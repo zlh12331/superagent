@@ -1,0 +1,2 @@
+# Pre-commit 钩子：对暂存文件运行 lint-staged（ESLint + Prettier）
+npx lint-staged

@@ -1,0 +1,2587 @@
+{
+  "tag": "body",
+  "class": "",
+  "id": "",
+  "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P\n新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置",
+  "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 1600,
+    "h": 1000
+  },
+  "color": "rgb(26, 33, 48)",
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "fontFamily": "\"Bricolage Grotesque\"",
+  "display": "block",
+  "children": [
+    {
+      "tag": "div",
+      "class": "",
+      "id": "root",
+      "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P\n新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1600,
+        "h": 1000
+      },
+      "color": "rgb(26, 33, 48)",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "fontFamily": "\"Bricolage Grotesque\"",
+      "display": "block",
+      "children": [
+        {
+          "tag": "div",
+          "class": "flex h-screen w-full flex-col overflow-hidden rounded-[var(--app-corner-radius)] bg-background",
+          "id": "",
+          "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P\n新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "w": 1600,
+            "h": 1000
+          },
+          "bg": "rgb(247, 248, 250)",
+          "color": "rgb(26, 33, 48)",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "fontFamily": "\"Bricolage Grotesque\"",
+          "radius": "12px",
+          "display": "flex",
+          "flex": "column",
+          "children": [
+            {
+              "tag": "div",
+              "class": "topbar-glow relative flex h-[52px] w-full shrink-0 items-center gap-3.5 border-b bg-background px-[18px]",
+              "id": "",
+              "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P",
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "w": 1600,
+                "h": 52
+              },
+              "bg": "rgb(247, 248, 250)",
+              "color": "rgb(26, 33, 48)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "fontFamily": "\"Bricolage Grotesque\"",
+              "display": "flex",
+              "flex": "row",
+              "gap": "14px",
+              "padding": "0px 18px",
+              "children": [
+                {
+                  "tag": "div",
+                  "class": "flex items-center gap-2 px-3 text-black active:text-black dark:text-black",
+                  "id": "",
+                  "rect": {
+                    "x": 18,
+                    "y": 20,
+                    "w": 76,
+                    "h": 12
+                  },
+                  "color": "rgb(0, 0, 0)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "display": "flex",
+                  "flex": "row",
+                  "gap": "8px",
+                  "padding": "0px 12px",
+                  "children": [
+                    {
+                      "tag": "button",
+                      "class": "group flex h-3 w-3 cursor-default items-center justify-center rounded-full border text-center text-black/60 hover:bg-[#f",
+                      "id": "",
+                      "ariaLabel": "Close window",
+                      "rect": {
+                        "x": 30,
+                        "y": 20,
+                        "w": 12,
+                        "h": 12
+                      },
+                      "bg": "rgb(255, 84, 77)",
+                      "color": "oklab(0 0 0 / 0.6)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "border": "0.666667px solid oklab(0 0 0 / 0.12)",
+                      "radius": "2.23696e+07px",
+                      "display": "flex",
+                      "flex": "row",
+                      "children": [
+                        {
+                          "tag": "div",
+                          "class": "flex h-3 w-3 items-center justify-center",
+                          "id": "",
+                          "rect": {
+                            "x": 31,
+                            "y": 20,
+                            "w": 11,
+                            "h": 12
+                          },
+                          "color": "oklab(0 0 0 / 0.6)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "flex",
+                          "flex": "row"
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "button",
+                      "class": "group flex h-3 w-3 cursor-default items-center justify-center rounded-full border text-center text-black/60 hover:bg-[#f",
+                      "id": "",
+                      "ariaLabel": "Minimize window",
+                      "rect": {
+                        "x": 50,
+                        "y": 20,
+                        "w": 12,
+                        "h": 12
+                      },
+                      "bg": "rgb(255, 189, 46)",
+                      "color": "oklab(0 0 0 / 0.6)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "border": "0.666667px solid oklab(0 0 0 / 0.12)",
+                      "radius": "2.23696e+07px",
+                      "display": "flex",
+                      "flex": "row",
+                      "children": [
+                        {
+                          "tag": "div",
+                          "class": "flex h-3 w-3 items-center justify-center",
+                          "id": "",
+                          "rect": {
+                            "x": 51,
+                            "y": 20,
+                            "w": 11,
+                            "h": 12
+                          },
+                          "color": "oklab(0 0 0 / 0.6)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "flex",
+                          "flex": "row"
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "button",
+                      "class": "group flex h-3 w-3 cursor-default items-center justify-center rounded-full border text-center text-black/60 hover:bg-[#2",
+                      "id": "",
+                      "ariaLabel": "Enter fullscreen",
+                      "rect": {
+                        "x": 70,
+                        "y": 20,
+                        "w": 12,
+                        "h": 12
+                      },
+                      "bg": "rgb(40, 201, 63)",
+                      "color": "oklab(0 0 0 / 0.6)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "border": "0.666667px solid oklab(0 0 0 / 0.12)",
+                      "radius": "2.23696e+07px",
+                      "display": "flex",
+                      "flex": "row",
+                      "children": [
+                        {
+                          "tag": "div",
+                          "class": "flex h-3 w-3 items-center justify-center",
+                          "id": "",
+                          "rect": {
+                            "x": 71,
+                            "y": 20,
+                            "w": 11,
+                            "h": 12
+                          },
+                          "color": "oklab(0 0 0 / 0.6)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "flex",
+                          "flex": "row"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "button",
+                  "class": "cursor-pointer rounded-md p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--bg-elev-2)]",
+                  "id": "",
+                  "ariaLabel": "Hide Left Sidebar",
+                  "rect": {
+                    "x": 108,
+                    "y": 12,
+                    "w": 28,
+                    "h": 28
+                  },
+                  "color": "rgb(108, 118, 134)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "radius": "8px",
+                  "display": "block",
+                  "padding": "6px",
+                  "children": [
+                    {
+                      "tag": "svg",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 114,
+                        "y": 18,
+                        "w": 16,
+                        "h": 16
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 116,
+                            "y": 20,
+                            "w": 12,
+                            "h": 12
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 120,
+                            "y": 20,
+                            "w": 0,
+                            "h": 12
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 123,
+                            "y": 24,
+                            "w": 2,
+                            "h": 4
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "div",
+                  "class": "flex items-center gap-2.5",
+                  "id": "",
+                  "text": "codex\nv1.4.0 · main\ngpt-5-codex",
+                  "rect": {
+                    "x": 150,
+                    "y": 16,
+                    "w": 293,
+                    "h": 20
+                  },
+                  "color": "rgb(26, 33, 48)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "display": "flex",
+                  "flex": "row",
+                  "gap": "10px",
+                  "children": [
+                    {
+                      "tag": "div",
+                      "class": "relative h-5 w-5 rounded-[5px]",
+                      "id": "",
+                      "rect": {
+                        "x": 150,
+                        "y": 16,
+                        "w": 20,
+                        "h": 20
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "radius": "5px",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "span",
+                          "class": "absolute",
+                          "id": "",
+                          "rect": {
+                            "x": 155,
+                            "y": 21,
+                            "w": 10,
+                            "h": 10
+                          },
+                          "color": "rgb(26, 33, 48)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "border": "1.33333px solid rgb(247, 248, 250)",
+                          "radius": "2px",
+                          "display": "block"
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "span",
+                      "class": "font-[var(--font-serif)] text-[14px] italic font-normal leading-none tracking-[0.01em]",
+                      "id": "",
+                      "text": "codex",
+                      "rect": {
+                        "x": 180,
+                        "y": 19,
+                        "w": 40,
+                        "h": 14
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block"
+                    },
+                    {
+                      "tag": "span",
+                      "class": "border-l border-[var(--border)] pl-3 font-mono text-[10px] tracking-[0.05em] text-[var(--text-faint)] leading-none",
+                      "id": "",
+                      "text": "v1.4.0 · main",
+                      "rect": {
+                        "x": 230,
+                        "y": 21,
+                        "w": 110,
+                        "h": 10
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "10px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Martian Mono\"",
+                      "display": "block",
+                      "padding": "0px 0px 0px 12px"
+                    },
+                    {
+                      "tag": "button",
+                      "class": "cursor-pointer font-mono text-[12px] text-[var(--text-dim)] transition-colors hover:text-[var(--text)]",
+                      "id": "",
+                      "text": "gpt-5-codex",
+                      "rect": {
+                        "x": 350,
+                        "y": 16,
+                        "w": 92,
+                        "h": 19
+                      },
+                      "color": "rgb(90, 100, 120)",
+                      "fontSize": "12px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Martian Mono\"",
+                      "display": "block"
+                    }
+                  ]
+                },
+                {
+                  "tag": "button",
+                  "class": "cursor-pointer rounded-md p-1.5 text-[var(--text-faint)] transition-all hover:bg-[var(--bg-elev-2)] hover:text-[var(--te",
+                  "id": "",
+                  "ariaLabel": "Back to Conversation",
+                  "rect": {
+                    "x": 457,
+                    "y": 12,
+                    "w": 28,
+                    "h": 28
+                  },
+                  "color": "rgb(108, 118, 134)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "radius": "8px",
+                  "display": "block",
+                  "padding": "6px",
+                  "children": [
+                    {
+                      "tag": "svg",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 463,
+                        "y": 18,
+                        "w": 16,
+                        "h": 16
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 466,
+                            "y": 21,
+                            "w": 5,
+                            "h": 9
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 466,
+                            "y": 26,
+                            "w": 9,
+                            "h": 0
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "div",
+                  "class": "flex-1",
+                  "id": "",
+                  "rect": {
+                    "x": 499,
+                    "y": 26,
+                    "w": 799,
+                    "h": 0
+                  },
+                  "color": "rgb(26, 33, 48)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "display": "block"
+                },
+                {
+                  "tag": "button",
+                  "class": "cursor-pointer rounded-md p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--bg-elev-2)]",
+                  "id": "",
+                  "ariaLabel": "Hide Right Sidebar",
+                  "rect": {
+                    "x": 1312,
+                    "y": 12,
+                    "w": 28,
+                    "h": 28
+                  },
+                  "color": "rgb(108, 118, 134)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "radius": "8px",
+                  "display": "block",
+                  "padding": "6px",
+                  "children": [
+                    {
+                      "tag": "svg",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 1318,
+                        "y": 18,
+                        "w": 16,
+                        "h": 16
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1320,
+                            "y": 20,
+                            "w": 12,
+                            "h": 12
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1328,
+                            "y": 20,
+                            "w": 0,
+                            "h": 12
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1323,
+                            "y": 24,
+                            "w": 2,
+                            "h": 4
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "button",
+                  "class": "cursor-pointer rounded-md p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--bg-elev-2)] hover:text-[var(-",
+                  "id": "",
+                  "ariaLabel": "Command Palette",
+                  "rect": {
+                    "x": 1354,
+                    "y": 12,
+                    "w": 28,
+                    "h": 28
+                  },
+                  "color": "rgb(108, 118, 134)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "radius": "8px",
+                  "display": "block",
+                  "padding": "6px",
+                  "children": [
+                    {
+                      "tag": "svg",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 1360,
+                        "y": 18,
+                        "w": 16,
+                        "h": 16
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1371,
+                            "y": 29,
+                            "w": 3,
+                            "h": 3
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "circle",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1362,
+                            "y": 20,
+                            "w": 11,
+                            "h": 11
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "button",
+                  "class": "inline-flex cursor-pointer items-center gap-[5px] rounded-[5px] border border-[var(--border)] bg-[var(--bg-elev-2)] px-2",
+                  "id": "",
+                  "ariaLabel": "Open Command Palette",
+                  "text": "Command Palette\n⌘P",
+                  "rect": {
+                    "x": 1396,
+                    "y": 13,
+                    "w": 148,
+                    "h": 25
+                  },
+                  "bg": "rgb(238, 240, 244)",
+                  "color": "rgb(108, 118, 134)",
+                  "fontSize": "10px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "border": "0.666667px solid rgb(225, 228, 235)",
+                  "radius": "5px",
+                  "display": "flex",
+                  "flex": "row",
+                  "gap": "5px",
+                  "padding": "3px 8px",
+                  "children": [
+                    {
+                      "tag": "svg",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 1405,
+                        "y": 20,
+                        "w": 12,
+                        "h": 12
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "10px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1413,
+                            "y": 28,
+                            "w": 2,
+                            "h": 2
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "10px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "circle",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1406,
+                            "y": 21,
+                            "w": 8,
+                            "h": 8
+                          },
+                          "color": "rgb(108, 118, 134)",
+                          "fontSize": "10px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "span",
+                      "class": "",
+                      "id": "",
+                      "text": "Command Palette",
+                      "rect": {
+                        "x": 1422,
+                        "y": 18,
+                        "w": 84,
+                        "h": 16
+                      },
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "10px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block"
+                    },
+                    {
+                      "tag": "kbd",
+                      "class": "rounded-[3px] border border-[var(--border)] bg-[var(--bg)] px-1 py-px font-mono text-[9px]",
+                      "id": "",
+                      "text": "⌘P",
+                      "rect": {
+                        "x": 1511,
+                        "y": 17,
+                        "w": 25,
+                        "h": 18
+                      },
+                      "bg": "rgb(247, 248, 250)",
+                      "color": "rgb(108, 118, 134)",
+                      "fontSize": "9px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Martian Mono\"",
+                      "border": "0.666667px solid rgb(225, 228, 235)",
+                      "radius": "3px",
+                      "display": "block",
+                      "padding": "1px 4px"
+                    }
+                  ]
+                },
+                {
+                  "tag": "button",
+                  "class": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:p",
+                  "id": "",
+                  "rect": {
+                    "x": 1558,
+                    "y": 14,
+                    "w": 24,
+                    "h": 24
+                  },
+                  "color": "oklab(0.248257 -0.0026736 -0.0303576 / 0.7)",
+                  "fontSize": "14px",
+                  "fontWeight": "500",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "radius": "8px",
+                  "display": "flex",
+                  "flex": "row",
+                  "gap": "8px",
+                  "children": [
+                    {
+                      "tag": "svg",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 1562,
+                        "y": 18,
+                        "w": 16,
+                        "h": 16
+                      },
+                      "color": "oklab(0.248257 -0.0026736 -0.0303576 / 0.7)",
+                      "fontSize": "14px",
+                      "fontWeight": "500",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "path",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1564,
+                            "y": 19,
+                            "w": 12,
+                            "h": 13
+                          },
+                          "color": "oklab(0.248257 -0.0026736 -0.0303576 / 0.7)",
+                          "fontSize": "14px",
+                          "fontWeight": "500",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        },
+                        {
+                          "tag": "circle",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1568,
+                            "y": 24,
+                            "w": 4,
+                            "h": 4
+                          },
+                          "color": "oklab(0.248257 -0.0026736 -0.0303576 / 0.7)",
+                          "fontSize": "14px",
+                          "fontWeight": "500",
+                          "fontFamily": "\"Bricolage Grotesque\""
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "div",
+              "class": "flex flex-1 overflow-hidden",
+              "id": "",
+              "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n4h · 3 msgs\n重构认证体系（8层递归测试）\n5h · 0 msgs\ncodex-rs\n3\n",
+              "rect": {
+                "x": 0,
+                "y": 52,
+                "w": 1600,
+                "h": 948
+              },
+              "color": "rgb(26, 33, 48)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "fontFamily": "\"Bricolage Grotesque\"",
+              "display": "flex",
+              "flex": "row",
+              "children": [
+                {
+                  "tag": "div",
+                  "class": "flex h-full w-full data-[panel-group-direction=vertical]:flex-col",
+                  "id": "",
+                  "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n4h · 3 msgs\n重构认证体系（8层递归测试）\n5h · 0 msgs\ncodex-rs\n3\n",
+                  "rect": {
+                    "x": 0,
+                    "y": 52,
+                    "w": 1600,
+                    "h": 948
+                  },
+                  "color": "rgb(26, 33, 48)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "display": "flex",
+                  "flex": "row",
+                  "children": [
+                    {
+                      "tag": "div",
+                      "class": "",
+                      "id": "_r_1_",
+                      "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n4h · 3 msgs\n重构认证体系（8层递归测试）\n5h · 0 msgs\ncodex-rs\n3\n",
+                      "rect": {
+                        "x": 0,
+                        "y": 52,
+                        "w": 320,
+                        "h": 948
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "div",
+                          "class": "h-full",
+                          "id": "",
+                          "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n4h · 3 msgs\n重构认证体系（8层递归测试）\n5h · 0 msgs\ncodex-rs\n3\n",
+                          "rect": {
+                            "x": 0,
+                            "y": 52,
+                            "w": 320,
+                            "h": 948
+                          },
+                          "color": "rgb(26, 33, 48)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "block",
+                          "children": [
+                            {
+                              "tag": "aside",
+                              "class": "relative flex min-h-0 min-w-0 flex-col border-r border-[var(--border)] bg-[var(--bg-elev)]",
+                              "id": "",
+                              "ariaLabel": "会话侧栏",
+                              "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n4h · 3 msgs\n重构认证体系（8层递归测试）\n5h · 0 msgs\ncodex-rs\n3\n",
+                              "rect": {
+                                "x": 0,
+                                "y": 52,
+                                "w": 320,
+                                "h": 640
+                              },
+                              "bg": "rgb(255, 255, 255)",
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "display": "flex",
+                              "flex": "column",
+                              "children": [
+                                {
+                                  "tag": "div",
+                                  "class": "border-b border-[var(--border)] p-3",
+                                  "id": "",
+                                  "text": "新建会话\n最近\n6\n归档\n2",
+                                  "rect": {
+                                    "x": 0,
+                                    "y": 52,
+                                    "w": 319,
+                                    "h": 141
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "display": "block",
+                                  "padding": "12px"
+                                },
+                                {
+                                  "tag": "div",
+                                  "class": "min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2",
+                                  "id": "",
+                                  "text": "最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n4h · 3 msgs\n重构认证体系（8层递归测试）\n5h · 0 msgs\ncodex-rs\n3\n重构 auth 模块，接入 O",
+                                  "rect": {
+                                    "x": 0,
+                                    "y": 193,
+                                    "w": 319,
+                                    "h": 435
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "display": "block",
+                                  "padding": "8px"
+                                },
+                                {
+                                  "tag": "div",
+                                  "class": "relative flex items-center gap-2 border-t border-[var(--border)] p-2.5",
+                                  "id": "",
+                                  "text": "DS\ndev\napi-key · sk-…",
+                                  "rect": {
+                                    "x": 0,
+                                    "y": 628,
+                                    "w": 319,
+                                    "h": 65
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "border": "0.666667px solid rgb(225, 228, 235)",
+                                  "display": "flex",
+                                  "flex": "row",
+                                  "gap": "8px",
+                                  "padding": "10px"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "div",
+                      "class": "bg-border focus-visible:ring-ring relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:le",
+                      "id": "",
+                      "role": "separator",
+                      "rect": {
+                        "x": 320,
+                        "y": 52,
+                        "w": 1,
+                        "h": 948
+                      },
+                      "bg": "rgb(225, 228, 235)",
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "flex",
+                      "flex": "row"
+                    },
+                    {
+                      "tag": "div",
+                      "class": "",
+                      "id": "_r_3_",
+                      "text": "5h 速率限制 · 剩余 04:23:11\nHelp me debug the bridge.rs streaming issue\n复制\n重试\n编辑\nC\nCODEX\n·\nGPT-5\n14:59:01\n\nI see a potential issue with the event loop...\n\n复",
+                      "rect": {
+                        "x": 321,
+                        "y": 52,
+                        "w": 959,
+                        "h": 948
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "div",
+                          "class": "flex h-full flex-col bg-background",
+                          "id": "",
+                          "text": "5h 速率限制 · 剩余 04:23:11\nHelp me debug the bridge.rs streaming issue\n复制\n重试\n编辑\nC\nCODEX\n·\nGPT-5\n14:59:01\n\nI see a potential issue with the event loop...\n\n复",
+                          "rect": {
+                            "x": 321,
+                            "y": 52,
+                            "w": 959,
+                            "h": 948
+                          },
+                          "bg": "rgb(247, 248, 250)",
+                          "color": "rgb(26, 33, 48)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "flex",
+                          "flex": "column",
+                          "children": [
+                            {
+                              "tag": "div",
+                              "class": "relative flex h-full min-h-0 flex-col",
+                              "id": "",
+                              "text": "5h 速率限制 · 剩余 04:23:11\nHelp me debug the bridge.rs streaming issue\n复制\n重试\n编辑\nC\nCODEX\n·\nGPT-5\n14:59:01\n\nI see a potential issue with the event loop...\n\n复",
+                              "rect": {
+                                "x": 321,
+                                "y": 52,
+                                "w": 959,
+                                "h": 948
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "display": "flex",
+                              "flex": "column",
+                              "children": [
+                                {
+                                  "tag": "div",
+                                  "class": "flex justify-end border-b border-[var(--border)] bg-[var(--bg-elev)] px-3 py-1",
+                                  "id": "",
+                                  "text": "5h 速率限制 · 剩余 04:23:11",
+                                  "rect": {
+                                    "x": 321,
+                                    "y": 52,
+                                    "w": 959,
+                                    "h": 32
+                                  },
+                                  "bg": "rgb(255, 255, 255)",
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "display": "flex",
+                                  "flex": "row",
+                                  "padding": "4px 12px"
+                                },
+                                {
+                                  "tag": "div",
+                                  "class": "relative flex-1 min-h-0",
+                                  "id": "",
+                                  "text": "Help me debug the bridge.rs streaming issue\n复制\n重试\n编辑\nC\nCODEX\n·\nGPT-5\n14:59:01\n\nI see a potential issue with the event loop...\n\n复制\n重试\n编辑",
+                                  "rect": {
+                                    "x": 321,
+                                    "y": 84,
+                                    "w": 959,
+                                    "h": 724
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "display": "block"
+                                },
+                                {
+                                  "tag": "div",
+                                  "class": "group relative min-w-0 border-t border-[var(--border)] bg-gradient-to-b from-[var(--bg-elev)] to-[var(--bg)] px-6 pb-[18",
+                                  "id": "",
+                                  "text": "⏎\n发送\n⇧⏎\n换行\n0\n本地\ncodex-rs\ngpt-5-codex\n就绪\n·\n0 msgs\n·\n0 turns\n·\nToken 0 / 200k\n·\n2.3 tok/s\n·\ndev@local\n·\n5h/1000\n·\nbuffer 87%\n·\n→ gpt-4o",
+                                  "rect": {
+                                    "x": 321,
+                                    "y": 808,
+                                    "w": 959,
+                                    "h": 192
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "border": "0.666667px solid rgb(225, 228, 235)",
+                                  "display": "block",
+                                  "padding": "14px 24px 18px"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "div",
+                      "class": "bg-border focus-visible:ring-ring relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:le",
+                      "id": "",
+                      "role": "separator",
+                      "rect": {
+                        "x": 1279,
+                        "y": 52,
+                        "w": 1,
+                        "h": 948
+                      },
+                      "bg": "rgb(225, 228, 235)",
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "flex",
+                      "flex": "row"
+                    },
+                    {
+                      "tag": "div",
+                      "class": "",
+                      "id": "_r_5_",
+                      "text": "信息\nDiff\n文件\n终端\n浏览器\n1: zsh\n×\nCodex Terminal v0.2.0\nType 'help' for available commands.\n$",
+                      "rect": {
+                        "x": 1280,
+                        "y": 52,
+                        "w": 320,
+                        "h": 948
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "div",
+                          "class": "h-full",
+                          "id": "",
+                          "text": "信息\nDiff\n文件\n终端\n浏览器\n1: zsh\n×\nCodex Terminal v0.2.0\nType 'help' for available commands.\n$",
+                          "rect": {
+                            "x": 1280,
+                            "y": 52,
+                            "w": 320,
+                            "h": 948
+                          },
+                          "color": "rgb(26, 33, 48)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "block",
+                          "children": [
+                            {
+                              "tag": "div",
+                              "class": "flex h-full flex-col border-l bg-background",
+                              "id": "",
+                              "text": "信息\nDiff\n文件\n终端\n浏览器\n1: zsh\n×\nCodex Terminal v0.2.0\nType 'help' for available commands.\n$",
+                              "rect": {
+                                "x": 1280,
+                                "y": 52,
+                                "w": 320,
+                                "h": 948
+                              },
+                              "bg": "rgb(247, 248, 250)",
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "display": "flex",
+                              "flex": "column",
+                              "children": [
+                                {
+                                  "tag": "div",
+                                  "class": "flex min-h-0 flex-1 flex-col",
+                                  "id": "",
+                                  "text": "信息\nDiff\n文件\n终端\n浏览器\n1: zsh\n×\nCodex Terminal v0.2.0\nType 'help' for available commands.\n$",
+                                  "rect": {
+                                    "x": 1281,
+                                    "y": 52,
+                                    "w": 319,
+                                    "h": 948
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\"",
+                                  "display": "flex",
+                                  "flex": "column"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "div",
+              "class": "flex flex-col gap-2 text-center sm:text-start sr-only",
+              "id": "",
+              "text": "Command Palette\n\nSearch files or type a command... (/cmd execute command, # search sessions)",
+              "rect": {
+                "x": -1,
+                "y": -1,
+                "w": 1,
+                "h": 1
+              },
+              "color": "rgb(26, 33, 48)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "fontFamily": "\"Bricolage Grotesque\"",
+              "display": "flex",
+              "flex": "column",
+              "gap": "8px",
+              "children": [
+                {
+                  "tag": "h2",
+                  "class": "text-lg leading-none font-semibold",
+                  "id": "radix-_r_7_",
+                  "text": "Command Palette",
+                  "rect": {
+                    "x": -1,
+                    "y": -1,
+                    "w": 1,
+                    "h": 18
+                  },
+                  "color": "rgb(26, 33, 48)",
+                  "fontSize": "18px",
+                  "fontWeight": "600",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "display": "block"
+                },
+                {
+                  "tag": "p",
+                  "class": "text-muted-foreground text-sm",
+                  "id": "radix-_r_8_",
+                  "text": "Search files or type a command... (/cmd execute command, # search sessions)",
+                  "rect": {
+                    "x": -1,
+                    "y": 25,
+                    "w": 1,
+                    "h": 20
+                  },
+                  "color": "rgb(90, 100, 120)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "display": "block"
+                }
+              ]
+            },
+            {
+              "tag": "section",
+              "class": "",
+              "id": "",
+              "ariaLabel": "Notifications alt+T",
+              "rect": {
+                "x": 0,
+                "y": 1000,
+                "w": 1600,
+                "h": 0
+              },
+              "color": "rgb(26, 33, 48)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "fontFamily": "\"Bricolage Grotesque\"",
+              "display": "block"
+            }
+          ]
+        },
+        {
+          "tag": "div",
+          "class": "",
+          "id": "",
+          "text": "Sentry E2E Debug\nSentry init: No\nJS Error\nUnhandled Rejection",
+          "rect": {
+            "x": 1400,
+            "y": 896,
+            "w": 192,
+            "h": 96
+          },
+          "bg": "rgba(0, 0, 0, 0.85)",
+          "color": "rgb(0, 255, 0)",
+          "fontSize": "12px",
+          "fontWeight": "400",
+          "fontFamily": "monospace",
+          "radius": "8px",
+          "display": "block",
+          "padding": "12px",
+          "children": [
+            {
+              "tag": "div",
+              "class": "",
+              "id": "",
+              "text": "Sentry E2E Debug",
+              "rect": {
+                "x": 1412,
+                "y": 908,
+                "w": 168,
+                "h": 19
+              },
+              "color": "rgb(0, 255, 0)",
+              "fontSize": "12px",
+              "fontWeight": "700",
+              "fontFamily": "monospace",
+              "display": "block"
+            },
+            {
+              "tag": "div",
+              "class": "",
+              "id": "",
+              "text": "Sentry init: No",
+              "rect": {
+                "x": 1412,
+                "y": 935,
+                "w": 168,
+                "h": 19
+              },
+              "color": "rgb(0, 255, 0)",
+              "fontSize": "12px",
+              "fontWeight": "400",
+              "fontFamily": "monospace",
+              "display": "block"
+            },
+            {
+              "tag": "div",
+              "class": "",
+              "id": "",
+              "text": "JS Error\nUnhandled Rejection",
+              "rect": {
+                "x": 1412,
+                "y": 962,
+                "w": 168,
+                "h": 18
+              },
+              "color": "rgb(0, 255, 0)",
+              "fontSize": "12px",
+              "fontWeight": "400",
+              "fontFamily": "monospace",
+              "display": "flex",
+              "flex": "row",
+              "gap": "6px",
+              "children": [
+                {
+                  "tag": "button",
+                  "class": "",
+                  "id": "",
+                  "text": "JS Error",
+                  "rect": {
+                    "x": 1412,
+                    "y": 962,
+                    "w": 48,
+                    "h": 18
+                  },
+                  "color": "rgb(0, 255, 0)",
+                  "fontSize": "11px",
+                  "fontWeight": "400",
+                  "fontFamily": "monospace",
+                  "display": "block"
+                },
+                {
+                  "tag": "button",
+                  "class": "",
+                  "id": "",
+                  "text": "Unhandled Rejection",
+                  "rect": {
+                    "x": 1466,
+                    "y": 962,
+                    "w": 114,
+                    "h": 18
+                  },
+                  "color": "rgb(0, 255, 0)",
+                  "fontSize": "11px",
+                  "fontWeight": "400",
+                  "fontFamily": "monospace",
+                  "display": "block"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "div",
+          "class": "tsqd-parent-container",
+          "id": "",
+          "rect": {
+            "x": 0,
+            "y": 1000,
+            "w": 1600,
+            "h": 0
+          },
+          "color": "rgb(26, 33, 48)",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "fontFamily": "\"Bricolage Grotesque\"",
+          "display": "block",
+          "children": [
+            {
+              "tag": "div",
+              "class": "go2420793703 tsqd-transitions-container",
+              "id": "",
+              "rect": {
+                "x": 0,
+                "y": 1000,
+                "w": 1600,
+                "h": 0
+              },
+              "color": "rgb(26, 33, 48)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "fontFamily": "\"Bricolage Grotesque\"",
+              "display": "block",
+              "children": [
+                {
+                  "tag": "div",
+                  "class": "go1434192219 go1754112896 tsqd-open-btn-container",
+                  "id": "",
+                  "rect": {
+                    "x": 1540,
+                    "y": 940,
+                    "w": 48,
+                    "h": 48
+                  },
+                  "color": "rgb(26, 33, 48)",
+                  "fontSize": "14px",
+                  "fontWeight": "400",
+                  "fontFamily": "\"Bricolage Grotesque\"",
+                  "radius": "9999px",
+                  "display": "flex",
+                  "flex": "row",
+                  "padding": "4px",
+                  "children": [
+                    {
+                      "tag": "div",
+                      "class": "",
+                      "id": "",
+                      "rect": {
+                        "x": 1532,
+                        "y": 932,
+                        "w": 64,
+                        "h": 64
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "radius": "9999px",
+                      "display": "block",
+                      "children": [
+                        {
+                          "tag": "svg",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1532,
+                            "y": 932,
+                            "w": 64,
+                            "h": 64
+                          },
+                          "color": "rgb(26, 33, 48)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "block",
+                          "children": [
+                            {
+                              "tag": "circle",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1532,
+                                "y": 932,
+                                "w": 64,
+                                "h": 64
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\""
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1519,
+                                "y": 975,
+                                "w": 43,
+                                "h": 38
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1519,
+                                    "y": 975,
+                                    "w": 43,
+                                    "h": 38
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1565,
+                                "y": 975,
+                                "w": 43,
+                                "h": 38
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 975,
+                                    "w": 43,
+                                    "h": 38
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1519,
+                                "y": 979,
+                                "w": 43,
+                                "h": 38
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1519,
+                                    "y": 979,
+                                    "w": 43,
+                                    "h": 38
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1565,
+                                "y": 979,
+                                "w": 43,
+                                "h": 38
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 979,
+                                    "w": 43,
+                                    "h": 38
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1519,
+                                "y": 982,
+                                "w": 43,
+                                "h": 38
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1519,
+                                    "y": 982,
+                                    "w": 43,
+                                    "h": 38
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1565,
+                                "y": 982,
+                                "w": 43,
+                                "h": 38
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 982,
+                                    "w": 43,
+                                    "h": 38
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1560,
+                                "y": 963,
+                                "w": 18,
+                                "h": 13
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1576,
+                                    "y": 973,
+                                    "w": 1,
+                                    "h": 3
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1560,
+                                    "y": 967,
+                                    "w": 1,
+                                    "h": 6
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 971,
+                                    "w": 0,
+                                    "h": 3
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "path",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1560,
+                                    "y": 963,
+                                    "w": 18,
+                                    "h": 10
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1540,
+                                "y": 944,
+                                "w": 27,
+                                "h": 31
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "path",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1551,
+                                    "y": 952,
+                                    "w": 8,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "g",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1540,
+                                    "y": 944,
+                                    "w": 27,
+                                    "h": 23
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1537,
+                                "y": 972,
+                                "w": 54,
+                                "h": 64
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1537,
+                                    "y": 972,
+                                    "w": 54,
+                                    "h": 64
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1572,
+                                "y": 930,
+                                "w": 29,
+                                "h": 28
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "circle",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1578,
+                                    "y": 930,
+                                    "w": 23,
+                                    "h": 23
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1572,
+                                    "y": 941,
+                                    "w": 3,
+                                    "h": 0
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1573,
+                                    "y": 937,
+                                    "w": 3,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1573,
+                                    "y": 944,
+                                    "w": 3,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1574,
+                                    "y": 947,
+                                    "w": 2,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1577,
+                                    "y": 950,
+                                    "w": 2,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1580,
+                                    "y": 953,
+                                    "w": 1,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1584,
+                                    "y": 954,
+                                    "w": 1,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1589,
+                                    "y": 955,
+                                    "w": 0,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "button",
+                      "class": "tsqd-open-btn",
+                      "id": "",
+                      "ariaLabel": "Open Tanstack query devtools",
+                      "rect": {
+                        "x": 1544,
+                        "y": 944,
+                        "w": 40,
+                        "h": 40
+                      },
+                      "color": "rgb(26, 33, 48)",
+                      "fontSize": "14px",
+                      "fontWeight": "400",
+                      "fontFamily": "\"Bricolage Grotesque\"",
+                      "radius": "9999px",
+                      "display": "flex",
+                      "flex": "row",
+                      "children": [
+                        {
+                          "tag": "svg",
+                          "class": "",
+                          "id": "",
+                          "rect": {
+                            "x": 1544,
+                            "y": 944,
+                            "w": 40,
+                            "h": 40
+                          },
+                          "color": "rgb(26, 33, 48)",
+                          "fontSize": "14px",
+                          "fontWeight": "400",
+                          "fontFamily": "\"Bricolage Grotesque\"",
+                          "display": "block",
+                          "children": [
+                            {
+                              "tag": "circle",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1544,
+                                "y": 944,
+                                "w": 40,
+                                "h": 40
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\""
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1536,
+                                "y": 971,
+                                "w": 27,
+                                "h": 24
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1536,
+                                    "y": 971,
+                                    "w": 27,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1565,
+                                "y": 971,
+                                "w": 27,
+                                "h": 24
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 971,
+                                    "w": 27,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1536,
+                                "y": 973,
+                                "w": 27,
+                                "h": 24
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1536,
+                                    "y": 973,
+                                    "w": 27,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1565,
+                                "y": 973,
+                                "w": 27,
+                                "h": 24
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 973,
+                                    "w": 27,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1536,
+                                "y": 976,
+                                "w": 27,
+                                "h": 24
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1536,
+                                    "y": 976,
+                                    "w": 27,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1565,
+                                "y": 976,
+                                "w": 27,
+                                "h": 24
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 976,
+                                    "w": 27,
+                                    "h": 24
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1561,
+                                "y": 963,
+                                "w": 11,
+                                "h": 8
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1571,
+                                    "y": 969,
+                                    "w": 0,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1562,
+                                    "y": 966,
+                                    "w": 1,
+                                    "h": 4
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1565,
+                                    "y": 968,
+                                    "w": 0,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "path",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1561,
+                                    "y": 963,
+                                    "w": 11,
+                                    "h": 6
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1549,
+                                "y": 952,
+                                "w": 17,
+                                "h": 20
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "path",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1556,
+                                    "y": 957,
+                                    "w": 5,
+                                    "h": 15
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "g",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1549,
+                                    "y": 952,
+                                    "w": 17,
+                                    "h": 14
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1547,
+                                "y": 969,
+                                "w": 34,
+                                "h": 40
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "ellipse",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1547,
+                                    "y": 969,
+                                    "w": 34,
+                                    "h": 40
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "g",
+                              "class": "",
+                              "id": "",
+                              "rect": {
+                                "x": 1569,
+                                "y": 942,
+                                "w": 18,
+                                "h": 18
+                              },
+                              "color": "rgb(26, 33, 48)",
+                              "fontSize": "14px",
+                              "fontWeight": "400",
+                              "fontFamily": "\"Bricolage Grotesque\"",
+                              "children": [
+                                {
+                                  "tag": "circle",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1573,
+                                    "y": 942,
+                                    "w": 14,
+                                    "h": 14
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1569,
+                                    "y": 950,
+                                    "w": 2,
+                                    "h": 0
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1570,
+                                    "y": 947,
+                                    "w": 2,
+                                    "h": 0
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1569,
+                                    "y": 952,
+                                    "w": 2,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1570,
+                                    "y": 954,
+                                    "w": 2,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1572,
+                                    "y": 955,
+                                    "w": 1,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1574,
+                                    "y": 957,
+                                    "w": 1,
+                                    "h": 1
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1577,
+                                    "y": 958,
+                                    "w": 0,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                },
+                                {
+                                  "tag": "line",
+                                  "class": "",
+                                  "id": "",
+                                  "rect": {
+                                    "x": 1580,
+                                    "y": 958,
+                                    "w": 0,
+                                    "h": 2
+                                  },
+                                  "color": "rgb(26, 33, 48)",
+                                  "fontSize": "14px",
+                                  "fontWeight": "400",
+                                  "fontFamily": "\"Bricolage Grotesque\""
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "script",
+      "class": "",
+      "id": "",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "color": "rgb(26, 33, 48)",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "fontFamily": "\"Bricolage Grotesque\"",
+      "display": "none"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+// 资源文件：将 Windows 应用清单嵌入到所有目标的可执行文件中。
+//
+// 1 = CREATEPROCESS_MANIFEST_RESOURCE_ID（创建进程时的清单资源 ID）
+// 24 = RT_MANIFEST（清单资源类型）
+#pragma code_page(65001)
+1 24 "app-manifest.xml"

@@ -1,0 +1,2 @@
+# Commit-msg 钩子：校验提交信息是否符合 Conventional Commits 规范
+npx --no -- commitlint --edit "$1"

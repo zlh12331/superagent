@@ -1,0 +1,25 @@
+# codex-desktop 项目的 Cargo 配置
+
+[http]
+# 禁用 SSL 证书吊销检查——当 CRL/OCSP 吊销服务器不可达时
+# （中国大陆常见），Windows schannel 会失败。
+check-revoke = false
+
+# 注意：rsproxy.cn 镜像被禁用，因为 VPN 代理（127.0.0.1:7890）
+# 无法路由到 rsproxy.cn。VPN 关闭时，取消下面的注释
+# 以使用国内镜像加速下载。
+# [source.crates-io]
+# replace-with = "rsproxy"
+#
+# [source.rsproxy]
+# registry = "sparse+https://rsproxy.cn/index/"
+
+# 为保持一致性，re-export codex-rs 的 Windows 链接器设置
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "link-arg=/STACK:8388608", "-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608", "-C", "link-arg=/arm64hazardfree"]
+
+[target.'cfg(all(windows, target_env = "gnu"))']
+rustflags = ["-C", "link-arg=-Wl,--stack,8388608"]

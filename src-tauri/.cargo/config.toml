@@ -1,0 +1,5 @@
+# Cargo 构建配置
+# codex-rs + Tauri 插件依赖众多，并行编译时 Rust 编译器可能 OOM。
+# 限制为单线程编译以避免内存不足（Windows 开发环境）。
+[build]
+jobs = 1

@@ -1,0 +1,13 @@
+[advisories]
+# 已审查 2026-06-07。请与 ../deny.toml 保持同步。
+ignore = [
+    "RUSTSEC-2024-0388", # derivative 2.2.0 经由 starlark/starlark_syntax 引入；上游 crate 已停止维护
+    "RUSTSEC-2025-0057", # fxhash 0.2.1 经由 starlark_map/bm25 引入；上游 crate 已停止维护
+    "RUSTSEC-2024-0436", # paste 1.0.15 经由 starlark/ratatui 引入；上游 crate 已停止维护
+    "RUSTSEC-2023-0089", # atomic-polyfill 经由 postcard/heapless/pagable 引入；上游 crate 已停止维护
+    "RUSTSEC-2024-0320", # yaml-rust 经由 syntect 引入；待 syntect 移除或升级后删除
+    "RUSTSEC-2025-0141", # bincode 经由 syntect 引入；待 syntect 移除或升级后删除
+    "RUSTSEC-2026-0118", # hickory-proto 经由 rama-dns/rama-tcp 引入；待 rama 升级到 hickory 0.26.1 或 hickory-net 后删除
+    "RUSTSEC-2026-0119", # hickory-proto 经由 rama-dns/rama-tcp 引入；待 rama 升级到 hickory 0.26.1 或 hickory-net 后删除
+    "RUSTSEC-2026-0173", # proc-macro-error2 经由 i18n-embed-fl/age/codex-secrets 引入；待本地密钥存储迁移出 age 或 age 移除 i18n-embed-fl 后删除
+]

@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Config files that should keep their formatting
+*.config.js
+*.config.ts
+vite.config.ts
+
+# Generated files
+package-lock.json
+.git/
+src/lib/bindings.ts
+CHANGELOG.md
+
+# Logs
+*.log
+
+# codex-rs — 迁移进来的 Rust 代码库，不参与前端格式检查
+# （含 auto-generated TypeScript schema 文件和 Markdown 文档）
+codex-rs/

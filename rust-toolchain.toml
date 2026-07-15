@@ -1,0 +1,5 @@
+[toolchain]
+channel = "1.96.0"
+# rust-src: codex-rs 需要（rust-analyzer 等工具使用）
+components = ["rustfmt", "clippy", "rust-src"]
+profile = "minimal"

@@ -1,0 +1,153 @@
+# cargo-deny 配置 — 合并 codex-rs + codex-desktop 的 deny.toml
+#
+# 本文件是合并后的唯一 deny.toml，覆盖 codex-rs 和 codex-desktop 的全部依赖树。
+# 运行 `cargo deny check` 验证 advisories、licenses、bans、sources 四个维度。
+#
+# 合并策略：
+# - advisories.ignore: codex-rs 9 条 + src-tauri 5 条（去重后 12 条）
+# - licenses.allow: 两份并集（16 项）
+# - bans.deny: 保留 codex-rs 的 async-trait 规则
+# - sources.allow-git: 两份并集（8 个 URL）
+# - licenses.exceptions: 保留 src-tauri 的 tauri-nspanel
+
+[graph]
+# 所有 workspace members 的依赖都会被检查
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+# ============================================================
+# Advisories — 漏洞数据库
+# ============================================================
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/RustSec/advisory-db"]
+yanked = "deny"
+# codex-rs 的 unmaintained/unsound 设置（更宽松，允许 transitive 的不维护 crate）
+unmaintained = "none"
+unsound = "none"
+ignore = [
+    # --- codex-rs advisories（9 条）---
+    # 已审查 2026-06-07。请与 .cargo/audit.toml 保持同步。
+    { id = "RUSTSEC-2024-0388", reason = "derivative is unmaintained; pulled in via starlark/starlark_syntax v0.14.2 used by execpolicy/cli/core; no fixed starlark release yet" },
+    { id = "RUSTSEC-2025-0057", reason = "fxhash is unmaintained; pulled in via starlark_map under starlark v0.14.2 used by execpolicy/cli/core and bm25 used by core; remove when upstream dependencies drop fxhash" },
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; pulled in via ratatui/rmcp/starlark used by tui/execpolicy; no fixed release yet" },
+    { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill is unmaintained; pulled in via postcard/heapless/pagable under starlark v0.14.2 used by execpolicy/cli/core; no fixed starlark release yet" },
+    # TODO(fcoury): 当 syntect 移除 yaml-rust 和 bincode，或升级到已修复漏洞的版本后，删除此例外。
+    { id = "RUSTSEC-2024-0320", reason = "yaml-rust is unmaintained; pulled in via syntect v5.3.0 used by codex-tui for syntax highlighting; no fixed release yet" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; pulled in via syntect v5.3.0 used by codex-tui for syntax highlighting; no fixed release yet" },
+    { id = "RUSTSEC-2026-0118", reason = "hickory-proto v0.25.2 is pulled in via rama-dns/rama-tcp used by codex-network-proxy; DNSSEC features are not enabled; remove when rama updates to hickory 0.26.1 or hickory-net" },
+    { id = "RUSTSEC-2026-0119", reason = "hickory-proto v0.25.2 is pulled in via rama-dns/rama-tcp used by codex-network-proxy; no fixed rama release is available yet; remove when rama updates to hickory 0.26.1 or hickory-net" },
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 is unmaintained; pulled in via i18n-embed-fl/age used by codex-secrets local storage; remove when codex-secrets migrates off age or age drops i18n-embed-fl" },
+    # --- src-tauri advisories（3 条，与 codex-rs 不重叠的部分）---
+    # quick-xml 0.39.4 由 wayland-scanner（仅 Linux 构建期依赖）引入。
+    # 它解析 Wayland 协议 XML（可信的硬编码输入——非用户提交）。
+    { id = "RUSTSEC-2026-0194", reason = "wayland-scanner build-time only; trusted XML input" },
+    { id = "RUSTSEC-2026-0195", reason = "wayland-scanner build-time only; trusted XML input" },
+]
+
+# ============================================================
+# Licenses — 许可证白名单
+# ============================================================
+[licenses]
+version = 2
+allow = [
+    # Apache-2.0
+    "Apache-2.0",
+    # Apache-2.0 WITH LLVM-exception
+    "Apache-2.0 WITH LLVM-exception",
+    # BSD-2-Clause
+    "BSD-2-Clause",
+    # BSD-3-Clause
+    "BSD-3-Clause",
+    # BSL-1.0 (Boost Software License)
+    "BSL-1.0",
+    # CC0-1.0
+    "CC0-1.0",
+    # CDLA-Permissive-2.0 (webpki-root-certs bundled CA data)
+    "CDLA-Permissive-2.0",
+    # ISC
+    "ISC",
+    # MIT
+    "MIT",
+    # MIT-0 (dunce crate)
+    "MIT-0",
+    # MPL-2.0 (nucleo-matcher)
+    "MPL-2.0",
+    # OpenSSL (aws-lc-sys)
+    "OpenSSL",
+    # Unicode-3.0 (icu_* crates)
+    "Unicode-3.0",
+    # Unicode-DFS-2016 (older unicode-regex)
+    "Unicode-DFS-2016",
+    # Unlicense
+    "Unlicense",
+    # Zlib
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+# tauri-nspanel 发布了 MIT/Apache-2.0 许可证文件，但未在其
+# Cargo.toml 清单中声明许可证表达式。
+[[licenses.exceptions]]
+allow = ["MIT", "Apache-2.0"]
+name = "tauri-nspanel"
+version = "2.1.0"
+
+[licenses.private]
+ignore = false
+
+# ============================================================
+# Bans — 依赖禁用规则
+# ============================================================
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = [
+    # 移除 async-trait 可显著改善 debug 构建时间：
+    # https://github.com/openai/codex/pull/27304
+    { crate = "async-trait", wrappers = [
+        "codex-desktop",
+        "hickory-proto",
+        "opentelemetry-http",
+        "pagable",
+        "rmcp",
+        "tonic",
+        "zbus",
+    ], reason = "first-party traits must use native async trait methods with explicit Send bounds; codex-desktop dev-only for mock tests" },
+]
+skip = []
+skip-tree = []
+
+# ============================================================
+# Sources — Git 源白名单
+# ============================================================
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+required-git-spec = "rev"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    # --- codex-rs transitive dependencies ---
+    "https://github.com/dzbarsky/rules_rust",
+    "https://github.com/helix-editor/nucleo.git",
+    "https://github.com/juberti-oai/rust-sdks.git",
+    # tokio-tungstenite / tungstenite fork — v8 OVERRIDE 修正：
+    # fork 添加了 tungstenite::extensions 等公开 API，编译期依赖，patch 不可删除
+    "https://github.com/openai-oss-forks/tokio-tungstenite",
+    "https://github.com/openai-oss-forks/tungstenite-rs",
+    # --- src-tauri dependencies ---
+    "https://github.com/ahkohd/tauri-nspanel",
+]
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []

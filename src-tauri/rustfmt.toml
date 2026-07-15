@@ -1,0 +1,4 @@
+edition = "2024"
+# 该设置产生的警告可以忽略。
+# 参见 https://github.com/openai/openai/pull/298039 了解详情。
+imports_granularity = "Item"

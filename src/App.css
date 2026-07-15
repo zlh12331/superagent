@@ -1,0 +1,628 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './theme-variables.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================================
+ * 环境氛围效果层 — 1:1 对齐 prototype.html
+ *
+ * 三层叠加营造科技感氛围：
+ *   1. body::before — 四层背景：gradient mesh 光晕 + 技术网格线 + 扫描线
+ *   2. body::after  — SVG feTurbulence 噪点纹理
+ *   3. body         — 基础背景色
+ *
+ * 所有效果通过 CSS 变量控制，支持主题切换与无障碍退化。
+ * ========================================================================= */
+
+@layer base {
+  :root {
+    --app-corner-radius: 12px;
+  }
+
+  /* =========================================================================
+   * 全局滚动条样式 — 对齐 prototype.html 行 1970-1982 精密仪器式视觉
+   *
+   * 通过 --scrollbar-thumb / --scrollbar-thumb-hover 变量实现主题适配：
+   *   深色主题：半透明白色滚动条（rgba(255,255,255,0.1~0.2)）
+   *   浅色主题：半透明黑色滚动条（rgba(0,0,0,0.15~0.25)）
+   * 变量定义位于 theme-variables.css 的各主题块中。
+   * border + background-clip 技巧实现"内嵌"效果（滑块不贴边）。
+   * ========================================================================= */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.1));
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.2));
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* =========================================================================
+   * 全局焦点环 — 对齐 prototype.html 行 3600-3605
+   *
+   * 所有可聚焦元素在键盘导航时显示 accent 色 2px 轮廓环，
+   * 提升无障碍可访问性与键盘导航视觉反馈。
+   * button / toggle-switch 的 outline-offset 缩小为 1px（紧贴边框）。
+   * ========================================================================= */
+  *:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  button:focus-visible,
+  .toggle-switch:focus-visible {
+    outline-offset: 1px;
+  }
+
+  /* 直角 — 在 Windows/Linux 全屏时使用 */
+  .square-corners {
+    --app-corner-radius: 0px;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+    cursor: default;
+  }
+
+  body {
+    @apply text-foreground;
+    background: var(--bg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    overscroll-behavior: none;
+    min-height: 100vh;
+    min-width: 100vw;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /*
+   * 环境背景层 — 网格线 + gradient mesh 光晕 + 扫描线
+   * 使用多层 background 叠加，从上到下：
+   *   第 1 层：左上角青绿色 radial-gradient 光晕
+   *   第 2 层：右下角琥珀色 radial-gradient 光晕
+   *   第 3 层：水平网格线（40px 间距）
+   *   第 4 层：垂直网格线（40px 间距）
+   *   第 5 层：扫描线纹理（3px 周期）
+   */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background:
+      radial-gradient(
+        ellipse 60% 50% at 15% 0%,
+        var(--accent-glow),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 50% 40% at 85% 100%,
+        var(--amber-glow),
+        transparent 60%
+      ),
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+      repeating-linear-gradient(
+        0deg,
+        transparent 0,
+        transparent 2px,
+        var(--scan-line) 2px,
+        var(--scan-line) 3px
+      );
+    background-size:
+      100% 100%, 100% 100%, 40px 40px, 40px 40px, auto;
+  }
+
+  /*
+   * 噪点纹理层 — SVG feTurbulence 生成 fractalNoise + feColorMatrix 调色
+   * 对齐 prototype.html 行 184：feColorMatrix 将噪点着色为暖白调，
+   * 避免纯灰噪点在深色背景上过于刺眼。
+   * mix-blend-mode 确保噪点与背景自然融合：
+   *   深色主题用 overlay（避免纯白噪点破坏暗色）
+   *   浅色主题用 multiply（噪点加深背景）
+   */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.9 0 0 0 0 0.95 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: var(--noise-opacity);
+    mix-blend-mode: var(--noise-blend);
+  }
+
+  /* 扫描线开关 — 通过 .no-scanlines 类禁用扫描线层 */
+  body.no-scanlines::before {
+    background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px, 0 0;
+  }
+
+  svg {
+    color: inherit;
+  }
+
+  /* 允许在特定区域进行文本选择 */
+  input,
+  textarea,
+  [contenteditable='true'] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text !important;
+  }
+
+  /* 工具类 — 显式需要指针光标时使用 */
+  .cursor-pointer {
+    cursor: pointer !important;
+  }
+
+  /* 使拖拽区域在 Windows 触摸/手写笔下生效所必需 */
+  *[data-tauri-drag-region] {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  /* 等宽数字 — 用于元数据/计数显示 */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* =========================================================================
+ * 关键帧动画定义 — 对齐 prototype.html
+ * ========================================================================= */
+
+/* 流式光标闪烁（流式回复、终端光标） */
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Spinner 旋转（工具卡运行中、计划项执行中） */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 工具卡运行中进度条往返动画 */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Toast 通知入场动画 */
+@keyframes toastIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Toast 通知出场动画 */
+@keyframes toastOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+/* Toast 底部进度条倒计时 */
+@keyframes toastProgress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* 浏览器面板加载进度条 */
+@keyframes br-loading-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 骨架屏闪烁动画 */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Typing indicator 三点跳动 */
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* 消息入场动画 */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 启动揭示动画 — 从上方轻微下滑淡入（对齐原型 translateY 视觉） */
+@keyframes bootReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 发送按钮脉冲反馈 */
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.92);
+  }
+}
+
+/* =========================================================================
+ * 入场动画工具类
+ * ========================================================================= */
+
+/* 顶栏启动揭示 */
+.enter-boot {
+  animation: bootReveal 0.5s ease;
+}
+
+/* 工作区淡入上滑 */
+.enter-fade-up {
+  animation: fadeUp 0.4s ease 0.15s both;
+}
+
+/* Composer 延迟淡入 */
+.enter-composer {
+  animation: fadeUp 0.5s ease 0.25s both;
+}
+
+/* 消息项入场 */
+.enter-anim {
+  animation: fadeUp 0.3s ease;
+}
+
+/* 发送中脉冲 */
+.sending {
+  animation: pulse 0.6s;
+}
+
+/* =========================================================================
+ * 无障碍退化 — prefers-reduced-motion 禁用所有动画
+ * 尊重用户系统偏好，避免前庭功能障礙者不适
+ * ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =========================================================================
+ * 顶栏底部渐变线 — accent 光晕装饰
+ * ========================================================================= */
+.topbar-glow::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 对齐原型 .topbar::after { bottom:-1px }：渐变线落在 border 下方，避免被 border 遮挡 */
+  bottom: -1px;
+  height: 1px;
+  /* 对齐原型 .topbar::after：渐变停止点 20%/80%（发光区域更宽） */
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-glow) 20%,
+    var(--accent-glow) 80%,
+    transparent
+  );
+  /* 对齐原型 opacity:0.5（半透明，避免发光线过于突兀） */
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* =========================================================================
+ * 窄屏侧栏抽屉触发按钮 — 对齐原型 .sidebar-toggle-btn 响应式显隐
+ *
+ * 默认 hidden（由 TitleBar 中 .sidebar-drawer-toggle 类设定），
+ * 窄屏（max-width:900px）下切换为 flex 显示。响应式布局切换由
+ * MainWindow.tsx 负责，此处仅控制按钮可见性。
+ * ========================================================================= */
+@media (max-width: 900px) {
+  .sidebar-drawer-toggle {
+    display: flex;
+  }
+}
+
+/* =========================================================================
+ * 骨架屏工具类
+ * ========================================================================= */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elev) 25%,
+    var(--bg-elev-2) 50%,
+    var(--bg-elev) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+/* =========================================================================
+ * 浮层抽屉机制 — 窄屏下面板以浮层方式滑出
+ * 对齐 prototype.html 行 4947-4997
+ *
+ * 工作原理：
+ *   - 正常宽度：面板在 ResizablePanelGroup 内（flex 布局）
+ *   - 紧凑屏（<1200px）：右面板自动隐藏，可通过浮层抽屉唤出
+ *   - 窄屏（<900px）：侧栏自动隐藏，可通过浮层抽屉唤出
+ *   - 抽屉为 position:fixed 定位，配合遮罩层点击关闭
+ *
+ * 注意：面板显隐由 React 状态驱动（useLayoutBreakpoint hook +
+ *       sidebar-store 的 visible 标志），此处 CSS 仅定义抽屉视觉与动画。
+ * ========================================================================= */
+
+/* 遮罩层 — 覆盖全屏，点击关闭抽屉 */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  z-index: calc(var(--z-modal) - 1);
+  animation: backdropFadeIn 0.25s ease forwards;
+}
+
+/* 侧栏抽屉 — 从左侧滑入，对齐原型 body.sidebar-drawer-open .sidebar */
+.sidebar-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(280px, 80vw);
+  z-index: var(--z-modal);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: 20px 0 60px rgba(0, 0, 0, 0.5);
+  animation: drawerSlideInLeft 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* 右面板抽屉 — 从右侧滑入，对齐原型 body.rp-drawer-open .chat-right-panel */
+.right-panel-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 85vw);
+  z-index: var(--z-modal);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+  animation: drawerSlideInRight 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* 遮罩淡入动画 */
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 抽屉滑入动画 — 左侧 */
+@keyframes drawerSlideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* 抽屉滑入动画 — 右侧 */
+@keyframes drawerSlideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* =========================================================================
+ * 响应式断点 — 4 档适配
+ * 对齐 prototype.html 行 4967-5039
+ *
+ * 断点策略：
+ *   1200px：收右栏（由 React useLayoutBreakpoint 驱动 store visible 标志 + 浮层抽屉）
+ *   900px：收左栏（由 React useLayoutBreakpoint 驱动 store visible 标志 + 浮层抽屉）
+ *   600px：简化顶栏与对话区间距（组件级 CSS 调整，由根容器 .is-mobile 类名触发）
+ *   480px：极简模式（由根容器 .is-minimal 类名触发）
+ *
+ * 说明：
+ *   - 1200px / 900px 档布局由 React 状态驱动（ResizablePanel 显隐 + 浮层抽屉），
+ *     无需 CSS 变量覆盖。原先覆盖 --sidebar-w 的媒体查询为死代码（前端使用
+ *     react-resizable-panels 百分比布局，不消费该变量），已删除；变量定义仍保留在
+ *     theme-variables.css 中以备未来使用。
+ *   - 600px / 480px 档通过根容器上的 .is-mobile / .is-minimal 类名（由
+ *     useLayoutBreakpoint 的 isMobile / isMinimal 状态添加）精确控制组件级调整。
+ * ========================================================================= */
+
+/* 600px 断点：极窄屏，关闭应用圆角 + 简化顶栏（对齐原型行 5019-5032）
+ * 说明：.is-mobile 类名由 MainWindow.tsx 根据 useLayoutBreakpoint.isMobile 添加。
+ *   .topbar-glow 为 TitleBar 容器现有类名，可立即生效；brand-telemetry 规则由
+ *   Group A 子代理在 TitleBar.tsx 落地 data-slot 属性后生效。
+ *
+ * 原型 600px 断点各项在前端中的映射说明：
+ *   1. .titlebar-center { display: none } — 前端 TitleBar 无 titlebar-center 元素，
+ *      中间区域不存在，无需隐藏。
+ *   2. .titlebar { padding: 0 8px } — 已通过下方 .topbar-glow 规则实现（padding: 0 10px，
+ *      对齐原型 .topbar { padding: 0 10px }）。
+ *   3. .sidebar { width:100%; position:absolute; transform:translateX(-100%) } —
+ *      前端侧栏在 900px 断点已通过 React 状态（isNarrow）隐藏，600px 时侧栏已不可见。
+ *      窄屏抽屉由 .sidebar-drawer 浮层实现（见上方抽屉机制注释），非 CSS transform 驱动。
+ *   4. .sidebar.mobile-open { transform:translateX(0) } — 抽屉打开态由 React 状态
+ *      sidebarDrawerOpen 控制，渲染 .sidebar-drawer 浮层（带 drawerSlideInLeft 动画）。
+ *   5. .right-panel { display: none } — 前端右面板在 1200px 断点已通过 React 状态
+ *      （isCompact）隐藏，600px 时右面板已不可见。紧凑屏抽屉由 .right-panel-drawer 实现。
+ *   6. .composer { padding: 8px } — Composer 组件（ChatInput.tsx）使用 Tailwind
+ *      响应式工具类实现 padding 调整，无需 App.css 规则。
+ *   7. .messages { padding: 8px } — ConversationArea 组件使用 Tailwind 响应式工具类。
+ *   8. .message { font-size: 13px } — 消息项组件使用 Tailwind 响应式工具类。
+ *   9. .resizer { display: none } — ResizableHandle 在窄屏下通过 React hidden 类隐藏
+ *      （MainWindow.tsx 中 (!leftSidebarVisible || isNarrow) && 'hidden'）。
+ *  10. .context-panel-toggle { display: flex } — 前端无此元素；窄屏右面板切换由
+ *      TitleBar 中的 .sidebar-drawer-toggle 按钮触发（900px 断点显示，见上方案）。
+ *
+ * 这些规则位于 @layer 之外（非分层样式），优先级高于 Tailwind 工具类，可正确覆盖。 */
+@media (max-width: 600px) {
+  :root {
+    /* 极窄屏：关闭应用圆角，全屏铺满 */
+    --app-corner-radius: 0px;
+  }
+  /* 简化顶栏：缩小内边距与间距（对齐原型 .topbar { padding: 0 10px; gap: 8px }） */
+  .is-mobile .topbar-glow {
+    padding-left: 10px;
+    padding-right: 10px;
+    gap: 8px;
+  }
+  /* 隐藏非必要元素（对齐原型 600px 断点隐藏项） */
+  .is-mobile [data-slot='brand-telemetry'] {
+    display: none;
+  }
+  /* 对话区 padding 缩小（对齐原型 .messages { padding: 8px }） */
+  .is-mobile [data-area='messages'] {
+    padding: 8px;
+  }
+  /* 输入框 padding 缩小（对齐原型 .composer { padding: 8px }） */
+  .is-mobile [data-area='composer'] {
+    padding: 8px;
+  }
+  /* 消息字体缩小（对齐原型 .message { font-size: 13px }） */
+  .is-mobile [data-area='message'] {
+    font-size: 13px;
+  }
+}
+
+/* 480px 断点：极简模式（对齐原型行 5034-5039）
+ * 说明：.is-minimal 类名由 MainWindow.tsx 根据 useLayoutBreakpoint.isMinimal 添加。
+ *
+ * 原型 480px 断点各项在前端中的映射说明：
+ *   1. .titlebar { height: 36px } — 已通过下方 .is-minimal .topbar-glow 规则实现，
+ *      覆盖 TitleBar 组件的 h-[52px] Tailwind 类（非分层 CSS 优先级高于工具类）。
+ *   2. .titlebar-logo { font-size: 12px } — 前端无 titlebar-logo 类；品牌名称
+ *      在 TitleBar.tsx 中使用 Tailwind 工具类控制字号，无对应 CSS 选择器。
+ *   3. .composer-input { font-size: 14px } — ChatInput.tsx 的 textarea 使用
+ *      Tailwind 响应式工具类控制字号（M-B-002 注释引用原型 480px 断点），无需 App.css 规则。
+ *   4. .message-bubble { padding: 8px 10px } — 消息气泡组件使用 Tailwind 工具类
+ *      控制 padding，无对应 CSS 选择器。
+ *   5. .welcome-hero h1 / p { font-size } — 欢迎屏组件使用 Tailwind 工具类
+ *      控制字号，无对应 CSS 选择器。
+ *
+ * 这些规则位于 @layer 之外（非分层样式），优先级高于 Tailwind 工具类，可正确覆盖。 */
+@media (max-width: 480px) {
+  :root {
+    /* 极简模式：沿用 600px 的圆角设置 */
+  }
+  /* 极窄屏顶栏高度压缩为 36px（对齐原型 .titlebar { height: 36px }） */
+  .is-minimal .topbar-glow {
+    height: 36px;
+  }
+  /* 品牌名称字号缩小（对齐原型 .titlebar-logo { font-size: 12px }） */
+  .is-minimal [data-slot='brand-name'] {
+    font-size: 12px;
+  }
+  /* 输入框字号增大防止 iOS 自动缩放（对齐原型 .composer-input { font-size: 14px }） */
+  .is-minimal [data-slot='composer-input'] {
+    font-size: 14px;
+  }
+  /* 消息气泡 padding 缩小（对齐原型 .message-bubble { padding: 8px 10px }） */
+  .is-minimal [data-slot='message-bubble'] {
+    padding: 8px 10px;
+  }
+  /* 欢迎屏标题字号缩小（对齐原型 .welcome-hero h1 { font-size: 20px }） */
+  .is-minimal [data-slot='welcome-title'] {
+    font-size: 20px;
+  }
+  /* 欢迎屏描述字号缩小（对齐原型 .welcome-hero p { font-size: 12px }） */
+  .is-minimal [data-slot='welcome-desc'] {
+    font-size: 12px;
+  }
+}

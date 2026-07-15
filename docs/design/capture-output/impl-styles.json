@@ -1,0 +1,533 @@
+{
+  "elements": [
+    {
+      "selector": "body[0]",
+      "tag": "body",
+      "class": "",
+      "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P\n新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 d",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1000
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "#root[0]",
+      "tag": "div",
+      "class": "",
+      "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P\n新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 d",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1000
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"app\"][0]",
+      "tag": "div",
+      "class": "flex h-screen w-full flex-col overflow-hidden rounded-[var(--app-corner-radius)] bg-background",
+      "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P\n新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 d",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1000
+      },
+      "styles": {
+        "backgroundColor": "rgb(247, 248, 250)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "12px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"right\"][0]",
+      "tag": "svg",
+      "class": "",
+      "text": "",
+      "rect": {
+        "x": 1318,
+        "y": 18,
+        "width": 16,
+        "height": 16
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(108, 118, 134)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"right\"][1]",
+      "tag": "div",
+      "class": "absolute -top-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--border-strong)] to-transparent",
+      "text": "",
+      "rect": {
+        "x": 321,
+        "y": 807,
+        "width": 959,
+        "height": 1
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"right\"][2]",
+      "tag": "div",
+      "class": "absolute top-0 left-0 right-0 z-10 flex h-2.5 cursor-ns-resize items-center justify-center transition-opacity duration-200 opacity-0 group-hover:opaci",
+      "text": "",
+      "rect": {
+        "x": 321,
+        "y": 808,
+        "width": 959,
+        "height": 10
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"panel\"][2]",
+      "tag": "div",
+      "class": "flex h-full w-full data-[panel-group-direction=vertical]:flex-col",
+      "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n",
+      "rect": {
+        "x": 0,
+        "y": 52,
+        "width": 1600,
+        "height": 948
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"panel\"][3]",
+      "tag": "div",
+      "class": "bg-border focus-visible:ring-ring relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-transl",
+      "text": "",
+      "rect": {
+        "x": 320,
+        "y": 52,
+        "width": 1,
+        "height": 948
+      },
+      "styles": {
+        "backgroundColor": "rgb(225, 228, 235)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"topbar\"][0]",
+      "tag": "div",
+      "class": "topbar-glow relative flex h-[52px] w-full shrink-0 items-center gap-3.5 border-b bg-background px-[18px]",
+      "text": "codex\nv1.4.0 · main\ngpt-5-codex\nCommand Palette\n⌘P",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 52
+      },
+      "styles": {
+        "backgroundColor": "rgb(247, 248, 250)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px 18px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "14px",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"group/thread\"][0]",
+      "tag": "div",
+      "class": "group/thread relative flex flex-wrap items-start gap-2 rounded-[7px] border border-transparent px-2.5 py-2 transition-[background,transform,border-col",
+      "text": "修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs",
+      "rect": {
+        "x": 27,
+        "y": 265,
+        "width": 286,
+        "height": 53
+      },
+      "styles": {
+        "backgroundColor": "rgb(238, 240, 244)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgba(0, 0, 0, 0)",
+        "borderWidth": "0.666667px",
+        "borderRadius": "7px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "8px 10px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "8px",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(238, 240, 244) 2px 0px 0px 0px inset, rgba(0, 229, 199, 0.06) 0px 0px 16px 0px, rgba(0, 184, 158, 0.15) 0px 0px 0px 1px"
+      }
+    },
+    {
+      "selector": "[class*=\"group/thread\"][1]",
+      "tag": "div",
+      "class": "group/thread relative flex flex-wrap items-start gap-2 rounded-[7px] border border-transparent px-2.5 py-2 transition-[background,transform,border-col",
+      "text": "Tailwind v4 CSS-first 配置\n4h · 3 msgs",
+      "rect": {
+        "x": 25,
+        "y": 318,
+        "width": 286,
+        "height": 53
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgba(0, 0, 0, 0)",
+        "borderWidth": "0.666667px",
+        "borderRadius": "7px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "8px 10px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "8px",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"bubble\"][0]",
+      "tag": "div",
+      "class": "rounded-xl rounded-br-sm bg-[var(--msg-bubble-user)] px-3.5 py-2.5",
+      "text": "Help me debug the bridge.rs streaming issue",
+      "rect": {
+        "x": 414,
+        "y": 108,
+        "width": 772,
+        "height": 43
+      },
+      "styles": {
+        "backgroundColor": "rgb(232, 237, 245)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "14px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "10px 14px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"tab\"][0]",
+      "tag": "span",
+      "class": "rounded-full bg-[var(--bg)] px-[5px] py-px font-mono text-[9.5px] tabular-nums text-[var(--accent)]",
+      "text": "6",
+      "rect": {
+        "x": 95,
+        "y": 152,
+        "width": 17,
+        "height": 17
+      },
+      "styles": {
+        "backgroundColor": "rgb(247, 248, 250)",
+        "color": "rgb(238, 240, 244)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "2.23696e+07px",
+        "fontSize": "9.5px",
+        "fontWeight": "500",
+        "fontFamily": "\"Martian Mono\"",
+        "padding": "1px 5px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"tab\"][1]",
+      "tag": "span",
+      "class": "rounded-full bg-[var(--bg)] px-[5px] py-px font-mono text-[9.5px] tabular-nums text-[var(--text-faint)]",
+      "text": "2",
+      "rect": {
+        "x": 235,
+        "y": 152,
+        "width": 17,
+        "height": 17
+      },
+      "styles": {
+        "backgroundColor": "rgb(247, 248, 250)",
+        "color": "rgb(108, 118, 134)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "2.23696e+07px",
+        "fontSize": "9.5px",
+        "fontWeight": "500",
+        "fontFamily": "\"Martian Mono\"",
+        "padding": "1px 5px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"tab\"][2]",
+      "tag": "div",
+      "class": "mt-[3px] font-mono text-[10px] text-[var(--text-faint)] tabular-nums",
+      "text": "1h · 8 msgs",
+      "rect": {
+        "x": 51,
+        "y": 294,
+        "width": 197,
+        "height": 16
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(108, 118, 134)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "10px",
+        "fontWeight": "400",
+        "fontFamily": "\"Martian Mono\"",
+        "padding": "0px",
+        "margin": "3px 0px 0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "[class*=\"terminal\"][1]",
+      "tag": "div",
+      "class": "terminal xterm xterm-dom-renderer-owner-2",
+      "text": "Codex Terminal v0.2.0\nType 'help' for available commands.\n$  ",
+      "rect": {
+        "x": 1281,
+        "y": 119,
+        "width": 319,
+        "height": 871
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "aside[0]",
+      "tag": "aside",
+      "class": "relative flex min-h-0 min-w-0 flex-col border-r border-[var(--border)] bg-[var(--bg-elev)]",
+      "text": "新建会话\n最近\n6\n归档\n2\n最近会话\ncodex-desktop\n3\n修复 Tauri v2 deep-link 注册失败\n1h · 8 msgs\nTailwind v4 CSS-first 配置\n",
+      "rect": {
+        "x": 0,
+        "y": 52,
+        "width": 320,
+        "height": 640
+      },
+      "styles": {
+        "backgroundColor": "rgb(255, 255, 255)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "section[0]",
+      "tag": "section",
+      "class": "",
+      "text": "",
+      "rect": {
+        "x": 0,
+        "y": 1000,
+        "width": 1600,
+        "height": 0
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(26, 33, 48)",
+        "borderColor": "rgb(225, 228, 235)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    }
+  ],
+  "appLayout": {
+    "display": "block",
+    "width": 1600,
+    "height": 1000
+  },
+  "cssVars": {
+    "--bg": "#f7f8fa",
+    "--bg-elev": "#ffffff",
+    "--bg-elev-2": "#eef0f4",
+    "--bg-elev-3": "#e0e4ec",
+    "--border": "#e1e4eb",
+    "--border-strong": "#cbd0db",
+    "--text": "#1a2130",
+    "--text-dim": "#5a6478",
+    "--text-faint": "#6c7686",
+    "--accent": "#eef0f4",
+    "--accent-dim": "#009a82",
+    "--accent-2": "#2b7fff",
+    "--amber": "#e89038",
+    "--warn": "#e89038",
+    "--error": "#c53030",
+    "--magenta": "#a855f7",
+    "--sidebar-w": "clamp(200px, 17vw, 280px)",
+    "--right-panel-w": "clamp(260px, 22vw, 360px)"
+  }
+}

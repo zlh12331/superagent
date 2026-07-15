@@ -1,0 +1,536 @@
+# ============================================================
+# Codex Desktop — Cargo workspace 根
+#
+# 本文件是纯 workspace 清单，不包含任何 package 定义。
+# 所有 crate（桌面端 + 引擎）统一放在 codex-rs/ 下。
+#
+# - [workspace] members 包含 codex-rs/ 下的 100 个 crate
+# - [workspace.dependencies] 统一管理依赖版本
+# - [workspace.lints] 定义全局 clippy 规则
+# ============================================================
+
+[workspace]
+resolver = "2"
+members = [
+    "codex-rs/desktop",
+    "codex-rs/aws-auth",
+    "codex-rs/analytics",
+    "codex-rs/agent-graph-store",
+    "codex-rs/agent-identity",
+    "codex-rs/backend-client",
+    "codex-rs/async-utils",
+    "codex-rs/app-server",
+    "codex-rs/app-server-transport",
+    "codex-rs/app-server-protocol",
+    "codex-rs/apply-patch",
+    "codex-rs/arg0",
+    "codex-rs/feedback",
+    "codex-rs/features",
+    "codex-rs/install-context",
+    "codex-rs/codex-backend-openapi-models",
+    "codex-rs/code-mode",
+    "codex-rs/code-mode-protocol",
+    "codex-rs/codex-home",
+    "codex-rs/cloud-config",
+    "codex-rs/collaboration-mode-templates",
+    "codex-rs/connectors",
+    "codex-rs/config",
+    "codex-rs/context-fragments",
+    "codex-rs/shell-command",
+    "codex-rs/shell-escalation",
+    "codex-rs/skills",
+    "codex-rs/core",
+    "codex-rs/core-plugins",
+    "codex-rs/core-skills",
+    "codex-rs/hooks",
+    "codex-rs/secrets",
+    "codex-rs/file-system",
+    "codex-rs/exec-server-protocol",
+    "codex-rs/exec-server",
+    "codex-rs/execpolicy",
+    "codex-rs/ext/connectors",
+    "codex-rs/ext/extension-api",
+    "codex-rs/ext/goal",
+    "codex-rs/ext/guardian",
+    "codex-rs/ext/image-generation",
+    "codex-rs/ext/memories",
+    "codex-rs/ext/mcp",
+    "codex-rs/ext/skills",
+    "codex-rs/ext/web-search",
+    "codex-rs/external-agent-migration",
+    "codex-rs/external-agent-sessions",
+    "codex-rs/keyring-store",
+    "codex-rs/file-search",
+    "codex-rs/file-watcher",
+    "codex-rs/linux-sandbox",
+    "codex-rs/lmstudio",
+    "codex-rs/login",
+    "codex-rs/codex-mcp",
+    "codex-rs/mcp-server",
+    "codex-rs/memories/read",
+    "codex-rs/memories/write",
+    "codex-rs/model-provider-info",
+    "codex-rs/models-manager",
+    "codex-rs/network-proxy",
+    "codex-rs/ollama",
+    "codex-rs/process-hardening",
+    "codex-rs/protocol",
+    "codex-rs/prompts",
+    "codex-rs/rollout",
+    "codex-rs/rollout-trace",
+    "codex-rs/rmcp-client",
+    "codex-rs/response-debug-context",
+    "codex-rs/sandboxing",
+    "codex-rs/otel",
+    "codex-rs/tools",
+    # v8-poc 已排除 — 实验性 Bazel crate，无依赖者
+    "codex-rs/utils/absolute-path",
+    "codex-rs/utils/path-uri",
+    "codex-rs/utils/cargo-bin",
+    "codex-rs/git-utils",
+    "codex-rs/utils/cache",
+    "codex-rs/utils/image",
+    "codex-rs/utils/json-to-toml",
+    "codex-rs/utils/home-dir",
+    "codex-rs/utils/pty",
+    "codex-rs/utils/readiness",
+    "codex-rs/utils/rustls-provider",
+    "codex-rs/utils/string",
+    "codex-rs/utils/cli",
+    "codex-rs/utils/sandbox-summary",
+    "codex-rs/utils/oss",
+    "codex-rs/utils/output-truncation",
+    "codex-rs/utils/path-utils",
+    "codex-rs/utils/plugins",
+    "codex-rs/utils/stream-parser",
+    "codex-rs/utils/template",
+    "codex-rs/codex-client",
+    "codex-rs/codex-api",
+    "codex-rs/state",
+    "codex-rs/terminal-detection",
+    "codex-rs/test-binary-support",
+    "codex-rs/thread-store",
+    "codex-rs/uds",
+    "codex-rs/codex-experimental-api-macros",
+    "codex-rs/plugin",
+    "codex-rs/model-provider",
+]
+
+[workspace.package]
+version = "0.0.0"
+# 在此处集中跟踪所有 workspace crate 的 edition。
+# 各 crate 仍可单独覆盖此值，但放在这里意味着
+# `cargo new -w ...` 创建的新 crate 会自动继承 2024 edition。
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# Internal codex-rs path 依赖（path 前缀已更新为 codex-rs/）
+app_test_support = { path = "codex-rs/app-server/tests/common" }
+codex-analytics = { path = "codex-rs/analytics" }
+codex-agent-graph-store = { path = "codex-rs/agent-graph-store" }
+codex-agent-identity = { path = "codex-rs/agent-identity" }
+codex-api = { path = "codex-rs/codex-api" }
+codex-aws-auth = { path = "codex-rs/aws-auth" }
+codex-app-server = { path = "codex-rs/app-server" }
+codex-app-server-transport = { path = "codex-rs/app-server-transport" }
+codex-app-server-protocol = { path = "codex-rs/app-server-protocol" }
+codex-apply-patch = { path = "codex-rs/apply-patch" }
+codex-arg0 = { path = "codex-rs/arg0" }
+codex-async-utils = { path = "codex-rs/async-utils" }
+codex-backend-client = { path = "codex-rs/backend-client" }
+codex-chatgpt = { path = "codex-rs/chatgpt" }
+codex-client = { path = "codex-rs/codex-client" }
+codex-collaboration-mode-templates = { path = "codex-rs/collaboration-mode-templates" }
+codex-cloud-config = { path = "codex-rs/cloud-config" }
+codex-code-mode = { path = "codex-rs/code-mode" }
+codex-code-mode-protocol = { path = "codex-rs/code-mode-protocol" }
+codex-home = { path = "codex-rs/codex-home" }
+codex-config = { path = "codex-rs/config" }
+codex-connectors = { path = "codex-rs/connectors" }
+codex-connectors-extension = { path = "codex-rs/ext/connectors" }
+codex-context-fragments = { path = "codex-rs/context-fragments" }
+codex-core = { path = "codex-rs/core" }
+codex-core-plugins = { path = "codex-rs/core-plugins" }
+codex-core-skills = { path = "codex-rs/core-skills" }
+codex-file-system = { path = "codex-rs/file-system" }
+codex-exec-server-protocol = { path = "codex-rs/exec-server-protocol" }
+codex-exec-server = { path = "codex-rs/exec-server" }
+codex-execpolicy = { path = "codex-rs/execpolicy" }
+codex-extension-api = { path = "codex-rs/ext/extension-api" }
+codex-goal-extension = { path = "codex-rs/ext/goal" }
+codex-guardian = { path = "codex-rs/ext/guardian" }
+codex-image-generation-extension = { path = "codex-rs/ext/image-generation" }
+codex-external-agent-migration = { path = "codex-rs/external-agent-migration" }
+codex-external-agent-sessions = { path = "codex-rs/external-agent-sessions" }
+codex-experimental-api-macros = { path = "codex-rs/codex-experimental-api-macros" }
+codex-features = { path = "codex-rs/features" }
+codex-feedback = { path = "codex-rs/feedback" }
+codex-install-context = { path = "codex-rs/install-context" }
+codex-file-search = { path = "codex-rs/file-search" }
+codex-file-watcher = { path = "codex-rs/file-watcher" }
+codex-git-utils = { path = "codex-rs/git-utils" }
+codex-hooks = { path = "codex-rs/hooks" }
+codex-keyring-store = { path = "codex-rs/keyring-store" }
+codex-linux-sandbox = { path = "codex-rs/linux-sandbox" }
+codex-lmstudio = { path = "codex-rs/lmstudio" }
+codex-login = { path = "codex-rs/login" }
+codex-memories-extension = { path = "codex-rs/ext/memories" }
+codex-web-search-extension = { path = "codex-rs/ext/web-search" }
+codex-memories-read = { path = "codex-rs/memories/read" }
+codex-memories-write = { path = "codex-rs/memories/write" }
+codex-mcp = { path = "codex-rs/codex-mcp" }
+codex-mcp-extension = { path = "codex-rs/ext/mcp" }
+codex-mcp-server = { path = "codex-rs/mcp-server" }
+codex-model-provider-info = { path = "codex-rs/model-provider-info" }
+codex-models-manager = { path = "codex-rs/models-manager" }
+codex-network-proxy = { path = "codex-rs/network-proxy" }
+codex-ollama = { path = "codex-rs/ollama" }
+codex-otel = { path = "codex-rs/otel" }
+codex-plugin = { path = "codex-rs/plugin" }
+codex-model-provider = { path = "codex-rs/model-provider" }
+codex-process-hardening = { path = "codex-rs/process-hardening" }
+codex-protocol = { path = "codex-rs/protocol" }
+codex-prompts = { path = "codex-rs/prompts" }
+codex-response-debug-context = { path = "codex-rs/response-debug-context" }
+codex-rmcp-client = { path = "codex-rs/rmcp-client" }
+codex-rollout = { path = "codex-rs/rollout" }
+codex-rollout-trace = { path = "codex-rs/rollout-trace" }
+codex-sandboxing = { path = "codex-rs/sandboxing" }
+codex-secrets = { path = "codex-rs/secrets" }
+codex-shell-command = { path = "codex-rs/shell-command" }
+codex-shell-escalation = { path = "codex-rs/shell-escalation" }
+codex-skills-extension = { path = "codex-rs/ext/skills" }
+codex-skills = { path = "codex-rs/skills" }
+codex-state = { path = "codex-rs/state" }
+codex-terminal-detection = { path = "codex-rs/terminal-detection" }
+codex-test-binary-support = { path = "codex-rs/test-binary-support" }
+codex-thread-store = { path = "codex-rs/thread-store" }
+codex-tools = { path = "codex-rs/tools" }
+codex-uds = { path = "codex-rs/uds" }
+codex-utils-absolute-path = { path = "codex-rs/utils/absolute-path" }
+codex-utils-cache = { path = "codex-rs/utils/cache" }
+codex-utils-cargo-bin = { path = "codex-rs/utils/cargo-bin" }
+codex-utils-cli = { path = "codex-rs/utils/cli" }
+codex-utils-home-dir = { path = "codex-rs/utils/home-dir" }
+codex-utils-image = { path = "codex-rs/utils/image" }
+codex-utils-json-to-toml = { path = "codex-rs/utils/json-to-toml" }
+codex-utils-oss = { path = "codex-rs/utils/oss" }
+codex-utils-output-truncation = { path = "codex-rs/utils/output-truncation" }
+codex-utils-path = { path = "codex-rs/utils/path-utils" }
+codex-utils-path-uri = { path = "codex-rs/utils/path-uri" }
+codex-utils-plugins = { path = "codex-rs/utils/plugins" }
+codex-utils-pty = { path = "codex-rs/utils/pty" }
+codex-utils-rustls-provider = { path = "codex-rs/utils/rustls-provider" }
+codex-utils-sandbox-summary = { path = "codex-rs/utils/sandbox-summary" }
+codex-utils-stream-parser = { path = "codex-rs/utils/stream-parser" }
+codex-utils-string = { path = "codex-rs/utils/string" }
+codex-utils-template = { path = "codex-rs/utils/template" }
+codex-windows-sandbox = { path = "codex-rs/windows-sandbox-rs" }
+core_test_support = { path = "codex-rs/core/tests/common" }
+mcp_test_support = { path = "codex-rs/mcp-server/tests/common" }
+
+# External
+age = "0.11.1"
+allocative = "0.3.3"
+anyhow = "1"
+arc-swap = "1.9.0"
+assert_cmd = "2"
+assert_matches = "1.5.0"
+async-channel = "2.3.1"
+async-io = "2.6.0"
+async-stream = "0.3.6"
+aws-config = "1"
+aws-credential-types = "1"
+aws-sigv4 = "1"
+aws-types = "1"
+axum = { version = "0.8", default-features = false }
+base64 = "0.22.1"
+bm25 = "2.3.2"
+bytes = "1.10.1"
+chardetng = "0.1.17"
+chrono = "0.4.43"
+clap = "4"
+clatter = { version = "2.2.0", default-features = false, features = [
+    "alloc",
+    "getrandom",
+    "use-25519",
+    "use-aes-gcm",
+    "use-rust-crypto-ml-kem",
+    "use-sha",
+] }
+constant_time_eq = "0.3.1"
+crossbeam-channel = "0.5.15"
+crypto_box = { version = "0.9.1", features = ["seal"] }
+csv = "1.3.1"
+ctor = "0.6.3"
+deno_core_icudata = "0.77.0"
+derive_more = "2"
+dirs = "6"
+divan = "0.1.21"
+dns-lookup = "3.0.1"
+dotenvy = "0.15.7"
+dunce = "1.0.4"
+ed25519-dalek = { version = "2.2.0", features = ["pkcs8"] }
+encoding_rs = "0.8.35"
+env_logger = "0.11.9"
+eventsource-stream = "0.2.3"
+flate2 = "1.1.8"
+futures = { version = "0.3", default-features = false }
+gethostname = "1.1.0"
+gix = { version = "0.81.0", default-features = false, features = ["sha1"] }
+glob = "0.3"
+globset = "0.4"
+hmac = "0.12.1"
+http = "1.3.1"
+httpdate = "1.0.3"
+iana-time-zone = "0.1.64"
+icu_decimal = "2.1"
+icu_locale_core = "2.1"
+icu_provider = { version = "2.1", features = ["sync"] }
+ignore = "0.4.23"
+image = { version = "^0.25.9", default-features = false }
+include_dir = "0.7.4"
+indexmap = "2.12.0"
+insta = "1.46.3"
+inventory = "0.3.19"
+itertools = "0.14.0"
+jsonptr = { version = "0.7.1", default-features = false }
+jsonwebtoken = "9.3.1"
+keyring = { version = "3.6", default-features = false }
+landlock = "0.4.4"
+lazy_static = "1"
+libc = "0.2.182"
+# 将 SQLx 的 bundled SQLite 保持在包含 WAL-reset 损坏修复的版本：
+# https://www.sqlite.org/wal.html#the_wal_reset_bug
+libsqlite3-sys = { version = "0.37", default-features = false }
+log = "0.4"
+lru = "0.16.3"
+maplit = "1.0.2"
+memchr = "2.7.6"
+mime_guess = "2.0.5"
+multimap = "0.10.0"
+notify = "8.2.0"
+nucleo = { git = "https://github.com/helix-editor/nucleo.git", rev = "4253de9faabb4e5c6d81d946a5e35a90f87347ee" }
+once_cell = "1.20.2"
+openssl-sys = "*"
+opentelemetry = "0.31.0"
+opentelemetry-appender-tracing = "0.31.0"
+opentelemetry-otlp = "0.31.0"
+opentelemetry-semantic-conventions = "0.31.0"
+opentelemetry_sdk = "0.31.0"
+os_info = "3.12.0"
+owo-colors = "4.3.0"
+path-absolutize = "3.1.1"
+portable-pty = "0.9.0"
+predicates = "3"
+pretty_assertions = "1.4.1"
+quick-xml = "0.38.4"
+rand = "0.9"
+rcgen = { version = "0.14.7", default-features = false, features = [
+    "aws_lc_rs",
+    "pem",
+] }
+regex = "1.12.3"
+regex-lite = "0.1.8"
+reqwest = { version = "0.12", features = ["cookies"] }
+rmcp = { version = "1.8.0", default-features = false }
+runfiles = { git = "https://github.com/dzbarsky/rules_rust", rev = "b56cbaa8465e74127f1ea216f813cd377295ad81" }
+rustls = { version = "0.23", default-features = false, features = [
+    "aws_lc_rs",
+    "std",
+] }
+rustls-native-certs = "0.8.3"
+rustls-pki-types = "1.14.0"
+schemars = "0.8.22"
+seccompiler = "0.5.0"
+semver = "1.0"
+sentry = "0.48"
+# serde: 合并 codex-rs 的 ["rc"] + src-tauri 的 ["derive"]
+serde = { version = "1", features = ["derive", "rc"] }
+serde_ignored = "0.1.14"
+serde_json = "1"
+serde_path_to_error = "0.1.20"
+serde_with = "3.17"
+serde_yaml = "0.9"
+serial_test = "3.2.0"
+sha1 = "0.10.6"
+sha2 = "0.10"
+shlex = "1.3.0"
+similar = "2.7.0"
+socket2 = "0.6.1"
+sqlx = { version = "0.9.0", default-features = false, features = [
+    "chrono",
+    "json",
+    "macros",
+    "migrate",
+    "runtime-tokio",
+    "tls-rustls",
+    "sqlite-bundled",
+    "time",
+    "uuid",
+] }
+starlark = { version = "0.14.2", default-features = false }
+strum = "0.27.2"
+strum_macros = "0.28.0"
+sys-locale = "0.3.2"
+system-configuration = "0.7"
+tar = { version = "=0.4.45", default-features = false }
+tempfile = "3.23.0"
+test-log = "0.2.19"
+textwrap = "0.16.2"
+thiserror = "2.0.17"
+time = "0.3.47"
+tiny_http = "0.12"
+tokio = "1"
+tokio-stream = "0.1.18"
+tokio-test = "0.4"
+tokio-tungstenite = { version = "0.28.0", features = [
+    "proxy",
+    "rustls-tls-native-roots",
+] }
+tokio-util = "0.7.18"
+toml = "0.9.5"
+toml_edit = "0.24.0"
+tracing = "0.1.44"
+tracing-appender = "0.2.3"
+tracing-opentelemetry = "0.32.0"
+tracing-subscriber = "0.3.22"
+tracing-test = "0.2.5"
+tonic = { version = "0.14.3", default-features = false, features = ["channel", "codegen"] }
+tonic-prost = "0.14.3"
+tree-sitter = "0.25.10"
+tree-sitter-bash = "0.25"
+ts-rs = "11"
+tungstenite = { version = "0.27.0", features = ["deflate", "proxy"] }
+uds_windows = "1.1.0"
+unicode-segmentation = "1.12.0"
+unicode-width = "0.2"
+url = "2"
+urlencoding = "2.1"
+uuid = "1"
+v8 = "=149.2.0"
+walkdir = "2.5.0"
+webbrowser = "1.0"
+which = "8"
+whoami = "1.6.1"
+wildmatch = "2.6.1"
+winapi-util = "0.1.11"
+zip = "2.4.2"
+zstd = "0.13"
+
+wiremock = "0.6"
+zeroize = "1.8.2"
+
+[workspace.lints]
+rust = {}
+
+[workspace.lints.clippy]
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+expect_used = "deny"
+identity_op = "deny"
+manual_clamp = "deny"
+manual_filter = "deny"
+manual_find = "deny"
+manual_flatten = "deny"
+manual_map = "deny"
+manual_memcpy = "deny"
+manual_non_exhaustive = "deny"
+manual_ok_or = "deny"
+manual_range_contains = "deny"
+manual_retain = "deny"
+manual_strip = "deny"
+manual_try_fold = "deny"
+manual_unwrap_or = "deny"
+needless_borrow = "deny"
+needless_borrowed_reference = "deny"
+needless_collect = "deny"
+needless_late_init = "deny"
+needless_option_as_deref = "deny"
+needless_question_mark = "deny"
+needless_update = "deny"
+redundant_clone = "deny"
+redundant_closure = "deny"
+redundant_closure_for_method_calls = "deny"
+redundant_static_lifetimes = "deny"
+trivially_copy_pass_by_ref = "deny"
+uninlined_format_args = "deny"
+unnecessary_filter_map = "deny"
+unnecessary_lazy_evaluations = "deny"
+unnecessary_sort_by = "deny"
+unnecessary_to_owned = "deny"
+unwrap_used = "deny"
+
+# cargo-shear 无法看到平台相关的 openssl-sys 使用，
+# 故在此静默误报，而非删除真实依赖。
+[workspace.metadata.cargo-shear]
+ignored = [
+    "icu_provider",
+    "openssl-sys",
+]
+
+# ============================================================
+# Profiles — codex-rs 的 profile 作为 workspace 默认
+# ============================================================
+
+[profile.dev]
+# 保留行表/回溯，同时避免本地 dev 构建中昂贵的完整变量调试信息。
+debug = "limited"
+
+[profile.dev-small]
+inherits = "dev"
+opt-level = 0
+debug = "none"
+strip = "symbols"
+
+[profile.release]
+lto = "thin"
+debug = "line-tables-only"
+split-debuginfo = "off"
+# 在打包归档 sidecar 符号并 strip 二进制之前，
+# 保持 release 二进制可符号化。
+strip = false
+
+# 平衡并行 release 代码生成与二进制体积。
+codegen-units = 4
+
+# codex-desktop per-package override：覆盖为 Tauri 应用优化（最小体积）
+# 注意：lto 不可 per-package 覆盖，接受 workspace 的 "thin"
+[profile.release.package.codex-desktop]
+opt-level = "s"
+codegen-units = 1
+strip = true
+
+[profile.profiling]
+inherits = "release"
+debug = "full"
+lto = false
+strip = false
+
+[profile.ci-test]
+# Reduce binary size to reduce disk pressure.
+debug = "limited"
+inherits = "test"
+opt-level = 0
+
+# ============================================================
+# Patches — 合并 codex-rs 的 patch
+#
+# v8 OVERRIDE 已修正（2026-07-11）：
+# OpenAI fork 不只修改 happy-eyeballs 内部逻辑，还添加了
+# tungstenite::extensions 模块、DeflateConfig、ExtensionsConfig 等公开 API。
+# codex-api 编译期依赖这些 API，因此 patch 必须保留，不可删除。
+# ============================================================
+
+[patch.crates-io]
+tokio-tungstenite = { git = "https://github.com/openai-oss-forks/tokio-tungstenite", rev = "0e5b2d73aa18dd9f0a50ee9ff199d5aef7594186" }
+tungstenite = { git = "https://github.com/openai-oss-forks/tungstenite-rs", rev = "4fffad30fe373adbdcffab9545e9e9bf4f2fc19f" }
+
+# 调试本地改动时取消注释。
+# rmcp = { path = "../../rust-sdk/crates/rmcp" }
+
+[patch."ssh://git@github.com/openai-oss-forks/tungstenite-rs.git"]
+tungstenite = { git = "https://github.com/openai-oss-forks/tungstenite-rs", rev = "4fffad30fe373adbdcffab9545e9e9bf4f2fc19f" }
+
+

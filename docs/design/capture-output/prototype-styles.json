@@ -1,0 +1,270 @@
+{
+  "elements": [
+    {
+      "selector": "body[0]",
+      "text": "跳到主内容\ncodexdesktop\nv1.4.0 · main\n命令面板\n⌘P\nCodex Desktop\n新建会话\n最近\n6\n归档\n2\n最近会话\n收起\ncodex-rs\n重构 auth 模块，接入 OAuth 回调\n2m · 12 ms",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1000
+      },
+      "styles": {
+        "backgroundColor": "rgb(8, 11, 16)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": ".app[0]",
+      "text": "codexdesktop\nv1.4.0 · main\n命令面板\n⌘P\nCodex Desktop\n新建会话\n最近\n6\n归档\n2\n最近会话\n收起\ncodex-rs\n重构 auth 模块，接入 OAuth 回调\n2m · 12 msgs\nspe",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1000
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "grid",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": ".sidebar[0]",
+      "text": "新建会话\n最近\n6\n归档\n2\n最近会话\n收起\ncodex-rs\n重构 auth 模块，接入 OAuth 回调\n2m · 12 msgs\nspecta 类型生成迁移方案评估\n昨天 · 24 msgs\n编写 event bridge 单元测试\n",
+      "rect": {
+        "x": 0,
+        "y": 52,
+        "width": 272,
+        "height": 948
+      },
+      "styles": {
+        "backgroundColor": "rgb(14, 19, 25)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": ".tool-card[0]",
+      "text": "read_file\n成功\n▸",
+      "rect": {
+        "x": 414,
+        "y": 284,
+        "width": 732,
+        "height": 38
+      },
+      "styles": {
+        "backgroundColor": "rgb(14, 19, 25)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(28, 35, 48)",
+        "borderWidth": "0.666667px",
+        "borderRadius": "9px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "10px 0px 0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "header[0]",
+      "text": "codexdesktop\nv1.4.0 · main\n命令面板\n⌘P",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 52
+      },
+      "styles": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px 18px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "row",
+        "gap": "14px",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "aside[0]",
+      "text": "新建会话\n最近\n6\n归档\n2\n最近会话\n收起\ncodex-rs\n重构 auth 模块，接入 OAuth 回调\n2m · 12 msgs\nspecta 类型生成迁移方案评估\n昨天 · 24 msgs\n编写 event bridge 单元测试\n",
+      "rect": {
+        "x": 0,
+        "y": 52,
+        "width": 272,
+        "height": 948
+      },
+      "styles": {
+        "backgroundColor": "rgb(14, 19, 25)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "aside[1]",
+      "text": "会话详情\nDiff\n文件\n终端\n浏览器\n计划待办\n0/162\n0%\nL1\n▶\n1\n需求分析与规划\nL1\n▶\n2\n架构设计\nL1\n▶\n3\n实现开发\nL1\n▶\n4\n测试\nL1\n▶\n5\n部署与运维\n引用文件\n暂无引用文件",
+      "rect": {
+        "x": 1248,
+        "y": 52,
+        "width": 352,
+        "height": 948
+      },
+      "styles": {
+        "backgroundColor": "rgb(14, 19, 25)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "aside[2]",
+      "text": "设置面板\n设置\nSettings\n模型与权限\n模型配置\n权限配置\n扩展能力\n实验功能\nMCP 服务器\n技能\n钩子\n2\n环境\n视图与外观\n协作模式\n通用\n远程控制\n账户与应用\n账户\n应用\n插件市场\n模型选择\n选择 codex 使用的底层 AI",
+      "rect": {
+        "x": 1600,
+        "y": 0,
+        "width": 540,
+        "height": 1000
+      },
+      "styles": {
+        "backgroundColor": "rgb(14, 19, 25)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "normal",
+        "boxShadow": "rgba(0, 0, 0, 0.5) -20px 0px 60px 0px"
+      }
+    },
+    {
+      "selector": "main[0]",
+      "text": "Codex Desktop 对话区\n\n帮我看下 src-tauri/src/bridge.rs 里 rpc_request 的返回值处理有没有问题，我怀疑 streaming 场景下会丢事件。\n\nC\nCODEX · GPT-5-CODEX\n",
+      "rect": {
+        "x": 278,
+        "y": 52,
+        "width": 964,
+        "height": 948
+      },
+      "styles": {
+        "backgroundColor": "rgb(8, 11, 16)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "0px",
+        "margin": "0px",
+        "display": "grid",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    },
+    {
+      "selector": "nav[0]",
+      "text": "模型与权限\n模型配置\n权限配置\n扩展能力\n实验功能\nMCP 服务器\n技能\n钩子\n2\n环境\n视图与外观\n协作模式\n通用\n远程控制\n账户与应用\n账户\n应用\n插件市场",
+      "rect": {
+        "x": 1601,
+        "y": 55,
+        "width": 160,
+        "height": 945
+      },
+      "styles": {
+        "backgroundColor": "rgb(20, 26, 35)",
+        "color": "rgb(232, 237, 244)",
+        "borderColor": "rgb(232, 237, 244)",
+        "borderWidth": "0px",
+        "borderRadius": "0px",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "fontFamily": "\"Bricolage Grotesque\"",
+        "padding": "12px 8px",
+        "margin": "0px",
+        "display": "block",
+        "flexDirection": "row",
+        "gap": "normal",
+        "boxShadow": "none"
+      }
+    }
+  ],
+  "appLayout": {
+    "display": "grid",
+    "flexDirection": "row",
+    "width": 1600,
+    "height": 1000
+  }
+}

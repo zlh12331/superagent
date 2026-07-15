@@ -1,0 +1,333 @@
+/*
+ * 主题变量 — SuperAgent
+ *
+ * 设计令牌定义层，1:1 对齐 prototype.html 原型。
+ *
+ * 令牌分类：
+ *   1. 背景层级：--bg, --bg-elev, --bg-elev-2, --bg-elev-3
+ *   2. 边框：--border, --border-strong
+ *   3. 文本：--text, --text-dim, --text-faint
+ *   4. 主色体系：--accent, --accent-dim, --accent-2, --accent-glow, --accent-soft
+ *   5. 功能色：--amber, --warn, --error, --magenta, --info-blue
+ *   6. 氛围效果：--grid-line, --scan-line, --noise-opacity, --noise-blend
+ *   7. 消息气泡：--user-bubble, --msg-bubble-user, --msg-bubble-assistant
+ *   8. 覆盖层：--overlay-bg, --overlay-blur, --drawer-overlay
+ *   9. 阴影：--shadow-elev, --shadow-modal, --shadow-dropdown
+ *  10. 字体：--font-sans, --font-mono, --font-serif
+ *  11. 图标尺寸：--icon-xs ~ --icon-xl
+ *  12. 布局尺寸：--sidebar-w, --right-panel-w, --resizer-w, --drawer-w
+ *  13. z-index 层级体系：--z-base ~ --z-boundary
+ *
+ * shadcn/ui 映射变量在下方 @theme inline 与各主题块中定义。
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--muted-foreground);
+  --color-accent: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-elev-2: var(--bg-elev-2);
+  --color-bg-elev-3: var(--bg-elev-3);
+  --color-border-strong: var(--border-strong);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent-dim: var(--accent-dim);
+  --color-error: var(--error);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+/* ===== 全局布局与层级令牌（主题无关，所有主题共享） ===== */
+:root {
+  /* 布局尺寸 — clamp() 实现响应式宽度约束 */
+  --sidebar-w: clamp(200px, 17vw, 280px);
+  --right-panel-w: clamp(260px, 22vw, 360px);
+  --resizer-w: 6px;
+  --drawer-w: 540px;
+
+  /* z-index 层级体系 — 从低到高，确保所有浮层层级一致 */
+  --z-base: 1;            /* 基础内容层 */
+  --z-raised: 2;          /* 抬升内容（如卡片） */
+  --z-elevated: 5;        /* 进一步抬升（如 sticky 表头） */
+  --z-context-menu: 100;  /* 右键上下文菜单 */
+  --z-dropdown: 50;       /* 下拉菜单 */
+  --z-modal-backdrop: 1000; /* 模态遮罩 */
+  --z-sticky: 1100;       /* 粘性定位元素 */
+  --z-fixed: 1200;        /* 固定定位元素（如顶栏） */
+  --z-drawer: 1500;       /* 抽屉面板 */
+  --z-modal: 2000;        /* 模态对话框 */
+  --z-toast: 10000;       /* Toast 通知 */
+  --z-overlay: 15000;     /* 全局覆盖层 */
+  --z-toast-stack: 20000; /* Toast 堆栈（最高优先通知） */
+  --z-boundary: 30000;    /* 错误边界、API 调试面板（最顶层） */
+
+  /* 旧名字别名 — 兼容 prototype.html 中使用的变量名
+   * 原型定义 --mono / --sans / --serif 为基础字体变量，
+   * --font-mono / --font-sans / --font-serif 为别名（var(--mono) 等）。
+   * 前端反转了该关系：--font-* 为基础名，此处补全旧名别名以确保
+   * 任何引用 --mono / --sans / --serif 的样式能正确解析。 */
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
+  --serif: var(--font-serif);
+}
+
+/* 浅色主题（默认） */
+:root {
+  /* ===== 原型自定义变量 — 浅色 ===== */
+
+  /* 背景层级 */
+  --bg: #f7f8fa;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #eef0f4;
+  --bg-elev-3: #e0e4ec;
+
+  /* 边框 */
+  --border: #e1e4eb;
+  --border-strong: #cbd0db;
+
+  /* 文本 */
+  --text: #1a2130;
+  --text-dim: #5a6478;
+  --text-faint: #6c7686;
+
+  /* 主色体系（青绿色） */
+  --accent: #00b89e;
+  --accent-dim: #009a82;
+  --accent-2: #2b7fff; /* 蓝色辅助强调色 */
+  --accent-glow: rgba(0, 184, 158, 0.15);
+  --accent-soft: rgba(0, 184, 158, 0.08);
+
+  /* 功能色体系 */
+  --amber: #e89038;
+  --amber-dim: #d07828;
+  --amber-glow: rgba(232, 144, 56, 0.15);
+  --warn: #e89038;
+  --error: #c53030;
+  --magenta: #a855f7;
+  --info-blue: rgba(43, 127, 255, 0.1);
+  --info-amber: rgba(232, 144, 56, 0.12);
+
+  /* 消息气泡专用色 */
+  --user-bubble: #eef0f4;
+  --msg-bubble-user: #e8edf5;
+  --msg-bubble-assistant: transparent;
+
+  /* 覆盖层 — 对齐 prototype.html 行 110：浅色用半透明黑色 */
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --overlay-blur: 8px;
+  --drawer-overlay: rgba(245, 247, 250, 0.55);
+
+  /* 氛围效果令牌 */
+  --grid-line: rgba(0, 0, 0, 0.025);
+  --scan-line: rgba(0, 0, 0, 0.012);
+  --noise-opacity: 0.015;
+  --noise-blend: multiply;
+
+  /* 滚动条令牌 — 浅色主题用半透明黑色（对齐 App.css ::-webkit-scrollbar-thumb） */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+
+  /* 阴影体系 — 对齐 prototype.html 行 114：浅色阴影更轻柔 */
+  --shadow-elev: 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--accent-glow);
+  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.1);
+
+  /* 字体系统 */
+  --font-sans: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, monospace;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+
+  /* 图标尺寸令牌 — 统一图标视觉大小 */
+  --icon-xs: 10px;
+  --icon-sm: 12px;
+  --icon-md: 14px;
+  --icon-lg: 16px;
+  --icon-xl: 20px;
+
+  /* 语义别名变量 — 兼容多套命名 */
+  --bg-primary: var(--bg);
+  --text-primary: var(--text);
+  --bg-ter: var(--bg-elev-2);
+  --danger: var(--error);
+  --success: #00d9c0;
+
+  /* shadcn 映射 — 浅色 */
+  --background: #f7f8fa;
+  --foreground: #1a2130;
+  --card: #ffffff;
+  --card-foreground: #1a2130;
+  --popover: #ffffff;
+  --popover-foreground: #1a2130;
+  --primary: #00b89e;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f4;
+  --secondary-foreground: #1a2130;
+  --muted: #eef0f4;
+  --muted-foreground: #5a6478;
+  --destructive: #c53030;
+  --border: #e1e4eb;
+  --input: #e1e4eb;
+  --ring: #00b89e;
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --radius: 0.625rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a2130;
+  --sidebar-primary: #00b89e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0f4;
+  --sidebar-accent-foreground: #1a2130;
+  --sidebar-border: #e1e4eb;
+  --sidebar-ring: #00b89e;
+}
+
+/* 深色主题 */
+.dark {
+  /* ===== 原型自定义变量 — 深色 ===== */
+
+  /* 背景层级 */
+  --bg: #080b10;
+  --bg-elev: #0e1319;
+  --bg-elev-2: #141a23;
+  --bg-elev-3: #1a2130;
+
+  /* 边框 */
+  --border: #1c2330;
+  --border-strong: #2d3848;
+
+  /* 文本 */
+  --text: #e8edf4;
+  --text-dim: #8a95a6;
+  --text-faint: #7a8699;
+
+  /* 主色体系（青绿色） */
+  --accent: #00e5c7;
+  --accent-dim: #00b89e;
+  --accent-2: #4a9eff; /* 蓝色辅助强调色 */
+  --accent-glow: rgba(0, 229, 199, 0.15);
+  --accent-soft: rgba(0, 229, 199, 0.06);
+
+  /* 功能色体系 */
+  --amber: #ffb454;
+  --amber-dim: #e89038;
+  --amber-glow: rgba(255, 180, 84, 0.12);
+  --warn: #ffb454;
+  --error: #ff6b6b;
+  --magenta: #e879f9;
+  --info-blue: rgba(74, 158, 255, 0.12);
+  --info-amber: rgba(255, 193, 7, 0.15);
+
+  /* 消息气泡专用色 */
+  --user-bubble: #131a25;
+  --msg-bubble-user: #1a2332;
+  --msg-bubble-assistant: transparent;
+
+  /* 覆盖层 — 对齐 prototype.html 行 46：暗色用半透明黑色 */
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --overlay-blur: 8px;
+  --drawer-overlay: rgba(8, 11, 16, 0.55);
+
+  /* 氛围效果令牌 */
+  --grid-line: rgba(255, 255, 255, 0.015);
+  --scan-line: rgba(255, 255, 255, 0.008);
+  --noise-opacity: 0.025;
+  --noise-blend: overlay;
+
+  /* 滚动条令牌 — 深色主题用半透明白色（对齐 App.css ::-webkit-scrollbar-thumb） */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+
+  /* 阴影体系 */
+  --shadow-elev:
+    0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-glow);
+  --shadow-dropdown: 0 12px 36px rgba(0, 0, 0, 0.5);
+
+  /* 字体系统 */
+  --font-sans: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, monospace;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+
+  /* 图标尺寸令牌 */
+  --icon-xs: 10px;
+  --icon-sm: 12px;
+  --icon-md: 14px;
+  --icon-lg: 16px;
+  --icon-xl: 20px;
+
+  /* 语义别名变量 */
+  --bg-primary: var(--bg);
+  --text-primary: var(--text);
+  --bg-ter: var(--bg-elev-2);
+  --danger: var(--error);
+  --success: #00d9c0;
+
+  /* shadcn 映射 — 深色 */
+  --background: #080b10;
+  --foreground: #e8edf4;
+  --card: #0e1319;
+  --card-foreground: #e8edf4;
+  --popover: #0e1319;
+  --popover-foreground: #e8edf4;
+  --primary: #00e5c7;
+  --primary-foreground: #001814;
+  --secondary: #141a23;
+  --secondary-foreground: #e8edf4;
+  --muted: #141a23;
+  --muted-foreground: #8a95a6;
+  --destructive: #ff6b6b;
+  --border: #1c2330;
+  --input: #1c2330;
+  --ring: #00e5c7;
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --sidebar: #0e1319;
+  --sidebar-foreground: #e8edf4;
+  --sidebar-primary: #00e5c7;
+  --sidebar-primary-foreground: #001814;
+  --sidebar-accent: #141a23;
+  --sidebar-accent-foreground: #e8edf4;
+  --sidebar-border: #1c2330;
+  --sidebar-ring: #00e5c7;
+}

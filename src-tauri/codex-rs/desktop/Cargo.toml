@@ -1,0 +1,79 @@
+[package]
+name = "superagent"
+version = "0.1.0"
+description = "SuperAgent — cross-platform AI coding assistant"
+authors = ["zlh12331"]
+edition.workspace = true
+rust-version = "1.93"
+license.workspace = true
+
+[lib]
+name = "codex_desktop_lib"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+embed-resource = "3"
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-log = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-persisted-scope = "2"
+tauri-plugin-process = "2"
+tauri-plugin-os = "2"
+tauri-plugin-global-shortcut = "2"
+log = { workspace = true }
+anyhow = { workspace = true }
+regex = { workspace = true }
+sentry = { workspace = true, features = ["log", "logs"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive", "serde_json"] }
+tauri-specta = { version = "=2.0.0-rc.25", features = ["typescript"] }
+specta-typescript = "=0.0.12"
+thiserror = { workspace = true }
+tauri-plugin-http = "2.5.9"
+tauri-plugin-store = "2.4.3"
+codex-app-server = { workspace = true }
+codex-app-server-protocol = { workspace = true }
+codex-arg0 = { workspace = true }
+codex-config = { workspace = true }
+codex-core = { workspace = true }
+codex-exec-server = { workspace = true }
+codex-feedback = { workspace = true }
+codex-login = { workspace = true }
+codex-otel = { workspace = true }
+codex-protocol = { workspace = true }
+codex-rollout = { workspace = true }
+codex-state = { workspace = true }
+winapi = { version = "0.3.9", features = ["std"] }
+tokio = { workspace = true, features = ["sync"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-shell = "2.3.5"
+tauri-plugin-window-state = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "a3122e894383aa068ec5365a42994e3ac94ba1b6" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tauri = { version = "2", features = ["test"] }
+mockall = "0.13"
+async-trait = "0.1"
+
+# 启用 workspace 级 clippy lint 规则（30+ 条 deny 规则）
+# 包括 expect_used/unwrap_used = "deny"，强制使用显式错误处理
+[lints]
+workspace = true
