@@ -126,7 +126,7 @@
     "react-hook-form": "^7.80.0",
     "react-i18next": "^17.0.0",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^3.0.6",
+    "react-resizable-panels": "^4.12.2",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
