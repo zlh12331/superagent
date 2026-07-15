@@ -135,7 +135,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.42.0",
+    "@ast-grep/cli": "^0.44.1",
     "@axe-core/playwright": "^4.12.1",
     "@commitlint/cli": "^21.2.0",
     "@commitlint/config-conventional": "^21.2.0",
