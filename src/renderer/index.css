@@ -1,0 +1,17 @@
+/* src/renderer/index.css
+   全局样式入口
+   Phase 7 将替换为 Tailwind v4 入口（@import "tailwindcss"） */
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}

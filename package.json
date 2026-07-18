@@ -27,7 +27,21 @@
     ]
   },
   "devDependencies": {
+    "@novel-writer/shared": "workspace:*",
     "@novel-writer/tsconfig": "workspace:*",
-    "@novel-writer/shared": "workspace:*"
+    "@types/node": "^24",
+    "@types/react": "^19.2",
+    "@types/react-dom": "^19.2",
+    "@vitejs/plugin-react": "^5",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "husky": "^9",
+    "typescript": "^6"
+  },
+  "dependencies": {
+    "electron": "^40",
+    "electron-vite": "6.0.0-beta.1",
+    "react": "^19.2",
+    "react-dom": "^19.2",
+    "vite": "^8"
   }
 }
