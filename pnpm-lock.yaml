@@ -1,0 +1,20 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@novel-writer/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      '@novel-writer/tsconfig':
+        specifier: workspace:*
+        version: link:packages/tsconfig
+
+  packages/shared: {}
+
+  packages/tsconfig: {}

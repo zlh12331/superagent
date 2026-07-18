@@ -1,0 +1,16 @@
+{
+  "name": "@novel-writer/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "base.json",
+    "node.json",
+    "web.json"
+  ],
+  "exports": {
+    "./base.json": "./base.json",
+    "./node.json": "./node.json",
+    "./web.json": "./web.json"
+  }
+}
