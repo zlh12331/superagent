@@ -80,6 +80,19 @@
           "style": { "useNamingConvention": "off" }
         }
       }
+    },
+    {
+      "includes": ["**/packages/shared/src/types/models.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
     }
   ]
 }
