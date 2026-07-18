@@ -2,10 +2,11 @@
 // electron-vite 配置：定义 main / preload / renderer 三个构建入口
 // 参考 electron-vite 官方文档 https://electron-vite.org/
 
-import { resolve } from 'node:path'
-import { defineConfig } from 'electron-vite'
-import react from '@vitejs/plugin-react'
+import { resolve } from 'node:path';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'electron-vite';
 
+// biome-ignore lint/style/noDefaultExport: electron-vite 框架要求 config 文件必须使用 export default
 export default defineConfig({
   // 主进程构建配置
   main: {
@@ -52,4 +53,4 @@ export default defineConfig({
       }),
     ],
   },
-})
+});

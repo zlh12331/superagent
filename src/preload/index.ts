@@ -4,7 +4,7 @@
 //
 // Phase 1 仅暴露空 api 占位，后续 Phase 将填充 project/chapter/chat 等
 
-import { contextBridge } from 'electron'
+import { contextBridge } from 'electron';
 
 // 暴露到渲染层的 window.api 命名空间（当前为空对象）
 const api = {
@@ -13,7 +13,7 @@ const api = {
   // chapter: { ... }
   // chat: { ... }
   // rag: { ... }
-} as const
+} as const;
 
 // 通过 contextBridge 暴露（contextIsolation: true 下唯一安全方式）
-contextBridge.exposeInMainWorld('api', api)
+contextBridge.exposeInMainWorld('api', api);

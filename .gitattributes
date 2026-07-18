@@ -1,0 +1,19 @@
+# .gitattributes
+# 强制文本文件使用 LF 换行（与 Biome formatter lineEnding: "lf" 保持一致）
+# 跨平台协作必备：Windows 的 core.autocrlf=true 会破坏 Biome 格式化结果
+# 参考 Git 官方文档：https://git-scm.com/docs/gitattributes
+
+* text=auto eol=lf
+
+# 二进制文件（不做换行转换）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.wasm binary

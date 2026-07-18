@@ -9,7 +9,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "references": [
-    { "path": "../../packages/shared" }
-  ]
+  "references": [{ "path": "../../packages/shared" }]
 }

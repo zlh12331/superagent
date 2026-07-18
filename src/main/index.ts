@@ -3,12 +3,12 @@
 // 职责：创建 BrowserWindow、加载渲染层、配置安全基线
 // 设计文档 §1.1 进程拓扑 / §4.5 安全配置
 
-import { app, BrowserWindow, shell } from 'electron'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { app, BrowserWindow, shell } from 'electron';
 
 // 模块路径解析（ESM 环境下 __dirname 不可用，需用 import.meta.url）
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 /**
  * 创建主窗口
@@ -31,52 +31,52 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       webSecurity: true,
     },
-  })
+  });
 
   // 限制导航（Security #13）：只允许应用内导航
   win.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('http://localhost') && !url.startsWith('app://')) {
-      event.preventDefault()
+      event.preventDefault();
     }
-  })
+  });
 
   // 限制新窗口（Security #14）：外链走系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) {
-      shell.openExternal(url)
+      shell.openExternal(url);
     }
-    return { action: 'deny' }
-  })
+    return { action: 'deny' };
+  });
 
   // 开发环境加载 dev server，生产环境加载构建产物
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
+    void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
   win.once('ready-to-show', () => {
-    win.show()
-  })
+    win.show();
+  });
 
-  return win
+  return win;
 }
 
 // 应用就绪后创建窗口
 app.whenReady().then(() => {
-  createWindow()
+  createWindow();
 
   // macOS: 点击 dock 图标时若无窗口则重建
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+      createWindow();
     }
-  })
-})
+  });
+});
 
 // 所有窗口关闭时退出（macOS 除外）
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit()
+    app.quit();
   }
-})
+});

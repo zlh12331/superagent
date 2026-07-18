@@ -27,6 +27,7 @@
     ]
   },
   "devDependencies": {
+    "@biomejs/biome": "^2",
     "@novel-writer/shared": "workspace:*",
     "@novel-writer/tsconfig": "workspace:*",
     "@types/node": "^24",
