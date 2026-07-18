@@ -1,5 +1,38 @@
 // packages/shared/src/index.ts
-// 跨进程共享类型入口
-// Phase 2 将填充 IPC 类型契约、Zod schema、错误码等
+// @novel-writer/shared 跨进程共享包统一入口
+// 暴露：错误码 + 业务实体类型 + Zod schema + IPC 类型契约
+//
+// 消费方：
+// - 主进程：import { AppError, ErrorCode, ProjectCreateInputSchema } from '@novel-writer/shared'
+// - Preload：import type { IpcApi } from '@novel-writer/shared'
+// - 渲染层：import type { Project, IpcResponse } from '@novel-writer/shared'
 
-export const SHARED_VERSION = '0.0.0' as const;
+// 错误处理（§7）
+export * from './constants/errors';
+
+// IPC 类型契约（§5）
+export * from './ipc/api';
+export * from './ipc/channels';
+export * from './ipc/payloads';
+export * from './ipc/response';
+
+// Zod schema + CRUD Input（运行时校验 + 类型派生）
+// 此处 export * 会让 schemas 派生的 Project/Chapter/... 成为对外唯一类型来源
+export * from './schemas';
+
+// 业务实体类型与枚举（§6.2）
+// 注意：types/models 与 schemas/*.schema 对 Project/Chapter/Character/Worldview/
+// ChatSession/ChatMessage/RagDocument/ProjectSetting/AppSetting 存在同名导出。
+// 按 Zod 4 最佳实践（schema 同时承担运行时校验与类型派生），同名类型以 schemas 派生为准；
+// 此处仅从 models 显式导出 schemas 未覆盖的独有类型，避免 TS2308 模糊导出错误。
+export * from './types/enums';
+export type {
+  AiUsageLog,
+  CharacterRelation,
+  ISODateString,
+  RagDocumentChunk,
+  Volume,
+} from './types/models';
+
+// 包版本（供运行时 sanity check）
+export const SHARED_VERSION = '0.1.0' as const;
