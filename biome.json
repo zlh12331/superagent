@@ -71,7 +71,10 @@
       }
     },
     {
-      "includes": ["**/packages/shared/src/constants/errors.ts"],
+      "includes": [
+        "**/packages/shared/src/constants/errors.ts",
+        "**/packages/shared/src/types/enums.ts"
+      ],
       "linter": {
         "rules": {
           "style": { "useNamingConvention": "off" }
