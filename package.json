@@ -18,7 +18,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "test": "pnpm -r --filter '@novel-writer/*' run test",
+    "test": "pnpm -r --filter \"@novel-writer/*\" run test",
     "codegraph:sync": "codegraph sync",
     "prepare": "husky"
   },
