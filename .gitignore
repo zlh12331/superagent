@@ -36,6 +36,11 @@ logs/
 # 测试覆盖率
 coverage/
 
+# Electron 二进制下载缓存（dev 环境用，避免 TRAE 沙箱拦截系统 %LOCALAPPDATA%）
+.electron-cache/
+# Electron userData 目录（dev 环境重定向到此，避免 TRAE 沙箱拦截系统 %APPDATA%）
+.electron-user-data/
+
 # Electron 打包
 *.exe
 *.appx

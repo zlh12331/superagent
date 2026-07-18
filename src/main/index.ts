@@ -4,11 +4,17 @@
 // 设计文档 §1.1 进程拓扑 / §4.5 安全配置
 
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, shell } from 'electron';
 
-// 模块路径解析（ESM 环境下 __dirname 不可用，需用 import.meta.url）
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+// __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
+// （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
+// 详见 https://electron-vite.org/guide/dev#limitations-of-sandboxing
+
+// dev 环境把 userData 重定向到项目内目录，避免 TRAE 沙箱拦截系统 %APPDATA% 写入
+// 生产环境（app.isPackaged === true）保持系统默认 %APPDATA%/<AppName>，符合用户数据规范
+if (!app.isPackaged) {
+  app.setPath('userData', join(__dirname, '../../.electron-user-data'));
+}
 
 /**
  * 创建主窗口
