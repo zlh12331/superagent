@@ -1,10 +1,13 @@
 // src/main/index.ts
 // Electron 主进程入口
 // 职责：创建 BrowserWindow、加载渲染层、配置安全基线
-// 设计文档 §1.1 进程拓扑 / §4.5 安全配置
+// 设计文档 §1.1 进程拓扑 / §4.5 安全配置 / §7.6 日志 / §7.7 Sentry
 
 import { join } from 'node:path';
+import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
+import { getAppConfig } from './config';
+import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
@@ -14,6 +17,44 @@ import { app, BrowserWindow, shell } from 'electron';
 // 生产环境（app.isPackaged === true）保持系统默认 %APPDATA%/<AppName>，符合用户数据规范
 if (!app.isPackaged) {
   app.setPath('userData', join(__dirname, '../../.electron-user-data'));
+}
+
+/**
+ * 初始化 Sentry
+ *
+ * 设计文档 §7.7：
+ * - 自托管 Sentry v26.6.0
+ * - DSN 从 config 读取（环境变量 SENTRY_DSN）
+ * - 生产环境采样 10% 事务，dev 不采样
+ * - beforeSend 脱敏：移除 Authorization header
+ *
+ * 必须在 app.whenReady() 之前调用
+ */
+function initSentry(): void {
+  const config = getAppConfig();
+  if (config.sentry.dsn === '') {
+    // DSN 未配置时跳过初始化（dev 环境常见）
+    logger.warn({}, 'Sentry DSN 未配置，跳过初始化');
+    return;
+  }
+
+  Sentry.init({
+    dsn: config.sentry.dsn,
+    release: `novel-writer@${app.getVersion()}`,
+    environment: config.isPackaged ? 'production' : 'development',
+    tracesSampleRate: config.sentry.tracesSampleRate,
+    sendDefaultPii: false,
+    beforeSend(event) {
+      // 脱敏：移除可能的 API Key / Authorization header
+      // 注意：@sentry/electron 5 的 beforeSend 入参为 ErrorEvent（type: undefined），
+      // 返回类型必须为 ErrorEvent | null，因此采用不可变更新保持 type 兼容
+      if (event.request?.headers?.authorization) {
+        const { authorization: _auth, ...restHeaders } = event.request.headers;
+        return { ...event, request: { ...event.request, headers: restHeaders } };
+      }
+      return event;
+    },
+  });
 }
 
 /**
@@ -68,8 +109,16 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
-// 应用就绪后创建窗口
+// Sentry 必须在 app.whenReady() 之前初始化（@sentry/electron 要求）
+initSentry();
+
+// 应用就绪后初始化 logger + 全局错误捕获 + 创建窗口
 app.whenReady().then(() => {
+  // 初始化 logger（需要 app.getPath，必须在 whenReady 之后）
+  initLogger();
+  registerGlobalErrorHandlers();
+  logger.info({}, '应用启动');
+
   createWindow();
 
   // macOS: 点击 dock 图标时若无窗口则重建
