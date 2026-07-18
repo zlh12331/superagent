@@ -1,8 +1,8 @@
 # 网文写作 Agent - 设计文档
 
-> **版本**：1.1
+> **版本**：1.2
 > **日期**：2026-07-18
-> **状态**：Q&A 决策已落实，待最终审查
+> **状态**：RAG 嵌入模型改为本地 Ollama 部署，待最终审查
 > **架构方案**：方案 C — Electron + Node.js + 嵌入式 PostgreSQL
 
 ---
@@ -37,6 +37,7 @@
 │                 Worldview / Chat / RAG / Agent           │
 │  [Repo层]       Prisma + pg → PostgreSQL                │
 │  [AI客户端]     OpenAI SDK (deepseek-v4-flash)           │
+│  [嵌入服务]     Ollama 本地 (Nemotron-3-Embed-1B-BF16)  │
 │  [PG生命周期]   child_process 管理 PG 子进程             │
 │                 (init / start / stop / backup)           │
 │  [原生能力]     fs / dialog / shell / clipboard /       │
@@ -103,7 +104,7 @@
 | 语言 | TypeScript | ^6.0 |
 | ORM | Prisma | ^7 |
 | AI SDK | openai | ^5（兼容 DeepSeek API） |
-| 嵌入模型 | Nemotron-3-Embed-1B-BF16 | via NVIDIA NIM（OpenAI 兼容协议，2048 维） |
+| 嵌入模型 | Nemotron-3-Embed-1B-BF16 | 本地部署 via Ollama（localhost:11434，OpenAI 兼容协议，2048 维） |
 | 配置校验 | zod | ^4 |
 | 日志 | electron-log | ^5 |
 | 钥匙串 | keytar | ^7 |
@@ -164,10 +165,11 @@ Electron 40 ──┬── Node 24 (内置)
               └── electron-builder 27
 React 19.2 + React Compiler ── Vite 8 ── TypeScript 6.0
 electron-vite 5 ── Vite 8 ── Electron 40
-openai 5 ── 兼容 DeepSeek API
+openai 5 ── 兼容 DeepSeek API + 复用调用本地 Ollama
+Ollama latest ── Nemotron-3-Embed-1B-BF16 ── 2048 维 ── Intel iGPU
 Prisma 7 ── 引擎 query engine 配 PG 18
-pgvector + pgvectorscale ── halfvec + HNSW/DiskANN
-Apache AGE latest ── PG 18 兼容
+pgvector + pgvectorscale ── halfvec(2048) + HNSW/DiskANN
+Apache AGE latest ── PG 18 兼容（失败降级 17.10）
 Biome 2 ── 替代 ESLint+Prettier
 Vitest 4 ── Vite 8 原生
 Playwright 1.58 ── Electron 40
@@ -217,16 +219,18 @@ f:\TraeProjects\1\
 │  │  ├─ services/               # 业务逻辑层（核心）
 │  │  │  └─ *.service.ts + *.service.test.ts
 │  │  ├─ infra/
-│  │  │  ├─ pg/                  # PG 子进程生命周期
-│  │  │  ├─ prisma/
-│  │  │  │  ├─ client.ts
-│  │  │  │  └─ extensions/       # pgvector + age
-│  │  │  ├─ ai/
-│  │  │  │  ├─ openai-client.ts
-│  │  │  │  ├─ deepseek-config.ts
-│  │  │  │  └─ stream-bridge.ts
-│  │  │  ├─ storage/             # keychain + app-data
-│  │  │  └─ updater/
+  │  │  ├─ pg/                  # PG 子进程生命周期
+  │  │  ├─ prisma/
+  │  │  │  ├─ client.ts
+  │  │  │  └─ extensions/       # pgvector + age
+  │  │  ├─ ai/
+  │  │  │  ├─ openai-client.ts          # DeepSeek 聊天客户端
+  │  │  │  ├─ embedding-client.ts        # 本地 Ollama 嵌入客户端（OpenAI 兼容）
+  │  │  │  ├─ ollama-controller.ts       # Ollama 进程生命周期 + 健康探活
+  │  │  │  ├─ deepseek-config.ts
+  │  │  │  └─ stream-bridge.ts
+  │  │  ├─ storage/             # keychain + app-data
+  │  │  └─ updater/
 │  │  ├─ utils/                  # logger / errors / retry / wrap / path
 │  │  └─ config/
 │  ├─ preload/
@@ -255,9 +259,10 @@ f:\TraeProjects\1\
 │  ├─ playwright.config.ts
 │  └─ *.spec.ts
 ├─ resources/
-│  ├─ pg/                        # 嵌入式 PG 18 二进制
+│  ├─ pg/                        # 嵌入式 PG 18 二进制（含 17.10 降级备份）
 │  ├─ icons/
 │  └─ images/
+│  # 注：Ollama 模型不打包进 resources，由用户首次启动时通过 `ollama pull` 自动拉取到 %USERPROFILE%/.ollama/models/
 ├─ scripts/
 ├─ .editorconfig
 ├─ .gitignore
@@ -318,8 +323,10 @@ PostgreSQL (pgvector / AGE)
 | prisma/client | PrismaClient 单例 |
 | prisma/extensions/pgvector | 向量检索（halfvec + HNSW） |
 | prisma/extensions/age | Apache AGE Cypher 透传 |
-| ai/openai-client | OpenAI 5 客户端单例 |
+| ai/openai-client | OpenAI 5 客户端单例（DeepSeek 聊天） |
+| ai/embedding-client | 嵌入客户端（指向本地 Ollama，OpenAI 兼容） |
 | ai/stream-bridge | 流式响应 → IPC 事件桥接（含 AbortController） |
+| ai/ollama-controller | Ollama 子进程生命周期 + 健康探活 + 模型拉取 |
 | storage/keychain | API Key 钥匙串 |
 | storage/app-data | %APPDATA% 路径管理 |
 | updater/auto-updater | 自动更新 |
@@ -367,8 +374,10 @@ win.webContents.setWindowOpenHandler(({ url }) => {
       content="default-src 'self' app:;
               script-src 'self';
               style-src 'self' 'unsafe-inline';
-              connect-src 'self' https://api.deepseek.com https://api.openai.com;
+              connect-src 'self' http://localhost:11434 https://api.deepseek.com https://api.openai.com;
               img-src 'self' data: blob:;">
+<!-- 注：connect-src 含 http://localhost:11434 用于渲染层直连 Ollama（仅 dev 调试），
+     生产环境嵌入请求由主进程转发，渲染层不直连 -->
 ```
 
 ### 4.7 IPC sender 校验 + traceId 贯穿
@@ -596,7 +605,7 @@ React Form Submit
   → React 触发 qc.invalidateQueries(['chat', 'messages', sessionId])
 ```
 
-#### 场景 4：RAG 文档入库
+#### 场景 4：RAG 文档入库（本地嵌入）
 
 ```
 用户上传文档
@@ -605,8 +614,9 @@ React Form Submit
   → ragService.ingestDocument()
     1. 切片（按段落 + token 数）
     2. embeddingService.embed(chunks)
-       → 调 NVIDIA NIM API（OpenAI 兼容）
-       → 模型：nvidia/nemotron-3-embed-1b-bf16
+       → 调本地 Ollama HTTP API（http://localhost:11434/v1/embeddings）
+       → OpenAI 兼容协议，openai SDK 复用
+       → 模型：nemotron-3-embed-1b-bf16
        → 返回 2048 维向量数组
     3. prisma.$transaction 批量插入 DocumentChunk + halfvec(2048) 向量
   → PostgreSQL (pgvector halfvec 存储)
@@ -655,6 +665,8 @@ React Form Submit
 | settings:get / set / setApiKey / testApiKey | R→M | 设置 |
 | app:getStatus / openExternal | R→M | 应用级 |
 | app:event:pgStatus | M→R | PG 状态变更通知 |
+| app:event:ollamaStatus | M→R | Ollama 状态变更通知 |
+| app:event:ollamaPullProgress | M→R | 嵌入模型拉取进度 |
 
 ### 5.4 IPC 类型契约（单一来源）
 
@@ -966,8 +978,9 @@ model AiUsageLog {
 
 ### 6.4 HNSW 索引（生产级性能）
 
-> 向量维度固定为 2048（Nemotron-3-Embed-1B-BF16 官方默认）。halfvec 用 2 字节存储每维，
-> 单条向量占用 4 KB；HNSW 索引 `m=16, ef_construction=64` 在召回率与内存占用之间取平衡。
+> 向量维度固定为 2048（Nemotron-3-Embed-1B-BF16 官方默认，本地 Ollama 部署）。
+> halfvec 用 2 字节存储每维，单条向量占用 4 KB；
+> HNSW 索引 `m=16, ef_construction=64` 在召回率与内存占用之间取平衡。
 
 ```sql
 -- 向量索引（halfvec(2048) + HNSW + 余弦距离）
@@ -1033,7 +1046,137 @@ export const POSTGRES_VERSIONS = {
 - `electron-builder.yml` 中 `extraResources` 同时打包两个版本
 - 首次启动若检测到 AGE 失败，自动迁移数据目录到 17.10
 
-### 6.6 Zod Schema（前后端共享校验）
+### 6.6 Ollama 本地嵌入服务配置
+
+**部署架构**：
+
+```
+┌─────────────────────────────────────────────────┐
+│  Electron 主进程                                  │
+│  ┌──────────────────────────────────────────┐    │
+│  │ embeddingService                        │    │
+│  │   ↓ http://localhost:11434/v1/embeddings│    │
+│  │ openai SDK（OpenAI 兼容）                │    │
+│  └────────────┬─────────────────────────────┘    │
+│               │                                  │
+│  ┌────────────▼─────────────────────────────┐    │
+│  │ ollama-controller                       │    │
+│  │ · child_process 管理 Ollama 进程         │    │
+│  │ · 启动时检查模型已拉取                   │    │
+│  │ · 健康探活（GET /api/tags）              │    │
+│  │ · 崩溃自动重启（最多 3 次）              │    │
+│  └────────────┬─────────────────────────────┘    │
+└───────────────┼──────────────────────────────────┘
+                │ child_process
+        ┌───────▼───────┐
+        │  Ollama 进程   │
+        │  · 模型:        │
+        │    nemotron-3-  │
+        │    embed-1b-bf16│
+        │  · 端口: 11434  │
+        │  · 显存: ~2GB   │
+        │    (Intel iGPU) │
+        └───────────────┘
+```
+
+**模型拉取策略**（首次启动）：
+
+```ts
+// src/main/infra/ai/ollama-controller.ts（伪代码）
+const EMBEDDING_MODEL = 'nemotron-3-embed-1b-bf16'
+
+async function ensureModelPulled(): Promise<void> {
+  // 1. 检查 Ollama 是否已安装
+  if (!await isOllamaInstalled()) {
+    throw new AppError(ErrorCode.OLLAMA_NOT_INSTALLED, '请先安装 Ollama: https://ollama.com')
+  }
+
+  // 2. 启动 Ollama 服务（若未运行）
+  if (!await isOllamaRunning()) {
+    await startOllamaProcess()
+  }
+
+  // 3. 检查模型是否已拉取
+  const tags = await fetch('http://localhost:11434/api/tags').then(r => r.json())
+  const hasModel = tags.models?.some(m => m.name === EMBEDDING_MODEL)
+  if (!hasModel) {
+    // 4. 首次使用：拉取模型（~2GB，进度推送到渲染层）
+    await pullModelWithProgress(EMBEDDING_MODEL, (progress) => {
+      mainWindow.webContents.send('app:event:ollamaPullProgress', { progress })
+    })
+  }
+}
+```
+
+**embeddingService 调用**：
+
+```ts
+// src/main/services/embedding.service.ts
+import OpenAI from 'openai'
+
+// 复用 openai SDK，指向本地 Ollama（OpenAI 兼容协议）
+const embeddingClient = new OpenAI({
+  baseURL: 'http://localhost:11434/v1',
+  apiKey: 'ollama',  // Ollama 不校验 key，任意值即可
+})
+
+export class EmbeddingService {
+  /**
+   * 批量生成嵌入向量
+   * @param texts 文本数组（已切片）
+   * @returns 2048 维向量数组
+   */
+  async embed(texts: string[], ctx: IpcContext): Promise<number[][]> {
+    const res = await embeddingClient.embeddings.create({
+      model: 'nemotron-3-embed-1b-bf16',
+      input: texts,
+    })
+    logger.info({ traceId: ctx.traceId, count: texts.length }, '嵌入生成完成')
+    return res.data.map(d => d.embedding)
+  }
+}
+```
+
+**Ollama 版本与模型信息**：
+
+| 项 | 值 |
+|----|----|
+| Ollama 版本 | latest（2026-07） |
+| 嵌入模型 | `nemotron-3-embed-1b-bf16` |
+| 模型大小 | ~2 GB（BF16 量化） |
+| 向量维度 | 2048 |
+| API 端点 | `http://localhost:11434/v1/embeddings` |
+| 协议 | OpenAI 兼容 |
+| 部署方式 | 用户本机（Intel AIPC iGPU 加速） |
+
+**配置项**（packages/shared/src/constants/ollama.ts）：
+
+```ts
+export const OLLAMA_CONFIG = {
+  BINARY: 'ollama',                    // 系统 PATH 中的 ollama 可执行文件
+  HOST: 'http://localhost',
+  PORT: 11434,
+  API_BASE: 'http://localhost:11434/v1',
+  EMBEDDING_MODEL: 'nemotron-3-embed-1b-bf16',
+  HEALTH_CHECK_INTERVAL_MS: 30_000,   // 健康探活间隔
+  MAX_RESTART_COUNT: 3,                // 崩溃最大重启次数
+  MODEL_PULL_TIMEOUT_MS: 600_000,      // 模型拉取超时（10 分钟，2GB 下载）
+} as const
+```
+
+**用户引导**（首次启动未检测到 Ollama）：
+
+```
+检测到本机未安装 Ollama，本地嵌入服务无法启动。
+请按以下步骤安装：
+1. 访问 https://ollama.com/download 下载 Windows 版
+2. 安装后启动 Ollama（系统托盘图标）
+3. 点击「重试检测」按钮
+
+或可选择「切换为云端嵌入模式」（需配置 API Key）
+```
+
+### 6.7 Zod Schema（前后端共享校验）
 
 ```ts
 // packages/shared/src/schemas/project.schema.ts
@@ -1089,6 +1232,9 @@ export const ErrorCode = {
   DB_CONNECTION_FAILED, DB_QUERY_ERROR, DB_CONSTRAINT_VIOLATION,
   // PG 子进程
   PG_INIT_FAILED, PG_START_FAILED, PG_CRASHED, PG_BACKUP_FAILED,
+  // Ollama 本地嵌入服务
+  OLLAMA_NOT_INSTALLED, OLLAMA_NOT_RUNNING, OLLAMA_MODEL_PULL_FAILED,
+  OLLAMA_MODEL_NOT_FOUND, OLLAMA_TIMEOUT, OLLAMA_DISK_FULL,
   // 文件系统
   FS_READ_FAILED, FS_WRITE_FAILED, FS_DISK_FULL,
 } as const
@@ -1193,7 +1339,15 @@ Sentry.init({
 - 崩溃自动重启（最多 3 次，指数退避）
 - 状态变化通知渲染层
 
-### 7.9 用户友好错误提示
+### 7.9 Ollama 嵌入服务健康监控
+
+- 每 30 秒调用 `GET http://localhost:11434/api/tags` 探活
+- 进程崩溃自动重启（最多 3 次，指数退避）
+- 首次启动检测 Ollama 是否安装，未安装则弹出引导（见 §6.6）
+- 模型未拉取时自动触发 `ollama pull nemotron-3-embed-1b-bf16`，进度推送渲染层
+- 状态变化通知渲染层（IPC: `app:event:ollamaStatus`）
+
+### 7.10 用户友好错误提示
 
 | 错误码 | 提示 | 操作建议 |
 |--------|------|---------|
@@ -1202,6 +1356,10 @@ Sentry.init({
 | AI_RATE_LIMITED | AI 调用频繁 | 自动重试 |
 | AI_CONTEXT_TOO_LARGE | 上下文过长 | 提示精简对话 |
 | PG_CRASHED | 数据库异常 | 自动重启 |
+| OLLAMA_NOT_INSTALLED | 未检测到 Ollama | "下载安装"按钮（跳转官网） |
+| OLLAMA_NOT_RUNNING | Ollama 服务未运行 | "启动服务"按钮 |
+| OLLAMA_MODEL_NOT_FOUND | 嵌入模型未拉取 | "下载模型"按钮（进度条） |
+| OLLAMA_DISK_FULL | 磁盘空间不足 | 提示清理 |
 | FS_DISK_FULL | 磁盘空间不足 | 提示清理 |
 
 ---
@@ -1246,9 +1404,9 @@ Sentry.init({
 
 | 测试层 | Mock 对象 | 不 Mock 对象 |
 |--------|----------|-------------|
-| 单元测试 | Prisma、AI SDK、IPC、fs | Service 自身、Utils、Schema |
-| 集成测试 | AI SDK（不依赖云端） | Prisma、PG、AGE |
-| E2E 测试 | 不 Mock | 全部真实 |
+| 单元测试 | Prisma、DeepSeek SDK、Ollama HTTP、IPC、fs | Service 自身、Utils、Schema |
+| 集成测试 | DeepSeek SDK（不依赖云端）、Ollama（用 stub HTTP） | Prisma、PG、AGE |
+| E2E 测试 | 不 Mock（要求本机已装 Ollama + 已拉取模型） | 全部真实 |
 
 ### 8.6 覆盖率目标（CI 卡关）
 
@@ -1608,7 +1766,7 @@ pnpm commitlint --edit "$1"
 |---|------|---------|---------|
 | 1 | Apache AGE 对 PG 18 兼容性 | 默认 PG 18.4，AGE 加载失败自动降级 17.10 | §6.5 |
 | 2 | Sentry DSN | `http://8550a56f41fc3c8a4f0ca8ec5f8acfde@127.0.0.1:9000/2`（自托管 v26.6.0，项目复用 tauri-template） | §2.6, §7.7 |
-| 3 | RAG 嵌入模型 | Nemotron-3-Embed-1B-BF16（NVIDIA NIM, OpenAI 兼容协议, 2048 维） | §2.2, §5.1 场景 4, §6.4 |
+| 3 | RAG 嵌入模型 | Nemotron-3-Embed-1B-BF16 本地部署 via Ollama（localhost:11434, OpenAI 兼容, 2048 维） | §2.2, §4.3, §5.1 场景 4, §6.4, §6.6 |
 | 4 | 向量维度 | 2048（Nemotron 官方默认） | §6.2 Prisma schema, §6.4 HNSW |
 | 5 | Sentry 集成时机 | 立即集成，不留后置接口 | §7.7 |
 | 6 | traceId 贯穿 IPC | 是（渲染层生成 → preload 注入 → 主进程 wrap 接收 → 日志 + Sentry） | §2.6, §4.7, §5.1 场景 4 |
