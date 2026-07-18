@@ -3,7 +3,9 @@
   "extends": "@novel-writer/tsconfig/node.json",
   "compilerOptions": {
     "outDir": "./out",
-    "rootDir": "./"
+    "rootDir": "./",
+    "types": ["node", "vitest/globals"]
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts"],
+  "exclude": ["vitest.config.ts"]
 }
