@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# .husky/commit-msg
+# 提交信息钩子：校验 Conventional Commits
+# 设计文档 §9.8 / §9.9
+
+pnpm commitlint --edit "$1"
