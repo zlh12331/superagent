@@ -69,6 +69,14 @@
           "style": { "noDefaultExport": "off" }
         }
       }
+    },
+    {
+      "includes": ["**/packages/shared/src/constants/errors.ts"],
+      "linter": {
+        "rules": {
+          "style": { "useNamingConvention": "off" }
+        }
+      }
     }
   ]
 }
