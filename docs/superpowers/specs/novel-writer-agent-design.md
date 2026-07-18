@@ -1,8 +1,8 @@
 # 网文写作 Agent - 设计文档
 
-> **版本**：1.0
+> **版本**：1.1
 > **日期**：2026-07-18
-> **状态**：待审查
+> **状态**：Q&A 决策已落实，待最终审查
 > **架构方案**：方案 C — Electron + Node.js + 嵌入式 PostgreSQL
 
 ---
@@ -103,9 +103,11 @@
 | 语言 | TypeScript | ^6.0 |
 | ORM | Prisma | ^7 |
 | AI SDK | openai | ^5（兼容 DeepSeek API） |
+| 嵌入模型 | Nemotron-3-Embed-1B-BF16 | via NVIDIA NIM（OpenAI 兼容协议，2048 维） |
 | 配置校验 | zod | ^4 |
 | 日志 | electron-log | ^5 |
 | 钥匙串 | keytar | ^7 |
+| 崩溃监控 | @sentry/electron | ^5（自托管 Sentry v26.6.0） |
 
 ### 2.3 渲染进程（React 19.2 + React Compiler）
 
@@ -128,8 +130,8 @@
 
 | 组件 | 版本 | 部署 |
 |------|------|------|
-| PostgreSQL | 18.4 | portable |
-| pgvector | latest | halfvec + HNSW |
+| PostgreSQL | 18.4（AGE 失败则降级 17.10） | portable |
+| pgvector | latest | halfvec(2048) + HNSW |
 | pgvectorscale | latest | DiskANN 索引 |
 | Apache AGE | latest | Cypher over SQL |
 
@@ -147,10 +149,12 @@
 
 | 类别 | 选型 | 理由 |
 |------|------|------|
-| 崩溃监控 | Sentry @sentry/electron | 主进程+渲染层+IPC 全链路 |
+| 崩溃监控 | Sentry @sentry/electron + 自托管 v26.6.0 | 主进程+渲染层+IPC 全链路 |
+| Sentry DSN | `http://8550a56f41fc3c8a4f0ca8ec5f8acfde@127.0.0.1:9000/2` | 自托管（项目: tauri-template，已验证可用） |
 | 自动更新 | electron-updater + 私服静态托管 | 国内访问稳定 |
 | 数据备份 | 自写 `pg_dump` 调度 | 每日备份到 `%APPDATA%/App/backups/` |
 | 代码签名 | Windows Authenticode | 避免 SmartScreen 拦截 |
+| traceId 贯穿 IPC | 渲染层生成 → IPC header → 主进程日志 | 端到端可观测 |
 
 ### 2.7 关键版本兼容矩阵（生产级钉死）
 
@@ -367,18 +371,119 @@ win.webContents.setWindowOpenHandler(({ url }) => {
               img-src 'self' data: blob:;">
 ```
 
-### 4.7 IPC sender 校验
+### 4.7 IPC sender 校验 + traceId 贯穿
 
 ```ts
 // src/main/utils/wrap.ts
-export function wrap<TArgs, TResult>(handler: ...) {
-  return async (evt, ...args) => {
+import { randomUUID } from 'node:crypto'
+import { BrowserWindow, ipcMain } from 'electron'
+
+/**
+ * wrap(): IPC handler 统一包装器
+ *
+ * 职责：
+ * 1. sender 校验（防止跨窗口越权）
+ * 2. 自动生成 / 接收 traceId（贯穿渲染层 → IPC → 主进程日志 → Sentry）
+ * 3. zod schema 校验
+ * 4. try/catch + 错误分类 + Sentry 上报
+ * 5. 返回统一结构 { data } | { error }
+ */
+export function wrap<TInput, TOutput>(
+  channel: string,
+  schema: z.ZodType<TInput>,
+  handler: (input: TInput, ctx: IpcContext) => Promise<TOutput>,
+) {
+  ipcMain.handle(channel, async (evt, input: unknown, incomingTraceId?: string) => {
+    // 1. traceId 生成或复用（渲染层可显式传入）
+    const traceId = incomingTraceId ?? randomUUID()
+    const ctx: IpcContext = { traceId, sender: evt.sender }
+
+    // 2. sender 校验（Electron Security #17）
     const win = BrowserWindow.fromWebContents(evt.sender)
-    if (!win) throw new AppError(ErrorCode.IPC_SENDER_INVALID)
-    // ...
-  }
+    if (!win) {
+      logger.error({ traceId, channel }, 'IPC sender 无效')
+      throw new AppError(ErrorCode.IPC_SENDER_INVALID)
+    }
+
+    // 3. zod 校验
+    const parsed = schema.safeParse(input)
+    if (!parsed.success) {
+      logger.warn({ traceId, channel, issues: parsed.error.issues }, 'IPC 参数校验失败')
+      return { error: new AppError(ErrorCode.INVALID_INPUT, undefined, parsed.error).toIpcError() }
+    }
+
+    // 4. 执行 handler，所有日志自动携带 traceId
+    try {
+      logger.info({ traceId, channel }, 'IPC 请求开始')
+      const data = await handler(parsed.data, ctx)
+      logger.info({ traceId, channel }, 'IPC 请求成功')
+      return { data }
+    } catch (err) {
+      const appErr = err instanceof AppError ? err : new AppError(ErrorCode.INTERNAL_ERROR, undefined, err)
+      logger.error({ traceId, channel, err }, 'IPC 请求失败')
+      // Sentry 上报携带 traceId，便于关联日志
+      Sentry.captureException(appErr, { tags: { channel, traceId } })
+      return { error: appErr.toIpcError() }
+    }
+  })
 }
 ```
+
+**Preload 注入 traceId**：
+
+```ts
+// src/preload/utils/ipc-bridge.ts
+import { randomUUID } from 'node:crypto'  // preload 在 sandbox=false 下可访问
+
+/**
+ * createInvokeProxy(): 生成自动注入 traceId 的 invoke 代理
+ *
+ * 渲染层调用 window.api.project.create(input) 时，
+ * preload 自动生成 traceId 并作为第二参数传入 ipcRenderer.invoke，
+ * 主进程 wrap() 接收并贯穿到所有日志 / Sentry。
+ */
+export function createInvokeProxy<T extends Record<string, (...args: any[]) => Promise<any>>>(
+  channels: Record<keyof T, string>,
+): T {
+  return new Proxy(channels, {
+    get: (target, prop: string) => {
+      if (!(prop in target)) return undefined
+      return (...args: unknown[]) => {
+        const traceId = randomUUID()
+        return ipcRenderer.invoke(target[prop as keyof T], ...args, traceId)
+      }
+    },
+  }) as T
+}
+```
+
+**渲染层使用方式**（无需感知 traceId）：
+
+```ts
+// src/renderer/api/project.api.ts
+export const projectApi = {
+  create: (input: ProjectCreateInput) => window.api.project.create(input),
+  // preload 内部已自动注入 traceId，渲染层无需关心
+}
+```
+
+**traceId 贯穿链路**：
+
+```
+渲染层 api.project.create(input)
+  ↓ preload 生成 traceId（UUID v4）
+ipcRenderer.invoke('project:create', input, traceId)
+  ↓
+主进程 wrap() 接收 traceId
+  ↓ ctx = { traceId, sender }
+projectService.create(input, ctx)  // 所有 service 接收 ctx
+  ↓ logger.info({ traceId }, ...)  // 日志贯穿
+  ↓ Sentry.captureException(err, { tags: { traceId } })  // Sentry 关联
+PostgreSQL 查询（可写入 comment 自动记录）
+```
+
+> **规则**：所有 IPC handler 必须用 `wrap()` 包装；所有 service 方法接收 `IpcContext` 作为第二参数；
+> 所有日志和 Sentry 上报必须携带 `traceId`。这是端到端可观测性的基础。
 
 ### 4.8 Prisma 优雅关闭
 
@@ -495,12 +600,17 @@ React Form Submit
 
 ```
 用户上传文档
-  → window.api.rag.ingestDocument({ projectId, fileContent })
+  → window.api.rag.ingestDocument({ projectId, fileContent, traceId })
+  → Preload 在 invoke 第二参数注入 traceId（贯穿 IPC）
   → ragService.ingestDocument()
     1. 切片（按段落 + token 数）
-    2. embeddingService.embed(chunks) → 向量数组
-    3. prisma.$transaction 批量插入 DocumentChunk + 向量
+    2. embeddingService.embed(chunks)
+       → 调 NVIDIA NIM API（OpenAI 兼容）
+       → 模型：nvidia/nemotron-3-embed-1b-bf16
+       → 返回 2048 维向量数组
+    3. prisma.$transaction 批量插入 DocumentChunk + halfvec(2048) 向量
   → PostgreSQL (pgvector halfvec 存储)
+  → 主进程所有日志携带 traceId（贯穿 IPC）
   → 返回 { chunksCount }
   → mutation onSuccess: qc.invalidateQueries(['rag', 'documents', projectId])
 ```
@@ -794,7 +904,8 @@ model RagDocumentChunk {
   documentId String
   content    String   @db.Text
   chunkIndex Int
-  embedding  Unsupported("halfvec(1024)")
+  // 向量维度 = 2048（Nemotron-3-Embed-1B-BF16 官方默认维度）
+  embedding  Unsupported("halfvec(2048)")
   metadata   Json     @default("{}")
   createdAt  DateTime @default(now())
 
@@ -855,12 +966,22 @@ model AiUsageLog {
 
 ### 6.4 HNSW 索引（生产级性能）
 
+> 向量维度固定为 2048（Nemotron-3-Embed-1B-BF16 官方默认）。halfvec 用 2 字节存储每维，
+> 单条向量占用 4 KB；HNSW 索引 `m=16, ef_construction=64` 在召回率与内存占用之间取平衡。
+
 ```sql
+-- 向量索引（halfvec(2048) + HNSW + 余弦距离）
 CREATE INDEX idx_rag_chunks_embedding
   ON rag_document_chunks
   USING hnsw (embedding halfvec_cosine_ops)
   WITH (m = 16, ef_construction = 64);
 
+-- 大规模数据（>10 万切片）追加 pgvectorscale DiskANN 索引
+-- CREATE INDEX idx_rag_chunks_diskann ON rag_document_chunks
+--   USING diskann (embedding halfvec_cosine_ops)
+--   WITH (num_neighbors=50, search_list_size=100);
+
+-- 全文检索（章节内容）
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX idx_chapters_content_trgm
   ON chapters USING gin (content gin_trgm_ops);
@@ -869,7 +990,50 @@ CREATE INDEX idx_chapters_project_order
   ON chapters (project_id, sort_order);
 ```
 
-### 6.5 Zod Schema（前后端共享校验）
+### 6.5 Apache AGE 兼容性策略（PG 18 → 17.10 降级）
+
+> AGE 官方对 PG 主版本兼容窗口通常滞后 1-2 个 minor 版本。本项目采取**默认 PG 18.4 + AGE 自动降级**策略。
+
+**降级流程**（在 `pg/pg-installer.ts` 启动初始化时执行）：
+
+```ts
+// src/main/infra/pg/pg-installer.ts（伪代码）
+async function ensureAgeExtension(): Promise<void> {
+  try {
+    // 1. 尝试在 PG 18.4 上加载 AGE
+    await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS age;`)
+    await prisma.$executeRawUnsafe(`LOAD 'age';`)
+    await prisma.$executeRawUnsafe(`SET search_path = ag_catalog, "$user", public;`)
+    logger.info({ traceId }, 'AGE 扩展加载成功（PG 18.4）')
+  } catch (err) {
+    // 2. AGE 加载失败 → 降级 PG 17.10
+    logger.warn({ traceId, err }, 'AGE 不兼容 PG 18.4，触发降级流程')
+    await pgController.stop()
+    await pgInstaller.switchTo(POSTGRES_VERSIONS.V17_10)
+    await pgController.start()
+    // 3. 降级后重新初始化 AGE
+    await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS age;`)
+    logger.info({ traceId }, 'AGE 在 PG 17.10 上加载成功（降级完成）')
+  }
+}
+```
+
+**版本探测配置**：
+
+```ts
+// packages/shared/src/constants/pg-versions.ts
+export const POSTGRES_VERSIONS = {
+  V18_4: '18.4',   // 默认
+  V17_10: '17.10', // AGE 兼容降级版本
+} as const
+```
+
+**资源管理**：
+- `resources/pg/18.4/` 与 `resources/pg/17.10/` 双份二进制目录
+- `electron-builder.yml` 中 `extraResources` 同时打包两个版本
+- 首次启动若检测到 AGE 失败，自动迁移数据目录到 17.10
+
+### 6.6 Zod Schema（前后端共享校验）
 
 ```ts
 // packages/shared/src/schemas/project.schema.ts
@@ -977,16 +1141,51 @@ export class AppError extends Error {
 - `unhandledRejection` / `uncaughtException` 全局捕获
 - traceId 关联同一请求多条日志
 
-### 7.7 Sentry 集成
+### 7.7 Sentry 集成（自托管 v26.6.0）
+
+**主进程初始化**（在 `app.whenReady` 之前）：
 
 ```ts
-// 主进程 + 渲染层均初始化
+// src/main/index.ts
+import * as Sentry from '@sentry/electron/main'
+
 Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  release: app.getVersion(),
+  dsn: 'http://8550a56f41fc3c8a4f0ca8ec5f8acfde@127.0.0.1:9000/2',
+  release: `novel-writer@${app.getVersion()}`,
+  environment: app.isPackaged ? 'production' : 'development',
+  tracesSampleRate: 0.1,           // 采样 10% 事务
+  sendDefaultPii: false,            // 不发送 PII
+  beforeSend(event) {
+    // 脱敏：移除可能的 API Key / 用户内容
+    if (event.request?.headers?.authorization) {
+      delete event.request.headers.authorization
+    }
+    return event
+  },
+})
+```
+
+**渲染层初始化**（在 `main.tsx` 顶部）：
+
+```ts
+// src/renderer/main.tsx
+import * as Sentry from '@sentry/electron/renderer'
+
+Sentry.init({
+  // 渲染层无需重复配置 DSN，SDK 自动从主进程继承
   tracesSampleRate: 0.1,
 })
 ```
+
+**Sentry 自托管部署信息**：
+
+| 项 | 值 |
+|----|----|
+| 版本 | v26.6.0（自托管） |
+| DSN | `http://8550a56f41fc3c8a4f0ca8ec5f8acfde@127.0.0.1:9000/2` |
+| 项目 | tauri-template（已验证可用，复用现有部署） |
+| 服务地址 | http://127.0.0.1:9000 |
+| Org ID | 2 |
 
 ### 7.8 PG 子进程健康监控
 
@@ -1401,13 +1600,27 @@ pnpm commitlint --edit "$1"
 9. **安全基线**：contextIsolation + sandbox + CSP + sender 校验 + 导航限制
 10. **CodeGraph 同步**：每次代码修改后 `codegraph sync`（强制）
 
-## 附录 B：未决问题（待确认）
+## 附录 B：未决问题清单
 
-1. **Apache AGE 对 PG 18 兼容性**：需在实现期验证；若不支持则降级到 PG 17.10
-2. **Sentry DSN**：暂未提供，先用本地日志为主、Sentry 预留接口
-3. **嵌入模型**：DeepSeek embedding 或 bge-m3，二选一待定
-4. **PG 自动重启次数**：当前 3 次，是否合适
-5. **traceId 是否贯穿 IPC**：当前仅主进程内部，可扩展
+### B.1 已确认决策（本轮 Q&A 已解决）
+
+| # | 议题 | 最终决策 | 落实位置 |
+|---|------|---------|---------|
+| 1 | Apache AGE 对 PG 18 兼容性 | 默认 PG 18.4，AGE 加载失败自动降级 17.10 | §6.5 |
+| 2 | Sentry DSN | `http://8550a56f41fc3c8a4f0ca8ec5f8acfde@127.0.0.1:9000/2`（自托管 v26.6.0，项目复用 tauri-template） | §2.6, §7.7 |
+| 3 | RAG 嵌入模型 | Nemotron-3-Embed-1B-BF16（NVIDIA NIM, OpenAI 兼容协议, 2048 维） | §2.2, §5.1 场景 4, §6.4 |
+| 4 | 向量维度 | 2048（Nemotron 官方默认） | §6.2 Prisma schema, §6.4 HNSW |
+| 5 | Sentry 集成时机 | 立即集成，不留后置接口 | §7.7 |
+| 6 | traceId 贯穿 IPC | 是（渲染层生成 → preload 注入 → 主进程 wrap 接收 → 日志 + Sentry） | §2.6, §4.7, §5.1 场景 4 |
+
+### B.2 剩余未决问题（进入实现阶段再定）
+
+| # | 议题 | 当前默认值 | 待确认要点 |
+|---|------|----------|-----------|
+| 1 | PG 子进程自动重启次数 | 3 次（指数退避） | 是否调整为 5 次？崩溃后是否进入只读模式？ |
+| 2 | pgvectorscale DiskANN 触发阈值 | 10 万切片 | 是否按硬件配置动态调整？ |
+| 3 | Sentry 事务采样率 | 0.1（10%） | 是否按环境差异化（dev=1.0, prod=0.1）？ |
+| 4 | 日志保留时长 | 14 天 / 10MB 单文件 | 是否需要导出到文件供用户提交 bug？ |
 
 ---
 
