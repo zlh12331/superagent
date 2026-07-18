@@ -51,6 +51,7 @@
     "electron-vite": "6.0.0-beta.1",
     "react": "^19.2",
     "react-dom": "^19.2",
-    "vite": "^8"
+    "vite": "^8",
+    "zod": "^4.0.0"
   }
 }

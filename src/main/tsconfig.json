@@ -4,7 +4,8 @@
   "compilerOptions": {
     "outDir": "./out",
     "rootDir": "./",
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "isolatedDeclarations": false
   },
   "include": ["**/*.ts"],
   "exclude": ["vitest.config.ts"]
