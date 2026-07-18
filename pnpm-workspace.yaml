@@ -1,0 +1,4 @@
+# pnpm-workspace.yaml
+# pnpm workspace 配置：声明 packages/ 下所有子目录为 workspace 包
+packages:
+  - 'packages/*'

@@ -1,0 +1,42 @@
+# .gitignore
+
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# electron-vite 临时
+.vite/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+logs/
+
+# CodeGraph 索引（已存在 .codegraph/.gitignore 自管）
+# 测试覆盖率
+coverage/
+
+# Electron 打包
+*.exe
+*.appx
+*.msi

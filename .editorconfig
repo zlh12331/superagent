@@ -1,0 +1,17 @@
+# .editorconfig
+# EditorConfig: https://editorconfig.org
+# 跨编辑器统一缩进/换行/编码行为，与 Biome formatter 保持一致
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown 允许尾部空格（换行用）
+trim_trailing_whitespace = false

@@ -1,0 +1,33 @@
+{
+  "name": "novel-writer-agent",
+  "version": "0.1.0",
+  "description": "网文写作 Agent - Windows 桌面端应用",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=24.13.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "echo \"测试将在 Phase 9 引入\" && exit 0",
+    "codegraph:sync": "codegraph sync",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,css}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
+  },
+  "devDependencies": {
+    "@novel-writer/tsconfig": "workspace:*",
+    "@novel-writer/shared": "workspace:*"
+  }
+}
