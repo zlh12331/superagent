@@ -5,7 +5,9 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "noEmit": false,
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "types": ["vitest/globals"],
+    "isolatedDeclarations": false
   },
   "include": ["src/**/*.ts"]
 }

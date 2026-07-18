@@ -7,5 +7,16 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@novel-writer/tsconfig": "workspace:*",
+    "vitest": "^4.0.0"
   }
 }
