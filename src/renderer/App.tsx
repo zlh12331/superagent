@@ -8,7 +8,7 @@ export default function App(): ReactElement {
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
       <h1>网文写作 Agent</h1>
-      <p>Phase 1 基础设施已就绪。</p>
+      <p>Phase 1 基础设施验证完成。</p>
     </div>
   );
 }
