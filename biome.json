@@ -53,6 +53,11 @@
       "arrowParentheses": "always"
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "overrides": [
     {
       "includes": ["**/src/renderer/**/*.tsx"],
@@ -76,7 +81,8 @@
         "**/packages/shared/src/constants/pg-versions.ts",
         "**/packages/shared/src/constants/age.ts",
         "**/packages/shared/src/types/enums.ts",
-        "**/packages/shared/src/ipc/channels.ts"
+        "**/packages/shared/src/ipc/channels.ts",
+        "**/src/renderer/lib/constants.ts"
       ],
       "linter": {
         "rules": {

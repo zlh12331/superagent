@@ -3,6 +3,7 @@
 // 参考 electron-vite 官方文档 https://electron-vite.org/
 
 import { resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 
@@ -34,9 +35,15 @@ export default defineConfig({
       },
     },
   },
-  // 渲染层（React 19.2 + Vite 8 + React Compiler）配置
+  // 渲染层（React 19.2 + Vite 8 + React Compiler + Tailwind v4）配置
   renderer: {
     root: 'src/renderer',
+    resolve: {
+      // 与 tsconfig.json paths 对齐，让 Vite 能解析 @/* 别名
+      alias: {
+        '@': resolve(__dirname, 'src/renderer'),
+      },
+    },
     build: {
       rollupOptions: {
         input: {
@@ -51,6 +58,9 @@ export default defineConfig({
           plugins: [['babel-plugin-react-compiler']],
         },
       }),
+      // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
+      // 文档：https://tailwindcss.com/docs/installation/using-vite
+      tailwindcss(),
     ],
   },
 });

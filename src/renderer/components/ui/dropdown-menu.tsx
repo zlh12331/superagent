@@ -191,17 +191,19 @@ export function DropdownMenuItem({
  *
  * 在左侧显示勾选状态，点击切换 checked。
  * 通过 checked / onCheckedChange 受控。
+ *
+ * 注意：不显式解构 checked，避免 exactOptionalPropertyTypes 下
+ * `checked: CheckedState | undefined` 不能赋给必填 `checked: CheckedState`。
+ * checked 由 props 透传给底层 Radix 组件。
  */
 export function DropdownMenuCheckboxItem({
   className,
   children,
-  checked,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>): React.ReactElement {
   return (
     <DropdownMenuPrimitive.CheckboxItem
       data-slot="dropdown-menu-checkbox-item"
-      checked={checked}
       className={cn(
         'focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
         className,

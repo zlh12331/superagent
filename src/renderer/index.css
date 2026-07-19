@@ -1,17 +1,16 @@
 /* src/renderer/index.css
-   全局样式入口
-   Phase 7 将替换为 Tailwind v4 入口（@import "tailwindcss"） */
+   渲染层全局样式入口
+   设计文档 §2.3：Tailwind v4 + shadcn/ui 设计令牌
+   - @tailwindcss/vite 插件自动注入 Tailwind 工具类
+   - tw-animate-css 提供 Tailwind v3 风格的动画工具类（v4 移除默认）
+   - @custom-variant dark 启用 .dark 类切换暗黑模式（配合 next-themes）
+   - globals.css 定义 shadcn 设计令牌（--background / --foreground 等） */
 
-html,
-body,
-#root {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-}
+/* 所有 @import 必须在其他 at-rule 之前（CSS 规范要求） */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./styles/globals.css";
 
-body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  user-select: none;
-}
+/* 暗黑模式变体：当父元素含 .dark 类时启用
+   next-themes 通过给 <html> 添加 .dark 切换主题 */
+@custom-variant dark (&:is(.dark *));

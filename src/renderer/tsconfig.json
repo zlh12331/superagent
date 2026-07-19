@@ -4,6 +4,7 @@
   "compilerOptions": {
     "outDir": "./out",
     "rootDir": "./",
+    "isolatedDeclarations": false,
     "paths": {
       "@/*": ["./*"]
     }
