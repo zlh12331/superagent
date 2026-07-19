@@ -10,6 +10,8 @@
 import { AppError, ERROR_META, ErrorCode, type IpcError } from '@novel-writer/shared';
 import { toast } from 'sonner';
 
+import { router } from '@/router';
+
 /**
  * 从未知错误中提取 IpcError
  *
@@ -47,8 +49,11 @@ function extractIpcError(err: unknown): IpcError {
 /**
  * 根据错误码提供操作建议（如 AI_API_KEY_MISSING → 跳转设置）
  *
- * 简化实现：仅处理几个关键错误码，其他返回 undefined
- * Phase 8 路由集成时再完善跳转方式（避免绕过 RR7）
+ * 通过 router 单例的 navigate 方法跳转到 /settings。
+ * RR7 Data Mode 推荐用 router 单例做非组件内导航，
+ * 避免必须依赖 useNavigate 的限制（handle-ipc-error.ts 不是组件）。
+ *
+ * 注意：router.tsx 不导入本文件，无循环依赖风险。
  */
 function getErrorAction(code: ErrorCode): { label: string; onClick: () => void } | undefined {
   switch (code) {
@@ -57,11 +62,10 @@ function getErrorAction(code: ErrorCode): { label: string; onClick: () => void }
     case ErrorCode.OLLAMA_NOT_INSTALLED:
     case ErrorCode.OLLAMA_NOT_RUNNING:
     case ErrorCode.OLLAMA_MODEL_NOT_FOUND:
+    case ErrorCode.RAG_EMBEDDING_FAILED:
       return {
         label: '去设置',
-        onClick: () => {
-          // Phase 8 通过事件总线触发路由跳转到 /settings
-        },
+        onClick: () => router.navigate('/settings'),
       };
     default:
       return undefined;
