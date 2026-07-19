@@ -39,8 +39,8 @@ test.describe('项目列表页交互', () => {
 
     // Dialog 弹出
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
-    // Dialog 标题"新建项目"可见
-    await expect(page.getByText('新建项目', { exact: true })).toBeVisible({ timeout: 5_000 });
+    // Dialog 标题"新建项目"可见（用 heading role 精确匹配，避免与按钮文字"新建项目"冲突）
+    await expect(page.getByRole('heading', { name: '新建项目' })).toBeVisible({ timeout: 5_000 });
   });
 
   test('Dialog 内表单元素可见', async ({ page }) => {

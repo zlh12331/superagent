@@ -11,10 +11,31 @@ export default defineConfig({
     // 测试文件位置：与源码同目录（colocation 模式）
     // 同时覆盖 __tests__/ 集中目录与源码同级 colocation 两种风格
     include: ['**/*.test.ts'],
-    // 覆盖率收集
+    // 覆盖率收集（设计文档 §8.6 覆盖率 CI 卡关）
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'html', 'lcov'],
+      // 阈值卡关：低于此值命令失败（exit code ≠ 0）
+      // 设计文档 §8.6：statements 80% / branches 75% / functions 80% / lines 80%
+      thresholds: {
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
+      },
+      // 排除测试文件本身、类型声明文件、配置文件、入口文件、mock
+      // 这些文件不参与覆盖率统计，避免拉低实际业务代码覆盖率
+      exclude: [
+        '**/*.test.ts',
+        '**/*.config.ts',
+        '**/*.d.ts',
+        'out/**',
+        'node_modules/**',
+        // index.ts 是 Electron 入口，依赖 app.whenReady() 无法单测
+        'index.ts',
+        // mock-handlers.ts 是 E2E 测试专用 mock，由 Playwright 验证
+        'ipc/mock-handlers.ts',
+      ],
     },
   },
 });

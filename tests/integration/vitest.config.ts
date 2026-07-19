@@ -60,10 +60,27 @@ export default defineConfig({
     // 不并发执行（避免多个 worker 进程并发，资源浪费）
     // 多文件按顺序执行，单文件内多个 it 仍可并发
     fileParallelism: false,
-    // 覆盖率收集
+    // 覆盖率收集（设计文档 §8.6 覆盖率 CI 卡关）
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'html', 'lcov'],
+      // 阈值卡关：与 unit 配置一致
+      // 设计文档 §8.6：statements 80% / branches 75% / functions 80% / lines 80%
+      thresholds: {
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
+      },
+      // 排除测试文件本身、helpers、配置文件、mock stub
+      exclude: [
+        '**/*.test.ts',
+        '**/*.config.ts',
+        '**/*.d.ts',
+        'helpers/**',
+        'setup.ts',
+        'global-setup.ts',
+      ],
     },
   },
 });
