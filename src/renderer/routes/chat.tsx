@@ -40,6 +40,7 @@ import { useChatMessages } from '@/hooks/use-chat-messages';
 import {
   useChatSessionList,
   useCreateChatSession,
+  useDeleteChatSession,
   useSendChatMessage,
   useStopChatGeneration,
 } from '@/hooks/use-chat-sessions';
@@ -73,6 +74,7 @@ export function Component(): ReactElement {
   const { mutateAsync: createSessionAsync, isPending: isCreating } = useCreateChatSession();
   const { mutateAsync: sendAsync } = useSendChatMessage();
   const { mutateAsync: stopAsync } = useStopChatGeneration();
+  const { mutateAsync: deleteSessionAsync } = useDeleteChatSession();
 
   // isStreaming 状态：从 chat-stream.store 获取 activeSessionId 的状态
   // 仅当当前会话处于 streaming 时为 true，控制 ChatInputArea 显示发送/停止按钮
@@ -169,12 +171,25 @@ export function Component(): ReactElement {
   /**
    * 删除会话
    *
-   * 注：当前 apiClient.chat 没有 deleteSession 方法（检查 IpcApi 接口确认），
-   * 简化为 toast 提示，待 Phase 9 实现真正的删除逻辑。
+   * 流程：
+   * 1. 调 deleteSessionAsync 触发主进程级联删除（含消息 + 中断活跃流）
+   * 2. 删除成功后清理 chat-stream.store 中该会话的流式状态
+   * 3. 若删除的是当前 active session，由上方 useEffect 自动切换到第一个可用会话
+   * 4. ConfirmDialog 成功后自动关闭，失败时不关闭（让用户可重试）
    */
-  const handleDelete = (): void => {
-    toast.info('删除会话功能待 Phase 9 实现');
-    setDeleteTarget(null);
+  const handleDelete = async (): Promise<void> => {
+    if (deleteTarget === null || !projectId) return;
+    const targetId = deleteTarget;
+    try {
+      await deleteSessionAsync({ id: targetId, projectId });
+      // 清理该会话的流式状态（chunks / status / error）
+      clearSession(targetId);
+      toast.success('会话已删除');
+    } catch (err) {
+      handleIpcError(err);
+      // 重新抛出让 ConfirmDialog 不关闭
+      throw err;
+    }
   };
 
   // 加载中：展示旋转加载占位

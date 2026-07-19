@@ -46,6 +46,7 @@ export const IPC_CHANNELS = {
   CHAT_GET_MESSAGES: 'chat:getMessages',
   CHAT_SEND_MESSAGE: 'chat:sendMessage',
   CHAT_STOP_GENERATION: 'chat:stopGeneration',
+  CHAT_DELETE_SESSION: 'chat:deleteSession',
 
   // 流式事件（M→R）
   CHAT_STREAM_CHUNK: 'chat:stream:chunk',

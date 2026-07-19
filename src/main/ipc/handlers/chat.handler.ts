@@ -3,9 +3,10 @@
 // 设计文档 §4.1 分层架构 / §5.1 场景 3（AI 流式对话）/ §5.3 完整 Channel 清单
 //
 // 职责：
-// 1. 注册 chat 域 5 个 channel 的 handler（createSession / listSessions / getMessages / sendMessage / stopGeneration）
+// 1. 注册 chat 域 6 个 channel 的 handler（createSession / listSessions / getMessages / sendMessage / stopGeneration / deleteSession）
 // 2. sendMessage：持久化用户消息 → 后台启动 AI 生成 → 立即返回 ackId
-// 3. 不做业务逻辑，仅参数校验（wrap 内置 zod）+ 调 service
+// 3. deleteSession：先 abort 活跃流再级联删除会话与消息
+// 4. 不做业务逻辑，仅参数校验（wrap 内置 zod）+ 调 service
 //
 // 注意：
 // - runChatGeneration 使用 sessionId 作为 streamId，通过 stream-bridge 推送 chunk/end/error 事件
@@ -20,6 +21,7 @@ import { z } from 'zod';
 import { runChatGeneration } from '../../services/agent.service';
 import {
   createChatSession,
+  deleteChatSession,
   getChatMessages,
   listChatSessions,
   sendChatMessage,
@@ -30,12 +32,13 @@ import { wrap } from '../../utils/wrap';
 /**
  * 注册 chat 域 IPC handler
  *
- * 5 个 channel：
- * - chat:createSession  → createChatSession
- * - chat:listSessions   → listChatSessions
- * - chat:getMessages    → getChatMessages
- * - chat:sendMessage    → sendChatMessage + 后台 runChatGeneration
- * - chat:stopGeneration → stopChatGeneration
+ * 6 个 channel：
+ * - chat:createSession   → createChatSession
+ * - chat:listSessions    → listChatSessions
+ * - chat:getMessages     → getChatMessages
+ * - chat:sendMessage     → sendChatMessage + 后台 runChatGeneration
+ * - chat:stopGeneration  → stopChatGeneration
+ * - chat:deleteSession   → deleteChatSession（级联删除消息）
  */
 export function registerChatHandlers(): void {
   // 创建对话会话（projectId / title 必填，model 可选）
@@ -73,5 +76,11 @@ export function registerChatHandlers(): void {
   // 停止 AI 生成（通过 StreamBridge 中断 sessionId 对应的活跃流）
   wrap(IPC_CHANNELS.CHAT_STOP_GENERATION, z.object({ sessionId: z.string().min(1) }), (input) =>
     stopChatGeneration(input.sessionId),
+  );
+
+  // 删除会话（级联删除消息 + 中断活跃 AI 流）
+  // service 内部处理：findUnique 校验存在 → bridge.has 时 abort → prisma.delete（级联）
+  wrap(IPC_CHANNELS.CHAT_DELETE_SESSION, z.object({ id: z.string().min(1) }), (input) =>
+    deleteChatSession(input.id),
   );
 }

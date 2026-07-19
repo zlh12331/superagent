@@ -5,7 +5,7 @@
 // 职责：
 // - useChatSessionList：按 projectId 获取会话列表
 // - useCreateChatSession：新建会话
-// - useDeleteChatSession：删除会话（间接通过 chat:stopGeneration 等清理）
+// - useDeleteChatSession：删除会话（主进程级联删除消息 + 中断活跃流）
 
 import type { ChatSession, ChatSessionCreateInput } from '@novel-writer/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -69,5 +69,33 @@ export function useStopChatGeneration() {
   return useMutation({
     mutationFn: async (sessionId: string) =>
       unwrap<{ stopped: boolean }>(await apiClient.chat.stopGeneration({ sessionId })),
+  });
+}
+
+/**
+ * 删除聊天会话
+ *
+ * 调用主进程 chat:deleteSession，主进程内部会：
+ * 1. 校验会话存在
+ * 2. 若有活跃 AI 流则先 abort
+ * 3. prisma.chatSession.delete 级联删除所有消息（schema onDelete: Cascade）
+ *
+ * 成功后：
+ * - 失效该项目下会话列表缓存（让列表刷新）
+ * - 移除该会话的消息列表缓存（避免显示陈旧数据）
+ *
+ * @param projectId 会话所属项目 ID（用于失效会话列表缓存）
+ */
+export function useDeleteChatSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; projectId: string }) =>
+      unwrap<{ id: string }>(await apiClient.chat.deleteSession({ id: input.id })),
+    onSuccess: (_data, vars) => {
+      // 失效会话列表（让列表重新加载，删除的会话自动消失）
+      void qc.invalidateQueries({ queryKey: queryKeys.chatSessions.list(vars.projectId) });
+      // 移除该会话的消息缓存（已删除，无需保留）
+      void qc.removeQueries({ queryKey: queryKeys.chatMessages.list(vars.id) });
+    },
   });
 }

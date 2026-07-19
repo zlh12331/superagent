@@ -3,7 +3,7 @@
 // 设计文档 §4.9 Preload unsubscribe 模式 / §5.4 类型契约单一来源 / §4.7 traceId 注入
 //
 // 职责：
-// 1. 实现 IpcApi 完整接口（38 个 channel，9 个业务域）
+// 1. 实现 IpcApi 完整接口（39 个 channel，9 个业务域）
 // 2. 通过 contextBridge.exposeInMainWorld('api', api) 暴露给渲染层
 // 3. 请求-响应 channel 走 invoke（自动注入 traceId）
 // 4. 事件订阅 channel 走 subscribe（返回 unsubscribe 函数，防泄漏）
@@ -25,7 +25,7 @@ import { invoke, subscribe } from './utils/ipc-bridge';
 /**
  * IpcApi 实现：window.api 命名空间
  *
- * 9 个业务域共 38 个 channel：
+ * 9 个业务域共 39 个 channel：
  * - 请求-响应（IpcInvokeMethod）：调用 invoke(channel, input)，返回 Promise<IpcResponse>
  * - 事件订阅（IpcSubscribeMethod）：调用 subscribe(channel, callback)，返回 unsubscribe
  *
@@ -85,6 +85,7 @@ const api = {
     getMessages: (input) => invoke(IPC_CHANNELS.CHAT_GET_MESSAGES, input),
     sendMessage: (input) => invoke(IPC_CHANNELS.CHAT_SEND_MESSAGE, input),
     stopGeneration: (input) => invoke(IPC_CHANNELS.CHAT_STOP_GENERATION, input),
+    deleteSession: (input) => invoke(IPC_CHANNELS.CHAT_DELETE_SESSION, input),
     // 流式事件订阅：渲染层需在组件卸载时调用返回的 unsubscribe 函数
     onStreamChunk: (cb) => subscribe(IPC_CHANNELS.CHAT_STREAM_CHUNK, cb),
     onStreamEnd: (cb) => subscribe(IPC_CHANNELS.CHAT_STREAM_END, cb),

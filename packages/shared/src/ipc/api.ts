@@ -66,6 +66,7 @@ export interface IpcApi {
     getMessages: IpcInvokeMethod<'chat:getMessages'>;
     sendMessage: IpcInvokeMethod<'chat:sendMessage'>;
     stopGeneration: IpcInvokeMethod<'chat:stopGeneration'>;
+    deleteSession: IpcInvokeMethod<'chat:deleteSession'>;
     onStreamChunk: IpcSubscribeMethod<'chat:stream:chunk'>;
     onStreamEnd: IpcSubscribeMethod<'chat:stream:end'>;
     onStreamError: IpcSubscribeMethod<'chat:stream:error'>;

@@ -4,7 +4,7 @@
 //
 // 测试策略：
 // 1. mock wrap：捕获注册的 channel + schema + handler，不真实注册 ipcMain.handle
-// 2. mock chat.service 的 5 个函数 + agent.service 的 runChatGeneration
+// 2. mock chat.service 的 6 个函数 + agent.service 的 runChatGeneration
 // 3. 提取 handler 回调，验证正确调用 service（参数传递 + 返回值）
 // 4. sendMessage 测试重点：验证 runChatGeneration 被调用（void 调用不 await）+ ctx.sender 作为 webContents
 
@@ -24,16 +24,18 @@ const {
   mockGetChatMessages,
   mockSendChatMessage,
   mockStopChatGeneration,
+  mockDeleteChatSession,
   mockRunChatGeneration,
 } = vi.hoisted(() => ({
   // wrap 注册记录数组（每个 handler 注册时 push 一条）
   registrations: [] as WrapRegistration[],
-  // chat.service 5 个函数 mock
+  // chat.service 6 个函数 mock
   mockCreateChatSession: vi.fn(),
   mockListChatSessions: vi.fn(),
   mockGetChatMessages: vi.fn(),
   mockSendChatMessage: vi.fn(),
   mockStopChatGeneration: vi.fn(),
+  mockDeleteChatSession: vi.fn(),
   // agent.service runChatGeneration mock（后台异步执行，返回 void）
   mockRunChatGeneration: vi.fn().mockResolvedValue(undefined),
 }));
@@ -49,13 +51,14 @@ vi.mock('../../utils/wrap', () => ({
   },
 }));
 
-// mock chat.service：5 个函数全部替换为 vi.fn
+// mock chat.service：6 个函数全部替换为 vi.fn
 vi.mock('../../services/chat.service', () => ({
   createChatSession: mockCreateChatSession,
   listChatSessions: mockListChatSessions,
   getChatMessages: mockGetChatMessages,
   sendChatMessage: mockSendChatMessage,
   stopChatGeneration: mockStopChatGeneration,
+  deleteChatSession: mockDeleteChatSession,
 }));
 
 // mock agent.service：runChatGeneration 替换为 vi.fn（resolve undefined）
@@ -75,7 +78,7 @@ describe('chat.handler', () => {
     registerChatHandlers();
   });
 
-  it('应注册 5 个 channel', () => {
+  it('应注册 6 个 channel', () => {
     const channels = registrations.map((r) => r.channel);
     expect(channels).toEqual([
       IPC_CHANNELS.CHAT_CREATE_SESSION,
@@ -83,6 +86,7 @@ describe('chat.handler', () => {
       IPC_CHANNELS.CHAT_GET_MESSAGES,
       IPC_CHANNELS.CHAT_SEND_MESSAGE,
       IPC_CHANNELS.CHAT_STOP_GENERATION,
+      IPC_CHANNELS.CHAT_DELETE_SESSION,
     ]);
   });
 
@@ -200,6 +204,18 @@ describe('chat.handler', () => {
 
       expect(mockStopChatGeneration).toHaveBeenCalledWith('s1');
       expect(result).toEqual({ stopped: true });
+    });
+  });
+
+  describe('chat:deleteSession', () => {
+    it('应调用 deleteChatSession(id) 并返回 { id }', async () => {
+      mockDeleteChatSession.mockResolvedValue({ id: 's1' });
+
+      const handler = findRegistration(registrations, IPC_CHANNELS.CHAT_DELETE_SESSION).handler;
+      const result = await handler({ id: 's1' }, createMockCtx());
+
+      expect(mockDeleteChatSession).toHaveBeenCalledWith('s1');
+      expect(result).toEqual({ id: 's1' });
     });
   });
 });

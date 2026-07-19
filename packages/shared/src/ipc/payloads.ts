@@ -94,6 +94,7 @@ export interface IpcRequestMap {
   'chat:getMessages': { req: { sessionId: string }; res: ChatMessage[] };
   'chat:sendMessage': { req: ChatSendMessageInput; res: { ackId: string } };
   'chat:stopGeneration': { req: { sessionId: string }; res: { stopped: boolean } };
+  'chat:deleteSession': { req: { id: string }; res: { id: string } };
 
   // RAG
   'rag:ingestDocument': {

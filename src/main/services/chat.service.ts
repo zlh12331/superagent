@@ -3,11 +3,12 @@
 // 设计文档 §4.2 Services 层职责矩阵 / §6.2 ChatSession / ChatMessage 模型
 //
 // 职责：
-// 1. 对话会话管理（createSession / listSessions）
+// 1. 对话会话管理（createSession / listSessions / deleteSession）
 // 2. 消息管理（getMessages / sendMessage）
 // 3. sendChatMessage 持久化用户消息并返回 ackId（实际 AI 调用由 agent.service 编排）
 // 4. stopChatGeneration 通过 StreamBridge 单例中断活跃流
-// 5. saveAssistantMessage 供 agent.service 在流结束后持久化 assistant 消息
+// 5. deleteChatSession 删除会话（先 abort 活跃流，再级联删除消息）
+// 6. saveAssistantMessage 供 agent.service 在流结束后持久化 assistant 消息
 //
 // 注意：
 // - 不与其他 service 互相依赖
@@ -141,6 +142,41 @@ export async function stopChatGeneration(sessionId: string): Promise<{ stopped: 
   bridge.abort(sessionId);
   logger.info({ sessionId }, '已请求中断 AI 生成');
   return { stopped: true };
+}
+
+/**
+ * 删除对话会话
+ *
+ * 流程：
+ * 1. 校验会话存在（不存在抛 NOT_FOUND）
+ * 2. 若该会话有活跃 AI 流，先 abort（避免删除后流仍尝试写消息造成写入异常）
+ * 3. 删除会话（Prisma schema 中 ChatMessage.onDelete: Cascade 会自动级联删除所有消息）
+ *
+ * @param id 会话 ID
+ * @returns `{ id }` 用于渲染层确认删除对象
+ * @throws AppError(NOT_FOUND) 会话不存在
+ */
+export async function deleteChatSession(id: string): Promise<{ id: string }> {
+  const prisma = getPrismaClient();
+
+  // 1. 校验会话存在
+  const session = await prisma.chatSession.findUnique({ where: { id } });
+  if (session === null) {
+    throw new AppError(ErrorCode.NOT_FOUND, `对话会话不存在：${id}`);
+  }
+
+  // 2. 中断可能的活跃 AI 流（避免删除后流仍在尝试持久化 assistant 消息）
+  const bridge = getStreamBridge();
+  if (bridge.has(id)) {
+    bridge.abort(id);
+    logger.info({ sessionId: id }, '删除会话前已中断活跃 AI 流');
+  }
+
+  // 3. 删除会话（消息表 ChatMessage.sessionId onDelete: Cascade 自动级联清理）
+  await prisma.chatSession.delete({ where: { id } });
+
+  logger.info({ sessionId: id }, '删除对话会话（含消息级联）');
+  return { id };
 }
 
 /**

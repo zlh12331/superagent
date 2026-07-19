@@ -11,6 +11,7 @@ const { mockChatSession, mockChatMessage, mockStreamBridge } = vi.hoisted(() => 
     findUnique: vi.fn(),
     findMany: vi.fn(),
     create: vi.fn(),
+    delete: vi.fn(),
   },
   mockChatMessage: {
     findMany: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('../infra/ai/stream-bridge', () => ({
 
 import {
   createChatSession,
+  deleteChatSession,
   getChatMessages,
   listChatSessions,
   saveAssistantMessage,
@@ -49,6 +51,7 @@ describe('chat.service', () => {
     mockChatSession.findUnique.mockReset();
     mockChatSession.findMany.mockReset();
     mockChatSession.create.mockReset();
+    mockChatSession.delete.mockReset();
     mockChatMessage.findMany.mockReset();
     mockChatMessage.create.mockReset();
     mockStreamBridge.has.mockReset();
@@ -192,6 +195,65 @@ describe('chat.service', () => {
 
       expect(mockStreamBridge.abort).not.toHaveBeenCalled();
       expect(result).toEqual({ stopped: false });
+    });
+  });
+
+  describe('deleteChatSession', () => {
+    const now = new Date();
+
+    it('应删除会话并返回 id（无活跃流时不调用 abort）', async () => {
+      mockChatSession.findUnique.mockResolvedValue({
+        id: 's1',
+        projectId: 'p1',
+        title: 'T',
+        context: {},
+        model: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      mockStreamBridge.has.mockReturnValue(false);
+      mockChatSession.delete.mockResolvedValue({});
+
+      const result = await deleteChatSession('s1');
+
+      expect(mockChatSession.findUnique).toHaveBeenCalledWith({ where: { id: 's1' } });
+      expect(mockStreamBridge.has).toHaveBeenCalledWith('s1');
+      // 无活跃流，不调用 abort
+      expect(mockStreamBridge.abort).not.toHaveBeenCalled();
+      // 调用 prisma.chatSession.delete 级联删除消息（onDelete: Cascade）
+      expect(mockChatSession.delete).toHaveBeenCalledWith({ where: { id: 's1' } });
+      expect(result).toEqual({ id: 's1' });
+    });
+
+    it('有活跃 AI 流时应先 abort 再删除', async () => {
+      mockChatSession.findUnique.mockResolvedValue({
+        id: 's1',
+        projectId: 'p1',
+        title: 'T',
+        context: {},
+        model: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      mockStreamBridge.has.mockReturnValue(true);
+      mockChatSession.delete.mockResolvedValue({});
+
+      await deleteChatSession('s1');
+
+      // 验证 abort 在 delete 之前被调用（避免删除后流仍尝试写消息）
+      expect(mockStreamBridge.abort).toHaveBeenCalledWith('s1');
+      expect(mockChatSession.delete).toHaveBeenCalledWith({ where: { id: 's1' } });
+    });
+
+    it('会话不存在应抛 NOT_FOUND', async () => {
+      mockChatSession.findUnique.mockResolvedValue(null);
+
+      await expect(deleteChatSession('nope')).rejects.toMatchObject({
+        code: ErrorCode.NOT_FOUND,
+      });
+      // 不应调用 delete 或 abort
+      expect(mockChatSession.delete).not.toHaveBeenCalled();
+      expect(mockStreamBridge.abort).not.toHaveBeenCalled();
     });
   });
 
