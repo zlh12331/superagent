@@ -123,6 +123,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/tests/integration/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }
