@@ -38,6 +38,17 @@ const { mockSpawn, mockChildProcess, mockFetch } = vi.hoisted(() => {
 });
 
 vi.mock('node:child_process', () => ({ spawn: mockSpawn }));
+// mock config（ollama-controller 新增 getOllamaController 单例访问器依赖 getAppConfig）
+vi.mock('../config', () => ({
+  getAppConfig: () => ({
+    ollama: {
+      url: 'http://localhost:11434',
+      embedModel: 'nemotron-3-embed-1b-bf16',
+      embedDimensions: 2048,
+      healthCheckInterval: 30_000,
+    },
+  }),
+}));
 // mock global fetch
 globalThis.fetch = mockFetch as unknown as typeof fetch;
 

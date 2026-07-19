@@ -14,6 +14,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { AppError, ErrorCode } from '@novel-writer/shared';
+import { getAppConfig } from '../../config';
 import { logger } from '../../utils/logger';
 
 /**
@@ -293,6 +294,15 @@ export class OllamaController extends EventEmitter {
   }
 
   /**
+   * 获取嵌入模型名
+   *
+   * 供 status-broadcaster 构造 pull-progress 事件 payload 使用
+   */
+  getEmbedModel(): string {
+    return this.config.embedModel;
+  }
+
+  /**
    * 探活 Ollama API
    *
    * GET http://{host}:{port}/api/tags 返回 200 即健康
@@ -391,4 +401,41 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms).unref();
   });
+}
+
+// ── 单例访问器 ──────────────────────────────────────────
+
+/** 缓存的 OllamaController 单例 */
+let cachedController: OllamaController | null = null;
+
+/**
+ * 获取 OllamaController 单例
+ *
+ * 与 getPrismaClient / getStreamBridge 单例模式一致（设计文档 §4.3）。
+ * 首次调用时根据 getAppConfig() 创建实例，后续复用。
+ *
+ * 注意：本函数只返回单例，不自动 start()。
+ * 实际启动编排（start + ensureModelPulled）由后续阶段集成。
+ */
+export function getOllamaController(): OllamaController {
+  if (cachedController === null) {
+    const config = getAppConfig();
+    cachedController = new OllamaController({
+      binaryPath: 'ollama',
+      host: 'localhost',
+      port: 11434,
+      embedModel: config.ollama.embedModel,
+      maxRestartCount: 3,
+    });
+  }
+  return cachedController;
+}
+
+/**
+ * 重置 OllamaController 单例（仅测试用）
+ *
+ * 调用后 getOllamaController() 将创建新实例。
+ */
+export function resetOllamaController(): void {
+  cachedController = null;
 }
