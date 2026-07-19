@@ -7,7 +7,9 @@ import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
 import { initializeDatabase, shutdownDatabase } from './app/db-init';
+import { startStatusBroadcaster } from './app/status-broadcaster';
 import { getAppConfig } from './config';
+import { registerIpcHandlers } from './ipc/router';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
@@ -130,6 +132,13 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
+
+  // 注册 IPC handler（设计文档 §4.1 分层架构：薄层参数校验 + 调 service）
+  // 必须在数据库初始化后调用（部分 handler 依赖 PrismaClient）
+  registerIpcHandlers();
+
+  // 启动状态广播器（订阅 PG/Ollama 状态变更事件 → 推送到渲染层窗口）
+  startStatusBroadcaster();
 
   createWindow();
 
