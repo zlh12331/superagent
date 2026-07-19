@@ -1,0 +1,169 @@
+// src/main/__tests__/stream-bridge.test.ts
+// stream-bridge 单测
+
+import { IPC_CHANNELS } from '@novel-writer/shared';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { StreamBridge } from '../infra/ai/stream-bridge';
+
+// 辅助：构造内存 AsyncIterable
+function makeStream<T>(chunks: T[], shouldThrow = false): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      let i = 0;
+      return {
+        next(): Promise<IteratorResult<T>> {
+          if (shouldThrow && i === chunks.length) {
+            return Promise.reject(new Error('stream error'));
+          }
+          if (i >= chunks.length) {
+            return Promise.resolve({ done: true, value: undefined as unknown as T });
+          }
+          // noUncheckedIndexedAccess 下 chunks[i] 推断为 T | undefined，断言为 T
+          return Promise.resolve({ done: false, value: chunks[i++] as T });
+        },
+      };
+    },
+  };
+}
+
+// 模拟 webContents
+function makeWebContents() {
+  return {
+    send: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+  };
+}
+
+describe('StreamBridge', () => {
+  let bridge: StreamBridge;
+
+  beforeEach(() => {
+    bridge = new StreamBridge();
+  });
+
+  it('streamToWebContents 迭代完成推送所有 chunk 与 end 事件', async () => {
+    const wc = makeWebContents();
+    const stream = makeStream(['hello', ' ', 'world']);
+
+    const fullText = await bridge.streamToWebContents({
+      sessionId: 'session-1',
+      webContents: wc as never,
+      stream,
+      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
+      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
+      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+    });
+
+    expect(fullText).toBe('hello world');
+    expect(wc.send).toHaveBeenCalledTimes(4); // 3 chunk + 1 end
+    expect(wc.send).toHaveBeenNthCalledWith(1, IPC_CHANNELS.CHAT_STREAM_CHUNK, {
+      sessionId: 'session-1',
+      chunk: 'hello',
+    });
+    expect(wc.send).toHaveBeenNthCalledWith(4, IPC_CHANNELS.CHAT_STREAM_END, {
+      sessionId: 'session-1',
+      fullText: 'hello world',
+    });
+  });
+
+  it('stream 抛错时推送 error 事件并清理', async () => {
+    const wc = makeWebContents();
+    const stream = makeStream(['a', 'b'], true);
+
+    await expect(
+      bridge.streamToWebContents({
+        sessionId: 'session-2',
+        webContents: wc as never,
+        stream,
+        chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
+        endChannel: IPC_CHANNELS.CHAT_STREAM_END,
+        errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+      }),
+    ).rejects.toThrow('stream error');
+
+    expect(wc.send).toHaveBeenCalledWith(IPC_CHANNELS.CHAT_STREAM_ERROR, {
+      sessionId: 'session-2',
+      error: 'stream error',
+    });
+    // 流被清理
+    expect(bridge.has('session-2')).toBe(false);
+  });
+
+  it('abort 中断流并推送 error 事件', async () => {
+    const wc = makeWebContents();
+    // definite assignment assertion：resolveNext 会在 Promise 构造时被赋值
+    let resolveNext!: () => void;
+    const blockedNext = new Promise<void>((resolve) => {
+      resolveNext = resolve;
+    });
+
+    const stream: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<string>> {
+            return blockedNext.then(() => ({ done: true, value: undefined as unknown as string }));
+          },
+        };
+      },
+    };
+
+    const promise = bridge.streamToWebContents({
+      sessionId: 'session-3',
+      webContents: wc as never,
+      stream,
+      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
+      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
+      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+    });
+
+    bridge.abort('session-3');
+    resolveNext();
+
+    await promise;
+
+    expect(wc.send).toHaveBeenCalledWith(IPC_CHANNELS.CHAT_STREAM_ERROR, {
+      sessionId: 'session-3',
+      error: 'aborted',
+    });
+    expect(bridge.has('session-3')).toBe(false);
+  });
+
+  it('has 返回活跃流状态', async () => {
+    const wc = makeWebContents();
+    const stream = makeStream(['a']);
+
+    expect(bridge.has('session-4')).toBe(false);
+
+    const promise = bridge.streamToWebContents({
+      sessionId: 'session-4',
+      webContents: wc as never,
+      stream,
+      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
+      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
+      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+    });
+    // 流在迭代期间活跃
+    expect(bridge.has('session-4')).toBe(true);
+    await promise;
+    // 流结束后清理
+    expect(bridge.has('session-4')).toBe(false);
+  });
+
+  it('webContents 已销毁时不推送', async () => {
+    const wc = makeWebContents();
+    wc.isDestroyed.mockReturnValue(true);
+    const stream = makeStream(['a', 'b']);
+
+    const fullText = await bridge.streamToWebContents({
+      sessionId: 'session-5',
+      webContents: wc as never,
+      stream,
+      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
+      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
+      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+    });
+
+    expect(wc.send).not.toHaveBeenCalled();
+    expect(fullText).toBe('ab');
+  });
+});
