@@ -6,8 +6,8 @@
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
+import { initializeDatabase, shutdownDatabase } from './app/db-init';
 import { getAppConfig } from './config';
-import { disconnectPrisma } from './infra/prisma/client';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
@@ -113,12 +113,23 @@ function createWindow(): BrowserWindow {
 // Sentry 必须在 app.whenReady() 之前初始化（@sentry/electron 要求）
 initSentry();
 
-// 应用就绪后初始化 logger + 全局错误捕获 + 创建窗口
-app.whenReady().then(() => {
+// 应用就绪后初始化 logger + 全局错误捕获 + 数据库 + 创建窗口
+app.whenReady().then(async () => {
   // 初始化 logger（需要 app.getPath，必须在 whenReady 之后）
   initLogger();
   registerGlobalErrorHandlers();
   logger.info({}, '应用启动');
+
+  // 初始化数据库（initdb + PG 启动 + migration + AGE + HNSW，设计文档 §1.1 + §6.5）
+  // 失败则直接退出应用（无数据库无法运行）
+  try {
+    await initializeDatabase();
+    logger.info({}, '数据库初始化完成');
+  } catch (err) {
+    logger.error({ error: err }, '数据库初始化失败，应用将退出');
+    app.exit(1);
+    return;
+  }
 
   createWindow();
 
@@ -137,8 +148,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 应用退出前断开 PrismaClient 连接（设计文档 §1.1 应用生命周期）
-// 注：Phase 4a 仅注册清理逻辑，启动时连接 PG 由 Phase 4b 实现
+// 应用退出前关闭数据库（设计文档 §1.1 应用生命周期）
+// shutdownDatabase 包含 disconnectPrisma + pgController.stop（Phase 4b 集成）
 // 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
 let isQuitting = false;
 app.on('before-quit', async (event) => {
@@ -149,7 +160,7 @@ app.on('before-quit', async (event) => {
   event.preventDefault();
   isQuitting = true;
   try {
-    await disconnectPrisma();
+    await shutdownDatabase();
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }
