@@ -8,6 +8,7 @@
 // 3. abort(sessionId) 中断指定流
 // 4. 流结束/中断/异常时清理 controller
 // 5. 推送前检查 webContents.isDestroyed，避免窗口关闭后报错
+// 6. getStreamBridge 单例访问器（活跃流注册表必须全进程共享，否则跨模块 abort 失效）
 //
 // 解耦：不依赖 openai SDK 类型，接收任意 AsyncIterable<T>
 
@@ -184,4 +185,28 @@ function chunkToString(chunk: unknown): string {
     return chunk;
   }
   return JSON.stringify(chunk);
+}
+
+/** 缓存的 StreamBridge 单例 */
+let cachedBridge: StreamBridge | null = null;
+
+/**
+ * 获取 StreamBridge 单例
+ *
+ * activeStreams 注册表必须全主进程共享：
+ * agent.service 发起的流注册在单例内，chat.service 的 stopChatGeneration
+ * 才能通过同一注册表找到并 abort 对应 sessionId 的流。
+ */
+export function getStreamBridge(): StreamBridge {
+  if (cachedBridge === null) {
+    cachedBridge = new StreamBridge();
+  }
+  return cachedBridge;
+}
+
+/**
+ * 重置 StreamBridge 单例（仅测试用）
+ */
+export function resetStreamBridge(): void {
+  cachedBridge = null;
 }

@@ -5,8 +5,9 @@
 // 职责：
 // 1. 对话会话管理（createSession / listSessions）
 // 2. 消息管理（getMessages / sendMessage）
-// 3. sendChatMessage 持久化用户消息并返回 ackId（实际 AI 调用由 Phase 5b agent.service 编排）
-// 4. stopChatGeneration：Phase 5a 占位（5b 实现 AbortController 管理）
+// 3. sendChatMessage 持久化用户消息并返回 ackId（实际 AI 调用由 agent.service 编排）
+// 4. stopChatGeneration 通过 StreamBridge 单例中断活跃流
+// 5. saveAssistantMessage 供 agent.service 在流结束后持久化 assistant 消息
 //
 // 注意：
 // - 不与其他 service 互相依赖
@@ -23,6 +24,7 @@ import {
   ErrorCode,
 } from '@novel-writer/shared';
 import type { PrismaClient } from '@prisma/client';
+import { getStreamBridge } from '../infra/ai/stream-bridge';
 import { getPrismaClient } from '../infra/prisma/client';
 import { logger } from '../utils/logger';
 
@@ -124,15 +126,51 @@ export async function sendChatMessage(input: ChatSendMessageInput): Promise<{ ac
 /**
  * 停止 AI 生成
  *
- * Phase 5a 占位实现：返回 stopped=false（无活跃生成）
- * Phase 5b 将通过 AbortController 管理实际停止逻辑
+ * 通过 StreamBridge 单例检查并中断 sessionId 对应的活跃流：
+ * - 有活跃流：调用 abort()，返回 { stopped: true }
+ * - 无活跃流：返回 { stopped: false }
  *
- * @param _sessionId 会话 ID（Phase 5a 暂未使用）
+ * @param sessionId 会话 ID（即 StreamBridge 的流 ID）
  */
-export async function stopChatGeneration(_sessionId: string): Promise<{ stopped: boolean }> {
-  // Phase 5a 占位：无实际生成可停止
-  // Phase 5b 实现：检查 sessionId 对应的 AbortController，调用 abort()
-  return { stopped: false };
+export async function stopChatGeneration(sessionId: string): Promise<{ stopped: boolean }> {
+  const bridge = getStreamBridge();
+  if (!bridge.has(sessionId)) {
+    return { stopped: false };
+  }
+
+  bridge.abort(sessionId);
+  logger.info({ sessionId }, '已请求中断 AI 生成');
+  return { stopped: true };
+}
+
+/**
+ * 持久化 assistant 消息
+ *
+ * 供 agent.service 在流式响应结束后调用。
+ * tokens 用 content.length 估算（中文按字符计，与 sendChatMessage 一致）。
+ *
+ * @param sessionId 会话 ID
+ * @param content AI 完整回复文本
+ * @returns 持久化后的消息
+ */
+export async function saveAssistantMessage(
+  sessionId: string,
+  content: string,
+): Promise<ChatMessage> {
+  const prisma = getPrismaClient();
+
+  const created = await prisma.chatMessage.create({
+    data: {
+      sessionId,
+      role: ChatRole.ASSISTANT,
+      content,
+      tokens: content.length,
+      metadata: {},
+    },
+  });
+
+  logger.info({ sessionId, length: content.length }, 'assistant 消息已持久化');
+  return serializeChatMessage(created);
 }
 
 /**

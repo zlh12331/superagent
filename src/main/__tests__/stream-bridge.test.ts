@@ -3,7 +3,7 @@
 
 import { IPC_CHANNELS } from '@novel-writer/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { StreamBridge } from '../infra/ai/stream-bridge';
+import { getStreamBridge, resetStreamBridge, StreamBridge } from '../infra/ai/stream-bridge';
 
 // 辅助：构造内存 AsyncIterable
 function makeStream<T>(chunks: T[], shouldThrow = false): AsyncIterable<T> {
@@ -165,5 +165,22 @@ describe('StreamBridge', () => {
 
     expect(wc.send).not.toHaveBeenCalled();
     expect(fullText).toBe('ab');
+  });
+});
+
+describe('getStreamBridge 单例', () => {
+  it('多次调用应返回同一实例', () => {
+    resetStreamBridge();
+    const a = getStreamBridge();
+    const b = getStreamBridge();
+    expect(a).toBe(b);
+  });
+
+  it('resetStreamBridge 后应返回新实例', () => {
+    resetStreamBridge();
+    const a = getStreamBridge();
+    resetStreamBridge();
+    const b = getStreamBridge();
+    expect(a).not.toBe(b);
   });
 });

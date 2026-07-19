@@ -6,7 +6,7 @@ import { ErrorCode } from '@novel-writer/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockPrismaClient, resetMocks } from '../__tests__/helpers/mock-prisma';
 
-const { mockChatSession, mockChatMessage } = vi.hoisted(() => ({
+const { mockChatSession, mockChatMessage, mockStreamBridge } = vi.hoisted(() => ({
   mockChatSession: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
@@ -15,6 +15,10 @@ const { mockChatSession, mockChatMessage } = vi.hoisted(() => ({
   mockChatMessage: {
     findMany: vi.fn(),
     create: vi.fn(),
+  },
+  mockStreamBridge: {
+    has: vi.fn(),
+    abort: vi.fn(),
   },
 }));
 
@@ -26,10 +30,15 @@ vi.mock('../infra/prisma/client', () => ({
   }),
 }));
 
+vi.mock('../infra/ai/stream-bridge', () => ({
+  getStreamBridge: () => mockStreamBridge,
+}));
+
 import {
   createChatSession,
   getChatMessages,
   listChatSessions,
+  saveAssistantMessage,
   sendChatMessage,
   stopChatGeneration,
 } from './chat.service';
@@ -42,6 +51,8 @@ describe('chat.service', () => {
     mockChatSession.create.mockReset();
     mockChatMessage.findMany.mockReset();
     mockChatMessage.create.mockReset();
+    mockStreamBridge.has.mockReset();
+    mockStreamBridge.abort.mockReset();
   });
 
   describe('createChatSession', () => {
@@ -164,9 +175,52 @@ describe('chat.service', () => {
   });
 
   describe('stopChatGeneration', () => {
-    it('Phase 5a 占位实现应返回 stopped=false', async () => {
+    it('有活跃流时应调用 abort 并返回 stopped=true', async () => {
+      mockStreamBridge.has.mockReturnValue(true);
+
       const result = await stopChatGeneration('s1');
+
+      expect(mockStreamBridge.has).toHaveBeenCalledWith('s1');
+      expect(mockStreamBridge.abort).toHaveBeenCalledWith('s1');
+      expect(result).toEqual({ stopped: true });
+    });
+
+    it('无活跃流时应返回 stopped=false（不调用 abort）', async () => {
+      mockStreamBridge.has.mockReturnValue(false);
+
+      const result = await stopChatGeneration('s1');
+
+      expect(mockStreamBridge.abort).not.toHaveBeenCalled();
       expect(result).toEqual({ stopped: false });
+    });
+  });
+
+  describe('saveAssistantMessage', () => {
+    it('应持久化 assistant 消息（tokens 按 content.length 估算）', async () => {
+      const now = new Date();
+      mockChatMessage.create.mockResolvedValue({
+        id: 'm2',
+        sessionId: 's1',
+        role: 'assistant',
+        content: 'AI 回复内容',
+        tokens: 7,
+        metadata: {},
+        createdAt: now,
+      });
+
+      const result = await saveAssistantMessage('s1', 'AI 回复内容');
+
+      expect(mockChatMessage.create).toHaveBeenCalledWith({
+        data: {
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'AI 回复内容',
+          tokens: 7, // 'AI 回复内容'.length === 7
+          metadata: {},
+        },
+      });
+      expect(result.role).toBe('assistant');
+      expect(result.createdAt).toBe(now.toISOString());
     });
   });
 });
