@@ -4,10 +4,11 @@
 //
 // 职责：
 // - useRagDocumentList：按 projectId 获取已入库文档列表
-// - useIngestRagDocument：上传文档（FileReader 转 text 后通过 fileContent 字符串传输）
+// - useIngestRagDocument：上传文档（FileReader 转 text / base64 后通过 fileContent 字符串传输）
 // - useDeleteRagDocument：删除文档
 // - useRagSearch：检索测试（不缓存，每次都重新调）
-// - readFileAsText：工具函数，把 File 包装为 Promise<string>
+// - readFileAsText：工具函数，把文本类 File 包装为 Promise<string>
+// - readFileAsBase64：工具函数，把二进制 File（如 PDF）包装为 Promise<string>（base64，无 data: 前缀）
 
 import type {
   RagDocument,
@@ -24,7 +25,7 @@ import { queryKeys } from '@/api/query-keys';
  * 把 File 读取为文本
  *
  * 用于 RAG 文档上传：FileReader.readAsText 后通过 IPC 字符串传输。
- * 仅支持文本格式文件（.md/.txt/.json），PDF 需主进程侧解析（Phase 9 增强）。
+ * 仅支持文本格式文件（.md/.txt/.json），PDF 请使用 readFileAsBase64。
  *
  * @param file - 用户选择的文件
  * @returns 文件文本内容
@@ -44,6 +45,47 @@ export function readFileAsText(file: File): Promise<string> {
       reject(reader.error ?? new Error('文件读取失败'));
     };
     reader.readAsText(file);
+  });
+}
+
+/**
+ * 把 File 读取为 base64 字符串（不含 data: 前缀）
+ *
+ * 用于 RAG 文档上传：把 PDF 等二进制文件读取为 base64 字符串后通过 IPC 传输。
+ * 主进程 ingestDocument 检测到 mimeType === 'application/pdf' 时会解码 base64
+ * → Uint8Array → 调 pdf-parser 解析为文本，后续走原切片+嵌入流程。
+ *
+ * 实现说明：
+ * - 用 FileReader.readAsDataURL 读取，得到 'data:application/pdf;base64,XXXX' 格式
+ * - 用 indexOf(',') 找到 base64 起始位置，截取后半部分作为纯 base64 返回
+ * - 相比直接拼装 String.fromCharCode + btoa，readAsDataURL 性能更好（C++ 原生实现）
+ *
+ * @param file - 用户选择的二进制文件（如 PDF）
+ * @returns 文件的 base64 编码字符串（不含 data: 前缀）
+ */
+export function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        // readAsDataURL 返回 'data:<mime>;base64,<base64-payload>'
+        // 用 indexOf 而非 split，避免 base64 内若含 ',' 导致截断错误（实际不会，但更稳健）
+        const commaIdx = result.indexOf(',');
+        if (commaIdx === -1) {
+          reject(new Error('文件读取失败：data URL 格式异常'));
+          return;
+        }
+        // 截取 comma 之后的部分作为纯 base64 字符串
+        resolve(result.slice(commaIdx + 1));
+      } else {
+        reject(new Error('文件读取失败：结果非字符串'));
+      }
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error('文件读取失败'));
+    };
+    reader.readAsDataURL(file);
   });
 }
 

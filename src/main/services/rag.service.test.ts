@@ -2,22 +2,25 @@
 // rag.service 单元测试
 // 设计文档 §4.2 rag.service / §6.2 RagDocument / RagDocumentChunk 模型
 
-import { ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@novel-writer/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockPrismaClient, resetMocks } from '../__tests__/helpers/mock-prisma';
 
-const { mockRagDocument, mockEmbedTexts, mockExecuteRaw, mockQueryRaw } = vi.hoisted(() => ({
-  mockRagDocument: {
-    findUnique: vi.fn(),
-    findMany: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  },
-  mockEmbedTexts: vi.fn(),
-  mockExecuteRaw: vi.fn(),
-  mockQueryRaw: vi.fn(),
-}));
+const { mockRagDocument, mockEmbedTexts, mockExecuteRaw, mockQueryRaw, mockParsePdfToText } =
+  vi.hoisted(() => ({
+    mockRagDocument: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+    mockEmbedTexts: vi.fn(),
+    mockExecuteRaw: vi.fn(),
+    mockQueryRaw: vi.fn(),
+    // mock pdf-parser：默认未实现，PDF 测试用例单独 mockResolveValue
+    mockParsePdfToText: vi.fn(),
+  }));
 
 vi.mock('../infra/prisma/client', () => ({
   getPrismaClient: () => ({
@@ -30,6 +33,10 @@ vi.mock('../infra/prisma/client', () => ({
 
 vi.mock('./embedding.service', () => ({
   embedTexts: mockEmbedTexts,
+}));
+
+vi.mock('../infra/rag/pdf-parser', () => ({
+  parsePdfToText: mockParsePdfToText,
 }));
 
 import {
@@ -50,6 +57,7 @@ describe('rag.service', () => {
     mockEmbedTexts.mockReset();
     mockExecuteRaw.mockReset();
     mockQueryRaw.mockReset();
+    mockParsePdfToText.mockReset();
   });
 
   describe('ingestDocument', () => {
@@ -166,6 +174,89 @@ describe('rag.service', () => {
       expect(mockEmbedTexts).not.toHaveBeenCalled();
       expect(mockExecuteRaw).not.toHaveBeenCalled();
       expect(result).toEqual({ documentId: 'doc1', chunksCount: 0 });
+    });
+
+    it('PDF（mimeType=application/pdf）应先解码 base64 → 解析文本 → 走原切片+嵌入流程', async () => {
+      // 模拟 pdf-parser 返回的解析文本（3 个段落 → 1 个 chunk）
+      const parsedText = '第一段内容。\n\n第二段内容。\n\n第三段内容。';
+      mockParsePdfToText.mockResolvedValue(parsedText);
+      mockEmbedTexts.mockResolvedValue([[0.1, 0.2, 0.3]]);
+      mockRagDocument.create.mockResolvedValue({
+        id: 'doc-pdf',
+        projectId: 'p1',
+        title: '设定集',
+        source: null,
+        mimeType: null,
+        chunksCount: 0,
+        metadata: {},
+        createdAt: new Date(),
+      });
+      mockExecuteRaw.mockResolvedValue(1);
+      mockRagDocument.update.mockResolvedValue({});
+
+      // fileContent 是渲染层用 FileReader.readAsDataURL 得到的 base64 字符串
+      // 这里用 'JVBERi0xLjQK' 模拟（实际是 %PDF-1.4\n 的 base64 编码，pdf-parser 已 mock 无需真实 PDF）
+      const result = await ingestDocument({
+        projectId: 'p1',
+        title: '设定集',
+        fileContent: 'JVBERi0xLjQK',
+        mimeType: 'application/pdf',
+      });
+
+      // 校验：parsePdfToText 被调用，且参数是 Uint8Array（base64 解码后的字节）
+      expect(mockParsePdfToText).toHaveBeenCalledTimes(1);
+      const [uint8] = mockParsePdfToText.mock.calls[0] as [Uint8Array];
+      expect(uint8).toBeInstanceOf(Uint8Array);
+      // 'JVBERi0xLjQK' base64 解码后应为 '%PDF-1.4\n'（9 字节）
+      expect(uint8.byteLength).toBe(9);
+      // 后续流程：嵌入收到解析后的文本切片
+      expect(mockEmbedTexts).toHaveBeenCalledWith(['第一段内容。\n\n第二段内容。\n\n第三段内容。']);
+      // 1 个 chunk → 1 次 raw SQL 插入 + 1 次更新 chunksCount
+      expect(mockExecuteRaw).toHaveBeenCalledTimes(1);
+      expect(mockRagDocument.update).toHaveBeenCalledWith({
+        where: { id: 'doc-pdf' },
+        data: { chunksCount: 1 },
+      });
+      expect(result).toEqual({ documentId: 'doc-pdf', chunksCount: 1 });
+    });
+
+    it('PDF 解析失败应抛 RAG_DOCUMENT_PARSE_FAILED（不调用嵌入/创建文档）', async () => {
+      // 模拟 pdf-parser 抛 AppError(RAG_DOCUMENT_PARSE_FAILED)
+      mockParsePdfToText.mockRejectedValue(
+        new AppError(ErrorCode.RAG_DOCUMENT_PARSE_FAILED, 'PDF 解析失败：损坏的文件'),
+      );
+
+      await expect(
+        ingestDocument({
+          projectId: 'p1',
+          title: 'T',
+          fileContent: 'aGVsbG8=',
+          mimeType: 'application/pdf',
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.RAG_DOCUMENT_PARSE_FAILED });
+
+      // 解析失败：不应调用嵌入、不应创建文档记录
+      expect(mockEmbedTexts).not.toHaveBeenCalled();
+      expect(mockRagDocument.create).not.toHaveBeenCalled();
+      expect(mockExecuteRaw).not.toHaveBeenCalled();
+    });
+
+    it('PDF 解析后文本超过 MAX_DOCUMENT_SIZE 应抛 RAG_DOCUMENT_TOO_LARGE', async () => {
+      // 模拟 pdf-parser 返回超长文本（200_001 字符）
+      mockParsePdfToText.mockResolvedValue('字'.repeat(200_001));
+
+      await expect(
+        ingestDocument({
+          projectId: 'p1',
+          title: 'T',
+          fileContent: 'aGVsbG8=',
+          mimeType: 'application/pdf',
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.RAG_DOCUMENT_TOO_LARGE });
+
+      // 超大文档：不应调用嵌入、不应创建文档记录
+      expect(mockEmbedTexts).not.toHaveBeenCalled();
+      expect(mockRagDocument.create).not.toHaveBeenCalled();
     });
   });
 

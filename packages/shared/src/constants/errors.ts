@@ -48,6 +48,7 @@ export const ErrorCode = {
   RAG_EMBEDDING_FAILED: 'RAG_EMBEDDING_FAILED',
   RAG_NO_RESULTS: 'RAG_NO_RESULTS',
   RAG_DOCUMENT_TOO_LARGE: 'RAG_DOCUMENT_TOO_LARGE',
+  RAG_DOCUMENT_PARSE_FAILED: 'RAG_DOCUMENT_PARSE_FAILED',
 
   // ── 数据库 ────────────────────────────────────────
   DB_CONNECTION_FAILED: 'DB_CONNECTION_FAILED',
@@ -141,6 +142,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   RAG_EMBEDDING_FAILED: { userMessage: '嵌入向量生成失败', retryable: true, severity: 'error' },
   RAG_NO_RESULTS: { userMessage: '未检索到相关文档', retryable: false, severity: 'info' },
   RAG_DOCUMENT_TOO_LARGE: { userMessage: '文档过大，无法入库', retryable: false, severity: 'warn' },
+  RAG_DOCUMENT_PARSE_FAILED: {
+    userMessage: 'PDF 解析失败，请检查文件是否损坏',
+    retryable: false,
+    severity: 'warn',
+  },
 
   // 数据库
   DB_CONNECTION_FAILED: { userMessage: '数据库连接失败', retryable: true, severity: 'error' },

@@ -5,7 +5,9 @@
 // 职责：
 // - 受控对话框（open + onOpenChange），收集标题 + 文件两个输入
 // - 文件选择使用原生 <input type="file">（不引入 react-dropzone 等额外依赖）
-// - 提交时通过 readFileAsText 把 File 转为文本，再调 useIngestRagDocument 上传
+// - 提交时根据文件类型分流：
+//   - 文本类（.md/.txt/.json）：readFileAsText → fileContent 直接传文本
+//   - PDF（.pdf）：readFileAsBase64 → fileContent 传 base64 字符串（主进程解码+解析）
 // - 成功后清空表单 + 关闭对话框 + 调 onUploaded 回调；失败时不关闭，让用户重试
 //
 // 注意：
@@ -29,7 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { readFileAsText, useIngestRagDocument } from '@/hooks/use-rag';
+import { readFileAsBase64, readFileAsText, useIngestRagDocument } from '@/hooks/use-rag';
 import { handleIpcError } from '@/lib/handle-ipc-error';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +47,7 @@ interface RagUploadDialogProps {
 }
 
 /** 允许上传的文件扩展名白名单 */
-const ALLOWED_EXTENSIONS = ['.md', '.txt', '.json'] as const;
+const ALLOWED_EXTENSIONS = ['.md', '.txt', '.json', '.pdf'] as const;
 
 /** 文件大小上限：10MB（字节） */
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -147,7 +149,7 @@ export function RagUploadDialog({
     // 扩展名校验：不在白名单内则显示错误并清空文件
     if (!ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])) {
       setFile(null);
-      setExtError(`不支持的文件类型：${ext || '无扩展名'}，仅支持 .md / .txt / .json`);
+      setExtError(`不支持的文件类型：${ext || '无扩展名'}，仅支持 .md / .txt / .json / .pdf`);
       setSizeWarning(null);
       return;
     }
@@ -166,7 +168,11 @@ export function RagUploadDialog({
   };
 
   /**
-   * 提交表单：读取文件文本并上传
+   * 提交表单：根据文件类型分流读取并上传
+   *
+   * - PDF：readFileAsBase64 → fileContent 为 base64 字符串，mimeType='application/pdf'
+   *   主进程会先解码 base64 → 调 pdf-parser 解析为文本，后续走原切片+嵌入流程
+   * - 文本类：readFileAsText → fileContent 为原始文本
    *
    * 失败时不关闭对话框，让用户可以重试。
    */
@@ -177,15 +183,20 @@ export function RagUploadDialog({
     if (extError !== null || sizeWarning !== null) return;
 
     try {
-      // 把 File 读取为文本字符串（通过 FileReader）
-      const fileContent = await readFileAsText(file);
+      const ext = getFileExtension(file.name);
+      // PDF 走 base64 + mimeType 分支；其他走文本分支
+      // 注意：即使 file.type 为空（某些系统不识别 PDF MIME），按扩展名判定也能正确路由
+      const isPdf = ext === '.pdf';
+      const fileContent = isPdf ? await readFileAsBase64(file) : await readFileAsText(file);
       await mutateAsync({
         projectId,
         title: title.trim(),
         fileContent,
         // exactOptionalPropertyTypes 下：mimeType 为可选属性，用条件展开传入
-        // file.type 可能为空字符串（如某些 .md 文件未带 MIME），此时不传 mimeType
-        ...(file.type.length > 0 ? { mimeType: file.type } : {}),
+        // PDF：强制传 'application/pdf'（主进程依赖此字段决定是否调 pdf-parser）
+        // 文本类：file.type 可能为空（如某些 .md 文件未带 MIME），此时不传 mimeType
+        ...(isPdf ? { mimeType: 'application/pdf' as const } : {}),
+        ...(!isPdf && file.type.length > 0 ? { mimeType: file.type } : {}),
       });
       // 成功：清空表单 + 关闭对话框 + 调 onUploaded
       resetForm();
@@ -226,7 +237,9 @@ export function RagUploadDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>上传文档</DialogTitle>
-          <DialogDescription>支持 Markdown / 文本 / JSON，文件大小不超过 10MB</DialogDescription>
+          <DialogDescription>
+            支持 Markdown / 文本 / JSON / PDF，文件大小不超过 10MB
+          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           {/* 标题输入：必填，最大 200 字符 */}
@@ -244,11 +257,11 @@ export function RagUploadDialog({
           {/* 文件选择：隐藏原生 input + 按钮 + 文件信息展示 */}
           <div className="flex flex-col gap-2">
             <Label>文件 *</Label>
-            {/* 隐藏的文件输入：accept 限定为 .md/.txt/.json */}
+            {/* 隐藏的文件输入：accept 限定为 .md/.txt/.json/.pdf */}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".md,.txt,.json"
+              accept=".md,.txt,.json,.pdf,application/pdf"
               className="hidden"
               onChange={handleFileChange}
             />

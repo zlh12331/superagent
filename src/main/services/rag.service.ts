@@ -7,11 +7,14 @@
 // 2. 向量入库（embedding 是 Unsupported("halfvec(2048)")，必须 raw SQL 写入）
 // 3. 相似检索（pgvector 余弦距离 <=>）
 // 4. 文档管理（list / delete）
+// 5. PDF 文档解析（mimeType === 'application/pdf' 时先走 pdf-parser，再切片）
 //
 // 注意：
 // - 向量只在主进程内流转，不跨 IPC、不出现在返回值中
 // - 调用 embedding.service 生成向量（设计文档 §4.2 允许 rag.service 依赖 embedding.service）
 // - 表名 snake_case（rag_document_chunks），列名 camelCase（"documentId"），raw SQL 需注意双引号
+// - PDF 文件由渲染层以 base64 字符串形式通过 fileContent 字段传入（避免修改 IPC schema）
+//   主进程解码 base64 → Uint8Array → 调 parsePdfToText → 得到的 text 替换 fileContent，后续流程不变
 
 import {
   AppError,
@@ -23,6 +26,7 @@ import {
 } from '@novel-writer/shared';
 import type { PrismaClient } from '@prisma/client';
 import { getPrismaClient } from '../infra/prisma/client';
+import { parsePdfToText } from '../infra/rag/pdf-parser';
 import { logger } from '../utils/logger';
 import { embedTexts } from './embedding.service';
 
@@ -35,9 +39,14 @@ const MAX_DOCUMENT_SIZE = 200_000;
 /**
  * 文档入库
  *
- * 流程：大小校验 → 切片 → 批量嵌入 → 建文档记录 → 逐 chunk raw SQL 插入 → 更新 chunksCount
+ * 流程：
+ * 1. 若 mimeType === 'application/pdf'：fileContent 视为 base64 字符串
+ *    → Buffer.from(base64, 'base64') → parsePdfToText → 得到纯文本
+ * 2. 文本大小校验（基于解析后的文本字符数，PDF 与文本统一标准）
+ * 3. 切片 → 批量嵌入 → 建文档记录 → 逐 chunk raw SQL 插入 → 更新 chunksCount
  *
- * @throws AppError(RAG_DOCUMENT_TOO_LARGE) 文档超过 200_000 字符
+ * @throws AppError(RAG_DOCUMENT_TOO_LARGE) 文档超过 200_000 字符（解析后）
+ * @throws AppError(RAG_DOCUMENT_PARSE_FAILED) PDF 解析失败（文件损坏 / 加密 / 不支持）
  * @throws AppError(RAG_EMBEDDING_FAILED) 嵌入失败（由 embedding.service 抛出）
  */
 export async function ingestDocument(
@@ -49,18 +58,26 @@ export async function ingestDocument(
     '文档入库',
   );
 
-  // 1. 大小校验
-  if (input.fileContent.length > MAX_DOCUMENT_SIZE) {
+  // 1. 解析原始文本（PDF 需先解码 base64 → 解析为文本）
+  // PDF：fileContent 是渲染层用 FileReader.readAsDataURL 得到的 base64 字符串
+  // 文本：fileContent 即为原始文本，无需转换
+  const content =
+    input.mimeType === 'application/pdf'
+      ? await parsePdfToText(new Uint8Array(Buffer.from(input.fileContent, 'base64')))
+      : input.fileContent;
+
+  // 2. 大小校验（基于解析后的文本字符数，PDF 与文本统一标准）
+  if (content.length > MAX_DOCUMENT_SIZE) {
     throw new AppError(
       ErrorCode.RAG_DOCUMENT_TOO_LARGE,
-      `文档过大（${input.fileContent.length} 字符，上限 ${MAX_DOCUMENT_SIZE}）`,
+      `文档过大（${content.length} 字符，上限 ${MAX_DOCUMENT_SIZE}）`,
     );
   }
 
-  // 2. 切片
-  const chunks = chunkText(input.fileContent);
+  // 3. 切片
+  const chunks = chunkText(content);
 
-  // 3. 创建文档记录（先建记录拿到 documentId，再插 chunks）
+  // 4. 创建文档记录（先建记录拿到 documentId，再插 chunks）
   const document = await prisma.ragDocument.create({
     data: {
       projectId: input.projectId,
@@ -71,16 +88,16 @@ export async function ingestDocument(
     },
   });
 
-  // 4. 无有效切片：直接返回空文档
+  // 5. 无有效切片：直接返回空文档
   if (chunks.length === 0) {
     logger.warn({ documentId: document.id }, '文档切片后无有效内容');
     return { documentId: document.id, chunksCount: 0 };
   }
 
-  // 5. 批量嵌入
+  // 6. 批量嵌入
   const vectors = await embedTexts(chunks);
 
-  // 6. 逐 chunk raw SQL 插入（embedding 字段 Prisma Client 不支持，必须 raw SQL）
+  // 7. 逐 chunk raw SQL 插入（embedding 字段 Prisma Client 不支持，必须 raw SQL）
   for (const [index, chunkContent] of chunks.entries()) {
     const vector = vectors[index];
     if (vector === undefined) {
@@ -100,7 +117,7 @@ export async function ingestDocument(
     );
   }
 
-  // 7. 更新 chunksCount
+  // 8. 更新 chunksCount
   await prisma.ragDocument.update({
     where: { id: document.id },
     data: { chunksCount: chunks.length },
