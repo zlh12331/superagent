@@ -14,7 +14,10 @@
       "!**/node_modules",
       "!**/out",
       "!**/dist",
-      "!**/.codegraph"
+      "!**/.codegraph",
+      "!**/playwright-report",
+      "!**/test-results",
+      "!**/playwright/.cache"
     ]
   },
   "formatter": {
@@ -130,6 +133,29 @@
         "rules": {
           "suspicious": {
             "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/e2e/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          },
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/e2e/playwright.config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
           }
         }
       }

@@ -9,6 +9,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import { initializeDatabase, shutdownDatabase } from './app/db-init';
 import { startStatusBroadcaster } from './app/status-broadcaster';
 import { getAppConfig } from './config';
+import { registerMockIpcHandlers } from './ipc/mock-handlers';
 import { registerIpcHandlers } from './ipc/router';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
@@ -122,23 +123,33 @@ app.whenReady().then(async () => {
   registerGlobalErrorHandlers();
   logger.info({}, '应用启动');
 
-  // 初始化数据库（initdb + PG 启动 + migration + AGE + HNSW，设计文档 §1.1 + §6.5）
-  // 失败则直接退出应用（无数据库无法运行）
-  try {
-    await initializeDatabase();
-    logger.info({}, '数据库初始化完成');
-  } catch (err) {
-    logger.error({ error: err }, '数据库初始化失败，应用将退出');
-    app.exit(1);
-    return;
+  // E2E 测试模式：跳过 DB 初始化，注册 mock IPC handler
+  // 设计文档 §8.4 E2E 测试策略 / Phase 10 Task 1
+  // E2E_MODE=true 时无 PG 二进制，通过 mock handler 让渲染层正常渲染 UI
+  const isE2E = process.env.E2E_MODE === 'true' && !app.isPackaged;
+
+  if (isE2E) {
+    logger.warn({}, 'E2E 测试模式：跳过数据库初始化，注册 mock IPC handler');
+    registerMockIpcHandlers();
+  } else {
+    // 初始化数据库（initdb + PG 启动 + migration + AGE + HNSW，设计文档 §1.1 + §6.5）
+    // 失败则直接退出应用（无数据库无法运行）
+    try {
+      await initializeDatabase();
+      logger.info({}, '数据库初始化完成');
+    } catch (err) {
+      logger.error({ error: err }, '数据库初始化失败，应用将退出');
+      app.exit(1);
+      return;
+    }
+
+    // 注册 IPC handler（设计文档 §4.1 分层架构：薄层参数校验 + 调 service）
+    // 必须在数据库初始化后调用（部分 handler 依赖 PrismaClient）
+    registerIpcHandlers();
+
+    // 启动状态广播器（订阅 PG/Ollama 状态变更事件 → 推送到渲染层窗口）
+    startStatusBroadcaster();
   }
-
-  // 注册 IPC handler（设计文档 §4.1 分层架构：薄层参数校验 + 调 service）
-  // 必须在数据库初始化后调用（部分 handler 依赖 PrismaClient）
-  registerIpcHandlers();
-
-  // 启动状态广播器（订阅 PG/Ollama 状态变更事件 → 推送到渲染层窗口）
-  startStatusBroadcaster();
 
   createWindow();
 

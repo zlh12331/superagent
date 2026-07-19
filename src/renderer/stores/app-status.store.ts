@@ -11,6 +11,7 @@
 
 import type { AppStatus } from '@novel-writer/shared';
 import { create } from 'zustand';
+import { apiClient } from '../api/client';
 
 /**
  * 应用级状态接口
@@ -29,7 +30,7 @@ export interface AppStatusState {
   dbConnected: boolean;
   /** Ollama 模型拉取进度（无拉取任务时为 null） */
   pullProgress: { model: string; percent: number } | null;
-  /** 主动拉取一次最新状态（调用 window.api.app.getStatus） */
+  /** 主动拉取一次最新状态（调用 apiClient.app.getStatus） */
   refresh: () => Promise<void>;
   /** 启动 IPC 订阅，返回 cleanup 函数（由组件在 useEffect 中调用） */
   init: () => () => void;
@@ -56,7 +57,7 @@ export const useAppStatusStore = create<AppStatusState>()((set, get) => ({
   dbConnected: false,
   pullProgress: null,
   refresh: async () => {
-    const res = await window.api.app.getStatus();
+    const res = await apiClient.app.getStatus();
     // IpcResponse 是 discriminated union：用 'data' in res 类型收窄
     if ('data' in res) {
       const s = res.data;
@@ -69,13 +70,13 @@ export const useAppStatusStore = create<AppStatusState>()((set, get) => ({
     }
   },
   init: () => {
-    const unsubPg = window.api.app.onPgStatusChange((status) => {
+    const unsubPg = apiClient.app.onPgStatusChange((status) => {
       set({ pgStatus: status });
     });
-    const unsubOllama = window.api.app.onOllamaStatusChange((status) => {
+    const unsubOllama = apiClient.app.onOllamaStatusChange((status) => {
       set({ ollamaStatus: status });
     });
-    const unsubPull = window.api.app.onOllamaPullProgress((p) => {
+    const unsubPull = apiClient.app.onOllamaPullProgress((p) => {
       set({ pullProgress: { model: p.model, percent: p.percent } });
     });
     // 启动时立即拉取一次最新状态，避免初始状态过期

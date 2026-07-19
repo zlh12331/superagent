@@ -17,8 +17,17 @@
 // - contextIsolation: true 下，contextBridge.exposeInMainWorld 是唯一安全暴露方式
 // - 渲染层无法直接访问 ipcRenderer / Node API，只能通过 api 命名空间调用白名单方法
 // - 每个 channel 名从 IPC_CHANNELS 常量获取，避免拼写错误
+//
+// 导入策略（关键）：
+// - IPC_CHANNELS 通过子路径 '@novel-writer/shared/ipc/channels' 导入，
+//   避免触发 shared 主入口（src/index.ts）的 `export * from './schemas'` 求值，
+//   防止把 zod（纯 ESM 包）拉进 preload 构建产物。
+// - sandbox: true 下 preload 必须是 CJS 格式，require('zod') 在沙箱中会失败，
+//   导致 contextBridge.exposeInMainWorld 不执行，window.api 为 undefined。
+// - IpcApi 是 type-only 导入，esbuild 编译时会移除，不会触发运行时求值。
 
-import { IPC_CHANNELS, type IpcApi } from '@novel-writer/shared';
+import type { IpcApi } from '@novel-writer/shared';
+import { IPC_CHANNELS } from '@novel-writer/shared/ipc/channels';
 import { contextBridge } from 'electron';
 import { invoke, subscribe } from './utils/ipc-bridge';
 
