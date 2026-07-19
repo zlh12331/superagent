@@ -7,6 +7,7 @@
 //
 // 敏感数据（API Key）不存此处，由 keychain.ts 管理
 
+import { POSTGRES_VERSIONS } from '@novel-writer/shared';
 import { app } from 'electron';
 import { z } from 'zod';
 
@@ -65,6 +66,12 @@ const PgConfigSchema = z.object({
   database: z.string().default('nwa'),
   /** PG 启动超时（毫秒） */
   startTimeout: z.number().int().positive().default(30_000),
+  /** PG 版本（默认 18.4，AGE 加载失败时降级到 17.10，设计文档 §6.5） */
+  version: z.string().default(POSTGRES_VERSIONS.V18_4),
+  /** PG 资源根目录（dev: 空字符串表示用系统 PATH；prod: resources/pg，设计文档 §6.5） */
+  resourcesDir: z.string().default(''),
+  /** initdb 超时（毫秒），首次启动初始化数据目录的超时上限 */
+  initdbTimeout: z.number().int().positive().default(60_000),
 });
 
 /**
@@ -124,6 +131,9 @@ export function loadConfig(): AppConfig {
       port: Number(process.env.PG_PORT ?? 5433),
       database: process.env.PG_DATABASE ?? 'nwa',
       startTimeout: Number(process.env.PG_START_TIMEOUT ?? 30_000),
+      version: process.env.PG_VERSION ?? POSTGRES_VERSIONS.V18_4,
+      resourcesDir: process.env.PG_RESOURCES_DIR ?? '',
+      initdbTimeout: Number(process.env.PG_INITDB_TIMEOUT ?? 60_000),
     },
   });
 }

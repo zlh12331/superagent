@@ -7,9 +7,10 @@
 // - Preload：import type { IpcApi } from '@novel-writer/shared'
 // - 渲染层：import type { Project, IpcResponse } from '@novel-writer/shared'
 
+// Apache AGE 图数据常量（§6.3）
+export * from './constants/age';
 // 错误处理（§7）
 export * from './constants/errors';
-
 // PostgreSQL 版本常量（§6.5 AGE 兼容性策略）
 export * from './constants/pg-versions';
 

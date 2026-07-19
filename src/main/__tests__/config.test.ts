@@ -148,4 +148,35 @@ describe('AppConfig - pg', () => {
     expect(() => getAppConfig()).toThrow();
     delete process.env.DATABASE_URL;
   });
+
+  it('应使用默认 version 与 initdbTimeout', () => {
+    // 清空 pg 新字段相关 env，验证默认值
+    delete process.env.PG_VERSION;
+    delete process.env.PG_INITDB_TIMEOUT;
+    delete process.env.PG_RESOURCES_DIR;
+    resetConfigCache();
+
+    const config = getAppConfig();
+
+    expect(config.pg.version).toBe('18.4');
+    expect(config.pg.initdbTimeout).toBe(60_000);
+    expect(config.pg.resourcesDir).toBe('');
+  });
+
+  it('应从环境变量读取 version 与 initdbTimeout', () => {
+    process.env.PG_VERSION = '17.10';
+    process.env.PG_INITDB_TIMEOUT = '120000';
+    process.env.PG_RESOURCES_DIR = 'C:/custom/pg';
+    resetConfigCache();
+
+    const config = getAppConfig();
+
+    expect(config.pg.version).toBe('17.10');
+    expect(config.pg.initdbTimeout).toBe(120_000);
+    expect(config.pg.resourcesDir).toBe('C:/custom/pg');
+
+    delete process.env.PG_VERSION;
+    delete process.env.PG_INITDB_TIMEOUT;
+    delete process.env.PG_RESOURCES_DIR;
+  });
 });
