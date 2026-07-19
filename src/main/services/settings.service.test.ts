@@ -6,17 +6,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockPrismaClient, resetMocks } from '../__tests__/helpers/mock-prisma';
 
 // vi.hoisted 模式：避免 vi.mock factory TDZ（参考 db-init.test.ts）
-const { mockProjectSetting, mockKeychain } = vi.hoisted(() => ({
-  mockProjectSetting: {
-    findUnique: vi.fn(),
-    upsert: vi.fn(),
-  },
-  mockKeychain: {
-    setSecret: vi.fn(),
-    getSecret: vi.fn(),
-    deleteSecret: vi.fn(),
-  },
-}));
+const { mockProjectSetting, mockKeychain, mockGetOpenAIClient, mockTestEmbeddingConnection } =
+  vi.hoisted(() => ({
+    mockProjectSetting: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+    },
+    mockKeychain: {
+      setSecret: vi.fn(),
+      getSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+    },
+    // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
+    mockGetOpenAIClient: vi.fn(),
+    mockTestEmbeddingConnection: vi.fn(),
+  }));
 
 // mock PrismaClient 单例模块（spread 共享 mock + 覆盖 projectSetting）
 vi.mock('../infra/prisma/client', () => ({
@@ -28,6 +32,17 @@ vi.mock('../infra/prisma/client', () => ({
 
 // mock keychain 模块（避免实际读写文件）
 vi.mock('../infra/storage/keychain', () => mockKeychain);
+
+// mock OpenAI 客户端工厂（避免真实网络请求）
+vi.mock('../infra/ai/openai-client', () => ({
+  // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
+  getOpenAIClient: mockGetOpenAIClient,
+}));
+
+// mock embedding 服务（ollama 连通性检查）
+vi.mock('./embedding.service', () => ({
+  testEmbeddingConnection: mockTestEmbeddingConnection,
+}));
 
 import {
   getProjectSettings,
@@ -46,6 +61,8 @@ describe('settings.service', () => {
     mockKeychain.setSecret.mockReset();
     mockKeychain.getSecret.mockReset();
     mockKeychain.deleteSecret.mockReset();
+    mockGetOpenAIClient.mockReset();
+    mockTestEmbeddingConnection.mockReset();
   });
 
   describe('getProjectSettings', () => {
@@ -139,21 +156,53 @@ describe('settings.service', () => {
   });
 
   describe('testApiKey', () => {
-    it('Key 不存在时返回 ok=false', async () => {
+    it('deepseek Key 不存在时返回 ok=false', async () => {
       mockKeychain.getSecret.mockResolvedValue(null);
 
       const result = await testApiKey('deepseek');
 
       expect(mockKeychain.getSecret).toHaveBeenCalledWith('deepseek-api-key');
       expect(result).toEqual({ ok: false });
+      expect(mockGetOpenAIClient).not.toHaveBeenCalled();
     });
 
-    it('Phase 5a 占位：Key 存在时返回 ok=false（实际调用在 5b）', async () => {
+    it('deepseek 调用成功应返回 ok=true 与 latencyMs', async () => {
       mockKeychain.getSecret.mockResolvedValue('sk-xxx');
+      const mockList = vi.fn().mockResolvedValue({ data: [] });
+      mockGetOpenAIClient.mockResolvedValue({ models: { list: mockList } });
 
       const result = await testApiKey('deepseek');
 
-      expect(result.ok).toBe(false);
+      expect(mockGetOpenAIClient).toHaveBeenCalledWith({ apiKey: 'sk-xxx' });
+      expect(mockList).toHaveBeenCalled();
+      expect(result.ok).toBe(true);
+      expect(result.latencyMs).toEqual(expect.any(Number));
+    });
+
+    it('deepseek 调用失败应返回 ok=false（不抛出）', async () => {
+      mockKeychain.getSecret.mockResolvedValue('sk-bad');
+      mockGetOpenAIClient.mockRejectedValue(new Error('HTTP 401'));
+
+      const result = await testApiKey('deepseek');
+
+      expect(result).toEqual({ ok: false });
+    });
+
+    it('ollama 应跳过 keychain 直接测连通性（成功）', async () => {
+      mockTestEmbeddingConnection.mockResolvedValue({ ok: true, latencyMs: 42 });
+
+      const result = await testApiKey('ollama');
+
+      expect(mockKeychain.getSecret).not.toHaveBeenCalled();
+      expect(result).toEqual({ ok: true, latencyMs: 42 });
+    });
+
+    it('ollama 连通性检查失败应返回 ok=false', async () => {
+      mockTestEmbeddingConnection.mockResolvedValue({ ok: false });
+
+      const result = await testApiKey('ollama');
+
+      expect(result).toEqual({ ok: false });
     });
   });
 });

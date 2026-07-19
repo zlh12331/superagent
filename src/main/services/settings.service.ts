@@ -9,14 +9,16 @@
 // 注意：
 // - ProjectSetting 是单例（PK = projectId），upsert 创建/更新
 // - API Key 存 keychain（设计文档 §1.2 决策 5）
-// - testApiKey：Phase 5a 占位（实际 API 调用由 Phase 5b 实现）
+// - testApiKey：deepseek 走 models.list 验证，ollama 走嵌入连通性检查
 // - 不与其他 service 互相依赖（设计文档 §4.4 禁止依赖方向）
 
 import type { ProjectSetting, ProjectSettingUpdateInput } from '@novel-writer/shared';
 import type { PrismaClient } from '@prisma/client';
+import { getOpenAIClient } from '../infra/ai/openai-client';
 import { getPrismaClient } from '../infra/prisma/client';
 import { getSecret, setSecret } from '../infra/storage/keychain';
 import { logger } from '../utils/logger';
+import { testEmbeddingConnection } from './embedding.service';
 
 /**
  * Keychain 中的 API Key 名称映射
@@ -144,26 +146,38 @@ export async function setApiKey(
 /**
  * 测试 API Key 有效性
  *
- * Phase 5a 占位实现：
- * - Key 不存在时返回 ok=false
- * - Key 存在时也返回 ok=false（实际 API 调用由 Phase 5b 实现）
- *
- * Phase 5b 将通过实际调用 DeepSeek / Ollama API 健康检查接口验证 Key
+ * - deepseek：从 keychain 读 Key → 创建临时 OpenAI 客户端 → models.list() 验证
+ *   Key 不存在或调用失败均返回 { ok: false }
+ * - ollama：本地服务不校验 Key，跳过 keychain，直接测嵌入连通性
  */
 export async function testApiKey(
   provider: 'deepseek' | 'ollama',
 ): Promise<{ ok: boolean; latencyMs?: number }> {
-  const keyName = API_KEY_NAMES[provider];
-  const key = await getSecret(keyName);
+  // ollama：本地服务无 Key 概念，直接测连通性
+  if (provider === 'ollama') {
+    return testEmbeddingConnection();
+  }
 
+  // deepseek：读 Key → 真实调用
+  const key = await getSecret(API_KEY_NAMES.deepseek);
   if (key === null) {
     return { ok: false };
   }
 
-  // Phase 5a 占位：不实际调用 API
-  // Phase 5b 实现：调用 deepseek/ollama 健康检查接口
-  logger.info({ provider }, 'API Key 存在，但 Phase 5a 暂未实现实际调用');
-  return { ok: false };
+  const start = Date.now();
+  try {
+    // 显式传入 apiKey 创建临时客户端（不污染单例缓存）
+    const client = await getOpenAIClient({ apiKey: key });
+    await client.models.list();
+    logger.info({ provider, latencyMs: Date.now() - start }, 'API Key 验证成功');
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    logger.warn(
+      { provider, err: err instanceof Error ? err.message : String(err) },
+      'API Key 验证失败',
+    );
+    return { ok: false };
+  }
 }
 
 /**
