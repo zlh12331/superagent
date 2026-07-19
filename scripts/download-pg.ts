@@ -21,7 +21,6 @@
 
 import { spawn } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -30,6 +29,8 @@ import { pipeline } from 'node:stream/promises';
 const ROOT = resolve(import.meta.dirname, '..');
 // PG 二进制存放目录
 const PG_DIR = join(ROOT, 'resources', 'pg');
+// 临时解压目录：放在项目根目录下，避免跨盘符 rename（C: Temp → F: 项目目录会 EXDEV）
+const TMP_DIR = join(ROOT, '.tmp', 'pg-extract');
 
 /**
  * 下载 EnterpriseDB PG 便携版 zip
@@ -41,7 +42,9 @@ const PG_DIR = join(ROOT, 'resources', 'pg');
  */
 async function downloadPgZip(version: string): Promise<string> {
   const url = `https://get.enterprisedb.com/postgresql/postgresql-${version}-1-windows-x64-binaries.zip`;
-  const zipPath = join(tmpdir(), `postgresql-${version}-win-x64.zip`);
+  // zip 文件也放在项目盘符下，与解压目录同盘符，避免跨盘符 IO
+  mkdirSync(TMP_DIR, { recursive: true });
+  const zipPath = join(TMP_DIR, `postgresql-${version}-win-x64.zip`);
 
   console.log(`[download-pg] 开始下载 PG ${version}`);
   console.log(`[download-pg] URL: ${url}`);
@@ -109,17 +112,24 @@ function unzipWithPowerShell(zipPath: string, destDir: string): Promise<void> {
  */
 async function extractAndInstall(version: string, zipPath: string): Promise<void> {
   // 临时解压目录（解压完成后删除）
-  const tmpExtractDir = join(tmpdir(), `pg-extract-${version}-${Date.now()}`);
+  // 必须在项目所在盘符内，否则跨盘符 rename 会报 EXDEV（cross-device link not permitted）
+  const tmpExtractDir = join(TMP_DIR, `${version}-${Date.now()}`);
   mkdirSync(tmpExtractDir, { recursive: true });
 
   try {
-    unzipWithPowerShell(zipPath, tmpExtractDir);
+    // 注意：必须 await 解压完成后再检查目录，否则会误报"未找到 pgsql 目录"
+    await unzipWithPowerShell(zipPath, tmpExtractDir);
 
     // EnterpriseDB 解压后顶层是 pgsql/ 目录，包含 bin/lib/share 等子目录
     // 标准结构：resources/pg/<version>/bin/postgres.exe
     const pgsqlDir = join(tmpExtractDir, 'pgsql');
     if (!existsSync(pgsqlDir)) {
-      throw new Error(`解压后未找到 pgsql 目录：${pgsqlDir}`);
+      // 调试：列出解压目录顶层内容，方便排查 EnterpriseDB zip 结构变化
+      const { readdirSync } = await import('node:fs');
+      const topEntries = existsSync(tmpExtractDir) ? readdirSync(tmpExtractDir) : [];
+      throw new Error(
+        `解压后未找到 pgsql 目录：${pgsqlDir}；解压目录顶层内容：${JSON.stringify(topEntries)}`,
+      );
     }
 
     const versionDir = join(PG_DIR, version);

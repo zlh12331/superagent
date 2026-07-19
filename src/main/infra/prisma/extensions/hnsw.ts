@@ -45,10 +45,12 @@ const CREATE_CONTENT_TRGM_INDEX_SQL = `
 
 /**
  * 章节复合索引（项目列表排序）
+ *
+ * 字段名与 Prisma migration 一致（camelCase，需双引号包裹避免 PG 解析为小写）
  */
 const CREATE_CHAPTERS_PROJECT_ORDER_INDEX_SQL = `
   CREATE INDEX IF NOT EXISTS idx_chapters_project_order
-    ON chapters (project_id, sort_order);
+    ON chapters ("projectId", "sortOrder");
 `;
 
 /**
@@ -63,11 +65,16 @@ let isInitialized = false;
  *
  * 顺序：
  * 1. pg_trgm 扩展
- * 2. HNSW 向量索引
+ * 2. HNSW 向量索引（pgvector 未安装时跳过，不阻塞应用启动）
  * 3. trgm 全文索引
  * 4. 章节复合索引
  *
- * @throws Error 索引创建失败（HNSW 在大数据量时可能耗时/失败）
+ * 容错策略：
+ * - pgvector 未安装时 HNSW 索引创建失败 → 跳过，仅 warn
+ * - pg_trgm / 章节索引失败 → 抛错（这些是核心功能）
+ * - RAG 检索功能在 pgvector 安装前不可用，但不阻塞应用启动
+ *
+ * @throws Error 核心索引创建失败（pg_trgm / 章节复合索引）
  */
 export async function ensureHnswIndex(client: PrismaClient): Promise<void> {
   if (isInitialized) {
@@ -80,8 +87,17 @@ export async function ensureHnswIndex(client: PrismaClient): Promise<void> {
   await client.$executeRawUnsafe(CREATE_PG_TRGM_SQL);
   logger.info({}, 'pg_trgm 扩展已就绪');
 
-  await client.$executeRawUnsafe(CREATE_HNSW_INDEX_SQL);
-  logger.info({}, 'HNSW 向量索引已就绪（halfvec(2048), m=16, ef_construction=64）');
+  // HNSW 向量索引依赖 pgvector 扩展（便携版 PG 默认不含，需单独安装）
+  // 失败时跳过，仅 warn 不阻塞应用启动（RAG 检索功能不可用，但其他功能正常）
+  try {
+    await client.$executeRawUnsafe(CREATE_HNSW_INDEX_SQL);
+    logger.info({}, 'HNSW 向量索引已就绪（halfvec(2048), m=16, ef_construction=64）');
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'HNSW 向量索引创建失败（pgvector 扩展可能未安装），跳过；RAG 检索功能不可用',
+    );
+  }
 
   await client.$executeRawUnsafe(CREATE_CONTENT_TRGM_INDEX_SQL);
   logger.info({}, 'chapters.content trgm 索引已就绪');

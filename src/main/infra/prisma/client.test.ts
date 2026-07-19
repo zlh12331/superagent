@@ -30,14 +30,21 @@ const mockPrismaInstance = {
 
 // config/index.ts 与 logger.ts 都 import { app } from 'electron'，必须 mock 否则 Node 环境下 app 为 undefined
 // 使用 vi.hoisted 导出 mock 对象（vi.mock factory 不能直接引用外部 const）
-const { mockApp } = vi.hoisted(() => ({
+const { mockApp, mockPrismaPg } = vi.hoisted(() => ({
   mockApp: {
     isPackaged: false,
     getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
   },
+  // mock PrismaPg adapter 构造函数，避免真实加载 pg 模块
+  // biome-ignore lint/complexity/useArrowFunction: 需要 [[Construct]] 调用（client.ts 用 new PrismaPg(...)）
+  mockPrismaPg: vi.fn(function () {
+    return { adapter: true };
+  }),
 }));
 
 vi.mock('electron', () => ({ app: mockApp }));
+// biome-ignore lint/style/useNamingConvention: 保留 PrismaPg 大写以匹配 @prisma/adapter-pg SDK 导出名
+vi.mock('@prisma/adapter-pg', () => ({ PrismaPg: mockPrismaPg }));
 
 // 关键：用 function 表达式实现 constructor（Vitest 4 vi.fn 箭头函数无 [[Construct]]）
 vi.mock('@prisma/client', () => ({

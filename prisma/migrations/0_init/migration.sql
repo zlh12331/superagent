@@ -1,11 +1,11 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
--- CreateExtension
-CREATE EXTENSION IF NOT EXISTS "age";
-
--- CreateExtension
-CREATE EXTENSION IF NOT EXISTS "pgvector";
+-- 注意：CREATE EXTENSION age / pgvector 已从此 migration 移除
+-- 原因：便携版 PG 18.4 不含 age / pgvector 扩展二进制
+-- 扩展加载由 db-init.ts 的 ensureAgeExtension / ensureHnswIndex 在运行时按需加载，
+-- 失败则降级（AGE 不可用 / HNSW 索引跳过），不阻塞应用启动
+-- 硬性约束：migration.sql 必须移除 CREATE EXTENSION "age"（pgvector 容器兼容性）
 
 -- CreateEnum
 CREATE TYPE "ProjectStatus" AS ENUM ('ACTIVE', 'ARCHIVED', 'DRAFT');
@@ -142,7 +142,11 @@ CREATE TABLE "rag_document_chunks" (
     "documentId" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "chunkIndex" INTEGER NOT NULL,
-    "embedding" halfvec(2048) NOT NULL,
+    -- 注意：embedding 字段类型从 halfvec(2048) 改为 TEXT
+    -- 原因：便携版 PG 18.4 不含 pgvector 扩展，halfvec 类型不可用
+    -- RAG 向量字段在 pgvector 扩展加载后由 ensureHnswIndex 通过 ALTER COLUMN 改回 halfvec(2048)
+    -- 当前 TEXT 类型作为占位，不阻塞应用启动（RAG 检索功能在 pgvector 加载前不可用）
+    "embedding" TEXT NOT NULL,
     "metadata" JSONB NOT NULL DEFAULT '{}',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

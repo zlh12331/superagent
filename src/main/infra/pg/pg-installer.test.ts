@@ -21,6 +21,8 @@ const { mockExistsSync, mockSpawn, mockApp } = vi.hoisted(() => ({
   mockApp: {
     isPackaged: false,
     getPath: vi.fn((name: string) => `C:/test-userdata/${name}`),
+    // getAppPath：pg-installer 在 dev 环境用 app.getAppPath() 找项目内便携版 PG
+    getAppPath: vi.fn(() => 'F:/TraeProjects/1'),
   },
 }));
 
@@ -36,6 +38,7 @@ import {
   getPgDataDir,
   initdb,
   isPgInitialized,
+  isPortablePgAvailable,
   switchVersion,
 } from './pg-installer';
 
@@ -93,13 +96,54 @@ describe('pg-installer', () => {
   });
 
   describe('getPgBinaryPath', () => {
-    it('dev 环境应返回 "postgres"（系统 PATH）', () => {
+    it('便携版不存在时 dev 环境应 fallback 到系统 PATH "postgres"', () => {
       // mockApp.isPackaged = false → config.isDev = true
+      // existsSync 默认返回 false → 便携版不存在
+      mockExistsSync.mockReturnValue(false);
       expect(getPgBinaryPath()).toBe('postgres');
     });
 
-    it('应接受版本参数（dev 环境仍返回系统 PATH）', () => {
-      expect(getPgBinaryPath('17.10')).toBe('postgres');
+    it('便携版存在时 dev 环境应返回便携版绝对路径', () => {
+      mockExistsSync.mockReturnValue(true);
+      const path = getPgBinaryPath();
+      // 应返回 <projectRoot>/resources/pg/18.4/bin/postgres.exe
+      expect(path).toContain('resources');
+      expect(path).toContain('pg');
+      expect(path).toContain('18.4');
+      expect(path).toContain('postgres.exe');
+      // 应通过 existsSync 检查便携版是否存在
+      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('postgres.exe'));
+    });
+
+    it('应接受版本参数（17.10 便携版存在时返回 17.10 路径）', () => {
+      mockExistsSync.mockReturnValue(true);
+      const path = getPgBinaryPath('17.10');
+      expect(path).toContain('17.10');
+      expect(path).toContain('postgres.exe');
+    });
+  });
+
+  describe('isPortablePgAvailable', () => {
+    it('便携版 postgres.exe 存在时应返回 true', () => {
+      // existsSync 返回 true → 便携版已下载
+      mockExistsSync.mockReturnValue(true);
+      expect(isPortablePgAvailable('17.10')).toBe(true);
+      // 应检查指定版本的 postgres.exe 路径
+      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('17.10'));
+      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('postgres.exe'));
+    });
+
+    it('便携版 postgres.exe 不存在时应返回 false', () => {
+      // existsSync 返回 false → 便携版未下载
+      mockExistsSync.mockReturnValue(false);
+      expect(isPortablePgAvailable('17.10')).toBe(false);
+    });
+
+    it('默认版本应为 18.4', () => {
+      mockExistsSync.mockReturnValue(true);
+      isPortablePgAvailable();
+      // 应检查 18.4 版本的 postgres.exe
+      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('18.4'));
     });
   });
 

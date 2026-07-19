@@ -10,13 +10,15 @@
 // 5. 提供 resetClient() 用于测试隔离
 //
 // 注意（Prisma 7 适配）：
-// - Prisma 7 移除了 PrismaClientOptions.datasources 字段，连接 URL 由 prisma.config.ts 提供
-// - 运行时通过 Driver Adapter 注入（Phase 4b 实现）
-// - 本阶段不实际连接 PG（PG 由 Phase 4b 启动）
+// - Prisma 7 起 engine type = "client"，必须通过 Driver Adapter 注入连接
+// - adapter 来自 @prisma/adapter-pg，底层用 pg 包建立连接池
+// - 连接 URL 由 config.pg.url 提供（默认 postgresql://nwa@localhost:5433/nwa）
 // - getPrismaClient() 仅返回单例，不主动 $connect()
 // - 调用方应在使用前调用 $connect()（或由 service 层 retry 包裹）
 
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { getAppConfig } from '../../config';
 import { logger } from '../../utils/logger';
 import { retry } from '../../utils/retry';
 
@@ -26,7 +28,11 @@ let cachedClient: PrismaClient | null = null;
 /**
  * 获取 PrismaClient 单例
  *
- * 首次调用时实例化并绑定日志钩子，后续调用返回缓存
+ * 首次调用时实例化：
+ * 1. 从 config 读取 PG 连接 URL
+ * 2. 用 PrismaPg adapter 包装连接（Prisma 7 engine type="client" 要求）
+ * 3. 绑定 error/warn 日志事件
+ * 后续调用返回缓存
  *
  * @returns PrismaClient 单例
  */
@@ -35,7 +41,15 @@ export function getPrismaClient(): PrismaClient {
     return cachedClient;
   }
 
+  const config = getAppConfig();
+  // Prisma 7 Driver Adapter：用 pg 连接池包装，让 Prisma 7 在 engine type="client" 下运行
+  // adapter 接管底层连接管理，PrismaClient 不再需要 datasources 配置
+  const adapter = new PrismaPg({ connectionString: config.pg.url });
+  logger.info({ url: config.pg.url }, '初始化 PrismaClient（Prisma 7 + PrismaPg adapter）');
+
   const client = new PrismaClient({
+    // adapter 是 Prisma 7 必填项（engine type="client" 模式下）
+    adapter,
     // 日志级别：监听 error 与 warn 事件，由 logger 统一处理
     // 查询日志（query）默认不开启，避免噪声；dev 环境可由 logger.level 控制
     log: [

@@ -13,6 +13,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AppError, ErrorCode, POSTGRES_VERSIONS } from '@novel-writer/shared';
+import { app } from 'electron';
 import { getAppConfig } from '../../config';
 import { logger } from '../../utils/logger';
 import { getUserDataPath } from '../storage/app-data';
@@ -27,23 +28,67 @@ const DEFAULT_VERSION = POSTGRES_VERSIONS.V18_4;
 const FALLBACK_VERSION = POSTGRES_VERSIONS.V17_10;
 
 /**
+ * 获取项目内便携版 PG 二进制根目录
+ *
+ * dev 环境：app.getAppPath() 返回项目根目录，便携版位于 <root>/resources/pg/<version>/
+ * prod 环境：process.resourcesPath 指向 app.asar 同级 resources，便携版位于 <resources>/pg/<version>/
+ *
+ * @returns 便携版 PG 根目录（包含 18.4/、17.10/ 子目录）；不存在时返回空串
+ */
+function getPortablePgRoot(): string {
+  const config = getAppConfig();
+  if (config.isDev) {
+    // dev：app.getAppPath() 返回项目根目录（package.json 所在目录）
+    return join(app.getAppPath(), 'resources', 'pg');
+  }
+  // prod：app.asar 同级 resources 目录由 electron-builder.yml 的 extraResources 注入
+  return join(process.resourcesPath, 'pg');
+}
+
+/**
  * 获取 PG 二进制路径
  *
- * dev 环境：返回 'postgres'（依赖系统 PATH 中的 postgres 可执行文件）
- * prod 环境：返回 resources/pg/<version>/bin/postgres.exe（便携版二进制）
+ * 优先级：
+ * 1. 项目内便携版 resources/pg/<version>/bin/postgres.exe（dev 和 prod 都适用）
+ * 2. dev 环境 fallback：系统 PATH 中的 'postgres'（便携版未下载时）
+ * 3. prod 环境：便携版必须存在，否则返回路径（让 spawn 报 ENOENT 暴露问题）
  *
  * @param version PG 版本号，默认 18.4
  * @returns postgres 可执行文件路径
  */
 export function getPgBinaryPath(version: string = DEFAULT_VERSION): string {
+  // 优先用便携版（dev 和 prod 都适用）
+  const portablePath = join(getPortablePgRoot(), version, 'bin', 'postgres.exe');
+  if (existsSync(portablePath)) {
+    return portablePath;
+  }
+
   const config = getAppConfig();
+  // dev 环境 fallback：系统 PATH 中的 postgres / initdb
   if (config.isDev) {
-    // dev 环境：依赖系统 PATH 中的 postgres / initdb
+    logger.warn(
+      { portablePath },
+      '便携版 PG 不存在，fallback 到系统 PATH（请运行 pnpm download:pg 下载便携版）',
+    );
     return 'postgres';
   }
-  // 生产环境：从打包资源目录加载便携版 PG 二进制
-  // process.resourcesPath 由 Electron 注入，指向 app.asar 同级 resources 目录
-  return join(process.resourcesPath, 'pg', version, 'bin', 'postgres.exe');
+
+  // prod 环境：便携版必须存在（不存在也返回路径，让上层 spawn 报 ENOENT 暴露打包问题）
+  return portablePath;
+}
+
+/**
+ * 检测指定版本的便携版 PG 是否已下载
+ *
+ * 用于 AGE 降级路径：17.10 便携版未下载时跳过降级，仅 warn 不阻塞应用启动
+ * （便携版 PG 不含 AGE 扩展二进制，降级到 17.10 同样无法解决 AGE 问题）
+ *
+ * @param version PG 版本号，默认 18.4
+ * @returns true=便携版 postgres.exe 存在；false=未下载
+ */
+export function isPortablePgAvailable(version: string = DEFAULT_VERSION): boolean {
+  const portablePath = join(getPortablePgRoot(), version, 'bin', 'postgres.exe');
+  return existsSync(portablePath);
 }
 
 /**
@@ -57,6 +102,31 @@ export function getPgBinaryPath(version: string = DEFAULT_VERSION): string {
  */
 export function getPgDataDir(version: string = DEFAULT_VERSION): string {
   return join(getUserDataPath(), `pgdata-${version}`);
+}
+
+/**
+ * 从 PostgreSQL 连接 URL 解析 username
+ *
+ * 用于 initdb 时设置 superuser 名（保证 PG 启动后能用 url 中的 username 连接）
+ * 例：postgresql://nwa@localhost:5433/nwa → 'nwa'
+ *     postgresql://localhost:5433/postgres → 'postgres'（兜底）
+ *
+ * @param url PG 连接 URL（如 config.pg.url）
+ * @returns username，URL 无 username 时返回 'postgres'（PG 默认 superuser 名）
+ */
+function parsePgUsername(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // URL.username 对 'postgresql://nwa@localhost' 返回 'nwa'
+    // 对 'postgresql://localhost' 返回 ''（无 username）
+    if (parsed.username.length > 0) {
+      // URL 编码的 username（如 %2F）需 decodeURIComponent 还原
+      return decodeURIComponent(parsed.username);
+    }
+  } catch (err) {
+    logger.warn({ url, error: err }, '解析 PG URL username 失败，使用 postgres 兜底');
+  }
+  return 'postgres';
 }
 
 /**
@@ -97,6 +167,13 @@ export async function initdb(version: string = DEFAULT_VERSION): Promise<void> {
 
   const config = getAppConfig();
 
+  // 从 config.pg.url 解析 username 作为 PG superuser 名
+  // initdb 默认创建 username 同名数据库（与 config.pg.url 的 path 一致）
+  // 例：postgresql://nwa@localhost:5433/nwa → username=nwa, 默认 DB=nwa
+  // 兜底：URL 无 username 时用 'postgres'（PG 默认 superuser 名）
+  const pgUser = parsePgUsername(config.pg.url);
+  logger.info({ pgUser }, 'initdb 用 superuser 用户名');
+
   return new Promise<void>((resolve, reject) => {
     // spawn 后赋值给外层 child 变量，便于超时回调 kill
     let child: ReturnType<typeof spawn>;
@@ -108,7 +185,7 @@ export async function initdb(version: string = DEFAULT_VERSION): Promise<void> {
 
     child = spawn(
       initdbPath,
-      ['-D', dataDir, '--username=postgres', '--auth=trust', '--encoding=UTF8'],
+      ['-D', dataDir, `--username=${pgUser}`, '--auth=trust', '--encoding=UTF8'],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
 

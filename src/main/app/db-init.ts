@@ -3,14 +3,20 @@
 //
 // 职责：
 // 1. 编排 PG 启动 + DB 初始化流程
-// 2. AGE 加载失败时降级 PG 版本
+// 2. AGE 加载失败时降级 PG 版本（17.10 便携版不存在时跳过降级，不阻塞应用启动）
 // 3. 串联 pg-installer / pg-controller / Prisma migrate / AGE / HNSW
 //
 // 启动顺序：
 //   ensureInstalled(18.4) → pgController.start → testPrismaConnection
 //   → prisma migrate deploy → ensureAgeExtension
-//   → 失败则 switchVersion(17.10) + 重启 PG + 重新 AGE
+//   → 失败则尝试降级到 17.10（便携版未下载时跳过降级，仅 warn）
 //   → ensureHnswIndex
+//
+// 容错策略：
+// - 便携版 PG 默认不含 AGE / pgvector 扩展二进制
+// - AGE 加载失败 + 17.10 未下载 → 仅 warn，应用照常启动（人物关系图功能不可用）
+// - HNSW 索引创建失败（pgvector 未安装）→ 仅 warn（RAG 检索不可用）
+// - 核心功能（项目/章节/角色 CRUD）不依赖 AGE / pgvector
 //
 // 注意：本模块由 index.ts 在 app.whenReady() 中调用
 
@@ -21,6 +27,7 @@ import {
   ensureInstalled,
   getPgBinaryPath,
   getPgDataDir,
+  isPortablePgAvailable,
   switchVersion,
 } from '../infra/pg/pg-installer';
 import { disconnectPrisma, getPrismaClient, testPrismaConnection } from '../infra/prisma/client';
@@ -81,11 +88,11 @@ export async function initializeDatabase(): Promise<void> {
   // 这里通过 child_process 调用，因为 Prisma client 不直接暴露 migrate API
   await runMigrateDeploy();
 
-  // 5. 加载 AGE 扩展（失败则降级到 PG 17.10）
+  // 5. 加载 AGE 扩展（失败则降级到 PG 17.10；17.10 便携版不存在时跳过降级，仅 warn 不阻塞）
   const client = getPrismaClient();
   const ageOk = await ensureAgeExtension(client);
   if (!ageOk) {
-    logger.warn({}, 'AGE 在 PG 18.4 上加载失败，触发降级流程');
+    logger.warn({}, 'AGE 在 PG 18.4 上加载失败，尝试降级流程');
     await downgradeForAge();
   }
 
@@ -104,11 +111,29 @@ export async function initializeDatabase(): Promise<void> {
  * 4. 重启 PG（17.10）
  * 5. 重新加载 AGE 扩展
  *
- * @throws Error AGE 在 17.10 上仍无法加载
+ * 容错策略：
+ * - 17.10 便携版未下载时跳过降级，仅 warn 不阻塞应用启动
+ *   （便携版 PG 默认不含 AGE 扩展二进制，降级到 17.10 同样无法解决 AGE 问题）
+ * - 此时人物关系图（Cypher 查询）功能不可用，但其他功能正常
+ * - 17.10 上 AGE 仍加载失败时抛错（语义：明确告知用户 AGE 不兼容）
+ *
+ * @throws Error 17.10 便携版已下载但 AGE 仍加载失败（说明扩展不兼容）
  */
 async function downgradeForAge(): Promise<void> {
   if (pgController === null) {
     throw new Error('PG 控制器未初始化');
+  }
+
+  // 检查 17.10 便携版是否已下载
+  // 便携版 PG 不含 AGE 扩展二进制，降级到 17.10 也无法解决 AGE 问题
+  // 未下载时跳过降级，让应用在没有 AGE 的情况下启动（人物关系图功能不可用）
+  const fallbackVersion = POSTGRES_VERSIONS.V17_10;
+  if (!isPortablePgAvailable(fallbackVersion)) {
+    logger.warn(
+      { fallbackVersion },
+      '17.10 便携版未下载，跳过 AGE 降级；人物关系图（Cypher）功能不可用，其他功能正常',
+    );
+    return;
   }
 
   // 1. 停止当前 PG（18.4）
@@ -117,7 +142,6 @@ async function downgradeForAge(): Promise<void> {
   await disconnectPrisma();
 
   // 3. 切换到 PG 17.10（确保 17.10 数据目录已 initdb）
-  const fallbackVersion = POSTGRES_VERSIONS.V17_10;
   await switchVersion(fallbackVersion);
 
   // 4. 重启 PG（17.10）
@@ -150,9 +174,12 @@ async function runMigrateDeploy(): Promise<void> {
   logger.info({}, '执行 prisma migrate deploy');
 
   return new Promise<void>((resolve, reject) => {
+    // shell: true 让 Windows 通过 PATHEXT 解析 pnpm.cmd（Electron 主进程默认 PATH 不含 .cmd 扩展）
+    // 在 dev 环境 pnpm 通常位于 nodejs 目录或 Node 安装目录的 .cmd shim 中
     const child = spawn('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: process.cwd(),
+      shell: true,
     });
 
     // 收集 stderr 用于失败时输出错误信息
