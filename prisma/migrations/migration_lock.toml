@@ -1,0 +1,3 @@
+# Prisma migration lock 文件
+# 标记 migrations 目录的 provider，避免不同 provider 混用
+provider = "postgresql"

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
 import { getAppConfig } from './config';
+import { disconnectPrisma } from './infra/prisma/client';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
@@ -134,4 +135,24 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// 应用退出前断开 PrismaClient 连接（设计文档 §1.1 应用生命周期）
+// 注：Phase 4a 仅注册清理逻辑，启动时连接 PG 由 Phase 4b 实现
+// 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
+let isQuitting = false;
+app.on('before-quit', async (event) => {
+  if (isQuitting) {
+    return;
+  }
+  // preventDefault 必须在事件循环开始处同步调用，确保能阻止默认退出
+  event.preventDefault();
+  isQuitting = true;
+  try {
+    await disconnectPrisma();
+  } catch (err) {
+    logger.error({ error: err }, '应用退出清理失败');
+  }
+  // 强制退出，不再触发 before-quit（与 app.quit() 不同）
+  app.exit(0);
 });
