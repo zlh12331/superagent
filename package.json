@@ -20,6 +20,8 @@
     "format": "biome format --write .",
     "test": "pnpm -r --filter \"@novel-writer/*\" run test && pnpm test:main",
     "test:main": "vitest run --root src/main",
+    "db:generate": "prisma generate",
+    "db:migrate:diff": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script",
     "codegraph:sync": "codegraph sync",
     "prepare": "husky"
   },
@@ -39,12 +41,15 @@
     "@types/react-dom": "^19.2",
     "@vitejs/plugin-react": "^5",
     "babel-plugin-react-compiler": "^1.0.0",
+    "dotenv": "^16",
     "husky": "^9",
     "lint-staged": "^15",
+    "prisma": "^7",
     "typescript": "^6",
     "vitest": "^4.0.0"
   },
   "dependencies": {
+    "@prisma/client": "^7",
     "@sentry/electron": "^5",
     "electron": "^40",
     "electron-log": "^5",

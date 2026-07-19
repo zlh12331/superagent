@@ -10,6 +10,9 @@
 // 错误处理（§7）
 export * from './constants/errors';
 
+// PostgreSQL 版本常量（§6.5 AGE 兼容性策略）
+export * from './constants/pg-versions';
+
 // IPC 类型契约（§5）
 export * from './ipc/api';
 export * from './ipc/channels';

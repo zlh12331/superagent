@@ -73,12 +73,21 @@
     {
       "includes": [
         "**/packages/shared/src/constants/errors.ts",
+        "**/packages/shared/src/constants/pg-versions.ts",
         "**/packages/shared/src/types/enums.ts",
         "**/packages/shared/src/ipc/channels.ts"
       ],
       "linter": {
         "rules": {
           "style": { "useNamingConvention": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["**/prisma.config.ts"],
+      "linter": {
+        "rules": {
+          "style": { "noDefaultExport": "off" }
         }
       }
     },
