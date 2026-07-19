@@ -47,6 +47,27 @@ const OllamaConfigSchema = z.object({
 });
 
 /**
+ * PostgreSQL 数据库配置
+ *
+ * 设计文档 §6.2 + §7.8
+ * - 端口 5433 避免与系统 PG 5432 冲突
+ * - dataDir 由 app-data.ts 提供（%APPDATA%/<AppName>/pgdata）
+ * - 实际启动由 Phase 4b pg-controller 完成
+ */
+const PgConfigSchema = z.object({
+  /** 数据库连接 URL（端口 5433 避免与系统 PG 5432 冲突） */
+  url: z.string().url().default('postgresql://nwa@localhost:5433/nwa'),
+  /** PG 数据目录（%APPDATA%/<AppName>/pgdata，由 app-data.ts 提供） */
+  dataDir: z.string().default(''),
+  /** PG 监听端口（与 url 中端口一致，pg-controller.start() 使用） */
+  port: z.number().int().min(1).max(65535).default(5433),
+  /** PG 数据库实例名 */
+  database: z.string().default('nwa'),
+  /** PG 启动超时（毫秒） */
+  startTimeout: z.number().int().positive().default(30_000),
+});
+
+/**
  * 应用配置 Schema
  */
 const AppConfigSchema = z.object({
@@ -62,6 +83,8 @@ const AppConfigSchema = z.object({
   deepseek: DeepseekConfigSchema,
   /** Ollama 嵌入服务配置 */
   ollama: OllamaConfigSchema,
+  /** PostgreSQL 数据库配置 */
+  pg: PgConfigSchema,
 });
 
 /** 应用配置类型（从 schema 派生） */
@@ -94,6 +117,13 @@ export function loadConfig(): AppConfig {
       embedModel: process.env.OLLAMA_EMBED_MODEL ?? 'nemotron-3-embed-1b-bf16',
       embedDimensions: Number(process.env.OLLAMA_EMBED_DIMENSIONS ?? 2048),
       healthCheckInterval: Number(process.env.OLLAMA_HEALTH_CHECK_INTERVAL ?? 30_000),
+    },
+    pg: {
+      url: process.env.DATABASE_URL ?? 'postgresql://nwa@localhost:5433/nwa',
+      dataDir: process.env.PG_DATA_DIR ?? '',
+      port: Number(process.env.PG_PORT ?? 5433),
+      database: process.env.PG_DATABASE ?? 'nwa',
+      startTimeout: Number(process.env.PG_START_TIMEOUT ?? 30_000),
     },
   });
 }
