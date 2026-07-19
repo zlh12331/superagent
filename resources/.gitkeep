@@ -1,0 +1,3 @@
+# 此目录用于存放打包资源
+# - pg/: PostgreSQL 便携版二进制（由 pnpm download:pg 下载，已加入 .gitignore）
+# - icons/: 应用图标（icon.ico）

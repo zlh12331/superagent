@@ -1,0 +1,105 @@
+# electron-builder.yml
+# Electron 应用打包配置（设计文档 §3 + §6.5 + §10.2）
+#
+# 用途：将 main/preload/renderer 三入口产物 + PostgreSQL 便携版二进制
+# 打包成 Windows NSIS 安装器
+#
+# 命令：pnpm build:dist（先 electron-vite build 构建，再 electron-builder 打包）
+#
+# 依赖：
+# - out/main/index.js、out/preload/index.cjs（electron-vite build 产物）
+# - out/renderer/（渲染层静态资源）
+# - resources/pg/18.4/、resources/pg/17.10/（PG 便携版二进制，由 scripts/download-pg.ts 下载）
+# - package.json 中 author 字段（electron-builder 强制要求）
+
+# 应用唯一标识（注册到 Windows 注册表，用于关联文件类型、卸载登记等）
+appId: com.novel-writer.app
+
+# 安装包显示名称（Windows「程序与功能」中展示）
+productName: 网文写作 Agent
+
+# 打包输出目录（与 .gitignore 中 release/ 对齐）
+directories:
+  output: release
+  buildResources: resources
+
+# asar 打包（设计文档 §3 Electron 安全基线）
+# - asar: true 把源码打包成 app.asar，避免直接暴露 .js 源文件
+# - extraResources 中的 PG 二进制不打入 asar，独立部署到 resources/ 目录
+asar: true
+
+# 需要打入 asar 的文件白名单（out/ 是 electron-vite 构建产物）
+# 排除：测试文件、配置文件、源码、文档、缓存
+files:
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - package.json
+  - "!**/.vitest"
+  - "!**/*.test.ts"
+  - "!**/*.spec.ts"
+  - "!**/__tests__/**"
+  - "!**/coverage/**"
+  - "!**/playwright-report/**"
+  - "!**/test-results/**"
+
+# 额外资源（不打入 asar，部署到 process.resourcesPath）
+# 设计文档 §6.5：
+# - resources/pg/18.4/：默认 PG 版本
+# - resources/pg/17.10/：AGE 兼容性降级备份
+# - resources/icons/：应用图标
+extraResources:
+  - from: resources/pg
+    to: pg
+    filter:
+      - "**/*"
+  - from: resources/icons
+    to: icons
+    filter:
+      - "**/*"
+
+# Windows 平台配置（设计文档 §1.1 项目是 Windows-only）
+# 代码签名：证书通过环境变量提供（CSC_LINK/CSC_KEY_PASSWORD），
+# 未提供时 electron-builder 自动跳过签名（dev 阶段可空）
+# 默认签名哈希算法为 sha256（设计文档附录 A #7 Windows Authenticode）
+win:
+  # 图标（256x256 .ico 格式，放在 resources/icons/）
+  icon: resources/icons/icon.ico
+  # 目标架构（仅打 x64，Intel/AMD 桌面端通用）
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+# NSIS 安装器配置（设计文档 §3 NSIS）
+nsis:
+  # 一键安装：false 让用户自定义安装目录
+  oneClick: false
+  # 允许修改安装目录
+  allowToChangeInstallationDirectory: true
+  # 安装包文件名（包含版本号，便于归档）
+  artifactName: ${productName}-${version}-setup.${ext}
+  # 创建桌面快捷方式
+  createDesktopShortcut: true
+  # 创建开始菜单快捷方式
+  createStartMenuShortcut: true
+  # 显示卸载确认
+  perMachine: false
+  # 安装向导标题
+  installerIcon: resources/icons/icon.ico
+  uninstallerIcon: resources/icons/icon.ico
+  # 安装完成后启动应用
+  runAfterFinish: true
+
+# 版本元数据（设计文档 §1.1 版本管理）
+# - Git tag v0.1.0 → 版本 0.1.0
+# - 通过 package.json version 字段自动同步，无需在此重复声明
+
+# 发布配置（设计文档 §3.5 electron-updater 私服静态托管）
+# 发布到自托管静态服务器，electron-updater 会拉取 latest.yml 检查更新
+# provider: generic 通用 HTTP 静态文件服务
+# URL 末尾必须以 / 结尾，electron-updater 会拼接 latest.yml
+publish:
+  provider: generic
+  url: https://novel-writer.example.com/releases/
+  channel: latest

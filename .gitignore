@@ -50,3 +50,10 @@ test-results/
 *.exe
 *.appx
 *.msi
+
+# PostgreSQL 便携版二进制（由 scripts/download-pg.ts 下载，约 200MB/版本，不入仓）
+# 设计文档 §6.5：resources/pg/18.4 + resources/pg/17.10 双版本
+resources/pg/
+
+# electron-builder 打包产物（NSIS 安装包、latest.yml 等）
+release/
