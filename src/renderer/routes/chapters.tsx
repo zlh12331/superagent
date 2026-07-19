@@ -1,13 +1,15 @@
 // src/renderer/routes/chapters.tsx
 // 章节管理路由（章节工作台）
-// 设计文档 §3 路由结构 + §5.1 数据流 + §8 Phase 8 章节编辑器
+// 设计文档 §3 路由结构 + §5.1 数据流 + §8 Phase 8 章节编辑器 + §7.7 Agent 编排
 //
 // 职责：
 // - 通过 useChapterList 加载章节列表，渲染 Loading / Error / Empty / 工作台四种状态
 // - 左侧 ChapterList：章节列表 + 拖拽排序 + 新建/删除入口
-// - 右侧 ChapterToolbar + ChapterEditor：状态切换 + TipTap 3 富文本编辑
+// - 中间 ChapterToolbar + ChapterEditor：状态切换 + TipTap 3 富文本编辑
+// - 右侧 AgentStreamPanel：AI 写作流式结果展示（ackId 非空时显示）
 // - 自动保存：编辑器内容变化后 debounce 1500ms 调 useUpdateChapter
 // - 切换章节前 flush 未保存内容（立即保存，不等 debounce）
+// - AI 写作：工具栏触发续写/改写 → 后台流式生成 → 面板展示结果 → 完成后失效缓存
 //
 // RR7 lazy 约定：模块需 export function Component（命名导出，非默认导出）
 
@@ -17,14 +19,17 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 
+import { AgentStreamPanel } from '@/components/chapter/AgentStreamPanel';
 import { ChapterCreateDialog } from '@/components/chapter/ChapterCreateDialog';
 import { ChapterEditor } from '@/components/chapter/ChapterEditor';
 import { ChapterList } from '@/components/chapter/ChapterList';
 import { ChapterToolbar } from '@/components/chapter/ChapterToolbar';
+import { RewriteChapterDialog } from '@/components/chapter/RewriteChapterDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { useGenerateChapter } from '@/hooks/use-agent';
 import {
   useChapterDetail,
   useChapterList,
@@ -67,6 +72,11 @@ export function Component(): ReactElement {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   // 实时字数（来自编辑器 CharacterCount，工具栏显示用）
   const [wordCount, setWordCount] = useState(0);
+  // AI 改写对话框开关（点击工具栏"AI 改写"按钮触发）
+  const [rewriteOpen, setRewriteOpen] = useState(false);
+  // 当前活跃的 Agent 流 ID（非空时展示 AgentStreamPanel；为空时面板隐藏）
+  // 注意：流式订阅在 AgentStreamPanel 内部，面板卸载会自动 cleanup
+  const [activeAckId, setActiveAckId] = useState<string | null>(null);
 
   // debounce 定时器 ref（避免闭包陷阱，跨渲染保持最新引用）
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,6 +89,8 @@ export function Component(): ReactElement {
   const { mutateAsync: updateAsync } = useUpdateChapter();
   const { mutateAsync: deleteAsync } = useDeleteChapter();
   const { mutateAsync: reorderAsync } = useReorderChapters();
+  // Agent：续写下一章（改写 hook 在 RewriteChapterDialog 内部调用）
+  const { mutateAsync: generateAsync } = useGenerateChapter();
 
   /**
    * 保存章节内容到后端
@@ -207,6 +219,31 @@ export function Component(): ReactElement {
     setDeleteTarget(null);
   };
 
+  /**
+   * AI 续写下一章
+   *
+   * 触发 agent:generateChapter，prevChapterId 取当前选中章节（让 AI 衔接当前章节末尾）。
+   * 成功后：ackId 写入 activeAckId 触发 AgentStreamPanel 显示，流式完成后面板自动失效章节列表。
+   */
+  const handleGenerateChapter = async (): Promise<void> => {
+    if (!projectId) return;
+    try {
+      const { ackId } = await generateAsync({
+        projectId,
+        // 用当前章节作为前文（若未选中则由后端处理"无前文"分支）
+        ...(activeChapterId ? { prevChapterId: activeChapterId } : {}),
+      });
+      setActiveAckId(ackId);
+    } catch (err) {
+      handleIpcError(err);
+    }
+  };
+
+  /** AI 改写 Dialog 成功触发后的 ackId 回调 */
+  const handleRewriteStarted = (ackId: string): void => {
+    setActiveAckId(ackId);
+  };
+
   // 加载中：展示旋转加载占位
   if (isLoading) {
     return <LoadingSpinner label="正在加载章节列表..." />;
@@ -255,7 +292,7 @@ export function Component(): ReactElement {
         onDeleteChapter={(id) => setDeleteTarget(id)}
         onReorder={handleReorder}
       />
-      {/* 右侧：工具栏 + 编辑器 */}
+      {/* 中间：工具栏 + 编辑器 */}
       <main className="flex min-w-0 flex-1 flex-col">
         {activeChapter ? (
           <>
@@ -264,6 +301,9 @@ export function Component(): ReactElement {
               onStatusChange={handleStatusChange}
               wordCount={wordCount}
               saveStatus={saveStatus}
+              onGenerateChapter={() => void handleGenerateChapter()}
+              onRewriteClick={() => setRewriteOpen(true)}
+              isAgentBusy={activeAckId !== null}
             />
             <ChapterEditor chapter={activeChapter} onContentChange={handleContentChange} />
           </>
@@ -273,12 +313,21 @@ export function Component(): ReactElement {
           </div>
         )}
       </main>
+      {/* 右侧：AI 流式结果面板（ackId 非空时显示） */}
+      <AgentStreamPanel ackId={activeAckId} onClose={() => setActiveAckId(null)} />
       {/* 新建章节对话框（受控） */}
       <ChapterCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         projectId={projectId ?? ''}
         nextSortOrder={nextSortOrder}
+      />
+      {/* AI 改写指令输入对话框 */}
+      <RewriteChapterDialog
+        open={rewriteOpen}
+        onOpenChange={setRewriteOpen}
+        chapterId={activeChapterId}
+        onStarted={handleRewriteStarted}
       />
       {/* 删除二次确认对话框 */}
       <ConfirmDialog
