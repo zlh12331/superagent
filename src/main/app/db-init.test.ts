@@ -6,7 +6,11 @@
 // 2. vi.mock('node:child_process') 拦截 runMigrateDeploy 中的 spawn
 // 3. vi.mock('electron') 提供 app.isPackaged / app.getPath（config 与 logger 依赖）
 // 4. 使用 vi.hoisted 声明 mock 对象（配合静态 import 避免 TDZ，参考 pg-installer.test.ts）
-// 5. 不实际启动 PG，仅验证调用顺序与降级流程
+// 5. 不实际启动 PG，仅验证调用顺序与 AGE/HNSW 容错流程
+//
+// 注意：ShanGor 预编译包自带 AGE 1.5.0 + pgvector 0.8.0
+// - 默认版本 17.2-mingw，无降级路径
+// - AGE 失败仅 warn 不阻塞，不抛错（核心功能不依赖 AGE）
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,7 +18,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // （vi.mock 会被 hoist 到 import 之前，工厂内直接引用外部 const 会触发 TDZ）
 const {
   mockEnsureInstalled,
-  mockSwitchVersion,
   mockGetPgBinaryPath,
   mockGetPgDataDir,
   mockPgController,
@@ -28,7 +31,6 @@ const {
 } = vi.hoisted(() => ({
   // pg-installer mock
   mockEnsureInstalled: vi.fn().mockResolvedValue(undefined),
-  mockSwitchVersion: vi.fn().mockResolvedValue(undefined),
   mockGetPgBinaryPath: vi.fn().mockReturnValue('postgres'),
   mockGetPgDataDir: vi.fn().mockReturnValue('/tmp/pgdata'),
   // PgController 实例 mock（new PgController(...) 返回此对象）
@@ -52,12 +54,12 @@ const {
     const child = {
       stdout: {
         on: (_e: string, cb: (...args: unknown[]) => void) => {
-          handlers.stdout = cb;
+          handlers['stdout'] = cb;
         },
       },
       stderr: {
         on: (_e: string, cb: (...args: unknown[]) => void) => {
-          handlers.stderr = cb;
+          handlers['stderr'] = cb;
         },
       },
       on: (event: string, cb: (...args: unknown[]) => void) => {
@@ -68,7 +70,8 @@ const {
     };
     // 异步触发 exit(0)，确保 runMigrateDeploy 完成
     // setTimeout 0 让 on('exit', ...) 回调先注册再触发
-    setTimeout(() => handlers.exit?.(0), 0);
+    // noPropertyAccessFromIndexSignature: handlers 是索引签名，必须用方括号访问
+    setTimeout(() => handlers['exit']?.(0), 0);
     return child;
   }),
   // electron app mock（config 与 logger 模块依赖）
@@ -83,7 +86,6 @@ vi.mock('electron', () => ({ app: mockApp }));
 
 vi.mock('../infra/pg/pg-installer', () => ({
   ensureInstalled: mockEnsureInstalled,
-  switchVersion: mockSwitchVersion,
   getPgBinaryPath: mockGetPgBinaryPath,
   getPgDataDir: mockGetPgDataDir,
 }));
@@ -116,6 +118,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 // 静态导入被测模块：vi.mock 已 hoist 到文件顶部，mock 此时已生效
+import { POSTGRES_VERSIONS } from '@novel-writer/shared';
 import { getPgController, initializeDatabase, shutdownDatabase } from './db-init';
 
 describe('数据库初始化编排', () => {
@@ -124,7 +127,6 @@ describe('数据库初始化编排', () => {
     // 但保留 mockResolvedValue 默认实现（通过重新设置）
     vi.clearAllMocks();
     mockEnsureInstalled.mockResolvedValue(undefined);
-    mockSwitchVersion.mockResolvedValue(undefined);
     mockGetPgBinaryPath.mockReturnValue('postgres');
     mockGetPgDataDir.mockReturnValue('/tmp/pgdata');
     mockPgController.start.mockResolvedValue(undefined);
@@ -144,8 +146,8 @@ describe('数据库初始化编排', () => {
     it('成功流程应按顺序调用所有步骤', async () => {
       await initializeDatabase();
 
-      // 1. initdb（默认版本 18.4）
-      expect(mockEnsureInstalled).toHaveBeenCalledWith('18.4');
+      // 1. initdb（默认版本 17.2-mingw，ShanGor 预编译包）
+      expect(mockEnsureInstalled).toHaveBeenCalledWith(POSTGRES_VERSIONS.V17_2_MINGW);
       // 2. pgController.start（启动 PG 子进程）
       expect(mockPgController.start).toHaveBeenCalledTimes(1);
       // 3. testPrismaConnection（连接测试）
@@ -170,23 +172,19 @@ describe('数据库初始化编排', () => {
       await expect(initializeDatabase()).rejects.toThrow('PG start failed');
     });
 
-    it('AGE 在 18.4 失败应触发降级流程', async () => {
-      // 第一次（18.4）失败，第二次（17.10）成功
-      mockEnsureAgeExtension.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    it('AGE 加载失败应仅 warn 不阻塞（ShanGor 包含 AGE 但容错测试）', async () => {
+      // AGE 加载失败，但不应阻塞启动（ShanGor 包理论上不会失败，但容错逻辑要保留）
+      mockEnsureAgeExtension.mockResolvedValueOnce(false);
 
-      await initializeDatabase();
+      await expect(initializeDatabase()).resolves.toBeUndefined();
 
-      // 应停止旧 PG + 切换版本 + 启动新 PG + 重新 AGE
-      expect(mockPgController.stop).toHaveBeenCalledTimes(1);
-      expect(mockSwitchVersion).toHaveBeenCalledWith('17.10');
-      expect(mockPgController.start).toHaveBeenCalledTimes(2);
-      expect(mockEnsureAgeExtension).toHaveBeenCalledTimes(2);
-    });
-
-    it('AGE 降级后仍失败应抛错', async () => {
-      // 两次 AGE 都失败
-      mockEnsureAgeExtension.mockResolvedValue(false);
-      await expect(initializeDatabase()).rejects.toThrow('Apache AGE');
+      // 不应停止 PG 或重启（无降级路径）
+      expect(mockPgController.stop).not.toHaveBeenCalled();
+      expect(mockPgController.start).toHaveBeenCalledTimes(1);
+      // AGE 应被调用 1 次（不重试）
+      expect(mockEnsureAgeExtension).toHaveBeenCalledTimes(1);
+      // HNSW 仍应被调用（独立于 AGE）
+      expect(mockEnsureHnswIndex).toHaveBeenCalledTimes(1);
     });
   });
 

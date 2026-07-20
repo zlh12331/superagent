@@ -9,7 +9,7 @@ const { mockSpawn, mockChildProcess, mockFetch } = vi.hoisted(() => {
     kill: vi.fn((_signal?: string) => {
       mockChildProcess.killed = true;
       setTimeout(() => {
-        mockChildProcess.listeners?.exit?.(0, null);
+        mockChildProcess.listeners?.['exit']?.(0, null);
       }, 10);
       return true;
     }),
@@ -157,13 +157,13 @@ describe('OllamaController', () => {
 
     // 触发 stdout 模拟 ollama pull 输出
     setTimeout(() => {
-      mockChildProcess.stdoutListeners.data?.(
+      mockChildProcess.stdoutListeners['data']?.(
         Buffer.from('{"status":"pulling","completed":50,"total":100}\n'),
       );
-      mockChildProcess.stdoutListeners.data?.(
+      mockChildProcess.stdoutListeners['data']?.(
         Buffer.from('{"status":"success","completed":100,"total":100}\n'),
       );
-      mockChildProcess.listeners.exit?.(0, null);
+      mockChildProcess.listeners['exit']?.(0, null);
     }, 10);
 
     await pullPromise;
@@ -200,7 +200,7 @@ describe('OllamaController', () => {
 
     await controller.start();
     // 模拟进程崩溃
-    mockChildProcess.listeners.exit?.(1, null);
+    mockChildProcess.listeners['exit']?.(1, null);
 
     expect(statusListener).toHaveBeenCalledWith({ status: 'crashed', code: 1 });
   });

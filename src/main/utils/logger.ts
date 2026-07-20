@@ -126,8 +126,10 @@ function serializeError(error: unknown): Record<string, unknown> {
       message: error.message,
       stack: error.stack,
     };
+    // Error.cause 来自 ES2022.Error lib（tsconfig 已包含）
+    // result 类型为 Record<string, unknown>，必须用方括号赋值（noPropertyAccessFromIndexSignature）
     if (error.cause !== undefined) {
-      result.cause = serializeError(error.cause);
+      result['cause'] = serializeError(error.cause);
     }
     return result;
   }

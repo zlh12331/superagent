@@ -55,12 +55,12 @@ function createMockChild() {
   return {
     stdout: {
       on: (_event: string, cb: (...args: unknown[]) => void) => {
-        handlers.stdout = cb;
+        handlers['stdout'] = cb;
       },
     },
     stderr: {
       on: (_event: string, cb: (...args: unknown[]) => void) => {
-        handlers.stderr = cb;
+        handlers['stderr'] = cb;
       },
     },
     on: (event: string, cb: (...args: unknown[]) => void) => {
@@ -71,9 +71,9 @@ function createMockChild() {
     /** 触发 on(event, ...) 注册的事件回调 */
     emit: (event: string, ...args: unknown[]) => handlers[event]?.(...args),
     /** 触发 stderr 的 data 事件（initdb 失败时用于收集错误信息） */
-    emitStderr: (text: string) => handlers.stderr?.(Buffer.from(text)),
+    emitStderr: (text: string) => handlers['stderr']?.(Buffer.from(text)),
     /** 触发 exit 事件（code=0 成功；非 0 失败） */
-    emitExit: (code: number, signal: string | null = null) => handlers.exit?.(code, signal),
+    emitExit: (code: number, signal: string | null = null) => handlers['exit']?.(code, signal),
   };
 }
 
@@ -85,9 +85,10 @@ describe('pg-installer', () => {
     mockApp.isPackaged = false;
     resetConfigCache();
     // 清理 pg 新字段相关 env，确保默认值生效
-    delete process.env.PG_VERSION;
-    delete process.env.PG_RESOURCES_DIR;
-    delete process.env.PG_INITDB_TIMEOUT;
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    delete process.env['PG_VERSION'];
+    delete process.env['PG_RESOURCES_DIR'];
+    delete process.env['PG_INITDB_TIMEOUT'];
   });
 
   afterEach(() => {

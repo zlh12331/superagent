@@ -52,8 +52,9 @@ function initSentry(): void {
       // 脱敏：移除可能的 API Key / Authorization header
       // 注意：@sentry/electron 5 的 beforeSend 入参为 ErrorEvent（type: undefined），
       // 返回类型必须为 ErrorEvent | null，因此采用不可变更新保持 type 兼容
-      if (event.request?.headers?.authorization) {
-        const { authorization: _auth, ...restHeaders } = event.request.headers;
+      // noPropertyAccessFromIndexSignature: headers 是索引签名，必须用方括号访问
+      if (event.request?.headers?.['authorization']) {
+        const { ['authorization']: _auth, ...restHeaders } = event.request.headers;
         return { ...event, request: { ...event.request, headers: restHeaders } };
       }
       return event;
@@ -100,8 +101,10 @@ function createWindow(): BrowserWindow {
   });
 
   // 开发环境加载 dev server，生产环境加载构建产物
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
+  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
+  if (rendererUrl) {
+    void win.loadURL(rendererUrl);
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
@@ -126,7 +129,8 @@ app.whenReady().then(async () => {
   // E2E 测试模式：跳过 DB 初始化，注册 mock IPC handler
   // 设计文档 §8.4 E2E 测试策略 / Phase 10 Task 1
   // E2E_MODE=true 时无 PG 二进制，通过 mock handler 让渲染层正常渲染 UI
-  const isE2E = process.env.E2E_MODE === 'true' && !app.isPackaged;
+  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+  const isE2E = process.env['E2E_MODE'] === 'true' && !app.isPackaged;
 
   if (isE2E) {
     logger.warn({}, 'E2E 测试模式：跳过数据库初始化，注册 mock IPC handler');

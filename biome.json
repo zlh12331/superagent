@@ -45,6 +45,9 @@
         "useNamingConvention": "error",
         "useConst": "error",
         "noDefaultExport": "error"
+      },
+      "complexity": {
+        "useLiteralKeys": "off"
       }
     }
   },

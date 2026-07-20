@@ -106,34 +106,37 @@ export function loadConfig(): AppConfig {
   const isPackaged = app.isPackaged;
   const isDev = !isPackaged;
 
+  // noPropertyAccessFromIndexSignature: process.env 是 NodeJS.ProcessEnv 索引签名
+  // 必须用 ['KEY'] 方括号语法访问，不能用 . 属性访问
+  const env = process.env;
   return AppConfigSchema.parse({
     isDev,
     isPackaged,
-    logLevel: process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info'),
+    logLevel: env['LOG_LEVEL'] ?? (isDev ? 'debug' : 'info'),
     sentry: {
-      dsn: process.env.SENTRY_DSN ?? '',
-      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+      dsn: env['SENTRY_DSN'] ?? '',
+      tracesSampleRate: Number(env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
     },
     deepseek: {
-      apiBase: process.env.DEEPSEEK_API_BASE ?? 'https://api.deepseek.com',
-      model: process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash',
-      timeout: Number(process.env.DEEPSEEK_TIMEOUT ?? 60_000),
+      apiBase: env['DEEPSEEK_API_BASE'] ?? 'https://api.deepseek.com',
+      model: env['DEEPSEEK_MODEL'] ?? 'deepseek-v4-flash',
+      timeout: Number(env['DEEPSEEK_TIMEOUT'] ?? 60_000),
     },
     ollama: {
-      url: process.env.OLLAMA_URL ?? 'http://localhost:11434',
-      embedModel: process.env.OLLAMA_EMBED_MODEL ?? 'nemotron-3-embed-1b-bf16',
-      embedDimensions: Number(process.env.OLLAMA_EMBED_DIMENSIONS ?? 2048),
-      healthCheckInterval: Number(process.env.OLLAMA_HEALTH_CHECK_INTERVAL ?? 30_000),
+      url: env['OLLAMA_URL'] ?? 'http://localhost:11434',
+      embedModel: env['OLLAMA_EMBED_MODEL'] ?? 'nemotron-3-embed-1b-bf16',
+      embedDimensions: Number(env['OLLAMA_EMBED_DIMENSIONS'] ?? 2048),
+      healthCheckInterval: Number(env['OLLAMA_HEALTH_CHECK_INTERVAL'] ?? 30_000),
     },
     pg: {
-      url: process.env.DATABASE_URL ?? 'postgresql://nwa@localhost:5433/nwa',
-      dataDir: process.env.PG_DATA_DIR ?? '',
-      port: Number(process.env.PG_PORT ?? 5433),
-      database: process.env.PG_DATABASE ?? 'nwa',
-      startTimeout: Number(process.env.PG_START_TIMEOUT ?? 30_000),
-      version: process.env.PG_VERSION ?? POSTGRES_VERSIONS.V18_4,
-      resourcesDir: process.env.PG_RESOURCES_DIR ?? '',
-      initdbTimeout: Number(process.env.PG_INITDB_TIMEOUT ?? 60_000),
+      url: env['DATABASE_URL'] ?? 'postgresql://nwa@localhost:5433/nwa',
+      dataDir: env['PG_DATA_DIR'] ?? '',
+      port: Number(env['PG_PORT'] ?? 5433),
+      database: env['PG_DATABASE'] ?? 'nwa',
+      startTimeout: Number(env['PG_START_TIMEOUT'] ?? 30_000),
+      version: env['PG_VERSION'] ?? POSTGRES_VERSIONS.V18_4,
+      resourcesDir: env['PG_RESOURCES_DIR'] ?? '',
+      initdbTimeout: Number(env['PG_INITDB_TIMEOUT'] ?? 60_000),
     },
   });
 }

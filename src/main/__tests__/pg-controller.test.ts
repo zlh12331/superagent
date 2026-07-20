@@ -14,7 +14,7 @@ const { mockSpawn, mockChildProcess, mockNet, mockSocket, defaultKill, defaultSo
         mockChildProcess.killed = true;
         // 模拟 exit 事件
         setTimeout(() => {
-          mockChildProcess.listeners?.exit?.(0, null);
+          mockChildProcess.listeners?.['exit']?.(0, null);
         }, 10);
         return true;
       }),
@@ -149,7 +149,7 @@ describe('PgController', () => {
       // SIGKILL：模拟进程被强制终止，触发 exit 事件以便 stop() 完成
       mockChildProcess.killed = true;
       setTimeout(() => {
-        mockChildProcess.listeners?.exit?.(0, null);
+        mockChildProcess.listeners?.['exit']?.(0, null);
       }, 0);
       return true;
     });
@@ -173,7 +173,7 @@ describe('PgController', () => {
 
     await controller.start();
     // 模拟进程崩溃（触发 exit 事件非 0 退出码）
-    mockChildProcess.listeners.exit?.(1, null);
+    mockChildProcess.listeners['exit']?.(1, null);
 
     expect(statusListener).toHaveBeenCalledWith({ status: 'crashed', code: 1 });
   });

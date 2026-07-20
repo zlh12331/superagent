@@ -33,9 +33,10 @@ describe('appConfig', () => {
 
   it('使用默认值生成配置', async () => {
     // 清空相关 env 变量
-    delete process.env.SENTRY_DSN;
-    delete process.env.DEEPSEEK_API_BASE;
-    delete process.env.OLLAMA_URL;
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    delete process.env['SENTRY_DSN'];
+    delete process.env['DEEPSEEK_API_BASE'];
+    delete process.env['OLLAMA_URL'];
 
     const { loadConfig } = await import('../config/index');
     const config = loadConfig();
@@ -50,9 +51,10 @@ describe('appConfig', () => {
   });
 
   it('从 process.env 读取配置', async () => {
-    process.env.SENTRY_DSN = 'http://test@example.com/1';
-    process.env.DEEPSEEK_API_BASE = 'https://custom.api.com';
-    process.env.OLLAMA_URL = 'http://192.168.1.100:11434';
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    process.env['SENTRY_DSN'] = 'http://test@example.com/1';
+    process.env['DEEPSEEK_API_BASE'] = 'https://custom.api.com';
+    process.env['OLLAMA_URL'] = 'http://192.168.1.100:11434';
 
     const { loadConfig } = await import('../config/index');
     const config = loadConfig();
@@ -89,11 +91,12 @@ describe('AppConfig - pg', () => {
   });
 
   it('应使用默认 pg 配置（DATABASE_URL 未设置时）', () => {
-    delete process.env.DATABASE_URL;
-    delete process.env.PG_PORT;
-    delete process.env.PG_DATABASE;
-    delete process.env.PG_DATA_DIR;
-    delete process.env.PG_START_TIMEOUT;
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    delete process.env['DATABASE_URL'];
+    delete process.env['PG_PORT'];
+    delete process.env['PG_DATABASE'];
+    delete process.env['PG_DATA_DIR'];
+    delete process.env['PG_START_TIMEOUT'];
 
     const config = getAppConfig();
 
@@ -105,11 +108,12 @@ describe('AppConfig - pg', () => {
   });
 
   it('应从环境变量读取 pg 配置', () => {
-    process.env.DATABASE_URL = 'postgresql://user:pass@host:6543/db';
-    process.env.PG_PORT = '6543';
-    process.env.PG_DATABASE = 'custom_db';
-    process.env.PG_DATA_DIR = 'C:/custom/pgdata';
-    process.env.PG_START_TIMEOUT = '60000';
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    process.env['DATABASE_URL'] = 'postgresql://user:pass@host:6543/db';
+    process.env['PG_PORT'] = '6543';
+    process.env['PG_DATABASE'] = 'custom_db';
+    process.env['PG_DATA_DIR'] = 'C:/custom/pgdata';
+    process.env['PG_START_TIMEOUT'] = '60000';
 
     const config = getAppConfig();
 
@@ -119,41 +123,44 @@ describe('AppConfig - pg', () => {
     expect(config.pg.dataDir).toBe('C:/custom/pgdata');
     expect(config.pg.startTimeout).toBe(60_000);
 
-    delete process.env.DATABASE_URL;
-    delete process.env.PG_PORT;
-    delete process.env.PG_DATABASE;
-    delete process.env.PG_DATA_DIR;
-    delete process.env.PG_START_TIMEOUT;
+    delete process.env['DATABASE_URL'];
+    delete process.env['PG_PORT'];
+    delete process.env['PG_DATABASE'];
+    delete process.env['PG_DATA_DIR'];
+    delete process.env['PG_START_TIMEOUT'];
   });
 
   it('应拒绝无效端口（0 / 负数 / 超过 65535）', () => {
-    process.env.PG_PORT = '0';
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    process.env['PG_PORT'] = '0';
     resetConfigCache();
     expect(() => getAppConfig()).toThrow();
     resetConfigCache();
 
-    process.env.PG_PORT = '-1';
+    process.env['PG_PORT'] = '-1';
     expect(() => getAppConfig()).toThrow();
     resetConfigCache();
 
-    process.env.PG_PORT = '70000';
+    process.env['PG_PORT'] = '70000';
     expect(() => getAppConfig()).toThrow();
 
-    delete process.env.PG_PORT;
+    delete process.env['PG_PORT'];
   });
 
   it('应拒绝无效 URL', () => {
-    process.env.DATABASE_URL = 'not-a-url';
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    process.env['DATABASE_URL'] = 'not-a-url';
     resetConfigCache();
     expect(() => getAppConfig()).toThrow();
-    delete process.env.DATABASE_URL;
+    delete process.env['DATABASE_URL'];
   });
 
   it('应使用默认 version 与 initdbTimeout', () => {
     // 清空 pg 新字段相关 env，验证默认值
-    delete process.env.PG_VERSION;
-    delete process.env.PG_INITDB_TIMEOUT;
-    delete process.env.PG_RESOURCES_DIR;
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    delete process.env['PG_VERSION'];
+    delete process.env['PG_INITDB_TIMEOUT'];
+    delete process.env['PG_RESOURCES_DIR'];
     resetConfigCache();
 
     const config = getAppConfig();
@@ -164,9 +171,10 @@ describe('AppConfig - pg', () => {
   });
 
   it('应从环境变量读取 version 与 initdbTimeout', () => {
-    process.env.PG_VERSION = '17.10';
-    process.env.PG_INITDB_TIMEOUT = '120000';
-    process.env.PG_RESOURCES_DIR = 'C:/custom/pg';
+    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+    process.env['PG_VERSION'] = '17.10';
+    process.env['PG_INITDB_TIMEOUT'] = '120000';
+    process.env['PG_RESOURCES_DIR'] = 'C:/custom/pg';
     resetConfigCache();
 
     const config = getAppConfig();
@@ -175,8 +183,8 @@ describe('AppConfig - pg', () => {
     expect(config.pg.initdbTimeout).toBe(120_000);
     expect(config.pg.resourcesDir).toBe('C:/custom/pg');
 
-    delete process.env.PG_VERSION;
-    delete process.env.PG_INITDB_TIMEOUT;
-    delete process.env.PG_RESOURCES_DIR;
+    delete process.env['PG_VERSION'];
+    delete process.env['PG_INITDB_TIMEOUT'];
+    delete process.env['PG_RESOURCES_DIR'];
   });
 });
