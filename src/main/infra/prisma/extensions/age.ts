@@ -14,8 +14,21 @@
 //   故用 DO 块 + ag_catalog.ag_graph 系统表查询实现幂等（重启时不报错）
 
 import { AGE_GRAPH_NAME } from '@novel-writer/shared';
-import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../../utils/logger';
+
+/**
+ * Prisma 数据库执行器接口（兼容 PrismaClient 与事务 tx client）
+ *
+ * 设计文档 §4.3 infra 层职责：Repository 模式需要把 AGE 操作纳入事务边界
+ * - PrismaClient 满足此接口（结构兼容）
+ * - Prisma 7 的 TransactionClient 也满足此接口
+ * - 这样 Repository 可以把 AGE 操作放在 $transaction(async (tx) => ...) 内
+ *   保证 Prisma 写入 + AGE 写入的原子性（AGE 1.5 支持 PostgreSQL 事务回滚）
+ */
+interface DbExecutor {
+  $executeRawUnsafe(sql: string, ...values: unknown[]): Promise<number>;
+  $queryRawUnsafe<T = unknown>(sql: string, ...values: unknown[]): Promise<T[]>;
+}
 
 /**
  * AGE Graph 初始化 SQL（设计文档 §6.3）
@@ -55,7 +68,7 @@ const CREATE_GRAPH_SQL = `
  *
  * @returns true 成功；false 失败（AGE 不兼容当前 PG 版本）
  */
-export async function ensureAgeExtension(client: PrismaClient): Promise<boolean> {
+export async function ensureAgeExtension(client: DbExecutor): Promise<boolean> {
   try {
     logger.info({}, '加载 Apache AGE 扩展');
     await client.$executeRawUnsafe(AGE_INIT_SQL);
@@ -83,7 +96,7 @@ export async function ensureAgeExtension(client: PrismaClient): Promise<boolean>
  * `);
  * ```
  */
-export async function executeCypher(client: PrismaClient, cypher: string): Promise<number> {
+export async function executeCypher(client: DbExecutor, cypher: string): Promise<number> {
   // ag_catalog.cypher 第二参数是 Cypher 字符串
   // 返回 SETOF record，但 CREATE/DELETE/MERGE 等写操作不需要 RETURNING
   const sql = `SELECT * FROM ag_catalog.cypher('${AGE_GRAPH_NAME}', $$ ${cypher} $$) AS (result agtype);`;
@@ -103,9 +116,10 @@ export async function executeCypher(client: PrismaClient, cypher: string): Promi
  * `);
  * ```
  */
-export async function queryCypher<T = unknown>(client: PrismaClient, cypher: string): Promise<T[]> {
+export async function queryCypher<T = unknown>(client: DbExecutor, cypher: string): Promise<T[]> {
   const sql = `SELECT * FROM ag_catalog.cypher('${AGE_GRAPH_NAME}', $$ ${cypher} $$) AS (result agtype);`;
-  const rows = await client.$queryRawUnsafe<T[]>(sql);
+  // 注意：$queryRawUnsafe<T> 已返回 Promise<T[]>，不能再传 T[] 否则变成 Promise<T[][]>
+  const rows = await client.$queryRawUnsafe<T>(sql);
   return rows;
 }
 
@@ -117,7 +131,7 @@ export async function queryCypher<T = unknown>(client: PrismaClient, cypher: str
  * @param role 角色定位
  */
 export async function createCharacterVertex(
-  client: PrismaClient,
+  client: DbExecutor,
   params: { characterId: string; name: string; role: string },
 ): Promise<number> {
   const cypher = `CREATE (n:Character {characterId: '${params.characterId}', name: '${params.name}', role: '${params.role}'})`;
@@ -134,7 +148,7 @@ export async function createCharacterVertex(
  * @param chapterId 关联章节 id
  */
 export async function createRelationEdge(
-  client: PrismaClient,
+  client: DbExecutor,
   params: {
     fromCharacterId: string;
     toCharacterId: string;

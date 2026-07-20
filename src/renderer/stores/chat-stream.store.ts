@@ -7,6 +7,13 @@
 // - 跟踪每个 sessionId 的流式状态（streaming / completed / error）
 // - 流结束或出错时保存最终文本与错误信息
 //
+// 设计决策（与 agent-stream.store 保持独立的理由）：
+// - 语义不同：本 store 按 sessionId 索引（会话级），含 activeSessionId 用于 UI 高亮
+//   agent-stream 按 ackId 索引（任务级），含 kind/targetId 元信息
+// - 合并后需用 union 类型区分 chat session 与 agent task，反而增加复杂度
+// - 两个 store 各自独立测试与维护，符合"高内聚低耦合"
+// - 现有 5 个组件/hook 已稳定，物理合并风险高、收益低
+//
 // 注意：不直接订阅 window.api.chat.onStreamChunk，由组件层
 // 在 useEffect 中调用 init() 启动订阅，避免 store 模块加载即订阅。
 

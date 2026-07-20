@@ -21,6 +21,7 @@ const {
   mockGetPgBinaryPath,
   mockGetPgDataDir,
   mockPgController,
+  mockPgSupervisor,
   mockTestPrismaConnection,
   mockDisconnectPrisma,
   mockGetPrismaClient,
@@ -33,10 +34,17 @@ const {
   mockEnsureInstalled: vi.fn().mockResolvedValue(undefined),
   mockGetPgBinaryPath: vi.fn().mockReturnValue('postgres'),
   mockGetPgDataDir: vi.fn().mockReturnValue('/tmp/pgdata'),
-  // PgController 实例 mock（new PgController(...) 返回此对象）
+  // PgController 实例 mock（new PgController(...) 返回此对象，传给 PgSupervisor）
   mockPgController: {
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
+  },
+  // PgSupervisor 实例 mock（new PgSupervisor(...) 返回此对象，db-init 使用 supervisor API）
+  mockPgSupervisor: {
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    isHealthy: vi.fn().mockResolvedValue(true),
+    getStatus: vi.fn().mockReturnValue('stopped'),
   },
   // prisma/client mock
   mockTestPrismaConnection: vi.fn().mockResolvedValue(true),
@@ -92,10 +100,21 @@ vi.mock('../infra/pg/pg-installer', () => ({
 
 vi.mock('../infra/pg/pg-controller', () => ({
   // PgController 是 class，必须用 function 表达式实现 constructor（[[Construct]]）
+  // 返回 mockPgController（仅作为 PgSupervisor 构造参数，实际不会被使用）
   // biome-ignore lint/complexity/useArrowFunction: 需要 [[Construct]] 调用
   // biome-ignore lint/style/useNamingConvention: 保留 PgController 大写以匹配 class 名
   PgController: vi.fn(function () {
     return mockPgController;
+  }),
+}));
+
+vi.mock('../infra/pg/pg-supervisor', () => ({
+  // PgSupervisor 是 class，必须用 function 表达式实现 constructor（[[Construct]]）
+  // 返回 mockPgSupervisor（db-init 调用 supervisor.start / stop）
+  // biome-ignore lint/complexity/useArrowFunction: 需要 [[Construct]] 调用
+  // biome-ignore lint/style/useNamingConvention: 保留 PgSupervisor 大写以匹配 class 名
+  PgSupervisor: vi.fn(function () {
+    return mockPgSupervisor;
   }),
 }));
 
@@ -131,6 +150,8 @@ describe('数据库初始化编排', () => {
     mockGetPgDataDir.mockReturnValue('/tmp/pgdata');
     mockPgController.start.mockResolvedValue(undefined);
     mockPgController.stop.mockResolvedValue(undefined);
+    mockPgSupervisor.start.mockResolvedValue(undefined);
+    mockPgSupervisor.stop.mockResolvedValue(undefined);
     mockTestPrismaConnection.mockResolvedValue(true);
     mockEnsureAgeExtension.mockResolvedValue(true);
     mockEnsureHnswIndex.mockResolvedValue(undefined);
@@ -148,8 +169,8 @@ describe('数据库初始化编排', () => {
 
       // 1. initdb（默认版本 17.2-mingw，ShanGor 预编译包）
       expect(mockEnsureInstalled).toHaveBeenCalledWith(POSTGRES_VERSIONS.V17_2_MINGW);
-      // 2. pgController.start（启动 PG 子进程）
-      expect(mockPgController.start).toHaveBeenCalledTimes(1);
+      // 2. pgSupervisor.start（启动 PG 子进程，含崩溃自愈）
+      expect(mockPgSupervisor.start).toHaveBeenCalledTimes(1);
       // 3. testPrismaConnection（连接测试）
       expect(mockTestPrismaConnection).toHaveBeenCalledTimes(1);
       // 4. AGE 扩展加载
@@ -164,11 +185,11 @@ describe('数据库初始化编排', () => {
       mockEnsureInstalled.mockRejectedValueOnce(new Error('initdb failed'));
       await expect(initializeDatabase()).rejects.toThrow('initdb failed');
       // initdb 失败后不应启动 PG
-      expect(mockPgController.start).not.toHaveBeenCalled();
+      expect(mockPgSupervisor.start).not.toHaveBeenCalled();
     });
 
     it('PG 启动失败应抛错', async () => {
-      mockPgController.start.mockRejectedValueOnce(new Error('PG start failed'));
+      mockPgSupervisor.start.mockRejectedValueOnce(new Error('PG start failed'));
       await expect(initializeDatabase()).rejects.toThrow('PG start failed');
     });
 
@@ -179,8 +200,8 @@ describe('数据库初始化编排', () => {
       await expect(initializeDatabase()).resolves.toBeUndefined();
 
       // 不应停止 PG 或重启（无降级路径）
-      expect(mockPgController.stop).not.toHaveBeenCalled();
-      expect(mockPgController.start).toHaveBeenCalledTimes(1);
+      expect(mockPgSupervisor.stop).not.toHaveBeenCalled();
+      expect(mockPgSupervisor.start).toHaveBeenCalledTimes(1);
       // AGE 应被调用 1 次（不重试）
       expect(mockEnsureAgeExtension).toHaveBeenCalledTimes(1);
       // HNSW 仍应被调用（独立于 AGE）
@@ -196,14 +217,14 @@ describe('数据库初始化编排', () => {
       // 成功路径下 initializeDatabase 不调用 disconnectPrisma
       // shutdownDatabase 调用 1 次 disconnectPrisma
       expect(mockDisconnectPrisma).toHaveBeenCalledTimes(1);
-      expect(mockPgController.stop).toHaveBeenCalledTimes(1);
+      expect(mockPgSupervisor.stop).toHaveBeenCalledTimes(1);
     });
 
     it('未初始化时应安全返回', async () => {
       // 未调用 initializeDatabase 直接 shutdown，不应抛错
       await expect(shutdownDatabase()).resolves.toBeUndefined();
-      // pgController 为 null 时不应调用 stop
-      expect(mockPgController.stop).not.toHaveBeenCalled();
+      // pgSupervisor 为 null 时不应调用 stop
+      expect(mockPgSupervisor.stop).not.toHaveBeenCalled();
     });
   });
 
@@ -212,10 +233,10 @@ describe('数据库初始化编排', () => {
       expect(getPgController()).toBeNull();
     });
 
-    it('初始化后应返回 controller 实例', async () => {
+    it('初始化后应返回 supervisor 实例', async () => {
       await initializeDatabase();
-      // mockPgController 是 new PgController(...) 的返回值
-      expect(getPgController()).toBe(mockPgController);
+      // mockPgSupervisor 是 new PgSupervisor(...) 的返回值
+      expect(getPgController()).toBe(mockPgSupervisor);
       await shutdownDatabase();
     });
   });

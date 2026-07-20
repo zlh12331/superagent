@@ -25,10 +25,9 @@ export * from './ipc/response';
 export * from './schemas';
 
 // 业务实体类型与枚举（§6.2）
-// 注意：types/models 与 schemas/*.schema 对 Project/Chapter/Character/Worldview/
-// ChatSession/ChatMessage/RagDocument/ProjectSetting/AppSetting 存在同名导出。
-// 按 Zod 4 最佳实践（schema 同时承担运行时校验与类型派生），同名类型以 schemas 派生为准；
-// 此处仅从 models 显式导出 schemas 未覆盖的独有类型，避免 TS2308 模糊导出错误。
+// 类型真理源策略：所有可在 IPC 边界校验的实体类型由 schemas 派生（z.infer）
+// types/models 仅保留 schemas 未覆盖的独有类型：
+// - ISODateString / Volume / CharacterRelation / RagDocumentChunk / AiUsageLog
 export * from './types/enums';
 export type {
   AiUsageLog,

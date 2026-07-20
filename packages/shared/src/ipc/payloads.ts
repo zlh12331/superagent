@@ -4,42 +4,55 @@
 //
 // 每个请求-响应 channel 定义 Req（请求入参）和 Res（响应数据）类型
 // 流式/事件 channel 定义 Payload 类型
+//
+// 类型真理源策略（Zod 4 最佳实践）：
+// - 所有实体类型（Project/Chapter/Character/...）从 schemas 派生（z.infer）
+// - types/models 仅保留 schemas 未覆盖的独有类型（AiUsageLog/CharacterRelation/...）
+// - 这样运行时校验与类型派生同源，避免手写 interface 与 schema 不一致
 
 import type {
+  Chapter,
   ChapterCreateInput,
   ChapterUpdateInput,
+  Character,
   CharacterCreateInput,
   CharacterRelationInput,
   CharacterUpdateInput,
+  ChatMessage,
   ChatSendMessageInput,
+  ChatSession,
   ChatSessionCreateInput,
   ChatStreamChunkPayload,
   ChatStreamEndPayload,
   ChatStreamErrorPayload,
+  Project,
   ProjectCreateInput,
+  ProjectSetting,
   ProjectSettingUpdateInput,
   ProjectUpdateInput,
+  RagDocument,
   RagIngestDocumentInput,
   RagSearchInput,
   RagSearchResultItem,
   TestApiKeyInput,
+  Worldview,
   WorldviewCreateInput,
   WorldviewUpdateInput,
 } from '../schemas';
-import type {
-  Chapter,
-  Character,
-  ChatMessage,
-  ChatSession,
-  Project,
-  ProjectSetting,
-  RagDocument,
-  Worldview,
-} from '../types/models';
 
-/** 应用状态（health check） */
+/**
+ * 应用状态（health check）
+ *
+ * pgStatus 状态机：
+ * - starting：spawn 后等待端口就绪
+ * - running：端口探活成功，可接收连接
+ * - stopped：未启动或正常停止
+ * - crashed：进程意外退出（非 0 退出码）
+ * - restarting：PgSupervisor 自动重启中（指数退避等待）
+ * - dead：重启 3 次均失败，进入不可恢复状态
+ */
 export interface AppStatus {
-  readonly pgStatus: 'starting' | 'running' | 'stopped' | 'crashed';
+  readonly pgStatus: 'starting' | 'running' | 'stopped' | 'crashed' | 'restarting' | 'dead';
   readonly ollamaStatus: 'starting' | 'running' | 'stopped' | 'not_installed';
   readonly ollamaModelReady: boolean;
   readonly dbConnected: boolean;

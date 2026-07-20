@@ -1,29 +1,29 @@
 // packages/shared/src/types/models.ts
-// 业务实体类型定义
+// 业务实体类型定义（仅 schemas 未覆盖的独有类型）
 // 来源：设计文档 §6.2 Prisma Schema 字段
-// 注意：Phase 4 引入 Prisma 后，可通过 type alias 让 Prisma 生成类型对齐此处定义
-// 此处独立定义是为了让 packages/shared 不依赖 Prisma（避免循环依赖）
-
-import type { ChapterStatus, CharacterRole, ChatRole, ProjectStatus } from './enums';
+//
+// 类型真理源策略（Zod 4 最佳实践）：
+// - 所有可在 IPC 边界校验的实体（Project/Chapter/Character/Worldview/
+//   ChatSession/ChatMessage/RagDocument/ProjectSetting/AppSetting）类型
+//   由 schemas/*.schema.ts 派生（z.infer），运行时校验与类型派生同源
+// - 本文件仅保留 schemas 未覆盖的独有类型：
+//   - ISODateString：时间戳别名（被 schemas 复用）
+//   - Volume：卷宗实体（暂未建 schema，未来若加 CRUD 再迁移）
+//   - CharacterRelation：AGE 图边（不通过 Prisma 表，由 Cypher 透传查询）
+//   - RagDocumentChunk：RAG 切片（向量不跨 IPC 传输，故无运行时校验需求）
+//   - AiUsageLog：AI 调用日志（暂无 IPC channel，主进程内部使用）
+//
+// 注意：本文件不依赖 Prisma（避免 packages/shared → @prisma/client 循环依赖）
 
 /** ISO 8601 字符串时间戳（Prisma DateTime 在 IPC 边界序列化为 string） */
 export type ISODateString = string;
 
-/** 项目 */
-export interface Project {
-  readonly id: string;
-  readonly name: string;
-  readonly description?: string | null;
-  readonly genre?: string | null;
-  readonly cover?: string | null;
-  readonly status: ProjectStatus;
-  readonly metadata: Record<string, unknown>;
-  readonly createdAt: ISODateString;
-  readonly updatedAt: ISODateString;
-  readonly archivedAt?: ISODateString | null;
-}
-
-/** 卷宗 */
+/**
+ * 卷宗
+ *
+ * 暂未建 Zod schema：当前无卷宗 CRUD IPC channel，仅作为 Chapter.volumeId 的元信息。
+ * 未来若增加卷宗管理（创建/列表/删除），应迁移为 VolumeSchema + z.infer 派生。
+ */
 export interface Volume {
   readonly id: string;
   readonly projectId: string;
@@ -34,35 +34,12 @@ export interface Volume {
   readonly updatedAt: ISODateString;
 }
 
-/** 章节 */
-export interface Chapter {
-  readonly id: string;
-  readonly projectId: string;
-  readonly volumeId?: string | null;
-  readonly title: string;
-  readonly content: string;
-  readonly wordCount: number;
-  readonly status: ChapterStatus;
-  readonly sortOrder: number;
-  readonly metadata: Record<string, unknown>;
-  readonly createdAt: ISODateString;
-  readonly updatedAt: ISODateString;
-}
-
-/** 人物卡 */
-export interface Character {
-  readonly id: string;
-  readonly projectId: string;
-  readonly name: string;
-  readonly avatar?: string | null;
-  readonly role: CharacterRole;
-  readonly description?: string | null;
-  readonly profile: Record<string, unknown>;
-  readonly createdAt: ISODateString;
-  readonly updatedAt: ISODateString;
-}
-
-/** 人物关系（AGE 图边，不在 Prisma 表中，通过 Cypher 透传查询） */
+/**
+ * 人物关系（AGE 图边，不在 Prisma 表中，通过 Cypher 透传查询）
+ *
+ * 不建 Zod schema：关系入参用 CharacterRelationInputSchema 校验，
+ * 查询结果直接通过 AGE Cypher 返回，结构由查询 SQL 决定（无需运行时校验）。
+ */
 export interface CharacterRelation {
   readonly fromCharacterId: string;
   readonly toCharacterId: string;
@@ -71,55 +48,12 @@ export interface CharacterRelation {
   readonly chapterId?: string;
 }
 
-/** 世界观条目（自关联树形） */
-export interface Worldview {
-  readonly id: string;
-  readonly projectId: string;
-  readonly parentId?: string | null;
-  readonly title: string;
-  readonly content?: string | null;
-  readonly type?: string | null;
-  readonly icon?: string | null;
-  readonly sortOrder: number;
-  readonly createdAt: ISODateString;
-  readonly updatedAt: ISODateString;
-}
-
-/** AI 对话会话 */
-export interface ChatSession {
-  readonly id: string;
-  readonly projectId: string;
-  readonly title: string;
-  readonly context: Record<string, unknown>;
-  readonly model?: string | null;
-  readonly createdAt: ISODateString;
-  readonly updatedAt: ISODateString;
-}
-
-/** AI 对话消息 */
-export interface ChatMessage {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly role: ChatRole;
-  readonly content: string;
-  readonly tokens: number;
-  readonly metadata: Record<string, unknown>;
-  readonly createdAt: ISODateString;
-}
-
-/** RAG 文档 */
-export interface RagDocument {
-  readonly id: string;
-  readonly projectId: string;
-  readonly title: string;
-  readonly source?: string | null;
-  readonly mimeType?: string | null;
-  readonly chunksCount: number;
-  readonly metadata: Record<string, unknown>;
-  readonly createdAt: ISODateString;
-}
-
-/** RAG 文档切片（不含 embedding，向量不跨 IPC 传输） */
+/**
+ * RAG 文档切片（不含 embedding，向量不跨 IPC 传输）
+ *
+ * 不建 Zod schema：当前无独立 IPC channel 返回切片列表
+ * （rag:search 返回 RagSearchResultItem，已含 content 字段）。
+ */
 export interface RagDocumentChunk {
   readonly id: string;
   readonly documentId: string;
@@ -129,27 +63,12 @@ export interface RagDocumentChunk {
   readonly createdAt: ISODateString;
 }
 
-/** 项目设置 */
-export interface ProjectSetting {
-  readonly projectId: string;
-  readonly aiModel: string;
-  readonly aiTemperature: number;
-  readonly aiMaxTokens: number;
-  readonly ragEnabled: boolean;
-  readonly ragTopK: number;
-  readonly ragThreshold: number;
-  readonly customPrompts: Record<string, unknown>;
-  readonly updatedAt: ISODateString;
-}
-
-/** 全局应用设置（KV 结构） */
-export interface AppSetting {
-  readonly key: string;
-  readonly value: string;
-  readonly updatedAt: ISODateString;
-}
-
-/** AI 调用日志 */
+/**
+ * AI 调用日志
+ *
+ * 不建 Zod schema：当前无 IPC channel 暴露日志查询，主进程内部使用。
+ * 未来若加 admin UI 查看调用日志，应迁移为 AiUsageLogSchema + z.infer 派生。
+ */
 export interface AiUsageLog {
   readonly id: string;
   readonly provider: string;

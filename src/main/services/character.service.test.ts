@@ -1,44 +1,60 @@
 // src/main/services/character.service.test.ts
 // character.service 单元测试
 // 设计文档 §4.2 Services 层职责矩阵 / §6.2 Character 模型 / §6.3 AGE 图边
+//
+// 测试策略（设计文档 §4.3 Repository 模式）：
+// - mock CharacterRepository：service 只做编排，Repository 已独立测试覆盖 Prisma + AGE 双写
+// - 不 mock Prisma / AGE：避免重复 Repository 测试已覆盖的逻辑
+// - 验证 service 是否正确委托 + 日志 + 错误透传
+//
+// 注意：
+// - vi.hoisted 模式避免 vi.mock factory TDZ（参考 db-init.test.ts）
+// - 用 class 表达式 mock CharacterRepository（vi.fn() 不能直接作为 class）
+// - getPrismaClient 也 mock（service 内部调用拿 prisma 引用，传给 MockRepository 但不会真实使用）
 
-import { ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@novel-writer/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockPrismaClient, resetMocks } from '../__tests__/helpers/mock-prisma';
 
-// vi.hoisted 模式：避免 vi.mock factory TDZ（参考 db-init.test.ts）
-// mockCharacter 局部覆盖共享 mockPrismaClient.character（仅 5 方法）
-// mockAge 覆盖 age.ts 的 4 个导出函数
-const { mockCharacter, mockAge } = vi.hoisted(() => ({
-  mockCharacter: {
-    findUnique: vi.fn(),
-    findMany: vi.fn(),
+// vi.hoisted：mock CharacterRepository + getPrismaClient（避免 vi.mock factory TDZ）
+const { mockRepo, MockCharacterRepository } = vi.hoisted(() => {
+  const mockRepo = {
     create: vi.fn(),
+    findById: vi.fn(),
+    listByProject: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-  },
-  mockAge: {
-    createCharacterVertex: vi.fn(),
-    createRelationEdge: vi.fn(),
-    executeCypher: vi.fn(),
-    queryCypher: vi.fn(),
-  },
+    addRelation: vi.fn(),
+    findRelations: vi.fn(),
+  };
+  // 用 class 表达式 mock `new CharacterRepository(prisma)` 返回 mockRepo 实例
+  // 字段初始化器确保每个 new 实例都共享同一组 mock（service 每次 new 新 Repository）
+  class MockCharacterRepository {
+    create = mockRepo.create;
+    findById = mockRepo.findById;
+    listByProject = mockRepo.listByProject;
+    update = mockRepo.update;
+    delete = mockRepo.delete;
+    addRelation = mockRepo.addRelation;
+    findRelations = mockRepo.findRelations;
+  }
+  return {
+    mockRepo,
+    // biome-ignore lint/style/useNamingConvention: 必须匹配源 class 名 CharacterRepository
+    MockCharacterRepository,
+  };
+});
+
+// mock CharacterRepository 类（service 通过 `new CharacterRepository(prisma)` 实例化）
+vi.mock('../infra/repositories/character.repository', () => ({
+  // biome-ignore lint/style/useNamingConvention: 必须匹配源 class 名 CharacterRepository
+  CharacterRepository: MockCharacterRepository,
 }));
 
-// mock PrismaClient 单例模块
-// 使用 spread + 覆盖 character，避免修改共享的 mockPrismaClient
+// mock getPrismaClient（service 内部调用拿 prisma 引用，传给 MockRepository 但不会真实使用）
 vi.mock('../infra/prisma/client', () => ({
-  getPrismaClient: () => ({
-    ...mockPrismaClient,
-    character: mockCharacter,
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
-  }),
+  getPrismaClient: () => ({}),
 }));
 
-// mock age.ts 透传模块（character.service 调用其 4 个导出函数）
-vi.mock('../infra/prisma/extensions/age', () => mockAge);
-
-// 直接 import（vi.mock 已提升）
 import {
   addCharacterRelation,
   createCharacter,
@@ -48,31 +64,51 @@ import {
   updateCharacter,
 } from './character.service';
 
+/** 生成样本 Character（IPC 兼容的字符串日期格式） */
+function sampleCharacter(
+  id: string,
+  overrides: Partial<Record<string, unknown>> = {},
+): {
+  id: string;
+  projectId: string;
+  name: string;
+  avatar: string | null;
+  role: string;
+  description: string | null;
+  profile: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+} {
+  const now = '2026-01-01T00:00:00.000Z';
+  return {
+    id,
+    projectId: 'p1',
+    name: 'N',
+    avatar: null,
+    role: 'SUPPORTING',
+    description: null,
+    profile: {},
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
 describe('character.service', () => {
   beforeEach(() => {
-    // resetMocks 重置共享 mockPrismaClient 中所有 model（保持完整 9 方法）
-    // mockCharacter / mockAge 是局部 mock，需单独 reset
-    resetMocks();
-    mockCharacter.findUnique.mockReset();
-    mockCharacter.findMany.mockReset();
-    mockCharacter.create.mockReset();
-    mockCharacter.update.mockReset();
-    mockCharacter.delete.mockReset();
-    mockAge.createCharacterVertex.mockReset();
-    mockAge.createRelationEdge.mockReset();
-    mockAge.executeCypher.mockReset();
-    mockAge.queryCypher.mockReset();
+    mockRepo.create.mockReset();
+    mockRepo.findById.mockReset();
+    mockRepo.listByProject.mockReset();
+    mockRepo.update.mockReset();
+    mockRepo.delete.mockReset();
+    mockRepo.addRelation.mockReset();
+    mockRepo.findRelations.mockReset();
   });
 
   describe('createCharacter', () => {
-    it('应创建人物并同步创建 AGE 顶点', async () => {
-      const now = new Date();
-      mockCharacter.create.mockResolvedValue({
-        ...sampleDbCharacter('c1', now),
-        name: '主角',
-        role: 'PROTAGONIST',
-      });
-      mockAge.createCharacterVertex.mockResolvedValue(1);
+    it('应委托 Repository.create 创建人物', async () => {
+      const created = sampleCharacter('c1', { name: '主角', role: 'PROTAGONIST' });
+      mockRepo.create.mockResolvedValue(created);
 
       const result = await createCharacter({
         projectId: 'p1',
@@ -80,62 +116,43 @@ describe('character.service', () => {
         role: 'PROTAGONIST',
       });
 
-      // 验证 Prisma create 调用（avatar/description 未传 → key 缺失，Vitest 视同 undefined）
-      expect(mockCharacter.create).toHaveBeenCalledWith({
-        data: {
-          projectId: 'p1',
-          name: '主角',
-          avatar: undefined,
-          role: 'PROTAGONIST',
-          description: undefined,
-          profile: {},
-        },
-      });
-      // 验证 AGE 顶点创建调用
-      expect(mockAge.createCharacterVertex).toHaveBeenCalledWith(expect.anything(), {
-        characterId: 'c1',
+      // 验证 Repository.create 收到完整入参
+      expect(mockRepo.create).toHaveBeenCalledWith({
+        projectId: 'p1',
         name: '主角',
         role: 'PROTAGONIST',
       });
-      expect(result.id).toBe('c1');
+      expect(result).toEqual(created);
     });
   });
 
   describe('listCharacters', () => {
-    it('应返回人物列表（按 createdAt 升序）', async () => {
-      const now = new Date();
-      mockCharacter.findMany.mockResolvedValue([sampleDbCharacter('c1', now)]);
+    it('应委托 Repository.listByProject 返回人物列表', async () => {
+      const list = [sampleCharacter('c1')];
+      mockRepo.listByProject.mockResolvedValue(list);
 
       const result = await listCharacters('p1');
 
-      expect(mockCharacter.findMany).toHaveBeenCalledWith({
-        where: { projectId: 'p1' },
-        orderBy: { createdAt: 'asc' },
-      });
-      expect(result).toHaveLength(1);
+      expect(mockRepo.listByProject).toHaveBeenCalledWith('p1');
+      expect(result).toEqual(list);
     });
   });
 
   describe('updateCharacter', () => {
-    it('应更新人物字段', async () => {
-      const now = new Date();
-      mockCharacter.findUnique.mockResolvedValue(sampleDbCharacter('c1', now));
-      mockCharacter.update.mockResolvedValue({
-        ...sampleDbCharacter('c1', now),
-        name: '新名',
-      });
+    it('应委托 Repository.update 更新人物', async () => {
+      const updated = sampleCharacter('c1', { name: '新名' });
+      mockRepo.update.mockResolvedValue(updated);
 
       const result = await updateCharacter({ id: 'c1', name: '新名' });
 
-      expect(mockCharacter.update).toHaveBeenCalledWith({
-        where: { id: 'c1' },
-        data: { name: '新名' },
-      });
+      expect(mockRepo.update).toHaveBeenCalledWith({ id: 'c1', name: '新名' });
       expect(result.name).toBe('新名');
     });
 
-    it('人物不存在应抛 CHARACTER_NOT_FOUND', async () => {
-      mockCharacter.findUnique.mockResolvedValue(null);
+    it('Repository 抛 CHARACTER_NOT_FOUND 时应透传', async () => {
+      mockRepo.update.mockRejectedValue(
+        new AppError(ErrorCode.CHARACTER_NOT_FOUND, '人物不存在：nope'),
+      );
       await expect(updateCharacter({ id: 'nope', name: 'x' })).rejects.toMatchObject({
         code: ErrorCode.CHARACTER_NOT_FOUND,
       });
@@ -143,21 +160,19 @@ describe('character.service', () => {
   });
 
   describe('deleteCharacter', () => {
-    it('应删除人物并清理 AGE 顶点（AGE 失败不阻塞）', async () => {
-      const now = new Date();
-      mockCharacter.findUnique.mockResolvedValue(sampleDbCharacter('c1', now));
-      mockCharacter.delete.mockResolvedValue({});
-      mockAge.executeCypher.mockRejectedValue(new Error('AGE 不可用'));
+    it('应委托 Repository.delete 删除人物并返回 { id }', async () => {
+      mockRepo.delete.mockResolvedValue(undefined);
 
       const result = await deleteCharacter('c1');
 
-      expect(mockCharacter.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
-      expect(mockAge.executeCypher).toHaveBeenCalled();
+      expect(mockRepo.delete).toHaveBeenCalledWith('c1');
       expect(result).toEqual({ id: 'c1' });
     });
 
-    it('人物不存在应抛 CHARACTER_NOT_FOUND', async () => {
-      mockCharacter.findUnique.mockResolvedValue(null);
+    it('Repository 抛 CHARACTER_NOT_FOUND 时应透传', async () => {
+      mockRepo.delete.mockRejectedValue(
+        new AppError(ErrorCode.CHARACTER_NOT_FOUND, '人物不存在：nope'),
+      );
       await expect(deleteCharacter('nope')).rejects.toMatchObject({
         code: ErrorCode.CHARACTER_NOT_FOUND,
       });
@@ -165,12 +180,8 @@ describe('character.service', () => {
   });
 
   describe('addCharacterRelation', () => {
-    it('应创建人物关系（校验两端存在）', async () => {
-      const now = new Date();
-      mockCharacter.findUnique
-        .mockResolvedValueOnce(sampleDbCharacter('c1', now))
-        .mockResolvedValueOnce(sampleDbCharacter('c2', now));
-      mockAge.createRelationEdge.mockResolvedValue(1);
+    it('应委托 Repository.addRelation 添加关系并原样返回入参', async () => {
+      mockRepo.addRelation.mockResolvedValue(undefined);
 
       const result = await addCharacterRelation({
         fromCharacterId: 'c1',
@@ -179,7 +190,7 @@ describe('character.service', () => {
         description: '挚友',
       });
 
-      expect(mockAge.createRelationEdge).toHaveBeenCalledWith(expect.anything(), {
+      expect(mockRepo.addRelation).toHaveBeenCalledWith({
         fromCharacterId: 'c1',
         toCharacterId: 'c2',
         type: 'friend',
@@ -188,8 +199,10 @@ describe('character.service', () => {
       expect(result.fromCharacterId).toBe('c1');
     });
 
-    it('from 人物不存在应抛 CHARACTER_NOT_FOUND', async () => {
-      mockCharacter.findUnique.mockResolvedValue(null);
+    it('Repository 抛 CHARACTER_NOT_FOUND 时应透传', async () => {
+      mockRepo.addRelation.mockRejectedValue(
+        new AppError(ErrorCode.CHARACTER_NOT_FOUND, '起始人物不存在：nope'),
+      );
       await expect(
         addCharacterRelation({
           fromCharacterId: 'nope',
@@ -201,36 +214,30 @@ describe('character.service', () => {
   });
 
   describe('getCharacterRelations', () => {
-    it('应通过 Cypher 查询项目下所有关系', async () => {
-      mockCharacter.findMany.mockResolvedValue([
-        { ...sampleDbCharacter('c1', new Date()), id: 'c1' },
-        { ...sampleDbCharacter('c2', new Date()), id: 'c2' },
-      ]);
-      mockAge.queryCypher.mockResolvedValue([
-        { from: 'c1', to: 'c2', type: 'friend', description: '挚友' },
+    it('应委托 Repository.findRelations 查询关系', async () => {
+      mockRepo.findRelations.mockResolvedValue([
+        {
+          fromCharacterId: 'c1',
+          toCharacterId: 'c2',
+          type: 'friend',
+          description: '挚友',
+        },
       ]);
 
       const result = await getCharacterRelations('p1');
 
-      expect(mockAge.queryCypher).toHaveBeenCalled();
+      expect(mockRepo.findRelations).toHaveBeenCalledWith('p1');
       expect(result).toHaveLength(1);
       // noUncheckedIndexedAccess: true 下 result[0] 类型为 T | undefined，用可选链
       expect(result[0]?.fromCharacterId).toBe('c1');
     });
+
+    it('Repository 降级返回空数组时应透传空数组', async () => {
+      mockRepo.findRelations.mockResolvedValue([]);
+
+      const result = await getCharacterRelations('p1');
+
+      expect(result).toEqual([]);
+    });
   });
 });
-
-/** 生成样本 DB Character 记录 */
-function sampleDbCharacter(id: string, now: Date) {
-  return {
-    id,
-    projectId: 'p1',
-    name: 'N',
-    avatar: null,
-    role: 'SUPPORTING',
-    description: null,
-    profile: {},
-    createdAt: now,
-    updatedAt: now,
-  };
-}

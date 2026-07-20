@@ -3,19 +3,22 @@
 // 设计文档 §7.8 PG 子进程健康监控 / §7.9 Ollama 嵌入服务健康监控
 //
 // 职责：
-// - 显示 PG 子进程状态（starting/running/stopped/crashed）
+// - 显示 PG 子进程状态（starting/running/stopped/crashed/restarting/dead）
 // - 显示 Ollama 服务状态（starting/running/stopped/not_installed）
 // - 显示 DB 连接状态（已连接/未连接）
 // - Ollama 模型拉取进度条（仅当 pullProgress 非 null 时显示）
 //
 // 通过 useAppStatusStore 选择性订阅各字段，单字段变更仅触发相关重渲染。
-// 状态图标使用 lucide-react：Circle (stopped) / Loader (starting) / CircleCheck (running) / CircleAlert (crashed)
+// 状态图标使用 lucide-react：
+// - Circle (stopped) / Loader (starting) / CircleCheck (running) / CircleAlert (crashed/dead)
+// - restarting 使用 Loader（与 starting 区分：amber + 旋转）
+// - dead 使用 CircleAlert（红色，表示不可恢复）
 //
 // 注意：PG/Ollama 状态键来自 IPC payload 类型（包含 'not_installed' snake_case），
 // 使用 switch case 而非对象字面量映射，避免 biome useNamingConvention 对
 // snake_case 键报错。
 
-import { Circle, CircleAlert, CircleCheck, Loader2 } from 'lucide-react';
+import { Circle, CircleAlert, CircleCheck, Loader2, OctagonAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { STATUS_BAR_HEIGHT } from '@/lib/constants';
@@ -32,12 +35,22 @@ interface StatusMeta {
   dot: string;
 }
 
-/** 根据 PG 状态返回展示信息 */
-function getPgMeta(status: 'starting' | 'running' | 'stopped' | 'crashed'): StatusMeta {
+/** 根据 PG 状态返回展示信息（PgSupervisor 增补 'restarting' / 'dead' 状态） */
+function getPgMeta(
+  status: 'starting' | 'running' | 'stopped' | 'crashed' | 'restarting' | 'dead',
+): StatusMeta {
   switch (status) {
     case 'starting': {
       return {
         label: 'PG 启动中',
+        icon: <Loader2 className="size-3 animate-spin" />,
+        dot: 'text-amber-500',
+      };
+    }
+    case 'restarting': {
+      // PgSupervisor 自动重启中（指数退避 5s/10s/30s 后重试）
+      return {
+        label: 'PG 重启中',
         icon: <Loader2 className="size-3 animate-spin" />,
         dot: 'text-amber-500',
       };
@@ -60,6 +73,14 @@ function getPgMeta(status: 'starting' | 'running' | 'stopped' | 'crashed'): Stat
       return {
         label: 'PG 崩溃',
         icon: <CircleAlert className="size-3" />,
+        dot: 'text-destructive',
+      };
+    }
+    case 'dead': {
+      // PgSupervisor 重启 3 次均失败，进入不可恢复状态
+      return {
+        label: 'PG 不可用',
+        icon: <OctagonAlert className="size-3" />,
         dot: 'text-destructive',
       };
     }

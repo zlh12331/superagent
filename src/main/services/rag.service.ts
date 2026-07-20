@@ -4,15 +4,20 @@
 //
 // 职责：
 // 1. 文档切片（按段落 + 最大长度硬切）
-// 2. 向量入库（embedding 是 Unsupported("halfvec(2048)")，必须 raw SQL 写入）
-// 3. 相似检索（pgvector 余弦距离 <=>）
-// 4. 文档管理（list / delete）
-// 5. PDF 文档解析（mimeType === 'application/pdf' 时先走 pdf-parser，再切片）
+// 2. PDF 文档解析（mimeType === 'application/pdf' 时先走 pdf-parser，再切片）
+// 3. 向量入库编排（嵌入 + 委托 Repository 写入）
+// 4. 相似检索编排（嵌入 + 委托 Repository 检索 + JS 侧 threshold 过滤）
+// 5. 文档管理（list / delete，委托 Repository）
+//
+// 架构原则（设计文档 §4.3 Repository 模式）：
+// - service 层只依赖 Repository，不直接调用 PrismaClient / raw SQL
+// - SQL/halfvec 细节封装在 Repository 内
+// - 事务原子性由 Repository 保证（insertChunksBatch 内部 $transaction）
+// - service 关注切片、嵌入、解析等业务逻辑
 //
 // 注意：
 // - 向量只在主进程内流转，不跨 IPC、不出现在返回值中
 // - 调用 embedding.service 生成向量（设计文档 §4.2 允许 rag.service 依赖 embedding.service）
-// - 表名 snake_case（rag_document_chunks），列名 camelCase（"documentId"），raw SQL 需注意双引号
 // - PDF 文件由渲染层以 base64 字符串形式通过 fileContent 字段传入（避免修改 IPC schema）
 //   主进程解码 base64 → Uint8Array → 调 parsePdfToText → 得到的 text 替换 fileContent，后续流程不变
 
@@ -24,9 +29,9 @@ import {
   type RagSearchInput,
   type RagSearchResultItem,
 } from '@novel-writer/shared';
-import type { PrismaClient } from '@prisma/client';
 import { getPrismaClient } from '../infra/prisma/client';
 import { parsePdfToText } from '../infra/rag/pdf-parser';
+import { RagRepository } from '../infra/repositories/rag.repository';
 import { logger } from '../utils/logger';
 import { embedTexts } from './embedding.service';
 
@@ -37,26 +42,37 @@ const MAX_CHUNK_SIZE = 800;
 const MAX_DOCUMENT_SIZE = 200_000;
 
 /**
+ * 获取 RAG 领域 Repository 实例
+ *
+ * 每次调用创建新实例：Repository 无状态，新实例避免潜在的状态泄漏
+ */
+function getRagRepository(): RagRepository {
+  return new RagRepository(getPrismaClient());
+}
+
+/**
  * 文档入库
  *
  * 流程：
  * 1. 若 mimeType === 'application/pdf'：fileContent 视为 base64 字符串
  *    → Buffer.from(base64, 'base64') → parsePdfToText → 得到纯文本
  * 2. 文本大小校验（基于解析后的文本字符数，PDF 与文本统一标准）
- * 3. 切片 → 批量嵌入 → 建文档记录 → 逐 chunk raw SQL 插入 → 更新 chunksCount
+ * 3. 切片 → 批量嵌入 → 建文档记录 → 委托 Repository 批量插入 chunks + 更新 chunksCount（事务原子性）
  *
  * @throws AppError(RAG_DOCUMENT_TOO_LARGE) 文档超过 200_000 字符（解析后）
  * @throws AppError(RAG_DOCUMENT_PARSE_FAILED) PDF 解析失败（文件损坏 / 加密 / 不支持）
  * @throws AppError(RAG_EMBEDDING_FAILED) 嵌入失败（由 embedding.service 抛出）
+ * @throws AppError(INTERNAL_ERROR) 嵌入向量数量与切片数量不一致
  */
 export async function ingestDocument(
   input: RagIngestDocumentInput,
 ): Promise<{ documentId: string; chunksCount: number }> {
-  const prisma = getPrismaClient();
   logger.info(
     { projectId: input.projectId, title: input.title, size: input.fileContent.length },
     '文档入库',
   );
+
+  const repo = getRagRepository();
 
   // 1. 解析原始文本（PDF 需先解码 base64 → 解析为文本）
   // PDF：fileContent 是渲染层用 FileReader.readAsDataURL 得到的 base64 字符串
@@ -78,17 +94,13 @@ export async function ingestDocument(
   const chunks = chunkText(content);
 
   // 4. 创建文档记录（先建记录拿到 documentId，再插 chunks）
-  const document = await prisma.ragDocument.create({
-    data: {
-      projectId: input.projectId,
-      title: input.title,
-      mimeType: input.mimeType ?? null,
-      source: null,
-      metadata: {},
-    },
+  const document = await repo.createDocument({
+    projectId: input.projectId,
+    title: input.title,
+    mimeType: input.mimeType,
   });
 
-  // 5. 无有效切片：直接返回空文档
+  // 5. 无有效切片：直接返回空文档（chunksCount 默认 0 由 createDocument 设置）
   if (chunks.length === 0) {
     logger.warn({ documentId: document.id }, '文档切片后无有效内容');
     return { documentId: document.id, chunksCount: 0 };
@@ -97,31 +109,25 @@ export async function ingestDocument(
   // 6. 批量嵌入
   const vectors = await embedTexts(chunks);
 
-  // 7. 逐 chunk raw SQL 插入（embedding 字段 Prisma Client 不支持，必须 raw SQL）
-  for (const [index, chunkContent] of chunks.entries()) {
-    const vector = vectors[index];
-    if (vector === undefined) {
-      throw new AppError(
-        ErrorCode.INTERNAL_ERROR,
-        `嵌入向量数量与切片数量不一致（index=${index}）`,
-      );
-    }
-    const vectorLiteral = `[${vector.join(',')}]`;
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO rag_document_chunks (id, "documentId", content, "chunkIndex", embedding, metadata, "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4::halfvec, '{}', NOW())`,
-      document.id,
-      chunkContent,
-      index,
-      vectorLiteral,
+  // 7. 嵌入向量数量校验（防止 embedding.service 返回数量不一致）
+  if (vectors.length !== chunks.length) {
+    throw new AppError(
+      ErrorCode.INTERNAL_ERROR,
+      `嵌入向量数量(${vectors.length})与切片数量(${chunks.length})不一致`,
     );
   }
 
-  // 8. 更新 chunksCount
-  await prisma.ragDocument.update({
-    where: { id: document.id },
-    data: { chunksCount: chunks.length },
-  });
+  // 8. 委托 Repository 批量插入 chunks + 更新 chunksCount（事务原子性，任一失败回滚）
+  // noUncheckedIndexedAccess 下 vectors[index] 类型为 number[] | undefined，
+  // 前面已校验 vectors.length === chunks.length，此处用 as 断言安全（避免 ! 非空断言）
+  await repo.insertChunksBatch(
+    document.id,
+    chunks.map((content, index) => ({
+      content,
+      index,
+      vector: vectors[index] as number[],
+    })),
+  );
 
   logger.info({ documentId: document.id, chunksCount: chunks.length }, '文档入库完成');
   return { documentId: document.id, chunksCount: chunks.length };
@@ -130,7 +136,7 @@ export async function ingestDocument(
 /**
  * 相似检索
  *
- * 流程：查询向量化 → 余弦距离检索（全表按 projectId JOIN 过滤）→ JS 侧 threshold 过滤
+ * 流程：查询向量化 → Repository 余弦距离检索 → JS 侧 threshold 过滤
  *
  * 注意：空结果返回 []，不抛 RAG_NO_RESULTS（检索不到是正常业务情况，非错误）
  *
@@ -138,7 +144,6 @@ export async function ingestDocument(
  * @throws AppError(INTERNAL_ERROR) 嵌入返回空向量数组
  */
 export async function searchSimilarChunks(input: RagSearchInput): Promise<RagSearchResultItem[]> {
-  const prisma = getPrismaClient();
   logger.debug(
     { projectId: input.projectId, query: input.query, topK: input.topK },
     'RAG 相似检索',
@@ -150,25 +155,11 @@ export async function searchSimilarChunks(input: RagSearchInput): Promise<RagSea
   if (queryVector === undefined) {
     throw new AppError(ErrorCode.INTERNAL_ERROR, '嵌入服务返回空向量数组');
   }
-  const vectorLiteral = `[${queryVector.join(',')}]`;
 
-  // 2. 余弦距离检索（<=> 返回距离，1 - 距离 = 相似度 score）
-  const rows = await prisma.$queryRawUnsafe<
-    { chunkId: string; documentId: string; content: string; score: number }[]
-  >(
-    `SELECT c.id AS "chunkId", c."documentId", c.content,
-            1 - (c.embedding <=> $1::halfvec) AS score
-     FROM rag_document_chunks c
-     JOIN rag_documents d ON d.id = c."documentId"
-     WHERE d."projectId" = $2
-     ORDER BY c.embedding <=> $1::halfvec
-     LIMIT $3`,
-    vectorLiteral,
-    input.projectId,
-    input.topK,
-  );
+  // 2. 委托 Repository 检索（HNSW 余弦距离 + JOIN rag_documents 过滤 projectId）
+  const rows = await getRagRepository().searchHalfvec(input.projectId, queryVector, input.topK);
 
-  // 3. threshold 过滤 + 映射
+  // 3. threshold 过滤 + 映射（Repository 返回全量 topK，由 service 按 threshold 过滤）
   return rows
     .filter((row) => row.score >= input.threshold)
     .map((row) => ({
@@ -183,30 +174,21 @@ export async function searchSimilarChunks(input: RagSearchInput): Promise<RagSea
  * 列出项目下所有 RAG 文档（按 createdAt 倒序）
  */
 export async function listRagDocuments(projectId: string): Promise<RagDocument[]> {
-  const prisma = getPrismaClient();
-  const documents = await prisma.ragDocument.findMany({
-    where: { projectId },
-    orderBy: { createdAt: 'desc' },
-  });
-  return documents.map(serializeRagDocument);
+  return getRagRepository().listByProject(projectId);
 }
 
 /**
  * 删除 RAG 文档
  *
- * DB 层 onDelete: Cascade 自动级联删除所有 chunks
+ * DB 层 onDelete: Cascade 自动级联删除所有 chunks（由 Repository 委托 Prisma delete）
  *
  * @throws AppError(NOT_FOUND) 文档不存在
  */
 export async function deleteRagDocument(id: string): Promise<{ id: string }> {
-  const prisma = getPrismaClient();
-
-  const existing = await prisma.ragDocument.findUnique({ where: { id } });
-  if (existing === null) {
+  const deleted = await getRagRepository().deleteDocument(id);
+  if (!deleted) {
     throw new AppError(ErrorCode.NOT_FOUND, `RAG 文档不存在：${id}`);
   }
-
-  await prisma.ragDocument.delete({ where: { id } });
   logger.info({ documentId: id }, '删除 RAG 文档（含 chunks 级联）');
   return { id };
 }
@@ -257,22 +239,3 @@ function chunkText(text: string): string[] {
 
   return chunks;
 }
-
-/**
- * 序列化 Prisma RagDocument 记录为 IPC 兼容的 RagDocument 类型
- */
-function serializeRagDocument(raw: RawRagDocument): RagDocument {
-  return {
-    id: raw.id,
-    projectId: raw.projectId,
-    title: raw.title,
-    source: raw.source,
-    mimeType: raw.mimeType,
-    chunksCount: raw.chunksCount,
-    metadata: raw.metadata as Record<string, unknown>,
-    createdAt: raw.createdAt.toISOString(),
-  };
-}
-
-/** Prisma ragDocument.findUnique 返回的原始类型 */
-type RawRagDocument = NonNullable<Awaited<ReturnType<PrismaClient['ragDocument']['findUnique']>>>;

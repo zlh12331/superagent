@@ -6,7 +6,8 @@
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
-import { initializeDatabase, shutdownDatabase } from './app/db-init';
+import { initializeDatabase } from './app/db-init';
+import { disposeServices } from './app/service-container';
 import { startStatusBroadcaster } from './app/status-broadcaster';
 import { getAppConfig } from './config';
 import { registerMockIpcHandlers } from './ipc/mock-handlers';
@@ -172,8 +173,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 应用退出前关闭数据库（设计文档 §1.1 应用生命周期）
-// shutdownDatabase 包含 disconnectPrisma + pgController.stop（Phase 4b 集成）
+// 应用退出前统一清理所有服务（设计文档 §1.1 应用生命周期 / §7.6 生命周期管理）
+// disposeServices 包含：中断流式响应 + 清理 AI 客户端缓存 + 断开 Prisma + 停止 PG 子进程
 // 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
 let isQuitting = false;
 app.on('before-quit', async (event) => {
@@ -184,7 +185,7 @@ app.on('before-quit', async (event) => {
   event.preventDefault();
   isQuitting = true;
   try {
-    await shutdownDatabase();
+    await disposeServices();
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }

@@ -8,6 +8,13 @@
 // - 流结束或出错时保存最终文本与错误信息
 // - 记录每个 ackId 的"任务类型"（generate / rewrite / expand），用于 UI 区分展示
 //
+// 设计决策（与 chat-stream.store 保持独立的理由）：
+// - 语义不同：本 store 按 ackId 索引（任务级），含 kind/targetId 元信息用于完成后失效缓存
+//   chat-stream 按 sessionId 索引（会话级），含 activeSessionId 用于 UI 高亮
+// - 合并后需用 union 类型区分 chat session 与 agent task，反而增加复杂度
+// - 两个 store 各自独立测试与维护，符合"高内聚低耦合"
+// - 现有 5 个组件/hook 已稳定，物理合并风险高、收益低
+//
 // 注意：
 // - Agent 后端复用 chat:stream:chunk/end/error channel，但 payload.sessionId 实际是 ackId
 //   （见 src/main/services/agent.service.ts 的 streamId: ackId）

@@ -3,16 +3,17 @@
 //
 // 职责：
 // 1. 编排 PG 启动 + DB 初始化流程
-// 2. 串联 pg-installer / pg-controller / Prisma migrate / AGE / HNSW
+// 2. 串联 pg-installer / pg-supervisor / Prisma migrate / AGE / HNSW
 //
 // 启动顺序：
-//   ensureInstalled(17.2-mingw) → pgController.start → testPrismaConnection
+//   ensureInstalled(17.2-mingw) → pgSupervisor.start → testPrismaConnection
 //   → prisma migrate deploy → ensureAgeExtension → ensureHnswIndex
 //
 // 说明：
 // - ShanGor 预编译包自带 AGE 1.5.0 + pgvector 0.8.0，无需降级
 // - AGE / HNSW 加载失败时仅 warn，不阻塞应用启动（核心功能不依赖扩展）
 // - 旧版 AGE 降级路径已移除（V17_10 常量保留仅为历史数据目录检测）
+// - PgSupervisor 包装 PgController，提供崩溃自动重启（指数退避 5s/10s/30s）
 //
 // 注意：本模块由 index.ts 在 app.whenReady() 中调用
 
@@ -20,29 +21,32 @@ import { POSTGRES_VERSIONS } from '@novel-writer/shared';
 import { getAppConfig } from '../config';
 import { PgController } from '../infra/pg/pg-controller';
 import { ensureInstalled, getPgBinaryPath, getPgDataDir } from '../infra/pg/pg-installer';
+import { PgSupervisor } from '../infra/pg/pg-supervisor';
 import { disconnectPrisma, getPrismaClient, testPrismaConnection } from '../infra/prisma/client';
 import { ensureAgeExtension } from '../infra/prisma/extensions/age';
 import { ensureHnswIndex } from '../infra/prisma/extensions/hnsw';
 import { logger } from '../utils/logger';
 
-/** PG 控制器单例（模块级，供 getPgController 测试访问器读取） */
-let pgController: PgController | null = null;
+/** PG Supervisor 单例（模块级，提供崩溃自愈 + 状态变更事件） */
+let pgSupervisor: PgSupervisor | null = null;
 
 /**
- * 创建 PgController 实例
+ * 创建 PgSupervisor 实例
  *
- * 根据当前配置生成 binaryPath 与 dataDir，构造 PgController
+ * 根据当前配置生成 binaryPath 与 dataDir，构造 PgController 后包装为 PgSupervisor
  *
  * @param version PG 版本号（用于解析 binaryPath 与 dataDir）
- * @returns PgController 实例
+ * @returns PgSupervisor 实例
  */
-function createPgController(version: string): PgController {
+function createPgSupervisor(version: string): PgSupervisor {
   const config = getAppConfig();
-  return new PgController({
+  const pgConfig = {
     binaryPath: getPgBinaryPath(version),
     dataDir: getPgDataDir(version),
     port: config.pg.port,
-  });
+  };
+  // PgSupervisor 包装 PgController，提供崩溃自动重启（指数退避）
+  return new PgSupervisor(new PgController(pgConfig));
 }
 
 /**
@@ -70,9 +74,9 @@ export async function initializeDatabase(): Promise<void> {
   // 1. initdb（首次启动初始化数据目录）
   await ensureInstalled(defaultVersion);
 
-  // 2. 启动 PG 子进程
-  pgController = createPgController(defaultVersion);
-  await pgController.start();
+  // 2. 启动 PG 子进程（PgSupervisor 提供崩溃自愈，PG 异常退出时自动重启）
+  pgSupervisor = createPgSupervisor(defaultVersion);
+  await pgSupervisor.start();
 
   // 3. 测试 PrismaClient 连接（带 retry）
   await testPrismaConnection();
@@ -151,13 +155,13 @@ async function runMigrateDeploy(): Promise<void> {
  *
  * 应用退出时调用（main/index.ts before-quit）：
  * 1. 断开 PrismaClient（释放连接池）
- * 2. 停止 PG 子进程（SIGTERM → 5s → SIGKILL）
+ * 2. 停止 PG 子进程（PgSupervisor.stop 取消重启等待 + SIGTERM → 5s → SIGKILL）
  */
 export async function shutdownDatabase(): Promise<void> {
   await disconnectPrisma();
-  if (pgController !== null) {
-    await pgController.stop();
-    pgController = null;
+  if (pgSupervisor !== null) {
+    await pgSupervisor.stop();
+    pgSupervisor = null;
   }
 }
 
@@ -165,9 +169,10 @@ export async function shutdownDatabase(): Promise<void> {
  * 获取 PG 控制器实例
  *
  * 仅用于测试与状态查询，业务代码不应依赖此函数
+ * 返回 PgSupervisor 实例（对外接口与 PgController 兼容，并增加 'restarting'/'dead' 状态）
  *
- * @returns PgController 实例（未初始化时为 null）
+ * @returns PgSupervisor 实例（未初始化时为 null）
  */
-export function getPgController(): PgController | null {
-  return pgController;
+export function getPgController(): PgSupervisor | null {
+  return pgSupervisor;
 }
