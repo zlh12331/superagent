@@ -1,10 +1,16 @@
 // src/renderer/components/chapter/ChapterEditor.tsx
-// TipTap 3 富文本编辑器封装
-// 设计文档 §5.1 数据流 + §8 Phase 8 章节编辑器
+// TipTap 3 富文本编辑器封装 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 容器为"纸张"风格：奶白底 + 微阴影 + 大留白
+// - 编辑器正文应用 .prose-literacy 类（17px 衬线 + 1.9 行高 + 首行缩进 2em）
+// - 聚焦时不显示 ring（编辑器本就是焦点元素，无需额外提示）
+// - 章节切换淡入动画
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 用 useEditor 创建 TipTap 编辑器实例（StarterKit + Placeholder + CharacterCount）
-// - 章节切换时通过 editor.commands.setContent 重置内容（不发 onUpdate）
+// - 章节切换时通过 editor.Commands.setContent 重置内容（不发 onUpdate）
 // - 内容变化通过 onUpdate 回调上抛 HTML + 字数（父组件做 debounce 自动保存）
 // - 组件卸载时由 useEditor 内部自动 destroy 编辑器
 //
@@ -13,7 +19,7 @@
 //   （Electron 渲染层虽然是纯 CSR，但遵循官方建议保持一致性）
 // - useEditor 返回 Editor | null（immediatelyRender: false 时），需 null 兜底
 // - 编辑器样式通过 EditorContent 的 className 注入（ProseMirror 实际 DOM 在 .ProseMirror 类下）
-// - prose 类需 @tailwindcss/typography 插件，未安装时为 no-op，不影响功能
+// - .prose-literacy 类在 globals.css 定义，含衬线字体 + 行高 + 首行缩进 + 段间距
 // - useEffect 仅依赖 chapter.id（不依赖 content），避免保存后查询刷新导致光标重置；
 //   通过 ref 读取最新 content，规避 Biome useExhaustiveDependencies 警告
 
@@ -76,13 +82,17 @@ export function ChapterEditor({ chapter, onContentChange }: ChapterEditorProps):
   }, [editor, chapter.id]);
 
   return (
-    <div
-      className={cn(
-        'min-h-[60vh] flex-1 overflow-y-auto border-b p-6',
-        'focus-within:border-primary focus-within:ring-ring/30 focus-within:ring-2',
-      )}
-    >
-      <EditorContent editor={editor} className="prose prose-sm max-w-none focus:outline-none" />
+    // 纸张容器：奶白底 + 微阴影 + 大留白
+    // paper-texture 提供极淡米色噪点纹理（在 globals.css 定义）
+    <div className="paper-texture relative flex-1 overflow-y-auto bg-card">
+      {/* 纸张本体：居中限宽 + 内边距大留白 */}
+      <div className={cn('mx-auto max-w-3xl px-12 py-16', 'shadow-paper rounded-sm')}>
+        <EditorContent
+          editor={editor}
+          // 应用文学风正文样式：衬线 + 行高 + 首行缩进
+          className="prose-literacy max-w-none focus:outline-none"
+        />
+      </div>
     </div>
   );
 }

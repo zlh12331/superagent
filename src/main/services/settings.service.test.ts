@@ -6,21 +6,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockPrismaClient, resetMocks } from '../__tests__/helpers/mock-prisma';
 
 // vi.hoisted 模式：避免 vi.mock factory TDZ（参考 db-init.test.ts）
-const { mockProjectSetting, mockKeychain, mockGetOpenAIClient, mockTestEmbeddingConnection } =
-  vi.hoisted(() => ({
-    mockProjectSetting: {
-      findUnique: vi.fn(),
-      upsert: vi.fn(),
-    },
-    mockKeychain: {
-      setSecret: vi.fn(),
-      getSecret: vi.fn(),
-      deleteSecret: vi.fn(),
-    },
-    // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
-    mockGetOpenAIClient: vi.fn(),
-    mockTestEmbeddingConnection: vi.fn(),
-  }));
+const {
+  mockProjectSetting,
+  mockKeychain,
+  mockGetOpenAIClient,
+  mockResetOpenAIClient,
+  mockTestEmbeddingConnection,
+} = vi.hoisted(() => ({
+  mockProjectSetting: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+  },
+  mockKeychain: {
+    setSecret: vi.fn(),
+    getSecret: vi.fn(),
+    deleteSecret: vi.fn(),
+  },
+  // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
+  mockGetOpenAIClient: vi.fn(),
+  // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
+  mockResetOpenAIClient: vi.fn(),
+  mockTestEmbeddingConnection: vi.fn(),
+}));
 
 // mock PrismaClient 单例模块（spread 共享 mock + 覆盖 projectSetting）
 vi.mock('../infra/prisma/client', () => ({
@@ -34,9 +41,13 @@ vi.mock('../infra/prisma/client', () => ({
 vi.mock('../infra/storage/keychain', () => mockKeychain);
 
 // mock OpenAI 客户端工厂（避免真实网络请求）
+// 注意：setApiKey 在写入 keychain 后会调用 resetOpenAIClient 重置缓存，
+// 测试中需同时 mock getOpenAIClient 与 resetOpenAIClient 两个导出
 vi.mock('../infra/ai/openai-client', () => ({
   // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
   getOpenAIClient: mockGetOpenAIClient,
+  // biome-ignore lint/style/useNamingConvention: 保留 OpenAI 大写以匹配 openai SDK 类名
+  resetOpenAIClient: mockResetOpenAIClient,
 }));
 
 // mock embedding 服务（ollama 连通性检查）
@@ -62,6 +73,7 @@ describe('settings.service', () => {
     mockKeychain.getSecret.mockReset();
     mockKeychain.deleteSecret.mockReset();
     mockGetOpenAIClient.mockReset();
+    mockResetOpenAIClient.mockReset();
     mockTestEmbeddingConnection.mockReset();
   });
 

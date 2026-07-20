@@ -1,6 +1,13 @@
 // src/renderer/components/rag/RagDocumentList.tsx
-// RAG 文档列表组件
-// 设计文档 §5.1 数据流 + §6 RAG 检索增强 + §7.10 用户友好提示
+// RAG 文档列表组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 顶部标题栏用 bg-sidebar 暖米色背景框 + 衬线字体
+// - 上传按钮采用虚线描边风格（与其他列表的"新建"按钮一致）
+// - 文档标题用 font-serif，切片数/时间用 font-mono
+// - hover 态用 hover:bg-sidebar-accent/60
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 渲染已入库的 RAG 文档列表（标题 / 切片数 / 时间 / 类型）
@@ -56,6 +63,27 @@ function getMimeTypeLabel(mimeType: string | null | undefined): string {
 }
 
 /**
+ * 渲染顶部标题栏 + 上传按钮（共用片段）
+ *
+ * 设计：bg-sidebar 暖米色背景 + 标题用衬线字体 + 上传按钮虚线描边
+ */
+function renderHeader(onUploadClick: () => void): ReactElement {
+  return (
+    <div className="border-sidebar-border bg-sidebar flex items-center justify-between border-b p-3">
+      <h2 className="text-foreground font-serif text-sm font-semibold tracking-wide">已入库文档</h2>
+      <button
+        type="button"
+        onClick={onUploadClick}
+        className="text-muted-foreground hover:text-primary hover:bg-primary/4 flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors duration-150"
+      >
+        <Plus className="size-3.5" strokeWidth={1.5} />
+        <span className="font-sans tracking-wide">上传文档</span>
+      </button>
+    </div>
+  );
+}
+
+/**
  * RAG 文档列表
  *
  * @example
@@ -75,19 +103,13 @@ export function RagDocumentList({
   // 空列表：引导用户上传第一个文档
   if (documents.length === 0) {
     return (
-      <section className="bg-card flex h-full flex-col border">
+      <section className="bg-card border-border flex h-full flex-col border">
         {/* 顶部标题栏 + 上传按钮 */}
-        <div className="flex items-center justify-between border-b p-3">
-          <h2 className="text-foreground text-sm font-semibold">已入库文档</h2>
-          <Button size="sm" onClick={onUploadClick}>
-            <Plus className="size-4" />
-            上传文档
-          </Button>
-        </div>
+        {renderHeader(onUploadClick)}
         {/* 空状态：图标 + 标题 + 描述 + 引导按钮 */}
         <div className="flex-1">
           <EmptyState
-            icon={<FileText className="size-6" />}
+            icon={<FileText className="size-6" strokeWidth={1.5} />}
             title="还没有文档"
             description="上传 Markdown / 文本 / JSON 文档，AI 对话将基于这些文档进行检索增强"
             actionLabel="上传第一个文档"
@@ -99,15 +121,9 @@ export function RagDocumentList({
   }
 
   return (
-    <section className="bg-card flex h-full flex-col border">
+    <section className="bg-card border-border flex h-full flex-col border">
       {/* 顶部标题栏 + 上传按钮 */}
-      <div className="flex items-center justify-between border-b p-3">
-        <h2 className="text-foreground text-sm font-semibold">已入库文档</h2>
-        <Button size="sm" onClick={onUploadClick}>
-          <Plus className="size-4" />
-          上传文档
-        </Button>
-      </div>
+      {renderHeader(onUploadClick)}
       {/* 文档列表：ScrollArea 提供细滚动条 */}
       <ScrollArea className="flex-1">
         <ul className="flex flex-col gap-0.5 p-2">
@@ -118,17 +134,21 @@ export function RagDocumentList({
             };
             return (
               <li key={doc.id}>
-                {/* biome-ignore lint/a11y/useSemanticElements: 外层需承载 DropdownMenu 触发 Button，HTML 不允许 button 嵌套 button，故用 div + role=button */}
+                {/* biome-ignore lint/a11y/useSemanticElements: 外层需承载 DropdownMenu 触发 Button，HTML 不允许 button 嵌套 button，故用 div + role=group */}
                 <div
                   role="group"
-                  className="group hover:bg-accent flex items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors"
+                  className="group hover:bg-sidebar-accent/60 flex items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors duration-150"
                 >
                   {/* 左侧图标 */}
-                  <FileText className="text-muted-foreground size-4 shrink-0" />
+                  <FileText className="text-muted-foreground size-4 shrink-0" strokeWidth={1.5} />
                   {/* 中间内容：标题 + 元信息 */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{doc.title}</p>
-                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                    {/* 标题用衬线字体 */}
+                    <p className="font-serif truncate text-sm font-medium tracking-wide">
+                      {doc.title}
+                    </p>
+                    {/* 元信息：切片数 · 相对时间 · 类型，等宽字体 */}
+                    <p className="text-muted-foreground font-mono mt-0.5 truncate text-xs tracking-wide">
                       {/* 元信息：切片数 · 相对时间 · 类型 */}
                       {doc.chunksCount} 切片 · {formatRelativeTime(doc.createdAt)} ·{' '}
                       {getMimeTypeLabel(doc.mimeType)}
@@ -144,12 +164,12 @@ export function RagDocumentList({
                         aria-label="文档操作"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <MoreVertical className="size-3.5" />
+                        <MoreVertical className="size-3.5" strokeWidth={1.5} />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem variant="destructive" onClick={handleDelete}>
-                        <Trash2 className="size-4" />
+                        <Trash2 className="size-4" strokeWidth={1.5} />
                         删除
                       </DropdownMenuItem>
                     </DropdownMenuContent>

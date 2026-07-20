@@ -1,6 +1,11 @@
 // src/renderer/components/rag/RagUploadDialog.tsx
-// RAG 文档上传对话框
-// 设计文档 §5.1 数据流 + §6 RAG 检索增强 + §7.4 错误处理流程
+// RAG 文档上传对话框 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 标题/标签用 font-serif 衬线字体
+// - 错误提示用 text-error token（替代 destructive）
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 受控对话框（open + onOpenChange），收集标题 + 文件两个输入
@@ -236,7 +241,8 @@ export function RagUploadDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>上传文档</DialogTitle>
+          {/* 标题用衬线字体 */}
+          <DialogTitle className="font-serif tracking-wide">上传文档</DialogTitle>
           <DialogDescription>
             支持 Markdown / 文本 / JSON / PDF，文件大小不超过 10MB
           </DialogDescription>
@@ -244,7 +250,9 @@ export function RagUploadDialog({
         <div className="flex flex-col gap-4 py-2">
           {/* 标题输入：必填，最大 200 字符 */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="rag-doc-title">标题 *</Label>
+            <Label htmlFor="rag-doc-title" className="font-serif tracking-wide">
+              标题 *
+            </Label>
             <Input
               id="rag-doc-title"
               value={title}
@@ -256,7 +264,7 @@ export function RagUploadDialog({
           </div>
           {/* 文件选择：隐藏原生 input + 按钮 + 文件信息展示 */}
           <div className="flex flex-col gap-2">
-            <Label>文件 *</Label>
+            <Label className="font-serif tracking-wide">文件 *</Label>
             {/* 隐藏的文件输入：accept 限定为 .md/.txt/.json/.pdf */}
             <input
               ref={fileInputRef}
@@ -272,23 +280,23 @@ export function RagUploadDialog({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isPending}
               >
-                <FileUp className="size-4" />
+                <FileUp className="size-4" strokeWidth={1.5} />
                 选择文件
               </Button>
               {/* 已选文件信息：文件名 + 文件大小 */}
               {file !== null && (
-                <span className="text-muted-foreground truncate text-xs">
+                <span className="text-muted-foreground font-mono truncate text-xs tracking-wide">
                   {file.name} · {formatFileSize(file.size)}
                 </span>
               )}
             </div>
-            {/* 扩展名错误提示：红色 */}
-            {extError !== null && <p className="text-destructive text-xs">{extError}</p>}
-            {/* 文件大小超限警告：红色 */}
-            {sizeWarning !== null && <p className="text-destructive text-xs">{sizeWarning}</p>}
+            {/* 扩展名错误提示：用 text-error 文学风 token */}
+            {extError !== null && <p className="text-error text-xs">{extError}</p>}
+            {/* 文件大小超限警告：用 text-error 文学风 token */}
+            {sizeWarning !== null && <p className="text-error text-xs">{sizeWarning}</p>}
             {/* 通用样式占位：仅在无错误无警告且无文件时显示提示 */}
             {file === null && extError === null && sizeWarning === null && (
-              <p className="text-muted-foreground text-xs">未选择文件</p>
+              <p className="text-muted-foreground font-serif text-xs">未选择文件</p>
             )}
           </div>
         </div>

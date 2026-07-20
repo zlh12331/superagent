@@ -1,6 +1,10 @@
 // src/renderer/components/common/LoadingSpinner.tsx
-// 通用加载中组件
-// 设计文档 §7.10 用户友好提示
+// 通用加载中组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 旋转图标用 strokeWidth=1.5
+// - 提示文字用衬线字体
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 在数据加载中展示旋转图标 + 可选提示文字
@@ -45,8 +49,9 @@ export function LoadingSpinner({
         className,
       )}
     >
-      <Loader2 className={cn('animate-spin', SIZE_MAP[size])} />
-      <span className="text-xs">{label}</span>
+      <Loader2 className={cn('animate-spin', SIZE_MAP[size])} strokeWidth={1.5} />
+      {/* 提示文字用衬线字体 */}
+      <span className="font-serif text-xs tracking-wide">{label}</span>
     </div>
   );
 }

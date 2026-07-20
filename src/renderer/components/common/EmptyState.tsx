@@ -1,6 +1,11 @@
 // src/renderer/components/common/EmptyState.tsx
-// 通用空状态组件
-// 设计文档 §7.10 用户友好提示
+// 通用空状态组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 图标用 size-12 圆形 + 暖米底 + strokeWidth=1.5
+// - 标题用衬线字体
+// - 描述用衬线字体 + 行高放宽
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 展示空状态图标 + 标题 + 描述 + 可选操作按钮
@@ -47,11 +52,18 @@ export function EmptyState({
   return (
     <div className="text-muted-foreground flex flex-col items-center justify-center gap-3 py-16">
       <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-        {icon ?? <Inbox className="size-6" />}
+        {/* 默认 Inbox 图标 + strokeWidth=1.5 */}
+        {icon ?? <Inbox className="size-6" strokeWidth={1.5} />}
       </div>
       <div className="text-center">
-        <p className="text-foreground text-sm font-medium">{title}</p>
-        {description !== undefined && <p className="mt-1 text-xs">{description}</p>}
+        {/* 标题用衬线字体 */}
+        <p className="text-foreground font-serif text-sm font-medium tracking-wide">{title}</p>
+        {/* 描述用衬线字体 + 行高放宽 */}
+        {description !== undefined && (
+          <p className="text-muted-foreground mt-1 font-serif text-xs leading-relaxed">
+            {description}
+          </p>
+        )}
       </div>
       {actionLabel !== undefined && onAction !== undefined && (
         <Button variant="outline" size="sm" onClick={onAction}>

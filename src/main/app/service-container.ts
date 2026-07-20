@@ -51,7 +51,7 @@ export async function disposeServices(): Promise<void> {
 
   // 1. 中断所有活跃流式响应（避免 webContents 销毁后继续推送导致 isDestroyed 异常）
   try {
-    getStreamBridge().abortAll();
+    await getStreamBridge().abortAll();
   } catch (err) {
     logger.error({ error: err }, '中断流式响应失败');
   }

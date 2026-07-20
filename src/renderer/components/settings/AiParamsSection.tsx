@@ -1,6 +1,12 @@
 // src/renderer/components/settings/AiParamsSection.tsx
-// AI 模型参数区块（项目级）
-// 设计文档 §7.7 应用设置 + §5.1 数据流
+// AI 模型参数区块（项目级） · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 卡片标题用 font-serif 衬线字体
+// - 标签用 font-serif 衬线字体 + 字间距
+// - 数字参数（temperature/max_tokens/topK/threshold）用 font-mono 等宽字体
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 当 projectId 为 null 时提示用户先选择项目
@@ -31,6 +37,23 @@ import { handleIpcError } from '@/lib/handle-ipc-error';
 interface AiParamsSectionProps {
   /** 当前选择的项目 ID（null 时禁用本区块并提示用户先选择项目） */
   projectId: string | null;
+}
+
+/**
+ * 渲染卡片头部（标题 + 图标 + 描述）共用片段
+ *
+ * 文学风：标题用 font-serif 衬线字体，图标 strokeWidth=1.5
+ */
+function renderCardHeader(): ReactElement {
+  return (
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2 font-serif tracking-wide">
+        <Bot className="size-4" strokeWidth={1.5} />
+        AI 模型参数（项目级）
+      </CardTitle>
+      <CardDescription>调整此项目的 AI 生成参数与 RAG 检索配置</CardDescription>
+    </CardHeader>
+  );
 }
 
 /**
@@ -69,15 +92,9 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
   if (projectId === null) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="size-4" />
-            AI 模型参数（项目级）
-          </CardTitle>
-          <CardDescription>调整此项目的 AI 生成参数与 RAG 检索配置</CardDescription>
-        </CardHeader>
+        {renderCardHeader()}
         <CardContent>
-          <p className="text-muted-foreground text-sm">请先在上方选择项目</p>
+          <p className="text-muted-foreground font-serif text-sm">请先在上方选择项目</p>
         </CardContent>
       </Card>
     );
@@ -87,13 +104,7 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="size-4" />
-            AI 模型参数（项目级）
-          </CardTitle>
-          <CardDescription>调整此项目的 AI 生成参数与 RAG 检索配置</CardDescription>
-        </CardHeader>
+        {renderCardHeader()}
         <CardContent>
           <LoadingSpinner label="正在加载项目设置..." />
         </CardContent>
@@ -105,13 +116,7 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="size-4" />
-            AI 模型参数（项目级）
-          </CardTitle>
-          <CardDescription>调整此项目的 AI 生成参数与 RAG 检索配置</CardDescription>
-        </CardHeader>
+        {renderCardHeader()}
         <CardContent>
           <ErrorState error={error} onRetry={() => void refetch()} />
         </CardContent>
@@ -148,17 +153,13 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="size-4" />
-          AI 模型参数（项目级）
-        </CardTitle>
-        <CardDescription>调整此项目的 AI 生成参数与 RAG 检索配置</CardDescription>
-      </CardHeader>
+      {renderCardHeader()}
       <CardContent className="flex flex-col gap-4">
         {/* AI 模型名称 */}
         <div className="flex flex-col gap-2">
-          <Label htmlFor="ai-model">AI 模型</Label>
+          <Label htmlFor="ai-model" className="font-serif tracking-wide">
+            AI 模型
+          </Label>
           <Input
             id="ai-model"
             value={aiModel}
@@ -167,10 +168,12 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
             disabled={isPending}
           />
         </div>
-        {/* temperature + max_tokens：两列布局节省纵向空间 */}
+        {/* temperature + max_tokens：两列布局，等宽字体 */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ai-temperature">Temperature</Label>
+            <Label htmlFor="ai-temperature" className="font-mono text-xs tracking-wide">
+              Temperature
+            </Label>
             <Input
               id="ai-temperature"
               type="number"
@@ -180,10 +183,13 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
               value={aiTemperature}
               onChange={(e) => setAiTemperature(e.target.value)}
               disabled={isPending}
+              className="font-mono"
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ai-max-tokens">Max Tokens</Label>
+            <Label htmlFor="ai-max-tokens" className="font-mono text-xs tracking-wide">
+              Max Tokens
+            </Label>
             <Input
               id="ai-max-tokens"
               type="number"
@@ -193,11 +199,15 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
               value={aiMaxTokens}
               onChange={(e) => setAiMaxTokens(e.target.value)}
               disabled={isPending}
+              className="font-mono"
             />
           </div>
         </div>
         {/* RAG 开关：使用原生 checkbox（项目无 shadcn Checkbox 组件） */}
-        <Label htmlFor="rag-enabled" className="flex cursor-pointer items-center gap-2">
+        <Label
+          htmlFor="rag-enabled"
+          className="font-serif flex cursor-pointer items-center gap-2 tracking-wide"
+        >
           <input
             id="rag-enabled"
             type="checkbox"
@@ -210,7 +220,9 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
         {/* RAG 参数：仅 ragEnabled=true 时可编辑 */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="rag-top-k">Top K</Label>
+            <Label htmlFor="rag-top-k" className="font-mono text-xs tracking-wide">
+              Top K
+            </Label>
             <Input
               id="rag-top-k"
               type="number"
@@ -219,10 +231,13 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
               value={ragTopK}
               onChange={(e) => setRagTopK(e.target.value)}
               disabled={isPending || !ragEnabled}
+              className="font-mono"
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="rag-threshold">Threshold</Label>
+            <Label htmlFor="rag-threshold" className="font-mono text-xs tracking-wide">
+              Threshold
+            </Label>
             <Input
               id="rag-threshold"
               type="number"
@@ -232,6 +247,7 @@ export function AiParamsSection({ projectId }: AiParamsSectionProps): ReactEleme
               value={ragThreshold}
               onChange={(e) => setRagThreshold(e.target.value)}
               disabled={isPending || !ragEnabled}
+              className="font-mono"
             />
           </div>
         </div>

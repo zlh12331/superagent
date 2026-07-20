@@ -1,6 +1,11 @@
 // src/renderer/components/chat/ChatMessageList.tsx
-// 聊天消息流容器（含流式 chunk 订阅）
-// 设计文档 §5.1 场景 3 AI 流式对话 + §6.2 ChatMessage 模型
+// 聊天消息流容器 · 极简文学风（含流式 chunk 订阅）
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 主区域用 paper-texture 纸张纹理
+// - 消息容器居中限宽，大留白
+// - 图标 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 用 useChatStreamSubscription(sessionId) 订阅 IPC 流式事件（chunk/end/error）
@@ -101,9 +106,9 @@ export function ChatMessageList({ sessionId, messages }: ChatMessageListProps): 
   // 未选中会话：引导用户选择左侧会话
   if (sessionId === null) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="paper-texture bg-background flex flex-1 items-center justify-center">
         <EmptyState
-          icon={<MessageSquare className="size-6" />}
+          icon={<MessageSquare className="size-6" strokeWidth={1.5} />}
           title="请选择左侧会话"
           description="从左侧列表选择一个会话开始对话"
         />
@@ -114,7 +119,7 @@ export function ChatMessageList({ sessionId, messages }: ChatMessageListProps): 
   // 流式出错：展示错误状态（含 streamError 消息）
   if (streamStatus === 'error') {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="paper-texture bg-background flex flex-1 items-center justify-center">
         <ErrorState error={new Error(streamError || 'AI 回复失败，请重试')} />
       </div>
     );
@@ -124,8 +129,9 @@ export function ChatMessageList({ sessionId, messages }: ChatMessageListProps): 
   const showStreamingBubble = streamStatus === 'streaming' && streamText.length > 0;
 
   return (
-    <ScrollArea className="flex-1">
-      <div className="mx-auto flex max-w-3xl flex-col px-4 py-4">
+    <ScrollArea className="paper-texture bg-background flex-1">
+      {/* 消息容器：居中限宽 + 大留白 */}
+      <div className="mx-auto flex max-w-3xl flex-col px-6 py-6">
         {/* 历史消息 */}
         {messages.map((m) => (
           <ChatMessageBubble key={m.id} message={m} />

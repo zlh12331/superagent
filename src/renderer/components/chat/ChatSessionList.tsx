@@ -1,6 +1,13 @@
 // src/renderer/components/chat/ChatSessionList.tsx
-// 聊天会话列表侧边栏
-// 设计文档 §5.1 数据流 + §7.10 用户友好提示
+// 聊天会话列表侧边栏 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 暖米色背景（与 Topbar 同色）
+// - 会话项激活态：左侧 3px 墨水条 + 暖米高亮底 + 深棕衬线标题
+// - 时间用等宽字体（呼应"墨水计数"感）
+// - 标题用衬线字体
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 渲染会话列表（标题 + 最后更新时间），高亮当前选中会话
@@ -70,10 +77,10 @@ export function ChatSessionList({
   // 空会话列表：引导用户新建第一个会话
   if (sessions.length === 0) {
     return (
-      <aside className="bg-card border-r flex w-64 shrink-0 flex-col">
+      <aside className="bg-sidebar border-sidebar-border flex w-64 shrink-0 flex-col border-r">
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
-            icon={<MessageSquare className="size-6" />}
+            icon={<MessageSquare className="size-6" strokeWidth={1.5} />}
             title="还没有会话"
             description="开始你的第一次 AI 对话"
             actionLabel="新建会话"
@@ -85,12 +92,12 @@ export function ChatSessionList({
   }
 
   return (
-    <aside className="bg-card border-r flex w-64 shrink-0 flex-col">
-      {/* 顶部标题 + 新建按钮 */}
-      <div className="flex items-center justify-between gap-2 border-b p-3">
-        <h2 className="text-foreground text-sm font-semibold">会话列表</h2>
+    <aside className="bg-sidebar border-sidebar-border flex w-64 shrink-0 flex-col border-r">
+      {/* 顶部标题（衬线）+ 新建按钮 */}
+      <div className="border-sidebar-border flex items-center justify-between gap-2 border-b p-3">
+        <h2 className="text-foreground font-serif text-sm font-semibold tracking-wide">会话列表</h2>
         <Button variant="outline" size="sm" onClick={onCreateClick}>
-          <Plus className="size-4" />
+          <Plus className="size-4" strokeWidth={1.5} />
           新建
         </Button>
       </div>
@@ -114,15 +121,29 @@ export function ChatSessionList({
                     }
                   }}
                   className={cn(
-                    'group flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors',
-                    'hover:bg-accent hover:text-accent-foreground',
+                    'group relative flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150',
+                    'hover:bg-sidebar-accent',
                     'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-                    isActive && 'bg-accent text-accent-foreground font-medium',
+                    // 激活态：暖米高亮 + 深棕文字
+                    isActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
                   )}
                 >
+                  {/* 激活态左侧墨水条（3px 宽，深棕色，垂直居中） */}
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="bg-primary absolute top-1/2 left-0.5 h-4 w-[3px] -translate-y-1/2 rounded-[1px]"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate">{session.title}</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
+                    {/* 会话标题用衬线字体 */}
+                    <p
+                      className={cn('truncate font-serif tracking-wide', isActive && 'font-medium')}
+                    >
+                      {session.title}
+                    </p>
+                    {/* 时间用等宽字体 */}
+                    <p className="text-muted-foreground mt-0.5 font-mono text-[10px] tracking-wider">
                       {formatRelativeTime(session.updatedAt)}
                     </p>
                   </div>
@@ -136,7 +157,7 @@ export function ChatSessionList({
                         aria-label="会话操作"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <MoreVertical className="size-3.5" />
+                        <MoreVertical className="size-3.5" strokeWidth={1.5} />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -147,7 +168,7 @@ export function ChatSessionList({
                           onDeleteSession(session.id);
                         }}
                       >
-                        <Trash2 className="size-4" />
+                        <Trash2 className="size-4" strokeWidth={1.5} />
                         删除
                       </DropdownMenuItem>
                     </DropdownMenuContent>

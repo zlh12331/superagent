@@ -1,6 +1,13 @@
 // src/renderer/components/chapter/AgentStreamPanel.tsx
-// Agent 流式生成结果展示面板
-// 设计文档 §5.1 场景 5（Agent 章节生成）+ §5.5 流式响应中断设计
+// Agent 流式生成结果展示面板 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 右侧抽屉：奶白底（bg-card）与主区域融合，左侧细边框分隔
+// - 任务标题用衬线字体（呼应文学风）
+// - 流式状态颜色用设计 token：warning(琥珀)/success(墨绿)/error(朱砂)
+// - 流式文本用衬线字体（AI 写作内容，文学感）
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 接收 ackId，订阅 Agent 流式事件（chunk/end/error）
@@ -9,8 +16,8 @@
 // - 提供关闭按钮（清理 store 中该 ackId 的所有状态）
 //
 // 注意：
-// - 本面板是一个固定高度的右侧抽屉式面板，浮在编辑器上方
-// - 流式状态用不同颜色 + 文案区分：streaming（黄圈+流式中）/ completed（绿勾+已完成）/ error（红叉+失败）
+// - 本面板是一个固定宽度的右侧抽屉式面板，浮在编辑器右侧
+// - 流式状态用不同颜色 + 文案区分：streaming（琥珀圈+流式中）/ completed（墨绿勾+已完成）/ error（朱砂叉+失败）
 // - useAgentStreamSubscription + useAgentCompletionEffect 在本组件调用，
 //   保证面板挂载时才订阅，卸载时自动 cleanup
 // - 父组件通过 ackId === null 控制面板显隐
@@ -42,25 +49,28 @@ const KIND_LABELS: Record<AgentTaskKind, string> = {
 /** 任务类型标题兜底值 */
 const KIND_LABEL_FALLBACK = 'AI 写作';
 
-/** 流式状态 → 图标 + 文案 + 颜色 */
+/** 流式状态 → 图标 + 文案 + 颜色 token */
 const STATUS_META: Record<
   AgentStreamStatus,
-  { icon: ReactElement; label: string; dotClass: string }
+  { icon: ReactElement; label: string; dotClass: string; iconClass: string }
 > = {
   streaming: {
-    icon: <Loader2 className="size-3.5 animate-spin" />,
+    icon: <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />,
     label: '生成中...',
-    dotClass: 'bg-amber-500',
+    dotClass: 'bg-warning',
+    iconClass: 'text-warning',
   },
   completed: {
-    icon: <CheckCircle2 className="size-3.5 text-emerald-500" />,
+    icon: <CheckCircle2 className="size-3.5" strokeWidth={1.5} />,
     label: '已完成',
-    dotClass: 'bg-emerald-500',
+    dotClass: 'bg-success',
+    iconClass: 'text-success',
   },
   error: {
-    icon: <AlertCircle className="size-3.5 text-destructive" />,
+    icon: <AlertCircle className="size-3.5" strokeWidth={1.5} />,
     label: '失败',
-    dotClass: 'bg-destructive',
+    dotClass: 'bg-error',
+    iconClass: 'text-error',
   },
 };
 
@@ -106,17 +116,22 @@ export function AgentStreamPanel({ ackId, onClose }: AgentStreamPanelProps): Rea
 
   return (
     <aside
-      className="bg-card flex w-96 shrink-0 flex-col border-l shadow-lg"
+      className="bg-card border-border flex w-96 shrink-0 flex-col border-l shadow-lg"
       aria-label="AI 生成结果面板"
     >
-      {/* 顶部：任务标题 + 状态指示器 + 关闭按钮 */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
+      {/* 顶部：任务标题（衬线）+ 状态指示器 + 关闭按钮 */}
+      <header className="border-border flex h-12 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
           <span className={cn('size-2 rounded-full', statusMeta.dotClass)} aria-hidden />
-          <span className="text-sm font-medium">{kindLabel}</span>
-          <span className="text-muted-foreground flex items-center gap-1 text-xs">
+          <span className="font-serif text-sm font-medium tracking-wide">{kindLabel}</span>
+          <span
+            className={cn(
+              'text-muted-foreground flex items-center gap-1 text-xs',
+              statusMeta.iconClass,
+            )}
+          >
             {statusMeta.icon}
-            {statusMeta.label}
+            <span className="text-muted-foreground">{statusMeta.label}</span>
           </span>
         </div>
         <Button
@@ -126,7 +141,7 @@ export function AgentStreamPanel({ ackId, onClose }: AgentStreamPanelProps): Rea
           onClick={handleClose}
           aria-label="关闭 AI 面板"
         >
-          <X className="size-4" />
+          <X className="size-4" strokeWidth={1.5} />
         </Button>
       </header>
 
@@ -135,24 +150,22 @@ export function AgentStreamPanel({ ackId, onClose }: AgentStreamPanelProps): Rea
         <div className="p-4">
           {status === 'error' ? (
             // 错误状态：显示错误消息
-            <p className="text-destructive text-sm whitespace-pre-wrap">
-              {error.length > 0 ? error : '生成失败，请重试'}
-            </p>
+            <p className="text-error text-sm whitespace-pre-wrap">{error || '生成失败，请重试'}</p>
           ) : text.length > 0 ? (
-            // 有文本：展示纯文本（流式临时展示，未做富文本格式化）
-            <pre className="text-foreground text-sm whitespace-pre-wrap font-sans leading-relaxed">
+            // 有文本：展示衬线文学风（AI 写作内容，呼应正文编辑器样式）
+            <pre className="prose-literacy text-foreground whitespace-pre-wrap text-[15px] leading-[1.9]">
               {text}
             </pre>
           ) : (
-            // 无文本：等待第一个 chunk
-            <p className="text-muted-foreground text-sm">等待 AI 输出...</p>
+            // 无文本：等待第一个 chunk（脉冲呼吸）
+            <p className="text-muted-foreground animate-pulse-soft text-sm">等待 AI 输出...</p>
           )}
         </div>
       </ScrollArea>
 
       {/* 底部：完成后的提示 */}
       {status === 'completed' && (
-        <footer className="border-t p-3 text-xs text-muted-foreground">
+        <footer className="border-border text-muted-foreground border-t p-3 text-xs">
           {kind === 'rewrite'
             ? '已自动更新到当前章节'
             : kind === 'generate'

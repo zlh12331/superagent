@@ -1,19 +1,41 @@
 <!doctype html>
-<!-- src/renderer/index.html
-     Electron 渲染层入口 HTML
-     CSP 严格定义见设计文档 §4.6 -->
+<!--
+  src/renderer/index.html
+  Electron 渲染层入口 HTML · 极简文学风
+  ──────────────────────────────────────────────────────────────
+  设计：
+  - 通过 Google Fonts 加载文学风字体：
+    - Noto Serif SC（正文衬线）
+    - Noto Sans SC（UI 无衬线）
+    - JetBrains Mono（数字等宽）
+  - 配合 CSP 放开 style-src https://fonts.googleapis.com 与 font-src https://fonts.gstatic.com
+  ──────────────────────────────────────────────────────────────
+  注意：
+  - 用 preconnect 提前建立 TLS，降低字体加载延迟
+  - 字体在 globals.css 中通过 --font-serif/--font-sans/--font-mono 变量定义并附本地回退
+  - 加载失败时自动降级到系统字体（Songti SC / Microsoft YaHei / Consolas 等）
+-->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- CSP：default-src 'self' + 限制 connect-src -->
+    <!-- CSP：default-src 'self' + 放开 Google Fonts 与本地后端连接 -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self';
               script-src 'self';
-              style-src 'self' 'unsafe-inline';
+              style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+              font-src 'self' https://fonts.gstatic.com;
               connect-src 'self' http://localhost:11434 https://api.deepseek.com https://api.openai.com;
               img-src 'self' data: blob:;" />
+    <!-- 预连接 Google Fonts 域名，降低首次字体请求延迟 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- 文学风字体：Noto Serif SC（正文）+ Noto Sans SC（UI）+ JetBrains Mono（数字） -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <title>网文写作 Agent</title>
   </head>
   <body>

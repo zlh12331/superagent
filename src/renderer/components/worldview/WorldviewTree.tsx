@@ -1,6 +1,12 @@
 // src/renderer/components/worldview/WorldviewTree.tsx
-// 世界观树容器组件
-// 设计文档 §5.1 数据流 + §6.2 Worldview 自关联树形
+// 世界观树容器组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 顶部标题栏用 bg-sidebar 暖米色背景框
+// - 标题用 font-serif 衬线字体 + 字间距
+// - 新建按钮改为虚线边框 + 深棕描边（与 ChapterList 一致）
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 接收后端返回的扁平 Worldview[]，通过 buildTree 构造为递归树形结构
@@ -20,7 +26,6 @@ import { FolderTree, Plus } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   WorldviewTreeNode,
@@ -120,19 +125,23 @@ export function WorldviewTree({
 
   return (
     <div className="flex h-full flex-col">
-      {/* 顶部标题栏：标题 + 新建根节点按钮 */}
-      <div className="flex items-center justify-between border-b px-3 py-2">
-        <h2 className="text-foreground text-sm font-semibold">世界观</h2>
-        <Button variant="ghost" size="sm" onClick={onCreateRoot}>
-          <Plus className="size-4" />
-          新建根节点
-        </Button>
+      {/* 顶部标题栏：标题用衬线字体，新建按钮采用虚线描边风格 */}
+      <div className="border-sidebar-border bg-sidebar flex items-center justify-between border-b px-3 py-2">
+        <h2 className="text-foreground font-serif text-sm font-semibold tracking-wide">世界观</h2>
+        <button
+          type="button"
+          onClick={onCreateRoot}
+          className="text-muted-foreground hover:text-primary hover:bg-primary/4 flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors duration-150"
+        >
+          <Plus className="size-3.5" strokeWidth={1.5} />
+          <span className="font-sans tracking-wide">新建根节点</span>
+        </button>
       </div>
 
       {/* 树体：空状态引导，非空用 ScrollArea 包裹递归渲染 */}
       {roots.length === 0 ? (
         <EmptyState
-          icon={<FolderTree className="size-6" />}
+          icon={<FolderTree className="size-6" strokeWidth={1.5} />}
           title="暂无世界观"
           description="新建第一个根节点，开始构建你的世界设定"
           actionLabel="新建根节点"

@@ -1,15 +1,17 @@
 // src/renderer/components/layout/AppShell.tsx
-// 应用主布局容器（Topbar + Sidebar + children + StatusBar）
-// 设计文档 §3 目录结构 + §7.8/§7.9 状态监控
-//
+// 应用主布局容器 · 极简文学风
+// ──────────────────────────────────────────────────────────────
 // 职责：
-// - 三段式布局：顶部 Topbar（44px）/ 中部 Sidebar+内容 / 底部 StatusBar（28px）
-// - 在 mount 时启动 app-status store 的 init() 订阅 PG/Ollama 状态
-// - 在 unmount 时调用 cleanup 解除订阅，避免内存泄漏
+// - 三段式布局：Topbar（44px）/ Sidebar + 内容 / StatusBar（28px）
+// - mount 时启动 app-status store 订阅 PG/Ollama 状态
+// - unmount 时 cleanup 解除订阅
 //
-// 注意：AppShell 不直接渲染业务内容，业务内容由调用方通过 children 传入
-// （通常 RootLayout 传入 <Outlet /> 由 router 注入路由内容）。
-// 这样路由切换时 Topbar/Sidebar/StatusBar 保持挂载，状态订阅不会中断。
+// 文学风设计：
+// - 整体米黄纸张底色
+// - Topbar 与 Sidebar 共用暖米色（次要层级）
+// - 内容区主色（最浅，最聚焦）
+// - StatusBar 深墨色（次要信息层）
+// ──────────────────────────────────────────────────────────────
 
 import type { ReactElement, ReactNode } from 'react';
 import { useEffect } from 'react';
@@ -36,18 +38,18 @@ interface AppShellProps {
  * - 返回 cleanup 函数，组件卸载时解除订阅
  */
 export function AppShell({ children }: AppShellProps): ReactElement {
-  // 启动 PG/Ollama 状态订阅，仅执行一次（eslint-disable 防止 init 函数引用触发重新订阅）
+  // 启动 PG/Ollama 状态订阅，仅执行一次
   useEffect(() => {
     const cleanup = useAppStatusStore.getState().init();
     return cleanup;
   }, []);
 
   return (
-    <div className="bg-background text-foreground flex h-screen w-screen flex-col overflow-hidden">
+    <div className="bg-background text-foreground flex h-screen w-screen flex-col overflow-hidden font-sans">
       <Topbar />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <main className="min-w-0 flex-1 overflow-auto">{children}</main>
+        <main className="paper-texture min-w-0 flex-1 overflow-auto bg-background">{children}</main>
       </div>
       <StatusBar />
     </div>

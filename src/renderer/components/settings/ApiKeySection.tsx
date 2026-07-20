@@ -1,6 +1,11 @@
 // src/renderer/components/settings/ApiKeySection.tsx
-// DeepSeek API Key 设置区块
-// 设计文档 §7.7 应用设置 + §7.4 错误处理流程
+// DeepSeek API Key 设置区块 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 卡片标题用 font-serif 衬线字体
+// - 标签用 font-serif 衬线字体 + 字间距
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 提供 API Key 输入框（password 模式，避免明文泄露）
@@ -80,15 +85,18 @@ export function ApiKeySection(): ReactElement {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRound className="size-4" />
+        {/* 标题用衬线字体 */}
+        <CardTitle className="flex items-center gap-2 font-serif tracking-wide">
+          <KeyRound className="size-4" strokeWidth={1.5} />
           DeepSeek API Key
         </CardTitle>
         <CardDescription>用于调用 DeepSeek Chat API，加密存储在系统 keychain</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="deepseek-api-key">API Key</Label>
+          <Label htmlFor="deepseek-api-key" className="font-serif tracking-wide">
+            API Key
+          </Label>
           <Input
             id="deepseek-api-key"
             type="password"
@@ -97,6 +105,7 @@ export function ApiKeySection(): ReactElement {
             placeholder="sk-xxxxxxxxxxxxxxxx"
             autoComplete="off"
             disabled={isBusy}
+            className="font-mono"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -111,7 +120,9 @@ export function ApiKeySection(): ReactElement {
             {saveMutation.isPending ? '保存中...' : '保存'}
           </Button>
         </div>
-        <p className="text-muted-foreground text-xs">API Key 加密存储在系统 keychain，跨项目共享</p>
+        <p className="text-muted-foreground font-serif text-xs leading-relaxed">
+          API Key 加密存储在系统 keychain，跨项目共享
+        </p>
       </CardContent>
     </Card>
   );

@@ -1,6 +1,11 @@
 // src/renderer/components/common/ConfirmDialog.tsx
-// 通用确认对话框
-// 设计文档 §7.10 用户友好提示
+// 通用确认对话框 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 标题用衬线字体
+// - 描述用衬线字体 + 行高放宽
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 在执行危险操作前要求用户二次确认
@@ -98,8 +103,12 @@ export function ConfirmDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          {/* 标题用衬线字体 */}
+          <DialogTitle className="font-serif tracking-wide">{title}</DialogTitle>
+          {/* 描述用衬线字体 + 行高放宽 */}
+          <DialogDescription className="font-serif leading-relaxed">
+            {description}
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>

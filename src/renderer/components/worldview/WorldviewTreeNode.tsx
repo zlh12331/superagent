@@ -1,6 +1,13 @@
 // src/renderer/components/worldview/WorldviewTreeNode.tsx
-// 世界观树单节点组件（递归）
-// 设计文档 §5.1 数据流 + §6.2 Worldview 自关联树形
+// 世界观树单节点组件（递归） · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 选中态用 bg-sidebar-accent + 左侧墨水条标记
+// - hover 态用 hover:bg-sidebar-accent/60
+// - 标题用 font-serif 衬线字体
+// - 展开/折叠箭头统一 strokeWidth=1.5
+// - 操作菜单图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 渲染单行节点：展开/折叠箭头 + 图标 + 标题 + 操作菜单
@@ -29,6 +36,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 /**
  * 树形节点内部类型
@@ -122,11 +130,22 @@ export function WorldviewTreeNode({
         aria-expanded={hasChildren ? isExpanded : undefined}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
-        className={`group flex items-center gap-1 rounded-sm py-1.5 pr-1 transition-colors ${
-          isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-        }`}
+        className={cn(
+          'group relative flex items-center gap-1 rounded-sm py-1.5 pr-1 transition-colors duration-150',
+          isSelected
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'hover:bg-sidebar-accent/60',
+        )}
         style={{ paddingLeft }}
       >
+        {/* 选中态墨水条标记：左侧 3px 宽深棕色竖条 */}
+        {isSelected && (
+          <span
+            aria-hidden
+            className="bg-primary absolute top-1/2 left-0 h-4 w-[3px] -translate-y-1/2 rounded-[1px]"
+          />
+        )}
+
         {/* 展开/折叠箭头：无 children 时占位保持对齐 */}
         {hasChildren ? (
           <Button
@@ -139,7 +158,11 @@ export function WorldviewTreeNode({
               handleToggleExpand();
             }}
           >
-            {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            {isExpanded ? (
+              <ChevronDown className="size-3" strokeWidth={1.5} />
+            ) : (
+              <ChevronRight className="size-3" strokeWidth={1.5} />
+            )}
           </Button>
         ) : (
           <span className="inline-block size-5 shrink-0" aria-hidden="true" />
@@ -147,13 +170,15 @@ export function WorldviewTreeNode({
 
         {/* 节点图标（可选）：来自 node.icon，无则不渲染 */}
         {node.icon !== null && node.icon !== undefined && node.icon.length > 0 && (
-          <span className="shrink-0 text-sm" aria-hidden="true">
+          <span className="shrink-0 font-serif text-sm" aria-hidden="true">
             {node.icon}
           </span>
         )}
 
-        {/* 标题：自动截断超长文本 */}
-        <span className="min-w-0 flex-1 truncate text-sm">{node.title}</span>
+        {/* 标题：衬线字体，自动截断超长文本 */}
+        <span className="font-serif min-w-0 flex-1 truncate text-sm tracking-wide">
+          {node.title}
+        </span>
 
         {/* 操作菜单：触发器 stopPropagation 避免触发节点行选中 */}
         <DropdownMenu>
@@ -165,17 +190,17 @@ export function WorldviewTreeNode({
               aria-label="节点操作"
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreHorizontal className="size-3" />
+              <MoreHorizontal className="size-3" strokeWidth={1.5} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={handleCreateChild}>
-              <Plus className="size-4" />
+              <Plus className="size-4" strokeWidth={1.5} />
               新建子节点
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleDelete} variant="destructive">
-              <Trash2 className="size-4" />
+              <Trash2 className="size-4" strokeWidth={1.5} />
               删除
             </DropdownMenuItem>
           </DropdownMenuContent>

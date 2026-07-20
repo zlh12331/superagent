@@ -1,6 +1,12 @@
 // src/renderer/components/character/CharacterRelationGraph.tsx
-// 人物关系图组件（ReactFlow v12）
-// 设计文档 §5.1 数据流 + §6.3 AGE 关系图 + §8 Phase 8 Task 3
+// 人物关系图组件 · 极简文学风（ReactFlow v12）
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 节点配色按文学风：主角(深棕墨水)/反派(朱砂)/配角(墨绿)/龙套(灰墨)
+// - 节点字体用衬线
+// - 边颜色用暖米边框 token，动画保留
+// - 容器边框 + 圆角呼应纸张感
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 用 ReactFlow 渲染人物关系网络：每个 Character 一个节点，每条 relation 一条边
@@ -67,26 +73,26 @@ interface RoleNodeStyle {
 }
 
 /**
- * 角色节点样式映射表
+ * 角色节点样式映射表（文学风配色）
  *
  * 颜色与 CharacterCard.ROLE_BADGE 视觉对齐：
- * - PROTAGONIST：主角（琥珀色 amber）
- * - ANTAGONIST：反派（玫红色 rose）
- * - SUPPORTING：配角（天蓝色 sky）
- * - MINOR：龙套（灰色）
+ * - PROTAGONIST：主角（深棕墨水 #8B4513 系）
+ * - ANTAGONIST：反派（朱砂红 #C44536 系）
+ * - SUPPORTING：配角（墨绿 #5C8A3A 系）
+ * - MINOR：龙套（灰墨 #6B6358 系）
  */
 const ROLE_NODE_STYLE = new Map<CharacterRole, RoleNodeStyle>([
-  ['PROTAGONIST', { label: '主角', nodeColor: '#fef3c7', nodeBorder: '#f59e0b' }],
-  ['ANTAGONIST', { label: '反派', nodeColor: '#ffe4e6', nodeBorder: '#f43f5e' }],
-  ['SUPPORTING', { label: '配角', nodeColor: '#e0f2fe', nodeBorder: '#0ea5e9' }],
-  ['MINOR', { label: '龙套', nodeColor: '#f3f4f6', nodeBorder: '#9ca3af' }],
+  ['PROTAGONIST', { label: '主角', nodeColor: '#fff5e6', nodeBorder: '#8b4513' }],
+  ['ANTAGONIST', { label: '反派', nodeColor: '#fce8e5', nodeBorder: '#c44536' }],
+  ['SUPPORTING', { label: '配角', nodeColor: '#eef4e3', nodeBorder: '#5c8a3a' }],
+  ['MINOR', { label: '龙套', nodeColor: '#f0ede5', nodeBorder: '#6b6358' }],
 ]);
 
 /** 节点样式兜底值（理论上不会命中） */
 const ROLE_NODE_STYLE_FALLBACK: RoleNodeStyle = {
   label: '未知',
-  nodeColor: '#f3f4f6',
-  nodeBorder: '#9ca3af',
+  nodeColor: '#f0ede5',
+  nodeBorder: '#6b6358',
 };
 
 /** 圆形布局半径（像素） */
@@ -112,13 +118,15 @@ function useGraphLayout(
     const nodes: Node[] = characters.map((c, i) => {
       const style = ROLE_NODE_STYLE.get(c.role) ?? ROLE_NODE_STYLE_FALLBACK;
       // 节点样式：背景色 + 边框色 + 文字色 + 圆角 + 内边距
+      // 字体用衬线（呼应文学风）
       const nodeStyle: CSSProperties = {
         background: style.nodeColor,
         border: `2px solid ${style.nodeBorder}`,
-        color: '#1f2937',
+        color: '#1a1814',
         borderRadius: '8px',
-        padding: '8px 12px',
+        padding: '8px 14px',
         fontSize: '14px',
+        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', serif",
         fontWeight: 500,
       };
       return {
@@ -135,12 +143,19 @@ function useGraphLayout(
     });
 
     // 边：每条 relation 一条边，带动画 + label
+    // 颜色用文学风暖米边框色，比默认深灰更柔和
     const edges: Edge[] = relations.map((r, i) => ({
       id: `${r.fromCharacterId}-${r.toCharacterId}-${i}`,
       source: r.fromCharacterId,
       target: r.toCharacterId,
       label: r.type,
       animated: true,
+      style: { stroke: '#8b4513', strokeWidth: 1.5 },
+      labelStyle: {
+        fontFamily: "'Noto Serif SC', serif",
+        fontSize: '12px',
+        fill: '#6b6358',
+      },
     }));
 
     return { nodes, edges };
@@ -220,11 +235,11 @@ export function CharacterRelationGraph({
     fromId.length > 0 && toId.length > 0 && fromId !== toId && type.trim().length > 0;
 
   return (
-    <div className="border-border bg-card relative h-[600px] overflow-hidden rounded-xl border">
+    <div className="border-border bg-card shadow-paper relative h-[600px] overflow-hidden rounded-xl border">
       {/* 顶部右上角：添加关系按钮 */}
       <div className="absolute top-3 right-3 z-10">
         <Button size="sm" onClick={() => setAddOpen(true)}>
-          <Plus className="size-4" />
+          <Plus className="size-4" strokeWidth={1.5} />
           添加关系
         </Button>
       </div>
@@ -255,7 +270,8 @@ export function CharacterRelationGraph({
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>添加人物关系</DialogTitle>
+            {/* 标题用衬线字体 */}
+            <DialogTitle className="font-serif tracking-wide">添加人物关系</DialogTitle>
             <DialogDescription>
               选择起始人物与目标人物，并填写关系类型（如"朋友"/"敌人"/"师徒"）
             </DialogDescription>
@@ -263,7 +279,7 @@ export function CharacterRelationGraph({
           <div className="flex flex-col gap-4 py-2">
             {/* 起始人物 */}
             <div className="flex flex-col gap-2">
-              <Label>起始人物</Label>
+              <Label className="font-serif tracking-wide">起始人物</Label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -291,7 +307,7 @@ export function CharacterRelationGraph({
 
             {/* 目标人物 */}
             <div className="flex flex-col gap-2">
-              <Label>目标人物</Label>
+              <Label className="font-serif tracking-wide">目标人物</Label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -319,7 +335,9 @@ export function CharacterRelationGraph({
 
             {/* 关系类型 */}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="relation-type">关系类型</Label>
+              <Label htmlFor="relation-type" className="font-serif tracking-wide">
+                关系类型
+              </Label>
               <Input
                 id="relation-type"
                 value={type}

@@ -1,6 +1,14 @@
 // src/renderer/components/chapter/ChapterToolbar.tsx
-// 章节工具栏（标题展示 + 状态切换 + AI 写作 + 字数 + 保存状态）
-// 设计文档 §5.1 数据流 + §7.7 Agent 编排 + §7.10 用户友好提示
+// 章节工具栏 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 暖米色背景（与 Topbar 同色，融合视觉框）
+// - 标题用衬线字体（呼应文学风）
+// - 字数用等宽字体（呼应"墨水计数"感）
+// - 保存状态颜色用设计 token：warning/success/error
+// - 图标统一 strokeWidth=1.5
+// - AI 按钮用 outline 变体，悬停时深棕描边
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 左侧：展示当前章节标题（truncate 防溢出）
@@ -12,7 +20,7 @@
 // 注意：
 // - STATUS_LABELS 用 Map 而非对象字面量，避开 Biome useNamingConvention 对
 //   UPPER_CASE 键的报错（ChapterStatus 取值为 'DRAFT' / 'OUTLINE' 等）
-// - 保存状态用纯展示型圆点，颜色区分：灰/黄/绿/红
+// - 保存状态用纯展示型圆点，颜色区分：灰(warning→idle)/琥珀(saving)/绿(success)/红(error)
 // - 状态切换不触发自动保存（由父组件单独处理 status 字段更新）
 // - AI 按钮用 outline 变体 + sm 尺寸，与状态切换按钮视觉一致
 // - AI 续写：立即触发（无指令），后台流式生成下一章
@@ -81,12 +89,12 @@ const STATUS_OPTIONS: ReadonlyArray<ChapterStatus> = [
   ChapterStatus.REVISION,
 ];
 
-/** 保存状态指示器配置：圆点颜色 + 文案 */
+/** 保存状态指示器配置：圆点颜色 token + 文案 */
 const SAVE_STATUS_META: Record<SaveStatus, { dotClass: string; label: string }> = {
-  idle: { dotClass: 'bg-muted-foreground', label: '' },
-  saving: { dotClass: 'bg-amber-500', label: '保存中' },
-  saved: { dotClass: 'bg-emerald-500', label: '已保存' },
-  error: { dotClass: 'bg-destructive', label: '保存失败' },
+  idle: { dotClass: 'bg-muted-foreground/40', label: '' },
+  saving: { dotClass: 'bg-warning', label: '保存中' },
+  saved: { dotClass: 'bg-success', label: '已保存' },
+  error: { dotClass: 'bg-error', label: '保存失败' },
 };
 
 /**
@@ -116,9 +124,11 @@ export function ChapterToolbar({
   const saveMeta = SAVE_STATUS_META[saveStatus];
 
   return (
-    <div className="bg-card flex h-12 shrink-0 items-center justify-between gap-4 border-b px-4">
-      {/* 左侧：章节标题（truncate 防溢出） */}
-      <p className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">{chapter.title}</p>
+    <div className="bg-sidebar border-sidebar-border flex h-12 shrink-0 items-center justify-between gap-4 border-b px-4">
+      {/* 左侧：章节标题（衬线字体 + truncate 防溢出） */}
+      <p className="text-foreground min-w-0 flex-1 truncate font-serif text-sm font-medium tracking-wide">
+        {chapter.title}
+      </p>
 
       {/* 中间：AI 写作按钮组 + 状态切换器 */}
       <div className="flex shrink-0 items-center gap-2">
@@ -130,7 +140,7 @@ export function ChapterToolbar({
           disabled={isAgentBusy}
           title="AI 续写下一章（基于前文与人物设定）"
         >
-          <Sparkles className="size-3.5" />
+          <Sparkles className="size-3.5" strokeWidth={1.5} />
           AI 续写
         </Button>
         {/* AI 改写：弹 Dialog 输入指令 */}
@@ -141,7 +151,7 @@ export function ChapterToolbar({
           disabled={isAgentBusy}
           title="AI 改写当前章节正文"
         >
-          <Sparkles className="size-3.5" />
+          <Sparkles className="size-3.5" strokeWidth={1.5} />
           AI 改写
         </Button>
 
@@ -150,7 +160,7 @@ export function ChapterToolbar({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
               {currentStatusLabel}
-              <ChevronDown className="size-3.5" />
+              <ChevronDown className="size-3.5" strokeWidth={1.5} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -166,7 +176,10 @@ export function ChapterToolbar({
                     if (!isCurrent) onStatusChange(status);
                   }}
                 >
-                  <Check className={cn('size-4', isCurrent ? 'opacity-100' : 'opacity-0')} />
+                  <Check
+                    className={cn('size-4', isCurrent ? 'opacity-100' : 'opacity-0')}
+                    strokeWidth={1.5}
+                  />
                   {label}
                 </DropdownMenuItem>
               );
@@ -175,9 +188,11 @@ export function ChapterToolbar({
         </DropdownMenu>
       </div>
 
-      {/* 右侧：字数 + 保存状态指示器 */}
+      {/* 右侧：字数（等宽字体）+ 保存状态指示器 */}
       <div className="flex shrink-0 items-center gap-3">
-        <span className="text-muted-foreground text-xs">{formatWordCount(wordCount)}</span>
+        <span className="text-muted-foreground font-mono text-xs tracking-wider">
+          {formatWordCount(wordCount)}
+        </span>
         <div className="flex items-center gap-1.5">
           <span className={cn('size-2 rounded-full', saveMeta.dotClass)} aria-hidden />
           {saveMeta.label.length > 0 && (

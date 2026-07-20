@@ -1,6 +1,11 @@
 // src/renderer/components/common/ErrorState.tsx
-// 通用错误状态组件
-// 设计文档 §7.4 错误处理流程 / §7.10 用户友好提示
+// 通用错误状态组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 图标用 size-12 圆形 + 朱砂红淡底 + strokeWidth=1.5
+// - 标题用衬线字体
+// - 错误消息用衬线字体 + 行高放宽
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 在 query/mutation 失败时展示错误图标 + 消息 + 可选重试按钮
@@ -54,21 +59,23 @@ export function ErrorState({
 
   return (
     <div
-      className={cn(
-        'text-destructive flex flex-col items-center justify-center gap-3 py-16',
-        className,
-      )}
+      className={cn('text-error flex flex-col items-center justify-center gap-3 py-16', className)}
     >
-      <div className="bg-destructive/10 text-destructive flex size-12 items-center justify-center rounded-full">
-        <AlertCircle className="size-6" />
+      {/* 朱砂红淡底 + strokeWidth=1.5 */}
+      <div className="bg-error/10 text-error flex size-12 items-center justify-center rounded-full">
+        <AlertCircle className="size-6" strokeWidth={1.5} />
       </div>
       <div className="text-center">
-        <p className="text-foreground text-sm font-medium">加载失败</p>
-        <p className="text-muted-foreground mt-1 max-w-md text-xs">{message}</p>
+        {/* 标题用衬线字体 */}
+        <p className="text-foreground font-serif text-sm font-medium tracking-wide">加载失败</p>
+        {/* 错误消息用衬线字体 + 行高放宽 */}
+        <p className="text-muted-foreground mt-1 max-w-md font-serif text-xs leading-relaxed">
+          {message}
+        </p>
       </div>
       {onRetry !== undefined && (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          <RefreshCw className="size-3" />
+          <RefreshCw className="size-3" strokeWidth={1.5} />
           {retryLabel}
         </Button>
       )}

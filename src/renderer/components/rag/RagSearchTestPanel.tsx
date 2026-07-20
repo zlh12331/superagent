@@ -1,6 +1,13 @@
 // src/renderer/components/rag/RagSearchTestPanel.tsx
-// RAG 检索测试面板
-// 设计文档 §6 RAG 检索增强 + §7.4 错误处理流程 + §7.10 用户友好提示
+// RAG 检索测试面板 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 顶部标题栏用 bg-sidebar 暖米色背景框
+// - 标题用 font-serif 衬线字体
+// - 分数颜色按文学风 token：高分(success) / 中分(warning) / 低分(muted)
+// - 数字用 font-mono 等宽字体
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 提供查询文本 + topK + threshold 三个输入字段
@@ -11,7 +18,7 @@
 // - useRagSearch 为 mutation（非 useQuery），结果需用 useState 管理
 // - topK 与 threshold 在 zod schema 中有 .default()，z.infer 推断为必填 number
 //   → 提交时必须显式传值，不能用 ?? undefined
-// - score 颜色映射：高分绿 / 中分黄 / 低分灰，便于用户快速判断相似度
+// - score 颜色映射：高分(success) / 中分(warning) / 低分(muted)，便于用户快速判断相似度
 // - content 超过 200 字截断显示 "..."
 
 import type { RagSearchResultItem } from '@novel-writer/shared';
@@ -39,15 +46,15 @@ interface RagSearchTestPanelProps {
 const CONTENT_MAX_LENGTH = 200;
 
 /**
- * 根据相似度分数返回对应的 Tailwind 颜色类
+ * 根据相似度分数返回对应的 Tailwind 颜色类（文学风 token）
  *
- * - 高分（>= 0.8）：绿色（emerald）
- * - 中分（>= 0.6）：琥珀色（amber）
- * - 低分（< 0.6）：灰色（muted-foreground）
+ * - 高分（>= 0.8）：success（墨绿）
+ * - 中分（>= 0.6）：warning（琥珀）
+ * - 低分（< 0.6）：muted-foreground（灰墨）
  */
 function getScoreColor(score: number): string {
-  if (score >= 0.8) return 'text-emerald-600';
-  if (score >= 0.6) return 'text-amber-600';
+  if (score >= 0.8) return 'text-success';
+  if (score >= 0.6) return 'text-warning';
   return 'text-muted-foreground';
 }
 
@@ -140,17 +147,19 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
   const hasSearched = results !== null;
 
   return (
-    <section className="bg-card flex h-full flex-col border">
-      {/* 顶部标题 */}
-      <div className="border-b p-3">
-        <h2 className="text-foreground text-sm font-semibold">检索测试</h2>
+    <section className="bg-card border-border flex h-full flex-col border">
+      {/* 顶部标题栏：bg-sidebar 暖米色背景 + 衬线字体 */}
+      <div className="border-sidebar-border bg-sidebar border-b p-3">
+        <h2 className="text-foreground font-serif text-sm font-semibold tracking-wide">检索测试</h2>
       </div>
 
-      {/* 查询表单 */}
-      <div className="flex flex-col gap-3 border-b p-3">
+      {/* 查询表单：bg-sidebar 暖米色背景框 */}
+      <div className="border-sidebar-border bg-sidebar flex flex-col gap-3 border-b p-3">
         {/* 查询文本 */}
         <div className="flex flex-col gap-2">
-          <Label htmlFor="rag-query">查询文本 *</Label>
+          <Label htmlFor="rag-query" className="font-serif tracking-wide">
+            查询文本 *
+          </Label>
           <Textarea
             id="rag-query"
             value={query}
@@ -163,7 +172,9 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
         {/* topK + threshold 双列 */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="rag-topk">topK</Label>
+            <Label htmlFor="rag-topk" className="font-mono text-xs tracking-wide">
+              topK
+            </Label>
             <Input
               id="rag-topk"
               type="number"
@@ -172,10 +183,13 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
               value={topK}
               onChange={changeTopK}
               disabled={isPending}
+              className="font-mono"
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="rag-threshold">threshold</Label>
+            <Label htmlFor="rag-threshold" className="font-mono text-xs tracking-wide">
+              threshold
+            </Label>
             <Input
               id="rag-threshold"
               type="number"
@@ -185,6 +199,7 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
               value={threshold}
               onChange={handleThresholdChange}
               disabled={isPending}
+              className="font-mono"
             />
           </div>
         </div>
@@ -194,7 +209,7 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
           onClick={() => void handleSearch()}
           disabled={isPending || query.trim().length === 0}
         >
-          <Search className="size-4" />
+          <Search className="size-4" strokeWidth={1.5} />
           搜索
         </Button>
       </div>
@@ -220,7 +235,7 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
             results !== null &&
             results.length === 0 && (
               <EmptyState
-                icon={<Search className="size-6" />}
+                icon={<Search className="size-6" strokeWidth={1.5} />}
                 title="无匹配切片"
                 description="尝试调整查询文本或降低 threshold 阈值后重试"
               />
@@ -236,20 +251,25 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
                   // 分数百分比：0~1 转为 0~100，四舍五入到整数
                   const scorePercent = Math.round(item.score * 100);
                   return (
-                    <li key={item.chunkId} className="bg-background rounded-md border p-2 text-xs">
+                    <li
+                      key={item.chunkId}
+                      className="border-border bg-background rounded-md border p-2 text-xs"
+                    >
                       {/* 第一行：分数 + 文档 ID */}
                       <div className="mb-1 flex items-center justify-between gap-2">
-                        {/* 分数百分比：颜色随分数高→低（绿→黄→灰） */}
-                        <span className={`font-medium ${getScoreColor(item.score)}`}>
+                        {/* 分数百分比：颜色随分数高→低（success→warning→muted），等宽字体 */}
+                        <span
+                          className={`font-mono text-sm font-medium tracking-wider ${getScoreColor(item.score)}`}
+                        >
                           {scorePercent}%
                         </span>
-                        {/* 文档 ID：截断显示，便于定位来源 */}
-                        <span className="text-muted-foreground truncate text-[10px]">
+                        {/* 文档 ID：截断显示，便于定位来源，等宽字体 */}
+                        <span className="text-muted-foreground font-mono truncate text-[10px]">
                           {item.documentId}
                         </span>
                       </div>
-                      {/* 第二行：内容（前 200 字） */}
-                      <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                      {/* 第二行：内容（前 200 字），衬线字体 */}
+                      <p className="text-foreground font-serif leading-relaxed whitespace-pre-wrap break-words">
                         {truncateContent(item.content)}
                       </p>
                     </li>
@@ -260,7 +280,7 @@ export function RagSearchTestPanel({ projectId }: RagSearchTestPanelProps): Reac
           {/* 初始状态：未检索过 */}
           {!isPending && error === null && !hasSearched && (
             <EmptyState
-              icon={<Search className="size-6" />}
+              icon={<Search className="size-6" strokeWidth={1.5} />}
               title="输入查询开始检索"
               description="输入查询文本，调整 topK 和 threshold 后点击搜索"
             />

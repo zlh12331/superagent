@@ -1,6 +1,13 @@
 // src/renderer/components/project/ProjectCard.tsx
-// 项目卡片组件
-// 设计文档 §5.1 数据流 + §7.10 用户友好提示
+// 项目卡片组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 卡片为"卷宗"风格：奶白底 + 微阴影 + 暖米边框
+// - 标题用衬线字体
+// - 状态徽章按文学风 token：进行中(墨绿)/已归档(灰墨)/草稿(琥珀)
+// - 时间用衬线字体
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 展示单个项目的名称、流派、状态、简介、最近更新时间
@@ -41,24 +48,24 @@ interface ProjectCardProps {
   onDelete: (id: string) => void;
 }
 
-/** 状态徽章配置：label 为中文文案，className 为 Tailwind 颜色类 */
+/** 状态徽章配置：label 为中文文案，className 为 Tailwind 颜色类（文学风 token） */
 interface StatusBadge {
   label: string;
   className: string;
 }
 
 /**
- * 状态徽章映射表
+ * 状态徽章映射表（文学风配色）
  *
  * 覆盖 Project['status'] 全部取值：
- * - ACTIVE：进行中（绿色）
- * - ARCHIVED：已归档（灰色，bg-muted 不带斜杠避免与背景叠色异常）
- * - DRAFT：草稿（黄色）
+ * - ACTIVE：进行中（墨绿 success）
+ * - ARCHIVED：已归档（灰墨 muted）
+ * - DRAFT：草稿（琥珀 warning）
  */
 const STATUS_BADGE = new Map<Project['status'], StatusBadge>([
-  ['ACTIVE', { label: '进行中', className: 'bg-emerald-500/10 text-emerald-600' }],
+  ['ACTIVE', { label: '进行中', className: 'bg-success/10 text-success' }],
   ['ARCHIVED', { label: '已归档', className: 'bg-muted text-muted-foreground' }],
-  ['DRAFT', { label: '草稿', className: 'bg-amber-500/10 text-amber-600' }],
+  ['DRAFT', { label: '草稿', className: 'bg-warning/10 text-warning' }],
 ]);
 
 /** 状态徽章兜底值（理论上不会命中，仅为满足 Map.get() 的 undefined 返回） */
@@ -98,12 +105,17 @@ export function ProjectCard({ project, onArchive, onDelete }: ProjectCardProps):
   };
 
   return (
-    <Card className="cursor-pointer transition-shadow hover:shadow-md" onClick={handleClick}>
+    <Card
+      className="shadow-paper hover:shadow-paper border-border cursor-pointer transition-shadow duration-200"
+      onClick={handleClick}
+    >
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <CardTitle className="truncate">{project.name}</CardTitle>
-            <CardDescription className="mt-1">
+            {/* 标题用衬线字体 */}
+            <CardTitle className="truncate font-serif tracking-wide">{project.name}</CardTitle>
+            {/* 描述用衬线字体 */}
+            <CardDescription className="mt-1 font-serif">
               {project.genre ?? '未分类'} · 更新于 {formatRelativeTime(project.updatedAt)}
             </CardDescription>
           </div>
@@ -116,17 +128,17 @@ export function ProjectCard({ project, onArchive, onDelete }: ProjectCardProps):
                 aria-label="项目操作"
                 onClick={(e) => e.stopPropagation()}
               >
-                <MoreVertical className="size-4" />
+                <MoreVertical className="size-4" strokeWidth={1.5} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleArchive}>
-                <Archive className="size-4" />
+                <Archive className="size-4" strokeWidth={1.5} />
                 归档
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                <Trash2 className="size-4" />
+                <Trash2 className="size-4" strokeWidth={1.5} />
                 删除
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -135,12 +147,17 @@ export function ProjectCard({ project, onArchive, onDelete }: ProjectCardProps):
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
+          {/* 状态徽章：颜色按文学风 token */}
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium tracking-wide ${status.className}`}
+          >
             {status.label}
           </span>
           {/* Project.description 类型为 string | null | undefined，需同时排除 null 与 undefined */}
           {project.description !== undefined && project.description !== null && (
-            <p className="text-muted-foreground line-clamp-2 text-xs">{project.description}</p>
+            <p className="text-muted-foreground line-clamp-2 font-serif text-xs leading-relaxed">
+              {project.description}
+            </p>
           )}
         </div>
       </CardContent>

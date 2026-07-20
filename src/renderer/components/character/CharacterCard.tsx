@@ -1,6 +1,14 @@
 // src/renderer/components/character/CharacterCard.tsx
-// 人物卡片组件
-// 设计文档 §5.1 数据流 + §6.2 Character 模型 + §7.10 用户友好提示
+// 人物卡片组件 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 卡片为"册页"风格：奶白底 + 微阴影 + 暖米边框
+// - 头像占位：深棕底 + 奶白衬线首字
+// - 角色徽章颜色按文学风 token：主角(深棕)/反派(朱砂)/配角(墨绿)/龙套(灰墨)
+// - 人物姓名用衬线字体
+// - 简介用衬线字体，行高放宽
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 展示单个人物的头像、姓名、角色徽章、简介
@@ -39,25 +47,25 @@ interface CharacterCardProps {
   onDelete: (id: string) => void;
 }
 
-/** 角色徽章配置：label 为中文文案，className 为 Tailwind 颜色类 */
+/** 角色徽章配置：label 为中文文案，className 为 Tailwind 颜色类（基于文学风 token） */
 interface RoleBadge {
   label: string;
   className: string;
 }
 
 /**
- * 角色徽章映射表
+ * 角色徽章映射表（文学风配色）
  *
  * 覆盖 CharacterRole 全部取值：
- * - PROTAGONIST：主角（琥珀色 amber）
- * - ANTAGONIST：反派（玫红色 rose）
- * - SUPPORTING：配角（天蓝色 sky）
- * - MINOR：龙套（灰色 muted）
+ * - PROTAGONIST：主角（深棕墨水 primary）
+ * - ANTAGONIST：反派（朱砂红 error）
+ * - SUPPORTING：配角（墨绿 success）
+ * - MINOR：龙套（灰墨 muted）
  */
 const ROLE_BADGE = new Map<CharacterRole, RoleBadge>([
-  ['PROTAGONIST', { label: '主角', className: 'bg-amber-500/10 text-amber-600' }],
-  ['ANTAGONIST', { label: '反派', className: 'bg-rose-500/10 text-rose-600' }],
-  ['SUPPORTING', { label: '配角', className: 'bg-sky-500/10 text-sky-600' }],
+  ['PROTAGONIST', { label: '主角', className: 'bg-primary/10 text-primary' }],
+  ['ANTAGONIST', { label: '反派', className: 'bg-error/10 text-error' }],
+  ['SUPPORTING', { label: '配角', className: 'bg-success/10 text-success' }],
   ['MINOR', { label: '龙套', className: 'bg-muted text-muted-foreground' }],
 ]);
 
@@ -105,10 +113,10 @@ export function CharacterCard({ character, onEdit, onDelete }: CharacterCardProp
   };
 
   return (
-    <Card className="transition-shadow hover:shadow-md">
+    <Card className="shadow-paper hover:shadow-paper border-border transition-shadow duration-200">
       <CardHeader>
         <div className="flex items-start gap-3">
-          {/* 头像：有 URL 用 img，否则用首字母圆形占位 */}
+          {/* 头像：有 URL 用 img，否则用深棕底 + 奶白衬线首字占位 */}
           {character.avatar !== null && character.avatar !== undefined ? (
             <img
               src={character.avatar}
@@ -116,36 +124,39 @@ export function CharacterCard({ character, onEdit, onDelete }: CharacterCardProp
               className="border-border size-12 shrink-0 rounded-full border object-cover"
             />
           ) : (
-            <div className="bg-primary/10 text-primary flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold">
+            <div className="bg-primary text-card flex size-12 shrink-0 items-center justify-center rounded-full font-serif text-base font-semibold">
               {getInitial(character.name)}
             </div>
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-semibold">{character.name}</span>
+              {/* 人物姓名用衬线字体 */}
+              <span className="truncate font-serif text-sm font-semibold tracking-wide">
+                {character.name}
+              </span>
               {/* 操作菜单：右上角 */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="人物操作">
-                    <MoreVertical className="size-4" />
+                    <MoreVertical className="size-4" strokeWidth={1.5} />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={handleEdit}>
-                    <Pencil className="size-4" />
+                    <Pencil className="size-4" strokeWidth={1.5} />
                     编辑
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-4" strokeWidth={1.5} />
                     删除
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            {/* 角色徽章：颜色按角色映射 */}
+            {/* 角色徽章：颜色按角色映射（文学风 token） */}
             <span
-              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${role.className}`}
+              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium tracking-wide ${role.className}`}
             >
               {role.label}
             </span>
@@ -153,9 +164,11 @@ export function CharacterCard({ character, onEdit, onDelete }: CharacterCardProp
         </div>
       </CardHeader>
       <CardContent>
-        {/* 简介为 null/undefined 时不渲染该行，避免空段落 */}
+        {/* 简介用衬线字体，行高放宽（呼应正文感） */}
         {character.description !== null && character.description !== undefined && (
-          <p className="text-muted-foreground line-clamp-2 text-xs">{character.description}</p>
+          <p className="text-muted-foreground line-clamp-2 font-serif text-xs leading-relaxed">
+            {character.description}
+          </p>
         )}
       </CardContent>
     </Card>

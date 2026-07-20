@@ -1,6 +1,13 @@
 // src/renderer/components/chapter/ChapterList.tsx
-// 章节列表侧边栏（含拖拽排序）
-// 设计文档 §5.1 数据流 + §7.10 用户友好提示
+// 章节列表侧边栏 · 极简文学风（含拖拽排序）
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 暖米色背景（与 Topbar 同色）
+// - 章节项激活态：左侧 3px 墨水条 + 暖米高亮底 + 深棕衬线标题
+// - 章节项悬停态：浅暖米底 + 圆点变深
+// - 字数用等宽字体（呼应"墨水计数"感）
+// - "新建章节"按钮：虚线边框 + 深棕描边（参考 demo .new-chapter-btn）
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 渲染章节列表（标题 + 字数），高亮当前选中章节
@@ -143,13 +150,17 @@ export function ChapterList({
   };
 
   return (
-    <aside className="bg-card flex w-60 shrink-0 flex-col border-r">
-      {/* 顶部新建章节按钮 */}
+    <aside className="bg-sidebar border-sidebar-border flex w-60 shrink-0 flex-col border-r">
+      {/* 顶部新建章节按钮（虚线边框 + 深棕描边，参考 demo .new-chapter-btn） */}
       <div className="p-3">
-        <Button variant="default" size="sm" className="w-full" onClick={onCreateClick}>
-          <Plus className="size-4" />
-          新建章节
-        </Button>
+        <button
+          type="button"
+          onClick={onCreateClick}
+          className="text-muted-foreground hover:text-primary hover:bg-primary/4 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs transition-colors duration-150"
+        >
+          <Plus className="size-3.5" strokeWidth={1.5} />
+          <span className="font-sans tracking-wide">新建章节</span>
+        </button>
       </div>
       {/* 章节列表：ScrollArea 提供细滚动条 */}
       <ScrollArea className="flex-1">
@@ -178,17 +189,35 @@ export function ChapterList({
                     }
                   }}
                   className={cn(
-                    'group flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors',
-                    'hover:bg-accent hover:text-accent-foreground',
+                    'group relative flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150',
+                    'hover:bg-sidebar-accent',
                     'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-                    isActive && 'bg-accent text-accent-foreground font-medium',
+                    // 激活态：暖米高亮 + 深棕文字
+                    isActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
                     isDragging && 'opacity-50',
+                    // 拖拽插入指示线（顶部 2px 深棕边）
                     isDragOver && 'border-t-2 border-primary',
                   )}
                 >
+                  {/* 激活态左侧墨水条（3px 宽，深棕色，垂直居中） */}
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="bg-primary absolute top-1/2 left-0.5 h-4 w-[3px] -translate-y-1/2 rounded-[1px]"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate">{chapter.title}</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
+                    {/* 章节标题用衬线字体（呼应文学风） */}
+                    <p
+                      className={cn(
+                        'truncate font-serif tracking-wide',
+                        isActive ? 'font-medium' : 'text-sidebar-foreground/85',
+                      )}
+                    >
+                      {chapter.title}
+                    </p>
+                    {/* 字数用等宽字体（呼应"墨水计数"感） */}
+                    <p className="text-muted-foreground mt-0.5 font-mono text-[10px] tracking-wider">
                       {formatWordCount(chapter.wordCount)}
                     </p>
                   </div>
@@ -202,7 +231,7 @@ export function ChapterList({
                         aria-label="章节操作"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <MoreVertical className="size-3.5" />
+                        <MoreVertical className="size-3.5" strokeWidth={1.5} />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -213,7 +242,7 @@ export function ChapterList({
                           onDeleteChapter(chapter.id);
                         }}
                       >
-                        <Trash2 className="size-4" />
+                        <Trash2 className="size-4" strokeWidth={1.5} />
                         删除
                       </DropdownMenuItem>
                     </DropdownMenuContent>

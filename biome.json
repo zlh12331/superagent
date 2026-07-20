@@ -17,7 +17,8 @@
       "!**/.codegraph",
       "!**/playwright-report",
       "!**/test-results",
-      "!**/playwright/.cache"
+      "!**/playwright/.cache",
+      "!**/docs/design"
     ]
   },
   "formatter": {

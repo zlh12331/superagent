@@ -1,6 +1,13 @@
 // src/renderer/components/worldview/WorldviewEditor.tsx
-// 世界观节点编辑面板
-// 设计文档 §5.1 数据流 + §6.2 Worldview 自关联树形 + §7.10 用户友好提示
+// 世界观节点编辑面板 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 顶部路径栏用 bg-sidebar 暖米色背景框 + 衬线字体
+// - 表单背景用 bg-card 纸张感卡片底
+// - 标签用 font-serif 衬线字体 + 字间距
+// - 内容输入框应用 prose-literacy 衬线字体
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 展示当前选中节点的编辑表单（title / type / icon / content 四个字段）
@@ -122,7 +129,7 @@ export function WorldviewEditor({ node, onSaved, onCancel }: WorldviewEditorProp
     return (
       <div className="flex h-full items-center justify-center">
         <EmptyState
-          icon={<FileText className="size-6" />}
+          icon={<FileText className="size-6" strokeWidth={1.5} />}
           title="未选择节点"
           description="请在左侧树中选择一个节点进行编辑"
         />
@@ -134,11 +141,13 @@ export function WorldviewEditor({ node, onSaved, onCancel }: WorldviewEditorProp
   const isSaveDisabled = title.trim().length === 0;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="bg-card flex h-full flex-col">
       {/* 顶部：当前节点标题（简化路径，不递归查找祖先链） */}
-      <div className="border-b px-4 py-3">
-        <p className="text-muted-foreground text-xs">编辑节点</p>
-        <p className="text-foreground truncate text-sm font-semibold">{node.title}</p>
+      <div className="border-sidebar-border bg-sidebar border-b px-4 py-3">
+        <p className="text-muted-foreground font-sans text-xs tracking-wide">编辑节点</p>
+        <p className="text-foreground font-serif truncate text-sm font-semibold tracking-wide">
+          {node.title}
+        </p>
       </div>
 
       {/* 表单主体：可滚动 */}
@@ -146,7 +155,9 @@ export function WorldviewEditor({ node, onSaved, onCancel }: WorldviewEditorProp
         <div className="flex flex-col gap-4">
           {/* 标题（必填） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="worldview-title">标题 *</Label>
+            <Label htmlFor="worldview-title" className="font-serif tracking-wide">
+              标题 *
+            </Label>
             <Input
               id="worldview-title"
               value={title}
@@ -158,7 +169,9 @@ export function WorldviewEditor({ node, onSaved, onCancel }: WorldviewEditorProp
 
           {/* 类型（可选） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="worldview-type">类型</Label>
+            <Label htmlFor="worldview-type" className="font-serif tracking-wide">
+              类型
+            </Label>
             <Input
               id="worldview-type"
               value={type}
@@ -170,7 +183,9 @@ export function WorldviewEditor({ node, onSaved, onCancel }: WorldviewEditorProp
 
           {/* 图标（可选，emoji 或单字） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="worldview-icon">图标</Label>
+            <Label htmlFor="worldview-icon" className="font-serif tracking-wide">
+              图标
+            </Label>
             <Input
               id="worldview-icon"
               value={icon}
@@ -182,20 +197,23 @@ export function WorldviewEditor({ node, onSaved, onCancel }: WorldviewEditorProp
 
           {/* 内容（可选，详细设定） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="worldview-content">内容</Label>
+            <Label htmlFor="worldview-content" className="font-serif tracking-wide">
+              内容
+            </Label>
             <Textarea
               id="worldview-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="详细描述此节点的设定，如地理、历史、文化、规则等"
               rows={8}
+              className="font-serif"
             />
           </div>
         </div>
       </div>
 
       {/* 底部操作栏：取消 + 保存 */}
-      <div className="flex justify-end gap-2 border-t p-3">
+      <div className="border-sidebar-border bg-sidebar flex justify-end gap-2 border-t p-3">
         <Button variant="outline" onClick={handleCancel}>
           取消
         </Button>

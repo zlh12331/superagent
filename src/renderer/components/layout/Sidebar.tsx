@@ -1,17 +1,18 @@
 // src/renderer/components/layout/Sidebar.tsx
-// 侧边栏（默认 240px，折叠 56px）
-// 设计文档 §3 侧边栏导航
+// 侧边栏 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 暖米色背景（与 Topbar 同色，形成上下视觉框）
+// - 展开态 240px，折叠态 56px（仅图标）
+// - 激活态：左侧 3px 墨水条 + 深棕文字 + 暖米高亮底
+// - 悬停态：浅暖米底色 + 图标转深棕
+// - 图标统一 strokeWidth=1.5，呼应线稿感
 //
-// 职责：
-// - 项目列表入口（/projects）
-// - 当前项目工作台子导航（chapters/characters/worldview/chat/rag）
-// - 折叠态：仅显示图标，鼠标悬停展示 Tooltip
-//
-// 通过 useUiStore 订阅 sidebarCollapsed 与 activeProjectId：
-// - 折叠时宽度变为 SIDEBAR_WIDTH_COLLAPSED，仅显示图标
-// - activeProjectId 为 null 时不显示子导航（提示用户先选择项目）
-//
-// 使用 NavLink 实现路由高亮，active 样式由 className 函数判断。
+// 文学风细节：
+// - 激活墨水条用 ::before 伪元素（Tailwind before: 修饰符）
+// - 折叠态仍保留墨水条（左侧贴边）
+// - 文字使用 font-serif 衬线，与 Topbar 标题呼应
+// ──────────────────────────────────────────────────────────────
 
 import { BookOpen, Bot, Database, FolderOpen, Globe, Users } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -43,37 +44,37 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   {
     label: '项目',
-    icon: <FolderOpen className="size-4" />,
+    icon: <FolderOpen className="size-4" strokeWidth={1.5} />,
     to: '/projects',
     requiresProject: false,
   },
   {
     label: '章节',
-    icon: <BookOpen className="size-4" />,
+    icon: <BookOpen className="size-4" strokeWidth={1.5} />,
     to: '/projects/:projectId/chapters',
     requiresProject: true,
   },
   {
     label: '人物',
-    icon: <Users className="size-4" />,
+    icon: <Users className="size-4" strokeWidth={1.5} />,
     to: '/projects/:projectId/characters',
     requiresProject: true,
   },
   {
     label: '世界观',
-    icon: <Globe className="size-4" />,
+    icon: <Globe className="size-4" strokeWidth={1.5} />,
     to: '/projects/:projectId/worldview',
     requiresProject: true,
   },
   {
     label: 'AI 对话',
-    icon: <Bot className="size-4" />,
+    icon: <Bot className="size-4" strokeWidth={1.5} />,
     to: '/projects/:projectId/chat',
     requiresProject: true,
   },
   {
     label: 'RAG 文档',
-    icon: <Database className="size-4" />,
+    icon: <Database className="size-4" strokeWidth={1.5} />,
     to: '/projects/:projectId/rag',
     requiresProject: true,
   },
@@ -82,8 +83,8 @@ const NAV_ITEMS: NavItem[] = [
 /**
  * 侧边栏组件
  *
- * 折叠态：仅显示图标 + Tooltip（hover 时展开文字）
- * 展开态：图标 + 文字横向排列
+ * 折叠态：仅显示图标 + Tooltip（hover 时展开文字），仍保留墨水条
+ * 展开态：图标 + 衬线文字横向排列
  *
  * useParams 提供当前路由的 :projectId（如果有），用于替换路径占位符。
  * 同时同步到 useUiStore.setActiveProject 以保持 UI 状态与路由一致。
@@ -105,27 +106,47 @@ export function Sidebar(): ReactElement {
 
   return (
     <aside
-      className="bg-card flex flex-col border-r py-2"
+      className="bg-sidebar border-sidebar-border flex flex-col border-r transition-[width] duration-200 ease-out"
       style={{ width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH }}
     >
-      <nav className="flex flex-col gap-1 px-2">
+      <nav className="flex flex-col gap-1 px-2 py-3">
         {NAV_ITEMS.filter((item) => !item.requiresProject || projectId !== null).map((item) => {
           const to = resolvePath(item.to);
           // 折叠态用 Tooltip 包裹，展开态直接渲染文字
+          // 激活态通过 before: 伪元素绘制左侧墨水条（3px 宽 16px 高，深棕色）
           const link = (
             <NavLink
               key={item.to}
               to={to}
+              aria-label={item.label}
               className={({ isActive }) =>
                 cn(
-                  'hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors',
-                  isActive && 'bg-accent text-accent-foreground',
-                  collapsed && 'justify-center',
+                  'hover:bg-sidebar-accent group relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors duration-150',
+                  // 激活态：暖米高亮 + 深棕文字
+                  isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                    : 'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground',
+                  // 折叠态：图标居中
+                  collapsed && 'justify-center px-0',
                 )
               }
             >
-              {item.icon}
-              {!collapsed && <span>{item.label}</span>}
+              {({ isActive }) => (
+                <>
+                  {/* 激活态左侧墨水条（3px 宽，深棕色，垂直居中） */}
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'bg-sidebar-primary absolute top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-[1px]',
+                        collapsed ? 'left-1' : 'left-0.5',
+                      )}
+                    />
+                  )}
+                  {item.icon}
+                  {!collapsed && <span className="font-serif tracking-wide">{item.label}</span>}
+                </>
+              )}
             </NavLink>
           );
           return collapsed ? (

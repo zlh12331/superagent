@@ -1,6 +1,13 @@
 // src/renderer/components/chat/ChatInputArea.tsx
-// 聊天输入区（输入框 + 发送 + 停止按钮）
-// 设计文档 §5.1 场景 3 AI 流式对话 + §7.10 用户友好提示
+// 聊天输入区 · 极简文学风（输入框 + 发送 + 停止按钮）
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 输入区边框用暖米色
+// - Textarea 聚焦时 ring 用深棕 primary
+// - 发送按钮 primary 色（深棕墨水）
+// - 停止按钮 destructive 色（朱砂红）
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 提供 Textarea 多行纯文本输入（不引入 markdown 编辑器）
@@ -84,7 +91,7 @@ export function ChatInputArea({
   };
 
   return (
-    <div className="border-t p-3">
+    <div className="border-border border-t p-3">
       <div className="mx-auto flex max-w-3xl items-end gap-2">
         <Textarea
           value={value}
@@ -93,12 +100,12 @@ export function ChatInputArea({
           placeholder={disabled ? '请先选择会话' : '输入消息，Enter 发送，Shift+Enter 换行'}
           rows={3}
           disabled={disabled}
-          className="max-h-[200px] min-h-[80px] resize-none overflow-y-auto"
+          className="focus-visible:ring-primary/30 max-h-[200px] min-h-[80px] resize-none overflow-y-auto"
         />
         {/* 发送 / 停止按钮：根据 isStreaming 切换 */}
         {isStreaming ? (
           <Button variant="destructive" size="default" onClick={onStop} disabled={disabled}>
-            <StopCircle className="size-4" />
+            <StopCircle className="size-4" strokeWidth={1.5} />
             停止
           </Button>
         ) : (
@@ -108,7 +115,7 @@ export function ChatInputArea({
             onClick={handleSend}
             disabled={disabled || value.trim().length === 0}
           >
-            <Send className="size-4" />
+            <Send className="size-4" strokeWidth={1.5} />
             发送
           </Button>
         )}

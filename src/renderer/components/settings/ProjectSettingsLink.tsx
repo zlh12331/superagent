@@ -1,6 +1,12 @@
 // src/renderer/components/settings/ProjectSettingsLink.tsx
-// 项目选择器区块
-// 设计文档 §7.7 应用设置
+// 项目选择器区块 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 卡片标题用 font-serif 衬线字体
+// - 标签用 font-serif 衬线字体 + 字间距
+// - select 用文学风配色 + 衬线字体
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 通过 useProjectList 加载项目列表
@@ -30,6 +36,23 @@ interface ProjectSettingsLinkProps {
 }
 
 /**
+ * 渲染卡片头部（标题 + 图标 + 描述）共用片段
+ *
+ * 文学风：标题用 font-serif 衬线字体，图标 strokeWidth=1.5
+ */
+function renderCardHeader(): ReactElement {
+  return (
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2 font-serif tracking-wide">
+        <FolderCog className="size-4" strokeWidth={1.5} />
+        项目设置
+      </CardTitle>
+      <CardDescription>选择要配置的项目</CardDescription>
+    </CardHeader>
+  );
+}
+
+/**
  * 项目选择器区块
  *
  * @example
@@ -48,13 +71,7 @@ export function ProjectSettingsLink({
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FolderCog className="size-4" />
-            项目设置
-          </CardTitle>
-          <CardDescription>选择要配置的项目</CardDescription>
-        </CardHeader>
+        {renderCardHeader()}
         <CardContent>
           <LoadingSpinner label="正在加载项目列表..." />
         </CardContent>
@@ -66,13 +83,7 @@ export function ProjectSettingsLink({
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FolderCog className="size-4" />
-            项目设置
-          </CardTitle>
-          <CardDescription>选择要配置的项目</CardDescription>
-        </CardHeader>
+        {renderCardHeader()}
         <CardContent>
           <ErrorState error={error} onRetry={() => void refetch()} />
         </CardContent>
@@ -85,22 +96,18 @@ export function ProjectSettingsLink({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FolderCog className="size-4" />
-          项目设置
-        </CardTitle>
-        <CardDescription>选择要配置的项目</CardDescription>
-      </CardHeader>
+      {renderCardHeader()}
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="project-select">选择项目</Label>
-          {/* 原生 select：避免引入 shadcn Select 依赖 */}
+          <Label htmlFor="project-select" className="font-serif tracking-wide">
+            选择项目
+          </Label>
+          {/* 原生 select：避免引入 shadcn Select 依赖，搭配文学风配色 */}
           <select
             id="project-select"
             value={selectedProjectId ?? ''}
             onChange={(e) => onProjectChange(e.target.value === '' ? null : e.target.value)}
-            className="border-input bg-background flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="border-input bg-background font-serif flex h-9 w-full rounded-md border px-3 py-1 text-sm tracking-wide shadow-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <option value="">请选择项目</option>
             {safeProjects.map((p) => (
@@ -110,7 +117,7 @@ export function ProjectSettingsLink({
             ))}
           </select>
         </div>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground font-serif text-xs leading-relaxed">
           选择项目后，可在下方调整该项目的 AI 模型参数
         </p>
       </CardContent>

@@ -1,6 +1,14 @@
 // src/renderer/components/chat/ChatMessageBubble.tsx
-// 单条聊天消息气泡
-// 设计文档 §5.1 场景 3 AI 流式对话 + §7.10 用户友好提示
+// 单条聊天消息气泡 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - user 头像：深棕底（primary）+ 奶白文字
+// - assistant 头像：墨绿底（success）+ 奶白文字
+// - system 消息：琥珀色（warning）居中胶囊
+// - 气泡内容用衬线字体（呼应文学感）
+// - 时间与 tokens 用等宽字体
+// - 流式光标用 animate-pulse-soft（柔脉冲，呼应文学风的克制）
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 根据 role 选择气泡对齐方式与背景色
@@ -10,7 +18,7 @@
 //
 // 注意：
 // - role=system 用居中小字风格，区分 user/assistant
-// - 流式光标用 Tailwind animate-pulse + "▌" 字符简化实现，无需额外 CSS
+// - 流式光标用 animate-pulse-soft + "▌" 字符简化实现，无需额外 CSS
 // - role 是字面量联合类型，可直接 if/else 分支，无需 Map
 
 import type { ChatMessage } from '@novel-writer/shared';
@@ -53,7 +61,7 @@ export function ChatMessageBubble({
   if (role === 'system') {
     return (
       <div className="flex justify-center py-2">
-        <div className="bg-amber-500/10 text-amber-700 rounded-full px-3 py-1 text-xs">
+        <div className="bg-warning/10 text-warning rounded-full px-3 py-1 text-xs">
           {message.content}
         </div>
       </div>
@@ -64,34 +72,35 @@ export function ChatMessageBubble({
   const isUser = role === 'user';
   return (
     <div className={cn('flex gap-2 py-2', isUser ? 'flex-row-reverse' : 'flex-row')}>
-      {/* 头像 */}
+      {/* 头像：user 用深棕底（primary），assistant 用墨绿底（success） */}
       <div
         className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-medium',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+          'flex size-8 shrink-0 items-center justify-center rounded-full font-serif text-xs font-medium',
+          isUser ? 'bg-primary text-primary-foreground' : 'bg-success text-card',
         )}
       >
         {AVATAR_TEXT[role]}
       </div>
       {/* 气泡 + 元信息 */}
       <div className={cn('flex max-w-[80%] flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
+        {/* 气泡内容用衬线字体（呼应文学感） */}
         <div
           className={cn(
-            'whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm',
+            'whitespace-pre-wrap break-words rounded-lg px-3 py-2 font-serif text-sm leading-relaxed',
             isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
           )}
         >
           {message.content}
-          {/* 流式光标：闪烁的 ▌ 字符（Tailwind animate-pulse 实现） */}
+          {/* 流式光标：柔脉冲呼吸（呼应文学风的克制） */}
           {isStreaming && (
-            <span className="ml-0.5 inline-block animate-pulse" aria-hidden="true">
+            <span className="ml-0.5 inline-block animate-pulse-soft" aria-hidden="true">
               ▌
             </span>
           )}
         </div>
-        {/* 元信息：时间 + tokens（仅 assistant 非流式且 tokens>0 时显示 tokens） */}
+        {/* 元信息：时间 + tokens 用等宽字体 */}
         {!isStreaming && (
-          <div className="text-muted-foreground flex items-center gap-2 text-xs">
+          <div className="text-muted-foreground flex items-center gap-2 font-mono text-[10px] tracking-wider">
             <span>{formatRelativeTime(message.createdAt)}</span>
             {!isUser && message.tokens > 0 && <span>· {message.tokens} tokens</span>}
           </div>

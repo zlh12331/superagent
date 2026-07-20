@@ -1,6 +1,10 @@
 // src/renderer/components/project/ProjectCreateDialog.tsx
-// 新建项目对话框
-// 设计文档 §5.1 数据流 + §7.4 错误处理流程
+// 新建项目对话框 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 标题用衬线字体
+// - 标签用衬线字体 + 字间距
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 受控对话框（open + onOpenChange），收集 name/description/genre 三个字段
@@ -80,12 +84,15 @@ export function ProjectCreateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>新建项目</DialogTitle>
+          {/* 标题用衬线字体 */}
+          <DialogTitle className="font-serif tracking-wide">新建项目</DialogTitle>
           <DialogDescription>填写项目基本信息，后续可在设置中修改</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="project-name">项目名称 *</Label>
+            <Label htmlFor="project-name" className="font-serif tracking-wide">
+              项目名称 *
+            </Label>
             <Input
               id="project-name"
               value={name}
@@ -95,7 +102,9 @@ export function ProjectCreateDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="project-genre">流派</Label>
+            <Label htmlFor="project-genre" className="font-serif tracking-wide">
+              流派
+            </Label>
             <Input
               id="project-genre"
               value={genre}
@@ -105,7 +114,9 @@ export function ProjectCreateDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="project-description">简介</Label>
+            <Label htmlFor="project-description" className="font-serif tracking-wide">
+              简介
+            </Label>
             <Textarea
               id="project-description"
               value={description}

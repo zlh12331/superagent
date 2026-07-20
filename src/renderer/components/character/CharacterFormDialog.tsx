@@ -1,6 +1,12 @@
 // src/renderer/components/character/CharacterFormDialog.tsx
-// 人物创建/编辑共用对话框
-// 设计文档 §5.1 数据流 + §6.2 Character 模型 + §7.4 错误处理流程
+// 人物创建/编辑共用对话框 · 极简文学风
+// ──────────────────────────────────────────────────────────────
+// 设计：
+// - 对话框标题用衬线字体
+// - 表单标签用衬线字体 + 字间距
+// - 按钮风格统一文学风
+// - 图标统一 strokeWidth=1.5
+// ──────────────────────────────────────────────────────────────
 //
 // 职责：
 // - 受控对话框（open + onOpenChange），收集 name/role/avatar/description 四个字段
@@ -195,7 +201,10 @@ export function CharacterFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? '编辑人物' : '新建人物'}</DialogTitle>
+          {/* 标题用衬线字体 */}
+          <DialogTitle className="font-serif tracking-wide">
+            {isEdit ? '编辑人物' : '新建人物'}
+          </DialogTitle>
           <DialogDescription>
             {isEdit ? '修改人物基本信息' : '填写人物基本信息，后续可继续编辑'}
           </DialogDescription>
@@ -203,7 +212,9 @@ export function CharacterFormDialog({
         <div className="flex flex-col gap-4 py-2">
           {/* 姓名（必填） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="character-name">姓名 *</Label>
+            <Label htmlFor="character-name" className="font-serif tracking-wide">
+              姓名 *
+            </Label>
             <Input
               id="character-name"
               value={name}
@@ -215,7 +226,7 @@ export function CharacterFormDialog({
 
           {/* 角色（DropdownMenu 单选） */}
           <div className="flex flex-col gap-2">
-            <Label>角色定位</Label>
+            <Label className="font-serif tracking-wide">角色定位</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="justify-between" disabled={isPending}>
@@ -231,7 +242,7 @@ export function CharacterFormDialog({
                     className="justify-between"
                   >
                     {opt.label}
-                    {role === value && <Check className="size-4" />}
+                    {role === value && <Check className="size-4" strokeWidth={1.5} />}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -240,7 +251,9 @@ export function CharacterFormDialog({
 
           {/* 头像 URL（可选） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="character-avatar">头像 URL</Label>
+            <Label htmlFor="character-avatar" className="font-serif tracking-wide">
+              头像 URL
+            </Label>
             <Input
               id="character-avatar"
               value={avatar}
@@ -251,7 +264,9 @@ export function CharacterFormDialog({
 
           {/* 简介（可选） */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="character-description">简介</Label>
+            <Label htmlFor="character-description" className="font-serif tracking-wide">
+              简介
+            </Label>
             <Textarea
               id="character-description"
               value={description}
