@@ -14,7 +14,7 @@
 
 import type { ProjectSetting, ProjectSettingUpdateInput } from '@novel-writer/shared';
 import type { PrismaClient } from '@prisma/client';
-import { getOpenAIClient } from '../infra/ai/openai-client';
+import { getOpenAIClient, resetOpenAIClient } from '../infra/ai/openai-client';
 import { getPrismaClient } from '../infra/prisma/client';
 import { getSecret, setSecret } from '../infra/storage/keychain';
 import { logger } from '../utils/logger';
@@ -140,6 +140,13 @@ export async function setApiKey(
   const keyName = API_KEY_NAMES[provider];
   await setSecret(keyName, apiKey);
   logger.info({ provider }, 'API Key 已存储到 keychain');
+
+  // 重置客户端缓存，确保下次调用 getOpenAIClient 时从 keychain 读取新的 API Key
+  // deepseek provider 需要重置，ollama provider 不使用 OpenAI 客户端
+  if (provider === 'deepseek') {
+    resetOpenAIClient();
+  }
+
   return { ok: true };
 }
 

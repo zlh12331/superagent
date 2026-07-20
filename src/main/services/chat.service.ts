@@ -135,11 +135,11 @@ export async function sendChatMessage(input: ChatSendMessageInput): Promise<{ ac
  */
 export async function stopChatGeneration(sessionId: string): Promise<{ stopped: boolean }> {
   const bridge = getStreamBridge();
-  if (!bridge.has(sessionId)) {
+  if (!(await bridge.has(sessionId))) {
     return { stopped: false };
   }
 
-  bridge.abort(sessionId);
+  await bridge.abort(sessionId);
   logger.info({ sessionId }, '已请求中断 AI 生成');
   return { stopped: true };
 }
@@ -167,8 +167,8 @@ export async function deleteChatSession(id: string): Promise<{ id: string }> {
 
   // 2. 中断可能的活跃 AI 流（避免删除后流仍在尝试持久化 assistant 消息）
   const bridge = getStreamBridge();
-  if (bridge.has(id)) {
-    bridge.abort(id);
+  if (await bridge.has(id)) {
+    await bridge.abort(id);
     logger.info({ sessionId: id }, '删除会话前已中断活跃 AI 流');
   }
 

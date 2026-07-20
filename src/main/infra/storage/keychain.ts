@@ -17,6 +17,33 @@ import { safeStorage } from 'electron';
 import { getKeychainPath } from './app-data';
 
 /**
+ * 互斥锁（用于保护 keychain 文件的并发读写）
+ *
+ * 场景：多个 IPC 请求同时调用 setSecret 时，若没有锁保护，
+ * readStore() 可能读取到旧数据，writeStore() 会覆盖其他请求的写入，
+ * 导致数据丢失。
+ *
+ * 实现：用 Promise 链式调用实现简单的互斥锁，
+ * 每个操作必须等待前一个操作完成才能执行。
+ */
+let lock: Promise<void> = Promise.resolve();
+
+/**
+ * 获取互斥锁
+ *
+ * @returns 释放锁的函数
+ */
+function acquireLock(): () => void {
+  const releaseRef: { value: () => void } = { value: () => {} };
+  const next = new Promise<void>((resolve) => {
+    releaseRef.value = resolve;
+  });
+  const current = lock;
+  lock = current.then(() => next);
+  return releaseRef.value;
+}
+
+/**
  * Keychain 存储结构
  *
  * key: secret 名称（如 'deepseek-api-key'）
@@ -64,10 +91,15 @@ export async function setSecret(key: string, value: string): Promise<void> {
     throw new Error('safeStorage 加密不可用，无法存储敏感数据');
   }
 
-  const encrypted = safeStorage.encryptString(value);
-  const store = await readStore();
-  store[key] = Array.from(encrypted);
-  await writeStore(store);
+  const release = acquireLock();
+  try {
+    const encrypted = safeStorage.encryptString(value);
+    const store = await readStore();
+    store[key] = Array.from(encrypted);
+    await writeStore(store);
+  } finally {
+    release();
+  }
 }
 
 /**

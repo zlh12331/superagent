@@ -17,6 +17,35 @@ import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 
 /**
+ * 简单的 Promise 链式互斥锁
+ *
+ * 用于保护 activeStreams Map 的并发访问。
+ * 多个异步操作（streamToWebContents 的 set、abort、abortAll、delete）可能同时发生，
+ * 需要确保对 Map 的操作是原子的，避免并发修改导致的数据不一致。
+ */
+class SimpleMutex {
+  private lock: Promise<void> = Promise.resolve();
+
+  async runExclusive<T>(fn: () => T | Promise<T>): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  private acquire(): Promise<() => void> {
+    return new Promise((resolve) => {
+      const next = new Promise<void>((resolveNext) => {
+        resolve(resolveNext);
+      });
+      this.lock = this.lock.then(() => next);
+    });
+  }
+}
+
+/**
  * 流式 chunk 类型约束
  *
  * openai SDK 的 chunk 是对象，streamToWebContents 会通过 String(chunk) 转换
@@ -61,6 +90,7 @@ export interface StreamToWebContentsOptions<T extends StreamChunk = StreamChunk>
  */
 export class StreamBridge {
   private readonly activeStreams = new Map<string, AbortController>();
+  private readonly lock = new SimpleMutex();
 
   /**
    * 迭代流并推送到 webContents
@@ -80,7 +110,9 @@ export class StreamBridge {
     const { sessionId, webContents, stream, chunkChannel, endChannel, errorChannel } = options;
 
     const controller = new AbortController();
-    this.activeStreams.set(sessionId, controller);
+    await this.lock.runExclusive(() => {
+      this.activeStreams.set(sessionId, controller);
+    });
 
     let fullText = '';
     let wasAborted = false;
@@ -125,7 +157,9 @@ export class StreamBridge {
       logger.error({ sessionId, err: error }, '流式响应异常');
       throw error;
     } finally {
-      this.activeStreams.delete(sessionId);
+      await this.lock.runExclusive(() => {
+        this.activeStreams.delete(sessionId);
+      });
     }
 
     return fullText;
@@ -134,8 +168,10 @@ export class StreamBridge {
   /**
    * 中断指定 session 的流
    */
-  abort(sessionId: string): void {
-    const controller = this.activeStreams.get(sessionId);
+  async abort(sessionId: string): Promise<void> {
+    const controller = await this.lock.runExclusive(() => {
+      return this.activeStreams.get(sessionId);
+    });
     if (controller) {
       controller.abort();
       logger.info({ sessionId }, '请求中断流式响应');
@@ -145,8 +181,10 @@ export class StreamBridge {
   /**
    * 检查指定 session 是否有活跃流
    */
-  has(sessionId: string): boolean {
-    return this.activeStreams.has(sessionId);
+  async has(sessionId: string): Promise<boolean> {
+    return this.lock.runExclusive(() => {
+      return this.activeStreams.has(sessionId);
+    });
   }
 
   /**
@@ -154,8 +192,12 @@ export class StreamBridge {
    *
    * 用于应用退出时清理
    */
-  abortAll(): void {
-    for (const [sessionId, controller] of this.activeStreams) {
+  async abortAll(): Promise<void> {
+    const controllers = await this.lock.runExclusive(() => {
+      const entries = Array.from(this.activeStreams.entries());
+      return entries;
+    });
+    for (const [sessionId, controller] of controllers) {
       controller.abort();
       logger.info({ sessionId }, '应用退出，中断流式响应');
     }

@@ -1,89 +1,166 @@
 /* src/renderer/styles/globals.css
-   shadcn/ui 设计令牌 + 全局基础样式
-   设计文档 §2.3：Tailwind v4 + shadcn/ui 设计系统
-   - 颜色系统：使用 OKLCH 色彩空间（CSS Color 4，浏览器原生支持）
-   - 圆角：--radius 统一管理，通过 calc 派生各组件圆角
-   - 暗黑模式：通过 .dark 父类选择器覆盖
-   - @theme inline：将 CSS 变量映射到 Tailwind 工具类（如 bg-background） */
+   极简文学风设计系统 · 设计令牌
+   ──────────────────────────────────────────────────────────────
+   设计哲学：
+   - 以纸为底（米黄），以墨为字（深炭黑），以朱为印（深棕墨水）
+   - 衬线宋体承载正文，营造文学感
+   - 大留白 + 1.9 行高，模仿书桌稿纸
+   - 深色状态栏（墨条）+ 浅色编辑区（纸面），层次分明
 
-/* 亮色主题（默认） */
+   灵感来源：
+   - Typora 的纸张感
+   - Obsidian 的侧边栏克制
+   - Notion 的大留白
+   - 国内传统书籍排版（首行缩进 2em）
+
+   配色体系：
+   - 背景层：bg-paper（主）/ bg-paper-warm（侧栏）/ bg-cream（编辑器）
+   - 文字层：text-ink（主）/ text-ink-soft（次）/ text-ink-mute（辅）
+   - 强调色：accent-seal（深棕墨水）/ accent-vermilion（朱砂红）
+   - 状态色：success / warn / error
+   ────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────────
+   亮色主题（默认）· 极简文学风
+   ────────────────────────────────────────────────────────────── */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* 圆角：克制，接近纸张直角 */
+  --radius: 0.25rem;
+
+  /* 背景层（从深到浅） */
+  --background: #faf8f3; /* 米黄纸张 - 主背景 */
+  --foreground: #1a1814; /* 墨黑 - 主文字 */
+  --card: #fffdf7; /* 奶白 - 卡片/编辑器主区域 */
+  --card-foreground: #1a1814;
+  --popover: #fffdf7;
+  --popover-foreground: #1a1814;
+
+  /* 主色：深棕墨水（呼应"墨水"主题） */
+  --primary: #8b4513;
+  --primary-foreground: #fffdf7;
+
+  /* 次要色 */
+  --secondary: #f5f1e8; /* 暖米色 */
+  --secondary-foreground: #3d3a32;
+
+  /* 静音色 */
+  --muted: #ede8dc; /* 暗米色 - hover */
+  --muted-foreground: #6b6358; /* 灰墨 - 辅助文字 */
+
+  /* 强调色 */
+  --accent: #f5f1e8;
+  --accent-foreground: #8b4513; /* 深棕墨水 */
+
+  /* 危险色：朱砂红 */
+  --destructive: #c44536;
+  --destructive-foreground: #fffdf7;
+
+  /* 边框/分割线 */
+  --border: #e8e2d3; /* 浅米边框 */
+  --input: #e8e2d3;
+  --ring: #8b4513;
+
+  /* 状态色（用于状态栏指示器） */
+  --success: #5c8a3a;
+  --warning: #b8860b;
+  --error: #c44536;
+
+  /* 图表色（保留文学风：大地色系） */
+  --chart-1: #8b4513; /* 深棕墨水 */
+  --chart-2: #6b6358; /* 灰墨 */
+  --chart-3: #b8860b; /* 暗金 */
+  --chart-4: #5c8a3a; /* 苔藓绿 */
+  --chart-5: #c44536; /* 朱砂红 */
+
+  /* 侧边栏（暖米色调，比主背景稍深） */
+  --sidebar: #f5f1e8;
+  --sidebar-foreground: #3d3a32;
+  --sidebar-primary: #8b4513;
+  --sidebar-primary-foreground: #fffdf7;
+  --sidebar-accent: #ede8dc;
+  --sidebar-accent-foreground: #8b4513;
+  --sidebar-border: #e8e2d3;
+  --sidebar-ring: #8b4513;
+
+  /* 文学风扩展令牌（非 shadcn 标准） */
+  /* 纸张感阴影 */
+  --shadow-paper: 0 1px 2px rgba(26, 24, 20, 0.04), 0 8px 24px rgba(26, 24, 20, 0.06);
+  --shadow-lift: 0 2px 8px rgba(26, 24, 20, 0.08), 0 12px 32px rgba(26, 24, 20, 0.1);
+
+  /* 字体族 */
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "宋体", serif;
+  --font-sans: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+
+  /* 动效缓动函数 */
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-paper: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-/* 暗色主题（.dark 类切换） */
+/* ──────────────────────────────────────────────────────────────
+   暗色主题（.dark 类切换）· 墨夜模式
+   思路：墨色底 + 米色字，模拟夜晚书桌的台灯效果
+   ────────────────────────────────────────────────────────────── */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #1a1814; /* 深墨色背景 */
+  --foreground: #ede8dc; /* 米色文字 */
+  --card: #252220; /* 暗墨色卡片 */
+  --card-foreground: #ede8dc;
+  --popover: #252220;
+  --popover-foreground: #ede8dc;
+
+  --primary: #d4a574; /* 柔金 - 主强调（暗色下深棕不可见） */
+  --primary-foreground: #1a1814;
+
+  --secondary: #2d2926;
+  --secondary-foreground: #ede8dc;
+
+  --muted: #2d2926;
+  --muted-foreground: #8a8378; /* 暗灰墨 */
+
+  --accent: #2d2926;
+  --accent-foreground: #d4a574;
+
+  --destructive: #e57563; /* 柔朱砂 */
+  --destructive-foreground: #1a1814;
+
+  --border: #3d3a32;
+  --input: #3d3a32;
+  --ring: #d4a574;
+
+  --success: #8fb570;
+  --warning: #d4a574;
+  --error: #e57563;
+
+  --chart-1: #d4a574;
+  --chart-2: #8a8378;
+  --chart-3: #b8860b;
+  --chart-4: #8fb570;
+  --chart-5: #e57563;
+
+  --sidebar: #252220;
+  --sidebar-foreground: #ede8dc;
+  --sidebar-primary: #d4a574;
+  --sidebar-primary-foreground: #1a1814;
+  --sidebar-accent: #2d2926;
+  --sidebar-accent-foreground: #d4a574;
+  --sidebar-border: #3d3a32;
+  --sidebar-ring: #d4a574;
 }
 
-/* 将 CSS 变量映射到 Tailwind 工具类（如 bg-background、text-foreground）
-   @theme inline 表示不生成新 CSS 变量，直接复用上方定义 */
+/* ──────────────────────────────────────────────────────────────
+   Tailwind v4 主题映射
+   @theme inline：将 CSS 变量映射到 Tailwind 工具类
+   （如 bg-background、text-foreground、font-serif 等）
+   ────────────────────────────────────────────────────────────── */
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  /* 圆角派生 */
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* shadcn 标准颜色映射 */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -99,6 +176,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -115,9 +193,21 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* 扩展颜色（文学风专属） */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  /* 字体族映射到 Tailwind 工具类 */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
 }
 
-/* 全局基础样式（替代 src/renderer/index.css 旧有的内联样式） */
+/* ──────────────────────────────────────────────────────────────
+   全局基础样式
+   ────────────────────────────────────────────────────────────── */
 html,
 body,
 #root {
@@ -127,15 +217,19 @@ body,
 }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* 默认无衬线（UI 层），正文用 font-serif 类显式指定 */
+  font-family: var(--font-sans);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   user-select: none;
-  /* 应用 shadcn 默认背景色与前景色 */
   background-color: var(--background);
   color: var(--foreground);
 }
 
-/* 滚动条样式（Tailwind v4 不默认配置，需手动声明） */
+/* ──────────────────────────────────────────────────────────────
+   滚动条样式 · 纸张感
+   ────────────────────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
@@ -146,11 +240,194 @@ body {
   height: 8px;
 }
 
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background-color: var(--border);
   border-radius: 4px;
+  /* 两侧留白，模拟纸张边缘 */
+  border: 2px solid var(--background);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--muted-foreground);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   选中文本 · 墨水印迹感
+   ────────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(139, 69, 19, 0.15);
+  color: var(--foreground);
+}
+
+.dark ::selection {
+  background: rgba(212, 165, 116, 0.2);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   编辑器正文 · 衬线宋体 + 舒适行高（用于 TipTap ProseMirror）
+   通过 .prose-literary 类显式启用，不影响 UI 文本
+   ────────────────────────────────────────────────────────────── */
+.prose-literacy {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.9;
+  color: var(--foreground);
+  letter-spacing: 0.01em;
+  outline: none;
+}
+
+.prose-literacy p {
+  margin-bottom: 1.4em;
+  text-indent: 2em;
+}
+
+.prose-literacy h1 {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1em 0 0.5em;
+  text-indent: 0;
+  text-align: center;
+}
+
+.prose-literacy h2 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 1.5em 0 0.8em;
+  padding-left: 12px;
+  border-left: 2px solid var(--primary);
+  text-indent: 0;
+}
+
+.prose-literacy h3 {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  margin: 1.2em 0 0.6em;
+  text-indent: 0;
+}
+
+.prose-literacy blockquote {
+  margin: 1.5em 0;
+  padding: 0.5em 1.2em;
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+  font-style: italic;
+  background: rgba(139, 69, 19, 0.03);
+  text-indent: 0;
+}
+
+.prose-literacy code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 2px 6px;
+  background: var(--secondary);
+  border-radius: 2px;
+  color: var(--destructive);
+}
+
+.prose-literacy ul,
+.prose-literacy ol {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+.prose-literacy ul li {
+  list-style: disc;
+  text-indent: 0;
+  margin: 0.4em 0;
+}
+
+.prose-literacy ol li {
+  list-style: decimal;
+  text-indent: 0;
+  margin: 0.4em 0;
+}
+
+.prose-literacy a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-literacy strong {
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* TipTap 占位符（ProseMirror 编辑器空内容时显示） */
+.prose-literacy.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  font-style: italic;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* ProseMirror 焦态 */
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   动画 · 纸张呼吸感（用于状态指示器脉冲）
+   ────────────────────────────────────────────────────────────── */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s var(--ease-soft) infinite;
+}
+
+/* 章节激活态墨水条标记 */
+.chapter-ink-mark {
+  position: relative;
+}
+
+.chapter-ink-mark::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: var(--primary);
+  border-radius: 1px;
+}
+
+/* 纸张纹理 · 极淡的米色噪点（用于主编辑区背景） */
+.paper-texture {
+  position: relative;
+}
+
+.paper-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(139, 69, 19, 0.015) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(139, 69, 19, 0.015) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .paper-texture::before {
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(212, 165, 116, 0.02) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(212, 165, 116, 0.02) 0%, transparent 50%);
 }

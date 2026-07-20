@@ -35,6 +35,19 @@ import {
 } from '../prisma/extensions/age';
 
 /**
+ * 转义 Cypher 字符串值中的单引号
+ *
+ * Cypher 字符串用单引号包裹，单引号本身需要转义为两个单引号 ''
+ * 用于 ID 字段转义，防止 Cypher 注入攻击
+ *
+ * @param value 原始字符串值
+ * @returns 转义后的字符串值（不含外层引号）
+ */
+function escapeCypherId(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+/**
  * 人物领域 Repository
  *
  * 封装 Prisma character 表 + AGE Character 顶点 / RELATION 边的双写一致性
@@ -140,7 +153,7 @@ export class CharacterRepository {
         await this.prisma.$transaction(async (tx) => {
           await executeCypher(
             tx,
-            `MATCH (n:Character {characterId: '${input.id}'}) DETACH DELETE n`,
+            `MATCH (n:Character {characterId: '${escapeCypherId(input.id)}'}) DETACH DELETE n`,
           );
           await createCharacterVertex(tx, {
             characterId: updated.id,
@@ -178,7 +191,7 @@ export class CharacterRepository {
     try {
       await executeCypher(
         this.prisma,
-        `MATCH (n:Character {characterId: '${id}'}) DETACH DELETE n`,
+        `MATCH (n:Character {characterId: '${escapeCypherId(id)}'}) DETACH DELETE n`,
       );
     } catch (err) {
       logger.warn(

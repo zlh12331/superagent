@@ -86,7 +86,7 @@ describe('StreamBridge', () => {
       error: 'stream error',
     });
     // 流被清理
-    expect(bridge.has('session-2')).toBe(false);
+    expect(await bridge.has('session-2')).toBe(false);
   });
 
   it('abort 中断流并推送 error 事件', async () => {
@@ -116,7 +116,7 @@ describe('StreamBridge', () => {
       errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
     });
 
-    bridge.abort('session-3');
+    await bridge.abort('session-3');
     resolveNext();
 
     await promise;
@@ -125,14 +125,14 @@ describe('StreamBridge', () => {
       sessionId: 'session-3',
       error: 'aborted',
     });
-    expect(bridge.has('session-3')).toBe(false);
+    expect(await bridge.has('session-3')).toBe(false);
   });
 
   it('has 返回活跃流状态', async () => {
     const wc = makeWebContents();
     const stream = makeStream(['a']);
 
-    expect(bridge.has('session-4')).toBe(false);
+    expect(await bridge.has('session-4')).toBe(false);
 
     const promise = bridge.streamToWebContents({
       sessionId: 'session-4',
@@ -143,10 +143,10 @@ describe('StreamBridge', () => {
       errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
     });
     // 流在迭代期间活跃
-    expect(bridge.has('session-4')).toBe(true);
+    expect(await bridge.has('session-4')).toBe(true);
     await promise;
     // 流结束后清理
-    expect(bridge.has('session-4')).toBe(false);
+    expect(await bridge.has('session-4')).toBe(false);
   });
 
   it('webContents 已销毁时不推送', async () => {

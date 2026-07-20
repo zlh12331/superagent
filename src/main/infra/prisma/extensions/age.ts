@@ -124,6 +124,19 @@ export async function queryCypher<T = unknown>(client: DbExecutor, cypher: strin
 }
 
 /**
+ * 转义 Cypher 字符串值中的单引号
+ *
+ * Cypher 字符串用单引号包裹，单引号本身需要转义为两个单引号 ''
+ * 例如：name = "O'Neil" → Cypher 中写为 'O''Neil'
+ *
+ * @param value 原始字符串值
+ * @returns 转义后的字符串值（不含外层引号）
+ */
+function escapeCypherString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+/**
  * 创建 Character 顶点（便捷方法）
  *
  * @param characterId Character 表 id
@@ -134,7 +147,7 @@ export async function createCharacterVertex(
   client: DbExecutor,
   params: { characterId: string; name: string; role: string },
 ): Promise<number> {
-  const cypher = `CREATE (n:Character {characterId: '${params.characterId}', name: '${params.name}', role: '${params.role}'})`;
+  const cypher = `CREATE (n:Character {characterId: '${escapeCypherString(params.characterId)}', name: '${escapeCypherString(params.name)}', role: '${escapeCypherString(params.role)}'})`;
   return executeCypher(client, cypher);
 }
 
@@ -158,17 +171,17 @@ export async function createRelationEdge(
   },
 ): Promise<number> {
   const props = [
-    `type: '${params.type}'`,
-    params.description ? `description: '${params.description}'` : '',
-    params.chapterId ? `chapterId: '${params.chapterId}'` : '',
+    `type: '${escapeCypherString(params.type)}'`,
+    params.description ? `description: '${escapeCypherString(params.description)}'` : '',
+    params.chapterId ? `chapterId: '${escapeCypherString(params.chapterId)}'` : '',
   ]
     .filter(Boolean)
     .join(', ');
 
   // 先 MATCH 两个顶点，再 CREATE 关系
   const cypher = `
-    MATCH (a:Character {characterId: '${params.fromCharacterId}'}),
-          (b:Character {characterId: '${params.toCharacterId}'})
+    MATCH (a:Character {characterId: '${escapeCypherString(params.fromCharacterId)}'}),
+          (b:Character {characterId: '${escapeCypherString(params.toCharacterId)}'})
     CREATE (a)-[r:RELATION {${props}}]->(b)
   `;
   return executeCypher(client, cypher);
