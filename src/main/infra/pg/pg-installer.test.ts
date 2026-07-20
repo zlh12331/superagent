@@ -39,7 +39,6 @@ import {
   initdb,
   isPgInitialized,
   isPortablePgAvailable,
-  switchVersion,
 } from './pg-installer';
 
 /**
@@ -106,19 +105,19 @@ describe('pg-installer', () => {
     it('便携版存在时 dev 环境应返回便携版绝对路径', () => {
       mockExistsSync.mockReturnValue(true);
       const path = getPgBinaryPath();
-      // 应返回 <projectRoot>/resources/pg/18.4/bin/postgres.exe
+      // 应返回 <projectRoot>/resources/pg/17.2-mingw/bin/postgres.exe
       expect(path).toContain('resources');
       expect(path).toContain('pg');
-      expect(path).toContain('18.4');
+      expect(path).toContain('17.2-mingw');
       expect(path).toContain('postgres.exe');
       // 应通过 existsSync 检查便携版是否存在
       expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('postgres.exe'));
     });
 
-    it('应接受版本参数（17.10 便携版存在时返回 17.10 路径）', () => {
+    it('应接受版本参数（18.4 便携版存在时返回 18.4 路径）', () => {
       mockExistsSync.mockReturnValue(true);
-      const path = getPgBinaryPath('17.10');
-      expect(path).toContain('17.10');
+      const path = getPgBinaryPath('18.4');
+      expect(path).toContain('18.4');
       expect(path).toContain('postgres.exe');
     });
   });
@@ -127,23 +126,23 @@ describe('pg-installer', () => {
     it('便携版 postgres.exe 存在时应返回 true', () => {
       // existsSync 返回 true → 便携版已下载
       mockExistsSync.mockReturnValue(true);
-      expect(isPortablePgAvailable('17.10')).toBe(true);
+      expect(isPortablePgAvailable('17.2-mingw')).toBe(true);
       // 应检查指定版本的 postgres.exe 路径
-      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('17.10'));
+      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('17.2-mingw'));
       expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('postgres.exe'));
     });
 
     it('便携版 postgres.exe 不存在时应返回 false', () => {
       // existsSync 返回 false → 便携版未下载
       mockExistsSync.mockReturnValue(false);
-      expect(isPortablePgAvailable('17.10')).toBe(false);
+      expect(isPortablePgAvailable('17.2-mingw')).toBe(false);
     });
 
-    it('默认版本应为 18.4', () => {
+    it('默认版本应为 17.2-mingw', () => {
       mockExistsSync.mockReturnValue(true);
       isPortablePgAvailable();
-      // 应检查 18.4 版本的 postgres.exe
-      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('18.4'));
+      // 应检查 17.2-mingw 版本的 postgres.exe
+      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('17.2-mingw'));
     });
   });
 
@@ -151,12 +150,12 @@ describe('pg-installer', () => {
     it('应返回 userData 下的 pgdata-<version> 路径', () => {
       const path = getPgDataDir();
       // mockApp.getPath('userData') 返回 'C:/test-userdata/userData'
-      expect(path).toContain('pgdata-18.4');
+      expect(path).toContain('pgdata-17.2-mingw');
     });
 
     it('应根据版本参数返回不同路径', () => {
-      const path = getPgDataDir('17.10');
-      expect(path).toContain('pgdata-17.10');
+      const path = getPgDataDir('18.4');
+      expect(path).toContain('pgdata-18.4');
     });
   });
 
@@ -234,16 +233,6 @@ describe('pg-installer', () => {
 
       await expect(promise).resolves.toBeUndefined();
       expect(mockSpawn).toHaveBeenCalled();
-    });
-  });
-
-  describe('switchVersion', () => {
-    it('切换到 17.10 应确保该版本数据目录已初始化', async () => {
-      // 已初始化 → 跳过 initdb
-      mockExistsSync.mockReturnValue(true);
-      await switchVersion('17.10');
-      // 应检查 pgdata-17.10/PG_VERSION 文件
-      expect(mockExistsSync).toHaveBeenCalledWith(expect.stringContaining('pgdata-17.10'));
     });
   });
 });

@@ -5,9 +5,11 @@
 // 1. 检测数据目录是否已初始化（PG_VERSION 文件存在）
 // 2. 未初始化时调用 initdb 创建数据目录
 // 3. 提供 postgres 二进制路径（dev: 系统 PATH；prod: resources/pg/<version>/bin/）
-// 4. AGE 兼容性降级编排（18.4 失败 → 切换 17.10，迁移数据目录）
 //
-// 注意：本模块不启动 PG（由 pg-controller.start() 负责）
+// 注意：
+// - 本模块不启动 PG（由 pg-controller.start() 负责）
+// - AGE 降级逻辑已移除（ShanGor 预编译包自带 AGE 1.5.0，无需降级）
+// - 旧版 EnterpriseDB 18.4 便携版已弃用（不含 AGE/pgvector 扩展二进制）
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -21,11 +23,15 @@ import { getUserDataPath } from '../storage/app-data';
 /** PG 数据目录标识文件（initdb 完成后会创建此文件，含 PG 主版本号） */
 const PG_VERSION_FILE = 'PG_VERSION';
 
-/** 默认 PG 版本（AGE 在此版本通常已兼容） */
-const DEFAULT_VERSION = POSTGRES_VERSIONS.V18_4;
-
-/** 降级 PG 版本（AGE 兼容性兜底） */
-const FALLBACK_VERSION = POSTGRES_VERSIONS.V17_10;
+/**
+ * 默认 PG 版本
+ *
+ * ShanGor/apache-age-windows 预编译包：
+ * - PG 17.2 + AGE 1.5.0 + pgvector 0.8.0 三合一
+ * - MSYS2-MINGW64 编译，目录名带 -mingw 后缀
+ * - 来源：https://github.com/ShanGor/apache-age-windows/releases/tag/PG17%2Fv1.5.0-rc0
+ */
+const DEFAULT_VERSION = POSTGRES_VERSIONS.V17_2_MINGW;
 
 /**
  * 获取项目内便携版 PG 二进制根目录
@@ -33,7 +39,7 @@ const FALLBACK_VERSION = POSTGRES_VERSIONS.V17_10;
  * dev 环境：app.getAppPath() 返回项目根目录，便携版位于 <root>/resources/pg/<version>/
  * prod 环境：process.resourcesPath 指向 app.asar 同级 resources，便携版位于 <resources>/pg/<version>/
  *
- * @returns 便携版 PG 根目录（包含 18.4/、17.10/ 子目录）；不存在时返回空串
+ * @returns 便携版 PG 根目录（包含 17.2-mingw/、18.4/ 等子目录）
  */
 function getPortablePgRoot(): string {
   const config = getAppConfig();
@@ -53,7 +59,7 @@ function getPortablePgRoot(): string {
  * 2. dev 环境 fallback：系统 PATH 中的 'postgres'（便携版未下载时）
  * 3. prod 环境：便携版必须存在，否则返回路径（让 spawn 报 ENOENT 暴露问题）
  *
- * @param version PG 版本号，默认 18.4
+ * @param version PG 版本号，默认 17.2-mingw（ShanGor 预编译包）
  * @returns postgres 可执行文件路径
  */
 export function getPgBinaryPath(version: string = DEFAULT_VERSION): string {
@@ -80,10 +86,9 @@ export function getPgBinaryPath(version: string = DEFAULT_VERSION): string {
 /**
  * 检测指定版本的便携版 PG 是否已下载
  *
- * 用于 AGE 降级路径：17.10 便携版未下载时跳过降级，仅 warn 不阻塞应用启动
- * （便携版 PG 不含 AGE 扩展二进制，降级到 17.10 同样无法解决 AGE 问题）
+ * 用于应用启动前自检：便携版不存在时给出明确提示
  *
- * @param version PG 版本号，默认 18.4
+ * @param version PG 版本号，默认 17.2-mingw
  * @returns true=便携版 postgres.exe 存在；false=未下载
  */
 export function isPortablePgAvailable(version: string = DEFAULT_VERSION): boolean {
@@ -96,8 +101,9 @@ export function isPortablePgAvailable(version: string = DEFAULT_VERSION): boolea
  *
  * 路径： %APPDATA%/<AppName>/pgdata-<version>/
  * 版本切换时通过目录后缀隔离，避免不同 PG 主版本数据目录混用
+ * （如 pgdata-17.2-mingw 与 pgdata-18.4 互不干扰）
  *
- * @param version PG 版本号，默认 18.4
+ * @param version PG 版本号，默认 17.2-mingw
  * @returns 数据目录绝对路径
  */
 export function getPgDataDir(version: string = DEFAULT_VERSION): string {
@@ -134,7 +140,7 @@ function parsePgUsername(url: string): string {
  *
  * initdb 成功后会在数据目录创建 PG_VERSION 文件，作为初始化完成的标志
  *
- * @param version PG 版本号，默认 18.4
+ * @param version PG 版本号，默认 17.2-mingw
  * @returns true=已初始化；false=未初始化
  */
 export function isPgInitialized(version: string = DEFAULT_VERSION): boolean {
@@ -147,13 +153,13 @@ export function isPgInitialized(version: string = DEFAULT_VERSION): boolean {
  * 执行 initdb 初始化数据目录
  *
  * 调用 initdb 命令：
- *   initdb -D <dataDir> --username=postgres --auth=trust --encoding=UTF8
+ *   initdb -D <dataDir> --username=<pgUser> --auth=trust --encoding=UTF8
  *
- * - --username=postgres：默认 superuser 名
+ * - --username：从 config.pg.url 解析，保证与 PrismaClient 连接用同名用户
  * - --auth=trust：本地信任认证（嵌入式无需密码）
  * - --encoding=UTF8：字符集
  *
- * @param version PG 版本号，默认 18.4
+ * @param version PG 版本号，默认 17.2-mingw
  * @throws AppError(ErrorCode.PG_INIT_FAILED) initdb 失败或超时
  */
 export async function initdb(version: string = DEFAULT_VERSION): Promise<void> {
@@ -229,7 +235,7 @@ export async function initdb(version: string = DEFAULT_VERSION): Promise<void> {
  *
  * 首次启动时调用：若已初始化则跳过，否则执行 initdb
  *
- * @param version PG 版本号，默认 18.4
+ * @param version PG 版本号，默认 17.2-mingw
  * @throws AppError(ErrorCode.PG_INIT_FAILED) initdb 失败
  */
 export async function ensureInstalled(version: string = DEFAULT_VERSION): Promise<void> {
@@ -238,22 +244,4 @@ export async function ensureInstalled(version: string = DEFAULT_VERSION): Promis
     return;
   }
   await initdb(version);
-}
-
-/**
- * 切换 PG 版本（AGE 降级用，设计文档 §6.5）
- *
- * 流程：
- * 1. 确保目标版本数据目录已初始化（必要时执行 initdb）
- * 2. 调用方负责 stop 旧版本 + start 新版本（由 db-init.ts 编排）
- *
- * @param targetVersion 目标 PG 版本（如 17.10）
- * @throws AppError(ErrorCode.PG_INIT_FAILED) initdb 失败
- */
-export async function switchVersion(targetVersion: string): Promise<void> {
-  if (targetVersion !== FALLBACK_VERSION) {
-    logger.warn({ targetVersion }, '切换到非标准版本，可能不兼容');
-  }
-  logger.info({ targetVersion }, '切换 PG 版本');
-  await ensureInstalled(targetVersion);
 }
