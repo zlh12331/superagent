@@ -10,7 +10,8 @@
 // 注意：
 // - Cypher 语句通过 ag_catalog.cypher() 函数包裹，返回 SETOF record
 // - 必须用 Prisma $executeRawUnsafe / $queryRawUnsafe（Prisma 不原生支持 Cypher）
-// - ag_catalog.create_graph 是幂等的（已存在则报 NOTICE 不抛错）
+// - ag_catalog.create_graph 不幂等：已存在时抛 'graph "xxx" already exists'（错误码 3F000）
+//   故用 DO 块 + ag_catalog.ag_graph 系统表查询实现幂等（重启时不报错）
 
 import { AGE_GRAPH_NAME } from '@novel-writer/shared';
 import type { PrismaClient } from '@prisma/client';
@@ -30,11 +31,24 @@ const AGE_INIT_SQL = `
 `;
 
 /**
- * 创建 Graph SQL（若已存在则 NOTICE 不抛错）
+ * 创建 Graph SQL（幂等：若已存在则跳过）
  *
  * ag_catalog.create_graph 第二参数是 Graph 名
+ *
+ * 实现细节：
+ * - ag_catalog.create_graph 不幂等，已存在时抛 'graph "xxx" already exists'（3F000）
+ * - 用 PL/pgSQL DO 块 + ag_catalog.ag_graph 系统表查询实现幂等
+ * - 仅当 graph 不存在时 PERFORM create_graph
+ * - 重启场景下 graph 已存在 → DO 块直接结束，不抛错
  */
-const CREATE_GRAPH_SQL = `SELECT ag_catalog.create_graph('${AGE_GRAPH_NAME}');`;
+const CREATE_GRAPH_SQL = `
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM ag_catalog.ag_graph WHERE name = '${AGE_GRAPH_NAME}') THEN
+      PERFORM ag_catalog.create_graph('${AGE_GRAPH_NAME}');
+    END IF;
+  END $$;
+`;
 
 /**
  * 加载 AGE 扩展并初始化 Graph

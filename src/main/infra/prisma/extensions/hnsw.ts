@@ -12,6 +12,8 @@
 // - HNSW 索引在 migration 之后创建（Prisma 不支持 halfvec 类型 DDL）
 // - 索引创建幂等（IF NOT EXISTS）
 // - 大表创建 HNSW 索引可能耗时，生产环境应在用户引导下执行
+// - pg_trgm GIN 索引失败仅 warn 不阻塞（可能因 AGE_INIT_SQL 改变 search_path
+//   导致 gin_trgm_ops opclass 不可见；相似度搜索功能不可用，但其他功能正常）
 
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../../utils/logger';
@@ -71,10 +73,12 @@ let isInitialized = false;
  *
  * 容错策略：
  * - pgvector 未安装时 HNSW 索引创建失败 → 跳过，仅 warn
- * - pg_trgm / 章节索引失败 → 抛错（这些是核心功能）
- * - RAG 检索功能在 pgvector 安装前不可用，但不阻塞应用启动
+ * - pg_trgm GIN 索引失败 → 跳过，仅 warn（不阻塞应用启动）
+ *   可能因 AGE_INIT_SQL 改变 search_path 导致 gin_trgm_ops opclass 不可见
+ * - 章节复合索引失败 → 抛错（核心功能）
+ * - RAG 检索 / 相似度搜索功能不可用时不阻塞应用启动
  *
- * @throws Error 核心索引创建失败（pg_trgm / 章节复合索引）
+ * @throws Error 核心索引创建失败（章节复合索引）
  */
 export async function ensureHnswIndex(client: PrismaClient): Promise<void> {
   if (isInitialized) {
@@ -99,8 +103,18 @@ export async function ensureHnswIndex(client: PrismaClient): Promise<void> {
     );
   }
 
-  await client.$executeRawUnsafe(CREATE_CONTENT_TRGM_INDEX_SQL);
-  logger.info({}, 'chapters.content trgm 索引已就绪');
+  // 章节内容 trgm GIN 索引（相似度搜索）
+  // 失败时跳过，仅 warn 不阻塞应用启动
+  // 可能因 AGE_INIT_SQL 改变 search_path 导致 gin_trgm_ops opclass 不可见
+  try {
+    await client.$executeRawUnsafe(CREATE_CONTENT_TRGM_INDEX_SQL);
+    logger.info({}, 'chapters.content trgm 索引已就绪');
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'chapters.content trgm 索引创建失败（gin_trgm_ops opclass 可能因 search_path 不可见），跳过；相似度搜索功能不可用',
+    );
+  }
 
   await client.$executeRawUnsafe(CREATE_CHAPTERS_PROJECT_ORDER_INDEX_SQL);
   logger.info({}, 'chapters(project_id, sort_order) 复合索引已就绪');

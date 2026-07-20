@@ -56,7 +56,7 @@ describe('HNSW 索引初始化', () => {
     expect(calls[2]).toContain('idx_chapters_content_trgm');
     expect(calls[2]).toContain('gin_trgm_ops');
     expect(calls[3]).toContain('idx_chapters_project_order');
-    expect(calls[3]).toContain('project_id, sort_order');
+    expect(calls[3]).toContain('"projectId", "sortOrder"');
   });
 
   it('HNSW 索引名应为 idx_rag_chunks_embedding', async () => {
@@ -82,8 +82,30 @@ describe('HNSW 索引初始化', () => {
     expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(8);
   });
 
-  it('索引创建失败应抛错', async () => {
+  it('pg_trgm 扩展创建失败应抛错（核心扩展不可缺）', async () => {
     mockPrisma.$executeRawUnsafe.mockRejectedValueOnce(new Error('halfvec type not found'));
     await expect(ensureHnswIndex(mockPrisma as never)).rejects.toThrow('halfvec type not found');
+  });
+
+  it('HNSW 索引失败应容错不抛错（pgvector 可能未安装）', async () => {
+    // 第 1 次调用（pg_trgm 扩展）成功
+    mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(1);
+    // 第 2 次调用（HNSW 索引）失败 → 应被 try-catch 吞掉
+    mockPrisma.$executeRawUnsafe.mockRejectedValueOnce(new Error('halfvec type not found'));
+    // 第 3、4 次调用仍正常执行
+    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
+    await expect(ensureHnswIndex(mockPrisma as never)).resolves.toBeUndefined();
+  });
+
+  it('trgm GIN 索引失败应容错不抛错（search_path 可能导致 opclass 不可见）', async () => {
+    // 第 1、2 次调用正常
+    mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+    // 第 3 次调用（trgm 索引）失败 → 应被 try-catch 吞掉
+    mockPrisma.$executeRawUnsafe.mockRejectedValueOnce(
+      new Error('operator class gin_trgm_ops does not exist'),
+    );
+    // 第 4 次调用仍正常
+    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
+    await expect(ensureHnswIndex(mockPrisma as never)).resolves.toBeUndefined();
   });
 });
