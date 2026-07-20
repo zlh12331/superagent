@@ -22,6 +22,9 @@
 // - 节点行使用 div + role="treeitem" + tabIndex + onKeyDown 满足 Biome a11y 要求
 //   （treeitem 角色支持 aria-selected 与 aria-expanded，且无对应 HTML 元素）
 // - DropdownMenu 触发器需 stopPropagation，避免触发节点行的 onSelect
+// - DropdownMenuItem 用 onSelect（Radix 标准事件），且会打开 Dialog 的操作（新建子节点/删除）
+//   需用 setTimeout(0) 延迟回调，避开 DropdownMenu 关闭时派发 pointerDownOutside 事件
+//   导致父组件 Dialog 立即被关闭的问题
 
 import type { Worldview } from '@novel-writer/shared';
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
@@ -108,14 +111,15 @@ export function WorldviewTreeNode({
     setIsExpanded((prev) => !prev);
   };
 
-  // 新建子节点：上抛父节点 ID
+  // 新建子节点：延迟一帧上抛父节点 ID，避开 DropdownMenu 关闭时的 Portal 事件冲突
+  // （父组件会打开 WorldviewFormDialog，若同步打开会被 DropdownMenu 关闭事件误关闭）
   const handleCreateChild = (): void => {
-    onCreateChild(node.id);
+    setTimeout(() => onCreateChild(node.id), 0);
   };
 
-  // 删除节点：上抛节点 ID
+  // 删除节点：延迟一帧上抛，原因同 handleCreateChild（父组件会打开 ConfirmDialog）
   const handleDelete = (): void => {
-    onDelete(node.id);
+    setTimeout(() => onDelete(node.id), 0);
   };
 
   // 缩进：每层 16px + 基础 8px
@@ -194,12 +198,12 @@ export function WorldviewTreeNode({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleCreateChild}>
+            <DropdownMenuItem onSelect={handleCreateChild}>
               <Plus className="size-4" strokeWidth={1.5} />
               新建子节点
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleDelete} variant="destructive">
+            <DropdownMenuItem onSelect={handleDelete} variant="destructive">
               <Trash2 className="size-4" strokeWidth={1.5} />
               删除
             </DropdownMenuItem>

@@ -17,6 +17,11 @@
 //
 // 注意：
 // - 卡片整体可点击跳转，操作菜单触发器需 stopPropagation 避免触发跳转
+// - DropdownMenuItem 用 onSelect（Radix 标准事件，比 onClick 更可靠），
+//   且会打开 Dialog 的操作（归档/删除）需用 setTimeout(0) 延迟回调：
+//   DropdownMenu 关闭时会向 body 派发 pointerDownOutside 事件，
+//   若 ConfirmDialog 在同一事件循环中打开，会被该事件立即关闭，
+//   导致"点击删除后什么都没发生"。延迟一帧打开可避开冲突。
 // - STATUS_BADGE 使用 Map 而非对象字面量：
 //   1) Biome useNamingConvention 要求对象属性名为 camelCase，
 //      而 Project['status'] 取值为 UPPER_CASE（'ACTIVE' / 'ARCHIVED' / 'DRAFT'），
@@ -94,14 +99,15 @@ export function ProjectCard({ project, onArchive, onDelete }: ProjectCardProps):
     navigate(`/projects/${project.id}`);
   };
 
-  // 归档操作（直接上抛项目 ID）
+  // 归档操作：延迟一帧上抛，避开 DropdownMenu 关闭时派发的 pointerDownOutside 事件
+  // 导致 ConfirmDialog 立即被关闭的问题（详见文件顶部注释）
   const handleArchive = (): void => {
-    onArchive(project.id);
+    setTimeout(() => onArchive(project.id), 0);
   };
 
-  // 删除操作（上抛项目 ID，由父组件弹出确认框）
+  // 删除操作：延迟一帧上抛，原因同 handleArchive
   const handleDelete = (): void => {
-    onDelete(project.id);
+    setTimeout(() => onDelete(project.id), 0);
   };
 
   return (
@@ -132,12 +138,12 @@ export function ProjectCard({ project, onArchive, onDelete }: ProjectCardProps):
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleArchive}>
+              <DropdownMenuItem onSelect={handleArchive}>
                 <Archive className="size-4" strokeWidth={1.5} />
                 归档
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+              <DropdownMenuItem onSelect={handleDelete} className="text-destructive">
                 <Trash2 className="size-4" strokeWidth={1.5} />
                 删除
               </DropdownMenuItem>

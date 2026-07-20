@@ -23,6 +23,9 @@
 //   2) Map.get() 返回 T | undefined，正好契合 noUncheckedIndexedAccess 的兜底需求。
 // - 头像缺失时用姓名首字母占位，避免布局抖动
 // - 简介为 null/undefined 时整行不渲染，避免出现空段落
+// - DropdownMenuItem 用 onSelect（Radix 标准事件），且会打开 Dialog 的操作（编辑/删除）
+//   需用 setTimeout(0) 延迟回调，避开 DropdownMenu 关闭时派发 pointerDownOutside 事件
+//   导致 ConfirmDialog/CharacterFormDialog 立即被关闭的问题
 
 import type { Character, CharacterRole } from '@novel-writer/shared';
 import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
@@ -102,14 +105,15 @@ export function CharacterCard({ character, onEdit, onDelete }: CharacterCardProp
   // Map.get() 返回 T | undefined，用兜底值保证安全
   const role = ROLE_BADGE.get(character.role) ?? ROLE_BADGE_FALLBACK;
 
-  // 编辑操作：把整个 character 上抛，父组件用 initial 进入编辑模式
+  // 编辑操作：延迟一帧上抛，避开 DropdownMenu 关闭时派发的 pointerDownOutside 事件
+  // 导致 CharacterFormDialog 立即被关闭的问题
   const handleEdit = (): void => {
-    onEdit(character);
+    setTimeout(() => onEdit(character), 0);
   };
 
-  // 删除操作：上抛 ID，由父组件弹出 ConfirmDialog 二次确认
+  // 删除操作：延迟一帧上抛，原因同 handleEdit（ConfirmDialog 同样会被影响）
   const handleDelete = (): void => {
-    onDelete(character.id);
+    setTimeout(() => onDelete(character.id), 0);
   };
 
   return (
@@ -142,12 +146,12 @@ export function CharacterCard({ character, onEdit, onDelete }: CharacterCardProp
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleEdit}>
+                  <DropdownMenuItem onSelect={handleEdit}>
                     <Pencil className="size-4" strokeWidth={1.5} />
                     编辑
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+                  <DropdownMenuItem onSelect={handleDelete} className="text-destructive">
                     <Trash2 className="size-4" strokeWidth={1.5} />
                     删除
                   </DropdownMenuItem>

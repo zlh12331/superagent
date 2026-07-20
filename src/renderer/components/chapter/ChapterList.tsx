@@ -237,9 +237,10 @@ export function ChapterList({
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         variant="destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteChapter(chapter.id);
+                        onSelect={() => {
+                          // 延迟一帧上抛，避开 DropdownMenu 关闭时派发的 pointerDownOutside 事件
+                          // 导致 ConfirmDialog 立即被关闭的问题（详见 ProjectCard.tsx 注释）
+                          setTimeout(() => onDeleteChapter(chapter.id), 0);
                         }}
                       >
                         <Trash2 className="size-4" strokeWidth={1.5} />

@@ -19,6 +19,9 @@
 // - 本组件为纯展示型组件，不直接调用 mutation，删除/上传均通过回调上抛父组件
 // - DropdownMenu 触发器需 stopPropagation，避免点击触发器时同时触发卡片选中
 //   （此处没有卡片选中场景，但保留 stopPropagation 习惯，便于未来扩展）
+// - DropdownMenuItem 用 onSelect（Radix 标准事件），且会打开 Dialog 的操作（删除）
+//   需用 setTimeout(0) 延迟回调，避开 DropdownMenu 关闭时派发 pointerDownOutside 事件
+//   导致 ConfirmDialog 立即被关闭的问题
 
 import type { RagDocument } from '@novel-writer/shared';
 import { FileText, MoreVertical, Plus, Trash2 } from 'lucide-react';
@@ -128,9 +131,10 @@ export function RagDocumentList({
       <ScrollArea className="flex-1">
         <ul className="flex flex-col gap-0.5 p-2">
           {documents.map((doc) => {
-            // 删除操作：上抛文档 ID，由父组件弹出确认框
+            // 删除操作：延迟一帧上抛文档 ID，避开 DropdownMenu 关闭时的 Portal 事件冲突
+            // （父组件会打开 ConfirmDialog，若同步打开会被 DropdownMenu 关闭事件误关闭）
             const handleDelete = (): void => {
-              onDeleteDocument(doc.id);
+              setTimeout(() => onDeleteDocument(doc.id), 0);
             };
             return (
               <li key={doc.id}>
@@ -168,7 +172,7 @@ export function RagDocumentList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+                      <DropdownMenuItem variant="destructive" onSelect={handleDelete}>
                         <Trash2 className="size-4" strokeWidth={1.5} />
                         删除
                       </DropdownMenuItem>
