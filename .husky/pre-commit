@@ -1,8 +1,24 @@
 #!/usr/bin/env sh
 # .husky/pre-commit
-# 提交前钩子：跑 lint-staged（自动修复）+ codegraph sync
+# 提交前钩子：跑 lint-staged（自动修复）+ codegraph sync（带超时）
 # 设计文档 §9.9 / §9.13
+#
+# codegraph sync 容错说明：
+# - 当 codegraph daemon 锁住数据库（如 IDE 启动了 MCP server）时，sync 会失败
+# - 当索引有大量待解析 refs（如 docs/参考项目 被全量索引）时，sync 会卡死
+# - 用 timeout 60 限制 sync 最多 60 秒，超时后 kill 不阻塞 commit
+# - 配置见 codegraph.json（exclude 字段排除 docs/参考项目）
+# - 用户可设 SKIP_CODEGRAPH_SYNC=1 完全跳过 sync
 
 pnpm lint-staged
-pnpm codegraph sync
-git add .codegraph
+
+if [ "$SKIP_CODEGRAPH_SYNC" = "1" ]; then
+  echo "[pre-commit] SKIP_CODEGRAPH_SYNC=1，跳过 codegraph sync"
+else
+  # timeout 命令在 Linux/macOS 原生可用；Git Bash for Windows 也自带 timeout
+  # 超时返回码 124，失败返回非零，均不阻塞 commit
+  timeout 60 pnpm codegraph sync 2>&1 || echo "[pre-commit] codegraph sync 超时或失败（codegraph.json 已配置 exclude）"
+fi
+
+# .codegraph 目录可能不存在或被 .gitignore 忽略，git add 失败不阻塞
+git add .codegraph 2>/dev/null || true
