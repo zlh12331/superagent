@@ -14,6 +14,7 @@
 
 import type { ChatMessage } from '@novel-writer/shared';
 import { IPC_CHANNELS } from '@novel-writer/shared';
+import { APICallError, LoadAPIKeyError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,9 +47,15 @@ const mocks = vi.hoisted(() => {
 });
 
 // mock ai：拦截 streamText（getModel 在 ai-provider.ts，但 chat-service 直接 import getModel）
-vi.mock('ai', () => ({
-  streamText: mocks.mockStreamText,
-}));
+// 注意：APICallError / LoadAPIKeyError 是真实类（不 mock），
+// 测试用例需要用真实错误类构造 mock 错误以验证 instanceof 类型守卫
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return {
+    ...actual,
+    streamText: mocks.mockStreamText,
+  };
+});
 
 // mock ai-provider：拦截 getModel，避免触发 keychain/config
 vi.mock('../infra/ai/ai-provider', () => ({
@@ -320,7 +327,14 @@ describe('chat-service', () => {
 
     it('API key 无效错误：推送 CHAT_STREAM_ERROR + AI_API_KEY_INVALID', async () => {
       const wc = createMockWebContents();
-      const err = new Error('Invalid API key provided');
+      // P2-7：用真实 APICallError（statusCode=401）替代 Error('Invalid API key')
+      const err = new APICallError({
+        message: 'Invalid API key provided',
+        url: 'https://api.deepseek.com/v1/chat/completions',
+        requestBodyValues: undefined,
+        statusCode: 401,
+        responseBody: 'Unauthorized',
+      });
       mocks.mockStreamText.mockImplementation(() => {
         throw err;
       });
@@ -347,8 +361,16 @@ describe('chat-service', () => {
 
     it('限流错误：推送 AI_RATE_LIMITED', async () => {
       const wc = createMockWebContents();
+      // P2-7：用真实 APICallError（statusCode=429）替代 Error('Rate limit')
+      const err = new APICallError({
+        message: 'Rate limit exceeded',
+        url: 'https://api.deepseek.com/v1/chat/completions',
+        requestBodyValues: undefined,
+        statusCode: 429,
+        responseBody: 'Too Many Requests',
+      });
       mocks.mockStreamText.mockImplementation(() => {
-        throw new Error('Rate limit exceeded (429)');
+        throw err;
       });
 
       await getChatService().startChat({
@@ -367,10 +389,18 @@ describe('chat-service', () => {
       expect(payload.code).toBe('AI_RATE_LIMITED');
     });
 
-    it('网络错误：推送 AI_STREAM_INTERRUPTED', async () => {
+    it('网络错误（isRetryable=true）：推送 AI_STREAM_INTERRUPTED', async () => {
       const wc = createMockWebContents();
+      // P2-7：用真实 APICallError（statusCode=undefined, isRetryable=true）模拟网络中断
+      // AI SDK 在 fetch 失败时会包装为 APICallError（statusCode=undefined, isRetryable=true）
+      const err = new APICallError({
+        message: 'fetch failed: network error',
+        url: 'https://api.deepseek.com/v1/chat/completions',
+        requestBodyValues: undefined,
+        isRetryable: true,
+      });
       mocks.mockStreamText.mockImplementation(() => {
-        throw new Error('fetch failed: network error');
+        throw err;
       });
 
       await getChatService().startChat({
@@ -387,6 +417,30 @@ describe('chat-service', () => {
       }
       const payload = call[1] as { code: string };
       expect(payload.code).toBe('AI_STREAM_INTERRUPTED');
+    });
+
+    it('API key 未配置：推送 AI_API_KEY_MISSING', async () => {
+      const wc = createMockWebContents();
+      // P2-7：用真实 LoadAPIKeyError 模拟 keychain/config 未配置 API key
+      const err = new LoadAPIKeyError({ message: 'API key not found in keychain' });
+      mocks.mockStreamText.mockImplementation(() => {
+        throw err;
+      });
+
+      await getChatService().startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 'session-missing',
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      const call = wc.send.mock.calls[0];
+      if (!call) {
+        throw new Error('webContents.send 未被调用');
+      }
+      const payload = call[1] as { code: string };
+      expect(payload.code).toBe('AI_API_KEY_MISSING');
     });
 
     it('未知错误：推送 INTERNAL_ERROR', async () => {
@@ -516,6 +570,89 @@ describe('chat-service', () => {
       expect(wc1Calls).toHaveLength(1);
       const wc2Calls = wc2.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.CHAT_STREAM_END);
       expect(wc2Calls).toHaveLength(1);
+    });
+  });
+
+  describe('dispose（P3-10 优雅关闭）', () => {
+    it('无活跃对话时立即返回', async () => {
+      // 不启动任何对话，直接 dispose
+      await getChatService().dispose(1000);
+      // 应该立即完成（无 stream 可等待）
+      // 这里能执行到 expect 即证明 dispose 已 resolve
+      expect(true).toBe(true);
+    });
+
+    it('有活跃对话时等待 stream 完成后 resolve', async () => {
+      const wc = createMockWebContents();
+      // mock streamText 响应 abortSignal：abort 时让 reader 抛 AbortError
+      mocks.mockStreamText.mockImplementation(({ abortSignal }: { abortSignal: AbortSignal }) => ({
+        toUIMessageStream: () =>
+          new ReadableStream({
+            start(controller) {
+              if (abortSignal !== undefined) {
+                abortSignal.addEventListener(
+                  'abort',
+                  () => {
+                    const err = new Error('aborted');
+                    err.name = 'AbortError';
+                    controller.error(err);
+                  },
+                  { once: true },
+                );
+              }
+            },
+          }),
+      }));
+
+      await getChatService().startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 'session-dispose-1',
+        webContents: wc,
+      });
+
+      // dispose 会先 abortAll 再 await 所有活跃 stream Promise
+      // 因为 streamText 响应了 abortSignal，stream 会抛 AbortError 被 catch，
+      // 进入 finally 后从 Map 移除，stream Promise resolve
+      await getChatService().dispose(1000);
+
+      // 验证 stream 已完成（wc 收到 CHAT_STREAM_END）
+      const endCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.CHAT_STREAM_END);
+      expect(endCalls).toHaveLength(1);
+    });
+
+    it('超时强制清空不 hang 死', async () => {
+      const wc = createMockWebContents();
+      // mock streamText 返回永不 close 的流，且不响应 abortSignal
+      // 这样 dispose 的 Promise.allSettled 会永远 pending，只能靠 timeout 兜底
+      mocks.mockStreamText.mockReturnValue({
+        toUIMessageStream: () =>
+          new ReadableStream({
+            start() {
+              // 不 enqueue 也不 close，也不响应 abortSignal
+              // reader.read() 永远 pending
+            },
+          }),
+      });
+
+      await getChatService().startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 'session-stuck',
+        webContents: wc,
+      });
+
+      // 用很短的超时（50ms）让测试快速完成
+      // dispose 必须在 50ms 后强制 resolve（而非永远 pending）
+      const start = Date.now();
+      await getChatService().dispose(50);
+      const elapsed = Date.now() - start;
+
+      // 应该在 50ms 后 + 一点缓冲时间内完成
+      expect(elapsed).toBeGreaterThanOrEqual(40);
+      expect(elapsed).toBeLessThan(1000);
+
+      // 验证 dispose 后即使 stream 协程仍在 pending，再次 dispose 也应立即返回
+      // （Map 已被清空，无活跃 stream 可等待）
+      await getChatService().dispose(50);
     });
   });
 });

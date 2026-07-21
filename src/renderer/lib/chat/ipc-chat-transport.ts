@@ -7,7 +7,8 @@
 //
 // 工作流程：
 // 1. useChat 调用 transport.sendMessages({ messages, abortSignal, ... })
-// 2. transport 把 UIMessage[] 转换为 ChatMessage[]（仅提取 role + text content）
+// 2. transport 用官方 convertToModelMessages 把 UIMessage[] 转换为 ChatMessage[]
+//    （= ModelMessage[]，包含 text/tool/reasoning/file 等所有 part 的结构化转换）
 // 3. transport 创建 ReadableStream<UIMessageChunk> 并：
 //    a. 订阅 window.api.chat 的 part/end/error 三个 IPC 事件
 //    b. 调用 window.api.chat.send() 触发主进程 streamText
@@ -24,13 +25,17 @@
 //
 // 限制：
 // - 不支持 reconnectToStream（主进程未持久化流状态，刷新页面无法恢复）
-// - 仅支持纯文本对话（UIMessage.parts 中的 TextUIPart），tool/reasoning 暂不传递
+//
+// P1-6 透传设计：
+// - 渲染层用官方 convertToModelMessages 把 UIMessage[] → ModelMessage[]
+// - ChatMessage 类型 = ModelMessage（shared 包 type-only import）
+// - 主进程直接透传给 streamText，无需手动转换
 
 import type { ChatMessage } from '@novel-writer/shared';
 import {
   type ChatRequestOptions,
   type ChatTransport,
-  isTextUIPart,
+  convertToModelMessages,
   type UIMessage,
   type UIMessageChunk,
 } from 'ai';
@@ -62,7 +67,8 @@ export class IpcChatTransport<Message extends UIMessage = UIMessage>
    * 返回一个 UIMessageChunk 流，useChat 自动消费并更新 messages 状态。
    *
    * 实现：
-   * 1. 把 UIMessage[] 转换为 ChatMessage[]（仅提取 role + text content）
+   * 1. 用官方 convertToModelMessages 把 UIMessage[] 转换为 ChatMessage[]
+   *    （= ModelMessage[]，包含 text/tool/reasoning/file 等所有 part 的结构化转换）
    * 2. 创建 ReadableStream，订阅 IPC 事件流式 enqueue chunk
    * 3. 调用 window.api.chat.send() 触发主进程 streamText
    * 4. abortSignal 触发时调用 window.api.chat.stop() 中断主进程
@@ -76,13 +82,6 @@ export class IpcChatTransport<Message extends UIMessage = UIMessage>
       abortSignal: AbortSignal | undefined;
     } & ChatRequestOptions,
   ): Promise<ReadableStream<UIMessageChunk>> {
-    // 1. UIMessage[] → ChatMessage[]：仅提取 role + 拼接 text content
-    // 不传 tool/reasoning part，主进程仅做纯文本 streamText
-    const chatMessages: ChatMessage[] = options.messages.map((msg) => ({
-      role: msg.role,
-      content: extractTextContent(msg),
-    }));
-
     // 2. 创建 ReadableStream，桥接 IPC 事件
     // 注意：currentSessionId 在 send() 返回后填充，初始为 undefined
     // 在此期间订阅的 IPC 事件会被过滤（不 enqueue），避免错位
@@ -146,6 +145,11 @@ export class IpcChatTransport<Message extends UIMessage = UIMessage>
           );
         }
 
+        // 1. 用官方 convertToModelMessages 把 UIMessage[] 转换为 ChatMessage[]
+        //    （= ModelMessage[]，包含 text/tool/reasoning/file 等所有 part 的结构化转换）
+        //    在 start 内部做异步转换，避免 sendMessages 本身再 await
+        const chatMessages: ChatMessage[] = await convertToModelMessages(options.messages);
+
         // 4. 触发主进程 streamText（异步推送 part）
         const response = await window.api.chat.send({
           messages: chatMessages,
@@ -190,21 +194,4 @@ export class IpcChatTransport<Message extends UIMessage = UIMessage>
   reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
     return Promise.resolve(null);
   }
-}
-
-/**
- * 从 UIMessage 中提取纯文本内容
- *
- * 拼接 parts 数组中所有 TextUIPart 的 text 字段，
- * 忽略 tool/reasoning/file 等非文本 part。
- *
- * 使用 AI SDK 官方 isTextUIPart 类型守卫过滤，类型安全且无 any。
- *
- * 多个 text part 之间用换行分隔（保留多个文本块的语义边界）。
- */
-function extractTextContent(message: UIMessage): string {
-  // parts 中可能混合 text/tool/reasoning 等多种 part，仅提取 text
-  // isTextUIPart 是 AI SDK v7 内置类型守卫，运行时按 type 字段判断
-  const textParts = message.parts.filter(isTextUIPart);
-  return textParts.map((part) => part.text).join('\n');
 }

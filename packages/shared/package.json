@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@novel-writer/tsconfig": "workspace:*",
+    "ai": "^7.0.32",
     "vitest": "^4.0.0"
   }
 }

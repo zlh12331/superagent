@@ -24,7 +24,7 @@ import type {
   ChatStreamPartPayload,
 } from '@novel-writer/shared';
 import { AppError, ErrorCode, IPC_CHANNELS } from '@novel-writer/shared';
-import { type ModelMessage, streamText } from 'ai';
+import { APICallError, LoadAPIKeyError, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 import { getModel } from './ai-provider';
@@ -53,6 +53,13 @@ export interface StartChatOptions {
  * 解耦 IPC handler 对具体类的依赖，便于：
  * - 单元测试：注入 mock 实现，不依赖真实 streamText
  * - 未来扩展：替换为本地 LLM、多 provider 路由等实现
+ *
+ * P3-10 改造：新增 dispose(timeoutMs?) 异步收尾方法
+ * - abortAll() 仅同步触发 AbortController.abort()，streamText 协程仍可能在 reader.read() 等待
+ * - dispose() 在 abortAll 后等待所有活跃 stream 真正进入 finally 块，避免：
+ *   · 进程退出时正在进行的 IPC send 丢失
+ *   · streamText 协程未感知 abort 导致资源泄漏
+ *   · 渲染层未收到 CHAT_STREAM_END/ERROR 导致 loading 状态卡死
  */
 export interface IChatService {
   /** 启动一次对话，返回 sessionId（渲染层用此 id 订阅后续流式事件） */
@@ -61,6 +68,16 @@ export interface IChatService {
   abort(sessionId: string): boolean;
   /** 中断所有活跃对话（用于应用退出 / 窗口关闭场景） */
   abortAll(): void;
+  /**
+   * 优雅关闭：中断所有活跃对话并等待 stream 真正完成（P3-10）
+   *
+   * 用于应用退出场景，与 abortAll 的区别：
+   * - abortAll：仅同步触发 abort 信号，不等待流协程响应
+   * - dispose：触发 abort + 等待所有活跃 stream 进入 finally 块，带超时兜底
+   *
+   * @param timeoutMs 超时毫秒数（默认 3000ms），避免 hang 死阻塞退出
+   */
+  dispose(timeoutMs?: number): Promise<void>;
 }
 
 /**
@@ -76,6 +93,16 @@ export interface IChatService {
 class ChatService implements IChatService {
   /** 活跃对话 Map：sessionId → AbortController */
   private readonly activeSessions = new Map<string, AbortController>();
+  /**
+   * 活跃 stream Promise Map：sessionId → streamToWebContents 的 Promise
+   *
+   * P3-10 新增：用于 dispose 时等待所有 stream 真正完成（进入 finally 块）。
+   * 与 activeSessions 配对维护：
+   * - startChat 时同时写入两个 Map
+   * - streamToWebContents 的 finally 同时清空两个 Map
+   * - dispose 时 await 所有 Promise，确保流协程已响应 abort 并完成清理
+   */
+  private readonly activeStreams = new Map<string, Promise<void>>();
 
   /**
    * 启动一次对话
@@ -96,7 +123,11 @@ class ChatService implements IChatService {
 
     // 异步推送流式 part（不 await，让 startChat 立即返回 sessionId）
     // 任何错误都通过 catch 推送 CHAT_STREAM_ERROR，不抛回调用方
-    void this.streamToWebContents(
+    //
+    // P3-10：把 streamPromise 存入 activeStreams，dispose 时等待其完成
+    // catch 内部仅记录日志，不改变 Promise 状态（仍为 fulfilled），
+    // 这样 dispose 的 Promise.allSettled 不会被 reject 影响
+    const streamPromise = this.streamToWebContents(
       sessionId,
       options.messages,
       options.webContents,
@@ -104,6 +135,7 @@ class ChatService implements IChatService {
     ).catch((err: unknown) => {
       logger.error({ sessionId, error: err }, 'ChatService 流推送异常');
     });
+    this.activeStreams.set(sessionId, streamPromise);
 
     return sessionId;
   }
@@ -127,11 +159,73 @@ class ChatService implements IChatService {
    * 中断所有活跃对话
    *
    * 用于应用退出 / 窗口关闭场景，避免 streamText 在 webContents 销毁后继续推送。
+   *
+   * 注意：本方法仅同步触发 abort 信号，不等待流协程响应。
+   * 如需等待流真正完成，应使用 dispose()（P3-10）。
    */
   abortAll(): void {
     for (const controller of this.activeSessions.values()) {
       controller.abort();
     }
+  }
+
+  /**
+   * 优雅关闭：中断所有活跃对话并等待 stream 真正完成（P3-10）
+   *
+   * 与 abortAll 的区别：
+   * - abortAll：仅同步触发 abort 信号，streamText 协程仍可能在 reader.read() 等待
+   * - dispose：触发 abort + 等待所有活跃 stream 进入 finally 块
+   *
+   * 使用场景：应用退出（before-quit 事件），避免：
+   * - 进程退出时正在进行的 IPC send 丢失
+   * - streamText 协程未感知 abort 导致资源泄漏
+   * - 渲染层未收到 CHAT_STREAM_END/ERROR 导致 loading 状态卡死
+   *
+   * 超时兜底：若 streamText 协程在 timeoutMs 内未完成（异常情况），
+   * 强制清空 Map 让进程退出，避免 hang 死阻塞用户关机。
+   *
+   * @param timeoutMs 超时毫秒数，默认 3000ms
+   */
+  async dispose(timeoutMs = 3000): Promise<void> {
+    // 1. 触发所有 abort 信号
+    this.abortAll();
+
+    // 2. 收集所有活跃 stream Promise
+    const streams = Array.from(this.activeStreams.values());
+    if (streams.length === 0) {
+      // 无活跃对话，直接返回
+      return;
+    }
+
+    // 3. 等待所有 stream 完成，或超时
+    //    使用 Promise.race 实现：哪个先完成都行
+    //    allSettled 而非 all：即使某个 stream 抛错也等待其他完成
+    //    （streamToWebContents 内部已 catch 所有错误，这里双保险）
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timeoutId = setTimeout(() => {
+        logger.warn(
+          { streamCount: streams.length, timeoutMs },
+          'ChatService dispose 超时，强制清空',
+        );
+        resolve();
+      }, timeoutMs);
+    });
+
+    try {
+      await Promise.race([Promise.allSettled(streams), timeoutPromise]);
+    } finally {
+      // 清理 timeout（若 allSettled 先完成，取消超时任务）
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    // 4. 清空 Map（即使超时也清空，避免内存泄漏）
+    //    注意：streamToWebContents 的 finally 也会 delete，但 dispose 可能在超时后调用，
+    //    此时 stream 协程仍在运行，强制清空避免后续 startChat 复用同一 sessionId 时冲突
+    this.activeSessions.clear();
+    this.activeStreams.clear();
   }
 
   /**
@@ -159,9 +253,10 @@ class ChatService implements IChatService {
       // 2. 启动 streamText（同步调用，立即返回 result 对象）
       const result = streamText({
         model,
-        // 把 ChatMessage 转换为 ModelMessage（结构兼容：role + content: string）
+        // P1-6 透传设计：ChatMessage = ModelMessage（type-only import）
+        // 渲染层已用 convertToModelMessages 转换好，主进程直接透传即可
         // AI SDK v7 默认拒绝 messages 中的 system 消息，这里显式允许以兼容旧消息历史
-        messages: messages as ModelMessage[],
+        messages,
         allowSystemInMessages: true,
         abortSignal: controller.signal,
       });
@@ -213,8 +308,10 @@ class ChatService implements IChatService {
         logger.error({ sessionId, error: appError }, '对话流异常结束');
       }
     } finally {
-      // 无论正常/异常/abort，都从 Map 移除
+      // 无论正常/异常/abort，都从两个 Map 同步移除
+      // P3-10：activeStreams 也需清空，dispose 通过 Promise.allSettled 等待其 resolve
       this.activeSessions.delete(sessionId);
+      this.activeStreams.delete(sessionId);
     }
   }
 }
@@ -268,69 +365,87 @@ function isAbortError(error: unknown): boolean {
 /**
  * 错误分类：把未知错误转换为 AppError
  *
- * AI SDK 抛出的错误通常是 APICallerError / APICallError / AbortError，
- * 这里按错误特征映射到项目的 ErrorCode。
+ * P2-7 改造：完全改用 instanceof 类型守卫，避免脆弱的 message 字符串扫描
+ *
+ * 分类优先级（从最具体到最宽泛）：
+ * 1. AppError：已是项目标准错误，直接透传
+ * 2. APICallError：AI SDK 标准 API 调用错误，按 statusCode 精确分类
+ * 3. LoadAPIKeyError：AI SDK 加载 API key 失败（keychain/config 缺失）
+ * 4. TypeError：Node.js 原生 fetch 失败（理论上 AI SDK 会包装为 APICallError，
+ *    但保留兜底以防边缘情况）
+ * 5. 其他：INTERNAL_ERROR
+ *
+ * AbortError 不进入此函数（由 isAbortError 单独处理后直接推送 END）
  */
 function classifyError(error: unknown): AppError {
-  // 已是 AppError：直接返回
+  // 1. 已是 AppError：直接透传
   if (error instanceof AppError) {
     return error;
   }
 
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-
-    // API key 相关
-    if (message.includes('api key') && message.includes('invalid')) {
-      return new AppError(ErrorCode.AI_API_KEY_INVALID, 'API Key 无效', error);
-    }
-    if (message.includes('unauthorized') || message.includes('401')) {
-      return new AppError(ErrorCode.AI_API_KEY_INVALID, 'API Key 无效或已过期', error);
-    }
-
-    // 限流
-    if (
-      message.includes('rate limit') ||
-      message.includes('429') ||
-      message.includes('too many requests')
-    ) {
-      return new AppError(ErrorCode.AI_RATE_LIMITED, 'AI 调用过于频繁', error);
-    }
-
-    // 超时
-    if (message.includes('timeout') || message.includes('timed out')) {
-      return new AppError(ErrorCode.AI_TIMEOUT, 'AI 调用超时', error);
-    }
-
-    // 上下文过长
-    if (
-      message.includes('context length') ||
-      message.includes('too long') ||
-      message.includes('context_length_exceeded')
-    ) {
-      return new AppError(ErrorCode.AI_CONTEXT_TOO_LARGE, '上下文过长', error);
-    }
-
-    // 网络错误（连接失败、中断）
-    if (
-      message.includes('network') ||
-      message.includes('econnreset') ||
-      message.includes('fetch failed')
-    ) {
-      return new AppError(ErrorCode.AI_STREAM_INTERRUPTED, '网络连接中断', error);
-    }
-
-    // 模型错误（500 等）
-    if (
-      message.includes('model') ||
-      message.includes('500') ||
-      message.includes('502') ||
-      message.includes('503')
-    ) {
-      return new AppError(ErrorCode.AI_MODEL_ERROR, 'AI 模型服务异常', error);
-    }
+  // 2. AI SDK 标准 API 调用错误：按 statusCode + isRetryable 精确分类
+  if (error instanceof APICallError) {
+    return classifyAPICallError(error);
   }
 
-  // 兜底：未知错误
+  // 3. AI SDK 加载 API key 失败（keychain/config 缺失）
+  if (error instanceof LoadAPIKeyError) {
+    return new AppError(ErrorCode.AI_API_KEY_MISSING, 'API Key 未配置', error);
+  }
+
+  // 4. Node.js 原生 fetch 失败（未被 AI SDK 包装的边缘情况）
+  if (error instanceof TypeError) {
+    return new AppError(ErrorCode.AI_STREAM_INTERRUPTED, '网络连接中断', error);
+  }
+
+  // 5. 兜底：未知错误
   return new AppError(ErrorCode.INTERNAL_ERROR, 'AI 调用失败', error);
+}
+
+/**
+ * 分类 APICallError：按 HTTP statusCode 精确映射 ErrorCode
+ *
+ * @param error AI SDK 抛出的 APICallError，含 statusCode / isRetryable / responseBody
+ * @returns 对应的 AppError，附带 statusCode 用于渲染层诊断
+ */
+function classifyAPICallError(error: APICallError): AppError {
+  const { statusCode, isRetryable } = error;
+
+  // 401/403：API key 无效或权限不足
+  if (statusCode === 401 || statusCode === 403) {
+    return new AppError(ErrorCode.AI_API_KEY_INVALID, 'API Key 无效或已过期', error);
+  }
+
+  // 404：模型不存在（用户配置的 modelId 错误）
+  if (statusCode === 404) {
+    return new AppError(ErrorCode.AI_MODEL_ERROR, 'AI 模型不存在', error);
+  }
+
+  // 408：请求超时
+  if (statusCode === 408) {
+    return new AppError(ErrorCode.AI_TIMEOUT, 'AI 调用超时', error);
+  }
+
+  // 413：请求体过大（上下文超限）
+  if (statusCode === 413) {
+    return new AppError(ErrorCode.AI_CONTEXT_TOO_LARGE, '上下文过长', error);
+  }
+
+  // 429：限流
+  if (statusCode === 429) {
+    return new AppError(ErrorCode.AI_RATE_LIMITED, 'AI 调用过于频繁', error);
+  }
+
+  // 5xx：模型服务端异常
+  if (statusCode !== undefined && statusCode >= 500) {
+    return new AppError(ErrorCode.AI_MODEL_ERROR, 'AI 模型服务异常', error);
+  }
+
+  // isRetryable=true：网络层错误（连接中断、DNS 失败等，无明确 statusCode）
+  if (isRetryable) {
+    return new AppError(ErrorCode.AI_STREAM_INTERRUPTED, '网络连接中断', error);
+  }
+
+  // 其他：不可重试 + 未分类状态码，视为模型错误
+  return new AppError(ErrorCode.AI_MODEL_ERROR, 'AI 模型服务异常', error);
 }

@@ -8,11 +8,12 @@
 
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
+import { buildCsp } from './security/csp';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
@@ -131,6 +132,21 @@ app.whenReady().then(() => {
   // 注册聊天域 IPC handler（chat:send / chat:stop，基于 Vercel AI SDK v7）
   // 通过 ServiceContainer 注入 IChatService 实例，解耦 handler 与具体实现
   registerChatHandlers({ chatService: serviceContainer.getChatService() });
+
+  // 注入 CSP 响应头（P1-5 安全基线）
+  // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）
+  // 覆盖渲染层 HTML 的 CSP meta，确保所有响应统一使用主进程策略
+  const csp = buildCsp(!app.isPackaged);
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp],
+      },
+    });
+  });
+  logger.info({ isPackaged: app.isPackaged }, 'CSP 策略已注入');
+
   logger.info({}, '应用启动');
 
   createWindow();
@@ -151,7 +167,8 @@ app.on('window-all-closed', () => {
 });
 
 // 应用退出前统一清理所有服务（设计文档 §1.1 应用生命周期 / §7.6 生命周期管理）
-// disposeServices 包含：中断流式响应 + 清理 AI 客户端缓存
+// P3-10 改造：disposeServices 内部调用 ChatService.dispose() 等待所有活跃 stream 真正完成
+// （带 3s 超时兜底），避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
 // 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
 let isQuitting = false;
 app.on('before-quit', async (event) => {

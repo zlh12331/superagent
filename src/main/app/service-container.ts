@@ -74,7 +74,12 @@ class ServiceContainer {
   /**
    * 应用退出时统一清理所有服务
    *
-   * 顺序按反向依赖：先中断活跃对话，再清理 AI Provider 缓存。
+   * 顺序按反向依赖：先优雅关闭 ChatService（中断 + 等待 stream 真正完成），再清理 AI Provider 缓存。
+   *
+   * P3-10 改造：
+   * - 旧实现调用 abortAll() 仅同步触发 abort 信号，streamText 协程可能仍在 reader.read() 等待
+   * - 新实现调用 dispose() 等待所有活跃 stream 真正进入 finally 块（带 3s 超时兜底）
+   * - 避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
    *
    * 幂等：多次调用安全（各模块内部已处理 null 检查）。
    *
@@ -91,13 +96,14 @@ class ServiceContainer {
   async dispose(): Promise<void> {
     logger.info({}, '开始清理应用服务');
 
-    // 1. 中断所有活跃对话（避免 webContents 销毁后 streamText 继续推送）
-    //    ChatService 内部维护 sessionId → AbortController Map，abortAll 会触发所有 streamText abort
+    // 1. 优雅关闭 ChatService（P3-10：中断 + 等待 stream 真正完成）
     //    通过容器持有的实例调用（可能为测试注入的 mock），与生产路径一致
+    //    dispose 内部会先 abortAll 再 await 所有活跃 stream Promise
     if (this.chatService !== null) {
-      this.chatService.abortAll();
+      await this.chatService.dispose();
     }
     // 同时重置模块级单例（若 ServiceContainer 缓存为空但模块单例仍存活，也需中断）
+    // resetChatService 内部会调用 abortAll（幂等，已 abort 过的不会重复触发）
     resetChatService();
     this.chatService = null;
 

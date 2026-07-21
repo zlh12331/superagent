@@ -60,3 +60,7 @@ resources/pg/
 
 # electron-builder 打包产物（NSIS 安装包、latest.yml 等）
 release/
+
+# 原型设计文件（仅本地参考，不入仓）
+# P2-9：prototype-v2.html 已从根目录移入 docs/prototype/，避免污染项目根
+docs/prototype/

@@ -15,9 +15,16 @@
 // - chat 域类型从 zod schema 派生（z.infer），schema 作为单一真源
 // - 避免类型与 schema 双向漂移
 // - schema 文件：../schemas/chat.ts
+//
+// P1-6 透传设计：
+// - ChatMessage 类型直接引用 AI SDK 的 ModelMessage（type-only import）
+// - 渲染层用 convertToModelMessages 转换后透传，主进程无需手动转换
 
 import type { z } from 'zod';
-import type { ChatMessageSchema, ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
+import type { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
+
+// 从 schemas/chat.ts 重新导出 ChatMessage 类型（= AI SDK 的 ModelMessage）
+export type { ChatMessage } from '../schemas/chat';
 
 /**
  * 应用状态（health check）
@@ -31,22 +38,15 @@ export interface AppStatus {
 }
 
 /**
- * 聊天消息（Vercel AI SDK CoreMessage 子集）
- *
- * 类型从 ChatMessageSchema 派生（z.infer），schema 为单一真源。
- *
- * 限制为 user/assistant/system 三种角色，与 DeepSeek API 兼容。
- * 渲染层调用 IPC 时把 useChat 的 UIMessage 转换为此结构传给主进程。
- */
-export type ChatMessage = z.infer<typeof ChatMessageSchema>;
-
-/**
  * chat:send 请求 payload
  *
  * 类型从 ChatSendReqSchema 派生（z.infer），schema 为单一真源。
  *
  * 消息列表由渲染层维护，每次发起对话把完整历史传给主进程，
  * 主进程不持有对话上下文（无状态设计，便于多窗口/多会话扩展）。
+ *
+ * P1-6 透传设计：messages 类型为 ChatMessage[]（= ModelMessage[]），
+ * 渲染层用 convertToModelMessages 转换后直接透传，主进程无需手动转换。
  *
  * sessionId 使用 `string | undefined` 而非 `?: string`：
  * exactOptionalPropertyTypes 严格模式下，zod `.optional().transform()` 推断为 `string | undefined`，

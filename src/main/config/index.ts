@@ -2,24 +2,39 @@
 // 应用配置：从 process.env 读取，zod 校验，提供类型安全的单例
 // 设计文档 §2.6 监控与运维配置
 //
-// dev 环境：electron-vite 自动注入 .env 变量到 process.env
-// 生产环境：通过打包配置或环境变量提供
+// P2-8 环境分层：
+// - 显式 appEnv: 'development' | 'production' | 'test' 三态枚举
+// - 优先级：APP_ENV > NODE_ENV > app.isPackaged 推断
+// - test 环境由 Vitest 自动设置 NODE_ENV=test 触发
+// - isDev / isTest / isPackaged 三个布尔派生字段（向后兼容）
 //
-// 敏感数据（API Key）不存此处，由 keychain.ts 管理
+// 环境特定默认值：
+// - development：logLevel=debug、Sentry tracesSampleRate=0.1、DeepSeek timeout=60s
+// - production：logLevel=info、Sentry tracesSampleRate=0.1、DeepSeek timeout=60s
+// - test：logLevel=error（减少测试噪音）、Sentry dsn='' + tracesSampleRate=0（不上报）、
+//         DeepSeek timeout=5s（测试不应等 60s 超时）
 //
-// 说明：原 PostgreSQL/Ollama 配置已随数据库层一并删除，
-// 当前仅保留应用级配置（isDev/isPackaged/logLevel/sentry/deepseek）。
+// 敏感数据（API Key）不存此处，由 keychain.ts 管理。
 
 import { app } from 'electron';
 import { z } from 'zod';
 
 /**
+ * 应用运行环境枚举
+ *
+ * - development：本地开发（electron-vite dev）
+ * - production：打包发布（electron-builder 产物）
+ * - test：自动化测试（Vitest 自动设置 NODE_ENV=test）
+ */
+const AppEnvSchema = z.enum(['development', 'production', 'test']);
+
+/**
  * Sentry 配置
  */
 const SentryConfigSchema = z.object({
-  /** Sentry DSN（自托管 v26.6.0） */
+  /** Sentry DSN（自托管 v26.6.0，test 环境强制为空字符串不上报） */
   dsn: z.string().default(''),
-  /** 事务采样率（0-1） */
+  /** 事务采样率（0-1，test 环境强制为 0 不采样） */
   tracesSampleRate: z.number().min(0).max(1).default(0.1),
 });
 
@@ -31,23 +46,28 @@ const DeepseekConfigSchema = z.object({
   apiBase: z.string().url().default('https://api.deepseek.com'),
   /** 默认聊天模型 */
   model: z.string().default('deepseek-v4-flash'),
-  /** 请求超时（毫秒） */
+  /** 请求超时（毫秒，test 环境缩短为 5s） */
   timeout: z.number().int().positive().default(60_000),
 });
 
 /**
  * 应用配置 Schema
  *
- * 仅包含应用运行所需的最基础配置项：
- * - 环境标识（isDev/isPackaged）
- * - 日志级别
- * - Sentry 监控配置
- * - DeepSeek AI 服务配置
+ * P2-8 改造：新增 appEnv 字段作为环境真源，isDev/isTest/isPackaged 为派生字段
+ *
+ * isDev 包含 development 和 test 两种环境：
+ * - test 环境本质是开发环境的特化（关闭 Sentry、缩短 timeout），
+ *   但保留开发模式行为（devtools 可用、CSP 宽松等）
+ * - 因此 isDev = (appEnv !== 'production')
  */
 const AppConfigSchema = z.object({
-  /** 是否为开发环境 */
+  /** 运行环境（真源） */
+  appEnv: AppEnvSchema,
+  /** 是否为开发模式（appEnv !== 'production'，包含 development 和 test） */
   isDev: z.boolean(),
-  /** 是否为打包后的生产环境 */
+  /** 是否为测试环境（appEnv === 'test'） */
+  isTest: z.boolean(),
+  /** 是否为打包后的生产环境（运行时事实，独立于 appEnv） */
   isPackaged: z.boolean(),
   /** 日志级别 */
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -61,29 +81,72 @@ const AppConfigSchema = z.object({
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
 /**
+ * 推断运行环境
+ *
+ * 优先级：
+ * 1. APP_ENV 显式覆盖（CI/E2E 强制 production 或 test）
+ * 2. NODE_ENV=test（Vitest 自动设置，测试环境）
+ * 3. app.isPackaged（运行时事实，true=production，false=development）
+ *
+ * @param isPackaged app.isPackaged 的值
+ * @returns 推断出的运行环境
+ */
+function resolveAppEnv(isPackaged: boolean): 'development' | 'production' | 'test' {
+  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
+  const env = process.env;
+  // 1. APP_ENV 显式覆盖
+  const explicit = env['APP_ENV'];
+  if (explicit === 'development' || explicit === 'production' || explicit === 'test') {
+    return explicit;
+  }
+  // 2. NODE_ENV=test（Vitest 自动设置）
+  if (env['NODE_ENV'] === 'test') {
+    return 'test';
+  }
+  // 3. 根据 isPackaged 推断
+  return isPackaged ? 'production' : 'development';
+}
+
+/**
  * 从 process.env 加载并校验配置
  *
  * @returns 校验后的应用配置单例
  */
 export function loadConfig(): AppConfig {
   const isPackaged = app.isPackaged;
-  const isDev = !isPackaged;
+  const appEnv = resolveAppEnv(isPackaged);
+  // isDev 包含 development 和 test（test 是开发环境的特化，保留开发模式行为）
+  const isDev = appEnv !== 'production';
+  const isTest = appEnv === 'test';
 
-  // noPropertyAccessFromIndexSignature: process.env 是 NodeJS.ProcessEnv 索引签名
-  // 必须用 ['KEY'] 方括号语法访问，不能用 . 属性访问
+  // 环境特定默认值
+  // - test：logLevel=error（减少测试噪音）
+  // - development：logLevel=debug（开发调试）
+  // - production：logLevel=info（默认）
+  const defaultLogLevel: 'debug' | 'info' | 'error' = isTest ? 'error' : isDev ? 'debug' : 'info';
+  // test 环境强制不上报 Sentry（避免测试错误污染线上 Sentry）
+  const defaultSentryDsn = isTest ? '' : '';
+  // test 环境强制采样率为 0
+  const defaultSentryTracesSampleRate = isTest ? 0 : 0.1;
+  // test 环境缩短超时为 5s（测试不应等 60s 超时）
+  const defaultDeepseekTimeout = isTest ? 5_000 : 60_000;
+
+  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
   const env = process.env;
   return AppConfigSchema.parse({
+    appEnv,
     isDev,
+    isTest,
     isPackaged,
-    logLevel: env['LOG_LEVEL'] ?? (isDev ? 'debug' : 'info'),
+    logLevel: env['LOG_LEVEL'] ?? defaultLogLevel,
     sentry: {
-      dsn: env['SENTRY_DSN'] ?? '',
-      tracesSampleRate: Number(env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
+      dsn: env['SENTRY_DSN'] ?? defaultSentryDsn,
+      tracesSampleRate: Number(env['SENTRY_TRACES_SAMPLE_RATE'] ?? defaultSentryTracesSampleRate),
     },
     deepseek: {
       apiBase: env['DEEPSEEK_API_BASE'] ?? 'https://api.deepseek.com',
       model: env['DEEPSEEK_MODEL'] ?? 'deepseek-v4-flash',
-      timeout: Number(env['DEEPSEEK_TIMEOUT'] ?? 60_000),
+      timeout: Number(env['DEEPSEEK_TIMEOUT'] ?? defaultDeepseekTimeout),
     },
   });
 }

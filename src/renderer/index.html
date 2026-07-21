@@ -8,7 +8,9 @@
     - Noto Serif SC（正文衬线）
     - Noto Sans SC（UI 无衬线）
     - JetBrains Mono（数字等宽）
-  - 配合 CSP 放开 style-src https://fonts.googleapis.com 与 font-src https://fonts.gstatic.com
+  - CSP 由主进程通过 session.defaultSession.webRequest.onHeadersReceived 注入
+    （见 src/main/security/csp.ts + src/main/index.ts）
+    不在 HTML 中声明 CSP meta，避免与响应头策略冲突
   ──────────────────────────────────────────────────────────────
   注意：
   - 用 preconnect 提前建立 TLS，降低字体加载延迟
@@ -19,15 +21,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- CSP：default-src 'self' + 放开 Google Fonts 与本地后端连接 -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self';
-              script-src 'self';
-              style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-              font-src 'self' https://fonts.gstatic.com;
-              connect-src 'self' http://localhost:11434 https://api.deepseek.com https://api.openai.com;
-              img-src 'self' data: blob:;" />
     <!-- 预连接 Google Fonts 域名，降低首次字体请求延迟 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
