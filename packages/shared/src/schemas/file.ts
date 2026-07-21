@@ -2,8 +2,8 @@
 // 文件域 zod schema 单一真源
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 定义 file:read / file:write / file:list 请求-响应 zod schema
-// - 定义 file:watch 流式事件 payload 类型
+// - 定义 file:read / file:write / file:list / file:watch:start / file:watch:stop 请求-响应 zod schema
+// - 定义 file:watch:event 流式事件 payload 类型
 // - 供主进程 IPC handler 校验入参
 //
 // 设计：
@@ -11,6 +11,10 @@
 //   （防越权访问 workingDir 之外）由 FileService 在执行时校验
 // - offset/limit 用 `.optional().transform(v => v ?? undefined)` 兼容 exactOptionalPropertyTypes
 // - 文件条目用 FileEntrySchema 复用，list 与 watch 都可能用到
+// - file:watch 拆分为 start/stop/event 三种 channel：
+//   · start（请求-响应）：渲染层发起监听，返回 watcherId
+//   · stop（请求-响应）：渲染层停止指定 watcher
+//   · event（流式事件）：主进程推送变更事件（携带 watcherId 关联）
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
@@ -113,7 +117,40 @@ export interface FileListRes {
 }
 
 /**
- * file:watch 事件 payload（流式事件）
+ * file:watch:start 入参 zod schema
+ *
+ * 渲染层发起文件监听，主进程返回 watcherId 用于后续停止监听。
+ * 后续文件变更通过 file:watch:event 流式事件推送（携带 watcherId 关联）。
+ */
+export const FileWatchStartReqSchema = z.object({
+  // 监听根目录（绝对路径）
+  path: z.string().min(1),
+});
+
+/** file:watch:start 响应 payload */
+export interface FileWatchStartRes {
+  /** watcher 唯一 ID，渲染层用此 id 订阅 file:watch:event 并在停止时传给 file:watch:stop */
+  readonly watcherId: string;
+}
+
+/**
+ * file:watch:stop 入参 zod schema
+ *
+ * 渲染层停止指定 watcherId 的文件监听。
+ */
+export const FileWatchStopReqSchema = z.object({
+  // 要停止的 watcher id（来自 file:watch:start 返回值）
+  watcherId: z.string().min(1),
+});
+
+/** file:watch:stop 响应 payload */
+export interface FileWatchStopRes {
+  /** 是否成功停止（watcherId 不存在时返回 false） */
+  readonly stopped: boolean;
+}
+
+/**
+ * file:watch:event 事件 payload（流式事件）
  *
  * chokidar 监听文件系统变更时推送。type 取值：
  * - 'create'：新建文件/目录
@@ -122,7 +159,11 @@ export interface FileListRes {
  * - 'rename'：重命名（oldPath 为原路径，path 为新路径）
  */
 export interface FileWatchEventPayload {
+  /** 关联的 watcherId（用于渲染层过滤事件来源） */
+  readonly watcherId: string;
+  /** 变更类型 */
   readonly type: 'create' | 'modify' | 'delete' | 'rename';
+  /** 变更路径（绝对路径） */
   readonly path: string;
   /** rename 时的原路径，其他 type 为 undefined */
   readonly oldPath?: string;

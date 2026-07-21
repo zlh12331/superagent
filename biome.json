@@ -19,7 +19,8 @@
       "!**/test-results",
       "!**/playwright/.cache",
       "!**/docs/design",
-      "!prototype-v2.html"
+      "!**/docs/参考项目",
+      "!**/prototype-v2.html"
     ]
   },
   "formatter": {
@@ -162,7 +163,10 @@
       "includes": [
         "**/src/main/infra/ai/chat-service.ts",
         "**/src/main/app/service-container.ts",
-        "**/src/main/ipc/chat.handler.ts"
+        "**/src/main/ipc/chat.handler.ts",
+        "**/src/main/ipc/file.handler.ts",
+        "**/src/main/ipc/search.handler.ts",
+        "**/src/main/infra/file/file-service.ts"
       ],
       "linter": {
         "rules": {
@@ -171,6 +175,16 @@
               "level": "error",
               "options": { "strictCase": false }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/src/main/infra/search/search-service.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
           }
         }
       }

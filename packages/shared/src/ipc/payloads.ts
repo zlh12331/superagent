@@ -38,6 +38,10 @@ import type {
   FileReadReqSchema,
   FileReadRes,
   FileWatchEventPayload,
+  FileWatchStartReqSchema,
+  FileWatchStartRes,
+  FileWatchStopReqSchema,
+  FileWatchStopRes,
   FileWriteReqSchema,
   FileWriteRes,
 } from '../schemas/file';
@@ -175,6 +179,12 @@ export type FileWriteReq = z.infer<typeof FileWriteReqSchema>;
 /** file:list 请求 payload：列出目录内容 */
 export type FileListReq = z.infer<typeof FileListReqSchema>;
 
+/** file:watch:start 请求 payload：开始监听文件变更 */
+export type FileWatchStartReq = z.infer<typeof FileWatchStartReqSchema>;
+
+/** file:watch:stop 请求 payload：停止监听指定 watcher */
+export type FileWatchStopReq = z.infer<typeof FileWatchStopReqSchema>;
+
 // ─── Search 域 Req 派生（ripgrep + glob） ──────────────────────
 
 /** search:grep 请求 payload：正则搜索文件内容 */
@@ -254,10 +264,14 @@ export interface IpcRequestMap {
     res: { ok: boolean };
   };
 
-  // 文件域（文件读写 + 目录列表）
+  // 文件域（文件读写 + 目录列表 + 文件监听）
   'file:read': { req: FileReadReq; res: FileReadRes };
   'file:write': { req: FileWriteReq; res: FileWriteRes };
   'file:list': { req: FileListReq; res: FileListRes };
+  // file:watch:start 发起监听，返回 watcherId；后续通过 file:watch:event 推送变更
+  'file:watch:start': { req: FileWatchStartReq; res: FileWatchStartRes };
+  // file:watch:stop 停止指定 watcher
+  'file:watch:stop': { req: FileWatchStopReq; res: FileWatchStopRes };
 
   // 搜索域（ripgrep + glob）
   'search:grep': { req: GrepReq; res: GrepRes };
@@ -317,8 +331,8 @@ export interface IpcEventMap {
   'agent:approval:request': AgentApprovalRequestPayload;
 
   // ── 文件域事件（chokidar 监听） ───────────────────
-  // 文件系统变更事件：create/modify/delete/rename
-  'file:watch': FileWatchEventPayload;
+  // 文件系统变更事件：create/modify/delete/rename（携带 watcherId 关联）
+  'file:watch:event': FileWatchEventPayload;
 
   // ── 终端域事件（node-pty 输出与退出） ──────────────
   // 终端原始输出（含 ANSI 转义序列，未解码，渲染层用 xterm.js 直接 write）

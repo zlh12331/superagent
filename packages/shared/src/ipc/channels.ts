@@ -14,7 +14,7 @@
 // - 聊天域（保留兼容旧 chat:send，新业务用 agent 域）：chat:* 系列
 // - Agent 域（Code Agent 核心）：agent:run / agent:stop / agent:stream:* / agent:tool:* / agent:approval:*
 // - 会话域：session:list / session:get / session:delete / session:rename
-// - 文件域：file:read / file:write / file:list / file:watch
+// - 文件域：file:read / file:write / file:list / file:watch:start / file:watch:stop / file:watch:event
 // - 搜索域：search:grep / search:glob
 // - 终端域：terminal:create / terminal:input / terminal:resize / terminal:kill / terminal:event:*
 // - Git 域：git:status / git:diff
@@ -79,8 +79,12 @@ export const IPC_CHANNELS = {
   FILE_WRITE: 'file:write',
   // 请求-响应：列出目录内容（带深度与隐藏文件过滤）
   FILE_LIST: 'file:list',
+  // 请求-响应：开始监听文件变更（返回 watcherId 用于后续 stop）
+  FILE_WATCH_START: 'file:watch:start',
+  // 请求-响应：停止监听指定 watcher
+  FILE_WATCH_STOP: 'file:watch:stop',
   // 流式事件：文件变更事件（chokidar 监听 create/modify/delete/rename）
-  FILE_WATCH: 'file:watch',
+  FILE_WATCH_EVENT: 'file:watch:event',
 
   // ── 搜索域（ripgrep + glob） ──────────────────────
   // 请求-响应：正则搜索文件内容（基于 ripgrep）

@@ -1,0 +1,127 @@
+// src/main/ipc/file.handler.ts
+// 文件域 IPC handler（FileService 暴露给渲染层的入口）
+//
+// 注册 5 个请求-响应 channel：
+// - file:read        读取文件内容（支持 offset/limit 分批）
+// - file:write       写入文件（覆盖或追加，可选自动创建父目录）
+// - file:list        递归列出目录内容（深度可控）
+// - file:watch:start 开始监听文件变更，返回 watcherId
+// - file:watch:stop  停止指定 watcherId 的监听
+//
+// 流式事件由 FileService 主动推送（不在此 handler 返回）：
+// - file:watch:event  文件变更事件（携带 watcherId 关联）
+//
+// 设计要点：
+// - 与 chat.handler.ts 一致的 DI 模式：通过 ServiceContainer 注入 IFileService 实例
+// - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
+// - file:watch:start 需要使用 ctx.sender（WebContents）传给 FileService.watch()，
+//   后续文件变更事件会通过该 webContents.send 推送回渲染层
+// - handler 内不直接调用 webContents.send，所有事件推送由 FileService 内部处理
+//   （保持 handler 简单 + 关注点分离）
+
+import {
+  type FileListReq,
+  FileListReqSchema,
+  type FileListRes,
+  type FileReadReq,
+  FileReadReqSchema,
+  type FileReadRes,
+  type FileWatchStartReq,
+  FileWatchStartReqSchema,
+  type FileWatchStartRes,
+  type FileWatchStopReq,
+  FileWatchStopReqSchema,
+  type FileWatchStopRes,
+  type FileWriteReq,
+  FileWriteReqSchema,
+  type FileWriteRes,
+  IPC_CHANNELS,
+} from '@novel-writer/shared';
+import type { IFileService } from '../infra/file/file-service';
+import { wrap } from '../utils/wrap';
+
+/**
+ * 文件域 handler 依赖
+ *
+ * 通过依赖注入解耦 handler 与具体 FileService 实现：
+ * - 生产环境：ServiceContainer 注入默认 FileService 实例
+ * - 测试环境：可注入 mock 实现，不依赖真实文件系统
+ */
+export interface FileHandlerDeps {
+  /** FileService 实例（由 ServiceContainer 注入） */
+  readonly fileService: IFileService;
+}
+
+/**
+ * 注册文件域 IPC handler
+ *
+ * 在 app.whenReady() 后调用一次，与 registerChatHandlers 并列。
+ *
+ * @param deps 依赖项：包含 IFileService 实例
+ *
+ * 幂等性：重复调用会因 ipcMain.handle 对同一 channel 重复注册而抛错，
+ * 但正常流程不会触发——本函数只在 whenReady 中调用一次。
+ */
+export function registerFileHandlers(deps: FileHandlerDeps): void {
+  const { fileService } = deps;
+
+  // 读取文件：支持大文件分批读取（offset/limit）
+  // 入参由 FileReadReqSchema 校验（path 非空、offset/limit 为非负整数）
+  // 返回文件内容（UTF-8 解码）+ 总行数（渲染层据此判断是否分批）
+  wrap<FileReadReq, FileReadRes>(IPC_CHANNELS.FILE_READ, FileReadReqSchema, async (input) => {
+    return fileService.read({
+      path: input.path,
+      offset: input.offset,
+      limit: input.limit,
+    });
+  });
+
+  // 写入文件：覆盖或追加
+  // append=true 时使用 O_APPEND 模式追加，避免覆盖已有内容
+  // createDirs=true 时自动创建父目录（避免 ENOENT）
+  wrap<FileWriteReq, FileWriteRes>(IPC_CHANNELS.FILE_WRITE, FileWriteReqSchema, async (input) => {
+    return fileService.write({
+      path: input.path,
+      content: input.content,
+      append: input.append,
+      createDirs: input.createDirs,
+    });
+  });
+
+  // 列出目录内容：递归深度可控（默认 1 层，最大 10 层）
+  // includeHidden=false 时跳过 .git / .vscode 等隐藏文件/目录
+  wrap<FileListReq, FileListRes>(IPC_CHANNELS.FILE_LIST, FileListReqSchema, async (input) => {
+    return fileService.list({
+      path: input.path,
+      depth: input.depth,
+      includeHidden: input.includeHidden,
+    });
+  });
+
+  // 开始文件监听：基于 chokidar v5 监听指定目录
+  // 关键：传入 ctx.sender（WebContents）作为事件推送目标，
+  // 后续文件变更会通过 file:watch:event 事件推送到该 webContents
+  // 返回 watcherId，渲染层用此 id 关联后续事件并在停止时传给 file:watch:stop
+  wrap<FileWatchStartReq, FileWatchStartRes>(
+    IPC_CHANNELS.FILE_WATCH_START,
+    FileWatchStartReqSchema,
+    async (input, ctx) => {
+      const handle = await fileService.watch({
+        path: input.path,
+        webContents: ctx.sender,
+      });
+      return { watcherId: handle.watcherId };
+    },
+  );
+
+  // 停止指定 watcher：通过 watcherId 定位并关闭对应的 chokidar watcher
+  // 返回 stopped=true 表示成功停止，stopped=false 表示 watcherId 不存在（可能已自动停止）
+  wrap<FileWatchStopReq, FileWatchStopRes>(
+    IPC_CHANNELS.FILE_WATCH_STOP,
+    FileWatchStopReqSchema,
+    async (input) => {
+      const stopped = fileService.unwatch(input.watcherId);
+      return { stopped };
+    },
+  );
+}

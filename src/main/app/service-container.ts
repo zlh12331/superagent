@@ -3,15 +3,19 @@
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
 // 设计目标：
-// 1. 集中持有核心服务实例（如 IChatService），统一对外暴露获取接口
+// 1. 集中持有核心服务实例（IChatService / IFileService / ISearchService），统一对外暴露获取接口
 // 2. 应用退出时统一清理（替代 index.ts 中分散的 cleanup 调用）
 // 3. 测试隔离时统一 reset（避免每个测试手动调用各模块 reset）
 // 4. 支持依赖注入：IPC handler 通过容器获取服务实例，而非直接 import 模块级单例
 //
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
-//   ChatService.abortAll          中断活跃对话（依赖 streamText + webContents）
-//   resetChatService              清空 ChatService 单例缓存
-//   resetAIProvider                清理 AI Provider 缓存（无连接池，仅清空引用）
+//   1. ChatService.dispose()       中断活跃对话（依赖 streamText + webContents）
+//      resetChatService()          清空 ChatService 模块级单例缓存
+//   2. FileService.dispose()       关闭所有 chokidar watcher（释放 fs 监听句柄）
+//      resetFileService()          清空 FileService 模块级单例缓存
+//   3. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
+//      resetSearchService()        清空 SearchService 模块级单例缓存
+//   4. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
 //
 // 注意：
 // - 数据库相关清理（Prisma/PG 子进程/Ollama/Embedding）已随数据库层一并删除
@@ -24,6 +28,10 @@ import { resetConfigCache } from '../config';
 import { resetAIProvider } from '../infra/ai/ai-provider';
 import type { IChatService } from '../infra/ai/chat-service';
 import { getChatService, resetChatService } from '../infra/ai/chat-service';
+import type { IFileService } from '../infra/file/file-service';
+import { getFileService, resetFileService } from '../infra/file/file-service';
+import type { ISearchService } from '../infra/search/search-service';
+import { getSearchService, resetSearchService } from '../infra/search/search-service';
 import { logger } from '../utils/logger';
 
 /**
@@ -72,9 +80,83 @@ class ServiceContainer {
   }
 
   /**
+   * FileService 实例缓存
+   *
+   * 设计与 ChatService 一致：
+   * - 生产环境：通过 getFileService() 拿到默认 FileService 实现（基于 chokidar v5）
+   * - 测试环境：通过 setFileService() 注入 mock 实现，避免依赖真实文件系统
+   *
+   * 缓存值与 getFileService() 模块级单例保持一致：
+   * 调用 setFileService(null) 或 reset() 后，下次 getFileService() 会重新拿默认实现。
+   */
+  private fileService: IFileService | null = null;
+
+  /**
+   * SearchService 实例缓存
+   *
+   * 设计与 ChatService 一致：
+   * - 生产环境：通过 getSearchService() 拿到默认 SearchService 实现（基于 @vscode/ripgrep）
+   * - 测试环境：通过 setSearchService() 注入 mock 实现，避免依赖真实 ripgrep 子进程
+   *
+   * 缓存值与 getSearchService() 模块级单例保持一致：
+   * 调用 setSearchService(null) 或 reset() 后，下次 getSearchService() 会重新拿默认实现。
+   */
+  private searchService: ISearchService | null = null;
+
+  /**
+   * 获取 FileService 实例
+   *
+   * 首次调用延迟初始化为默认 FileService 实现（与 getFileService() 单例一致）。
+   * 测试可通过 setFileService() 注入 mock 实例覆盖。
+   */
+  getFileService(): IFileService {
+    if (this.fileService === null) {
+      this.fileService = getFileService();
+    }
+    return this.fileService;
+  }
+
+  /**
+   * 注入 FileService 实例（仅测试用）
+   *
+   * 用于测试用例隔离：注入 mock 实现，避免依赖真实文件系统。
+   * 传 null 清空缓存，下次 getFileService() 会重新拿默认实现。
+   */
+  setFileService(service: IFileService | null): void {
+    this.fileService = service;
+  }
+
+  /**
+   * 获取 SearchService 实例
+   *
+   * 首次调用延迟初始化为默认 SearchService 实现（与 getSearchService() 单例一致）。
+   * 测试可通过 setSearchService() 注入 mock 实例覆盖。
+   */
+  getSearchService(): ISearchService {
+    if (this.searchService === null) {
+      this.searchService = getSearchService();
+    }
+    return this.searchService;
+  }
+
+  /**
+   * 注入 SearchService 实例（仅测试用）
+   *
+   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 ripgrep 子进程。
+   * 传 null 清空缓存，下次 getSearchService() 会重新拿默认实现。
+   */
+  setSearchService(service: ISearchService | null): void {
+    this.searchService = service;
+  }
+
+  /**
    * 应用退出时统一清理所有服务
    *
-   * 顺序按反向依赖：先优雅关闭 ChatService（中断 + 等待 stream 真正完成），再清理 AI Provider 缓存。
+   * 顺序按反向依赖（先停依赖方再停被依赖方）：
+   * 1. ChatService   中断活跃对话（P3-10：等待 stream 真正完成，避免 IPC send 丢失）
+   * 2. FileService   关闭所有 chokidar watcher（释放 fs 监听句柄，避免进程不退出）
+   * 3. SearchService 终止活跃的 ripgrep 子进程（释放 spawn 句柄）
+   * 4. AI Provider   清空引用（无连接池，仅让 GC 回收）
    *
    * P3-10 改造：
    * - 旧实现调用 abortAll() 仅同步触发 abort 信号，streamText 协程可能仍在 reader.read() 等待
@@ -107,7 +189,23 @@ class ServiceContainer {
     resetChatService();
     this.chatService = null;
 
-    // 2. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 2. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
+    //    watcher 句柄不释放会导致进程无法退出（Node.js 事件循环不空）
+    if (this.fileService !== null) {
+      await this.fileService.dispose();
+    }
+    resetFileService();
+    this.fileService = null;
+
+    // 3. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
+    //    子进程不释放会导致进程退出延迟（Node.js 会等待所有子进程退出）
+    if (this.searchService !== null) {
+      await this.searchService.dispose();
+    }
+    resetSearchService();
+    this.searchService = null;
+
+    // 4. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
     logger.info({}, '应用服务清理完成');
@@ -125,6 +223,10 @@ class ServiceContainer {
   reset(): void {
     resetChatService();
     this.chatService = null;
+    resetFileService();
+    this.fileService = null;
+    resetSearchService();
+    this.searchService = null;
     resetAIProvider();
     resetConfigCache();
   }

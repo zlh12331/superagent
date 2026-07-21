@@ -13,6 +13,8 @@ import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
+import { registerFileHandlers } from './ipc/file.handler';
+import { registerSearchHandlers } from './ipc/search.handler';
 import { buildCsp } from './security/csp';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
@@ -132,6 +134,12 @@ app.whenReady().then(() => {
   // 注册聊天域 IPC handler（chat:send / chat:stop，基于 Vercel AI SDK v7）
   // 通过 ServiceContainer 注入 IChatService 实例，解耦 handler 与具体实现
   registerChatHandlers({ chatService: serviceContainer.getChatService() });
+  // 注册文件域 IPC handler（file:read / file:write / file:list / file:watch:start / file:watch:stop）
+  // 通过 ServiceContainer 注入 IFileService 实例，handler 不直接依赖 FileService 实现
+  registerFileHandlers({ fileService: serviceContainer.getFileService() });
+  // 注册搜索域 IPC handler（search:grep / search:glob）
+  // 通过 ServiceContainer 注入 ISearchService 实例，handler 不直接依赖 SearchService 实现
+  registerSearchHandlers({ searchService: serviceContainer.getSearchService() });
 
   // 注入 CSP 响应头（P1-5 安全基线）
   // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）
