@@ -5,8 +5,11 @@
 // 每个请求-响应 channel 定义 Req（请求入参）和 Res（响应数据）类型
 // 流式/事件 channel 定义 Payload 类型
 //
-// 说明：业务相关 payload（project/chapter/character/worldview/chat/rag/agent/settings）
-// 已随业务层一并删除，仅保留应用级 payload 作为 Electron 模板基础设施。
+// 说明：
+// - 业务相关 payload（project/chapter/character/worldview/rag/agent/settings）
+//   已随数据库层一并删除
+// - 当前保留应用级 payload + chat 域 payload（基于 Vercel AI SDK v7）
+//   chat 域采用 UIMessageStreamPart 作为流式 part 类型，与官方协议保持一致
 
 /**
  * 应用状态（health check）
@@ -19,20 +22,113 @@ export interface AppStatus {
   readonly ready: boolean;
 }
 
+/**
+ * 聊天消息（Vercel AI SDK CoreMessage 子集）
+ *
+ * 限制为 user/assistant/system 三种角色，与 DeepSeek API 兼容。
+ * 渲染层调用 IPC 时把 useChat 的 UIMessage 转换为此结构传给主进程。
+ */
+export interface ChatMessage {
+  /** 消息角色：user（用户）/ assistant（助手）/ system（系统提示） */
+  readonly role: 'user' | 'assistant' | 'system';
+  /** 消息文本内容（多模态暂不支持，仅 string） */
+  readonly content: string;
+}
+
+/**
+ * chat:send 请求 payload
+ *
+ * 消息列表由渲染层维护，每次发起对话把完整历史传给主进程，
+ * 主进程不持有对话上下文（无状态设计，便于多窗口/多会话扩展）。
+ */
+export interface ChatSendReq {
+  /** 完整消息历史（最后一条通常是 user 新消息） */
+  readonly messages: ChatMessage[];
+  /**
+   * 可选 sessionId：续传已有对话时传入；
+   * 省略则由主进程生成新 sessionId 并在响应中返回。
+   *
+   * 使用 `string | undefined` 而非 `?: string`：
+   * exactOptionalPropertyTypes 严格模式下，zod `.optional()` 推断为 `string | undefined`，
+   * 显式声明 `| undefined` 才能兼容 zod schema 推断的类型。
+   */
+  readonly sessionId: string | undefined;
+}
+
+/** chat:send 响应 payload：返回本次对话的 sessionId */
+export interface ChatSendRes {
+  /** 本次对话的唯一标识，渲染层用此 id 订阅后续流式事件并支持中断 */
+  readonly sessionId: string;
+}
+
+/** chat:stop 请求 payload：中断指定 sessionId 的对话 */
+export interface ChatStopReq {
+  /** 要中断的对话 sessionId */
+  readonly sessionId: string;
+}
+
+/** chat:stop 响应 payload */
+export interface ChatStopRes {
+  /** 是否成功中断（若对话已结束则返回 false） */
+  readonly stopped: boolean;
+}
+
+/**
+ * chat:stream:part 事件 payload
+ *
+ * part 类型为 Vercel AI SDK 官方 UIMessageStreamPart 的 JSON 序列化形式。
+ * 通过 IPC 传输时使用 unknown 而非具体类型，避免 shared 包依赖 ai 包
+ * （shared 包应保持零运行时依赖，仅暴露类型契约）。
+ *
+ * 渲染层在 IpcChatTransport 中把 unknown 重新喂给 useChat 的 ReadableStream。
+ */
+export interface ChatStreamPartPayload {
+  /** 本次对话的 sessionId，渲染层按 id 过滤事件 */
+  readonly sessionId: string;
+  /**
+   * UIMessageStreamPart 的 JSON 序列化对象。
+   * 主进程从 toUIMessageStream() 读出后原样转发，渲染层直接 enqueue。
+   */
+  readonly part: unknown;
+}
+
+/** chat:stream:end 事件 payload：流正常结束 */
+export interface ChatStreamEndPayload {
+  /** 本次对话的 sessionId */
+  readonly sessionId: string;
+}
+
+/** chat:stream:error 事件 payload：流异常结束 */
+export interface ChatStreamErrorPayload {
+  /** 本次对话的 sessionId */
+  readonly sessionId: string;
+  /** 错误码（与 AppError.code 对齐） */
+  readonly code: string;
+  /** 错误消息（人类可读，用于渲染层 toast） */
+  readonly message: string;
+}
+
 /** 请求-响应 channel 类型映射：Req → Res */
 export interface IpcRequestMap {
   // 应用级
   'app:getStatus': { req: void; res: AppStatus };
   'app:openExternal': { req: { url: string }; res: { ok: boolean } };
+
+  // 聊天域（Vercel AI SDK v7）
+  'chat:send': { req: ChatSendReq; res: ChatSendRes };
+  'chat:stop': { req: ChatStopReq; res: ChatStopRes };
 }
 
 /**
  * 流式/事件 channel payload 映射
  *
- * 当前为空映射（业务事件已随数据库层删除）。
- * 使用 Record<string, never> 而非空 interface，
- * 避免 Biome noEmptyInterface 警告且更便于后续按字面量扩展。
- *
- * 扩展示例：export type IpcEventMap = { 'app:event:ready': void };
+ * chat 域流式事件由主进程主动推送，渲染层通过 ipcRenderer.on 订阅。
  */
-export type IpcEventMap = Record<string, never>;
+export interface IpcEventMap {
+  // 聊天流式 part：主进程逐 part 推送 UIMessageStreamPart
+  'chat:stream:part': ChatStreamPartPayload;
+  // 聊天流式结束：正常完成
+  'chat:stream:end': ChatStreamEndPayload;
+  // 聊天流式错误：异常终止
+  'chat:stream:error': ChatStreamErrorPayload;
+}

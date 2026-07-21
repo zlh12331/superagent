@@ -132,6 +132,19 @@
       }
     },
     {
+      "includes": ["**/src/main/infra/ai/ai-provider.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tests/integration/**/*.ts"],
       "linter": {
         "rules": {

@@ -5,10 +5,14 @@
 // Preload 实现 IpcApi，渲染层消费 IpcApi（通过 window.api）
 // 全局 Window 接口扩展在此声明，渲染层无需重复声明
 //
-// 说明：业务相关 API（project/chapter/character/worldview/chat/rag/agent/settings）
-// 已随业务层一并删除，仅保留应用级 API 作为 Electron 模板基础设施。
+// 说明：
+// - 业务相关 API（project/chapter/character/worldview/rag/agent/settings）
+//   已随数据库层一并删除
+// - 当前包含应用级 API + chat 域 API（基于 Vercel AI SDK v7）
+//   chat 域 API 同时提供请求-响应方法（send / stop）和事件订阅方法
+//   （subscribePart / subscribeEnd / subscribeError）
 
-import type { IpcRequestMap } from './payloads';
+import type { IpcEventMap, IpcRequestMap } from './payloads';
 import type { IpcResponse } from './response';
 
 /**
@@ -25,20 +29,24 @@ type IpcInvokeMethod<Channel extends keyof IpcRequestMap> =
 /**
  * 提取事件 channel 的订阅方法签名
  *
- * 注意：当前 IpcEventMap 为空，此类型暂未使用，保留以便未来扩展事件订阅 API。
- * 启用事件订阅时在 IpcApi 对应域中按需使用即可。
- *
- * 使用 export type 而非 biome-ignore：biome-ignore 无法抑制 TS6196（TS 编译器自带的未使用错误），
- * 通过 export 使类型成为模块导出，可同时消除 Biome 与 TS 的未使用告警。
+ * 入参：回调函数，收到 payload 时调用
+ * 返回：取消订阅函数（调用后不再接收事件）
  */
-export type IpcSubscribeMethod<Channel extends keyof import('./payloads').IpcEventMap> = (
-  callback: (payload: import('./payloads').IpcEventMap[Channel]) => void,
+type IpcSubscribeMethod<Channel extends keyof IpcEventMap> = (
+  callback: (payload: IpcEventMap[Channel]) => void,
 ) => () => void;
 
 /**
  * IpcApi 接口：window.api 完整形状
  *
- * 当前仅包含应用级 API，后续如需扩展业务域，按域分组添加。
+ * 当前包含：
+ * - app：应用级 API（getStatus / openExternal）
+ * - chat：聊天域 API（基于 Vercel AI SDK v7）
+ *   - send：发起对话，返回 sessionId
+ *   - stop：中断指定 sessionId 的对话
+ *   - subscribePart：订阅流式 part 事件（UIMessageStreamPart）
+ *   - subscribeEnd：订阅流正常结束事件
+ *   - subscribeError：订阅流异常结束事件
  */
 export interface IpcApi {
   /** 应用级 API */
@@ -47,6 +55,20 @@ export interface IpcApi {
     getStatus: IpcInvokeMethod<'app:getStatus'>;
     /** 通过系统浏览器打开外链 */
     openExternal: IpcInvokeMethod<'app:openExternal'>;
+  };
+
+  /** 聊天域 API（Vercel AI SDK v7） */
+  chat: {
+    /** 发起对话：传入消息历史，返回 sessionId（渲染层用此 id 订阅后续流式事件） */
+    send: IpcInvokeMethod<'chat:send'>;
+    /** 中断指定 sessionId 的对话（已结束则返回 stopped=false） */
+    stop: IpcInvokeMethod<'chat:stop'>;
+    /** 订阅流式 part 事件：每收到一个 UIMessageStreamPart 触发一次回调 */
+    subscribePart: IpcSubscribeMethod<'chat:stream:part'>;
+    /** 订阅流正常结束事件：所有 part 发送完毕后触发一次 */
+    subscribeEnd: IpcSubscribeMethod<'chat:stream:end'>;
+    /** 订阅流异常结束事件：发生错误时触发一次（含 code + message） */
+    subscribeError: IpcSubscribeMethod<'chat:stream:error'>;
   };
 }
 
