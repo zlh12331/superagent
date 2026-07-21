@@ -172,10 +172,14 @@
         "**/src/main/ipc/search.handler.ts",
         "**/src/main/ipc/terminal.handler.ts",
         "**/src/main/ipc/git.handler.ts",
+        "**/src/main/ipc/session.handler.ts",
         "**/src/main/infra/codebase/codebase-service.ts",
         "**/src/main/infra/file/file-service.ts",
         "**/src/main/infra/terminal/terminal-service.ts",
-        "**/src/main/infra/git/git-service.ts"
+        "**/src/main/infra/git/git-service.ts",
+        "**/src/main/infra/storage/db.ts",
+        "**/src/main/infra/storage/schema.ts",
+        "**/src/main/infra/storage/session-service.ts"
       ],
       "linter": {
         "rules": {

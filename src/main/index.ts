@@ -3,14 +3,17 @@
 // 职责：创建 BrowserWindow、加载渲染层、配置安全基线
 // 设计文档 §1.1 进程拓扑 / §4.5 安全配置 / §7.6 日志 / §7.7 Sentry
 //
-// 说明：数据库初始化（PG/Prisma/AGE）与状态广播器已随数据库层一并删除。
-// 当前主进程仅负责：Sentry 初始化、Logger 初始化、窗口创建、退出清理。
+// 说明：P7 新增 SQLite + Drizzle 持久化层（SessionService），
+// 替代早期已删除的 PG/Prisma/AGE 数据库层。
+// 当前主进程负责：Sentry 初始化、Logger 初始化、SQLite 初始化、
+// 窗口创建、退出清理（含 closeDb）。
 
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, session, shell } from 'electron';
 import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
+import { initDb } from './infra/storage/db';
 import { registerAgentHandlers } from './ipc/agent.handler';
 import { registerAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { registerAppHandlers } from './ipc/app.handler';
@@ -19,6 +22,7 @@ import { registerCodebaseHandlers } from './ipc/codebase.handler';
 import { registerFileHandlers } from './ipc/file.handler';
 import { registerGitHandlers } from './ipc/git.handler';
 import { registerSearchHandlers } from './ipc/search.handler';
+import { registerSessionHandlers } from './ipc/session.handler';
 import { registerTerminalHandlers } from './ipc/terminal.handler';
 import { registerToolHandlers } from './ipc/tool.handler';
 import { buildCsp } from './security/csp';
@@ -130,10 +134,15 @@ function createWindow(): BrowserWindow {
 // Sentry 必须在 app.whenReady() 之前初始化（@sentry/electron 要求）
 initSentry();
 
-// 应用就绪后初始化 logger + 全局错误捕获 + IPC handler + 创建窗口
+// 应用就绪后初始化 logger + SQLite + 全局错误捕获 + IPC handler + 创建窗口
 app.whenReady().then(() => {
   // 初始化 logger（需要 app.getPath，必须在 whenReady 之后）
   initLogger();
+  // 初始化 SQLite + Drizzle（必须在注册任何依赖 DB 的服务之前）
+  // - 建表 + 索引（幂等，已存在则跳过）
+  // - 启用 WAL 模式 + 外键约束
+  // - SessionService 通过 getDb() 动态访问，但首次访问必须确保 db 已初始化
+  initDb();
   registerGlobalErrorHandlers();
   // 注册应用级 IPC handler（app:getStatus / app:openExternal）
   registerAppHandlers();
@@ -163,6 +172,12 @@ app.whenReady().then(() => {
   // 提供 6 个代码智能查询通道，支持符号搜索、调用追踪、影响分析
   // Code Agent 调用这些方法获取代码上下文，喂给 LLM 辅助决策
   registerCodebaseHandlers({ codebaseService: serviceContainer.getCodebaseService() });
+
+  // 注册 Session 域 IPC handler（session:list / get / delete / rename）
+  // 通过 ServiceContainer 注入 ISessionService 实例（基于 drizzle + better-sqlite3）
+  // 持久化会话历史：用户关闭窗口后下次启动可恢复历史对话
+  // create / appendMessage 是内部 API（供 AgentService 调用），不通过 IPC 暴露
+  registerSessionHandlers({ sessionService: serviceContainer.getSessionService() });
 
   // 注册工具域 IPC handler（tool:list）
   // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 5 个内置工具）

@@ -28,10 +28,12 @@
 //      resetGitService()           清空 GitService 模块级单例缓存
 //   8. CodebaseService             无外部资源（每次调用 spawn codegraph 子进程在请求结束时退出）
 //      resetCodebaseService()      清空 CodebaseService 模块级单例缓存
-//   9. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
+//   9. SessionService              无外部资源（db 由 closeDb 单独关闭）
+//      resetSessionService()       清空 SessionService 模块级单例缓存
+//  10. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
+//  11. closeDb()                    关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
 //
 // 注意：
-// - 数据库相关清理（Prisma/PG 子进程/Ollama/Embedding）已随数据库层一并删除
 // - StreamBridge 已随 Vercel AI SDK v7 迁移一并删除（chat-service 内置 abort 管理）
 // - ToolRegistry / ToolExecutor / PermissionService 是 class（非模块级单例），
 //   由 ServiceContainer 直接 new，无需 reset 函数
@@ -59,6 +61,9 @@ import type { IGitService } from '../infra/git/git-service';
 import { getGitService, resetGitService } from '../infra/git/git-service';
 import type { ISearchService } from '../infra/search/search-service';
 import { getSearchService, resetSearchService } from '../infra/search/search-service';
+import { closeDb, resetDb } from '../infra/storage/db';
+import type { ISessionService } from '../infra/storage/session-service';
+import { getSessionService, resetSessionService } from '../infra/storage/session-service';
 import type { ITerminalService } from '../infra/terminal/terminal-service';
 import { getTerminalService, resetTerminalService } from '../infra/terminal/terminal-service';
 import { logger } from '../utils/logger';
@@ -433,6 +438,46 @@ class ServiceContainer {
     this.codebaseService = service;
   }
 
+  // ─── SessionService（SQLite 持久化，会话历史存储） ───
+
+  /**
+   * SessionService 实例缓存
+   *
+   * 设计与 ChatService / FileService / GitService 一致：
+   * - 生产环境：通过 getSessionService() 拿到默认 SessionService 实现（基于 drizzle + better-sqlite3）
+   * - 测试环境：通过 setSessionService() 注入 mock 实现，避免依赖真实 SQLite
+   *
+   * 缓存值与 getSessionService() 模块级单例保持一致：
+   * 调用 setSessionService(null) 或 reset() 后，下次 getSessionService() 会重新拿默认实现。
+   *
+   * 注意：SessionService 内部不持有 DB 连接（通过 getDb() 动态获取），
+   * db 实例由 initDb() 在应用启动时创建，由 closeDb() 在 dispose 中关闭。
+   */
+  private sessionService: ISessionService | null = null;
+
+  /**
+   * 获取 SessionService 实例
+   *
+   * 首次调用延迟初始化为默认 SessionService 实现（与 getSessionService() 单例一致）。
+   * 测试可通过 setSessionService() 注入 mock 实例覆盖。
+   */
+  getSessionService(): ISessionService {
+    if (this.sessionService === null) {
+      this.sessionService = getSessionService();
+    }
+    return this.sessionService;
+  }
+
+  /**
+   * 注入 SessionService 实例（仅测试用）
+   *
+   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 SQLite。
+   * 传 null 清空缓存，下次 getSessionService() 会重新拿默认实现。
+   */
+  setSessionService(service: ISessionService | null): void {
+    this.sessionService = service;
+  }
+
   /**
    * 应用退出时统一清理所有服务
    *
@@ -531,8 +576,21 @@ class ServiceContainer {
     resetCodebaseService();
     this.codebaseService = null;
 
-    // 9. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 9. SessionService 无外部资源（db 由 closeDb 单独关闭）
+    //    dispose 是 no-op，但保持一致性便于未来扩展（如查询缓存）
+    //    必须在 closeDb 之前调用，避免清空引用后仍有未完成的 DB 访问
+    if (this.sessionService !== null) {
+      await this.sessionService.dispose();
+    }
+    resetSessionService();
+    this.sessionService = null;
+
+    // 10. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
+
+    // 11. 关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
+    //    better-sqlite3 同步关闭，WAL 文件会自动 checkpoint
+    closeDb();
 
     logger.info({}, '应用服务清理完成');
   }
@@ -565,7 +623,12 @@ class ServiceContainer {
     this.gitService = null;
     resetCodebaseService();
     this.codebaseService = null;
+    // SessionService 模块级单例清理（不关闭 db，由 resetDb 单独处理）
+    resetSessionService();
+    this.sessionService = null;
     resetAIProvider();
+    // 关闭并重置 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
+    resetDb();
     resetConfigCache();
   }
 }
