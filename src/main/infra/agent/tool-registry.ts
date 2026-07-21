@@ -5,18 +5,21 @@
 // - register(tool)：注册工具实例，重名抛错
 // - get(name)：按名查找工具实例
 // - list()：列出所有工具元数据（ToolDescriptor）
-// - toAISDKTools(ctx)：转换为 AI SDK v7 原生 tool 格式（Record<string, AITool>）
+// - toAISDKTools(ctx, executeHook?)：转换为 AI SDK v7 原生 tool 格式
 //
 // 设计原则：
 // - 单一注册表：整个应用共享一个 ToolRegistry 实例（通过 ServiceContainer 持有）
 // - 注册时校验：避免重名注册导致 LLM 调用错乱
 // - 转换时注入 ctx：每次 agent 对话生成独立的 AI SDK tools 集合，
 //   闭包捕获对应的 sessionId / workingDir / abortSignal
+// - executeHook 可选注入：AgentService 传入 ToolExecutor.execute 作为 hook，
+//   统一执行权限检查、审批流程与 IPC 事件推送；不传时直接调用 tool.execute
 //
 // 与 AI SDK v7 的关系：
 // - streamText 接收 tools 参数，类型为 Record<string, Tool>
 // - 本注册表的 toAISDKTools() 把项目内 Tool 接口转换为 AI SDK 原生 Tool
-// - 转换时包装 execute 函数，注入 ToolContext
+// - AI SDK execute 函数的 options.toolCallId 会传给 executeHook，
+//   用于关联 AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件
 // ──────────────────────────────────────────────────────────────
 
 import type { ToolDescriptor } from '@novel-writer/shared';
@@ -67,9 +70,21 @@ export interface IToolRegistry {
    * 闭包捕获对应的 sessionId / workingDir / abortSignal。
    *
    * @param ctx 工具执行上下文（注入到每个工具的 execute 函数）
+   * @param executeHook 可选的工具执行 hook（AgentService 注入 ToolExecutor.execute）
+   *   - 不传时：直接调用 tool.execute(input, ctx)（用于测试/无权限检查场景）
+   *   - 传入时：调用 hook(tool, input, ctx, toolCallId)，由 hook 负责权限检查、
+   *     审批流程、IPC 事件推送，并返回工具输出
    * @returns AI SDK 原生 tool 集合，可直接传给 streamText 的 tools 参数
    */
-  toAISDKTools(ctx: ToolContext): Record<string, AITool>;
+  toAISDKTools(
+    ctx: ToolContext,
+    executeHook?: (
+      tool: Tool,
+      input: unknown,
+      ctx: ToolContext,
+      toolCallId: string,
+    ) => Promise<unknown>,
+  ): Record<string, AITool>;
 }
 
 /**
@@ -125,17 +140,33 @@ export class ToolRegistry implements IToolRegistry {
   }
 
   /** @inheritDoc */
-  toAISDKTools(ctx: ToolContext): Record<string, AITool> {
+  toAISDKTools(
+    ctx: ToolContext,
+    executeHook?: (
+      tool: Tool,
+      input: unknown,
+      ctx: ToolContext,
+      toolCallId: string,
+    ) => Promise<unknown>,
+  ): Record<string, AITool> {
     const aiTools: Record<string, AITool> = {};
     for (const toolInstance of this.tools.values()) {
-      // 包装 execute 函数，注入 ToolContext
-      // 闭包捕获 ctx，每次 streamText 调用生成的 tools 集合是独立的
+      // 包装 execute 函数，注入 ToolContext 与 executeHook
+      // 闭包捕获 ctx 与 executeHook，每次 streamText 调用生成的 tools 集合是独立的
       aiTools[toolInstance.name] = defineAITool({
         description: toolInstance.description,
         inputSchema: toolInstance.inputSchema,
-        execute: async (input: unknown) => {
+        execute: async (input: unknown, options: { toolCallId?: string } | undefined) => {
+          // AI SDK v7 的 execute 第二个参数为 ToolExecutionOptions，包含 toolCallId
+          // 这里用宽松类型避免引入 ai 包内部类型依赖，运行时一定能拿到 options
+          const toolCallId = options?.toolCallId ?? '';
+          if (executeHook !== undefined) {
+            // AgentService 注入了 hook：走权限检查 + 审批 + IPC 推送流程
+            // hook 内部调用 ToolExecutor.execute，返回 result.output
+            return executeHook(toolInstance, input, ctx, toolCallId);
+          }
+          // 默认行为：直接调用 tool.execute（用于测试/无权限检查场景）
           // 注意：这里 input 已被 AI SDK 通过 inputSchema 校验过
-          // 直接调用原 Tool 接口的 execute
           return toolInstance.execute(input, ctx);
         },
       });

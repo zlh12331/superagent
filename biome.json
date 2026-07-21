@@ -134,7 +134,10 @@
       }
     },
     {
-      "includes": ["**/src/main/infra/ai/ai-provider.ts"],
+      "includes": [
+        "**/src/main/infra/ai/ai-provider.ts",
+        "**/src/main/infra/ai/error-classifier.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -195,6 +198,7 @@
         "**/src/main/infra/agent/permission-service.ts",
         "**/src/main/infra/agent/tool-registry.ts",
         "**/src/main/infra/agent/tool-executor.ts",
+        "**/src/main/infra/agent/agent-service.ts",
         "**/src/main/infra/agent/tools/**/*.ts"
       ],
       "linter": {

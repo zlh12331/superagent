@@ -11,6 +11,7 @@ import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, session, shell } from 'electron';
 import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
+import { registerAgentHandlers } from './ipc/agent.handler';
 import { registerAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
@@ -147,9 +148,15 @@ app.whenReady().then(() => {
   // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 5 个内置工具）
   registerToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() });
 
+  // 注册 Agent 域 IPC handler（agent:run / agent:stop）
+  // 通过 ServiceContainer 注入 IAgentService 实例（依赖 ToolRegistry + ToolExecutor）
+  // agent:run 启动 streamText 多轮工具调用循环，立即返回 sessionId
+  // 后续流式事件通过 AGENT_STREAM_PART / AGENT_TOOL_CALL / AGENT_TOOL_RESULT / AGENT_APPROVAL_REQUEST 推送
+  registerAgentHandlers({ agentService: serviceContainer.getAgentService() });
+
   // 注册 Agent 审批响应 IPC handler（agent:approval:response）
   // 通过 ServiceContainer 注入 IPermissionService 实例
-  // 此 handler 在 P3.7 启用，agent:run / agent:stop 将在 P4 AgentService 实现后注册
+  // 渲染层 ApprovalModal 用户操作后通过此 channel 回传审批结果
   registerAgentApprovalHandlers({
     permissionService: serviceContainer.getPermissionService(),
   });

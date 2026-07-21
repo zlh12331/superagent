@@ -3,7 +3,7 @@
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
 // 设计目标：
-// 1. 集中持有核心服务实例（IChatService / IFileService / ISearchService
+// 1. 集中持有核心服务实例（IChatService / IAgentService / IFileService / ISearchService
 //    / IToolRegistry / IPermissionService / IToolExecutor），统一对外暴露获取接口
 // 2. 应用退出时统一清理（替代 index.ts 中分散的 cleanup 调用）
 // 3. 测试隔离时统一 reset（避免每个测试手动调用各模块 reset）
@@ -12,14 +12,17 @@
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
 //   1. ChatService.dispose()       中断活跃对话（依赖 streamText + webContents）
 //      resetChatService()          清空 ChatService 模块级单例缓存
-//   2. PermissionService.dispose() reject 所有 pending 审批 Promise
+//   2. AgentService.dispose()      中断活跃 agent 对话（依赖 streamText + tools + ToolExecutor）
+//      AgentService 依赖 ToolExecutor（已注入到 executeHook 闭包），
+//      必须在 PermissionService.dispose 之前停止，否则 ToolExecutor 会访问已释放的 pending Map
+//   3. PermissionService.dispose() reject 所有 pending 审批 Promise
 //      ToolExecutor                无外部资源（仅协调层），无需 dispose
 //      ToolRegistry                无外部资源（仅 Map），无需 dispose
-//   3. FileService.dispose()       关闭所有 chokidar watcher（释放 fs 监听句柄）
+//   4. FileService.dispose()       关闭所有 chokidar watcher（释放 fs 监听句柄）
 //      resetFileService()          清空 FileService 模块级单例缓存
-//   4. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
+//   5. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
 //      resetSearchService()        清空 SearchService 模块级单例缓存
-//   5. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
+//   6. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
 //
 // 注意：
 // - 数据库相关清理（Prisma/PG 子进程/Ollama/Embedding）已随数据库层一并删除
@@ -31,6 +34,7 @@
 // - 幂等：多次调用 disposeServices 安全
 
 import { resetConfigCache } from '../config';
+import { AgentService, type IAgentService } from '../infra/agent/agent-service';
 import type { IPermissionService } from '../infra/agent/permission-service';
 import { PermissionService } from '../infra/agent/permission-service';
 import type { IToolExecutor } from '../infra/agent/tool-executor';
@@ -268,6 +272,43 @@ class ServiceContainer {
     this.toolExecutor = executor;
   }
 
+  // ─── AgentService（Code Agent 核心，多轮工具调用） ───
+
+  /**
+   * AgentService 实例缓存
+   *
+   * 设计：由 ServiceContainer 直接 new AgentService（class 实现，依赖 ToolRegistry + ToolExecutor）。
+   * - 首次访问时延迟初始化，注入 toolRegistry + toolExecutor 实例
+   * - 测试可通过 setAgentService() 注入 mock 实现（不依赖真实 streamText）
+   * - dispose 时调用 AgentService.dispose() 等待活跃 stream 真正完成
+   *
+   * 依赖顺序：必须先 getToolRegistry / getToolExecutor，再初始化 AgentService
+   */
+  private agentService: IAgentService | null = null;
+
+  /**
+   * 获取 AgentService 实例
+   *
+   * 首次调用延迟初始化，注入当前 ToolRegistry + ToolExecutor 实例。
+   * AgentService 内部通过 ToolRegistry.toAISDKTools(ctx, executeHook) 转换工具，
+   * executeHook 注入 ToolExecutor.execute 作为权限检查 + 审批 + IPC 推送层。
+   */
+  getAgentService(): IAgentService {
+    if (this.agentService === null) {
+      this.agentService = new AgentService(this.getToolRegistry(), this.getToolExecutor());
+    }
+    return this.agentService;
+  }
+
+  /**
+   * 注入 AgentService 实例（仅测试用）
+   *
+   * 传 null 清空缓存，下次 getAgentService() 会重新创建并注入当前 registry + executor。
+   */
+  setAgentService(service: IAgentService | null): void {
+    this.agentService = service;
+  }
+
   /**
    * 应用退出时统一清理所有服务
    *
@@ -308,7 +349,16 @@ class ServiceContainer {
     resetChatService();
     this.chatService = null;
 
-    // 2. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
+    // 2. 优雅关闭 AgentService（P4：中断 + 等待活跃 agent stream 真正完成）
+    //    AgentService 依赖 ToolExecutor（已注入到 executeHook 闭包），
+    //    必须在 PermissionService.dispose 之前停止，否则 ToolExecutor 会访问已释放的 pending Map
+    //    dispose 内部会先 abortAll 再 await 所有活跃 stream Promise（带 3s 超时兜底）
+    if (this.agentService !== null) {
+      await this.agentService.dispose();
+    }
+    this.agentService = null;
+
+    // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
     //    ToolExecutor 与 ToolRegistry 无外部资源（仅 Map / 协调层），无需 dispose
     if (this.permissionService !== null) {
       this.permissionService.dispose();
@@ -317,7 +367,7 @@ class ServiceContainer {
     this.toolExecutor = null;
     this.toolRegistry = null;
 
-    // 3. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
+    // 4. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
     //    watcher 句柄不释放会导致进程无法退出（Node.js 事件循环不空）
     if (this.fileService !== null) {
       await this.fileService.dispose();
@@ -325,7 +375,7 @@ class ServiceContainer {
     resetFileService();
     this.fileService = null;
 
-    // 4. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
+    // 5. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
     //    子进程不释放会导致进程退出延迟（Node.js 会等待所有子进程退出）
     if (this.searchService !== null) {
       await this.searchService.dispose();
@@ -333,7 +383,7 @@ class ServiceContainer {
     resetSearchService();
     this.searchService = null;
 
-    // 5. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 6. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
     logger.info({}, '应用服务清理完成');
@@ -351,6 +401,8 @@ class ServiceContainer {
   reset(): void {
     resetChatService();
     this.chatService = null;
+    // AgentService 无模块级单例，直接清空 ServiceContainer 缓存引用
+    this.agentService = null;
     // 工具系统无模块级单例，直接清空 ServiceContainer 缓存引用
     this.permissionService = null;
     this.toolExecutor = null;
