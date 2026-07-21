@@ -10,6 +10,14 @@
 //   已随数据库层一并删除
 // - 当前保留应用级 payload + chat 域 payload（基于 Vercel AI SDK v7）
 //   chat 域采用 UIMessageStreamPart 作为流式 part 类型，与官方协议保持一致
+//
+// P0-3 改造：
+// - chat 域类型从 zod schema 派生（z.infer），schema 作为单一真源
+// - 避免类型与 schema 双向漂移
+// - schema 文件：../schemas/chat.ts
+
+import type { z } from 'zod';
+import type { ChatMessageSchema, ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
 
 /**
  * 应用状态（health check）
@@ -25,47 +33,41 @@ export interface AppStatus {
 /**
  * 聊天消息（Vercel AI SDK CoreMessage 子集）
  *
+ * 类型从 ChatMessageSchema 派生（z.infer），schema 为单一真源。
+ *
  * 限制为 user/assistant/system 三种角色，与 DeepSeek API 兼容。
  * 渲染层调用 IPC 时把 useChat 的 UIMessage 转换为此结构传给主进程。
  */
-export interface ChatMessage {
-  /** 消息角色：user（用户）/ assistant（助手）/ system（系统提示） */
-  readonly role: 'user' | 'assistant' | 'system';
-  /** 消息文本内容（多模态暂不支持，仅 string） */
-  readonly content: string;
-}
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 /**
  * chat:send 请求 payload
  *
+ * 类型从 ChatSendReqSchema 派生（z.infer），schema 为单一真源。
+ *
  * 消息列表由渲染层维护，每次发起对话把完整历史传给主进程，
  * 主进程不持有对话上下文（无状态设计，便于多窗口/多会话扩展）。
+ *
+ * sessionId 使用 `string | undefined` 而非 `?: string`：
+ * exactOptionalPropertyTypes 严格模式下，zod `.optional().transform()` 推断为 `string | undefined`，
+ * 显式声明 `| undefined` 才能兼容 zod schema 推断的类型。
  */
-export interface ChatSendReq {
-  /** 完整消息历史（最后一条通常是 user 新消息） */
-  readonly messages: ChatMessage[];
-  /**
-   * 可选 sessionId：续传已有对话时传入；
-   * 省略则由主进程生成新 sessionId 并在响应中返回。
-   *
-   * 使用 `string | undefined` 而非 `?: string`：
-   * exactOptionalPropertyTypes 严格模式下，zod `.optional()` 推断为 `string | undefined`，
-   * 显式声明 `| undefined` 才能兼容 zod schema 推断的类型。
-   */
-  readonly sessionId: string | undefined;
-}
+export type ChatSendReq = z.infer<typeof ChatSendReqSchema>;
 
-/** chat:send 响应 payload：返回本次对话的 sessionId */
+/**
+ * chat:send 响应 payload：返回本次对话的 sessionId
+ */
 export interface ChatSendRes {
   /** 本次对话的唯一标识，渲染层用此 id 订阅后续流式事件并支持中断 */
   readonly sessionId: string;
 }
 
-/** chat:stop 请求 payload：中断指定 sessionId 的对话 */
-export interface ChatStopReq {
-  /** 要中断的对话 sessionId */
-  readonly sessionId: string;
-}
+/**
+ * chat:stop 请求 payload：中断指定 sessionId 的对话
+ *
+ * 类型从 ChatStopReqSchema 派生（z.infer），schema 为单一真源。
+ */
+export type ChatStopReq = z.infer<typeof ChatStopReqSchema>;
 
 /** chat:stop 响应 payload */
 export interface ChatStopRes {

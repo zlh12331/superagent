@@ -159,6 +159,23 @@
       }
     },
     {
+      "includes": [
+        "**/src/main/infra/ai/chat-service.ts",
+        "**/src/main/app/service-container.ts",
+        "**/src/main/ipc/chat.handler.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tests/integration/**/*.ts"],
       "linter": {
         "rules": {

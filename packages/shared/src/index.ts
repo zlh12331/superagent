@@ -1,14 +1,14 @@
 // packages/shared/src/index.ts
 // @novel-writer/shared 跨进程共享包统一入口
-// 暴露：错误码 + IPC 类型契约（应用级）
+// 暴露：错误码 + IPC 类型契约（应用级）+ zod schema
 //
 // 消费方：
-// - 主进程：import { AppError, ErrorCode, IPC_CHANNELS } from '@novel-writer/shared'
+// - 主进程：import { AppError, ErrorCode, IPC_CHANNELS, ChatSendReqSchema } from '@novel-writer/shared'
 // - Preload：import type { IpcApi } from '@novel-writer/shared'
 // - 渲染层：import type { IpcResponse, AppStatus } from '@novel-writer/shared'
 //
 // 说明：业务相关导出（schemas/types/enums/age/pg-versions）已随数据库层一并删除，
-// 当前仅保留通用基础设施（错误码 + IPC 类型契约 + 应用级 payload）。
+// 当前仅保留通用基础设施（错误码 + IPC 类型契约 + 应用级 payload + chat 域 zod schema）。
 
 // 错误处理（§7）
 export * from './constants/errors';
@@ -18,6 +18,9 @@ export * from './ipc/api';
 export * from './ipc/channels';
 export * from './ipc/payloads';
 export * from './ipc/response';
+
+// zod schema（P0-3：单一真源，主进程 IPC handler 用于校验入参）
+export * from './schemas/chat';
 
 // 包版本（供运行时 sanity check）
 export const SHARED_VERSION = '0.1.0' as const;

@@ -9,7 +9,7 @@
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
-import { disposeServices } from './app/service-container';
+import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
@@ -129,7 +129,8 @@ app.whenReady().then(() => {
   // 注册应用级 IPC handler（app:getStatus / app:openExternal）
   registerAppHandlers();
   // 注册聊天域 IPC handler（chat:send / chat:stop，基于 Vercel AI SDK v7）
-  registerChatHandlers();
+  // 通过 ServiceContainer 注入 IChatService 实例，解耦 handler 与具体实现
+  registerChatHandlers({ chatService: serviceContainer.getChatService() });
   logger.info({}, '应用启动');
 
   createWindow();

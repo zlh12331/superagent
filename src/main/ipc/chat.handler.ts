@@ -11,66 +11,56 @@
 // - chat:stream:error：流异常结束（含 code + message）
 //
 // 设计文档 §4.7 IPC handler 设计 / §5.3 完整 Channel 清单
+//
+// P0-2 改造：
+// - 接受 IChatService 依赖注入，handler 不再直接 import 模块级单例
+// - 通过 ServiceContainer 在 app.whenReady 时注入实例
+// - 便于测试：可注入 mock chatService，不依赖真实 streamText
+//
+// P0-3 改造：
+// - zod schema 从 @novel-writer/shared 导入，不再在 handler 内联定义
+// - schema 与类型同源（payloads.ts 类型从 schema 派生），消除双向漂移风险
 
 import {
   type ChatSendReq,
+  ChatSendReqSchema,
   type ChatSendRes,
   type ChatStopReq,
+  ChatStopReqSchema,
   type ChatStopRes,
   IPC_CHANNELS,
 } from '@novel-writer/shared';
-import { z } from 'zod';
-import { getChatService } from '../infra/ai/chat-service';
+import type { IChatService } from '../infra/ai/chat-service';
 import { wrap } from '../utils/wrap';
 
 /**
- * ChatMessage zod schema
+ * 聊天域 handler 依赖
  *
- * 与 shared.ChatMessage 接口保持一致，用于校验 IPC 入参。
- * 共享包目前不导出 zod schema（保持轻量），handler 内联定义避免依赖膨胀。
+ * 通过依赖注入解耦 handler 与具体 ChatService 实现：
+ * - 生产环境：ServiceContainer 注入默认 ChatService 实例
+ * - 测试环境：可注入 mock 实现，不依赖真实 streamText / 网络
  */
-const ChatMessageSchema = z.object({
-  role: z.enum(['user', 'assistant', 'system']),
-  content: z.string().min(1),
-});
-
-/**
- * chat:send 入参 schema
- *
- * sessionId 用 `.optional().transform(v => v ?? undefined)`：
- * - 运行时允许字段缺失（渲染层首次发起对话时不传 sessionId）
- * - transform 把缺失值统一转为 undefined，让 output 类型为 `string | undefined`（必填字段，值可为 undefined）
- *
- * 这样与 shared.ChatSendReq.sessionId: `string | undefined` 类型完全对齐，
- * 兼容 exactOptionalPropertyTypes 严格模式（避免 `?: string | undefined` 与 `string | undefined` 不兼容）。
- */
-const ChatSendReqSchema = z.object({
-  messages: z.array(ChatMessageSchema).min(1),
-  sessionId: z
-    .string()
-    .optional()
-    .transform((v) => v ?? undefined),
-});
-
-/**
- * chat:stop 入参 schema
- */
-const ChatStopReqSchema = z.object({
-  sessionId: z.string().min(1),
-});
+export interface ChatHandlerDeps {
+  /** ChatService 实例（来自 ServiceContainer） */
+  readonly chatService: IChatService;
+}
 
 /**
  * 注册聊天域 IPC handler
  *
  * 在 app.whenReady() 后调用一次，与 registerAppHandlers 并列。
  *
+ * @param deps 依赖项：包含 IChatService 实例（由 ServiceContainer 注入）
+ *
  * 幂等：重复调用会抛错（ipcMain.handle 对同一 channel 重复注册），
  * 但正常流程不会触发——本函数只在 whenReady 中调用一次。
  */
-export function registerChatHandlers(): void {
+export function registerChatHandlers(deps: ChatHandlerDeps): void {
+  const { chatService } = deps;
+
   // 发起对话：启动 streamText 流，立即返回 sessionId（流式 part 通过 CHAT_STREAM_PART 推送）
   wrap<ChatSendReq, ChatSendRes>(IPC_CHANNELS.CHAT_SEND, ChatSendReqSchema, async (input, ctx) => {
-    const sessionId = await getChatService().startChat({
+    const sessionId = await chatService.startChat({
       messages: input.messages,
       sessionId: input.sessionId,
       webContents: ctx.sender,
@@ -80,7 +70,7 @@ export function registerChatHandlers(): void {
 
   // 中断对话：触发 AbortController.abort()，流推送协程会捕获 AbortError 并推送 CHAT_STREAM_END
   wrap<ChatStopReq, ChatStopRes>(IPC_CHANNELS.CHAT_STOP, ChatStopReqSchema, async (input) => {
-    const stopped = getChatService().abort(input.sessionId);
+    const stopped = chatService.abort(input.sessionId);
     return { stopped };
   });
 }

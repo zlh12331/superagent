@@ -10,6 +10,11 @@
 // 5. webContents.isDestroyed 守卫，避免销毁后继续推送
 //
 // 设计文档 §4.3 ai/chat-service（已适配 Vercel AI SDK v7）
+//
+// 接口化（P0-2 改造）：
+// - 抽出 IChatService 接口，ChatService 类实现该接口
+// - ServiceContainer 持有 IChatService 实例并注入到 IPC handler
+// - 便于测试 mock 与未来支持本地 LLM 等可替换实现
 
 import { randomUUID } from 'node:crypto';
 import type {
@@ -27,7 +32,7 @@ import { getModel } from './ai-provider';
 /**
  * 对话启动选项
  */
-interface StartChatOptions {
+export interface StartChatOptions {
   /** 完整消息历史（最后一条通常是 user 新消息） */
   readonly messages: ChatMessage[];
   /**
@@ -43,7 +48,23 @@ interface StartChatOptions {
 }
 
 /**
- * ChatService 单例
+ * ChatService 接口（P0-2 抽出）
+ *
+ * 解耦 IPC handler 对具体类的依赖，便于：
+ * - 单元测试：注入 mock 实现，不依赖真实 streamText
+ * - 未来扩展：替换为本地 LLM、多 provider 路由等实现
+ */
+export interface IChatService {
+  /** 启动一次对话，返回 sessionId（渲染层用此 id 订阅后续流式事件） */
+  startChat(options: StartChatOptions): Promise<string>;
+  /** 中断指定 sessionId 的对话，返回是否成功中断 */
+  abort(sessionId: string): boolean;
+  /** 中断所有活跃对话（用于应用退出 / 窗口关闭场景） */
+  abortAll(): void;
+}
+
+/**
+ * ChatService 默认实现
  *
  * 管理 sessionId → AbortController 映射，提供启动/中断对话的能力。
  *
@@ -52,7 +73,7 @@ interface StartChatOptions {
  * - 内部 Map 维护活跃对话，对话结束（正常/异常/abort）后从 Map 移除
  * - 所有 IPC 推送都通过 webContents.send，渲染层通过 ipcRenderer.on 订阅
  */
-class ChatService {
+class ChatService implements IChatService {
   /** 活跃对话 Map：sessionId → AbortController */
   private readonly activeSessions = new Map<string, AbortController>();
 
@@ -198,15 +219,19 @@ class ChatService {
   }
 }
 
-/** ChatService 单例 */
+/** ChatService 单例（内部按具体实现类持有，外部暴露为 IChatService 接口） */
 let chatService: ChatService | null = null;
 
 /**
  * 获取 ChatService 单例
  *
  * 整个应用生命周期共享一个实例，内部 Map 管理活跃对话。
+ *
+ * 返回类型为 IChatService 接口而非具体类：
+ * - 强制调用方面向接口编程，不依赖 ChatService 内部细节
+ * - ServiceContainer 注入到 IPC handler 时类型一致
  */
-export function getChatService(): ChatService {
+export function getChatService(): IChatService {
   if (chatService === null) {
     chatService = new ChatService();
   }
