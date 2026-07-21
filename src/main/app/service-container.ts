@@ -3,7 +3,8 @@
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
 // 设计目标：
-// 1. 集中持有核心服务实例（IChatService / IFileService / ISearchService），统一对外暴露获取接口
+// 1. 集中持有核心服务实例（IChatService / IFileService / ISearchService
+//    / IToolRegistry / IPermissionService / IToolExecutor），统一对外暴露获取接口
 // 2. 应用退出时统一清理（替代 index.ts 中分散的 cleanup 调用）
 // 3. 测试隔离时统一 reset（避免每个测试手动调用各模块 reset）
 // 4. 支持依赖注入：IPC handler 通过容器获取服务实例，而非直接 import 模块级单例
@@ -11,20 +12,32 @@
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
 //   1. ChatService.dispose()       中断活跃对话（依赖 streamText + webContents）
 //      resetChatService()          清空 ChatService 模块级单例缓存
-//   2. FileService.dispose()       关闭所有 chokidar watcher（释放 fs 监听句柄）
+//   2. PermissionService.dispose() reject 所有 pending 审批 Promise
+//      ToolExecutor                无外部资源（仅协调层），无需 dispose
+//      ToolRegistry                无外部资源（仅 Map），无需 dispose
+//   3. FileService.dispose()       关闭所有 chokidar watcher（释放 fs 监听句柄）
 //      resetFileService()          清空 FileService 模块级单例缓存
-//   3. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
+//   4. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
 //      resetSearchService()        清空 SearchService 模块级单例缓存
-//   4. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
+//   5. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
 //
 // 注意：
 // - 数据库相关清理（Prisma/PG 子进程/Ollama/Embedding）已随数据库层一并删除
 // - StreamBridge 已随 Vercel AI SDK v7 迁移一并删除（chat-service 内置 abort 管理）
+// - ToolRegistry / ToolExecutor / PermissionService 是 class（非模块级单例），
+//   由 ServiceContainer 直接 new，无需 reset 函数
 // - AppConfig 无需 dispose（纯内存对象，进程退出即回收）
 // - 各模块内部已处理 null 检查，本模块无需重复判空
 // - 幂等：多次调用 disposeServices 安全
 
 import { resetConfigCache } from '../config';
+import type { IPermissionService } from '../infra/agent/permission-service';
+import { PermissionService } from '../infra/agent/permission-service';
+import type { IToolExecutor } from '../infra/agent/tool-executor';
+import { ToolExecutor } from '../infra/agent/tool-executor';
+import type { IToolRegistry } from '../infra/agent/tool-registry';
+import { ToolRegistry } from '../infra/agent/tool-registry';
+import { registerBuiltinTools } from '../infra/agent/tools';
 import { resetAIProvider } from '../infra/ai/ai-provider';
 import type { IChatService } from '../infra/ai/chat-service';
 import { getChatService, resetChatService } from '../infra/ai/chat-service';
@@ -149,6 +162,112 @@ class ServiceContainer {
     this.searchService = service;
   }
 
+  // ─── 工具系统（ToolRegistry / PermissionService / ToolExecutor） ───
+
+  /**
+   * ToolRegistry 实例缓存
+   *
+   * 设计：由 ServiceContainer 直接 new ToolRegistry（class 实现，非模块级单例）。
+   * - 首次访问时延迟初始化，并调用 registerBuiltinTools 注册 5 个内置工具
+   *   （read_file / write_file / list_directory / grep / glob）
+   * - 测试可通过 setToolRegistry() 注入 mock 实现（如空注册表或预填充工具）
+   *
+   * 依赖：FileService + SearchService 实例（用于工具工厂创建）
+   * 初始化顺序：必须先 getFileService / getSearchService，再初始化 ToolRegistry
+   */
+  private toolRegistry: IToolRegistry | null = null;
+
+  /**
+   * PermissionService 实例缓存
+   *
+   * 设计：由 ServiceContainer 直接 new PermissionService（class 实现）。
+   * - 首次访问时延迟初始化
+   * - 测试可通过 setPermissionService() 注入 mock 实现
+   * - dispose 时调用 rejectAllPendingApprovals，避免内存泄漏
+   */
+  private permissionService: IPermissionService | null = null;
+
+  /**
+   * ToolExecutor 实例缓存
+   *
+   * 设计：由 ServiceContainer 直接 new ToolExecutor（class 实现，依赖 ToolRegistry + PermissionService）。
+   * - 首次访问时延迟初始化，注入 toolRegistry + permissionService
+   * - 测试可通过 setToolExecutor() 注入 mock 实现
+   * - ToolExecutor 无外部资源（仅协调层），dispose 时无需调用
+   */
+  private toolExecutor: IToolExecutor | null = null;
+
+  /**
+   * 获取 ToolRegistry 实例
+   *
+   * 首次调用延迟初始化：
+   * 1. new ToolRegistry() 创建空注册表
+   * 2. 调用 registerBuiltinTools(registry, fileService, searchService) 注册 5 个内置工具
+   *
+   * 依赖 FileService + SearchService 实例：先确保已初始化。
+   */
+  getToolRegistry(): IToolRegistry {
+    if (this.toolRegistry === null) {
+      const registry = new ToolRegistry();
+      // 注册 5 个内置工具（read_file / write_file / list_directory / grep / glob）
+      // 依赖 FileService + SearchService 实例
+      registerBuiltinTools(registry, this.getFileService(), this.getSearchService());
+      this.toolRegistry = registry;
+    }
+    return this.toolRegistry;
+  }
+
+  /**
+   * 注入 ToolRegistry 实例（仅测试用）
+   *
+   * 传 null 清空缓存，下次 getToolRegistry() 会重新创建并注册内置工具。
+   */
+  setToolRegistry(registry: IToolRegistry | null): void {
+    this.toolRegistry = registry;
+  }
+
+  /**
+   * 获取 PermissionService 实例
+   *
+   * 首次调用延迟初始化为默认 PermissionService 实现。
+   */
+  getPermissionService(): IPermissionService {
+    if (this.permissionService === null) {
+      this.permissionService = new PermissionService();
+    }
+    return this.permissionService;
+  }
+
+  /**
+   * 注入 PermissionService 实例（仅测试用）
+   *
+   * 传 null 清空缓存，下次 getPermissionService() 会重新创建默认实现。
+   */
+  setPermissionService(service: IPermissionService | null): void {
+    this.permissionService = service;
+  }
+
+  /**
+   * 获取 ToolExecutor 实例
+   *
+   * 首次调用延迟初始化，注入 ToolRegistry + PermissionService 实例。
+   */
+  getToolExecutor(): IToolExecutor {
+    if (this.toolExecutor === null) {
+      this.toolExecutor = new ToolExecutor(this.getToolRegistry(), this.getPermissionService());
+    }
+    return this.toolExecutor;
+  }
+
+  /**
+   * 注入 ToolExecutor 实例（仅测试用）
+   *
+   * 传 null 清空缓存，下次 getToolExecutor() 会重新创建并注入当前 registry + permissionService。
+   */
+  setToolExecutor(executor: IToolExecutor | null): void {
+    this.toolExecutor = executor;
+  }
+
   /**
    * 应用退出时统一清理所有服务
    *
@@ -189,7 +308,16 @@ class ServiceContainer {
     resetChatService();
     this.chatService = null;
 
-    // 2. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
+    // 2. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
+    //    ToolExecutor 与 ToolRegistry 无外部资源（仅 Map / 协调层），无需 dispose
+    if (this.permissionService !== null) {
+      this.permissionService.dispose();
+    }
+    this.permissionService = null;
+    this.toolExecutor = null;
+    this.toolRegistry = null;
+
+    // 3. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
     //    watcher 句柄不释放会导致进程无法退出（Node.js 事件循环不空）
     if (this.fileService !== null) {
       await this.fileService.dispose();
@@ -197,7 +325,7 @@ class ServiceContainer {
     resetFileService();
     this.fileService = null;
 
-    // 3. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
+    // 4. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
     //    子进程不释放会导致进程退出延迟（Node.js 会等待所有子进程退出）
     if (this.searchService !== null) {
       await this.searchService.dispose();
@@ -205,7 +333,7 @@ class ServiceContainer {
     resetSearchService();
     this.searchService = null;
 
-    // 4. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 5. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
     logger.info({}, '应用服务清理完成');
@@ -223,6 +351,10 @@ class ServiceContainer {
   reset(): void {
     resetChatService();
     this.chatService = null;
+    // 工具系统无模块级单例，直接清空 ServiceContainer 缓存引用
+    this.permissionService = null;
+    this.toolExecutor = null;
+    this.toolRegistry = null;
     resetFileService();
     this.fileService = null;
     resetSearchService();

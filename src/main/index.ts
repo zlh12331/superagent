@@ -11,10 +11,12 @@ import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, session, shell } from 'electron';
 import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
+import { registerAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
 import { registerFileHandlers } from './ipc/file.handler';
 import { registerSearchHandlers } from './ipc/search.handler';
+import { registerToolHandlers } from './ipc/tool.handler';
 import { buildCsp } from './security/csp';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
@@ -140,6 +142,17 @@ app.whenReady().then(() => {
   // 注册搜索域 IPC handler（search:grep / search:glob）
   // 通过 ServiceContainer 注入 ISearchService 实例，handler 不直接依赖 SearchService 实现
   registerSearchHandlers({ searchService: serviceContainer.getSearchService() });
+
+  // 注册工具域 IPC handler（tool:list）
+  // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 5 个内置工具）
+  registerToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() });
+
+  // 注册 Agent 审批响应 IPC handler（agent:approval:response）
+  // 通过 ServiceContainer 注入 IPermissionService 实例
+  // 此 handler 在 P3.7 启用，agent:run / agent:stop 将在 P4 AgentService 实现后注册
+  registerAgentApprovalHandlers({
+    permissionService: serviceContainer.getPermissionService(),
+  });
 
   // 注入 CSP 响应头（P1-5 安全基线）
   // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）

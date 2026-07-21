@@ -20,7 +20,7 @@
 import type { z } from 'zod';
 import type {
   AgentApprovalRequestPayload,
-  AgentApprovalResponseReq,
+  AgentApprovalResponseReqSchema,
   AgentRunReqSchema,
   AgentRunRes,
   AgentStopReqSchema,
@@ -168,6 +168,9 @@ export type AgentRunReq = z.infer<typeof AgentRunReqSchema>;
 
 /** agent:stop 请求 payload：中断指定 sessionId 的 agent 对话 */
 export type AgentStopReq = z.infer<typeof AgentStopReqSchema>;
+
+/** agent:approval:response 请求 payload：渲染层回传审批结果 */
+export type AgentApprovalResponseReq = z.infer<typeof AgentApprovalResponseReqSchema>;
 
 // ─── File 域 Req 派生（文件读写） ──────────────────────────────
 

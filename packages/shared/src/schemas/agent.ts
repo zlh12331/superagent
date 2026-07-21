@@ -132,14 +132,20 @@ export interface AgentApprovalRequestPayload {
   readonly description: string;
 }
 
-/** 审批响应 payload（渲染层 → 主进程，请求-响应） */
-export interface AgentApprovalResponseReq {
-  readonly approvalId: string;
-  /** 用户是否批准执行 */
-  readonly approved: boolean;
-  /** 用户可选"5分钟内对此工具+入参组合不再询问" */
-  readonly rememberDecision: boolean;
-}
+/**
+ * 审批响应 zod schema（渲染层 → 主进程，请求-响应）
+ *
+ * 渲染层 ApprovalModal 用户操作后，通过 ipcRenderer.invoke('agent:approval:response', req) 回传。
+ * 主进程 IPC handler 用此 schema 校验入参，再调用 PermissionService.handleApprovalResponse。
+ *
+ * 注意：对应的 TypeScript 类型 AgentApprovalResponseReq 在 ipc/payloads.ts 通过 z.infer 派生，
+ * 与其他域的 Req 类型派生惯例一致（schema 在 schemas/ 下定义，类型在 payloads.ts 派生）。
+ */
+export const AgentApprovalResponseReqSchema = z.object({
+  approvalId: z.string().min(1),
+  approved: z.boolean(),
+  rememberDecision: z.boolean(),
+});
 
 /**
  * Agent 流式 part payload
