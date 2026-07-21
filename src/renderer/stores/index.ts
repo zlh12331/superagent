@@ -44,6 +44,15 @@ export type {
 export { useApprovalsStore } from './transient/approvals-store';
 export type { TerminalMeta } from './transient/terminal-store';
 export { useTerminalStore } from './transient/terminal-store';
+export type {
+  ToolCallError,
+  ToolCallItem,
+  ToolCallStatus,
+  ToolPermission,
+} from './transient/tool-store';
+// L2 客户端共享状态层 - transient（工具调用运行时态）
+// 实际属于 L4 流式推送层：IPC on 订阅 agent:tool:call / agent:tool:result
+export { useToolStore } from './transient/tool-store';
 
 // L3 服务端请求状态层
 // （TanStack Query Provider 在 providers/QueryProvider.tsx，

@@ -17,6 +17,7 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
+import { useToolBridge } from '@/hooks/use-tool-bridge';
 
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -49,6 +50,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 审批桥接：订阅 IPC 推送 + 提供 respondApproval 方法
   // 在根布局初始化一次，保证任意路由下都能接收审批请求
   const { respondApproval } = useApprovalBridge();
+
+  // 工具调用桥接：订阅 agent:tool:call / agent:tool:result IPC 事件
+  // 将事件写入 useToolStore，供 ToolPanel 展示
+  useToolBridge();
 
   return (
     <div className="bg-background text-foreground flex h-screen w-screen flex-col overflow-hidden font-sans">

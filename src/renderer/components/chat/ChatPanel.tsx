@@ -28,6 +28,7 @@
 import { type ReactElement, useCallback } from 'react';
 import { toast } from 'sonner';
 
+import { ToolPanel } from '@/components/agent/ToolPanel';
 import { useChatWithIpc } from '@/hooks/use-chat';
 import { useErrorMessage } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,8 @@ interface ChatPanelProps {
    *
    * 不同 chatId 拥有独立的 messages 状态，互不干扰。
    * 父组件切换 chatId 时，useChat 会自动重置为对应会话的消息。
+   *
+   * 同时作为 ToolPanel 的 sessionId 查询当前会话的工具调用列表。
    */
   chatId: string;
   /**
@@ -110,6 +113,9 @@ export function ChatPanel({ chatId, onFinish, className }: ChatPanelProps): Reac
       <div className="min-h-0 flex-1">
         <ChatMessageList messages={messages} status={status} />
       </div>
+
+      {/* 工具调用面板（仅在有工具调用时展示，位于消息列表与输入框之间） */}
+      <ToolPanel sessionId={chatId} />
 
       {/* 底部输入框 */}
       <footer className="border-border border-t p-3">
