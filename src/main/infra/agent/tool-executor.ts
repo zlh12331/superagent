@@ -1,0 +1,266 @@
+// src/main/infra/agent/tool-executor.ts
+// 工具执行器：统一工具执行入口，整合权限检查与审批流程
+// ──────────────────────────────────────────────────────────────
+// 职责：
+// - execute(toolName, input, ctx, webContents)：统一执行入口
+//   1. 查找工具（ToolRegistry.get）
+//   2. PermissionService.decide(tool, input) 决策权限
+//   3. 若 'ask'：推送 AGENT_APPROVAL_REQUEST，等待用户响应
+//   4. 若 approved：调用 tool.execute(input, ctx)
+//   5. 推送 AGENT_TOOL_RESULT 到渲染层
+//   6. 返回 ToolResult
+//
+// 设计原则：
+// - 统一入口：所有工具调用都通过 ToolExecutor，确保权限检查与审计一致
+// - 错误分类：工具不存在 / 权限拒绝 / 执行失败 / 中断，分别对应不同错误码
+// - IPC 推送：执行前推送 AGENT_TOOL_CALL，执行后推送 AGENT_TOOL_RESULT
+// - 中断响应：检查 ctx.abortSignal.aborted，及时中止执行
+//
+// 与 AI SDK v7 的关系：
+// - AgentService 把 ToolExecutor 的执行逻辑包装为 AI SDK tool 的 execute 函数
+// - toolApproval 配置由 AgentService 负责（基于 ToolExecutor 的 decide 结果）
+// - ToolExecutor 不直接调用 streamText，是被 AgentService 调用
+// ──────────────────────────────────────────────────────────────
+
+import type { AgentToolCallPayload, AgentToolResultPayload } from '@novel-writer/shared';
+import { ErrorCode, IPC_CHANNELS } from '@novel-writer/shared';
+import type { WebContents } from 'electron';
+import { logger } from '../../utils/logger';
+import type { IPermissionService } from './permission-service';
+import { generateApprovalId } from './permission-service';
+import type { ToolContext } from './tool';
+import type { IToolRegistry } from './tool-registry';
+
+/**
+ * ToolExecutor 接口
+ *
+ * 解耦 AgentService 对具体实现的依赖，便于：
+ * - 单元测试：注入 mock 实现，不依赖真实 IPC 推送
+ * - 未来扩展：支持批量执行 / 重试 / 限流等策略
+ */
+export interface IToolExecutor {
+  /**
+   * 执行工具调用
+   *
+   * 完整流程：
+   * 1. ToolRegistry.get(toolName) 查找工具
+   * 2. PermissionService.decide(tool, input) 决策权限
+   * 3. 推送 AGENT_TOOL_CALL 事件到渲染层
+   * 4. 若 permission='ask'：生成 approvalId，推送 AGENT_APPROVAL_REQUEST，
+   *    等待用户通过 agent:approval:response 回传结果
+   * 5. 若 approved=false：返回带 TOOL_PERMISSION_DENIED 错误的 ToolResult
+   * 6. 若 approved=true 或 permission='auto'：调用 tool.execute(input, ctx)
+   * 7. 推送 AGENT_TOOL_RESULT 事件到渲染层
+   * 8. 返回 ToolResult（含 output 或 error）
+   *
+   * @param toolName 工具名称
+   * @param toolCallId AI SDK 生成的工具调用 id（用于事件关联与渲染层 UI 配对）
+   * @param input 工具入参（已被 AI SDK 通过 inputSchema 校验）
+   * @param ctx 工具执行上下文
+   * @param webContents 接收工具事件的窗口
+   * @returns 工具执行结果（含 output 或 error）
+   */
+  execute(
+    toolName: string,
+    toolCallId: string,
+    input: unknown,
+    ctx: ToolContext,
+    webContents: WebContents,
+  ): Promise<AgentToolResultPayload>;
+}
+
+/**
+ * ToolExecutor 默认实现
+ *
+ * 依赖：
+ * - IToolRegistry：查找工具实例
+ * - IPermissionService：决策权限与请求审批
+ *
+ * 单例模式：通过 ServiceContainer 持有，整个应用生命周期共享一个实例。
+ */
+export class ToolExecutor implements IToolExecutor {
+  /**
+   * @param registry 工具注册表
+   * @param permissionService 权限服务
+   */
+  constructor(
+    private readonly registry: IToolRegistry,
+    private readonly permissionService: IPermissionService,
+  ) {}
+
+  /** @inheritDoc */
+  async execute(
+    toolName: string,
+    toolCallId: string,
+    input: unknown,
+    ctx: ToolContext,
+    webContents: WebContents,
+  ): Promise<AgentToolResultPayload> {
+    // 1. 查找工具
+    const tool = this.registry.get(toolName);
+    if (tool === undefined) {
+      logger.warn({ toolName, toolCallId }, '工具不存在');
+      const result = this.buildErrorResult(
+        ctx.sessionId,
+        toolCallId,
+        toolName,
+        ErrorCode.TOOL_NOT_FOUND,
+        `工具不存在：${toolName}`,
+      );
+      this.sendToolResult(webContents, result);
+      return result;
+    }
+
+    // 2. 决策权限
+    const decision = this.permissionService.decide(tool, input);
+
+    // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
+    this.sendToolCall(webContents, {
+      sessionId: ctx.sessionId,
+      toolCallId,
+      toolName,
+      input,
+      permission: decision.permission,
+    });
+
+    // 4. 危险工具：请求用户审批
+    if (decision.permission === 'ask') {
+      const approvalId = generateApprovalId();
+      const approvalPayload = {
+        sessionId: ctx.sessionId,
+        approvalId,
+        toolCallId,
+        toolName,
+        input,
+        description: decision.description,
+      };
+
+      let approved: boolean;
+      try {
+        approved = await this.permissionService.requestApproval(
+          approvalPayload,
+          tool,
+          input,
+          webContents,
+        );
+      } catch (error: unknown) {
+        // 审批超时或 webContents 销毁
+        logger.warn({ toolName, toolCallId, approvalId, error }, '审批请求失败');
+        const result = this.buildErrorResult(
+          ctx.sessionId,
+          toolCallId,
+          toolName,
+          ErrorCode.TOOL_PERMISSION_DENIED,
+          error instanceof Error ? error.message : '审批请求失败',
+        );
+        this.sendToolResult(webContents, result);
+        return result;
+      }
+
+      if (!approved) {
+        // 用户拒绝
+        logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
+        const result = this.buildErrorResult(
+          ctx.sessionId,
+          toolCallId,
+          toolName,
+          ErrorCode.TOOL_PERMISSION_DENIED,
+          `用户拒绝执行：${toolName}`,
+        );
+        this.sendToolResult(webContents, result);
+        return result;
+      }
+
+      logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
+    }
+
+    // 5. 检查中断信号（审批等待期间用户可能中断了对话）
+    if (ctx.abortSignal.aborted) {
+      logger.info({ toolName, toolCallId }, '工具执行前检测到中断信号');
+      const result = this.buildErrorResult(
+        ctx.sessionId,
+        toolCallId,
+        toolName,
+        ErrorCode.TOOL_ABORTED,
+        '工具执行已被中断',
+      );
+      this.sendToolResult(webContents, result);
+      return result;
+    }
+
+    // 6. 执行工具
+    try {
+      logger.info({ toolName, toolCallId }, '开始执行工具');
+      const output = await tool.execute(input, ctx);
+      logger.info({ toolName, toolCallId }, '工具执行成功');
+
+      const result: AgentToolResultPayload = {
+        sessionId: ctx.sessionId,
+        toolCallId,
+        toolName,
+        output,
+      };
+      this.sendToolResult(webContents, result);
+      return result;
+    } catch (error: unknown) {
+      // 执行失败：包装为 TOOL_EXECUTION_FAILED
+      logger.error({ toolName, toolCallId, error }, '工具执行失败');
+      const message = error instanceof Error ? error.message : '工具执行失败';
+      const result = this.buildErrorResult(
+        ctx.sessionId,
+        toolCallId,
+        toolName,
+        ErrorCode.TOOL_EXECUTION_FAILED,
+        message,
+      );
+      this.sendToolResult(webContents, result);
+      return result;
+    }
+  }
+
+  /**
+   * 构建错误结果
+   *
+   * 内部辅助方法，统一构建带 error 字段的 AgentToolResultPayload。
+   */
+  private buildErrorResult(
+    sessionId: string,
+    toolCallId: string,
+    toolName: string,
+    code: string,
+    message: string,
+  ): AgentToolResultPayload {
+    return {
+      sessionId,
+      toolCallId,
+      toolName,
+      // 失败时 output 为 null（与成功时的 unknown 区分）
+      output: null,
+      error: { code, message },
+    };
+  }
+
+  /**
+   * 推送 AGENT_TOOL_CALL 事件
+   *
+   * 渲染层据此展示 ToolCallView（工具调用 UI），
+   * 含权限级别决定是否需要等待审批。
+   */
+  private sendToolCall(webContents: WebContents, payload: AgentToolCallPayload): void {
+    if (!webContents.isDestroyed()) {
+      webContents.send(IPC_CHANNELS.AGENT_TOOL_CALL, payload);
+    }
+  }
+
+  /**
+   * 推送 AGENT_TOOL_RESULT 事件
+   *
+   * 渲染层据此更新 ToolCallView 状态（成功/失败），
+   * error 字段存在表示失败，output 字段为工具输出。
+   */
+  private sendToolResult(webContents: WebContents, payload: AgentToolResultPayload): void {
+    if (!webContents.isDestroyed()) {
+      webContents.send(IPC_CHANNELS.AGENT_TOOL_RESULT, payload);
+    }
+  }
+}

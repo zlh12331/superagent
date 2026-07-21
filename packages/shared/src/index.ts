@@ -23,7 +23,7 @@ export * from './ipc/response';
 
 // zod schema（单一真源，主进程 IPC handler 用于校验入参）
 // 按域分组：agent（Code Agent 核心）/ chat（基础聊天）/ file/search（只读工具）
-// / terminal/git（读写工具）/ session（持久化）
+// / terminal/git（读写工具）/ session（持久化）/ tool（工具系统元数据）
 // 顺序由 Biome organizeImports 规则按字母序维护
 export * from './schemas/agent';
 export * from './schemas/chat';
@@ -32,6 +32,7 @@ export * from './schemas/git';
 export * from './schemas/search';
 export * from './schemas/session';
 export * from './schemas/terminal';
+export * from './schemas/tool';
 
 // 包版本（供运行时 sanity check）
 export const SHARED_VERSION = '0.1.0' as const;

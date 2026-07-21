@@ -74,6 +74,7 @@ import type {
   TerminalResizeReqSchema,
   TerminalResizeRes,
 } from '../schemas/terminal';
+import type { ToolListReqSchema, ToolListRes } from '../schemas/tool';
 
 // 从 schemas/chat.ts 重新导出 ChatMessage 类型（= AI SDK 的 ModelMessage）
 export type { ChatMessage } from '../schemas/chat';
@@ -229,6 +230,11 @@ export type SessionDeleteReq = z.infer<typeof SessionDeleteReqSchema>;
 /** session:rename 请求 payload：重命名会话 */
 export type SessionRenameReq = z.infer<typeof SessionRenameReqSchema>;
 
+// ─── Tool 域 Req 派生（工具系统元数据） ─────────────────────
+
+/** tool:list 请求 payload：列出已注册工具清单（可按权限过滤） */
+export type ToolListReq = z.infer<typeof ToolListReqSchema>;
+
 // ─── IPC 类型映射 ─────────────────────────────────────────────
 
 /**
@@ -292,6 +298,10 @@ export interface IpcRequestMap {
   'session:get': { req: SessionGetReq; res: SessionGetRes };
   'session:delete': { req: SessionDeleteReq; res: SessionDeleteRes };
   'session:rename': { req: SessionRenameReq; res: SessionRenameRes };
+
+  // 工具域（工具系统元数据查询）
+  // tool:list 列出当前已注册的工具清单（含权限级别，供渲染层展示工具面板）
+  'tool:list': { req: ToolListReq; res: ToolListRes };
 }
 
 /**

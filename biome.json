@@ -191,6 +191,25 @@
     },
     {
       "includes": [
+        "**/src/main/infra/agent/tool.ts",
+        "**/src/main/infra/agent/permission-service.ts",
+        "**/src/main/infra/agent/tool-registry.ts",
+        "**/src/main/infra/agent/tool-executor.ts",
+        "**/src/main/infra/agent/tools/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
         "**/src/renderer/stores/persistent/create-persistent-store.ts",
         "**/src/renderer/stores/server/create-ipc-stream-store.ts",
         "**/src/renderer/i18n/config.ts",

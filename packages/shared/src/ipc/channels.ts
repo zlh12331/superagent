@@ -62,6 +62,10 @@ export const IPC_CHANNELS = {
   // 请求-响应：渲染层回传审批结果（approve / deny / remember）
   AGENT_APPROVAL_RESPONSE: 'agent:approval:response',
 
+  // ── 工具域（工具系统元数据查询） ──────────────────
+  // 请求-响应：列出当前已注册的工具清单（含权限级别，供渲染层展示工具面板）
+  TOOL_LIST: 'tool:list',
+
   // ── 会话域（Code Agent 会话持久化） ────────────────
   // 请求-响应：列出所有会话（分页）
   SESSION_LIST: 'session:list',
