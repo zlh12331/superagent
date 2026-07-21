@@ -1,30 +1,38 @@
 // src/renderer/routes/home.tsx
-// 应用首页占位
+// 应用首页 · 新对话草稿区
 // ──────────────────────────────────────────────────────────────
-// 说明：
-// - 数据库层（PostgreSQL/Prisma/AGE/pgvector/RAG/人物图谱）已全部删除，
-//   原业务路由（projects/chapters/characters/worldview/chat/rag/settings）均无后端可承载。
-// - 当前仅保留一个占位首页，作为 Electron 模版的最小可启动渲染层。
-// - 后续若重建业务后端，在此扩展路由与组件即可。
+// 职责：
+// - 渲染 ChatPanel（chatId='draft'），让用户进入应用即可开始对话
+// - 不展示欢迎占位文案（保留极简沉浸式对话体验，参考 ChatGPT/Claude）
 //
-// 设计：保持原极简文学风（米黄纸张底色 + 衬线字体 + 墨色文字）
+// 设计：
+// - chatId='draft' 是固定值，用于 useChat 状态隔离
+// - 用户在首页发送首条消息后，主进程 AgentService 会创建真实会话
+//   并通过 chat:stream:end 推送 sessionId
+// - 未来 P9 将监听 sessionId 推送，自动 replace URL 到 /chat/:real-id
+//   （当前阶段 URL 保持 / 不变，刷新页面会丢失上下文）
+//
+// 与 /chat/:sessionId 路由的差异：
+// - / 路由：chatId='draft'，表示新对话草稿（无对应 SQLite 记录）
+// - /chat/:sessionId 路由：chatId=sessionId，表示历史会话续传
+// - 两者都渲染 ChatPanel，仅 chatId 不同，useChat 自动隔离状态
+// ──────────────────────────────────────────────────────────────
 
 import type { ReactElement } from 'react';
 
+import { ChatPanel } from '@/components/chat/ChatPanel';
+
+/** 新对话草稿区固定 chatId（与 /chat/:sessionId 路由区分） */
+const DRAFT_CHAT_ID = 'draft';
+
 /**
- * 应用首页占位组件
+ * 应用首页组件
  *
- * 展示一段欢迎文案，说明当前为模版骨架状态。
+ * 直接渲染 ChatPanel，让用户进入应用即可开始对话。
+ * 不展示欢迎占位文案，保持沉浸式对话体验。
  */
 export function HomePage(): ReactElement {
-  return (
-    <div className="text-foreground flex h-full flex-col items-center justify-center gap-4 p-12">
-      <h1 className="font-serif text-3xl tracking-wide">网文写作 Agent</h1>
-      <p className="text-muted-foreground font-serif text-base tracking-wide">
-        当前为 Electron 模版骨架，业务后端已移除。
-      </p>
-    </div>
-  );
+  return <ChatPanel chatId={DRAFT_CHAT_ID} />;
 }
 
 export default HomePage;

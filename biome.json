@@ -241,6 +241,24 @@
       }
     },
     {
+      "includes": [
+        "**/src/renderer/components/chat/**/*.tsx",
+        "**/src/renderer/components/agent/**/*.tsx",
+        "**/src/renderer/hooks/use-chat.ts",
+        "**/src/renderer/lib/chat/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tests/integration/**/*.ts"],
       "linter": {
         "rules": {

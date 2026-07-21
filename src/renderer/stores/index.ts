@@ -29,7 +29,10 @@
 
 export type { SessionMeta } from './persistent/sessions-store';
 // L2 客户端共享状态层 - persistent（跨重启保留）
-export { useSessionsStore } from './persistent/sessions-store';
+// - useActiveSessionStore：激活会话 id（UI 状态，持久化到 localStorage）
+// - useSessionsStore：兼容别名（指向 useActiveSessionStore，便于渐进式重构）
+//   sessions 列表数据已迁移到 TanStack Query（见 hooks/use-sessions.ts）
+export { useActiveSessionStore, useSessionsStore } from './persistent/sessions-store';
 export type { AiSettings, EditorSettings, Theme } from './persistent/settings-store';
 export { useSettingsStore } from './persistent/settings-store';
 export type {

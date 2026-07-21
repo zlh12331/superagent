@@ -3,7 +3,7 @@
 // 设计文档 §4.9 Preload unsubscribe 模式 / §5.4 类型契约单一来源 / §4.7 traceId 注入
 //
 // 职责：
-// 1. 实现 IpcApi 接口（app 域 + chat 域）
+// 1. 实现 IpcApi 接口（10 个域：app/chat/agent/session/file/search/terminal/git/codebase/tool）
 // 2. 通过 contextBridge.exposeInMainWorld('api', api) 暴露给渲染层
 // 3. 请求-响应 channel 走 invoke（自动注入 traceId）
 // 4. 流式事件 channel 走 subscribe（返回 unsubscribe 函数）
@@ -25,9 +25,6 @@
 // - sandbox: true 下 preload 必须是 CJS 格式，require('zod') 在沙箱中会失败，
 //   导致 contextBridge.exposeInMainWorld 不执行，window.api 为 undefined。
 // - IpcApi 是 type-only 导入，esbuild 编译时会移除，不会触发运行时求值。
-//
-// 说明：业务相关 channel（project/chapter/character/worldview/rag/agent/settings）
-// 已随数据库层一并删除，当前保留应用级 + chat 域作为 LLM 客户端基础设施。
 
 import type { IpcApi } from '@novel-writer/shared';
 import { IPC_CHANNELS } from '@novel-writer/shared/ipc/channels';
@@ -37,18 +34,44 @@ import { invoke, subscribe } from './utils/ipc-bridge';
 /**
  * IpcApi 实现：window.api 命名空间
  *
- * 包含两个域：
+ * 包含 10 个域：
  *
- * 1. app 域（请求-响应模式）
+ * 1. app（应用级，请求-响应模式）
  *    - app:getStatus：查询应用就绪状态
  *    - app:openExternal：通过系统浏览器打开外链
  *
- * 2. chat 域（Vercel AI SDK v7，混合模式）
- *    - chat:send（请求-响应）：发起对话，返回 sessionId
- *    - chat:stop（请求-响应）：中断指定 sessionId 的对话
- *    - chat:stream:part（事件订阅）：流式 UIMessageStreamPart 推送
- *    - chat:stream:end（事件订阅）：流正常结束
- *    - chat:stream:error（事件订阅）：流异常终止
+ * 2. chat（聊天域，Vercel AI SDK v7，混合模式）
+ *    - chat:send / chat:stop（请求-响应）
+ *    - chat:stream:part / end / error（事件订阅）
+ *
+ * 3. agent（Code Agent 核心，多轮工具调用，混合模式）
+ *    - agent:run / agent:stop / agent:approval:response（请求-响应）
+ *    - agent:stream:part / end / error（事件订阅，流式 part 推送）
+ *    - agent:tool:call / result（事件订阅，工具调用事件）
+ *    - agent:approval:request（事件订阅，审批请求）
+ *
+ * 4. session（会话持久化，请求-响应模式）
+ *    - session:list / get / delete / rename
+ *
+ * 5. file（文件读写 + 目录列表 + 文件监听，混合模式）
+ *    - file:read / write / list / watch:start / watch:stop（请求-响应）
+ *    - file:watch:event（事件订阅）
+ *
+ * 6. search（搜索域，请求-响应模式）
+ *    - search:grep / search:glob
+ *
+ * 7. terminal（终端会话池，混合模式）
+ *    - terminal:create / input / resize / kill（请求-响应）
+ *    - terminal:event:output / exit（事件订阅）
+ *
+ * 8. git（Git CLI 封装，请求-响应模式，只读）
+ *    - git:status / git:diff
+ *
+ * 9. codebase（代码智能查询，请求-响应模式）
+ *    - codebase:query / explore / node / callers / callees / impact
+ *
+ * 10. tool（工具系统元数据，请求-响应模式）
+ *     - tool:list
  *
  * 渲染层调用示例：
  * ```ts
@@ -58,22 +81,45 @@ import { invoke, subscribe } from './utils/ipc-bridge';
  *
  * // 聊天域（通常通过 IpcChatTransport + useChat 间接调用，不直接调用 chat 域 API）
  * const { data } = await window.api.chat.send({ messages, sessionId: undefined });
- * const off = window.api.chat.subscribePart(({ sessionId, part }) => {
- *   console.log('收到 part:', part);
+ *
+ * // Agent 域（Code Agent 核心，直接调用或通过 AgentTransport 间接调用）
+ * const { data } = await window.api.agent.run({ messages, config: {} });
+ *
+ * // 会话域（会话列表展示与持久化）
+ * const { data } = await window.api.session.list({ limit: 50, offset: 0 });
+ *
+ * // 文件域（文件读写与监听）
+ * const { data } = await window.api.file.read({ path: '/tmp/test.txt' });
+ * const off = window.api.file.subscribeWatchEvent(({ watcherId, event }) => {
+ *   console.log('文件变更:', event);
  * });
  * // 卸载时
  * off();
+ *
+ * // 终端域（终端会话池）
+ * const { data } = await window.api.terminal.create({ cwd: '/tmp' });
+ * const off = window.api.terminal.subscribeOutputEvent(({ terminalId, data }) => {
+ *   terminal.write(data);
+ * });
+ *
+ * // Git 域
+ * const { data } = await window.api.git.status({});
+ *
+ * // 代码库域
+ * const { data } = await window.api.codebase.query({ query: 'class Foo' });
+ *
+ * // 工具域
+ * const { data } = await window.api.tool.list({});
  * ```
  */
 const api = {
-  // ── 应用级 ────────────────────────────────────────
-  // getStatus / openExternal 均为请求-响应模式
+  // ── 应用级（请求-响应模式）────────────────────────────
   app: {
     getStatus: () => invoke(IPC_CHANNELS.APP_GET_STATUS),
     openExternal: (input: { url: string }) => invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, input),
   },
 
-  // ── 聊天域（Vercel AI SDK v7）─────────────────────────
+  // ── 聊天域（Vercel AI SDK v7，混合模式）──────────────────
   // send / stop 为请求-响应模式，subscribePart / subscribeEnd / subscribeError 为事件订阅模式
   // 渲染层通常不直接调用 chat 域 API，而是通过 IpcChatTransport（实现 ChatTransport 接口）
   // 包装为 ReadableStream<UIMessageStreamPart> 后交给 useChat 消费
@@ -89,6 +135,128 @@ const api = {
     subscribeEnd: (callback) => subscribe(IPC_CHANNELS.CHAT_STREAM_END, callback),
     // 订阅流异常结束事件：发生错误时触发一次（含 code + message）
     subscribeError: (callback) => subscribe(IPC_CHANNELS.CHAT_STREAM_ERROR, callback),
+  },
+
+  // ── Agent 域（Code Agent 核心，多轮工具调用，混合模式）──────
+  // run / stop / approvalResponse 为请求-响应模式
+  // subscribeStream* / subscribeTool* / subscribeApprovalRequest 为事件订阅模式
+  // 渲染层通过 AgentTransport 间接调用（待 P8.4-P8.5 实现）
+  agent: {
+    // 发起 agent 对话：传入消息历史与配置，返回 sessionId
+    // 后续通过 agent:stream:* / agent:tool:* / agent:approval:* 推送事件
+    run: (input) => invoke(IPC_CHANNELS.AGENT_RUN, input),
+    // 中断指定 sessionId 的 agent 对话
+    stop: (input) => invoke(IPC_CHANNELS.AGENT_STOP, input),
+    // 回传审批结果：用户点击批准/拒绝后调用
+    // 主进程收到后 resolve 对应 approvalId 的 Promise，ToolExecutor 继续/中止执行
+    approvalResponse: (input) => invoke(IPC_CHANNELS.AGENT_APPROVAL_RESPONSE, input),
+    // 订阅流式 part 事件：每收到一个 UIMessageStreamPart（text/tool-call/finish 等）触发
+    subscribeStreamPart: (callback) => subscribe(IPC_CHANNELS.AGENT_STREAM_PART, callback),
+    // 订阅 agent 对话结束事件：含 reason（completed/aborted/error）
+    subscribeStreamEnd: (callback) => subscribe(IPC_CHANNELS.AGENT_STREAM_END, callback),
+    // 订阅 agent 对话异常事件：含 code + message
+    subscribeStreamError: (callback) => subscribe(IPC_CHANNELS.AGENT_STREAM_ERROR, callback),
+    // 订阅工具调用事件：主进程推送工具调用入参与权限级别
+    subscribeToolCall: (callback) => subscribe(IPC_CHANNELS.AGENT_TOOL_CALL, callback),
+    // 订阅工具结果事件：主进程推送工具执行结果（含 output 或 error）
+    subscribeToolResult: (callback) => subscribe(IPC_CHANNELS.AGENT_TOOL_RESULT, callback),
+    // 订阅审批请求事件：主进程请求用户审批（permission='ask' 的工具调用）
+    // 渲染层弹出 ApprovalModal，用户选择后通过 agent.approvalResponse 回传结果
+    subscribeApprovalRequest: (callback) =>
+      subscribe(IPC_CHANNELS.AGENT_APPROVAL_REQUEST, callback),
+  },
+
+  // ── 会话域（SQLite 持久化，请求-响应模式）──────────────────
+  // SessionService 提供 list/get/delete/rename 四个 IPC 方法
+  // create/appendMessage 是内部 API（供主进程 AgentService 调用），不通过 IPC 暴露
+  session: {
+    // 列出会话（分页查询，按 updatedAt 倒序）
+    list: (input) => invoke(IPC_CHANNELS.SESSION_LIST, input),
+    // 获取指定会话的完整消息历史
+    get: (input) => invoke(IPC_CHANNELS.SESSION_GET, input),
+    // 删除指定会话（外键级联删除关联消息）
+    delete: (input) => invoke(IPC_CHANNELS.SESSION_DELETE, input),
+    // 重命名会话标题
+    rename: (input) => invoke(IPC_CHANNELS.SESSION_RENAME, input),
+  },
+
+  // ── 文件域（文件读写 + 目录列表 + 文件监听，混合模式）────────
+  // read / write / list / watchStart / watchStop 为请求-响应模式
+  // subscribeWatchEvent 为事件订阅模式（chokidar 文件监听）
+  file: {
+    // 读取文件内容（支持分批，避免一次性加载大文件）
+    read: (input) => invoke(IPC_CHANNELS.FILE_READ, input),
+    // 写入文件（覆盖或追加）
+    write: (input) => invoke(IPC_CHANNELS.FILE_WRITE, input),
+    // 列出目录内容（带深度与隐藏文件过滤）
+    list: (input) => invoke(IPC_CHANNELS.FILE_LIST, input),
+    // 开始监听文件变更，返回 watcherId
+    watchStart: (input) => invoke(IPC_CHANNELS.FILE_WATCH_START, input),
+    // 停止监听指定 watcher
+    watchStop: (input) => invoke(IPC_CHANNELS.FILE_WATCH_STOP, input),
+    // 订阅文件变更事件（create/modify/delete/rename）
+    subscribeWatchEvent: (callback) => subscribe(IPC_CHANNELS.FILE_WATCH_EVENT, callback),
+  },
+
+  // ── 搜索域（ripgrep + glob，请求-响应模式）──────────────────
+  // 主进程通过子进程调用 ripgrep / 实现 glob 匹配
+  search: {
+    // 正则搜索文件内容（基于 ripgrep）
+    grep: (input) => invoke(IPC_CHANNELS.SEARCH_GREP, input),
+    // 按 glob 模式匹配文件路径
+    glob: (input) => invoke(IPC_CHANNELS.SEARCH_GLOB, input),
+  },
+
+  // ── 终端域（node-pty 会话池，混合模式）──────────────────────
+  // create / input / resize / kill 为请求-响应模式
+  // subscribeOutputEvent / subscribeExitEvent 为事件订阅模式
+  terminal: {
+    // 创建终端会话，返回 terminalId
+    create: (input) => invoke(IPC_CHANNELS.TERMINAL_CREATE, input),
+    // 向终端写入输入
+    input: (input) => invoke(IPC_CHANNELS.TERMINAL_INPUT, input),
+    // 调整终端尺寸（rows/cols）
+    resize: (input) => invoke(IPC_CHANNELS.TERMINAL_RESIZE, input),
+    // 终止终端会话
+    kill: (input) => invoke(IPC_CHANNELS.TERMINAL_KILL, input),
+    // 订阅终端原始输出事件（含 ANSI 转义序列，未解码，渲染层用 xterm.js 直接 write）
+    subscribeOutputEvent: (callback) => subscribe(IPC_CHANNELS.TERMINAL_EVENT_OUTPUT, callback),
+    // 订阅终端进程退出事件（exitCode 0 正常退出，非 0 异常退出）
+    subscribeExitEvent: (callback) => subscribe(IPC_CHANNELS.TERMINAL_EVENT_EXIT, callback),
+  },
+
+  // ── Git 域（Git CLI 封装，请求-响应模式，只读）──────────────
+  // 仅支持 status / diff，不提供 commit/push 等写操作
+  // （避免误操作主仓库状态，commit/push 由用户在终端手动执行）
+  git: {
+    // 获取工作区状态（branch/ahead/behind/files）
+    status: (input) => invoke(IPC_CHANNELS.GIT_STATUS, input),
+    // 获取 diff（unstaged / staged / 对比任意 ref）
+    diff: (input) => invoke(IPC_CHANNELS.GIT_DIFF, input),
+  },
+
+  // ── 代码库域（codegraph CLI 封装，请求-响应模式）────────────
+  // 基于 codegraph CLI 的代码智能查询
+  codebase: {
+    // 结构化符号搜索（返回符号列表 + 相关度评分）
+    query: (input) => invoke(IPC_CHANNELS.CODEBASE_QUERY, input),
+    // 区域探索（自然语言查询，返回相关符号源码 + 调用路径 markdown）
+    explore: (input) => invoke(IPC_CHANNELS.CODEBASE_EXPLORE, input),
+    // 符号详情（符号源码 + 调用链，或文件模式：文件内容 + 依赖）
+    node: (input) => invoke(IPC_CHANNELS.CODEBASE_NODE, input),
+    // 调用方查询（谁调用了此符号）
+    callers: (input) => invoke(IPC_CHANNELS.CODEBASE_CALLERS, input),
+    // 被调用方查询（此符号调用了哪些符号）
+    callees: (input) => invoke(IPC_CHANNELS.CODEBASE_CALLEES, input),
+    // 影响分析（修改此符号会影响哪些代码）
+    impact: (input) => invoke(IPC_CHANNELS.CODEBASE_IMPACT, input),
+  },
+
+  // ── 工具域（工具系统元数据，请求-响应模式）──────────────────
+  // 供渲染层展示工具面板
+  tool: {
+    // 列出当前已注册的工具清单（含权限级别）
+    list: (input) => invoke(IPC_CHANNELS.TOOL_LIST, input),
   },
 } satisfies IpcApi;
 
