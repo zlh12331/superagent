@@ -22,7 +22,11 @@
 //      resetFileService()          清空 FileService 模块级单例缓存
 //   5. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
 //      resetSearchService()        清空 SearchService 模块级单例缓存
-//   6. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
+//   6. TerminalService.dispose()   kill 所有 pty 进程（释放 node-pty 句柄）
+//      resetTerminalService()      清空 TerminalService 模块级单例缓存
+//   7. GitService                  无外部资源（每次调用 spawn 子进程在请求结束时退出）
+//      resetGitService()           清空 GitService 模块级单例缓存
+//   8. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
 //
 // 注意：
 // - 数据库相关清理（Prisma/PG 子进程/Ollama/Embedding）已随数据库层一并删除
@@ -47,8 +51,12 @@ import type { IChatService } from '../infra/ai/chat-service';
 import { getChatService, resetChatService } from '../infra/ai/chat-service';
 import type { IFileService } from '../infra/file/file-service';
 import { getFileService, resetFileService } from '../infra/file/file-service';
+import type { IGitService } from '../infra/git/git-service';
+import { getGitService, resetGitService } from '../infra/git/git-service';
 import type { ISearchService } from '../infra/search/search-service';
 import { getSearchService, resetSearchService } from '../infra/search/search-service';
+import type { ITerminalService } from '../infra/terminal/terminal-service';
+import { getTerminalService, resetTerminalService } from '../infra/terminal/terminal-service';
 import { logger } from '../utils/logger';
 
 /**
@@ -309,6 +317,80 @@ class ServiceContainer {
     this.agentService = service;
   }
 
+  // ─── TerminalService（node-pty 终端会话池） ───
+
+  /**
+   * TerminalService 实例缓存
+   *
+   * 设计与 ChatService / FileService 一致：
+   * - 生产环境：通过 getTerminalService() 拿到默认 TerminalService 实现（基于 node-pty）
+   * - 测试环境：通过 setTerminalService() 注入 mock 实现，避免依赖真实 PTY 子进程
+   *
+   * 缓存值与 getTerminalService() 模块级单例保持一致：
+   * 调用 setTerminalService(null) 或 reset() 后，下次 getTerminalService() 会重新拿默认实现。
+   */
+  private terminalService: ITerminalService | null = null;
+
+  /**
+   * 获取 TerminalService 实例
+   *
+   * 首次调用延迟初始化为默认 TerminalService 实现（与 getTerminalService() 单例一致）。
+   * 测试可通过 setTerminalService() 注入 mock 实例覆盖。
+   */
+  getTerminalService(): ITerminalService {
+    if (this.terminalService === null) {
+      this.terminalService = getTerminalService();
+    }
+    return this.terminalService;
+  }
+
+  /**
+   * 注入 TerminalService 实例（仅测试用）
+   *
+   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 PTY 子进程。
+   * 传 null 清空缓存，下次 getTerminalService() 会重新拿默认实现。
+   */
+  setTerminalService(service: ITerminalService | null): void {
+    this.terminalService = service;
+  }
+
+  // ─── GitService（Git CLI 封装，只读查询） ───
+
+  /**
+   * GitService 实例缓存
+   *
+   * 设计与 ChatService / FileService 一致：
+   * - 生产环境：通过 getGitService() 拿到默认 GitService 实现（基于 child_process.spawn('git')）
+   * - 测试环境：通过 setGitService() 注入 mock 实现，避免依赖真实 git CLI
+   *
+   * 缓存值与 getGitService() 模块级单例保持一致：
+   * 调用 setGitService(null) 或 reset() 后，下次 getGitService() 会重新拿默认实现。
+   */
+  private gitService: IGitService | null = null;
+
+  /**
+   * 获取 GitService 实例
+   *
+   * 首次调用延迟初始化为默认 GitService 实现（与 getGitService() 单例一致）。
+   * 测试可通过 setGitService() 注入 mock 实例覆盖。
+   */
+  getGitService(): IGitService {
+    if (this.gitService === null) {
+      this.gitService = getGitService();
+    }
+    return this.gitService;
+  }
+
+  /**
+   * 注入 GitService 实例（仅测试用）
+   *
+   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 git CLI。
+   * 传 null 清空缓存，下次 getGitService() 会重新拿默认实现。
+   */
+  setGitService(service: IGitService | null): void {
+    this.gitService = service;
+  }
+
   /**
    * 应用退出时统一清理所有服务
    *
@@ -383,7 +465,23 @@ class ServiceContainer {
     resetSearchService();
     this.searchService = null;
 
-    // 6. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 6. kill 所有 TerminalService 活跃 pty 进程（释放 node-pty 句柄）
+    //    pty 进程不 kill 会导致子进程持续运行（PowerShell/bash 会保留在系统进程列表）
+    if (this.terminalService !== null) {
+      await this.terminalService.dispose();
+    }
+    resetTerminalService();
+    this.terminalService = null;
+
+    // 7. GitService 无外部资源（每次调用 spawn 子进程在请求结束时退出），
+    //    dispose 是 no-op，但保持一致性便于未来扩展（如长连接 git daemon）
+    if (this.gitService !== null) {
+      await this.gitService.dispose();
+    }
+    resetGitService();
+    this.gitService = null;
+
+    // 8. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
     logger.info({}, '应用服务清理完成');
@@ -411,6 +509,10 @@ class ServiceContainer {
     this.fileService = null;
     resetSearchService();
     this.searchService = null;
+    resetTerminalService();
+    this.terminalService = null;
+    resetGitService();
+    this.gitService = null;
     resetAIProvider();
     resetConfigCache();
   }

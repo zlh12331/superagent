@@ -16,7 +16,9 @@ import { registerAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
 import { registerFileHandlers } from './ipc/file.handler';
+import { registerGitHandlers } from './ipc/git.handler';
 import { registerSearchHandlers } from './ipc/search.handler';
+import { registerTerminalHandlers } from './ipc/terminal.handler';
 import { registerToolHandlers } from './ipc/tool.handler';
 import { buildCsp } from './security/csp';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
@@ -143,6 +145,17 @@ app.whenReady().then(() => {
   // 注册搜索域 IPC handler（search:grep / search:glob）
   // 通过 ServiceContainer 注入 ISearchService 实例，handler 不直接依赖 SearchService 实现
   registerSearchHandlers({ searchService: serviceContainer.getSearchService() });
+
+  // 注册终端域 IPC handler（terminal:create / input / resize / kill）
+  // 通过 ServiceContainer 注入 ITerminalService 实例（基于 node-pty）
+  // terminal:create 传入 ctx.sender（WebContents）作为后续事件推送目标
+  // 后续输出和退出事件通过 terminal:event:output / terminal:event:exit 推送
+  registerTerminalHandlers({ terminalService: serviceContainer.getTerminalService() });
+
+  // 注册 Git 域 IPC handler（git:status / git:diff）
+  // 通过 ServiceContainer 注入 IGitService 实例（基于 child_process.spawn('git')）
+  // 仅暴露只读查询，写操作通过 TerminalService 由用户手动执行
+  registerGitHandlers({ gitService: serviceContainer.getGitService() });
 
   // 注册工具域 IPC handler（tool:list）
   // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 5 个内置工具）
