@@ -6,7 +6,7 @@
 // 已随数据库层一并删除，仅保留通用基础设施错误码。
 //
 // 命名规范：{域}_{动作/状态}，全大写下划线分隔
-// 域：UNKNOWN/INTERNAL/IPC/AI/FS
+// 域：UNKNOWN/INTERNAL/IPC/AI/FS/TOOL/SESSION/TERMINAL
 //
 // 注意：使用 as const 派生字面量联合类型，避免 enum 的运行时对象开销
 
@@ -18,6 +18,9 @@
  * - IPC 边界：IPC_SENDER_INVALID/IPC_CHANNEL_NOT_FOUND
  * - AI 调用：AI_API_KEY_MISSING/AI_API_KEY_INVALID/AI_RATE_LIMITED/AI_TIMEOUT/AI_MODEL_ERROR/AI_STREAM_INTERRUPTED/AI_CONTEXT_TOO_LARGE
  * - 文件系统：FS_READ_FAILED/FS_WRITE_FAILED/FS_DISK_FULL
+ * - Code Agent 工具：TOOL_NOT_FOUND/TOOL_EXECUTION_FAILED/TOOL_PERMISSION_DENIED/TOOL_ABORTED
+ * - Code Agent 会话：SESSION_NOT_FOUND
+ * - Code Agent 终端：TERMINAL_SPAWN_FAILED
  */
 export const ErrorCode = {
   // ── 通用 ──────────────────────────────────────────
@@ -45,6 +48,17 @@ export const ErrorCode = {
   FS_READ_FAILED: 'FS_READ_FAILED',
   FS_WRITE_FAILED: 'FS_WRITE_FAILED',
   FS_DISK_FULL: 'FS_DISK_FULL',
+
+  // ── Code Agent ───────────────────────────────────
+  // 工具相关：Code Agent 执行 LLM 工具调用时的失败场景
+  TOOL_NOT_FOUND: 'TOOL_NOT_FOUND',
+  TOOL_EXECUTION_FAILED: 'TOOL_EXECUTION_FAILED',
+  TOOL_PERMISSION_DENIED: 'TOOL_PERMISSION_DENIED',
+  TOOL_ABORTED: 'TOOL_ABORTED',
+  // 会话相关：Code Agent 会话持久化与恢复
+  SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
+  // 终端相关：node-pty 终端会话管理
+  TERMINAL_SPAWN_FAILED: 'TERMINAL_SPAWN_FAILED',
 } as const;
 
 /** 错误码字面量联合类型（从 ErrorCode 派生） */
@@ -102,6 +116,28 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   FS_READ_FAILED: { userMessage: '文件读取失败', retryable: false, severity: 'error' },
   FS_WRITE_FAILED: { userMessage: '文件写入失败', retryable: false, severity: 'error' },
   FS_DISK_FULL: { userMessage: '磁盘空间不足', retryable: false, severity: 'warn' },
+
+  // Code Agent：工具调用相关
+  TOOL_NOT_FOUND: { userMessage: '工具不存在', retryable: false, severity: 'warn' },
+  TOOL_EXECUTION_FAILED: {
+    userMessage: '工具执行失败',
+    retryable: false,
+    severity: 'error',
+  },
+  TOOL_PERMISSION_DENIED: {
+    userMessage: '工具调用未授权',
+    retryable: false,
+    severity: 'warn',
+  },
+  TOOL_ABORTED: { userMessage: '工具执行被中断', retryable: false, severity: 'info' },
+  // Code Agent：会话相关
+  SESSION_NOT_FOUND: { userMessage: '会话不存在', retryable: false, severity: 'warn' },
+  // Code Agent：终端相关
+  TERMINAL_SPAWN_FAILED: {
+    userMessage: '终端启动失败',
+    retryable: false,
+    severity: 'error',
+  },
 };
 
 /**
