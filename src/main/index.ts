@@ -51,8 +51,8 @@ function initSentry(): void {
     sendDefaultPii: false,
     beforeSend(event) {
       // 脱敏：移除可能的 API Key / Authorization header
-      // 注意：@sentry/electron 5 的 beforeSend 入参为 ErrorEvent（type: undefined），
-      // 返回类型必须为 ErrorEvent | null，因此采用不可变更新保持 type 兼容
+      // 注意：@sentry/electron 7 的 beforeSend 入参为 Event（携带 type 字段），
+      // 返回类型必须为 Event | null，因此采用不可变更新保持 type 兼容
       // noPropertyAccessFromIndexSignature: headers 是索引签名，必须用方括号访问
       if (event.request?.headers?.['authorization']) {
         const { ['authorization']: _auth, ...restHeaders } = event.request.headers;

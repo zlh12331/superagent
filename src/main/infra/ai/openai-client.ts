@@ -1,9 +1,9 @@
 // src/main/infra/ai/openai-client.ts
-// OpenAI 5 SDK 客户端单例（DeepSeek 聊天）
+// OpenAI 6 SDK 客户端单例（DeepSeek 聊天）
 // 设计文档 §2.2 + §4.3 ai/openai-client 职责
 //
 // 职责：
-// 1. 创建 OpenAI 5 SDK 实例，baseURL 指向 DeepSeek API
+// 1. 创建 OpenAI 6 SDK 实例，baseURL 指向 DeepSeek API
 // 2. apiKey 从 keychain 读取（首次配置时由 settings service 写入）
 // 3. 配置默认超时 60s，maxRetries=0（由 retry.ts 统一管理重试）
 // 4. 单例缓存，避免重复创建
@@ -40,7 +40,7 @@ let cachedClient: OpenAI | null = null;
  * 获取 OpenAI 客户端单例
  *
  * @param options 显式覆盖配置（仅用于 apiKey 测试连接）
- * @returns OpenAI 5 SDK 实例
+ * @returns OpenAI 6 SDK 实例
  * @throws AppError(ErrorCode.AI_API_KEY_MISSING) API Key 未配置
  *
  * @example
