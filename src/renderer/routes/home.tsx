@@ -21,18 +21,19 @@
 import type { ReactElement } from 'react';
 
 import { ChatPanel } from '@/components/chat/ChatPanel';
-
-/** 新对话草稿区固定 chatId（与 /chat/:sessionId 路由区分） */
-const DRAFT_CHAT_ID = 'draft';
+import { DRAFT_SESSION_ID } from '@/lib/constants';
 
 /**
  * 应用首页组件
  *
  * 直接渲染 ChatPanel，让用户进入应用即可开始对话。
  * 不展示欢迎占位文案，保持沉浸式对话体验。
+ *
+ * chatId 使用 DRAFT_SESSION_ID（'draft'），与 AppShell 中 DevPanel 的 sessionId
+ * 保持一致，确保首页草稿态也能复用同一个草稿终端实例。
  */
 export function HomePage(): ReactElement {
-  return <ChatPanel chatId={DRAFT_CHAT_ID} />;
+  return <ChatPanel chatId={DRAFT_SESSION_ID} />;
 }
 
 export default HomePage;
