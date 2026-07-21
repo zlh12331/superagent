@@ -145,6 +145,19 @@
       }
     },
     {
+      "includes": ["**/src/main/__tests__/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tests/integration/**/*.ts"],
       "linter": {
         "rules": {
