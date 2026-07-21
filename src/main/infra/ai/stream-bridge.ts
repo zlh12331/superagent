@@ -10,9 +10,11 @@
 // 5. 推送前检查 webContents.isDestroyed，避免窗口关闭后报错
 // 6. getStreamBridge 单例访问器（活跃流注册表必须全进程共享，否则跨模块 abort 失效）
 //
-// 解耦：不依赖 openai SDK 类型，接收任意 AsyncIterable<T>
+// 解耦设计：
+// - 不依赖 openai SDK 类型，接收任意 AsyncIterable<T>
+// - 不依赖具体 IPC_CHANNELS 常量，channel 由调用方传入（string 类型）
+//   这样 StreamBridge 可被任意业务域复用，不与特定 channel 表耦合
 
-import type { IpcChannel } from '@novel-writer/shared';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 
@@ -55,6 +57,10 @@ export type StreamChunk = unknown;
 
 /**
  * streamToWebContents 参数
+ *
+ * channel 类型为 string 而非具体字面量联合：
+ * 调用方负责传入合法的 IPC channel 字符串（如 'chat:stream:chunk'），
+ * StreamBridge 本身不与任何业务 channel 表耦合。
  */
 export interface StreamToWebContentsOptions<T extends StreamChunk = StreamChunk> {
   /** 会话 ID（用于关联 abort 请求） */
@@ -63,12 +69,12 @@ export interface StreamToWebContentsOptions<T extends StreamChunk = StreamChunk>
   readonly webContents: WebContents;
   /** 流式数据源（openai SDK 的 stream 或自定义 AsyncIterable） */
   readonly stream: AsyncIterable<T>;
-  /** chunk 推送 channel（如 IPC_CHANNELS.CHAT_STREAM_CHUNK） */
-  readonly chunkChannel: IpcChannel;
-  /** 流结束 channel（如 IPC_CHANNELS.CHAT_STREAM_END） */
-  readonly endChannel: IpcChannel;
-  /** 流异常 channel（如 IPC_CHANNELS.CHAT_STREAM_ERROR） */
-  readonly errorChannel: IpcChannel;
+  /** chunk 推送 channel（如 'chat:stream:chunk'） */
+  readonly chunkChannel: string;
+  /** 流结束 channel（如 'chat:stream:end'） */
+  readonly endChannel: string;
+  /** 流异常 channel（如 'chat:stream:error'） */
+  readonly errorChannel: string;
 }
 
 /**
@@ -82,9 +88,9 @@ export interface StreamToWebContentsOptions<T extends StreamChunk = StreamChunk>
  *   sessionId: 'xxx',
  *   webContents: win.webContents,
  *   stream,
- *   chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
- *   endChannel: IPC_CHANNELS.CHAT_STREAM_END,
- *   errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+ *   chunkChannel: 'chat:stream:chunk',
+ *   endChannel: 'chat:stream:end',
+ *   errorChannel: 'chat:stream:error',
  * });
  * ```
  */
@@ -208,7 +214,7 @@ export class StreamBridge {
    *
    * 推送前检查 webContents.isDestroyed
    */
-  private emit(webContents: WebContents, channel: IpcChannel, payload: unknown): void {
+  private emit(webContents: WebContents, channel: string, payload: unknown): void {
     if (webContents.isDestroyed()) {
       return;
     }

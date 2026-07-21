@@ -137,7 +137,7 @@ describe('wrap', () => {
     mockFromWebContents.mockReturnValue(mockWin);
 
     const schema = z.object({ name: z.string() });
-    const handler = vi.fn().mockRejectedValue(new AppError(ErrorCode.PROJECT_NOT_FOUND));
+    const handler = vi.fn().mockRejectedValue(new AppError(ErrorCode.NOT_FOUND));
 
     wrap('test:channel', schema, handler);
 
@@ -147,7 +147,7 @@ describe('wrap', () => {
 
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
-    expect(error.code).toBe(ErrorCode.PROJECT_NOT_FOUND);
+    expect(error.code).toBe(ErrorCode.NOT_FOUND);
     expect(Sentry.captureException).toHaveBeenCalled();
   });
 

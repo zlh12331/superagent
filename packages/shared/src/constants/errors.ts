@@ -1,14 +1,23 @@
 // packages/shared/src/constants/errors.ts
 // 统一错误码 + AppError 类：跨进程共享的错误处理基础设施
 // 设计文档 §7.2（错误码枚举）、§7.3（AppError）、§7.10（用户友好提示）
+//
+// 说明：数据库相关错误码（PROJECT/CHAPTER/CHARACTER/RAG/DB/PG/OLLAMA）
+// 已随数据库层一并删除，仅保留通用基础设施错误码。
+//
+// 命名规范：{域}_{动作/状态}，全大写下划线分隔
+// 域：UNKNOWN/INTERNAL/IPC/AI/FS
+//
+// 注意：使用 as const 派生字面量联合类型，避免 enum 的运行时对象开销
 
 /**
  * 错误码枚举
  *
- * 命名规范：{域}_{动作/状态}，全大写下划线分隔
- * 域：UNKNOWN/INTERNAL/IPC/PROJECT/CHAPTER/CHARACTER/AI/RAG/DB/PG/OLLAMA/FS
- *
- * 注意：使用 as const 派生字面量联合类型，避免 enum 的运行时对象开销
+ * 仅包含与数据库无关的通用错误码：
+ * - 通用：UNKNOWN/INTERNAL_ERROR/INVALID_INPUT/NOT_FOUND/UNAUTHORIZED/RATE_LIMITED
+ * - IPC 边界：IPC_SENDER_INVALID/IPC_CHANNEL_NOT_FOUND
+ * - AI 调用：AI_API_KEY_MISSING/AI_API_KEY_INVALID/AI_RATE_LIMITED/AI_TIMEOUT/AI_MODEL_ERROR/AI_STREAM_INTERRUPTED/AI_CONTEXT_TOO_LARGE
+ * - 文件系统：FS_READ_FAILED/FS_WRITE_FAILED/FS_DISK_FULL
  */
 export const ErrorCode = {
   // ── 通用 ──────────────────────────────────────────
@@ -23,18 +32,6 @@ export const ErrorCode = {
   IPC_SENDER_INVALID: 'IPC_SENDER_INVALID',
   IPC_CHANNEL_NOT_FOUND: 'IPC_CHANNEL_NOT_FOUND',
 
-  // ── 项目 ──────────────────────────────────────────
-  PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
-  PROJECT_NAME_EXISTS: 'PROJECT_NAME_EXISTS',
-
-  // ── 章节 ──────────────────────────────────────────
-  CHAPTER_NOT_FOUND: 'CHAPTER_NOT_FOUND',
-  CHAPTER_CONTENT_TOO_LARGE: 'CHAPTER_CONTENT_TOO_LARGE',
-
-  // ── 人物 ──────────────────────────────────────────
-  CHARACTER_NOT_FOUND: 'CHARACTER_NOT_FOUND',
-  CHARACTER_RELATION_CYCLE: 'CHARACTER_RELATION_CYCLE',
-
   // ── AI 调用 ───────────────────────────────────────
   AI_API_KEY_MISSING: 'AI_API_KEY_MISSING',
   AI_API_KEY_INVALID: 'AI_API_KEY_INVALID',
@@ -43,31 +40,6 @@ export const ErrorCode = {
   AI_MODEL_ERROR: 'AI_MODEL_ERROR',
   AI_STREAM_INTERRUPTED: 'AI_STREAM_INTERRUPTED',
   AI_CONTEXT_TOO_LARGE: 'AI_CONTEXT_TOO_LARGE',
-
-  // ── RAG ───────────────────────────────────────────
-  RAG_EMBEDDING_FAILED: 'RAG_EMBEDDING_FAILED',
-  RAG_NO_RESULTS: 'RAG_NO_RESULTS',
-  RAG_DOCUMENT_TOO_LARGE: 'RAG_DOCUMENT_TOO_LARGE',
-  RAG_DOCUMENT_PARSE_FAILED: 'RAG_DOCUMENT_PARSE_FAILED',
-
-  // ── 数据库 ────────────────────────────────────────
-  DB_CONNECTION_FAILED: 'DB_CONNECTION_FAILED',
-  DB_QUERY_ERROR: 'DB_QUERY_ERROR',
-  DB_CONSTRAINT_VIOLATION: 'DB_CONSTRAINT_VIOLATION',
-
-  // ── PG 子进程 ─────────────────────────────────────
-  PG_INIT_FAILED: 'PG_INIT_FAILED',
-  PG_START_FAILED: 'PG_START_FAILED',
-  PG_CRASHED: 'PG_CRASHED',
-  PG_BACKUP_FAILED: 'PG_BACKUP_FAILED',
-
-  // ── Ollama 本地嵌入服务 ──────────────────────────
-  OLLAMA_NOT_INSTALLED: 'OLLAMA_NOT_INSTALLED',
-  OLLAMA_NOT_RUNNING: 'OLLAMA_NOT_RUNNING',
-  OLLAMA_MODEL_PULL_FAILED: 'OLLAMA_MODEL_PULL_FAILED',
-  OLLAMA_MODEL_NOT_FOUND: 'OLLAMA_MODEL_NOT_FOUND',
-  OLLAMA_TIMEOUT: 'OLLAMA_TIMEOUT',
-  OLLAMA_DISK_FULL: 'OLLAMA_DISK_FULL',
 
   // ── 文件系统 ──────────────────────────────────────
   FS_READ_FAILED: 'FS_READ_FAILED',
@@ -85,7 +57,7 @@ export type ErrorSeverity = 'info' | 'warn' | 'error' | 'fatal';
  * 错误元数据
  *
  * - userMessage：面向终端用户的中文友好提示
- * - retryable：是否可自动重试（AI 限流、超时、PG 崩溃等）
+ * - retryable：是否可自动重试（AI 限流、超时等）
  * - severity：日志级别 + Sentry 事件级别
  */
 export interface ErrorMeta {
@@ -113,18 +85,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   IPC_SENDER_INVALID: { userMessage: 'IPC 调用来源无效', retryable: false, severity: 'error' },
   IPC_CHANNEL_NOT_FOUND: { userMessage: 'IPC 通道不存在', retryable: false, severity: 'error' },
 
-  // 项目
-  PROJECT_NOT_FOUND: { userMessage: '项目不存在', retryable: false, severity: 'warn' },
-  PROJECT_NAME_EXISTS: { userMessage: '项目名已存在', retryable: false, severity: 'warn' },
-
-  // 章节
-  CHAPTER_NOT_FOUND: { userMessage: '章节不存在', retryable: false, severity: 'warn' },
-  CHAPTER_CONTENT_TOO_LARGE: { userMessage: '章节内容过长', retryable: false, severity: 'warn' },
-
-  // 人物
-  CHARACTER_NOT_FOUND: { userMessage: '人物不存在', retryable: false, severity: 'warn' },
-  CHARACTER_RELATION_CYCLE: { userMessage: '人物关系存在循环', retryable: false, severity: 'warn' },
-
   // AI
   AI_API_KEY_MISSING: { userMessage: '请先配置 API Key', retryable: false, severity: 'warn' },
   AI_API_KEY_INVALID: { userMessage: 'API Key 无效', retryable: false, severity: 'warn' },
@@ -137,39 +97,6 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
     retryable: false,
     severity: 'warn',
   },
-
-  // RAG
-  RAG_EMBEDDING_FAILED: { userMessage: '嵌入向量生成失败', retryable: true, severity: 'error' },
-  RAG_NO_RESULTS: { userMessage: '未检索到相关文档', retryable: false, severity: 'info' },
-  RAG_DOCUMENT_TOO_LARGE: { userMessage: '文档过大，无法入库', retryable: false, severity: 'warn' },
-  RAG_DOCUMENT_PARSE_FAILED: {
-    userMessage: 'PDF 解析失败，请检查文件是否损坏',
-    retryable: false,
-    severity: 'warn',
-  },
-
-  // 数据库
-  DB_CONNECTION_FAILED: { userMessage: '数据库连接失败', retryable: true, severity: 'error' },
-  DB_QUERY_ERROR: { userMessage: '数据库查询错误', retryable: false, severity: 'error' },
-  DB_CONSTRAINT_VIOLATION: { userMessage: '数据约束冲突', retryable: false, severity: 'error' },
-
-  // PG 子进程
-  PG_INIT_FAILED: { userMessage: '数据库初始化失败', retryable: false, severity: 'fatal' },
-  PG_START_FAILED: { userMessage: '数据库启动失败', retryable: true, severity: 'error' },
-  PG_CRASHED: { userMessage: '数据库异常，正在重启', retryable: true, severity: 'error' },
-  PG_BACKUP_FAILED: { userMessage: '数据库备份失败', retryable: false, severity: 'warn' },
-
-  // Ollama
-  OLLAMA_NOT_INSTALLED: {
-    userMessage: '未检测到 Ollama，请先安装',
-    retryable: false,
-    severity: 'warn',
-  },
-  OLLAMA_NOT_RUNNING: { userMessage: 'Ollama 服务未运行', retryable: true, severity: 'warn' },
-  OLLAMA_MODEL_PULL_FAILED: { userMessage: '嵌入模型拉取失败', retryable: false, severity: 'warn' },
-  OLLAMA_MODEL_NOT_FOUND: { userMessage: '嵌入模型未拉取', retryable: false, severity: 'warn' },
-  OLLAMA_TIMEOUT: { userMessage: 'Ollama 调用超时', retryable: true, severity: 'warn' },
-  OLLAMA_DISK_FULL: { userMessage: '磁盘空间不足', retryable: false, severity: 'warn' },
 
   // 文件系统
   FS_READ_FAILED: { userMessage: '文件读取失败', retryable: false, severity: 'error' },
@@ -227,7 +154,7 @@ export class AppError extends Error {
     return ERROR_META[this.code];
   }
 
-  /** 是否可自动重试（AI 限流、超时、PG 崩溃等） */
+  /** 是否可自动重试（AI 限流、超时等） */
   get retryable(): boolean {
     return this.meta.retryable;
   }

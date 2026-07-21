@@ -23,6 +23,8 @@ describe('appConfig', () => {
     process.env = { ...originalEnv };
     // 重置 mock 状态
     mockApp.isPackaged = false;
+    // 重置配置缓存，避免单例污染
+    resetConfigCache();
     vi.clearAllMocks();
   });
 
@@ -36,7 +38,6 @@ describe('appConfig', () => {
     // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
     delete process.env['SENTRY_DSN'];
     delete process.env['DEEPSEEK_API_BASE'];
-    delete process.env['OLLAMA_URL'];
 
     const { loadConfig } = await import('../config/index');
     const config = loadConfig();
@@ -45,23 +46,18 @@ describe('appConfig', () => {
     expect(config.sentry.dsn).toBe('');
     expect(config.deepseek.apiBase).toBe('https://api.deepseek.com');
     expect(config.deepseek.model).toBe('deepseek-v4-flash');
-    expect(config.ollama.url).toBe('http://localhost:11434');
-    expect(config.ollama.embedModel).toBe('nemotron-3-embed-1b-bf16');
-    expect(config.ollama.embedDimensions).toBe(2048);
   });
 
   it('从 process.env 读取配置', async () => {
     // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
     process.env['SENTRY_DSN'] = 'http://test@example.com/1';
     process.env['DEEPSEEK_API_BASE'] = 'https://custom.api.com';
-    process.env['OLLAMA_URL'] = 'http://192.168.1.100:11434';
 
     const { loadConfig } = await import('../config/index');
     const config = loadConfig();
 
     expect(config.sentry.dsn).toBe('http://test@example.com/1');
     expect(config.deepseek.apiBase).toBe('https://custom.api.com');
-    expect(config.ollama.url).toBe('http://192.168.1.100:11434');
   });
 
   it('isPackaged=true 时 isDev=false', async () => {
@@ -74,117 +70,17 @@ describe('appConfig', () => {
     expect(config.isDev).toBe(false);
     expect(config.isPackaged).toBe(true);
   });
-});
 
-describe('AppConfig - pg', () => {
-  // 保存原始 env，afterEach 恢复，避免测试间 env 污染
-  const originalEnv = { ...process.env };
-
-  beforeEach(() => {
-    // 重置配置缓存，避免单例污染
-    resetConfigCache();
+  it('getAppConfig 返回单例', () => {
+    const a = getAppConfig();
+    const b = getAppConfig();
+    expect(a).toBe(b);
   });
 
-  afterEach(() => {
-    // 恢复 env，确保后续测试不受影响
-    process.env = { ...originalEnv };
-  });
-
-  it('应使用默认 pg 配置（DATABASE_URL 未设置时）', () => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    delete process.env['DATABASE_URL'];
-    delete process.env['PG_PORT'];
-    delete process.env['PG_DATABASE'];
-    delete process.env['PG_DATA_DIR'];
-    delete process.env['PG_START_TIMEOUT'];
-
-    const config = getAppConfig();
-
-    expect(config.pg.url).toBe('postgresql://nwa@localhost:5433/nwa');
-    expect(config.pg.port).toBe(5433);
-    expect(config.pg.database).toBe('nwa');
-    expect(config.pg.dataDir).toBe('');
-    expect(config.pg.startTimeout).toBe(30_000);
-  });
-
-  it('应从环境变量读取 pg 配置', () => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    process.env['DATABASE_URL'] = 'postgresql://user:pass@host:6543/db';
-    process.env['PG_PORT'] = '6543';
-    process.env['PG_DATABASE'] = 'custom_db';
-    process.env['PG_DATA_DIR'] = 'C:/custom/pgdata';
-    process.env['PG_START_TIMEOUT'] = '60000';
-
-    const config = getAppConfig();
-
-    expect(config.pg.url).toBe('postgresql://user:pass@host:6543/db');
-    expect(config.pg.port).toBe(6543);
-    expect(config.pg.database).toBe('custom_db');
-    expect(config.pg.dataDir).toBe('C:/custom/pgdata');
-    expect(config.pg.startTimeout).toBe(60_000);
-
-    delete process.env['DATABASE_URL'];
-    delete process.env['PG_PORT'];
-    delete process.env['PG_DATABASE'];
-    delete process.env['PG_DATA_DIR'];
-    delete process.env['PG_START_TIMEOUT'];
-  });
-
-  it('应拒绝无效端口（0 / 负数 / 超过 65535）', () => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    process.env['PG_PORT'] = '0';
+  it('resetConfigCache 后 getAppConfig 返回新实例', () => {
+    const a = getAppConfig();
     resetConfigCache();
-    expect(() => getAppConfig()).toThrow();
-    resetConfigCache();
-
-    process.env['PG_PORT'] = '-1';
-    expect(() => getAppConfig()).toThrow();
-    resetConfigCache();
-
-    process.env['PG_PORT'] = '70000';
-    expect(() => getAppConfig()).toThrow();
-
-    delete process.env['PG_PORT'];
-  });
-
-  it('应拒绝无效 URL', () => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    process.env['DATABASE_URL'] = 'not-a-url';
-    resetConfigCache();
-    expect(() => getAppConfig()).toThrow();
-    delete process.env['DATABASE_URL'];
-  });
-
-  it('应使用默认 version 与 initdbTimeout', () => {
-    // 清空 pg 新字段相关 env，验证默认值
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    delete process.env['PG_VERSION'];
-    delete process.env['PG_INITDB_TIMEOUT'];
-    delete process.env['PG_RESOURCES_DIR'];
-    resetConfigCache();
-
-    const config = getAppConfig();
-
-    expect(config.pg.version).toBe('18.4');
-    expect(config.pg.initdbTimeout).toBe(60_000);
-    expect(config.pg.resourcesDir).toBe('');
-  });
-
-  it('应从环境变量读取 version 与 initdbTimeout', () => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    process.env['PG_VERSION'] = '17.10';
-    process.env['PG_INITDB_TIMEOUT'] = '120000';
-    process.env['PG_RESOURCES_DIR'] = 'C:/custom/pg';
-    resetConfigCache();
-
-    const config = getAppConfig();
-
-    expect(config.pg.version).toBe('17.10');
-    expect(config.pg.initdbTimeout).toBe(120_000);
-    expect(config.pg.resourcesDir).toBe('C:/custom/pg');
-
-    delete process.env['PG_VERSION'];
-    delete process.env['PG_INITDB_TIMEOUT'];
-    delete process.env['PG_RESOURCES_DIR'];
+    const b = getAppConfig();
+    expect(a).not.toBe(b);
   });
 });

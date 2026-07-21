@@ -23,7 +23,7 @@ export default defineConfig({
         functions: 80,
         lines: 80,
       },
-      // 排除测试文件本身、类型声明文件、配置文件、入口文件、mock
+      // 排除测试文件本身、类型声明文件、配置文件、入口文件
       // 这些文件不参与覆盖率统计，避免拉低实际业务代码覆盖率
       exclude: [
         '**/*.test.ts',
@@ -33,8 +33,6 @@ export default defineConfig({
         'node_modules/**',
         // index.ts 是 Electron 入口，依赖 app.whenReady() 无法单测
         'index.ts',
-        // mock-handlers.ts 是 E2E 测试专用 mock，由 Playwright 验证
-        'ipc/mock-handlers.ts',
       ],
     },
   },

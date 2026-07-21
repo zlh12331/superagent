@@ -1,16 +1,17 @@
 # electron-builder.yml
 # Electron 应用打包配置（设计文档 §3 + §6.5 + §10.2）
 #
-# 用途：将 main/preload/renderer 三入口产物 + PostgreSQL 便携版二进制
-# 打包成 Windows NSIS 安装器
+# 用途：将 main/preload/renderer 三入口产物打包成 Windows NSIS 安装器
 #
 # 命令：pnpm build:dist（先 electron-vite build 构建，再 electron-builder 打包）
 #
 # 依赖：
 # - out/main/index.js、out/preload/index.cjs（electron-vite build 产物）
 # - out/renderer/（渲染层静态资源）
-# - resources/pg/18.4/、resources/pg/17.10/（PG 便携版二进制，由 scripts/download-pg.ts 下载）
+# - resources/icons/（应用图标）
 # - package.json 中 author 字段（electron-builder 强制要求）
+#
+# 说明：原 PostgreSQL 便携版二进制打包（resources/pg/）已随数据库层一并删除。
 
 # 应用唯一标识（注册到 Windows 注册表，用于关联文件类型、卸载登记等）
 appId: com.novel-writer.app
@@ -25,7 +26,6 @@ directories:
 
 # asar 打包（设计文档 §3 Electron 安全基线）
 # - asar: true 把源码打包成 app.asar，避免直接暴露 .js 源文件
-# - extraResources 中的 PG 二进制不打入 asar，独立部署到 resources/ 目录
 asar: true
 
 # 需要打入 asar 的文件白名单（out/ 是 electron-vite 构建产物）
@@ -44,15 +44,8 @@ files:
   - "!**/test-results/**"
 
 # 额外资源（不打入 asar，部署到 process.resourcesPath）
-# 设计文档 §6.5：
-# - resources/pg/18.4/：默认 PG 版本
-# - resources/pg/17.10/：AGE 兼容性降级备份
-# - resources/icons/：应用图标
+# 当前仅打包应用图标，原 PG 二进制条目已删除
 extraResources:
-  - from: resources/pg
-    to: pg
-    filter:
-      - "**/*"
   - from: resources/icons
     to: icons
     filter:

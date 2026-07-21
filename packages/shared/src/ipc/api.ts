@@ -4,8 +4,11 @@
 //
 // Preload 实现 IpcApi，渲染层消费 IpcApi（通过 window.api）
 // 全局 Window 接口扩展在此声明，渲染层无需重复声明
+//
+// 说明：业务相关 API（project/chapter/character/worldview/chat/rag/agent/settings）
+// 已随业务层一并删除，仅保留应用级 API 作为 Electron 模板基础设施。
 
-import type { IpcEventMap, IpcRequestMap } from './payloads';
+import type { IpcRequestMap } from './payloads';
 import type { IpcResponse } from './response';
 
 /**
@@ -19,81 +22,31 @@ type IpcInvokeMethod<Channel extends keyof IpcRequestMap> =
     ? () => Promise<IpcResponse<IpcRequestMap[Channel]['res']>>
     : (input: IpcRequestMap[Channel]['req']) => Promise<IpcResponse<IpcRequestMap[Channel]['res']>>;
 
-/** 提取事件 channel 的订阅方法签名 */
-type IpcSubscribeMethod<Channel extends keyof IpcEventMap> = (
-  callback: (payload: IpcEventMap[Channel]) => void,
+/**
+ * 提取事件 channel 的订阅方法签名
+ *
+ * 注意：当前 IpcEventMap 为空，此类型暂未使用，保留以便未来扩展事件订阅 API。
+ * 启用事件订阅时在 IpcApi 对应域中按需使用即可。
+ *
+ * 使用 export type 而非 biome-ignore：biome-ignore 无法抑制 TS6196（TS 编译器自带的未使用错误），
+ * 通过 export 使类型成为模块导出，可同时消除 Biome 与 TS 的未使用告警。
+ */
+export type IpcSubscribeMethod<Channel extends keyof import('./payloads').IpcEventMap> = (
+  callback: (payload: import('./payloads').IpcEventMap[Channel]) => void,
 ) => () => void;
 
 /**
  * IpcApi 接口：window.api 完整形状
  *
- * 按业务域分组，每个域包含该域所有 channel 的方法
+ * 当前仅包含应用级 API，后续如需扩展业务域，按域分组添加。
  */
 export interface IpcApi {
-  project: {
-    create: IpcInvokeMethod<'project:create'>;
-    list: IpcInvokeMethod<'project:list'>;
-    get: IpcInvokeMethod<'project:get'>;
-    update: IpcInvokeMethod<'project:update'>;
-    delete: IpcInvokeMethod<'project:delete'>;
-    archive: IpcInvokeMethod<'project:archive'>;
-  };
-  chapter: {
-    create: IpcInvokeMethod<'chapter:create'>;
-    list: IpcInvokeMethod<'chapter:list'>;
-    get: IpcInvokeMethod<'chapter:get'>;
-    update: IpcInvokeMethod<'chapter:update'>;
-    reorder: IpcInvokeMethod<'chapter:reorder'>;
-    delete: IpcInvokeMethod<'chapter:delete'>;
-  };
-  character: {
-    create: IpcInvokeMethod<'character:create'>;
-    list: IpcInvokeMethod<'character:list'>;
-    update: IpcInvokeMethod<'character:update'>;
-    delete: IpcInvokeMethod<'character:delete'>;
-    getRelations: IpcInvokeMethod<'character:getRelations'>;
-    addRelation: IpcInvokeMethod<'character:addRelation'>;
-  };
-  worldview: {
-    create: IpcInvokeMethod<'worldview:create'>;
-    tree: IpcInvokeMethod<'worldview:tree'>;
-    update: IpcInvokeMethod<'worldview:update'>;
-    delete: IpcInvokeMethod<'worldview:delete'>;
-  };
-  chat: {
-    createSession: IpcInvokeMethod<'chat:createSession'>;
-    listSessions: IpcInvokeMethod<'chat:listSessions'>;
-    getMessages: IpcInvokeMethod<'chat:getMessages'>;
-    sendMessage: IpcInvokeMethod<'chat:sendMessage'>;
-    stopGeneration: IpcInvokeMethod<'chat:stopGeneration'>;
-    deleteSession: IpcInvokeMethod<'chat:deleteSession'>;
-    onStreamChunk: IpcSubscribeMethod<'chat:stream:chunk'>;
-    onStreamEnd: IpcSubscribeMethod<'chat:stream:end'>;
-    onStreamError: IpcSubscribeMethod<'chat:stream:error'>;
-  };
-  rag: {
-    ingestDocument: IpcInvokeMethod<'rag:ingestDocument'>;
-    search: IpcInvokeMethod<'rag:search'>;
-    listDocuments: IpcInvokeMethod<'rag:listDocuments'>;
-    deleteDocument: IpcInvokeMethod<'rag:deleteDocument'>;
-  };
-  agent: {
-    generateChapter: IpcInvokeMethod<'agent:generateChapter'>;
-    rewrite: IpcInvokeMethod<'agent:rewrite'>;
-    expandOutline: IpcInvokeMethod<'agent:expandOutline'>;
-  };
-  settings: {
-    get: IpcInvokeMethod<'settings:get'>;
-    set: IpcInvokeMethod<'settings:set'>;
-    setApiKey: IpcInvokeMethod<'settings:setApiKey'>;
-    testApiKey: IpcInvokeMethod<'settings:testApiKey'>;
-  };
+  /** 应用级 API */
   app: {
+    /** 获取应用运行状态（health check） */
     getStatus: IpcInvokeMethod<'app:getStatus'>;
+    /** 通过系统浏览器打开外链 */
     openExternal: IpcInvokeMethod<'app:openExternal'>;
-    onPgStatusChange: IpcSubscribeMethod<'app:event:pgStatus'>;
-    onOllamaStatusChange: IpcSubscribeMethod<'app:event:ollamaStatus'>;
-    onOllamaPullProgress: IpcSubscribeMethod<'app:event:ollamaPullProgress'>;
   };
 }
 

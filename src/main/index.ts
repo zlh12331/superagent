@@ -2,16 +2,16 @@
 // Electron 主进程入口
 // 职责：创建 BrowserWindow、加载渲染层、配置安全基线
 // 设计文档 §1.1 进程拓扑 / §4.5 安全配置 / §7.6 日志 / §7.7 Sentry
+//
+// 说明：数据库初始化（PG/Prisma/AGE）与状态广播器已随数据库层一并删除。
+// 当前主进程仅负责：Sentry 初始化、Logger 初始化、窗口创建、退出清理。
 
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, shell } from 'electron';
-import { initializeDatabase } from './app/db-init';
 import { disposeServices } from './app/service-container';
-import { startStatusBroadcaster } from './app/status-broadcaster';
 import { getAppConfig } from './config';
-import { registerMockIpcHandlers } from './ipc/mock-handlers';
-import { registerIpcHandlers } from './ipc/router';
+import { registerAppHandlers } from './ipc/app.handler';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
@@ -120,41 +120,14 @@ function createWindow(): BrowserWindow {
 // Sentry 必须在 app.whenReady() 之前初始化（@sentry/electron 要求）
 initSentry();
 
-// 应用就绪后初始化 logger + 全局错误捕获 + 数据库 + 创建窗口
-app.whenReady().then(async () => {
+// 应用就绪后初始化 logger + 全局错误捕获 + IPC handler + 创建窗口
+app.whenReady().then(() => {
   // 初始化 logger（需要 app.getPath，必须在 whenReady 之后）
   initLogger();
   registerGlobalErrorHandlers();
+  // 注册应用级 IPC handler（app:getStatus / app:openExternal）
+  registerAppHandlers();
   logger.info({}, '应用启动');
-
-  // E2E 测试模式：跳过 DB 初始化，注册 mock IPC handler
-  // 设计文档 §8.4 E2E 测试策略 / Phase 10 Task 1
-  // E2E_MODE=true 时无 PG 二进制，通过 mock handler 让渲染层正常渲染 UI
-  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-  const isE2E = process.env['E2E_MODE'] === 'true' && !app.isPackaged;
-
-  if (isE2E) {
-    logger.warn({}, 'E2E 测试模式：跳过数据库初始化，注册 mock IPC handler');
-    registerMockIpcHandlers();
-  } else {
-    // 初始化数据库（initdb + PG 启动 + migration + AGE + HNSW，设计文档 §1.1 + §6.5）
-    // 失败则直接退出应用（无数据库无法运行）
-    try {
-      await initializeDatabase();
-      logger.info({}, '数据库初始化完成');
-    } catch (err) {
-      logger.error({ error: err }, '数据库初始化失败，应用将退出');
-      app.exit(1);
-      return;
-    }
-
-    // 注册 IPC handler（设计文档 §4.1 分层架构：薄层参数校验 + 调 service）
-    // 必须在数据库初始化后调用（部分 handler 依赖 PrismaClient）
-    registerIpcHandlers();
-
-    // 启动状态广播器（订阅 PG/Ollama 状态变更事件 → 推送到渲染层窗口）
-    startStatusBroadcaster();
-  }
 
   createWindow();
 
@@ -174,7 +147,7 @@ app.on('window-all-closed', () => {
 });
 
 // 应用退出前统一清理所有服务（设计文档 §1.1 应用生命周期 / §7.6 生命周期管理）
-// disposeServices 包含：中断流式响应 + 清理 AI 客户端缓存 + 断开 Prisma + 停止 PG 子进程
+// disposeServices 包含：中断流式响应 + 清理 AI 客户端缓存
 // 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
 let isQuitting = false;
 app.on('before-quit', async (event) => {

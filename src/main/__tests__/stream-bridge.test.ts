@@ -1,9 +1,17 @@
 // src/main/__tests__/stream-bridge.test.ts
 // stream-bridge 单测
+//
+// 说明：原 IPC_CHANNELS.CHAT_STREAM_* 常量已随业务层删除，
+// StreamBridge 现为通用工具，channel 由调用方传入字符串。
+// 测试中使用字面量字符串模拟业务 channel。
 
-import { IPC_CHANNELS } from '@novel-writer/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getStreamBridge, resetStreamBridge, StreamBridge } from '../infra/ai/stream-bridge';
+
+// 测试用 channel 字符串（模拟业务调用方传入的 channel）
+const CHUNK_CHANNEL = 'test:stream:chunk';
+const END_CHANNEL = 'test:stream:end';
+const ERROR_CHANNEL = 'test:stream:error';
 
 // 辅助：构造内存 AsyncIterable
 function makeStream<T>(chunks: T[], shouldThrow = false): AsyncIterable<T> {
@@ -49,18 +57,18 @@ describe('StreamBridge', () => {
       sessionId: 'session-1',
       webContents: wc as never,
       stream,
-      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
-      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
-      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+      chunkChannel: CHUNK_CHANNEL,
+      endChannel: END_CHANNEL,
+      errorChannel: ERROR_CHANNEL,
     });
 
     expect(fullText).toBe('hello world');
     expect(wc.send).toHaveBeenCalledTimes(4); // 3 chunk + 1 end
-    expect(wc.send).toHaveBeenNthCalledWith(1, IPC_CHANNELS.CHAT_STREAM_CHUNK, {
+    expect(wc.send).toHaveBeenNthCalledWith(1, CHUNK_CHANNEL, {
       sessionId: 'session-1',
       chunk: 'hello',
     });
-    expect(wc.send).toHaveBeenNthCalledWith(4, IPC_CHANNELS.CHAT_STREAM_END, {
+    expect(wc.send).toHaveBeenNthCalledWith(4, END_CHANNEL, {
       sessionId: 'session-1',
       fullText: 'hello world',
     });
@@ -75,13 +83,13 @@ describe('StreamBridge', () => {
         sessionId: 'session-2',
         webContents: wc as never,
         stream,
-        chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
-        endChannel: IPC_CHANNELS.CHAT_STREAM_END,
-        errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+        chunkChannel: CHUNK_CHANNEL,
+        endChannel: END_CHANNEL,
+        errorChannel: ERROR_CHANNEL,
       }),
     ).rejects.toThrow('stream error');
 
-    expect(wc.send).toHaveBeenCalledWith(IPC_CHANNELS.CHAT_STREAM_ERROR, {
+    expect(wc.send).toHaveBeenCalledWith(ERROR_CHANNEL, {
       sessionId: 'session-2',
       error: 'stream error',
     });
@@ -111,9 +119,9 @@ describe('StreamBridge', () => {
       sessionId: 'session-3',
       webContents: wc as never,
       stream,
-      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
-      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
-      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+      chunkChannel: CHUNK_CHANNEL,
+      endChannel: END_CHANNEL,
+      errorChannel: ERROR_CHANNEL,
     });
 
     await bridge.abort('session-3');
@@ -121,7 +129,7 @@ describe('StreamBridge', () => {
 
     await promise;
 
-    expect(wc.send).toHaveBeenCalledWith(IPC_CHANNELS.CHAT_STREAM_ERROR, {
+    expect(wc.send).toHaveBeenCalledWith(ERROR_CHANNEL, {
       sessionId: 'session-3',
       error: 'aborted',
     });
@@ -138,9 +146,9 @@ describe('StreamBridge', () => {
       sessionId: 'session-4',
       webContents: wc as never,
       stream,
-      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
-      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
-      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+      chunkChannel: CHUNK_CHANNEL,
+      endChannel: END_CHANNEL,
+      errorChannel: ERROR_CHANNEL,
     });
     // 流在迭代期间活跃
     expect(await bridge.has('session-4')).toBe(true);
@@ -158,9 +166,9 @@ describe('StreamBridge', () => {
       sessionId: 'session-5',
       webContents: wc as never,
       stream,
-      chunkChannel: IPC_CHANNELS.CHAT_STREAM_CHUNK,
-      endChannel: IPC_CHANNELS.CHAT_STREAM_END,
-      errorChannel: IPC_CHANNELS.CHAT_STREAM_ERROR,
+      chunkChannel: CHUNK_CHANNEL,
+      endChannel: END_CHANNEL,
+      errorChannel: ERROR_CHANNEL,
     });
 
     expect(wc.send).not.toHaveBeenCalled();

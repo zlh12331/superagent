@@ -4,25 +4,17 @@
 //
 // 职责：
 // - 使用 createBrowserRouter（Data Mode）声明全应用路由
-// - 根布局 root.tsx 挂载 AppShell（Topbar + Sidebar + StatusBar）
-// - 业务路由全部使用 lazy 加载（代码分割）
+// - 根布局 root.tsx 挂载 AppShell（Topbar + 内容区）
+// - index 路由直接渲染 HomePage（占位首页）
 // - 提供 RootErrorBoundary 作为顶层错误边界
 //
-// 路由树：
-//   /                            → RootLayout (AppShell)
-//     index                      → /projects（重定向到 /projects）
-//     /projects                  → ProjectsPage
-//     /settings                  → SettingsPage
-//     /projects/:projectId       → ProjectShell (layout)
-//       index                    → ChaptersPage（默认进入章节管理）
-//       chapters                 → ChaptersPage
-//       characters               → CharactersPage
-//       worldview                → WorldviewPage
-//       chat                     → ChatPage
-//       rag                      → RagPage
+// 说明：原业务路由（projects/settings/chapters/characters/worldview/chat/rag）
+// 已随数据库层一并删除。当前仅保留根布局 + 占位首页，作为 Electron 模版骨架。
+// 后续若重建业务后端，在 children 中追加 lazy 路由即可。
 
-import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter } from 'react-router';
 
+import { HomePage } from './routes/home';
 import { RootErrorBoundary, RootLayout } from './routes/root';
 
 /**
@@ -31,9 +23,9 @@ import { RootErrorBoundary, RootLayout } from './routes/root';
  * 使用 RR7 Data Mode：createBrowserRouter + RouterProvider，
  * 在 App.tsx 中通过 <RouterProvider router={router} /> 挂载。
  *
- * lazy 加载策略：
- * - root 布局直接 import（启动时必须立即渲染，避免首屏白屏）
- * - 业务路由全部 lazy（按需加载，减少首屏 bundle 体积）
+ * 当前路由树：
+ *   /                            → RootLayout (AppShell)
+ *     index                      → HomePage（占位首页，非 lazy 加载）
  */
 export const router = createBrowserRouter([
   {
@@ -41,26 +33,8 @@ export const router = createBrowserRouter([
     element: <RootLayout />,
     errorElement: <RootErrorBoundary />,
     children: [
-      // 根路径重定向到项目列表
-      { index: true, element: <Navigate to="/projects" replace /> },
-      // 项目列表（不依赖 :projectId）
-      { path: 'projects', lazy: () => import('./routes/projects') },
-      // 设置页（不依赖 :projectId）
-      { path: 'settings', lazy: () => import('./routes/settings') },
-      // 项目工作台（依赖 :projectId，包含 5 个子路由）
-      {
-        path: 'projects/:projectId',
-        lazy: () => import('./routes/project-shell'),
-        children: [
-          // index 路由：默认进入章节管理（设计文档 §3）
-          { index: true, lazy: () => import('./routes/chapters') },
-          { path: 'chapters', lazy: () => import('./routes/chapters') },
-          { path: 'characters', lazy: () => import('./routes/characters') },
-          { path: 'worldview', lazy: () => import('./routes/worldview') },
-          { path: 'chat', lazy: () => import('./routes/chat') },
-          { path: 'rag', lazy: () => import('./routes/rag') },
-        ],
-      },
+      // index 路由：直接渲染占位首页（无业务路由可懒加载）
+      { index: true, element: <HomePage /> },
     ],
   },
 ]);

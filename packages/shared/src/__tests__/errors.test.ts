@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { AppError, ERROR_META, ErrorCode } from '../constants/errors';
 
 describe('ErrorCode', () => {
-  it('包含所有设计文档 §7.2 规定的错误码', () => {
+  it('包含所有通用基础设施错误码', () => {
     // 通用
     expect(ErrorCode.UNKNOWN).toBe('UNKNOWN');
     expect(ErrorCode.INTERNAL_ERROR).toBe('INTERNAL_ERROR');
@@ -15,19 +15,13 @@ describe('ErrorCode', () => {
     // IPC
     expect(ErrorCode.IPC_SENDER_INVALID).toBe('IPC_SENDER_INVALID');
     expect(ErrorCode.IPC_CHANNEL_NOT_FOUND).toBe('IPC_CHANNEL_NOT_FOUND');
-    // 项目
-    expect(ErrorCode.PROJECT_NOT_FOUND).toBe('PROJECT_NOT_FOUND');
-    expect(ErrorCode.PROJECT_NAME_EXISTS).toBe('PROJECT_NAME_EXISTS');
     // AI
     expect(ErrorCode.AI_API_KEY_MISSING).toBe('AI_API_KEY_MISSING');
     expect(ErrorCode.AI_RATE_LIMITED).toBe('AI_RATE_LIMITED');
-    // RAG
-    expect(ErrorCode.RAG_EMBEDDING_FAILED).toBe('RAG_EMBEDDING_FAILED');
-    // PG
-    expect(ErrorCode.PG_CRASHED).toBe('PG_CRASHED');
-    // Ollama
-    expect(ErrorCode.OLLAMA_NOT_INSTALLED).toBe('OLLAMA_NOT_INSTALLED');
-    expect(ErrorCode.OLLAMA_MODEL_NOT_FOUND).toBe('OLLAMA_MODEL_NOT_FOUND');
+    // 文件系统
+    expect(ErrorCode.FS_READ_FAILED).toBe('FS_READ_FAILED');
+    expect(ErrorCode.FS_WRITE_FAILED).toBe('FS_WRITE_FAILED');
+    expect(ErrorCode.FS_DISK_FULL).toBe('FS_DISK_FULL');
   });
 
   it('每个错误码都有对应的 ERROR_META 条目', () => {
@@ -43,9 +37,9 @@ describe('ErrorCode', () => {
 
 describe('AppError', () => {
   it('默认 message 来自 ERROR_META', () => {
-    const err = new AppError(ErrorCode.PROJECT_NOT_FOUND);
-    expect(err.message).toBe(ERROR_META[ErrorCode.PROJECT_NOT_FOUND].userMessage);
-    expect(err.code).toBe(ErrorCode.PROJECT_NOT_FOUND);
+    const err = new AppError(ErrorCode.NOT_FOUND);
+    expect(err.message).toBe(ERROR_META[ErrorCode.NOT_FOUND].userMessage);
+    expect(err.code).toBe(ErrorCode.NOT_FOUND);
   });
 
   it('自定义 message 优先于 ERROR_META', () => {
@@ -67,13 +61,13 @@ describe('AppError', () => {
     const retryable = new AppError(ErrorCode.AI_RATE_LIMITED);
     expect(retryable.retryable).toBe(true);
 
-    const fatal = new AppError(ErrorCode.PG_CRASHED);
-    expect(fatal.severity).toBe('error');
+    const error = new AppError(ErrorCode.INTERNAL_ERROR);
+    expect(error.severity).toBe('error');
   });
 
   it('支持 cause 链', () => {
-    const root = new Error('PostgreSQL 进程退出码 1');
-    const err = new AppError(ErrorCode.PG_CRASHED, undefined, root);
+    const root = new Error('底层错误');
+    const err = new AppError(ErrorCode.INTERNAL_ERROR, undefined, root);
     expect(err.cause).toBe(root);
   });
 });
