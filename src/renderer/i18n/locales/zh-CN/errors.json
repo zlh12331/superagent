@@ -1,0 +1,28 @@
+{
+  "$comment": "错误提示文案 · 中文（默认语言）· key 与 packages/shared 的 ErrorCode 一一对应",
+  "translation": {
+    "errors": {
+      "UNKNOWN": "未知错误",
+      "INTERNAL_ERROR": "内部错误",
+      "INVALID_INPUT": "输入参数有误",
+      "NOT_FOUND": "资源不存在",
+      "UNAUTHORIZED": "未授权",
+      "RATE_LIMITED": "操作过于频繁",
+
+      "IPC_SENDER_INVALID": "IPC 调用来源无效",
+      "IPC_CHANNEL_NOT_FOUND": "IPC 通道不存在",
+
+      "AI_API_KEY_MISSING": "请先配置 API Key",
+      "AI_API_KEY_INVALID": "API Key 无效",
+      "AI_RATE_LIMITED": "AI 调用频繁，正在重试",
+      "AI_TIMEOUT": "AI 调用超时",
+      "AI_MODEL_ERROR": "AI 模型错误",
+      "AI_STREAM_INTERRUPTED": "AI 流式响应中断",
+      "AI_CONTEXT_TOO_LARGE": "上下文过长，请精简对话",
+
+      "FS_READ_FAILED": "文件读取失败",
+      "FS_WRITE_FAILED": "文件写入失败",
+      "FS_DISK_FULL": "磁盘空间不足"
+    }
+  }
+}

@@ -3,13 +3,15 @@
 // 设计文档 §3 目录结构：providers/ 组合各 Provider
 //
 // 嵌套顺序（外 → 内）：
-// 1. ThemeProvider：主题最外层，确保所有组件能读取主题
-// 2. QueryProvider：TanStack Query，注入 useQuery / useMutation
-// 3. TooltipProvider：UI 上下文，控制 Tooltip 全局延迟
-// 4. Toaster：sonner toast 容器，渲染在 children 旁，浮在最上层
+// 1. I18nProvider：i18n 最外层，确保所有组件能查询文案
+// 2. ThemeProvider：主题次外层，确保所有组件能读取主题
+// 3. QueryProvider：TanStack Query，注入 useQuery / useMutation
+// 4. TooltipProvider：UI 上下文，控制 Tooltip 全局延迟
+// 5. Toaster：sonner toast 容器，渲染在 children 旁，浮在最上层
 //
 // 顺序理由：
-// - ThemeProvider 在外：theme 状态需要先于 query 失败提示生效
+// - I18nProvider 最外：文案是所有 UI 的基础，theme / query / tooltip 都可能用到文案
+// - ThemeProvider 次外：theme 状态需要先于 query 失败提示生效
 // - QueryProvider 在内：业务组件需要 useQuery，Query 不依赖 theme
 // - Toaster 放最后：确保所有 toast 能渲染在最上层
 
@@ -17,6 +19,8 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+
+import { I18nProvider } from '@/i18n';
 
 import { QueryProvider } from './QueryProvider';
 import { ThemeProvider } from './ThemeProvider';
@@ -28,13 +32,15 @@ import { ThemeProvider } from './ThemeProvider';
  */
 export function AppProviders({ children }: { children: ReactNode }): ReactElement {
   return (
-    <ThemeProvider>
-      <QueryProvider>
-        <TooltipProvider>
-          {children}
-          <Toaster />
-        </TooltipProvider>
-      </QueryProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <QueryProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </QueryProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }

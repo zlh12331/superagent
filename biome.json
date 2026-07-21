@@ -178,7 +178,9 @@
     {
       "includes": [
         "**/src/renderer/stores/persistent/create-persistent-store.ts",
-        "**/src/renderer/stores/server/create-ipc-stream-store.ts"
+        "**/src/renderer/stores/server/create-ipc-stream-store.ts",
+        "**/src/renderer/i18n/config.ts",
+        "**/src/renderer/i18n/use-translation.ts"
       ],
       "linter": {
         "rules": {

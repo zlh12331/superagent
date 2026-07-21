@@ -1,0 +1,20 @@
+{
+  "$comment": "通用 UI 文案 · 中文（默认语言）",
+  "translation": {
+    "common": {
+      "loading": "加载中...",
+      "save": "保存",
+      "cancel": "取消",
+      "confirm": "确认",
+      "close": "关闭",
+      "retry": "重试",
+      "delete": "删除",
+      "edit": "编辑",
+      "create": "新建",
+      "search": "搜索",
+      "noResults": "无匹配结果",
+      "yes": "是",
+      "no": "否"
+    }
+  }
+}

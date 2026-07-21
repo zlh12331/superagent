@@ -1,0 +1,28 @@
+{
+  "$comment": "Error messages · English · keys match ErrorCode in packages/shared",
+  "translation": {
+    "errors": {
+      "UNKNOWN": "Unknown error",
+      "INTERNAL_ERROR": "Internal error",
+      "INVALID_INPUT": "Invalid input",
+      "NOT_FOUND": "Resource not found",
+      "UNAUTHORIZED": "Unauthorized",
+      "RATE_LIMITED": "Too many requests",
+
+      "IPC_SENDER_INVALID": "Invalid IPC sender",
+      "IPC_CHANNEL_NOT_FOUND": "IPC channel not found",
+
+      "AI_API_KEY_MISSING": "Please configure API key first",
+      "AI_API_KEY_INVALID": "Invalid API key",
+      "AI_RATE_LIMITED": "AI rate limited, retrying",
+      "AI_TIMEOUT": "AI request timeout",
+      "AI_MODEL_ERROR": "AI model error",
+      "AI_STREAM_INTERRUPTED": "AI stream interrupted",
+      "AI_CONTEXT_TOO_LARGE": "Context too long, please simplify",
+
+      "FS_READ_FAILED": "Failed to read file",
+      "FS_WRITE_FAILED": "Failed to write file",
+      "FS_DISK_FULL": "Disk space insufficient"
+    }
+  }
+}

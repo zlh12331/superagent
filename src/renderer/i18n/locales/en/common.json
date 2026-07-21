@@ -1,0 +1,20 @@
+{
+  "$comment": "Common UI copy · English",
+  "translation": {
+    "common": {
+      "loading": "Loading...",
+      "save": "Save",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "close": "Close",
+      "retry": "Retry",
+      "delete": "Delete",
+      "edit": "Edit",
+      "create": "New",
+      "search": "Search",
+      "noResults": "No results",
+      "yes": "Yes",
+      "no": "No"
+    }
+  }
+}
