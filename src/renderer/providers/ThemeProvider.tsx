@@ -1,20 +1,20 @@
 // src/renderer/providers/ThemeProvider.tsx
-// 主题 Provider（替代 next-themes）
+// 主题 Provider（L2 settings-store 的副作用消费方）
 // ──────────────────────────────────────────────────────────────
-// 设计：
-// - 用 React Context + useState 管理主题状态
-// - localStorage 持久化用户选择
-// - 默认跟随系统偏好（matchMedia prefers-color-scheme）
-// - 通过给 <html> 添加/移除 .dark class 切换主题
-//   与 globals.css 中的 :root / .dark 变量对齐
+// 职责（P2 改造后）：
+// - 仅负责「把 settings-store 的 theme 字段应用到 <html>」副作用
+// - 不再持有状态、不再手写 localStorage（状态源已迁到 settings-store）
+// - 监听系统主题变化（matchMedia prefers-color-scheme），动态解析 'system'
+// - 通过 Context 暴露 useTheme() hook（接口与 next-themes 兼容，便于迁移）
 //
-// 替代 next-themes 的理由：
-// - next-themes 依赖 Next.js 生态，Electron 单机应用不需要
-// - 减少一个运行时依赖
-// - 实现简单，便于维护
+// 嵌套关系：
+// - 必须在 QueryProvider 内（QueryProvider 不依赖 theme）
+// - 必须在 TooltipProvider 外（Tooltip 颜色跟随 theme）
 //
-// 接口与 next-themes 兼容（theme / resolvedTheme / setTheme），
-// Topbar 和 sonner 的调用代码无需改动。
+// 与改造前的差异：
+// - 之前：useState 持有 theme + localStorage 持久化 + useEffect 应用副作用
+// - 现在：直接订阅 settings-store.theme + useEffect 应用副作用 + 监听系统偏好变化
+// - 状态源单一化：所有主题设置变更都走 settings-store.setTheme()
 // ──────────────────────────────────────────────────────────────
 
 import {
@@ -25,17 +25,10 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
 } from 'react';
 
-/**
- * 主题类型
- *
- * - 'light'：亮色
- * - 'dark'：暗色
- * - 'system'：跟随系统偏好
- */
-type Theme = 'light' | 'dark' | 'system';
+import type { Theme } from '@/stores/persistent/settings-store';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 
 /**
  * 主题 Context 值
@@ -43,14 +36,14 @@ type Theme = 'light' | 'dark' | 'system';
  * 与 next-themes 的 useTheme 接口对齐，便于迁移：
  * - theme：用户选择的主题（可能是 'system'）
  * - resolvedTheme：实际生效的主题（'system' 已解析为 'light' 或 'dark'）
- * - setTheme：切换主题
+ * - setTheme：切换主题（直接调 settings-store.setTheme）
  */
 interface ThemeContextValue {
   /** 用户选择的主题（可能是 'system'） */
   theme: Theme;
   /** 实际生效的主题（'system' 已解析为 'light' 或 'dark'） */
   resolvedTheme: 'light' | 'dark';
-  /** 切换主题 */
+  /** 切换主题（写入 settings-store，由 settings-store 负责持久化） */
   setTheme: (theme: Theme) => void;
 }
 
@@ -60,9 +53,6 @@ interface ThemeContextValue {
  * 默认值为 undefined，useTheme 中检测未在 Provider 内使用时抛错。
  */
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
-
-/** localStorage key */
-const STORAGE_KEY = 'theme';
 
 /**
  * 获取系统偏好主题
@@ -74,22 +64,6 @@ function getSystemTheme(): 'light' | 'dark' {
     return 'light';
   }
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-/**
- * 从 localStorage 读取用户选择的主题
- *
- * 无记录或值非法时返回 'system'（默认跟随系统）
- */
-function getStoredTheme(): Theme {
-  if (typeof localStorage === 'undefined') {
-    return 'system';
-  }
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark' || stored === 'system') {
-    return stored;
-  }
-  return 'system';
 }
 
 /**
@@ -117,20 +91,17 @@ function applyTheme(resolved: 'light' | 'dark'): void {
  * </ThemeProvider>
  */
 export function ThemeProvider({ children }: { children: ReactNode }): ReactElement {
-  const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
-  // resolvedTheme 是 theme 解析后的实际值（'system' → 'light'/'dark'）
-  // 初始值通过类型收窄确保为 'light' | 'dark'，不含 'system'
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => {
-    const stored = getStoredTheme();
-    return stored === 'system' ? getSystemTheme() : stored;
-  });
+  // 主题状态源：settings-store（持久化由 settings-store 负责）
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
 
-  // 应用主题到 <html> 并同步 resolvedTheme
+  // resolvedTheme：'system' 解析为 'light' 或 'dark'
+  const resolvedTheme: 'light' | 'dark' = theme === 'system' ? getSystemTheme() : theme;
+
+  // 应用主题到 <html>（theme 变化或系统偏好变化时重新应用）
   useEffect(() => {
-    const resolved = theme === 'system' ? getSystemTheme() : theme;
-    setResolvedTheme(resolved);
-    applyTheme(resolved);
-  }, [theme]);
+    applyTheme(resolvedTheme);
+  }, [resolvedTheme]);
 
   // 监听系统主题变化（仅当 theme === 'system' 时生效）
   useEffect(() => {
@@ -140,27 +111,20 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
       const resolved = mediaQuery.matches ? 'dark' : 'light';
-      setResolvedTheme(resolved);
       applyTheme(resolved);
     };
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  // setTheme：更新状态 + 持久化到 localStorage
-  const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // localStorage 不可用（隐私模式等）时静默失败
-    }
-  }, []);
+  // setTheme：直接调用 settings-store 的 setTheme（持久化由 store 负责）
+  // 用 useCallback 稳定引用，避免 Context value 每次渲染变化
+  const stableSetTheme = useCallback((next: Theme) => setTheme(next), [setTheme]);
 
   // 用 useMemo 稳定 context 值，避免不必要的重渲染
   const value = useMemo<ThemeContextValue>(
-    () => ({ theme, resolvedTheme, setTheme }),
-    [theme, resolvedTheme, setTheme],
+    () => ({ theme, resolvedTheme, setTheme: stableSetTheme }),
+    [theme, resolvedTheme, stableSetTheme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

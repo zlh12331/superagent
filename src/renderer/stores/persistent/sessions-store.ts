@@ -1,5 +1,5 @@
-// src/renderer/stores/sessions-store.ts
-// 会话状态管理（zustand）
+// src/renderer/stores/persistent/sessions-store.ts
+// 会话状态管理（L2 客户端共享状态层 - persistent）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 维护会话列表（sessions）与当前激活会话 id（activeSessionId）
@@ -7,7 +7,7 @@
 // - 仅为状态容器，不包含 IPC 调用逻辑（业务 hook 负责副作用）
 //
 // 设计：
-// - 使用 zustand 5 的 createStore API，配合 persist 中间件持久化到 localStorage
+// - 使用 createPersistentStore 工厂统一持久化策略
 // - 不依赖 useChat：useChat 维护单次对话的 messages，本 store 维护多会话元数据
 // - 跨组件共享：通过 useSessionsStore() 订阅，避免 props drilling
 //
@@ -16,8 +16,7 @@
 // - 仅持久化 sessions + activeSessionId，messages 走主进程持久化通道
 // ──────────────────────────────────────────────────────────────
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createPersistentStore } from './create-persistent-store';
 
 /**
  * 单个会话的元数据
@@ -61,7 +60,7 @@ interface SessionsState {
 /**
  * 会话状态 store
  *
- * 持久化到 localStorage（key: 'novel-writer-sessions'）。
+ * 持久化到 localStorage（key: 'novel-writer:sessions'）。
  *
  * @example
  * ```tsx
@@ -69,59 +68,58 @@ interface SessionsState {
  * const createSession = useSessionsStore((s) => s.createSession);
  * ```
  */
-export const useSessionsStore = create<SessionsState>()(
-  persist(
-    (set) => ({
-      sessions: [],
-      activeSessionId: null,
+export const useSessionsStore = createPersistentStore<SessionsState>()(
+  (set) => ({
+    sessions: [],
+    activeSessionId: null,
 
-      createSession: (id, title) =>
-        set((state) => {
-          const now = Date.now();
-          const session: SessionMeta = {
-            id,
-            title,
-            createdAt: now,
-            updatedAt: now,
-          };
-          // 新会话置于列表最前（最近活动）
-          return {
-            sessions: [session, ...state.sessions],
-            activeSessionId: id,
-          };
-        }),
-
-      setActiveSession: (id) =>
-        set(() => ({
+    createSession: (id, title) =>
+      set((state) => {
+        const now = Date.now();
+        const session: SessionMeta = {
+          id,
+          title,
+          createdAt: now,
+          updatedAt: now,
+        };
+        // 新会话置于列表最前（最近活动）
+        return {
+          sessions: [session, ...state.sessions],
           activeSessionId: id,
-        })),
-
-      removeSession: (id) =>
-        set((state) => {
-          const sessions = state.sessions.filter((s) => s.id !== id);
-          const activeSessionId = state.activeSessionId === id ? null : state.activeSessionId;
-          return { sessions, activeSessionId };
-        }),
-
-      updateSessionTitle: (id, title) =>
-        set((state) => ({
-          sessions: state.sessions.map((s) =>
-            s.id === id ? { ...s, title, updatedAt: Date.now() } : s,
-          ),
-        })),
-
-      touchSession: (id) =>
-        set((state) => ({
-          sessions: state.sessions.map((s) => (s.id === id ? { ...s, updatedAt: Date.now() } : s)),
-        })),
-    }),
-    {
-      name: 'novel-writer-sessions',
-      // 仅持久化状态数据，不持久化方法
-      partialize: (state) => ({
-        sessions: state.sessions,
-        activeSessionId: state.activeSessionId,
+        };
       }),
-    },
-  ),
+
+    setActiveSession: (id) =>
+      set(() => ({
+        activeSessionId: id,
+      })),
+
+    removeSession: (id) =>
+      set((state) => {
+        const sessions = state.sessions.filter((s) => s.id !== id);
+        const activeSessionId = state.activeSessionId === id ? null : state.activeSessionId;
+        return { sessions, activeSessionId };
+      }),
+
+    updateSessionTitle: (id, title) =>
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === id ? { ...s, title, updatedAt: Date.now() } : s,
+        ),
+      })),
+
+    touchSession: (id) =>
+      set((state) => ({
+        sessions: state.sessions.map((s) => (s.id === id ? { ...s, updatedAt: Date.now() } : s)),
+      })),
+  }),
+  {
+    name: 'sessions',
+    version: 1,
+    // 仅持久化状态数据（工厂默认会过滤函数，这里显式声明更清晰）
+    partialize: (state) => ({
+      sessions: state.sessions,
+      activeSessionId: state.activeSessionId,
+    }),
+  },
 );

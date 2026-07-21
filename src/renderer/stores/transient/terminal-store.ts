@@ -1,5 +1,5 @@
-// src/renderer/stores/terminal-store.ts
-// 终端实例状态管理（zustand）
+// src/renderer/stores/transient/terminal-store.ts
+// 终端实例状态管理（L2 客户端共享状态层 - transient）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 维护多个终端 tab 的元数据（每个会话对应一个独立 PTY 终端）

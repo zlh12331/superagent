@@ -176,6 +176,22 @@
       }
     },
     {
+      "includes": [
+        "**/src/renderer/stores/persistent/create-persistent-store.ts",
+        "**/src/renderer/stores/server/create-ipc-stream-store.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tests/integration/**/*.ts"],
       "linter": {
         "rules": {

@@ -1,5 +1,5 @@
-// src/renderer/stores/approvals-store.ts
-// 审批门状态管理（zustand）
+// src/renderer/stores/transient/approvals-store.ts
+// 审批门状态管理（L2 客户端共享状态层 - transient）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 维护待审批队列（FIFO，主进程推送 approval 事件时入队）
@@ -9,6 +9,7 @@
 // 设计：
 // - 纯状态容器，不调用 IPC（业务 hook 监听队列变化后副作用执行）
 // - 队列项有 approved/rejected/pending 三态，已决议的项保留 1s 后自动出队（便于 UI 反馈）
+// - 不持久化：审批决策是即时操作，跨重启保留意义不大
 // ──────────────────────────────────────────────────────────────
 
 import { create } from 'zustand';
