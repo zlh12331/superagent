@@ -33,6 +33,20 @@ import type {
 } from '../schemas/agent';
 import type { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
 import type {
+  CodebaseCalleesReqSchema,
+  CodebaseCalleesRes,
+  CodebaseCallersReqSchema,
+  CodebaseCallersRes,
+  CodebaseExploreReqSchema,
+  CodebaseExploreRes,
+  CodebaseImpactReqSchema,
+  CodebaseImpactRes,
+  CodebaseNodeReqSchema,
+  CodebaseNodeRes,
+  CodebaseQueryReqSchema,
+  CodebaseQueryRes,
+} from '../schemas/codebase';
+import type {
   FileListReqSchema,
   FileListRes,
   FileReadReqSchema,
@@ -219,6 +233,26 @@ export type GitStatusReq = z.infer<typeof GitStatusReqSchema>;
 /** git:diff 请求 payload：获取 diff */
 export type GitDiffReq = z.infer<typeof GitDiffReqSchema>;
 
+// ─── Codebase 域 Req 派生（codegraph CLI 封装） ────────────────
+
+/** codebase:query 请求 payload：结构化符号搜索 */
+export type CodebaseQueryReq = z.infer<typeof CodebaseQueryReqSchema>;
+
+/** codebase:explore 请求 payload：区域探索（自然语言查询） */
+export type CodebaseExploreReq = z.infer<typeof CodebaseExploreReqSchema>;
+
+/** codebase:node 请求 payload：符号详情或文件内容 */
+export type CodebaseNodeReq = z.infer<typeof CodebaseNodeReqSchema>;
+
+/** codebase:callers 请求 payload：调用方查询 */
+export type CodebaseCallersReq = z.infer<typeof CodebaseCallersReqSchema>;
+
+/** codebase:callees 请求 payload：被调用方查询 */
+export type CodebaseCalleesReq = z.infer<typeof CodebaseCalleesReqSchema>;
+
+/** codebase:impact 请求 payload：影响分析 */
+export type CodebaseImpactReq = z.infer<typeof CodebaseImpactReqSchema>;
+
 // ─── Session 域 Req 派生（SQLite 持久化） ──────────────────────
 
 /** session:list 请求 payload：分页列出会话 */
@@ -295,6 +329,14 @@ export interface IpcRequestMap {
   // Git 域（Git CLI 封装）
   'git:status': { req: GitStatusReq; res: GitStatusRes };
   'git:diff': { req: GitDiffReq; res: GitDiffRes };
+
+  // 代码库域（codegraph CLI 封装，代码智能查询）
+  'codebase:query': { req: CodebaseQueryReq; res: CodebaseQueryRes };
+  'codebase:explore': { req: CodebaseExploreReq; res: CodebaseExploreRes };
+  'codebase:node': { req: CodebaseNodeReq; res: CodebaseNodeRes };
+  'codebase:callers': { req: CodebaseCallersReq; res: CodebaseCallersRes };
+  'codebase:callees': { req: CodebaseCalleesReq; res: CodebaseCalleesRes };
+  'codebase:impact': { req: CodebaseImpactReq; res: CodebaseImpactRes };
 
   // 会话域（SQLite 持久化）
   'session:list': { req: SessionListReq; res: SessionListRes };

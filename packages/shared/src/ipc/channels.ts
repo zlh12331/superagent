@@ -18,6 +18,7 @@
 // - 搜索域：search:grep / search:glob
 // - 终端域：terminal:create / terminal:input / terminal:resize / terminal:kill / terminal:event:*
 // - Git 域：git:status / git:diff
+// - 代码库域：codebase:query / explore / node / callers / callees / impact
 
 /**
  * IPC Channel 常量表
@@ -115,6 +116,20 @@ export const IPC_CHANNELS = {
   GIT_STATUS: 'git:status',
   // 请求-响应：获取 diff（unstaged / staged / 对比任意 ref）
   GIT_DIFF: 'git:diff',
+
+  // ── 代码库域（codegraph CLI 封装，代码智能查询） ───
+  // 请求-响应：结构化符号搜索（返回符号列表 + 相关度评分）
+  CODEBASE_QUERY: 'codebase:query',
+  // 请求-响应：区域探索（自然语言查询，返回相关符号源码 + 调用路径 markdown）
+  CODEBASE_EXPLORE: 'codebase:explore',
+  // 请求-响应：符号详情（符号源码 + 调用链，或文件模式：文件内容 + 依赖）
+  CODEBASE_NODE: 'codebase:node',
+  // 请求-响应：调用方查询（谁调用了此符号）
+  CODEBASE_CALLERS: 'codebase:callers',
+  // 请求-响应：被调用方查询（此符号调用了哪些符号）
+  CODEBASE_CALLEES: 'codebase:callees',
+  // 请求-响应：影响分析（修改此符号会影响哪些代码）
+  CODEBASE_IMPACT: 'codebase:impact',
 } as const;
 
 /** IPC Channel 字面量联合类型 */

@@ -15,6 +15,7 @@ import { registerAgentHandlers } from './ipc/agent.handler';
 import { registerAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { registerAppHandlers } from './ipc/app.handler';
 import { registerChatHandlers } from './ipc/chat.handler';
+import { registerCodebaseHandlers } from './ipc/codebase.handler';
 import { registerFileHandlers } from './ipc/file.handler';
 import { registerGitHandlers } from './ipc/git.handler';
 import { registerSearchHandlers } from './ipc/search.handler';
@@ -156,6 +157,12 @@ app.whenReady().then(() => {
   // 通过 ServiceContainer 注入 IGitService 实例（基于 child_process.spawn('git')）
   // 仅暴露只读查询，写操作通过 TerminalService 由用户手动执行
   registerGitHandlers({ gitService: serviceContainer.getGitService() });
+
+  // 注册代码库域 IPC handler（codebase:query / explore / node / callers / callees / impact）
+  // 通过 ServiceContainer 注入 ICodebaseService 实例（基于 child_process.spawn('codegraph')）
+  // 提供 6 个代码智能查询通道，支持符号搜索、调用追踪、影响分析
+  // Code Agent 调用这些方法获取代码上下文，喂给 LLM 辅助决策
+  registerCodebaseHandlers({ codebaseService: serviceContainer.getCodebaseService() });
 
   // 注册工具域 IPC handler（tool:list）
   // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 5 个内置工具）

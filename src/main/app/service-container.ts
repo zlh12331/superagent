@@ -26,7 +26,9 @@
 //      resetTerminalService()      清空 TerminalService 模块级单例缓存
 //   7. GitService                  无外部资源（每次调用 spawn 子进程在请求结束时退出）
 //      resetGitService()           清空 GitService 模块级单例缓存
-//   8. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
+//   8. CodebaseService             无外部资源（每次调用 spawn codegraph 子进程在请求结束时退出）
+//      resetCodebaseService()      清空 CodebaseService 模块级单例缓存
+//   9. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
 //
 // 注意：
 // - 数据库相关清理（Prisma/PG 子进程/Ollama/Embedding）已随数据库层一并删除
@@ -49,6 +51,8 @@ import { registerBuiltinTools } from '../infra/agent/tools';
 import { resetAIProvider } from '../infra/ai/ai-provider';
 import type { IChatService } from '../infra/ai/chat-service';
 import { getChatService, resetChatService } from '../infra/ai/chat-service';
+import type { ICodebaseService } from '../infra/codebase/codebase-service';
+import { getCodebaseService, resetCodebaseService } from '../infra/codebase/codebase-service';
 import type { IFileService } from '../infra/file/file-service';
 import { getFileService, resetFileService } from '../infra/file/file-service';
 import type { IGitService } from '../infra/git/git-service';
@@ -391,6 +395,44 @@ class ServiceContainer {
     this.gitService = service;
   }
 
+  // ─── CodebaseService（codegraph CLI 封装，代码智能查询） ───
+
+  /**
+   * CodebaseService 实例缓存
+   *
+   * 设计与 ChatService / FileService / GitService 一致：
+   * - 生产环境：通过 getCodebaseService() 拿到默认 CodebaseService 实现
+   *   （基于 child_process.spawn('codegraph')）
+   * - 测试环境：通过 setCodebaseService() 注入 mock 实现，避免依赖真实 codegraph CLI
+   *
+   * 缓存值与 getCodebaseService() 模块级单例保持一致：
+   * 调用 setCodebaseService(null) 或 reset() 后，下次 getCodebaseService() 会重新拿默认实现。
+   */
+  private codebaseService: ICodebaseService | null = null;
+
+  /**
+   * 获取 CodebaseService 实例
+   *
+   * 首次调用延迟初始化为默认 CodebaseService 实现（与 getCodebaseService() 单例一致）。
+   * 测试可通过 setCodebaseService() 注入 mock 实例覆盖。
+   */
+  getCodebaseService(): ICodebaseService {
+    if (this.codebaseService === null) {
+      this.codebaseService = getCodebaseService();
+    }
+    return this.codebaseService;
+  }
+
+  /**
+   * 注入 CodebaseService 实例（仅测试用）
+   *
+   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 codegraph CLI。
+   * 传 null 清空缓存，下次 getCodebaseService() 会重新拿默认实现。
+   */
+  setCodebaseService(service: ICodebaseService | null): void {
+    this.codebaseService = service;
+  }
+
   /**
    * 应用退出时统一清理所有服务
    *
@@ -481,7 +523,15 @@ class ServiceContainer {
     resetGitService();
     this.gitService = null;
 
-    // 8. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 8. CodebaseService 无外部资源（每次调用 spawn codegraph 子进程在请求结束时退出），
+    //    dispose 是 no-op，但保持一致性便于未来扩展（如缓存查询结果）
+    if (this.codebaseService !== null) {
+      await this.codebaseService.dispose();
+    }
+    resetCodebaseService();
+    this.codebaseService = null;
+
+    // 9. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
     logger.info({}, '应用服务清理完成');
@@ -513,6 +563,8 @@ class ServiceContainer {
     this.terminalService = null;
     resetGitService();
     this.gitService = null;
+    resetCodebaseService();
+    this.codebaseService = null;
     resetAIProvider();
     resetConfigCache();
   }

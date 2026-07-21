@@ -167,10 +167,12 @@
         "**/src/main/infra/ai/chat-service.ts",
         "**/src/main/app/service-container.ts",
         "**/src/main/ipc/chat.handler.ts",
+        "**/src/main/ipc/codebase.handler.ts",
         "**/src/main/ipc/file.handler.ts",
         "**/src/main/ipc/search.handler.ts",
         "**/src/main/ipc/terminal.handler.ts",
         "**/src/main/ipc/git.handler.ts",
+        "**/src/main/infra/codebase/codebase-service.ts",
         "**/src/main/infra/file/file-service.ts",
         "**/src/main/infra/terminal/terminal-service.ts",
         "**/src/main/infra/git/git-service.ts"
