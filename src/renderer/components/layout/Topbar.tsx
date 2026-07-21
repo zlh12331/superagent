@@ -16,11 +16,11 @@
 // （数据库层删除后，Sidebar/Settings 均无业务内容可承载）。
 
 import { Moon, Sun } from 'lucide-react';
-import { useTheme } from 'next-themes';
 import type { ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { TOPBAR_HEIGHT } from '@/lib/constants';
+import { useTheme } from '@/providers/ThemeProvider';
 
 /**
  * 顶部栏组件

@@ -18,7 +18,8 @@
       "!**/playwright-report",
       "!**/test-results",
       "!**/playwright/.cache",
-      "!**/docs/design"
+      "!**/docs/design",
+      "!prototype-v2.html"
     ]
   },
   "formatter": {
