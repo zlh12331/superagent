@@ -130,6 +130,14 @@ export const IPC_CHANNELS = {
   CODEBASE_CALLEES: 'codebase:callees',
   // 请求-响应：影响分析（修改此符号会影响哪些代码）
   CODEBASE_IMPACT: 'codebase:impact',
+
+  // ── Settings 域（API Key / 敏感数据管理） ─────────
+  // 请求-响应：查询指定提供商的 API Key（返回明文或 null）
+  SETTINGS_GET_API_KEY: 'settings:getApiKey',
+  // 请求-响应：设置 API Key（主进程加密后存储到 keychain）
+  SETTINGS_SET_API_KEY: 'settings:setApiKey',
+  // 请求-响应：删除指定提供商的 API Key
+  SETTINGS_DELETE_API_KEY: 'settings:deleteApiKey',
 } as const;
 
 /** IPC Channel 字面量联合类型 */

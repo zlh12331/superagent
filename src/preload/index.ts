@@ -258,6 +258,17 @@ const api = {
     // 列出当前已注册的工具清单（含权限级别）
     list: (input) => invoke(IPC_CHANNELS.TOOL_LIST, input),
   },
+
+  // ── Settings 域（API Key 管理，请求-响应模式）──────────────
+  // 主进程通过 safeStorage 加密存储 API Key（Windows DPAPI / macOS Keychain / Linux libsecret）
+  settings: {
+    // 查询指定提供商的 API Key（未设置时返回 null）
+    getApiKey: (input) => invoke(IPC_CHANNELS.SETTINGS_GET_API_KEY, input),
+    // 设置 API Key（主进程加密后存储到 keychain）
+    setApiKey: (input) => invoke(IPC_CHANNELS.SETTINGS_SET_API_KEY, input),
+    // 删除指定提供商的 API Key
+    deleteApiKey: (input) => invoke(IPC_CHANNELS.SETTINGS_DELETE_API_KEY, input),
+  },
 } satisfies IpcApi;
 
 // 通过 contextBridge 暴露到渲染层的 window.api（contextIsolation: true 下唯一安全方式）

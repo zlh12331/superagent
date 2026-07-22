@@ -209,7 +209,8 @@
         "**/src/main/infra/ai/tool-registry.ts",
         "**/src/main/infra/ai/tool-executor.ts",
         "**/src/main/infra/ai/agent-service.ts",
-        "**/src/main/infra/ai/tools/**/*.ts"
+        "**/src/main/infra/ai/tools/**/*.ts",
+        "**/src/main/infra/ai/mcp/**/*.ts"
       ],
       "linter": {
         "rules": {

@@ -46,6 +46,17 @@ export interface IToolRegistry {
   register(tool: Tool): void;
 
   /**
+   * 注销工具
+   *
+   * 主要用于 MCP server 停止时移除其注册的工具。
+   * 不存在的工具名静默忽略（幂等）。
+   *
+   * @param name 工具名称
+   * @returns 是否成功移除（false 表示工具未注册）
+   */
+  unregister(name: string): boolean;
+
+  /**
    * 按名查找工具
    *
    * @param name 工具名称
@@ -113,6 +124,15 @@ export class ToolRegistry implements IToolRegistry {
 
     this.tools.set(toolInstance.name, toolInstance);
     logger.info({ toolName: toolInstance.name, permission: toolInstance.permission }, '工具已注册');
+  }
+
+  /** @inheritDoc */
+  unregister(name: string): boolean {
+    const existed = this.tools.delete(name);
+    if (existed) {
+      logger.info({ toolName: name }, '工具已注销');
+    }
+    return existed;
   }
 
   /** @inheritDoc */

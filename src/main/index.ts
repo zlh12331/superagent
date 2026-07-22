@@ -22,6 +22,7 @@ import { registerFileHandlers } from './ipc/file.handler';
 import { registerGitHandlers } from './ipc/git.handler';
 import { registerSearchHandlers } from './ipc/search.handler';
 import { registerSessionHandlers } from './ipc/session.handler';
+import { registerSettingsHandlers } from './ipc/settings.handler';
 import { registerTerminalHandlers } from './ipc/terminal.handler';
 import { registerToolHandlers } from './ipc/tool.handler';
 import { buildCsp } from './security/csp';
@@ -182,6 +183,11 @@ app.whenReady().then(() => {
   // 注册工具域 IPC handler（tool:list）
   // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 5 个内置工具）
   registerToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() });
+
+  // 注册 Settings 域 IPC handler（settings:getApiKey / setApiKey / deleteApiKey）
+  // 管理 API Key 等敏感数据，通过 safeStorage 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
+  // 无需 ServiceContainer 注入：直接调用 keychain 模块函数（无状态）
+  registerSettingsHandlers();
 
   // 注册 Agent 域 IPC handler（agent:run / agent:stop）
   // 通过 ServiceContainer 注入 IAgentService 实例（依赖 ToolRegistry + ToolExecutor）

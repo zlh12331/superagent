@@ -60,6 +60,17 @@ export interface ApprovalItem {
   readonly title: string;
   /** 详细描述（命令内容、文件路径、diff 内容等） */
   readonly description: string;
+  /**
+   * 工具原始入参（由主进程透传，结构由工具决定）
+   *
+   * 用于 UI 结构化展示：
+   * - run_command: { command, cwd?, timeout }
+   * - write_file: { path, content, append, createDirs }
+   * - edit_file: { path, oldString, newString, replaceAll }
+   *
+   * 类型为 unknown 以避免渲染层依赖主进程的工具入参类型。
+   */
+  readonly input: unknown;
   /** 创建时间戳（ms） */
   readonly createdAt: number;
   /** 决议时间戳（ms，pending 时为 null） */

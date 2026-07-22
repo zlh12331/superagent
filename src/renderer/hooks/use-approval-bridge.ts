@@ -9,7 +9,7 @@
 // 设计：
 // - 纯桥接层：不做业务决策（批准/拒绝由用户在 UI 中操作）
 // - toolName → ApprovalType 的映射规则集中在此 hook，UI 组件不感知工具名
-// - rememberDecision 当前固定为 false（P9 阶段引入"记住决策"复选框后再扩展）
+// - rememberDecision 由 ApprovalDialog 复选框传入，透传到主进程
 //
 // 数据流：
 //   主进程 ToolExecutor
@@ -100,7 +100,11 @@ function classifyTool(toolName: string): ApprovalType {
  */
 export function useApprovalBridge(): {
   /** 回传审批结果给主进程（approve=true 执行，approve=false 中止） */
-  readonly respondApproval: (approvalId: string, approved: boolean) => Promise<void>;
+  readonly respondApproval: (
+    approvalId: string,
+    approved: boolean,
+    rememberDecision?: boolean,
+  ) => Promise<void>;
 } {
   // 订阅 IPC approval:request 事件，将 payload 入队到 store
   useEffect(() => {
@@ -117,6 +121,7 @@ export function useApprovalBridge(): {
         type: classifyTool(typedPayload.toolName),
         title: typedPayload.toolName,
         description: typedPayload.description,
+        input: typedPayload.input,
         createdAt: Date.now(),
       });
     });
@@ -127,7 +132,11 @@ export function useApprovalBridge(): {
   // 使用 useMemo 缓存函数引用，避免子组件因 prop 引用变化无意义重渲染
   const respondApproval = useMemo(
     () =>
-      async (approvalId: string, approved: boolean): Promise<void> => {
+      async (
+        approvalId: string,
+        approved: boolean,
+        rememberDecision: boolean = false,
+      ): Promise<void> => {
         // 1. 更新本地 store 状态（从 pending 移到 resolved）
         if (approved) {
           useApprovalsStore.getState().approve(approvalId);
@@ -141,9 +150,9 @@ export function useApprovalBridge(): {
         await window.api.agent.approvalResponse({
           approvalId,
           approved,
-          // 当前阶段不提供"记住决策"能力，固定为 false
-          // P9 阶段引入复选框后从 UI 传入
-          rememberDecision: false,
+          // 由 ApprovalDialog 复选框传入：true 表示用户选择记住决策
+          // 主进程 PermissionService 收到后会缓存该决策供后续同类型工具调用复用
+          rememberDecision,
         });
       },
     [],

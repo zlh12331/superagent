@@ -251,6 +251,23 @@ export interface IpcApi {
     /** 列出当前已注册的工具清单（含权限级别，供渲染层展示工具面板） */
     list: IpcInvokeMethod<'tool:list'>;
   };
+
+  // ── Settings 域 API（API Key / 敏感数据管理） ────────
+  /**
+   * Settings 域 API
+   *
+   * 管理 API Key 等敏感数据，主进程通过 safeStorage 加密存储
+   * （Windows DPAPI / macOS Keychain / Linux libsecret）。
+   * 渲染层只读写明文，主进程透明加密。
+   */
+  settings: {
+    /** 查询指定提供商的 API Key（未设置时返回 null） */
+    getApiKey: IpcInvokeMethod<'settings:getApiKey'>;
+    /** 设置 API Key（主进程加密后存储到 keychain） */
+    setApiKey: IpcInvokeMethod<'settings:setApiKey'>;
+    /** 删除指定提供商的 API Key */
+    deleteApiKey: IpcInvokeMethod<'settings:deleteApiKey'>;
+  };
 }
 
 /** 全局 Window 接口扩展（渲染层通过 window.api 访问） */

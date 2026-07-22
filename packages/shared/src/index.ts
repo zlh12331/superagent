@@ -32,6 +32,7 @@ export * from './schemas/file';
 export * from './schemas/git';
 export * from './schemas/search';
 export * from './schemas/session';
+export * from './schemas/settings';
 export * from './schemas/terminal';
 export * from './schemas/tool';
 

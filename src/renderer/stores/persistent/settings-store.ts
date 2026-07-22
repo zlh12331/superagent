@@ -31,6 +31,16 @@ export interface AiSettings {
   readonly defaultModel: string;
   /** 温度（0-2，默认 0.7） */
   readonly temperature: number;
+  /**
+   * 自定义系统提示词（Code Agent 专用）
+   *
+   * 空字符串表示使用主进程内置默认 system prompt；
+   * 非空字符串会通过 AgentRunReq.systemPrompt 透传给主进程，
+   * 覆盖内置默认值。
+   *
+   * 用途：让用户自定义 Agent 行为（如"使用中文回复"、"专注于 TypeScript 代码"等）。
+   */
+  readonly systemPrompt: string;
 }
 
 /**
@@ -78,6 +88,7 @@ export const useSettingsStore = createPersistentStore<SettingsState>()(
     ai: {
       defaultModel: 'deepseek-v4-flash',
       temperature: 0.7,
+      systemPrompt: '',
     },
     editor: {
       fontSize: 14,

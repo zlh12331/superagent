@@ -46,6 +46,7 @@ import { AgentService, type IAgentService } from './infra/ai/agent-service';
 import { resetAIProvider } from './infra/ai/ai-provider';
 import type { IChatService } from './infra/ai/chat-service';
 import { getChatService, resetChatService } from './infra/ai/chat-service';
+import { type IMCPService, MCPService } from './infra/ai/mcp';
 import type { IPermissionService } from './infra/ai/permission-service';
 import { PermissionService } from './infra/ai/permission-service';
 import type { IToolExecutor } from './infra/ai/tool-executor';
@@ -289,6 +290,43 @@ class ServiceContainer {
     this.toolExecutor = executor;
   }
 
+  // ─── MCPService（多 MCP server 管理器） ───
+
+  /**
+   * MCPService 实例缓存
+   *
+   * 设计：由 ServiceContainer 直接 new MCPService（class 实现，依赖 IToolRegistry）。
+   * - 首次访问时延迟初始化，注入当前 ToolRegistry 实例
+   * - 测试可通过 setMcpService() 注入 mock 实现（不依赖真实子进程）
+   * - dispose 时调用 stopAll()，关闭所有 MCP server 子进程
+   *
+   * 依赖顺序：必须先 getToolRegistry，再初始化 MCPService
+   * （MCPService 通过 ToolRegistry.register / unregister 管理 MCP 工具）
+   */
+  private mcpService: IMCPService | null = null;
+
+  /**
+   * 获取 MCPService 实例
+   *
+   * 首次调用延迟初始化，注入当前 ToolRegistry 实例。
+   * MCPService 通过 ToolRegistry.register / unregister 管理 MCP 工具。
+   */
+  getMcpService(): IMCPService {
+    if (this.mcpService === null) {
+      this.mcpService = new MCPService(this.getToolRegistry());
+    }
+    return this.mcpService;
+  }
+
+  /**
+   * 注入 MCPService 实例（仅测试用）
+   *
+   * 传 null 清空缓存，下次 getMcpService() 会重新创建并注入当前 ToolRegistry。
+   */
+  setMcpService(service: IMCPService | null): void {
+    this.mcpService = service;
+  }
+
   // ─── AgentService（Code Agent 核心，多轮工具调用） ───
 
   /**
@@ -526,6 +564,15 @@ class ServiceContainer {
       await this.agentService.dispose();
     }
     this.agentService = null;
+
+    // 2.5 关闭 MCPService（停止所有 MCP server 子进程）
+    //     必须在 AgentService 停止后调用（避免活跃 agent 调用已停止的 MCP 工具）
+    //     必须在 ToolRegistry 清空之前调用（MCPService 内部会 unregister 工具，再 close client）
+    //     MCP server 子进程不关闭会导致进程退出延迟（stdio 子进程会保留在系统进程列表）
+    if (this.mcpService !== null) {
+      await this.mcpService.stopAll();
+    }
+    this.mcpService = null;
 
     // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
     //    ToolExecutor 与 ToolRegistry 无外部资源（仅 Map / 协调层），无需 dispose

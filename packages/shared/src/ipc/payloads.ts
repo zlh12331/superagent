@@ -77,6 +77,14 @@ import type {
   SessionRenameRes,
 } from '../schemas/session';
 import type {
+  DeleteApiKeyReqSchema,
+  DeleteApiKeyRes,
+  GetApiKeyReqSchema,
+  GetApiKeyRes,
+  SetApiKeyReqSchema,
+  SetApiKeyRes,
+} from '../schemas/settings';
+import type {
   TerminalCreateReqSchema,
   TerminalCreateRes,
   TerminalExitEventPayload,
@@ -272,6 +280,17 @@ export type SessionRenameReq = z.infer<typeof SessionRenameReqSchema>;
 /** tool:list 请求 payload：列出已注册工具清单（可按权限过滤） */
 export type ToolListReq = z.infer<typeof ToolListReqSchema>;
 
+// ─── Settings 域 Req 派生（API Key 管理） ─────────────────────
+
+/** settings:getApiKey 请求 payload：查询指定提供商的 API Key */
+export type GetApiKeyReq = z.infer<typeof GetApiKeyReqSchema>;
+
+/** settings:setApiKey 请求 payload：设置 API Key */
+export type SetApiKeyReq = z.infer<typeof SetApiKeyReqSchema>;
+
+/** settings:deleteApiKey 请求 payload：删除指定提供商的 API Key */
+export type DeleteApiKeyReq = z.infer<typeof DeleteApiKeyReqSchema>;
+
 // ─── IPC 类型映射 ─────────────────────────────────────────────
 
 /**
@@ -347,6 +366,12 @@ export interface IpcRequestMap {
   // 工具域（工具系统元数据查询）
   // tool:list 列出当前已注册的工具清单（含权限级别，供渲染层展示工具面板）
   'tool:list': { req: ToolListReq; res: ToolListRes };
+
+  // Settings 域（API Key / 敏感数据管理）
+  // settings:getApiKey 返回明文或 null，settings:setApiKey 加密后存储，settings:deleteApiKey 删除
+  'settings:getApiKey': { req: GetApiKeyReq; res: GetApiKeyRes };
+  'settings:setApiKey': { req: SetApiKeyReq; res: SetApiKeyRes };
+  'settings:deleteApiKey': { req: DeleteApiKeyReq; res: DeleteApiKeyRes };
 }
 
 /**
