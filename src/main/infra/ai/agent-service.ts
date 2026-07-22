@@ -1,4 +1,4 @@
-// src/main/infra/agent/agent-service.ts
+// src/main/infra/ai/agent-service.ts
 // AgentService：Code Agent 核心服务，封装 streamText + tools + stopWhen 多轮工具调用循环
 // ──────────────────────────────────────────────────────────────
 // 职责：

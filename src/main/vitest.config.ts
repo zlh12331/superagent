@@ -9,7 +9,6 @@ export default defineConfig({
     // 启用 globals：允许 describe/it/expect 无需显式 import
     globals: true,
     // 测试文件位置：与源码同目录（colocation 模式）
-    // 同时覆盖 __tests__/ 集中目录与源码同级 colocation 两种风格
     include: ['**/*.test.ts'],
     // 覆盖率收集（设计文档 §8.6 覆盖率 CI 卡关）
     coverage: {

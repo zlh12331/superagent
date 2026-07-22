@@ -1,4 +1,4 @@
-// src/main/__tests__/keychain.test.ts
+// src/main/infra/storage/keychain.test.ts
 // keychain 加密存储单测
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -34,7 +34,7 @@ vi.mock('node:fs', () => ({
   promises: fsMocks,
 }));
 
-import { deleteSecret, getSecret, listSecrets, setSecret } from '../infra/storage/keychain';
+import { deleteSecret, getSecret, listSecrets, setSecret } from './keychain';
 
 describe('keychain', () => {
   beforeEach(() => {

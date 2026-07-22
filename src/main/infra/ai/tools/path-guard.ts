@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/path-guard.ts
+// src/main/infra/ai/tools/path-guard.ts
 // 路径安全守卫：统一处理 LLM 输入路径到绝对路径的解析与边界检查
 // ──────────────────────────────────────────────────────────────
 // 职责：

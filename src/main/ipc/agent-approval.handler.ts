@@ -24,7 +24,7 @@ import {
   AgentApprovalResponseReqSchema,
   IPC_CHANNELS,
 } from '@novel-writer/shared';
-import type { IPermissionService } from '../infra/agent/permission-service';
+import type { IPermissionService } from '../infra/ai/permission-service';
 import { wrap } from '../utils/wrap';
 
 /**

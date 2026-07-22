@@ -1,4 +1,4 @@
-// src/main/infra/agent/tool.ts
+// src/main/infra/ai/tool.ts
 // Tool 接口与执行上下文（Code Agent 工具系统核心抽象）
 // ──────────────────────────────────────────────────────────────
 // 职责：

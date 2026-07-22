@@ -150,7 +150,7 @@
       }
     },
     {
-      "includes": ["**/src/main/__tests__/*.test.ts"],
+      "includes": ["**/src/main/**/*.test.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -165,7 +165,7 @@
     {
       "includes": [
         "**/src/main/infra/ai/chat-service.ts",
-        "**/src/main/app/service-container.ts",
+        "**/src/main/service-container.ts",
         "**/src/main/ipc/chat.handler.ts",
         "**/src/main/ipc/codebase.handler.ts",
         "**/src/main/ipc/file.handler.ts",
@@ -204,12 +204,12 @@
     },
     {
       "includes": [
-        "**/src/main/infra/agent/tool.ts",
-        "**/src/main/infra/agent/permission-service.ts",
-        "**/src/main/infra/agent/tool-registry.ts",
-        "**/src/main/infra/agent/tool-executor.ts",
-        "**/src/main/infra/agent/agent-service.ts",
-        "**/src/main/infra/agent/tools/**/*.ts"
+        "**/src/main/infra/ai/tool.ts",
+        "**/src/main/infra/ai/permission-service.ts",
+        "**/src/main/infra/ai/tool-registry.ts",
+        "**/src/main/infra/ai/tool-executor.ts",
+        "**/src/main/infra/ai/agent-service.ts",
+        "**/src/main/infra/ai/tools/**/*.ts"
       ],
       "linter": {
         "rules": {

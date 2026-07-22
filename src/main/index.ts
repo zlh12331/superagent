@@ -11,7 +11,6 @@
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { app, BrowserWindow, session, shell } from 'electron';
-import { disposeServices, serviceContainer } from './app/service-container';
 import { getAppConfig } from './config';
 import { initDb } from './infra/storage/db';
 import { registerAgentHandlers } from './ipc/agent.handler';
@@ -26,6 +25,7 @@ import { registerSessionHandlers } from './ipc/session.handler';
 import { registerTerminalHandlers } from './ipc/terminal.handler';
 import { registerToolHandlers } from './ipc/tool.handler';
 import { buildCsp } from './security/csp';
+import { disposeServices, serviceContainer } from './service-container';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入

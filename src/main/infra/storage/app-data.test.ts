@@ -1,4 +1,4 @@
-// src/main/__tests__/app-data.test.ts
+// src/main/infra/storage/app-data.test.ts
 // app-data 路径管理单测
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,7 +22,7 @@ import {
   getKeychainPath,
   getLogsPath,
   getUserDataPath,
-} from '../infra/storage/app-data';
+} from './app-data';
 
 // mockGetPath('userData') 的返回值
 // 注意：使用 path.join 构建期望值，确保跨平台路径分隔符一致

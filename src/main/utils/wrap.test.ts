@@ -1,4 +1,4 @@
-// src/main/__tests__/wrap.test.ts
+// src/main/utils/wrap.test.ts
 // wrap IPC handler 包装器单测
 // 设计文档 §4.7（IPC sender 校验 + traceId 贯穿）、§7.4（错误处理流程）
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,7 +28,7 @@ vi.mock('electron', () => ({
 }));
 
 // mock logger（避免触发真实 electron-log 初始化）
-vi.mock('../utils/logger', () => ({
+vi.mock('./logger', () => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock('../utils/logger', () => ({
 import { AppError, ErrorCode } from '@novel-writer/shared';
 import * as Sentry from '@sentry/electron/main';
 import { ipcMain } from 'electron';
-import { wrap } from '../utils/wrap';
+import { wrap } from './wrap';
 
 /**
  * 内部 handler 类型：放宽 event 类型以方便测试构造 mockEvent

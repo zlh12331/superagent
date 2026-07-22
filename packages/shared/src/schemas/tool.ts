@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 集中定义 Tool 域 zod schema 与 TypeScript 接口，作为工具系统的类型契约
-// - 不直接定义 Tool 接口本身（Tool 接口在主进程 main/infra/agent/tool.ts 中定义，
+// - 不直接定义 Tool 接口本身（Tool 接口在主进程 main/infra/ai/tool.ts 中定义，
 //   依赖 ZodType 与 execute 函数，属于主进程范畴）
 // - 本文件只定义可跨进程共享的元数据类型（ToolPermission / ToolDescriptor /
 //   ToolError / ToolResult / ToolListReq / ToolListRes）

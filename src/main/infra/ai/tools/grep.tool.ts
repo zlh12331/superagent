@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/grep.tool.ts
+// src/main/infra/ai/tools/grep.tool.ts
 // grep 工具：封装 SearchService.grep，供 Code Agent 在文件内容中搜索匹配
 // ──────────────────────────────────────────────────────────────
 // 职责：

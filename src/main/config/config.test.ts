@@ -1,4 +1,4 @@
-// src/main/__tests__/config.test.ts
+// src/main/config/config.test.ts
 // config 单元测试（P2-8 环境分层：dev/prod/test）
 //
 // 测试要点：
@@ -9,7 +9,7 @@
 // 5. getAppConfig 单例 + resetConfigCache 重置
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getAppConfig, resetConfigCache } from '../config/index';
+import { getAppConfig, resetConfigCache } from './index';
 
 // Vitest 4 的 vi.mock 会被 hoist 到文件顶部，工厂函数内不能直接引用外部 const 变量
 // 必须用 vi.hoisted 导出 mock 对象

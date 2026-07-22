@@ -1,4 +1,4 @@
-// src/main/infra/agent/tool-registry.ts
+// src/main/infra/ai/tool-registry.ts
 // 工具注册表：管理工具的注册、查找与转换为 AI SDK 格式
 // ──────────────────────────────────────────────────────────────
 // 职责：

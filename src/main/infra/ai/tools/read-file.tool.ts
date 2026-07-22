@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/read-file.tool.ts
+// src/main/infra/ai/tools/read-file.tool.ts
 // read_file 工具：封装 FileService.read，供 Code Agent 读取文件内容
 // ──────────────────────────────────────────────────────────────
 // 职责：

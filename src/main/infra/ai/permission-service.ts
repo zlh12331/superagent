@@ -1,4 +1,4 @@
-// src/main/infra/agent/permission-service.ts
+// src/main/infra/ai/permission-service.ts
 // 权限服务：工具调用的权限决策与审批管理
 // ──────────────────────────────────────────────────────────────
 // 职责：

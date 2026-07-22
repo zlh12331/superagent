@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/list-directory.tool.ts
+// src/main/infra/ai/tools/list-directory.tool.ts
 // list_directory 工具：封装 FileService.list，供 Code Agent 列出目录内容
 // ──────────────────────────────────────────────────────────────
 // 职责：

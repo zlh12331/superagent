@@ -1,4 +1,4 @@
-// src/main/app/service-container.ts
+// src/main/service-container.ts
 // ServiceContainer：应用单例统一生命周期管理入口
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
@@ -41,32 +41,32 @@
 // - 各模块内部已处理 null 检查，本模块无需重复判空
 // - 幂等：多次调用 disposeServices 安全
 
-import { resetConfigCache } from '../config';
-import { AgentService, type IAgentService } from '../infra/agent/agent-service';
-import type { IPermissionService } from '../infra/agent/permission-service';
-import { PermissionService } from '../infra/agent/permission-service';
-import type { IToolExecutor } from '../infra/agent/tool-executor';
-import { ToolExecutor } from '../infra/agent/tool-executor';
-import type { IToolRegistry } from '../infra/agent/tool-registry';
-import { ToolRegistry } from '../infra/agent/tool-registry';
-import { registerBuiltinTools } from '../infra/agent/tools';
-import { resetAIProvider } from '../infra/ai/ai-provider';
-import type { IChatService } from '../infra/ai/chat-service';
-import { getChatService, resetChatService } from '../infra/ai/chat-service';
-import type { ICodebaseService } from '../infra/codebase/codebase-service';
-import { getCodebaseService, resetCodebaseService } from '../infra/codebase/codebase-service';
-import type { IFileService } from '../infra/file/file-service';
-import { getFileService, resetFileService } from '../infra/file/file-service';
-import type { IGitService } from '../infra/git/git-service';
-import { getGitService, resetGitService } from '../infra/git/git-service';
-import type { ISearchService } from '../infra/search/search-service';
-import { getSearchService, resetSearchService } from '../infra/search/search-service';
-import { closeDb, resetDb } from '../infra/storage/db';
-import type { ISessionService } from '../infra/storage/session-service';
-import { getSessionService, resetSessionService } from '../infra/storage/session-service';
-import type { ITerminalService } from '../infra/terminal/terminal-service';
-import { getTerminalService, resetTerminalService } from '../infra/terminal/terminal-service';
-import { logger } from '../utils/logger';
+import { resetConfigCache } from './config';
+import { AgentService, type IAgentService } from './infra/ai/agent-service';
+import { resetAIProvider } from './infra/ai/ai-provider';
+import type { IChatService } from './infra/ai/chat-service';
+import { getChatService, resetChatService } from './infra/ai/chat-service';
+import type { IPermissionService } from './infra/ai/permission-service';
+import { PermissionService } from './infra/ai/permission-service';
+import type { IToolExecutor } from './infra/ai/tool-executor';
+import { ToolExecutor } from './infra/ai/tool-executor';
+import type { IToolRegistry } from './infra/ai/tool-registry';
+import { ToolRegistry } from './infra/ai/tool-registry';
+import { registerBuiltinTools } from './infra/ai/tools';
+import type { ICodebaseService } from './infra/codebase/codebase-service';
+import { getCodebaseService, resetCodebaseService } from './infra/codebase/codebase-service';
+import type { IFileService } from './infra/file/file-service';
+import { getFileService, resetFileService } from './infra/file/file-service';
+import type { IGitService } from './infra/git/git-service';
+import { getGitService, resetGitService } from './infra/git/git-service';
+import type { ISearchService } from './infra/search/search-service';
+import { getSearchService, resetSearchService } from './infra/search/search-service';
+import { closeDb, resetDb } from './infra/storage/db';
+import type { ISessionService } from './infra/storage/session-service';
+import { getSessionService, resetSessionService } from './infra/storage/session-service';
+import type { ITerminalService } from './infra/terminal/terminal-service';
+import { getTerminalService, resetTerminalService } from './infra/terminal/terminal-service';
+import { logger } from './utils/logger';
 
 /**
  * 服务容器：持有应用核心服务实例

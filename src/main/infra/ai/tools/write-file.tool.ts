@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/write-file.tool.ts
+// src/main/infra/ai/tools/write-file.tool.ts
 // write_file 工具：封装 FileService.write，供 Code Agent 写入文件
 // ──────────────────────────────────────────────────────────────
 // 职责：

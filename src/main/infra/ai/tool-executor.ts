@@ -1,4 +1,4 @@
-// src/main/infra/agent/tool-executor.ts
+// src/main/infra/ai/tool-executor.ts
 // 工具执行器：统一工具执行入口，整合权限检查与审批流程
 // ──────────────────────────────────────────────────────────────
 // 职责：

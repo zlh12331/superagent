@@ -1,4 +1,4 @@
-// src/main/__tests__/logger.test.ts
+// src/main/utils/logger.test.ts
 // logger 单元测试
 // 注意：electron-log 在测试环境 mock 为内存缓冲，验证日志格式与级别
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,7 +30,7 @@ vi.mock('electron', () => ({
   app: { isPackaged: false, getPath: vi.fn(() => '/tmp/test-userdata') },
 }));
 
-import { initLogger, logger, registerGlobalErrorHandlers } from '../utils/logger';
+import { initLogger, logger, registerGlobalErrorHandlers } from './logger';
 
 describe('logger', () => {
   beforeEach(() => {

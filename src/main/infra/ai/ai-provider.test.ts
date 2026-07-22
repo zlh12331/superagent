@@ -1,4 +1,4 @@
-// src/main/__tests__/ai-provider.test.ts
+// src/main/infra/ai/ai-provider.test.ts
 // ai-provider 单测：@ai-sdk/openai-compatible 工厂 + keychain 读取 + 单例缓存
 //
 // 测试要点：
@@ -65,12 +65,12 @@ vi.mock('@ai-sdk/openai-compatible', () => ({
 }));
 
 // mock keychain：拦截 getSecret，避免真实文件 IO
-vi.mock('../infra/storage/keychain', () => ({
+vi.mock('../storage/keychain', () => ({
   getSecret: mocks.mockGetSecret,
 }));
 
 // mock logger：避免触发真实 electron-log 初始化
-vi.mock('../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
@@ -78,12 +78,12 @@ vi.mock('../utils/logger', () => ({
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 
 // mock config：直接返回固定配置，避免 env 污染
-vi.mock('../config', () => ({
+vi.mock('../../config', () => ({
   getAppConfig: mocks.mockGetAppConfig,
   resetConfigCache: mocks.mockResetConfigCache,
 }));
 
-import { getAIProvider, getModel, resetAIProvider } from '../infra/ai/ai-provider';
+import { getAIProvider, getModel, resetAIProvider } from './ai-provider';
 
 describe('ai-provider', () => {
   beforeEach(() => {

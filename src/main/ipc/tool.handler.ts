@@ -17,7 +17,7 @@ import {
   ToolListReqSchema,
   type ToolListRes,
 } from '@novel-writer/shared';
-import type { IToolRegistry } from '../infra/agent/tool-registry';
+import type { IToolRegistry } from '../infra/ai/tool-registry';
 import { wrap } from '../utils/wrap';
 
 /**

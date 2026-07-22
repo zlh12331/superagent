@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/index.ts
+// src/main/infra/ai/tools/index.ts
 // 工具系统 barrel 导出：统一注册入口与工具工厂函数
 // ──────────────────────────────────────────────────────────────
 // 职责：

@@ -1,4 +1,4 @@
-// src/main/__tests__/chat-service.test.ts
+// src/main/infra/ai/chat-service.test.ts
 // chat-service 单测：streamText + toUIMessageStream + abort + 错误分类
 //
 // 测试要点：
@@ -58,12 +58,12 @@ vi.mock('ai', async (importOriginal) => {
 });
 
 // mock ai-provider：拦截 getModel，避免触发 keychain/config
-vi.mock('../infra/ai/ai-provider', () => ({
+vi.mock('./ai-provider', () => ({
   getModel: mocks.mockGetModel,
 }));
 
 // mock logger：避免触发真实 electron-log 初始化
-vi.mock('../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
@@ -72,7 +72,7 @@ vi.mock('node:crypto', () => ({
   randomUUID: mocks.mockRandomUUID,
 }));
 
-import { getChatService, resetChatService } from '../infra/ai/chat-service';
+import { getChatService, resetChatService } from './chat-service';
 
 /**
  * 创建 mock ReadableStream：按顺序推送 parts 后 close

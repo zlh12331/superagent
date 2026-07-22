@@ -34,7 +34,7 @@ import {
   type AgentStopRes,
   IPC_CHANNELS,
 } from '@novel-writer/shared';
-import type { IAgentService } from '../infra/agent/agent-service';
+import type { IAgentService } from '../infra/ai/agent-service';
 import { wrap } from '../utils/wrap';
 
 /**

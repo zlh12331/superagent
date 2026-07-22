@@ -1,4 +1,4 @@
-// src/main/infra/agent/tools/glob.tool.ts
+// src/main/infra/ai/tools/glob.tool.ts
 // glob 工具：封装 SearchService.glob，供 Code Agent 按文件名模式查找文件
 // ──────────────────────────────────────────────────────────────
 // 职责：

@@ -1,9 +1,9 @@
-// src/main/__tests__/retry.test.ts
+// src/main/utils/retry.test.ts
 // retry 工具单测
 
 import { AppError, ErrorCode } from '@novel-writer/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { isRetryableError, retry } from '../utils/retry';
+import { isRetryableError, retry } from './retry';
 
 describe('isRetryableError', () => {
   it('retryable=true 的 AppError 返回 true', () => {
