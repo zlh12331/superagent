@@ -33,6 +33,20 @@ vi.mock('../utils/wrap', () => ({
 
 import { registerDialogHandlers } from './dialog.handler';
 
+/**
+ * 取出 dialog:pickDirectory handler，若未注册则显式抛错。
+ *
+ * 避免使用非空断言 `handler!`（biome lint/style/noNonNullAssertion），
+ * 同时保证 handler 为 undefined 时测试有明确的失败原因，而非静默通过。
+ */
+function getPickDirHandler(): (input: unknown) => Promise<unknown> {
+  const handler = testHandlers['dialog:pickDirectory'];
+  if (handler === undefined) {
+    throw new Error('dialog:pickDirectory handler not registered');
+  }
+  return handler;
+}
+
 describe('dialog.handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,10 +59,7 @@ describe('dialog.handler', () => {
       filePaths: ['D:\\selected'],
     } as OpenDialogReturnValue);
 
-    const handler = testHandlers['dialog:pickDirectory'];
-    expect(handler).toBeDefined();
-
-    const result = await handler!({});
+    const result = await getPickDirHandler()({});
     expect(result).toEqual({ canceled: false, path: 'D:\\selected' });
   });
 
@@ -58,9 +69,7 @@ describe('dialog.handler', () => {
       filePaths: ['D:\\a', 'D:\\b'],
     } as OpenDialogReturnValue);
 
-    const handler = testHandlers['dialog:pickDirectory'];
-
-    const result = await handler!({});
+    const result = await getPickDirHandler()({});
     expect(result).toEqual({ canceled: false, path: 'D:\\a' });
   });
 
@@ -70,9 +79,7 @@ describe('dialog.handler', () => {
       filePaths: [],
     } as OpenDialogReturnValue);
 
-    const handler = testHandlers['dialog:pickDirectory'];
-
-    const result = await handler!({});
+    const result = await getPickDirHandler()({});
     expect(result).toEqual({ canceled: true });
     expect((result as { path?: string }).path).toBeUndefined();
   });
@@ -83,9 +90,7 @@ describe('dialog.handler', () => {
       filePaths: [],
     } as OpenDialogReturnValue);
 
-    const handler = testHandlers['dialog:pickDirectory'];
-
-    const result = await handler!({});
+    const result = await getPickDirHandler()({});
     expect(result).toEqual({ canceled: true });
   });
 });
