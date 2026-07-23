@@ -29,12 +29,13 @@ import type {
   ChatMessage,
   SessionDeleteRes,
   SessionGetRes,
+  SessionListRecentDirsRes,
   SessionListRes,
   SessionMeta,
   SessionRenameRes,
 } from '@novel-writer/shared';
 import { AppError, ErrorCode } from '@novel-writer/shared';
-import { count, desc, eq } from 'drizzle-orm';
+import { count, desc, eq, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb } from './db';
 import { type MessageInsert, messages, type SessionInsert, sessions } from './schema';
@@ -47,6 +48,12 @@ import { type MessageInsert, messages, type SessionInsert, sessions } from './sc
  * - 渲染层若需要"先创建空会话再发消息"模式，可省略 initialMessages
  */
 export interface SessionCreateOptions {
+  /**
+   * 项目工作目录（绝对路径，必填）
+   *
+   * 限制 agent 工具操作的根目录，每个会话绑定独立 workingDir。
+   */
+  readonly workingDir: string;
   /**
    * 可选标题
    *
@@ -102,6 +109,9 @@ export interface ISessionService {
   /** 向指定会话追加消息（seq 自动递增），返回追加后的消息总数 */
   appendMessage(options: SessionAppendMessageOptions): Promise<number>;
 
+  /** 查询最近使用的目录列表（去重 + 按 lastUsed 倒序） */
+  listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes>;
+
   /** 优雅关闭（无外部资源，db 由 closeDb 在 ServiceContainer.dispose 中关闭） */
   dispose(): Promise<void>;
 }
@@ -141,7 +151,7 @@ const LAST_MESSAGE_PREVIEW_LENGTH = 100;
  * - db.delete(...).where(...).run()
  * - db.transaction(() => { ... }) 事务包裹复合操作
  */
-class SessionService implements ISessionService {
+export class SessionService implements ISessionService {
   /**
    * 分页列出所有会话
    *
@@ -300,6 +310,7 @@ class SessionService implements ISessionService {
         updatedAt: now,
         lastMessage: lastMessagePreview,
         messageCount: initialMessages.length,
+        workingDir: options.workingDir,
       };
       tx.insert(sessions).values(sessionInsert).run();
 
@@ -401,6 +412,37 @@ class SessionService implements ISessionService {
   async dispose(): Promise<void> {
     // 无操作
   }
+
+  /**
+   * 查询最近使用的目录列表
+   *
+   * 从 sessions 表查询去重后的 workingDir,按最后使用时间倒序。
+   * 空字符串 workingDir 被过滤(旧 chat 会话兼容)。
+   *
+   * @param req.limit 返回条数上限(已由 zod schema 校验 1-50)
+   */
+  async listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes> {
+    const db = getDb();
+    const { limit } = req;
+
+    // 原始 SQL 查询:去重 + 取 MAX(updated_at) + 过滤空字符串 + 倒序
+    // 列别名使用 camelCase 以符合 biome useNamingConvention 规则
+    const rows = db.all<{ workingDir: string; lastUsed: number }>(
+      sql`SELECT DISTINCT working_dir as workingDir, MAX(updated_at) as lastUsed
+          FROM sessions
+          WHERE working_dir != ''
+          GROUP BY working_dir
+          ORDER BY lastUsed DESC
+          LIMIT ${limit}`,
+    );
+
+    return {
+      dirs: rows.map((row) => ({
+        workingDir: row.workingDir,
+        lastUsed: row.lastUsed,
+      })),
+    };
+  }
 }
 
 // ─── 辅助函数（模块私有，不导出） ──────────────────────────────
@@ -420,6 +462,7 @@ function rowToMeta(row: typeof sessions.$inferSelect): SessionMeta {
     updatedAt: row.updatedAt,
     lastMessage: row.lastMessage ?? undefined,
     messageCount: row.messageCount,
+    workingDir: row.workingDir,
   };
 }
 
