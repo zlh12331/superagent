@@ -167,8 +167,8 @@ const api = {
   },
 
   // ── 会话域（SQLite 持久化，请求-响应模式）──────────────────
-  // SessionService 提供 list/get/delete/rename 四个 IPC 方法
-  // create/appendMessage 是内部 API（供主进程 AgentService 调用），不通过 IPC 暴露
+  // SessionService 提供 list/get/delete/rename/create/listRecentDirs 六个 IPC 方法
+  // appendMessage 是内部 API（供主进程 AgentService 调用），不通过 IPC 暴露
   session: {
     // 列出会话（分页查询，按 updatedAt 倒序）
     list: (input) => invoke(IPC_CHANNELS.SESSION_LIST, input),
@@ -178,6 +178,10 @@ const api = {
     delete: (input) => invoke(IPC_CHANNELS.SESSION_DELETE, input),
     // 重命名会话标题
     rename: (input) => invoke(IPC_CHANNELS.SESSION_RENAME, input),
+    // 创建新会话（绑定 workingDir，空会话）
+    create: (input) => invoke(IPC_CHANNELS.SESSION_CREATE, input),
+    // 查询最近使用的目录列表（去重 + 按 lastUsed 倒序）
+    listRecentDirs: (input) => invoke(IPC_CHANNELS.SESSION_LIST_RECENT_DIRS, input),
   },
 
   // ── 文件域（文件读写 + 目录列表 + 文件监听，混合模式）────────
@@ -259,8 +263,9 @@ const api = {
     list: (input) => invoke(IPC_CHANNELS.TOOL_LIST, input),
   },
 
-  // ── Settings 域（API Key 管理，请求-响应模式）──────────────
+  // ── Settings 域（API Key 管理 + 遥测级别开关，请求-响应模式）──
   // 主进程通过 safeStorage 加密存储 API Key（Windows DPAPI / macOS Keychain / Linux libsecret）
+  // 遥测级别存储在 userData/telemetry-pref.json（明文，非敏感数据）
   settings: {
     // 查询指定提供商的 API Key（未设置时返回 null）
     getApiKey: (input) => invoke(IPC_CHANNELS.SETTINGS_GET_API_KEY, input),
@@ -268,6 +273,39 @@ const api = {
     setApiKey: (input) => invoke(IPC_CHANNELS.SETTINGS_SET_API_KEY, input),
     // 删除指定提供商的 API Key
     deleteApiKey: (input) => invoke(IPC_CHANNELS.SETTINGS_DELETE_API_KEY, input),
+    // 查询遥测级别（off / error-only / full）
+    getTelemetryLevel: () => invoke(IPC_CHANNELS.SETTINGS_GET_TELEMETRY_LEVEL),
+    // 设置遥测级别（修改后需重启应用生效）
+    setTelemetryLevel: (input) => invoke(IPC_CHANNELS.SETTINGS_SET_TELEMETRY_LEVEL, input),
+  },
+
+  // ── System 域（运行时可观测性，请求-响应模式）──────────
+  // DevPanel 的 Metrics tab + Logs tab 通过此域获取运行时数据
+  system: {
+    // 查询运行时状态（内存/CPU/uptime/版本），无入参
+    getStatus: () => invoke(IPC_CHANNELS.SYSTEM_GET_STATUS),
+  },
+
+  // ── Logs 域（日志查看器，请求-响应模式）────────────────
+  // 主进程从 main.log 文件尾部按块倒读，避免大文件全量加载
+  logs: {
+    // 读取最近 N 行日志（入参全可选，默认 200 行不过滤级别）
+    read: (input) => invoke(IPC_CHANNELS.LOGS_READ, input),
+  },
+
+  // ── DevTools 域（开发者工具集成，请求-响应模式）──────────
+  // 打开 Chromium DevTools，主进程调用 webContents.openDevTools({ mode })
+  // mode 默认 'detach' 独立窗口；'right'/'bottom' 停靠主窗口
+  devtools: {
+    // 打开 DevTools（已打开时聚焦原窗口，不会重复打开）
+    open: (input) => invoke(IPC_CHANNELS.DEVTOOLS_OPEN, input),
+  },
+
+  // ── Dialog 域（原生对话框，请求-响应模式）──────────────────
+  // 原生系统对话框封装，当前仅支持目录选择器
+  dialog: {
+    // 弹出原生目录选择器，返回选中路径或 canceled
+    pickDirectory: (input) => invoke(IPC_CHANNELS.DIALOG_PICK_DIRECTORY, input),
   },
 } satisfies IpcApi;
 
