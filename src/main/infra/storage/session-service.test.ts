@@ -181,9 +181,9 @@ describe('SessionService', () => {
 
       const result = await service.listRecentDirs({ limit: 10 });
       expect(result.dirs).toHaveLength(3);
-      expect(result.dirs[0].workingDir).toBe('D:\\proj3');
-      expect(result.dirs[1].workingDir).toBe('D:\\proj2');
-      expect(result.dirs[2].workingDir).toBe('D:\\proj1');
+      expect(result.dirs[0]?.workingDir).toBe('D:\\proj3');
+      expect(result.dirs[1]?.workingDir).toBe('D:\\proj2');
+      expect(result.dirs[2]?.workingDir).toBe('D:\\proj1');
     });
 
     it('边界：多个会话共享同一 workingDir(5 条) → 去重返回 1 条, lastUsed=MAX', async () => {
@@ -196,8 +196,8 @@ describe('SessionService', () => {
 
       const result = await service.listRecentDirs({ limit: 10 });
       expect(result.dirs).toHaveLength(1);
-      expect(result.dirs[0].workingDir).toBe('D:\\shared');
-      expect(result.dirs[0].lastUsed).toBe(baseTime + 4000);
+      expect(result.dirs[0]?.workingDir).toBe('D:\\shared');
+      expect(result.dirs[0]?.lastUsed).toBe(baseTime + 4000);
     });
 
     it('边界：5 个不同 workingDir, limit=2 → 返回 2 条(最近使用)', async () => {
@@ -210,8 +210,8 @@ describe('SessionService', () => {
 
       const result = await service.listRecentDirs({ limit: 2 });
       expect(result.dirs).toHaveLength(2);
-      expect(result.dirs[0].workingDir).toBe('D:\\proj4');
-      expect(result.dirs[1].workingDir).toBe('D:\\proj3');
+      expect(result.dirs[0]?.workingDir).toBe('D:\\proj4');
+      expect(result.dirs[1]?.workingDir).toBe('D:\\proj3');
     });
 
     it('异常：无会话(空表) → 返回 { dirs: [] }, 不报错', async () => {
