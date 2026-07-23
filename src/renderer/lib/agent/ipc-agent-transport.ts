@@ -169,9 +169,9 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         // 触发主进程 agent:run（异步推送 part）
         const response = await window.api.agent.run({
           messages: chatMessages,
-          // 当前实现：每次 sendMessages 都视为新会话（sessionId: undefined）
-          // 主进程生成新 sessionId 并通过 IPC 推送事件
-          sessionId: undefined,
+          // 传入 chatId 作为 sessionId：让主进程关联到持久化的会话
+          // （messages 落库 + workingDir 校验 + 事件按 sessionId 过滤）
+          sessionId: options.chatId,
           workingDir,
           systemPrompt,
           maxSteps: maxSteps ?? 20,
