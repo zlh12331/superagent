@@ -98,7 +98,8 @@ export function initDb(): DrizzleDB {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       last_message TEXT,
-      message_count INTEGER NOT NULL DEFAULT 0
+      message_count INTEGER NOT NULL DEFAULT 0,
+      working_dir TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -113,6 +114,19 @@ export function initDb(): DrizzleDB {
     CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
   `);
+
+  // 迁移：已存在的数据库加 working_dir 列（幂等）
+  // 新库建表时已包含此列，ALTER 仅对老库生效
+  // "duplicate column name" 错误表示列已存在，忽略即可
+  try {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN working_dir TEXT NOT NULL DEFAULT '';`);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('duplicate column name')) {
+      logger.info({}, 'sessions.working_dir 列已存在，跳过 ALTER');
+    } else {
+      throw err;
+    }
+  }
 
   dbInstance = db;
   sqliteInstance = sqlite;
