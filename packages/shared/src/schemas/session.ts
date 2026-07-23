@@ -47,6 +47,8 @@ export const SessionMetaSchema = z.object({
     .transform((v) => v ?? undefined),
   // 消息数量
   messageCount: z.number().int().nonnegative(),
+  // 会话级项目工作目录（绝对路径，agent 工具操作边界）
+  workingDir: z.string(),
 });
 
 /** 会话元数据类型 */
@@ -97,4 +99,36 @@ export const SessionRenameReqSchema = z.object({
 /** session:rename 响应 payload */
 export interface SessionRenameRes {
   readonly ok: boolean;
+}
+
+/** session:create 入参 zod schema */
+export const SessionCreateReqSchema = z.object({
+  // 项目工作目录（绝对路径，非空字符串）
+  workingDir: z.string().min(1),
+  // 可选标题（省略时由 SessionService 自动生成）
+  title: z.string().min(1).max(100).optional(),
+});
+
+/** session:create 响应 payload */
+export interface SessionCreateRes {
+  readonly sessionId: string;
+}
+
+/** session:listRecentDirs 入参 zod schema */
+export const SessionListRecentDirsReqSchema = z.object({
+  // 返回条数上限（默认 10，上限 50）
+  limit: z.number().int().positive().max(50).default(10),
+});
+
+/** 最近目录列表单项 */
+export interface RecentDir {
+  /** 项目工作目录（绝对路径） */
+  readonly workingDir: string;
+  /** 最后使用时间（Unix timestamp 毫秒） */
+  readonly lastUsed: number;
+}
+
+/** session:listRecentDirs 响应 payload */
+export interface SessionListRecentDirsRes {
+  readonly dirs: readonly RecentDir[];
 }
