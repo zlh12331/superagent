@@ -54,6 +54,10 @@ export function useSessionsQuery() {
   return useQuery({
     queryKey: SESSIONS_QUERY_KEY,
     queryFn: async () => {
+      // E2E 浏览器模式下 window.api 未注入（无 preload），返回空列表
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { sessions: [], total: 0 };
+      }
       const response = await window.api.session.list({
         limit: DEFAULT_PAGE_SIZE,
         offset: 0,
@@ -188,6 +192,72 @@ export function useRenameSession() {
     onSuccess: () => {
       // 失效会话列表缓存，触发重新拉取
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message);
+    },
+  });
+}
+
+/** 最近目录列表 query key */
+export const RECENT_DIRS_QUERY_KEY = ['session', 'recent-dirs'] as const;
+
+/**
+ * 最近目录列表查询 hook
+ *
+ * 调用 session:listRecentDirs IPC 获取去重后的最近使用目录列表。
+ * 用于 NewSessionDialog 展示历史目录。
+ */
+export function useRecentDirs() {
+  return useQuery({
+    queryKey: RECENT_DIRS_QUERY_KEY,
+    queryFn: async () => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { dirs: [] };
+      }
+      const response = await window.api.session.listRecentDirs({ limit: 10 });
+      if ('error' in response && response.error !== undefined) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      if ('data' in response && response.data !== undefined) {
+        return response.data;
+      }
+      throw new Error('Unexpected response: missing data and error');
+    },
+  });
+}
+
+/**
+ * 创建会话 mutation hook
+ *
+ * 调用 session:create IPC 创建新会话（绑定 workingDir）。
+ * 成功后自动 invalidate sessions 列表 + recent-dirs 缓存。
+ *
+ * @returns TanStack Mutation 结果
+ *
+ * @example
+ * ```tsx
+ * const { mutateAsync: createSession } = useCreateSession();
+ * const { sessionId } = await createSession({ workingDir: 'D:\\proj' });
+ * navigate(ROUTES.chatPath(sessionId));
+ * ```
+ */
+export function useCreateSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { workingDir: string; title?: string }) => {
+      const response = await window.api.session.create(params);
+      if ('error' in response) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      // 失效会话列表 + 最近目录列表缓存
+      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: RECENT_DIRS_QUERY_KEY });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
