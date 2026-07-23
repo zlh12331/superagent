@@ -39,6 +39,8 @@ export const sessions = sqliteTable('sessions', {
   lastMessage: text('last_message'),
   /** 消息数量（冗余字段，避免 list 时 COUNT(*) 全表扫描） */
   messageCount: integer('message_count').notNull().default(0),
+  /** 会话级项目工作目录（绝对路径，agent 工具操作边界） */
+  workingDir: text('working_dir').notNull(),
 });
 
 /**
