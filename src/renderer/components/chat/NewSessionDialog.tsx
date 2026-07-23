@@ -16,7 +16,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Folder, Plus } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,13 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps):
 
   const [autoPickedTriggered, setAutoPickedTriggered] = useState(false);
 
+  // 跟踪对话框 open 状态的 ref（用于异步操作完成后判断是否仍需执行副作用）
+  // 解决竞态：用户在 createSession 进行中关闭对话框时，不应继续 navigate
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
   const dirs = recentDirsData?.dirs ?? [];
 
   // 创建会话并跳转
@@ -72,6 +79,8 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps):
     async (workingDir: string) => {
       try {
         const { sessionId } = await createSession({ workingDir });
+        // 竞态守卫：若用户在 createSession 进行中关闭了对话框，不执行后续副作用
+        if (!openRef.current) return;
         setActiveSession(sessionId);
         navigate(ROUTES.chatPath(sessionId));
         onOpenChange(false);
@@ -85,16 +94,21 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps):
 
   // 浏览其他目录
   const handleBrowse = useCallback(async () => {
-    const response = await window.api.dialog.pickDirectory({});
-    if ('error' in response) {
-      toast.error(`[${response.error.code}] ${response.error.message}`);
-      return;
+    try {
+      const response = await window.api.dialog.pickDirectory({});
+      if ('error' in response) {
+        toast.error(`[${response.error.code}] ${response.error.message}`);
+        return;
+      }
+      if (response.data.canceled || response.data.path === undefined) {
+        // 用户取消：保持对话框打开，不报错
+        return;
+      }
+      await handleCreate(response.data.path);
+    } catch (error) {
+      // 捕获 IPC 调用本身的异常（如 preload bridge 未就绪）
+      toast.error(error instanceof Error ? error.message : String(error));
     }
-    if (response.data.canceled || response.data.path === undefined) {
-      // 用户取消：保持对话框打开，不报错
-      return;
-    }
-    await handleCreate(response.data.path);
   }, [handleCreate]);
 
   // 无历史时自动触发目录选择器（仅在数据加载完成 + 尚未触发过时执行）
