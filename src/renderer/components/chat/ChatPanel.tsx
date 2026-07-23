@@ -1,35 +1,22 @@
 // src/renderer/components/chat/ChatPanel.tsx
-// 聊天面板主容器 · 集成 useChat + ChatMessageList + ChatInput
+// 聊天面板主容器 · 集成 useAgentWithIpc + ChatMessageList + ChatInput
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 调用 useChatWithIpc 获取 useChat 完整状态
+// - 调用 useAgentWithIpc 获取 useChat 完整状态（Agent 模式）
 // - 透传 messages / status 给 ChatMessageList
 // - 透传 status + sendMessage + stop 给 ChatInput
-// - 错误处理：onError 回调统一 toast 提示（不阻塞 UI，仅展示）
-// - onFinish 回调：可选，父组件用于持久化消息到 SQLite
+// - 错误处理：onError 回调统一 toast 提示
 //
 // 设计：
 // - 三段式布局：顶部标题栏 / 中间消息列表 / 底部输入框
-// - 顶部标题栏使用 muted 背景，分隔线分明
-// - 消息列表 flex-1 + overflow，输入框底部 sticky
-// - 文学风：衬线字体 + 米色背景 + 圆角
+// - workingDir 为必填 prop（Agent 工具操作边界）
+// - 工具调用已 inline 渲染在 ChatMessageList（ToolCallView）
 // ──────────────────────────────────────────────────────────────
-//
-// 说明：
-// - chatId 用于 useChat 的 id 参数，控制消息状态隔离
-// - 多会话场景下，父组件切换 chatId 即可重置 useChat 状态
-// - onFinish 回调用于父组件持久化（如调用 session:appendMessage IPC）
-//
-// 错误处理策略：
-// - 仅在 onError 回调中处理（一次性触发，避免双 toast）
-// - 优先尝试从 error.message 提取 [CODE] 前缀匹配 i18n 文案
-// - 兜底：直接展示原始 error.message
 
 import { type ReactElement, useCallback } from 'react';
 import { toast } from 'sonner';
 
-import { ToolPanel } from '@/components/agent/ToolPanel';
-import { useChatWithIpc } from '@/hooks/use-chat';
+import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useErrorMessage } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
@@ -42,16 +29,15 @@ interface ChatPanelProps {
    *
    * 不同 chatId 拥有独立的 messages 状态，互不干扰。
    * 父组件切换 chatId 时，useChat 会自动重置为对应会话的消息。
-   *
-   * 同时作为 ToolPanel 的 sessionId 查询当前会话的工具调用列表。
    */
   chatId: string;
   /**
-   * 对话结束回调（可选）
+   * 项目工作目录（必填）
    *
-   * 当 useChat 进入 onFinish 时触发，父组件可在此持久化消息。
+   * Agent 工具操作的根目录，每个会话绑定独立 workingDir。
+   * 由路由层（chat.tsx）从 session.workingDir 注入。
    */
-  onFinish?: () => void;
+  workingDir: string;
   /** 自定义容器类名 */
   className?: string;
 }
@@ -59,14 +45,19 @@ interface ChatPanelProps {
 /**
  * 聊天面板主容器
  *
- * 三段式布局（顶栏 / 消息列表 / 输入框），集成 useChat。
+ * 三段式布局（顶栏 / 消息列表 / 输入框），集成 useAgentWithIpc。
+ *
+ * Agent 模式特性：
+ * - 多轮工具调用（走 agent:run IPC）
+ * - 工具调用以 inline 卡片渲染在 ChatMessageList（ToolCallView）
+ * - 消息持久化由 AgentService 在流式推送过程中完成，无需 onFinish 回调
  *
  * @example
  * ```tsx
- * <ChatPanel chatId={activeSessionId ?? 'new'} />
+ * <ChatPanel chatId={sessionId} workingDir={session.workingDir} />
  * ```
  */
-export function ChatPanel({ chatId, onFinish, className }: ChatPanelProps): ReactElement {
+export function ChatPanel({ chatId, workingDir, className }: ChatPanelProps): ReactElement {
   // 错误码 → 本地化文案 hook
   const { getErrorMessage } = useErrorMessage();
 
@@ -87,19 +78,14 @@ export function ChatPanel({ chatId, onFinish, className }: ChatPanelProps): Reac
     [getErrorMessage],
   );
 
-  // useChat 封装：注入 IPC transport
+  // useAgentWithIpc：Agent 模式专用 hook
   // - id: 控制消息状态隔离
+  // - workingDir: agent 工具操作边界（注入 IpcAgentTransport）
   // - onError: 统一 toast 提示（不阻塞 UI）
-  // - onFinish: 透传给父组件
-  //
-  // 注意：AI SDK v7 的 ChatOnErrorCallback 签名为 (error: Error) => void，
-  // 参数直接是 Error 实例（不是事件对象），访问 error.message 即可。
-  const { messages, sendMessage, status, stop } = useChatWithIpc({
+  const { messages, sendMessage, status, stop } = useAgentWithIpc({
     id: chatId,
+    workingDir,
     onError: handleError,
-    onFinish: () => {
-      onFinish?.();
-    },
   });
 
   return (
@@ -113,9 +99,6 @@ export function ChatPanel({ chatId, onFinish, className }: ChatPanelProps): Reac
       <div className="min-h-0 flex-1">
         <ChatMessageList messages={messages} status={status} />
       </div>
-
-      {/* 工具调用面板（仅在有工具调用时展示，位于消息列表与输入框之间） */}
-      <ToolPanel sessionId={chatId} />
 
       {/* 底部输入框 */}
       <footer className="border-border border-t p-3">
