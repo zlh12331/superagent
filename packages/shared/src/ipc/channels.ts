@@ -76,6 +76,10 @@ export const IPC_CHANNELS = {
   SESSION_DELETE: 'session:delete',
   // 请求-响应：重命名会话
   SESSION_RENAME: 'session:rename',
+  // 请求-响应：创建新会话（绑定 workingDir，空会话）
+  SESSION_CREATE: 'session:create',
+  // 请求-响应：查询最近使用的目录列表（去重 + 按 lastUsed 倒序）
+  SESSION_LIST_RECENT_DIRS: 'session:listRecentDirs',
 
   // ── 文件域（文件读写 + 目录列表 + 文件监听） ──────────
   // 请求-响应：读取文件内容（支持大文件分批读取）
@@ -138,6 +142,26 @@ export const IPC_CHANNELS = {
   SETTINGS_SET_API_KEY: 'settings:setApiKey',
   // 请求-响应：删除指定提供商的 API Key
   SETTINGS_DELETE_API_KEY: 'settings:deleteApiKey',
+  // 请求-响应：查询遥测级别（off / error-only / full）
+  SETTINGS_GET_TELEMETRY_LEVEL: 'settings:getTelemetryLevel',
+  // 请求-响应：设置遥测级别（修改后需重启应用生效）
+  SETTINGS_SET_TELEMETRY_LEVEL: 'settings:setTelemetryLevel',
+
+  // ── System 域（运行时可观测性，DevPanel 使用） ────
+  // 请求-响应：查询运行时状态（内存/CPU/uptime/活跃会话数），用于 DevPanel Metrics tab
+  SYSTEM_GET_STATUS: 'system:getStatus',
+  // ── Logs 域（日志查看器，DevPanel 使用） ──────────
+  // 请求-响应：读取最近 N 行日志（从 main.log 文件尾部读取），用于 DevPanel Logs tab
+  LOGS_READ: 'logs:read',
+
+  // ── Dialog 域（原生对话框） ──────────────────────
+  // 请求-响应：弹原生目录选择器，返回选中路径或 canceled
+  DIALOG_PICK_DIRECTORY: 'dialog:pickDirectory',
+
+  // ── DevTools 域（开发者工具集成，DevPanel 使用） ────
+  // 请求-响应：打开 Chromium DevTools（支持 mode 参数：detach/right/bottom）
+  // 渲染层 InspectorPanel 按钮触发，主进程调用 webContents.openDevTools({ mode })
+  DEVTOOLS_OPEN: 'devtools:open',
 } as const;
 
 /** IPC Channel 字面量联合类型 */
