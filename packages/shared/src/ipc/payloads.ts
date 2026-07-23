@@ -46,6 +46,8 @@ import type {
   CodebaseQueryReqSchema,
   CodebaseQueryRes,
 } from '../schemas/codebase';
+import type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
+import type { DialogPickDirectoryReq, DialogPickDirectoryRes } from '../schemas/dialog';
 import type {
   FileListReqSchema,
   FileListRes,
@@ -67,10 +69,14 @@ import type {
 } from '../schemas/git';
 import type { GlobReqSchema, GlobRes, GrepReqSchema, GrepRes } from '../schemas/search';
 import type {
+  SessionCreateReqSchema,
+  SessionCreateRes,
   SessionDeleteReqSchema,
   SessionDeleteRes,
   SessionGetReqSchema,
   SessionGetRes,
+  SessionListRecentDirsReqSchema,
+  SessionListRecentDirsRes,
   SessionListReqSchema,
   SessionListRes,
   SessionRenameReqSchema,
@@ -81,9 +87,13 @@ import type {
   DeleteApiKeyRes,
   GetApiKeyReqSchema,
   GetApiKeyRes,
+  GetTelemetryLevelRes,
   SetApiKeyReqSchema,
   SetApiKeyRes,
+  SetTelemetryLevelReqSchema,
+  SetTelemetryLevelRes,
 } from '../schemas/settings';
+import type { ReadLogsReq, ReadLogsRes, SystemStatusRes } from '../schemas/system';
 import type {
   TerminalCreateReqSchema,
   TerminalCreateRes,
@@ -275,6 +285,16 @@ export type SessionDeleteReq = z.infer<typeof SessionDeleteReqSchema>;
 /** session:rename 请求 payload：重命名会话 */
 export type SessionRenameReq = z.infer<typeof SessionRenameReqSchema>;
 
+/** session:create 请求 payload */
+export type SessionCreateReq = z.infer<typeof SessionCreateReqSchema>;
+
+/** session:listRecentDirs 请求 payload */
+export type SessionListRecentDirsReq = z.infer<typeof SessionListRecentDirsReqSchema>;
+
+// ─── Dialog 域 Req 派生（原生对话框） ─────────────────────────
+// DialogPickDirectoryReq 直接从 schemas/dialog.ts 导入（schema 文件已导出 z.infer 类型）
+// DialogPickDirectoryReqSchema 供 main 进程 dialog.handler.ts 用于运行时校验入参
+
 // ─── Tool 域 Req 派生（工具系统元数据） ─────────────────────
 
 /** tool:list 请求 payload：列出已注册工具清单（可按权限过滤） */
@@ -290,6 +310,27 @@ export type SetApiKeyReq = z.infer<typeof SetApiKeyReqSchema>;
 
 /** settings:deleteApiKey 请求 payload：删除指定提供商的 API Key */
 export type DeleteApiKeyReq = z.infer<typeof DeleteApiKeyReqSchema>;
+
+/** settings:setTelemetryLevel 请求 payload：设置遥测级别 */
+export type SetTelemetryLevelReq = z.infer<typeof SetTelemetryLevelReqSchema>;
+
+// 重新导出非 z.infer 类型（接口/联合）
+export type {
+  GetTelemetryLevelRes,
+  SetTelemetryLevelRes,
+  TelemetryLevel,
+} from '../schemas/settings';
+export { SetTelemetryLevelReqSchema, TelemetryLevelSchema } from '../schemas/settings';
+
+// ─── System 域（运行时可观测性） ──────────────────────────────
+// ReadLogsReq 直接从 schemas/system.ts 导入（schema 文件已导出 z.infer 类型）
+// ReadLogsReqSchema 供 main 进程 system.handler.ts 用于运行时校验入参
+
+// ─── DevTools 域 Req 派生（开发者工具集成） ───────────────────
+// OpenDevToolsReq / OpenDevToolsReqSchema / OpenDevToolsRes 直接从 schemas/devtools.ts 导入
+// main 进程 devtools.handler.ts 使用 OpenDevToolsReqSchema 做运行时校验
+export type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
+export { OpenDevToolsReqSchema } from '../schemas/devtools';
 
 // ─── IPC 类型映射 ─────────────────────────────────────────────
 
@@ -362,16 +403,35 @@ export interface IpcRequestMap {
   'session:get': { req: SessionGetReq; res: SessionGetRes };
   'session:delete': { req: SessionDeleteReq; res: SessionDeleteRes };
   'session:rename': { req: SessionRenameReq; res: SessionRenameRes };
+  // 会话域 — 创建 + 最近目录
+  'session:create': { req: SessionCreateReq; res: SessionCreateRes };
+  'session:listRecentDirs': { req: SessionListRecentDirsReq; res: SessionListRecentDirsRes };
 
   // 工具域（工具系统元数据查询）
   // tool:list 列出当前已注册的工具清单（含权限级别，供渲染层展示工具面板）
   'tool:list': { req: ToolListReq; res: ToolListRes };
 
-  // Settings 域（API Key / 敏感数据管理）
+  // Settings 域（API Key / 敏感数据管理 / 遥测级别）
   // settings:getApiKey 返回明文或 null，settings:setApiKey 加密后存储，settings:deleteApiKey 删除
   'settings:getApiKey': { req: GetApiKeyReq; res: GetApiKeyRes };
   'settings:setApiKey': { req: SetApiKeyReq; res: SetApiKeyRes };
   'settings:deleteApiKey': { req: DeleteApiKeyReq; res: DeleteApiKeyRes };
+  // settings:getTelemetryLevel 查询遥测级别，settings:setTelemetryLevel 修改（需重启生效）
+  'settings:getTelemetryLevel': { req: void; res: GetTelemetryLevelRes };
+  'settings:setTelemetryLevel': { req: SetTelemetryLevelReq; res: SetTelemetryLevelRes };
+
+  // System 域（运行时可观测性，DevPanel 使用）
+  // system:getStatus 返回运行时状态（内存/CPU/uptime/版本），无入参
+  // logs:read 读取最近 N 行日志（从 main.log 文件尾部倒读），入参全可选
+  'system:getStatus': { req: void; res: SystemStatusRes };
+  'logs:read': { req: ReadLogsReq; res: ReadLogsRes };
+
+  // DevTools 域（开发者工具集成，DevPanel Inspector tab 使用）
+  // devtools:open 打开 Chromium DevTools，入参 { mode? } 默认 detach 独立窗口
+  'devtools:open': { req: OpenDevToolsReq; res: OpenDevToolsRes };
+
+  // Dialog 域（原生目录选择器）
+  'dialog:pickDirectory': { req: DialogPickDirectoryReq; res: DialogPickDirectoryRes };
 }
 
 /**

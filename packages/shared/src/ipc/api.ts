@@ -137,6 +137,10 @@ export interface IpcApi {
     delete: IpcInvokeMethod<'session:delete'>;
     /** 重命名会话标题 */
     rename: IpcInvokeMethod<'session:rename'>;
+    /** 创建新会话（绑定 workingDir，空会话），返回 sessionId */
+    create: IpcInvokeMethod<'session:create'>;
+    /** 查询最近使用的目录列表（去重 + 按 lastUsed 倒序） */
+    listRecentDirs: IpcInvokeMethod<'session:listRecentDirs'>;
   };
 
   // ── 文件域 API（文件读写 + 目录列表 + 文件监听） ────────
@@ -267,6 +271,66 @@ export interface IpcApi {
     setApiKey: IpcInvokeMethod<'settings:setApiKey'>;
     /** 删除指定提供商的 API Key */
     deleteApiKey: IpcInvokeMethod<'settings:deleteApiKey'>;
+    /** 查询遥测级别（off / error-only / full） */
+    getTelemetryLevel: IpcInvokeMethod<'settings:getTelemetryLevel'>;
+    /** 设置遥测级别（修改后需重启应用生效） */
+    setTelemetryLevel: IpcInvokeMethod<'settings:setTelemetryLevel'>;
+  };
+
+  // ── System 域 API（运行时可观测性，DevPanel 使用） ─────
+  /**
+   * System 域 API
+   *
+   * 运行时可观测性查询，供 DevPanel 的 Metrics tab + Logs tab 使用。
+   * - system:getStatus 返回内存/CPU/uptime/版本等运行时指标
+   * - logs:read 读取最近 N 行日志（从 main.log 文件尾部倒读）
+   */
+  system: {
+    /** 查询运行时状态（内存/CPU/uptime/版本），无入参 */
+    getStatus: IpcInvokeMethod<'system:getStatus'>;
+  };
+
+  // ── Logs 域 API（日志查看器，DevPanel 使用） ──────────
+  /**
+   * Logs 域 API
+   *
+   * 日志读取接口，供 DevPanel Logs tab 使用。
+   * 主进程从 main.log 文件尾部按块倒读，避免大文件全量加载拖慢 IPC。
+   */
+  logs: {
+    /** 读取最近 N 行日志（入参全可选，默认 200 行不过滤级别） */
+    read: IpcInvokeMethod<'logs:read'>;
+  };
+
+  // ── DevTools 域 API（开发者工具集成，DevPanel Inspector tab 使用） ─
+  /**
+   * DevTools 域 API
+   *
+   * 打开 Chromium DevTools（renderer 进程的 Elements/Console/Sources/Network/Performance 等）。
+   * 主进程调用 webContents.openDevTools({ mode }) 实现。
+   *
+   * mode 说明：
+   * - 'detach'（默认）：独立窗口，不占用应用主窗口空间
+   * - 'right'：停靠在主窗口右侧
+   * - 'bottom'：停靠在主窗口底部
+   *
+   * dev 模式启动时会自动打开一次（detach），用户也可通过 DevPanel Inspector tab 手动唤起。
+   */
+  devtools: {
+    /** 打开 Chromium DevTools（已打开时聚焦原窗口） */
+    open: IpcInvokeMethod<'devtools:open'>;
+  };
+
+  // ── Dialog 域 API（原生对话框） ─────────────────────
+  /**
+   * Dialog 域 API
+   *
+   * 原生系统对话框封装。当前仅支持目录选择器（pickDirectory）。
+   * 主进程通过 Electron dialog.showOpenDialog 实现。
+   */
+  dialog: {
+    /** 弹出原生目录选择器，返回选中路径或 canceled */
+    pickDirectory: IpcInvokeMethod<'dialog:pickDirectory'>;
   };
 }
 
