@@ -24,7 +24,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { MoreVertical, Plus, Trash2 } from 'lucide-react';
-import { type ReactElement, useMemo } from 'react';
+import { memo, type ReactElement, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
 import { ROUTES, SIDEBAR_WIDTH } from '@/lib/constants';
@@ -73,7 +72,7 @@ function formatRelativeTime(timestamp: number): string {
  * </AppShell>
  * ```
  */
-export function Sidebar(): ReactElement {
+export const Sidebar = memo(function Sidebar(): ReactElement {
   const navigate = useNavigate();
 
   // L3 TanStack Query：会话列表数据
@@ -130,8 +129,11 @@ export function Sidebar(): ReactElement {
         </Button>
       </div>
 
-      {/* 中间：会话列表（可滚动） */}
-      <ScrollArea className="min-h-0 flex-1">
+      {/* 中间：会话列表（可滚动）
+          用原生 overflow-y-auto 替代 Radix ScrollArea：
+          - 全局 CSS 已定义细滚动条样式（scrollbar-width: thin + ::-webkit-scrollbar 8px），视觉一致
+          - 节省 Radix ScrollArea 组件树初始化开销（Provider + Viewport + Scrollbar + Corner） */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <nav className="p-2" aria-label="会话列表">
           {isLoading ? (
             <LoadingList />
@@ -147,6 +149,7 @@ export function Sidebar(): ReactElement {
                     title={session.title}
                     lastMessage={session.lastMessage}
                     updatedAt={session.updatedAt}
+                    workingDir={session.workingDir}
                     isActive={session.id === activeSessionId}
                     isDeleting={isDeleting}
                     onSelect={() => handleSelectSession(session.id)}
@@ -157,10 +160,10 @@ export function Sidebar(): ReactElement {
             </ul>
           )}
         </nav>
-      </ScrollArea>
+      </div>
     </aside>
   );
-}
+});
 
 // ── 子组件：会话列表项 ──────────────────────────────────────────
 
@@ -170,6 +173,8 @@ interface SessionItemProps {
   // 此处 lastMessage 可能从 session.lastMessage 直接传入（类型为 string | undefined）
   readonly lastMessage: string | undefined;
   readonly updatedAt: number;
+  /** 项目工作目录（用于副标题展示 basename，空字符串时隐藏） */
+  readonly workingDir: string;
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly onSelect: () => void;
@@ -190,6 +195,7 @@ function SessionItem({
   title,
   lastMessage,
   updatedAt,
+  workingDir,
   isActive,
   isDeleting,
   onSelect,
@@ -226,6 +232,11 @@ function SessionItem({
         </div>
         {lastMessage !== undefined && lastMessage.length > 0 && (
           <div className="text-muted-foreground mt-0.5 truncate text-xs">{lastMessage}</div>
+        )}
+        {workingDir.length > 0 && (
+          <div className="text-muted-foreground/60 mt-0.5 truncate text-[10px]" title={workingDir}>
+            {workingDir.split(/[\\/]/).pop() || workingDir}
+          </div>
         )}
         <div className="text-muted-foreground/70 mt-1 text-[10px]">
           {formatRelativeTime(updatedAt)}
