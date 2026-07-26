@@ -7,6 +7,7 @@
 // 3. adaptMcpTool：适配 Tool 实例（命名空间、权限、execute 转发）
 
 import { AppError, ErrorCode } from '@novel-writer/shared';
+import type { WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ToolContext } from '../tool';
@@ -20,12 +21,21 @@ import {
 } from './mcp-tool-adapter';
 import type { McpServerConfig } from './mcp-types';
 
+// Mock WebContents：测试不依赖事件推送，仅满足 ToolContext 类型契约
+const mockWebContents = {
+  send: vi.fn(),
+  isDestroyed: vi.fn(() => false),
+} as unknown as WebContents;
+
 // 构造默认 ToolContext
 function makeCtx(): ToolContext {
   return {
     workingDir: '/workspace',
     sessionId: 'test-session',
+    messageId: 'msg-1',
+    callId: 'call-1',
     abortSignal: new AbortController().signal,
+    webContents: mockWebContents,
   };
 }
 
@@ -210,7 +220,9 @@ describe('mcp-tool-adapter', () => {
       });
       const tool = adaptMcpTool(baseConfig, makeDescriptor(), mockCallTool);
       const result = await tool.execute({ path: '/tmp/test.txt' }, ctx);
-      expect(result).toBe('file content');
+      expect(result.output).toBe('file content');
+      expect(result.title).toContain('mcp__filesystem__read_file');
+      expect(result.metadata).toBeDefined();
       // callTool 第一个参数为原始工具名（不含命名空间前缀）
       expect(mockCallTool).toHaveBeenCalledWith('read_file', { path: '/tmp/test.txt' }, ctx);
     });
@@ -219,11 +231,14 @@ describe('mcp-tool-adapter', () => {
       const ctx: ToolContext = {
         workingDir: '/workspace',
         sessionId: 'session',
+        messageId: 'msg-1',
+        callId: 'call-1',
         abortSignal: {
           aborted: true,
           addEventListener: vi.fn(),
           removeEventListener: vi.fn(),
         } as unknown as AbortSignal,
+        webContents: mockWebContents,
       };
       const mockCallTool = vi.fn<McpCallToolFn>();
       const tool = adaptMcpTool(baseConfig, makeDescriptor(), mockCallTool);

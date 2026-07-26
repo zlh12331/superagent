@@ -76,16 +76,29 @@ export function wrap<TInput, TOutput>(
     }
 
     // 4. 执行 handler，所有日志自动携带 traceId
+    const startTime = performance.now();
     try {
       logger.info({ traceId, channel }, 'IPC 请求开始');
       const data = await handler(parsedInput, ctx);
-      logger.info({ traceId, channel }, 'IPC 请求成功');
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.info({ traceId, channel, durationMs }, 'IPC 请求成功');
       return { data } satisfies IpcResponse<TOutput>;
     } catch (error: unknown) {
       // 错误分类 + Sentry 上报
       const ipcError = toIpcError(error);
-      logger.error({ traceId, channel }, 'IPC 请求失败', error);
-      Sentry.captureException(error, { tags: { channel, traceId } });
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.error(
+        { traceId, channel, errorCode: ipcError.code, durationMs },
+        'IPC 请求失败',
+        error,
+      );
+      Sentry.captureException(error, { tags: { channel, traceId, errorCode: ipcError.code } });
+      // L4 修复：触发 Sentry flush，确保错误事件入发送队列
+      // - 不 await：IPC 响应不阻塞在 Sentry 上传上（高频错误时避免累积延迟）
+      // - fire-and-forget：Sentry 内部 worker 会处理发送，应用退出时由 before-quit 中的
+      //   Sentry.close(2000) 兜底等待所有 pending 事件上传完成
+      // - 显式 2s 超时：避免 worker 在网络异常时无限重试
+      void Sentry.flush(2000);
       return { error: ipcError } satisfies IpcResponse<TOutput>;
     }
   });

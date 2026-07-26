@@ -28,6 +28,7 @@ export const ErrorCode = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   INVALID_INPUT: 'INVALID_INPUT',
   NOT_FOUND: 'NOT_FOUND',
+  ALREADY_EXISTS: 'ALREADY_EXISTS',
   UNAUTHORIZED: 'UNAUTHORIZED',
   RATE_LIMITED: 'RATE_LIMITED',
 
@@ -92,6 +93,7 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   INTERNAL_ERROR: { userMessage: '内部错误', retryable: false, severity: 'error' },
   INVALID_INPUT: { userMessage: '输入参数有误', retryable: false, severity: 'warn' },
   NOT_FOUND: { userMessage: '资源不存在', retryable: false, severity: 'warn' },
+  ALREADY_EXISTS: { userMessage: '目标已存在', retryable: false, severity: 'warn' },
   UNAUTHORIZED: { userMessage: '未授权', retryable: false, severity: 'warn' },
   RATE_LIMITED: { userMessage: '操作过于频繁', retryable: true, severity: 'warn' },
 

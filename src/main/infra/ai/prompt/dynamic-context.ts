@@ -1,0 +1,161 @@
+// src/main/infra/ai/prompt/dynamic-context.ts
+// 动态上下文注入器：在运行时把环境信息注入 System Prompt 模板
+// ──────────────────────────────────────────────────────────────
+// 职责：
+// - 收集环境信息（OS / Shell / 工作目录）
+// - 收集 Git 状态（分支 / 是否 clean / 未提交文件数）
+// - 收集 AGENTS.md 内容（通过 agents-md.ts 分层发现）
+// - 把模板变量 {{workingDir}} / {{os}} / {{gitBranch}} 等替换为实际值
+//
+// 设计原则：
+// - 纯函数：注入器本身不持有状态，每次调用都重新收集
+// - 失败容忍：任何一项收集失败（如非 git 仓库、无 AGENTS.md）都用占位符而非抛错
+// - 性能：Git 状态查询可能涉及子进程 spawn，但通常 <100ms
+// ──────────────────────────────────────────────────────────────
+
+import { homedir, platform } from 'node:os';
+import { resolve } from 'node:path';
+import { resolveAgentsMd } from './agents-md';
+
+/**
+ * Git 状态摘要（简化版，仅用于 prompt 注入）
+ */
+interface GitSummary {
+  /** 当前分支名 */
+  readonly branch: string;
+  /** 工作区是否干净 */
+  readonly clean: boolean;
+  /** 未提交文件数（含 staged + unstaged） */
+  readonly changedFiles: number;
+}
+
+/**
+ * Git 状态查询函数签名
+ *
+ * 注入而非直接依赖 GitService：
+ * - 解耦 PromptService 对具体 GitService 实现的依赖
+ * - 便于测试 mock（避免真实 git CLI 调用）
+ *
+ * @param workingDir 工作目录
+ * @returns GitSummary；非 git 仓库返回 null
+ */
+export type GitSummaryProvider = (workingDir: string) => Promise<GitSummary | null>;
+
+/**
+ * 动态上下文注入选项
+ */
+export interface DynamicContextOptions {
+  /** 工作目录绝对路径 */
+  readonly workingDir: string;
+  /**
+   * Git 状态查询函数（可选）
+   *
+   * 不传则跳过 git 状态收集（prompt 中显示"未知"）
+   */
+  readonly gitSummaryProvider?: GitSummaryProvider;
+}
+
+/**
+ * 获取平台描述
+ *
+ * node:os.platform() 返回 'darwin' / 'win32' / 'linux' 等，
+ * 这里转换为用户友好的名称。
+ */
+function getPlatformName(osPlatform: string): string {
+  switch (osPlatform) {
+    case 'darwin':
+      return 'macOS';
+    case 'win32':
+      return 'Windows';
+    case 'linux':
+      return 'Linux';
+    default:
+      return osPlatform;
+  }
+}
+
+/**
+ * 获取默认 shell 名称
+ *
+ * Windows: PowerShell（或 cmd）
+ * macOS/Linux: 从 SHELL 环境变量获取，默认 bash
+ */
+function getDefaultShell(osPlatform: string): string {
+  if (osPlatform === 'win32') {
+    // PowerShell 是 Windows 10+ 默认
+    return process.env['COMSPEC'] ?? 'powershell.exe';
+  }
+  return process.env['SHELL'] ?? '/bin/bash';
+}
+
+/**
+ * 把 git 状态格式化为人类可读摘要
+ *
+ * @param summary git 状态
+ * @returns 如 "clean" 或 "dirty (3 个文件未提交)"
+ */
+function formatGitStatus(summary: GitSummary): string {
+  if (summary.clean) {
+    return 'clean';
+  }
+  return `dirty (${summary.changedFiles} 个文件未提交)`;
+}
+
+/**
+ * 收集动态上下文并替换模板变量
+ *
+ * 流程：
+ * 1. 收集环境信息（OS / Shell / 工作目录）
+ * 2. 收集 Git 状态（通过 gitSummaryProvider，失败则显示"未知"）
+ * 3. 收集 AGENTS.md（通过 resolveAgentsMd，无则空字符串）
+ * 4. 替换模板中的 {{变量}} 占位符
+ *
+ * @param template 含 {{workingDir}} 等占位符的 prompt 模板
+ * @param options 动态上下文选项
+ * @returns 替换变量后的完整 prompt
+ */
+export async function injectDynamicContext(
+  template: string,
+  options: DynamicContextOptions,
+): Promise<string> {
+  const osPlatform = platform();
+  const platformName = getPlatformName(osPlatform);
+  const shell = getDefaultShell(osPlatform);
+  const workingDir = resolve(options.workingDir);
+
+  // 收集 git 状态（失败时用占位符，不抛错）
+  let gitBranch = '非 git 仓库';
+  let gitStatus = '未知';
+  if (options.gitSummaryProvider !== undefined) {
+    try {
+      const summary = await options.gitSummaryProvider(workingDir);
+      if (summary !== null) {
+        gitBranch = summary.branch;
+        gitStatus = formatGitStatus(summary);
+      }
+    } catch {
+      // git 查询失败，保持占位符
+    }
+  }
+
+  // 收集 AGENTS.md（失败时用空字符串）
+  let agentsMd = '';
+  try {
+    agentsMd = resolveAgentsMd(workingDir);
+  } catch {
+    // AGENTS.md 发现失败，用空字符串
+  }
+
+  // 替换模板变量
+  const result = template
+    .replace(/\{\{workingDir\}\}/g, workingDir)
+    .replace(/\{\{os\}\}/g, osPlatform)
+    .replace(/\{\{platform\}\}/g, platformName)
+    .replace(/\{\{shell\}\}/g, shell)
+    .replace(/\{\{gitBranch\}\}/g, gitBranch)
+    .replace(/\{\{gitStatus\}\}/g, gitStatus)
+    .replace(/\{\{agentsMd\}\}/g, agentsMd)
+    .replace(/\{\{homeDir\}\}/g, homedir());
+
+  return result;
+}

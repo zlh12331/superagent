@@ -42,7 +42,9 @@ export function initLogger(): void {
   // 控制台日志级别：仅 dev 启用
   log.transports.console.level = app.isPackaged ? false : 'debug';
 
-  // 文件轮转配置：单文件 10MB 上限（按日轮转由 electron-log 默认行为 + maxSize 共同保证）
+  // 文件轮转配置：单文件 10MB 上限
+  // electron-log 5 的轮转机制：超出 maxSize 后当前文件移为 main.old.log，新文件从空开始写
+  // 仅保留 main.log + main.old.log 两个文件，不存在文件数量无限增长问题
   log.transports.file.fileName = 'main.log';
   log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
 

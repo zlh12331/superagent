@@ -18,9 +18,9 @@ import { z } from 'zod';
  * API Key 提供商标识
  *
  * 用作 keychain 的 key 前缀（如 'deepseek' → 'deepseek-api-key'）。
- * 当前仅支持 deepseek，后续可扩展 openai / anthropic 等。
+ * 当前支持 deepseek 和 openai。
  */
-export const ApiKeyProviderSchema = z.enum(['deepseek']);
+export const ApiKeyProviderSchema = z.enum(['deepseek', 'openai']);
 
 /** API Key 提供商标识 TypeScript 类型 */
 export type ApiKeyProvider = z.infer<typeof ApiKeyProviderSchema>;
@@ -76,4 +76,42 @@ export const DeleteApiKeyReqSchema = z.object({
 export interface DeleteApiKeyRes {
   /** 是否成功删除（未设置时也返回 true） */
   readonly ok: boolean;
+}
+
+// ─── Telemetry 用户开关（隐私合规） ─────────────────────────────
+
+/**
+ * 遥测级别（对标 VS Code telemetry.telemetryLevel / Cursor 双开关）
+ *
+ * - off：完全不初始化 Sentry，不上报任何错误和性能数据
+ * - error-only：仅上报错误（tracesSampleRate = 0），不上报性能事务
+ * - full：上报错误 + 性能事务（受 tracesSampleRate 采样率控制）
+ */
+export const TelemetryLevelSchema = z.enum(['off', 'error-only', 'full']);
+
+/** 遥测级别 TypeScript 类型 */
+export type TelemetryLevel = z.infer<typeof TelemetryLevelSchema>;
+
+/**
+ * settings:getTelemetryLevel 响应 payload
+ */
+export interface GetTelemetryLevelRes {
+  /** 当前遥测级别 */
+  readonly level: TelemetryLevel;
+}
+
+/**
+ * settings:setTelemetryLevel 请求 payload
+ */
+export const SetTelemetryLevelReqSchema = z.object({
+  /** 目标遥测级别 */
+  level: TelemetryLevelSchema,
+});
+
+/** settings:setTelemetryLevel 响应 payload */
+export interface SetTelemetryLevelRes {
+  /** 是否成功写入 */
+  readonly ok: boolean;
+  /** 写入后的级别（用于 UI 回显确认） */
+  readonly level: TelemetryLevel;
 }

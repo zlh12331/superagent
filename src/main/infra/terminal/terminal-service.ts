@@ -19,6 +19,7 @@
 import { randomUUID } from 'node:crypto';
 import * as os from 'node:os';
 import type {
+  TerminalCreatedEventPayload,
   TerminalCreateRes,
   TerminalExitEventPayload,
   TerminalInputRes,
@@ -68,15 +69,23 @@ export interface ITerminalService {
   resize(terminalId: string, cols: number, rows: number): Promise<TerminalResizeRes>;
   /** 终止指定终端 */
   kill(terminalId: string): Promise<TerminalKillRes>;
+  /** 获取终端历史输出（从创建开始的所有输出，含 ANSI 转义序列） */
+  getOutput(terminalId: string): string;
+  /** 清空终端输出缓冲 */
+  clearOutput(terminalId: string): void;
   /** 优雅关闭：kill 所有活跃 PTY */
   dispose(): Promise<void>;
 }
 
+/** 输出缓冲最大字节数（环形截断，避免内存膨胀） */
+const MAX_BUFFER_BYTES = 100 * 1024;
+
 /**
  * TerminalService 默认实现
  *
- * 内部维护 terminalId → { pty, webContents } 映射。
+ * 内部维护 terminalId → { pty, webContents, outputBuffer } 映射。
  * 每个 PTY 独立关联一个 webContents，避免多窗口事件串扰。
+ * outputBuffer 累积终端输出，供工具读取历史内容。
  *
  * 错误分类：
  * - spawn 失败：TERMINAL_SPAWN_FAILED（如 shell 不存在、权限不足）
@@ -87,12 +96,20 @@ class TerminalService implements ITerminalService {
    * 活跃终端 Map：terminalId → PTY 上下文
    *
    * 每个 PTY 独立关联一个 webContents，支持多窗口独立终端。
-   * PTY 退出（onExit）时会从此 Map 移除。
+   * PTY 退出（onExit）时会从此 Map 移除，但 outputBuffer 保留在 outputBuffers 中供历史读取。
    */
   private readonly terminals = new Map<
     string,
     { readonly pty: IPty; readonly webContents: WebContents }
   >();
+
+  /**
+   * 终端输出缓冲：terminalId → 累积输出字符串
+   *
+   * 独立于 terminals Map 维护，PTY 退出后仍保留缓冲供历史读取。
+   * 使用环形截断策略（MAX_BUFFER_BYTES），避免内存膨胀。
+   */
+  private readonly outputBuffers = new Map<string, string>();
 
   /**
    * 创建终端会话
@@ -138,8 +155,37 @@ class TerminalService implements ITerminalService {
       });
     }
 
-    // 绑定输出事件：推送 terminal:event:output
+    // 推送终端创建事件（通知渲染层，包括 Agent 工具创建的终端）
+    const title = command ?? file.split(/[\\/]/).pop() ?? 'shell';
+    const createdPayload: TerminalCreatedEventPayload = {
+      terminalId,
+      title,
+      pid: pty.pid,
+      cwd,
+      cols,
+      rows,
+    };
+    if (!webContents.isDestroyed()) {
+      webContents.send(IPC_CHANNELS.TERMINAL_EVENT_CREATED, createdPayload);
+    }
+
+    // 初始化输出缓冲
+    this.outputBuffers.set(terminalId, '');
+
+    // 绑定输出事件：推送 terminal:event:output + 追加到 outputBuffer
     pty.onData((data: string) => {
+      // 追加到输出缓冲（环形截断）
+      const current = this.outputBuffers.get(terminalId) ?? '';
+      const combined = current + data;
+      if (Buffer.byteLength(combined, 'utf8') > MAX_BUFFER_BYTES) {
+        // 环形截断：保留尾部 MAX_BUFFER_BYTES 字节
+        const buf = Buffer.from(combined, 'utf8');
+        const truncated = buf.subarray(buf.length - MAX_BUFFER_BYTES).toString('utf8');
+        this.outputBuffers.set(terminalId, truncated);
+      } else {
+        this.outputBuffers.set(terminalId, combined);
+      }
+      // 推送到渲染层
       if (webContents.isDestroyed()) {
         return;
       }
@@ -168,9 +214,9 @@ class TerminalService implements ITerminalService {
     });
 
     this.terminals.set(terminalId, { pty, webContents });
-    logger.info({ terminalId, file, cwd }, 'TerminalService PTY 已创建');
+    logger.info({ terminalId, file, cwd, pid: pty.pid }, 'TerminalService PTY 已创建');
 
-    return { terminalId };
+    return { terminalId, pid: pty.pid };
   }
 
   /**
@@ -233,25 +279,48 @@ class TerminalService implements ITerminalService {
   }
 
   /**
+   * 获取终端历史输出
+   *
+   * 返回从终端创建开始累积的所有输出（含 ANSI 转义序列）。
+   * PTY 退出后仍可读取历史输出。
+   * 输出受 MAX_BUFFER_BYTES 环形截断限制，仅保留最近的输出。
+   *
+   * @returns 终端输出字符串，不存在时返回空字符串
+   */
+  getOutput(terminalId: string): string {
+    return this.outputBuffers.get(terminalId) ?? '';
+  }
+
+  /**
+   * 清空终端输出缓冲
+   *
+   * 仅清空内存中的输出缓冲，不影响正在运行的 PTY 进程。
+   * 终端不存在时静默忽略。
+   */
+  clearOutput(terminalId: string): void {
+    this.outputBuffers.delete(terminalId);
+  }
+
+  /**
    * 优雅关闭：kill 所有活跃 PTY
    *
    * 应用退出时调用，避免 PTY 子进程句柄泄漏导致进程不退出。
    * kill 后 onExit 会异步触发，但应用即将退出，不等待事件回调。
    */
   async dispose(): Promise<void> {
-    if (this.terminals.size === 0) {
-      return;
-    }
-
-    for (const [id, ctx] of this.terminals) {
-      try {
-        ctx.pty.kill();
-      } catch (error) {
-        logger.warn({ terminalId: id, error }, 'TerminalService dispose kill 失败');
+    if (this.terminals.size > 0) {
+      for (const [id, ctx] of this.terminals) {
+        try {
+          ctx.pty.kill();
+        } catch (error) {
+          logger.warn({ terminalId: id, error }, 'TerminalService dispose kill 失败');
+        }
       }
+      // 立即清空 Map（onExit 回调可能异步触发，但应用即将退出）
+      this.terminals.clear();
     }
-    // 立即清空 Map（onExit 回调可能异步触发，但应用即将退出）
-    this.terminals.clear();
+    // 清理所有输出缓冲（包括已退出终端的残留缓冲）
+    this.outputBuffers.clear();
     logger.info({}, 'TerminalService 所有 PTY 已清理');
   }
 

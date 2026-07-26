@@ -1,24 +1,45 @@
 // src/main/infra/git/git-service.ts
-// GitService：Git CLI 封装（只读查询）
+// GitService：Git CLI 封装（只读查询 + 写操作）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - status：获取工作区状态（branch/ahead/behind/files/clean）
 // - diff：获取 unified diff 文本 + 统计（additions/deletions/filesChanged）
-// - dispose：无外部资源（每次调用 spawn 短任务子进程），无需清理
+// - add：暂存工作区改动到暂存区（git add）
+// - commit：提交暂存区改动（git commit -m，支持 --amend）
+// - push：推送本地提交到远程（git push，支持 --force-with-lease 和 -u）
+// - dispose：kill 所有活跃子进程（应用退出兜底）
 //
 // 设计：
 // - 通过 child_process.spawn('git', [...args]) 调用系统 git CLI
-// - path 可为仓库根或子目录，内部用 git rev-parse --show-toplevel 解析根目录
+// - path 可为仓库根或子目录，内部用 git rev-parse --is-inside-work-tree 校验
 // - status 用 git status --porcelain=v2 -b 获取结构化输出
 // - diff 用 git diff [--cached] [<ref>] [-- <path>] 获取 unified diff
 // - additions/deletions 通过解析 diff 中的 +/- 行统计（^+++ ^--- 不计）
+// - push 失败不抛错，返回 ok=false 便于 UI 友好提示
 // - 错误分类：非 git 仓库 → INVALID_INPUT；git 命令失败 → INTERNAL_ERROR
 // - 单例模式：与 FileService / SearchService 一致，便于统一生命周期管理
+//
+// 内存泄漏防护（M5）：
+// - activeProcesses 追踪所有活跃子进程，dispose 时统一 kill
+// - 每条 git 命令强制 30s 超时，超时后 SIGTERM 子进程并 reject
+//   避免 git 命令挂死（如等待凭证输入、ssh 卡住）导致 Promise 永久 pending
+// - 子进程 close/error 时主动从 activeProcesses 移除 + clearTimeout
 // ──────────────────────────────────────────────────────────────
 
-import { spawn } from 'node:child_process';
-import type { GitDiffRes, GitFileStatus, GitStatusRes } from '@novel-writer/shared';
+import { type ChildProcess, spawn } from 'node:child_process';
+import type {
+  GitAddRes,
+  GitCommitRes,
+  GitDiffRes,
+  GitFileStatus,
+  GitPushRes,
+  GitStatusRes,
+} from '@novel-writer/shared';
 import { AppError, ErrorCode } from '@novel-writer/shared';
+import { logger } from '../../utils/logger';
+
+/** 单条 git 命令的默认超时（毫秒）：30s 足够覆盖 status/diff/commit/push */
+const GIT_COMMAND_TIMEOUT_MS = 30_000;
 
 /**
  * diff 方法入参
@@ -37,6 +58,50 @@ export interface GitDiffOptions {
 }
 
 /**
+ * add 方法入参
+ *
+ * 与 GitAddReqSchema 字段对齐，类型独立定义以便测试 mock。
+ */
+export interface GitAddOptions {
+  /** Git 仓库路径（绝对路径） */
+  readonly path: string;
+  /** 要暂存的路径列表（相对 path 或绝对路径），空数组时执行 git add -A */
+  readonly paths: readonly string[];
+}
+
+/**
+ * commit 方法入参
+ *
+ * 与 GitCommitReqSchema 字段对齐，类型独立定义以便测试 mock。
+ */
+export interface GitCommitOptions {
+  /** Git 仓库路径（绝对路径） */
+  readonly path: string;
+  /** 提交信息 */
+  readonly message: string;
+  /** 是否 amend */
+  readonly amend: boolean;
+}
+
+/**
+ * push 方法入参
+ *
+ * 与 GitPushReqSchema 字段对齐，类型独立定义以便测试 mock。
+ */
+export interface GitPushOptions {
+  /** Git 仓库路径（绝对路径） */
+  readonly path: string;
+  /** 远程名（默认 'origin'） */
+  readonly remote: string;
+  /** 引用规格（空字符串时推送当前分支到同名远程分支） */
+  readonly refspec: string;
+  /** 是否设置上游 */
+  readonly setUpstream: boolean;
+  /** 是否使用 --force-with-lease */
+  readonly force: boolean;
+}
+
+/**
  * GitService 接口
  *
  * 解耦 IPC handler 对具体类的依赖，便于：
@@ -48,15 +113,32 @@ export interface IGitService {
   status(path: string): Promise<GitStatusRes>;
   /** 获取 diff */
   diff(options: GitDiffOptions): Promise<GitDiffRes>;
-  /** 优雅关闭（无外部资源，空实现） */
+  /** 暂存工作区改动（git add） */
+  add(options: GitAddOptions): Promise<GitAddRes>;
+  /** 提交暂存区改动（git commit） */
+  commit(options: GitCommitOptions): Promise<GitCommitRes>;
+  /** 推送本地提交到远程（git push） */
+  push(options: GitPushOptions): Promise<GitPushRes>;
+  /**
+   * 优雅关闭：kill 所有活跃子进程
+   *
+   * 应用退出时调用，避免 spawn 出去的 git 子进程未结束导致进程退出延迟。
+   * 正常完成的子进程会从 activeProcesses 自动移除，dispose 仅清理异常残留的子进程。
+   */
   dispose(): Promise<void>;
 }
 
 /**
  * GitService 默认实现
  *
- * 内部不持有长期状态（每次 status/diff 都启动新的子进程）。
- * dispose 为空操作（与 SearchService 一致保留接口，便于未来扩展）。
+ * 内部通过 activeProcesses 追踪所有活跃子进程：
+ * - runGit 启动子进程时加入 Set，close/error 时移除
+ * - dispose 时统一 SIGTERM 残留子进程（应用退出兜底）
+ *
+ * 每条 git 命令强制超时（GIT_COMMAND_TIMEOUT_MS），避免：
+ * - git 等待凭证输入（credential helper 弹窗）挂死
+ * - ssh 鉴权卡住（远程仓库不可达）
+ * - 子进程异常不退出导致 Promise 永久 pending
  *
  * 错误分类：
  * - 路径非 git 仓库：INVALID_INPUT（git rev-parse 失败）
@@ -64,6 +146,13 @@ export interface IGitService {
  * - stdout 解析失败：INTERNAL_ERROR
  */
 class GitService implements IGitService {
+  /**
+   * 活跃子进程集合：用于 dispose 时统一清理
+   *
+   * 正常完成的子进程会从 Set 自动移除（close 事件触发），
+   * 仅在异常退出 / dispose 调用时仍存活的子进程会留在 Set 中。
+   */
+  private readonly activeProcesses = new Set<ChildProcess>();
   /**
    * 获取工作区状态
    *
@@ -226,13 +315,186 @@ class GitService implements IGitService {
   }
 
   /**
-   * 优雅关闭（无外部资源，空实现）
+   * 优雅关闭：kill 所有活跃子进程
    *
-   * GitService 每次调用都启动新的子进程，不持有长期资源。
-   * 保留 dispose 方法以满足接口一致性，便于未来扩展（如缓存 git 仓库状态）。
+   * 应用退出时调用，避免异常残留的 git 子进程句柄泄漏导致进程退出延迟。
+   * 正常完成的子进程会从 activeProcesses 自动移除，dispose 仅清理异常残留。
+   *
+   * 幂等：多次调用安全（Set 已清空时为 no-op）。
    */
   async dispose(): Promise<void> {
-    // 无操作
+    if (this.activeProcesses.size === 0) {
+      return;
+    }
+    const processes = Array.from(this.activeProcesses);
+    for (const proc of processes) {
+      try {
+        // SIGTERM 优雅终止（SIGKILL 会损坏子进程输出缓冲区）
+        proc.kill('SIGTERM');
+      } catch (error) {
+        logger.warn({ error }, 'GitService 子进程 kill 失败');
+      }
+    }
+    this.activeProcesses.clear();
+    logger.info({}, 'GitService 所有子进程已清理');
+  }
+
+  /**
+   * 暂存工作区改动（git add）
+   *
+   * 流程：
+   * 1. 校验为 git 仓库
+   * 2. 构建 git add 参数（paths 为空时执行 git add -A）
+   * 3. 执行 git add
+   * 4. 通过 git status --porcelain=v2 统计已暂存文件数
+   *
+   * 注意：paths 内的相对路径基于 path 解析（与 schema 描述一致）。
+   * git add 不返回有用信息，stagedCount 通过 status 后查得。
+   */
+  async add(options: GitAddOptions): Promise<GitAddRes> {
+    const { path, paths } = options;
+    await this.assertGitRepo(path);
+
+    const args: string[] = ['add'];
+    if (paths.length === 0) {
+      args.push('-A');
+    } else {
+      args.push('--', ...paths);
+    }
+
+    const { stdout } = await this.runGit(args, path);
+
+    // 通过 status 统计已暂存文件数（git add 输出无结构化信息）
+    const stagedCount = await this.countStagedFiles(path);
+
+    return { stagedCount, stdout };
+  }
+
+  /**
+   * 提交暂存区改动（git commit）
+   *
+   * 流程：
+   * 1. 校验为 git 仓库
+   * 2. 构建 git commit 参数：
+   *    - 默认：git commit -m <message>
+   *    - amend=false 且 message：git commit -m <message>
+   *    - amend=true 且 message：git commit --amend -m <message>
+   * 3. 执行 git commit，解析 stdout 获取新提交 SHA
+   * 4. 通过 git show --stat 获取本次提交的统计信息
+   *
+   * 解析 commit stdout（典型输出）：
+   *   [master abc1234] message
+   *    1 file changed, 1 insertion(+), 1 deletion(-)
+   *
+   * 注意：amend=true 时不使用 --no-edit（保留 schema 提供的 message 覆盖原 message）。
+   */
+  async commit(options: GitCommitOptions): Promise<GitCommitRes> {
+    const { path, message, amend } = options;
+    await this.assertGitRepo(path);
+
+    const args: string[] = ['commit'];
+    if (amend) {
+      args.push('--amend');
+    }
+    args.push('-m', message);
+
+    const { stdout } = await this.runGit(args, path);
+
+    // 解析新提交的 SHA：[branch abc1234] message
+    const shaMatch = stdout.match(/^\[(\S+)\s+([0-9a-f]{7,40})\]/m);
+    const branch = shaMatch?.[1] ?? '(unknown)';
+    const shortSha = shaMatch?.[2] ?? '';
+    const sha = shortSha.length === 40 ? shortSha : await this.getHeadSha(path);
+    const realShortSha = shortSha.length >= 7 ? shortSha.slice(0, 7) : sha.slice(0, 7);
+
+    // 获取提交统计（filesChanged/additions/deletions）
+    const stats = await this.getCommitStats(path, sha);
+
+    return {
+      sha,
+      shortSha: realShortSha,
+      branch,
+      filesChanged: stats.filesChanged,
+      additions: stats.additions,
+      deletions: stats.deletions,
+      stdout,
+    };
+  }
+
+  /**
+   * 推送本地提交到远程（git push）
+   *
+   * 流程：
+   * 1. 校验为 git 仓库
+   * 2. 构建 git push 参数：
+   *    - force=true：--force-with-lease（更安全的强制推送）
+   *    - setUpstream=true：-u
+   *    - 远程名 + refspec
+   * 3. 执行 git push，捕获 stdout 和 stderr
+   * 4. 解析推送的提交数（从 stderr 的 "remote: Counting objects" 或 stdout 的 "abc..def" 解析）
+   *
+   * 安全策略：
+   * - 禁止 --force：使用 --force-with-lease 替代，避免覆盖他人提交
+   * - git push 的进度信息在 stderr，stdout 通常为空
+   *
+   * 解析 pushedCount（从 "To github.com:...\n   abc..def  master -> master"）：
+   * 若推送的 commit 数 > 0，输出形如 "abc1234..def5678"，需要计算两个 SHA 之间的 commit 数。
+   * 简化处理：直接用 git rev-list --count <oldSha>..<newSha> 计算。
+   */
+  async push(options: GitPushOptions): Promise<GitPushRes> {
+    const { path, remote, refspec, setUpstream, force } = options;
+    await this.assertGitRepo(path);
+
+    // 记录推送前的远程 SHA，用于计算推送的 commit 数
+    const beforeSha = await this.getRemoteHeadSha(path, remote, refspec);
+
+    const args: string[] = ['push'];
+    if (setUpstream) {
+      args.push('-u');
+    }
+    if (force) {
+      args.push('--force-with-lease');
+    }
+    args.push(remote);
+    if (refspec.length > 0) {
+      args.push(refspec);
+    }
+
+    let pushResult: { stdout: string; stderr: string };
+    try {
+      pushResult = await this.runGit(args, path);
+    } catch (error) {
+      // git push 失败时（远程拒绝、网络问题）返回 ok=false 而非抛出
+      // runGit 失败时将 stderr/stdout 封装到 AppError.details（见 runGit 实现）
+      const appError = error as AppError;
+      const details = appError.details as { stderr?: string; stdout?: string } | undefined;
+      const stderr = details?.stderr ?? '';
+      const stdout = details?.stdout ?? '';
+      return {
+        ok: false,
+        pushedCount: 0,
+        remote,
+        refspec,
+        stdout,
+        stderr: stderr || appError.message,
+      };
+    }
+
+    // 计算推送的 commit 数
+    const afterSha = await this.getRemoteHeadSha(path, remote, refspec);
+    let pushedCount = 0;
+    if (beforeSha !== null && afterSha !== null && beforeSha !== afterSha) {
+      pushedCount = await this.countCommitsBetween(path, beforeSha, afterSha);
+    }
+
+    return {
+      ok: true,
+      pushedCount,
+      remote,
+      refspec,
+      stdout: pushResult.stdout,
+      stderr: pushResult.stderr,
+    };
   }
 
   // ─── 内部辅助方法 ───────────────────────────────────
@@ -272,6 +534,7 @@ class GitService implements IGitService {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });
+      this.activeProcesses.add(child);
 
       let stdout = '';
       let stderr = '';
@@ -287,11 +550,38 @@ class GitService implements IGitService {
         });
       }
 
+      // 超时控制：30s 内未完成则 SIGTERM 子进程并 reject
+      // 避免 git 等待凭证输入 / ssh 卡住 / 远程不可达导致 Promise 永久 pending
+      const timeoutId = setTimeout(() => {
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // 子进程可能已退出，kill 失败忽略
+        }
+        reject(
+          new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            `git 命令超时（${GIT_COMMAND_TIMEOUT_MS}ms）`,
+            undefined,
+            { args, cwd },
+          ),
+        );
+      }, GIT_COMMAND_TIMEOUT_MS);
+
+      // 统一清理逻辑：清超时定时器 + 从 activeProcesses 移除
+      // 无论 close/error 都需调用，避免定时器泄漏和 Set 无限增长
+      const cleanup = (): void => {
+        clearTimeout(timeoutId);
+        this.activeProcesses.delete(child);
+      };
+
       child.on('error', (err: Error) => {
+        cleanup();
         reject(new AppError(ErrorCode.INTERNAL_ERROR, 'git 命令启动失败', err, { args, cwd }));
       });
 
       child.on('close', (code: number | null) => {
+        cleanup();
         if (code === 0) {
           resolve({ stdout, stderr });
           return;
@@ -466,6 +756,122 @@ class GitService implements IGitService {
     }
 
     return { additions, deletions, filesChanged };
+  }
+
+  /**
+   * 统计已暂存文件数
+   *
+   * 通过 git status --porcelain=v2 解析 X 状态码非空且非 '?' 的文件行。
+   * 用于 git add 后向调用方反馈暂存结果。
+   */
+  private async countStagedFiles(path: string): Promise<number> {
+    const { stdout } = await this.runGit(['status', '--porcelain=v2'], path);
+    let count = 0;
+    for (const line of stdout.split('\n')) {
+      if (line.startsWith('1 ')) {
+        const meta = line.split('\t')[0] ?? '';
+        const xy = meta.split(' ')[1] ?? '  ';
+        const x = xy[0] ?? ' ';
+        if (x !== ' ' && x !== '?') count += 1;
+      } else if (line.startsWith('2 ')) {
+        // rename 行总是已暂存
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * 获取当前 HEAD 的 SHA（40 字符）
+   *
+   * 通过 git rev-parse HEAD 获取，失败时返回空字符串。
+   */
+  private async getHeadSha(path: string): Promise<string> {
+    try {
+      const { stdout } = await this.runGit(['rev-parse', 'HEAD'], path);
+      return stdout.trim();
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * 获取指定 commit 的统计信息
+   *
+   * 通过 git show --stat --numstat 解析：
+   * - filesChanged：统计 "N file(s) changed" 行
+   * - additions/deletions：从 "N insertion(s)(+)" / "N deletion(s)(-)" 行解析
+   *
+   * 典型输出（git show --stat --oneline）：
+   *   abc1234 (HEAD -> master) message
+   *    file1.ts | 2 +-
+   *    file2.ts | 10 +++++-----
+   *    2 files changed, 6 insertions(+), 6 deletions(-)
+   */
+  private async getCommitStats(
+    path: string,
+    sha: string,
+  ): Promise<{ filesChanged: number; additions: number; deletions: number }> {
+    try {
+      const { stdout } = await this.runGit(['show', '--stat', '--oneline', sha], path);
+      const statsMatch = stdout.match(
+        /(\d+)\s+files?\s+changed(?:,\s+(\d+)\s+insertions?\(\+\))?(?:,\s+(\d+)\s+deletions?\(-\))?/,
+      );
+      return {
+        filesChanged: statsMatch ? Number.parseInt(statsMatch[1] ?? '0', 10) : 0,
+        additions: statsMatch ? Number.parseInt(statsMatch[2] ?? '0', 10) : 0,
+        deletions: statsMatch ? Number.parseInt(statsMatch[3] ?? '0', 10) : 0,
+      };
+    } catch {
+      return { filesChanged: 0, additions: 0, deletions: 0 };
+    }
+  }
+
+  /**
+   * 获取远程分支的 HEAD SHA
+   *
+   * 通过 git rev-parse <remote>/<branch> 获取（基于本地缓存的远程跟踪分支）。
+   * 用于 push 前后对比 SHA 计算推送的 commit 数。
+   *
+   * refspec 为空时，使用当前分支对应的远程跟踪分支。
+   * 失败时返回 null（可能是远程分支不存在或网络问题）。
+   */
+  private async getRemoteHeadSha(
+    path: string,
+    remote: string,
+    refspec: string,
+  ): Promise<string | null> {
+    try {
+      // refspec 为空时，用 @{upstream} 获取当前分支的远程跟踪分支
+      const arg = refspec.length > 0 ? `${remote}/${refspec}` : '@{upstream}';
+      const { stdout } = await this.runGit(['rev-parse', arg], path);
+      const trimmed = stdout.trim();
+      return trimmed.length === 40 ? trimmed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 计算两个 SHA 之间的 commit 数
+   *
+   * 通过 git rev-list --count <beforeSha>..<afterSha> 获取。
+   * 失败时返回 0。
+   */
+  private async countCommitsBetween(
+    path: string,
+    beforeSha: string,
+    afterSha: string,
+  ): Promise<number> {
+    try {
+      const { stdout } = await this.runGit(
+        ['rev-list', '--count', `${beforeSha}..${afterSha}`],
+        path,
+      );
+      return Number.parseInt(stdout.trim(), 10) || 0;
+    } catch {
+      return 0;
+    }
   }
 }
 

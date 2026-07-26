@@ -48,6 +48,8 @@ export const TerminalCreateReqSchema = z.object({
 export interface TerminalCreateRes {
   /** 终端会话唯一 id（UUID，主进程生成） */
   readonly terminalId: string;
+  /** PTY 进程 pid */
+  readonly pid: number;
 }
 
 /**
@@ -101,6 +103,26 @@ export interface TerminalOutputEventPayload {
   readonly terminalId: string;
   /** 终端原始输出（含 ANSI 转义序列，未解码） */
   readonly data: string;
+}
+
+/**
+ * terminal:event:created 流式事件 payload
+ *
+ * 终端创建成功后推送，用于通知渲染层（包括 Agent 工具创建的终端）。
+ * 渲染层收到后可将终端加入终端列表并显示。
+ */
+export interface TerminalCreatedEventPayload {
+  readonly terminalId: string;
+  /** 终端标题（启动命令或默认 shell 名） */
+  readonly title: string;
+  /** 进程 id */
+  readonly pid: number;
+  /** 工作目录 */
+  readonly cwd: string;
+  /** 初始列数 */
+  readonly cols: number;
+  /** 初始行数 */
+  readonly rows: number;
 }
 
 /**

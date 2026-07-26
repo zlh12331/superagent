@@ -8,7 +8,7 @@
 // - callers：调用方查询（谁调用了此符号）
 // - callees：被调用方查询（此符号调用了哪些符号）
 // - impact：影响分析（修改此符号会影响哪些代码）
-// - dispose：无外部资源（每次调用 spawn 短任务子进程），无需清理
+// - dispose：kill 所有活跃子进程（应用退出兜底）
 //
 // 设计：
 // - 通过 child_process.spawn('codegraph', [...args]) 调用 codegraph CLI
@@ -17,9 +17,15 @@
 // - path 必须为已初始化 codegraph 索引的项目根目录
 // - 错误分类：路径未初始化 → INVALID_INPUT；codegraph 命令失败 → INTERNAL_ERROR
 // - 单例模式：与 FileService / GitService 一致，便于统一生命周期管理
+//
+// 内存泄漏防护（M5）：
+// - activeProcesses 追踪所有活跃子进程，dispose 时统一 kill
+// - 每条 codegraph 命令强制 60s 超时（explore/impact 可能较慢），
+//   超时后 SIGTERM 子进程并 reject
+// - 子进程 close/error 时主动从 activeProcesses 移除 + clearTimeout
 // ──────────────────────────────────────────────────────────────
 
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import type {
   CodebaseCalleesRes,
   CodebaseCallersRes,
@@ -30,6 +36,10 @@ import type {
   CodebaseQueryResult,
 } from '@novel-writer/shared';
 import { AppError, ErrorCode } from '@novel-writer/shared';
+import { logger } from '../../utils/logger';
+
+/** 单条 codegraph 命令的默认超时（毫秒）：60s（explore/impact 可能遍历大量符号） */
+const CODEGRAPH_COMMAND_TIMEOUT_MS = 60_000;
 
 /**
  * query 方法入参
@@ -120,21 +130,38 @@ export interface ICodebaseService {
   callees(options: CodebaseCallOptions): Promise<CodebaseCalleesRes>;
   /** 影响分析 */
   impact(options: CodebaseImpactOptions): Promise<CodebaseImpactRes>;
-  /** 优雅关闭（无外部资源，空实现） */
+  /**
+   * 优雅关闭：kill 所有活跃子进程
+   *
+   * 应用退出时调用，避免 spawn 出去的 codegraph 子进程未结束导致进程退出延迟。
+   * 正常完成的子进程会从 activeProcesses 自动移除，dispose 仅清理异常残留的子进程。
+   */
   dispose(): Promise<void>;
 }
 
 /**
  * CodebaseService 默认实现
  *
- * 内部不持有长期状态（每次查询都启动新的子进程）。
- * dispose 为空操作（与 GitService 一致保留接口，便于未来扩展）。
+ * 内部通过 activeProcesses 追踪所有活跃子进程：
+ * - runCodegraph 启动子进程时加入 Set，close/error 时移除
+ * - dispose 时统一 SIGTERM 残留子进程（应用退出兜底）
+ *
+ * 每条 codegraph 命令强制超时（CODEGRAPH_COMMAND_TIMEOUT_MS），避免：
+ * - codegraph 索引大项目时遍历挂死
+ * - 子进程异常不退出导致 Promise 永久 pending
  *
  * 错误分类：
  * - codegraph 命令执行失败：INTERNAL_ERROR
  * - stdout JSON 解析失败：INTERNAL_ERROR
  */
 class CodebaseService implements ICodebaseService {
+  /**
+   * 活跃子进程集合：用于 dispose 时统一清理
+   *
+   * 正常完成的子进程会从 Set 自动移除（close 事件触发），
+   * 仅在异常退出 / dispose 调用时仍存活的子进程会留在 Set 中。
+   */
+  private readonly activeProcesses = new Set<ChildProcess>();
   /**
    * 结构化符号搜索
    *
@@ -241,13 +268,28 @@ class CodebaseService implements ICodebaseService {
   }
 
   /**
-   * 优雅关闭（无外部资源，空实现）
+   * 优雅关闭：kill 所有活跃子进程
    *
-   * CodebaseService 每次调用都启动新的子进程，不持有长期资源。
-   * 保留 dispose 方法以满足接口一致性，便于未来扩展（如缓存查询结果）。
+   * 应用退出时调用，避免异常残留的 codegraph 子进程句柄泄漏导致进程退出延迟。
+   * 正常完成的子进程会从 activeProcesses 自动移除，dispose 仅清理异常残留。
+   *
+   * 幂等：多次调用安全（Set 已清空时为 no-op）。
    */
   async dispose(): Promise<void> {
-    // 无操作
+    if (this.activeProcesses.size === 0) {
+      return;
+    }
+    const processes = Array.from(this.activeProcesses);
+    for (const proc of processes) {
+      try {
+        // SIGTERM 优雅终止（SIGKILL 会损坏子进程输出缓冲区）
+        proc.kill('SIGTERM');
+      } catch (error) {
+        logger.warn({ error }, 'CodebaseService 子进程 kill 失败');
+      }
+    }
+    this.activeProcesses.clear();
+    logger.info({}, 'CodebaseService 所有子进程已清理');
   }
 
   // ─── 内部辅助方法 ───────────────────────────────────
@@ -267,6 +309,7 @@ class CodebaseService implements ICodebaseService {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });
+      this.activeProcesses.add(child);
 
       let stdout = '';
       let stderr = '';
@@ -282,7 +325,32 @@ class CodebaseService implements ICodebaseService {
         });
       }
 
+      // 超时控制：60s 内未完成则 SIGTERM 子进程并 reject
+      // 避免 codegraph 遍历大项目挂死或子进程异常不退出导致 Promise 永久 pending
+      const timeoutId = setTimeout(() => {
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // 子进程可能已退出，kill 失败忽略
+        }
+        reject(
+          new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            `codegraph 命令超时（${CODEGRAPH_COMMAND_TIMEOUT_MS}ms）`,
+            undefined,
+            { args, cwd },
+          ),
+        );
+      }, CODEGRAPH_COMMAND_TIMEOUT_MS);
+
+      // 统一清理逻辑：清超时定时器 + 从 activeProcesses 移除
+      const cleanup = (): void => {
+        clearTimeout(timeoutId);
+        this.activeProcesses.delete(child);
+      };
+
       child.on('error', (err: Error) => {
+        cleanup();
         reject(
           new AppError(ErrorCode.INTERNAL_ERROR, 'codegraph 命令启动失败', err, {
             args,
@@ -292,6 +360,7 @@ class CodebaseService implements ICodebaseService {
       });
 
       child.on('close', (code: number | null) => {
+        cleanup();
         if (code === 0) {
           resolve({ stdout, stderr });
           return;
@@ -357,7 +426,8 @@ export function getCodebaseService(): ICodebaseService {
 /**
  * 重置 CodebaseService（仅测试用）
  *
- * CodebaseService 无外部资源，仅清空单例缓存。
+ * 仅清空单例缓存。dispose 由 ServiceContainer 单独 await 调用
+ * （与 resetGitService 风格一致）。
  */
 export function resetCodebaseService(): void {
   codebaseService = null;

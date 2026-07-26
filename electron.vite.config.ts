@@ -7,11 +7,18 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 
+// Source Map 生成配置（用于 Sentry 符号上传）
+// - main/preload: 'hidden' 生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
+// - renderer: 'sourcemap' 标准 source map（Vite 默认开发行为）
+// 生成后通过 `pnpm sentry:upload:symbols` 上传到 Sentry
+const SOURCEMAP_MODE = 'hidden' as const;
+
 // biome-ignore lint/style/noDefaultExport: electron-vite 框架要求 config 文件必须使用 export default
 export default defineConfig({
   // 主进程构建配置
   main: {
     build: {
+      sourcemap: SOURCEMAP_MODE,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
@@ -24,6 +31,7 @@ export default defineConfig({
   // 参考 electron-vite ESM 限制：https://electron-vite.org/guide/dev#limitations-of-sandboxing
   preload: {
     build: {
+      sourcemap: SOURCEMAP_MODE,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
@@ -45,6 +53,7 @@ export default defineConfig({
       },
     },
     build: {
+      sourcemap: SOURCEMAP_MODE,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),

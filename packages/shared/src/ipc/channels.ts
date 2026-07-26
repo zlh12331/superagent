@@ -95,6 +95,16 @@ export const IPC_CHANNELS = {
   // 流式事件：文件变更事件（chokidar 监听 create/modify/delete/rename）
   FILE_WATCH_EVENT: 'file:watch:event',
 
+  // ── 文件树编辑操作（新建/删除/重命名） ──────────────────
+  // 请求-响应：创建新文件（空文件，若已存在则报错）
+  FILE_CREATE: 'file:create',
+  // 请求-响应：创建新目录（递归创建父目录）
+  FILE_CREATE_DIR: 'file:createDir',
+  // 请求-响应：删除文件或目录（目录递归删除）
+  FILE_DELETE: 'file:delete',
+  // 请求-响应：重命名/移动文件或目录
+  FILE_RENAME: 'file:rename',
+
   // ── 搜索域（ripgrep + glob） ──────────────────────
   // 请求-响应：正则搜索文件内容（基于 ripgrep）
   SEARCH_GREP: 'search:grep',
@@ -110,16 +120,24 @@ export const IPC_CHANNELS = {
   TERMINAL_RESIZE: 'terminal:resize',
   // 请求-响应：终止终端会话
   TERMINAL_KILL: 'terminal:kill',
+  // 流式事件：终端创建成功（通知渲染层有新终端，包括 Agent 工具创建的）
+  TERMINAL_EVENT_CREATED: 'terminal:event:created',
   // 流式事件：终端原始输出（含 ANSI 转义序列）
   TERMINAL_EVENT_OUTPUT: 'terminal:event:output',
   // 流式事件：终端进程退出
   TERMINAL_EVENT_EXIT: 'terminal:event:exit',
 
-  // ── Git 域（Git CLI 封装） ────────────────────────
+  // ── Git 域（Git CLI 封装，含读写操作） ────────────────
   // 请求-响应：获取工作区状态（branch/ahead/behind/files）
   GIT_STATUS: 'git:status',
   // 请求-响应：获取 diff（unstaged / staged / 对比任意 ref）
   GIT_DIFF: 'git:diff',
+  // 请求-响应：暂存工作区改动（git add）
+  GIT_ADD: 'git:add',
+  // 请求-响应：提交暂存区改动（git commit）
+  GIT_COMMIT: 'git:commit',
+  // 请求-响应：推送本地提交到远程（git push）
+  GIT_PUSH: 'git:push',
 
   // ── 代码库域（codegraph CLI 封装，代码智能查询） ───
   // 请求-响应：结构化符号搜索（返回符号列表 + 相关度评分）

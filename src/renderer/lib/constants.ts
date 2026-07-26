@@ -6,11 +6,11 @@
 // - 布局尺寸常量供 AppShell / Sidebar / Topbar 引用，便于统一调整
 // - 路由常量 ROUTES 提供 path 模板 + 工厂函数，避免字符串拼接 typo
 
-/** 顶部栏高度（px） */
-export const TOPBAR_HEIGHT = 44;
+/** 顶部栏高度（px） - 与原型 --topbar-h 一致 */
+export const TOPBAR_HEIGHT = 52;
 
-/** 侧边栏宽度（px） - 会话列表展示区 */
-export const SIDEBAR_WIDTH = 260;
+/** 拖拽分隔线宽度（px） - 与原型 --resizer-w 一致 */
+export const RESIZER_WIDTH = 6;
 
 /**
  * 默认 Git 仓库路径

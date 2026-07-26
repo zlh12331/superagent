@@ -111,8 +111,20 @@ export function initDb(): DrizzleDB {
       created_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS prompts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_prompts_role ON prompts(role);
   `);
 
   // 迁移：已存在的数据库加 working_dir 列（幂等）

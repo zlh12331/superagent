@@ -1,0 +1,185 @@
+# .github/workflows/ci.yml
+# CI 流水线：push / PR 触发，跑全部质量门禁 + 测试矩阵
+#
+# 设计：
+# - quality job：跑在 ubuntu-latest，快速反馈 typecheck/lint/unit test/audit
+# - e2e-electron job：跑在 windows-latest（项目 Windows-only），跑真实 Electron E2E
+# - e2e-smoke-prod job：跑在 windows-latest，跑生产构建 smoke 测试
+#
+# 参考项目 electron-shadcn-main/.github/workflows/testing.yaml 的 job 分层模式
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # 允许手动触发（便于调试）
+
+# 同分支并行时取消旧 run（节省 CI 时间）
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Job 1: 质量门禁（快速反馈）────────────────────────────
+  quality:
+    name: Typecheck / Lint / Unit Test / Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests (shared + main + renderer)
+        run: pnpm test
+
+      - name: Dependency audit
+        run: pnpm audit
+        continue-on-error: true # 先警告不阻断（待 .nsprc 白名单稳定后再卡关）
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}
+          path: |
+            packages/shared/coverage/
+            src/main/coverage/
+            src/renderer/coverage/
+          retention-days: 7
+
+  # ── Job 2: 浏览器 E2E（dev server，轻量级）─────────────────
+  e2e-browser:
+    name: E2E (Browser Mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-browser-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7
+
+  # ── Job 3: Electron E2E（真实窗口，Windows-only）──────────
+  e2e-electron:
+    name: E2E (Electron Mode)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build dev artifacts
+        run: pnpm build
+
+      - name: Run Electron E2E tests
+        run: pnpm test:e2e:electron
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-electron-${{ github.run_id }}
+          path: playwright-report-electron/
+          retention-days: 7
+
+  # ── Job 4: 生产构建 Smoke 测试（最接近用户场景）──────────
+  smoke-prod:
+    name: Smoke (Production Build)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build production artifacts
+        run: pnpm build:win
+
+      - name: Run production smoke tests
+        run: pnpm test:smoke
+
+      - name: Upload smoke test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-smoke-${{ github.run_id }}
+          path: playwright-report-smoke/
+          retention-days: 7

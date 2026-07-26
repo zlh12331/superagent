@@ -1,12 +1,16 @@
 // src/main/ipc/file.handler.ts
 // 文件域 IPC handler（FileService 暴露给渲染层的入口）
 //
-// 注册 5 个请求-响应 channel：
+// 注册 9 个请求-响应 channel：
 // - file:read        读取文件内容（支持 offset/limit 分批）
 // - file:write       写入文件（覆盖或追加，可选自动创建父目录）
 // - file:list        递归列出目录内容（深度可控）
 // - file:watch:start 开始监听文件变更，返回 watcherId
 // - file:watch:stop  停止指定 watcherId 的监听
+// - file:create      创建新文件（空文件，若已存在则报错）
+// - file:createDir   创建新目录（递归创建父目录）
+// - file:delete      删除文件或目录（目录递归删除）
+// - file:rename      重命名/移动文件或目录
 //
 // 流式事件由 FileService 主动推送（不在此 handler 返回）：
 // - file:watch:event  文件变更事件（携带 watcherId 关联）
@@ -20,12 +24,24 @@
 //   （保持 handler 简单 + 关注点分离）
 
 import {
+  type FileCreateDirReq,
+  FileCreateDirReqSchema,
+  type FileCreateDirRes,
+  type FileCreateReq,
+  FileCreateReqSchema,
+  type FileCreateRes,
+  type FileDeleteReq,
+  FileDeleteReqSchema,
+  type FileDeleteRes,
   type FileListReq,
   FileListReqSchema,
   type FileListRes,
   type FileReadReq,
   FileReadReqSchema,
   type FileReadRes,
+  type FileRenameReq,
+  FileRenameReqSchema,
+  type FileRenameRes,
   type FileWatchStartReq,
   FileWatchStartReqSchema,
   type FileWatchStartRes,
@@ -122,6 +138,55 @@ export function registerFileHandlers(deps: FileHandlerDeps): void {
     async (input) => {
       const stopped = fileService.unwatch(input.watcherId);
       return { stopped };
+    },
+  );
+
+  // 创建新文件：空文件，已存在时抛 ALREADY_EXISTS
+  // createDirs=true 时自动创建父目录
+  wrap<FileCreateReq, FileCreateRes>(
+    IPC_CHANNELS.FILE_CREATE,
+    FileCreateReqSchema,
+    async (input) => {
+      return fileService.createFile({
+        path: input.path,
+        createDirs: input.createDirs,
+      });
+    },
+  );
+
+  // 创建新目录：递归创建父目录（mkdir -p 语义）
+  wrap<FileCreateDirReq, FileCreateDirRes>(
+    IPC_CHANNELS.FILE_CREATE_DIR,
+    FileCreateDirReqSchema,
+    async (input) => {
+      return fileService.createDir({
+        path: input.path,
+      });
+    },
+  );
+
+  // 删除文件或目录：recursive=true（默认）递归删除目录
+  wrap<FileDeleteReq, FileDeleteRes>(
+    IPC_CHANNELS.FILE_DELETE,
+    FileDeleteReqSchema,
+    async (input) => {
+      return fileService.delete({
+        path: input.path,
+        recursive: input.recursive,
+      });
+    },
+  );
+
+  // 重命名/移动：overwrite=false（默认）时目标已存在则报错
+  wrap<FileRenameReq, FileRenameRes>(
+    IPC_CHANNELS.FILE_RENAME,
+    FileRenameReqSchema,
+    async (input) => {
+      return fileService.rename({
+        oldPath: input.oldPath,
+        newPath: input.newPath,
+        overwrite: input.overwrite,
+      });
     },
   );
 }

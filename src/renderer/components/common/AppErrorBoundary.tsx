@@ -18,8 +18,9 @@
 // - 不依赖任何 Provider（避免边界本身被错误 Provider 拖垮）
 // ──────────────────────────────────────────────────────────────
 
+import * as Sentry from '@sentry/electron/renderer';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
-import type { ReactElement } from 'react';
+import type { ErrorInfo, ReactElement } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,11 @@ function appFallback({
   const message = error instanceof Error ? error.message : String(error);
 
   return (
-    <div className="bg-background text-foreground flex h-screen w-screen flex-col items-center justify-center gap-4 p-8">
+    // data-testid 用于 E2E 测试与 CDP 动态分析检测 AppErrorBoundary 是否被触发
+    <div
+      data-testid="app-error-boundary"
+      className="bg-background text-foreground flex h-screen w-screen flex-col items-center justify-center gap-4 p-8"
+    >
       {/* 朱砂红淡底圆形 + 警告图标 */}
       <div className="bg-error/10 text-error flex size-16 items-center justify-center rounded-full">
         <AlertTriangle className="size-8" strokeWidth={1.5} />
@@ -87,6 +92,14 @@ export function AppErrorBoundary({ children }: AppErrorBoundaryProps): ReactElem
   return (
     <ErrorBoundary
       fallbackRender={appFallback}
+      onError={(error: unknown, info: ErrorInfo) => {
+        // 上报到 Sentry（renderer → main → OTLP）
+        // info.componentStack 帮助定位错误来源组件
+        Sentry.captureException(error, {
+          contexts: { react: { componentStack: info.componentStack } },
+          tags: { boundary: 'AppErrorBoundary' },
+        });
+      }}
       onReset={() => {
         window.location.reload();
       }}

@@ -32,10 +32,12 @@ import type {
 import { IPC_CHANNELS } from '@novel-writer/shared';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
+import { withSpan } from '../../telemetry/otel';
 import { logger } from '../../utils/logger';
 import { getModel } from '../ai/ai-provider';
 import { classifyError, isAbortError } from '../ai/error-classifier';
-import type { ToolContext } from './tool';
+import { compressContext } from './context-compression';
+import type { IPromptService } from './prompt/prompt-service';
 import type { IToolExecutor } from './tool-executor';
 import type { IToolRegistry } from './tool-registry';
 
@@ -116,6 +118,7 @@ export interface IAgentService {
  * 依赖：
  * - IToolRegistry：转换为 AI SDK tools（toAISDKTools）
  * - IToolExecutor：作为 executeHook 注入，统一执行权限检查 + 审批 + IPC 推送
+ * - IPromptService：当调用方未传 systemPrompt 时，自动解析默认 Code Agent prompt
  *
  * 单例模式：通过 ServiceContainer 持有，整个应用生命周期共享一个实例。
  * 内部维护 sessionId → AbortController + streamPromise 两个 Map（与 ChatService 一致）。
@@ -124,10 +127,12 @@ export class AgentService implements IAgentService {
   /**
    * @param toolRegistry 工具注册表（用于 toAISDKTools）
    * @param toolExecutor 工具执行器（作为 executeHook 注入到 AI SDK tool.execute）
+   * @param promptService Prompt 服务（用于在未传 systemPrompt 时解析默认 Code Agent prompt）
    */
   constructor(
     private readonly toolRegistry: IToolRegistry,
     private readonly toolExecutor: IToolExecutor,
+    private readonly promptService: IPromptService,
   ) {}
 
   /** 活跃对话 Map：sessionId → AbortController */
@@ -138,6 +143,23 @@ export class AgentService implements IAgentService {
   /** @inheritDoc */
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
+
+    // 防重检查：若同 sessionId 已有活跃 stream，先 abort 并等待其退出，避免孤儿 stream
+    // 触发场景：用户快速双击发送、stop 后立即 send、跨入口并发 IPC
+    const existingController = this.activeSessions.get(sessionId);
+    if (existingController !== undefined) {
+      logger.warn({ sessionId }, '检测到已有活跃 agent stream，先中断旧 stream');
+      existingController.abort();
+      const existingStream = this.activeStreams.get(sessionId);
+      if (existingStream !== undefined) {
+        // 等待旧 stream 真正退出（最多 5s 兜底，避免卡死调用方）
+        await Promise.race([
+          existingStream,
+          new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+        ]);
+      }
+    }
+
     const controller = new AbortController();
     this.activeSessions.set(sessionId, controller);
 
@@ -152,6 +174,14 @@ export class AgentService implements IAgentService {
     );
     this.activeStreams.set(sessionId, streamPromise);
 
+    // CAS 删除 activeStreams：streamPromise resolve 后检查 Map 是否还是自己
+    // 避免旧 stream 的清理逻辑误删新 stream 的 Promise（与 activeSessions 的 CAS 删除同理）
+    streamPromise.finally(() => {
+      if (this.activeStreams.get(sessionId) === streamPromise) {
+        this.activeStreams.delete(sessionId);
+      }
+    });
+
     return sessionId;
   }
 
@@ -161,8 +191,13 @@ export class AgentService implements IAgentService {
     if (controller === undefined) {
       return false;
     }
+    // 立即从 Map 删除 controller，避免以下竞态：
+    //   T0: abort(sessionId) → controller.abort()
+    //   T1: startAgent(sessionId) → activeSessions.set(sessionId, newController)  // 覆盖
+    //   T2: 旧 stream 的 finally → activeSessions.delete(sessionId)  // ❌ 误删新 controller
+    // 改为立即删除：旧 stream 的 finally 改为 CAS 检查（见 streamToWebContents finally）
+    this.activeSessions.delete(sessionId);
     controller.abort();
-    // 不立即从 Map 移除，让流推送协程感知 abort 后自行清理
     return true;
   }
 
@@ -229,123 +264,204 @@ export class AgentService implements IAgentService {
     options: StartAgentOptions,
     controller: AbortController,
   ): Promise<void> {
-    try {
-      // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
-      const model = await getModel(undefined);
+    // 性能埋点：streamText 全流程耗时（含 prompt 解析 + 模型调用 + 工具执行 + 流推送）
+    const startTime = performance.now();
+    // OpenTelemetry span：串联 prompt 解析 → streamText → 工具执行 → 流推送整条链路
+    await withSpan(
+      'agent.streamText',
+      {
+        'session.id': sessionId,
+        'agent.maxSteps': options.maxSteps,
+        'agent.hasSystemPrompt': options.systemPrompt !== undefined,
+      },
+      async (span) => {
+        try {
+          // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
+          const model = await getModel(undefined);
 
-      // 2. 构造 ToolContext（每次对话独立，闭包捕获 sessionId / workingDir / abortSignal）
-      //    所有工具调用共享同一个 ctx，ToolExecutor 据此关联 IPC 事件
-      const ctx: ToolContext = {
-        workingDir: options.workingDir,
-        sessionId,
-        abortSignal: controller.signal,
-      };
+          // 1.5 解析 System Prompt
+          //     - 调用方传了 systemPrompt：直接用（用户显式覆盖）
+          //     - 调用方未传 systemPrompt：调用 PromptService.resolvePrompt 注入默认 Code Agent prompt
+          //       内部会从数据库读取模板 + 注入动态上下文（workingDir / git / AGENTS.md 等）
+          //     - 失败容忍：PromptService 内部已处理回退（DB 失败 → 硬编码默认值）
+          let systemPrompt = options.systemPrompt;
+          if (systemPrompt === undefined) {
+            const resolved = await this.promptService.resolvePrompt(undefined, options.workingDir);
+            systemPrompt = resolved.content;
+            logger.debug({ sessionId, source: resolved.source }, '已加载默认 Code Agent prompt');
+          }
 
-      // 3. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）
-      //    executeHook 内部流程：
-      //    - 调用 ToolExecutor.execute(toolName, toolCallId, input, ctx, webContents)
-      //    - ToolExecutor 内部推送 AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件
-      //    - ToolExecutor 内部处理权限检查 + 审批流程（permission='ask' 时）
-      //    - 返回结果：成功时返回 output，失败时返回 { error } 对象给 LLM
-      //
-      //    失败时不抛错的设计理由：
-      //    - 让 LLM 看到错误信息，自行决定下一步（重试 / 换工具 / 告知用户）
-      //    - 抛错会中断整个 streamText，无法让 LLM 从错误中恢复
-      //    - abortSignal 被触发时 streamText 会自动停止，无需靠抛错中断
-      const tools = this.toolRegistry.toAISDKTools(ctx, async (tool, input, ctx, toolCallId) => {
-        const result = await this.toolExecutor.execute(
-          tool.name,
-          toolCallId,
-          input,
-          ctx,
-          options.webContents,
-        );
-        // 失败时返回结构化错误对象（让 LLM 看到错误信息）
-        // 成功时返回 output（LLM 据此继续推理）
-        if (result.error !== undefined) {
-          return { error: result.error };
-        }
-        return result.output;
-      });
-
-      // 4. 启动 streamText（带 tools + stopWhen，自动多轮工具调用循环）
-      //    AI SDK v7 用 stopWhen 替代旧版 maxSteps：
-      //    - isStepCount(n) 创建步数限制条件，n 表示 LLM 调用工具的轮数上限
-      //    - 超过 n 轮后 streamText 自动停止，避免无限循环消耗 token
-      //
-      //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
-      //    条件展开：systemPrompt 为 undefined 时不传 system 字段
-      //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
-      const result = streamText({
-        model,
-        // ChatMessage = ModelMessage（type-only import），可直接透传
-        messages: options.messages,
-        // AI SDK v7 默认拒绝 messages 中的 system 消息，这里显式允许以兼容旧消息历史
-        allowSystemInMessages: true,
-        // 条件展开：systemPrompt 为 undefined 时不传 system 字段
-        ...(options.systemPrompt !== undefined ? { system: options.systemPrompt } : {}),
-        tools,
-        // AI SDK v7 用 stopWhen 替代 maxSteps
-        stopWhen: isStepCount(options.maxSteps),
-        abortSignal: controller.signal,
-      });
-
-      // 5. 把 result 转换为 UIMessageStream（包含 text/tool-call/tool-result/finish 等 part）
-      const uiStream = result.toUIMessageStream();
-      const reader = uiStream.getReader();
-
-      // 6. 逐 part 推送到渲染层
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        // webContents 销毁后停止推送（窗口已关闭）
-        if (options.webContents.isDestroyed()) {
-          logger.warn({ sessionId }, 'webContents 已销毁，停止推送 agent 流');
-          break;
-        }
-        const payload: AgentStreamPartPayload = { sessionId, part: value };
-        options.webContents.send(IPC_CHANNELS.AGENT_STREAM_PART, payload);
-      }
-
-      // 7. 正常结束推送 AGENT_STREAM_END（reason='completed'）
-      if (!options.webContents.isDestroyed()) {
-        const endPayload: AgentStreamEndPayload = {
-          sessionId,
-          reason: 'completed',
-        };
-        options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
-      }
-    } catch (error: unknown) {
-      // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
-      if (isAbortError(error)) {
-        logger.info({ sessionId }, 'Agent 对话被用户中断');
-        if (!options.webContents.isDestroyed()) {
-          const endPayload: AgentStreamEndPayload = {
+          // 2. 构造工具执行基础上下文（每次对话独立，闭包捕获 sessionId / workingDir / abortSignal / webContents）
+          //    messageId / callId 由每次工具调用时动态填充
+          const baseCtx = {
+            workingDir: options.workingDir,
             sessionId,
-            reason: 'aborted',
+            abortSignal: controller.signal,
+            webContents: options.webContents,
           };
-          options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
+
+          // 3. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）
+          //    executeHook 内部流程：
+          //    - 调用 ToolExecutor.execute(toolName, toolCallId, input, ctx, webContents)
+          //    - ToolExecutor 内部推送 AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件
+          //    - ToolExecutor 内部处理权限检查 + 审批流程（permission='ask' 时）
+          //    - 返回结果：成功时返回 output，失败时返回 { error } 对象给 LLM
+          //
+          //    失败时不抛错的设计理由：
+          //    - 让 LLM 看到错误信息，自行决定下一步（重试 / 换工具 / 告知用户）
+          //    - 抛错会中断整个 streamText，无法让 LLM 从错误中恢复
+          //    - abortSignal 被触发时 streamText 会自动停止，无需靠抛错中断
+          const tools = this.toolRegistry.toAISDKTools(baseCtx, async (tool, input, ctx) => {
+            const result = await this.toolExecutor.execute(
+              tool.name,
+              ctx.callId,
+              input,
+              ctx,
+              options.webContents,
+            );
+            // 失败时返回结构化错误对象（让 LLM 看到错误信息）
+            // 成功时返回 output（LLM 据此继续推理）
+            if (result.error !== undefined) {
+              return { error: result.error };
+            }
+            return result.output;
+          });
+
+          // 4. 启动 streamText（带 tools + stopWhen，自动多轮工具调用循环）
+          //    AI SDK v7 用 stopWhen 替代旧版 maxSteps：
+          //    - isStepCount(n) 创建步数限制条件，n 表示 LLM 调用工具的轮数上限
+          //    - 超过 n 轮后 streamText 自动停止，避免无限循环消耗 token
+          //
+          //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
+          //    条件展开：systemPrompt 为 undefined 时不传 system 字段
+          //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
+          const compressedMessages = compressContext(options.messages);
+          if (compressedMessages.length < options.messages.length) {
+            logger.info(
+              {
+                sessionId,
+                originalCount: options.messages.length,
+                compressedCount: compressedMessages.length,
+              },
+              '上下文已压缩',
+            );
+          }
+
+          const result = streamText({
+            model,
+            messages: compressedMessages,
+            allowSystemInMessages: true,
+            ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
+            tools,
+            // AI SDK v7 用 stopWhen 替代 maxSteps
+            stopWhen: isStepCount(options.maxSteps),
+            abortSignal: controller.signal,
+          });
+
+          // 5. 把 result 转换为 UIMessageStream（包含 text/tool-call/tool-result/finish 等 part）
+          const uiStream = result.toUIMessageStream();
+          const reader = uiStream.getReader();
+
+          // 6. 逐 part 推送到渲染层
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            // webContents 销毁后停止推送（窗口已关闭）
+            if (options.webContents.isDestroyed()) {
+              logger.warn({ sessionId }, 'webContents 已销毁，停止推送 agent 流');
+              break;
+            }
+            const payload: AgentStreamPartPayload = { sessionId, part: value };
+            options.webContents.send(IPC_CHANNELS.AGENT_STREAM_PART, payload);
+          }
+
+          // 7. 正常结束推送 AGENT_STREAM_END（reason='completed'）
+          if (!options.webContents.isDestroyed()) {
+            const endPayload: AgentStreamEndPayload = {
+              sessionId,
+              reason: 'completed',
+            };
+            options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
+          }
+
+          // 8. token 使用量统计（AI SDK v7 原生支持，免费数据）
+          //    totalUsage 是 PromiseLike（流结束后才 resolve），不 await 避免阻塞清理
+          //    失败时静默：不阻塞主流程
+          //    用 Promise.resolve 包裹以获得 .catch 方法（PromiseLike 本身无 .catch）
+          Promise.resolve(result.totalUsage)
+            .then((usage) => {
+              if (usage !== null && usage !== undefined) {
+                logger.info(
+                  {
+                    sessionId,
+                    inputTokens: usage.inputTokens,
+                    outputTokens: usage.outputTokens,
+                    totalTokens: usage.totalTokens,
+                  },
+                  'Agent token 使用量',
+                );
+                // setAttribute 不接受 undefined，需显式守卫
+                if (usage.totalTokens !== undefined) {
+                  span?.setAttribute('token.total', usage.totalTokens);
+                }
+                if (usage.inputTokens !== undefined) {
+                  span?.setAttribute('token.prompt', usage.inputTokens);
+                }
+                if (usage.outputTokens !== undefined) {
+                  span?.setAttribute('token.completion', usage.outputTokens);
+                }
+              }
+            })
+            .catch(() => {
+              // usage 读取失败，忽略
+            });
+        } catch (error: unknown) {
+          // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
+          if (isAbortError(error)) {
+            logger.info({ sessionId }, 'Agent 对话被用户中断');
+            span?.setAttribute('agent.aborted', true);
+            if (!options.webContents.isDestroyed()) {
+              const endPayload: AgentStreamEndPayload = {
+                sessionId,
+                reason: 'aborted',
+              };
+              options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
+            }
+          } else {
+            // 其他错误：分类并推送 AGENT_STREAM_ERROR
+            const appError = classifyError(error);
+            if (!options.webContents.isDestroyed()) {
+              const errorPayload: AgentStreamErrorPayload = {
+                sessionId,
+                code: appError.code,
+                message: appError.message,
+              };
+              options.webContents.send(IPC_CHANNELS.AGENT_STREAM_ERROR, errorPayload);
+            }
+            logger.error(
+              { sessionId, errorCode: appError.code, error: appError },
+              'Agent 对话流异常结束',
+            );
+          }
+        } finally {
+          // CAS（Compare-And-Swap）删除 activeSessions：
+          // 仅当 Map 里存的还是自己时才删，避免以下竞态：
+          //   abort() 已从 Map 删除 → startAgent 写入新 controller → 旧 stream finally 误删新 controller
+          // 通过 controller 引用比较保证只删除自己的条目
+          // activeStreams 的 CAS 删除在 startAgent 的 .finally() 链中处理（streamPromise 是 startAgent 局部变量）
+          if (this.activeSessions.get(sessionId) === controller) {
+            this.activeSessions.delete(sessionId);
+          }
+
+          // 性能埋点：总耗时（从 streamText 开始到流推送完毕）
+          const durationMs = Math.round(performance.now() - startTime);
+          logger.info({ sessionId, durationMs }, 'Agent streamText 总耗时');
+          span?.setAttribute('agent.durationMs', durationMs);
+          span?.end();
         }
-      } else {
-        // 其他错误：分类并推送 AGENT_STREAM_ERROR
-        const appError = classifyError(error);
-        if (!options.webContents.isDestroyed()) {
-          const errorPayload: AgentStreamErrorPayload = {
-            sessionId,
-            code: appError.code,
-            message: appError.message,
-          };
-          options.webContents.send(IPC_CHANNELS.AGENT_STREAM_ERROR, errorPayload);
-        }
-        logger.error({ sessionId, error: appError }, 'Agent 对话流异常结束');
-      }
-    } finally {
-      // 无论正常/异常/abort，都从两个 Map 同步移除
-      // dispose 通过 Promise.allSettled 等待 streamPromise resolve
-      this.activeSessions.delete(sessionId);
-      this.activeStreams.delete(sessionId);
-    }
+      },
+    );
   }
 }

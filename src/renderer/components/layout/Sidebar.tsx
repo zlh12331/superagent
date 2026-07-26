@@ -1,32 +1,29 @@
 // src/renderer/components/layout/Sidebar.tsx
-// 侧边栏 · 会话列表 · 极简文学风
+// 侧边栏 · 会话列表 · 对齐原型布局
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 顶部「新对话」按钮：清空激活会话 + 跳转首页
-// - 中间会话列表：拉取 SQLite 数据，点击跳转 /chat/:sessionId
-// - 每项悬停显示「删除」按钮，调用 deleteSession mutation
-// - 加载中展示 Skeleton 占位，空列表展示提示文案
+// - sidebar-head：新建会话按钮 + 搜索框 + tabs（最近/归档）
+// - sidebar-list：会话列表（thread-item 结构，按 folder 分组）
+// - sidebar-foot：用户信息区域（占位，功能预留）
 //
-// 设计：
-// - 状态分层（符合项目规范）：
-//   * L2 Zustand：useActiveSessionStore 维护激活会话 id（UI 状态）
-//   * L3 TanStack Query：useSessionsQuery 拉取列表（服务端请求状态）
-//   * L3 TanStack Mutation：useDeleteSession（自动 invalidate 缓存）
-// - 路由跳转通过 react-router useNavigate
-// - 激活态通过对比 activeSessionId 与 item.id 手动应用样式
-//   （不使用 NavLink，因为需要在点击时额外调用 setActiveSession）
+// 设计（对齐原型 docs/prototype/prototype-v2.html）：
+// - class 命名：sidebar / sidebar-head / sidebar-search / sidebar-tabs /
+//   sidebar-tab / sidebar-list / thread-group-label / folder-label /
+//   folder-items / thread-item / ti-row / ti-dot / ti-content / ti-title /
+//   ti-meta / ti-actions / sidebar-foot
+// - 文学风视觉令牌：深棕主色 + 衬线标题 + 等宽元信息
 //
-// 文学风细节：
-// - 衬线字体展示会话标题与时间
-// - 选中项用 bg-sidebar-accent 强调
-// - 描述文字 muted-foreground
-// - 删除按钮 hover 时显现，避免常态干扰
+// 状态分层（符合项目规范）：
+// - L2 Zustand：useActiveSessionStore 维护激活会话 id
+// - L3 TanStack Query：useSessionsQuery 拉取列表
+// - L3 TanStack Mutation：useDeleteSession
 // ──────────────────────────────────────────────────────────────
 
-import { MoreVertical, Plus, Trash2 } from 'lucide-react';
-import { memo, type ReactElement, useMemo } from 'react';
+import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
+import { memo, type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -36,9 +33,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
-import { ROUTES, SIDEBAR_WIDTH } from '@/lib/constants';
+import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 /** 相对时间格式化（如「刚刚」「3 分钟前」「昨天」），超过一周显示日期 */
 function formatRelativeTime(timestamp: number): string {
@@ -57,20 +55,17 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
+/** 从 workingDir 提取 basename，用于 folder 分组 */
+function getFolderName(workingDir: string): string {
+  const basename = workingDir.split(/[\\/]/).pop();
+  return basename && basename.length > 0 ? basename : '未分组';
+}
+
 /**
  * 侧边栏
  *
- * 通过 useSessionsQuery 拉取会话列表，useActiveSessionStore 维护激活态。
- * 点击会话项 → navigate 到 /chat/:sessionId + setActiveSession。
- * 点击「新对话」→ clearActiveSession + navigate 到首页。
- *
- * @example
- * ```tsx
- * <AppShell>
- *   <Sidebar />
- *   <main>{children}</main>
- * </AppShell>
- * ```
+ * 三段式结构：sidebar-head（搜索+tabs）+ sidebar-list（会话列表）+ sidebar-foot（用户信息）。
+ * 会话列表按 workingDir basename 分组为 folder-label + folder-items。
  */
 export const Sidebar = memo(function Sidebar(): ReactElement {
   const navigate = useNavigate();
@@ -79,17 +74,70 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
   const { data, isLoading, error } = useSessionsQuery();
   // L3 TanStack Mutation：删除会话
   const { mutate: deleteSession, isPending: isDeleting } = useDeleteSession();
-  // L2 Zustand：激活会话 id（用于高亮当前选中项）
+  // L2 Zustand：激活会话 id
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const setActiveSession = useActiveSessionStore((state) => state.setActiveSession);
   const clearActiveSession = useActiveSessionStore((state) => state.clearActiveSession);
+  // L2 Zustand：欢迎页模式
+  const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
 
-  // 派生：会话列表（默认空数组，避免 data 为 undefined 时报错）
+  // 搜索关键字（功能预留：仅 UI，暂不实现过滤逻辑）
+  const [searchKeyword, setSearchKeyword] = useState('');
+  // 当前激活的 tab（recent / files / archived）
+  const [activeTab, setActiveTab] = useState<'recent' | 'files' | 'archived'>('recent');
+
+  // 派生：会话列表
   const sessions = useMemo(() => data?.sessions ?? [], [data]);
 
-  // 点击「新对话」：清空激活会话 + 跳转首页
+  // 派生：当前激活会话的 workingDir（用于文件树面板）
+  // 无激活会话时为 null，FileTreePanel 显示空状态
+  const workingDir = useMemo(() => {
+    if (activeSessionId === null) return null;
+    return sessions.find((s) => s.id === activeSessionId)?.workingDir ?? null;
+  }, [sessions, activeSessionId]);
+
+  // 派生：按 workingDir basename 分组
+  // 结构：Map<folderName, Session[]>
+  // 注意：sessions 为 readonly 数组，使用 spread 创建新数组避免 push 副作用
+  const groupedSessions = useMemo(() => {
+    const groups = new Map<string, typeof sessions>();
+    for (const session of sessions) {
+      const folderName = getFolderName(session.workingDir);
+      const existing = groups.get(folderName) ?? [];
+      groups.set(folderName, [...existing, session]);
+    }
+    return groups;
+  }, [sessions]);
+
+  // 点击「新建会话」：清空激活会话 + 进入欢迎页模式 + 跳转首页
+  // 对齐原型 prototype-v2.html:13306-13336：
+  // - 自动复用 workingDir：优先取当前激活会话的 workingDir
+  //   若无激活会话，取 sessions 列表第一个（最近）的 workingDir
+  //   若都无（首次启动 / 无历史会话），使用 null（「未选择项目」）
+  // - 不弹原生目录选择对话框（由 HomePage composer-project-bar 的 folder dropdown 选择）
+  // - 进入欢迎页后用户可继续编辑输入框，发送消息时按 pendingWorkingDir 创建会话
   const handleNewChat = (): void => {
+    const lastWorkingDir =
+      (activeSessionId !== null
+        ? sessions.find((s) => s.id === activeSessionId)?.workingDir
+        : undefined) ??
+      sessions[0]?.workingDir ??
+      null;
+
     clearActiveSession();
+    enterWelcomeMode(lastWorkingDir);
+    navigate(ROUTES.home);
+  };
+
+  // 在指定文件夹内新建会话（对齐原型 fl-add-btn 13338-13412 行为）
+  // - 取该文件夹任一 session 的 workingDir 作为 pendingWorkingDir（同文件夹共享目录）
+  // - 进入欢迎页模式 + 跳转首页，用户可继续编辑首条消息
+  // - 不弹原生对话框（对齐原型 setWelcomeMode(true) + setPendingFolder）
+  const handleCreateInFolder = (folderName: string): void => {
+    const folderSession = sessions.find((s) => getFolderName(s.workingDir) === folderName);
+    const workingDir = folderSession?.workingDir ?? null;
+    clearActiveSession();
+    enterWelcomeMode(workingDir);
     navigate(ROUTES.home);
   };
 
@@ -99,8 +147,7 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
     navigate(ROUTES.chatPath(sessionId));
   };
 
-  // 点击删除：调用 mutation，成功后由 useDeleteSession 自动 invalidate 缓存
-  // 若删除的是当前激活会话，额外清空激活态并跳转首页
+  // 点击删除
   const handleDelete = (sessionId: string): void => {
     deleteSession(sessionId, {
       onSuccess: () => {
@@ -113,104 +160,245 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
   };
 
   return (
-    <aside
-      className="bg-sidebar border-sidebar-border flex flex-col border-r"
-      style={{ width: SIDEBAR_WIDTH }}
-    >
-      {/* 顶部：新对话按钮 */}
-      <div className="border-sidebar-border p-3">
-        <Button
-          variant="outline"
-          className="border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground w-full justify-start gap-2 font-serif tracking-wide"
-          onClick={handleNewChat}
-        >
-          <Plus className="size-4" strokeWidth={1.5} />
-          新对话
-        </Button>
+    <aside className="sidebar" aria-label="会话列表">
+      {/* 顶部：新建会话按钮 + 搜索框 + tabs */}
+      <div className="sidebar-head">
+        <button type="button" className="new-thread-btn" onClick={handleNewChat}>
+          <Plus className="size-3.5" strokeWidth={2.5} />
+          新建会话
+        </button>
+        <div className="sidebar-search">
+          <Search className="sidebar-search-icon" size={13} strokeWidth={2} />
+          <input
+            type="text"
+            className="sidebar-search-input"
+            placeholder="搜索会话…"
+            aria-label="搜索会话"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+        </div>
+        <div className="sidebar-tabs" role="tablist">
+          <button
+            type="button"
+            className={cn('sidebar-tab', activeTab === 'recent' && 'active')}
+            role="tab"
+            aria-selected={activeTab === 'recent'}
+            onClick={() => setActiveTab('recent')}
+          >
+            最近 <span className="count">{sessions.length}</span>
+          </button>
+          <button
+            type="button"
+            className={cn('sidebar-tab', activeTab === 'files' && 'active')}
+            role="tab"
+            aria-selected={activeTab === 'files'}
+            onClick={() => setActiveTab('files')}
+          >
+            文件
+          </button>
+          <button
+            type="button"
+            className={cn('sidebar-tab', activeTab === 'archived' && 'active')}
+            role="tab"
+            aria-selected={activeTab === 'archived'}
+            onClick={() => setActiveTab('archived')}
+          >
+            归档 <span className="count">0</span>
+          </button>
+        </div>
       </div>
 
-      {/* 中间：会话列表（可滚动）
-          用原生 overflow-y-auto 替代 Radix ScrollArea：
-          - 全局 CSS 已定义细滚动条样式（scrollbar-width: thin + ::-webkit-scrollbar 8px），视觉一致
-          - 节省 Radix ScrollArea 组件树初始化开销（Provider + Viewport + Scrollbar + Corner） */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <nav className="p-2" aria-label="会话列表">
-          {isLoading ? (
-            <LoadingList />
-          ) : error !== null ? (
-            <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-          ) : sessions.length === 0 ? (
-            <EmptyHint />
-          ) : (
-            <ul className="flex flex-col gap-0.5">
-              {sessions.map((session) => (
-                <li key={session.id}>
-                  <SessionItem
-                    title={session.title}
-                    lastMessage={session.lastMessage}
-                    updatedAt={session.updatedAt}
-                    workingDir={session.workingDir}
-                    isActive={session.id === activeSessionId}
-                    isDeleting={isDeleting}
-                    onSelect={() => handleSelectSession(session.id)}
-                    onDelete={() => handleDelete(session.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </nav>
+      {/* 中间：根据 activeTab 切换会话列表 / 文件树 / 归档 */}
+      <div className="sidebar-list">
+        {activeTab === 'files' ? (
+          <FileTreePanel workingDir={workingDir} />
+        ) : isLoading ? (
+          <LoadingList />
+        ) : error !== null ? (
+          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
+        ) : sessions.length === 0 ? (
+          <EmptyHint />
+        ) : (
+          <nav aria-label="会话列表">
+            <div className="thread-group-label">
+              <span>最近会话</span>
+            </div>
+            {Array.from(groupedSessions.entries()).map(([folderName, folderSessions]) => (
+              <FolderGroup
+                key={folderName}
+                folderName={folderName}
+                sessions={folderSessions}
+                activeSessionId={activeSessionId}
+                isDeleting={isDeleting}
+                onSelect={handleSelectSession}
+                onDelete={handleDelete}
+                onCreateInFolder={handleCreateInFolder}
+              />
+            ))}
+          </nav>
+        )}
+      </div>
+
+      {/* 底部：用户信息（功能预留，占位） */}
+      <div className="sidebar-foot">
+        <div className="avatar">U</div>
+        <div className="user-info">
+          <div className="uname">未登录</div>
+          <div className="uemail">local-user</div>
+        </div>
       </div>
     </aside>
   );
 });
 
-// ── 子组件：会话列表项 ──────────────────────────────────────────
+// ── 子组件：文件夹分组 ──────────────────────────────────────────
 
-interface SessionItemProps {
+interface FolderGroupProps {
+  readonly folderName: string;
+  readonly sessions: ReadonlyArray<{
+    id: string;
+    title: string;
+    lastMessage: string | undefined;
+    updatedAt: number;
+    workingDir: string;
+  }>;
+  readonly activeSessionId: string | null;
+  readonly isDeleting: boolean;
+  readonly onSelect: (sessionId: string) => void;
+  readonly onDelete: (sessionId: string) => void;
+  /** 在此文件夹内新建会话（fl-add-btn 触发） */
+  readonly onCreateInFolder: (folderName: string) => void;
+}
+
+/** 文件夹分组：folder-label + folder-items(thread-item 列表) */
+function FolderGroup({
+  folderName,
+  sessions,
+  activeSessionId,
+  isDeleting,
+  onSelect,
+  onDelete,
+  onCreateInFolder,
+}: FolderGroupProps): ReactElement {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        className={cn('folder-label', collapsed && 'collapsed')}
+        onClick={() => setCollapsed((prev) => !prev)}
+        aria-expanded={!collapsed}
+      >
+        <span className="fl-chevron">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            role="img"
+            aria-label="折叠文件夹"
+          >
+            <title>折叠文件夹</title>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+        <span className="fl-icon">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            role="img"
+            aria-label="文件夹"
+          >
+            <title>文件夹</title>
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+        </span>
+        <span className="fl-name">{folderName}</span>
+        {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
+        {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
+        <span
+          className="fl-add-btn"
+          role="button"
+          tabIndex={0}
+          aria-label={`在 ${folderName} 新建会话`}
+          title="在此文件夹新建会话"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCreateInFolder(folderName);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              event.stopPropagation();
+              onCreateInFolder(folderName);
+            }
+          }}
+        >
+          <Plus className="size-3" strokeWidth={2.5} />
+        </span>
+      </button>
+      <div className="folder-items">
+        {sessions.map((session) => (
+          <ThreadItem
+            key={session.id}
+            title={session.title}
+            lastMessage={session.lastMessage}
+            updatedAt={session.updatedAt}
+            isActive={session.id === activeSessionId}
+            isDeleting={isDeleting}
+            onSelect={() => onSelect(session.id)}
+            onDelete={() => onDelete(session.id)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ── 子组件：会话列表项（对齐原型 thread-item 结构） ──────────────
+
+interface ThreadItemProps {
   readonly title: string;
-  // exactOptionalPropertyTypes：可选属性不允许显式 undefined
-  // 此处 lastMessage 可能从 session.lastMessage 直接传入（类型为 string | undefined）
   readonly lastMessage: string | undefined;
   readonly updatedAt: number;
-  /** 项目工作目录（用于副标题展示 basename，空字符串时隐藏） */
-  readonly workingDir: string;
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly onSelect: () => void;
   readonly onDelete: () => void;
 }
 
-/**
- * 会话列表项
- *
- * 使用 group + group-hover 控制删除按钮的显隐：
- * - 默认隐藏（focus-within 也可访问，键盘可达）
- * - 悬停整个 li 时显现
- *
- * 激活态通过 isActive prop 手动控制（而非 NavLink 的 .active 类），
- * 因为需要在点击时额外调用 setActiveSession。
- */
-function SessionItem({
+/** 会话列表项 - 对齐原型 .thread-item 结构 */
+function ThreadItem({
   title,
   lastMessage,
   updatedAt,
-  workingDir,
   isActive,
   isDeleting,
   onSelect,
   onDelete,
-}: SessionItemProps): ReactElement {
+}: ThreadItemProps): ReactElement {
+  // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
+  const metaParts: string[] = [formatRelativeTime(updatedAt)];
+  if (lastMessage !== undefined && lastMessage.length > 0) {
+    const preview = lastMessage.length > 20 ? `${lastMessage.slice(0, 20)}…` : lastMessage;
+    metaParts.push(preview);
+  }
+  const metaText = metaParts.join(' · ');
+
   return (
     // biome-ignore lint/a11y/useSemanticElements: 外层含 DropdownMenu 触发器（button），HTML 禁止 button 嵌套
     <div
       role="button"
       tabIndex={0}
-      className={cn(
-        'group focus-within:bg-sidebar-accent relative flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-left transition-colors',
-        'hover:bg-sidebar-accent',
-        isActive && 'bg-sidebar-accent',
-      )}
+      className={cn('thread-item', isActive && 'active')}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -220,56 +408,42 @@ function SessionItem({
       }}
       aria-current={isActive ? 'page' : undefined}
     >
-      {/* 左侧：标题 + 预览 + 时间 */}
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            'text-sidebar-foreground truncate font-serif text-sm tracking-wide',
-            isActive && 'font-semibold',
-          )}
-        >
-          {title}
-        </div>
-        {lastMessage !== undefined && lastMessage.length > 0 && (
-          <div className="text-muted-foreground mt-0.5 truncate text-xs">{lastMessage}</div>
-        )}
-        {workingDir.length > 0 && (
-          <div className="text-muted-foreground/60 mt-0.5 truncate text-[10px]" title={workingDir}>
-            {workingDir.split(/[\\/]/).pop() || workingDir}
+      <div className="ti-row">
+        <span className="ti-dot" />
+        <div className="ti-content">
+          <div className="ti-title" title={title}>
+            {title}
           </div>
-        )}
-        <div className="text-muted-foreground/70 mt-1 text-[10px]">
-          {formatRelativeTime(updatedAt)}
+          <div className="ti-meta">{metaText}</div>
+        </div>
+        <div className="ti-actions">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground h-6 w-6"
+                aria-label="会话操作"
+                disabled={isDeleting}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <MoreVertical className="size-3.5" strokeWidth={1.5} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => {
+                  onDelete();
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="size-3.5" strokeWidth={1.5} />
+                删除会话
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-
-      {/* 右侧：操作菜单（hover 时显现） */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-            aria-label="会话操作"
-            disabled={isDeleting}
-            // 阻止点击按钮触发外层 li 的 onSelect
-            onClick={(event) => event.stopPropagation()}
-          >
-            <MoreVertical className="size-3.5" strokeWidth={1.5} />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onSelect={() => {
-              onDelete();
-            }}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="size-3.5" strokeWidth={1.5} />
-            删除会话
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 }
@@ -296,7 +470,7 @@ function EmptyHint(): ReactElement {
   return (
     <div className="text-muted-foreground p-6 text-center">
       <p className="font-serif text-sm tracking-wide">尚无会话</p>
-      <p className="mt-1 text-xs">点击上方「新对话」开始</p>
+      <p className="mt-1 text-xs">点击上方「新建会话」开始</p>
     </div>
   );
 }

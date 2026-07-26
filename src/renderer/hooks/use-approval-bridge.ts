@@ -50,6 +50,17 @@ interface ApprovalRequestPayload {
  */
 function classifyTool(toolName: string): ApprovalType {
   const name = toolName.toLowerCase();
+  // 顺序敏感：先匹配更具体的 Git 写操作，再匹配通用规则
+  // Git 工具命名固定为 git_add / git_commit / git_push，用精确匹配避免误判
+  if (name === 'git_push') {
+    return 'git_push';
+  }
+  if (name === 'git_commit') {
+    return 'git_commit';
+  }
+  if (name === 'git_add') {
+    return 'git_add';
+  }
   // 顺序敏感：先匹配更具体的（如 install_package 优先于 external_call）
   if (name.includes('install') || name.includes('npm') || name.includes('pip')) {
     return 'install_package';

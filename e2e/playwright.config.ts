@@ -18,6 +18,10 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
+  // 排除需要专属配置运行的测试文件：
+  // - electron.spec.ts：使用 _electron fixture，需 playwright.electron.config.ts
+  // - smoke.prod.spec.ts：需打包产物，需 playwright.smoke.config.ts
+  testIgnore: ['**/electron.spec.ts', '**/smoke.prod.spec.ts'],
   timeout: 30_000,
   expect: {
     timeout: 5_000,

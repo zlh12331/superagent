@@ -14,6 +14,8 @@ const { mockFromWebContents, mockIpcMainHandle } = vi.hoisted(() => ({
 // mock @sentry/electron/main（避免真实上报）
 vi.mock('@sentry/electron/main', () => ({
   captureException: vi.fn(),
+  // L4 修复后 wrap.ts 调用 Sentry.flush(2000)，mock 需提供该方法
+  flush: vi.fn().mockResolvedValue(true),
 }));
 
 // mock electron：仅暴露 wrap 依赖的 ipcMain.handle 与 BrowserWindow.fromWebContents

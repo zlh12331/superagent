@@ -88,10 +88,15 @@ export interface IPermissionService {
    * 同时在 pending Map 中保存 tool + input 引用，
    * 用于 handleApprovalResponse 时构建记忆决策 key。
    *
+   * abortSignal 支持：若传入 AbortSignal，在等待用户响应期间信号触发 abort 时，
+   * 立即 reject Promise（TOOL_ABORTED）。这解决了 ToolExecutor 在 await 期间
+   * 无法响应中断的竞态条件。
+   *
    * @param payload 审批请求 payload（含 approvalId / toolName / input / description）
    * @param tool 工具实例（用于 rememberDecision 时构建 key）
    * @param input 工具入参（用于 rememberDecision 时构建 key）
    * @param webContents 接收审批请求的窗口
+   * @param abortSignal 可选中断信号（用户点"停止"时触发，立即 reject）
    * @returns 用户是否批准（true 执行，false 拒绝）
    */
   requestApproval(
@@ -99,6 +104,7 @@ export interface IPermissionService {
     tool: Tool,
     input: unknown,
     webContents: WebContents,
+    abortSignal?: AbortSignal,
   ): Promise<boolean>;
 
   /**
@@ -139,6 +145,8 @@ interface PendingApproval {
   readonly tool: Tool;
   /** 关联的工具入参（用于 rememberDecision 时构建 key） */
   readonly input: unknown;
+  /** abort 监听器清理函数（若注册了 abort 监听则需要清理） */
+  readonly cleanupAbort?: () => void;
 }
 
 /**
@@ -206,14 +214,40 @@ export class PermissionService implements IPermissionService {
     tool: Tool,
     input: unknown,
     webContents: WebContents,
+    abortSignal?: AbortSignal,
   ): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
+      // 已 abort 的信号直接 reject（避免推送无意义的审批请求到已销毁的会话）
+      if (abortSignal?.aborted === true) {
+        reject(new AppError(ErrorCode.TOOL_ABORTED, '工具执行已被中断'));
+        return;
+      }
+
       // 超时定时器：5 分钟后自动 reject
       const timer = setTimeout(() => {
+        cleanupAbort();
         this.pending.delete(payload.approvalId);
         logger.warn({ approvalId: payload.approvalId, toolName: payload.toolName }, '审批超时');
         reject(new AppError(ErrorCode.TOOL_PERMISSION_DENIED, `审批超时：${payload.toolName}`));
       }, APPROVAL_TIMEOUT_MS);
+
+      // abort 监听器：用户中断对话时立即 reject（H4 修复）
+      // 必须在 pending.set 之前定义，因为 timer 回调中要引用它
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        this.pending.delete(payload.approvalId);
+        logger.info(
+          { approvalId: payload.approvalId, toolName: payload.toolName },
+          '审批等待期间收到中断信号',
+        );
+        reject(new AppError(ErrorCode.TOOL_ABORTED, '工具执行已被中断'));
+      };
+
+      const cleanupAbort = (): void => {
+        if (abortSignal !== undefined) {
+          abortSignal.removeEventListener('abort', onAbort);
+        }
+      };
 
       // 在 pending Map 中保存 tool + input 引用，
       // 用于 handleApprovalResponse 时构建记忆决策 key
@@ -223,7 +257,13 @@ export class PermissionService implements IPermissionService {
         timer,
         tool,
         input,
+        cleanupAbort,
       });
+
+      // 注册 abort 监听（若传入 abortSignal）
+      if (abortSignal !== undefined) {
+        abortSignal.addEventListener('abort', onAbort, { once: true });
+      }
 
       // 推送 AGENT_APPROVAL_REQUEST 到渲染层
       if (!webContents.isDestroyed()) {
@@ -235,6 +275,7 @@ export class PermissionService implements IPermissionService {
       } else {
         // webContents 已销毁，立即 reject
         clearTimeout(timer);
+        cleanupAbort();
         this.pending.delete(payload.approvalId);
         reject(
           new AppError(ErrorCode.TOOL_PERMISSION_DENIED, 'WebContents 已销毁，无法推送审批请求'),
@@ -252,6 +293,7 @@ export class PermissionService implements IPermissionService {
     }
 
     clearTimeout(entry.timer);
+    entry.cleanupAbort?.();
     this.pending.delete(approvalId);
 
     // 记忆决策（用户选了"5分钟内不再询问"）
@@ -287,6 +329,7 @@ export class PermissionService implements IPermissionService {
     // reject 所有 pending Promise
     for (const [approvalId, entry] of this.pending) {
       clearTimeout(entry.timer);
+      entry.cleanupAbort?.();
       entry.reject(new AppError(ErrorCode.TOOL_ABORTED, 'PermissionService 已释放'));
       logger.debug({ approvalId }, 'dispose 时 reject pending 审批');
     }
@@ -321,18 +364,36 @@ export class PermissionService implements IPermissionService {
  * 用于 buildRememberKey，避免对象键顺序影响记忆决策的 key。
  */
 function stableStringify(value: unknown): string {
+  return stableStringifyInternal(value, new WeakSet());
+}
+
+/**
+ * stableStringify 内部实现，携带已访问对象集合检测循环引用
+ *
+ * 与原生 JSON.stringify 行为一致：遇到循环引用抛 TypeError，
+ * 而非无限递归导致栈溢出（栈溢出会崩溃主进程，TypeError 可被调用方 catch）。
+ */
+function stableStringifyInternal(value: unknown, visited: WeakSet<object>): string {
   // 对于非对象值（string/number/boolean/null），直接 stringify
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
+  // 循环引用检测：已访问过的对象抛 TypeError（与 JSON.stringify 行为一致）
+  if (visited.has(value)) {
+    throw new TypeError('Converting circular structure to JSON in stableStringify');
+  }
+  visited.add(value);
   // 对于数组，递归处理元素
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
+    return `[${value.map((v) => stableStringifyInternal(v, visited)).join(',')}]`;
   }
   // 对于对象，按键排序后递归处理值
   const keys = Object.keys(value as Record<string, unknown>).sort();
   return `{${keys
-    .map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
+    .map(
+      (k) =>
+        `${JSON.stringify(k)}:${stableStringifyInternal((value as Record<string, unknown>)[k], visited)}`,
+    )
     .join(',')}}`;
 }
 

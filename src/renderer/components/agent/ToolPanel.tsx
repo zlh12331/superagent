@@ -24,11 +24,14 @@ import {
   Wrench,
 } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
+import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
 
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { ToolCallItem, ToolCallStatus } from '@/stores/transient/tool-store';
 import { useToolStore } from '@/stores/transient/tool-store';
+
+// 空数组常量：避免每次渲染创建新 [] 引用导致 useSyncExternalStore 无限循环
+const EMPTY_CALLS: readonly ToolCallItem[] = [];
 
 interface ToolPanelProps {
   /** 当前会话 id（用于从 store 查询对应的工具调用列表） */
@@ -130,6 +133,92 @@ function formatOutput(output: unknown): string {
 }
 
 /**
+ * 安全读取对象字段（类型守卫）
+ *
+ * 工具入参类型为 unknown，渲染层需安全提取字段。
+ */
+function getField(obj: unknown, key: string): string | undefined {
+  if (typeof obj !== 'object' || obj === null) return undefined;
+  const value = (obj as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * 判断工具是否支持 diff 视图展示
+ *
+ * edit_file 和 write_file 的入参包含文件修改前后的内容，
+ * 可用 ReactDiffViewer 展示结构化 diff。
+ */
+function isDiffCapableTool(toolName: string): boolean {
+  return toolName === 'edit_file' || toolName === 'write_file';
+}
+
+/**
+ * 渲染工具入参的 diff 视图
+ *
+ * - edit_file：用 oldString / newString 做词级 diff
+ * - write_file：左侧显示原文件状态（新建/追加），右侧显示新内容
+ */
+function renderToolDiff(toolName: string, input: unknown): ReactElement {
+  if (toolName === 'edit_file') {
+    const oldStr = getField(input, 'oldString') ?? '';
+    const newStr = getField(input, 'newString') ?? '';
+    const replaceAll = (() => {
+      if (typeof input === 'object' && input !== null) {
+        const v = (input as Record<string, unknown>)['replaceAll'];
+        return typeof v === 'boolean' ? v : false;
+      }
+      return false;
+    })();
+    return (
+      <div className="approval-diff-wrapper mt-0.5 max-h-64 overflow-auto rounded border border-border">
+        {replaceAll && (
+          <div className="bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200/60 dark:border-amber-900/40 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+            替换全部匹配项
+          </div>
+        )}
+        <ReactDiffViewer
+          oldValue={oldStr || '（空）'}
+          newValue={newStr || '（空，表示删除）'}
+          splitView={true}
+          compareMethod={DiffMethod.WORDS}
+          hideLineNumbers={false}
+          showDiffOnly={false}
+          leftTitle="旧内容"
+          rightTitle="新内容"
+          useDarkTheme={false}
+        />
+      </div>
+    );
+  }
+
+  // write_file
+  const content = getField(input, 'content') ?? '';
+  const append = (() => {
+    if (typeof input === 'object' && input !== null) {
+      const v = (input as Record<string, unknown>)['append'];
+      return typeof v === 'boolean' ? v : false;
+    }
+    return false;
+  })();
+  return (
+    <div className="approval-diff-wrapper mt-0.5 max-h-64 overflow-auto rounded border border-border">
+      <ReactDiffViewer
+        oldValue={append ? '（追加到文件末尾）' : '（新建文件）'}
+        newValue={content}
+        splitView={true}
+        compareMethod={DiffMethod.LINES}
+        hideLineNumbers={false}
+        showDiffOnly={false}
+        leftTitle="原文件"
+        rightTitle="新内容"
+        useDarkTheme={false}
+      />
+    </div>
+  );
+}
+
+/**
  * 工具调用展示面板
  *
  * 从 useToolStore 读取当前 sessionId 的工具调用列表，
@@ -142,7 +231,8 @@ function formatOutput(output: unknown): string {
  */
 export function ToolPanel({ sessionId, className }: ToolPanelProps): ReactElement | null {
   // 订阅当前会话的工具调用列表
-  const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? []);
+  // 使用 EMPTY_CALLS 常量而非内联 []，避免新引用触发无限重渲染
+  const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
 
   // 面板整体折叠状态（默认展开）
   const [panelExpanded, setPanelExpanded] = useState(true);
@@ -229,7 +319,7 @@ export function ToolPanel({ sessionId, className }: ToolPanelProps): ReactElemen
 
       {/* 工具调用列表（可滚动） */}
       {panelExpanded && (
-        <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <ul className="flex flex-col gap-1 p-2">
             {calls.map((call) => (
               <li key={call.id}>
@@ -237,7 +327,7 @@ export function ToolPanel({ sessionId, className }: ToolPanelProps): ReactElemen
               </li>
             ))}
           </ul>
-        </ScrollArea>
+        </div>
       )}
     </div>
   );
@@ -298,13 +388,21 @@ function ToolCallItemView({ call }: ToolCallItemViewProps): ReactElement {
       {/* 展开详情：完整入参 + 输出/错误 */}
       {expanded && (
         <div className="mt-2 space-y-2 pl-5">
-          {/* 完整入参（展开时展示 formatOutput 完整内容） */}
-          <div>
-            <div className="text-muted-foreground text-[10px] font-medium">入参</div>
-            <pre className="bg-muted/50 text-foreground/80 mt-0.5 overflow-x-auto rounded p-2 text-[10px] leading-relaxed whitespace-pre-wrap">
-              {formatOutput(call.input)}
-            </pre>
-          </div>
+          {/* diff 视图（edit_file / write_file 专用） */}
+          {isDiffCapableTool(call.toolName) ? (
+            <div>
+              <div className="text-muted-foreground text-[10px] font-medium">变更预览</div>
+              {renderToolDiff(call.toolName, call.input)}
+            </div>
+          ) : (
+            /* 其他工具：完整入参（pre 展示） */
+            <div>
+              <div className="text-muted-foreground text-[10px] font-medium">入参</div>
+              <pre className="bg-muted/50 text-foreground/80 mt-0.5 overflow-x-auto rounded p-2 text-[10px] leading-relaxed whitespace-pre-wrap">
+                {formatOutput(call.input)}
+              </pre>
+            </div>
+          )}
 
           {/* 输出（status='success' 时展示） */}
           {call.status === 'success' && (

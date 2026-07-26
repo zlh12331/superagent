@@ -212,7 +212,7 @@ class SearchService implements ISearchService {
       // 解析 JSON 行，失败时跳过（不阻塞整个搜索）
       const parsed = this.tryParseJsonLine(line) as RipgrepJsonLine | null;
       if (parsed === null) {
-        return;
+        return true;
       }
 
       // 收集 match 行
@@ -220,19 +220,20 @@ class SearchService implements ISearchService {
         totalMatchCount += 1;
         // 达到 maxResults 后停止收集（但继续计数以判断是否真的截断）
         if (collectedMatches.length >= maxResults) {
-          return;
+          // 已收集够 maxResults 条，主动 kill 子进程避免继续消耗 CPU/IO
+          return false;
         }
         const parsedMatch = this.parseMatchLine(parsed);
         if (parsedMatch !== null) {
           collectedMatches.push(parsedMatch);
         }
-        return;
+        return true;
       }
 
       // 收集 context 行（仅在前 maxResults 个 match 范围内收集，避免无限增长）
       if (parsed.type === 'context') {
         if (totalMatchCount > maxResults) {
-          return;
+          return true;
         }
         const { path, line_number, line } = parsed.data;
         collectedContexts.push({
@@ -242,6 +243,7 @@ class SearchService implements ISearchService {
         });
       }
       // begin / summary / end 忽略
+      return true;
     });
 
     // 组装 GrepMatch：为每个 match 关联前后 2 行 context
@@ -303,12 +305,15 @@ class SearchService implements ISearchService {
     await this.runRipgrep(args, (line: string) => {
       // 空行跳过
       if (line === '') {
-        return;
+        return true;
       }
       files.push(line);
       if (files.length >= maxResults) {
         truncated = true;
+        // 达到 maxResults 后主动 kill 子进程
+        return false;
       }
+      return true;
     });
 
     return { files, truncated };
@@ -342,16 +347,13 @@ class SearchService implements ISearchService {
    * 启动 ripgrep 子进程并按行读取 stdout
    *
    * @param args ripgrep 命令行参数
-   * @param onLine 每行 stdout 的回调（同步调用）
+   * @param onLine 每行 stdout 的回调（同步调用），返回 false 时主动 kill 子进程
    * @returns 退出码（0 / 1 正常，2 错误）
    *
-   * 注意：本方法会 await 子进程退出，调用方需要传入 maxResults 控制提前终止。
-   * 当前实现中 onLine 返回 void，提前终止由调用方在 onLine 内累积后通过 truncated 标志判断，
-   * 但子进程仍会继续运行直到 stdout 关闭——这是简化实现。
-   *
-   * 后续优化：onLine 返回 boolean 表示是否继续，false 时主动 kill 子进程。
+   * 优化：onLine 返回 boolean 表示是否继续，false 时主动 kill 子进程
+   * 避免达到 maxResults 后子进程继续运行消耗 CPU/IO
    */
-  private runRipgrep(args: string[], onLine: (line: string) => void): Promise<void> {
+  private runRipgrep(args: string[], onLine: (line: string) => boolean): Promise<void> {
     return new Promise((resolve, reject) => {
       // spawn 子进程
       // Windows 上 rgPath 是绝对路径到 ripgrep.exe，不需要 shell
@@ -362,9 +364,15 @@ class SearchService implements ISearchService {
 
       this.activeProcesses.add(child);
 
+      // 统一清理逻辑：从 activeProcesses 移除
+      // close/error 都需调用，避免 Set 无限增长
+      const cleanup = (): void => {
+        this.activeProcesses.delete(child);
+      };
+
       // 子进程启动失败（spawn error 事件）
       child.on('error', (err: Error) => {
-        this.activeProcesses.delete(child);
+        cleanup();
         reject(
           new AppError(ErrorCode.INTERNAL_ERROR, 'ripgrep 启动失败', err, {
             rgPath,
@@ -376,18 +384,42 @@ class SearchService implements ISearchService {
       // 读取 stdout 按行处理
       // createInterface 自动按 \n / \r\n 分割
       if (child.stdout === null) {
-        this.activeProcesses.delete(child);
+        cleanup();
         reject(new AppError(ErrorCode.INTERNAL_ERROR, 'ripgrep stdout 为空'));
         return;
       }
       const rl = createInterface({ input: child.stdout });
       rl.on('line', (line: string) => {
-        onLine(line);
+        const shouldContinue = onLine(line);
+        if (!shouldContinue) {
+          // onLine 返回 false：主动 kill 子进程，触发 close 事件
+          try {
+            child.kill('SIGTERM');
+          } catch {
+            // 子进程可能已退出，kill 失败忽略
+          }
+        }
+      });
+
+      // stdout error 事件处理：避免 stdout 流错误导致 Promise 永久 pending
+      child.stdout.on('error', (err: Error) => {
+        cleanup();
+        rl.close();
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // 子进程可能已退出
+        }
+        reject(
+          new AppError(ErrorCode.INTERNAL_ERROR, 'ripgrep stdout 读取失败', err, {
+            args,
+          }),
+        );
       });
 
       // 子进程退出
       child.on('close', (code: number | null, signal: string | null) => {
-        this.activeProcesses.delete(child);
+        cleanup();
         rl.close();
 
         // 退出码 0 / 1：正常（1 表示无匹配，不是错误）
@@ -402,7 +434,7 @@ class SearchService implements ISearchService {
           return;
         }
 
-        // 信号终止（如 SIGTERM）
+        // 信号终止（如 SIGTERM，onLine 返回 false 触发的 kill 也会到这里）
         if (signal !== null) {
           logger.warn({ signal, code }, 'ripgrep 子进程被信号终止');
           resolve();

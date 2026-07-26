@@ -25,6 +25,11 @@ import { create } from 'zustand';
  * - apply_patch：应用 diff 补丁
  * - install_package：安装 npm 包
  * - external_call：外部 API 调用（MCP / webhook）
+ *
+ * Git 写操作（影响仓库状态 / 远程仓库）：
+ * - git_add：暂存工作区改动（git add）
+ * - git_commit：提交暂存区改动到本地仓库（git commit）
+ * - git_push：推送本地提交到远程仓库（git push，影响他人）
  */
 export type ApprovalType =
   | 'run_command'
@@ -33,7 +38,10 @@ export type ApprovalType =
   | 'delete_file'
   | 'apply_patch'
   | 'install_package'
-  | 'external_call';
+  | 'external_call'
+  | 'git_add'
+  | 'git_commit'
+  | 'git_push';
 
 /**
  * 审批状态

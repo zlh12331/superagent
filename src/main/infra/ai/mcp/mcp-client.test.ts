@@ -12,11 +12,18 @@
 // 8. close：幂等（已关闭时直接返回）
 
 import { AppError, ErrorCode } from '@novel-writer/shared';
+import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ToolContext } from '../tool';
 import { MCPClient } from './mcp-client';
 import type { McpServerConfig } from './mcp-types';
+
+// Mock WebContents：测试不依赖事件推送，仅满足 ToolContext 类型契约
+const mockWebContents = {
+  send: vi.fn(),
+  isDestroyed: vi.fn(() => false),
+} as unknown as WebContents;
 
 // vi.mock 必须在顶层
 const mocks = vi.hoisted(() => {
@@ -25,6 +32,7 @@ const mocks = vi.hoisted(() => {
     getServerVersion: vi.fn(),
     listTools: vi.fn(),
     callTool: vi.fn(),
+    close: vi.fn(),
   };
   const mockTransport = {
     stderr: null as { on?: unknown } | null,
@@ -75,7 +83,10 @@ function makeCtx(): ToolContext {
   return {
     workingDir: '/workspace',
     sessionId: 'session',
+    messageId: 'msg-1',
+    callId: 'call-1',
     abortSignal: new AbortController().signal,
+    webContents: mockWebContents,
   };
 }
 
@@ -105,6 +116,7 @@ describe('mcp-client', () => {
     mocks.mockClient.callTool.mockResolvedValue({
       content: [{ type: 'text', text: 'file content' }],
     });
+    mocks.mockClient.close.mockResolvedValue(undefined);
     mocks.mockTransport.close.mockResolvedValue(undefined);
     mocks.mockTransport.stderr = null;
   });
@@ -180,10 +192,12 @@ describe('mcp-client', () => {
       const ctx = makeCtx();
       const result = await client.callTool('read_file', { path: '/tmp/x' }, ctx);
 
-      expect(mocks.mockClient.callTool).toHaveBeenCalledWith({
-        name: 'read_file',
-        arguments: { path: '/tmp/x' },
-      });
+      // callTool 签名：(params, resultSchema?, options?) — M1 后透传 signal
+      expect(mocks.mockClient.callTool).toHaveBeenCalledWith(
+        { name: 'read_file', arguments: { path: '/tmp/x' } },
+        undefined,
+        { signal: ctx.abortSignal },
+      );
       expect(result).toMatchObject({
         content: [{ type: 'text', text: 'file content' }],
       });
@@ -229,13 +243,60 @@ describe('mcp-client', () => {
       const result = await client.callTool('read_file', {}, ctx);
       expect(result.structuredContent).toEqual({ custom: 'data' });
     });
+
+    it('abortSignal.aborted 时抛 TOOL_ABORTED（不发起调用）', async () => {
+      await client.connect();
+      const controller = new AbortController();
+      controller.abort();
+      const ctx: ToolContext = {
+        workingDir: '/workspace',
+        sessionId: 'session',
+        messageId: 'msg-1',
+        callId: 'call-1',
+        abortSignal: controller.signal,
+        webContents: mockWebContents,
+      };
+      await expect(client.callTool('read_file', {}, ctx)).rejects.toMatchObject({
+        code: ErrorCode.TOOL_ABORTED,
+      });
+      expect(mocks.mockClient.callTool).not.toHaveBeenCalled();
+    });
+
+    it('AbortError 转换为 TOOL_ABORTED', async () => {
+      await client.connect();
+      const controller = new AbortController();
+      const ctx: ToolContext = {
+        workingDir: '/workspace',
+        sessionId: 'session',
+        messageId: 'msg-1',
+        callId: 'call-1',
+        abortSignal: controller.signal,
+        webContents: mockWebContents,
+      };
+      // 模拟 SDK 在 abort 时抛 AbortError
+      const abortErr = new Error('aborted');
+      abortErr.name = 'AbortError';
+      mocks.mockClient.callTool.mockRejectedValue(abortErr);
+      // 在 await 期间触发 abort
+      setTimeout(() => controller.abort(), 0);
+
+      await expect(client.callTool('read_file', {}, ctx)).rejects.toMatchObject({
+        code: ErrorCode.TOOL_ABORTED,
+      });
+    });
   });
 
   describe('close', () => {
-    it('已连接时调用 transport.close', async () => {
+    it('已连接时调用 client.close + transport.close（L7 顺序）', async () => {
       await client.connect();
       await client.close();
+      expect(mocks.mockClient.close).toHaveBeenCalledOnce();
       expect(mocks.mockTransport.close).toHaveBeenCalledOnce();
+      // L7 修复：client.close 必须在 transport.close 之前调用
+      // toHaveBeenCalledOnce 已确保调用至少一次；未调用时 ?? 0 让比较失败（测试本就该红）
+      const clientCloseOrder = mocks.mockClient.close.mock.invocationCallOrder[0] ?? 0;
+      const transportCloseOrder = mocks.mockTransport.close.mock.invocationCallOrder[0] ?? 0;
+      expect(clientCloseOrder).toBeLessThan(transportCloseOrder);
     });
 
     it('未连接时幂等（不调用 transport.close）', async () => {
@@ -254,6 +315,14 @@ describe('mcp-client', () => {
       await client.connect();
       mocks.mockTransport.close.mockRejectedValue(new Error('close fail'));
       await expect(client.close()).resolves.toBeUndefined();
+    });
+
+    it('client.close 失败不阻断 transport.close', async () => {
+      await client.connect();
+      mocks.mockClient.close.mockRejectedValue(new Error('protocol close fail'));
+      await expect(client.close()).resolves.toBeUndefined();
+      // 即便 client.close 失败，仍尝试 transport.close（kill 子进程）
+      expect(mocks.mockTransport.close).toHaveBeenCalledOnce();
     });
   });
 

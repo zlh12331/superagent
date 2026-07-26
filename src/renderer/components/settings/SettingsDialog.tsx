@@ -13,10 +13,19 @@
 // - 反馈：保存 / 删除成功后 toast 提示
 // ──────────────────────────────────────────────────────────────
 
-import { Eye, EyeOff, KeyRound, Loader2, MessageSquareText, Trash2 } from 'lucide-react';
+import type { ApiKeyProvider, TelemetryLevel } from '@novel-writer/shared';
+import {
+  Eye,
+  EyeOff,
+  Keyboard,
+  KeyRound,
+  Loader2,
+  MessageSquareText,
+  Shield,
+  Trash2,
+} from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -30,6 +39,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
+import { useSetTelemetryLevel, useTelemetryLevelQuery } from '@/hooks/use-telemetry';
+import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
 interface SettingsDialogProps {
@@ -66,40 +77,25 @@ function maskApiKey(key: string): string {
  * );
  * ```
  */
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): ReactElement {
-  // 当前仅支持 deepseek，后续扩展时改为动态枚举
-  const provider = 'deepseek' as const;
+interface ApiKeySectionProps {
+  readonly provider: ApiKeyProvider;
+  readonly label: string;
+}
 
+function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
   const { data: apiKey, isLoading } = useApiKeyQuery(provider);
   const { mutate: setApiKey, isPending: isSaving } = useSetApiKey();
   const { mutate: deleteApiKey, isPending: isDeleting } = useDeleteApiKey();
 
-  // settings store：读取 / 更新 systemPrompt
-  const persistedSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
-  const updateAi = useSettingsStore((s) => s.updateAi);
-
-  // 本地输入状态（受控输入框）
   const [inputValue, setInputValue] = useState('');
-  // 是否显示明文（眼睛图标切换）
   const [showPlain, setShowPlain] = useState(false);
-  // 是否处于编辑模式（已配置时默认不展示输入框，点击"修改"进入编辑）
   const [editing, setEditing] = useState(false);
 
-  // 系统提示词本地编辑状态（独立于 API Key 编辑状态）
-  const [promptDraft, setPromptDraft] = useState('');
-  const [promptEditing, setPromptEditing] = useState(false);
-
-  // 对话框打开时重置本地状态
-  // apiKey 变化（如首次加载完成）也同步重置 inputValue
   useEffect(() => {
-    if (open) {
-      setInputValue('');
-      setShowPlain(false);
-      setEditing(false);
-      setPromptDraft('');
-      setPromptEditing(false);
-    }
-  }, [open]);
+    setInputValue('');
+    setShowPlain(false);
+    setEditing(false);
+  }, []);
 
   const isConfigured = apiKey !== null && apiKey !== undefined && apiKey !== '';
 
@@ -112,7 +108,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
       { provider, apiKey: inputValue.trim() },
       {
         onSuccess: () => {
-          toast.success('API Key 已保存');
+          toast.success(`${label} API Key 已保存`);
           setInputValue('');
           setEditing(false);
         },
@@ -123,12 +119,140 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
   const handleDelete = (): void => {
     deleteApiKey(provider, {
       onSuccess: () => {
-        toast.success('API Key 已删除');
+        toast.success(`${label} API Key 已删除`);
         setInputValue('');
         setEditing(false);
       },
     });
   };
+
+  return (
+    <div className="space-y-3 py-2">
+      <Label htmlFor={`${provider}-api-key`} className="font-serif text-sm tracking-wide">
+        {label} API Key
+      </Label>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" strokeWidth={1.5} />
+          <span className="text-sm">加载中...</span>
+        </div>
+      ) : isConfigured && !editing ? (
+        <div className="space-y-2">
+          <div className="bg-muted/40 flex items-center justify-between rounded-md border px-3 py-2 font-mono text-sm">
+            <span className="truncate">{maskApiKey(apiKey ?? '')}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label={showPlain ? '隐藏 API Key' : '显示 API Key'}
+              onClick={() => setShowPlain((v) => !v)}
+            >
+              {showPlain ? (
+                <EyeOff className="size-3.5" strokeWidth={1.5} />
+              ) : (
+                <Eye className="size-3.5" strokeWidth={1.5} />
+              )}
+            </Button>
+          </div>
+          {showPlain && (
+            <div className="bg-muted/30 break-all rounded-md border px-3 py-2 font-mono text-xs">
+              {apiKey}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditing(true);
+                setInputValue('');
+              }}
+            >
+              修改
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              {isDeleting ? (
+                <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <Trash2 className="size-3.5" strokeWidth={1.5} />
+              )}
+              删除
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Input
+            id={`${provider}-api-key`}
+            type={showPlain ? 'text' : 'password'}
+            placeholder="sk-..."
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            autoFocus
+            className="font-mono"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSave} disabled={isSaving || inputValue.trim() === ''}>
+              {isSaving ? <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} /> : null}
+              保存
+            </Button>
+            {isConfigured && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditing(false);
+                  setInputValue('');
+                }}
+              >
+                取消
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label={showPlain ? '隐藏 API Key' : '显示 API Key'}
+              onClick={() => setShowPlain((v) => !v)}
+            >
+              {showPlain ? (
+                <EyeOff className="size-3.5" strokeWidth={1.5} />
+              ) : (
+                <Eye className="size-3.5" strokeWidth={1.5} />
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): ReactElement {
+  const persistedSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
+  const updateAi = useSettingsStore((s) => s.updateAi);
+  const shortcuts = useSettingsStore((s) => s.shortcuts);
+  const updateShortcuts = useSettingsStore((s) => s.updateShortcuts);
+
+  const { data: telemetryLevel, isLoading: isLoadingTelemetry } = useTelemetryLevelQuery();
+  const { mutate: setTelemetryLevel, isPending: isSavingTelemetry } = useSetTelemetryLevel();
+
+  const [promptDraft, setPromptDraft] = useState('');
+  const [promptEditing, setPromptEditing] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setPromptDraft('');
+      setPromptEditing(false);
+    }
+  }, [open]);
 
   // 系统提示词：进入编辑时，加载当前持久化值到 draft
   const handlePromptEdit = (): void => {
@@ -165,118 +289,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           </DialogDescription>
         </DialogHeader>
 
-        {/* DeepSeek API Key 区块 */}
-        <div className="space-y-3 py-2">
-          <Label htmlFor="deepseek-api-key" className="font-serif text-sm tracking-wide">
-            DeepSeek API Key
-          </Label>
-
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" strokeWidth={1.5} />
-              <span className="text-sm">加载中...</span>
-            </div>
-          ) : isConfigured && !editing ? (
-            <div className="space-y-2">
-              <div className="bg-muted/40 flex items-center justify-between rounded-md border px-3 py-2 font-mono text-sm">
-                <span className="truncate">{maskApiKey(apiKey ?? '')}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  aria-label={showPlain ? '隐藏 API Key' : '显示 API Key'}
-                  onClick={() => setShowPlain((v) => !v)}
-                >
-                  {showPlain ? (
-                    <EyeOff className="size-3.5" strokeWidth={1.5} />
-                  ) : (
-                    <Eye className="size-3.5" strokeWidth={1.5} />
-                  )}
-                </Button>
-              </div>
-              {showPlain && (
-                <div className="bg-muted/30 break-all rounded-md border px-3 py-2 font-mono text-xs">
-                  {apiKey}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(true);
-                    setInputValue('');
-                  }}
-                >
-                  修改
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                  {isDeleting ? (
-                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
-                  ) : (
-                    <Trash2 className="size-3.5" strokeWidth={1.5} />
-                  )}
-                  删除
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Input
-                id="deepseek-api-key"
-                type={showPlain ? 'text' : 'password'}
-                placeholder="sk-..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                autoFocus
-                className="font-mono"
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={isSaving || inputValue.trim() === ''}
-                >
-                  {isSaving ? (
-                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
-                  ) : null}
-                  保存
-                </Button>
-                {isConfigured && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditing(false);
-                      setInputValue('');
-                    }}
-                  >
-                    取消
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  aria-label={showPlain ? '隐藏 API Key' : '显示 API Key'}
-                  onClick={() => setShowPlain((v) => !v)}
-                >
-                  {showPlain ? (
-                    <EyeOff className="size-3.5" strokeWidth={1.5} />
-                  ) : (
-                    <Eye className="size-3.5" strokeWidth={1.5} />
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+        <ApiKeySection provider="deepseek" label="DeepSeek" />
+        <div className="border-t border-stone-200/60" />
+        <ApiKeySection provider="openai" label="OpenAI" />
 
         {/* 系统提示词区块（Code Agent 专用） */}
         <div className="space-y-3 border-t border-stone-200/60 pt-4">
@@ -345,6 +360,78 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
               </Button>
             </div>
           )}
+        </div>
+
+        {/* 遥测级别区块（隐私合规，对标 VS Code telemetryLevel） */}
+        <div className="space-y-3 border-t border-stone-200/60 pt-4">
+          <div className="flex items-center gap-2">
+            <Shield className="size-4 text-stone-600" strokeWidth={1.5} />
+            <Label className="font-serif text-sm tracking-wide">遥测与错误报告</Label>
+          </div>
+          <p className="text-xs text-muted-foreground font-sans">
+            控制应用向 Sentry（自托管）上报的数据量。修改后需重启应用生效。
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                { value: 'off', label: '关闭', desc: '不上报' },
+                { value: 'error-only', label: '仅错误', desc: '错误堆栈' },
+                { value: 'full', label: '完整', desc: '错误+性能' },
+              ] as const
+            ).map((option) => {
+              const isActive = telemetryLevel === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isSavingTelemetry || isLoadingTelemetry}
+                  onClick={() => setTelemetryLevel(option.value as TelemetryLevel)}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-center transition-colors',
+                    isActive
+                      ? 'border-stone-400 bg-stone-100/60 text-stone-800'
+                      : 'border-stone-200 bg-transparent text-stone-500 hover:bg-stone-50',
+                  )}
+                >
+                  <span className="font-serif text-xs tracking-wide">{option.label}</span>
+                  <span className="text-[9px] text-muted-foreground">{option.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 快捷键设置区块 */}
+        <div className="space-y-3 border-t border-stone-200/60 pt-4">
+          <div className="flex items-center gap-2">
+            <Keyboard className="size-4 text-stone-600" strokeWidth={1.5} />
+            <Label className="font-serif text-sm tracking-wide">快捷键</Label>
+          </div>
+          <p className="text-xs text-muted-foreground font-sans">
+            支持 Ctrl/Cmd + 字母组合，如 Meta+P、Ctrl+S。修改后立即生效。
+          </p>
+          <div className="space-y-2">
+            {[
+              { key: 'commandPalette', label: '打开命令面板' },
+              { key: 'saveFile', label: '保存文件' },
+              { key: 'searchFile', label: '搜索文件' },
+              { key: 'toggleTheme', label: '切换主题' },
+              { key: 'openSettings', label: '打开设置' },
+              { key: 'newSession', label: '新建会话' },
+            ].map((item) => (
+              <div key={item.key} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-stone-600">{item.label}</span>
+                <Input
+                  type="text"
+                  value={shortcuts[item.key as keyof typeof shortcuts]}
+                  onChange={(e) =>
+                    updateShortcuts({ [item.key]: e.target.value } as Partial<typeof shortcuts>)
+                  }
+                  className="w-32 font-mono text-xs"
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         <DialogFooter>

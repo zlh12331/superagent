@@ -18,7 +18,8 @@
 // - 默认不传 resetKeys，仅手动重试；调用方可传入 resetKeys 自动重置
 // ──────────────────────────────────────────────────────────────
 
-import type { ReactElement, ReactNode } from 'react';
+import * as Sentry from '@sentry/electron/renderer';
+import type { ErrorInfo, ReactElement, ReactNode } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { ErrorState } from '@/components/common/ErrorState';
@@ -74,6 +75,14 @@ export function SectionErrorBoundary({
           {...(className !== undefined ? { className } : {})}
         />
       )}
+      onError={(error: unknown, info: ErrorInfo) => {
+        // 局部错误也上报 Sentry，但标记为 Section 级（不影响整体可用性）
+        Sentry.captureException(error, {
+          contexts: { react: { componentStack: info.componentStack } },
+          tags: { boundary: 'SectionErrorBoundary' },
+          level: 'warning',
+        });
+      }}
       {...(resetKeys !== undefined ? { resetKeys: [...resetKeys] } : {})}
     >
       {children}

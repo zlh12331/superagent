@@ -1,26 +1,44 @@
 // src/main/ipc/git.handler.ts
 // Git 域 IPC handler（GitService 暴露给渲染层的入口）
 //
-// 注册 2 个请求-响应 channel：
+// 注册 5 个请求-响应 channel：
+// 只读：
 // - git:status  获取工作区状态（branch/ahead/behind/files/clean）
 // - git:diff    获取 diff（unstaged / staged / 对比任意 ref）
+// 写操作：
+// - git:add     暂存工作区改动（git add）
+// - git:commit  提交暂存区改动（git commit -m，支持 --amend）
+// - git:push    推送本地提交到远程（git push，支持 --force-with-lease 和 -u）
 //
 // 设计要点：
 // - 与 file.handler.ts / search.handler.ts 一致的 DI 模式
 // - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
-// - GitService 仅暴露只读查询接口（status / diff），
-//   不暴露 commit / push / merge 等写操作，避免 Code Agent 越权修改用户仓库
-//   （写操作通过 TerminalService 由用户手动执行，保留人类监督）
+// - GitService 通过 spawn('git') 调用系统 CLI，handler 不重复实现 git 逻辑
+// - 写操作通过 Agent 工具系统触发（git-add.tool / git-commit.tool / git-push.tool），
+//   渲染层也可以直接通过 IPC 调用（如 DevPanel 的 Git 面板）
+// - 写操作的安全性由两层保护：
+//   · 渲染层（DevPanel）：用户主动点击，无需审批
+//   · Agent 工具：通过 Tool.permission='ask' 触发审批门
 // - git:status / git:diff 都是短任务（spawn 子进程 → 读取 stdout → 子进程退出），
 //   不需要管理长期状态，handler 直接转发即可
-// - ref / staged / filePath 默认值由 schema 提供（ref='HEAD', staged=false, filePath=undefined），
+// - git:push 可能较慢（网络 IO），但仍是请求-响应模式，无流式进度推送
+// - ref / staged / filePath / amend / setUpstream / force 默认值由 schema 提供，
 //   handler 不再硬编码默认值，保证 schema 单一真源
 //
 
 import {
+  type GitAddReq,
+  GitAddReqSchema,
+  type GitAddRes,
+  type GitCommitReq,
+  GitCommitReqSchema,
+  type GitCommitRes,
   type GitDiffReq,
   GitDiffReqSchema,
   type GitDiffRes,
+  type GitPushReq,
+  GitPushReqSchema,
+  type GitPushRes,
   type GitStatusReq,
   GitStatusReqSchema,
   type GitStatusRes,
@@ -55,6 +73,8 @@ export interface GitHandlerDeps {
 export function registerGitHandlers(deps: GitHandlerDeps): void {
   const { gitService } = deps;
 
+  // ── 只读操作 ────────────────────────────────────────────
+
   // 获取工作区状态：基于 `git status --porcelain=v2 -b` 解析
   // 返回结构化数据（branch / ahead / behind / files / clean），
   // 渲染层直接渲染，无需解析 git 原始文本
@@ -73,6 +93,43 @@ export function registerGitHandlers(deps: GitHandlerDeps): void {
       ref: input.ref,
       staged: input.staged,
       filePath: input.filePath,
+    });
+  });
+
+  // ── 写操作 ──────────────────────────────────────────────
+
+  // 暂存工作区改动：基于 `git add -A` 或 `git add -- <paths>`
+  // paths 为空时暂存所有改动（git add -A）
+  // 返回 stagedCount（已暂存文件数）和原始 stdout
+  wrap<GitAddReq, GitAddRes>(IPC_CHANNELS.GIT_ADD, GitAddReqSchema, async (input) => {
+    return gitService.add({
+      path: input.path,
+      paths: input.paths,
+    });
+  });
+
+  // 提交暂存区改动：基于 `git commit -m <message>` 或 `git commit --amend -m <message>`
+  // 返回新提交的 SHA、分支名、filesChanged、additions、deletions
+  // 注意：本接口不自动 git add，调用方应先调用 git:add
+  wrap<GitCommitReq, GitCommitRes>(IPC_CHANNELS.GIT_COMMIT, GitCommitReqSchema, async (input) => {
+    return gitService.commit({
+      path: input.path,
+      message: input.message,
+      amend: input.amend,
+    });
+  });
+
+  // 推送本地提交到远程：基于 `git push [-u] [--force-with-lease] <remote> [<refspec>]`
+  // force=true 时使用 --force-with-lease（更安全的强制推送）
+  // 返回 ok=true/false、pushedCount、原始 stdout 和 stderr
+  // push 失败（远程拒绝、网络问题）返回 ok=false 而非抛错
+  wrap<GitPushReq, GitPushRes>(IPC_CHANNELS.GIT_PUSH, GitPushReqSchema, async (input) => {
+    return gitService.push({
+      path: input.path,
+      remote: input.remote,
+      refspec: input.refspec,
+      setUpstream: input.setUpstream,
+      force: input.force,
     });
   });
 }

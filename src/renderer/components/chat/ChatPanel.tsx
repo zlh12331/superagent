@@ -82,26 +82,77 @@ export function ChatPanel({ chatId, workingDir, className }: ChatPanelProps): Re
   // - id: 控制消息状态隔离
   // - workingDir: agent 工具操作边界（注入 IpcAgentTransport）
   // - onError: 统一 toast 提示（不阻塞 UI）
-  const { messages, sendMessage, status, stop } = useAgentWithIpc({
+  // - regenerate: AI SDK v7 内置，自动截断目标 assistant 消息及后续 → 重发请求
+  const { messages, sendMessage, status, stop, regenerate } = useAgentWithIpc({
     id: chatId,
     workingDir,
     onError: handleError,
   });
 
+  // 派生：workingDir basename（用于状态条展示，避免显示完整路径污染视觉）
+  const workingDirBasename = workingDir.split(/[\\/]/).pop() ?? workingDir;
+
+  // 派生：状态指示文本（用于状态条右侧）
+  const statusText =
+    status === 'streaming'
+      ? 'RUNNING'
+      : status === 'submitted'
+        ? 'THINKING'
+        : status === 'ready'
+          ? 'READY'
+          : status === 'error'
+            ? 'ERROR'
+            : 'IDLE';
+
+  // 重新生成回调：透传给 ChatMessageList → MsgActions
+  // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
+  // 然后用截断后的 messages 重新发起请求（transport 复用同一 sessionId，AgentService 自动中断旧 stream）
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      void regenerate({ messageId });
+    },
+    [regenerate],
+  );
+
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* 顶部标题栏 */}
-      <header className="border-border bg-muted/30 border-b px-4 py-2">
-        <span className="text-foreground font-serif text-sm font-medium tracking-wide">对话</span>
-      </header>
+      {/* 顶部状态条：等宽字体遥测带（workingDir + status 指示器）
+          - 左侧：项目目录 basename（限制宽度，溢出省略）
+          - 右侧：当前状态（READY/RUNNING/THINKING/ERROR/IDLE）+ 会话 id 前 8 位 */}
+      <div className="thread-status-bar">
+        <div className="min-w-0 flex-1 truncate" title={workingDir}>
+          {workingDirBasename}
+        </div>
+        <span className="text-muted-foreground/70" aria-hidden="true">
+          ·
+        </span>
+        <div
+          className={cn(
+            'inline-flex items-center gap-1.5',
+            status === 'streaming' && 'text-[var(--aurora-accent)]',
+            status === 'error' && 'text-destructive',
+          )}
+          role="status"
+          aria-label={`会话状态：${statusText}`}
+        >
+          {/* 状态点：streaming 时脉冲动画 */}
+          <span
+            className={cn(
+              'inline-block size-1.5 rounded-full bg-current',
+              status === 'streaming' && 'animate-pulse-soft',
+            )}
+          />
+          {statusText}
+        </div>
+      </div>
 
       {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">
-        <ChatMessageList messages={messages} status={status} />
+        <ChatMessageList messages={messages} status={status} onRegenerate={handleRegenerate} />
       </div>
 
-      {/* 底部输入框 */}
-      <footer className="border-border border-t p-3">
+      {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
+      <footer className="composer">
         <ChatInput
           status={status}
           onSend={(text) => {

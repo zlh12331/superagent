@@ -190,18 +190,23 @@ export class MCPClient {
    * 实现 McpCallToolFn 接口，供 adaptMcpTool 注入。
    * 内部调用 MCP SDK 的 client.callTool，把结果转换为 McpToolCallResult。
    *
+   * abortSignal 支持（M1 修复）：把 ctx.abortSignal 透传到 MCP SDK 的 RequestOptions.signal，
+   * SDK 在 abort 触发时会向 server 发送 cancellation notification 并抛出 AbortError。
+   * 这样用户中断对话时，长时间运行的 MCP 工具能及时被取消。
+   *
    * @param toolName 工具名（不含命名空间前缀）
    * @param input 工具入参
-   * @param _ctx 工具执行上下文（当前未使用，留待后续接入 abortSignal）
+   * @param ctx 工具执行上下文（提供 abortSignal，用于中断长时间运行的 MCP 工具）
    * @returns MCP server 返回的工具结果
    *
    * @throws AppError(TOOL_EXECUTION_FAILED) 当调用失败时
+   * @throws AppError(TOOL_ABORTED) 当用户中断时
    * @throws AppError(INTERNAL_ERROR) 当未连接时
    */
   callTool: McpCallToolFn = async (
     toolName: string,
     input: unknown,
-    _ctx: Parameters<McpCallToolFn>[2],
+    ctx: Parameters<McpCallToolFn>[2],
   ): Promise<McpToolCallResult> => {
     if (!this.connected || this.client === null) {
       throw new AppError(
@@ -210,11 +215,22 @@ export class MCPClient {
       );
     }
 
+    // 调用前再次检查 abortSignal（避免无效请求）
+    if (ctx.abortSignal.aborted) {
+      throw new AppError(ErrorCode.TOOL_ABORTED, `MCP 工具已中断：${toolName}`);
+    }
+
     try {
-      const result = await this.client.callTool({
-        name: toolName,
-        arguments: input as Record<string, unknown> | undefined,
-      });
+      // 把 ctx.abortSignal 透传到 MCP SDK 的 RequestOptions.signal（M1 修复）
+      // SDK 在 abort 触发时会向 server 发送 cancellation notification 并抛出 AbortError
+      const result = await this.client.callTool(
+        {
+          name: toolName,
+          arguments: input as Record<string, unknown> | undefined,
+        },
+        undefined,
+        { signal: ctx.abortSignal },
+      );
 
       // 转换 MCP SDK 返回结构为 McpToolCallResult
       // 注意：result.isError 在 MCP SDK 中因 $loose catchall 推断为 unknown，
@@ -227,6 +243,12 @@ export class MCPClient {
         ...(result.isError !== undefined ? { isError: result.isError as boolean } : {}),
       };
     } catch (error) {
+      // abort 触发的 AbortError 转换为 TOOL_ABORTED（与内置工具一致）
+      const isAborted =
+        ctx.abortSignal.aborted || (error instanceof Error && error.name === 'AbortError');
+      if (isAborted) {
+        throw new AppError(ErrorCode.TOOL_ABORTED, `MCP 工具已中断：${toolName}`);
+      }
       const message = error instanceof Error ? error.message : String(error);
       logger.warn({ serverName: this.config.name, toolName, error: message }, 'MCP 工具调用失败');
       throw new AppError(
@@ -254,8 +276,23 @@ export class MCPClient {
    * 静默关闭（不抛错，仅 log）
    *
    * 用于 connect 失败时的资源清理，以及 dispose 路径。
+   *
+   * 关闭顺序（L7 修复）：
+   * 1. client.close()：先关闭 MCP 协议层（发送 close 通知给 server）
+   * 2. transport.close()：再关闭 stdio 传输（kill 子进程）
+   * 顺序错误会导致 server 收不到 close 通知就被 SIGKILL，无法优雅退出。
    */
   private async closeQuietly(): Promise<void> {
+    // 1. 先关闭 MCP Client 协议层（L7 修复：之前漏掉 client.close）
+    if (this.client !== null) {
+      try {
+        await this.client.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn({ serverName: this.config.name, error: message }, 'MCP Client 协议层关闭失败');
+      }
+    }
+    // 2. 再关闭 stdio 传输（kill 子进程）
     try {
       if (this.transport !== null) {
         await this.transport.close();

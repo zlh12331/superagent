@@ -18,16 +18,20 @@
 
 import {
   AlertTriangle,
+  CloudUpload,
   FileDiff,
   FileEdit,
   FilePlus,
   FileX,
+  GitBranch,
+  GitCommitHorizontal,
   Globe,
   type LucideIcon,
   Package,
   Terminal,
 } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
+import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -67,6 +71,31 @@ function getField(obj: unknown, key: string): string | undefined {
 }
 
 /**
+ * 安全读取对象布尔字段（类型守卫）
+ *
+ * 与 getField 类似，但缩窄为 boolean | undefined。
+ * 用于读取工具入参中的布尔选项（如 amend / force / setUpstream）。
+ */
+function getBooleanField(obj: unknown, key: string): boolean | undefined {
+  if (typeof obj !== 'object' || obj === null) return undefined;
+  const value = (obj as Record<string, unknown>)[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+/**
+ * 安全读取对象字符串数组字段（类型守卫）
+ *
+ * 用于读取工具入参中的路径列表（如 git_add 的 paths）。
+ * 非数组或元素非字符串时返回 undefined。
+ */
+function getStringArrayField(obj: unknown, key: string): string[] | undefined {
+  if (typeof obj !== 'object' || obj === null) return undefined;
+  const value = (obj as Record<string, unknown>)[key];
+  if (!Array.isArray(value)) return undefined;
+  return value.every((v) => typeof v === 'string') ? (value as string[]) : undefined;
+}
+
+/**
  * 按 ApprovalType 获取对应图标
  *
  * 不同审批类型使用不同图标增强视觉辨识：
@@ -77,6 +106,9 @@ function getField(obj: unknown, key: string): string | undefined {
  * - apply_patch: FileDiff（差异补丁）
  * - install_package: Package（安装包）
  * - external_call: Globe（外部调用）
+ * - git_add: GitBranch（暂存改动）
+ * - git_commit: GitCommitHorizontal（提交）
+ * - git_push: CloudUpload（推送到远程）
  *
  * 使用 switch-case 而非对象字面量，避免 snake_case key 触发 useNamingConvention。
  */
@@ -96,6 +128,12 @@ function getIconForType(type: ApprovalType): LucideIcon {
       return Package;
     case 'external_call':
       return Globe;
+    case 'git_add':
+      return GitBranch;
+    case 'git_commit':
+      return GitCommitHorizontal;
+    case 'git_push':
+      return CloudUpload;
   }
 }
 
@@ -121,25 +159,41 @@ function getLabelForType(type: ApprovalType): string {
       return '安装依赖';
     case 'external_call':
       return '外部调用';
+    case 'git_add':
+      return 'Git 暂存';
+    case 'git_commit':
+      return 'Git 提交';
+    case 'git_push':
+      return 'Git 推送';
   }
 }
 
 /**
  * 判断是否为危险审批类型
  *
- * 涉及不可逆操作（删除文件、执行命令、安装依赖）返回 true，
+ * 涉及不可逆操作或影响他人的工具返回 true：
+ * - delete_file：删除文件不可逆
+ * - run_command：执行命令可能有副作用
+ * - install_package：安装依赖影响整个项目
+ * - git_push：推送影响远程仓库与他人协作
+ *
  * 拒绝按钮使用 destructive variant 以提示风险。
  */
 function isDangerousType(type: ApprovalType): boolean {
-  return type === 'delete_file' || type === 'run_command' || type === 'install_package';
+  return (
+    type === 'delete_file' ||
+    type === 'run_command' ||
+    type === 'install_package' ||
+    type === 'git_push'
+  );
 }
 
 /**
  * 判断是否支持"记住决策"
  *
- * 仅对有副作用的工具类型支持记住决策（run_command / write_file / edit_file）。
- * 危险操作（delete_file / install_package）不提供记住决策，强制每次询问。
- * apply_patch / external_call 因入参差异大，也不提供记住决策。
+ * 仅对有副作用但可重复的工具类型支持记住决策（run_command / write_file / edit_file）。
+ * 危险操作（delete_file / install_package / git_push）不提供记住决策，强制每次询问。
+ * apply_patch / external_call / git_add / git_commit 因入参差异大或影响仓库状态，也不提供记住决策。
  */
 function canRememberDecision(type: ApprovalType): boolean {
   return type === 'run_command' || type === 'write_file' || type === 'edit_file';
@@ -152,9 +206,15 @@ function canRememberDecision(type: ApprovalType): boolean {
  * - run_command: 命令文本 + 工作目录 + 超时
  * - write_file: 文件路径 + 写入内容预览（前 500 字符）
  * - edit_file: 文件路径 + oldString / newString diff 预览
+ * - git_add / git_commit / git_push: 委托 renderGitPreview
  * - 其他类型: 仅显示 description（已在 DialogDescription 渲染）
  */
 function renderStructuredPreview(type: ApprovalType, input: unknown): ReactElement | null {
+  // Git 审批类型委托给专用渲染函数
+  if (type === 'git_add' || type === 'git_commit' || type === 'git_push') {
+    return renderGitPreview(type, input);
+  }
+
   if (type === 'run_command') {
     const cmd = getField(input, 'command') ?? '';
     const cwd = getField(input, 'cwd');
@@ -174,19 +234,37 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
   if (type === 'write_file') {
     const path = getField(input, 'path') ?? '';
     const content = getField(input, 'content') ?? '';
-    const preview =
-      content.length > 500
-        ? `${content.slice(0, 500)}\n…（已截断，共 ${content.length} 字符）`
-        : content;
+    const append = (() => {
+      if (typeof input === 'object' && input !== null) {
+        const v = (input as Record<string, unknown>)['append'];
+        return typeof v === 'boolean' ? v : false;
+      }
+      return false;
+    })();
     return (
       <div className="mt-3 space-y-2">
         <div className="text-xs text-stone-500">
           <span className="font-sans">文件路径：</span>
           <span className="break-all font-mono">{path}</span>
+          {append && (
+            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+              追加模式
+            </span>
+          )}
         </div>
-        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-xs text-stone-800">
-          {preview}
-        </pre>
+        <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-amber-200/60">
+          <ReactDiffViewer
+            oldValue={append ? '（追加到文件末尾）' : '（新建文件）'}
+            newValue={content}
+            splitView={true}
+            compareMethod={DiffMethod.LINES}
+            hideLineNumbers={false}
+            showDiffOnly={false}
+            leftTitle="原文件"
+            rightTitle="新内容"
+            useDarkTheme={false}
+          />
+        </div>
       </div>
     );
   }
@@ -213,15 +291,18 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
             </span>
           )}
         </div>
-        <div className="space-y-1">
-          <div className="text-xs font-sans text-red-700">− 旧内容</div>
-          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md border border-red-200/60 bg-red-50/50 p-2 font-mono text-xs text-red-900">
-            {oldStr || '（空）'}
-          </pre>
-          <div className="text-xs font-sans text-green-700">+ 新内容</div>
-          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md border border-green-200/60 bg-green-50/50 p-2 font-mono text-xs text-green-900">
-            {newStr || '（空，表示删除）'}
-          </pre>
+        <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-amber-200/60">
+          <ReactDiffViewer
+            oldValue={oldStr || '（空）'}
+            newValue={newStr || '（空，表示删除）'}
+            splitView={true}
+            compareMethod={DiffMethod.WORDS}
+            hideLineNumbers={false}
+            showDiffOnly={false}
+            leftTitle="旧内容"
+            rightTitle="新内容"
+            useDarkTheme={false}
+          />
         </div>
       </div>
     );
@@ -229,6 +310,95 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
 
   // apply_patch / delete_file / install_package / external_call：不渲染额外预览
   // description 已在 DialogDescription 中展示
+  return null;
+}
+
+/**
+ * 渲染 Git 审批类型的结构化预览
+ *
+ * - git_add: 显示待暂存的路径列表（paths 为空时显示「全部改动」）
+ * - git_commit: 显示提交信息 + amend 标记
+ * - git_push: 显示 remote + refspec + 强制推送 / 设置上游标记
+ *
+ * 抽离为独立函数避免 renderStructuredPreview 过长，且 Git 类型共享视觉风格（琥珀色边框）。
+ */
+function renderGitPreview(type: ApprovalType, input: unknown): ReactElement | null {
+  if (type === 'git_add') {
+    const paths = getStringArrayField(input, 'paths') ?? [];
+    const isAddAll = paths.length === 0;
+    return (
+      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
+        <div className="text-xs text-stone-500">
+          <span className="font-sans">操作：</span>
+          <span>
+            {isAddAll ? 'git add -A（暂存全部改动）' : `git add（暂存 ${paths.length} 个路径）`}
+          </span>
+        </div>
+        {!isAddAll && (
+          <ul className="space-y-0.5 text-stone-800">
+            {paths.map((p) => (
+              <li key={p} className="break-all">
+                <span className="text-stone-400">+</span> {p}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  if (type === 'git_commit') {
+    const message = getField(input, 'message') ?? '';
+    const amend = getBooleanField(input, 'amend') ?? false;
+    return (
+      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
+        <div className="flex items-center gap-2 text-xs text-stone-500">
+          <span className="font-sans">操作：</span>
+          <span>{amend ? 'git commit --amend（追加到上次提交）' : 'git commit（新建提交）'}</span>
+          {amend && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+              不可逆
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-stone-500">
+          <span className="font-sans">提交信息：</span>
+        </div>
+        <pre className="whitespace-pre-wrap break-all rounded bg-white/60 p-2 text-stone-800">
+          {message}
+        </pre>
+      </div>
+    );
+  }
+
+  if (type === 'git_push') {
+    const remote = getField(input, 'remote') ?? 'origin';
+    const refspec = getField(input, 'refspec') ?? '';
+    const setUpstream = getBooleanField(input, 'setUpstream') ?? false;
+    const force = getBooleanField(input, 'force') ?? false;
+    const target = refspec.length > 0 ? `${remote}/${refspec}` : `${remote}/<current-branch>`;
+    return (
+      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
+        <div className="text-xs text-stone-500">
+          <span className="font-sans">操作：</span>
+          <span>{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {setUpstream && (
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">设置上游</span>
+          )}
+          {force && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">强制推送</span>}
+          {!force && !setUpstream && (
+            <span className="rounded bg-stone-200 px-1.5 py-0.5 text-stone-600">普通推送</span>
+          )}
+        </div>
+        <div className="text-xs text-amber-700">
+          ⚠ 推送将影响远程仓库与他人协作，请确认目标分支与协作者。
+        </div>
+      </div>
+    );
+  }
+
   return null;
 }
 

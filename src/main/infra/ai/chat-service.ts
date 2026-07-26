@@ -110,15 +110,34 @@ class ChatService implements IChatService {
    *
    * 流程：
    * 1. 生成或复用 sessionId
-   * 2. 创建 AbortController 并加入 Map
-   * 3. 调用 streamText 启动流式响应
-   * 4. 异步读取 toUIMessageStream 的 reader，逐 part 通过 IPC 推送
-   * 5. 流结束（正常/异常/abort）后从 Map 移除
+   * 2. 防重检查：若 sessionId 已有活跃 stream，先 abort 旧 stream 并等待其退出（对齐 AgentService）
+   * 3. 创建 AbortController 并加入 Map
+   * 4. 调用 streamText 启动流式响应
+   * 5. 异步读取 toUIMessageStream 的 reader，逐 part 通过 IPC 推送
+   * 6. 流结束（正常/异常/abort）后从 Map 移除
    *
    * @returns 本次对话的 sessionId（渲染层用此 id 订阅后续流式事件）
    */
   async startChat(options: StartChatOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
+
+    // 防重检查：若 sessionId 已有活跃 stream，先中断旧 stream 并等待其退出
+    // 避免覆盖旧 controller 导致旧 stream 无法被 abort（孤儿 stream 内存泄漏）
+    // 对齐 AgentService.startAgent 的实现
+    const existingController = this.activeSessions.get(sessionId);
+    if (existingController !== undefined) {
+      logger.warn({ sessionId }, '检测到已有活跃 chat stream，先中断旧 stream');
+      existingController.abort();
+      const existingStream = this.activeStreams.get(sessionId);
+      if (existingStream !== undefined) {
+        // 等待旧 stream 真正退出（最多 5s 兜底，避免卡死调用方）
+        await Promise.race([
+          existingStream,
+          new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+        ]);
+      }
+    }
+
     const controller = new AbortController();
     this.activeSessions.set(sessionId, controller);
 
@@ -144,6 +163,12 @@ class ChatService implements IChatService {
   /**
    * 中断指定 sessionId 的对话
    *
+   * 立即从 Map 删除 controller，避免以下竞态（对齐 AgentService.abort）：
+   *   T0: abort(sessionId) → controller.abort()
+   *   T1: startChat(sessionId) → activeSessions.set(sessionId, newController)  // 覆盖
+   *   T2: 旧 stream 的 finally → activeSessions.delete(sessionId)  // ❌ 误删新 controller
+   * 改为立即删除：旧 stream 的 finally 改为 CAS 检查（见 streamToWebContents finally）
+   *
    * @returns 是否成功中断（对话已结束则返回 false）
    */
   abort(sessionId: string): boolean {
@@ -151,8 +176,9 @@ class ChatService implements IChatService {
     if (controller === undefined) {
       return false;
     }
+    // 立即从 Map 删除 controller，配合 finally 的 CAS 检查避免误删新 controller
+    this.activeSessions.delete(sessionId);
     controller.abort();
-    // 不立即从 Map 移除，让流推送协程感知 abort 后自行清理
     return true;
   }
 
@@ -247,6 +273,8 @@ class ChatService implements IChatService {
     webContents: WebContents,
     controller: AbortController,
   ): Promise<void> {
+    // 性能埋点：从 streamText 开始到流推送完毕的总耗时
+    const startTime = performance.now();
     try {
       // 1. 获取 model 实例
       const model = await getModel(undefined);
@@ -273,8 +301,14 @@ class ChatService implements IChatService {
           break;
         }
         // webContents 销毁后停止推送（窗口已关闭）
+        // 主动 cancel reader + abort controller，让 streamText 协程感知并释放底层资源
+        // （HTTP 连接、内部 ReadableStream 等），避免孤儿 stream 内存泄漏
         if (webContents.isDestroyed()) {
           logger.warn({ sessionId }, 'webContents 已销毁，停止推送流');
+          await reader.cancel().catch(() => {
+            // reader.cancel 可能因流已关闭而失败，忽略
+          });
+          controller.abort();
           break;
         }
         const payload: ChatStreamPartPayload = { sessionId, part: value };
@@ -286,6 +320,27 @@ class ChatService implements IChatService {
         const endPayload: ChatStreamEndPayload = { sessionId };
         webContents.send(IPC_CHANNELS.CHAT_STREAM_END, endPayload);
       }
+
+      // 6. token 使用量统计（AI SDK v7 原生支持）
+      //    totalUsage 是 PromiseLike，流结束后才 resolve，不 await 避免阻塞 finally 清理
+      //    用 Promise.resolve 包裹以获得 .catch 方法（PromiseLike 本身无 .catch）
+      Promise.resolve(result.totalUsage)
+        .then((usage) => {
+          if (usage !== null && usage !== undefined) {
+            logger.info(
+              {
+                sessionId,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+              },
+              'Chat token 使用量',
+            );
+          }
+        })
+        .catch(() => {
+          // usage 读取失败，忽略
+        });
     } catch (error: unknown) {
       // AbortError 是用户主动中断，不视为错误（不推送 error）
       if (isAbortError(error)) {
@@ -306,13 +361,21 @@ class ChatService implements IChatService {
           };
           webContents.send(IPC_CHANNELS.CHAT_STREAM_ERROR, errorPayload);
         }
-        logger.error({ sessionId, error: appError }, '对话流异常结束');
+        logger.error({ sessionId, errorCode: appError.code, error: appError }, '对话流异常结束');
       }
     } finally {
       // 无论正常/异常/abort，都从两个 Map 同步移除
       // P3-10：activeStreams 也需清空，dispose 通过 Promise.allSettled 等待其 resolve
-      this.activeSessions.delete(sessionId);
+      // CAS 检查：abort() 已立即删除 controller，若 startChat 写入了新 controller，
+      // 引用比较不一致则跳过删除，避免误删新 controller（对齐 AgentService 实现）
+      if (this.activeSessions.get(sessionId) === controller) {
+        this.activeSessions.delete(sessionId);
+      }
       this.activeStreams.delete(sessionId);
+
+      // 性能埋点：总耗时
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.info({ sessionId, durationMs }, 'Chat streamText 总耗时');
     }
   }
 }

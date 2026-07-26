@@ -62,6 +62,8 @@ export interface ToolCallItem {
   readonly sessionId: string;
   /** 工具名称（如 read_file / write_file / run_command） */
   readonly toolName: string;
+  /** 人类可读标题（UI 展示用，如 "读取文件: src/main.ts"；pending 时为 null） */
+  readonly title: string | null;
   /** 工具入参（结构由工具 schema 决定，渲染层不校验） */
   readonly input: unknown;
   /** 权限级别 */
@@ -88,12 +90,16 @@ interface ToolState {
   // ── 操作方法 ────────────────────────────────────────
   /** 入队工具调用（主进程推送 tool:call 时调用） */
   readonly appendToolCall: (
-    item: Omit<ToolCallItem, 'status' | 'output' | 'error' | 'createdAt' | 'resolvedAt'>,
+    item: Omit<ToolCallItem, 'status' | 'output' | 'error' | 'title' | 'createdAt' | 'resolvedAt'>,
   ) => void;
   /** 更新工具结果（主进程推送 tool:result 时调用） */
   readonly appendToolResult: (
     toolCallId: string,
-    result: { readonly output: unknown; readonly error: ToolCallError | null },
+    result: {
+      readonly output: unknown;
+      readonly error: ToolCallError | null;
+      readonly title?: string;
+    },
   ) => void;
   /** 清空指定会话的所有工具调用（会话切换或关闭时调用） */
   readonly clearBySession: (sessionId: string) => void;
@@ -121,6 +127,7 @@ export const useToolStore = create<ToolState>()((set) => ({
       const newItem: ToolCallItem = {
         ...item,
         status: 'pending',
+        title: null,
         output: null,
         error: null,
         createdAt: Date.now(),
@@ -144,6 +151,7 @@ export const useToolStore = create<ToolState>()((set) => ({
           return {
             ...call,
             status: (result.error !== null ? 'error' : 'success') as ToolCallStatus,
+            title: result.title ?? call.title,
             output: result.output,
             error: result.error,
             resolvedAt: Date.now(),

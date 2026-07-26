@@ -1,25 +1,20 @@
 // src/renderer/components/chat/ChatMessageList.tsx
-// 聊天消息列表 · 极简文学风
+// 聊天消息列表 · Aurora 设计系统
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 渲染 UIMessage 数组（user / assistant / system 三种角色）
 // - assistant 消息按 parts 分发渲染（text / reasoning / tool / file / step-start 等）
-// - 自动滚动到底部（流式追加时保持视图跟随）
+// - 智能自动滚动：仅当用户在底部附近时跟随，否则显示 scroll-to-bottom 按钮
 // - 空状态展示 EmptyState 组件
 //
-// 设计：
-// - user 消息靠右，米色气泡（secondary 背景）
-// - assistant 消息靠左，无气泡，纯衬线文字（最大化可读性）
-// - system 消息居中，淡灰小字
-// - reasoning 部分用斜体灰字，加"思考"标签
-// - tool 部分用代码块展示（带 type + state 标签）
-// - step-start 部分用细分隔线表示新步骤
-// - 流式占位：streaming 状态时，最后一条 assistant 消息末尾显示"..."
-//
-// 文学风细节：
-// - 字体使用 font-serif（Noto Serif SC 衬线）
-// - 文字行高 1.8（接近书籍排版）
-// - 用户气泡用 secondary 暖米色，呼应纸张感
+// 设计（对齐原型 docs/prototype/prototype-v2.html）：
+// - user 消息：.msg.user > .msg-body > .msg-content（玻璃渐变气泡，靠右由 .msg-content 自身样式实现）
+// - assistant 消息：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + .msg-content（无气泡开放排版）
+// - tool 调用：.msg.msg-tool > .msg-body > .card.tool-card（可折叠卡片）
+// - reasoning：.reasoning-block（折叠式推理块，accent 左光条）
+// - system 消息：居中小字
+// - streaming 占位：typing-indicator（三个 accent 点弹跳）
+// - 滚动到底部按钮：.scroll-to-bottom（距底部 > 80px 时显示，有新消息加 .has-new）
 // ──────────────────────────────────────────────────────────────
 //
 // 说明：
@@ -38,12 +33,14 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from 'ai';
-import { Sparkles } from 'lucide-react';
-import { type ReactElement, useEffect, useRef } from 'react';
+import { ChevronDown, Copy, RefreshCw, Sparkles } from 'lucide-react';
+import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { useToolStore } from '@/stores/transient/tool-store';
+
+import { Markdown } from './Markdown';
 
 /**
  * UIMessage parts 元素类型
@@ -58,6 +55,13 @@ interface ChatMessageListProps {
   messages: readonly UIMessage[];
   /** 当前流式状态（'streaming' / 'submitted' 时显示流式占位） */
   status: 'submitted' | 'streaming' | 'ready' | 'error';
+  /**
+   * 重新生成指定 assistant 消息（对齐原型 .msg-actions 重新生成按钮）
+   *
+   * 由 ChatPanel 传入，内部调用 useChat.regenerate({ messageId })。
+   * 流式状态（streaming/submitted）下按钮自动禁用，避免并发请求。
+   */
+  onRegenerate?: (messageId: string) => void;
   /** 自定义容器类名 */
   className?: string;
 }
@@ -65,10 +69,11 @@ interface ChatMessageListProps {
 /**
  * 聊天消息列表
  *
- * 渲染规则：
- * - user 消息：靠右，米色气泡
- * - assistant 消息：靠左，无气泡，按 parts 渲染
- * - system 消息：居中，淡灰小字
+ * 渲染规则（对齐 Aurora 原型）：
+ * - user 消息：.msg.user > .msg-body > .msg-content（玻璃渐变气泡）
+ * - assistant 消息：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + .msg-content
+ * - tool 调用：.msg.msg-tool > .msg-body > .card.tool-card（可折叠卡片）
+ * - system 消息：居中淡灰小字
  *
  * @example
  * ```tsx
@@ -78,18 +83,75 @@ interface ChatMessageListProps {
 export function ChatMessageList({
   messages,
   status,
+  onRegenerate,
   className,
 }: ChatMessageListProps): ReactElement {
-  // 底部锚点元素：每次 messages 变化时滚动到此处
+  // 底部锚点元素：滚动到此处
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // 滚动容器 ref：用于读取 scrollTop / scrollHeight / clientHeight
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  // 是否在底部附近（ref 版本：在 effect 闭包中读取最新值，避免闭包陷阱）
+  const isAtBottomRef = useRef(true);
+
+  // 是否显示"滚动到底部"按钮（距底部 > 80px 时显示）
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  // 是否有新消息到达且用户不在底部（按钮显示 .has-new 红点）
+  const [hasNew, setHasNew] = useState(false);
 
   // 流式状态（streaming / submitted）时显示占位"..."
   const isStreaming = status === 'streaming' || status === 'submitted';
 
-  // 自动滚动到底部：messages 长度变化或流式状态变化时触发
+  /**
+   * 判断当前是否在底部附近（距底部 < 80px）
+   *
+   * 对齐原型 threshold = 80。
+   */
+  const checkIsAtBottom = useCallback((): boolean => {
+    const el = scrollContainerRef.current;
+    if (el === null) {
+      return true;
+    }
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
+  /**
+   * 滚动事件处理：更新按钮显示状态
+   *
+   * - 在底部附近：隐藏按钮，清除 hasNew
+   * - 不在底部：显示按钮
+   */
+  const handleScroll = useCallback(() => {
+    const atBottom = checkIsAtBottom();
+    isAtBottomRef.current = atBottom;
+    if (atBottom) {
+      setShowScrollBtn(false);
+      setHasNew(false);
+    } else {
+      setShowScrollBtn(true);
+    }
+  }, [checkIsAtBottom]);
+
+  /**
+   * 滚动到底部并隐藏按钮
+   */
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    setShowScrollBtn(false);
+    setHasNew(false);
+    isAtBottomRef.current = true;
+  }, []);
+
+  // 智能自动滚动：messages 长度变化或流式状态变化时触发
+  // - 用户在底部附近：自动滚动跟随
+  // - 用户不在底部：不强制滚动，仅标记 hasNew（按钮显示新消息红点）
   // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages.length 与 isStreaming，触发滚动而不读取其值
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (isAtBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else {
+      // 用户正在查看历史，标记有新消息
+      setHasNew(true);
+    }
   }, [messages.length, isStreaming]);
 
   // 空状态：无消息时展示 EmptyState
@@ -106,17 +168,37 @@ export function ChatMessageList({
   }
 
   return (
-    <ScrollArea className={cn('h-full', className)}>
-      <div className="flex flex-col gap-4 px-4 py-4">
-        {messages.map((message) => (
-          <MessageItem key={message.id} message={message} />
-        ))}
-        {/* 流式占位：assistant 正在响应时显示"..."气泡 */}
-        {isStreaming ? <StreamingPlaceholder /> : null}
-        {/* 底部锚点 */}
-        <div ref={bottomRef} />
+    // 外层 wrapper：position: relative 让 .scroll-to-bottom（absolute）正确定位
+    // 且不随 .messages 滚动内容移动（absolute 子元素在滚动容器内会随滚动，故移到外层）
+    <div className={cn('relative h-full', className)}>
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="messages h-full">
+        <div className="messages-inner">
+          {messages.map((message) => (
+            <MessageItem
+              key={message.id}
+              message={message}
+              onRegenerate={onRegenerate}
+              disableActions={isStreaming}
+            />
+          ))}
+          {/* 流式占位：assistant 正在响应时显示 typing-indicator */}
+          {isStreaming ? <StreamingPlaceholder /> : null}
+          {/* 底部锚点 */}
+          <div ref={bottomRef} />
+        </div>
       </div>
-    </ScrollArea>
+      {/* 滚动到底部按钮（对齐原型 .scroll-to-bottom，作为 .messages 的兄弟元素） */}
+      <button
+        type="button"
+        className={cn('scroll-to-bottom', showScrollBtn && 'visible', hasNew && 'has-new')}
+        onClick={scrollToBottom}
+        aria-label="滚动到底部"
+        title="滚动到底部"
+      >
+        <ChevronDown className="size-4" strokeWidth={2.5} />
+        <span className="new-msg-dot" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -128,33 +210,55 @@ export function ChatMessageList({
  * 单条消息渲染
  *
  * 按 message.role 分发到不同的展示样式：
- * - 'user'：靠右米色气泡
- * - 'assistant'：靠左无气泡，按 parts 渲染
+ * - 'user'：.msg.user > .msg-body > .msg-content（玻璃渐变气泡）
+ * - 'assistant'：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + parts
  * - 'system'：居中淡灰小字
  */
-function MessageItem({ message }: { message: UIMessage }): ReactElement {
+const MessageItem = memo(function MessageItem({
+  message,
+  onRegenerate,
+  disableActions,
+}: {
+  message: UIMessage;
+  onRegenerate: ((messageId: string) => void) | undefined;
+  disableActions: boolean;
+}): ReactElement {
   if (message.role === 'user') {
+    // user 消息：仅 .msg-body > .msg-content，气泡样式由 .msg-content 提供（玻璃渐变）
     return (
-      <div className="flex justify-end">
-        <div className="bg-secondary text-secondary-foreground max-w-[80%] rounded-md px-3 py-2 font-serif text-sm leading-relaxed whitespace-pre-wrap">
-          {/* user 消息仅渲染 text parts（拼接为单一字符串） */}
-          {extractText(message.parts)}
+      <div className="msg user enter-anim">
+        <div className="msg-body">
+          <div className="msg-content">
+            {/* user 消息仅渲染 text parts（拼接为单一字符串，保留换行） */}
+            {extractText(message.parts)}
+          </div>
         </div>
       </div>
     );
   }
 
   if (message.role === 'assistant') {
+    // assistant 消息：avatar + body（role + parts + actions）
+    // 对齐原型 addMsgActions()：仅 assistant 消息显示 hover 操作栏
     return (
-      <div className="flex flex-col gap-1.5">
-        {/* assistant 标签：左侧细线 + "助手"小字 */}
-        <span className="text-muted-foreground font-serif text-xs tracking-wide">助手</span>
-        {/* parts 列表：按 part 类型分别渲染 */}
-        <div className="flex flex-col gap-2">
+      <div className="msg assistant enter-anim">
+        <div className="msg-avatar assistant" aria-hidden="true">
+          C
+        </div>
+        <div className="msg-body">
+          <div className="msg-role assistant">助手</div>
+          {/* parts 列表：按 part 类型分别渲染 */}
           {message.parts.map((part, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: parts 是 append-only 序列，index 在单条消息内唯一稳定
             <PartView key={`${message.id}-${index}`} part={part} />
           ))}
+          {/* hover 操作栏：复制 + 重新生成（对齐原型 .msg-actions） */}
+          <MsgActions
+            text={extractText(message.parts)}
+            messageId={message.id}
+            onRegenerate={onRegenerate}
+            disabled={disableActions}
+          />
         </div>
       </div>
     );
@@ -163,46 +267,40 @@ function MessageItem({ message }: { message: UIMessage }): ReactElement {
   // system 消息：居中淡灰小字
   return (
     <div className="flex justify-center">
-      <div className="text-muted-foreground font-serif text-xs italic">
+      <div className="text-muted-foreground font-mono text-xs italic">
         {extractText(message.parts)}
       </div>
     </div>
   );
-}
+});
 
 /**
  * 单个 part 渲染
  *
  * 根据 part.type 分发到不同的展示组件：
- * - 'text'：纯文本（保留换行）
- * - 'reasoning'：思考内容（斜体灰字 + "思考"标签）
- * - 'tool-*' / 'dynamic-tool'：工具调用（代码块 + state 标签）
- * - 'file'：文件附件（链接 + mediaType）
- * - 'step-start'：步骤分隔线
+ * - 'text'：.msg-content > Markdown（GFM 解析 + shiki 代码高亮）
+ * - 'reasoning'：.reasoning-block（折叠式推理块，accent 左光条）
+ * - 'tool-*' / 'dynamic-tool'：.card.tool-card（可折叠工具卡片）
+ * - 'file'：.card 简易附件卡片
+ * - 'step-start'：细分隔线表示新步骤
  * - 其他：fallback 展示 part.type
  */
-function PartView({ part }: { part: UIMessagePart }): ReactElement {
-  // 文本 part：纯衬线字体展示，保留换行
+const PartView = memo(function PartView({ part }: { part: UIMessagePart }): ReactElement {
+  // 文本 part：Markdown 渲染（支持 GFM + 代码语法高亮）
   if (isTextUIPart(part)) {
+    if (part.text.length === 0) {
+      return <div className="msg-content" />;
+    }
     return (
-      <div className="text-foreground font-serif text-sm leading-relaxed whitespace-pre-wrap">
-        {part.text}
+      <div className="msg-content">
+        <Markdown content={part.text} />
       </div>
     );
   }
 
-  // 思考 part：斜体灰字 + "思考"标签
+  // 思考 part：.reasoning-block 折叠式推理块
   if (isReasoningUIPart(part)) {
-    return (
-      <div className="bg-muted/50 border-border rounded-md border-l-2 p-2">
-        <div className="text-muted-foreground mb-1 font-serif text-xs italic tracking-wide">
-          思考
-        </div>
-        <div className="text-muted-foreground font-serif text-xs leading-relaxed whitespace-pre-wrap italic">
-          {part.text}
-        </div>
-      </div>
-    );
+    return <ReasoningBlock text={part.text} />;
   }
 
   // 静态工具调用（tool-{name}）
@@ -212,6 +310,7 @@ function PartView({ part }: { part: UIMessagePart }): ReactElement {
     return (
       <ToolCallView
         type={part.type}
+        toolCallId={part.toolCallId}
         state={part.state}
         input={part.input}
         output={part.output}
@@ -225,6 +324,7 @@ function PartView({ part }: { part: UIMessagePart }): ReactElement {
     return (
       <ToolCallView
         type={`dynamic-tool: ${part.toolName}`}
+        toolCallId={part.toolCallId}
         state={part.state}
         input={part.input}
         output={part.output}
@@ -233,11 +333,15 @@ function PartView({ part }: { part: UIMessagePart }): ReactElement {
     );
   }
 
-  // 文件 part：展示为带 mediaType 的链接占位
+  // 文件 part：展示为 .card 简易附件卡片
   if (isFileUIPart(part)) {
     return (
-      <div className="bg-muted/30 border-border rounded-md border p-2">
-        <div className="text-muted-foreground font-serif text-xs">附件 · {part.mediaType}</div>
+      <div className="card">
+        <div className="card-head">
+          <span className="card-icon">📎</span>
+          <span className="card-title">附件</span>
+          <span className="card-status pending">{part.mediaType}</span>
+        </div>
       </div>
     );
   }
@@ -246,53 +350,129 @@ function PartView({ part }: { part: UIMessagePart }): ReactElement {
   if (part.type === 'step-start') {
     return (
       <div className="border-border my-2 flex items-center gap-2 border-t pt-1">
-        <span className="text-muted-foreground font-serif text-xs italic">下一步</span>
+        <span className="text-muted-foreground font-mono text-xs italic">下一步</span>
       </div>
     );
   }
 
   // fallback：未知 part 类型，展示 type 字符串
   return (
-    <div className="text-muted-foreground font-serif text-xs italic">未知消息类型: {part.type}</div>
+    <div className="text-muted-foreground font-mono text-xs italic">未知消息类型: {part.type}</div>
   );
-}
+});
 
 /**
- * 工具调用展示
+ * 工具调用卡片（对齐原型 .card.tool-card）
  *
  * 显示工具名称、状态、入参、输出 / 错误。
- * 使用代码块风格（font-mono + secondary 背景）。
+ * 可折叠：点击 card-head 切换 .open 类。
  *
  * 注意：可选字段使用 `T | undefined` 而非 `T?`，
  * 以兼容 exactOptionalPropertyTypes（exactOptionalPropertyTypes 下 `T?` 不允许显式传入 undefined）。
  */
 interface ToolCallViewProps {
   type: string;
+  toolCallId: string;
   state: string;
   input: unknown | undefined;
   output: unknown | undefined;
   errorText: string | undefined;
 }
 
-function ToolCallView({ type, state, input, output, errorText }: ToolCallViewProps): ReactElement {
+function ToolCallView({
+  type,
+  toolCallId,
+  state,
+  input,
+  output,
+  errorText,
+}: ToolCallViewProps): ReactElement {
+  // 折叠状态：默认折叠（对齐原型 #toolCard 初始无 .open 类）
+  const [open, setOpen] = useState(false);
+
+  // 从 tool-store 查找 title（主进程通过 AgentToolResultPayload 推送的人类可读标题）
+  // 没有找到时回退到工具名（type）
+  const title = useToolStore((s) => {
+    for (const calls of s.callsBySession.values()) {
+      const found = calls.find((c) => c.id === toolCallId);
+      if (found !== undefined) return found.title;
+    }
+    return null;
+  });
+
+  // 状态映射：AI SDK state → .card-status 类（success / error / running / pending）
+  const statusClass = mapToolStateToStatusClass(state);
+  const statusLabel = mapToolStateToStatusLabel(state);
+
   return (
-    <div className="bg-muted/40 border-border rounded-md border p-2">
-      {/* 工具头部：名称 + 状态标签 */}
-      <div className="mb-1 flex items-center gap-2">
-        <span className="text-foreground font-mono text-xs font-medium">{type}</span>
-        <span className="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 font-mono text-[10px]">
-          {state}
-        </span>
+    <div className="msg msg-tool enter-anim">
+      <div className="msg-body">
+        <div className={cn('card tool-card', open && 'open')}>
+          <button
+            type="button"
+            className="card-head"
+            onClick={() => setOpen((v) => !v)}
+            aria-label="折叠/展开工具调用详情"
+            aria-expanded={open}
+          >
+            <span className="card-icon">🔧</span>
+            <span className="card-title">{title ?? type}</span>
+            <span className={cn('card-status', statusClass)}>{statusLabel}</span>
+            <span className="tool-chev">▸</span>
+          </button>
+          <div className="card-body">
+            {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
+            {input !== undefined && <CodeBlock label="input" content={formatJson(input)} />}
+            {/* 输出（output 优先于 errorText） */}
+            {output !== undefined && <CodeBlock label="output" content={formatJson(output)} />}
+            {errorText !== undefined && errorText !== '' && (
+              <CodeBlock label="error" content={errorText} />
+            )}
+          </div>
+        </div>
       </div>
-      {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
-      {input !== undefined && <CodeBlock label="input" content={formatJson(input)} />}
-      {/* 输出（output 优先于 errorText） */}
-      {output !== undefined && <CodeBlock label="output" content={formatJson(output)} />}
-      {errorText !== undefined && errorText !== '' && (
-        <CodeBlock label="error" content={errorText} />
-      )}
     </div>
   );
+}
+
+/**
+ * 工具状态映射 → .card-status 类名
+ *
+ * AI SDK 的 tool.state 可能值：
+ * - 'input-streaming' / 'input-accepted'：输入阶段（pending）
+ * - 'output-available'：完成（success）
+ * - 'output-error'：错误（error）
+ */
+function mapToolStateToStatusClass(state: string): string {
+  if (state === 'output-error') {
+    return 'error';
+  }
+  if (state === 'output-available') {
+    return 'success';
+  }
+  if (state === 'input-streaming' || state === 'input-accepted') {
+    return 'running';
+  }
+  return 'pending';
+}
+
+/**
+ * 工具状态映射 → 状态标签文案
+ */
+function mapToolStateToStatusLabel(state: string): string {
+  if (state === 'output-error') {
+    return '错误';
+  }
+  if (state === 'output-available') {
+    return '成功';
+  }
+  if (state === 'input-streaming') {
+    return '运行中';
+  }
+  if (state === 'input-accepted') {
+    return '等待';
+  }
+  return state;
 }
 
 /**
@@ -303,7 +483,9 @@ function ToolCallView({ type, state, input, output, errorText }: ToolCallViewPro
 function CodeBlock({ label, content }: { label: string; content: string }): ReactElement {
   return (
     <div className="mt-1">
-      <div className="text-muted-foreground font-mono text-[10px]">{label}</div>
+      <div className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
+        {label}
+      </div>
       <pre className="bg-background/50 text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-[11px] leading-snug">
         {content}
       </pre>
@@ -312,18 +494,141 @@ function CodeBlock({ label, content }: { label: string; content: string }): Reac
 }
 
 /**
+ * 推理块（对齐原型 .reasoning-block）
+ *
+ * 折叠式：默认折叠，点击 head 切换 .open 类。
+ * accent 左光条 + 等宽字体展示思考内容。
+ */
+function ReasoningBlock({ text }: { text: string }): ReactElement {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={cn('reasoning-block', open && 'open')}>
+      <button
+        type="button"
+        className="reasoning-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="reasoning-title">思考</span>
+        <span className="rh-chevron" style={{ marginLeft: 'auto' }}>
+          ▸
+        </span>
+      </button>
+      <div className="reasoning-body">
+        <div className="text-muted-foreground font-mono text-xs leading-relaxed whitespace-pre-wrap italic">
+          {text}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * 流式占位
  *
- * streaming 状态时显示在消息列表末尾的"..."气泡，
- * 表示助手正在生成回复。
+ * streaming 状态时显示在消息列表末尾的 typing-indicator（三个 accent 点弹跳），
+ * 表示助手正在生成回复。对齐原型 .msg.assistant + .typing-indicator 结构。
  */
 function StreamingPlaceholder(): ReactElement {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-muted-foreground font-serif text-xs tracking-wide">助手</span>
-      <div className="text-muted-foreground font-serif text-sm tracking-widest animate-pulse-soft">
-        ...
+    <div className="msg assistant enter-anim">
+      <div className="msg-avatar assistant" aria-hidden="true">
+        C
       </div>
+      <div className="msg-body">
+        <div className="msg-role assistant">助手</div>
+        <div className="typing-indicator" role="status" aria-label="助手正在输入">
+          <span className="ti-dot" />
+          <span className="ti-dot" />
+          <span className="ti-dot" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// 消息微交互组件
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * 消息 hover 操作栏（对齐原型 addMsgActions + .msg-actions）
+ *
+ * - 默认 opacity:0，hover .msg 时 opacity:1（CSS 控制）
+ * - 复制：navigator.clipboard 写入纯文本，2s 内显示 copied 反馈
+ * - 重新生成：调用 useChat.regenerate({ messageId })，流式状态下禁用避免并发
+ *
+ * 仅在 assistant 消息渲染（跳过 tool 消息），对齐原型 addMsgActions 逻辑。
+ */
+function MsgActions({
+  text,
+  messageId,
+  onRegenerate,
+  disabled,
+}: {
+  text: string;
+  messageId: string;
+  onRegenerate: ((messageId: string) => void) | undefined;
+  disabled: boolean;
+}): ReactElement {
+  const [copied, setCopied] = useState(false);
+  // copy 按钮 2s 复位定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleCopy = useCallback(async () => {
+    if (text.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
+    } catch {
+      // clipboard 不可用时静默失败
+    }
+  }, [text]);
+
+  const handleRegenerate = useCallback(() => {
+    if (disabled) return;
+    onRegenerate?.(messageId);
+  }, [disabled, onRegenerate, messageId]);
+
+  return (
+    <div className="msg-actions show">
+      <button
+        type="button"
+        className={cn('msg-action-btn', copied && 'copied')}
+        onClick={handleCopy}
+        aria-label={copied ? '已复制' : '复制'}
+        title={copied ? '已复制' : '复制'}
+      >
+        <Copy />
+        {copied ? '已复制' : '复制'}
+      </button>
+      <button
+        type="button"
+        className="msg-action-btn"
+        aria-label="重新生成"
+        title={disabled ? '正在生成中…' : '重新生成'}
+        onClick={handleRegenerate}
+        disabled={disabled}
+      >
+        <RefreshCw />
+        重新生成
+      </button>
     </div>
   );
 }

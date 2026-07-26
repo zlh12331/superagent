@@ -16,11 +16,14 @@
       "!**/dist",
       "!**/.codegraph",
       "!**/playwright-report",
+      "!**/playwright-report-electron",
+      "!**/playwright-report-smoke",
       "!**/test-results",
       "!**/playwright/.cache",
       "!**/docs/design",
       "!**/docs/参考项目",
-      "!**/prototype-v2.html"
+      "!**/prototype-v2.html",
+      "!**/codex-desktop-prototype.design"
     ]
   },
   "formatter": {
@@ -101,6 +104,14 @@
     },
     {
       "includes": ["**/prisma.config.ts"],
+      "linter": {
+        "rules": {
+          "style": { "noDefaultExport": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["**/drizzle.config.ts"],
       "linter": {
         "rules": {
           "style": { "noDefaultExport": "off" }
@@ -210,7 +221,8 @@
         "**/src/main/infra/ai/tool-executor.ts",
         "**/src/main/infra/ai/agent-service.ts",
         "**/src/main/infra/ai/tools/**/*.ts",
-        "**/src/main/infra/ai/mcp/**/*.ts"
+        "**/src/main/infra/ai/mcp/**/*.ts",
+        "**/src/main/infra/ai/prompt/**/*.ts"
       ],
       "linter": {
         "rules": {
@@ -283,7 +295,31 @@
       }
     },
     {
-      "includes": ["**/e2e/playwright.config.ts"],
+      "includes": [
+        "**/e2e/playwright.config.ts",
+        "**/e2e/playwright.electron.config.ts",
+        "**/e2e/playwright.smoke.config.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/.github/workflows/*.yml"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/.nsprc"],
       "linter": {
         "rules": {
           "style": {

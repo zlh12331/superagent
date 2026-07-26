@@ -49,10 +49,18 @@ import type {
 import type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
 import type { DialogPickDirectoryReq, DialogPickDirectoryRes } from '../schemas/dialog';
 import type {
+  FileCreateDirReqSchema,
+  FileCreateDirRes,
+  FileCreateReqSchema,
+  FileCreateRes,
+  FileDeleteReqSchema,
+  FileDeleteRes,
   FileListReqSchema,
   FileListRes,
   FileReadReqSchema,
   FileReadRes,
+  FileRenameReqSchema,
+  FileRenameRes,
   FileWatchEventPayload,
   FileWatchStartReqSchema,
   FileWatchStartRes,
@@ -62,8 +70,14 @@ import type {
   FileWriteRes,
 } from '../schemas/file';
 import type {
+  GitAddReqSchema,
+  GitAddRes,
+  GitCommitReqSchema,
+  GitCommitRes,
   GitDiffReqSchema,
   GitDiffRes,
+  GitPushReqSchema,
+  GitPushRes,
   GitStatusReqSchema,
   GitStatusRes,
 } from '../schemas/git';
@@ -95,6 +109,7 @@ import type {
 } from '../schemas/settings';
 import type { ReadLogsReq, ReadLogsRes, SystemStatusRes } from '../schemas/system';
 import type {
+  TerminalCreatedEventPayload,
   TerminalCreateReqSchema,
   TerminalCreateRes,
   TerminalExitEventPayload,
@@ -221,6 +236,18 @@ export type FileWatchStartReq = z.infer<typeof FileWatchStartReqSchema>;
 /** file:watch:stop 请求 payload：停止监听指定 watcher */
 export type FileWatchStopReq = z.infer<typeof FileWatchStopReqSchema>;
 
+/** file:create 请求 payload：创建新文件 */
+export type FileCreateReq = z.infer<typeof FileCreateReqSchema>;
+
+/** file:createDir 请求 payload：创建新目录 */
+export type FileCreateDirReq = z.infer<typeof FileCreateDirReqSchema>;
+
+/** file:delete 请求 payload：删除文件或目录 */
+export type FileDeleteReq = z.infer<typeof FileDeleteReqSchema>;
+
+/** file:rename 请求 payload：重命名/移动文件或目录 */
+export type FileRenameReq = z.infer<typeof FileRenameReqSchema>;
+
 // ─── Search 域 Req 派生（ripgrep + glob） ──────────────────────
 
 /** search:grep 请求 payload：正则搜索文件内容 */
@@ -250,6 +277,15 @@ export type GitStatusReq = z.infer<typeof GitStatusReqSchema>;
 
 /** git:diff 请求 payload：获取 diff */
 export type GitDiffReq = z.infer<typeof GitDiffReqSchema>;
+
+/** git:add 请求 payload：暂存工作区改动（git add） */
+export type GitAddReq = z.infer<typeof GitAddReqSchema>;
+
+/** git:commit 请求 payload：提交暂存区改动（git commit） */
+export type GitCommitReq = z.infer<typeof GitCommitReqSchema>;
+
+/** git:push 请求 payload：推送本地提交到远程（git push） */
+export type GitPushReq = z.infer<typeof GitPushReqSchema>;
 
 // ─── Codebase 域 Req 派生（codegraph CLI 封装） ────────────────
 
@@ -375,6 +411,11 @@ export interface IpcRequestMap {
   'file:watch:start': { req: FileWatchStartReq; res: FileWatchStartRes };
   // file:watch:stop 停止指定 watcher
   'file:watch:stop': { req: FileWatchStopReq; res: FileWatchStopRes };
+  // 文件树编辑操作（新建/删除/重命名）
+  'file:create': { req: FileCreateReq; res: FileCreateRes };
+  'file:createDir': { req: FileCreateDirReq; res: FileCreateDirRes };
+  'file:delete': { req: FileDeleteReq; res: FileDeleteRes };
+  'file:rename': { req: FileRenameReq; res: FileRenameRes };
 
   // 搜索域（ripgrep + glob）
   'search:grep': { req: GrepReq; res: GrepRes };
@@ -389,6 +430,9 @@ export interface IpcRequestMap {
   // Git 域（Git CLI 封装）
   'git:status': { req: GitStatusReq; res: GitStatusRes };
   'git:diff': { req: GitDiffReq; res: GitDiffRes };
+  'git:add': { req: GitAddReq; res: GitAddRes };
+  'git:commit': { req: GitCommitReq; res: GitCommitRes };
+  'git:push': { req: GitPushReq; res: GitPushRes };
 
   // 代码库域（codegraph CLI 封装，代码智能查询）
   'codebase:query': { req: CodebaseQueryReq; res: CodebaseQueryRes };
@@ -475,6 +519,8 @@ export interface IpcEventMap {
   'file:watch:event': FileWatchEventPayload;
 
   // ── 终端域事件（node-pty 输出与退出） ──────────────
+  // 终端创建成功（通知渲染层有新终端，包括 Agent 工具创建的）
+  'terminal:event:created': TerminalCreatedEventPayload;
   // 终端原始输出（含 ANSI 转义序列，未解码，渲染层用 xterm.js 直接 write）
   'terminal:event:output': TerminalOutputEventPayload;
   // 终端进程退出（exitCode 0 正常退出，非 0 异常退出）

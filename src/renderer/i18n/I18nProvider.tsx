@@ -22,21 +22,21 @@
 //   t('errors.AI_TIMEOUT', { ns: 'errors' })  // → "AI 调用超时"
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, type ReactNode, useEffect } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 
 import { i18n, initI18n } from './config';
 
+// 模块加载时同步初始化 i18next（资源已内联，init() 同步完成）
+// 必须在 I18nextProvider 渲染前完成，否则子组件首次 useTranslation 时
+// i18n 实例尚未 init，触发 Suspense loading 导致白屏
+initI18n();
+
 /**
  * i18n Provider
  *
- * 包装 I18nextProvider，在挂载时完成 i18n 初始化
+ * 包装 I18nextProvider，把已初始化的 i18n 实例注入 React 上下文
  */
 export function I18nProvider({ children }: { children: ReactNode }): ReactElement {
-  // 在应用启动时初始化 i18next（同步完成，资源已内联）
-  useEffect(() => {
-    initI18n();
-  }, []);
-
   return <I18nextProvider i18n={i18n}>{children}</I18nextProvider>;
 }

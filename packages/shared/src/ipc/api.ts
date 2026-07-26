@@ -164,6 +164,14 @@ export interface IpcApi {
     watchStop: IpcInvokeMethod<'file:watch:stop'>;
     /** 订阅文件变更事件（create/modify/delete/rename） */
     subscribeWatchEvent: IpcSubscribeMethod<'file:watch:event'>;
+    /** 创建新文件（空文件，已存在时报错） */
+    create: IpcInvokeMethod<'file:create'>;
+    /** 创建新目录（递归创建父目录） */
+    createDir: IpcInvokeMethod<'file:createDir'>;
+    /** 删除文件或目录（目录递归删除） */
+    delete: IpcInvokeMethod<'file:delete'>;
+    /** 重命名/移动文件或目录 */
+    rename: IpcInvokeMethod<'file:rename'>;
   };
 
   // ── 搜索域 API（ripgrep + glob） ──────────────────────
@@ -197,6 +205,8 @@ export interface IpcApi {
     resize: IpcInvokeMethod<'terminal:resize'>;
     /** 终止终端会话 */
     kill: IpcInvokeMethod<'terminal:kill'>;
+    /** 订阅终端创建事件（新终端创建成功时触发，包括 Agent 工具创建的） */
+    subscribeCreatedEvent: IpcSubscribeMethod<'terminal:event:created'>;
     /** 订阅终端原始输出事件（含 ANSI 转义序列，未解码） */
     subscribeOutputEvent: IpcSubscribeMethod<'terminal:event:output'>;
     /** 订阅终端进程退出事件 */

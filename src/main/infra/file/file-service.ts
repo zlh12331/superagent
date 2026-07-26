@@ -20,11 +20,15 @@
 
 import { randomUUID } from 'node:crypto';
 import { promises as fs, type Stats } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type {
+  FileCreateDirRes,
+  FileCreateRes,
+  FileDeleteRes,
   FileEntry,
   FileListRes,
   FileReadRes,
+  FileRenameRes,
   FileWatchEventPayload,
   FileWriteRes,
 } from '@novel-writer/shared';
@@ -81,6 +85,38 @@ export interface FileWatchHandle {
   readonly watcherId: string;
 }
 
+/** createFile 方法入参 */
+export interface FileCreateOptions {
+  /** 文件绝对路径（父目录不存在时自动创建） */
+  readonly path: string;
+  /** 是否自动创建父目录（默认 true） */
+  readonly createDirs: boolean;
+}
+
+/** createDir 方法入参 */
+export interface FileCreateDirOptions {
+  /** 目录绝对路径（递归创建父目录） */
+  readonly path: string;
+}
+
+/** delete 方法入参 */
+export interface FileDeleteOptions {
+  /** 目标绝对路径（文件或目录） */
+  readonly path: string;
+  /** 是否递归删除目录（默认 true） */
+  readonly recursive: boolean;
+}
+
+/** rename 方法入参 */
+export interface FileRenameOptions {
+  /** 原路径（绝对路径） */
+  readonly oldPath: string;
+  /** 新路径（绝对路径） */
+  readonly newPath: string;
+  /** 目标已存在时是否覆盖（默认 false） */
+  readonly overwrite: boolean;
+}
+
 /**
  * FileService 接口
  *
@@ -101,6 +137,14 @@ export interface IFileService {
   unwatch(watcherId: string): boolean;
   /** 优雅关闭：停止所有 watcher 并释放资源 */
   dispose(): Promise<void>;
+  /** 创建新文件（空文件，若已存在则报错） */
+  createFile(options: FileCreateOptions): Promise<FileCreateRes>;
+  /** 创建新目录（递归创建父目录） */
+  createDir(options: FileCreateDirOptions): Promise<FileCreateDirRes>;
+  /** 删除文件或目录（目录递归删除） */
+  delete(options: FileDeleteOptions): Promise<FileDeleteRes>;
+  /** 重命名/移动文件或目录 */
+  rename(options: FileRenameOptions): Promise<FileRenameRes>;
 }
 
 /**
@@ -314,7 +358,12 @@ class FileService implements IFileService {
           return false;
         }
         // 跳过 node_modules 与点开头文件
-        const normalized = testPath.split(sep).pop() ?? '';
+        // L1 修复：chokidar 在 Windows 上传入的 testPath 可能混合使用 \\ 和 /
+        // （内部路径标准化不彻底，尤其是 UNC 路径或符号链接场景），
+        // 单独用 sep（'\\' on Windows）split 会漏掉以 / 分隔的路径，
+        // 导致 node_modules / .git 等目录的子文件未被正确过滤。
+        // 用正则 [\\/] 同时匹配两种分隔符，跨平台兼容。
+        const normalized = testPath.split(/[\\/]/).pop() ?? '';
         return normalized === 'node_modules' || normalized.startsWith('.');
       },
       depth: 10,
@@ -384,6 +433,104 @@ class FileService implements IFileService {
     );
     this.watchers.clear();
     logger.info({}, 'FileService 所有 watcher 已关闭');
+  }
+
+  /**
+   * 创建新文件
+   *
+   * 创建空文件，若文件已存在则抛 ALREADY_EXISTS 错误（不覆盖）。
+   * createDirs=true 时自动创建父目录。
+   */
+  async createFile(options: FileCreateOptions): Promise<FileCreateRes> {
+    const { path, createDirs } = options;
+    this.assertAbsolutePath(path);
+
+    try {
+      if (createDirs) {
+        await fs.mkdir(dirname(path), { recursive: true });
+      }
+      // 使用 'x' 标志：文件已存在时抛 EEXIST，避免覆盖已有文件
+      // fs.open 写入空内容后立即关闭，实现「创建空文件」语义
+      const handle = await fs.open(path, 'wx');
+      await handle.close();
+      return { path: resolve(path) };
+    } catch (error) {
+      throw this.classifyWriteError(error);
+    }
+  }
+
+  /**
+   * 创建新目录
+   *
+   * 递归创建父目录（与 mkdir -p 语义一致）。
+   * 目录已存在时不报错（recursive=true 容错）。
+   */
+  async createDir(options: FileCreateDirOptions): Promise<FileCreateDirRes> {
+    const { path } = options;
+    this.assertAbsolutePath(path);
+
+    try {
+      await fs.mkdir(path, { recursive: true });
+      return { path: resolve(path) };
+    } catch (error) {
+      throw this.classifyWriteError(error);
+    }
+  }
+
+  /**
+   * 删除文件或目录
+   *
+   * recursive=true（默认）：目录递归删除（rm -rf 语义）
+   * recursive=false：仅删除空目录或文件，目录非空时抛 ENOTEMPTY
+   */
+  async delete(options: FileDeleteOptions): Promise<FileDeleteRes> {
+    const { path, recursive } = options;
+    this.assertAbsolutePath(path);
+
+    try {
+      await fs.rm(path, { recursive, force: false });
+      return { deleted: true };
+    } catch (error) {
+      throw this.classifyWriteError(error);
+    }
+  }
+
+  /**
+   * 重命名/移动文件或目录
+   *
+   * overwrite=true（默认 false）：目标已存在时覆盖
+   * overwrite=false：目标已存在时抛 EEXIST，避免误覆盖
+   */
+  async rename(options: FileRenameOptions): Promise<FileRenameRes> {
+    const { oldPath, newPath, overwrite } = options;
+    this.assertAbsolutePath(oldPath);
+    this.assertAbsolutePath(newPath);
+
+    try {
+      // 目标已存在时处理：overwrite=false 抛错，overwrite=true 先删除目标
+      try {
+        await fs.access(newPath);
+        // newPath 存在
+        if (!overwrite) {
+          throw new AppError(ErrorCode.ALREADY_EXISTS, '目标路径已存在', { newPath });
+        }
+        await fs.rm(newPath, { recursive: true, force: true });
+      } catch (accessError) {
+        // access 抛 ENOENT 表示目标不存在，是期望情况，直接继续 rename
+        const nodeErr = accessError as { code?: string };
+        if (nodeErr.code !== 'ENOENT') {
+          throw accessError;
+        }
+      }
+
+      await fs.rename(oldPath, newPath);
+      return { path: resolve(newPath) };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw this.classifyWriteError(error);
+    }
   }
 
   /**

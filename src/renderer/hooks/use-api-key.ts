@@ -67,6 +67,7 @@ export function useApiKeyQuery(provider: ApiKeyProvider) {
   return useQuery({
     queryKey: API_KEY_QUERY_KEY(provider),
     queryFn: async () => {
+      if (typeof window === 'undefined' || window.api === undefined) return null;
       const response = await window.api.settings.getApiKey({ provider });
       return unwrap<{ apiKey: string | null }>(response).apiKey;
     },

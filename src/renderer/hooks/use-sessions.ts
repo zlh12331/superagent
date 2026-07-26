@@ -207,7 +207,7 @@ export const RECENT_DIRS_QUERY_KEY = ['session', 'recent-dirs'] as const;
  * 最近目录列表查询 hook
  *
  * 调用 session:listRecentDirs IPC 获取去重后的最近使用目录列表。
- * 用于 NewSessionDialog 展示历史目录。
+ * 用于 HomePage 欢迎页 composer-project-bar 的 folder dropdown 展示历史目录。
  */
 export function useRecentDirs() {
   return useQuery({

@@ -38,8 +38,15 @@ coverage/
 
 # Playwright 测试产物（trace / report / 截图 / 视频）
 playwright-report/
+playwright-report-electron/
+playwright-report-smoke/
 playwright/.cache/
 test-results/
+
+# Playwright 视觉回归基线图（首次生成后提交到仓库，不忽略）
+# e2e/visual.spec.ts-snapshots/ 需要提交以做 diff 基线
+# 但本地更新产生的临时 diff 产物可忽略
+test-results-visual/
 
 # Electron 二进制下载缓存（dev 环境用，避免 TRAE 沙箱拦截系统 %LOCALAPPDATA%）
 .electron-cache/

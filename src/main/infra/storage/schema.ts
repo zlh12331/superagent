@@ -77,15 +77,53 @@ export type SessionRow = typeof sessions.$inferSelect;
 /** sessions 表插入类型（id 必填，createdAt/updatedAt 必填） */
 export type SessionInsert = typeof sessions.$inferInsert;
 
+/**
+ * prompts 表：System Prompt 模板存储
+ *
+ * 用户选择的"数据库存储"方案：
+ * - 默认 prompt 在 PromptService.initialize 时插入（id 固定，重复插入跳过）
+ * - 用户可编辑 prompt 内容（未来通过设置界面）
+ * - 支持多 agent 角色（虽然 MVP 只有一个 code-agent，但表结构预留 role 字段）
+ *
+ * 设计参考 codex 的 SkillMetadata + MiMo-Code 的 prompt 模板分离设计：
+ * - 内容（content）与元数据（name/description/role）分离
+ * - isDefault 标记内置 prompt，防止用户误删
+ * - updatedAt 用于追踪用户编辑
+ */
+export const prompts = sqliteTable('prompts', {
+  /** Prompt 唯一标识（如 'code-agent'，主键） */
+  id: text('id').primaryKey(),
+  /** 显示名称（如 'Code Agent'） */
+  name: text('name').notNull(),
+  /** 描述（如 '通用代码助手默认行为'） */
+  description: text('description').notNull(),
+  /** Agent 角色标识（当前仅 'code-agent'，预留扩展） */
+  role: text('role').notNull(),
+  /** Prompt 内容（支持模板变量：{{workingDir}} / {{os}} / {{gitBranch}} 等） */
+  content: text('content').notNull(),
+  /** 是否为内置默认 prompt（true 不可删除，但可编辑） */
+  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(true),
+  /** 创建时间（Unix timestamp 毫秒） */
+  createdAt: integer('created_at').notNull(),
+  /** 最后更新时间（Unix timestamp 毫秒） */
+  updatedAt: integer('updated_at').notNull(),
+});
+
 /** messages 表类型 */
 export type MessageRow = typeof messages.$inferSelect;
 /** messages 表插入类型（id 自增，不传） */
 export type MessageInsert = typeof messages.$inferInsert;
 
+/** prompts 表类型 */
+export type PromptRow = typeof prompts.$inferSelect;
+/** prompts 表插入类型 */
+export type PromptInsert = typeof prompts.$inferInsert;
+
 // 导出 schema 对象供 db.ts 创建表
 export const schema = {
   sessions,
   messages,
+  prompts,
 };
 
 // 防止 ts 报未使用 sql 导入（未来 CREATE INDEX 会用到）

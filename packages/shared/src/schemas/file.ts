@@ -168,3 +168,72 @@ export interface FileWatchEventPayload {
   /** rename 时的原路径，其他 type 为 undefined */
   readonly oldPath?: string;
 }
+
+// ── 文件树编辑操作（新建/删除/重命名） ──────────────────────
+
+/**
+ * file:create 入参 zod schema
+ *
+ * 创建新文件（空文件，若已存在则报错）。
+ * 父目录不存在时自动创建（createDirs=true）。
+ */
+export const FileCreateReqSchema = z.object({
+  path: z.string().min(1),
+  createDirs: z.boolean().default(true),
+});
+
+/** file:create 响应 payload */
+export interface FileCreateRes {
+  /** 创建的文件绝对路径（标准化后） */
+  readonly path: string;
+}
+
+/**
+ * file:createDir 入参 zod schema
+ *
+ * 创建新目录（递归创建父目录）。
+ */
+export const FileCreateDirReqSchema = z.object({
+  path: z.string().min(1),
+});
+
+/** file:createDir 响应 payload */
+export interface FileCreateDirRes {
+  /** 创建的目录绝对路径（标准化后） */
+  readonly path: string;
+}
+
+/**
+ * file:delete 入参 zod schema
+ *
+ * 删除文件或目录（目录递归删除）。
+ */
+export const FileDeleteReqSchema = z.object({
+  path: z.string().min(1),
+  /** 是否递归删除目录（默认 true，避免目录非空时报错） */
+  recursive: z.boolean().default(true),
+});
+
+/** file:delete 响应 payload */
+export interface FileDeleteRes {
+  /** 是否成功删除 */
+  readonly deleted: boolean;
+}
+
+/**
+ * file:rename 入参 zod schema
+ *
+ * 重命名/移动文件或目录。
+ */
+export const FileRenameReqSchema = z.object({
+  oldPath: z.string().min(1),
+  newPath: z.string().min(1),
+  /** 目标已存在时是否覆盖（默认 false，避免误覆盖） */
+  overwrite: z.boolean().default(false),
+});
+
+/** file:rename 响应 payload */
+export interface FileRenameRes {
+  /** 重命名后的新路径（标准化后） */
+  readonly path: string;
+}

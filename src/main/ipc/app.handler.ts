@@ -8,9 +8,11 @@
 // 说明：业务相关 handler（project/chapter/character/worldview/chat/rag/agent/settings）
 // 已随数据库层一并删除，作为 Electron 模板基础设施仅保留应用级 handler。
 
-import { IPC_CHANNELS, type IpcResponse } from '@novel-writer/shared';
-import { ipcMain, shell } from 'electron';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@novel-writer/shared';
+import { shell } from 'electron';
+import { z } from 'zod';
 import { logger } from '../utils/logger';
+import { wrap } from '../utils/wrap';
 
 /**
  * 注册应用级 IPC handler
@@ -22,29 +24,29 @@ import { logger } from '../utils/logger';
  */
 export function registerAppHandlers(): void {
   // 应用状态查询：返回就绪标记
-  ipcMain.handle(IPC_CHANNELS.APP_GET_STATUS, (): IpcResponse<{ ready: boolean }> => {
-    return { data: { ready: true } };
-  });
+  wrap<undefined, { ready: boolean }>(
+    IPC_CHANNELS.APP_GET_STATUS,
+    null,
+    async (): Promise<{ ready: boolean }> => {
+      return { ready: true };
+    },
+  );
 
   // 外链打开：通过系统浏览器打开
-  ipcMain.handle(
+  const openExternalSchema = z.object({
+    url: z.string().min(1, 'URL 不能为空'),
+  });
+
+  wrap<{ url: string }, { ok: boolean }>(
     IPC_CHANNELS.APP_OPEN_EXTERNAL,
-    async (_event, payload: { url: string }): Promise<IpcResponse<{ ok: boolean }>> => {
-      const url = payload?.url;
-      if (typeof url !== 'string' || url === '') {
-        return { error: { code: 'INVALID_INPUT', message: 'URL 不能为空' } };
-      }
+    openExternalSchema,
+    async (input: { url: string }): Promise<{ ok: boolean }> => {
       // 仅允许 http/https 协议，防止 file:// / javascript: 等危险协议
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        return { error: { code: 'INVALID_INPUT', message: '仅允许 http/https 协议' } };
+      if (!input.url.startsWith('http://') && !input.url.startsWith('https://')) {
+        throw new AppError(ErrorCode.INVALID_INPUT, '仅允许 http/https 协议');
       }
-      try {
-        await shell.openExternal(url);
-        return { data: { ok: true } };
-      } catch (err) {
-        logger.error({ error: err, url }, '打开外链失败');
-        return { error: { code: 'INTERNAL_ERROR', message: '打开外链失败' } };
-      }
+      await shell.openExternal(input.url);
+      return { ok: true };
     },
   );
 

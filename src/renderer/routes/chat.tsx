@@ -6,14 +6,16 @@
 // - 通过 useSessionDetail 获取 session.workingDir
 // - 渲染 ChatPanel，传入 chatId + workingDir
 // - session 不存在或 workingDir 为空时重定向到首页
+// - 进入时退出欢迎页模式（确保从 HomePage navigate 过来后 welcome-mode class 移除）
 // ──────────────────────────────────────────────────────────────
 
-import type { ReactElement } from 'react';
+import { type ReactElement, useEffect } from 'react';
 import { Navigate, useParams } from 'react-router';
 
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import { useSessionDetail } from '@/hooks/use-sessions';
 import { ROUTES } from '@/lib/constants';
+import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 /**
  * 聊天页路由组件
@@ -44,6 +46,13 @@ export function ChatPage(): ReactElement {
  */
 function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   const { data: session, isLoading } = useSessionDetail(sessionId);
+  const setWelcomeMode = useWelcomeStore((state) => state.setWelcomeMode);
+
+  // 进入聊天页时退出欢迎页模式（兜底：HomePage 已调用 exitWelcomeMode，
+  // 此处确保直接通过 URL 访问 /chat/:id 时也能正确移除 welcome-mode class）
+  useEffect(() => {
+    setWelcomeMode(false);
+  }, [setWelcomeMode]);
 
   // loading 中：显示加载状态
   if (isLoading) {

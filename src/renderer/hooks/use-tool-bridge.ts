@@ -5,6 +5,7 @@
 // - 订阅 agent:tool:call / agent:tool:result IPC 事件
 // - 将事件 payload 转换为 ToolCallItem 并写入 useToolStore
 // - 提供清空指定会话工具调用的方法（切换会话时调用）
+// - 处理特殊工具副作用（如 terminal 工具创建终端 → 写入 terminal-store）
 //
 // 设计：
 // - 在 AppShell 根布局初始化一次，保证任意路由下都能接收工具事件
@@ -20,6 +21,7 @@
 import type { AgentToolCallPayload, AgentToolResultPayload } from '@novel-writer/shared';
 import { useEffect } from 'react';
 
+import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 
 /**
@@ -58,7 +60,35 @@ export function useToolBridge(): void {
       useToolStore.getState().appendToolResult(typedPayload.toolCallId, {
         output: typedPayload.output,
         error: typedPayload.error ?? null,
+        ...(typedPayload.title !== undefined ? { title: typedPayload.title } : {}),
       });
+
+      // 特殊工具副作用：terminal 工具的 create 操作 → 同步到 terminal-store
+      if (
+        typedPayload.toolName === 'terminal' &&
+        typedPayload.metadata !== undefined &&
+        typedPayload.metadata !== null &&
+        typeof typedPayload.metadata === 'object' &&
+        'action' in typedPayload.metadata &&
+        (typedPayload.metadata as Record<string, unknown>)['action'] === 'create' &&
+        'terminalId' in typedPayload.metadata
+      ) {
+        const meta = typedPayload.metadata as Record<string, unknown>;
+        const terminalId = String(meta['terminalId']);
+        const sessionId = typedPayload.sessionId;
+        // 检查是否已存在（避免重复创建）
+        const existing = useTerminalStore.getState().terminals.find((t) => t.id === terminalId);
+        if (existing === undefined) {
+          useTerminalStore.getState().createTerminal({
+            id: terminalId,
+            sessionId,
+            title: typeof meta['title'] === 'string' ? meta['title'] : 'shell',
+            pid: typeof meta['pid'] === 'number' ? meta['pid'] : null,
+            cwd: typeof meta['cwd'] === 'string' ? meta['cwd'] : '',
+            alive: true,
+          });
+        }
+      }
     });
 
     return () => {

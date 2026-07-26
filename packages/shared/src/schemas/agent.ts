@@ -97,13 +97,22 @@ export interface AgentToolCallPayload {
  *
  * ToolExecutor 执行完成后推送，渲染层据此更新工具调用 UI 的状态（成功/失败）。
  * error 为 undefined 表示执行成功；有值表示失败（含错误码与消息）。
+ *
+ * 标准化返回结构（对齐 ToolResult）：
+ * - title：人类可读标题（UI 展示用）
+ * - output：给 LLM 看的文本输出
+ * - metadata：结构化元数据（UI 可解析展示）
  */
 export interface AgentToolResultPayload {
   readonly sessionId: string;
   readonly toolCallId: string;
   readonly toolName: string;
-  /** 工具输出（结构由工具决定，如文件内容、命令 stdout 等） */
+  /** 人类可读标题（UI 展示用，如 "读取文件: src/main.ts"） */
+  readonly title: string;
+  /** 工具输出（给 LLM 看的文本） */
   readonly output: unknown;
+  /** 结构化元数据（可选，UI 可解析展示） */
+  readonly metadata?: Record<string, unknown>;
   /** 失败时携带错误信息；成功时为 undefined */
   readonly error?: {
     readonly code: string;

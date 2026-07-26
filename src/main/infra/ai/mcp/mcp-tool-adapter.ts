@@ -16,7 +16,7 @@
 
 import { AppError, ErrorCode } from '@novel-writer/shared';
 import { z } from 'zod';
-import type { Tool, ToolContext } from '../tool';
+import type { Tool, ToolContext, ToolResult } from '../tool';
 import type { McpServerConfig } from './mcp-types';
 import { buildMcpToolName } from './mcp-types';
 
@@ -212,7 +212,7 @@ export function adaptMcpTool(
     // 用 z.record(z.string(), z.unknown()) 允许任意对象，避免复杂 JSON Schema → Zod 转换
     inputSchema: mcpLooseInputSchema,
     permission,
-    async execute(input: unknown, ctx: ToolContext): Promise<unknown> {
+    async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
       // 中断信号检查：MCP 工具执行前先检查是否已中断
       // （MCP SDK 当前不原生支持 abortSignal，这里做软检查）
       if (ctx.abortSignal.aborted) {
@@ -223,7 +223,17 @@ export function adaptMcpTool(
       const result = await callTool(descriptor.name, input, ctx);
 
       // 标准化结果
-      return normalizeMcpToolResult(result);
+      const output = normalizeMcpToolResult(result);
+
+      return {
+        title: `MCP 工具: ${namespacedName}`,
+        output: typeof output === 'string' ? output : JSON.stringify(output),
+        metadata: {
+          mcpServer: config.name,
+          mcpTool: descriptor.name,
+          hasStructuredContent: result.structuredContent !== undefined,
+        },
+      };
     },
   };
 }

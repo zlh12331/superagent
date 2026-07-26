@@ -9,10 +9,12 @@
 // 5. 切换 Tab 时自动展开（折叠态切 Tab → 展开）
 // 6. aria-expanded 属性
 // 7. 自定义 className
+// 8. Logs / Metrics / Inspector Tab 切换 + enabled 透传
 //
 // 策略：
-// - mock TerminalPanel / GitPanel 子组件，仅断言是否被渲染 + props 透传
-// - 避免依赖 xterm/TanStack Query 等外部依赖
+// - mock TerminalPanel / GitPanel / LogsPanel / MetricsPanel / InspectorPanel 子组件
+// - 仅断言是否被渲染 + props 透传
+// - 避免依赖 xterm/TanStack Query / IPC 等外部依赖
 // ──────────────────────────────────────────────────────────────
 
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -23,10 +25,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ── mock 子组件（避免依赖 xterm / TanStack Query） ───────────
 //
 // vi.hoisted 提升 mock 函数，使 vi.mock factory 可安全引用
-const { mockTerminalPanel, mockGitPanel } = vi.hoisted(() => ({
-  mockTerminalPanel: vi.fn(),
-  mockGitPanel: vi.fn(),
-}));
+const { mockTerminalPanel, mockGitPanel, mockLogsPanel, mockMetricsPanel, mockInspectorPanel } =
+  vi.hoisted(() => ({
+    mockTerminalPanel: vi.fn(),
+    mockGitPanel: vi.fn(),
+    mockLogsPanel: vi.fn(),
+    mockMetricsPanel: vi.fn(),
+    mockInspectorPanel: vi.fn(),
+  }));
 
 vi.mock('@/components/terminal/TerminalPanel', () => ({
   // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
@@ -38,11 +44,26 @@ vi.mock('@/components/git/GitPanel', () => ({
   GitPanel: mockGitPanel,
 }));
 
+vi.mock('@/components/dev/LogsPanel', () => ({
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  LogsPanel: mockLogsPanel,
+}));
+
+vi.mock('@/components/dev/MetricsPanel', () => ({
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  MetricsPanel: mockMetricsPanel,
+}));
+
+vi.mock('@/components/dev/InspectorPanel', () => ({
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  InspectorPanel: mockInspectorPanel,
+}));
+
 import { DevPanel } from '../DevPanel';
 
 // ── mock 组件实现（返回固定占位） ────────────────────────────
 //
-// 每次调用 mockTerminalPanel/mockGitPanel 都返回一个带 data-testid 的 div
+// 每次调用 mock*Panel 都返回一个带 data-testid 的 div
 // 便于用 screen.queryByTestId 检测是否被渲染
 function MockTerminalPanel(props: { sessionId: string; className?: string }): ReactElement {
   return (
@@ -58,12 +79,39 @@ function MockGitPanel(props: { path: string; className?: string }): ReactElement
   return <div data-testid="git-panel" data-path={props.path} data-class={props.className} />;
 }
 
+function MockLogsPanel(props: { enabled?: boolean; className?: string }): ReactElement {
+  return (
+    <div
+      data-testid="logs-panel"
+      data-enabled={props.enabled === undefined ? 'undefined' : String(props.enabled)}
+      data-class={props.className}
+    />
+  );
+}
+
+function MockMetricsPanel(props: { enabled?: boolean; className?: string }): ReactElement {
+  return (
+    <div
+      data-testid="metrics-panel"
+      data-enabled={props.enabled === undefined ? 'undefined' : String(props.enabled)}
+      data-class={props.className}
+    />
+  );
+}
+
+function MockInspectorPanel(props: { className?: string }): ReactElement {
+  return <div data-testid="inspector-panel" data-class={props.className} />;
+}
+
 describe('DevPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // 重置 mock 实现（每个测试前确保返回占位组件）
     mockTerminalPanel.mockImplementation(MockTerminalPanel);
     mockGitPanel.mockImplementation(MockGitPanel);
+    mockLogsPanel.mockImplementation(MockLogsPanel);
+    mockMetricsPanel.mockImplementation(MockMetricsPanel);
+    mockInspectorPanel.mockImplementation(MockInspectorPanel);
   });
 
   // ── 默认折叠 ──────────────────────────────────────────
@@ -75,16 +123,22 @@ describe('DevPanel', () => {
       const expandBtn = screen.getByRole('button', { name: '展开开发面板' });
       expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
 
-      // 内容区不渲染（TerminalPanel / GitPanel 都不应被渲染）
+      // 内容区不渲染（所有面板都不应被渲染）
       expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
       expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('metrics-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('inspector-panel')).not.toBeInTheDocument();
     });
 
-    it('折叠态渲染「终端」和「Git」两个 Tab', () => {
+    it('折叠态渲染「终端」「Git」「日志」「指标」「检查器」五个 Tab', () => {
       render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
 
       expect(screen.getByText('终端')).toBeInTheDocument();
       expect(screen.getByText('Git')).toBeInTheDocument();
+      expect(screen.getByText('日志')).toBeInTheDocument();
+      expect(screen.getByText('指标')).toBeInTheDocument();
+      expect(screen.getByText('检查器')).toBeInTheDocument();
     });
 
     it('默认 activeTab=terminal', () => {
@@ -228,6 +282,73 @@ describe('DevPanel', () => {
       // 切换 gitRepoPath
       rerender(<DevPanel sessionId="s1" gitRepoPath="/repo2" />);
       expect(screen.getByTestId('git-panel')).toHaveAttribute('data-path', '/repo2');
+    });
+
+    // ── Logs / Metrics Tab（新增） ─────────────────────
+    it('点击日志 Tab → 切换到 LogsPanel + 自动展开 + enabled=true', async () => {
+      const user = userEvent.setup();
+      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
+
+      // 点击日志 Tab
+      await user.click(screen.getByText('日志'));
+
+      // 自动展开 + 渲染 LogsPanel
+      expect(screen.getByTestId('logs-panel')).toBeInTheDocument();
+      // 其他面板不渲染
+      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('metrics-panel')).not.toBeInTheDocument();
+
+      // enabled 透传（展开态应为 true）
+      expect(screen.getByTestId('logs-panel')).toHaveAttribute('data-enabled', 'true');
+    });
+
+    it('点击指标 Tab → 切换到 MetricsPanel + 自动展开 + enabled=true', async () => {
+      const user = userEvent.setup();
+      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
+
+      await user.click(screen.getByText('指标'));
+
+      expect(screen.getByTestId('metrics-panel')).toBeInTheDocument();
+      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
+
+      expect(screen.getByTestId('metrics-panel')).toHaveAttribute('data-enabled', 'true');
+    });
+
+    it('折叠态下 Logs/Metrics 面板不渲染（enabled 不影响渲染逻辑，仅控制查询）', async () => {
+      const user = userEvent.setup();
+      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
+
+      // 切换到日志 Tab（自动展开）
+      await user.click(screen.getByText('日志'));
+      expect(screen.getByTestId('logs-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('logs-panel')).toHaveAttribute('data-enabled', 'true');
+
+      // 折叠 → 内容区不渲染
+      fireEvent.click(screen.getByRole('button', { name: '收起开发面板' }));
+      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
+    });
+
+    // ── Inspector Tab（新增） ──────────────────────────
+    it('点击检查器 Tab → 切换到 InspectorPanel + 自动展开', async () => {
+      const user = userEvent.setup();
+      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
+
+      // 点击检查器 Tab
+      await user.click(screen.getByText('检查器'));
+
+      // 自动展开 + 渲染 InspectorPanel
+      expect(screen.getByTestId('inspector-panel')).toBeInTheDocument();
+      // 其他面板不渲染
+      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('metrics-panel')).not.toBeInTheDocument();
+
+      // className 透传
+      expect(screen.getByTestId('inspector-panel')).toHaveAttribute('data-class', 'h-full');
     });
   });
 

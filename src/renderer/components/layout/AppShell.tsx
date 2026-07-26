@@ -1,34 +1,84 @@
 // src/renderer/components/layout/AppShell.tsx
-// 应用主布局容器 · 极简文学风
+// 应用主布局容器 · 对齐原型布局（三段式 grid）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 三段式布局：Topbar（44px）/ 主体（Sidebar + 内容区）
-// - 内容区垂直布局：路由内容（main）+ DevPanel（可折叠底部面板）
+// - 三段式 grid：Topbar（52px）/ 主体（Sidebar + resizer + 内容 + resizer + 右面板）
+// - 可拖拽分隔线：左右两条 resizer，鼠标拖拽调整 sidebar/rightPanel 宽度
+// - 侧栏折叠：sb-collapsed 态，grid 第一列塌缩为 0
+// - 右面板折叠：crp-collapsed 态，grid 第五列塌缩为 0
+// - 右面板渲染 DevPanel（Terminal + Git + Logs + Metrics + Inspector）
 // - 集成 ApprovalDialog：通过 useApprovalBridge 订阅 IPC 审批推送
-//   - ApprovalDialog 作为根级兄弟节点渲染，确保任意路由下都能弹出
-// - 集成 useToolBridge：订阅工具调用 IPC 事件写入 store
-// - 集成 useTerminalBridge：订阅终端输出/退出 IPC 事件写入 store
+// - 集成 useToolBridge + useTerminalBridge：订阅工具/终端 IPC 事件
 //
-// 文学风设计：
-// - 整体米黄纸张底色
-// - Topbar 暖米色（次要层级）
-// - Sidebar 暖米色 + 浅边框
-// - 内容区主色（最浅，最聚焦）
-// - DevPanel 折叠为细条（28px），展开为 200px
+// 布局参考：docs/prototype/prototype-v2.html
+// - .app（grid 两行：topbar + body）
+// - .view-chat（grid 五列：sidebar | resizer | main | resizer | right-panel）
+// - .resizer（可拖拽分隔线，hover 显示 accent 光带）
+// - .chat-right-panel（右面板，可折叠）
+// - .sb-collapsed / .crp-collapsed（折叠态 class）
 // ──────────────────────────────────────────────────────────────
 
-import type { ReactElement, ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
+import { CommandPalette } from '@/components/common/CommandPalette';
+import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { DEFAULT_GIT_REPO_PATH, DRAFT_SESSION_ID } from '@/lib/constants';
+import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 import { DevPanel } from './DevPanel';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+
+/**
+ * 拖拽分隔线宽度区间（px）— 对齐原型 clamp() 边界
+ *
+ * 原型 CSS（globals.css / theme-variables.css）：
+ *   --sidebar-w: clamp(200px, 17vw, 280px);
+ *   --right-panel-w: clamp(260px, 22vw, 360px);
+ *
+ * 此处 MIN/MAX 与 clamp 边界保持一致，确保 JS 拖拽区间 == CSS 响应式区间，
+ * 避免「CSS 允许 200~280 但 JS 允许 210~360」这类不一致。
+ */
+const SIDEBAR_WIDTH_MIN = 200;
+const SIDEBAR_WIDTH_MAX = 280;
+const RIGHT_PANEL_WIDTH_MIN = 260;
+const RIGHT_PANEL_WIDTH_MAX = 360;
+
+/**
+ * 根据视口宽度计算初始侧栏宽度（对齐原型 clamp(200px, 17vw, 280px)）。
+ *
+ * 用 lazy initializer 在 useState 首次渲染时同步计算，避免首屏闪烁。
+ * SSR 防御：typeof window 检查（Electron 应用无 SSR 但保持健壮性）。
+ */
+function computeInitialSidebarWidth(): number {
+  if (typeof window === 'undefined') return 240;
+  return Math.round(
+    Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, window.innerWidth * 0.17)),
+  );
+}
+
+/**
+ * 根据视口宽度计算初始右面板宽度（对齐原型 clamp(260px, 22vw, 360px)）。
+ */
+function computeInitialRightPanelWidth(): number {
+  if (typeof window === 'undefined') return 317;
+  return Math.round(
+    Math.max(RIGHT_PANEL_WIDTH_MIN, Math.min(RIGHT_PANEL_WIDTH_MAX, window.innerWidth * 0.22)),
+  );
+}
+
+/** 拖拽方向标识 */
+type ResizerSide = 'left' | 'right';
 
 interface AppShellProps {
   /** 主内容区（通常由 RouterProvider 通过 <Outlet /> 传入） */
@@ -39,61 +89,241 @@ interface AppShellProps {
  * 应用主布局
  *
  * 使用 CSS Grid 划分两行：Topbar / 主体。
- * 主体水平排列 Sidebar + 内容区，内容区垂直排列 main + DevPanel。
+ * 主体水平排列 Sidebar + resizer + 内容区 + resizer + 右面板。
  *
- * 集成 useApprovalBridge + ApprovalDialog：
- * - useApprovalBridge 订阅 agent:approval:request IPC 事件
- * - 审批项入队 useApprovalsStore.pending
- * - ApprovalDialog 读取 pending[0] 弹出对话框
- * - 用户点击批准/拒绝 → 调用 IPC agent.approvalResponse 回传主进程
+ * 折叠态：
+ * - sb-collapsed：侧栏完全隐藏（grid 第一列=0）
+ * - crp-collapsed：右面板完全隐藏（grid 第五列=0）
+ * - 由 Topbar 的按钮触发，AppShell 持有状态并通过 CSS class 切换
  *
- * 集成 useToolBridge + useTerminalBridge：
- * - useToolBridge 订阅 agent:tool:call / agent:tool:result IPC 事件
- * - useTerminalBridge 订阅 terminal:event:output / terminal:event:exit IPC 事件
- * - 两者在根布局初始化一次，保证任意路由下都能接收事件
- *
- * @example
- * ```tsx
- * <AppShell>
- *   <Outlet />
- * </AppShell>
- * ```
+ * 拖拽分隔线：
+ * - mousedown 记录起始 X 坐标 + 当前宽度
+ * - mousemove 计算 delta，更新 CSS 变量 --aurora-sidebar-w / --aurora-right-panel-w
+ * - mouseup 移除监听，恢复 user-select
  */
 export function AppShell({ children }: AppShellProps): ReactElement {
   // 审批桥接：订阅 IPC 推送 + 提供 respondApproval 方法
-  // 在根布局初始化一次，保证任意路由下都能接收审批请求
   const { respondApproval } = useApprovalBridge();
 
   // 工具调用桥接：订阅 agent:tool:call / agent:tool:result IPC 事件
-  // 将事件写入 useToolStore，供 ToolPanel 展示
   useToolBridge();
 
   // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
-  // 将事件写入 useTerminalStore，供 TerminalPanel 兜底展示
   useTerminalBridge();
 
   // L2 Zustand：激活会话 id（用于关联 DevPanel 中的终端实例）
-  // 无激活会话时使用 DRAFT_SESSION_ID 作为占位（复用同一个草稿终端）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const devPanelSessionId = activeSessionId ?? DRAFT_SESSION_ID;
 
+  // L2 Zustand：欢迎页模式（控制 .view-chat.welcome-mode class）
+  // 欢迎页模式下隐藏右面板 + 右分隔线，主区域改为居中 flex 容器
+  const isWelcomeMode = useWelcomeStore((state) => state.isWelcomeMode);
+
+  // 拖拽分隔线状态 — 初始值对齐原型 clamp() 行为，按视口宽度计算
+  const [sidebarWidth, setSidebarWidth] = useState(computeInitialSidebarWidth);
+  const [rightPanelWidth, setRightPanelWidth] = useState(computeInitialRightPanelWidth);
+
+  // 折叠态
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+
+  // 响应式断点联动：窄屏自动折叠面板（对齐原型 @media 行为）
+  // <1200px：右面板自动隐藏；<900px：侧栏自动隐藏；宽屏自动恢复
+  const { isCompact, isNarrow } = useLayoutBreakpoint();
+  useEffect(() => {
+    setRightPanelCollapsed(isCompact);
+  }, [isCompact]);
+  useEffect(() => {
+    setSidebarCollapsed(isNarrow);
+  }, [isNarrow]);
+
+  const [draggingSide, setDraggingSide] = useState<ResizerSide | null>(null);
+
+  // 命令面板 open 状态（由 ⌘P 快捷键或 Topbar paletteBtn 触发）
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  const theme = useSettingsStore((s) => s.theme);
+  const enterWelcomeMode = useWelcomeStore((s) => s.enterWelcomeMode);
+
+  useKeyboardShortcuts({
+    onCommandPalette: () => setPaletteOpen(true),
+    onSaveFile: () => {},
+    onSearchFile: () => setPaletteOpen(true),
+    onToggleTheme: () => {
+      const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
+      setTheme(nextTheme);
+    },
+    onOpenSettings: () => {},
+    onNewSession: () => {
+      enterWelcomeMode();
+    },
+  });
+
+  // 拖拽起始信息（ref 避免重渲染）
+  const dragStartRef = useRef<{ side: ResizerSide; startX: number; startWidth: number } | null>(
+    null,
+  );
+
+  // 同步 CSS 变量到根元素（供 .view-chat 的 grid-template-columns 使用）
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--aurora-sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
+    root.style.setProperty(
+      '--aurora-right-panel-w',
+      rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`,
+    );
+  }, [sidebarWidth, rightPanelWidth, sidebarCollapsed, rightPanelCollapsed]);
+
+  // 拖拽 mousemove 处理函数
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    const dragStart = dragStartRef.current;
+    if (dragStart === null) return;
+
+    const delta = event.clientX - dragStart.startX;
+    if (dragStart.side === 'left') {
+      const newWidth = dragStart.startWidth + delta;
+      const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, newWidth));
+      setSidebarWidth(clamped);
+    } else {
+      const newWidth = dragStart.startWidth - delta;
+      const clamped = Math.max(RIGHT_PANEL_WIDTH_MIN, Math.min(RIGHT_PANEL_WIDTH_MAX, newWidth));
+      setRightPanelWidth(clamped);
+    }
+  }, []);
+
+  // 拖拽 mouseup 处理函数
+  const handleMouseUp = useCallback(() => {
+    document.body.classList.remove('resizing');
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+    dragStartRef.current = null;
+    setDraggingSide(null);
+  }, [handleMouseMove]);
+
+  // 拖拽启动：mousedown 注册监听
+  const handleMouseDown = useCallback(
+    (side: ResizerSide) => (event: React.MouseEvent<HTMLHRElement>) => {
+      event.preventDefault();
+      const startWidth = side === 'left' ? sidebarWidth : rightPanelWidth;
+      dragStartRef.current = { side, startX: event.clientX, startWidth };
+      setDraggingSide(side);
+      document.body.classList.add('resizing');
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [sidebarWidth, rightPanelWidth, handleMouseMove, handleMouseUp],
+  );
+
+  // 卸载时清理监听（防御性）
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove('resizing');
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
+  // 折叠态切换回调
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => !prev);
+  }, []);
+  const handleToggleRightPanel = useCallback(() => {
+    setRightPanelCollapsed((prev) => !prev);
+  }, []);
+
   return (
-    <div className="bg-background text-foreground flex h-screen w-screen flex-col overflow-hidden font-sans">
-      <Topbar />
-      <div className="flex min-h-0 flex-1">
+    <div className="bg-background text-foreground app font-sans">
+      {/* WCAG 2.4.1 Bypass Blocks：跳过导航链接 */}
+      <a
+        href="#main-content"
+        className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+      >
+        跳到主内容
+      </a>
+      <Topbar
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={handleToggleSidebar}
+        rightPanelCollapsed={rightPanelCollapsed}
+        onToggleRightPanel={handleToggleRightPanel}
+        onOpenCommandPalette={openPalette}
+      />
+      <div
+        className={cn(
+          'view-chat',
+          sidebarCollapsed && 'sb-collapsed',
+          rightPanelCollapsed && 'crp-collapsed',
+          isWelcomeMode && 'welcome-mode',
+        )}
+      >
+        {/* 列 1：侧边栏 */}
         <Sidebar />
-        {/* 内容区：垂直布局（路由内容 + 开发面板） */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <main className="paper-texture min-h-0 flex-1 overflow-auto bg-background">
-            {children}
-          </main>
-          {/* 开发面板：Terminal + Git，可折叠底部面板 */}
-          <DevPanel sessionId={devPanelSessionId} gitRepoPath={DEFAULT_GIT_REPO_PATH} />
-        </div>
+
+        {/* 列 2：左分隔线（可拖拽调整 sidebar 宽度） */}
+        {!sidebarCollapsed && (
+          <hr
+            aria-orientation="vertical"
+            aria-label="侧边栏宽度调整"
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={SIDEBAR_WIDTH_MIN}
+            aria-valuemax={SIDEBAR_WIDTH_MAX}
+            tabIndex={0}
+            className={cn('resizer resizer-left', draggingSide === 'left' && 'dragging')}
+            onMouseDown={handleMouseDown('left')}
+          />
+        )}
+
+        {/* 列 3：主内容区（thread 背景：多层光晕氛围 + 纸张噪点纹理） */}
+        <main id="main-content" className="thread-bg paper-texture">
+          {children}
+        </main>
+
+        {/* 列 4：右分隔线（可拖拽调整右面板宽度）
+            欢迎页模式下不渲染（无右面板可调） */}
+        {!rightPanelCollapsed && !isWelcomeMode && (
+          <hr
+            aria-orientation="vertical"
+            aria-label="右面板宽度调整"
+            aria-valuenow={rightPanelWidth}
+            aria-valuemin={RIGHT_PANEL_WIDTH_MIN}
+            aria-valuemax={RIGHT_PANEL_WIDTH_MAX}
+            tabIndex={0}
+            className={cn('resizer resizer-right', draggingSide === 'right' && 'dragging')}
+            onMouseDown={handleMouseDown('right')}
+          />
+        )}
+
+        {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector） */}
+        <aside className="chat-right-panel" aria-label="开发面板">
+          {/* 折叠按钮：点击切换 rightPanelCollapsed */}
+          <button
+            type="button"
+            className="crp-collapse-btn"
+            onClick={handleToggleRightPanel}
+            aria-label={rightPanelCollapsed ? '展开右面板' : '折叠右面板'}
+            aria-expanded={!rightPanelCollapsed}
+          >
+            <ChevronRight className="size-3" strokeWidth={1.5} />
+          </button>
+          {!rightPanelCollapsed && (
+            <DevPanel
+              sessionId={devPanelSessionId}
+              gitRepoPath={DEFAULT_GIT_REPO_PATH}
+              className="h-full border-t-0"
+            />
+          )}
+        </aside>
       </div>
 
       {/* 全局审批对话框：根级渲染，覆盖在所有内容之上 */}
       <ApprovalDialog onRespond={respondApproval} />
+
+      {/* 文件查看器对话框：根级渲染，由 useFileViewerStore 控制 */}
+      <FileViewerDialog />
+
+      {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }

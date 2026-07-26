@@ -187,10 +187,15 @@ export class MCPService implements IMCPService {
   listServers(): readonly McpServerInfo[] {
     const infos: McpServerInfo[] = [];
     for (const [, entry] of this.servers) {
+      // L2 修复：显式检查 client 连接状态后再读取 server 元数据
+      // - startServer 失败时 entry 保留在 Map（status='error'），但 client 已通过 closeQuietly 断开
+      // - 此时 getServerName/Version 虽不会抛错（仅返回 undefined），但显式检查避免依赖隐式约定
+      // - 也为未来 SDK 升级留出防御空间（新版本可能在断开后抛错）
+      const isConnected = entry.client.isConnected();
+      const serverName = isConnected ? entry.client.getServerName() : undefined;
+      const serverVersion = isConnected ? entry.client.getServerVersion() : undefined;
       // 注意：exactOptionalPropertyTypes 下，可选属性不能显式赋 undefined，
       // 必须用条件展开（仅当值存在时才写入属性）
-      const serverName = entry.client.getServerName();
-      const serverVersion = entry.client.getServerVersion();
       infos.push({
         config: entry.client.getConfig(),
         status: entry.status,

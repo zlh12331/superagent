@@ -1,0 +1,103 @@
+# .github/workflows/release.yml
+# CD 流水线：tag 触发，自动构建 Windows 安装器 + 上传 Sentry 符号 + 发布 GitHub Release
+#
+# 触发条件：推送 v*.*.* 格式的 git tag（如 v0.1.0）
+# 工作流：
+# 1. checkout + 安装依赖
+# 2. 跑全部测试（typecheck/lint/unit/e2e-electron）作为 release gate
+# 3. 构建 Windows NSIS 安装器（electron-builder）
+# 4. 上传 Sentry 符号（@sentry/cli）
+# 5. 上传构建产物到 GitHub Release
+#
+# 必需 Secrets：
+# - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
+# - 代码签名证书通过 CSC_LINK/CSC_KEY_PASSWORD 环境变量提供（可选）
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: # 允许手动触发（调试用）
+
+jobs:
+  release:
+    name: Build & Release Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write # 创建 GitHub Release 需要写权限
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取全部历史（便于生成 changelog）
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Release Gate：发布前必须通过质量门禁 ──────────────
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      # ── 构建 Windows NSIS 安装器 ──────────────────────────
+      - name: Build & package Windows installer
+        run: pnpm build:win
+        env:
+          # 代码签名证书（可选，未设置则跳过签名）
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # electron-builder 发布配置（不通过 GH_TOKEN 自动 publish，手动控制）
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 上传 Sentry 符号（错误堆栈符号化必需）─────────────
+      - name: Upload Sentry symbols
+        if: env.SENTRY_AUTH_TOKEN != ''
+        run: pnpm sentry:upload:symbols
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+      # ── 跑生产构建 smoke 测试（确保 binary 可启动）────────
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run production smoke tests
+        run: pnpm test:smoke
+
+      # ── 发布 GitHub Release ──────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true # 自动从 commits 生成 changelog
+          files: |
+            release/*-setup.exe
+            release/latest.yml
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }} # v0.1.0-beta1 标记为 prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: release/
+          retention-days: 30

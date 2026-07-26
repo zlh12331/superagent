@@ -295,9 +295,24 @@ export class SessionService implements ISessionService {
     const sessionId = randomUUID();
     const initialMessages = options.messages ?? [];
 
-    // 计算标题与 lastMessage 预览
+    // 计算标题与 lastMessage 预览（事务外，避免持有 DB 锁）
     const title = resolveTitle(options.title, initialMessages);
     const lastMessagePreview = resolveLastMessagePreview(initialMessages);
+
+    // 预序列化 messages（M2 修复：在事务外完成 JSON.stringify）
+    // - JSON.stringify 是 CPU 密集操作，事务内执行会延长 SQLite 写锁持有时间
+    // - 若序列化失败（如循环引用），在事务外抛错，避免 BEGIN/ROLLBACK 开销
+    // - 事务体仅保留纯 DB 操作，更易推理
+    const messageInserts: MessageInsert[] =
+      initialMessages.length > 0
+        ? initialMessages.map((msg, index) => ({
+            sessionId,
+            seq: index,
+            role: extractRole(msg),
+            content: serializeMessage(msg),
+            createdAt: now,
+          }))
+        : [];
 
     // 事务：保证 sessions 行与 messages 行原子写入
     // 任一步失败则整体回滚，避免出现孤立的 messages 行
@@ -314,15 +329,8 @@ export class SessionService implements ISessionService {
       };
       tx.insert(sessions).values(sessionInsert).run();
 
-      // 2. 批量插入 messages 行（seq 从 0 递增）
-      if (initialMessages.length > 0) {
-        const messageInserts: MessageInsert[] = initialMessages.map((msg, index) => ({
-          sessionId,
-          seq: index,
-          role: extractRole(msg),
-          content: serializeMessage(msg),
-          createdAt: now,
-        }));
+      // 2. 批量插入预序列化的 messages 行
+      if (messageInserts.length > 0) {
         tx.insert(messages).values(messageInserts).run();
       }
     });
@@ -364,23 +372,25 @@ export class SessionService implements ISessionService {
       return sessionRow.messageCount;
     }
 
-    // 3. 事务：批量插入 messages + 更新 sessions
-    //    条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
-    //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
-    //     用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
+    // 3. 预计算（事务外）：startSeq / now / newLastMessage / messageInserts
+    //    M2 修复：serializeMessage 在事务外完成，避免 JSON.stringify 延长 SQLite 写锁
     const startSeq = sessionRow.messageCount;
     const now = Date.now();
     const newLastMessage = resolveLastMessagePreview(newMessages);
+    const messageInserts: MessageInsert[] = newMessages.map((msg, index) => ({
+      sessionId,
+      seq: startSeq + index,
+      role: extractRole(msg),
+      content: serializeMessage(msg),
+      createdAt: now,
+    }));
 
+    // 4. 事务：批量插入 messages + 更新 sessions
+    //    条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
+    //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
+    //     用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
     db.transaction((tx) => {
-      // 批量插入 messages 行
-      const messageInserts: MessageInsert[] = newMessages.map((msg, index) => ({
-        sessionId,
-        seq: startSeq + index,
-        role: extractRole(msg),
-        content: serializeMessage(msg),
-        createdAt: now,
-      }));
+      // 批量插入预序列化的 messages 行
       tx.insert(messages).values(messageInserts).run();
 
       // 更新 sessions：updatedAt + messageCount（+ lastMessage 若有新 user 消息）

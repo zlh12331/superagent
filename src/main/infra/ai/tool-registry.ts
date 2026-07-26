@@ -78,23 +78,19 @@ export interface IToolRegistry {
    * 转换为 AI SDK v7 原生 tool 格式
    *
    * 为每次 agent 对话生成独立的 AI SDK tools 集合，
-   * 闭包捕获对应的 sessionId / workingDir / abortSignal。
+   * 闭包捕获对应的 sessionId / workingDir / abortSignal / webContents。
    *
-   * @param ctx 工具执行上下文（注入到每个工具的 execute 函数）
+   * @param baseCtx 工具执行基础上下文（含 sessionId / workingDir / abortSignal / webContents 等）
+   *   注意：messageId / callId 由每次工具调用时动态填充
    * @param executeHook 可选的工具执行 hook（AgentService 注入 ToolExecutor.execute）
    *   - 不传时：直接调用 tool.execute(input, ctx)（用于测试/无权限检查场景）
-   *   - 传入时：调用 hook(tool, input, ctx, toolCallId)，由 hook 负责权限检查、
-   *     审批流程、IPC 事件推送，并返回工具输出
+   *   - 传入时：调用 hook(tool, input, ctx)，由 hook 负责权限检查、
+   *     审批流程、IPC 事件推送，并返回最终给 LLM 的结果值
    * @returns AI SDK 原生 tool 集合，可直接传给 streamText 的 tools 参数
    */
   toAISDKTools(
-    ctx: ToolContext,
-    executeHook?: (
-      tool: Tool,
-      input: unknown,
-      ctx: ToolContext,
-      toolCallId: string,
-    ) => Promise<unknown>,
+    baseCtx: Omit<ToolContext, 'messageId' | 'callId' | 'metadata'>,
+    executeHook?: (tool: Tool, input: unknown, ctx: ToolContext) => Promise<unknown>,
   ): Record<string, AITool>;
 }
 
@@ -112,12 +108,10 @@ export class ToolRegistry implements IToolRegistry {
 
   /** @inheritDoc */
   register(toolInstance: Tool): void {
-    // 参数校验：工具名不能为空
     if (!toolInstance.name) {
       throw new AppError(ErrorCode.TOOL_NOT_FOUND, '工具名不能为空');
     }
 
-    // 重名校验
     if (this.tools.has(toolInstance.name)) {
       throw new AppError(ErrorCode.INVALID_INPUT, `工具已注册：${toolInstance.name}`);
     }
@@ -144,7 +138,6 @@ export class ToolRegistry implements IToolRegistry {
   list(permissionFilter?: 'auto' | 'ask'): readonly ToolDescriptor[] {
     const descriptors: ToolDescriptor[] = [];
     for (const toolInstance of this.tools.values()) {
-      // 权限过滤
       if (permissionFilter !== undefined && toolInstance.permission !== permissionFilter) {
         continue;
       }
@@ -154,40 +147,32 @@ export class ToolRegistry implements IToolRegistry {
         permission: toolInstance.permission,
       });
     }
-    // 按 name 字母序排序，确保跨进程一致
     descriptors.sort((a, b) => a.name.localeCompare(b.name));
     return descriptors;
   }
 
   /** @inheritDoc */
   toAISDKTools(
-    ctx: ToolContext,
-    executeHook?: (
-      tool: Tool,
-      input: unknown,
-      ctx: ToolContext,
-      toolCallId: string,
-    ) => Promise<unknown>,
+    baseCtx: Omit<ToolContext, 'messageId' | 'callId' | 'metadata'>,
+    executeHook?: (tool: Tool, input: unknown, ctx: ToolContext) => Promise<unknown>,
   ): Record<string, AITool> {
     const aiTools: Record<string, AITool> = {};
     for (const toolInstance of this.tools.values()) {
-      // 包装 execute 函数，注入 ToolContext 与 executeHook
-      // 闭包捕获 ctx 与 executeHook，每次 streamText 调用生成的 tools 集合是独立的
       aiTools[toolInstance.name] = defineAITool({
         description: toolInstance.description,
         inputSchema: toolInstance.inputSchema,
-        execute: async (input: unknown, options: { toolCallId?: string } | undefined) => {
-          // AI SDK v7 的 execute 第二个参数为 ToolExecutionOptions，包含 toolCallId
-          // 这里用宽松类型避免引入 ai 包内部类型依赖，运行时一定能拿到 options
-          const toolCallId = options?.toolCallId ?? '';
+        execute: async (input: unknown, options) => {
+          const callId = options.toolCallId;
+          const ctx: ToolContext = {
+            ...baseCtx,
+            messageId: '',
+            callId,
+          };
           if (executeHook !== undefined) {
-            // AgentService 注入了 hook：走权限检查 + 审批 + IPC 推送流程
-            // hook 内部调用 ToolExecutor.execute，返回 result.output
-            return executeHook(toolInstance, input, ctx, toolCallId);
+            return executeHook(toolInstance, input, ctx);
           }
-          // 默认行为：直接调用 tool.execute（用于测试/无权限检查场景）
-          // 注意：这里 input 已被 AI SDK 通过 inputSchema 校验过
-          return toolInstance.execute(input, ctx);
+          const result = await toolInstance.execute(input, ctx);
+          return result.output;
         },
       });
     }
