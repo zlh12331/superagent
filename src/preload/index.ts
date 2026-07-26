@@ -307,6 +307,49 @@ const api = {
     // 弹出原生目录选择器，返回选中路径或 canceled
     pickDirectory: (input) => invoke(IPC_CHANNELS.DIALOG_PICK_DIRECTORY, input),
   },
+
+  // ── Novel 域（网文写作平台，请求-响应模式）────────────────
+  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
+  novel: {
+    projectList: (input) => invoke(IPC_CHANNELS.NOVEL_PROJECT_LIST, input),
+    projectCreate: (input) => invoke(IPC_CHANNELS.NOVEL_PROJECT_CREATE, input),
+    projectGet: (input) => invoke(IPC_CHANNELS.NOVEL_PROJECT_GET, input),
+    projectDelete: (input) => invoke(IPC_CHANNELS.NOVEL_PROJECT_DELETE, input),
+
+    chapterList: (input) => invoke(IPC_CHANNELS.NOVEL_CHAPTER_LIST, input),
+    chapterGet: (input) => invoke(IPC_CHANNELS.NOVEL_CHAPTER_GET, input),
+    chapterSave: (input) => invoke(IPC_CHANNELS.NOVEL_CHAPTER_SAVE, input),
+    chapterCreate: (input) => invoke(IPC_CHANNELS.NOVEL_CHAPTER_CREATE, input),
+    chapterDelete: (input) => invoke(IPC_CHANNELS.NOVEL_CHAPTER_DELETE, input),
+
+    outlineList: (input) => invoke(IPC_CHANNELS.NOVEL_OUTLINE_LIST, input),
+    outlineCreate: (input) => invoke(IPC_CHANNELS.NOVEL_OUTLINE_CREATE, input),
+    outlineUpdate: (input) => invoke(IPC_CHANNELS.NOVEL_OUTLINE_UPDATE, input),
+    outlineDelete: (input) => invoke(IPC_CHANNELS.NOVEL_OUTLINE_DELETE, input),
+
+    characterList: (input) => invoke(IPC_CHANNELS.NOVEL_CHARACTER_LIST, input),
+    characterCreate: (input) => invoke(IPC_CHANNELS.NOVEL_CHARACTER_CREATE, input),
+    characterGet: (input) => invoke(IPC_CHANNELS.NOVEL_CHARACTER_GET, input),
+    characterUpdate: (input) => invoke(IPC_CHANNELS.NOVEL_CHARACTER_UPDATE, input),
+    characterDelete: (input) => invoke(IPC_CHANNELS.NOVEL_CHARACTER_DELETE, input),
+
+    characterRelationshipList: (input) =>
+      invoke(IPC_CHANNELS.NOVEL_CHARACTER_RELATIONSHIP_LIST, input),
+    characterRelationshipCreate: (input) =>
+      invoke(IPC_CHANNELS.NOVEL_CHARACTER_RELATIONSHIP_CREATE, input),
+    characterRelationshipDelete: (input) =>
+      invoke(IPC_CHANNELS.NOVEL_CHARACTER_RELATIONSHIP_DELETE, input),
+
+    worldSettingList: (input) => invoke(IPC_CHANNELS.NOVEL_WORLD_SETTING_LIST, input),
+    worldSettingCreate: (input) => invoke(IPC_CHANNELS.NOVEL_WORLD_SETTING_CREATE, input),
+    worldSettingUpdate: (input) => invoke(IPC_CHANNELS.NOVEL_WORLD_SETTING_UPDATE, input),
+    worldSettingDelete: (input) => invoke(IPC_CHANNELS.NOVEL_WORLD_SETTING_DELETE, input),
+
+    writingSessionList: (input) => invoke(IPC_CHANNELS.NOVEL_WRITING_SESSION_LIST, input),
+    writingSessionCreate: (input) => invoke(IPC_CHANNELS.NOVEL_WRITING_SESSION_CREATE, input),
+
+    exportTxt: (input) => invoke(IPC_CHANNELS.NOVEL_EXPORT_TXT, input),
+  },
 } satisfies IpcApi;
 
 // 通过 contextBridge 暴露到渲染层的 window.api（contextIsolation: true 下唯一安全方式）

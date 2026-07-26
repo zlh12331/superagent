@@ -119,11 +119,194 @@ export type PromptRow = typeof prompts.$inferSelect;
 /** prompts 表插入类型 */
 export type PromptInsert = typeof prompts.$inferInsert;
 
+// ─── 网文写作平台 9 张表 ─────────────────────────────────
+
+/**
+ * novel_projects 表：写作项目
+ */
+export const novelProjects = sqliteTable('novel_projects', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  author: text('author').notNull(),
+  genre: text('genre').notNull(),
+  description: text('description'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/**
+ * volumes 表：卷
+ */
+export const volumes = sqliteTable('volumes', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => novelProjects.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  summary: text('summary'),
+  createdAt: integer('created_at').notNull(),
+});
+
+/**
+ * chapters 表：章
+ */
+export const chapters = sqliteTable('chapters', {
+  id: text('id').primaryKey(),
+  volumeId: text('volume_id')
+    .notNull()
+    .references(() => volumes.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  content: text('content'),
+  wordCount: integer('word_count').notNull().default(0),
+  summary: text('summary'),
+  status: text('status').notNull().default('draft'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/**
+ * scenes 表：节
+ */
+export const scenes = sqliteTable('scenes', {
+  id: text('id').primaryKey(),
+  chapterId: text('chapter_id')
+    .notNull()
+    .references(() => chapters.id, { onDelete: 'cascade' }),
+  title: text('title'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  summary: text('summary'),
+  content: text('content'),
+});
+
+/**
+ * outline_items 表：大纲项（卷纲/章纲/节纲统一表，自引用树）
+ */
+export const outlineItems = sqliteTable('outline_items', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => novelProjects.id, { onDelete: 'cascade' }),
+  parentId: text('parent_id'),
+  level: text('level', { enum: ['volume', 'chapter', 'scene'] }).notNull(),
+  title: text('title').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  summary: text('summary'),
+  targetWordCount: integer('target_word_count').default(0),
+  emotionalGoal: text('emotional_goal'),
+  pacing: text('pacing'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/**
+ * characters 表：角色
+ */
+export const characters = sqliteTable('characters', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => novelProjects.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  aliases: text('aliases'),
+  role: text('role', { enum: ['主角', '重要', '次要'] }).notNull().default('次要'),
+  appearance: text('appearance'),
+  personality: text('personality'),
+  background: text('background'),
+  abilities: text('abilities'),
+  status: text('status'),
+  avatarUrl: text('avatar_url'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/**
+ * character_relationships 表：角色关系
+ */
+export const characterRelationships = sqliteTable('character_relationships', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => novelProjects.id, { onDelete: 'cascade' }),
+  characterAId: text('character_a_id')
+    .notNull()
+    .references(() => characters.id, { onDelete: 'cascade' }),
+  characterBId: text('character_b_id')
+    .notNull()
+    .references(() => characters.id, { onDelete: 'cascade' }),
+  relationshipType: text('relationship_type').notNull(),
+  description: text('description'),
+  createdAt: integer('created_at').notNull(),
+});
+
+/**
+ * world_settings 表：世界观设定
+ */
+export const worldSettings = sqliteTable('world_settings', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => novelProjects.id, { onDelete: 'cascade' }),
+  category: text('category').notNull(),
+  title: text('title').notNull(),
+  content: text('content'),
+  tags: text('tags'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/**
+ * writing_sessions 表：写作会话（AI 对话记录）
+ */
+export const writingSessions = sqliteTable('writing_sessions', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => novelProjects.id, { onDelete: 'cascade' }),
+  chapterId: text('chapter_id'),
+  sessionType: text('session_type', {
+    enum: ['write', 'review', 'inspiration'],
+  }).notNull(),
+  messages: text('messages'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// 类型导出
+export type NovelProjectRow = typeof novelProjects.$inferSelect;
+export type NovelProjectInsert = typeof novelProjects.$inferInsert;
+export type VolumeRow = typeof volumes.$inferSelect;
+export type VolumeInsert = typeof volumes.$inferInsert;
+export type ChapterRow = typeof chapters.$inferSelect;
+export type ChapterInsert = typeof chapters.$inferInsert;
+export type SceneRow = typeof scenes.$inferSelect;
+export type SceneInsert = typeof scenes.$inferInsert;
+export type OutlineItemRow = typeof outlineItems.$inferSelect;
+export type OutlineItemInsert = typeof outlineItems.$inferInsert;
+export type CharacterRow = typeof characters.$inferSelect;
+export type CharacterInsert = typeof characters.$inferInsert;
+export type CharacterRelationshipRow = typeof characterRelationships.$inferSelect;
+export type CharacterRelationshipInsert = typeof characterRelationships.$inferInsert;
+export type WorldSettingRow = typeof worldSettings.$inferSelect;
+export type WorldSettingInsert = typeof worldSettings.$inferInsert;
+export type WritingSessionRow = typeof writingSessions.$inferSelect;
+export type WritingSessionInsert = typeof writingSessions.$inferInsert;
+
 // 导出 schema 对象供 db.ts 创建表
 export const schema = {
   sessions,
   messages,
   prompts,
+  novelProjects,
+  volumes,
+  chapters,
+  scenes,
+  outlineItems,
+  characters,
+  characterRelationships,
+  worldSettings,
+  writingSessions,
 };
 
 // 防止 ts 报未使用 sql 导入（未来 CREATE INDEX 会用到）
