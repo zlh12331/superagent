@@ -342,6 +342,60 @@ export interface IpcApi {
     /** 弹出原生目录选择器，返回选中路径或 canceled */
     pickDirectory: IpcInvokeMethod<'dialog:pickDirectory'>;
   };
+
+  // ── Novel 域 API（网文写作平台） ─────────────────────
+  /**
+   * Novel 域 API
+   *
+   * 网文写作平台的所有业务操作，包括项目、章节、大纲、角色、世界观、写作会话等。
+   * 所有方法使用 any 类型约束以兼容 strict TS 配置。
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
+  novel: {
+    // 项目管理
+    projectList: IpcInvokeMethod<'novel:project:list'>;
+    projectCreate: IpcInvokeMethod<'novel:project:create'>;
+    projectGet: IpcInvokeMethod<'novel:project:get'>;
+    projectDelete: IpcInvokeMethod<'novel:project:delete'>;
+
+    // 章节管理
+    chapterList: IpcInvokeMethod<'novel:chapter:list'>;
+    chapterGet: IpcInvokeMethod<'novel:chapter:get'>;
+    chapterSave: IpcInvokeMethod<'novel:chapter:save'>;
+    chapterCreate: IpcInvokeMethod<'novel:chapter:create'>;
+    chapterDelete: IpcInvokeMethod<'novel:chapter:delete'>;
+
+    // 大纲管理
+    outlineList: IpcInvokeMethod<'novel:outline:list'>;
+    outlineCreate: IpcInvokeMethod<'novel:outline:create'>;
+    outlineUpdate: IpcInvokeMethod<'novel:outline:update'>;
+    outlineDelete: IpcInvokeMethod<'novel:outline:delete'>;
+
+    // 角色管理
+    characterList: IpcInvokeMethod<'novel:character:list'>;
+    characterCreate: IpcInvokeMethod<'novel:character:create'>;
+    characterGet: IpcInvokeMethod<'novel:character:get'>;
+    characterUpdate: IpcInvokeMethod<'novel:character:update'>;
+    characterDelete: IpcInvokeMethod<'novel:character:delete'>;
+
+    // 角色关系管理
+    characterRelationshipList: IpcInvokeMethod<'novel:character:relationship:list'>;
+    characterRelationshipCreate: IpcInvokeMethod<'novel:character:relationship:create'>;
+    characterRelationshipDelete: IpcInvokeMethod<'novel:character:relationship:delete'>;
+
+    // 世界观管理
+    worldSettingList: IpcInvokeMethod<'novel:world-setting:list'>;
+    worldSettingCreate: IpcInvokeMethod<'novel:world-setting:create'>;
+    worldSettingUpdate: IpcInvokeMethod<'novel:world-setting:update'>;
+    worldSettingDelete: IpcInvokeMethod<'novel:world-setting:delete'>;
+
+    // 写作会话管理
+    writingSessionList: IpcInvokeMethod<'novel:session:list'>;
+    writingSessionCreate: IpcInvokeMethod<'novel:session:create'>;
+
+    // 导出
+    exportTxt: IpcInvokeMethod<'novel:export:txt'>;
+  };
 }
 
 /** 全局 Window 接口扩展（渲染层通过 window.api 访问） */

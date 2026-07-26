@@ -180,6 +180,43 @@ export const IPC_CHANNELS = {
   // 请求-响应：打开 Chromium DevTools（支持 mode 参数：detach/right/bottom）
   // 渲染层 InspectorPanel 按钮触发，主进程调用 webContents.openDevTools({ mode })
   DEVTOOLS_OPEN: 'devtools:open',
+
+  // ── Novel 域（网文写作平台） ──────────────────────
+  NOVEL_PROJECT_LIST: 'novel:project:list',
+  NOVEL_PROJECT_CREATE: 'novel:project:create',
+  NOVEL_PROJECT_GET: 'novel:project:get',
+  NOVEL_PROJECT_DELETE: 'novel:project:delete',
+
+  NOVEL_CHAPTER_LIST: 'novel:chapter:list',
+  NOVEL_CHAPTER_GET: 'novel:chapter:get',
+  NOVEL_CHAPTER_SAVE: 'novel:chapter:save',
+  NOVEL_CHAPTER_CREATE: 'novel:chapter:create',
+  NOVEL_CHAPTER_DELETE: 'novel:chapter:delete',
+
+  NOVEL_OUTLINE_LIST: 'novel:outline:list',
+  NOVEL_OUTLINE_CREATE: 'novel:outline:create',
+  NOVEL_OUTLINE_UPDATE: 'novel:outline:update',
+  NOVEL_OUTLINE_DELETE: 'novel:outline:delete',
+
+  NOVEL_CHARACTER_LIST: 'novel:character:list',
+  NOVEL_CHARACTER_CREATE: 'novel:character:create',
+  NOVEL_CHARACTER_GET: 'novel:character:get',
+  NOVEL_CHARACTER_UPDATE: 'novel:character:update',
+  NOVEL_CHARACTER_DELETE: 'novel:character:delete',
+
+  NOVEL_CHARACTER_RELATIONSHIP_LIST: 'novel:character:relationship:list',
+  NOVEL_CHARACTER_RELATIONSHIP_CREATE: 'novel:character:relationship:create',
+  NOVEL_CHARACTER_RELATIONSHIP_DELETE: 'novel:character:relationship:delete',
+
+  NOVEL_WORLD_SETTING_LIST: 'novel:world-setting:list',
+  NOVEL_WORLD_SETTING_CREATE: 'novel:world-setting:create',
+  NOVEL_WORLD_SETTING_UPDATE: 'novel:world-setting:update',
+  NOVEL_WORLD_SETTING_DELETE: 'novel:world-setting:delete',
+
+  NOVEL_WRITING_SESSION_LIST: 'novel:session:list',
+  NOVEL_WRITING_SESSION_CREATE: 'novel:session:create',
+
+  NOVEL_EXPORT_TXT: 'novel:export:txt',
 } as const;
 
 /** IPC Channel 字面量联合类型 */
