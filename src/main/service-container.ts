@@ -54,6 +54,8 @@ import { ToolExecutor } from './infra/ai/tool-executor';
 import type { IToolRegistry } from './infra/ai/tool-registry';
 import { ToolRegistry } from './infra/ai/tool-registry';
 import { registerBuiltinTools } from './infra/ai/tools';
+import type { IPromptService } from './infra/ai/prompt/prompt-service';
+import { PromptService } from './infra/ai/prompt/prompt-service';
 import type { ICodebaseService } from './infra/codebase/codebase-service';
 import { getCodebaseService, resetCodebaseService } from './infra/codebase/codebase-service';
 import type { IFileService } from './infra/file/file-service';
@@ -233,7 +235,13 @@ class ServiceContainer {
       const registry = new ToolRegistry();
       // 注册 5 个内置工具（read_file / write_file / list_directory / grep / glob）
       // 依赖 FileService + SearchService 实例
-      registerBuiltinTools(registry, this.getFileService(), this.getSearchService());
+      registerBuiltinTools(
+        registry,
+        this.getFileService(),
+        this.getSearchService(),
+        this.getTerminalService(),
+        this.getGitService(),
+      );
       this.toolRegistry = registry;
     }
     return this.toolRegistry;
@@ -327,7 +335,21 @@ class ServiceContainer {
     this.mcpService = service;
   }
 
-  // ─── AgentService（Code Agent 核心，多轮工具调用） ───
+  // ─── PromptService ───
+  private promptService: IPromptService | null = null;
+
+  getPromptService(): IPromptService {
+    if (this.promptService === null) {
+      this.promptService = new PromptService();
+    }
+    return this.promptService;
+  }
+
+  setPromptService(service: IPromptService | null): void {
+    this.promptService = service;
+  }
+
+  // ─── AgentService ───
 
   /**
    * AgentService 实例缓存
@@ -350,7 +372,7 @@ class ServiceContainer {
    */
   getAgentService(): IAgentService {
     if (this.agentService === null) {
-      this.agentService = new AgentService(this.getToolRegistry(), this.getToolExecutor());
+      this.agentService = new AgentService(this.getToolRegistry(), this.getToolExecutor(), this.getPromptService());
     }
     return this.agentService;
   }
@@ -632,7 +654,10 @@ class ServiceContainer {
     resetSessionService();
     this.sessionService = null;
 
-    // 10. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
+    // 10. PromptService 无外部资源（仅 DB），清空引用即可
+    this.promptService = null;
+
+    // 11. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
     // 11. 关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
@@ -673,6 +698,7 @@ class ServiceContainer {
     // SessionService 模块级单例清理（不关闭 db，由 resetDb 单独处理）
     resetSessionService();
     this.sessionService = null;
+    this.promptService = null;
     resetAIProvider();
     // 关闭并重置 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
     resetDb();

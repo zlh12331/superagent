@@ -200,6 +200,14 @@ const api = {
     watchStop: (input) => invoke(IPC_CHANNELS.FILE_WATCH_STOP, input),
     // 订阅文件变更事件（create/modify/delete/rename）
     subscribeWatchEvent: (callback) => subscribe(IPC_CHANNELS.FILE_WATCH_EVENT, callback),
+    // 创建新文件
+    create: (input) => invoke(IPC_CHANNELS.FILE_CREATE, input),
+    // 创建新目录
+    createDir: (input) => invoke(IPC_CHANNELS.FILE_CREATE_DIR, input),
+    // 删除文件或目录
+    delete: (input) => invoke(IPC_CHANNELS.FILE_DELETE, input),
+    // 重命名/移动文件或目录
+    rename: (input) => invoke(IPC_CHANNELS.FILE_RENAME, input),
   },
 
   // ── 搜索域（ripgrep + glob，请求-响应模式）──────────────────
@@ -223,6 +231,8 @@ const api = {
     resize: (input) => invoke(IPC_CHANNELS.TERMINAL_RESIZE, input),
     // 终止终端会话
     kill: (input) => invoke(IPC_CHANNELS.TERMINAL_KILL, input),
+    // 订阅终端创建事件（新终端创建成功时触发）
+    subscribeCreatedEvent: (callback) => subscribe(IPC_CHANNELS.TERMINAL_EVENT_CREATED, callback),
     // 订阅终端原始输出事件（含 ANSI 转义序列，未解码，渲染层用 xterm.js 直接 write）
     subscribeOutputEvent: (callback) => subscribe(IPC_CHANNELS.TERMINAL_EVENT_OUTPUT, callback),
     // 订阅终端进程退出事件（exitCode 0 正常退出，非 0 异常退出）
