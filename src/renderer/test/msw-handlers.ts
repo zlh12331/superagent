@@ -17,7 +17,7 @@
 // - MSW 已安装，预留扩展空间
 // ──────────────────────────────────────────────────────────────
 
-import type { IpcResponse } from '@novel-writer/shared';
+import type { IpcResponse } from '@code-agent/shared';
 import { vi } from 'vitest';
 
 /**

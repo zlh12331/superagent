@@ -6,7 +6,7 @@
 // - 默认语言 zh-CN，fallback 也是 zh-CN（保证缺失 key 时显示中文而非 key 本身）
 // - 语言检测：localStorage > navigator > 默认
 // - 与 settings-store 协同：settings-store 不直接管理语言，
-//   而是由 LanguageDetector 持久化到 localStorage（key: novel-writer:lang）
+//   而是由 LanguageDetector 持久化到 localStorage（key: code-agent:lang）
 //   这样 settings-store 不必引入 i18next 类型，保持职责单一
 //
 // 资源加载策略：
@@ -40,7 +40,7 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export const DEFAULT_LANGUAGE: SupportedLanguage = 'zh-CN';
 
 /** localStorage key（与 settings-store 的前缀对齐） */
-export const LANGUAGE_STORAGE_KEY = 'novel-writer:lang';
+export const LANGUAGE_STORAGE_KEY = 'code-agent:lang';
 
 /**
  * i18next 资源结构

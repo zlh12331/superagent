@@ -18,9 +18,13 @@ import { z } from 'zod';
  * API Key 提供商标识
  *
  * 用作 keychain 的 key 前缀（如 'deepseek' → 'deepseek-api-key'）。
- * 当前支持 deepseek 和 openai。
+ * 与主进程 ProviderRegistry（src/main/infra/ai/providers）保持一致：
+ * - deepseek：DeepSeek 官方 API（OpenAI Compatible）
+ * - openai：OpenAI 官方 API
+ * - anthropic：Anthropic Claude API
+ * - ollama：本地 Ollama 服务（无需 API Key，保留枚举项供 UI 展示）
  */
-export const ApiKeyProviderSchema = z.enum(['deepseek', 'openai']);
+export const ApiKeyProviderSchema = z.enum(['deepseek', 'openai', 'anthropic', 'ollama']);
 
 /** API Key 提供商标识 TypeScript 类型 */
 export type ApiKeyProvider = z.infer<typeof ApiKeyProviderSchema>;

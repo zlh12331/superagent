@@ -19,7 +19,7 @@ import {
   ReadLogsReqSchema,
   type ReadLogsRes,
   type SystemStatusRes,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import { app } from 'electron';
 import { logger } from '../utils/logger';
 import { wrap } from '../utils/wrap';

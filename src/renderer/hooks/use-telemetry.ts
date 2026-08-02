@@ -11,7 +11,7 @@
 // - UI 应在设置成功后提示用户重启
 // ──────────────────────────────────────────────────────────────
 
-import type { TelemetryLevel } from '@novel-writer/shared';
+import type { TelemetryLevel } from '@code-agent/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 

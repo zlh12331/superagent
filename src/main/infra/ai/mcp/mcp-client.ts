@@ -15,9 +15,9 @@
 // - StdioClientTransport 内部管理子进程，close 时会 kill 子进程
 // ──────────────────────────────────────────────────────────────
 
+import { AppError, ErrorCode } from '@code-agent/shared';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { AppError, ErrorCode } from '@novel-writer/shared';
 
 import { logger } from '../../../utils/logger';
 import type { McpCallToolFn, McpToolCallResult, McpToolDescriptor } from './mcp-tool-adapter';
@@ -117,7 +117,7 @@ export class MCPClient {
 
       // 2. 创建 MCP Client 并连接
       this.client = new Client(
-        { name: 'novel-writer-agent', version: '0.1.0' },
+        { name: 'code-agent-agent', version: '0.1.0' },
         { capabilities: {} },
       );
       await this.client.connect(this.transport);

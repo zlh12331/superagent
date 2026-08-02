@@ -24,7 +24,7 @@
 // - 若后续出现性能瓶颈，可改为 requestAnimationFrame 批量合并
 // ──────────────────────────────────────────────────────────────
 
-import type { TerminalExitEventPayload, TerminalOutputEventPayload } from '@novel-writer/shared';
+import type { TerminalExitEventPayload, TerminalOutputEventPayload } from '@code-agent/shared';
 import { useEffect } from 'react';
 
 import { useTerminalStore } from '@/stores/transient/terminal-store';

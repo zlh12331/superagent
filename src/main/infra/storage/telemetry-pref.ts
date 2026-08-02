@@ -14,7 +14,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { TelemetryLevel } from '@novel-writer/shared';
+import type { TelemetryLevel } from '@code-agent/shared';
 import { app } from 'electron';
 
 /** 默认遥测级别（与项目初始行为一致） */

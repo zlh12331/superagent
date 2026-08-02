@@ -29,9 +29,6 @@ import { createBrowserRouter } from 'react-router';
 import { ROUTES } from '@/lib/constants';
 import { ChatPage } from './routes/chat';
 import { HomePage } from './routes/home';
-import { NovelHome } from './routes/novel/NovelHome';
-import { NovelLayout } from './routes/novel/NovelLayout';
-import { NovelEditor } from './routes/novel/NovelEditor';
 import { RootErrorBoundary, RootLayout } from './routes/root';
 
 /**
@@ -50,16 +47,6 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       // 聊天页：历史会话续传（chatId=URL 参数 sessionId）
       { path: ROUTES.chat, element: <ChatPage /> },
-      // 写作项目列表
-      { path: ROUTES.novel, element: <NovelHome /> },
-      // 写作工作台（三栏布局）
-      {
-        path: ROUTES.novelProject,
-        element: <NovelLayout />,
-        children: [
-          { index: true, element: <NovelEditor /> },
-        ],
-      },
     ],
   },
 ]);

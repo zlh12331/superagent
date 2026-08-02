@@ -30,7 +30,7 @@
 // ```
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import { APICallError, LoadAPIKeyError } from 'ai';
 
 /**

@@ -1,5 +1,5 @@
 {
-  "name": "@novel-writer/shared",
+  "name": "@code-agent/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@novel-writer/tsconfig": "workspace:*",
+    "@code-agent/tsconfig": "workspace:*",
     "ai": "^7.0.32",
     "vitest": "^4.0.0"
   }

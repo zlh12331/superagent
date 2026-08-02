@@ -15,7 +15,7 @@
 //
 // 设计要点：
 // - 与 chat.handler.ts / tool.handler.ts 一致的 DI 模式
-// - 入参 zod schema 来自 @novel-writer/shared（AgentRunReqSchema / AgentStopReqSchema）
+// - 入参 zod schema 来自 @code-agent/shared（AgentRunReqSchema / AgentStopReqSchema）
 // - agent:run 立即返回 sessionId，后续流式事件通过 webContents.send 推送
 // - agent:stop 触发 AbortController.abort()，流推送协程会捕获 AbortError 并推送 reason='aborted' 的 END
 //
@@ -33,7 +33,7 @@ import {
   AgentStopReqSchema,
   type AgentStopRes,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { IAgentService } from '../infra/ai/agent-service';
 import { wrap } from '../utils/wrap';
 
@@ -72,6 +72,7 @@ export function registerAgentHandlers(deps: AgentHandlerDeps): void {
       workingDir: input.workingDir,
       systemPrompt: input.systemPrompt,
       maxSteps: input.maxSteps,
+      mode: input.mode,
       webContents: ctx.sender,
     });
     return { sessionId };

@@ -1,5 +1,5 @@
 // packages/shared/vitest.config.ts
-// Vitest 配置：@novel-writer/shared 工作空间包单测
+// Vitest 配置：@code-agent/shared 工作空间包单测
 // 参考 Vitest 4 官方文档 https://vitest.dev/config/
 import { defineConfig } from 'vitest/config';
 

@@ -1,11 +1,11 @@
 // packages/shared/src/index.ts
-// @novel-writer/shared 跨进程共享包统一入口
+// @code-agent/shared 跨进程共享包统一入口
 // 暴露：错误码 + IPC 类型契约（应用级 + Code Agent 全域）+ zod schema
 //
 // 消费方：
-// - 主进程：import { AppError, ErrorCode, IPC_CHANNELS, ChatSendReqSchema } from '@novel-writer/shared'
-// - Preload：import type { IpcApi } from '@novel-writer/shared'
-// - 渲染层：import type { IpcResponse, AppStatus } from '@novel-writer/shared'
+// - 主进程：import { AppError, ErrorCode, IPC_CHANNELS, ChatSendReqSchema } from '@code-agent/shared'
+// - Preload：import type { IpcApi } from '@code-agent/shared'
+// - 渲染层：import type { IpcResponse, AppStatus } from '@code-agent/shared'
 //
 // P1 改造（Code Agent 架构）：
 // - 新增 6 个域的 zod schema（agent/file/search/terminal/git/session）

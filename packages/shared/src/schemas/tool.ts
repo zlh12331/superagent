@@ -44,7 +44,7 @@ export type ToolPermission = z.infer<typeof ToolPermissionSchema>;
  * - message 人类可读，用于渲染层 toast
  */
 export const ToolErrorSchema = z.object({
-  /** 错误码（与 @novel-writer/shared 的 ErrorCode 对齐） */
+  /** 错误码（与 @code-agent/shared 的 ErrorCode 对齐） */
   code: z.string().min(1),
   /** 人类可读错误消息 */
   message: z.string().min(1),

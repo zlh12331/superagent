@@ -39,7 +39,7 @@ vi.mock('./logger', () => ({
   },
 }));
 
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import * as Sentry from '@sentry/electron/main';
 import { ipcMain } from 'electron';
 import { wrap } from './wrap';

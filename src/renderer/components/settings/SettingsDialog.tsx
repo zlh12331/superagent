@@ -13,7 +13,7 @@
 // - 反馈：保存 / 删除成功后 toast 提示
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider, TelemetryLevel } from '@novel-writer/shared';
+import type { ApiKeyProvider, TelemetryLevel } from '@code-agent/shared';
 import {
   Eye,
   EyeOff,

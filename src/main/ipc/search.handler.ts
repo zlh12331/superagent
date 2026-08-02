@@ -7,7 +7,7 @@
 //
 // 设计要点：
 // - 与 chat.handler.ts / file.handler.ts 一致的 DI 模式
-// - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
+// - 入参 zod schema 来自 @code-agent/shared，handler 不内联定义
 // - search 是短任务（spawn 子进程 → 读取 stdout → 子进程退出），
 //   不需要像 file:watch 那样管理长期状态，handler 直接转发即可
 // - maxResults 默认值由 schema 提供（grep 默认 100，glob 默认 1000），
@@ -21,7 +21,7 @@ import {
   GrepReqSchema,
   type GrepRes,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { ISearchService } from '../infra/search/search-service';
 import { wrap } from '../utils/wrap';
 

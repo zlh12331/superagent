@@ -10,7 +10,7 @@
 // 5. 返回统一结构 { data } | { error }
 
 import { randomUUID } from 'node:crypto';
-import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@novel-writer/shared';
+import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@code-agent/shared';
 import * as Sentry from '@sentry/electron/main';
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import type { ZodType } from 'zod';
@@ -19,7 +19,7 @@ import { logger } from './logger';
 /**
  * IPC handler 上下文（main 进程专用）
  *
- * 注意：与 @novel-writer/shared 的 IpcContext 不同
+ * 注意：与 @code-agent/shared 的 IpcContext 不同
  * - shared.IpcContext.sender 是 unknown（preload 注入用，渲染层访问）
  * - IpcHandlerContext.sender 是 WebContents（main 进程专用，可调用 webContents API）
  *

@@ -1,16 +1,17 @@
 // src/main/infra/ai/ai-provider.test.ts
-// ai-provider 单测：@ai-sdk/openai-compatible 工厂 + keychain 读取 + 单例缓存
+// ai-provider 单测：多供应商路由（deepseek/openai/anthropic/ollama）+ keychain 读取 + 单例缓存
 //
 // 测试要点：
-// 1. getAIProvider 首次调用从 keychain 读取 apiKey 并创建 provider
+// 1. getAIProvider 默认 kind=deepseek：从 keychain 读取 apiKey 并创建 provider
 // 2. 缓存：第二次调用直接返回缓存（不重复读 keychain）
 // 3. 显式 apiKey 参数：创建临时实例不污染缓存
 // 4. keychain 返回 null：抛 AppError(AI_API_KEY_MISSING)
-// 5. getModel：调用 provider 工厂返回 LanguageModel
-// 6. resetAIProvider：清空缓存
-// 7. createProvider 内部 baseURL 拼接 /v1
+// 5. getModel：默认模型来自供应商定义（deepseek-chat），可显式覆盖
+// 6. 多供应商路由：kind='anthropic' 走 createAnthropic；kind='ollama' 无需 API Key
+// 7. resetAIProvider：清空缓存
+// 8. ProviderRegistry：内置 4 个供应商，默认 kind 为 deepseek
 
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,6 +22,10 @@ const mocks = vi.hoisted(() => {
   const mockProviderFactory = vi.fn();
   // createOpenAICompatible mock
   const mockCreateOpenAICompatible = vi.fn(() => mockProviderFactory);
+  // createOpenAI mock（OpenAI 官方 provider）
+  const mockCreateOpenAI = vi.fn(() => mockProviderFactory);
+  // createAnthropic mock（Anthropic provider）
+  const mockCreateAnthropic = vi.fn(() => mockProviderFactory);
   // keychain.getSecret mock
   const mockGetSecret = vi.fn();
   // logger mock
@@ -30,38 +35,29 @@ const mocks = vi.hoisted(() => {
     error: vi.fn(),
     debug: vi.fn(),
   };
-  // config 依赖 electron app.isPackaged
-  const mockApp = {
-    isPackaged: false,
-    getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
-  };
-  // config.getAppConfig mock（避免 env 污染）
-  const mockGetAppConfig = vi.fn(() => ({
-    isDev: true,
-    isPackaged: false,
-    logLevel: 'info' as const,
-    sentry: { dsn: '', tracesSampleRate: 0.1 },
-    deepseek: {
-      apiBase: 'https://api.deepseek.com',
-      model: 'deepseek-v4-flash',
-      timeout: 60_000,
-    },
-  }));
-  const mockResetConfigCache = vi.fn();
   return {
     mockProviderFactory,
     mockCreateOpenAICompatible,
+    mockCreateOpenAI,
+    mockCreateAnthropic,
     mockGetSecret,
     mockLogger,
-    mockApp,
-    mockGetAppConfig,
-    mockResetConfigCache,
   };
 });
 
 // mock @ai-sdk/openai-compatible：拦截 createOpenAICompatible 调用
 vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: mocks.mockCreateOpenAICompatible,
+}));
+
+// mock @ai-sdk/openai：拦截 createOpenAI 调用
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: mocks.mockCreateOpenAI,
+}));
+
+// mock @ai-sdk/anthropic：拦截 createAnthropic 调用
+vi.mock('@ai-sdk/anthropic', () => ({
+  createAnthropic: mocks.mockCreateAnthropic,
 }));
 
 // mock keychain：拦截 getSecret，避免真实文件 IO
@@ -74,16 +70,8 @@ vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-// mock electron：config 依赖 app.isPackaged + app.getPath
-vi.mock('electron', () => ({ app: mocks.mockApp }));
-
-// mock config：直接返回固定配置，避免 env 污染
-vi.mock('../../config', () => ({
-  getAppConfig: mocks.mockGetAppConfig,
-  resetConfigCache: mocks.mockResetConfigCache,
-}));
-
-import { getAIProvider, getModel, resetAIProvider } from './ai-provider';
+import { getAIProvider, getModel, getProviderCacheSize, resetAIProvider } from './ai-provider';
+import { ProviderRegistry } from './providers';
 
 describe('ai-provider', () => {
   beforeEach(() => {
@@ -94,13 +82,13 @@ describe('ai-provider', () => {
     mocks.mockGetSecret.mockResolvedValue('sk-test-api-key');
   });
 
-  describe('getAIProvider', () => {
+  describe('getAIProvider（默认 deepseek）', () => {
     it('首次调用：从 keychain 读取 apiKey 并创建 provider', async () => {
       const provider = await getAIProvider();
 
       // 应该调用 keychain.getSecret('deepseek-api-key')
       expect(mocks.mockGetSecret).toHaveBeenCalledWith('deepseek-api-key');
-      // 应该调用 createOpenAICompatible
+      // 应该调用 createOpenAICompatible（deepseek 走 OpenAI Compatible 协议）
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
       // 返回值应该是 provider 工厂函数
       expect(provider).toBe(mocks.mockProviderFactory);
@@ -128,8 +116,8 @@ describe('ai-provider', () => {
       expect(mocks.mockGetSecret).toHaveBeenCalledTimes(1);
       // createOpenAICompatible 应该被调用 2 次（缓存 + 临时）
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(2);
-      // 临时实例不应等于缓存实例（mock 每次返回同一引用，需验证 createOpenAICompatible 调用次数）
-      void tempProvider; // tempProvider 与 cached 都是 mockProviderFactory 引用，仅验证调用次数
+      // 临时实例与缓存实例引用相同（mock 返回同一引用），仅验证调用次数
+      void tempProvider;
 
       // 再次调用（无参数）：应返回原缓存实例
       const cachedAgain = await getAIProvider();
@@ -179,9 +167,48 @@ describe('ai-provider', () => {
     });
   });
 
+  describe('多供应商路由', () => {
+    it('kind=openai：使用 createOpenAI 并读取 openai-api-key', async () => {
+      await getAIProvider({ kind: 'openai' });
+
+      expect(mocks.mockGetSecret).toHaveBeenCalledWith('openai-api-key');
+      expect(mocks.mockCreateOpenAI).toHaveBeenCalledTimes(1);
+      expect(mocks.mockCreateOpenAICompatible).not.toHaveBeenCalled();
+    });
+
+    it('kind=anthropic：使用 createAnthropic 并读取 anthropic-api-key', async () => {
+      await getAIProvider({ kind: 'anthropic' });
+
+      expect(mocks.mockGetSecret).toHaveBeenCalledWith('anthropic-api-key');
+      expect(mocks.mockCreateAnthropic).toHaveBeenCalledTimes(1);
+      expect(mocks.mockCreateOpenAICompatible).not.toHaveBeenCalled();
+    });
+
+    it('kind=ollama：无需 API Key，走 OpenAI Compatible 协议', async () => {
+      await getAIProvider({ kind: 'ollama' });
+
+      // 本地服务不读 keychain
+      expect(mocks.mockGetSecret).not.toHaveBeenCalled();
+      expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
+    });
+
+    it('未知供应商：抛错', async () => {
+      // @ts-expect-error 故意传入非法 kind 验证运行时校验
+      await expect(getAIProvider({ kind: 'unknown-provider' })).rejects.toThrow(/未知模型供应商/);
+    });
+
+    it('不同供应商缓存相互独立', async () => {
+      await getAIProvider({ kind: 'deepseek' });
+      await getAIProvider({ kind: 'openai' });
+
+      // 两个供应商分别创建，缓存互不干扰
+      expect(getProviderCacheSize()).toBe(2);
+    });
+  });
+
   describe('getModel', () => {
-    it('默认 modelId：使用 config.deepseek.model 并调用 provider 工厂', async () => {
-      // getAIProvider 返回 mock 的 vi.fn()，但类型是 OpenAICompatibleProvider
+    it('默认 modelId：使用供应商默认模型（deepseek-chat）', async () => {
+      // getAIProvider 返回 mock 的 vi.fn()，但类型是工厂函数
       // 需要 cast 为 Mock 才能调用 mockClear
       const providerFactory = (await getAIProvider()) as unknown as Mock;
       // 清除之前的调用记录
@@ -189,8 +216,8 @@ describe('ai-provider', () => {
 
       const model = await getModel();
 
-      // 应使用 config 中的默认 model id 调用 provider 工厂
-      expect(providerFactory).toHaveBeenCalledWith('deepseek-v4-flash');
+      // 应使用供应商定义中的默认模型 id 调用 provider 工厂
+      expect(providerFactory).toHaveBeenCalledWith('deepseek-chat');
       // 返回值就是 provider 工厂的返回值
       expect(model).toBe(mocks.mockProviderFactory());
     });
@@ -202,6 +229,15 @@ describe('ai-provider', () => {
       await getModel('deepseek-reasoner');
 
       expect(providerFactory).toHaveBeenCalledWith('deepseek-reasoner');
+    });
+
+    it('显式 kind + modelId：路由到对应供应商并覆盖模型', async () => {
+      const providerFactory = (await getAIProvider({ kind: 'anthropic' })) as unknown as Mock;
+      providerFactory.mockClear();
+
+      await getModel('claude-opus-4-20250514', { kind: 'anthropic' });
+
+      expect(providerFactory).toHaveBeenCalledWith('claude-opus-4-20250514');
     });
 
     it('显式 apiKey：创建临时 provider 不污染缓存', async () => {
@@ -217,6 +253,48 @@ describe('ai-provider', () => {
       expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
       // provider 工厂应该用 'test-model' 调用
       expect(mocks.mockProviderFactory).toHaveBeenCalledWith('test-model');
+    });
+  });
+
+  describe('ProviderRegistry', () => {
+    it('内置 4 个供应商，默认 kind 为 deepseek', () => {
+      const registry = new ProviderRegistry();
+      const infos = registry.list();
+
+      expect(infos).toHaveLength(4);
+      expect(registry.getDefaultKind()).toBe('deepseek');
+      expect(infos.map((i) => i.kind).sort()).toEqual(
+        ['anthropic', 'deepseek', 'ollama', 'openai'].sort(),
+      );
+    });
+
+    it('ProviderInfo：包含显示名 / 默认模型 / 是否需要 API Key', () => {
+      const registry = new ProviderRegistry();
+      const deepseek = registry.list().find((i) => i.kind === 'deepseek');
+
+      expect(deepseek).toMatchObject({
+        kind: 'deepseek',
+        displayName: 'DeepSeek',
+        defaultModel: 'deepseek-chat',
+        requiresApiKey: true,
+        isDefault: true,
+      });
+    });
+
+    it('ollama 不需要 API Key 且非默认', () => {
+      const registry = new ProviderRegistry();
+      const ollama = registry.list().find((i) => i.kind === 'ollama');
+
+      expect(ollama).toMatchObject({
+        requiresApiKey: false,
+        isDefault: false,
+      });
+    });
+
+    it('未知 kind 获取定义：抛错', () => {
+      const registry = new ProviderRegistry();
+      // @ts-expect-error 故意传入非法 kind 验证运行时校验
+      expect(() => registry.getDefinition('unknown')).toThrow(/未知模型供应商/);
     });
   });
 

@@ -19,7 +19,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { isAbsolute, relative, resolve } from 'node:path';
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 
 /**
  * 解析路径并确保在 workingDir 内

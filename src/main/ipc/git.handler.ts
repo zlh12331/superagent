@@ -12,7 +12,7 @@
 //
 // 设计要点：
 // - 与 file.handler.ts / search.handler.ts 一致的 DI 模式
-// - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
+// - 入参 zod schema 来自 @code-agent/shared，handler 不内联定义
 // - GitService 通过 spawn('git') 调用系统 CLI，handler 不重复实现 git 逻辑
 // - 写操作通过 Agent 工具系统触发（git-add.tool / git-commit.tool / git-push.tool），
 //   渲染层也可以直接通过 IPC 调用（如 DevPanel 的 Git 面板）
@@ -43,7 +43,7 @@ import {
   GitStatusReqSchema,
   type GitStatusRes,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { IGitService } from '../infra/git/git-service';
 import { wrap } from '../utils/wrap';
 

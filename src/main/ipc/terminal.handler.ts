@@ -13,7 +13,7 @@
 //
 // 设计要点：
 // - 与 chat.handler.ts / file.handler.ts 一致的 DI 模式
-// - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
+// - 入参 zod schema 来自 @code-agent/shared，handler 不内联定义
 // - terminal:create 需要使用 ctx.sender（WebContents）传给 TerminalService.create()，
 //   后续输出与退出事件会通过该 webContents.send 推送回渲染层
 // - handler 内不直接调用 webContents.send，所有事件推送由 TerminalService 内部处理
@@ -36,7 +36,7 @@ import {
   type TerminalResizeReq,
   TerminalResizeReqSchema,
   type TerminalResizeRes,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { ITerminalService } from '../infra/terminal/terminal-service';
 import { wrap } from '../utils/wrap';
 

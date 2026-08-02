@@ -20,6 +20,22 @@ import { z } from 'zod';
 import { ChatMessageSchema } from './chat';
 
 /**
+ * Agent 运行模式（OpenCode 风格 plan/apply 分离）
+ *
+ * - 'plan'：只读探索模式。Agent 只能调用只读工具（permission='auto'），
+ *   所有写操作（permission='ask'）直接拒绝并返回 TOOL_PERMISSION_DENIED，
+ *   用于生成实施方案 / 代码审查，不产生任何副作用。
+ * - 'build'：正常执行模式。写操作走审批流（用户批准后执行）。
+ *
+ * 渲染层可先以 plan 模式发起对话获取方案，用户确认后再以 build 模式
+ * 续传同一 sessionId 执行（会话恢复天然支持）。
+ */
+export const AgentRunModeSchema = z.enum(['plan', 'build']);
+
+/** Agent 运行模式 TypeScript 类型 */
+export type AgentRunMode = z.infer<typeof AgentRunModeSchema>;
+
+/**
  * Agent 运行入参 zod schema
  *
  * 与 chat:send 的区别：
@@ -48,6 +64,8 @@ export const AgentRunReqSchema = z.object({
     .transform((v) => v ?? undefined),
   // 最大工具调用轮数（默认 20，避免无限循环）
   maxSteps: z.number().int().positive().max(50).default(20),
+  // 运行模式（默认 build：写操作走审批流）
+  mode: AgentRunModeSchema.default('build'),
 });
 
 /** Agent 中断入参 zod schema */

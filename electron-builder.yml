@@ -14,10 +14,10 @@
 # 说明：原 PostgreSQL 便携版二进制打包（resources/pg/）已随数据库层一并删除。
 
 # 应用唯一标识（注册到 Windows 注册表，用于关联文件类型、卸载登记等）
-appId: com.novel-writer.app
+appId: com.code-agent.desktop
 
 # 安装包显示名称（Windows「程序与功能」中展示）
-productName: 网文写作 Agent
+productName: Code Agent Desktop
 
 # 打包输出目录（与 .gitignore 中 release/ 对齐）
 directories:
@@ -94,5 +94,5 @@ nsis:
 # URL 末尾必须以 / 结尾，electron-updater 会拼接 latest.yml
 publish:
   provider: generic
-  url: https://novel-writer.example.com/releases/
+  url: https://code-agent.example.com/releases/
   channel: latest

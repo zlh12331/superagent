@@ -49,6 +49,8 @@ export interface ToolContext {
   readonly webContents: WebContents;
   /** 元数据更新回调（工具执行中可调用，用于实时展示进度/状态） */
   readonly metadata?: (data: Record<string, unknown>) => void;
+  /** Agent 运行模式（缺省视为 'build'：plan 只读探索 / build 审批后执行） */
+  readonly mode?: 'plan' | 'build';
 }
 
 /**

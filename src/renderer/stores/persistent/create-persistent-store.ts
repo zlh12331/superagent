@@ -7,7 +7,7 @@
 // - 与 transient/ 目录的 store 区分：transient 不持久化，重启即失
 //
 // 设计要点：
-// - storage key 统一前缀 `novel-writer:`，避免与其他应用冲突
+// - storage key 统一前缀 `code-agent:`，避免与其他应用冲突
 // - 默认 partialize：仅持久化非函数字段（函数自动被过滤）
 // - 版本字段 + migrate 函数支持 schema 演进（如 v1 → v2 字段重命名）
 // - localStorage 失败时（隐私模式 / 配额超限）静默降级到内存 store
@@ -31,7 +31,7 @@ import {
  *
  * 所有持久化 store 共享此前缀，避免与其他 Electron 应用 / localStorage 项冲突。
  */
-const STORAGE_KEY_PREFIX = 'novel-writer:';
+const STORAGE_KEY_PREFIX = 'code-agent:';
 
 /**
  * 持久化 store 配置（业务 store 传入的覆盖项）

@@ -24,8 +24,8 @@
 // - ToolExecutor 不直接调用 streamText，是被 AgentService 调用
 // ──────────────────────────────────────────────────────────────
 
-import type { AgentToolCallPayload, AgentToolResultPayload } from '@novel-writer/shared';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@novel-writer/shared';
+import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';
 import { logger } from '../../utils/logger';
@@ -139,7 +139,26 @@ export class ToolExecutor implements IToolExecutor {
         });
 
         // 4. 危险工具：请求用户审批
+        //    plan 模式（只读探索）下直接拒绝写操作，不弹审批框——
+        //    保证 plan 阶段零副作用，这是 OpenCode 风格 plan/apply 分离的核心约束
         if (decision.permission === 'ask') {
+          if (ctx.mode === 'plan') {
+            logger.info(
+              { toolName, toolCallId, sessionId: ctx.sessionId },
+              'plan 模式拒绝写操作（只读约束）',
+            );
+            const result = this.buildErrorResult(
+              ctx.sessionId,
+              toolCallId,
+              toolName,
+              'plan 模式只读',
+              ErrorCode.TOOL_PERMISSION_DENIED,
+              `plan 模式禁止写操作：${toolName}（如需执行请切换到 build 模式）`,
+            );
+            this.sendToolResult(webContents, result);
+            return result;
+          }
+
           const approvalId = generateApprovalId();
           const approvalPayload = {
             sessionId: ctx.sessionId,

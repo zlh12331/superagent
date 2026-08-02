@@ -31,7 +31,7 @@
 // - ChatMessage 类型 = ModelMessage（shared 包 type-only import）
 // - 主进程直接透传给 streamText，无需手动转换
 
-import type { ChatMessage } from '@novel-writer/shared';
+import type { ChatMessage } from '@code-agent/shared';
 import {
   type ChatRequestOptions,
   type ChatTransport,

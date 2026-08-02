@@ -15,8 +15,8 @@
 // 11. 工具 executeHook 注入：验证 ToolExecutor.execute 被调用，结果正确返回给 AI SDK
 // 12. systemPrompt 未传时：调用 PromptService.resolvePrompt 注入默认 prompt
 
-import type { ChatMessage } from '@novel-writer/shared';
-import { IPC_CHANNELS } from '@novel-writer/shared';
+import type { ChatMessage } from '@code-agent/shared';
+import { IPC_CHANNELS } from '@code-agent/shared';
 import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
@@ -236,6 +236,40 @@ describe('agent-service', () => {
 
       expect(sessionId).toBe('custom-agent-id');
       expect(mocks.mockRandomUUID).not.toHaveBeenCalled();
+    });
+
+    it('mode=plan：ToolContext.mode 透传为 plan（写操作会被 ToolExecutor 拒绝）', async () => {
+      const wc = createMockWebContents();
+      await service.startAgent({
+        messages: [{ role: 'user', content: '分析这个项目的结构' }],
+        sessionId: undefined,
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 20,
+        mode: 'plan',
+        webContents: wc,
+      });
+
+      // toAISDKTools 收到的基础上下文应携带 mode='plan'
+      const calls = mockRegistry.toAISDKTools.mock.calls;
+      const ctx = calls[0]?.[0] as { mode?: string } | undefined;
+      expect(ctx?.mode).toBe('plan');
+    });
+
+    it('缺省 mode：ToolContext.mode 回退为 build（兼容旧调用方）', async () => {
+      const wc = createMockWebContents();
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: undefined,
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      const calls = mockRegistry.toAISDKTools.mock.calls;
+      const ctx = calls[0]?.[0] as { mode?: string } | undefined;
+      expect(ctx?.mode).toBe('build');
     });
 
     it('streamText 入参：传 model + messages + tools + stopWhen + system + abortSignal', async () => {
@@ -487,6 +521,7 @@ describe('agent-service', () => {
           isDestroyed: expect.any(Function),
         }),
         abortSignal: expect.any(AbortSignal),
+        mode: 'build',
       });
     });
   });

@@ -24,7 +24,6 @@ import { registerCodebaseHandlers } from './ipc/codebase.handler';
 import { registerDevToolsHandlers } from './ipc/devtools.handler';
 import { registerDialogHandlers } from './ipc/dialog.handler';
 import { registerFileHandlers } from './ipc/file.handler';
-import { registerNovelHandlers } from './ipc/novel.handler';
 import { registerGitHandlers } from './ipc/git.handler';
 import { registerSearchHandlers } from './ipc/search.handler';
 import { registerSessionHandlers } from './ipc/session.handler';
@@ -94,7 +93,7 @@ function initSentry(): void {
 
   Sentry.init({
     dsn: config.sentry.dsn,
-    release: `novel-writer@${app.getVersion()}`,
+    release: `code-agent@${app.getVersion()}`,
     environment: config.isPackaged ? 'production' : 'development',
     tracesSampleRate: effectiveSampleRate,
     sendDefaultPii: false,
@@ -314,11 +313,6 @@ app
     // - 原生目录选择器，供 NewSessionDialog 调用
     // - 无需 ServiceContainer 注入：dialog 是 Electron 全局 API
     registerDialogHandlers();
-
-    // 注册 Novel 域 IPC handler（novel:* 系列）
-    // - 网文写作平台所有业务操作：项目/章节/大纲/角色/世界观/写作会话/导出
-    // - 无 DI 依赖，服务函数直接调用
-    registerNovelHandlers();
 
     // 注册 Agent 域 IPC handler（agent:run / agent:stop）
     // 通过 ServiceContainer 注入 IAgentService 实例（依赖 ToolRegistry + ToolExecutor）

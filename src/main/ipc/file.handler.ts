@@ -17,7 +17,7 @@
 //
 // 设计要点：
 // - 与 chat.handler.ts 一致的 DI 模式：通过 ServiceContainer 注入 IFileService 实例
-// - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
+// - 入参 zod schema 来自 @code-agent/shared，handler 不内联定义
 // - file:watch:start 需要使用 ctx.sender（WebContents）传给 FileService.watch()，
 //   后续文件变更事件会通过该 webContents.send 推送回渲染层
 // - handler 内不直接调用 webContents.send，所有事件推送由 FileService 内部处理
@@ -52,7 +52,7 @@ import {
   FileWriteReqSchema,
   type FileWriteRes,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { IFileService } from '../infra/file/file-service';
 import { wrap } from '../utils/wrap';
 

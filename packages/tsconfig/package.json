@@ -1,5 +1,5 @@
 {
-  "name": "@novel-writer/tsconfig",
+  "name": "@code-agent/tsconfig",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -56,17 +56,4 @@ export const ROUTES = {
    * @returns 形如 '/chat/abc123' 的路径
    */
   chatPath: (sessionId: string): string => `/chat/${sessionId}`,
-
-  // ── Novel 写作域 ──────────────────────────────────────────
-  /** 写作项目列表页 */
-  novel: '/novel',
-  /** 写作项目路由模板（含 :id 参数） */
-  novelProject: '/novel/project/:id',
-  /**
-   * 生成指定写作项目的路径
-   *
-   * @param id 项目 id
-   * @returns 形如 '/novel/project/abc123' 的路径
-   */
-  novelProjectPath: (id: string): string => `/novel/project/${id}`,
 } as const;

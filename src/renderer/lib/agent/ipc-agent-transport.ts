@@ -29,7 +29,7 @@
 // - workingDir 由渲染层传入，主进程 path-guard 二次校验
 // - sessionId 用于过滤当前对话的事件
 
-import type { ChatMessage } from '@novel-writer/shared';
+import type { ChatMessage } from '@code-agent/shared';
 import {
   type ChatRequestOptions,
   type ChatTransport,
@@ -48,6 +48,8 @@ interface AgentConfig {
   readonly systemPrompt?: string;
   /** 最大工具调用轮数（默认 20，上限 50） */
   readonly maxSteps?: number;
+  /** 运行模式（plan 只读探索 / build 审批后执行，缺省 build） */
+  readonly mode?: 'plan' | 'build';
 }
 
 /**
@@ -111,7 +113,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         new Error('IpcAgentTransport: workingDir not configured. Call configure() first.'),
       );
     }
-    const { workingDir, systemPrompt, maxSteps } = this.config;
+    const { workingDir, systemPrompt, maxSteps, mode } = this.config;
 
     // currentSessionId 在 agent.run 返回后填充，初始为 undefined
     let currentSessionId: string | undefined;
@@ -175,6 +177,8 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           workingDir,
           systemPrompt,
           maxSteps: maxSteps ?? 20,
+          // plan 模式：写操作被主进程直接拒绝（只读探索）；缺省 build
+          mode: mode ?? 'build',
         });
 
         // 处理响应：失败则 error stream，成功则记录 sessionId

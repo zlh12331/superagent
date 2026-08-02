@@ -31,8 +31,8 @@ import type {
   FileRenameRes,
   FileWatchEventPayload,
   FileWriteRes,
-} from '@novel-writer/shared';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@novel-writer/shared';
+} from '@code-agent/shared';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
 import { type FSWatcher, watch } from 'chokidar';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';

@@ -12,7 +12,7 @@
 // - 写操作走 mutation，不污染 query 缓存，但成功后需 invalidate read 缓存
 // ──────────────────────────────────────────────────────────────
 
-import type { FileWriteReq, FileWriteRes } from '@novel-writer/shared';
+import type { FileWriteReq, FileWriteRes } from '@code-agent/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 

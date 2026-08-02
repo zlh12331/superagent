@@ -20,7 +20,7 @@ import {
   type OpenDevToolsReq,
   OpenDevToolsReqSchema,
   type OpenDevToolsRes,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import { wrap } from '../utils/wrap';

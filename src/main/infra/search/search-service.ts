@@ -17,8 +17,8 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import type { GlobRes, GrepMatch, GrepRes } from '@novel-writer/shared';
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import type { GlobRes, GrepMatch, GrepRes } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../../utils/logger';
 

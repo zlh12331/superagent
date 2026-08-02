@@ -17,7 +17,7 @@
 // - 文学风视觉：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
 // ──────────────────────────────────────────────────────────────
 
-import type { FileEntry } from '@novel-writer/shared';
+import type { FileEntry } from '@code-agent/shared';
 import { ChevronRight, File, Folder, FolderOpen, MoreHorizontal } from 'lucide-react';
 import { type KeyboardEvent, memo, type ReactElement, useRef } from 'react';
 import {

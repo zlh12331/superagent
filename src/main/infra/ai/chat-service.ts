@@ -22,8 +22,8 @@ import type {
   ChatStreamEndPayload,
   ChatStreamErrorPayload,
   ChatStreamPartPayload,
-} from '@novel-writer/shared';
-import { IPC_CHANNELS } from '@novel-writer/shared';
+} from '@code-agent/shared';
+import { IPC_CHANNELS } from '@code-agent/shared';
 import { streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';

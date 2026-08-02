@@ -12,7 +12,7 @@
 // - 解耦：PromptService 不直接依赖 GitService，仅依赖 GitSummaryProvider 函数签名
 // ──────────────────────────────────────────────────────────────
 
-import type { GitStatusRes } from '@novel-writer/shared';
+import type { GitStatusRes } from '@code-agent/shared';
 import type { IGitService } from '../../git/git-service';
 import type { GitSummaryProvider } from './dynamic-context';
 

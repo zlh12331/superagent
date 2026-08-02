@@ -476,64 +476,6 @@ export interface IpcRequestMap {
 
   // Dialog 域（原生目录选择器）
   'dialog:pickDirectory': { req: DialogPickDirectoryReq; res: DialogPickDirectoryRes };
-
-  // ── Novel 域（网文写作平台，使用 any 简化类型约束） ──────
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:project:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:project:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:project:get': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:project:delete': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:chapter:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:chapter:get': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:chapter:save': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:chapter:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:chapter:delete': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:outline:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:outline:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:outline:update': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:outline:delete': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:get': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:update': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:delete': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:relationship:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:relationship:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:character:relationship:delete': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:world-setting:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:world-setting:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:world-setting:update': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:world-setting:delete': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:session:list': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:session:create': { req: any; res: any };
-  // biome-ignore lint/suspicious/noExplicitAny: novel domain types are flexible
-  'novel:export:txt': { req: any; res: any };
 }
 
 /**

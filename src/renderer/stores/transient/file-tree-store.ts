@@ -19,7 +19,7 @@
 // - 不持久化：文件树状态随会话切换重置，重启后为空
 // ──────────────────────────────────────────────────────────────
 
-import type { FileEntry } from '@novel-writer/shared';
+import type { FileEntry } from '@code-agent/shared';
 import { create } from 'zustand';
 
 /**

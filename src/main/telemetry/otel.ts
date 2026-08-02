@@ -62,7 +62,7 @@ export function initTelemetry(): void {
 
   try {
     const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
-    const serviceName = `novel-writer-agent-${app.isPackaged ? 'prod' : 'dev'}`;
+    const serviceName = `code-agent-agent-${app.isPackaged ? 'prod' : 'dev'}`;
     const serviceVersion = app.getVersion();
 
     const resource = resourceFromAttributes({

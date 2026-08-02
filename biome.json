@@ -23,7 +23,8 @@
       "!**/docs/design",
       "!**/docs/参考项目",
       "!**/prototype-v2.html",
-      "!**/codex-desktop-prototype.design"
+      "!**/codex-desktop-prototype.design",
+      "!_template"
     ]
   },
   "formatter": {
@@ -224,6 +225,19 @@
         "**/src/main/infra/ai/mcp/**/*.ts",
         "**/src/main/infra/ai/prompt/**/*.ts"
       ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "error",
+              "options": { "strictCase": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/src/main/infra/ai/providers/**/*.ts"],
       "linter": {
         "rules": {
           "style": {

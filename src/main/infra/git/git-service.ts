@@ -34,8 +34,8 @@ import type {
   GitFileStatus,
   GitPushRes,
   GitStatusRes,
-} from '@novel-writer/shared';
-import { AppError, ErrorCode } from '@novel-writer/shared';
+} from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import { logger } from '../../utils/logger';
 
 /** 单条 git 命令的默认超时（毫秒）：30s 足够覆盖 status/diff/commit/push */

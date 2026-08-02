@@ -18,7 +18,7 @@
 // - 便于测试：可注入 mock chatService，不依赖真实 streamText
 //
 // P0-3 改造：
-// - zod schema 从 @novel-writer/shared 导入，不再在 handler 内联定义
+// - zod schema 从 @code-agent/shared 导入，不再在 handler 内联定义
 // - schema 与类型同源（payloads.ts 类型从 schema 派生），消除双向漂移风险
 
 import {
@@ -29,7 +29,7 @@ import {
   ChatStopReqSchema,
   type ChatStopRes,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { IChatService } from '../infra/ai/chat-service';
 import { wrap } from '../utils/wrap';
 

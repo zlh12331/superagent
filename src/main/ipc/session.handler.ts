@@ -37,7 +37,7 @@ import {
   type SessionRenameReq,
   SessionRenameReqSchema,
   type SessionRenameRes,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { ISessionService } from '../infra/storage/session-service';
 import { wrap } from '../utils/wrap';
 

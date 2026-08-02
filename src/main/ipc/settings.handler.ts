@@ -10,7 +10,7 @@
 //
 // 设计要点：
 // - 不依赖 ServiceContainer：keychain 和 telemetry-pref 是无状态模块函数
-// - 入参 zod schema 来自 @novel-writer/shared（单一真源）
+// - 入参 zod schema 来自 @code-agent/shared（单一真源）
 // - safeStorage 加密失败（如 Linux 缺 libsecret）会抛错并返回 INTERNAL_ERROR
 // - keychain key 命名规则：'<provider>-api-key'（如 'deepseek-api-key'）
 
@@ -29,19 +29,11 @@ import {
   type SetTelemetryLevelReq,
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
+import { toKeychainKey } from '../infra/ai/providers';
 import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
 import { wrap } from '../utils/wrap';
-
-/**
- * 将 provider 转换为 keychain 的 key
- *
- * 命名规则：'<provider>-api-key'，与早期版本保持一致
- */
-function toKeychainKey(provider: 'deepseek' | 'openai'): string {
-  return `${provider}-api-key`;
-}
 
 /**
  * 注册 Settings 域 IPC handler

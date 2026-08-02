@@ -20,7 +20,7 @@
 // - SessionMeta 类型 re-export 自 shared，作为单一真源
 // ──────────────────────────────────────────────────────────────
 
-import type { SessionMeta } from '@novel-writer/shared';
+import type { SessionMeta } from '@code-agent/shared';
 
 import { createPersistentStore } from './create-persistent-store';
 
@@ -45,7 +45,7 @@ interface ActiveSessionState {
 /**
  * 激活会话状态 store
  *
- * 持久化到 localStorage（key: 'novel-writer:active-session'）。
+ * 持久化到 localStorage（key: 'code-agent:active-session'）。
  *
  * 与原 sessions-store 的差异：
  * - 仅持久化 activeSessionId（一个字符串或 null），不持久化 sessions 列表

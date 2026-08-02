@@ -11,7 +11,7 @@
 // 7. callTool：转发失败抛 TOOL_EXECUTION_FAILED
 // 8. close：幂等（已关闭时直接返回）
 
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

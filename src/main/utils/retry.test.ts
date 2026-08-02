@@ -1,7 +1,7 @@
 // src/main/utils/retry.test.ts
 // retry 工具单测
 
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { isRetryableError, retry } from './retry';
 

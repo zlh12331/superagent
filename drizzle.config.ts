@@ -13,7 +13,7 @@
 // - dbCredentials 指向 dev 环境的 sessions.db（仅 push/migrate 用）
 //
 // 注意：
-// - 生产环境数据库路径在 %APPDATA%/novel-writer-agent/sessions.db
+// - 生产环境数据库路径在 %APPDATA%/code-agent-desktop/sessions.db
 // - dev 环境数据库路径在 .electron-user-data/sessions.db
 // - 此处的 dbCredentials 仅用于 drizzle-kit push/migrate 命令，
 //   实际运行时由 db.ts 的 getDbPath() 决定路径

@@ -16,7 +16,7 @@ import {
   DialogPickDirectoryReqSchema,
   type DialogPickDirectoryRes,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import { dialog } from 'electron';
 import { wrap } from '../utils/wrap';
 

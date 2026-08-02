@@ -12,7 +12,7 @@
 // - 仅存储用户偏好，不存储敏感数据（API Key 由主进程 keychain 管理）
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider } from '@novel-writer/shared';
+import type { ApiKeyProvider } from '@code-agent/shared';
 import { createPersistentStore } from './create-persistent-store';
 
 /**

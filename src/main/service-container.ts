@@ -49,13 +49,13 @@ import { getChatService, resetChatService } from './infra/ai/chat-service';
 import { type IMCPService, MCPService } from './infra/ai/mcp';
 import type { IPermissionService } from './infra/ai/permission-service';
 import { PermissionService } from './infra/ai/permission-service';
+import type { IPromptService } from './infra/ai/prompt/prompt-service';
+import { PromptService } from './infra/ai/prompt/prompt-service';
 import type { IToolExecutor } from './infra/ai/tool-executor';
 import { ToolExecutor } from './infra/ai/tool-executor';
 import type { IToolRegistry } from './infra/ai/tool-registry';
 import { ToolRegistry } from './infra/ai/tool-registry';
 import { registerBuiltinTools } from './infra/ai/tools';
-import type { IPromptService } from './infra/ai/prompt/prompt-service';
-import { PromptService } from './infra/ai/prompt/prompt-service';
 import type { ICodebaseService } from './infra/codebase/codebase-service';
 import { getCodebaseService, resetCodebaseService } from './infra/codebase/codebase-service';
 import type { IFileService } from './infra/file/file-service';
@@ -372,7 +372,11 @@ class ServiceContainer {
    */
   getAgentService(): IAgentService {
     if (this.agentService === null) {
-      this.agentService = new AgentService(this.getToolRegistry(), this.getToolExecutor(), this.getPromptService());
+      this.agentService = new AgentService(
+        this.getToolRegistry(),
+        this.getToolExecutor(),
+        this.getPromptService(),
+      );
     }
     return this.agentService;
   }

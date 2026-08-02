@@ -2,7 +2,7 @@
 // grep 工具：封装 SearchService.grep，供 Code Agent 在文件内容中搜索匹配
 // ──────────────────────────────────────────────────────────────
 
-import type { GrepRes } from '@novel-writer/shared';
+import type { GrepRes } from '@code-agent/shared';
 import { z } from 'zod';
 import type { ISearchService } from '../../search/search-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';

@@ -28,8 +28,8 @@ import type {
   AgentStreamErrorPayload,
   AgentStreamPartPayload,
   ChatMessage,
-} from '@novel-writer/shared';
-import { IPC_CHANNELS } from '@novel-writer/shared';
+} from '@code-agent/shared';
+import { IPC_CHANNELS } from '@code-agent/shared';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';
@@ -66,6 +66,8 @@ export interface StartAgentOptions {
   readonly systemPrompt: string | undefined;
   /** 最大工具调用轮数（默认 20，上限 50，避免无限循环） */
   readonly maxSteps: number;
+  /** 运行模式（plan 只读探索 / build 审批后执行，缺省视为 build） */
+  readonly mode?: 'plan' | 'build';
   /** 接收流式 part 的 webContents（通常是发起 agent:run 的窗口） */
   readonly webContents: WebContents;
 }
@@ -293,11 +295,13 @@ export class AgentService implements IAgentService {
 
           // 2. 构造工具执行基础上下文（每次对话独立，闭包捕获 sessionId / workingDir / abortSignal / webContents）
           //    messageId / callId 由每次工具调用时动态填充
+          //    mode：plan 模式下 ToolExecutor 会拒绝所有写操作（只读探索）
           const baseCtx = {
             workingDir: options.workingDir,
             sessionId,
             abortSignal: controller.signal,
             webContents: options.webContents,
+            mode: options.mode ?? 'build',
           };
 
           // 3. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）

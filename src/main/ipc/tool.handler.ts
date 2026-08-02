@@ -6,7 +6,7 @@
 //
 // 设计要点：
 // - 与 chat.handler.ts / file.handler.ts 一致的 DI 模式
-// - 入参 zod schema 来自 @novel-writer/shared，handler 不内联定义
+// - 入参 zod schema 来自 @code-agent/shared，handler 不内联定义
 // - 工具元数据（ToolDescriptor）由 ToolRegistry.list() 返回，handler 仅做转发
 // - 渲染层启动时调用一次 tool:list，获取可用工具列表展示工具面板
 // - 后续可通过 tool:added / tool:removed 事件增量更新（当前阶段不实现）
@@ -16,7 +16,7 @@ import {
   type ToolListReq,
   ToolListReqSchema,
   type ToolListRes,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { IToolRegistry } from '../infra/ai/tool-registry';
 import { wrap } from '../utils/wrap';
 

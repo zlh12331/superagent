@@ -17,7 +17,7 @@
 // - 不会自动 refetch（API Key 变更频率极低，无需轮询）
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider } from '@novel-writer/shared';
+import type { ApiKeyProvider } from '@code-agent/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 

@@ -35,7 +35,7 @@ const DB_FILENAME = 'sessions.db';
  *
  * 路径：%APPDATA%/<AppName>/sessions.db
  * - dev 环境：%PROJECT%/.electron-user-data/sessions.db
- * - prod 环境：%APPDATA%/novel-writer-agent/sessions.db
+ * - prod 环境：%APPDATA%/code-agent-agent/sessions.db
  *
  * 外部导出供测试使用（注入临时路径）。
  */
@@ -125,121 +125,6 @@ export function initDb(): DrizzleDB {
     CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
     CREATE INDEX IF NOT EXISTS idx_prompts_role ON prompts(role);
-
-    -- 网文写作平台 9 张表
-    CREATE TABLE IF NOT EXISTS novel_projects (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      author TEXT NOT NULL,
-      genre TEXT NOT NULL,
-      description TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS volumes (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES novel_projects(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      summary TEXT,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS chapters (
-      id TEXT PRIMARY KEY,
-      volume_id TEXT NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      content TEXT,
-      word_count INTEGER NOT NULL DEFAULT 0,
-      summary TEXT,
-      status TEXT NOT NULL DEFAULT 'draft',
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS scenes (
-      id TEXT PRIMARY KEY,
-      chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-      title TEXT,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      summary TEXT,
-      content TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS outline_items (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES novel_projects(id) ON DELETE CASCADE,
-      parent_id TEXT,
-      level TEXT NOT NULL CHECK(level IN ('volume','chapter','scene')),
-      title TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      summary TEXT,
-      target_word_count INTEGER DEFAULT 0,
-      emotional_goal TEXT,
-      pacing TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS characters (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES novel_projects(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      aliases TEXT,
-      role TEXT NOT NULL DEFAULT '次要' CHECK(role IN ('主角','重要','次要')),
-      appearance TEXT,
-      personality TEXT,
-      background TEXT,
-      abilities TEXT,
-      status TEXT,
-      avatar_url TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS character_relationships (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES novel_projects(id) ON DELETE CASCADE,
-      character_a_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-      character_b_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-      relationship_type TEXT NOT NULL,
-      description TEXT,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS world_settings (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES novel_projects(id) ON DELETE CASCADE,
-      category TEXT NOT NULL,
-      title TEXT NOT NULL,
-      content TEXT,
-      tags TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS writing_sessions (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES novel_projects(id) ON DELETE CASCADE,
-      chapter_id TEXT,
-      session_type TEXT NOT NULL CHECK(session_type IN ('write','review','inspiration')),
-      messages TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    -- 索引
-    CREATE INDEX IF NOT EXISTS idx_volumes_project ON volumes(project_id);
-    CREATE INDEX IF NOT EXISTS idx_chapters_volume ON chapters(volume_id);
-    CREATE INDEX IF NOT EXISTS idx_scenes_chapter ON scenes(chapter_id);
-    CREATE INDEX IF NOT EXISTS idx_outline_items_project ON outline_items(project_id);
-    CREATE INDEX IF NOT EXISTS idx_outline_items_parent ON outline_items(parent_id);
-    CREATE INDEX IF NOT EXISTS idx_characters_project ON characters(project_id);
-    CREATE INDEX IF NOT EXISTS idx_character_relationships_project ON character_relationships(project_id);
-    CREATE INDEX IF NOT EXISTS idx_world_settings_project ON world_settings(project_id);
-    CREATE INDEX IF NOT EXISTS idx_writing_sessions_project ON writing_sessions(project_id);
   `);
 
   // 迁移：已存在的数据库加 working_dir 列（幂等）

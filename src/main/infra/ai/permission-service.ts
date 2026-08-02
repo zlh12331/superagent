@@ -23,8 +23,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentApprovalRequestPayload } from '@novel-writer/shared';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@novel-writer/shared';
+import type { AgentApprovalRequestPayload } from '@code-agent/shared';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 import type { Tool } from './tool';

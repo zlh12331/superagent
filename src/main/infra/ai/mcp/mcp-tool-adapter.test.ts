@@ -6,7 +6,7 @@
 // 2. normalizeMcpToolResult：结果标准化（isError 抛错 / structuredContent 优先 / text 拼接）
 // 3. adaptMcpTool：适配 Tool 实例（命名空间、权限、execute 转发）
 
-import { AppError, ErrorCode } from '@novel-writer/shared';
+import { AppError, ErrorCode } from '@code-agent/shared';
 import type { WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 

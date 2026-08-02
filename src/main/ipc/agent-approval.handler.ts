@@ -6,7 +6,7 @@
 //
 // 设计要点：
 // - 与其他 handler 一致的 DI 模式：通过 ServiceContainer 注入 IPermissionService 实例
-// - 入参 zod schema 来自 @novel-writer/shared（AgentApprovalResponseReqSchema）
+// - 入参 zod schema 来自 @code-agent/shared（AgentApprovalResponseReqSchema）
 // - 此 channel 是请求-响应模式，但语义是"回传事件"：
 //     主进程通过 webContents.send('agent:approval:request') 推送审批请求
 //     渲染层弹出 ApprovalModal，用户操作后通过 invoke('agent:approval:response', req) 回传
@@ -23,7 +23,7 @@ import {
   type AgentApprovalResponseReq,
   AgentApprovalResponseReqSchema,
   IPC_CHANNELS,
-} from '@novel-writer/shared';
+} from '@code-agent/shared';
 import type { IPermissionService } from '../infra/ai/permission-service';
 import { wrap } from '../utils/wrap';
 
