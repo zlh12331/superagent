@@ -22,16 +22,19 @@
  * - default-src 'self'：默认仅允许同源
  * - script-src 'self'：禁止内联脚本与外部脚本
  * - style-src 'unsafe-inline'：React 19 + Tailwind v4 运行时注入内联样式，必须放开
- * - connect-src：仅允许 AI API（DeepSeek / OpenAI）同源连接
+ * - connect-src：仅允许 AI API（DeepSeek / OpenAI / Anthropic）+ 本地 Ollama，
+ *   与 ProviderRegistry 内置供应商对齐（新增供应商时需同步此列表）
  * - object-src 'none' / frame-ancestors 'none'：禁用插件与嵌入
+ * - worker-src：shiki 高亮等 Web Worker 场景（与 dev 对齐）
  */
 const PRODUCTION_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://api.deepseek.com https://api.openai.com",
+  "connect-src 'self' https://api.deepseek.com https://api.openai.com https://api.anthropic.com http://localhost:*",
   "img-src 'self' data: blob:",
+  "worker-src 'self' blob:",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",

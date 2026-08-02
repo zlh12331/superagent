@@ -38,8 +38,8 @@ import { AppError, ErrorCode } from '@code-agent/shared';
  * @throws AppError(UNAUTHORIZED) 路径越权访问
  */
 export function resolveWithinWorkspace(inputPath: string, workingDir: string): string {
-  // 空路径校验
-  if (!inputPath || inputPath.length === 0) {
+  // 空路径校验（含纯空白路径：LLM 可能输出无意义空白）
+  if (!inputPath || inputPath.trim().length === 0) {
     throw new AppError(ErrorCode.INVALID_INPUT, '路径不能为空');
   }
 

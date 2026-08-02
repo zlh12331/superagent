@@ -65,25 +65,26 @@ describe('appConfig', () => {
     expect(config.logLevel).toBe('error');
     expect(config.sentry.dsn).toBe('');
     expect(config.sentry.tracesSampleRate).toBe(0);
-    expect(config.deepseek.timeout).toBe(5_000);
-    // 默认 deepseek 配置
-    expect(config.deepseek.apiBase).toBe('https://api.deepseek.com');
-    expect(config.deepseek.model).toBe('deepseek-v4-flash');
+    // 默认 provider 根地址（无 /v1 后缀，由 ProviderRegistry 拼接）
+    expect(config.providers.deepseek).toBe('https://api.deepseek.com');
+    expect(config.providers.openai).toBe('https://api.openai.com');
+    expect(config.providers.anthropic).toBe('https://api.anthropic.com');
+    expect(config.providers.ollama).toBe('http://localhost:11434');
   });
 
   it('从 process.env 读取配置覆盖默认值', async () => {
     process.env['SENTRY_DSN'] = 'http://test@example.com/1';
     process.env['DEEPSEEK_API_BASE'] = 'https://custom.api.com';
+    process.env['ANTHROPIC_API_BASE'] = 'https://custom-anthropic.api.com';
     process.env['LOG_LEVEL'] = 'debug';
-    process.env['DEEPSEEK_TIMEOUT'] = '30000';
 
     const { loadConfig } = await import('../config/index');
     const config = loadConfig();
 
     expect(config.sentry.dsn).toBe('http://test@example.com/1');
-    expect(config.deepseek.apiBase).toBe('https://custom.api.com');
+    expect(config.providers.deepseek).toBe('https://custom.api.com');
+    expect(config.providers.anthropic).toBe('https://custom-anthropic.api.com');
     expect(config.logLevel).toBe('debug');
-    expect(config.deepseek.timeout).toBe(30_000);
   });
 
   it('APP_ENV=production：isDev=false, isTest=false', async () => {
@@ -102,8 +103,8 @@ describe('appConfig', () => {
     expect(config.logLevel).toBe('info');
     // production 默认 Sentry 采样率 0.1
     expect(config.sentry.tracesSampleRate).toBe(0.1);
-    // production 默认 DeepSeek timeout=60s
-    expect(config.deepseek.timeout).toBe(60_000);
+    // production 默认 provider 根地址保持不变
+    expect(config.providers.deepseek).toBe('https://api.deepseek.com');
   });
 
   it('APP_ENV=development：isDev=true, isTest=false', async () => {
@@ -120,8 +121,6 @@ describe('appConfig', () => {
     expect(config.logLevel).toBe('debug');
     // development 默认 Sentry 采样率 0.1
     expect(config.sentry.tracesSampleRate).toBe(0.1);
-    // development 默认 DeepSeek timeout=60s
-    expect(config.deepseek.timeout).toBe(60_000);
   });
 
   it('app.isPackaged=true 且无 APP_ENV/NODE_ENV：appEnv=production', async () => {

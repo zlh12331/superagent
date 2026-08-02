@@ -28,6 +28,11 @@ const mocks = vi.hoisted(() => {
   const mockCreateAnthropic = vi.fn(() => mockProviderFactory);
   // keychain.getSecret mock
   const mockGetSecret = vi.fn();
+  // electron app mock（config 依赖 app.isPackaged）
+  const mockApp = {
+    isPackaged: false,
+    getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
+  };
   // logger mock
   const mockLogger = {
     info: vi.fn(),
@@ -41,6 +46,7 @@ const mocks = vi.hoisted(() => {
     mockCreateOpenAI,
     mockCreateAnthropic,
     mockGetSecret,
+    mockApp,
     mockLogger,
   };
 });
@@ -64,6 +70,9 @@ vi.mock('@ai-sdk/anthropic', () => ({
 vi.mock('../storage/keychain', () => ({
   getSecret: mocks.mockGetSecret,
 }));
+
+// mock electron：config 依赖 app.isPackaged（registry 从 config.providers 读取 baseURL）
+vi.mock('electron', () => ({ app: mocks.mockApp }));
 
 // mock logger：避免触发真实 electron-log 初始化
 vi.mock('../../utils/logger', () => ({

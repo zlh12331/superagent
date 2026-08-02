@@ -19,6 +19,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 
+import { getAppConfig } from '../../../config';
 import type {
   ProviderDefinition,
   ProviderFactory,
@@ -77,13 +78,12 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
  * 内置供应商工厂表
  *
  * 每个工厂返回 (modelId) => LanguageModel 的工厂函数。
- * baseURL 可被 .env 覆盖（DEEPSEEK_API_BASE / OPENAI_API_BASE 等），
- * 便于自托管网关 / 代理场景。
+ * baseURL 单一入口：从 config.providers 读取（config 内部已处理 .env 覆盖），
+ * 支持自托管网关 / 代理场景；新增供应商时同步扩展 config 的 ProviderBaseUrlSchema。
  */
 const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   deepseek: ({ apiKey }) => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    const baseUrl = process.env['DEEPSEEK_API_BASE'] ?? 'https://api.deepseek.com';
+    const baseUrl = getAppConfig().providers.deepseek;
     return createOpenAICompatible({
       name: 'deepseek',
       baseURL: `${baseUrl}/v1`,
@@ -93,26 +93,23 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     }) as unknown as (modelId: string) => LanguageModel;
   },
   openai: ({ apiKey }) => {
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    const baseUrl = process.env['OPENAI_API_BASE'] ?? 'https://api.openai.com/v1';
+    const baseUrl = getAppConfig().providers.openai;
     return createOpenAI({
+      // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
+      ...(apiKey !== undefined ? { apiKey } : {}),
+      baseURL: `${baseUrl}/v1`,
+    }) as unknown as (modelId: string) => LanguageModel;
+  },
+  anthropic: ({ apiKey }) => {
+    const baseUrl = getAppConfig().providers.anthropic;
+    return createAnthropic({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
       baseURL: baseUrl,
     }) as unknown as (modelId: string) => LanguageModel;
   },
-  anthropic: ({ apiKey }) => {
-    const baseUrl = process.env['ANTHROPIC_API_BASE'];
-    return createAnthropic({
-      // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
-      ...(apiKey !== undefined ? { apiKey } : {}),
-      ...(baseUrl !== undefined ? { baseURL: baseUrl } : {}),
-    }) as unknown as (modelId: string) => LanguageModel;
-  },
   ollama: () => {
-    // 本地服务默认地址；OLLAMA_API_BASE 可覆盖（如远程 Ollama 服务器）
-    // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
-    const baseUrl = process.env['OLLAMA_API_BASE'] ?? 'http://localhost:11434';
+    const baseUrl = getAppConfig().providers.ollama;
     return createOpenAICompatible({
       name: 'ollama',
       baseURL: `${baseUrl}/v1`,

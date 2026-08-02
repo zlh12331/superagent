@@ -39,15 +39,25 @@ const SentryConfigSchema = z.object({
 });
 
 /**
- * DeepSeek AI 配置
+ * 模型供应商根地址配置（不含 /v1 后缀）
+ *
+ * ProviderRegistry（src/main/infra/ai/providers）从本配置读取各供应商 baseURL，
+ * 由 registry 负责拼接协议路径（如 OpenAI Compatible 需要 /v1）。
+ *
+ * 与 .env 的关系：
+ * - 环境变量（DEEPSEEK_API_BASE / OPENAI_API_BASE / ANTHROPIC_API_BASE / OLLAMA_API_BASE）
+ *   优先于默认值，支持自托管网关 / 代理场景
+ * - 新增供应商时同步扩展此处 + ProviderRegistry
  */
-const DeepseekConfigSchema = z.object({
-  /** API 基础 URL */
-  apiBase: z.string().url().default('https://api.deepseek.com'),
-  /** 默认聊天模型 */
-  model: z.string().default('deepseek-v4-flash'),
-  /** 请求超时（毫秒，test 环境缩短为 5s） */
-  timeout: z.number().int().positive().default(60_000),
+const ProviderBaseUrlSchema = z.object({
+  /** DeepSeek 根地址（registry 拼接 /v1） */
+  deepseek: z.string().url().default('https://api.deepseek.com'),
+  /** OpenAI 根地址（registry 拼接 /v1） */
+  openai: z.string().url().default('https://api.openai.com'),
+  /** Anthropic 根地址（registry 直接使用，无需 /v1） */
+  anthropic: z.string().url().default('https://api.anthropic.com'),
+  /** Ollama 本地服务根地址（registry 拼接 /v1） */
+  ollama: z.string().url().default('http://localhost:11434'),
 });
 
 /**
@@ -73,8 +83,8 @@ const AppConfigSchema = z.object({
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   /** Sentry 配置 */
   sentry: SentryConfigSchema,
-  /** DeepSeek AI 配置 */
-  deepseek: DeepseekConfigSchema,
+  /** 模型供应商根地址（ProviderRegistry 消费） */
+  providers: ProviderBaseUrlSchema,
 });
 
 /** 应用配置类型（从 schema 派生） */
@@ -128,10 +138,7 @@ export function loadConfig(): AppConfig {
   const defaultSentryDsn = isTest ? '' : '';
   // test 环境强制采样率为 0
   const defaultSentryTracesSampleRate = isTest ? 0 : 0.1;
-  // test 环境缩短超时为 5s（测试不应等 60s 超时）
-  const defaultDeepseekTimeout = isTest ? 5_000 : 60_000;
 
-  // noPropertyAccessFromIndexSignature: process.env 必须用方括号访问
   const env = process.env;
   return AppConfigSchema.parse({
     appEnv,
@@ -143,10 +150,11 @@ export function loadConfig(): AppConfig {
       dsn: env['SENTRY_DSN'] ?? defaultSentryDsn,
       tracesSampleRate: Number(env['SENTRY_TRACES_SAMPLE_RATE'] ?? defaultSentryTracesSampleRate),
     },
-    deepseek: {
-      apiBase: env['DEEPSEEK_API_BASE'] ?? 'https://api.deepseek.com',
-      model: env['DEEPSEEK_MODEL'] ?? 'deepseek-v4-flash',
-      timeout: Number(env['DEEPSEEK_TIMEOUT'] ?? defaultDeepseekTimeout),
+    providers: {
+      deepseek: env['DEEPSEEK_API_BASE'] ?? 'https://api.deepseek.com',
+      openai: env['OPENAI_API_BASE'] ?? 'https://api.openai.com',
+      anthropic: env['ANTHROPIC_API_BASE'] ?? 'https://api.anthropic.com',
+      ollama: env['OLLAMA_API_BASE'] ?? 'http://localhost:11434',
     },
   });
 }
