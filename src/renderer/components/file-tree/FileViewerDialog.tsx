@@ -33,6 +33,8 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
+import { FileTreeNavigator } from './FileTreeNavigator';
+
 /**
  * 文件扩展名 → shiki 语言 ID 映射
  *
@@ -363,55 +365,59 @@ export function FileViewerDialog(): ReactElement {
           </div>
         </div>
 
-        {/* 内容区：加载中 / 错误 / 高亮代码 / 编辑态 */}
-        <div className="file-viewer-body">
-          {isLoading ? (
-            <div className="file-viewer-loading">加载中…</div>
-          ) : error !== null ? (
-            <div className="file-viewer-error">
-              <p>加载失败</p>
-              <p className="file-viewer-error-detail">
-                {error instanceof Error ? error.message : String(error)}
-              </p>
-            </div>
-          ) : displayContent === '' ? (
-            <div className="file-viewer-empty">{editMode ? '空文件，开始编辑…' : '空文件'}</div>
-          ) : editMode ? (
-            // 编辑态：textarea + shiki 叠加
-            <div className="file-viewer-editor">
-              {/* 高亮层（背景，pointer-events: none） */}
-              {html !== null && (
-                <div
-                  ref={highlightRef}
-                  className="file-viewer-editor-highlight"
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML
-                  dangerouslySetInnerHTML={{ __html: html }}
+        {/* 内容区：左侧文件树导航（仅查看态）+ 右侧内容 */}
+        <div className="file-viewer-layout">
+          {/* react-arborist 只读文件树：点击切换当前查看的文件（编辑态隐藏，避免脏数据切换） */}
+          {!editMode && <FileTreeNavigator />}
+          <div className="file-viewer-body">
+            {isLoading ? (
+              <div className="file-viewer-loading">加载中…</div>
+            ) : error !== null ? (
+              <div className="file-viewer-error">
+                <p>加载失败</p>
+                <p className="file-viewer-error-detail">
+                  {error instanceof Error ? error.message : String(error)}
+                </p>
+              </div>
+            ) : displayContent === '' ? (
+              <div className="file-viewer-empty">{editMode ? '空文件，开始编辑…' : '空文件'}</div>
+            ) : editMode ? (
+              // 编辑态：textarea + shiki 叠加
+              <div className="file-viewer-editor">
+                {/* 高亮层（背景，pointer-events: none） */}
+                {html !== null && (
+                  <div
+                    ref={highlightRef}
+                    className="file-viewer-editor-highlight"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML
+                    dangerouslySetInnerHTML={{ __html: html }}
+                  />
+                )}
+                {/* textarea 层（前景，文字透明、caret 不透明） */}
+                <textarea
+                  ref={textareaRef}
+                  className="file-viewer-editor-textarea"
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  onScroll={handleTextareaScroll}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  wrap="off"
+                  aria-label={`编辑 ${fileName}`}
                 />
-              )}
-              {/* textarea 层（前景，文字透明、caret 不透明） */}
-              <textarea
-                ref={textareaRef}
-                className="file-viewer-editor-textarea"
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                onScroll={handleTextareaScroll}
-                spellCheck={false}
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                wrap="off"
-                aria-label={`编辑 ${fileName}`}
-              />
-            </div>
-          ) : html !== null ? (
-            // 查看态：shiki 高亮
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
-            <div className="file-viewer-code" dangerouslySetInnerHTML={{ __html: html }} />
-          ) : (
-            <pre className="file-viewer-plaintext">
-              <code>{displayContent}</code>
-            </pre>
-          )}
+              </div>
+            ) : html !== null ? (
+              // 查看态：shiki 高亮
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
+              <div className="file-viewer-code" dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <pre className="file-viewer-plaintext">
+                <code>{displayContent}</code>
+              </pre>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

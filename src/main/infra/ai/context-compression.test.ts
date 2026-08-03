@@ -4,7 +4,7 @@
 import type { ModelMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
 
-import { compressContext } from './context-compression';
+import { compressByTokenBudget, compressContext, estimateTokenCount } from './context-compression';
 
 /** 构造消息辅助 */
 const user = (content: string): ModelMessage => ({ role: 'user', content });
@@ -18,6 +18,76 @@ const toolCall = (name: string): ModelMessage =>
     content: '',
     toolCalls: [{ type: 'tool-call', toolName: name, toolCallId: `call-${name}` }],
   }) as unknown as ModelMessage;
+
+describe('estimateTokenCount', () => {
+  it('空文本为 0', () => {
+    expect(estimateTokenCount('')).toBe(0);
+  });
+
+  it('英文单词计数（gpt-tokenizer 精确计数）', () => {
+    const count = estimateTokenCount('hello world');
+    expect(count).toBeGreaterThan(0);
+    // cl100k 词表下 hello world 约为 2 token
+    expect(count).toBeLessThanOrEqual(4);
+  });
+
+  it('中文按字节特征计数（非 1 字符 1 token）', () => {
+    const count = estimateTokenCount('你好世界');
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThan(8);
+  });
+
+  it('长文本 token 数单调不减', () => {
+    const short = estimateTokenCount('short text');
+    const long = estimateTokenCount('short text with much more content here');
+    expect(long).toBeGreaterThanOrEqual(short);
+  });
+});
+
+describe('compressByTokenBudget', () => {
+  it('预算充足：全部保留', () => {
+    const messages = [system('系统提示词'), user('hi'), assistant('hello')];
+    const result = compressByTokenBudget(messages, 10_000);
+    expect(result).toHaveLength(3);
+  });
+
+  it('超预算：保留 system + 从后往前的消息', () => {
+    // 每条 user 消息内容不同长度，预算只够容纳最后几条
+    const messages: ModelMessage[] = [system('系统提示词')];
+    for (let i = 1; i <= 20; i += 1) {
+      messages.push(user(`消息 ${i} ${'内容'.repeat(50)}`));
+    }
+    const result = compressByTokenBudget(messages, 300);
+    // system 必在
+    expect(result[0]?.role).toBe('system');
+    // 保留数量少于原始（发生了压缩）
+    expect(result.length).toBeLessThan(messages.length);
+    // 最后一条消息必在（最新上下文优先）
+    expect(result.at(-1)).toEqual(messages.at(-1));
+  });
+
+  it('单条消息就超预算：至少保留最后一条', () => {
+    const messages = [user('短消息'), user('x'.repeat(5000))];
+    const result = compressByTokenBudget(messages, 10);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.at(-1)).toEqual(messages.at(-1));
+  });
+
+  it('maxTokens <= 0：返回空数组', () => {
+    expect(compressByTokenBudget([user('x')], 0)).toEqual([]);
+  });
+
+  it('空消息列表：返回空数组', () => {
+    expect(compressByTokenBudget([])).toEqual([]);
+  });
+
+  it('不修改原始数组', () => {
+    const messages = [system('s'), user('a'), user('b')];
+    const before = [...messages];
+    compressByTokenBudget(messages, 10);
+    expect(messages).toEqual(before);
+  });
+});
 
 describe('compressContext', () => {
   it('消息数 <= maxMessages：原样返回（不压缩）', () => {

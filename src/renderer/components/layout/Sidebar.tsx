@@ -19,8 +19,22 @@
 // - L3 TanStack Mutation：useDeleteSession
 // ──────────────────────────────────────────────────────────────
 
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
-import { memo, type ReactElement, useMemo, useState } from 'react';
+import { memo, type ReactElement, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
@@ -108,6 +122,39 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
     }
     return groups;
   }, [sessions]);
+
+  // 拖拽排序覆盖（folderName → 会话 id 顺序；未覆盖的文件夹保持服务端顺序）
+  // 会话顺序由 updatedAt 决定，拖拽重排仅作为 UI 层临时排序（不持久化）
+  const [orderOverrides, setOrderOverrides] = useState<ReadonlyMap<string, readonly string[]>>(
+    () => new Map(),
+  );
+  // PointerSensor：拖拽需移动 4px 才激活（避免与点击选择冲突）
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  /** 拖拽结束：同文件夹内重排 */
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (over === null || active.id === over.id) {
+        return;
+      }
+      const folderName = String(active.data.current?.['folder'] ?? '');
+      // 当前顺序：优先拖拽覆盖，否则取该文件夹的默认（服务端）顺序
+      const folderSessions = sessions.filter((s) => getFolderName(s.workingDir) === folderName);
+      const current = orderOverridesRef.current.get(folderName) ?? folderSessions.map((s) => s.id);
+      const oldIndex = current.indexOf(String(active.id));
+      const newIndex = current.indexOf(String(over.id));
+      if (oldIndex === -1 || newIndex === -1) {
+        return;
+      }
+      const next = arrayMove([...current], oldIndex, newIndex);
+      setOrderOverrides((prev) => new Map(prev).set(folderName, next));
+    },
+    [sessions],
+  );
+  // ref 同步（handleDragEnd 读取最新覆盖顺序；useRef 保持对象稳定，避免闭包捕获旧值）
+  const orderOverridesRef = useRef(orderOverrides);
+  orderOverridesRef.current = orderOverrides;
 
   // 点击「新建会话」：清空激活会话 + 进入欢迎页模式 + 跳转首页
   // 对齐原型 prototype-v2.html:13306-13336：
@@ -224,18 +271,25 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
             <div className="thread-group-label">
               <span>最近会话</span>
             </div>
-            {Array.from(groupedSessions.entries()).map(([folderName, folderSessions]) => (
-              <FolderGroup
-                key={folderName}
-                folderName={folderName}
-                sessions={folderSessions}
-                activeSessionId={activeSessionId}
-                isDeleting={isDeleting}
-                onSelect={handleSelectSession}
-                onDelete={handleDelete}
-                onCreateInFolder={handleCreateInFolder}
-              />
-            ))}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              {Array.from(groupedSessions.entries()).map(([folderName, folderSessions]) => (
+                <FolderGroup
+                  key={folderName}
+                  folderName={folderName}
+                  sessions={folderSessions}
+                  orderOverride={orderOverrides.get(folderName)}
+                  activeSessionId={activeSessionId}
+                  isDeleting={isDeleting}
+                  onSelect={handleSelectSession}
+                  onDelete={handleDelete}
+                  onCreateInFolder={handleCreateInFolder}
+                />
+              ))}
+            </DndContext>
           </nav>
         )}
       </div>
@@ -263,6 +317,8 @@ interface FolderGroupProps {
     updatedAt: number;
     workingDir: string;
   }>;
+  /** 拖拽排序覆盖（undefined = 保持服务端顺序） */
+  readonly orderOverride: readonly string[] | undefined;
   readonly activeSessionId: string | null;
   readonly isDeleting: boolean;
   readonly onSelect: (sessionId: string) => void;
@@ -271,10 +327,11 @@ interface FolderGroupProps {
   readonly onCreateInFolder: (folderName: string) => void;
 }
 
-/** 文件夹分组：folder-label + folder-items(thread-item 列表) */
+/** 文件夹分组：folder-label + folder-items(thread-item 列表，支持拖拽排序) */
 function FolderGroup({
   folderName,
   sessions,
+  orderOverride,
   activeSessionId,
   isDeleting,
   onSelect,
@@ -282,6 +339,17 @@ function FolderGroup({
   onCreateInFolder,
 }: FolderGroupProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false);
+
+  // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
+  const orderedSessions = useMemo(() => {
+    if (orderOverride === undefined) {
+      return sessions;
+    }
+    const byId = new Map(sessions.map((s) => [s.id, s]));
+    return orderOverride
+      .map((id) => byId.get(id))
+      .filter((s): s is NonNullable<typeof s> => s !== undefined);
+  }, [sessions, orderOverride]);
 
   return (
     <>
@@ -346,20 +414,82 @@ function FolderGroup({
         </span>
       </button>
       <div className="folder-items">
-        {sessions.map((session) => (
-          <ThreadItem
-            key={session.id}
-            title={session.title}
-            lastMessage={session.lastMessage}
-            updatedAt={session.updatedAt}
-            isActive={session.id === activeSessionId}
-            isDeleting={isDeleting}
-            onSelect={() => onSelect(session.id)}
-            onDelete={() => onDelete(session.id)}
-          />
-        ))}
+        <SortableContext
+          items={orderedSessions.map((s) => s.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {orderedSessions.map((session) => (
+            <SortableThreadItem
+              key={session.id}
+              sessionId={session.id}
+              folderName={folderName}
+              title={session.title}
+              lastMessage={session.lastMessage}
+              updatedAt={session.updatedAt}
+              isActive={session.id === activeSessionId}
+              isDeleting={isDeleting}
+              onSelect={() => onSelect(session.id)}
+              onDelete={() => onDelete(session.id)}
+            />
+          ))}
+        </SortableContext>
       </div>
     </>
+  );
+}
+
+// ── 子组件：可拖拽会话项（@dnd-kit/sortable 包装） ────────────
+
+interface SortableThreadItemProps {
+  readonly sessionId: string;
+  readonly folderName: string;
+  readonly title: string;
+  readonly lastMessage: string | undefined;
+  readonly updatedAt: number;
+  readonly isActive: boolean;
+  readonly isDeleting: boolean;
+  readonly onSelect: () => void;
+  readonly onDelete: () => void;
+}
+
+/** 可拖拽会话项：useSortable 提供拖拽句柄属性，ti-dot 作为手柄 */
+function SortableThreadItem({
+  sessionId,
+  folderName,
+  title,
+  lastMessage,
+  updatedAt,
+  isActive,
+  isDeleting,
+  onSelect,
+  onDelete,
+}: SortableThreadItemProps): ReactElement {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sessionId,
+    data: { folder: folderName },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform:
+          transform === null ? undefined : `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        transition,
+      }}
+      className={isDragging ? 'opacity-50' : undefined}
+    >
+      <ThreadItem
+        title={title}
+        lastMessage={lastMessage}
+        updatedAt={updatedAt}
+        isActive={isActive}
+        isDeleting={isDeleting}
+        onSelect={onSelect}
+        onDelete={onDelete}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
   );
 }
 
@@ -373,6 +503,8 @@ interface ThreadItemProps {
   readonly isDeleting: boolean;
   readonly onSelect: () => void;
   readonly onDelete: () => void;
+  /** 拖拽手柄属性（@dnd-kit useSortable 的 attributes + listeners，挂在 ti-dot 上） */
+  readonly dragHandleProps?: Record<string, unknown>;
 }
 
 /** 会话列表项 - 对齐原型 .thread-item 结构 */
@@ -384,6 +516,7 @@ function ThreadItem({
   isDeleting,
   onSelect,
   onDelete,
+  dragHandleProps,
 }: ThreadItemProps): ReactElement {
   // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
   const metaParts: string[] = [formatRelativeTime(updatedAt)];
@@ -409,7 +542,12 @@ function ThreadItem({
       aria-current={isActive ? 'page' : undefined}
     >
       <div className="ti-row">
-        <span className="ti-dot" />
+        {/* ti-dot：拖拽手柄（dnd-kit），hover 显示抓取光标；不参与点击选择（title 提供可访问说明） */}
+        <span
+          className="ti-dot cursor-grab active:cursor-grabbing"
+          title="拖拽排序"
+          {...dragHandleProps}
+        />
         <div className="ti-content">
           <div className="ti-title" title={title}>
             {title}

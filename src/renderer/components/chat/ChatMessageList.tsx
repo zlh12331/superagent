@@ -34,9 +34,12 @@ import {
   isTextUIPart,
 } from 'ai';
 import { ChevronDown, Copy, RefreshCw, Sparkles } from 'lucide-react';
+import { motion } from 'motion/react';
 import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 import { EmptyState } from '@/components/common/EmptyState';
+import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useToolStore } from '@/stores/transient/tool-store';
 
@@ -67,13 +70,18 @@ interface ChatMessageListProps {
 }
 
 /**
- * 聊天消息列表
+ * 聊天消息列表（react-virtuoso 虚拟化）
  *
  * 渲染规则（对齐 Aurora 原型）：
  * - user 消息：.msg.user > .msg-body > .msg-content（玻璃渐变气泡）
  * - assistant 消息：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + .msg-content
  * - tool 调用：.msg.msg-tool > .msg-body > .card.tool-card（可折叠卡片）
  * - system 消息：居中淡灰小字
+ *
+ * 虚拟化（react-virtuoso）：
+ * - 仅渲染可视区消息，长对话不卡顿（替代手写 .messages-inner 全量渲染）
+ * - followOutput：流式时用户位于底部则平滑跟随，否则不抢滚动
+ * - atBottomStateChange：底部检测驱动 scroll-to-bottom 按钮与 hasNew 红点
  *
  * @example
  * ```tsx
@@ -86,14 +94,12 @@ export function ChatMessageList({
   onRegenerate,
   className,
 }: ChatMessageListProps): ReactElement {
-  // 底部锚点元素：滚动到此处
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  // 滚动容器 ref：用于读取 scrollTop / scrollHeight / clientHeight
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  // 是否在底部附近（ref 版本：在 effect 闭包中读取最新值，避免闭包陷阱）
+  // Virtuoso 句柄：用于 scrollToIndex 滚动到底部
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // 是否在底部附近（ref 版本：在回调中写入，避免闭包陷阱）
   const isAtBottomRef = useRef(true);
 
-  // 是否显示"滚动到底部"按钮（距底部 > 80px 时显示）
+  // 是否显示"滚动到底部"按钮（距底部 > 阈值时显示）
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   // 是否有新消息到达且用户不在底部（按钮显示 .has-new 红点）
   const [hasNew, setHasNew] = useState(false);
@@ -102,26 +108,12 @@ export function ChatMessageList({
   const isStreaming = status === 'streaming' || status === 'submitted';
 
   /**
-   * 判断当前是否在底部附近（距底部 < 80px）
-   *
-   * 对齐原型 threshold = 80。
-   */
-  const checkIsAtBottom = useCallback((): boolean => {
-    const el = scrollContainerRef.current;
-    if (el === null) {
-      return true;
-    }
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  }, []);
-
-  /**
-   * 滚动事件处理：更新按钮显示状态
+   * Virtuoso 内置底部检测回调（替换手写 scroll 监听）
    *
    * - 在底部附近：隐藏按钮，清除 hasNew
    * - 不在底部：显示按钮
    */
-  const handleScroll = useCallback(() => {
-    const atBottom = checkIsAtBottom();
+  const handleAtBottomChange = useCallback((atBottom: boolean) => {
     isAtBottomRef.current = atBottom;
     if (atBottom) {
       setShowScrollBtn(false);
@@ -129,27 +121,24 @@ export function ChatMessageList({
     } else {
       setShowScrollBtn(true);
     }
-  }, [checkIsAtBottom]);
+  }, []);
 
   /**
    * 滚动到底部并隐藏按钮
    */
   const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
     setShowScrollBtn(false);
     setHasNew(false);
     isAtBottomRef.current = true;
   }, []);
 
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
-  // - 用户在底部附近：自动滚动跟随
-  // - 用户不在底部：不强制滚动，仅标记 hasNew（按钮显示新消息红点）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages.length 与 isStreaming，触发滚动而不读取其值
+  // - 用户在底部附近：Virtuoso followOutput 自动跟随（无需手动滚动）
+  // - 用户不在底部：标记 hasNew（按钮显示新消息红点）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages.length 与 isStreaming，触发标记而不读取其值
   useEffect(() => {
-    if (isAtBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    } else {
-      // 用户正在查看历史，标记有新消息
+    if (!isAtBottomRef.current) {
       setHasNew(true);
     }
   }, [messages.length, isStreaming]);
@@ -169,24 +158,21 @@ export function ChatMessageList({
 
   return (
     // 外层 wrapper：position: relative 让 .scroll-to-bottom（absolute）正确定位
-    // 且不随 .messages 滚动内容移动（absolute 子元素在滚动容器内会随滚动，故移到外层）
     <div className={cn('relative h-full', className)}>
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="messages h-full">
-        <div className="messages-inner">
-          {messages.map((message) => (
-            <MessageItem
-              key={message.id}
-              message={message}
-              onRegenerate={onRegenerate}
-              disableActions={isStreaming}
-            />
-          ))}
-          {/* 流式占位：assistant 正在响应时显示 typing-indicator */}
-          {isStreaming ? <StreamingPlaceholder /> : null}
-          {/* 底部锚点 */}
-          <div ref={bottomRef} />
-        </div>
-      </div>
+      <Virtuoso
+        ref={virtuosoRef}
+        className="messages h-full"
+        data={messages}
+        // 流式跟随：用户在底部时平滑跟随新内容，否则不抢滚动（hasNew 由 effect 标记）
+        followOutput={(atBottom) => (atBottom ? 'smooth' : false)}
+        atBottomStateChange={handleAtBottomChange}
+        itemContent={(_, message) => (
+          <MessageItem message={message} onRegenerate={onRegenerate} disableActions={isStreaming} />
+        )}
+        // 流式占位：assistant 正在响应时渲染在列表尾部（Footer 插槽）
+        // biome-ignore lint/style/useNamingConvention: Virtuoso Components 接口的 Footer 字段为 PascalCase
+        {...(isStreaming ? { components: { Footer: StreamingFooter } } : {})}
+      />
       {/* 滚动到底部按钮（对齐原型 .scroll-to-bottom，作为 .messages 的兄弟元素） */}
       <button
         type="button"
@@ -200,6 +186,11 @@ export function ChatMessageList({
       </button>
     </div>
   );
+}
+
+/** Virtuoso Footer 插槽：流式占位（assistant 正在响应时显示 typing-indicator） */
+function StreamingFooter(): ReactElement {
+  return <StreamingPlaceholder />;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -226,14 +217,19 @@ const MessageItem = memo(function MessageItem({
   if (message.role === 'user') {
     // user 消息：仅 .msg-body > .msg-content，气泡样式由 .msg-content 提供（玻璃渐变）
     return (
-      <div className="msg user enter-anim">
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={smoothEaseOut}
+        className="msg user enter-anim"
+      >
         <div className="msg-body">
           <div className="msg-content">
             {/* user 消息仅渲染 text parts（拼接为单一字符串，保留换行） */}
             {extractText(message.parts)}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -241,7 +237,12 @@ const MessageItem = memo(function MessageItem({
     // assistant 消息：avatar + body（role + parts + actions）
     // 对齐原型 addMsgActions()：仅 assistant 消息显示 hover 操作栏
     return (
-      <div className="msg assistant enter-anim">
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={smoothEaseOut}
+        className="msg assistant enter-anim"
+      >
         <div className="msg-avatar assistant" aria-hidden="true">
           C
         </div>
@@ -260,7 +261,7 @@ const MessageItem = memo(function MessageItem({
             disabled={disableActions}
           />
         </div>
-      </div>
+      </motion.div>
     );
   }
 

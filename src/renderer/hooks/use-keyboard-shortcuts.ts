@@ -1,19 +1,20 @@
 // src/renderer/hooks/use-keyboard-shortcuts.ts
-// 全局快捷键 hook
+// 全局快捷键 hook（react-hotkeys-hook 实现）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 统一管理全局快捷键监听
-// - 解析快捷键配置字符串（如 "Meta+P"）
+// - 解析快捷键配置字符串（如 "Meta+P"）为 react-hotkeys-hook 格式
 // - 根据配置动态绑定快捷键事件
 // - 支持自定义快捷键映射
 //
 // 设计：
-// - 单例模式：全局只注册一次 keydown 监听
+// - 基于 react-hotkeys-hook 的 useHotkeys（事件绑定/解绑/表单隔离均由库处理）
 // - 配置驱动：快捷键绑定从 settings-store 读取
-// - 优先级：编辑器内的快捷键优先于全局快捷键
+// - 行为：默认在 input/textarea/contentEditable 内不触发（库默认，与原实现一致）
 // ──────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
@@ -72,89 +73,56 @@ function parseShortcut(shortcut: string): ParsedShortcut {
   return { key, ctrl, alt, shift, meta };
 }
 
-function matchesShortcut(e: KeyboardEvent, parsed: ParsedShortcut): boolean {
-  const key = e.key.toUpperCase();
-  const code = e.code.toUpperCase();
-
-  const keyMatches = key === parsed.key || code.endsWith(`_${parsed.key}`);
-
-  if (!keyMatches) return false;
-
-  if (parsed.ctrl && !e.ctrlKey) return false;
-  if (parsed.alt && !e.altKey) return false;
-  if (parsed.shift && !e.shiftKey) return false;
-  if (parsed.meta && !e.metaKey) return false;
-
-  if (!parsed.ctrl && e.ctrlKey) return false;
-  if (!parsed.alt && e.altKey) return false;
-  if (!parsed.shift && e.shiftKey) return false;
-  if (!parsed.meta && e.metaKey) return false;
-
-  return true;
+/** ParsedShortcut → react-hotkeys-hook 键串（"Meta+P" → "meta+p"） */
+function toHotkeyString(parsed: ParsedShortcut): string {
+  const parts: string[] = [];
+  if (parsed.ctrl) parts.push('ctrl');
+  if (parsed.alt) parts.push('alt');
+  if (parsed.shift) parts.push('shift');
+  if (parsed.meta) parts.push('meta');
+  parts.push(parsed.key.toLowerCase());
+  return parts.join('+');
 }
+
+/** useHotkeys 公共选项：阻止默认行为，表单元素内不触发（与原实现一致） */
+const HOTKEY_OPTIONS = { preventDefault: true } as const;
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
   const shortcuts = useSettingsStore((s) => s.shortcuts);
 
-  const parsedShortcuts = useMemo(() => {
-    return {
-      commandPalette: parseShortcut(shortcuts.commandPalette),
-      saveFile: parseShortcut(shortcuts.saveFile),
-      searchFile: parseShortcut(shortcuts.searchFile),
-      toggleTheme: parseShortcut(shortcuts.toggleTheme),
-      openSettings: parseShortcut(shortcuts.openSettings),
-      newSession: parseShortcut(shortcuts.newSession),
-    };
-  }, [shortcuts]);
+  // 最新 handlers 引用（避免依赖变化导致重复绑定/解绑）
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      const target = e.target as HTMLElement;
-      const isInput =
-        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+  const hotkeys = useMemo(
+    () => ({
+      commandPalette: toHotkeyString(parseShortcut(shortcuts.commandPalette)),
+      saveFile: toHotkeyString(parseShortcut(shortcuts.saveFile)),
+      searchFile: toHotkeyString(parseShortcut(shortcuts.searchFile)),
+      toggleTheme: toHotkeyString(parseShortcut(shortcuts.toggleTheme)),
+      openSettings: toHotkeyString(parseShortcut(shortcuts.openSettings)),
+      newSession: toHotkeyString(parseShortcut(shortcuts.newSession)),
+    }),
+    [shortcuts],
+  );
 
-      if (isInput && !e.metaKey && !e.ctrlKey) {
-        return;
-      }
-
-      if (matchesShortcut(e, parsedShortcuts.commandPalette)) {
-        e.preventDefault();
-        handlers.onCommandPalette();
-        return;
-      }
-
-      if (matchesShortcut(e, parsedShortcuts.saveFile)) {
-        e.preventDefault();
-        handlers.onSaveFile();
-        return;
-      }
-
-      if (matchesShortcut(e, parsedShortcuts.searchFile)) {
-        e.preventDefault();
-        handlers.onSearchFile();
-        return;
-      }
-
-      if (matchesShortcut(e, parsedShortcuts.toggleTheme)) {
-        e.preventDefault();
-        handlers.onToggleTheme();
-        return;
-      }
-
-      if (matchesShortcut(e, parsedShortcuts.openSettings)) {
-        e.preventDefault();
-        handlers.onOpenSettings();
-        return;
-      }
-
-      if (matchesShortcut(e, parsedShortcuts.newSession)) {
-        e.preventDefault();
-        handlers.onNewSession();
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlers, parsedShortcuts]);
+  // 逐个绑定：handlers 经 ref 取最新，key 变化触发重新绑定
+  useHotkeys(hotkeys.commandPalette, () => handlersRef.current.onCommandPalette(), HOTKEY_OPTIONS, [
+    hotkeys.commandPalette,
+  ]);
+  useHotkeys(hotkeys.saveFile, () => handlersRef.current.onSaveFile(), HOTKEY_OPTIONS, [
+    hotkeys.saveFile,
+  ]);
+  useHotkeys(hotkeys.searchFile, () => handlersRef.current.onSearchFile(), HOTKEY_OPTIONS, [
+    hotkeys.searchFile,
+  ]);
+  useHotkeys(hotkeys.toggleTheme, () => handlersRef.current.onToggleTheme(), HOTKEY_OPTIONS, [
+    hotkeys.toggleTheme,
+  ]);
+  useHotkeys(hotkeys.openSettings, () => handlersRef.current.onOpenSettings(), HOTKEY_OPTIONS, [
+    hotkeys.openSettings,
+  ]);
+  useHotkeys(hotkeys.newSession, () => handlersRef.current.onNewSession(), HOTKEY_OPTIONS, [
+    hotkeys.newSession,
+  ]);
 }
