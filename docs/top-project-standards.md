@@ -29,12 +29,12 @@
 | 可观测：Sentry + OpenTelemetry + electron-log | ✅ |
 | 文档：AGENTS.md（已对齐）/ README / CHANGELOG（自动生成） | ✅ |
 
-### ② 体验极致 —— 部分达成
+### ② 体验极致 —— 部分达成（i18n 已全量收口）
 
 | 已有 | 差距 |
 |---|---|
 | 动画（motion）/ 拖拽（dnd-kit）/ 消息虚拟化 / 命令面板 / 文件树导航 | a11y 未全量验证（axe 已配置，E2E 未跑） |
-| 空状态 / 加载态 / 错误态 / 脏数据保护 | i18n 只有骨架（i18next 已装，文案大多硬编码中文） |
+| 空状态 / 加载态 / 错误态 / 脏数据保护 | **i18n 已全量收口**（37 组件/hooks、400+ key、零硬编码残留）✅ |
 | token 用量 / 更新提示 / diff 语义统计 | 一致性：设计令牌已用 CSS 变量，组件规范待固化 |
 
 ### ③ 性能极致 —— 局部达成
@@ -159,6 +159,25 @@ packages/shared/ → 契约层——被所有进程依赖，自身零业务依�
 | 命名一致性（Biome strictCase）✓ | 模块边界无成文文档（依赖矩阵缺失） |
 | — | 可读性巡检无节奏 |
 
+#### 执行路线图（三阶段）
+
+```
+阶段 1 · 机器闸（依赖方向 + 循环消除）
+  1. 盘点实际分层（main 的 infra/ipc/telemetry/security/utils + preload + renderer + shared）
+  2. 引入 dependency-cruiser：分层规则（禁止反向/同层互依/禁止 shared 依赖上层）+ 循环检测
+  3. pnpm depcruise 脚本 + 门禁接入（pre-push / CI 卡关）
+  4. 跑一遍 → 修复发现的环与反向依赖
+
+阶段 2 · 复杂度阈值（复杂度治理）
+  1. Biome 开启 noExcessiveCognitiveComplexity（认知复杂度，建议 15-20 起步）
+  2. 全量跑 → 列出超限函数清单 → 分批重构（或合理豁免 + 注明理由）
+
+阶段 3 · 边界文档 + 巡检节奏（模块边界 + 认知负担）
+  1. 依赖矩阵成文 → 补进 AGENTS.md 架构段
+  2. 可读性巡检 → 并入 docs/TECH_DEBT.md（每季度抽查最难读文件重构）
+  3. 抽象层次检查点 → 写进 Code Review 清单（"这层该知道这个细节吗？"）
+```
+
 ### ⑩ 协作生态极致 —— 模板的终极形态是生态
 
 | 已有 | 差距 |
@@ -221,18 +240,18 @@ isolatedModules / resolveJsonModule / useDefineForClassFields
 
 ### 佐证
 
-- 539+ 测试全绿、306 文件 lint 零警告——配置不是摆设，代码真实在这些约束下写出
+- 184 个测试文件全绿（shared 4 + main 45 + renderer 131 + scripts 4）、307 文件 lint 零警告——配置不是摆设，代码真实在这些约束下写出
 - 类型安全维度已无压缩空间，是 TypeScript 当前最强约束
 
 ## 三、下一步优先级（按价值/成本）
 
 1. **ADR（架构决策记录）**——模板的灵魂：为什么 IPC 用定义表、为什么状态四层、为什么 plan/build。`docs/adr/` 每篇一页：背景/决策/后果。成本低、对模板价值极高
-2. **数据资产可迁移**——会话 JSON 导出 + 一键打开数据目录（用户工作资产不锁死在本机）
-3. **IPC 向后兼容策略**——payload 变更规范（新增字段必须 optional），模板使用者升级不破坏
-4. **循环依赖检查进 CI**——dependency-cruiser（发现 import 环即失败），架构极致第一道机器闸
-5. **复杂度阈值卡关**——Biome complexity 阈值（函数 >15、嵌套 >4 提示/卡关）
-6. **体验层闭环**——a11y 全量验证（axe 已配置）+ i18n 文案收口（当前中英混排）
+2. **架构极致·阶段 1：循环依赖检查进 CI**——dependency-cruiser（发现 import 环即失败），架构极致第一道机器闸（执行路线见 ⑨ 章节）
+3. **数据资产可迁移**——会话 JSON 导出 + 一键打开数据目录（用户工作资产不锁死在本机）
+4. **IPC 向后兼容策略**——payload 变更规范（新增字段必须 optional），模板使用者升级不破坏
+5. **架构极致·阶段 2：复杂度阈值卡关**——Biome noExcessiveCognitiveComplexity（函数复杂度 >15-20 提示/卡关）
+6. **体验层收尾**——a11y 全量验证（axe 已配置；**i18n 已全量收口 ✅**，37 组件/400+ key/零残留）
 7. **性能预算进 CI**——修好 perf/navigation.bench 后设阈值卡关（如首次交互 <3s）
-8. **技术债登记**——docs/TECH_DEBT.md + TODO 巡检节奏
+8. **技术债登记**——docs/TECH_DEBT.md + TODO 巡检节奏（含架构极致阶段 3 的可读性巡检）
 9. **工程化收尾**——coverage 补 service 层测试、E2E 重新设计（浏览器模式为主 + Electron 独立 CI job）
 10. **生态建设**——贡献指南 + issue/PR 模板（推 GitHub 后激活）
