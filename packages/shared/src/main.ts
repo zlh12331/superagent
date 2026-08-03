@@ -46,3 +46,4 @@ export * from './schemas/settings';
 export * from './schemas/system';
 export * from './schemas/terminal';
 export * from './schemas/tool';
+export * from './schemas/update';

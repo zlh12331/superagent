@@ -128,6 +128,12 @@ export const IPC_META = {
   dialog: {
     pickDirectory: request('dialog:pickDirectory'),
   },
+
+  update: {
+    check: request('update:check'),
+    install: request('update:install'),
+    subscribeStatus: event('update:event:status'),
+  },
 } as const;
 
 /** IPC 元数据表类型 */

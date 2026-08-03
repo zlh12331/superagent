@@ -23,6 +23,7 @@ import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useS
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
+import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -324,6 +325,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
       {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {/* 自动更新提示（事件驱动 toast，无 DOM） */}
+      <UpdateNotice />
     </div>
   );
 }

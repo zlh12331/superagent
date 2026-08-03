@@ -116,6 +116,11 @@ import {
   type TerminalResizeRes,
 } from '../schemas/terminal';
 import { ToolListReqSchema, type ToolListRes } from '../schemas/tool';
+import {
+  UpdateCheckReqSchema,
+  type UpdateCheckRes,
+  type UpdateStatusPayload,
+} from '../schemas/update';
 import { IPC_META, type IpcMeta } from './meta';
 
 /**
@@ -326,6 +331,12 @@ export const IPC_DEFINITIONS = {
       DialogPickDirectoryReqSchema,
       {} as DialogPickDirectoryRes,
     ),
+  },
+
+  update: {
+    check: withSchema(IPC_META.update.check, UpdateCheckReqSchema, {} as UpdateCheckRes),
+    install: withSchema(IPC_META.update.install, null, {} as { ok: boolean }),
+    subscribeStatus: withPayload(IPC_META.update.subscribeStatus, {} as UpdateStatusPayload),
   },
 } as const;
 

@@ -41,6 +41,8 @@
 // - 各模块内部已处理 null 检查，本模块无需重复判空
 // - 幂等：多次调用 disposeServices 安全
 
+import { app } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { resetConfigCache } from './config';
 import { AgentService, type IAgentService } from './infra/ai/agent-service';
 import { resetAIProvider } from './infra/ai/ai-provider';
@@ -69,6 +71,7 @@ import type { ISessionService } from './infra/storage/session-service';
 import { getSessionService, resetSessionService } from './infra/storage/session-service';
 import type { ITerminalService } from './infra/terminal/terminal-service';
 import { getTerminalService, resetTerminalService } from './infra/terminal/terminal-service';
+import { type IUpdateService, UpdateService } from './infra/update/update-service';
 import { logger } from './utils/logger';
 
 /**
@@ -661,6 +664,10 @@ class ServiceContainer {
     // 10. PromptService 无外部资源（仅 DB），清空引用即可
     this.promptService = null;
 
+    // 10.5 UpdateService 无外部资源（事件随进程退出释放），清空引用即可
+    this.updateService?.dispose();
+    this.updateService = null;
+
     // 11. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     resetAIProvider();
 
@@ -670,6 +677,21 @@ class ServiceContainer {
 
     logger.info({}, '应用服务清理完成');
   }
+
+  /**
+   * 获取 UpdateService 实例
+   *
+   * 首次调用延迟初始化：注入 electron-updater 的 autoUpdater 与打包状态判断。
+   * 打包环境（app.isPackaged）才有 app-update.yml 更新源，开发模式 check 返回明确错误。
+   */
+  getUpdateService(): IUpdateService {
+    if (this.updateService === null) {
+      this.updateService = new UpdateService(autoUpdater, () => app.isPackaged);
+    }
+    return this.updateService;
+  }
+
+  private updateService: IUpdateService | null = null;
 
   /**
    * 重置所有服务缓存（仅测试用）
@@ -703,6 +725,7 @@ class ServiceContainer {
     resetSessionService();
     this.sessionService = null;
     this.promptService = null;
+    this.updateService = null;
     resetAIProvider();
     // 关闭并重置 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
     resetDb();

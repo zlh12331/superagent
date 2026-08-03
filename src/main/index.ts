@@ -32,6 +32,7 @@ import { settingsHandlers } from './ipc/settings.handler';
 import { logsHandlers, systemHandlers } from './ipc/system.handler';
 import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
+import { createUpdateHandlers } from './ipc/update.handler';
 import { buildCsp } from './security/csp';
 import { disposeServices, serviceContainer } from './service-container';
 import { initTelemetry, shutdownTelemetry } from './telemetry/otel';
@@ -281,7 +282,11 @@ app
       logs: logsHandlers,
       devtools: devtoolsHandlers,
       dialog: dialogHandlers,
+      update: createUpdateHandlers({ updateService: serviceContainer.getUpdateService() }),
     });
+
+    // 启动自动更新服务（注册 autoUpdater 事件 → 推送渲染层；打包环境才实际检查）
+    serviceContainer.getUpdateService().start();
 
     // 注入 CSP 响应头（P1-5 安全基线）
     // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）

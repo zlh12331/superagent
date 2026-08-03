@@ -41,3 +41,4 @@ export type * from './schemas/settings';
 export type * from './schemas/system';
 export type * from './schemas/terminal';
 export type * from './schemas/tool';
+export type * from './schemas/update';

@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
 import { useSetTelemetryLevel, useTelemetryLevelQuery } from '@/hooks/use-telemetry';
@@ -401,8 +402,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           </div>
         </div>
 
-        {/* 快捷键设置区块 */}
-        <div className="space-y-3 border-t border-stone-200/60 pt-4">
+        {/* 快捷键设置区块（Separator 分隔：Radix 原生分隔线替代 border-t） */}
+        <Separator className="my-2" />
+        <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2">
             <Keyboard className="size-4 text-stone-600" strokeWidth={1.5} />
             <Label className="font-serif text-sm tracking-wide">快捷键</Label>
