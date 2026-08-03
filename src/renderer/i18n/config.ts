@@ -50,12 +50,12 @@ export const LANGUAGE_STORAGE_KEY = 'code-agent:lang';
  */
 export const resources = {
   'zh-CN': {
-    common: zhCNCommon,
-    errors: zhCNErrors,
+    common: zhCNCommon.translation,
+    errors: zhCNErrors.translation,
   },
   en: {
-    common: enCommon,
-    errors: enErrors,
+    common: enCommon.translation,
+    errors: enErrors.translation,
   },
 } as const;
 

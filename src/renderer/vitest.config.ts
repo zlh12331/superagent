@@ -29,7 +29,7 @@ export default defineConfig({
     // 使用 jsdom 环境（React 组件测试需要 DOM API）
     environment: 'jsdom',
     // setup 文件：在所有测试前执行，注册全局 mock
-    setupFiles: ['./test/setup.ts'],
+    setupFiles: ['./test/setup-lang.ts', './test/setup.ts'],
     // 测试文件位置：与源码同目录（colocation 模式）
     include: ['**/*.test.{ts,tsx}'],
     // 排除 main 进程、preload、参考项目、构建产物

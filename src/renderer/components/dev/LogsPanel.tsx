@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLogsReadQuery } from '@/hooks/use-system';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
 /** 日志级别过滤选项 */
@@ -30,13 +31,17 @@ type LogLevelFilter = 'all' | 'info' | 'warn' | 'error' | 'debug';
 const LINE_OPTIONS = [100, 200, 500] as const;
 type LineOption = (typeof LINE_OPTIONS)[number];
 
-/** 级别过滤按钮配置 */
-const LEVEL_FILTERS: readonly { readonly value: LogLevelFilter; readonly label: string }[] = [
-  { value: 'all', label: '全部' },
-  { value: 'info', label: 'Info' },
-  { value: 'warn', label: 'Warn' },
-  { value: 'error', label: 'Error' },
-  { value: 'debug', label: 'Debug' },
+/** 级别过滤按钮配置（'all' 走 i18n，级别术语 Info/Warn/Error/Debug 保持英文） */
+const LEVEL_FILTERS: readonly {
+  readonly value: LogLevelFilter;
+  readonly labelKey: string | null;
+  readonly label: string;
+}[] = [
+  { value: 'all', labelKey: 'dev.all', label: '' },
+  { value: 'info', labelKey: null, label: 'Info' },
+  { value: 'warn', labelKey: null, label: 'Warn' },
+  { value: 'error', labelKey: null, label: 'Error' },
+  { value: 'debug', labelKey: null, label: 'Debug' },
 ] as const;
 
 interface LogsPanelProps {
@@ -57,6 +62,8 @@ interface LogsPanelProps {
  * ```
  */
 export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 本地状态：级别过滤 + 行数（用户可切换，切换后触发 refetch）
   const [level, setLevel] = useState<LogLevelFilter>('all');
   const [lines, setLines] = useState<LineOption>(200);
@@ -90,7 +97,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
               }}
               disabled={!enabled}
             >
-              {filter.label}
+              {filter.labelKey !== null ? t(filter.labelKey) : filter.label}
             </button>
           ))}
         </div>
@@ -124,7 +131,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           {data !== undefined && (
             <span className="text-muted-foreground font-mono text-[9px]">
               {data.total}
-              {data.truncated ? ' (截断)' : ''}
+              {data.truncated ? t('dev.truncated') : ''}
             </span>
           )}
           <Button
@@ -135,7 +142,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
               void refetch();
             }}
             disabled={isFetching || !enabled}
-            aria-label="刷新日志"
+            aria-label={t('dev.refreshLogs')}
           >
             <RefreshCw className={cn('size-3', isFetching && 'animate-spin')} strokeWidth={1.5} />
           </Button>

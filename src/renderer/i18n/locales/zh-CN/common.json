@@ -180,6 +180,78 @@
       "chooseProjectLabel": "选择项目目录",
       "dirList": "项目目录列表",
       "noRecentDirs": "暂无历史目录"
+    },
+    "dev": {
+      "runtimeMetrics": "运行时指标",
+      "refreshMetrics": "刷新指标",
+      "metricsEmpty": "指标数据为空",
+      "rssMemory": "RSS 内存",
+      "detachWindow": "独立窗口",
+      "panelRight": "右侧",
+      "panelBottom": "底部",
+      "openingDevtools": "正在打开…",
+      "devtoolsOpened": "DevTools 已打开（{{mode}}）",
+      "openFailedSender": "打开失败：sender 窗口不存在",
+      "unknownResponse": "未知响应",
+      "all": "全部",
+      "truncated": " (截断)",
+      "refreshLogs": "刷新日志",
+      "collapsePanel": "收起开发面板",
+      "expandPanel": "展开开发面板",
+      "tabTerminal": "终端",
+      "tabLogs": "日志",
+      "tabMetrics": "指标",
+      "tabInspector": "检查器",
+      "developerTools": "开发者工具",
+      "developerToolsDesc": "打开 Electron 内置的浏览器开发者工具（Elements / Console / Sources / Network / Performance）",
+      "openDevtoolsMode": "以{{mode}} 模式打开 DevTools",
+      "heapUsed": "堆已用",
+      "heapTotalHint": "总量 {{value}}",
+      "externalMemory": "外部内存",
+      "residentMemory": "常驻内存",
+      "cpuUser": "CPU 用户态",
+      "cpuSystemHint": "系统态 {{value}}",
+      "uptime": "运行时长",
+      "envInfo": "环境信息",
+      "metricsFailed": "指标获取失败"
+    },
+    "git": {
+      "statusModified": "修改",
+      "statusAdded": "新增",
+      "statusDeleted": "删除",
+      "statusRenamed": "重命名",
+      "statusUntracked": "未跟踪",
+      "statusConflict": "冲突",
+      "refreshStatus": "刷新 Git 状态"
+    },
+    "fileViewer": {
+      "copyFailed": "复制失败：剪贴板不可用",
+      "saved": "已保存",
+      "editor": "编辑器",
+      "unsaved": "未保存",
+      "lines": "{{count}} 行",
+      "switchToEdit": "切换到编辑模式",
+      "switchToPreview": "切换到预览模式"
+    },
+    "fileTree": {
+      "emptyDesc": "请先选择或创建一个会话",
+      "treeLabel": "文件树 - {{name}}",
+      "toolbarLabel": "文件树操作",
+      "newFileInRoot": "在根目录新建文件",
+      "newFile": "新建文件",
+      "newDirInRoot": "在根目录新建目录",
+      "newDir": "新建目录",
+      "moreActions": "更多操作",
+      "rename": "重命名",
+      "emptyDir": "空目录"
+    },
+    "terminal": {
+      "createFailed": "创建终端失败: {{message}}",
+      "closeFailed": "关闭终端失败: {{message}}",
+      "creating": "创建中…",
+      "newTerminal": "新建终端",
+      "closed": "已结束",
+      "closeTerminal": "关闭终端"
     }
   }
 }

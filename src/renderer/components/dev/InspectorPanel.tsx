@@ -17,6 +17,7 @@ import type { OpenDevToolsRes } from '@code-agent/shared/renderer';
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
 /** DevTools 停靠模式 */
@@ -25,13 +26,13 @@ type DevToolsMode = 'detach' | 'right' | 'bottom';
 /** 模式按钮配置 */
 const MODE_BUTTONS: readonly {
   readonly mode: DevToolsMode;
-  readonly label: string;
+  readonly labelKey: string;
   readonly icon: typeof ExternalLink;
   readonly hint: string;
 }[] = [
-  { mode: 'detach', label: '独立窗口', icon: ExternalLink, hint: 'detach' },
-  { mode: 'right', label: '右侧', icon: PanelRight, hint: 'right' },
-  { mode: 'bottom', label: '底部', icon: PanelBottom, hint: 'bottom' },
+  { mode: 'detach', labelKey: 'detachWindow', icon: ExternalLink, hint: 'detach' },
+  { mode: 'right', labelKey: 'panelRight', icon: PanelRight, hint: 'right' },
+  { mode: 'bottom', labelKey: 'panelBottom', icon: PanelBottom, hint: 'bottom' },
 ] as const;
 
 /** 成功消息自动清除延迟 */
@@ -54,6 +55,8 @@ interface InspectorPanelProps {
  * ```
  */
 export function InspectorPanel({ className }: InspectorPanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 调用状态：idle / loading / success / error
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -71,46 +74,49 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
   );
 
   /** 调用 IPC 打开 DevTools */
-  const handleOpen = useCallback(async (mode: DevToolsMode) => {
-    setStatus('loading');
-    setStatusMessage('正在打开…');
-    setLoadingMode(mode);
+  const handleOpen = useCallback(
+    async (mode: DevToolsMode) => {
+      setStatus('loading');
+      setStatusMessage(t('dev.openingDevtools'));
+      setLoadingMode(mode);
 
-    try {
-      const response = await window.api.devtools.open({ mode });
+      try {
+        const response = await window.api.devtools.open({ mode });
 
-      if ('error' in response && response.error !== undefined) {
-        setStatus('error');
-        setStatusMessage(`[${response.error.code}] ${response.error.message}`);
-      } else if ('data' in response && response.data !== undefined) {
-        const data = response.data as OpenDevToolsRes;
-        if (data.ok) {
-          setStatus('success');
-          setStatusMessage(`DevTools 已打开（${data.mode}）`);
+        if ('error' in response && response.error !== undefined) {
+          setStatus('error');
+          setStatusMessage(`[${response.error.code}] ${response.error.message}`);
+        } else if ('data' in response && response.data !== undefined) {
+          const data = response.data as OpenDevToolsRes;
+          if (data.ok) {
+            setStatus('success');
+            setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
+          } else {
+            setStatus('error');
+            setStatusMessage(t('dev.openFailedSender'));
+          }
         } else {
           setStatus('error');
-          setStatusMessage('打开失败：sender 窗口不存在');
+          setStatusMessage(t('dev.unknownResponse'));
         }
-      } else {
+      } catch (err) {
         setStatus('error');
-        setStatusMessage('未知响应');
+        setStatusMessage(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoadingMode(null);
+        // 3s 后自动清除状态
+        if (statusTimerRef.current !== null) {
+          clearTimeout(statusTimerRef.current);
+        }
+        statusTimerRef.current = setTimeout(() => {
+          statusTimerRef.current = null;
+          setStatus('idle');
+          setStatusMessage('');
+        }, STATUS_CLEAR_DELAY);
       }
-    } catch (err) {
-      setStatus('error');
-      setStatusMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoadingMode(null);
-      // 3s 后自动清除状态
-      if (statusTimerRef.current !== null) {
-        clearTimeout(statusTimerRef.current);
-      }
-      statusTimerRef.current = setTimeout(() => {
-        statusTimerRef.current = null;
-        setStatus('idle');
-        setStatusMessage('');
-      }, STATUS_CLEAR_DELAY);
-    }
-  }, []);
+    },
+    [t],
+  );
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
@@ -118,16 +124,13 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       <div className="border-border bg-muted/30 flex items-center gap-1.5 border-b px-2 py-1">
         <ExternalLink className="text-muted-foreground size-3" strokeWidth={1.5} />
         <span className="text-muted-foreground font-serif text-[10px] tracking-wide">
-          开发者工具
+          {t('dev.developerTools')}
         </span>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         {/* Chromium DevTools 按钮组 */}
-        <Section
-          title="Chromium DevTools"
-          description="打开 Electron 内置的浏览器开发者工具（Elements / Console / Sources / Network / Performance）"
-        >
+        <Section title="Chromium DevTools" description={t('dev.developerToolsDesc')}>
           <div className="flex items-center gap-0.5">
             {MODE_BUTTONS.map((btn) => {
               const Icon = btn.icon;
@@ -145,10 +148,10 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
                     void handleOpen(btn.mode);
                   }}
                   disabled={status === 'loading'}
-                  aria-label={`以 ${btn.label} 模式打开 DevTools`}
+                  aria-label={t('dev.openDevtoolsMode', { mode: t(`dev.${btn.labelKey}`) })}
                 >
                   <Icon className="size-2.5" strokeWidth={1.5} />
-                  {btn.label}
+                  {t(`dev.${btn.labelKey}`)}
                 </button>
               );
             })}

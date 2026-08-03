@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSystemStatusQuery } from '@/hooks/use-system';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
 interface MetricsPanelProps {
@@ -40,6 +41,8 @@ interface MetricsPanelProps {
  * ```
  */
 export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const { data, isLoading, error, refetch, isFetching } = useSystemStatusQuery(enabled);
 
   return (
@@ -48,7 +51,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
       <div className="border-border bg-muted/30 flex items-center justify-between border-b px-2 py-1">
         <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
           <Activity className="size-3" strokeWidth={1.5} />
-          <span className="font-serif tracking-wide">运行时指标</span>
+          <span className="font-serif tracking-wide">{t('dev.runtimeMetrics')}</span>
           {data !== undefined && (
             <span className="text-muted-foreground/70 font-mono">
               · {formatTime(data.timestamp)}
@@ -63,7 +66,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
             void refetch();
           }}
           disabled={isFetching || !enabled}
-          aria-label="刷新指标"
+          aria-label={t('dev.refreshMetrics')}
         >
           <RefreshCw className={cn('size-3', isFetching && 'animate-spin')} strokeWidth={1.5} />
         </Button>
@@ -76,7 +79,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
         ) : error !== null ? (
           <ErrorHint message={error instanceof Error ? error.message : String(error)} />
         ) : data === undefined ? (
-          <ErrorHint message="指标数据为空" />
+          <ErrorHint message={t('dev.metricsEmpty')} />
         ) : (
           <MetricsGrid status={data} />
         )}
@@ -93,24 +96,26 @@ interface MetricsGridProps {
 
 /** 指标卡片网格：2 列布局，紧凑展示 */
 function MetricsGrid({ status }: MetricsGridProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-1.5 p-2">
       {/* 内存指标 */}
       <MetricCard
         icon={MemoryStick}
-        label="RSS 内存"
+        label={t('dev.rssMemory')}
         value={formatBytes(status.memory.rss)}
-        hint="常驻内存集"
+        hint={t('dev.residentMemory')}
       />
       <MetricCard
         icon={MemoryStick}
-        label="堆已用"
+        label={t('dev.heapUsed')}
         value={formatBytes(status.memory.heapUsed)}
-        hint={`总量 ${formatBytes(status.memory.heapTotal)}`}
+        hint={t('dev.heapTotalHint', { value: formatBytes(status.memory.heapTotal) })}
       />
       <MetricCard
         icon={MemoryStick}
-        label="外部内存"
+        label={t('dev.externalMemory')}
         value={formatBytes(status.memory.external)}
         hint={`ArrayBuffer ${formatBytes(status.memory.arrayBuffers)}`}
       />
@@ -118,15 +123,15 @@ function MetricsGrid({ status }: MetricsGridProps): ReactElement {
       {/* CPU 指标 */}
       <MetricCard
         icon={Cpu}
-        label="CPU 用户态"
+        label={t('dev.cpuUser')}
         value={formatMs(status.cpu.user)}
-        hint={`系统态 ${formatMs(status.cpu.system)}`}
+        hint={t('dev.cpuSystemHint', { value: formatMs(status.cpu.system) })}
       />
 
       {/* 运行时长 */}
       <MetricCard
         icon={Timer}
-        label="运行时长"
+        label={t('dev.uptime')}
         value={formatUptime(status.uptimeSeconds)}
         hint={`PID ${status.pid}`}
       />
@@ -170,11 +175,13 @@ interface VersionCardProps {
 
 /** 版本信息卡片：app/electron/node + platform/arch + isPackaged */
 function VersionCard({ status }: VersionCardProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="border-border bg-muted/20 col-span-2 flex flex-col gap-0.5 rounded border px-2 py-1.5">
       <div className="text-muted-foreground flex items-center gap-1 text-[9px]">
         <Activity className="size-2.5 shrink-0" strokeWidth={1.5} />
-        <span className="font-serif tracking-wide">环境信息</span>
+        <span className="font-serif tracking-wide">{t('dev.envInfo')}</span>
       </div>
       <div className="text-foreground/80 font-mono text-[9px] leading-relaxed">
         <div>
@@ -212,10 +219,12 @@ function MetricsSkeleton(): ReactElement {
 
 /** 错误状态提示 */
 function ErrorHint({ message }: { readonly message: string }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
-      <p className="font-serif text-xs">指标获取失败</p>
+      <p className="font-serif text-xs">{t('dev.metricsFailed')}</p>
       <p className="text-muted-foreground truncate text-[10px]">{message}</p>
     </div>
   );

@@ -180,6 +180,78 @@
       "chooseProjectLabel": "Select project directory",
       "dirList": "Project directory list",
       "noRecentDirs": "No recent directories"
+    },
+    "dev": {
+      "runtimeMetrics": "Runtime metrics",
+      "refreshMetrics": "Refresh metrics",
+      "metricsEmpty": "No metrics data",
+      "rssMemory": "RSS memory",
+      "detachWindow": "Detach window",
+      "panelRight": "Right",
+      "panelBottom": "Bottom",
+      "openingDevtools": "Opening…",
+      "devtoolsOpened": "DevTools opened ({{mode}})",
+      "openFailedSender": "Open failed: sender window does not exist",
+      "unknownResponse": "Unknown response",
+      "all": "All",
+      "truncated": " (truncated)",
+      "refreshLogs": "Refresh logs",
+      "collapsePanel": "Collapse dev panel",
+      "expandPanel": "Expand dev panel",
+      "tabTerminal": "Terminal",
+      "tabLogs": "Logs",
+      "tabMetrics": "Metrics",
+      "tabInspector": "Inspector",
+      "developerTools": "Developer tools",
+      "developerToolsDesc": "Open the built-in browser devtools (Elements / Console / Sources / Network / Performance)",
+      "openDevtoolsMode": "Open DevTools in {{mode}} mode",
+      "heapUsed": "Heap used",
+      "heapTotalHint": "Total {{value}}",
+      "externalMemory": "External memory",
+      "residentMemory": "Resident memory",
+      "cpuUser": "CPU user",
+      "cpuSystemHint": "System {{value}}",
+      "uptime": "Uptime",
+      "envInfo": "Environment",
+      "metricsFailed": "Failed to fetch metrics"
+    },
+    "git": {
+      "statusModified": "Modified",
+      "statusAdded": "Added",
+      "statusDeleted": "Deleted",
+      "statusRenamed": "Renamed",
+      "statusUntracked": "Untracked",
+      "statusConflict": "Conflict",
+      "refreshStatus": "Refresh Git status"
+    },
+    "fileViewer": {
+      "copyFailed": "Copy failed: clipboard unavailable",
+      "saved": "Saved",
+      "editor": "Editor",
+      "unsaved": "Unsaved",
+      "lines": "{{count}} lines",
+      "switchToEdit": "Switch to edit mode",
+      "switchToPreview": "Switch to preview mode"
+    },
+    "fileTree": {
+      "emptyDesc": "Select or create a session first",
+      "treeLabel": "File tree - {{name}}",
+      "toolbarLabel": "File tree actions",
+      "newFileInRoot": "New file in root",
+      "newFile": "New file",
+      "newDirInRoot": "New directory in root",
+      "newDir": "New directory",
+      "moreActions": "More actions",
+      "rename": "Rename",
+      "emptyDir": "Empty directory"
+    },
+    "terminal": {
+      "createFailed": "Failed to create terminal: {{message}}",
+      "closeFailed": "Failed to close terminal: {{message}}",
+      "creating": "Creating…",
+      "newTerminal": "New terminal",
+      "closed": "Closed",
+      "closeTerminal": "Close terminal"
     }
   }
 }

@@ -15,6 +15,9 @@
 
 import { vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+// 初始化 i18next（资源内联，同步完成；语言已由 setup-lang.ts 固定为 zh-CN）
+// 同步 import：组件内 t() 返回默认中文文案，测试断言保持中文
+import '@/i18n';
 
 // ── window.api 全局 mock ────────────────────────────────────
 //

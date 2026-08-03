@@ -285,7 +285,7 @@ export function HomePage(): ReactElement {
           </button>
         );
       }),
-    [dirs, pendingWorkingDir, handleSelectFolder],
+    [dirs, pendingWorkingDir, handleSelectFolder, t],
   );
 
   return (

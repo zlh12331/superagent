@@ -37,6 +37,7 @@ import { MetricsPanel } from '@/components/dev/MetricsPanel';
 import { GitPanel } from '@/components/git/GitPanel';
 import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
 interface DevPanelProps {
@@ -74,6 +75,8 @@ export const DevPanel = memo(function DevPanel({
   gitRepoPath,
   className,
 }: DevPanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 面板折叠状态（默认折叠，避免初次进入即占据主区域空间）
   const [expanded, setExpanded] = useState(false);
 
@@ -99,7 +102,7 @@ export const DevPanel = memo(function DevPanel({
             setExpanded((prev) => !prev);
           }}
           aria-expanded={expanded}
-          aria-label={expanded ? '收起开发面板' : '展开开发面板'}
+          aria-label={expanded ? t('dev.collapsePanel') : t('dev.expandPanel')}
         >
           {expanded ? (
             <ChevronDown className="size-3" strokeWidth={1.5} />
@@ -123,7 +126,7 @@ export const DevPanel = memo(function DevPanel({
           <TabsList className="bg-transparent h-5 gap-1 p-0">
             <TabsTrigger value="terminal" className="h-5 gap-1 px-2 py-0 text-[10px]">
               <TerminalSquare className="size-3" strokeWidth={1.5} />
-              终端
+              {t('dev.tabTerminal')}
             </TabsTrigger>
             <TabsTrigger value="git" className="h-5 gap-1 px-2 py-0 text-[10px]">
               <GitBranch className="size-3" strokeWidth={1.5} />
@@ -131,15 +134,15 @@ export const DevPanel = memo(function DevPanel({
             </TabsTrigger>
             <TabsTrigger value="logs" className="h-5 gap-1 px-2 py-0 text-[10px]">
               <ScrollText className="size-3" strokeWidth={1.5} />
-              日志
+              {t('dev.tabLogs')}
             </TabsTrigger>
             <TabsTrigger value="metrics" className="h-5 gap-1 px-2 py-0 text-[10px]">
               <Activity className="size-3" strokeWidth={1.5} />
-              指标
+              {t('dev.tabMetrics')}
             </TabsTrigger>
             <TabsTrigger value="inspector" className="h-5 gap-1 px-2 py-0 text-[10px]">
               <Wrench className="size-3" strokeWidth={1.5} />
-              检查器
+              {t('dev.tabInspector')}
             </TabsTrigger>
           </TabsList>
         </Tabs>
