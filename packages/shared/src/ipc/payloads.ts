@@ -19,109 +19,61 @@
 
 import type { z } from 'zod';
 import type {
-  AgentApprovalRequestPayload,
   AgentApprovalResponseReqSchema,
   AgentRunReqSchema,
-  AgentRunRes,
   AgentStopReqSchema,
-  AgentStopRes,
-  AgentStreamEndPayload,
-  AgentStreamErrorPayload,
-  AgentStreamPartPayload,
-  AgentToolCallPayload,
-  AgentToolResultPayload,
 } from '../schemas/agent';
 import type { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
 import type {
   CodebaseCalleesReqSchema,
-  CodebaseCalleesRes,
   CodebaseCallersReqSchema,
-  CodebaseCallersRes,
   CodebaseExploreReqSchema,
-  CodebaseExploreRes,
   CodebaseImpactReqSchema,
-  CodebaseImpactRes,
   CodebaseNodeReqSchema,
-  CodebaseNodeRes,
   CodebaseQueryReqSchema,
-  CodebaseQueryRes,
 } from '../schemas/codebase';
-import type { OpenDevToolsReq, OpenDevToolsRes } from '../schemas/devtools';
-import type { DialogPickDirectoryReq, DialogPickDirectoryRes } from '../schemas/dialog';
 import type {
   FileCreateDirReqSchema,
-  FileCreateDirRes,
   FileCreateReqSchema,
-  FileCreateRes,
   FileDeleteReqSchema,
-  FileDeleteRes,
   FileListReqSchema,
-  FileListRes,
   FileReadReqSchema,
-  FileReadRes,
   FileRenameReqSchema,
-  FileRenameRes,
-  FileWatchEventPayload,
   FileWatchStartReqSchema,
-  FileWatchStartRes,
   FileWatchStopReqSchema,
-  FileWatchStopRes,
   FileWriteReqSchema,
-  FileWriteRes,
 } from '../schemas/file';
 import type {
   GitAddReqSchema,
-  GitAddRes,
   GitCommitReqSchema,
-  GitCommitRes,
   GitDiffReqSchema,
-  GitDiffRes,
   GitPushReqSchema,
-  GitPushRes,
   GitStatusReqSchema,
-  GitStatusRes,
 } from '../schemas/git';
-import type { GlobReqSchema, GlobRes, GrepReqSchema, GrepRes } from '../schemas/search';
+import type { GlobReqSchema, GrepReqSchema } from '../schemas/search';
 import type {
   SessionCreateReqSchema,
-  SessionCreateRes,
   SessionDeleteReqSchema,
-  SessionDeleteRes,
   SessionGetReqSchema,
-  SessionGetRes,
   SessionListRecentDirsReqSchema,
-  SessionListRecentDirsRes,
   SessionListReqSchema,
-  SessionListRes,
   SessionRenameReqSchema,
-  SessionRenameRes,
 } from '../schemas/session';
 import type {
   DeleteApiKeyReqSchema,
-  DeleteApiKeyRes,
   GetApiKeyReqSchema,
-  GetApiKeyRes,
-  GetTelemetryLevelRes,
   SetApiKeyReqSchema,
-  SetApiKeyRes,
   SetTelemetryLevelReqSchema,
-  SetTelemetryLevelRes,
 } from '../schemas/settings';
-import type { ReadLogsReq, ReadLogsRes, SystemStatusRes } from '../schemas/system';
 import type {
-  TerminalCreatedEventPayload,
   TerminalCreateReqSchema,
-  TerminalCreateRes,
-  TerminalExitEventPayload,
   TerminalInputReqSchema,
-  TerminalInputRes,
   TerminalKillReqSchema,
-  TerminalKillRes,
-  TerminalOutputEventPayload,
   TerminalResizeReqSchema,
-  TerminalResizeRes,
 } from '../schemas/terminal';
-import type { ToolListReqSchema, ToolListRes } from '../schemas/tool';
+import type { ToolListReqSchema } from '../schemas/tool';
+import type { IPC_DEFINITIONS } from './definitions';
+import type { InferEventMap, InferRequestMap } from './derive';
 
 // 从 schemas/chat.ts 重新导出 ChatMessage 类型（= AI SDK 的 ModelMessage）
 export type { ChatMessage } from '../schemas/chat';
@@ -380,106 +332,13 @@ export { OpenDevToolsReqSchema } from '../schemas/devtools';
  * 渲染层通过 ipcRenderer.invoke(channel, req) 调用，
  * 主进程通过 ipcMain.handle(channel, (e, req: Req) => Res) 注册 handler。
  *
- * 类型完整性：所有在 channels.ts 中定义的请求-响应 channel 必须在此映射中存在，
- * 否则 IpcApi 的 invoke 方法类型推断会失败。
+ * 类型完整性：所有在 definitions.ts 中定义的请求-响应 channel 自动进入此映射，
+ * 无需手写（由 InferRequestMap 推导）。
  */
-export interface IpcRequestMap {
-  // 应用级
-  'app:getStatus': { req: void; res: AppStatus };
-  'app:openExternal': { req: { url: string }; res: { ok: boolean } };
-
-  // 聊天域（Vercel AI SDK v7，单轮流式响应，保留兼容）
-  'chat:send': { req: ChatSendReq; res: ChatSendRes };
-  'chat:stop': { req: ChatStopReq; res: ChatStopRes };
-
-  // Agent 域（Code Agent 核心，多轮工具调用）
-  // agent:run 发起对话，返回 sessionId；后续通过 agent:stream:* / agent:tool:* / agent:approval:* 推送事件
-  'agent:run': { req: AgentRunReq; res: AgentRunRes };
-  'agent:stop': { req: AgentStopReq; res: AgentStopRes };
-  // agent:approval:response 是审批回传通道（请求-响应模式）
-  // 主进程收到 response 后 resolve 对应 approvalId 的 Promise，ToolExecutor 继续/中止执行
-  'agent:approval:response': {
-    req: AgentApprovalResponseReq;
-    res: { ok: boolean };
-  };
-
-  // 文件域（文件读写 + 目录列表 + 文件监听）
-  'file:read': { req: FileReadReq; res: FileReadRes };
-  'file:write': { req: FileWriteReq; res: FileWriteRes };
-  'file:list': { req: FileListReq; res: FileListRes };
-  // file:watch:start 发起监听，返回 watcherId；后续通过 file:watch:event 推送变更
-  'file:watch:start': { req: FileWatchStartReq; res: FileWatchStartRes };
-  // file:watch:stop 停止指定 watcher
-  'file:watch:stop': { req: FileWatchStopReq; res: FileWatchStopRes };
-  // 文件树编辑操作（新建/删除/重命名）
-  'file:create': { req: FileCreateReq; res: FileCreateRes };
-  'file:createDir': { req: FileCreateDirReq; res: FileCreateDirRes };
-  'file:delete': { req: FileDeleteReq; res: FileDeleteRes };
-  'file:rename': { req: FileRenameReq; res: FileRenameRes };
-
-  // 搜索域（ripgrep + glob）
-  'search:grep': { req: GrepReq; res: GrepRes };
-  'search:glob': { req: GlobReq; res: GlobRes };
-
-  // 终端域（node-pty 会话池）
-  'terminal:create': { req: TerminalCreateReq; res: TerminalCreateRes };
-  'terminal:input': { req: TerminalInputReq; res: TerminalInputRes };
-  'terminal:resize': { req: TerminalResizeReq; res: TerminalResizeRes };
-  'terminal:kill': { req: TerminalKillReq; res: TerminalKillRes };
-
-  // Git 域（Git CLI 封装）
-  'git:status': { req: GitStatusReq; res: GitStatusRes };
-  'git:diff': { req: GitDiffReq; res: GitDiffRes };
-  'git:add': { req: GitAddReq; res: GitAddRes };
-  'git:commit': { req: GitCommitReq; res: GitCommitRes };
-  'git:push': { req: GitPushReq; res: GitPushRes };
-
-  // 代码库域（codegraph CLI 封装，代码智能查询）
-  'codebase:query': { req: CodebaseQueryReq; res: CodebaseQueryRes };
-  'codebase:explore': { req: CodebaseExploreReq; res: CodebaseExploreRes };
-  'codebase:node': { req: CodebaseNodeReq; res: CodebaseNodeRes };
-  'codebase:callers': { req: CodebaseCallersReq; res: CodebaseCallersRes };
-  'codebase:callees': { req: CodebaseCalleesReq; res: CodebaseCalleesRes };
-  'codebase:impact': { req: CodebaseImpactReq; res: CodebaseImpactRes };
-
-  // 会话域（SQLite 持久化）
-  'session:list': { req: SessionListReq; res: SessionListRes };
-  'session:get': { req: SessionGetReq; res: SessionGetRes };
-  'session:delete': { req: SessionDeleteReq; res: SessionDeleteRes };
-  'session:rename': { req: SessionRenameReq; res: SessionRenameRes };
-  // 会话域 — 创建 + 最近目录
-  'session:create': { req: SessionCreateReq; res: SessionCreateRes };
-  'session:listRecentDirs': { req: SessionListRecentDirsReq; res: SessionListRecentDirsRes };
-
-  // 工具域（工具系统元数据查询）
-  // tool:list 列出当前已注册的工具清单（含权限级别，供渲染层展示工具面板）
-  'tool:list': { req: ToolListReq; res: ToolListRes };
-
-  // Settings 域（API Key / 敏感数据管理 / 遥测级别）
-  // settings:getApiKey 返回明文或 null，settings:setApiKey 加密后存储，settings:deleteApiKey 删除
-  'settings:getApiKey': { req: GetApiKeyReq; res: GetApiKeyRes };
-  'settings:setApiKey': { req: SetApiKeyReq; res: SetApiKeyRes };
-  'settings:deleteApiKey': { req: DeleteApiKeyReq; res: DeleteApiKeyRes };
-  // settings:getTelemetryLevel 查询遥测级别，settings:setTelemetryLevel 修改（需重启生效）
-  'settings:getTelemetryLevel': { req: void; res: GetTelemetryLevelRes };
-  'settings:setTelemetryLevel': { req: SetTelemetryLevelReq; res: SetTelemetryLevelRes };
-
-  // System 域（运行时可观测性，DevPanel 使用）
-  // system:getStatus 返回运行时状态（内存/CPU/uptime/版本），无入参
-  // logs:read 读取最近 N 行日志（从 main.log 文件尾部倒读），入参全可选
-  'system:getStatus': { req: void; res: SystemStatusRes };
-  'logs:read': { req: ReadLogsReq; res: ReadLogsRes };
-
-  // DevTools 域（开发者工具集成，DevPanel Inspector tab 使用）
-  // devtools:open 打开 Chromium DevTools，入参 { mode? } 默认 detach 独立窗口
-  'devtools:open': { req: OpenDevToolsReq; res: OpenDevToolsRes };
-
-  // Dialog 域（原生目录选择器）
-  'dialog:pickDirectory': { req: DialogPickDirectoryReq; res: DialogPickDirectoryRes };
-}
+export type IpcRequestMap = InferRequestMap<typeof IPC_DEFINITIONS>;
 
 /**
- * 流式/事件 channel payload 映射
+ * 流式/事件 channel payload 映射（从 IPC_DEFINITIONS 自动推导）
  *
  * 流式 channel 由主进程主动 webContents.send 推送，渲染层通过 ipcRenderer.on 订阅。
  * 事件 channel 同样由主进程推送，但表示一次性状态变更（如终端退出）。
@@ -490,39 +349,4 @@ export interface IpcRequestMap {
  *
  * 渲染层订阅后必须按 sessionId / terminalId 过滤事件，避免跨会话污染。
  */
-export interface IpcEventMap {
-  // ── Chat 域流式事件（保留兼容） ───────────────────
-  // 主进程逐 part 推送 UIMessageStreamPart
-  'chat:stream:part': ChatStreamPartPayload;
-  // 聊天流正常结束
-  'chat:stream:end': ChatStreamEndPayload;
-  // 聊天流异常结束
-  'chat:stream:error': ChatStreamErrorPayload;
-
-  // ── Agent 域流式事件（Code Agent 核心） ────────────
-  // 主进程逐 part 推送 UIMessageStreamPart（text/tool-call/tool-result/finish 等）
-  'agent:stream:part': AgentStreamPartPayload;
-  // agent 对话结束（含原因：completed/aborted/error）
-  'agent:stream:end': AgentStreamEndPayload;
-  // agent 对话异常结束（错误码 + 消息）
-  'agent:stream:error': AgentStreamErrorPayload;
-  // 工具调用事件：主进程推送工具调用详情，渲染层展示 UI
-  'agent:tool:call': AgentToolCallPayload;
-  // 工具执行结果事件：主进程推送工具执行结果（含 output 或 error）
-  'agent:tool:result': AgentToolResultPayload;
-  // 审批请求事件：主进程请求用户审批（permission='ask' 的工具调用）
-  // 渲染层弹出 ApprovalModal，用户选择后通过 agent:approval:response 回传结果
-  'agent:approval:request': AgentApprovalRequestPayload;
-
-  // ── 文件域事件（chokidar 监听） ───────────────────
-  // 文件系统变更事件：create/modify/delete/rename（携带 watcherId 关联）
-  'file:watch:event': FileWatchEventPayload;
-
-  // ── 终端域事件（node-pty 输出与退出） ──────────────
-  // 终端创建成功（通知渲染层有新终端，包括 Agent 工具创建的）
-  'terminal:event:created': TerminalCreatedEventPayload;
-  // 终端原始输出（含 ANSI 转义序列，未解码，渲染层用 xterm.js 直接 write）
-  'terminal:event:output': TerminalOutputEventPayload;
-  // 终端进程退出（exitCode 0 正常退出，非 0 异常退出）
-  'terminal:event:exit': TerminalExitEventPayload;
-}
+export type IpcEventMap = InferEventMap<typeof IPC_DEFINITIONS>;

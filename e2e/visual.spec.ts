@@ -27,7 +27,7 @@ test.describe('视觉回归测试', () => {
     // 等待应用完全渲染（React 挂载 + 网络资源加载）
     await page.waitForLoadState('networkidle');
     // Topbar 应用名称可见表明布局已稳定（比 ChatInput 更稳定，不受初始化时序影响）
-    await expect(page.getByText('网文写作 Agent').first()).toBeVisible({
+    await expect(page.getByText('Code Agent').first()).toBeVisible({
       timeout: 15_000,
     });
 

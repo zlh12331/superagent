@@ -3,7 +3,7 @@
 //
 // 测试场景：
 // 1. 应用启动后页面可见
-// 2. 顶栏显示应用名称"网文写作 Agent"
+// 2. 顶栏显示应用名称"Code Agent Desktop"
 // 3. 首页渲染 ChatInput 输入框
 // 4. 主题切换按钮可点击
 
@@ -13,7 +13,7 @@ test.describe('冒烟测试：应用启动', () => {
   test('应用启动后页面正常渲染', async ({ page }) => {
     await page.goto('/');
     // 顶栏显示应用名称
-    await expect(page.getByText('网文写作 Agent').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Code Agent').first()).toBeVisible({ timeout: 15_000 });
   });
 
   test('首页渲染 ChatInput 输入框', async ({ page }) => {

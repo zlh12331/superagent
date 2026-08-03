@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./ipc/channels": "./src/ipc/channels.ts"
+    "./ipc/channels": "./src/ipc/channels.ts",
+    "./ipc/meta": "./src/ipc/meta.ts"
   },
   "scripts": {
     "test": "vitest run",

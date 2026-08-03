@@ -18,6 +18,9 @@ export * from './constants/errors';
 // IPC 类型契约（§5）
 export * from './ipc/api';
 export * from './ipc/channels';
+export * from './ipc/definitions';
+export * from './ipc/derive';
+export * from './ipc/meta';
 export * from './ipc/payloads';
 export * from './ipc/response';
 

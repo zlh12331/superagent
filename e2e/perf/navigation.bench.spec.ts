@@ -23,7 +23,7 @@ test.describe('性能基准：页面加载与渲染', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // 等待 Topbar 应用名称可见（应用就绪标志，比 ChatInput 更稳定）
-    await expect(page.getByText('网文写作 Agent').first()).toBeVisible({
+    await expect(page.getByText('Code Agent').first()).toBeVisible({
       timeout: 15_000,
     });
     const duration = performance.now() - start;

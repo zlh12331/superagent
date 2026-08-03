@@ -23,7 +23,7 @@ import { _electron as electron } from 'playwright';
 
 // win-unpacked 可执行文件路径
 // electron-builder 打包后输出到 release/win-unpacked/<productName>.exe
-const PRODUCT_NAME = '网文写作 Agent';
+const PRODUCT_NAME = 'Code Agent Desktop';
 const EXECUTABLE_PATH = join(process.cwd(), 'release', 'win-unpacked', `${PRODUCT_NAME}.exe`);
 
 // 启动打包后的 Electron 应用
@@ -63,7 +63,7 @@ test.describe('生产构建冒烟测试', () => {
 
     // 应用标题正确
     const title = await page.title();
-    expect(title).toContain('网文写作 Agent');
+    expect(title).toContain('Code Agent Desktop');
 
     // root 节点有子元素（React 已渲染）
     const rootChildCount = await page.evaluate(() => {

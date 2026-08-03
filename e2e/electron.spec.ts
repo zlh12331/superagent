@@ -66,7 +66,7 @@ test.describe('Electron 应用 E2E 测试', () => {
 
     // 应用标题正确
     const title = await page.title();
-    expect(title).toContain('网文写作 Agent');
+    expect(title).toContain('Code Agent Desktop');
 
     // root 节点有子元素（React 已渲染）
     const rootChildCount = await page.evaluate(() => {
