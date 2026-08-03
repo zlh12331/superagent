@@ -15,6 +15,35 @@
       "noResults": "无匹配结果",
       "yes": "是",
       "no": "否"
+    },
+    "topbar": {
+      "expandSidebar": "展开侧边栏",
+      "collapseSidebar": "折叠侧边栏",
+      "expandPanel": "展开右侧面板",
+      "collapsePanel": "折叠右侧面板",
+      "commandPalette": "命令面板",
+      "settings": "设置",
+      "toggleTheme": "切换主题"
+    },
+    "sidebar": {
+      "sessionList": "会话列表",
+      "searchSessions": "搜索会话…",
+      "recentSessions": "最近会话",
+      "newSession": "新建会话",
+      "tabsRecent": "最近",
+      "tabsFiles": "文件",
+      "tabsArchived": "归档",
+      "notLoggedIn": "未登录",
+      "unlabeled": "未分组",
+      "noSessions": "尚无会话",
+      "newSessionHint": "点击上方「新建会话」开始",
+      "errorLoad": "会话列表加载失败",
+      "collapseFolder": "折叠文件夹",
+      "folder": "文件夹",
+      "newSessionIn": "在 {{name}} 新建会话",
+      "newSessionInFolder": "在此文件夹新建会话",
+      "dragSort": "拖拽排序",
+      "sessionActions": "会话操作"
     }
   }
 }

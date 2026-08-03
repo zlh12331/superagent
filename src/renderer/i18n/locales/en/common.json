@@ -15,6 +15,35 @@
       "noResults": "No results",
       "yes": "Yes",
       "no": "No"
+    },
+    "topbar": {
+      "expandSidebar": "Expand sidebar",
+      "collapseSidebar": "Collapse sidebar",
+      "expandPanel": "Expand panel",
+      "collapsePanel": "Collapse panel",
+      "commandPalette": "Command palette",
+      "settings": "Settings",
+      "toggleTheme": "Toggle theme"
+    },
+    "sidebar": {
+      "sessionList": "Sessions",
+      "searchSessions": "Search sessions…",
+      "recentSessions": "Recent sessions",
+      "newSession": "New session",
+      "tabsRecent": "Recent",
+      "tabsFiles": "Files",
+      "tabsArchived": "Archived",
+      "notLoggedIn": "Not signed in",
+      "unlabeled": "Ungrouped",
+      "noSessions": "No sessions yet",
+      "newSessionHint": "Click \"New session\" above to start",
+      "errorLoad": "Failed to load sessions",
+      "collapseFolder": "Collapse folder",
+      "folder": "Folder",
+      "newSessionIn": "New session in {{name}}",
+      "newSessionInFolder": "New session in this folder",
+      "dragSort": "Drag to reorder",
+      "sessionActions": "Session actions"
     }
   }
 }

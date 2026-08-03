@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
+import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -69,10 +70,10 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
-/** 从 workingDir 提取 basename，用于 folder 分组 */
+/** 从 workingDir 提取 basename，用于 folder 分组（无 basename 返回空串，展示时本地化「未分组」） */
 function getFolderName(workingDir: string): string {
   const basename = workingDir.split(/[\\/]/).pop();
-  return basename && basename.length > 0 ? basename : '未分组';
+  return basename && basename.length > 0 ? basename : '';
 }
 
 /**
@@ -83,6 +84,8 @@ function getFolderName(workingDir: string): string {
  */
 export const Sidebar = memo(function Sidebar(): ReactElement {
   const navigate = useNavigate();
+  // 本地化文案
+  const { t } = useTranslation();
 
   // L3 TanStack Query：会话列表数据
   const { data, isLoading, error } = useSessionsQuery();
@@ -207,20 +210,20 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
   };
 
   return (
-    <aside className="sidebar" aria-label="会话列表">
+    <aside className="sidebar" aria-label={t('sidebar.sessionList')}>
       {/* 顶部：新建会话按钮 + 搜索框 + tabs */}
       <div className="sidebar-head">
         <button type="button" className="new-thread-btn" onClick={handleNewChat}>
           <Plus className="size-3.5" strokeWidth={2.5} />
-          新建会话
+          {t('sidebar.newSession')}
         </button>
         <div className="sidebar-search">
           <Search className="sidebar-search-icon" size={13} strokeWidth={2} />
           <input
             type="text"
             className="sidebar-search-input"
-            placeholder="搜索会话…"
-            aria-label="搜索会话"
+            placeholder={t('sidebar.searchSessions')}
+            aria-label={t('sidebar.searchSessions')}
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
           />
@@ -233,7 +236,7 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
             aria-selected={activeTab === 'recent'}
             onClick={() => setActiveTab('recent')}
           >
-            最近 <span className="count">{sessions.length}</span>
+            {t('sidebar.tabsRecent')} <span className="count">{sessions.length}</span>
           </button>
           <button
             type="button"
@@ -242,7 +245,7 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
             aria-selected={activeTab === 'files'}
             onClick={() => setActiveTab('files')}
           >
-            文件
+            {t('sidebar.tabsFiles')}
           </button>
           <button
             type="button"
@@ -251,7 +254,7 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
             aria-selected={activeTab === 'archived'}
             onClick={() => setActiveTab('archived')}
           >
-            归档 <span className="count">0</span>
+            {t('sidebar.tabsArchived')} <span className="count">0</span>
           </button>
         </div>
       </div>
@@ -267,9 +270,9 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
         ) : sessions.length === 0 ? (
           <EmptyHint />
         ) : (
-          <nav aria-label="会话列表">
+          <nav aria-label={t('sidebar.sessionList')}>
             <div className="thread-group-label">
-              <span>最近会话</span>
+              <span>{t('sidebar.recentSessions')}</span>
             </div>
             <DndContext
               sensors={sensors}
@@ -298,7 +301,7 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
       <div className="sidebar-foot">
         <div className="avatar">U</div>
         <div className="user-info">
-          <div className="uname">未登录</div>
+          <div className="uname">{t('sidebar.notLoggedIn')}</div>
           <div className="uemail">local-user</div>
         </div>
       </div>
@@ -339,6 +342,8 @@ function FolderGroup({
   onCreateInFolder,
 }: FolderGroupProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false);
+  // 本地化文案
+  const { t } = useTranslation();
 
   // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
   const orderedSessions = useMemo(() => {
@@ -368,9 +373,9 @@ function FolderGroup({
             stroke="currentColor"
             strokeWidth="2.5"
             role="img"
-            aria-label="折叠文件夹"
+            aria-label={t('sidebar.collapseFolder')}
           >
-            <title>折叠文件夹</title>
+            <title>{t('sidebar.collapseFolder')}</title>
             <path d="M6 9l6 6 6-6" />
           </svg>
         </span>
@@ -383,21 +388,23 @@ function FolderGroup({
             stroke="currentColor"
             strokeWidth="2"
             role="img"
-            aria-label="文件夹"
+            aria-label={t('sidebar.folder')}
           >
-            <title>文件夹</title>
+            <title>{t('sidebar.folder')}</title>
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
           </svg>
         </span>
-        <span className="fl-name">{folderName}</span>
+        <span className="fl-name">
+          {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
+        </span>
         {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
         {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
         <span
           className="fl-add-btn"
           role="button"
           tabIndex={0}
-          aria-label={`在 ${folderName} 新建会话`}
-          title="在此文件夹新建会话"
+          aria-label={t('sidebar.newSessionIn', { name: folderName })}
+          title={t('sidebar.newSessionInFolder')}
           onClick={(event) => {
             event.stopPropagation();
             onCreateInFolder(folderName);
@@ -518,6 +525,8 @@ function ThreadItem({
   onDelete,
   dragHandleProps,
 }: ThreadItemProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
   const metaParts: string[] = [formatRelativeTime(updatedAt)];
   if (lastMessage !== undefined && lastMessage.length > 0) {
@@ -545,7 +554,7 @@ function ThreadItem({
         {/* ti-dot：拖拽手柄（dnd-kit），hover 显示抓取光标；不参与点击选择（title 提供可访问说明） */}
         <span
           className="ti-dot cursor-grab active:cursor-grabbing"
-          title="拖拽排序"
+          title={t('sidebar.dragSort')}
           {...dragHandleProps}
         />
         <div className="ti-content">
@@ -561,7 +570,7 @@ function ThreadItem({
                 variant="ghost"
                 size="icon"
                 className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground h-6 w-6"
-                aria-label="会话操作"
+                aria-label={t('sidebar.sessionActions')}
                 disabled={isDeleting}
                 onClick={(event) => event.stopPropagation()}
               >
@@ -605,19 +614,21 @@ function LoadingList(): ReactElement {
 
 /** 空状态提示 */
 function EmptyHint(): ReactElement {
+  const { t } = useTranslation();
   return (
     <div className="text-muted-foreground p-6 text-center">
-      <p className="font-serif text-sm tracking-wide">尚无会话</p>
-      <p className="mt-1 text-xs">点击上方「新建会话」开始</p>
+      <p className="font-serif text-sm tracking-wide">{t('sidebar.noSessions')}</p>
+      <p className="mt-1 text-xs">{t('sidebar.newSessionHint')}</p>
     </div>
   );
 }
 
 /** 错误状态提示 */
 function ErrorHint({ message }: { readonly message: string }): ReactElement {
+  const { t } = useTranslation();
   return (
     <div className="text-destructive p-4 text-center">
-      <p className="font-serif text-sm">会话列表加载失败</p>
+      <p className="font-serif text-sm">{t('sidebar.errorLoad')}</p>
       <p className="mt-1 truncate text-xs" title={message}>
         {message}
       </p>

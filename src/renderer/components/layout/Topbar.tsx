@@ -21,6 +21,7 @@ import { memo, type ReactElement, useState } from 'react';
 
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 
@@ -52,6 +53,8 @@ export const Topbar = memo(function Topbar({
 }: TopbarProps): ReactElement {
   const { resolvedTheme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 本地化文案
+  const { t } = useTranslation();
 
   return (
     <header className="topbar">
@@ -59,8 +62,8 @@ export const Topbar = memo(function Topbar({
       <button
         type="button"
         className="icon-btn sb-collapse-btn"
-        aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
-        title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
+        aria-label={sidebarCollapsed ? t('topbar.expandSidebar') : t('topbar.collapseSidebar')}
+        title={sidebarCollapsed ? t('topbar.expandSidebar') : t('topbar.collapseSidebar')}
         aria-expanded={!sidebarCollapsed}
         onClick={onToggleSidebar}
       >
@@ -84,8 +87,8 @@ export const Topbar = memo(function Topbar({
         <button
           type="button"
           className="icon-btn rp-toggle-btn"
-          aria-label={rightPanelCollapsed ? '展开右面板' : '折叠右面板'}
-          title={rightPanelCollapsed ? '展开右面板' : '折叠右面板'}
+          aria-label={rightPanelCollapsed ? t('topbar.expandPanel') : t('topbar.collapsePanel')}
+          title={rightPanelCollapsed ? t('topbar.expandPanel') : t('topbar.collapsePanel')}
           aria-expanded={!rightPanelCollapsed}
           onClick={onToggleRightPanel}
         >
@@ -94,8 +97,8 @@ export const Topbar = memo(function Topbar({
         <button
           type="button"
           className="icon-btn"
-          aria-label="命令面板"
-          title="命令面板 (⌘P)"
+          aria-label={t('topbar.commandPalette')}
+          title={`${t('topbar.commandPalette')} (⌘P)`}
           onClick={onOpenCommandPalette}
         >
           <Command className="size-4" strokeWidth={1.5} />
@@ -103,7 +106,7 @@ export const Topbar = memo(function Topbar({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="设置"
+          aria-label={t('topbar.settings')}
           onClick={() => setSettingsOpen(true)}
           className={cn(
             'text-muted-foreground hover:bg-sidebar-accent',
@@ -115,7 +118,7 @@ export const Topbar = memo(function Topbar({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="切换主题"
+          aria-label={t('topbar.toggleTheme')}
           onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
           className={cn(
             'text-muted-foreground hover:bg-sidebar-accent',
