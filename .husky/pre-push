@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# .husky/pre-push
+# 推送前钩子：快速门禁（typecheck + lint + scripts 测试）
+#
+# 设计：
+# - 全量测试（unit/e2e）由 CI 覆盖，本地推送只跑秒级快速门禁
+# - typecheck：增量编译，防止带类型错误推送
+# - lint：全量 Biome 检查（含格式/import 排序）
+# - test:scripts：脚手架纯函数测试（秒级）
+# - 用户可设 SKIP_PREPUSH=1 完全跳过（紧急推送时）
+#
+# 注意：与 pre-commit（lint-staged 只检查暂存区）互补，
+# pre-push 检查工作区全量状态，防"暂存区通过但工作区带错"推送
+
+if [ "$SKIP_PREPUSH" = "1" ]; then
+  echo "[pre-push] SKIP_PREPUSH=1，跳过快速门禁"
+  exit 0
+fi
+
+echo "[pre-push] 运行快速门禁（typecheck + lint + test:scripts）..."
+
+pnpm typecheck || exit 1
+pnpm lint || exit 1
+pnpm test:scripts || exit 1
+
+echo "[pre-push] 快速门禁通过 ✓"

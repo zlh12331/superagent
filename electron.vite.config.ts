@@ -6,12 +6,46 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 // Source Map 生成配置（用于 Sentry 符号上传）
 // - main/preload: 'hidden' 生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
 // - renderer: 'sourcemap' 标准 source map（Vite 默认开发行为）
 // 生成后通过 `pnpm sentry:upload:symbols` 上传到 Sentry
 const SOURCEMAP_MODE = 'hidden' as const;
+
+// 包体积分析：`pnpm analyze:bundle` 时启用 rollup-plugin-visualizer
+// - 渲染层产物生成交互式 treemap（stats/renderer-bundle.html）+ 机器可读 stats.json
+// - 不注入 ANALYZE_BUNDLE=1 时零开销（不参与日常构建）
+const ANALYZE_BUNDLE = process.env.ANALYZE_BUNDLE === '1';
+
+/** 渲染层插件列表（analyze 模式追加体积分析插件） */
+function rendererPlugins() {
+  const plugins = [
+    react({
+      // 启用 React Compiler（React 19.2 官方推荐，自动 memoize）
+      babel: {
+        plugins: [['babel-plugin-react-compiler']],
+      },
+    }),
+    // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
+    // 文档：https://tailwindcss.com/docs/installation/using-vite
+    tailwindcss(),
+  ];
+  if (ANALYZE_BUNDLE) {
+    plugins.push(
+      visualizer({
+        filename: 'stats/renderer-bundle.html',
+        gzipSize: true,
+        brotliSize: true,
+        // 同时输出 stats.json 供脚本/CI 解析对比
+        json: true,
+        template: 'treemap',
+      }),
+    );
+  }
+  return plugins;
+}
 
 // biome-ignore lint/style/noDefaultExport: electron-vite 框架要求 config 文件必须使用 export default
 export default defineConfig({
@@ -60,16 +94,6 @@ export default defineConfig({
         },
       },
     },
-    plugins: [
-      react({
-        // 启用 React Compiler（React 19.2 官方推荐，自动 memoize）
-        babel: {
-          plugins: [['babel-plugin-react-compiler']],
-        },
-      }),
-      // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
-      // 文档：https://tailwindcss.com/docs/installation/using-vite
-      tailwindcss(),
-    ],
+    plugins: rendererPlugins(),
   },
 });

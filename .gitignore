@@ -36,6 +36,12 @@ logs/
 # 测试覆盖率
 coverage/
 
+# 包体积分析产物（pnpm analyze:bundle 生成，按需分析不入仓）
+stats/
+
+# TypeDoc 生成的 API 文档（pnpm docs:types 按需生成，不入仓）
+docs/api/
+
 # Playwright 测试产物（trace / report / 截图 / 视频）
 playwright-report/
 playwright-report-electron/
