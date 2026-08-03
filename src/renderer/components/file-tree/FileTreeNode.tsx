@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useFileTreeOps } from '@/hooks/use-file-tree-ops';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
@@ -60,6 +61,8 @@ export const FileTreeNode = memo(function FileTreeNode({
   depth,
   onOpenFile,
 }: FileTreeNodeProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 订阅自身展开状态
   const expanded = useFileTreeStore((s) => s.expandedPaths.has(path));
   // 订阅自身激活状态（仅文件节点）
@@ -186,11 +189,11 @@ export const FileTreeNode = memo(function FileTreeNode({
             )}
             {isLoading && entries.length === 0 && !isCreatingHere ? (
               <div className="ft-loading" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
-                加载中…
+                {t('common.loading')}
               </div>
             ) : entries.length === 0 && !isCreatingHere ? (
               <div className="ft-empty" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
-                空目录
+                {t('fileTree.emptyDir')}
               </div>
             ) : (
               entries.map((entry) => (
@@ -305,6 +308,8 @@ function NodeMenu({
   onDelete,
   onCopyPath,
 }: NodeMenuProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // Radix DropdownMenuItem onSelect 事件签名是 (event: Event) => void
   // 但我们需要在 select 后等待菜单关闭动画再聚焦新 input（Radix 推荐模式）
   const handleItemClick =
@@ -325,7 +330,7 @@ function NodeMenu({
         <button
           type="button"
           className="ft-more-btn"
-          aria-label="更多操作"
+          aria-label={t('fileTree.moreActions')}
           // 阻止 click 冒泡到 row button，避免触发展开/打开文件
           onClick={(e) => e.stopPropagation()}
           disabled={disabled}
@@ -338,20 +343,24 @@ function NodeMenu({
         {type === 'directory' && (
           <>
             <DropdownMenuItem onSelect={handleItemClick(safeCall(onNewFile))}>
-              新建文件
+              {t('fileTree.newFile')}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleItemClick(safeCall(onNewDir))}>
-              新建目录
+              {t('fileTree.newDir')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem onSelect={handleItemClick(onRename)}>重命名</DropdownMenuItem>
+        <DropdownMenuItem onSelect={handleItemClick(onRename)}>
+          {t('fileTree.rename')}
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={handleItemClick(onDelete)} className="ft-menu-danger">
-          删除
+          {t('common.delete')}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={handleItemClick(onCopyPath)}>复制路径</DropdownMenuItem>
+        <DropdownMenuItem onSelect={handleItemClick(onCopyPath)}>
+          {t('fileTree.copyPath')}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -468,6 +477,8 @@ function InlineCreateInput({
   onConfirm,
   onCancel,
 }: InlineCreateInputProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   // 防止 Enter/Esc 触发后 onBlur 重复调用：keydown 先标记，blur 检查后重置
   const handledRef = useRef(false);
@@ -521,7 +532,7 @@ function InlineCreateInput({
           ref={inputRef}
           type="text"
           className="ft-rename-input"
-          placeholder={type === 'directory' ? '目录名' : '文件名'}
+          placeholder={type === 'directory' ? t('fileTree.newDir') : t('fileTree.newFile')}
           // biome-ignore lint/a11y/noAutofocus: 内联新建必须立即聚焦以提供 VSCode 风格体验
           autoFocus
           onKeyDown={handleKeyDown}

@@ -222,7 +222,9 @@
       "statusRenamed": "重命名",
       "statusUntracked": "未跟踪",
       "statusConflict": "冲突",
-      "refreshStatus": "刷新 Git 状态"
+      "refreshStatus": "刷新 Git 状态",
+      "statusEmpty": "Git 状态为空",
+      "loadFailed": "无法获取"
     },
     "fileViewer": {
       "copyFailed": "复制失败：剪贴板不可用",
@@ -231,7 +233,13 @@
       "unsaved": "未保存",
       "lines": "{{count}} 行",
       "switchToEdit": "切换到编辑模式",
-      "switchToPreview": "切换到预览模式"
+      "switchToPreview": "切换到预览模式",
+      "confirmCloseDirty": "有未保存的修改，确认要关闭吗？",
+      "edit": "编辑",
+      "confirmExitEdit": "退出编辑模式将丢失未保存的修改，确认？",
+      "view": "查看",
+      "saving": "保存中…",
+      "copyContent": "复制内容"
     },
     "fileTree": {
       "emptyDesc": "请先选择或创建一个会话",
@@ -243,7 +251,8 @@
       "newDir": "新建目录",
       "moreActions": "更多操作",
       "rename": "重命名",
-      "emptyDir": "空目录"
+      "emptyDir": "空目录",
+      "copyPath": "复制路径"
     },
     "terminal": {
       "createFailed": "创建终端失败: {{message}}",

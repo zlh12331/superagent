@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { useFileContent } from '@/hooks/use-file-content';
 import { useFileWrite } from '@/hooks/use-file-write';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
@@ -107,6 +108,8 @@ function basename(path: string): string {
  * - 编辑模式：textarea + shiki 叠加高亮，Ctrl+S 保存
  */
 export function FileViewerDialog(): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 受控状态
   const open = useFileViewerStore((s) => s.open);
   const filePath = useFileViewerStore((s) => s.filePath);
@@ -203,9 +206,9 @@ export function FileViewerDialog(): ReactElement {
         setCopied(false);
       }, 2000);
     } catch {
-      toast.error('复制失败：剪贴板不可用');
+      toast.error(t('fileViewer.copyFailed'));
     }
-  }, [displayContent]);
+  }, [displayContent, t]);
 
   // 保存处理
   const handleSave = useCallback(async () => {
@@ -218,7 +221,7 @@ export function FileViewerDialog(): ReactElement {
         createDirs: false,
       });
       markSaved();
-      toast.success('已保存', { description: basename(filePath) });
+      toast.success(t('fileViewer.saved'), { description: basename(filePath) });
     } catch {
       // onError 已在 use-file-write 中 toast 错误
     }
@@ -246,7 +249,7 @@ export function FileViewerDialog(): ReactElement {
         if (isDirty) {
           // 用 confirm 避免引入复杂确认对话框
           // 项目惯例：sonner toast 用于通知，confirm 用于阻塞式确认
-          const confirmed = window.confirm('有未保存的修改，确定要关闭吗？');
+          const confirmed = window.confirm(t('fileViewer.confirmCloseDirty'));
           if (!confirmed) return;
           // 用户确认丢弃修改
           exitEditMode();
@@ -254,7 +257,7 @@ export function FileViewerDialog(): ReactElement {
         close();
       }
     },
-    [close, isDirty, exitEditMode],
+    [close, isDirty, exitEditMode, t],
   );
 
   // textarea ref（用于滚动同步）
@@ -283,10 +286,10 @@ export function FileViewerDialog(): ReactElement {
             {editMode && (
               <span className="file-viewer-edit-badge">
                 <Pencil size={10} strokeWidth={2} />
-                <span>编辑中</span>
+                <span>{t('fileViewer.editor')}</span>
               </span>
             )}
-            {isDirty && <span className="file-viewer-dirty-dot" title="未保存" />}
+            {isDirty && <span className="file-viewer-dirty-dot" title={t('fileViewer.unsaved')} />}
           </DialogTitle>
           <DialogDescription className="font-mono text-[10px] break-all opacity-70">
             {filePath}
@@ -296,7 +299,8 @@ export function FileViewerDialog(): ReactElement {
         {/* 工具栏：行数 + 模式切换 + 复制/保存按钮 */}
         <div className="file-viewer-toolbar">
           <span className="file-viewer-meta">
-            {totalLines} 行{lang !== 'text' ? ` · ${lang}` : ''}
+            {totalLines} {t('fileViewer.lines', { count: totalLines })}
+            {lang !== 'text' ? ` · ${lang}` : ''}
           </span>
           <div className="file-viewer-actions">
             {/* 模式切换按钮 */}
@@ -306,11 +310,11 @@ export function FileViewerDialog(): ReactElement {
                 className="file-viewer-mode-btn"
                 onClick={enterEditMode}
                 disabled={isLoading || error !== null}
-                title="切换到编辑模式"
-                aria-label="切换到编辑模式"
+                title={t('fileViewer.switchToEdit')}
+                aria-label={t('fileViewer.switchToEdit')}
               >
                 <Pencil size={12} />
-                <span>编辑</span>
+                <span>{t('fileViewer.edit')}</span>
               </button>
             ) : (
               <button
@@ -318,16 +322,16 @@ export function FileViewerDialog(): ReactElement {
                 className="file-viewer-mode-btn"
                 onClick={() => {
                   if (isDirty) {
-                    const confirmed = window.confirm('退出编辑模式将丢弃未保存的修改，确定吗？');
+                    const confirmed = window.confirm(t('fileViewer.confirmExitEdit'));
                     if (!confirmed) return;
                   }
                   exitEditMode();
                 }}
-                title="切换到查看模式"
-                aria-label="切换到查看模式"
+                title={t('fileViewer.switchToPreview')}
+                aria-label={t('fileViewer.switchToPreview')}
               >
                 <Eye size={12} />
-                <span>查看</span>
+                <span>{t('fileViewer.view')}</span>
               </button>
             )}
 
@@ -338,15 +342,15 @@ export function FileViewerDialog(): ReactElement {
                 className={cn('file-viewer-save-btn', isDirty && 'dirty')}
                 onClick={handleSave}
                 disabled={!isDirty || isSaving}
-                title="保存 (Ctrl+S)"
-                aria-label="保存"
+                title={`${t('common.save')} (Ctrl+S)`}
+                aria-label={t('common.save')}
               >
                 {isSaving ? (
                   <span className="file-viewer-spinner" role="status" />
                 ) : (
                   <Save size={12} />
                 )}
-                <span>{isSaving ? '保存中…' : '保存'}</span>
+                <span>{isSaving ? t('fileViewer.saving') : t('common.save')}</span>
               </button>
             )}
 
@@ -356,11 +360,11 @@ export function FileViewerDialog(): ReactElement {
               className={cn('file-viewer-copy-btn', copied && 'copied')}
               onClick={handleCopy}
               disabled={displayContent === ''}
-              aria-label={copied ? '已复制' : '复制内容'}
-              title={copied ? '已复制' : '复制内容'}
+              aria-label={copied ? t('common.copied') : t('fileViewer.copyContent')}
+              title={copied ? t('common.copied') : t('fileViewer.copyContent')}
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
-              <span>{copied ? '已复制' : '复制'}</span>
+              <span>{copied ? t('common.copied') : t('common.copy')}</span>
             </button>
           </div>
         </div>
@@ -371,7 +375,7 @@ export function FileViewerDialog(): ReactElement {
           {!editMode && <FileTreeNavigator />}
           <div className="file-viewer-body">
             {isLoading ? (
-              <div className="file-viewer-loading">加载中…</div>
+              <div className="file-viewer-loading">{t('common.loading')}</div>
             ) : error !== null ? (
               <div className="file-viewer-error">
                 <p>加载失败</p>

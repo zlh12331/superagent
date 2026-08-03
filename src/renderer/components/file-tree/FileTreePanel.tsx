@@ -18,6 +18,7 @@ import { FilePlus, FolderOpen, FolderPlus } from 'lucide-react';
 import { type ReactElement, useCallback } from 'react';
 
 import { useFileTree } from '@/hooks/use-file-tree';
+import { useTranslation } from '@/i18n/use-translation';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
@@ -53,6 +54,8 @@ function basename(path: string): string {
  * ```
  */
 export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 启动文件树数据生命周期（IPC + watch + 状态同步）
   useFileTree(workingDir);
 
@@ -87,8 +90,8 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
     return (
       <div className="ft-empty-state">
         <FolderOpen size={24} strokeWidth={1.25} className="ft-empty-icon" />
-        <p className="ft-empty-title">未选择项目</p>
-        <p className="ft-empty-desc">请先选择或创建一个会话</p>
+        <p className="ft-empty-title">{t('home.noProject')}</p>
+        <p className="ft-empty-desc">{t('fileTree.emptyDesc')}</p>
       </div>
     );
   }
@@ -98,7 +101,7 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   if (rootPath === null) {
     return (
       <div className="ft-empty-state">
-        <p className="ft-empty-title">加载中…</p>
+        <p className="ft-empty-title">{t('common.loading')}</p>
       </div>
     );
   }
@@ -106,14 +109,18 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   // 渲染工具栏 + 根节点（递归展开子树）
   // 使用 div 而非 nav：nav 是非交互元素，与 role="tree" 冲突（biome a11y 规则）
   return (
-    <div className="file-tree" role="tree" aria-label={`文件树 - ${basename(rootPath)}`}>
-      <div className="ft-toolbar" role="toolbar" aria-label="文件树操作">
+    <div
+      className="file-tree"
+      role="tree"
+      aria-label={t('fileTree.treeLabel', { name: basename(rootPath) })}
+    >
+      <div className="ft-toolbar" role="toolbar" aria-label={t('fileTree.toolbarLabel')}>
         <button
           type="button"
           className="ft-toolbar-btn"
           onClick={handleNewFile}
-          aria-label="在根目录新建文件"
-          title="新建文件"
+          aria-label={t('fileTree.newFileInRoot')}
+          title={t('fileTree.newFile')}
           tabIndex={-1}
         >
           <FilePlus size={12} strokeWidth={1.75} />
@@ -122,8 +129,8 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
           type="button"
           className="ft-toolbar-btn"
           onClick={handleNewDir}
-          aria-label="在根目录新建目录"
-          title="新建目录"
+          aria-label={t('fileTree.newDirInRoot')}
+          title={t('fileTree.newDir')}
           tabIndex={-1}
         >
           <FolderPlus size={12} strokeWidth={1.75} />

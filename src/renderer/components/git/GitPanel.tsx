@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGitDiffQuery, useGitStatusQuery } from '@/hooks/use-git';
+import { useTranslation } from '@/i18n/use-translation';
 import { countSemanticDiffLines } from '@/lib/diff/diff-stats';
 import { cn } from '@/lib/utils';
 
@@ -91,22 +92,22 @@ function getColorForFileStatus(status: GitFileStatus['status']): string {
 }
 
 /**
- * 按文件状态获取中文标签
+ * 按文件状态获取本地化 key（组件内 t(`git.${key}`) 渲染）
  */
-function getLabelForFileStatus(status: GitFileStatus['status']): string {
+function getLabelKeyForFileStatus(status: GitFileStatus['status']): string {
   switch (status) {
     case 'modified':
-      return '修改';
+      return 'statusModified';
     case 'added':
-      return '新增';
+      return 'statusAdded';
     case 'deleted':
-      return '删除';
+      return 'statusDeleted';
     case 'renamed':
-      return '重命名';
+      return 'statusRenamed';
     case 'untracked':
-      return '未跟踪';
+      return 'statusUntracked';
     case 'conflicted':
-      return '冲突';
+      return 'statusConflict';
   }
 }
 
@@ -121,6 +122,8 @@ function getLabelForFileStatus(status: GitFileStatus['status']): string {
  * ```
  */
 export function GitPanel({ path, className }: GitPanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 当前选中的文件路径（用于查询该文件的 diff）
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
 
@@ -151,7 +154,7 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
             void refetch();
           }}
           disabled={isFetching}
-          aria-label="刷新 Git 状态"
+          aria-label={t('git.refreshStatus')}
         >
           <RefreshCw className={cn('size-3', isFetching && 'animate-spin')} strokeWidth={1.5} />
         </Button>
@@ -164,7 +167,7 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
         ) : error !== null ? (
           <ErrorHint message={error instanceof Error ? error.message : String(error)} />
         ) : status === undefined ? (
-          <ErrorHint message="Git 状态为空" />
+          <ErrorHint message={t('git.statusEmpty')} />
         ) : status.clean ? (
           <CleanHint />
         ) : (
@@ -200,11 +203,13 @@ interface BranchInfoProps {
 
 /** 分支信息展示：分支名 + ahead/behind 标记 */
 function BranchInfo({ status, isLoading, error }: BranchInfoProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   if (isLoading) {
     return (
       <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
         <GitBranch className="size-3 animate-pulse" strokeWidth={1.5} />
-        <span className="font-serif tracking-wide">加载中...</span>
+        <span className="font-serif tracking-wide">{t('common.loading')}</span>
       </div>
     );
   }
@@ -213,7 +218,7 @@ function BranchInfo({ status, isLoading, error }: BranchInfoProps): ReactElement
     return (
       <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
         <AlertCircle className="size-3" strokeWidth={1.5} />
-        <span className="font-serif tracking-wide">无法获取</span>
+        <span className="font-serif tracking-wide">{t('git.loadFailed')}</span>
       </div>
     );
   }
@@ -242,12 +247,14 @@ interface FileListProps {
 
 /** 变更文件列表：每项展示图标 + 路径 + 状态标签 */
 function FileList({ files, selectedFilePath, onSelect }: FileListProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <ul className="flex flex-col gap-0.5 p-1">
       {files.map((file) => {
         const Icon = getIconForFileStatus(file.status);
         const colorClass = getColorForFileStatus(file.status);
-        const label = getLabelForFileStatus(file.status);
+        const label = t(`git.${getLabelKeyForFileStatus(file.status)}`);
         const isSelected = file.path === selectedFilePath;
 
         return (

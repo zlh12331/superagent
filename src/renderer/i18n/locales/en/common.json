@@ -222,7 +222,9 @@
       "statusRenamed": "Renamed",
       "statusUntracked": "Untracked",
       "statusConflict": "Conflict",
-      "refreshStatus": "Refresh Git status"
+      "refreshStatus": "Refresh Git status",
+      "statusEmpty": "Git status is empty",
+      "loadFailed": "Failed to load"
     },
     "fileViewer": {
       "copyFailed": "Copy failed: clipboard unavailable",
@@ -231,7 +233,13 @@
       "unsaved": "Unsaved",
       "lines": "{{count}} lines",
       "switchToEdit": "Switch to edit mode",
-      "switchToPreview": "Switch to preview mode"
+      "switchToPreview": "Switch to preview mode",
+      "confirmCloseDirty": "You have unsaved changes. Close anyway?",
+      "edit": "Edit",
+      "confirmExitEdit": "Leaving edit mode will discard unsaved changes. Continue?",
+      "view": "View",
+      "saving": "Saving…",
+      "copyContent": "Copy content"
     },
     "fileTree": {
       "emptyDesc": "Select or create a session first",
@@ -243,7 +251,8 @@
       "newDir": "New directory",
       "moreActions": "More actions",
       "rename": "Rename",
-      "emptyDir": "Empty directory"
+      "emptyDir": "Empty directory",
+      "copyPath": "Copy path"
     },
     "terminal": {
       "createFailed": "Failed to create terminal: {{message}}",
