@@ -127,6 +127,7 @@
       "copied": "Copied",
       "regenerate": "Regenerate",
       "generating": "Generating…",
+      "runInterrupted": "The previous run was interrupted by an abnormal exit. Please start again",
       "truncatedJson": "(truncated)",
       "editFileLabel": "Edit {{name}}"
     },
@@ -217,7 +218,14 @@
       "telErrorOnly": "Errors only",
       "telErrorOnlyDesc": "Error stack traces",
       "telFull": "Full",
-      "telFullDesc": "Errors + performance"
+      "telFullDesc": "Errors + performance",
+      "dataSection": "Data",
+      "dataHint": "Session history is your work asset: export as backup, or open the data directory (auto-rotated backups included)",
+      "exportSessions": "Export all sessions",
+      "openDataDir": "Open data directory",
+      "exportSuccess": "Exported to {{path}}",
+      "exportFailed": "Failed to export sessions",
+      "dataDirOpened": "Data directory opened"
     },
     "home": {
       "appDev": "App development",

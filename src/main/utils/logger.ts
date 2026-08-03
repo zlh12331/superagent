@@ -8,6 +8,8 @@
 // 4. 控制台仅 dev 环境
 // 5. 注册全局 unhandledRejection / uncaughtException 捕获
 
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { app } from 'electron';
 import log from 'electron-log';
 
@@ -143,13 +145,73 @@ function serializeError(error: unknown): Record<string, unknown> {
  *
  * 设计文档 §7.6：unhandledRejection / uncaughtException 全局捕获
  * 必须在 app.whenReady() 之后、业务逻辑之前调用
+ *
+ * 增强（可靠性极致）：
+ * - Sentry 上报（logger 只落本地日志，崩溃现场需要云端可见）
+ * - 崩溃标记：uncaughtException 时写入 userData/.crash-marker，
+ *   下次启动由崩溃恢复逻辑消费（标记中断的会话状态）
  */
 export function registerGlobalErrorHandlers(): void {
   process.on('uncaughtException', (error: Error) => {
     logger.error({}, '全局未捕获异常 uncaughtException', error);
+    writeCrashMarker(error);
+    void captureToSentry(error);
   });
 
   process.on('unhandledRejection', (reason: unknown) => {
     logger.error({}, '全局未处理的 Promise 拒绝 unhandledRejection', reason);
+    if (reason instanceof Error) {
+      void captureToSentry(reason);
+    }
   });
+}
+
+/** 崩溃标记文件路径（位于 userData 下） */
+export function getCrashMarkerPath(): string {
+  return join(app.getPath('userData'), '.crash-marker');
+}
+
+/** 写入崩溃标记（uncaughtException 时调用，供下次启动恢复检测） */
+function writeCrashMarker(error: Error): void {
+  try {
+    const markerPath = getCrashMarkerPath();
+    mkdirSync(dirname(markerPath), { recursive: true });
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ timestamp: Date.now(), message: error.message }),
+      'utf8',
+    );
+    logger.info({ markerPath }, '已写入崩溃标记');
+  } catch (writeError) {
+    // 标记写入失败不影响主流程
+    logger.error({ error: String(writeError) }, '崩溃标记写入失败');
+  }
+}
+
+/** 清除崩溃标记（正常启动流程消费后调用） */
+export function clearCrashMarker(): void {
+  try {
+    const markerPath = getCrashMarkerPath();
+    if (existsSync(markerPath)) {
+      unlinkSync(markerPath);
+      logger.info({ markerPath }, '已清除崩溃标记');
+    }
+  } catch (error) {
+    logger.error({ error: String(error) }, '崩溃标记清除失败');
+  }
+}
+
+/** 是否存在崩溃标记（上次进程异常退出的证据） */
+export function hasCrashMarker(): boolean {
+  return existsSync(getCrashMarkerPath());
+}
+
+/** Sentry 上报（Sentry 可能未初始化，try 包裹保证不抛） */
+async function captureToSentry(error: Error): Promise<void> {
+  try {
+    const Sentry = await import('@sentry/electron/main');
+    Sentry.captureException(error);
+  } catch {
+    // Sentry 未初始化或不可用时静默降级（logger 已记录）
+  }
 }

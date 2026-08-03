@@ -14,8 +14,8 @@
 // - Drizzle 的 better-sqlite3 driver 是同步的，无需 await
 // ──────────────────────────────────────────────────────────────
 
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
@@ -29,6 +29,45 @@ import { schema } from './schema';
  * 存放在 userData 目录下，与 keychain.dat / logs/ 同级。
  */
 const DB_FILENAME = 'sessions.db';
+/** 备份保留份数（自动轮转，保留最近 N 份） */
+const BACKUP_KEEP = 3;
+/** 备份目录名（位于 userData 下） */
+const BACKUP_DIR = 'backups';
+
+/**
+ * 启动时热备份数据库（better-sqlite3 内置 backup API，不中断服务）
+ *
+ * 轮转策略：写入 backups/sessions-<时间戳>.db，删除超出 BACKUP_KEEP 的最旧备份。
+ * 崩溃后可从备份恢复（配合 WAL 崩溃恢复双保险）。
+ * 注意：better-sqlite3 的 backup() 是异步 API，必须 await，否则拒绝未被捕获。
+ */
+async function backupDatabase(sqlite: Database.Database, dbPath: string): Promise<void> {
+  try {
+    const backupDir = join(dirname(dbPath), BACKUP_DIR);
+    mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupPath = join(backupDir, `sessions-${stamp}.db`);
+    await sqlite.backup(backupPath);
+    logger.info({ backupPath }, '数据库热备份完成');
+
+    // 轮转：删除超出保留份数的最旧备份
+    const backups = readdirSync(backupDir)
+      .filter((name) => name.startsWith('sessions-') && name.endsWith('.db'))
+      .sort();
+    const excess = backups.length - BACKUP_KEEP;
+    for (let i = 0; i < excess; i++) {
+      const stale = join(backupDir, backups[i] ?? '');
+      unlinkSync(stale);
+      logger.info({ stale }, '轮转删除过期备份');
+    }
+  } catch (error) {
+    // 备份失败不阻断启动（日志中可诊断）
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      '数据库备份失败',
+    );
+  }
+}
 
 /**
  * 获取数据库文件路径
@@ -81,10 +120,25 @@ export function initDb(): DrizzleDB {
   // better-sqlite3 是同步驱动，所有操作都是阻塞的，适合 Electron 主进程
   const sqlite = new Database(dbPath);
   // 启用 WAL 模式（Write-Ahead Logging）：提升并发读性能
-  // 写入仍为串行，但读不阻塞写
+  // 写入仍为串行，但读不阻塞写；崩溃后由 WAL 自动恢复
   sqlite.pragma('journal_mode = WAL');
   // 启用外键约束（SQLite 默认关闭，drizzle schema 中 references 依赖此）
   sqlite.pragma('foreign_keys = ON');
+
+  // 启动完整性校验：损坏时提前暴露（替代崩溃后才发现）
+  const integrity = sqlite.pragma('integrity_check', { simple: true }) as unknown;
+  if (Array.isArray(integrity) && integrity.length > 0 && integrity[0] !== 'ok') {
+    logger.error({ result: integrity }, 'SQLite 完整性校验失败，数据库可能已损坏');
+    // 不阻断启动（只读场景仍可用），但明确记录供诊断
+  } else {
+    logger.info({}, 'SQLite 完整性校验通过');
+  }
+
+  // 启动时自动轮转备份（热备份，不中断服务）：保留最近 BACKUP_KEEP 份
+  // 异步执行，不阻塞启动流程
+  void backupDatabase(sqlite, dbPath).catch((error: unknown) => {
+    logger.error({ error: String(error) }, '数据库备份失败');
+  });
 
   // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });
@@ -99,7 +153,8 @@ export function initDb(): DrizzleDB {
       updated_at INTEGER NOT NULL,
       last_message TEXT,
       message_count INTEGER NOT NULL DEFAULT 0,
-      working_dir TEXT NOT NULL DEFAULT ''
+      working_dir TEXT NOT NULL DEFAULT '',
+      last_run_status TEXT NOT NULL DEFAULT 'idle'
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -135,6 +190,17 @@ export function initDb(): DrizzleDB {
   } catch (err) {
     if (err instanceof Error && err.message.includes('duplicate column name')) {
       logger.info({}, 'sessions.working_dir 列已存在，跳过 ALTER');
+    } else {
+      throw err;
+    }
+  }
+
+  // 迁移：已存在的数据库加 last_run_status 列（崩溃恢复状态，幂等）
+  try {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN last_run_status TEXT NOT NULL DEFAULT 'idle';`);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('duplicate column name')) {
+      logger.info({}, 'sessions.last_run_status 列已存在，跳过 ALTER');
     } else {
       throw err;
     }

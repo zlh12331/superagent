@@ -40,7 +40,8 @@ function createInMemoryDb() {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       last_message TEXT,
-      message_count INTEGER NOT NULL DEFAULT 0
+      message_count INTEGER NOT NULL DEFAULT 0,
+      last_run_status TEXT NOT NULL DEFAULT 'idle'
     );
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -49,6 +49,8 @@ export const SessionMetaSchema = z.object({
   messageCount: z.number().int().nonnegative(),
   // 会话级项目工作目录（绝对路径，agent 工具操作边界）
   workingDir: z.string(),
+  // 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别）
+  lastRunStatus: z.enum(['idle', 'running', 'interrupted']).default('idle'),
 });
 
 /** 会话元数据类型 */

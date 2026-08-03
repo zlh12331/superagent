@@ -41,6 +41,8 @@ export const sessions = sqliteTable('sessions', {
   messageCount: integer('message_count').notNull().default(0),
   /** 会话级项目工作目录（绝对路径，agent 工具操作边界） */
   workingDir: text('working_dir').notNull(),
+  /** 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别） */
+  lastRunStatus: text('last_run_status').notNull().default('idle'),
 });
 
 /**

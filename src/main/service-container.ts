@@ -77,7 +77,7 @@ import { getSessionService, resetSessionService } from './infra/storage/session-
 import type { ITerminalService } from './infra/terminal/terminal-service';
 import { getTerminalService, resetTerminalService } from './infra/terminal/terminal-service';
 import { type IUpdateService, UpdateService } from './infra/update/update-service';
-import { logger } from './utils/logger';
+import { clearCrashMarker, hasCrashMarker, logger } from './utils/logger';
 
 /**
  * 服务容器：持有应用核心服务实例
@@ -384,6 +384,7 @@ class ServiceContainer {
         this.getToolRegistry(),
         this.getToolExecutor(),
         this.getPromptService(),
+        this.getSessionService(),
       );
     }
     return this.agentService;
@@ -740,6 +741,28 @@ class ServiceContainer {
 
 /** 应用级单例 ServiceContainer */
 export const serviceContainer = new ServiceContainer();
+
+/**
+ * 崩溃恢复（启动时调用）
+ *
+ * - 检测上次是否异常退出（userData/.crash-marker，uncaughtException 时写入）
+ * - 把所有 running 残留会话标记为 interrupted（渲染层据此提示"上次回合已中断"）
+ * - 清除崩溃标记
+ */
+export async function recoverFromCrash(): Promise<void> {
+  const wasCrash = hasCrashMarker();
+  if (wasCrash) {
+    logger.warn({}, '检测到上次进程异常退出（崩溃标记），执行崩溃恢复');
+  }
+  try {
+    const interrupted = await serviceContainer.getSessionService().markAllInterrupted();
+    if (interrupted > 0 || wasCrash) {
+      logger.info({ interrupted, wasCrash }, '崩溃恢复：残留 running 会话已标记为 interrupted');
+    }
+  } finally {
+    clearCrashMarker();
+  }
+}
 
 /**
  * 应用退出时统一清理所有服务（兼容旧 API）

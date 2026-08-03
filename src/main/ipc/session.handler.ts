@@ -14,13 +14,47 @@
 // - SessionService 的 appendMessage 是内部 API（非 IPC 通道）
 //   由 AgentService / ChatService 直接调用，不在此 handler 中注册
 
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import { app, dialog } from 'electron';
 
 import type { ISessionService } from '../infra/storage/session-service';
+import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 export interface SessionHandlerDeps {
   readonly sessionService: ISessionService;
+}
+
+/**
+ * 导出全部会话 JSON（数据资产可迁移）
+ *
+ * 流程：dialog 选保存路径 → SessionService.exportAll 聚合数据 → 写文件。
+ * 用户取消时返回 { saved: false }。
+ */
+async function exportAllSessions(sessionService: ISessionService): Promise<{
+  saved: boolean;
+  path?: string;
+}> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: '导出全部会话',
+    defaultPath: join(app.getPath('documents'), `sessions-export-${stamp}.json`),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (canceled || filePath === undefined || filePath === '') {
+    return { saved: false };
+  }
+  try {
+    const payload = await sessionService.exportAll();
+    writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    logger.info({ filePath, sessions: payload.sessions.length }, '会话导出完成');
+    return { saved: true, path: filePath };
+  } catch (error) {
+    logger.error({ error: String(error) }, '会话导出失败');
+    throw error;
+  }
 }
 
 /**
@@ -75,6 +109,11 @@ export function createSessionHandlers(
     // session:listRecentDirs - 查询最近使用的目录列表
     listRecentDirs: async (input) => {
       return sessionService.listRecentDirs({ limit: input.limit });
+    },
+
+    // session:exportAll - 导出全部会话 JSON（dialog 选路径 + 写文件）
+    exportAll: async () => {
+      return exportAllSessions(sessionService);
     },
   };
 }

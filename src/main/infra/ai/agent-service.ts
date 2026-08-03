@@ -36,6 +36,7 @@ import { withSpan } from '../../telemetry/otel';
 import { logger } from '../../utils/logger';
 import { getModel } from '../ai/ai-provider';
 import { classifyError, isAbortError } from '../ai/error-classifier';
+import type { ISessionService } from '../storage/session-service';
 import { compressContext } from './context-compression';
 import type { IPromptService } from './prompt/prompt-service';
 import type { IToolExecutor } from './tool-executor';
@@ -135,6 +136,7 @@ export class AgentService implements IAgentService {
     private readonly toolRegistry: IToolRegistry,
     private readonly toolExecutor: IToolExecutor,
     private readonly promptService: IPromptService,
+    private readonly sessionService: ISessionService,
   ) {}
 
   /** 活跃对话 Map：sessionId → AbortController */
@@ -165,6 +167,11 @@ export class AgentService implements IAgentService {
     const controller = new AbortController();
     this.activeSessions.set(sessionId, controller);
 
+    // 回合状态机：标记进行中（崩溃恢复识别；正常结束在 stream finally 归位 idle）
+    void this.sessionService.markRunning(sessionId).catch((err: unknown) => {
+      logger.error({ sessionId, error: err }, 'markRunning 失败');
+    });
+
     // 异步推送流式 part（不 await，让 startAgent 立即返回 sessionId）
     // 任何错误都通过 catch 推送 AGENT_STREAM_ERROR，不抛回调用方
     // catch 内部仅记录日志，不改变 Promise 状态（仍为 fulfilled），
@@ -182,6 +189,10 @@ export class AgentService implements IAgentService {
       if (this.activeStreams.get(sessionId) === streamPromise) {
         this.activeStreams.delete(sessionId);
       }
+      // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
+      void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
+        logger.error({ sessionId, error: err }, 'markIdle 失败');
+      });
     });
 
     return sessionId;

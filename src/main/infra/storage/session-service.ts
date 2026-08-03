@@ -90,6 +90,23 @@ export interface SessionAppendMessageOptions {
  * 1. IPC 暴露（list/get/delete/rename）：渲染层通过 IPC 调用
  * 2. 内部 API（create/appendMessage）：AgentService / ChatService 调用
  */
+/**
+ * 导出单个会话（元数据 + 消息历史）
+ */
+export interface SessionExportItem {
+  readonly meta: SessionMeta;
+  readonly messages: readonly unknown[];
+}
+
+/**
+ * 导出全部会话的 payload（数据资产可迁移格式）
+ */
+export interface SessionExportPayload {
+  readonly exportedAt: number;
+  readonly app: string;
+  readonly sessions: readonly SessionExportItem[];
+}
+
 export interface ISessionService {
   // ── IPC 暴露方法 ───────────────────────────────────
 
@@ -111,6 +128,18 @@ export interface ISessionService {
 
   /** 查询最近使用的目录列表（去重 + 按 lastUsed 倒序） */
   listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes>;
+
+  // ── 崩溃恢复（回合状态机） ──────────────────────────────
+
+  /** 标记会话回合开始（崩溃恢复状态机） */
+  markRunning(id: string): Promise<void>;
+  /** 标记会话回合结束（正常结束/错误/中断都归位 idle） */
+  markIdle(id: string): Promise<void>;
+  /** 启动恢复：把所有 running 残留置为 interrupted，返回影响数 */
+  markAllInterrupted(): Promise<number>;
+
+  /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
+  exportAll(): Promise<SessionExportPayload>;
 
   /** 优雅关闭（无外部资源，db 由 closeDb 在 ServiceContainer.dispose 中关闭） */
   dispose(): Promise<void>;
@@ -423,6 +452,54 @@ export class SessionService implements ISessionService {
     // 无操作
   }
 
+  // ── 崩溃恢复（回合状态机） ──────────────────────────────
+
+  async markRunning(id: string): Promise<void> {
+    const db = getDb();
+    db.update(sessions).set({ lastRunStatus: 'running' }).where(eq(sessions.id, id)).run();
+  }
+
+  async markIdle(id: string): Promise<void> {
+    const db = getDb();
+    db.update(sessions).set({ lastRunStatus: 'idle' }).where(eq(sessions.id, id)).run();
+  }
+
+  async markAllInterrupted(): Promise<number> {
+    const db = getDb();
+    // 启动时把所有 running 残留置为 interrupted（上次进程异常退出的证据）
+    const result = db
+      .update(sessions)
+      .set({ lastRunStatus: 'interrupted' })
+      .where(eq(sessions.lastRunStatus, 'running'))
+      .run();
+    return result.changes;
+  }
+
+  async exportAll(): Promise<SessionExportPayload> {
+    const db = getDb();
+    const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
+    const items: SessionExportItem[] = rows.map((row) => {
+      const messageRows = db
+        .select()
+        .from(messages)
+        .where(eq(messages.sessionId, row.id))
+        .orderBy(messages.seq)
+        .all();
+      return {
+        meta: rowToMeta(row),
+        messages: messageRows.map((m) => {
+          try {
+            return JSON.parse(m.content) as unknown;
+          } catch {
+            // 损坏的 content 保留原始字符串（导出不丢数据）
+            return m.content;
+          }
+        }),
+      };
+    });
+    return { exportedAt: Date.now(), app: 'code-agent-desktop', sessions: items };
+  }
+
   /**
    * 查询最近使用的目录列表
    *
@@ -473,6 +550,7 @@ function rowToMeta(row: typeof sessions.$inferSelect): SessionMeta {
     lastMessage: row.lastMessage ?? undefined,
     messageCount: row.messageCount,
     workingDir: row.workingDir,
+    lastRunStatus: row.lastRunStatus as SessionMeta['lastRunStatus'],
   };
 }
 

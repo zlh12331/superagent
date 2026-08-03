@@ -21,6 +21,7 @@ import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ISessionService } from '../storage/session-service';
 import type { IToolRegistry } from './tool-registry';
 
 // vi.mock 会被 hoist，工厂函数内不能引用外部 const
@@ -190,6 +191,21 @@ describe('agent-service', () => {
   let mockRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockExecutor: ReturnType<typeof createMockToolExecutor>;
   let mockPromptService: ReturnType<typeof createMockPromptService>;
+  // 崩溃恢复状态机：注入 fake sessionService（无 mock 规范，用真实接口最小实现）
+  const mockSessionService: ISessionService = {
+    markRunning: vi.fn(async () => {}),
+    markIdle: vi.fn(async () => {}),
+    markAllInterrupted: vi.fn(async () => 0),
+    exportAll: vi.fn(async () => ({ exportedAt: 0, app: 'test', sessions: [] })),
+    list: vi.fn(),
+    get: vi.fn(),
+    delete: vi.fn(),
+    rename: vi.fn(),
+    create: vi.fn(),
+    appendMessage: vi.fn(),
+    listRecentDirs: vi.fn(),
+    dispose: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -200,6 +216,7 @@ describe('agent-service', () => {
       mockRegistry as unknown as IToolRegistry,
       mockExecutor,
       mockPromptService,
+      mockSessionService,
     );
     // 默认 streamText 返回空流（立即 close）
     mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));

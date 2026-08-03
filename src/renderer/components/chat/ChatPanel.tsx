@@ -13,7 +13,8 @@
 // - 工具调用已 inline 渲染在 ChatMessageList（ToolCallView）
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useCallback } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
+import { type ReactElement, useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useAgentWithIpc } from '@/hooks/use-agent';
@@ -38,6 +39,11 @@ interface ChatPanelProps {
    * 由路由层（chat.tsx）从 session.workingDir 注入。
    */
   workingDir: string;
+  /**
+   * 上次回合是否异常中断（崩溃恢复：由路由层从 session.lastRunStatus 注入）
+   * 为 true 时顶部展示"上次回合已中断"提示条
+   */
+  interrupted?: boolean;
   /** 自定义容器类名 */
   className?: string;
 }
@@ -57,7 +63,14 @@ interface ChatPanelProps {
  * <ChatPanel chatId={sessionId} workingDir={session.workingDir} />
  * ```
  */
-export function ChatPanel({ chatId, workingDir, className }: ChatPanelProps): ReactElement {
+export function ChatPanel({
+  chatId,
+  workingDir,
+  interrupted = false,
+  className,
+}: ChatPanelProps): ReactElement {
+  // 中断提示条关闭状态（会话内关闭后不再显示）
+  const [interruptedDismissed, setInterruptedDismissed] = useState(false);
   // 错误码 → 本地化文案 hook
   const { getErrorMessage } = useErrorMessage();
 
@@ -125,6 +138,21 @@ export function ChatPanel({ chatId, workingDir, className }: ChatPanelProps): Re
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
+      {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
+      {interrupted && !interruptedDismissed && (
+        <div className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 flex items-center gap-2 border-b px-3 py-1 text-xs text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
+          <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
+          <button
+            type="button"
+            className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200"
+            aria-label={t('common.close')}
+            onClick={() => setInterruptedDismissed(true)}
+          >
+            <X className="size-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      )}
       {/* 顶部状态条：等宽字体遥测带（workingDir + status 指示器）
           - 左侧：项目目录 basename（限制宽度，溢出省略）
           - 右侧：当前状态（READY/RUNNING/THINKING/ERROR/IDLE）+ 会话 id 前 8 位 */}

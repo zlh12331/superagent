@@ -34,7 +34,7 @@ import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { buildCsp } from './security/csp';
-import { disposeServices, serviceContainer } from './service-container';
+import { disposeServices, recoverFromCrash, serviceContainer } from './service-container';
 import { initTelemetry, shutdownTelemetry } from './telemetry/otel';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
@@ -259,6 +259,8 @@ app
     // - 用户编辑过的 prompt 不会被覆盖（onConflictDoNothing）
     serviceContainer.getPromptService().initialize();
     registerGlobalErrorHandlers();
+    // 崩溃恢复：上次异常退出时把残留 running 会话标记为 interrupted（渲染层提示恢复）
+    void recoverFromCrash();
     // 注册全部 IPC handler（定义表驱动，registerIpcHandlers 统一执行）
     // - handler 对象形状受 InferHandlers 约束：定义表新增方法而 handler 缺失 → 编译期报错
     // - channel / schema / traceId / sender 校验 / Sentry 由 wrap 统一处理

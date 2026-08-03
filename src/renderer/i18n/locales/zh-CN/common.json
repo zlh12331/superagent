@@ -127,6 +127,7 @@
       "copied": "已复制",
       "regenerate": "重新生成",
       "generating": "正在生成中…",
+      "runInterrupted": "上次回合因应用异常退出而中断，请重新发起",
       "truncatedJson": "(已截断)",
       "editFileLabel": "编辑 {{name}}"
     },
@@ -217,7 +218,14 @@
       "telErrorOnly": "仅错误",
       "telErrorOnlyDesc": "错误堆栈",
       "telFull": "完整",
-      "telFullDesc": "错误+性能"
+      "telFullDesc": "错误+性能",
+      "dataSection": "数据",
+      "dataHint": "会话历史即工作资产：可导出备份，或直接打开数据目录（含自动轮转备份）",
+      "exportSessions": "导出全部会话",
+      "openDataDir": "打开数据目录",
+      "exportSuccess": "已导出到 {{path}}",
+      "exportFailed": "会话导出失败",
+      "dataDirOpened": "已打开数据目录"
     },
     "home": {
       "appDev": "应用开发",

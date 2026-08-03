@@ -15,6 +15,7 @@
 
 import type { ApiKeyProvider, TelemetryLevel } from '@code-agent/shared/renderer';
 import {
+  Database,
   Eye,
   EyeOff,
   Keyboard,
@@ -79,6 +80,22 @@ function maskApiKey(key: string): string {
  * );
  * ```
  */
+/**
+ * 解包 IpcResponse（data/error 包装，与 hooks 层共用逻辑）
+ */
+function unwrap<T>(response: {
+  readonly data?: T;
+  readonly error?: { readonly code: string; readonly message: string };
+}): T {
+  if ('error' in response && response.error !== undefined) {
+    throw new Error(`[${response.error.code}] ${response.error.message}`);
+  }
+  if ('data' in response && response.data !== undefined) {
+    return response.data;
+  }
+  throw new Error('Unexpected response: missing data and error');
+}
+
 interface ApiKeySectionProps {
   readonly provider: ApiKeyProvider;
   readonly label: string;
@@ -282,6 +299,31 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
     toast.success(t('settings.promptReset'));
   };
 
+  // 数据区块：导出全部会话（dialog 选路径，main 写文件）
+  const handleExportAll = async (): Promise<void> => {
+    try {
+      const response = await window.api.session.exportAll();
+      const res = unwrap<{ saved: boolean; path?: string }>(response);
+      if (res.saved) {
+        toast.success(t('settings.exportSuccess', { path: res.path ?? '' }));
+      }
+      // 用户取消：静默
+    } catch {
+      toast.error(t('settings.exportFailed'));
+    }
+  };
+
+  // 数据区块：打开数据目录（会话/备份/日志所在）
+  const handleOpenDataDir = async (): Promise<void> => {
+    const response = await window.api.app.openDataDir();
+    const res = unwrap<{ ok: boolean }>(response);
+    if (res.ok) {
+      toast.success(t('settings.dataDirOpened'));
+    } else {
+      toast.error(t('settings.exportFailed'));
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -436,6 +478,24 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                 />
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* 数据区块（可靠性/数据极致）：会话导出 + 打开数据目录 */}
+        <Separator className="my-2" />
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Database className="size-4 text-stone-600" strokeWidth={1.5} />
+            <Label className="font-serif text-sm tracking-wide">{t('settings.dataSection')}</Label>
+          </div>
+          <p className="text-xs text-muted-foreground font-sans">{t('settings.dataHint')}</p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportAll}>
+              {t('settings.exportSessions')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleOpenDataDir}>
+              {t('settings.openDataDir')}
+            </Button>
           </div>
         </div>
 

@@ -165,6 +165,7 @@ export const IPC_DEFINITIONS = {
       z.object({ url: z.string().min(1, 'URL 不能为空') }),
       {} as { ok: boolean },
     ),
+    openDataDir: withSchema(IPC_META.app.openDataDir, null, {} as { ok: boolean }),
   },
 
   chat: {
@@ -213,6 +214,11 @@ export const IPC_DEFINITIONS = {
       IPC_META.session.listRecentDirs,
       SessionListRecentDirsReqSchema,
       {} as SessionListRecentDirsRes,
+    ),
+    exportAll: withSchema(
+      IPC_META.session.exportAll,
+      null,
+      {} as { saved: boolean; path?: string },
     ),
   },
 

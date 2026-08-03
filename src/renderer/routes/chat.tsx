@@ -80,7 +80,13 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     );
   }
 
-  return <ChatPanel chatId={sessionId} workingDir={session.session.workingDir} />;
+  return (
+    <ChatPanel
+      chatId={sessionId}
+      workingDir={session.session.workingDir}
+      interrupted={session.session.lastRunStatus === 'interrupted'}
+    />
+  );
 }
 
 export default ChatPage;

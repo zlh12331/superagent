@@ -10,7 +10,7 @@
 
 import type { InferHandlers } from '@code-agent/shared/main';
 import { AppError, ErrorCode, type IPC_DEFINITIONS } from '@code-agent/shared/main';
-import { shell } from 'electron';
+import { app, shell } from 'electron';
 
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -28,5 +28,12 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     }
     await shell.openExternal(input.url);
     return { ok: true };
+  },
+
+  // 打开用户数据目录（会话/备份/日志所在，数据资产可迁移入口）
+  openDataDir: async () => {
+    const dir = app.getPath('userData');
+    const error = await shell.openPath(dir);
+    return { ok: error.length === 0 };
   },
 };

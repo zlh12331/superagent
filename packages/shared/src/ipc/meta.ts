@@ -25,6 +25,7 @@ export const IPC_META = {
   app: {
     getStatus: request('app:getStatus'),
     openExternal: request('app:openExternal'),
+    openDataDir: request('app:openDataDir'),
   },
 
   chat: {
@@ -54,6 +55,7 @@ export const IPC_META = {
     rename: request('session:rename'),
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
+    exportAll: request('session:exportAll'),
   },
 
   file: {
