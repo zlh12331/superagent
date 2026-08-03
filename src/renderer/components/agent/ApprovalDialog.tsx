@@ -328,7 +328,6 @@ function renderStructuredPreview(
  *
  * 抽离为独立函数避免 renderStructuredPreview 过长，且 Git 类型共享视觉风格（琥珀色边框）。
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 审批 Git 预览（类型分支/预览/确认流），拆组件计划已登记 TECH_DEBT
 function renderGitPreview(type: ApprovalType, input: unknown, t: TFunction): ReactElement | null {
   if (type === 'git_add') {
     const paths = getStringArrayField(input, 'paths') ?? [];

@@ -180,7 +180,6 @@ class GitService implements IGitService {
    * - ? path：untracked
    * - u ...：conflict
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Git 操作聚合（多命令/错误分支），重构风险高，已登记 TECH_DEBT
   async status(path: string): Promise<GitStatusRes> {
     // 1. 校验为 git 仓库（同时解析根目录）
     await this.assertGitRepo(path);

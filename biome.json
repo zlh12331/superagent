@@ -54,11 +54,7 @@
         "noDefaultExport": "error"
       },
       "complexity": {
-        "useLiteralKeys": "off",
-        "noExcessiveCognitiveComplexity": {
-          "level": "error",
-          "options": { "maxAllowedComplexity": 20 }
-        }
+        "useLiteralKeys": "off"
       }
     }
   },

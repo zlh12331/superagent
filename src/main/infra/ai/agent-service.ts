@@ -276,7 +276,6 @@ export class AgentService implements IAgentService {
         'agent.maxSteps': options.maxSteps,
         'agent.hasSystemPrompt': options.systemPrompt !== undefined,
       },
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Agent 主循环（工具调用/流式/中断/错误分支），核心编排重构风险高，已登记 TECH_DEBT
       async (span) => {
         try {
           // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）

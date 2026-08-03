@@ -54,7 +54,6 @@ interface FileTreeNodeProps {
  * 从 store 派生：展开状态、子条目、加载状态、激活状态、内联编辑状态。
  * 当父节点的 expandedPaths 变化时，对应子节点自动重新渲染（store 订阅）。
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 文件树节点（类型/编辑态/展开分支），拆组件计划已登记 TECH_DEBT
 export const FileTreeNode = memo(function FileTreeNode({
   path,
   name,

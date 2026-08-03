@@ -55,7 +55,6 @@ export function useToolBridge(): void {
     });
 
     // 订阅工具结果事件：主进程推送工具执行结果（含 output 或 error）
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 工具桥接（事件订阅/状态分支），拆分计划已登记 TECH_DEBT
     const unsubscribeToolResult = window.api.agent.subscribeToolResult((payload) => {
       const typedPayload = payload as AgentToolResultPayload;
       useToolStore.getState().appendToolResult(typedPayload.toolCallId, {

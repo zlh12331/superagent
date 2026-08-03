@@ -62,7 +62,6 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
       '在指定工作目录内执行 shell 命令（支持管道、重定向、环境变量展开）。会修改文件系统或执行任意代码，需用户审批后执行。超时时间默认 30 秒，可通过 timeout 参数延长至最多 5 分钟。返回 stdout / stderr / exitCode / signal。',
     inputSchema: RunCommandInputSchema,
     permission: 'ask',
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 命令执行工具（参数/超时/安全校验分支），轻微超限，重构计划已登记 TECH_DEBT
     execute: async (input: RunCommandInput, ctx: ToolContext): Promise<ToolResult> => {
       for (const { pattern, reason } of DANGEROUS_PATTERNS) {
         if (pattern.test(input.command)) {

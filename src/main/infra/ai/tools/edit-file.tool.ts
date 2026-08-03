@@ -35,7 +35,6 @@ export function createEditFileTool(): Tool<EditFileInput> {
       '通过字符串替换精确编辑文件（不重写整个文件）。查找 oldString 并替换为 newString，默认要求 oldString 在文件中唯一（防止误替换）。设置 replaceAll=true 可替换所有匹配项。newString 为空字符串时表示删除 oldString。会修改文件系统，需用户审批后执行。',
     inputSchema: EditFileInputSchema,
     permission: 'ask',
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 编辑文件工具（diff/回退/校验分支），轻微超限，重构计划已登记 TECH_DEBT
     execute: async (input: EditFileInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
 

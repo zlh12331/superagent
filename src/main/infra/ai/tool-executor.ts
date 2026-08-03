@@ -109,7 +109,6 @@ export class ToolExecutor implements IToolExecutor {
         'tool.callId': toolCallId,
         'session.id': ctx.sessionId,
       },
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 工具执行器（执行/审批/重试/权限分支），核心编排重构风险高，已登记 TECH_DEBT
       async (span) => {
         // 1. 查找工具
         const tool = this.registry.get(toolName);
