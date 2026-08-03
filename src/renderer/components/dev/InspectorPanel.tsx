@@ -159,10 +159,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         </Section>
 
         {/* React DevTools 说明 */}
-        <Section
-          title="React DevTools"
-          description="React 组件树 / Hooks / Props / Profiler 检查器"
-        >
+        <Section title="React DevTools" description={t('common.reactTreeDesc')}>
           <div className="flex items-start gap-1.5">
             <Info className="text-muted-foreground mt-0.5 size-3 shrink-0" strokeWidth={1.5} />
             <p className="text-muted-foreground text-[10px] leading-relaxed">

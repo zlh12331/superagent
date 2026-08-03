@@ -201,7 +201,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       if (payload.terminalId !== terminalId) return;
       isExited = true;
       // 在终端末尾追加退出提示（便于用户感知）
-      term.write(`\r\n\x1b[2m[进程已退出，exit code: ${payload.exitCode}]\x1b[0m\r\n`);
+      term.write(`\r\n\x1b[2m${t('terminal.exited', { code: payload.exitCode })}\x1b[0m\r\n`);
     });
 
     // 用户输入回调：直接转发到 IPC（不经过 store）

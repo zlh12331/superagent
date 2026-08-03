@@ -271,7 +271,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         {!sidebarCollapsed && (
           <hr
             aria-orientation="vertical"
-            aria-label="侧边栏宽度调整"
+            aria-label={t('common.sidebarResizer')}
             aria-valuenow={sidebarWidth}
             aria-valuemin={SIDEBAR_WIDTH_MIN}
             aria-valuemax={SIDEBAR_WIDTH_MAX}
@@ -291,7 +291,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         {!rightPanelCollapsed && !isWelcomeMode && (
           <hr
             aria-orientation="vertical"
-            aria-label="右面板宽度调整"
+            aria-label={t('common.panelResizer')}
             aria-valuenow={rightPanelWidth}
             aria-valuemin={RIGHT_PANEL_WIDTH_MIN}
             aria-valuemax={RIGHT_PANEL_WIDTH_MAX}
@@ -302,13 +302,15 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         )}
 
         {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector） */}
-        <aside className="chat-right-panel" aria-label="开发面板">
+        <aside className="chat-right-panel" aria-label={t('common.rightPanel')}>
           {/* 折叠按钮：点击切换 rightPanelCollapsed */}
           <button
             type="button"
             className="crp-collapse-btn"
             onClick={handleToggleRightPanel}
-            aria-label={rightPanelCollapsed ? '展开右面板' : '折叠右面板'}
+            aria-label={
+              rightPanelCollapsed ? t('common.expandRightPanel') : t('common.collapseRightPanel')
+            }
             aria-expanded={!rightPanelCollapsed}
           >
             <ChevronRight className="size-3" strokeWidth={1.5} />

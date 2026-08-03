@@ -156,7 +156,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         ) : error !== null ? (
           <ErrorHint message={error instanceof Error ? error.message : String(error)} />
         ) : data === undefined ? (
-          <ErrorHint message="日志数据为空" />
+          <ErrorHint message={t('common.logsEmpty')} />
         ) : data.lines.length === 0 ? (
           <EmptyLogs filePath={data.filePath} />
         ) : (
@@ -226,11 +226,13 @@ function LogsSkeleton(): ReactElement {
 
 /** 空日志提示 */
 function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
       <FileText className="size-5 opacity-50" strokeWidth={1.5} />
-      <p className="font-serif text-xs tracking-wide">暂无日志</p>
-      <p className="text-[10px]">日志文件可能为空或被截断</p>
+      <p className="font-serif text-xs tracking-wide">{t('common.noLogs')}</p>
+      <p className="text-[10px]">{t('common.logsTruncatedDesc')}</p>
       <p className="text-muted-foreground/60 mt-1 truncate font-mono text-[9px]">{filePath}</p>
     </div>
   );
@@ -238,10 +240,12 @@ function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
 
 /** 错误状态提示 */
 function ErrorHint({ message }: { readonly message: string }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
-      <p className="font-serif text-xs">日志读取失败</p>
+      <p className="font-serif text-xs">{t('common.logsLoadFailed')}</p>
       <p className="text-muted-foreground truncate text-[10px]">{message}</p>
     </div>
   );

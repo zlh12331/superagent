@@ -29,9 +29,15 @@
       "readFileError": "Error reading file",
       "createDirFailed": "Failed to create directory",
       "createFileFailed": "Failed to create file",
+      "deleteFailed": "Delete failed",
+      "moveFailed": "Move failed",
       "watchFailed": "File watcher stopped",
       "watchFailedDesc": "File watching stopped. Refresh the directory to re-watch",
       "watchAbnormal": "File watching error",
+      "watchAbnormalDesc": "File watching error. Live updates interrupted",
+      "fileLoadFailed": "Failed to load",
+      "emptyFile": "Empty file",
+      "emptyFileEdit": "Empty file. Start editing…",
       "telemetryUpdated": "Telemetry level updated to {{level}}. Restart to apply",
       "telemetryUpdateFailed": "Failed to update telemetry level: {{message}}",
       "apiKeySaveFailed": "Failed to save API Key: {{message}}",
@@ -45,7 +51,7 @@
       "fileTreeNav": "File tree navigation",
       "newFileStartEdit": "New file created. Start editing",
       "noFile": "No file open",
-      "noDiff": "Select a file to view diff",
+      "noDiff": "No diff content",
       "noChanges": "No changed files",
       "cleanWorkingTree": "Working tree clean",
       "gitStatusFailed": "Failed to fetch Git status",
@@ -54,7 +60,13 @@
       "rightPanel": "Right panel",
       "expandRightPanel": "Expand right panel",
       "collapseRightPanel": "Collapse right panel",
-      "shortcuts": "Shortcuts"
+      "shortcuts": "Shortcuts",
+      "shortcutsHint": "Supports Ctrl/Cmd + letter combos, e.g. Meta+P, Ctrl+S. Changes apply immediately.",
+      "saveFileShortcut": "Save file",
+      "searchFileShortcut": "Search file",
+      "toggleThemeShortcut": "Toggle theme",
+      "openSettingsShortcut": "Open settings",
+      "newSessionShortcut": "New session"
     },
     "topbar": {
       "expandSidebar": "Expand sidebar",
@@ -114,7 +126,9 @@
       "copy": "Copy",
       "copied": "Copied",
       "regenerate": "Regenerate",
-      "generating": "Generating…"
+      "generating": "Generating…",
+      "truncatedJson": "(truncated)",
+      "editFileLabel": "Edit {{name}}"
     },
     "update": {
       "noticeAvailable": "Update available",
@@ -135,6 +149,7 @@
       "toggleThemeDark": "Switch to dark theme",
       "openSettings": "Open settings",
       "searchPlaceholder": "Search files or type a command…",
+      "commandPaletteShortcut": "Open command palette",
       "searchLabel": "Command palette search",
       "unnamedSession": "Untitled session",
       "navigate": "Navigate",
@@ -214,9 +229,13 @@
       "toolKnowledge": "Tool knowledge",
       "toolKnowledgePrompt": "Introduce some practical dev tools",
       "justNow": "Just now",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}} hr ago",
+      "daysAgo": "{{count}} day(s) ago",
       "noProject": "No project selected",
       "chooseProject": "Select a project directory first",
       "chooseProjectDesc": "Choose a recent directory from the project bar below or browse for another",
+      "chooseFolder": "Choose folder…",
       "chooseProjectLabel": "Select project directory",
       "dirList": "Project directory list",
       "noRecentDirs": "No recent directories"
@@ -300,7 +319,8 @@
       "creating": "Creating…",
       "newTerminal": "New terminal",
       "closed": "Closed",
-      "closeTerminal": "Close terminal"
+      "closeTerminal": "Close terminal",
+      "exited": "[Process exited, exit code: {{code}}]"
     }
   }
 }

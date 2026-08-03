@@ -412,22 +412,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
         <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2">
             <Keyboard className="size-4 text-stone-600" strokeWidth={1.5} />
-            <Label className="font-serif text-sm tracking-wide">快捷键</Label>
+            <Label className="font-serif text-sm tracking-wide">{t('common.shortcuts')}</Label>
           </div>
-          <p className="text-xs text-muted-foreground font-sans">
-            支持 Ctrl/Cmd + 字母组合，如 Meta+P、Ctrl+S。修改后立即生效。
-          </p>
+          <p className="text-xs text-muted-foreground font-sans">{t('common.shortcutsHint')}</p>
           <div className="space-y-2">
             {[
-              { key: 'commandPalette', label: '打开命令面板' },
-              { key: 'saveFile', label: '保存文件' },
-              { key: 'searchFile', label: '搜索文件' },
-              { key: 'toggleTheme', label: '切换主题' },
-              { key: 'openSettings', label: '打开设置' },
-              { key: 'newSession', label: '新建会话' },
+              { key: 'commandPalette', labelKey: 'palette.commandPaletteShortcut' },
+              { key: 'saveFile', labelKey: 'common.saveFileShortcut' },
+              { key: 'searchFile', labelKey: 'common.searchFileShortcut' },
+              { key: 'toggleTheme', labelKey: 'common.toggleThemeShortcut' },
+              { key: 'openSettings', labelKey: 'common.openSettingsShortcut' },
+              { key: 'newSession', labelKey: 'common.newSessionShortcut' },
             ].map((item) => (
               <div key={item.key} className="flex items-center justify-between gap-2">
-                <span className="text-xs text-stone-600">{item.label}</span>
+                <span className="text-xs text-stone-600">{t(item.labelKey)}</span>
                 <Input
                   type="text"
                   value={shortcuts[item.key as keyof typeof shortcuts]}

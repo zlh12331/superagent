@@ -16,6 +16,7 @@ import type { FileWriteReq, FileWriteRes } from '@code-agent/shared/renderer';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import { useTranslation } from '@/i18n/use-translation';
 import { FILE_CONTENT_QUERY_KEY } from './use-file-content';
 
 /**
@@ -31,6 +32,8 @@ import { FILE_CONTENT_QUERY_KEY } from './use-file-content';
  * ```
  */
 export function useFileWrite() {
+  // 本地化文案
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   return useMutation<FileWriteRes, Error, FileWriteReq>({
@@ -55,7 +58,7 @@ export function useFileWrite() {
       });
     },
     onError: (error) => {
-      toast.error('保存失败', {
+      toast.error(t('common.writeFailed'), {
         description: error instanceof Error ? error.message : String(error),
       });
     },

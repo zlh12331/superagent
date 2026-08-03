@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
+import { useTranslation } from '@/i18n/use-translation';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
 /**
@@ -40,6 +41,8 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
  * ```
  */
 export function useFileTree(workingDir: string | null): void {
+  // 本地化文案
+  const { t } = useTranslation();
   // store actions（订阅 action 引用稳定，不触发额外渲染）
   const setRootPath = useFileTreeStore((s) => s.setRootPath);
   const expandedPaths = useFileTreeStore((s) => s.expandedPaths);
@@ -135,15 +138,15 @@ export function useFileTree(workingDir: string | null): void {
           watcherId = response.data.watcherId;
         } else if ('error' in response) {
           // watcher 启动失败：一次性 toast 提示，不影响已有数据
-          toast.warning('文件监听启动失败', {
-            description: '文件变更不会实时更新，刷新目录可重新加载',
+          toast.warning(t('common.watchFailed'), {
+            description: t('common.watchFailedDesc'),
             duration: 4000,
           });
         }
       } catch {
         // 异常情况：同上，toast 提示
-        toast.warning('文件监听启动异常', {
-          description: '文件变更不会实时更新',
+        toast.warning(t('common.watchAbnormal'), {
+          description: t('common.watchAbnormalDesc'),
           duration: 4000,
         });
       }
@@ -197,7 +200,7 @@ export function useFileTree(workingDir: string | null): void {
       }
     };
     // 仅依赖 workingDir 和稳定的 store actions：watcher 生命周期与根目录绑定
-  }, [workingDir, removeEntry, loadDir]);
+  }, [workingDir, removeEntry, loadDir, t]);
 
   // 组件卸载时重置 store（避免切换到无文件树页面时残留状态）
   useEffect(() => {

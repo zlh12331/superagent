@@ -33,6 +33,7 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from 'ai';
+import type { TFunction } from 'i18next';
 import { ChevronDown, Copy, RefreshCw, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
@@ -435,9 +436,9 @@ function ToolCallView({
           </button>
           <div className="card-body">
             {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
-            {input !== undefined && <CodeBlock label="input" content={formatJson(input)} />}
+            {input !== undefined && <CodeBlock label="input" content={formatJson(input, t)} />}
             {/* 输出（output 优先于 errorText） */}
-            {output !== undefined && <CodeBlock label="output" content={formatJson(output)} />}
+            {output !== undefined && <CodeBlock label="output" content={formatJson(output, t)} />}
             {errorText !== undefined && errorText !== '' && (
               <CodeBlock label="error" content={errorText} />
             )}
@@ -673,10 +674,10 @@ function extractText(parts: readonly UIMessagePart[]): string {
 /**
  * JSON 序列化（截断到 200 字符，避免大对象撑爆 UI）
  */
-function formatJson(value: unknown): string {
+function formatJson(value: unknown, t: TFunction): string {
   try {
     const json = JSON.stringify(value, null, 2) ?? 'undefined';
-    return json.length > 200 ? `${json.slice(0, 200)}\n...(已截断)` : json;
+    return json.length > 200 ? `${json.slice(0, 200)}\n…${t('chat.truncatedJson')}` : json;
   } catch {
     return String(value);
   }

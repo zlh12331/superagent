@@ -15,6 +15,7 @@
 import { File, Folder, FolderOpen } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { type NodeRendererProps, Tree } from 'react-arborist';
+import { useTranslation } from '@/i18n/use-translation';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
@@ -60,6 +61,8 @@ function updateNode(
  * 展开目录时通过 file:list IPC 加载子节点（children 注入受控 data）。
  */
 export function FileTreeNavigator(): ReactElement | null {
+  // 本地化文案
+  const { t } = useTranslation();
   const rootPath = useFileTreeStore((s) => s.rootPath);
 
   // 受控树数据（根节点 + 已加载的子节点）
@@ -93,7 +96,7 @@ export function FileTreeNavigator(): ReactElement | null {
   }
 
   return (
-    <nav className="file-tree-navigator" aria-label="文件树导航">
+    <nav className="file-tree-navigator" aria-label={t('common.fileTreeNav')}>
       <Tree<FileNode>
         data={treeData}
         onToggle={handleToggle}

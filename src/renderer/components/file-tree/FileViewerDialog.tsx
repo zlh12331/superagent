@@ -378,13 +378,15 @@ export function FileViewerDialog(): ReactElement {
               <div className="file-viewer-loading">{t('common.loading')}</div>
             ) : error !== null ? (
               <div className="file-viewer-error">
-                <p>加载失败</p>
+                <p>{t('common.fileLoadFailed')}</p>
                 <p className="file-viewer-error-detail">
                   {error instanceof Error ? error.message : String(error)}
                 </p>
               </div>
             ) : displayContent === '' ? (
-              <div className="file-viewer-empty">{editMode ? '空文件，开始编辑…' : '空文件'}</div>
+              <div className="file-viewer-empty">
+                {editMode ? t('common.emptyFileEdit') : t('common.emptyFile')}
+              </div>
             ) : editMode ? (
               // 编辑态：textarea + shiki 叠加
               <div className="file-viewer-editor">
@@ -409,7 +411,7 @@ export function FileViewerDialog(): ReactElement {
                   autoCapitalize="off"
                   autoCorrect="off"
                   wrap="off"
-                  aria-label={`编辑 ${fileName}`}
+                  aria-label={t('chat.editFileLabel', { name: fileName })}
                 />
               </div>
             ) : html !== null ? (

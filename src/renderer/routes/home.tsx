@@ -368,7 +368,7 @@ export function HomePage(): ReactElement {
                   <span className="fdm-icon">
                     <Plus size={13} strokeWidth={2} />
                   </span>
-                  <span>选择文件夹…</span>
+                  <span>{t('home.chooseFolder')}</span>
                 </button>
               </div>
             )}

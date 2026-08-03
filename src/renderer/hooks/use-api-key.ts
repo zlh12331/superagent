@@ -20,6 +20,7 @@
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useTranslation } from '@/i18n/use-translation';
 
 /**
  * Query key 工厂（按 provider 分桶）
@@ -96,6 +97,8 @@ export function useApiKeyQuery(provider: ApiKeyProvider) {
  * ```
  */
 export function useSetApiKey() {
+  // 本地化文案
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -109,7 +112,7 @@ export function useSetApiKey() {
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(`API Key 保存失败：${message}`);
+      toast.error(t('common.apiKeySaveFailed', { message }));
     },
   });
 }
@@ -123,6 +126,8 @@ export function useSetApiKey() {
  * @returns TanStack Mutation 结果
  */
 export function useDeleteApiKey() {
+  // 本地化文案
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -135,7 +140,7 @@ export function useDeleteApiKey() {
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(`API Key 删除失败：${message}`);
+      toast.error(t('common.apiKeyDeleteFailed', { message }));
     },
   });
 }

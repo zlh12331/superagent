@@ -33,6 +33,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import type { TFunction } from 'i18next';
 import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
 import { memo, type ReactElement, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -53,18 +54,18 @@ import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
-/** 相对时间格式化（如「刚刚」「3 分钟前」「昨天」），超过一周显示日期 */
-function formatRelativeTime(timestamp: number): string {
+/** 相对时间格式化（如「刚刚」「3 分钟前」），超过一周显示日期；t 注入避免模块函数碰 hook */
+function formatRelativeTime(timestamp: number, t: TFunction): string {
   const now = Date.now();
   const diff = now - timestamp;
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
 
-  if (diff < minute) return '刚刚';
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`;
-  if (diff < day) return `${Math.floor(diff / hour)} 小时前`;
-  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`;
+  if (diff < minute) return t('home.justNow');
+  if (diff < hour) return t('home.minutesAgo', { count: Math.floor(diff / minute) });
+  if (diff < day) return t('home.hoursAgo', { count: Math.floor(diff / hour) });
+  if (diff < 7 * day) return t('home.daysAgo', { count: Math.floor(diff / day) });
 
   // 超过一周显示 YYYY-MM-DD
   return new Date(timestamp).toISOString().slice(0, 10);
@@ -528,7 +529,7 @@ function ThreadItem({
   // 本地化文案
   const { t } = useTranslation();
   // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
-  const metaParts: string[] = [formatRelativeTime(updatedAt)];
+  const metaParts: string[] = [formatRelativeTime(updatedAt, t)];
   if (lastMessage !== undefined && lastMessage.length > 0) {
     const preview = lastMessage.length > 20 ? `${lastMessage.slice(0, 20)}…` : lastMessage;
     metaParts.push(preview);

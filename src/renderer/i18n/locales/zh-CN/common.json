@@ -29,9 +29,15 @@
       "readFileError": "读取文件异常",
       "createDirFailed": "创建目录失败",
       "createFileFailed": "创建文件失败",
+      "deleteFailed": "删除失败",
+      "moveFailed": "移动失败",
       "watchFailed": "文件监听已失效",
       "watchFailedDesc": "文件监听已失效，实时更新中断，刷新目录后重新监听",
       "watchAbnormal": "文件监听出现异常",
+      "watchAbnormalDesc": "文件监听出现异常，实时更新中断",
+      "fileLoadFailed": "加载失败",
+      "emptyFile": "空文件",
+      "emptyFileEdit": "空文件，开始编辑…",
       "telemetryUpdated": "遥测级别已更新为 {{level}}，重启应用后生效",
       "telemetryUpdateFailed": "遥测级别更新失败：{{message}}",
       "apiKeySaveFailed": "API Key 保存失败：{{message}}",
@@ -45,7 +51,7 @@
       "fileTreeNav": "文件树导航",
       "newFileStartEdit": "新建文件，开始编辑吧",
       "noFile": "未打开文件",
-      "noDiff": "选中文件查看 diff",
+      "noDiff": "无 diff 内容",
       "noChanges": "无变更文件",
       "cleanWorkingTree": "工作区干净",
       "gitStatusFailed": "Git 状态获取失败",
@@ -54,7 +60,13 @@
       "rightPanel": "右侧面板",
       "expandRightPanel": "展开右侧面板",
       "collapseRightPanel": "折叠右侧面板",
-      "shortcuts": "快捷键"
+      "shortcuts": "快捷键",
+      "shortcutsHint": "支持 Ctrl/Cmd + 字母组合，如 Meta+P、Ctrl+S。修改后立即生效。",
+      "saveFileShortcut": "保存文件",
+      "searchFileShortcut": "搜索文件",
+      "toggleThemeShortcut": "切换主题",
+      "openSettingsShortcut": "打开设置",
+      "newSessionShortcut": "新建会话"
     },
     "topbar": {
       "expandSidebar": "展开侧边栏",
@@ -114,7 +126,9 @@
       "copy": "复制",
       "copied": "已复制",
       "regenerate": "重新生成",
-      "generating": "正在生成中…"
+      "generating": "正在生成中…",
+      "truncatedJson": "(已截断)",
+      "editFileLabel": "编辑 {{name}}"
     },
     "update": {
       "noticeAvailable": "发现新版本",
@@ -135,6 +149,7 @@
       "toggleThemeDark": "切换到暗色主题",
       "openSettings": "打开设置",
       "searchPlaceholder": "搜索文件或输入命令…",
+      "commandPaletteShortcut": "打开命令面板",
       "searchLabel": "命令面板搜索",
       "unnamedSession": "未命名会话",
       "navigate": "导航",
@@ -214,9 +229,13 @@
       "toolKnowledge": "工具知识",
       "toolKnowledgePrompt": "介绍一些实用的开发工具",
       "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前",
       "noProject": "未选择项目",
       "chooseProject": "请先选择项目目录",
       "chooseProjectDesc": "点击下方项目栏选择历史目录或浏览其它",
+      "chooseFolder": "选择文件夹…",
       "chooseProjectLabel": "选择项目目录",
       "dirList": "项目目录列表",
       "noRecentDirs": "暂无历史目录"
@@ -300,7 +319,8 @@
       "creating": "创建中…",
       "newTerminal": "新建终端",
       "closed": "已结束",
-      "closeTerminal": "关闭终端"
+      "closeTerminal": "关闭终端",
+      "exited": "[进程已退出，exit code: {{code}}]"
     }
   }
 }

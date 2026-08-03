@@ -4,6 +4,7 @@
     "src/renderer/index.html",
     "src/renderer/main.tsx",
     "src/renderer/test/setup.ts",
+    "src/renderer/test/setup-lang.ts",
     "**/vitest.config.ts",
     "scripts/**/*.ts",
     "e2e/**/*.ts",

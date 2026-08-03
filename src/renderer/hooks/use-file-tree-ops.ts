@@ -21,6 +21,7 @@
 
 import { toast } from 'sonner';
 
+import { useTranslation } from '@/i18n/use-translation';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
 /**
@@ -37,6 +38,8 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
  * ```
  */
 export function useFileTreeOps() {
+  // 本地化文案
+  const { t } = useTranslation();
   const setPendingOp = useFileTreeStore((s) => s.setPendingOp);
   const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
   const cancelRename = useFileTreeStore((s) => s.cancelRename);
@@ -56,13 +59,13 @@ export function useFileTreeOps() {
     try {
       const res = await window.api.file.create({ path: fullPath, createDirs: false });
       if ('error' in res) {
-        toast.error('创建文件失败', { description: res.error.message });
+        toast.error(t('common.createFileFailed'), { description: res.error.message });
         return false;
       }
       cancelCreate();
       return true;
     } catch (err) {
-      toast.error('创建文件异常', { description: String(err) });
+      toast.error(t('common.createFileFailed'), { description: String(err) });
       return false;
     } finally {
       setPendingOp(fullPath, false);
@@ -81,13 +84,13 @@ export function useFileTreeOps() {
     try {
       const res = await window.api.file.createDir({ path: fullPath });
       if ('error' in res) {
-        toast.error('创建目录失败', { description: res.error.message });
+        toast.error(t('common.createDirFailed'), { description: res.error.message });
         return false;
       }
       cancelCreate();
       return true;
     } catch (err) {
-      toast.error('创建目录异常', { description: String(err) });
+      toast.error(t('common.createDirFailed'), { description: String(err) });
       return false;
     } finally {
       setPendingOp(fullPath, false);
@@ -104,12 +107,12 @@ export function useFileTreeOps() {
     try {
       const res = await window.api.file.delete({ path, recursive: true });
       if ('error' in res) {
-        toast.error('删除失败', { description: res.error.message });
+        toast.error(t('common.deleteFailed'), { description: res.error.message });
         return false;
       }
       return true;
     } catch (err) {
-      toast.error('删除异常', { description: String(err) });
+      toast.error(t('common.deleteFailed'), { description: String(err) });
       return false;
     } finally {
       setPendingOp(path, false);
@@ -132,13 +135,13 @@ export function useFileTreeOps() {
         overwrite: false,
       });
       if ('error' in res) {
-        toast.error('重命名失败', { description: res.error.message });
+        toast.error(t('common.moveFailed'), { description: res.error.message });
         return false;
       }
       cancelRename();
       return true;
     } catch (err) {
-      toast.error('重命名异常', { description: String(err) });
+      toast.error(t('common.moveFailed'), { description: String(err) });
       return false;
     } finally {
       setPendingOp(oldPath, false);

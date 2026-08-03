@@ -306,6 +306,8 @@ function FileDiffView({
   deletions,
   isLoading,
 }: FileDiffViewProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
 
   // 语义统计（diff-match-patch 行级 diff）：比 git 文本统计更准（移动的行不计增删）
@@ -363,7 +365,7 @@ function FileDiffView({
               <Skeleton className="mt-1 h-3 w-1/2" />
             </div>
           ) : diff === undefined || diff.length === 0 ? (
-            <div className="text-muted-foreground p-2 text-[10px]">无 diff 内容</div>
+            <div className="text-muted-foreground p-2 text-[10px]">{t('common.noDiff')}</div>
           ) : (
             <DiffText diff={diff} />
           )}
@@ -452,21 +454,25 @@ function FileListSkeleton(): ReactElement {
 
 /** 工作区干净提示 */
 function CleanHint(): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
       <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
-      <p className="font-serif text-xs tracking-wide">工作区干净</p>
-      <p className="text-[10px]">无变更文件</p>
+      <p className="font-serif text-xs tracking-wide">{t('common.cleanWorkingTree')}</p>
+      <p className="text-[10px]">{t('common.noChanges')}</p>
     </div>
   );
 }
 
 /** 错误状态提示 */
 function ErrorHint({ message }: { readonly message: string }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
-      <p className="font-serif text-xs">Git 状态获取失败</p>
+      <p className="font-serif text-xs">{t('common.gitStatusFailed')}</p>
       <p className="text-muted-foreground truncate text-[10px]" title={message}>
         {message}
       </p>

@@ -14,6 +14,7 @@
 import type { TelemetryLevel } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useTranslation } from '@/i18n/use-translation';
 
 /** Query key */
 export const TELEMETRY_LEVEL_QUERY_KEY = ['telemetry-level'] as const;
@@ -58,6 +59,8 @@ export function useTelemetryLevelQuery() {
  * 成功后提示用户重启应用以生效。
  */
 export function useSetTelemetryLevel() {
+  // 本地化文案
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -67,11 +70,11 @@ export function useSetTelemetryLevel() {
     },
     onSuccess: (_data, level) => {
       void queryClient.invalidateQueries({ queryKey: TELEMETRY_LEVEL_QUERY_KEY });
-      toast.success(`遥测级别已设为「${level}」，重启后生效`);
+      toast.success(t('common.telemetryUpdated', { level }));
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(`遥测级别设置失败：${message}`);
+      toast.error(t('common.telemetryUpdateFailed', { message }));
     },
   });
 }
