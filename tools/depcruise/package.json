@@ -1,0 +1,14 @@
+{
+  "name": "@code-agent/depcruise",
+  "version": "0.0.0",
+  "private": true,
+  "description": "依赖方向/循环消除机器闸。独立子包声明 typescript@6.x，规避 depcruise 与 TS 7 的不兼容（同 TypeDoc 隔离方案）。",
+  "type": "module",
+  "scripts": {
+    "check": "cd ../.. && depcruise src packages/shared --config tools/depcruise/.dependency-cruiser.cjs --output-type err-long"
+  },
+  "dependencies": {
+    "dependency-cruiser": "^17.0.0",
+    "typescript": "^6.0.2"
+  }
+}

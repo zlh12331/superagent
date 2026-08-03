@@ -21,6 +21,7 @@ echo "[pre-push] 运行快速门禁（typecheck + lint + test:scripts）..."
 
 pnpm typecheck || exit 1
 pnpm lint || exit 1
+pnpm depcruise || exit 1
 pnpm test:scripts || exit 1
 
 echo "[pre-push] 快速门禁通过 ✓"

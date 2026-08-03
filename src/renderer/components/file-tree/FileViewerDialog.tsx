@@ -107,6 +107,7 @@ function basename(path: string): string {
  * - 查看模式（默认）：shiki 高亮只读
  * - 编辑模式：textarea + shiki 叠加高亮，Ctrl+S 保存
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 文件查看器（模式/脏数据/加载分支），拆组件计划已登记 TECH_DEBT
 export function FileViewerDialog(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

@@ -84,6 +84,7 @@ interface ApiKeySectionProps {
   readonly label: string;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: API Key 配置区（编辑/配置/加载分支），拆组件计划已登记 TECH_DEBT
 function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

@@ -267,6 +267,7 @@ class ChatService implements IChatService {
    * - 模型错误：AI_MODEL_ERROR
    * - 其他：INTERNAL_ERROR
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Chat 流式循环（增量/完成/错误/中断分支），核心编排重构风险高，已登记 TECH_DEBT
   private async streamToWebContents(
     sessionId: string,
     messages: ChatMessage[],
