@@ -15,6 +15,7 @@ import { isRouteErrorResponse, Outlet, useRouteError } from 'react-router';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/use-translation';
 
 /**
  * 根布局组件
@@ -39,15 +40,19 @@ export function RootLayout(): ReactElement {
  * - 其他错误：显示错误消息与"重试"按钮
  */
 export function RootErrorBoundary(): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const error = useRouteError();
 
   if (isRouteErrorResponse(error)) {
     return (
       <div className="text-foreground flex h-full flex-col items-center justify-center gap-3 p-8">
-        <h2 className="text-lg font-semibold">{error.status} 错误</h2>
-        <p className="text-muted-foreground text-sm">{error.statusText || '页面加载失败'}</p>
+        <h2 className="text-lg font-semibold">{t('common.pageError', { status: error.status })}</h2>
+        <p className="text-muted-foreground text-sm">
+          {error.statusText || t('common.pageLoadFailed')}
+        </p>
         <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-          重新加载
+          {t('common.reload')}
         </Button>
       </div>
     );
@@ -56,10 +61,10 @@ export function RootErrorBoundary(): ReactElement {
   const message = error instanceof Error ? error.message : String(error);
   return (
     <div className="text-foreground flex h-full flex-col items-center justify-center gap-3 p-8">
-      <h2 className="text-lg font-semibold">页面出错了</h2>
+      <h2 className="text-lg font-semibold">{t('common.pageLoadFailed')}</h2>
       <p className="text-muted-foreground max-w-md text-center text-sm">{message}</p>
       <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-        重新加载
+        {t('common.reload')}
       </Button>
     </div>
   );

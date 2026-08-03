@@ -31,6 +31,7 @@ import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
+import { useTranslation } from '@/i18n/use-translation';
 import { DEFAULT_GIT_REPO_PATH, DRAFT_SESSION_ID } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -104,6 +105,8 @@ interface AppShellProps {
  * - mouseup 移除监听，恢复 user-select
  */
 export function AppShell({ children }: AppShellProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 审批桥接：订阅 IPC 推送 + 提供 respondApproval 方法
   const { respondApproval } = useApprovalBridge();
 
@@ -244,7 +247,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         href="#main-content"
         className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
       >
-        跳到主内容
+        {t('common.skipToContent')}
       </a>
       <Topbar
         sidebarCollapsed={sidebarCollapsed}

@@ -14,6 +14,7 @@ import { Navigate, useParams } from 'react-router';
 
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import { useSessionDetail } from '@/hooks/use-sessions';
+import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
@@ -45,6 +46,8 @@ export function ChatPage(): ReactElement {
  * 因此在 sessionId 确定后调用，避免条件 hook。
  */
 function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const { data: session, isLoading } = useSessionDetail(sessionId);
   const setWelcomeMode = useWelcomeStore((state) => state.setWelcomeMode);
 
@@ -57,7 +60,9 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // loading 中：显示加载状态
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex h-full items-center justify-center">加载中...</div>
+      <div className="text-muted-foreground flex h-full items-center justify-center">
+        {t('common.loading')}
+      </div>
     );
   }
 
@@ -70,7 +75,7 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   if (session.session.workingDir === '') {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center">
-        <p>会话数据异常,请删除后重建</p>
+        <p>{t('common.chatLoadFailed')}</p>
       </div>
     );
   }

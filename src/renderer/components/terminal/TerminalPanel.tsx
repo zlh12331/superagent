@@ -32,6 +32,7 @@ import { CircleSlash, Plus, TerminalSquare, X } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/use-translation';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
 interface TerminalPanelProps {
@@ -78,6 +79,8 @@ const RESIZE_DEBOUNCE_MS = 100;
  * ```
  */
 export function TerminalPanel({ sessionId, className }: TerminalPanelProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 查找当前 sessionId 的终端元数据
   const terminal = useTerminalStore(
     (state) => state.terminals.find((t) => t.sessionId === sessionId) ?? null,
@@ -124,7 +127,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     } catch (error) {
       // 终端创建失败时通过 toast 提示用户（不阻塞 UI）
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(`创建终端失败: ${message}`);
+      toast.error(t('terminal.createFailed', { message }));
     } finally {
       setIsCreating(false);
     }
@@ -138,7 +141,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     } catch (error) {
       // 关闭失败时通过 toast 提示用户，但仍从 store 移除（避免 UI 卡住）
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(`关闭终端失败: ${message}`);
+      toast.error(t('terminal.closeFailed', { message }));
     } finally {
       // 无论 IPC 是否成功，都从 store 移除（避免 UI 卡住）
       closeTerminalInStore(terminal.id);
@@ -255,7 +258,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
           disabled={isCreating}
         >
           <Plus className="size-3.5" strokeWidth={1.5} />
-          {isCreating ? '创建中...' : '新建终端'}
+          {isCreating ? t('terminal.creating') : t('terminal.newTerminal')}
         </Button>
       </div>
     );
@@ -272,7 +275,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
           {!terminal.alive && (
             <span className="text-muted-foreground/70 flex items-center gap-0.5">
               <CircleSlash className="size-2.5" strokeWidth={1.5} />
-              已结束
+              {t('terminal.closed')}
             </span>
           )}
         </div>
@@ -283,7 +286,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
           onClick={() => {
             void handleClose();
           }}
-          aria-label="关闭终端"
+          aria-label={t('terminal.closeTerminal')}
         >
           <X className="size-3" strokeWidth={1.5} />
         </Button>

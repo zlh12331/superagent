@@ -1,6 +1,7 @@
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
 interface ModelInfo {
@@ -46,6 +47,8 @@ export function ModelSelector({
   onModelChange,
   disabled = false,
 }: ModelSelectorProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -110,7 +113,7 @@ export function ModelSelector({
         onClick={() => !disabled && setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="选择模型"
+        aria-label={t('common.selectModel')}
         disabled={disabled}
       >
         <span
@@ -126,7 +129,7 @@ export function ModelSelector({
         <div
           className="folder-dropdown-menu show model-selector-menu"
           role="menu"
-          aria-label="模型选择"
+          aria-label={t('common.modelSelector')}
         >
           <div className="fdm-scroll">
             {MODEL_CONFIGS.map((config) => (

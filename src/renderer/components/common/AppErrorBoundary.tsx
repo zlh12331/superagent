@@ -24,19 +24,22 @@ import type { ErrorInfo, ReactElement } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/use-translation';
 
 /**
  * App 级错误边界的 fallback 渲染函数
  *
  * 全屏错误页面，仅依赖最基础的原生 DOM（无 Provider 依赖）。
  */
-function appFallback({
+function AppFallback({
   error,
   resetErrorBoundary,
 }: {
   error: unknown;
   resetErrorBoundary: () => void;
 }): ReactElement {
+  // 本地化文案（i18next 全局实例已 init，错误边界场景无需 Provider）
+  const { t } = useTranslation();
   const message = error instanceof Error ? error.message : String(error);
 
   return (
@@ -51,7 +54,7 @@ function appFallback({
       </div>
 
       <div className="text-center">
-        <h1 className="font-serif text-lg font-semibold tracking-wide">应用崩溃</h1>
+        <h1 className="font-serif text-lg font-semibold tracking-wide">{t('common.appCrashed')}</h1>
         <p className="text-muted-foreground mt-2 max-w-md font-serif text-xs leading-relaxed">
           {message}
         </p>
@@ -59,7 +62,7 @@ function appFallback({
 
       <Button variant="outline" size="sm" onClick={resetErrorBoundary}>
         <RefreshCw className="size-3" strokeWidth={1.5} />
-        重新加载
+        {t('common.reload')}
       </Button>
     </div>
   );
@@ -91,7 +94,7 @@ interface AppErrorBoundaryProps {
 export function AppErrorBoundary({ children }: AppErrorBoundaryProps): ReactElement {
   return (
     <ErrorBoundary
-      fallbackRender={appFallback}
+      fallbackRender={AppFallback}
       onError={(error: unknown, info: ErrorInfo) => {
         // 上报到 Sentry（renderer → main → OTLP）
         // info.componentStack 帮助定位错误来源组件

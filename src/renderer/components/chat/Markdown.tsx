@@ -30,7 +30,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createHighlighter, type Highlighter } from 'shiki';
-
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 
@@ -217,6 +217,8 @@ function AnchorComponent({ href, children }: ComponentPropsWithoutRef<'a'>): Rea
  * - 复制按钮：对齐原型 .code-block-wrapper + .code-copy-btn
  */
 function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
   const [html, setHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -280,8 +282,8 @@ function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement
         type="button"
         className={cn('code-copy-btn', copied && 'copied')}
         onClick={handleCopy}
-        aria-label={copied ? '已复制' : '复制代码'}
-        title={copied ? '已复制' : '复制代码'}
+        aria-label={copied ? t('common.copied') : t('common.copyCode')}
+        title={copied ? t('common.copied') : t('common.copyCode')}
       >
         {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
       </button>
