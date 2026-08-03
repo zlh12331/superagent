@@ -27,6 +27,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "knip": "knip --include files,dependencies,devDependencies,binaries",
+    "changelog": "tsx scripts/changelog/changelog-gen.ts",
     "format": "biome format --write .",
     "test": "pnpm -r --filter \"@code-agent/*\" --filter \"!@code-agent/typedoc-docs\" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts",
     "test:scripts": "vitest run --root scripts",
