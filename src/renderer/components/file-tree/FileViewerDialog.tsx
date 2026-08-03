@@ -225,7 +225,7 @@ export function FileViewerDialog(): ReactElement {
     } catch {
       // onError 已在 use-file-write 中 toast 错误
     }
-  }, [filePath, isDirty, isSaving, editedContent, saveFile, markSaved]);
+  }, [filePath, isDirty, isSaving, editedContent, saveFile, markSaved, t]);
 
   // Ctrl+S / Cmd+S 快捷键保存
   useEffect(() => {
