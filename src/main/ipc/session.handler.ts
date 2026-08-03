@@ -1,9 +1,8 @@
 // src/main/ipc/session.handler.ts
-// Session 域 IPC handler：注册会话持久化查询通道
-// ──────────────────────────────────────────────────────────────
+// Session 域 IPC handler：会话持久化查询通道（定义表驱动）
+//
 // 职责：
-// - 注册 6 个 session:* 请求-响应 channel
-// - 入参用 zod schema 校验，出参类型由 Res 接口保证
+// - 实现 6 个 session:* 请求-响应方法
 // - 把 IPC 调用委托给 SessionService
 //
 // 设计：
@@ -14,95 +13,57 @@
 // 注意：
 // - SessionService 的 appendMessage 是内部 API（非 IPC 通道）
 //   由 AgentService / ChatService 直接调用，不在此 handler 中注册
-// - create 已通过 session:create channel 暴露给渲染层
-// ──────────────────────────────────────────────────────────────
 
-import {
-  IPC_CHANNELS,
-  type SessionCreateReq,
-  SessionCreateReqSchema,
-  type SessionCreateRes,
-  type SessionDeleteReq,
-  SessionDeleteReqSchema,
-  type SessionDeleteRes,
-  type SessionGetReq,
-  SessionGetReqSchema,
-  type SessionGetRes,
-  type SessionListRecentDirsReq,
-  SessionListRecentDirsReqSchema,
-  type SessionListRecentDirsRes,
-  type SessionListReq,
-  SessionListReqSchema,
-  type SessionListRes,
-  type SessionRenameReq,
-  SessionRenameReqSchema,
-  type SessionRenameRes,
-} from '@code-agent/shared/main';
+import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+
 import type { ISessionService } from '../infra/storage/session-service';
-import { wrap } from '../utils/wrap';
+import type { IpcHandlerContext } from '../utils/wrap';
 
 export interface SessionHandlerDeps {
   readonly sessionService: ISessionService;
 }
 
 /**
- * 注册 Session 域 IPC handler
+ * 创建 Session 域 handler 实现
  *
- * 6 个 channel 对应会话持久化的用户操作：
- * - session:list            → 分页列出所有会话（按 updatedAt 倒序）
- * - session:get             → 获取指定会话的完整消息历史
- * - session:delete          → 删除指定会话（级联删除消息）
- * - session:rename          → 重命名会话标题
- * - session:create          → 创建新会话（绑定 workingDir，空会话）
- * - session:listRecentDirs  → 查询最近使用的目录列表（去重 + 按 lastUsed 倒序）
+ * 6 个方法对应会话持久化的用户操作：
+ * - list            → 分页列出所有会话（按 updatedAt 倒序）
+ * - get             → 获取指定会话的完整消息历史
+ * - delete          → 删除指定会话（级联删除消息）
+ * - rename          → 重命名会话标题
+ * - create          → 创建新会话（绑定 workingDir，空会话）
+ * - listRecentDirs  → 查询最近使用的目录列表（去重 + 按 lastUsed 倒序）
  *
  * appendMessage 是内部 API（供 AgentService 调用），不通过 IPC 暴露。
- * create 已通过 session:create channel 暴露给渲染层。
  */
-export function registerSessionHandlers(deps: SessionHandlerDeps): void {
+export function createSessionHandlers(
+  deps: SessionHandlerDeps,
+): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['session'] {
   const { sessionService } = deps;
 
-  // session:list - 分页列出会话
-  wrap<SessionListReq, SessionListRes>(
-    IPC_CHANNELS.SESSION_LIST,
-    SessionListReqSchema,
-    async (input) => {
+  return {
+    // session:list - 分页列出会话
+    list: async (input) => {
       return sessionService.list(input.limit, input.offset);
     },
-  );
 
-  // session:get - 获取完整会话消息历史
-  wrap<SessionGetReq, SessionGetRes>(
-    IPC_CHANNELS.SESSION_GET,
-    SessionGetReqSchema,
-    async (input) => {
+    // session:get - 获取完整会话消息历史
+    get: async (input) => {
       return sessionService.get(input.id);
     },
-  );
 
-  // session:delete - 删除会话（级联删除消息）
-  wrap<SessionDeleteReq, SessionDeleteRes>(
-    IPC_CHANNELS.SESSION_DELETE,
-    SessionDeleteReqSchema,
-    async (input) => {
+    // session:delete - 删除会话（级联删除消息）
+    delete: async (input) => {
       return sessionService.delete(input.id);
     },
-  );
 
-  // session:rename - 重命名会话标题
-  wrap<SessionRenameReq, SessionRenameRes>(
-    IPC_CHANNELS.SESSION_RENAME,
-    SessionRenameReqSchema,
-    async (input) => {
+    // session:rename - 重命名会话标题
+    rename: async (input) => {
       return sessionService.rename(input.id, input.title);
     },
-  );
 
-  // session:create - 创建新会话（绑定 workingDir，空会话）
-  wrap<SessionCreateReq, SessionCreateRes>(
-    IPC_CHANNELS.SESSION_CREATE,
-    SessionCreateReqSchema,
-    async (input) => {
+    // session:create - 创建新会话（绑定 workingDir，空会话）
+    create: async (input) => {
       const sessionId = await sessionService.create({
         workingDir: input.workingDir,
         title: input.title,
@@ -110,14 +71,10 @@ export function registerSessionHandlers(deps: SessionHandlerDeps): void {
       });
       return { sessionId };
     },
-  );
 
-  // session:listRecentDirs - 查询最近使用的目录列表
-  wrap<SessionListRecentDirsReq, SessionListRecentDirsRes>(
-    IPC_CHANNELS.SESSION_LIST_RECENT_DIRS,
-    SessionListRecentDirsReqSchema,
-    async (input) => {
+    // session:listRecentDirs - 查询最近使用的目录列表
+    listRecentDirs: async (input) => {
       return sessionService.listRecentDirs({ limit: input.limit });
     },
-  );
+  };
 }

@@ -1,42 +1,31 @@
 // src/main/ipc/system.handler.ts
-// 系统级 IPC handler（运行时可观测性）
-// ──────────────────────────────────────────────────────────────
+// 系统级 IPC handler（运行时可观测性，定义表驱动）
+//
 // 职责：
-// - system:getStatus：返回运行时状态（内存/CPU/uptime/版本），DevPanel Metrics tab 使用
-// - logs:read：读取最近 N 行日志（从 main.log 文件尾部倒读），DevPanel Logs tab 使用
+// - getStatus：返回运行时状态（内存/CPU/uptime/版本），DevPanel Metrics tab 使用
+// - read（logs 域）：读取最近 N 行日志（从 main.log 文件尾部倒读），DevPanel Logs tab 使用
 //
 // 设计：
-// - 复用 wrap.ts 统一包装（traceId + zod 校验 + Sentry 上报 + 日志埋点）
-// - system:getStatus 读取 Node.js 原生 process.memoryUsage / cpuUsage
-// - logs:read 使用 fs.open 从文件尾部按块倒读，避免大文件全量加载拖慢 IPC
-// ──────────────────────────────────────────────────────────────
+// - getStatus 读取 Node.js 原生 process.memoryUsage / cpuUsage
+// - read 使用 fs.open 从文件尾部按块倒读，避免大文件全量加载拖慢 IPC
 
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  IPC_CHANNELS,
-  type ReadLogsReq,
-  ReadLogsReqSchema,
-  type ReadLogsRes,
-  type SystemStatusRes,
-} from '@code-agent/shared/main';
+import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { app } from 'electron';
+
 import { logger } from '../utils/logger';
-import { wrap } from '../utils/wrap';
+import type { IpcHandlerContext } from '../utils/wrap';
 
 /** logs:read 入参默认行数 */
 const DEFAULT_LINES = 200;
 /** logs:read 入参最大行数（防止大文件拖慢渲染层，与 schemas/system.ts 一致） */
 const MAX_LINES = 2000;
 
-/**
- * 注册系统级 IPC handler
- *
- * 在 app.whenReady() 后调用一次。
- */
-export function registerSystemHandlers(): void {
+/** System 域 handler 实现（system:getStatus） */
+export const systemHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['system'] = {
   // system:getStatus：查询运行时状态（内存/CPU/uptime/版本）
-  wrap<null, SystemStatusRes>(IPC_CHANNELS.SYSTEM_GET_STATUS, null, async () => {
+  getStatus: async () => {
     const mem = process.memoryUsage();
     const cpu = process.cpuUsage();
     return {
@@ -61,10 +50,13 @@ export function registerSystemHandlers(): void {
       },
       timestamp: new Date().toISOString(),
     };
-  });
+  },
+};
 
+/** Logs 域 handler 实现（logs:read） */
+export const logsHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['logs'] = {
   // logs:read：读取最近 N 行日志（从文件尾部倒读）
-  wrap<ReadLogsReq, ReadLogsRes>(IPC_CHANNELS.LOGS_READ, ReadLogsReqSchema, async (input) => {
+  read: async (input) => {
     const requestedLines = input?.lines ?? DEFAULT_LINES;
     const lines = Math.min(requestedLines, MAX_LINES);
     const logPath = join(app.getPath('logs'), 'main.log');
@@ -92,10 +84,8 @@ export function registerSystemHandlers(): void {
         truncated: false,
       };
     }
-  });
-
-  logger.info({}, '系统级 IPC handler 注册完成（2 channel：system:getStatus / logs:read）');
-}
+  },
+};
 
 /**
  * 从文件尾部读取最近 N 行（高效版，不全量加载）

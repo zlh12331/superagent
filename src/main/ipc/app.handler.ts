@@ -1,54 +1,32 @@
 // src/main/ipc/app.handler.ts
-// 应用级 IPC handler
+// 应用级 IPC handler（定义表驱动，注册由 registerIpcHandlers 统一执行）
 //
-// 当前仅注册 2 个应用级 channel：
+// 当前仅实现 2 个应用级 channel：
 // - app:getStatus：返回应用就绪状态（health check）
 // - app:openExternal：通过系统浏览器打开外链
 //
-// 说明：业务相关 handler（project/chapter/character/worldview/chat/rag/agent/settings）
-// 已随数据库层一并删除，作为 Electron 模板基础设施仅保留应用级 handler。
+// 说明：handler 对象形状受 InferHandlers 约束（缺方法编译期报错）；
+// channel / schema 由 IPC_DEFINITIONS 提供，本文件只写业务实现。
 
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import type { InferHandlers } from '@code-agent/shared/main';
+import { AppError, ErrorCode, type IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { shell } from 'electron';
-import { z } from 'zod';
-import { logger } from '../utils/logger';
-import { wrap } from '../utils/wrap';
 
-/**
- * 注册应用级 IPC handler
- *
- * 在 app.whenReady() 后调用一次。
- *
- * 幂等：重复调用会抛错（ipcMain.handle 对同一 channel 重复注册），
- * 但正常流程不会触发——本函数只在 whenReady 中调用一次。
- */
-export function registerAppHandlers(): void {
+import type { IpcHandlerContext } from '../utils/wrap';
+
+/** 应用级 handler 实现（app 域） */
+export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['app'] = {
   // 应用状态查询：返回就绪标记
-  wrap<undefined, { ready: boolean }>(
-    IPC_CHANNELS.APP_GET_STATUS,
-    null,
-    async (): Promise<{ ready: boolean }> => {
-      return { ready: true };
-    },
-  );
+  getStatus: async () => {
+    return { ready: true };
+  },
 
-  // 外链打开：通过系统浏览器打开
-  const openExternalSchema = z.object({
-    url: z.string().min(1, 'URL 不能为空'),
-  });
-
-  wrap<{ url: string }, { ok: boolean }>(
-    IPC_CHANNELS.APP_OPEN_EXTERNAL,
-    openExternalSchema,
-    async (input: { url: string }): Promise<{ ok: boolean }> => {
-      // 仅允许 http/https 协议，防止 file:// / javascript: 等危险协议
-      if (!input.url.startsWith('http://') && !input.url.startsWith('https://')) {
-        throw new AppError(ErrorCode.INVALID_INPUT, '仅允许 http/https 协议');
-      }
-      await shell.openExternal(input.url);
-      return { ok: true };
-    },
-  );
-
-  logger.info({}, '应用级 IPC handler 注册完成（2 channel）');
-}
+  // 外链打开：仅允许 http/https 协议，防止 file:// / javascript: 等危险协议
+  openExternal: async (input) => {
+    if (!input.url.startsWith('http://') && !input.url.startsWith('https://')) {
+      throw new AppError(ErrorCode.INVALID_INPUT, '仅允许 http/https 协议');
+    }
+    await shell.openExternal(input.url);
+    return { ok: true };
+  },
+};

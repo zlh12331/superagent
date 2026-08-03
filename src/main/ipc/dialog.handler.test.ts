@@ -1,7 +1,10 @@
 // src/main/ipc/dialog.handler.test.ts
-// dialog.handler 单测：dialog:pickDirectory channel
+// dialog.handler 单测：dialog:pickDirectory 方法（定义表驱动模式下直接测 handler 对象）
 //
 // 测试维度：正向 / 边界 / 异常
+//
+// 说明：handler 是纯业务函数（channel/schema 由定义表 + wrap 统一处理），
+// 测试直接调用 dialogHandlers.pickDirectory(input, ctx)，ctx 传入空对象即可。
 
 import type { OpenDialogReturnValue } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,41 +19,14 @@ vi.mock('electron', () => ({
   },
 }));
 
-// 测试 handler 注册表（类型安全，避免 noUncheckedIndexedAccess / unknown 问题）
-interface TestHandlerRegistry {
-  [channel: string]: ((input: unknown) => Promise<unknown>) | undefined;
-}
-const testHandlers: TestHandlerRegistry = {};
+import { dialogHandlers } from './dialog.handler';
 
-// mock wrap（避免真实 ipcMain.handle 注册）
-vi.mock('../utils/wrap', () => ({
-  wrap: vi.fn(
-    (channel: string, _schema: unknown, handler: (input: unknown) => Promise<unknown>) => {
-      testHandlers[channel] = handler;
-    },
-  ),
-}));
-
-import { registerDialogHandlers } from './dialog.handler';
-
-/**
- * 取出 dialog:pickDirectory handler，若未注册则显式抛错。
- *
- * 避免使用非空断言 `handler!`（biome lint/style/noNonNullAssertion），
- * 同时保证 handler 为 undefined 时测试有明确的失败原因，而非静默通过。
- */
-function getPickDirHandler(): (input: unknown) => Promise<unknown> {
-  const handler = testHandlers['dialog:pickDirectory'];
-  if (handler === undefined) {
-    throw new Error('dialog:pickDirectory handler not registered');
-  }
-  return handler;
-}
+/** 空 ctx（pickDirectory 不使用 ctx） */
+const EMPTY_CTX = {} as never;
 
 describe('dialog.handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    registerDialogHandlers();
   });
 
   it('正向：showOpenDialog 返回选中路径 → 返回 { canceled: false, path }', async () => {
@@ -59,7 +35,7 @@ describe('dialog.handler', () => {
       filePaths: ['D:\\selected'],
     } as OpenDialogReturnValue);
 
-    const result = await getPickDirHandler()({});
+    const result = await dialogHandlers.pickDirectory({}, EMPTY_CTX);
     expect(result).toEqual({ canceled: false, path: 'D:\\selected' });
   });
 
@@ -69,7 +45,7 @@ describe('dialog.handler', () => {
       filePaths: ['D:\\a', 'D:\\b'],
     } as OpenDialogReturnValue);
 
-    const result = await getPickDirHandler()({});
+    const result = await dialogHandlers.pickDirectory({}, EMPTY_CTX);
     expect(result).toEqual({ canceled: false, path: 'D:\\a' });
   });
 
@@ -79,7 +55,7 @@ describe('dialog.handler', () => {
       filePaths: [],
     } as OpenDialogReturnValue);
 
-    const result = await getPickDirHandler()({});
+    const result = await dialogHandlers.pickDirectory({}, EMPTY_CTX);
     expect(result).toEqual({ canceled: true });
     expect((result as { path?: string }).path).toBeUndefined();
   });
@@ -90,7 +66,7 @@ describe('dialog.handler', () => {
       filePaths: [],
     } as OpenDialogReturnValue);
 
-    const result = await getPickDirHandler()({});
+    const result = await dialogHandlers.pickDirectory({}, EMPTY_CTX);
     expect(result).toEqual({ canceled: true });
   });
 });

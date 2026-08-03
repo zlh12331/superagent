@@ -100,8 +100,8 @@ type RequestMethods<D, Domain extends keyof D> = {
   [M in keyof D[Domain]]: D[Domain][M] extends RequestDefLike ? M : never;
 }[keyof D[Domain]];
 
-/** 入参类型：schema=null → undefined（无参）；否则取 zod input 类型 */
-type ReqOf<S> = S extends null ? undefined : S extends z.ZodType ? z.input<S> : never;
+/** 入参类型：schema=null → undefined（无参）；否则取 zod output 类型（wrap 校验后的 parsed.data） */
+type ReqOf<S> = S extends null ? undefined : S extends z.ZodType ? z.output<S> : never;
 
 /** 单个 request 方法的调用签名（无入参时不生成 input 参数） */
 type RequestSignature<Def> = Def extends {
@@ -187,22 +187,24 @@ export type InferEventMap<D extends Record<string, Record<string, RequestDefLike
     : never;
 
 /** 定义表 request 方法的处理器签名（供 registerIpcHandlers 推导 handler 对象） */
-export type HandlerSignature<Def> = Def extends {
+export type HandlerSignature<Def, C> = Def extends {
   readonly kind: 'request';
   readonly schema: infer S;
   readonly res: infer R;
 }
-  ? (input: ReqOf<S>, ctx: never) => Promise<R>
+  ? (input: ReqOf<S>, ctx: C) => Promise<R>
   : never;
 
 /**
- * 从定义表推导 handler 实现对象形状
+ * 从定义表推导 handler 实现对象形状（ctx 泛型由调用方指定，如主进程 IpcHandlerContext）
  *
  * 缺失任一 request 方法的 handler → 编译期报错（通道↔handler 一致性保证）
  */
-export type InferHandlers<D extends Record<string, Record<string, RequestDefLike | EventDefLike>>> =
-  {
-    [Domain in keyof D]: {
-      [M in RequestMethods<D, Domain>]: HandlerSignature<D[Domain][M]>;
-    };
+export type InferHandlers<
+  D extends Record<string, Record<string, RequestDefLike | EventDefLike>>,
+  C,
+> = {
+  [Domain in keyof D]: {
+    [M in RequestMethods<D, Domain>]: HandlerSignature<D[Domain][M], C>;
   };
+};

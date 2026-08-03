@@ -1,12 +1,11 @@
 // src/main/ipc/agent-approval.handler.ts
-// Agent 域审批响应 IPC handler（PermissionService 暴露给渲染层的回传通道）
+// Agent 域审批响应 IPC handler（PermissionService 暴露给渲染层的回传通道，定义表驱动）
 //
-// 注册 1 个请求-响应 channel：
-// - agent:approval:response  渲染层回传用户审批结果（approve / deny / remember）
+// 实现 1 个请求-响应方法：
+// - approvalResponse  渲染层回传用户审批结果（approve / deny / remember）
 //
 // 设计要点：
-// - 与其他 handler 一致的 DI 模式：通过 ServiceContainer 注入 IPermissionService 实例
-// - 入参 zod schema 来自 @code-agent/shared（AgentApprovalResponseReqSchema）
+// - DI 模式：通过 deps 注入 IPermissionService 实例
 // - 此 channel 是请求-响应模式，但语义是"回传事件"：
 //     主进程通过 webContents.send('agent:approval:request') 推送审批请求
 //     渲染层弹出 ApprovalModal，用户操作后通过 invoke('agent:approval:response', req) 回传
@@ -14,18 +13,14 @@
 // - 返回 { ok: true } 仅作为 invoke 的 ack，业务结果通过后续 agent:tool:result 推送
 //
 // 与 agent.handler.ts 的关系：
-// - agent.handler.ts（P4 实现）注册 agent:run / agent:stop
-// - 本 handler 单独注册 agent:approval:response，因为审批响应是工具系统的一部分，
+// - agent.handler.ts 实现 agent:run / agent:stop
+// - 本 handler 单独实现 agent:approval:response，因为审批响应是工具系统的一部分，
 //   依赖 PermissionService 而非 AgentService
-// - 拆分到独立文件便于关注点分离，避免 agent.handler.ts 在 P4 之前被创建
 
-import {
-  type AgentApprovalResponseReq,
-  AgentApprovalResponseReqSchema,
-  IPC_CHANNELS,
-} from '@code-agent/shared/main';
+import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+
 import type { IPermissionService } from '../infra/ai/permission-service';
-import { wrap } from '../utils/wrap';
+import type { IpcHandlerContext } from '../utils/wrap';
 
 /**
  * Agent 审批响应 handler 依赖
@@ -39,27 +34,26 @@ export interface AgentApprovalHandlerDeps {
   readonly permissionService: IPermissionService;
 }
 
+/** agent 域审批子集（与 agent.handler 的 run/stop 合并成完整 agent 域） */
+type AgentApprovalHandlers = Pick<
+  InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['agent'],
+  'approvalResponse'
+>;
+
 /**
- * 注册 Agent 审批响应 IPC handler
- *
- * 在 app.whenReady() 后调用一次，与 registerToolHandlers 并列。
+ * 创建 Agent 审批响应 handler 实现
  *
  * @param deps 依赖项：包含 IPermissionService 实例
- *
- * 幂等性：重复调用会因 ipcMain.handle 对同一 channel 重复注册而抛错，
- * 但正常流程不会触发——本函数只在 whenReady 中调用一次。
  */
-export function registerAgentApprovalHandlers(deps: AgentApprovalHandlerDeps): void {
+export function createAgentApprovalHandlers(deps: AgentApprovalHandlerDeps): AgentApprovalHandlers {
   const { permissionService } = deps;
 
-  // 审批响应回传：渲染层 ApprovalModal 用户操作后调用
-  // 调用 PermissionService.handleApprovalResponse resolve 对应 approvalId 的 Promise
-  // ToolExecutor 等待的 Promise 解除阻塞，继续执行或返回 TOOL_PERMISSION_DENIED
-  // 返回 { ok: true } 仅作为 invoke 的 ack，业务结果通过 agent:tool:result 推送
-  wrap<AgentApprovalResponseReq, { ok: boolean }>(
-    IPC_CHANNELS.AGENT_APPROVAL_RESPONSE,
-    AgentApprovalResponseReqSchema,
-    async (input) => {
+  return {
+    // 审批响应回传：渲染层 ApprovalModal 用户操作后调用
+    // 调用 PermissionService.handleApprovalResponse resolve 对应 approvalId 的 Promise
+    // ToolExecutor 等待的 Promise 解除阻塞，继续执行或返回 TOOL_PERMISSION_DENIED
+    // 返回 { ok: true } 仅作为 invoke 的 ack，业务结果通过 agent:tool:result 推送
+    approvalResponse: async (input) => {
       permissionService.handleApprovalResponse(
         input.approvalId,
         input.approved,
@@ -67,5 +61,5 @@ export function registerAgentApprovalHandlers(deps: AgentApprovalHandlerDeps): v
       );
       return { ok: true };
     },
-  );
+  };
 }

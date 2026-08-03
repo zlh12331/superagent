@@ -16,21 +16,22 @@ import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-insta
 import { getAppConfig } from './config';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
-import { registerAgentHandlers } from './ipc/agent.handler';
-import { registerAgentApprovalHandlers } from './ipc/agent-approval.handler';
-import { registerAppHandlers } from './ipc/app.handler';
-import { registerChatHandlers } from './ipc/chat.handler';
-import { registerCodebaseHandlers } from './ipc/codebase.handler';
-import { registerDevToolsHandlers } from './ipc/devtools.handler';
-import { registerDialogHandlers } from './ipc/dialog.handler';
-import { registerFileHandlers } from './ipc/file.handler';
-import { registerGitHandlers } from './ipc/git.handler';
-import { registerSearchHandlers } from './ipc/search.handler';
-import { registerSessionHandlers } from './ipc/session.handler';
-import { registerSettingsHandlers } from './ipc/settings.handler';
-import { registerSystemHandlers } from './ipc/system.handler';
-import { registerTerminalHandlers } from './ipc/terminal.handler';
-import { registerToolHandlers } from './ipc/tool.handler';
+import { createAgentHandlers } from './ipc/agent.handler';
+import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
+import { appHandlers } from './ipc/app.handler';
+import { createChatHandlers } from './ipc/chat.handler';
+import { createCodebaseHandlers } from './ipc/codebase.handler';
+import { devtoolsHandlers } from './ipc/devtools.handler';
+import { dialogHandlers } from './ipc/dialog.handler';
+import { createFileHandlers } from './ipc/file.handler';
+import { createGitHandlers } from './ipc/git.handler';
+import { registerIpcHandlers } from './ipc/register';
+import { createSearchHandlers } from './ipc/search.handler';
+import { createSessionHandlers } from './ipc/session.handler';
+import { settingsHandlers } from './ipc/settings.handler';
+import { logsHandlers, systemHandlers } from './ipc/system.handler';
+import { createTerminalHandlers } from './ipc/terminal.handler';
+import { createToolHandlers } from './ipc/tool.handler';
 import { buildCsp } from './security/csp';
 import { disposeServices, serviceContainer } from './service-container';
 import { initTelemetry, shutdownTelemetry } from './telemetry/otel';
@@ -254,77 +255,32 @@ app
     // - 用户编辑过的 prompt 不会被覆盖（onConflictDoNothing）
     serviceContainer.getPromptService().initialize();
     registerGlobalErrorHandlers();
-    // 注册应用级 IPC handler（app:getStatus / app:openExternal）
-    registerAppHandlers();
-    // 注册聊天域 IPC handler（chat:send / chat:stop，基于 Vercel AI SDK v7）
-    // 通过 ServiceContainer 注入 IChatService 实例，解耦 handler 与具体实现
-    registerChatHandlers({ chatService: serviceContainer.getChatService() });
-    // 注册文件域 IPC handler（file:read / file:write / file:list / file:watch:start / file:watch:stop）
-    // 通过 ServiceContainer 注入 IFileService 实例，handler 不直接依赖 FileService 实现
-    registerFileHandlers({ fileService: serviceContainer.getFileService() });
-    // 注册搜索域 IPC handler（search:grep / search:glob）
-    // 通过 ServiceContainer 注入 ISearchService 实例，handler 不直接依赖 SearchService 实现
-    registerSearchHandlers({ searchService: serviceContainer.getSearchService() });
-
-    // 注册终端域 IPC handler（terminal:create / input / resize / kill）
-    // 通过 ServiceContainer 注入 ITerminalService 实例（基于 node-pty）
-    // terminal:create 传入 ctx.sender（WebContents）作为后续事件推送目标
-    // 后续输出和退出事件通过 terminal:event:output / terminal:event:exit 推送
-    registerTerminalHandlers({ terminalService: serviceContainer.getTerminalService() });
-
-    // 注册 Git 域 IPC handler（git:status / git:diff）
-    // 通过 ServiceContainer 注入 IGitService 实例（基于 child_process.spawn('git')）
-    // 仅暴露只读查询，写操作通过 TerminalService 由用户手动执行
-    registerGitHandlers({ gitService: serviceContainer.getGitService() });
-
-    // 注册代码库域 IPC handler（codebase:query / explore / node / callers / callees / impact）
-    // 通过 ServiceContainer 注入 ICodebaseService 实例（基于 child_process.spawn('codegraph')）
-    // 提供 6 个代码智能查询通道，支持符号搜索、调用追踪、影响分析
-    // Code Agent 调用这些方法获取代码上下文，喂给 LLM 辅助决策
-    registerCodebaseHandlers({ codebaseService: serviceContainer.getCodebaseService() });
-
-    // 注册 Session 域 IPC handler（session:list / get / delete / rename）
-    // 通过 ServiceContainer 注入 ISessionService 实例（基于 drizzle + better-sqlite3）
-    // 持久化会话历史：用户关闭窗口后下次启动可恢复历史对话
-    // create / appendMessage 是内部 API（供 AgentService 调用），不通过 IPC 暴露
-    registerSessionHandlers({ sessionService: serviceContainer.getSessionService() });
-
-    // 注册工具域 IPC handler（tool:list）
-    // 通过 ServiceContainer 注入 IToolRegistry 实例（已注册 7 个内置工具）
-    registerToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() });
-
-    // 注册 Settings 域 IPC handler（settings:getApiKey / setApiKey / deleteApiKey）
-    // 管理 API Key 等敏感数据，通过 safeStorage 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
-    // 无需 ServiceContainer 注入：直接调用 keychain 模块函数（无状态）
-    registerSettingsHandlers();
-
-    // 注册系统级 IPC handler（system:getStatus / logs:read）
-    // - system:getStatus：返回运行时状态（内存/CPU/uptime/版本），DevPanel Metrics tab 使用
-    // - logs:read：读取最近 N 行日志（从 main.log 文件尾部倒读），DevPanel Logs tab 使用
-    // 无需 ServiceContainer 注入：仅读取 process 全局状态 + 日志文件
-    registerSystemHandlers();
-
-    // 注册 DevTools 域 IPC handler（devtools:open）
-    // - 渲染层 DevPanel Inspector tab 按钮触发，主进程调用 webContents.openDevTools({ mode })
-    // - 无需 ServiceContainer 注入：通过 BrowserWindow.fromWebContents(ctx.sender) 获取窗口
-    registerDevToolsHandlers();
-
-    // 注册 Dialog 域 IPC handler（dialog:pickDirectory）
-    // - 原生目录选择器，供 NewSessionDialog 调用
-    // - 无需 ServiceContainer 注入：dialog 是 Electron 全局 API
-    registerDialogHandlers();
-
-    // 注册 Agent 域 IPC handler（agent:run / agent:stop）
-    // 通过 ServiceContainer 注入 IAgentService 实例（依赖 ToolRegistry + ToolExecutor）
-    // agent:run 启动 streamText 多轮工具调用循环，立即返回 sessionId
-    // 后续流式事件通过 AGENT_STREAM_PART / AGENT_TOOL_CALL / AGENT_TOOL_RESULT / AGENT_APPROVAL_REQUEST 推送
-    registerAgentHandlers({ agentService: serviceContainer.getAgentService() });
-
-    // 注册 Agent 审批响应 IPC handler（agent:approval:response）
-    // 通过 ServiceContainer 注入 IPermissionService 实例
-    // 渲染层 ApprovalModal 用户操作后通过此 channel 回传审批结果
-    registerAgentApprovalHandlers({
-      permissionService: serviceContainer.getPermissionService(),
+    // 注册全部 IPC handler（定义表驱动，registerIpcHandlers 统一执行）
+    // - handler 对象形状受 InferHandlers 约束：定义表新增方法而 handler 缺失 → 编译期报错
+    // - channel / schema / traceId / sender 校验 / Sentry 由 wrap 统一处理
+    registerIpcHandlers({
+      app: appHandlers,
+      chat: createChatHandlers({ chatService: serviceContainer.getChatService() }),
+      agent: {
+        ...createAgentHandlers({ agentService: serviceContainer.getAgentService() }),
+        ...createAgentApprovalHandlers({
+          permissionService: serviceContainer.getPermissionService(),
+        }),
+      },
+      session: createSessionHandlers({ sessionService: serviceContainer.getSessionService() }),
+      file: createFileHandlers({ fileService: serviceContainer.getFileService() }),
+      search: createSearchHandlers({ searchService: serviceContainer.getSearchService() }),
+      terminal: createTerminalHandlers({ terminalService: serviceContainer.getTerminalService() }),
+      git: createGitHandlers({ gitService: serviceContainer.getGitService() }),
+      codebase: createCodebaseHandlers({
+        codebaseService: serviceContainer.getCodebaseService(),
+      }),
+      tool: createToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() }),
+      settings: settingsHandlers,
+      system: systemHandlers,
+      logs: logsHandlers,
+      devtools: devtoolsHandlers,
+      dialog: dialogHandlers,
     });
 
     // 注入 CSP 响应头（P1-5 安全基线）
