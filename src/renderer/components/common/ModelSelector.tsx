@@ -1,4 +1,4 @@
-import type { ApiKeyProvider } from '@code-agent/shared';
+import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';

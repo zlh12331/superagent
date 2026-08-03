@@ -4,7 +4,7 @@
 // 测试维度：正向用例 / 边界用例 / 异常用例
 // 使用内存 SQLite 避免文件系统依赖
 
-import type { ChatMessage } from '@code-agent/shared';
+import type { ChatMessage } from '@code-agent/shared/main';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // mock electron（app.getPath 在 db.ts 中使用）

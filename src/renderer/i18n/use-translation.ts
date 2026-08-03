@@ -23,8 +23,8 @@
 // - 这样文案只在 ERROR_META 一处维护，避免双份同步问题
 // ──────────────────────────────────────────────────────────────
 
-import type { ErrorCode } from '@code-agent/shared';
-import { ERROR_META } from '@code-agent/shared';
+import type { ErrorCode } from '@code-agent/shared/renderer';
+import { ERROR_META } from '@code-agent/shared/renderer';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 

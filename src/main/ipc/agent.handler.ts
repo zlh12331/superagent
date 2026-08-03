@@ -33,7 +33,7 @@ import {
   AgentStopReqSchema,
   type AgentStopRes,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { IAgentService } from '../infra/ai/agent-service';
 import { wrap } from '../utils/wrap';
 

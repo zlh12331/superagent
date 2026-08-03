@@ -26,8 +26,8 @@ import type {
   TerminalKillRes,
   TerminalOutputEventPayload,
   TerminalResizeRes,
-} from '@code-agent/shared';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
+} from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { type IPty, spawn } from 'node-pty';
 import { logger } from '../../utils/logger';

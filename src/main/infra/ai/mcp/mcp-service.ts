@@ -15,7 +15,7 @@
 // - 状态追踪：维护 serverName → { client, status, toolNames } 的 Map
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 import { logger } from '../../../utils/logger';
 import type { IToolRegistry } from '../tool-registry';

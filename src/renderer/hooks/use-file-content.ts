@@ -17,7 +17,7 @@
 // - gcTime: 5min（关闭 Dialog 后 5 分钟内缓存仍可用，再次打开秒开）
 // ──────────────────────────────────────────────────────────────
 
-import type { FileReadRes } from '@code-agent/shared';
+import type { FileReadRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
 /** 文件内容 query key 工厂（保持 queryKey 一致性，便于失效） */

@@ -13,7 +13,7 @@
 // - 成功/失败状态通过本地 useState 管理，3s 后自动清除
 // ──────────────────────────────────────────────────────────────
 
-import type { OpenDevToolsRes } from '@code-agent/shared';
+import type { OpenDevToolsRes } from '@code-agent/shared/renderer';
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';

@@ -16,7 +16,7 @@ import {
   type ToolListReq,
   ToolListReqSchema,
   type ToolListRes,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { IToolRegistry } from '../infra/ai/tool-registry';
 import { wrap } from '../utils/wrap';
 

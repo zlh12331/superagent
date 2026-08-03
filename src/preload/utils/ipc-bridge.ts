@@ -12,7 +12,7 @@
 // - contextIsolation: true 下 ipcRenderer 不能直接暴露给渲染层，
 //   必须通过 contextBridge 包装后再 expose（见 ../index.ts）
 
-import type { IpcResponse } from '@code-agent/shared';
+import type { IpcResponse } from '@code-agent/shared/preload';
 import { type IpcRendererEvent, ipcRenderer } from 'electron';
 
 /**

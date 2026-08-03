@@ -13,7 +13,7 @@
 // 9. hasRunningServers：判断是否有运行中 server
 // 10. validateMcpServerConfig：配置校验
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

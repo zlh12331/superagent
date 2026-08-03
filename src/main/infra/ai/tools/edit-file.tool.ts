@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { promises as fs } from 'node:fs';
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';

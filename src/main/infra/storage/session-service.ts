@@ -33,8 +33,8 @@ import type {
   SessionListRes,
   SessionMeta,
   SessionRenameRes,
-} from '@code-agent/shared';
-import { AppError, ErrorCode } from '@code-agent/shared';
+} from '@code-agent/shared/main';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { count, desc, eq, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb } from './db';

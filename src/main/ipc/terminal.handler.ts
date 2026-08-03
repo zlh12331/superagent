@@ -36,7 +36,7 @@ import {
   type TerminalResizeReq,
   TerminalResizeReqSchema,
   type TerminalResizeRes,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { ITerminalService } from '../infra/terminal/terminal-service';
 import { wrap } from '../utils/wrap';
 

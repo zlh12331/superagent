@@ -16,7 +16,7 @@
 // 输出：ToolResult（title + output 文本 + metadata 结构化数据）
 // ──────────────────────────────────────────────────────────────
 
-import type { FileReadRes } from '@code-agent/shared';
+import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';

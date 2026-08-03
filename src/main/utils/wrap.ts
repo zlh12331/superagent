@@ -10,7 +10,7 @@
 // 5. 返回统一结构 { data } | { error }
 
 import { randomUUID } from 'node:crypto';
-import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@code-agent/shared';
+import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@code-agent/shared/main';
 import * as Sentry from '@sentry/electron/main';
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import type { ZodType } from 'zod';

@@ -29,7 +29,7 @@ import {
   type SetTelemetryLevelReq,
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import { toKeychainKey } from '../infra/ai/providers';
 import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';

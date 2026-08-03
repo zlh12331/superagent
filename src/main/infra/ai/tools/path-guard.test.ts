@@ -9,7 +9,7 @@
 // 5. Windows 盘符跨盘越界 → UNAUTHORIZED
 // 6. 工作区内部路径（含子目录回溯后仍在区内）→ 通过
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { describe, expect, it } from 'vitest';
 
 import { resolveWithinWorkspace } from './path-guard';

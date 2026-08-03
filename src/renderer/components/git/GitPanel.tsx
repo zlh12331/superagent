@@ -16,7 +16,7 @@
 // - 路径必须为绝对路径（由调用方传入）
 // ──────────────────────────────────────────────────────────────
 
-import type { GitFileStatus, GitStatusRes } from '@code-agent/shared';
+import type { GitFileStatus, GitStatusRes } from '@code-agent/shared/renderer';
 import {
   AlertCircle,
   CheckCircle2,

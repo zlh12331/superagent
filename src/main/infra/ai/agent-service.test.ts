@@ -15,8 +15,8 @@
 // 11. 工具 executeHook 注入：验证 ToolExecutor.execute 被调用，结果正确返回给 AI SDK
 // 12. systemPrompt 未传时：调用 PromptService.resolvePrompt 注入默认 prompt
 
-import type { ChatMessage } from '@code-agent/shared';
-import { IPC_CHANNELS } from '@code-agent/shared';
+import type { ChatMessage } from '@code-agent/shared/main';
+import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';

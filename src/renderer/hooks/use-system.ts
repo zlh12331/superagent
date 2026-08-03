@@ -12,7 +12,7 @@
 // - enabled 参数：面板折叠时不查询，节省 IPC 调用
 // ──────────────────────────────────────────────────────────────
 
-import type { ReadLogsRes, SystemStatusRes } from '@code-agent/shared';
+import type { ReadLogsRes, SystemStatusRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
 /** system:getStatus Query key */

@@ -23,7 +23,7 @@ import {
   type AgentApprovalResponseReq,
   AgentApprovalResponseReqSchema,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { IPermissionService } from '../infra/ai/permission-service';
 import { wrap } from '../utils/wrap';
 

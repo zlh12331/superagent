@@ -18,7 +18,7 @@
 // - 主进程保证配对推送：每个 tool:call 必有对应 tool:result（成功或失败）
 // ──────────────────────────────────────────────────────────────
 
-import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared';
+import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/renderer';
 import { useEffect } from 'react';
 
 import { useTerminalStore } from '@/stores/transient/terminal-store';

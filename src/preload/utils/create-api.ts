@@ -12,7 +12,8 @@
 // - 新增 IPC 方法只改 IPC_META + definitions.ts，本文件零改动
 // ──────────────────────────────────────────────────────────────
 
-import type { IpcApi, IpcMeta } from '@code-agent/shared';
+import type { IpcMeta } from '@code-agent/shared/preload';
+import type { IpcApi } from '@code-agent/shared/renderer';
 import { invoke, subscribe } from './ipc-bridge';
 
 /**
@@ -32,14 +33,15 @@ export function createIpcApi(meta: IpcMeta): IpcApi {
   const api: Record<string, Record<string, unknown>> = {};
 
   for (const [domain, methods] of Object.entries(meta)) {
-    api[domain] = {};
+    const domainApi: Record<string, unknown> = {};
+    api[domain] = domainApi;
     for (const [method, def] of Object.entries(methods)) {
       if (def.kind === 'request') {
         // 请求-响应：invoke(channel, input)，traceId 由 ipc-bridge 自动注入
-        api[domain]![method] = (input: unknown) => invoke(def.channel, input);
+        domainApi[method] = (input: unknown) => invoke(def.channel, input);
       } else {
         // 事件订阅：subscribe(channel, callback)，返回 unsubscribe 函数
-        api[domain]![method] = (callback: (payload: unknown) => void) =>
+        domainApi[method] = (callback: (payload: unknown) => void) =>
           subscribe(def.channel, callback);
       }
     }

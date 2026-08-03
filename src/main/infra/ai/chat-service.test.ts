@@ -12,8 +12,8 @@
 // 8. webContents.isDestroyed：停止推送
 // 9. getChatService / resetChatService 单例管理
 
-import type { ChatMessage } from '@code-agent/shared';
-import { IPC_CHANNELS } from '@code-agent/shared';
+import type { ChatMessage } from '@code-agent/shared/main';
+import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';

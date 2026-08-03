@@ -2,7 +2,7 @@
 // list_directory 工具：封装 FileService.list，供 Code Agent 列出目录内容
 // ──────────────────────────────────────────────────────────────
 
-import type { FileListRes } from '@code-agent/shared';
+import type { FileListRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';

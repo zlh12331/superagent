@@ -20,7 +20,7 @@
 // - SessionMeta 类型 re-export 自 shared，作为单一真源
 // ──────────────────────────────────────────────────────────────
 
-import type { SessionMeta } from '@code-agent/shared';
+import type { SessionMeta } from '@code-agent/shared/renderer';
 
 import { createPersistentStore } from './create-persistent-store';
 

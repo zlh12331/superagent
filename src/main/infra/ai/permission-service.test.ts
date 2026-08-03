@@ -8,7 +8,7 @@
 // 4. dispose：reject 所有 pending，清理记忆
 // 5. stableStringify：键顺序不影响记忆 key
 
-import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
+import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

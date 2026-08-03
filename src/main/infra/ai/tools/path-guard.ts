@@ -19,7 +19,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { isAbsolute, relative, resolve } from 'node:path';
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 /**
  * 解析路径并确保在 workingDir 内

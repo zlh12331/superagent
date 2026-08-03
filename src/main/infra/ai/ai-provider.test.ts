@@ -11,7 +11,7 @@
 // 7. resetAIProvider：清空缓存
 // 8. ProviderRegistry：内置 4 个供应商，默认 kind 为 deepseek
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

@@ -32,7 +32,7 @@ import {
   CodebaseQueryReqSchema,
   type CodebaseQueryRes,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { ICodebaseService } from '../infra/codebase/codebase-service';
 import { wrap } from '../utils/wrap';
 

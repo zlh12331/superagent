@@ -16,7 +16,7 @@
 //   ANTHROPIC_API_BASE / OLLAMA_API_BASE）
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
 import { logger } from '../../utils/logger';
 import { getSecret } from '../storage/keychain';

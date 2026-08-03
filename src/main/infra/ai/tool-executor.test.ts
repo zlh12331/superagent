@@ -11,7 +11,7 @@
 // 7. 执行抛错 → TOOL_EXECUTION_FAILED
 // 8. AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件推送
 
-import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
+import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tool, ToolContext, ToolResult } from './tool';

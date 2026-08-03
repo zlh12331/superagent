@@ -28,8 +28,8 @@ import type {
   AgentStreamErrorPayload,
   AgentStreamPartPayload,
   ChatMessage,
-} from '@code-agent/shared';
-import { IPC_CHANNELS } from '@code-agent/shared';
+} from '@code-agent/shared/main';
+import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';

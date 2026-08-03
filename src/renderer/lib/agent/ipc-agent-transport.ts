@@ -29,7 +29,7 @@
 // - workingDir 由渲染层传入，主进程 path-guard 二次校验
 // - sessionId 用于过滤当前对话的事件
 
-import type { ChatMessage } from '@code-agent/shared';
+import type { ChatMessage } from '@code-agent/shared/renderer';
 import {
   type ChatRequestOptions,
   type ChatTransport,

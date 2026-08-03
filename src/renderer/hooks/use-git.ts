@@ -19,7 +19,7 @@
 // - 不缓存 diff：每次调用都重新请求
 // ──────────────────────────────────────────────────────────────
 
-import type { GitDiffRes, GitStatusRes } from '@code-agent/shared';
+import type { GitDiffRes, GitStatusRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
 /**
@@ -140,4 +140,4 @@ export function useGitDiffQuery(
  *
  * 业务方从此处导入 Git 类型，避免直接依赖 shared 包。
  */
-export type { GitDiffRes, GitFileStatus, GitStatusRes } from '@code-agent/shared';
+export type { GitDiffRes, GitFileStatus, GitStatusRes } from '@code-agent/shared/renderer';

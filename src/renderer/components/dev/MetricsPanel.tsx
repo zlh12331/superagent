@@ -13,7 +13,7 @@
 // - 等宽字体展示数值，衬线字体展示标签
 // ──────────────────────────────────────────────────────────────
 
-import type { SystemStatusRes } from '@code-agent/shared';
+import type { SystemStatusRes } from '@code-agent/shared/renderer';
 import { Activity, AlertCircle, Cpu, MemoryStick, RefreshCw, Timer } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';

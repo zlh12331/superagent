@@ -24,8 +24,8 @@
 // - ToolExecutor 不直接调用 streamText，是被 AgentService 调用
 // ──────────────────────────────────────────────────────────────
 
-import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
+import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';
 import { logger } from '../../utils/logger';

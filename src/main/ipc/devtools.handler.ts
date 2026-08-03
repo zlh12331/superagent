@@ -20,7 +20,7 @@ import {
   type OpenDevToolsReq,
   OpenDevToolsReqSchema,
   type OpenDevToolsRes,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import { wrap } from '../utils/wrap';

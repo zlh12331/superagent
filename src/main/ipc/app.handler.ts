@@ -8,7 +8,7 @@
 // 说明：业务相关 handler（project/chapter/character/worldview/chat/rag/agent/settings）
 // 已随数据库层一并删除，作为 Electron 模板基础设施仅保留应用级 handler。
 
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import { shell } from 'electron';
 import { z } from 'zod';
 import { logger } from '../utils/logger';

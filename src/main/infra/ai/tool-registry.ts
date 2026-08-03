@@ -22,8 +22,8 @@
 //   用于关联 AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件
 // ──────────────────────────────────────────────────────────────
 
-import type { ToolDescriptor } from '@code-agent/shared';
-import { AppError, ErrorCode } from '@code-agent/shared';
+import type { ToolDescriptor } from '@code-agent/shared/main';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { type Tool as AITool, tool as defineAITool } from 'ai';
 import { logger } from '../../utils/logger';
 import type { Tool, ToolContext } from './tool';

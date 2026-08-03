@@ -29,7 +29,7 @@ import {
   ChatStopReqSchema,
   type ChatStopRes,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { IChatService } from '../infra/ai/chat-service';
 import { wrap } from '../utils/wrap';
 

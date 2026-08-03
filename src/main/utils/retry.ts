@@ -6,7 +6,7 @@
 // 指数退避 + 抖动：baseDelay * 2^(attempt-1) + random(500)
 // 默认 maxAttempts: 3
 
-import { AppError } from '@code-agent/shared';
+import { AppError } from '@code-agent/shared/main';
 
 /**
  * 重试选项

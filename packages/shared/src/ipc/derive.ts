@@ -100,8 +100,8 @@ type RequestMethods<D, Domain extends keyof D> = {
   [M in keyof D[Domain]]: D[Domain][M] extends RequestDefLike ? M : never;
 }[keyof D[Domain]];
 
-/** 入参类型：schema=null → void；否则取 zod input 类型 */
-type ReqOf<S> = S extends null ? void : S extends z.ZodType ? z.input<S> : never;
+/** 入参类型：schema=null → undefined（无参）；否则取 zod input 类型 */
+type ReqOf<S> = S extends null ? undefined : S extends z.ZodType ? z.input<S> : never;
 
 /** 单个 request 方法的调用签名（无入参时不生成 input 参数） */
 type RequestSignature<Def> = Def extends {
@@ -109,7 +109,7 @@ type RequestSignature<Def> = Def extends {
   readonly schema: infer S;
   readonly res: infer R;
 }
-  ? ReqOf<S> extends void
+  ? ReqOf<S> extends undefined
     ? () => Promise<IpcResponse<R>>
     : (input: ReqOf<S>) => Promise<IpcResponse<R>>
   : never;

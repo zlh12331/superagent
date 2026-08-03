@@ -19,7 +19,7 @@
 // - delete / rename mutation 后 invalidate ['sessions']，触发列表刷新
 // ──────────────────────────────────────────────────────────────
 
-import type { SessionMeta } from '@code-agent/shared';
+import type { SessionMeta } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 

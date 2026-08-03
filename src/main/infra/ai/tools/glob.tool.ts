@@ -2,7 +2,7 @@
 // glob 工具：封装 SearchService.glob，供 Code Agent 按文件名模式查找文件
 // ──────────────────────────────────────────────────────────────
 
-import type { GlobRes } from '@code-agent/shared';
+import type { GlobRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { ISearchService } from '../../search/search-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';

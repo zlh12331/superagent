@@ -30,7 +30,7 @@
 // ```
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 
 /**

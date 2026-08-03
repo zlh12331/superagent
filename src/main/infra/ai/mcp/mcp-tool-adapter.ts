@@ -14,7 +14,7 @@
 // - 工具描述透传 server 返回的 description，让 LLM 据此决定是否调用
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { Tool, ToolContext, ToolResult } from '../tool';
 import type { McpServerConfig } from './mcp-types';

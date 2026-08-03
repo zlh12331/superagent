@@ -34,8 +34,8 @@ import type {
   CodebaseNodeRes,
   CodebaseQueryRes,
   CodebaseQueryResult,
-} from '@code-agent/shared';
-import { AppError, ErrorCode } from '@code-agent/shared';
+} from '@code-agent/shared/main';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
 
 /** 单条 codegraph 命令的默认超时（毫秒）：60s（explore/impact 可能遍历大量符号） */

@@ -37,7 +37,7 @@ import {
   type SessionRenameReq,
   SessionRenameReqSchema,
   type SessionRenameRes,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { ISessionService } from '../infra/storage/session-service';
 import { wrap } from '../utils/wrap';
 

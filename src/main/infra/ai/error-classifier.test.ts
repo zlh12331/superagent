@@ -10,7 +10,7 @@
 // 5. 未知错误 → INTERNAL_ERROR
 // 6. isAbortError 判断
 
-import { AppError, ErrorCode } from '@code-agent/shared';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { classifyError, isAbortError } from './error-classifier';

@@ -52,7 +52,7 @@ import {
   FileWriteReqSchema,
   type FileWriteRes,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { IFileService } from '../infra/file/file-service';
 import { wrap } from '../utils/wrap';
 

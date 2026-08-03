@@ -21,7 +21,7 @@ import {
   GrepReqSchema,
   type GrepRes,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { ISearchService } from '../infra/search/search-service';
 import { wrap } from '../utils/wrap';
 

@@ -43,7 +43,7 @@ import {
   GitStatusReqSchema,
   type GitStatusRes,
   IPC_CHANNELS,
-} from '@code-agent/shared';
+} from '@code-agent/shared/main';
 import type { IGitService } from '../infra/git/git-service';
 import { wrap } from '../utils/wrap';
 
