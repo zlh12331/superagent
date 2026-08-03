@@ -41,6 +41,7 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
 import { useSetTelemetryLevel, useTelemetryLevelQuery } from '@/hooks/use-telemetry';
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
@@ -84,6 +85,8 @@ interface ApiKeySectionProps {
 }
 
 function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const { data: apiKey, isLoading } = useApiKeyQuery(provider);
   const { mutate: setApiKey, isPending: isSaving } = useSetApiKey();
   const { mutate: deleteApiKey, isPending: isDeleting } = useDeleteApiKey();
@@ -102,14 +105,14 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
 
   const handleSave = (): void => {
     if (inputValue.trim() === '') {
-      toast.error('API Key 不能为空');
+      toast.error(t('settings.apiKeyEmpty'));
       return;
     }
     setApiKey(
       { provider, apiKey: inputValue.trim() },
       {
         onSuccess: () => {
-          toast.success(`${label} API Key 已保存`);
+          toast.success(t('settings.apiKeySaved', { label }));
           setInputValue('');
           setEditing(false);
         },
@@ -120,7 +123,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
   const handleDelete = (): void => {
     deleteApiKey(provider, {
       onSuccess: () => {
-        toast.success(`${label} API Key 已删除`);
+        toast.success(t('settings.apiKeyDeleted', { label }));
         setInputValue('');
         setEditing(false);
       },
@@ -136,7 +139,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="size-4 animate-spin" strokeWidth={1.5} />
-          <span className="text-sm">加载中...</span>
+          <span className="text-sm">{t('common.loading')}</span>
         </div>
       ) : isConfigured && !editing ? (
         <div className="space-y-2">
@@ -146,7 +149,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
               variant="ghost"
               size="icon"
               className="size-7"
-              aria-label={showPlain ? '隐藏 API Key' : '显示 API Key'}
+              aria-label={showPlain ? t('settings.hideApiKey') : t('settings.showApiKey')}
               onClick={() => setShowPlain((v) => !v)}
             >
               {showPlain ? (
@@ -170,7 +173,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
                 setInputValue('');
               }}
             >
-              修改
+              {t('settings.modify')}
             </Button>
             <Button
               variant="outline"
@@ -184,7 +187,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
               ) : (
                 <Trash2 className="size-3.5" strokeWidth={1.5} />
               )}
-              删除
+              {t('common.delete')}
             </Button>
           </div>
         </div>
@@ -202,7 +205,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave} disabled={isSaving || inputValue.trim() === ''}>
               {isSaving ? <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} /> : null}
-              保存
+              {t('common.save')}
             </Button>
             {isConfigured && (
               <Button
@@ -220,7 +223,7 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
               variant="ghost"
               size="icon"
               className="size-7"
-              aria-label={showPlain ? '隐藏 API Key' : '显示 API Key'}
+              aria-label={showPlain ? t('settings.hideApiKey') : t('settings.showApiKey')}
               onClick={() => setShowPlain((v) => !v)}
             >
               {showPlain ? (
@@ -237,6 +240,8 @@ function ApiKeySection({ provider, label }: ApiKeySectionProps): ReactElement {
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const persistedSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
   const updateAi = useSettingsStore((s) => s.updateAi);
   const shortcuts = useSettingsStore((s) => s.shortcuts);
@@ -266,7 +271,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
     updateAi({ systemPrompt: promptDraft });
     setPromptEditing(false);
     setPromptDraft('');
-    toast.success('系统提示词已保存');
+    toast.success(t('settings.promptSaved'));
   };
 
   // 系统提示词：清空（恢复使用默认 system prompt）
@@ -274,7 +279,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
     updateAi({ systemPrompt: '' });
     setPromptEditing(false);
     setPromptDraft('');
-    toast.success('已恢复使用默认系统提示词');
+    toast.success(t('settings.promptReset'));
   };
 
   return (
@@ -283,11 +288,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-serif tracking-wide">
             <KeyRound className="size-4" strokeWidth={1.5} />
-            <span>设置</span>
+            <span>{t('settings.title')}</span>
           </DialogTitle>
-          <DialogDescription className="font-serif">
-            管理 API Key 等敏感数据。主进程通过系统钥匙串加密存储，重启后依然可用。
-          </DialogDescription>
+          <DialogDescription className="font-serif">{t('settings.desc')}</DialogDescription>
         </DialogHeader>
 
         <ApiKeySection provider="deepseek" label="DeepSeek" />
@@ -299,11 +302,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           <div className="flex items-center gap-2">
             <MessageSquareText className="size-4 text-stone-600" strokeWidth={1.5} />
             <Label htmlFor="system-prompt" className="font-serif text-sm tracking-wide">
-              系统提示词（Code Agent）
+              {t('settings.systemPrompt')}
             </Label>
           </div>
           <p className="text-xs text-muted-foreground font-sans">
-            自定义 Agent 行为。留空则使用主进程内置默认 system prompt。
+            {t('settings.systemPromptHint')}
           </p>
 
           {promptEditing ? (
@@ -312,14 +315,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                 id="system-prompt"
                 value={promptDraft}
                 onChange={(e) => setPromptDraft(e.target.value)}
-                placeholder="例如：你是一个专注于 TypeScript 代码审查的助手，请使用中文回复..."
+                placeholder={t('settings.systemPromptPlaceholder')}
                 rows={6}
                 className="font-mono text-xs"
                 autoFocus
               />
               <div className="flex gap-2">
                 <Button size="sm" onClick={handlePromptSave}>
-                  保存
+                  {t('common.save')}
                 </Button>
                 <Button
                   variant="ghost"
@@ -329,7 +332,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                     setPromptDraft('');
                   }}
                 >
-                  取消
+                  {t('common.cancel')}
                 </Button>
                 {promptDraft.length > 0 && (
                   <Button
@@ -338,7 +341,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                     onClick={handlePromptClear}
                     className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                   >
-                    清空
+                    {t('settings.clear')}
                   </Button>
                 )}
               </div>
@@ -352,12 +355,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                   </pre>
                 ) : (
                   <span className="text-xs italic text-muted-foreground">
-                    （使用默认 system prompt）
+                    {t('settings.useDefaultPrompt')}
                   </span>
                 )}
               </div>
               <Button variant="outline" size="sm" onClick={handlePromptEdit}>
-                {persistedSystemPrompt.length > 0 ? '修改' : '设置'}
+                {persistedSystemPrompt.length > 0 ? t('settings.modify') : t('settings.set')}
               </Button>
             </div>
           )}
@@ -367,17 +370,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
         <div className="space-y-3 border-t border-stone-200/60 pt-4">
           <div className="flex items-center gap-2">
             <Shield className="size-4 text-stone-600" strokeWidth={1.5} />
-            <Label className="font-serif text-sm tracking-wide">遥测与错误报告</Label>
+            <Label className="font-serif text-sm tracking-wide">{t('settings.telemetry')}</Label>
           </div>
-          <p className="text-xs text-muted-foreground font-sans">
-            控制应用向 Sentry（自托管）上报的数据量。修改后需重启应用生效。
-          </p>
+          <p className="text-xs text-muted-foreground font-sans">{t('settings.telemetryHint')}</p>
           <div className="grid grid-cols-3 gap-1.5">
             {(
               [
-                { value: 'off', label: '关闭', desc: '不上报' },
-                { value: 'error-only', label: '仅错误', desc: '错误堆栈' },
-                { value: 'full', label: '完整', desc: '错误+性能' },
+                { value: 'off', label: t('settings.telOff'), desc: t('settings.telOffDesc') },
+                {
+                  value: 'error-only',
+                  label: t('settings.telErrorOnly'),
+                  desc: t('settings.telErrorOnlyDesc'),
+                },
+                { value: 'full', label: t('settings.telFull'), desc: t('settings.telFullDesc') },
               ] as const
             ).map((option) => {
               const isActive = telemetryLevel === option.value;

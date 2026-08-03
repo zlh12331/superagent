@@ -15,6 +15,7 @@
 // - 本组件仅负责渲染内容，welcome-mode class 由 AppShell 根据 useWelcomeStore 切换
 // ──────────────────────────────────────────────────────────────
 
+import type { TFunction } from 'i18next';
 import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
+import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -32,22 +34,28 @@ import { useWelcomeStore } from '@/stores/transient/welcome-store';
 /** 快捷动作定义（对齐原型 4 个 welcome-pill） */
 interface QuickAction {
   readonly key: string;
-  readonly label: string;
-  readonly prompt: string;
+  /** i18n key（label 与 prompt 均由组件内 t() 渲染，避免模块级常量碰 hook） */
+  readonly labelKey: string;
+  readonly promptKey: string;
   readonly icon: typeof LayoutGrid;
 }
 
 /** 快捷动作列表（对齐原型 data-welcome-action） */
 const QUICK_ACTIONS: readonly QuickAction[] = [
-  { key: 'app-dev', label: '应用开发', prompt: '帮我开发一个应用', icon: LayoutGrid },
+  { key: 'app-dev', labelKey: 'home.appDev', promptKey: 'home.appDevPrompt', icon: LayoutGrid },
   {
     key: 'project-understand',
-    label: '项目理解',
-    prompt: '帮我理解这个项目的结构和代码',
+    labelKey: 'home.projectUnderstanding',
+    promptKey: 'home.projectUnderstandingPrompt',
     icon: Search,
   },
-  { key: 'game-idea', label: '游戏创意', prompt: '给我一些游戏创意', icon: Star },
-  { key: 'tool-knowledge', label: '工具知识', prompt: '介绍一些实用的开发工具', icon: Wrench },
+  { key: 'game-idea', labelKey: 'home.gameIdea', promptKey: 'home.gameIdeaPrompt', icon: Star },
+  {
+    key: 'tool-knowledge',
+    labelKey: 'home.toolKnowledge',
+    promptKey: 'home.toolKnowledgePrompt',
+    icon: Wrench,
+  },
 ] as const;
 
 /** 路径 basename（跨平台，取最后一段） */
@@ -56,13 +64,13 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-/** 相对时间格式化（紧凑版本，用于 dropdown 项右侧 meta） */
-function formatRelativeTime(timestamp: number): string {
+/** 相对时间格式化（紧凑版本，用于 dropdown 项右侧 meta；t 注入避免模块函数碰 hook） */
+function formatRelativeTime(timestamp: number, t: TFunction): string {
   const diff = Date.now() - timestamp;
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
-  if (diff < minute) return '刚刚';
+  if (diff < minute) return t('home.justNow');
   if (diff < hour) return `${Math.floor(diff / minute)}m`;
   if (diff < day) return `${Math.floor(diff / hour)}h`;
   if (diff < 7 * day) return `${Math.floor(diff / day)}d`;
@@ -70,6 +78,8 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 export function HomePage(): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { mutateAsync: createSession, isPending: isCreating } = useCreateSession();
   const { data: recentDirsData } = useRecentDirs();
@@ -93,7 +103,7 @@ export function HomePage(): ReactElement {
   const dirs = recentDirsData?.dirs ?? [];
 
   // 派生：当前显示的 folder 名（pendingWorkingDir 的 basename，或「未选择项目」）
-  const currentFolderLabel = pendingWorkingDir ? basename(pendingWorkingDir) : '未选择项目';
+  const currentFolderLabel = pendingWorkingDir ? basename(pendingWorkingDir) : t('home.noProject');
 
   // 兜底初始化 pendingWorkingDir（对齐原型 prototype-v2.html:13312-13315）
   // 场景：首次启动 / 通过 URL 直接访问 /home / 进入欢迎页时无激活会话
@@ -190,8 +200,8 @@ export function HomePage(): ReactElement {
     async (text: string) => {
       // 步骤 1：校验 workingDir（对齐原型：不允许「本地」模式创建无目录会话）
       if (pendingWorkingDir === null || pendingWorkingDir === '') {
-        toast.message('请先选择项目目录', {
-          description: '点击下方项目栏选择历史目录或浏览其他',
+        toast.message(t('home.chooseProject'), {
+          description: t('home.chooseProjectDesc'),
         });
         setFolderMenuOpen(true);
         return;
@@ -215,7 +225,7 @@ export function HomePage(): ReactElement {
         // 保持欢迎页打开，允许重试
       }
     },
-    [createSession, navigate, pendingWorkingDir, setActiveSession, exitWelcomeMode],
+    [createSession, navigate, pendingWorkingDir, setActiveSession, exitWelcomeMode, t],
   );
 
   /** 快捷 pill 点击：预填输入框（不自动发送，对齐原型行为） */
@@ -242,15 +252,15 @@ export function HomePage(): ReactElement {
             key={action.key}
             type="button"
             className="welcome-pill"
-            onClick={() => handleQuickAction(action.prompt)}
+            onClick={() => handleQuickAction(t(action.promptKey))}
             disabled={isCreating}
           >
             <Icon strokeWidth={2} />
-            {action.label}
+            {t(action.labelKey)}
           </button>
         );
       }),
-    [handleQuickAction, isCreating],
+    [handleQuickAction, isCreating, t],
   );
 
   // useMemo 缓存 folder dropdown 项列表
@@ -271,7 +281,7 @@ export function HomePage(): ReactElement {
               <Folder size={13} strokeWidth={2} />
             </span>
             <span className="fdm-name">{name}</span>
-            <span className="fdm-meta">{formatRelativeTime(dir.lastUsed)}</span>
+            <span className="fdm-meta">{formatRelativeTime(dir.lastUsed, t)}</span>
           </button>
         );
       }),
@@ -302,7 +312,7 @@ export function HomePage(): ReactElement {
           value={inputValue}
           onValueChange={setInputValue}
           disabled={isDisabled}
-          placeholder="帮你编写代码、测试 Bug、优化性能等开发工作，交付生产级代码产物。"
+          placeholder={t('chat.inputPlaceholder')}
         />
 
         {/* composer-project-bar：folder dropdown + 模型选择器占位
@@ -315,7 +325,7 @@ export function HomePage(): ReactElement {
               className="cpb-select"
               aria-expanded={folderMenuOpen}
               aria-haspopup="menu"
-              aria-label="选择项目目录"
+              aria-label={t('home.chooseProjectLabel')}
               onClick={() => setFolderMenuOpen((prev) => !prev)}
             >
               <Folder size={12} strokeWidth={2} />
@@ -325,10 +335,10 @@ export function HomePage(): ReactElement {
 
             {/* folder dropdown menu */}
             {folderMenuOpen && (
-              <div className="folder-dropdown-menu show" role="menu" aria-label="项目目录列表">
+              <div className="folder-dropdown-menu show" role="menu" aria-label={t('home.dirList')}>
                 <div className="fdm-scroll">
                   {dirs.length === 0 ? (
-                    <div className="fdm-empty">暂无历史目录</div>
+                    <div className="fdm-empty">{t('home.noRecentDirs')}</div>
                   ) : (
                     <>
                       {/* 清空选择（回到「未选择项目」） */}
@@ -340,7 +350,7 @@ export function HomePage(): ReactElement {
                         <span className="fdm-icon">
                           <Folder size={13} strokeWidth={2} />
                         </span>
-                        <span className="fdm-name">未选择项目</span>
+                        <span className="fdm-name">{t('home.noProject')}</span>
                       </button>
                       {dirs.length > 0 && <div className="fdm-sep" />}
                       {folderItems}
