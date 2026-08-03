@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router';
 
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { useSessionsQuery } from '@/hooks/use-sessions';
+import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -56,6 +57,8 @@ const FUSE_THRESHOLD = 0.4;
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): ReactElement | null {
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
+  // 本地化文案
+  const { t } = useTranslation();
   const clearActiveSession = useActiveSessionStore((state) => state.clearActiveSession);
   const setActiveSession = useActiveSessionStore((state) => state.setActiveSession);
   const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
@@ -78,8 +81,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     const baseCommands: readonly CommandItemData[] = [
       {
         id: 'new-chat',
-        section: '操作',
-        title: '新建会话',
+        section: t('palette.sectionActions'),
+        title: t('palette.newChat'),
         icon: Plus,
         shortcut: '⌘N',
         action: () => {
@@ -91,8 +94,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
       },
       {
         id: 'toggle-theme',
-        section: '操作',
-        title: resolvedTheme === 'dark' ? '切换到亮色主题' : '切换到暗色主题',
+        section: t('palette.sectionActions'),
+        title:
+          resolvedTheme === 'dark' ? t('palette.toggleThemeLight') : t('palette.toggleThemeDark'),
         icon: resolvedTheme === 'dark' ? Sun : Moon,
         action: () => {
           setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
@@ -101,8 +105,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
       },
       {
         id: 'open-settings',
-        section: '操作',
-        title: '打开设置',
+        section: t('palette.sectionActions'),
+        title: t('palette.openSettings'),
         icon: Settings,
         action: () => {
           setSettingsOpen(true);
@@ -123,7 +127,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
             : filePath;
         fileCommands.push({
           id: `file:${filePath}`,
-          section: '文件',
+          section: t('palette.sectionFiles'),
           title: relativePath,
           icon: FileText,
           action: () => {
@@ -138,8 +142,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     const sessions = sessionsData?.sessions ?? [];
     const sessionCommands: readonly CommandItemData[] = sessions.slice(0, 20).map((session) => ({
       id: `session:${session.id}`,
-      section: '会话',
-      title: session.title.length > 0 ? session.title : '未命名会话',
+      section: t('palette.sectionSessions'),
+      title: session.title.length > 0 ? session.title : t('palette.unnamedSession'),
       icon: MessageSquare,
       action: () => {
         setActiveSession(session.id);
@@ -161,6 +165,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     rootPath,
     getAllFilePaths,
     openFile,
+    t,
   ]);
 
   // fuse.js 模糊搜索（标题 + 分组字段；空查询时返回全部）
@@ -188,7 +193,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
       <div
         className="palette-overlay show"
         role="dialog"
-        aria-label="命令面板"
+        aria-label={t('topbar.commandPalette')}
         aria-modal="true"
         onClick={(e) => {
           // 点击遮罩空白处关闭
@@ -207,15 +212,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
             <Search className="size-4" strokeWidth={2} />
             <CommandInput
               className="palette-input"
-              placeholder="搜索文件或输入命令…"
-              aria-label="命令面板搜索"
+              placeholder={t('palette.searchPlaceholder')}
+              aria-label={t('palette.searchLabel')}
               value={query}
               onValueChange={setQuery}
               autoFocus
             />
           </div>
           <CommandList className="palette-results">
-            <CommandEmpty className="palette-empty">无匹配结果</CommandEmpty>
+            <CommandEmpty className="palette-empty">{t('common.noResults')}</CommandEmpty>
             {Array.from(new Set(filtered.map((cmd) => cmd.section))).map((section) => (
               <CommandGroup key={section} heading={section}>
                 {filtered
@@ -246,13 +251,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
           </CommandList>
           <div className="palette-foot">
             <span>
-              <kbd>↑↓</kbd> 导航
+              <kbd>↑↓</kbd> {t('palette.navigate')}
             </span>
             <span>
-              <kbd>⏎</kbd> 选择
+              <kbd>⏎</kbd> {t('palette.select')}
             </span>
             <span>
-              <kbd>esc</kbd> 关闭
+              <kbd>esc</kbd> {t('common.close')}
             </span>
           </div>
         </Command>

@@ -39,6 +39,7 @@ import { memo, type ReactElement, useCallback, useEffect, useRef, useState } fro
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 import { EmptyState } from '@/components/common/EmptyState';
+import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -94,6 +95,8 @@ export function ChatMessageList({
   onRegenerate,
   className,
 }: ChatMessageListProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // Virtuoso 句柄：用于 scrollToIndex 滚动到底部
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   // 是否在底部附近（ref 版本：在回调中写入，避免闭包陷阱）
@@ -149,8 +152,8 @@ export function ChatMessageList({
       <div className={cn('flex h-full items-center justify-center', className)}>
         <EmptyState
           icon={<Sparkles className="size-6" strokeWidth={1.5} />}
-          title="开始新对话"
-          description="在下方输入框输入你的问题，按 Enter 发送"
+          title={t('chat.startNewChat')}
+          description={t('chat.startNewChatDesc')}
         />
       </div>
     );
@@ -178,8 +181,8 @@ export function ChatMessageList({
         type="button"
         className={cn('scroll-to-bottom', showScrollBtn && 'visible', hasNew && 'has-new')}
         onClick={scrollToBottom}
-        aria-label="滚动到底部"
-        title="滚动到底部"
+        aria-label={t('chat.scrollToBottom')}
+        title={t('chat.scrollToBottom')}
       >
         <ChevronDown className="size-4" strokeWidth={2.5} />
         <span className="new-msg-dot" aria-hidden="true" />
@@ -214,6 +217,8 @@ const MessageItem = memo(function MessageItem({
   onRegenerate: ((messageId: string) => void) | undefined;
   disableActions: boolean;
 }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   if (message.role === 'user') {
     // user 消息：仅 .msg-body > .msg-content，气泡样式由 .msg-content 提供（玻璃渐变）
     return (
@@ -247,7 +252,7 @@ const MessageItem = memo(function MessageItem({
           C
         </div>
         <div className="msg-body">
-          <div className="msg-role assistant">助手</div>
+          <div className="msg-role assistant">{t('chat.assistant')}</div>
           {/* parts 列表：按 part 类型分别渲染 */}
           {message.parts.map((part, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: parts 是 append-only 序列，index 在单条消息内唯一稳定
@@ -287,6 +292,8 @@ const MessageItem = memo(function MessageItem({
  * - 其他：fallback 展示 part.type
  */
 const PartView = memo(function PartView({ part }: { part: UIMessagePart }): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 文本 part：Markdown 渲染（支持 GFM + 代码语法高亮）
   if (isTextUIPart(part)) {
     if (part.text.length === 0) {
@@ -340,7 +347,7 @@ const PartView = memo(function PartView({ part }: { part: UIMessagePart }): Reac
       <div className="card">
         <div className="card-head">
           <span className="card-icon">📎</span>
-          <span className="card-title">附件</span>
+          <span className="card-title">{t('chat.attachment')}</span>
           <span className="card-status pending">{part.mediaType}</span>
         </div>
       </div>
@@ -351,14 +358,16 @@ const PartView = memo(function PartView({ part }: { part: UIMessagePart }): Reac
   if (part.type === 'step-start') {
     return (
       <div className="border-border my-2 flex items-center gap-2 border-t pt-1">
-        <span className="text-muted-foreground font-mono text-xs italic">下一步</span>
+        <span className="text-muted-foreground font-mono text-xs italic">{t('chat.nextStep')}</span>
       </div>
     );
   }
 
   // fallback：未知 part 类型，展示 type 字符串
   return (
-    <div className="text-muted-foreground font-mono text-xs italic">未知消息类型: {part.type}</div>
+    <div className="text-muted-foreground font-mono text-xs italic">
+      {t('chat.unknownPart', { type: part.type })}
+    </div>
   );
 });
 
@@ -390,6 +399,8 @@ function ToolCallView({
 }: ToolCallViewProps): ReactElement {
   // 折叠状态：默认折叠（对齐原型 #toolCard 初始无 .open 类）
   const [open, setOpen] = useState(false);
+  // 本地化文案
+  const { t } = useTranslation();
 
   // 从 tool-store 查找 title（主进程通过 AgentToolResultPayload 推送的人类可读标题）
   // 没有找到时回退到工具名（type）
@@ -401,9 +412,10 @@ function ToolCallView({
     return null;
   });
 
-  // 状态映射：AI SDK state → .card-status 类（success / error / running / pending）
+  // 状态映射：AI SDK state → .card-status 类 + 本地化文案
   const statusClass = mapToolStateToStatusClass(state);
-  const statusLabel = mapToolStateToStatusLabel(state);
+  const statusLabel = mapToolStateToStatusLabelKey(state);
+  const localizedStatusLabel = t(`chat.${statusLabel}`);
 
   return (
     <div className="msg msg-tool enter-anim">
@@ -413,12 +425,12 @@ function ToolCallView({
             type="button"
             className="card-head"
             onClick={() => setOpen((v) => !v)}
-            aria-label="折叠/展开工具调用详情"
+            aria-label={t('chat.toggleToolDetails')}
             aria-expanded={open}
           >
             <span className="card-icon">🔧</span>
             <span className="card-title">{title ?? type}</span>
-            <span className={cn('card-status', statusClass)}>{statusLabel}</span>
+            <span className={cn('card-status', statusClass)}>{localizedStatusLabel}</span>
             <span className="tool-chev">▸</span>
           </button>
           <div className="card-body">
@@ -434,6 +446,27 @@ function ToolCallView({
       </div>
     </div>
   );
+}
+
+/**
+ * 工具状态映射 → 本地化 key（组件内 t(`chat.${key}`) 渲染）
+ *
+ * AI SDK 的 tool.state 可能值：
+ * - 'input-streaming' / 'input-accepted'：输入阶段（等待）
+ * - 'output-available'：完成（成功）
+ * - 'output-error'：错误（error）
+ */
+function mapToolStateToStatusLabelKey(state: string): string {
+  if (state === 'output-error') {
+    return 'statusError';
+  }
+  if (state === 'output-available') {
+    return 'statusSuccess';
+  }
+  if (state === 'input-streaming' || state === 'input-accepted') {
+    return 'statusRunning';
+  }
+  return 'statusWaiting';
 }
 
 /**
@@ -455,25 +488,6 @@ function mapToolStateToStatusClass(state: string): string {
     return 'running';
   }
   return 'pending';
-}
-
-/**
- * 工具状态映射 → 状态标签文案
- */
-function mapToolStateToStatusLabel(state: string): string {
-  if (state === 'output-error') {
-    return '错误';
-  }
-  if (state === 'output-available') {
-    return '成功';
-  }
-  if (state === 'input-streaming') {
-    return '运行中';
-  }
-  if (state === 'input-accepted') {
-    return '等待';
-  }
-  return state;
 }
 
 /**
@@ -502,6 +516,8 @@ function CodeBlock({ label, content }: { label: string; content: string }): Reac
  */
 function ReasoningBlock({ text }: { text: string }): ReactElement {
   const [open, setOpen] = useState(false);
+  // 本地化文案
+  const { t } = useTranslation();
 
   return (
     <div className={cn('reasoning-block', open && 'open')}>
@@ -511,7 +527,7 @@ function ReasoningBlock({ text }: { text: string }): ReactElement {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="reasoning-title">思考</span>
+        <span className="reasoning-title">{t('chat.thinking')}</span>
         <span className="rh-chevron" style={{ marginLeft: 'auto' }}>
           ▸
         </span>
@@ -532,14 +548,16 @@ function ReasoningBlock({ text }: { text: string }): ReactElement {
  * 表示助手正在生成回复。对齐原型 .msg.assistant + .typing-indicator 结构。
  */
 function StreamingPlaceholder(): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   return (
     <div className="msg assistant enter-anim">
       <div className="msg-avatar assistant" aria-hidden="true">
         C
       </div>
       <div className="msg-body">
-        <div className="msg-role assistant">助手</div>
-        <div className="typing-indicator" role="status" aria-label="助手正在输入">
+        <div className="msg-role assistant">{t('chat.assistant')}</div>
+        <div className="typing-indicator" role="status" aria-label={t('chat.assistantTyping')}>
           <span className="ti-dot" />
           <span className="ti-dot" />
           <span className="ti-dot" />
@@ -574,6 +592,8 @@ function MsgActions({
   disabled: boolean;
 }): ReactElement {
   const [copied, setCopied] = useState(false);
+  // 本地化文案
+  const { t } = useTranslation();
   // copy 按钮 2s 复位定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -613,22 +633,22 @@ function MsgActions({
         type="button"
         className={cn('msg-action-btn', copied && 'copied')}
         onClick={handleCopy}
-        aria-label={copied ? '已复制' : '复制'}
-        title={copied ? '已复制' : '复制'}
+        aria-label={copied ? t('chat.copied') : t('chat.copy')}
+        title={copied ? t('chat.copied') : t('chat.copy')}
       >
         <Copy />
-        {copied ? '已复制' : '复制'}
+        {copied ? t('chat.copied') : t('chat.copy')}
       </button>
       <button
         type="button"
         className="msg-action-btn"
-        aria-label="重新生成"
-        title={disabled ? '正在生成中…' : '重新生成'}
+        aria-label={t('chat.regenerate')}
+        title={disabled ? t('chat.generating') : t('chat.regenerate')}
         onClick={handleRegenerate}
         disabled={disabled}
       >
         <RefreshCw />
-        重新生成
+        {t('chat.regenerate')}
       </button>
     </div>
   );

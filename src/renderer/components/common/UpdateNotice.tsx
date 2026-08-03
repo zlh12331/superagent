@@ -15,12 +15,14 @@ import type { UpdatePhase } from '@code-agent/shared/renderer';
 import { type ReactElement, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useUpdate } from '@/hooks/use-update';
-
+import { useTranslation } from '@/i18n/use-translation';
 /**
  * 自动更新提示组件（挂载在 AppShell 根级，全局只此一个）
  */
 export function UpdateNotice(): ReactElement | null {
   const { state, install } = useUpdate();
+  // 本地化文案
+  const { t } = useTranslation();
   // 记录上次已提示的阶段（同阶段重复推送不弹，避免干扰）
   const lastNotifiedPhaseRef = useRef<UpdatePhase | null>(null);
 
@@ -34,26 +36,26 @@ export function UpdateNotice(): ReactElement | null {
     switch (phase) {
       case 'available':
         // electron-updater 默认自动下载，这里提示用户已发现新版
-        toast.info('发现新版本', {
-          description: `v${state?.version ?? ''} 正在后台下载…`,
+        toast.info(t('update.noticeAvailable'), {
+          description: t('update.downloadingDesc', { version: state?.version ?? '' }),
         });
         break;
       case 'downloaded':
-        toast('更新已就绪', {
-          description: `v${state?.version ?? ''} 下载完成，重启后生效`,
+        toast(t('update.noticeReady'), {
+          description: t('update.readyDesc', { version: state?.version ?? '' }),
           action: {
-            label: '立即重启',
+            label: t('update.restartNow'),
             onClick: install,
           },
           duration: 60_000,
         });
         break;
       case 'not-available':
-        toast.success('已是最新版本');
+        toast.success(t('update.upToDate'));
         break;
       case 'error':
-        toast.error('更新检查失败', {
-          description: state?.message ?? '未知错误',
+        toast.error(t('update.checkFailed'), {
+          description: state?.message ?? t('update.unknownError'),
         });
         break;
       case 'checking':
@@ -61,7 +63,7 @@ export function UpdateNotice(): ReactElement | null {
         // 检查中/下载进度不做 toast（进度高频推送，避免刷屏）
         break;
     }
-  }, [state, install]);
+  }, [state, install, t]);
 
   return null;
 }

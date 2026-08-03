@@ -25,6 +25,7 @@
 import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 
+import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
@@ -72,12 +73,16 @@ export function ChatInput({
   status,
   onSend,
   onStop,
-  placeholder = '帮你编写代码、测试 Bug、优化性能等开发工作，交付生产级代码产物。',
+  placeholder,
   disabled = false,
   className,
   value: controlledValue,
   onValueChange,
 }: ChatInputProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
+  // 占位符：props 优先，缺省走 i18n
+  const effectivePlaceholder = placeholder ?? t('chat.inputPlaceholder');
   // 输入文本：受控模式（controlledValue 提供）或内部 state（默认）
   // 受控模式用于欢迎页快捷 pill 预填场景，ChatPanel 保持非受控以避免父级重渲染
   const [internalValue, setInternalValue] = useState('');
@@ -168,13 +173,13 @@ export function ChatInput({
       <textarea
         className="composer-input"
         rows={1}
-        aria-label="聊天消息输入框"
+        aria-label={t('chat.inputLabel')}
         id="chat-input"
         spellCheck={false}
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         value={value}
         disabled={disabled || isStreaming}
         onChange={(event) => setValue(event.target.value)}
@@ -187,8 +192,8 @@ export function ChatInput({
           <button
             type="button"
             className="composer-tool-btn"
-            aria-label="附加文件"
-            title="附加文件 (@)"
+            aria-label={t('chat.attachFile')}
+            title={`${t('chat.attachFile')} (@)`}
             onClick={() => {
               /* 功能预留：后续接入文件选择器 */
             }}
@@ -198,8 +203,8 @@ export function ChatInput({
           <button
             type="button"
             className="composer-tool-btn"
-            aria-label="斜杠命令"
-            title="斜杠命令 (/)"
+            aria-label={t('chat.slashCommand')}
+            title={`${t('chat.slashCommand')} (/)`}
             onClick={() => {
               setValue(`${value}/`);
               autoResize();
@@ -210,11 +215,11 @@ export function ChatInput({
         </div>
         {/* 快捷键提示（等宽字体 kbd） */}
         <span className="composer-hint">
-          <kbd>⏎</kbd> 发送 · <kbd>⇧⏎</kbd> 换行
+          <kbd>⏎</kbd> {t('chat.send')} · <kbd>⇧⏎</kbd> {t('chat.newline')}
           {isStreaming ? (
             <>
               {' · '}
-              <kbd>Esc</kbd> 中断
+              <kbd>Esc</kbd> {t('chat.interrupt')}
             </>
           ) : null}
         </span>
@@ -228,8 +233,8 @@ export function ChatInput({
             type="button"
             className="stop-gen-btn"
             onClick={onStop}
-            aria-label="停止生成"
-            title="停止生成"
+            aria-label={t('chat.stopGenerating')}
+            title={t('chat.stopGenerating')}
             style={{ marginLeft: 'auto' }}
           >
             <Square className="size-3.5" strokeWidth={2.5} fill="currentColor" />
@@ -240,8 +245,8 @@ export function ChatInput({
             className="send-btn"
             disabled={!canSend}
             onClick={handleSend}
-            aria-label="发送消息"
-            title="发送"
+            aria-label={t('chat.sendMessage')}
+            title={t('chat.send')}
             style={{ marginLeft: 'auto' }}
           >
             <Send className="size-3.5" strokeWidth={2.5} />
