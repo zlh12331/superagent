@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useErrorMessage } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
-
+import { EMPTY_USAGE, useUsageStore } from '@/stores/transient/usage-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
 
@@ -104,6 +104,13 @@ export function ChatPanel({ chatId, workingDir, className }: ChatPanelProps): Re
             ? 'ERROR'
             : 'IDLE';
 
+  // 派生：当前会话累积 token 用量（per-session，回合结束后由 usage-store 累积）
+  const usage = useUsageStore((s) => s.usageBySession.get(chatId) ?? EMPTY_USAGE);
+  const usageText =
+    usage.totalTokens > 0
+      ? `${usage.totalTokens >= 1000 ? `${(usage.totalTokens / 1000).toFixed(1)}k` : usage.totalTokens} tok`
+      : null;
+
   // 重新生成回调：透传给 ChatMessageList → MsgActions
   // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
   // 然后用截断后的 messages 重新发起请求（transport 复用同一 sessionId，AgentService 自动中断旧 stream）
@@ -144,6 +151,15 @@ export function ChatPanel({ chatId, workingDir, className }: ChatPanelProps): Re
           />
           {statusText}
         </div>
+        {/* token 用量（回合结束后显示，悬浮提示明细） */}
+        {usageText !== null && (
+          <span
+            className="text-muted-foreground/60 font-mono text-[10px]"
+            title={`输入 ${usage.inputTokens} · 输出 ${usage.outputTokens} · 总计 ${usage.totalTokens} tokens`}
+          >
+            {usageText}
+          </span>
+        )}
       </div>
 
       {/* 中间消息列表 */}

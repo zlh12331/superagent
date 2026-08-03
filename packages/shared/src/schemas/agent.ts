@@ -186,11 +186,23 @@ export interface AgentStreamPartPayload {
   readonly part: unknown;
 }
 
+/** Agent 回合 token 使用量（AI SDK totalUsage，可选字段） */
+export interface AgentUsage {
+  /** 输入 token 数（prompt 侧） */
+  readonly inputTokens?: number;
+  /** 输出 token 数（completion 侧） */
+  readonly outputTokens?: number;
+  /** 总 token 数（input + output） */
+  readonly totalTokens?: number;
+}
+
 /** Agent 流式结束 payload */
 export interface AgentStreamEndPayload {
   readonly sessionId: string;
   /** 结束原因：'completed' 正常完成 / 'aborted' 用户中断 / 'error' 异常（已推送 error） */
   readonly reason: 'completed' | 'aborted' | 'error';
+  /** token 使用量（reason='completed' 时提供，AI SDK 统计） */
+  readonly usage?: AgentUsage;
 }
 
 /** Agent 流式错误 payload */

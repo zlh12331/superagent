@@ -25,6 +25,7 @@ import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
+import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
@@ -108,6 +109,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   // 工具调用桥接：订阅 agent:tool:call / agent:tool:result IPC 事件
   useToolBridge();
+  // Agent 生命周期桥接：回合结束 → invalidate 缓存 + 清理 L2 缓冲 + usage 累积
+  useAgentBridge();
 
   // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
   useTerminalBridge();

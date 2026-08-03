@@ -35,6 +35,12 @@ export const SESSION_DETAIL_QUERY_KEY = (id: string) => ['session', id] as const
 /** 默认分页大小（一次拉取 50 条，足够侧栏展示） */
 const DEFAULT_PAGE_SIZE = 50;
 
+/** 会话列表缓存数据类型（useSessionsQuery 返回，乐观更新用） */
+type SessionListData = {
+  readonly sessions: readonly SessionMeta[];
+  readonly total: number;
+};
+
 /**
  * 会话列表查询 hook
  *
@@ -149,15 +155,29 @@ export function useDeleteSession() {
       }
       return response.data;
     },
-    onSuccess: () => {
-      // 失效会话列表缓存，触发重新拉取
-      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
+    // 乐观更新：先本地移除，失败回滚（避免全量重拉 50 条的等待）
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
+      const prev = queryClient.getQueryData<SessionListData>(SESSIONS_QUERY_KEY);
+      if (prev !== undefined) {
+        queryClient.setQueryData<SessionListData>(SESSIONS_QUERY_KEY, {
+          ...prev,
+          sessions: prev.sessions.filter((s) => s.id !== id),
+        });
+      }
+      return { prev };
     },
-    onError: (error) => {
-      // 错误处理：toast 提示
-      // 提取错误消息（格式为 [CODE] message，包含足够上下文供用户排查）
+    onError: (error, _id, context) => {
+      // 回滚乐观更新，恢复原列表
+      if (context?.prev !== undefined) {
+        queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
+      }
       const message = error instanceof Error ? error.message : String(error);
       toast.error(message);
+    },
+    // 最终一致：无论成败都触发重新拉取（校验服务端真实状态）
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
   });
 }
@@ -189,13 +209,31 @@ export function useRenameSession() {
       }
       return response.data;
     },
-    onSuccess: () => {
-      // 失效会话列表缓存，触发重新拉取
-      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
+    // 乐观更新：先本地改标题，失败回滚（避免全量重拉 50 条的等待）
+    onMutate: async (params: { id: string; title: string }) => {
+      await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
+      const prev = queryClient.getQueryData<SessionListData>(SESSIONS_QUERY_KEY);
+      if (prev !== undefined) {
+        queryClient.setQueryData<SessionListData>(SESSIONS_QUERY_KEY, {
+          ...prev,
+          sessions: prev.sessions.map((s) =>
+            s.id === params.id ? { ...s, title: params.title } : s,
+          ),
+        });
+      }
+      return { prev };
     },
-    onError: (error) => {
+    onError: (error, _params, context) => {
+      // 回滚乐观更新，恢复原标题
+      if (context?.prev !== undefined) {
+        queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
+      }
       const message = error instanceof Error ? error.message : String(error);
       toast.error(message);
+    },
+    // 最终一致：无论成败都触发重新拉取（校验服务端真实状态）
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
   });
 }

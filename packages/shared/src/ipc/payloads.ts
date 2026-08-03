@@ -148,6 +148,12 @@ export interface ChatStreamPartPayload {
 export interface ChatStreamEndPayload {
   /** 本次对话的 sessionId */
   readonly sessionId: string;
+  /** token 使用量（AI SDK totalUsage，可选） */
+  readonly usage?: {
+    readonly inputTokens?: number;
+    readonly outputTokens?: number;
+    readonly totalTokens?: number;
+  };
 }
 
 /** chat:stream:error 事件 payload：流异常结束 */

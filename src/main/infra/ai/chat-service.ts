@@ -315,32 +315,37 @@ class ChatService implements IChatService {
         webContents.send(IPC_CHANNELS.CHAT_STREAM_PART, payload);
       }
 
-      // 5. 正常结束推送 CHAT_STREAM_END
+      // 5+6. 正常结束：获取 token 使用量并推送 CHAT_STREAM_END（含 usage）
+      //    totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
       if (!webContents.isDestroyed()) {
-        const endPayload: ChatStreamEndPayload = { sessionId };
+        const usage = await Promise.resolve(result.totalUsage).catch(() => null);
+        const endPayload: ChatStreamEndPayload = {
+          sessionId,
+          ...(usage !== null && usage !== undefined
+            ? {
+                usage: {
+                  ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+                  ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+                  ...(usage.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
+                },
+              }
+            : {}),
+        };
         webContents.send(IPC_CHANNELS.CHAT_STREAM_END, endPayload);
-      }
 
-      // 6. token 使用量统计（AI SDK v7 原生支持）
-      //    totalUsage 是 PromiseLike，流结束后才 resolve，不 await 避免阻塞 finally 清理
-      //    用 Promise.resolve 包裹以获得 .catch 方法（PromiseLike 本身无 .catch）
-      Promise.resolve(result.totalUsage)
-        .then((usage) => {
-          if (usage !== null && usage !== undefined) {
-            logger.info(
-              {
-                sessionId,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                totalTokens: usage.totalTokens,
-              },
-              'Chat token 使用量',
-            );
-          }
-        })
-        .catch(() => {
-          // usage 读取失败，忽略
-        });
+        // token 使用量统计（AI SDK v7 原生支持）
+        if (usage !== null && usage !== undefined) {
+          logger.info(
+            {
+              sessionId,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+            },
+            'Chat token 使用量',
+          );
+        }
+      }
     } catch (error: unknown) {
       // AbortError 是用户主动中断，不视为错误（不推送 error）
       if (isAbortError(error)) {

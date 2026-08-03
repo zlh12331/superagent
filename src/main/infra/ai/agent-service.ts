@@ -381,46 +381,54 @@ export class AgentService implements IAgentService {
             options.webContents.send(IPC_CHANNELS.AGENT_STREAM_PART, payload);
           }
 
-          // 7. 正常结束推送 AGENT_STREAM_END（reason='completed'）
+          // 7+8. 正常结束：获取 token 使用量并推送 AGENT_STREAM_END（reason='completed'，含 usage）
+          //    totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
           if (!options.webContents.isDestroyed()) {
+            const usage = await Promise.resolve(result.totalUsage).catch(() => null);
             const endPayload: AgentStreamEndPayload = {
               sessionId,
               reason: 'completed',
+              ...(usage !== null && usage !== undefined
+                ? {
+                    usage: {
+                      ...(usage.inputTokens !== undefined
+                        ? { inputTokens: usage.inputTokens }
+                        : {}),
+                      ...(usage.outputTokens !== undefined
+                        ? { outputTokens: usage.outputTokens }
+                        : {}),
+                      ...(usage.totalTokens !== undefined
+                        ? { totalTokens: usage.totalTokens }
+                        : {}),
+                    },
+                  }
+                : {}),
             };
             options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
-          }
 
-          // 8. token 使用量统计（AI SDK v7 原生支持，免费数据）
-          //    totalUsage 是 PromiseLike（流结束后才 resolve），不 await 避免阻塞清理
-          //    失败时静默：不阻塞主流程
-          //    用 Promise.resolve 包裹以获得 .catch 方法（PromiseLike 本身无 .catch）
-          Promise.resolve(result.totalUsage)
-            .then((usage) => {
-              if (usage !== null && usage !== undefined) {
-                logger.info(
-                  {
-                    sessionId,
-                    inputTokens: usage.inputTokens,
-                    outputTokens: usage.outputTokens,
-                    totalTokens: usage.totalTokens,
-                  },
-                  'Agent token 使用量',
-                );
-                // setAttribute 不接受 undefined，需显式守卫
-                if (usage.totalTokens !== undefined) {
-                  span?.setAttribute('token.total', usage.totalTokens);
-                }
-                if (usage.inputTokens !== undefined) {
-                  span?.setAttribute('token.prompt', usage.inputTokens);
-                }
-                if (usage.outputTokens !== undefined) {
-                  span?.setAttribute('token.completion', usage.outputTokens);
-                }
+            // token 使用量统计（AI SDK v7 原生支持，免费数据）
+            if (usage !== null && usage !== undefined) {
+              logger.info(
+                {
+                  sessionId,
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  totalTokens: usage.totalTokens,
+                },
+                'Agent token 使用量',
+              );
+              // setAttribute 不接受 undefined，需显式守卫
+              if (usage.totalTokens !== undefined) {
+                span?.setAttribute('token.total', usage.totalTokens);
               }
-            })
-            .catch(() => {
-              // usage 读取失败，忽略
-            });
+              if (usage.inputTokens !== undefined) {
+                span?.setAttribute('token.prompt', usage.inputTokens);
+              }
+              if (usage.outputTokens !== undefined) {
+                span?.setAttribute('token.completion', usage.outputTokens);
+              }
+            }
+          }
         } catch (error: unknown) {
           // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
           if (isAbortError(error)) {
