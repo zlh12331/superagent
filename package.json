@@ -27,7 +27,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "test": "pnpm -r --filter \"@code-agent/*\" run test && pnpm test:main && pnpm test:renderer",
+    "test": "pnpm -r --filter \"@code-agent/*\" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts",
+    "test:scripts": "vitest run --root scripts",
     "test:main": "vitest run --root src/main",
     "test:main:watch": "vitest --root src/main",
     "test:renderer": "vitest run --root src/renderer",
@@ -46,6 +47,8 @@
     "sentry:release:new": "sentry-cli releases new \"code-agent@1.0.0\"",
     "build:win:full": "pnpm build:win && pnpm sentry:release:new && pnpm sentry:upload:symbols",
     "codegraph:sync": "codegraph sync",
+    "scaffold:ipc": "tsx scripts/scaffold/scaffold-ipc.ts",
+    "scaffold:tool": "tsx scripts/scaffold/scaffold-tool.ts",
     "prepare": "husky"
   },
   "lint-staged": {
