@@ -298,4 +298,3 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
 // ── 兼容导出 ────────────────────────────────────────────────
 
 /** 终端面板默认导出（便于 lazy 加载） */
-export default TerminalPanel;

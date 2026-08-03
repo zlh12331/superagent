@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/renderer/index.html",
+    "src/renderer/main.tsx",
+    "src/renderer/test/setup.ts",
+    "**/vitest.config.ts",
+    "scripts/**/*.ts",
+    "e2e/**/*.ts",
+    "*.config.{js,ts}",
+    ".husky/pre-commit",
+    ".husky/pre-push"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "e2e/**/*.ts", "*.{ts,js}"],
+  "ignore": ["_template/**", "docs/**"],
+  "ignoreBinaries": ["codegraph"],
+  "ignoreDependencies": [
+    "@code-agent/tsconfig",
+    "@electron/rebuild",
+    "tailwindcss",
+    "tslib",
+    "tw-animate-css"
+  ]
+}

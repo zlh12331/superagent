@@ -470,4 +470,3 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
 // ── 兼容导出 ────────────────────────────────────────────────
 
 /** Git 面板默认导出（便于 lazy 加载） */
-export default GitPanel;

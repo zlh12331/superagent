@@ -50,6 +50,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Dead code check (knip)
+        run: pnpm knip
+
       - name: Unit tests (shared + main + renderer)
         run: pnpm test
 
