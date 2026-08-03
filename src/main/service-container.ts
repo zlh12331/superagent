@@ -42,7 +42,12 @@
 // - 幂等：多次调用 disposeServices 安全
 
 import { app } from 'electron';
-import { autoUpdater } from 'electron-updater';
+// electron-updater 是 CJS 包：ESM 下 named import 运行时失败（cjs-module-lexer 无法静态分析），
+// 必须默认导入后解构（Node ESM 对 CJS 的 default = module.exports，可靠）
+import electronUpdater from 'electron-updater';
+
+const { autoUpdater } = electronUpdater;
+
 import { resetConfigCache } from './config';
 import { AgentService, type IAgentService } from './infra/ai/agent-service';
 import { resetAIProvider } from './infra/ai/ai-provider';

@@ -45,7 +45,10 @@ import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger'
 // dev 环境把 userData 重定向到项目内目录，避免 TRAE 沙箱拦截系统 %APPDATA% 写入
 // 生产环境（app.isPackaged === true）保持系统默认 %APPDATA%/<AppName>，符合用户数据规范
 if (!app.isPackaged) {
-  app.setPath('userData', join(__dirname, '../../.electron-user-data'));
+  // userData 重定向到项目目录（避免沙箱拦截系统 %APPDATA% 写入）
+  // E2E 测试可通过 CODE_AGENT_USER_DATA 环境变量覆盖（多实例隔离，避免 SQLite 锁冲突）
+  const userDataOverride = process.env['CODE_AGENT_USER_DATA'];
+  app.setPath('userData', userDataOverride ?? join(__dirname, '../../.electron-user-data'));
   // 开启远程调试端口（CDP over WebSocket），允许 MCP / Chrome DevTools 直连 Electron 窗口
   // 用途：
   // - Chrome DevTools MCP 可通过 http://localhost:9222 连接 Electron 窗口（而非独立 Chromium）

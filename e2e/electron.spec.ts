@@ -32,6 +32,9 @@ const __dirname = dirname(__filename);
 // Electron 主进程入口（electron-vite dev 构建产物，dev 模式）
 const MAIN_ENTRY = join(__dirname, '..', 'out', 'main', 'index.js');
 
+// E2E 专用 userData 目录（与 dev 实例隔离，避免 SQLite 锁/扩展目录冲突）
+const E2E_USER_DATA = join(__dirname, '..', '.e2e-user-data');
+
 // 启动 Electron 应用，返回 app 与首个 page
 async function launchElectron(): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
@@ -42,6 +45,8 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
       // 指定 renderer dev server URL，让主进程走 loadURL 而非 loadFile
       // electron-vite dev 默认端口 5173，被占用时递增到 5174
       ELECTRON_RENDERER_URL: 'http://localhost:5173',
+      // 独立 userData：避免与 dev 实例（.electron-user-data）冲突
+      CODE_AGENT_USER_DATA: E2E_USER_DATA,
     },
   });
 

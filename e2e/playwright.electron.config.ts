@@ -37,7 +37,11 @@ export default defineConfig({
     video: 'retain-on-failure',
     trace: 'retain-on-failure',
   },
-  // 不自动启动 webServer — 用户需要先手动运行 `pnpm dev`
-  // 如果 dev server 已在运行，测试会直接复用
-  // 如果没运行，测试会立即失败（提示用户先启动 dev server）
+  // 自动启动 dev server（与 playwright.config.ts 一致；本地已手动运行时自动复用）
+  webServer: {
+    command: 'pnpm exec electron-vite dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: true,
+    timeout: 60_000,
+  },
 });
