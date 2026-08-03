@@ -183,7 +183,8 @@ class SearchService implements ISearchService {
     }
 
     // 排除的文件名 glob（ripgrep -g '!pattern' 表示排除）
-    for (const ex of exclude) {
+    // 兜底：exclude 可能为 undefined（工具层 optional 字段未传），避免 TypeError
+    for (const ex of exclude ?? []) {
       if (ex !== '') {
         args.push('-g', `!${ex}`);
       }
@@ -235,11 +236,19 @@ class SearchService implements ISearchService {
         if (totalMatchCount > maxResults) {
           return true;
         }
-        const { path, line_number, line } = parsed.data;
+        // ripgrep --json 的 context 消息结构：{ line_number, lines: { text } }（无 path 字段）
+        // 部分版本也可能输出 line 字段；用可选链兜底避免崩溃（真实缺陷修复）
+        const data = parsed.data as {
+          path?: { text?: string };
+          line_number?: number;
+          line?: { text?: string };
+          lines?: { text?: string };
+        };
+        const lineData = data.line ?? data.lines;
         collectedContexts.push({
-          file: path.text,
-          line: line_number,
-          text: line.text.replace(/\r?\n$/, ''),
+          file: data.path?.text ?? '',
+          line: data.line_number ?? 0,
+          text: lineData?.text?.replace(/\r?\n$/, '') ?? '',
         });
       }
       // begin / summary / end 忽略
@@ -469,11 +478,19 @@ class SearchService implements ISearchService {
       const column = firstSubmatch !== undefined ? firstSubmatch.start : 0;
 
       // 行文本去掉末尾换行符
-      const text = data.line.text.replace(/\r?\n$/, '');
+      // 兼容不同 ripgrep 版本：match 消息可能用 line 或 lines 字段（真实缺陷修复）
+      const matchData = data as {
+        path?: { text?: string };
+        line_number?: number;
+        line?: { text?: string };
+        lines?: { text?: string };
+      };
+      const lineData = matchData.line ?? matchData.lines;
+      const text = lineData?.text?.replace(/\r?\n$/, '') ?? '';
 
       return {
-        file: data.path.text,
-        line: data.line_number,
+        file: matchData.path?.text ?? '',
+        line: matchData.line_number ?? 0,
         column,
         text,
         beforeContext: [],
