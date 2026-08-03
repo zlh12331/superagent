@@ -16,6 +16,7 @@
 // - 结构化展示区使用 monospace 字体 + 暗色背景，便于查看代码 / 命令
 // ──────────────────────────────────────────────────────────────
 
+import type { TFunction } from 'i18next';
 import {
   AlertTriangle,
   CloudUpload,
@@ -43,6 +44,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from '@/i18n/use-translation';
 import { type ApprovalType, useApprovalsStore } from '@/stores/transient/approvals-store';
 
 interface ApprovalDialogProps {
@@ -138,33 +140,33 @@ function getIconForType(type: ApprovalType): LucideIcon {
 }
 
 /**
- * 按 ApprovalType 获取中文标签
+ * 从 ApprovalType 获取本地化 key（组件内 t(`approval.${key}`) 渲染）
  *
  * 用于 Dialog 标题前缀，让用户一眼看出审批类型。
  * 使用 switch-case 避免对象字面量的 snake_case key 命名冲突。
  */
-function getLabelForType(type: ApprovalType): string {
+function getLabelKeyForType(type: ApprovalType): string {
   switch (type) {
     case 'run_command':
-      return '执行命令';
+      return 'runCommand';
     case 'write_file':
-      return '写入文件';
+      return 'writeFile';
     case 'edit_file':
-      return '编辑文件';
+      return 'editFile';
     case 'delete_file':
-      return '删除文件';
+      return 'deleteFile';
     case 'apply_patch':
-      return '应用补丁';
+      return 'applyPatch';
     case 'install_package':
-      return '安装依赖';
+      return 'installDependency';
     case 'external_call':
-      return '外部调用';
+      return 'externalCall';
     case 'git_add':
-      return 'Git 暂存';
+      return 'gitStage';
     case 'git_commit':
-      return 'Git 提交';
+      return 'gitCommit';
     case 'git_push':
-      return 'Git 推送';
+      return 'gitPush';
   }
 }
 
@@ -209,10 +211,14 @@ function canRememberDecision(type: ApprovalType): boolean {
  * - git_add / git_commit / git_push: 委托 renderGitPreview
  * - 其他类型: 仅显示 description（已在 DialogDescription 渲染）
  */
-function renderStructuredPreview(type: ApprovalType, input: unknown): ReactElement | null {
+function renderStructuredPreview(
+  type: ApprovalType,
+  input: unknown,
+  t: TFunction,
+): ReactElement | null {
   // Git 审批类型委托给专用渲染函数
   if (type === 'git_add' || type === 'git_commit' || type === 'git_push') {
-    return renderGitPreview(type, input);
+    return renderGitPreview(type, input, t);
   }
 
   if (type === 'run_command') {
@@ -222,7 +228,7 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
       <div className="mt-3 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
         {cwd !== undefined && (
           <div className="mb-2 text-xs text-stone-500">
-            <span className="font-sans">工作目录：</span>
+            <span className="font-sans">{t('approval.workingDir')}</span>
             <span className="break-all">{cwd}</span>
           </div>
         )}
@@ -244,24 +250,24 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
     return (
       <div className="mt-3 space-y-2">
         <div className="text-xs text-stone-500">
-          <span className="font-sans">文件路径：</span>
+          <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {append && (
             <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
-              追加模式
+              {t('approval.appendMode')}
             </span>
           )}
         </div>
         <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-amber-200/60">
           <ReactDiffViewer
-            oldValue={append ? '（追加到文件末尾）' : '（新建文件）'}
+            oldValue={append ? t('approval.appendToEnd') : t('approval.newFile')}
             newValue={content}
             splitView={true}
             compareMethod={DiffMethod.LINES}
             hideLineNumbers={false}
             showDiffOnly={false}
-            leftTitle="原文件"
-            rightTitle="新内容"
+            leftTitle={t('approval.original')}
+            rightTitle={t('approval.newContent')}
             useDarkTheme={false}
           />
         </div>
@@ -283,24 +289,24 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
     return (
       <div className="mt-3 space-y-2">
         <div className="text-xs text-stone-500">
-          <span className="font-sans">文件路径：</span>
+          <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {replaceAll && (
             <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
-              替换全部
+              {t('approval.replaceAll')}
             </span>
           )}
         </div>
         <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-amber-200/60">
           <ReactDiffViewer
-            oldValue={oldStr || '（空）'}
-            newValue={newStr || '（空，表示删除）'}
+            oldValue={oldStr || t('approval.empty')}
+            newValue={newStr || t('approval.emptyMeansDelete')}
             splitView={true}
             compareMethod={DiffMethod.WORDS}
             hideLineNumbers={false}
             showDiffOnly={false}
-            leftTitle="旧内容"
-            rightTitle="新内容"
+            leftTitle={t('approval.oldContent')}
+            rightTitle={t('approval.newContent')}
             useDarkTheme={false}
           />
         </div>
@@ -322,16 +328,16 @@ function renderStructuredPreview(type: ApprovalType, input: unknown): ReactEleme
  *
  * 抽离为独立函数避免 renderStructuredPreview 过长，且 Git 类型共享视觉风格（琥珀色边框）。
  */
-function renderGitPreview(type: ApprovalType, input: unknown): ReactElement | null {
+function renderGitPreview(type: ApprovalType, input: unknown, t: TFunction): ReactElement | null {
   if (type === 'git_add') {
     const paths = getStringArrayField(input, 'paths') ?? [];
     const isAddAll = paths.length === 0;
     return (
       <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
         <div className="text-xs text-stone-500">
-          <span className="font-sans">操作：</span>
+          <span className="font-sans">{t('approval.operation')}</span>
           <span>
-            {isAddAll ? 'git add -A（暂存全部改动）' : `git add（暂存 ${paths.length} 个路径）`}
+            {isAddAll ? t('approval.stageAll') : t('approval.stagePaths', { count: paths.length })}
           </span>
         </div>
         {!isAddAll && (
@@ -353,16 +359,16 @@ function renderGitPreview(type: ApprovalType, input: unknown): ReactElement | nu
     return (
       <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
         <div className="flex items-center gap-2 text-xs text-stone-500">
-          <span className="font-sans">操作：</span>
-          <span>{amend ? 'git commit --amend（追加到上次提交）' : 'git commit（新建提交）'}</span>
+          <span className="font-sans">{t('approval.operation')}</span>
+          <span>{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
           {amend && (
             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
-              不可逆
+              {t('approval.unavailable')}
             </span>
           )}
         </div>
         <div className="text-xs text-stone-500">
-          <span className="font-sans">提交信息：</span>
+          <span className="font-sans">{t('approval.commitMessage')}</span>
         </div>
         <pre className="whitespace-pre-wrap break-all rounded bg-white/60 p-2 text-stone-800">
           {message}
@@ -380,21 +386,27 @@ function renderGitPreview(type: ApprovalType, input: unknown): ReactElement | nu
     return (
       <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
         <div className="text-xs text-stone-500">
-          <span className="font-sans">操作：</span>
+          <span className="font-sans">{t('approval.operation')}</span>
           <span>{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {setUpstream && (
-            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">设置上游</span>
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">
+              {t('approval.setUpstream')}
+            </span>
           )}
-          {force && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">强制推送</span>}
+          {force && (
+            <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">
+              {t('approval.forcePush')}
+            </span>
+          )}
           {!force && !setUpstream && (
-            <span className="rounded bg-stone-200 px-1.5 py-0.5 text-stone-600">普通推送</span>
+            <span className="rounded bg-stone-200 px-1.5 py-0.5 text-stone-600">
+              {t('approval.normalPush')}
+            </span>
           )}
         </div>
-        <div className="text-xs text-amber-700">
-          ⚠ 推送将影响远程仓库与他人协作，请确认目标分支与协作者。
-        </div>
+        <div className="text-xs text-amber-700">{t('approval.pushWarning')}</div>
       </div>
     );
   }
@@ -417,6 +429,8 @@ function renderGitPreview(type: ApprovalType, input: unknown): ReactElement | nu
  * ```
  */
 export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): ReactElement {
+  // 本地化文案
+  const { t } = useTranslation();
   // 订阅 pending 队列：只取队首项（一次只处理一个审批）
   const currentPending = useApprovalsStore((state) => state.pending[0]);
 
@@ -427,13 +441,13 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
   // 使用 lowercase 属性名（icon），在解构时重命名为大写 Icon 以满足 JSX 组件命名要求
   const { icon: Icon, typeLabel } = useMemo(() => {
     if (currentPending === undefined) {
-      return { icon: AlertTriangle, typeLabel: '审批' };
+      return { icon: AlertTriangle, typeLabel: t('approval.approval') };
     }
     return {
       icon: getIconForType(currentPending.type),
-      typeLabel: getLabelForType(currentPending.type),
+      typeLabel: t(`approval.${getLabelKeyForType(currentPending.type)}`),
     };
-  }, [currentPending]);
+  }, [currentPending, t]);
 
   // 拒绝按钮 variant：危险类型用 destructive，其他用 outline
   const rejectVariant: 'destructive' | 'outline' = useMemo(() => {
@@ -452,8 +466,8 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
   // 结构化预览内容
   const structuredPreview = useMemo(() => {
     if (currentPending === undefined) return null;
-    return renderStructuredPreview(currentPending.type, currentPending.input);
-  }, [currentPending]);
+    return renderStructuredPreview(currentPending.type, currentPending.input, t);
+  }, [currentPending, t]);
 
   // 处理用户点击批准/拒绝
   // 点击后 store 会自动从 pending 移除该项（由 useApprovalBridge.respondApproval 触发）
@@ -504,7 +518,7 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
                     onChange={(e) => setRememberDecision(e.target.checked)}
                     className="size-3.5 cursor-pointer accent-stone-700"
                   />
-                  <span>记住决策（同类操作本次会话内自动应用）</span>
+                  <span>{t('approval.rememberDecision')}</span>
                 </Label>
               ) : (
                 <span />
@@ -513,10 +527,10 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
               {/* 操作按钮 */}
               <div className="flex justify-end gap-2">
                 <Button variant={rejectVariant} onClick={handleReject}>
-                  拒绝
+                  {t('approval.reject')}
                 </Button>
                 <Button variant="default" onClick={handleApprove}>
-                  批准
+                  {t('approval.approve')}
                 </Button>
               </div>
             </DialogFooter>
