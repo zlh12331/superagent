@@ -49,8 +49,8 @@ export interface FileReadRes {
   readonly content: string;
   /** 文件总行数（用于渲染层判断是否分批读取） */
   readonly totalLines: number;
-  /** 文件编码（当前仅支持 utf-8，二进制文件由工具拒绝） */
-  readonly encoding: 'utf-8';
+  /** 文件编码（自动检测：utf-8 / gb2312 / gb18030 等，由 file-service 的 chardet 检测） */
+  readonly encoding: string;
 }
 
 /**

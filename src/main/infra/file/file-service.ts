@@ -33,9 +33,27 @@ import type {
   FileWriteRes,
 } from '@code-agent/shared/main';
 import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import chardet from 'chardet';
 import { type FSWatcher, watch } from 'chokidar';
 import type { WebContents } from 'electron';
+import iconv from 'iconv-lite';
 import { logger } from '../../utils/logger';
+
+/** UTF-8 同族编码（chardet 检测结果 → 无需转码直接解码） */
+const UTF8_LIKE_ENCODINGS = new Set(['UTF-8', 'ASCII']);
+
+/**
+ * 规范化 chardet 检测结果 → iconv-lite 可解码的编码名
+ *
+ * - null / UTF-8 同族 → 'utf-8'（直接 Buffer.toString）
+ * - 其他（GB2312/GB18030/windows-1252 等）→ 小写（iconv-lite 兼容大小写）
+ */
+function normalizeEncoding(detected: string | null): string {
+  if (detected === null || UTF8_LIKE_ENCODINGS.has(detected)) {
+    return 'utf-8';
+  }
+  return detected.toLowerCase();
+}
 
 /**
  * read 方法入参
@@ -175,16 +193,16 @@ class FileService implements IFileService {
   >();
 
   /**
-   * 读取文件内容
+   * 读取文件内容（自动编码检测）
    *
    * 流程：
-   * 1. 读取整个文件内容（UTF-8）
-   * 2. 按换行符分割为行数组
-   * 3. 应用 offset/limit 切片
-   * 4. 返回切片后的内容 + 总行数
+   * 1. 读取整个文件为 Buffer
+   * 2. chardet 检测编码（Windows 场景支持 GBK/GB18030 等非 UTF-8 文件）
+   * 3. UTF-8 同族直接解码；其他编码经 iconv-lite 转码
+   * 4. 按换行符分割为行数组，应用 offset/limit 切片
+   * 5. 返回切片后的内容 + 总行数 + 实际编码
    *
    * 注意：当前实现一次性读取整个文件到内存，超大文件（>100MB）可能 OOM。
-   * 后续可改为流式读取优化，但 P2 阶段保持简单实现。
    */
   async read(options: FileReadOptions): Promise<FileReadRes> {
     const { path, offset, limit } = options;
@@ -192,7 +210,24 @@ class FileService implements IFileService {
     this.assertAbsolutePath(path);
 
     try {
-      const content = await fs.readFile(path, 'utf-8');
+      const buffer = await fs.readFile(path);
+      // 编码检测：chardet 返回 null（ASCII/无法识别）→ 按 UTF-8 处理
+      const detected = chardet.detect(buffer);
+      const encoding = normalizeEncoding(detected);
+
+      let content: string;
+      if (encoding === 'utf-8') {
+        content = buffer.toString('utf-8');
+      } else {
+        // 非 UTF-8（GBK/GB18030 等）：iconv-lite 转码，失败回退 UTF-8 并告警
+        try {
+          content = iconv.decode(buffer, encoding);
+        } catch (decodeError) {
+          logger.warn({ path, encoding, error: decodeError }, '编码转码失败，回退 UTF-8');
+          content = buffer.toString('utf-8');
+        }
+      }
+
       // 按换行符分割（保留 \r\n 与 \n 两种情况）
       // 不使用 split('\n') 是为了避免行尾 \r 残留影响渲染层渲染
       const lines = content.split(/\r?\n/);
@@ -202,12 +237,12 @@ class FileService implements IFileService {
       const start = offset ?? 0;
       // offset 超出范围时返回空字符串（不视为错误）
       if (start >= totalLines) {
-        return { content: '', totalLines, encoding: 'utf-8' };
+        return { content: '', totalLines, encoding };
       }
       const end = limit === undefined ? totalLines : Math.min(start + limit, totalLines);
       const sliced = lines.slice(start, end);
       // 重新拼接为字符串（用 \n 统一行尾，避免 \r\n 混杂）
-      return { content: sliced.join('\n'), totalLines, encoding: 'utf-8' };
+      return { content: sliced.join('\n'), totalLines, encoding };
     } catch (error) {
       throw this.classifyReadError(error);
     }

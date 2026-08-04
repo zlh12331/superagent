@@ -215,6 +215,16 @@
       }
     },
     {
+      "includes": ["**/src/main/infra/code/code-analyzer.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "**/src/main/infra/ai/tool.ts",
         "**/src/main/infra/ai/permission-service.ts",
