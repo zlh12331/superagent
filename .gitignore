@@ -79,3 +79,6 @@ release/
 # 原型设计文件（仅本地参考，不入仓）
 # P2-9：prototype-v2.html 已从根目录移入 docs/prototype/，避免污染项目根
 docs/prototype/
+
+# Qoder 工具缓存（repowiki 索引等，运行时自动生成，不入仓）
+.qoder/

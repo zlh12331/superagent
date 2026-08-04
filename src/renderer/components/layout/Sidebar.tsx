@@ -37,6 +37,7 @@ import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
 import { memo, type ReactElement, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAsyncView } from '@/hooks/use-async-view';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
@@ -72,7 +74,9 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
   const { t } = useTranslation();
 
   // L3 TanStack Query：会话列表数据
-  const { data, isLoading, error } = useSessionsQuery();
+  const query = useSessionsQuery();
+  // 视图状态机映射（五态：loading / refreshing / error / empty / ready）
+  const view = useAsyncView(query, { isEmpty: (d) => d.sessions.length === 0 });
   // L3 TanStack Mutation：删除会话
   const { mutate: deleteSession, isPending: isDeleting } = useDeleteSession();
   // L2 Zustand：激活会话 id
@@ -88,7 +92,7 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
   const [activeTab, setActiveTab] = useState<'recent' | 'files' | 'archived'>('recent');
 
   // 派生：会话列表
-  const sessions = useMemo(() => data?.sessions ?? [], [data]);
+  const sessions = useMemo(() => query.data?.sessions ?? [], [query.data]);
 
   // 派生：当前激活会话的 workingDir（用于文件树面板）
   // 无激活会话时为 null，FileTreePanel 显示空状态
@@ -247,37 +251,35 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
       <div className="sidebar-list">
         {activeTab === 'files' ? (
           <FileTreePanel workingDir={workingDir} />
-        ) : isLoading ? (
-          <LoadingList />
-        ) : error !== null ? (
-          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-        ) : sessions.length === 0 ? (
-          <EmptyHint />
         ) : (
-          <nav aria-label={t('sidebar.sessionList')}>
-            <div className="thread-group-label">
-              <span>{t('sidebar.recentSessions')}</span>
-            </div>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              {Array.from(groupedSessions.entries()).map(([folderName, folderSessions]) => (
-                <FolderGroup
-                  key={folderName}
-                  folderName={folderName}
-                  sessions={folderSessions}
-                  orderOverride={orderOverrides.get(folderName)}
-                  activeSessionId={activeSessionId}
-                  isDeleting={isDeleting}
-                  onSelect={handleSelectSession}
-                  onDelete={handleDelete}
-                  onCreateInFolder={handleCreateInFolder}
-                />
-              ))}
-            </DndContext>
-          </nav>
+          <AsyncBoundary view={view} skeleton={<LoadingList />} empty={<EmptyHint />}>
+            {() => (
+              <nav aria-label={t('sidebar.sessionList')}>
+                <div className="thread-group-label">
+                  <span>{t('sidebar.recentSessions')}</span>
+                </div>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  {Array.from(groupedSessions.entries()).map(([folderName, folderSessions]) => (
+                    <FolderGroup
+                      key={folderName}
+                      folderName={folderName}
+                      sessions={folderSessions}
+                      orderOverride={orderOverrides.get(folderName)}
+                      activeSessionId={activeSessionId}
+                      isDeleting={isDeleting}
+                      onSelect={handleSelectSession}
+                      onDelete={handleDelete}
+                      onCreateInFolder={handleCreateInFolder}
+                    />
+                  ))}
+                </DndContext>
+              </nav>
+            )}
+          </AsyncBoundary>
         )}
       </div>
 
@@ -579,7 +581,7 @@ function ThreadItem({
   );
 }
 
-// ── 子组件：加载中 / 空状态 / 错误状态 ─────────────────────────
+// ── 子组件：加载中 / 空状态 ───────────────────────────────────
 
 /** 加载中骨架屏（5 行占位） */
 function LoadingList(): ReactElement {
@@ -603,19 +605,6 @@ function EmptyHint(): ReactElement {
     <div className="text-muted-foreground p-6 text-center">
       <p className="font-serif text-sm tracking-wide">{t('sidebar.noSessions')}</p>
       <p className="mt-1 text-xs">{t('sidebar.newSessionHint')}</p>
-    </div>
-  );
-}
-
-/** 错误状态提示 */
-function ErrorHint({ message }: { readonly message: string }): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <div className="text-destructive p-4 text-center">
-      <p className="font-serif text-sm">{t('sidebar.errorLoad')}</p>
-      <p className="mt-1 truncate text-xs" title={message}>
-        {message}
-      </p>
     </div>
   );
 }
