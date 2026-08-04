@@ -15,7 +15,6 @@
 // - 本组件仅负责渲染内容，welcome-mode class 由 AppShell 根据 useWelcomeStore 切换
 // ──────────────────────────────────────────────────────────────
 
-import type { TFunction } from 'i18next';
 import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -26,6 +25,7 @@ import { ModelSelector } from '@/components/common/ModelSelector';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { formatRelativeTime } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -62,19 +62,6 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
 function basename(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
-}
-
-/** 相对时间格式化（紧凑版本，用于 dropdown 项右侧 meta；t 注入避免模块函数碰 hook） */
-function formatRelativeTime(timestamp: number, t: TFunction): string {
-  const diff = Date.now() - timestamp;
-  const minute = 60_000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  if (diff < minute) return t('home.justNow');
-  if (diff < hour) return `${Math.floor(diff / minute)}m`;
-  if (diff < day) return `${Math.floor(diff / hour)}h`;
-  if (diff < 7 * day) return `${Math.floor(diff / day)}d`;
-  return new Date(timestamp).toISOString().slice(0, 10);
 }
 
 export function HomePage(): ReactElement {
@@ -281,7 +268,7 @@ export function HomePage(): ReactElement {
               <Folder size={13} strokeWidth={2} />
             </span>
             <span className="fdm-name">{name}</span>
-            <span className="fdm-meta">{formatRelativeTime(dir.lastUsed, t)}</span>
+            <span className="fdm-meta">{formatRelativeTime(dir.lastUsed, t, true)}</span>
           </button>
         );
       }),

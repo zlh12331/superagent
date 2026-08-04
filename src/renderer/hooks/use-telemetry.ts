@@ -15,25 +15,10 @@ import type { TelemetryLevel } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 
 /** Query key */
 export const TELEMETRY_LEVEL_QUERY_KEY = ['telemetry-level'] as const;
-
-/**
- * 解包 IpcResponse（与 use-api-key.ts 共用逻辑，复制以避免循环依赖）
- */
-function unwrap<T>(response: {
-  readonly data?: T;
-  readonly error?: { readonly code: string; readonly message: string };
-}): T {
-  if ('error' in response && response.error !== undefined) {
-    throw new Error(`[${response.error.code}] ${response.error.message}`);
-  }
-  if ('data' in response && response.data !== undefined) {
-    return response.data;
-  }
-  throw new Error('Unexpected response: missing data and error');
-}
 
 /**
  * 遥测级别查询 hook

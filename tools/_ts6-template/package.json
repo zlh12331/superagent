@@ -1,0 +1,14 @@
+{
+  "name": "@code-agent/__TOOL_NAME__",
+  "version": "0.0.0",
+  "private": true,
+  "description": "__TOOL_NAME__ 工具（独立子包声明 typescript@6.x，规避该工具与项目 TS 7 的不兼容）。复制本模板后替换 __TOOL_NAME__ 与依赖。",
+  "type": "module",
+  "scripts": {
+    "run": "__TOOL_CLI__"
+  },
+  "dependencies": {
+    "__TOOL_PACKAGE__": "^0.0.0",
+    "typescript": "^6.0.2"
+  }
+}

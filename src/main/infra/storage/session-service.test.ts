@@ -23,6 +23,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { resetDb } from './db';
 import { schema } from './schema';
+import { SCHEMA_SQL } from './schema-sql';
 import { SessionService } from './session-service';
 
 /** 创建内存数据库 + drizzle 实例（绕过 app.getPath） */
@@ -32,28 +33,8 @@ function createInMemoryDb() {
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite, { schema });
 
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      working_dir TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      last_message TEXT,
-      message_count INTEGER NOT NULL DEFAULT 0,
-      last_run_status TEXT NOT NULL DEFAULT 'idle'
-    );
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      seq INTEGER NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
-  `);
+  // 建表 SQL 单一真源（schema-sql.ts），与生产 db.ts 共用，杜绝双源真相
+  sqlite.exec(SCHEMA_SQL);
 
   return { db, sqlite };
 }

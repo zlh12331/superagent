@@ -21,6 +21,7 @@ import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 
 /**
  * Query key 工厂（按 provider 分桶）
@@ -28,25 +29,6 @@ import { useTranslation } from '@/i18n/use-translation';
  * ['api-key', provider] 唯一标识单个 provider 的 API Key 查询缓存。
  */
 export const API_KEY_QUERY_KEY = (provider: ApiKeyProvider) => ['api-key', provider] as const;
-
-/**
- * 解包 IpcResponse：从 discriminated union 中提取 data 或抛错
- *
- * TanStack Query 期望 queryFn 抛错（自动进入 error 状态），
- * 因此 'error' 分支需要 throw，'data' 分支返回 data。
- */
-function unwrap<T>(response: {
-  readonly data?: T;
-  readonly error?: { readonly code: string; readonly message: string };
-}): T {
-  if ('error' in response && response.error !== undefined) {
-    throw new Error(`[${response.error.code}] ${response.error.message}`);
-  }
-  if ('data' in response && response.data !== undefined) {
-    return response.data;
-  }
-  throw new Error('Unexpected response: missing data and error');
-}
 
 /**
  * API Key 查询 hook

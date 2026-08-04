@@ -43,6 +43,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
 import { useSetTelemetryLevel, useTelemetryLevelQuery } from '@/hooks/use-telemetry';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
@@ -80,21 +81,6 @@ function maskApiKey(key: string): string {
  * );
  * ```
  */
-/**
- * 解包 IpcResponse（data/error 包装，与 hooks 层共用逻辑）
- */
-function unwrap<T>(response: {
-  readonly data?: T;
-  readonly error?: { readonly code: string; readonly message: string };
-}): T {
-  if ('error' in response && response.error !== undefined) {
-    throw new Error(`[${response.error.code}] ${response.error.message}`);
-  }
-  if ('data' in response && response.data !== undefined) {
-    return response.data;
-  }
-  throw new Error('Unexpected response: missing data and error');
-}
 
 interface ApiKeySectionProps {
   readonly provider: ApiKeyProvider;

@@ -3,3 +3,5 @@
 packages:
   - 'packages/*'
   - 'tools/*'
+  # 排除下划线前缀的模板目录（如 tools/_ts6-template），不作为真实 workspace 包
+  - '!tools/_*'

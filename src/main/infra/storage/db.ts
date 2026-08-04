@@ -22,6 +22,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
 import { schema } from './schema';
+import { SCHEMA_SQL } from './schema-sql';
 
 /**
  * 数据库文件名
@@ -145,42 +146,8 @@ export function initDb(): DrizzleDB {
 
   // 建表（幂等，已存在则跳过）
   // 使用原始 SQL 而非 drizzle migrate，避免引入迁移文件管理复杂度
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      last_message TEXT,
-      message_count INTEGER NOT NULL DEFAULT 0,
-      working_dir TEXT NOT NULL DEFAULT '',
-      last_run_status TEXT NOT NULL DEFAULT 'idle'
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      seq INTEGER NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS prompts (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      is_default INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
-    CREATE INDEX IF NOT EXISTS idx_prompts_role ON prompts(role);
-  `);
+  // SCHEMA_SQL 为单一真源（schema-sql.ts），生产与测试共用，杜绝双源真相
+  sqlite.exec(SCHEMA_SQL);
 
   // 迁移：已存在的数据库加 working_dir 列（幂等）
   // 新库建表时已包含此列，ALTER 仅对老库生效

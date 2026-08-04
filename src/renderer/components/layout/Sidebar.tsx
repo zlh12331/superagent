@@ -33,7 +33,6 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import type { TFunction } from 'i18next';
 import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
 import { memo, type ReactElement, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -50,26 +49,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { formatRelativeTime } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
-
-/** 相对时间格式化（如「刚刚」「3 分钟前」），超过一周显示日期；t 注入避免模块函数碰 hook */
-function formatRelativeTime(timestamp: number, t: TFunction): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minute = 60_000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-
-  if (diff < minute) return t('home.justNow');
-  if (diff < hour) return t('home.minutesAgo', { count: Math.floor(diff / minute) });
-  if (diff < day) return t('home.hoursAgo', { count: Math.floor(diff / hour) });
-  if (diff < 7 * day) return t('home.daysAgo', { count: Math.floor(diff / day) });
-
-  // 超过一周显示 YYYY-MM-DD
-  return new Date(timestamp).toISOString().slice(0, 10);
-}
 
 /** 从 workingDir 提取 basename，用于 folder 分组（无 basename 返回空串，展示时本地化「未分组」） */
 function getFolderName(workingDir: string): string {

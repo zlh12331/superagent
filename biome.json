@@ -343,7 +343,7 @@
       }
     },
     {
-      "includes": ["**/scripts/**/*.ts"],
+      "includes": ["**/scripts/**/*.ts", "**/scripts/**/*.mjs"],
       "linter": {
         "rules": {
           "suspicious": {
