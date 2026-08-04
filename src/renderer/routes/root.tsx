@@ -21,7 +21,7 @@ import { useTranslation } from '@/i18n/use-translation';
  * 根布局组件
  *
  * 在 createBrowserRouter 中作为顶层路由的 element，
- * 其 children（projects/settings/project-shell 等）通过 <Outlet /> 渲染。
+ * 其 children（HomePage / ChatPage）通过 <Outlet /> 渲染。
  */
 export function RootLayout(): ReactElement {
   return (

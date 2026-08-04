@@ -7,17 +7,15 @@
 // - 根布局 root.tsx 挂载 AppShell（Topbar + Sidebar + 内容区）
 // - index 路由渲染 HomePage（新对话草稿区，直接渲染 ChatPanel）
 // - /chat/:sessionId 路由渲染 ChatPage（历史会话续传）
-// - /novel 路由渲染 NovelHome（写作项目列表）
-// - /novel/project/:id 路由渲染 NovelLayout（三栏写作工作台）
 // - 提供 RootErrorBoundary 作为顶层错误边界
+//
+// 预留（未实现）：/novel 写作模块（NovelHome 项目列表 / NovelLayout 三栏工作台 /
+// NovelEditor 编辑器）待功能设计后按需补充路由，不在当前路由树中声明
 //
 // 路由树：
 //   /                            → RootLayout (AppShell)
 //     index                      → HomePage（新对话草稿，chatId='draft'）
 //     /chat/:sessionId           → ChatPage（历史会话，chatId=sessionId）
-//     /novel                     → NovelHome（写作项目列表）
-//     /novel/project/:id         → NovelLayout（写作工作台）
-//       index                    → NovelEditor（编辑器页面）
 //
 // 说明：
 // - HomePage 和 ChatPage 都渲染 ChatPanel，仅 chatId 不同
