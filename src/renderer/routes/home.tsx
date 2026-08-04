@@ -16,7 +16,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
@@ -139,13 +139,10 @@ export function HomePage(): ReactElement {
    *
    * 对齐原型 switchToFolder(folder)：仅更新 pendingFolder，不切换 welcome-mode。
    */
-  const handleSelectFolder = useCallback(
-    (workingDir: string | null) => {
-      setPendingWorkingDir(workingDir);
-      setFolderMenuOpen(false);
-    },
-    [setPendingWorkingDir],
-  );
+  const handleSelectFolder = (workingDir: string | null): void => {
+    setPendingWorkingDir(workingDir);
+    setFolderMenuOpen(false);
+  };
 
   /**
    * 浏览其他目录：触发原生目录选择器
@@ -153,7 +150,7 @@ export function HomePage(): ReactElement {
    * 对齐原型 fdm-action-btn「选择文件夹…」点击逻辑。
    * 用户取消选择：保持 dropdown 打开，允许重新选择。
    */
-  const handleBrowseFolder = useCallback(async () => {
+  const handleBrowseFolder = async (): Promise<void> => {
     try {
       const response = await window.api.dialog.pickDirectory({});
       if ('error' in response) {
@@ -169,7 +166,7 @@ export function HomePage(): ReactElement {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
-  }, [setPendingWorkingDir]);
+  };
 
   /**
    * 创建会话并跳转聊天页
@@ -183,45 +180,42 @@ export function HomePage(): ReactElement {
    * 错误处理：
    * - IPC 失败：useCreateSession 的 onError 已 toast 提示
    */
-  const handleSend = useCallback(
-    async (text: string) => {
-      // 步骤 1：校验 workingDir（对齐原型：不允许「本地」模式创建无目录会话）
-      if (pendingWorkingDir === null || pendingWorkingDir === '') {
-        toast.message(t('home.chooseProject'), {
-          description: t('home.chooseProjectDesc'),
-        });
-        setFolderMenuOpen(true);
-        return;
-      }
+  const handleSend = async (text: string): Promise<void> => {
+    // 步骤 1：校验 workingDir（对齐原型：不允许「本地」模式创建无目录会话）
+    if (pendingWorkingDir === null || pendingWorkingDir === '') {
+      toast.message(t('home.chooseProject'), {
+        description: t('home.chooseProjectDesc'),
+      });
+      setFolderMenuOpen(true);
+      return;
+    }
 
-      // 步骤 2：创建会话
-      try {
-        const { sessionId } = await createSession({ workingDir: pendingWorkingDir });
-        // 步骤 3：设置激活 + 跳转
-        setActiveSession(sessionId);
-        // 退出欢迎页模式（与 navigate 同一 React commit，避免视觉闪烁）
-        exitWelcomeMode();
-        navigate(ROUTES.chatPath(sessionId));
-        // 透传首条消息：通过 sessionStorage 暂存，ChatPanel 挂载后读取并发送
-        // （避免在 navigate 前直接调用 sendMessage，因为 ChatPanel 还未挂载）
-        if (text.trim().length > 0) {
-          sessionStorage.setItem(`welcome:pending-message:${sessionId}`, JSON.stringify({ text }));
-        }
-      } catch {
-        // onError 已在 useCreateSession 中 toast 提示
-        // 保持欢迎页打开，允许重试
+    // 步骤 2：创建会话
+    try {
+      const { sessionId } = await createSession({ workingDir: pendingWorkingDir });
+      // 步骤 3：设置激活 + 跳转
+      setActiveSession(sessionId);
+      // 退出欢迎页模式（与 navigate 同一 React commit，避免视觉闪烁）
+      exitWelcomeMode();
+      navigate(ROUTES.chatPath(sessionId));
+      // 透传首条消息：通过 sessionStorage 暂存，ChatPanel 挂载后读取并发送
+      // （避免在 navigate 前直接调用 sendMessage，因为 ChatPanel 还未挂载）
+      if (text.trim().length > 0) {
+        sessionStorage.setItem(`welcome:pending-message:${sessionId}`, JSON.stringify({ text }));
       }
-    },
-    [createSession, navigate, pendingWorkingDir, setActiveSession, exitWelcomeMode, t],
-  );
+    } catch {
+      // onError 已在 useCreateSession 中 toast 提示
+      // 保持欢迎页打开，允许重试
+    }
+  };
 
   /** 快捷 pill 点击：预填输入框（不自动发送，对齐原型行为） */
-  const handleQuickAction = useCallback((prompt: string) => {
+  const handleQuickAction = (prompt: string): void => {
     setInputValue(prompt);
     // 聚焦输入框（用户可能想立即编辑）
     const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
     input?.focus();
-  }, []);
+  };
 
   // ChatInput status：创建中视为 submitted（显示禁用 + loading 态）
   const chatStatus: 'submitted' | 'ready' = isCreating ? 'submitted' : 'ready';
@@ -229,51 +223,43 @@ export function HomePage(): ReactElement {
   // 派生：是否禁用发送（创建中禁用，避免重复提交）
   const isDisabled = isCreating;
 
-  // useMemo 缓存 quick action 按钮列表，避免每次 render 重建
-  const quickActionButtons = useMemo(
-    () =>
-      QUICK_ACTIONS.map((action) => {
-        const Icon = action.icon;
-        return (
-          <button
-            key={action.key}
-            type="button"
-            className="welcome-pill"
-            onClick={() => handleQuickAction(t(action.promptKey))}
-            disabled={isCreating}
-          >
-            <Icon strokeWidth={2} />
-            {t(action.labelKey)}
-          </button>
-        );
-      }),
-    [handleQuickAction, isCreating, t],
-  );
+  // 派生：quick action 按钮列表（React Compiler 自动缓存，无需手写 useMemo）
+  const quickActionButtons = QUICK_ACTIONS.map((action) => {
+    const Icon = action.icon;
+    return (
+      <button
+        key={action.key}
+        type="button"
+        className="welcome-pill"
+        onClick={() => handleQuickAction(t(action.promptKey))}
+        disabled={isCreating}
+      >
+        <Icon strokeWidth={2} />
+        {t(action.labelKey)}
+      </button>
+    );
+  });
 
-  // useMemo 缓存 folder dropdown 项列表
-  const folderItems = useMemo(
-    () =>
-      dirs.map((dir) => {
-        const name = basename(dir.workingDir);
-        const isActive = pendingWorkingDir === dir.workingDir;
-        return (
-          <button
-            key={dir.workingDir}
-            type="button"
-            className={cn('fdm-item', isActive && 'active')}
-            onClick={() => handleSelectFolder(dir.workingDir)}
-            title={dir.workingDir}
-          >
-            <span className="fdm-icon">
-              <Folder size={13} strokeWidth={2} />
-            </span>
-            <span className="fdm-name">{name}</span>
-            <span className="fdm-meta">{formatRelativeTime(dir.lastUsed, t, true)}</span>
-          </button>
-        );
-      }),
-    [dirs, pendingWorkingDir, handleSelectFolder, t],
-  );
+  // 派生：folder dropdown 项列表（React Compiler 自动缓存）
+  const folderItems = dirs.map((dir) => {
+    const name = basename(dir.workingDir);
+    const isActive = pendingWorkingDir === dir.workingDir;
+    return (
+      <button
+        key={dir.workingDir}
+        type="button"
+        className={cn('fdm-item', isActive && 'active')}
+        onClick={() => handleSelectFolder(dir.workingDir)}
+        title={dir.workingDir}
+      >
+        <span className="fdm-icon">
+          <Folder size={13} strokeWidth={2} />
+        </span>
+        <span className="fdm-name">{name}</span>
+        <span className="fdm-meta">{formatRelativeTime(dir.lastUsed, t, true)}</span>
+      </button>
+    );
+  });
 
   return (
     // 欢迎页容器：空 div 即可，CSS .view-chat.welcome-mode 会重排 .thread-bg 为居中 flex

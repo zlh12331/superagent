@@ -36,7 +36,7 @@ import {
 import type { TFunction } from 'i18next';
 import { ChevronDown, Copy, RefreshCw, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
-import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 import { EmptyState } from '@/components/common/EmptyState';
@@ -117,7 +117,7 @@ export function ChatMessageList({
    * - 在底部附近：隐藏按钮，清除 hasNew
    * - 不在底部：显示按钮
    */
-  const handleAtBottomChange = useCallback((atBottom: boolean) => {
+  const handleAtBottomChange = (atBottom: boolean): void => {
     isAtBottomRef.current = atBottom;
     if (atBottom) {
       setShowScrollBtn(false);
@@ -125,17 +125,17 @@ export function ChatMessageList({
     } else {
       setShowScrollBtn(true);
     }
-  }, []);
+  };
 
   /**
    * 滚动到底部并隐藏按钮
    */
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = (): void => {
     virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
     setShowScrollBtn(false);
     setHasNew(false);
     isAtBottomRef.current = true;
-  }, []);
+  };
 
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
   // - 用户在底部附近：Virtuoso followOutput 自动跟随（无需手动滚动）
@@ -209,7 +209,7 @@ function StreamingFooter(): ReactElement {
  * - 'assistant'：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + parts
  * - 'system'：居中淡灰小字
  */
-const MessageItem = memo(function MessageItem({
+function MessageItem({
   message,
   onRegenerate,
   disableActions,
@@ -279,7 +279,7 @@ const MessageItem = memo(function MessageItem({
       </div>
     </div>
   );
-});
+}
 
 /**
  * 单个 part 渲染
@@ -292,7 +292,7 @@ const MessageItem = memo(function MessageItem({
  * - 'step-start'：细分隔线表示新步骤
  * - 其他：fallback 展示 part.type
  */
-const PartView = memo(function PartView({ part }: { part: UIMessagePart }): ReactElement {
+function PartView({ part }: { part: UIMessagePart }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   // 文本 part：Markdown 渲染（支持 GFM + 代码语法高亮）
@@ -370,7 +370,7 @@ const PartView = memo(function PartView({ part }: { part: UIMessagePart }): Reac
       {t('chat.unknownPart', { type: part.type })}
     </div>
   );
-});
+}
 
 /**
  * 工具调用卡片（对齐原型 .card.tool-card）
@@ -606,7 +606,7 @@ function MsgActions({
     [],
   );
 
-  const handleCopy = useCallback(async () => {
+  const handleCopy = async (): Promise<void> => {
     if (text.length === 0) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -621,12 +621,12 @@ function MsgActions({
     } catch {
       // clipboard 不可用时静默失败
     }
-  }, [text]);
+  };
 
-  const handleRegenerate = useCallback(() => {
+  const handleRegenerate = (): void => {
     if (disabled) return;
     onRegenerate?.(messageId);
-  }, [disabled, onRegenerate, messageId]);
+  };
 
   return (
     <div className="msg-actions show">

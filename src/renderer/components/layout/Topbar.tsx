@@ -17,13 +17,13 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Command, Moon, PanelLeft, PanelRight, Settings, Sun } from 'lucide-react';
-import { memo, type ReactElement, useState } from 'react';
+import type { ReactElement } from 'react';
 
-import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useUiStore } from '@/stores/transient/ui-store';
 
 interface TopbarProps {
   /** 侧栏是否已折叠（控制 sb-collapse-btn 图标方向） */
@@ -44,7 +44,7 @@ interface TopbarProps {
  * 玻璃质感 + 双 accent 发光刻度线 + 品牌标识。
  * 集成侧栏/右面板折叠开关 + 命令面板按钮(⌘P) + 设置 + 主题切换。
  */
-export const Topbar = memo(function Topbar({
+export function Topbar({
   sidebarCollapsed,
   onToggleSidebar,
   rightPanelCollapsed,
@@ -52,7 +52,8 @@ export const Topbar = memo(function Topbar({
   onOpenCommandPalette,
 }: TopbarProps): ReactElement {
   const { resolvedTheme, setTheme } = useTheme();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // 全局 UI store：设置对话框入口（Topbar / 命令面板 / 错误动作共享）
+  const openSettings = useUiStore((state) => state.openSettings);
   // 本地化文案
   const { t } = useTranslation();
 
@@ -107,7 +108,7 @@ export const Topbar = memo(function Topbar({
           variant="ghost"
           size="icon"
           aria-label={t('topbar.settings')}
-          onClick={() => setSettingsOpen(true)}
+          onClick={openSettings}
           className={cn(
             'text-muted-foreground hover:bg-sidebar-accent',
             'hover:text-sidebar-accent-foreground h-8 w-8',
@@ -132,10 +133,6 @@ export const Topbar = memo(function Topbar({
           )}
         </Button>
       </div>
-
-      {/* 设置对话框（受控，Topbar 持有开关状态）
-          延迟挂载：仅 open=true 时渲染，避免首屏 mount Dialog 组件树 + IPC 查询 hooks */}
-      {settingsOpen && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />}
     </header>
   );
-});
+}

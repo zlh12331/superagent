@@ -2,13 +2,19 @@
 // AsyncBoundary 渲染层单测：五态渲染 + 防闪烁 + 可操作错误 + a11y
 // 直接构造 AsyncView（discriminated union）驱动各状态，无需真实 query。
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { AsyncView } from '@/hooks/use-async-view';
+import { useUiStore } from '@/stores/transient/ui-store';
 import { AsyncBoundary } from '../AsyncBoundary';
 
 const skeleton = <div data-testid="skeleton">骨架</div>;
 const empty = <div data-testid="empty">空态</div>;
+
+afterEach(() => {
+  // 重置全局 ui-store，避免「去配置」用例的打开状态污染后续用例
+  useUiStore.setState({ settingsOpen: false });
+});
 
 function renderView(view: AsyncView<string[]>) {
   return render(
@@ -72,5 +78,26 @@ describe('AsyncBoundary', () => {
       </AsyncBoundary>,
     );
     expect(screen.getByTestId('custom-error')).toBeTruthy();
+  });
+
+  it('error（注册错误码）：额外渲染「去配置」恢复动作并打开设置', () => {
+    renderView({
+      state: 'error',
+      error: new Error('[AI_API_KEY_MISSING] no key'),
+      retry: () => {},
+    });
+    // 错误码 → 恢复动作按钮（common.goToSettings = "去配置"），点击打开全局设置入口
+    fireEvent.click(screen.getByRole('button', { name: /去配置/ }));
+    expect(useUiStore.getState().settingsOpen).toBe(true);
+  });
+
+  it('error（未注册错误码）：仅默认重试按钮，无「去配置」', () => {
+    renderView({
+      state: 'error',
+      error: new Error('[FS_READ_FAILED] boom'),
+      retry: () => {},
+    });
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /去配置/ })).toBeNull();
   });
 });

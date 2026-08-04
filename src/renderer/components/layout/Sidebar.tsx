@@ -34,8 +34,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
-import { memo, type ReactElement, useCallback, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Virtuoso } from 'react-virtuoso';
 
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -69,7 +70,7 @@ function getFolderName(workingDir: string): string {
  * 三段式结构：sidebar-head（搜索+tabs）+ sidebar-list（会话列表）+ sidebar-foot（用户信息）。
  * 会话列表按 workingDir basename 分组为 folder-label + folder-items。
  */
-export const Sidebar = memo(function Sidebar(): ReactElement {
+export function Sidebar(): ReactElement {
   const navigate = useNavigate();
   // 本地化文案
   const { t } = useTranslation();
@@ -93,19 +94,19 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
   const [activeTab, setActiveTab] = useState<'recent' | 'files' | 'archived'>('recent');
 
   // 派生：会话列表
-  const sessions = useMemo(() => query.data?.sessions ?? [], [query.data]);
+  const sessions = query.data?.sessions ?? [];
 
   // 派生：当前激活会话的 workingDir（用于文件树面板）
   // 无激活会话时为 null，FileTreePanel 显示空状态
-  const workingDir = useMemo(() => {
+  const workingDir = ((): string | null => {
     if (activeSessionId === null) return null;
     return sessions.find((s) => s.id === activeSessionId)?.workingDir ?? null;
-  }, [sessions, activeSessionId]);
+  })();
 
   // 派生：按 workingDir basename 分组
   // 结构：Map<folderName, Session[]>
   // 注意：sessions 为 readonly 数组，使用 spread 创建新数组避免 push 副作用
-  const groupedSessions = useMemo(() => {
+  const groupedSessions = ((): Map<string, typeof sessions> => {
     const groups = new Map<string, typeof sessions>();
     for (const session of sessions) {
       const folderName = getFolderName(session.workingDir);
@@ -113,40 +114,81 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
       groups.set(folderName, [...existing, session]);
     }
     return groups;
-  }, [sessions]);
+  })();
 
   // 拖拽排序覆盖（folderName → 会话 id 顺序；未覆盖的文件夹保持服务端顺序）
   // 会话顺序由 updatedAt 决定，拖拽重排仅作为 UI 层临时排序（不持久化）
   const [orderOverrides, setOrderOverrides] = useState<ReadonlyMap<string, readonly string[]>>(
     () => new Map(),
   );
+  // 折叠的文件夹集合（提升到 Sidebar：虚拟化列表需要整体过滤条目）
+  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleFolder = (name: string): void => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
   // PointerSensor：拖拽需移动 4px 才激活（避免与点击选择冲突）
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  /** 拖拽结束：同文件夹内重排 */
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (over === null || active.id === over.id) {
-        return;
-      }
-      const folderName = String(active.data.current?.['folder'] ?? '');
+  /** 拖拽结束：同文件夹内重排（跨文件夹拖拽被 folder 归属过滤） */
+  const handleDragEnd = (event: DragEndEvent): void => {
+    const { active, over } = event;
+    if (over === null || active.id === over.id) {
+      return;
+    }
+    const folderName = String(active.data.current?.['folder'] ?? '');
+    // 函数式更新：直接基于最新覆盖顺序计算，无需 ref 同步（React Compiler 合规）
+    setOrderOverrides((prev) => {
       // 当前顺序：优先拖拽覆盖，否则取该文件夹的默认（服务端）顺序
       const folderSessions = sessions.filter((s) => getFolderName(s.workingDir) === folderName);
-      const current = orderOverridesRef.current.get(folderName) ?? folderSessions.map((s) => s.id);
+      const current = prev.get(folderName) ?? folderSessions.map((s) => s.id);
       const oldIndex = current.indexOf(String(active.id));
       const newIndex = current.indexOf(String(over.id));
       if (oldIndex === -1 || newIndex === -1) {
-        return;
+        return prev;
       }
       const next = arrayMove([...current], oldIndex, newIndex);
-      setOrderOverrides((prev) => new Map(prev).set(folderName, next));
-    },
-    [sessions],
-  );
-  // ref 同步（handleDragEnd 读取最新覆盖顺序；useRef 保持对象稳定，避免闭包捕获旧值）
-  const orderOverridesRef = useRef(orderOverrides);
-  orderOverridesRef.current = orderOverrides;
+      return new Map(prev).set(folderName, next);
+    });
+  };
+
+  // 扁平化列表条目：文件夹标签 + 会话项（Virtuoso 虚拟化渲染；React Compiler 自动缓存）
+  const entries = ((): SidebarEntry[] => {
+    const list: SidebarEntry[] = [];
+    for (const [folderName, folderSessions] of groupedSessions) {
+      list.push({ type: 'label', name: folderName });
+      if (collapsedFolders.has(folderName)) {
+        continue;
+      }
+      // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
+      const byId = new Map(folderSessions.map((s) => [s.id, s]));
+      const ordered = orderOverrides.get(folderName) ?? folderSessions.map((s) => s.id);
+      for (const id of ordered) {
+        const session = byId.get(id);
+        if (session !== undefined) {
+          list.push({ type: 'item', session });
+        }
+      }
+    }
+    return list;
+  })();
+  // dnd-kit SortableContext 所需的可见会话 id（仅未折叠文件夹）
+  const sortableIds = ((): string[] => {
+    const ids: string[] = [];
+    for (const entry of entries) {
+      if (entry.type === 'item') {
+        ids.push(entry.session.id);
+      }
+    }
+    return ids;
+  })();
 
   // 点击「新建会话」：清空激活会话 + 进入欢迎页模式 + 跳转首页
   // 对齐原型 prototype-v2.html:13306-13336：
@@ -275,19 +317,42 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
                   collisionDetection={closestCenter}
                   onDragEnd={handleDragEnd}
                 >
-                  {Array.from(groupedSessions.entries()).map(([folderName, folderSessions]) => (
-                    <FolderGroup
-                      key={folderName}
-                      folderName={folderName}
-                      sessions={folderSessions}
-                      orderOverride={orderOverrides.get(folderName)}
-                      activeSessionId={activeSessionId}
-                      isDeleting={isDeleting}
-                      onSelect={handleSelectSession}
-                      onDelete={handleDelete}
-                      onCreateInFolder={handleCreateInFolder}
+                  {/* 虚拟化列表：标签 + 会话项扁平化渲染（Virtuoso 接管滚动） */}
+                  <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+                    <Virtuoso
+                      data={entries}
+                      computeItemKey={(_, entry) =>
+                        entry.type === 'label' ? `label:${entry.name}` : entry.session.id
+                      }
+                      itemContent={(_, entry) => {
+                        if (entry.type === 'label') {
+                          return (
+                            <FolderLabel
+                              folderName={entry.name}
+                              collapsed={collapsedFolders.has(entry.name)}
+                              onToggle={() => toggleFolder(entry.name)}
+                              onCreateInFolder={handleCreateInFolder}
+                            />
+                          );
+                        }
+                        const session = entry.session;
+                        return (
+                          <SortableThreadItem
+                            key={session.id}
+                            sessionId={session.id}
+                            folderName={getFolderName(session.workingDir)}
+                            title={session.title}
+                            lastMessage={session.lastMessage}
+                            updatedAt={session.updatedAt}
+                            isActive={session.id === activeSessionId}
+                            isDeleting={isDeleting}
+                            onSelect={() => handleSelectSession(session.id)}
+                            onDelete={() => handleDelete(session.id)}
+                          />
+                        );
+                      }}
                     />
-                  ))}
+                  </SortableContext>
                 </DndContext>
               </nav>
             )}
@@ -305,141 +370,105 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
       </div>
     </aside>
   );
-});
+}
 
-// ── 子组件：文件夹分组 ──────────────────────────────────────────
+// ── 子组件：文件夹标签（Virtuoso 扁平化列表的 label 条目） ────
 
-interface FolderGroupProps {
+/** 虚拟化列表条目：文件夹标签 | 会话项 */
+type SidebarEntry =
+  | { readonly type: 'label'; readonly name: string }
+  | {
+      readonly type: 'item';
+      readonly session: {
+        readonly id: string;
+        readonly title: string;
+        readonly lastMessage: string | undefined;
+        readonly updatedAt: number;
+        readonly workingDir: string;
+      };
+    };
+
+interface FolderLabelProps {
   readonly folderName: string;
-  readonly sessions: ReadonlyArray<{
-    id: string;
-    title: string;
-    lastMessage: string | undefined;
-    updatedAt: number;
-    workingDir: string;
-  }>;
-  /** 拖拽排序覆盖（undefined = 保持服务端顺序） */
-  readonly orderOverride: readonly string[] | undefined;
-  readonly activeSessionId: string | null;
-  readonly isDeleting: boolean;
-  readonly onSelect: (sessionId: string) => void;
-  readonly onDelete: (sessionId: string) => void;
+  /** 是否折叠（折叠时隐藏该组会话项） */
+  readonly collapsed: boolean;
+  /** 切换折叠 */
+  readonly onToggle: () => void;
   /** 在此文件夹内新建会话（fl-add-btn 触发） */
   readonly onCreateInFolder: (folderName: string) => void;
 }
 
-/** 文件夹分组：folder-label + folder-items(thread-item 列表，支持拖拽排序) */
-function FolderGroup({
+/** 文件夹标签：折叠箭头 + 图标 + 名称 + hover 新建按钮 */
+function FolderLabel({
   folderName,
-  sessions,
-  orderOverride,
-  activeSessionId,
-  isDeleting,
-  onSelect,
-  onDelete,
+  collapsed,
+  onToggle,
   onCreateInFolder,
-}: FolderGroupProps): ReactElement {
-  const [collapsed, setCollapsed] = useState(false);
+}: FolderLabelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
 
-  // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
-  const orderedSessions = useMemo(() => {
-    if (orderOverride === undefined) {
-      return sessions;
-    }
-    const byId = new Map(sessions.map((s) => [s.id, s]));
-    return orderOverride
-      .map((id) => byId.get(id))
-      .filter((s): s is NonNullable<typeof s> => s !== undefined);
-  }, [sessions, orderOverride]);
-
   return (
-    <>
-      <button
-        type="button"
-        className={cn('folder-label', collapsed && 'collapsed')}
-        onClick={() => setCollapsed((prev) => !prev)}
-        aria-expanded={!collapsed}
-      >
-        <span className="fl-chevron">
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            role="img"
-            aria-label={t('sidebar.collapseFolder')}
-          >
-            <title>{t('sidebar.collapseFolder')}</title>
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </span>
-        <span className="fl-icon">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            role="img"
-            aria-label={t('sidebar.folder')}
-          >
-            <title>{t('sidebar.folder')}</title>
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
-        </span>
-        <span className="fl-name">
-          {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
-        </span>
-        {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
-        {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
-        <span
-          className="fl-add-btn"
-          role="button"
-          tabIndex={0}
-          aria-label={t('sidebar.newSessionIn', { name: folderName })}
-          title={t('sidebar.newSessionInFolder')}
-          onClick={(event) => {
+    <button
+      type="button"
+      className={cn('folder-label', collapsed && 'collapsed')}
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+    >
+      <span className="fl-chevron">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          role="img"
+          aria-label={t('sidebar.collapseFolder')}
+        >
+          <title>{t('sidebar.collapseFolder')}</title>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </span>
+      <span className="fl-icon">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          role="img"
+          aria-label={t('sidebar.folder')}
+        >
+          <title>{t('sidebar.folder')}</title>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      </span>
+      <span className="fl-name">{folderName.length > 0 ? folderName : t('sidebar.unlabeled')}</span>
+      {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
+      {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
+      <span
+        className="fl-add-btn"
+        role="button"
+        tabIndex={0}
+        aria-label={t('sidebar.newSessionIn', { name: folderName })}
+        title={t('sidebar.newSessionInFolder')}
+        onClick={(event) => {
+          event.stopPropagation();
+          onCreateInFolder(folderName);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
             event.stopPropagation();
             onCreateInFolder(folderName);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              event.stopPropagation();
-              onCreateInFolder(folderName);
-            }
-          }}
-        >
-          <Plus className="size-3" strokeWidth={2.5} />
-        </span>
-      </button>
-      <div className="folder-items">
-        <SortableContext
-          items={orderedSessions.map((s) => s.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {orderedSessions.map((session) => (
-            <SortableThreadItem
-              key={session.id}
-              sessionId={session.id}
-              folderName={folderName}
-              title={session.title}
-              lastMessage={session.lastMessage}
-              updatedAt={session.updatedAt}
-              isActive={session.id === activeSessionId}
-              isDeleting={isDeleting}
-              onSelect={() => onSelect(session.id)}
-              onDelete={() => onDelete(session.id)}
-            />
-          ))}
-        </SortableContext>
-      </div>
-    </>
+          }
+        }}
+      >
+        <Plus className="size-3" strokeWidth={2.5} />
+      </span>
+    </button>
   );
 }
 

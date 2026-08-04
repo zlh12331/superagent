@@ -22,7 +22,16 @@
 
       "FS_READ_FAILED": "文件读取失败",
       "FS_WRITE_FAILED": "文件写入失败",
-      "FS_DISK_FULL": "磁盘空间不足"
+      "FS_DISK_FULL": "磁盘空间不足",
+
+      "ALREADY_EXISTS": "目标已存在",
+
+      "TOOL_NOT_FOUND": "工具不存在",
+      "TOOL_EXECUTION_FAILED": "工具执行失败",
+      "TOOL_PERMISSION_DENIED": "工具调用未授权",
+      "TOOL_ABORTED": "工具执行被中断",
+      "SESSION_NOT_FOUND": "会话不存在",
+      "TERMINAL_SPAWN_FAILED": "终端启动失败"
     }
   }
 }

@@ -19,7 +19,7 @@
 
 import type { FileEntry } from '@code-agent/shared/renderer';
 import { ChevronRight, File, Folder, FolderOpen, MoreHorizontal } from 'lucide-react';
-import { type KeyboardEvent, memo, type ReactElement, useRef } from 'react';
+import { type KeyboardEvent, type ReactElement, useRef } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,7 +54,7 @@ interface FileTreeNodeProps {
  * 从 store 派生：展开状态、子条目、加载状态、激活状态、内联编辑状态。
  * 当父节点的 expandedPaths 变化时，对应子节点自动重新渲染（store 订阅）。
  */
-export const FileTreeNode = memo(function FileTreeNode({
+export function FileTreeNode({
   path,
   name,
   type,
@@ -272,7 +272,7 @@ export const FileTreeNode = memo(function FileTreeNode({
       </div>
     </div>
   );
-});
+}
 
 // ── 子组件：节点「更多操作」菜单 ────────────────────────────
 

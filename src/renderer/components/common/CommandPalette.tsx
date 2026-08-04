@@ -16,10 +16,9 @@
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from 'cmdk';
 import Fuse from 'fuse.js';
 import { FileText, MessageSquare, Moon, Plus, Search, Settings, Sun } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
@@ -27,6 +26,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
+import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 interface CommandPaletteProps {
@@ -70,13 +70,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const openFile = useFileViewerStore((state) => state.openFile);
 
   const [query, setQuery] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // 全局 UI store：设置对话框入口（命令面板 / Topbar / 错误动作共享）
+  const openSettings = useUiStore((state) => state.openSettings);
 
-  // 命令列表（依赖外部状态，需 useMemo 避免重建）
+  // 命令列表（依赖外部状态派生；React Compiler 自动缓存）
   // - 操作组：新建会话 / 切换主题 / 打开设置
   // - 文件组：动态派生自文件树，点击打开文件
   // - 会话组：动态派生自 useSessionsQuery 的会话列表，点击切换激活会话并跳转
-  const commands = useMemo<readonly CommandItemData[]>(() => {
+  const commands = ((): readonly CommandItemData[] => {
     const closePalette = (): void => onOpenChange(false);
     const baseCommands: readonly CommandItemData[] = [
       {
@@ -109,7 +110,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
         title: t('palette.openSettings'),
         icon: Settings,
         action: () => {
-          setSettingsOpen(true);
+          openSettings();
           closePalette();
         },
       },
@@ -153,116 +154,96 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     }));
 
     return [...baseCommands, ...fileCommands, ...sessionCommands];
-  }, [
-    resolvedTheme,
-    setTheme,
-    clearActiveSession,
-    setActiveSession,
-    enterWelcomeMode,
-    navigate,
-    onOpenChange,
-    sessionsData?.sessions,
-    rootPath,
-    getAllFilePaths,
-    openFile,
-    t,
-  ]);
+  })();
 
-  // fuse.js 模糊搜索（标题 + 分组字段；空查询时返回全部）
-  const fuse = useMemo(
-    () =>
-      new Fuse([...commands], {
-        keys: ['title', 'section'],
-        threshold: FUSE_THRESHOLD,
-        ignoreLocation: true,
-      }),
-    [commands],
-  );
-  const filtered = useMemo(() => {
+  // fuse.js 模糊搜索（标题 + 分组字段；空查询时返回全部；React Compiler 自动缓存）
+  const fuse = new Fuse([...commands], {
+    keys: ['title', 'section'],
+    threshold: FUSE_THRESHOLD,
+    ignoreLocation: true,
+  });
+  const filtered = ((): readonly CommandItemData[] => {
     const q = query.trim();
     if (q.length === 0) {
       return commands;
     }
     return fuse.search(q).map((result) => result.item);
-  }, [commands, fuse, query]);
+  })();
 
   if (!open) return null;
 
   return (
-    <>
-      <div
-        className="palette-overlay show"
-        role="dialog"
-        aria-label={t('topbar.commandPalette')}
-        aria-modal="true"
-        onClick={(e) => {
-          // 点击遮罩空白处关闭
-          if (e.target === e.currentTarget) onOpenChange(false);
-        }}
-        onKeyDown={(e) => {
-          // 键盘可达性：Esc 关闭（cmdk 内部处理 Esc 时也会调 onOpenChange）
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            onOpenChange(false);
-          }
-        }}
-      >
-        <Command className="palette" shouldFilter={false}>
-          <div className="palette-input-wrap">
-            <Search className="size-4" strokeWidth={2} />
-            <CommandInput
-              className="palette-input"
-              placeholder={t('palette.searchPlaceholder')}
-              aria-label={t('palette.searchLabel')}
-              value={query}
-              onValueChange={setQuery}
-              autoFocus
-            />
-          </div>
-          <CommandList className="palette-results">
-            <CommandEmpty className="palette-empty">{t('common.noResults')}</CommandEmpty>
-            {Array.from(new Set(filtered.map((cmd) => cmd.section))).map((section) => (
-              <CommandGroup key={section} heading={section}>
-                {filtered
-                  .filter((cmd) => cmd.section === section)
-                  .map((cmd) => {
-                    const Icon = cmd.icon;
-                    return (
-                      <CommandItem
-                        key={cmd.id}
-                        className="palette-item"
-                        value={`${section} ${cmd.title}`}
-                        onSelect={() => cmd.action()}
-                      >
-                        <span className="pi-icon">
-                          <Icon className="size-3" strokeWidth={2} />
-                        </span>
-                        <span className="pi-main">
-                          <span className="pi-title">{cmd.title}</span>
-                        </span>
-                        {cmd.shortcut !== undefined && (
-                          <span className="pi-shortcut">{cmd.shortcut}</span>
-                        )}
-                      </CommandItem>
-                    );
-                  })}
-              </CommandGroup>
-            ))}
-          </CommandList>
-          <div className="palette-foot">
-            <span>
-              <kbd>↑↓</kbd> {t('palette.navigate')}
-            </span>
-            <span>
-              <kbd>⏎</kbd> {t('palette.select')}
-            </span>
-            <span>
-              <kbd>esc</kbd> {t('common.close')}
-            </span>
-          </div>
-        </Command>
-      </div>
-      {settingsOpen && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />}
-    </>
+    <div
+      className="palette-overlay show"
+      role="dialog"
+      aria-label={t('topbar.commandPalette')}
+      aria-modal="true"
+      onClick={(e) => {
+        // 点击遮罩空白处关闭
+        if (e.target === e.currentTarget) onOpenChange(false);
+      }}
+      onKeyDown={(e) => {
+        // 键盘可达性：Esc 关闭（cmdk 内部处理 Esc 时也会调 onOpenChange）
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onOpenChange(false);
+        }
+      }}
+    >
+      <Command className="palette" shouldFilter={false}>
+        <div className="palette-input-wrap">
+          <Search className="size-4" strokeWidth={2} />
+          <CommandInput
+            className="palette-input"
+            placeholder={t('palette.searchPlaceholder')}
+            aria-label={t('palette.searchLabel')}
+            value={query}
+            onValueChange={setQuery}
+            autoFocus
+          />
+        </div>
+        <CommandList className="palette-results">
+          <CommandEmpty className="palette-empty">{t('common.noResults')}</CommandEmpty>
+          {Array.from(new Set(filtered.map((cmd) => cmd.section))).map((section) => (
+            <CommandGroup key={section} heading={section}>
+              {filtered
+                .filter((cmd) => cmd.section === section)
+                .map((cmd) => {
+                  const Icon = cmd.icon;
+                  return (
+                    <CommandItem
+                      key={cmd.id}
+                      className="palette-item"
+                      value={`${section} ${cmd.title}`}
+                      onSelect={() => cmd.action()}
+                    >
+                      <span className="pi-icon">
+                        <Icon className="size-3" strokeWidth={2} />
+                      </span>
+                      <span className="pi-main">
+                        <span className="pi-title">{cmd.title}</span>
+                      </span>
+                      {cmd.shortcut !== undefined && (
+                        <span className="pi-shortcut">{cmd.shortcut}</span>
+                      )}
+                    </CommandItem>
+                  );
+                })}
+            </CommandGroup>
+          ))}
+        </CommandList>
+        <div className="palette-foot">
+          <span>
+            <kbd>↑↓</kbd> {t('palette.navigate')}
+          </span>
+          <span>
+            <kbd>⏎</kbd> {t('palette.select')}
+          </span>
+          <span>
+            <kbd>esc</kbd> {t('common.close')}
+          </span>
+        </div>
+      </Command>
+    </div>
   );
 }

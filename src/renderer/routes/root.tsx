@@ -32,6 +32,20 @@ export function RootLayout(): ReactElement {
 }
 
 /**
+ * 懒加载路由的占位（HydrateFallback）
+ *
+ * HomePage / ChatPage 使用 route.lazy 按需加载，加载完成前在此渲染轻量占位，
+ * 避免空白窗口。仅占位一瞬（本地模块加载毫秒级），不做骨架屏。
+ */
+export function RootHydrateFallback(): ReactElement {
+  return (
+    <div className="text-muted-foreground flex h-full items-center justify-center">
+      <div className="border-border size-6 animate-spin rounded-full border-2 border-t-transparent" />
+    </div>
+  );
+}
+
+/**
  * 根路由错误边界
  *
  * 子路由抛出未捕获错误（如 IPC 异常、组件崩溃）时由 React Router 捕获，

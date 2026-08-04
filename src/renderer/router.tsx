@@ -27,26 +27,44 @@
 import { createBrowserRouter } from 'react-router';
 
 import { ROUTES } from '@/lib/constants';
-import { ChatPage } from './routes/chat';
-import { HomePage } from './routes/home';
-import { RootErrorBoundary, RootLayout } from './routes/root';
+import { RootErrorBoundary, RootHydrateFallback, RootLayout } from './routes/root';
 
 /**
  * 应用路由配置
  *
  * 使用 RR8 Data Mode：createBrowserRouter + RouterProvider，
  * 在 App.tsx 中通过 <RouterProvider router={router} /> 挂载。
+ *
+ * 代码分割：HomePage / ChatPage 使用 route.lazy 按需加载，
+ * 首屏 bundle 不再包含 shiki / diff-viewer / virtuoso 等重型依赖；
+ * 加载期间由 root 路由的 HydrateFallback 提供占位。
  */
 export const router = createBrowserRouter([
   {
     path: ROUTES.home,
     element: <RootLayout />,
     errorElement: <RootErrorBoundary />,
+    // biome-ignore lint/style/useNamingConvention: React Router 8 路由 API 要求 PascalCase 属性名
+    HydrateFallback: RootHydrateFallback,
     children: [
       // 首页：新对话草稿区（直接渲染 ChatPanel，chatId='draft'）
-      { index: true, element: <HomePage /> },
+      {
+        index: true,
+        lazy: async () => {
+          const { HomePage } = await import('./routes/home');
+          // biome-ignore lint/style/useNamingConvention: React Router lazy 要求模块导出 Component
+          return { Component: HomePage };
+        },
+      },
       // 聊天页：历史会话续传（chatId=URL 参数 sessionId）
-      { path: ROUTES.chat, element: <ChatPage /> },
+      {
+        path: ROUTES.chat,
+        lazy: async () => {
+          const { ChatPage } = await import('./routes/chat');
+          // biome-ignore lint/style/useNamingConvention: React Router lazy 要求模块导出 Component
+          return { Component: ChatPage };
+        },
+      },
     ],
   },
 ]);

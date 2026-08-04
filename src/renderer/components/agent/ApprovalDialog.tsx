@@ -31,7 +31,7 @@ import {
   Package,
   Terminal,
 } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
 
 import { Button } from '@/components/ui/button';
@@ -437,9 +437,9 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
   // 记住决策复选框状态：每次切换审批项时重置为 false
   const [rememberDecision, setRememberDecision] = useState(false);
 
-  // 当前审批项的图标与标签（通过 currentPending.type 查表）
+  // 当前审批项的图标与标签（通过 currentPending.type 查表；React Compiler 自动缓存）
   // 使用 lowercase 属性名（icon），在解构时重命名为大写 Icon 以满足 JSX 组件命名要求
-  const { icon: Icon, typeLabel } = useMemo(() => {
+  const { icon: Icon, typeLabel } = (() => {
     if (currentPending === undefined) {
       return { icon: AlertTriangle, typeLabel: t('approval.approval') };
     }
@@ -447,27 +447,23 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
       icon: getIconForType(currentPending.type),
       typeLabel: t(`approval.${getLabelKeyForType(currentPending.type)}`),
     };
-  }, [currentPending, t]);
+  })();
 
   // 拒绝按钮 variant：危险类型用 destructive，其他用 outline
-  const rejectVariant: 'destructive' | 'outline' = useMemo(() => {
-    if (currentPending === undefined) {
-      return 'outline';
-    }
-    return isDangerousType(currentPending.type) ? 'destructive' : 'outline';
-  }, [currentPending]);
+  const rejectVariant: 'destructive' | 'outline' =
+    currentPending !== undefined && isDangerousType(currentPending.type)
+      ? 'destructive'
+      : 'outline';
 
   // 是否支持"记住决策"复选框
-  const showRememberCheckbox = useMemo(() => {
-    if (currentPending === undefined) return false;
-    return canRememberDecision(currentPending.type);
-  }, [currentPending]);
+  const showRememberCheckbox =
+    currentPending !== undefined && canRememberDecision(currentPending.type);
 
   // 结构化预览内容
-  const structuredPreview = useMemo(() => {
-    if (currentPending === undefined) return null;
-    return renderStructuredPreview(currentPending.type, currentPending.input, t);
-  }, [currentPending, t]);
+  const structuredPreview =
+    currentPending === undefined
+      ? null
+      : renderStructuredPreview(currentPending.type, currentPending.input, t);
 
   // 处理用户点击批准/拒绝
   // 点击后 store 会自动从 pending 移除该项（由 useApprovalBridge.respondApproval 触发）

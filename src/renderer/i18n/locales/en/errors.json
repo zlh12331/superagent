@@ -22,7 +22,16 @@
 
       "FS_READ_FAILED": "Failed to read file",
       "FS_WRITE_FAILED": "Failed to write file",
-      "FS_DISK_FULL": "Disk space insufficient"
+      "FS_DISK_FULL": "Disk space insufficient",
+
+      "ALREADY_EXISTS": "Target already exists",
+
+      "TOOL_NOT_FOUND": "Tool not found",
+      "TOOL_EXECUTION_FAILED": "Tool execution failed",
+      "TOOL_PERMISSION_DENIED": "Tool call not authorized",
+      "TOOL_ABORTED": "Tool execution interrupted",
+      "SESSION_NOT_FOUND": "Session not found",
+      "TERMINAL_SPAWN_FAILED": "Failed to start terminal"
     }
   }
 }

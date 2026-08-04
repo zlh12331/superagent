@@ -7,6 +7,12 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// 在 React 渲染前同步应用初始主题，消除首屏闪烁（FOUC 防护）
+// 必须在 createRoot(...).render() 之前调用
+import { applyInitialTheme } from '@/lib/theme-init';
+
+applyInitialTheme();
+
 // React 19 createRoot API
 const rootElement = document.getElementById('root');
 if (!rootElement) {

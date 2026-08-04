@@ -16,7 +16,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Check, Copy, Eye, FileText, Pencil, Save } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getHighlighter, normalizeLang } from '@/components/chat/Markdown';
@@ -137,11 +137,8 @@ export function FileViewerDialog(): ReactElement {
   const theme: 'github-dark' | 'github-light' =
     resolvedTheme === 'dark' ? 'github-dark' : 'github-light';
 
-  // 推断语言（filePath 变化时重新计算）
-  const lang = useMemo(
-    () => (filePath !== null ? detectLangFromPath(filePath) : 'text'),
-    [filePath],
-  );
+  // 推断语言（filePath 变化时重新计算，React Compiler 自动缓存）
+  const lang = filePath !== null ? detectLangFromPath(filePath) : 'text';
 
   // IPC 数据到达后同步到 store
   useEffect(() => {
@@ -194,7 +191,7 @@ export function FileViewerDialog(): ReactElement {
     },
     [],
   );
-  const handleCopy = useCallback(async () => {
+  const handleCopy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(displayContent);
       setCopied(true);
@@ -208,10 +205,10 @@ export function FileViewerDialog(): ReactElement {
     } catch {
       toast.error(t('fileViewer.copyFailed'));
     }
-  }, [displayContent, t]);
+  };
 
   // 保存处理
-  const handleSave = useCallback(async () => {
+  const handleSave = async (): Promise<void> => {
     if (filePath === null || !isDirty || isSaving) return;
     try {
       await saveFile({
@@ -225,7 +222,7 @@ export function FileViewerDialog(): ReactElement {
     } catch {
       // onError 已在 use-file-write 中 toast 错误
     }
-  }, [filePath, isDirty, isSaving, editedContent, saveFile, markSaved, t]);
+  };
 
   // Ctrl+S / Cmd+S 快捷键保存
   useEffect(() => {
@@ -239,38 +236,36 @@ export function FileViewerDialog(): ReactElement {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleSave（依赖不变时引用稳定），无需 useCallback；未缓存时重复绑定仅低效不错误
   }, [editMode, open, handleSave]);
 
   // Dialog 关闭回调（Esc / 点击遮罩 / 点关闭按钮）
   // 脏数据保护：未保存时阻止关闭，提示用户
-  const handleOpenChange = useCallback(
-    (next: boolean) => {
-      if (!next) {
-        if (isDirty) {
-          // 用 confirm 避免引入复杂确认对话框
-          // 项目惯例：sonner toast 用于通知，confirm 用于阻塞式确认
-          const confirmed = window.confirm(t('fileViewer.confirmCloseDirty'));
-          if (!confirmed) return;
-          // 用户确认丢弃修改
-          exitEditMode();
-        }
-        close();
+  const handleOpenChange = (next: boolean): void => {
+    if (!next) {
+      if (isDirty) {
+        // 用 confirm 避免引入复杂确认对话框
+        // 项目惯例：sonner toast 用于通知，confirm 用于阻塞式确认
+        const confirmed = window.confirm(t('fileViewer.confirmCloseDirty'));
+        if (!confirmed) return;
+        // 用户确认丢弃修改
+        exitEditMode();
       }
-    },
-    [close, isDirty, exitEditMode, t],
-  );
+      close();
+    }
+  };
 
   // textarea ref（用于滚动同步）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
 
   // textarea 滚动同步：编辑态下滚动 textarea 时同步高亮层
-  const handleTextareaScroll = useCallback(() => {
+  const handleTextareaScroll = (): void => {
     if (textareaRef.current !== null && highlightRef.current !== null) {
       highlightRef.current.scrollTop = textareaRef.current.scrollTop;
       highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
     }
-  }, []);
+  };
 
   // 渲染
   const fileName = filePath !== null ? basename(filePath) : '';

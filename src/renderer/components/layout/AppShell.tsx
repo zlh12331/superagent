@@ -25,6 +25,7 @@ import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
+import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -36,6 +37,7 @@ import { DEFAULT_GIT_REPO_PATH, DRAFT_SESSION_ID } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 import { DevPanel } from './DevPanel';
@@ -137,6 +139,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 响应式断点联动：窄屏自动折叠面板（对齐原型 @media 行为）
   // <1200px：右面板自动隐藏；<900px：侧栏自动隐藏；宽屏自动恢复
   const { isCompact, isNarrow } = useLayoutBreakpoint();
+
+  // 全局设置对话框开关（useUiStore）
+  const settingsOpen = useUiStore((s) => s.settingsOpen);
+  const closeSettings = useUiStore((s) => s.closeSettings);
   useEffect(() => {
     setRightPanelCollapsed(isCompact);
   }, [isCompact]);
@@ -153,6 +159,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const setTheme = useSettingsStore((s) => s.setTheme);
   const theme = useSettingsStore((s) => s.theme);
   const enterWelcomeMode = useWelcomeStore((s) => s.enterWelcomeMode);
+  // 全局 UI store：设置对话框入口（快捷键 / 错误动作 / Topbar / 命令面板共享）
+  const openSettings = useUiStore((s) => s.openSettings);
 
   useKeyboardShortcuts({
     onCommandPalette: () => setPaletteOpen(true),
@@ -162,7 +170,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
       setTheme(nextTheme);
     },
-    onOpenSettings: () => {},
+    onOpenSettings: openSettings,
     onNewSession: () => {
       enterWelcomeMode();
     },
@@ -330,6 +338,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
       {/* 文件查看器对话框：根级渲染，由 useFileViewerStore 控制 */}
       <FileViewerDialog />
+
+      {/* 设置对话框：根级渲染，由 useUiStore 控制（Topbar / 命令面板 / 错误动作共用入口） */}
+      <SettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
 
       {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />

@@ -14,12 +14,14 @@
 // - 可访问性：loading 有 aria-busy / role="status"，error 有 role="alert"。
 // ──────────────────────────────────────────────────────────────
 
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Settings2 } from 'lucide-react';
 import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { AsyncView } from '@/hooks/use-async-view';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { resolveErrorAction } from '@/lib/error-actions';
+import { useUiStore } from '@/stores/transient/ui-store';
 
 /** 默认骨架屏延迟（毫秒）：低于此时长的首次加载不显示骨架屏，防闪烁 */
 const DEFAULT_SKELETON_DELAY = 200;
@@ -70,6 +72,8 @@ export function AsyncBoundary<T>({
 }: AsyncBoundaryProps<T>): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
+  // 全局 UI store：错误码恢复动作（如「去配置」）打开设置对话框
+  const openSettings = useUiStore((state) => state.openSettings);
 
   // 从 Error 解析本地化文案：约定错误格式为 "[CODE] message"（见 lib/ipc unwrap）；
   // 解析出合法错误码则本地化，否则回退原始 message。
@@ -119,14 +123,24 @@ export function AsyncBoundary<T>({
       if (errorHint !== undefined) {
         return <>{errorHint(view.error, view.retry, view.data)}</>;
       }
+      // 错误码 → 恢复动作（如 API Key 缺失 → 打开设置）
+      const action = resolveErrorAction(view.error);
       return (
         <div role="alert" aria-live="assertive" className="flex flex-col items-center gap-3 p-6">
           <AlertTriangle className="text-destructive size-8" strokeWidth={1.5} />
           <p className="text-muted-foreground text-sm">{resolveErrorMessage(view.error)}</p>
-          <Button variant="outline" size="sm" onClick={view.retry}>
-            <RefreshCw className="size-3.5" strokeWidth={2} />
-            {t('common.retry')}
-          </Button>
+          <div className="flex gap-2">
+            {action !== undefined && action.kind === 'open-settings' && (
+              <Button variant="outline" size="sm" onClick={openSettings}>
+                <Settings2 className="size-3.5" strokeWidth={2} />
+                {t('common.goToSettings')}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={view.retry}>
+              <RefreshCw className="size-3.5" strokeWidth={2} />
+              {t('common.retry')}
+            </Button>
+          </div>
         </div>
       );
     }

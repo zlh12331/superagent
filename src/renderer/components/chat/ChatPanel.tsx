@@ -14,7 +14,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { AlertTriangle, X } from 'lucide-react';
-import { type ReactElement, useCallback, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useAgentWithIpc } from '@/hooks/use-agent';
@@ -76,20 +76,17 @@ export function ChatPanel({
 
   // 错误处理回调：一次性触发，避免 useEffect 双 toast
   // 策略：尝试从 error.message 提取 [CODE] 前缀匹配 i18n 文案，失败则展示原始消息
-  const handleError = useCallback(
-    (error: Error) => {
-      // 尝试从 error.message 提取错误码（格式 "[CODE] message"）
-      const codeMatch = /^\[([A-Z_]+)\]/.exec(error.message);
-      if (codeMatch !== null) {
-        const code = codeMatch[1] as Parameters<typeof getErrorMessage>[0];
-        toast.error(getErrorMessage(code));
-      } else {
-        // 兜底：直接展示原始 error.message
-        toast.error(error.message);
-      }
-    },
-    [getErrorMessage],
-  );
+  const handleError = (error: Error): void => {
+    // 尝试从 error.message 提取错误码（格式 "[CODE] message"）
+    const codeMatch = /^\[([A-Z_]+)\]/.exec(error.message);
+    if (codeMatch !== null) {
+      const code = codeMatch[1] as Parameters<typeof getErrorMessage>[0];
+      toast.error(getErrorMessage(code));
+    } else {
+      // 兜底：直接展示原始 error.message
+      toast.error(error.message);
+    }
+  };
 
   // useAgentWithIpc：Agent 模式专用 hook
   // - id: 控制消息状态隔离
@@ -129,12 +126,9 @@ export function ChatPanel({
   // 重新生成回调：透传给 ChatMessageList → MsgActions
   // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
   // 然后用截断后的 messages 重新发起请求（transport 复用同一 sessionId，AgentService 自动中断旧 stream）
-  const handleRegenerate = useCallback(
-    (messageId: string) => {
-      void regenerate({ messageId });
-    },
-    [regenerate],
-  );
+  const handleRegenerate = (messageId: string): void => {
+    void regenerate({ messageId });
+  };
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
