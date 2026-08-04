@@ -82,3 +82,18 @@ docs/prototype/
 
 # Qoder 工具缓存（repowiki 索引等，运行时自动生成，不入仓）
 .qoder/
+
+# 根目录临时调试脚本与一次性诊断输出（历史遗留，不入仓）
+/check-encoding.ps1
+/convert_crlf.py
+/diag.txt
+/feishu_doc.txt
+/fix_platform_toolset.py
+/lint_output.txt
+/lint_output2.txt
+/rebuild-node-pty.ps1
+/rebuild-node-pty-step2.ps1
+
+# 本地模板/原型参考资产（含运行时产物与 .env，不入仓）
+/_template/
+/codex-desktop-prototype.design/
