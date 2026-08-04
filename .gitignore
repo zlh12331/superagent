@@ -97,3 +97,6 @@ docs/prototype/
 # 本地模板/原型参考资产（含运行时产物与 .env，不入仓）
 /_template/
 /codex-desktop-prototype.design/
+
+# 外部参考代码（docs/参考项目/，含 node_modules 约 2.6GB，不入仓）
+/docs/参考项目/
