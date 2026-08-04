@@ -9,9 +9,6 @@
 // - /chat/:sessionId 路由渲染 ChatPage（历史会话续传）
 // - 提供 RootErrorBoundary 作为顶层错误边界
 //
-// 预留（未实现）：/novel 写作模块（NovelHome 项目列表 / NovelLayout 三栏工作台 /
-// NovelEditor 编辑器）待功能设计后按需补充路由，不在当前路由树中声明
-//
 // 路由树：
 //   /                            → RootLayout (AppShell)
 //     index                      → HomePage（新对话草稿，chatId='draft'）
