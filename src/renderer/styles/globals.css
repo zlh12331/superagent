@@ -4130,6 +4130,40 @@ button.card-head {
   }
 }
 
+/* ──────────────────────────────────────────────────────────────
+   后台刷新顶部细进度条 · indeterminate 滑动
+   （AsyncBoundary refreshing 态，保留旧数据的同时指示刷新中）
+   ────────────────────────────────────────────────────────────── */
+.async-refreshing-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: var(--z-raised);
+}
+
+.async-refreshing-bar::before {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  animation: refreshing-slide 1.2s var(--ease-soft) infinite;
+}
+
+@keyframes refreshing-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 @keyframes toolSpin {
   to {
     transform: rotate(360deg);
@@ -4194,7 +4228,8 @@ button.card-head {
   .card-status.running::before,
   .tool-card:has(.card-status.running) .card-icon::after,
   .tool-card:has(.card-status.running)::after,
-  .plan-item.active .plan-check {
+  .plan-item.active .plan-check,
+  .async-refreshing-bar::before {
     animation: none;
   }
 }

@@ -24,9 +24,12 @@ describe('AsyncBoundary', () => {
     expect(screen.getByTestId('content').textContent).toBe('a,b');
   });
 
-  it('refreshing：保留旧数据渲染内容', () => {
+  it('refreshing：保留旧数据渲染内容 + 顶部进度条指示刷新中', () => {
     renderView({ state: 'refreshing', data: ['x'] });
     expect(screen.getByTestId('content').textContent).toBe('x');
+    // 进度条存在且对读屏隐藏（aria-hidden，不干扰 role=status/alert 语义）
+    const bar = screen.getByTestId('refreshing-bar');
+    expect(bar.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('empty：渲染空态', () => {

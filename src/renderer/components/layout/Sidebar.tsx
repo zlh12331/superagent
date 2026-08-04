@@ -38,6 +38,7 @@ import { memo, type ReactElement, useCallback, useMemo, useRef, useState } from 
 import { useNavigate } from 'react-router';
 
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
+import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
 import { Button } from '@/components/ui/button';
 import {
@@ -252,7 +253,18 @@ export const Sidebar = memo(function Sidebar(): ReactElement {
         {activeTab === 'files' ? (
           <FileTreePanel workingDir={workingDir} />
         ) : (
-          <AsyncBoundary view={view} skeleton={<LoadingList />} empty={<EmptyHint />}>
+          <AsyncBoundary
+            view={view}
+            skeleton={<LoadingList />}
+            empty={
+              <EmptyState
+                title={t('sidebar.noSessions')}
+                description={t('sidebar.newSessionHint')}
+                actionLabel={t('sidebar.newSession')}
+                onAction={handleNewChat}
+              />
+            }
+          >
             {() => (
               <nav aria-label={t('sidebar.sessionList')}>
                 <div className="thread-group-label">
@@ -595,16 +607,5 @@ function LoadingList(): ReactElement {
         </li>
       ))}
     </ul>
-  );
-}
-
-/** 空状态提示 */
-function EmptyHint(): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <div className="text-muted-foreground p-6 text-center">
-      <p className="font-serif text-sm tracking-wide">{t('sidebar.noSessions')}</p>
-      <p className="mt-1 text-xs">{t('sidebar.newSessionHint')}</p>
-    </div>
   );
 }

@@ -106,8 +106,14 @@ export function AsyncBoundary<T>({
       );
 
     case 'refreshing':
-      // 后台刷新：保留旧数据，不闪骨架屏
-      return children(view.data);
+      // 后台刷新：保留旧数据渲染，不闪骨架屏；
+      // 顶部细进度条指示刷新中（indeterminate 滑动，aria-hidden 不干扰读屏）
+      return (
+        <div className="relative">
+          <div aria-hidden="true" data-testid="refreshing-bar" className="async-refreshing-bar" />
+          {children(view.data)}
+        </div>
+      );
 
     case 'error': {
       if (errorHint !== undefined) {

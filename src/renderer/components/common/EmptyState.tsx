@@ -53,7 +53,7 @@ export function EmptyState({
     <div className="text-muted-foreground flex flex-col items-center justify-center gap-3 py-16">
       <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
         {/* 默认 Inbox 图标 + strokeWidth=1.5 */}
-        {icon ?? <Inbox className="size-6" strokeWidth={1.5} />}
+        {icon ?? <Inbox className="size-6" strokeWidth={1.5} data-testid="empty-default-icon" />}
       </div>
       <div className="text-center">
         {/* 标题用衬线字体 */}
