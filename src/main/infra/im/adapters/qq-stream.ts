@@ -63,6 +63,41 @@ export interface ParsedQqMessage {
   readonly timestamp: number;
 }
 
+/** 网关响应 */
+export interface QqGatewayResponse {
+  readonly url: string;
+}
+
+/**
+ * 获取网关地址（官方：GET /gateway/bot，可注入测试）
+ */
+export async function fetchQqGatewayUrl(
+  accessToken: string,
+  gatewayUrl = 'https://api.sgroup.qq.com/gateway/bot',
+): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort('timeout'), 15_000);
+  try {
+    const response = await fetch(gatewayUrl, {
+      headers: { Authorization: `QQBot ${accessToken}` },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new AppError(
+        ErrorCode.IM_CHANNEL_REQUEST_FAILED,
+        `QQ 网关获取失败（HTTP ${response.status}）`,
+      );
+    }
+    const data = (await response.json()) as { url?: string };
+    if (typeof data.url !== 'string' || data.url.length === 0) {
+      throw new AppError(ErrorCode.IM_CHANNEL_REQUEST_FAILED, 'QQ 网关响应缺少 url');
+    }
+    return data.url;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** accessToken 响应 */
 export interface QqTokenResponse {
   readonly accessToken: string;
@@ -114,8 +149,8 @@ export function parseQqEvent(frame: QqGatewayFrame): ParsedQqMessage | null {
   if (frame.op !== QqOpCode.DISPATCH || typeof frame.t !== 'string') {
     return null;
   }
-  const isGroup = frame.t === 'GROUP_AT_MESSAGE';
-  const isC2C = frame.t === 'C2C_MESSAGE';
+  const isGroup = frame.t === 'GROUP_AT_MESSAGE_CREATE';
+  const isC2C = frame.t === 'C2C_MESSAGE_CREATE';
   if (!isGroup && !isC2C) {
     return null;
   }
@@ -151,7 +186,7 @@ function stripBotMention(content: string): string {
 export interface QqStreamConfig {
   readonly appId: string;
   readonly appSecret: string;
-  /** 网关地址（测试注入；缺省正式环境） */
+  /** 网关获取端点（测试注入；缺省官方 /gateway/bot） */
   readonly gatewayUrl?: string;
   /** accessToken 端点（测试注入） */
   readonly tokenUrl?: string;
@@ -168,13 +203,15 @@ export class QqStreamReceiver {
 
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** 最新事件序列号（心跳携带；官方协议要求） */
+  private lastSeq: number | null = null;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
 
   constructor(config: QqStreamConfig) {
     this.appId = config.appId;
     this.appSecret = config.appSecret;
-    this.gatewayUrl = config.gatewayUrl ?? 'wss://api.sgroup.qq.com/websocket';
+    this.gatewayUrl = config.gatewayUrl ?? 'https://api.sgroup.qq.com/gateway/bot';
     this.tokenUrl = config.tokenUrl ?? 'https://bots.qq.com/app/getAppAccessToken';
   }
 
@@ -195,7 +232,8 @@ export class QqStreamReceiver {
       return;
     }
     const { accessToken } = await fetchQqAccessToken(this.appId, this.appSecret, this.tokenUrl);
-    const ws = new WebSocket(this.gatewayUrl);
+    const gateway = await fetchQqGatewayUrl(accessToken, this.gatewayUrl);
+    const ws = new WebSocket(gateway);
     this.ws = ws;
     await this.handshake(ws, accessToken);
     this.opened = true;
@@ -244,6 +282,12 @@ export class QqStreamReceiver {
               d: {
                 token: `QQBot ${accessToken}`,
                 intents: QqIntent.C2C_MESSAGE | QqIntent.GROUP_AT_MESSAGE,
+                shard: [0, 1],
+                properties: {
+                  $os: 'windows',
+                  $browser: 'code-agent-desktop',
+                  $device: 'code-agent-desktop',
+                },
               },
             }),
           );
@@ -264,7 +308,7 @@ export class QqStreamReceiver {
   private startHeartbeat(ws: WebSocket, intervalMs: number): void {
     this.heartbeatTimer = setInterval(() => {
       try {
-        ws.send(JSON.stringify({ op: QqOpCode.HEARTBEAT, d: null }));
+        ws.send(JSON.stringify({ op: QqOpCode.HEARTBEAT, d: this.lastSeq }));
       } catch {
         // 连接关闭时停止心跳
         if (this.heartbeatTimer !== null) {
@@ -275,8 +319,11 @@ export class QqStreamReceiver {
     }, intervalMs);
   }
 
-  /** 事件分发：解析 → 转发入站消息 */
+  /** 事件分发：记录序列号 + 解析转发 */
   private dispatchFrame(frame: QqGatewayFrame): void {
+    if (typeof frame.s === 'number') {
+      this.lastSeq = frame.s;
+    }
     const parsed = parseQqEvent(frame);
     if (parsed === null) {
       return;

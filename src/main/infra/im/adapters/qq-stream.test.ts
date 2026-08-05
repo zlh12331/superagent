@@ -13,7 +13,7 @@ function frame(t: string, d: unknown): QqGatewayFrame {
 describe('parseQqEvent（QQ Gateway 事件解析）', () => {
   it('群聊 @ 消息：完整解析（group_openid 为 chatId）', () => {
     const parsed = parseQqEvent(
-      frame('GROUP_AT_MESSAGE', {
+      frame('GROUP_AT_MESSAGE_CREATE', {
         id: 'evt-1',
         author: { member_openid: 'member-9' },
         content: '<@!bot_openid> 帮我看看',
@@ -31,7 +31,7 @@ describe('parseQqEvent（QQ Gateway 事件解析）', () => {
 
   it('C2C 单聊：user_openid 为 chatId', () => {
     const parsed = parseQqEvent(
-      frame('C2C_MESSAGE', {
+      frame('C2C_MESSAGE_CREATE', {
         id: 'evt-2',
         author: { user_openid: 'user-5' },
         content: '在吗',
@@ -47,7 +47,7 @@ describe('parseQqEvent（QQ Gateway 事件解析）', () => {
 
   it('群聊消息保留非 bot mention（仅剥离开头 @bot）', () => {
     const parsed = parseQqEvent(
-      frame('GROUP_AT_MESSAGE', {
+      frame('GROUP_AT_MESSAGE_CREATE', {
         id: 'evt-3',
         author: { member_openid: 'm1' },
         content: '<@!botid> @member2 一起确认',
@@ -64,7 +64,9 @@ describe('parseQqEvent（QQ Gateway 事件解析）', () => {
 
   it('空文本：返回 null', () => {
     expect(
-      parseQqEvent(frame('C2C_MESSAGE', { id: 'x', author: { user_openid: 'u' }, content: '  ' })),
+      parseQqEvent(
+        frame('C2C_MESSAGE_CREATE', { id: 'x', author: { user_openid: 'u' }, content: '  ' }),
+      ),
     ).toBeNull();
   });
 
@@ -128,5 +130,24 @@ describe('fetchQqAccessToken（access_token 获取）', () => {
     await expect(
       fetchQqAccessToken('app-1', 'sec-1', `http://127.0.0.1:${address.port}/token`),
     ).rejects.toThrow('access_token');
+  });
+
+  it('网关获取：/gateway/bot 返回 ws 地址（Bearer 鉴权）', async () => {
+    const captured: Array<{ auth: string | undefined }> = [];
+    server = createServer((req, res) => {
+      captured.push({ auth: req.headers['authorization'] });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ url: 'wss://api.sgroup.qq.com/websocket', shards: 1 }));
+    });
+    await new Promise<void>((resolve) => {
+      server?.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('服务器启动失败');
+    }
+    const url = await fetchQqGatewayUrl('tok-1', `http://127.0.0.1:${address.port}/gateway/bot`);
+    expect(url).toBe('wss://api.sgroup.qq.com/websocket');
+    expect(captured[0]?.auth).toBe('QQBot tok-1');
   });
 });

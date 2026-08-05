@@ -26,7 +26,10 @@ export class QqAdapter implements IChannelAdapter {
   readonly implemented = true;
 
   isConnected = false;
+  private appIdValue: string | null = null;
+  private appSecretValue: string | null = null;
   private accessToken: string | null = null;
+  private accessTokenExpiresAt = 0;
   /** openid → 会话类型（入站事件学习：群/单聊路由） */
   private readonly chatTypeMap = new Map<string, 'group' | 'user'>();
   private receiver: QqStreamReceiver | null = null;
@@ -50,8 +53,9 @@ export class QqAdapter implements IChannelAdapter {
     ) {
       throw new AppError(ErrorCode.IM_CHANNEL_INVALID_TOKEN, 'QQ：无效的 appId:appSecret');
     }
-    const { accessToken } = await fetchQqAccessToken(appId, appSecret);
-    this.accessToken = accessToken;
+    this.appIdValue = appId;
+    this.appSecretValue = appSecret;
+    await this.refreshAccessToken(appId, appSecret);
 
     // 启动长连接接收
     const receiver = new QqStreamReceiver({ appId, appSecret });
@@ -85,14 +89,18 @@ export class QqAdapter implements IChannelAdapter {
    * 回发消息（chatId 即 openid；群/单聊按入站学习路由）
    */
   async sendMessage(target: ChannelTarget, text: string): Promise<void> {
-    if (this.accessToken === null) {
-      throw new AppError(ErrorCode.IM_CHANNEL_NOT_CONFIGURED, 'QQ：渠道未连接');
-    }
     const chatType = this.chatTypeMap.get(target.chatId) ?? 'user';
     const endpoint =
       chatType === 'group'
         ? `${API_HOST}/v2/groups/${target.chatId}/messages`
         : `${API_HOST}/v2/users/${target.chatId}/messages`;
+    // access_token 过期前刷新（官方：7200s 生命周期，需自行刷新）
+    if (this.appIdValue !== null && this.appSecretValue !== null && this.isTokenExpiring()) {
+      await this.refreshAccessToken(this.appIdValue, this.appSecretValue);
+    }
+    if (this.accessToken === null) {
+      throw new AppError(ErrorCode.IM_CHANNEL_NOT_CONFIGURED, 'QQ：渠道未连接');
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), SEND_TIMEOUT_MS);
     try {
@@ -105,12 +113,33 @@ export class QqAdapter implements IChannelAdapter {
         body: JSON.stringify({ content: text, msg_type: 0 }),
         signal: controller.signal,
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      const body = (await response.json().catch(() => null)) as {
+        err_code?: number;
+        message?: string;
+      } | null;
+      // 官方：依据 err_code 判断失败（message 可能调整）
+      if (!response.ok || (body?.err_code !== undefined && body.err_code !== 0)) {
+        throw new Error(
+          body?.err_code !== undefined
+            ? `QQ 发送失败（err_code ${body.err_code}）：${body.message ?? '未知'}`
+            : `HTTP ${response.status} ${response.statusText}`,
+        );
       }
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** 是否接近过期（剩余 <60s 视为过期窗口；官方：过期前 60s 内获取新 token） */
+  private isTokenExpiring(): boolean {
+    return Date.now() >= this.accessTokenExpiresAt - 60_000;
+  }
+
+  /** 获取/刷新 access_token（记录过期时间） */
+  private async refreshAccessToken(appId: string, appSecret: string): Promise<void> {
+    const { accessToken, expiresIn } = await fetchQqAccessToken(appId, appSecret);
+    this.accessToken = accessToken;
+    this.accessTokenExpiresAt = Date.now() + expiresIn * 1000;
   }
 
   /** 订阅入站消息（多订阅者：与 im-service 兼容） */
