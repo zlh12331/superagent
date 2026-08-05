@@ -50,7 +50,7 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
    * 连接（webhook 型 = 配置就绪；token 为 webhook URL，钉钉加签格式 URL#secret）
    */
   async connect(token: string | undefined): Promise<void> {
-    const parsed = parseWebhookToken(token);
+    const parsed = parseWebhookToken(this.parseToken(token ?? ''));
     if (parsed === null) {
       throw new AppError(
         ErrorCode.IM_CHANNEL_INVALID_TOKEN,
@@ -61,11 +61,13 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
     this.secret = parsed.secret;
     this.isConnected = true;
     logger.info({ kind: this.kind }, `${this.displayName} 渠道配置就绪（webhook）`);
+    await this.afterConnect();
   }
 
   /** 断开（webhook 无长连接，仅清状态） */
   async disconnect(): Promise<void> {
     this.isConnected = false;
+    await this.afterDisconnect();
   }
 
   /** 入站：webhook 群机器人无接收通道（需公网回调，桌面端后置） */
@@ -114,6 +116,21 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
   /** URL 装饰（加签渠道覆写；钉钉 timestamp+sign） */
   protected async decorateUrl(url: string): Promise<string> {
     return url;
+  }
+
+  /** token 预处理（多配置渠道覆写；默认原样返回） */
+  protected parseToken(token: string): string {
+    return token;
+  }
+
+  /** 连接后钩子（长连接接收渠道覆写；默认 no-op） */
+  protected async afterConnect(): Promise<void> {
+    // no-op
+  }
+
+  /** 断开后钩子（长连接接收渠道覆写；默认 no-op） */
+  protected async afterDisconnect(): Promise<void> {
+    // no-op
   }
 
   /** 加签 secret（子类读取用） */
