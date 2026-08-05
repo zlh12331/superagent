@@ -1,15 +1,15 @@
 # 技术栈文档
 
-> 基于 `novel-writer-agent` v0.1.3 实际 [package.json](file:///f:/TraeProjects/1/package.json) 整理。
+> 基于 `code-agent-desktop` v1.0.0 实际 [package.json](file:///f:/TraeProjects/1/package.json) 整理。
 > 整理时间：2026-07-23
 
 ## 1. 项目基本信息
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| name | `novel-writer-agent` | [package.json#L2](file:///f:/TraeProjects/1/package.json#L2) |
-| version | `0.1.3` | [package.json#L3](file:///f:/TraeProjects/1/package.json#L3) |
-| description | 网文写作 Agent - Windows 桌面端应用 | [package.json#L4](file:///f:/TraeProjects/1/package.json#L4) |
+| name | `code-agent-desktop` | [package.json#L2](file:///f:/TraeProjects/1/package.json#L2) |
+| version | `1.0.0` | [package.json#L3](file:///f:/TraeProjects/1/package.json#L3) |
+| description | Code Agent Desktop - 生产级 Electron Code Agent 模板（Windows 桌面端） | [package.json#L4](file:///f:/TraeProjects/1/package.json#L4) |
 | type | `module` | [package.json#L7](file:///f:/TraeProjects/1/package.json#L7) |
 | main | `./out/main/index.js` | [package.json#L8](file:///f:/TraeProjects/1/package.json#L8) |
 | packageManager | `pnpm@10.0.0` | [package.json#L9](file:///f:/TraeProjects/1/package.json#L9) |
@@ -46,12 +46,12 @@
 |---|---|
 | `react` | `^19.2` |
 | `react-dom` | `^19.2` |
-| `react-router` | `^8.2.0` |
+| `react-router` | `^8.3.0` |
 | `react-i18next` / `i18next` / `i18next-browser-languagedetector` | `^17.0.10` / `^26.3.6` / `^8.2.1` |
 | `@tanstack/react-query` | `^5.101.3` |
 | `react-error-boundary` | `^6.1.2` |
 | `react-hotkeys-hook` | `^5.3.3` |
-| `react-markdown` / `remark-gfm` / `rehype-raw` | `^10.1.0` / `^4.0.1` / `^7.0.0` |
+| `react-markdown` / `remark-gfm` | `^10.1.0` / `^4.0.1` |
 | `react-diff-viewer-continued` | `^4.4.0` |
 | `react-virtuoso` | `^4.18.11` |
 | `react-arborist` | `^3.15.0` |
@@ -63,7 +63,7 @@
 | `ai` (Vercel AI SDK) | `^7.0.32` | streamText / tools / stopWhen 多轮工具调用 |
 | `@ai-sdk/openai-compatible` | `^3.0.13` | DeepSeek 等 OpenAI 兼容 provider |
 | `@ai-sdk/react` | `^4.0.35` | useChat 等 React hooks |
-| `@modelcontextprotocol/sdk` | `^1.29.0` | MCP server 集成（仅 stdio transport） |
+| `@modelcontextprotocol/sdk` | `^1.30.0` | MCP server 集成（仅 stdio transport） |
 | `gpt-tokenizer` | `^3.4.0` | token 计数 |
 
 ### 3.4 数据库
@@ -72,7 +72,7 @@
 |---|---|---|
 | `better-sqlite3` | `^12.11.1` | SQLite 原生绑定 |
 | `drizzle-orm` | `^0.45.2` | TypeScript ORM |
-| `drizzle-kit` | `^0.31.10` | devDep，迁移工具（但根目录未发现 drizzle.config.ts） |
+| `drizzle-kit` | `^0.31.10` | devDep，迁移工具（[drizzle.config.ts](file:///f:/TraeProjects/1/drizzle.config.ts) 已在根目录提供） |
 | `@types/better-sqlite3` | `^7.6.13` | devDep |
 
 ### 3.5 UI / 样式
@@ -93,7 +93,7 @@
 | `node-pty` | `^1.1.0` | PTY 进程 |
 | `chokidar` | `^5.0.0` | 文件监听 |
 | `@vscode/ripgrep` | `^1.18.0` | grep 搜索 |
-| `web-tree-sitter` | `^0.26.11` | tree-sitter 解析 |
+| `web-tree-sitter` | `^0.24.7` | tree-sitter 解析 |
 | `diff-match-patch` | `^1.0.5` | 文件 diff |
 | `fuse.js` | `^7.5.0` | 模糊搜索 |
 
@@ -123,11 +123,9 @@
 |---|---|---|
 | `vitest` / `@vitest/coverage-v8` | `^4.0.0` / `^4.0.0` | 单测框架 + v8 coverage |
 | `@playwright/test` / `playwright` | `^1.58` / `^1.61.1` | E2E 测试 |
-| `@testing-library/react` / `jest-dom` / `user-event` | `^16.3.2` / `^7.0.0` / `^14.6.1` | 组件测试（实际未使用） |
+| `@testing-library/react` / `jest-dom` / `user-event` | `^16.3.2` / `^7.0.0` / `^14.6.1` | 组件测试 |
 | `@axe-core/playwright` | `^4.12.1` | a11y 审计 |
 | `jsdom` | `^29.1.1` | DOM 环境 |
-| `msw` | `^2.15.0` | 网络 mock |
-| `wait-on` | `^9.0.10` | 等待服务启动 |
 
 ### 3.10 工程化 / 工具
 
@@ -144,8 +142,8 @@
 
 ### 3.11 workspace 内部包
 
-- `@novel-writer/shared`: `workspace:*`（devDep）
-- `@novel-writer/tsconfig`: `workspace:*`（devDep）
+- `@code-agent/shared`: `workspace:*`（devDep）
+- `@code-agent/tsconfig`: `workspace:*`（devDep）
 
 ## 4. Monorepo 结构
 
@@ -214,22 +212,19 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
   - complexity: `useLiteralKeys` off
 - **javascript formatter**：单引号、分号必加、尾逗号 all、箭头括号 always
 - **css parser**：`tailwindDirectives: true`
-- **ignore 列表**：`resources/pg`、`release`、`coverage`、`node_modules`、`out`、`dist`、`.codegraph`、`playwright-report*`、`test-results`、`playwright/.cache`、`docs/design`、`docs/参考项目`、`prototype-v2.html`、`codex-desktop-prototype.design`
-- **overrides**（15 组）：`src/renderer/**/*.tsx` 关闭 `noDefaultExport`；常量/枚举文件关闭 `useNamingConvention`；AI 服务层 + storage + IPC handler 关闭 `strictCase`；`tests/**`、`e2e/**`、`scripts/**` 关闭 `noConsole`
+- **ignore 列表**：`resources/pg`、`release`、`coverage`、`node_modules`、`out`、`dist`、`.codegraph`、`playwright-report`、`playwright-report-electron`、`playwright-report-smoke`、`test-results`、`playwright/.cache`、`docs/design`、`docs/参考项目`、`prototype-v2.html`、`codex-desktop-prototype.design`、`_template`
+- **overrides**（22 组）：`src/renderer/**/*.tsx` 关闭 `noDefaultExport`；常量/枚举文件关闭 `useNamingConvention`；AI 服务层 + storage + IPC handler 关闭 `strictCase`；`tests/**`、`e2e/**`、`scripts/**` 关闭 `noConsole`
 
 ## 8. 环境变量与配置文件
 
-### .env（项目根目录）
+### .env / .env.example（项目根目录）
 
-[.env](file:///f:/TraeProjects/1/.env) 内容：
+[.env.example](file:///f:/TraeProjects/1/.env.example) 提供环境变量模板，[.env](file:///f:/TraeProjects/1/.env) 为实际值：
 
-- `DATABASE_URL="postgresql://nwa@localhost:5433/nwa"`（**遗留**，注释标"仅用于 prisma generate / migrate diff"，实际已迁移到 SQLite）
 - `SENTRY_DSN="http://b24f47b022820d979452bf4ef3d43473@127.0.0.1:9000/3"`
 - `SENTRY_TRACES_SAMPLE_RATE=1.0`
 - `SENTRY_URL` / `SENTRY_ORG` / `SENTRY_PROJECT`
 - `SENTRY_AUTH_TOKEN="sntryu_..."`（**硬编码真实 token，需轮换并改为 CI secrets**）
-
-⚠️ **未发现 `.env.example`**，新开发者无法快速知晓所需环境变量集合。
 
 ### sentry.properties
 
@@ -243,19 +238,15 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 ## 9. 关键风险点
 
 1. **真实凭证泄露**：`.env` 硬编码 `SENTRY_AUTH_TOKEN`，应改由 CI secrets 注入并立即轮换
-2. **遗留 DATABASE_URL**：仍指向 PostgreSQL，与实际使用的 SQLite 不符，易误导
-3. **缺 `.env.example`**：新开发者依赖阅读 `.env`（含敏感信息）或代码逆推
-4. **缺 `drizzle.config.ts`**：devDependencies 有 drizzle-kit，但项目根无配置文件，schema 在 [src/main/infra/storage/schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts)，迁移生成流程不明
-5. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
-6. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
-7. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
-8. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///f:/TraeProjects/1/electron-builder.yml#L97) `publish.url: https://novel-writer.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
-9. **版本号硬编码在 sentry 脚本**：`sentry:upload:symbols` 与 `sentry:release:new` 把 `novel-writer@0.1.3` 写死，每次发版需手动同步 package.json version
+2. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
+3. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
+4. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
+5. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///f:/TraeProjects/1/electron-builder.yml#L97) `publish.url: https://code-agent.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
 
 ## 10. 关键亮点
 
 1. **顶配 TypeScript 严格度**：`base.json` 开启了几乎所有严格选项，远超默认 `strict: true`
-2. **Biome v2 统一工具链**：用 Biome 2.5.4 同时替代 ESLint + Prettier，配合 15 组 overrides 精细化放宽命名约定
+2. **Biome v2 统一工具链**：用 Biome 2.5.4 同时替代 ESLint + Prettier，配合 22 组 overrides 精细化放宽命名约定
 3. **React 19.2 + React Compiler**：渲染层启用 `babel-plugin-react-compiler`（React 19 官方推荐自动 memoize）
 4. **Tailwind v4 官方 Vite 插件**：弃用 v3 postcss 流程，改用 `@tailwindcss/vite`，与 Vite 8 原生集成
 5. **完整 monorepo**：pnpm workspace + 两个内部包，主应用三入口严格分离

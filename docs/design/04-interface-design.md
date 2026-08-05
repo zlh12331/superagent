@@ -1,6 +1,6 @@
 # 接口设计文档
 
-> 基于 `novel-writer-agent` v0.1.3 实际代码整理。
+> 基于 `code-agent-desktop` v1.0.0 实际代码整理。
 > 整理时间：2026-07-23
 
 ## 1. IPC Channels 完整清单
@@ -17,48 +17,52 @@
 
 | 域 | 数量 | Channels |
 |---|---|---|
-| app | 2 | `app:getStatus`, `app:openExternal` |
+| app | 3 | `app:getStatus`, `app:openExternal`, `app:openDataDir` |
 | chat | 5 (3 推送) | `chat:send`, `chat:stop`, `chat:stream:part`, `chat:stream:end`, `chat:stream:error` |
-| agent | 9 (6 推送) | `agent:run`, `agent:stop`, `agent:stream:part`, `agent:stream:end`, `agent:stream:error`, `agent:tool:call`, `agent:tool:result`, `agent:approval:request`, `agent:approval:response` |
-| tool | 1 | `tool:list` |
-| session | 4 | `session:list`, `session:get`, `session:delete`, `session:rename` |
-| file | 6 (1 推送) | `file:read`, `file:write`, `file:list`, `file:watch:start`, `file:watch:stop`, `file:watch:event` |
+| agent | 10 (7 推送) | `agent:run`, `agent:stop`, `agent:approval:response`, `agent:stream:part`, `agent:stream:end`, `agent:stream:error`, `agent:tool:call`, `agent:tool:result`, `agent:approval:request`, `agent:turn:event` |
+| session | 10 | `session:list`, `session:get`, `session:delete`, `session:rename`, `session:create`, `session:listRecentDirs`, `session:exportAll`, `session:getUsageSummary`, `session:getTurns`, `session:getRecentTurns` |
+| file | 10 (1 推送) | `file:read`, `file:write`, `file:list`, `file:watch:start`, `file:watch:stop`, `file:watch:event`, `file:create`, `file:createDir`, `file:delete`, `file:rename` |
 | search | 2 | `search:grep`, `search:glob` |
-| terminal | 6 (2 推送) | `terminal:create`, `terminal:input`, `terminal:resize`, `terminal:kill`, `terminal:event:output`, `terminal:event:exit` |
-| git | 2 | `git:status`, `git:diff` |
+| terminal | 7 (3 推送) | `terminal:create`, `terminal:input`, `terminal:resize`, `terminal:kill`, `terminal:event:created`, `terminal:event:output`, `terminal:event:exit` |
+| git | 5 | `git:status`, `git:diff`, `git:add`, `git:commit`, `git:push` |
 | codebase | 6 | `codebase:query`, `codebase:explore`, `codebase:node`, `codebase:callers`, `codebase:callees`, `codebase:impact` |
-| settings | 5 | `settings:getApiKey`, `settings:setApiKey`, `settings:deleteApiKey`, `settings:getTelemetryLevel`, `settings:setTelemetryLevel` |
+| tool | 1 | `tool:list` |
+| settings | 8 | `settings:getApiKey`, `settings:setApiKey`, `settings:deleteApiKey`, `settings:getTelemetryLevel`, `settings:setTelemetryLevel`, `settings:addRuntimeModel`, `settings:removeRuntimeModel`, `settings:listRuntimeModels` |
 | system | 1 | `system:getStatus` |
 | logs | 1 | `logs:read` |
 | devtools | 1 | `devtools:open` |
+| dialog | 1 | `dialog:pickDirectory` |
+| update | 3 (1 推送) | `update:check`, `update:install`, `update:event:status` |
 
-合计 14 个域 / 51 个 channel（39 invoke + 12 push）。
+合计 16 个域 / 74 个 channel（59 invoke + 15 push）。
 
 ## 2. Preload API 形状（window.api）
 
-实现文件：[src/preload/index.ts#L115-L299](file:///f:/TraeProjects/1/src/preload/index.ts#L115)
-契约定义：[packages/shared/src/ipc/api.ts#L56](file:///f:/TraeProjects/1/packages/shared/src/ipc/api.ts#L56)
+实现文件：[src/preload/index.ts](file:///f:/TraeProjects/1/src/preload/index.ts)（通过 `createIpcApi(IPC_META)` 自动生成）
+契约定义：[packages/shared/src/ipc/api.ts](file:///f:/TraeProjects/1/packages/shared/src/ipc/api.ts)
 
-通过 `contextBridge.exposeInMainWorld('api', api)` 暴露（[L302](file:///f:/TraeProjects/1/src/preload/index.ts#L302)），并用 `satisfies IpcApi` 编译时校验。
+通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，形状由 `IPC_META` 元数据表驱动，类型系统保证与定义表同步。
 
-### 2.1 14 个域方法
+### 2.1 16 个域方法
 
 | 域 | invoke 方法 | subscribe 方法 |
 |---|---|---|
-| app | `getStatus`, `openExternal` | — |
+| app | `getStatus`, `openExternal`, `openDataDir` | — |
 | chat | `send`, `stop` | `subscribePart`, `subscribeEnd`, `subscribeError` |
-| agent | `run`, `stop`, `approvalResponse` | `subscribeStreamPart`, `subscribeStreamEnd`, `subscribeStreamError`, `subscribeToolCall`, `subscribeToolResult`, `subscribeApprovalRequest` |
-| session | `list`, `get`, `delete`, `rename` | — |
-| file | `read`, `write`, `list`, `watchStart`, `watchStop` | `subscribeWatchEvent` |
+| agent | `run`, `stop`, `approvalResponse` | `subscribeStreamPart`, `subscribeStreamEnd`, `subscribeStreamError`, `subscribeToolCall`, `subscribeToolResult`, `subscribeApprovalRequest`, `subscribeTurnEvent` |
+| session | `list`, `get`, `delete`, `rename`, `create`, `listRecentDirs`, `exportAll`, `getUsageSummary`, `getTurns`, `getRecentTurns` | — |
+| file | `read`, `write`, `list`, `watchStart`, `watchStop`, `create`, `createDir`, `delete`, `rename` | `subscribeWatchEvent` |
 | search | `grep`, `glob` | — |
-| terminal | `create`, `input`, `resize`, `kill` | `subscribeOutputEvent`, `subscribeExitEvent` |
-| git | `status`, `diff` | — |
+| terminal | `create`, `input`, `resize`, `kill` | `subscribeCreatedEvent`, `subscribeOutputEvent`, `subscribeExitEvent` |
+| git | `status`, `diff`, `add`, `commit`, `push` | — |
 | codebase | `query`, `explore`, `node`, `callers`, `callees`, `impact` | — |
 | tool | `list` | — |
-| settings | `getApiKey`, `setApiKey`, `deleteApiKey`, `getTelemetryLevel`, `setTelemetryLevel` | — |
+| settings | `getApiKey`, `setApiKey`, `deleteApiKey`, `getTelemetryLevel`, `setTelemetryLevel`, `addRuntimeModel`, `removeRuntimeModel`, `listRuntimeModels` | — |
 | system | `getStatus` | — |
 | logs | `read` | — |
 | devtools | `open` | — |
+| dialog | `pickDirectory` | — |
+| update | `check`, `install` | `subscribeStatus` |
 
 ### 2.2 invoke vs subscribe 形状差异
 
@@ -89,13 +93,13 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 - `IpcInvokeMethod<Channel>`：根据 `IpcRequestMap[Channel]['req']` 是否为 `void` 决定参数个数，返回 `Promise<IpcResponse<...>>`
 - `IpcSubscribeMethod<Channel>`：接收 `(payload: IpcEventMap[Channel]) => void` 回调，返回 `() => void`
 
-## 3. Service 接口（13 个）
+## 3. Service 接口（14 个）
 
-接口定义在各自服务文件内（与具体类同文件，未单独抽到 `types.ts`）。每个接口遵循"接口 + 默认实现 + 单例 getter + reset 测试工具"四件套模式。
+接口定义在各自服务文件内（与具体类同文件，未单独抽到 `types.ts`）。每个接口遵循"接口 + 默认实现 + 单例 getter + reset 测试工具"四件套模式（UpdateService 例外，由 ServiceContainer 直接 `new`）。
 
 ### 3.1 IChatService
 
-[src/main/infra/ai/chat-service.ts#L65-L82](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts#L65)：
+[src/main/infra/ai/chat-service.ts#L71-L88](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts#L71)：
 
 ```ts
 export interface IChatService {
@@ -108,7 +112,7 @@ export interface IChatService {
 
 ### 3.2 IAgentService
 
-[src/main/infra/ai/agent-service.ts#L83-L113](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L83)：
+[src/main/infra/ai/agent-service.ts#L100-L130](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L100)：
 
 ```ts
 export interface IAgentService {
@@ -121,7 +125,7 @@ export interface IAgentService {
 
 ### 3.3 IFileService
 
-[src/main/infra/file/file-service.ts#L91-L104](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts#L91)：
+[src/main/infra/file/file-service.ts#L145-L166](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts#L145)：
 
 ```ts
 export interface IFileService {
@@ -131,6 +135,10 @@ export interface IFileService {
   watch(options: FileWatchOptions): Promise<FileWatchHandle>;
   unwatch(watcherId: string): boolean;
   dispose(): Promise<void>;
+  createFile(options: FileCreateOptions): Promise<FileCreateRes>;
+  createDir(options: FileCreateDirOptions): Promise<FileCreateDirRes>;
+  delete(options: FileDeleteOptions): Promise<FileDeleteRes>;
+  rename(options: FileRenameOptions): Promise<FileRenameRes>;
 }
 ```
 
@@ -148,7 +156,7 @@ export interface ISearchService {
 
 ### 3.5 ITerminalService
 
-[src/main/infra/terminal/terminal-service.ts#L62-L73](file:///f:/TraeProjects/1/src/main/infra/terminal/terminal-service.ts#L62)：
+[src/main/infra/terminal/terminal-service.ts#L63-L78](file:///f:/TraeProjects/1/src/main/infra/terminal/terminal-service.ts#L63)：
 
 ```ts
 export interface ITerminalService {
@@ -156,43 +164,63 @@ export interface ITerminalService {
   input(terminalId: string, data: string): Promise<TerminalInputRes>;
   resize(terminalId: string, cols: number, rows: number): Promise<TerminalResizeRes>;
   kill(terminalId: string): Promise<TerminalKillRes>;
+  getOutput(terminalId: string): string;
+  clearOutput(terminalId: string): void;
   dispose(): Promise<void>;
 }
 ```
 
 ### 3.6 IGitService
 
-[src/main/infra/git/git-service.ts#L46-L53](file:///f:/TraeProjects/1/src/main/infra/git/git-service.ts#L46)：
+[src/main/infra/git/git-service.ts#L104-L117](file:///f:/TraeProjects/1/src/main/infra/git/git-service.ts#L104)：
 
 ```ts
 export interface IGitService {
   status(path: string): Promise<GitStatusRes>;
   diff(options: GitDiffOptions): Promise<GitDiffRes>;
+  add(options: GitAddOptions): Promise<GitAddRes>;
+  commit(options: GitCommitOptions): Promise<GitCommitRes>;
+  push(options: GitPushOptions): Promise<GitPushRes>;
   dispose(): Promise<void>;
 }
 ```
 
 ### 3.7 ISessionService
 
-[src/main/infra/storage/session-service.ts#L86-L107](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts#L86)：
+[src/main/infra/storage/session-service.ts#L121-L190](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts#L121)：
 
 ```ts
 export interface ISessionService {
-  // IPC 暴露
+  // ── IPC 暴露方法 ──
   list(limit: number, offset: number): Promise<SessionListRes>;
   get(id: string): Promise<SessionGetRes>;
   delete(id: string): Promise<SessionDeleteRes>;
   rename(id: string, title: string): Promise<SessionRenameRes>;
-  // 内部 API（AgentService / ChatService 直接调用，不走 IPC）
+  // ── 内部 API（AgentService / ChatService 调用，不走 IPC）──
   create(options: SessionCreateOptions): Promise<string>;
   appendMessage(options: SessionAppendMessageOptions): Promise<number>;
+  listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes>;
+  // ── 崩溃恢复（回合状态机）──
+  markRunning(id: string): Promise<void>;
+  markIdle(id: string): Promise<void>;
+  markAllInterrupted(): Promise<number>;
+  exportAll(): Promise<SessionExportPayload>;
+  // ── token 用量统计（设置页展示）──
+  recordUsage(usage: { ... }): Promise<void>;
+  getUsageSummary(): Promise<UsageSummaryRes>;
+  // ── Transcript（回合记录）──
+  recordTurn(turn: { ... }): Promise<void>;
+  getTurns(sessionId: string): Promise<SessionGetTurnsRes>;
+  getRecentTurns(req: { readonly limit: number }): Promise<SessionRecentTurnsRes>;
   dispose(): Promise<void>;
 }
 ```
 
+> 完整方法签名见源文件；为简洁起见 `recordUsage` / `recordTurn` 的内联对象类型此处省略。
+
 ### 3.8 IToolRegistry
 
-[src/main/infra/ai/tool-registry.ts#L38-L99](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts#L38)：
+[src/main/infra/ai/tool-registry.ts#L38-L95](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts#L38)：
 
 ```ts
 export interface IToolRegistry {
@@ -201,15 +229,15 @@ export interface IToolRegistry {
   get(name: string): Tool | undefined;
   list(permissionFilter?: 'auto' | 'ask'): readonly ToolDescriptor[];
   toAISDKTools(
-    ctx: ToolContext,
-    executeHook?: (tool: Tool, input: unknown, ctx: ToolContext, toolCallId: string) => Promise<unknown>,
+    baseCtx: Omit<ToolContext, 'messageId' | 'callId' | 'metadata'>,
+    executeHook?: (tool: Tool, input: unknown, ctx: ToolContext) => Promise<unknown>,
   ): Record<string, AITool>;
 }
 ```
 
 ### 3.9 IToolExecutor
 
-[src/main/infra/ai/tool-executor.ts#L42-L71](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts#L42)：
+[src/main/infra/ai/tool-executor.ts#L44-L73](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts#L44)：
 
 ```ts
 export interface IToolExecutor {
@@ -225,7 +253,7 @@ export interface IToolExecutor {
 
 ### 3.10 IPermissionService
 
-[src/main/infra/ai/permission-service.ts#L68-L123](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts#L68)：
+[src/main/infra/ai/permission-service.ts#L68-L130](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts#L68)：
 
 ```ts
 export interface IPermissionService {
@@ -235,6 +263,7 @@ export interface IPermissionService {
     tool: Tool,
     input: unknown,
     webContents: WebContents,
+    abortSignal?: AbortSignal,
   ): Promise<boolean>;
   handleApprovalResponse(approvalId: string, approved: boolean, rememberDecision: boolean): void;
   dispose(): void;
@@ -254,7 +283,7 @@ export interface IPromptService {
 
 ### 3.12 ICodebaseService
 
-[src/main/infra/codebase/codebase-service.ts#L110-L125](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts#L110)：
+[src/main/infra/codebase/codebase-service.ts#L120-L140](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts#L120)：
 
 ```ts
 export interface ICodebaseService {
@@ -281,6 +310,21 @@ export interface IMCPService {
   hasRunningServers(): boolean;
 }
 ```
+
+### 3.14 IUpdateService
+
+[src/main/infra/update/update-service.ts#L40-L49](file:///f:/TraeProjects/1/src/main/infra/update/update-service.ts#L40)：
+
+```ts
+export interface IUpdateService {
+  start(): void;
+  check(manual: boolean): Promise<UpdateCheckRes>;
+  quitAndInstall(): void;
+  dispose(): void;
+}
+```
+
+> 实现为 `new UpdateService(autoUpdater, () => app.isPackaged)`，由 ServiceContainer 直接构造（非模块级单例）。
 
 ## 4. 数据类型定义
 
@@ -343,22 +387,24 @@ export interface AgentStreamPartPayload {
 
 ## 5. 数据库表结构
 
-定义在 [src/main/infra/storage/schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts)（Drizzle ORM + better-sqlite3）：
+定义在 [src/main/infra/storage/schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts)（Drizzle ORM + better-sqlite3），共 6 张表。
 
-### sessions 表
+### sessions 表（会话元数据）
 
-[L29-L42](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L29)：
+[L29-L46](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L29)：
 
-- `id` text primaryKey（UUID）
-- `title` text notNull
+- `id` text primaryKey（UUID，由 SessionService.create 生成）
+- `title` text notNull（用户可编辑，默认取首条用户消息前 50 字符）
 - `created_at` integer notNull（Unix ms）
 - `updated_at` integer notNull
 - `last_message` text（nullable，最后一条 user 消息预览，前 100 字符）
 - `message_count` integer notNull default 0（冗余字段避免 list 时 COUNT(*)）
+- `working_dir` text notNull（会话级项目工作目录，agent 工具操作边界）
+- `last_run_status` text notNull default 'idle'（最近运行状态：idle / running / interrupted，崩溃恢复识别）
 
-### messages 表
+### messages 表（消息历史）
 
-[L53-L71](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L53)：
+[L57-L75](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L57)：
 
 - `id` integer primaryKey autoIncrement
 - `session_id` text notNull + `references(() => sessions.id, { onDelete: 'cascade' })`（外键级联删除）
@@ -367,11 +413,59 @@ export interface AgentStreamPartPayload {
 - `content` text notNull（完整 ModelMessage 的 JSON 字符串）
 - `created_at` integer notNull
 
-### prompts 表
+### prompts 表（System Prompt 模板存储）
 
-[L91-L108](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L91)：
+[L95-L112](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L95)：
 
-- `id` / `name` / `description` / `role` / `content` / `is_default` / `created_at` / `updated_at`
+- `id` text primaryKey（如 'code-agent'）
+- `name` text notNull（显示名称）
+- `description` text notNull
+- `role` text notNull（Agent 角色标识，当前仅 'code-agent'，预留扩展）
+- `content` text notNull（支持模板变量：`{{workingDir}}` / `{{os}}` / `{{gitBranch}}` 等）
+- `is_default` integer(boolean) notNull default true（内置 prompt 不可删除但可编辑）
+- `created_at` integer notNull
+- `updated_at` integer notNull
+
+### token_usage 表（LLM 调用 token 用量记录）
+
+[L132-L153](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L132)：
+
+- `id` integer primaryKey autoIncrement
+- `session_id` text notNull + `references(() => sessions.id, { onDelete: 'cascade' })`
+- `model_id` text notNull（如 deepseek-v4-flash）
+- `input_tokens` integer notNull
+- `output_tokens` integer notNull
+- `total_tokens` integer notNull
+- `cache_read_tokens` integer（nullable，KV cache 命中，DeepSeek prompt_cache_hit_tokens）
+- `reasoning_tokens` integer（nullable，思维链 token，reasoning 模型）
+- `created_at` integer notNull
+
+### turns 表（Agent 回合记录 / Transcript 结构化）
+
+[L168-L193](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L168)：
+
+- `id` integer primaryKey autoIncrement
+- `turn_id` text notNull（UUID，关联 TurnEvent.turnId）
+- `session_id` text notNull + `references(() => sessions.id, { onDelete: 'cascade' })`
+- `seq` integer notNull（回合序号，会话内从 0 递增）
+- `model_id` text notNull
+- `status` text notNull（终止原因：completed / aborted / max-steps / error）
+- `input_tokens` integer（nullable）
+- `output_tokens` integer（nullable）
+- `total_tokens` integer（nullable）
+- `duration_ms` integer（nullable，回合总耗时）
+- `created_at` integer notNull
+
+### runtime_models 表（用户手动配置的模型运行时快照）
+
+[L208-L217](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts#L208)：
+
+- `model_id` text primaryKey（全局唯一）
+- `provider_kind` text notNull（所属供应商 kind，决定 SDK 协议）
+- `base_url` text（nullable，显式 baseUrl 覆盖供应商默认端点；null = 用默认）
+- `created_at` integer notNull
+
+> 注：apiKey 不落库，存 keychain（key = `runtime:${modelId}`，与 AI 域约定一致）。
 
 ### 消息存储格式
 

@@ -76,7 +76,9 @@
       "includes": ["**/src/renderer/**/*.tsx"],
       "linter": {
         "rules": {
-          "style": { "noDefaultExport": "off" }
+          "style": {
+            "noDefaultExport": "off"
+          }
         }
       }
     },
@@ -84,7 +86,9 @@
       "includes": ["**/commitlint.config.js"],
       "linter": {
         "rules": {
-          "style": { "noDefaultExport": "off" }
+          "style": {
+            "noDefaultExport": "off"
+          }
         }
       }
     },
@@ -95,11 +99,20 @@
         "**/packages/shared/src/constants/age.ts",
         "**/packages/shared/src/types/enums.ts",
         "**/packages/shared/src/ipc/channels.ts",
+        "**/packages/shared/src/schemas/agent-events.ts",
+        "**/packages/shared/src/schemas/im.ts",
+        "**/packages/shared/src/schemas/goal.ts",
+        "**/src/main/infra/im/**",
+        "**/src/main/infra/remote/**",
+        "**/src/main/infra/ai/hook-registry.ts",
+        "**/src/main/infra/ai/task-service.ts",
         "**/src/renderer/lib/constants.ts"
       ],
       "linter": {
         "rules": {
-          "style": { "useNamingConvention": "off" }
+          "style": {
+            "useNamingConvention": "off"
+          }
         }
       }
     },
@@ -107,7 +120,9 @@
       "includes": ["**/prisma.config.ts"],
       "linter": {
         "rules": {
-          "style": { "noDefaultExport": "off" }
+          "style": {
+            "noDefaultExport": "off"
+          }
         }
       }
     },
@@ -115,7 +130,9 @@
       "includes": ["**/drizzle.config.ts"],
       "linter": {
         "rules": {
-          "style": { "noDefaultExport": "off" }
+          "style": {
+            "noDefaultExport": "off"
+          }
         }
       }
     },
@@ -129,7 +146,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -155,7 +174,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -168,7 +189,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -177,6 +200,7 @@
     {
       "includes": [
         "**/src/main/infra/ai/chat-service.ts",
+        "**/src/main/infra/ai/session-title.ts",
         "**/src/main/service-container.ts",
         "**/src/main/ipc/chat.handler.ts",
         "**/src/main/ipc/codebase.handler.ts",
@@ -198,7 +222,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -240,7 +266,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -253,7 +281,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -271,7 +301,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -289,7 +321,9 @@
           "style": {
             "useNamingConvention": {
               "level": "error",
-              "options": { "strictCase": false }
+              "options": {
+                "strictCase": false
+              }
             }
           }
         }
@@ -361,6 +395,16 @@
           },
           "style": {
             "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/src/main/infra/ai/workflow-service.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
           }
         }
       }

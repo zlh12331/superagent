@@ -20,6 +20,7 @@
     "@electron/rebuild",
     "tailwindcss",
     "tslib",
-    "tw-animate-css"
+    "tw-animate-css",
+    "tree-sitter-wasms"
   ]
 }

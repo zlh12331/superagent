@@ -2,8 +2,6 @@
 
 生产级 **Electron Code Agent 模板**（Windows 桌面端），开箱即用：多轮工具调用、权限审批流、多模型供应商路由、代码智能、终端与 Git 集成、会话持久化、Sentry + OpenTelemetry 双遥测。
 
-> 由「网文写作 Agent」项目改造而来：剥离业务域（Novel），强化 Agent 基础设施，聚焦 Code Agent 通用能力。
-
 ## 技术栈
 
 | 层 | 选型 |

@@ -8,18 +8,28 @@
 
 ### 新增
 
-- 转型为生产级 Code Agent 桌面模板：多 AI 供应商可插拔路由（DeepSeek/OpenAI/Anthropic/Ollama）、plan/build 双模式工作流、主进程 Service Container 生命周期管理
-- IPC 定义表驱动自动化：单一真源定义表自动生成 preload API、类型推导、通道常量与主进程统一注册，新增 IPC 方法缺 handler 编译期报错
-- 新增 IPC/工具 CLI 脚手架：`pnpm scaffold:ipc` 从定义表生成新域/方法骨架，`pnpm scaffold:tool` 生成工具文件并自动接入注册表（幂等保护）
-- 补齐工程化工具链：Renovate 依赖自动更新、changesets 版本与 CHANGELOG 管理、包体积分析、pre-push 快速门禁、TypeDoc 契约文档、knip 死代码检测（CI 卡关）
-- 接入自动更新链路（electron-updater）：更新检查、下载进度、就绪后一键重启安装，状态事件驱动 UI 提示
-- 核心 UI 能力增强：会话列表拖拽排序、消息列表虚拟化、命令面板（模糊搜索）、文件查看器树导航、全局快捷键库化、diff 语义统计
-- 新增 token 用量统计：回合结束后展示输入/输出/总 token 消耗（会话级累积，状态条可见）
+- `main`：im 渠道与设置体系 - telegram 适配器/审批偏好/三平台构建
+- `main`：引入后端基础设施依赖 - simple-git/编码检测/代码分析
+- `renderer`：前端性能与体验优化 - 懒加载/防闪烁/虚拟化/错误恢复动作/memo 清理
+- `renderer`：完善异步视图边界 - 刷新进度指示与空态 CTA
+- `renderer`：引入异步视图状态契约 useAsyncView + AsyncBoundary 并接入会话列表
+- 可靠性极致 - 崩溃恢复/数据备份/进程兜底/导出入口
+- 架构极致阶段 1+2 - 依赖机器闸与复杂度阈值
+- 体验极致 - 渲染层硬编码中文 UI 文案零残留收尾
+- 体验极致 - 渲染层硬编码中文 UI 文案全量收口完成
+- 体验极致 - 终端/错误边界/路由/hooks 文案 i18n 收口（全量完成）
+- 体验极致 - Git/FileViewer/FileTree 组件 i18n 收口
+- 体验极致 - dev 面板系列 i18n 收口 + 修复 resources 解包 bug
+- 体验极致 - SettingsDialog/home 页 i18n 收口
+- 体验极致 - ApprovalDialog 审批 UI 全面 i18n 收口
+- 体验极致 - chat/update/palette 组件 i18n 收口
+- 体验极致 - Topbar/Sidebar 文案 i18n 收口
+- 新增 changelog 自动生成器（commit 驱动）
 
 ### 修复
 
-- 修复 SearchService 两处解析缺陷：exclude 参数空值导致的 TypeError、ripgrep --json 消息结构差异（line/lines 字段、缺 path）导致的崩溃
-- 修复状态管理正确性：回合结束后会话缓存未失效导致切回会话看到旧消息；工具调用/审批缓冲缺少清理时机导致长会话内存累积
+- fileViewerDialog 的 useCallback 依赖补充 t
+- 修复 electron-updater CJS 互操作与 E2E 实例隔离
 
 ## [1.0.0] - 2026-08-03
 

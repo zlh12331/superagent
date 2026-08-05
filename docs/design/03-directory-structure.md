@@ -1,6 +1,6 @@
 # 目录结构文档
 
-> 基于 `novel-writer-agent` v0.1.3 实际目录扫描整理。
+> 基于 `code-agent-desktop` v1.0.0 实际目录扫描整理。
 > 整理时间：2026-07-23
 
 ## 1. 顶层结构
@@ -16,15 +16,15 @@ f:\TraeProjects\1\
 │   └── typescript-dev-standards-ai.txt
 ├── e2e/                      # Playwright E2E 测试
 ├── packages/                 # pnpm workspace 内部包
-│   ├── shared/               # @novel-writer/shared 跨进程共享包
-│   └── tsconfig/             # @novel-writer/tsconfig 统一 TS 预设
+│   ├── shared/               # @code-agent/shared 跨进程共享包
+│   └── tsconfig/             # @code-agent/tsconfig 统一 TS 预设
 ├── resources/                # 应用资源（图标等）
 ├── scripts/                  # 工具脚本
 ├── src/
 │   ├── main/                 # Electron 主进程
 │   ├── preload/              # Preload 脚本
 │   └── renderer/             # React 19 渲染层
-├── .biome.json               # Biome lint + format 配置
+├── biome.json                # Biome lint + format 配置
 ├── .env                      # 环境变量（项目根）
 ├── .nsprc                    # audit-ci 白名单
 ├── electron-builder.yml      # electron-builder 打包配置
@@ -39,22 +39,28 @@ f:\TraeProjects\1\
 
 `src/main/` 下分 6 个子目录：`config` / `infra` / `ipc` / `security` / `telemetry` / `utils`
 
-### 2.1 src/main/infra/ — 业务服务（按业务域分 7 个子目录，47 个 .ts 文件）
+### 2.1 src/main/infra/ — 业务服务（按业务域分 11 个子目录）
 
 | 域 | 文件数 | 关键文件 |
 |---|---|---|
-| ai/（顶层） | 10 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts) / [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts) / [ai-provider.ts](file:///f:/TraeProjects/1/src/main/infra/ai/ai-provider.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts) / [tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool.ts) / [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/error-classifier.ts) + 2 测试 |
+| ai/（顶层） | 18 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts) / [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts) / [ai-provider.ts](file:///f:/TraeProjects/1/src/main/infra/ai/ai-provider.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts) / [tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool.ts) / [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/error-classifier.ts) / [context-compression.ts](file:///f:/TraeProjects/1/src/main/infra/ai/context-compression.ts) / [session-title.ts](file:///f:/TraeProjects/1/src/main/infra/ai/session-title.ts) + 8 测试 |
+| ai/agent-runtime/ | 8 | [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/index.ts) / [stream-reader.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/stream-reader.ts) / [turn-emitter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-emitter.ts) / [turn-runner.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-runner.ts) / [turn-translator.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-translator.ts) + 3 测试 |
+| ai/llm-client/ | 5 | [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/index.ts) / [llm-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/llm-client.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/retry.ts) + 2 测试 |
 | ai/mcp/ | 9 | [mcp-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-client.ts) / [mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts) / [mcp-tool-adapter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-tool-adapter.ts) / [mcp-types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-types.ts) + 4 测试 + index.ts |
-| ai/prompt/ | 6 | [prompt-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts) / [default-prompt.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/default-prompt.ts) / [dynamic-context.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/dynamic-context.ts) / [agents-md.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/agents-md.ts) / [git-adapter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/git-adapter.ts) / index.ts |
-| ai/tools/ | 9 | 7 个工具 + [path-guard.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/path-guard.ts) + [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) |
-| storage/ | 8 | [db.ts](file:///f:/TraeProjects/1/src/main/infra/storage/db.ts) / [schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts) / [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) / [keychain.ts](file:///f:/TraeProjects/1/src/main/infra/storage/keychain.ts) / [app-data.ts](file:///f:/TraeProjects/1/src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///f:/TraeProjects/1/src/main/infra/storage/telemetry-pref.ts) + 2 测试 |
+| ai/models/ | 13 | [builtin-models.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/builtin-models.ts) / [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/registry.ts) / [runtime-model-store.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/runtime-model-store.ts) / [generation-options.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/generation-options.ts) / [reasoning-effort.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/reasoning-effort.ts) / [token-limits.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/token-limits.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/types.ts) + index.ts + 6 测试 |
+| ai/prompt/ | 5 | [prompt-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts) / [default-prompt.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/default-prompt.ts) / [dynamic-context.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/dynamic-context.ts) / [agents-md.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/agents-md.ts) + 1 测试 |
+| ai/providers/ | 5 | [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/registry.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/types.ts) + index.ts + 2 测试 |
+| ai/tools/ | 18 | 12 个工具 + [path-guard.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/path-guard.ts) + [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + 5 测试 |
+| storage/ | 11 | [db.ts](file:///f:/TraeProjects/1/src/main/infra/storage/db.ts) / [schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts) / [schema-sql.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema-sql.ts) / [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) / [keychain.ts](file:///f:/TraeProjects/1/src/main/infra/storage/keychain.ts) / [app-data.ts](file:///f:/TraeProjects/1/src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///f:/TraeProjects/1/src/main/infra/storage/telemetry-pref.ts) + 4 测试 |
+| code/ | 2 | [code-analyzer.ts](file:///f:/TraeProjects/1/src/main/infra/code/code-analyzer.ts) + 1 测试 |
 | codebase/ | 1 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) |
-| file/ | 1 | [file-service.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts) |
-| git/ | 1 | [git-service.ts](file:///f:/TraeProjects/1/src/main/infra/git/git-service.ts) |
+| file/ | 2 | [file-service.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts) + 1 测试 |
+| git/ | 2 | [git-service.ts](file:///f:/TraeProjects/1/src/main/infra/git/git-service.ts) + 1 测试 |
 | search/ | 1 | [search-service.ts](file:///f:/TraeProjects/1/src/main/infra/search/search-service.ts) |
 | terminal/ | 1 | [terminal-service.ts](file:///f:/TraeProjects/1/src/main/infra/terminal/terminal-service.ts) |
+| update/ | 2 | [update-service.ts](file:///f:/TraeProjects/1/src/main/infra/update/update-service.ts) + 1 测试 |
 
-### 2.2 src/main/ipc/ — IPC Handler（14 个 handler 文件）
+### 2.2 src/main/ipc/ — IPC Handler（16 个 handler 文件）
 
 按域对应关系见 [01-architecture.md §3.1](file:///f:/TraeProjects/1/docs/design/01-architecture.md) 的 IPC 表格。每个 handler 文件注册本域的 invoke + subscribe 通道。
 
@@ -67,70 +73,85 @@ f:\TraeProjects\1\
 | telemetry/ | [otel.ts](file:///f:/TraeProjects/1/src/main/telemetry/otel.ts) | OpenTelemetry 初始化 |
 | utils/ | [logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) / [wrap.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/utils/retry.ts) + 测试 | 工具函数 |
 | index.ts | [src/main/index.ts](file:///f:/TraeProjects/1/src/main/index.ts) | 主进程入口 |
-| service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 13 服务统一生命周期管理 |
+| service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 14 服务统一生命周期管理 |
 
-### 2.4 src/main/infra/ai/tools/ — 内置工具（7 个）
+### 2.4 src/main/infra/ai/tools/ — 内置工具（12 个）
 
-实际注册 7 个工具（[index.ts#L60-L72](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L60)）：
+实际注册 12 个工具（[index.ts#L81-L99](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L81)）：
 
 | 工具文件 | 工具名 | 权限 | 依赖 |
 |---|---|---|---|
 | [read-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/read-file.tool.ts) | read_file | auto | IFileService |
 | [write-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/write-file.tool.ts) | write_file | ask | IFileService |
-| [edit-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/edit-file.tool.ts) | edit_file | ask | 无 |
 | [list-directory.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/list-directory.tool.ts) | list_directory | auto | IFileService |
+| [code-review.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/code-review.tool.ts) | code_review | auto | IFileService |
 | [grep.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/grep.tool.ts) | grep | auto | ISearchService |
 | [glob.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/glob.tool.ts) | glob | auto | ISearchService |
+| [terminal.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/terminal.tool.ts) | terminal | ask | ITerminalService |
 | [run-command.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/run-command.tool.ts) | run_command | ask | 无 |
+| [edit-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/edit-file.tool.ts) | edit_file | ask | 无 |
+| [git-add.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/git-add.tool.ts) | git_add | ask | IGitService |
+| [git-commit.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/git-commit.tool.ts) | git_commit | ask | IGitService |
+| [git-push.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/git-push.tool.ts) | git_push | ask | IGitService |
 
 ## 3. src/preload/ — Preload 脚本
 
 ```
 src/preload/
-├── index.ts              # contextBridge 暴露 window.api（14 个域）
+├── index.ts              # contextBridge 暴露 window.api（16 个域，createIpcApi 自动生成）
 ├── utils/
+│   ├── create-api.ts     # createIpcApi 生成器（遍历 IPC_META）
 │   └── ipc-bridge.ts     # invoke/subscribe 底层封装（traceId 自动注入）
 └── tsconfig.json         # sandbox CJS 配置
 ```
 
 ## 4. src/renderer/ — React 19 渲染层
 
-约 76 个 .ts/.tsx 文件。
-
 ```
 src/renderer/
-├── components/           # 32 个组件（不含测试）
-│   ├── agent/            # 2 个（Agent 相关 UI）
-│   ├── chat/             # 3 个（Chat 相关 UI）
-│   ├── common/           # 6 个（通用组件）
-│   ├── dev/              # 4 个（LogsPanel / MetricsPanel / InspectorPanel 等）
-│   ├── git/              # 1 个（GitPanel）
-│   ├── layout/           # 4 个（DevPanel / 主布局）
-│   ├── settings/         # 1 个
-│   ├── terminal/         # 1 个（TerminalPanel）
-│   └── ui/               # 13 个（shadcn 基础组件）
-├── hooks/                # 11 个 + 2 测试
-│   ├── use-active-session.ts
+├── components/           # UI 组件（不含测试）
+│   ├── agent/            # ApprovalDialog
+│   ├── chat/             # ChatInput / ChatMessageList / ChatPanel / Markdown
+│   ├── common/           # AppErrorBoundary / AsyncBoundary / CommandPalette / EmptyState / ModelSelector / UpdateNotice
+│   ├── dev/              # InspectorPanel / LogsPanel / MetricsPanel
+│   ├── file-tree/        # FileTreeNavigator / FileTreeNode / FileTreePanel / FileViewerDialog
+│   ├── git/              # GitPanel
+│   ├── layout/           # AppShell / DevPanel / Sidebar / Topbar
+│   ├── settings/         # SettingsDialog
+│   ├── terminal/         # TerminalPanel
+│   └── ui/               # shadcn 基础组件（button / dialog / dropdown-menu / input / label / scroll-area / separator / skeleton / sonner / tabs / textarea / tooltip）
+├── hooks/                # 17 个 + 8 测试
+│   ├── use-agent-bridge.ts
 │   ├── use-agent.ts
 │   ├── use-api-key.ts
 │   ├── use-approval-bridge.ts
-│   ├── use-chat.ts
+│   ├── use-async-view.ts
+│   ├── use-file-content.ts
+│   ├── use-file-tree-ops.ts
+│   ├── use-file-tree.ts
+│   ├── use-file-write.ts
 │   ├── use-git.ts
+│   ├── use-keyboard-shortcuts.ts
+│   ├── use-layout-breakpoint.ts
 │   ├── use-sessions.ts
 │   ├── use-system.ts
 │   ├── use-telemetry.ts
 │   ├── use-terminal-bridge.ts
-│   └── use-tool-bridge.ts
-├── stores/               # 7 个 + 1 测试（三层架构）
-│   ├── persistent/       # sessions / settings / create-persistent-store
-│   ├── server/           # create-ipc-stream-store（TanStack Query 模式）
-│   └── transient/        # approvals / terminal / tool
-├── lib/                  # 9 个
+│   ├── use-tool-bridge.ts
+│   └── use-update.ts
+├── stores/               # 双层架构（persistent + transient）
+│   ├── persistent/       # create-persistent-store / sessions-store / settings-store
+│   └── transient/        # approvals / file-tree / file-viewer / terminal / tool / ui / usage / welcome store
+├── lib/                  # 工具库
 │   ├── agent/            # ipc-agent-transport
-│   ├── chat/             # ipc-chat-transport
+│   ├── diff/             # diff-stats
 │   ├── motion/           # index + transitions + variants
 │   ├── query/            # query-client
 │   ├── constants.ts
+│   ├── error-actions.ts
+│   ├── format-time.ts
+│   ├── ipc.ts
+│   ├── theme-init.ts
 │   └── utils.ts
 ├── routes/               # 3 个（chat.tsx / home.tsx / root.tsx）
 ├── providers/            # 3 个（QueryProvider / ThemeProvider / index）
@@ -142,12 +163,13 @@ src/renderer/
 │   └── locales/
 │       ├── en/common.json + errors.json
 │       └── zh-CN/common.json + errors.json
-├── test/                 # 3 个（setup / msw-handlers / smoke.test）
+├── test/                 # 3 个（setup / setup-lang / msw-handlers / smoke.test）
 │   └── __tests__/mock-api.test.ts
+├── styles/
+│   └── globals.css
 ├── App.tsx
 ├── main.tsx              # 渲染层入口
 ├── router.tsx
-├── instrumentation.ts    # Sentry 浏览器侧初始化
 ├── index.html
 ├── index.css
 ├── vite-env.d.ts
@@ -156,23 +178,31 @@ src/renderer/
 
 ## 5. packages/shared/ — 跨进程共享包
 
-[packages/shared/src/index.ts](file:///f:/TraeProjects/1/packages/shared/src/index.ts) 统一导出，22 个 .ts 文件（含 4 测试）：
+[packages/shared/src/index.ts](file:///f:/TraeProjects/1/packages/shared/src/index.ts) 统一导出，31 个 .ts 文件（含 4 测试）：
 
 ```
 packages/shared/src/
 ├── index.ts              # barrel 导出
+├── main.ts               # 主进程入口（导出 IPC_DEFINITIONS / InferHandlers）
+├── preload.ts            # preload 入口（导出 IpcApi / IpcResponse 类型）
+├── renderer.ts           # renderer 入口
 ├── constants/
 │   └── errors.ts         # AppError + ErrorCode 错误码（6 组分类）
 ├── ipc/
-│   ├── channels.ts       # 51 个 IPC_CHANNELS 常量 + IpcChannel 联合类型
-│   ├── api.ts            # IpcApi 接口契约（14 域方法签名）
+│   ├── meta.ts           # IPC_META 纯字符串元数据（零依赖，preload 沙箱安全）
+│   ├── definitions.ts    # IPC_DEFINITIONS（meta + zod schema 合并，单一真源）
+│   ├── channels.ts       # IPC_CHANNELS 由 deriveChannels(IPC_META) 自动生成
+│   ├── derive.ts         # deriveChannels 工具函数
+│   ├── api.ts            # IpcApi 接口契约（16 域方法签名）
 │   ├── payloads.ts       # payload 类型映射
 │   └── response.ts       # IpcResponse 判别联合
-├── schemas/              # 12 个 Zod schema 文件
+├── schemas/              # 15 个 Zod schema 文件
 │   ├── agent.ts          # AgentRunReqSchema / AgentStreamPartPayload 等
+│   ├── agent-events.ts   # TurnEvent 等
 │   ├── chat.ts           # ChatMessageSchema（复用 AI SDK ModelMessage）
 │   ├── codebase.ts
 │   ├── devtools.ts
+│   ├── dialog.ts
 │   ├── file.ts
 │   ├── git.ts
 │   ├── search.ts
@@ -180,7 +210,8 @@ packages/shared/src/
 │   ├── settings.ts
 │   ├── system.ts
 │   ├── terminal.ts
-│   └── tool.ts
+│   ├── tool.ts
+│   └── update.ts
 └── __tests__/            # 4 测试文件
     ├── api.test.ts
     ├── channels.test.ts
@@ -188,7 +219,7 @@ packages/shared/src/
     └── smoke.test.ts
 ```
 
-**子路径导入设计**：preload 通过 `@novel-writer/shared/ipc/channels` 子路径导入（[preload/index.ts#L30](file:///f:/TraeProjects/1/src/preload/index.ts#L30)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
+**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///f:/TraeProjects/1/src/preload/index.ts#L27)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
 
 ## 6. packages/tsconfig/ — TS 预设包
 

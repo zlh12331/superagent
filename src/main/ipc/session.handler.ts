@@ -115,5 +115,26 @@ export function createSessionHandlers(
     exportAll: async () => {
       return exportAllSessions(sessionService);
     },
+
+    // session:getUsageSummary - 用量统计汇总（设置页展示）
+    getUsageSummary: async () => {
+      return sessionService.getUsageSummary();
+    },
+
+    // session:getTurns - 回合列表查询（Transcript）
+    getTurns: async (input) => {
+      return sessionService.getTurns(input.sessionId);
+    },
+
+    // session:getRecentTurns - 最近回合查询（设置页展示）
+    getRecentTurns: async (input) => {
+      return sessionService.getRecentTurns({ limit: input.limit });
+    },
+
+    // session:getTurnMessages - 回合消息明细（Transcript 消息级回放）
+    getTurnMessages: async (input) => {
+      const messages = await sessionService.getTurnMessages(input.turnId);
+      return { messages };
+    },
   };
 }

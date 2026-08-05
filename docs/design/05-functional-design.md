@@ -13,14 +13,14 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 |---|--------|---------|---------|
 | 1 | AI Agent 核心 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts) | 多轮工具调用循环、流式响应、中断控制 |
 | 2 | 纯对话 Chat | [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts) | 不带工具的流式响应 |
-| 3 | 工具系统 | [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts) + [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts) | 7 个内置工具 + 权限审批 + IPC 推送 |
+| 3 | 工具系统 | [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts) + [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts) | 12 个内置工具 + 权限审批 + IPC 推送 |
 | 4 | MCP 集成 | [mcp/mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts) | stdio transport 多 server 管理 |
 | 5 | 会话管理 | [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) | DB 持久化会话历史 |
 | 6 | 代码理解 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) | 调用 codegraph CLI 做符号检索 |
 | 7 | 终端集成 | [terminal-service.ts](file:///f:/TraeProjects/1/src/main/infra/terminal/terminal-service.ts) | node-pty 多终端会话 |
 | 8 | 文件服务 | [file-service.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts) | 文件读写 + chokidar 监听 |
 | 9 | Prompt 系统 | [prompt/prompt-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts) | DB 模板 + 动态上下文注入 |
-| 10 | 可观测性 | [utils/logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) + [telemetry/otel.ts](file:///f:/TraeProjects/1/src/main/telemetry/otel.ts) + [instrumentation.ts](file:///f:/TraeProjects/1/src/renderer/instrumentation.ts) | electron-log + OTel + Sentry 三层 |
+| 10 | 可观测性 | [utils/logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) + [telemetry/otel.ts](file:///f:/TraeProjects/1/src/main/telemetry/otel.ts) + [AppErrorBoundary.tsx](file:///f:/TraeProjects/1/src/renderer/components/common/AppErrorBoundary.tsx) | electron-log + OTel + Sentry 三层 |
 | 11 | DevPanel | [DevPanel.tsx](file:///f:/TraeProjects/1/src/renderer/components/layout/DevPanel.tsx) | 应用内诊断面板 |
 | 12 | i18n | [i18n/](file:///f:/TraeProjects/1/src/renderer/i18n) | 中英双语 |
 
@@ -43,7 +43,7 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
     → 8. 流结束推送 AGENT_STREAM_END(reason='completed')
 ```
 
-源码：[agent-service.ts#L144-L161](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L144-L161)（startAgent）、[agent-service.ts#L232-L343](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L232-L343)（streamToWebContents）。
+源码：[agent-service.ts#L164-L215](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L164)（startAgent）、[agent-service.ts#L291-L530](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L291)（streamToWebContents）。
 
 ### 2.2 关键设计
 
@@ -55,13 +55,13 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 - `stopWhen: isStepCount(maxSteps)`：v7 替代旧 `maxSteps`，限制工具调用轮数上限
 - `maxSteps` 默认 20，上限 50，避免无限循环消耗 token
 
-源码：[agent-service.ts#L310-L324](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L310-L324)。
+源码：[agent-service.ts#L423-L470](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L423)（streamText + stopWhen 调用）。
 
 #### executeHook 失败容忍
 
 `executeHook` 注入 `ToolExecutor.execute` 作为权限检查 + 审批 + IPC 推送层。失败时不抛错，返回结构化错误对象 `{ error }` 给 LLM，让模型看到错误信息自行决策（重试 / 换工具 / 告知用户）。
 
-源码：[agent-service.ts#L283-L300](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L283-L300)。
+源码：[agent-service.ts#L383-L414](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L383)（executeHook 注入与失败容忍）。
 
 #### 中断与生命周期
 
@@ -71,13 +71,13 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 - `abortAll()`：触发所有活跃 session 的 abort
 - `dispose(timeoutMs=3000)`：abortAll + Promise.allSettled 等待所有 stream 完成，超时兜底
 
-源码：[agent-service.ts#L164-L217](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L164-L217)。
+源码：[agent-service.ts#L218-L276](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L218)（abort / abortAll / dispose）。
 
 #### webContents 销毁守卫
 
 流推送前检查 `webContents.isDestroyed()`，避免窗口关闭后继续推送导致异常。
 
-源码：[agent-service.ts#L337-L340](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L337-L340)。
+源码：[agent-service.ts#L322-L347](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L322)（回合事件推送前的 isDestroyed 守卫）、[agent-service.ts#L488](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L488)（流推送循环内的守卫）。
 
 ### 2.3 与 ChatService 的差异
 
@@ -103,7 +103,7 @@ ToolExecutor（执行 + IPC 推送）
 PermissionService（权限决策 + 审批）
 ```
 
-### 3.2 内置工具清单（7 个）
+### 3.2 内置工具清单（12 个）
 
 [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) 的 `registerBuiltinTools` 注册：
 
@@ -112,12 +112,17 @@ PermissionService（权限决策 + 审批）
 | `read_file` | auto | IFileService | 读文件内容 |
 | `write_file` | ask | IFileService | 写文件 |
 | `list_directory` | auto | IFileService | 列目录 |
+| `code_review` | auto | IFileService | 代码审查 |
 | `grep` | auto | ISearchService | ripgrep 内容搜索 |
 | `glob` | auto | ISearchService | glob 模式文件查找 |
+| `terminal` | ask | ITerminalService | 终端会话操作 |
 | `run_command` | ask | 无 | 子进程命令执行 |
 | `edit_file` | ask | 无 | 基于 diff-match-patch 的文件编辑 |
+| `git_add` | ask | IGitService | git 暂存改动 |
+| `git_commit` | ask | IGitService | git 提交 |
+| `git_push` | ask | IGitService | git 推送远程 |
 
-源码：[tools/index.ts#L60-L72](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L60-L72)。
+源码：[tools/index.ts#L81-L100](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L81)（registerBuiltinTools 函数体）。
 
 ### 3.3 权限模型
 
@@ -154,7 +159,7 @@ PermissionService（权限决策 + 审批）
 7. 返回 ToolResult（含 output 或 error）
 ```
 
-源码：[tool-executor.ts#L93-L120](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts#L93-L120)。
+源码：[tool-executor.ts#L95-L200](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts#L95)（execute 方法体）。
 
 ### 3.5 ToolContext
 
@@ -197,24 +202,30 @@ MCP 工具与内置工具共用同一套 ToolExecutor 执行路径（权限 + �
 
 ### 4.3 依赖
 
-`@modelcontextprotocol/sdk@^1.29.0`（package.json dependencies）。
+`@modelcontextprotocol/sdk@^1.30.0`（package.json dependencies）。
 
 ## 5. 会话管理
 
-### 5.1 双方法组设计
+### 5.1 多方法组设计
 
-SessionService 暴露两组方法：
+SessionService 暴露多组方法：
 
-- **IPC 暴露组**：`list` / `get` / `delete` / `rename`，由 IPC handler 调用
+- **IPC 暴露组**：`list` / `get` / `delete` / `rename` / `listRecentDirs` / `exportAll` / `getUsageSummary` / `getTurns` / `getRecentTurns`，由 IPC handler 调用
 - **内部 API 组**：`create` / `appendMessage`，由 AgentService / ChatService 直接调用（不经过 IPC）
+- **崩溃恢复组**：`markRunning` / `markIdle` / `markAllInterrupted`（回合状态机）
+- **用量统计组**：`recordUsage`（agent/chat 回合结束时写入 token_usage 表）
+- **Transcript 组**：`recordTurn`（回合结束后写入 turns 表）
 
 源码：[session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts)。
 
-### 5.2 数据库表
+### 5.2 数据库表（6 张）
 
-- `sessions`：id / title / createdAt / updatedAt / workingDir
-- `messages`：id / sessionId / role / content / createdAt（外键 cascade 删除）
-- `prompts`：id / content / updatedAt
+- `sessions`：id / title / createdAt / updatedAt / lastMessage / messageCount / workingDir / lastRunStatus
+- `messages`：id / sessionId / seq / role / content / createdAt（外键 cascade 删除）
+- `prompts`：id / name / description / role / content / isDefault / createdAt / updatedAt
+- `token_usage`：id / sessionId / modelId / inputTokens / outputTokens / totalTokens / cacheReadTokens / reasoningTokens / createdAt
+- `turns`：id / turnId / sessionId / seq / modelId / status / inputTokens / outputTokens / totalTokens / durationMs / createdAt
+- `runtime_models`：modelId / providerKind / baseUrl / createdAt
 
 源码：[storage/schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts)。
 
@@ -292,11 +303,13 @@ PromptService
 
 源码：[prompt-service.ts#L42-L79](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts#L42-L79)。
 
-### 9.3 GitSummaryProvider 适配器
+### 9.3 GitSummaryProvider 注入
 
-通过 `createGitSummaryProvider(gitService)` 把 `IGitService` 适配为 `GitSummaryProvider`，解耦 PromptService 对 GitService 的直接依赖。
+`GitSummaryProvider` 是定义在 [dynamic-context.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/dynamic-context.ts) 中的函数类型 `(workingDir: string) => Promise<GitSummary | null>`。PromptService 通过构造选项 `options.gitSummaryProvider` 接收，不直接依赖 `IGitService`，解耦具体 Git 实现。
 
-源码：[prompt/git-adapter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/git-adapter.ts)。
+> 注：项目中不存在独立的 `git-adapter.ts` 文件（`_template` 模板中有但未纳入实际项目）。`GitSummaryProvider` 由调用方（ServiceContainer）在构造 PromptService 时注入适配实现。
+
+源码：[dynamic-context.ts#L42](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/dynamic-context.ts#L42)（GitSummaryProvider 类型）、[prompt-service.ts#L68](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts#L68)（PromptServiceOptions.gitSummaryProvider）。
 
 ## 10. 可观测性三层体系
 
@@ -304,7 +317,7 @@ PromptService
 
 | 层 | 技术 | 职责 | 数据位置 |
 |----|------|------|---------|
-| 本地全量日志 | electron-log | 本地完整日志，供 DevPanel + 用户 bug report | `%APPDATA%/novel-writer/logs/` |
+| 本地全量日志 | electron-log | 本地完整日志，供 DevPanel + 用户 bug report | `%APPDATA%/code-agent/logs/` |
 | 业务 trace | OpenTelemetry | Code Agent 工具链路自定义 span | OTLP HTTP 上报 |
 | 远程错误聚合 | Sentry | 远程错误聚合 + 性能追踪 + Session Replay | Sentry self-hosted v26.6.0 |
 
@@ -319,7 +332,9 @@ PromptService
 - 主进程 logger：[utils/logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts)
 - OTel 入口：[telemetry/otel.ts](file:///f:/TraeProjects/1/src/main/telemetry/otel.ts)
 - Sentry 主进程初始化：[main/index.ts](file:///f:/TraeProjects/1/src/main/index.ts)（`initSentry()` 在 app.whenReady 前调用）
-- Sentry 渲染层 instrumentation：[renderer/instrumentation.ts](file:///f:/TraeProjects/1/src/renderer/instrumentation.ts)
+- Sentry 渲染层集成：[AppErrorBoundary.tsx](file:///f:/TraeProjects/1/src/renderer/components/common/AppErrorBoundary.tsx)（通过 `@sentry/electron/renderer` 的 `Sentry.captureException` 上报）
+
+> 注：项目中不存在独立的 `src/renderer/instrumentation.ts` 文件（`_template` 模板中有但未纳入实际项目）。渲染层 Sentry 集成直接在 `AppErrorBoundary` 组件中完成。
 
 ### 10.4 三层不可替代关系
 
@@ -363,7 +378,7 @@ PromptService
 `useErrorMessage` hook 实现 DRY：
 
 1. 优先查 i18n resources
-2. 回退到 `@novel-writer/shared` 的 `ERROR_META.userMessage`
+2. 回退到 `@code-agent/shared` 的 `ERROR_META.userMessage`
 
 ## 13. 渲染层架构补充
 
@@ -388,7 +403,7 @@ PromptService
 
 ### 14.2 待优化项
 
-- service-container.ts 注释漂移：注释说"5 个内置工具"，实际 7 个（见 [service-container.ts#L195-L196](file:///f:/TraeProjects/1/src/main/service-container.ts#L195-L196)）
+- service-container.ts 注释漂移：注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///f:/TraeProjects/1/src/main/service-container.ts#L205)、[service-container.ts#L239](file:///f:/TraeProjects/1/src/main/service-container.ts#L239)、[service-container.ts#L246](file:///f:/TraeProjects/1/src/main/service-container.ts#L246)）；`tools/index.ts` 文件头注释也说"7 个工具工厂函数"（[L5](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L5)），实际 12 个
 - `InspectorPanel` 标签页仅打开 DevTools，可能冗余
 - DevPanel 仅 Logs/Metrics，无 Network/Performance 子标签
 - codebase-service 每次调用 spawn codegraph 子进程，可考虑常驻

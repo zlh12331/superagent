@@ -21,8 +21,9 @@
                 │   Perf Bench              │  e2e/perf/navigation.bench.spec.ts
                 │   性能基准                │
                 ├──────────────────────────┤
-                │   Unit (vitest)           │  22 个测试文件
+                │   Unit (vitest)           │  90 个测试文件
                 │   shared / main / renderer │
+                │   + scripts               │
                 └──────────────────────────┘
 ```
 
@@ -38,10 +39,11 @@
 | @testing-library/user-event | `^14.6.1` | 用户交互模拟 |
 | @testing-library/jest-dom | `^7.0.0` | DOM 断言扩展 |
 | jsdom | `^29.1.1` | 浏览器环境模拟 |
-| msw | `^2.15.0` | HTTP mock |
 | @axe-core/playwright | `^4.12.1` | 可访问性审计 |
 
-源码：[package.json#L53-L88](file:///f:/TraeProjects/1/package.json#L53-L88)（devDependencies）。
+源码：[package.json#L79-L117](file:///f:/TraeProjects/1/package.json#L79)（devDependencies）。
+
+> 注：`msw` 已从 devDependencies 中移除，渲染层 mock 由独立 mock-api 层实现（见 §5.1）。
 
 ## 3. 单元测试（vitest）
 
@@ -57,14 +59,15 @@
 
 ### 3.2 跑测试脚本
 
-来自 [package.json#L29-L38](file:///f:/TraeProjects/1/package.json#L29-L38)：
+来自 [package.json#L33-L58](file:///f:/TraeProjects/1/package.json#L33)：
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
-| `test` | `pnpm -r --filter "@novel-writer/*" run test && pnpm test:main && pnpm test:renderer` | 全量单元测试（shared + main + renderer） |
+| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts` | 全量单元测试（shared + main + renderer + scripts） |
+| `test:scripts` | `vitest run --root scripts` | scripts 目录测试（i18n / changelog / scaffold 工具链） |
 | `test:main` | `vitest run --root src/main` | 仅主进程 |
 | `test:renderer` | `vitest run --root src/renderer` | 仅渲染层 |
-| `test:coverage` | `pnpm --filter "@novel-writer/shared" exec vitest run --coverage && pnpm test:main -- --coverage` | shared + main 覆盖率（**未包含 renderer**） |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage` | shared + main + renderer 覆盖率 |
 
 ### 3.3 覆盖率配置
 
@@ -76,7 +79,9 @@
 | main | 80 | 75 | 80 | 80 |
 | renderer | 80 | 75 | 80 | 80 |
 
-### 3.4 测试文件清单（22 个）
+### 3.4 测试文件清单（90 个）
+
+> 以下按区域列出代表性文件，完整清单以 `Glob "**/*.test.{ts,tsx}"` 为准。
 
 #### shared 包（4 个）
 
@@ -87,35 +92,46 @@
 | [packages/shared/src/__tests__/api.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/api.test.ts) | IpcApi 接口形状 |
 | [packages/shared/src/__tests__/smoke.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/smoke.test.ts) | shared 包 smoke |
 
-#### main 主进程（11 个）
+#### main 主进程（59 个）
+
+涵盖 AI 核心（agent-service / chat-service / tool-registry / tool-executor / permission-service / error-classifier / context-compression / ai-provider / models/* / agent-runtime/* / llm-client/* / providers/*）、MCP（mcp-service / mcp-client / mcp-tool-adapter / mcp-types）、工具（file-tools / search-tools / path-guard / run-command）、基础设施（file-service / git-service / session-service / db / keychain / app-data / code-analyzer / update-service / csp）、IPC handler（全部 16 域各一个）、配置与工具（config / logger / retry / wrap）、smoke（services.smoke）。
+
+代表性文件：
 
 | 文件 | 说明 |
 |------|------|
+| [src/main/infra/ai/agent-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
 | [src/main/infra/ai/chat-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.test.ts) | ChatService 流式 + abort + dispose |
-| [src/main/infra/ai/ai-provider.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/ai-provider.test.ts) | AI provider 单例 |
-| [src/main/infra/ai/mcp/mcp-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.test.ts) | MCPService 多 server 管理 |
-| [src/main/infra/ai/mcp/mcp-client.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-client.test.ts) | 单 MCP client |
-| [src/main/infra/ai/mcp/mcp-tool-adapter.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-tool-adapter.test.ts) | MCP 工具转 Tool 格式 |
-| [src/main/infra/ai/mcp/mcp-types.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-types.test.ts) | MCP 类型 |
-| [src/main/infra/storage/app-data.test.ts](file:///f:/TraeProjects/1/src/main/infra/storage/app-data.test.ts) | 应用数据目录解析 |
-| [src/main/infra/storage/keychain.test.ts](file:///f:/TraeProjects/1/src/main/infra/storage/keychain.test.ts) | keychain 凭证存储 |
-| [src/main/config/config.test.ts](file:///f:/TraeProjects/1/src/main/config/config.test.ts) | AppConfig |
-| [src/main/utils/logger.test.ts](file:///f:/TraeProjects/1/src/main/utils/logger.test.ts) | logger |
-| [src/main/utils/retry.test.ts](file:///f:/TraeProjects/1/src/main/utils/retry.test.ts) | 重试策略 |
-| [src/main/utils/wrap.test.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.test.ts) | wrap 工具 |
+| [src/main/infra/ai/tool-executor.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.test.ts) | 工具执行 + 权限审批 |
+| [src/main/infra/ai/permission-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.test.ts) | 权限决策 + 记忆缓存 |
+| [src/main/infra/storage/session-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.test.ts) | 会话 CRUD + 用量统计 + 回合记录 |
+| [src/main/infra/git/git-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/git/git-service.test.ts) | Git 操作（status / diff / add / commit / push） |
+| [src/main/infra/file/file-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.test.ts) | 文件读写 + 目录列举 + 监听 |
+| [src/main/ipc/agent.handler.test.ts](file:///f:/TraeProjects/1/src/main/ipc/agent.handler.test.ts) | agent 域 IPC handler |
+| [src/main/security/csp.test.ts](file:///f:/TraeProjects/1/src/main/security/csp.test.ts) | CSP 安全策略 |
 
-#### renderer 渲染层（7 个）
+#### renderer 渲染层（22 个）
+
+涵盖 hooks（use-agent-bridge / use-terminal-bridge / use-git / use-update / use-api-key / use-sessions / use-tool-bridge / use-async-view）、组件（DevPanel / TerminalPanel / GitPanel / AsyncBoundary / EmptyState）、stores（terminal-store / usage-store）、lib（theme-init / error-actions / format-time / ipc / diff-stats）、mock-api、smoke。
+
+代表性文件：
 
 | 文件 | 说明 |
 |------|------|
 | [src/renderer/test/__tests__/mock-api.test.ts](file:///f:/TraeProjects/1/src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
-| [src/renderer/test/smoke.test.tsx](file:///f:/TraeProjects/1/src/renderer/test/smoke.test.tsx) | 渲染层 smoke |
-| [src/renderer/stores/transient/__tests__/terminal-store.test.ts](file:///f:/TraeProjects/1/src/renderer/stores/transient/__tests__/terminal-store.test.ts) | terminal store |
-| [src/renderer/hooks/__tests__/use-terminal-bridge.test.tsx](file:///f:/TraeProjects/1/src/renderer/hooks/__tests__/use-terminal-bridge.test.tsx) | 终端桥接 hook |
-| [src/renderer/hooks/__tests__/use-git.test.tsx](file:///f:/TraeProjects/1/src/renderer/hooks/__tests__/use-git.test.tsx) | git hook |
+| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///f:/TraeProjects/1/src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook |
 | [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///f:/TraeProjects/1/src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
-| [src/renderer/components/terminal/__tests__/TerminalPanel.test.tsx](file:///f:/TraeProjects/1/src/renderer/components/terminal/__tests__/TerminalPanel.test.tsx) | 终端面板 |
-| [src/renderer/components/git/__tests__/GitPanel.test.tsx](file:///f:/TraeProjects/1/src/renderer/components/git/__tests__/GitPanel.test.tsx) | git 面板 |
+| [src/renderer/stores/transient/__tests__/usage-store.test.ts](file:///f:/TraeProjects/1/src/renderer/stores/transient/__tests__/usage-store.test.ts) | 用量统计 store |
+
+#### scripts 工具链（5 个）
+
+| 文件 | 说明 |
+|------|------|
+| [scripts/i18n/locales-consistency.test.ts](file:///f:/TraeProjects/1/scripts/i18n/locales-consistency.test.ts) | i18n 语言包一致性校验 |
+| [scripts/changelog/lib/parse.test.ts](file:///f:/TraeProjects/1/scripts/changelog/lib/parse.test.ts) | changelog 解析 |
+| [scripts/scaffold/lib/text.test.ts](file:///f:/TraeProjects/1/scripts/scaffold/lib/text.test.ts) | scaffold 文本工具 |
+| [scripts/scaffold/lib/naming.test.ts](file:///f:/TraeProjects/1/scripts/scaffold/lib/naming.test.ts) | scaffold 命名工具 |
+| [scripts/scaffold/lib/args.test.ts](file:///f:/TraeProjects/1/scripts/scaffold/lib/args.test.ts) | scaffold 参数工具 |
 
 ## 4. E2E 测试（Playwright）
 
@@ -127,7 +143,7 @@
 | Electron | [e2e/playwright.electron.config.ts](file:///f:/TraeProjects/1/e2e/playwright.electron.config.ts) | `pnpm test:e2e:electron` | 真实 Electron 窗口 |
 | Smoke | [e2e/playwright.smoke.config.ts](file:///f:/TraeProjects/1/e2e/playwright.smoke.config.ts) | `pnpm test:smoke` | 生产构建 smoke |
 
-源码：[package.json#L32-L34](file:///f:/TraeProjects/1/package.json#L32-L34)。
+源码：[package.json#L52-L54](file:///f:/TraeProjects/1/package.json#L52)（test:e2e / test:e2e:electron / test:smoke 脚本）。
 
 ### 4.2 E2E 文件清单（6 个）
 
@@ -142,7 +158,7 @@
 
 ### 4.3 专项测试脚本
 
-来自 [package.json#L35-L37](file:///f:/TraeProjects/1/package.json#L35-L37)：
+来自 [package.json#L55-L57](file:///f:/TraeProjects/1/package.json#L55)（test:visual / test:a11y / test:perf 脚本）：
 
 | 脚本 | grep 模式 |
 |------|----------|
@@ -184,16 +200,16 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 ### 7.1 当前规模
 
-- **单元测试文件**：22 个（shared 4 + main 11 + renderer 7）
+- **单元测试文件**：90 个（shared 4 + main 59 + renderer 22 + scripts 5）
 - **E2E 文件**：6 个
-- **总用例数**：约 260（来自 project memory，shared 17 + main 147 + renderer 96）+ E2E 17
+- **总用例数**：约 260+（随测试增长，shared 17 + main 147+ + renderer 96+）+ E2E 17
 
 ### 7.2 已知覆盖率缺口
 
-- `test:coverage` 脚本未跑 renderer（仅 shared + main）
+- `test:coverage` 脚本现已包含 renderer（shared + main + renderer 三套覆盖率）
 - 整体覆盖率约 0.13（来自项目评估），与配置阈值 80 差距较大
-- 主进程大量 service / IPC handler 文件未覆盖测试
-- codebase-service / git-service / file-service / search-service / terminal-service 无专属测试文件
+- codebase-service / search-service / terminal-service 无专属测试文件（git-service / file-service 已有）
+- 主进程部分 IPC handler 测试较薄（仅验证 happy path）
 
 ### 7.3 已知质量风险
 

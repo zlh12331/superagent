@@ -22,7 +22,7 @@
 
 ## 2. 构建脚本
 
-来自 [package.json#L21-L47](file:///f:/TraeProjects/1/package.json#L21-L47)：
+来自 [package.json#L33-L72](file:///f:/TraeProjects/1/package.json#L33)：
 
 ### 2.1 核心构建
 
@@ -49,29 +49,42 @@
 
 | 脚本 | 命令 |
 |------|------|
-| `test` | `pnpm -r --filter "@novel-writer/*" run test && pnpm test:main && pnpm test:renderer` |
+| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts` |
+| `test:scripts` | `vitest run --root scripts` |
 | `test:main` | `vitest run --root src/main` |
+| `test:main:watch` | `vitest --root src/main` |
 | `test:renderer` | `vitest run --root src/renderer` |
+| `test:renderer:watch` | `vitest --root src/renderer` |
 | `test:e2e` | `cross-env E2E_MODE=true playwright test --config e2e/playwright.config.ts` |
 | `test:e2e:electron` | `playwright test --config e2e/playwright.electron.config.ts` |
 | `test:smoke` | `playwright test --config e2e/playwright.smoke.config.ts` |
 | `test:visual` | `playwright test --config e2e/playwright.config.ts --grep "视觉回归"` |
 | `test:a11y` | `playwright test --config e2e/playwright.config.ts --grep "可访问性"` |
 | `test:perf` | `playwright test --config e2e/playwright.config.ts --grep "性能基准"` |
-| `test:coverage` | `pnpm --filter "@novel-writer/shared" exec vitest run --coverage && pnpm test:main -- --coverage` |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage` |
 
 ### 2.4 Sentry
 
 | 脚本 | 命令 |
 |------|------|
-| `sentry:upload:symbols` | `sentry-cli sourcemaps upload --org sentry --project electron --release "novel-writer@0.1.3" --url-prefix "app:///out/" ./out && sentry-cli sourcemaps upload --org sentry --project electron --release "novel-writer@0.1.3" --url-prefix "app:///renderer/" ./out/renderer` |
-| `sentry:release:new` | `sentry-cli releases new "novel-writer@0.1.3"` |
+| `sentry:upload:symbols` | `sentry-cli sourcemaps upload --org sentry --project electron --release "code-agent@1.0.0" --url-prefix "app:///out/" ./out && sentry-cli sourcemaps upload --org sentry --project electron --release "code-agent@1.0.0" --url-prefix "app:///renderer/" ./out/renderer` |
+| `sentry:release:new` | `sentry-cli releases new "code-agent@1.0.0"` |
 
 ### 2.5 其他
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
+| `knip` | `knip --include files,dependencies,devDependencies,binaries` | 死代码检测 |
+| `depcruise` | `pnpm --filter @code-agent/depcruise run check` | 依赖循环检测 |
+| `changelog` | `tsx scripts/changelog/changelog-gen.ts` | changelog 生成 |
 | `codegraph:sync` | `codegraph sync` | 同步 CodeGraph 索引 |
+| `scaffold:ipc` | `tsx scripts/scaffold/scaffold-ipc.ts` | IPC 脚手架 |
+| `scaffold:tool` | `tsx scripts/scaffold/scaffold-tool.ts` | 工具脚手架 |
+| `changeset` | `changeset` | 创建 changeset |
+| `version:packages` | `changeset version` | 应用 changeset 版本 |
+| `analyze:bundle` | `cross-env ANALYZE_BUNDLE=1 pnpm build` | bundle 体积分析 |
+| `docs:types` | `pnpm --filter @code-agent/typedoc-docs run gen` | 类型文档生成 |
+| `postinstall` | `node scripts/postinstall-rebuild.mjs` | 安装后 native 模块重编译 |
 | `prepare` | `husky` | 安装 git 钩子 |
 
 ## 3. CI 流水线
@@ -116,7 +129,7 @@ concurrency:
 - run: pnpm install --frozen-lockfile
 - run: pnpm typecheck
 - run: pnpm lint
-- run: pnpm test  # shared + main + renderer
+- run: pnpm test  # shared + main + renderer + scripts
 - run: pnpm audit
   continue-on-error: true  # 先警告不阻断（待 .nsprc 白名单稳定后再卡关）
 - uses: actions/upload-artifact@v4
@@ -210,7 +223,7 @@ on:
 
 - Windows NSIS 安装器
 - 允许自定义安装目录
-- electron-updater 配置：私有服务器 `https://novel-writer.example.com/releases/`
+- electron-updater 配置：私有服务器 `https://code-agent.example.com/releases/`
 
 ## 6. 代码质量门禁
 
@@ -231,12 +244,15 @@ tsconfig 启用以下严格选项：
 
 源码：[biome.json](file:///f:/TraeProjects/1/biome.json)。
 
-15 组 overrides 精细化命名约定，包括：
+22 组 overrides 精细化命名约定，主要分类：
 
-- `__tests__/*.test.ts`：放宽 `strictCase`（保留 AI SDK 官方 API 命名）
-- codebase 相关文件：放宽 `strictCase`
-- 新 storage 文件：放宽 `strictCase`
-- i18n 文件：放宽 `strictCase`
+- `src/renderer/**/*.tsx`：关闭 `noDefaultExport`（React 组件默认导出）
+- 常量/枚举文件（errors / pg-versions / age / enums / channels / agent-events / constants）：关闭 `useNamingConvention`
+- AI 服务层 + storage + IPC handler：关闭 `strictCase`（保留 AI SDK / drizzle 官方 API 命名）
+- `src/main/**/*.test.ts`：关闭 `strictCase`（测试文件宽松）
+- `tests/integration/**` / `e2e/**` / `scripts/**`：关闭 `noConsole`
+- `e2e/**`：关闭 `useNamingConvention`（Playwright API 命名）
+- 配置文件（commitlint / drizzle / prisma / playwright）：关闭 `noDefaultExport`
 
 ### 6.3 依赖审计白名单
 
@@ -246,11 +262,11 @@ tsconfig 启用以下严格选项：
 
 ### 7.1 husky
 
-`prepare` 脚本安装钩子（[package.json#L46](file:///f:/TraeProjects/1/package.json#L46)）。
+`prepare` 脚本安装钩子（[package.json#L72](file:///f:/TraeProjects/1/package.json#L72)）。
 
 ### 7.2 lint-staged
 
-[package.json#L48-L52](file:///f:/TraeProjects/1/package.json#L48-L52)：
+[package.json#L74-L78](file:///f:/TraeProjects/1/package.json#L74)：
 
 ```json
 "lint-staged": {
@@ -298,19 +314,19 @@ tsconfig 启用以下严格选项：
 # 上传主进程 + 渲染层 source map
 sentry-cli sourcemaps upload \
   --org sentry --project electron \
-  --release "novel-writer@0.1.3" \
+  --release "code-agent@1.0.0" \
   --url-prefix "app:///out/" ./out
 
 sentry-cli sourcemaps upload \
   --org sentry --project electron \
-  --release "novel-writer@0.1.3" \
+  --release "code-agent@1.0.0" \
   --url-prefix "app:///renderer/" ./out/renderer
 ```
 
 ### 9.2 Release 创建
 
 ```bash
-sentry-cli releases new "novel-writer@0.1.3"
+sentry-cli releases new "code-agent@1.0.0"
 ```
 
 每个版本发布前必须创建 Sentry release 并上传符号，否则错误堆栈无法符号化。
@@ -327,7 +343,7 @@ sentry-cli releases new "novel-writer@0.1.3"
 
 ### 10.2 脚本
 
-[package.json#L45](file:///f:/TraeProjects/1/package.json#L45)：
+[package.json#L65](file:///f:/TraeProjects/1/package.json#L65)：
 
 ```json
 "codegraph:sync": "codegraph sync"
@@ -355,10 +371,9 @@ sentry-cli releases new "novel-writer@0.1.3"
 
 | 项 | 说明 |
 |----|------|
-| `test:coverage` 未跑 renderer | 与配置阈值存在执行层缺口 |
-| `drizzle.config.ts` 缺失 | devDependencies 有 drizzle-kit 但无配置文件 |
 | `test:bench` 脚本不存在 | 实际只有 `test:perf`（与文档/记忆中提及的不符） |
-| service-container.ts 注释漂移 | 注释说"5 个内置工具"，实际 7 个 |
+| service-container.ts 注释漂移 | 注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///f:/TraeProjects/1/src/main/service-container.ts#L205) / L239 / L246）；`tools/index.ts` 文件头注释说"7 个"（[L5](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L5)），实际 12 个 |
+| 整体覆盖率约 0.13 | 与 vitest 配置阈值 80 差距较大（`test:coverage` 现已包含 renderer） |
 
 ### 11.3 低优先级
 
