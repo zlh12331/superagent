@@ -212,6 +212,9 @@ export function adaptMcpTool(
     // 用 z.record(z.string(), z.unknown()) 允许任意对象，避免复杂 JSON Schema → Zod 转换
     inputSchema: mcpLooseInputSchema,
     permission,
+    // MCP 工具一律按 exec 分类：第三方代码无法静态信任（对齐 qwen 白名单排除 MCP 的语义），
+    // auto 模式下不自动放行，仍需审批
+    category: 'exec',
     async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
       // 中断信号检查：MCP 工具执行前先检查是否已中断
       // （MCP SDK 当前不原生支持 abortSignal，这里做软检查）

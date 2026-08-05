@@ -45,12 +45,18 @@ export interface ToolContext {
   readonly callId: string;
   /** 中断信号（与 AgentService 的 AbortController 联动） */
   readonly abortSignal: AbortSignal;
-  /** 接收工具事件的渲染窗口（用于推送终端输出等实时事件） */
-  readonly webContents: WebContents;
+  /**
+   * 接收工具事件的渲染窗口（用于推送终端输出等实时事件）
+   *
+   * 可选：IM 桥接等无头场景不传（推送跳过、审批自动拒绝）。
+   */
+  readonly webContents?: WebContents;
   /** 元数据更新回调（工具执行中可调用，用于实时展示进度/状态） */
   readonly metadata?: (data: Record<string, unknown>) => void;
   /** Agent 运行模式（缺省视为 'build'：plan 只读探索 / build 审批后执行） */
   readonly mode?: 'plan' | 'build';
+  /** 用户原始 prompt（权限决策用：意图豁免破坏性拦截；由 agent-service 从消息历史提取） */
+  readonly userPrompt?: string;
 }
 
 /**
@@ -76,10 +82,20 @@ export interface ToolResult {
 }
 
 /**
+ * 工具类别（ApprovalMode 决策依据，对齐 qwen 安全白名单语义）
+ *
+ * - read：只读工具（读文件/搜索/glob），全部模式自动放行
+ * - edit：工作区编辑（写文件/编辑/git 操作），auto 模式快速路径放行
+ * - exec：命令执行（终端/run_command），auto 模式仍需审批（危险操作）
+ */
+export type ToolCategory = 'read' | 'edit' | 'exec';
+
+/**
  * Tool 接口：Code Agent 工具系统的核心抽象
  *
  * 与 AI SDK v7 原生 tool 的区别：
  * - 增加 permission 字段：'auto' 白名单自动 / 'ask' 需用户审批
+ * - 增加 category 字段：工具类别（ApprovalMode 分级决策依据）
  * - execute 接收 ToolContext：提供 workingDir 约束 + abortSignal 中断能力
  * - execute 返回 ToolResult：标准化返回结构（title / output / metadata）
  *
@@ -93,6 +109,7 @@ export interface ToolResult {
  *   description: '读取文件内容',
  *   inputSchema: ReadFileInputSchema,
  *   permission: 'auto',
+ *   category: 'read',
  *   execute: async (input, ctx) => {
  *     const content = await readFile(path);
  *     return { title: `读取文件: ${input.path}`, output: content };
@@ -109,6 +126,8 @@ export interface Tool<TInput = unknown> {
   readonly inputSchema: ZodType<TInput>;
   /** 权限级别：'auto' 自动执行 / 'ask' 需用户审批 */
   readonly permission: 'auto' | 'ask';
+  /** 工具类别（ApprovalMode 分级决策依据：read 只读 / edit 编辑 / exec 执行） */
+  readonly category: ToolCategory;
   /**
    * 执行方法：接收已校验的入参与执行上下文，返回标准化 ToolResult
    *

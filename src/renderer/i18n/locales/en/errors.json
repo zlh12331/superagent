@@ -19,6 +19,11 @@
       "AI_MODEL_ERROR": "AI model error",
       "AI_STREAM_INTERRUPTED": "AI stream interrupted",
       "AI_CONTEXT_TOO_LARGE": "Context too long, please simplify",
+      "AI_BALANCE_INSUFFICIENT": "Insufficient account balance, please top up",
+      "IM_CHANNEL_NOT_CONFIGURED": "IM channel credentials missing",
+      "IM_CHANNEL_INVALID_TOKEN": "IM channel credentials invalid",
+      "IM_CHANNEL_NOT_IMPLEMENTED": "IM channel not yet integrated",
+      "IM_CHANNEL_REQUEST_FAILED": "IM channel request failed",
 
       "FS_READ_FAILED": "Failed to read file",
       "FS_WRITE_FAILED": "Failed to write file",

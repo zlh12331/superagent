@@ -23,24 +23,36 @@
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentApprovalRequestPayload } from '@code-agent/shared/main';
+import type { AgentApprovalRequestPayload, ApprovalMode } from '@code-agent/shared/main';
 import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
+import type { CommandClassifier } from './command-classifier';
+import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
+import type { DenialState } from './denial-tracking';
+import {
+  createDenialState,
+  recordAllowance,
+  recordDenial,
+  shouldFallbackToManual,
+} from './denial-tracking';
 import type { Tool } from './tool';
 
 /**
  * 权限决策结果
  *
- * - permission：最终权限级别（'auto' 直接执行 / 'ask' 需用户审批）
+ * - permission：最终权限级别（'auto' 直接执行 / 'ask' 需用户审批 / 'deny' 拒绝）
  * - description：人类可读的操作摘要，用于 ApprovalModal 展示
  */
 export interface PermissionDecision {
   /** 最终权限级别 */
-  readonly permission: 'auto' | 'ask';
+  readonly permission: 'auto' | 'ask' | 'deny';
   /** 人类可读的操作摘要（如 "写入文件 /path/to/file.ts"） */
   readonly description: string;
 }
+
+/** 默认审批模式（与 approval-pref 默认一致：保守） */
+export const DEFAULT_APPROVAL_MODE: ApprovalMode = 'ask';
 
 /**
  * 审批超时时间（毫秒）
@@ -69,15 +81,21 @@ export interface IPermissionService {
   /**
    * 决策工具调用的权限级别
    *
-   * 决策顺序：
+   * 决策顺序（对齐 qwen ApprovalMode + autoMode 三层过滤）：
    * 1. 检查记忆决策：若用户之前对此 tool+input 组合选了"5分钟内不再询问"且未过期，
    *    返回记忆结果（approved → 'auto'；denied → 'ask' 让用户重新决策）
-   * 2. 默认返回 tool.permission
+   * 2. 按工具类别 + ApprovalMode 分级决策：
+   *    - plan：edit/exec 工具 → 'deny'（只读探索零副作用）；read 工具 → 'auto'
+   *    - ask：permission='ask' → 'ask'；permission='auto' → 'auto'（保守默认）
+   *    - auto：edit 工具 → 'auto'（工作区编辑快速路径）；exec 工具 → 'ask'（危险命令仍审批）；read → 'auto'
+   *    - yolo：全部 → 'auto'（无审批）
+   * 3. 工具自身 permission='auto' 时恒为 'auto'（只读白名单，任何模式不弹审批）
    *
    * @param tool 待执行的工具
    * @param input 工具入参（用于构建记忆 key）
+   * @param userPrompt 用户原始 prompt（意图豁免：显式提及 discard/wipe 等豁免破坏性拦截）
    */
-  decide(tool: Tool, input: unknown): PermissionDecision;
+  decide(tool: Tool, input: unknown, userPrompt?: string): Promise<PermissionDecision>;
 
   /**
    * 请求用户审批
@@ -103,7 +121,7 @@ export interface IPermissionService {
     payload: AgentApprovalRequestPayload,
     tool: Tool,
     input: unknown,
-    webContents: WebContents,
+    webContents?: WebContents,
     abortSignal?: AbortSignal,
   ): Promise<boolean>;
 
@@ -126,6 +144,28 @@ export interface IPermissionService {
    * reject 所有未完成的审批 Promise，避免内存泄漏。
    */
   dispose(): void;
+
+  /**
+   * 设置审批模式（对齐 qwen ApprovalMode 配置化）
+   *
+   * 由 settings:setApprovalMode handler 调用；启动时读取 approval-pref 应用。
+   */
+  setApprovalMode(mode: ApprovalMode): void;
+
+  /** 当前审批模式 */
+  getApprovalMode(): ApprovalMode;
+
+  /**
+   * 记录一次用户拒绝（AUTO 模式拒绝跟踪：连续拒绝超阈值降级手动确认）
+   *
+   * 由 ToolExecutor 在用户拒绝工具调用后调用。
+   */
+  recordUserDenial(): void;
+
+  /**
+   * 记录一次用户放行/工具成功执行（重置连续拒绝计数）
+   */
+  recordUserAllowance(): void;
 }
 
 /**
@@ -172,13 +212,52 @@ interface RememberedDecision {
  * 单例模式：通过 ServiceContainer 持有，整个应用生命周期共享一个实例。
  */
 export class PermissionService implements IPermissionService {
+  constructor(classifier?: CommandClassifier) {
+    this.classifier = classifier;
+  }
   /** pending 审批 Map：approvalId → PendingApproval */
   private readonly pending = new Map<string, PendingApproval>();
   /** 记忆决策 Map：`${toolName}:${hash(input)}` → RememberedDecision */
   private readonly remembered = new Map<string, RememberedDecision>();
+  /** 审批模式（默认保守 ask；settings 可配置） */
+  private approvalMode: ApprovalMode = DEFAULT_APPROVAL_MODE;
+  /** AUTO 模式拒绝跟踪状态（用户拒绝超阈值 → 单次降级手动确认） */
+  private denialState: DenialState = createDenialState();
+  /** 命令安全分类器（AUTO 模式 exec 命令分层；可选注入，缺省降级保守 ask） */
+  private readonly classifier: CommandClassifier | undefined;
 
   /** @inheritDoc */
-  decide(tool: Tool, input: unknown): PermissionDecision {
+  setApprovalMode(mode: ApprovalMode): void {
+    this.approvalMode = mode;
+    // 切换审批模式重置拒绝计数（对齐 qwen：模式切换重置全部计数器）
+    this.denialState = createDenialState();
+    logger.info({ mode }, '审批模式已更新');
+  }
+
+  /** @inheritDoc */
+  getApprovalMode(): ApprovalMode {
+    return this.approvalMode;
+  }
+
+  /** @inheritDoc */
+  recordUserDenial(): void {
+    this.denialState = recordDenial(this.denialState);
+    logger.warn(
+      {
+        consecutive: this.denialState.consecutiveDenials,
+        total: this.denialState.totalDenials,
+      },
+      '用户拒绝工具调用（AUTO 拒绝跟踪）',
+    );
+  }
+
+  /** @inheritDoc */
+  recordUserAllowance(): void {
+    this.denialState = recordAllowance(this.denialState);
+  }
+
+  /** @inheritDoc */
+  async decide(tool: Tool, input: unknown, userPrompt?: string): Promise<PermissionDecision> {
     // 1. 检查记忆决策
     const key = this.buildRememberKey(tool.name, input);
     const remembered = this.remembered.get(key);
@@ -201,11 +280,94 @@ export class PermissionService implements IPermissionService {
       }
     }
 
-    // 2. 默认返回 tool.permission
+    // 2. 工具自身白名单（permission='auto'）：任何模式自动放行（只读工具）
+    if (tool.permission === 'auto') {
+      return {
+        permission: 'auto',
+        description: tool.description,
+      };
+    }
+
+    // 3. 按审批模式分级决策（对齐 qwen ApprovalMode 谱系）
+    const decision = await this.decideByMode(tool, input, userPrompt);
     return {
-      permission: tool.permission,
-      description: tool.description,
+      permission: decision.permission,
+      description: decision.description,
     };
+  }
+
+  /**
+   * 按审批模式分级决策（仅对 permission='ask' 的工具）
+   *
+   * 对齐 qwen autoMode 三层过滤的收敛子集：
+   * - L1 快速路径：edit 工具在 auto 模式自动放行（工作区编辑）
+   * - L2 安全白名单：read 工具恒 auto（permission 已表达）
+   * - Layer-0 确定性拦截：exec 工具在 auto 模式下，破坏性命令（git reset --hard /
+   *   terraform destroy 等）强制 ask；只读安全命令自动放行；其余 ask（保守）
+   * - 拒绝跟踪降级：连续拒绝超阈值 → 单次降级手动确认（防死循环）
+   */
+  private async decideByMode(
+    tool: Tool,
+    input: unknown,
+    userPrompt?: string,
+  ): Promise<{
+    permission: 'auto' | 'ask' | 'deny';
+    description: string;
+  }> {
+    switch (this.approvalMode) {
+      case 'plan':
+        // 只读探索：写类工具全部拒绝（Plan/Apply 分离的只读阶段）
+        return tool.category === 'read'
+          ? { permission: 'auto', description: tool.description }
+          : { permission: 'deny', description: tool.description };
+      case 'auto': {
+        // 拒绝跟踪降级：连续/累计拒绝超阈值 → 本次调用降级手动确认
+        if (shouldFallbackToManual(this.denialState)) {
+          return {
+            permission: 'ask',
+            description: `${tool.description}（拒绝频繁，降级手动确认）`,
+          };
+        }
+        // 编辑快速路径自动；命令执行按危险/安全分层
+        if (tool.category === 'exec') {
+          const command = extractCommandFromInput(input);
+          if (command !== undefined) {
+            const dangerous = detectDangerousCommand(command, userPrompt);
+            if (dangerous.isDangerous) {
+              // Layer-0 确定性拦截：破坏性命令强制 ask（不可被绕过）
+              return {
+                permission: 'ask',
+                description: `${tool.description}（⚠️ ${dangerous.reason}）`,
+              };
+            }
+            if (isSafeReadOnlyCommand(command)) {
+              // 只读安全命令自动放行（对齐 AUTO 分类器安全命令收敛）
+              return { permission: 'auto', description: tool.description };
+            }
+            // LLM 分类器（可选注入）：safe 自动放行；dangerous/unknown 降级 ask
+            if (this.classifier !== undefined) {
+              const classification = await this.classifier.classify(command, userPrompt);
+              if (classification.verdict === 'safe') {
+                return { permission: 'auto', description: tool.description };
+              }
+              return {
+                permission: 'ask',
+                description: `${tool.description}（分类：${classification.reason}）`,
+              };
+            }
+          }
+          // 其余命令保守 ask（无分类器时）
+          return { permission: 'ask', description: tool.description };
+        }
+        return { permission: 'auto', description: tool.description };
+      }
+      case 'yolo':
+        // 全部自动（仅信任环境使用；显式 opt-out 所有守卫）
+        return { permission: 'auto', description: tool.description };
+      default:
+        // ask（保守默认）：全部审批
+        return { permission: 'ask', description: tool.description };
+    }
   }
 
   /** @inheritDoc */
@@ -213,7 +375,7 @@ export class PermissionService implements IPermissionService {
     payload: AgentApprovalRequestPayload,
     tool: Tool,
     input: unknown,
-    webContents: WebContents,
+    webContents?: WebContents,
     abortSignal?: AbortSignal,
   ): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
@@ -266,11 +428,19 @@ export class PermissionService implements IPermissionService {
       }
 
       // 推送 AGENT_APPROVAL_REQUEST 到渲染层
-      if (!webContents.isDestroyed()) {
+      if (webContents !== undefined && !webContents.isDestroyed()) {
         webContents.send(IPC_CHANNELS.AGENT_APPROVAL_REQUEST, payload);
         logger.info(
           { approvalId: payload.approvalId, toolName: payload.toolName },
           '审批请求已推送',
+        );
+      } else if (webContents === undefined) {
+        // 无头场景（IM 桥接等）无审批通道：自动拒绝（安全优先）
+        clearTimeout(timer);
+        cleanupAbort();
+        this.pending.delete(payload.approvalId);
+        reject(
+          new AppError(ErrorCode.TOOL_PERMISSION_DENIED, '无审批通道（无头执行），工具调用被拒绝'),
         );
       } else {
         // webContents 已销毁，立即 reject
@@ -395,6 +565,20 @@ function stableStringifyInternal(value: unknown, visited: WeakSet<object>): stri
         `${JSON.stringify(k)}:${stableStringifyInternal((value as Record<string, unknown>)[k], visited)}`,
     )
     .join(',')}}`;
+}
+
+/**
+ * 从工具入参提取命令文本（run_command: { command }；terminal: { command? }）
+ *
+ * 无命令字段的工具入参返回 undefined（跳过命令级检测）。
+ */
+function extractCommandFromInput(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return undefined;
+  }
+  const record = input as Record<string, unknown>;
+  const command = record['command'];
+  return typeof command === 'string' && command.trim().length > 0 ? command : undefined;
 }
 
 /**

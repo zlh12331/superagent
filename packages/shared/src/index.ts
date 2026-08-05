@@ -30,16 +30,22 @@ export * from './ipc/response';
 // / system（运行时可观测性）/ settings（API Key 管理）/ devtools（开发者工具集成）
 // 顺序由 Biome organizeImports 规则按字母序维护
 export * from './schemas/agent';
+export * from './schemas/agent-events';
 export * from './schemas/chat';
 export * from './schemas/codebase';
 export * from './schemas/devtools';
 export * from './schemas/dialog';
 export * from './schemas/file';
 export * from './schemas/git';
+export * from './schemas/goal';
+export * from './schemas/im';
+export * from './schemas/memory';
 export * from './schemas/search';
 export * from './schemas/session';
 export * from './schemas/settings';
+export * from './schemas/skill';
 export * from './schemas/system';
+export * from './schemas/task';
 export * from './schemas/terminal';
 export * from './schemas/tool';
 

@@ -82,6 +82,8 @@ describe('ToolExecutor', () => {
   let permissionService: {
     decide: ReturnType<typeof vi.fn>;
     requestApproval: ReturnType<typeof vi.fn>;
+    recordUserDenial: ReturnType<typeof vi.fn>;
+    recordUserAllowance: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -92,6 +94,8 @@ describe('ToolExecutor', () => {
         description: tool.description,
       })),
       requestApproval: vi.fn(async () => true),
+      recordUserDenial: vi.fn(),
+      recordUserAllowance: vi.fn(),
     };
   });
 
@@ -228,7 +232,7 @@ describe('ToolExecutor', () => {
       expect(execute).not.toHaveBeenCalled();
       // 返回 TOOL_PERMISSION_DENIED
       expect(result.error?.code).toBe(ErrorCode.TOOL_PERMISSION_DENIED);
-      expect(result.error?.message).toContain('plan 模式禁止写操作');
+      expect(result.error?.message).toContain('工具调用被拒绝');
     });
 
     it('auto 工具：正常执行（只读探索仍可读文件/搜索）', async () => {

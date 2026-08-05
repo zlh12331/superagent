@@ -106,8 +106,8 @@ export interface AgentToolCallPayload {
   readonly toolName: string;
   /** 工具入参（结构由工具 schema 决定） */
   readonly input: unknown;
-  /** 权限级别：'auto' 自动执行 / 'ask' 需要用户确认 */
-  readonly permission: 'auto' | 'ask';
+  /** 权限级别：'auto' 自动执行 / 'ask' 需要用户确认 / 'deny' 被拒绝（plan/模式约束） */
+  readonly permission: 'auto' | 'ask' | 'deny';
 }
 
 /**

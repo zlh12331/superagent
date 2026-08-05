@@ -25,16 +25,26 @@ import { devtoolsHandlers } from './ipc/devtools.handler';
 import { dialogHandlers } from './ipc/dialog.handler';
 import { createFileHandlers } from './ipc/file.handler';
 import { createGitHandlers } from './ipc/git.handler';
+import { createGoalHandlers } from './ipc/goal.handler';
+import { createImHandlers } from './ipc/im.handler';
+import { createMemoryHandlers } from './ipc/memory.handler';
 import { registerIpcHandlers } from './ipc/register';
 import { createSearchHandlers } from './ipc/search.handler';
 import { createSessionHandlers } from './ipc/session.handler';
-import { settingsHandlers } from './ipc/settings.handler';
+import { createSettingsHandlers } from './ipc/settings.handler';
+import { skillHandlers } from './ipc/skill.handler';
 import { logsHandlers, systemHandlers } from './ipc/system.handler';
+import { taskHandlers } from './ipc/task.handler';
 import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { buildCsp } from './security/csp';
-import { disposeServices, recoverFromCrash, serviceContainer } from './service-container';
+import {
+  disposeServices,
+  initRuntimeModels,
+  recoverFromCrash,
+  serviceContainer,
+} from './service-container';
 import { initTelemetry, shutdownTelemetry } from './telemetry/otel';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 
@@ -261,6 +271,12 @@ app
     registerGlobalErrorHandlers();
     // 崩溃恢复：上次异常退出时把残留 running 会话标记为 interrupted（渲染层提示恢复）
     void recoverFromCrash();
+    // 运行时模型加载：自定义模型注册到 ModelRegistry（LLM 首次调用前）
+    void initRuntimeModels();
+    // IM 渠道恢复：已配置渠道自动连接（含 IM → Agent 桥接挂载）
+    void serviceContainer.initImChannels();
+    // 子代理管理器初始化（run_subagent 工具依赖）
+    serviceContainer.initSubagents();
     // 注册全部 IPC handler（定义表驱动，registerIpcHandlers 统一执行）
     // - handler 对象形状受 InferHandlers 约束：定义表新增方法而 handler 缺失 → 编译期报错
     // - channel / schema / traceId / sender 校验 / Sentry 由 wrap 统一处理
@@ -282,8 +298,15 @@ app
         codebaseService: serviceContainer.getCodebaseService(),
       }),
       tool: createToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() }),
-      settings: settingsHandlers,
+      settings: createSettingsHandlers({
+        permissionService: serviceContainer.getPermissionService(),
+      }),
       system: systemHandlers,
+      goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
+      memory: createMemoryHandlers({ memoryService: serviceContainer.getMemoryService() }),
+      skill: skillHandlers,
+      task: taskHandlers,
+      im: createImHandlers({ imService: serviceContainer.getImService() }),
       logs: logsHandlers,
       devtools: devtoolsHandlers,
       dialog: dialogHandlers,
@@ -379,6 +402,8 @@ app.on('before-quit', async (event) => {
   event.preventDefault();
   isQuitting = true;
   try {
+    // IM 渠道停止（长轮询等后台协程先停，避免退出时残留请求）
+    await serviceContainer.disposeImChannels();
     await disposeServices();
     // 关闭 OpenTelemetry：flush 所有 pending span 到 exporter，避免丢失 trace 数据
     // 必须在 disposeServices 之后（业务 span 已全部 end）

@@ -39,9 +39,10 @@ export function createToolHandlers(
   return {
     // 列出工具清单：渲染层启动时调用一次，展示工具面板
     // permission 过滤可选：省略列出全部工具，传 'auto' / 'ask' 仅列出对应权限的工具
+    // 'deny' 是决策结果（非工具静态属性），过滤时视为列出全部
     // 返回 tools 数组（按 name 字母序排序，由 ToolRegistry.list 保证）
     list: async (input) => {
-      const tools = toolRegistry.list(input.permission);
+      const tools = toolRegistry.list(input.permission === 'deny' ? undefined : input.permission);
       return { tools };
     },
   };

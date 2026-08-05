@@ -28,8 +28,12 @@ import type {
   AgentStreamErrorPayload,
   AgentStreamPartPayload,
   ChatMessage,
+  TurnEndEvent,
+  TurnEvent,
+  TurnToolResultEvent,
+  TurnUsage,
 } from '@code-agent/shared/main';
-import { IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_CHANNELS, TurnEventType } from '@code-agent/shared/main';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';
@@ -37,8 +41,19 @@ import { logger } from '../../utils/logger';
 import { getModel } from '../ai/ai-provider';
 import { classifyError, isAbortError } from '../ai/error-classifier';
 import type { ISessionService } from '../storage/session-service';
-import { compressContext } from './context-compression';
+import { TurnEventEmitter } from './agent-runtime';
+import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from './agent-runtime/stream-reader';
+import { TurnRunner } from './agent-runtime/turn-runner';
+import {
+  compressByTokenBudget,
+  estimateMessagesTokens,
+  getCompactionBudget,
+  getTokenBudgetDecision,
+} from './context-compression';
+import { buildGenerationOptions, modelRegistry } from './models';
 import type { IPromptService } from './prompt/prompt-service';
+import type { ITitleGenerator } from './session-title';
+import { ensureSessionTitle, firstUserMessageText, lastUserMessageText } from './session-title';
 import type { IToolExecutor } from './tool-executor';
 import type { IToolRegistry } from './tool-registry';
 
@@ -69,8 +84,13 @@ export interface StartAgentOptions {
   readonly maxSteps: number;
   /** 运行模式（plan 只读探索 / build 审批后执行，缺省视为 build） */
   readonly mode?: 'plan' | 'build';
-  /** 接收流式 part 的 webContents（通常是发起 agent:run 的窗口） */
-  readonly webContents: WebContents;
+  /**
+   * 接收流式 part 的 webContents（桌面窗口发起 agent:run 时传入）
+   *
+   * 可选：IM 桥接等无头场景不传（推送跳过、审批自动拒绝，
+   * 由桥接层保证 approvalMode 为 auto/yolo 时才执行）。
+   */
+  readonly webContents?: WebContents;
 }
 
 /**
@@ -113,6 +133,12 @@ export interface IAgentService {
    * @param timeoutMs 超时毫秒数（默认 3000ms）
    */
   dispose(timeoutMs?: number): Promise<void>;
+  /**
+   * 订阅全局回合事件（IM 桥接等跨会话监听方）
+   *
+   * 类级总线：任何会话的回合事件都会通知（回合内的事件发射器独立）。
+   */
+  onTurnEvent(listener: (event: TurnEvent) => void): () => void;
 }
 
 /**
@@ -137,12 +163,24 @@ export class AgentService implements IAgentService {
     private readonly toolExecutor: IToolExecutor,
     private readonly promptService: IPromptService,
     private readonly sessionService: ISessionService,
+    /** 标题生成器（回合结束后异步生成会话标题，失败静默） */
+    private readonly titleGenerator?: ITitleGenerator,
   ) {}
 
   /** 活跃对话 Map：sessionId → AbortController */
   private readonly activeSessions = new Map<string, AbortController>();
   /** 活跃 stream Promise Map：sessionId → streamToWebContents 的 Promise（用于 dispose 等待） */
   private readonly activeStreams = new Map<string, Promise<void>>();
+  /** 类级回合事件监听器（onTurnEvent 注册；回合内转发） */
+  private readonly turnListeners = new Set<(event: TurnEvent) => void>();
+
+  /** @inheritDoc */
+  onTurnEvent(listener: (event: TurnEvent) => void): () => void {
+    this.turnListeners.add(listener);
+    return () => {
+      this.turnListeners.delete(listener);
+    };
+  }
 
   /** @inheritDoc */
   async startAgent(options: StartAgentOptions): Promise<string> {
@@ -288,9 +326,68 @@ export class AgentService implements IAgentService {
         'agent.hasSystemPrompt': options.systemPrompt !== undefined,
       },
       async (span) => {
+        // 回合事件上下文（try/catch/finally 共享：必须声明在 try 外，
+        // catch/finally 是独立块级作用域，无法访问 try 内的 const）
+        const turnEmitter = new TurnEventEmitter();
+        const turnId = randomUUID();
+        const turnStartTime = Date.now();
+        const resolvedModel = modelRegistry.resolve(undefined);
+        // 类级事件转发（IM 桥接等跨会话监听方）：回合内所有事件同步转发
+        const forwardTurnEvents = turnEmitter.onAny((event) => {
+          for (const listener of this.turnListeners) {
+            try {
+              listener(event);
+            } catch (err: unknown) {
+              logger.error({ error: err }, '回合事件转发异常');
+            }
+          }
+        });
+        let unsubscribeAll = (): void => {};
         try {
           // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
           const model = await getModel(undefined);
+
+          // 1.1 回合事件系统：订阅事件并推送 agent:turn:event 通道
+          //     - AgentRuntime 组件（emitter + translator）负责事件形状
+          //     - 本层订阅后推送（传输职责）；Transcript（回合落库）在回合结束时写入
+          const unsubscribeStart = turnEmitter.on(TurnEventType.TURN_START, (event) => {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+              options.webContents.send(IPC_CHANNELS.AGENT_TURN_EVENT, event);
+            }
+          });
+          const unsubscribeEnd = turnEmitter.on(TurnEventType.TURN_END, (event) => {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+              options.webContents.send(IPC_CHANNELS.AGENT_TURN_EVENT, event);
+            }
+          });
+          const unsubscribeDelta = turnEmitter.on(TurnEventType.TEXT_DELTA, (event) => {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+              options.webContents.send(IPC_CHANNELS.AGENT_TURN_EVENT, event);
+            }
+          });
+          const unsubscribeCall = turnEmitter.on(TurnEventType.TOOL_CALL, (event) => {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+              options.webContents.send(IPC_CHANNELS.AGENT_TURN_EVENT, event);
+            }
+          });
+          const unsubscribeResult = turnEmitter.on(TurnEventType.TOOL_RESULT, (event) => {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+              options.webContents.send(IPC_CHANNELS.AGENT_TURN_EVENT, event);
+            }
+          });
+          const unsubscribeError = turnEmitter.on(TurnEventType.ERROR, (event) => {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+              options.webContents.send(IPC_CHANNELS.AGENT_TURN_EVENT, event);
+            }
+          });
+          unsubscribeAll = () => {
+            unsubscribeStart();
+            unsubscribeEnd();
+            unsubscribeDelta();
+            unsubscribeCall();
+            unsubscribeResult();
+            unsubscribeError();
+          };
 
           // 1.5 解析 System Prompt
           //     - 调用方传了 systemPrompt：直接用（用户显式覆盖）
@@ -307,12 +404,16 @@ export class AgentService implements IAgentService {
           // 2. 构造工具执行基础上下文（每次对话独立，闭包捕获 sessionId / workingDir / abortSignal / webContents）
           //    messageId / callId 由每次工具调用时动态填充
           //    mode：plan 模式下 ToolExecutor 会拒绝所有写操作（只读探索）
+          //    userPrompt：权限决策用（意图豁免破坏性拦截）
+          const userPrompt = lastUserMessageText(options.messages);
           const baseCtx = {
             workingDir: options.workingDir,
             sessionId,
             abortSignal: controller.signal,
-            webContents: options.webContents,
+            ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
             mode: options.mode ?? 'build',
+            // 用户原始 prompt（权限决策：意图豁免破坏性拦截）
+            ...(userPrompt !== undefined ? { userPrompt } : {}),
           };
 
           // 3. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）
@@ -327,6 +428,7 @@ export class AgentService implements IAgentService {
           //    - 抛错会中断整个 streamText，无法让 LLM 从错误中恢复
           //    - abortSignal 被触发时 streamText 会自动停止，无需靠抛错中断
           const tools = this.toolRegistry.toAISDKTools(baseCtx, async (tool, input, ctx) => {
+            const toolStartTime = Date.now();
             const result = await this.toolExecutor.execute(
               tool.name,
               ctx.callId,
@@ -334,6 +436,18 @@ export class AgentService implements IAgentService {
               ctx,
               options.webContents,
             );
+            // 回合事件：工具执行结果（单一信息源：执行器侧信息最全）
+            turnEmitter.emit({
+              type: TurnEventType.TOOL_RESULT,
+              sessionId,
+              turnId,
+              timestamp: Date.now(),
+              toolCallId: ctx.callId,
+              toolName: tool.name,
+              success: result.error === undefined,
+              ...(result.error !== undefined ? { error: result.error } : {}),
+              ...(result.error === undefined ? { durationMs: Date.now() - toolStartTime } : {}),
+            } satisfies TurnToolResultEvent);
             // 失败时返回结构化错误对象（让 LLM 看到错误信息）
             // 成功时返回 output（LLM 据此继续推理）
             if (result.error !== undefined) {
@@ -350,7 +464,42 @@ export class AgentService implements IAgentService {
           //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
           //    条件展开：systemPrompt 为 undefined 时不传 system 字段
           //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
-          const compressedMessages = compressContext(options.messages);
+          // 上下文压缩：窗口感知预算（对齐 qwen compaction 阈值体系）
+          // 预算 = 模型窗口 75% − 输出预留；默认窗口 128K（无能力元数据时兜底）
+          const contextWindowSize = resolvedModel.capabilities.contextWindowSize ?? 128_000;
+          // TokenBudget 回合级调度（对齐 qwen token-budget）：
+          // - over-limit：上下文超硬上限 → 拒绝调用（防供应商 400）
+          // - warn：接近压缩线 → 日志/遥测提醒（提前几轮缓冲）
+          // - compact：达到压缩线 → 压缩消息历史（下方现有逻辑）
+          const contextTokens = estimateMessagesTokens(options.messages);
+          const budgetDecision = getTokenBudgetDecision(contextTokens, contextWindowSize);
+          if (budgetDecision.level === 'over-limit') {
+            logger.warn(
+              {
+                sessionId,
+                contextTokens: budgetDecision.contextTokens,
+                hardLimit: budgetDecision.hardLimit,
+              },
+              '上下文超出窗口硬上限，回合被拒绝',
+            );
+            throw new AppError(
+              ErrorCode.AI_CONTEXT_TOO_LARGE,
+              `上下文超出窗口上限（${budgetDecision.contextTokens} / ${budgetDecision.hardLimit} tokens），请新建会话或精简上下文`,
+            );
+          }
+          if (budgetDecision.level === 'warn') {
+            logger.warn(
+              {
+                sessionId,
+                contextTokens: budgetDecision.contextTokens,
+                compactAt: budgetDecision.compactAt,
+              },
+              '上下文接近压缩线（warn）',
+            );
+            span?.setAttribute('token.contextLevel', 'warn');
+          }
+          const compactionBudget = getCompactionBudget(contextWindowSize);
+          const compressedMessages = compressByTokenBudget(options.messages, compactionBudget);
           if (compressedMessages.length < options.messages.length) {
             logger.info(
               {
@@ -362,11 +511,26 @@ export class AgentService implements IAgentService {
             );
           }
 
+          // 生成选项：思考强度 / 采样参数 / 输出上限（gpt-tokenizer 精确估算压缩后 prompt）
+          const genOptions = buildGenerationOptions(
+            resolvedModel,
+            estimateMessagesTokens(compressedMessages),
+          );
+
           const result = streamText({
             model,
             messages: compressedMessages,
             allowSystemInMessages: true,
             ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
+            // 生成选项（与 side query 同一真源 buildGenerationOptions）：
+            // 思考强度 reasoningEffort（DeepSeek 按官方映射钳制）、采样参数、输出上限
+            ...genOptions.samplingOptions,
+            ...(genOptions.maxOutputTokens !== undefined
+              ? { maxOutputTokens: genOptions.maxOutputTokens }
+              : {}),
+            ...(genOptions.providerOptions !== undefined
+              ? { providerOptions: genOptions.providerOptions }
+              : {}),
             tools,
             // AI SDK v7 用 stopWhen 替代 maxSteps
             stopWhen: isStepCount(options.maxSteps),
@@ -375,47 +539,59 @@ export class AgentService implements IAgentService {
 
           // 5. 把 result 转换为 UIMessageStream（包含 text/tool-call/tool-result/finish 等 part）
           const uiStream = result.toUIMessageStream();
-          const reader = uiStream.getReader();
 
-          // 6. 逐 part 推送到渲染层
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              break;
-            }
-            // webContents 销毁后停止推送（窗口已关闭）
-            if (options.webContents.isDestroyed()) {
-              logger.warn({ sessionId }, 'webContents 已销毁，停止推送 agent 流');
-              break;
-            }
-            const payload: AgentStreamPartPayload = { sessionId, part: value };
-            options.webContents.send(IPC_CHANNELS.AGENT_STREAM_PART, payload);
-          }
+          // 6. 回合执行（TurnRunner：读流 → 翻译 → 事件产出 → 统计）
+          //    不感知 webContents / DB：事件经 emitter 产出，由订阅回调推送；
+          //    流空闲超时在 TurnRunner 内守卫（复用 stream-reader）
+          const runner = new TurnRunner({
+            sessionId,
+            turnId,
+            modelId: resolvedModel.modelId,
+            controller,
+            emitter: turnEmitter,
+            idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+            // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
+            onPart: (part) => {
+              if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+                const payload: AgentStreamPartPayload = { sessionId, part };
+                options.webContents.send(IPC_CHANNELS.AGENT_STREAM_PART, payload);
+              }
+            },
+          });
+          const runResult = await runner.run(uiStream as ReadableStream<unknown>);
 
-          // 7+8. 正常结束：获取 token 使用量并推送 AGENT_STREAM_END（reason='completed'，含 usage）
-          //    totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
-          if (!options.webContents.isDestroyed()) {
-            const usage = await Promise.resolve(result.totalUsage).catch(() => null);
-            const endPayload: AgentStreamEndPayload = {
+          // 7+8. 结束处理：usage / AGENT_STREAM_END / turn-end / Transcript 落库
+          if (runResult.reason === 'aborted') {
+            logger.info({ sessionId }, 'Agent 对话被用户中断');
+            span?.setAttribute('agent.aborted', true);
+            this.completeTurn({
               sessionId,
-              reason: 'completed',
-              ...(usage !== null && usage !== undefined
+              turnId,
+              modelId: resolvedModel.modelId,
+              reason: 'aborted',
+              durationMs: runResult.durationMs,
+              emitter: turnEmitter,
+              ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+            });
+          } else {
+            // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
+            const usage = await Promise.resolve(result.totalUsage).catch(() => null);
+            const turnUsage: TurnUsage | undefined =
+              usage !== null && usage !== undefined
                 ? {
-                    usage: {
-                      ...(usage.inputTokens !== undefined
-                        ? { inputTokens: usage.inputTokens }
-                        : {}),
-                      ...(usage.outputTokens !== undefined
-                        ? { outputTokens: usage.outputTokens }
-                        : {}),
-                      ...(usage.totalTokens !== undefined
-                        ? { totalTokens: usage.totalTokens }
-                        : {}),
-                    },
+                    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+                    ...(usage.outputTokens !== undefined
+                      ? { outputTokens: usage.outputTokens }
+                      : {}),
+                    ...(usage.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
+                    ...(usage.inputTokenDetails?.cacheReadTokens !== undefined
+                      ? { cacheReadTokens: usage.inputTokenDetails.cacheReadTokens }
+                      : {}),
+                    ...(usage.outputTokenDetails?.reasoningTokens !== undefined
+                      ? { reasoningTokens: usage.outputTokenDetails.reasoningTokens }
+                      : {}),
                   }
-                : {}),
-            };
-            options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
+                : undefined;
 
             // token 使用量统计（AI SDK v7 原生支持，免费数据）
             if (usage !== null && usage !== undefined) {
@@ -428,6 +604,20 @@ export class AgentService implements IAgentService {
                 },
                 'Agent token 使用量',
               );
+              // 用量持久化（设置页用量统计）：失败不阻断主流程
+              void this.sessionService
+                .recordUsage({
+                  sessionId,
+                  modelId: resolvedModel.modelId,
+                  inputTokens: usage.inputTokens ?? 0,
+                  outputTokens: usage.outputTokens ?? 0,
+                  totalTokens: usage.totalTokens ?? 0,
+                  cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens,
+                  reasoningTokens: usage.outputTokenDetails?.reasoningTokens,
+                })
+                .catch((err: unknown) => {
+                  logger.error({ sessionId, error: err }, 'recordUsage 失败');
+                });
               // setAttribute 不接受 undefined，需显式守卫
               if (usage.totalTokens !== undefined) {
                 span?.setAttribute('token.total', usage.totalTokens);
@@ -439,23 +629,49 @@ export class AgentService implements IAgentService {
                 span?.setAttribute('token.completion', usage.outputTokens);
               }
             }
+
+            this.completeTurn({
+              sessionId,
+              turnId,
+              modelId: resolvedModel.modelId,
+              reason: 'completed',
+              durationMs: runResult.durationMs,
+              // exactOptionalPropertyTypes：undefined 需条件展开
+              ...(turnUsage !== undefined ? { usage: turnUsage } : {}),
+              emitter: turnEmitter,
+              ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+            });
+            // 标题生成（回合结束后异步，失败静默）：
+            // 会话仍为默认标题时用首条用户消息生成简洁标题
+            if (this.titleGenerator !== undefined) {
+              void ensureSessionTitle({
+                sessionService: this.sessionService,
+                titleGenerator: this.titleGenerator,
+                sessionId,
+                firstUserText: firstUserMessageText(options.messages),
+              });
+            }
           }
         } catch (error: unknown) {
           // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
+          // 注：TurnRunner 内的中断已归为 aborted result；此处处理组装阶段
+          // （streamText 调用）直接抛出的中断
           if (isAbortError(error)) {
             logger.info({ sessionId }, 'Agent 对话被用户中断');
             span?.setAttribute('agent.aborted', true);
-            if (!options.webContents.isDestroyed()) {
-              const endPayload: AgentStreamEndPayload = {
-                sessionId,
-                reason: 'aborted',
-              };
-              options.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
-            }
+            this.completeTurn({
+              sessionId,
+              turnId,
+              modelId: resolvedModel.modelId,
+              reason: 'aborted',
+              durationMs: Date.now() - turnStartTime,
+              emitter: turnEmitter,
+              ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+            });
           } else {
             // 其他错误：分类并推送 AGENT_STREAM_ERROR
             const appError = classifyError(error);
-            if (!options.webContents.isDestroyed()) {
+            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
               const errorPayload: AgentStreamErrorPayload = {
                 sessionId,
                 code: appError.code,
@@ -463,12 +679,33 @@ export class AgentService implements IAgentService {
               };
               options.webContents.send(IPC_CHANNELS.AGENT_STREAM_ERROR, errorPayload);
             }
+            // 回合事件：error + turn-end（error）+ Transcript 落库
+            turnEmitter.emit({
+              type: TurnEventType.ERROR,
+              sessionId,
+              turnId,
+              timestamp: Date.now(),
+              code: appError.code,
+              message: appError.message,
+            } satisfies TurnEvent);
+            this.completeTurn({
+              sessionId,
+              turnId,
+              modelId: resolvedModel.modelId,
+              reason: 'error',
+              durationMs: Date.now() - turnStartTime,
+              emitter: turnEmitter,
+              ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+            });
             logger.error(
               { sessionId, errorCode: appError.code, error: appError },
               'Agent 对话流异常结束',
             );
           }
         } finally {
+          // 取消回合事件订阅（防泄漏）
+          unsubscribeAll();
+          forwardTurnEvents();
           // CAS（Compare-And-Swap）删除 activeSessions：
           // 仅当 Map 里存的还是自己时才删，避免以下竞态：
           //   abort() 已从 Map 删除 → startAgent 写入新 controller → 旧 stream finally 误删新 controller
@@ -486,5 +723,74 @@ export class AgentService implements IAgentService {
         }
       },
     );
+  }
+
+  /**
+   * 回合落库（Transcript）：失败不阻断主流程
+   *
+   * seq 取会话已有回合数（单会话串行执行，无并发冲突）。
+   */
+  private async persistTurn(turn: TurnEndEvent, modelId: string): Promise<void> {
+    try {
+      const { turns: existing } = await this.sessionService.getTurns(turn.sessionId);
+      await this.sessionService.recordTurn({
+        turnId: turn.turnId,
+        sessionId: turn.sessionId,
+        seq: existing.length,
+        modelId,
+        status: turn.reason,
+        inputTokens: turn.usage?.inputTokens,
+        outputTokens: turn.usage?.outputTokens,
+        totalTokens: turn.usage?.totalTokens,
+        durationMs: turn.durationMs,
+      });
+    } catch (err: unknown) {
+      logger.error({ sessionId: turn.sessionId, error: err }, 'persistTurn 失败');
+    }
+  }
+
+  /**
+   * 统一回合收尾：turn-end 事件 + AGENT_STREAM_END 推送 + Transcript 落库
+   *
+   * 三个出口（completed / aborted / error）共用，消除重复。
+   */
+  private completeTurn(params: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly modelId: string;
+    readonly reason: 'completed' | 'aborted' | 'error';
+    readonly durationMs: number;
+    readonly usage?: TurnUsage;
+    readonly emitter: TurnEventEmitter;
+    readonly webContents?: WebContents;
+  }): void {
+    const turnEnd: TurnEndEvent = {
+      type: TurnEventType.TURN_END,
+      sessionId: params.sessionId,
+      turnId: params.turnId,
+      timestamp: Date.now(),
+      reason: params.reason,
+      durationMs: params.durationMs,
+      ...(params.usage !== undefined ? { usage: params.usage } : {}),
+    };
+    params.emitter.emit(turnEnd);
+
+    // AGENT_STREAM_END 推送（error 出口不推 END，已推 AGENT_STREAM_ERROR；
+    // 无 webContents 的无头场景跳过推送）
+    if (
+      params.webContents !== undefined &&
+      !params.webContents.isDestroyed() &&
+      params.reason !== 'error'
+    ) {
+      const endPayload: AgentStreamEndPayload = {
+        sessionId: params.sessionId,
+        reason: params.reason,
+        ...(params.usage !== undefined ? { usage: params.usage } : {}),
+      };
+      params.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
+    }
+
+    // Transcript 落库（失败不阻断主流程）
+    void this.persistTurn(turnEnd, params.modelId);
   }
 }

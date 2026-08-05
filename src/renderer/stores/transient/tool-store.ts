@@ -35,8 +35,9 @@ export type ToolCallStatus = 'pending' | 'success' | 'error';
  *
  * - auto：自动执行（无需用户审批）
  * - ask：需要用户审批（会触发 ApprovalDialog）
+ * - deny：被拒绝（plan/审批模式约束，工具卡片直接展示拒绝态）
  */
-export type ToolPermission = 'auto' | 'ask';
+export type ToolPermission = 'auto' | 'ask' | 'deny';
 
 /**
  * 工具调用错误信息

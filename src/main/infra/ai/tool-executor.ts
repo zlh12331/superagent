@@ -29,6 +29,7 @@ import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';
 import { logger } from '../../utils/logger';
+import { HookEventName, hookRegistry } from './hook-registry';
 import type { IPermissionService } from './permission-service';
 import { generateApprovalId } from './permission-service';
 import type { ToolContext, ToolResult } from './tool';
@@ -68,7 +69,7 @@ export interface IToolExecutor {
     toolCallId: string,
     input: unknown,
     ctx: ToolContext,
-    webContents: WebContents,
+    webContents?: WebContents,
   ): Promise<AgentToolResultPayload>;
 }
 
@@ -97,7 +98,7 @@ export class ToolExecutor implements IToolExecutor {
     toolCallId: string,
     input: unknown,
     ctx: ToolContext,
-    webContents: WebContents,
+    webContents?: WebContents,
   ): Promise<AgentToolResultPayload> {
     // 性能埋点：工具执行全流程耗时（含权限检查 + 审批等待 + 工具执行）
     const startTime = performance.now();
@@ -126,8 +127,8 @@ export class ToolExecutor implements IToolExecutor {
           return result;
         }
 
-        // 2. 决策权限
-        const decision = this.permissionService.decide(tool, input);
+        // 2. 决策权限（userPrompt 用于意图豁免破坏性拦截）
+        const decision = await this.permissionService.decide(tool, input, ctx.userPrompt);
 
         // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
         this.sendToolCall(webContents, {
@@ -138,27 +139,53 @@ export class ToolExecutor implements IToolExecutor {
           permission: decision.permission,
         });
 
-        // 4. 危险工具：请求用户审批
-        //    plan 模式（只读探索）下直接拒绝写操作，不弹审批框——
-        //    保证 plan 阶段零副作用，这是 OpenCode 风格 plan/apply 分离的核心约束
-        if (decision.permission === 'ask') {
-          if (ctx.mode === 'plan') {
-            logger.info(
-              { toolName, toolCallId, sessionId: ctx.sessionId },
-              'plan 模式拒绝写操作（只读约束）',
-            );
-            const result = this.buildErrorResult(
-              ctx.sessionId,
-              toolCallId,
-              toolName,
-              'plan 模式只读',
-              ErrorCode.TOOL_PERMISSION_DENIED,
-              `plan 模式禁止写操作：${toolName}（如需执行请切换到 build 模式）`,
-            );
-            this.sendToolResult(webContents, result);
-            return result;
-          }
+        // 3.5 生命周期钩子：pre-tool-use（可阻断执行；错误隔离）
+        const preAllowed = await hookRegistry.trigger(HookEventName.PRE_TOOL_USE, {
+          sessionId: ctx.sessionId,
+          toolCallId,
+          toolName,
+          input,
+        });
+        if (!preAllowed) {
+          logger.info({ toolName, toolCallId }, '钩子阻止工具执行');
+          const result = this.buildErrorResult(
+            ctx.sessionId,
+            toolCallId,
+            toolName,
+            '钩子阻止',
+            ErrorCode.TOOL_PERMISSION_DENIED,
+            `工具执行被钩子阻止：${toolName}`,
+          );
+          this.sendToolResult(webContents, result);
+          return result;
+        }
 
+        // 4. 权限决策处理
+        //    - 'deny'：审批模式拒绝（plan 模式只读约束 / 模式分级决策）
+        //    - 'ask'：请求用户审批（plan 模式会话级双保险：直接拒绝写操作，不弹审批框——
+        //      保证 plan 阶段零副作用，这是 OpenCode 风格 plan/apply 分离的核心约束）
+        if (
+          decision.permission === 'deny' ||
+          (decision.permission === 'ask' && ctx.mode === 'plan')
+        ) {
+          logger.info(
+            { toolName, toolCallId, sessionId: ctx.sessionId, permission: decision.permission },
+            '工具调用被拒绝（只读/模式约束）',
+          );
+          const result = this.buildErrorResult(
+            ctx.sessionId,
+            toolCallId,
+            toolName,
+            '权限拒绝',
+            ErrorCode.TOOL_PERMISSION_DENIED,
+            `工具调用被拒绝：${toolName}（审批模式 ${decision.permission}；plan 模式只读，如需执行请切换到 build 模式）`,
+          );
+          this.sendToolResult(webContents, result);
+          return result;
+        }
+
+        // 4.1 需审批的工具：推送审批请求并等待用户响应
+        if (decision.permission === 'ask') {
           const approvalId = generateApprovalId();
           const approvalPayload = {
             sessionId: ctx.sessionId,
@@ -240,6 +267,14 @@ export class ToolExecutor implements IToolExecutor {
         try {
           logger.info({ toolName, toolCallId }, '开始执行工具');
           const toolResult: ToolResult = await tool.execute(input, ctx);
+          // 生命周期钩子：post-tool-use（执行成功；错误隔离）
+          void hookRegistry.trigger(HookEventName.POST_TOOL_USE, {
+            sessionId: ctx.sessionId,
+            toolCallId,
+            toolName,
+            input,
+            result: toolResult,
+          });
           const durationMs = Math.round(performance.now() - startTime);
           logger.info({ toolName, toolCallId, durationMs }, '工具执行成功');
           span?.setAttribute('tool.durationMs', durationMs);
@@ -311,8 +346,8 @@ export class ToolExecutor implements IToolExecutor {
    * 渲染层据此展示 ToolCallView（工具调用 UI），
    * 含权限级别决定是否需要等待审批。
    */
-  private sendToolCall(webContents: WebContents, payload: AgentToolCallPayload): void {
-    if (!webContents.isDestroyed()) {
+  private sendToolCall(webContents: WebContents | undefined, payload: AgentToolCallPayload): void {
+    if (webContents !== undefined && !webContents.isDestroyed()) {
       webContents.send(IPC_CHANNELS.AGENT_TOOL_CALL, payload);
     }
   }
@@ -323,8 +358,11 @@ export class ToolExecutor implements IToolExecutor {
    * 渲染层据此更新 ToolCallView 状态（成功/失败），
    * error 字段存在表示失败，output 字段为工具输出。
    */
-  private sendToolResult(webContents: WebContents, payload: AgentToolResultPayload): void {
-    if (!webContents.isDestroyed()) {
+  private sendToolResult(
+    webContents: WebContents | undefined,
+    payload: AgentToolResultPayload,
+  ): void {
+    if (webContents !== undefined && !webContents.isDestroyed()) {
       webContents.send(IPC_CHANNELS.AGENT_TOOL_RESULT, payload);
     }
   }

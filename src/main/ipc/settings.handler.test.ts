@@ -27,12 +27,22 @@ vi.mock('electron', () => ({
   app: mockApp,
 }));
 
-import { settingsHandlers } from './settings.handler';
+import type { IPermissionService } from '../infra/ai/permission-service';
+import { createSettingsHandlers } from './settings.handler';
 
 /** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */
 const TEMP_DIR_PLACEHOLDER = '';
 
 let tempDir: string;
+
+/** 测试用 PermissionService 假实现（真实类依赖 electron，注入轻量 stub） */
+const mockPermissionService = {
+  setApprovalMode: vi.fn(),
+  getApprovalMode: vi.fn(() => 'ask'),
+} as unknown as IPermissionService;
+
+/** 测试用 handlers 实例（工厂注入） */
+let settingsHandlers: ReturnType<typeof createSettingsHandlers>;
 
 describe('settings.handler', () => {
   beforeAll(() => {
@@ -40,6 +50,7 @@ describe('settings.handler', () => {
     mockApp.getPath.mockImplementation((name: string) =>
       name === 'userData' ? tempDir : `/tmp/${name}`,
     );
+    settingsHandlers = createSettingsHandlers({ permissionService: mockPermissionService });
   });
 
   afterAll(() => {

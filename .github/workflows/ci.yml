@@ -1,10 +1,11 @@
 # .github/workflows/ci.yml
-# CI 流水线：push / PR 触发，跑全部质量门禁 + 测试矩阵
+# CI 流水线：push / PR 触发，跑全部质量门禁 + 测试矩阵（三平台）
 #
 # 设计：
 # - quality job：跑在 ubuntu-latest，快速反馈 typecheck/lint/unit test/audit
-# - e2e-electron job：跑在 windows-latest（项目 Windows-only），跑真实 Electron E2E
-# - e2e-smoke-prod job：跑在 windows-latest，跑生产构建 smoke 测试
+# - e2e-electron job：三平台矩阵（windows/ubuntu/macos），跑真实 Electron E2E
+# - e2e-smoke-prod job：windows + ubuntu 矩阵，跑生产构建 smoke 测试
+# - package job：三平台 electron-builder 打包验证（当前平台原生构建）
 #
 # 参考项目 electron-shadcn-main/.github/workflows/testing.yaml 的 job 分层模式
 
@@ -106,11 +107,16 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  # ── Job 3: Electron E2E（真实窗口，Windows-only）──────────
+  # ── Job 3: Electron E2E（真实窗口，三平台矩阵）─────────────
   e2e-electron:
-    name: E2E (Electron Mode)
-    runs-on: windows-latest
+    name: E2E (Electron Mode, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 三平台真实 Electron 窗口验证（macOS 验证 mac 专属路径，Linux 验证 libsecret 降级路径）
+        os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -139,21 +145,30 @@ jobs:
         run: pnpm build
 
       - name: Run Electron E2E tests
+        # Linux 无头环境需要 xvfb（GitHub ubuntu runner 预装 Xvfb）
         run: pnpm test:e2e:electron
+        env:
+          # macOS 沙箱冲突时允许开发模式启动（测试专用）
+          ELECTRON_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-electron-${{ github.run_id }}
+          name: playwright-report-electron-${{ matrix.os }}-${{ github.run_id }}
           path: playwright-report-electron/
           retention-days: 7
 
-  # ── Job 4: 生产构建 Smoke 测试（最接近用户场景）──────────
+  # ── Job 4: 生产构建 Smoke 测试（最接近用户场景，win + linux）─
   smoke-prod:
-    name: Smoke (Production Build)
-    runs-on: windows-latest
+    name: Smoke (Production Build, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows：NSIS；Linux：AppImage（macOS smoke 由 package job 覆盖）
+        os: [windows-latest, ubuntu-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -174,15 +189,65 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Build production artifacts
-        run: pnpm build:win
+        run: pnpm build:${{ runner.os == 'Windows' && 'win' || 'linux' }}
 
       - name: Run production smoke tests
         run: pnpm test:smoke
+        env:
+          ELECTRON_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
 
       - name: Upload smoke test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-smoke-${{ github.run_id }}
+          name: playwright-report-smoke-${{ matrix.os }}-${{ github.run_id }}
           path: playwright-report-smoke/
           retention-days: 7
+
+  # ── Job 5: 三平台打包验证（当前平台原生构建）───────────────
+  package:
+    name: Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + package
+        # macos runner 需签名工具（跳过：未提供证书时 electron-builder 自动跳过）
+        run: pnpm build:${{ runner.os == 'Windows' && 'win' || runner.os == 'macOS' && 'mac' || 'linux' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}-${{ github.run_id }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/latest*.yml
+          retention-days: 7
+          if-no-files-found: warn

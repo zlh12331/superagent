@@ -22,12 +22,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
 /** 创建 mock 工具 */
-function createMockTool(permission: 'auto' | 'ask' = 'ask'): Tool {
+function createMockTool(
+  permission: 'auto' | 'ask' = 'ask',
+  category: 'read' | 'edit' | 'exec' = 'edit',
+): Tool {
   return {
     name: 'mock_tool',
     description: 'Mock 工具',
     inputSchema: undefined as unknown as Tool['inputSchema'],
     permission,
+    category,
     execute: vi.fn(),
   } as unknown as Tool;
 }
@@ -64,43 +68,139 @@ describe('PermissionService', () => {
   });
 
   describe('decide', () => {
-    it('默认：返回 tool.permission（auto 工具直接执行）', () => {
+    it('默认：返回 tool.permission（auto 工具直接执行）', async () => {
       const tool = createMockTool('auto');
-      const decision = service.decide(tool, { path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision).toEqual({ permission: 'auto', description: 'Mock 工具' });
     });
 
-    it('默认：返回 tool.permission（ask 工具需审批）', () => {
+    it('默认：返回 tool.permission（ask 工具需审批）', async () => {
       const tool = createMockTool('ask');
-      const decision = service.decide(tool, { path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('ask');
     });
 
-    it('记忆命中（approved）：返回 auto（不再询问）', () => {
+    it('setApprovalMode(plan)：edit/exec 工具 deny，read 工具 auto（只读探索零副作用）', async () => {
+      service.setApprovalMode('plan');
+      expect((await service.decide(createMockTool('ask', 'edit'), {})).permission).toBe('deny');
+      expect((await service.decide(createMockTool('ask', 'exec'), {})).permission).toBe('deny');
+      expect((await service.decide(createMockTool('auto', 'read'), {})).permission).toBe('auto');
+    });
+
+    it('setApprovalMode(auto)：edit 自动放行（工作区编辑快速路径），exec 仍审批（危险命令）', async () => {
+      service.setApprovalMode('auto');
+      expect((await service.decide(createMockTool('ask', 'edit'), {})).permission).toBe('auto');
+      expect((await service.decide(createMockTool('ask', 'exec'), {})).permission).toBe('ask');
+    });
+
+    it('setApprovalMode(yolo)：全部自动放行（无审批）', async () => {
+      service.setApprovalMode('yolo');
+      expect((await service.decide(createMockTool('ask', 'edit'), {})).permission).toBe('auto');
+      expect((await service.decide(createMockTool('ask', 'exec'), {})).permission).toBe('auto');
+    });
+
+    it('getApprovalMode：返回当前模式（默认 ask）', async () => {
+      expect(service.getApprovalMode()).toBe('ask');
+      service.setApprovalMode('auto');
+      expect(service.getApprovalMode()).toBe('auto');
+    });
+
+    it('setApprovalMode(auto)：exec 命令分层（破坏性强制 ask / 只读自动 / 其余保守 ask）', async () => {
+      service.setApprovalMode('auto');
+      // 破坏性命令：强制 ask + 危险标注
+      const dangerous = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git reset --hard HEAD',
+      });
+      expect(dangerous.permission).toBe('ask');
+      expect(dangerous.description).toContain('破坏性');
+      // 只读安全命令：自动放行
+      expect(
+        (await service.decide(createMockTool('ask', 'exec'), { command: 'git status' })).permission,
+      ).toBe('auto');
+      // 其他命令：保守 ask（无分类器时）
+      expect(
+        (await service.decide(createMockTool('ask', 'exec'), { command: 'pnpm install' }))
+          .permission,
+      ).toBe('ask');
+    });
+
+    it('setApprovalMode(auto)：userPrompt 意图豁免破坏性拦截（意图优先，无意图时标注危险）', async () => {
+      service.setApprovalMode('auto');
+      // 用户显式说 discard → 破坏性拦截豁免（命令非只读 → 保守 ask）
+      expect(
+        (
+          await service.decide(
+            createMockTool('ask', 'exec'),
+            { command: 'git reset --hard HEAD' },
+            '请 discard 所有更改',
+          )
+        ).permission,
+      ).toBe('ask');
+      // 无意图：危险标注出现在描述中
+      const withoutIntent = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git reset --hard HEAD',
+      });
+      expect(withoutIntent.description).toContain('破坏性');
+    });
+
+    it('拒绝跟踪：连续拒绝 3 次后 auto 模式降级手动确认', async () => {
+      service.setApprovalMode('auto');
+      service.recordUserDenial();
+      service.recordUserDenial();
+      service.recordUserDenial();
+      const decision = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git status',
+      });
+      expect(decision.permission).toBe('ask');
+      expect(decision.description).toContain('拒绝频繁');
+    });
+
+    it('拒绝跟踪：用户放行重置连续计数', async () => {
+      service.setApprovalMode('auto');
+      service.recordUserDenial();
+      service.recordUserDenial();
+      service.recordUserAllowance();
+      expect(
+        (await service.decide(createMockTool('ask', 'exec'), { command: 'git status' })).permission,
+      ).toBe('auto');
+    });
+
+    it('拒绝跟踪：切换审批模式重置计数', async () => {
+      service.setApprovalMode('auto');
+      service.recordUserDenial();
+      service.recordUserDenial();
+      service.recordUserDenial();
+      service.setApprovalMode('auto');
+      expect(
+        (await service.decide(createMockTool('ask', 'exec'), { command: 'git status' })).permission,
+      ).toBe('auto');
+    });
+
+    it('记忆命中（approved）：返回 auto（不再询问）', async () => {
       const tool = createMockTool('ask');
       service.rememberDecision(tool, { path: '/tmp/a.ts' }, true);
-      const decision = service.decide(tool, { path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('auto');
     });
 
-    it('记忆命中（denied）：返回 ask（重新询问，避免锁死）', () => {
+    it('记忆命中（denied）：返回 ask（重新询问，避免锁死）', async () => {
       const tool = createMockTool('ask');
       service.rememberDecision(tool, { path: '/tmp/a.ts' }, false);
-      const decision = service.decide(tool, { path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('ask');
     });
 
-    it('输入不同（路径不同）：不命中记忆', () => {
+    it('输入不同（路径不同）：不命中记忆', async () => {
       const tool = createMockTool('ask');
       service.rememberDecision(tool, { path: '/tmp/a.ts' }, true);
-      const decision = service.decide(tool, { path: '/tmp/b.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/b.ts' });
       expect(decision.permission).toBe('ask');
     });
 
-    it('对象键顺序不同：记忆 key 相同（stable stringify）', () => {
+    it('对象键顺序不同：记忆 key 相同（stable stringify）', async () => {
       const tool = createMockTool('ask');
       service.rememberDecision(tool, { path: '/tmp/a.ts', mode: 'write' }, true);
-      const decision = service.decide(tool, { mode: 'write', path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { mode: 'write', path: '/tmp/a.ts' });
       expect(decision.permission).toBe('auto');
     });
   });
@@ -151,11 +251,11 @@ describe('PermissionService', () => {
       service.handleApprovalResponse('approval-1', true, true);
       await promise;
 
-      const decision = service.decide(tool, { path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('auto');
     });
 
-    it('未知 approvalId：忽略（已超时或不存在）', () => {
+    it('未知 approvalId：忽略（已超时或不存在）', async () => {
       expect(() => service.handleApprovalResponse('nonexistent', true, false)).not.toThrow();
     });
 
@@ -223,17 +323,17 @@ describe('PermissionService', () => {
       await expect(promise2).rejects.toMatchObject({ code: ErrorCode.TOOL_ABORTED });
     });
 
-    it('清空记忆决策', () => {
+    it('清空记忆决策', async () => {
       const tool = createMockTool('ask');
       service.rememberDecision(tool, { path: '/tmp/a.ts' }, true);
       service.dispose();
-      const decision = service.decide(tool, { path: '/tmp/a.ts' });
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
       expect(decision.permission).toBe('ask');
     });
   });
 
   describe('generateApprovalId', () => {
-    it('生成 UUID v4 格式 id', () => {
+    it('生成 UUID v4 格式 id', async () => {
       const id = generateApprovalId();
       expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     });

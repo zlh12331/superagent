@@ -25,6 +25,7 @@ import {
   type AgentToolCallPayload,
   type AgentToolResultPayload,
 } from '../schemas/agent';
+import type { TurnEvent } from '../schemas/agent-events';
 import { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
 import {
   CodebaseCalleesReqSchema,
@@ -75,33 +76,66 @@ import {
   GitStatusReqSchema,
   type GitStatusRes,
 } from '../schemas/git';
+import {
+  GoalClearReqSchema,
+  type GoalClearRes,
+  GoalCreateReqSchema,
+  type GoalCreateRes,
+  GoalListReqSchema,
+  type GoalListRes,
+} from '../schemas/goal';
+import type { ChannelListRes, ChannelOpRes } from '../schemas/im';
+import { ChannelStartReqSchema, ChannelStopReqSchema } from '../schemas/im';
+import {
+  MemoryClearReqSchema,
+  type MemoryClearRes,
+  MemoryListReqSchema,
+  type MemoryListRes,
+} from '../schemas/memory';
 import { GlobReqSchema, type GlobRes, GrepReqSchema, type GrepRes } from '../schemas/search';
 import {
   SessionCreateReqSchema,
   type SessionCreateRes,
   SessionDeleteReqSchema,
   type SessionDeleteRes,
+  SessionGetRecentTurnsReqSchema,
   SessionGetReqSchema,
   type SessionGetRes,
+  SessionGetTurnMessagesReqSchema,
+  type SessionGetTurnMessagesRes,
+  SessionGetTurnsReqSchema,
+  type SessionGetTurnsRes,
   SessionListRecentDirsReqSchema,
   type SessionListRecentDirsRes,
   SessionListReqSchema,
   type SessionListRes,
+  type SessionRecentTurnsRes,
   SessionRenameReqSchema,
   type SessionRenameRes,
+  type UsageSummaryRes,
 } from '../schemas/session';
 import {
+  AddRuntimeModelReqSchema,
+  type AddRuntimeModelRes,
   DeleteApiKeyReqSchema,
   type DeleteApiKeyRes,
   GetApiKeyReqSchema,
   type GetApiKeyRes,
+  type GetApprovalModeRes,
   type GetTelemetryLevelRes,
+  type ListRuntimeModelsRes,
+  RemoveRuntimeModelReqSchema,
+  type RemoveRuntimeModelRes,
   SetApiKeyReqSchema,
   type SetApiKeyRes,
+  SetApprovalModeReqSchema,
+  type SetApprovalModeRes,
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
 } from '../schemas/settings';
+import type { SkillListRes } from '../schemas/skill';
 import { ReadLogsReqSchema, type ReadLogsRes, type SystemStatusRes } from '../schemas/system';
+import { TaskListReqSchema, type TaskListRes } from '../schemas/task';
 import {
   type TerminalCreatedEventPayload,
   TerminalCreateReqSchema,
@@ -202,6 +236,7 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeApprovalRequest,
       {} as AgentApprovalRequestPayload,
     ),
+    subscribeTurnEvent: withPayload(IPC_META.agent.subscribeTurnEvent, {} as TurnEvent),
   },
 
   session: {
@@ -219,6 +254,22 @@ export const IPC_DEFINITIONS = {
       IPC_META.session.exportAll,
       null,
       {} as { saved: boolean; path?: string },
+    ),
+    getUsageSummary: withSchema(IPC_META.session.getUsageSummary, null, {} as UsageSummaryRes),
+    getTurns: withSchema(
+      IPC_META.session.getTurns,
+      SessionGetTurnsReqSchema,
+      {} as SessionGetTurnsRes,
+    ),
+    getRecentTurns: withSchema(
+      IPC_META.session.getRecentTurns,
+      SessionGetRecentTurnsReqSchema,
+      {} as SessionRecentTurnsRes,
+    ),
+    getTurnMessages: withSchema(
+      IPC_META.session.getTurnMessages,
+      SessionGetTurnMessagesReqSchema,
+      {} as SessionGetTurnMessagesRes,
     ),
   },
 
@@ -317,10 +368,56 @@ export const IPC_DEFINITIONS = {
       SetTelemetryLevelReqSchema,
       {} as SetTelemetryLevelRes,
     ),
+    getApprovalMode: withSchema(IPC_META.settings.getApprovalMode, null, {} as GetApprovalModeRes),
+    setApprovalMode: withSchema(
+      IPC_META.settings.setApprovalMode,
+      SetApprovalModeReqSchema,
+      {} as SetApprovalModeRes,
+    ),
+    addRuntimeModel: withSchema(
+      IPC_META.settings.addRuntimeModel,
+      AddRuntimeModelReqSchema,
+      {} as AddRuntimeModelRes,
+    ),
+    removeRuntimeModel: withSchema(
+      IPC_META.settings.removeRuntimeModel,
+      RemoveRuntimeModelReqSchema,
+      {} as RemoveRuntimeModelRes,
+    ),
+    listRuntimeModels: withSchema(
+      IPC_META.settings.listRuntimeModels,
+      null,
+      {} as ListRuntimeModelsRes,
+    ),
   },
 
   system: {
     getStatus: withSchema(IPC_META.system.getStatus, null, {} as SystemStatusRes),
+  },
+
+  memory: {
+    list: withSchema(IPC_META.memory.list, MemoryListReqSchema, {} as MemoryListRes),
+    clear: withSchema(IPC_META.memory.clear, MemoryClearReqSchema, {} as MemoryClearRes),
+  },
+
+  task: {
+    list: withSchema(IPC_META.task.list, TaskListReqSchema, {} as TaskListRes),
+  },
+
+  skill: {
+    list: withSchema(IPC_META.skill.list, null, {} as SkillListRes),
+  },
+
+  goal: {
+    create: withSchema(IPC_META.goal.create, GoalCreateReqSchema, {} as GoalCreateRes),
+    list: withSchema(IPC_META.goal.list, GoalListReqSchema, {} as GoalListRes),
+    clear: withSchema(IPC_META.goal.clear, GoalClearReqSchema, {} as GoalClearRes),
+  },
+
+  im: {
+    list: withSchema(IPC_META.im.list, null, {} as ChannelListRes),
+    start: withSchema(IPC_META.im.start, ChannelStartReqSchema, {} as ChannelOpRes),
+    stop: withSchema(IPC_META.im.stop, ChannelStopReqSchema, {} as ChannelOpRes),
   },
 
   logs: {

@@ -13,19 +13,30 @@
 // - 反馈：保存 / 删除成功后 toast 提示
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider, TelemetryLevel } from '@code-agent/shared/renderer';
+import type {
+  ApiKeyProvider,
+  ChannelListRes,
+  ListRuntimeModelsRes,
+  SessionRecentTurnsRes,
+  TelemetryLevel,
+  TurnStatusText,
+  UsageSummaryRes,
+} from '@code-agent/shared/renderer';
 import {
+  BarChart3,
   Database,
   Eye,
   EyeOff,
+  History,
   Keyboard,
   KeyRound,
   Loader2,
   MessageSquareText,
+  Plus,
   Shield,
   Trash2,
 } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,11 +52,535 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
+import { useApprovalMode } from '@/hooks/use-approval-mode';
 import { useSetTelemetryLevel, useTelemetryLevelQuery } from '@/hooks/use-telemetry';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+
+/**
+ * 审批模式区块：工具调用审批策略（plan / ask / auto / yolo）
+ *
+ * 数据来源：settings:getApprovalMode / setApprovalMode（持久化 approval-pref.json）。
+ */
+function ApprovalModeSection(): ReactElement {
+  const { t } = useTranslation();
+  const { mode, setMode } = useApprovalMode();
+
+  const options = [
+    {
+      value: 'plan' as const,
+      label: t('settings.approvalModePlan'),
+      desc: t('settings.approvalModePlanDesc'),
+    },
+    {
+      value: 'ask' as const,
+      label: t('settings.approvalModeAsk'),
+      desc: t('settings.approvalModeAskDesc'),
+    },
+    {
+      value: 'auto' as const,
+      label: t('settings.approvalModeAuto'),
+      desc: t('settings.approvalModeAutoDesc'),
+    },
+    {
+      value: 'yolo' as const,
+      label: t('settings.approvalModeYolo'),
+      desc: t('settings.approvalModeYoloDesc'),
+    },
+  ];
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center gap-2">
+        <Shield className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Label className="font-serif text-sm tracking-wide">
+          {t('settings.approvalModeSection')}
+        </Label>
+      </div>
+      <p className="text-xs text-muted-foreground font-sans">{t('settings.approvalModeHint')}</p>
+      <div className="grid gap-1.5">
+        {options.map((option) => (
+          <label
+            key={option.value}
+            className={cn(
+              'flex cursor-pointer items-start gap-2 rounded border px-2.5 py-1.5',
+              mode === option.value
+                ? 'border-stone-400 bg-stone-50'
+                : 'border-stone-100 hover:border-stone-300',
+            )}
+          >
+            <input
+              type="radio"
+              name="approval-mode"
+              checked={mode === option.value}
+              onChange={() => void setMode(option.value)}
+              className="mt-0.5 size-3.5 accent-stone-700"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-stone-800 font-sans">
+                {option.label}
+              </span>
+              <span className="block text-xs text-muted-foreground font-sans">{option.desc}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 用量统计区块：展示全部会话的 token 消耗汇总（总量 / 按模型 / 按日）
+ *
+ * 数据来源：session:getUsageSummary（token_usage 表聚合）。
+ */
+function UsageSection(): ReactElement {
+  const { t } = useTranslation();
+  const [summary, setSummary] = useState<UsageSummaryRes | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.api.session
+      .getUsageSummary()
+      .then((res) => {
+        if (!cancelled) {
+          setSummary(unwrap<UsageSummaryRes>(res));
+        }
+      })
+      .catch(() => {
+        toast.error(t('settings.usageLoadFailed'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const isEmpty = summary === null || summary.total.calls === 0;
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center gap-2">
+        <BarChart3 className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Label className="font-serif text-sm tracking-wide">{t('settings.usageSection')}</Label>
+      </div>
+      <p className="text-xs text-muted-foreground font-sans">{t('settings.usageHint')}</p>
+
+      {isEmpty ? (
+        <p className="text-xs text-muted-foreground font-sans">{t('settings.usageEmpty')}</p>
+      ) : (
+        <div className="space-y-2 font-sans">
+          {/* 总量 */}
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="rounded border border-stone-200 p-2">
+              <p className="text-muted-foreground">{t('settings.usageTotalCalls')}</p>
+              <p className="mt-0.5 font-medium text-stone-800">{summary.total.calls}</p>
+            </div>
+            <div className="rounded border border-stone-200 p-2">
+              <p className="text-muted-foreground">{t('settings.usageTotalTokens')}</p>
+              <p className="mt-0.5 font-medium text-stone-800">{summary.total.totalTokens}</p>
+            </div>
+            <div className="rounded border border-stone-200 p-2">
+              <p className="text-muted-foreground">{t('settings.usageCacheHit')}</p>
+              <p className="mt-0.5 font-medium text-stone-800">
+                {summary.byModel.reduce((sum, m) => sum + m.cacheReadTokens, 0)}
+              </p>
+            </div>
+          </div>
+
+          {/* 按模型 */}
+          <div>
+            <p className="text-xs font-medium text-stone-600">{t('settings.usageByModel')}</p>
+            <ul className="mt-1 space-y-1 text-xs">
+              {summary.byModel.map((m) => (
+                <li
+                  key={m.modelId}
+                  className="flex items-center justify-between rounded border border-stone-100 px-2 py-1"
+                >
+                  <span className="truncate text-stone-700">{m.modelId}</span>
+                  <span className="ml-2 shrink-0 text-muted-foreground">
+                    {m.calls} 次 · {m.totalTokens} tokens
+                    {m.reasoningTokens > 0
+                      ? ` · ${t('settings.usageReasoning')} ${m.reasoningTokens}`
+                      : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* 按日 */}
+          <div>
+            <p className="text-xs font-medium text-stone-600">{t('settings.usageByDay')}</p>
+            <ul className="mt-1 space-y-0.5 text-xs">
+              {summary.byDay.map((d) => (
+                <li key={d.date} className="flex items-center justify-between text-stone-600">
+                  <span>{d.date}</span>
+                  <span className="text-muted-foreground">
+                    {d.calls} 次 · {d.totalTokens} tokens
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 回合记录区块：展示最近 Agent 回合的终止原因与 token 消耗（Transcript）
+ *
+ * 数据来源：session:getRecentTurns（turns 表跨会话倒序查询）。
+ */
+function TurnsSection(): ReactElement {
+  const { t } = useTranslation();
+  const [turns, setTurns] = useState<SessionRecentTurnsRes['turns'] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.api.session
+      .getRecentTurns({ limit: 10 })
+      .then((res) => {
+        if (!cancelled) {
+          setTurns(unwrap<SessionRecentTurnsRes>(res).turns);
+        }
+      })
+      .catch(() => {
+        toast.error(t('settings.turnsLoadFailed'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const isEmpty = turns === null || turns.length === 0;
+  const statusKey: TurnStatusText = {
+    completed: t('settings.turnStatusCompleted'),
+    aborted: t('settings.turnStatusAborted'),
+    'max-steps': t('settings.turnStatusMaxSteps'),
+    error: t('settings.turnStatusError'),
+  };
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center gap-2">
+        <History className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Label className="font-serif text-sm tracking-wide">{t('settings.turnsSection')}</Label>
+      </div>
+      <p className="text-xs text-muted-foreground font-sans">{t('settings.turnsHint')}</p>
+
+      {isEmpty ? (
+        <p className="text-xs text-muted-foreground font-sans">{t('settings.turnsEmpty')}</p>
+      ) : (
+        <ul className="space-y-1 text-xs font-sans">
+          {turns.map((turn) => (
+            <li
+              key={turn.turnId}
+              className="flex items-center justify-between gap-2 rounded border border-stone-100 px-2 py-1"
+            >
+              <span className="truncate text-stone-700">
+                {turn.modelId}
+                <span className="ml-1 text-muted-foreground">#{turn.seq}</span>
+              </span>
+              <span className="ml-2 shrink-0 text-muted-foreground">
+                {statusKey[turn.status] ?? turn.status}
+                {turn.totalTokens !== undefined ? ` · ${turn.totalTokens} tokens` : ''}
+                {turn.durationMs !== undefined ? ` · ${Math.round(turn.durationMs / 1000)}s` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 自定义模型区块：添加/删除运行时模型（持久化 + 注册 + 缓存失效）
+ *
+ * 数据来源：settings:listRuntimeModels / addRuntimeModel / removeRuntimeModel。
+ */
+function RuntimeModelsSection(): ReactElement {
+  const { t } = useTranslation();
+  const [models, setModels] = useState<ListRuntimeModelsRes['models'] | null>(null);
+  const [modelId, setModelId] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const loadModels = useCallback(() => {
+    window.api.settings
+      .listRuntimeModels()
+      .then((res) => {
+        setModels(unwrap<ListRuntimeModelsRes>(res).models);
+      })
+      .catch(() => {
+        toast.error(t('settings.runtimeModelLoadFailed'));
+      });
+  }, [t]);
+
+  useEffect(() => {
+    loadModels();
+  }, [loadModels]);
+
+  const handleAdd = async (): Promise<void> => {
+    if (modelId.trim().length === 0) {
+      return;
+    }
+    setAdding(true);
+    try {
+      await window.api.settings.addRuntimeModel({
+        modelId: modelId.trim(),
+        providerKind: 'openai',
+        // zod transform 输出为 string | undefined：显式传 undefined
+        baseUrl: baseUrl.trim().length > 0 ? baseUrl.trim() : undefined,
+        apiKey: apiKey.trim().length > 0 ? apiKey.trim() : undefined,
+      });
+      toast.success(t('settings.runtimeModelAdded'));
+      setModelId('');
+      setBaseUrl('');
+      setApiKey('');
+      loadModels();
+    } catch {
+      toast.error(t('settings.runtimeModelLoadFailed'));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleRemove = async (id: string): Promise<void> => {
+    try {
+      await window.api.settings.removeRuntimeModel({ modelId: id });
+      toast.success(t('settings.runtimeModelRemoved'));
+      loadModels();
+    } catch {
+      toast.error(t('settings.runtimeModelLoadFailed'));
+    }
+  };
+
+  const isEmpty = models === null || models.length === 0;
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center gap-2">
+        <Plus className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Label className="font-serif text-sm tracking-wide">
+          {t('settings.runtimeModelsSection')}
+        </Label>
+      </div>
+      <p className="text-xs text-muted-foreground font-sans">{t('settings.runtimeModelsHint')}</p>
+
+      {/* 添加表单 */}
+      <div className="space-y-1.5">
+        <Input
+          type="text"
+          value={modelId}
+          onChange={(e) => setModelId(e.target.value)}
+          placeholder={t('settings.runtimeModelIdPlaceholder')}
+          className="font-mono text-xs"
+        />
+        <Input
+          type="text"
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder={t('settings.runtimeModelBaseUrlPlaceholder')}
+          className="font-mono text-xs"
+        />
+        <Input
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={t('settings.runtimeModelApiKeyPlaceholder')}
+          className="font-mono text-xs"
+        />
+        <Button variant="outline" size="sm" onClick={handleAdd} disabled={adding}>
+          {adding ? (
+            <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+          ) : (
+            <Plus className="size-3.5" strokeWidth={1.5} />
+          )}
+          {t('settings.runtimeModelAdd')}
+        </Button>
+      </div>
+
+      {/* 模型列表 */}
+      {isEmpty ? (
+        <p className="text-xs text-muted-foreground font-sans">
+          {t('settings.runtimeModelsEmpty')}
+        </p>
+      ) : (
+        <ul className="space-y-1 text-xs font-sans">
+          {models.map((m) => (
+            <li
+              key={m.modelId}
+              className="flex items-center justify-between gap-2 rounded border border-stone-100 px-2 py-1"
+            >
+              <span className="truncate text-stone-700">
+                {m.modelId}
+                <span className="ml-1 text-muted-foreground">({m.providerKind})</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleRemove(m.modelId)}
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                aria-label={t('settings.runtimeModelRemove')}
+              >
+                <Trash2 className="size-3.5" strokeWidth={1.5} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * IM 渠道区块：渠道列表 / 启停 / token 配置
+ *
+ * 数据来源：im:list / start / stop（token 存 keychain，不落库）。
+ */
+function ImChannelsSection(): ReactElement {
+  const { t } = useTranslation();
+  const [channels, setChannels] = useState<ChannelListRes['channels'] | null>(null);
+  const [tokenInputs, setTokenInputs] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const loadChannels = useCallback(() => {
+    window.api.im
+      .list()
+      .then((res) => {
+        setChannels(unwrap<ChannelListRes>(res).channels);
+      })
+      .catch(() => {
+        // 列表加载失败：静默（渠道功能不可用时降级）
+      });
+  }, []);
+
+  useEffect(() => {
+    loadChannels();
+  }, [loadChannels]);
+
+  const handleStart = async (kind: string): Promise<void> => {
+    setBusy(kind);
+    try {
+      const token = tokenInputs[kind];
+      await window.api.im.start({
+        kind: kind as ChannelListRes['channels'][number]['kind'],
+        // zod transform 输出为 string | undefined：显式传 undefined
+        token: token !== undefined && token.trim().length > 0 ? token.trim() : undefined,
+      });
+      toast.success(t('settings.imChannelStarted'));
+      setTokenInputs((prev) => ({ ...prev, [kind]: '' }));
+      loadChannels();
+    } catch {
+      toast.error(t('settings.imChannelStartFailed'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleStop = async (kind: string): Promise<void> => {
+    setBusy(kind);
+    try {
+      await window.api.im.stop({ kind: kind as ChannelListRes['channels'][number]['kind'] });
+      toast.success(t('settings.imChannelStopSuccess'));
+      loadChannels();
+    } catch {
+      toast.error(t('settings.imChannelStopFailed'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (channels === null) {
+    return <div className="space-y-2 pt-2" />;
+  }
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center gap-2">
+        <MessageSquareText className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Label className="font-serif text-sm tracking-wide">
+          {t('settings.imChannelsSection')}
+        </Label>
+      </div>
+      <p className="text-xs text-muted-foreground font-sans">{t('settings.imChannelsHint')}</p>
+
+      <ul className="space-y-2 text-xs font-sans">
+        {channels.map((channel) => (
+          <li key={channel.kind} className="rounded border border-stone-100 px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="block font-medium text-stone-800">{channel.displayName}</span>
+                <span className="block truncate text-muted-foreground">{channel.description}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[10px]',
+                    channel.running
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-stone-100 text-stone-500',
+                  )}
+                >
+                  {channel.running
+                    ? t('settings.imChannelRunning')
+                    : t('settings.imChannelStopped')}
+                </span>
+                {channel.running ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleStop(channel.kind)}
+                    disabled={busy === channel.kind}
+                  >
+                    {t('settings.imChannelStop')}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleStart(channel.kind)}
+                    disabled={busy === channel.kind || !channel.implemented}
+                  >
+                    {t('settings.imChannelStart')}
+                  </Button>
+                )}
+              </div>
+            </div>
+            {/* 未配置 token 的已实现渠道：显示 token 输入（首次启动） */}
+            {channel.implemented && !channel.configured && (
+              <div className="mt-1.5 flex gap-1.5">
+                <Input
+                  type="password"
+                  value={tokenInputs[channel.kind] ?? ''}
+                  onChange={(e) =>
+                    setTokenInputs((prev) => ({ ...prev, [channel.kind]: e.target.value }))
+                  }
+                  placeholder={t('settings.imChannelTokenPlaceholder')}
+                  className="h-7 font-mono text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => void handleStart(channel.kind)}
+                  disabled={busy === channel.kind}
+                >
+                  {t('settings.imChannelSave')}
+                </Button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 interface SettingsDialogProps {
   /** 是否打开（受控） */
@@ -466,6 +1001,26 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
             ))}
           </div>
         </div>
+
+        {/* 用量统计区块（token 消耗汇总） */}
+        <Separator className="my-2" />
+        <UsageSection />
+
+        {/* 审批模式区块（ApprovalMode 配置化） */}
+        <Separator className="my-2" />
+        <ApprovalModeSection />
+
+        {/* 回合记录区块（Transcript） */}
+        <Separator className="my-2" />
+        <TurnsSection />
+
+        {/* 自定义模型区块（运行时快照） */}
+        <Separator className="my-2" />
+        <RuntimeModelsSection />
+
+        {/* IM 渠道区块（Telegram 等渠道集成） */}
+        <Separator className="my-2" />
+        <ImChannelsSection />
 
         {/* 数据区块（可靠性/数据极致）：会话导出 + 打开数据目录 */}
         <Separator className="my-2" />

@@ -1,22 +1,30 @@
 # electron-builder.yml
-# Electron 应用打包配置（设计文档 §3 + §6.5 + §10.2）
+# Electron 应用打包配置（设计文档 §3 + §6.5 + §10.2，跨平台三平台版）
 #
-# 用途：将 main/preload/renderer 三入口产物打包成 Windows NSIS 安装器
+# 用途：将 main/preload/renderer 三入口产物打包成三平台安装包：
+#   - Windows：NSIS 安装器（x64）
+#   - macOS：DMG + ZIP（ZIP 供 electron-updater 自动更新）
+#   - Linux：AppImage + deb（x64）
 #
-# 命令：pnpm build:dist（先 electron-vite build 构建，再 electron-builder 打包）
+# 命令：
+#   pnpm build:win    # Windows NSIS
+#   pnpm build:mac    # macOS（必须在 macOS runner 上执行，交叉编译不支持）
+#   pnpm build:linux  # Linux AppImage + deb
+#   pnpm build:all    # 当前平台构建
 #
 # 依赖：
 # - out/main/index.js、out/preload/index.cjs（electron-vite build 产物）
 # - out/renderer/（渲染层静态资源）
-# - resources/icons/（应用图标）
+# - resources/icons/icon.png（1024x1024 源图标，electron-builder 自动派生 ico/icns）
 # - package.json 中 author 字段（electron-builder 强制要求）
 #
 # 说明：原 PostgreSQL 便携版二进制打包（resources/pg/）已随数据库层一并删除。
+# safeStorage 三平台原生支持（Windows DPAPI / macOS Keychain / Linux libsecret）。
 
-# 应用唯一标识（注册到 Windows 注册表，用于关联文件类型、卸载登记等）
+# 应用唯一标识（注册到 Windows 注册表 / macOS 包标识 / Linux .desktop）
 appId: com.code-agent.desktop
 
-# 安装包显示名称（Windows「程序与功能」中展示）
+# 安装包显示名称（Windows「程序与功能」/ macOS 应用名 / Linux 桌面条目）
 productName: Code Agent Desktop
 
 # 打包输出目录（与 .gitignore 中 release/ 对齐）
@@ -44,20 +52,19 @@ files:
   - "!**/test-results/**"
 
 # 额外资源（不打入 asar，部署到 process.resourcesPath）
-# 当前仅打包应用图标，原 PG 二进制条目已删除
 extraResources:
   - from: resources/icons
     to: icons
     filter:
       - "**/*"
 
-# Windows 平台配置（设计文档 §1.1 项目是 Windows-only）
+# ── Windows 平台配置 ──────────────────────────────────────────
 # 代码签名：证书通过环境变量提供（CSC_LINK/CSC_KEY_PASSWORD），
 # 未提供时 electron-builder 自动跳过签名（dev 阶段可空）
 # 默认签名哈希算法为 sha256（设计文档附录 A #7 Windows Authenticode）
 win:
-  # 图标（256x256 .ico 格式，放在 resources/icons/）
-  icon: resources/icons/icon.ico
+  # 图标：1024x1024 PNG 源（electron-builder 自动派生 .ico）
+  icon: resources/icons/icon.png
   # 目标架构（仅打 x64，Intel/AMD 桌面端通用）
   target:
     - target: nsis
@@ -79,19 +86,81 @@ nsis:
   # 显示卸载确认
   perMachine: false
   # 安装向导标题
-  installerIcon: resources/icons/icon.ico
-  uninstallerIcon: resources/icons/icon.ico
+  installerIcon: resources/icons/icon.png
+  uninstallerIcon: resources/icons/icon.png
   # 安装完成后启动应用
   runAfterFinish: true
+
+# ── macOS 平台配置 ────────────────────────────────────────────
+# 注意：macOS 包只能在 macOS runner 上构建（electron-builder 不支持 Windows → macOS 交叉编译）
+# 签名/公证：未提供证书时 electron-builder 自动跳过（dev 阶段可空）；
+# 正式发布需 CSC_LINK + notarize（env 配置，见 CI release.yml）
+mac:
+  # 图标：1024x1024 PNG 源（electron-builder 在 macOS 上自动派生 .icns）
+  icon: resources/icons/icon.png
+  # 目标：dmg（分发安装包）+ zip（electron-updater 自动更新必须，latest-mac.yml）
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  # macOS 应用分类（App Store 元数据）
+  category: public.app-category.developer-tools
+  # 深色模式支持
+  darkModeSupport: true
+  # 应用商店分发：false = 直接分发（非 App Store）
+  notarize: false
+
+# DMG 安装包配置
+# 自动更新用 zip artifact（latest-mac.yml），DMG 仅作首次安装分发
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+# ── Linux 平台配置 ────────────────────────────────────────────
+linux:
+  # 图标：1024x1024 PNG 源（electron-builder 自动派生各尺寸）
+  icon: resources/icons/icon.png
+  # 目标：AppImage（单文件分发，electron-updater 支持）+ deb（Debian/Ubuntu）
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  # 分类（Linux 桌面条目 Categories）
+  category: Development
+  # 可执行文件名
+  executableName: code-agent-desktop
+  # 桌面条目描述
+  synopsis: AI Code Agent Desktop
+  description: AI-powered coding assistant for desktop
+  # 维护者（deb 必需）
+  maintainer: code-agent <dev@code-agent.example.com>
+
+# AppImage 配置
+appImage:
+  artifactName: ${productName}-${version}.${ext}
+
+# deb 配置
+deb:
+  artifactName: ${productName}-${version}.${ext}
 
 # 版本元数据（设计文档 §1.1 版本管理）
 # - Git tag v0.1.0 → 版本 0.1.0
 # - 通过 package.json version 字段自动同步，无需在此重复声明
 
 # 发布配置（设计文档 §3.5 electron-updater 私服静态托管）
-# 发布到自托管静态服务器，electron-updater 会拉取 latest.yml 检查更新
+# 发布到自托管静态服务器，electron-updater 会按平台拉取元数据：
+# - Windows: latest.yml（nsis）
+# - macOS: latest-mac.yml（zip）
+# - Linux: latest-linux.yml（AppImage）
 # provider: generic 通用 HTTP 静态文件服务
-# URL 末尾必须以 / 结尾，electron-updater 会拼接 latest.yml
+# URL 末尾必须以 / 结尾，electron-updater 会拼接 latest*.yml
 publish:
   provider: generic
   url: https://code-agent.example.com/releases/

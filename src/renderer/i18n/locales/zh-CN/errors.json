@@ -19,6 +19,11 @@
       "AI_MODEL_ERROR": "AI 模型错误",
       "AI_STREAM_INTERRUPTED": "AI 流式响应中断",
       "AI_CONTEXT_TOO_LARGE": "上下文过长，请精简对话",
+      "AI_BALANCE_INSUFFICIENT": "账户余额不足，请充值后重试",
+      "IM_CHANNEL_NOT_CONFIGURED": "IM 渠道未配置凭证",
+      "IM_CHANNEL_INVALID_TOKEN": "IM 渠道凭证无效",
+      "IM_CHANNEL_NOT_IMPLEMENTED": "IM 渠道待接入",
+      "IM_CHANNEL_REQUEST_FAILED": "IM 渠道请求失败",
 
       "FS_READ_FAILED": "文件读取失败",
       "FS_WRITE_FAILED": "文件写入失败",

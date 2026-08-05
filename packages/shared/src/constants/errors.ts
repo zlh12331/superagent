@@ -44,6 +44,18 @@ export const ErrorCode = {
   AI_MODEL_ERROR: 'AI_MODEL_ERROR',
   AI_STREAM_INTERRUPTED: 'AI_STREAM_INTERRUPTED',
   AI_CONTEXT_TOO_LARGE: 'AI_CONTEXT_TOO_LARGE',
+  /** HTTP 402：账户余额不足（DeepSeek 等供应商返回） */
+  AI_BALANCE_INSUFFICIENT: 'AI_BALANCE_INSUFFICIENT',
+
+  // ── IM 渠道 ───────────────────────────────────────
+  /** 渠道未配置 token（keychain 无凭证） */
+  IM_CHANNEL_NOT_CONFIGURED: 'IM_CHANNEL_NOT_CONFIGURED',
+  /** 渠道 token 无效（getMe 等校验失败） */
+  IM_CHANNEL_INVALID_TOKEN: 'IM_CHANNEL_INVALID_TOKEN',
+  /** 渠道未实现（骨架占位） */
+  IM_CHANNEL_NOT_IMPLEMENTED: 'IM_CHANNEL_NOT_IMPLEMENTED',
+  /** 渠道 API 请求失败（网络/HTTP 错误） */
+  IM_CHANNEL_REQUEST_FAILED: 'IM_CHANNEL_REQUEST_FAILED',
 
   // ── 文件系统 ──────────────────────────────────────
   FS_READ_FAILED: 'FS_READ_FAILED',
@@ -111,6 +123,33 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   AI_CONTEXT_TOO_LARGE: {
     userMessage: '上下文过长，请精简对话',
     retryable: false,
+    severity: 'warn',
+  },
+  AI_BALANCE_INSUFFICIENT: {
+    userMessage: '账户余额不足，请充值后重试',
+    retryable: false,
+    severity: 'warn',
+  },
+
+  // IM 渠道
+  IM_CHANNEL_NOT_CONFIGURED: {
+    userMessage: 'IM 渠道未配置凭证',
+    retryable: false,
+    severity: 'warn',
+  },
+  IM_CHANNEL_INVALID_TOKEN: {
+    userMessage: 'IM 渠道凭证无效',
+    retryable: false,
+    severity: 'warn',
+  },
+  IM_CHANNEL_NOT_IMPLEMENTED: {
+    userMessage: 'IM 渠道待接入',
+    retryable: false,
+    severity: 'info',
+  },
+  IM_CHANNEL_REQUEST_FAILED: {
+    userMessage: 'IM 渠道请求失败',
+    retryable: true,
     severity: 'warn',
   },
 

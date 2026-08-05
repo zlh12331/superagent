@@ -50,14 +50,20 @@ const { autoUpdater } = electronUpdater;
 
 import { resetConfigCache } from './config';
 import { AgentService, type IAgentService } from './infra/ai/agent-service';
-import { resetAIProvider } from './infra/ai/ai-provider';
+import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/ai-provider';
 import type { IChatService } from './infra/ai/chat-service';
 import { getChatService, resetChatService } from './infra/ai/chat-service';
+import { CommandClassifier } from './infra/ai/command-classifier';
+import { GoalJudge } from './infra/ai/goal-judge';
+import { GoalService } from './infra/ai/goal-service';
+import type { LlmClient } from './infra/ai/llm-client';
 import { type IMCPService, MCPService } from './infra/ai/mcp';
+import { MemoryService } from './infra/ai/memory-service';
 import type { IPermissionService } from './infra/ai/permission-service';
 import { PermissionService } from './infra/ai/permission-service';
 import type { IPromptService } from './infra/ai/prompt/prompt-service';
 import { PromptService } from './infra/ai/prompt/prompt-service';
+import { initSubagentManager } from './infra/ai/subagent-manager';
 import type { IToolExecutor } from './infra/ai/tool-executor';
 import { ToolExecutor } from './infra/ai/tool-executor';
 import type { IToolRegistry } from './infra/ai/tool-registry';
@@ -69,8 +75,12 @@ import type { IFileService } from './infra/file/file-service';
 import { getFileService, resetFileService } from './infra/file/file-service';
 import type { IGitService } from './infra/git/git-service';
 import { getGitService, resetGitService } from './infra/git/git-service';
+import { ImAgentBridge } from './infra/im/im-agent-bridge';
+import { ImService } from './infra/im/im-service';
+import { LspServerManager } from './infra/lsp/lsp-server-manager';
 import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
+import { readApprovalModeSync } from './infra/storage/approval-pref';
 import { closeDb, resetDb } from './infra/storage/db';
 import type { ISessionService } from './infra/storage/session-service';
 import { getSessionService, resetSessionService } from './infra/storage/session-service';
@@ -109,7 +119,8 @@ class ServiceContainer {
    */
   getChatService(): IChatService {
     if (this.chatService === null) {
-      this.chatService = getChatService();
+      // 注入 sessionService（usage 落库）+ llmClient（标题生成），与 AgentService 对齐
+      this.chatService = getChatService(this.getSessionService(), llmClient);
     }
     return this.chatService;
   }
@@ -249,6 +260,8 @@ class ServiceContainer {
         this.getSearchService(),
         this.getTerminalService(),
         this.getGitService(),
+        this.getMemoryService(),
+        this.getLspManager(),
       );
       this.toolRegistry = registry;
     }
@@ -271,7 +284,9 @@ class ServiceContainer {
    */
   getPermissionService(): IPermissionService {
     if (this.permissionService === null) {
-      this.permissionService = new PermissionService();
+      this.permissionService = new PermissionService(new CommandClassifier(this.getLlmClient()));
+      // 启动时应用持久化审批模式（approval-pref.json，默认 ask）
+      this.permissionService.setApprovalMode(readApprovalModeSync());
     }
     return this.permissionService;
   }
@@ -385,9 +400,116 @@ class ServiceContainer {
         this.getToolExecutor(),
         this.getPromptService(),
         this.getSessionService(),
+        this.getLlmClient(),
       );
     }
     return this.agentService;
+  }
+
+  /**
+   * 初始化子代理管理器（run_subagent 工具依赖；幂等）
+   */
+  initSubagents(): void {
+    if (!this.subagentsInitialized) {
+      initSubagentManager(this.getAgentService());
+      this.subagentsInitialized = true;
+    }
+  }
+
+  /**
+   * 获取记忆服务（延迟初始化）
+   */
+  getMemoryService(): MemoryService {
+    if (this.memoryService === null) {
+      this.memoryService = new MemoryService(this.getLlmClient());
+    }
+    return this.memoryService;
+  }
+  /**
+   * 获取 LSP 服务器管理器（懒加载：首次工具调用才创建）
+   */
+  getLspManager(): LspServerManager {
+    if (this.lspManager === null) {
+      this.lspManager = new LspServerManager();
+    }
+    return this.lspManager;
+  }
+
+  /**
+   * 获取会话目标服务（延迟初始化 + 挂载回合监听）
+   */
+  getGoalService(): GoalService {
+    if (this.goalService === null) {
+      this.goalService = new GoalService(
+        this.getAgentService(),
+        new GoalJudge(this.getLlmClient()),
+      );
+      this.goalService.mount();
+    }
+    return this.goalService;
+  }
+
+  /**
+   * IM 渠道服务实例（模块单例，与 handler 共享）
+   */
+  private imService: ImService | null = null;
+  /** IM → Agent 桥接实例（挂载后订阅渠道消息） */
+  private imBridge: ImAgentBridge | null = null;
+  /** 会话目标服务实例（挂载回合监听 + handler 注入） */
+  private goalService: GoalService | null = null;
+  /** 记忆服务实例（提取/召回 + handler 注入） */
+  private memoryService: MemoryService | null = null;
+  private lspManager: LspServerManager | null = null;
+  /** 子代理管理器（已初始化标记） */
+  private subagentsInitialized = false;
+
+  /**
+   * 获取 IM 渠道服务（延迟初始化）
+   */
+  getImService(): ImService {
+    if (this.imService === null) {
+      this.imService = new ImService();
+      // 挂载 IM → Agent 桥接（无头执行；审批模式受控）
+      this.imBridge = new ImAgentBridge(
+        this.imService,
+        this.getAgentService(),
+        this.getPermissionService(),
+        this.getSessionService(),
+      );
+      this.imBridge.mount();
+    }
+    return this.imService;
+  }
+
+  /**
+   * 初始化 IM 渠道（应用启动时调用）：已配置渠道自动连接
+   */
+  async initImChannels(): Promise<void> {
+    await this.getImService().restore();
+  }
+
+  /**
+   * 释放 IM 渠道（应用退出）
+   */
+  async disposeImChannels(): Promise<void> {
+    await this.getImService().stopAll();
+    this.imService = null;
+    this.imBridge = null;
+  }
+
+  /**
+   * 重置 IM 渠道（仅测试用）
+   */
+  resetImChannels(): void {
+    this.imService = null;
+    this.imBridge = null;
+  }
+
+  /**
+   * LLM 客户端（标题生成 / 结构化输出等 side query）
+   */
+  private getLlmClient(): LlmClient {
+    return llmClient;
   }
 
   /**
@@ -578,6 +700,9 @@ class ServiceContainer {
    * ```
    */
   async dispose(): Promise<void> {
+    await this.lspManager?.disposeAll();
+    this.lspManager = null;
+
     logger.info({}, '开始清理应用服务');
 
     // 1. 优雅关闭 ChatService（P3-10：中断 + 等待 stream 真正完成）
@@ -741,6 +866,15 @@ class ServiceContainer {
 
 /** 应用级单例 ServiceContainer */
 export const serviceContainer = new ServiceContainer();
+
+/**
+ * 启动时加载运行时模型（自定义模型注册到 ModelRegistry）
+ *
+ * 在 LLM 首次调用前调用（index.ts 启动流程中，与 recoverFromCrash 同阶段）。
+ */
+export async function initRuntimeModels(): Promise<void> {
+  await runtimeModelStore.loadAll();
+}
 
 /**
  * 崩溃恢复（启动时调用）

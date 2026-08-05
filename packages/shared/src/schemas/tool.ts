@@ -31,7 +31,7 @@ import { z } from 'zod';
  * - 'auto' → toolApproval 返回 'approved'
  * - 'ask'  → toolApproval 返回 'user-approval'
  */
-export const ToolPermissionSchema = z.enum(['auto', 'ask']);
+export const ToolPermissionSchema = z.enum(['auto', 'ask', 'deny']);
 
 /** 工具权限级别 TypeScript 类型（z.infer 派生） */
 export type ToolPermission = z.infer<typeof ToolPermissionSchema>;

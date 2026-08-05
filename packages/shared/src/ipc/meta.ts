@@ -46,6 +46,7 @@ export const IPC_META = {
     subscribeToolCall: event('agent:tool:call'),
     subscribeToolResult: event('agent:tool:result'),
     subscribeApprovalRequest: event('agent:approval:request'),
+    subscribeTurnEvent: event('agent:turn:event'),
   },
 
   session: {
@@ -56,6 +57,10 @@ export const IPC_META = {
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
     exportAll: request('session:exportAll'),
+    getUsageSummary: request('session:getUsageSummary'),
+    getTurns: request('session:getTurns'),
+    getRecentTurns: request('session:getRecentTurns'),
+    getTurnMessages: request('session:getTurnMessages'),
   },
 
   file: {
@@ -113,10 +118,40 @@ export const IPC_META = {
     deleteApiKey: request('settings:deleteApiKey'),
     getTelemetryLevel: request('settings:getTelemetryLevel'),
     setTelemetryLevel: request('settings:setTelemetryLevel'),
+    getApprovalMode: request('settings:getApprovalMode'),
+    setApprovalMode: request('settings:setApprovalMode'),
+    addRuntimeModel: request('settings:addRuntimeModel'),
+    removeRuntimeModel: request('settings:removeRuntimeModel'),
+    listRuntimeModels: request('settings:listRuntimeModels'),
   },
 
   system: {
     getStatus: request('system:getStatus'),
+  },
+
+  memory: {
+    list: request('memory:list'),
+    clear: request('memory:clear'),
+  },
+
+  task: {
+    list: request('task:list'),
+  },
+
+  skill: {
+    list: request('skill:list'),
+  },
+
+  goal: {
+    create: request('goal:create'),
+    list: request('goal:list'),
+    clear: request('goal:clear'),
+  },
+
+  im: {
+    list: request('im:list'),
+    start: request('im:start'),
+    stop: request('im:stop'),
   },
 
   logs: {

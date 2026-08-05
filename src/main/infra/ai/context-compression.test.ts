@@ -3,8 +3,16 @@
 
 import type { ModelMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
-
-import { compressByTokenBudget, compressContext, estimateTokenCount } from './context-compression';
+import {
+  compressByTokenBudget,
+  compressContext,
+  estimateMessagesTokens,
+  estimateTokenCount,
+  getCompactionBudget,
+  getCompactionDecision,
+  getTokenBudgetDecision,
+  MIN_COMPACTION_BUDGET,
+} from './context-compression';
 
 /** 构造消息辅助 */
 const user = (content: string): ModelMessage => ({ role: 'user', content });
@@ -156,5 +164,81 @@ describe('compressContext', () => {
     expect(result[0]?.role).toBe('system');
     // 结果非空
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe('压缩服务化（窗口感知预算 + 阈值判定）', () => {
+  describe('getCompactionBudget', () => {
+    it('大窗口：75% 窗口 − 20K 预留', () => {
+      // 1M 窗口：750K − 20K = 730K
+      expect(getCompactionBudget(1_000_000)).toBe(730_000);
+    });
+
+    it('小窗口：预留缩水（min(20K, 5%×window)）', () => {
+      // 32K 窗口：24K − 1.6K = 22.4K
+      expect(getCompactionBudget(32_000)).toBe(22_400);
+    });
+
+    it('极小窗口：下限 MIN_COMPACTION_BUDGET 保护', () => {
+      // 8K 窗口：6K − 0.4K = 5.6K < 8K → 8K
+      expect(getCompactionBudget(8_000)).toBe(MIN_COMPACTION_BUDGET);
+    });
+  });
+
+  describe('estimateMessagesTokens', () => {
+    it('空列表为 0', () => {
+      expect(estimateMessagesTokens([])).toBe(0);
+    });
+
+    it('多消息求和', () => {
+      const messages = [user('hello world'), assistant('你好')];
+      const expected = estimateTokenCount('hello world') + estimateTokenCount('你好');
+      expect(estimateMessagesTokens(messages)).toBe(expected);
+    });
+  });
+
+  describe('getCompactionDecision', () => {
+    const window = 100_000; // warn 缓冲 = 5K
+
+    it('低于 warn 线：ok', () => {
+      // compact 线 = 75K − 5K = 70K；warn 线 = 65K
+      expect(getCompactionDecision(60_000, window)).toBe('ok');
+    });
+
+    it('warn 区：提前提醒（compact 线 − 缓冲）', () => {
+      expect(getCompactionDecision(67_000, window)).toBe('warn');
+    });
+
+    it('达到 compact 线：应压缩', () => {
+      expect(getCompactionDecision(70_000, window)).toBe('compact');
+    });
+  });
+
+  describe('getTokenBudgetDecision（回合级调度）', () => {
+    const Window = 128_000;
+
+    it('ok：上下文安全', () => {
+      const decision = getTokenBudgetDecision(10_000, Window);
+      expect(decision.level).toBe('ok');
+      // 硬上限 = 窗口 − 输出预留（5% × 128K = 6.4K）
+      expect(decision.hardLimit).toBe(Window - 6_400);
+    });
+
+    it('compact：达到压缩线', () => {
+      const compactAt = getCompactionBudget(Window);
+      expect(getTokenBudgetDecision(compactAt, Window).level).toBe('compact');
+    });
+
+    it('over-limit：超出硬上限（窗口 − 输出预留）拒止', () => {
+      const hardLimit = Window - 6_400;
+      const decision = getTokenBudgetDecision(hardLimit + 1, Window);
+      expect(decision.level).toBe('over-limit');
+      expect(decision.hardLimit).toBe(hardLimit);
+    });
+
+    it('窗口边界：恰好等于硬上限不拒止', () => {
+      const hardLimit = Window - 6_400;
+      expect(getTokenBudgetDecision(hardLimit, Window).level).not.toBe('over-limit');
+    });
   });
 });
