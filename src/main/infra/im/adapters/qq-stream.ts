@@ -208,6 +208,14 @@ export class QqStreamReceiver {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   /** 最新事件序列号（心跳携带；官方协议要求） */
   private lastSeq: number | null = null;
+  /** HEARTBEAT_ACK 超时监控（僵尸连接检测） */
+  private ackTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 手动关闭标记（区分主动关闭与意外断线） */
+  private manualClose = false;
+  /** 重连退避延迟（毫秒） */
+  private reconnectDelayMs = 5_000;
+  /** 重连中（防并发重连） */
+  private reconnecting = false;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
 
@@ -238,13 +246,42 @@ export class QqStreamReceiver {
     const gateway = await fetchQqGatewayUrl(accessToken, this.gatewayUrl);
     const ws = new WebSocket(gateway);
     this.ws = ws;
+    this.manualClose = false;
+    // 意外断线（非手动关闭）：自动重连（对齐 qwen 心跳监控/重连语义）
+    ws.addEventListener('close', () => {
+      this.ws = null;
+      this.opened = false;
+      if (this.heartbeatTimer !== null) {
+        clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+      }
+      this.clearAckTimeout();
+      if (!this.manualClose && !this.reconnecting) {
+        this.scheduleReconnect();
+      }
+    });
     await this.handshake(ws, accessToken);
     this.opened = true;
     logger.info({}, 'QQ 长连接已建立（接收就绪）');
   }
 
-  /** 关闭长连接（幂等） */
+  /** 计划重连（固定退避；token 有效则持续重试） */
+  private scheduleReconnect(): void {
+    this.reconnecting = true;
+    logger.warn({ delayMs: this.reconnectDelayMs }, 'QQ 长连接断开，计划重连');
+    setTimeout(() => {
+      this.reconnecting = false;
+      void this.open().catch((err: unknown) => {
+        logger.error({ error: err }, 'QQ 重连失败，再次计划');
+        this.scheduleReconnect();
+      });
+    }, this.reconnectDelayMs);
+  }
+
+  /** 关闭长连接（幂等；手动关闭不触发重连） */
   close(): void {
+    this.manualClose = true;
+    this.clearAckTimeout();
     if (this.heartbeatTimer !== null) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -275,7 +312,9 @@ export class QqStreamReceiver {
         if (frame === null) {
           return;
         }
-        if (frame.op === QqOpCode.HELLO) {
+        if (frame.op === QqOpCode.HEARTBEAT_ACK) {
+          this.clearAckTimeout();
+        } else if (frame.op === QqOpCode.HELLO) {
           const hello = frame.d as { heartbeat_interval?: number } | undefined;
           const interval = hello?.heartbeat_interval ?? 30_000;
           // identify（订阅 C2C + 群 @ 消息）
@@ -307,11 +346,13 @@ export class QqStreamReceiver {
     });
   }
 
-  /** 心跳：Gateway 协议（op1 定期发送） */
+  /** 心跳：Gateway 协议（op1 定期发送 + HEARTBEAT_ACK 超时监控） */
   private startHeartbeat(ws: WebSocket, intervalMs: number): void {
     this.heartbeatTimer = setInterval(() => {
       try {
         ws.send(JSON.stringify({ op: QqOpCode.HEARTBEAT, d: this.lastSeq }));
+        // 发送后武装 ack 超时（2 倍心跳周期；超时判定僵尸连接 → 强制断开触发重连）
+        this.armAckTimeout(ws, intervalMs * 2);
       } catch {
         // 连接关闭时停止心跳
         if (this.heartbeatTimer !== null) {
@@ -320,6 +361,30 @@ export class QqStreamReceiver {
         }
       }
     }, intervalMs);
+  }
+
+  /** 武装 HEARTBEAT_ACK 超时监控 */
+  private armAckTimeout(ws: WebSocket, timeoutMs: number): void {
+    this.clearAckTimeout();
+    this.ackTimeoutTimer = setTimeout(() => {
+      if (this.manualClose) {
+        return;
+      }
+      logger.warn({ timeoutMs }, 'QQ HEARTBEAT_ACK 超时，判定僵尸连接，强制断开');
+      try {
+        ws.close();
+      } catch {
+        // close 事件触发重连
+      }
+    }, timeoutMs);
+  }
+
+  /** 清除 ack 超时监控 */
+  private clearAckTimeout(): void {
+    if (this.ackTimeoutTimer !== null) {
+      clearTimeout(this.ackTimeoutTimer);
+      this.ackTimeoutTimer = null;
+    }
   }
 
   /** 事件分发：记录序列号 + 解析转发 */

@@ -1,8 +1,11 @@
 // src/main/ipc/im.handler.test.ts
 // im.handler 单测：渠道列表/启停（真实 ImService + fake 适配器 + electron 外壳）
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ChannelKind, IChannelInfo } from '@code-agent/shared/main';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ChannelIncomingMessage,
   ChannelTarget,
@@ -10,6 +13,9 @@ import type {
 } from '../infra/im/channel/types';
 import { ImService } from '../infra/im/im-service';
 import { createImHandlers } from './im.handler';
+
+/** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */
+const TEMP_DIR = mkdtempSync(join(tmpdir(), 'im-handler-test-'));
 
 // mock electron：safeStorage（keychain 依赖）+ app
 vi.mock('electron', () => ({
@@ -19,7 +25,7 @@ vi.mock('electron', () => ({
     decryptString: vi.fn((b: Buffer) => b.toString('utf8').replace(/^enc:/, '')),
   },
   app: {
-    getPath: vi.fn(() => '/tmp/im-test'),
+    getPath: vi.fn((name: string) => (name === 'userData' ? TEMP_DIR : `/tmp/${name}`)),
     isPackaged: false,
   },
 }));
@@ -70,6 +76,10 @@ describe('im.handler', () => {
 
   afterEach(async () => {
     // 清理 keychain 残留（真实文件可能写入 tmp）
+  });
+
+  afterAll(() => {
+    rmSync(TEMP_DIR, { recursive: true, force: true });
   });
 
   it('list：返回渠道状态列表', async () => {
