@@ -20,6 +20,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 
 import { getAppConfig } from '../../../config';
+// 单一真源：默认模型 / 默认供应商由模型领域层定义（避免双源维护路由分裂）
+import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
 import type {
   ProviderDefinition,
   ProviderFactory,
@@ -42,35 +44,50 @@ export function toKeychainKey(kind: ProviderKind): string {
 }
 
 /**
+ * 供应商在 AI SDK 中的 provider name（providerOptions 键）
+ *
+ * 约定收敛点：createOpenAICompatible({ name: 'deepseek' }) / 官方 SDK
+ * 默认 name 均与 ProviderKind 同名。LlmClient 构造 providerOptions 时
+ * 必须经此函数取键，禁止直接硬编码 kind——未来工厂改名只改这里。
+ */
+export function getProviderName(kind: ProviderKind): string {
+  return kind;
+}
+
+/**
  * 内置供应商定义表
  *
- * isDefault 标记默认路由目标（当前为 deepseek，保持向后兼容）。
+ * defaultModel / isDefault 均从模型领域层单一真源派生
+ * （DEFAULT_MODEL_BY_KIND / DEFAULT_KIND），避免双源维护。
  */
 const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
   {
     kind: 'deepseek',
     displayName: 'DeepSeek',
-    defaultModel: 'deepseek-chat',
+    defaultModel: DEFAULT_MODEL_BY_KIND.deepseek,
     requiresApiKey: true,
-    isDefault: true,
+    isDefault: DEFAULT_KIND === 'deepseek',
   },
   {
     kind: 'openai',
     displayName: 'OpenAI',
-    defaultModel: 'gpt-4o',
+    defaultModel: DEFAULT_MODEL_BY_KIND.openai,
     requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'openai',
   },
   {
     kind: 'anthropic',
     displayName: 'Anthropic Claude',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: DEFAULT_MODEL_BY_KIND.anthropic,
     requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'anthropic',
   },
   {
     kind: 'ollama',
     displayName: 'Ollama (Local)',
-    defaultModel: 'qwen2.5-coder:7b',
+    defaultModel: DEFAULT_MODEL_BY_KIND.ollama,
     requiresApiKey: false,
+    isDefault: DEFAULT_KIND === 'ollama',
   },
 ];
 
@@ -82,37 +99,79 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
  * 支持自托管网关 / 代理场景；新增供应商时同步扩展 config 的 ProviderBaseUrlSchema。
  */
 const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
-  deepseek: ({ apiKey }) => {
-    const baseUrl = getAppConfig().providers.deepseek;
+  deepseek: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
     return createOpenAICompatible({
       name: 'deepseek',
-      baseURL: `${baseUrl}/v1`,
+      baseURL: `${resolvedBaseUrl}/v1`,
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段（ollama 等本地场景）
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      // DeepSeek 深度适配（官方文档 https://api-docs.deepseek.com/zh-cn/）：
+      // 1. transformRequestBody：思考模式显式开启（v4 默认开启，此处兜底确保语义明确）
+      // 2. convertUsage：DeepSeek 非标准 usage 字段（prompt_cache_hit_tokens /
+      //    prompt_cache_miss_tokens，KV cache 计费）映射为 AI SDK 标准
+      //    inputTokens.cacheRead / noCache
+      transformRequestBody: (args) => ({
+        ...args,
+        // noPropertyAccessFromIndexSignature：Record 类型属性需方括号访问
+        ...(args['thinking'] === undefined ? { thinking: { type: 'enabled' as const } } : {}),
+      }),
+      convertUsage: (usage) => {
+        // DeepSeek 非标准 usage 字段（loose schema 透传）：
+        // 统一经宽松 Record 方括号访问（snake_case 字段名规避命名规范）
+        const raw = usage as Record<string, unknown> | null | undefined;
+        const promptDetails = (raw?.['prompt_tokens_details'] ?? {}) as Record<string, unknown>;
+        const completionDetails = (raw?.['completion_tokens_details'] ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const promptCacheHit =
+          (raw?.['prompt_cache_hit_tokens'] as number | undefined) ??
+          (promptDetails['cached_tokens'] as number | undefined) ??
+          0;
+        const promptCacheMiss =
+          (raw?.['prompt_cache_miss_tokens'] as number | undefined) ??
+          ((raw?.['prompt_tokens'] as number | undefined) ?? 0) - promptCacheHit;
+        return {
+          inputTokens: {
+            total: (raw?.['prompt_tokens'] as number | undefined) ?? 0,
+            noCache: promptCacheMiss,
+            cacheRead: promptCacheHit,
+            // DeepSeek 无 cache write 概念（KV cache 自动构建）
+            cacheWrite: 0,
+          },
+          outputTokens: {
+            total: (raw?.['completion_tokens'] as number | undefined) ?? 0,
+            text: undefined,
+            // null → undefined（LanguageModelV4Usage 不接受 null）
+            reasoning: (completionDetails['reasoning_tokens'] as number | undefined) ?? undefined,
+          },
+        };
+      },
     }) as unknown as (modelId: string) => LanguageModel;
   },
-  openai: ({ apiKey }) => {
-    const baseUrl = getAppConfig().providers.openai;
+  openai: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openai;
     return createOpenAI({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: `${baseUrl}/v1`,
+      baseURL: `${resolvedBaseUrl}/v1`,
     }) as unknown as (modelId: string) => LanguageModel;
   },
-  anthropic: ({ apiKey }) => {
-    const baseUrl = getAppConfig().providers.anthropic;
+  anthropic: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.anthropic;
     return createAnthropic({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: baseUrl,
+      baseURL: resolvedBaseUrl,
     }) as unknown as (modelId: string) => LanguageModel;
   },
-  ollama: () => {
-    const baseUrl = getAppConfig().providers.ollama;
+  ollama: ({ baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.ollama;
     return createOpenAICompatible({
       name: 'ollama',
-      baseURL: `${baseUrl}/v1`,
+      baseURL: `${resolvedBaseUrl}/v1`,
       apiKey: 'ollama',
       includeUsage: false,
     }) as unknown as (modelId: string) => LanguageModel;
@@ -180,6 +239,7 @@ export class ProviderRegistry {
     kind: ProviderKind,
     context: {
       readonly apiKey: string | undefined;
+      readonly baseUrl?: string;
     },
   ): (modelId: string) => LanguageModel {
     const entry = this.providers.get(kind);

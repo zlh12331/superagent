@@ -39,6 +39,7 @@ export function createWriteFileTool(fileService: IFileService): Tool<WriteFileIn
       '写入文件内容（UTF-8 文本）。默认覆盖写入，可通过 append=true 追加到文件末尾。会修改文件系统，需用户审批后执行。路径可相对工作目录或绝对路径（必须在工作目录内）。',
     inputSchema: WriteFileInputSchema,
     permission: 'ask',
+    category: 'edit',
     execute: async (input: WriteFileInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
 

@@ -46,6 +46,7 @@ export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
       '在文件内容中搜索匹配（基于 ripgrep）。支持正则与字面量两种模式，可指定文件名 glob 过滤和排除规则。返回匹配行、行号、列号及前后 2 行上下文。路径可相对工作目录或绝对路径（必须在工作目录内）。',
     inputSchema: GrepInputSchema,
     permission: 'auto',
+    category: 'read',
     execute: async (input: GrepInput, ctx: ToolContext): Promise<ToolResult> => {
       const resolvedPaths =
         input.paths.length > 0

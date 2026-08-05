@@ -21,7 +21,7 @@ import type {
   RegisteredProvider,
 } from './types';
 
-export { ProviderRegistry, toKeychainKey } from './registry';
+export { getProviderName, ProviderRegistry, toKeychainKey } from './registry';
 export { PROVIDER_KINDS } from './types';
 export type {
   ProviderCreateContext,

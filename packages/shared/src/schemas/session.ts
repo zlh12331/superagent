@@ -116,6 +116,101 @@ export interface SessionCreateRes {
   readonly sessionId: string;
 }
 
+/**
+ * 单模型用量汇总（session:getUsageSummary 响应 byModel 条目）
+ */
+export interface UsageModelSummary {
+  readonly modelId: string;
+  /** 调用次数 */
+  readonly calls: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+  /** KV cache 命中 token（DeepSeek 计费优化可见性） */
+  readonly cacheReadTokens: number;
+  /** 思维链 token（reasoning 模型） */
+  readonly reasoningTokens: number;
+}
+
+/**
+ * 按日用量条目（session:getUsageSummary 响应 byDay）
+ */
+export interface UsageDaySummary {
+  /** 日期（YYYY-MM-DD，本地时区） */
+  readonly date: string;
+  readonly calls: number;
+  readonly totalTokens: number;
+}
+
+/**
+ * session:getUsageSummary 响应 payload（设置页用量统计）
+ */
+export interface UsageSummaryRes {
+  /** 总量汇总 */
+  readonly total: {
+    readonly calls: number;
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalTokens: number;
+  };
+  /** 按模型分组 */
+  readonly byModel: readonly UsageModelSummary[];
+  /** 按日分组（近 30 天，倒序） */
+  readonly byDay: readonly UsageDaySummary[];
+}
+
+/**
+ * 回合摘要（session:getTurns 响应条目，Transcript 查询结果）
+ */
+export interface TurnSummary {
+  /** 回合唯一 id（关联 TurnEvent.turnId） */
+  readonly turnId: string;
+  /** 回合序号（会话内递增） */
+  readonly seq: number;
+  readonly modelId: string;
+  /** 终止原因 */
+  readonly status: 'completed' | 'aborted' | 'max-steps' | 'error';
+  readonly inputTokens: number | undefined;
+  readonly outputTokens: number | undefined;
+  readonly totalTokens: number | undefined;
+  /** 回合总耗时（毫秒） */
+  readonly durationMs: number | undefined;
+  readonly createdAt: number;
+}
+
+/**
+ * 回合终止原因 → 展示文案映射（渲染层用）
+ */
+export type TurnStatusText = Record<TurnSummary['status'], string>;
+
+/**
+ * session:getTurns 响应 payload（回合级查询）
+ */
+export interface SessionGetTurnsRes {
+  readonly sessionId: string;
+  /** 按 seq 升序的回合列表 */
+  readonly turns: readonly TurnSummary[];
+}
+
+/** session:getTurns 入参 zod schema */
+export const SessionGetTurnsReqSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+/**
+ * session:getRecentTurns 响应 payload（设置页回合记录展示）
+ */
+export interface SessionRecentTurnsRes {
+  /** 按 createdAt 倒序的最近回合（跨会话） */
+  readonly turns: readonly (TurnSummary & { readonly sessionId: string })[];
+}
+
+/** session:getRecentTurns 入参 zod schema */
+export const SessionGetRecentTurnsReqSchema = z.object({
+  // 返回条数上限（默认 10，上限 50）
+  limit: z.number().int().positive().max(50).default(10),
+});
+
 /** session:listRecentDirs 入参 zod schema */
 export const SessionListRecentDirsReqSchema = z.object({
   // 返回条数上限（默认 10，上限 50）
@@ -133,4 +228,17 @@ export interface RecentDir {
 /** session:listRecentDirs 响应 payload */
 export interface SessionListRecentDirsRes {
   readonly dirs: readonly RecentDir[];
+}
+
+/**
+ * session:getTurnMessages 入参 zod schema（Transcript 消息级明细）
+ */
+export const SessionGetTurnMessagesReqSchema = z.object({
+  /** 回合 id（turns.turn_id） */
+  turnId: z.string().min(1).max(64),
+});
+
+/** session:getTurnMessages 响应 payload（该回合消息明细，按 seq 升序） */
+export interface SessionGetTurnMessagesRes {
+  readonly messages: readonly unknown[];
 }

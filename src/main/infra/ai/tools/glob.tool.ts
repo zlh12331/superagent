@@ -34,6 +34,7 @@ export function createGlobTool(searchService: ISearchService): Tool<GlobInput> {
       '按 glob 模式匹配文件路径（不读取内容），用于按文件名查找。基于 ripgrep --files 实现，默认遵守 .gitignore。返回匹配的文件绝对路径数组。路径可相对工作目录或绝对路径（必须在工作目录内）。',
     inputSchema: GlobInputSchema,
     permission: 'auto',
+    category: 'read',
     execute: async (input: GlobInput, ctx: ToolContext): Promise<ToolResult> => {
       const rawPath = input.path ?? '.';
       const absPath = resolveWithinWorkspace(rawPath, ctx.workingDir);

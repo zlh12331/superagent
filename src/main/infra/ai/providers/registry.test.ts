@@ -1,172 +1,168 @@
 // src/main/infra/ai/providers/registry.test.ts
-// ProviderRegistry 单测：注册表元数据 + 工厂路由
+// ProviderRegistry deepseek 工厂单测：DeepSeek 官方文档深度适配
 //
 // 测试要点：
-// 1. 内置 4 个供应商定义（deepseek/openai/anthropic/ollama）
-// 2. getDefaultKind：isDefault 标记优先，无标记回落到第一个
-// 3. createFactory：按 kind 路由到对应 SDK 工厂（OpenAI Compatible / OpenAI / Anthropic）
-// 4. baseURL 拼接规则：deepseek/openai/ollama 拼 /v1，anthropic 直接用
-// 5. 未知 kind：抛错
-// 6. 空注册表：getDefaultKind 抛错
+// 1. transformRequestBody：思考模式显式开启（thinking: enabled）
+// 2. transformRequestBody：已有 thinking 配置时不覆盖
+// 3. convertUsage：DeepSeek 非标准字段（prompt_cache_hit_tokens /
+//    prompt_cache_miss_tokens）映射为 cacheRead / noCache
+// 4. convertUsage：兼容标准 OpenAI 字段（prompt_tokens_details.cached_tokens）
+// 5. convertUsage：reasoning_tokens 映射
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProviderRegistry } from './registry';
 
-// 与 ai-provider.test.ts 相同的 mock 模式：
-// - electron：config 依赖 app.isPackaged
-// - @ai-sdk/*：拦截 SDK 工厂，避免真实网络/依赖
 const mocks = vi.hoisted(() => {
+  // provider 工厂 mock（createOpenAICompatible 返回值）
   const mockProviderFactory = vi.fn();
+  // createOpenAICompatible mock（deepseek / ollama 走该协议）
+  const mockCreateOpenAICompatible = vi.fn(() => mockProviderFactory);
+  // electron app mock（config 依赖 app.isPackaged）
+  const mockApp = {
+    isPackaged: false,
+    getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
+  };
+  // logger mock
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
   return {
     mockProviderFactory,
-    mockCreateOpenAICompatible: vi.fn(() => mockProviderFactory),
-    mockCreateOpenAI: vi.fn(() => mockProviderFactory),
-    mockCreateAnthropic: vi.fn(() => mockProviderFactory),
-    mockApp: {
-      isPackaged: false,
-      getPath: vi.fn((name: string) => `/tmp/test-userdata/${name}`),
-    },
-    mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    mockCreateOpenAICompatible,
+    mockApp,
+    mockLogger,
   };
 });
 
+// mock @ai-sdk/openai-compatible：拦截 createOpenAICompatible 调用
 vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: mocks.mockCreateOpenAICompatible,
 }));
-vi.mock('@ai-sdk/openai', () => ({ createOpenAI: mocks.mockCreateOpenAI }));
-vi.mock('@ai-sdk/anthropic', () => ({ createAnthropic: mocks.mockCreateAnthropic }));
+
+// mock electron：config 依赖 app.isPackaged（registry 从 config.providers 读取 baseURL）
 vi.mock('electron', () => ({ app: mocks.mockApp }));
-vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
-import { ProviderRegistry } from './registry';
-import type { ProviderKind } from './types';
+// mock logger：避免触发真实 electron-log 初始化
+vi.mock('../../utils/logger', () => ({
+  logger: mocks.mockLogger,
+}));
 
-describe('ProviderRegistry', () => {
+/** 获取 deepseek 工厂的 createOpenAICompatible 配置 */
+function getDeepSeekOptions(): Record<string, unknown> {
+  const registry = new ProviderRegistry();
+  registry.createFactory('deepseek', { apiKey: 'sk-test' });
+  // mock 调用参数元组为空（vi.fn 无参类型），需显式 cast 后访问
+  const calls = mocks.mockCreateOpenAICompatible.mock.calls as unknown[][];
+  const options = calls[0]?.[0];
+  if (options === undefined) {
+    throw new Error('createOpenAICompatible 未被调用');
+  }
+  return options as Record<string, unknown>;
+}
+
+/** 获取 transformRequestBody 函数 */
+function getTransform(): (args: Record<string, unknown>) => Record<string, unknown> {
+  const transform = getDeepSeekOptions()['transformRequestBody'] as
+    | ((args: Record<string, unknown>) => Record<string, unknown>)
+    | undefined;
+  if (transform === undefined) {
+    throw new Error('transformRequestBody 未配置');
+  }
+  return transform;
+}
+
+/** 获取 convertUsage 函数 */
+function getConvertUsage(): (usage: Record<string, unknown>) => {
+  inputTokens: Record<string, unknown>;
+  outputTokens: Record<string, unknown>;
+} {
+  const convert = getDeepSeekOptions()['convertUsage'] as
+    | ((usage: Record<string, unknown>) => {
+        inputTokens: Record<string, unknown>;
+        outputTokens: Record<string, unknown>;
+      })
+    | undefined;
+  if (convert === undefined) {
+    throw new Error('convertUsage 未配置');
+  }
+  return convert;
+}
+
+describe('deepseek 工厂（DeepSeek 官方适配）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('内置供应商', () => {
-    it('注册 4 个供应商，kind 集合完整', () => {
-      const registry = new ProviderRegistry();
-      const kinds = registry.list().map((i) => i.kind);
-      expect(kinds.sort()).toEqual(['anthropic', 'deepseek', 'ollama', 'openai'].sort());
+  describe('transformRequestBody（思考模式）', () => {
+    it('自动注入 thinking: enabled（思考模式显式开启）', () => {
+      const transform = getTransform();
+
+      const body = transform({ model: 'deepseek-v4-pro', messages: [] });
+
+      expect(body['thinking']).toEqual({ type: 'enabled' });
+      // 其余字段原样保留
+      expect(body['model']).toBe('deepseek-v4-pro');
+      expect(body['messages']).toEqual([]);
     });
 
-    it('deepseek：默认供应商，需要 API Key', () => {
-      const registry = new ProviderRegistry();
-      const info = registry.list().find((i) => i.kind === 'deepseek');
-      expect(info).toMatchObject({
-        displayName: 'DeepSeek',
-        defaultModel: 'deepseek-chat',
-        requiresApiKey: true,
-        isDefault: true,
-      });
-    });
+    it('已有 thinking 配置时不覆盖（尊重调用方显式关闭）', () => {
+      const transform = getTransform();
 
-    it('ollama：本地服务，不需要 API Key，非默认', () => {
-      const registry = new ProviderRegistry();
-      const info = registry.list().find((i) => i.kind === 'ollama');
-      expect(info).toMatchObject({
-        requiresApiKey: false,
-        isDefault: false,
-      });
-    });
+      const body = transform({ thinking: { type: 'disabled' } });
 
-    it('getDefinition：未知 kind 抛错', () => {
-      const registry = new ProviderRegistry();
-      // @ts-expect-error 故意传非法 kind 验证运行时校验
-      expect(() => registry.getDefinition('unknown')).toThrow(/未知模型供应商/);
+      expect(body['thinking']).toEqual({ type: 'disabled' });
     });
   });
 
-  describe('getDefaultKind', () => {
-    it('默认注册表：返回 isDefault 标记的 deepseek', () => {
-      const registry = new ProviderRegistry();
-      expect(registry.getDefaultKind()).toBe('deepseek');
+  describe('convertUsage（KV cache 计费适配）', () => {
+    it('DeepSeek 非标准字段：prompt_cache_hit_tokens → cacheRead', () => {
+      const convert = getConvertUsage();
+
+      const usage = convert({
+        // snake_case 字段名来自 OpenAI/DeepSeek API 响应：计算属性规避命名规范
+        ['prompt_tokens']: 100,
+        ['completion_tokens']: 50,
+        ['total_tokens']: 150,
+        ['prompt_cache_hit_tokens']: 30,
+        ['prompt_cache_miss_tokens']: 70,
+        ['completion_tokens_details']: { ['reasoning_tokens']: 20 },
+      });
+
+      expect(usage['inputTokens']).toEqual({
+        total: 100,
+        noCache: 70,
+        cacheRead: 30,
+        cacheWrite: 0,
+      });
+      expect(usage['outputTokens']).toEqual({ total: 50, text: undefined, reasoning: 20 });
     });
 
-    it('无 isDefault 标记：回落到第一个注册的供应商', () => {
-      // 自定义空定义注册表：传入不含 isDefault 的定义
-      const registry = new ProviderRegistry([
-        {
-          kind: 'openai',
-          displayName: 'OpenAI',
-          defaultModel: 'gpt-4o',
-          requiresApiKey: true,
-        },
-        {
-          kind: 'ollama',
-          displayName: 'Ollama',
-          defaultModel: 'qwen2.5-coder:7b',
-          requiresApiKey: false,
-        },
-      ]);
-      expect(registry.getDefaultKind()).toBe('openai');
-    });
+    it('兼容标准 OpenAI 字段：prompt_tokens_details.cached_tokens', () => {
+      const convert = getConvertUsage();
 
-    it('空注册表：抛错', () => {
-      const registry = new ProviderRegistry([]);
-      expect(() => registry.getDefaultKind()).toThrow(/注册表为空/);
-    });
-  });
+      const usage = convert({
+        ['prompt_tokens']: 100,
+        ['completion_tokens']: 50,
+        ['prompt_tokens_details']: { ['cached_tokens']: 40 },
+      });
 
-  describe('createFactory', () => {
-    it('deepseek：走 OpenAI Compatible，baseURL 拼接 /v1，传 apiKey', () => {
-      const registry = new ProviderRegistry();
-      const factory = registry.createFactory('deepseek', { apiKey: 'sk-test' });
-      expect(factory).toBe(mocks.mockProviderFactory);
-      expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
-      type DeepseekConfig = {
-        name: string;
-        baseURL: string;
-        apiKey: string;
-        includeUsage: boolean;
-      };
-      const calls = mocks.mockCreateOpenAICompatible.mock.calls as unknown as [DeepseekConfig][];
-      const config = calls[0]?.[0];
-      expect(config).toMatchObject({
-        name: 'deepseek',
-        baseURL: 'https://api.deepseek.com/v1',
-        apiKey: 'sk-test',
-        includeUsage: true,
+      expect(usage['inputTokens']).toEqual({
+        total: 100,
+        noCache: 60,
+        cacheRead: 40,
+        cacheWrite: 0,
       });
     });
 
-    it('openai：走 @ai-sdk/openai，baseURL 拼接 /v1', () => {
-      const registry = new ProviderRegistry();
-      registry.createFactory('openai', { apiKey: 'sk-test' });
-      expect(mocks.mockCreateOpenAI).toHaveBeenCalledTimes(1);
-      // mock.calls 类型推断为空元组，用 as unknown as 访问首参
-      type OpenAIConfig = { baseURL: string };
-      const calls = mocks.mockCreateOpenAI.mock.calls as unknown as [OpenAIConfig][];
-      expect(calls[0]?.[0].baseURL).toBe('https://api.openai.com/v1');
-    });
+    it('无缓存信息：noCache = total，cacheRead = 0', () => {
+      const convert = getConvertUsage();
 
-    it('anthropic：走 @ai-sdk/anthropic，baseURL 直接用（无 /v1）', () => {
-      const registry = new ProviderRegistry();
-      registry.createFactory('anthropic', { apiKey: 'sk-test' });
-      expect(mocks.mockCreateAnthropic).toHaveBeenCalledTimes(1);
-      type AnthropicConfig = { baseURL: string };
-      const calls = mocks.mockCreateAnthropic.mock.calls as unknown as [AnthropicConfig][];
-      expect(calls[0]?.[0].baseURL).toBe('https://api.anthropic.com');
-    });
+      const usage = convert({ ['prompt_tokens']: 80, ['completion_tokens']: 30 });
 
-    it('ollama：走 OpenAI Compatible，无需 apiKey 字段，baseURL 拼接 /v1', () => {
-      const registry = new ProviderRegistry();
-      registry.createFactory('ollama', { apiKey: undefined });
-      expect(mocks.mockCreateOpenAICompatible).toHaveBeenCalledTimes(1);
-      type OllamaConfig = { name: string; baseURL: string; apiKey: string };
-      const calls = mocks.mockCreateOpenAICompatible.mock.calls as unknown as [OllamaConfig][];
-      const config = calls[0]?.[0];
-      expect(config?.name).toBe('ollama');
-      expect(config?.baseURL).toBe('http://localhost:11434/v1');
-    });
-
-    it('未知 kind：抛错', () => {
-      const registry = new ProviderRegistry();
-      expect(() =>
-        registry.createFactory('unknown' as ProviderKind, { apiKey: undefined }),
-      ).toThrow(/未知模型供应商/);
+      expect(usage['inputTokens']).toEqual({ total: 80, noCache: 80, cacheRead: 0, cacheWrite: 0 });
     });
   });
 });

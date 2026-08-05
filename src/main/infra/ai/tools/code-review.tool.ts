@@ -34,6 +34,7 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
       '读取文件内容并准备代码审查。读取指定文件的完整内容，供后续分析代码质量、潜在问题、安全性漏洞、性能优化建议等。路径可相对工作目录或绝对路径（必须在工作目录内）。',
     inputSchema: CodeReviewInputSchema,
     permission: 'auto',
+    category: 'read',
     execute: async (input: CodeReviewInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
 

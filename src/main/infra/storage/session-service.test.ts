@@ -229,4 +229,248 @@ describe('SessionService', () => {
       expect(detail.session.lastMessage).toBeUndefined();
     });
   });
+
+  describe('recordUsage / getUsageSummary（token 用量统计）', () => {
+    it('记录后：getUsageSummary 按总量/模型/日聚合', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\proj',
+        title: undefined,
+        messages: undefined,
+      });
+
+      await service.recordUsage({
+        sessionId,
+        modelId: 'deepseek-v4-flash',
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        cacheReadTokens: 30,
+        reasoningTokens: 20,
+      });
+      await service.recordUsage({
+        sessionId,
+        modelId: 'deepseek-v4-flash',
+        inputTokens: 200,
+        outputTokens: 100,
+        totalTokens: 300,
+        cacheReadTokens: undefined,
+        reasoningTokens: undefined,
+      });
+
+      const summary = await service.getUsageSummary();
+
+      // 总量：2 次调用
+      expect(summary.total).toEqual({
+        calls: 2,
+        inputTokens: 300,
+        outputTokens: 150,
+        totalTokens: 450,
+      });
+      // 按模型聚合
+      expect(summary.byModel).toHaveLength(1);
+      expect(summary.byModel[0]).toMatchObject({
+        modelId: 'deepseek-v4-flash',
+        calls: 2,
+        totalTokens: 450,
+        cacheReadTokens: 30,
+        reasoningTokens: 20,
+      });
+      // 按日聚合（当天日期）
+      const today = new Date();
+      const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      expect(summary.byDay).toHaveLength(1);
+      expect(summary.byDay[0]).toEqual({ date, calls: 2, totalTokens: 450 });
+    });
+
+    it('无记录：返回空汇总', async () => {
+      const summary = await service.getUsageSummary();
+      expect(summary.total.calls).toBe(0);
+      expect(summary.byModel).toHaveLength(0);
+      expect(summary.byDay).toHaveLength(0);
+    });
+
+    it('多模型：按模型分组汇总', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\proj',
+        title: undefined,
+        messages: undefined,
+      });
+
+      await service.recordUsage({
+        sessionId,
+        modelId: 'deepseek-v4-flash',
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        cacheReadTokens: undefined,
+        reasoningTokens: undefined,
+      });
+      await service.recordUsage({
+        sessionId,
+        modelId: 'gpt-4o',
+        inputTokens: 20,
+        outputTokens: 10,
+        totalTokens: 30,
+        cacheReadTokens: undefined,
+        reasoningTokens: undefined,
+      });
+
+      const summary = await service.getUsageSummary();
+      expect(summary.byModel).toHaveLength(2);
+      // 按 totalTokens 倒序：gpt-4o(30) 在前
+      expect(summary.byModel[0]?.modelId).toBe('gpt-4o');
+      expect(summary.byModel[1]?.modelId).toBe('deepseek-v4-flash');
+    });
+  });
+
+  describe('recordTurn / getTurns / getRecentTurns（Transcript 回合记录）', () => {
+    it('记录回合后：getTurns 按 seq 升序返回', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\proj',
+        title: undefined,
+        messages: undefined,
+      });
+
+      await service.recordTurn({
+        turnId: 'turn-1',
+        sessionId,
+        seq: 0,
+        modelId: 'deepseek-v4-flash',
+        status: 'completed',
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        durationMs: 2000,
+      });
+      await service.recordTurn({
+        turnId: 'turn-2',
+        sessionId,
+        seq: 1,
+        modelId: 'deepseek-v4-flash',
+        status: 'aborted',
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+        durationMs: 800,
+      });
+
+      const res = await service.getTurns(sessionId);
+      expect(res.sessionId).toBe(sessionId);
+      expect(res.turns).toHaveLength(2);
+      expect(res.turns[0]).toMatchObject({
+        turnId: 'turn-1',
+        seq: 0,
+        modelId: 'deepseek-v4-flash',
+        status: 'completed',
+        totalTokens: 150,
+        durationMs: 2000,
+      });
+      expect(res.turns[1]).toMatchObject({ turnId: 'turn-2', seq: 1, status: 'aborted' });
+      // 可空字段转 undefined
+      expect(res.turns[1]?.totalTokens).toBeUndefined();
+    });
+
+    it('无回合记录：返回空列表', async () => {
+      const res = await service.getTurns('nonexistent');
+      expect(res.turns).toHaveLength(0);
+    });
+
+    it('getRecentTurns：跨会话按 createdAt 倒序 + limit 限制', async () => {
+      const sessionA = await service.create({
+        workingDir: 'D:\\a',
+        title: undefined,
+        messages: undefined,
+      });
+      const sessionB = await service.create({
+        workingDir: 'D:\\b',
+        title: undefined,
+        messages: undefined,
+      });
+
+      await service.recordTurn({
+        turnId: 't-a1',
+        sessionId: sessionA,
+        seq: 0,
+        modelId: 'deepseek-v4-flash',
+        status: 'completed',
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        durationMs: 100,
+      });
+      await service.recordTurn({
+        turnId: 't-b1',
+        sessionId: sessionB,
+        seq: 0,
+        modelId: 'gpt-4o',
+        status: 'error',
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+        durationMs: 50,
+      });
+
+      const res = await service.getRecentTurns({ limit: 10 });
+      expect(res.turns).toHaveLength(2);
+      // 按 createdAt 倒序：后写入的 t-b1 在前
+      expect(res.turns[0]?.turnId).toBe('t-b1');
+      expect(res.turns[0]?.sessionId).toBe(sessionB);
+      expect(res.turns[1]?.turnId).toBe('t-a1');
+
+      const limited = await service.getRecentTurns({ limit: 1 });
+      expect(limited.turns).toHaveLength(1);
+    });
+  });
+
+  describe('getTurnMessages（Transcript 消息级明细）', () => {
+    it('按回合追加消息后：getTurnMessages 按 seq 升序返回该回合消息', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\proj',
+        title: undefined,
+        messages: undefined,
+      });
+
+      await service.appendMessage({
+        sessionId,
+        turnId: 'turn-x',
+        messages: [{ role: 'user', content: '你好' }],
+      });
+      await service.appendMessage({
+        sessionId,
+        turnId: 'turn-x',
+        messages: [{ role: 'assistant', content: '收到' }],
+      });
+      // 其他回合的消息不应混入
+      await service.appendMessage({
+        sessionId,
+        turnId: 'turn-y',
+        messages: [{ role: 'user', content: '另一回合' }],
+      });
+
+      const messages = await service.getTurnMessages('turn-x');
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toEqual({ role: 'user', content: '你好' });
+      expect(messages[1]).toEqual({ role: 'assistant', content: '收到' });
+    });
+
+    it('无归属消息的回合：返回空数组', async () => {
+      expect(await service.getTurnMessages('nonexistent-turn')).toEqual([]);
+    });
+
+    it('未传 turnId 的消息：不归属任何回合（兼容旧数据）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\proj',
+        title: undefined,
+        messages: undefined,
+      });
+      await service.appendMessage({
+        sessionId,
+        messages: [{ role: 'user', content: '旧消息' }],
+      });
+
+      expect(await service.getTurnMessages('anything')).toEqual([]);
+      const session = await service.get(sessionId);
+      expect(session.messages).toHaveLength(1);
+    });
+  });
 });

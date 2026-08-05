@@ -45,6 +45,7 @@ export function createGitPushTool(gitService: IGitService): Tool<GitPushInput> {
       '推送本地提交到远程仓库（git push）。支持设置上游（-u，首次推送使用）和强制推送（--force-with-lease，比 --force 安全）。push 到远程会影响他人，是高风险操作，需用户审批后执行。push 失败（如远程拒绝、网络问题）会返回 ok=false 而非抛错，便于继续对话。',
     inputSchema: GitPushInputSchema,
     permission: 'ask',
+    category: 'edit',
     execute: async (input: GitPushInput, ctx: ToolContext): Promise<ToolResult> => {
       const result = await gitService.push({
         path: ctx.workingDir,

@@ -57,6 +57,12 @@ export interface ProviderDefinition {
 export interface ProviderCreateContext {
   /** API Key（requiresApiKey=false 的供应商可能为 undefined） */
   readonly apiKey: string | undefined;
+  /**
+   * 显式 baseUrl 覆盖（运行时模型快照携带；undefined = 供应商默认端点）
+   *
+   * 触发场景：用户手动配置的自定义 OpenAI-compatible 端点。
+   */
+  readonly baseUrl?: string;
 }
 
 /**

@@ -32,6 +32,7 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
       '列出目录内容（递归深度可控）。返回文件/目录/符号链接列表，含名称、路径、类型、大小、修改时间。路径可相对工作目录或绝对路径（必须在工作目录内）。',
     inputSchema: ListDirectoryInputSchema,
     permission: 'auto',
+    category: 'read',
     execute: async (input: ListDirectoryInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
 

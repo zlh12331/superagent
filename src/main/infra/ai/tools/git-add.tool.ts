@@ -34,6 +34,7 @@ export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
       '将工作区改动暂存到 Git 暂存区（git add）。paths 为空数组时暂存所有改动（git add -A）；指定具体路径时只暂存这些路径。会修改 Git 仓库状态，需用户审批后执行。建议在 commit 前调用此工具暂存改动。',
     inputSchema: GitAddInputSchema,
     permission: 'ask',
+    category: 'edit',
     execute: async (input: GitAddInput, ctx: ToolContext): Promise<ToolResult> => {
       // ctx.workingDir 已是绝对路径，作为 Git 仓库根传给 GitService
       const result = await gitService.add({

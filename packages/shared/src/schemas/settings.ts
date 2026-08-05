@@ -119,3 +119,83 @@ export interface SetTelemetryLevelRes {
   /** 写入后的级别（用于 UI 回显确认） */
   readonly level: TelemetryLevel;
 }
+
+/**
+ * settings:addRuntimeModel 入参 zod schema（自定义模型）
+ */
+export const AddRuntimeModelReqSchema = z.object({
+  // 模型 id（全局唯一，如 custom-coder）
+  modelId: z.string().min(1).max(100),
+  // 所属供应商 kind（决定 SDK 协议）
+  providerKind: ApiKeyProviderSchema,
+  // 显式 baseUrl（覆盖供应商默认端点；可选）
+  baseUrl: z
+    .string()
+    .url()
+    .optional()
+    .transform((v) => v ?? undefined),
+  // 显式 API Key（可选；省略则走 keychain 默认 key）
+  apiKey: z
+    .string()
+    .min(1)
+    .optional()
+    .transform((v) => v ?? undefined),
+});
+
+/** settings:addRuntimeModel 响应 payload */
+export interface AddRuntimeModelRes {
+  readonly ok: boolean;
+}
+
+/** settings:removeRuntimeModel 入参 zod schema */
+export const RemoveRuntimeModelReqSchema = z.object({
+  modelId: z.string().min(1).max(100),
+});
+
+/** settings:removeRuntimeModel 响应 payload */
+export interface RemoveRuntimeModelRes {
+  readonly ok: boolean;
+}
+
+/** 运行时模型列表条目（settings:listRuntimeModels 响应） */
+export interface RuntimeModelInfo {
+  readonly modelId: string;
+  readonly providerKind: ApiKeyProvider;
+  readonly baseUrl: string | undefined;
+  readonly createdAt: number;
+}
+
+/** settings:listRuntimeModels 响应 payload */
+export interface ListRuntimeModelsRes {
+  readonly models: readonly RuntimeModelInfo[];
+}
+
+/**
+ * 工具审批模式（对齐 qwen ApprovalMode 谱系，配置化替代写死两级）
+ *
+ * - plan：只读探索，写工具直接拒绝（Plan/Apply 分离的只读阶段）
+ * - ask：写工具均需用户审批（保守默认）
+ * - auto：工作区编辑自动放行，危险命令（exec 类）仍审批
+ * - yolo：全部自动放行（仅信任环境使用）
+ */
+export const ApprovalModeSchema = z.enum(['plan', 'ask', 'auto', 'yolo']);
+
+/** 工具审批模式 TypeScript 类型 */
+export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
+
+/** settings:getApprovalMode 响应 payload */
+export interface GetApprovalModeRes {
+  readonly mode: ApprovalMode;
+}
+
+/** settings:setApprovalMode 入参 zod schema */
+export const SetApprovalModeReqSchema = z.object({
+  mode: ApprovalModeSchema,
+});
+
+/** settings:setApprovalMode 响应 payload */
+export interface SetApprovalModeRes {
+  readonly ok: boolean;
+  /** 写入后的模式（用�?UI 回显确认） */
+  readonly mode: ApprovalMode;
+}

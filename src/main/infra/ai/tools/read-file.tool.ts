@@ -49,6 +49,7 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
       '读取文件内容（UTF-8 文本）。支持分批读取：通过 offset 和 limit 参数指定起始行和行数。路径可相对工作目录或绝对路径（必须在工作中目录内）。',
     inputSchema: ReadFileInputSchema,
     permission: 'auto',
+    category: 'read',
     execute: async (input: ReadFileInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
 

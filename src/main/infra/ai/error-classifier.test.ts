@@ -60,6 +60,10 @@ describe('classifyError', () => {
     expect(classifyError(createApiError(403, false)).code).toBe(ErrorCode.AI_API_KEY_INVALID);
   });
 
+  it('APICallError 402：→ AI_BALANCE_INSUFFICIENT（账户余额不足）', () => {
+    expect(classifyError(createApiError(402, false)).code).toBe(ErrorCode.AI_BALANCE_INSUFFICIENT);
+  });
+
   it('APICallError 404：→ AI_MODEL_ERROR', () => {
     expect(classifyError(createApiError(404, false)).code).toBe(ErrorCode.AI_MODEL_ERROR);
   });
@@ -88,8 +92,12 @@ describe('classifyError', () => {
     );
   });
 
-  it('APICallError 其他状态码：→ AI_MODEL_ERROR', () => {
+  it('APICallError 422：→ AI_MODEL_ERROR（请求参数错误）', () => {
     expect(classifyError(createApiError(422, false)).code).toBe(ErrorCode.AI_MODEL_ERROR);
+  });
+
+  it('APICallError 其他状态码：→ AI_MODEL_ERROR', () => {
+    expect(classifyError(createApiError(418, false)).code).toBe(ErrorCode.AI_MODEL_ERROR);
   });
 
   it('LoadAPIKeyError：→ AI_API_KEY_MISSING', () => {
@@ -101,6 +109,12 @@ describe('classifyError', () => {
 
   it('TypeError：→ AI_STREAM_INTERRUPTED', () => {
     expect(classifyError(new TypeError('fetch failed')).code).toBe(ErrorCode.AI_STREAM_INTERRUPTED);
+  });
+
+  it('TimeoutError（AbortSignal.timeout）：→ AI_TIMEOUT', () => {
+    // Node 20+ 的 AbortSignal.timeout 超时抛 DOMException TimeoutError
+    const timeoutError = new DOMException('The operation timed out', 'TimeoutError');
+    expect(classifyError(timeoutError).code).toBe(ErrorCode.AI_TIMEOUT);
   });
 
   it('未知错误：→ INTERNAL_ERROR', () => {

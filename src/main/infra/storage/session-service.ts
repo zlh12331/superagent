@@ -29,16 +29,27 @@ import type {
   ChatMessage,
   SessionDeleteRes,
   SessionGetRes,
+  SessionGetTurnsRes,
   SessionListRecentDirsRes,
   SessionListRes,
   SessionMeta,
+  SessionRecentTurnsRes,
   SessionRenameRes,
+  TurnSummary,
+  UsageSummaryRes,
 } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import { count, desc, eq, sql } from 'drizzle-orm';
+import { count, desc, eq, gte, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb } from './db';
-import { type MessageInsert, messages, type SessionInsert, sessions } from './schema';
+import {
+  type MessageInsert,
+  messages,
+  type SessionInsert,
+  sessions,
+  tokenUsage,
+  turns,
+} from './schema';
 
 /**
  * create 方法入参
@@ -77,6 +88,8 @@ export interface SessionAppendMessageOptions {
   readonly sessionId: string;
   /** 要追加的消息数组（按顺序写入，seq 自动递增） */
   readonly messages: readonly ChatMessage[];
+  /** 归属回合 id（Transcript 消息级明细；省略 = 不归属） */
+  readonly turnId?: string;
 }
 
 /**
@@ -126,6 +139,14 @@ export interface ISessionService {
   /** 向指定会话追加消息（seq 自动递增），返回追加后的消息总数 */
   appendMessage(options: SessionAppendMessageOptions): Promise<number>;
 
+  /**
+   * 查询指定回合的消息明细（Transcript 消息级回放）
+   *
+   * @param turnId 回合 id（turns.turn_id）
+   * @returns 该回合的全部消息（按 seq 升序；无归属消息返回空数组）
+   */
+  getTurnMessages(turnId: string): Promise<ChatMessage[]>;
+
   /** 查询最近使用的目录列表（去重 + 按 lastUsed 倒序） */
   listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes>;
 
@@ -141,6 +162,40 @@ export interface ISessionService {
   /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
   exportAll(): Promise<SessionExportPayload>;
 
+  // ── token 用量统计（设置页展示） ──────────────────────────
+
+  /** 记录一次 LLM 调用用量（agent/chat 回合结束时写入一行） */
+  recordUsage(usage: {
+    readonly sessionId: string;
+    readonly modelId: string;
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalTokens: number;
+    readonly cacheReadTokens: number | undefined;
+    readonly reasoningTokens: number | undefined;
+  }): Promise<void>;
+  /** 用量统计汇总（总量 / 按模型 / 按日） */
+  getUsageSummary(): Promise<UsageSummaryRes>;
+
+  // ── Transcript（回合记录，对齐 qwen chatRecordingService） ──────
+
+  /** 记录一个回合（agent:run 结束后写入一行） */
+  recordTurn(turn: {
+    readonly turnId: string;
+    readonly sessionId: string;
+    readonly seq: number;
+    readonly modelId: string;
+    readonly status: 'completed' | 'aborted' | 'max-steps' | 'error';
+    readonly inputTokens: number | undefined;
+    readonly outputTokens: number | undefined;
+    readonly totalTokens: number | undefined;
+    readonly durationMs: number | undefined;
+  }): Promise<void>;
+  /** 查询会话的回合列表（按 seq 升序，Transcript 查询） */
+  getTurns(sessionId: string): Promise<SessionGetTurnsRes>;
+  /** 查询最近回合（跨会话，按 createdAt 倒序，设置页展示） */
+  getRecentTurns(req: { readonly limit: number }): Promise<SessionRecentTurnsRes>;
+
   /** 优雅关闭（无外部资源，db 由 closeDb 在 ServiceContainer.dispose 中关闭） */
   dispose(): Promise<void>;
 }
@@ -151,6 +206,9 @@ export interface ISessionService {
  * 当传入 messages 中无 user 角色消息时使用。
  */
 const DEFAULT_SESSION_TITLE = '新会话';
+
+/** 默认会话标题（AgentService 标题生成判断用，导出供跨模块复用） */
+export { DEFAULT_SESSION_TITLE };
 
 /**
  * 会话标题最大长度（与 SessionRenameReqSchema 一致）
@@ -408,6 +466,8 @@ export class SessionService implements ISessionService {
     const newLastMessage = resolveLastMessagePreview(newMessages);
     const messageInserts: MessageInsert[] = newMessages.map((msg, index) => ({
       sessionId,
+      // exactOptionalPropertyTypes：turnId 未传时条件展开（不写 NULL）
+      ...(options.turnId !== undefined ? { turnId: options.turnId } : {}),
       seq: startSeq + index,
       role: extractRole(msg),
       content: serializeMessage(msg),
@@ -439,6 +499,32 @@ export class SessionService implements ISessionService {
       '追加会话消息',
     );
     return startSeq + newMessages.length;
+  }
+
+  /**
+   * 查询指定回合的消息明细（Transcript 消息级回放）
+   */
+  async getTurnMessages(turnId: string): Promise<ChatMessage[]> {
+    const db = getDb();
+    const rows = db
+      .select()
+      .from(messages)
+      .where(eq(messages.turnId, turnId))
+      .orderBy(messages.seq)
+      .all();
+    // 反序列化 content JSON（与 get 的语义一致：解析失败抛 INTERNAL_ERROR）
+    return rows.map((row) => {
+      try {
+        return JSON.parse(row.content) as ChatMessage;
+      } catch (error) {
+        throw new AppError(
+          ErrorCode.INTERNAL_ERROR,
+          `回合消息 JSON 解析失败（turnId=${turnId}, seq=${row.seq}）`,
+          error,
+          { turnId, seq: row.seq },
+        );
+      }
+    });
   }
 
   /**
@@ -530,9 +616,192 @@ export class SessionService implements ISessionService {
       })),
     };
   }
+
+  /** @inheritDoc */
+  async recordUsage(usage: {
+    readonly sessionId: string;
+    readonly modelId: string;
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalTokens: number;
+    readonly cacheReadTokens: number | undefined;
+    readonly reasoningTokens: number | undefined;
+  }): Promise<void> {
+    const db = getDb();
+    db.insert(tokenUsage)
+      .values({
+        sessionId: usage.sessionId,
+        modelId: usage.modelId,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        // exactOptionalPropertyTypes：可空列 undefined 时条件展开
+        ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+        ...(usage.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
+        createdAt: Date.now(),
+      })
+      .run();
+  }
+
+  /** @inheritDoc */
+  async getUsageSummary(): Promise<UsageSummaryRes> {
+    const db = getDb();
+    // 90 天窗口过滤：设置页只关心近期消耗；全表扫描随数据增长变慢，
+    // 窗口限制保证查询成本有界（token_usage 按日索引命中）
+    const windowStart = Date.now() - USAGE_SUMMARY_WINDOW_MS;
+    const rows = db
+      .select()
+      .from(tokenUsage)
+      .where(gte(tokenUsage.createdAt, windowStart))
+      .orderBy(desc(tokenUsage.createdAt))
+      .all();
+
+    // 总量汇总
+    const total = { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    // 聚合中间态（可变，避免触碰 readonly 接口字段）
+    type MutableModelSummary = {
+      modelId: string;
+      calls: number;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      cacheReadTokens: number;
+      reasoningTokens: number;
+    };
+    type MutableDaySummary = { date: string; calls: number; totalTokens: number };
+    const byModelMap = new Map<string, MutableModelSummary>();
+    const byDayMap = new Map<string, MutableDaySummary>();
+
+    for (const row of rows) {
+      total.calls += 1;
+      total.inputTokens += row.inputTokens;
+      total.outputTokens += row.outputTokens;
+      total.totalTokens += row.totalTokens;
+
+      const model = byModelMap.get(row.modelId) ?? {
+        modelId: row.modelId,
+        calls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        cacheReadTokens: 0,
+        reasoningTokens: 0,
+      };
+      model.calls += 1;
+      model.inputTokens += row.inputTokens;
+      model.outputTokens += row.outputTokens;
+      model.totalTokens += row.totalTokens;
+      model.cacheReadTokens += row.cacheReadTokens ?? 0;
+      model.reasoningTokens += row.reasoningTokens ?? 0;
+      byModelMap.set(row.modelId, model);
+
+      const date = formatLocalDate(row.createdAt);
+      const day = byDayMap.get(date) ?? { date, calls: 0, totalTokens: 0 };
+      day.calls += 1;
+      day.totalTokens += row.totalTokens;
+      byDayMap.set(date, day);
+    }
+
+    // 按模型用量倒序、按日倒序（近 30 天）
+    const byModel = [...byModelMap.values()].sort((a, b) => b.totalTokens - a.totalTokens);
+    const byDay = [...byDayMap.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 30);
+
+    return { total, byModel, byDay };
+  }
+
+  /** @inheritDoc */
+  async recordTurn(turn: {
+    readonly turnId: string;
+    readonly sessionId: string;
+    readonly seq: number;
+    readonly modelId: string;
+    readonly status: 'completed' | 'aborted' | 'max-steps' | 'error';
+    readonly inputTokens: number | undefined;
+    readonly outputTokens: number | undefined;
+    readonly totalTokens: number | undefined;
+    readonly durationMs: number | undefined;
+  }): Promise<void> {
+    const db = getDb();
+    db.insert(turns)
+      .values({
+        turnId: turn.turnId,
+        sessionId: turn.sessionId,
+        seq: turn.seq,
+        modelId: turn.modelId,
+        status: turn.status,
+        // exactOptionalPropertyTypes：可空列 undefined 时条件展开
+        ...(turn.inputTokens !== undefined ? { inputTokens: turn.inputTokens } : {}),
+        ...(turn.outputTokens !== undefined ? { outputTokens: turn.outputTokens } : {}),
+        ...(turn.totalTokens !== undefined ? { totalTokens: turn.totalTokens } : {}),
+        ...(turn.durationMs !== undefined ? { durationMs: turn.durationMs } : {}),
+        createdAt: Date.now(),
+      })
+      .run();
+  }
+
+  /** @inheritDoc */
+  async getTurns(sessionId: string): Promise<SessionGetTurnsRes> {
+    const db = getDb();
+    const rows = db
+      .select()
+      .from(turns)
+      .where(eq(turns.sessionId, sessionId))
+      .orderBy(turns.seq)
+      .all();
+    const summaries: TurnSummary[] = rows.map((row) => ({
+      turnId: row.turnId,
+      seq: row.seq,
+      modelId: row.modelId,
+      status: row.status as TurnSummary['status'],
+      inputTokens: row.inputTokens ?? undefined,
+      outputTokens: row.outputTokens ?? undefined,
+      totalTokens: row.totalTokens ?? undefined,
+      durationMs: row.durationMs ?? undefined,
+      createdAt: row.createdAt,
+    }));
+    return { sessionId, turns: summaries };
+  }
+
+  /** @inheritDoc */
+  async getRecentTurns(req: { readonly limit: number }): Promise<SessionRecentTurnsRes> {
+    const db = getDb();
+    // createdAt 同毫秒时按 id 倒序兑底（后写入的排前），保证排序稳定
+    const rows = db
+      .select()
+      .from(turns)
+      .orderBy(desc(turns.createdAt), desc(turns.id))
+      .limit(req.limit)
+      .all();
+    const summaries = rows.map((row) => ({
+      turnId: row.turnId,
+      sessionId: row.sessionId,
+      seq: row.seq,
+      modelId: row.modelId,
+      status: row.status as TurnSummary['status'],
+      inputTokens: row.inputTokens ?? undefined,
+      outputTokens: row.outputTokens ?? undefined,
+      totalTokens: row.totalTokens ?? undefined,
+      durationMs: row.durationMs ?? undefined,
+      createdAt: row.createdAt,
+    }));
+    return { turns: summaries };
+  }
 }
 
 // ─── 辅助函数（模块私有，不导出） ──────────────────────────────
+
+/** 用量统计窗口（90 天）：查询成本有界 + 关注近期消耗 */
+const USAGE_SUMMARY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * 时间戳 → 本地时区日期（YYYY-MM-DD，用量按日聚合用）
+ */
+function formatLocalDate(timestamp: number): string {
+  const d = new Date(timestamp);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
 
 /**
  * 将 SessionRow 转换为 SessionMeta（IPC 响应类型）

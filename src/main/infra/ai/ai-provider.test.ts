@@ -216,7 +216,7 @@ describe('ai-provider', () => {
   });
 
   describe('getModel', () => {
-    it('默认 modelId：使用供应商默认模型（deepseek-chat）', async () => {
+    it('默认 modelId：使用供应商默认模型（deepseek-v4-flash）', async () => {
       // getAIProvider 返回 mock 的 vi.fn()，但类型是工厂函数
       // 需要 cast 为 Mock 才能调用 mockClear
       const providerFactory = (await getAIProvider()) as unknown as Mock;
@@ -226,7 +226,7 @@ describe('ai-provider', () => {
       const model = await getModel();
 
       // 应使用供应商定义中的默认模型 id 调用 provider 工厂
-      expect(providerFactory).toHaveBeenCalledWith('deepseek-chat');
+      expect(providerFactory).toHaveBeenCalledWith('deepseek-v4-flash');
       // 返回值就是 provider 工厂的返回值
       expect(model).toBe(mocks.mockProviderFactory());
     });
@@ -284,7 +284,7 @@ describe('ai-provider', () => {
       expect(deepseek).toMatchObject({
         kind: 'deepseek',
         displayName: 'DeepSeek',
-        defaultModel: 'deepseek-chat',
+        defaultModel: 'deepseek-v4-flash',
         requiresApiKey: true,
         isDefault: true,
       });

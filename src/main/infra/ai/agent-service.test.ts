@@ -123,12 +123,29 @@ function createMockWebContents(overrides?: { isDestroyed?: boolean }): MockedWeb
 
 /**
  * 等待所有微任务/异步任务完成
+ *
+ * 迭代次数需覆盖 TurnRunner 的完整链路（每次 read 含 Promise.race + finally，
+ * 3 次 read + completeTurn 约需 20+ 个微任务 tick）。
  */
 async function flushAsync(): Promise<void> {
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 30; i++) {
     // eslint-disable-next-line no-await-in-loop -- 测试需要顺序刷新微任务队列
     await Promise.resolve();
   }
+}
+
+/**
+ * 回合事件通道的 send 调用（agent:turn:event 独立断言）
+ */
+function getTurnEventCalls(wc: MockedWebContents): unknown[][] {
+  return wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_TURN_EVENT);
+}
+
+/**
+ * 非回合事件通道的 send 调用（原有流/工具/审批通道断言用）
+ */
+function getNonTurnCalls(wc: MockedWebContents): unknown[][] {
+  return wc.send.mock.calls.filter((c) => c[0] !== IPC_CHANNELS.AGENT_TURN_EVENT);
 }
 
 /**
@@ -204,6 +221,12 @@ describe('agent-service', () => {
     create: vi.fn(),
     appendMessage: vi.fn(),
     listRecentDirs: vi.fn(),
+    recordUsage: vi.fn(async () => {}),
+    getUsageSummary: vi.fn(),
+    recordTurn: vi.fn(async () => {}),
+    getTurns: vi.fn(async () => ({ sessionId: '', turns: [] })),
+    getRecentTurns: vi.fn(async () => ({ turns: [] })),
+    getTurnMessages: vi.fn(async () => []),
     dispose: vi.fn(),
   };
 
@@ -236,11 +259,12 @@ describe('agent-service', () => {
       });
 
       expect(sessionId).toBe('test-session-id');
-      expect(mocks.mockRandomUUID).toHaveBeenCalledTimes(1);
+      // randomUUID 调用 2 次：sessionId + 回合 turnId（回合事件系统）
+      expect(mocks.mockRandomUUID).toHaveBeenCalledTimes(2);
       expect(mocks.mockStreamText).toHaveBeenCalledTimes(1);
     });
 
-    it('传入 sessionId：复用不生成新 id', async () => {
+    it('传入 sessionId：复用不生成新 id（仅生成回合 turnId）', async () => {
       const wc = createMockWebContents();
       const sessionId = await service.startAgent({
         messages: [{ role: 'user', content: '帮我读文件' }],
@@ -252,7 +276,8 @@ describe('agent-service', () => {
       });
 
       expect(sessionId).toBe('custom-agent-id');
-      expect(mocks.mockRandomUUID).not.toHaveBeenCalled();
+      // 会话 id 复用，但每个回合仍生成独立 turnId
+      expect(mocks.mockRandomUUID).toHaveBeenCalledTimes(1);
     });
 
     it('mode=plan：ToolContext.mode 透传为 plan（写操作会被 ToolExecutor 拒绝）', async () => {
@@ -370,17 +395,18 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 应该推送 2 个 part + 1 个 end
-      expect(wc.send).toHaveBeenCalledTimes(3);
+      // 非回合通道：2 个 part + 1 个 end；回合通道：turn-start + turn-end
+      expect(getNonTurnCalls(wc)).toHaveLength(3);
+      expect(getTurnEventCalls(wc)).toHaveLength(2);
 
-      const firstCall = wc.send.mock.calls[0];
+      const firstCall = getNonTurnCalls(wc)[0];
       if (!firstCall) throw new Error('webContents.send 未被调用');
       expect(firstCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_PART);
       const partPayload = firstCall[1] as { sessionId: string; part: unknown };
       expect(partPayload.sessionId).toBe('session-1');
       expect(partPayload.part).toEqual({ type: 'text', text: 'hello' });
 
-      const lastCall = wc.send.mock.calls[2];
+      const lastCall = getNonTurnCalls(wc)[2];
       if (!lastCall) throw new Error('最后一个 webContents.send 不存在');
       expect(lastCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
       expect(lastCall[1]).toEqual({ sessionId: 'session-1', reason: 'completed' });
@@ -430,9 +456,11 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 应该只调用一次 send：AGENT_STREAM_END
-      expect(wc.send).toHaveBeenCalledTimes(1);
-      const call = wc.send.mock.calls[0];
+      // 非回合通道：仅 AGENT_STREAM_END（aborted）
+      // 回合通道：仅 turn-end（组装阶段中断，TurnRunner 未运行故无 turn-start）
+      expect(getNonTurnCalls(wc)).toHaveLength(1);
+      expect(getTurnEventCalls(wc)).toHaveLength(1);
+      const call = getNonTurnCalls(wc)[0];
       if (!call) throw new Error('webContents.send 未被调用');
       expect(call[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
       expect(call[1]).toEqual({ sessionId: 'session-abort', reason: 'aborted' });
@@ -465,8 +493,8 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      expect(wc.send).toHaveBeenCalledTimes(1);
-      const call = wc.send.mock.calls[0];
+      expect(getNonTurnCalls(wc)).toHaveLength(1);
+      const call = getNonTurnCalls(wc)[0];
       if (!call) throw new Error('webContents.send 未被调用');
       expect(call[0]).toBe(IPC_CHANNELS.AGENT_STREAM_ERROR);
       const payload = call[1] as { sessionId: string; code: string; message: string };
@@ -498,10 +526,49 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      const call = wc.send.mock.calls[0];
+      const call = getNonTurnCalls(wc)[0];
       if (!call) throw new Error('webContents.send 未被调用');
       const payload = call[1] as { code: string };
       expect(payload.code).toBe('AI_RATE_LIMITED');
+    });
+
+    it('流空闲超时（无 chunk 超过阈值）：中断并推送 AI_TIMEOUT', async () => {
+      vi.useFakeTimers();
+      try {
+        const wc = createMockWebContents();
+        // 永不推送数据的死流（pull 不 enqueue）
+        const pendingStream = new ReadableStream({
+          pull() {
+            // 故意不调用 controller.enqueue / close，read() 永久挂起
+          },
+        });
+        mocks.mockStreamText.mockReturnValue({
+          toUIMessageStream: () => pendingStream,
+        });
+
+        await service.startAgent({
+          messages: [{ role: 'user', content: '帮我读文件' }],
+          sessionId: 'session-idle-timeout',
+          workingDir: '/tmp/project',
+          systemPrompt: '你是 Code Agent',
+          maxSteps: 20,
+          webContents: wc,
+        });
+
+        // 推进超过空闲超时阈值（600s）
+        await vi.advanceTimersByTimeAsync(600_001);
+        await flushAsync();
+
+        // 中断流后推送 AGENT_STREAM_ERROR（AI_TIMEOUT）
+        const errorCalls = wc.send.mock.calls.filter(
+          (c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR,
+        );
+        expect(errorCalls.length).toBeGreaterThan(0);
+        const payload = errorCalls[0]?.[1] as { code: string } | undefined;
+        expect(payload?.code).toBe('AI_TIMEOUT');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -533,6 +600,7 @@ describe('agent-service', () => {
       expect(ctxArg).toEqual({
         workingDir: '/tmp/project',
         sessionId: 'session-tool',
+        userPrompt: '帮我读文件',
         webContents: expect.objectContaining({
           send: expect.any(Function),
           isDestroyed: expect.any(Function),
@@ -579,7 +647,12 @@ describe('agent-service', () => {
             },
           }),
       });
-      mocks.mockRandomUUID.mockReturnValueOnce('session-a').mockReturnValueOnce('session-b');
+      // 每个会话消耗 2 个 UUID：sessionId + 回合 turnId
+      mocks.mockRandomUUID
+        .mockReturnValueOnce('session-a')
+        .mockReturnValueOnce('turn-a')
+        .mockReturnValueOnce('session-b')
+        .mockReturnValueOnce('turn-b');
 
       await service.startAgent({
         messages: [{ role: 'user', content: 'a' }],

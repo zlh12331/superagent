@@ -39,6 +39,7 @@ export function createGitCommitTool(gitService: IGitService): Tool<GitCommitInpu
       '提交暂存区改动到本地仓库（git commit -m <message>）。注意：本工具不会自动 git add，调用前应先调用 git_add 暂存改动。amend=true 时执行 git commit --amend -m <message>（覆盖上次提交）。创建新提交是不可逆操作，需用户审批后执行。',
     inputSchema: GitCommitInputSchema,
     permission: 'ask',
+    category: 'edit',
     execute: async (input: GitCommitInput, ctx: ToolContext): Promise<ToolResult> => {
       const result = await gitService.commit({
         path: ctx.workingDir,

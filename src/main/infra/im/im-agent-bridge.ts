@@ -1,0 +1,267 @@
+// src/main/infra/im/im-agent-bridge.ts
+// IM 消息 → Agent 回合桥接（无头执行，安全受控）
+// ──────────────────────────────────────────────────────────────
+// 职责：
+// - 入站 IM 消息 → agent 回合（复用 AgentService.startAgent 无头模式）
+// - 回合事件（TEXT_DELTA / TOOL_RESULT / turn-end）→ 渠道回发
+// - 会话映射：`${channel}:${chatId}` → sessionId（内存 Map，首次消息自动建会话）
+// - Transcript 落库：回合结束把 user + assistant 消息写入会话历史（带 turnId 关联）
+//
+// 安全设计（对齐"远程执行默认保守"）：
+// - 仅 approvalMode 为 auto / yolo 时执行（ask/plan 无审批通道，回发提示）
+// - 同一 chatId 串行执行：执行中收到的消息回发"正在处理"提示
+// - 工作目录：默认用户主目录（无窗口工作区概念），后续可配置
+//
+// 依赖注入：imService（回发）/ agentService（执行）/ permissionService（模式检查）/ sessionService（落库）
+// ──────────────────────────────────────────────────────────────
+
+import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { TurnEventType } from '@code-agent/shared/main';
+import { logger } from '../../utils/logger';
+import type { IAgentService } from '../ai/agent-service';
+import type { IPermissionService } from '../ai/permission-service';
+import type { ISessionService } from '../storage/session-service';
+import type { ChannelIncomingMessage } from './channel/types';
+import type { ImService } from './im-service';
+
+/** 会话映射 key：`${channel}:${chatId}` */
+function sessionKey(channel: string, chatId: string): string {
+  return `${channel}:${chatId}`;
+}
+
+/** IM 渠道 agent 的默认工作目录（用户主目录；IM 无窗口工作区概念） */
+export const IM_DEFAULT_WORKING_DIR = homedir();
+
+/**
+ * IM 消息 → Agent 桥接（模块单例，由 ServiceContainer 初始化挂载）
+ */
+export class ImAgentBridge {
+  /** 会话映射：`${channel}:${chatId}` → sessionId（重启后由消息重新建立） */
+  private readonly sessionMap = new Map<string, string>();
+  /** 正在执行的 chatId 集合（串行控制） */
+  private readonly busyChats = new Set<string>();
+  /** 桥接是否已挂载（防重复 onMessage 订阅） */
+  private mounted = false;
+
+  constructor(
+    private readonly imService: ImService,
+    private readonly agentService: IAgentService,
+    private readonly permissionService: IPermissionService,
+    private readonly sessionService: ISessionService,
+  ) {}
+
+  /**
+   * 挂载桥接到 im-service 的消息入口（ServiceContainer 初始化调用，幂等）
+   */
+  mount(): void {
+    if (this.mounted) {
+      return;
+    }
+    this.mounted = true;
+    this.imService.onMessage((message) => {
+      void this.handleMessage(message);
+    });
+    logger.info({}, 'IM → Agent 桥接已挂载');
+  }
+
+  /**
+   * 处理单条入站消息（串行 + 模式检查 + 回合执行）
+   */
+  private async handleMessage(message: ChannelIncomingMessage): Promise<void> {
+    const key = sessionKey(message.channel, message.chatId);
+
+    // 1. 串行控制：同一会话执行中，新消息提示排队
+    if (this.busyChats.has(key)) {
+      await this.imService.send(
+        message.channel,
+        message.chatId,
+        '⏳ 上一个任务仍在执行中，请稍候…',
+      );
+      return;
+    }
+
+    // 2. 审批模式检查：仅 auto/yolo 允许无头执行（ask/plan 无审批通道）
+    const mode = this.permissionService.getApprovalMode();
+    if (mode !== 'auto' && mode !== 'yolo') {
+      await this.imService.send(
+        message.channel,
+        message.chatId,
+        `⚠️ 当前审批模式为 ${mode}，无头执行需要 auto 或 yolo 模式。\n请在桌面端设置 → 工具审批模式中切换。`,
+      );
+      return;
+    }
+
+    // 3. 建立/复用会话（首次消息：落库创建，标题标记 IM 渠道来源）
+    let sessionId = this.sessionMap.get(key);
+    if (sessionId === undefined) {
+      sessionId = randomUUID();
+      try {
+        await this.sessionService.create({
+          workingDir: IM_DEFAULT_WORKING_DIR,
+          title: `IM:${message.channel}:${message.chatId}`,
+          messages: undefined,
+        });
+      } catch (err: unknown) {
+        // 会话创建失败不阻断执行（仅影响落库）
+        logger.warn({ error: err }, 'IM 会话创建失败');
+      }
+      this.sessionMap.set(key, sessionId);
+    }
+
+    // 4. 执行回合（无头：不传 webContents）
+    this.busyChats.add(key);
+    try {
+      await this.runTurn(message, sessionId);
+    } catch (err: unknown) {
+      logger.error({ channel: message.channel, chatId: message.chatId, error: err }, 'IM 回合失败');
+      await this.imService.send(message.channel, message.chatId, '❌ 执行异常，请查看桌面端日志。');
+    } finally {
+      this.busyChats.delete(key);
+    }
+  }
+
+  /**
+   * 执行单回合：startAgent（无 webContents）→ 回合事件 → 渠道回发
+   */
+  private async runTurn(message: ChannelIncomingMessage, sessionId: string): Promise<void> {
+    const { channel, chatId } = message;
+
+    // 回发缓冲：TEXT_DELTA 累积后按句回发（减少消息频率）
+    let pendingText = '';
+    // 回合完整文本（与回发缓冲分离：flush 清空 pendingText 不影响落库）
+    let assistantText = '';
+    let lastFlushAt = 0;
+    const FLUSH_INTERVAL_MS = 800;
+    const flush = async (): Promise<void> => {
+      if (pendingText.length === 0) {
+        return;
+      }
+      const text = pendingText;
+      pendingText = '';
+      await this.imService.send(channel, chatId, text);
+    };
+
+    // 回合事件订阅：增量文本 / 工具摘要 / 结束汇总 / 落库
+    const turnEvents: string[] = [];
+    let currentTurnId: string | undefined;
+    let completionResolve: (() => void) | undefined;
+    const unsubscribe = this.agentService.onTurnEvent((event) => {
+      try {
+        switch (event.type) {
+          case TurnEventType.TURN_START: {
+            // 捕获回合 id（Transcript 落库关联）
+            currentTurnId = event.turnId;
+            break;
+          }
+          case TurnEventType.TEXT_DELTA: {
+            pendingText += event.text;
+            assistantText += event.text;
+            const now = Date.now();
+            if (now - lastFlushAt >= FLUSH_INTERVAL_MS) {
+              lastFlushAt = now;
+              void flush();
+            }
+            break;
+          }
+          case TurnEventType.TOOL_CALL: {
+            turnEvents.push(`🔧 ${event.toolName}`);
+            break;
+          }
+          case TurnEventType.ERROR: {
+            turnEvents.push(`❌ ${event.message}`);
+            break;
+          }
+          case TurnEventType.TURN_END: {
+            // Transcript 落库：user + assistant 消息（带 turnId 关联）
+            // 用独立累积的 assistantText（回发缓冲可能已被 flush 清空）
+            void this.persistTurnMessages(sessionId, currentTurnId, message.text, assistantText);
+            if (pendingText.length > 0) {
+              void flush();
+            }
+            const reasonText: Record<string, string> = {
+              completed: '✅ 完成',
+              aborted: '⏹ 已中断',
+              'max-steps': '🔁 达步数上限',
+              error: '❌ 异常结束',
+            };
+            const summary = [
+              reasonText[event.reason] ?? event.reason,
+              ...turnEvents,
+              event.usage !== undefined
+                ? `Tokens: ${event.usage.totalTokens ?? event.usage.inputTokens ?? 0}`
+                : '',
+            ]
+              .filter((line) => line.length > 0)
+              .join('\n');
+            void this.imService.send(channel, chatId, summary);
+            completionResolve?.();
+            break;
+          }
+          default:
+            break;
+        }
+      } catch (err: unknown) {
+        logger.error({ error: err }, 'IM 回合事件处理异常');
+      }
+    });
+
+    try {
+      // 开始执行（无头）：startAgent 立即返回，回合完成由 TURN_END 事件驱动
+      const completion = new Promise<void>((resolve) => {
+        completionResolve = resolve;
+        // 安全兜底：30 分钟超时（流空闲超时已 10 分钟，兜底更长）
+        setTimeout(
+          () => {
+            completionResolve = undefined;
+            resolve();
+          },
+          30 * 60 * 1000,
+        );
+      });
+
+      await this.agentService.startAgent({
+        messages: [{ role: 'user', content: message.text }],
+        sessionId,
+        workingDir: IM_DEFAULT_WORKING_DIR,
+        systemPrompt: undefined,
+        maxSteps: 20,
+        // 无头：不传 webContents（推送跳过；exec 工具拒绝、edit 按 auto 快速路径放行）
+      });
+
+      // 等待回合结束事件（或超时兜底）
+      await completion;
+    } finally {
+      unsubscribe();
+    }
+  }
+
+  /**
+   * 回合消息落库（Transcript）：user + assistant 写入会话历史
+   *
+   * 失败静默（不影响主流程）；assistant 文本为空（纯工具回合）时仅落 user 消息。
+   */
+  private async persistTurnMessages(
+    sessionId: string,
+    turnId: string | undefined,
+    userText: string,
+    assistantText: string,
+  ): Promise<void> {
+    try {
+      const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+        { role: 'user', content: userText },
+      ];
+      if (assistantText.trim().length > 0) {
+        messages.push({ role: 'assistant', content: assistantText });
+      }
+      await this.sessionService.appendMessage({
+        sessionId,
+        // exactOptionalPropertyTypes：turnId 未捕获时条件展开
+        ...(turnId !== undefined ? { turnId } : {}),
+        messages,
+      });
+    } catch (err: unknown) {
+      logger.warn({ sessionId, error: err }, 'IM 回合消息落库失败');
+    }
+  }
+}

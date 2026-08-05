@@ -57,7 +57,12 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
       '创建和管理交互式终端会话。支持创建终端、输入命令、读取输出、调整尺寸、终止终端等操作。终端输出会实时推送到前端面板。注意：终端可以执行任意系统命令，属于高风险操作，需用户审批后执行。',
     inputSchema: TerminalActionSchema,
     permission: 'ask',
+    category: 'exec',
     execute: async (input: TerminalInput, ctx: ToolContext): Promise<ToolResult> => {
+      // 无头场景（IM 桥接等）拒绝：终端输出推送依赖桌面窗口
+      if (ctx.webContents === undefined) {
+        return { title: '终端不可用', output: '终端工具需要桌面窗口，无头执行不支持。' };
+      }
       switch (input.action) {
         case 'create': {
           const cwd =
@@ -70,6 +75,7 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
             env: undefined,
             cols: input.cols,
             rows: input.rows,
+            // 守卫后已收窄为非空，直接传递
             webContents: ctx.webContents,
           });
           const title = input.command ?? 'shell';

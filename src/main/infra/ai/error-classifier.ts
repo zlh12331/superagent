@@ -72,12 +72,18 @@ export function classifyError(error: unknown): AppError {
     return new AppError(ErrorCode.AI_API_KEY_MISSING, 'API Key 未配置', error);
   }
 
-  // 4. Node.js 原生 fetch 失败（未被 AI SDK 包装的边缘情况）
+  // 4. AbortSignal.timeout 触发的超时（Node 20+ DOMException TimeoutError）
+  //    识别 name 而非类型（不同运行时的 TimeoutError 实现不同）
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return new AppError(ErrorCode.AI_TIMEOUT, 'AI 调用超时', error);
+  }
+
+  // 5. Node.js 原生 fetch 失败（未被 AI SDK 包装的边缘情况）
   if (error instanceof TypeError) {
     return new AppError(ErrorCode.AI_STREAM_INTERRUPTED, '网络连接中断', error);
   }
 
-  // 5. 兜底：未知错误
+  // 6. 兜底：未知错误
   return new AppError(ErrorCode.INTERNAL_ERROR, 'AI 调用失败', error);
 }
 
@@ -95,6 +101,11 @@ function classifyAPICallError(error: APICallError): AppError {
     return new AppError(ErrorCode.AI_API_KEY_INVALID, 'API Key 无效或已过期', error);
   }
 
+  // 402：账户余额不足（DeepSeek 官方错误码）
+  if (statusCode === 402) {
+    return new AppError(ErrorCode.AI_BALANCE_INSUFFICIENT, '账户余额不足', error);
+  }
+
   // 404：模型不存在（用户配置的 modelId 错误）
   if (statusCode === 404) {
     return new AppError(ErrorCode.AI_MODEL_ERROR, 'AI 模型不存在', error);
@@ -108,6 +119,11 @@ function classifyAPICallError(error: APICallError): AppError {
   // 413：请求体过大（上下文超限）
   if (statusCode === 413) {
     return new AppError(ErrorCode.AI_CONTEXT_TOO_LARGE, '上下文过长', error);
+  }
+
+  // 422：请求体参数错误（模型不支持的参数 / 非法格式，DeepSeek 官方错误码）
+  if (statusCode === 422) {
+    return new AppError(ErrorCode.AI_MODEL_ERROR, 'AI 请求参数错误', error);
   }
 
   // 429：限流

@@ -27,8 +27,14 @@ import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
+import type { ISessionService } from '../storage/session-service';
+import { readWithIdleTimeout } from './agent-runtime/stream-reader';
 import { getModel } from './ai-provider';
+import { estimateMessagesTokens } from './context-compression';
 import { classifyError, isAbortError } from './error-classifier';
+import { buildGenerationOptions, modelRegistry } from './models';
+import type { ITitleGenerator } from './session-title';
+import { ensureSessionTitle, firstUserMessageText } from './session-title';
 
 /**
  * 对话启动选项
@@ -104,6 +110,18 @@ class ChatService implements IChatService {
    * - dispose 时 await 所有 Promise，确保流协程已响应 abort 并完成清理
    */
   private readonly activeStreams = new Map<string, Promise<void>>();
+
+  /**
+   * 构造注入（可选依赖：标题生成 / usage 落库；未注入则跳过）
+   *
+   * 与 AgentService 对齐：
+   * - sessionService：回合结束后 usage 落库 + 标题生成查询
+   * - titleGenerator：回合结束后异步生成会话标题（失败静默）
+   */
+  constructor(
+    private readonly sessionService?: ISessionService,
+    private readonly titleGenerator?: ITitleGenerator,
+  ) {}
 
   /**
    * 启动一次对话
@@ -276,8 +294,12 @@ class ChatService implements IChatService {
     // 性能埋点：从 streamText 开始到流推送完毕的总耗时
     const startTime = performance.now();
     try {
-      // 1. 获取 model 实例
+      // 1. 获取 model 实例 + 生成选项（思考强度/采样/输出上限）
       const model = await getModel(undefined);
+      const genOptions = buildGenerationOptions(
+        modelRegistry.resolve(undefined),
+        estimateMessagesTokens(messages),
+      );
 
       // 2. 启动 streamText（同步调用，立即返回 result 对象）
       const result = streamText({
@@ -287,6 +309,15 @@ class ChatService implements IChatService {
         // AI SDK v7 默认拒绝 messages 中的 system 消息，这里显式允许以兼容旧消息历史
         messages,
         allowSystemInMessages: true,
+        // 生成选项（与 agent 主流程同一真源 buildGenerationOptions）：
+        // 思考强度 reasoningEffort（DeepSeek 按官方映射钳制）、采样参数、输出上限
+        ...genOptions.samplingOptions,
+        ...(genOptions.maxOutputTokens !== undefined
+          ? { maxOutputTokens: genOptions.maxOutputTokens }
+          : {}),
+        ...(genOptions.providerOptions !== undefined
+          ? { providerOptions: genOptions.providerOptions }
+          : {}),
         abortSignal: controller.signal,
       });
 
@@ -294,9 +325,9 @@ class ChatService implements IChatService {
       const uiStream = result.toUIMessageStream();
       const reader = uiStream.getReader();
 
-      // 4. 逐 part 推送到渲染层
+      // 4. 逐 part 推送到渲染层（共享空闲超时守卫，与 agent-service 一致）
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readWithIdleTimeout(reader, controller);
         if (done) {
           break;
         }
@@ -344,7 +375,34 @@ class ChatService implements IChatService {
             },
             'Chat token 使用量',
           );
+          // 用量持久化（设置页用量统计，与 agent 回合一致）：失败不阻断主流程
+          if (this.sessionService !== undefined) {
+            void this.sessionService
+              .recordUsage({
+                sessionId,
+                modelId: modelRegistry.resolve(undefined).modelId,
+                inputTokens: usage.inputTokens ?? 0,
+                outputTokens: usage.outputTokens ?? 0,
+                totalTokens: usage.totalTokens ?? 0,
+                cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens,
+                reasoningTokens: usage.outputTokenDetails?.reasoningTokens,
+              })
+              .catch((err: unknown) => {
+                logger.error({ sessionId, error: err }, 'chat recordUsage 失败');
+              });
+          }
         }
+      }
+
+      // 标题生成（对话结束后异步，失败静默）：
+      // 会话仍为默认标题时用首条用户消息生成简洁标题
+      if (this.sessionService !== undefined && this.titleGenerator !== undefined) {
+        void ensureSessionTitle({
+          sessionService: this.sessionService,
+          titleGenerator: this.titleGenerator,
+          sessionId,
+          firstUserText: firstUserMessageText(messages),
+        });
       }
     } catch (error: unknown) {
       // AbortError 是用户主动中断，不视为错误（不推送 error）
@@ -396,10 +454,16 @@ let chatService: ChatService | null = null;
  * 返回类型为 IChatService 接口而非具体类：
  * - 强制调用方面向接口编程，不依赖 ChatService 内部细节
  * - ServiceContainer 注入到 IPC handler 时类型一致
+ *
+ * @param sessionService 会话服务（usage 落库 + 标题生成；可选）
+ * @param titleGenerator 标题生成器（可选）
  */
-export function getChatService(): IChatService {
+export function getChatService(
+  sessionService?: ISessionService,
+  titleGenerator?: ITitleGenerator,
+): IChatService {
   if (chatService === null) {
-    chatService = new ChatService();
+    chatService = new ChatService(sessionService, titleGenerator);
   }
   return chatService;
 }

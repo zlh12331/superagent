@@ -72,7 +72,9 @@ vi.mock('node:crypto', () => ({
   randomUUID: mocks.mockRandomUUID,
 }));
 
+import type { ISessionService } from '../storage/session-service';
 import { getChatService, resetChatService } from './chat-service';
+import type { ITitleGenerator } from './session-title';
 
 /**
  * 创建 mock ReadableStream：按顺序推送 parts 后 close
@@ -653,6 +655,113 @@ describe('chat-service', () => {
       // 验证 dispose 后即使 stream 协程仍在 pending，再次 dispose 也应立即返回
       // （Map 已被清空，无活跃 stream 可等待）
       await getChatService().dispose(50);
+    });
+  });
+
+  describe('集成：生成选项 / usage 落库 / 标题生成', () => {
+    it('streamText 收到生成选项：思考强度 max + 输出上限 384K', async () => {
+      const wc = createMockWebContents();
+      mocks.mockStreamText.mockReturnValue(createMockStreamResult([{ type: 'finish' }]));
+
+      await getChatService().startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 's-gen-options',
+        webContents: wc,
+      });
+      await flushAsync();
+
+      // 默认模型 deepseek-v4-flash：reasoning + effort max + 384K 输出上限
+      const opts = mocks.mockStreamText.mock.calls[0]?.[0] as {
+        providerOptions?: unknown;
+        maxOutputTokens?: number;
+      };
+      expect(opts?.providerOptions).toEqual({ deepseek: { reasoningEffort: 'max' } });
+      expect(opts?.maxOutputTokens).toBe(384_000);
+    });
+
+    it('注入依赖后：usage 落库 + 默认标题自动生成', async () => {
+      const wc = createMockWebContents();
+      mocks.mockStreamText.mockReturnValue(
+        createMockStreamResult([{ type: 'finish', finishReason: 'stop' }]),
+      );
+      // 会话服务 mock：默认标题 + rename 记录
+      const mockSessionService = {
+        get: vi.fn(async () => ({ session: { title: '新会话' } })),
+        rename: vi.fn(async () => ({ ok: true })),
+        recordUsage: vi.fn(async () => ({ ok: true })),
+      } as unknown as ISessionService;
+      // 标题生成器 mock
+      const mockTitleGenerator: ITitleGenerator = {
+        generateText: vi.fn(async () => ({
+          text: '你好标题',
+          usage: undefined,
+        })),
+      };
+
+      // 注入依赖的 ChatService（beforeEach 已 resetChatService）
+      await getChatService(mockSessionService, mockTitleGenerator).startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 's-title',
+        webContents: wc,
+      });
+      await flushAsync();
+
+      // usage 落库（totalUsage 为 undefined 时 recordUsage 不调用）
+      expect(mockSessionService.recordUsage).not.toHaveBeenCalled();
+      // 标题生成：get（默认标题）→ generateText → rename
+      expect(mockTitleGenerator.generateText).toHaveBeenCalledTimes(1);
+      expect(mockSessionService.rename).toHaveBeenCalledWith('s-title', '你好标题');
+    });
+
+    it('totalUsage 存在时：usage 落库（设置页用量统计）', async () => {
+      const wc = createMockWebContents();
+      mocks.mockStreamText.mockReturnValue({
+        toUIMessageStream: () => createMockReadableStream([{ type: 'finish' }]),
+        totalUsage: Promise.resolve({ inputTokens: 10, outputTokens: 5, totalTokens: 15 }),
+      } as never);
+      const mockSessionService = {
+        recordUsage: vi.fn(async () => ({ ok: true })),
+      } as unknown as ISessionService;
+
+      await getChatService(mockSessionService).startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 's-usage',
+        webContents: wc,
+      });
+      await flushAsync();
+
+      expect(mockSessionService.recordUsage).toHaveBeenCalledTimes(1);
+      const args = (mockSessionService.recordUsage as ReturnType<typeof vi.fn>).mock
+        .calls[0]?.[0] as {
+        sessionId: string;
+        inputTokens: number;
+        totalTokens: number;
+      };
+      expect(args.sessionId).toBe('s-usage');
+      expect(args.inputTokens).toBe(10);
+      expect(args.totalTokens).toBe(15);
+    });
+
+    it('会话已有自定义标题：不覆盖', async () => {
+      const wc = createMockWebContents();
+      mocks.mockStreamText.mockReturnValue(createMockStreamResult([{ type: 'finish' }]));
+      const mockSessionService = {
+        get: vi.fn(async () => ({ session: { title: '我的会话' } })),
+        rename: vi.fn(async () => ({ ok: true })),
+      } as unknown as ISessionService;
+      const mockTitleGenerator: ITitleGenerator = {
+        generateText: vi.fn(async () => ({ text: '不该用', usage: undefined })),
+      };
+
+      await getChatService(mockSessionService, mockTitleGenerator).startChat({
+        messages: [{ role: 'user', content: '你好' }],
+        sessionId: 's-title-keep',
+        webContents: wc,
+      });
+      await flushAsync();
+
+      expect(mockTitleGenerator.generateText).not.toHaveBeenCalled();
+      expect(mockSessionService.rename).not.toHaveBeenCalled();
     });
   });
 });

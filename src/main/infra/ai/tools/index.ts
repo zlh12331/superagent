@@ -14,8 +14,11 @@
 
 import type { IFileService } from '../../file/file-service';
 import type { IGitService } from '../../git/git-service';
+import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import type { ISearchService } from '../../search/search-service';
 import type { ITerminalService } from '../../terminal/terminal-service';
+import type { MemoryService } from '../memory-service';
+import { skillRegistry } from '../skills/skill-registry';
 import type { IToolRegistry } from '../tool-registry';
 import { createCodeReviewTool } from './code-review.tool';
 import { createEditFileTool } from './edit-file.tool';
@@ -25,9 +28,19 @@ import { createGitPushTool } from './git-push.tool';
 import { createGlobTool } from './glob.tool';
 import { createGrepTool } from './grep.tool';
 import { createListDirectoryTool } from './list-directory.tool';
+import { createLoadSkillTool } from './load-skill.tool';
+import { createLspDefinitionTool } from './lsp-definition.tool';
+import { createLspReferencesTool } from './lsp-references.tool';
 import { createReadFileTool } from './read-file.tool';
 import { createRunCommandTool } from './run-command.tool';
+import { createRunSubagentTool } from './run-subagent.tool';
+import { createRunTeamTool } from './run-team.tool';
+import { createSaveMemoryTool } from './save-memory.tool';
+import { createTaskCreateTool } from './task-create.tool';
+import { createTaskListTool } from './task-list.tool';
+import { createTaskUpdateTool } from './task-update.tool';
 import { createTerminalTool } from './terminal.tool';
+import { createWebFetchTool } from './web-fetch.tool';
 import { createWriteFileTool } from './write-file.tool';
 
 export { createCodeReviewTool } from './code-review.tool';
@@ -84,6 +97,8 @@ export function registerBuiltinTools(
   searchService: ISearchService,
   terminalService: ITerminalService,
   gitService: IGitService,
+  memoryService: MemoryService,
+  lspManager: LspServerManager,
 ): void {
   registry.register(createReadFileTool(fileService));
   registry.register(createWriteFileTool(fileService));
@@ -97,4 +112,21 @@ export function registerBuiltinTools(
   registry.register(createGitAddTool(gitService));
   registry.register(createGitCommitTool(gitService));
   registry.register(createGitPushTool(gitService));
+  // 技能加载工具（模型按名加载技能提示词；只读自动放行）
+  registry.register(createLoadSkillTool(skillRegistry));
+  // 子代理委派工具（任务分解与并行执行）
+  registry.register(createRunSubagentTool());
+  // 团队协作工具（多代理并行委派）
+  registry.register(createRunTeamTool());
+  // 任务跟踪工具（任务面板登记/状态机/列表）
+  registry.register(createTaskCreateTool());
+  registry.register(createTaskUpdateTool());
+  registry.register(createTaskListTool());
+  // 网页抓取工具（资料查阅）
+  registry.register(createWebFetchTool());
+  // 记忆主动存储工具
+  registry.register(createSaveMemoryTool(memoryService));
+  // 代码智能工具（LSP 定义/引用；只读自动放行）
+  registry.register(createLspDefinitionTool(lspManager));
+  registry.register(createLspReferencesTool(lspManager));
 }
