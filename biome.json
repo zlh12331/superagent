@@ -428,6 +428,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/main/infra/im/adapters/wecom-stream.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }
