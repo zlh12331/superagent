@@ -8,6 +8,14 @@
 
 ### 新增
 
+- `main`：im 渠道配置说明 configHint - 设置页展示各渠道接入指引
+- `main`：微信渠道 - ilink 智能机器人长轮询收发
+- `main`：qq 渠道 - 官方 gateway 长连接接收与 api 发送
+- `main`：企业微信长连接接收 - aibot sdk 消息入站
+- `main`：飞书长连接接收 - 官方 sdk wsclient 消息入站
+- `main`：钉钉 stream 长连接接收 - 企业应用消息入站
+- `main`：im 渠道 webhook 发送 - 钉钉/企业微信/飞书群机器人
+- `main`：qwen-code 后端功能对齐 - 编排/权限/记忆/任务/子代理/团队/lsp/workflow/工具
 - `main`：im 渠道与设置体系 - telegram 适配器/审批偏好/三平台构建
 - `main`：引入后端基础设施依赖 - simple-git/编码检测/代码分析
 - `renderer`：前端性能与体验优化 - 懒加载/防闪烁/虚拟化/错误恢复动作/memo 清理
@@ -28,6 +36,9 @@
 
 ### 修复
 
+- `main`：schema-sql memories 建表段字面换行损坏 - dev 启动 sqlite 崩溃修复
+- `main`：qq 渠道 intents 修正 - c2c 与群聊同属 group_and_c2c_event(1<<25)
+- `main`：qq 渠道官方协议合规 - 事件名/网关获取/token 刷新/心跳序列号/err_code
 - fileViewerDialog 的 useCallback 依赖补充 t
 - 修复 electron-updater CJS 互操作与 E2E 实例隔离
 
