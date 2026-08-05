@@ -30,8 +30,8 @@ export const QqOpCode = {
 
 /** 事件订阅 intent（官方协议） */
 export const QqIntent = {
-  C2C_MESSAGE: 1 << 12,
-  GROUP_AT_MESSAGE: 1 << 25,
+  // 官方：GROUP_AND_C2C_EVENT (1 << 25) 同时覆盖群聊@消息（GROUP_AT_MESSAGE_CREATE）与单聊（C2C_MESSAGE_CREATE）
+  GROUP_AND_C2C_EVENT: 1 << 25,
 } as const;
 
 /** QQ 消息事件形状 */
@@ -281,7 +281,7 @@ export class QqStreamReceiver {
               op: QqOpCode.IDENTIFY,
               d: {
                 token: `QQBot ${accessToken}`,
-                intents: QqIntent.C2C_MESSAGE | QqIntent.GROUP_AT_MESSAGE,
+                intents: QqIntent.GROUP_AND_C2C_EVENT,
                 shard: [0, 1],
                 properties: {
                   $os: 'windows',
