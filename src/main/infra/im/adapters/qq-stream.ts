@@ -24,6 +24,8 @@ export const QqOpCode = {
   DISPATCH: 0,
   HEARTBEAT: 1,
   IDENTIFY: 2,
+  RESUME: 6,
+  INVALID_SESSION: 9,
   HELLO: 10,
   HEARTBEAT_ACK: 11,
 } as const;
@@ -216,6 +218,8 @@ export class QqStreamReceiver {
   private reconnectDelayMs = 5_000;
   /** 重连中（防并发重连） */
   private reconnecting = false;
+  /** 会话 id（READY 下发；断线 RESUME 恢复用） */
+  private sessionId: string | null = null;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
 
@@ -317,7 +321,43 @@ export class QqStreamReceiver {
         } else if (frame.op === QqOpCode.HELLO) {
           const hello = frame.d as { heartbeat_interval?: number } | undefined;
           const interval = hello?.heartbeat_interval ?? 30_000;
-          // identify（订阅 C2C + 群 @ 消息）
+          if (this.sessionId !== null) {
+            // 断线恢复：RESUME（复用会话，避免消息重播）
+            ws.send(
+              JSON.stringify({
+                op: QqOpCode.RESUME,
+                d: {
+                  token: `QQBot ${accessToken}`,
+                  session_id: this.sessionId,
+                  seq: this.lastSeq,
+                },
+              }),
+            );
+            this.startHeartbeat(ws, interval);
+          } else {
+            // 首次连接：identify（订阅 C2C + 群 @ 消息）
+            ws.send(
+              JSON.stringify({
+                op: QqOpCode.IDENTIFY,
+                d: {
+                  token: `QQBot ${accessToken}`,
+                  intents: QqIntent.GROUP_AND_C2C_EVENT,
+                  shard: [0, 1],
+                  properties: {
+                    $os: 'windows',
+                    $browser: 'code-agent-desktop',
+                    $device: 'code-agent-desktop',
+                  },
+                },
+              }),
+            );
+            this.startHeartbeat(ws, interval);
+          }
+        } else if (frame.op === QqOpCode.INVALID_SESSION) {
+          // RESUME 失败（session 失效）：回退 identify（清空 sessionId 走首次流程）
+          logger.warn({}, 'QQ RESUME 失败（INVALID_SESSION），回退 identify');
+          this.sessionId = null;
+          this.lastSeq = null;
           ws.send(
             JSON.stringify({
               op: QqOpCode.IDENTIFY,
@@ -333,11 +373,17 @@ export class QqStreamReceiver {
               },
             }),
           );
-          this.startHeartbeat(ws, interval);
         } else if (frame.op === QqOpCode.DISPATCH) {
           this.dispatchFrame(frame);
-          // identify 后首个事件（READY）视为握手完成
+          // READY（identify 成功）或 RESUMED（resume 成功）视为握手完成
           if (frame.t === 'READY') {
+            const ready = frame.d as { session_id?: string } | undefined;
+            if (typeof ready?.session_id === 'string') {
+              this.sessionId = ready.session_id;
+            }
+            clearTimeout(timer);
+            resolve();
+          } else if (frame.t === 'RESUMED') {
             clearTimeout(timer);
             resolve();
           }
