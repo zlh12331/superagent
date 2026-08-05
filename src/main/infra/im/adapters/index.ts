@@ -4,7 +4,7 @@
 // 渠道实现状态（实事求是）：
 // - telegram：完整实现（Bot API 长轮询，零依赖；收发齐全）
 // - dingtalk / wecom / feishu：完整实现（群机器人 webhook 发送；接收需公网回调/长连接，后置）
-// - qq：骨架占位——QQ 官方机器人发送需 openid（来自入站回调），本地无公网回调无法闭环，保留架构位
+// - qq：完整实现（官方 Gateway 长连接接收 + 官方 API 发送）
 // - wechat：骨架占位——个人微信自动化违反官方 ToS；公众号需公网回调，合规保留架构位
 // ──────────────────────────────────────────────────────────────
 
@@ -13,6 +13,7 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 import { DingTalkAdapter } from './dingtalk-adapter';
 import { FeishuAdapter } from './feishu-adapter';
+import { QqAdapter } from './qq-adapter';
 import { TelegramAdapter } from './telegram-adapter';
 import { WecomAdapter } from './wecom-adapter';
 
@@ -60,12 +61,8 @@ export function createAllAdapters(): IChannelAdapter[] {
     new WecomAdapter(),
     // 飞书：自定义机器人 webhook（发送）；接收需自建应用长连接
     new FeishuAdapter(),
-    // QQ：官方机器人发送依赖入站回调提供的 openid，本地无公网回调无法闭环
-    new SkeletonChannelAdapter(
-      'qq',
-      'QQ',
-      '待接入：QQ 官方机器人需公网回调获取 openid（本地场景受限）',
-    ),
+    // QQ：官方机器人（Gateway 长连接接收 + 官方 API 发送）
+    new QqAdapter(),
     // 微信：个人号自动化违反官方 ToS；公众号需公网回调
     new SkeletonChannelAdapter(
       'wechat',

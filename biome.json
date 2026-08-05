@@ -438,6 +438,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/main/infra/im/adapters/qq-stream.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }
