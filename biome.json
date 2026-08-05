@@ -418,6 +418,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/main/infra/im/adapters/feishu-stream.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }

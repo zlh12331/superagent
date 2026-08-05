@@ -186,6 +186,7 @@
     "vite": "^8",
     "web-tree-sitter": "^0.24.7",
     "zod": "^4.0.0",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "@larksuiteoapi/node-sdk": "^1.72.0"
   }
 }
