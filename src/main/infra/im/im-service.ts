@@ -30,11 +30,18 @@ export function channelKeychainKey(kind: ChannelKind): string {
  * IM 渠道服务（模块单例，与 ServiceContainer 生命周期一致）
  */
 export class ImService {
-  private readonly adapters: IChannelAdapter[] = createAllAdapters();
+  private readonly adapters: IChannelAdapter[];
   /** 渠道消息监听器（桥接层挂载点） */
   private readonly messageListeners = new Set<(message: ChannelIncomingMessage) => void>();
   /** 已启动渠道集合 */
   private readonly started = new Set<ChannelKind>();
+
+  /**
+   * 构造注入（测试可控；缺省 createAllAdapters 全部渠道）
+   */
+  constructor(adapters?: readonly IChannelAdapter[]) {
+    this.adapters = adapters !== undefined ? [...adapters] : createAllAdapters();
+  }
 
   /**
    * 启动渠道（token 优先取入参；否则读 keychain；骨架渠道抛 NOT_IMPLEMENTED）
