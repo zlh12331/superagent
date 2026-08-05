@@ -5,7 +5,7 @@
 // - telegram：完整实现（Bot API 长轮询，零依赖；收发齐全）
 // - dingtalk / wecom / feishu：完整实现（群机器人 webhook 发送；接收需公网回调/长连接，后置）
 // - qq：完整实现（官方 Gateway 长连接接收 + 官方 API 发送）
-// - wechat：骨架占位——个人微信自动化违反官方 ToS；公众号需公网回调，合规保留架构位
+// - wechat：完整实现（iLink 智能机器人：长轮询接收 + 消息发送）
 // ──────────────────────────────────────────────────────────────
 
 import type { ChannelKind } from '@code-agent/shared/main';
@@ -16,6 +16,7 @@ import { FeishuAdapter } from './feishu-adapter';
 import { QqAdapter } from './qq-adapter';
 import { TelegramAdapter } from './telegram-adapter';
 import { WecomAdapter } from './wecom-adapter';
+import { WeixinAdapter } from './weixin-adapter';
 
 /**
  * 骨架渠道适配器（未实现渠道的统一占位）
@@ -63,11 +64,7 @@ export function createAllAdapters(): IChannelAdapter[] {
     new FeishuAdapter(),
     // QQ：官方机器人（Gateway 长连接接收 + 官方 API 发送）
     new QqAdapter(),
-    // 微信：个人号自动化违反官方 ToS；公众号需公网回调
-    new SkeletonChannelAdapter(
-      'wechat',
-      '微信',
-      '待接入：个人微信自动化受官方限制；公众号需公网回调',
-    ),
+    // 微信：iLink 智能机器人（长轮询接收 + 消息发送，官方服务）
+    new WeixinAdapter(),
   ];
 }

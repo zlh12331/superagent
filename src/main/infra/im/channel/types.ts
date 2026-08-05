@@ -28,6 +28,8 @@ export interface ChannelIncomingMessage {
   readonly text: string;
   /** 渠道原始消息 id（去重用） */
   readonly messageId: string;
+  /** 会话类型（群聊/单聊；渠道支持时提供，用于回发路由） */
+  readonly channelType?: 'group' | 'user';
   /** 接收时间 */
   readonly timestamp: number;
 }
