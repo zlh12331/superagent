@@ -408,6 +408,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/main/infra/im/adapters/webhook-channels.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }
