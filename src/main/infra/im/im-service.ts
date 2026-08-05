@@ -155,13 +155,10 @@ export class ImService {
   }
 }
 
-/** 渠道描述（骨架渠道显示接入说明） */
+/** 渠道描述（各适配器自带配置说明 configHint；骨架渠道显示待接入原因） */
 function adapterDescription(adapter: IChannelAdapter): string {
   if (!adapter.implemented) {
-    return `待接入：${adapter.displayName} 开放平台凭证`;
+    return `待接入：${adapter.configHint}`;
   }
-  if (adapter.kind === 'telegram') {
-    return 'Bot API 长轮询（零依赖）';
-  }
-  return adapter.displayName;
+  return adapter.configHint;
 }

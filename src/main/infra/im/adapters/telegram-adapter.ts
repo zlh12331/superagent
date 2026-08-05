@@ -38,6 +38,7 @@ export class TelegramAdapter implements IChannelAdapter {
   readonly kind = 'telegram' as const;
   readonly displayName = 'Telegram';
   readonly implemented = true;
+  readonly configHint: string = 'Bot Token（@BotFather 获取）';
 
   private botToken: string | undefined;
   private pollController: AbortController | undefined;

@@ -25,6 +25,7 @@ export class FeishuAdapter extends WebhookChannelAdapter {
   readonly kind = 'feishu';
   readonly displayName = '飞书';
   readonly implemented = true;
+  override readonly configHint: string = 'webhook URL 或 appId:appSecret:webhookUrl（发送+接收）';
 
   private streamReceiver: FeishuStreamReceiver | null = null;
   private streamHandler: ((message: ChannelIncomingMessage) => void) | null = null;

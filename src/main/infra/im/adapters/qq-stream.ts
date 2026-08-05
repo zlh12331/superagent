@@ -56,6 +56,8 @@ export interface QqGatewayFrame {
 
 /** 解析结果：null = 非文本消息事件（忽略） */
 export interface ParsedQqMessage {
+  /** 会话类型（群聊/单聊；回发路由） */
+  readonly chatType: 'group' | 'user';
   readonly text: string;
   readonly chatId: string;
   readonly senderId: string | undefined;
@@ -167,6 +169,7 @@ export function parseQqEvent(frame: QqGatewayFrame): ParsedQqMessage | null {
     return null;
   }
   return {
+    chatType: isGroup ? 'group' : 'user',
     text,
     chatId,
     senderId,

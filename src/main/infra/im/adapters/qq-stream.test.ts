@@ -3,7 +3,13 @@
 
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
-import { fetchQqAccessToken, parseQqEvent, type QqGatewayFrame, QqOpCode } from './qq-stream';
+import {
+  fetchQqAccessToken,
+  fetchQqGatewayUrl,
+  parseQqEvent,
+  type QqGatewayFrame,
+  QqOpCode,
+} from './qq-stream';
 
 /** 构造 Gateway 帧 */
 function frame(t: string, d: unknown): QqGatewayFrame {

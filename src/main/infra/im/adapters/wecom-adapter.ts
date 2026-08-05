@@ -25,6 +25,7 @@ export class WecomAdapter extends WebhookChannelAdapter {
   readonly kind = 'wecom';
   readonly displayName = '企业微信';
   readonly implemented = true;
+  override readonly configHint: string = 'webhook URL 或 botId:secret:webhookUrl（发送+接收）';
 
   private streamReceiver: WecomStreamReceiver | null = null;
   private streamHandler: ((message: ChannelIncomingMessage) => void) | null = null;

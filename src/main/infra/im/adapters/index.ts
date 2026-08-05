@@ -24,17 +24,20 @@ import { WeixinAdapter } from './weixin-adapter';
  * connect 抛 IM_CHANNEL_NOT_IMPLEMENTED；设置页展示为"待接入"。
  */
 export class SkeletonChannelAdapter implements IChannelAdapter {
-  constructor(
-    readonly kind: ChannelKind,
-    readonly displayName: string,
-    private readonly note: string,
-  ) {}
-
+  readonly kind: ChannelKind;
+  readonly displayName: string;
   readonly implemented = false;
   readonly isConnected = false;
+  readonly configHint: string;
+
+  constructor(kind: ChannelKind, displayName: string, note: string) {
+    this.kind = kind;
+    this.displayName = displayName;
+    this.configHint = note;
+  }
 
   async connect(): Promise<void> {
-    throw new AppError(ErrorCode.IM_CHANNEL_NOT_IMPLEMENTED, this.note);
+    throw new AppError(ErrorCode.IM_CHANNEL_NOT_IMPLEMENTED, this.configHint);
   }
 
   async disconnect(): Promise<void> {
@@ -42,7 +45,7 @@ export class SkeletonChannelAdapter implements IChannelAdapter {
   }
 
   async sendMessage(_target: ChannelTarget, _text: string): Promise<void> {
-    throw new AppError(ErrorCode.IM_CHANNEL_NOT_IMPLEMENTED, this.note);
+    throw new AppError(ErrorCode.IM_CHANNEL_NOT_IMPLEMENTED, this.configHint);
   }
 
   onMessage(_handler: (message: ChannelIncomingMessage) => void): () => void {

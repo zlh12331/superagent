@@ -60,6 +60,8 @@ export interface IChannelAdapter {
   readonly implemented: boolean;
   /** 是否已连接 */
   readonly isConnected: boolean;
+  /** 配置说明（设置页展示：token 格式/接入指引） */
+  readonly configHint: string;
 
   /**
    * 建立连接（Telegram：验证 token + 启动长轮询）

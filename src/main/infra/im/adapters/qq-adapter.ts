@@ -24,6 +24,7 @@ export class QqAdapter implements IChannelAdapter {
   readonly kind = 'qq';
   readonly displayName = 'QQ';
   readonly implemented = true;
+  readonly configHint = 'appId:appSecret（官方机器人凭证）';
 
   isConnected = false;
   private appIdValue: string | null = null;

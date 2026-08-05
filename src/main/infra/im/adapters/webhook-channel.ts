@@ -42,6 +42,8 @@ export abstract class WebhookChannelAdapter implements IChannelAdapter {
   abstract readonly displayName: string;
   abstract readonly implemented: boolean;
 
+  readonly configHint: string = 'webhook URL（发送）；长连接接收见各渠道说明';
+
   isConnected = false;
   private webhookUrl: string | null = null;
   private secret: string | null = null;

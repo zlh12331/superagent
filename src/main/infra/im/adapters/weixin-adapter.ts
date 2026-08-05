@@ -17,6 +17,7 @@ export class WeixinAdapter implements IChannelAdapter {
   readonly kind = 'wechat';
   readonly displayName = '微信';
   readonly implemented = true;
+  readonly configHint = 'iLink 机器人 token';
 
   isConnected = false;
   private token: string | null = null;

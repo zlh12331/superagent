@@ -24,6 +24,7 @@ export class DingTalkAdapter extends WebhookChannelAdapter {
   readonly kind = 'dingtalk';
   readonly displayName = '钉钉';
   readonly implemented = true;
+  override readonly configHint: string = 'webhook URL 或 appKey:appSecret:webhookUrl（发送+接收）';
 
   private streamReceiver: DingTalkStreamReceiver | null = null;
   private streamHandler: ((message: ChannelIncomingMessage) => void) | null = null;
