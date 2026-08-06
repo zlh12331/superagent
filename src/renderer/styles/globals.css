@@ -1596,20 +1596,15 @@ body.resizing iframe {
   opacity: 0.7;
 }
 
-/* welcome-mode 布局覆写 */
+/* welcome-mode 布局覆写：保留右面板（用户要求欢迎页也可见右面板），
+   grid 保持 5 列（sidebar | resizer | main | resizer | right-panel） */
 .view-chat.welcome-mode {
   grid-template-columns:
     var(--aurora-sidebar-w)
     var(--aurora-resizer-w)
     minmax(0, 1fr)
-    0
-    0;
-}
-
-/* 隐藏右面板 + 右分隔线 */
-.view-chat.welcome-mode .chat-right-panel,
-.view-chat.welcome-mode .resizer-right {
-  display: none;
+    var(--aurora-resizer-w)
+    var(--aurora-right-panel-w);
 }
 
 /* main 改为居中 flex 容器（对齐原型 .thread 行为） */

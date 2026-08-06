@@ -221,7 +221,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         rightPanelCollapsed={rightPanelCollapsed}
         onToggleRightPanel={handleToggleRightPanel}
         onOpenCommandPalette={openPalette}
-        hideRightPanelToggle={isWelcomeMode}
       />
       <div
         className={cn(
@@ -253,9 +252,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           {children}
         </main>
 
-        {/* 列 4：右分隔线（可拖拽调整右面板宽度）
-            欢迎页模式下不渲染（无右面板可调） */}
-        {!rightPanelCollapsed && !isWelcomeMode && (
+        {/* 列 4：右分隔线（可拖拽调整右面板宽度；欢迎页也保留——右面板常驻） */}
+        {!rightPanelCollapsed && (
           <hr
             aria-orientation="vertical"
             aria-label={t('common.panelResizer')}
