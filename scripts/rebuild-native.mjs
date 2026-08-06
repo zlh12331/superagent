@@ -37,8 +37,16 @@ console.log('[rebuild-native] 残留 Electron 进程已清理');
 
 // 1.5 auto 模式：检测当前 ABI 是否已匹配目标（匹配则跳过 rebuild，秒级返回）
 if (autoMode && target === 'node') {
+  // 关键：better-sqlite3 的 .node 是懒加载（db() 实例化时才加载）——
+  // 仅 require 包入口会骗过检测，必须实例化才能真正校验 ABI
+  // 同时测 node-pty（严格 ABI 模块）；解析基准与 vitest 一致（src/main 向上）
+  const srcRequire = createRequire(join(process.cwd(), 'src/main/infra/ai/cron-service.ts'));
   try {
-    require('better-sqlite3');
+    const Database = srcRequire('better-sqlite3');
+    const conn = new Database(':memory:');
+    conn.exec('CREATE TABLE t (id INTEGER PRIMARY KEY)');
+    conn.close();
+    srcRequire('node-pty');
     console.log('[rebuild-native] ✓ Node ABI 已就绪（--auto 跳过）');
     process.exit(0);
   } catch {
