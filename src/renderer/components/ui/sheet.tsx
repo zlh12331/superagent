@@ -49,7 +49,9 @@ export function SheetContent({
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right fixed inset-y-0 right-0 z-50 h-full w-full shadow-lg duration-200 sm:max-w-lg',
+          // 注意：不设 max-w-lg 等宽度限制——宽度完全由调用方控制
+          // （SettingsDialog 拖拽调宽 360-800px，max-width 会锁死拖拽范围）
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right fixed inset-y-0 right-0 z-50 h-full w-full shadow-lg duration-200',
           className,
         )}
         {...props}
