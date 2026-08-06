@@ -1,4 +1,10 @@
 // src/renderer/components/layout/AppShell.tsx
+// 应用外壳 · 组装层（初始宽度计算纯函数移至 layout-utils）
+// ──────────────────────────────
+// 拆分背景（2026-08 重构）：原文件 352 行，纯函数提取为独立文件
+// ──────────────────────────────
+
+// src/renderer/components/layout/AppShell.tsx
 // 应用主布局容器 · 对齐原型布局（三段式 grid）
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -41,71 +47,23 @@ import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 import { DevPanel } from './DevPanel';
+import {
+  computeInitialRightPanelWidth,
+  computeInitialSidebarWidth,
+  RIGHT_PANEL_WIDTH_MAX,
+  RIGHT_PANEL_WIDTH_MIN,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
+} from './layout-utils';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
-
-/**
- * 拖拽分隔线宽度区间（px）— 对齐原型 clamp() 边界
- *
- * 原型 CSS（globals.css / theme-variables.css）：
- *   --sidebar-w: clamp(200px, 17vw, 280px);
- *   --right-panel-w: clamp(260px, 22vw, 360px);
- *
- * 此处 MIN/MAX 与 clamp 边界保持一致，确保 JS 拖拽区间 == CSS 响应式区间，
- * 避免「CSS 允许 200~280 但 JS 允许 210~360」这类不一致。
- */
-const SIDEBAR_WIDTH_MIN = 200;
-const SIDEBAR_WIDTH_MAX = 280;
-const RIGHT_PANEL_WIDTH_MIN = 260;
-const RIGHT_PANEL_WIDTH_MAX = 360;
-
-/**
- * 根据视口宽度计算初始侧栏宽度（对齐原型 clamp(200px, 17vw, 280px)）。
- *
- * 用 lazy initializer 在 useState 首次渲染时同步计算，避免首屏闪烁。
- * SSR 防御：typeof window 检查（Electron 应用无 SSR 但保持健壮性）。
- */
-function computeInitialSidebarWidth(): number {
-  if (typeof window === 'undefined') return 240;
-  return Math.round(
-    Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, window.innerWidth * 0.17)),
-  );
-}
-
-/**
- * 根据视口宽度计算初始右面板宽度（对齐原型 clamp(260px, 22vw, 360px)）。
- */
-function computeInitialRightPanelWidth(): number {
-  if (typeof window === 'undefined') return 317;
-  return Math.round(
-    Math.max(RIGHT_PANEL_WIDTH_MIN, Math.min(RIGHT_PANEL_WIDTH_MAX, window.innerWidth * 0.22)),
-  );
-}
-
-/** 拖拽方向标识 */
-type ResizerSide = 'left' | 'right';
 
 interface AppShellProps {
   /** 主内容区（通常由 RouterProvider 通过 <Outlet /> 传入） */
   children: ReactNode;
 }
+type ResizerSide = 'left' | 'right';
 
-/**
- * 应用主布局
- *
- * 使用 CSS Grid 划分两行：Topbar / 主体。
- * 主体水平排列 Sidebar + resizer + 内容区 + resizer + 右面板。
- *
- * 折叠态：
- * - sb-collapsed：侧栏完全隐藏（grid 第一列=0）
- * - crp-collapsed：右面板完全隐藏（grid 第五列=0）
- * - 由 Topbar 的按钮触发，AppShell 持有状态并通过 CSS class 切换
- *
- * 拖拽分隔线：
- * - mousedown 记录起始 X 坐标 + 当前宽度
- * - mousemove 计算 delta，更新 CSS 变量 --aurora-sidebar-w / --aurora-right-panel-w
- * - mouseup 移除监听，恢复 user-select
- */
 export function AppShell({ children }: AppShellProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
