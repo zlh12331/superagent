@@ -6,23 +6,24 @@
 // - permission='auto' / category='read'：只读
 // ──────────────────────────────────────────────────────────────
 
+import { z } from 'zod';
 import { cronService } from '../cron-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';
 
 /** cron_list 入参（无字段） */
-const CronListInputSchema = undefined;
+const CronListInputSchema = z.object({});
 
 /**
  * 创建 cron_list 工具（依赖模块级 CronService 单例）
  */
-export function createCronListTool(): Tool<undefined> {
+export function createCronListTool(): Tool<Record<string, never>> {
   return {
     name: 'cron_list',
     description: '列出全部定时任务（表达式、状态、下次触发时间）。',
     inputSchema: CronListInputSchema,
     permission: 'auto',
     category: 'read',
-    execute: async (_input: undefined, _ctx: ToolContext): Promise<ToolResult> => {
+    execute: async (_input: Record<string, never>, _ctx: ToolContext): Promise<ToolResult> => {
       const tasks = cronService.list();
       if (tasks.length === 0) {
         return { title: '定时任务列表', output: '（暂无定时任务）' };

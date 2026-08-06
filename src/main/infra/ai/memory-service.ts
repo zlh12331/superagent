@@ -60,6 +60,20 @@ const ExtractionOutputSchema = z.object({
   preferences: z.array(z.string().max(200)).max(10),
 });
 
+/** 遗忘主题输出 schema */
+const ForgetOutputSchema = z.object({
+  /** 用户想遗忘的记忆主题（关键词/短语） */
+  topics: z.array(z.string().min(1).max(100)).max(10),
+});
+
+/** 遗忘提取提示词（系统）：保守提取 */
+const FORGET_SYSTEM_PROMPT = [
+  '你是记忆遗忘分析器。从用户语句中提取用户明确想遗忘/取消的记忆主题：',
+  '- 只提取明确表达遗忘/取消/纠正意图的主题',
+  '- 不推断；不确定时返回空数组',
+  '仅返回 JSON：{"topics": [string]}',
+].join('\n');
+
 /** 提取提示词（系统）：不提取敏感信息 */
 const EXTRACTION_SYSTEM_PROMPT = [
   '你是记忆提取器。从对话转录中提取值得跨会话记住的用户事实与偏好：',
@@ -88,7 +102,7 @@ export class MemoryService {
   /**
    * 召回会话记忆（注入上下文用；按创建时间倒序，最多 20 条）
    */
-  async recall(sessionId: string): Promise<MemoryEntry[]> {
+  async recall(sessionId: string, query?: string): Promise<MemoryEntry[]> {
     const db = getDb();
     const rows = db
       .select()
@@ -96,7 +110,17 @@ export class MemoryService {
       .where(eq(memories.sessionId, sessionId))
       .orderBy(memories.createdAt)
       .all();
-    return rows.slice(-20).map(rowToEntry);
+    const entries = rows.slice(-20).map(rowToEntry);
+    // 关键词索引召回：query 与记忆内容 token 交集排序（对齐 qwen indexer 语义收敛）
+    if (query !== undefined && query.trim().length > 0) {
+      const queryTokens = tokenize(query);
+      return entries
+        .map((entry) => ({ entry, score: tokenOverlap(queryTokens, tokenize(entry.content)) }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.entry);
+    }
+    return entries;
   }
 
   /**
@@ -217,6 +241,49 @@ export class MemoryService {
   }
 
   /**
+   * 遗忘记忆：LLM 提取用户陈述中的主题 → 相似度匹配删除
+   *
+   * 对齐 qwen forget 语义收敛：用户声明（"忘掉 X"）→ 找出相关记忆删除。
+   * LLM 失败/无主题 → 不删除（安全默认）；删除数返回。
+   */
+  async forget(sessionId: string, statement: string): Promise<number> {
+    if (statement.trim().length === 0) {
+      return 0;
+    }
+    // LLM 提取遗忘主题
+    let topics: string[] = [];
+    try {
+      const output = await this.llmClient.generateJson({
+        schema: ForgetOutputSchema,
+        prompt: `用户语句：${statement.slice(0, 2000)}\n\n提取用户想遗忘的记忆主题（仅 JSON 输出）。`,
+        system: FORGET_SYSTEM_PROMPT,
+        maxAttempts: 1,
+      });
+      topics = output.topics;
+    } catch (err: unknown) {
+      logger.warn({ sessionId, error: err }, '记忆遗忘主题提取失败（安全默认不删除）');
+      return 0;
+    }
+    if (topics.length === 0) {
+      return 0;
+    }
+    // 相似度匹配删除
+    const db = getDb();
+    const rows = db.select().from(memories).where(eq(memories.sessionId, sessionId)).all();
+    const topicTokens = topics.map((topic) => tokenize(topic));
+    const toDelete = rows.filter((row) =>
+      topicTokens.some((tokens) => tokenOverlap(tokens, tokenize(row.content)) > 0),
+    );
+    for (const row of toDelete) {
+      db.delete(memories).where(eq(memories.id, row.id)).run();
+    }
+    if (toDelete.length > 0) {
+      logger.info({ sessionId, removed: toDelete.length, topics }, '记忆遗忘完成');
+    }
+    return toDelete.length;
+  }
+
+  /**
    * 从转录提取记忆条目（LLM 判定 + 敏感过滤；失败返回空列表，不阻断）
    *
    * @param sessionId 目标会话
@@ -311,6 +378,17 @@ export function tokenSimilarity(a: string, b: string): number {
   }
   const union = setA.size + setB.size - intersection;
   return union === 0 ? 0 : intersection / union;
+}
+
+/** token 交集计数（关键词索引召回的匹配度） */
+export function tokenOverlap(setA: ReadonlySet<string>, setB: ReadonlySet<string>): number {
+  let count = 0;
+  for (const token of setA) {
+    if (setB.has(token)) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /** 融合内容：代表 + 新增去重拼接（截断上限） */

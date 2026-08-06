@@ -39,14 +39,14 @@ vi.mock('../storage/db', async (importOriginal) => {
 import { resetDb } from '../storage/db';
 import { SessionService } from '../storage/session-service';
 
-/** fake LlmClient（手写最小实现） */
+/** fake LlmClient（手写最小实现；output 缺省为提取输出） */
 function createFakeLlm(output?: unknown, throwError = false): LlmClient {
   return {
     generateJson: vi.fn(async () => {
       if (throwError) {
         throw new Error('API 不可用');
       }
-      return output;
+      return output ?? { facts: [], preferences: [] };
     }),
   } as unknown as LlmClient;
 }
@@ -210,5 +210,76 @@ describe('MemoryService', () => {
     await service.dream(s1);
 
     expect(await service.recall(s2)).toHaveLength(1);
+  });
+
+  it('recall：关键词查询过滤并按匹配度排序', async () => {
+    const service = new MemoryService(createFakeLlm());
+    const sid = await sessionService.create({
+      workingDir: 'D:\\proj',
+      title: undefined,
+      messages: undefined,
+    });
+    await service.store(sid, [
+      { content: '用户偏好 TypeScript 严格模式', kind: 'preference' },
+      { content: '用户使用 Rust 开发 CLI 工具', kind: 'fact' },
+    ]);
+
+    const matched = await service.recall(sid, 'TypeScript');
+    expect(matched).toHaveLength(1);
+    expect(matched[0]?.content).toContain('TypeScript');
+  });
+
+  it('recall：无匹配关键词返回空', async () => {
+    const service = new MemoryService(createFakeLlm());
+    const sid = await sessionService.create({
+      workingDir: 'D:\\proj',
+      title: undefined,
+      messages: undefined,
+    });
+    await service.store(sid, [{ content: '用户偏好 TypeScript', kind: 'preference' }]);
+    expect(await service.recall(sid, 'Python')).toHaveLength(0);
+  });
+
+  it('forget：LLM 主题提取 + 相似匹配删除', async () => {
+    const service = new MemoryService(createFakeLlm({ topics: ['Go 语言'] }));
+    const sid = await sessionService.create({
+      workingDir: 'D:\\proj',
+      title: undefined,
+      messages: undefined,
+    });
+    await service.store(sid, [
+      { content: '用户偏好 Go 语言开发', kind: 'preference' },
+      { content: '用户使用 TypeScript 严格模式', kind: 'preference' },
+    ]);
+
+    const removed = await service.forget(sid, '忘掉 Go 相关的记忆');
+    expect(removed).toBe(1);
+    const remaining = await service.recall(sid);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.content).toContain('TypeScript');
+  });
+
+  it('forget：LLM 失败安全默认不删除', async () => {
+    const service = new MemoryService(createFakeLlm(undefined, true));
+    const sid = await sessionService.create({
+      workingDir: 'D:\\proj',
+      title: undefined,
+      messages: undefined,
+    });
+    await service.store(sid, [{ content: '用户偏好 TypeScript', kind: 'preference' }]);
+    expect(await service.forget(sid, '忘掉所有')).toBe(0);
+    expect(await service.recall(sid)).toHaveLength(1);
+  });
+
+  it('forget：空主题不删除', async () => {
+    const service = new MemoryService(createFakeLlm({ topics: [] }));
+    const sid = await sessionService.create({
+      workingDir: 'D:\\proj',
+      title: undefined,
+      messages: undefined,
+    });
+    await service.store(sid, [{ content: '用户偏好 TypeScript', kind: 'preference' }]);
+    expect(await service.forget(sid, '随便说说')).toBe(0);
+    expect(await service.recall(sid)).toHaveLength(1);
   });
 });
