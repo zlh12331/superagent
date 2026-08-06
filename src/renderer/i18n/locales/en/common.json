@@ -127,7 +127,13 @@
       "fileChange": {
         "created": "Created",
         "modified": "Modified"
-      }
+      },
+      "searchInConversation": "Search in conversation",
+      "searchAriaLabel": "Conversation search",
+      "searchInputAriaLabel": "Search input",
+      "searchPlaceholder": "Search in conversation…",
+      "searchPrev": "Previous match",
+      "searchNext": "Next match"
     },
     "update": {
       "noticeAvailable": "Update available",

@@ -127,7 +127,13 @@
       "fileChange": {
         "created": "新建",
         "modified": "修改"
-      }
+      },
+      "searchInConversation": "在对话中搜索",
+      "searchAriaLabel": "对话搜索",
+      "searchInputAriaLabel": "搜索输入框",
+      "searchPlaceholder": "在对话中搜索…",
+      "searchPrev": "上一个匹配",
+      "searchNext": "下一个匹配"
     },
     "update": {
       "noticeAvailable": "发现新版本",

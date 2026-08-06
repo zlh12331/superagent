@@ -54,6 +54,8 @@ export interface ChatMessageListProps {
   readonly status: 'submitted' | 'streaming' | 'ready' | 'error';
   /** 重新生成指定 assistant 消息 */
   readonly onRegenerate: (messageId: string) => void;
+  /** 搜索当前匹配消息索引（会话内搜索；-1 = 无匹配/搜索关闭） */
+  readonly searchActiveIndex?: number;
   /** 附加 className */
   readonly className?: string;
 }
@@ -62,6 +64,7 @@ export function ChatMessageList({
   messages,
   status,
   onRegenerate,
+  searchActiveIndex = -1,
   className,
 }: ChatMessageListProps): ReactElement {
   // 本地化文案
@@ -115,6 +118,17 @@ export function ChatMessageList({
     }
   }, [messages.length, isStreaming]);
 
+  // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
+  useEffect(() => {
+    if (searchActiveIndex >= 0) {
+      virtuosoRef.current?.scrollToIndex({
+        index: searchActiveIndex,
+        align: 'center',
+        behavior: 'smooth',
+      });
+    }
+  }, [searchActiveIndex]);
+
   // 空状态：无消息时展示 EmptyState
   if (messages.length === 0) {
     return (
@@ -138,8 +152,16 @@ export function ChatMessageList({
         // 流式跟随：用户在底部时平滑跟随新内容，否则不抢滚动（hasNew 由 effect 标记）
         followOutput={(atBottom) => (atBottom ? 'smooth' : false)}
         atBottomStateChange={handleAtBottomChange}
-        itemContent={(_, message) => (
-          <MessageItem message={message} onRegenerate={onRegenerate} disableActions={isStreaming} />
+        itemContent={(index, message) => (
+          <div
+            className={cn('transition-colors', index === searchActiveIndex && 'search-highlight')}
+          >
+            <MessageItem
+              message={message}
+              onRegenerate={onRegenerate}
+              disableActions={isStreaming}
+            />
+          </div>
         )}
         // 流式占位：assistant 正在响应时渲染在列表尾部（Footer 插槽）
         // biome-ignore lint/style/useNamingConvention: Virtuoso Components 接口的 Footer 字段为 PascalCase

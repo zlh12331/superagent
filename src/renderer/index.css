@@ -14,3 +14,17 @@
 /* 暗黑模式变体：当父元素含 .dark 类时启用
    ThemeProvider 通过给 <html> 添加 .dark 切换主题 */
 @custom-variant dark (&:is(.dark *));
+
+/* 会话内搜索：当前匹配消息高亮（短暂 accent 背景 + 淡出） */
+.search-highlight {
+  animation: search-highlight-fade 2.5s ease-out forwards;
+}
+
+@keyframes search-highlight-fade {
+  0% {
+    background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}

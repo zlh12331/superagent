@@ -13,16 +13,18 @@
 // - 工具调用已 inline 渲染在 ChatMessageList（ToolCallView）
 // ──────────────────────────────────────────────────────────────
 
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Search, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useAgentWithIpc } from '@/hooks/use-agent';
+import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { EMPTY_USAGE, useUsageStore } from '@/stores/transient/usage-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
+import { ConversationSearchBar } from './conversation-search-bar';
 import { RateLimitBanner } from './rate-limit-banner';
 
 interface ChatPanelProps {
@@ -100,6 +102,14 @@ export function ChatPanel({
     onError: handleError,
   });
 
+  // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
+  const search = useConversationSearch(messages);
+  // 当前匹配消息索引（供 ChatMessageList 滚动 + 高亮；无匹配/关闭时为 -1）
+  const searchActiveIndex =
+    search.visible && search.currentMatch >= 0
+      ? (search.matchIndexes[search.currentMatch] ?? -1)
+      : -1;
+
   // 派生：workingDir basename（用于状态条展示，避免显示完整路径污染视觉）
   const workingDirBasename = workingDir.split(/[\\/]/).pop() ?? workingDir;
 
@@ -135,6 +145,16 @@ export function ChatPanel({
     <div className={cn('flex h-full flex-col', className)}>
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
       <RateLimitBanner />
+      {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
+      <ConversationSearchBar
+        visible={search.visible}
+        query={search.query}
+        totalMatches={search.matchIndexes.length}
+        currentMatch={search.currentMatch >= 0 ? search.currentMatch + 1 : 0}
+        onSearch={search.actions.search}
+        onNavigate={search.actions.navigate}
+        onClose={search.actions.close}
+      />
       {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
       {interrupted && !interruptedDismissed && (
         <div className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 flex items-center gap-2 border-b px-3 py-1 text-xs text-amber-700 dark:text-amber-300">
@@ -160,23 +180,35 @@ export function ChatPanel({
         <span className="text-muted-foreground/70" aria-hidden="true">
           ·
         </span>
-        <div
-          className={cn(
-            'inline-flex items-center gap-1.5',
-            status === 'streaming' && 'text-[var(--aurora-accent)]',
-            status === 'error' && 'text-destructive',
-          )}
-          role="status"
-          aria-label={t('chat.sessionStatus', { status: statusText })}
-        >
-          {/* 状态点：streaming 时脉冲动画 */}
+        <div className="inline-flex items-center gap-1.5">
+          {/* 会话内搜索入口（对齐参考项目 ConversationSearchBar） */}
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground -mr-1 flex size-5 cursor-pointer items-center justify-center rounded transition-colors"
+            onClick={search.actions.open}
+            aria-label={t('chat.searchInConversation')}
+            title={t('chat.searchInConversation')}
+          >
+            <Search className="size-3.5" strokeWidth={1.5} />
+          </button>
           <span
             className={cn(
-              'inline-block size-1.5 rounded-full bg-current',
-              status === 'streaming' && 'animate-pulse-soft',
+              'inline-flex items-center gap-1.5',
+              status === 'streaming' && 'text-[var(--aurora-accent)]',
+              status === 'error' && 'text-destructive',
             )}
-          />
-          {statusText}
+            role="status"
+            aria-label={t('chat.sessionStatus', { status: statusText })}
+          >
+            {/* 状态点：streaming 时脉冲动画 */}
+            <span
+              className={cn(
+                'inline-block size-1.5 rounded-full bg-current',
+                status === 'streaming' && 'animate-pulse-soft',
+              )}
+            />
+            {statusText}
+          </span>
         </div>
         {/* token 用量（回合结束后显示，悬浮提示明细） */}
         {usageText !== null && (
@@ -195,7 +227,12 @@ export function ChatPanel({
 
       {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">
-        <ChatMessageList messages={messages} status={status} onRegenerate={handleRegenerate} />
+        <ChatMessageList
+          messages={messages}
+          status={status}
+          onRegenerate={handleRegenerate}
+          searchActiveIndex={searchActiveIndex}
+        />
       </div>
 
       {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
