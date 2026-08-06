@@ -67,7 +67,7 @@ describe('createStreamWithRetry', () => {
     ).rejects.toThrow('network failure');
   });
 
-  it('限流错误（429）不重试，立即抛出（主流程快速失败语义）', async () => {
+  it('限流错误（429）无 Retry-After 不重试，立即抛出（快速失败语义）', async () => {
     const rateLimited = new APICallError({
       message: 'Rate limit exceeded',
       url: 'https://api.example.com/v1/chat/completions',
@@ -86,7 +86,30 @@ describe('createStreamWithRetry', () => {
         maxAttempts: 3,
       }),
     ).rejects.toThrow('Rate limit exceeded');
-    expect(createdCount()).toBe(1); // 429 不重试
+    expect(createdCount()).toBe(1); // 429 无 Retry-After 不重试
+  });
+
+  it('限流错误（429）带 Retry-After 自动重试（尊重服务端限流窗口）', async () => {
+    // 构造带 retry-after 头的 429（首次失败，随后成功）
+    const rateLimited = new APICallError({
+      message: 'Rate limit exceeded',
+      url: 'https://api.example.com/v1/chat/completions',
+      requestBodyValues: undefined,
+      statusCode: 429,
+      responseBody: 'Too Many Requests',
+      responseHeaders: { 'retry-after': '1' },
+    });
+    const { streamable, createdCount } = createFakeStream({
+      firstReadFailures: 1,
+      error: rateLimited,
+    });
+    const created = await createStreamWithRetry({
+      create: () => streamable,
+      controller: new AbortController(),
+      maxAttempts: 3,
+    });
+    expect(createdCount()).toBe(2); // 429 带 Retry-After 重试 1 次后成功
+    expect(created.firstPart.done).toBe(false);
   });
 
   it('流立即结束（done 首读）', async () => {

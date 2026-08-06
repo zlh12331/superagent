@@ -12,7 +12,12 @@
 
 import { logger } from '../../../utils/logger';
 import type { RetryAttemptInfo } from '../llm-client/retry';
-import { getErrorStatus, isRetryableError, retryWithBackoff } from '../llm-client/retry';
+import {
+  getErrorStatus,
+  getRetryAfterDelayMs,
+  isRetryableError,
+  retryWithBackoff,
+} from '../llm-client/retry';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 
 /** 可转为 UIMessageStream 的 streamText 结果（agent/chat 共用形状） */
@@ -76,10 +81,17 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
       maxAttempts: options.maxAttempts ?? 3,
       ...(options.controller.signal !== undefined ? { signal: options.controller.signal } : {}),
       // 主流程重试语义：网络错误（5xx/超时/连接）重试；
-      // 排除 429 限流——静默退避等待体验差，且回合可能已产生副作用，快速失败更安全
+      // 429 限流：仅当服务端给出 Retry-After 指示时重试（尊重服务端限流窗口，
+      // 退避时长由 Retry-After 决定）；无 Retry-After 时快速失败
+      // （盲目指数退避体验差，且回合可能已产生副作用）
       // （side query 保持完整重试，见 llm-client.runSideQuery）
-      shouldRetryOnError: (error: unknown) =>
-        isRetryableError(error) && getErrorStatus(error) !== 429,
+      shouldRetryOnError: (error: unknown) => {
+        if (!isRetryableError(error)) return false;
+        if (getErrorStatus(error) === 429) {
+          return getRetryAfterDelayMs(error) !== undefined;
+        }
+        return true;
+      },
       onRetry: (info: RetryAttemptInfo) => {
         logger.warn(
           { attempt: info.attempt, errorStatus: info.errorStatus, delayMs: info.delayMs },
