@@ -123,6 +123,10 @@
         "clear": "清空当前对话",
         "compact": "压缩上下文",
         "models": "查看可用模型"
+      },
+      "fileChange": {
+        "created": "Created",
+        "modified": "Modified"
       }
     },
     "update": {

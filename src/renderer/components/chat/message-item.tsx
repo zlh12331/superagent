@@ -46,7 +46,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useToolStore } from '@/stores/transient/tool-store';
-
+import { FileChangeCard } from './file-change-card';
 import { Markdown } from './Markdown';
 import { MsgActions } from './message-actions';
 import { extractText, formatJson } from './message-utils';
@@ -161,6 +161,11 @@ function PartView({ part }: { part: UIMessagePart }): ReactElement {
   // 注意：errorText 在不同 state 下可能为 string 或 undefined，
   // 用 ?? undefined 统一为 string | undefined（兼容 exactOptionalPropertyTypes）
   if (isStaticToolUIPart(part)) {
+    // 文件变更工具（edit_file / write_file）：渲染 FileChangeCard（diff 卡片）
+    // 对齐参考项目 FileChangeCard——替代通用 JSON 展示，突出文件变更可视化
+    if (part.type === 'tool-edit_file' || part.type === 'tool-write_file') {
+      return <FileChangeCard toolName={part.type.slice(5)} input={part.input} />;
+    }
     return (
       <ToolCallView
         type={part.type}
