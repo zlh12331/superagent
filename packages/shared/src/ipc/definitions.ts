@@ -191,6 +191,13 @@ export function withPayload<M extends { readonly kind: 'event'; readonly channel
  * 新增方法：在 IPC_META 加一行，再在本文件用 withSchema/withPayload 合并 schema。
  * preload 生成器自动同步（消费 IPC_META），handler 缺失在编译期报错（InferHandlers）。
  */
+const SkillLearnReqSchema = z.object({
+  rawInput: z.string().min(1).max(8000),
+});
+const SkillRemoveReqSchema = z.object({
+  name: z.string().min(1).max(64),
+});
+
 const AudioStartReqSchema = z.object({
   sampleRate: z.number().int().positive().max(48000).optional(),
   channels: z.number().int().positive().max(2).optional(),
@@ -434,6 +441,21 @@ export const IPC_DEFINITIONS = {
 
   skill: {
     list: withSchema(IPC_META.skill.list, null, {} as SkillListRes),
+    learn: withSchema(
+      IPC_META.skill.learn,
+      SkillLearnReqSchema,
+      {} as { name: string; description: string; prompt: string; replaced: boolean },
+    ),
+    listLearned: withSchema(
+      IPC_META.skill.listLearned,
+      z.object({}),
+      {} as Array<{ name: string; description: string; prompt: string }>,
+    ),
+    removeLearned: withSchema(
+      IPC_META.skill.removeLearned,
+      SkillRemoveReqSchema,
+      {} as { removed: boolean },
+    ),
   },
 
   goal: {

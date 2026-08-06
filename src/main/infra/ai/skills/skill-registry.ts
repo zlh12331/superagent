@@ -104,6 +104,32 @@ export class SkillRegistry {
   register(skill: Skill): void {
     this.skills.set(skill.name, skill);
   }
+
+  /**
+   * 批量加载（learn-skill-agent 产物从 skills 表合并；启动时调用）
+   */
+  loadFromRows(rows: readonly Skill[]): void {
+    for (const skill of rows) {
+      this.skills.set(skill.name, skill);
+    }
+  }
+
+  /**
+   * 移除技能（若为内置技能则自动回退内置定义）
+   *
+   * @returns 是否存在该技能
+   */
+  remove(name: string): boolean {
+    if (!this.skills.has(name)) {
+      return false;
+    }
+    this.skills.delete(name);
+    const builtin = BUILTIN_SKILLS.find((skill) => skill.name === name);
+    if (builtin !== undefined) {
+      this.skills.set(name, builtin);
+    }
+    return true;
+  }
 }
 
 /** 模块级单例 */

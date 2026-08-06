@@ -80,6 +80,14 @@ export const SCHEMA_SQL = `
       created_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS skills (
+      name TEXT PRIMARY KEY,
+      description TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'learned',
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS cron_tasks (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,

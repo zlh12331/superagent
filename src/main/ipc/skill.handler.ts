@@ -6,10 +6,12 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
+import { llmClient } from '../infra/ai/ai-provider';
+import { LearnSkillService } from '../infra/ai/learn-skill-agent';
 import { skillRegistry } from '../infra/ai/skills/skill-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** 技能域 handler 实现（依赖模块级 skillRegistry 单例） */
+/** 技能域 handler 实现（依赖模块级 skillRegistry 单例 + LearnSkillService） */
 export const skillHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['skill'] = {
   // 列出全部技能
   list: async () => {
@@ -20,5 +22,33 @@ export const skillHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCont
         description: skill.description,
       })),
     };
+  },
+
+  // 学习技能：用户输入 → LLM 提炼 → 持久化 + 动态注册
+  learn: async (input) => {
+    const service = new LearnSkillService(llmClient);
+    const result = await service.learn(input.rawInput);
+    return {
+      name: result.skill.name,
+      description: result.skill.description,
+      prompt: result.skill.prompt,
+      replaced: result.replaced,
+    };
+  },
+
+  // 列出已学习技能（skills 表）
+  listLearned: async () => {
+    const service = new LearnSkillService(llmClient);
+    return service.listLearned().map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      prompt: skill.prompt,
+    }));
+  },
+
+  // 删除已学习技能
+  removeLearned: async (input) => {
+    const service = new LearnSkillService(llmClient);
+    return { removed: service.remove(input.name) };
   },
 };

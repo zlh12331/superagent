@@ -146,6 +146,9 @@ export const IPC_META = {
 
   skill: {
     list: request('skill:list'),
+    learn: request('skill:learn'),
+    listLearned: request('skill:listLearned'),
+    removeLearned: request('skill:removeLearned'),
   },
 
   goal: {

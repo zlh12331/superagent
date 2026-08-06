@@ -14,6 +14,9 @@ import { startupTracingIntegration } from '@sentry/electron/main';
 import { app, BrowserWindow, session, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { getAppConfig } from './config';
+import { llmClient } from './infra/ai/ai-provider';
+import { LearnSkillService } from './infra/ai/learn-skill-agent';
+import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { createAgentHandlers } from './ipc/agent.handler';
@@ -274,6 +277,8 @@ app
     void recoverFromCrash();
     // 运行时模型加载：自定义模型注册到 ModelRegistry（LLM 首次调用前）
     void initRuntimeModels();
+    // 已学习技能合并加载（skills 表 → 注册表，重启保留）
+    skillRegistry.loadFromRows(new LearnSkillService(llmClient).listLearned());
     // IM 渠道恢复：已配置渠道自动连接（含 IM → Agent 桥接挂载）
     void serviceContainer.initImChannels();
     // 子代理管理器初始化（run_subagent 工具依赖）

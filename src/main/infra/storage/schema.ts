@@ -323,6 +323,24 @@ export const cronTasks = sqliteTable('cron_tasks', {
 
 export type CronTaskRow = typeof cronTasks.$inferSelect;
 
+/**
+ * skills 表：学习到的技能（learn-skill-agent 产物；source=learned）
+ */
+export const skills = sqliteTable('skills', {
+  /** 技能名（snake_case 主键） */
+  name: text('name').primaryKey(),
+  /** 一句话描述 */
+  description: text('description').notNull(),
+  /** 技能提示词 */
+  prompt: text('prompt').notNull(),
+  /** 来源（learned / builtin） */
+  source: text('source').notNull().default('learned'),
+  /** 创建时间 */
+  createdAt: integer('created_at').notNull(),
+});
+
+export type SkillRow = typeof skills.$inferSelect;
+
 /** tasks 表类型 */
 export type TaskRow = typeof tasks.$inferSelect;
 /** tasks 表插入类型 */
@@ -350,6 +368,7 @@ export const schema = {
   memories,
   tasks,
   cronTasks,
+  skills,
 };
 
 // 防止 ts 报未使用 sql 导入（未来 CREATE INDEX 会用到）
