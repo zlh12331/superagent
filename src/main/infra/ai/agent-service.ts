@@ -43,6 +43,7 @@ import { classifyError, isAbortError } from '../ai/error-classifier';
 import type { ISessionService } from '../storage/session-service';
 import { TurnEventEmitter } from './agent-runtime';
 import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
+import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from './agent-runtime/create-stream';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from './agent-runtime/stream-reader';
 import { TurnRunner } from './agent-runtime/turn-runner';
@@ -167,6 +168,8 @@ export class AgentService implements IAgentService {
     private readonly sessionService: ISessionService,
     /** 标题生成器（回合结束后异步生成会话标题，失败静默） */
     private readonly titleGenerator?: ITitleGenerator,
+    /** 并发公平调度门（多会话共享执行槽位；未注入则无并发上限，测试兼容） */
+    private readonly concurrencyGate?: ConcurrencyGate,
   ) {}
 
   /** 活跃对话 Map：sessionId → AbortController */
@@ -347,7 +350,14 @@ export class AgentService implements IAgentService {
           }
         });
         let unsubscribeAll = (): void => {};
+        // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
+        let releaseGate: (() => void) | undefined;
         try {
+          // 0. 并发槽位（回合执行开始前获取，释放见 finally）
+          releaseGate =
+            this.concurrencyGate === undefined
+              ? undefined
+              : await this.concurrencyGate.acquire(sessionId, controller.signal);
           // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
           const model = await getModel(undefined);
 
@@ -729,6 +739,8 @@ export class AgentService implements IAgentService {
             );
           }
         } finally {
+          // 并发槽位释放（幂等；必须在超时定时器清理前完成，让排队的下个回合尽早启动）
+          releaseGate?.();
           // 取消回合事件订阅（防泄漏）
           unsubscribeAll();
           forwardTurnEvents();

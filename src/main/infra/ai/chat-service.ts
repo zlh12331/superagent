@@ -29,6 +29,7 @@ import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 import type { ISessionService } from '../storage/session-service';
 import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
+import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from './agent-runtime/create-stream';
 import { readWithIdleTimeout } from './agent-runtime/stream-reader';
 import { getModel } from './ai-provider';
@@ -123,6 +124,8 @@ class ChatService implements IChatService {
   constructor(
     private readonly sessionService?: ISessionService,
     private readonly titleGenerator?: ITitleGenerator,
+    /** 并发公平调度门（多会话共享执行槽位；未注入则无并发上限，测试兼容） */
+    private readonly concurrencyGate?: ConcurrencyGate,
   ) {}
 
   /**
@@ -297,7 +300,13 @@ class ChatService implements IChatService {
     const startTime = performance.now();
     // 模型级超时定时器（finally 清理；请求结束立即释放）
     let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
+    // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
+    let releaseGate: (() => void) | undefined;
     try {
+      releaseGate =
+        this.concurrencyGate === undefined
+          ? undefined
+          : await this.concurrencyGate.acquire(sessionId, controller.signal);
       // 1. 获取 model 实例 + 生成选项（思考强度/采样/输出上限）
       const model = await getModel(undefined);
       const resolvedModel = modelRegistry.resolve(undefined);
@@ -464,6 +473,8 @@ class ChatService implements IChatService {
         logger.error({ sessionId, errorCode: appError.code, error: appError }, '对话流异常结束');
       }
     } finally {
+      // 并发槽位释放（幂等；必须在超时定时器清理前完成，让排队的下个回合尽早启动）
+      releaseGate?.();
       // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
       modelTimeout?.clear();
       // 无论正常/异常/abort，都从两个 Map 同步移除
@@ -500,9 +511,10 @@ let chatService: ChatService | null = null;
 export function getChatService(
   sessionService?: ISessionService,
   titleGenerator?: ITitleGenerator,
+  concurrencyGate?: ConcurrencyGate,
 ): IChatService {
   if (chatService === null) {
-    chatService = new ChatService(sessionService, titleGenerator);
+    chatService = new ChatService(sessionService, titleGenerator, concurrencyGate);
   }
   return chatService;
 }

@@ -49,6 +49,11 @@ import electronUpdater from 'electron-updater';
 const { autoUpdater } = electronUpdater;
 
 import { resetConfigCache } from './config';
+import {
+  type ConcurrencyGate,
+  createConcurrencyGate,
+  DEFAULT_MAX_CONCURRENT_TURNS,
+} from './infra/ai/agent-runtime/concurrency-gate';
 import { AgentService, type IAgentService } from './infra/ai/agent-service';
 import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/ai-provider';
 import type { IChatService } from './infra/ai/chat-service';
@@ -112,6 +117,23 @@ class ServiceContainer {
   private chatService: IChatService | null = null;
 
   /**
+   * 并发公平调度门（多会话共享执行槽位）
+   *
+   * 全局唯一实例：chat + agent 回合共用同一上限，FIFO 先来先得（平均分配）。
+   * 会话并发超过上限时排队等待，避免打满供应商 API 触发 429。
+   */
+  private readonly concurrencyGate: ConcurrencyGate = createConcurrencyGate(
+    DEFAULT_MAX_CONCURRENT_TURNS,
+  );
+
+  /**
+   * 获取并发公平调度门（chat + agent 回合共用）
+   */
+  getConcurrencyGate(): ConcurrencyGate {
+    return this.concurrencyGate;
+  }
+
+  /**
    * 获取 ChatService 实例
    *
    * 首次调用延迟初始化为默认 ChatService 实现（与 getChatService() 单例一致）。
@@ -119,8 +141,8 @@ class ServiceContainer {
    */
   getChatService(): IChatService {
     if (this.chatService === null) {
-      // 注入 sessionService（usage 落库）+ llmClient（标题生成），与 AgentService 对齐
-      this.chatService = getChatService(this.getSessionService(), llmClient);
+      // 注入 sessionService（usage 落库）+ llmClient（标题生成）+ 并发调度门
+      this.chatService = getChatService(this.getSessionService(), llmClient, this.concurrencyGate);
     }
     return this.chatService;
   }
@@ -401,6 +423,7 @@ class ServiceContainer {
         this.getPromptService(),
         this.getSessionService(),
         this.getLlmClient(),
+        this.concurrencyGate,
       );
     }
     return this.agentService;
