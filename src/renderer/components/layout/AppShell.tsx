@@ -221,6 +221,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         rightPanelCollapsed={rightPanelCollapsed}
         onToggleRightPanel={handleToggleRightPanel}
         onOpenCommandPalette={openPalette}
+        hideRightPanelToggle={isWelcomeMode}
       />
       <div
         className={cn(

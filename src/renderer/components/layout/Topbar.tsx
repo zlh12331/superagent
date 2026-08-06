@@ -36,6 +36,8 @@ interface TopbarProps {
   onToggleRightPanel: () => void;
   /** 打开命令面板（由 AppShell 通过 ⌘P 快捷键或点击按钮触发） */
   onOpenCommandPalette: () => void;
+  /** 是否隐藏右面板开关（欢迎页模式右面板隐藏，按钮无意义——对齐原型 welcome-mode） */
+  hideRightPanelToggle?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function Topbar({
   rightPanelCollapsed,
   onToggleRightPanel,
   onOpenCommandPalette,
+  hideRightPanelToggle = false,
 }: TopbarProps): ReactElement {
   const { resolvedTheme, setTheme } = useTheme();
   // 全局 UI store：设置对话框入口（Topbar / 命令面板 / 错误动作共享）
@@ -83,18 +86,20 @@ export function Topbar({
       {/* 中部：弹性 spacer（未来可放置命令面板入口 / 模型选择器） */}
       <div className="topbar-spacer" />
 
-      {/* 右侧：右面板开关 + 命令面板(预留) + 设置 + 主题切换 */}
+      {/* 右侧：右面板开关（欢迎页隐藏）+ 命令面板 + 设置 + 主题切换 */}
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          className="icon-btn rp-toggle-btn"
-          aria-label={rightPanelCollapsed ? t('topbar.expandPanel') : t('topbar.collapsePanel')}
-          title={rightPanelCollapsed ? t('topbar.expandPanel') : t('topbar.collapsePanel')}
-          aria-expanded={!rightPanelCollapsed}
-          onClick={onToggleRightPanel}
-        >
-          <PanelRight className="size-4" strokeWidth={1.5} />
-        </button>
+        {!hideRightPanelToggle && (
+          <button
+            type="button"
+            className="icon-btn rp-toggle-btn"
+            aria-label={rightPanelCollapsed ? t('topbar.expandPanel') : t('topbar.collapsePanel')}
+            title={rightPanelCollapsed ? t('topbar.expandPanel') : t('topbar.collapsePanel')}
+            aria-expanded={!rightPanelCollapsed}
+            onClick={onToggleRightPanel}
+          >
+            <PanelRight className="size-4" strokeWidth={1.5} />
+          </button>
+        )}
         <button
           type="button"
           className="icon-btn"
