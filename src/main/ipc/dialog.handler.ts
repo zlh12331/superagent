@@ -3,7 +3,8 @@
 //
 // 职责：
 // - dialog:pickDirectory：调用 Electron dialog.showOpenDialog 弹原生目录选择器
-// - 返回标准化结果 { canceled, path? }
+// - dialog:pickFiles：弹原生文件选择器（多选）
+// - 返回标准化结果 { canceled, path? } / { canceled, paths? }
 //
 // 设计：
 // - 无 ServiceContainer 依赖（dialog 是 Electron 全局 API，无状态）
@@ -35,5 +36,19 @@ export const dialogHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCon
     }
 
     return { canceled: false, path: selectedPath };
+  },
+
+  // dialog:pickFiles - 弹原生文件选择器（多选，任意文件类型）
+  // 用于聊天输入框附件选择（对齐参考项目 ChatInputAttachments）
+  pickFiles: async (input) => {
+    const result = await dialog.showOpenDialog({
+      properties: input.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true };
+    }
+
+    return { canceled: false, paths: result.filePaths };
   },
 };

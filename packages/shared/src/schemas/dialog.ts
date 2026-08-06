@@ -2,7 +2,7 @@
 // Dialog 域 zod schema（原生对话框）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 定义 dialog:pickDirectory 请求-响应 zod schema
+// - 定义 dialog:pickDirectory / dialog:pickFiles 请求-响应 zod schema
 // - 供主进程 DialogHandler 校验入参
 // ──────────────────────────────────────────────────────────────
 
@@ -20,4 +20,24 @@ export interface DialogPickDirectoryRes {
   readonly canceled: boolean;
   /** 选中的目录路径（canceled=true 时为 undefined） */
   readonly path?: string;
+}
+
+/** dialog:pickFiles 入参 zod schema */
+export const DialogPickFilesReqSchema = z.object({
+  /** 是否允许多选（默认 true） */
+  multiple: z
+    .boolean()
+    .optional()
+    .transform((v) => v ?? true),
+});
+
+/** dialog:pickFiles 入参类型 */
+export type DialogPickFilesReq = z.infer<typeof DialogPickFilesReqSchema>;
+
+/** dialog:pickFiles 响应 payload */
+export interface DialogPickFilesRes {
+  /** 用户是否取消选择 */
+  readonly canceled: boolean;
+  /** 选中的文件路径列表（canceled=true 时为 undefined） */
+  readonly paths?: string[];
 }

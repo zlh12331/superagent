@@ -42,7 +42,12 @@ import {
   type CodebaseQueryRes,
 } from '../schemas/codebase';
 import { OpenDevToolsReqSchema, type OpenDevToolsRes } from '../schemas/devtools';
-import { DialogPickDirectoryReqSchema, type DialogPickDirectoryRes } from '../schemas/dialog';
+import {
+  DialogPickDirectoryReqSchema,
+  type DialogPickDirectoryRes,
+  DialogPickFilesReqSchema,
+  type DialogPickFilesRes,
+} from '../schemas/dialog';
 import {
   FileCreateDirReqSchema,
   type FileCreateDirRes,
@@ -483,6 +488,11 @@ export const IPC_DEFINITIONS = {
       IPC_META.dialog.pickDirectory,
       DialogPickDirectoryReqSchema,
       {} as DialogPickDirectoryRes,
+    ),
+    pickFiles: withSchema(
+      IPC_META.dialog.pickFiles,
+      DialogPickFilesReqSchema,
+      {} as DialogPickFilesRes,
     ),
   },
 

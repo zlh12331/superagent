@@ -173,6 +173,7 @@ export const IPC_META = {
 
   dialog: {
     pickDirectory: request('dialog:pickDirectory'),
+    pickFiles: request('dialog:pickFiles'),
   },
 
   update: {

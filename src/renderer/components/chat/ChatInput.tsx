@@ -22,11 +22,22 @@
 // - 这样 ChatInput 是纯展示+交互组件，可在测试中独立 mock
 // - sendMessage / stop 回调签名与 useChat 返回值对齐
 
-import { AtSign, Send, Slash, Square } from 'lucide-react';
+import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+
+/** 附件项（对齐参考项目 ChatInputAttachments） */
+interface ChatAttachment {
+  /** 绝对路径（发送时 file:read 读取内容） */
+  readonly path: string;
+  /** 展示名称（路径 basename） */
+  readonly name: string;
+}
+
+/** 附件内容读取上限（字符，超出截断避免消息膨胀） */
+const ATTACHMENT_MAX_CHARS = 4000;
 
 /** 斜杠命令建议项 */
 interface SlashSuggestion {
@@ -96,6 +107,8 @@ export function ChatInput({
 }: ChatInputProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  // 附件列表（对齐参考项目 ChatInputAttachments：选择 → chip 展示 → 发送时读取拼接）
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   // 占位符：props 优先，缺省走 i18n
   const effectivePlaceholder = placeholder ?? t('chat.inputPlaceholder');
   // 输入文本：受控模式（controlledValue 提供）或内部 state（默认）
@@ -158,18 +171,78 @@ export function ChatInput({
   const charCount = value.trim().length;
   const isOverLimit = charCount > 2000;
 
+  /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
+  const handlePickFiles = async (): Promise<void> => {
+    if (typeof window === 'undefined' || window.api === undefined) return;
+    const response = await window.api.dialog.pickFiles({ multiple: true });
+    if ('error' in response && response.error !== undefined) return;
+    if ('data' in response && response.data !== undefined) {
+      const data = response.data;
+      if (data.canceled || data.paths === undefined || data.paths.length === 0) {
+        return;
+      }
+      // 去重（已选路径跳过）
+      const existing = new Set(attachments.map((a) => a.path));
+      const next = data.paths
+        .filter((p) => !existing.has(p))
+        .map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p }));
+      if (next.length > 0) {
+        setAttachments((prev) => [...prev, ...next]);
+      }
+    }
+  };
+
+  /** 移除附件 */
+  const removeAttachment = (path: string): void => {
+    setAttachments((prev) => prev.filter((a) => a.path !== path));
+  };
+
+  /**
+   * 读取附件内容并拼接进消息文本（file:read 支持 GBK 自动转码）
+   * 读取失败（二进制/超大）跳过该附件，不影响发送。
+   */
+  const buildTextWithAttachments = async (baseText: string): Promise<string> => {
+    if (attachments.length === 0 || typeof window === 'undefined' || window.api === undefined) {
+      return baseText;
+    }
+    let text = baseText;
+    for (const att of attachments) {
+      try {
+        const response = await window.api.file.read({
+          path: att.path,
+          offset: undefined,
+          limit: 200,
+        });
+        if ('error' in response && response.error !== undefined) {
+          text += `\n\n[附件: ${att.name}]（内容读取失败）`;
+          continue;
+        }
+        if ('data' in response && response.data !== undefined) {
+          const content = response.data.content.slice(0, ATTACHMENT_MAX_CHARS);
+          text += `\n\n[附件: ${att.name}]\n\`\`\`\n${content}\n\`\`\``;
+        }
+      } catch {
+        // 读取失败（二进制文件/权限）：仅附加文件名标注，不阻断发送
+        text += `\n\n[附件: ${att.name}]（内容读取失败）`;
+      }
+    }
+    return text;
+  };
+
   /**
    * 发送当前文本
    *
    * 清空输入框并触发 onSend 回调。
    * 若文本为空或处于流式状态，直接返回。
    */
-  const handleSend = () => {
+  const handleSend = async (): Promise<void> => {
     if (!canSend) {
       return;
     }
-    onSend(value);
+    const text = await buildTextWithAttachments(value);
+    onSend(text);
     setValue('');
+    setAttachments([]);
   };
 
   /**
@@ -236,6 +309,30 @@ export function ChatInput({
           ))}
         </div>
       )}
+      {/* 附件 chip 列表（对齐参考项目 ChatInputAttachments） */}
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pb-1.5">
+          {attachments.map((att) => (
+            <span
+              key={att.path}
+              className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+            >
+              <FileText className="size-3 shrink-0" />
+              <span className="max-w-40 truncate" title={att.path}>
+                {att.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeAttachment(att.path)}
+                aria-label={t('common.close')}
+                className="hover:text-foreground cursor-pointer rounded-full transition-colors"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光） */}
       <textarea
         className="composer-input"
@@ -262,7 +359,7 @@ export function ChatInput({
             aria-label={t('chat.attachFile')}
             title={`${t('chat.attachFile')} (@)`}
             onClick={() => {
-              /* 功能预留：后续接入文件选择器 */
+              void handlePickFiles();
             }}
           >
             <AtSign className="size-4" strokeWidth={1.5} />
