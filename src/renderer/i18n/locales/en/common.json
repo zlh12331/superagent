@@ -427,6 +427,19 @@
       "closed": "Closed",
       "closeTerminal": "Close terminal",
       "exited": "[Process exited, exit code: {{code}}]"
+    },
+    "panel": {
+      "tabInfo": "Info",
+      "tabDiff": "Diff",
+      "tabFiles": "Files",
+      "tabDev": "Dev",
+      "goals": "Goals",
+      "noGoals": "No goals",
+      "tasks": "Tasks",
+      "noTasks": "No tasks",
+      "sessionInfo": "Session Info",
+      "noChanges": "No file changes this turn",
+      "noFiles": "No modified files"
     }
   }
 }

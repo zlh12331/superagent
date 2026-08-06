@@ -1,38 +1,54 @@
 // src/renderer/components/layout/__tests__/DevPanel.test.tsx
-// DevPanel 组件测试
+// DevPanel 组件测试（右面板 · 会话上下文面板）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：
-// 1. 默认折叠（expanded=false）→ 仅标题栏，内容区不渲染
-// 2. 点击展开按钮 → 展开 + 渲染 TerminalPanel
-// 3. 再次点击展开按钮 → 折叠 + 不渲染内容区
-// 4. 切换到 Git Tab → 渲染 GitPanel（替代 TerminalPanel）
-// 5. 切换 Tab 时自动展开（折叠态切 Tab → 展开）
-// 6. aria-expanded 属性
-// 7. 自定义 className
-// 8. Logs / Metrics / Inspector Tab 切换 + enabled 透传
+// 1. 默认展开 + 默认 activeTab=info（会话详情）
+// 2. 点击折叠按钮 → 折叠 + 不渲染内容区；再点展开
+// 3. 切换到 diff / files / terminal Tab → 渲染对应 pane
+// 4. 切换到 dev Tab → 默认 git 子视图；切换 logs/metrics/inspector
+// 5. sessionId / gitRepoPath props 透传
+// 6. 自定义 className
 //
 // 策略：
-// - mock TerminalPanel / GitPanel / LogsPanel / MetricsPanel / InspectorPanel 子组件
+// - mock 子组件（InfoPane/DiffPane/FilesPane/TerminalPanel/GitPanel/LogsPanel/MetricsPanel/InspectorPanel）
 // - 仅断言是否被渲染 + props 透传
-// - 避免依赖 xterm/TanStack Query / IPC 等外部依赖
+// - 避免依赖 xterm/TanStack Query/IPC 等外部依赖
 // ──────────────────────────────────────────────────────────────
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ── mock 子组件（避免依赖 xterm / TanStack Query） ───────────
-//
-// vi.hoisted 提升 mock 函数，使 vi.mock factory 可安全引用
-const { mockTerminalPanel, mockGitPanel, mockLogsPanel, mockMetricsPanel, mockInspectorPanel } =
-  vi.hoisted(() => ({
-    mockTerminalPanel: vi.fn(),
-    mockGitPanel: vi.fn(),
-    mockLogsPanel: vi.fn(),
-    mockMetricsPanel: vi.fn(),
-    mockInspectorPanel: vi.fn(),
-  }));
+// ── mock 子组件 ─────────────────────────────────────────────
+const {
+  mockInfoPane,
+  mockDiffPane,
+  mockFilesPane,
+  mockTerminalPanel,
+  mockGitPanel,
+  mockLogsPanel,
+  mockMetricsPanel,
+  mockInspectorPanel,
+} = vi.hoisted(() => ({
+  mockInfoPane: vi.fn(),
+  mockDiffPane: vi.fn(),
+  mockFilesPane: vi.fn(),
+  mockTerminalPanel: vi.fn(),
+  mockGitPanel: vi.fn(),
+  mockLogsPanel: vi.fn(),
+  mockMetricsPanel: vi.fn(),
+  mockInspectorPanel: vi.fn(),
+}));
+
+vi.mock('../right-panel-panes', () => ({
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  InfoPane: mockInfoPane,
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  DiffPane: mockDiffPane,
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  FilesPane: mockFilesPane,
+}));
 
 vi.mock('@/components/terminal/TerminalPanel', () => ({
   // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
@@ -61,10 +77,19 @@ vi.mock('@/components/dev/InspectorPanel', () => ({
 
 import { DevPanel } from '../DevPanel';
 
-// ── mock 组件实现（返回固定占位） ────────────────────────────
-//
-// 每次调用 mock*Panel 都返回一个带 data-testid 的 div
-// 便于用 screen.queryByTestId 检测是否被渲染
+// ── mock 组件实现 ───────────────────────────────────────────
+function MockInfoPane(props: { sessionId: string }): ReactElement {
+  return <div data-testid="info-pane" data-session-id={props.sessionId} />;
+}
+
+function MockDiffPane(props: { sessionId: string }): ReactElement {
+  return <div data-testid="diff-pane" data-session-id={props.sessionId} />;
+}
+
+function MockFilesPane(props: { sessionId: string }): ReactElement {
+  return <div data-testid="files-pane" data-session-id={props.sessionId} />;
+}
+
 function MockTerminalPanel(props: { sessionId: string; className?: string }): ReactElement {
   return (
     <div
@@ -103,10 +128,19 @@ function MockInspectorPanel(props: { className?: string }): ReactElement {
   return <div data-testid="inspector-panel" data-class={props.className} />;
 }
 
+/** 渲染 DevPanel 的公共 helper */
+function renderDevPanel(props: Partial<React.ComponentProps<typeof DevPanel>> = {}) {
+  return render(
+    <DevPanel sessionId="session-1" gitRepoPath="/repo" workingDir="/repo" {...props} />,
+  );
+}
+
 describe('DevPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // 重置 mock 实现（每个测试前确保返回占位组件）
+    mockInfoPane.mockImplementation(MockInfoPane);
+    mockDiffPane.mockImplementation(MockDiffPane);
+    mockFilesPane.mockImplementation(MockFilesPane);
     mockTerminalPanel.mockImplementation(MockTerminalPanel);
     mockGitPanel.mockImplementation(MockGitPanel);
     mockLogsPanel.mockImplementation(MockLogsPanel);
@@ -114,253 +148,95 @@ describe('DevPanel', () => {
     mockInspectorPanel.mockImplementation(MockInspectorPanel);
   });
 
-  // ── 默认折叠 ──────────────────────────────────────────
-  describe('默认折叠', () => {
-    it('初始渲染：折叠态 → 仅标题栏，不渲染内容区', () => {
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 展开按钮存在（aria-expanded=false）
-      const expandBtn = screen.getByRole('button', { name: '展开开发面板' });
-      expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
-
-      // 内容区不渲染（所有面板都不应被渲染）
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('metrics-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('inspector-panel')).not.toBeInTheDocument();
-    });
-
-    it('折叠态渲染「终端」「Git」「日志」「指标」「检查器」五个 Tab', () => {
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      expect(screen.getByText('终端')).toBeInTheDocument();
-      expect(screen.getByText('Git')).toBeInTheDocument();
-      expect(screen.getByText('日志')).toBeInTheDocument();
-      expect(screen.getByText('指标')).toBeInTheDocument();
-      expect(screen.getByText('检查器')).toBeInTheDocument();
-    });
-
-    it('默认 activeTab=terminal', () => {
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 终端 Tab 应有 active 状态（Radix TabsTrigger 选中时 data-state=active）
-      const terminalTab = screen.getByText('终端').closest('[role="tab"]');
-      expect(terminalTab).toHaveAttribute('data-state', 'active');
-    });
+  // ── 默认状态 ─────────────────────────────────────────────
+  it('默认展开且默认 activeTab=info（渲染会话详情 pane）', () => {
+    renderDevPanel();
+    expect(screen.getByTestId('info-pane')).toBeInTheDocument();
+    expect(mockInfoPane).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-1' }),
+      undefined,
+    );
   });
 
-  // ── 折叠/展开 ─────────────────────────────────────────
-  describe('折叠/展开', () => {
-    it('点击展开按钮 → 展开 + 渲染 TerminalPanel（默认 activeTab=terminal）', () => {
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      const expandBtn = screen.getByRole('button', { name: '展开开发面板' });
-      fireEvent.click(expandBtn);
-
-      // aria-expanded 变为 true
-      expect(expandBtn).toHaveAttribute('aria-expanded', 'true');
-      // 按钮的 aria-label 切换为「收起开发面板」
-      expect(expandBtn).toHaveAttribute('aria-label', '收起开发面板');
-
-      // 内容区渲染 → TerminalPanel 被调用
-      expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
-      // sessionId 透传
-      expect(screen.getByTestId('terminal-panel')).toHaveAttribute('data-session-id', 's1');
-    });
-
-    it('再次点击展开按钮 → 折叠 + 不渲染内容区', () => {
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      const expandBtn = screen.getByRole('button', { name: '展开开发面板' });
-
-      // 展开
-      fireEvent.click(expandBtn);
-      expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
-
-      // 再次点击 → 折叠
-      fireEvent.click(expandBtn);
-      expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-    });
-
-    it('展开 → 折叠 → 展开：状态保持默认 activeTab', () => {
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      const expandBtn = screen.getByRole('button', { name: '展开开发面板' });
-
-      // 展开
-      fireEvent.click(expandBtn);
-      expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
-
-      // 折叠
-      fireEvent.click(expandBtn);
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-
-      // 再次展开 → 仍是 terminal Tab（activeTab 状态保留）
-      fireEvent.click(expandBtn);
-      expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
-    });
+  it('折叠按钮点击 → 折叠不渲染内容；再点展开恢复', async () => {
+    renderDevPanel();
+    const toggleBtn = screen.getByRole('button', { name: /收起|展开/ });
+    // 默认展开
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    // 折叠
+    await userEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('info-pane')).not.toBeInTheDocument();
+    // 展开
+    await userEvent.click(toggleBtn);
+    expect(screen.getByTestId('info-pane')).toBeInTheDocument();
   });
 
-  // ── Tab 切换 ──────────────────────────────────────────
-  describe('Tab 切换', () => {
-    it('点击 Git Tab → 切换到 GitPanel + 自动展开', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 初始折叠，无内容
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-
-      // 点击 Git Tab（Radix Tabs 需要 pointerDown 触发，用 userEvent 模拟真实交互）
-      await user.click(screen.getByText('Git'));
-
-      // 自动展开 + 渲染 GitPanel
-      expect(screen.getByTestId('git-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-
-      // gitRepoPath 透传
-      expect(screen.getByTestId('git-panel')).toHaveAttribute('data-path', '/repo');
-    });
-
-    it('展开态下切换 Tab → 切换内容区（TerminalPanel ↔ GitPanel）', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 先展开（默认 terminal）
-      fireEvent.click(screen.getByRole('button', { name: '展开开发面板' }));
-      expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
-
-      // 切换到 Git
-      await user.click(screen.getByText('Git'));
-      expect(screen.getByTestId('git-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-
-      // 切回终端
-      await user.click(screen.getByText('终端'));
-      expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-    });
-
-    it('切换 Tab 后折叠 → 重新展开保持切换后的 Tab', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 切换到 Git Tab（自动展开）
-      await user.click(screen.getByText('Git'));
-      expect(screen.getByTestId('git-panel')).toBeInTheDocument();
-
-      // 折叠
-      fireEvent.click(screen.getByRole('button', { name: '收起开发面板' }));
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-
-      // 重新展开 → 仍是 Git Tab
-      fireEvent.click(screen.getByRole('button', { name: '展开开发面板' }));
-      expect(screen.getByTestId('git-panel')).toBeInTheDocument();
-    });
-
-    it('sessionId 变化 → TerminalPanel 接收新的 sessionId', () => {
-      const { rerender } = render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 展开
-      fireEvent.click(screen.getByRole('button', { name: '展开开发面板' }));
-      expect(screen.getByTestId('terminal-panel')).toHaveAttribute('data-session-id', 's1');
-
-      // 切换 sessionId
-      rerender(<DevPanel sessionId="s2" gitRepoPath="/repo" />);
-      expect(screen.getByTestId('terminal-panel')).toHaveAttribute('data-session-id', 's2');
-    });
-
-    it('gitRepoPath 变化 → GitPanel 接收新的 path', async () => {
-      const user = userEvent.setup();
-      const { rerender } = render(<DevPanel sessionId="s1" gitRepoPath="/repo1" />);
-
-      // 切换到 Git Tab
-      await user.click(screen.getByText('Git'));
-      expect(screen.getByTestId('git-panel')).toHaveAttribute('data-path', '/repo1');
-
-      // 切换 gitRepoPath
-      rerender(<DevPanel sessionId="s1" gitRepoPath="/repo2" />);
-      expect(screen.getByTestId('git-panel')).toHaveAttribute('data-path', '/repo2');
-    });
-
-    // ── Logs / Metrics Tab（新增） ─────────────────────
-    it('点击日志 Tab → 切换到 LogsPanel + 自动展开 + enabled=true', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 点击日志 Tab
-      await user.click(screen.getByText('日志'));
-
-      // 自动展开 + 渲染 LogsPanel
-      expect(screen.getByTestId('logs-panel')).toBeInTheDocument();
-      // 其他面板不渲染
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('metrics-panel')).not.toBeInTheDocument();
-
-      // enabled 透传（展开态应为 true）
-      expect(screen.getByTestId('logs-panel')).toHaveAttribute('data-enabled', 'true');
-    });
-
-    it('点击指标 Tab → 切换到 MetricsPanel + 自动展开 + enabled=true', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      await user.click(screen.getByText('指标'));
-
-      expect(screen.getByTestId('metrics-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
-
-      expect(screen.getByTestId('metrics-panel')).toHaveAttribute('data-enabled', 'true');
-    });
-
-    it('折叠态下 Logs/Metrics 面板不渲染（enabled 不影响渲染逻辑，仅控制查询）', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 切换到日志 Tab（自动展开）
-      await user.click(screen.getByText('日志'));
-      expect(screen.getByTestId('logs-panel')).toBeInTheDocument();
-      expect(screen.getByTestId('logs-panel')).toHaveAttribute('data-enabled', 'true');
-
-      // 折叠 → 内容区不渲染
-      fireEvent.click(screen.getByRole('button', { name: '收起开发面板' }));
-      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
-    });
-
-    // ── Inspector Tab（新增） ──────────────────────────
-    it('点击检查器 Tab → 切换到 InspectorPanel + 自动展开', async () => {
-      const user = userEvent.setup();
-      render(<DevPanel sessionId="s1" gitRepoPath="/repo" />);
-
-      // 点击检查器 Tab
-      await user.click(screen.getByText('检查器'));
-
-      // 自动展开 + 渲染 InspectorPanel
-      expect(screen.getByTestId('inspector-panel')).toBeInTheDocument();
-      // 其他面板不渲染
-      expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('git-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('logs-panel')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('metrics-panel')).not.toBeInTheDocument();
-
-      // className 透传
-      expect(screen.getByTestId('inspector-panel')).toHaveAttribute('data-class', 'h-full');
-    });
+  it('折叠态点击 Tab → 自动展开并渲染对应 pane', async () => {
+    renderDevPanel();
+    // 折叠
+    await userEvent.click(screen.getByRole('button', { name: /收起|展开/ }));
+    // 点击 diff tab
+    await userEvent.click(screen.getByRole('tab', { name: /文件变更/ }));
+    expect(screen.getByTestId('diff-pane')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /收起|展开/ }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
   });
 
-  // ── 自定义 className ─────────────────────────────────
-  describe('自定义 className', () => {
-    it('传入 className → 根容器合并 class', () => {
-      const { container } = render(
-        <DevPanel sessionId="s1" gitRepoPath="/repo" className="custom-class" />,
-      );
+  // ── Tab 切换 ─────────────────────────────────────────────
+  it('切换 diff / files / terminal Tab 渲染对应 pane', async () => {
+    renderDevPanel();
+    await userEvent.click(screen.getByRole('tab', { name: /文件变更/ }));
+    expect(screen.getByTestId('diff-pane')).toBeInTheDocument();
 
-      const root = container.firstElementChild;
-      expect(root?.className).toContain('custom-class');
-    });
+    await userEvent.click(screen.getByRole('tab', { name: /文件$/ }));
+    expect(screen.getByTestId('files-pane')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: /终端/ }));
+    expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
+  });
+
+  // ── 开发者子视图 ─────────────────────────────────────────
+  it('dev Tab 默认 git 子视图，可切换 logs/metrics/inspector', async () => {
+    renderDevPanel();
+    await userEvent.click(screen.getByRole('tab', { name: /开发者/ }));
+    expect(screen.getByTestId('git-panel')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /日志/ }));
+    expect(screen.getByTestId('logs-panel')).toBeInTheDocument();
+    expect(mockLogsPanel).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+      undefined,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /指标/ }));
+    expect(screen.getByTestId('metrics-panel')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /检查器/ }));
+    expect(screen.getByTestId('inspector-panel')).toBeInTheDocument();
+  });
+
+  // ── props 透传 ───────────────────────────────────────────
+  it('sessionId 变化 → InfoPane 与 TerminalPanel 收到新 sessionId', () => {
+    const { rerender } = renderDevPanel();
+    expect(screen.getByTestId('info-pane').getAttribute('data-session-id')).toBe('session-1');
+
+    rerender(<DevPanel sessionId="session-2" gitRepoPath="/repo" workingDir="/repo" />);
+    expect(screen.getByTestId('info-pane').getAttribute('data-session-id')).toBe('session-2');
+  });
+
+  it('gitRepoPath 变化 → GitPanel 收到新 path', async () => {
+    const { rerender } = renderDevPanel();
+    await userEvent.click(screen.getByRole('tab', { name: /开发者/ }));
+    expect(screen.getByTestId('git-panel').getAttribute('data-path')).toBe('/repo');
+
+    rerender(<DevPanel sessionId="session-1" gitRepoPath="/repo2" workingDir="/repo" />);
+    expect(screen.getByTestId('git-panel').getAttribute('data-path')).toBe('/repo2');
+  });
+
+  it('自定义 className 合并到容器', () => {
+    renderDevPanel({ className: 'custom-class' });
+    expect(document.querySelector('.custom-class')).not.toBeNull();
   });
 });

@@ -427,6 +427,19 @@
       "closed": "已结束",
       "closeTerminal": "关闭终端",
       "exited": "[进程已退出，exit code: {{code}}]"
+    },
+    "panel": {
+      "tabInfo": "会话详情",
+      "tabDiff": "文件变更",
+      "tabFiles": "文件",
+      "tabDev": "开发者",
+      "goals": "会话目标",
+      "noGoals": "暂无目标",
+      "tasks": "计划待办",
+      "noTasks": "暂无待办",
+      "sessionInfo": "会话信息",
+      "noChanges": "本轮暂无文件变更",
+      "noFiles": "暂无修改文件"
     }
   }
 }
