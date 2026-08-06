@@ -1,4 +1,10 @@
 // src/renderer/components/file-tree/FileViewerDialog.tsx
+// 文件预览对话框 · 组装层（语言检测/文件名提取纯函数移至 file-viewer-utils）
+// ──────────────────────────────
+// 拆分背景（2026-08 重构）：原文件 427 行，纯函数提取为独立文件
+// ──────────────────────────────
+
+// src/renderer/components/file-tree/FileViewerDialog.tsx
 // 文件查看器对话框（点击文件树中的文件后弹出）
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -19,7 +25,7 @@ import { Check, Copy, Eye, FileText, Pencil, Save } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { getHighlighter, normalizeLang } from '@/components/chat/Markdown';
+import { getHighlighter } from '@/components/chat/Markdown';
 import {
   Dialog,
   DialogContent,
@@ -36,77 +42,8 @@ import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
 import { FileTreeNavigator } from './FileTreeNavigator';
 
-/**
- * 文件扩展名 → shiki 语言 ID 映射
- *
- * 仅映射与 shiki 预加载语言名不一致的情况（如 .ts → typescript 已对齐，无需在此列出）。
- * 未列出的扩展名将直接用扩展名去 normalizeLang（shiki 已知 lang id 时直接生效）。
- */
-const EXT_TO_LANG: Readonly<Record<string, string>> = {
-  ts: 'typescript',
-  tsx: 'tsx',
-  js: 'javascript',
-  jsx: 'jsx',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  json: 'json',
-  jsonc: 'json',
-  py: 'python',
-  rs: 'rust',
-  go: 'go',
-  java: 'java',
-  sh: 'bash',
-  bash: 'bash',
-  zsh: 'bash',
-  yaml: 'yaml',
-  yml: 'yaml',
-  xml: 'xml',
-  html: 'html',
-  htm: 'html',
-  css: 'css',
-  scss: 'css',
-  md: 'markdown',
-  markdown: 'markdown',
-  sql: 'sql',
-  diff: 'diff',
-  patch: 'diff',
-};
+import { basename, detectLangFromPath } from './file-viewer-utils';
 
-/**
- * 从文件路径推断 shiki 语言 ID
- *
- * 取最后一个 . 后的扩展名，转小写后查表；未命中时返回 'text'。
- * 无扩展名或未知扩展名 → 'text'（不高亮，但保留 pre 格式）。
- */
-function detectLangFromPath(filePath: string): string {
-  const lastDot = filePath.lastIndexOf('.');
-  if (lastDot === -1) return 'text';
-  const ext = filePath.slice(lastDot + 1).toLowerCase();
-  const raw = EXT_TO_LANG[ext] ?? ext;
-  return normalizeLang(raw);
-}
-
-/**
- * 从绝对路径提取 basename（兼容 Windows 反斜杠与 POSIX 正斜杠）
- */
-function basename(path: string): string {
-  const lastSlash = path.lastIndexOf('/');
-  const lastBackslash = path.lastIndexOf('\\');
-  const idx = Math.max(lastSlash, lastBackslash);
-  if (idx === -1) return path;
-  return path.slice(idx + 1);
-}
-
-/**
- * 文件查看器对话框
- *
- * 全局单例（挂载在 AppShell 根级），通过 useFileViewerStore 控制开关。
- * FileTreePanel 调用 store.openFile(path) 即可弹出本对话框。
- *
- * 双模式切换：
- * - 查看模式（默认）：shiki 高亮只读
- * - 编辑模式：textarea + shiki 叠加高亮，Ctrl+S 保存
- */
 export function FileViewerDialog(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
