@@ -11,7 +11,7 @@
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { startupTracingIntegration } from '@sentry/electron/main';
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, screen, session, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { getAppConfig } from './config';
 import { llmClient } from './infra/ai/ai-provider';
@@ -51,6 +51,7 @@ import {
 } from './service-container';
 import { initTelemetry, shutdownTelemetry } from './telemetry/otel';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
+import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
@@ -155,9 +156,17 @@ function initSentry(): void {
  * - sandbox: true（渲染层沙箱）
  */
 function createWindow(): BrowserWindow {
+  // 窗口状态记忆：恢复上次尺寸/位置/最大化（校验不可见时回退系统默认）
+  const windowState: WindowState = loadWindowState(
+    join(app.getPath('userData'), 'window-state.json'),
+    { width: 1280, height: 800 },
+    screen.getAllDisplays().map((d) => d.workArea),
+  );
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(windowState.x !== undefined ? { x: windowState.x } : {}),
+    ...(windowState.y !== undefined ? { y: windowState.y } : {}),
+    width: windowState.width,
+    height: windowState.height,
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -197,6 +206,14 @@ function createWindow(): BrowserWindow {
   win.once('ready-to-show', () => {
     win.show();
   });
+
+  // 恢复最大化状态（必须在 show 前，避免先显示普通窗口再跳变）
+  if (windowState.isMaximized) {
+    win.maximize();
+  }
+
+  // 窗口状态跟踪：move/resize 防抖 + 最大化即时 + close 同步落盘
+  trackWindowState(win, join(app.getPath('userData'), 'window-state.json'));
 
   // 方案 A + C：dev 模式自动安装 React DevTools 扩展 + 自动打开 Chromium DevTools
   // - C：installExtension 从 Chrome Web Store 下载 React DevTools 并注入 session
@@ -251,10 +268,33 @@ if (process.env['NODE_ENV'] !== 'test') {
 // Sentry 必须在 app.whenReady() 之前初始化（@sentry/electron 要求）
 initSentry();
 
+// 单实例锁：防止多开（多实例会争抢 SQLite 数据库锁 / IM 长轮询 / 端口监听）
+// - 主实例：正常启动，监听 second-instance 聚焦已有窗口
+// - 第二实例：requestSingleInstanceLock 返回 false，立即退出（不初始化任何服务）
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  // 用户再次启动应用（双击 exe / 命令行）时：聚焦已有主窗口而不是新开实例
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win !== undefined) {
+      if (win.isMinimized()) {
+        win.restore();
+      }
+      win.focus();
+    }
+  });
+}
+
 // 应用就绪后初始化 logger + SQLite + 全局错误捕获 + IPC handler + 创建窗口
 app
   .whenReady()
   .then(() => {
+    // 双保险：第二实例即使 whenReady 触发也不初始化（正常流程 quit 已阻止）
+    if (!gotTheLock) {
+      return;
+    }
     // 初始化 logger（需要 app.getPath，必须在 whenReady 之后）
     initLogger();
     // 初始化 OpenTelemetry（需要在 app.getVersion 之后，与 Sentry 互补：
@@ -362,6 +402,18 @@ app
       callback({ responseHeaders: headers });
     });
     logger.info({ isPackaged: app.isPackaged }, 'CSP 策略已注入');
+
+    // 权限请求策略（安全基线）：默认拒绝所有 web 权限请求
+    // 本应用不使用摄像头/麦克风/地理位置/系统通知等渲染层权限；
+    // 剪贴板写入（navigator.clipboard.writeText）无需权限，读取会走拒绝。
+    // 拒绝而非忽略：显式处理 + 日志，避免 Electron 默认放行一切权限请求的宽松行为。
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      logger.warn(
+        { permission, url: webContents.getURL() },
+        '拒绝渲染层权限请求（未授权权限类型）',
+      );
+      callback(false);
+    });
 
     logger.info({}, '应用启动');
 
