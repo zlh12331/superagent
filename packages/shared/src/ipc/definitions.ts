@@ -92,6 +92,14 @@ import {
 import type { ChannelListRes, ChannelOpRes } from '../schemas/im';
 import { ChannelStartReqSchema, ChannelStopReqSchema } from '../schemas/im';
 import {
+  McpListReqSchema,
+  type McpListRes,
+  McpServerConfigSchema,
+  type McpStartRes,
+  McpStopReqSchema,
+  type McpStopRes,
+} from '../schemas/mcp';
+import {
   MemoryClearReqSchema,
   type MemoryClearRes,
   MemoryListReqSchema,
@@ -494,6 +502,12 @@ export const IPC_DEFINITIONS = {
       DialogPickFilesReqSchema,
       {} as DialogPickFilesRes,
     ),
+  },
+
+  mcp: {
+    list: withSchema(IPC_META.mcp.list, McpListReqSchema, {} as McpListRes),
+    start: withSchema(IPC_META.mcp.start, McpServerConfigSchema, {} as McpStartRes),
+    stop: withSchema(IPC_META.mcp.stop, McpStopReqSchema, {} as McpStopRes),
   },
 
   update: {

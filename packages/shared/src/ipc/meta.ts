@@ -176,6 +176,12 @@ export const IPC_META = {
     pickFiles: request('dialog:pickFiles'),
   },
 
+  mcp: {
+    list: request('mcp:list'),
+    start: request('mcp:start'),
+    stop: request('mcp:stop'),
+  },
+
   update: {
     check: request('update:check'),
     install: request('update:install'),

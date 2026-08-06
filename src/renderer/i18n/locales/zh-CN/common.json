@@ -298,7 +298,8 @@
         "turns": "回合记录",
         "imChannels": "IM 渠道",
         "data": "数据",
-        "telemetry": "遥测"
+        "telemetry": "遥测",
+        "mcp": "MCP 服务器"
       },
       "drawerResizer": "调整设置面板宽度",
       "sectionsAriaLabel": "设置分区导航",
@@ -308,7 +309,18 @@
         "defaultModel": "默认模型",
         "defaultModelDesc": "聊天与 Agent 默认使用的模型 ID（如 deepseek-v4-flash）",
         "temperature": "默认温度"
-      }
+      },
+      "mcpServers": "已启动服务器",
+      "mcpHint": "MCP（Model Context Protocol）服务器为 Agent 提供外部工具接入。",
+      "mcpEmpty": "暂无已启动的 MCP 服务器",
+      "mcpAdd": "添加服务器",
+      "mcpNamePlaceholder": "服务器名称（如 filesystem）",
+      "mcpCommandPlaceholder": "启动命令（如 npx）",
+      "mcpArgsPlaceholder": "参数（空格分隔，如 -y @modelcontextprotocol/server-filesystem）",
+      "mcpStart": "启动",
+      "mcpStop": "停止",
+      "mcpStarted": "MCP 服务器已启动",
+      "mcpStopped": "MCP 服务器已停止"
     },
     "home": {
       "justNow": "刚刚",

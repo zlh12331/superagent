@@ -25,6 +25,7 @@ import {
   MessageSquareWarning,
   Radio,
   ScrollText,
+  Server as ServerIcon,
   Settings as SettingsIcon,
   Shield,
   SlidersHorizontal,
@@ -38,6 +39,7 @@ import { ApiKeySection } from './sections/api-key-section';
 import { ApprovalModeSection } from './sections/approval-mode-section';
 import { DataSection } from './sections/data-section';
 import { ImChannelsSection } from './sections/im-channels-section';
+import { McpSection } from './sections/mcp-section';
 import { ModelParamsSection } from './sections/model-params-section';
 import { PromptSection } from './sections/prompt-section';
 import { RuntimeModelsSection } from './sections/runtime-models-section';
@@ -60,6 +62,7 @@ type SectionId =
   | 'model-params'
   | 'runtime-models'
   | 'approval-mode'
+  | 'mcp'
   | 'prompt'
   | 'shortcuts'
   | 'usage'
@@ -95,6 +98,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.viewPrompt',
     items: [
+      { id: 'mcp', labelKey: 'settings.nav.mcp', icon: ServerIcon },
       { id: 'prompt', labelKey: 'settings.nav.prompt', icon: MessageSquareText },
       { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
     ],
@@ -135,6 +139,8 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       );
     case 'model-params':
       return <ModelParamsSection />;
+    case 'mcp':
+      return <McpSection />;
     case 'runtime-models':
       return <RuntimeModelsSection />;
     case 'approval-mode':

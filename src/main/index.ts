@@ -31,6 +31,7 @@ import { createFileHandlers } from './ipc/file.handler';
 import { createGitHandlers } from './ipc/git.handler';
 import { createGoalHandlers } from './ipc/goal.handler';
 import { createImHandlers } from './ipc/im.handler';
+import { createMcpHandlers } from './ipc/mcp.handler';
 import { createMemoryHandlers } from './ipc/memory.handler';
 import { registerIpcHandlers } from './ipc/register';
 import { createSearchHandlers } from './ipc/search.handler';
@@ -351,6 +352,7 @@ app
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
       memory: createMemoryHandlers({ memoryService: serviceContainer.getMemoryService() }),
+      mcp: createMcpHandlers(serviceContainer.getMcpService()),
       skill: skillHandlers,
       task: taskHandlers,
       im: createImHandlers({ imService: serviceContainer.getImService() }),

@@ -298,7 +298,8 @@
         "turns": "Turns",
         "imChannels": "IM Channels",
         "data": "Data",
-        "telemetry": "Telemetry"
+        "telemetry": "Telemetry",
+        "mcp": "MCP Servers"
       },
       "drawerResizer": "Resize settings panel width",
       "sectionsAriaLabel": "Settings sections navigation",
@@ -308,7 +309,18 @@
         "defaultModel": "Default Model",
         "defaultModelDesc": "Default model ID for chat & agent (e.g. deepseek-v4-flash)",
         "temperature": "Default Temperature"
-      }
+      },
+      "mcpServers": "Running Servers",
+      "mcpHint": "MCP (Model Context Protocol) servers provide external tool access for the Agent.",
+      "mcpEmpty": "No MCP servers running",
+      "mcpAdd": "Add Server",
+      "mcpNamePlaceholder": "Server name (e.g. filesystem)",
+      "mcpCommandPlaceholder": "Command (e.g. npx)",
+      "mcpArgsPlaceholder": "Args (space-separated, e.g. -y @modelcontextprotocol/server-filesystem)",
+      "mcpStart": "Start",
+      "mcpStop": "Stop",
+      "mcpStarted": "MCP server started",
+      "mcpStopped": "MCP server stopped"
     },
     "home": {
       "justNow": "Just now",
