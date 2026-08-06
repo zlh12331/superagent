@@ -145,6 +145,13 @@ async function flushAsync(): Promise<void> {
     // eslint-disable-next-line no-await-in-loop -- 测试需要顺序刷新微任务队列
     await Promise.resolve();
   }
+  // 请求级重试链路（createStreamWithRetry）引入 async 边界后：
+  // 追加 macrotask，确保流处理链完整推进（否则 END 推送可能尚未到达）
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  for (let i = 0; i < 10; i++) {
+    // eslint-disable-next-line no-await-in-loop -- 测试需要顺序刷新微任务队列
+    await Promise.resolve();
+  }
 }
 
 describe('chat-service', () => {
@@ -392,6 +399,7 @@ describe('chat-service', () => {
     });
 
     it('网络错误（isRetryable=true）：推送 AI_STREAM_INTERRUPTED', async () => {
+      // 本用例需等待重试退避（~4.5s），显式放宽测试超时
       const wc = createMockWebContents();
       // P2-7：用真实 APICallError（statusCode=undefined, isRetryable=true）模拟网络中断
       // AI SDK 在 fetch 失败时会包装为 APICallError（statusCode=undefined, isRetryable=true）
@@ -412,6 +420,9 @@ describe('chat-service', () => {
       });
 
       await flushAsync();
+      // 网络错误可重试（isRetryable=true）：重试链路含指数退避（1500+3000ms），
+      // 等待退避完成后再断言错误推送
+      await new Promise<void>((resolve) => setTimeout(resolve, 5200));
 
       const call = wc.send.mock.calls[0];
       if (!call) {
@@ -419,7 +430,7 @@ describe('chat-service', () => {
       }
       const payload = call[1] as { code: string };
       expect(payload.code).toBe('AI_STREAM_INTERRUPTED');
-    });
+    }, 20000);
 
     it('API key 未配置：推送 AI_API_KEY_MISSING', async () => {
       const wc = createMockWebContents();
