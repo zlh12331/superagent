@@ -33,13 +33,19 @@ export function useUpdate(): UseUpdateResult {
   const [state, setState] = useState<UpdateStatusPayload | null>(null);
 
   // 订阅主进程更新状态推送（事件订阅返回 unsubscribe）
-  useEffect(() => window.api.update.subscribeStatus(setState), []);
+  // 浏览器模式（window.api 缺失）跳过订阅：与 use-agent-bridge 等守卫模式对齐
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.api === undefined) return;
+    return window.api.update.subscribeStatus(setState);
+  }, []);
 
   const check = useCallback(async (): Promise<void> => {
+    if (typeof window === 'undefined' || window.api === undefined) return;
     await window.api.update.check({ manual: true });
   }, []);
 
   const install = useCallback((): void => {
+    if (typeof window === 'undefined' || window.api === undefined) return;
     void window.api.update.install();
   }, []);
 

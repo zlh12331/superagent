@@ -275,7 +275,15 @@
       "chooseFolder": "Choose folder…",
       "chooseProjectLabel": "Select project directory",
       "dirList": "Project directory list",
-      "noRecentDirs": "No recent directories"
+      "noRecentDirs": "No recent directories",
+      "appDev": "App development",
+      "appDevPrompt": "Help me build an app",
+      "gameIdea": "Game idea",
+      "gameIdeaPrompt": "Give me some game ideas",
+      "projectUnderstanding": "Project understanding",
+      "projectUnderstandingPrompt": "Help me understand this project's structure and code",
+      "toolKnowledge": "Tool knowledge",
+      "toolKnowledgePrompt": "Introduce some practical dev tools"
     },
     "dev": {
       "runtimeMetrics": "Runtime metrics",

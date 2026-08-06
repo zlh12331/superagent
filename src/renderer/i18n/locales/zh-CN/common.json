@@ -275,7 +275,15 @@
       "chooseFolder": "选择文件夹…",
       "chooseProjectLabel": "选择项目目录",
       "dirList": "项目目录列表",
-      "noRecentDirs": "暂无历史目录"
+      "noRecentDirs": "暂无历史目录",
+      "appDev": "应用开发",
+      "appDevPrompt": "帮我开发一个应用",
+      "gameIdea": "游戏创意",
+      "gameIdeaPrompt": "给我一些游戏创意",
+      "projectUnderstanding": "项目理解",
+      "projectUnderstandingPrompt": "帮我理解这个项目的结构和代码",
+      "toolKnowledge": "工具知识",
+      "toolKnowledgePrompt": "介绍一些实用的开发工具"
     },
     "dev": {
       "runtimeMetrics": "运行时指标",
