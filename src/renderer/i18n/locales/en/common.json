@@ -198,7 +198,9 @@
       "approval": "Approval",
       "rememberDecision": "Remember decision (auto-apply for similar operations in this session)",
       "reject": "Reject",
-      "approve": "Approve"
+      "approve": "Approve",
+      "approved": "Approved",
+      "rejected": "Rejected"
     },
     "settings": {
       "apiKeyEmpty": "API Key cannot be empty",

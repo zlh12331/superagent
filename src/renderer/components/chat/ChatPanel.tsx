@@ -17,6 +17,7 @@ import { AlertTriangle, Search, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 
+import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -145,6 +146,8 @@ export function ChatPanel({
     <div className={cn('flex h-full flex-col', className)}>
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
       <RateLimitBanner />
+      {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
+      <InlineApprovalCard sessionId={chatId} />
       {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
       <ConversationSearchBar
         visible={search.visible}
