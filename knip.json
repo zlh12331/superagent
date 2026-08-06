@@ -14,7 +14,7 @@
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "e2e/**/*.ts", "*.{ts,js}"],
   "ignore": ["_template/**", "docs/**"],
-  "ignoreBinaries": ["codegraph"],
+  "ignoreBinaries": ["codegraph", "pkill"],
   "ignoreDependencies": [
     "@code-agent/tsconfig",
     "@electron/rebuild",

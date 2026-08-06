@@ -72,7 +72,9 @@
     "version:packages": "changeset version",
     "analyze:bundle": "cross-env ANALYZE_BUNDLE=1 pnpm build",
     "docs:types": "pnpm --filter @code-agent/typedoc-docs run gen",
-    "prepare": "husky"
+    "prepare": "husky",
+    "rebuild:native:node": "node scripts/rebuild-native.mjs node",
+    "rebuild:native:electron": "node scripts/rebuild-native.mjs electron"
   },
   "lint-staged": {
     "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,css}": [
