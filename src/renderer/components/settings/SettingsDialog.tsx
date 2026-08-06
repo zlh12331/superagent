@@ -310,6 +310,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
               );
               if (buttons.length === 0) return;
               const activeEl = document.activeElement as HTMLElement | null;
+              // biome-ignore lint/complexity/useIndexOf: activeEl 为 HTMLElement，indexOf 需断言，findIndex 类型安全
               const currentIndex = buttons.findIndex((btn) => btn === activeEl);
               const nextIndex =
                 e.key === 'ArrowDown'

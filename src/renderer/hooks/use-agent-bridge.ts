@@ -21,6 +21,7 @@ import { useEffect } from 'react';
 import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
 import { queryClient } from '@/lib/query/query-client';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
+import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 import { useUsageStore } from '@/stores/transient/usage-store';
 
@@ -71,6 +72,10 @@ export function useAgentBridge(): void {
     const unsubscribeError = window.api.agent.subscribeStreamError((payload) => {
       const typedPayload = payload as AgentStreamErrorPayload;
       handleSessionEnd(typedPayload.sessionId);
+      // 429 限流：触发限流横幅（RateLimitBanner 订阅显示）
+      if (typedPayload.code === 'AI_RATE_LIMITED') {
+        useRateLimitStore.getState().trigger();
+      }
     });
 
     return () => {

@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { EMPTY_USAGE, useUsageStore } from '@/stores/transient/usage-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
+import { RateLimitBanner } from './rate-limit-banner';
 
 interface ChatPanelProps {
   /**
@@ -132,6 +133,8 @@ export function ChatPanel({
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
+      {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
+      <RateLimitBanner />
       {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
       {interrupted && !interruptedDismissed && (
         <div className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 flex items-center gap-2 border-b px-3 py-1 text-xs text-amber-700 dark:text-amber-300">

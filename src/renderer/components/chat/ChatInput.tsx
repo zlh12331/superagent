@@ -28,6 +28,21 @@ import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } fr
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+/** 斜杠命令建议项 */
+interface SlashSuggestion {
+  readonly command: string;
+  readonly labelKey: string;
+}
+
+/** 斜杠命令建议列表（对齐参考项目 useSlashSuggest；命令执行链路为后续增强） */
+const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
+  { command: '/help', labelKey: 'chat.slashSuggest.help' },
+  { command: '/new', labelKey: 'chat.slashSuggest.newChat' },
+  { command: '/clear', labelKey: 'chat.slashSuggest.clear' },
+  { command: '/compact', labelKey: 'chat.slashSuggest.compact' },
+  { command: '/models', labelKey: 'chat.slashSuggest.models' },
+];
+
 interface ChatInputProps {
   /**
    * 当前流式状态
@@ -100,8 +115,7 @@ export function ChatInput({
     onValueChange?.(next);
   };
 
-  /**
-   * 自动调整 textarea 高度（对齐原型 input.style.height = 'auto' + scrollHeight）
+  /** 自动调整 textarea 高度（对齐原型 input.style.height = 'auto' + scrollHeight）
    *
    * - 最小 1 行（约 38px）
    * - 最大 8 行（约 240px，超过则滚动）
@@ -112,6 +126,20 @@ export function ChatInput({
     if (el === null) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  };
+
+  // ── 斜杠建议状态（对齐参考项目 useSlashSuggest 交互）──
+  // 输入以 / 开头且当前段无空格时显示建议下拉
+  const slashPrefix = value.startsWith('/') && !value.includes(' ') ? value : null;
+  const filteredSuggestions =
+    slashPrefix !== null ? SLASH_SUGGESTIONS.filter((s) => s.command.startsWith(slashPrefix)) : [];
+  const slashOpen = slashPrefix !== null && filteredSuggestions.length > 0;
+
+  /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
+  const applySuggestion = (command: string): void => {
+    setValue(command);
+    autoResize();
+    textareaRef.current?.focus();
   };
 
   // 值变化后 auto-resize
@@ -158,6 +186,23 @@ export function ChatInput({
       onStop();
       return;
     }
+    // 斜杠建议展开时：Tab/Enter 应用建议，Esc 关闭
+    if (slashOpen && filteredSuggestions.length > 0) {
+      const firstSuggestion = filteredSuggestions[0];
+      if (event.key === 'Tab' || event.key === 'Enter') {
+        if (firstSuggestion !== undefined) {
+          event.preventDefault();
+          applySuggestion(firstSuggestion.command);
+        }
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        // 关闭建议：清空斜杠输入（当前整个值即斜杠前缀）
+        setValue('');
+        return;
+      }
+    }
     // Enter 且无 Shift / Ctrl / Cmd 同时按：发送
     if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
@@ -168,7 +213,29 @@ export function ChatInput({
   return (
     // .composer：输入舱外壳（顶部渐变 + 底部 padding，由父级 footer 提供）
     // 此处仅渲染 .composer-box 内层（外层 .composer 由 ChatPanel footer 提供）
-    <div className={cn('composer-box', className)}>
+    <div className={cn('composer-box relative', className)}>
+      {/* 斜杠建议下拉（输入以 / 开头时显示，对齐参考项目 useSlashSuggest） */}
+      {slashOpen && (
+        <div
+          role="listbox"
+          aria-label={t('chat.slashCommand')}
+          className="bg-popover text-popover-foreground absolute right-0 bottom-full z-10 mb-1 w-56 overflow-hidden rounded-md border shadow-md"
+        >
+          {filteredSuggestions.map((s) => (
+            <button
+              key={s.command}
+              type="button"
+              role="option"
+              onClick={() => applySuggestion(s.command)}
+              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
+            >
+              <Slash className="text-muted-foreground size-3.5 shrink-0" />
+              <span className="font-mono text-xs">{s.command}</span>
+              <span className="text-muted-foreground ml-auto text-[11px]">{t(s.labelKey)}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光） */}
       <textarea
         className="composer-input"

@@ -115,7 +115,15 @@
       "generating": "正在生成中…",
       "runInterrupted": "上次回合因应用异常退出而中断，请重新发起",
       "truncatedJson": "(已截断)",
-      "editFileLabel": "编辑 {{name}}"
+      "editFileLabel": "编辑 {{name}}",
+      "rateLimited": "AI 调用过于频繁，请稍后重试",
+      "slashSuggest": {
+        "help": "显示帮助",
+        "newChat": "新建会话",
+        "clear": "清空当前对话",
+        "compact": "压缩上下文",
+        "models": "查看可用模型"
+      }
     },
     "update": {
       "noticeAvailable": "发现新版本",
