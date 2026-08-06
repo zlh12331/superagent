@@ -868,6 +868,19 @@ body::after {
   backdrop-filter: blur(16px) saturate(1.4);
   border-bottom: 1px solid var(--border);
   position: relative;
+  /* frameless 窗口（titleBarStyle: hidden）：顶栏即窗口标题栏
+     右侧预留 Win11 overlay 窗口控件占位（最小化/最大化/关闭约 140px） */
+  padding-right: 158px;
+  height: var(--aurora-topbar-h, 52px);
+}
+
+/* frameless 拖拽区（对齐原型：spacer 可拖拽移动窗口，其余元素 no-drag） */
+.topbar > * {
+  -webkit-app-region: no-drag;
+}
+
+.topbar-spacer {
+  -webkit-app-region: drag;
 }
 
 /* 底部双 accent 渐变发光刻度线 */
@@ -950,7 +963,6 @@ body::after {
 .topbar-spacer {
   flex: 1;
 }
-
 @keyframes brand-pulse {
   0%,
   100% {

@@ -170,6 +170,19 @@ function createWindow(): BrowserWindow {
     height: windowState.height,
     show: false,
     autoHideMenuBar: true,
+    // frameless 标题栏（对齐原型自绘标题栏设计）：
+    // - 隐藏系统标题栏，渲染层顶部栏延伸到窗口顶部（顶栏即标题栏）
+    // - Win11 窗口控件（最小化/最大化/关闭）以 titleBarOverlay 保留系统绘制
+    //   （保留 Aero Snap / 双击最大化 / 右键菜单等原生交互，无需自绘控件链路）
+    // - 仅在 Windows 生效（项目仅限 Windows 桌面端）
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      // 与顶部栏玻璃背景近似（stone-900 半透明），symbolColor 灰白
+      color: 'rgba(28, 25, 23, 0.85)',
+      symbolColor: '#d6d3d1',
+      // 与 --aurora-topbar-h（52px）对齐
+      height: 52,
+    },
     webPreferences: {
       // preload 输出为 .cjs（CJS 格式）：sandbox: true 要求 preload 必须是 CommonJS
       preload: join(__dirname, '../preload/index.cjs'),
