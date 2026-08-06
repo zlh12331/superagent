@@ -181,7 +181,7 @@ function createWindow(): BrowserWindow {
           titleBarOverlay: {
             // 透明底：让顶栏玻璃背景统一延伸（深色实底会形成突兀黑块）
             color: '#00000000',
-            // stone-400：比默认灰亮一档但不过分浅（深色玻璃上清晰可见）
+            // stone-400：暗色玻璃背景上清晰可见（纯黑会隐身）
             symbolColor: '#a8a29e',
             // 与 --aurora-topbar-h（52px）对齐
             height: 52,
