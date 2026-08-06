@@ -42,6 +42,8 @@ import { getModel } from '../ai/ai-provider';
 import { classifyError, isAbortError } from '../ai/error-classifier';
 import type { ISessionService } from '../storage/session-service';
 import { TurnEventEmitter } from './agent-runtime';
+import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
+import { createStreamWithRetry } from './agent-runtime/create-stream';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from './agent-runtime/stream-reader';
 import { TurnRunner } from './agent-runtime/turn-runner';
 import {
@@ -331,6 +333,8 @@ export class AgentService implements IAgentService {
         const turnEmitter = new TurnEventEmitter();
         const turnId = randomUUID();
         const turnStartTime = Date.now();
+        // 模型级超时定时器（回合作用域；finally 清理）
+        let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
         const resolvedModel = modelRegistry.resolve(undefined);
         // 类级事件转发（IM 桥接等跨会话监听方）：回合内所有事件同步转发
         const forwardTurnEvents = turnEmitter.onAny((event) => {
@@ -346,6 +350,16 @@ export class AgentService implements IAgentService {
         try {
           // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
           const model = await getModel(undefined);
+
+          // 模型级容错（P0-1）：总时长超时（声明提升至回合作用域；有效信号组合）
+          modelTimeout =
+            resolvedModel.generationConfig?.timeoutMs !== undefined
+              ? createTimeoutSignal(resolvedModel.generationConfig.timeoutMs)
+              : undefined;
+          const effectiveAbortSignal = combineAbortSignals([
+            controller.signal,
+            modelTimeout?.signal,
+          ]);
 
           // 1.1 回合事件系统：订阅事件并推送 agent:turn:event 通道
           //     - AgentRuntime 组件（emitter + translator）负责事件形状
@@ -517,30 +531,35 @@ export class AgentService implements IAgentService {
             estimateMessagesTokens(compressedMessages),
           );
 
-          const result = streamText({
-            model,
-            messages: compressedMessages,
-            allowSystemInMessages: true,
-            ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-            // 生成选项（与 side query 同一真源 buildGenerationOptions）：
-            // 思考强度 reasoningEffort（DeepSeek 按官方映射钳制）、采样参数、输出上限
-            ...genOptions.samplingOptions,
-            ...(genOptions.maxOutputTokens !== undefined
-              ? { maxOutputTokens: genOptions.maxOutputTokens }
-              : {}),
-            ...(genOptions.providerOptions !== undefined
-              ? { providerOptions: genOptions.providerOptions }
-              : {}),
-            tools,
-            // AI SDK v7 用 stopWhen 替代 maxSteps
-            stopWhen: isStepCount(options.maxSteps),
-            abortSignal: controller.signal,
+          // 5+6. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；
+          //    首 part 成功后不重试——流中错误重试会重复工具副作用）
+          const created = await createStreamWithRetry({
+            create: () =>
+              streamText({
+                model,
+                messages: compressedMessages,
+                allowSystemInMessages: true,
+                ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
+                ...genOptions.samplingOptions,
+                ...(genOptions.maxOutputTokens !== undefined
+                  ? { maxOutputTokens: genOptions.maxOutputTokens }
+                  : {}),
+                ...(genOptions.providerOptions !== undefined
+                  ? { providerOptions: genOptions.providerOptions }
+                  : {}),
+                tools,
+                stopWhen: isStepCount(options.maxSteps),
+                ...(effectiveAbortSignal !== undefined
+                  ? { abortSignal: effectiveAbortSignal }
+                  : {}),
+              }),
+            controller,
+            // 模型级重试：generationConfig.maxRetries（默认 2 次重试 = 3 次尝试）
+            maxAttempts: (resolvedModel.generationConfig?.maxRetries ?? 2) + 1,
           });
+          const uiStream = created.stream;
 
-          // 5. 把 result 转换为 UIMessageStream（包含 text/tool-call/tool-result/finish 等 part）
-          const uiStream = result.toUIMessageStream();
-
-          // 6. 回合执行（TurnRunner：读流 → 翻译 → 事件产出 → 统计）
+          // 7. 回合执行（TurnRunner：读流 → 翻译 → 事件产出 → 统计）
           //    不感知 webContents / DB：事件经 emitter 产出，由订阅回调推送；
           //    流空闲超时在 TurnRunner 内守卫（复用 stream-reader）
           const runner = new TurnRunner({
@@ -550,6 +569,8 @@ export class AgentService implements IAgentService {
             controller,
             emitter: turnEmitter,
             idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+            // 请求级重试链路：首 part 已预读，TurnRunner 接续消费（复用 reader）
+            firstPart: created.firstPart,
             // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
             onPart: (part) => {
               if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
@@ -558,7 +579,12 @@ export class AgentService implements IAgentService {
               }
             },
           });
-          const runResult = await runner.run(uiStream as ReadableStream<unknown>);
+          const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
+
+          // 模型级总时长超时检查：超时信号已触发 → 按 AI_TIMEOUT 归类（非用户中断）
+          if (modelTimeout?.signal.aborted === true) {
+            throw new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时');
+          }
 
           // 7+8. 结束处理：usage / AGENT_STREAM_END / turn-end / Transcript 落库
           if (runResult.reason === 'aborted') {
@@ -575,7 +601,7 @@ export class AgentService implements IAgentService {
             });
           } else {
             // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
-            const usage = await Promise.resolve(result.totalUsage).catch(() => null);
+            const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
             const turnUsage: TurnUsage | undefined =
               usage !== null && usage !== undefined
                 ? {
@@ -706,6 +732,8 @@ export class AgentService implements IAgentService {
           // 取消回合事件订阅（防泄漏）
           unsubscribeAll();
           forwardTurnEvents();
+          // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
+          modelTimeout?.clear();
           // CAS（Compare-And-Swap）删除 activeSessions：
           // 仅当 Map 里存的还是自己时才删，避免以下竞态：
           //   abort() 已从 Map 删除 → startAgent 写入新 controller → 旧 stream finally 误删新 controller

@@ -23,11 +23,13 @@ import type {
   ChatStreamErrorPayload,
   ChatStreamPartPayload,
 } from '@code-agent/shared/main';
-import { IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import { streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 import type { ISessionService } from '../storage/session-service';
+import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
+import { createStreamWithRetry } from './agent-runtime/create-stream';
 import { readWithIdleTimeout } from './agent-runtime/stream-reader';
 import { getModel } from './ai-provider';
 import { estimateMessagesTokens } from './context-compression';
@@ -293,39 +295,60 @@ class ChatService implements IChatService {
   ): Promise<void> {
     // 性能埋点：从 streamText 开始到流推送完毕的总耗时
     const startTime = performance.now();
+    // 模型级超时定时器（finally 清理；请求结束立即释放）
+    let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
     try {
       // 1. 获取 model 实例 + 生成选项（思考强度/采样/输出上限）
       const model = await getModel(undefined);
-      const genOptions = buildGenerationOptions(
-        modelRegistry.resolve(undefined),
-        estimateMessagesTokens(messages),
-      );
+      const resolvedModel = modelRegistry.resolve(undefined);
+      const genOptions = buildGenerationOptions(resolvedModel, estimateMessagesTokens(messages));
 
-      // 2. 启动 streamText（同步调用，立即返回 result 对象）
-      const result = streamText({
-        model,
-        // P1-6 透传设计：ChatMessage = ModelMessage（type-only import）
-        // 渲染层已用 convertToModelMessages 转换好，主进程直接透传即可
-        // AI SDK v7 默认拒绝 messages 中的 system 消息，这里显式允许以兼容旧消息历史
-        messages,
-        allowSystemInMessages: true,
-        // 生成选项（与 agent 主流程同一真源 buildGenerationOptions）：
-        // 思考强度 reasoningEffort（DeepSeek 按官方映射钳制）、采样参数、输出上限
-        ...genOptions.samplingOptions,
-        ...(genOptions.maxOutputTokens !== undefined
-          ? { maxOutputTokens: genOptions.maxOutputTokens }
-          : {}),
-        ...(genOptions.providerOptions !== undefined
-          ? { providerOptions: genOptions.providerOptions }
-          : {}),
-        abortSignal: controller.signal,
+      // 模型级容错（P0-1）：总时长超时 + 有效信号组合（用户中断 + 超时）
+      modelTimeout =
+        resolvedModel.generationConfig?.timeoutMs !== undefined
+          ? createTimeoutSignal(resolvedModel.generationConfig.timeoutMs)
+          : undefined;
+      const effectiveAbortSignal = combineAbortSignals([controller.signal, modelTimeout?.signal]);
+
+      // 2+3. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；
+      //      单轮对话无工具副作用，但首包后流中错误仍不重试——半流推送重试会重复文本）
+      const created = await createStreamWithRetry({
+        create: () =>
+          streamText({
+            model,
+            // P1-6 透传设计：ChatMessage = ModelMessage（type-only import）
+            // 渲染层已用 convertToModelMessages 转换好，主进程直接透传即可
+            // AI SDK v7 默认拒绝 messages 中的 system 消息，这里显式允许以兼容旧消息历史
+            messages,
+            allowSystemInMessages: true,
+            // 生成选项（与 agent 主流程同一真源 buildGenerationOptions）：
+            // 思考强度 reasoningEffort（DeepSeek 按官方映射钳制）、采样参数、输出上限
+            ...genOptions.samplingOptions,
+            ...(genOptions.maxOutputTokens !== undefined
+              ? { maxOutputTokens: genOptions.maxOutputTokens }
+              : {}),
+            ...(genOptions.providerOptions !== undefined
+              ? { providerOptions: genOptions.providerOptions }
+              : {}),
+            ...(effectiveAbortSignal !== undefined ? { abortSignal: effectiveAbortSignal } : {}),
+          }),
+        controller,
+        // 模型级重试：generationConfig.maxRetries（默认 2 次重试 = 3 次尝试）
+        maxAttempts: (resolvedModel.generationConfig?.maxRetries ?? 2) + 1,
       });
-
-      // 3. 把 result 转换为 UIMessageStream（包含 text/tool-call/finish 等 part）
-      const uiStream = result.toUIMessageStream();
-      const reader = uiStream.getReader();
+      const reader = created.reader;
 
       // 4. 逐 part 推送到渲染层（共享空闲超时守卫，与 agent-service 一致）
+      //    请求级重试链路：首 part 已由 createStreamWithRetry 预读，先处理再接续循环
+      //    （webContents 销毁守卫与循环内一致：销毁后不再推送）
+      if (
+        !webContents.isDestroyed() &&
+        !created.firstPart.done &&
+        created.firstPart.value !== undefined
+      ) {
+        const payload: ChatStreamPartPayload = { sessionId, part: created.firstPart.value };
+        webContents.send(IPC_CHANNELS.CHAT_STREAM_PART, payload);
+      }
       while (true) {
         const { done, value } = await readWithIdleTimeout(reader, controller);
         if (done) {
@@ -349,7 +372,7 @@ class ChatService implements IChatService {
       // 5+6. 正常结束：获取 token 使用量并推送 CHAT_STREAM_END（含 usage）
       //    totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
       if (!webContents.isDestroyed()) {
-        const usage = await Promise.resolve(result.totalUsage).catch(() => null);
+        const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
         const endPayload: ChatStreamEndPayload = {
           sessionId,
           ...(usage !== null && usage !== undefined
@@ -405,6 +428,20 @@ class ChatService implements IChatService {
         });
       }
     } catch (error: unknown) {
+      // 模型级总时长超时：超时信号已触发 → 按 AI_TIMEOUT 归类（非用户中断）
+      if (modelTimeout?.signal.aborted === true) {
+        const appError = new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时');
+        if (!webContents.isDestroyed()) {
+          const errorPayload: ChatStreamErrorPayload = {
+            sessionId,
+            code: appError.code,
+            message: appError.message,
+          };
+          webContents.send(IPC_CHANNELS.CHAT_STREAM_ERROR, errorPayload);
+        }
+        logger.error({ sessionId, error: appError }, '对话超时（模型级总时长）');
+        return;
+      }
       // AbortError 是用户主动中断，不视为错误（不推送 error）
       if (isAbortError(error)) {
         logger.info({ sessionId }, '对话被用户中断');
@@ -427,6 +464,8 @@ class ChatService implements IChatService {
         logger.error({ sessionId, errorCode: appError.code, error: appError }, '对话流异常结束');
       }
     } finally {
+      // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
+      modelTimeout?.clear();
       // 无论正常/异常/abort，都从两个 Map 同步移除
       // P3-10：activeStreams 也需清空，dispose 通过 Promise.allSettled 等待其 resolve
       // CAS 检查：abort() 已立即删除 controller，若 startChat 写入了新 controller，

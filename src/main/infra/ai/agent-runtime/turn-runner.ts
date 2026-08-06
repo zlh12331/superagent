@@ -41,6 +41,13 @@ export interface TurnRunnerOptions {
    * 注意：类型是领域投影（编译期裁剪），运行时对象为 SDK 完整 part，透传无损。
    */
   readonly onPart?: (part: StreamPart) => void;
+  /**
+   * 预读的首个 part（请求级重试链路：首读在重试内完成，此处接续）
+   *
+   * 语义：与循环内 read 结果相同——{ done: true } 或 { done: false, value: part }。
+   * 提供时回合先处理该 part 再继续循环读流。
+   */
+  readonly firstPart?: { done: boolean; value?: unknown };
 }
 
 /**
@@ -75,7 +82,10 @@ export class TurnRunner {
    * @returns 回合执行结果（completed/aborted + 耗时）
    * @throws 非中断错误（含流空闲超时 AI_TIMEOUT）由上层分类处理
    */
-  async run(stream: ReadableStream<unknown>): Promise<TurnRunResult> {
+  async run(
+    stream: ReadableStream<unknown>,
+    reader?: ReadableStreamDefaultReader<unknown>,
+  ): Promise<TurnRunResult> {
     // turn-start：模型已选定，回合开始
     this.options.emitter.emit({
       type: TurnEventType.TURN_START,
@@ -85,11 +95,31 @@ export class TurnRunner {
       modelId: this.options.modelId,
     });
 
-    const reader = stream.getReader();
+    // 请求级重试链路：上层已持有 reader（首 part 预读）时复用，避免重复 getReader
+    const activeReader = reader ?? stream.getReader();
     try {
+      // 请求级重试链路：首 part 已由上层预读（重试内完成），此处接续处理
+      if (this.options.firstPart !== undefined) {
+        const done = this.options.firstPart.done;
+        const value = this.options.firstPart.value;
+        if (!done && value !== undefined) {
+          this.options.onPart?.(value as StreamPart);
+          const translated = translatePart(value as StreamPart, {
+            sessionId: this.options.sessionId,
+            turnId: this.options.turnId,
+            timestamp: Date.now(),
+          });
+          if (translated !== null) {
+            this.options.emitter.emit(translated);
+          }
+        }
+        if (done) {
+          return { reason: 'completed', durationMs: Date.now() - this.startTime };
+        }
+      }
       while (true) {
         const { done, value } = await readWithIdleTimeout(
-          reader,
+          activeReader,
           this.options.controller,
           this.options.idleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS,
         );
