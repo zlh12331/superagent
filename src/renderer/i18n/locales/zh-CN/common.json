@@ -262,7 +262,35 @@
       "imChannelStopSuccess": "渠道已停止",
       "imChannelStartFailed": "渠道启动失败",
       "imChannelStopFailed": "渠道停止失败",
-      "imChannelTokenPlaceholder": "Bot Token（首次启动必填）"
+      "imChannelTokenPlaceholder": "Bot Token（首次启动必填）",
+      "group": {
+        "modelPerms": "模型与权限",
+        "viewPrompt": "视图与提示词",
+        "accountData": "账户与数据",
+        "advanced": "高级"
+      },
+      "nav": {
+        "apiKey": "API 密钥",
+        "modelParams": "模型参数",
+        "runtimeModels": "运行时模型",
+        "approvalMode": "审批模式",
+        "prompt": "系统提示词",
+        "shortcuts": "快捷键",
+        "usage": "用量统计",
+        "turns": "回合记录",
+        "imChannels": "IM 渠道",
+        "data": "数据",
+        "telemetry": "遥测"
+      },
+      "drawerResizer": "调整设置面板宽度",
+      "sectionsAriaLabel": "设置分区导航",
+      "modelParams": {
+        "selection": "模型选择",
+        "parameters": "模型参数",
+        "defaultModel": "默认模型",
+        "defaultModelDesc": "聊天与 Agent 默认使用的模型 ID（如 deepseek-v4-flash）",
+        "temperature": "默认温度"
+      }
     },
     "home": {
       "justNow": "刚刚",

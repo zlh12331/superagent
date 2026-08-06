@@ -262,7 +262,35 @@
       "imChannelStopSuccess": "Channel stopped",
       "imChannelStartFailed": "Failed to start channel",
       "imChannelStopFailed": "Failed to stop channel",
-      "imChannelTokenPlaceholder": "Bot token (required on first start)"
+      "imChannelTokenPlaceholder": "Bot token (required on first start)",
+      "group": {
+        "modelPerms": "Models & Permissions",
+        "viewPrompt": "View & Prompts",
+        "accountData": "Account & Data",
+        "advanced": "Advanced"
+      },
+      "nav": {
+        "apiKey": "API Keys",
+        "modelParams": "Model Params",
+        "runtimeModels": "Runtime Models",
+        "approvalMode": "Approval Mode",
+        "prompt": "System Prompt",
+        "shortcuts": "Shortcuts",
+        "usage": "Usage",
+        "turns": "Turns",
+        "imChannels": "IM Channels",
+        "data": "Data",
+        "telemetry": "Telemetry"
+      },
+      "drawerResizer": "Resize settings panel width",
+      "sectionsAriaLabel": "Settings sections navigation",
+      "modelParams": {
+        "selection": "Model Selection",
+        "parameters": "Model Parameters",
+        "defaultModel": "Default Model",
+        "defaultModelDesc": "Default model ID for chat & agent (e.g. deepseek-v4-flash)",
+        "temperature": "Default Temperature"
+      }
     },
     "home": {
       "justNow": "Just now",
