@@ -19,6 +19,7 @@ import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { appHandlers } from './ipc/app.handler';
+import { createAudioHandlers } from './ipc/audio.handler';
 import { createChatHandlers } from './ipc/chat.handler';
 import { createCodebaseHandlers } from './ipc/codebase.handler';
 import { devtoolsHandlers } from './ipc/devtools.handler';
@@ -281,6 +282,7 @@ app
     // - handler 对象形状受 InferHandlers 约束：定义表新增方法而 handler 缺失 → 编译期报错
     // - channel / schema / traceId / sender 校验 / Sentry 由 wrap 统一处理
     registerIpcHandlers({
+      audio: createAudioHandlers(),
       app: appHandlers,
       chat: createChatHandlers({ chatService: serviceContainer.getChatService() }),
       agent: {

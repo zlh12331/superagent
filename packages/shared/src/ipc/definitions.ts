@@ -191,7 +191,35 @@ export function withPayload<M extends { readonly kind: 'event'; readonly channel
  * 新增方法：在 IPC_META 加一行，再在本文件用 withSchema/withPayload 合并 schema。
  * preload 生成器自动同步（消费 IPC_META），handler 缺失在编译期报错（InferHandlers）。
  */
+const AudioStartReqSchema = z.object({
+  sampleRate: z.number().int().positive().max(48000).optional(),
+  channels: z.number().int().positive().max(2).optional(),
+});
+const AudioAppendReqSchema = z.object({
+  sessionId: z.string(),
+  chunk: z.instanceof(Uint8Array),
+});
+const AudioStopReqSchema = z.object({
+  sessionId: z.string(),
+});
+
 export const IPC_DEFINITIONS = {
+  audio: {
+    start: withSchema(IPC_META.audio.start, AudioStartReqSchema, {} as { sessionId: string }),
+    append: withSchema(IPC_META.audio.append, AudioAppendReqSchema, {} as { received: number }),
+    stop: withSchema(
+      IPC_META.audio.stop,
+      AudioStopReqSchema,
+      {} as {
+        path: string;
+        durationMs: number;
+        sampleRate: number;
+        channels: number;
+        byteLength: number;
+      },
+    ),
+  },
+
   app: {
     getStatus: withSchema(IPC_META.app.getStatus, null, {} as { ready: boolean }),
     openExternal: withSchema(

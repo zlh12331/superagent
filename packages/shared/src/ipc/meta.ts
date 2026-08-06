@@ -22,6 +22,12 @@ export const event = <C extends string>(channel: C) => ({ kind: 'event', channel
  * preload 生成器（createIpcApi）直接遍历本表，无需加载 zod。
  */
 export const IPC_META = {
+  audio: {
+    start: request('audio:start'),
+    append: request('audio:append'),
+    stop: request('audio:stop'),
+  },
+
   app: {
     getStatus: request('app:getStatus'),
     openExternal: request('app:openExternal'),
