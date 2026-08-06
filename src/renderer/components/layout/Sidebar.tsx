@@ -1,4 +1,14 @@
 // src/renderer/components/layout/Sidebar.tsx
+// 侧边栏 · 组装层（会话列表/文件夹标签/线程项/加载态提取至独立文件）
+// ──────────────────────────────────────────────
+// 拆分背景（2026-08 重构）：原文件 641 行，按职责拆分：
+// - folder-label.tsx：文件夹标签
+// - thread-item.tsx：会话线程项（含拖拽排序）
+// - loading-list.tsx：加载占位
+// - sidebar-utils.ts：纯函数
+// ──────────────────────────────────────────────
+
+// src/renderer/components/layout/Sidebar.tsx
 // 侧边栏 · 会话列表 · 对齐原型布局
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -27,13 +37,8 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
+import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { Plus, Search } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Virtuoso } from 'react-virtuoso';
@@ -41,35 +46,19 @@ import { Virtuoso } from 'react-virtuoso';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useAsyncView } from '@/hooks/use-async-view';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
-import { formatRelativeTime } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
-/** 从 workingDir 提取 basename，用于 folder 分组（无 basename 返回空串，展示时本地化「未分组」） */
-function getFolderName(workingDir: string): string {
-  const basename = workingDir.split(/[\\/]/).pop();
-  return basename && basename.length > 0 ? basename : '';
-}
+import { FolderLabel } from './folder-label';
+import { LoadingList } from './loading-list';
+import { getFolderName } from './sidebar-utils';
+import { SortableThreadItem } from './thread-item';
 
-/**
- * 侧边栏
- *
- * 三段式结构：sidebar-head（搜索+tabs）+ sidebar-list（会话列表）+ sidebar-foot（用户信息）。
- * 会话列表按 workingDir basename 分组为 folder-label + folder-items。
- */
 export function Sidebar(): ReactElement {
   const navigate = useNavigate();
   // 本地化文案
@@ -388,253 +377,4 @@ type SidebarEntry =
       };
     };
 
-interface FolderLabelProps {
-  readonly folderName: string;
-  /** 是否折叠（折叠时隐藏该组会话项） */
-  readonly collapsed: boolean;
-  /** 切换折叠 */
-  readonly onToggle: () => void;
-  /** 在此文件夹内新建会话（fl-add-btn 触发） */
-  readonly onCreateInFolder: (folderName: string) => void;
-}
-
 /** 文件夹标签：折叠箭头 + 图标 + 名称 + hover 新建按钮 */
-function FolderLabel({
-  folderName,
-  collapsed,
-  onToggle,
-  onCreateInFolder,
-}: FolderLabelProps): ReactElement {
-  // 本地化文案
-  const { t } = useTranslation();
-
-  return (
-    <button
-      type="button"
-      className={cn('folder-label', collapsed && 'collapsed')}
-      onClick={onToggle}
-      aria-expanded={!collapsed}
-    >
-      <span className="fl-chevron">
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          role="img"
-          aria-label={t('sidebar.collapseFolder')}
-        >
-          <title>{t('sidebar.collapseFolder')}</title>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </span>
-      <span className="fl-icon">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          role="img"
-          aria-label={t('sidebar.folder')}
-        >
-          <title>{t('sidebar.folder')}</title>
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-        </svg>
-      </span>
-      <span className="fl-name">{folderName.length > 0 ? folderName : t('sidebar.unlabeled')}</span>
-      {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
-      {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
-      <span
-        className="fl-add-btn"
-        role="button"
-        tabIndex={0}
-        aria-label={t('sidebar.newSessionIn', { name: folderName })}
-        title={t('sidebar.newSessionInFolder')}
-        onClick={(event) => {
-          event.stopPropagation();
-          onCreateInFolder(folderName);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            event.stopPropagation();
-            onCreateInFolder(folderName);
-          }
-        }}
-      >
-        <Plus className="size-3" strokeWidth={2.5} />
-      </span>
-    </button>
-  );
-}
-
-// ── 子组件：可拖拽会话项（@dnd-kit/sortable 包装） ────────────
-
-interface SortableThreadItemProps {
-  readonly sessionId: string;
-  readonly folderName: string;
-  readonly title: string;
-  readonly lastMessage: string | undefined;
-  readonly updatedAt: number;
-  readonly isActive: boolean;
-  readonly isDeleting: boolean;
-  readonly onSelect: () => void;
-  readonly onDelete: () => void;
-}
-
-/** 可拖拽会话项：useSortable 提供拖拽句柄属性，ti-dot 作为手柄 */
-function SortableThreadItem({
-  sessionId,
-  folderName,
-  title,
-  lastMessage,
-  updatedAt,
-  isActive,
-  isDeleting,
-  onSelect,
-  onDelete,
-}: SortableThreadItemProps): ReactElement {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: sessionId,
-    data: { folder: folderName },
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform:
-          transform === null ? undefined : `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        transition,
-      }}
-      className={isDragging ? 'opacity-50' : undefined}
-    >
-      <ThreadItem
-        title={title}
-        lastMessage={lastMessage}
-        updatedAt={updatedAt}
-        isActive={isActive}
-        isDeleting={isDeleting}
-        onSelect={onSelect}
-        onDelete={onDelete}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
-    </div>
-  );
-}
-
-// ── 子组件：会话列表项（对齐原型 thread-item 结构） ──────────────
-
-interface ThreadItemProps {
-  readonly title: string;
-  readonly lastMessage: string | undefined;
-  readonly updatedAt: number;
-  readonly isActive: boolean;
-  readonly isDeleting: boolean;
-  readonly onSelect: () => void;
-  readonly onDelete: () => void;
-  /** 拖拽手柄属性（@dnd-kit useSortable 的 attributes + listeners，挂在 ti-dot 上） */
-  readonly dragHandleProps?: Record<string, unknown>;
-}
-
-/** 会话列表项 - 对齐原型 .thread-item 结构 */
-function ThreadItem({
-  title,
-  lastMessage,
-  updatedAt,
-  isActive,
-  isDeleting,
-  onSelect,
-  onDelete,
-  dragHandleProps,
-}: ThreadItemProps): ReactElement {
-  // 本地化文案
-  const { t } = useTranslation();
-  // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
-  const metaParts: string[] = [formatRelativeTime(updatedAt, t)];
-  if (lastMessage !== undefined && lastMessage.length > 0) {
-    const preview = lastMessage.length > 20 ? `${lastMessage.slice(0, 20)}…` : lastMessage;
-    metaParts.push(preview);
-  }
-  const metaText = metaParts.join(' · ');
-
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: 外层含 DropdownMenu 触发器（button），HTML 禁止 button 嵌套
-    <div
-      role="button"
-      tabIndex={0}
-      className={cn('thread-item', isActive && 'active')}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      aria-current={isActive ? 'page' : undefined}
-    >
-      <div className="ti-row">
-        {/* ti-dot：拖拽手柄（dnd-kit），hover 显示抓取光标；不参与点击选择（title 提供可访问说明） */}
-        <span
-          className="ti-dot cursor-grab active:cursor-grabbing"
-          title={t('sidebar.dragSort')}
-          {...dragHandleProps}
-        />
-        <div className="ti-content">
-          <div className="ti-title" title={title}>
-            {title}
-          </div>
-          <div className="ti-meta">{metaText}</div>
-        </div>
-        <div className="ti-actions">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground h-6 w-6"
-                aria-label={t('sidebar.sessionActions')}
-                disabled={isDeleting}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <MoreVertical className="size-3.5" strokeWidth={1.5} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => {
-                  onDelete();
-                }}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="size-3.5" strokeWidth={1.5} />
-                删除会话
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── 子组件：加载中 / 空状态 ───────────────────────────────────
-
-/** 加载中骨架屏（5 行占位） */
-function LoadingList(): ReactElement {
-  return (
-    <ul className="flex flex-col gap-1 p-1">
-      {Array.from({ length: 5 }).map((_, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: 静态骨架屏占位，index 稳定且无重排
-        <li key={index} className="px-2 py-2">
-          <Skeleton className="h-3 w-3/4" />
-          <Skeleton className="mt-2 h-2 w-1/2" />
-        </li>
-      ))}
-    </ul>
-  );
-}
