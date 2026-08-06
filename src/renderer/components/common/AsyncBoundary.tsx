@@ -55,7 +55,7 @@ interface AsyncBoundaryProps<T> {
  *   <AsyncBoundary
  *     view={view}
  *     skeleton={<SessionListSkeleton />}
- *     empty={<EmptyState title={t('...')} actionLabel={t('...')} onAction={...} />}
+ *     empty={<EmptyState title={t('sidebar.noSessions')} actionLabel={t('common.retry')} onAction={...} />}
  *   >
  *     {(data) => <SessionList sessions={data.sessions} />}
  *   </AsyncBoundary>
