@@ -26,6 +26,7 @@
 
 import { ChevronRight } from 'lucide-react';
 import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
@@ -113,6 +114,11 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 命令面板 open 状态（由 ⌘P 快捷键或 Topbar paletteBtn 触发）
   const [paletteOpen, setPaletteOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
+
+  // 路由：聊天页显示返回按钮（对齐原型 back-btn）
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isChatRoute = location.pathname.startsWith('/chat/');
 
   const setTheme = useSettingsStore((s) => s.setTheme);
   const theme = useSettingsStore((s) => s.theme);
@@ -221,6 +227,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         rightPanelCollapsed={rightPanelCollapsed}
         onToggleRightPanel={handleToggleRightPanel}
         onOpenCommandPalette={openPalette}
+        showBack={isChatRoute}
+        onBack={() => navigate('/')}
       />
       <div
         className={cn(

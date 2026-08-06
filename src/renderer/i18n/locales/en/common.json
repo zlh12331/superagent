@@ -62,7 +62,8 @@
       "collapsePanel": "Collapse panel",
       "commandPalette": "Command palette",
       "settings": "Settings",
-      "toggleTheme": "Toggle theme"
+      "toggleTheme": "Toggle theme",
+      "back": "Back"
     },
     "sidebar": {
       "sessionList": "Sessions",
@@ -441,7 +442,9 @@
       "noTasks": "No tasks",
       "sessionInfo": "Session Info",
       "noChanges": "No file changes this turn",
-      "noFiles": "No modified files"
+      "noFiles": "No modified files",
+      "addGoal": "Add goal",
+      "goalPlaceholder": "Enter session goal…"
     }
   }
 }

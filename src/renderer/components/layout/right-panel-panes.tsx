@@ -7,9 +7,10 @@
 // - FilesPane：最近修改文件列表（点击打开 FileViewerDialog）
 // ──────────────────────────────────────────────────────────────
 
-import { useQuery } from '@tanstack/react-query';
-import { FileText, FolderOpen, Target } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileText, FolderOpen, Plus, Target } from 'lucide-react';
+import { type ReactElement, useState } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -45,6 +46,9 @@ interface LocalTask {
  */
 export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps): ReactElement {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  // 添加目标输入（对齐参考项目 GoalEditDialog）
+  const [goalDraft, setGoalDraft] = useState('');
 
   // L3：目标列表（按会话过滤）
   const goalsQuery = useQuery({
@@ -84,6 +88,27 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
 
   const goals = (goalsQuery.data?.goals ?? []) as LocalGoal[];
   const tasks = (tasksQuery.data?.tasks ?? []) as LocalTask[];
+
+  // 创建目标 mutation（goal:create）
+  const createGoalMutation = useMutation({
+    mutationFn: async (condition: string) => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { ok: true };
+      }
+      const response = await window.api.goal.create({ sessionId, condition });
+      if ('error' in response) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      setGoalDraft('');
+      void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-xs">
       {/* 会话目标 */}
@@ -103,6 +128,33 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
             ))}
           </ul>
         )}
+        {/* 添加目标（对齐参考项目 GoalEditDialog） */}
+        <form
+          className="mt-1.5 flex gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const value = goalDraft.trim();
+            if (value !== '') {
+              createGoalMutation.mutate(value);
+            }
+          }}
+        >
+          <input
+            type="text"
+            value={goalDraft}
+            onChange={(e) => setGoalDraft(e.target.value)}
+            placeholder={t('panel.goalPlaceholder')}
+            className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded border px-2 py-1 text-[11px] focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={goalDraft.trim() === '' || createGoalMutation.isPending}
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center gap-0.5 rounded border px-1.5 py-1 text-[10px] transition-colors disabled:opacity-50"
+            aria-label={t('panel.addGoal')}
+          >
+            <Plus className="size-2.5" />
+          </button>
+        </form>
       </div>
 
       {/* 计划待办 */}

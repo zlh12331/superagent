@@ -62,7 +62,8 @@
       "collapsePanel": "折叠右侧面板",
       "commandPalette": "命令面板",
       "settings": "设置",
-      "toggleTheme": "切换主题"
+      "toggleTheme": "切换主题",
+      "back": "返回"
     },
     "sidebar": {
       "sessionList": "会话列表",
@@ -441,7 +442,9 @@
       "noTasks": "暂无待办",
       "sessionInfo": "会话信息",
       "noChanges": "本轮暂无文件变更",
-      "noFiles": "暂无修改文件"
+      "noFiles": "暂无修改文件",
+      "addGoal": "添加目标",
+      "goalPlaceholder": "输入会话目标…"
     }
   }
 }

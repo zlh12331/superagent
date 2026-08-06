@@ -16,7 +16,16 @@
 // - 设置/主题切换：项目独有功能，保留在右侧末尾
 // ──────────────────────────────────────────────────────────────
 
-import { Command, Moon, PanelLeft, PanelRight, Settings, Sun } from 'lucide-react';
+import {
+  ArrowLeft,
+  Command,
+  Moon,
+  PanelLeft,
+  PanelRight,
+  Search,
+  Settings,
+  Sun,
+} from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -38,6 +47,10 @@ interface TopbarProps {
   onOpenCommandPalette: () => void;
   /** 是否隐藏右面板开关（欢迎页模式右面板隐藏，按钮无意义——对齐原型 welcome-mode） */
   hideRightPanelToggle?: boolean;
+  /** 返回按钮（聊天页显示；对齐原型 back-btn，Alt+←） */
+  onBack?: () => void;
+  /** 是否显示返回按钮（AppShell 按路由判断） */
+  showBack?: boolean;
 }
 
 /**
@@ -53,6 +66,8 @@ export function Topbar({
   onToggleRightPanel,
   onOpenCommandPalette,
   hideRightPanelToggle = false,
+  onBack,
+  showBack = false,
 }: TopbarProps): ReactElement {
   const { resolvedTheme, setTheme } = useTheme();
   // 全局 UI store：设置对话框入口（Topbar / 命令面板 / 错误动作共享）
@@ -83,6 +98,19 @@ export function Topbar({
         <span className="brand-telemetry">v0.1.0 · main</span>
       </div>
 
+      {/* 返回按钮（聊天页显示，对齐原型 back-btn，Alt+← 返回） */}
+      {showBack && onBack !== undefined && (
+        <button
+          type="button"
+          className="icon-btn back-btn"
+          aria-label={t('topbar.back')}
+          title={`${t('topbar.back')} (Alt+←)`}
+          onClick={onBack}
+        >
+          <ArrowLeft className="size-4" strokeWidth={1.5} />
+        </button>
+      )}
+
       {/* 中部：弹性 spacer（未来可放置命令面板入口 / 模型选择器） */}
       <div className="topbar-spacer" />
 
@@ -108,6 +136,17 @@ export function Topbar({
           onClick={onOpenCommandPalette}
         >
           <Command className="size-4" strokeWidth={1.5} />
+        </button>
+        {/* 命令面板文字入口（对齐原型 .palette-entry-btn：icon + 文案 + kbd） */}
+        <button
+          type="button"
+          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground hidden cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors sm:flex"
+          aria-label={t('topbar.commandPalette')}
+          onClick={onOpenCommandPalette}
+        >
+          <Search className="size-3" strokeWidth={1.5} />
+          <span>{t('topbar.commandPalette')}</span>
+          <kbd className="text-muted-foreground/70 font-mono text-[9px]">⌘P</kbd>
         </button>
         <Button
           variant="ghost"
