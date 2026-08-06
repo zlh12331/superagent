@@ -16,9 +16,10 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const target = process.argv[2];
+const autoMode = process.argv.includes('--auto');
 
 if (target !== 'node' && target !== 'electron') {
-  console.error('用法：node scripts/rebuild-native.mjs <node|electron>');
+  console.error('用法：node scripts/rebuild-native.mjs <node|electron> [--auto]');
   process.exit(1);
 }
 
@@ -33,6 +34,42 @@ if (process.platform === 'win32') {
   spawnSync('pkill', ['-f', 'electron'], { stdio: 'ignore' });
 }
 console.log('[rebuild-native] 残留 Electron 进程已清理');
+
+// 1.5 auto 模式：检测当前 ABI 是否已匹配目标（匹配则跳过 rebuild，秒级返回）
+if (autoMode && target === 'node') {
+  try {
+    require('better-sqlite3');
+    console.log('[rebuild-native] ✓ Node ABI 已就绪（--auto 跳过）');
+    process.exit(0);
+  } catch {
+    console.log('[rebuild-native] Node ABI 不匹配，执行 rebuild');
+  }
+}
+if (autoMode && target === 'electron') {
+  const electronBin = require('electron');
+  const probeFile = fileURLToPath(new URL('../.tmp/abi-check.cjs', import.meta.url));
+  const probe = [
+    "const { app } = require('electron');",
+    'app.whenReady().then(() => {',
+    '  try {',
+    "    const db = require('better-sqlite3')(':memory:');",
+    "    const pty = require('node-pty');",
+    "    console.log('ABI_OK');",
+    '  } catch {',
+    "    console.log('ABI_MISMATCH');",
+    '  }',
+    '  app.exit(0);',
+    '});',
+  ].join('\n');
+  require('node:fs').writeFileSync(probeFile, probe, 'utf8');
+  const check = spawnSync(electronBin, [probeFile], { encoding: 'utf8', timeout: 30_000 });
+  require('node:fs').rmSync(probeFile, { force: true });
+  if ((check.stdout ?? '').includes('ABI_OK')) {
+    console.log('[rebuild-native] ✓ Electron ABI 已就绪（--auto 跳过）');
+    process.exit(0);
+  }
+  console.log('[rebuild-native] Electron ABI 不匹配，执行 rebuild');
+}
 
 // 2. 重建原生模块
 // node：pnpm rebuild（Node ABI）；electron：直接 node 调用 @electron/rebuild CLI（绕开 pnpm/shell 包装）
