@@ -46,6 +46,7 @@ import { Virtuoso } from 'react-virtuoso';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
+import { SidebarAccount } from '@/components/layout/sidebar-account';
 import { useAsyncView } from '@/hooks/use-async-view';
 import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
@@ -349,14 +350,8 @@ export function Sidebar(): ReactElement {
         )}
       </div>
 
-      {/* 底部：用户信息（功能预留，占位） */}
-      <div className="sidebar-foot">
-        <div className="avatar">U</div>
-        <div className="user-info">
-          <div className="uname">{t('sidebar.notLoggedIn')}</div>
-          <div className="uemail">local-user</div>
-        </div>
-      </div>
+      {/* 底部：账户触发器 + 下拉菜单（对齐参考项目 SidebarAccountSection） */}
+      <SidebarAccount />
     </aside>
   );
 }

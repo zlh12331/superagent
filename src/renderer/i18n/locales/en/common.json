@@ -81,7 +81,10 @@
       "newSessionIn": "New session in {{name}}",
       "newSessionInFolder": "New session in this folder",
       "dragSort": "Drag to reorder",
-      "sessionActions": "Session actions"
+      "sessionActions": "Session actions",
+      "accountMenu": "Account menu",
+      "toggleTheme": "Toggle theme",
+      "about": "About"
     },
     "chat": {
       "inputPlaceholder": "Help you write code, test, debug, and optimize for production-quality deliverables",
