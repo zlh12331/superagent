@@ -170,19 +170,23 @@ function createWindow(): BrowserWindow {
     height: windowState.height,
     show: false,
     autoHideMenuBar: true,
-    // frameless 标题栏（对齐原型自绘标题栏设计）：
+    // frameless 标题栏（对齐原型自绘标题栏设计，三端支持）：
     // - 隐藏系统标题栏，渲染层顶部栏延伸到窗口顶部（顶栏即标题栏）
-    // - Win11 窗口控件（最小化/最大化/关闭）以 titleBarOverlay 保留系统绘制
-    //   （保留 Aero Snap / 双击最大化 / 右键菜单等原生交互，无需自绘控件链路）
-    // - 仅在 Windows 生效（项目仅限 Windows 桌面端）
+    // - macOS：titleBarStyle hidden 保留红绿灯（系统绘制）
+    // - Windows/Linux：titleBarOverlay 保留窗口控件（系统绘制，原生交互全保留）
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      // 与顶部栏玻璃背景近似（stone-900 半透明），symbolColor 灰白
-      color: 'rgba(28, 25, 23, 0.85)',
-      symbolColor: '#d6d3d1',
-      // 与 --aurora-topbar-h（52px）对齐
-      height: 52,
-    },
+    // 非 macOS 平台用 overlay 窗口控件（Electron 官方推荐平台分支写法）
+    ...(process.platform !== 'darwin'
+      ? {
+          titleBarOverlay: {
+            // 透明底：让顶栏玻璃背景统一延伸（深色实底会形成突兀黑块）
+            color: '#00000000',
+            symbolColor: '#d6d3d1',
+            // 与 --aurora-topbar-h（52px）对齐
+            height: 52,
+          },
+        }
+      : {}),
     webPreferences: {
       // preload 输出为 .cjs（CJS 格式）：sandbox: true 要求 preload 必须是 CommonJS
       preload: join(__dirname, '../preload/index.cjs'),
