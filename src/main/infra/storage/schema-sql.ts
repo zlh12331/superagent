@@ -80,6 +80,16 @@ export const SCHEMA_SQL = `
       created_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS cron_tasks (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      expression TEXT NOT NULL,
+      description TEXT NOT NULL,
+      next_fire_at INTEGER,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,

@@ -301,6 +301,28 @@ export const tasks = sqliteTable('tasks', {
   endTime: integer('end_time'),
 });
 
+/**
+ * cron_tasks 表：定时任务（对齐 qwen cronScheduler durable 语义收敛）
+ */
+export const cronTasks = sqliteTable('cron_tasks', {
+  /** 任务 id（uuid 主键） */
+  id: text('id').primaryKey(),
+  /** 所属会话 id（创建者） */
+  sessionId: text('session_id').notNull(),
+  /** cron 表达式（5 字段） */
+  expression: text('expression').notNull(),
+  /** 任务描述 */
+  description: text('description').notNull(),
+  /** 下次触发时间（Unix 毫秒；null = 未启用） */
+  nextFireAt: integer('next_fire_at'),
+  /** 是否启用 */
+  enabled: integer('enabled').notNull().default(1),
+  /** 创建时间 */
+  createdAt: integer('created_at').notNull(),
+});
+
+export type CronTaskRow = typeof cronTasks.$inferSelect;
+
 /** tasks 表类型 */
 export type TaskRow = typeof tasks.$inferSelect;
 /** tasks 表插入类型 */
@@ -327,6 +349,7 @@ export const schema = {
   goals,
   memories,
   tasks,
+  cronTasks,
 };
 
 // 防止 ts 报未使用 sql 导入（未来 CREATE INDEX 会用到）

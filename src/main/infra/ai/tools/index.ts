@@ -21,6 +21,9 @@ import type { MemoryService } from '../memory-service';
 import { skillRegistry } from '../skills/skill-registry';
 import type { IToolRegistry } from '../tool-registry';
 import { createCodeReviewTool } from './code-review.tool';
+import { createCronCreateTool } from './cron-create.tool';
+import { createCronDeleteTool } from './cron-delete.tool';
+import { createCronListTool } from './cron-list.tool';
 import { createEditFileTool } from './edit-file.tool';
 import { createGitAddTool } from './git-add.tool';
 import { createGitCommitTool } from './git-commit.tool';
@@ -126,6 +129,10 @@ export function registerBuiltinTools(
   registry.register(createWebFetchTool());
   // 记忆主动存储工具
   registry.register(createSaveMemoryTool(memoryService));
+  // 定时任务工具（cron 表达式调度）
+  registry.register(createCronCreateTool());
+  registry.register(createCronListTool());
+  registry.register(createCronDeleteTool());
   // 代码智能工具（LSP 定义/引用；只读自动放行）
   registry.register(createLspDefinitionTool(lspManager));
   registry.register(createLspReferencesTool(lspManager));
