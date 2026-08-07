@@ -18,6 +18,8 @@
 
 import { create } from 'zustand';
 
+import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+
 /**
  * 欢迎页模式状态形状
  */
@@ -33,7 +35,12 @@ interface WelcomeModeState {
   readonly pendingWorkingDir: string | null;
 
   // ── 操作方法 ────────────────────────────────────────
-  /** 进入欢迎页模式（可携带预设工作目录） */
+  /**
+   * 进入欢迎页模式（可携带预设工作目录）
+   *
+   * 内部统一清空激活会话：保证「欢迎页 + 旧激活会话」不一致态不可构造
+   * （此前一致性依赖每个调用方手动先调 clearActiveSession，约束散落）
+   */
   readonly enterWelcomeMode: (workingDir?: string | null) => void;
   /** 退出欢迎页模式（清空预设目录） */
   readonly exitWelcomeMode: () => void;
@@ -63,11 +70,14 @@ export const useWelcomeStore = create<WelcomeModeState>()((set) => ({
   isWelcomeMode: true,
   pendingWorkingDir: null,
 
-  enterWelcomeMode: (workingDir = null) =>
-    set(() => ({
+  enterWelcomeMode: (workingDir = null) => {
+    // 一致性约束：欢迎页 + 激活会话不可并存（避免调用方漏清导致状态不一致）
+    useActiveSessionStore.getState().clearActiveSession();
+    return set(() => ({
       isWelcomeMode: true,
       pendingWorkingDir: workingDir,
-    })),
+    }));
+  },
 
   exitWelcomeMode: () =>
     set(() => ({

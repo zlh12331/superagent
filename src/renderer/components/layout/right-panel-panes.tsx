@@ -9,7 +9,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, FileText, FolderOpen, Plus, Target } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { useTranslation } from '@/i18n/use-translation';
@@ -235,6 +235,13 @@ export function DiffPane({
   const [diffCache, setDiffCache] = useState<Map<string, string>>(() => new Map());
   // 加载中标记（change.id → true）
   const [loadingDiff, setLoadingDiff] = useState<Set<string>>(() => new Set());
+
+  // 会话切换清空行级 diff 缓存（DevPanel 跨会话保持，避免孤儿缓存持续累积）
+  useEffect(() => {
+    setExpanded(new Set());
+    setDiffCache(new Map());
+    setLoadingDiff(new Set());
+  }, [sessionId]);
 
   // selector 只取稳定引用（Map.get 返回的数组；无记录时用模块级常量）：
   // 在 selector 内 filter/map 会每次返回新数组 → Zustand 认为状态变化 → 无限重渲染

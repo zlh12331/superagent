@@ -46,6 +46,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useReasoningCollapseStore } from '@/stores/transient/reasoning-collapse-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 import { FileChangeCard } from './file-change-card';
 import { Markdown } from './Markdown';
@@ -103,7 +104,7 @@ export function MessageItem({
           {/* parts 列表：按 part 类型分别渲染 */}
           {message.parts.map((part, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: parts 是 append-only 序列，index 在单条消息内唯一稳定
-            <PartView key={`${message.id}-${index}`} part={part} />
+            <PartView key={`${message.id}-${index}`} part={part} messageId={message.id} />
           ))}
           {/* hover 操作栏：复制 + 重新生成（对齐原型 .msg-actions） */}
           <MsgActions
@@ -138,7 +139,14 @@ export function MessageItem({
  * - 'step-start'：细分隔线表示新步骤
  * - 其他：fallback 展示 part.type
  */
-function PartView({ part }: { part: UIMessagePart }): ReactElement {
+function PartView({
+  part,
+  messageId,
+}: {
+  part: UIMessagePart;
+  /** 所属消息 id（推理块折叠态关联 store 用） */
+  messageId: string;
+}): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   // 文本 part：Markdown 渲染（支持 GFM + 代码语法高亮）
@@ -155,7 +163,7 @@ function PartView({ part }: { part: UIMessagePart }): ReactElement {
 
   // 思考 part：.reasoning-block 折叠式推理块
   if (isReasoningUIPart(part)) {
-    return <ReasoningBlock text={part.text} />;
+    return <ReasoningBlock text={part.text} messageId={messageId} />;
   }
 
   // 静态工具调用（tool-{name}）
@@ -366,10 +374,12 @@ function CodeBlock({ label, content }: { label: string; content: string }): Reac
  * 折叠式：默认折叠，点击 head 切换 .open 类。
  * accent 左光条 + 等宽字体展示思考内容。
  */
-function ReasoningBlock({ text }: { text: string }): ReactElement {
-  // 初始折叠态跟随实验设置（reasoningCollapsed=true 默认折叠，false 默认展开）
+function ReasoningBlock({ text, messageId }: { text: string; messageId: string }): ReactElement {
+  // 折叠态：用户显式覆盖优先（L2 store，滚动卸载不丢失）；未覆盖时实时跟随实验设置
   const reasoningCollapsed = useSettingsStore((s) => s.experimental.reasoningCollapsed);
-  const [open, setOpen] = useState(!reasoningCollapsed);
+  const override = useReasoningCollapseStore((s) => s.overrides.get(messageId));
+  const setCollapsed = useReasoningCollapseStore((s) => s.setCollapsed);
+  const open = override === undefined ? !reasoningCollapsed : !override;
   // 本地化文案
   const { t } = useTranslation();
 
@@ -378,7 +388,7 @@ function ReasoningBlock({ text }: { text: string }): ReactElement {
       <button
         type="button"
         className="reasoning-head"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setCollapsed(messageId, open)}
         aria-expanded={open}
       >
         <span className="reasoning-title">{t('chat.thinking')}</span>

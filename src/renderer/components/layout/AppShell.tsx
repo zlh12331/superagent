@@ -100,26 +100,35 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 折叠态
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  // 用户是否手动切换过面板（置位后断点自动折叠不再覆盖手动意图）
+  const sidebarManualRef = useRef(false);
+  const rightPanelManualRef = useRef(false);
 
   // 响应式断点联动：窄屏自动折叠面板（对齐原型 @media 行为）
   // <1200px：右面板自动隐藏；<900px：侧栏自动隐藏；宽屏自动恢复
+  // 仅当用户未手动覆盖时才跟随断点（手动展开不被 resize 强制折叠）
   const { isCompact, isNarrow } = useLayoutBreakpoint();
 
   // 全局设置对话框开关（useUiStore）
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const closeSettings = useUiStore((s) => s.closeSettings);
   useEffect(() => {
-    setRightPanelCollapsed(isCompact);
+    if (!rightPanelManualRef.current) {
+      setRightPanelCollapsed(isCompact);
+    }
   }, [isCompact]);
   useEffect(() => {
-    setSidebarCollapsed(isNarrow);
+    if (!sidebarManualRef.current) {
+      setSidebarCollapsed(isNarrow);
+    }
   }, [isNarrow]);
 
   const [draggingSide, setDraggingSide] = useState<ResizerSide | null>(null);
 
-  // 命令面板 open 状态（由 ⌘P 快捷键或 Topbar paletteBtn 触发）
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  // 命令面板 open 状态（多入口：⌘P 快捷键 / Topbar / Shift+/ / 错误动作；集中到 ui-store）
+  const paletteOpen = useUiStore((s) => s.paletteOpen);
+  const openPalette = useUiStore((s) => s.openPalette);
+  const closePalette = useUiStore((s) => s.closePalette);
 
   // 快捷键帮助对话框（'?' 键触发）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -136,9 +145,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const openSettings = useUiStore((s) => s.openSettings);
 
   useKeyboardShortcuts({
-    onCommandPalette: () => setPaletteOpen(true),
+    onCommandPalette: () => openPalette(),
     onSaveFile: () => {},
-    onSearchFile: () => setPaletteOpen(true),
+    onSearchFile: () => openPalette(),
     onToggleTheme: () => {
       const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
       setTheme(nextTheme);
@@ -214,11 +223,13 @@ export function AppShell({ children }: AppShellProps): ReactElement {
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  // 折叠态切换回调
+  // 折叠态切换回调（用户手动操作：置位 manualRef，断点自动折叠不再覆盖手动意图）
   const handleToggleSidebar = useCallback(() => {
+    sidebarManualRef.current = true;
     setSidebarCollapsed((prev) => !prev);
   }, []);
   const handleToggleRightPanel = useCallback(() => {
+    rightPanelManualRef.current = true;
     setRightPanelCollapsed((prev) => !prev);
   }, []);
 
@@ -323,7 +334,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       <SettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
 
       {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <CommandPalette open={paletteOpen} onOpenChange={closePalette} />
       {/* 快捷键帮助对话框（'?' 触发） */}
       <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
       {/* 自动更新提示（事件驱动 toast，无 DOM） */}

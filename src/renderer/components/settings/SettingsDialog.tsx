@@ -140,6 +140,21 @@ const NAV_GROUPS: readonly NavGroup[] = [
 /** 抽屉宽度范围（对齐参考项目：360-800，默认 540） */
 const DRAWER_MIN_WIDTH = 360;
 const DRAWER_DEFAULT_WIDTH = 540;
+/** 抽屉宽度 localStorage key（用户拖宽后跨会话保留） */
+const DRAWER_WIDTH_STORAGE_KEY = 'code-agent:settings-drawer-width';
+
+/** 读取持久化宽度（无记录 / 非法值回退默认） */
+function readStoredWidth(): number {
+  try {
+    const stored = Number(localStorage.getItem(DRAWER_WIDTH_STORAGE_KEY));
+    if (Number.isFinite(stored) && stored >= DRAWER_MIN_WIDTH) {
+      return stored;
+    }
+  } catch {
+    // localStorage 不可用（隐私模式等）：回退默认
+  }
+  return DRAWER_DEFAULT_WIDTH;
+}
 
 /**
  * 分区渲染器（集中分发，避免 JSX 堆叠 11 个条件分支）
@@ -193,12 +208,21 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
  * 抽屉拖拽调宽（Pointer Events + RAF 节流，对齐参考项目 useDrawerResize）
  */
 function useDrawerResize() {
-  const [width, setWidth] = useState(DRAWER_DEFAULT_WIDTH);
+  const [width, setWidth] = useState(readStoredWidth);
   const [isDragging, setIsDragging] = useState(false);
   const dragState = useRef({ startX: 0, startWidth: DRAWER_DEFAULT_WIDTH, maxW: 0 });
   const sheetRef = useRef<HTMLDivElement>(null);
   const rafIdRef = useRef<number | null>(null);
   const pendingWidthRef = useRef<number | null>(null);
+
+  // 宽度持久化：拖拽/键盘调整后写入 localStorage（关闭重开保留用户偏好）
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAWER_WIDTH_STORAGE_KEY, String(width));
+    } catch {
+      // localStorage 不可用（隐私模式等）：忽略
+    }
+  }, [width]);
 
   // 拖拽时禁用文本选中
   useEffect(() => {

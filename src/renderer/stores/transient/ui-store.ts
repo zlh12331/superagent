@@ -16,6 +16,12 @@ interface UiState {
   readonly openSettings: () => void;
   /** 关闭设置对话框 */
   readonly closeSettings: () => void;
+  /** 命令面板是否打开（多入口：顶栏按钮 / Ctrl+P / Shift+/ / 错误动作；集中到 store 避免双模式） */
+  readonly paletteOpen: boolean;
+  /** 打开命令面板 */
+  readonly openPalette: () => void;
+  /** 关闭命令面板 */
+  readonly closePalette: () => void;
   /** 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换，不进头部 tab） */
   readonly sidebarView: 'threads' | 'fileTree';
   /** 切换侧栏视图 */
@@ -26,6 +32,9 @@ export const useUiStore = create<UiState>()((set) => ({
   settingsOpen: false,
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+  paletteOpen: false,
+  openPalette: () => set({ paletteOpen: true }),
+  closePalette: () => set({ paletteOpen: false }),
   sidebarView: 'threads',
   setSidebarView: (view) => set({ sidebarView: view }),
 }));

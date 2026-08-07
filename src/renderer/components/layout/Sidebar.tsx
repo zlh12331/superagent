@@ -53,6 +53,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
@@ -109,47 +110,32 @@ export function Sidebar(): ReactElement {
     return groups;
   })();
 
-  // 拖拽排序覆盖（folderName → 会话 id 顺序；未覆盖的文件夹保持服务端顺序）
-  // 会话顺序由 updatedAt 决定，拖拽重排仅作为 UI 层临时排序（不持久化）
-  const [orderOverrides, setOrderOverrides] = useState<ReadonlyMap<string, readonly string[]>>(
-    () => new Map(),
-  );
-  // 折叠的文件夹集合（提升到 Sidebar：虚拟化列表需要整体过滤条目）
-  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleFolder = (name: string): void => {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  };
+  // 拖拽排序覆盖 + 折叠文件夹：持久化到 localStorage（sidebar-pref-store）——
+  // 用户显式操作跨重启保留（此前本地 useState 刷新即丢）
+  const orderOverrides = useSidebarPrefStore((s) => s.orderOverrides);
+  const setOrderOverride = useSidebarPrefStore((s) => s.setOrderOverride);
+  const collapsedFolders = useSidebarPrefStore((s) => s.collapsedFolders);
+  const toggleFolder = useSidebarPrefStore((s) => s.toggleFolder);
   // PointerSensor：拖拽需移动 4px 才激活（避免与点击选择冲突）
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  /** 拖拽结束：同文件夹内重排（跨文件夹拖拽被 folder 归属过滤） */
+  /** 拖拽结束：同文件夹内重排（跨文件夹拖拽被 folder 归属过滤）；覆盖写入持久化 store */
   const handleDragEnd = (event: DragEndEvent): void => {
     const { active, over } = event;
     if (over === null || active.id === over.id) {
       return;
     }
     const folderName = String(active.data.current?.['folder'] ?? '');
-    // 函数式更新：直接基于最新覆盖顺序计算，无需 ref 同步（React Compiler 合规）
-    setOrderOverrides((prev) => {
-      // 当前顺序：优先拖拽覆盖，否则取该文件夹的默认（服务端）顺序
-      const folderSessions = sessions.filter((s) => getFolderName(s.workingDir) === folderName);
-      const current = prev.get(folderName) ?? folderSessions.map((s) => s.id);
-      const oldIndex = current.indexOf(String(active.id));
-      const newIndex = current.indexOf(String(over.id));
-      if (oldIndex === -1 || newIndex === -1) {
-        return prev;
-      }
-      const next = arrayMove([...current], oldIndex, newIndex);
-      return new Map(prev).set(folderName, next);
-    });
+    // 当前顺序：优先拖拽覆盖，否则取该文件夹的默认（服务端）顺序
+    const folderSessions = sessions.filter((s) => getFolderName(s.workingDir) === folderName);
+    const current = orderOverrides[folderName] ?? folderSessions.map((s) => s.id);
+    const oldIndex = current.indexOf(String(active.id));
+    const newIndex = current.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+    const next = arrayMove([...current], oldIndex, newIndex);
+    setOrderOverride(folderName, next);
   };
 
   // 扁平化列表条目：文件夹标签 + 会话项（Virtuoso 虚拟化渲染；React Compiler 自动缓存）
@@ -157,12 +143,12 @@ export function Sidebar(): ReactElement {
     const list: SidebarEntry[] = [];
     for (const [folderName, folderSessions] of groupedSessions) {
       list.push({ type: 'label', name: folderName });
-      if (collapsedFolders.has(folderName)) {
+      if (collapsedFolders.includes(folderName)) {
         continue;
       }
       // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
       const byId = new Map(folderSessions.map((s) => [s.id, s]));
-      const ordered = orderOverrides.get(folderName) ?? folderSessions.map((s) => s.id);
+      const ordered = orderOverrides[folderName] ?? folderSessions.map((s) => s.id);
       for (const id of ordered) {
         const session = byId.get(id);
         if (session !== undefined) {
@@ -321,7 +307,7 @@ export function Sidebar(): ReactElement {
                           return (
                             <FolderLabel
                               folderName={entry.name}
-                              collapsed={collapsedFolders.has(entry.name)}
+                              collapsed={collapsedFolders.includes(entry.name)}
                               onToggle={() => toggleFolder(entry.name)}
                               onCreateInFolder={handleCreateInFolder}
                             />
