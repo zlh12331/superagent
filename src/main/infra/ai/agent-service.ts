@@ -50,6 +50,7 @@ import { classifyError, isAbortError } from '../ai/error-classifier';
 import type { ISessionService } from '../storage/session-service';
 import { TurnEventEmitter } from './agent-runtime';
 import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
+import { createAgentTurnActor } from './agent-runtime/agent-turn-machine';
 import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from './agent-runtime/create-stream';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from './agent-runtime/stream-reader';
@@ -345,6 +346,14 @@ export class AgentService implements IAgentService {
         const turnEmitter = new TurnEventEmitter();
         const turnId = randomUUID();
         const turnStartTime = Date.now();
+        // 回合状态机（XState）：回合执行层唯一状态权威；关键节点发送事件，
+        // 非法转换被忽略（转换合法性由 agent-turn-machine.test 全表断言）
+        const turnMachine = createAgentTurnActor({
+          sessionId,
+          turnId,
+          modelId: modelRegistry.resolve(undefined).modelId,
+          startedAt: turnStartTime,
+        });
         // 模型级超时定时器（回合作用域；finally 清理）
         let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
         const resolvedModel = modelRegistry.resolve(undefined);
@@ -367,6 +376,8 @@ export class AgentService implements IAgentService {
             this.concurrencyGate === undefined
               ? undefined
               : await this.concurrencyGate.acquire(sessionId, controller.signal);
+          // 回合状态机：槽位获取成功 → running
+          turnMachine.send({ type: 'gate.ready' });
           // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
           const model = await getModel(undefined);
 
@@ -603,6 +614,13 @@ export class AgentService implements IAgentService {
           });
           const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
 
+          // 回合状态机：流结束 → completed / aborted（TurnRunner 已归因）
+          turnMachine.send(
+            runResult.reason === 'completed'
+              ? { type: 'stream.finished' }
+              : { type: 'stream.aborted' },
+          );
+
           // 模型级总时长超时检查：超时信号已触发 → 按 AI_TIMEOUT 归类（非用户中断）
           if (modelTimeout?.signal.aborted === true) {
             throw new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时');
@@ -719,6 +737,12 @@ export class AgentService implements IAgentService {
           } else {
             // 其他错误：分类并推送 AGENT_STREAM_ERROR
             const appError = classifyError(error);
+            // 回合状态机：异常 → error（带错误码上下文）
+            turnMachine.send({
+              type: 'stream.error',
+              code: appError.code,
+              message: appError.message,
+            });
             if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
               const errorPayload: AgentStreamErrorPayload = {
                 sessionId,
