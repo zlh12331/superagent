@@ -168,6 +168,16 @@ export interface IPermissionService {
   recordUserDenial(): void;
 
   /**
+   * 订阅审批生命周期（Agent 回合状态机 waitingApproval 状态的数据源）
+   *
+   * - onRequested：审批请求已推送（回合进入等待）
+   * - onResolved：审批决议完成（回合恢复执行）
+   *
+   * @returns 注销函数
+   */
+  onApprovalLifecycle(listener: ApprovalLifecycleListener): () => void;
+
+  /**
    * 记录一次用户放行/工具成功执行（重置连续拒绝计数）
    */
   recordUserAllowance(): void;
@@ -189,6 +199,20 @@ export interface IPermissionService {
 }
 
 /**
+ * 审批生命周期监听器（Agent 回合状态机 waitingApproval 状态的数据源）
+ */
+export interface ApprovalLifecycleListener {
+  /** 审批请求已推送（approvalId + sessionId，供回合过滤） */
+  onRequested(payload: {
+    readonly sessionId: string;
+    readonly approvalId: string;
+    readonly toolName: string;
+  }): void;
+  /** 审批决议完成（批准/拒绝；带 sessionId 供回合过滤） */
+  onResolved(payload: { readonly sessionId: string; readonly approvalId: string }): void;
+}
+
+/**
  * pending 审批条目
  *
  * 包含 Promise 的 resolve/reject、超时定时器、
@@ -205,6 +229,8 @@ interface PendingApproval {
   readonly tool: Tool;
   /** 关联的工具入参（用于 rememberDecision 时构建 key） */
   readonly input: unknown;
+  /** 所属会话 id（审批生命周期事件过滤用） */
+  readonly sessionId: string;
   /** abort 监听器清理函数（若注册了 abort 监听则需要清理） */
   readonly cleanupAbort?: () => void;
 }
@@ -241,6 +267,8 @@ export class PermissionService implements IPermissionService {
   private readonly pending = new Map<string, PendingApproval>();
   /** 记忆决策 Map：`${toolName}:${hash(input)}` → RememberedDecision */
   private readonly remembered = new Map<string, RememberedDecision>();
+  /** 审批生命周期监听器（Agent 回合状态机 waitingApproval 数据源） */
+  private readonly lifecycleListeners = new Set<ApprovalLifecycleListener>();
   /** 审批模式（默认保守 ask；settings 可配置） */
   private approvalMode: ApprovalMode = DEFAULT_APPROVAL_MODE;
   /** AUTO 模式拒绝跟踪状态（用户拒绝超阈值 → 单次降级手动确认） */
@@ -305,6 +333,43 @@ export class PermissionService implements IPermissionService {
     if (next.length !== this.whitelist.length) {
       this.whitelist = next;
       await writeWhitelist(this.whitelist);
+    }
+  }
+
+  /** @inheritDoc */
+  onApprovalLifecycle(listener: ApprovalLifecycleListener): () => void {
+    this.lifecycleListeners.add(listener);
+    return () => {
+      this.lifecycleListeners.delete(listener);
+    };
+  }
+
+  /** 通知所有监听器：审批请求已推送 */
+  private notifyApprovalRequested(payload: {
+    readonly sessionId: string;
+    readonly approvalId: string;
+    readonly toolName: string;
+  }): void {
+    for (const listener of this.lifecycleListeners) {
+      try {
+        listener.onRequested(payload);
+      } catch (err: unknown) {
+        logger.error({ error: err }, '审批生命周期监听器 onRequested 异常');
+      }
+    }
+  }
+
+  /** 通知所有监听器：审批决议完成 */
+  private notifyApprovalResolved(payload: {
+    readonly sessionId: string;
+    readonly approvalId: string;
+  }): void {
+    for (const listener of this.lifecycleListeners) {
+      try {
+        listener.onResolved(payload);
+      } catch (err: unknown) {
+        logger.error({ error: err }, '审批生命周期监听器 onResolved 异常');
+      }
     }
   }
 
@@ -499,6 +564,7 @@ export class PermissionService implements IPermissionService {
         timer,
         tool,
         input,
+        sessionId: payload.sessionId,
         cleanupAbort,
       });
 
@@ -514,6 +580,12 @@ export class PermissionService implements IPermissionService {
           { approvalId: payload.approvalId, toolName: payload.toolName },
           '审批请求已推送',
         );
+        // 审批生命周期：真实推送后通知（Agent 回合状态机 → waitingApproval）
+        this.notifyApprovalRequested({
+          sessionId: payload.sessionId,
+          approvalId: payload.approvalId,
+          toolName: payload.toolName,
+        });
       } else if (webContents === undefined) {
         // 无头场景（IM 桥接等）无审批通道：自动拒绝（安全优先）
         clearTimeout(timer);
@@ -553,6 +625,8 @@ export class PermissionService implements IPermissionService {
 
     entry.resolve(approved);
     logger.info({ approvalId, approved, rememberDecision }, '审批响应已处理');
+    // 审批生命周期：决议完成通知（Agent 回合状态机 → 恢复 running）
+    this.notifyApprovalResolved({ sessionId: entry.sessionId, approvalId });
   }
 
   /**

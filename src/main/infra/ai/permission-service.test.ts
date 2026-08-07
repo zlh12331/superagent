@@ -81,6 +81,56 @@ describe('PermissionService', () => {
     service = new PermissionService();
   });
 
+  describe('approval lifecycle', () => {
+    it('订阅后：审批请求推送 → onRequested（带 sessionId/approvalId/toolName）', async () => {
+      const wc = createMockWebContents();
+      const onRequested = vi.fn();
+      const onResolved = vi.fn();
+      const unsubscribe = service.onApprovalLifecycle({ onRequested, onResolved });
+
+      const tool = createMockTool('ask');
+      const requestPromise = service.requestApproval(
+        createApprovalPayload({
+          sessionId: 'session-1',
+          approvalId: 'ap-1',
+          toolName: 'mock_tool',
+        }),
+        tool,
+        { path: '/tmp/a.ts' },
+        wc,
+      );
+      expect(onRequested).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        approvalId: 'ap-1',
+        toolName: 'mock_tool',
+      });
+
+      // 决议 → onResolved
+      service.handleApprovalResponse('ap-1', true, false);
+      await expect(requestPromise).resolves.toBe(true);
+      expect(onResolved).toHaveBeenCalledWith({ sessionId: 'session-1', approvalId: 'ap-1' });
+      unsubscribe();
+    });
+
+    it('注销后不再通知', async () => {
+      const wc = createMockWebContents();
+      const onRequested = vi.fn();
+      const unsubscribe = service.onApprovalLifecycle({ onRequested, onResolved: vi.fn() });
+      unsubscribe();
+
+      const tool = createMockTool('ask');
+      const requestPromise = service.requestApproval(
+        createApprovalPayload({ approvalId: 'ap-2' }),
+        tool,
+        { path: '/tmp/a.ts' },
+        wc,
+      );
+      expect(onRequested).not.toHaveBeenCalled();
+      service.handleApprovalResponse('ap-2', false, false);
+      await expect(requestPromise).resolves.toBe(false);
+    });
+  });
+
   describe('whitelist', () => {
     it('listWhitelist：返回当前条目（初始为空）', () => {
       expect(service.listWhitelist()).toEqual([]);

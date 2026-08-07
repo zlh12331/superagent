@@ -62,6 +62,7 @@ import {
   getTokenBudgetDecision,
 } from './context-compression';
 import { buildGenerationOptions, modelRegistry } from './models';
+import type { IPermissionService } from './permission-service';
 import type { IPromptService } from './prompt/prompt-service';
 import type { ITitleGenerator } from './session-title';
 import { ensureSessionTitle, firstUserMessageText, lastUserMessageText } from './session-title';
@@ -180,6 +181,8 @@ export class AgentService implements IAgentService {
     private readonly titleGenerator?: ITitleGenerator,
     /** 并发公平调度门（多会话共享执行槽位；未注入则无并发上限，测试兼容） */
     private readonly concurrencyGate?: ConcurrencyGate,
+    /** 权限服务（审批生命周期 → 回合状态机 waitingApproval；未注入则跳过订阅） */
+    private readonly permissionService?: IPermissionService,
   ) {}
 
   /** 活跃对话 Map：sessionId → AbortController */
@@ -353,6 +356,20 @@ export class AgentService implements IAgentService {
           turnId,
           modelId: modelRegistry.resolve(undefined).modelId,
           startedAt: turnStartTime,
+        });
+        // 审批生命周期订阅（waitingApproval 状态运行时数据源）：
+        // 审批推送 → waitingApproval；决议完成 → 恢复 running（按 sessionId 过滤）
+        const unsubscribeApproval = this.permissionService?.onApprovalLifecycle({
+          onRequested: (p) => {
+            if (p.sessionId === sessionId) {
+              turnMachine.send({ type: 'approval.requested', approvalId: p.approvalId });
+            }
+          },
+          onResolved: (p) => {
+            if (p.sessionId === sessionId) {
+              turnMachine.send({ type: 'approval.responded' });
+            }
+          },
         });
         // 模型级超时定时器（回合作用域；finally 清理）
         let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
@@ -784,6 +801,8 @@ export class AgentService implements IAgentService {
           // 取消回合事件订阅（防泄漏）
           unsubscribeAll();
           forwardTurnEvents();
+          // 取消审批生命周期订阅（回合结束；防泄漏）
+          unsubscribeApproval?.();
           // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
           modelTimeout?.clear();
           // CAS（Compare-And-Swap）删除 activeSessions：

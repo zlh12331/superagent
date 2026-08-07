@@ -424,6 +424,8 @@ class ServiceContainer {
         this.getSessionService(),
         this.getLlmClient(),
         this.concurrencyGate,
+        // 审批生命周期 → 回合状态机 waitingApproval（AgentService 依赖）
+        this.getPermissionService(),
       );
     }
     return this.agentService;
