@@ -157,8 +157,8 @@ export function ApprovalModeSection(): ReactElement {
             className={cn(
               'flex cursor-pointer items-start gap-2 rounded border px-2.5 py-1.5',
               mode === option.value
-                ? 'border-stone-400 bg-stone-50'
-                : 'border-stone-100 hover:border-stone-300',
+                ? 'border-border bg-muted'
+                : 'border-border hover:border-border',
             )}
           >
             <input
@@ -166,7 +166,7 @@ export function ApprovalModeSection(): ReactElement {
               name="approval-mode"
               checked={mode === option.value}
               onChange={() => void setMode(option.value)}
-              className="mt-0.5 size-3.5 accent-stone-700"
+              className="mt-0.5 size-3.5 accent-foreground"
             />
             <span className="min-w-0">
               <span className="text-foreground block text-xs font-medium font-sans">
@@ -195,7 +195,7 @@ export function ApprovalModeSection(): ReactElement {
             entries.map((entry) => (
               <div
                 key={`${entry.toolName}:${entry.pattern}`}
-                className="flex items-center gap-2 rounded border border-stone-100 px-2 py-1.5 font-sans"
+                className="flex items-center gap-2 rounded border border-border px-2 py-1.5 font-sans"
               >
                 <span className="text-foreground min-w-0 flex-1 truncate font-mono text-xs">
                   {entry.toolName}
@@ -208,7 +208,7 @@ export function ApprovalModeSection(): ReactElement {
                 <button
                   type="button"
                   onClick={() => removeMutation.mutate(entry)}
-                  className="text-muted-foreground hover:text-red-500 flex cursor-pointer items-center rounded border px-1.5 py-1 text-[10px] transition-colors"
+                  className="text-muted-foreground hover:text-red-500 flex cursor-pointer items-center rounded border px-1.5 py-1 text-2xs transition-colors"
                   aria-label={t('settings.whitelistRemove')}
                 >
                   <Trash2 className="size-3" />
@@ -257,29 +257,29 @@ export function ApprovalModeSection(): ReactElement {
         </div>
         <p className="text-xs text-muted-foreground font-sans">{t('settings.permProfileHint')}</p>
         <div className="mt-1.5 grid gap-1.5">
-          <div className="rounded border border-stone-100 p-2">
+          <div className="rounded border border-border p-2">
             <div className="flex items-center justify-between">
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAuto')}
               </span>
-              <span className="bg-emerald-500/10 text-emerald-700 rounded-full px-2 py-0.5 font-mono text-[11px]">
+              <span className="bg-emerald-500/10 text-emerald-700 rounded-full px-2 py-0.5 font-mono text-xs">
                 auto · {autoTools.length}
               </span>
             </div>
-            <p className="mt-1 font-mono text-[11px] leading-[1.7] text-muted-foreground">
+            <p className="mt-1 font-mono text-xs leading-[1.7] text-muted-foreground">
               {autoTools.map((tool) => tool.name).join(' · ') || '—'}
             </p>
           </div>
-          <div className="rounded border border-stone-100 p-2">
+          <div className="rounded border border-border p-2">
             <div className="flex items-center justify-between">
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAsk')}
               </span>
-              <span className="bg-amber-500/10 text-amber-700 rounded-full px-2 py-0.5 font-mono text-[11px]">
+              <span className="bg-amber-500/10 text-amber-700 rounded-full px-2 py-0.5 font-mono text-xs">
                 ask · {askTools.length}
               </span>
             </div>
-            <p className="mt-1 font-mono text-[11px] leading-[1.7] text-muted-foreground">
+            <p className="mt-1 font-mono text-xs leading-[1.7] text-muted-foreground">
               {askTools.map((tool) => tool.name).join(' · ') || '—'}
             </p>
           </div>

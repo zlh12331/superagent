@@ -49,7 +49,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
     <div className={cn('flex h-full flex-col', className)}>
       {/* 顶部：标题 + 刷新按钮 */}
       <div className="border-border bg-muted/30 flex items-center justify-between border-b px-2 py-1">
-        <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+        <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
           <Activity className="size-3" strokeWidth={1.5} />
           <span className="font-serif tracking-wide">{t('dev.runtimeMetrics')}</span>
           {data !== undefined && (
@@ -159,7 +159,7 @@ function MetricCard({ icon: Icon, label, value, hint }: MetricCardProps): ReactE
         <Icon className="size-2.5 shrink-0" strokeWidth={1.5} />
         <span className="font-serif tracking-wide">{label}</span>
       </div>
-      <div className="text-foreground font-mono text-[11px] leading-tight">{value}</div>
+      <div className="text-foreground font-mono text-xs leading-tight">{value}</div>
       {hint !== undefined && (
         <div className="text-muted-foreground/70 font-mono text-[9px]">{hint}</div>
       )}
@@ -225,7 +225,7 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
     <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
       <p className="font-serif text-xs">{t('dev.metricsFailed')}</p>
-      <p className="text-muted-foreground truncate text-[10px]">{message}</p>
+      <p className="text-muted-foreground truncate text-2xs">{message}</p>
     </div>
   );
 }

@@ -127,7 +127,7 @@ export function Topbar({
             始终显示（不随断点隐藏）：删除重复的图标按钮后，此入口是唯一命令面板触发点 */}
         <button
           type="button"
-          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors"
+          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
           aria-label={t('topbar.commandPalette')}
           onClick={onOpenCommandPalette}
         >

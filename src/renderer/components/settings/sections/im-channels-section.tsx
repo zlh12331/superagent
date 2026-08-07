@@ -81,7 +81,7 @@ export function ImChannelsSection(): ReactElement {
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center gap-2">
-        <MessageSquareText className="size-4 text-stone-600" strokeWidth={1.5} />
+        <MessageSquareText className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">
           {t('settings.imChannelsSection')}
         </Label>
@@ -90,19 +90,19 @@ export function ImChannelsSection(): ReactElement {
 
       <ul className="space-y-2 text-xs font-sans">
         {channels.map((channel) => (
-          <li key={channel.kind} className="rounded border border-stone-100 px-2.5 py-2">
+          <li key={channel.kind} className="rounded border border-border px-2.5 py-2">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <span className="block font-medium text-stone-800">{channel.displayName}</span>
+                <span className="block font-medium text-foreground">{channel.displayName}</span>
                 <span className="block truncate text-muted-foreground">{channel.description}</span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span
                   className={cn(
-                    'rounded-full px-1.5 py-0.5 text-[10px]',
+                    'rounded-full px-1.5 py-0.5 text-2xs',
                     channel.running
                       ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-stone-100 text-stone-500',
+                      : 'bg-muted text-muted-foreground',
                   )}
                 >
                   {channel.running

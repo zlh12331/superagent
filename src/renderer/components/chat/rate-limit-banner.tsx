@@ -38,8 +38,8 @@ export function RateLimitBanner(): ReactElement | null {
   if (!visible || isRateLimitExpired(triggeredAt)) return null;
 
   return (
-    <div className="flex justify-end border-b bg-gradient-to-b from-muted/60 to-background px-6 py-[7px] font-mono text-[11px] text-muted-foreground">
-      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border bg-card px-[9px] py-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+    <div className="flex justify-end border-b bg-gradient-to-b from-muted/60 to-background px-6 py-[7px] font-mono text-xs text-muted-foreground">
+      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border bg-card px-[9px] py-0.5 text-xs text-amber-600 dark:text-amber-400">
         <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2} />
         <span>{t('chat.rateLimited')}</span>
         <button

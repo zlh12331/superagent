@@ -64,7 +64,7 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-5 py-4 text-xs leading-[1.9]">
           {SHORTCUTS.map((item) => (
             <div key={item.descriptionKey} className="flex items-center gap-1.5">
-              <kbd className="text-primary border-border bg-muted inline-flex shrink-0 items-center rounded-[3px] border px-1.5 py-px font-mono text-[10px]">
+              <kbd className="text-primary border-border bg-muted inline-flex shrink-0 items-center rounded-[3px] border px-1.5 py-px font-mono text-2xs">
                 {item.keys}
               </kbd>
               <span className="text-muted-foreground truncate">{t(item.descriptionKey)}</span>

@@ -185,7 +185,7 @@ function LogLines({ lines, filePath }: LogLinesProps): ReactElement {
       </div>
 
       {/* 日志行：日志内容可能重复，使用 index 作为 key 一部分是合理的 */}
-      <pre className="text-foreground/80 overflow-x-auto p-1 text-[10px] leading-relaxed font-mono">
+      <pre className="text-foreground/80 overflow-x-auto p-1 text-2xs leading-relaxed font-mono">
         {lines.map((line, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: 日志行内容可能重复，index 作为 key 一部分是必要的
           <LogLine key={`${index}-${line.slice(0, 20)}`} line={line} />
@@ -232,7 +232,7 @@ function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
       <FileText className="size-5 opacity-50" strokeWidth={1.5} />
       <p className="font-serif text-xs tracking-wide">{t('common.noLogs')}</p>
-      <p className="text-[10px]">{t('common.logsTruncatedDesc')}</p>
+      <p className="text-2xs">{t('common.logsTruncatedDesc')}</p>
       <p className="text-muted-foreground/60 mt-1 truncate font-mono text-[9px]">{filePath}</p>
     </div>
   );
@@ -246,7 +246,7 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
     <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
       <p className="font-serif text-xs">{t('common.logsLoadFailed')}</p>
-      <p className="text-muted-foreground truncate text-[10px]">{message}</p>
+      <p className="text-muted-foreground truncate text-2xs">{message}</p>
     </div>
   );
 }

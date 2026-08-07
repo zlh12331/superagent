@@ -66,7 +66,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
               <Icon className={cn('size-3 shrink-0', colorClass)} strokeWidth={1.5} />
               <span
                 className={cn(
-                  'min-w-0 flex-1 truncate text-[10px] font-mono',
+                  'min-w-0 flex-1 truncate text-2xs font-mono',
                   isSelected ? 'text-foreground' : 'text-muted-foreground',
                 )}
                 title={file.path}

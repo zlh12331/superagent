@@ -304,7 +304,7 @@ export function ChatInput({
             >
               <Slash className="text-muted-foreground size-3.5 shrink-0" />
               <span className="font-mono text-xs">{s.command}</span>
-              <span className="text-muted-foreground ml-auto text-[11px]">{t(s.labelKey)}</span>
+              <span className="text-muted-foreground ml-auto text-xs">{t(s.labelKey)}</span>
             </button>
           ))}
         </div>
@@ -315,7 +315,7 @@ export function ChatInput({
           {attachments.map((att) => (
             <span
               key={att.path}
-              className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+              className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
             >
               <FileText className="size-3 shrink-0" />
               <span className="max-w-40 truncate" title={att.path}>
@@ -397,23 +397,21 @@ export function ChatInput({
         {isStreaming ? (
           <button
             type="button"
-            className="stop-gen-btn"
+            className="stop-gen-btn ml-auto"
             onClick={onStop}
             aria-label={t('chat.stopGenerating')}
             title={t('chat.stopGenerating')}
-            style={{ marginLeft: 'auto' }}
           >
             <Square className="size-3.5" strokeWidth={2.5} fill="currentColor" />
           </button>
         ) : (
           <button
             type="button"
-            className="send-btn"
+            className="send-btn ml-auto"
             disabled={!canSend}
             onClick={handleSend}
             aria-label={t('chat.sendMessage')}
             title={t('chat.send')}
-            style={{ marginLeft: 'auto' }}
           >
             <Send className="size-3.5" strokeWidth={2.5} />
           </button>

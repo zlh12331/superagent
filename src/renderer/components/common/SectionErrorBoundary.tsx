@@ -49,10 +49,7 @@ function SectionFallback({
     >
       <AlertTriangle className="size-5" strokeWidth={1.5} />
       <p className="text-xs leading-relaxed">区块加载失败，请重试</p>
-      <p
-        className="text-muted-foreground max-w-full truncate font-mono text-[10px]"
-        title={message}
-      >
+      <p className="text-muted-foreground max-w-full truncate font-mono text-2xs" title={message}>
         {message}
       </p>
       <Button variant="outline" size="sm" onClick={resetErrorBoundary}>

@@ -83,7 +83,7 @@ export function RuntimeModelsSection(): ReactElement {
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center gap-2">
-        <Plus className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Plus className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">
           {t('settings.runtimeModelsSection')}
         </Label>
@@ -133,9 +133,9 @@ export function RuntimeModelsSection(): ReactElement {
           {models.map((m) => (
             <li
               key={m.modelId}
-              className="flex items-center justify-between gap-2 rounded border border-stone-100 px-2 py-1"
+              className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1"
             >
-              <span className="truncate text-stone-700">
+              <span className="truncate text-foreground">
                 {m.modelId}
                 <span className="ml-1 text-muted-foreground">({m.providerKind})</span>
               </span>

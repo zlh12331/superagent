@@ -85,17 +85,17 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
         <span className="card-title max-w-[45%] truncate" title={path}>
           {fileName}
         </span>
-        <span className={cn('rounded-full px-1.5 py-0.5 font-mono text-[10px]', badgeClass)}>
+        <span className={cn('rounded-full px-1.5 py-0.5 font-mono text-2xs', badgeClass)}>
           {badgeText}
         </span>
-        <span className="card-status font-mono text-[10px]">
+        <span className="card-status font-mono text-2xs">
           +{stats.additions} / -{stats.deletions}
         </span>
         <span className="tool-chev">▸</span>
       </button>
       <div className="card-body">
         {open && (
-          <div className="diff-lines max-h-72 overflow-y-auto rounded border font-mono text-[11px] leading-[1.6]">
+          <div className="diff-lines max-h-72 overflow-y-auto rounded border font-mono text-xs leading-[1.6]">
             {rows.map((line) => (
               <div
                 key={line.rowKey}

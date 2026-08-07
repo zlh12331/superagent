@@ -24,7 +24,7 @@ export function ExperimentalSection(): ReactElement {
   return (
     <div className="space-y-2">
       <SectionTitle>{t('settings.experimental.title')}</SectionTitle>
-      <p className="text-muted-foreground text-[11px] leading-[1.5]">
+      <p className="text-muted-foreground text-xs leading-[1.5]">
         {t('settings.experimental.hint')}
       </p>
 

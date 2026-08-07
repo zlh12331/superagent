@@ -44,7 +44,7 @@ export function UsageSection(): ReactElement {
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center gap-2">
-        <BarChart3 className="size-4 text-stone-600" strokeWidth={1.5} />
+        <BarChart3 className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.usageSection')}</Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.usageHint')}</p>
@@ -55,17 +55,17 @@ export function UsageSection(): ReactElement {
         <div className="space-y-2 font-sans">
           {/* 总量 */}
           <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded border border-stone-200 p-2">
+            <div className="rounded border border-border p-2">
               <p className="text-muted-foreground">{t('settings.usageTotalCalls')}</p>
-              <p className="mt-0.5 font-medium text-stone-800">{summary.total.calls}</p>
+              <p className="mt-0.5 font-medium text-foreground">{summary.total.calls}</p>
             </div>
-            <div className="rounded border border-stone-200 p-2">
+            <div className="rounded border border-border p-2">
               <p className="text-muted-foreground">{t('settings.usageTotalTokens')}</p>
-              <p className="mt-0.5 font-medium text-stone-800">{summary.total.totalTokens}</p>
+              <p className="mt-0.5 font-medium text-foreground">{summary.total.totalTokens}</p>
             </div>
-            <div className="rounded border border-stone-200 p-2">
+            <div className="rounded border border-border p-2">
               <p className="text-muted-foreground">{t('settings.usageCacheHit')}</p>
-              <p className="mt-0.5 font-medium text-stone-800">
+              <p className="mt-0.5 font-medium text-foreground">
                 {summary.byModel.reduce((sum, m) => sum + m.cacheReadTokens, 0)}
               </p>
             </div>
@@ -73,14 +73,16 @@ export function UsageSection(): ReactElement {
 
           {/* 按模型 */}
           <div>
-            <p className="text-xs font-medium text-stone-600">{t('settings.usageByModel')}</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {t('settings.usageByModel')}
+            </p>
             <ul className="mt-1 space-y-1 text-xs">
               {summary.byModel.map((m) => (
                 <li
                   key={m.modelId}
-                  className="flex items-center justify-between rounded border border-stone-100 px-2 py-1"
+                  className="flex items-center justify-between rounded border border-border px-2 py-1"
                 >
-                  <span className="truncate text-stone-700">{m.modelId}</span>
+                  <span className="truncate text-foreground">{m.modelId}</span>
                   <span className="ml-2 shrink-0 text-muted-foreground">
                     {m.calls} 次 · {m.totalTokens} tokens
                     {m.reasoningTokens > 0
@@ -94,10 +96,13 @@ export function UsageSection(): ReactElement {
 
           {/* 按日 */}
           <div>
-            <p className="text-xs font-medium text-stone-600">{t('settings.usageByDay')}</p>
+            <p className="text-xs font-medium text-muted-foreground">{t('settings.usageByDay')}</p>
             <ul className="mt-1 space-y-0.5 text-xs">
               {summary.byDay.map((d) => (
-                <li key={d.date} className="flex items-center justify-between text-stone-600">
+                <li
+                  key={d.date}
+                  className="flex items-center justify-between text-muted-foreground"
+                >
                   <span>{d.date}</span>
                   <span className="text-muted-foreground">
                     {d.calls} 次 · {d.totalTokens} tokens

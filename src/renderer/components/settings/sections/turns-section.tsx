@@ -50,7 +50,7 @@ export function TurnsSection(): ReactElement {
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center gap-2">
-        <History className="size-4 text-stone-600" strokeWidth={1.5} />
+        <History className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.turnsSection')}</Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.turnsHint')}</p>
@@ -62,9 +62,9 @@ export function TurnsSection(): ReactElement {
           {turns.map((turn) => (
             <li
               key={turn.turnId}
-              className="flex items-center justify-between gap-2 rounded border border-stone-100 px-2 py-1"
+              className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1"
             >
-              <span className="truncate text-stone-700">
+              <span className="truncate text-foreground">
                 {turn.modelId}
                 <span className="ml-1 text-muted-foreground">#{turn.seq}</span>
               </span>

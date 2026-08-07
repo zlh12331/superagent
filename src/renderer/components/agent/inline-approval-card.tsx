@@ -95,7 +95,7 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
           <button
             type="button"
             onClick={() => reject(item.id)}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-[11px] transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
           >
             <X className="size-3" />
             {t('approval.reject')}
@@ -104,7 +104,7 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
             type="button"
             onClick={() => approve(item.id)}
             className={cn(
-              'flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-[11px] text-white transition-colors',
+              'flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-white transition-colors',
               dangerous ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-700',
             )}
           >

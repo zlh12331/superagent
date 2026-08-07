@@ -269,7 +269,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     <div className={className}>
       {/* 工具栏：标题 + 关闭按钮 */}
       <div className="border-border bg-muted/30 flex items-center justify-between border-b px-2 py-1">
-        <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+        <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
           <TerminalSquare className="size-3" strokeWidth={1.5} />
           <span className="font-serif tracking-wide">{terminal.title}</span>
           {!terminal.alive && (

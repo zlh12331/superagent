@@ -28,7 +28,7 @@ export function SectionTitle({ children, className }: SectionTitleProps): ReactE
   return (
     <h4
       className={cn(
-        'text-muted-foreground mt-[18px] mb-2.5 text-[11px] font-semibold tracking-[0.12em] uppercase first:mt-0',
+        'text-muted-foreground mt-[18px] mb-2.5 text-xs font-semibold tracking-[0.12em] uppercase first:mt-0',
         className,
       )}
     >
@@ -67,7 +67,7 @@ export function SettingRow({
       <div className="min-w-0 flex-1">
         <div className="text-foreground text-sm">{label}</div>
         {description !== undefined && (
-          <p className="text-muted-foreground mt-0.5 text-[11px] leading-[1.5]">{description}</p>
+          <p className="text-muted-foreground mt-0.5 text-xs leading-[1.5]">{description}</p>
         )}
       </div>
       {/* shrink：允许控件区随容器收缩（SegControl 等可折行控件需要宽度约束） */}
@@ -150,7 +150,7 @@ export function SegControl({ value, options, onChange, className }: SegControlPr
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
           className={cn(
-            'shrink cursor-pointer border-none px-[11px] py-1 font-mono text-[11px] transition-colors',
+            'shrink cursor-pointer border-none px-[11px] py-1 font-mono text-xs transition-colors',
             value === opt.value
               ? 'bg-primary text-primary-foreground font-semibold'
               : 'bg-card text-muted-foreground hover:text-foreground',
@@ -188,7 +188,7 @@ export function SettingField({
       <span className="text-foreground text-sm font-medium">{label}</span>
       {children}
       {description !== undefined && (
-        <p className="text-muted-foreground text-[11px] leading-[1.5]">{description}</p>
+        <p className="text-muted-foreground text-xs leading-[1.5]">{description}</p>
       )}
     </div>
   );

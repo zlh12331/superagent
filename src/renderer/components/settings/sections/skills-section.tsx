@@ -129,7 +129,7 @@ export function SkillsSection(): ReactElement {
     <div className="space-y-2">
       {/* 已学技能（LLM 生成，可移除） */}
       <SectionTitle>{t('settings.skillLearnedTitle')}</SectionTitle>
-      <p className="text-muted-foreground text-[11px] leading-[1.5]">
+      <p className="text-muted-foreground text-xs leading-[1.5]">
         {t('settings.skillLearnedHint')}
       </p>
       {learned.length === 0 ? (
@@ -142,7 +142,7 @@ export function SkillsSection(): ReactElement {
             <button
               type="button"
               onClick={() => removeMutation.mutate(skill.name)}
-              className="text-muted-foreground hover:text-red-500 flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-[10px] transition-colors"
+              className="text-muted-foreground hover:text-red-500 flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
               aria-label={t('settings.skillRemove')}
             >
               <Trash2 className="size-3" />

@@ -130,7 +130,7 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
                 {variantBadge !== null && (
                   <span
                     className={cn(
-                      'rounded-full px-2 py-0.5 font-sans text-[10px] font-semibold',
+                      'rounded-full px-2 py-0.5 font-sans text-2xs font-semibold',
                       variantBadge.className,
                     )}
                   >
@@ -151,12 +151,12 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
             <DialogFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
               {/* 记住决策复选框：仅对支持的工具类型显示 */}
               {showRememberCheckbox ? (
-                <Label className="flex cursor-pointer items-center gap-2 text-xs font-sans text-stone-600">
+                <Label className="flex cursor-pointer items-center gap-2 text-xs font-sans text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={rememberDecision}
                     onChange={(e) => setRememberDecision(e.target.checked)}
-                    className="size-3.5 cursor-pointer accent-stone-700"
+                    className="size-3.5 cursor-pointer accent-foreground"
                   />
                   <span>{t('approval.rememberDecision')}</span>
                 </Label>

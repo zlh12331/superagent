@@ -44,14 +44,14 @@ export function renderStructuredPreview(
     const cmd = getField(input, 'command') ?? '';
     const cwd = getField(input, 'cwd');
     return (
-      <div className="mt-3 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
+      <div className="mt-3 rounded-md border border-amber-200/60 bg-muted p-3 font-mono text-sm">
         {cwd !== undefined && (
-          <div className="mb-2 text-xs text-stone-500">
+          <div className="mb-2 text-xs text-muted-foreground">
             <span className="font-sans">{t('approval.workingDir')}</span>
             <span className="break-all">{cwd}</span>
           </div>
         )}
-        <pre className="whitespace-pre-wrap break-all text-stone-800">{cmd}</pre>
+        <pre className="whitespace-pre-wrap break-all text-foreground">{cmd}</pre>
       </div>
     );
   }
@@ -68,11 +68,11 @@ export function renderStructuredPreview(
     })();
     return (
       <div className="mt-3 space-y-2">
-        <div className="text-xs text-stone-500">
+        <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {append && (
-            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-2xs text-amber-700">
               {t('approval.appendMode')}
             </span>
           )}
@@ -107,11 +107,11 @@ export function renderStructuredPreview(
     })();
     return (
       <div className="mt-3 space-y-2">
-        <div className="text-xs text-stone-500">
+        <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {replaceAll && (
-            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-2xs text-amber-700">
               {t('approval.replaceAll')}
             </span>
           )}
@@ -156,18 +156,18 @@ export function renderGitPreview(
     const paths = getStringArrayField(input, 'paths') ?? [];
     const isAddAll = paths.length === 0;
     return (
-      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
-        <div className="text-xs text-stone-500">
+      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-muted p-3 font-mono text-sm">
+        <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.operation')}</span>
           <span>
             {isAddAll ? t('approval.stageAll') : t('approval.stagePaths', { count: paths.length })}
           </span>
         </div>
         {!isAddAll && (
-          <ul className="space-y-0.5 text-stone-800">
+          <ul className="space-y-0.5 text-foreground">
             {paths.map((p) => (
               <li key={p} className="break-all">
-                <span className="text-stone-400">+</span> {p}
+                <span className="text-muted-foreground">+</span> {p}
               </li>
             ))}
           </ul>
@@ -180,20 +180,20 @@ export function renderGitPreview(
     const message = getField(input, 'message') ?? '';
     const amend = getBooleanField(input, 'amend') ?? false;
     return (
-      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
-        <div className="flex items-center gap-2 text-xs text-stone-500">
+      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-muted p-3 font-mono text-sm">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.operation')}</span>
           <span>{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
           {amend && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-2xs text-amber-700">
               {t('approval.unavailable')}
             </span>
           )}
         </div>
-        <div className="text-xs text-stone-500">
+        <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.commitMessage')}</span>
         </div>
-        <pre className="whitespace-pre-wrap break-all rounded bg-white/60 p-2 text-stone-800">
+        <pre className="whitespace-pre-wrap break-all rounded bg-white/60 p-2 text-foreground">
           {message}
         </pre>
       </div>
@@ -207,8 +207,8 @@ export function renderGitPreview(
     const force = getBooleanField(input, 'force') ?? false;
     const target = refspec.length > 0 ? `${remote}/${refspec}` : `${remote}/<current-branch>`;
     return (
-      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-stone-50 p-3 font-mono text-sm">
-        <div className="text-xs text-stone-500">
+      <div className="mt-3 space-y-2 rounded-md border border-amber-200/60 bg-muted p-3 font-mono text-sm">
+        <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.operation')}</span>
           <span>{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
         </div>
@@ -224,7 +224,7 @@ export function renderGitPreview(
             </span>
           )}
           {!force && !setUpstream && (
-            <span className="rounded bg-stone-200 px-1.5 py-0.5 text-stone-600">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
               {t('approval.normalPush')}
             </span>
           )}

@@ -86,7 +86,7 @@ export function ConversationSearchBar({
       {/* 匹配计数（有查询时显示） */}
       {hasQuery && (
         <span
-          className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums"
+          className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums"
           aria-live="polite"
         >
           {hasMatches ? `${currentMatch}/${totalMatches}` : '0/0'}

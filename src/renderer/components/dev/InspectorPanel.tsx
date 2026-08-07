@@ -123,7 +123,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       {/* 顶部：标题栏 */}
       <div className="border-border bg-muted/30 flex items-center gap-1.5 border-b px-2 py-1">
         <ExternalLink className="text-muted-foreground size-3" strokeWidth={1.5} />
-        <span className="text-muted-foreground font-serif text-[10px] tracking-wide">
+        <span className="text-muted-foreground font-serif text-2xs tracking-wide">
           {t('dev.developerTools')}
         </span>
       </div>
@@ -140,7 +140,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
                   key={btn.mode}
                   type="button"
                   className={cn(
-                    'flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-mono transition-colors',
+                    'flex items-center gap-1 rounded border px-2 py-1 text-2xs font-mono transition-colors',
                     'border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                     isLoading && 'opacity-50',
                   )}
@@ -162,7 +162,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         <Section title="React DevTools" description={t('common.reactTreeDesc')}>
           <div className="flex items-start gap-1.5">
             <Info className="text-muted-foreground mt-0.5 size-3 shrink-0" strokeWidth={1.5} />
-            <p className="text-muted-foreground text-[10px] leading-relaxed">
+            <p className="text-muted-foreground text-2xs leading-relaxed">
               dev 模式启动时由主进程自动安装（electron-devtools-installer）。 打开 Chromium DevTools
               后切换到「Components」/「Profiler」Tab 使用。 首次安装可能需要刷新页面才能生效。
             </p>
@@ -173,7 +173,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         {status !== 'idle' && (
           <div
             className={cn(
-              'flex items-center gap-1.5 border-b px-2 py-1 text-[10px]',
+              'flex items-center gap-1.5 border-b px-2 py-1 text-2xs',
               status === 'success' && 'border-green-500/30 text-green-600 dark:text-green-400',
               status === 'error' && 'border-red-500/30 text-red-600 dark:text-red-400',
               status === 'loading' && 'border-border text-muted-foreground',
@@ -205,7 +205,7 @@ function Section({ title, description, children }: SectionProps): ReactElement {
   return (
     <div className="border-border flex flex-col gap-1.5 border-b px-2 py-2">
       <div>
-        <h3 className="text-foreground/90 font-serif text-[11px] tracking-wide">{title}</h3>
+        <h3 className="text-foreground/90 font-serif text-xs tracking-wide">{title}</h3>
         <p className="text-muted-foreground/70 mt-0.5 text-[9px] leading-relaxed">{description}</p>
       </div>
       {children}

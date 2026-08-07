@@ -222,7 +222,7 @@ export function ChatPanel({
         {/* token 用量（回合结束后显示，悬浮提示明细） */}
         {usageText !== null && (
           <span
-            className="text-muted-foreground/60 font-mono text-[10px]"
+            className="text-muted-foreground/60 font-mono text-2xs"
             title={t('chat.tokenUsage', {
               input: usage.inputTokens,
               output: usage.outputTokens,

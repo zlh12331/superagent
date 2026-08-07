@@ -319,7 +319,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
         <div className="bg-muted/50 flex shrink-0 items-center gap-2.5 border-b px-[18px] py-3.5">
           <SettingsIcon className="text-primary size-4" strokeWidth={1.5} />
           <span className="text-foreground text-sm font-semibold">{t('settings.title')}</span>
-          <span className="text-muted-foreground font-mono text-[11px]">{t('settings.desc')}</span>
+          <span className="text-muted-foreground font-mono text-xs">{t('settings.desc')}</span>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
@@ -360,7 +360,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           >
             {NAV_GROUPS.map((group) => (
               <div key={group.labelKey} className="mb-1">
-                <div className="text-muted-foreground px-3 pt-2 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase">
+                <div className="text-muted-foreground px-3 pt-2 pb-1 text-2xs font-semibold tracking-[0.08em] uppercase">
                   {t(group.labelKey)}
                 </div>
                 {group.items.map((item) => {

@@ -223,7 +223,7 @@ export function FileViewerDialog(): ReactElement {
             )}
             {isDirty && <span className="file-viewer-dirty-dot" title={t('fileViewer.unsaved')} />}
           </DialogTitle>
-          <DialogDescription className="font-mono text-[10px] break-all opacity-70">
+          <DialogDescription className="font-mono text-2xs break-all opacity-70">
             {filePath}
           </DialogDescription>
         </DialogHeader>

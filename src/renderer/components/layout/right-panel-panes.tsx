@@ -113,7 +113,7 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-xs">
       {/* 会话目标 */}
       <div>
-        <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide uppercase">
+        <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
           <Target className="size-3" strokeWidth={1.5} />
           {t('panel.goals')}
         </div>
@@ -144,12 +144,12 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
             value={goalDraft}
             onChange={(e) => setGoalDraft(e.target.value)}
             placeholder={t('panel.goalPlaceholder')}
-            className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded border px-2 py-1 text-[11px] focus:outline-none"
+            className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded border px-2 py-1 text-xs focus:outline-none"
           />
           <button
             type="submit"
             disabled={goalDraft.trim() === '' || createGoalMutation.isPending}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center gap-0.5 rounded border px-1.5 py-1 text-[10px] transition-colors disabled:opacity-50"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center gap-0.5 rounded border px-1.5 py-1 text-2xs transition-colors disabled:opacity-50"
             aria-label={t('panel.addGoal')}
           >
             <Plus className="size-2.5" />
@@ -159,7 +159,7 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
 
       {/* 计划待办 */}
       <div>
-        <div className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">
+        <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.tasks')}
         </div>
         {tasks.length === 0 ? (
@@ -177,10 +177,10 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
 
       {/* 会话信息 */}
       <div>
-        <div className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">
+        <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.sessionInfo')}
         </div>
-        <dl className="space-y-1 font-mono text-[10px]">
+        <dl className="space-y-1 font-mono text-2xs">
           <div className="flex gap-2">
             <dt className="text-muted-foreground shrink-0">session</dt>
             <dd className="text-foreground/80 min-w-0 truncate" title={sessionId}>
@@ -343,7 +343,7 @@ export function DiffPane({
           </button>
           {/* 行级 diff（展开态；git:diff 数据源） */}
           {expanded.has(change.id) && (
-            <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5 font-mono text-[10px] leading-[1.6]">
+            <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5 font-mono text-2xs leading-[1.6]">
               {loadingDiff.has(change.id) ? (
                 <span className="text-muted-foreground">{t('panel.diffLoading')}</span>
               ) : diffCache.has(change.id) ? (

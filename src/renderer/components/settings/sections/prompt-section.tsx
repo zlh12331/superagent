@@ -48,9 +48,9 @@ export function PromptSection({ open }: { open: boolean }): React.ReactElement {
   };
 
   return (
-    <div className="space-y-3 border-t border-stone-200/60 pt-4">
+    <div className="space-y-3 border-t border-border/60 pt-4">
       <div className="flex items-center gap-2">
-        <MessageSquareText className="size-4 text-stone-600" strokeWidth={1.5} />
+        <MessageSquareText className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label htmlFor="system-prompt" className="font-serif text-sm tracking-wide">
           {t('settings.systemPrompt')}
         </Label>
@@ -98,7 +98,7 @@ export function PromptSection({ open }: { open: boolean }): React.ReactElement {
         <div className="space-y-2">
           <div className="rounded-md border bg-muted/30 px-3 py-2">
             {persistedSystemPrompt.length > 0 ? (
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-stone-700">
+              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-foreground">
                 {persistedSystemPrompt}
               </pre>
             ) : (

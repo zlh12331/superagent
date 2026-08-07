@@ -97,7 +97,7 @@ export const DevPanel = memo(function DevPanel({
         {/* 折叠/展开按钮 */}
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[10px] transition-colors"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-2xs transition-colors"
           onClick={() => setExpanded((prev) => !prev)}
           aria-expanded={expanded}
           aria-label={expanded ? t('dev.collapsePanel') : t('dev.expandPanel')}
@@ -122,30 +122,27 @@ export const DevPanel = memo(function DevPanel({
         >
           {/* w-full 覆盖 TabsList 基类 w-fit：tab 行随面板收缩均分，永不溢出 */}
           <TabsList className="bg-transparent h-5 min-w-0 w-full p-0">
-            <TabsTrigger value="info" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+            <TabsTrigger value="info" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <Target className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabInfo')}</span>
             </TabsTrigger>
-            <TabsTrigger value="diff" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+            <TabsTrigger value="diff" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <FileCode2 className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabDiff')}</span>
             </TabsTrigger>
-            <TabsTrigger value="files" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+            <TabsTrigger value="files" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <FolderOpen className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabFiles')}</span>
             </TabsTrigger>
-            <TabsTrigger value="browser" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+            <TabsTrigger value="browser" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <Globe className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabBrowser')}</span>
             </TabsTrigger>
-            <TabsTrigger
-              value="terminal"
-              className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]"
-            >
+            <TabsTrigger value="terminal" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <TerminalSquare className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('dev.tabTerminal')}</span>
             </TabsTrigger>
-            <TabsTrigger value="dev" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+            <TabsTrigger value="dev" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <LayoutGrid className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabDev')}</span>
             </TabsTrigger>
@@ -174,7 +171,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'git'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -187,7 +184,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'logs'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -200,7 +197,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'metrics'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -213,7 +210,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'inspector'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',

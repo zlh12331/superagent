@@ -350,10 +350,10 @@ function mapToolStateToStatusClass(state: string): string {
 function CodeBlock({ label, content }: { label: string; content: string }): ReactElement {
   return (
     <div className="mt-1">
-      <div className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
+      <div className="text-muted-foreground font-mono text-2xs uppercase tracking-wider">
         {label}
       </div>
-      <pre className="bg-background/50 text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-[11px] leading-snug">
+      <pre className="bg-background/50 text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-xs leading-snug">
         {content}
       </pre>
     </div>
@@ -382,9 +382,7 @@ function ReasoningBlock({ text }: { text: string }): ReactElement {
         aria-expanded={open}
       >
         <span className="reasoning-title">{t('chat.thinking')}</span>
-        <span className="rh-chevron" style={{ marginLeft: 'auto' }}>
-          ▸
-        </span>
+        <span className="rh-chevron ml-auto">▸</span>
       </button>
       <div className="reasoning-body">
         <div className="text-muted-foreground font-mono text-xs leading-relaxed whitespace-pre-wrap italic">

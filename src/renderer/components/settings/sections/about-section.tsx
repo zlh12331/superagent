@@ -57,7 +57,7 @@ export function AboutSection(): ReactElement {
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center gap-2">
-        <Info className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Info className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <span className="text-foreground font-serif text-sm tracking-wide">
           {t('settings.aboutSection')}
         </span>
@@ -70,7 +70,7 @@ export function AboutSection(): ReactElement {
         </div>
         <div className="min-w-0">
           <div className="text-foreground text-sm font-medium">code-agent</div>
-          <div className="text-muted-foreground text-[11px]">
+          <div className="text-muted-foreground text-xs">
             {info === null ? '…' : `v${info.version}`}
           </div>
         </div>
@@ -97,7 +97,7 @@ export function AboutSection(): ReactElement {
       </SettingRow>
       <SettingRow label={t('settings.aboutUserData')}>
         <span
-          className="text-muted-foreground min-w-0 max-w-[220px] truncate font-mono text-[11px]"
+          className="text-muted-foreground min-w-0 max-w-[220px] truncate font-mono text-xs"
           title={info?.userDataPath}
         >
           {info?.userDataPath ?? '…'}

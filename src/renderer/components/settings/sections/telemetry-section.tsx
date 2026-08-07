@@ -18,9 +18,9 @@ export function TelemetrySection(): React.ReactElement {
   const { mutate: setTelemetryLevel, isPending: isSavingTelemetry } = useSetTelemetryLevel();
 
   return (
-    <div className="space-y-3 border-t border-stone-200/60 pt-4">
+    <div className="space-y-3 border-t border-border/60 pt-4">
       <div className="flex items-center gap-2">
-        <Shield className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Shield className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.telemetry')}</Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.telemetryHint')}</p>
@@ -46,8 +46,8 @@ export function TelemetrySection(): React.ReactElement {
               className={cn(
                 'flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-center transition-colors',
                 isActive
-                  ? 'border-stone-400 bg-stone-100/60 text-stone-800'
-                  : 'border-stone-200 bg-transparent text-stone-500 hover:bg-stone-50',
+                  ? 'border-border bg-muted/60 text-foreground'
+                  : 'border-border bg-transparent text-muted-foreground hover:bg-muted',
               )}
             >
               <span className="font-serif text-xs tracking-wide">{option.label}</span>

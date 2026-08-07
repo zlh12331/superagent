@@ -218,7 +218,7 @@ export function BrowserPane(): ReactElement {
             value={devicePreset}
             onChange={(e) => handlePresetChange(e.target.value as DevicePreset)}
             aria-label={t('panel.browserDevicePreset')}
-            className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1.5 text-[11px] focus:border-primary"
+            className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1.5 text-xs focus:border-primary"
           >
             <option value="responsive">{t('panel.browserDeviceResponsive')}</option>
             <option value="desktop">{t('panel.browserDeviceDesktop')}</option>
@@ -234,9 +234,9 @@ export function BrowserPane(): ReactElement {
               max={3000}
               disabled={devicePreset === 'responsive'}
               aria-label={t('panel.browserDeviceWidth')}
-              className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-[11px] disabled:opacity-40"
+              className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-xs disabled:opacity-40"
             />
-            <span className="text-muted-foreground px-0.5 font-mono text-[11px]">×</span>
+            <span className="text-muted-foreground px-0.5 font-mono text-xs">×</span>
             <input
               type="number"
               value={deviceHeight}
@@ -245,14 +245,14 @@ export function BrowserPane(): ReactElement {
               max={3000}
               disabled={devicePreset === 'responsive'}
               aria-label={t('panel.browserDeviceHeight')}
-              className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-[11px] disabled:opacity-40"
+              className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-xs disabled:opacity-40"
             />
           </div>
           <select
             value={deviceZoom}
             onChange={(e) => setDeviceZoom(Number(e.target.value))}
             aria-label={t('panel.browserZoom')}
-            className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1 text-[11px]"
+            className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1 text-xs"
           >
             <option value={50}>50%</option>
             <option value={75}>75%</option>

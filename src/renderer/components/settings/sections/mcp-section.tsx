@@ -118,7 +118,7 @@ export function McpSection(): ReactElement {
   return (
     <div className="space-y-2">
       <SectionTitle>{t('settings.mcpServers')}</SectionTitle>
-      <p className="text-muted-foreground text-[11px] leading-[1.5]">{t('settings.mcpHint')}</p>
+      <p className="text-muted-foreground text-xs leading-[1.5]">{t('settings.mcpHint')}</p>
 
       {/* 服务器列表 */}
       {isLoading && <div className="text-muted-foreground text-xs">Loading…</div>}
@@ -136,7 +136,7 @@ export function McpSection(): ReactElement {
           >
             <span
               className={cn(
-                'rounded-full px-1.5 py-0.5 font-mono text-[10px]',
+                'rounded-full px-1.5 py-0.5 font-mono text-2xs',
                 STATUS_BADGE[server.status] ?? 'bg-muted text-muted-foreground',
               )}
             >
@@ -145,7 +145,7 @@ export function McpSection(): ReactElement {
             {server.toolNames.length > 0 && (
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-0.5 font-mono text-[10px] transition-colors"
+                className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-0.5 font-mono text-2xs transition-colors"
                 title={server.toolNames.join('\n')}
                 onClick={() =>
                   setExpandedServer((prev) =>
@@ -178,15 +178,13 @@ export function McpSection(): ReactElement {
           {expandedServer === server.config.name && (
             <div className="bg-card rounded-lg border px-3 py-2">
               {server.toolNames.length === 0 ? (
-                <span className="text-muted-foreground text-[11px]">
-                  {t('settings.mcpNoTools')}
-                </span>
+                <span className="text-muted-foreground text-xs">{t('settings.mcpNoTools')}</span>
               ) : (
                 <ul className="space-y-0.5">
                   {server.toolNames.map((toolName) => (
                     <li
                       key={toolName}
-                      className="text-muted-foreground flex items-center gap-1.5 font-mono text-[11px]"
+                      className="text-muted-foreground flex items-center gap-1.5 font-mono text-xs"
                     >
                       <Wrench className="size-2.5 shrink-0" strokeWidth={1.5} />
                       <span className="truncate">{toolName}</span>

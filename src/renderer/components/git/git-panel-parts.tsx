@@ -37,7 +37,7 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
   const { t } = useTranslation();
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+      <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
         <GitBranch className="size-3 animate-pulse" strokeWidth={1.5} />
         <span className="font-serif tracking-wide">{t('common.loading')}</span>
       </div>
@@ -46,7 +46,7 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
 
   if (error !== null || status === undefined) {
     return (
-      <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+      <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
         <AlertCircle className="size-3" strokeWidth={1.5} />
         <span className="font-serif tracking-wide">{t('git.loadFailed')}</span>
       </div>
@@ -54,7 +54,7 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
   }
 
   return (
-    <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+    <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
       <GitBranch className="size-3" strokeWidth={1.5} />
       <span className="text-foreground font-serif tracking-wide">{status.branch}</span>
       {status.ahead > 0 && (
@@ -78,7 +78,7 @@ export function CleanHint(): ReactElement {
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
       <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
       <p className="font-serif text-xs tracking-wide">{t('common.cleanWorkingTree')}</p>
-      <p className="text-[10px]">{t('common.noChanges')}</p>
+      <p className="text-2xs">{t('common.noChanges')}</p>
     </div>
   );
 }
@@ -92,7 +92,7 @@ export function ErrorHint({ message }: { readonly message: string }): ReactEleme
     <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
       <p className="font-serif text-xs">{t('common.gitStatusFailed')}</p>
-      <p className="text-muted-foreground truncate text-[10px]" title={message}>
+      <p className="text-muted-foreground truncate text-2xs" title={message}>
         {message}
       </p>
     </div>

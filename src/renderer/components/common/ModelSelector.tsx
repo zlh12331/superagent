@@ -116,10 +116,7 @@ export function ModelSelector({
         aria-label={t('common.selectModel')}
         disabled={disabled}
       >
-        <span
-          className="dot"
-          style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }}
-        />
+        <span className="dot size-1.5 rounded-full bg-accent" />
         <span>{currentProviderConfig?.label ?? provider}</span>
         <span className="text-muted-foreground text-xs">· {currentModelName}</span>
         <ChevronDown className="cpb-caret" size={10} strokeWidth={2} />

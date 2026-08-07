@@ -70,7 +70,7 @@ export function FileDiffView({
       <div className="border-border flex items-center justify-between border-b px-2 py-1">
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 items-center gap-1 text-[10px] transition-colors"
+          className="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 items-center gap-1 text-2xs transition-colors"
           onClick={() => {
             setExpanded((prev) => !prev);
           }}
@@ -102,7 +102,7 @@ export function FileDiffView({
               <Skeleton className="mt-1 h-3 w-1/2" />
             </div>
           ) : diff === undefined || diff.length === 0 ? (
-            <div className="text-muted-foreground p-2 text-[10px]">{t('common.noDiff')}</div>
+            <div className="text-muted-foreground p-2 text-2xs">{t('common.noDiff')}</div>
           ) : (
             <DiffText diff={diff} />
           )}
@@ -133,7 +133,7 @@ function DiffText({ diff }: DiffTextProps): ReactElement {
   const lines = diff.split('\n');
 
   return (
-    <pre className="text-foreground/80 overflow-x-auto p-1 text-[10px] leading-relaxed font-mono">
+    <pre className="text-foreground/80 overflow-x-auto p-1 text-2xs leading-relaxed font-mono">
       {lines.map((line, index) => {
         const key = `${index}-${line.slice(0, 20)}`;
         if (line.startsWith('+++') || line.startsWith('---')) {
