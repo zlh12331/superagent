@@ -14,6 +14,7 @@
 export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';
+export { IPC_PROTOCOL_VERSION } from './constants/protocol';
 
 // IPC 类型契约（纯类型，自动推导）
 export type { IpcApi } from './ipc/api';

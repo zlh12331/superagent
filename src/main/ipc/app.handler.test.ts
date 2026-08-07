@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
   shell: { openExternal: vi.fn() },
 }));
 
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_PROTOCOL_VERSION } from '@code-agent/shared/main';
 
 import { appHandlers } from './app.handler';
 
@@ -22,9 +22,9 @@ describe('app.handler', () => {
     vi.clearAllMocks();
   });
 
-  it('getStatus：返回 ready=true', async () => {
+  it('getStatus：返回 ready=true 与当前协议版本', async () => {
     const result = await appHandlers.getStatus(undefined, EMPTY_CTX);
-    expect(result).toEqual({ ready: true });
+    expect(result).toEqual({ ready: true, protocolVersion: IPC_PROTOCOL_VERSION });
   });
 
   it('openExternal（http）：调用 shell.openExternal 并返回 ok', async () => {

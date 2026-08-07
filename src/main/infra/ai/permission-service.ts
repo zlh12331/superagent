@@ -28,7 +28,7 @@ import type {
   ApprovalMode,
   WhitelistEntry,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, DEFAULT_APPROVAL_MODE, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
 import { readWhitelistSync, writeWhitelist } from '../storage/whitelist-pref';
@@ -56,8 +56,8 @@ export interface PermissionDecision {
   readonly description: string;
 }
 
-/** 默认审批模式（与 approval-pref 默认一致：保守） */
-export const DEFAULT_APPROVAL_MODE: ApprovalMode = 'ask';
+/** 默认审批模式（单一真源：shared schemas/settings.ts，与 approval-pref 共用） */
+export { DEFAULT_APPROVAL_MODE } from '@code-agent/shared/main';
 
 /**
  * 审批超时时间（毫秒）

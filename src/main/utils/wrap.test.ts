@@ -194,4 +194,37 @@ describe('wrap', () => {
     expect(typeof ctx.traceId).toBe('string');
     expect(ctx.traceId.length).toBeGreaterThan(0);
   });
+
+  it('响应契约校验：结构合法时正常返回 { data }', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    const resSchema = z.object({ sessionId: z.string().min(1) });
+    const handler = vi.fn().mockResolvedValue({ sessionId: 'session-1' });
+
+    wrap('test:channel', null, handler, resSchema);
+
+    const registeredHandler = getRegisteredHandler();
+    const result = await registeredHandler({ sender: {} }, undefined, undefined);
+
+    expect(result).toEqual({ data: { sessionId: 'session-1' } });
+  });
+
+  it('响应契约校验：结构不符返回 INVALID_RESPONSE（防手写 Res 接口漂移）', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    const resSchema = z.object({ sessionId: z.string().min(1) });
+    // handler 返回漂移结构（缺 sessionId）
+    const handler = vi.fn().mockResolvedValue({ ok: true });
+
+    wrap('test:channel', null, handler, resSchema);
+
+    const registeredHandler = getRegisteredHandler();
+    const result = await registeredHandler({ sender: {} }, undefined, undefined);
+
+    expect(result).toHaveProperty('error');
+    const error = (result as { error: { code: string } }).error;
+    expect(error.code).toBe(ErrorCode.INVALID_RESPONSE);
+  });
 });

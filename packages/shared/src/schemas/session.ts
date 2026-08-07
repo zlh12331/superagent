@@ -63,6 +63,12 @@ export interface SessionListRes {
   readonly total: number;
 }
 
+/** session:list 响应 zod schema（响应契约校验用） */
+export const SessionListResSchema = z.object({
+  sessions: z.array(SessionMetaSchema),
+  total: z.number().int().nonnegative(),
+});
+
 /** session:get 入参 zod schema */
 export const SessionGetReqSchema = z.object({
   id: z.string().min(1),

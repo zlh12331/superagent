@@ -14,12 +14,9 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ApprovalMode } from '@code-agent/shared/main';
+import { type ApprovalMode, DEFAULT_APPROVAL_MODE } from '@code-agent/shared/main';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
-
-/** 默认审批模式（保守：写操作均需审批） */
-export const DEFAULT_APPROVAL_MODE: ApprovalMode = 'ask';
 
 /** 偏好文件路径（userData 目录） */
 function approvalPrefPath(): string {

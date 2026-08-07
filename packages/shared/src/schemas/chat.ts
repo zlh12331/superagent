@@ -72,6 +72,11 @@ export const ChatSendReqSchema = z.object({
   thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
 });
 
+/** chat:send 响应 zod schema（响应契约校验用） */
+export const ChatSendResSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
 /**
  * chat:stop 入参 zod schema
  */

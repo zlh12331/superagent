@@ -2,13 +2,15 @@
 // 冒烟测试：验证统一导出可被外部消费
 import { describe, expect, it } from 'vitest';
 import type { AppStatus, IpcApi, IpcResponse } from '../index';
-import { AppError, ErrorCode, IPC_CHANNELS, SHARED_VERSION } from '../index';
+import { AppError, ErrorCode, IPC_CHANNELS, IPC_PROTOCOL_VERSION, SHARED_VERSION } from '../index';
 
 describe('smoke: packages/shared 统一导出', () => {
   it('可导入常量', () => {
     expect(SHARED_VERSION).toBe('0.1.0');
     expect(IPC_CHANNELS.APP_GET_STATUS).toBe('app:getStatus');
     expect(IPC_CHANNELS.APP_OPEN_EXTERNAL).toBe('app:openExternal');
+    // IPC 协议版本（破坏性变更时递增；渲染层启动校验用）
+    expect(IPC_PROTOCOL_VERSION).toBe(1);
   });
 
   it('可使用 AppError', () => {
@@ -18,7 +20,7 @@ describe('smoke: packages/shared 统一导出', () => {
   });
 
   it('可引用类型（编译时校验）', () => {
-    const status: AppStatus = { ready: true };
+    const status: AppStatus = { ready: true, protocolVersion: 1 };
     const resp: IpcResponse<AppStatus> = { data: status };
     expect('data' in resp).toBe(true);
     expect(resp.data?.ready).toBe(true);

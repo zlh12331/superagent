@@ -17,6 +17,7 @@ import {
   AgentApprovalResponseReqSchema,
   AgentRunReqSchema,
   type AgentRunRes,
+  AgentRunResSchema,
   AgentStopReqSchema,
   type AgentStopRes,
   type AgentStreamEndPayload,
@@ -27,7 +28,8 @@ import {
 } from '../schemas/agent';
 import type { TurnEvent } from '../schemas/agent-events';
 import type { AppInfoRes } from '../schemas/app';
-import { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
+import { AppInfoResSchema, AppStatusResSchema } from '../schemas/app';
+import { ChatSendReqSchema, ChatSendResSchema, ChatStopReqSchema } from '../schemas/chat';
 import {
   CodebaseCalleesReqSchema,
   type CodebaseCalleesRes,
@@ -77,10 +79,12 @@ import {
   type GitCommitRes,
   GitDiffReqSchema,
   type GitDiffRes,
+  GitDiffResSchema,
   GitPushReqSchema,
   type GitPushRes,
   GitStatusReqSchema,
   type GitStatusRes,
+  GitStatusResSchema,
 } from '../schemas/git';
 import {
   GoalClearReqSchema,
@@ -123,6 +127,7 @@ import {
   type SessionListRecentDirsRes,
   SessionListReqSchema,
   type SessionListRes,
+  SessionListResSchema,
   type SessionRecentTurnsRes,
   SessionRenameReqSchema,
   type SessionRenameRes,
@@ -136,7 +141,9 @@ import {
   GetApiKeyReqSchema,
   type GetApiKeyRes,
   type GetApprovalModeRes,
+  GetApprovalModeResSchema,
   type GetTelemetryLevelRes,
+  GetTelemetryLevelResSchema,
   type ListRuntimeModelsRes,
   RemoveRuntimeModelReqSchema,
   type RemoveRuntimeModelRes,
@@ -146,6 +153,7 @@ import {
   type SetApprovalModeRes,
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
+  SetTelemetryLevelResSchema,
 } from '../schemas/settings';
 import type { SkillListRes } from '../schemas/skill';
 import { ReadLogsReqSchema, type ReadLogsRes, type SystemStatusRes } from '../schemas/system';
@@ -170,9 +178,11 @@ import {
   type UpdateStatusPayload,
 } from '../schemas/update';
 import {
+  OkResSchema,
   WhitelistAddReqSchema,
   type WhitelistAddRes,
   type WhitelistListRes,
+  WhitelistListResSchema,
   WhitelistRemoveReqSchema,
   type WhitelistRemoveRes,
 } from '../schemas/whitelist';
@@ -189,8 +199,21 @@ export function withSchema<
   M extends { readonly kind: 'request'; readonly channel: string },
   S extends z.ZodType | null,
   R,
->(meta: M, schema: S, _res: R): M & { readonly schema: S; readonly res: R } {
-  return { ...meta, schema, res: undefined as unknown as R };
+  // biome-ignore lint/style/useNamingConvention: RS 为 TS 泛型惯例（响应 schema 类型参数）
+  RS extends z.ZodType | undefined = undefined,
+>(
+  meta: M,
+  schema: S,
+  _res: R,
+  resSchema?: RS,
+): M & { readonly schema: S; readonly res: R; readonly resSchema?: RS } {
+  return {
+    ...meta,
+    schema,
+    res: undefined as unknown as R,
+    // 条件展开：resSchema 为 undefined 时不携带字段（exactOptionalPropertyTypes）
+    ...(resSchema !== undefined ? { resSchema } : {}),
+  } as M & { readonly schema: S; readonly res: R; readonly resSchema?: RS };
 }
 
 /**
@@ -198,12 +221,23 @@ export function withSchema<
  *
  * @param meta 来自 IPC_META 的 event 条目
  * @param payload payload 类型标记（仅编译期类型用途，运行时忽略）
+ * @param payloadSchema 事件 payload 的 zod schema（可选；主进程发送侧 dev 校验用）
  */
-export function withPayload<M extends { readonly kind: 'event'; readonly channel: string }, P>(
+export function withPayload<
+  M extends { readonly kind: 'event'; readonly channel: string },
+  P,
+  // biome-ignore lint/style/useNamingConvention: PS 为 TS 泛型惯例（payload schema 类型参数）
+  PS extends z.ZodType | undefined = undefined,
+>(
   meta: M,
   _payload: P,
-): M & { readonly payload: P } {
-  return { ...meta, payload: undefined as unknown as P };
+  payloadSchema?: PS,
+): M & { readonly payload: P; readonly payloadSchema?: PS } {
+  return {
+    ...meta,
+    payload: undefined as unknown as P,
+    ...(payloadSchema !== undefined ? { payloadSchema } : {}),
+  } as M & { readonly payload: P; readonly payloadSchema?: PS };
 }
 
 /**
@@ -231,6 +265,66 @@ const AudioStopReqSchema = z.object({
   sessionId: z.string(),
 });
 
+// ─── 事件 payload zod schema（主进程发送侧 dev 校验，envelope 级） ───
+
+/** agent:stream:part / chat:stream:part 事件 envelope（part 为 SDK 结构，仅校验 sessionId） */
+const StreamPartPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  part: z.unknown(),
+});
+
+/** chat:stream:end 事件 payload schema */
+const ChatStreamEndPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  usage: z
+    .object({
+      inputTokens: z.number().int().nonnegative().optional(),
+      outputTokens: z.number().int().nonnegative().optional(),
+      totalTokens: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+});
+
+/** chat:stream:error / agent:stream:error 事件 payload schema */
+const StreamErrorPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  code: z.string().min(1),
+  message: z.string().min(1),
+});
+
+/** agent:stream:end 事件 payload schema */
+const AgentStreamEndPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  reason: z.enum(['completed', 'aborted', 'error']),
+  usage: z
+    .object({
+      inputTokens: z.number().int().nonnegative().optional(),
+      outputTokens: z.number().int().nonnegative().optional(),
+      totalTokens: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+});
+
+/** agent:tool:call 事件 payload schema（input 为工具入参，仅 envelope 校验） */
+const AgentToolCallPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  permission: z.enum(['auto', 'ask', 'deny']),
+  input: z.unknown(),
+});
+
+/** agent:tool:result 事件 payload schema（output/metadata 结构由工具决定，仅 envelope 校验） */
+const AgentToolResultPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  title: z.string().min(1),
+  output: z.unknown(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  error: z.object({ code: z.string().min(1), message: z.string().min(1) }).optional(),
+});
+
 export const IPC_DEFINITIONS = {
   audio: {
     start: withSchema(IPC_META.audio.start, AudioStartReqSchema, {} as { sessionId: string }),
@@ -249,8 +343,13 @@ export const IPC_DEFINITIONS = {
   },
 
   app: {
-    getStatus: withSchema(IPC_META.app.getStatus, null, {} as { ready: boolean }),
-    getInfo: withSchema(IPC_META.app.getInfo, null, {} as AppInfoRes),
+    getStatus: withSchema(
+      IPC_META.app.getStatus,
+      null,
+      {} as { ready: boolean; protocolVersion: number },
+      AppStatusResSchema,
+    ),
+    getInfo: withSchema(IPC_META.app.getInfo, null, {} as AppInfoRes, AppInfoResSchema),
     openExternal: withSchema(
       IPC_META.app.openExternal,
       z.object({ url: z.string().min(1, 'URL 不能为空') }),
@@ -260,15 +359,32 @@ export const IPC_DEFINITIONS = {
   },
 
   chat: {
-    send: withSchema(IPC_META.chat.send, ChatSendReqSchema, {} as { sessionId: string }),
+    send: withSchema(
+      IPC_META.chat.send,
+      ChatSendReqSchema,
+      {} as { sessionId: string },
+      ChatSendResSchema,
+    ),
     stop: withSchema(IPC_META.chat.stop, ChatStopReqSchema, {} as { stopped: boolean }),
-    subscribePart: withPayload(IPC_META.chat.subscribePart, {} as AgentStreamPartPayload),
-    subscribeEnd: withPayload(IPC_META.chat.subscribeEnd, {} as AgentStreamEndPayload),
-    subscribeError: withPayload(IPC_META.chat.subscribeError, {} as AgentStreamErrorPayload),
+    subscribePart: withPayload(
+      IPC_META.chat.subscribePart,
+      {} as AgentStreamPartPayload,
+      StreamPartPayloadSchema,
+    ),
+    subscribeEnd: withPayload(
+      IPC_META.chat.subscribeEnd,
+      {} as AgentStreamEndPayload,
+      ChatStreamEndPayloadSchema,
+    ),
+    subscribeError: withPayload(
+      IPC_META.chat.subscribeError,
+      {} as AgentStreamErrorPayload,
+      StreamErrorPayloadSchema,
+    ),
   },
 
   agent: {
-    run: withSchema(IPC_META.agent.run, AgentRunReqSchema, {} as AgentRunRes),
+    run: withSchema(IPC_META.agent.run, AgentRunReqSchema, {} as AgentRunRes, AgentRunResSchema),
     stop: withSchema(IPC_META.agent.stop, AgentStopReqSchema, {} as AgentStopRes),
     approvalResponse: withSchema(
       IPC_META.agent.approvalResponse,
@@ -278,16 +394,27 @@ export const IPC_DEFINITIONS = {
     subscribeStreamPart: withPayload(
       IPC_META.agent.subscribeStreamPart,
       {} as AgentStreamPartPayload,
+      StreamPartPayloadSchema,
     ),
-    subscribeStreamEnd: withPayload(IPC_META.agent.subscribeStreamEnd, {} as AgentStreamEndPayload),
+    subscribeStreamEnd: withPayload(
+      IPC_META.agent.subscribeStreamEnd,
+      {} as AgentStreamEndPayload,
+      AgentStreamEndPayloadSchema,
+    ),
     subscribeStreamError: withPayload(
       IPC_META.agent.subscribeStreamError,
       {} as AgentStreamErrorPayload,
+      StreamErrorPayloadSchema,
     ),
-    subscribeToolCall: withPayload(IPC_META.agent.subscribeToolCall, {} as AgentToolCallPayload),
+    subscribeToolCall: withPayload(
+      IPC_META.agent.subscribeToolCall,
+      {} as AgentToolCallPayload,
+      AgentToolCallPayloadSchema,
+    ),
     subscribeToolResult: withPayload(
       IPC_META.agent.subscribeToolResult,
       {} as AgentToolResultPayload,
+      AgentToolResultPayloadSchema,
     ),
     subscribeApprovalRequest: withPayload(
       IPC_META.agent.subscribeApprovalRequest,
@@ -297,7 +424,12 @@ export const IPC_DEFINITIONS = {
   },
 
   session: {
-    list: withSchema(IPC_META.session.list, SessionListReqSchema, {} as SessionListRes),
+    list: withSchema(
+      IPC_META.session.list,
+      SessionListReqSchema,
+      {} as SessionListRes,
+      SessionListResSchema,
+    ),
     get: withSchema(IPC_META.session.get, SessionGetReqSchema, {} as SessionGetRes),
     delete: withSchema(IPC_META.session.delete, SessionDeleteReqSchema, {} as SessionDeleteRes),
     rename: withSchema(IPC_META.session.rename, SessionRenameReqSchema, {} as SessionRenameRes),
@@ -375,8 +507,13 @@ export const IPC_DEFINITIONS = {
   },
 
   git: {
-    status: withSchema(IPC_META.git.status, GitStatusReqSchema, {} as GitStatusRes),
-    diff: withSchema(IPC_META.git.diff, GitDiffReqSchema, {} as GitDiffRes),
+    status: withSchema(
+      IPC_META.git.status,
+      GitStatusReqSchema,
+      {} as GitStatusRes,
+      GitStatusResSchema,
+    ),
+    diff: withSchema(IPC_META.git.diff, GitDiffReqSchema, {} as GitDiffRes, GitDiffResSchema),
     add: withSchema(IPC_META.git.add, GitAddReqSchema, {} as GitAddRes),
     commit: withSchema(IPC_META.git.commit, GitCommitReqSchema, {} as GitCommitRes),
     push: withSchema(IPC_META.git.push, GitPushReqSchema, {} as GitPushRes),
@@ -419,13 +556,20 @@ export const IPC_DEFINITIONS = {
       IPC_META.settings.getTelemetryLevel,
       null,
       {} as GetTelemetryLevelRes,
+      GetTelemetryLevelResSchema,
     ),
     setTelemetryLevel: withSchema(
       IPC_META.settings.setTelemetryLevel,
       SetTelemetryLevelReqSchema,
       {} as SetTelemetryLevelRes,
+      SetTelemetryLevelResSchema,
     ),
-    getApprovalMode: withSchema(IPC_META.settings.getApprovalMode, null, {} as GetApprovalModeRes),
+    getApprovalMode: withSchema(
+      IPC_META.settings.getApprovalMode,
+      null,
+      {} as GetApprovalModeRes,
+      GetApprovalModeResSchema,
+    ),
     setApprovalMode: withSchema(
       IPC_META.settings.setApprovalMode,
       SetApprovalModeReqSchema,
@@ -481,12 +625,18 @@ export const IPC_DEFINITIONS = {
   },
 
   whitelist: {
-    list: withSchema(IPC_META.whitelist.list, null, {} as WhitelistListRes),
-    add: withSchema(IPC_META.whitelist.add, WhitelistAddReqSchema, {} as WhitelistAddRes),
+    list: withSchema(IPC_META.whitelist.list, null, {} as WhitelistListRes, WhitelistListResSchema),
+    add: withSchema(
+      IPC_META.whitelist.add,
+      WhitelistAddReqSchema,
+      {} as WhitelistAddRes,
+      OkResSchema,
+    ),
     remove: withSchema(
       IPC_META.whitelist.remove,
       WhitelistRemoveReqSchema,
       {} as WhitelistRemoveRes,
+      OkResSchema,
     ),
   },
 

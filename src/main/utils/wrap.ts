@@ -38,12 +38,14 @@ export interface IpcHandlerContext {
  * @param channel IPC channel 名（从 IPC_CHANNELS 常量获取）
  * @param schema 入参的 zod schema（null 表示无入参）
  * @param handler 业务处理函数
+ * @param resSchema 响应契约 schema（可选；存在时校验 handler 返回，防手写 Res 接口漂移）
  */
 // biome-ignore lint/style/useNamingConvention: TInput/TOutput 为 TS 泛型惯例，描述入参/出参类型
 export function wrap<TInput, TOutput>(
   channel: string,
   schema: ZodType<TInput> | null,
   handler: (input: TInput, ctx: IpcHandlerContext) => Promise<TOutput>,
+  resSchema?: ZodType<TOutput>,
 ): void {
   ipcMain.handle(channel, async (evt, input: unknown, incomingTraceId?: string) => {
     // 1. traceId 生成或复用（渲染层可显式传入）
@@ -80,6 +82,20 @@ export function wrap<TInput, TOutput>(
     try {
       logger.info({ traceId, channel }, 'IPC 请求开始');
       const data = await handler(parsedInput, ctx);
+      // 4.5 响应契约校验（resSchema 存在时）：防手写 Res 接口与 handler 实际返回漂移
+      if (resSchema !== undefined) {
+        const parsedRes = resSchema.safeParse(data);
+        if (!parsedRes.success) {
+          logger.error(
+            { traceId, channel, issues: parsedRes.error.issues },
+            'IPC 响应契约校验失败',
+          );
+          const error = new AppError(ErrorCode.INVALID_RESPONSE, undefined, parsedRes.error, {
+            issues: parsedRes.error.issues,
+          }).toIpcError();
+          return { error } satisfies IpcResponse<TOutput>;
+        }
+      }
       const durationMs = Math.round(performance.now() - startTime);
       logger.info({ traceId, channel, durationMs }, 'IPC 请求成功');
       return { data } satisfies IpcResponse<TOutput>;

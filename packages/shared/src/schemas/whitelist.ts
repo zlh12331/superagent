@@ -33,6 +33,16 @@ export interface WhitelistListRes {
   readonly entries: readonly WhitelistEntry[];
 }
 
+/** whitelist:list 响应 zod schema（响应契约校验用） */
+export const WhitelistListResSchema = z.object({
+  entries: z.array(WhitelistEntrySchema),
+});
+
+/** 通用 ok 响应 zod schema（whitelist:add / remove 共用） */
+export const OkResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /** whitelist:add 响应 payload */
 export interface WhitelistAddRes {
   readonly ok: boolean;

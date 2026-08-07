@@ -14,6 +14,7 @@
 
 // 错误处理（§7）
 export * from './constants/errors';
+export * from './constants/protocol';
 
 // IPC 类型契约（§5）
 export * from './ipc/api';

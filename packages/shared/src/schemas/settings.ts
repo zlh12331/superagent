@@ -104,6 +104,11 @@ export interface GetTelemetryLevelRes {
   readonly level: TelemetryLevel;
 }
 
+/** settings:getTelemetryLevel 响应 zod schema（响应契约校验用） */
+export const GetTelemetryLevelResSchema = z.object({
+  level: TelemetryLevelSchema,
+});
+
 /**
  * settings:setTelemetryLevel 请求 payload
  */
@@ -119,6 +124,12 @@ export interface SetTelemetryLevelRes {
   /** 写入后的级别（用于 UI 回显确认） */
   readonly level: TelemetryLevel;
 }
+
+/** settings:setTelemetryLevel 响应 zod schema（响应契约校验用） */
+export const SetTelemetryLevelResSchema = z.object({
+  ok: z.boolean(),
+  level: TelemetryLevelSchema,
+});
 
 /**
  * settings:addRuntimeModel 入参 zod schema（自定义模型）
@@ -183,10 +194,18 @@ export const ApprovalModeSchema = z.enum(['plan', 'ask', 'auto', 'yolo']);
 /** 工具审批模式 TypeScript 类型 */
 export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
 
+/** 默认审批模式（保守：写操作均需审批；主进程偏好文件与权限服务共用） */
+export const DEFAULT_APPROVAL_MODE: ApprovalMode = 'ask';
+
 /** settings:getApprovalMode 响应 payload */
 export interface GetApprovalModeRes {
   readonly mode: ApprovalMode;
 }
+
+/** settings:getApprovalMode 响应 zod schema（响应契约校验用） */
+export const GetApprovalModeResSchema = z.object({
+  mode: ApprovalModeSchema,
+});
 
 /** settings:setApprovalMode 入参 zod schema */
 export const SetApprovalModeReqSchema = z.object({

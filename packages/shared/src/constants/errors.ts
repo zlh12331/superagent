@@ -35,6 +35,8 @@ export const ErrorCode = {
   // ── IPC 边界 ──────────────────────────────────────
   IPC_SENDER_INVALID: 'IPC_SENDER_INVALID',
   IPC_CHANNEL_NOT_FOUND: 'IPC_CHANNEL_NOT_FOUND',
+  /** 主进程 handler 返回结构不符合契约（resSchema 校验失败） */
+  INVALID_RESPONSE: 'INVALID_RESPONSE',
 
   // ── AI 调用 ───────────────────────────────────────
   AI_API_KEY_MISSING: 'AI_API_KEY_MISSING',
@@ -112,6 +114,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   // IPC
   IPC_SENDER_INVALID: { userMessage: 'IPC 调用来源无效', retryable: false, severity: 'error' },
   IPC_CHANNEL_NOT_FOUND: { userMessage: 'IPC 通道不存在', retryable: false, severity: 'error' },
+  INVALID_RESPONSE: {
+    userMessage: '主进程响应不符合契约',
+    retryable: false,
+    severity: 'error',
+  },
 
   // AI
   AI_API_KEY_MISSING: { userMessage: '请先配置 API Key', retryable: false, severity: 'warn' },

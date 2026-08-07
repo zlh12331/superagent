@@ -9,16 +9,21 @@
 // channel / schema 由 IPC_DEFINITIONS 提供，本文件只写业务实现。
 
 import type { InferHandlers } from '@code-agent/shared/main';
-import { AppError, ErrorCode, type IPC_DEFINITIONS } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  type IPC_DEFINITIONS,
+  IPC_PROTOCOL_VERSION,
+} from '@code-agent/shared/main';
 import { app, shell } from 'electron';
 
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /** 应用级 handler 实现（app 域） */
 export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['app'] = {
-  // 应用状态查询：返回就绪标记
+  // 应用状态查询：返回就绪标记 + IPC 协议版本（渲染层启动校验，防版本错配）
   getStatus: async () => {
-    return { ready: true };
+    return { ready: true, protocolVersion: IPC_PROTOCOL_VERSION };
   },
 
   // 应用信息查询：版本与环境信息（「关于」面板数据源）

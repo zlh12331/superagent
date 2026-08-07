@@ -33,10 +33,17 @@ import type {
   TurnToolResultEvent,
   TurnUsage,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_CHANNELS, TurnEventType } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  IPC_CHANNELS,
+  IPC_DEFINITIONS,
+  TurnEventType,
+} from '@code-agent/shared/main';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { withSpan } from '../../telemetry/otel';
+import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 import { getModel } from '../ai/ai-provider';
 import { classifyError, isAbortError } from '../ai/error-classifier';
@@ -589,7 +596,8 @@ export class AgentService implements IAgentService {
             onPart: (part) => {
               if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
                 const payload: AgentStreamPartPayload = { sessionId, part };
-                options.webContents.send(IPC_CHANNELS.AGENT_STREAM_PART, payload);
+                // dev 契约校验后发送（payloadSchema 见定义表）
+                emitEvent(options.webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
               }
             },
           });
@@ -717,7 +725,11 @@ export class AgentService implements IAgentService {
                 code: appError.code,
                 message: appError.message,
               };
-              options.webContents.send(IPC_CHANNELS.AGENT_STREAM_ERROR, errorPayload);
+              emitEvent(
+                options.webContents,
+                IPC_DEFINITIONS.agent.subscribeStreamError,
+                errorPayload,
+              );
             }
             // 回合事件：error + turn-end（error）+ Transcript 落库
             turnEmitter.emit({
@@ -831,7 +843,7 @@ export class AgentService implements IAgentService {
         reason: params.reason,
         ...(params.usage !== undefined ? { usage: params.usage } : {}),
       };
-      params.webContents.send(IPC_CHANNELS.AGENT_STREAM_END, endPayload);
+      emitEvent(params.webContents, IPC_DEFINITIONS.agent.subscribeStreamEnd, endPayload);
     }
 
     // Transcript 落库（失败不阻断主流程）

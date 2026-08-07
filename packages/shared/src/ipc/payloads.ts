@@ -89,6 +89,12 @@ export type { ChatMessage } from '../schemas/chat';
 export interface AppStatus {
   /** 应用是否已就绪（true 表示主进程初始化完成） */
   readonly ready: boolean;
+  /**
+   * IPC 协议版本（渲染层启动时校验；不匹配 = 主进程/渲染层来自不同构建，提示重启）
+   *
+   * 与 IPC_PROTOCOL_VERSION（constants/protocol.ts）比较。
+   */
+  readonly protocolVersion: number;
 }
 
 // ─── Chat 域 payload（保留兼容，Vercel AI SDK v7） ─────────────

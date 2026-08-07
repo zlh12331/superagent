@@ -67,6 +67,15 @@ export interface GitStatusRes {
   readonly clean: boolean;
 }
 
+/** git:status 响应 zod schema（响应契约校验用） */
+export const GitStatusResSchema = z.object({
+  branch: z.string(),
+  ahead: z.number().int().nonnegative(),
+  behind: z.number().int().nonnegative(),
+  files: z.array(GitFileStatusSchema),
+  clean: z.boolean(),
+});
+
 /** git:diff 入参 zod schema */
 export const GitDiffReqSchema = z.object({
   path: z.string().min(1),
@@ -97,6 +106,14 @@ export interface GitDiffRes {
   /** 变更文件数 */
   readonly filesChanged: number;
 }
+
+/** git:diff 响应 zod schema（响应契约校验用） */
+export const GitDiffResSchema = z.object({
+  diff: z.string(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  filesChanged: z.number().int().nonnegative(),
+});
 
 // ── Git 写操作（add / commit / push）──────────────────────
 

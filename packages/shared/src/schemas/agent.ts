@@ -85,6 +85,11 @@ export interface AgentRunRes {
   readonly sessionId: string;
 }
 
+/** agent:run 响应 zod schema（响应契约校验用） */
+export const AgentRunResSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
 /** Agent 中断响应 */
 export interface AgentStopRes {
   /** 是否成功中断（对话已结束则返回 false） */

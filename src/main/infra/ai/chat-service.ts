@@ -23,9 +23,10 @@ import type {
   ChatStreamErrorPayload,
   ChatStreamPartPayload,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { streamText } from 'ai';
 import type { WebContents } from 'electron';
+import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 import type { ISessionService } from '../storage/session-service';
 import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
@@ -365,7 +366,8 @@ class ChatService implements IChatService {
         created.firstPart.value !== undefined
       ) {
         const payload: ChatStreamPartPayload = { sessionId, part: created.firstPart.value };
-        webContents.send(IPC_CHANNELS.CHAT_STREAM_PART, payload);
+        // dev 契约校验后发送（payloadSchema 见定义表）
+        emitEvent(webContents, IPC_DEFINITIONS.chat.subscribePart, payload);
       }
       while (true) {
         const { done, value } = await readWithIdleTimeout(reader, controller);
@@ -384,7 +386,7 @@ class ChatService implements IChatService {
           break;
         }
         const payload: ChatStreamPartPayload = { sessionId, part: value };
-        webContents.send(IPC_CHANNELS.CHAT_STREAM_PART, payload);
+        emitEvent(webContents, IPC_DEFINITIONS.chat.subscribePart, payload);
       }
 
       // 5+6. 正常结束：获取 token 使用量并推送 CHAT_STREAM_END（含 usage）
@@ -403,7 +405,7 @@ class ChatService implements IChatService {
               }
             : {}),
         };
-        webContents.send(IPC_CHANNELS.CHAT_STREAM_END, endPayload);
+        emitEvent(webContents, IPC_DEFINITIONS.chat.subscribeEnd, endPayload);
 
         // token 使用量统计（AI SDK v7 原生支持）
         if (usage !== null && usage !== undefined) {
@@ -455,7 +457,7 @@ class ChatService implements IChatService {
             code: appError.code,
             message: appError.message,
           };
-          webContents.send(IPC_CHANNELS.CHAT_STREAM_ERROR, errorPayload);
+          emitEvent(webContents, IPC_DEFINITIONS.chat.subscribeError, errorPayload);
         }
         logger.error({ sessionId, error: appError }, '对话超时（模型级总时长）');
         return;
@@ -466,7 +468,7 @@ class ChatService implements IChatService {
         // 中断也推送 END（让渲染层关闭 loading 状态）
         if (!webContents.isDestroyed()) {
           const endPayload: ChatStreamEndPayload = { sessionId };
-          webContents.send(IPC_CHANNELS.CHAT_STREAM_END, endPayload);
+          emitEvent(webContents, IPC_DEFINITIONS.chat.subscribeEnd, endPayload);
         }
       } else {
         // 其他错误：分类并推送 CHAT_STREAM_ERROR
@@ -477,7 +479,7 @@ class ChatService implements IChatService {
             code: appError.code,
             message: appError.message,
           };
-          webContents.send(IPC_CHANNELS.CHAT_STREAM_ERROR, errorPayload);
+          emitEvent(webContents, IPC_DEFINITIONS.chat.subscribeError, errorPayload);
         }
         logger.error({ sessionId, errorCode: appError.code, error: appError }, '对话流异常结束');
       }

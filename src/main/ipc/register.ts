@@ -51,8 +51,8 @@ export function registerIpcHandlers(
       if (handler === undefined) {
         throw new Error(`IPC handler 缺失: ${domain}.${method} (${def.channel})`);
       }
-      // 复用 wrap：traceId 贯穿 / sender 校验 / zod 校验 / 错误分类 / Sentry
-      wrap(def.channel, def.schema, handler as never);
+      // 复用 wrap：traceId 贯穿 / sender 校验 / zod 校验（入参 + 响应契约）/ 错误分类 / Sentry
+      wrap(def.channel, def.schema, handler as never, def.resSchema as never);
       count += 1;
     }
   }
