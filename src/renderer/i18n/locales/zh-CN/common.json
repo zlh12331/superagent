@@ -60,7 +60,9 @@
       "searchFileShortcut": "文件搜索",
       "toggleThemeShortcut": "切换主题",
       "openSettingsShortcut": "打开设置",
-      "newSessionShortcut": "新建会话"
+      "newSessionShortcut": "新建会话",
+      "protocolMismatch": "应用版本不兼容",
+      "protocolMismatchDesc": "主进程与界面协议版本不一致，请重启应用以正常使用"
     },
     "topbar": {
       "expandSidebar": "展开侧边栏",

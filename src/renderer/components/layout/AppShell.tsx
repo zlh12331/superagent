@@ -38,6 +38,7 @@ import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
+import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useTranslation } from '@/i18n/use-translation';
@@ -79,6 +80,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
   useTerminalBridge();
+
+  // IPC 协议版本校验：主进程/渲染层版本错配时提示重启（P0 契约加固）
+  useProtocolCheck();
 
   // L2 Zustand：激活会话 id（用于关联 DevPanel 中的终端实例）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);

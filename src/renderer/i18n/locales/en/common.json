@@ -60,7 +60,9 @@
       "searchFileShortcut": "File search",
       "toggleThemeShortcut": "Toggle theme",
       "openSettingsShortcut": "Open settings",
-      "newSessionShortcut": "New session"
+      "newSessionShortcut": "New session",
+      "protocolMismatch": "App version mismatch",
+      "protocolMismatchDesc": "Main process and UI protocol versions differ. Please restart the app"
     },
     "topbar": {
       "expandSidebar": "Expand sidebar",
