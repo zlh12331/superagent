@@ -9,7 +9,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, FileText, FolderOpen, Plus, Target } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
@@ -207,6 +207,18 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
   );
 }
 
+/** 工具调用形状（tool-store 条目投影） */
+interface ToolCallEntry {
+  readonly id: string;
+  readonly toolName: string;
+  readonly status: string;
+  readonly input: unknown;
+  readonly title: string;
+}
+
+/** 空调用列表（模块级常量：selector 返回稳定引用，避免无限重渲染） */
+const EMPTY_CALLS: readonly ToolCallEntry[] = [];
+
 /** 文件变更 pane：从 tool-store 提取 edit_file/write_file 记录（本轮文件变更） */
 export function DiffPane({
   sessionId,
@@ -223,27 +235,32 @@ export function DiffPane({
   // 加载中标记（change.id → true）
   const [loadingDiff, setLoadingDiff] = useState<Set<string>>(() => new Set());
 
-  // 从 tool-store 提取当前会话的文件变更工具调用（已完成的）
-  const changes = useToolStore((state) => {
-    const calls = state.callsBySession.get(sessionId) ?? [];
-    return calls
-      .filter((c) => c.toolName === 'edit_file' || c.toolName === 'write_file')
-      .filter((c) => c.status === 'success' || c.status === 'error')
-      .map((c) => {
-        const path =
-          typeof c.input === 'object' && c.input !== null
-            ? String((c.input as Record<string, unknown>)['path'] ?? '')
-            : '';
-        return {
-          id: c.id,
-          path,
-          toolName: c.toolName,
-          status: c.status,
-          title: c.title,
-        };
-      })
-      .reverse();
-  });
+  // selector 只取稳定引用（Map.get 返回的数组；无记录时用模块级常量）：
+  // 在 selector 内 filter/map 会每次返回新数组 → Zustand 认为状态变化 → 无限重渲染
+  const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
+
+  // 派生：文件变更记录（useMemo 依赖稳定引用，仅真实数据变化时重算）
+  const changes = useMemo(
+    () =>
+      calls
+        .filter((c) => c.toolName === 'edit_file' || c.toolName === 'write_file')
+        .filter((c) => c.status === 'success' || c.status === 'error')
+        .map((c) => {
+          const path =
+            typeof c.input === 'object' && c.input !== null
+              ? String((c.input as Record<string, unknown>)['path'] ?? '')
+              : '';
+          return {
+            id: c.id,
+            path,
+            toolName: c.toolName,
+            status: c.status,
+            title: c.title,
+          };
+        })
+        .reverse(),
+    [calls],
+  );
 
   if (changes.length === 0) {
     return (
@@ -389,9 +406,12 @@ export function FilesPane({ sessionId }: { readonly sessionId: string }): ReactE
   const { t } = useTranslation();
   const openFile = useFileViewerStore((state) => state.openFile);
 
-  // 从 tool-store 提取去重后的文件路径（edit_file/write_file 按路径去重，保留最新）
-  const files = useToolStore((state) => {
-    const calls = state.callsBySession.get(sessionId) ?? [];
+  // selector 只取稳定引用（Map.get 返回的数组；无记录时用模块级常量）
+  // 在 selector 内遍历构建新数组 → 每次引用变化 → 无限重渲染
+  const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
+
+  // 派生：按路径去重（保留最新），仅真实数据变化时重算
+  const files = useMemo(() => {
     const seen = new Set<string>();
     const result: string[] = [];
     for (const c of [...calls].reverse()) {
@@ -406,7 +426,7 @@ export function FilesPane({ sessionId }: { readonly sessionId: string }): ReactE
       }
     }
     return result;
-  });
+  }, [calls]);
 
   if (files.length === 0) {
     return (

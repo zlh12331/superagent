@@ -30,6 +30,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
+import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
@@ -247,8 +248,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           isWelcomeMode && 'welcome-mode',
         )}
       >
-        {/* 列 1：侧边栏 */}
-        <Sidebar />
+        {/* 列 1：侧边栏（组件级错误边界：单组件报错局部降级，不拖垮整个 App） */}
+        <SectionErrorBoundary name="sidebar">
+          <Sidebar />
+        </SectionErrorBoundary>
 
         {/* 列 2：左分隔线（可拖拽调整 sidebar 宽度） */}
         {!sidebarCollapsed && (
@@ -264,9 +267,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           />
         )}
 
-        {/* 列 3：主内容区（thread 背景：多层光晕氛围 + 纸张噪点纹理） */}
+        {/* 列 3：主内容区（thread 背景：多层光晕氛围 + 纸张噪点纹理）
+            组件级错误边界：聊天区单组件报错局部降级，不整页崩溃 */}
         <main id="main-content" className="thread-bg paper-texture">
-          {children}
+          <SectionErrorBoundary name="main-content">{children}</SectionErrorBoundary>
         </main>
 
         {/* 列 4：右分隔线（可拖拽调整右面板宽度；欢迎页也保留——右面板常驻） */}
@@ -298,11 +302,13 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             <ChevronRight className="size-3" strokeWidth={1.5} />
           </button>
           {!rightPanelCollapsed && (
-            <DevPanel
-              sessionId={devPanelSessionId}
-              gitRepoPath={DEFAULT_GIT_REPO_PATH}
-              className="h-full border-t-0"
-            />
+            <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
+              <DevPanel
+                sessionId={devPanelSessionId}
+                gitRepoPath={DEFAULT_GIT_REPO_PATH}
+                className="h-full border-t-0"
+              />
+            </SectionErrorBoundary>
           )}
         </aside>
       </div>

@@ -118,32 +118,36 @@ export const DevPanel = memo(function DevPanel({
               setExpanded(true);
             }
           }}
-          className="flex-1"
+          className="min-w-0 flex-1"
         >
-          <TabsList className="bg-transparent h-5 min-w-0 gap-0 overflow-x-auto p-0 [scrollbar-width:none]">
-            <TabsTrigger value="info" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
-              <Target className="size-3" strokeWidth={1.5} />
-              {t('panel.tabInfo')}
+          {/* w-full 覆盖 TabsList 基类 w-fit：tab 行随面板收缩均分，永不溢出 */}
+          <TabsList className="bg-transparent h-5 min-w-0 w-full p-0">
+            <TabsTrigger value="info" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+              <Target className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('panel.tabInfo')}</span>
             </TabsTrigger>
-            <TabsTrigger value="diff" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
-              <FileCode2 className="size-3" strokeWidth={1.5} />
-              {t('panel.tabDiff')}
+            <TabsTrigger value="diff" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+              <FileCode2 className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('panel.tabDiff')}</span>
             </TabsTrigger>
-            <TabsTrigger value="files" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
-              <FolderOpen className="size-3" strokeWidth={1.5} />
-              {t('panel.tabFiles')}
+            <TabsTrigger value="files" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+              <FolderOpen className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('panel.tabFiles')}</span>
             </TabsTrigger>
-            <TabsTrigger value="browser" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
-              <Globe className="size-3" strokeWidth={1.5} />
-              {t('panel.tabBrowser')}
+            <TabsTrigger value="browser" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+              <Globe className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('panel.tabBrowser')}</span>
             </TabsTrigger>
-            <TabsTrigger value="terminal" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
-              <TerminalSquare className="size-3" strokeWidth={1.5} />
-              {t('dev.tabTerminal')}
+            <TabsTrigger
+              value="terminal"
+              className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]"
+            >
+              <TerminalSquare className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('dev.tabTerminal')}</span>
             </TabsTrigger>
-            <TabsTrigger value="dev" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
-              <LayoutGrid className="size-3" strokeWidth={1.5} />
-              {t('panel.tabDev')}
+            <TabsTrigger value="dev" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-[10px]">
+              <LayoutGrid className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('panel.tabDev')}</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>

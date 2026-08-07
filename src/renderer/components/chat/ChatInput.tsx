@@ -333,8 +333,10 @@ export function ChatInput({
           ))}
         </div>
       )}
-      {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光） */}
+      {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光）
+          ref 必须绑定：autoResize 依赖 textareaRef 调整高度（此前漏绑定导致多行不增高） */}
       <textarea
+        ref={textareaRef}
         className="composer-input"
         rows={1}
         aria-label={t('chat.inputLabel')}

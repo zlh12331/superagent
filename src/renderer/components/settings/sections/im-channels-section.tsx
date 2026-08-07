@@ -23,6 +23,11 @@ export function ImChannelsSection(): ReactElement {
   const [busy, setBusy] = useState<string | null>(null);
 
   const loadChannels = useCallback(() => {
+    // 浏览器模式（dev 预览）无 window.api：静默空列表
+    if (typeof window === 'undefined' || window.api === undefined) {
+      setChannels([]);
+      return;
+    }
     window.api.im
       .list()
       .then((res) => {

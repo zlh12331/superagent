@@ -377,7 +377,22 @@
       "skillRemove": "Remove skill",
       "skillBuiltinTitle": "Built-in Skills",
       "skillBuiltin": "Built-in",
-      "skillLearned": "Skill learned"
+      "skillLearned": "Skill learned",
+      "editor": {
+        "display": "Display",
+        "fontSize": "Font size",
+        "behavior": "Behavior",
+        "vimMode": "Vim mode",
+        "vimModeDesc": "Enable Vim keybindings (editor integration is a future feature; preference is stored)"
+      },
+      "experimental": {
+        "title": "Experimental Features",
+        "hint": "These features are experimental and may be unstable. Watch for possible performance impact.",
+        "scanlines": "Scanline overlay",
+        "scanlinesDesc": "CRT-style scanline visual overlay",
+        "reasoningCollapsed": "Collapse reasoning blocks by default",
+        "reasoningCollapsedDesc": "Assistant reasoning blocks start collapsed (off = expanded by default)"
+      }
     },
     "home": {
       "justNow": "Just now",

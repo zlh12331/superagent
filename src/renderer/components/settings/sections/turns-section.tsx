@@ -18,6 +18,11 @@ export function TurnsSection(): ReactElement {
   const [turns, setTurns] = useState<SessionRecentTurnsRes['turns'] | null>(null);
 
   useEffect(() => {
+    // 浏览器模式（dev 预览）无 window.api：静默空列表
+    if (typeof window === 'undefined' || window.api === undefined) {
+      setTurns([]);
+      return;
+    }
     let cancelled = false;
     window.api.session
       .getRecentTurns({ limit: 10 })

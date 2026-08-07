@@ -18,6 +18,11 @@ export function UsageSection(): ReactElement {
   const [summary, setSummary] = useState<UsageSummaryRes | null>(null);
 
   useEffect(() => {
+    // 浏览器模式（dev 预览）无 window.api：静默空数据
+    if (typeof window === 'undefined' || window.api === undefined) {
+      setSummary(null);
+      return;
+    }
     let cancelled = false;
     window.api.session
       .getUsageSummary()

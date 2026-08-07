@@ -69,15 +69,27 @@ export interface SectionErrorBoundaryProps {
   readonly children: ReactNode;
   /** 错误标识前缀（Sentry tag 区分区块） */
   readonly name?: string;
+  /**
+   * 重置键：任一元素变化时自动清除错误状态并重渲染 children
+   * （对齐参考项目 ErrorBoundary 的 resetKey 语义——切换 tab/会话后不残留上个区块的错误）
+   */
+  readonly resetKeys?: readonly unknown[];
 }
 
 /**
  * 组件级错误边界：区块内错误局部降级，不拖垮整个 App
  */
-export function SectionErrorBoundary({ children, name }: SectionErrorBoundaryProps): ReactElement {
+export function SectionErrorBoundary({
+  children,
+  name,
+  resetKeys,
+}: SectionErrorBoundaryProps): ReactElement {
   return (
     <ErrorBoundary
       fallbackRender={SectionFallback}
+      // 条件展开 + 断言：resetKeys 未传时不携带字段；readonly 数组转 unknown[]
+      // （react-error-boundary 的 resetKeys 类型为非 readonly unknown[]）
+      {...(resetKeys !== undefined ? { resetKeys: resetKeys as unknown[] } : {})}
       onError={(error: unknown, info: { componentStack?: string | null }) => {
         Sentry.captureException(error, {
           contexts: { react: { componentStack: info.componentStack ?? undefined } },

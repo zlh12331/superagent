@@ -377,7 +377,22 @@
       "skillRemove": "移除技能",
       "skillBuiltinTitle": "内置技能",
       "skillBuiltin": "内置",
-      "skillLearned": "技能已学习"
+      "skillLearned": "技能已学习",
+      "editor": {
+        "display": "显示",
+        "fontSize": "字体大小",
+        "behavior": "行为",
+        "vimMode": "Vim 模式",
+        "vimModeDesc": "启用 Vim 键位（编辑器集成后续功能，先存储偏好）"
+      },
+      "experimental": {
+        "title": "实验功能开关",
+        "hint": "以下功能处于实验阶段，可能不稳定。启用后请关注可能的性能影响。",
+        "scanlines": "扫描线叠加",
+        "scanlinesDesc": "致敬终端 CRT 的扫描线视觉叠加",
+        "reasoningCollapsed": "推理块默认折叠",
+        "reasoningCollapsedDesc": "助手思考过程默认折叠展示（关闭 = 默认展开）"
+      }
     },
     "home": {
       "justNow": "刚刚",
