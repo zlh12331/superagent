@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, FileText, FolderOpen, Plus, Target } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { useTranslation } from '@/i18n/use-translation';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -341,13 +342,13 @@ export function DiffPane({
               {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
             </span>
           </button>
-          {/* 行级 diff（展开态；git:diff 数据源） */}
+          {/* 行级 diff（展开态；git:diff 数据源 → UnifiedDiffView 双栏渲染） */}
           {expanded.has(change.id) && (
-            <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5 font-mono text-2xs leading-[1.6]">
+            <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5">
               {loadingDiff.has(change.id) ? (
                 <span className="text-muted-foreground">{t('panel.diffLoading')}</span>
               ) : diffCache.has(change.id) ? (
-                <DiffLines diff={diffCache.get(change.id) ?? ''} />
+                <UnifiedDiffView diff={diffCache.get(change.id) ?? ''} />
               ) : (
                 <span className="text-muted-foreground">{t('panel.diffUnavailable')}</span>
               )}
@@ -356,48 +357,6 @@ export function DiffPane({
         </li>
       ))}
     </ul>
-  );
-}
-
-/** 行级 diff 渲染：unified diff 文本 → +/- 着色行（对齐原型 crpPaneDiff 行级展开） */
-function DiffLines({ diff }: { readonly diff: string }): ReactElement {
-  return (
-    <pre className="m-0 whitespace-pre-wrap break-all">
-      {diff.split('\n').map((line, index) => {
-        // key 用 `index + 行首 24 字符` 组合：diff 行可能重复，纯 index 被 lint 禁止
-        const lineKey = `${index}-${line.slice(0, 24)}`;
-        const trimmed = line.trim();
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-          return (
-            <span
-              key={lineKey}
-              className="block bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-            >
-              {line || ' '}
-            </span>
-          );
-        }
-        if (line.startsWith('-') && !line.startsWith('---')) {
-          return (
-            <span key={lineKey} className="block bg-red-500/10 text-red-600 dark:text-red-400">
-              {line || ' '}
-            </span>
-          );
-        }
-        if (trimmed.startsWith('@@')) {
-          return (
-            <span key={lineKey} className="text-sky-600 dark:text-sky-400 block">
-              {line}
-            </span>
-          );
-        }
-        return (
-          <span key={lineKey} className="text-muted-foreground block">
-            {line || ' '}
-          </span>
-        );
-      })}
-    </pre>
   );
 }
 

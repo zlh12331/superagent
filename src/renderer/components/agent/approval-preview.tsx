@@ -34,6 +34,8 @@ export function renderStructuredPreview(
   type: ApprovalType,
   input: unknown,
   t: TFunction,
+  /** 是否深色主题（ReactDiffViewer 的 useDarkTheme 跟随全局主题） */
+  useDarkTheme: boolean,
 ): ReactElement | null {
   // Git 审批类型委托给专用渲染函数
   if (type === 'git_add' || type === 'git_commit' || type === 'git_push') {
@@ -87,7 +89,7 @@ export function renderStructuredPreview(
             showDiffOnly={false}
             leftTitle={t('approval.original')}
             rightTitle={t('approval.newContent')}
-            useDarkTheme={false}
+            useDarkTheme={useDarkTheme}
           />
         </div>
       </div>
@@ -126,7 +128,7 @@ export function renderStructuredPreview(
             showDiffOnly={false}
             leftTitle={t('approval.oldContent')}
             rightTitle={t('approval.newContent')}
-            useDarkTheme={false}
+            useDarkTheme={useDarkTheme}
           />
         </div>
       </div>

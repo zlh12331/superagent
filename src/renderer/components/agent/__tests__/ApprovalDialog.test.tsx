@@ -11,6 +11,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ThemeProvider } from '@/providers/ThemeProvider';
 
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { ApprovalDialog } from '../ApprovalDialog';
@@ -41,13 +42,21 @@ describe('ApprovalDialog', () => {
   });
 
   it('pending 为空：不渲染对话框内容', () => {
-    render(<ApprovalDialog onRespond={onRespond} />);
+    render(
+      <ThemeProvider>
+        <ApprovalDialog onRespond={onRespond} />
+      </ThemeProvider>,
+    );
     expect(screen.queryByText(/npm install/)).toBeNull();
   });
 
   it('pending 非空：渲染标题/描述与批准/拒绝按钮', () => {
     enqueueApproval();
-    render(<ApprovalDialog onRespond={onRespond} />);
+    render(
+      <ThemeProvider>
+        <ApprovalDialog onRespond={onRespond} />
+      </ThemeProvider>,
+    );
     // 标题与结构化预览均含 npm install（多元素匹配）
     expect(screen.getAllByText(/npm install/).length).toBeGreaterThan(0);
     expect(screen.getByText(/在工作目录执行 npm install/)).toBeTruthy();
@@ -57,14 +66,22 @@ describe('ApprovalDialog', () => {
 
   it('点击批准：onRespond(approvalId, true)', async () => {
     enqueueApproval();
-    render(<ApprovalDialog onRespond={onRespond} />);
+    render(
+      <ThemeProvider>
+        <ApprovalDialog onRespond={onRespond} />
+      </ThemeProvider>,
+    );
     await userEvent.click(screen.getByRole('button', { name: '批准' }));
     expect(onRespond).toHaveBeenCalledWith('approval-1', true, false);
   });
 
   it('点击拒绝：onRespond(approvalId, false)', async () => {
     enqueueApproval();
-    render(<ApprovalDialog onRespond={onRespond} />);
+    render(
+      <ThemeProvider>
+        <ApprovalDialog onRespond={onRespond} />
+      </ThemeProvider>,
+    );
     await userEvent.click(screen.getByRole('button', { name: '拒绝' }));
     expect(onRespond).toHaveBeenCalledWith('approval-1', false, false);
   });

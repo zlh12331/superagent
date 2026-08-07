@@ -16,9 +16,8 @@
 // 设计：
 // - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
 // - 文件状态用颜色区分（modified/added/deleted/untracked/conflicted）
-// - diff 渲染用 <pre> 而非 react-diff-viewer-continued
-//   原因：git:diff 返回 unified diff 原始文本，解析为 oldValue/newValue 较复杂
-//   <pre> 渲染已足够展示，且性能更好（避免解析开销）
+// - diff 渲染用 react-diff-viewer-continued（UnifiedDiffView，统一方案）
+//   实现：git:diff 返回 unified diff → parseUnifiedDiff 拆 hunk → 双栏渲染
 // - 路径必须为绝对路径（由调用方传入）
 // ──────────────────────────────────────────────────────────────
 

@@ -16,14 +16,14 @@
 // 设计：
 // - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
 // - 文件状态用颜色区分（modified/added/deleted/untracked/conflicted）
-// - diff 渲染用 <pre> 而非 react-diff-viewer-continued
-//   原因：git:diff 返回 unified diff 原始文本，解析为 oldValue/newValue 较复杂
-//   <pre> 渲染已足够展示，且性能更好（避免解析开销）
+// - diff 渲染用 react-diff-viewer-continued（UnifiedDiffView，统一方案）
+//   实现：git:diff 返回 unified diff → parseUnifiedDiff 拆 hunk → 双栏渲染
 // - 路径必须为绝对路径（由调用方传入）
 // ──────────────────────────────────────────────────────────────
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
+import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/i18n/use-translation';
@@ -104,72 +104,11 @@ export function FileDiffView({
           ) : diff === undefined || diff.length === 0 ? (
             <div className="text-muted-foreground p-2 text-2xs">{t('common.noDiff')}</div>
           ) : (
-            <DiffText diff={diff} />
+            <UnifiedDiffView diff={diff} className="min-h-0" />
           )}
         </ScrollArea>
       )}
     </div>
-  );
-}
-
-// ── 子组件：diff 文本渲染 ─────────────────────────────────────
-
-interface DiffTextProps {
-  readonly diff: string;
-}
-
-/**
- * 渲染 unified diff 文本
- *
- * 按行解析：
- * - `+` 开头：新增行，绿色背景
- * - `-` 开头：删除行，红色背景
- * - `@@` 开头：hunk 头，灰色
- * - 其他：普通行，默认色
- *
- * 使用 <pre> + 行级着色，避免引入复杂 diff 解析库。
- */
-function DiffText({ diff }: DiffTextProps): ReactElement {
-  const lines = diff.split('\n');
-
-  return (
-    <pre className="text-foreground/80 overflow-x-auto p-1 text-2xs leading-relaxed font-mono">
-      {lines.map((line, index) => {
-        const key = `${index}-${line.slice(0, 20)}`;
-        if (line.startsWith('+++') || line.startsWith('---')) {
-          return (
-            <div key={key} className="text-muted-foreground">
-              {line}
-            </div>
-          );
-        }
-        if (line.startsWith('+')) {
-          return (
-            <div
-              key={key}
-              className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
-            >
-              {line}
-            </div>
-          );
-        }
-        if (line.startsWith('-')) {
-          return (
-            <div key={key} className="bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
-              {line}
-            </div>
-          );
-        }
-        if (line.startsWith('@@')) {
-          return (
-            <div key={key} className="text-muted-foreground bg-muted/40">
-              {line}
-            </div>
-          );
-        }
-        return <div key={key}>{line || ' '}</div>;
-      })}
-    </pre>
   );
 }
 

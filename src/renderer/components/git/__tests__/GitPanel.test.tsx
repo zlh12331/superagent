@@ -19,6 +19,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ThemeProvider } from '@/providers/ThemeProvider';
+
 // ── mock use-git hooks ──────────────────────────────────────
 //
 // 提供 useGitStatusQuery / useGitDiffQuery 的可控 mock：
@@ -115,7 +117,11 @@ describe('GitPanel', () => {
     it('isLoading=true → 渲染骨架屏（4 个 Skeleton）', () => {
       setStatusState({ isLoading: true });
 
-      const { container } = render(<GitPanel path="/repo" />);
+      const { container } = render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       // 骨架屏由 4 个 <Skeleton> 组成（FileListSkeleton 固定渲染 4 个）
       // Skeleton 组件用 data-slot="skeleton" 标识
@@ -126,7 +132,11 @@ describe('GitPanel', () => {
     it('分支信息：isLoading 时显示「加载中...」', () => {
       setStatusState({ isLoading: true });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       expect(screen.getByText('加载中...')).toBeInTheDocument();
     });
@@ -137,7 +147,11 @@ describe('GitPanel', () => {
     it('error 非 null → 显示 ErrorHint + 错误消息', () => {
       setStatusState({ error: new Error('Not a git repository') });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       expect(screen.getByText('Git 状态获取失败')).toBeInTheDocument();
       expect(screen.getByText('Not a git repository')).toBeInTheDocument();
@@ -147,7 +161,11 @@ describe('GitPanel', () => {
       // error 为 null，但 status 为 undefined（理论上不可达，但兜底）
       setStatusState({ data: undefined, error: null });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       expect(screen.getByText('Git 状态获取失败')).toBeInTheDocument();
       expect(screen.getByText('Git 状态为空')).toBeInTheDocument();
@@ -156,7 +174,11 @@ describe('GitPanel', () => {
     it('分支信息：error 时显示「无法获取」', () => {
       setStatusState({ error: new Error('fail') });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       expect(screen.getByText('无法获取')).toBeInTheDocument();
     });
@@ -167,7 +189,11 @@ describe('GitPanel', () => {
     it('clean=true → 显示「工作区干净」+「无变更文件」', () => {
       setStatusState({ data: cleanStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       expect(screen.getByText('工作区干净')).toBeInTheDocument();
       expect(screen.getByText('无变更文件')).toBeInTheDocument();
@@ -176,7 +202,11 @@ describe('GitPanel', () => {
     it('分支信息：clean 时显示分支名 main', () => {
       setStatusState({ data: cleanStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       expect(screen.getByText('main')).toBeInTheDocument();
     });
@@ -187,7 +217,11 @@ describe('GitPanel', () => {
     it('渲染所有文件项（图标 + 路径 + 状态标签）', () => {
       setStatusState({ data: dirtyStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       // 6 个文件路径都应展示
       for (const file of dirtyStatus.files) {
@@ -205,7 +239,11 @@ describe('GitPanel', () => {
     it('分支信息：显示 ahead/behind 标记', () => {
       setStatusState({ data: dirtyStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       // ahead=2 → ↑2
       expect(screen.getByText('↑2')).toBeInTheDocument();
@@ -218,7 +256,11 @@ describe('GitPanel', () => {
     it('点击文件 → 触发 useGitDiffQuery（selectedFilePath 不为 null）', async () => {
       setStatusState({ data: dirtyStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       // 点击第一个文件
       fireEvent.click(screen.getByText('src/a.ts'));
@@ -241,7 +283,11 @@ describe('GitPanel', () => {
       setStatusState({ data: dirtyStatus });
       setDiffState({ data: sampleDiff });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       // 初始无 diff 视图
       expect(screen.queryByText('+1')).not.toBeInTheDocument();
@@ -259,7 +305,11 @@ describe('GitPanel', () => {
     it('点击已选中文件 → 仍保持选中态', () => {
       setStatusState({ data: dirtyStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       const fileBtn = screen.getByText('src/a.ts').closest('button');
       expect(fileBtn).not.toBeNull();
@@ -278,7 +328,11 @@ describe('GitPanel', () => {
     it('点击刷新 → 调用 refetch', () => {
       setStatusState({ data: cleanStatus });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       const refreshBtn = screen.getByRole('button', { name: '刷新 Git 状态' });
       fireEvent.click(refreshBtn);
@@ -289,7 +343,11 @@ describe('GitPanel', () => {
     it('isFetching=true → 刷新按钮 disabled', () => {
       setStatusState({ data: cleanStatus, isFetching: true });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       const refreshBtn = screen.getByRole('button', { name: '刷新 Git 状态' });
       expect(refreshBtn).toBeDisabled();
@@ -302,7 +360,11 @@ describe('GitPanel', () => {
       setStatusState({ data: dirtyStatus });
       setDiffState({ data: sampleDiff });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       // 选中文件 → 出现 diff 视图
       fireEvent.click(screen.getByText('src/a.ts'));
@@ -327,7 +389,11 @@ describe('GitPanel', () => {
       setStatusState({ data: dirtyStatus });
       setDiffState({ data: { diff: '', additions: 0, deletions: 0 } });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       fireEvent.click(screen.getByText('src/a.ts'));
 
@@ -340,7 +406,11 @@ describe('GitPanel', () => {
       setStatusState({ data: dirtyStatus });
       setDiffState({ isLoading: true });
 
-      render(<GitPanel path="/repo" />);
+      render(
+        <ThemeProvider>
+          <GitPanel path="/repo" />
+        </ThemeProvider>,
+      );
 
       fireEvent.click(screen.getByText('src/a.ts'));
 
@@ -356,7 +426,11 @@ describe('GitPanel', () => {
     it('传入 className → 容器合并 class', () => {
       setStatusState({ data: cleanStatus });
 
-      const { container } = render(<GitPanel path="/repo" className="custom-class" />);
+      const { container } = render(
+        <ThemeProvider>
+          <GitPanel path="/repo" className="custom-class" />
+        </ThemeProvider>,
+      );
 
       const root = container.firstElementChild;
       expect(root?.className).toContain('custom-class');

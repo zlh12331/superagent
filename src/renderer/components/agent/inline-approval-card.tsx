@@ -11,6 +11,7 @@ import { Check, X } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { renderStructuredPreview } from './approval-preview';
 import { getIconForType, getLabelKeyForType, isDangerousType } from './approval-utils';
@@ -29,6 +30,9 @@ export interface InlineApprovalCardProps {
  */
 export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): ReactElement | null {
   const { t } = useTranslation();
+  // 深色主题（结构化预览的 ReactDiffViewer 双栏适配）
+  const { resolvedTheme } = useTheme();
+  const isDarkTheme = resolvedTheme === 'dark';
 
   // 当前会话的审批项（pending 优先展示最新；已决的回显最近一条）
   const item = useApprovalsStore((state) => {
@@ -86,7 +90,9 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
         </p>
       )}
       {item.input !== undefined && (
-        <div className="mt-1.5">{renderStructuredPreview(item.type, item.input, t)}</div>
+        <div className="mt-1.5">
+          {renderStructuredPreview(item.type, item.input, t, isDarkTheme)}
+        </div>
       )}
 
       {/* pending 操作按钮 */}

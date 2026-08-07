@@ -39,6 +39,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 
 import { renderStructuredPreview } from './approval-preview';
@@ -90,11 +91,17 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
   const showRememberCheckbox =
     currentPending !== undefined && canRememberDecision(currentPending.type);
 
-  // 结构化预览内容
+  // 结构化预览内容（useDarkTheme 跟随全局主题：diff 双栏深色适配）
+  const { resolvedTheme } = useTheme();
   const structuredPreview =
     currentPending === undefined
       ? null
-      : renderStructuredPreview(currentPending.type, currentPending.input, t);
+      : renderStructuredPreview(
+          currentPending.type,
+          currentPending.input,
+          t,
+          resolvedTheme === 'dark',
+        );
 
   // 审批类型变体徽章（对齐原型 modal-variant 7 色徽章）
   const variantBadge = currentPending === undefined ? null : getVariantForType(currentPending.type);
