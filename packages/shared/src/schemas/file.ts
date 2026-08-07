@@ -53,6 +53,13 @@ export interface FileReadRes {
   readonly encoding: string;
 }
 
+/** file:read 响应 zod schema（响应契约校验用） */
+export const FileReadResSchema = z.object({
+  content: z.string(),
+  totalLines: z.number().int().nonnegative(),
+  encoding: z.string(),
+});
+
 /**
  * file:write 入参 zod schema
  *

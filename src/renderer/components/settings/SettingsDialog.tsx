@@ -36,6 +36,7 @@ import {
   X,
 } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -389,7 +390,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
 
           {/* 内容区 */}
           <div className="overflow-y-auto overflow-x-hidden px-5 py-[18px]">
-            {renderSection(activeSection, open)}
+            {/* 组件级错误边界：pane 抛错局部降级（不拖垮整个设置抽屉） */}
+            <SectionErrorBoundary name={`settings:${activeSection}`}>
+              {renderSection(activeSection, open)}
+            </SectionErrorBoundary>
           </div>
         </div>
       </SheetContent>

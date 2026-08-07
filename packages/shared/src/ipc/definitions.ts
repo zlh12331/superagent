@@ -62,6 +62,7 @@ import {
   type FileListRes,
   FileReadReqSchema,
   type FileReadRes,
+  FileReadResSchema,
   FileRenameReqSchema,
   type FileRenameRes,
   type FileWatchEventPayload,
@@ -162,6 +163,7 @@ import {
   type TerminalCreatedEventPayload,
   TerminalCreateReqSchema,
   type TerminalCreateRes,
+  TerminalCreateResSchema,
   type TerminalExitEventPayload,
   TerminalInputReqSchema,
   type TerminalInputRes,
@@ -463,7 +465,7 @@ export const IPC_DEFINITIONS = {
   },
 
   file: {
-    read: withSchema(IPC_META.file.read, FileReadReqSchema, {} as FileReadRes),
+    read: withSchema(IPC_META.file.read, FileReadReqSchema, {} as FileReadRes, FileReadResSchema),
     write: withSchema(IPC_META.file.write, FileWriteReqSchema, {} as FileWriteRes),
     list: withSchema(IPC_META.file.list, FileListReqSchema, {} as FileListRes),
     watchStart: withSchema(
@@ -488,7 +490,12 @@ export const IPC_DEFINITIONS = {
   },
 
   terminal: {
-    create: withSchema(IPC_META.terminal.create, TerminalCreateReqSchema, {} as TerminalCreateRes),
+    create: withSchema(
+      IPC_META.terminal.create,
+      TerminalCreateReqSchema,
+      {} as TerminalCreateRes,
+      TerminalCreateResSchema,
+    ),
     input: withSchema(IPC_META.terminal.input, TerminalInputReqSchema, {} as TerminalInputRes),
     resize: withSchema(IPC_META.terminal.resize, TerminalResizeReqSchema, {} as TerminalResizeRes),
     kill: withSchema(IPC_META.terminal.kill, TerminalKillReqSchema, {} as TerminalKillRes),

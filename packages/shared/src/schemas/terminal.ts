@@ -52,6 +52,12 @@ export interface TerminalCreateRes {
   readonly pid: number;
 }
 
+/** terminal:create 响应 zod schema（响应契约校验用） */
+export const TerminalCreateResSchema = z.object({
+  terminalId: z.string().min(1),
+  pid: z.number().int().positive(),
+});
+
 /**
  * terminal:input 入参 zod schema
  *
