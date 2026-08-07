@@ -19,31 +19,39 @@ import {
   AlertTriangle,
   BarChart3,
   Database,
+  FlaskConical,
+  Info,
   Keyboard,
   KeyRound,
   MessageSquareText,
   MessageSquareWarning,
+  PenLine,
   Radio,
   ScrollText,
   Server as ServerIcon,
   Settings as SettingsIcon,
   Shield,
   SlidersHorizontal,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { AboutSection } from './sections/about-section';
 import { ApiKeySection } from './sections/api-key-section';
 import { ApprovalModeSection } from './sections/approval-mode-section';
 import { DataSection } from './sections/data-section';
+import { EditorSection } from './sections/editor-section';
+import { ExperimentalSection } from './sections/experimental-section';
 import { ImChannelsSection } from './sections/im-channels-section';
 import { McpSection } from './sections/mcp-section';
 import { ModelParamsSection } from './sections/model-params-section';
 import { PromptSection } from './sections/prompt-section';
 import { RuntimeModelsSection } from './sections/runtime-models-section';
 import { ShortcutsSection } from './sections/shortcuts-section';
+import { SkillsSection } from './sections/skills-section';
 import { TelemetrySection } from './sections/telemetry-section';
 import { TurnsSection } from './sections/turns-section';
 import { UsageSection } from './sections/usage-section';
@@ -65,11 +73,15 @@ type SectionId =
   | 'mcp'
   | 'prompt'
   | 'shortcuts'
+  | 'skills'
+  | 'editor'
+  | 'experimental'
   | 'usage'
   | 'turns'
   | 'im-channels'
   | 'data'
-  | 'telemetry';
+  | 'telemetry'
+  | 'about';
 
 /** 导航项 */
 interface NavItem {
@@ -98,14 +110,16 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.viewPrompt',
     items: [
-      { id: 'mcp', labelKey: 'settings.nav.mcp', icon: ServerIcon },
-      { id: 'prompt', labelKey: 'settings.nav.prompt', icon: MessageSquareText },
+      { id: 'editor', labelKey: 'settings.nav.editor', icon: PenLine },
+      { id: 'experimental', labelKey: 'settings.nav.experimental', icon: FlaskConical },
       { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
+      { id: 'prompt', labelKey: 'settings.nav.prompt', icon: MessageSquareText },
     ],
   },
   {
     labelKey: 'settings.group.accountData',
     items: [
+      { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
       { id: 'turns', labelKey: 'settings.nav.turns', icon: ScrollText },
       { id: 'im-channels', labelKey: 'settings.nav.imChannels', icon: MessageSquareWarning },
@@ -114,7 +128,11 @@ const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     labelKey: 'settings.group.advanced',
-    items: [{ id: 'telemetry', labelKey: 'settings.nav.telemetry', icon: AlertTriangle }],
+    items: [
+      { id: 'mcp', labelKey: 'settings.nav.mcp', icon: ServerIcon },
+      { id: 'telemetry', labelKey: 'settings.nav.telemetry', icon: AlertTriangle },
+      { id: 'about', labelKey: 'settings.nav.about', icon: Info },
+    ],
   },
 ];
 
@@ -149,6 +167,12 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <PromptSection open={drawerOpen} />;
     case 'shortcuts':
       return <ShortcutsSection />;
+    case 'skills':
+      return <SkillsSection />;
+    case 'editor':
+      return <EditorSection />;
+    case 'experimental':
+      return <ExperimentalSection />;
     case 'usage':
       return <UsageSection />;
     case 'turns':
@@ -159,6 +183,8 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <DataSection />;
     case 'telemetry':
       return <TelemetrySection />;
+    case 'about':
+      return <AboutSection />;
   }
 }
 
@@ -281,7 +307,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           }}
           title={t('settings.drawerResizer')}
           className={cn(
-            'absolute inset-y-0 left-[-4px] z-[5] m-0 w-[8px] touch-none cursor-col-resize border-none transition-colors',
+            // h-full 必须显式：Tailwind preflight 给 hr 默认 height:0，
+            // 与 inset-y-0 的 top/bottom 拉伸冲突（height 优先 → 手柄高度 0 不可拖）
+            'absolute inset-y-0 left-[-4px] z-[5] m-0 h-full w-[8px] touch-none cursor-col-resize border-none transition-colors',
             isDragging ? 'bg-primary/15' : 'hover:bg-primary/10 bg-transparent',
           )}
         />

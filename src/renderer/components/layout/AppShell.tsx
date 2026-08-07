@@ -30,6 +30,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
+import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
@@ -115,6 +116,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
 
+  // 快捷键帮助对话框（'?' 键触发）
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+
   // 路由：聊天页显示返回按钮（对齐原型 back-btn）
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,6 +142,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
     onNewSession: () => {
       enterWelcomeMode();
     },
+    onOpenShortcutHelp: () => setShortcutHelpOpen(true),
   });
 
   // 拖拽起始信息（ref 避免重渲染）
@@ -309,6 +314,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
       {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {/* 快捷键帮助对话框（'?' 触发） */}
+      <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
       {/* 自动更新提示（事件驱动 toast，无 DOM） */}
       <UpdateNotice />
     </div>

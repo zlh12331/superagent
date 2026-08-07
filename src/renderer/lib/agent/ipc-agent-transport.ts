@@ -29,7 +29,7 @@
 // - workingDir 由渲染层传入，主进程 path-guard 二次校验
 // - sessionId 用于过滤当前对话的事件
 
-import type { ChatMessage } from '@code-agent/shared/renderer';
+import type { ChatMessage, ThinkingLevel } from '@code-agent/shared/renderer';
 import {
   type ChatRequestOptions,
   type ChatTransport,
@@ -50,6 +50,8 @@ interface AgentConfig {
   readonly maxSteps?: number;
   /** 运行模式（plan 只读探索 / build 审批后执行，缺省 build） */
   readonly mode?: 'plan' | 'build';
+  /** 思考强度（可选：渲染层设置项，覆盖主进程模型级默认） */
+  readonly thinking?: ThinkingLevel;
 }
 
 /**
@@ -113,7 +115,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         new Error('IpcAgentTransport: workingDir not configured. Call configure() first.'),
       );
     }
-    const { workingDir, systemPrompt, maxSteps, mode } = this.config;
+    const { workingDir, systemPrompt, maxSteps, mode, thinking } = this.config;
 
     // currentSessionId 在 agent.run 返回后填充，初始为 undefined
     let currentSessionId: string | undefined;
@@ -179,6 +181,8 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           maxSteps: maxSteps ?? 20,
           // plan 模式：写操作被主进程直接拒绝（只读探索）；缺省 build
           mode: mode ?? 'build',
+          // 思考强度：设置项覆盖主进程模型级默认（undefined = 用模型默认）
+          thinking,
         });
 
         // 处理响应：失败则 error stream，成功则记录 sessionId

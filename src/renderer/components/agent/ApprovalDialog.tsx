@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
+import { cn } from '@/lib/utils';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 
 import { renderStructuredPreview } from './approval-preview';
@@ -45,6 +46,7 @@ import {
   canRememberDecision,
   getIconForType,
   getLabelKeyForType,
+  getVariantForType,
   isDangerousType,
 } from './approval-utils';
 
@@ -94,6 +96,9 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
       ? null
       : renderStructuredPreview(currentPending.type, currentPending.input, t);
 
+  // 审批类型变体徽章（对齐原型 modal-variant 7 色徽章）
+  const variantBadge = currentPending === undefined ? null : getVariantForType(currentPending.type);
+
   // 处理用户点击批准/拒绝
   // 点击后 store 会自动从 pending 移除该项（由 useApprovalBridge.respondApproval 触发）
   // 同时重置 rememberDecision 为 false（为下一个审批项准备）
@@ -119,10 +124,20 @@ export function ApprovalDialog({ onRespond, className }: ApprovalDialogProps): R
         {currentPending !== undefined && (
           <>
             <DialogHeader>
-              {/* 标题：图标 + 类型标签 + 工具名 */}
+              {/* 标题：图标 + 类型徽章 + 类型标签 + 工具名 */}
               <DialogTitle className="flex items-center gap-2 font-serif tracking-wide">
                 <Icon className="size-5" strokeWidth={1.5} />
-                <span>{`${typeLabel} · ${currentPending.title}`}</span>
+                {variantBadge !== null && (
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 font-sans text-[10px] font-semibold',
+                      variantBadge.className,
+                    )}
+                  >
+                    {typeLabel}
+                  </span>
+                )}
+                <span>{currentPending.title}</span>
               </DialogTitle>
               {/* 描述：人类可读的操作摘要（pre-wrap 保留换行） */}
               <DialogDescription className="font-serif leading-relaxed whitespace-pre-wrap">

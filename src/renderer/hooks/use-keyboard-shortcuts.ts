@@ -25,6 +25,8 @@ interface ShortcutHandlers {
   readonly onToggleTheme: () => void;
   readonly onOpenSettings: () => void;
   readonly onNewSession: () => void;
+  /** 打开快捷键帮助对话框（'?' 键，非用户可配置） */
+  readonly onOpenShortcutHelp?: () => void;
 }
 
 interface ParsedShortcut {
@@ -125,4 +127,8 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
   useHotkeys(hotkeys.newSession, () => handlersRef.current.onNewSession(), HOTKEY_OPTIONS, [
     hotkeys.newSession,
   ]);
+
+  // 快捷键帮助：'?' 固定键（对齐参考项目 ShortcutHelpDialog 触发方式）
+  // react-hotkeys-hook v5 按 event.code 匹配：物理键 '/' 的 code 是 'Slash'（shift+Slash = '?'）
+  useHotkeys('shift+Slash', () => handlersRef.current.onOpenShortcutHelp?.(), HOTKEY_OPTIONS, []);
 }

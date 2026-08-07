@@ -12,7 +12,7 @@
 // - 仅存储用户偏好，不存储敏感数据（API Key 由主进程 keychain 管理）
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider } from '@code-agent/shared/renderer';
+import type { ApiKeyProvider, ThinkingLevel } from '@code-agent/shared/renderer';
 import { createPersistentStore } from './create-persistent-store';
 
 /**
@@ -44,6 +44,13 @@ export interface AiSettings {
    * 用途：让用户自定义 Agent 行为（如"使用中文回复"、"专注于 TypeScript 代码"等）。
    */
   readonly systemPrompt: string;
+  /**
+   * 思考强度（对齐原型 thinking seg-control：off/low/medium/high）
+   *
+   * 发送消息时透传给主进程（agent:run / chat:send），
+   * 覆盖模型级默认 reasoningEffort（'off' = 不注入，用模型默认）。
+   */
+  readonly thinking: ThinkingLevel;
 }
 
 /**
@@ -75,6 +82,20 @@ export interface KeyboardShortcuts {
 }
 
 /**
+ * 实验性功能开关（对齐原型「实验功能」设置区）
+ *
+ * 只列真实生效的开关：
+ * - scanlines：扫描线视觉叠加（致敬终端，CSS 类驱动）
+ * - reasoningCollapsed：推理块默认折叠（消息渲染消费）
+ */
+export interface ExperimentalSettings {
+  /** 扫描线视觉叠加（.scanlines-overlay） */
+  readonly scanlines: boolean;
+  /** 推理块默认折叠（false = 默认展开） */
+  readonly reasoningCollapsed: boolean;
+}
+
+/**
  * 用户设置状态形状
  */
 interface SettingsState {
@@ -86,6 +107,8 @@ interface SettingsState {
   readonly editor: EditorSettings;
   /** 快捷键设置 */
   readonly shortcuts: KeyboardShortcuts;
+  /** 实验性功能 */
+  readonly experimental: ExperimentalSettings;
 
   // ── 操作方法 ────────────────────────────────────────
   /** 设置主题 */
@@ -96,6 +119,8 @@ interface SettingsState {
   readonly updateEditor: (patch: Partial<EditorSettings>) => void;
   /** 更新快捷键设置（部分字段） */
   readonly updateShortcuts: (patch: Partial<KeyboardShortcuts>) => void;
+  /** 更新实验性功能（部分字段） */
+  readonly updateExperimental: (patch: Partial<ExperimentalSettings>) => void;
 }
 
 /**
@@ -115,6 +140,7 @@ export const useSettingsStore = createPersistentStore<SettingsState>()(
       defaultModel: 'deepseek-v4-flash',
       temperature: 0.7,
       systemPrompt: '',
+      thinking: 'high',
     },
     editor: {
       fontSize: 14,
@@ -128,11 +154,17 @@ export const useSettingsStore = createPersistentStore<SettingsState>()(
       openSettings: 'Meta+,',
       newSession: 'Meta+N',
     },
+    experimental: {
+      scanlines: false,
+      reasoningCollapsed: true,
+    },
 
     setTheme: (theme) => set({ theme }),
     updateAi: (patch) => set((state) => ({ ai: { ...state.ai, ...patch } })),
     updateEditor: (patch) => set((state) => ({ editor: { ...state.editor, ...patch } })),
     updateShortcuts: (patch) => set((state) => ({ shortcuts: { ...state.shortcuts, ...patch } })),
+    updateExperimental: (patch) =>
+      set((state) => ({ experimental: { ...state.experimental, ...patch } })),
   }),
   {
     name: 'settings',

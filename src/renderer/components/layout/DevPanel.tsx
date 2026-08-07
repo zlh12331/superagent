@@ -21,6 +21,7 @@ import {
   FileCode2,
   FolderOpen,
   GitBranch,
+  Globe,
   LayoutGrid,
   ScrollText,
   Target,
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react';
 import { memo, type ReactElement, useState } from 'react';
 
+import { BrowserPane } from '@/components/dev/browser-pane';
 import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
@@ -57,7 +59,7 @@ interface DevPanelProps {
 }
 
 /** 顶层 Tab 类型 */
-type PanelTab = 'info' | 'diff' | 'files' | 'terminal' | 'dev';
+type PanelTab = 'info' | 'diff' | 'files' | 'browser' | 'terminal' | 'dev';
 
 /** 开发者子视图类型 */
 type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
@@ -118,24 +120,28 @@ export const DevPanel = memo(function DevPanel({
           }}
           className="flex-1"
         >
-          <TabsList className="bg-transparent h-5 gap-0.5 p-0">
-            <TabsTrigger value="info" className="h-5 gap-1 px-1.5 py-0 text-[10px]">
+          <TabsList className="bg-transparent h-5 min-w-0 gap-0 overflow-x-auto p-0 [scrollbar-width:none]">
+            <TabsTrigger value="info" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
               <Target className="size-3" strokeWidth={1.5} />
               {t('panel.tabInfo')}
             </TabsTrigger>
-            <TabsTrigger value="diff" className="h-5 gap-1 px-1.5 py-0 text-[10px]">
+            <TabsTrigger value="diff" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
               <FileCode2 className="size-3" strokeWidth={1.5} />
               {t('panel.tabDiff')}
             </TabsTrigger>
-            <TabsTrigger value="files" className="h-5 gap-1 px-1.5 py-0 text-[10px]">
+            <TabsTrigger value="files" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
               <FolderOpen className="size-3" strokeWidth={1.5} />
               {t('panel.tabFiles')}
             </TabsTrigger>
-            <TabsTrigger value="terminal" className="h-5 gap-1 px-1.5 py-0 text-[10px]">
+            <TabsTrigger value="browser" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
+              <Globe className="size-3" strokeWidth={1.5} />
+              {t('panel.tabBrowser')}
+            </TabsTrigger>
+            <TabsTrigger value="terminal" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
               <TerminalSquare className="size-3" strokeWidth={1.5} />
               {t('dev.tabTerminal')}
             </TabsTrigger>
-            <TabsTrigger value="dev" className="h-5 gap-1 px-1.5 py-0 text-[10px]">
+            <TabsTrigger value="dev" className="h-5 shrink-0 gap-1 px-1.5 py-0 text-[10px]">
               <LayoutGrid className="size-3" strokeWidth={1.5} />
               {t('panel.tabDev')}
             </TabsTrigger>
@@ -153,8 +159,9 @@ export const DevPanel = memo(function DevPanel({
               {...(defaultModel !== undefined ? { defaultModel } : {})}
             />
           )}
-          {activeTab === 'diff' && <DiffPane sessionId={sessionId} />}
+          {activeTab === 'diff' && <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />}
           {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
+          {activeTab === 'browser' && <BrowserPane />}
           {activeTab === 'terminal' && <TerminalPanel sessionId={sessionId} className="h-full" />}
           {activeTab === 'dev' && (
             <div className="flex h-full flex-col">

@@ -19,9 +19,10 @@
 // ──────────────────────────────────────────────────────────────
 
 import * as Sentry from '@sentry/electron/renderer';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Send } from 'lucide-react';
 import type { ErrorInfo, ReactElement } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
@@ -42,6 +43,13 @@ function AppFallback({
   const { t } = useTranslation();
   const message = error instanceof Error ? error.message : String(error);
 
+  // 崩溃报告：主动上报到 Sentry（对齐参考项目 CrashReportDialog 的"发送报告"动作；
+  // 本项目 Sentry 已在 AppErrorBoundary onError 自动上报，按钮为显式补报 + 用户反馈）
+  const handleSendReport = (): void => {
+    Sentry.captureMessage(`[user-reported] ${message}`, 'error');
+    toast.success(t('common.crashReportSent'));
+  };
+
   return (
     // data-testid 用于 E2E 测试与 CDP 动态分析检测 AppErrorBoundary 是否被触发
     <div
@@ -60,10 +68,16 @@ function AppFallback({
         </p>
       </div>
 
-      <Button variant="outline" size="sm" onClick={resetErrorBoundary}>
-        <RefreshCw className="size-3" strokeWidth={1.5} />
-        {t('common.reload')}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={resetErrorBoundary}>
+          <RefreshCw className="size-3" strokeWidth={1.5} />
+          {t('common.reload')}
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleSendReport}>
+          <Send className="size-3" strokeWidth={1.5} />
+          {t('common.sendCrashReport')}
+        </Button>
+      </div>
     </div>
   );
 }

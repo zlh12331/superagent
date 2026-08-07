@@ -9,7 +9,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Square, Wrench } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -112,6 +112,8 @@ export function McpSection(): ReactElement {
   });
 
   const servers = data?.servers ?? [];
+  // 已展开工具列表的 server 名（对齐参考项目 McpServerDetailDialog 的详情查看）
+  const [expandedServer, setExpandedServer] = useState<string | null>(null);
 
   return (
     <div className="space-y-2">
@@ -126,39 +128,75 @@ export function McpSection(): ReactElement {
         </div>
       )}
       {servers.map((server) => (
-        <SettingRow
-          key={server.config.name}
-          label={server.config.name}
-          description={`${server.config.command} ${(server.config.args ?? []).join(' ')}`}
-        >
-          <span
-            className={cn(
-              'rounded-full px-1.5 py-0.5 font-mono text-[10px]',
-              STATUS_BADGE[server.status] ?? 'bg-muted text-muted-foreground',
-            )}
+        <div key={server.config.name} className="space-y-1">
+          <SettingRow
+            key={server.config.name}
+            label={server.config.name}
+            description={`${server.config.command} ${(server.config.args ?? []).join(' ')}`}
           >
-            {server.status}
-          </span>
-          {server.toolNames.length > 0 && (
             <span
-              className="text-muted-foreground font-mono text-[10px]"
-              title={server.toolNames.join('\n')}
+              className={cn(
+                'rounded-full px-1.5 py-0.5 font-mono text-[10px]',
+                STATUS_BADGE[server.status] ?? 'bg-muted text-muted-foreground',
+              )}
             >
-              {server.toolNames.length} tools
+              {server.status}
             </span>
+            {server.toolNames.length > 0 && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-0.5 font-mono text-[10px] transition-colors"
+                title={server.toolNames.join('\n')}
+                onClick={() =>
+                  setExpandedServer((prev) =>
+                    prev === server.config.name ? null : server.config.name,
+                  )
+                }
+                aria-expanded={expandedServer === server.config.name}
+              >
+                {expandedServer === server.config.name ? (
+                  <ChevronDown className="size-3" strokeWidth={1.5} />
+                ) : (
+                  <ChevronRight className="size-3" strokeWidth={1.5} />
+                )}
+                {server.toolNames.length} tools
+              </button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="size-7 p-0"
+              disabled={stopMutation.isPending}
+              onClick={() => stopMutation.mutate(server.config.name)}
+              aria-label={t('settings.mcpStop')}
+              title={t('settings.mcpStop')}
+            >
+              <Square className="size-3" />
+            </Button>
+          </SettingRow>
+          {/* 工具列表详情（展开态，对齐参考项目 McpServerDetailDialog） */}
+          {expandedServer === server.config.name && (
+            <div className="bg-card rounded-lg border px-3 py-2">
+              {server.toolNames.length === 0 ? (
+                <span className="text-muted-foreground text-[11px]">
+                  {t('settings.mcpNoTools')}
+                </span>
+              ) : (
+                <ul className="space-y-0.5">
+                  {server.toolNames.map((toolName) => (
+                    <li
+                      key={toolName}
+                      className="text-muted-foreground flex items-center gap-1.5 font-mono text-[11px]"
+                    >
+                      <Wrench className="size-2.5 shrink-0" strokeWidth={1.5} />
+                      <span className="truncate">{toolName}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="size-7 p-0"
-            disabled={stopMutation.isPending}
-            onClick={() => stopMutation.mutate(server.config.name)}
-            aria-label={t('settings.mcpStop')}
-            title={t('settings.mcpStop')}
-          >
-            <Square className="size-3" />
-          </Button>
-        </SettingRow>
+        </div>
       ))}
 
       {/* 添加服务器表单 */}

@@ -48,6 +48,24 @@ export function ModelParamsSection(): ReactElement {
           ]}
         />
       </SettingRow>
+
+      {/* 思考强度（对齐原型 thinking seg-control：off/low/medium/high）
+          仅 reasoning 模型生效；透传给主进程覆盖模型级默认档位 */}
+      <SettingRow
+        label={t('settings.modelParams.thinking')}
+        description={t('settings.modelParams.thinkingDesc')}
+      >
+        <SegControl
+          value={ai.thinking}
+          onChange={(value) => updateAi({ thinking: value as typeof ai.thinking })}
+          options={[
+            { value: 'off', label: t('settings.modelParams.thinkingOff') },
+            { value: 'low', label: t('settings.modelParams.thinkingLow') },
+            { value: 'medium', label: t('settings.modelParams.thinkingMedium') },
+            { value: 'high', label: t('settings.modelParams.thinkingHigh') },
+          ]}
+        />
+      </SettingRow>
     </div>
   );
 }

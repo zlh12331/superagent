@@ -8,7 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, FolderOpen, Plus, Target } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, FolderOpen, Plus, Target } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
@@ -208,8 +208,20 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
 }
 
 /** 文件变更 pane：从 tool-store 提取 edit_file/write_file 记录（本轮文件变更） */
-export function DiffPane({ sessionId }: { readonly sessionId: string }): ReactElement {
+export function DiffPane({
+  sessionId,
+  gitRepoPath,
+}: {
+  readonly sessionId: string;
+  /** Git 仓库路径（行级 diff 数据源；缺省则仅展示变更列表） */
+  readonly gitRepoPath?: string;
+}): ReactElement {
   const { t } = useTranslation();
+  // 已展开的行级 diff（change.id → unified diff 文本）
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [diffCache, setDiffCache] = useState<Map<string, string>>(() => new Map());
+  // 加载中标记（change.id → true）
+  const [loadingDiff, setLoadingDiff] = useState<Set<string>>(() => new Set());
 
   // 从 tool-store 提取当前会话的文件变更工具调用（已完成的）
   const changes = useToolStore((state) => {
@@ -241,29 +253,134 @@ export function DiffPane({ sessionId }: { readonly sessionId: string }): ReactEl
     );
   }
 
+  // 展开/收起一个变更项（首次展开时拉取行级 diff）
+  const toggleChange = (changeId: string, changePath: string): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(changeId)) {
+        next.delete(changeId);
+        return next;
+      }
+      next.add(changeId);
+      return next;
+    });
+    // 已缓存或不在加载中：无需重复拉取
+    if (diffCache.has(changeId) || loadingDiff.has(changeId)) {
+      return;
+    }
+    if (typeof window === 'undefined' || window.api === undefined || gitRepoPath === undefined) {
+      return;
+    }
+    setLoadingDiff((prev) => new Set(prev).add(changeId));
+    window.api.git
+      .diff({ path: gitRepoPath, filePath: changePath, ref: 'HEAD', staged: false })
+      .then((res) => {
+        if ('data' in res && res.data !== undefined) {
+          setDiffCache((prev) => {
+            const next = new Map(prev);
+            next.set(changeId, res.data.diff);
+            return next;
+          });
+        }
+      })
+      .catch(() => {
+        toast.error(t('panel.diffLoadFailed'));
+      })
+      .finally(() => {
+        setLoadingDiff((prev) => {
+          const next = new Set(prev);
+          next.delete(changeId);
+          return next;
+        });
+      });
+  };
+
   return (
     <ul className="h-full space-y-1 overflow-y-auto p-3 text-xs">
       {changes.map((change) => (
-        <li
-          key={change.id}
-          className="border-border bg-muted/30 flex items-center gap-2 rounded border px-2 py-1.5"
-        >
-          <FileText className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
-          <span className="text-foreground/90 min-w-0 flex-1 truncate" title={change.path}>
-            {change.path.split(/[\\/]/).pop() ?? change.path}
-          </span>
-          <span
-            className={
-              change.status === 'error'
-                ? 'text-red-500 font-mono text-[9px]'
-                : 'text-emerald-600 dark:text-emerald-400 font-mono text-[9px]'
-            }
+        <li key={change.id} className="space-y-0.5">
+          <button
+            type="button"
+            onClick={() => toggleChange(change.id, change.path)}
+            className="border-border bg-muted/30 hover:bg-muted/60 flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
+            aria-expanded={expanded.has(change.id)}
           >
-            {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
-          </span>
+            {expanded.has(change.id) ? (
+              <ChevronDown className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
+            ) : (
+              <ChevronRight className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
+            )}
+            <FileText className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
+            <span className="text-foreground/90 min-w-0 flex-1 truncate" title={change.path}>
+              {change.path.split(/[\\/]/).pop() ?? change.path}
+            </span>
+            <span
+              className={
+                change.status === 'error'
+                  ? 'text-red-500 font-mono text-[9px]'
+                  : 'text-emerald-600 dark:text-emerald-400 font-mono text-[9px]'
+              }
+            >
+              {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
+            </span>
+          </button>
+          {/* 行级 diff（展开态；git:diff 数据源） */}
+          {expanded.has(change.id) && (
+            <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5 font-mono text-[10px] leading-[1.6]">
+              {loadingDiff.has(change.id) ? (
+                <span className="text-muted-foreground">{t('panel.diffLoading')}</span>
+              ) : diffCache.has(change.id) ? (
+                <DiffLines diff={diffCache.get(change.id) ?? ''} />
+              ) : (
+                <span className="text-muted-foreground">{t('panel.diffUnavailable')}</span>
+              )}
+            </div>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+/** 行级 diff 渲染：unified diff 文本 → +/- 着色行（对齐原型 crpPaneDiff 行级展开） */
+function DiffLines({ diff }: { readonly diff: string }): ReactElement {
+  return (
+    <pre className="m-0 whitespace-pre-wrap break-all">
+      {diff.split('\n').map((line, index) => {
+        // key 用 `index + 行首 24 字符` 组合：diff 行可能重复，纯 index 被 lint 禁止
+        const lineKey = `${index}-${line.slice(0, 24)}`;
+        const trimmed = line.trim();
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          return (
+            <span
+              key={lineKey}
+              className="block bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+            >
+              {line || ' '}
+            </span>
+          );
+        }
+        if (line.startsWith('-') && !line.startsWith('---')) {
+          return (
+            <span key={lineKey} className="block bg-red-500/10 text-red-600 dark:text-red-400">
+              {line || ' '}
+            </span>
+          );
+        }
+        if (trimmed.startsWith('@@')) {
+          return (
+            <span key={lineKey} className="text-sky-600 dark:text-sky-400 block">
+              {line}
+            </span>
+          );
+        }
+        return (
+          <span key={lineKey} className="text-muted-foreground block">
+            {line || ' '}
+          </span>
+        );
+      })}
+    </pre>
   );
 }
 

@@ -25,6 +25,10 @@ export function useApprovalMode(): {
   const [mode, setModeState] = useState<ApprovalMode>(DEFAULT_MODE);
 
   useEffect(() => {
+    // 浏览器模式（dev 预览）无 window.api：保持默认模式
+    if (typeof window === 'undefined' || window.api === undefined) {
+      return;
+    }
     let cancelled = false;
     window.api.settings
       .getApprovalMode()

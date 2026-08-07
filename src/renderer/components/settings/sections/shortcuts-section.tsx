@@ -5,10 +5,10 @@
 // ──────────────────────────────────────────────
 
 import { Keyboard } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { ShortcutPicker } from '../shortcut-picker';
 
 /** 快捷键设置区块 */
 export function ShortcutsSection(): React.ReactElement {
@@ -34,13 +34,11 @@ export function ShortcutsSection(): React.ReactElement {
         ].map((item) => (
           <div key={item.key} className="flex items-center justify-between gap-2">
             <span className="text-xs text-stone-600">{t(item.labelKey)}</span>
-            <Input
-              type="text"
+            <ShortcutPicker
               value={shortcuts[item.key as keyof typeof shortcuts]}
-              onChange={(e) =>
-                updateShortcuts({ [item.key]: e.target.value } as Partial<typeof shortcuts>)
+              onChange={(value) =>
+                updateShortcuts({ [item.key]: value } as Partial<typeof shortcuts>)
               }
-              className="w-32 font-mono text-xs"
             />
           </div>
         ))}

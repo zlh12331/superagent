@@ -124,6 +124,36 @@ export function getLabelKeyForType(type: ApprovalType): string {
 }
 
 /**
+ * 审批类型变体徽章（对齐原型 modal-variant 7 色徽章）
+ *
+ * 按工具类别分配颜色（而非逐类型），同类操作视觉一致：
+ * - 命令执行 amber / 文件编辑 blue / 危险删除 red
+ * - 依赖安装 violet / 网络调用 cyan / Git 操作 purple / 其他 slate
+ */
+export function getVariantForType(type: ApprovalType): {
+  readonly className: string;
+} {
+  switch (type) {
+    case 'run_command':
+      return { className: 'bg-amber-100 text-amber-700' };
+    case 'write_file':
+    case 'edit_file':
+    case 'apply_patch':
+      return { className: 'bg-blue-100 text-blue-700' };
+    case 'delete_file':
+      return { className: 'bg-red-100 text-red-700' };
+    case 'install_package':
+      return { className: 'bg-violet-100 text-violet-700' };
+    case 'external_call':
+      return { className: 'bg-cyan-100 text-cyan-700' };
+    case 'git_add':
+    case 'git_commit':
+    case 'git_push':
+      return { className: 'bg-purple-100 text-purple-700' };
+  }
+}
+
+/**
  * 判断是否为危险审批类型
  *
  * 涉及不可逆操作或影响他人的工具返回 true：

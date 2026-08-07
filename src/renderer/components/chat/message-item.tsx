@@ -45,6 +45,7 @@ import { type ReactElement, useState } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 import { FileChangeCard } from './file-change-card';
 import { Markdown } from './Markdown';
@@ -366,7 +367,9 @@ function CodeBlock({ label, content }: { label: string; content: string }): Reac
  * accent 左光条 + 等宽字体展示思考内容。
  */
 function ReasoningBlock({ text }: { text: string }): ReactElement {
-  const [open, setOpen] = useState(false);
+  // 初始折叠态跟随实验设置（reasoningCollapsed=true 默认折叠，false 默认展开）
+  const reasoningCollapsed = useSettingsStore((s) => s.experimental.reasoningCollapsed);
+  const [open, setOpen] = useState(!reasoningCollapsed);
   // 本地化文案
   const { t } = useTranslation();
 

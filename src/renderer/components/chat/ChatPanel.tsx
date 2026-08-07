@@ -22,6 +22,7 @@ import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { EMPTY_USAGE, useUsageStore } from '@/stores/transient/usage-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
@@ -134,6 +135,8 @@ export function ChatPanel({
       : null;
   // 本地化文案
   const { t } = useTranslation();
+  // 编辑器设置：字体大小真实消费（消息区字号）
+  const editorFontSize = useSettingsStore((s) => s.editor.fontSize);
 
   // 重新生成回调：透传给 ChatMessageList → MsgActions
   // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
@@ -143,7 +146,10 @@ export function ChatPanel({
   };
 
   return (
-    <div className={cn('flex h-full flex-col', className)}>
+    <div
+      className={cn('flex h-full flex-col', className)}
+      style={{ fontSize: `${editorFontSize}px` }}
+    >
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
       <RateLimitBanner />
       {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}

@@ -70,7 +70,8 @@ export function SettingRow({
           <p className="text-muted-foreground mt-0.5 text-[11px] leading-[1.5]">{description}</p>
         )}
       </div>
-      <div className="shrink-0">{children}</div>
+      {/* shrink：允许控件区随容器收缩（SegControl 等可折行控件需要宽度约束） */}
+      <div className="min-w-0 shrink">{children}</div>
     </div>
   );
 }
@@ -137,7 +138,8 @@ export function SegControl({ value, options, onChange, className }: SegControlPr
   return (
     <fieldset
       className={cn(
-        'border-border m-0 flex min-w-0 overflow-hidden rounded-md border p-0',
+        // flex-wrap：窄容器下分段按钮自动折行，避免溢出裁切
+        'border-border m-0 flex min-w-0 flex-wrap overflow-hidden rounded-md border p-0',
         className,
       )}
     >
@@ -148,7 +150,7 @@ export function SegControl({ value, options, onChange, className }: SegControlPr
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
           className={cn(
-            'cursor-pointer border-none px-[11px] py-1 font-mono text-[11px] transition-colors',
+            'shrink cursor-pointer border-none px-[11px] py-1 font-mono text-[11px] transition-colors',
             value === opt.value
               ? 'bg-primary text-primary-foreground font-semibold'
               : 'bg-card text-muted-foreground hover:text-foreground',

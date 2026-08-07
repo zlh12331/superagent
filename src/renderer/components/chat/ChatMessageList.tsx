@@ -167,6 +167,30 @@ export function ChatMessageList({
         // biome-ignore lint/style/useNamingConvention: Virtuoso Components 接口的 Footer 字段为 PascalCase
         {...(isStreaming ? { components: { Footer: StreamingFooter } } : {})}
       />
+      {/* 消息导航轨（对齐原型 .msg-nav-rail：右侧点导航，点击滚动到对应消息）
+          仅消息较多时显示，避免干扰 */}
+      {messages.length >= 4 && (
+        <ul className="msg-nav-rail visible" aria-label={t('chat.msgNavRail')}>
+          {messages.map((message, index) => (
+            <li key={message.id}>
+              <button
+                type="button"
+                className="nav-dot"
+                data-role={message.role}
+                onClick={() =>
+                  virtuosoRef.current?.scrollToIndex({
+                    index,
+                    align: 'center',
+                    behavior: 'smooth',
+                  })
+                }
+                aria-label={`${t('chat.msgNavGoTo')} ${index + 1}`}
+                title={`${t('chat.msgNavGoTo')} ${index + 1}`}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
       {/* 滚动到底部按钮（对齐原型 .scroll-to-bottom，作为 .messages 的兄弟元素） */}
       <button
         type="button"

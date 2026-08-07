@@ -28,6 +28,7 @@
 import { type UseChatOptions, useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import { useEffect, useMemo } from 'react';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { IpcAgentTransport } from '../lib/agent/ipc-agent-transport';
 
 /**
@@ -90,6 +91,9 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
 ) {
   const transport = useMemo(() => getIpcAgentTransport(), []);
 
+  // 思考强度设置项（settings-store persistent；变化时重新 configure）
+  const thinking = useSettingsStore((s) => s.ai.thinking);
+
   // 解构 agent 专用字段，剩余透传给 useChat
   const { workingDir, systemPrompt, maxSteps, ...chatOptions } = options;
 
@@ -101,8 +105,9 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
       workingDir,
       ...(systemPrompt !== undefined ? { systemPrompt } : {}),
       ...(maxSteps !== undefined ? { maxSteps } : {}),
+      ...(thinking !== undefined ? { thinking } : {}),
     });
-  }, [transport, workingDir, systemPrompt, maxSteps]);
+  }, [transport, workingDir, systemPrompt, maxSteps, thinking]);
 
   return useChat<Message>({
     ...chatOptions,
