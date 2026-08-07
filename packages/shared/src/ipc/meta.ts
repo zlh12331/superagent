@@ -30,6 +30,7 @@ export const IPC_META = {
 
   app: {
     getStatus: request('app:getStatus'),
+    getInfo: request('app:getInfo'),
     openExternal: request('app:openExternal'),
     openDataDir: request('app:openDataDir'),
   },
@@ -149,6 +150,12 @@ export const IPC_META = {
     learn: request('skill:learn'),
     listLearned: request('skill:listLearned'),
     removeLearned: request('skill:removeLearned'),
+  },
+
+  whitelist: {
+    list: request('whitelist:list'),
+    add: request('whitelist:add'),
+    remove: request('whitelist:remove'),
   },
 
   goal: {

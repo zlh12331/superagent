@@ -38,6 +38,7 @@ describe('agent.handler', () => {
       systemPrompt: undefined,
       maxSteps: 20,
       mode: 'plan' as const,
+      thinking: undefined,
     };
     const result = await handlers.run(input, createCtx());
     expect(agentService.startAgent).toHaveBeenCalledWith({

@@ -10,7 +10,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { getProviderName } from '../providers';
-import { clampDeepSeekReasoningEffort } from './reasoning-effort';
+import { clampDeepSeekReasoningEffort, type ReasoningEffort } from './reasoning-effort';
 import { clampOutputTokens } from './token-limits';
 import type { ResolvedModel } from './types';
 
@@ -30,14 +30,25 @@ export interface GenerationOptions {
 }
 
 /**
+ * 思考强度请求档位（用户可配置）
+ *
+ * - ReasoningEffort：覆盖模型级默认档位
+ * - 'off'：不注入 providerOptions（模型默认行为）
+ * - undefined：使用模型级 generationConfig.reasoningEffort
+ */
+export type ThinkingOverride = ReasoningEffort | 'off';
+
+/**
  * 构造模型生成选项（纯函数，llm-client 与 agent-service 共用）
  *
  * @param resolved 模型解析结果（ModelRegistry.resolve 产物）
  * @param promptTokens 估算的 prompt 大小（含 system；输出预算钳制用）
+ * @param thinkingOverride 用户思考强度档位（可选；覆盖模型级默认）
  */
 export function buildGenerationOptions(
   resolved: ResolvedModel,
   promptTokens: number,
+  thinkingOverride?: ThinkingOverride,
 ): GenerationOptions {
   const generationConfig = resolved.generationConfig;
   const isReasoning = resolved.capabilities.reasoning === true;
@@ -53,16 +64,18 @@ export function buildGenerationOptions(
         ...(generationConfig?.topP !== undefined ? { topP: generationConfig.topP } : {}),
       };
 
-  // 思考强度：DeepSeek 按官方映射表钳制（xhigh→flash:high/pro:max 等）
+  // 思考强度：用户档位 > 模型级默认档位；DeepSeek 按官方映射表钳制
+  // （xhigh→flash:high/pro:max 等）；'off' = 不注入 providerOptions
   // providerOptions 键经 getProviderName 收敛（见 providers/registry.ts）
+  const effort = thinkingOverride ?? generationConfig?.reasoningEffort;
   const providerOptions =
-    isReasoning && generationConfig?.reasoningEffort !== undefined
+    isReasoning && effort !== undefined && effort !== 'off'
       ? {
           [getProviderName(resolved.providerKind)]: {
             reasoningEffort:
               resolved.providerKind === 'deepseek'
-                ? clampDeepSeekReasoningEffort(resolved.modelId, generationConfig.reasoningEffort)
-                : generationConfig.reasoningEffort,
+                ? clampDeepSeekReasoningEffort(resolved.modelId, effort)
+                : effort,
           },
         }
       : undefined;

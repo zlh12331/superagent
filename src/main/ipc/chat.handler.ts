@@ -48,6 +48,7 @@ export function createChatHandlers(
       const sessionId = await chatService.startChat({
         messages: input.messages,
         sessionId: input.sessionId,
+        ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
         webContents: ctx.sender,
       });
       return { sessionId };

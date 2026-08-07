@@ -23,10 +23,15 @@
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentApprovalRequestPayload, ApprovalMode } from '@code-agent/shared/main';
+import type {
+  AgentApprovalRequestPayload,
+  ApprovalMode,
+  WhitelistEntry,
+} from '@code-agent/shared/main';
 import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { logger } from '../../utils/logger';
+import { readWhitelistSync, writeWhitelist } from '../storage/whitelist-pref';
 import type { CommandClassifier } from './command-classifier';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
 import type { DenialState } from './denial-tracking';
@@ -166,6 +171,21 @@ export interface IPermissionService {
    * 记录一次用户放行/工具成功执行（重置连续拒绝计数）
    */
   recordUserAllowance(): void;
+
+  /**
+   * 列出全部白名单条目（跨会话持久化）
+   */
+  listWhitelist(): readonly WhitelistEntry[];
+
+  /**
+   * 添加白名单条目（立即持久化；空 pattern = 该工具全部放行）
+   */
+  addWhitelistEntry(entry: WhitelistEntry): Promise<void>;
+
+  /**
+   * 移除白名单条目（立即持久化）
+   */
+  removeWhitelistEntry(entry: WhitelistEntry): Promise<void>;
 }
 
 /**
@@ -214,6 +234,8 @@ interface RememberedDecision {
 export class PermissionService implements IPermissionService {
   constructor(classifier?: CommandClassifier) {
     this.classifier = classifier;
+    // 启动时读入持久化白名单（空列表 = 全部走审批流）
+    this.whitelist = readWhitelistSync();
   }
   /** pending 审批 Map：approvalId → PendingApproval */
   private readonly pending = new Map<string, PendingApproval>();
@@ -225,6 +247,8 @@ export class PermissionService implements IPermissionService {
   private denialState: DenialState = createDenialState();
   /** 命令安全分类器（AUTO 模式 exec 命令分层；可选注入，缺省降级保守 ask） */
   private readonly classifier: CommandClassifier | undefined;
+  /** 命令白名单（跨会话持久化；空 pattern = 该工具全部放行） */
+  private whitelist: WhitelistEntry[];
 
   /** @inheritDoc */
   setApprovalMode(mode: ApprovalMode): void {
@@ -257,6 +281,53 @@ export class PermissionService implements IPermissionService {
   }
 
   /** @inheritDoc */
+  listWhitelist(): readonly WhitelistEntry[] {
+    return this.whitelist;
+  }
+
+  /** @inheritDoc */
+  async addWhitelistEntry(entry: WhitelistEntry): Promise<void> {
+    // 幂等：同工具 + 同模式已存在则不重复添加
+    const exists = this.whitelist.some(
+      (e) => e.toolName === entry.toolName && e.pattern === entry.pattern,
+    );
+    if (!exists) {
+      this.whitelist = [...this.whitelist, entry];
+      await writeWhitelist(this.whitelist);
+    }
+  }
+
+  /** @inheritDoc */
+  async removeWhitelistEntry(entry: WhitelistEntry): Promise<void> {
+    const next = this.whitelist.filter(
+      (e) => !(e.toolName === entry.toolName && e.pattern === entry.pattern),
+    );
+    if (next.length !== this.whitelist.length) {
+      this.whitelist = next;
+      await writeWhitelist(this.whitelist);
+    }
+  }
+
+  /**
+   * 白名单匹配：工具名相等 + 模式匹配（空模式 = 该工具全部放行）
+   *
+   * 命令子串匹配（对齐原型 whitelist-panel 的按命令放行语义）：
+   * 非命令工具（write_file 等）无 command 字段时仅空模式可命中。
+   */
+  private isWhitelisted(tool: Tool, input: unknown): boolean {
+    return this.whitelist.some((entry) => {
+      if (entry.toolName !== tool.name) {
+        return false;
+      }
+      if (entry.pattern === '') {
+        return true;
+      }
+      const command = extractCommandFromInput(input);
+      return command?.includes(entry.pattern) === true;
+    });
+  }
+
+  /** @inheritDoc */
   async decide(tool: Tool, input: unknown, userPrompt?: string): Promise<PermissionDecision> {
     // 1. 检查记忆决策
     const key = this.buildRememberKey(tool.name, input);
@@ -282,6 +353,15 @@ export class PermissionService implements IPermissionService {
 
     // 2. 工具自身白名单（permission='auto'）：任何模式自动放行（只读工具）
     if (tool.permission === 'auto') {
+      return {
+        permission: 'auto',
+        description: tool.description,
+      };
+    }
+
+    // 2.5 用户白名单（跨会话持久化）：命中即自动放行（无需审批）
+    if (this.isWhitelisted(tool, input)) {
+      logger.debug({ toolName: tool.name }, '权限决策命中用户白名单');
       return {
         permission: 'auto',
         description: tool.description,

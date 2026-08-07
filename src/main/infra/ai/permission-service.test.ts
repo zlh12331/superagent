@@ -21,6 +21,18 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
+// 白名单持久化：测试环境隔离（内存假实现，避免依赖 electron app.getPath）
+const whitelistMocks = vi.hoisted(() => ({
+  entries: [] as Array<{ toolName: string; pattern: string }>,
+  readWhitelistSync: vi.fn((): Array<{ toolName: string; pattern: string }> => []),
+  writeWhitelist: vi.fn(async () => {}),
+}));
+
+vi.mock('../storage/whitelist-pref', () => ({
+  readWhitelistSync: whitelistMocks.readWhitelistSync,
+  writeWhitelist: whitelistMocks.writeWhitelist,
+}));
+
 /** 创建 mock 工具 */
 function createMockTool(
   permission: 'auto' | 'ask' = 'ask',
@@ -64,7 +76,30 @@ describe('PermissionService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    whitelistMocks.entries = [];
+    whitelistMocks.readWhitelistSync.mockReturnValue([]);
     service = new PermissionService();
+  });
+
+  describe('whitelist', () => {
+    it('listWhitelist：返回当前条目（初始为空）', () => {
+      expect(service.listWhitelist()).toEqual([]);
+    });
+
+    it('addWhitelistEntry：添加并持久化（幂等）', async () => {
+      await service.addWhitelistEntry({ toolName: 'run_command', pattern: 'npm test' });
+      await service.addWhitelistEntry({ toolName: 'run_command', pattern: 'npm test' });
+      expect(service.listWhitelist()).toEqual([{ toolName: 'run_command', pattern: 'npm test' }]);
+      expect(whitelistMocks.writeWhitelist).toHaveBeenCalledOnce();
+    });
+
+    it('removeWhitelistEntry：移除并持久化（幂等）', async () => {
+      await service.addWhitelistEntry({ toolName: 'run_command', pattern: 'npm test' });
+      await service.removeWhitelistEntry({ toolName: 'run_command', pattern: 'npm test' });
+      await service.removeWhitelistEntry({ toolName: 'run_command', pattern: 'npm test' });
+      expect(service.listWhitelist()).toEqual([]);
+      expect(whitelistMocks.writeWhitelist).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('decide', () => {
@@ -77,6 +112,34 @@ describe('PermissionService', () => {
     it('默认：返回 tool.permission（ask 工具需审批）', async () => {
       const tool = createMockTool('ask');
       const decision = await service.decide(tool, { path: '/tmp/a.ts' });
+      expect(decision.permission).toBe('ask');
+    });
+
+    it('用户白名单（空 pattern）：该工具全部自动放行', async () => {
+      const tool = createMockTool('ask');
+      whitelistMocks.readWhitelistSync.mockReturnValue([{ toolName: 'mock_tool', pattern: '' }]);
+      service = new PermissionService();
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('用户白名单（命令模式）：命令包含 pattern 时自动放行', async () => {
+      const tool = createMockTool('ask', 'exec');
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'mock_tool', pattern: 'npm test' },
+      ]);
+      service = new PermissionService();
+      const decision = await service.decide(tool, { command: 'npm test -- --watch' });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('用户白名单（命令模式）：不匹配时仍按审批模式决策', async () => {
+      const tool = createMockTool('ask', 'exec');
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'mock_tool', pattern: 'npm test' },
+      ]);
+      service = new PermissionService();
+      const decision = await service.decide(tool, { command: 'rm -rf dist' });
       expect(decision.permission).toBe('ask');
     });
 

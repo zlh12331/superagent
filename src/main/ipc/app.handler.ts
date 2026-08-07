@@ -21,6 +21,19 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     return { ready: true };
   },
 
+  // 应用信息查询：版本与环境信息（「关于」面板数据源）
+  getInfo: async () => {
+    return {
+      version: app.getVersion(),
+      electron: process.versions.electron ?? 'unknown',
+      node: process.versions.node ?? 'unknown',
+      chrome: process.versions.chrome ?? 'unknown',
+      platform: process.platform,
+      arch: process.arch,
+      userDataPath: app.getPath('userData'),
+    };
+  },
+
   // 外链打开：仅允许 http/https 协议，防止 file:// / javascript: 等危险协议
   openExternal: async (input) => {
     if (!input.url.startsWith('http://') && !input.url.startsWith('https://')) {

@@ -22,6 +22,8 @@
 import type { ModelMessage } from 'ai';
 import { z } from 'zod';
 
+import { ThinkingLevelSchema } from './thinking';
+
 /**
  * 聊天消息 zod schema（P1-6 透传设计）
  *
@@ -66,6 +68,8 @@ export const ChatSendReqSchema = z.object({
     .string()
     .optional()
     .transform((v) => v ?? undefined),
+  // 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort）
+  thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
 });
 
 /**

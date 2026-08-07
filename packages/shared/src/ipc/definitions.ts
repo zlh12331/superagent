@@ -26,6 +26,7 @@ import {
   type AgentToolResultPayload,
 } from '../schemas/agent';
 import type { TurnEvent } from '../schemas/agent-events';
+import type { AppInfoRes } from '../schemas/app';
 import { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
 import {
   CodebaseCalleesReqSchema,
@@ -168,6 +169,13 @@ import {
   type UpdateCheckRes,
   type UpdateStatusPayload,
 } from '../schemas/update';
+import {
+  WhitelistAddReqSchema,
+  type WhitelistAddRes,
+  type WhitelistListRes,
+  WhitelistRemoveReqSchema,
+  type WhitelistRemoveRes,
+} from '../schemas/whitelist';
 import { IPC_META, type IpcMeta } from './meta';
 
 /**
@@ -242,6 +250,7 @@ export const IPC_DEFINITIONS = {
 
   app: {
     getStatus: withSchema(IPC_META.app.getStatus, null, {} as { ready: boolean }),
+    getInfo: withSchema(IPC_META.app.getInfo, null, {} as AppInfoRes),
     openExternal: withSchema(
       IPC_META.app.openExternal,
       z.object({ url: z.string().min(1, 'URL 不能为空') }),
@@ -468,6 +477,16 @@ export const IPC_DEFINITIONS = {
       IPC_META.skill.removeLearned,
       SkillRemoveReqSchema,
       {} as { removed: boolean },
+    ),
+  },
+
+  whitelist: {
+    list: withSchema(IPC_META.whitelist.list, null, {} as WhitelistListRes),
+    add: withSchema(IPC_META.whitelist.add, WhitelistAddReqSchema, {} as WhitelistAddRes),
+    remove: withSchema(
+      IPC_META.whitelist.remove,
+      WhitelistRemoveReqSchema,
+      {} as WhitelistRemoveRes,
     ),
   },
 

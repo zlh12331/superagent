@@ -53,6 +53,8 @@ export interface StartChatOptions {
    * 显式声明 `| undefined` 才能接受 zod 推断的 `string | undefined` 类型。
    */
   readonly sessionId: string | undefined;
+  /** 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort） */
+  readonly thinking?: 'off' | 'low' | 'medium' | 'high';
   /** 接收流式 part 的 webContents（通常是发起 chat:send 的窗口） */
   readonly webContents: WebContents;
 }
@@ -175,6 +177,7 @@ class ChatService implements IChatService {
       options.messages,
       options.webContents,
       controller,
+      options.thinking,
     ).catch((err: unknown) => {
       logger.error({ sessionId, error: err }, 'ChatService 流推送异常');
     });
@@ -295,6 +298,7 @@ class ChatService implements IChatService {
     messages: ChatMessage[],
     webContents: WebContents,
     controller: AbortController,
+    thinking?: 'off' | 'low' | 'medium' | 'high',
   ): Promise<void> {
     // 性能埋点：从 streamText 开始到流推送完毕的总耗时
     const startTime = performance.now();
@@ -310,7 +314,12 @@ class ChatService implements IChatService {
       // 1. 获取 model 实例 + 生成选项（思考强度/采样/输出上限）
       const model = await getModel(undefined);
       const resolvedModel = modelRegistry.resolve(undefined);
-      const genOptions = buildGenerationOptions(resolvedModel, estimateMessagesTokens(messages));
+      // 用户思考强度档位覆盖模型级默认（'off' = 不注入 providerOptions）
+      const genOptions = buildGenerationOptions(
+        resolvedModel,
+        estimateMessagesTokens(messages),
+        thinking,
+      );
 
       // 模型级容错（P0-1）：总时长超时 + 有效信号组合（用户中断 + 超时）
       modelTimeout =

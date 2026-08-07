@@ -85,6 +85,8 @@ export interface StartAgentOptions {
   readonly systemPrompt: string | undefined;
   /** 最大工具调用轮数（默认 20，上限 50，避免无限循环） */
   readonly maxSteps: number;
+  /** 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort） */
+  readonly thinking?: 'off' | 'low' | 'medium' | 'high';
   /** 运行模式（plan 只读探索 / build 审批后执行，缺省视为 build） */
   readonly mode?: 'plan' | 'build';
   /**
@@ -536,9 +538,11 @@ export class AgentService implements IAgentService {
           }
 
           // 生成选项：思考强度 / 采样参数 / 输出上限（gpt-tokenizer 精确估算压缩后 prompt）
+          // 用户思考强度档位覆盖模型级默认（'off' = 不注入 providerOptions）
           const genOptions = buildGenerationOptions(
             resolvedModel,
             estimateMessagesTokens(compressedMessages),
+            options.thinking,
           );
 
           // 5+6. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；

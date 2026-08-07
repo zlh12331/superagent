@@ -43,6 +43,7 @@ import { taskHandlers } from './ipc/task.handler';
 import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
+import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { buildCsp } from './security/csp';
 import {
   disposeServices,
@@ -372,6 +373,9 @@ app
       memory: createMemoryHandlers({ memoryService: serviceContainer.getMemoryService() }),
       mcp: createMcpHandlers(serviceContainer.getMcpService()),
       skill: skillHandlers,
+      whitelist: createWhitelistHandlers({
+        permissionService: serviceContainer.getPermissionService(),
+      }),
       task: taskHandlers,
       im: createImHandlers({ imService: serviceContainer.getImService() }),
       logs: logsHandlers,

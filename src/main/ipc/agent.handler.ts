@@ -65,6 +65,7 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
         systemPrompt: input.systemPrompt,
         maxSteps: input.maxSteps,
         mode: input.mode,
+        ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
         webContents: ctx.sender,
       });
       return { sessionId };

@@ -18,6 +18,7 @@ import type { ModelMessage } from 'ai';
 import { z } from 'zod';
 
 import { ChatMessageSchema } from './chat';
+import { ThinkingLevelSchema } from './thinking';
 
 /**
  * Agent 运行模式（OpenCode 风格 plan/apply 分离）
@@ -66,6 +67,8 @@ export const AgentRunReqSchema = z.object({
   maxSteps: z.number().int().positive().max(50).default(20),
   // 运行模式（默认 build：写操作走审批流）
   mode: AgentRunModeSchema.default('build'),
+  // 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort）
+  thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
 });
 
 /** Agent 中断入参 zod schema */

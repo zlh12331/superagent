@@ -30,6 +30,7 @@ export type { IpcResponse } from './ipc/response';
 // zod schema 的类型部分（仅类型重导出，不携带 schema 运行时）
 export type * from './schemas/agent';
 export type * from './schemas/agent-events';
+export type * from './schemas/app';
 export type * from './schemas/chat';
 export type * from './schemas/codebase';
 export type * from './schemas/devtools';
@@ -46,5 +47,7 @@ export type * from './schemas/skill';
 export type * from './schemas/system';
 export type * from './schemas/task';
 export type * from './schemas/terminal';
+export type * from './schemas/thinking';
 export type * from './schemas/tool';
 export type * from './schemas/update';
+export type * from './schemas/whitelist';

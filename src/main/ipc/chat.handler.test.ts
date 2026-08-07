@@ -31,7 +31,11 @@ describe('chat.handler', () => {
 
   it('send：转发消息与 sender 并返回 sessionId', async () => {
     const result = await handlers.send(
-      { messages: [{ role: 'user', content: 'hi' }], sessionId: undefined },
+      {
+        messages: [{ role: 'user', content: 'hi' }],
+        sessionId: undefined,
+        thinking: undefined,
+      },
       createCtx(),
     );
     expect(chatService.startChat).toHaveBeenCalledWith({
