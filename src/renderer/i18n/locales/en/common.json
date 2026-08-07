@@ -94,7 +94,9 @@
       "sessionActions": "Session actions",
       "accountMenu": "Account menu",
       "toggleTheme": "Toggle theme",
-      "about": "About"
+      "about": "About",
+      "noArchived": "No archived sessions",
+      "noArchivedHint": "Archiving is a placeholder; archived sessions will appear here"
     },
     "chat": {
       "inputPlaceholder": "Help you write code, test, debug, and optimize for production-quality deliverables",
@@ -173,7 +175,9 @@
       "unnamedSession": "Untitled session",
       "navigate": "Navigate",
       "select": "Select",
-      "commandPaletteShortcut": "Open command palette"
+      "commandPaletteShortcut": "Open command palette",
+      "openFileTree": "Show file tree",
+      "backToSessions": "Show sessions"
     },
     "approval": {
       "runCommand": "Run command",

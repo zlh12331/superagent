@@ -16,10 +16,16 @@ interface UiState {
   readonly openSettings: () => void;
   /** 关闭设置对话框 */
   readonly closeSettings: () => void;
+  /** 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换，不进头部 tab） */
+  readonly sidebarView: 'threads' | 'fileTree';
+  /** 切换侧栏视图 */
+  readonly setSidebarView: (view: 'threads' | 'fileTree') => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
   settingsOpen: false,
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+  sidebarView: 'threads',
+  setSidebarView: (view) => set({ sidebarView: view }),
 }));

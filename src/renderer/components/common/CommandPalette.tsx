@@ -15,7 +15,17 @@
 
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from 'cmdk';
 import Fuse from 'fuse.js';
-import { FileText, MessageSquare, Moon, Plus, Search, Settings, Sun } from 'lucide-react';
+import {
+  FileText,
+  FolderOpen,
+  MessageSquare,
+  MessagesSquare,
+  Moon,
+  Plus,
+  Search,
+  Settings,
+  Sun,
+} from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -72,6 +82,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const [query, setQuery] = useState('');
   // 全局 UI store：设置对话框入口（命令面板 / Topbar / 错误动作共享）
   const openSettings = useUiStore((state) => state.openSettings);
+  // 侧栏视图切换（文件树为独立视图：对齐参考项目 codex.openFileTree 命令）
+  const sidebarView = useUiStore((state) => state.sidebarView);
+  const setSidebarView = useUiStore((state) => state.setSidebarView);
 
   // 命令列表（依赖外部状态派生；React Compiler 自动缓存）
   // - 操作组：新建会话 / 切换主题 / 打开设置
@@ -111,6 +124,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
         icon: Settings,
         action: () => {
           openSettings();
+          closePalette();
+        },
+      },
+      {
+        id: 'toggle-sidebar-view',
+        section: t('palette.sectionActions'),
+        title: sidebarView === 'fileTree' ? t('palette.backToSessions') : t('palette.openFileTree'),
+        icon: sidebarView === 'fileTree' ? MessagesSquare : FolderOpen,
+        action: () => {
+          setSidebarView(sidebarView === 'fileTree' ? 'threads' : 'fileTree');
           closePalette();
         },
       },

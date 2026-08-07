@@ -53,6 +53,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 import { FolderLabel } from './folder-label';
@@ -80,8 +81,10 @@ export function Sidebar(): ReactElement {
 
   // 搜索关键字（功能预留：仅 UI，暂不实现过滤逻辑）
   const [searchKeyword, setSearchKeyword] = useState('');
-  // 当前激活的 tab（recent / files / archived）
-  const [activeTab, setActiveTab] = useState<'recent' | 'files' | 'archived'>('recent');
+  // 当前激活的 tab（recent / archived；文件树是独立视图 sidebarView，不进 tablist）
+  const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent');
+  // 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换）
+  const sidebarView = useUiStore((state) => state.sidebarView);
 
   // 派生：会话列表
   const sessions = query.data?.sessions ?? [];
@@ -261,15 +264,6 @@ export function Sidebar(): ReactElement {
           </button>
           <button
             type="button"
-            className={cn('sidebar-tab', activeTab === 'files' && 'active')}
-            role="tab"
-            aria-selected={activeTab === 'files'}
-            onClick={() => setActiveTab('files')}
-          >
-            {t('sidebar.tabsFiles')}
-          </button>
-          <button
-            type="button"
             className={cn('sidebar-tab', activeTab === 'archived' && 'active')}
             role="tab"
             aria-selected={activeTab === 'archived'}
@@ -280,10 +274,16 @@ export function Sidebar(): ReactElement {
         </div>
       </div>
 
-      {/* 中间：根据 activeTab 切换会话列表 / 文件树 / 归档 */}
+      {/* 中间：会话列表 / 归档 / 文件树（文件树为独立视图 sidebarView，对齐参考项目） */}
       <div className="sidebar-list">
-        {activeTab === 'files' ? (
+        {sidebarView === 'fileTree' ? (
           <FileTreePanel workingDir={workingDir} />
+        ) : activeTab === 'archived' ? (
+          <EmptyState
+            title={t('sidebar.noArchived')}
+            description={t('sidebar.noArchivedHint')}
+            className="h-full"
+          />
         ) : (
           <AsyncBoundary
             view={view}
