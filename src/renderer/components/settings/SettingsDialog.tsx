@@ -375,8 +375,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                       data-nav-item="true"
                       onClick={() => setActiveSection(item.id)}
                       className={cn(
-                        'text-muted-foreground hover:bg-muted hover:text-foreground mb-0.5 flex w-full items-center gap-[9px] rounded-[7px] px-2.5 py-2 text-left text-sm transition-colors',
-                        isActive && 'bg-card text-primary shadow-[inset_2px_0_0_var(--accent)]',
+                        'text-muted-foreground hover:bg-muted hover:text-foreground mb-0.5 flex w-full items-center gap-[9px] rounded-[7px] border-l-2 border-l-transparent px-2.5 py-2 text-left text-sm transition-colors',
+                        // 激活态：accent 竖条（对齐原型 L3535 inset 2px）+ 文字用 foreground
+                        // （text-primary 青色在浅色模式白底上仅 2.51:1，不满足 WCAG AA）
+                        isActive &&
+                          'bg-card text-foreground border-l-[color:var(--accent)] font-medium',
                       )}
                     >
                       <Icon className="size-3.5 shrink-0" strokeWidth={1.5} />

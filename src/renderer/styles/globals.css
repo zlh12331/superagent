@@ -1027,6 +1027,10 @@ body::after {
 .thread-bg {
   min-width: 0;
   min-height: 0;
+  /* grid 列锚定（对齐原型 L1215 .thread { grid-column: 3 }）：
+     双折叠态下 sidebar/resizer display:none 不占轨道，
+     auto 放置会把 main 放进第 1 列（0px）→ 主区崩溃 */
+  grid-column: 3;
   background: var(--background);
   background-image:
     radial-gradient(ellipse 45% 32% at 18% -4%, var(--accent-glow), transparent 65%),

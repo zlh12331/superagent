@@ -19,7 +19,7 @@ export function ShortcutsSection(): React.ReactElement {
   return (
     <div className="space-y-3 pt-2">
       <div className="flex items-center gap-2">
-        <Keyboard className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Keyboard className="text-muted-foreground size-4" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('common.shortcuts')}</Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('common.shortcutsHint')}</p>
@@ -33,7 +33,7 @@ export function ShortcutsSection(): React.ReactElement {
           { key: 'newSession', labelKey: 'common.newSessionShortcut' },
         ].map((item) => (
           <div key={item.key} className="flex items-center justify-between gap-2">
-            <span className="text-xs text-stone-600">{t(item.labelKey)}</span>
+            <span className="text-foreground text-xs">{t(item.labelKey)}</span>
             <ShortcutPicker
               value={shortcuts[item.key as keyof typeof shortcuts]}
               onChange={(value) =>

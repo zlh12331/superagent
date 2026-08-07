@@ -144,7 +144,7 @@ export function ApprovalModeSection(): ReactElement {
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center gap-2">
-        <Shield className="size-4 text-stone-600" strokeWidth={1.5} />
+        <Shield className="text-muted-foreground size-4" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">
           {t('settings.approvalModeSection')}
         </Label>
@@ -169,7 +169,7 @@ export function ApprovalModeSection(): ReactElement {
               className="mt-0.5 size-3.5 accent-stone-700"
             />
             <span className="min-w-0">
-              <span className="block text-xs font-medium text-stone-800 font-sans">
+              <span className="text-foreground block text-xs font-medium font-sans">
                 {option.label}
               </span>
               <span className="block text-xs text-muted-foreground font-sans">{option.desc}</span>
@@ -182,7 +182,7 @@ export function ApprovalModeSection(): ReactElement {
           持久化于主进程 userData/whitelist.json，跨会话生效 */}
       <div className="pt-1">
         <div className="flex items-center gap-2">
-          <ListChecks className="size-3.5 text-stone-600" strokeWidth={1.5} />
+          <ListChecks className="text-muted-foreground size-3.5" strokeWidth={1.5} />
           <Label className="font-serif text-sm tracking-wide">{t('settings.whitelistTitle')}</Label>
         </div>
         <p className="text-xs text-muted-foreground font-sans">{t('settings.whitelistHint')}</p>
@@ -197,7 +197,7 @@ export function ApprovalModeSection(): ReactElement {
                 key={`${entry.toolName}:${entry.pattern}`}
                 className="flex items-center gap-2 rounded border border-stone-100 px-2 py-1.5 font-sans"
               >
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-stone-700">
+                <span className="text-foreground min-w-0 flex-1 truncate font-mono text-xs">
                   {entry.toolName}
                   {entry.pattern !== '' ? (
                     <span className="text-muted-foreground"> · {entry.pattern}</span>
@@ -250,7 +250,7 @@ export function ApprovalModeSection(): ReactElement {
           数据源：tool:list 真实工具注册表（auto 只读自动 / ask 需审批） */}
       <div className="pt-1">
         <div className="flex items-center gap-2">
-          <ListChecks className="size-3.5 text-stone-600" strokeWidth={1.5} />
+          <ListChecks className="text-muted-foreground size-3.5" strokeWidth={1.5} />
           <Label className="font-serif text-sm tracking-wide">
             {t('settings.permProfileTitle')}
           </Label>
@@ -259,7 +259,7 @@ export function ApprovalModeSection(): ReactElement {
         <div className="mt-1.5 grid gap-1.5">
           <div className="rounded border border-stone-100 p-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-stone-700 font-sans">
+              <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAuto')}
               </span>
               <span className="bg-emerald-500/10 text-emerald-700 rounded-full px-2 py-0.5 font-mono text-[11px]">
@@ -272,7 +272,7 @@ export function ApprovalModeSection(): ReactElement {
           </div>
           <div className="rounded border border-stone-100 p-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-stone-700 font-sans">
+              <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAsk')}
               </span>
               <span className="bg-amber-500/10 text-amber-700 rounded-full px-2 py-0.5 font-mono text-[11px]">
