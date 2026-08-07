@@ -51,7 +51,7 @@
       "expandRightPanel": "展开右侧面板",
       "collapseRightPanel": "折叠右侧面板",
       "shortcuts": "快捷键",
-      "shortcutsHint": "支持 Ctrl/Cmd + 字母组合，如 Meta+P、Ctrl+S。修改后立即生效。",
+      "shortcutsHint": "支持 Ctrl/Cmd + 字母组合，如 Ctrl+P、Ctrl+S。修改后立即生效。",
       "copy": "复制",
       "copied": "已复制",
       "sidebarResizer": "调整侧边栏宽度",

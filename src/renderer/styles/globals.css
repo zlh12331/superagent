@@ -1402,6 +1402,10 @@ body::after {
 .sidebar-foot .user-info {
   flex: 1;
   min-width: 0;
+  /* 名称与邮箱纵向堆叠（默认 inline 会粘连成一行） */
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .sidebar-foot .user-info .uname {

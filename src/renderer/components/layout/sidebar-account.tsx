@@ -7,7 +7,7 @@
 // - 本地模式（local-user）：无真实登录后端，退出登录不提供（诚实标注）
 // ──────────────────────────────────────────────────────────────
 
-import { Info, Moon, Settings, Sun, User } from 'lucide-react';
+import { ChevronDown, Info, Moon, Settings, Sun, User } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 
@@ -56,6 +56,8 @@ export function SidebarAccount(): ReactElement {
               <span className="uname">{t('sidebar.notLoggedIn')}</span>
               <span className="uemail">local-user</span>
             </span>
+            {/* 下拉箭头：可展开状态视觉暗示（对齐原型 account-trigger chevron） */}
+            <ChevronDown className="text-muted-foreground/60 size-3 shrink-0" strokeWidth={1.5} />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-48">

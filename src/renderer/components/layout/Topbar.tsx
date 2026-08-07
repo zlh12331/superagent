@@ -72,6 +72,10 @@ export function Topbar({
   const { resolvedTheme, setTheme } = useTheme();
   // 全局 UI store：设置对话框入口（Topbar / 命令面板 / 错误动作共享）
   const openSettings = useUiStore((state) => state.openSettings);
+  // 快捷键展示平台化：macOS ⌘ / Windows-Linux Ctrl（与 settings-store 默认一致）
+  const isMac =
+    typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') === true;
+  const paletteKbd = isMac ? '⌘P' : 'Ctrl+P';
   // 本地化文案
   const { t } = useTranslation();
 
@@ -132,7 +136,7 @@ export function Topbar({
           type="button"
           className="icon-btn"
           aria-label={t('topbar.commandPalette')}
-          title={`${t('topbar.commandPalette')} (⌘P)`}
+          title={`${t('topbar.commandPalette')} (${paletteKbd})`}
           onClick={onOpenCommandPalette}
         >
           <Command className="size-4" strokeWidth={1.5} />
@@ -146,7 +150,7 @@ export function Topbar({
         >
           <Search className="size-3" strokeWidth={1.5} />
           <span>{t('topbar.commandPalette')}</span>
-          <kbd className="text-muted-foreground/70 font-mono text-[9px]">⌘P</kbd>
+          <kbd className="text-muted-foreground/70 font-mono text-[9px]">{paletteKbd}</kbd>
         </button>
         <Button
           variant="ghost"

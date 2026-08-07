@@ -17,6 +17,7 @@ import { Inbox } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface EmptyStateProps {
   /** 图标（默认 Inbox 图标） */
@@ -29,6 +30,8 @@ interface EmptyStateProps {
   actionLabel?: string;
   /** 操作按钮点击回调 */
   onAction?: () => void;
+  /** 附加类名（如 h-full 让空态在容器内垂直居中） */
+  className?: string;
 }
 
 /**
@@ -48,9 +51,15 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  className,
 }: EmptyStateProps): ReactElement {
   return (
-    <div className="text-muted-foreground flex flex-col items-center justify-center gap-3 py-16">
+    <div
+      className={cn(
+        'text-muted-foreground flex flex-col items-center justify-center gap-3 py-16',
+        className,
+      )}
+    >
       <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
         {/* 默认 Inbox 图标 + strokeWidth=1.5 */}
         {icon ?? <Inbox className="size-6" strokeWidth={1.5} data-testid="empty-default-icon" />}

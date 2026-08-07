@@ -169,6 +169,9 @@ function createWindow(): BrowserWindow {
     ...(windowState.y !== undefined ? { y: windowState.y } : {}),
     width: windowState.width,
     height: windowState.height,
+    // 最小窗口尺寸：低于 960 宽时主区被压缩至不可用（聊天输入区不可见）
+    minWidth: 960,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     // frameless 标题栏（对齐原型自绘标题栏设计，三端支持）：

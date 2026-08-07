@@ -51,7 +51,7 @@
       "expandRightPanel": "Expand right panel",
       "collapseRightPanel": "Collapse right panel",
       "shortcuts": "Shortcuts",
-      "shortcutsHint": "Supports Ctrl/Cmd + letter combos, e.g. Meta+P, Ctrl+S. Changes apply immediately.",
+      "shortcutsHint": "Supports Ctrl/Cmd + letter combos, e.g. Ctrl+P, Ctrl+S. Changes take effect immediately.",
       "copy": "Copy",
       "copied": "Copied",
       "sidebarResizer": "Resize sidebar width",

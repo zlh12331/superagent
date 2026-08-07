@@ -294,6 +294,8 @@ export function Sidebar(): ReactElement {
                 description={t('sidebar.newSessionHint')}
                 actionLabel={t('sidebar.newSession')}
                 onAction={handleNewChat}
+                // h-full：空态在列表区垂直居中（对齐参考项目空态视觉）
+                className="h-full"
               />
             }
           >

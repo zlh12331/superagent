@@ -16,6 +16,15 @@ import type { ApiKeyProvider, ThinkingLevel } from '@code-agent/shared/renderer'
 import { createPersistentStore } from './create-persistent-store';
 
 /**
+ * 平台修饰键：macOS 用 Meta（⌘），Windows/Linux 用 Ctrl
+ *
+ * 默认快捷键按平台归一化（Windows 用户按 Ctrl+P 生效，与快捷键帮助文档一致）。
+ */
+const IS_MAC =
+  typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') === true;
+const MOD = IS_MAC ? 'Meta' : 'Ctrl';
+
+/**
  * 主题类型
  *
  * - 'light'：亮色
@@ -147,12 +156,12 @@ export const useSettingsStore = createPersistentStore<SettingsState>()(
       vimMode: false,
     },
     shortcuts: {
-      commandPalette: 'Meta+P',
-      saveFile: 'Meta+S',
-      searchFile: 'Meta+Shift+F',
-      toggleTheme: 'Meta+Shift+T',
-      openSettings: 'Meta+,',
-      newSession: 'Meta+N',
+      commandPalette: `${MOD}+P`,
+      saveFile: `${MOD}+S`,
+      searchFile: `${MOD}+Shift+F`,
+      toggleTheme: `${MOD}+Shift+T`,
+      openSettings: `${MOD}+,`,
+      newSession: `${MOD}+N`,
     },
     experimental: {
       scanlines: false,
@@ -168,6 +177,26 @@ export const useSettingsStore = createPersistentStore<SettingsState>()(
   }),
   {
     name: 'settings',
-    version: 2,
+    version: 3,
+    // v3 迁移：v2 默认快捷键均为 Meta 前缀（Windows 用户按 Ctrl+P 无效），
+    // 按平台归一化——Windows/Linux 上 'Meta+P' → 'Ctrl+P'（macOS 保持）
+    migrate: (persisted): Partial<SettingsState> => {
+      const state = persisted as Partial<SettingsState> | null;
+      if (state === null || state.shortcuts === undefined || IS_MAC) {
+        return state ?? {};
+      }
+      const migrated: Record<string, string> = {};
+      for (const [key, value] of Object.entries(state.shortcuts)) {
+        migrated[key] =
+          typeof value === 'string' && value.startsWith('Meta+')
+            ? value.replace(/^Meta\+/, 'Ctrl+')
+            : (value as string);
+      }
+      // KeyboardShortcuts 为全必填接口，Record 结果经 unknown 断言（迁移保证 6 键齐全）
+      return {
+        ...state,
+        shortcuts: migrated as unknown as KeyboardShortcuts,
+      };
+    },
   },
 );

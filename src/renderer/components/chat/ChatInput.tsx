@@ -292,7 +292,7 @@ export function ChatInput({
         <div
           role="listbox"
           aria-label={t('chat.slashCommand')}
-          className="bg-popover text-popover-foreground absolute right-0 bottom-full z-10 mb-1 w-56 overflow-hidden rounded-md border shadow-md"
+          className="bg-popover text-popover-foreground absolute right-0 bottom-full z-10 mb-2 w-56 overflow-hidden rounded-md border shadow-md"
         >
           {filteredSuggestions.map((s) => (
             <button
