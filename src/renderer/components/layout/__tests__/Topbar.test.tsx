@@ -44,10 +44,11 @@ describe('Topbar', () => {
     expect(handlers.onToggleRightPanel).toHaveBeenCalledTimes(1);
   });
 
-  it('命令面板双入口：图标按钮 + 文字入口，点击触发 onOpenCommandPalette', async () => {
+  it('命令面板单一入口（文字胶囊）：点击触发 onOpenCommandPalette', async () => {
     const handlers = renderTopbar();
     const paletteButtons = screen.getAllByRole('button', { name: /命令面板/ });
-    expect(paletteButtons.length).toBeGreaterThanOrEqual(2);
+    // 单一入口：重复的图标按钮已删除（对齐原型 palette-entry-btn）
+    expect(paletteButtons.length).toBe(1);
     const first = paletteButtons[0];
     if (first === undefined) {
       throw new Error('命令面板按钮缺失');

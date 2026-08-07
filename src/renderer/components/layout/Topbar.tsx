@@ -16,16 +16,7 @@
 // - 设置/主题切换：项目独有功能，保留在右侧末尾
 // ──────────────────────────────────────────────────────────────
 
-import {
-  ArrowLeft,
-  Command,
-  Moon,
-  PanelLeft,
-  PanelRight,
-  Search,
-  Settings,
-  Sun,
-} from 'lucide-react';
+import { ArrowLeft, Moon, PanelLeft, PanelRight, Search, Settings, Sun } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -132,19 +123,11 @@ export function Topbar({
             <PanelRight className="size-4" strokeWidth={1.5} />
           </button>
         )}
+        {/* 命令面板文字入口（对齐原型 .palette-entry-btn：icon + 文案 + kbd，单一入口）
+            始终显示（不随断点隐藏）：删除重复的图标按钮后，此入口是唯一命令面板触发点 */}
         <button
           type="button"
-          className="icon-btn"
-          aria-label={t('topbar.commandPalette')}
-          title={`${t('topbar.commandPalette')} (${paletteKbd})`}
-          onClick={onOpenCommandPalette}
-        >
-          <Command className="size-4" strokeWidth={1.5} />
-        </button>
-        {/* 命令面板文字入口（对齐原型 .palette-entry-btn：icon + 文案 + kbd） */}
-        <button
-          type="button"
-          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground hidden cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors sm:flex"
+          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors"
           aria-label={t('topbar.commandPalette')}
           onClick={onOpenCommandPalette}
         >
