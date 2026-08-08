@@ -10,6 +10,7 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
+  ArrowLeft,
   BarChart3,
   BookOpenText,
   FlaskConical,
@@ -25,7 +26,6 @@ import {
   TerminalSquare,
   User,
   Workflow,
-  X,
 } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -190,24 +190,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
         <SheetTitle className="sr-only">{t('settings.title')}</SheetTitle>
         <SheetDescription className="sr-only">{t('settings.desc')}</SheetDescription>
 
-        {/* 头部（右侧预留窗口控件 overlay 区：关闭按钮位于控件左侧，
-            右侧 140px 为透明拖拽区——frameless 窗口控件仍可点击，不重叠） */}
+        {/* 头部（左上角返回按钮；右侧预留窗口控件 overlay 区 140px 透明拖拽） */}
         <div className="bg-muted/50 flex shrink-0 items-center gap-2.5 border-b px-[18px] py-3.5">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-[26px] cursor-pointer items-center gap-1 rounded-md px-2 text-xs transition-colors"
+            aria-label={t('settings.back')}
+          >
+            <ArrowLeft className="size-3.5" strokeWidth={2} />
+            {t('settings.back')}
+          </button>
           <SettingsIcon className="text-primary size-4" strokeWidth={1.5} />
           <span className="text-foreground text-sm font-semibold">{t('settings.title')}</span>
           <span className="text-muted-foreground font-mono text-xs">{t('settings.desc')}</span>
-          <div className="ml-auto flex h-full items-center">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-[26px] w-[26px] items-center justify-center rounded-md transition-colors"
-              aria-label={t('common.close')}
-            >
-              <X className="size-4" />
-            </button>
-            {/* 窗口控件 overlay 预留区（透明拖拽：不遮挡系统关闭/最小化按钮） */}
-            <div className="app-region-drag h-full w-[140px] shrink-0" aria-hidden="true" />
-          </div>
+          {/* 窗口控件 overlay 预留区（透明拖拽：不遮挡系统关闭/最小化按钮） */}
+          <div className="app-region-drag ml-auto h-full w-[140px] shrink-0" aria-hidden="true" />
         </div>
 
         {/* 主体：左导航 + 右内容 */}

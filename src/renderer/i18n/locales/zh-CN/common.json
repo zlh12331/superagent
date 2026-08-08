@@ -455,7 +455,8 @@
       "memoryNoSession": "选择会话后查看该会话的记忆",
       "memoryClear": "清除",
       "memoryCleared": "记忆已清除",
-      "memoryClearFailed": "清除记忆失败"
+      "memoryClearFailed": "清除记忆失败",
+      "back": "返回"
     },
     "home": {
       "justNow": "刚刚",

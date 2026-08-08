@@ -455,7 +455,8 @@
       "memoryNoSession": "Select a session to view its memories",
       "memoryClear": "Clear",
       "memoryCleared": "Memory cleared",
-      "memoryClearFailed": "Failed to clear memory"
+      "memoryClearFailed": "Failed to clear memory",
+      "back": "Back"
     },
     "home": {
       "justNow": "Just now",
