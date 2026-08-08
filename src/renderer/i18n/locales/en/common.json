@@ -63,7 +63,8 @@
       "newSessionShortcut": "New session",
       "protocolMismatch": "App version mismatch",
       "protocolMismatchDesc": "Main process and UI protocol versions differ. Please restart the app",
-      "noModels": "No configured models. Add an API key or a runtime model in Settings"
+      "noModels": "No configured models. Add an API key or a runtime model in Settings",
+      "noModelConfigured": "No model configured"
     },
     "topbar": {
       "expandSidebar": "Expand sidebar",

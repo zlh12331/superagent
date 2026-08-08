@@ -65,6 +65,15 @@ export function ModelSelector({
     [allModels, model],
   );
 
+  // 当前选中模型的实际供应商（来自清单数据；未知回退 settings 值）
+  const currentProvider = useMemo(
+    () => allModels.find((m) => m.id === model)?.providerKind ?? provider,
+    [allModels, model, provider],
+  );
+
+  // 是否已配置可用模型（空清单 = 未配置：按钮显示占位，不渲染默认配置名）
+  const hasConfiguredModels = allModels.length > 0;
+
   // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）
   const providerGroups = useMemo(() => {
     const groups = new Map<string, AvailableModelInfo[]>();
@@ -117,8 +126,14 @@ export function ModelSelector({
         disabled={disabled}
       >
         <span className="dot size-1.5 rounded-full bg-accent" />
-        <span>{provider}</span>
-        <span className="text-muted-foreground text-xs">· {currentModelName}</span>
+        {hasConfiguredModels ? (
+          <>
+            <span>{currentProvider}</span>
+            <span className="text-muted-foreground text-xs">· {currentModelName}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">{t('common.noModelConfigured')}</span>
+        )}
         <ChevronDown className="cpb-caret" size={10} strokeWidth={2} />
       </button>
 
