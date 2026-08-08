@@ -2464,10 +2464,10 @@ body.resizing iframe {
 /* 输入框高度拖拽手柄（对齐原型 .composer-drag-handle：hover 显示、ns-resize） */
 .composer-drag-handle {
   position: absolute;
-  top: -5px;
+  top: -7px;
   left: 0;
   right: 0;
-  height: 10px;
+  height: 14px;
   cursor: ns-resize;
   display: flex;
   align-items: center;

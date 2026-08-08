@@ -39,6 +39,11 @@ interface ChatAttachment {
 /** 附件内容读取上限（字符，超出截断避免消息膨胀） */
 const ATTACHMENT_MAX_CHARS = 4000;
 
+/** 输入框拖拽高度下限（单行，约 40px） */
+const COMPOSER_MIN_H = 40;
+/** 输入框拖拽高度上限（对齐原型 maxExtra 300 + 基础 160） */
+const COMPOSER_MAX_H = 460;
+
 /** 斜杠命令建议项 */
 interface SlashSuggestion {
   readonly command: string;
@@ -138,7 +143,10 @@ export function ChatInput({
     const el = textareaRef.current;
     if (el === null) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+    // 自动增长封顶：手动拖拽/键盘设置过 maxHeight 时跟随手动档，否则默认 240px
+    const manualCap = Number.parseFloat(el.style.maxHeight);
+    const cap = Number.isFinite(manualCap) && manualCap > 0 ? Math.max(240, manualCap) : 240;
+    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   };
 
   // ── 斜杠建议状态（对齐参考项目 useSlashSuggest 交互）──
@@ -235,56 +243,38 @@ export function ChatInput({
    * 清空输入框并触发 onSend 回调。
    * 若文本为空或处于流式状态，直接返回。
    */
-  /** 输入框高度拖拽（对齐原型 composerDragHandle：拖拽调整 textarea 高度，160-460px 钳位） */
+  /** 输入框高度拖拽（对齐原型 composerDragHandle：拖拽调整 textarea 高度，40-460px 钳位） */
   const composerDragRef = useRef<{
     startY: number;
     startH: number;
-    dragMinH: number;
   } | null>(null);
 
-  /** 测量 textarea 自然高度（临时解除高度/上限限制） */
-  const measureNaturalHeight = (el: HTMLTextAreaElement): number => {
-    const prevHeight = el.style.height;
-    const prevMax = el.style.maxHeight;
-    el.style.height = 'auto';
-    el.style.maxHeight = 'none';
-    const height = el.scrollHeight;
-    el.style.height = prevHeight;
-    el.style.maxHeight = prevMax;
-    return height;
-  };
-
-  /** 拖拽开始：记录起点，注册全局 pointer 监听 */
+  /** 拖拽开始：记录起点 + 指针捕获，注册全局 pointer 监听 */
   const handleComposerDragStart = (event: React.PointerEvent<HTMLDivElement>): void => {
     const el = textareaRef.current;
     if (el === null) {
       return;
     }
     event.preventDefault();
-    const baseMax = 160;
-    const naturalHeight = measureNaturalHeight(el);
+    // 指针捕获：拖拽过程中 pointer 移出手柄元素不丢失事件
+    event.currentTarget.setPointerCapture(event.pointerId);
     composerDragRef.current = {
       startY: event.clientY,
       startH: el.offsetHeight,
-      dragMinH: Math.min(naturalHeight, baseMax),
     };
     const handleMove = (ev: PointerEvent): void => {
       const state = composerDragRef.current;
       if (state === null) {
         return;
       }
-      const maxH = 460; // baseMax 160 + maxExtra 300（对齐原型）
+      // 拖拽下限为单行最小高度（40px，不依赖内容自然高度——
+      // 此前 dragMinH=min(自然高,160) 导致首次拖拽时高度=自然高、向上拖被钳制无响应）
       const clamped = Math.max(
-        state.dragMinH,
-        Math.min(maxH, state.startH + (ev.clientY - state.startY)),
+        COMPOSER_MIN_H,
+        Math.min(COMPOSER_MAX_H, state.startH + (ev.clientY - state.startY)),
       );
-      if (clamped <= state.dragMinH) {
-        el.style.maxHeight = `${baseMax}px`;
-        el.style.height = `${state.dragMinH}px`;
-      } else {
-        el.style.maxHeight = `${clamped}px`;
-        el.style.height = `${clamped}px`;
-      }
+      el.style.maxHeight = `${clamped}px`;
+      el.style.height = `${clamped}px`;
     };
     const handleUp = (): void => {
       composerDragRef.current = null;
@@ -362,7 +352,7 @@ export function ChatInput({
           event.preventDefault();
           const delta = event.key === 'ArrowUp' ? -20 : 20;
           const current = el.offsetHeight;
-          const next = Math.max(24, Math.min(460, current + delta));
+          const next = Math.max(COMPOSER_MIN_H, Math.min(COMPOSER_MAX_H, current + delta));
           el.style.maxHeight = `${next}px`;
           el.style.height = `${next}px`;
         }}
