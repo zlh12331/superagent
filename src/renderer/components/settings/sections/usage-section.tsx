@@ -52,9 +52,13 @@ export function UsageSection(): ReactElement {
   const [summary, setSummary] = useState<UsageSummaryRes | null>(null);
 
   useEffect(() => {
-    // 浏览器模式（dev 预览）无 window.api：静默空数据
+    // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架（0 值三卡 + 空热力图网格）
     if (typeof window === 'undefined' || window.api === undefined) {
-      setSummary(null);
+      setSummary({
+        total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        byModel: [],
+        byDay: [],
+      });
       return;
     }
     let cancelled = false;
@@ -100,7 +104,7 @@ export function UsageSection(): ReactElement {
     }));
   }, [summary]);
 
-  const isEmpty = summary === null || summary.total.calls === 0;
+  const isEmpty = summary === null;
 
   return (
     <div className="space-y-2 pt-2">
@@ -133,7 +137,7 @@ export function UsageSection(): ReactElement {
             <div className="rounded border border-border p-2">
               <p className="text-muted-foreground">{t('settings.usageTotal')}</p>
               <p className="mt-0.5 font-medium text-foreground">
-                {formatTokens(summary.total.totalTokens)}{' '}
+                {formatTokens(summary?.total.totalTokens ?? 0)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
