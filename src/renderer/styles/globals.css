@@ -2476,6 +2476,8 @@ body.resizing iframe {
   opacity: 0;
   transition: opacity 0.2s ease;
   touch-action: none;
+  /* hr 默认边框会显示为横贯黑线（preflight border-top:1px）：必须清零，仅留 ::before 圆条 */
+  border: none;
 }
 .composer-box:hover .composer-drag-handle,
 .composer-drag-handle.dragging {
