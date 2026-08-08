@@ -16,21 +16,26 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
-  AlertTriangle,
   BarChart3,
-  Database,
+  BookOpenText,
   FlaskConical,
+  FolderTree,
+  Globe,
   Info,
   Keyboard,
   MessageSquareText,
-  MessageSquareWarning,
   PenLine,
-  ScrollText,
+  Plug,
+  Puzzle,
   Server as ServerIcon,
   Settings as SettingsIcon,
   Shield,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
+  TerminalSquare,
+  User,
+  Workflow,
   X,
 } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
@@ -40,19 +45,26 @@ import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { AboutSection } from './sections/about-section';
 import { ApprovalModeSection } from './sections/approval-mode-section';
-import { DataSection } from './sections/data-section';
+import { BrowserSection } from './sections/browser-section';
 import { EditorSection } from './sections/editor-section';
 import { ExperimentalSection } from './sections/experimental-section';
-import { ImChannelsSection } from './sections/im-channels-section';
+import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
 import { ModelParamsSection } from './sections/model-params-section';
 import { ModelsSection } from './sections/models-section';
+import {
+  AccountSection,
+  CommandsSection,
+  HooksSection,
+  MobileSection,
+  PluginsSection,
+} from './sections/placeholders';
 import { PromptSection } from './sections/prompt-section';
+import { RulesMemorySection } from './sections/rules-memory-section';
 import { ShortcutsSection } from './sections/shortcuts-section';
 import { SkillsSection } from './sections/skills-section';
-import { TelemetrySection } from './sections/telemetry-section';
-import { TurnsSection } from './sections/turns-section';
 import { UsageSection } from './sections/usage-section';
+import { WorkspaceSection } from './sections/workspace-section';
 
 /** SettingsDialog props */
 export interface SettingsDialogProps {
@@ -64,20 +76,25 @@ export interface SettingsDialogProps {
 
 /** 设置分区 ID */
 type SectionId =
+  | 'account'
+  | 'usage'
+  | 'general'
+  | 'mobile'
+  | 'editor'
+  | 'shortcuts'
+  | 'prompt'
+  | 'browser'
+  | 'workspace'
+  | 'commands'
+  | 'rules-memory'
   | 'models'
   | 'model-params'
   | 'approval-mode'
   | 'mcp'
-  | 'prompt'
-  | 'shortcuts'
   | 'skills'
-  | 'editor'
-  | 'experimental'
-  | 'usage'
-  | 'turns'
-  | 'im-channels'
-  | 'data'
-  | 'telemetry'
+  | 'hooks'
+  | 'plugins'
+  | 'beta'
   | 'about';
 
 /** 导航项 */
@@ -96,38 +113,43 @@ interface NavGroup {
 /** 导航分组（4 组，语义归组） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
-    labelKey: 'settings.group.modelPerms',
+    labelKey: 'settings.group.accountData',
+    items: [
+      { id: 'account', labelKey: 'settings.nav.account', icon: User },
+      { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
+    ],
+  },
+  {
+    labelKey: 'settings.group.general',
+    items: [
+      { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
+      { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
+      { id: 'editor', labelKey: 'settings.nav.editor', icon: PenLine },
+      { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
+      { id: 'prompt', labelKey: 'settings.nav.prompt', icon: MessageSquareText },
+      { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
+      { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
+      { id: 'commands', labelKey: 'settings.nav.commands', icon: TerminalSquare },
+      { id: 'rules-memory', labelKey: 'settings.nav.rulesMemory', icon: BookOpenText },
+    ],
+  },
+  {
+    labelKey: 'settings.group.models',
     items: [
       // 模型服务：提供商/API Key/运行时模型统一管理（对齐同类桌面 LLM 客户端）
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
       { id: 'model-params', labelKey: 'settings.nav.modelParams', icon: SlidersHorizontal },
       { id: 'approval-mode', labelKey: 'settings.nav.approvalMode', icon: Shield },
-    ],
-  },
-  {
-    labelKey: 'settings.group.viewPrompt',
-    items: [
-      { id: 'editor', labelKey: 'settings.nav.editor', icon: PenLine },
-      { id: 'experimental', labelKey: 'settings.nav.experimental', icon: FlaskConical },
-      { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
-      { id: 'prompt', labelKey: 'settings.nav.prompt', icon: MessageSquareText },
-    ],
-  },
-  {
-    labelKey: 'settings.group.accountData',
-    items: [
+      { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
-      { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
-      { id: 'turns', labelKey: 'settings.nav.turns', icon: ScrollText },
-      { id: 'im-channels', labelKey: 'settings.nav.imChannels', icon: MessageSquareWarning },
-      { id: 'data', labelKey: 'settings.nav.data', icon: Database },
+      { id: 'hooks', labelKey: 'settings.nav.hooks', icon: Workflow },
     ],
   },
   {
-    labelKey: 'settings.group.advanced',
+    labelKey: 'settings.group.plugins',
     items: [
-      { id: 'mcp', labelKey: 'settings.nav.mcp', icon: ServerIcon },
-      { id: 'telemetry', labelKey: 'settings.nav.telemetry', icon: AlertTriangle },
+      { id: 'plugins', labelKey: 'settings.nav.plugins', icon: Puzzle },
+      { id: 'beta', labelKey: 'settings.nav.beta', icon: FlaskConical },
       { id: 'about', labelKey: 'settings.nav.about', icon: Info },
     ],
   },
@@ -157,34 +179,44 @@ function readStoredWidth(): number {
  */
 function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
   switch (section) {
+    case 'account':
+      return <AccountSection />;
+    case 'usage':
+      return <UsageSection />;
+    case 'general':
+      return <GeneralSection />;
+    case 'mobile':
+      return <MobileSection />;
+    case 'editor':
+      return <EditorSection />;
+    case 'shortcuts':
+      return <ShortcutsSection />;
+    case 'prompt':
+      return <PromptSection open={drawerOpen} />;
+    case 'browser':
+      return <BrowserSection />;
+    case 'workspace':
+      return <WorkspaceSection />;
+    case 'commands':
+      return <CommandsSection />;
+    case 'rules-memory':
+      return <RulesMemorySection />;
     case 'models':
       return <ModelsSection />;
     case 'model-params':
       return <ModelParamsSection />;
-    case 'mcp':
-      return <McpSection />;
     case 'approval-mode':
       return <ApprovalModeSection />;
-    case 'prompt':
-      return <PromptSection open={drawerOpen} />;
-    case 'shortcuts':
-      return <ShortcutsSection />;
+    case 'mcp':
+      return <McpSection />;
     case 'skills':
       return <SkillsSection />;
-    case 'editor':
-      return <EditorSection />;
-    case 'experimental':
+    case 'hooks':
+      return <HooksSection />;
+    case 'plugins':
+      return <PluginsSection />;
+    case 'beta':
       return <ExperimentalSection />;
-    case 'usage':
-      return <UsageSection />;
-    case 'turns':
-      return <TurnsSection />;
-    case 'im-channels':
-      return <ImChannelsSection />;
-    case 'data':
-      return <DataSection />;
-    case 'telemetry':
-      return <TelemetrySection />;
     case 'about':
       return <AboutSection />;
   }

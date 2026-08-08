@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { TurnsSection } from './turns-section';
 
 export function UsageSection(): ReactElement {
   const { t } = useTranslation();
@@ -113,6 +114,9 @@ export function UsageSection(): ReactElement {
           </div>
         </div>
       )}
+
+      {/* 回合记录（并入用量：最近 Agent 回合的终止原因与 token 消耗） */}
+      <TurnsSection />
     </div>
   );
 }
