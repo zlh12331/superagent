@@ -195,10 +195,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-[26px] cursor-pointer items-center gap-1 rounded-md px-2 text-xs transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm transition-colors"
             aria-label={t('settings.back')}
           >
-            <ArrowLeft className="size-3.5" strokeWidth={2} />
+            <ArrowLeft className="size-4" strokeWidth={2} />
             {t('settings.back')}
           </button>
           <SettingsIcon className="text-primary size-4" strokeWidth={1.5} />
