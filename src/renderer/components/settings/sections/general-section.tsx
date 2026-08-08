@@ -9,6 +9,9 @@ import { type ReactElement, useState } from 'react';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
 import { DataSection } from './data-section';
+import { EditorSection } from './editor-section';
+import { PromptSection } from './prompt-section';
+import { ShortcutsSection } from './shortcuts-section';
 import { TelemetrySection } from './telemetry-section';
 
 /** 语言切换行（真实 i18n：changeLanguage 立即生效） */
@@ -52,16 +55,23 @@ function cnRow(active: boolean): string {
   ].join(' ');
 }
 
-/** 通用 pane：语言 + 数据管理 + 遥测 */
-export function GeneralSection(): ReactElement {
+/** 通用 pane：语言 + 数据管理 + 遥测 + 编辑器/快捷键/提示词（导航收敛后并入） */
+export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean }): ReactElement {
   const { t } = useTranslation();
   return (
-    <div className="space-y-4 pt-2">
+    <div className="space-y-5 pt-2">
       <div>
         <h3 className="text-foreground text-sm font-semibold">{t('settings.generalTitle')}</h3>
         <div className="border-border bg-muted/20 mt-2 rounded-md border p-3">
           <LanguageRow />
         </div>
+      </div>
+
+      {/* 编辑器 / 快捷键 / 提示词（并入通用） */}
+      <div className="space-y-4">
+        <EditorSection />
+        <ShortcutsSection />
+        <PromptSection open={drawerOpen} />
       </div>
 
       {/* 数据管理（会话导出 + 打开数据目录） */}

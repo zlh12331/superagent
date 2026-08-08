@@ -19,6 +19,8 @@ import { Label } from '@/components/ui/label';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { ApprovalModeSection } from './approval-mode-section';
+import { ModelParamsSection } from './model-params-section';
 
 /** 内置提供商列表（显示名 + 供应商枚举） */
 const BUILTIN_PROVIDERS: readonly { readonly kind: ApiKeyProvider; readonly label: string }[] = [
@@ -31,7 +33,7 @@ const BUILTIN_PROVIDERS: readonly { readonly kind: ApiKeyProvider; readonly labe
 /**
  * 模型服务 pane
  *
- * 提供商列表 + 运行时模型管理（原 api-key / runtime-models 两个 pane 的聚合）。
+ * 提供商列表 + 运行时模型管理 + 模型参数 + 审批权限（导航收敛后并入）。
  */
 export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
@@ -202,6 +204,16 @@ export function ModelsSection(): ReactElement {
             {t('settings.runtimeModelAdd')}
           </Button>
         </div>
+      </div>
+
+      {/* 模型参数（默认模型/温度/思考强度，导航收敛后并入） */}
+      <div>
+        <ModelParamsSection />
+      </div>
+
+      {/* 审批权限（审批模式/白名单，导航收敛后并入） */}
+      <div>
+        <ApprovalModeSection />
       </div>
     </div>
   );

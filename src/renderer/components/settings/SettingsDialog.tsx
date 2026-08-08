@@ -22,15 +22,10 @@ import {
   FolderTree,
   Globe,
   Info,
-  Keyboard,
-  MessageSquareText,
-  PenLine,
   Plug,
   Puzzle,
   Server as ServerIcon,
   Settings as SettingsIcon,
-  Shield,
-  SlidersHorizontal,
   Smartphone,
   Sparkles,
   TerminalSquare,
@@ -44,13 +39,10 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { AboutSection } from './sections/about-section';
-import { ApprovalModeSection } from './sections/approval-mode-section';
 import { BrowserSection } from './sections/browser-section';
-import { EditorSection } from './sections/editor-section';
 import { ExperimentalSection } from './sections/experimental-section';
 import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
-import { ModelParamsSection } from './sections/model-params-section';
 import { ModelsSection } from './sections/models-section';
 import {
   AccountSection,
@@ -59,9 +51,7 @@ import {
   MobileSection,
   PluginsSection,
 } from './sections/placeholders';
-import { PromptSection } from './sections/prompt-section';
 import { RulesMemorySection } from './sections/rules-memory-section';
-import { ShortcutsSection } from './sections/shortcuts-section';
 import { SkillsSection } from './sections/skills-section';
 import { UsageSection } from './sections/usage-section';
 import { WorkspaceSection } from './sections/workspace-section';
@@ -80,16 +70,11 @@ type SectionId =
   | 'usage'
   | 'general'
   | 'mobile'
-  | 'editor'
-  | 'shortcuts'
-  | 'prompt'
   | 'browser'
   | 'workspace'
   | 'commands'
   | 'rules-memory'
   | 'models'
-  | 'model-params'
-  | 'approval-mode'
   | 'mcp'
   | 'skills'
   | 'hooks'
@@ -124,9 +109,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
       { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
-      { id: 'editor', labelKey: 'settings.nav.editor', icon: PenLine },
-      { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
-      { id: 'prompt', labelKey: 'settings.nav.prompt', icon: MessageSquareText },
       { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
       { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
       { id: 'commands', labelKey: 'settings.nav.commands', icon: TerminalSquare },
@@ -138,8 +120,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       // 模型服务：提供商/API Key/运行时模型统一管理（对齐同类桌面 LLM 客户端）
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
-      { id: 'model-params', labelKey: 'settings.nav.modelParams', icon: SlidersHorizontal },
-      { id: 'approval-mode', labelKey: 'settings.nav.approvalMode', icon: Shield },
       { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'hooks', labelKey: 'settings.nav.hooks', icon: Workflow },
@@ -184,15 +164,9 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
     case 'usage':
       return <UsageSection />;
     case 'general':
-      return <GeneralSection />;
+      return <GeneralSection drawerOpen={drawerOpen} />;
     case 'mobile':
       return <MobileSection />;
-    case 'editor':
-      return <EditorSection />;
-    case 'shortcuts':
-      return <ShortcutsSection />;
-    case 'prompt':
-      return <PromptSection open={drawerOpen} />;
     case 'browser':
       return <BrowserSection />;
     case 'workspace':
@@ -203,10 +177,6 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <RulesMemorySection />;
     case 'models':
       return <ModelsSection />;
-    case 'model-params':
-      return <ModelParamsSection />;
-    case 'approval-mode':
-      return <ApprovalModeSection />;
     case 'mcp':
       return <McpSection />;
     case 'skills':
