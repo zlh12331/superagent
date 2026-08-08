@@ -19,6 +19,7 @@ import type { ISearchService } from '../../search/search-service';
 import type { ITerminalService } from '../../terminal/terminal-service';
 import type { AgentAskService } from '../agent-ask-service';
 import type { MemoryService } from '../memory-service';
+import type { IPermissionService } from '../permission-service';
 import { skillRegistry } from '../skills/skill-registry';
 import type { IToolRegistry } from '../tool-registry';
 import { createAskUserQuestionTool } from './ask-user-question.tool';
@@ -36,6 +37,7 @@ import { createListDirectoryTool } from './list-directory.tool';
 import { createLoadSkillTool } from './load-skill.tool';
 import { createLspDefinitionTool } from './lsp-definition.tool';
 import { createLspReferencesTool } from './lsp-references.tool';
+import { createEnterPlanModeTool, createExitPlanModeTool } from './plan-mode.tools';
 import { createReadFileTool } from './read-file.tool';
 import { createRunCommandTool } from './run-command.tool';
 import { createRunSubagentTool } from './run-subagent.tool';
@@ -43,6 +45,7 @@ import { createRunTeamTool } from './run-team.tool';
 import { createSaveMemoryTool } from './save-memory.tool';
 import { createTaskCreateTool } from './task-create.tool';
 import { createTaskListTool } from './task-list.tool';
+import { createTaskStopTool } from './task-stop.tool';
 import { createTaskUpdateTool } from './task-update.tool';
 import { createTerminalTool } from './terminal.tool';
 import { createWebFetchTool } from './web-fetch.tool';
@@ -105,9 +108,12 @@ export function registerBuiltinTools(
   memoryService: MemoryService,
   lspManager: LspServerManager,
   askService: AgentAskService,
+  permissionService: IPermissionService,
 ): void {
   registry.register(createReadFileTool(fileService));
   registry.register(createAskUserQuestionTool(askService));
+  registry.register(createEnterPlanModeTool(permissionService));
+  registry.register(createExitPlanModeTool(permissionService));
   registry.register(createWriteFileTool(fileService));
   registry.register(createListDirectoryTool(fileService));
   registry.register(createCodeReviewTool(fileService));
@@ -128,6 +134,7 @@ export function registerBuiltinTools(
   // 任务跟踪工具（任务面板登记/状态机/列表）
   registry.register(createTaskCreateTool());
   registry.register(createTaskUpdateTool());
+  registry.register(createTaskStopTool());
   registry.register(createTaskListTool());
   // 网页抓取工具（资料查阅）
   registry.register(createWebFetchTool());

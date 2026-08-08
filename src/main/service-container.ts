@@ -286,6 +286,7 @@ class ServiceContainer {
         this.getMemoryService(),
         this.getLspManager(),
         agentAskService,
+        this.getPermissionService(),
       );
       this.toolRegistry = registry;
     }
