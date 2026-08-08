@@ -38,6 +38,21 @@ function heatLevel(tokens: number, max: number): 0 | 1 | 2 | 3 | 4 {
   return 4;
 }
 
+/** 生成近 N 天日期列表（倒序，today 在前；与 byDay 数据格式一致） */
+function recentDays(count: number): string[] {
+  const days: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i += 1) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    days.push(`${y}-${m}-${day}`);
+  }
+  return days;
+}
+
 /** 色档 → accent 透明度类 */
 const HEAT_CLASS = [
   'bg-muted/20',
@@ -52,12 +67,13 @@ export function UsageSection(): ReactElement {
   const [summary, setSummary] = useState<UsageSummaryRes | null>(null);
 
   useEffect(() => {
-    // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架（0 值三卡 + 空热力图网格）
+    // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
+    // （0 值三卡 + 近 30 天 0 值热力图格子，形态完整可见）
     if (typeof window === 'undefined' || window.api === undefined) {
       setSummary({
         total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
         byModel: [],
-        byDay: [],
+        byDay: recentDays(30).map((date) => ({ date, calls: 0, totalTokens: 0 })),
       });
       return;
     }
