@@ -22,11 +22,9 @@ import {
   FlaskConical,
   Info,
   Keyboard,
-  KeyRound,
   MessageSquareText,
   MessageSquareWarning,
   PenLine,
-  Radio,
   ScrollText,
   Server as ServerIcon,
   Settings as SettingsIcon,
@@ -41,7 +39,6 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { AboutSection } from './sections/about-section';
-import { ApiKeySection } from './sections/api-key-section';
 import { ApprovalModeSection } from './sections/approval-mode-section';
 import { DataSection } from './sections/data-section';
 import { EditorSection } from './sections/editor-section';
@@ -49,8 +46,8 @@ import { ExperimentalSection } from './sections/experimental-section';
 import { ImChannelsSection } from './sections/im-channels-section';
 import { McpSection } from './sections/mcp-section';
 import { ModelParamsSection } from './sections/model-params-section';
+import { ModelsSection } from './sections/models-section';
 import { PromptSection } from './sections/prompt-section';
-import { RuntimeModelsSection } from './sections/runtime-models-section';
 import { ShortcutsSection } from './sections/shortcuts-section';
 import { SkillsSection } from './sections/skills-section';
 import { TelemetrySection } from './sections/telemetry-section';
@@ -67,9 +64,8 @@ export interface SettingsDialogProps {
 
 /** 设置分区 ID */
 type SectionId =
-  | 'api-key'
+  | 'models'
   | 'model-params'
-  | 'runtime-models'
   | 'approval-mode'
   | 'mcp'
   | 'prompt'
@@ -102,9 +98,9 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.modelPerms',
     items: [
-      { id: 'api-key', labelKey: 'settings.nav.apiKey', icon: KeyRound },
+      // 模型服务：提供商/API Key/运行时模型统一管理（对齐同类桌面 LLM 客户端）
+      { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
       { id: 'model-params', labelKey: 'settings.nav.modelParams', icon: SlidersHorizontal },
-      { id: 'runtime-models', labelKey: 'settings.nav.runtimeModels', icon: Radio },
       { id: 'approval-mode', labelKey: 'settings.nav.approvalMode', icon: Shield },
     ],
   },
@@ -161,22 +157,12 @@ function readStoredWidth(): number {
  */
 function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
   switch (section) {
-    case 'api-key':
-      return (
-        <>
-          <ApiKeySection provider="deepseek" label="DeepSeek" />
-          <div className="mt-2 border-t" />
-          <div className="mt-2">
-            <ApiKeySection provider="openai" label="OpenAI" />
-          </div>
-        </>
-      );
+    case 'models':
+      return <ModelsSection />;
     case 'model-params':
       return <ModelParamsSection />;
     case 'mcp':
       return <McpSection />;
-    case 'runtime-models':
-      return <RuntimeModelsSection />;
     case 'approval-mode':
       return <ApprovalModeSection />;
     case 'prompt':
@@ -292,13 +278,13 @@ function useDrawerResize() {
  */
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): ReactElement {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<SectionId>('api-key');
+  const [activeSection, setActiveSection] = useState<SectionId>('models');
   const { width, isDragging, handlePointerDown, sheetRef, setWidth } = useDrawerResize();
 
   // 打开时重置到默认分区（避免上次停留的深层分区）
   useEffect(() => {
     if (open) {
-      setActiveSection('api-key');
+      setActiveSection('models');
     }
   }, [open]);
 
