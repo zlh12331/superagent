@@ -613,6 +613,13 @@
         "newline": "New line",
         "closeDialog": "Close dialog"
       }
+    },
+    "agent": {
+      "askTitle": "Agent Question",
+      "askFreeInput": "Free-form answer (optional)…",
+      "askCancel": "Cancel",
+      "askSubmit": "Submit",
+      "askSubmitFailed": "Failed to submit answer"
     }
   }
 }

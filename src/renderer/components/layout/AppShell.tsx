@@ -29,12 +29,14 @@ import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useS
 import { useLocation, useNavigate } from 'react-router';
 
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
+import { AskDialog } from '@/components/agent/ask-dialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
+import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -73,6 +75,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const { t } = useTranslation();
   // 审批桥接：订阅 IPC 推送 + 提供 respondApproval 方法
   const { respondApproval } = useApprovalBridge();
+  // Agent 提问桥接：订阅 ask 事件 → agent-ask-store（AskDialog 渲染）
+  useAgentAskBridge();
 
   // 工具调用桥接：订阅 agent:tool:call / agent:tool:result IPC 事件
   useToolBridge();
@@ -326,6 +330,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
       {/* 全局审批对话框：根级渲染，覆盖在所有内容之上 */}
       <ApprovalDialog onRespond={respondApproval} />
+      <AskDialog />
 
       {/* 文件查看器对话框：根级渲染，由 useFileViewerStore 控制 */}
       <FileViewerDialog />

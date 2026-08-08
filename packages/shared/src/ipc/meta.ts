@@ -45,6 +45,8 @@ export const IPC_META = {
 
   agent: {
     run: request('agent:run'),
+    ask: event('agent:event:ask'),
+    respondAsk: request('agent:ask:respond'),
     stop: request('agent:stop'),
     approvalResponse: request('agent:approval:response'),
     subscribeStreamPart: event('agent:stream:part'),

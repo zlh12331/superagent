@@ -49,6 +49,7 @@ import electronUpdater from 'electron-updater';
 const { autoUpdater } = electronUpdater;
 
 import { resetConfigCache } from './config';
+import { agentAskService } from './infra/ai/agent-ask-service';
 import {
   type ConcurrencyGate,
   createConcurrencyGate,
@@ -284,6 +285,7 @@ class ServiceContainer {
         this.getGitService(),
         this.getMemoryService(),
         this.getLspManager(),
+        agentAskService,
       );
       this.toolRegistry = registry;
     }

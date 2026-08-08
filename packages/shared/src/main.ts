@@ -35,6 +35,7 @@ export type { IpcResponse } from './ipc/response';
 
 // zod schema（单一真源，主进程 IPC handler 用于校验入参）
 export * from './schemas/agent';
+export * from './schemas/agent-ask';
 export * from './schemas/agent-events';
 export * from './schemas/app';
 export * from './schemas/chat';

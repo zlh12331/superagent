@@ -17,9 +17,11 @@ import type { IGitService } from '../../git/git-service';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import type { ISearchService } from '../../search/search-service';
 import type { ITerminalService } from '../../terminal/terminal-service';
+import type { AgentAskService } from '../agent-ask-service';
 import type { MemoryService } from '../memory-service';
 import { skillRegistry } from '../skills/skill-registry';
 import type { IToolRegistry } from '../tool-registry';
+import { createAskUserQuestionTool } from './ask-user-question.tool';
 import { createCodeReviewTool } from './code-review.tool';
 import { createCronCreateTool } from './cron-create.tool';
 import { createCronDeleteTool } from './cron-delete.tool';
@@ -102,8 +104,10 @@ export function registerBuiltinTools(
   gitService: IGitService,
   memoryService: MemoryService,
   lspManager: LspServerManager,
+  askService: AgentAskService,
 ): void {
   registry.register(createReadFileTool(fileService));
+  registry.register(createAskUserQuestionTool(askService));
   registry.register(createWriteFileTool(fileService));
   registry.register(createListDirectoryTool(fileService));
   registry.register(createCodeReviewTool(fileService));

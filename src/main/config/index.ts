@@ -50,15 +50,41 @@ const SentryConfigSchema = z.object({
  * - 新增供应商时同步扩展此处 + ProviderRegistry
  */
 const ProviderBaseUrlSchema = z.object({
-  /** DeepSeek 根地址（registry 拼接 /v1） */
-  deepseek: z.string().url().default('https://api.deepseek.com'),
-  /** OpenAI 根地址（registry 拼接 /v1） */
-  openai: z.string().url().default('https://api.openai.com'),
-  /** Anthropic 根地址（registry 直接使用，无需 /v1） */
-  anthropic: z.string().url().default('https://api.anthropic.com'),
-  /** Ollama 本地服务根地址（registry 拼接 /v1） */
-  ollama: z.string().url().default('http://localhost:11434'),
+  /** DeepSeek 根地址（registry 拼接 /v1；env DEEPSEEK_API_BASE 优先） */
+  deepseek: z.preprocess(
+    (v) => process.env['DEEPSEEK_API_BASE'] ?? v,
+    z.string().url().default('https://api.deepseek.com'),
+  ),
+  /** OpenAI 根地址（registry 拼接 /v1；env OPENAI_API_BASE 优先） */
+  openai: z.preprocess(
+    (v) => process.env['OPENAI_API_BASE'] ?? v,
+    z.string().url().default('https://api.openai.com'),
+  ),
+  /** Anthropic 根地址（registry 直接使用，无需 /v1；env ANTHROPIC_API_BASE 优先） */
+  anthropic: z.preprocess(
+    (v) => process.env['ANTHROPIC_API_BASE'] ?? v,
+    z.string().url().default('https://api.anthropic.com'),
+  ),
+  /** Ollama 本地服务根地址（registry 拼接 /v1；env OLLAMA_API_BASE 优先） */
+  ollama: z.preprocess(
+    (v) => process.env['OLLAMA_API_BASE'] ?? v,
+    z.string().url().default('http://localhost:11434'),
+  ),
 });
+
+/**
+ * 模型级总时长超时（毫秒）
+ *
+ * 消费链：llm-client.generateText → buildGenerationOptions(defaultTimeoutMs)
+ * → generationConfig.timeoutMs → AbortSignal.timeout。
+ * 模型自带 timeoutMs 优先，本值为全局兜底（env MODEL_TIMEOUT_MS 可覆盖）。
+ */
+const ModelTimeoutMsSchema = z.preprocess((v) => {
+  const raw = process.env['MODEL_TIMEOUT_MS'];
+  if (raw === undefined || raw === '') return v;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : v;
+}, z.number().int().positive().default(60000));
 
 /**
  * 应用配置 Schema
@@ -85,6 +111,8 @@ const AppConfigSchema = z.object({
   sentry: SentryConfigSchema,
   /** 模型供应商根地址（ProviderRegistry 消费） */
   providers: ProviderBaseUrlSchema,
+  /** 模型级总时长超时（毫秒；llm-client 兜底，test 环境 5s） */
+  modelTimeoutMs: ModelTimeoutMsSchema,
 });
 
 /** 应用配置类型（从 schema 派生） */
@@ -150,12 +178,10 @@ export function loadConfig(): AppConfig {
       dsn: env['SENTRY_DSN'] ?? defaultSentryDsn,
       tracesSampleRate: Number(env['SENTRY_TRACES_SAMPLE_RATE'] ?? defaultSentryTracesSampleRate),
     },
-    providers: {
-      deepseek: env['DEEPSEEK_API_BASE'] ?? 'https://api.deepseek.com',
-      openai: env['OPENAI_API_BASE'] ?? 'https://api.openai.com',
-      anthropic: env['ANTHROPIC_API_BASE'] ?? 'https://api.anthropic.com',
-      ollama: env['OLLAMA_API_BASE'] ?? 'http://localhost:11434',
-    },
+    // providers 由 schema preprocess 读取 env（DEEPSEEK_API_BASE 等），此处不重复
+    providers: {},
+    // test 环境缩短超时（5s），避免测试等待生产级 60s 超时
+    modelTimeoutMs: isTest ? 5000 : undefined,
   });
 }
 

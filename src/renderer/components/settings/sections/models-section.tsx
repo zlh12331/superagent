@@ -65,10 +65,10 @@ export function ModelsSection(): ReactElement {
     }
   };
 
+  // 仅挂载时加载一次（loadRuntimeModels 每次渲染重建，勿入依赖）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 仅挂载时加载一次
   useEffect(() => {
-    // 初始加载运行时模型（空依赖：仅挂载时执行一次）
     void loadRuntimeModels();
-    // biome-ignore lint/correctness/useExhaustiveDependencies: 仅挂载时加载一次
   }, []);
 
   const handleAddRuntime = async (): Promise<void> => {

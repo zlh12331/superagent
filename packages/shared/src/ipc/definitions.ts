@@ -26,6 +26,13 @@ import {
   type AgentToolCallPayload,
   type AgentToolResultPayload,
 } from '../schemas/agent';
+import {
+  type AskEventPayload,
+  AskEventPayloadSchema,
+  AskRespondReqSchema,
+  type AskRespondRes,
+  AskRespondResSchema,
+} from '../schemas/agent-ask';
 import type { TurnEvent } from '../schemas/agent-events';
 import type { AppInfoRes } from '../schemas/app';
 import { AppInfoResSchema, AppStatusResSchema } from '../schemas/app';
@@ -389,6 +396,12 @@ export const IPC_DEFINITIONS = {
   agent: {
     run: withSchema(IPC_META.agent.run, AgentRunReqSchema, {} as AgentRunRes, AgentRunResSchema),
     stop: withSchema(IPC_META.agent.stop, AgentStopReqSchema, {} as AgentStopRes),
+    respondAsk: withSchema(
+      IPC_META.agent.respondAsk,
+      AskRespondReqSchema,
+      {} as AskRespondRes,
+      AskRespondResSchema,
+    ),
     approvalResponse: withSchema(
       IPC_META.agent.approvalResponse,
       AgentApprovalResponseReqSchema,
@@ -399,6 +412,7 @@ export const IPC_DEFINITIONS = {
       {} as AgentStreamPartPayload,
       StreamPartPayloadSchema,
     ),
+    subscribeAsk: withPayload(IPC_META.agent.ask, {} as AskEventPayload, AskEventPayloadSchema),
     subscribeStreamEnd: withPayload(
       IPC_META.agent.subscribeStreamEnd,
       {} as AgentStreamEndPayload,

@@ -27,12 +27,17 @@ import { buildGenerationOptions } from '../models/generation-options';
 import type { ProviderKind } from '../providers/types';
 import { retryWithBackoff } from './retry';
 
+/** 全局模型超时兜底（毫秒）：模型未自带 timeoutMs 时的默认总时长 */
+const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
+
 /**
  * LlmClient 依赖（DI 注入，便于测试替换 fake 实现）
  */
 export interface LlmClientDeps {
   /** 模型注册表（模型级解析） */
   readonly modelRegistry: ModelRegistry;
+  /** 全局模型超时兜底（毫秒；模型自带 timeoutMs 优先，DI 注入便于测试） */
+  readonly defaultTimeoutMs?: number;
   /**
    * 创建供应商 LanguageModel 工厂
    *
@@ -246,10 +251,10 @@ export class LlmClient {
     const generationConfig = resolved.generationConfig;
     const model = await this.getModel(resolved.modelId);
 
-    const timeout =
-      generationConfig?.timeoutMs !== undefined
-        ? createTimeoutSignal(generationConfig.timeoutMs)
-        : undefined;
+    // 总时长超时：模型自带 timeoutMs 优先，全局默认（deps.defaultTimeoutMs）兜底
+    const timeout = createTimeoutSignal(
+      generationConfig?.timeoutMs ?? this.deps.defaultTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS,
+    );
     // 有效信号 = 用户信号 + 模型级超时（超时触发后与用户中断同语义：不重试）
     const effectiveSignal = combineAbortSignals([options.signal, timeout?.signal]);
     // 重试次数：调用方显式 > 模型级 maxRetries（默认 2 次重试 = 3 次尝试）

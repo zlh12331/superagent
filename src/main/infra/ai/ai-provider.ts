@@ -19,6 +19,7 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
+import { getAppConfig } from '../../config';
 import { logger } from '../../utils/logger';
 import { getSecret } from '../storage/keychain';
 import { LlmClient } from './llm-client';
@@ -121,6 +122,8 @@ export async function getAIProvider(
  */
 export const llmClient = new LlmClient({
   modelRegistry,
+  // 全局模型超时兜底（config.modelTimeoutMs；test 环境 5s）
+  defaultTimeoutMs: getAppConfig().modelTimeoutMs,
   createProviderFactory: async (kind, options) => {
     // 运行时快照携带显式配置时创建临时实例（不污染 kind 级缓存）
     if (options?.apiKey !== undefined || options?.baseUrl !== undefined) {

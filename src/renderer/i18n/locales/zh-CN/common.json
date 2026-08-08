@@ -613,6 +613,13 @@
         "newline": "换行",
         "closeDialog": "关闭对话框"
       }
+    },
+    "agent": {
+      "askTitle": "Agent 提问",
+      "askFreeInput": "自由回答（可选）…",
+      "askCancel": "取消",
+      "askSubmit": "提交",
+      "askSubmitFailed": "提交回答失败"
     }
   }
 }

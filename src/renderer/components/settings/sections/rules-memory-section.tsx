@@ -49,10 +49,11 @@ export function RulesMemorySection(): ReactElement {
     }
   };
 
+  // 会话变化时重载记忆（loadMemories 每次渲染重建，勿入依赖）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 会话变化时重载记忆
   useEffect(() => {
     setLoading(true);
     void loadMemories();
-    // biome-ignore lint/correctness/useExhaustiveDependencies: 会话变化时重载记忆
   }, [activeSessionId]);
 
   const handleClear = async (): Promise<void> => {
