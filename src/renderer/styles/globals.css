@@ -898,7 +898,7 @@ body::after {
   fill: var(--muted-foreground);
 }
 .react-calendar-heatmap .color-empty {
-  fill: var(--bg-muted);
+  fill: var(--muted);
 }
 .react-calendar-heatmap .color-scale-1 {
   fill: color-mix(in srgb, var(--accent) 25%, transparent);
