@@ -235,6 +235,66 @@ export function ChatInput({
    * 清空输入框并触发 onSend 回调。
    * 若文本为空或处于流式状态，直接返回。
    */
+  /** 输入框高度拖拽（对齐原型 composerDragHandle：拖拽调整 textarea 高度，160-460px 钳位） */
+  const composerDragRef = useRef<{
+    startY: number;
+    startH: number;
+    dragMinH: number;
+  } | null>(null);
+
+  /** 测量 textarea 自然高度（临时解除高度/上限限制） */
+  const measureNaturalHeight = (el: HTMLTextAreaElement): number => {
+    const prevHeight = el.style.height;
+    const prevMax = el.style.maxHeight;
+    el.style.height = 'auto';
+    el.style.maxHeight = 'none';
+    const height = el.scrollHeight;
+    el.style.height = prevHeight;
+    el.style.maxHeight = prevMax;
+    return height;
+  };
+
+  /** 拖拽开始：记录起点，注册全局 pointer 监听 */
+  const handleComposerDragStart = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const el = textareaRef.current;
+    if (el === null) {
+      return;
+    }
+    event.preventDefault();
+    const baseMax = 160;
+    const naturalHeight = measureNaturalHeight(el);
+    composerDragRef.current = {
+      startY: event.clientY,
+      startH: el.offsetHeight,
+      dragMinH: Math.min(naturalHeight, baseMax),
+    };
+    const handleMove = (ev: PointerEvent): void => {
+      const state = composerDragRef.current;
+      if (state === null) {
+        return;
+      }
+      const maxH = 460; // baseMax 160 + maxExtra 300（对齐原型）
+      const clamped = Math.max(
+        state.dragMinH,
+        Math.min(maxH, state.startH + (ev.clientY - state.startY)),
+      );
+      if (clamped <= state.dragMinH) {
+        el.style.maxHeight = `${baseMax}px`;
+        el.style.height = `${state.dragMinH}px`;
+      } else {
+        el.style.maxHeight = `${clamped}px`;
+        el.style.height = `${clamped}px`;
+      }
+    };
+    const handleUp = (): void => {
+      composerDragRef.current = null;
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleUp);
+    };
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleUp);
+  };
+
   const handleSend = async (): Promise<void> => {
     if (!canSend) {
       return;
@@ -287,6 +347,26 @@ export function ChatInput({
     // .composer：输入舱外壳（顶部渐变 + 底部 padding，由父级 footer 提供）
     // 此处仅渲染 .composer-box 内层（外层 .composer 由 ChatPanel footer 提供）
     <div className={cn('composer-box relative', className)}>
+      {/* 输入框高度拖拽手柄（对齐原型 .composer-drag-handle：hover 显示、ns-resize 调整高度）
+          语义：hr + separator（键盘可达：ArrowUp/Down 20px 步进调整） */}
+      <hr
+        className="composer-drag-handle"
+        aria-label={t('chat.resizeComposer')}
+        tabIndex={0}
+        onPointerDown={handleComposerDragStart}
+        onKeyDown={(event) => {
+          const el = textareaRef.current;
+          if (el === null || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+            return;
+          }
+          event.preventDefault();
+          const delta = event.key === 'ArrowUp' ? -20 : 20;
+          const current = el.offsetHeight;
+          const next = Math.max(24, Math.min(460, current + delta));
+          el.style.maxHeight = `${next}px`;
+          el.style.height = `${next}px`;
+        }}
+      />
       {/* 斜杠建议下拉（输入以 / 开头时显示，对齐参考项目 useSlashSuggest） */}
       {slashOpen && (
         <div

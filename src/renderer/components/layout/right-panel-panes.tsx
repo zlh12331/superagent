@@ -237,6 +237,7 @@ export function DiffPane({
   const [loadingDiff, setLoadingDiff] = useState<Set<string>>(() => new Set());
 
   // 会话切换清空行级 diff 缓存（DevPanel 跨会话保持，避免孤儿缓存持续累积）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId 是故意的触发键（effect 仅用 setter）
   useEffect(() => {
     setExpanded(new Set());
     setDiffCache(new Map());

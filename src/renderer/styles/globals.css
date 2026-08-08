@@ -1440,6 +1440,9 @@ body::after {
 
 /* ── 拖拽分隔线 ── */
 .resizer {
+  /* h-full 必须显式：Tailwind preflight 给 hr 默认 height 0.67px，
+     align-self: stretch 无法覆盖显式高度 → 命中区塌陷不可拖（同抽屉调宽条坑） */
+  height: 100%;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -2453,6 +2456,42 @@ body.resizing iframe {
   opacity: 1;
 }
 
+/* 输入框高度拖拽手柄（对齐原型 .composer-drag-handle：hover 显示、ns-resize） */
+.composer-drag-handle {
+  position: absolute;
+  top: -5px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  touch-action: none;
+}
+.composer-box:hover .composer-drag-handle,
+.composer-drag-handle.dragging {
+  opacity: 1;
+}
+.composer-drag-handle::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.composer-drag-handle:hover::before,
+.composer-drag-handle.dragging::before {
+  background: var(--accent);
+  box-shadow: var(--glow-sm);
+}
 .composer-input {
   width: 100%;
   background: transparent;

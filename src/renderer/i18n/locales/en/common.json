@@ -150,7 +150,8 @@
       "searchInputAriaLabel": "Search input",
       "searchPlaceholder": "Search in conversation…",
       "searchPrev": "Previous match",
-      "searchNext": "Next match"
+      "searchNext": "Next match",
+      "resizeComposer": "Drag to resize composer"
     },
     "update": {
       "noticeAvailable": "Update available",
