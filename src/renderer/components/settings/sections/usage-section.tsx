@@ -64,7 +64,7 @@ export function UsageSection(): ReactElement {
       setSummary({
         total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
         byModel: [],
-        byDay: recentDays(30).map((date) => ({ date, calls: 0, totalTokens: 0 })),
+        byDay: recentDays(90).map((date) => ({ date, calls: 0, totalTokens: 0 })),
       });
       return;
     }
@@ -96,13 +96,29 @@ export function UsageSection(): ReactElement {
   const heatEnd = useMemo(() => new Date(), []);
   const heatStart = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() - 29);
+    d.setDate(d.getDate() - 89);
     return d;
   }, []);
 
-  // 近 30 天合计（"本月"近似，界面如实标注）
+  // 热力图色档分位基准（当日最大值；全 0 时所有格子取最低档）
+  const heatMax = useMemo(
+    () => (summary?.byDay ?? []).reduce((m, d) => Math.max(m, d.totalTokens), 0),
+    [summary],
+  );
+
+  /** 热力图色档：0 → 空档；>0 按最大值分位 4 档（与图例 HEAT_PANEL_COLORS 对应） */
+  const heatLevel = (count: number | undefined): number => {
+    if (count === undefined || count <= 0 || heatMax <= 0) return 0;
+    const ratio = count / heatMax;
+    if (ratio <= 0.25) return 1;
+    if (ratio <= 0.5) return 2;
+    if (ratio <= 0.75) return 3;
+    return 4;
+  };
+
+  // 近 30 天合计（"本月"近似：byDay 为近 90 天倒序，取前 30 项）
   const monthTokens = useMemo(
-    () => (summary?.byDay ?? []).reduce((sum, d) => sum + d.totalTokens, 0),
+    () => (summary?.byDay ?? []).slice(0, 30).reduce((sum, d) => sum + d.totalTokens, 0),
     [summary],
   );
   const todayTokens = summary?.byDay[0]?.totalTokens ?? 0;
@@ -134,91 +150,100 @@ export function UsageSection(): ReactElement {
         <p className="text-xs text-muted-foreground font-sans">{t('settings.usageEmpty')}</p>
       ) : (
         <div className="space-y-4 font-sans">
-          {/* ① 时间维度三卡：今日 / 近 30 天（本月近似）/ 累计 */}
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded border border-border p-2">
+          {/* ① 时间维度四卡：今日 / 近 30 天（本月近似）/ 累计 / 总调用次数 */}
+          <div className="grid grid-cols-4 gap-2 text-xs">
+            <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageToday')}</p>
               <p className="mt-0.5 font-medium text-foreground">
                 {formatTokens(todayTokens)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
-            <div className="rounded border border-border p-2">
+            <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageMonth')}</p>
               <p className="mt-0.5 font-medium text-foreground">
                 {formatTokens(monthTokens)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
-            <div className="rounded border border-border p-2">
+            <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageTotal')}</p>
               <p className="mt-0.5 font-medium text-foreground">
                 {formatTokens(summary?.total.totalTokens ?? 0)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
-          </div>
-
-          {/* ② 消耗热力图（近 30 天，@uiw/react-heat-map 现成组件） */}
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              {t('settings.usageHeatmap')}
-            </p>
-            <div className="mt-1.5 overflow-x-auto">
-              <HeatMap
-                value={heatValue}
-                startDate={heatStart}
-                endDate={heatEnd}
-                rectSize={13}
-                space={3}
-                rectProps={{ rx: 3 }}
-                panelColors={HEAT_PANEL_COLORS}
-                legendCellSize={10}
-                rectRender={(props, data) => (
-                  <rect {...props} rx={3}>
-                    <title>
-                      {data.date} · {formatTokens(data.count ?? 0)} tokens
-                    </title>
-                  </rect>
-                )}
-              />
+            <div className="rounded-md border border-border p-2.5">
+              <p className="text-muted-foreground">{t('settings.usageCalls')}</p>
+              <p className="mt-0.5 font-medium text-foreground">{summary?.total.calls ?? 0}</p>
             </div>
-            <p className="text-muted-foreground mt-1 text-2xs">{t('settings.usageHeatmapHint')}</p>
           </div>
 
-          {/* ③ 按模型占比（横向条形 + 百分比） */}
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              {t('settings.usageByModel')}
-            </p>
-            <ul className="mt-1.5 space-y-1.5 text-xs">
-              {modelRows.map((m) => (
-                <li key={m.modelId}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-foreground">{m.modelId}</span>
-                    <span className="text-muted-foreground shrink-0">
-                      {formatTokens(m.tokens)} tokens · {m.share.toFixed(0)}%
-                      {m.reasoningTokens > 0
-                        ? ` · ${t('settings.usageReasoning')} ${formatTokens(m.reasoningTokens)}`
-                        : ''}
-                    </span>
-                  </div>
-                  {/* 占比条（accent 宽度 = 占比） */}
-                  <div className="bg-muted/30 mt-0.5 h-[5px] w-full overflow-hidden rounded-full">
-                    <div
-                      className="bg-accent h-full rounded-full"
-                      style={{ width: `${Math.max(2, m.share)}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {/* ②③ 双列：消耗热力图（近 90 天，左） + 按模型占比（右） */}
+          <div className="grid grid-cols-[1.4fr_1fr] gap-3">
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t('settings.usageHeatmap')}
+              </p>
+              <div className="mt-2">
+                <HeatMap
+                  value={heatValue}
+                  startDate={heatStart}
+                  endDate={heatEnd}
+                  width={520}
+                  rectSize={14}
+                  space={3}
+                  rectProps={{ rx: 3 }}
+                  panelColors={HEAT_PANEL_COLORS}
+                  legendCellSize={10}
+                  rectRender={(props, data) => (
+                    <rect {...props} rx={3} fill={HEAT_PANEL_COLORS[heatLevel(data.count)]}>
+                      <title>
+                        {data.date} · {formatTokens(data.count ?? 0)} tokens
+                      </title>
+                    </rect>
+                  )}
+                />
+              </div>
+              <p className="text-muted-foreground mt-1.5 text-2xs">
+                {t('settings.usageHeatmapHint')}
+              </p>
+            </div>
+
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t('settings.usageByModel')}
+              </p>
+              <ul className="mt-2 space-y-2 text-xs">
+                {modelRows.length === 0 ? (
+                  <li className="text-muted-foreground/60">{t('settings.usageEmpty')}</li>
+                ) : (
+                  modelRows.map((m) => (
+                    <li key={m.modelId}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-foreground">{m.modelId}</span>
+                        <span className="text-muted-foreground shrink-0">
+                          {formatTokens(m.tokens)} · {m.share.toFixed(0)}%
+                        </span>
+                      </div>
+                      {/* 占比条（accent 宽度 = 占比） */}
+                      <div className="bg-muted/30 mt-1 h-[5px] w-full overflow-hidden rounded-full">
+                        <div
+                          className="bg-accent h-full rounded-full"
+                          style={{ width: `${Math.max(2, m.share)}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
           </div>
 
-          {/* ④ 按日明细（近 30 天列表，热力图数值兜底） */}
-          <div>
+          {/* ④ 按日明细（近 90 天列表，热力图数值兜底；完整展开不再内部滚动） */}
+          <div className="rounded-md border border-border p-3">
             <p className="text-xs font-medium text-muted-foreground">{t('settings.usageByDay')}</p>
-            <ul className="mt-1 max-h-36 space-y-0.5 overflow-y-auto text-xs">
+            <ul className="mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
               {summary.byDay.map((d) => (
                 <li
                   key={d.date}

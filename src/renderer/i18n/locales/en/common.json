@@ -259,7 +259,7 @@
       "usageTotalCalls": "Calls",
       "usageTotalTokens": "Total tokens",
       "usageByModel": "By model",
-      "usageByDay": "By day (last 30 days)",
+      "usageByDay": "By day (last 90 days)",
       "usageCacheHit": "Cache hit",
       "usageReasoning": "Reasoning",
       "usageEmpty": "No usage data yet",
@@ -460,9 +460,10 @@
       "usageToday": "Today",
       "usageMonth": "Last 30 days",
       "usageTotal": "Total",
-      "usageHeatmap": "Usage heatmap (30 days)",
-      "usageHeatmapAria": "Daily token usage heatmap for the last 30 days",
-      "usageHeatmapHint": "Darker = more tokens that day; hover for details"
+      "usageHeatmap": "Usage heatmap (90 days)",
+      "usageHeatmapAria": "Daily token usage heatmap for the last 90 days",
+      "usageHeatmapHint": "Darker = more tokens that day; hover for details",
+      "usageCalls": "Total calls"
     },
     "home": {
       "justNow": "Just now",

@@ -702,9 +702,9 @@ export class SessionService implements ISessionService {
       byDayMap.set(date, day);
     }
 
-    // 按模型用量倒序、按日倒序（近 30 天）
+    // 按模型用量倒序、按日倒序（近 90 天，热力图数据源）
     const byModel = [...byModelMap.values()].sort((a, b) => b.totalTokens - a.totalTokens);
-    const byDay = [...byDayMap.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 30);
+    const byDay = [...byDayMap.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 90);
 
     return { total, byModel, byDay };
   }

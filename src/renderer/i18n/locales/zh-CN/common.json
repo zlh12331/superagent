@@ -259,7 +259,7 @@
       "usageTotalCalls": "调用次数",
       "usageTotalTokens": "总 tokens",
       "usageByModel": "按模型",
-      "usageByDay": "按日（近 30 天）",
+      "usageByDay": "按日（近 90 天）",
       "usageCacheHit": "缓存命中",
       "usageReasoning": "思维链",
       "usageEmpty": "暂无用量数据",
@@ -460,9 +460,10 @@
       "usageToday": "今日",
       "usageMonth": "近 30 天",
       "usageTotal": "累计",
-      "usageHeatmap": "消耗热力图（近 30 天）",
-      "usageHeatmapAria": "近 30 天每日 token 消耗热力图",
-      "usageHeatmapHint": "色深 = 当日消耗量；悬停查看日期与数值"
+      "usageHeatmap": "消耗热力图（近 90 天）",
+      "usageHeatmapAria": "近 90 天每日 token 消耗热力图",
+      "usageHeatmapHint": "色深 = 当日消耗量；悬停查看日期与数值",
+      "usageCalls": "总调用次数"
     },
     "home": {
       "justNow": "刚刚",
