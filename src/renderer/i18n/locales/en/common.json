@@ -535,7 +535,10 @@
       "browserPreview": "Browser preview",
       "diffLoadFailed": "Failed to load diff",
       "diffLoading": "Loading…",
-      "diffUnavailable": "No diff available (untracked file or repo not initialized)"
+      "diffUnavailable": "No diff available (untracked file or repo not initialized)",
+      "clearGoal": "Clear goal",
+      "referencedFiles": "Referenced files",
+      "noReferencedFiles": "No referenced files"
     },
     "shortcutHelp": {
       "title": "Keyboard Shortcuts",

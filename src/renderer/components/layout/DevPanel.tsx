@@ -16,8 +16,6 @@
 
 import {
   Activity,
-  ChevronDown,
-  ChevronRight,
   FileCode2,
   FolderOpen,
   GitBranch,
@@ -50,10 +48,6 @@ interface DevPanelProps {
   readonly sessionId: string;
   /** Git 仓库路径（绝对路径） */
   readonly gitRepoPath: string;
-  /** 当前工作目录（会话详情展示；未知时省略） */
-  readonly workingDir?: string;
-  /** 默认模型 id（会话详情展示） */
-  readonly defaultModel?: string;
   /** 自定义容器类名 */
   readonly className?: string;
 }
@@ -70,53 +64,24 @@ type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
 export const DevPanel = memo(function DevPanel({
   sessionId,
   gitRepoPath,
-  workingDir,
-  defaultModel,
   className,
 }: DevPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  // 内容折叠状态（默认展开；折叠为标题栏横条）
-  const [expanded, setExpanded] = useState(true);
   // 当前激活 Tab（默认会话详情，对齐原型首位）
   const [activeTab, setActiveTab] = useState<PanelTab>('info');
   // 开发者子视图（默认 git，对齐原 GitPanel 入口）
   const [devSubTab, setDevSubTab] = useState<DevSubTab>('git');
 
   return (
-    <div
-      className={cn(
-        'border-border bg-background flex flex-col border-l',
-        expanded ? '' : 'h-7',
-        className,
-      )}
-      style={expanded ? { height: '100%' } : undefined}
-    >
-      {/* 标题栏：折叠/展开按钮 + Tab 切换 */}
+    <div className={cn('border-border bg-background flex flex-col border-l', className)}>
+      {/* 标题栏：Tab 切换（右面板折叠由全局机制管理：断点/AppShell 按钮，此处不重复放置） */}
       <div className="border-border bg-muted/30 flex items-center gap-2 border-b px-2 py-1">
-        {/* 折叠/展开按钮 */}
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-2xs transition-colors"
-          onClick={() => setExpanded((prev) => !prev)}
-          aria-expanded={expanded}
-          aria-label={expanded ? t('dev.collapsePanel') : t('dev.expandPanel')}
-        >
-          {expanded ? (
-            <ChevronDown className="size-3" strokeWidth={1.5} />
-          ) : (
-            <ChevronRight className="size-3" strokeWidth={1.5} />
-          )}
-        </button>
-
-        {/* Tab 切换（折叠态也可见，点击切换 + 自动展开） */}
+        {/* Tab 切换 */}
         <Tabs
           value={activeTab}
           onValueChange={(value) => {
             setActiveTab(value as PanelTab);
-            if (!expanded) {
-              setExpanded(true);
-            }
           }}
           className="min-w-0 flex-1"
         >
@@ -150,87 +115,79 @@ export const DevPanel = memo(function DevPanel({
         </Tabs>
       </div>
 
-      {/* 内容区：仅展开时渲染 */}
-      {expanded && (
-        <div className="min-h-0 flex-1">
-          {activeTab === 'info' && (
-            <InfoPane
-              sessionId={sessionId}
-              {...(workingDir !== undefined ? { workingDir } : {})}
-              {...(defaultModel !== undefined ? { defaultModel } : {})}
-            />
-          )}
-          {activeTab === 'diff' && <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />}
-          {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
-          {activeTab === 'browser' && <BrowserPane />}
-          {activeTab === 'terminal' && <TerminalPanel sessionId={sessionId} className="h-full" />}
-          {activeTab === 'dev' && (
-            <div className="flex h-full flex-col">
-              {/* 开发者子视图切换（调试工具收纳） */}
-              <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
-                <button
-                  type="button"
-                  className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'git'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('git')}
-                >
-                  <GitBranch className="size-2.5" strokeWidth={1.5} />
-                  Git
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'logs'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('logs')}
-                >
-                  <ScrollText className="size-2.5" strokeWidth={1.5} />
-                  {t('dev.tabLogs')}
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'metrics'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('metrics')}
-                >
-                  <Activity className="size-2.5" strokeWidth={1.5} />
-                  {t('dev.tabMetrics')}
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'inspector'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('inspector')}
-                >
-                  <Wrench className="size-2.5" strokeWidth={1.5} />
-                  {t('dev.tabInspector')}
-                </button>
-              </div>
-              <div className="min-h-0 flex-1">
-                {devSubTab === 'git' && <GitPanel path={gitRepoPath} className="h-full" />}
-                {devSubTab === 'logs' && <LogsPanel enabled={expanded} className="h-full" />}
-                {devSubTab === 'metrics' && <MetricsPanel enabled={expanded} className="h-full" />}
-                {devSubTab === 'inspector' && <InspectorPanel className="h-full" />}
-              </div>
+      {/* 内容区（面板折叠由全局机制管理，此处始终展开） */}
+      <div className="min-h-0 flex-1">
+        {activeTab === 'info' && <InfoPane sessionId={sessionId} />}
+        {activeTab === 'diff' && <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />}
+        {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
+        {activeTab === 'browser' && <BrowserPane />}
+        {activeTab === 'terminal' && <TerminalPanel sessionId={sessionId} className="h-full" />}
+        {activeTab === 'dev' && (
+          <div className="flex h-full flex-col">
+            {/* 开发者子视图切换（调试工具收纳） */}
+            <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
+              <button
+                type="button"
+                className={cn(
+                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                  devSubTab === 'git'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setDevSubTab('git')}
+              >
+                <GitBranch className="size-2.5" strokeWidth={1.5} />
+                Git
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                  devSubTab === 'logs'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setDevSubTab('logs')}
+              >
+                <ScrollText className="size-2.5" strokeWidth={1.5} />
+                {t('dev.tabLogs')}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                  devSubTab === 'metrics'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setDevSubTab('metrics')}
+              >
+                <Activity className="size-2.5" strokeWidth={1.5} />
+                {t('dev.tabMetrics')}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                  devSubTab === 'inspector'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setDevSubTab('inspector')}
+              >
+                <Wrench className="size-2.5" strokeWidth={1.5} />
+                {t('dev.tabInspector')}
+              </button>
             </div>
-          )}
-        </div>
-      )}
+            <div className="min-h-0 flex-1">
+              {devSubTab === 'git' && <GitPanel path={gitRepoPath} className="h-full" />}
+              {devSubTab === 'logs' && <LogsPanel enabled={true} className="h-full" />}
+              {devSubTab === 'metrics' && <MetricsPanel enabled={true} className="h-full" />}
+              {devSubTab === 'inspector' && <InspectorPanel className="h-full" />}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 });

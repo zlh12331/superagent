@@ -275,11 +275,10 @@ export function Sidebar(): ReactElement {
             view={view}
             skeleton={<LoadingList />}
             empty={
+              // 空态无 CTA：侧栏头部已有「新建会话」按钮，重复按钮冗余（对齐原型空态）
               <EmptyState
                 title={t('sidebar.noSessions')}
                 description={t('sidebar.newSessionHint')}
-                actionLabel={t('sidebar.newSession')}
-                onAction={handleNewChat}
                 // h-full：空态在列表区垂直居中（对齐参考项目空态视觉）
                 className="h-full"
               />

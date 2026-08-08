@@ -8,7 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, FileText, FolderOpen, Plus, Target } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, FolderOpen, Target } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
@@ -20,10 +20,6 @@ import { useToolStore } from '@/stores/transient/tool-store';
 export interface InfoPaneProps {
   /** 当前会话 id（goal/task 查询按会话过滤） */
   readonly sessionId: string;
-  /** 工作目录（展示会话元信息；未知时省略） */
-  readonly workingDir?: string;
-  /** 默认模型（展示会话元信息） */
-  readonly defaultModel?: string;
 }
 
 /** goal:list 查询 key */
@@ -45,11 +41,9 @@ interface LocalTask {
 /**
  * 会话详情 pane（对齐原型 crpPaneInfo：会话目标 / 计划待办 / 会话信息）
  */
-export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps): ReactElement {
+export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  // 添加目标输入（对齐参考项目 GoalEditDialog）
-  const [goalDraft, setGoalDraft] = useState('');
 
   // L3：目标列表（按会话过滤）
   const goalsQuery = useQuery({
@@ -90,37 +84,62 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
   const goals = (goalsQuery.data?.goals ?? []) as LocalGoal[];
   const tasks = (tasksQuery.data?.tasks ?? []) as LocalTask[];
 
-  // 创建目标 mutation（goal:create）
-  const createGoalMutation = useMutation({
-    mutationFn: async (condition: string) => {
+  // 清除目标 mutation（goal:clear，对齐原型 crpGoalClear × 按钮）
+  const clearGoalMutation = useMutation({
+    mutationFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { ok: true };
       }
-      const response = await window.api.goal.create({ sessionId, condition });
+      const response = await window.api.goal.clear({ sessionId });
       if ('error' in response) {
         throw new Error(`[${response.error.code}] ${response.error.message}`);
       }
       return response.data;
     },
     onSuccess: () => {
-      setGoalDraft('');
-      void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: [...GOAL_LIST_QUERY_KEY, sessionId] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
+
+  // 引用文件（对齐原型 crpFiles）：从 tool-store 提取 read_file 调用路径（去重，保留最新）
+  const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
+  const referencedFiles = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const c of [...calls].reverse()) {
+      if (c.toolName !== 'read_file') continue;
+      const filePath =
+        typeof c.input === 'object' && c.input !== null
+          ? String((c.input as Record<string, unknown>)['path'] ?? '')
+          : '';
+      if (filePath !== '' && !seen.has(filePath)) {
+        seen.add(filePath);
+        result.push(filePath);
+      }
+    }
+    return result;
+  }, [calls]);
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-xs">
-      {/* 会话目标 */}
-      <div>
-        <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
-          <Target className="size-3" strokeWidth={1.5} />
-          {t('panel.goals')}
-        </div>
-        {goals.length === 0 ? (
-          <div className="text-muted-foreground/60">{t('panel.noGoals')}</div>
-        ) : (
+      {/* 会话目标（对齐原型 crpGoalSection：默认隐藏，有目标才显示 + 清除按钮） */}
+      {goals.length > 0 && (
+        <div>
+          <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
+            <Target className="size-3" strokeWidth={1.5} />
+            {t('panel.goals')}
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground ml-auto cursor-pointer text-sm leading-none"
+              title={t('panel.clearGoal')}
+              aria-label={t('panel.clearGoal')}
+              onClick={() => clearGoalMutation.mutate()}
+            >
+              ×
+            </button>
+          </div>
           <ul className="space-y-1">
             {goals.map((goal) => (
               <li key={goal.condition} className="text-foreground/90 leading-relaxed">
@@ -128,35 +147,8 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
               </li>
             ))}
           </ul>
-        )}
-        {/* 添加目标（对齐参考项目 GoalEditDialog） */}
-        <form
-          className="mt-1.5 flex gap-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const value = goalDraft.trim();
-            if (value !== '') {
-              createGoalMutation.mutate(value);
-            }
-          }}
-        >
-          <input
-            type="text"
-            value={goalDraft}
-            onChange={(e) => setGoalDraft(e.target.value)}
-            placeholder={t('panel.goalPlaceholder')}
-            className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded border px-2 py-1 text-xs focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={goalDraft.trim() === '' || createGoalMutation.isPending}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center gap-0.5 rounded border px-1.5 py-1 text-2xs transition-colors disabled:opacity-50"
-            aria-label={t('panel.addGoal')}
-          >
-            <Plus className="size-2.5" />
-          </button>
-        </form>
-      </div>
+        </div>
+      )}
 
       {/* 计划待办 */}
       <div>
@@ -176,33 +168,26 @@ export function InfoPane({ sessionId, workingDir, defaultModel }: InfoPaneProps)
         )}
       </div>
 
-      {/* 会话信息 */}
+      {/* 引用文件（对齐原型 crpFiles：从 tool-store 提取 read_file 路径去重） */}
       <div>
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
-          {t('panel.sessionInfo')}
+          {t('panel.referencedFiles')}
         </div>
-        <dl className="space-y-1 font-mono text-2xs">
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground shrink-0">session</dt>
-            <dd className="text-foreground/80 min-w-0 truncate" title={sessionId}>
-              {sessionId.slice(0, 12)}
-            </dd>
-          </div>
-          {workingDir !== undefined && workingDir !== '' && (
-            <div className="flex gap-2">
-              <dt className="text-muted-foreground shrink-0">cwd</dt>
-              <dd className="text-foreground/80 min-w-0 truncate" title={workingDir}>
-                {workingDir}
-              </dd>
-            </div>
-          )}
-          {defaultModel !== undefined && defaultModel !== '' && (
-            <div className="flex gap-2">
-              <dt className="text-muted-foreground shrink-0">model</dt>
-              <dd className="text-foreground/80 min-w-0 truncate">{defaultModel}</dd>
-            </div>
-          )}
-        </dl>
+        {referencedFiles.length === 0 ? (
+          <div className="text-muted-foreground/60">{t('panel.noReferencedFiles')}</div>
+        ) : (
+          <ul className="space-y-1">
+            {referencedFiles.map((filePath) => (
+              <li
+                key={filePath}
+                className="text-foreground/80 truncate font-mono text-2xs"
+                title={filePath}
+              >
+                {filePath}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

@@ -130,9 +130,7 @@ function MockInspectorPanel(props: { className?: string }): ReactElement {
 
 /** 渲染 DevPanel 的公共 helper */
 function renderDevPanel(props: Partial<React.ComponentProps<typeof DevPanel>> = {}) {
-  return render(
-    <DevPanel sessionId="session-1" gitRepoPath="/repo" workingDir="/repo" {...props} />,
-  );
+  return render(<DevPanel sessionId="session-1" gitRepoPath="/repo" {...props} />);
 }
 
 describe('DevPanel', () => {
@@ -158,30 +156,12 @@ describe('DevPanel', () => {
     );
   });
 
-  it('折叠按钮点击 → 折叠不渲染内容；再点展开恢复', async () => {
+  it('移除面板内折叠按钮（对齐原型：折叠由全局机制管理）', async () => {
     renderDevPanel();
-    const toggleBtn = screen.getByRole('button', { name: /收起|展开/ });
-    // 默认展开
-    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
-    // 折叠
-    await userEvent.click(toggleBtn);
-    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByTestId('info-pane')).not.toBeInTheDocument();
-    // 展开
-    await userEvent.click(toggleBtn);
+    // 不再有面板内折叠按钮（仅全局顶栏按钮管理折叠）
+    expect(screen.queryByRole('button', { name: /收起|展开/ })).toBeNull();
+    // 内容始终渲染
     expect(screen.getByTestId('info-pane')).toBeInTheDocument();
-  });
-
-  it('折叠态点击 Tab → 自动展开并渲染对应 pane', async () => {
-    renderDevPanel();
-    // 折叠
-    await userEvent.click(screen.getByRole('button', { name: /收起|展开/ }));
-    // 点击 diff tab
-    await userEvent.click(screen.getByRole('tab', { name: /文件变更/ }));
-    expect(screen.getByTestId('diff-pane')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /收起|展开/ }).getAttribute('aria-expanded')).toBe(
-      'true',
-    );
   });
 
   // ── Tab 切换 ─────────────────────────────────────────────
@@ -222,7 +202,7 @@ describe('DevPanel', () => {
     const { rerender } = renderDevPanel();
     expect(screen.getByTestId('info-pane').getAttribute('data-session-id')).toBe('session-1');
 
-    rerender(<DevPanel sessionId="session-2" gitRepoPath="/repo" workingDir="/repo" />);
+    rerender(<DevPanel sessionId="session-2" gitRepoPath="/repo" />);
     expect(screen.getByTestId('info-pane').getAttribute('data-session-id')).toBe('session-2');
   });
 
@@ -231,7 +211,7 @@ describe('DevPanel', () => {
     await userEvent.click(screen.getByRole('tab', { name: /开发者/ }));
     expect(screen.getByTestId('git-panel').getAttribute('data-path')).toBe('/repo');
 
-    rerender(<DevPanel sessionId="session-1" gitRepoPath="/repo2" workingDir="/repo" />);
+    rerender(<DevPanel sessionId="session-1" gitRepoPath="/repo2" />);
     expect(screen.getByTestId('git-panel').getAttribute('data-path')).toBe('/repo2');
   });
 

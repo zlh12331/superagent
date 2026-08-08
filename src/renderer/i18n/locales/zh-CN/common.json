@@ -535,7 +535,10 @@
       "browserPreview": "浏览器预览",
       "diffLoadFailed": "变更内容加载失败",
       "diffLoading": "加载中…",
-      "diffUnavailable": "暂无变更内容（未跟踪文件或仓库未初始化）"
+      "diffUnavailable": "暂无变更内容（未跟踪文件或仓库未初始化）",
+      "clearGoal": "清除目标",
+      "referencedFiles": "引用文件",
+      "noReferencedFiles": "暂无引用文件"
     },
     "shortcutHelp": {
       "title": "快捷键帮助",
