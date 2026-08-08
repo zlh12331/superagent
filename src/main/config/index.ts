@@ -70,6 +70,31 @@ const ProviderBaseUrlSchema = z.object({
     (v) => process.env['OLLAMA_API_BASE'] ?? v,
     z.string().url().default('http://localhost:11434'),
   ),
+  /** Moonshot Kimi 根地址（registry 拼接协议路径；env MOONSHOT_API_BASE 优先） */
+  moonshot: z.preprocess(
+    (v) => process.env['MOONSHOT_API_BASE'] ?? v,
+    z.string().url().default('https://api.moonshot.cn/v1'),
+  ),
+  zhipu: z.preprocess(
+    (v) => process.env['ZHIPU_API_BASE'] ?? v,
+    z.string().url().default('https://open.bigmodel.cn/api/paas/v4'),
+  ),
+  qwen: z.preprocess(
+    (v) => process.env['QWEN_API_BASE'] ?? v,
+    z.string().url().default('https://dashscope.aliyuncs.com/compatible-mode/v1'),
+  ),
+  doubao: z.preprocess(
+    (v) => process.env['DOUBAO_API_BASE'] ?? v,
+    z.string().url().default('https://ark.cn-beijing.volces.com/api/v3'),
+  ),
+  siliconflow: z.preprocess(
+    (v) => process.env['SILICONFLOW_API_BASE'] ?? v,
+    z.string().url().default('https://api.siliconflow.cn/v1'),
+  ),
+  openrouter: z.preprocess(
+    (v) => process.env['OPENROUTER_API_BASE'] ?? v,
+    z.string().url().default('https://openrouter.ai/api/v1'),
+  ),
 });
 
 /**

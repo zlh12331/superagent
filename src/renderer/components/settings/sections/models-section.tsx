@@ -28,6 +28,12 @@ const BUILTIN_PROVIDERS: readonly { readonly kind: ApiKeyProvider; readonly labe
   { kind: 'openai', label: 'OpenAI' },
   { kind: 'anthropic', label: 'Anthropic' },
   { kind: 'ollama', label: 'Ollama' },
+  { kind: 'moonshot', label: 'Moonshot Kimi' },
+  { kind: 'zhipu', label: '智谱 GLM' },
+  { kind: 'qwen', label: '通义千问' },
+  { kind: 'doubao', label: '豆包（火山方舟）' },
+  { kind: 'siliconflow', label: '硅基流动' },
+  { kind: 'openrouter', label: 'OpenRouter' },
 ];
 
 /**

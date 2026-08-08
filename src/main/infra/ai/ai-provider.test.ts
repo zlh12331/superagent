@@ -266,14 +266,25 @@ describe('ai-provider', () => {
   });
 
   describe('ProviderRegistry', () => {
-    it('内置 4 个供应商，默认 kind 为 deepseek', () => {
+    it('内置 10 个供应商，默认 kind 为 deepseek', () => {
       const registry = new ProviderRegistry();
       const infos = registry.list();
 
-      expect(infos).toHaveLength(4);
+      expect(infos).toHaveLength(10);
       expect(registry.getDefaultKind()).toBe('deepseek');
       expect(infos.map((i) => i.kind).sort()).toEqual(
-        ['anthropic', 'deepseek', 'ollama', 'openai'].sort(),
+        [
+          'anthropic',
+          'deepseek',
+          'ollama',
+          'openai',
+          'moonshot',
+          'zhipu',
+          'qwen',
+          'doubao',
+          'siliconflow',
+          'openrouter',
+        ].sort(),
       );
     });
 

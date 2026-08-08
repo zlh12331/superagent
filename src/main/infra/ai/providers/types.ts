@@ -26,7 +26,18 @@ import type { LanguageModel } from 'ai';
  * 扩展新供应商：在 ProviderKindSchema / ProviderKind 中追加枚举值，
  * 并在 registry.ts 的 registerBuiltinProviders 中注册定义与工厂。
  */
-export const PROVIDER_KINDS = ['deepseek', 'openai', 'anthropic', 'ollama'] as const;
+export const PROVIDER_KINDS = [
+  'deepseek',
+  'openai',
+  'anthropic',
+  'ollama',
+  'moonshot',
+  'zhipu',
+  'qwen',
+  'doubao',
+  'siliconflow',
+  'openrouter',
+] as const;
 
 /** 模型供应商标识 TypeScript 类型 */
 export type ProviderKind = (typeof PROVIDER_KINDS)[number];

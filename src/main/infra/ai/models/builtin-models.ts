@@ -111,6 +111,66 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     displayName: 'Qwen2.5 7B（本地快模型）',
     capabilities: { contextWindowSize: 32_000, maxOutputTokens: 8_192, fastOnly: true },
   },
+  // Moonshot Kimi（OpenAI Compatible 协议）
+  {
+    id: 'kimi-k2-0711-preview',
+    providerKind: 'moonshot',
+    displayName: 'Kimi K2 0711 Preview',
+    capabilities: {
+      contextWindowSize: 131072,
+      maxOutputTokens: 8192,
+    },
+  },
+  // 智谱 GLM（OpenAI Compatible 协议）
+  {
+    id: 'glm-4.6',
+    providerKind: 'zhipu',
+    displayName: 'GLM-4.6',
+    capabilities: {
+      contextWindowSize: 200000,
+      maxOutputTokens: 8192,
+    },
+  },
+  // 通义千问（OpenAI Compatible 协议）
+  {
+    id: 'qwen3-coder-plus',
+    providerKind: 'qwen',
+    displayName: 'Qwen3 Coder Plus',
+    capabilities: {
+      contextWindowSize: 131072,
+      maxOutputTokens: 8192,
+    },
+  },
+  // 豆包（火山方舟）（OpenAI Compatible 协议）
+  {
+    id: 'doubao-seed-1-6-250615',
+    providerKind: 'doubao',
+    displayName: 'Doubao Seed 1.6',
+    capabilities: {
+      contextWindowSize: 131072,
+      maxOutputTokens: 8192,
+    },
+  },
+  // 硅基流动（OpenAI Compatible 协议）
+  {
+    id: 'deepseek-ai/DeepSeek-V3.1',
+    providerKind: 'siliconflow',
+    displayName: 'DeepSeek V3.1 (SF)',
+    capabilities: {
+      contextWindowSize: 131072,
+      maxOutputTokens: 8192,
+    },
+  },
+  // OpenRouter（OpenAI Compatible 协议）
+  {
+    id: 'deepseek/deepseek-chat',
+    providerKind: 'openrouter',
+    displayName: 'DeepSeek Chat (OR)',
+    capabilities: {
+      contextWindowSize: 131072,
+      maxOutputTokens: 8192,
+    },
+  },
 ];
 
 /**
@@ -125,6 +185,12 @@ export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
   openai: 'gpt-4o',
   anthropic: 'claude-sonnet-4-20250514',
   ollama: 'qwen2.5-coder:7b',
+  moonshot: 'kimi-k2-0711-preview',
+  zhipu: 'glm-4.6',
+  qwen: 'qwen3-coder-plus',
+  doubao: 'doubao-seed-1-6-250615',
+  siliconflow: 'deepseek-ai/DeepSeek-V3.1',
+  openrouter: 'deepseek/deepseek-chat',
 };
 
 /**

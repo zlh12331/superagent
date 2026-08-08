@@ -89,6 +89,48 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
     requiresApiKey: false,
     isDefault: DEFAULT_KIND === 'ollama',
   },
+  {
+    kind: 'moonshot',
+    displayName: 'Moonshot Kimi',
+    defaultModel: DEFAULT_MODEL_BY_KIND.moonshot,
+    requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'moonshot',
+  },
+  {
+    kind: 'zhipu',
+    displayName: '智谱 GLM',
+    defaultModel: DEFAULT_MODEL_BY_KIND.zhipu,
+    requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'zhipu',
+  },
+  {
+    kind: 'qwen',
+    displayName: '通义千问',
+    defaultModel: DEFAULT_MODEL_BY_KIND.qwen,
+    requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'qwen',
+  },
+  {
+    kind: 'doubao',
+    displayName: '豆包（火山方舟）',
+    defaultModel: DEFAULT_MODEL_BY_KIND.doubao,
+    requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'doubao',
+  },
+  {
+    kind: 'siliconflow',
+    displayName: '硅基流动',
+    defaultModel: DEFAULT_MODEL_BY_KIND.siliconflow,
+    requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'siliconflow',
+  },
+  {
+    kind: 'openrouter',
+    displayName: 'OpenRouter',
+    defaultModel: DEFAULT_MODEL_BY_KIND.openrouter,
+    requiresApiKey: true,
+    isDefault: DEFAULT_KIND === 'openrouter',
+  },
 ];
 
 /**
@@ -166,6 +208,54 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       ...(apiKey !== undefined ? { apiKey } : {}),
       baseURL: resolvedBaseUrl,
     }) as unknown as (modelId: string) => LanguageModel;
+  },
+  moonshot: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.moonshot;
+    return createOpenAICompatible({
+      name: 'moonshot',
+      baseURL: resolvedBaseUrl,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    });
+  },
+  zhipu: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.zhipu;
+    return createOpenAICompatible({
+      name: 'zhipu',
+      baseURL: resolvedBaseUrl,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    });
+  },
+  qwen: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.qwen;
+    return createOpenAICompatible({
+      name: 'qwen',
+      baseURL: resolvedBaseUrl,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    });
+  },
+  doubao: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.doubao;
+    return createOpenAICompatible({
+      name: 'doubao',
+      baseURL: resolvedBaseUrl,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    });
+  },
+  siliconflow: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.siliconflow;
+    return createOpenAICompatible({
+      name: 'siliconflow',
+      baseURL: resolvedBaseUrl,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    });
+  },
+  openrouter: ({ apiKey, baseUrl }) => {
+    const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openrouter;
+    return createOpenAICompatible({
+      name: 'openrouter',
+      baseURL: resolvedBaseUrl,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    });
   },
   ollama: ({ baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.ollama;

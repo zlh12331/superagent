@@ -24,7 +24,18 @@ import { z } from 'zod';
  * - anthropic：Anthropic Claude API
  * - ollama：本地 Ollama 服务（无需 API Key，保留枚举项供 UI 展示）
  */
-export const ApiKeyProviderSchema = z.enum(['deepseek', 'openai', 'anthropic', 'ollama']);
+export const ApiKeyProviderSchema = z.enum([
+  'deepseek',
+  'openai',
+  'anthropic',
+  'ollama',
+  'moonshot',
+  'zhipu',
+  'qwen',
+  'doubao',
+  'siliconflow',
+  'openrouter',
+]);
 
 /** API Key 提供商标识 TypeScript 类型 */
 export type ApiKeyProvider = z.infer<typeof ApiKeyProviderSchema>;
