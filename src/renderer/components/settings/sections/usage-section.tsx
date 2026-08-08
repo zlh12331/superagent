@@ -12,9 +12,9 @@
 // ──────────────────────────────────────────────
 
 import type { UsageSummaryRes } from '@code-agent/shared/renderer';
-import HeatMap from '@uiw/react-heat-map';
 import { BarChart3 } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import CalendarHeatmap from 'react-calendar-heatmap';
 
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
@@ -44,13 +44,13 @@ function recentDays(count: number): string[] {
   return days;
 }
 
-/** 热力图色档（@uiw/react-heat-map panelColors：0 = 空，1-4 = accent 透明度递进） */
-const HEAT_PANEL_COLORS = [
-  'var(--bg-muted)',
-  'color-mix(in srgb, var(--accent) 25%, transparent)',
-  'color-mix(in srgb, var(--accent) 50%, transparent)',
-  'color-mix(in srgb, var(--accent) 75%, transparent)',
-  'var(--accent)',
+/** 热力图色档（react-calendar-heatmap classForValue：color-empty / color-scale-1..4） */
+const HEAT_SCALE_CLASS = [
+  'color-empty',
+  'color-scale-1',
+  'color-scale-2',
+  'color-scale-3',
+  'color-scale-4',
 ];
 
 export function UsageSection(): ReactElement {
@@ -84,13 +84,9 @@ export function UsageSection(): ReactElement {
     };
   }, [t]);
 
-  // 热力图：@uiw/react-heat-map 数据（date 格式 YYYY/MM/DD + count = 当日 tokens）
+  // 热力图：react-calendar-heatmap 数据（date 格式 YYYY-MM-DD + count = 当日 tokens）
   const heatValue = useMemo(
-    () =>
-      (summary?.byDay ?? []).map((d) => ({
-        date: d.date.replaceAll('-', '/'),
-        count: d.totalTokens,
-      })),
+    () => (summary?.byDay ?? []).map((d) => ({ date: d.date, count: d.totalTokens })),
     [summary],
   );
   const heatEnd = useMemo(() => new Date(), []);
@@ -185,24 +181,21 @@ export function UsageSection(): ReactElement {
               <p className="text-xs font-medium text-muted-foreground">
                 {t('settings.usageHeatmap')}
               </p>
-              <div className="mt-2">
-                <HeatMap
-                  value={heatValue}
+              <div className="mt-2 heatmap-wrap">
+                <CalendarHeatmap
+                  values={heatValue}
                   startDate={heatStart}
                   endDate={heatEnd}
-                  width={520}
-                  rectSize={14}
-                  space={3}
-                  rectProps={{ rx: 3 }}
-                  panelColors={HEAT_PANEL_COLORS}
-                  legendCellSize={10}
-                  rectRender={(props, data) => (
-                    <rect {...props} rx={3} fill={HEAT_PANEL_COLORS[heatLevel(data.count)]}>
-                      <title>
-                        {data.date} · {formatTokens(data.count ?? 0)} tokens
-                      </title>
-                    </rect>
-                  )}
+                  gutterSize={3}
+                  classForValue={(value) =>
+                    HEAT_SCALE_CLASS[heatLevel(value?.['count'] as number | undefined)] ??
+                    'color-empty'
+                  }
+                  titleForValue={(value) =>
+                    value === undefined
+                      ? '无数据'
+                      : `${String(value['date'])} · ${formatTokens(Number(value['count']))} tokens`
+                  }
                 />
               </div>
               <p className="text-muted-foreground mt-1.5 text-2xs">
@@ -238,24 +231,6 @@ export function UsageSection(): ReactElement {
                 )}
               </ul>
             </div>
-          </div>
-
-          {/* ④ 按日明细（近 90 天列表，热力图数值兜底；完整展开不再内部滚动） */}
-          <div className="rounded-md border border-border p-3">
-            <p className="text-xs font-medium text-muted-foreground">{t('settings.usageByDay')}</p>
-            <ul className="mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
-              {summary.byDay.map((d) => (
-                <li
-                  key={d.date}
-                  className="flex items-center justify-between text-muted-foreground"
-                >
-                  <span>{d.date}</span>
-                  <span className="text-muted-foreground">
-                    {d.calls} 次 · {formatTokens(d.totalTokens)} tokens
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
       )}

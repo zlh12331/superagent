@@ -886,6 +886,36 @@ body::after {
   height: var(--aurora-topbar-h, 52px);
 }
 
+/* ── 用量热力图（react-calendar-heatmap 主题化：色档走设计 token，不引官方 css）── */
+.react-calendar-heatmap {
+  width: 100%;
+}
+.react-calendar-heatmap rect {
+  rx: 3px;
+}
+.react-calendar-heatmap text {
+  font-size: 9px;
+  fill: var(--muted-foreground);
+}
+.react-calendar-heatmap .color-empty {
+  fill: var(--bg-muted);
+}
+.react-calendar-heatmap .color-scale-1 {
+  fill: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.react-calendar-heatmap .color-scale-2 {
+  fill: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.react-calendar-heatmap .color-scale-3 {
+  fill: color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.react-calendar-heatmap .color-scale-4 {
+  fill: var(--accent);
+}
+.heatmap-wrap {
+  overflow-x: auto;
+}
+
 /* 通用 frameless 拖拽区（Topbar / 设置抽屉头部窗口控件预留区复用） */
 .app-region-drag {
   -webkit-app-region: drag;
