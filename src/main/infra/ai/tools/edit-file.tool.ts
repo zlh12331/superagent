@@ -7,6 +7,7 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import { readTracker } from './read-tracker';
 
 const EditFileInputSchema = z.object({
   path: z.string().min(1).describe('文件路径（相对路径基于工作目录解析）'),
@@ -38,6 +39,15 @@ export function createEditFileTool(): Tool<EditFileInput> {
     category: 'edit',
     execute: async (input: EditFileInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+
+      // priorReadEnforcement：修改已存在文件前必须已 read_file（防盲目编辑）
+      if (!readTracker.has(ctx.sessionId, absPath)) {
+        return {
+          title: '文件未读取',
+          output:
+            '编辑前必须先读取文件内容。请先使用 read_file 工具读取该文件（含要修改的区域），再调用 edit_file。',
+        };
+      }
 
       let original: string;
       try {

@@ -99,6 +99,11 @@ describe('file 类工具（真实 FileService）', () => {
   describe('edit_file', () => {
     it('精确替换：oldString 匹配后替换', async () => {
       writeFileSync(join(workDir, 'edit.txt'), 'const a = 1;\n', 'utf8');
+      // priorReadEnforcement 契约：编辑前必须先 read_file
+      await createReadFileTool(getFileService()).execute(
+        { path: 'edit.txt', offset: 0, limit: undefined },
+        createCtx(),
+      );
       const tool = createEditFileTool();
       const result = await tool.execute(
         {
@@ -117,6 +122,11 @@ describe('file 类工具（真实 FileService）', () => {
 
     it('找不到 oldString：抛 AppError（INVALID_INPUT）且内容不变', async () => {
       writeFileSync(join(workDir, 'edit2.txt'), 'content', 'utf8');
+      // priorReadEnforcement 契约：编辑前必须先 read_file
+      await createReadFileTool(getFileService()).execute(
+        { path: 'edit2.txt', offset: 0, limit: undefined },
+        createCtx(),
+      );
       const tool = createEditFileTool();
       await expect(
         tool.execute(

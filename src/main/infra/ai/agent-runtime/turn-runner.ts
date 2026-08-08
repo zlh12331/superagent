@@ -14,6 +14,7 @@
 
 import { TurnEventType } from '@code-agent/shared/main';
 import { isAbortError } from '../error-classifier';
+import { readTracker } from '../tools/read-tracker';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 import type { TurnEventEmitter } from './turn-emitter';
 import type { StreamPart } from './turn-translator';
@@ -146,6 +147,9 @@ export class TurnRunner {
       }
       // 其他错误（含流空闲超时 AI_TIMEOUT）：抛出，由上层分类 + 产出 error 事件
       throw error;
+    } finally {
+      // 回合终态：清理本会话已读文件记录（priorReadEnforcement 防跨回合累积）
+      readTracker.clearSession(this.options.sessionId);
     }
   }
 }

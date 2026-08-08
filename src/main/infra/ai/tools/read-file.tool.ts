@@ -21,6 +21,7 @@ import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import { readTracker } from './read-tracker';
 
 const ReadFileInputSchema = z.object({
   path: z.string().min(1).describe('文件路径（相对路径基于工作目录解析）'),
@@ -58,6 +59,8 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
         offset: input.offset,
         limit: input.limit,
       });
+      // 记录已读文件（priorReadEnforcement：编辑前必须先读）
+      readTracker.record(ctx.sessionId, absPath);
 
       return {
         title: `读取文件: ${input.path}`,

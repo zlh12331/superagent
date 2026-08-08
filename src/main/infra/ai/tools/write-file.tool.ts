@@ -17,11 +17,23 @@
 // 输出：ToolResult（title + output 文本 + metadata 结构化数据）
 // ──────────────────────────────────────────────────────────────
 
+import { promises as fs } from 'node:fs';
 import type { FileWriteRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
 import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import { readTracker } from './read-tracker';
+
+/** 目标文件是否存在（写入前校验用） */
+async function fileExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const WriteFileInputSchema = z.object({
   path: z.string().min(1).describe('文件路径（相对路径基于工作目录解析）'),
@@ -42,6 +54,15 @@ export function createWriteFileTool(fileService: IFileService): Tool<WriteFileIn
     category: 'edit',
     execute: async (input: WriteFileInput, ctx: ToolContext): Promise<ToolResult> => {
       const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+
+      // priorReadEnforcement：覆盖/追加已存在文件前必须已 read_file（新建文件不要求）
+      const exists = await fileExists(absPath);
+      if (exists && !readTracker.has(ctx.sessionId, absPath)) {
+        return {
+          title: '文件未读取',
+          output: '修改已存在文件前必须先读取其内容。请先使用 read_file 工具读取该文件，再写入。',
+        };
+      }
 
       const result: FileWriteRes = await fileService.write({
         path: absPath,
