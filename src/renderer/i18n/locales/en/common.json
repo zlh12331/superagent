@@ -456,7 +456,13 @@
       "memoryClear": "Clear",
       "memoryCleared": "Memory cleared",
       "memoryClearFailed": "Failed to clear memory",
-      "back": "Back"
+      "back": "Back",
+      "usageToday": "Today",
+      "usageMonth": "Last 30 days",
+      "usageTotal": "Total",
+      "usageHeatmap": "Usage heatmap (30 days)",
+      "usageHeatmapAria": "Daily token usage heatmap for the last 30 days",
+      "usageHeatmapHint": "Darker = more tokens that day; hover for details"
     },
     "home": {
       "justNow": "Just now",

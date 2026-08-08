@@ -456,7 +456,13 @@
       "memoryClear": "清除",
       "memoryCleared": "记忆已清除",
       "memoryClearFailed": "清除记忆失败",
-      "back": "返回"
+      "back": "返回",
+      "usageToday": "今日",
+      "usageMonth": "近 30 天",
+      "usageTotal": "累计",
+      "usageHeatmap": "消耗热力图（近 30 天）",
+      "usageHeatmapAria": "近 30 天每日 token 消耗热力图",
+      "usageHeatmapHint": "色深 = 当日消耗量；悬停查看日期与数值"
     },
     "home": {
       "justNow": "刚刚",
