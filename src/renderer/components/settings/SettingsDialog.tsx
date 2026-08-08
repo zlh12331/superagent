@@ -98,40 +98,41 @@ interface NavGroup {
 /** 导航分组（4 组，语义归组） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
-    labelKey: 'settings.group.accountData',
+    labelKey: 'settings.group.accountGeneral',
     items: [
       { id: 'account', labelKey: 'settings.nav.account', icon: User },
       { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
-    ],
-  },
-  {
-    labelKey: 'settings.group.general',
-    items: [
       { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
       { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
-      { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
-      { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
-      { id: 'commands', labelKey: 'settings.nav.commands', icon: TerminalSquare },
-      { id: 'rules-memory', labelKey: 'settings.nav.rulesMemory', icon: BookOpenText },
     ],
   },
   {
-    labelKey: 'settings.group.models',
+    labelKey: 'settings.group.capabilities',
     items: [
       // 模型服务：提供商/API Key/运行时模型统一管理（对齐同类桌面 LLM 客户端）
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
       { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
+      { id: 'plugins', labelKey: 'settings.nav.plugins', icon: Puzzle },
       { id: 'hooks', labelKey: 'settings.nav.hooks', icon: Workflow },
+      { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
+      { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
     ],
   },
   {
-    labelKey: 'settings.group.plugins',
+    labelKey: 'settings.group.agent',
     items: [
-      { id: 'plugins', labelKey: 'settings.nav.plugins', icon: Puzzle },
-      { id: 'beta', labelKey: 'settings.nav.beta', icon: FlaskConical },
-      { id: 'about', labelKey: 'settings.nav.about', icon: Info },
+      { id: 'commands', labelKey: 'settings.nav.commands', icon: TerminalSquare },
+      { id: 'rules-memory', labelKey: 'settings.nav.rulesMemory', icon: BookOpenText },
     ],
+  },
+  {
+    labelKey: 'settings.group.beta',
+    items: [{ id: 'beta', labelKey: 'settings.nav.beta', icon: FlaskConical }],
+  },
+  {
+    labelKey: 'settings.group.about',
+    items: [{ id: 'about', labelKey: 'settings.nav.about', icon: Info }],
   },
 ];
 

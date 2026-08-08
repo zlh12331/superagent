@@ -313,7 +313,12 @@
         "advanced": "高级",
         "general": "通用",
         "models": "模型与扩展",
-        "plugins": "插件与系统"
+        "plugins": "插件与系统",
+        "accountGeneral": "账户与通用",
+        "capabilities": "能力",
+        "agent": "智能与行为",
+        "beta": "实验",
+        "about": "关于"
       },
       "nav": {
         "apiKey": "API 密钥",

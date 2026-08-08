@@ -313,7 +313,12 @@
         "advanced": "Advanced",
         "general": "General",
         "models": "Models & Extensions",
-        "plugins": "Plugins & System"
+        "plugins": "Plugins & System",
+        "accountGeneral": "Account & General",
+        "capabilities": "Capabilities",
+        "agent": "Agent",
+        "beta": "Experimental",
+        "about": "About"
       },
       "nav": {
         "apiKey": "API Keys",
