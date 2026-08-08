@@ -1,36 +1,24 @@
-import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
+// src/renderer/components/common/ModelSelector.tsx
+// 模型选择器（composer 项目栏）
+// ──────────────────────────────────────────────────────────────
+// 数据源：models:list IPC——主进程 modelRegistry 真实清单
+// （内置 + 运行时自定义合并，单一真源）。渲染层零硬编码模型表：
+// 后端没有就是没有（浏览器模式无 window.api 时降级为空列表）。
+// ──────────────────────────────────────────────────────────────
+
+import type {
+  ApiKeyProvider,
+  AvailableModelInfo,
+  ModelsListRes,
+} from '@code-agent/shared/renderer';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
-interface ModelInfo {
-  readonly provider: ApiKeyProvider;
-  readonly label: string;
-  readonly icon: string;
-  readonly models: readonly { id: string; name: string }[];
-}
-
-const MODEL_CONFIGS: readonly ModelInfo[] = [
-  {
-    provider: 'deepseek',
-    label: 'DeepSeek',
-    icon: 'D',
-    models: [
-      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
-      { id: 'deepseek-v4', name: 'DeepSeek V4' },
-    ],
-  },
-  {
-    provider: 'openai',
-    label: 'OpenAI',
-    icon: 'O',
-    models: [
-      { id: 'gpt-4o-mini', name: 'GPT-4o mini' },
-      { id: 'gpt-4o', name: 'GPT-4o' },
-    ],
-  },
-];
+/** 模型清单查询 key */
+const MODELS_QUERY_KEY = ['models', 'list'] as const;
 
 interface ModelSelectorProps {
   readonly provider: ApiKeyProvider;
@@ -52,37 +40,41 @@ export function ModelSelector({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 运行时自定义模型（后端 userData 持久化，settings:listRuntimeModels）——
-  // 模型表不硬编码：内置配置仅作兜底，运行时模型动态合并
-  const [runtimeModels, setRuntimeModels] = useState<RuntimeModelInfo[]>([]);
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) {
-      return;
-    }
-    window.api.settings
-      .listRuntimeModels()
-      .then((res) => {
-        if ('data' in res && res.data !== undefined) {
-          setRuntimeModels([...res.data.models]);
-        }
-      })
-      .catch(() => {
-        // 运行时模型拉取失败：回退内置表（不阻断选择器）
-      });
-  }, []);
+  // 模型清单：models:list（主进程真实数据；浏览器模式守卫降级空列表）
+  const { data: modelsData } = useQuery({
+    queryKey: MODELS_QUERY_KEY,
+    queryFn: async (): Promise<ModelsListRes> => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { models: [] };
+      }
+      const response = await window.api.models.list();
+      if ('error' in response && response.error !== undefined) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      if ('data' in response && response.data !== undefined) {
+        return response.data;
+      }
+      throw new Error('Unexpected response');
+    },
+  });
+  const allModels = modelsData?.models ?? [];
 
-  // 合并模型列表：内置（兜底）+ 运行时（后端持久化，优先显示）
-  const allModels = useMemo(() => {
-    const builtin = MODEL_CONFIGS.flatMap((config) =>
-      config.models.map((m) => ({ id: m.id, name: m.name, provider: config.provider })),
-    );
-    const runtime = runtimeModels.map((m) => ({
-      id: m.modelId,
-      name: m.modelId,
-      provider: m.providerKind,
-    }));
-    return [...runtime, ...builtin];
-  }, [runtimeModels]);
+  // 当前模型展示名（来自后端清单；未知 id 回退原始 id）
+  const currentModelName = useMemo(
+    () => allModels.find((m) => m.id === model)?.label ?? model,
+    [allModels, model],
+  );
+
+  // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）
+  const providerGroups = useMemo(() => {
+    const groups = new Map<string, AvailableModelInfo[]>();
+    for (const m of allModels) {
+      const list = groups.get(m.providerKind) ?? [];
+      list.push(m);
+      groups.set(m.providerKind, list);
+    }
+    return [...groups.entries()];
+  }, [allModels]);
 
   useEffect(() => {
     if (!open) return;
@@ -104,36 +96,13 @@ export function ModelSelector({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open]);
 
-  const currentProviderConfig = useMemo(
-    () => MODEL_CONFIGS.find((m) => m.provider === provider),
-    [provider],
-  );
-
-  const currentModelName = useMemo(() => {
-    return allModels.find((m) => m.id === model)?.name ?? model;
-  }, [allModels, model]);
-
-  const handleProviderSelect = useCallback(
-    (p: ApiKeyProvider) => {
-      onProviderChange(p);
-      const config = MODEL_CONFIGS.find((m) => m.provider === p);
-      if (config && config.models.length > 0) {
-        const firstModel = config.models[0] ?? config.models[0];
-        if (firstModel !== undefined) {
-          onModelChange(firstModel.id);
-        }
-      }
+  const handleModelSelect = useCallback(
+    (providerKind: string, modelId: string) => {
+      onProviderChange(providerKind as ApiKeyProvider);
+      onModelChange(modelId);
       setOpen(false);
     },
     [onProviderChange, onModelChange],
-  );
-
-  const handleModelSelect = useCallback(
-    (m: string) => {
-      onModelChange(m);
-      setOpen(false);
-    },
-    [onModelChange],
   );
 
   return (
@@ -148,7 +117,7 @@ export function ModelSelector({
         disabled={disabled}
       >
         <span className="dot size-1.5 rounded-full bg-accent" />
-        <span>{currentProviderConfig?.label ?? provider}</span>
+        <span>{provider}</span>
         <span className="text-muted-foreground text-xs">· {currentModelName}</span>
         <ChevronDown className="cpb-caret" size={10} strokeWidth={2} />
       </button>
@@ -160,43 +129,37 @@ export function ModelSelector({
           aria-label={t('common.modelSelector')}
         >
           <div className="fdm-scroll">
-            {/* 分组：内置配置（兜底）+ 运行时模型（后端持久化） */}
-            {MODEL_CONFIGS.map((config) => {
-              const runtimeForProvider = runtimeModels.filter(
-                (m) => m.providerKind === config.provider,
-              );
-              const models = [
-                ...runtimeForProvider.map((m) => ({ id: m.modelId, name: m.modelId })),
-                ...config.models,
-              ];
-              return (
-                <div key={config.provider} className="model-provider-group">
+            {/* 分组：按后端返回的 providerKind 动态生成（无数据 = 空菜单 + 提示） */}
+            {providerGroups.length === 0 ? (
+              <div className="text-muted-foreground px-3 py-2 text-xs">{t('common.noModels')}</div>
+            ) : (
+              providerGroups.map(([providerKind, models]) => (
+                <div key={providerKind} className="model-provider-group">
                   <div className="model-provider-header">
-                    <span className="model-provider-icon">{config.icon}</span>
-                    <span className="model-provider-label">{config.label}</span>
+                    <span className="model-provider-icon">
+                      {providerKind.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="model-provider-label">{providerKind}</span>
                   </div>
                   <div className="model-list">
                     {models.map((m) => {
-                      const isSelected = provider === config.provider && model === m.id;
+                      const isSelected = provider === providerKind && model === m.id;
                       return (
                         <button
                           key={m.id}
                           type="button"
                           className={cn('model-item', isSelected && 'active')}
-                          onClick={() => {
-                            handleProviderSelect(config.provider);
-                            handleModelSelect(m.id);
-                          }}
+                          onClick={() => handleModelSelect(providerKind, m.id)}
                           role="menuitem"
                         >
-                          {m.name}
+                          {m.label}
                         </button>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
         </div>
       )}

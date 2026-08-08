@@ -46,6 +46,7 @@ export * from './schemas/git';
 export * from './schemas/goal';
 export * from './schemas/im';
 export * from './schemas/memory';
+export * from './schemas/models';
 export * from './schemas/search';
 export * from './schemas/session';
 export * from './schemas/settings';

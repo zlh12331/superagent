@@ -136,6 +136,10 @@ export const IPC_META = {
     getStatus: request('system:getStatus'),
   },
 
+  models: {
+    list: request('models:list'),
+  },
+
   memory: {
     list: request('memory:list'),
     clear: request('memory:clear'),

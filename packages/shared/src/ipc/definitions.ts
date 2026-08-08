@@ -111,6 +111,7 @@ import {
   MemoryListReqSchema,
   type MemoryListRes,
 } from '../schemas/memory';
+import { type ModelsListRes, ModelsListResSchema } from '../schemas/models';
 import { GlobReqSchema, type GlobRes, GrepReqSchema, type GrepRes } from '../schemas/search';
 import {
   SessionCreateReqSchema,
@@ -601,6 +602,10 @@ export const IPC_DEFINITIONS = {
 
   system: {
     getStatus: withSchema(IPC_META.system.getStatus, null, {} as SystemStatusRes),
+  },
+
+  models: {
+    list: withSchema(IPC_META.models.list, null, {} as ModelsListRes, ModelsListResSchema),
   },
 
   memory: {

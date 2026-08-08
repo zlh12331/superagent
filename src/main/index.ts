@@ -33,6 +33,7 @@ import { createGoalHandlers } from './ipc/goal.handler';
 import { createImHandlers } from './ipc/im.handler';
 import { createMcpHandlers } from './ipc/mcp.handler';
 import { createMemoryHandlers } from './ipc/memory.handler';
+import { modelsHandlers } from './ipc/models.handler';
 import { registerIpcHandlers } from './ipc/register';
 import { createSearchHandlers } from './ipc/search.handler';
 import { createSessionHandlers } from './ipc/session.handler';
@@ -374,6 +375,7 @@ app
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
       memory: createMemoryHandlers({ memoryService: serviceContainer.getMemoryService() }),
+      models: modelsHandlers,
       mcp: createMcpHandlers(serviceContainer.getMcpService()),
       skill: skillHandlers,
       whitelist: createWhitelistHandlers({
