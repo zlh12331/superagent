@@ -886,6 +886,11 @@ body::after {
   height: var(--aurora-topbar-h, 52px);
 }
 
+/* 通用 frameless 拖拽区（Topbar / 设置抽屉头部窗口控件预留区复用） */
+.app-region-drag {
+  -webkit-app-region: drag;
+}
+
 /* frameless 拖拽区：顶栏背景整体可拖（含 padding 预留区），
    交互元素（按钮/品牌）no-drag——空 spacer 高度为 0 无法承载 drag，必须挂在容器上 */
 .topbar {
