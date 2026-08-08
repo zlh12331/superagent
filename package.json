@@ -148,6 +148,7 @@
     "@sentry/electron": "^7.15.0",
     "@tailwindcss/vite": "^4",
     "@tanstack/react-query": "^5.101.3",
+    "@uiw/react-heat-map": "^2.3.4",
     "@vscode/ripgrep": "^1.18.0",
     "@wecom/aibot-node-sdk": "^1.0.7",
     "@xterm/addon-fit": "^0.11.0",

@@ -12,6 +12,7 @@
 // ──────────────────────────────────────────────
 
 import type { UsageSummaryRes } from '@code-agent/shared/renderer';
+import HeatMap from '@uiw/react-heat-map';
 import { BarChart3 } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 
@@ -26,16 +27,6 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
-}
-
-/** 热力图色档（0 → 空；>0 按最大值分位 4 档） */
-function heatLevel(tokens: number, max: number): 0 | 1 | 2 | 3 | 4 {
-  if (tokens <= 0 || max <= 0) return 0;
-  const ratio = tokens / max;
-  if (ratio <= 0.25) return 1;
-  if (ratio <= 0.5) return 2;
-  if (ratio <= 0.75) return 3;
-  return 4;
 }
 
 /** 生成近 N 天日期列表（倒序，today 在前；与 byDay 数据格式一致） */
@@ -53,14 +44,14 @@ function recentDays(count: number): string[] {
   return days;
 }
 
-/** 色档 → accent 透明度类 */
-const HEAT_CLASS = [
-  'bg-muted/20',
-  'bg-accent/25',
-  'bg-accent/50',
-  'bg-accent/75',
-  'bg-accent',
-] as const;
+/** 热力图色档（@uiw/react-heat-map panelColors：0 = 空，1-4 = accent 透明度递进） */
+const HEAT_PANEL_COLORS = [
+  'var(--bg-muted)',
+  'color-mix(in srgb, var(--accent) 25%, transparent)',
+  'color-mix(in srgb, var(--accent) 50%, transparent)',
+  'color-mix(in srgb, var(--accent) 75%, transparent)',
+  'var(--accent)',
+];
 
 export function UsageSection(): ReactElement {
   const { t } = useTranslation();
@@ -93,12 +84,21 @@ export function UsageSection(): ReactElement {
     };
   }, [t]);
 
-  // 热力图：byDay 为近 30 天倒序 → 转正序网格（最新在右下）
-  const heatCells = useMemo(() => {
-    const days = [...(summary?.byDay ?? [])].reverse();
-    const max = days.reduce((m, d) => Math.max(m, d.totalTokens), 0);
-    return { days, max };
-  }, [summary]);
+  // 热力图：@uiw/react-heat-map 数据（date 格式 YYYY/MM/DD + count = 当日 tokens）
+  const heatValue = useMemo(
+    () =>
+      (summary?.byDay ?? []).map((d) => ({
+        date: d.date.replaceAll('-', '/'),
+        count: d.totalTokens,
+      })),
+    [summary],
+  );
+  const heatEnd = useMemo(() => new Date(), []);
+  const heatStart = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 29);
+    return d;
+  }, []);
 
   // 近 30 天合计（"本月"近似，界面如实标注）
   const monthTokens = useMemo(
@@ -159,27 +159,29 @@ export function UsageSection(): ReactElement {
             </div>
           </div>
 
-          {/* ② 消耗热力图（近 30 天，GitHub 风格 6×5 网格） */}
+          {/* ② 消耗热力图（近 30 天，@uiw/react-heat-map 现成组件） */}
           <div>
             <p className="text-xs font-medium text-muted-foreground">
               {t('settings.usageHeatmap')}
             </p>
-            <div
-              className="mt-1.5 grid gap-[3px]"
-              style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}
-              role="img"
-              aria-label={t('settings.usageHeatmapAria')}
-            >
-              {heatCells.days.map((d) => {
-                const level = heatLevel(d.totalTokens, heatCells.max);
-                return (
-                  <div
-                    key={d.date}
-                    title={`${d.date} · ${formatTokens(d.totalTokens)} tokens · ${d.calls} 次`}
-                    className={`aspect-square w-full rounded-[3px] ${HEAT_CLASS[level]}`}
-                  />
-                );
-              })}
+            <div className="mt-1.5 overflow-x-auto">
+              <HeatMap
+                value={heatValue}
+                startDate={heatStart}
+                endDate={heatEnd}
+                rectSize={13}
+                space={3}
+                rectProps={{ rx: 3 }}
+                panelColors={HEAT_PANEL_COLORS}
+                legendCellSize={10}
+                rectRender={(props, data) => (
+                  <rect {...props} rx={3}>
+                    <title>
+                      {data.date} · {formatTokens(data.count ?? 0)} tokens
+                    </title>
+                  </rect>
+                )}
+              />
             </div>
             <p className="text-muted-foreground mt-1 text-2xs">{t('settings.usageHeatmapHint')}</p>
           </div>
