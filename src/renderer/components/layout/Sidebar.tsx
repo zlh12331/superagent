@@ -337,7 +337,11 @@ export function Sidebar(): ReactElement {
                             onTogglePin={() =>
                               togglePin(entry.session.id, entry.session.pinned !== true)
                             }
-                            onOpenFiles={() => setSidebarView('fileTree')}
+                            onOpenFiles={() => {
+                              // 对齐原型 showThreadFileTree：先切换到该会话（主区），再打开其文件树
+                              handleSelectSession(entry.session.id);
+                              setSidebarView('fileTree');
+                            }}
                           />
                         ),
                       )}
