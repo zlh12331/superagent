@@ -1,5 +1,5 @@
 // src/main/infra/ai/cron-service.test.ts
-// 定时任务服务单测：创建/删除/列表/启停/触发（内存 DB）
+// 定时任务服务单测：创建/删除/列表/启停/触发（内存 DB + croner 真实调度）
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
@@ -37,6 +37,20 @@ vi.mock('../storage/db', async (importOriginal) => {
 
 import { resetDb } from '../storage/db';
 
+/** 秒级表达式（croner 6 字段：秒/分/时/日/月/周）——单测触发不等待分钟级 */
+const EVERY_SECOND = '* * * * * *';
+
+/** 等待条件成立（真实 croner 调度触发用） */
+async function waitFor(condition: () => boolean, timeoutMs = 3_000): Promise<void> {
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('waitFor 超时');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 describe('CronService', () => {
   let service: CronService;
 
@@ -44,6 +58,10 @@ describe('CronService', () => {
     resetDb();
     service = new CronService();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    service.stop();
   });
 
   it('create：创建任务并计算下次触发', () => {
@@ -68,17 +86,17 @@ describe('CronService', () => {
   });
 
   it('setEnabled：停用后不触发；重新启用重算下次触发', async () => {
-    const id = service.create('s1', '* * * * *', '每分钟');
+    const id = service.create('s1', EVERY_SECOND, '每秒');
     expect(service.setEnabled(id, false)).toBe(true);
     const disabled = service.list().find((t) => t.id === id);
     expect(disabled?.enabled).toBe(false);
 
-    // tick 不应触发停用任务
+    // 停用：等待 1.2s（croner 秒级调度）不应触发
     const fired: string[] = [];
     service.onFire((task) => {
       fired.push(task.id);
     });
-    await service.tick();
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
     expect(fired).toHaveLength(0);
 
     expect(service.setEnabled(id, true)).toBe(true);
@@ -87,62 +105,49 @@ describe('CronService', () => {
     expect(enabled?.nextFireAt).not.toBeNull();
   });
 
-  it('tick：到期任务触发并更新下次触发（同分钟不重复）', async () => {
-    // 每分钟任务：nextFireAt 已过期 → tick 触发
-    const id = service.create('s1', '* * * * *', '每分钟');
-    // 人为把 nextFireAt 改为过去
-    const { getDb } = await import('../storage/db');
-    const { cronTasks } = await import('../storage/schema');
-    const { eq } = await import('drizzle-orm');
-    getDb()
-      .update(cronTasks)
-      .set({ nextFireAt: Date.now() - 60_000 })
-      .where(eq(cronTasks.id, id))
-      .run();
-
+  it('到期任务触发并更新下次触发（croner 真实调度）', async () => {
+    const id = service.create('s1', EVERY_SECOND, '每秒');
     const fired: Array<{ id: string; description: string }> = [];
     service.onFire((task) => {
       fired.push({ id: task.id, description: task.description });
     });
 
-    await service.tick();
-    expect(fired).toHaveLength(1);
-    expect(fired[0]?.description).toBe('每分钟');
+    await waitFor(() => fired.length >= 1);
+    expect(fired[0]?.description).toBe('每秒');
 
     // 下次触发已更新（未来）
     const after = service.list().find((t) => t.id === id);
     expect(after?.nextFireAt as number).toBeGreaterThan(Date.now());
-
-    // 同分钟再次 tick 不重复触发
-    fired.length = 0;
-    await service.tick();
-    expect(fired).toHaveLength(0);
   });
 
-  it('start/stop：调度循环生命周期（幂等）', () => {
+  it('start/stop：调度生命周期（幂等；start 恢复启用任务）', async () => {
+    service.create('s1', EVERY_SECOND, '每秒');
+    const fired: string[] = [];
+    service.onFire((task) => {
+      fired.push(task.id);
+    });
     service.start();
-    service.start(); // 幂等
+    service.start(); // 幂等（不重复创建实例）
     service.stop();
     service.stop(); // 幂等
+
+    // 停止后不再触发
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    const stoppedCount = fired.length;
+
+    // 重新 start：恢复任务并继续触发
+    service.start();
+    await waitFor(() => fired.length > stoppedCount);
   });
 
   it('onFire：unsubscribe 生效', async () => {
-    const id = service.create('s1', '* * * * *', '每分钟');
-    const { getDb } = await import('../storage/db');
-    const { cronTasks } = await import('../storage/schema');
-    const { eq } = await import('drizzle-orm');
-    getDb()
-      .update(cronTasks)
-      .set({ nextFireAt: Date.now() - 60_000 })
-      .where(eq(cronTasks.id, id))
-      .run();
-
+    service.create('s1', EVERY_SECOND, '每秒');
     const fired: string[] = [];
     const unsubscribe = service.onFire((task) => {
       fired.push(task.id);
     });
     unsubscribe();
-    await service.tick();
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
     expect(fired).toHaveLength(0);
   });
 
