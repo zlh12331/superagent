@@ -14,7 +14,8 @@
 import type { UsageSummaryRes } from '@code-agent/shared/renderer';
 import { BarChart3 } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
-import CalendarHeatmap from 'react-calendar-heatmap';
+import { ActivityCalendar } from 'react-activity-calendar';
+import 'react-activity-calendar/tooltips.css';
 
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
@@ -44,13 +45,21 @@ function recentDays(count: number): string[] {
   return days;
 }
 
-/** 热力图色档（react-calendar-heatmap classForValue：color-empty / color-scale-1..4） */
-const HEAT_SCALE_CLASS = [
-  'color-empty',
-  'color-scale-1',
-  'color-scale-2',
-  'color-scale-3',
-  'color-scale-4',
+/** Date → yyyy-MM-dd（与 byDay 数据格式一致） */
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** 热力图色档（react-activity-calendar theme：0 = 空，1-4 = accent 透明度递进，CSS 变量主题自适应） */
+const HEAT_THEME = [
+  'var(--muted)',
+  'color-mix(in srgb, var(--accent) 25%, transparent)',
+  'color-mix(in srgb, var(--accent) 50%, transparent)',
+  'color-mix(in srgb, var(--accent) 75%, transparent)',
+  'var(--accent)',
 ];
 
 export function UsageSection(): ReactElement {
@@ -84,17 +93,34 @@ export function UsageSection(): ReactElement {
     };
   }, [t]);
 
-  // 热力图：react-calendar-heatmap 数据（date 格式 YYYY-MM-DD + count = 当日 tokens）
-  const heatValue = useMemo(
-    () => (summary?.byDay ?? []).map((d) => ({ date: d.date, count: d.totalTokens })),
-    [summary],
-  );
+  // 热力图：react-activity-calendar 数据（date yyyy-MM-dd + count + level 0-4）
+  // 首尾补空条目控制显示范围（v3 语义：无条目日期视为无活动）
+  const heatValue = useMemo(() => {
+    const days = summary?.byDay ?? [];
+    const first = days.length > 0 ? days[days.length - 1] : undefined;
+    const last = days.length > 0 ? days[0] : undefined;
+    const items = [...days]
+      .reverse()
+      .map((d) => ({ date: d.date, count: d.totalTokens, level: heatLevel(d.totalTokens) }));
+    // 首尾空条目（范围锚点）：仅当数据未覆盖边界时补
+    if (first !== undefined && items[0]?.date !== heatStartIso) {
+      items.unshift({ date: heatStartIso, count: 0, level: 0 });
+    }
+    if (last !== undefined && items[items.length - 1]?.date !== heatEndIso) {
+      items.push({ date: heatEndIso, count: 0, level: 0 });
+    }
+    return items;
+    // biome-ignore lint/correctness/useExhaustiveDependencies: 日期锚点固定，仅依赖 summary
+  }, [summary]);
   const heatEnd = useMemo(() => new Date(), []);
   const heatStart = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 89);
     return d;
   }, []);
+  /** 日期锚点（ISO，用于首尾空条目） */
+  const heatStartIso = useMemo(() => toIsoDate(heatStart), [heatStart]);
+  const heatEndIso = useMemo(() => toIsoDate(heatEnd), [heatEnd]);
 
   // 热力图色档分位基准（当日最大值；全 0 时所有格子取最低档）
   const heatMax = useMemo(
@@ -182,20 +208,14 @@ export function UsageSection(): ReactElement {
                 {t('settings.usageHeatmap')}
               </p>
               <div className="mt-2 heatmap-wrap">
-                <CalendarHeatmap
-                  values={heatValue}
-                  startDate={heatStart}
-                  endDate={heatEnd}
-                  gutterSize={3}
-                  classForValue={(value) =>
-                    HEAT_SCALE_CLASS[heatLevel(value?.['count'] as number | undefined)] ??
-                    'color-empty'
-                  }
-                  titleForValue={(value) =>
-                    value === undefined
-                      ? '无数据'
-                      : `${String(value['date'])} · ${formatTokens(Number(value['count']))} tokens`
-                  }
+                <ActivityCalendar
+                  data={heatValue}
+                  theme={{ light: HEAT_THEME }}
+                  blockSize={14}
+                  blockMargin={3}
+                  blockRadius={3}
+                  fontSize={9}
+                  labels={{ totalCount: '{{count}} tokens' }}
                 />
               </div>
               <p className="text-muted-foreground mt-1.5 text-2xs">
