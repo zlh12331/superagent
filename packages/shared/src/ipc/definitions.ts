@@ -412,7 +412,11 @@ export const IPC_DEFINITIONS = {
       {} as AgentStreamPartPayload,
       StreamPartPayloadSchema,
     ),
-    subscribeAsk: withPayload(IPC_META.agent.ask, {} as AskEventPayload, AskEventPayloadSchema),
+    subscribeAsk: withPayload(
+      IPC_META.agent.subscribeAsk,
+      {} as AskEventPayload,
+      AskEventPayloadSchema,
+    ),
     subscribeStreamEnd: withPayload(
       IPC_META.agent.subscribeStreamEnd,
       {} as AgentStreamEndPayload,
