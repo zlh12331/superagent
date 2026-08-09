@@ -7,7 +7,7 @@
 // - 数据源：approvals-store（单一真源，与 ApprovalDialog 弹窗共存）
 // ──────────────────────────────────────────────────────────────
 
-import { Check, X } from 'lucide-react';
+import { Check, ShieldCheck, X } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,32 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
 
   const approve = useApprovalsStore((state) => state.approve);
   const reject = useApprovalsStore((state) => state.reject);
+
+  /**
+   * 响应审批：更新本地 store + 回传主进程（PermissionService 继续/中止工具）
+   *
+   * 此前仅更新 store（UI 假审批），主进程审批永久挂起——工具永远不执行。
+   * 对齐原型 .card.paused 三按钮（拒绝 / 白名单 / 批准）：
+   * - reject     → approved: false
+   * - whitelist  → approved: true + rememberDecision: true（后续同工具自动放行）
+   * - approve    → approved: true
+   */
+  const respond = async (approved: boolean, rememberDecision: boolean): Promise<void> => {
+    if (approved) {
+      approve(item.id);
+    } else {
+      reject(item.id);
+    }
+    // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）
+    if (typeof window === 'undefined' || window.api === undefined) {
+      return;
+    }
+    await window.api.agent.approvalResponse({
+      approvalId: item.id,
+      approved,
+      rememberDecision,
+    });
+  };
 
   if (item === undefined) return null;
 
@@ -95,12 +121,12 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
         </div>
       )}
 
-      {/* pending 操作按钮 */}
+      {/* pending 操作按钮：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */}
       {isPending && (
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => reject(item.id)}
+            onClick={() => void respond(false, false)}
             className="text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
           >
             <X className="size-3" />
@@ -108,9 +134,18 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
           </button>
           <button
             type="button"
-            onClick={() => approve(item.id)}
+            onClick={() => void respond(true, true)}
+            className="hover:bg-muted text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
+            title={t('approval.whitelistHint')}
+          >
+            <ShieldCheck className="size-3" />
+            {t('approval.whitelist')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void respond(true, false)}
             className={cn(
-              'flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-white transition-colors',
+              'ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-white transition-colors',
               dangerous ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-700',
             )}
           >

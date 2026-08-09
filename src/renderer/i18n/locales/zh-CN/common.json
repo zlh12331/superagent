@@ -222,7 +222,9 @@
       "reject": "拒绝",
       "approve": "批准",
       "approved": "已批准",
-      "rejected": "已拒绝"
+      "rejected": "已拒绝",
+      "whitelist": "批准并记住",
+      "whitelistHint": "批准并将该工具加入白名单，后续自动放行"
     },
     "settings": {
       "apiKeyEmpty": "API Key 不能为空",
