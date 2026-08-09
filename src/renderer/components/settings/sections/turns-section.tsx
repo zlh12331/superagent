@@ -5,41 +5,30 @@
 // ──────────────────────────────────────────────
 
 import type { SessionRecentTurnsRes, TurnStatusText } from '@code-agent/shared/renderer';
+import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
 
-import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 
 export function TurnsSection(): ReactElement {
   const { t } = useTranslation();
-  const [turns, setTurns] = useState<SessionRecentTurnsRes['turns'] | null>(null);
 
-  useEffect(() => {
-    // 浏览器模式（dev 预览）无 window.api：静默空列表
-    if (typeof window === 'undefined' || window.api === undefined) {
-      setTurns([]);
-      return;
-    }
-    let cancelled = false;
-    window.api.session
-      .getRecentTurns({ limit: 10 })
-      .then((res) => {
-        if (!cancelled) {
-          setTurns(unwrap<SessionRecentTurnsRes>(res).turns);
-        }
-      })
-      .catch(() => {
-        toast.error(t('settings.turnsLoadFailed'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
+  // 最近回合：TanStack Query（L3 服务端数据；浏览器模式守卫返回空列表）
+  const { data: turns } = useQuery({
+    queryKey: ['turns', 'recent'],
+    queryFn: async (): Promise<SessionRecentTurnsRes['turns']> => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return [];
+      }
+      return unwrap<SessionRecentTurnsRes>(await window.api.session.getRecentTurns({ limit: 10 }))
+        .turns;
+    },
+  });
 
-  const isEmpty = turns === null || turns.length === 0;
+  const isEmpty = turns === undefined || turns.length === 0;
   const statusKey: TurnStatusText = {
     completed: t('settings.turnStatusCompleted'),
     aborted: t('settings.turnStatusAborted'),

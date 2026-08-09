@@ -12,12 +12,12 @@
 // ──────────────────────────────────────────────
 
 import type { UsageSummaryRes } from '@code-agent/shared/renderer';
+import { useQuery } from '@tanstack/react-query';
 import { BarChart3 } from 'lucide-react';
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useMemo } from 'react';
 import { ActivityCalendar } from 'react-activity-calendar';
 import 'react-activity-calendar/tooltips.css';
 
-import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -64,34 +64,23 @@ const HEAT_THEME = [
 
 export function UsageSection(): ReactElement {
   const { t } = useTranslation();
-  const [summary, setSummary] = useState<UsageSummaryRes | null>(null);
 
-  useEffect(() => {
-    // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
-    // （0 值三卡 + 近 30 天 0 值热力图格子，形态完整可见）
-    if (typeof window === 'undefined' || window.api === undefined) {
-      setSummary({
-        total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        byModel: [],
-        byDay: recentDays(90).map((date) => ({ date, calls: 0, totalTokens: 0 })),
-      });
-      return;
-    }
-    let cancelled = false;
-    window.api.session
-      .getUsageSummary()
-      .then((res) => {
-        if (!cancelled) {
-          setSummary(unwrap<UsageSummaryRes>(res));
-        }
-      })
-      .catch(() => {
-        toast.error(t('settings.usageLoadFailed'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
+  // 用量汇总：TanStack Query（L3 服务端数据；浏览器模式守卫返回空骨架）
+  const { data: summary } = useQuery({
+    queryKey: ['usage', 'summary'],
+    queryFn: async (): Promise<UsageSummaryRes> => {
+      // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
+      // （0 值三卡 + 近 90 天 0 值热力图格子，形态完整可见）
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return {
+          total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          byModel: [],
+          byDay: recentDays(90).map((date) => ({ date, calls: 0, totalTokens: 0 })),
+        };
+      }
+      return unwrap<UsageSummaryRes>(await window.api.session.getUsageSummary());
+    },
+  });
 
   const heatEnd = useMemo(() => new Date(), []);
   const heatStart = useMemo(() => {
