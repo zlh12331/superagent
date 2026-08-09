@@ -229,6 +229,17 @@ export function Sidebar(): ReactElement {
           <Plus className="size-3.5" strokeWidth={2.5} />
           {t('sidebar.newSession')}
         </button>
+        {/* 文件树视图切换按钮（对齐原型 sidebar-filetree 入口；
+            此前仅命令面板可达，侧栏无直接入口） */}
+        <button
+          type="button"
+          className={cn('icon-btn sidebar-filetree-btn', sidebarView === 'fileTree' && 'active')}
+          onClick={() => setSidebarView(sidebarView === 'fileTree' ? 'threads' : 'fileTree')}
+          aria-label={t('sidebar.fileTree')}
+          title={t('sidebar.fileTree')}
+        >
+          <FolderTree className="size-3.5" strokeWidth={1.5} />
+        </button>
         <div className="sidebar-search">
           <Search className="sidebar-search-icon" size={13} strokeWidth={2} />
           <input
