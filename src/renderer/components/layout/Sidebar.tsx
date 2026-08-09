@@ -39,7 +39,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Plus, Search } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -100,7 +100,9 @@ export function Sidebar(): ReactElement {
   // 派生：按 workingDir basename 分组
   // 结构：Map<folderName, Session[]>
   // 注意：sessions 为 readonly 数组，使用 spread 创建新数组避免 push 副作用
-  const groupedSessions = ((): Map<string, typeof sessions> => {
+  // 显式 useMemo：React Compiler 对 IIFE 的自动缓存可能滞后于异步 query 数据到位，
+  // 导致 reload 后列表首次以空数据计算并被缓存（虚拟列表静默空渲染）
+  const groupedSessions = useMemo(() => {
     const groups = new Map<string, typeof sessions>();
     for (const session of sessions) {
       const folderName = getFolderName(session.workingDir);
@@ -108,7 +110,7 @@ export function Sidebar(): ReactElement {
       groups.set(folderName, [...existing, session]);
     }
     return groups;
-  })();
+  }, [sessions]);
 
   // 拖拽排序覆盖 + 折叠文件夹：持久化到 localStorage（sidebar-pref-store）——
   // 用户显式操作跨重启保留（此前本地 useState 刷新即丢）
@@ -138,8 +140,9 @@ export function Sidebar(): ReactElement {
     setOrderOverride(folderName, next);
   };
 
-  // 扁平化列表条目：文件夹标签 + 会话项（Virtuoso 虚拟化渲染；React Compiler 自动缓存）
-  const entries = ((): SidebarEntry[] => {
+  // 扁平化列表条目：文件夹标签 + 会话项（Virtuoso 虚拟化渲染）
+  // 显式 useMemo（同 groupedSessions）：避免 Compiler 缓存异步数据到位前的空计算
+  const entries = useMemo((): SidebarEntry[] => {
     const list: SidebarEntry[] = [];
     for (const [folderName, folderSessions] of groupedSessions) {
       list.push({ type: 'label', name: folderName });
@@ -157,7 +160,7 @@ export function Sidebar(): ReactElement {
       }
     }
     return list;
-  })();
+  }, [groupedSessions, collapsedFolders, orderOverrides]);
   // dnd-kit SortableContext 所需的可见会话 id（仅未折叠文件夹）
   const sortableIds = ((): string[] => {
     const ids: string[] = [];
