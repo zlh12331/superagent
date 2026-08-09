@@ -627,7 +627,8 @@
       "askFreeInput": "Free-form answer (optional)…",
       "askCancel": "Cancel",
       "askSubmit": "Submit",
-      "askSubmitFailed": "Failed to submit answer"
+      "askSubmitFailed": "Failed to submit answer",
+      "askProgress": "Answer progress"
     }
   }
 }

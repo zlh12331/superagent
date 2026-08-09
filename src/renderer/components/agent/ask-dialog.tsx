@@ -22,6 +22,44 @@ interface AnswerState {
   readonly text: string;
 }
 
+/**
+ * 分节进度条（借鉴 tool-ui Question Flow ProgressBar）
+ *
+ * 多问题引导时展示：每节一段，已完成段 accent 填充 + 动画过渡。
+ */
+function QuestionProgressBar({
+  current,
+  total,
+}: {
+  readonly current: number;
+  readonly total: number;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  if (total <= 1) return null;
+  return (
+    <div
+      className="flex h-1.5 gap-1"
+      role="progressbar"
+      aria-valuenow={current}
+      aria-valuemin={1}
+      aria-valuemax={total}
+      aria-label={t('agent.askProgress')}
+    >
+      {Array.from({ length: total }).map((_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 分节纯静态视觉，无重排/状态场景
+        <div key={i} className="bg-muted relative flex-1 overflow-hidden rounded-full">
+          <div
+            className={cn(
+              'bg-primary absolute inset-0 origin-left rounded-full transition-transform duration-300',
+              i < current ? 'scale-x-100' : 'scale-x-0',
+            )}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Agent 提问对话框 */
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
@@ -109,6 +147,16 @@ export function AskDialog(): ReactElement | null {
           </button>
         </div>
 
+        {/* 多问题引导进度条（tool-ui Question Flow 借鉴） */}
+        <div className="px-4 pt-3">
+          <QuestionProgressBar
+            current={
+              answers.filter((a) => a.selectedIndexes.length > 0 || a.text !== '').length + 1
+            }
+            total={questions.length}
+          />
+        </div>
+
         {/* 问题列表 */}
         <div className="space-y-4 p-4">
           {questions.map((q, qIndex) => (
@@ -129,26 +177,34 @@ export function AskDialog(): ReactElement | null {
                         type="button"
                         onClick={() => toggleOption(qIndex, optIndex)}
                         className={cn(
-                          'flex w-full cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors',
+                          'group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
                           selected
                             ? 'bg-primary/10 border-primary/40'
                             : 'border-border bg-background hover:bg-muted/40',
                         )}
                       >
+                        {/* hover 背景层（对齐 tool-ui Question Flow OptionItem） */}
                         <span
                           className={cn(
-                            'flex size-4 shrink-0 items-center justify-center rounded border text-2xs',
+                            'bg-primary/5 absolute inset-0 -m-0.5 rounded-xl opacity-0 transition-opacity group-hover:opacity-100',
+                            selected && 'opacity-0',
+                          )}
+                          aria-hidden="true"
+                        />
+                        <span
+                          className={cn(
+                            'relative flex size-4 shrink-0 items-center justify-center rounded border text-2xs',
                             selected
                               ? 'bg-primary border-primary text-primary-foreground'
-                              : 'border-border text-transparent',
+                              : 'border-border text-transparent group-hover:border-primary/40',
                           )}
                         >
                           ✓
                         </span>
-                        <span className="min-w-0 flex-1">
+                        <span className="relative min-w-0 flex-1">
                           <span className="text-foreground block">{opt.label}</span>
                           {opt.description !== undefined && (
-                            <span className="text-muted-foreground block text-2xs">
+                            <span className="text-muted-foreground relative block text-2xs">
                               {opt.description}
                             </span>
                           )}
