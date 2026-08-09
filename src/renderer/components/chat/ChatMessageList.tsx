@@ -4,61 +4,42 @@
 // 拆分背景（2026-08 重构）：原文件 685 行混合渲染/操作/纯函数，按职责拆分：
 // - message-item.tsx：消息行渲染（PartView/工具调用/代码块/推理块）
 // - streaming-footer.tsx：流式尾部（生成中/占位）
-// - message-actions.tsx：消息操作按钮
-// - message-utils.ts：纯函数（状态映射/文本提取/JSON 格式化）
+// - message-actions.tsx：消息操作（复制/重试/重新生成）
+// ──────────────────────────────────────────────
+// 渲染策略（2026-08 调整）：普通滚动渲染（去 Virtuoso）——
+// react-virtuoso 在 React 19 下存在 data 空→非空更新时序 bug（发送消息后
+// 列表不渲染新消息，CDP 实测定位），消息渲染正确性优先；流式场景下
+// MessageItem 内部按消息 id 记忆化，仅变化消息重渲染，性能可接受。
 // ──────────────────────────────────────────────
 
-// src/renderer/components/chat/ChatMessageList.tsx
-// 聊天消息列表 · Aurora 设计系统
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渲染 UIMessage 数组（user / assistant / system 三种角色）
-// - assistant 消息按 parts 分发渲染（text / reasoning / tool / file / step-start 等）
-// - 智能自动滚动：仅当用户在底部附近时跟随，否则显示 scroll-to-bottom 按钮
-// - 空状态展示 EmptyState 组件
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - user 消息：.msg.user > .msg-body > .msg-content（玻璃渐变气泡，靠右由 .msg-content 自身样式实现）
-// - assistant 消息：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + .msg-content（无气泡开放排版）
-// - tool 调用：.msg.msg-tool > .msg-body > .card.tool-card（可折叠卡片）
-// - reasoning：.reasoning-block（折叠式推理块，accent 左光条）
-// - system 消息：居中小字
-// - streaming 占位：typing-indicator（三个 accent 点弹跳）
-// - 滚动到底部按钮：.scroll-to-bottom（距底部 > 80px 时显示，有新消息加 .has-new）
-// ──────────────────────────────────────────────────────────────
-//
-// 说明：
-// - 不在此组件内调用 useChat，messages / status 由父组件传入
-// - 仅做展示，不做任何业务逻辑
-// - 使用 AI SDK 官方类型守卫（isTextUIPart / isReasoningUIPart 等）
-// - part 类型用 UIMessage['parts'][number] 派生，避免手写泛型参数
-
-// type-only import：仅引入类型，不引入运行时依赖
 import type { UIMessage } from 'ai';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
-
 import { MessageItem } from './message-item';
 import { StreamingFooter } from './streaming-footer';
 
-/** ChatMessageList props */
-export interface ChatMessageListProps {
-  /** 消息数组（来自 useChat().messages） */
+/** 消息导航轨元素的数据属性（滚动定位用） */
+const MSG_INDEX_ATTR = 'data-msg-index';
+
+interface ChatMessageListProps {
+  /** 消息列表（useChat/useAgentWithIpc 的 messages） */
   readonly messages: readonly UIMessage[];
-  /** 当前流式状态（'streaming' / 'submitted' 时显示流式占位） */
+  /** 流式状态（'ready' / 'streaming' / 'submitted' / 'error'） */
   readonly status: 'submitted' | 'streaming' | 'ready' | 'error';
-  /** 重新生成指定 assistant 消息 */
-  readonly onRegenerate: (messageId: string) => void;
-  /** 搜索当前匹配消息索引（会话内搜索；-1 = 无匹配/搜索关闭） */
+  /** 重新生成回调（透传给消息操作；接收消息 id） */
+  readonly onRegenerate: ((messageId: string) => void) | undefined;
+  /** 当前搜索匹配消息索引（滚动定位；无匹配为 -1） */
   readonly searchActiveIndex?: number;
-  /** 附加 className */
+  /** 自定义容器类名 */
   readonly className?: string;
 }
+
+/** 距底部阈值（px）：小于该值视为"在底部" */
+const AT_BOTTOM_THRESHOLD = 80;
 
 export function ChatMessageList({
   messages,
@@ -69,9 +50,9 @@ export function ChatMessageList({
 }: ChatMessageListProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  // Virtuoso 句柄：用于 scrollToIndex 滚动到底部
-  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  // 是否在底部附近（ref 版本：在回调中写入，避免闭包陷阱）
+  // 滚动容器 ref（替代 Virtuoso 句柄）
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // 是否在底部附近（ref 版本：在滚动回调中写入，避免闭包陷阱）
   const isAtBottomRef = useRef(true);
 
   // 是否显示"滚动到底部"按钮（距底部 > 阈值时显示）
@@ -83,12 +64,15 @@ export function ChatMessageList({
   const isStreaming = status === 'streaming' || status === 'submitted';
 
   /**
-   * Virtuoso 内置底部检测回调（替换手写 scroll 监听）
+   * 滚动回调：底部检测（替代 Virtuoso atBottomStateChange）
    *
    * - 在底部附近：隐藏按钮，清除 hasNew
    * - 不在底部：显示按钮
    */
-  const handleAtBottomChange = (atBottom: boolean): void => {
+  const handleScroll = (): void => {
+    const el = scrollerRef.current;
+    if (el === null) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD;
     isAtBottomRef.current = atBottom;
     if (atBottom) {
       setShowScrollBtn(false);
@@ -102,18 +86,32 @@ export function ChatMessageList({
    * 滚动到底部并隐藏按钮
    */
   const scrollToBottom = (): void => {
-    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+    const el = scrollerRef.current;
+    if (el !== null) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
     setShowScrollBtn(false);
     setHasNew(false);
     isAtBottomRef.current = true;
   };
 
+  /** 滚动到指定消息（导航轨/搜索定位；居中） */
+  const scrollToIndex = (index: number): void => {
+    const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
-  // - 用户在底部附近：Virtuoso followOutput 自动跟随（无需手动滚动）
+  // - 用户在底部附近：直接滚动跟随新内容（替代 Virtuoso followOutput）
   // - 用户不在底部：标记 hasNew（按钮显示新消息红点）
   // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages.length 与 isStreaming，触发标记而不读取其值
   useEffect(() => {
-    if (!isAtBottomRef.current) {
+    if (isAtBottomRef.current) {
+      const el = scrollerRef.current;
+      if (el !== null) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
+    } else {
       setHasNew(true);
     }
   }, [messages.length, isStreaming]);
@@ -121,12 +119,9 @@ export function ChatMessageList({
   // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
   useEffect(() => {
     if (searchActiveIndex >= 0) {
-      virtuosoRef.current?.scrollToIndex({
-        index: searchActiveIndex,
-        align: 'center',
-        behavior: 'smooth',
-      });
+      scrollToIndex(searchActiveIndex);
     }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: scrollToIndex 为组件内稳定函数
   }, [searchActiveIndex]);
 
   // 空状态：无消息时展示 EmptyState
@@ -145,15 +140,12 @@ export function ChatMessageList({
   return (
     // 外层 wrapper：position: relative 让 .scroll-to-bottom（absolute）正确定位
     <div className={cn('relative h-full', className)}>
-      <Virtuoso
-        ref={virtuosoRef}
-        className="messages h-full"
-        data={messages}
-        // 流式跟随：用户在底部时平滑跟随新内容，否则不抢滚动（hasNew 由 effect 标记）
-        followOutput={(atBottom) => (atBottom ? 'smooth' : false)}
-        atBottomStateChange={handleAtBottomChange}
-        itemContent={(index, message) => (
+      {/* 消息滚动区（普通滚动渲染） */}
+      <div ref={scrollerRef} className="messages h-full overflow-y-auto" onScroll={handleScroll}>
+        {messages.map((message, index) => (
           <div
+            key={message.id}
+            {...{ [MSG_INDEX_ATTR]: index }}
             className={cn('transition-colors', index === searchActiveIndex && 'search-highlight')}
           >
             <MessageItem
@@ -162,11 +154,10 @@ export function ChatMessageList({
               disableActions={isStreaming}
             />
           </div>
-        )}
-        // 流式占位：assistant 正在响应时渲染在列表尾部（Footer 插槽）
-        // biome-ignore lint/style/useNamingConvention: Virtuoso Components 接口的 Footer 字段为 PascalCase
-        {...(isStreaming ? { components: { Footer: StreamingFooter } } : {})}
-      />
+        ))}
+        {/* 流式占位：assistant 正在响应时渲染在列表尾部（替代 Virtuoso Footer 插槽） */}
+        {isStreaming && <StreamingFooter />}
+      </div>
       {/* 消息导航轨（对齐原型 .msg-nav-rail：右侧点导航，点击滚动到对应消息）
           仅消息较多时显示，避免干扰 */}
       {messages.length >= 4 && (
@@ -177,13 +168,7 @@ export function ChatMessageList({
                 type="button"
                 className="nav-dot"
                 data-role={message.role}
-                onClick={() =>
-                  virtuosoRef.current?.scrollToIndex({
-                    index,
-                    align: 'center',
-                    behavior: 'smooth',
-                  })
-                }
+                onClick={() => scrollToIndex(index)}
                 aria-label={`${t('chat.msgNavGoTo')} ${index + 1}`}
                 title={`${t('chat.msgNavGoTo')} ${index + 1}`}
               />
@@ -205,5 +190,3 @@ export function ChatMessageList({
     </div>
   );
 }
-
-/** Virtuoso Footer 插槽：流式占位（assistant 正在响应时显示 typing-indicator） */
