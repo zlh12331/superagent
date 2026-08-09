@@ -93,6 +93,32 @@ export function UsageSection(): ReactElement {
     };
   }, [t]);
 
+  const heatEnd = useMemo(() => new Date(), []);
+  const heatStart = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 89);
+    return d;
+  }, []);
+  /** 日期锚点（ISO，用于首尾空条目） */
+  const heatStartIso = useMemo(() => toIsoDate(heatStart), [heatStart]);
+  const heatEndIso = useMemo(() => toIsoDate(heatEnd), [heatEnd]);
+
+  // 热力图色档分位基准（当日最大值；全 0 时所有格子取最低档）
+  const heatMax = useMemo(
+    () => (summary?.byDay ?? []).reduce((m, d) => Math.max(m, d.totalTokens), 0),
+    [summary],
+  );
+
+  /** 热力图色档：0 → 空档；>0 按最大值分位 4 档（与图例 HEAT_THEME 对应） */
+  const heatLevel = (count: number | undefined): number => {
+    if (count === undefined || count <= 0 || heatMax <= 0) return 0;
+    const ratio = count / heatMax;
+    if (ratio <= 0.25) return 1;
+    if (ratio <= 0.5) return 2;
+    if (ratio <= 0.75) return 3;
+    return 4;
+  };
+
   // 热力图：react-activity-calendar 数据（date yyyy-MM-dd + count + level 0-4）
   // 首尾补空条目控制显示范围（v3 语义：无条目日期视为无活动）
   const heatValue = useMemo(() => {
@@ -112,31 +138,6 @@ export function UsageSection(): ReactElement {
     return items;
     // biome-ignore lint/correctness/useExhaustiveDependencies: 日期锚点固定，仅依赖 summary
   }, [summary]);
-  const heatEnd = useMemo(() => new Date(), []);
-  const heatStart = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 89);
-    return d;
-  }, []);
-  /** 日期锚点（ISO，用于首尾空条目） */
-  const heatStartIso = useMemo(() => toIsoDate(heatStart), [heatStart]);
-  const heatEndIso = useMemo(() => toIsoDate(heatEnd), [heatEnd]);
-
-  // 热力图色档分位基准（当日最大值；全 0 时所有格子取最低档）
-  const heatMax = useMemo(
-    () => (summary?.byDay ?? []).reduce((m, d) => Math.max(m, d.totalTokens), 0),
-    [summary],
-  );
-
-  /** 热力图色档：0 → 空档；>0 按最大值分位 4 档（与图例 HEAT_PANEL_COLORS 对应） */
-  const heatLevel = (count: number | undefined): number => {
-    if (count === undefined || count <= 0 || heatMax <= 0) return 0;
-    const ratio = count / heatMax;
-    if (ratio <= 0.25) return 1;
-    if (ratio <= 0.5) return 2;
-    if (ratio <= 0.75) return 3;
-    return 4;
-  };
 
   // 近 30 天合计（"本月"近似：byDay 为近 90 天倒序，取前 30 项）
   const monthTokens = useMemo(
@@ -216,6 +217,12 @@ export function UsageSection(): ReactElement {
                   blockRadius={3}
                   fontSize={9}
                   labels={{ totalCount: '{{count}} tokens' }}
+                  tooltips={{
+                    activity: {
+                      text: (activity) =>
+                        `${activity.date} · ${formatTokens(activity.count)} tokens`,
+                    },
+                  }}
                 />
               </div>
               <p className="text-muted-foreground mt-1.5 text-2xs">
