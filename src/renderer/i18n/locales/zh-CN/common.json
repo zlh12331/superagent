@@ -153,7 +153,9 @@
       "searchPlaceholder": "在对话中搜索…",
       "searchPrev": "上一个匹配",
       "searchNext": "下一个匹配",
-      "resizeComposer": "拖拽调整输入框高度"
+      "resizeComposer": "拖拽调整输入框高度",
+      "statsMessages": "消息数",
+      "statsTokens": "Token"
     },
     "update": {
       "noticeAvailable": "发现新版本",

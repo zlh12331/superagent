@@ -4527,3 +4527,22 @@ button.card-head {
   color: var(--text-faint);
   font-size: var(--font-size-sm);
 }
+
+/* composer-stats-bar：输入栏底部信息栏（就绪 · 消息数 · Token；对齐原型 .csb-*） */
+.composer-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  letter-spacing: 0.02em;
+}
+.composer-stats-bar .csb-item b {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.composer-stats-bar .csb-sep {
+  opacity: 0.5;
+}

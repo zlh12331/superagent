@@ -153,7 +153,9 @@
       "searchPlaceholder": "Search in conversation…",
       "searchPrev": "Previous match",
       "searchNext": "Next match",
-      "resizeComposer": "Drag to resize composer"
+      "resizeComposer": "Drag to resize composer",
+      "statsMessages": "Messages",
+      "statsTokens": "Tokens"
     },
     "update": {
       "noticeAvailable": "Update available",

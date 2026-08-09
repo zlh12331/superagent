@@ -13,11 +13,12 @@
 // - 工具调用已 inline 渲染在 ChatMessageList（ToolCallView）
 // ──────────────────────────────────────────────────────────────
 
-import { AlertTriangle, Search, X } from 'lucide-react';
+import { AlertTriangle, Folder, Search, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
+import { ModelSelector } from '@/components/common/ModelSelector';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -126,6 +127,11 @@ export function ChatPanel({
           : status === 'error'
             ? 'ERROR'
             : 'IDLE';
+
+  // 模型选择（对齐原型 composer-project-bar .model-select：输入栏底部条）
+  const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
+  const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
+  const updateAi = useSettingsStore((state) => state.updateAi);
 
   // 派生：当前会话累积 token 用量（per-session，回合结束后由 usage-store 累积）
   const usage = useUsageStore((s) => s.usageBySession.get(chatId) ?? EMPTY_USAGE);
@@ -257,6 +263,39 @@ export function ChatPanel({
             void stop();
           }}
         />
+        {/* composer-project-bar：项目 + 模型选择（对齐原型；对话模式项目只读展示当前工作目录） */}
+        <div className="composer-project-bar">
+          <div className="cpb-folder-group">
+            <span className="cpb-select" title={workingDir}>
+              <Folder className="size-3" strokeWidth={1.5} />
+              <span className="max-w-40 truncate">{workingDirBasename}</span>
+            </span>
+          </div>
+          <ModelSelector
+            provider={defaultProvider}
+            model={defaultModel}
+            onProviderChange={(p) => updateAi({ defaultProvider: p })}
+            onModelChange={(m) => updateAi({ defaultModel: m })}
+          />
+        </div>
+        {/* composer-stats-bar：状态 · 消息数 · Token（对齐原型；账户/速率无后端数据源不展示） */}
+        <div className="composer-stats-bar">
+          <span className="csb-item">
+            <b>{statusText}</b>
+          </span>
+          <span className="csb-sep" aria-hidden="true">
+            ·
+          </span>
+          <span className="csb-item">
+            {t('chat.statsMessages')} <b>{messages.length}</b>
+          </span>
+          <span className="csb-sep" aria-hidden="true">
+            ·
+          </span>
+          <span className="csb-item">
+            {t('chat.statsTokens')} <b>{usageText}</b>
+          </span>
+        </div>
       </footer>
     </div>
   );
