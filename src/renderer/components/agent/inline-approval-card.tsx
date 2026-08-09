@@ -45,6 +45,8 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
   const approve = useApprovalsStore((state) => state.approve);
   const reject = useApprovalsStore((state) => state.reject);
 
+  if (item === undefined) return null;
+
   /**
    * 响应审批：更新本地 store + 回传主进程（PermissionService 继续/中止工具）
    *
@@ -70,8 +72,6 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
       rememberDecision,
     });
   };
-
-  if (item === undefined) return null;
 
   const Icon = getIconForType(item.type);
   const isPending = item.status === 'pending';
