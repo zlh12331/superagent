@@ -8,7 +8,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import type { GoalService } from '../infra/ai/goal-service';
+import type { GoalService } from '../infra/ai/knowledge/goal-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**

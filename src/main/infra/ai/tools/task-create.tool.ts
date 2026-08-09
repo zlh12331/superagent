@@ -8,8 +8,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { TaskKind, taskService } from '../task-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import { TaskKind, taskService } from '../agent/task-service';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** task_create 入参 */
 const TaskCreateInputSchema = z.object({

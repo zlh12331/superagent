@@ -16,7 +16,7 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from '../tools/tool';
 import type { McpServerConfig } from './mcp-types';
 import { buildMcpToolName } from './mcp-types';
 

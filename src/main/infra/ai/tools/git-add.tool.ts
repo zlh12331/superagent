@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitAddInputSchema = z.object({
   // 要暂存的路径列表（相对 workingDir 或绝对路径）

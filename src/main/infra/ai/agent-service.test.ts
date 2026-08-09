@@ -22,7 +22,7 @@ import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ISessionService } from '../storage/session-service';
-import type { IToolRegistry } from './tool-registry';
+import type { IToolRegistry } from './tools/tool-registry';
 
 // vi.mock 会被 hoist，工厂函数内不能引用外部 const
 // 必须用 vi.hoisted 导出 mock 对象
@@ -62,7 +62,7 @@ vi.mock('ai', async (importOriginal) => {
 });
 
 // mock ai-provider：拦截 getModel
-vi.mock('./ai-provider', () => ({
+vi.mock('./llm-client/ai-provider', () => ({
   getModel: mocks.mockGetModel,
 }));
 
@@ -81,7 +81,7 @@ vi.mock('../../telemetry/otel', () => ({
   withSpan: mocks.mockWithSpan,
 }));
 
-import { AgentService } from './agent-service';
+import { AgentService } from './agent/agent-service';
 
 /**
  * 创建 mock ReadableStream：按顺序推送 parts 后 close

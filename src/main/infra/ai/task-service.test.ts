@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../storage/schema';
 import { SCHEMA_SQL } from '../storage/schema-sql';
-import { TaskKind, TaskService, TaskStatus } from './task-service';
+import { TaskKind, TaskService, TaskStatus } from './agent/task-service';
 
 // mock getDb：内存数据库（建表 SQL 单一真源）
 function createInMemoryDb() {

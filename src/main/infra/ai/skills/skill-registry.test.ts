@@ -2,8 +2,8 @@
 // 技能注册表单测：内置技能列表/加载/注册
 
 import { describe, expect, it } from 'vitest';
-import type { ToolContext } from '../tool';
 import { createLoadSkillTool } from '../tools/load-skill.tool';
+import type { ToolContext } from '../tools/tool';
 import { SkillRegistry, skillRegistry } from './skill-registry';
 
 describe('SkillRegistry', () => {

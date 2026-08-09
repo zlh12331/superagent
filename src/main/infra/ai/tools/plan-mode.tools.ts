@@ -13,8 +13,8 @@
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { z } from 'zod';
 import { writeApprovalMode } from '../../storage/approval-pref';
-import type { IPermissionService } from '../permission-service';
-import type { Tool, ToolResult } from '../tool';
+import type { IPermissionService } from './permission-service';
+import type { Tool, ToolResult } from './tool';
 
 /** 进入 plan 模式前保存的模式（exit 时恢复；进程内单实例） */
 let previousMode: ApprovalMode | null = null;

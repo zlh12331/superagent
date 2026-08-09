@@ -7,10 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../../storage/schema';
 import { SCHEMA_SQL } from '../../storage/schema-sql';
 import { SessionService } from '../../storage/session-service';
+import { MemoryService } from '../knowledge/memory-service';
 import type { LlmClient } from '../llm-client';
-import { MemoryService } from '../memory-service';
-import type { ToolContext } from '../tool';
 import { createSaveMemoryTool } from './save-memory.tool';
+import type { ToolContext } from './tool';
 
 // mock getDb：内存数据库（建表 SQL 单一真源）
 function createInMemoryDb() {

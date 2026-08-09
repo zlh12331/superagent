@@ -27,9 +27,9 @@
 import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/main';
 import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
+import { logger } from '../../../utils/logger';
 import { withSpan } from '../../telemetry/otel';
-import { logger } from '../../utils/logger';
-import { HookEventName, hookRegistry } from './hook-registry';
+import { HookEventName, hookRegistry } from '../agent/hook-registry';
 import type { IPermissionService } from './permission-service';
 import { generateApprovalId } from './permission-service';
 import type { ToolContext, ToolResult } from './tool';

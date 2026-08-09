@@ -2,7 +2,7 @@
 // 停滞看门狗单测：无进展停滞/工具豁免/重试耗尽/父取消传播
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { StallWatchdog, type WatchdogEvent } from './stall-watchdog';
+import { StallWatchdog, type WatchdogEvent } from './agent/stall-watchdog';
 
 describe('StallWatchdog', () => {
   afterEach(() => {

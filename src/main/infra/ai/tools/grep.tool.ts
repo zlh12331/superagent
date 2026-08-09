@@ -5,8 +5,8 @@
 import type { GrepRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { ISearchService } from '../../search/search-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GrepInputSchema = z.object({
   pattern: z.string().min(1).describe('搜索模式（正则或字面量）'),

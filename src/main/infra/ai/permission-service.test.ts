@@ -12,8 +12,8 @@ import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateApprovalId, PermissionService } from './permission-service';
-import type { Tool } from './tool';
+import { generateApprovalId, PermissionService } from './tools/permission-service';
+import type { Tool } from './tools/tool';
 
 const mocks = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

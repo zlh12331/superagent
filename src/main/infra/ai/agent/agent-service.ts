@@ -42,32 +42,36 @@ import {
 } from '@code-agent/shared/main';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
+import { emitEvent } from '../../../utils/emit-event';
+import { logger } from '../../../utils/logger';
+import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
-import { emitEvent } from '../../utils/emit-event';
-import { logger } from '../../utils/logger';
-import { getModel } from '../ai/ai-provider';
-import { classifyError, isAbortError } from '../ai/error-classifier';
-import type { ISessionService } from '../storage/session-service';
-import { TurnEventEmitter } from './agent-runtime';
-import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
-import { createAgentTurnActor } from './agent-runtime/agent-turn-machine';
-import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
-import { createStreamWithRetry } from './agent-runtime/create-stream';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from './agent-runtime/stream-reader';
-import { TurnRunner } from './agent-runtime/turn-runner';
+import { TurnEventEmitter } from '../agent-runtime';
+import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
+import { createAgentTurnActor } from '../agent-runtime/agent-turn-machine';
+import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
+import { createStreamWithRetry } from '../agent-runtime/create-stream';
+import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../agent-runtime/stream-reader';
+import { TurnRunner } from '../agent-runtime/turn-runner';
+import type { ITitleGenerator } from '../knowledge/session-title';
+import {
+  ensureSessionTitle,
+  firstUserMessageText,
+  lastUserMessageText,
+} from '../knowledge/session-title';
+import { getModel } from '../llm-client/ai-provider';
+import { buildGenerationOptions, modelRegistry } from '../models';
+import type { IPromptService } from '../prompt/prompt-service';
+import { classifyError, isAbortError } from '../tools/error-classifier';
+import type { IPermissionService } from '../tools/permission-service';
+import type { IToolExecutor } from '../tools/tool-executor';
+import type { IToolRegistry } from '../tools/tool-registry';
 import {
   compressByTokenBudget,
   estimateMessagesTokens,
   getCompactionBudget,
   getTokenBudgetDecision,
 } from './context-compression';
-import { buildGenerationOptions, modelRegistry } from './models';
-import type { IPermissionService } from './permission-service';
-import type { IPromptService } from './prompt/prompt-service';
-import type { ITitleGenerator } from './session-title';
-import { ensureSessionTitle, firstUserMessageText, lastUserMessageText } from './session-title';
-import type { IToolExecutor } from './tool-executor';
-import type { IToolRegistry } from './tool-registry';
 
 /**
  * Agent 启动选项

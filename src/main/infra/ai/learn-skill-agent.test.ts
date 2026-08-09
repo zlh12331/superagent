@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDb } from '../storage/db';
 import { schema } from '../storage/schema';
 import { SCHEMA_SQL } from '../storage/schema-sql';
-import { buildLearnSkillPrompt, LearnSkillService } from './learn-skill-agent';
+import { buildLearnSkillPrompt, LearnSkillService } from './knowledge/learn-skill-agent';
 import type { LlmClient } from './llm-client/llm-client';
 import { skillRegistry } from './skills/skill-registry';
 

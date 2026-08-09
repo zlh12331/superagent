@@ -14,12 +14,13 @@ import { startupTracingIntegration } from '@sentry/electron/main';
 import { app, BrowserWindow, screen, session, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { getAppConfig } from './config';
-import { agentAskService } from './infra/ai/agent-ask-service';
-import { llmClient } from './infra/ai/ai-provider';
-import { LearnSkillService } from './infra/ai/learn-skill-agent';
+import { agentAskService } from './infra/ai/agent/agent-ask-service';
+import { LearnSkillService } from './infra/ai/knowledge/learn-skill-agent';
+import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
+import { initTelemetry, shutdownTelemetry } from './infra/telemetry/otel';
 import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { createAgentAskHandlers } from './ipc/agent-ask.handler';
@@ -54,7 +55,6 @@ import {
   recoverFromCrash,
   serviceContainer,
 } from './service-container';
-import { initTelemetry, shutdownTelemetry } from './telemetry/otel';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
 

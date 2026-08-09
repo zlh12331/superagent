@@ -8,7 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** 抓取超时（毫秒） */
 const FETCH_TIMEOUT_MS = 15_000;

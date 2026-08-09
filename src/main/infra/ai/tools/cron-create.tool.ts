@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 import { cronService } from '../cron-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** cron_create 入参 */
 const CronCreateInputSchema = z.object({

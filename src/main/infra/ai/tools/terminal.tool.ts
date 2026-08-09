@@ -4,8 +4,8 @@
 
 import { z } from 'zod';
 import type { ITerminalService } from '../../terminal/terminal-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const TerminalActionSchema = z.discriminatedUnion('action', [
   z.object({

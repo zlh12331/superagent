@@ -18,7 +18,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { TurnEventType } from '@code-agent/shared/main';
-import { logger } from '../../utils/logger';
+import { logger } from '../../../utils/logger';
 import type { IAgentService } from './agent-service';
 import { StallWatchdog } from './stall-watchdog';
 import { TaskKind, TaskStatus, taskService } from './task-service';

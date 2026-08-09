@@ -13,9 +13,9 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import { llmClient, runtimeModelStore } from '../infra/ai/ai-provider';
-import type { IPermissionService } from '../infra/ai/permission-service';
+import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { toKeychainKey } from '../infra/ai/providers';
+import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { readApprovalModeSync, writeApprovalMode } from '../infra/storage/approval-pref';
 import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';

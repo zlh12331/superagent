@@ -18,8 +18,8 @@
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const CodeReviewInputSchema = z.object({
   path: z.string().min(1).describe('要审查的文件路径（相对路径基于工作目录解析）'),

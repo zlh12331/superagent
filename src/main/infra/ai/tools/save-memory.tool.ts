@@ -8,8 +8,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import type { MemoryService } from '../memory-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { MemoryService } from '../knowledge/memory-service';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** save_memory 入参 */
 const SaveMemoryInputSchema = z.object({

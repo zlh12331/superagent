@@ -7,8 +7,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { TaskStatus, taskService } from '../task-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import { TaskStatus, taskService } from '../agent/task-service';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** task_update 入参 */
 const TaskUpdateInputSchema = z.object({

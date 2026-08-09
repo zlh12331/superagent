@@ -14,7 +14,7 @@
 // - 保持核心不变式：无进展计时 + 工具飞行中暂停 + 停滞 abort 重试
 // ──────────────────────────────────────────────────────────────
 
-import { logger } from '../../utils/logger';
+import { logger } from '../../../utils/logger';
 
 /** 看门狗配置 */
 export interface StallWatchdogOptions {

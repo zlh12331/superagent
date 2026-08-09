@@ -5,8 +5,8 @@
 import type { GlobRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { ISearchService } from '../../search/search-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GlobInputSchema = z.object({
   pattern: z.string().min(1).describe('glob 模式，如 **/*.ts 匹配所有 TypeScript 文件'),

@@ -2,7 +2,7 @@
 // 危险命令检测单测：破坏性拦截 / 意图豁免 / 只读白名单
 
 import { describe, expect, it } from 'vitest';
-import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
+import { detectDangerousCommand, isSafeReadOnlyCommand } from './tools/dangerous-commands';
 
 describe('detectDangerousCommand', () => {
   it('git reset --hard：判定为破坏性（git-destructive）', () => {

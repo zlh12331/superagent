@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitCommitInputSchema = z.object({
   message: z

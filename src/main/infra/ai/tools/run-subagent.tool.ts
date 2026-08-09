@@ -8,8 +8,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { getSubagentManager } from '../subagent-manager';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import { getSubagentManager } from '../agent/subagent-manager';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** run_subagent 入参 */
 const RunSubagentInputSchema = z.object({

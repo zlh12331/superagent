@@ -5,9 +5,8 @@
 // - skill:list  列出全部可用技能（设置页/提示面板展示）
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
-
-import { llmClient } from '../infra/ai/ai-provider';
-import { LearnSkillService } from '../infra/ai/learn-skill-agent';
+import { LearnSkillService } from '../infra/ai/knowledge/learn-skill-agent';
+import { llmClient } from '../infra/ai/llm-client/ai-provider';
 import { skillRegistry } from '../infra/ai/skills/skill-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 

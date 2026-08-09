@@ -6,9 +6,9 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../storage/schema';
 import { SCHEMA_SQL } from '../storage/schema-sql';
-import type { IAgentService } from './agent-service';
-import type { GoalJudge } from './goal-judge';
-import { GoalService } from './goal-service';
+import type { IAgentService } from './agent/agent-service';
+import type { GoalJudge } from './knowledge/goal-judge';
+import { GoalService } from './knowledge/goal-service';
 
 // mock getDb：内存数据库（建表 SQL 单一真源）
 function createInMemoryDb() {

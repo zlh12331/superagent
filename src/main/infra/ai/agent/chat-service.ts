@@ -26,19 +26,19 @@ import type {
 import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { streamText } from 'ai';
 import type { WebContents } from 'electron';
-import { emitEvent } from '../../utils/emit-event';
-import { logger } from '../../utils/logger';
-import type { ISessionService } from '../storage/session-service';
-import { combineAbortSignals, createTimeoutSignal } from './agent-runtime/abort-utils';
-import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
-import { createStreamWithRetry } from './agent-runtime/create-stream';
-import { readWithIdleTimeout } from './agent-runtime/stream-reader';
-import { getModel } from './ai-provider';
+import { emitEvent } from '../../../utils/emit-event';
+import { logger } from '../../../utils/logger';
+import type { ISessionService } from '../../storage/session-service';
+import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
+import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
+import { createStreamWithRetry } from '../agent-runtime/create-stream';
+import { readWithIdleTimeout } from '../agent-runtime/stream-reader';
+import type { ITitleGenerator } from '../knowledge/session-title';
+import { ensureSessionTitle, firstUserMessageText } from '../knowledge/session-title';
+import { getModel } from '../llm-client/ai-provider';
+import { buildGenerationOptions, modelRegistry } from '../models';
+import { classifyError, isAbortError } from '../tools/error-classifier';
 import { estimateMessagesTokens } from './context-compression';
-import { classifyError, isAbortError } from './error-classifier';
-import { buildGenerationOptions, modelRegistry } from './models';
-import type { ITitleGenerator } from './session-title';
-import { ensureSessionTitle, firstUserMessageText } from './session-title';
 
 /**
  * 对话启动选项

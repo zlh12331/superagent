@@ -7,8 +7,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { teamService } from '../team-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import { teamService } from '../agent/team-service';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** run_team 入参 */
 const RunTeamInputSchema = z.object({

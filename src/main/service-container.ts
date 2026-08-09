@@ -49,32 +49,32 @@ import electronUpdater from 'electron-updater';
 const { autoUpdater } = electronUpdater;
 
 import { resetConfigCache } from './config';
-import { agentAskService } from './infra/ai/agent-ask-service';
+import { agentAskService } from './infra/ai/agent/agent-ask-service';
+import { AgentService, type IAgentService } from './infra/ai/agent/agent-service';
+import type { IChatService } from './infra/ai/agent/chat-service';
+import { getChatService, resetChatService } from './infra/ai/agent/chat-service';
+import { initSubagentManager } from './infra/ai/agent/subagent-manager';
 import {
   type ConcurrencyGate,
   createConcurrencyGate,
   DEFAULT_MAX_CONCURRENT_TURNS,
 } from './infra/ai/agent-runtime/concurrency-gate';
-import { AgentService, type IAgentService } from './infra/ai/agent-service';
-import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/ai-provider';
-import type { IChatService } from './infra/ai/chat-service';
-import { getChatService, resetChatService } from './infra/ai/chat-service';
-import { CommandClassifier } from './infra/ai/command-classifier';
-import { GoalJudge } from './infra/ai/goal-judge';
-import { GoalService } from './infra/ai/goal-service';
+import { GoalJudge } from './infra/ai/knowledge/goal-judge';
+import { GoalService } from './infra/ai/knowledge/goal-service';
+import { MemoryService } from './infra/ai/knowledge/memory-service';
 import type { LlmClient } from './infra/ai/llm-client';
+import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/llm-client/ai-provider';
 import { type IMCPService, MCPService } from './infra/ai/mcp';
-import { MemoryService } from './infra/ai/memory-service';
-import type { IPermissionService } from './infra/ai/permission-service';
-import { PermissionService } from './infra/ai/permission-service';
 import type { IPromptService } from './infra/ai/prompt/prompt-service';
 import { PromptService } from './infra/ai/prompt/prompt-service';
-import { initSubagentManager } from './infra/ai/subagent-manager';
-import type { IToolExecutor } from './infra/ai/tool-executor';
-import { ToolExecutor } from './infra/ai/tool-executor';
-import type { IToolRegistry } from './infra/ai/tool-registry';
-import { ToolRegistry } from './infra/ai/tool-registry';
 import { registerBuiltinTools } from './infra/ai/tools';
+import { CommandClassifier } from './infra/ai/tools/command-classifier';
+import type { IPermissionService } from './infra/ai/tools/permission-service';
+import { PermissionService } from './infra/ai/tools/permission-service';
+import type { IToolExecutor } from './infra/ai/tools/tool-executor';
+import { ToolExecutor } from './infra/ai/tools/tool-executor';
+import type { IToolRegistry } from './infra/ai/tools/tool-registry';
+import { ToolRegistry } from './infra/ai/tools/tool-registry';
 import type { ICodebaseService } from './infra/codebase/codebase-service';
 import { getCodebaseService, resetCodebaseService } from './infra/codebase/codebase-service';
 import type { IFileService } from './infra/file/file-service';

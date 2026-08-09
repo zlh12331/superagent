@@ -2,7 +2,7 @@
 // 工作流服务单测：创建/步骤状态机/预算软闸/日志/终端状态锁定
 
 import { describe, expect, it } from 'vitest';
-import { WorkflowService, WorkflowStepStatus } from './workflow-service';
+import { WorkflowService, WorkflowStepStatus } from './agent/workflow-service';
 
 describe('WorkflowService', () => {
   it('create：idle 状态 + 初始日志', () => {

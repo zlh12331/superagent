@@ -16,8 +16,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { logger } from '../../utils/logger';
-import type { LlmClient } from './llm-client';
+import { logger } from '../../../utils/logger';
+import type { LlmClient } from '../llm-client';
 
 /** 目标判定结果 */
 export interface GoalJudgement {

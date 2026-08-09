@@ -79,7 +79,12 @@ vi.mock('../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
-import { getAIProvider, getModel, getProviderCacheSize, resetAIProvider } from './ai-provider';
+import {
+  getAIProvider,
+  getModel,
+  getProviderCacheSize,
+  resetAIProvider,
+} from './llm-client/ai-provider';
 import { ProviderRegistry } from './providers';
 
 describe('ai-provider', () => {

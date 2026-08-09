@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitPushInputSchema = z.object({
   remote: z.string().default('origin').describe('远程名，默认 origin'),

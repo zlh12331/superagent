@@ -4,7 +4,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { getCodeAnalyzer, resetCodeAnalyzer } from '../code-analysis/code-analyzer';
+import { getCodeAnalyzer, resetCodeAnalyzer } from './code-analyzer';
 
 const TS_SOURCE = `import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';

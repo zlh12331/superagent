@@ -104,8 +104,14 @@
         "**/packages/shared/src/schemas/goal.ts",
         "**/src/main/infra/im/**",
         "**/src/main/infra/remote/**",
-        "**/src/main/infra/ai/hook-registry.ts",
-        "**/src/main/infra/ai/task-service.ts",
+        "**/src/main/infra/ai/agent/hook-registry.ts",
+        "**/src/main/infra/ai/agent/task-service.ts",
+        "**/src/main/infra/ai/agent/agent-service.ts",
+        "**/src/main/infra/ai/agent/chat-service.ts",
+        "**/src/main/infra/ai/agent/workflow-service.ts",
+        "**/src/main/infra/ai/knowledge/session-title.ts",
+        "**/src/main/infra/ai/llm-client/ai-provider.ts",
+        "**/src/main/infra/code-analysis/code-analyzer.ts",
         "**/src/renderer/lib/constants.ts"
       ],
       "linter": {

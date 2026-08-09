@@ -9,7 +9,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import type { IPermissionService } from '../infra/ai/permission-service';
+import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**

@@ -10,7 +10,7 @@
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** lsp_references 入参 */
 const LspReferencesInputSchema = z.object({

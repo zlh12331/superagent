@@ -15,7 +15,7 @@
 // - 收敛为"领导委派 → 成员并行执行 → 结构化汇总"（领导汇总后置）
 // ──────────────────────────────────────────────────────────────
 
-import { logger } from '../../utils/logger';
+import { logger } from '../../../utils/logger';
 import { getSubagentManager, type SubagentManager } from './subagent-manager';
 
 /** 团队成员委派 */

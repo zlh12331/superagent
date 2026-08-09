@@ -15,7 +15,7 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ToolContext } from '../tool';
+import type { ToolContext } from '../tools/tool';
 import { MCPClient } from './mcp-client';
 import type { McpServerConfig } from './mcp-types';
 

@@ -7,8 +7,8 @@
 // 3. cwd 越界路径 → UNAUTHORIZED
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ToolContext } from '../tool';
 import { createRunCommandTool } from './run-command.tool';
+import type { ToolContext } from './tool';
 
 const mocks = vi.hoisted(() => {
   const mockSpawn = vi.fn();

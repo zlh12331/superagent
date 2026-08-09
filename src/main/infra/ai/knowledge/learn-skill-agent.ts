@@ -17,12 +17,12 @@
 
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { logger } from '../../utils/logger';
-import { getDb } from '../storage/db';
-import { skills } from '../storage/schema';
-import type { LlmClient } from './llm-client/llm-client';
-import type { Skill } from './skills/skill-registry';
-import { skillRegistry } from './skills/skill-registry';
+import { logger } from '../../../utils/logger';
+import { getDb } from '../../storage/db';
+import { skills } from '../../storage/schema';
+import type { LlmClient } from '../llm-client/llm-client';
+import type { Skill } from '../skills/skill-registry';
+import { skillRegistry } from '../skills/skill-registry';
 
 /** 技能名合法性（snake_case：小写字母/数字/下划线） */
 const SKILL_NAME_RE = /^[a-z][a-z0-9_]{1,31}$/;

@@ -16,10 +16,10 @@
 import type { GoalInfo, GoalStatus, TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { eq } from 'drizzle-orm';
-import { logger } from '../../utils/logger';
-import { getDb } from '../storage/db';
-import { goals } from '../storage/schema';
-import type { IAgentService } from './agent-service';
+import { logger } from '../../../utils/logger';
+import { getDb } from '../../storage/db';
+import { goals } from '../../storage/schema';
+import type { IAgentService } from '../agent/agent-service';
 import type { GoalJudge } from './goal-judge';
 
 /** 目标状态内部类型（shared GoalStatus 映射） */

@@ -11,7 +11,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import type { IToolRegistry } from '../infra/ai/tool-registry';
+import type { IToolRegistry } from '../infra/ai/tools/tool-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**

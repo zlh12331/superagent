@@ -15,7 +15,7 @@
 // - 回合级事件点（turn-start/end）由现有 onTurnEvent 类级总线覆盖，不重复实现
 // ──────────────────────────────────────────────────────────────
 
-import { logger } from '../../utils/logger';
+import { logger } from '../../../utils/logger';
 
 /** 钩子事件名（对齐 qwen HookEventName 的收敛子集） */
 export const HookEventName = {

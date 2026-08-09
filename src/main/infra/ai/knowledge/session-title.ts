@@ -12,10 +12,10 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/main';
-import { logger } from '../../utils/logger';
-import type { ISessionService } from '../storage/session-service';
-import { DEFAULT_SESSION_TITLE } from '../storage/session-service';
-import type { LlmGenerateTextOptions, LlmGenerateTextResult } from './llm-client';
+import { logger } from '../../../utils/logger';
+import type { ISessionService } from '../../storage/session-service';
+import { DEFAULT_SESSION_TITLE } from '../../storage/session-service';
+import type { LlmGenerateTextOptions, LlmGenerateTextResult } from '../llm-client';
 
 /**
  * 标题生成器接口（DI 窄接口：仅依赖 generateText 能力）

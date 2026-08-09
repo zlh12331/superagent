@@ -19,14 +19,14 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { LanguageModel } from 'ai';
-import { getAppConfig } from '../../config';
-import { logger } from '../../utils/logger';
-import { getSecret } from '../storage/keychain';
-import { LlmClient } from './llm-client';
-import { modelRegistry } from './models';
-import { RuntimeModelStore } from './models/runtime-model-store';
-import type { ProviderKind } from './providers';
-import { providerRegistry, toKeychainKey } from './providers';
+import { getAppConfig } from '../../../config';
+import { logger } from '../../../utils/logger';
+import { getSecret } from '../../storage/keychain';
+import { modelRegistry } from '../models';
+import { RuntimeModelStore } from '../models/runtime-model-store';
+import type { ProviderKind } from '../providers';
+import { providerRegistry, toKeychainKey } from '../providers';
+import { LlmClient } from './';
 
 /**
  * Provider 工厂配置

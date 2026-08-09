@@ -27,7 +27,7 @@ vi.mock('electron', () => ({
   app: mockApp,
 }));
 
-import type { IPermissionService } from '../infra/ai/permission-service';
+import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { createSettingsHandlers } from './settings.handler';
 
 /** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */

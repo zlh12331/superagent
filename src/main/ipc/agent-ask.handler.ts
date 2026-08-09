@@ -14,7 +14,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { AskRespondReq, AskRespondRes } from '@code-agent/shared/main';
-import type { AgentAskService } from '../infra/ai/agent-ask-service';
+import type { AgentAskService } from '../infra/ai/agent/agent-ask-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /** Agent 提问域 handler 工厂 */

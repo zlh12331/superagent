@@ -24,7 +24,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import type { IAgentService } from '../infra/ai/agent-service';
+import type { IAgentService } from '../infra/ai/agent/agent-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**

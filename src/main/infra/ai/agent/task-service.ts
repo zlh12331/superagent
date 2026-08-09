@@ -18,10 +18,10 @@
 
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { logger } from '../../utils/logger';
-import { getDb } from '../storage/db';
-import type { TaskRow } from '../storage/schema';
-import { tasks } from '../storage/schema';
+import { logger } from '../../../utils/logger';
+import { getDb } from '../../storage/db';
+import type { TaskRow } from '../../storage/schema';
+import { tasks } from '../../storage/schema';
 
 /** 任务状态机（对齐 qwen TaskState 生命周期收敛） */
 export const TaskStatus = {

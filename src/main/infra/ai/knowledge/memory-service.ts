@@ -18,11 +18,11 @@
 
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { logger } from '../../utils/logger';
-import { getDb } from '../storage/db';
-import type { MemoryRow } from '../storage/schema';
-import { memories } from '../storage/schema';
-import type { LlmClient } from './llm-client';
+import { logger } from '../../../utils/logger';
+import { getDb } from '../../storage/db';
+import type { MemoryRow } from '../../storage/schema';
+import { memories } from '../../storage/schema';
+import type { LlmClient } from '../llm-client';
 
 /** 记忆类别 */
 export type MemoryKind = 'fact' | 'preference';

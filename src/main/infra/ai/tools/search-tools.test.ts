@@ -7,9 +7,9 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getSearchService } from '../../search/search-service';
-import type { ToolContext } from '../tool';
 import { createGlobTool } from './glob.tool';
 import { createGrepTool } from './grep.tool';
+import type { ToolContext } from './tool';
 
 let workDir: string;
 

@@ -21,8 +21,8 @@ import {
 } from 'ai';
 import type { ZodType } from 'zod';
 import { logger } from '../../../utils/logger';
+import { estimateTokenCount } from '../agent/context-compression';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
-import { estimateTokenCount } from '../context-compression';
 import type { ModelRegistry } from '../models';
 import { buildGenerationOptions } from '../models/generation-options';
 import type { ProviderKind } from '../providers/types';

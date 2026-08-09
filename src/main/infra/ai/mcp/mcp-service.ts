@@ -18,7 +18,7 @@
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 import { logger } from '../../../utils/logger';
-import type { IToolRegistry } from '../tool-registry';
+import type { IToolRegistry } from '../tools/tool-registry';
 import { MCPClient } from './mcp-client';
 import { adaptMcpTool } from './mcp-tool-adapter';
 import type { McpServerConfig, McpServerInfo, McpServerStatus } from './mcp-types';

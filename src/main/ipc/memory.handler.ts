@@ -7,7 +7,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import type { MemoryService } from '../infra/ai/memory-service';
+import type { MemoryService } from '../infra/ai/knowledge/memory-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**

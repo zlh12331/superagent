@@ -30,8 +30,8 @@ import type {
 } from '@code-agent/shared/main';
 import { AppError, DEFAULT_APPROVAL_MODE, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
-import { logger } from '../../utils/logger';
-import { readWhitelistSync, writeWhitelist } from '../storage/whitelist-pref';
+import { logger } from '../../../utils/logger';
+import { readWhitelistSync, writeWhitelist } from '../../storage/whitelist-pref';
 import type { CommandClassifier } from './command-classifier';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
 import type { DenialState } from './denial-tracking';

@@ -14,7 +14,7 @@
 
 import type { TurnToolCallEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
-import { isAbortError } from '../error-classifier';
+import { isAbortError } from '../tools/error-classifier';
 import { readTracker } from '../tools/read-tracker';
 import { LoopDetector } from './loop-detector';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';

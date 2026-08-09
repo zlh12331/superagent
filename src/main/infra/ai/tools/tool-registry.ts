@@ -25,7 +25,7 @@
 import type { ToolDescriptor } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { type Tool as AITool, tool as defineAITool } from 'ai';
-import { logger } from '../../utils/logger';
+import { logger } from '../../../utils/logger';
 import type { Tool, ToolContext } from './tool';
 
 /**

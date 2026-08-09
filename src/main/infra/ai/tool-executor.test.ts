@@ -14,9 +14,9 @@
 import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Tool, ToolContext, ToolResult } from './tool';
-import { ToolExecutor } from './tool-executor';
-import type { IToolRegistry } from './tool-registry';
+import type { Tool, ToolContext, ToolResult } from './tools/tool';
+import { ToolExecutor } from './tools/tool-executor';
+import type { IToolRegistry } from './tools/tool-registry';
 
 const mocks = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

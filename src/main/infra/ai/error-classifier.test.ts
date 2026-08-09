@@ -13,7 +13,7 @@
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { classifyError, isAbortError } from './error-classifier';
+import { classifyError, isAbortError } from './tools/error-classifier';
 
 /** 构造 APICallError（AI SDK 类型，仅需 statusCode/isRetryable 字段） */
 function createApiError(statusCode: number | undefined, isRetryable: boolean): APICallError {

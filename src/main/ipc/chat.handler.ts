@@ -17,7 +17,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import type { IChatService } from '../infra/ai/chat-service';
+import type { IChatService } from '../infra/ai/agent/chat-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**

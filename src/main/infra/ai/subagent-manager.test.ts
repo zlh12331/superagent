@@ -33,8 +33,8 @@ vi.mock('../storage/db', async (importOriginal) => {
   };
 });
 
-import type { IAgentService } from './agent-service';
-import { getSubagentManager, initSubagentManager, SubagentManager } from './subagent-manager';
+import type { IAgentService } from './agent/agent-service';
+import { getSubagentManager, initSubagentManager, SubagentManager } from './agent/subagent-manager';
 
 /** fake agentService（无 mock 框架，手写最小实现） */
 function createFakeAgent() {

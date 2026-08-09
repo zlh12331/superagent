@@ -14,7 +14,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentAnswer, AgentQuestion } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
-import { logger } from '../../utils/logger';
+import { logger } from '../../../utils/logger';
 
 /** 单次提问的 pending 条目 */
 interface PendingAsk {

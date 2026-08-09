@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 import type { SkillRegistry } from '../skills/skill-registry';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** load_skill 入参 */
 const LoadSkillInputSchema = z.object({

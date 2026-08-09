@@ -4,8 +4,8 @@
 
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const MAX_OUTPUT_BYTES = 100 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;

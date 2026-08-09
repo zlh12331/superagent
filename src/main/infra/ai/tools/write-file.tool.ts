@@ -21,9 +21,9 @@ import { promises as fs } from 'node:fs';
 import type { FileWriteRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** 目标文件是否存在（写入前校验用） */
 async function fileExists(targetPath: string): Promise<boolean> {

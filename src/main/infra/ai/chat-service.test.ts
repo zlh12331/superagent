@@ -58,7 +58,7 @@ vi.mock('ai', async (importOriginal) => {
 });
 
 // mock ai-provider：拦截 getModel，避免触发 keychain/config
-vi.mock('./ai-provider', () => ({
+vi.mock('./llm-client/ai-provider', () => ({
   getModel: mocks.mockGetModel,
 }));
 
@@ -73,8 +73,8 @@ vi.mock('node:crypto', () => ({
 }));
 
 import type { ISessionService } from '../storage/session-service';
-import { getChatService, resetChatService } from './chat-service';
-import type { ITitleGenerator } from './session-title';
+import { getChatService, resetChatService } from './agent/chat-service';
+import type { ITitleGenerator } from './knowledge/session-title';
 
 /**
  * 创建 mock ReadableStream：按顺序推送 parts 后 close

@@ -17,8 +17,8 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Tool } from '../tool';
-import type { IToolRegistry } from '../tool-registry';
+import type { Tool } from '../tools/tool';
+import type { IToolRegistry } from '../tools/tool-registry';
 import { isMcpToolName, MCPService, validateMcpServerConfig } from './mcp-service';
 import type { McpToolDescriptor } from './mcp-tool-adapter';
 import type { McpServerConfig } from './mcp-types';

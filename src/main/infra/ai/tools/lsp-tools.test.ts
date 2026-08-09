@@ -3,9 +3,9 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { LspServerManager } from '../../lsp/lsp-server-manager';
-import type { ToolContext } from '../tool';
 import { createLspDefinitionTool } from './lsp-definition.tool';
 import { createLspReferencesTool } from './lsp-references.tool';
+import type { ToolContext } from './tool';
 
 /** fake 语言服务器脚本（真实 JSON-RPC 2.0 over stdio） */
 const FAKE_SERVER_SCRIPT = `

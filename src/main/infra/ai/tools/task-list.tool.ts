@@ -7,8 +7,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { taskService } from '../task-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import { taskService } from '../agent/task-service';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** task_list 入参 */
 const TaskListInputSchema = z.object({

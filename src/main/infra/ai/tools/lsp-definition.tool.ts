@@ -11,7 +11,7 @@
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** lsp_definition 入参 */
 const LspDefinitionInputSchema = z.object({

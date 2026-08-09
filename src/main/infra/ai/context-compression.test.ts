@@ -12,7 +12,7 @@ import {
   getCompactionDecision,
   getTokenBudgetDecision,
   MIN_COMPACTION_BUDGET,
-} from './context-compression';
+} from './agent/context-compression';
 
 /** 构造消息辅助 */
 const user = (content: string): ModelMessage => ({ role: 'user', content });

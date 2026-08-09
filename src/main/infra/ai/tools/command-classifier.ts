@@ -18,8 +18,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { logger } from '../../utils/logger';
-import type { LlmClient } from './llm-client';
+import { logger } from '../../../utils/logger';
+import type { LlmClient } from '../llm-client';
 
 /** 分类判定：safe 自动放行 / dangerous 拦截 / unknown 降级 ask */
 export type CommandVerdict = 'safe' | 'dangerous' | 'unknown';

@@ -6,8 +6,8 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../storage/schema';
 import { SCHEMA_SQL } from '../storage/schema-sql';
+import { MemoryService } from './knowledge/memory-service';
 import type { LlmClient } from './llm-client';
-import { MemoryService } from './memory-service';
 
 // mock getDb：内存数据库（建表 SQL 单一真源）
 function createInMemoryDb() {

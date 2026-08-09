@@ -10,7 +10,7 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ToolContext } from '../tool';
+import type { ToolContext } from '../tools/tool';
 import {
   adaptMcpTool,
   decideMcpToolPermission,

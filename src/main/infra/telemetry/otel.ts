@@ -21,7 +21,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { app } from 'electron';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 /**
  * 全局 Tracer 实例

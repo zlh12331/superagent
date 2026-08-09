@@ -6,7 +6,7 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
-import { taskService } from '../infra/ai/task-service';
+import { taskService } from '../infra/ai/agent/task-service';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /** 任务域 handler 实现（依赖模块级 taskService 单例） */

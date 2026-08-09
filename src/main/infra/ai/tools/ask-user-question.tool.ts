@@ -11,8 +11,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import type { AgentAskService } from '../agent-ask-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
+import type { AgentAskService } from '../agent/agent-ask-service';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** 工具入参（与 shared AgentQuestion 对齐；本地 z 校验 LLM 生成） */
 const AskUserQuestionInputSchema = z.object({

@@ -7,10 +7,10 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getFileService } from '../../file/file-service';
-import type { ToolContext } from '../tool';
 import { createEditFileTool } from './edit-file.tool';
 import { createListDirectoryTool } from './list-directory.tool';
 import { createReadFileTool } from './read-file.tool';
+import type { ToolContext } from './tool';
 import { createWriteFileTool } from './write-file.tool';
 
 let workDir: string;

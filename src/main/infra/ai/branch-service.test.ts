@@ -2,7 +2,7 @@
 // 会话分支服务单测：分类纯函数 + 记录/摘要
 
 import { describe, expect, it } from 'vitest';
-import { BranchService, classifyBranch } from './branch-service';
+import { BranchService, classifyBranch } from './agent/branch-service';
 
 describe('classifyBranch（纯函数）', () => {
   it('无回退（顺序追加）：ordinary', () => {

@@ -5,8 +5,8 @@
 import type { FileListRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
-import type { Tool, ToolContext, ToolResult } from '../tool';
 import { resolveWithinWorkspace } from './path-guard';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 const ListDirectoryInputSchema = z.object({
   path: z.string().min(1).describe('目录路径（相对路径基于工作目录解析）'),

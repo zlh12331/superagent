@@ -4,8 +4,8 @@
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IAgentService } from '../ai/agent-service';
-import type { IPermissionService } from '../ai/permission-service';
+import type { IAgentService } from '../ai/agent/agent-service';
+import type { IPermissionService } from '../ai/tools/permission-service';
 import type { ISessionService } from '../storage/session-service';
 import { IM_DEFAULT_WORKING_DIR, ImAgentBridge } from './im-agent-bridge';
 import type { ImService } from './im-service';
