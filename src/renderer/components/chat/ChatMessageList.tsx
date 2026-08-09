@@ -1,3 +1,5 @@
+'use no memo';
+// React Compiler 与 Virtuoso 内部 ref 状态不兼容（同 Sidebar），精确禁用
 // src/renderer/components/chat/ChatMessageList.tsx
 // 聊天消息列表 · 组装层（消息行/流式尾部/操作按钮提取至独立文件）
 // ──────────────────────────────────────────────

@@ -1,3 +1,4 @@
+'use no memo';
 // src/renderer/components/layout/Sidebar.tsx
 // 侧边栏 · 组装层（会话列表/文件夹标签/线程项/加载态提取至独立文件）
 // ──────────────────────────────────────────────
@@ -302,8 +303,10 @@ export function Sidebar(): ReactElement {
                   {/* 虚拟化列表：标签 + 会话项扁平化渲染（Virtuoso 接管滚动） */}
                   <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
                     <Virtuoso
+                      key={sessions.length}
                       style={{ height: '100%' }}
                       data={entries}
+                      totalCount={entries.length}
                       computeItemKey={(_, entry) =>
                         entry.type === 'label' ? `label:${entry.name}` : entry.session.id
                       }

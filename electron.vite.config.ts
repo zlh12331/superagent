@@ -24,6 +24,8 @@ function rendererPlugins() {
   const plugins = [
     react({
       // 启用 React Compiler（React 19.2 官方推荐，自动 memoize）
+      // 注意：Virtuoso 使用文件（Sidebar/ChatMessageList）顶部用 'use no memo' 精确禁用
+      // —— 全量模式与 Virtuoso 的 ref 内部状态不兼容（data 更新不触发渲染）
       babel: {
         plugins: [['babel-plugin-react-compiler']],
       },
