@@ -38,7 +38,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Plus, Search } from 'lucide-react';
+import { FolderTree, Plus, Search } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -85,6 +85,7 @@ export function Sidebar(): ReactElement {
   const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent');
   // 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换）
   const sidebarView = useUiStore((state) => state.sidebarView);
+  const setSidebarView = useUiStore((state) => state.setSidebarView);
 
   // 派生：会话列表
   const sessions = query.data?.sessions ?? [];
