@@ -112,8 +112,12 @@ export function UsageSection(): ReactElement {
   // 首尾补空条目控制显示范围（v3 语义：无条目日期视为无活动）
   const heatValue = useMemo(() => {
     const days = summary?.byDay ?? [];
-    const first = days.length > 0 ? days[days.length - 1] : undefined;
-    const last = days.length > 0 ? days[0] : undefined;
+    // 空数据兑底：近 90 天 0 值（ActivityCalendar 不允许 data 为空，否则抛错）
+    if (days.length === 0) {
+      return recentDays(90).map((date) => ({ date, count: 0, level: 0 }));
+    }
+    const first = days[days.length - 1];
+    const last = days[0];
     const items = [...days]
       .reverse()
       .map((d) => ({ date: d.date, count: d.totalTokens, level: heatLevel(d.totalTokens) }));
