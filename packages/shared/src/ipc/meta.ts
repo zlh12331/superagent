@@ -63,6 +63,7 @@ export const IPC_META = {
     get: request('session:get'),
     delete: request('session:delete'),
     rename: request('session:rename'),
+    pin: request('session:pin'),
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
     exportAll: request('session:exportAll'),

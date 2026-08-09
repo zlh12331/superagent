@@ -43,6 +43,8 @@ export const sessions = sqliteTable('sessions', {
   workingDir: text('working_dir').notNull(),
   /** 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别） */
   lastRunStatus: text('last_run_status').notNull().default('idle'),
+  /** 是否置顶（对齐参考项目 pinned-header 分组；置顶会话优先展示） */
+  pinned: integer('pinned').notNull().default(0),
 });
 
 /**

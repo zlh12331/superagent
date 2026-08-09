@@ -96,6 +96,11 @@ export function createSessionHandlers(
       return sessionService.rename(input.id, input.title);
     },
 
+    // session:pin - 置顶/取消置顶会话（对齐参考项目 pinned-header 分组）
+    pin: async (input) => {
+      return sessionService.pin(input.id, input.pinned);
+    },
+
     // session:create - 创建新会话（绑定 workingDir，空会话）
     create: async (input) => {
       const sessionId = await sessionService.create({

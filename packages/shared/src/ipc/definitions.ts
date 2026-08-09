@@ -137,6 +137,8 @@ import {
   SessionListReqSchema,
   type SessionListRes,
   SessionListResSchema,
+  SessionPinReqSchema,
+  type SessionPinRes,
   type SessionRecentTurnsRes,
   SessionRenameReqSchema,
   type SessionRenameRes,
@@ -454,6 +456,7 @@ export const IPC_DEFINITIONS = {
     get: withSchema(IPC_META.session.get, SessionGetReqSchema, {} as SessionGetRes),
     delete: withSchema(IPC_META.session.delete, SessionDeleteReqSchema, {} as SessionDeleteRes),
     rename: withSchema(IPC_META.session.rename, SessionRenameReqSchema, {} as SessionRenameRes),
+    pin: withSchema(IPC_META.session.pin, SessionPinReqSchema, {} as SessionPinRes),
     create: withSchema(IPC_META.session.create, SessionCreateReqSchema, {} as SessionCreateRes),
     listRecentDirs: withSchema(
       IPC_META.session.listRecentDirs,

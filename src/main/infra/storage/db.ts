@@ -163,6 +163,16 @@ export function initDb(): DrizzleDB {
   }
 
   // 迁移：已存在的数据库加 last_run_status 列（崩溃恢复状态，幂等）
+  //（此迁移已包含在上一段注释的 try 块之后，追加 pinned 迁移）
+  try {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('duplicate column name')) {
+      logger.info({}, 'sessions.pinned 列已存在，跳过 ALTER');
+    } else {
+      throw err;
+    }
+  }
   try {
     sqlite.exec(`ALTER TABLE sessions ADD COLUMN last_run_status TEXT NOT NULL DEFAULT 'idle';`);
   } catch (err) {

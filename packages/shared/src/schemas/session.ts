@@ -51,6 +51,8 @@ export const SessionMetaSchema = z.object({
   workingDir: z.string(),
   // 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别）
   lastRunStatus: z.enum(['idle', 'running', 'interrupted']).default('idle'),
+  // 是否置顶（对齐参考项目 pinned-header 分组）
+  pinned: z.boolean().default(false),
 });
 
 /** 会话元数据类型 */
@@ -106,6 +108,17 @@ export const SessionRenameReqSchema = z.object({
 
 /** session:rename 响应 payload */
 export interface SessionRenameRes {
+  readonly ok: boolean;
+}
+
+/** session:pin 入参 zod schema（置顶/取消置顶；对齐参考项目 pinned 分组） */
+export const SessionPinReqSchema = z.object({
+  id: z.string().min(1),
+  pinned: z.boolean(),
+});
+
+/** session:pin 响应 payload */
+export interface SessionPinRes {
   readonly ok: boolean;
 }
 

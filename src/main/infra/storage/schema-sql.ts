@@ -23,7 +23,8 @@ export const SCHEMA_SQL = `
       last_message TEXT,
       message_count INTEGER NOT NULL DEFAULT 0,
       working_dir TEXT NOT NULL DEFAULT '',
-      last_run_status TEXT NOT NULL DEFAULT 'idle'
+      last_run_status TEXT NOT NULL DEFAULT 'idle',
+      pinned INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS messages (

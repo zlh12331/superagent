@@ -218,6 +218,7 @@ describe('agent-service', () => {
     get: vi.fn(),
     delete: vi.fn(),
     rename: vi.fn(),
+    pin: vi.fn(),
     create: vi.fn(),
     appendMessage: vi.fn(),
     listRecentDirs: vi.fn(),

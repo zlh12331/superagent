@@ -103,7 +103,9 @@
       "renameTitle": "Rename session",
       "doubleClickRename": "Double-click to rename",
       "deleteSession": "Delete session",
-      "fileTree": "Files"
+      "fileTree": "Files",
+      "pin": "Pin",
+      "unpin": "Unpin"
     },
     "chat": {
       "inputPlaceholder": "Help you write code, test, debug, and optimize for production-quality deliverables",

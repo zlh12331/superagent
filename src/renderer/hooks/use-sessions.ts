@@ -305,6 +305,29 @@ export function useCreateSession() {
 }
 
 /**
+ * 置顶/取消置顶会话 mutation hook（对齐参考项目 pinned-header 分组）
+ *
+ * 调用 session:pin IPC，成功后 invalidate sessions 列表缓存（置顶会话排序在前）。
+ */
+export function usePinSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { id: string; pinned: boolean }) => {
+      const response = await window.api.session.pin(params);
+      if ('error' in response) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      return response.data;
+    },
+    // 最终一致：无论成败都触发重新拉取（置顶分组重排）
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
+    },
+  });
+}
+
+/**
  * 会话列表类型导出（从 query result 派生）
  *
  * 业务方从此处导入 SessionMeta，避免直接依赖 shared 包。

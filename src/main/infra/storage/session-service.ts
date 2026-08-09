@@ -33,6 +33,7 @@ import type {
   SessionListRecentDirsRes,
   SessionListRes,
   SessionMeta,
+  SessionPinRes,
   SessionRecentTurnsRes,
   SessionRenameRes,
   TurnSummary,
@@ -131,6 +132,8 @@ export interface ISessionService {
   delete(id: string): Promise<SessionDeleteRes>;
   /** 重命名会话标题 */
   rename(id: string, title: string): Promise<SessionRenameRes>;
+  /** 置顶/取消置顶会话（对齐参考项目 pinned-header 分组） */
+  pin(id: string, pinned: boolean): Promise<SessionPinRes>;
 
   // ── 内部 API（供 AgentService / ChatService 调用） ────
 
@@ -360,6 +363,20 @@ export class SessionService implements ISessionService {
     }
 
     return { ok: true };
+  }
+
+  /**
+   * 置顶/取消置顶会话（对齐参考项目 pinned-header 分组）
+   */
+  async pin(id: string, pinned: boolean): Promise<SessionPinRes> {
+    const db = getDb();
+    const result = db
+      .update(sessions)
+      .set({ pinned: pinned ? 1 : 0, updatedAt: Date.now() })
+      .where(eq(sessions.id, id))
+      .run();
+    // 不存在的会话：返回 ok: false（幂等，不抛错）
+    return { ok: result.changes > 0 };
   }
 
   /**
@@ -820,6 +837,7 @@ function rowToMeta(row: typeof sessions.$inferSelect): SessionMeta {
     messageCount: row.messageCount,
     workingDir: row.workingDir,
     lastRunStatus: row.lastRunStatus as SessionMeta['lastRunStatus'],
+    pinned: row.pinned === 1,
   };
 }
 

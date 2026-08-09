@@ -26,7 +26,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useSortable } from '@dnd-kit/sortable';
-import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -50,8 +50,11 @@ interface SortableThreadItemProps {
   readonly updatedAt: number;
   readonly isActive: boolean;
   readonly isDeleting: boolean;
+  readonly isPinned: boolean;
   readonly onSelect: () => void;
   readonly onDelete: () => void;
+  /** 置顶/取消置顶回调（对齐参考项目 pinned-header 分组） */
+  readonly onTogglePin: () => void;
 }
 
 export function SortableThreadItem({
@@ -62,8 +65,10 @@ export function SortableThreadItem({
   updatedAt,
   isActive,
   isDeleting,
+  isPinned,
   onSelect,
   onDelete,
+  onTogglePin,
 }: SortableThreadItemProps): ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sessionId,
@@ -87,8 +92,10 @@ export function SortableThreadItem({
         updatedAt={updatedAt}
         isActive={isActive}
         isDeleting={isDeleting}
+        isPinned={isPinned}
         onSelect={onSelect}
         onDelete={onDelete}
+        onTogglePin={onTogglePin}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -105,8 +112,11 @@ interface ThreadItemProps {
   readonly updatedAt: number;
   readonly isActive: boolean;
   readonly isDeleting: boolean;
+  readonly isPinned: boolean;
   readonly onSelect: () => void;
   readonly onDelete: () => void;
+  /** 置顶/取消置顶回调（对齐参考项目 pinned-header 分组） */
+  readonly onTogglePin: () => void;
   /** 拖拽手柄属性（@dnd-kit useSortable 的 attributes + listeners，挂在 ti-dot 上） */
   readonly dragHandleProps?: Record<string, unknown>;
 }
@@ -119,8 +129,10 @@ function ThreadItem({
   updatedAt,
   isActive,
   isDeleting,
+  isPinned,
   onSelect,
   onDelete,
+  onTogglePin,
   dragHandleProps,
 }: ThreadItemProps): ReactElement {
   // 本地化文案
@@ -215,6 +227,14 @@ function ThreadItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => {
+                  onTogglePin();
+                }}
+              >
+                <Pin className="size-3.5" strokeWidth={1.5} />
+                {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {
                   setRenaming(true);

@@ -47,7 +47,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
 import { SidebarAccount } from '@/components/layout/sidebar-account';
 import { useAsyncView } from '@/hooks/use-async-view';
-import { useDeleteSession, useSessionsQuery } from '@/hooks/use-sessions';
+import { useDeleteSession, usePinSession, useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -72,6 +72,12 @@ export function Sidebar(): ReactElement {
   const view = useAsyncView(query, { isEmpty: (d) => d.sessions.length === 0 });
   // L3 TanStack Mutation：删除会话
   const { mutate: deleteSession, isPending: isDeleting } = useDeleteSession();
+  // L3 TanStack Mutation：置顶/取消置顶（对齐参考项目 pinned-header 分组）
+  const { mutate: pinSession } = usePinSession();
+  /** 置顶切换：mutation 触发（invalidate 自动重排） */
+  const togglePin = (sessionId: string, pinned: boolean): void => {
+    pinSession({ id: sessionId, pinned });
+  };
   // L2 Zustand：激活会话 id
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const setActiveSession = useActiveSessionStore((state) => state.setActiveSession);
@@ -335,8 +341,12 @@ export function Sidebar(): ReactElement {
                             updatedAt={entry.session.updatedAt}
                             isActive={entry.session.id === activeSessionId}
                             isDeleting={isDeleting}
+                            isPinned={entry.session.pinned === true}
                             onSelect={() => handleSelectSession(entry.session.id)}
                             onDelete={() => handleDelete(entry.session.id)}
+                            onTogglePin={() =>
+                              togglePin(entry.session.id, entry.session.pinned !== true)
+                            }
                           />
                         ),
                       )}
@@ -368,6 +378,8 @@ type SidebarEntry =
         readonly lastMessage: string | undefined;
         readonly updatedAt: number;
         readonly workingDir: string;
+        /** 置顶（对齐参考项目 pinned-header 分组） */
+        readonly pinned: boolean;
       };
     };
 
