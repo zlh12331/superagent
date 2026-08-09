@@ -31,6 +31,8 @@ import { Terminal } from '@xterm/xterm';
 import { CircleSlash, Plus, TerminalSquare, X } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+// loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
+import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
@@ -258,7 +260,12 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
           disabled={isCreating}
         >
           <Plus className="size-3.5" strokeWidth={1.5} />
-          {isCreating ? t('terminal.creating') : t('terminal.newTerminal')}
+          {isCreating ? (
+            // 创建中：终端光标闪烁动画（loading-ui）替代文字提示
+            <TerminalLoader className="text-muted-foreground" prompt="$" />
+          ) : (
+            t('terminal.newTerminal')
+          )}
         </Button>
       </div>
     );

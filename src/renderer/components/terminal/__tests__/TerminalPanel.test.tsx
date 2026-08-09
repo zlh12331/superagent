@@ -120,7 +120,7 @@ describe('TerminalPanel', () => {
       });
     });
 
-    it('创建中显示「创建中...」并禁用按钮', async () => {
+    it('创建中显示终端光标动画并禁用按钮', async () => {
       const user = userEvent.setup();
       // 让 create 永远 pending（不 resolve）
       (window.api.terminal.create as ReturnType<typeof vi.fn>).mockImplementation(
@@ -130,9 +130,10 @@ describe('TerminalPanel', () => {
       render(<TerminalPanel sessionId="session-1" />);
       await user.click(screen.getByText('新建终端'));
 
-      // 创建中：按钮禁用 + 显示「创建中...」
-      const button = screen.getByRole('button', { name: /创建中/ });
+      // 创建中：按钮禁用 + 终端光标动画（loading-ui，role=status，sr-only 文本 Loading）
+      const button = screen.getByRole('button', { name: /Loading/ });
       expect(button).toBeDisabled();
+      expect(screen.getByRole('status')).toBeInTheDocument();
     });
 
     it('IPC create 返回 error → toast.error 提示', async () => {
