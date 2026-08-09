@@ -15,6 +15,7 @@
 
 import { AlertTriangle, Folder, Search, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
@@ -75,6 +76,8 @@ export function ChatPanel({
   interrupted = false,
   className,
 }: ChatPanelProps): ReactElement {
+  // 路由导航（斜杠命令 /new 回欢迎页）
+  const navigate = useNavigate();
   // 中断提示条关闭状态（会话内关闭后不再显示）
   const [interruptedDismissed, setInterruptedDismissed] = useState(false);
   // 错误码 → 本地化文案 hook
@@ -106,7 +109,7 @@ export function ChatPanel({
   // - workingDir: agent 工具操作边界（注入 IpcAgentTransport）
   // - onError: 统一 toast 提示（不阻塞 UI）
   // - regenerate: AI SDK v7 内置，自动截断目标 assistant 消息及后续 → 重发请求
-  const { messages, sendMessage, status, stop, regenerate } = useAgentWithIpc({
+  const { messages, sendMessage, status, stop, regenerate, setMessages } = useAgentWithIpc({
     id: chatId,
     workingDir,
     onError: handleError,
@@ -262,6 +265,24 @@ export function ChatPanel({
         <ChatInput
           status={status}
           chatId={chatId}
+          onSlashCommand={(action) => {
+            // 斜杠命令执行（对齐参考项目）：/new 回欢迎页新建，/clear 清空对话
+            switch (action) {
+              case 'new':
+                navigate('/');
+                break;
+              case 'clear':
+                // 清空对话（AI SDK v7 无 clearMessages，用 setMessages([])）
+                setMessages([]);
+                break;
+              case 'models':
+              case 'compact':
+              case 'help':
+                // 模型选择/压缩/帮助：toast 引导（完整链路后续增强）
+                toast.info(t(`chat.slashAction.${action}`));
+                break;
+            }
+          }}
           onSend={(text) => {
             // sendMessage 接受 { text: string } 格式
             void sendMessage({ text });

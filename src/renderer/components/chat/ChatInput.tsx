@@ -46,22 +46,27 @@ const COMPOSER_MIN_H = 40;
 /** 输入框拖拽高度上限（对齐原型 maxExtra 300 + 基础 160） */
 const COMPOSER_MAX_H = 460;
 
-/** 斜杠命令建议项 */
-interface SlashSuggestion {
-  readonly command: string;
-  readonly labelKey: string;
-}
-
 /** 斜杠命令建议列表（对齐参考项目 useSlashSuggest；命令执行链路为后续增强） */
 
 /** 消息最大长度（对齐原型 8000 字符上限拦截） */
 const MAX_MESSAGE_LENGTH = 8000;
+
+/** 斜杠命令动作（对齐参考项目：命令可执行而非仅填充文本） */
+type SlashAction = 'new' | 'clear' | 'compact' | 'models' | 'help';
+
+/** 斜杠建议项：有 action 时点击执行动作；无 action 时填充文本 */
+interface SlashSuggestion {
+  readonly command: string;
+  readonly labelKey: string;
+  readonly action?: SlashAction;
+}
+
 const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
-  { command: '/help', labelKey: 'chat.slashSuggest.help' },
-  { command: '/new', labelKey: 'chat.slashSuggest.newChat' },
-  { command: '/clear', labelKey: 'chat.slashSuggest.clear' },
-  { command: '/compact', labelKey: 'chat.slashSuggest.compact' },
-  { command: '/models', labelKey: 'chat.slashSuggest.models' },
+  { command: '/help', labelKey: 'chat.slashSuggest.help', action: 'help' },
+  { command: '/new', labelKey: 'chat.slashSuggest.newChat', action: 'new' },
+  { command: '/clear', labelKey: 'chat.slashSuggest.clear', action: 'clear' },
+  { command: '/compact', labelKey: 'chat.slashSuggest.compact', action: 'compact' },
+  { command: '/models', labelKey: 'chat.slashSuggest.models', action: 'models' },
 ];
 
 interface ChatInputProps {
@@ -88,6 +93,12 @@ interface ChatInputProps {
    * 欢迎页（无会话）不传——无草稿语义。
    */
   chatId?: string;
+  /**
+   * 斜杠命令回调（对齐参考项目：/new /clear 等命令可执行）
+   *
+   * 点击带 action 的建议项时触发（不填充文本）；父组件实现具体动作。
+   */
+  onSlashCommand?: (action: SlashAction) => void;
   /**
    * 受控值（可选）
    *
@@ -122,6 +133,7 @@ export function ChatInput({
   value: controlledValue,
   onValueChange,
   chatId,
+  onSlashCommand,
 }: ChatInputProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -183,6 +195,15 @@ export function ChatInput({
 
   /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
   const applySuggestion = (command: string): void => {
+    // 带 action 的命令：执行动作（对齐参考项目），不填充文本
+    const suggestion = SLASH_SUGGESTIONS.find((s) => s.command === command);
+    if (suggestion?.action !== undefined) {
+      // 清空输入（slashOpen 派生自输入值，自动关闭建议面板）
+      setValue('');
+      autoResize();
+      onSlashCommand?.(suggestion.action);
+      return;
+    }
     setValue(command);
     autoResize();
     textareaRef.current?.focus();

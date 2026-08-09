@@ -156,7 +156,12 @@
       "resizeComposer": "Drag to resize composer",
       "statsMessages": "Messages",
       "statsTokens": "Tokens",
-      "messageTooLong": "Message too long (max 8000 characters)"
+      "messageTooLong": "Message too long (max 8000 characters)",
+      "slashAction": {
+        "models": "Model picker: use the selector on the right",
+        "compact": "Context compaction coming soon",
+        "help": "Commands: /new new session · /clear clear chat · /models pick model"
+      }
     },
     "update": {
       "noticeAvailable": "Update available",
