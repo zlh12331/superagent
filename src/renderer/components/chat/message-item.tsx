@@ -67,6 +67,8 @@ export function MessageItem({
 }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  // 当前模型（对齐原型 .msg-role 展示模型名）
+  const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
   if (message.role === 'user') {
     // user 消息：仅 .msg-body > .msg-content，气泡样式由 .msg-content 提供（玻璃渐变）
     return (
@@ -100,7 +102,10 @@ export function MessageItem({
           C
         </div>
         <div className="msg-body">
-          <div className="msg-role assistant">{t('chat.assistant')}</div>
+          {/* 对齐原型 .msg-role（"codex · gpt-5-codex"）：品牌 · 当前模型 */}
+          <div className="msg-role assistant">
+            {t('chat.assistant')} · {defaultModel}
+          </div>
           {/* parts 列表：按 part 类型分别渲染 */}
           {message.parts.map((part, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: parts 是 append-only 序列，index 在单条消息内唯一稳定
