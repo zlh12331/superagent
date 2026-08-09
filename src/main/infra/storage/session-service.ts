@@ -254,11 +254,11 @@ export class SessionService implements ISessionService {
   async list(limit: number, offset: number): Promise<SessionListRes> {
     const db = getDb();
 
-    // 1. 查询当前页会话（按 updatedAt 倒序）
+    // 1. 查询当前页会话（置顶优先，同置顶内按 updatedAt 倒序——对齐参考项目 pinned-header 分组）
     const rows = db
       .select()
       .from(sessions)
-      .orderBy(desc(sessions.updatedAt))
+      .orderBy(desc(sessions.pinned), desc(sessions.updatedAt))
       .limit(limit)
       .offset(offset)
       .all();
