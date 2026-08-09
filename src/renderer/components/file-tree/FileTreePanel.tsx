@@ -73,7 +73,7 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
       return;
     }
     try {
-      const res = await window.api.file.list({ path: rootPath });
+      const res = await window.api.file.list({ path: rootPath, depth: 1, includeHidden: false });
       if ('data' in res && res.data) {
         useFileTreeStore.getState().setEntries(rootPath, res.data.entries);
       }
