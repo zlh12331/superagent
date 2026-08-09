@@ -38,7 +38,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ArrowLeft, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -272,24 +272,8 @@ export function Sidebar(): ReactElement {
       {/* 中间：会话列表 / 归档 / 文件树（文件树为独立视图 sidebarView，对齐参考项目） */}
       <div className="sidebar-list">
         {sidebarView === 'fileTree' ? (
-          // 文件树视图（对齐原型 sidebar-filetree：顶部返回条 + 树）
-          <div className="flex h-full flex-col">
-            <div className="sft-head">
-              <button
-                type="button"
-                className="sft-back"
-                onClick={() => setSidebarView('threads')}
-                aria-label={t('sidebar.backToThreads')}
-                title={t('sidebar.backToThreads')}
-              >
-                <ArrowLeft className="size-3.5" strokeWidth={2} />
-              </button>
-              <span className="sft-title">{t('sidebar.fileTree')}</span>
-            </div>
-            <div className="min-h-0 flex-1">
-              <FileTreePanel workingDir={workingDir} />
-            </div>
-          </div>
+          // 文件树视图（头部返回/刷新由 FileTreePanel 内部提供——对齐参考项目 FileTree）
+          <FileTreePanel workingDir={workingDir} />
         ) : activeTab === 'archived' ? (
           <EmptyState
             title={t('sidebar.noArchived')}

@@ -576,7 +576,8 @@
       "moreActions": "More actions",
       "rename": "Rename",
       "emptyDir": "Empty directory",
-      "copyPath": "Copy path"
+      "copyPath": "Copy path",
+      "refresh": "Refresh file tree"
     },
     "terminal": {
       "createFailed": "Failed to create terminal: {{message}}",

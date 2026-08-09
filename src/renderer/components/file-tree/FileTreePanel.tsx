@@ -14,14 +14,14 @@
 // - 视觉对齐 Sidebar 文学风：根目录显示 workingDir basename
 // ──────────────────────────────────────────────────────────────
 
-import { FilePlus, FolderOpen, FolderPlus } from 'lucide-react';
+import { ArrowLeft, FilePlus, FolderOpen, FolderPlus, RefreshCw } from 'lucide-react';
 import { type ReactElement, useCallback } from 'react';
 
 import { useFileTree } from '@/hooks/use-file-tree';
 import { useTranslation } from '@/i18n/use-translation';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
-
+import { useUiStore } from '@/stores/transient/ui-store';
 import { FileTreeNode } from './FileTreeNode';
 
 interface FileTreePanelProps {
@@ -59,11 +59,30 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   // 启动文件树数据生命周期（IPC + watch + 状态同步）
   useFileTree(workingDir);
 
+  // 文件树视图返回（对齐参考项目 FileTree 头部返回按钮）
+  const setSidebarView = useUiStore((state) => state.setSidebarView);
+
   // 读取根路径（用于判断是否已初始化）
   const rootPath = useFileTreeStore((s) => s.rootPath);
 
   // 文件点击回调：打开 FileViewerDialog（shiki 语法高亮只读查看器）
   const openFile = useFileViewerStore((s) => s.openFile);
+  const refreshTree = useCallback(async (): Promise<void> => {
+    // 手动刷新：重新拉取根目录（watch 事件流之外的兜底）
+    if (typeof window === 'undefined' || window.api === undefined || rootPath === null) {
+      return;
+    }
+    try {
+      const res = await window.api.file.list({ path: rootPath });
+      if ('data' in res && res.data) {
+        useFileTreeStore.getState().setEntries(rootPath, res.data.entries);
+      }
+    } catch {
+      // 刷新失败静默（watch 事件流仍在运行）
+    }
+  }, [rootPath]);
+
+  // 文件点击回调：打开 FileViewerDialog（shiki 语法高亮只读查看器）
   const handleOpenFile = useCallback(
     (filePath: string) => {
       openFile(filePath);
@@ -109,40 +128,64 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   // 渲染工具栏 + 根节点（递归展开子树）
   // 使用 div 而非 nav：nav 是非交互元素，与 role="tree" 冲突（biome a11y 规则）
   return (
-    <div
-      className="file-tree"
-      role="tree"
-      aria-label={t('fileTree.treeLabel', { name: basename(rootPath) })}
-    >
-      <div className="ft-toolbar" role="toolbar" aria-label={t('fileTree.toolbarLabel')}>
+    <div className="flex h-full flex-col">
+      {/* 头部（对齐参考项目 FileTree：返回按钮 + 标题 + 刷新） */}
+      <div className="sft-head">
         <button
           type="button"
-          className="ft-toolbar-btn"
-          onClick={handleNewFile}
-          aria-label={t('fileTree.newFileInRoot')}
-          title={t('fileTree.newFile')}
-          tabIndex={-1}
+          className="sft-back"
+          onClick={() => setSidebarView('threads')}
+          aria-label={t('sidebar.backToThreads')}
+          title={t('sidebar.backToThreads')}
         >
-          <FilePlus size={12} strokeWidth={1.75} />
+          <ArrowLeft className="size-3.5" strokeWidth={2} />
         </button>
+        <span className="sft-title">{t('sidebar.fileTree')}</span>
         <button
           type="button"
-          className="ft-toolbar-btn"
-          onClick={handleNewDir}
-          aria-label={t('fileTree.newDirInRoot')}
-          title={t('fileTree.newDir')}
-          tabIndex={-1}
+          className="sft-refresh"
+          onClick={() => void refreshTree()}
+          aria-label={t('fileTree.refresh')}
+          title={t('fileTree.refresh')}
         >
-          <FolderPlus size={12} strokeWidth={1.75} />
+          <RefreshCw className="size-3.5" strokeWidth={1.5} />
         </button>
       </div>
-      <FileTreeNode
-        path={rootPath}
-        name={basename(rootPath)}
-        type="directory"
-        depth={0}
-        onOpenFile={handleOpenFile}
-      />
+      <div
+        className="file-tree min-h-0 flex-1"
+        role="tree"
+        aria-label={t('fileTree.treeLabel', { name: basename(rootPath) })}
+      >
+        <div className="ft-toolbar" role="toolbar" aria-label={t('fileTree.toolbarLabel')}>
+          <button
+            type="button"
+            className="ft-toolbar-btn"
+            onClick={handleNewFile}
+            aria-label={t('fileTree.newFileInRoot')}
+            title={t('fileTree.newFile')}
+            tabIndex={-1}
+          >
+            <FilePlus size={12} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            className="ft-toolbar-btn"
+            onClick={handleNewDir}
+            aria-label={t('fileTree.newDirInRoot')}
+            title={t('fileTree.newDir')}
+            tabIndex={-1}
+          >
+            <FolderPlus size={12} strokeWidth={1.75} />
+          </button>
+        </div>
+        <FileTreeNode
+          path={rootPath}
+          name={basename(rootPath)}
+          type="directory"
+          depth={0}
+          onOpenFile={handleOpenFile}
+        />
+      </div>
     </div>
   );
 }

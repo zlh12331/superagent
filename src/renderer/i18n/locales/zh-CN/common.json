@@ -576,7 +576,8 @@
       "moreActions": "更多操作",
       "rename": "重命名",
       "emptyDir": "空目录",
-      "copyPath": "复制路径"
+      "copyPath": "复制路径",
+      "refresh": "刷新文件树"
     },
     "terminal": {
       "createFailed": "创建终端失败: {{message}}",
