@@ -12,9 +12,11 @@
 // - usage（token 统计）来自 streamText 结果对象（上层持有），本层不重复采集
 // ──────────────────────────────────────────────────────────────
 
+import type { TurnToolCallEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
 import { isAbortError } from '../error-classifier';
 import { readTracker } from '../tools/read-tracker';
+import { LoopDetector } from './loop-detector';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 import type { TurnEventEmitter } from './turn-emitter';
 import type { StreamPart } from './turn-translator';
@@ -98,6 +100,8 @@ export class TurnRunner {
 
     // 请求级重试链路：上层已持有 reader（首 part 预读）时复用，避免重复 getReader
     const activeReader = reader ?? stream.getReader();
+    // 回合循环检测（对齐 qwen loopDetection）：连续相同工具调用/文件读取超阈值终止
+    const loopDetector = new LoopDetector();
     try {
       // 请求级重试链路：首 part 已由上层预读（重试内完成），此处接续处理
       if (this.options.firstPart !== undefined) {
@@ -136,6 +140,11 @@ export class TurnRunner {
           timestamp: Date.now(),
         });
         if (translated !== null) {
+          // 循环检测：tool-call 事件记录（同 name + 同入参连续超阈值抛 LoopDetectedError）
+          if (translated.type === TurnEventType.TOOL_CALL) {
+            const toolCall = translated as TurnToolCallEvent;
+            loopDetector.recordToolCall(toolCall.toolName, JSON.stringify(toolCall.input ?? {}));
+          }
           this.options.emitter.emit(translated);
         }
       }

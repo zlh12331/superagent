@@ -16,7 +16,7 @@
  * 仅包含与数据库无关的通用错误码：
  * - 通用：UNKNOWN/INTERNAL_ERROR/INVALID_INPUT/NOT_FOUND/UNAUTHORIZED/RATE_LIMITED
  * - IPC 边界：IPC_SENDER_INVALID/IPC_CHANNEL_NOT_FOUND
- * - AI 调用：AI_API_KEY_MISSING/AI_API_KEY_INVALID/AI_RATE_LIMITED/AI_TIMEOUT/AI_MODEL_ERROR/AI_STREAM_INTERRUPTED/AI_CONTEXT_TOO_LARGE
+ * - AI 调用：AI_API_KEY_MISSING/AI_API_KEY_INVALID/AI_RATE_LIMITED/AI_TIMEOUT/AI_MODEL_ERROR/AI_STREAM_INTERRUPTED/AI_CONTEXT_TOO_LARGE/AI_LOOP_DETECTED
  * - 文件系统：FS_READ_FAILED/FS_WRITE_FAILED/FS_DISK_FULL
  * - Code Agent 工具：TOOL_NOT_FOUND/TOOL_EXECUTION_FAILED/TOOL_PERMISSION_DENIED/TOOL_ABORTED
  * - Code Agent 会话：SESSION_NOT_FOUND
@@ -46,6 +46,8 @@ export const ErrorCode = {
   AI_MODEL_ERROR: 'AI_MODEL_ERROR',
   AI_STREAM_INTERRUPTED: 'AI_STREAM_INTERRUPTED',
   AI_CONTEXT_TOO_LARGE: 'AI_CONTEXT_TOO_LARGE',
+  /** 检测到工具调用/文件读取循环，回合已终止（对齐 qwen loopDetection） */
+  AI_LOOP_DETECTED: 'AI_LOOP_DETECTED',
   /** HTTP 402：账户余额不足（DeepSeek 等供应商返回） */
   AI_BALANCE_INSUFFICIENT: 'AI_BALANCE_INSUFFICIENT',
 
@@ -129,6 +131,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   AI_STREAM_INTERRUPTED: { userMessage: 'AI 流式响应中断', retryable: true, severity: 'warn' },
   AI_CONTEXT_TOO_LARGE: {
     userMessage: '上下文过长，请精简对话',
+    retryable: false,
+    severity: 'warn',
+  },
+  AI_LOOP_DETECTED: {
+    userMessage: '检测到重复操作循环，回合已终止',
     retryable: false,
     severity: 'warn',
   },

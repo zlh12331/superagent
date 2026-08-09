@@ -342,15 +342,22 @@ class GitService implements IGitService {
     const beforeSha = await this.getRemoteHeadSha(path, remote, refspec);
 
     const pushOptions: Record<string, string | null> = {};
-    if (setUpstream) {
-      pushOptions['--set-upstream'] = null;
-    }
     if (force) {
       pushOptions['--force-with-lease'] = null;
     }
     // --set-upstream 需要显式 refspec（分支名）；refspec 为空且 setUpstream 时取当前分支
     const pushRefspec =
       refspec.length > 0 ? refspec : setUpstream ? await this.getCurrentBranch(path) : undefined;
+
+    // 建立上游（setUpstream）：simple-git 的 options 追加在命令末尾，部分 git 版本
+    // 不识别末尾 --set-upstream（报 no upstream branch）——改用显式上游配置（确定性）
+    if (setUpstream && pushRefspec !== undefined) {
+      await this.runGit((git) => git.addConfig(`branch.${pushRefspec}.remote`, remote), path);
+      await this.runGit(
+        (git) => git.addConfig(`branch.${pushRefspec}.merge`, `refs/heads/${pushRefspec}`),
+        path,
+      );
+    }
 
     try {
       const result = await this.runGit((git) => git.push(remote, pushRefspec, pushOptions), path);

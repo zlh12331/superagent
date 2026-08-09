@@ -14,6 +14,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import {
+  APICallError,
   generateObject as generateObjectAi,
   generateText as generateTextAi,
   type LanguageModel,
@@ -25,10 +26,38 @@ import { estimateTokenCount } from '../context-compression';
 import type { ModelRegistry } from '../models';
 import { buildGenerationOptions } from '../models/generation-options';
 import type { ProviderKind } from '../providers/types';
-import { retryWithBackoff } from './retry';
+import { getErrorCode, getErrorStatus, retryWithBackoff } from './retry';
 
 /** 全局模型超时兜底（毫秒）：模型未自带 timeoutMs 时的默认总时长 */
 const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
+
+/**
+ * 模型降级资格判定（ModelFallback）：
+ * - 可降级：HTTP 5xx / SDK 网络层错误 / 超时 / 流中断（供应商侧故障，换默认模型可能可用）
+ * - 不降级：401/400/402/429/模型不存在（Key/余额/限流/配置问题，换模型无意义）
+ */
+function isFallbackEligibleError(error: unknown): boolean {
+  const status = getErrorStatus(error);
+  if (status !== undefined) {
+    return status >= 500 && status < 600;
+  }
+  if (error instanceof APICallError) {
+    return error.isRetryable === true;
+  }
+  // Node/undici 网络层错误 + 超时 + 流中断：可降级
+  const code = getErrorCode(error);
+  if (code !== undefined) {
+    return (
+      code === 'ECONNRESET' ||
+      code === 'ECONNREFUSED' ||
+      code === 'ETIMEDOUT' ||
+      code === 'UND_ERR_CONNECT_TIMEOUT' ||
+      code === 'UND_ERR_HEADERS_TIMEOUT' ||
+      code === 'UND_ERR_SOCKET'
+    );
+  }
+  return false;
+}
 
 /**
  * LlmClient 依赖（DI 注入，便于测试替换 fake 实现）
@@ -180,6 +209,30 @@ export class LlmClient {
    * - 非思考模型：应用 temperature / topP / maxTokens（窗口预算钳制）
    */
   async generateText(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult> {
+    try {
+      return await this.generateTextOnce(options);
+    } catch (error) {
+      // ModelFallback 降级链（对齐 qwen modelConfigResolver 配置级降级语义）：
+      // 可降级错误（5xx / 网络 / 超时）且当前模型不是默认模型 → 降级默认模型重试一次
+      const fallbackModel = this.deps.modelRegistry.resolve(undefined).modelId;
+      // 未显式指定模型（undefined = 默认模型）或已是默认模型：降级无意义，直接抛
+      if (
+        options.model === undefined ||
+        options.model === fallbackModel ||
+        !isFallbackEligibleError(error)
+      ) {
+        throw error;
+      }
+      logger.warn(
+        { model: options.model, fallbackModel, error: (error as Error).message },
+        '模型调用失败，降级默认模型重试（ModelFallback）',
+      );
+      return this.generateTextOnce({ ...options, model: fallbackModel });
+    }
+  }
+
+  /** 单模型调用（含重试与遥测；降级链的底层执行单元） */
+  private async generateTextOnce(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult> {
     // gpt-tokenizer 精确估算 prompt + system（输出预算钳制用）
     const promptTokens =
       estimateTokenCount(options.prompt) +
