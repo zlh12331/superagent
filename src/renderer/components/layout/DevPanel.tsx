@@ -26,18 +26,24 @@ import {
   TerminalSquare,
   Wrench,
 } from 'lucide-react';
-import { memo, type ReactElement, useState } from 'react';
+import { lazy, memo, type ReactElement, Suspense, useState } from 'react';
 
-import { BrowserPane } from '@/components/dev/browser-pane';
 import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
 import { GitPanel } from '@/components/git/GitPanel';
-import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { DiffPane, FilesPane, InfoPane } from './right-panel-panes';
+
+// 懒加载（对齐参考项目：xterm ~200KB vendor chunk 仅在切到终端 tab 时加载，避免拖慢首屏）
+const TerminalPanel = lazy(() =>
+  import('@/components/terminal/TerminalPanel').then((m) => ({ default: m.TerminalPanel })),
+);
+const BrowserPane = lazy(() =>
+  import('@/components/dev/browser-pane').then((m) => ({ default: m.BrowserPane })),
+);
 
 interface DevPanelProps {
   /**
@@ -120,8 +126,28 @@ export const DevPanel = memo(function DevPanel({
         {activeTab === 'info' && <InfoPane sessionId={sessionId} />}
         {activeTab === 'diff' && <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />}
         {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
-        {activeTab === 'browser' && <BrowserPane />}
-        {activeTab === 'terminal' && <TerminalPanel sessionId={sessionId} className="h-full" />}
+        {activeTab === 'browser' && (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                加载中…
+              </div>
+            }
+          >
+            <BrowserPane />
+          </Suspense>
+        )}
+        {activeTab === 'terminal' && (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                加载中…
+              </div>
+            }
+          >
+            <TerminalPanel sessionId={sessionId} className="h-full" />
+          </Suspense>
+        )}
         {activeTab === 'dev' && (
           <div className="flex h-full flex-col">
             {/* 开发者子视图切换（调试工具收纳） */}

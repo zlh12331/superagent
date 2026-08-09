@@ -174,7 +174,8 @@ describe('DevPanel', () => {
     expect(screen.getByTestId('files-pane')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: /终端/ }));
-    expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
+    // lazy 加载（xterm chunk）：异步渲染，需等待 Suspense 完成
+    expect(await screen.findByTestId('terminal-panel')).toBeInTheDocument();
   });
 
   // ── 开发者子视图 ─────────────────────────────────────────
