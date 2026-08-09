@@ -26,8 +26,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useSortable } from '@dnd-kit/sortable';
-import { MoreVertical, Trash2 } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -36,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useRenameSession } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatRelativeTime } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
@@ -80,6 +81,7 @@ export function SortableThreadItem({
       className={isDragging ? 'opacity-50' : undefined}
     >
       <ThreadItem
+        sessionId={sessionId}
         title={title}
         lastMessage={lastMessage}
         updatedAt={updatedAt}
@@ -96,6 +98,8 @@ export function SortableThreadItem({
 // ── 子组件：会话列表项（对齐原型 thread-item 结构） ──────────────
 
 interface ThreadItemProps {
+  /** 会话 id（重命名提交用） */
+  readonly sessionId: string;
   readonly title: string;
   readonly lastMessage: string | undefined;
   readonly updatedAt: number;
@@ -109,6 +113,7 @@ interface ThreadItemProps {
 
 /** 会话列表项 - 对齐原型 .thread-item 结构 */
 function ThreadItem({
+  sessionId,
   title,
   lastMessage,
   updatedAt,
@@ -120,6 +125,20 @@ function ThreadItem({
 }: ThreadItemProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  // 内联重命名状态（双击标题或更多菜单触发；对齐参考项目 ThreadItem 内联重命名）
+  const [renaming, setRenaming] = useState(false);
+  // 重命名提交（useRenameSession：mutation + invalidate 自动刷新列表）
+  const { mutateAsync: renameSession } = useRenameSession();
+
+  /** 提交重命名：空值/未变化时直接退出编辑态 */
+  const commitRename = (next: string): void => {
+    const trimmed = next.trim();
+    setRenaming(false);
+    if (trimmed.length === 0 || trimmed === title) {
+      return;
+    }
+    void renameSession({ id: sessionId, title: trimmed });
+  };
   // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
   const metaParts: string[] = [formatRelativeTime(updatedAt, t)];
   if (lastMessage !== undefined && lastMessage.length > 0) {
@@ -135,6 +154,7 @@ function ThreadItem({
       tabIndex={0}
       className={cn('thread-item', isActive && 'active')}
       onClick={onSelect}
+      onDoubleClick={() => setRenaming(true)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
@@ -151,9 +171,33 @@ function ThreadItem({
           {...dragHandleProps}
         />
         <div className="ti-content">
-          <div className="ti-title" title={title}>
-            {title}
-          </div>
+          {renaming ? (
+            // 内联重命名输入框（uncontrolled + key：切换标题时重置 defaultValue）
+            <input
+              key={`rename-${title}`}
+              type="text"
+              defaultValue={title}
+              // biome-ignore lint/a11y/noAutofocus: 内联重命名需要即时聚焦（对齐参考项目编辑模式）
+              autoFocus
+              className="bg-background border-border text-foreground w-full rounded border px-1 py-0.5 text-xs"
+              aria-label={t('sidebar.renameTitle')}
+              onBlur={(event) => {
+                void commitRename(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void commitRename(event.currentTarget.value);
+                } else if (event.key === 'Escape') {
+                  setRenaming(false);
+                }
+              }}
+            />
+          ) : (
+            <div className="ti-title" title={`${title}（${t('sidebar.doubleClickRename')}）`}>
+              {title}
+            </div>
+          )}
           <div className="ti-meta">{metaText}</div>
         </div>
         <div className="ti-actions">
@@ -173,12 +217,20 @@ function ThreadItem({
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onSelect={() => {
+                  setRenaming(true);
+                }}
+              >
+                <Pencil className="size-3.5" strokeWidth={1.5} />
+                {t('sidebar.rename')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
                   onDelete();
                 }}
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="size-3.5" strokeWidth={1.5} />
-                删除会话
+                {t('sidebar.deleteSession')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

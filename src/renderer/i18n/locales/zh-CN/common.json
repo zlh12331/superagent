@@ -98,7 +98,11 @@
       "toggleTheme": "切换主题",
       "about": "关于",
       "noArchived": "暂无归档会话",
-      "noArchivedHint": "归档功能预留，会话归档后显示在这里"
+      "noArchivedHint": "归档功能预留，会话归档后显示在这里",
+      "rename": "重命名",
+      "renameTitle": "重命名会话",
+      "doubleClickRename": "双击重命名",
+      "deleteSession": "删除会话"
     },
     "chat": {
       "inputPlaceholder": "帮你编写代码、测试 Debug、优化性能等开发工作，交付生产级代码产物",

@@ -14,7 +14,7 @@
 
 import type { UIMessage } from 'ai';
 import { ChevronDown, Sparkles } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { useTranslation } from '@/i18n/use-translation';
@@ -96,10 +96,10 @@ export function ChatMessageList({
   };
 
   /** 滚动到指定消息（导航轨/搜索定位；居中） */
-  const scrollToIndex = (index: number): void => {
+  const scrollToIndex = useCallback((index: number): void => {
     const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`);
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  };
+  }, []);
 
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
   // - 用户在底部附近：直接滚动跟随新内容（替代 Virtuoso followOutput）
@@ -121,8 +121,7 @@ export function ChatMessageList({
     if (searchActiveIndex >= 0) {
       scrollToIndex(searchActiveIndex);
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: scrollToIndex 为组件内稳定函数
-  }, [searchActiveIndex]);
+  }, [searchActiveIndex, scrollToIndex]);
 
   // 空状态：无消息时展示 EmptyState
   if (messages.length === 0) {

@@ -228,6 +228,7 @@ export function ChatInput({
 
   // 会话切换（chatId 变化）：恢复新会话草稿（对齐参考项目 prevThreadId 模式）
   const prevChatIdRef = useRef(chatId);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: autoResize 每次渲染新引用，加入依赖会无限循环；其行为仅依赖内部 ref
   useEffect(() => {
     if (chatId === prevChatIdRef.current || chatId === undefined || isControlled) {
       prevChatIdRef.current = chatId;

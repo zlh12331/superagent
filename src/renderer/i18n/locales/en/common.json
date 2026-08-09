@@ -98,7 +98,11 @@
       "toggleTheme": "Toggle theme",
       "about": "About",
       "noArchived": "No archived sessions",
-      "noArchivedHint": "Archiving is a placeholder; archived sessions will appear here"
+      "noArchivedHint": "Archiving is a placeholder; archived sessions will appear here",
+      "rename": "Rename",
+      "renameTitle": "Rename session",
+      "doubleClickRename": "Double-click to rename",
+      "deleteSession": "Delete session"
     },
     "chat": {
       "inputPlaceholder": "Help you write code, test, debug, and optimize for production-quality deliverables",
