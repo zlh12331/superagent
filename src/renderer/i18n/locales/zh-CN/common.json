@@ -155,7 +155,8 @@
       "searchNext": "下一个匹配",
       "resizeComposer": "拖拽调整输入框高度",
       "statsMessages": "消息数",
-      "statsTokens": "Token"
+      "statsTokens": "Token",
+      "messageTooLong": "消息过长（最多 8000 字符）"
     },
     "update": {
       "noticeAvailable": "发现新版本",

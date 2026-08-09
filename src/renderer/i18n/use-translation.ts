@@ -52,7 +52,8 @@ export function useErrorMessage() {
       const message = t(key);
       // 兜底：如果资源文件缺失 key，i18next 会返回 key 本身
       // 此时回退到 ERROR_META 的中文默认值（DRY：文案只在 shared 一处维护）
-      return message === key ? ERROR_META[code].userMessage : message;
+      // ?. 保护：未知错误码（未在 ERROR_META 注册）时回退原文，避免抛错中断 onError
+      return message === key ? (ERROR_META[code]?.userMessage ?? message) : message;
     },
     [t],
   );

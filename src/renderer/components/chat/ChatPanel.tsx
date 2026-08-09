@@ -82,14 +82,21 @@ export function ChatPanel({
 
   // 错误处理回调：一次性触发，避免 useEffect 双 toast
   // 策略：尝试从 error.message 提取 [CODE] 前缀匹配 i18n 文案，失败则展示原始消息
+  // try/catch 双保险：getErrorMessage 异常时也绝不让 onError 抛错
+  // （onError 抛错会中断 AI SDK 状态机 setStatus(error)，界面永久卡 THINKING）
   const handleError = (error: Error): void => {
-    // 尝试从 error.message 提取错误码（格式 "[CODE] message"）
-    const codeMatch = /^\[([A-Z_]+)\]/.exec(error.message);
-    if (codeMatch !== null) {
-      const code = codeMatch[1] as Parameters<typeof getErrorMessage>[0];
-      toast.error(getErrorMessage(code));
-    } else {
-      // 兜底：直接展示原始 error.message
+    try {
+      // 尝试从 error.message 提取错误码（格式 "[CODE] message"）
+      const codeMatch = /^\[([A-Z_]+)\]/.exec(error.message);
+      if (codeMatch !== null) {
+        const code = codeMatch[1] as Parameters<typeof getErrorMessage>[0];
+        toast.error(getErrorMessage(code));
+      } else {
+        // 兜底：直接展示原始 error.message
+        toast.error(error.message);
+      }
+    } catch {
+      // 极端保险：本地化失败时仍展示原始消息（onError 绝不允许抛错）
       toast.error(error.message);
     }
   };

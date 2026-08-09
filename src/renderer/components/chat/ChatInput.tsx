@@ -24,6 +24,7 @@
 
 import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,9 @@ interface SlashSuggestion {
 }
 
 /** 斜杠命令建议列表（对齐参考项目 useSlashSuggest；命令执行链路为后续增强） */
+
+/** 消息最大长度（对齐原型 8000 字符上限拦截） */
+const MAX_MESSAGE_LENGTH = 8000;
 const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
   { command: '/help', labelKey: 'chat.slashSuggest.help' },
   { command: '/new', labelKey: 'chat.slashSuggest.newChat' },
@@ -171,6 +175,24 @@ export function ChatInput({
 
   // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
+
+  // 流式期间 window 级 Esc 监听：textarea 未聚焦时也可中断生成
+  // （对齐原型 composer-hint "Esc 中断"；disabled 元素收不到键盘事件的补充通道）
+  useEffect(() => {
+    if (!isStreaming) {
+      return;
+    }
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault();
+        onStop();
+      }
+    };
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onWindowKeyDown);
+    };
+  }, [isStreaming, onStop]);
 
   // 是否可以发送（非空文本 + 非流式 + 未禁用）
   const canSend = value.trim().length > 0 && !isStreaming && !disabled;
@@ -319,7 +341,14 @@ export function ChatInput({
     if (!canSend) {
       return;
     }
-    const text = await buildTextWithAttachments(value);
+    // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
+    const base = value.trim();
+    // 超长拦截（对齐原型 8000 字符上限）
+    if (base.length > MAX_MESSAGE_LENGTH) {
+      toast.error(t('chat.messageTooLong'));
+      return;
+    }
+    const text = await buildTextWithAttachments(base);
     onSend(text);
     setValue('');
     setAttachments([]);
@@ -448,7 +477,9 @@ export function ChatInput({
         autoCapitalize="off"
         placeholder={effectivePlaceholder}
         value={value}
-        disabled={disabled || isStreaming}
+        // 流式期间不禁用输入框（对齐原型：允许预输入下一条；
+        // disabled 会吞掉键盘事件导致 Esc 中断失效——Esc 由 window 级监听处理）
+        disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={handleKeyDown}
       />
@@ -473,7 +504,10 @@ export function ChatInput({
             aria-label={t('chat.slashCommand')}
             title={`${t('chat.slashCommand')} (/)`}
             onClick={() => {
-              setValue(`${value}/`);
+              // 点击斜杠按钮：以 / 开头打开建议面板（对齐原型 suggest-pop）
+              // 此前追加到末尾（value+//），输入不以 / 开头时面板永不显示
+              setValue('/');
+              textareaRef.current?.focus();
               autoResize();
             }}
           >

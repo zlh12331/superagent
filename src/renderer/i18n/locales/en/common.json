@@ -155,7 +155,8 @@
       "searchNext": "Next match",
       "resizeComposer": "Drag to resize composer",
       "statsMessages": "Messages",
-      "statsTokens": "Tokens"
+      "statsTokens": "Tokens",
+      "messageTooLong": "Message too long (max 8000 characters)"
     },
     "update": {
       "noticeAvailable": "Update available",
