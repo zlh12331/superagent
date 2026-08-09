@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useDraftStore } from '@/stores/persistent/draft-store';
 
 /** 附件项（对齐参考项目 ChatInputAttachments） */
 interface ChatAttachment {
@@ -81,6 +82,13 @@ interface ChatInputProps {
   /** 自定义容器类名 */
   className?: string;
   /**
+   * 会话 id（草稿持久化 key；对齐参考项目 useDraftStore）
+   *
+   * 提供时：输入文本/附件按会话保存，切换会话恢复草稿，发送成功清除。
+   * 欢迎页（无会话）不传——无草稿语义。
+   */
+  chatId?: string;
+  /**
    * 受控值（可选）
    *
    * 提供时切换为受控模式，由父组件管理输入值（如欢迎页快捷 pill 预填）。
@@ -113,16 +121,29 @@ export function ChatInput({
   className,
   value: controlledValue,
   onValueChange,
+  chatId,
 }: ChatInputProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  // 附件列表（对齐参考项目 ChatInputAttachments：选择 → chip 展示 → 发送时读取拼接）
-  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [internalValue, setInternalValue] = useState(() => {
+    // 草稿恢复：非受控 + 有 chatId 时从 draft-store 初始化（对齐参考项目 useDraftStore）
+    return (
+      controlledValue ??
+      (chatId !== undefined ? useDraftStore.getState().getDraft(chatId).text : '')
+    );
+  });
   // 占位符：props 优先，缺省走 i18n
   const effectivePlaceholder = placeholder ?? t('chat.inputPlaceholder');
-  // 输入文本：受控模式（controlledValue 提供）或内部 state（默认）
-  // 受控模式用于欢迎页快捷 pill 预填场景，ChatPanel 保持非受控以避免父级重渲染
-  const [internalValue, setInternalValue] = useState('');
+  // 附件列表（对齐参考项目 ChatInputAttachments：选择 → chip 展示 → 发送时读取拼接）
+  const [attachments, setAttachments] = useState<ChatAttachment[]>(() => {
+    if (chatId === undefined) {
+      return [];
+    }
+    const draft = useDraftStore.getState().getDraft(chatId);
+    // 草稿附件恢复：仅恢复仍存在的文件路径（历史路径可能已删除）
+    return draft.attachments.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p }));
+  });
+  // 占位符：props 优先，缺省走 i18n
   const isControlled = controlledValue !== undefined;
   const value = isControlled ? controlledValue : internalValue;
 
@@ -172,6 +193,31 @@ export function ChatInput({
   useEffect(() => {
     autoResize();
   }, [value]);
+
+  // 草稿保存：非受控 + 有 chatId 时，文本/附件变化写入 draft-store（对齐参考项目 useDraftStore）
+  useEffect(() => {
+    if (isControlled || chatId === undefined) {
+      return;
+    }
+    useDraftStore.getState().setDraft(chatId, {
+      text: internalValue,
+      attachments: attachments.map((a) => a.path),
+    });
+  }, [internalValue, attachments, chatId, isControlled]);
+
+  // 会话切换（chatId 变化）：恢复新会话草稿（对齐参考项目 prevThreadId 模式）
+  const prevChatIdRef = useRef(chatId);
+  useEffect(() => {
+    if (chatId === prevChatIdRef.current || chatId === undefined || isControlled) {
+      prevChatIdRef.current = chatId;
+      return;
+    }
+    prevChatIdRef.current = chatId;
+    const draft = useDraftStore.getState().getDraft(chatId);
+    setInternalValue(draft.text);
+    setAttachments(draft.attachments.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p })));
+    autoResize();
+  }, [chatId, isControlled]);
 
   // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
@@ -350,6 +396,10 @@ export function ChatInput({
     }
     const text = await buildTextWithAttachments(base);
     onSend(text);
+    // 发送成功：清除本会话草稿（草稿只保留未发送内容）
+    if (chatId !== undefined) {
+      useDraftStore.getState().clearDraft(chatId);
+    }
     setValue('');
     setAttachments([]);
   };

@@ -261,6 +261,7 @@ export function ChatPanel({
       <footer className="composer">
         <ChatInput
           status={status}
+          chatId={chatId}
           onSend={(text) => {
             // sendMessage 接受 { text: string } 格式
             void sendMessage({ text });
