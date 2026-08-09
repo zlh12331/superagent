@@ -38,7 +38,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { FolderTree, Plus, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Search } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -236,17 +236,6 @@ export function Sidebar(): ReactElement {
           <Plus className="size-3.5" strokeWidth={2.5} />
           {t('sidebar.newSession')}
         </button>
-        {/* 文件树视图切换按钮（对齐原型 sidebar-filetree 入口；
-            此前仅命令面板可达，侧栏无直接入口） */}
-        <button
-          type="button"
-          className={cn('icon-btn sidebar-filetree-btn', sidebarView === 'fileTree' && 'active')}
-          onClick={() => setSidebarView(sidebarView === 'fileTree' ? 'threads' : 'fileTree')}
-          aria-label={t('sidebar.fileTree')}
-          title={t('sidebar.fileTree')}
-        >
-          <FolderTree className="size-3.5" strokeWidth={1.5} />
-        </button>
         <div className="sidebar-search">
           <Search className="sidebar-search-icon" size={13} strokeWidth={2} />
           <input
@@ -283,7 +272,24 @@ export function Sidebar(): ReactElement {
       {/* 中间：会话列表 / 归档 / 文件树（文件树为独立视图 sidebarView，对齐参考项目） */}
       <div className="sidebar-list">
         {sidebarView === 'fileTree' ? (
-          <FileTreePanel workingDir={workingDir} />
+          // 文件树视图（对齐原型 sidebar-filetree：顶部返回条 + 树）
+          <div className="flex h-full flex-col">
+            <div className="sft-head">
+              <button
+                type="button"
+                className="sft-back"
+                onClick={() => setSidebarView('threads')}
+                aria-label={t('sidebar.backToThreads')}
+                title={t('sidebar.backToThreads')}
+              >
+                <ArrowLeft className="size-3.5" strokeWidth={2} />
+              </button>
+              <span className="sft-title">{t('sidebar.fileTree')}</span>
+            </div>
+            <div className="min-h-0 flex-1">
+              <FileTreePanel workingDir={workingDir} />
+            </div>
+          </div>
         ) : activeTab === 'archived' ? (
           <EmptyState
             title={t('sidebar.noArchived')}
@@ -347,6 +353,7 @@ export function Sidebar(): ReactElement {
                             onTogglePin={() =>
                               togglePin(entry.session.id, entry.session.pinned !== true)
                             }
+                            onOpenFiles={() => setSidebarView('fileTree')}
                           />
                         ),
                       )}

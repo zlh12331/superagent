@@ -105,7 +105,9 @@
       "deleteSession": "Delete session",
       "fileTree": "Files",
       "pin": "Pin",
-      "unpin": "Unpin"
+      "unpin": "Unpin",
+      "openFiles": "Show files",
+      "backToThreads": "Back to threads"
     },
     "chat": {
       "inputPlaceholder": "Help you write code, test, debug, and optimize for production-quality deliverables",

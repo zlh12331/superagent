@@ -26,7 +26,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useSortable } from '@dnd-kit/sortable';
-import { MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
+import { FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,8 @@ interface SortableThreadItemProps {
   readonly onDelete: () => void;
   /** 置顶/取消置顶回调（对齐参考项目 pinned-header 分组） */
   readonly onTogglePin: () => void;
+  /** 打开会话文件树回调（对齐原型 ti-action-btn data-act=files） */
+  readonly onOpenFiles: () => void;
 }
 
 export function SortableThreadItem({
@@ -69,6 +71,7 @@ export function SortableThreadItem({
   onSelect,
   onDelete,
   onTogglePin,
+  onOpenFiles,
 }: SortableThreadItemProps): ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sessionId,
@@ -96,6 +99,7 @@ export function SortableThreadItem({
         onSelect={onSelect}
         onDelete={onDelete}
         onTogglePin={onTogglePin}
+        onOpenFiles={onOpenFiles}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -117,6 +121,8 @@ interface ThreadItemProps {
   readonly onDelete: () => void;
   /** 置顶/取消置顶回调（对齐参考项目 pinned-header 分组） */
   readonly onTogglePin: () => void;
+  /** 打开会话文件树回调（对齐原型 ti-action-btn data-act=files） */
+  readonly onOpenFiles: () => void;
   /** 拖拽手柄属性（@dnd-kit useSortable 的 attributes + listeners，挂在 ti-dot 上） */
   readonly dragHandleProps?: Record<string, unknown>;
 }
@@ -133,6 +139,7 @@ function ThreadItem({
   onSelect,
   onDelete,
   onTogglePin,
+  onOpenFiles,
   dragHandleProps,
 }: ThreadItemProps): ReactElement {
   // 本地化文案
@@ -213,6 +220,20 @@ function ThreadItem({
           <div className="ti-meta">{metaText}</div>
         </div>
         <div className="ti-actions">
+          {/* 文件树按钮（对齐原型 ti-action-btn data-act=files：hover 显示，点击打开会话文件树） */}
+          <button
+            type="button"
+            className="ti-action-btn"
+            aria-label={t('sidebar.openFiles')}
+            title={t('sidebar.openFiles')}
+            disabled={isDeleting}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenFiles();
+            }}
+          >
+            <FolderTree className="size-3.5" strokeWidth={1.5} />
+          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
