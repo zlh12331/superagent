@@ -40,7 +40,7 @@ import {
   isTextUIPart,
 } from 'ai';
 import { motion } from 'motion/react';
-import { type ReactElement, useState } from 'react';
+import { memo, type ReactElement, useState } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
@@ -56,7 +56,9 @@ import { extractText, formatJson } from './message-utils';
 /** part 类型（UIMessage['parts'][number] 派生） */
 type UIMessagePart = UIMessage['parts'][number];
 
-export function MessageItem({
+// 记忆化导出：消息未变化（引用不变）时跳过重渲染——
+// 去 Virtuoso 后流式场景仅变化消息重渲染，避免全列表 Markdown 重新解析
+export const MessageItem = memo(function MessageItem({
   message,
   onRegenerate,
   disableActions,
@@ -131,7 +133,7 @@ export function MessageItem({
       </div>
     </div>
   );
-}
+});
 
 /**
  * 单个 part 渲染

@@ -13,8 +13,7 @@
 // - 侧栏折叠：sb-collapsed 态，grid 第一列塌缩为 0
 // - 右面板折叠：crp-collapsed 态，grid 第五列塌缩为 0
 // - 右面板渲染 DevPanel（Terminal + Git + Logs + Metrics + Inspector）
-// - 集成 ApprovalDialog：通过 useApprovalBridge 订阅 IPC 审批推送
-// - 集成 useToolBridge + useTerminalBridge：订阅工具/终端 IPC 事件
+// - 集成 useApprovalBridge（审批推送订阅）+ useToolBridge + useTerminalBridge：订阅工具/终端 IPC 事件
 //
 // 布局参考：docs/prototype/prototype-v2.html
 // - .app（grid 两行：topbar + body）
@@ -28,7 +27,6 @@ import { ChevronRight } from 'lucide-react';
 import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { AskDialog } from '@/components/agent/ask-dialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -73,8 +71,8 @@ type ResizerSide = 'left' | 'right';
 export function AppShell({ children }: AppShellProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  // 审批桥接：订阅 IPC 推送 + 提供 respondApproval 方法
-  const { respondApproval } = useApprovalBridge();
+  // 审批桥接：订阅 IPC 推送（就地内联展示在 ChatPanel，弹窗已移除）
+  useApprovalBridge();
   // Agent 提问桥接：订阅 ask 事件 → agent-ask-store（AskDialog 渲染）
   useAgentAskBridge();
 
@@ -328,8 +326,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         </aside>
       </div>
 
-      {/* 全局审批对话框：根级渲染，覆盖在所有内容之上 */}
-      <ApprovalDialog onRespond={respondApproval} />
+      {/* 审批：就地内联展示（inline-approval-card 在 ChatPanel）——
+          移除全局 ApprovalDialog 弹窗：对齐原型 .card.paused 就地审批，
+          避免与内联卡双 UI 重复（同一审批两处呈现） */}
       <AskDialog />
 
       {/* 文件查看器对话框：根级渲染，由 useFileViewerStore 控制 */}
