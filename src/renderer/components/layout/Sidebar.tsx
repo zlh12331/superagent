@@ -285,7 +285,9 @@ export function Sidebar(): ReactElement {
             }
           >
             {() => (
-              <nav aria-label={t('sidebar.sessionList')}>
+              // h-full：高度链传递（sidebar-list → nav → Virtuoso），
+              // 缺链时 Virtuoso 视口高度 0 → 虚拟列表不渲染任何会话项
+              <nav aria-label={t('sidebar.sessionList')} className="h-full">
                 <div className="thread-group-label">
                   <span>{t('sidebar.recentSessions')}</span>
                 </div>
@@ -297,6 +299,7 @@ export function Sidebar(): ReactElement {
                   {/* 虚拟化列表：标签 + 会话项扁平化渲染（Virtuoso 接管滚动） */}
                   <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
                     <Virtuoso
+                      style={{ height: '100%' }}
                       data={entries}
                       computeItemKey={(_, entry) =>
                         entry.type === 'label' ? `label:${entry.name}` : entry.session.id
