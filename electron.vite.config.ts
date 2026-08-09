@@ -23,11 +23,12 @@ const ANALYZE_BUNDLE = process.env.ANALYZE_BUNDLE === '1';
 function rendererPlugins() {
   const plugins = [
     react({
-      // 启用 React Compiler（React 19.2 官方推荐，自动 memoize）
-      // 注意：Virtuoso 使用文件（Sidebar/ChatMessageList）顶部用 'use no memo' 精确禁用
-      // —— 全量模式与 Virtuoso 的 ref 内部状态不兼容（data 更新不触发渲染）
+      // React Compiler：annotation 模式（仅标记 'use memo' 的文件编译）
+      // 原因：全量模式与 react-virtuoso 的 ref 内部状态不兼容——Virtuoso 组件
+      // data 更新不触发渲染（侧栏会话列表静默空渲染，CDP 实测定位）。
+      // 'use no memo' 文件级指令实测未生效，故用编译模式级 opt-in 方案。
       babel: {
-        plugins: [['babel-plugin-react-compiler']],
+        plugins: [['babel-plugin-react-compiler', { compilationMode: 'annotation' }]],
       },
     }),
     // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）

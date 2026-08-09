@@ -1,4 +1,3 @@
-'use no memo';
 // src/renderer/components/layout/Sidebar.tsx
 // 侧边栏 · 组装层（会话列表/文件夹标签/线程项/加载态提取至独立文件）
 // ──────────────────────────────────────────────
@@ -42,7 +41,6 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-ki
 import { Plus, Search } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Virtuoso } from 'react-virtuoso';
 
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -300,44 +298,37 @@ export function Sidebar(): ReactElement {
                   collisionDetection={closestCenter}
                   onDragEnd={handleDragEnd}
                 >
-                  {/* 虚拟化列表：标签 + 会话项扁平化渲染（Virtuoso 接管滚动） */}
+                  {/* 会话列表：普通滚动渲染（去 Virtuoso）——
+                      会话量级（几十条）无需虚拟化；react-virtuoso 在 React 19 + Compiler
+                      下存在 data 空→非空更新时序 bug（reload 后列表静默空渲染），
+                      虚拟化收益低，普通滚动彻底规避 */}
                   <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-                    <Virtuoso
-                      key={sessions.length}
-                      style={{ height: '100%' }}
-                      data={entries}
-                      totalCount={entries.length}
-                      computeItemKey={(_, entry) =>
-                        entry.type === 'label' ? `label:${entry.name}` : entry.session.id
-                      }
-                      itemContent={(_, entry) => {
-                        if (entry.type === 'label') {
-                          return (
-                            <FolderLabel
-                              folderName={entry.name}
-                              collapsed={collapsedFolders.includes(entry.name)}
-                              onToggle={() => toggleFolder(entry.name)}
-                              onCreateInFolder={handleCreateInFolder}
-                            />
-                          );
-                        }
-                        const session = entry.session;
-                        return (
-                          <SortableThreadItem
-                            key={session.id}
-                            sessionId={session.id}
-                            folderName={getFolderName(session.workingDir)}
-                            title={session.title}
-                            lastMessage={session.lastMessage}
-                            updatedAt={session.updatedAt}
-                            isActive={session.id === activeSessionId}
-                            isDeleting={isDeleting}
-                            onSelect={() => handleSelectSession(session.id)}
-                            onDelete={() => handleDelete(session.id)}
+                    <div className="h-full overflow-y-auto pb-2">
+                      {entries.map((entry) =>
+                        entry.type === 'label' ? (
+                          <FolderLabel
+                            key={`label:${entry.name}`}
+                            folderName={entry.name}
+                            collapsed={collapsedFolders.includes(entry.name)}
+                            onToggle={() => toggleFolder(entry.name)}
+                            onCreateInFolder={handleCreateInFolder}
                           />
-                        );
-                      }}
-                    />
+                        ) : (
+                          <SortableThreadItem
+                            key={entry.session.id}
+                            sessionId={entry.session.id}
+                            folderName={getFolderName(entry.session.workingDir)}
+                            title={entry.session.title}
+                            lastMessage={entry.session.lastMessage}
+                            updatedAt={entry.session.updatedAt}
+                            isActive={entry.session.id === activeSessionId}
+                            isDeleting={isDeleting}
+                            onSelect={() => handleSelectSession(entry.session.id)}
+                            onDelete={() => handleDelete(entry.session.id)}
+                          />
+                        ),
+                      )}
+                    </div>
                   </SortableContext>
                 </DndContext>
               </nav>
