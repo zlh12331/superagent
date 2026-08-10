@@ -7,6 +7,15 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// 前端独立开发模式（pnpm dev:web）：无 Electron preload 时注入完整 mock window.api
+// - 仅当 vite 以 --mode web 运行时生效（import.meta.env.MODE === 'web'）
+// - 动态 import：生产构建与 electron-vite dev（E2E 模式）不加载 mock 代码
+// - 真实 Electron 环境由 preload 注入 window.api，本分支永不执行
+if (import.meta.env.MODE === 'web') {
+  const { installMockApi } = await import('@/dev/mock-api');
+  installMockApi();
+}
+
 // 在 React 渲染前同步应用初始主题，消除首屏闪烁（FOUC 防护）
 // 必须在 createRoot(...).render() 之前调用
 import { applyInitialTheme } from '@/lib/theme-init';
@@ -26,7 +35,6 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 applyInitialTheme();
-
 // React 19 createRoot API
 const rootElement = document.getElementById('root');
 if (!rootElement) {

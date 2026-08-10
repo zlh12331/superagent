@@ -33,6 +33,7 @@
   "scripts": {
     "postinstall": "node scripts/postinstall-rebuild.mjs",
     "dev": "node scripts/rebuild-native.mjs electron --auto && electron-vite dev -w",
+    "dev:web": "vite --config vite.web.config.ts --mode web",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --build",

@@ -7,6 +7,29 @@
 
 一份"照着就能把前端做出来"的说明书。与 04 号（IPC 接口契约）、05 号（功能需求）的分工：本文讲**实现**。阅读方式：先看架构图，再逐层往下——设计体系 → 布局 → 原子组件 → 业务组件 → 交互流程 → 数据流。图表是主体，文字是注释。
 
+## 0.1 前端独立开发模式（pnpm dev:web）
+
+前端可以不依赖 Electron 主进程，在浏览器中单独开发、调试全部界面：
+
+```bash
+pnpm dev:web   # vite --config vite.web.config.ts --mode web → http://localhost:5173
+```
+
+工作原理：
+
+```mermaid
+flowchart LR
+  A[pnpm dev:web] --> B[vite.web.config.ts<br/>root/alias/插件与 electron-vite renderer 一致]
+  B --> C[--mode web → import.meta.env.MODE === 'web']
+  C --> D[main.tsx 动态 import dev/mock-api.ts]
+  D --> E[注入完整 mock window.api<br/>内存假数据 + 模拟流式输出]
+```
+
+- **mock 覆盖**：会话 CRUD、聊天流式输出（按 AI SDK v7 UIMessageChunk 格式模拟 text-start/text-delta 推送，token 累加）、模型清单、文件树、Git 状态、用量统计、终端回显、设置各页；其余域返回空数据兜底。mock 数据全部内存态，标注 MOCK，重启即失。
+- **隔离性**：仅 `--mode web` 时注入；`pnpm dev`（Electron）由 preload 注入真实 window.api；生产构建与 E2E（electron-vite dev）不加载 mock 代码（动态 import + 条件短路）。
+- **相关文件**：vite.web.config.ts（独立 vite 配置）、src/renderer/dev/mock-api.ts（mock 层，参数类型从 IpcApi 推导）、src/renderer/main.tsx（注入入口）、package.json `dev:web` 脚本。
+- **已知限制**：历史会话消息不自动回显（与真实 Electron 环境一致的既有缺口——session:get 的 messages 未注入 useChat，属产品功能问题，非 mock 问题）；协议版本校验由 mock 返回匹配的 IPC_PROTOCOL_VERSION 避免误报。
+
 ## 一、全局架构
 
 ### 1.1 系统分层总览
