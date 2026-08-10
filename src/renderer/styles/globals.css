@@ -4170,30 +4170,49 @@ button.card-head {
   pointer-events: auto;
 }
 
+/* 竖线连接所有圆点（对齐参考项目 .nav-rail-line：1.5px、border 色、1px 圆角） */
+.msg-nav-rail .nav-rail-line {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 1.5px;
+  transform: translateX(-50%);
+  background: var(--border);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
 .msg-nav-rail .nav-dot {
   /* 视觉 6px 圆点；padding 扩大命中区（WCAG 最小可点击目标 24px） */
+  position: relative;
   width: 6px;
   height: 6px;
   padding: 6px;
   background-clip: content-box;
   background-color: var(--text-faint);
   border-radius: 50%;
-  opacity: 0.45;
-  cursor: pointer;
   border: none;
+  opacity: 0.4;
+  cursor: pointer;
   transition:
     background-color 0.2s ease,
     opacity 0.2s ease,
-    transform 0.2s ease;
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.msg-nav-rail .nav-dot[data-role="user"] {
-  background: var(--accent);
+/* 滚动联动的活跃圆点（对齐参考项目：accent 色 + accent-2 蓝色发光，尺寸放大） */
+.msg-nav-rail .nav-dot[data-active="true"] {
+  background-color: var(--accent);
+  opacity: 1;
+  box-shadow: 0 0 6px var(--accent-2);
+  transform: scale(1.15);
 }
 
 .msg-nav-rail .nav-dot:hover {
-  opacity: 0.85;
-  transform: scale(1.35);
+  opacity: 0.7;
+  transform: scale(1.2);
 }
 
 /* ──────────────────────────────────────────────────────────────

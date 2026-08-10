@@ -14,12 +14,14 @@
 
 import type { UIMessage } from 'ai';
 import { ChevronDown, Sparkles } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { MessageItem } from './message-item';
+import { extractText } from './message-utils';
 import { StreamingFooter } from './streaming-footer';
 
 /** 消息导航轨元素的数据属性（滚动定位用） */
@@ -40,6 +42,23 @@ interface ChatMessageListProps {
 
 /** 距底部阈值（px）：小于该值视为"在底部" */
 const AT_BOTTOM_THRESHOLD = 80;
+
+/** 导航圆点数量上限（对齐参考项目：超过时按比例映射，避免溢出） */
+const MAX_NAV_DOTS = 10;
+
+/** 导航圆点渲染数据 */
+interface NavDot {
+  /** React key */
+  readonly key: string;
+  /** 用户消息序号（0-based，aria-label/tooltip 用） */
+  readonly userIndex: number;
+  /** 消息列表中的索引（点击滚动用） */
+  readonly messageIndex: number;
+  /** 是否活跃（滚动联动） */
+  readonly isActive: boolean;
+  /** 用户消息内容预览（tooltip 展示，截断） */
+  readonly preview: string;
+}
 
 export function ChatMessageList({
   messages,
@@ -71,12 +90,79 @@ export function ChatMessageList({
   const lastRole = messages.length > 0 ? messages[messages.length - 1]?.role : undefined;
   const showStreamingFooter = isStreaming && (status === 'submitted' || lastRole !== 'assistant');
 
+  // 导航轨数据源：用户消息位置（对齐参考项目 VerticalProgressBar——圆点代表用户消息而非每条消息）
+  const userMessageIndices = useMemo(
+    () => messages.map((m, i) => (m.role === 'user' ? i : -1)).filter((i) => i >= 0),
+    [messages],
+  );
+
+  // 滚动联动的活跃用户消息序（0-based；null = 无活跃）
+  const [activeUserIndex, setActiveUserIndex] = useState<number | null>(null);
+
+  // 导航圆点：未超上限全量展示（活跃 = 序号相等）；超过 MAX_NAV_DOTS 按比例映射
+  // （对齐参考项目 I-M-012，active 用区间 [srcIdx, nextSrcIdx) 判断，避免映射后索引错位）
+  const navDots = useMemo<readonly NavDot[]>(() => {
+    const n = userMessageIndices.length;
+    if (n === 0) return [];
+    // 预览：用户消息文本（对齐参考实现 hover peek 内容；截断 60 字符）
+    const previewOf = (messageIndex: number): string => {
+      const text = extractText(messages[messageIndex]?.parts ?? []);
+      return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+    };
+    if (n <= MAX_NAV_DOTS) {
+      return userMessageIndices.map((messageIndex, i) => ({
+        key: `dot-${i}`,
+        userIndex: i,
+        messageIndex,
+        isActive: activeUserIndex === i,
+        preview: previewOf(messageIndex),
+      }));
+    }
+    return Array.from({ length: MAX_NAV_DOTS }, (_, dotIdx) => {
+      const srcIdx = Math.min(Math.floor((dotIdx * n) / MAX_NAV_DOTS), n - 1);
+      const nextSrcIdx = Math.min(Math.floor(((dotIdx + 1) * n) / MAX_NAV_DOTS), n - 1);
+      const isActive =
+        activeUserIndex !== null &&
+        srcIdx <= activeUserIndex &&
+        (dotIdx === MAX_NAV_DOTS - 1 || nextSrcIdx > activeUserIndex);
+      return {
+        key: `dot-${dotIdx}`,
+        userIndex: srcIdx,
+        messageIndex: userMessageIndices[srcIdx] ?? -1,
+        isActive,
+        preview: previewOf(userMessageIndices[srcIdx] ?? -1),
+      };
+    });
+  }, [userMessageIndices, activeUserIndex, messages]);
+
   /**
    * 滚动回调：底部检测（替代 Virtuoso atBottomStateChange）
    *
    * - 在底部附近：隐藏按钮，清除 hasNew
    * - 不在底部：显示按钮
    */
+  // 导航轨滚动联动（对齐参考项目 I-M-011）：视口中线对应的最后一条消息
+  // → 其之前最近的用户消息 → 返回用户消息序（null = 无活跃）
+  const computeActiveUserIndex = useCallback(
+    (el: HTMLElement): number | null => {
+      const midpoint = el.scrollTop + el.clientHeight / 2;
+      let activeMsgIndex = -1;
+      for (const node of el.querySelectorAll(`[${MSG_INDEX_ATTR}]`)) {
+        const msgIndex = Number(node.getAttribute(MSG_INDEX_ATTR));
+        const top = (node as HTMLElement).offsetTop;
+        if (msgIndex > activeMsgIndex && top <= midpoint) {
+          activeMsgIndex = msgIndex;
+        }
+      }
+      const lastUserMsgIndex =
+        activeMsgIndex >= 0
+          ? [...userMessageIndices].reverse().find((idx) => idx <= activeMsgIndex)
+          : undefined;
+      return lastUserMsgIndex !== undefined ? userMessageIndices.indexOf(lastUserMsgIndex) : null;
+    },
+    [userMessageIndices],
+  );
+
   const handleScroll = (): void => {
     const el = scrollerRef.current;
     if (el === null) return;
@@ -88,7 +174,20 @@ export function ChatMessageList({
     } else {
       setShowScrollBtn(true);
     }
+
+    // 导航轨滚动联动：更新活跃圆点（相同值不触发重渲染）
+    const nextActive = computeActiveUserIndex(el);
+    setActiveUserIndex((prev) => (prev === nextActive ? prev : nextActive));
   };
+
+  // 初始/用户消息数变化时同步一次活跃圆点（内容不满一屏时无滚动事件，
+  // 挂载即按当前视口计算，保证底部场景下最后一个圆点默认高亮）
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el === null) return;
+    const nextActive = computeActiveUserIndex(el);
+    setActiveUserIndex((prev) => (prev === nextActive ? prev : nextActive));
+  }, [computeActiveUserIndex]);
 
   /**
    * 滚动到底部并隐藏按钮
@@ -165,20 +264,35 @@ export function ChatMessageList({
         {/* 流式占位：assistant 尚未开始输出时显示打字指示（避免与真实 assistant 消息双头像重复） */}
         {showStreamingFooter && <StreamingFooter />}
       </div>
-      {/* 消息导航轨（对齐原型 .msg-nav-rail：右侧点导航，点击滚动到对应消息）
-          仅消息较多时显示，避免干扰 */}
-      {messages.length >= 4 && (
+      {/* 消息导航轨（对齐参考项目 VerticalProgressBar：圆点代表用户消息位置，
+          竖线连接、滚动联动高亮、hover tooltip、数量上限 10 比例映射）
+          仅当用户消息 ≥2 条时显示（对齐参考项目：少于 2 条无导航意义） */}
+      {userMessageIndices.length >= 2 && (
         <ul className="msg-nav-rail visible" aria-label={t('chat.msgNavRail')}>
-          {messages.map((message, index) => (
-            <li key={message.id}>
-              <button
-                type="button"
-                className="nav-dot"
-                data-role={message.role}
-                onClick={() => scrollToIndex(index)}
-                aria-label={`${t('chat.msgNavGoTo')} ${index + 1}`}
-                title={`${t('chat.msgNavGoTo')} ${index + 1}`}
-              />
+          {/* 竖线连接所有圆点 */}
+          <li className="nav-rail-line" aria-hidden="true" />
+          {navDots.map((dot) => (
+            <li key={dot.key}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="nav-dot"
+                    data-active={dot.isActive}
+                    data-role="user"
+                    onClick={() => scrollToIndex(dot.messageIndex)}
+                    aria-label={`${t('chat.msgNavGoTo')} ${dot.userIndex + 1}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <span className="block truncate">{`${t('chat.msgNavGoTo')} ${dot.userIndex + 1}`}</span>
+                  {dot.preview !== '' && (
+                    <span className="text-muted-foreground mt-0.5 block max-w-[200px] truncate text-2xs">
+                      {dot.preview}
+                    </span>
+                  )}
+                </TooltipContent>
+              </Tooltip>
             </li>
           ))}
         </ul>
