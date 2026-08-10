@@ -121,12 +121,20 @@ export const DevPanel = memo(function DevPanel({
         </Tabs>
       </div>
 
-      {/* 内容区（面板折叠由全局机制管理，此处始终展开） */}
+      {/* 内容区（面板折叠由全局机制管理，此处始终展开）
+          面板常驻：所有 tab 始终在 DOM，用 hidden 切换（照搬参考项目 ContextPanel）——
+          避免 xterm 实例、滚动位置、diff 展开态在切换 tab 时丢失 */}
       <div className="min-h-0 flex-1">
-        {activeTab === 'info' && <InfoPane sessionId={sessionId} />}
-        {activeTab === 'diff' && <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />}
-        {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
-        {activeTab === 'browser' && (
+        <div className={cn('h-full', activeTab !== 'info' && 'hidden')}>
+          <InfoPane sessionId={sessionId} />
+        </div>
+        <div className={cn('h-full', activeTab !== 'diff' && 'hidden')}>
+          <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />
+        </div>
+        <div className={cn('h-full', activeTab !== 'files' && 'hidden')}>
+          <FilesPane sessionId={sessionId} />
+        </div>
+        <div className={cn('h-full', activeTab !== 'browser' && 'hidden')}>
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -136,8 +144,8 @@ export const DevPanel = memo(function DevPanel({
           >
             <BrowserPane />
           </Suspense>
-        )}
-        {activeTab === 'terminal' && (
+        </div>
+        <div className={cn('h-full', activeTab !== 'terminal' && 'hidden')}>
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -147,8 +155,8 @@ export const DevPanel = memo(function DevPanel({
           >
             <TerminalPanel sessionId={sessionId} className="h-full" />
           </Suspense>
-        )}
-        {activeTab === 'dev' && (
+        </div>
+        <div className={cn('h-full', activeTab !== 'dev' && 'hidden')}>
           <div className="flex h-full flex-col">
             {/* 开发者子视图切换（调试工具收纳） */}
             <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
@@ -206,13 +214,29 @@ export const DevPanel = memo(function DevPanel({
               </button>
             </div>
             <div className="min-h-0 flex-1">
-              {devSubTab === 'git' && <GitPanel path={gitRepoPath} className="h-full" />}
-              {devSubTab === 'logs' && <LogsPanel enabled={true} className="h-full" />}
-              {devSubTab === 'metrics' && <MetricsPanel enabled={true} className="h-full" />}
-              {devSubTab === 'inspector' && <InspectorPanel className="h-full" />}
+              <div className={cn('h-full', devSubTab !== 'git' && 'hidden')}>
+                <GitPanel path={gitRepoPath} className="h-full" />
+              </div>
+              <div className={cn('h-full', devSubTab !== 'logs' && 'hidden')}>
+                {/* enabled 跟随可见性（对齐参考项目：面板不可见时不查询） */}
+                <LogsPanel
+                  enabled={activeTab === 'dev' && devSubTab === 'logs'}
+                  className="h-full"
+                />
+              </div>
+              <div className={cn('h-full', devSubTab !== 'metrics' && 'hidden')}>
+                {/* enabled 跟随可见性（对齐参考项目：面板不可见时不轮询） */}
+                <MetricsPanel
+                  enabled={activeTab === 'dev' && devSubTab === 'metrics'}
+                  className="h-full"
+                />
+              </div>
+              <div className={cn('h-full', devSubTab !== 'inspector' && 'hidden')}>
+                <InspectorPanel className="h-full" />
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
