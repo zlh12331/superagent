@@ -260,6 +260,7 @@ export function FileViewerDialog(): ReactElement {
                     const confirmed = await confirm({
                       title: t('fileViewer.unsaved'),
                       message: t('fileViewer.confirmExitEdit'),
+                      danger: true,
                     });
                     if (!confirmed) return;
                   }
