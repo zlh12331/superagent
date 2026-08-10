@@ -141,8 +141,7 @@ export function ChatMessageList({
    * - 在底部附近：隐藏按钮，清除 hasNew
    * - 不在底部：显示按钮
    */
-  // 导航轨滚动联动（对齐参考项目 I-M-011）：视口中线对应的最后一条消息
-  // → 其之前最近的用户消息 → 返回用户消息序（null = 无活跃）
+  // 导航轨滚动联动（对齐参考项目 I-M-011）：视口中线对应的最后一条消息  // → 其之前最近的用户消息 → 返回用户消息序（null = 无活跃）
   const computeActiveUserIndex = useCallback(
     (el: HTMLElement): number | null => {
       const midpoint = el.scrollTop + el.clientHeight / 2;
@@ -248,19 +247,25 @@ export function ChatMessageList({
     <div className={cn('relative h-full', className)}>
       {/* 消息滚动区（普通滚动渲染） */}
       <div ref={scrollerRef} className="messages h-full overflow-y-auto" onScroll={handleScroll}>
-        {messages.map((message, index) => (
-          <div
-            key={message.id}
-            {...{ [MSG_INDEX_ATTR]: index }}
-            className={cn('transition-colors', index === searchActiveIndex && 'search-highlight')}
-          >
-            <MessageItem
-              message={message}
-              onRegenerate={onRegenerate}
-              disableActions={isStreaming}
-            />
-          </div>
-        ))}
+        {messages.map((message, index) => {
+          // 流式标记：最后一条 assistant 消息正在输出时，文本末尾显示闪烁光标（照搬参考项目 StreamingCursor）
+          const isStreamingMessage =
+            !showStreamingFooter && isStreaming && index === messages.length - 1;
+          return (
+            <div
+              key={message.id}
+              {...{ [MSG_INDEX_ATTR]: index }}
+              className={cn('transition-colors', index === searchActiveIndex && 'search-highlight')}
+            >
+              <MessageItem
+                message={message}
+                onRegenerate={onRegenerate}
+                disableActions={isStreaming}
+                {...(isStreamingMessage ? { isStreaming: true } : {})}
+              />
+            </div>
+          );
+        })}
         {/* 流式占位：assistant 尚未开始输出时显示打字指示（避免与真实 assistant 消息双头像重复） */}
         {showStreamingFooter && <StreamingFooter />}
       </div>

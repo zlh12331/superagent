@@ -277,24 +277,38 @@ function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement
   }, [code]);
 
   return (
-    <div className="code-block-wrapper">
-      <button
-        type="button"
-        className={cn('code-copy-btn', copied && 'copied')}
-        onClick={handleCopy}
-        aria-label={copied ? t('common.copied') : t('common.copyCode')}
-        title={copied ? t('common.copied') : t('common.copyCode')}
-      >
-        {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-      </button>
-      {html !== null ? (
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
-        <div dangerouslySetInnerHTML={{ __html: html }} />
-      ) : (
-        <pre>
-          <code>{code}</code>
-        </pre>
-      )}
+    // group 容器：头栏 + 高亮区（对齐参考项目 CodeBlock：rounded-lg border + 头栏）
+    <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
+      {/* 头栏：语言标签（font-mono uppercase 小字） + 悬浮复制按钮 */}
+      <div className="border-border bg-muted/30 flex items-center justify-between border-b px-3 py-1.5">
+        <span className="text-muted-foreground font-mono text-[10px] tracking-wider uppercase">
+          {normalizedLang}
+        </span>
+        <button
+          type="button"
+          className={cn(
+            'text-muted-foreground hover:text-foreground absolute top-2 right-2 flex size-6 cursor-pointer items-center justify-center rounded transition-all duration-200',
+            copied && 'text-accent',
+            'opacity-0 group-hover:opacity-100',
+          )}
+          onClick={handleCopy}
+          aria-label={copied ? t('common.copied') : t('common.copyCode')}
+          title={copied ? t('common.copied') : t('common.copyCode')}
+        >
+          {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+        </button>
+      </div>
+      {/* 高亮区（overflow-x-auto 防长行溢出） */}
+      <div className="overflow-x-auto">
+        {html !== null ? (
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
+          <pre>
+            <code>{code}</code>
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

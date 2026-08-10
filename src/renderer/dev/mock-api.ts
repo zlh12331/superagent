@@ -120,6 +120,13 @@ function simulateAgentStream(sessionId: string, userText: string): void {
     '- 回合结束推送 `agent:stream:end`（含 usage，状态条 token 会累加）',
     '- 点停止按钮会触发 `agent:stop` 并结束流',
     '',
+    '代码块示例（验证语言标签头栏 + 悬浮复制）：',
+    '```ts',
+    'export function hello(): string {',
+    '  return "world";',
+    '}',
+    '```',
+    '',
     '真实 Electron 环境（`pnpm dev`）下此链路走主进程 AgentService + 真实 LLM。',
   ];
   const total = answer.join('\n');

@@ -40,7 +40,7 @@ import {
   isTextUIPart,
 } from 'ai';
 import { motion } from 'motion/react';
-import { memo, type ReactElement, useState } from 'react';
+import { memo, type ReactElement, useMemo, useState } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
@@ -52,6 +52,7 @@ import { FileChangeCard } from './file-change-card';
 import { Markdown } from './Markdown';
 import { MsgActions } from './message-actions';
 import { extractText, formatJson } from './message-utils';
+import { StreamingCursor } from './streaming-cursor';
 
 /** part 类型（UIMessage['parts'][number] 派生） */
 type UIMessagePart = UIMessage['parts'][number];
@@ -62,15 +63,34 @@ export const MessageItem = memo(function MessageItem({
   message,
   onRegenerate,
   disableActions,
+  isStreaming = false,
 }: {
   message: UIMessage;
   onRegenerate: ((messageId: string) => void) | undefined;
   disableActions: boolean;
+  /** 是否为正在流式输出的消息（ChatMessageList 对最后一条 assistant 传入） */
+  isStreaming?: boolean;
 }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   // 当前模型（对齐原型 .msg-role 展示模型名）
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
+
+  // parts 预映射（assistant 分支用）：生成稳定 key（含 index 但不暴露给 JSX key，规避 noArrayIndexKey）
+  // 并标记最后一条 text part 的流式光标（照搬参考项目 StreamingCursor）。
+  // 必须在组件顶层调用（Hook 规则），非 assistant 消息返回空。
+  const partsWithCursor = useMemo(
+    () =>
+      message.role === 'assistant'
+        ? message.parts.map((part, index) => ({
+            part,
+            key: `${message.id}-${index}`,
+            showCursor: isStreaming && index === message.parts.length - 1,
+          }))
+        : [],
+    [message.parts, message.id, isStreaming, message.role],
+  );
+
   if (message.role === 'user') {
     // user 消息：仅 .msg-body > .msg-content，气泡样式由 .msg-content 提供（玻璃渐变）
     return (
@@ -108,10 +128,9 @@ export const MessageItem = memo(function MessageItem({
           <div className="msg-role assistant">
             {t('chat.assistant')} · {defaultModel}
           </div>
-          {/* parts 列表：按 part 类型分别渲染 */}
-          {message.parts.map((part, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: parts 是 append-only 序列，index 在单条消息内唯一稳定
-            <PartView key={`${message.id}-${index}`} part={part} messageId={message.id} />
+          {/* parts 列表：按 part 类型分别渲染；流式消息在最后一条文本 part 末尾加闪烁光标 */}
+          {partsWithCursor.map(({ part, key, showCursor }) => (
+            <PartView key={key} part={part} messageId={message.id} showCursor={showCursor} />
           ))}
           {/* hover 操作栏：复制 + 重新生成（对齐原型 .msg-actions） */}
           <MsgActions
@@ -149,10 +168,13 @@ export const MessageItem = memo(function MessageItem({
 function PartView({
   part,
   messageId,
+  showCursor = false,
 }: {
   part: UIMessagePart;
   /** 所属消息 id（推理块折叠态关联 store 用） */
   messageId: string;
+  /** 流式光标：仅最后一条 text part 渲染（照搬参考项目 StreamingCursor） */
+  showCursor?: boolean;
 }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -164,6 +186,8 @@ function PartView({
     return (
       <div className="msg-content">
         <Markdown content={part.text} />
+        {/* 流式光标：当前消息正在输出时，文本末尾显示闪烁光标 */}
+        {showCursor && <StreamingCursor />}
       </div>
     );
   }
@@ -284,6 +308,9 @@ function ToolCallView({
   const statusLabel = mapToolStateToStatusLabelKey(state);
   const localizedStatusLabel = t(`chat.${statusLabel}`);
 
+  // 命令工具高亮（照搬参考项目 COMMAND_TOOLS：命令行块 accent 左边条 + 深色背景）
+  const isCommandTool = COMMAND_TOOLS.has(type);
+
   return (
     <div className="msg msg-tool enter-anim">
       <div className="msg-body">
@@ -300,14 +327,36 @@ function ToolCallView({
             <span className={cn('card-status', statusClass)}>{localizedStatusLabel}</span>
             <span className="tool-chev">▸</span>
           </button>
-          <div className="card-body">
-            {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
-            {input !== undefined && <CodeBlock label="input" content={formatJson(input, t)} />}
-            {/* 输出（output 优先于 errorText） */}
-            {output !== undefined && <CodeBlock label="output" content={formatJson(output, t)} />}
-            {errorText !== undefined && errorText !== '' && (
-              <CodeBlock label="error" content={errorText} />
+          {/* 展开动画（照搬参考项目 grid-rows 方案：始终挂载切换 class，非条件渲染） */}
+          <div
+            className={cn(
+              'grid transition-all duration-200',
+              open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
             )}
+          >
+            <div className="overflow-hidden">
+              <div className="card-body">
+                {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
+                {input !== undefined && (
+                  <CodeBlock
+                    label="input"
+                    content={formatJson(input, t)}
+                    commandStyle={isCommandTool}
+                  />
+                )}
+                {/* 输出（output 优先于 errorText） */}
+                {output !== undefined && (
+                  <CodeBlock
+                    label="output"
+                    content={formatJson(output, t)}
+                    commandStyle={isCommandTool}
+                  />
+                )}
+                {errorText !== undefined && errorText !== '' && (
+                  <CodeBlock label="error" content={errorText} />
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -358,17 +407,39 @@ function mapToolStateToStatusClass(state: string): string {
 }
 
 /**
+ * 命令工具集合（照搬参考项目 COMMAND_TOOLS：命令工具显示命令行块样式）
+ */
+const COMMAND_TOOLS = new Set(['exec_command', 'shell', 'run_command']);
+
+/**
  * 代码块（带标签 + 内容）
  *
- * 用于展示工具调用的 input / output / error。
+ * 用于展示工具调用的 input / output / error；
+ * 命令工具时加 accent 左边条 + 深色背景（照搬参考项目命令行块）。
  */
-function CodeBlock({ label, content }: { label: string; content: string }): ReactElement {
+function CodeBlock({
+  label,
+  content,
+  commandStyle = false,
+}: {
+  label: string;
+  content: string;
+  /** 命令工具样式：accent 左边条 + 深色背景 */
+  commandStyle?: boolean;
+}): ReactElement {
   return (
     <div className="mt-1">
       <div className="text-muted-foreground font-mono text-2xs uppercase tracking-wider">
         {label}
       </div>
-      <pre className="bg-background/50 text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-xs leading-snug">
+      <pre
+        className={cn(
+          'text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-xs leading-snug',
+          commandStyle
+            ? 'border-l-[var(--accent-dim)] bg-[#070A0E] border-l-2'
+            : 'bg-background/50',
+        )}
+      >
         {content}
       </pre>
     </div>
