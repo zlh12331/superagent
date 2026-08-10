@@ -65,7 +65,8 @@
       "protocolMismatchDesc": "Main process and UI protocol versions differ. Please restart the app",
       "noModels": "No configured models. Add an API key or a runtime model in Settings",
       "noModelConfigured": "No model configured",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "copyFailed": "Laptop"
     },
     "topbar": {
       "expandSidebar": "Expand sidebar",
@@ -625,7 +626,8 @@
       "diffUnavailable": "No diff available (untracked file or repo not initialized)",
       "clearGoal": "Clear goal",
       "referencedFiles": "Referenced files",
-      "noReferencedFiles": "No referenced files"
+      "noReferencedFiles": "No referenced files",
+      "browserDeviceLaptop": "Laptop"
     },
     "shortcutHelp": {
       "title": "Keyboard Shortcuts",

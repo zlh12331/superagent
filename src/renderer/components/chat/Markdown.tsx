@@ -30,6 +30,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createHighlighter, type Highlighter } from 'shiki';
+import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -272,9 +273,10 @@ function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement
         setCopied(false);
       }, 2000);
     } catch {
-      // clipboard 不可用时静默失败
+      // clipboard 不可用时提示（照搬参考项目：复制失败 toast）
+      toast.error(t('common.copyFailed'));
     }
-  }, [code]);
+  }, [code, t]);
 
   return (
     // group 容器：头栏 + 高亮区（对齐参考项目 CodeBlock：rounded-lg border + 头栏）

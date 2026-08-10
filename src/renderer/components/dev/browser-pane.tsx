@@ -16,13 +16,14 @@ import { type CSSProperties, type ReactElement, useEffect, useRef, useState } fr
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
-/** 设备预设类型 */
-type DevicePreset = 'responsive' | 'desktop' | 'tablet' | 'mobile';
+/** 设备预设类型（对齐参考项目 BrowserPane：含 laptop） */
+type DevicePreset = 'responsive' | 'desktop' | 'laptop' | 'tablet' | 'mobile';
 
-/** 设备预设 → 默认宽高映射 */
+/** 设备预设 → 默认宽高映射（对齐参考项目 DEVICE_DIMENSIONS） */
 const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number }> = {
   responsive: { width: 0, height: 0 },
-  desktop: { width: 1366, height: 768 },
+  desktop: { width: 1920, height: 1080 },
+  laptop: { width: 1366, height: 768 },
   tablet: { width: 768, height: 1024 },
   mobile: { width: 375, height: 667 },
 };
@@ -222,6 +223,7 @@ export function BrowserPane(): ReactElement {
           >
             <option value="responsive">{t('panel.browserDeviceResponsive')}</option>
             <option value="desktop">{t('panel.browserDeviceDesktop')}</option>
+            <option value="laptop">{t('panel.browserDeviceLaptop')}</option>
             <option value="tablet">{t('panel.browserDeviceTablet')}</option>
             <option value="mobile">{t('panel.browserDeviceMobile')}</option>
           </select>
