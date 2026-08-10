@@ -381,10 +381,10 @@ stateDiagram-v2
   ready --> submitted: 发送（校验：非空/非流式/≤8000字）
   submitted --> streaming: 首个片段到达
   streaming --> ready: 流结束（收尾：刷新缓存+清缓冲+累加用量）
-  streaming --> error: 流错误 → toast([CODE])
+  streaming --> error: 流错误 → toast 错误码
   submitted --> error: 请求失败
   error --> ready: 下次发送
-  streaming --> ready: 停止（按钮/Esc/卸载 → agent:stop）
+  streaming --> ready: 停止（按钮/Esc/卸载 → agent.stop）
   ready --> ready: 重新生成（截断后重发，旧流自动中断）
 ```
 
@@ -430,8 +430,8 @@ flowchart LR
 
 ```mermaid
 stateDiagram-v2
-  [*] --> none: 无实例
-  none --> running: 创建 → terminal:create → PTY
+  [*] --> idle: 无实例
+  idle --> running: 创建 → terminal.create → PTY
   running --> running: 输出直写 xterm / 输入回传 / resize 防抖
   running --> exited: exit 事件（输出保留+已结束）
   running --> [*]: kill 关闭
