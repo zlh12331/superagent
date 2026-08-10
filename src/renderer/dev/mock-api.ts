@@ -132,6 +132,13 @@ function simulateAgentStream(sessionId: string, userText: string): void {
   const interval = setInterval(() => {
     if (index >= total.length) {
       clearInterval(interval);
+      // 助手回复落库（对齐主进程行为：真实环境流式推送过程中持久化消息；
+      // 不落库则切走再切回会话时助手回复消失）
+      messagesBySession[sessionId]?.push({
+        id: messageId,
+        role: 'assistant',
+        content: total,
+      });
       const usage = { inputTokens: 120, outputTokens: 320, totalTokens: 440 };
       for (const cb of endCallbacks) {
         cb({ sessionId, reason: 'completed', usage });
