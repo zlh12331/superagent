@@ -63,6 +63,14 @@ export function ChatMessageList({
   // 流式状态（streaming / submitted）时显示占位"..."
   const isStreaming = status === 'streaming' || status === 'submitted';
 
+  // 流式占位显示条件：
+  // - submitted（思考中，assistant 尚未开始输出）：总是显示打字指示
+  // - streaming（已收到首个 chunk）：仅当最后一条消息不是 assistant 时显示——
+  //   AI SDK v7 收到 text-start 即创建真实 assistant 消息，此时占位再显示
+  //   会出现"真实消息头像 + 占位头像"双头像重复（实测 bug）
+  const lastRole = messages.length > 0 ? messages[messages.length - 1]?.role : undefined;
+  const showStreamingFooter = isStreaming && (status === 'submitted' || lastRole !== 'assistant');
+
   /**
    * 滚动回调：底部检测（替代 Virtuoso atBottomStateChange）
    *
@@ -154,8 +162,8 @@ export function ChatMessageList({
             />
           </div>
         ))}
-        {/* 流式占位：assistant 正在响应时渲染在列表尾部（替代 Virtuoso Footer 插槽） */}
-        {isStreaming && <StreamingFooter />}
+        {/* 流式占位：assistant 尚未开始输出时显示打字指示（避免与真实 assistant 消息双头像重复） */}
+        {showStreamingFooter && <StreamingFooter />}
       </div>
       {/* 消息导航轨（对齐原型 .msg-nav-rail：右侧点导航，点击滚动到对应消息）
           仅消息较多时显示，避免干扰 */}
