@@ -64,7 +64,8 @@
       "protocolMismatch": "App version mismatch",
       "protocolMismatchDesc": "Main process and UI protocol versions differ. Please restart the app",
       "noModels": "No configured models. Add an API key or a runtime model in Settings",
-      "noModelConfigured": "No model configured"
+      "noModelConfigured": "No model configured",
+      "confirm": "Confirm"
     },
     "topbar": {
       "expandSidebar": "Expand sidebar",

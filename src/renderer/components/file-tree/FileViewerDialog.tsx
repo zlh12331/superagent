@@ -38,6 +38,7 @@ import { useFileWrite } from '@/hooks/use-file-write';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
 import { FileTreeNavigator } from './FileTreeNavigator';
@@ -177,13 +178,15 @@ export function FileViewerDialog(): ReactElement {
   }, [editMode, open, handleSave]);
 
   // Dialog 关闭回调（Esc / 点击遮罩 / 点关闭按钮）
-  // 脏数据保护：未保存时阻止关闭，提示用户
-  const handleOpenChange = (next: boolean): void => {
+  // 脏数据保护：未保存时阻止关闭，命令式 confirm 确认后丢弃（照搬参考项目 confirm-dialog）
+  const handleOpenChange = async (next: boolean): Promise<void> => {
     if (!next) {
       if (isDirty) {
-        // 用 confirm 避免引入复杂确认对话框
-        // 项目惯例：sonner toast 用于通知，confirm 用于阻塞式确认
-        const confirmed = window.confirm(t('fileViewer.confirmCloseDirty'));
+        const confirmed = await confirm({
+          title: t('fileViewer.unsaved'),
+          message: t('fileViewer.confirmCloseDirty'),
+          danger: true,
+        });
         if (!confirmed) return;
         // 用户确认丢弃修改
         exitEditMode();
@@ -252,9 +255,12 @@ export function FileViewerDialog(): ReactElement {
               <button
                 type="button"
                 className="file-viewer-mode-btn"
-                onClick={() => {
+                onClick={async () => {
                   if (isDirty) {
-                    const confirmed = window.confirm(t('fileViewer.confirmExitEdit'));
+                    const confirmed = await confirm({
+                      title: t('fileViewer.unsaved'),
+                      message: t('fileViewer.confirmExitEdit'),
+                    });
                     if (!confirmed) return;
                   }
                   exitEditMode();

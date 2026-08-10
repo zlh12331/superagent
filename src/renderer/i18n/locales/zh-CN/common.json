@@ -64,7 +64,8 @@
       "protocolMismatch": "应用版本不兼容",
       "protocolMismatchDesc": "主进程与界面协议版本不一致，请重启应用以正常使用",
       "noModels": "暂无已配置模型，请到设置中配置 API Key 或添加运行时模型",
-      "noModelConfigured": "未配置模型"
+      "noModelConfigured": "未配置模型",
+      "confirm": "确认"
     },
     "topbar": {
       "expandSidebar": "展开侧边栏",

@@ -29,6 +29,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { AskDialog } from '@/components/agent/ask-dialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
+import { DialogHost } from '@/components/common/DialogHost';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
@@ -326,6 +327,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         </aside>
       </div>
 
+      {/* 命令式确认/输入对话框（confirm()/prompt()，照搬参考项目） */}
+      <DialogHost />
       {/* 审批：就地内联展示（inline-approval-card 在 ChatPanel）——
           移除全局 ApprovalDialog 弹窗：对齐原型 .card.paused 就地审批，
           避免与内联卡双 UI 重复（同一审批两处呈现） */}
