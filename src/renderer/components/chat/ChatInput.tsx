@@ -94,6 +94,11 @@ interface ChatInputProps {
    */
   chatId?: string;
   /**
+   * 工作目录（可选，@ 文件补全用）
+   * 提供时输入 @ 触发 search.glob 文件建议（照搬参考项目 mention 补全）
+   */
+  workingDir?: string;
+  /**
    * 斜杠命令回调（对齐参考项目：/new /clear 等命令可执行）
    *
    * 点击带 action 的建议项时触发（不填充文本）；父组件实现具体动作。
@@ -133,6 +138,7 @@ export function ChatInput({
   value: controlledValue,
   onValueChange,
   chatId,
+  workingDir,
   onSlashCommand,
 }: ChatInputProps): ReactElement {
   // 本地化文案
@@ -186,25 +192,98 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   };
 
-  // ── 斜杠建议状态（对齐参考项目 useSlashSuggest 交互）──
-  // 输入以 / 开头且当前段无空格时显示建议下拉
-  const slashPrefix = value.startsWith('/') && !value.includes(' ') ? value : null;
+  // ── 斜杠/提及建议状态（照搬参考项目 useSlashSuggest：支持任意位置触发，取位置靠后者）──
+  // 触发条件：查询段无空格；slash 1-20 字符、mention ≤30 字符（允许空串）
+  const slashIndex = value.lastIndexOf('/');
+  const atIndex = value.lastIndexOf('@');
+  const slashQuery = slashIndex >= 0 ? value.slice(slashIndex + 1) : null;
+  const mentionQuery = atIndex >= 0 ? value.slice(atIndex + 1) : null;
+  const slashActive =
+    slashIndex > atIndex &&
+    slashQuery !== null &&
+    slashQuery.length <= 20 &&
+    !slashQuery.includes(' ');
+  const mentionActive =
+    atIndex > slashIndex &&
+    mentionQuery !== null &&
+    mentionQuery.length <= 30 &&
+    !mentionQuery.includes(' ');
+  const activeTrigger = slashActive ? 'slash' : mentionActive ? 'mention' : null;
+  const activeQuery = activeTrigger === 'slash' ? slashQuery : mentionQuery;
+
+  // slash 建议：内置命令过滤
   const filteredSuggestions =
-    slashPrefix !== null ? SLASH_SUGGESTIONS.filter((s) => s.command.startsWith(slashPrefix)) : [];
-  const slashOpen = slashPrefix !== null && filteredSuggestions.length > 0;
+    activeTrigger === 'slash' && activeQuery !== null
+      ? SLASH_SUGGESTIONS.filter((s) => s.command.startsWith(activeQuery))
+      : [];
+
+  // mention 建议：search.glob 按查询过滤（200ms 防抖，对齐参考项目防抖约定）
+  const [mentionFiles, setMentionFiles] = useState<string[]>([]);
+  const mentionSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (mentionSearchTimerRef.current !== null) {
+      clearTimeout(mentionSearchTimerRef.current);
+      mentionSearchTimerRef.current = null;
+    }
+    if (activeTrigger !== 'mention' || workingDir === undefined) {
+      setMentionFiles([]);
+      return;
+    }
+    // 防抖后调 glob（浏览器模式无 window.api 时静默清空）
+    mentionSearchTimerRef.current = setTimeout(() => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        setMentionFiles([]);
+        return;
+      }
+      void window.api.search
+        .glob({
+          pattern: `**/*${activeQuery ?? ''}*`,
+          path: workingDir,
+          includeHidden: false,
+          maxResults: 10,
+        })
+        .then((res) => {
+          if ('data' in res && res.data !== undefined) {
+            setMentionFiles([...res.data.files]);
+          }
+        })
+        .catch(() => {
+          setMentionFiles([]);
+        });
+    }, 200);
+    return () => {
+      if (mentionSearchTimerRef.current !== null) {
+        clearTimeout(mentionSearchTimerRef.current);
+      }
+    };
+  }, [activeTrigger, activeQuery, workingDir]);
+
+  const mentionOpen = activeTrigger === 'mention' && mentionFiles.length > 0;
+  const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
+  // 统一建议面板开关（两者互斥，取靠后者触发）
+  const suggestOpen = slashOpen || mentionOpen;
 
   /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
   const applySuggestion = (command: string): void => {
     // 带 action 的命令：执行动作（对齐参考项目），不填充文本
     const suggestion = SLASH_SUGGESTIONS.find((s) => s.command === command);
     if (suggestion?.action !== undefined) {
-      // 清空输入（slashOpen 派生自输入值，自动关闭建议面板）
+      // 清空输入（suggestOpen 派生自输入值，自动关闭建议面板）
       setValue('');
       autoResize();
       onSlashCommand?.(suggestion.action);
       return;
     }
     setValue(command);
+    autoResize();
+    textareaRef.current?.focus();
+  };
+
+  /** 应用提及建议：替换当前 @查询 为 @完整路径 */
+  const applyMention = (filePath: string): void => {
+    if (atIndex < 0) return;
+    const next = `${value.slice(0, atIndex)}@${filePath} `;
+    setValue(next);
     autoResize();
     textareaRef.current?.focus();
   };
@@ -440,19 +519,23 @@ export function ChatInput({
       onStop();
       return;
     }
-    // 斜杠建议展开时：Tab/Enter 应用建议，Esc 关闭
-    if (slashOpen && filteredSuggestions.length > 0) {
-      const firstSuggestion = filteredSuggestions[0];
+    // 斜杠/提及建议展开时：Tab/Enter 应用建议，Esc 关闭（对齐参考项目键盘优先级）
+    if (suggestOpen) {
+      const firstSuggestion = slashOpen ? filteredSuggestions[0] : undefined;
+      const firstMention = mentionOpen ? mentionFiles[0] : undefined;
       if (event.key === 'Tab' || event.key === 'Enter') {
         if (firstSuggestion !== undefined) {
           event.preventDefault();
           applySuggestion(firstSuggestion.command);
+        } else if (firstMention !== undefined) {
+          event.preventDefault();
+          applyMention(firstMention);
         }
         return;
       }
       if (event.key === 'Escape') {
         event.preventDefault();
-        // 关闭建议：清空斜杠输入（当前整个值即斜杠前缀）
+        // 关闭建议：清空斜杠/提及输入
         setValue('');
         return;
       }
@@ -489,26 +572,42 @@ export function ChatInput({
           el.style.height = `${next}px`;
         }}
       />
-      {/* 斜杠建议下拉（输入以 / 开头时显示，对齐参考项目 useSlashSuggest） */}
-      {slashOpen && (
+      {/* 斜杠/提及建议下拉（照搬参考项目 useSlashSuggest：/ 命令 + @ 文件，位置靠后者触发） */}
+      {suggestOpen && (
         <div
           role="listbox"
           aria-label={t('chat.slashCommand')}
-          className="bg-popover text-popover-foreground absolute right-0 bottom-full z-10 mb-2 w-56 overflow-hidden rounded-md border shadow-md"
+          className="bg-popover text-popover-foreground absolute right-0 bottom-full z-10 mb-2 w-72 overflow-hidden rounded-md border shadow-md"
         >
-          {filteredSuggestions.map((s) => (
-            <button
-              key={s.command}
-              type="button"
-              role="option"
-              onClick={() => applySuggestion(s.command)}
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
-            >
-              <Slash className="text-muted-foreground size-3.5 shrink-0" />
-              <span className="font-mono text-xs">{s.command}</span>
-              <span className="text-muted-foreground ml-auto text-xs">{t(s.labelKey)}</span>
-            </button>
-          ))}
+          {slashOpen &&
+            filteredSuggestions.map((s) => (
+              <button
+                key={s.command}
+                type="button"
+                role="option"
+                onClick={() => applySuggestion(s.command)}
+                className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
+              >
+                <Slash className="text-muted-foreground size-3.5 shrink-0" />
+                <span className="font-mono text-xs">{s.command}</span>
+                <span className="text-muted-foreground ml-auto text-xs">{t(s.labelKey)}</span>
+              </button>
+            ))}
+          {mentionOpen &&
+            mentionFiles.map((filePath) => (
+              <button
+                key={filePath}
+                type="button"
+                role="option"
+                onClick={() => applyMention(filePath)}
+                className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
+              >
+                <FileText className="text-muted-foreground size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs" title={filePath}>
+                  {filePath}
+                </span>
+              </button>
+            ))}
         </div>
       )}
       {/* 附件 chip 列表（对齐参考项目 ChatInputAttachments） */}

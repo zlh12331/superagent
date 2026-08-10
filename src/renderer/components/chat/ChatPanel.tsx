@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
+import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -125,6 +126,8 @@ export function ChatPanel({
 }: ChatPanelProps): ReactElement {
   // 路由导航（斜杠命令 /new 回欢迎页）
   const navigate = useNavigate();
+  // 快捷键帮助对话框（/help 斜杠命令触发；对齐参考项目：命令即时执行而非 toast）
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   // 中断提示条关闭状态（会话内关闭后不再显示）
   const [interruptedDismissed, setInterruptedDismissed] = useState(false);
   // 错误码 → 本地化文案 hook
@@ -316,8 +319,9 @@ export function ChatPanel({
         <ChatInput
           status={status}
           chatId={chatId}
+          workingDir={workingDir}
           onSlashCommand={(action) => {
-            // 斜杠命令执行（对齐参考项目）：/new 回欢迎页新建，/clear 清空对话
+            // 斜杠命令执行（对齐参考项目）：/new 回欢迎页新建，/clear 清空对话，/help 打开快捷键帮助
             switch (action) {
               case 'new':
                 navigate('/');
@@ -326,10 +330,13 @@ export function ChatPanel({
                 // 清空对话（AI SDK v7 无 clearMessages，用 setMessages([])）
                 setMessages([]);
                 break;
+              case 'help':
+                // 即时打开快捷键帮助对话框（照搬参考项目 /help 行为）
+                setShortcutHelpOpen(true);
+                break;
               case 'models':
               case 'compact':
-              case 'help':
-                // 模型选择/压缩/帮助：toast 引导（完整链路后续增强）
+                // 模型选择/压缩：toast 引导（完整链路后续增强）
                 toast.info(t(`chat.slashAction.${action}`));
                 break;
             }
@@ -377,6 +384,8 @@ export function ChatPanel({
           </span>
         </div>
       </footer>
+      {/* 快捷键帮助对话框（/help 触发） */}
+      <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
     </div>
   );
 }

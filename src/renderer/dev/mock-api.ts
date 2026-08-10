@@ -550,7 +550,26 @@ function createMockApi(): IpcApi {
     },
     search: {
       grep: async () => ok({ matches: [] }),
-      glob: async () => ok({ paths: [] }),
+      glob: async ({ pattern }: Req<IpcApi['search']['glob']>) => {
+        // 模拟文件匹配（@ 文件补全用）：按查询子串过滤假文件清单
+        const query = pattern
+          .replace(/^\*\*\/\*/, '')
+          .replace(/\*$/, '')
+          .toLowerCase();
+        const files = [
+          'src/renderer/App.tsx',
+          'src/renderer/main.tsx',
+          'src/renderer/index.css',
+          'src/renderer/router.tsx',
+          'src/renderer/components/chat/ChatInput.tsx',
+          'src/renderer/components/chat/ChatPanel.tsx',
+          'src/renderer/components/layout/AppShell.tsx',
+          'package.json',
+          'README.md',
+          'electron.vite.config.ts',
+        ].filter((f) => f.toLowerCase().includes(query));
+        return ok({ files, truncated: false });
+      },
     },
     codebase: {
       query: async () => ok({ results: [] }),
