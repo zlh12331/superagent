@@ -27,7 +27,8 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -146,8 +147,35 @@ function ThreadItem({
   const { t } = useTranslation();
   // 内联重命名状态（双击标题或更多菜单触发；对齐参考项目 ThreadItem 内联重命名）
   const [renaming, setRenaming] = useState(false);
+  // 右键菜单位置（照搬参考项目 ThreadContextMenu：fixed 定位 + clamp）
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  // 右键菜单 ref（外部 mousedown 关闭判定）
+  const ctxMenuRef = useRef<HTMLDivElement | null>(null);
   // 重命名提交（useRenameSession：mutation + invalidate 自动刷新列表）
   const { mutateAsync: renameSession } = useRenameSession();
+
+  // 外部 mousedown / Escape 关闭右键菜单（参考项目 bug 修复：检查 e.defaultPrevented，
+  // 避免刚打开的新菜单被同一次交互的关闭监听吞掉）
+  useEffect(() => {
+    if (ctxMenu === null) return;
+    const handleMouseDown = (e: MouseEvent): void => {
+      if (e.defaultPrevented) return;
+      if (ctxMenuRef.current !== null && !ctxMenuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        setCtxMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [ctxMenu]);
 
   /** 提交重命名：空值/未变化时直接退出编辑态 */
   const commitRename = (next: string): void => {
@@ -174,6 +202,14 @@ function ThreadItem({
       className={cn('thread-item', isActive && 'active')}
       onClick={onSelect}
       onDoubleClick={() => setRenaming(true)}
+      onContextMenu={(event) => {
+        // 右键菜单（照搬参考项目 ThreadContextMenu：fixed 定位 + 视口 clamp）
+        event.preventDefault();
+        setCtxMenu({
+          x: Math.min(event.clientX, window.innerWidth - 200),
+          y: Math.min(event.clientY, window.innerHeight - 200),
+        });
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
@@ -277,6 +313,55 @@ function ThreadItem({
           </DropdownMenu>
         </div>
       </div>
+      {/* 右键菜单（照搬参考项目 ThreadContextMenu：fixed 定位 + clamp + danger 样式）
+          createPortal 到 body：dnd-kit 的 transform 容器会破坏 fixed 定位（creating block） */}
+      {ctxMenu !== null &&
+        createPortal(
+          <div
+            ref={ctxMenuRef}
+            className="bg-popover text-popover-foreground fixed z-[var(--z-drawer)] min-w-[160px] rounded-lg border p-1 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            role="menu"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
+              onClick={() => {
+                onTogglePin();
+                setCtxMenu(null);
+              }}
+            >
+              <Pin className="size-3.5" strokeWidth={1.5} />
+              {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
+              onClick={() => {
+                setRenaming(true);
+                setCtxMenu(null);
+              }}
+            >
+              <Pencil className="size-3.5" strokeWidth={1.5} />
+              {t('sidebar.rename')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="text-error hover:bg-error/10 flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
+              onClick={() => {
+                onDelete();
+                setCtxMenu(null);
+              }}
+            >
+              <Trash2 className="size-3.5" strokeWidth={1.5} />
+              {t('sidebar.deleteSession')}
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
