@@ -1,710 +1,409 @@
 # 前端交互与数据链路规格说明（09）
 
-> 依据 `src/renderer/` 全部代码 + `src/main/ipc/*` + `packages/shared/src/ipc/meta.ts` 逐文件核实整理
-> 整理时间：2026-08-09 ｜ 覆盖：页面布局 / 组件状态与事件 / 交互流程 / 数据链路 / 逐文件完整性
-> 诚实原则：所有条目均来自实际代码；不存在的功能标注"占位 / 部分实现 / 不适用"，绝不编造。
+> 依据 `src/renderer/` 全部代码、`src/main/ipc/` 的处理器、`packages/shared/src/ipc/meta.ts` 的通道定义逐文件核实整理。
+> 整理时间：2026-08-10。
+> 这份文档回答一个问题：这个软件的前端目前真实是怎么工作的。页面怎么摆、组件有什么状态、操作之后会发生什么、数据从哪来到哪去，全部逐条对应实际代码；没有的功能明确标注"占位 / 部分实现 / 不适用"，不编造。
 
 ## 0. 文档定位说明
 
-### 0.1 与现有设计文档的分工
+### 0.1 这份文档和现有设计文档的分工
 
-| 文档 | 视角 | 回答的问题 |
-|---|---|---|
-| `04-interface-design.md` | 主进程/契约 | IPC 通道清单（74 通道）、preload `window.api` 形状、zod schema——**接口长什么样** |
-| `05-functional-design.md` | 需求/设计意图 | 按功能域描述需求、模块职责、设计决策——**产品想要什么** |
-| `03-directory-structure.md` | 工程组织 | 目录分层与命名约定——**代码放在哪** |
-| **本文档（09）** | **渲染层实现态** | 每个页面怎么排布、每个组件有哪些状态/事件/转换、每个功能从点击到数据落库的完整链路——**实际是怎么跑的** |
+项目里已有几份设计文档。04 号"接口设计文档"讲的是 IPC 接口契约——有哪些通道、参数长什么样，回答"接口是什么样"；05 号"功能设计文档"讲的是需求与设计意图——每个功能想做什么，回答"产品想要什么"；03 号"目录结构"讲代码放哪。这份 09 号文档不一样，它讲的是"实际是怎么跑的"：从渲染层代码出发，把每个页面的布局、每个组件的状态变化、每个功能从点击到数据落库的完整过程写出来。凡与 05 号文档冲突的地方，以这份文档（也就是代码本身）为准，冲突点都已显式标注。
 
-一句话：04 讲 IPC 契约，05 讲功能设计，本文讲"渲染层代码当前的真实行为"（实现态说明书）。凡与 05 冲突之处，以本文（= 代码）为准，冲突点均显式标注。
+### 0.2 候选文件名
 
-### 0.2 候选文件名（待确认）
+当前文件名为 `09-ux-interaction-spec.md`（UX 交互规格）。备选还有 `09-frontend-interaction-dataflow.md`（前端交互与数据流）和 `09-frontend-system-manual.md`（前端系统说明书），最终名字由你确认。旧的 `08-ux-guidelines.md`（风格指南）未做处理，是保留、改名还是删除，同样等你确认。
 
-1. **`09-ux-interaction-spec.md`（本文当前名，推荐）**——UX 交互规格：布局 + 状态机 + 流程 + 数据链路
-2. `09-frontend-interaction-dataflow.md`——强调交互与数据流双主线
-3. `09-frontend-system-manual.md`——"前端系统说明书"风格
+### 0.3 阅读前需要知道的几个约定
 
-> 旧 `08-ux-guidelines.md`（风格指南）未删除，是否保留/重命名/删除由你确认。
+为了讲数据链路，需要先认识渲染层的四层状态组织方式。第一层是组件自己内部用 useState 管的临时状态，比如输入框的文字；第二层是全局共享的 Zustand 状态仓库，其中带"持久化"的一类会存进 localStorage、重启还在（设置、草稿、激活会话），不带持久化的一类只在本次运行里有效（文件树、工具调用记录、审批队列等）；第三层是 TanStack Query，专门管"向主进程请求一次拿结果"的数据，带缓存和自动重试；第四层是主进程主动推送的事件，前端订阅后直接写进第二层的仓库。后面提到"第几层"，都是指这四层。
 
-### 0.3 阅读约定
-
-- 状态分层代称：**L1** 组件内 useState ｜ **L2** Zustand（persistent/ 跨重启、transient/ 会话内）｜ **L3** TanStack Query ｜ **L4** IPC 事件推送（subscribe → 写 L2 store）
-- IPC 通道名一律引用 [meta.ts](../../packages/shared/src/ipc/meta.ts)（25 域，单一真源）
-- 主进程服务由 [service-container.ts](../../src/main/service-container.ts) 统一持有（Agent/Chat/File/Search/Terminal/Git/Codebase/Session/MCP/Permission/IM/Update…），dispose 顺序按反向依赖
-- 渲染层入口链：`main.tsx → App → AppErrorBoundary → AppProviders(I18n→Theme→Query→Tooltip→Toaster) → RouterProvider`
-
----
+数据要从渲染层到主进程，走的是 preload 桥接层暴露的 window.api 对象，最终落到一个个 IPC 通道上，通道名统一在 `packages/shared/src/ipc/meta.ts` 里定义，一共 25 个域。主进程侧所有服务由 `src/main/service-container.ts` 统一管理，应用退出时按依赖反序逐个清理。
 
 ## 一、页面布局
 
-### 1.1 全局布局框架（AppShell）
+这一部分逐个介绍软件里的每一个界面。每个界面先画一张示意图，再用文字把布局讲清楚。
 
-实现：[AppShell.tsx](../../src/renderer/components/layout/AppShell.tsx) + [globals.css](../../src/renderer/styles/globals.css) `.view-chat`
+### 1.1 整体框架（AppShell）
 
 ```
-┌──────────────── topbar 52px（--topbar-h，玻璃质感）────────────────┐
+┌──────────────── 顶部栏 topbar（52px 高，半透明玻璃质感）────────────────┐
 ├─────────┬───┬───────────────────────┬───┬─────────────────────────┤
-│ sidebar │ R │  main（thread-bg）    │ R │   right-panel           │
-│ clamp   │ 6 │  HomePage / ChatPage  │ 6 │   DevPanel（6 tab）     │
-│ 200-400 │px │  （welcome-mode 时    │px │   clamp 260-360         │
-│ (17vw)  │   │   居中 flex 布局）    │   │   (22vw)                │
+│ 侧栏    │ R │  主内容区             │ R │  右面板                 │
+│ sidebar │ 6 │  欢迎页 / 聊天页      │ 6 │  会话详情/文件变更/文件/ │
+│ 宽200-  │px │  （欢迎模式时居中）   │px │  浏览器/终端/开发者      │
+│ 400px   │   │                       │   │  宽260-360px            │
 └─────────┴───┴───────────────────────┴───┴─────────────────────────┘
-   R = resizer（可拖拽分隔线，tabIndex=0 + aria-valuenow）
+   R = 可拖拽的分隔线（宽 6px，键盘可聚焦）
 ```
 
-- **栅格**：`.app` 两行（topbar + body）；`.view-chat` 五列 grid（sidebar｜resizer｜main｜resizer｜right-panel）；宽度默认 `clamp()` 响应式，拖拽后由 JS 写入 CSS 变量 `--aurora-sidebar-w` / `--aurora-right-panel-w` 覆盖。
-- **拖拽范围**：侧栏 [200, 400]px（`SIDEBAR_WIDTH_MIN/MAX`）、右面板 [260, 360]px（`RIGHT_PANEL_WIDTH_MIN/MAX`），见 [layout-utils.ts](../../src/renderer/components/layout/layout-utils.ts)。
-- **折叠态**：`sb-collapsed` / `crp-collapsed` 类使 grid 列塌缩为 0；入口在顶栏两按钮 + 右面板竖条 `crp-collapse-btn`。
-- **断点联动**：`useLayoutBreakpoint` 监听两档媒体查询——<1200px 自动折叠右面板（`isCompact`）、<900px 自动折叠侧栏（`isNarrow`）；**用户手动切换后（manualRef 置位）断点不再覆盖手动意图**。
-- **滚动区域**：主内容 `main#main-content`（供"跳过导航"锚点）、侧栏列表区、右面板内容区各自独立 `overflow`；主区无滚动条（子组件内部滚动）。
-- **欢迎页模式**：`welcome-mode` class 下右面板与右 resizer 隐藏，主区改居中 flex。
-- **窗口控件避让**：设置页头部右侧预留 140px `app-region-drag` 透明拖拽区，不遮挡系统关闭/最小化按钮；Topbar 由系统标题栏 overlay 承载（`titleBarOverlay`，见主进程 window 配置）。
-- **z-index 档位**：dropdown 50 < context-menu 100 < modal-backdrop 1000 < drawer 1500 < modal 2000 < toast 10000 < overlay 15000（命令面板/设置 Sheet）< toast-stack 20000 < boundary 30000（错误边界/调试面板）。新增浮层必须复用档位。
+整个窗口是两行布局：上面一行是顶部栏，固定 52 像素高；下面一行是主体，分成五列——侧栏、左分隔线、主内容区、右分隔线、右面板。各列宽度默认按窗口大小比例自动算（侧栏约占 17%，右面板约占 22%），但用户可以直接拖中间的分隔线来改宽度，拖拽范围侧栏限制在 200 到 400 像素，右面板限制在 260 到 360 像素。拖的时候整个界面会加上一个"拖拽中"的样式，松手结束。
 
-### 1.2 欢迎页（`/`）
+侧栏和右面板都能折叠。折叠后对应列宽度变零，入口在顶部栏的两个按钮，右面板自己边缘上还有一个细长的折叠按钮。窗口宽度小于 1200 像素时右面板自动折叠，小于 900 像素时侧栏自动折叠；但如果用户手动展开过某个面板，自动折叠就不会再覆盖用户的意图。
 
-实现：[home.tsx](../../src/renderer/routes/home.tsx)（懒加载，路由 index）
+滚动方面：主内容区、侧栏列表、右面板各自独立滚动。主内容区带一个"主内容"锚点，配合键盘用户"跳过导航"的链接使用。
 
-```
-┌──────────────────────── 主区（居中，max-width 720px）────────────────────────┐
-│  welcome-view：品牌大字 ⟨/⟩ Code with TRAE                                  │
-│  ┌────────────────────────── composer ──────────────────────────┐           │
-│  │  ChatInput（透明背景）                                        │           │
-│  │  composer-project-bar：[📁 项目名 ▾]  [模型选择器]            │           │
-│  └──────────────────────────────────────────────────────────────┘           │
-│  welcome-quick-actions：4 个快捷 pill（应用开发/项目理解/点子/工具知识）       │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+顶部栏用的是半透明玻璃质感（背景模糊），底部有一条青蓝渐变的发光细线。窗口右上角的系统关闭、最小化按钮区域，在设置全屏页里预留了 140 像素宽的透明拖拽区避让，不会遮挡。
 
-- 四层结构：welcome-view（品牌）+ composer（输入舱 + project-bar）+ quick-actions；welcome-mode 之外默认隐藏。
-- folder dropdown：历史目录列表（相对时间）+「未选择项目」+「浏览其他目录…」（原生选择器）；无历史目录时显示空态文案。
-- 空态：无历史目录 → `fdm-empty` 文案；发送时无 workingDir → toast + 自动展开 dropdown。
+浮层的层级从低到高依次是：下拉菜单、右键菜单、模态遮罩、抽屉、模态对话框、Toast 通知、全局覆盖层（命令面板和设置页用这一档）、最高优先级通知堆栈、错误边界全屏层。新做的浮层必须复用这些档位，不能自己随便定数字。
 
-### 1.3 聊天主页面（`/chat/:sessionId`）
+### 1.2 欢迎页
 
-实现：[chat.tsx](../../src/renderer/routes/chat.tsx) + [ChatPanel.tsx](../../src/renderer/components/chat/ChatPanel.tsx)
+欢迎页是应用启动后没有激活会话时显示的主界面，路由是 `/`。
 
 ```
-┌ thread-status-bar：项目 basename · [🔍] · 状态点+状态字 · token 用量 ┐
-├ 限流横幅（RateLimitBanner，429 时）／ 中断提示条（崩溃恢复）／ 内联审批卡 ┤
-├ 会话内搜索栏（ConversationSearchBar，打开时）                         ┤
-├ 消息列表（滚动区 + 导航轨 ≥4 条 + scroll-to-bottom 按钮）             ┤
-├ footer.composer：ChatInput + composer-project-bar + composer-stats-bar ┤
-└  stats-bar：状态 · 消息数 · Token                                       ┘
+┌──────────────── 主内容区（居中，最大宽 720px）────────────────┐
+│  品牌区：⟨/⟩ Code with TRAE                                  │
+│  ┌────────────── 输入舱 ──────────────┐                       │
+│  │  消息输入框                        │                       │
+│  │  项目选择条：[📁 项目名 ▾] [模型]  │                       │
+│  └────────────────────────────────────┘                       │
+│  快捷动作：应用开发 / 项目理解 / 创意点子 / 工具知识（4 个）    │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-- 路由守卫：`sessionId` 缺失 → 重定向首页；`useSessionDetail` loading → 居中"加载中"；会话不存在 → 重定向首页；`workingDir === ''` → "会话加载异常"错误态。
-- `interrupted={lastRunStatus === 'interrupted'}` 驱动顶部 amber 中断提示条（可关闭，会话内不重复）。
-- 状态条 `role="status"`：`READY / RUNNING / THINKING / ERROR / IDLE`（流式时 accent 色 + 脉冲点）；token 用量悬浮显示 input/output/total 明细。
+欢迎页自上而下有四块。第一块是品牌区，显示产品名；第二块是居中的输入舱，里面是消息输入框；第三块是输入舱下方的项目选择条，左边是"项目名"下拉按钮，点击弹出历史项目列表（带相对时间）、"未选择项目"选项和"浏览其他目录…"入口（会打开系统原生目录选择框），右边是模型选择器；第四块是四个快捷动作胶囊，点击会把对应的示例提示词填进输入框（不会自动发送，用户可以改完再回车）。如果没有任何历史项目，下拉里会显示"暂无最近目录"的空提示。发送消息时如果还没选项目，会弹一个"请选择项目"的提示并自动展开项目下拉，而不是弹原生对话框。
+
+### 1.3 聊天主页面
+
+聊天页是历史会话的界面，路由是 `/chat/会话id`。
+
+```
+┌ 状态条：项目名 · [搜索] · 状态点+状态文字 · token 用量 ┐
+├ 限流横幅（遇到 429 限流时出现）／ 中断提示条（崩溃恢复后出现）／ 审批卡片 ┤
+├ 会话内搜索栏（点搜索后出现）                              ┤
+├ 消息列表（可滚动；右侧有点状导航轨；底部有"回到最新"按钮）┤
+├ 输入舱（输入框 + 拖拽手柄 + 工具栏）                      ┤
+├ 输入舱底条：项目名(只读) · 模型选择                        ┤
+└ 统计条：状态 · 消息数 · Token                              ┘
+```
+
+从上到下分四段。第一段是状态条，左边显示当前项目的名字（只取最后一段目录名，溢出省略），中间有一个搜索按钮和状态指示（一个小圆点加 READY / RUNNING / THINKING / ERROR / IDLE 这些文字，生成中圆点会脉冲跳动、文字变青色），右边显示本会话累计的 token 用量，鼠标悬停可以看到输入、输出、总计的明细。状态条下面会根据情况出现几种横条：限流横幅（收到 429 错误时出现，5 分钟内有效，可手动关闭）、中断提示条（上次会话异常中断时出现，比如应用崩溃过，可关闭）、审批卡片（有工具操作等待批准时出现）。
+
+第二段是消息列表，占中间大部分空间，独立滚动。用户不在底部时，右下角会出现"回到最新"按钮，新消息到达时按钮会带红点；消息条数达到 4 条以上时，右侧会出现点状的导航轨，点击某个点会跳到对应消息。第三段是输入舱，包括多行输入框、高度拖拽手柄和工具栏（附件、斜杠命令按钮、快捷键提示、字符计数、发送/停止按钮）。第四段是输入舱底部的两条小条：项目名和模型选择（对话中项目只读）、状态与消息数与 token 统计。
+
+进入聊天页时，如果从地址栏直接访问了一个不存在的会话 id，会被重定向回首页；会话还在加载中时显示"加载中"；会话数据异常（工作目录为空）时显示"会话加载异常"。
 
 ### 1.4 设置全屏页
 
-实现：[SettingsDialog.tsx](../../src/renderer/components/settings/SettingsDialog.tsx)
+设置页不是一个独立路由，而是从顶部栏、快捷键、命令面板等入口打开的全屏覆盖层。
 
 ```
-┌ 头部：[← 返回]  ⚙ 设置 · 描述    （右 140px 拖拽避让区）           ┐
-├ 左导航 160px（5 组 15 项，tablist + ↑↓ 循环） │ 右内容区（滚动）   ┤
-└ 组：账户与通用 / 能力 / 智能与行为 / 实验 / 关于                      ┘
+┌ 头部：[← 返回]  设置标题·说明      （右侧 140px 透明拖拽避让区）┐
+├ 左导航（宽 160px）：5 个分组 15 个条目                         ┤
+├ 右内容区（滚动）                                               ┤
+└ 分组：账户与通用 / 能力 / 智能与行为 / 实验 / 关于               ┘
 ```
 
-- 分区：账号(占位)/用量/通用/移动端(占位+IM)/模型服务/MCP/技能/插件(占位)/hooks(占位)/浏览器(说明页)/工作树/命令(占位)/规则与记忆/实验/关于。
-- 打开时重置到「模型服务」分区；每个 pane 独立 SectionErrorBoundary。
-- 默认分区 `models`；导航激活态 = accent 2px 左竖条 + `text-foreground font-medium`。
+左边是导航栏，分成五组：账户与通用（账号、用量、通用、移动端）、能力（模型服务、MCP、技能、插件、hooks、浏览器、工作树）、智能与行为（命令、规则与记忆）、实验、关于。选中的条目有青色竖条和加粗文字标识。支持键盘上下方向键在条目间循环移动。右边是内容区，随导航切换显示对应内容，每个分区都包了独立错误边界，某一块崩溃只影响它自己。每次打开设置页都会重置到"模型服务"分区，避免停留在上次的深层位置。
 
-### 1.5 右面板（DevPanel）
+### 1.5 右面板
 
-实现：[DevPanel.tsx](../../src/renderer/components/layout/DevPanel.tsx) + [right-panel-panes.tsx](../../src/renderer/components/layout/right-panel-panes.tsx)
+右面板常驻在主内容区右侧，顶部是一排六个标签，均分宽度：会话详情、文件变更、文件、浏览器、终端、开发者。
 
-```
-┌ 标题栏：6 tab 均分（会话详情/文件变更/文件/浏览器/终端/开发者）┐
-├ 内容区（懒加载：终端 xterm ~200KB、浏览器 iframe 切到才加载） ┤
-└ 开发者 tab 内再分 4 子视图：Git / 日志 / 指标 / 检查器          ┘
-```
+会话详情页展示当前会话的目标列表（可清除）、计划待办列表、以及本次对话读过的文件引用列表。文件变更页展示本轮对话里改过的文件（编辑和写入工具调用的记录），每条可以展开看双栏 diff。文件页展示最近修改过的文件，点击会打开文件查看器。浏览器页是一个内嵌的 iframe 预览工具，有地址栏、后退前进刷新和设备尺寸预设。终端页是真实终端（xterm 渲染，底层是主进程的 PTY 进程），每个会话一个独立终端实例，切到该标签时才加载（体积大所以懒加载）；终端退出后输出保留并标记"已结束"。开发者标签里还有四个子视图：Git（只读）、日志（可过滤级别和行数）、指标（每 10 秒自动刷新）、检查器（一键打开 DevTools，支持三种停靠位置）。
 
-- 会话详情 InfoPane：目标列表（goal:list + 清除 ×）、计划待办（task:list）、引用文件（read_file 调用去重）。
-- 文件变更 DiffPane：tool-store 中 edit_file/write_file 记录 → UnifiedDiffView 双栏。
-- 文件 FilesPane：最近修改文件 → 点击开 FileViewerDialog。
-- 终端 TerminalPanel：每会话一个 PTY；输出直写 xterm；退出后保留输出标「已结束」。
-- 开发者子视图：GitPanel（只读）、LogsPanel（级别过滤 + 行数 + 刷新）、MetricsPanel（10s 自动刷新）、InspectorPanel（DevTools 三种停靠模式）。
-- 空态：Git 干净 →「无变更」；浏览器未加载 URL → 提示输入地址；日志/指标无数据 → 骨架。
+### 1.6 文件树面板
 
-### 1.6 文件树面板（侧栏视图）
-
-实现：[FileTreePanel.tsx](../../src/renderer/components/file-tree/FileTreePanel.tsx) + [FileTreeNode.tsx](../../src/renderer/components/file-tree/FileTreeNode.tsx)
+文件树不是独立的页面，而是侧栏里的一种视图，可以从会话项上的文件夹按钮或命令面板切换过去。
 
 ```
-┌ 头部：[← 返回] 文件树  [🔄 刷新]            ┐
-├ 工具栏：[新建文件] [新建目录]（root 下）      ┤
-├ 树：目录（▸ 展开箭头 + 图标 + 名称）         ├
-│     文件（📄 名称，点击打开查看器）           │
-└ 节点 hover 显示 [⋯ 更多]（新建/重命名/删除/复制路径） ┘
+┌ 头部：[← 返回] 文件树  [🔄 刷新]       ┐
+├ 工具栏：[新建文件] [新建目录]           ┐
+├ 树：目录行（箭头+图标+名称，可展开折叠）├
+│     文件行（图标+名称，点击打开查看器） ┘
 ```
 
-- 无激活会话 → 空态（"未选择项目"）；rootPath 未就绪 → "加载中"。
-- 内联编辑：新建/重命名以行内 input 替换名称（Enter 提交 / Esc 取消 / blur 提交）。
-- 查看器内还有轻量只读导航 FileTreeNavigator（react-arborist，受控 data + onToggle 懒加载）。
+头部有返回会话列表按钮和手动刷新按钮。工具栏可以在根目录新建文件或目录。树节点按"目录在前、文件在后、名称排序"排列，目录点击箭头展开折叠（首次展开才去请求子目录），文件点击打开查看器。鼠标悬停在节点上会出现"更多"按钮，菜单里有新建文件、新建目录、重命名、删除、复制路径。新建和重命名都是行内编辑：名字位置直接变成一个输入框，回车确认、Esc 取消。没有激活会话时，显示"未选择项目"的空态；文件树还在加载时显示"加载中"。文件查看器内部还有一个轻量的只读文件导航（只负责切换查看的文件）。
 
-### 1.7 文件查看器对话框（FileViewerDialog）
+### 1.7 文件查看器对话框
 
-实现：[FileViewerDialog.tsx](../../src/renderer/components/file-tree/FileViewerDialog.tsx)
+点击文件树里的文件后弹出的对话框。
 
 ```
-┌ 头部：路径面包屑 · 行数 · [复制] [编辑/保存] [关闭] ┐
-├ 主体：只读 = shiki 高亮；编辑 = textarea 透明 + shiki 叠加高亮 ┤
-└ 左侧（可选）：FileTreeNavigator 轻量导航                    ┘
+┌ 头部：文件路径面包屑 · 行数 · [复制] [编辑/保存] [关闭] ┐
+├ 主体：只读模式显示语法高亮；编辑模式是透明文字的文本框叠加高亮 ┤
+└ 左侧可带一个轻量文件导航（可选）                         ┘
 ```
 
-- 状态：只读 / 编辑；脏数据（isDirty）时关闭需确认；`Ctrl+S` 保存。
-- 打开/关闭受控于 file-viewer-store（open + filePath + 编辑态 + 内容缓存，卸载不丢）。
+默认是只读模式，用 shiki 做语法高亮，深浅色主题自动跟随全局。点"编辑"进入编辑模式，用透明文字文本框叠加高亮的方式实现（没有引入重型编辑器）。编辑过程中如果内容有改动，关闭时会先弹确认，防止丢失未保存内容；Ctrl+S 保存，保存成功后内容缓存会刷新。路径栏显示文件路径、行数，有复制按钮。
 
-### 1.8 命令面板（CommandPalette）
+### 1.8 命令面板
 
-实现：[CommandPalette.tsx](../../src/renderer/components/common/CommandPalette.tsx)
+命令面板是全局搜索框，按 Ctrl+P 或点顶部栏的文字胶囊打开。
 
 ```
-┌ palette-overlay（z-overlay 15000，点击遮罩关闭）┐
-├ [🔍 输入]                                        ├
-├ 分组结果：操作 / 文件(≤50) / 会话(≤20)           ├
-├ 空结果：无匹配结果                               ├
-└ 底部 kbd 提示：↑↓ 导航 · ⏎ 选择 · esc 关闭       ┘
+┌ 遮罩层（点空白处关闭）                    ┐
+├ [🔍 搜索输入框]                           ├
+├ 分组结果：操作 / 文件 / 会话              ├
+├ 无匹配时显示"无匹配结果"                  ├
+└ 底部提示：↑↓ 导航 · 回车 选择 · esc 关闭 ┘
 ```
 
-### 1.9 快捷键帮助对话框（ShortcutHelpDialog）
+输入关键字后做模糊搜索（容忍拼写和顺序差异），结果分三组：操作（新建会话、切换主题、打开设置、切换文件树视图）、文件（来自当前文件树，最多 50 条）、会话（最近会话，最多 20 条，限制数量防止列表过长）。键盘上下选择、回车执行、Esc 或点遮罩关闭。
 
-实现：[ShortcutHelpDialog.tsx](../../src/renderer/components/common/ShortcutHelpDialog.tsx)：Dialog + 双列网格（kbd + 描述，11 项）。
+### 1.9 快捷键帮助对话框
 
-### 1.10 Agent 提问对话框（AskDialog）
+按 `?`（即 Shift+/）打开的小对话框，双列网格展示所有快捷键和说明，一共 11 条，按键符号是固定技术标识，描述文案走国际化。
 
-实现：[ask-dialog.tsx](../../src/renderer/components/agent/ask-dialog.tsx)：展示 Agent 提出的问题（可带单选/多选预置选项 + 自由文本输入）→ 回传 `agent:ask:respond`；取消回传空回答；浏览器模式直接关闭。**注意：独立的"审批对话框"已不存在**（AppShell 注释明确：移除 ApprovalDialog，审批改为内联卡，避免双 UI）。
+### 1.10 Agent 提问对话框
 
-### 1.11 内联审批卡片（InlineApprovalCard）
+Agent 在任务中需要用户回答问题时弹出的对话框（例如带有选项的问题）。可以带预置选项（单选或多选）和自由文本输入框。点确定把回答回传给主进程；点取消会回传一个空回答，Agent 按"用户未选择"继续。需要说明的是：以前有一个独立的"审批对话框"，后来删掉了，审批改成了消息列表里的内联卡片，避免同一审批在两处重复显示。
 
-实现：[inline-approval-card.tsx](../../src/renderer/components/agent/inline-approval-card.tsx)：渲染在消息列表上方（`role="alert"`，左色条边）；pending 显示三按钮（拒绝/白名单/批准），已决显示状态徽章。
+### 1.11 内联审批卡片
 
-### 1.12 全局浮层清单
+审批请求不再弹窗打断，而是直接显示在聊天消息列表上方的一张卡片里。卡片左边有一条颜色边：等待审批时是琥珀色，批准后变绿色，拒绝后变红色。等待中显示三个按钮——拒绝、白名单（批准并记住，以后同类型操作自动放行）、批准；危险操作（删文件、跑命令、装包）的批准按钮是红色警示色。已经处理完的审批卡片会显示"已批准"或"已拒绝"徽章，最近一条会保留回显。
 
-| 浮层 | 挂载点 | 控制 |
-|---|---|---|
-| SettingsDialog | AppShell 根 | ui-store.settingsOpen（顶栏/快捷键/命令面板/错误动作共用） |
-| CommandPalette | AppShell 根 | ui-store.paletteOpen（多入口集中） |
-| FileViewerDialog | AppShell 根 | file-viewer-store |
-| AskDialog | AppShell 根 | agent-ask-store |
-| ShortcutHelpDialog | AppShell 根 | 本地 useState（'?' 触发） |
-| UpdateNotice | AppShell 根 | 事件驱动 toast，无 DOM |
-| Toaster | providers 最内层 | sonner，全局 |
+### 1.12 全局浮层汇总
 
----
+设置页、命令面板、文件查看器、提问对话框、快捷键帮助都挂在应用外壳 AppShell 的根部渲染，由各自的状态仓库或本地状态控制开关；更新提示不渲染任何界面元素，只弹 Toast；Toast 容器挂在 Provider 最内层，保证任何界面都能弹。
 
 ## 二、组件状态与事件
 
-### 2.1 AsyncBoundary 五态契约（全局异步约定）
+这一部分逐个介绍有交互的组件：它有哪些状态，每种状态下能做什么操作，操作之后状态怎么变。先介绍一个全局通用的异步加载约定。
 
-实现：[AsyncBoundary.tsx](../../src/renderer/components/common/AsyncBoundary.tsx) + [use-async-view.ts](../../src/renderer/hooks/use-async-view.ts)
+### 2.1 异步加载的五种状态（全局约定）
 
-| 状态 | 触发条件 | 渲染 | 可触发事件 |
-|---|---|---|---|
-| loading | 首载无数据 | 骨架屏（>200ms 才显示防闪烁） | — |
-| refreshing | 已有数据 + 后台刷新 | 旧数据 + 顶部细进度条 | — |
-| error | query 抛错（`[CODE] msg` 约定） | 本地化文案 + 重试按钮（+ 错误码恢复动作，如「去配置」） | 点击重试 → retry() → loading/refreshing；点击恢复动作 → openSettings |
-| empty | 成功但 `isEmpty` 谓词为真 | EmptyState（可带 CTA） | CTA 回调 |
-| ready | 成功且有数据 | children(data) | 业务事件 |
+项目里所有"从主进程请求数据"的列表、面板，都统一走一个五状态约定。第一种是加载中：首次加载还没有数据时显示骨架屏，但有个防闪烁设计——如果请求在 200 毫秒内就完成了，就不显示骨架屏，避免闪一下；第二种是刷新中：已经有旧数据、后台在重新拉取，此时保留旧数据继续显示，只在顶部出现一条细细的进度条，绝不闪骨架屏；第三种是错误：加载失败时显示本地化错误文案加"重试"按钮，如果错误码能识别出恢复动作（比如"没配 API Key"），还会额外显示一个"去配置"按钮直接打开设置页；第四种是空：加载成功但数据为空，显示空状态组件（可以带操作按钮）；第五种是就绪：正常显示数据。错误信息有一个统一约定：格式是"[错误码] 描述"，前端解析出错误码后查国际化文案表，解析不出来就显示原始消息。
 
-### 2.2 AppShell（布局容器）
+### 2.2 应用外壳 AppShell
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| sidebarWidth / rightPanelWidth（[200,400] / [260,360]） | resizer mousedown → 全局 mousemove 实时更新 + body.resizing → mouseup 解除 |
-| sidebarCollapsed / rightPanelCollapsed | 顶栏按钮 / 右面板竖条按钮 → 取反 + manualRef 置位；断点变化 → 自动折叠（仅未手动时） |
-| draggingSide（left/right/null） | 拖拽中 → 对应 resizer 加 .dragging |
-| isWelcomeMode（welcome-store） | enterWelcomeMode()/exitWelcomeMode() → .view-chat class 切换 |
+外壳管理四类状态。第一类是两条分隔线的位置（侧栏宽度和右面板宽度），由用户拖拽改变，鼠标按下开始拖、移动过程实时更新、松开结束，拖拽期间给 body 加"拖拽中"样式。第二类是折叠状态，顶部栏按钮或右面板折叠按钮点击后取反，同时记住"用户手动操作过"，此后窗口缩放不再自动改它。第三类是拖拽标记，记录当前正在拖哪条线，用于给分隔线加高亮。第四类是欢迎模式标志，进入欢迎模式后主区布局从五列变成居中。外壳还在挂载期间统一订阅了四类主进程事件（审批、提问、工具调用、终端输出）和一个协议版本校验（启动时对比主进程和渲染层的协议版本，不一致弹提示让用户重启）。
 
-挂载的全局订阅（L4，AppShell 生命周期内）：useApprovalBridge / useAgentAskBridge / useToolBridge / useAgentBridge / useTerminalBridge / useProtocolCheck；全局快捷键绑定（useKeyboardShortcuts）。
+### 2.3 顶部栏
 
-### 2.3 Topbar
+顶部栏上有五个按钮。折叠侧栏按钮，点击折叠或展开侧栏，图标方向跟着变，带 aria-expanded 语义。返回按钮只在聊天页显示，点击回首页（也有 Alt+左箭头快捷键）。命令面板入口是一个文字胶囊（放大镜图标加"命令面板"文字加快捷键提示），点击打开命令面板。右面板开关按钮，点击折叠或展开右面板，同样带展开状态语义。设置按钮和主题按钮在右侧末尾。主题按钮的行为是：当前是深色就切浅色，是浅色就切深色，只在两态之间切换；但注意，全局快捷键切主题是在"浅色、深色、跟随系统"三态之间循环，两者行为不一致，这是现状，如实标注。
 
-| 按钮 | 状态 | 事件 |
-|---|---|---|
-| 折叠侧栏 | aria-expanded | click → onToggleSidebar |
-| 返回（聊天页才渲染） | — | click / Alt+← → navigate('/') |
-| 命令面板胶囊 | — | click / Ctrl+P → openPalette |
-| 右面板开关 | aria-expanded | click → onToggleRightPanel |
-| 设置 | ghost | click → openSettings |
-| 主题 | resolvedTheme | click → **两态**切换 light↔dark（注意：快捷键 Ctrl+Shift+T 是三态循环，现状不一致，如实标注） |
+### 2.4 侧栏与会话列表
 
-### 2.4 Sidebar 系（Sidebar / FolderLabel / SortableThreadItem）
+侧栏头部有新建会话按钮、搜索输入框和两个标签（最近 / 归档）。搜索框目前只能输入，没有实际过滤功能（占位）；归档标签永远是空状态（没有归档功能）。列表主体按"项目文件夹"分组展示会话，每组上面有一个文件夹标签行，带折叠箭头，点击折叠或展开该组（折叠状态会记住，重启还在）；鼠标悬停标签时出现一个加号按钮，点击可以在该文件夹里直接新建会话。组内会话按时间倒序排列，但用户可以用会话项左侧的圆点拖拽调整顺序（拖拽需要移动 4 像素才激活，避免和点击冲突），调整后的顺序会记住。每个会话项显示标题、相对时间和最后一条消息的预览（超过 20 字截断）。点击会话项进入该会话；双击标题进入内联重命名（回车提交、Esc 取消、点别处也提交）；鼠标悬停出现两个按钮——文件夹树按钮（打开该会话的文件树）和"更多"菜单（置顶/取消置顶、重命名、删除）。删除正在进行的会话时，操作按钮会禁用防止重复点击；删除的是当前激活会话时，界面自动回首页。列表本身也有加载中（骨架屏）、错误（重试）、空（空态，不带按钮，因为头部已有新建入口）三种形态。
 
-| 组件 | 状态 | 事件 → 转换 |
-|---|---|---|
-| Sidebar | activeTab: recent/archived；searchKeyword（仅 UI）；sidebarView: threads/fileTree | tab 点击；搜索输入（无过滤逻辑，占位）；切换视图 |
-| Sidebar 列表 | view 五态（useAsyncView） | 删除 mutation isPending 时项禁用 |
-| FolderLabel | collapsed（persistent） | 点击折叠箭头 → toggleFolder；hover 显示 + → handleCreateInFolder |
-| ThreadItem | active / renaming / isDeleting / isPinned | click 选中（Enter/Space 同效）；双击 → renaming；内联输入 Enter 提交 / Esc 取消 / blur 提交；hover 文件树按钮 → 开文件树；⋯ 菜单：置顶(取反)/重命名/删除 |
-| 拖拽排序 | isDragging（dnd-kit） | ti-dot 拖拽（4px 激活）→ dragEnd 同文件夹 arrayMove → 写 orderOverrides |
+### 2.5 文件树
 
-### 2.5 文件树（FileTreePanel / FileTreeNode / 内联输入）
+文件树节点的状态有：目录展开或折叠（点击箭头切换，展开时才加载子目录）、加载中（子目录请求未返回时显示占位）、操作中（新建/删除/重命名请求进行中，对应节点禁用，防止重复操作）、内联编辑中（新建或重命名时名字位置变成输入框，回车确认、Esc 取消，确认后才调 IPC 落盘）、选中（当前查看的文件高亮）。文件的实时变化（外部编辑、新增、删除）由主进程的文件监听事件推送，前端增量更新树，不需要手动刷新；监听失效时会弹"文件监听已失效"的提示，建议用户点刷新重新监听。
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| rootPath null / 加载中 | useFileTree 挂载 → file:list + file:watch:start → store 填充 |
-| 目录 expandedPaths | 点击箭头 → setExpanded + file:list 拉子目录 |
-| pendingOps（Set<path>） | 新建/删除/重命名进行中 → 对应节点禁用，防重复操作 |
-| creatingEntry / renamingPath | 菜单/工具栏 → 行内 input（tempName）；Enter 提交 → IPC → watch 事件同步刷新；Esc → 取消 |
-| 选中文件 | 点击 → openFile(path) → file-viewer-store |
+### 2.6 聊天面板
 
-### 2.6 ChatPanel（聊天容器）
+聊天面板通过一个 Agent 专用 hook 管理对话状态，核心状态有五种：就绪（可以发消息）、已提交（消息已发出，显示"思考中"）、生成中（正在流式输出）、错误（显示错误 Toast）、空闲。状态条的指示文字和颜色跟随这些状态。发送失败时，错误处理有双保险：先尝试从错误消息里解析错误码查本地化文案，解析失败就显示原始消息，而且错误回调本身绝不允许抛异常，防止界面卡死在"思考中"。面板还持有会话内搜索状态（开关、关键字、匹配计数、当前匹配项）、token 用量（每回合结束后累加进状态仓库）和编辑器字号设置（真实作用于消息区字号）。
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| useAgentWithIpc.status：ready/submitted/streaming/error | sendMessage → submitted（THINKING）→ streaming（RUNNING）→ end → ready；onError → error → toast（错误码 i18n，双保险不抛错） |
-| interruptedDismissed | 中断条关闭 → 不再显示 |
-| search（useConversationSearch） | open/search/navigate/close → 状态条 + 搜索栏 + 消息高亮联动 |
-| usage（usage-store per-session） | 回合 end 携带 usage → 累加 → 状态条 token 展示 |
-| editorFontSize（settings） | 设置变更 → 整个面板字号（消息区真实消费） |
+### 2.7 输入框
 
-### 2.7 ChatInput（输入舱，交互最密集）
+输入框是交互最密集的组件，状态和事件如下。
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| isStreaming（status ∈ {streaming, submitted}） | 按钮 发送→停止；Esc（textarea 内 + window 级兜底）→ onStop；流式期间**不禁用**输入（可预输入） |
-| canSend = 非空 && !isStreaming && !disabled | 输入/停止变化时重算；点击发送 → handleSend |
-| value / attachments（受控或内部+草稿） | onChange → autoResize（1-8 行，240px 封顶）；草稿写 draft-store（chatId 存在时）；chatId 变化 → 恢复新会话草稿 |
-| charCount >2000 | 计数变警告色（aria-live） |
-| 超长拦截 | >8000 字符 → toast.error，不发送 |
-| slashOpen（/ 开头且无空格） | 输入过滤 → 建议下拉；Tab/Enter 应用（带 action 的直接执行并清空输入）；Esc 关闭（清空斜杠输入） |
-| composerDragH（[40,460]） | 手柄 pointerdown 拖拽（向上拉高，下限=内容自然高度）；双击重置；键盘 ↑↓ 20px 步进 |
-| 附件 chips | @ 按钮 → dialog.pickFiles 多选去重 → chip（可移除）→ 发送时 file:read 拼接（≤4000 字符，失败仅标注文件名） |
-| 发送成功 | 清空输入 + 清附件 + clearDraft |
+生成状态：生成中或已提交时，右侧按钮从青色"发送"变成红色"停止"；此时按 Esc 可以中断（输入框没聚焦时也能中断，因为有一个窗口级的 Esc 监听兜底）；生成期间输入框不禁用，允许用户先打好下一条消息。
 
-### 2.8 ChatMessageList
+发送条件：文字非空、不在生成中、未禁用（欢迎页创建会话中会禁用）。满足时点发送或按回车才有效，空内容时发送按钮是灰的。
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| showScrollBtn / hasNew | scroll（距底 >80px → 显示；新消息到达且不在底部 → hasNew 红点）→ 点击 → 平滑滚底 |
-| searchActiveIndex | 搜索导航 → scrollIntoView 居中 + .search-highlight |
-| messages 空 | EmptyState（开始新对话） |
-| 流式 | messages.length/isStreaming 变化 → 底部跟随或 hasNew |
+文字输入：回车发送、Shift+回车换行；输入过程中输入框高度自动增长，最多 8 行约 240 像素，超出内部滚动。
 
-### 2.9 消息项（MessageItem / PartView / ToolCallView / ReasoningBlock）
+高度拖拽：输入框顶部有一条拖拽手柄，向上拖输入框变高（钳位在 40 到 460 像素），向下拖变矮但有下限（不能矮到把内容裁掉）；双击手柄恢复自动高度；键盘聚焦手柄后上下方向键可以 20 像素步进调整。
 
-| 组件 | 状态 | 事件 |
-|---|---|---|
-| MessageItem | user/assistant/system 角色 | user 仅文本气泡；assistant 头像+角色行+parts+操作栏；system 居中 |
-| MsgActions | hover 显示 | 复制（clipboard）；重新生成（流式中禁用）→ regenerate({messageId}) 截断重发 |
-| ToolCallView | open 折叠态；state：pending/running/success/error | 点击 card-head 展开/收起；标题来自 tool-store（AgentToolResultPayload 人类可读标题，缺失回退工具名） |
-| ReasoningBlock | open（默认随 experimental.reasoningCollapsed；用户显式覆盖后以 override 为准，持久于 reasoning-collapse-store） | 点击头 → setCollapsed(messageId) |
-| FileChangeCard | 折叠态 | 点击展开 diff 行（created=write_file / modified=edit_file） |
+字符计数：右下角显示输入长度，超过 2000 字变警告色；超过 8000 字直接拦截发送并弹提示。
 
-### 2.10 审批系（InlineApprovalCard / useApprovalBridge / approvals-store）
+附件：点"@"按钮从系统选择多个文件，选中的文件变成小胶囊显示在输入框上方（可单个移除，重复选择自动去重）；发送时逐个读取文件内容拼进消息（最多取前 4000 字符，读取失败只标注文件名不阻断发送）。
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| pending → approved / rejected | 主进程 agent:approval:request → bridge → store.pending 入队；点「批准」→ store.approve + agent:approval:response({approved:true, rememberDecision})；「拒绝」→ reject + response(false)；「白名单」→ approve + rememberDecision:true（主进程写 whitelist-pref） |
-| 已决回显 | resolved 队列保留 1s 后出队（便于 UI 反馈）；当前会话最近一条仍回显 |
-| 审批模式（ask/auto-approve/deny） | 设置页单选 → settings:setApprovalMode（失败回滚 + toast）→ PermissionService 同步 |
+斜杠命令：输入以 "/" 开头时弹出命令建议（/help、/new、/clear、/compact、/models），Tab 或回车应用第一个匹配，Esc 关闭；带动作的命令点击后直接执行（/new 回欢迎页、/clear 清空消息、其余弹提示引导），不填充文本。
 
-### 2.11 AskDialog
+草稿：输入的文字和附件按会话保存（本地持久化），发送成功后清除，切换到别的会话再回来还能恢复。
 
-| 状态 | 事件 |
-|---|---|
-| open（agent-ask-store） | 主进程 agent:event:ask → bridge → setAsk → Dialog 打开 |
-| 提交 | 选项 + 文本 → agent:ask:respond → 关闭；取消 → respond 空回答 |
+### 2.8 消息列表
 
-### 2.12 ConversationSearchBar
+消息列表的状态：在底部附近（距底部 80 像素内）时，新内容自动跟随滚动；用户翻到上面时，"回到最新"按钮出现，此时有新消息到达，按钮会带红点提示；点按钮平滑滚到底部。搜索定位时，目标消息滚动到居中位置并带高亮。没有消息时显示空状态（"开始新对话"）。流式生成中，列表尾部显示打字指示（三个青色点弹跳）。消息项本身做了记忆化，流式时只有变化的那条消息重渲染，性能有保证。
 
-| 状态 | 事件 |
-|---|---|
-| visible/query/totalMatches/currentMatch | 输入 → search()；↑↓/Enter/Shift+Enter → navigate() 循环；关闭 → close() |
+### 2.9 消息条目与各类卡片
 
-### 2.13 RateLimitBanner
+消息有三种角色。用户消息是右侧的玻璃渐变气泡。助手消息是左侧开放排版：一个"C"头像、一行角色信息（"助手 · 模型名"）、内容区、鼠标悬停显示的操作栏（复制、重新生成；生成中禁用）。系统消息是居中淡灰小字。助手消息内容按片段类型渲染：文字片段渲染成 Markdown（支持代码块语法高亮）；思考片段渲染成可折叠的推理块（默认折叠还是展开跟随实验设置，但用户手动开合过某一条后，以用户的选择为准并记住）；工具调用渲染成可折叠卡片（默认折叠，显示工具名、状态徽章——等待/运行中/成功/错误，点开看入参、输出、错误；编辑文件和写文件工具会渲染成专门的 diff 卡片，直观展示改了什么）；附件渲染成简单卡片；步骤分隔线渲染成细线。
 
-| 状态 | 事件 |
-|---|---|
-| visible（触发 5 分钟内有效） | agent/chat 回合 error 且为 429 → rate-limit-store → 横幅显示；手动 × 关闭 / 超时自动消失 |
+### 2.10 审批卡片
 
-### 2.14 ModelSelector
+审批卡片的状态机：等待中（显示拒绝、白名单、批准三个按钮）→ 用户点击 → 变为已批准或已拒绝（显示对应徽章）。已决的记录在仓库里保留 1 秒后出队（给界面留反馈时间），当前会话最近一条已决审批仍会在卡片位置回显。审批模式有三种（询问、自动批准、拒绝），在设置页切换，切换失败会回滚并弹提示。
 
-| 状态 | 事件 |
-|---|---|
-| query（models:list，L3） | 提供商下拉（仅"已配置 API Key"的提供商，实事求是）→ onProviderChange；模型下拉（默认模型）→ onModelChange |
+### 2.11 提问对话框
 
-### 2.15 CommandPalette
+提问对话框由主进程推送的提问事件打开，有打开、关闭两种状态。用户选择选项并确认后回传答案并关闭；取消回传空答案并关闭；浏览器模式（没有 window.api）下直接关闭，不弹任何错误。
 
-| 状态 | 事件 |
-|---|---|
-| open（受控）+ query | cmdk 键盘导航（↑↓/Enter/Esc）；fuse 模糊搜索（threshold 0.4）；分组渲染；条目 select → action + 关闭 |
+### 2.12 会话内搜索条
 
-### 2.16 设置页与 sections
+搜索条有隐藏、显示两种状态，显示时包含输入框、匹配计数（当前第几个 / 共几个）、上一条、下一条、关闭按钮。输入时即时搜索；上下方向键或按钮在匹配项之间循环；关闭后清除高亮。
 
-| 组件 | 状态 | 事件 |
-|---|---|---|
-| SettingsDialog | activeSection（打开时重置 models） | 导航点击 / ↑↓ 循环 |
-| ProviderRow（models） | expanded / showPlain / isConfigured / isSaving / isDeleting | 行点击展开；输入 API Key → 保存/删除（settings:setApiKey/deleteApiKey，toast 反馈） |
-| 运行时模型表单 | adding/removingId | 添加/删除 → settings:addRuntimeModel/removeRuntimeModel → models:list 刷新 |
-| ShortcutPicker | 录制中 | 点击 → 捕获按键 → settings-store.shortcuts 持久化（v3 迁移：Windows 默认 Ctrl 前缀） |
-| 语言行 | lang | 点击 → changeLanguage（立即生效，localStorage code-agent:lang） |
-| 审批模式/白名单 | mode / whitelist 列表 | useApprovalMode（失败回滚）；白名单增删 → whitelist:add/remove |
-| 遥测 | level | setTelemetryLevel → 提示"重启生效" |
-| 系统提示词 | editing/draft | 编辑 → 保存 → settings-store.ai.systemPrompt（透传 agent:run） |
-| 数据管理 | 导出中 | session:exportAll（主进程弹保存对话框）→ toast；打开数据目录 app:openDataDir |
-| MCP/技能/规则记忆 | 各自 query/mutation 态 | mcp:list/start/stop；skill:list/listLearned/learn/removeLearned；memory:list/clear |
+### 2.13 限流横幅
 
-### 2.17 FileViewerDialog
+限流横幅只有显示、隐藏两种状态。触发条件：回合失败且错误码是 429。显示后 5 分钟自动消失，也可以手动点关闭。
 
-| 状态 | 事件 → 转换 |
-|---|---|
-| open/filePath（store） | 文件树点击 → openFile |
-| loading/error（file:read query） | — |
-| editMode / isDirty / originalContent / editedContent | 「编辑」→ 进入编辑；输入 → isDirty；Ctrl+S → file:write（成功 invalidate read 缓存 + markSaved；失败保留编辑态）→ 保存中禁用 |
-| 关闭保护 | isDirty 时关闭 → 确认弹层；确认丢弃 / 取消 |
+### 2.14 模型选择器
 
-### 2.18 右面板各 tab
+模型选择器提供两个下拉：提供商和模型。数据来自主进程的模型清单接口（真实数据）。实事求是的设计：提供商下拉只显示"已经配置了 API Key"的那些，没配的不显示，避免用户选了用不了；模型下拉显示默认模型。
 
-| 组件 | 状态 | 事件 |
-|---|---|---|
-| DevPanel | activeTab / devSubTab | tab 点击切换（懒加载 Suspense "加载中…"） |
-| GitPanel | status query + selectedFilePath + diff query（选中才启用） | 刷新按钮 refetch；文件行点击 → 查询 diff → FileDiffView 双栏 |
-| TerminalPanel | 无实例（"创建终端"）/ 运行中 / 已退出 | 创建 → terminal:create；输入 onData → terminal:input；关闭 → terminal:kill；resize（ResizeObserver 100ms 防抖）→ terminal:resize；exit 事件 → store.markExited |
-| LogsPanel | 级别过滤（all/info/warn/error/debug）+ 行数（100/200/500） | 手动刷新 → refetch |
-| MetricsPanel | query（5s stale / 10s refetchInterval，enabled=面板可见） | 自动刷新 |
-| InspectorPanel | 停靠模式（detach/right/bottom） | 点击 → devtools:open → toast 反馈（3s 自动清除） |
-| BrowserPane | 地址/设备预设（responsive/desktop/tablet/mobile） | iframe 导航/后退/前进/刷新 |
+### 2.15 命令面板
 
-### 2.19 错误边界三层
+命令面板状态：打开、关闭（受控于全局状态仓库）。打开后输入框自动聚焦；输入时模糊过滤；键盘上下选择、回车执行、Esc 关闭；点遮罩也关闭；执行动作后自动关闭。命令列表每类有数量上限（文件 50、会话 20），防止列表过长。
 
-| 层 | 状态 | 事件 |
-|---|---|---|
-| AppErrorBoundary | 崩溃 | 「重新加载」→ window.location.reload()；「发送报告」→ Sentry.captureMessage 显式补报 |
-| RootErrorBoundary | 路由错误 | 「重新加载」按钮 |
-| SectionErrorBoundary | 区块错误（sidebar/main/right-panel/设置 pane） | 内联错误提示 + 重试 |
+### 2.16 设置页各项
 
-### 2.20 UpdateNotice
+设置页每个分区都有自己的交互状态。
 
-| 状态 | 事件 |
-|---|---|
-| available/downloaded/not-updated/error | update:event:status 推送 → toast（同阶段防抖不重复弹）；downloaded → 「重启安装」→ update:install |
+模型服务分区：提供商列表里每一行显示配置状态徽标（已配置是绿色对勾、未配置是灰字），点击整行展开 API Key 编辑区（密码输入、显示/隐藏切换、保存、删除；已配置时占位符提示"输入以替换"）。运行时模型区块有添加表单（模型 id、提供商、baseUrl）和已添加列表（每项可删除，删除中显示转圈）。模型参数区块（默认模型、温度、思考强度四档开关）和审批权限区块也收在这个分区。
 
----
+通用分区：语言行（简体中文 / English 两个按钮，点击立即切换整个界面语言并记住）；编辑器（字号 12/14/16 三档，真实改变消息区字号；vim 开关只存设置没有实际行为，标注"后续支持"）；快捷键（六个可录制项，点击录制按钮后按下新组合键即生效并持久化）；系统提示词（编辑保存，空内容表示用主进程内置默认）；数据管理（导出全部会话为 JSON 文件——由主进程弹保存对话框；打开数据目录）；遥测级别（修改后提示重启才生效）。
+
+MCP 分区：服务器列表（名称、状态徽章、工具数、错误信息），添加表单（名称、命令、参数），启动/停止按钮，操作后列表自动刷新。技能分区：全部技能列表、已学技能列表、用一段描述让 LLM 生成结构化技能（learn 按钮）、移除已学技能。规则与记忆分区：AGENTS.md 规范说明、记忆列表（按当前会话过滤）和清空按钮。用量分区：四张卡片（今日、近 30 天、累计、总调用次数）、近 90 天消耗热力图（鼠标悬停显示日期和 token）、按模型占比条形图、最近回合记录。工作树分区：显示当前工作目录和已展开节点数（只读）。关于分区：版本号、Electron/Node/Chromium 版本、打开数据目录按钮。账号、移动端（内含真实的 IM 渠道配置）、插件、hooks、命令分区是"🚧 规划中"占位页。
+
+### 2.17 文件查看器
+
+文件查看器状态：打开/关闭、只读/编辑、已保存/有未保存改动（脏）、加载中/加载失败。进入编辑模式后输入内容即标记脏；Ctrl+S 或点保存按钮保存，保存中按钮禁用防重复；保存成功清除脏标记并刷新内容缓存；关闭时如果还是脏的，先弹确认。文件路径变化时自动重新拉取内容。
+
+### 2.18 右面板各页
+
+右面板标签页切换状态由本地状态管理，切换到浏览器或终端时显示"加载中"占位（懒加载）。Git 页：状态查询中显示骨架，非 Git 仓库显示错误提示，工作区干净显示"无变更"，点击文件行后请求该文件 diff（只有选中文件时才请求），双栏渲染。终端页：无实例时显示"创建终端"按钮，运行中实时显示输出，已退出保留输出加"已结束"标识；关闭按钮终止进程；窗口尺寸变化时防抖（100 毫秒）同步到 PTY。日志页：级别过滤（全部/信息/警告/错误/调试）和行数选择（100/200/500），手动刷新。指标页：自动每 10 秒刷新，面板不可见时不请求。检查器页：选择停靠模式后点按钮打开 DevTools，成功失败都有 Toast 反馈，3 秒后自动清除。
+
+### 2.19 三层错误边界
+
+错误边界分三层，越靠外越严重。最外层是应用级：任何未捕获错误都显示全屏错误页，提供"重新加载"和"发送报告"两个按钮（发送报告是主动上报一条用户反馈），错误本身自动上报监控。中间层是路由级：路由加载失败时显示状态码和错误信息加重新加载按钮。最内层是区块级：侧栏、主内容区、右面板、设置页的每个分区分别包裹，某一小块崩溃只在那块显示内联错误和重试按钮，其他区域照常工作。
+
+### 2.20 更新提示
+
+更新提示是纯事件消费组件，不渲染任何 DOM。主进程推送更新状态事件时按阶段弹 Toast：发现新版本、下载完成（带"重启安装"按钮）、已是最新、错误。下载进度不弹 Toast（太频繁），同一阶段有防抖不会重复弹。
 
 ## 三、交互流程与逻辑
 
-### 3.1 会话创建流程（欢迎页 → 聊天页）
+这一部分把每个功能的完整过程写出来：用户操作 → 前端状态变化 → 调哪个 IPC → 主进程处理 → 结果回推 → 界面更新，以及各种边界情况。
 
-```
-点击「新建会话」/ 文件夹 + 按钮 / Ctrl+N / 命令面板「新建会话」
-→ clearActiveSession + enterWelcomeMode(复用最近 workingDir) + navigate('/')
-→ HomePage：可选项目（历史目录/浏览其他目录），快捷 pill 预填输入
-→ 回车发送：workingDir 为空？→ toast「选择项目」+ 展开 dropdown（不弹原生框）
-→ createSession({workingDir}) → setActiveSession + exitWelcomeMode + navigate(/chat/:id)
-→ 首条消息经 sessionStorage 暂存 → ChatPanel 挂载后自动发送
-```
-边界：创建中 isPending 禁用发送与 pill（防重复提交）；createSession 失败 → toast + 保持欢迎页可重试；URL 直访 /chat/:id 且会话不存在 → 重定向首页。
+### 3.1 新建会话
 
-### 3.2 消息发送 → 流式 → 停止 → 重新生成
+入口有四处：侧栏的"新建会话"按钮、文件夹标签悬停的加号、Ctrl+N 快捷键、命令面板里的"新建会话"。点击后清空当前激活会话、进入欢迎模式（自动带上最近使用过的项目目录）、跳转首页。在欢迎页，用户可以先改项目（历史列表或浏览其他目录），再输入第一条消息。回车发送时：如果还没选项目，弹"请选择项目"提示并展开项目下拉，不发消息；选了项目则调用创建会话接口，成功后设置激活会话、退出欢迎模式、跳转到新会话的聊天页，第一条消息通过一个临时通道暂存，聊天面板挂载后自动发出。创建过程中按钮和快捷胶囊都禁用，防止重复提交；创建失败弹错误提示并留在欢迎页，可以重试。直接从地址栏访问聊天页且会话不存在时，重定向回首页。
 
-```
-ChatInput Enter（或发送按钮）
-→ canSend 校验（非空/非流式/非禁用）→ 8000 字符拦截 → 附件读取拼接
-→ sendMessage({text}) → useChat 调 transport.sendMessages
-→ convertToModelMessages → window.api.agent.run({sessionId: chatId, workingDir, maxSteps:20, mode:'build', thinking})
-→ 主进程 AgentService.startAgent（并发门 FIFO 排队）→ streamText 多轮工具循环
-→ 推送 agent:stream:part（text/tool-call/tool-result/finish）→ transport 按 sessionId 过滤 enqueue → useChat 更新 messages
-→ agent:stream:end → controller.close → status=ready；useAgentBridge invalidate 会话缓存 + 清理 tool/approvals 缓冲 + usage 累积
-→ agent:stream:error → controller.error(`[CODE] msg`) → onError → toast（i18n 错误码，双保险）
-停止：按钮/Esc/卸载 → agent:stop → 主进程 abort → 推送 reason='aborted' 的 END
-重新生成：MsgActions → regenerate({messageId}) → 截断该消息及后续 → 重新 run
-```
-边界：config 未配置（无 workingDir）→ transport reject；浏览器模式无 window.api → 守卫返回空。
+### 3.2 发送消息、流式输出、停止、重新生成
 
-### 3.3 工具调用与审批流程
+回车或点发送按钮。先校验：内容非空、不在生成中、未禁用；再校验长度（超过 8000 字符拦截）；有附件的话先读取拼接。然后调用 AI SDK 的发送方法，它会走自定义的传输层：把消息历史转换成模型消息格式，调用 agent:run 通道（带会话 id、工作目录、最大步骤数默认 20、运行模式默认"执行"、思考强度设置），主进程的 Agent 服务收到后先在"并发门"里排队（多个会话共用有限的并发槽位，防止把 API 打满触发限流），然后启动大模型流式生成，过程中可能多次调用工具，每产生一段输出就通过"流式片段"事件推回前端，前端按会话 id 过滤后写入消息流，界面实时显示。全部结束时推"流结束"事件，前端把状态置为就绪，同时做三件收尾：刷新会话列表和会话详情缓存（标题可能变了）、清空本会话的工具调用和审批缓冲、把本回合的 token 用量累加进统计。如果中途出错，推"流错误"事件，前端把错误转成 Toast 提示。停止有四种触发方式：停止按钮、Esc 键、输入框失焦时的窗口级 Esc、组件卸载；都走同一个中断通道，主进程中止后推一个"已中止"的流结束事件。重新生成：在助手消息的悬停操作栏点"重新生成"，前端截断该消息及其后的所有消息，然后重新发起请求（旧的流会被主进程自动中断）。
 
-```
-Agent 回合中 → ToolExecutor 执行工具
-→ permission='ask'（危险/白名单未命中）→ 推送 agent:approval:request
-→ useApprovalBridge 入队 approvals-store → InlineApprovalCard 就地展示（不弹窗打断）
-→ 用户点「批准/拒绝/白名单」→ store 更新 + agent:approval:response → PermissionService resolve pending Promise
-→ 工具继续/中止 → agent:tool:result（或 TOOL_ABORTED）推送 → tool-store 配对更新
-审批模式=auto-approve 时主进程直接放行；=deny 时直接拒绝（UI 无感知，仍推送 result）
-```
-边界：单个会话多个 pending 审批（批量编辑）FIFO；已决项 1s 出队；危险工具（delete_file/run_command/install_package）批准按钮红色；白名单写入 whitelist-pref.json（approval-mode-section 可管理）。
+### 3.3 工具调用与审批
 
-### 3.4 会话管理（切换/重命名/置顶/删除/拖拽）
+Agent 回合中执行工具时，主进程的工具执行器先做权限检查。权限模式是"询问"且该工具不在白名单时，推一个审批请求事件给前端，前端把请求加入审批队列，聊天区出现内联审批卡片，Agent 的回合停在"等待审批"状态不继续。用户点"批准"：前端更新本地状态、把批准结果（带不带"记住决策"）回传给主进程，主进程解开等待，工具继续执行；点"拒绝"：工具被中止；点"白名单"：相当于批准且记住，以后同类操作自动放行。工具执行完（或失败）推结果事件，前端按调用 id 配对更新卡片状态。如果审批模式是"自动批准"，主进程直接放行不打扰用户；是"拒绝"，直接拒绝。危险工具（删文件、跑命令、装包）的批准按钮在界面上用红色警示。单个会话可以同时有多个待审批（比如批量编辑），按先来后到排队展示最新的一个。
 
-```
-切换：点击项 → setActiveSession + navigate(/chat/:id) → useSessionDetail 拉详情
-重命名：双击标题或菜单 → 内联 input → Enter/blur 提交 → session:rename（乐观更新+失败回滚+invalidate）
-置顶：菜单 → session:pin({pinned}) → invalidate（服务端排序在前）
-删除：菜单 → session:delete（乐观删除+失败回滚+onSettled invalidate）→ 若为激活会话 → clearActiveSession + navigate('/')
-拖拽：ti-dot 拖拽 → 同文件夹重排 → orderOverrides（localStorage，跨重启保留）
-```
-边界：删除激活会话自动回首页；isDeleting 期间禁用操作按钮；空列表 → EmptyState（无 CTA，头部已有新建按钮）。
+### 3.4 会话管理
 
-### 3.5 文件树操作流程
+切换会话：点击会话项，设置激活会话 id 并跳转聊天页，聊天页用会话 id 拉取会话详情（含完整消息历史）。重命名：双击标题或菜单，标题变输入框，回车或失焦提交，提交前会去掉首尾空格、空值和没变化直接退出编辑；提交走重命名接口，前端先乐观更新本地标题，失败回滚。置顶：菜单点击，走置顶接口，成功后刷新列表（置顶的排前面）。删除：菜单点击，前端乐观移除该条（失败回滚），无论成败最后都重新拉取列表校准；删的是当前会话时自动回首页。拖拽排序：拖动会话项左侧圆点，松手后计算新位置，只在同一文件夹内重排，顺序写入本地持久化，重启保留。空列表显示空态；列表加载中显示骨架。
 
-```
-新建：工具栏/菜单 → 行内 input → Enter → file:create / file:createDir → pendingOps 置位禁用
-→ watch 事件（create）增量更新 store → 目录自动展开
-重命名：菜单 → 行内 input → file:rename → watch(rename) 更新
-删除：菜单 → file:delete → watch(delete) 移除；目录删除级联
-刷新：头部按钮 → file:list 重拉根目录（watch 失效兜底）
-实时同步：useFileTree 订阅 file:watch:event → store upsert/remove/rename；watch 失败 → toast「文件监听已失效」+ 提示刷新
-```
-边界：pendingOps 防重复操作；错误 toast（createFileFailed 等）；内联输入 Esc 取消不落盘。
+### 3.5 文件树操作
 
-### 3.6 文件查看器编辑保存流程
+新建文件或目录：点工具栏或菜单，名字位置出现输入框，回车确认后调创建接口（请求进行中该节点禁用，防止连点），成功后依赖文件监听事件自动刷新父目录，同时自动展开父目录让用户看到新文件。重命名：同上流程走重命名接口。删除：菜单点击，走删除接口。所有失败都会弹对应的错误提示。内联输入中按 Esc 取消，不落盘。手动刷新按钮是监听失效时的兜底，直接重新拉取根目录。
 
-```
-点击文件 → openFile → useFileContent(file:read，缓存 30s/5min)
-「编辑」→ editMode + 编辑内容缓存于 store → 输入 → isDirty
-Ctrl+S → file:write → 成功 invalidate ['file',path] + markSaved；失败 toast + 保留编辑内容
-关闭：isDirty → 确认弹层（丢弃/取消）；保存后正常关闭
-```
-边界：二进制/超大文件读取失败 → error 态；路径变化自动重新查询（enabled=open）。
+### 3.6 文件查看器编辑与保存
+
+打开文件：从文件树点击，前端从缓存拉内容（30 秒内重复打开同一文件直接用缓存，关闭 5 分钟内再开也能秒开）。编辑：点"编辑"进入编辑模式，改动即标记脏。保存：Ctrl+S 或保存按钮，调写文件接口；成功则清除脏标记、刷新该文件的内容缓存；失败弹提示，编辑内容保留，用户可以改完再试。关闭：脏状态下先弹确认，用户确认丢弃或取消。
 
 ### 3.7 终端生命周期
 
-```
-TerminalPanel 挂载（无实例）→「创建终端」→ terminal:create → store 记录元数据 → xterm 初始化
-→ 订阅 terminal:event:output 直写 xterm（不经 store 中转，防抖仅 resize）
-→ 输入 onData → terminal:input → 主进程 PTY → 输出回流
-→ 关闭 → terminal:kill + store.closeTerminal；exit 事件 → markExited（输出保留）
-→ 会话切换 → 按 sessionId 查找/创建对应终端实例
-```
+打开终端标签，如果当前会话还没有终端实例，显示"创建终端"按钮。点击后调创建接口，主进程用 node-pty 拉起一个真实 shell（PowerShell），前端初始化 xterm 渲染，之后主进程把 shell 的输出逐段推给前端直写终端（不经过中间缓冲，保证性能）；用户在终端里输入，每个字符走输入通道回传主进程喂给 shell。窗口大小变化时，前端防抖 100 毫秒后把新尺寸同步给主进程（PTY 需要知道行列数才能正确换行）。点关闭按钮终止进程并清理；shell 自己退出（比如敲了 exit）时，界面保留输出并标"已结束"。每个会话一个终端实例，切换会话时自动切到对应的终端。
 
-### 3.8 Git 查看流程
+### 3.8 Git 查看
 
-```
-GitPanel 挂载 → useGitStatusQuery(git:status，stale 10s)
-→ 文件列表点击 → useGitDiffQuery（enabled=选中，每次新请求不缓存）
-→ parseUnifiedDiff → UnifiedDiffView 双栏渲染
-→ 刷新按钮 → refetch
-```
-边界：非 git 仓库 → ErrorHint；工作区干净 → CleanHint；只读无写操作（不提供 commit/push）。
+打开开发者标签下的 Git 子视图。请求工作区状态（分支、领先/落后、变更文件列表，缓存 10 秒）。点击某个变更文件，才去请求该文件的 diff（每次都是新请求不缓存，因为参数组合多、文本大），解析成双栏 diff 渲染。点刷新按钮重新拉状态。整个过程只读，不提供提交、推送等写操作，防止误操作主仓库。
 
-### 3.9 命令面板流程
+### 3.9 命令面板执行
 
-```
-Ctrl+P / 顶栏胶囊 / Shift+/ → ui-store.openPalette → cmdk 渲染
-→ 输入 → fuse 模糊过滤 → ↑↓ 选择 → Enter 执行（新建会话/切主题/开设置/切文件树视图/开文件/切会话）
-→ 执行动作 + closePalette
-```
-边界：无匹配 → CommandEmpty；文件命令 ≤50、会话命令 ≤20（防列表过长）；Esc/遮罩点击关闭。
+打开命令面板，输入关键字过滤，选择条目回车执行。各动作：新建会话（回欢迎页）、切换主题、打开设置、切换侧栏视图（会话列表/文件树）、打开文件（文件查看器）、切换到某个会话。执行后自动关闭面板。
 
-### 3.10 会话内搜索流程
+### 3.10 会话内搜索
 
-```
-状态条 🔍 → search.actions.open → 搜索栏显示 → 输入 → 匹配（消息级纯函数）
-→ ↑↓/Enter 循环导航 → 目标消息 scrollIntoView 居中 + .search-highlight
-→ 关闭 → 高亮清除
-```
+点状态条的放大镜打开搜索条，输入关键字即时匹配消息，计数显示"当前第几个 / 共几个"，上下方向键或按钮在匹配之间循环，当前匹配消息滚动到居中并高亮；点关闭清除高亮。没有匹配时计数为 0，不影响使用。
 
-### 3.11 设置修改流程（各写入型设置）
+### 3.11 设置修改
 
-| 设置 | 链路 | 失败处理 |
-|---|---|---|
-| API Key | 输入 → settings:setApiKey → keychain（DPAPI 加密）→ invalidate ['api-key',provider] | toast + 保留输入 |
-| 运行时模型 | 表单 → settings:addRuntimeModel/removeRuntimeModel → SQLite runtime_models → 重新拉取 | toast |
-| 审批模式 | useApprovalMode → settings:getApprovalMode/setApprovalMode → approval-pref.json → PermissionService | 失败回滚原值 |
-| 白名单 | whitelist:list/add/remove → whitelist-pref.json | toast |
-| 遥测 | settings:getTelemetryLevel/setTelemetryLevel → telemetry-pref.json | toast + 提示重启生效 |
-| 语言 | changeLanguage → localStorage code-agent:lang | — |
-| 快捷键 | ShortcutPicker → settings-store.shortcuts（localStorage，v3 版本迁移） | — |
-| 系统提示词 | 编辑保存 → settings-store.ai.systemPrompt → 下次 agent:run 透传 | — |
-| 主题 | setTheme → settings-store.theme → ThemeProvider 应用 .dark class | — |
-| MCP | mcp:start/stop → MCPService 子进程 → 工具注册/注销 → invalidate mcp:list | 错误显示于 server 行 |
+各类设置的写入链路与失败处理：API Key 输入后保存，主进程用系统加密存储（Windows 上是 DPAPI），成功后刷新该提供商的配置状态；失败弹提示并保留输入。审批模式切换失败回滚原值。遥测修改后提示"重启生效"。语言切换立即生效并记住。快捷键录制后立即生效并持久化，历史数据有版本迁移（Windows 上老版本默认 Meta 前缀的会迁移成 Ctrl）。系统提示词保存后，下一次发消息时透传给主进程。MCP 服务器启动/停止失败时错误显示在对应服务器行上。技能学习是异步的（用一段描述让 LLM 生成结构化技能），有进行中状态。
 
 ### 3.12 边界情况总表
 
-| 场景 | 处理 |
-|---|---|
-| 空态 | 会话空/文件树空/搜索无结果/归档空 → EmptyState（侧栏空态无 CTA） |
-| 错误态 | 全部 L3 查询 → AsyncBoundary error（`[CODE]` i18n + 重试 + 恢复动作） |
-| 加载态 | 首载 >200ms 骨架屏防闪烁；刷新保留旧数据不闪 |
-| 防重复提交 | 创建会话 isPending 禁用；发送流式中按钮变停止；文件操作 pendingOps |
-| 输入长度限制 | 消息 8000 拦截；附件 4000 截断；工具 JSON 200 字符；重命名空值忽略 |
-| 脏数据保护 | 查看器 isDirty 关闭确认 |
-| Esc 中断 | 流式中断（window 级）；斜杠建议关闭；dropdown/浮层关闭 |
-| window.api 未定义 | 全部 IPC 调用点守卫（浏览器模式：空列表/空骨架/静默跳过，预览不崩溃） |
-| 版本错配 | useProtocolCheck → toast 提示重启 |
-| 崩溃恢复 | 主进程 crash-marker → 残留会话标记 interrupted → 聊天页顶部提示条 |
-| 限流 | 429 → rate-limit-store → 横幅（5 分钟有效） |
-| 超长列表 | 命令面板文件 ≤50 / 会话 ≤20；侧栏 50 条分页（session:list limit=50） |
-
----
+各类边界情况的统一处理方式：数据为空时显示各场景的空态（侧栏空态不重复放按钮）；请求失败统一走五态约定的错误态（本地化文案 + 重试 + 可选的恢复动作）；首载 200 毫秒内不闪骨架屏、刷新保留旧数据；所有"创建/提交"类操作在请求进行中禁用按钮防止重复提交；消息长度上限 8000 字符、附件内容 4000 字符截断、工具卡片 JSON 200 字符截断、重命名空值忽略；文件查看器脏数据关闭前确认；Esc 统一用于中断生成、关闭建议下拉、关闭各种浮层；浏览器模式（开发预览，没有 window.api）下所有接口调用点都有守卫，返回空数据或静默跳过，界面不崩溃；协议版本不匹配弹提示重启；应用崩溃过的话启动时把残留会话标记为"已中断"，聊天页显示提示条；遇到限流弹横幅且 5 分钟内有效。
 
 ## 四、数据链路
 
+这一部分把每类数据的完整来路和去处写清楚。
+
 ### 4.1 链路总览
 
-```
-组件 useState/L1 ──→ L2 Zustand（persistent/transient）
-        ↓                          ↑
-   L3 TanStack Query ──→ window.api.*（preload，createIpcApi 遍历 IPC_META 生成）
-                                  ↓
-                contextBridge → ipcRenderer.invoke(channel, payload)
-                                  ↓
-        src/main/ipc/*.handler（wrap：traceId + sender 校验 + zod 入参/响应校验 + 错误分类 + Sentry）
-                                  ↓
-        ServiceContainer 持有 25 个域服务（Agent/Chat/File/Search/Terminal/Git/Codebase/Session/...）
-                                  ↓
-        SQLite（sessions/messages/token_usage/turns/runtime_models/goals/memories/tasks/skills）
-        keychain（DPAPI）｜ JSON 偏好文件（telemetry/approval/whitelist）｜ 外部进程（PTY/git/codegraph/ripgrep/MCP）｜ LLM Provider
+前端组件的数据只有两个来源：要么自己请求（经 TanStack Query 调 window.api 上的方法，走 IPC 通道到主进程的处理器，处理器经过参数校验后转给对应的服务，服务再访问数据库、文件系统、外部进程或大模型），要么被推送（主进程的服务主动把事件发回，经 IPC 通道到前端的订阅，桥接 hook 把数据写进状态仓库，组件订阅仓库渲染）。写数据的操作走"变更"通道，成功后刷新相关查询缓存；读数据的操作走"查询"通道，带缓存和重试。
 
-反向推送：Service → webContents.send(channel) → preload 订阅 → renderer window.api.*.subscribe* → 桥接 hook → L2 store → UI
-```
+主进程侧的存储有好几种：会话、消息、token 用量、回合记录、运行时模型、目标、记忆、任务、技能存在 SQLite 数据库里；API Key 用系统加密存储；遥测级别、审批模式、白名单存在三个 JSON 偏好文件里；终端、Git、代码搜索、MCP 依赖外部进程；大模型走网络。
 
-### 4.2 会话域 session:*
+### 4.2 会话数据
 
-| 通道 | 前端入口 | 数据去向 |
-|---|---|---|
-| `session:list` | useSessionsQuery（L3，`['sessions']`，stale 30s，limit 50）→ Sidebar | SessionService → SQLite `sessions` 表 |
-| `session:get` | useSessionDetail（`['session',id]`，enabled=id≠null）→ ChatPage | SQLite `sessions` + `messages`（完整历史） |
-| `session:create` | useCreateSession（mutation）→ HomePage | 新建会话绑定 workingDir |
-| `session:delete` | useDeleteSession（乐观删除 + onSettled invalidate） | 级联删消息 |
-| `session:rename` | useRenameSession（乐观更新） | 更新标题 |
-| `session:pin` | usePinSession（onSettled invalidate） | 置顶排序 |
-| `session:listRecentDirs` | useRecentDirs（`['session','recent-dirs']`）→ HomePage dropdown | 去重 + lastUsed 倒序 |
-| `session:exportAll` | DataSection → 主进程弹保存框 + 写 JSON 文件 | 数据迁移 |
-| `session:getUsageSummary` | UsageSection（`['usage','summary']`） | token_usage 聚合（今日/近30天/累计/模型占比/热力图） |
-| `session:getRecentTurns` | TurnsSection | `turns` 表（终止原因 + token） |
+会话列表：侧栏挂载时请求（一次拉 50 条），缓存 30 秒，数据存 SQLite 的会话表。会话详情（含完整消息历史）：进入聊天页时按会话 id 请求，只有 id 存在才发请求。创建、删除、重命名、置顶都走对应的变更通道，删除和重命名做了乐观更新（本地先变，失败回滚，最后重新拉取校准），置顶和创建成功后刷新列表缓存。最近项目目录列表：欢迎页请求，创建会话成功后也刷新它。用量统计（今日/近 30 天/累计/模型占比/热力图）和最近回合记录：用量页请求，数据来自 token 用量表和回合表，前端按日期聚合计算。导出全部会话：主进程弹保存对话框，聚合所有数据写成一个 JSON 文件。
 
-### 4.3 Agent 域 agent:*
+### 4.3 AI 对话数据
 
-| 通道 | 方向 | 链路 |
-|---|---|---|
-| `agent:run` | req | ChatInput → useAgentWithIpc → IpcAgentTransport（configure 注入 workingDir/systemPrompt/maxSteps/mode/thinking）→ AgentService.startAgent → 并发门 FIFO → llmClient（Provider）→ streamText + 工具循环 |
-| `agent:stop` | req | 停止按钮/Esc/流 cancel → AbortController → reason='aborted' |
-| `agent:stream:part` | push | 主进程按 part 推送 → transport 按 sessionId 过滤 → ReadableStream → useChat messages |
-| `agent:stream:end` | push | → transport close → useAgentBridge：invalidate `['sessions']` + `['session',id]`、tool-store/approvals-store clearBySession、usage-store addUsage（回合结束统一清理） |
-| `agent:stream:error` | push | → transport error(`[CODE]`) → ChatPanel onError → toast |
-| `agent:tool:call` / `agent:tool:result` | push | ToolExecutor 推送（入参/权限级别；输出/错误）→ useToolBridge → tool-store（toolCallId 配对）→ 消息工具卡 + 右面板 DiffPane/FilesPane |
-| `agent:approval:request` | push | PermissionService → useApprovalBridge → approvals-store |
-| `agent:approval:response` | req | 审批按钮 → PermissionService resolve |
-| `agent:event:ask` / `agent:ask:respond` | push/req | Agent 提问 → agent-ask-store → AskDialog → 回答回传 |
-| `agent:turn:event` | push | 回合状态机事件（订阅预留，见 useAgentBridge 侧链路） |
+这是最核心的一条链路。用户按回车后，AI SDK 的 useChat 调用自定义传输层，传输层把消息历史转换格式，通过 agent:run 通道请求主进程。主进程的 Agent 服务拿到请求后：先过并发调度门（多会话共用有限的执行槽位，FIFO 排队），再带上工作目录（所有文件操作的边界）、系统提示词（用户自定义或内置）、最大步骤数、运行模式、思考强度启动大模型。生成过程中，大模型的输出片段、工具调用、工具结果都通过"流式片段"事件推回前端；会话结束推"流结束"（带原因：正常完成/已中止/出错，以及 token 用量）；异常推"流错误"（带错误码）。前端收到流结束做统一收尾：刷新会话列表和详情缓存、清空工具与审批缓冲、累加用量。工具调用和结果还有单独的事件通道，推给前端写进工具记录仓库（供消息卡片和右面板的文件变更、引用文件使用）。审批请求走单独的审批请求事件；用户的审批决定走审批回传通道。Agent 提问走提问事件和回答回传通道。回合状态机事件有专门的推送通道。
 
-### 4.4 文件域 file:*
+### 4.4 文件数据
 
-| 通道 | 链路 |
-|---|---|
-| `file:list` / `file:read` | useFileTree（直接 IPC，结果入 file-tree-store——与 watch 合并，不走 Query 缓存）/ useFileContent（L3，`['file',path]` stale 30s gcTime 5min） |
-| `file:watch:start/stop` + `file:watch:event`(push) | useFileTree：workingDir 变化 → watchStart → 订阅事件 → store upsert/remove/rename（增量更新，watch 失败 toast） |
-| `file:write` | useFileWrite（mutation）→ 成功 invalidate `['file',path]` |
-| `file:create/createDir/delete/rename` | useFileTreeOps（pendingOps 防重；结果靠 watch 事件同步） |
+文件树：挂载时先列根目录、同时启动目录监听（watch）；监听事件（新建/删除/重命名/改动）推回前端做增量更新，所以外部编辑文件树会自动变。展开目录时按需列子目录。文件内容：查看器打开时按路径请求，带缓存（30 秒内不重取，关闭 5 分钟内缓存不回收）。写文件：保存时走写通道，成功后刷新该文件的内容缓存。新建、创建目录、删除、重命名各走各的通道，结果不自己刷新，依赖监听事件同步（避免双份数据打架）。
 
-### 4.5 终端域 terminal:*
+### 4.5 终端数据
 
-`terminal:create`（TerminalPanel 无实例时）→ TerminalService（node-pty 子进程）→ `terminal:event:created/output`(push) 直写 xterm → `terminal:input` / `terminal:resize`（100ms 防抖）/ `terminal:kill` → `terminal:event:exit`(push) → store.markExited。
+创建终端走创建通道，主进程用 node-pty 拉起 shell 并返回终端 id。之后两条反向链路：输出事件（shell 的输出实时推给前端直写 xterm）和退出事件（shell 结束后推给前端标记状态）。用户的输入走输入通道，尺寸变化走 resize 通道（防抖），关闭走 kill 通道。终端的元数据（哪个会话对应哪个终端、pid、退出状态）存在前端的瞬时状态仓库里，xterm 实例本身由组件持有。
 
-### 4.6 Git 域 git:*
+### 4.6 Git 数据
 
-`git:status`（L3，`['git','status',path]` stale 10s）→ GitService（spawn git CLI）；`git:diff`（选中文件才启用，每次新请求不缓存）。`git:add/commit/push` 定义表中存在但**渲染层无调用方**（面板只读，不适用标注）。
+工作区状态走 status 通道（缓存 10 秒），选中文件后走 diff 通道（不缓存）。数据源是主进程每次调用系统 git 命令的返回。add、commit、push 三个通道在定义表里存在，但前端没有任何地方调用（面板只读），属于"不适用"标注。
 
-### 4.7 设置域 settings:* 与偏好持久化
+### 4.7 设置数据
 
-| 通道 | 存储 |
-|---|---|
-| `settings:getApiKey/setApiKey/deleteApiKey` | keychain（safeStorage DPAPI；查询 stale Infinity，显式变更才失效） |
-| `settings:getTelemetryLevel/setTelemetryLevel` | telemetry-pref.json（重启生效） |
-| `settings:getApprovalMode/setApprovalMode` | approval-pref.json（启动时 PermissionService 同步） |
-| `settings:addRuntimeModel/removeRuntimeModel/listRuntimeModels` | SQLite `runtime_models`（启动时 runtimeModelStore.loadAll 注册到 ModelRegistry） |
-| `whitelist:list/add/remove` | whitelist-pref.json |
-| 主题/快捷键/编辑器/实验开关/草稿/侧栏偏好 | 渲染层 localStorage（createPersistentStore，`code-agent:` 前缀 + 版本迁移，失败静默降级内存） |
+API Key 走设置域的加密存储，前端查询缓存永不过期（只有显式保存或删除才刷新），因为密钥几乎不变。遥测级别走偏好文件。审批模式走偏好文件，且应用启动时主进程会读一次同步给权限服务。运行时模型（用户自定义的模型 id、提供商、baseUrl）存在 SQLite 的运行时模型表里，应用启动时加载注册进模型注册表，模型选择器的数据来自注册表加配置过滤（只显示已配 Key 的提供商）。白名单存偏好文件。主题、快捷键、编辑器设置、实验开关、草稿、侧栏偏好（折叠、顺序）都存前端本地 localStorage，带版本号和迁移逻辑，存储失败静默降级为内存模式。
 
-### 4.8 其他域一览
+### 4.8 其他数据
 
-| 域 | 通道 | 消费方 | 数据去向 |
-|---|---|---|---|
-| models | `models:list` | ModelSelector（`['models','list']`） | ModelRegistry + runtime_models（仅已配置 Key 的提供商） |
-| mcp | `mcp:list/start/stop` | McpSection | MCPService（子进程 + ToolRegistry 注册/注销） |
-| skill | `skill:list/listLearned/learn/removeLearned` | SkillsSection | SQLite `skills` + learn-skill-agent |
-| memory | `memory:list/clear` | RulesMemorySection（按会话） | SQLite `memories` |
-| goal / task | `goal:list/clear/create`、`task:list` | InfoPane（L3，按 sessionId） | SQLite `goals` / `tasks` |
-| app | `app:getStatus/getInfo/openExternal/openDataDir` | useProtocolCheck / AboutSection / DataSection | 主进程 + 数据目录 |
-| system | `system:getStatus` | MetricsPanel（stale 5s，refetchInterval 10s，enabled 面板可见） | 主进程运行时指标 |
-| logs | `logs:read` | LogsPanel（stale 0，手动刷新） | electron-log main.log |
-| devtools | `devtools:open` | InspectorPanel | webContents.openDevTools（detach/right/bottom） |
-| dialog | `dialog:pickDirectory/pickFiles` | HomePage / ChatInput | Electron 原生对话框 |
-| update | `update:check/install` + `update:event:status`(push) | UpdateNotice / useUpdate | electron-updater（打包环境才可用） |
-| im | `im:list/start/stop` | ImChannelsSection | ImService + 渠道适配器（企微/钉钉/飞书等） |
-| search | `search:grep/glob` | 渲染层无直接调用方（工具内部使用） | SearchService（ripgrep） |
-| codebase | `codebase:*` | 渲染层无直接调用方（工具内部使用） | CodebaseService（codegraph） |
-| tool | `tool:list` | approval-mode-section 工具下拉 | ToolRegistry |
-| audio | `audio:start/append/stop` | 渲染层无 UI 调用方 | AudioService（无 UI，标注不适用） |
+模型清单（模型选择器）来自主进程模型注册表。MCP 服务器列表、启动、停止走 MCP 域，主进程管理子进程生命周期，启动停止后工具注册表同步增删工具。技能列表、已学技能、学习、移除走技能域，存技能表，学习是让大模型按描述生成结构化技能。记忆列表、清空走记忆域，按会话过滤，存记忆表。目标和任务列表走对应域，存目标表、任务表，按会话过滤，会话详情页展示。应用信息（版本、运行时版本、数据目录）走应用域。系统指标（内存、CPU、运行时长）走系统域，指标页每 10 秒轮询，面板不可见时不请求。日志走日志域，读主进程日志文件尾部，手动刷新。DevTools 打开走 devtools 域。原生对话框（选目录、选文件）走 dialog 域。更新检查、安装、状态推送走 update 域，只有打包版可用。IM 渠道列表、启动、停止走 im 域，主进程管理各渠道适配器（企微、钉钉、飞书等），渠道消息可以桥接进 Agent 无头执行。代码搜索（grep/glob）和代码图谱查询（codebase）这两个域的通道存在，但渲染层没有直接调用方（工具内部使用），属于"不适用"标注。音频域（start/append/stop）同样没有 UI 调用方。
 
-### 4.9 缓存/失效/重试策略汇总
+### 4.9 缓存、失效、重试策略
 
-| 策略 | 值 | 出处 |
-|---|---|---|
-| QueryClient 全局 | staleTime 30s / gcTime 5min / refetchOnWindowFocus off / retry 1 / mutation retry 0 | query-client.ts |
-| 覆盖：git status | stale 10s（变化快） | use-git |
-| 覆盖：system status | stale 5s + refetchInterval 10s + enabled 控制 | use-system |
-| 覆盖：logs | stale 0（每次最新） | use-system |
-| 覆盖：api-key | stale Infinity（显式变更才失效） | use-api-key |
-| 覆盖：file 内容 | stale 30s / gcTime 5min（关窗再开秒开） | use-file-content |
-| mutation 失效 | delete/rename/pin → invalidate `['sessions']`；create → +`['recent-dirs']`；write → `['file',path]`；apiKey → `['api-key',provider]`；mcp start/stop → mcp:list | 各 hook |
-| 乐观更新 | delete（本地移除）、rename（本地改标题），失败回滚 + onSettled 重新拉取 | use-sessions |
-| 回合结束 | invalidate sessions + 详情；tool/approvals clearBySession；usage 累积 | use-agent-bridge |
-| 崩溃恢复 | 启动 markAllInterrupted → 渲染层中断提示条 | service-container |
+全局默认：查询缓存 30 秒内不重新请求，缓存 5 分钟后回收，窗口聚焦不触发刷新（桌面应用无意义），请求失败重试一次，写操作不重试（避免重复写入）。各处的覆盖：Git 状态缓存 10 秒（变化快）；系统指标缓存 5 秒、每 10 秒自动刷新；日志不缓存（每次要最新）；API Key 永不过期（显式变更才失效）；文件内容 30 秒、关闭 5 分钟内缓存保留。写操作成功后的失效规则：会话删除/重命名/置顶刷新会话列表；创建会话额外刷新最近目录；写文件刷新该文件内容缓存；API Key 变更刷新对应提供商；MCP 启停刷新服务器列表；回合结束刷新会话列表和详情。
 
-### 4.10 写操作失败兜底
+### 4.10 回合结束清理与崩溃恢复
 
-所有 IPC 写操作失败路径：`unwrap`/discriminated union 判断 → `[CODE] message` → toast（i18n errors.json 错误码文案，解析失败回退原始消息）→ 状态回滚（乐观更新回滚 / 审批模式回滚 / pendingOps 清除）。
-
----
+每回合结束后统一做三件事：刷新会话相关缓存、清空该会话的工具调用缓冲和审批缓冲（防内存累积）、累加 token 用量。应用启动时检查崩溃标记：上次异常退出过的话，把所有还挂着"运行中"的会话标记为"已中断"，聊天页据此显示提示条；清除崩溃标记。应用退出时按依赖反序停止所有服务：先中断对话流，再停权限和工具系统，然后关文件监听、停搜索子进程、杀终端进程、最后关数据库。
 
 ## 五、完整性与可信度（逐文件核对）
 
-### 5.1 文件清单（UI 职责 + 数据来源 + 实现状态）
+这一部分把 `src/renderer` 下的文件按类别过一遍，每个类别说明包含哪些文件、各自负责什么、数据从哪来、实现状态如何。所有文件都已核对。
 
-**入口与路由（6）**
+入口与路由共六个文件：main.tsx 只负责挂载根节点；App.tsx 组装各 Provider 并套最外层错误边界；router.tsx 声明路由（首页和聊天页都做懒加载，加载中显示轻量占位）；routes/root.tsx 是根布局（外壳加内容出口）和路由级错误边界；routes/home.tsx 是欢迎页（数据来自最近目录接口和原生目录选择）；routes/chat.tsx 是聊天页（按会话 id 拉详情，带各种守卫）。全部已实现。
 
-| 文件 | 职责 | 数据来源 | 状态 |
-|---|---|---|---|
-| main.tsx | 挂载根 + StrictMode | — | 已实现 |
-| App.tsx | Provider 组装 + 错误边界 | — | 已实现 |
-| router.tsx | RR8 Data Mode 路由（lazy 首页/聊天页） | — | 已实现 |
-| routes/root.tsx | 根布局 + HydrateFallback + 路由错误边界 | — | 已实现 |
-| routes/home.tsx | 欢迎页 | session:listRecentDirs / dialog:pickDirectory | 已实现 |
-| routes/chat.tsx | 聊天页（路由守卫） | session:get | 已实现 |
+布局共六个文件：AppShell.tsx 是外壳（栅格、拖拽、折叠、断点、全局事件订阅都在这）；Topbar.tsx 顶部栏；Sidebar.tsx 侧栏组装；folder-label.tsx 文件夹标签；thread-item.tsx 会话项（拖拽、内联重命名、菜单）；DevPanel.tsx 右面板标签容器。全部已实现。
 
-**布局（6）**：AppShell（栅格/折叠/拖拽/断点 + 全局桥接挂载）、Topbar、Sidebar（分组/拖拽/置顶）、folder-label、thread-item（内联重命名 + 菜单）、DevPanel（6 tab）。全部已实现。
+聊天域共十一个文件：ChatPanel.tsx 容器（对话状态、状态条、统计条）；ChatInput.tsx 输入框（最复杂）；ChatMessageList.tsx 消息列表（滚动、导航轨）；message-item.tsx 消息行与各类卡片；message-actions.tsx 悬停操作栏；message-utils.ts 文本提取等纯函数；streaming-footer.tsx 流式尾部；Markdown.tsx Markdown 渲染（shiki 高亮，双主题）；file-change-card.tsx 文件变更 diff 卡片；conversation-search-bar.tsx 会话内搜索条；rate-limit-banner.tsx 限流横幅。全部已实现。
 
-**chat 域（11）**：ChatPanel、ChatInput、ChatMessageList、message-item、message-actions、message-utils、streaming-footer、Markdown（shiki 双主题）、file-change-card、conversation-search-bar、rate-limit-banner。全部已实现。
+审批域共四个文件：inline-approval-card.tsx 内联审批卡；ask-dialog.tsx 提问对话框；approval-preview.tsx 按工具类型渲染结构化预览（命令、路径、diff）；approval-utils.ts 类型图标映射等纯函数。全部已实现。
 
-**agent 域（4）**：inline-approval-card（已实现）、ask-dialog（已实现）、approval-preview（已实现）、approval-utils（已实现）。
+通用域共九个文件：AppErrorBoundary.tsx 应用级错误边界；SectionErrorBoundary.tsx 区块级错误边界；AsyncBoundary.tsx 五态渲染层（配 use-async-view 状态机）；CommandPalette.tsx 命令面板；EmptyState.tsx 空态组件；ModelSelector.tsx 模型选择器（数据来自模型清单接口）；ShortcutHelpDialog.tsx 快捷键帮助；UnifiedDiffView.tsx 统一双栏 diff；UpdateNotice.tsx 更新提示。全部已实现。其中快捷键帮助表里有 Ctrl+B 和 Ctrl+J 两项，但全局绑定里没有对应实现，属已知不一致。
 
-**common（9）**：AppErrorBoundary、SectionErrorBoundary（已实现）；AsyncBoundary + useAsyncView（五态，已实现）；CommandPalette（已实现）；EmptyState（已实现）；ModelSelector（已实现，数据源 models:list）；ShortcutHelpDialog（已实现，注意 Ctrl+B/Ctrl+J 帮助表项与实际绑定不一致）；UnifiedDiffView（已实现）；UpdateNotice（已实现）。
+文件域共八个文件：FileTreePanel.tsx 面板；FileTreeNode.tsx 递归节点；FileTreeNavigator.tsx 查看器内轻量导航；inline-create-input.tsx、inline-rename-input.tsx 行内输入；node-menu.tsx 节点右键菜单；FileViewerDialog.tsx 查看器；file-viewer-utils.ts 语言推断等纯函数。全部已实现。
 
-**file-tree（8）**：FileTreePanel/FileTreeNode/FileTreeNavigator/inline-create-input/inline-rename-input/node-menu/FileViewerDialog/file-viewer-utils。全部已实现。
+Git 域五个文件：GitPanel.tsx、file-list.tsx、file-diff-view.tsx、git-panel-parts.tsx、git-status-utils.ts，全部只读已实现。
 
-**git（5）**：GitPanel/file-list/file-diff-view/git-panel-parts/git-status-utils。只读已实现；`git:add/commit/push` 通道定义存在但渲染层无 UI（不适用）。
+开发者域四个文件：browser-pane.tsx 内嵌浏览器、InspectorPanel.tsx DevTools 检查器、LogsPanel.tsx 日志、MetricsPanel.tsx 指标。全部已实现。
 
-**dev（4）**：browser-pane（已实现）、InspectorPanel（已实现）、LogsPanel（已实现）、MetricsPanel（已实现）。
+终端域：TerminalPanel.tsx（xterm 集成）；另有 loading-ui 目录下的终端加载动画。
 
-**terminal（2）**：TerminalPanel（已实现）、loading-ui/terminal（加载动画）。
+设置域共二十三个文件：SettingsDialog.tsx 容器（导航、分发）；shortcut-picker.tsx 快捷键录制；settings-controls.tsx 共用控件；sections 目录下二十个分区文件（关于、审批模式、浏览器、数据、编辑器、实验、通用、IM 渠道、MCP、模型参数、模型服务、占位集合、系统提示词、规则与记忆、快捷键、技能、遥测、回合、用量、工作树）。其中浏览器是说明页，占位集合里是账号、移动端、插件、hooks、命令五个"规划中"占位。
 
-**settings（23）**：SettingsDialog + shortcut-picker + settings-controls（已实现）+ sections 20 个——about/approval-mode/browser/data/editor/experimental/general/im-channels/mcp/model-params/models/prompt/rules-memory/shortcuts/skills/telemetry/turns/usage/workspace（已实现；browser 为说明页）；placeholders（account/mobile/plugins/hooks/commands 为占位）。
+hooks 共二十二个：use-agent（Agent 对话桥接，注入自定义传输层）；use-sessions（会话七个查询/变更）；use-git；use-file-tree（文件树加载与监听）；use-file-tree-ops（文件树增删改，带防重复标记）；use-file-content、use-file-write（查看器读写）；use-api-key；use-telemetry；use-update；use-system（系统指标、日志）；use-protocol-check（协议版本校验）；use-layout-breakpoint（断点）；use-async-view（五态状态机）；use-keyboard-shortcuts（快捷键绑定，配置驱动）；use-conversation-search；use-agent-bridge（回合结束统一收尾）；use-agent-ask-bridge；use-approval-bridge；use-approval-mode；use-tool-bridge；use-terminal-bridge。全部已实现。
 
-**hooks（22）**：use-agent（transport 注入）、use-sessions（7 个 query/mutation）、use-git、use-file-tree、use-file-tree-ops、use-file-content、use-file-write、use-api-key、use-telemetry、use-update、use-system、use-protocol-check、use-layout-breakpoint、use-async-view、use-keyboard-shortcuts、use-conversation-search、use-agent-bridge、use-agent-ask-bridge、use-approval-bridge、use-approval-mode、use-tool-bridge、use-terminal-bridge。全部已实现。
+stores 共十六个：持久化五个（工厂、设置、激活会话、侧栏偏好、草稿）；瞬态十一个（全局 UI 开关、欢迎模式、文件树、文件查看器、工具调用记录、审批队列、提问、限流、推理折叠覆盖、终端元数据、用量）。全部已实现。
 
-**stores（16）**：persistent/（create-persistent-store 工厂、settings、sessions、sidebar-pref、draft）+ transient/（ui、welcome、file-tree、file-viewer、tool、approvals、agent-ask、rate-limit、reasoning-collapse、terminal、usage）。全部已实现。
+providers 三个：I18nProvider、ThemeProvider（把设置里的主题应用到页面根节点，监听系统主题）、QueryProvider。
 
-**providers（3）**：I18nProvider、ThemeProvider、QueryProvider（+ TooltipProvider/Toaster 由 ui 组件提供）。已实现。
+lib 工具：ipc.ts 响应解包（统一把成功失败分支转成数据或抛错）；error-actions.ts 错误码到恢复动作的注册表；constants.ts 路由和尺寸常量；format-time.ts 相对时间；utils.ts 类名合并；theme-init.ts 主题初始化防闪烁；agent/ipc-agent-transport.ts 是核心的流式桥接（把 AI SDK 和 IPC 通道接起来）；query/query-client.ts 缓存配置；motion 目录动效参数；diff 目录 diff 解析纯函数。全部已实现。
 
-**lib（10+）**：ipc（unwrap）、error-actions（错误码恢复）、constants（ROUTES/尺寸/草稿 id）、format-time、utils（cn）、theme-init、agent/ipc-agent-transport（核心流式桥接）、query/query-client、motion/*、diff/*。已实现。
-
-**i18n**：config（zh-CN/en，`code-agent:lang` 持久化）、use-translation、locales/*。已实现。
-
-### 5.2 实现状态汇总
-
-- **已实现**：以上全部交互/数据链路（会话 CRUD、流式 Agent、审批+白名单、文件树+watch、查看器编辑、终端 PTY、Git 只读、用量统计、MCP/技能/记忆管理、IM 渠道配置、i18n、主题、快捷键、更新提示、崩溃恢复）。
-- **部分实现**：侧栏搜索框（仅 UI 无过滤）；归档 tab（恒空）；斜杠命令 /models /compact /help（toast 引导）；vim 模式（存储无行为）；设置快捷键帮助表中 Ctrl+B/Ctrl+J（未绑定）。
-- **占位**：设置页 账号/移动端/插件/hooks/命令 分区（"🚧 规划中"）。
-- **不适用（NONE，诚实不提供）**：退出登录/云端账户（无登录后端）；Git commit/push UI（只读防误操作）；codebase/search/audio 域无渲染层 UI；独立审批对话框（已移除，改内联卡）。
-
----
+国际化：i18n 目录，支持简体中文和英文，默认中文，缺 key 回退中文，语言选择存 localStorage；两个命名空间（通用文案、错误文案）。
 
 ## 六、交付摘要（占位 / 不适用清单）
 
-1. **占位（规划中，UI 已存在但无后端能力）**：侧栏搜索过滤、归档 tab、设置页账号/插件/hooks/命令/移动端分区、斜杠命令部分动作（toast 引导）、vim 模式、浏览器设置配置项。
-2. **不适用（NONE，诚实不渲染）**：退出登录、Git 写操作 UI、codebase/search/audio 域 UI、独立审批对话框（已内联化）。
-3. **已知不一致（如实记录）**：顶栏主题两态 vs 快捷键三态循环；快捷键帮助表 Ctrl+B/Ctrl+J 未实际绑定；DEFAULT_GIT_REPO_PATH 为硬编码 `f:\TraeProjects\1`（配置化后续增强）。
+最后汇总哪些东西是占位、哪些是不适用、哪些是已知不一致，都是如实标注的。
+
+占位（界面在、功能没做完）：侧栏搜索框只能输入不过滤；归档标签永远是空；设置页的账号、移动端（仅含 IM 渠道真功能）、插件、hooks、命令五个分区是"规划中"占位；斜杠命令里的 /models、/compact、/help 只弹提示引导；vim 模式开关只存设置无实际行为；浏览器设置分区只是说明文字。
+
+不适用（诚实不提供）：没有退出登录和云端账户（没有登录后端）；Git 面板只读，不提供提交推送，add/commit/push 三个通道虽在定义表里但前端零调用；代码搜索和代码图谱、音频三个域的通道存在但渲染层无界面；独立审批对话框已移除，改为内联卡片。
+
+已知不一致：顶部栏主题按钮是浅色/深色两态切换，快捷键是三态循环（多了"跟随系统"）；快捷键帮助表里的 Ctrl+B、Ctrl+J 没有实际绑定；Git 仓库路径目前是硬编码的项目路径（后续应改为配置）。
+
+以上即当前前端全部行为。如某处需要进一步展开（例如某个流程的时序细节、某条链路的完整代码路径），可针对该处补充说明。
