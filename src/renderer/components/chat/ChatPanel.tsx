@@ -13,6 +13,8 @@
 // - 工具调用已 inline 渲染在 ChatMessageList（ToolCallView）
 // ──────────────────────────────────────────────────────────────
 
+import type { ChatMessage } from '@code-agent/shared/renderer';
+import type { UIMessage } from 'ai';
 import { AlertTriangle, Folder, Search, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -31,6 +33,43 @@ import { ChatMessageList } from './ChatMessageList';
 import { ConversationSearchBar } from './conversation-search-bar';
 import { RateLimitBanner } from './rate-limit-banner';
 
+/**
+ * ModelMessage → UIMessage（历史消息回显用）
+ *
+ * AI SDK v7 的 useChat messages 字段需要 UIMessage 格式（id/role/parts），
+ * 但 session:get 返回的是 ModelMessage 格式（role/content，与 SQLite 存储一致）；
+ * v7 只导出 UIMessage→ModelMessage 的 convertToModelMessages，反向需手写。
+ * 仅提取文本内容（tool/reasoning 等复杂 part 不参与回显）。
+ */
+function toInitialMessages(messages: readonly ChatMessage[]): UIMessage[] {
+  return messages.map((m, index) => {
+    const role: UIMessage['role'] =
+      m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user';
+    const content = m.content;
+    const text =
+      typeof content === 'string'
+        ? content
+        : Array.isArray(content)
+          ? content
+              .filter(
+                (p): p is { type: 'text'; text: string } =>
+                  typeof p === 'object' &&
+                  p !== null &&
+                  'type' in p &&
+                  p.type === 'text' &&
+                  typeof (p as { text?: unknown }).text === 'string',
+              )
+              .map((p) => p.text)
+              .join('\n')
+          : '';
+    return {
+      id: `hist-${index}`,
+      role,
+      parts: [{ type: 'text', text }],
+    };
+  });
+}
+
 interface ChatPanelProps {
   /**
    * 对话 id（用于 useChat 的 id 参数，控制消息状态隔离）
@@ -46,6 +85,13 @@ interface ChatPanelProps {
    * 由路由层（chat.tsx）从 session.workingDir 注入。
    */
   workingDir: string;
+  /**
+   * 历史消息（ChatMessage[] = ModelMessage[]，来自 session:get）
+   *
+   * 转换为 UIMessage 后作为 useChat 的 messages（v7 字段名）注入，
+   * 打开历史会话时回显消息；仅在组件首次挂载时生效。空数组表示新会话。
+   */
+  initialMessages?: readonly ChatMessage[];
   /**
    * 上次回合是否异常中断（崩溃恢复：由路由层从 session.lastRunStatus 注入）
    * 为 true 时顶部展示"上次回合已中断"提示条
@@ -73,6 +119,7 @@ interface ChatPanelProps {
 export function ChatPanel({
   chatId,
   workingDir,
+  initialMessages,
   interrupted = false,
   className,
 }: ChatPanelProps): ReactElement {
@@ -107,11 +154,15 @@ export function ChatPanel({
   // useAgentWithIpc：Agent 模式专用 hook
   // - id: 控制消息状态隔离
   // - workingDir: agent 工具操作边界（注入 IpcAgentTransport）
+  // - messages: 历史消息回显（v7 字段名，仅首次挂载生效；非空才传）
   // - onError: 统一 toast 提示（不阻塞 UI）
   // - regenerate: AI SDK v7 内置，自动截断目标 assistant 消息及后续 → 重发请求
   const { messages, sendMessage, status, stop, regenerate, setMessages } = useAgentWithIpc({
     id: chatId,
     workingDir,
+    ...(initialMessages !== undefined && initialMessages.length > 0
+      ? { messages: toInitialMessages(initialMessages) }
+      : {}),
     onError: handleError,
   });
 

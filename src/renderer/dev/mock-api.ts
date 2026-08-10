@@ -72,7 +72,8 @@ const mockSessions: SessionMeta[] = [
 interface MockMessage {
   id: string;
   role: 'user' | 'assistant';
-  parts: Array<{ type: 'text'; text: string }>;
+  // ModelMessage 形状（与主进程 SQLite 存储一致）：content 为字符串
+  content: string;
 }
 
 const messagesBySession: Record<string, MockMessage[]> = {
@@ -80,17 +81,13 @@ const messagesBySession: Record<string, MockMessage[]> = {
     {
       id: 'm1-1',
       role: 'user',
-      parts: [{ type: 'text', text: '帮我把 IPC 定义表拆成 meta 和 definitions 两个文件' }],
+      content: '帮我把 IPC 定义表拆成 meta 和 definitions 两个文件',
     },
     {
       id: 'm1-2',
       role: 'assistant',
-      parts: [
-        {
-          type: 'text',
-          text: '已完成拆分：`meta.ts` 保留纯字符串通道元数据（preload 沙箱安全），`definitions.ts` 合并 zod schema。新增 IPC 方法只需改两行 + handler 一个方法，其余全自动。',
-        },
-      ],
+      content:
+        '已完成拆分：`meta.ts` 保留纯字符串通道元数据（preload 沙箱安全），`definitions.ts` 合并 zod schema。新增 IPC 方法只需改两行 + handler 一个方法，其余全自动。',
     },
   ],
 };
@@ -112,7 +109,7 @@ function simulateAgentStream(sessionId: string, userText: string): void {
   messagesBySession[sessionId].push({
     id: `u-${Date.now()}`,
     role: 'user',
-    parts: [{ type: 'text', text: userText }],
+    content: userText,
   });
 
   const answer = [

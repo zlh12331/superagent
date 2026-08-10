@@ -3,12 +3,13 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 从 URL 参数读取 sessionId
-// - 通过 useSessionDetail 获取 session.workingDir
-// - 渲染 ChatPanel，传入 chatId + workingDir
+// - 通过 useSessionDetail 获取 session.workingDir + 历史消息
+// - 渲染 ChatPanel，传入 chatId + workingDir + initialMessages
 // - session 不存在或 workingDir 为空时重定向到首页
 // - 进入时退出欢迎页模式（确保从 HomePage navigate 过来后 welcome-mode class 移除）
 // ──────────────────────────────────────────────────────────────
 
+import type { ChatMessage } from '@code-agent/shared/renderer';
 import { type ReactElement, useEffect } from 'react';
 import { Navigate, useParams } from 'react-router';
 
@@ -24,7 +25,9 @@ import { useWelcomeStore } from '@/stores/transient/welcome-store';
  * URL 模式：/chat/:sessionId
  *
  * 通过 useParams 读取 sessionId，再通过 useSessionDetail 拉取会话详情，
- * 提取 workingDir 注入 ChatPanel（Agent 模式的工具操作边界）。
+ * 提取 workingDir 注入 ChatPanel（Agent 模式的工具操作边界），
+ * 并把历史消息（ChatMessage[] = ModelMessage[]）作为 initialMessages
+ * 注入 useChat——历史会话打开即可回显消息（此前缺口）。
  *
  * 若 URL 不含 sessionId（不应发生，但类型守卫），重定向到首页。
  */
@@ -85,6 +88,8 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
       chatId={sessionId}
       workingDir={session.session.workingDir}
       interrupted={session.session.lastRunStatus === 'interrupted'}
+      // 历史消息注入 useChat（ChatMessage = ModelMessage，useChat 直接消费）
+      initialMessages={session.messages as unknown as ChatMessage[]}
     />
   );
 }
