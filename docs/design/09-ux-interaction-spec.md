@@ -28,7 +28,7 @@ flowchart LR
     M3[存储]
   end
   R5 --> B1 --> M1 --> M2 --> M3
-  M2 --webContents.send 推送事件--> R4
+  M2 -->|webContents.send 推送事件| R4
 ```
 
 ### 1.2 状态四层（L1-L4）
@@ -285,7 +285,7 @@ graph TD
   A --> M[DropdownMenu 下拉菜单]
   A --> N[Toaster Toast]
   B --> B1[基于 Radix Slot + cva]
-  I --> J[Sheet = Dialog 变体右侧滑出]
+  I --> J1[Sheet = Dialog 变体右侧滑出]
   K --> K1[基于 Radix Tabs]
   L --> L1[基于 Radix Tooltip]
   M --> M1[基于 Radix DropdownMenu]
@@ -340,15 +340,15 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-  subgraph 拖拽
+  subgraph drag[拖拽]
     D1[mousedown] --> D2[mousemove 更新宽度] --> D3[mouseup 结束]
   end
-  subgraph 折叠
+  subgraph collapse[折叠]
     C1[按钮点击] --> C2[取反 + 记住手动]
-    C3[窗口<1200px] --> C4[自动折右面板]
-    C5[窗口<900px] --> C6[自动折侧栏]
+    C3["窗口 <1200px"] --> C4[自动折右面板]
+    C5["窗口 <900px"] --> C6[自动折侧栏]
   end
-  subgraph 挂载副作用
+  subgraph mount[挂载副作用]
     G1[订阅审批/提问/工具/终端事件] --> G2[回合结束统一收尾] --> G3[快捷键绑定] --> G4[协议版本校验]
   end
 ```
@@ -361,7 +361,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  subgraph 会话项操作
+  subgraph ops[会话项操作]
     O1[点击] --> A1[激活+跳转聊天页]
     O2[双击标题] --> A2[内联重命名→session:rename 乐观更新]
     O3[⋯菜单置顶] --> A3[session:pin→列表刷新]
@@ -385,7 +385,7 @@ stateDiagram-v2
   submitted --> error: 请求失败
   error --> ready: 下次发送
   streaming --> ready: 停止（按钮/Esc/卸载 → agent:stop）
-  ready/streaming --> ready: 重新生成（截断重发）
+  ready --> ready: 重新生成（截断后重发，旧流自动中断）
 ```
 
 输入框附加状态：
