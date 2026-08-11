@@ -508,6 +508,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/main/infra/lsp/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }

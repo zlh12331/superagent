@@ -34,14 +34,22 @@ export class LspServerManager {
   private readonly command: string;
   private readonly args: readonly string[];
   private readonly timeoutMs: number;
+
+  /**
+   * 客户端构造器（DI 注入点：测试传 fake，生产默认 LspClient）
+   * 注入而非 mock：外部依赖可替换，业务逻辑保持真实实现
+   */
+  private readonly clientCtor: typeof LspClient;
+
   private readonly clients = new Map<string, LspClient>();
   private readonly pending = new Map<string, Promise<LspClient>>();
   private disposed = false;
 
-  constructor(options?: LspServerManagerOptions) {
+  constructor(options?: LspServerManagerOptions & { lspClientCtor?: typeof LspClient }) {
     this.command = options?.command ?? 'typescript-language-server';
     this.args = options?.args ?? ['--stdio'];
     this.timeoutMs = options?.timeoutMs ?? 15_000;
+    this.clientCtor = options?.lspClientCtor ?? LspClient;
   }
 
   /**
@@ -86,7 +94,7 @@ export class LspServerManager {
 
   /** 启动单个服务器（initialize 失败清理资源） */
   private async boot(rootUri: string): Promise<LspClient> {
-    const client = new LspClient({
+    const client = new this.clientCtor({
       command: this.command,
       args: this.args,
       rootUri,
