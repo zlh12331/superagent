@@ -154,7 +154,20 @@ export interface ICodebaseService {
  * - codegraph 命令执行失败：INTERNAL_ERROR
  * - stdout JSON 解析失败：INTERNAL_ERROR
  */
-class CodebaseService implements ICodebaseService {
+export class CodebaseService implements ICodebaseService {
+  /**
+   * 子进程启动函数（DI 注入点：测试传 fake，生产默认 node:child_process）
+   * 注入而非 mock：外部依赖可替换，业务逻辑保持真实实现
+   */
+  private readonly spawnFn: typeof spawn;
+  /** 单条命令超时（DI 注入点：测试可缩短验证超时路径） */
+  private readonly commandTimeoutMs: number;
+
+  constructor(options: { spawnFn?: typeof spawn; timeoutMs?: number } = {}) {
+    this.spawnFn = options.spawnFn ?? spawn;
+    this.commandTimeoutMs = options.timeoutMs ?? CODEGRAPH_COMMAND_TIMEOUT_MS;
+  }
+
   /**
    * 活跃子进程集合：用于 dispose 时统一清理
    *
@@ -304,7 +317,7 @@ class CodebaseService implements ICodebaseService {
    */
   private runCodegraph(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const child = spawn('codegraph', args, {
+      const child = this.spawnFn('codegraph', args, {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
@@ -336,12 +349,12 @@ class CodebaseService implements ICodebaseService {
         reject(
           new AppError(
             ErrorCode.INTERNAL_ERROR,
-            `codegraph 命令超时（${CODEGRAPH_COMMAND_TIMEOUT_MS}ms）`,
+            `codegraph 命令超时（${this.commandTimeoutMs}ms）`,
             undefined,
             { args, cwd },
           ),
         );
-      }, CODEGRAPH_COMMAND_TIMEOUT_MS);
+      }, this.commandTimeoutMs);
 
       // 统一清理逻辑：清超时定时器 + 从 activeProcesses 移除
       const cleanup = (): void => {
