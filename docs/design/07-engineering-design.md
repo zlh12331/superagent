@@ -152,6 +152,18 @@ concurrency:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+
+### 4.0 三平台发布（2026-08-11 起）
+
+- release.yml 三平台矩阵：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64
+- 各平台 runner 构建 + 独立 release job 合并上传 GitHub Release
+
+**macOS 公证与签名**（正式发布必需）：
+1. Apple Developer 证书（Developer ID Application）→ 配置 CI Secrets：`CSC_LINK`（.p12 base64）+ `CSC_KEY_PASSWORD`
+2. 公证（notarize）：electron-builder.yml `mac.notarize` 当前为 false；开启需 `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD`（或 `APPLE_TEAM_ID`）Secrets
+3. 未签名/未公证版本仅限本地开发分发（macOS Gatekeeper 会拦截）
+
+**Windows 签名**（可选）：Authenticode 证书 → 同一 `CSC_LINK`/`CSC_KEY_PASSWORD` 自动签名
 ## 4. Release 流水线
 
 源码：[.github/workflows/release.yml](file:///f:/TraeProjects/1/.github/workflows/release.yml)。
