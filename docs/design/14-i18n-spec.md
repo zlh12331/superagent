@@ -62,3 +62,5 @@ src/renderer/i18n/
 - [ ] 动态内容用插值，非拼接
 - [ ] 错误消息走 errors.json（按 code）
 - [ ] 审计脚本通过
+
+> **工具评估（2026-08-11）**：调研 i18next-cli（官方 SWC 工具）/ i18next-parser 后**未引入**——原因：①其输出格式与项目语言包 `{translation:...}` 顶层包装结构不兼容（extract 会重建文件）；②AST 提取的"新 key"实为命名空间错位误报（key 已在语言包）；③check:i18n（正则+类型安全 t）已验证 0 缺失。结论：保留自研 check:i18n，新增 key 走 §三流程。

@@ -23,7 +23,7 @@
 ## 三、密钥管理（工程化强制：`pnpm check:secrets`）
 
 1. **API Key 存储**：Electron `safeStorage`（Windows DPAPI）加密，`settings:setApiKey` 走主进程，渲染层不得持有明文
-2. **禁止硬编码**：源码中禁止真实密钥/令牌（check:secrets 扫描：`sk-` 前缀 / `api_key`/`secret`/`password` 赋值模式，pre-push + CI 卡关）
+2. **禁止硬编码**：源码中禁止真实密钥/令牌（gitleaks 业界标准：100+ 规则，pre-commit `protect --staged` + CI Action 双卡关；`pnpm check:secrets` = `gitleaks dir src`，0.6s）
 3. **.env 保护**：环境变量仅主进程启动时 `process.loadEnvFile()` 加载（whenReady 之前），.gitignore 排除
 4. **测试密钥**：测试/mock 必须用显式 fake 值（`fake-token` 风格），禁止复制真实密钥
 5. **日志纪律**：日志禁止输出密钥（16-error-logging §2.3，traceId 只记前 8 位已实现）
