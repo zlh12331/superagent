@@ -10,6 +10,10 @@ pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部 unit tests: shared → main → renderer → scripts
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
+pnpm check:static           # 静态审计：check:tokens（样式铁律）+ check:i18n（i18n 缺失卡关），pre-push/CI 卡关
+pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
+pnpm check:i18n             # i18n 审计：引用缺失卡关 + 双语一致性；冗余加 --strict 卡关
+pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
 pnpm changelog              # 从 git log 自动生成 CHANGELOG [Unreleased] 段
 
 # 单包/层测试
@@ -34,8 +38,8 @@ pnpm changeset              # 子包 changeset 记录（仅子包；根应用不
 pnpm version:packages       # changesets 结算（仅子包）
 ```
 
-质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm test` → `pnpm knip`。
-pre-push 钩子：typecheck + lint + test:scripts（`SKIP_PREPUSH=1` 跳过）。
+质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`。
+pre-push 钩子：typecheck + lint + check:static + depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）。
 
 ## 架构
 
@@ -121,7 +125,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **changelog 自动生成**（`pnpm changelog`）：从 git log（Conventional Commits）生成 CHANGELOG [Unreleased] 段；tag 锚点幂等（自最近 v*.*.* 起）；排除 docs/chore/test 等类型
 - **CHANGELOG 手动维护**：根应用是 pnpm workspace 根包，changesets 不支持（known limitation）；发版时手动把 [Unreleased] 改为版本段 + 升 package.json version + 打 tag
 - **Renovate**：依赖自动更新（周末批次，electron major 人工评审）
-- **pre-push 钩子**：typecheck + lint + test:scripts（`SKIP_PREPUSH=1` 跳过）
+- **pre-push 钩子**：typecheck + lint + check:static（check:tokens + check:i18n）+ depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）
 - **TypeDoc**：`pnpm docs:types` 在 tools/typedoc 子包运行（TS6 隔离，规避 TS7 不兼容）
 - **包体积分析**：`pnpm analyze:bundle`（rollup-plugin-visualizer，ANALYZE_BUNDLE=1）
 
