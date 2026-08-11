@@ -206,6 +206,12 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 > 2026-08-11 同步：测试文件 90 → 137（main 59 → 95、renderer 22 → 33，含对齐轮新增 goal-service / memory-service / im-service / approval-utils / fuzzy-search-dialog 等测试）；renderer 用例 242 全绿。
 
+
+> **覆盖率门禁（2026-08-11 起 CI 卡关）**：`pnpm test:coverage` 三层门槛按实测基线设定（渐进收紧至规范值 80/75/80/80）：
+> - shared：80/18/33/80（当前 84.73/18.57/33.33/84.49）
+> - main：70/60/70/70（当前 72.01/63.17/72.25/72.07）
+> - renderer：65/55/65/65（当前 67.34/59.34/67.72/68.66）
+> CI Unit tests step 已改为 `pnpm test:coverage`（覆盖率低于基线即失败；补测试后同步上调门槛）。
 ### 7.2 已知覆盖率缺口
 
 - `test:coverage` 脚本现已包含 renderer（shared + main + renderer 三套覆盖率）

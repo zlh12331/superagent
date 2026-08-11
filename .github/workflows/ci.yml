@@ -68,8 +68,8 @@ jobs:
       - name: Dependency direction (depcruise)
         run: pnpm depcruise
 
-      - name: Unit tests (shared + main + renderer)
-        run: pnpm test
+      - name: Unit tests + coverage gate (shared + main + renderer)
+        run: pnpm test:coverage
 
       - name: Dependency audit
         run: pnpm audit
