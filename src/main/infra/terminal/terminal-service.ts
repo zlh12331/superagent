@@ -91,7 +91,17 @@ const MAX_BUFFER_BYTES = 100 * 1024;
  * - spawn 失败：TERMINAL_SPAWN_FAILED（如 shell 不存在、权限不足）
  * - input/resize/kill 失败：返回 ok=false（不抛错，渲染层据此判断终端已关闭）
  */
-class TerminalService implements ITerminalService {
+export class TerminalService implements ITerminalService {
+  /**
+   * PTY 创建函数（DI 注入点：测试传 fake，生产默认 node-pty spawn）
+   * 注入而非 mock：外部依赖可替换，业务逻辑保持真实实现
+   */
+  private readonly spawnFn: typeof spawn;
+
+  constructor(options: { spawnFn?: typeof spawn } = {}) {
+    this.spawnFn = options.spawnFn ?? spawn;
+  }
+
   /**
    * 活跃终端 Map：terminalId → PTY 上下文
    *
@@ -139,7 +149,7 @@ class TerminalService implements ITerminalService {
 
     let pty: IPty;
     try {
-      pty = spawn(file, args, {
+      pty = this.spawnFn(file, args, {
         // 终端名称（xterm.js 识别用）
         name: 'xterm-256color',
         cols,
