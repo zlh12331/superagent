@@ -61,10 +61,10 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
   const { path, isCreate, lines, stats } = parsed;
   // 预构造带稳定 key 的行（diff 行无天然唯一 id：内容可重复；type+序号 组合保证稳定）
   const rows = lines.map((line, i) => ({ ...line, rowKey: `${line.type}:${i}` }));
-  // 变更类型徽章：created（accent 软底）/ modified（蓝底）
+  // 变更类型徽章：created（accent 软底）/ modified（蓝底）——纯语义令牌（照搬参考项目 FileChangeCard）
   const badgeClass = isCreate
-    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-    : 'bg-sky-500/10 text-sky-600 dark:text-sky-400';
+    ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+    : 'bg-[var(--info-blue)] text-[var(--accent-2)]';
   const badgeText = isCreate ? t('chat.fileChange.created') : t('chat.fileChange.modified');
   const fileName = path.split(/[\\/]/).pop() ?? path;
 
@@ -101,8 +101,9 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
                 key={line.rowKey}
                 className={cn(
                   'flex gap-2 px-2 whitespace-pre-wrap break-all',
-                  line.type === 'add' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-                  line.type === 'del' && 'bg-red-500/10 text-red-600 dark:text-red-400',
+                  // diff 行配色：纯语义令牌（照搬参考项目 FileChangeCard，无 dark: 双写）
+                  line.type === 'add' && 'bg-[var(--accent)]/10 text-[var(--accent)]',
+                  line.type === 'del' && 'bg-[var(--error)]/10 text-[var(--error)]',
                   line.type === 'context' && 'text-muted-foreground',
                 )}
               >
