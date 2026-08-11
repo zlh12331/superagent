@@ -32,7 +32,7 @@
 
 - **React Compiler**（babel-plugin-react-compiler）——自动 memo，禁止用注释/配置绕过
 - **memo 包裹**：高频重渲染组件（MessageItem 等）显式 `memo`
-- **动态 import**：DialogHost/命令面板等低频模块按需加载
+- **动态 import**：路由（router.tsx）与低频面板（DevPanel 等）按需加载（lazy）
 
 ### 2.2 规则
 
