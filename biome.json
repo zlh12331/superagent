@@ -152,6 +152,16 @@
       }
     },
     {
+      "includes": ["**/i18next.config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "**/packages/shared/src/types/models.ts",
         "**/packages/shared/src/ipc/response.ts"
