@@ -424,6 +424,18 @@ class FileService implements IFileService {
     this.watchers.set(watcherId, { watcher, webContents });
     logger.info({ watcherId, path }, 'FileService watcher 已注册');
 
+    // 等待 chokidar 就绪再返回（真实竞态修复：ignoreInitial: true 下，
+    // ready 之前创建的文件会被当作初始状态吞掉 add 事件——调用方在
+    // watch() resolve 后立刻创建文件会丢事件，单测暴露）
+    await new Promise<void>((resolve, reject) => {
+      if (watcher.optionsReady) {
+        resolve();
+        return;
+      }
+      watcher.once('ready', () => resolve());
+      watcher.once('error', (error: unknown) => reject(error));
+    });
+
     return { watcherId };
   }
 
@@ -663,6 +675,9 @@ class FileService implements IFileService {
       case 'ENOENT':
         // 文件或目录不存在
         return new AppError(ErrorCode.NOT_FOUND, '文件或目录不存在', error);
+      case 'EEXIST':
+        // 文件或目录已存在（createFile 的 wx 标志 / rename 目标冲突）
+        return new AppError(ErrorCode.ALREADY_EXISTS, '文件或目录已存在', error);
       case 'EACCES':
       case 'EPERM':
         // 权限不足（读/写/执行权限被拒绝）
