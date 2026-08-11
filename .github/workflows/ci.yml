@@ -59,6 +59,9 @@ jobs:
       - name: Static checks (tokens + i18n)
         run: pnpm check:static
 
+      - name: Token consistency (Style Dictionary)
+        run: pnpm tokens:check
+
       - name: Dead code check (knip)
         run: pnpm knip
 
