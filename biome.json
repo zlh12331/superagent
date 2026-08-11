@@ -258,7 +258,10 @@
       }
     },
     {
-      "includes": ["**/src/main/infra/search/search-service.ts"],
+      "includes": [
+        "**/src/main/infra/search/search-service.ts",
+        "**/src/main/infra/search/search-service.test.ts"
+      ],
       "linter": {
         "rules": {
           "style": {

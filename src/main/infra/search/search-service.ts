@@ -121,7 +121,17 @@ type RipgrepJsonLine =
  * - 子进程启动失败：INTERNAL_ERROR
  * - stdout 解析失败：INTERNAL_ERROR
  */
-class SearchService implements ISearchService {
+export class SearchService implements ISearchService {
+  /**
+   * 子进程启动函数（DI 注入点：测试传 fake，生产默认 node:child_process spawn）
+   * 注入而非 mock：外部依赖可替换，业务逻辑保持真实实现
+   */
+  private readonly spawnFn: typeof spawn;
+
+  constructor(options: { spawnFn?: typeof spawn } = {}) {
+    this.spawnFn = options.spawnFn ?? spawn;
+  }
+
   /**
    * 当前活跃的子进程列表（用于 dispose 时统一清理）
    *
@@ -316,12 +326,14 @@ class SearchService implements ISearchService {
       if (line === '') {
         return true;
       }
-      files.push(line);
+      // 先检查再 push：达到 maxResults 的行不入结果（真实缺陷修复：
+      // 原实现先 push 再检查，导致多收 1 条且恰好 maxResults 被误标 truncated）
       if (files.length >= maxResults) {
         truncated = true;
         // 达到 maxResults 后主动 kill 子进程
         return false;
       }
+      files.push(line);
       return true;
     });
 
@@ -366,7 +378,7 @@ class SearchService implements ISearchService {
     return new Promise((resolve, reject) => {
       // spawn 子进程
       // Windows 上 rgPath 是绝对路径到 ripgrep.exe，不需要 shell
-      const child = spawn(rgPath, args, {
+      const child = this.spawnFn(rgPath, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });
@@ -411,7 +423,9 @@ class SearchService implements ISearchService {
       });
 
       // stdout error 事件处理：避免 stdout 流错误导致 Promise 永久 pending
-      child.stdout.on('error', (err: Error) => {
+      // 注意：readline 会把 input 的 error 转发到自身（Node 17+），必须监听 rl 的 error，
+      // 否则 rl.emit('error') 无监听者会抛未捕获异常（真实缺陷修复）
+      rl.on('error', (err: Error) => {
         cleanup();
         rl.close();
         try {
