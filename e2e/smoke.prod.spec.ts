@@ -128,6 +128,45 @@ test.describe('生产构建冒烟测试', () => {
     expect(result.isPackaged).toBe(true);
   });
 
+  test('生产构建启动到可交互 < 10s（分段报告）', async () => {
+    // 前置检查（与 launchPackagedApp 一致，但需分段计时故独立实现）
+    if (!existsSync(EXECUTABLE_PATH)) {
+      throw new Error(
+        `可执行文件不存在：${EXECUTABLE_PATH}\n请先执行 pnpm build:dist 生成打包产物`,
+      );
+    }
+
+    const t0 = Date.now();
+    const launchApp = await electron.launch({
+      executablePath: EXECUTABLE_PATH,
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+    const t1 = Date.now(); // 进程启动 + 首窗口创建
+
+    const page = await launchApp.firstWindow();
+    const t2 = Date.now(); // 首窗口可用
+
+    await page.waitForLoadState('domcontentloaded');
+    const t3 = Date.now(); // DOM 加载完成
+
+    // UI 就绪：输入框可见（React 挂载完成——生产首页无品牌文本，textarea 是最稳标志）
+    const input = page.locator('textarea').first();
+    await expect(input).toBeVisible({ timeout: 15_000 });
+    const t4 = Date.now(); // React 首屏渲染完成
+
+    // 可交互：输入框可聚焦（真实键盘事件可写入）
+    await input.fill('');
+    const t5 = Date.now(); // 可交互
+
+    const total = t5 - t0;
+    console.log(
+      `[perf:startup] 生产启动分段：launch ${t1 - t0}ms / firstWindow ${t2 - t1}ms / dom ${t3 - t2}ms / React 首屏 ${t4 - t3}ms / 可交互 ${t5 - t4}ms / 合计 ${total}ms`,
+    );
+    expect(total, '生产构建冷启动到可交互应 < 10s（基线，渐进收紧）').toBeLessThan(10_000);
+
+    await launchApp.close();
+  });
+
   test('应用无控制台错误', async () => {
     ({ app, page } = await launchPackagedApp());
 

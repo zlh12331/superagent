@@ -380,6 +380,16 @@
       }
     },
     {
+      "includes": ["**/*.perf.test.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "**/e2e/playwright.config.ts",
         "**/e2e/playwright.electron.config.ts",

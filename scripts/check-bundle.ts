@@ -8,11 +8,17 @@
 // 运行：pnpm build && pnpm check:bundle
 // ──────────────────────────────────────────────────────────────
 
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const ASSETS_DIR = join(ROOT, 'out', 'renderer', 'assets');
+/** 包体积历史记录（趋势对比用，stats/ 已 gitignore） */
+const HISTORY_PATH = join(ROOT, 'stats', 'bundle-history.json');
+/** 历史保留条数 */
+const HISTORY_KEEP = 30;
+/** 环比告警阈值（相比上次总包变化，超过即提示，不卡关——门槛已卡关） */
+const TREND_ALERT_RATIO = 0.15;
 
 // 基线门槛（依据 12-performance-spec §1.2，渐进收紧）：
 const CHUNK_LIMIT_KB = 5 * 1024;
@@ -21,6 +27,62 @@ const TOTAL_LIMIT_KB = 16 * 1024;
 interface ChunkInfo {
   readonly name: string;
   readonly sizeKib: number;
+}
+
+/** 包体积历史记录项 */
+interface BundleHistoryEntry {
+  readonly timestamp: number;
+  readonly totalKib: number;
+  readonly chunkCount: number;
+  readonly largestKib: number;
+}
+
+/** 追加本次记录到历史并返回上一次（无历史返回 null） */
+function recordHistory(totalKib: number, chunks: readonly ChunkInfo[]): BundleHistoryEntry | null {
+  const entry: BundleHistoryEntry = {
+    timestamp: Date.now(),
+    totalKib: Math.round(totalKib),
+    chunkCount: chunks.length,
+    largestKib: Math.round(Math.max(...chunks.map((c) => c.sizeKib))),
+  };
+
+  let history: BundleHistoryEntry[] = [];
+  try {
+    if (existsSync(HISTORY_PATH)) {
+      history = JSON.parse(readFileSync(HISTORY_PATH, 'utf8')) as BundleHistoryEntry[];
+    }
+  } catch {
+    // 历史损坏时重置（不影响门禁）
+  }
+  const previous = history.at(-1) ?? null;
+
+  history.push(entry);
+  if (history.length > HISTORY_KEEP) {
+    history = history.slice(-HISTORY_KEEP);
+  }
+  mkdirSync(join(HISTORY_PATH, '..'), { recursive: true });
+  writeFileSync(HISTORY_PATH, JSON.stringify(history, null, 2), 'utf8');
+  return previous;
+}
+
+/** 输出环比趋势（超阈值告警，不卡关） */
+function reportTrend(previous: BundleHistoryEntry | null, totalKib: number): void {
+  if (previous === null) {
+    console.log(
+      `[check-bundle] 首次记录历史 → stats/bundle-history.json（${HISTORY_KEEP} 条上限）`,
+    );
+    return;
+  }
+  const delta = ((totalKib - previous.totalKib) / previous.totalKib) * 100;
+  const direction = delta >= 0 ? '📈 +' : '📉 ';
+  console.log(
+    `[check-bundle] 趋势：上次 ${previous.totalKib}KB → 本次 ${Math.round(totalKib)}KB（${direction}${Math.abs(delta).toFixed(1)}%，阈值 ±${TREND_ALERT_RATIO * 100}%）`,
+  );
+  if (Math.abs(delta) > TREND_ALERT_RATIO * 100) {
+    console.warn(
+      `[check-bundle] ⚠️ 体积环比变化超 ${TREND_ALERT_RATIO * 100}%：请审查本次改动（新依赖/静态导入膨胀）`,
+    );
+  }
 }
 
 function main(): number {
@@ -50,6 +112,9 @@ function main(): number {
   }
 
   if (problems.length === 0) {
+    // 记录历史趋势（门槛通过后写，避免失败时污染趋势）
+    const previous = recordHistory(totalKib, chunks);
+    reportTrend(previous, totalKib);
     console.log(
       `[check-bundle] ✅ 通过：${chunks.length} 个 chunk，合计 ${totalKib.toFixed(0)}KB（门槛：单 ${CHUNK_LIMIT_KB}KB / 总 ${TOTAL_LIMIT_KB}KB）`,
     );

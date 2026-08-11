@@ -34,6 +34,8 @@ const MAIN_ENTRY = join(__dirname, '..', 'out', 'main', 'index.js');
 
 // E2E 专用 userData 目录（与 dev 实例隔离，避免 SQLite 锁/扩展目录冲突）
 const E2E_USER_DATA = join(__dirname, '..', '.e2e-user-data');
+// 测试实例独立调试端口（避免与 dev 实例的 9222 冲突导致 CDP 连不上、launch 超时）
+const DEBUG_PORT = '9223';
 
 // 启动 Electron 应用，返回 app 与首个 page
 async function launchElectron(): Promise<{ app: ElectronApplication; page: Page }> {
@@ -47,6 +49,8 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
       ELECTRON_RENDERER_URL: 'http://localhost:5173',
       // 独立 userData：避免与 dev 实例（.electron-user-data）冲突
       CODE_AGENT_USER_DATA: E2E_USER_DATA,
+      // 独立调试端口：dev 实例（electron-vite dev 自带窗口）已占 9222
+      CODE_AGENT_DEBUG_PORT: DEBUG_PORT,
     },
   });
 
@@ -186,7 +190,7 @@ test.describe('Electron 应用 E2E 测试', () => {
     expect(profilerStatus?.mounts).toBeGreaterThan(0);
   });
 
-  test('DevPanel 5 Tab 全部渲染', async () => {
+  test('右面板 6 Tab 全部渲染', async () => {
     ({ app, page } = await launchElectron());
 
     // 等待应用渲染完成
@@ -198,10 +202,13 @@ test.describe('Electron 应用 E2E 测试', () => {
       );
     });
 
-    expect(tabTexts).toContain('终端');
-    expect(tabTexts).toContain('Git');
-    expect(tabTexts).toContain('日志');
-    expect(tabTexts).toContain('指标');
-    expect(tabTexts).toContain('检查器');
+    // DevPanel 改版后 6 tab（i18n 双语言任一命中）：会话详情/文件变更/文件/浏览器/开发者 + 终端
+    const all = tabTexts.join(' ');
+    expect(all).toMatch(/终端|Terminal/);
+    expect(all).toMatch(/文件变更|Diff/);
+    expect(all).toMatch(/文件|Files/);
+    expect(all).toMatch(/浏览器|Browser/);
+    expect(all).toMatch(/开发者|Dev/);
+    expect(all).toMatch(/会话详情|Info/);
   });
 });

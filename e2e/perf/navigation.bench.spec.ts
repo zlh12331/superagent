@@ -42,27 +42,20 @@ test.describe('性能基准：页面加载与渲染', () => {
     expect(nodeCount, `DOM 节点数 ${nodeCount} 超过 5000`).toBeLessThan(5000);
   });
 
-  test('DevPanel Tab 切换 < 200ms', async ({ page }) => {
+  test('右面板 Tab 切换 < 200ms', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // 展开 DevPanel（aria-label 为「展开开发面板」）
-    const toggle = page.getByRole('button', { name: /展开开发面板|开发者面板|DevPanel/ }).first();
-    if (await toggle.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await toggle.click();
-      await page.waitForTimeout(500);
-    }
-
-    // 切换到 Git Tab（DevPanel 用条件渲染而非 TabsContent，所以等待 trigger 变为 active）
-    const gitTab = page.getByRole('tab', { name: /Git/ }).first();
-    if (await gitTab.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      const start = performance.now();
-      await gitTab.click();
-      // Radix Tabs 在 trigger 上设置 data-state="active" 表示当前激活的 Tab
-      await expect(gitTab).toHaveAttribute('data-state', 'active', { timeout: 5_000 });
-      const duration = performance.now() - start;
-      expect(duration, `Tab 切换耗时 ${duration.toFixed(0)}ms 超过 200ms`).toBeLessThan(200);
-    }
+    // 右面板默认展开（rightPanelCollapsed=false），Tab 直接可见——找不到则失败（不许静默跳过）
+    // Tab 文本随语言（zh 会话详情/en Info），用双语言正则匹配
+    const diffTab = page.getByRole('tab', { name: /文件变更|Diff/ }).first();
+    await expect(diffTab).toBeVisible({ timeout: 10_000 });
+    const start = performance.now();
+    await diffTab.click();
+    // Radix Tabs 在 trigger 上设置 data-state="active" 表示当前激活的 Tab
+    await expect(diffTab).toHaveAttribute('data-state', 'active', { timeout: 5_000 });
+    const duration = performance.now() - start;
+    expect(duration, `Tab 切换耗时 ${duration.toFixed(0)}ms 超过 200ms`).toBeLessThan(200);
   });
 
   test('输入响应 < 100ms（无明显卡顿）', async ({ page }) => {

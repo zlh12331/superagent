@@ -61,8 +61,20 @@
 
 ## 四、性能验证
 
-1. `pnpm analyze:bundle` 对比门槛（§1.2）
-2. `pnpm knip` 死代码卡关
-3. E2E perf 基准（`e2e/perf/navigation.bench.spec.ts`）对比基线
-4. 大列表/流式场景手工验证（DevTools Performance 面板，长任务 < 200ms）
-5. 内存：长会话连续操作后 heap 不持续增长（订阅泄漏回归）
+### 4.1 基准体系（2026-08-11 落地，三层）
+
+| 层 | 命令 | 覆盖 | 关键阈值（基线，渐进收紧） |
+|---|---|---|---|
+| **主进程基准**（vitest，真实实现） | `pnpm test:perf:main` | SQLite 存储（万级消息/查询/索引命中 EXPLAIN 验证）、ripgrep 搜索（25000 行/500 文件）、node-pty 终端吞吐（2000 行） | 追加 100 条 < 100ms；list(50) < 5ms；get(1000 条) < 100ms；搜索 < 500ms；终端 ≥ 300 行/s |
+| **浏览器 E2E 基准**（Playwright + CDP） | `pnpm test:perf` | 首载可交互 < 3000ms、DOM 节点 < 5000、布局引擎 reflow（标注非 React 路径）、滚动、**CDP 真实指标**（Script/Layout 增量）、**长任务观测**（>200ms 阻塞=失败）、heap 三阶段趋势（对齐 memlab 方法论）、IPC mock 链路 RTT | 长任务 >200ms 必须为 0；heap 增长 < 15MB 且无单调增长 |
+| **真实 Electron 链路**（playwright Electron 模式） | `pnpm test:perf:electron` | 真实 invoke RTT（median/p95）、500KB 大 payload 往返（file.read 真实链路）、事件推送吞吐（无丢失）、启动分段（仅报告；生产版由 smoke 卡关） | RTT median < 20ms；500KB < 300ms；事件 ≥ 500/s 且零丢失 |
+
+### 4.2 工程化约定
+
+1. **阈值策略**：多轮采样取中位数（抗 GC/系统抖动）+ 宽松基线（防明显回退），随优化渐进收紧
+2. **诚实标注**：布局引擎基准（DOM 注入）明确标注非 React 渲染路径；mock 链路基准（浏览器 IPC）明确标注非真实进程通信，真实链路由 Electron 基准覆盖
+3. **发现记录**（2026-08-11）：terminal:event:output 全链路渲染路径（store→TerminalPanel/xterm）每事件 ~166ms 为**测试时序误判**（订阅未就绪即 send），已修正为屏障同步；真实 IPC 分发吞吐实测 719 事件/s（受测试分批节奏限制，非上限）
+4. `pnpm analyze:bundle` 对比门槛（§1.2）；`pnpm check:bundle` 记录历史趋势到 `stats/bundle-history.json`（环比超 ±15% 告警，不卡关）
+5. `pnpm knip` 死代码卡关
+6. 大列表/流式场景手工验证（DevTools Performance 面板，长任务 < 200ms）
+7. 内存：长会话连续操作后 heap 不持续增长（订阅泄漏回归，CDP HeapProfiler.collectGarbage 强制 GC）

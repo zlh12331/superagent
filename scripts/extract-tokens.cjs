@@ -36,7 +36,7 @@ function parseBlock(lines, startIdx) {
       // 跨行值：未以 ; 结尾则拼接后续行
       while (!value.endsWith(';') && i + 1 < lines.length) {
         i++;
-        value += ' ' + lines[i].trim();
+        value += ` ${lines[i].trim()}`;
       }
       value = value.replace(/;\s*$/, '').trim();
       // 行内注释剥离

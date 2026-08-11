@@ -23,8 +23,8 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  // 只匹配 electron.spec.ts，不匹配 smoke.spec.ts
-  testMatch: '**/electron.spec.ts',
+  // 匹配 electron.spec.ts 与 perf-electron.spec.ts（真实 Electron 链路功能 + 性能）
+  testMatch: ['**/electron.spec.ts', '**/perf-electron.spec.ts'],
   timeout: 60_000,
   expect: {
     timeout: 10_000,

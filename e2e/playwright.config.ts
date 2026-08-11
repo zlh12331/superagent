@@ -19,9 +19,9 @@ export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
   // 排除需要专属配置运行的测试文件：
-  // - electron.spec.ts：使用 _electron fixture，需 playwright.electron.config.ts
+  // - electron.spec.ts / perf-electron.spec.ts：使用 _electron fixture，需 playwright.electron.config.ts
   // - smoke.prod.spec.ts：需打包产物，需 playwright.smoke.config.ts
-  testIgnore: ['**/electron.spec.ts', '**/smoke.prod.spec.ts'],
+  testIgnore: ['**/electron.spec.ts', '**/smoke.prod.spec.ts', '**/perf-electron.spec.ts'],
   timeout: 30_000,
   expect: {
     timeout: 5_000,
@@ -35,9 +35,11 @@ export default defineConfig({
     video: 'retain-on-failure',
     trace: 'retain-on-failure',
   },
-  // 自动启动 renderer vite dev server
+  // 自动启动 renderer dev server
+  // 浏览器模式 = dev:web（--mode web，注入 mock window.api）——与 electron-vite dev
+  // （development 模式，无 mock）区分：ipc-rtt 等 mock 链路基准依赖 web 模式
   webServer: {
-    command: 'pnpm exec electron-vite dev',
+    command: 'pnpm exec vite --config vite.web.config.ts --mode web',
     url: 'http://localhost:5173',
     timeout: 60_000,
     reuseExistingServer: true,

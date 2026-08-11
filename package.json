@@ -69,6 +69,8 @@
     "test:visual": "playwright test --config e2e/playwright.config.ts --grep \"视觉回归\"",
     "test:a11y": "playwright test --config e2e/playwright.config.ts --grep \"可访问性\"",
     "test:perf": "playwright test --config e2e/playwright.config.ts --grep \"性能基准|渲染性能基准|内存基准|IPC 基准\"",
+    "test:perf:main": "pnpm rebuild:native:node:auto && vitest run --root src/main perf",
+    "test:perf:electron": "pnpm rebuild:native:electron:auto && playwright test --config e2e/playwright.electron.config.ts --grep \"性能基准\"",
     "test:coverage": "pnpm --filter \"@code-agent/shared\" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage",
     "audit": "audit-ci --config .nsprc --moderate --high --critical --report-type summary --registry https://registry.npmjs.org",
     "build:dist": "pnpm build && electron-builder --publish never",

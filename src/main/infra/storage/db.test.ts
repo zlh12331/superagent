@@ -77,15 +77,19 @@ describe('schema 一致性', () => {
     const { schema } = await import('./schema');
     const { SCHEMA_SQL } = await import('./schema-sql');
     const sqlTables = new Set(
-      [...SCHEMA_SQL.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_]+)"?/gi)].map((m) =>
-        m[1].toLowerCase(),
+      [...SCHEMA_SQL.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_]+)"?/gi)].map(
+        (m) => m[1]?.toLowerCase() ?? '',
       ),
     );
     // sqliteTable('<表名>', ...) 的字符串参数为表名真源（导出变量名 camelCase 是惯例）
+    // 表名经 drizzle:Name symbol 存于表对象（TS 下 symbol 索引需显式 cast）
     const drizzleTables = new Set(
-      Object.values(schema).map(
-        (t) => t[Symbol.for('drizzle:Name')] ?? t[Symbol.for('drizzle:Table')]?.name ?? '',
-      ),
+      Object.values(schema).map((t) => {
+        const tbl = t as unknown as Record<symbol, unknown>;
+        const name = tbl[Symbol.for('drizzle:Name')];
+        const table = tbl[Symbol.for('drizzle:Table')] as { name?: string } | undefined;
+        return typeof name === 'string' ? name : (table?.name ?? '');
+      }),
     );
     for (const t of drizzleTables) {
       if (t === '') continue;
