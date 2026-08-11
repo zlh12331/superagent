@@ -10,7 +10,7 @@
 // 5. convertUsage：reasoning_tokens 映射
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProviderRegistry } from './registry';
+import { getProviderName, ProviderRegistry, toKeychainKey } from './registry';
 
 const mocks = vi.hoisted(() => {
   // provider 工厂 mock（createOpenAICompatible 返回值）
@@ -164,5 +164,152 @@ describe('deepseek 工厂（DeepSeek 官方适配）', () => {
 
       expect(usage['inputTokens']).toEqual({ total: 80, noCache: 80, cacheRead: 0, cacheWrite: 0 });
     });
+  });
+});
+
+describe('ProviderRegistry 注册表（类行为三件套）', () => {
+  it('正向：默认构造函数注册全部内置供应商（10 家）', () => {
+    const registry = new ProviderRegistry();
+    const infos = registry.list();
+    expect(infos).toHaveLength(10);
+    expect(infos.map((i) => i.kind)).toEqual(
+      expect.arrayContaining([
+        'deepseek',
+        'openai',
+        'anthropic',
+        'ollama',
+        'moonshot',
+        'zhipu',
+        'qwen',
+        'doubao',
+        'siliconflow',
+        'openrouter',
+      ]),
+    );
+  });
+
+  it('正向：自定义 definitions 注册（含 isDefault 标记）', () => {
+    const registry = new ProviderRegistry([
+      {
+        kind: 'deepseek',
+        displayName: 'D',
+        defaultModel: 'm1',
+        requiresApiKey: true,
+        isDefault: false,
+      },
+      {
+        kind: 'openai',
+        displayName: 'O',
+        defaultModel: 'm2',
+        requiresApiKey: true,
+        isDefault: true,
+      },
+    ]);
+    expect(registry.list()).toHaveLength(2);
+    expect(registry.getDefaultKind()).toBe('openai');
+  });
+
+  it('异常：未知 kind 注册 → 构造抛错（工厂缺失）', () => {
+    expect(() => {
+      new ProviderRegistry([
+        {
+          kind: 'deepseek',
+          displayName: 'D',
+          defaultModel: 'm',
+          requiresApiKey: true,
+          isDefault: false,
+        },
+        // @ts-expect-error 故意传未注册 kind
+        {
+          kind: 'nonexistent',
+          displayName: 'X',
+          defaultModel: 'm',
+          requiresApiKey: true,
+          isDefault: false,
+        },
+      ]);
+    }).toThrow('未注册供应商工厂');
+  });
+
+  it('getDefinition 正向：返回已注册定义', () => {
+    const registry = new ProviderRegistry();
+    expect(registry.getDefinition('deepseek').displayName).toBe('DeepSeek');
+  });
+
+  it('getDefinition 异常：未知 kind 抛错', () => {
+    const registry = new ProviderRegistry();
+    expect(() => registry.getDefinition('nonexistent')).toThrow('未知模型供应商');
+  });
+
+  it('getDefaultKind：无 isDefault 标记时回落第一个注册', () => {
+    const registry = new ProviderRegistry([
+      {
+        kind: 'deepseek',
+        displayName: 'D',
+        defaultModel: 'm',
+        requiresApiKey: true,
+        isDefault: false,
+      },
+      {
+        kind: 'openai',
+        displayName: 'O',
+        defaultModel: 'm',
+        requiresApiKey: true,
+        isDefault: false,
+      },
+    ]);
+    expect(registry.getDefaultKind()).toBe('deepseek'); // 回落第一个注册
+  });
+
+  it('getDefaultKind 异常：空注册表抛错', () => {
+    const registry = new ProviderRegistry([]);
+    expect(() => registry.getDefaultKind()).toThrow('注册表为空');
+  });
+
+  it('createFactory 正向：返回工厂函数且可实例化', () => {
+    const registry = new ProviderRegistry();
+    const factory = registry.createFactory('ollama', { apiKey: undefined });
+    expect(typeof factory).toBe('function');
+  });
+
+  it('createFactory 异常：未知 kind 抛错', () => {
+    const registry = new ProviderRegistry();
+    expect(() => registry.createFactory('nonexistent', { apiKey: undefined })).toThrow(
+      '未知模型供应商',
+    );
+  });
+
+  it('list：isDefault 标记与定义一致', () => {
+    const registry = new ProviderRegistry([
+      {
+        kind: 'deepseek',
+        displayName: 'D',
+        defaultModel: 'm',
+        requiresApiKey: false,
+        isDefault: true,
+      },
+      {
+        kind: 'openai',
+        displayName: 'O',
+        defaultModel: 'm',
+        requiresApiKey: true,
+        isDefault: false,
+      },
+    ]);
+    const infos = registry.list();
+    expect(infos.find((i) => i.kind === 'deepseek')?.isDefault).toBe(true);
+    expect(infos.find((i) => i.kind === 'openai')?.isDefault).toBe(false);
+  });
+});
+
+describe('provider 纯函数', () => {
+  it('toKeychainKey：按 kind 生成 keychain key 前缀', () => {
+    expect(toKeychainKey('deepseek')).toBe('deepseek-api-key');
+    expect(toKeychainKey('ollama')).toBe('ollama-api-key');
+  });
+
+  it('getProviderName：返回 kind 原值（providerOptions 键约定收敛点）', () => {
+    expect(getProviderName('deepseek')).toBe('deepseek');
+    expect(getProviderName('anthropic')).toBe('anthropic');
   });
 });

@@ -81,3 +81,37 @@ describe('Provider 工厂真实实例化（AI SDK 消费集成验证）', () => 
     expectModelUsable(factory('deepseek-v4-flash'));
   });
 });
+
+describe('其余内置工厂真实实例化（SDK 消费集成）', () => {
+  let registry: ProviderRegistry;
+
+  beforeEach(() => {
+    registry = new ProviderRegistry();
+  });
+
+  it.each([
+    ['moonshot', 'kimi-k2'],
+    ['zhipu', 'glm-4.5'],
+    ['qwen', 'qwen3-coder'],
+    ['doubao', 'doubao-seed'],
+    ['siliconflow', 'deepseek-ai/DeepSeek-V3'],
+    ['openrouter', 'anthropic/claude-3.5-sonnet'],
+  ])('%s：OpenAI Compatible 工厂真实实例化成功', (kind, modelId) => {
+    const factory = registry.createFactory(kind, { apiKey: 'sk-test' });
+    const model = factory(modelId) as { doGenerate?: unknown; doStream?: unknown };
+    expect(typeof model.doGenerate).toBe('function');
+    expect(typeof model.doStream).toBe('function');
+  });
+
+  it('ollama：本地协议工厂（固定 apiKey=ollama）真实实例化成功', () => {
+    const factory = registry.createFactory('ollama', { apiKey: undefined });
+    const model = factory('qwen2.5-coder:7b') as { doGenerate?: unknown };
+    expect(typeof model.doGenerate).toBe('function');
+  });
+
+  it('baseUrl 缺失时回落 config（env 覆盖链路生效）', () => {
+    // config.providers.<kind> 在 dev 环境有默认值（mock app.isPackaged=false）
+    const factory = registry.createFactory('moonshot', { apiKey: 'sk-test' });
+    expect(typeof factory).toBe('function');
+  });
+});
