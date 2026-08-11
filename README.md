@@ -1,6 +1,6 @@
 # Code Agent Desktop
 
-生产级 **Electron Code Agent 模板**（Windows 桌面端），开箱即用：多轮工具调用、权限审批流、多模型供应商路由、代码智能、终端与 Git 集成、会话持久化、Sentry + OpenTelemetry 双遥测。
+生产级 **Electron Code Agent 模板**（Windows/macOS/Linux 桌面端），开箱即用：多轮工具调用、权限审批流、多模型供应商路由、代码智能、终端与 Git 集成、会话持久化、Sentry + OpenTelemetry 双遥测。
 
 ## 技术栈
 
@@ -132,5 +132,5 @@ e2e/                Playwright 三套配置
 ## 已知事项
 
 - `electron-vite` 使用 `6.0.0-beta.1`（Vite 8 的官方配套预发布版本；`5.0.0` 稳定版 peer 依赖 Vite ≤7）。`6.0.0` 稳定版发布后应升级
-- 仅支持 Windows x64（NSIS 安装器）；若需 macOS/Linux 需补充打包配置
+- 发布安装包：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64（release.yml 三平台矩阵；macOS 公证与代码签名需配置证书后启用）
 - dev 环境 userData 重定向到 `.electron-user-data/`，远程调试端口 9222（生产环境不暴露）
