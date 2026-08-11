@@ -17,6 +17,12 @@ import { cn } from '@/lib/utils';
  * <ScrollArea className="h-72">
  *   <ul>...</ul>
  * </ScrollArea>
+ * ──────────────────────────────
+ * 变体：无（高度由 className 决定；Scrollbar 可自定义 thumb/track）
+ * 状态：非受控（原生滚动）
+ * 依赖：@radix-ui/react-scroll-area
+ * 可访问性：Radix 内置（滚动容器语义 + 键盘滚动透传）
+ * ──────────────────────────────
  */
 export function ScrollArea({
   className,

@@ -19,6 +19,12 @@ import { useTheme } from '@/providers/ThemeProvider';
  * @example
  * <Toaster />                       // 在 App 根节点
  * toast.success('保存成功')         // 任意位置调用
+ * ──────────────────────────────
+ * 变体：无（toast/success/error/info 由 sonner API 决定）
+ * 状态：无状态容器（全局单例）
+ * 依赖：sonner + ThemeProvider（主题联动）
+ * 可访问性：sonner 内置 aria-live 通知语义
+ * ──────────────────────────────
  */
 export function Toaster({ ...props }: React.ComponentProps<typeof Sonner>): React.ReactElement {
   const { theme } = useTheme();

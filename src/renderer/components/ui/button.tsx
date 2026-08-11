@@ -16,6 +16,12 @@ import { cn } from '@/lib/utils';
  * - size：控制尺寸（default/sm/lg/icon）
  *
  * 通过 buttonVariants 函数也可单独复用样式（例如给 <a> 链接套用按钮外观）。
+ * ──────────────────────────────
+ * 变体：variant=default|destructive|outline|secondary|ghost|link / size=default|sm|lg|icon
+ * 状态：非受控（原生 button）+ asChild 支持任意渲染元素
+ * 依赖：class-variance-authority + @radix-ui/react-slot（asChild）
+ * 可访问性：原生 button 语义；disabled 态含 pointer-events 与视觉降级
+ * ──────────────────────────────
  */
 export const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',

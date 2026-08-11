@@ -15,6 +15,12 @@ import { cn } from '@/lib/utils';
  *
  * @example
  * <Label htmlFor="email">邮箱</Label>
+ * ──────────────────────────────
+ * 变体：无
+ * 状态：非受控（关联原生控件）
+ * 依赖：@radix-ui/react-label
+ * 可访问性：htmlFor 关联 + 点击聚焦（Radix 内置）
+ * ──────────────────────────────
  */
 export function Label({
   className,

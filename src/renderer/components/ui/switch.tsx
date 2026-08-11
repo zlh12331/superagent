@@ -10,7 +10,15 @@
 import type { ReactElement } from 'react';
 import { cn } from '@/lib/utils';
 
-/** Switch props */
+/**
+ * Switch props
+ * ──────────────────────────────
+ * 变体：无（尺寸由 className 控制）
+ * 状态：受控（checked + onCheckedChange）
+ * 依赖：无（自研 button + role="switch"）
+ * 可访问性：button 原生键盘（Space/Enter）+ aria-checked；无可见文字时须传 aria-label
+ * ──────────────────────────────
+ */
 export interface SwitchProps {
   /** 是否选中（受控） */
   readonly checked: boolean;

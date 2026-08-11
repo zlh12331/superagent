@@ -15,6 +15,12 @@ import { cn } from '@/lib/utils';
  * @example
  * <Skeleton className="h-4 w-32" />
  * <Skeleton className="size-12 rounded-full" />
+ * ──────────────────────────────
+ * 变体：无（尺寸/形状完全由 className 决定）
+ * 状态：无状态（纯展示）
+ * 依赖：无
+ * 可访问性：装饰性元素（aria-hidden 由调用方按需设置）
+ * ──────────────────────────────
  */
 export function Skeleton({ className, ...props }: React.ComponentProps<'div'>): React.ReactElement {
   return (

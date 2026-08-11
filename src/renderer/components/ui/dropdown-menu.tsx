@@ -13,6 +13,12 @@ import { cn } from '@/lib/utils';
  *
  * 包装 Radix DropdownMenu Primitive，负责管理开关状态。
  * 通过 open / onOpenChange 受控或 defaultOpen 非受控。
+ * ──────────────────────────────
+ * 变体：Item 支持 data-[variant=destructive]；Content 可组合子项/分隔/子菜单
+ * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
+ * 依赖：@radix-ui/react-dropdown-menu
+ * 可访问性：Radix 内置全键盘导航/方向键/ARIA menu 角色；14 个导出覆盖完整菜单形态
+ * ──────────────────────────────
  */
 export function DropdownMenu(
   props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>,

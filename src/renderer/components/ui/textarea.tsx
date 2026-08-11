@@ -14,6 +14,12 @@ import { cn } from '@/lib/utils';
  *
  * @example
  * <Textarea placeholder="请输入正文……" rows={6} />
+ * ──────────────────────────────
+ * 变体：无（与 Input 同视觉体系）
+ * 状态：非受控（原生 textarea，value/defaultValue 均可）
+ * 依赖：无（原生 <textarea> 包装）
+ * 可访问性：原生 textarea 语义 + aria-invalid 错误态样式
+ * ──────────────────────────────
  */
 export function Textarea({
   className,

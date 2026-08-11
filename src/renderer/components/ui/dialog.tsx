@@ -13,6 +13,12 @@ import { cn } from '@/lib/utils';
  *
  * 包装 Radix Dialog Primitive，负责管理开关状态。
  * 可通过 open / onOpenChange 受控，或 defaultOpen 非受控。
+ * ──────────────────────────────
+ * 变体：Content 支持 showCloseButton（默认 true）/ className 控制尺寸
+ * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
+ * 依赖：@radix-ui/react-dialog
+ * 可访问性：Radix 内置焦点陷阱/Escape 关闭/ARIA dialog 角色；需 SheetTitle 提供标题
+ * ──────────────────────────────
  */
 export function Dialog(
   props: React.ComponentProps<typeof DialogPrimitive.Root>,

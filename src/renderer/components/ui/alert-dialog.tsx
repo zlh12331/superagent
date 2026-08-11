@@ -13,7 +13,14 @@ import { cn } from '@/lib/utils';
 
 import { buttonVariants } from './button';
 
-/** 对话框根容器（open/onOpenChange 受控或 defaultOpen） */
+/** 对话框根容器（open/onOpenChange 受控或 defaultOpen）
+ * ──────────────────────────────
+ * 变体：无（遮罩不可点击关闭，强制显式确认/取消）
+ * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
+ * 依赖：@radix-ui/react-alert-dialog
+ * 可访问性：Radix 内置焦点陷阱/ARIA alertdialog 角色；用途为不可逆操作确认
+ * ──────────────────────────────
+ */
 export function AlertDialog(
   props: React.ComponentProps<typeof AlertDialogPrimitive.Root>,
 ): React.ReactElement {

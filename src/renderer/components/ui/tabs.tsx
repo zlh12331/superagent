@@ -22,6 +22,12 @@ import { cn } from '@/lib/utils';
  *   <TabsContent value="account">...</TabsContent>
  *   <TabsContent value="profile">...</TabsContent>
  * </Tabs>
+ * ──────────────────────────────
+ * 变体：无（激活态样式内置于 TabsTrigger，纯语义令牌）
+ * 状态：受控（value + onValueChange）| 非受控（defaultValue）
+ * 依赖：@radix-ui/react-tabs
+ * 可访问性：Radix 内置方向键切换/RoamingTabIndex/ARIA tabs 角色
+ * ──────────────────────────────
  */
 export function Tabs({
   className,

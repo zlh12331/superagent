@@ -14,6 +14,12 @@ import { cn } from '@/lib/utils';
  *
  * @example
  * <Input type="email" placeholder="you@example.com" />
+ * ──────────────────────────────
+ * 变体：无（size 默认 h-9；尺寸由 className 覆盖）
+ * 状态：非受控（原生 input，value/defaultValue 均可）
+ * 依赖：无（原生 <input> 包装）
+ * 可访问性：原生 input 语义 + aria-invalid 错误态样式
+ * ──────────────────────────────
  */
 export function Input({
   className,

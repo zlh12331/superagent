@@ -13,7 +13,14 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
 
-/** 抽屉根容器（与 Dialog 同源，受控开关） */
+/** 抽屉根容器（与 Dialog 同源，受控开关）
+ * ──────────────────────────────
+ * 变体：Content side="right" 滑出；设置页用 w-full h-full 全屏形态
+ * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
+ * 依赖：@radix-ui/react-dialog
+ * 可访问性：与 Dialog 一致（焦点陷阱/Escape/ARIA），需 SheetTitle/SheetDescription
+ * ──────────────────────────────
+ */
 export function Sheet(
   props: React.ComponentProps<typeof DialogPrimitive.Root>,
 ): React.ReactElement {
