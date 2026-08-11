@@ -97,6 +97,11 @@
 | P1 | agent（回合编排） | 63.65% | 回合异常路径：max-steps/abort/工具失败 |
 | P2 | im/adapters、lsp、skills | 44-62% | 协议异常分支补到 70%+ |
 
+**变异测试降级记录**（2026-08-11）：Stryker 9.6.1 与项目 TypeScript 7 不兼容
+（ts.parseConfigFileTextToJson API 缺失，@stryker-mutator/vitest-runner 9.6.1 报错）——
+闸门 3 降级为"断言有效性抽查"：核心域 122 用例 / 194 断言（密度 1.6/用例），零空跑。
+触发条件：Stryker 发布 TS7 兼容版本后重跑。
+
 **目标线（到什么程度停）**：
 - 核心域分支追到 **80-85%**（业界拐点），中等域 **70-75%**
 - **停止判据**：分支 ≥85% 后收益递减不硬追；getter/setter/日志行不补（有效覆盖理念）
