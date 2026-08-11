@@ -213,6 +213,34 @@ test.describe('真实 Electron IPC 性能基准', () => {
     }
   });
 
+  test('并发 IPC：20 路并行 invoke p95 < 100ms（争用延迟）', async () => {
+    const { app, page } = await launchElectron();
+    try {
+      await expect(page.getByRole('main').first()).toBeAttached({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+
+      // 20 路并发 session.list（模拟多面板同时拉数据；真实 IPC 争用场景）
+      const rounds: number[] = [];
+      for (let round = 0; round < 5; round += 1) {
+        const start = performance.now();
+        await page.evaluate(async () => {
+          await Promise.all(
+            Array.from({ length: 20 }, () => window.api.session.list({ limit: 50, offset: 0 })),
+          );
+        });
+        rounds.push((performance.now() - start) / 20); // 单路均摊
+      }
+      const sorted = [...rounds].sort((a, b) => a - b);
+      const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
+      console.log(
+        `[perf:electron] 并发 20 路 invoke 单路均摊: p95 ${p95.toFixed(2)}ms / max ${(sorted[sorted.length - 1] ?? 0).toFixed(2)}ms`,
+      );
+      expect(p95, '并发争用下单路 invoke 均摊 p95 应 < 100ms（基线，渐进收紧）').toBeLessThan(100);
+    } finally {
+      await app.close();
+    }
+  });
+
   test('启动分段耗时（仅报告：launch → firstWindow → domcontentloaded）', async () => {
     const launchStart = performance.now();
     const app = await electron.launch({

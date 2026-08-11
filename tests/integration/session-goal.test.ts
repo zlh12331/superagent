@@ -43,8 +43,8 @@ vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {
   };
 });
 
-import type { IAgentService } from '../../src/main/infra/ai/agent-service';
-import { GoalService } from '../../src/main/infra/ai/goal-service';
+import type { IAgentService } from '../../src/main/infra/ai/agent/agent-service';
+import { GoalService } from '../../src/main/infra/ai/knowledge/goal-service';
 import { resetDb } from '../../src/main/infra/storage/db';
 import { SessionService } from '../../src/main/infra/storage/session-service';
 

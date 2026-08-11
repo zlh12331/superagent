@@ -155,6 +155,44 @@ describe('SQLite 存储基准（perf）', () => {
     });
   });
 
+  // ── 并发基准（多会话争用：同步驱动下并发 = 交错调度，测争用正确性与延迟） ──
+
+  describe('并发基准（10 路并行）', () => {
+    it('并发 10 会话 × 100 条追加：总数无丢失且总耗时 < 2000ms', async () => {
+      // 10 路并行创建 + 追加（模拟多会话同时流式写入；better-sqlite3 同步驱动
+      // 下实际为交错调度，事务保证不丢失——测的是争用正确性 + 延迟）
+      const start = performance.now();
+      const results = await Promise.all(
+        Array.from({ length: 10 }, async () => {
+          const sessionId = await service.create({
+            workingDir: '/bench',
+            title: undefined,
+            messages: undefined,
+          });
+          return service.appendMessage({ sessionId, messages: makeBatch(100) });
+        }),
+      );
+      const total = performance.now() - start;
+
+      console.log(`[perf] 并发 10 路追加（10×100 条）总耗时: ${total.toFixed(0)}ms`);
+      // 每路返回追加后总数 = 100（事务原子性：无丢失无串扰）
+      expect(results, '每路消息总数必须为 100（并发写入无丢失）').toEqual(Array(10).fill(100));
+      expect(total, '并发 10 路 × 100 条应 < 2000ms（基线，渐进收紧）').toBeLessThan(2000);
+    });
+
+    it('并发 10 路 list(50, 0) 中位数 < 20ms（争用下查询延迟）', async () => {
+      const timings: number[] = [];
+      for (let round = 0; round < 5; round += 1) {
+        const start = performance.now();
+        await Promise.all(Array.from({ length: 10 }, () => service.list(50, 0)));
+        timings.push((performance.now() - start) / 10); // 单路均摊
+      }
+      const median = [...timings].sort((a, b) => a - b)[Math.floor(timings.length / 2)] ?? 0;
+      console.log(`[perf] 并发 10 路 list 单路均摊中位数: ${median.toFixed(2)}ms`);
+      expect(median, '并发争用下单路查询应 < 20ms（基线，渐进收紧）').toBeLessThan(20);
+    });
+  });
+
   // ── 索引验证（防全表扫描回归） ─────────────────────────────
 
   describe('索引命中验证', () => {
