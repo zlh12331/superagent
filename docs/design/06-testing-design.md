@@ -21,7 +21,7 @@
                 │   Perf Bench              │  e2e/perf/navigation.bench.spec.ts
                 │   性能基准                │
                 ├──────────────────────────┤
-                │   Unit (vitest)           │  90 个测试文件
+                │   Unit (vitest)           │  128 个测试文件 / 242+ 用例
                 │   shared / main / renderer │
                 │   + scripts               │
                 └──────────────────────────┘
@@ -79,7 +79,7 @@
 | main | 80 | 75 | 80 | 80 |
 | renderer | 80 | 75 | 80 | 80 |
 
-### 3.4 测试文件清单（90 个）
+### 3.4 测试文件清单（137 个）
 
 > 以下按区域列出代表性文件，完整清单以 `Glob "**/*.test.{ts,tsx}"` 为准。
 
@@ -200,9 +200,11 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 ### 7.1 当前规模
 
-- **单元测试文件**：90 个（shared 4 + main 59 + renderer 22 + scripts 5）
+- **单元测试文件**：137 个（shared 4 + main 95 + renderer 33 + scripts 5）
 - **E2E 文件**：6 个
-- **总用例数**：约 260+（随测试增长，shared 17 + main 147+ + renderer 96+）+ E2E 17
+- **总用例数**：约 400+（renderer 242 通过 + main/shared 用例；随测试增长）
+
+> 2026-08-11 同步：测试文件 90 → 137（main 59 → 95、renderer 22 → 33，含对齐轮新增 goal-service / memory-service / im-service / approval-utils / fuzzy-search-dialog 等测试）；renderer 用例 242 全绿。
 
 ### 7.2 已知覆盖率缺口
 

@@ -1,7 +1,7 @@
 # 架构设计文档
 
 > 基于 `code-agent-desktop` v1.0.0 实际代码整理。所有结论均来自源码，未做主观推断。
-> 整理时间：2026-07-23
+> 整理时间：2026-07-23（服务清单 2026-08-11 同步）
 
 ## 1. 整体分层架构
 
@@ -29,7 +29,7 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 文件：[src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts)（约 800 行）
 
-### 2.1 持有的 14 个服务实例
+### 2.1 持有的 15 个服务 + 2 个核心组件
 
 | # | 服务 | 接口 | 初始化方式 |
 |---|---|---|---|
@@ -47,9 +47,14 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 | 12 | codebaseService | ICodebaseService | 模块级单例 `getCodebaseService()` |
 | 13 | sessionService | ISessionService | 模块级单例 `getSessionService()` |
 | 14 | updateService | IUpdateService | class `new UpdateService(autoUpdater, () => app.isPackaged)` |
+| 15 | goalService | —（直接 export class GoalService） | class `new GoalService(agentService, GoalJudge(llmClient), …)` |
+| 16 | imService | —（直接 export class ImService） | class `new ImService()`（+ ImAgentBridge 桥接，懒执行） |
+| 17 | memoryService | —（直接 export class MemoryService） | class `new MemoryService(llmClient)` |
 
 - 模块级单例（getXXXService 模式）：7 个
-- class 直接 new：7 个
+- class 直接 new：10 个（含 toolRegistry/toolExecutor 2 个核心组件）
+
+> 2026-08-11 同步：服务表由 14 行扩充至 17 行（新增 goalService / imService / memoryService，对齐 service-container 实际注册）；dispose 12 步不变（新增服务随容器引用释放，无独立 dispose）。
 
 ### 2.2 dispose 顺序（12 步，反向依赖）
 

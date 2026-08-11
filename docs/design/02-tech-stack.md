@@ -1,7 +1,7 @@
 # 技术栈文档
 
 > 基于 `code-agent-desktop` v1.0.0 实际 [package.json](file:///f:/TraeProjects/1/package.json) 整理。
-> 整理时间：2026-07-23
+> 整理时间：2026-07-23（依赖清单 2026-08-11 同步）
 
 ## 1. 项目基本信息
 
@@ -53,7 +53,7 @@
 | `react-hotkeys-hook` | `^5.3.3` |
 | `react-markdown` / `remark-gfm` | `^10.1.0` / `^4.0.1` |
 | `react-diff-viewer-continued` | `^4.4.0` |
-| `react-virtuoso` | `^4.18.11` |
+| `react-activity-calendar` | `^3.2.1` |
 | `react-arborist` | `^3.15.0` |
 
 ### 3.3 AI 相关
@@ -61,6 +61,8 @@
 | 依赖 | 版本 | 用途 |
 |---|---|---|
 | `ai` (Vercel AI SDK) | `^7.0.32` | streamText / tools / stopWhen 多轮工具调用 |
+| `@ai-sdk/openai` | `^4.0.27` | OpenAI provider |
+| `@ai-sdk/anthropic` | `^4.0.27` | Anthropic provider |
 | `@ai-sdk/openai-compatible` | `^3.0.13` | DeepSeek 等 OpenAI 兼容 provider |
 | `@ai-sdk/react` | `^4.0.35` | useChat 等 React hooks |
 | `@modelcontextprotocol/sdk` | `^1.30.0` | MCP server 集成（仅 stdio transport） |
@@ -80,9 +82,9 @@
 | 依赖 | 版本 |
 |---|---|
 | `@tailwindcss/vite` / `tailwindcss` | `^4` / `^4` |
-| `@radix-ui/react-{dialog,dropdown-menu,label,scroll-area,separator,slot,tabs,tooltip}` | 多个 |
+| `@radix-ui/react-{dialog,dropdown-menu,label,scroll-area,slot,tabs,tooltip,alert-dialog}` | 多个 |
 | `class-variance-authority` / `clsx` / `tailwind-merge` / `tw-animate-css` | `^0.7.1` / `^2.1.1` / `^3.6.0` / `^1.4.0` |
-| `lucide-react` / `cmdk` / `sonner` / `motion` | `^1.25.0` / `^1.1.1` / `^2.0.7` / `^12.42.2` |
+| `lucide-react` / `cmdk` / `sonner` / `motion` | `^1.25.0` / `^1.1.1` / `^2.0.7` / `^13.0.0` |
 | `shiki` | `^4.3.1` |
 
 ### 3.6 终端 / 文件系统 / 搜索
@@ -94,8 +96,11 @@
 | `chokidar` | `^5.0.0` | 文件监听 |
 | `@vscode/ripgrep` | `^1.18.0` | grep 搜索 |
 | `web-tree-sitter` | `^0.24.7` | tree-sitter 解析 |
+| `tree-sitter-wasms` | `^0.1.13` | tree-sitter WASM 语法包 |
 | `diff-match-patch` | `^1.0.5` | 文件 diff |
 | `fuse.js` | `^7.5.0` | 模糊搜索 |
+
+> 2026-08-11 同步：依赖清单对齐 package.json（radix 补 alert-dialog 去 separator；AI 栈补 openai/anthropic provider；react-virtuoso → react-activity-calendar；motion ^13；补 tree-sitter-wasms）。
 
 ### 3.7 状态 / 校验
 

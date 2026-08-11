@@ -1,7 +1,7 @@
 # 接口设计文档
 
 > 基于 `code-agent-desktop` v1.0.0 实际代码整理。
-> 整理时间：2026-07-23
+> 整理时间：2026-07-23（IPC 域/Service 清单 2026-08-11 同步）
 
 ## 1. IPC Channels 完整清单
 
@@ -17,24 +17,33 @@
 
 | 域 | 数量 | Channels |
 |---|---|---|
-| app | 3 | `app:getStatus`, `app:openExternal`, `app:openDataDir` |
+| audio | 3 | `audio:start`, `audio:append`, `audio:stop` |
+| app | 4 | `app:getStatus`, `app:getInfo`, `app:openExternal`, `app:openDataDir` |
 | chat | 5 (3 推送) | `chat:send`, `chat:stop`, `chat:stream:part`, `chat:stream:end`, `chat:stream:error` |
-| agent | 10 (7 推送) | `agent:run`, `agent:stop`, `agent:approval:response`, `agent:stream:part`, `agent:stream:end`, `agent:stream:error`, `agent:tool:call`, `agent:tool:result`, `agent:approval:request`, `agent:turn:event` |
-| session | 10 | `session:list`, `session:get`, `session:delete`, `session:rename`, `session:create`, `session:listRecentDirs`, `session:exportAll`, `session:getUsageSummary`, `session:getTurns`, `session:getRecentTurns` |
+| agent | 12 (8 推送) | `agent:run`, `agent:ask:respond`, `agent:stop`, `agent:approval:response`, `agent:event:ask`, `agent:stream:part`, `agent:stream:end`, `agent:stream:error`, `agent:tool:call`, `agent:tool:result`, `agent:approval:request`, `agent:turn:event` |
+| session | 12 | `session:list`, `session:get`, `session:delete`, `session:rename`, `session:pin`, `session:create`, `session:listRecentDirs`, `session:exportAll`, `session:getUsageSummary`, `session:getTurns`, `session:getRecentTurns`, `session:getTurnMessages` |
 | file | 10 (1 推送) | `file:read`, `file:write`, `file:list`, `file:watch:start`, `file:watch:stop`, `file:watch:event`, `file:create`, `file:createDir`, `file:delete`, `file:rename` |
 | search | 2 | `search:grep`, `search:glob` |
 | terminal | 7 (3 推送) | `terminal:create`, `terminal:input`, `terminal:resize`, `terminal:kill`, `terminal:event:created`, `terminal:event:output`, `terminal:event:exit` |
 | git | 5 | `git:status`, `git:diff`, `git:add`, `git:commit`, `git:push` |
 | codebase | 6 | `codebase:query`, `codebase:explore`, `codebase:node`, `codebase:callers`, `codebase:callees`, `codebase:impact` |
 | tool | 1 | `tool:list` |
-| settings | 8 | `settings:getApiKey`, `settings:setApiKey`, `settings:deleteApiKey`, `settings:getTelemetryLevel`, `settings:setTelemetryLevel`, `settings:addRuntimeModel`, `settings:removeRuntimeModel`, `settings:listRuntimeModels` |
+| settings | 10 | `settings:getApiKey`, `settings:setApiKey`, `settings:deleteApiKey`, `settings:getTelemetryLevel`, `settings:setTelemetryLevel`, `settings:getApprovalMode`, `settings:setApprovalMode`, `settings:addRuntimeModel`, `settings:removeRuntimeModel`, `settings:listRuntimeModels` |
 | system | 1 | `system:getStatus` |
+| models | 1 | `models:list` |
+| memory | 2 | `memory:list`, `memory:clear` |
+| task | 1 | `task:list` |
+| skill | 4 | `skill:list`, `skill:learn`, `skill:listLearned`, `skill:removeLearned` |
+| whitelist | 3 | `whitelist:list`, `whitelist:add`, `whitelist:remove` |
+| goal | 3 | `goal:create`, `goal:list`, `goal:clear` |
+| im | 3 | `im:list`, `im:start`, `im:stop` |
 | logs | 1 | `logs:read` |
 | devtools | 1 | `devtools:open` |
-| dialog | 1 | `dialog:pickDirectory` |
+| dialog | 2 | `dialog:pickDirectory`, `dialog:pickFiles` |
+| mcp | 3 | `mcp:list`, `mcp:start`, `mcp:stop` |
 | update | 3 (1 推送) | `update:check`, `update:install`, `update:event:status` |
 
-合计 16 个域 / 74 个 channel（59 invoke + 15 push）。
+合计 25 个域 / 105 个 channel（89 invoke + 16 push）。
 
 ## 2. Preload API 形状（window.api）
 
@@ -47,22 +56,33 @@
 
 | 域 | invoke 方法 | subscribe 方法 |
 |---|---|---|
-| app | `getStatus`, `openExternal`, `openDataDir` | — |
+| audio | `start`, `append`, `stop` | — |
+| app | `getStatus`, `getInfo`, `openExternal`, `openDataDir` | — |
 | chat | `send`, `stop` | `subscribePart`, `subscribeEnd`, `subscribeError` |
-| agent | `run`, `stop`, `approvalResponse` | `subscribeStreamPart`, `subscribeStreamEnd`, `subscribeStreamError`, `subscribeToolCall`, `subscribeToolResult`, `subscribeApprovalRequest`, `subscribeTurnEvent` |
-| session | `list`, `get`, `delete`, `rename`, `create`, `listRecentDirs`, `exportAll`, `getUsageSummary`, `getTurns`, `getRecentTurns` | — |
+| agent | `run`, `askRespond`, `stop`, `approvalResponse` | `subscribeStreamPart`, `subscribeStreamEnd`, `subscribeStreamError`, `subscribeToolCall`, `subscribeToolResult`, `subscribeApprovalRequest`, `subscribeTurnEvent`, `subscribeAskEvent` |
+| session | `list`, `get`, `delete`, `rename`, `pin`, `create`, `listRecentDirs`, `exportAll`, `getUsageSummary`, `getTurns`, `getRecentTurns`, `getTurnMessages` | — |
 | file | `read`, `write`, `list`, `watchStart`, `watchStop`, `create`, `createDir`, `delete`, `rename` | `subscribeWatchEvent` |
 | search | `grep`, `glob` | — |
 | terminal | `create`, `input`, `resize`, `kill` | `subscribeCreatedEvent`, `subscribeOutputEvent`, `subscribeExitEvent` |
 | git | `status`, `diff`, `add`, `commit`, `push` | — |
 | codebase | `query`, `explore`, `node`, `callers`, `callees`, `impact` | — |
 | tool | `list` | — |
-| settings | `getApiKey`, `setApiKey`, `deleteApiKey`, `getTelemetryLevel`, `setTelemetryLevel`, `addRuntimeModel`, `removeRuntimeModel`, `listRuntimeModels` | — |
+| settings | `getApiKey`, `setApiKey`, `deleteApiKey`, `getTelemetryLevel`, `setTelemetryLevel`, `getApprovalMode`, `setApprovalMode`, `addRuntimeModel`, `removeRuntimeModel`, `listRuntimeModels` | — |
 | system | `getStatus` | — |
+| models | `list` | — |
+| memory | `list`, `clear` | — |
+| task | `list` | — |
+| skill | `list`, `learn`, `listLearned`, `removeLearned` | — |
+| whitelist | `list`, `add`, `remove` | — |
+| goal | `create`, `list`, `clear` | — |
+| im | `list`, `start`, `stop` | — |
 | logs | `read` | — |
 | devtools | `open` | — |
-| dialog | `pickDirectory` | — |
+| dialog | `pickDirectory`, `pickFiles` | — |
+| mcp | `list`, `start`, `stop` | — |
 | update | `check`, `install` | `subscribeStatus` |
+
+> 2026-08-11 同步：域表由 16 域/74 channel 更新为 25 域/105 channel（新增 audio/models/memory/task/skill/whitelist/goal/im/mcp + agent:ask/agent:event:ask/session:pin/session:getTurnMessages/settings 审批模式/dialog:pickFiles 等新方法），与 packages/shared/src/ipc/meta.ts 一致。
 
 ### 2.2 invoke vs subscribe 形状差异
 
@@ -93,7 +113,7 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 - `IpcInvokeMethod<Channel>`：根据 `IpcRequestMap[Channel]['req']` 是否为 `void` 决定参数个数，返回 `Promise<IpcResponse<...>>`
 - `IpcSubscribeMethod<Channel>`：接收 `(payload: IpcEventMap[Channel]) => void` 回调，返回 `() => void`
 
-## 3. Service 接口（14 个）
+## 3. Service 接口（15 个）
 
 接口定义在各自服务文件内（与具体类同文件，未单独抽到 `types.ts`）。每个接口遵循"接口 + 默认实现 + 单例 getter + reset 测试工具"四件套模式（UpdateService 例外，由 ServiceContainer 直接 `new`）。
 
@@ -325,6 +345,53 @@ export interface IUpdateService {
 ```
 
 > 实现为 `new UpdateService(autoUpdater, () => app.isPackaged)`，由 ServiceContainer 直接构造（非模块级单例）。
+
+### 3.15 GoalService
+
+[src/main/infra/ai/knowledge/goal-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/goal-service.ts)：无独立接口，直接 export class。
+
+```ts
+export class GoalService {
+  mount(goal: string): void;          // 挂载当前目标
+  create(goal: string): Promise<void>; // 创建/更新目标
+  list(): GoalItem[];                  // 列出目标
+  clear(): void;                       // 清空目标
+}
+```
+
+> 依赖 AgentService + GoalJudge（LLM 判定），用于目标驱动会话。
+
+### 3.16 ImService
+
+[src/main/infra/im/im-service.ts](file:///f:/TraeProjects/1/src/main/infra/im/im-service.ts)：无独立接口，直接 export class；由 ImAgentBridge 桥接到 Agent。
+
+```ts
+export class ImService {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  list(): ImChannel[];
+  send(channelId: string, message: string): Promise<void>;
+  restore(): Promise<void>;
+  stopAll(): void;
+}
+```
+
+### 3.17 MemoryService
+
+[src/main/infra/ai/knowledge/memory-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/memory-service.ts)：无独立接口，直接 export class。
+
+```ts
+export class MemoryService {
+  recall(query: string): Promise<MemoryEntry[]>;
+  store(content: string): Promise<void>;
+  clear(): Promise<void>;
+  dream(): Promise<void>;               // 梦境整理（LLM 摘要）
+  forget(entryId: string): Promise<void>;
+  extractAndStore(text: string): Promise<void>;
+}
+```
+
+> 2026-08-11 同步：Service 小节由 14 扩充至 17（新增 GoalService / ImService / MemoryService，均为直接 export class 无独立接口）。
 
 ## 4. 数据类型定义
 
