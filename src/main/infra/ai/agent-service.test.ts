@@ -53,6 +53,16 @@ const mocks = vi.hoisted(() => {
 });
 
 // mock ai：拦截 streamText（保留 isStepCount 等真实导出）
+// mock ../models：modelRegistry.resolve 返回无超时配置（真实单例在测试环境可能带
+// timeoutMs=0 → AbortSignal.timeout(0) 立即中断流，导致活跃会话测试无法挂起）
+vi.mock('../models', () => ({
+  buildGenerationOptions: () => ({}),
+  modelRegistry: {
+    resolve: () => ({ modelId: 'test-model', generationConfig: {} }),
+    register: () => {},
+  },
+}));
+
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>();
   return {
@@ -740,5 +750,108 @@ describe('agent-service', () => {
       // 超时后 Map 应清空
       expect(service.abort('session-hang')).toBe(false);
     });
+  });
+});
+
+describe('AgentService 生命周期补充（活跃会话分支）', () => {
+  let service: AgentService;
+  let releaseStream: () => void;
+
+  beforeEach(() => {
+    service = new AgentService(
+      { toAISDKTools: vi.fn(() => ({})) } as unknown as IToolRegistry,
+      {} as unknown as IToolExecutor,
+      { resolvePrompt: vi.fn(async () => '系统提示') } as unknown as IPromptService,
+      {
+        markRunning: vi.fn(async () => {}),
+        markIdle: vi.fn(async () => {}),
+        getTurns: vi.fn(async () => ({ sessionId: '', turns: [] })),
+        getRecentTurns: vi.fn(async () => ({ turns: [] })),
+        recordTurn: vi.fn(async () => {}),
+        getTurnMessages: vi.fn(async () => []),
+        appendMessage: vi.fn(async () => 0),
+      } as unknown as ISessionService,
+    );
+    // deferred 流对象：保持会话活跃（可手动 close 结束）
+    // 注意：必须返回流结果对象（含 toUIMessageStream），裸 Promise 会让
+    // streamToWebContents 抛错并触发 finally 清理（测试踩坑实录）
+    releaseStream = () => {};
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () =>
+        new ReadableStream({
+          start(controller) {
+            releaseStream = () => {
+              try {
+                controller.close();
+              } catch {
+                /* 已关闭 */
+              }
+            };
+          },
+        }),
+    });
+  });
+
+  function options(sessionId: string | undefined) {
+    const wc = { isDestroyed: () => false, send: vi.fn() };
+    return {
+      messages: [{ role: 'user', content: '你好' }],
+      sessionId,
+      workingDir: '/tmp/project',
+      systemPrompt: '测试',
+      maxSteps: 5,
+      webContents: wc,
+    };
+  }
+
+  it('abort：活跃会话 → true；不存在 → false', async () => {
+    const sessionId = await service.startAgent(options(undefined));
+    expect(service.abort(sessionId)).toBe(true);
+    expect(service.abort('ghost-session')).toBe(false);
+    releaseStream();
+  });
+
+  it('abortAll：多活跃会话全部终止；空集 no-op', async () => {
+    await service.startAgent(options('sess-a'));
+    await service.startAgent(options('sess-b'));
+    expect(() => service.abortAll()).not.toThrow();
+    releaseStream();
+  });
+
+  it('dispose：挂起流时正常返回（不永久 pending）', async () => {
+    await service.startAgent(options(undefined));
+    await expect(service.dispose(500)).resolves.toBeUndefined();
+    releaseStream();
+  });
+
+  it('startAgent 重复会话：旧活跃流被 abort（防双开）', async () => {
+    await service.startAgent(options('dup'));
+    const second = await service.startAgent(options('dup'));
+    expect(second).toBe('dup');
+    releaseStream();
+    await vi.waitFor(() => expect(service.abort('dup')).toBe(true), { timeout: 2000 });
+  }, 10_000);
+
+  it('onTurnEvent：订阅收到事件；退订后不再收到', () => {
+    const received: unknown[] = [];
+    const unsubscribe = service.onTurnEvent((event) => received.push(event));
+    const listeners = (service as unknown as { turnListeners: Set<(e: unknown) => void> })
+      .turnListeners;
+    expect(listeners.size).toBe(1);
+    for (const listener of listeners) listener({ type: 'turn-start' });
+    expect(received).toHaveLength(1);
+    unsubscribe();
+    expect(listeners.size).toBe(0);
+    for (const listener of listeners) listener({ type: 'turn-start' });
+    expect(received).toHaveLength(1);
+  });
+
+  it('markRunning 失败不阻断 startAgent（容错）', async () => {
+    const sess = (
+      service as unknown as { sessionService: { markRunning: ReturnType<typeof vi.fn> } }
+    ).sessionService;
+    sess.markRunning.mockRejectedValueOnce(new Error('db down'));
+    await expect(service.startAgent(options(undefined))).resolves.toBeTruthy();
+    releaseStream();
   });
 });
