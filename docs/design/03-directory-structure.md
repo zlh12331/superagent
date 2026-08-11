@@ -9,11 +9,11 @@
 f:\TraeProjects\1\
 ├── .github/workflows/        # CI/CD（ci.yml + release.yml）
 ├── docs/                     # 文档
-│   ├── design/               # 本设计文档集
-│   ├── 参考项目/             # 第三方参考项目源码副本（不入索引）
-│   ├── rust-dev-standards-ai.txt
-│   ├── software-architecture-principles-ai.txt
-│   └── typescript-dev-standards-ai.txt
+│   ├── design/               # 本设计文档集 + AI 编码/架构规范（.md）
+│   │   ├── 01-architecture.md … 10-component-design-spec.md
+│   │   ├── software-architecture-principles-ai.md
+│   │   └── typescript-dev-standards-ai.md
+│   └── 参考项目/             # 第三方参考项目源码副本（不入索引）
 ├── e2e/                      # Playwright E2E 测试
 ├── packages/                 # pnpm workspace 内部包
 │   ├── shared/               # @code-agent/shared 跨进程共享包
