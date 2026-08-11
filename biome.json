@@ -38,6 +38,15 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
+      "a11y": {
+        "useAltText": "error",
+        "useButtonType": "error",
+        "useValidAriaValues": "error",
+        "noAriaHiddenOnFocusable": "error",
+        "useHeadingContent": "error",
+        "useFocusableInteractive": "error",
+        "useSemanticElements": "warn"
+      },
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",

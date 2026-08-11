@@ -51,6 +51,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Static checks (tokens + i18n)
+        run: pnpm check:static
+
       - name: Dead code check (knip)
         run: pnpm knip
 
