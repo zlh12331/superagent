@@ -19,6 +19,8 @@
       "!**/playwright-report-electron",
       "!**/playwright-report-smoke",
       "!**/test-results",
+      "!**/styles/tokens.css",
+      "!**/tokens",
       "!**/playwright/.cache",
       "!**/docs/design",
       "!**/docs/参考项目",
@@ -412,7 +414,7 @@
       }
     },
     {
-      "includes": ["**/scripts/**/*.ts", "**/scripts/**/*.mjs"],
+      "includes": ["**/scripts/**/*.ts", "**/scripts/**/*.mjs", "**/scripts/**/*.cjs"],
       "linter": {
         "rules": {
           "suspicious": {

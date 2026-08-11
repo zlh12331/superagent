@@ -2,7 +2,7 @@
 design_tokens:
   name: Aurora Design Tokens
   version: 1.0.0
-  source: src/renderer/styles/globals.css
+  source: tokens/aurora.json（Style Dictionary，生成 src/renderer/styles/tokens.css）
   themes: [light, dark]
   mechanism: css-variables
   last_synced: 2026-08-11
@@ -11,7 +11,7 @@ design_tokens:
 # DESIGN.md — Aurora 设计令牌契约
 
 > 机器可读的设计系统契约（供 design-md-review / design-debt-review 类工具接入）。
-> **单一真源：`src/renderer/styles/globals.css`**（本文件为契约摘要，值以 globals.css 为准，同步时以 globals.css 为准覆盖本文件）。
+> **单一真源：`tokens/aurora.json`**（Style Dictionary 构建，`pnpm tokens:build` 生成 `src/renderer/styles/tokens.css`；改令牌只改 aurora.json，禁止手改生成物）。
 
 > 🔒 工程化强制：pnpm check:tokens（扫描裸色/dark:/space-*/w+h 双写/hex，pre-push + CI 卡关）
 

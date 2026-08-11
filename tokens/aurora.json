@@ -1,0 +1,474 @@
+{
+  "sidebar-w": {
+    "value": "clamp(200px, 17vw, 280px)",
+    "comment": "布局尺寸 — clamp() 实现响应式宽度约束"
+  },
+  "right-panel-w": {
+    "value": "clamp(260px, 22vw, 360px)"
+  },
+  "resizer-w": {
+    "value": "6px"
+  },
+  "drawer-w": {
+    "value": "540px"
+  },
+  "topbar-h": {
+    "value": "52px"
+  },
+  "z-base": {
+    "value": "1;",
+    "comment": "z-index 层级体系 — 从低到高，确保所有浮层层级一致"
+  },
+  "sans": {
+    "value": "var(--font-sans)"
+  },
+  "serif": {
+    "value": "var(--font-serif)"
+  },
+  "font-size-2xs": {
+    "value": "10px",
+    "comment": "字号阶梯 — 6 级（对齐参考项目 --font-size-*）"
+  },
+  "font-size-xs": {
+    "value": "11px"
+  },
+  "font-size-sm": {
+    "value": "12px"
+  },
+  "font-size-base": {
+    "value": "13px"
+  },
+  "font-size-md": {
+    "value": "14px"
+  },
+  "font-size-lg": {
+    "value": "16px"
+  },
+  "radius": {
+    "value": "0.625rem",
+    "comment": "圆角 — 对齐参考项目 0.625rem (10px)"
+  },
+  "bg": {
+    "value": "#f7f8fa;",
+    "comment": "—— 3 层背景深度（亮色，对齐参考项目）——",
+    "dark": "#080b10;"
+  },
+  "background": {
+    "value": "var(--bg)",
+    "comment": "shadcn 标准背景映射"
+  },
+  "foreground": {
+    "value": "#1a2130",
+    "dark": "#e8edf4"
+  },
+  "card": {
+    "value": "var(--bg-elev)"
+  },
+  "card-foreground": {
+    "value": "#1a2130",
+    "dark": "#e8edf4"
+  },
+  "popover": {
+    "value": "var(--bg-elev)"
+  },
+  "popover-foreground": {
+    "value": "#1a2130",
+    "dark": "#e8edf4"
+  },
+  "border": {
+    "value": "#e1e4eb",
+    "comment": "描边：两级",
+    "dark": "#1c2330"
+  },
+  "border-strong": {
+    "value": "#cbd0db",
+    "dark": "#2d3848"
+  },
+  "input": {
+    "value": "var(--border)"
+  },
+  "text": {
+    "value": "#1a2130;",
+    "comment": "文字：三级明度",
+    "dark": "#e8edf4;"
+  },
+  "accent": {
+    "value": "#00b89e",
+    "comment": "双 accent：青绿（主）+ 蓝色（辅），对齐参考项目",
+    "dark": "#00e5c7"
+  },
+  "accent-dim": {
+    "value": "#009a82",
+    "dark": "#00b89e"
+  },
+  "accent-2": {
+    "value": "#2b7fff;",
+    "dark": "#4a9eff;"
+  },
+  "primary-foreground": {
+    "value": "var(--on-accent)"
+  },
+  "ring": {
+    "value": "var(--accent)"
+  },
+  "secondary": {
+    "value": "var(--bg-elev-2)"
+  },
+  "secondary-foreground": {
+    "value": "var(--text)"
+  },
+  "muted": {
+    "value": "var(--bg-elev-2)"
+  },
+  "accent-foreground": {
+    "value": "var(--muted-foreground)"
+  },
+  "accent-glow": {
+    "value": "rgba(0, 184, 158, 0.15)",
+    "comment": "accent 氛围色",
+    "dark": "rgba(0, 229, 199, 0.15)"
+  },
+  "accent-soft": {
+    "value": "rgba(0, 184, 158, 0.08)",
+    "dark": "rgba(0, 229, 199, 0.06)"
+  },
+  "accent-2-glow": {
+    "value": "rgba(43, 127, 255, 0.12)",
+    "dark": "rgba(74, 158, 255, 0.16)"
+  },
+  "accent-2-soft": {
+    "value": "rgba(43, 127, 255, 0.06)",
+    "dark": "rgba(74, 158, 255, 0.07)"
+  },
+  "info-blue": {
+    "value": "rgba(43, 127, 255, 0.1)",
+    "dark": "rgba(74, 158, 255, 0.12)"
+  },
+  "info-amber": {
+    "value": "rgba(232, 144, 56, 0.12)",
+    "dark": "rgba(255, 193, 7, 0.15)"
+  },
+  "error-bg": {
+    "value": "rgba(197, 48, 48, 0.08)",
+    "dark": "rgba(255, 107, 107, 0.1)"
+  },
+  "glow-sm": {
+    "value": "0 0 8px rgba(0, 184, 158, 0.14)",
+    "comment": "多级发光阴影（亮色降低不透明度，仅做润色）",
+    "dark": "0 0 8px rgba(0, 229, 199, 0.22)"
+  },
+  "glow-md": {
+    "value": "0 0 16px rgba(0, 184, 158, 0.14), 0 0 36px rgba(0, 184, 158, 0.05)",
+    "dark": "0 0 18px rgba(0, 229, 199, 0.24), 0 0 44px rgba(0, 229, 199, 0.08)"
+  },
+  "glow-lg": {
+    "value": "0 0 24px rgba(0, 184, 158, 0.18), 0 0 70px rgba(0, 184, 158, 0.08)",
+    "dark": "0 0 28px rgba(0, 229, 199, 0.32), 0 0 90px rgba(0, 229, 199, 0.14)"
+  },
+  "glow-2-sm": {
+    "value": "0 0 8px rgba(43, 127, 255, 0.14)",
+    "dark": "0 0 8px rgba(74, 158, 255, 0.25)"
+  },
+  "glow-2-md": {
+    "value": "0 0 16px rgba(43, 127, 255, 0.16), 0 0 36px rgba(43, 127, 255, 0.06)",
+    "dark": "0 0 18px rgba(74, 158, 255, 0.28), 0 0 44px rgba(74, 158, 255, 0.1)"
+  },
+  "grid-line": {
+    "value": "rgba(0, 0, 0, 0.025)",
+    "comment": "背景纹理：网格线 / 扫描线 / 噪点",
+    "dark": "rgba(255, 255, 255, 0.015)"
+  },
+  "scan-line": {
+    "value": "rgba(0, 0, 0, 0.012)",
+    "dark": "rgba(255, 255, 255, 0.008)"
+  },
+  "noise-opacity": {
+    "value": "0.015",
+    "dark": "0.025"
+  },
+  "noise-blend": {
+    "value": "multiply",
+    "dark": "overlay"
+  },
+  "amber": {
+    "value": "#e89038",
+    "comment": "语义色",
+    "dark": "#ffb454"
+  },
+  "amber-dim": {
+    "value": "#d07828",
+    "dark": "#e89038"
+  },
+  "amber-glow": {
+    "value": "rgba(232, 144, 56, 0.15)",
+    "dark": "rgba(255, 180, 84, 0.12)"
+  },
+  "warning": {
+    "value": "var(--amber)"
+  },
+  "warn": {
+    "value": "var(--amber)"
+  },
+  "error": {
+    "value": "#c53030",
+    "dark": "#ff6b6b"
+  },
+  "destructive": {
+    "value": "var(--error)"
+  },
+  "destructive-foreground": {
+    "value": "#ffffff"
+  },
+  "magenta": {
+    "value": "#a855f7",
+    "dark": "#e879f9"
+  },
+  "success": {
+    "value": "#00d9c0"
+  },
+  "chart-1": {
+    "value": "var(--accent)",
+    "comment": "图表色"
+  },
+  "chart-2": {
+    "value": "var(--accent-2)"
+  },
+  "chart-3": {
+    "value": "var(--amber)"
+  },
+  "chart-4": {
+    "value": "var(--success)"
+  },
+  "chart-5": {
+    "value": "var(--error)"
+  },
+  "msg-bubble-user": {
+    "value": "#e8edf5",
+    "comment": "消息气泡",
+    "dark": "#1a2332"
+  },
+  "msg-bubble-assistant": {
+    "value": "transparent"
+  },
+  "user-bubble": {
+    "value": "var(--msg-bubble-user)",
+    "comment": "兼容别名：旧 --user-bubble 指向 --msg-bubble-user"
+  },
+  "overlay-bg": {
+    "value": "rgba(0, 0, 0, 0.3)",
+    "comment": "遮罩 / 玻璃",
+    "dark": "rgba(0, 0, 0, 0.5)"
+  },
+  "overlay-blur": {
+    "value": "8px"
+  },
+  "drawer-overlay": {
+    "value": "rgba(245, 247, 250, 0.55)",
+    "dark": "rgba(8, 11, 16, 0.55)"
+  },
+  "glass-bg": {
+    "value": "rgba(255, 255, 255, 0.78)",
+    "dark": "rgba(10, 15, 25, 0.72)"
+  },
+  "scrollbar-thumb": {
+    "value": "rgba(0, 0, 0, 0.15)",
+    "comment": "滚动条令牌",
+    "dark": "rgba(255, 255, 255, 0.1)"
+  },
+  "scrollbar-thumb-hover": {
+    "value": "rgba(0, 0, 0, 0.25)",
+    "dark": "rgba(255, 255, 255, 0.2)"
+  },
+  "sidebar": {
+    "value": "var(--bg-elev)",
+    "comment": "侧边栏（与 L1 同色）"
+  },
+  "sidebar-foreground": {
+    "value": "var(--text)"
+  },
+  "sidebar-primary": {
+    "value": "var(--accent)"
+  },
+  "sidebar-primary-foreground": {
+    "value": "var(--on-accent)"
+  },
+  "sidebar-accent": {
+    "value": "var(--bg-elev-2)"
+  },
+  "sidebar-accent-foreground": {
+    "value": "var(--text)"
+  },
+  "sidebar-border": {
+    "value": "var(--border)"
+  },
+  "sidebar-ring": {
+    "value": "var(--accent)"
+  },
+  "font-sans": {
+    "value": "\"Bricolage Grotesque\", \"Bricolage Grotesque Variable\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+    "comment": "字体族"
+  },
+  "font-serif": {
+    "value": "\"Instrument Serif\", Georgia, \"Songti SC\", serif"
+  },
+  "font-mono": {
+    "value": "\"Martian Mono\", \"Martian Mono Variable\", ui-monospace, \"Cascadia Code\", Consolas, monospace"
+  },
+  "fs-2xs": {
+    "value": "10px",
+    "comment": "旧字号别名（兼容已有组件代码）"
+  },
+  "fs-xs": {
+    "value": "11px"
+  },
+  "fs-sm": {
+    "value": "12px"
+  },
+  "fs-md": {
+    "value": "13px"
+  },
+  "fs-base": {
+    "value": "15px"
+  },
+  "fs-lg": {
+    "value": "16px"
+  },
+  "fs-xl": {
+    "value": "18px"
+  },
+  "fs-2xl": {
+    "value": "22px"
+  },
+  "fs-3xl": {
+    "value": "28px"
+  },
+  "sp-1": {
+    "value": "4px",
+    "comment": "16px 呼吸感间距基线"
+  },
+  "sp-2": {
+    "value": "8px"
+  },
+  "sp-3": {
+    "value": "12px"
+  },
+  "sp-4": {
+    "value": "16px"
+  },
+  "sp-5": {
+    "value": "24px"
+  },
+  "sp-6": {
+    "value": "32px"
+  },
+  "sp-7": {
+    "value": "48px"
+  },
+  "shadow-elev": {
+    "value": "0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04)",
+    "comment": "阴影体系 — 对齐参考项目",
+    "dark": "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02)"
+  },
+  "shadow-modal": {
+    "value": "0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--accent-glow)",
+    "dark": "0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-glow)"
+  },
+  "shadow-dropdown": {
+    "value": "0 8px 24px rgba(0, 0, 0, 0.1)",
+    "dark": "0 12px 36px rgba(0, 0, 0, 0.5)"
+  },
+  "shadow-pop": {
+    "value": "var(--shadow-dropdown)",
+    "comment": "扩展阴影（保留以兼容已有组件）"
+  },
+  "shadow-card": {
+    "value": "0 2px 10px rgba(0, 0, 0, 0.08)",
+    "dark": "0 2px 10px rgba(0, 0, 0, 0.3)"
+  },
+  "shadow-card-hover": {
+    "value": "0 12px 32px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04)",
+    "dark": "0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04)"
+  },
+  "ease-soft": {
+    "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+    "comment": "动效缓动函数"
+  },
+  "ease-paper": {
+    "value": "cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+  },
+  "ease-out": {
+    "value": "cubic-bezier(0.2, 0.8, 0.2, 1)"
+  },
+  "icon-xs": {
+    "value": "10px",
+    "comment": "图标尺寸阶梯"
+  },
+  "icon-sm": {
+    "value": "12px"
+  },
+  "icon-md": {
+    "value": "14px"
+  },
+  "icon-lg": {
+    "value": "16px"
+  },
+  "icon-xl": {
+    "value": "20px"
+  },
+  "bg-primary": {
+    "value": "var(--bg)",
+    "comment": "语义别名变量 — 兼容多套命名"
+  },
+  "text-primary": {
+    "value": "var(--text)"
+  },
+  "bg-ter": {
+    "value": "var(--bg-elev-2)"
+  },
+  "danger": {
+    "value": "var(--error)"
+  },
+  "aurora-accent": {
+    "value": "var(--accent)"
+  },
+  "aurora-accent-2": {
+    "value": "var(--accent-2)"
+  },
+  "aurora-accent-glow": {
+    "value": "var(--accent-glow)"
+  },
+  "aurora-accent-2-glow": {
+    "value": "var(--accent-2-glow)"
+  },
+  "aurora-glow-sm": {
+    "value": "var(--glow-sm)"
+  },
+  "aurora-glow-md": {
+    "value": "var(--glow-md)"
+  },
+  "aurora-glass-bg": {
+    "value": "var(--glass-bg)",
+    "comment": "玻璃质感 - 顶栏背景（半透明 + 模糊）"
+  },
+  "aurora-sidebar-w": {
+    "value": "var(--sidebar-w)",
+    "comment": "布局尺寸别名（指向主题无关的统一布局令牌）"
+  },
+  "aurora-right-panel-w": {
+    "value": "var(--right-panel-w)"
+  },
+  "aurora-resizer-w": {
+    "value": "var(--resizer-w)"
+  },
+  "aurora-topbar-h": {
+    "value": "var(--topbar-h)"
+  },
+  "aurora-ease-out": {
+    "value": "var(--ease-out)",
+    "comment": "缓动曲线"
+  },
+  "primary": {
+    "value": "var(--accent)",
+    "dark": "var(--accent)"
+  }
+}

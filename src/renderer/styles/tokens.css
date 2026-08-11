@@ -1,0 +1,223 @@
+/* ⚠️ 生成文件（Style Dictionary）——请勿手改；修改 tokens/aurora.json 后运行 pnpm tokens:build */
+:root {
+  /* 布局尺寸 — clamp() 实现响应式宽度约束 */
+  --sidebar-w: clamp(200px, 17vw, 280px);
+  --right-panel-w: clamp(260px, 22vw, 360px);
+  --resizer-w: 6px;
+  --drawer-w: 540px;
+  --topbar-h: 52px;
+  /* z-index 层级体系 — 从低到高，确保所有浮层层级一致 */
+  --z-base: 1;;
+  --sans: var(--font-sans);
+  --serif: var(--font-serif);
+  /* 字号阶梯 — 6 级（对齐参考项目 --font-size-*） */
+  --font-size-2xs: 10px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  /* 圆角 — 对齐参考项目 0.625rem (10px) */
+  --radius: 0.625rem;
+  /* —— 3 层背景深度（亮色，对齐参考项目）—— */
+  --bg: #f7f8fa;;
+  /* shadcn 标准背景映射 */
+  --background: var(--bg);
+  --foreground: #1a2130;
+  --card: var(--bg-elev);
+  --card-foreground: #1a2130;
+  --popover: var(--bg-elev);
+  --popover-foreground: #1a2130;
+  /* 描边：两级 */
+  --border: #e1e4eb;
+  --border-strong: #cbd0db;
+  --input: var(--border);
+  /* 文字：三级明度 */
+  --text: #1a2130;;
+  /* 双 accent：青绿（主）+ 蓝色（辅），对齐参考项目 */
+  --accent: #00b89e;
+  --accent-dim: #009a82;
+  --accent-2: #2b7fff;;
+  --primary-foreground: var(--on-accent);
+  --ring: var(--accent);
+  --secondary: var(--bg-elev-2);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-elev-2);
+  --accent-foreground: var(--muted-foreground);
+  /* accent 氛围色 */
+  --accent-glow: rgba(0, 184, 158, 0.15);
+  --accent-soft: rgba(0, 184, 158, 0.08);
+  --accent-2-glow: rgba(43, 127, 255, 0.12);
+  --accent-2-soft: rgba(43, 127, 255, 0.06);
+  --info-blue: rgba(43, 127, 255, 0.1);
+  --info-amber: rgba(232, 144, 56, 0.12);
+  --error-bg: rgba(197, 48, 48, 0.08);
+  /* 多级发光阴影（亮色降低不透明度，仅做润色） */
+  --glow-sm: 0 0 8px rgba(0, 184, 158, 0.14);
+  --glow-md: 0 0 16px rgba(0, 184, 158, 0.14), 0 0 36px rgba(0, 184, 158, 0.05);
+  --glow-lg: 0 0 24px rgba(0, 184, 158, 0.18), 0 0 70px rgba(0, 184, 158, 0.08);
+  --glow-2-sm: 0 0 8px rgba(43, 127, 255, 0.14);
+  --glow-2-md: 0 0 16px rgba(43, 127, 255, 0.16), 0 0 36px rgba(43, 127, 255, 0.06);
+  /* 背景纹理：网格线 / 扫描线 / 噪点 */
+  --grid-line: rgba(0, 0, 0, 0.025);
+  --scan-line: rgba(0, 0, 0, 0.012);
+  --noise-opacity: 0.015;
+  --noise-blend: multiply;
+  /* 语义色 */
+  --amber: #e89038;
+  --amber-dim: #d07828;
+  --amber-glow: rgba(232, 144, 56, 0.15);
+  --warning: var(--amber);
+  --warn: var(--amber);
+  --error: #c53030;
+  --destructive: var(--error);
+  --destructive-foreground: #ffffff;
+  --magenta: #a855f7;
+  --success: #00d9c0;
+  /* 图表色 */
+  --chart-1: var(--accent);
+  --chart-2: var(--accent-2);
+  --chart-3: var(--amber);
+  --chart-4: var(--success);
+  --chart-5: var(--error);
+  /* 消息气泡 */
+  --msg-bubble-user: #e8edf5;
+  --msg-bubble-assistant: transparent;
+  /* 兼容别名：旧 --user-bubble 指向 --msg-bubble-user */
+  --user-bubble: var(--msg-bubble-user);
+  /* 遮罩 / 玻璃 */
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --overlay-blur: 8px;
+  --drawer-overlay: rgba(245, 247, 250, 0.55);
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  /* 滚动条令牌 */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  /* 侧边栏（与 L1 同色） */
+  --sidebar: var(--bg-elev);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--bg-elev-2);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
+  /* 字体族 */
+  --font-sans: "Bricolage Grotesque", "Bricolage Grotesque Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Songti SC", serif;
+  --font-mono: "Martian Mono", "Martian Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* 旧字号别名（兼容已有组件代码） */
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-base: 15px;
+  --fs-lg: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+  /* 16px 呼吸感间距基线 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  /* 阴影体系 — 对齐参考项目 */
+  --shadow-elev: 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--accent-glow);
+  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.1);
+  /* 扩展阴影（保留以兼容已有组件） */
+  --shadow-pop: var(--shadow-dropdown);
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  /* 动效缓动函数 */
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-paper: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 图标尺寸阶梯 */
+  --icon-xs: 10px;
+  --icon-sm: 12px;
+  --icon-md: 14px;
+  --icon-lg: 16px;
+  --icon-xl: 20px;
+  /* 语义别名变量 — 兼容多套命名 */
+  --bg-primary: var(--bg);
+  --text-primary: var(--text);
+  --bg-ter: var(--bg-elev-2);
+  --danger: var(--error);
+  --aurora-accent: var(--accent);
+  --aurora-accent-2: var(--accent-2);
+  --aurora-accent-glow: var(--accent-glow);
+  --aurora-accent-2-glow: var(--accent-2-glow);
+  --aurora-glow-sm: var(--glow-sm);
+  --aurora-glow-md: var(--glow-md);
+  /* 玻璃质感 - 顶栏背景（半透明 + 模糊） */
+  --aurora-glass-bg: var(--glass-bg);
+  /* 布局尺寸别名（指向主题无关的统一布局令牌） */
+  --aurora-sidebar-w: var(--sidebar-w);
+  --aurora-right-panel-w: var(--right-panel-w);
+  --aurora-resizer-w: var(--resizer-w);
+  --aurora-topbar-h: var(--topbar-h);
+  /* 缓动曲线 */
+  --aurora-ease-out: var(--ease-out);
+  --primary: var(--accent);
+}
+
+.dark {
+  /* —— 3 层背景深度（亮色，对齐参考项目）—— */
+  --bg: #080b10;;
+  --foreground: #e8edf4;
+  --card-foreground: #e8edf4;
+  --popover-foreground: #e8edf4;
+  /* 描边：两级 */
+  --border: #1c2330;
+  --border-strong: #2d3848;
+  /* 文字：三级明度 */
+  --text: #e8edf4;;
+  /* 双 accent：青绿（主）+ 蓝色（辅），对齐参考项目 */
+  --accent: #00e5c7;
+  --accent-dim: #00b89e;
+  --accent-2: #4a9eff;;
+  /* accent 氛围色 */
+  --accent-glow: rgba(0, 229, 199, 0.15);
+  --accent-soft: rgba(0, 229, 199, 0.06);
+  --accent-2-glow: rgba(74, 158, 255, 0.16);
+  --accent-2-soft: rgba(74, 158, 255, 0.07);
+  --info-blue: rgba(74, 158, 255, 0.12);
+  --info-amber: rgba(255, 193, 7, 0.15);
+  --error-bg: rgba(255, 107, 107, 0.1);
+  /* 多级发光阴影（亮色降低不透明度，仅做润色） */
+  --glow-sm: 0 0 8px rgba(0, 229, 199, 0.22);
+  --glow-md: 0 0 18px rgba(0, 229, 199, 0.24), 0 0 44px rgba(0, 229, 199, 0.08);
+  --glow-lg: 0 0 28px rgba(0, 229, 199, 0.32), 0 0 90px rgba(0, 229, 199, 0.14);
+  --glow-2-sm: 0 0 8px rgba(74, 158, 255, 0.25);
+  --glow-2-md: 0 0 18px rgba(74, 158, 255, 0.28), 0 0 44px rgba(74, 158, 255, 0.1);
+  /* 背景纹理：网格线 / 扫描线 / 噪点 */
+  --grid-line: rgba(255, 255, 255, 0.015);
+  --scan-line: rgba(255, 255, 255, 0.008);
+  --noise-opacity: 0.025;
+  --noise-blend: overlay;
+  /* 语义色 */
+  --amber: #ffb454;
+  --amber-dim: #e89038;
+  --amber-glow: rgba(255, 180, 84, 0.12);
+  --error: #ff6b6b;
+  --magenta: #e879f9;
+  /* 消息气泡 */
+  --msg-bubble-user: #1a2332;
+  /* 遮罩 / 玻璃 */
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --drawer-overlay: rgba(8, 11, 16, 0.55);
+  --glass-bg: rgba(10, 15, 25, 0.72);
+  /* 滚动条令牌 */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+  /* 阴影体系 — 对齐参考项目 */
+  --shadow-elev: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-glow);
+  --shadow-dropdown: 0 12px 36px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}

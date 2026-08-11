@@ -46,6 +46,8 @@
     "check:bundle": "tsx scripts/check-bundle.ts",
     "check:static": "pnpm check:tokens && pnpm check:i18n && pnpm check:comments && pnpm check:file-size && pnpm check:functions && pnpm check:docs && pnpm check:secrets",
     "check:secrets": "gitleaks dir src --redact --no-banner",
+    "tokens:build": "node scripts/build-tokens.mjs",
+    "tokens:check": "node scripts/build-tokens.mjs && git diff --exit-code -- src/renderer/styles/tokens.css",
     "i18n:status": "i18next-cli status",
     "i18n:lint": "i18next-cli lint",
     "check:docs": "pnpm --filter @code-agent/typedoc-docs run check",
