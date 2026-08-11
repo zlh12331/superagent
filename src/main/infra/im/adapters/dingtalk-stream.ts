@@ -118,15 +118,38 @@ export class DingTalkStreamReceiver {
   private readonly appKey: string;
   private readonly appSecret: string;
 
+  /**
+   * 外部依赖注入点（测试传 fake，生产默认实现）：
+   * - fetchFn：HTTP 请求（网络）
+   * - wsCtor：WebSocket 长连接（网络）
+   * - httpTimeoutMs / heartbeatMs：时间参数（测试缩短验证超时/心跳路径）
+   */
+  private readonly fetchFn: typeof fetch;
+  private readonly wsCtor: typeof WebSocket;
+  private readonly httpTimeoutMs: number;
+  private readonly heartbeatMs: number;
+
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
 
-  constructor(config: DingTalkStreamConfig) {
+  constructor(
+    config: DingTalkStreamConfig,
+    options: {
+      fetchFn?: typeof fetch;
+      WebSocketCtor?: typeof WebSocket;
+      timeoutMs?: number;
+      heartbeatMs?: number;
+    } = {},
+  ) {
     this.appKey = config.appKey;
     this.appSecret = config.appSecret;
     this.apiBaseUrl = config.apiBaseUrl ?? 'https://api.dingtalk.com';
+    this.fetchFn = options.fetchFn ?? fetch;
+    this.wsCtor = options.WebSocketCtor ?? WebSocket;
+    this.httpTimeoutMs = options.timeoutMs ?? HTTP_TIMEOUT_MS;
+    this.heartbeatMs = options.heartbeatMs ?? HEARTBEAT_INTERVAL_MS;
   }
 
   get isOpen(): boolean {
@@ -150,12 +173,12 @@ export class DingTalkStreamReceiver {
     // 2. 网关连接参数（endpoint + ticket）
     const { endpoint, ticket } = await this.fetchConnection(accessToken);
     // 3. WebSocket 连接 + register
-    const ws = new WebSocket(endpoint);
+    const ws = new this.wsCtor(endpoint);
     this.ws = ws;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new AppError(ErrorCode.IM_CHANNEL_REQUEST_FAILED, '钉钉 Stream 连接超时'));
-      }, HTTP_TIMEOUT_MS);
+      }, this.httpTimeoutMs);
       ws.addEventListener('open', () => {
         clearTimeout(timer);
         ws.send(JSON.stringify({ type: 'register', ticket }));
@@ -236,9 +259,9 @@ export class DingTalkStreamReceiver {
   /** POST JSON（超时） */
   private async postJson(url: string, body: unknown): Promise<unknown> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort('timeout'), HTTP_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort('timeout'), this.httpTimeoutMs);
     try {
-      const response = await fetch(url, {
+      const response = await this.fetchFn(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -253,9 +276,9 @@ export class DingTalkStreamReceiver {
   /** GET（Bearer 鉴权 + 超时） */
   private async getJson(url: string, accessToken: string): Promise<unknown> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort('timeout'), HTTP_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort('timeout'), this.httpTimeoutMs);
     try {
-      const response = await fetch(url, {
+      const response = await this.fetchFn(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
         signal: controller.signal,
       });
@@ -269,7 +292,7 @@ export class DingTalkStreamReceiver {
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       this.ws?.send(JSON.stringify({ type: 'nop' }));
-    }, HEARTBEAT_INTERVAL_MS);
+    }, this.heartbeatMs);
   }
 
   /** data 帧分发：解析 → 转发入站消息 */
