@@ -54,7 +54,7 @@
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsole": "warn"
+        "noConsole": "error"
       },
       "style": {
         "useImportType": "error",

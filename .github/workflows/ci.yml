@@ -147,6 +147,9 @@ jobs:
       - name: Build dev artifacts
         run: pnpm build
 
+      - name: Bundle size gate
+        run: pnpm check:bundle
+
       - name: Run Electron E2E tests
         # Linux 无头环境需要 xvfb（GitHub ubuntu runner 预装 Xvfb）
         run: pnpm test:e2e:electron
