@@ -10,6 +10,9 @@ export default defineConfig({
     globals: true,
     // 测试文件位置：与源码同目录（colocation 模式）
     include: ['**/*.test.ts'],
+    // 性能基准独立运行（pnpm test:perf:main = vitest run --root src/main perf）：
+    // 不进常规 test:main（全量并发下 PTY 类基准时序不稳，且拉长 CI 时长）
+    exclude: ['**/*.perf.test.ts'],
     // 覆盖率收集（设计文档 §8.6 覆盖率 CI 卡关）
     coverage: {
       provider: 'v8',
