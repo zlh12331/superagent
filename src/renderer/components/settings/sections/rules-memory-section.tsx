@@ -73,7 +73,7 @@ export function RulesMemorySection(): ReactElement {
   };
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className="flex flex-col gap-4 pt-2">
       {/* 规则：AGENTS.md */}
       <div>
         <div className="flex items-center gap-2">
@@ -120,7 +120,7 @@ export function RulesMemorySection(): ReactElement {
         ) : memories.length === 0 ? (
           <div className="text-muted-foreground/60 mt-2 text-xs">{t('settings.memoryEmpty')}</div>
         ) : (
-          <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+          <ul className="mt-2 max-h-64 flex flex-col gap-1 overflow-y-auto">
             {memories.map((m) => (
               <li
                 key={m.id}

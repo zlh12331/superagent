@@ -18,7 +18,7 @@ export function TelemetrySection(): React.ReactElement {
   const { mutate: setTelemetryLevel, isPending: isSavingTelemetry } = useSetTelemetryLevel();
 
   return (
-    <div className="space-y-3 border-t border-border/60 pt-4">
+    <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
       <div className="flex items-center gap-2">
         <Shield className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.telemetry')}</Label>

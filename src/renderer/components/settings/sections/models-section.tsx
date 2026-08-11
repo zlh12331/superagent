@@ -116,12 +116,12 @@ export function ModelsSection(): ReactElement {
   };
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className="flex flex-col gap-4 pt-2">
       {/* 提供商列表（内置，配置状态可视） */}
       <div>
         <Label className="font-serif text-sm tracking-wide">{t('settings.providersTitle')}</Label>
         <p className="text-muted-foreground mt-0.5 text-xs">{t('settings.providersHint')}</p>
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 flex flex-col gap-1.5">
           {BUILTIN_PROVIDERS.map((p) => (
             <ProviderRow key={p.kind} kind={p.kind} label={p.label} />
           ))}
@@ -140,7 +140,7 @@ export function ModelsSection(): ReactElement {
 
         {/* 已添加列表 */}
         {runtimeModels.length > 0 && (
-          <ul className="mt-2 space-y-1">
+          <ul className="mt-2 flex flex-col gap-1">
             {runtimeModels.map((m) => (
               <li
                 key={m.id}

@@ -80,7 +80,7 @@ export function GoalEditDialog({
 
         <div className="py-4">
           {/* 目标描述（objective → condition 映射；status/tokenBudget 无后端字段，诚实裁剪） */}
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="goal-condition" className="text-[12px]">
               {t('panel.goalLabel')}
             </Label>

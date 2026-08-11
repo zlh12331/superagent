@@ -18,7 +18,7 @@ function PlaceholderPane({
   readonly description: string;
 }): ReactElement {
   return (
-    <div className="space-y-3 pt-2">
+    <div className="flex flex-col gap-3 pt-2">
       <h3 className="text-foreground text-sm font-semibold">{title}</h3>
       <p className="text-muted-foreground max-w-md text-xs leading-relaxed">{description}</p>
       <div className="border-border bg-muted/20 rounded-md border px-3 py-2.5">
@@ -40,7 +40,7 @@ export function AccountSection(): ReactElement {
 export function MobileSection(): ReactElement {
   const { t } = useTranslation();
   return (
-    <div className="space-y-4 pt-2">
+    <div className="flex flex-col gap-4 pt-2">
       <PlaceholderPane title={t('settings.nav.mobile')} description={t('settings.mobileHint')} />
       {/* IM 渠道（真实功能：企微/飞书桥接配置） */}
       <div>

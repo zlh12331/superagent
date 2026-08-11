@@ -75,11 +75,11 @@ export function ImChannelsSection(): ReactElement {
   };
 
   if (channels === null) {
-    return <div className="space-y-2 pt-2" />;
+    return <div className="flex flex-col gap-2 pt-2" />;
   }
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
         <MessageSquareText className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">
@@ -88,7 +88,7 @@ export function ImChannelsSection(): ReactElement {
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.imChannelsHint')}</p>
 
-      <ul className="space-y-2 text-xs font-sans">
+      <ul className="flex flex-col gap-2 text-xs font-sans">
         {channels.map((channel) => (
           <li key={channel.kind} className="rounded border border-border px-2.5 py-2">
             <div className="flex items-center justify-between gap-2">

@@ -22,7 +22,7 @@ export function ModelParamsSection(): ReactElement {
   const updateAi = useSettingsStore((s) => s.updateAi);
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <SectionTitle>{t('settings.modelParams.selection')}</SectionTitle>
       <SettingField
         label={t('settings.modelParams.defaultModel')}

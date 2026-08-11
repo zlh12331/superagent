@@ -37,7 +37,7 @@ export function TurnsSection(): ReactElement {
   };
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
         <History className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.turnsSection')}</Label>
@@ -47,7 +47,7 @@ export function TurnsSection(): ReactElement {
       {isEmpty ? (
         <p className="text-xs text-muted-foreground font-sans">{t('settings.turnsEmpty')}</p>
       ) : (
-        <ul className="space-y-1 text-xs font-sans">
+        <ul className="flex flex-col gap-1 text-xs font-sans">
           {turns.map((turn) => (
             <li
               key={turn.turnId}

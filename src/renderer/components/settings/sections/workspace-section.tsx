@@ -17,7 +17,7 @@ export function WorkspaceSection(): ReactElement {
   const expandedCount = useFileTreeStore((state) => state.expandedPaths.size);
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="flex flex-col gap-3 pt-2">
       <div className="flex items-center gap-2">
         <FolderTree className="text-muted-foreground size-3.5" strokeWidth={1.5} />
         <h3 className="text-foreground text-sm font-semibold">{t('settings.nav.workspace')}</h3>

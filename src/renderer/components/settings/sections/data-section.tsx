@@ -39,7 +39,7 @@ export function DataSection(): React.ReactElement {
   };
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="flex flex-col gap-3 pt-2">
       <div className="flex items-center gap-2">
         <Database className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.dataSection')}</Label>

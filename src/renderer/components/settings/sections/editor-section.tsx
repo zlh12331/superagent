@@ -21,7 +21,7 @@ export function EditorSection(): ReactElement {
   const updateEditor = useSettingsStore((s) => s.updateEditor);
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <SectionTitle>{t('settings.editor.display')}</SectionTitle>
       <SettingRow label={t('settings.editor.fontSize')}>
         <SegControl

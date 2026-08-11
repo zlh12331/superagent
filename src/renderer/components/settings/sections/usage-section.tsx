@@ -155,7 +155,7 @@ export function UsageSection(): ReactElement {
   const isEmpty = summary === null;
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
         <BarChart3 className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('settings.usageSection')}</Label>
@@ -165,7 +165,7 @@ export function UsageSection(): ReactElement {
       {isEmpty ? (
         <p className="text-xs text-muted-foreground font-sans">{t('settings.usageEmpty')}</p>
       ) : (
-        <div className="space-y-4 font-sans">
+        <div className="flex flex-col gap-4 font-sans">
           {/* ① 时间维度四卡：今日 / 近 30 天（本月近似）/ 累计 / 总调用次数 */}
           <div className="grid grid-cols-4 gap-2 text-xs">
             <div className="rounded-md border border-border p-2.5">
@@ -227,7 +227,7 @@ export function UsageSection(): ReactElement {
               <p className="text-xs font-medium text-muted-foreground">
                 {t('settings.usageByModel')}
               </p>
-              <ul className="mt-2 space-y-2 text-xs">
+              <ul className="mt-2 flex flex-col gap-2 text-xs">
                 {modelRows.length === 0 ? (
                   <li className="text-muted-foreground/60">{t('settings.usageEmpty')}</li>
                 ) : (

@@ -188,7 +188,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
               ×
             </button>
           </div>
-          <ul className="space-y-1">
+          <ul className="flex flex-col gap-1">
             {goals.map((goal) => (
               <li key={goal.condition} className="text-foreground/90 leading-relaxed">
                 {goal.condition}
@@ -234,7 +234,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
         {tasks.length === 0 ? (
           <div className="text-muted-foreground/60">{t('panel.noTasks')}</div>
         ) : (
-          <ul className="space-y-1">
+          <ul className="flex flex-col gap-1">
             {tasks.map((task) => {
               // 状态视觉（对齐参考项目 PlanNode：完成 = 删除线淡色；运行中 = spinner + accent；失败 = error 色）
               const status = task.status;
@@ -270,7 +270,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
         {referencedFiles.length === 0 ? (
           <div className="text-muted-foreground/60">{t('panel.noReferencedFiles')}</div>
         ) : (
-          <ul className="space-y-1">
+          <ul className="flex flex-col gap-1">
             {referencedFiles.map((filePath) => (
               <li
                 key={filePath}
@@ -401,9 +401,9 @@ export function DiffPane({
   };
 
   return (
-    <ul className="h-full space-y-1 overflow-y-auto p-3 text-xs">
+    <ul className="h-full flex flex-col gap-1 overflow-y-auto p-3 text-xs">
       {changes.map((change) => (
-        <li key={change.id} className="space-y-0.5">
+        <li key={change.id} className="flex flex-col gap-0.5">
           <button
             type="button"
             onClick={() => toggleChange(change.id, change.path)}
@@ -484,7 +484,7 @@ export function FilesPane({ sessionId }: { readonly sessionId: string }): ReactE
   }
 
   return (
-    <ul className="h-full space-y-1 overflow-y-auto p-3 text-xs">
+    <ul className="h-full flex flex-col gap-1 overflow-y-auto p-3 text-xs">
       {files.map((file) => (
         <li key={file}>
           <button

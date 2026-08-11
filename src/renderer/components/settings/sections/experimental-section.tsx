@@ -22,7 +22,7 @@ export function ExperimentalSection(): ReactElement {
   const updateExperimental = useSettingsStore((s) => s.updateExperimental);
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <SectionTitle>{t('settings.experimental.title')}</SectionTitle>
       <p className="text-muted-foreground text-xs leading-[1.5]">
         {t('settings.experimental.hint')}

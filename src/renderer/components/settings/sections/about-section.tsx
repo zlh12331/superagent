@@ -55,7 +55,7 @@ export function AboutSection(): ReactElement {
   }, [t]);
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
         <Info className="size-4 text-muted-foreground" strokeWidth={1.5} />
         <span className="text-foreground font-serif text-sm tracking-wide">

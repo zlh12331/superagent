@@ -116,7 +116,7 @@ export function McpSection(): ReactElement {
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <SectionTitle>{t('settings.mcpServers')}</SectionTitle>
       <p className="text-muted-foreground text-xs leading-[1.5]">{t('settings.mcpHint')}</p>
 
@@ -128,7 +128,7 @@ export function McpSection(): ReactElement {
         </div>
       )}
       {servers.map((server) => (
-        <div key={server.config.name} className="space-y-1">
+        <div key={server.config.name} className="flex flex-col gap-1">
           <SettingRow
             key={server.config.name}
             label={server.config.name}
@@ -180,7 +180,7 @@ export function McpSection(): ReactElement {
               {server.toolNames.length === 0 ? (
                 <span className="text-muted-foreground text-xs">{t('settings.mcpNoTools')}</span>
               ) : (
-                <ul className="space-y-0.5">
+                <ul className="flex flex-col gap-0.5">
                   {server.toolNames.map((toolName) => (
                     <li
                       key={toolName}

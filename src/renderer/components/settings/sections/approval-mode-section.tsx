@@ -142,7 +142,7 @@ export function ApprovalModeSection(): ReactElement {
   const askTools = tools.filter((tool) => tool.permission === 'ask');
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
         <Shield className="text-muted-foreground size-4" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">
@@ -186,7 +186,7 @@ export function ApprovalModeSection(): ReactElement {
           <Label className="font-serif text-sm tracking-wide">{t('settings.whitelistTitle')}</Label>
         </div>
         <p className="text-xs text-muted-foreground font-sans">{t('settings.whitelistHint')}</p>
-        <div className="mt-1.5 space-y-1.5">
+        <div className="mt-1.5 flex flex-col gap-1.5">
           {entries.length === 0 ? (
             <p className="text-xs text-muted-foreground font-sans">
               {t('settings.whitelistEmpty')}

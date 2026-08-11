@@ -126,7 +126,7 @@ export function SkillsSection(): ReactElement {
   const builtinSkills = allSkills.filter((s) => !learnedNames.has(s.name));
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {/* 已学技能（LLM 生成，可移除） */}
       <SectionTitle>{t('settings.skillLearnedTitle')}</SectionTitle>
       <p className="text-muted-foreground text-xs leading-[1.5]">

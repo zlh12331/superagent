@@ -13,7 +13,7 @@ import { useTranslation } from '@/i18n/use-translation';
 export function BrowserSection(): ReactElement {
   const { t } = useTranslation();
   return (
-    <div className="space-y-3 pt-2">
+    <div className="flex flex-col gap-3 pt-2">
       <div className="flex items-center gap-2">
         <Globe className="text-muted-foreground size-3.5" strokeWidth={1.5} />
         <h3 className="text-foreground text-sm font-semibold">{t('settings.nav.browser')}</h3>

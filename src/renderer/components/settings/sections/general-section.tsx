@@ -59,7 +59,7 @@ function cnRow(active: boolean): string {
 export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean }): ReactElement {
   const { t } = useTranslation();
   return (
-    <div className="space-y-5 pt-2">
+    <div className="flex flex-col gap-5 pt-2">
       <div>
         <h3 className="text-foreground text-sm font-semibold">{t('settings.generalTitle')}</h3>
         <div className="border-border bg-muted/20 mt-2 rounded-md border p-3">
@@ -68,7 +68,7 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
       </div>
 
       {/* 编辑器 / 快捷键 / 提示词（并入通用） */}
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <EditorSection />
         <ShortcutsSection />
         <PromptSection open={drawerOpen} />

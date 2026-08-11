@@ -158,7 +158,7 @@ export function AskDialog(): ReactElement | null {
         </div>
 
         {/* 问题列表 */}
-        <div className="space-y-4 p-4">
+        <div className="flex flex-col gap-4 p-4">
           {questions.map((q, qIndex) => (
             <div key={`${askId}-${q.question}`}>
               {q.header !== undefined && (
@@ -168,7 +168,7 @@ export function AskDialog(): ReactElement | null {
 
               {/* 选项 */}
               {q.options !== undefined && q.options.length > 0 && (
-                <div className="mt-2 space-y-1.5">
+                <div className="mt-2 flex flex-col gap-1.5">
                   {q.options.map((opt, optIndex) => {
                     const selected = answers[qIndex]?.selectedIndexes.includes(optIndex) ?? false;
                     return (

@@ -17,13 +17,13 @@ export function ShortcutsSection(): React.ReactElement {
   const updateShortcuts = useSettingsStore((s) => s.updateShortcuts);
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="flex flex-col gap-3 pt-2">
       <div className="flex items-center gap-2">
         <Keyboard className="text-muted-foreground size-4" strokeWidth={1.5} />
         <Label className="font-serif text-sm tracking-wide">{t('common.shortcuts')}</Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('common.shortcutsHint')}</p>
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         {[
           { key: 'commandPalette', labelKey: 'palette.commandPaletteShortcut' },
           { key: 'saveFile', labelKey: 'common.saveFileShortcut' },
