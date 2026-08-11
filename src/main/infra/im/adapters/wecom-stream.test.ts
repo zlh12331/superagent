@@ -90,3 +90,77 @@ describe('parseWecomEvent（企业微信消息帧解析）', () => {
     expect(parseWecomEvent('not-object')).toBeNull();
   });
 });
+
+describe('parseWecomEvent 补充（媒体占位与兜底）', () => {
+  it('voice 消息：语音转文本', () => {
+    const parsed = parseWecomEvent({
+      body: {
+        msgid: 'm1',
+        from: { userid: 'u1' },
+        chattype: 'single',
+        chatid: 'c1',
+        msgtype: 'voice',
+        voice: { content: '语音转文字' },
+      },
+    });
+    expect(parsed?.text).toBe('语音转文字');
+  });
+
+  it('video 消息：媒体占位 (video)', () => {
+    const parsed = parseWecomEvent({
+      body: {
+        msgid: 'm1',
+        from: { userid: 'u1' },
+        chattype: 'single',
+        chatid: 'c1',
+        msgtype: 'video',
+      },
+    });
+    expect(parsed?.text).toBe('(video)');
+  });
+
+  it('file 消息无 filename：占位 (file: file)', () => {
+    const parsed = parseWecomEvent({
+      body: {
+        msgid: 'm1',
+        from: { userid: 'u1' },
+        chattype: 'single',
+        chatid: 'c1',
+        msgtype: 'file',
+        file: {},
+      },
+    });
+    expect(parsed?.text).toBe('(file: file)');
+  });
+
+  it('缺 msgid：messageId 兜底为 chatId:timestamp 格式', () => {
+    const parsed = parseWecomEvent({
+      body: {
+        from: { userid: 'u1' },
+        chattype: 'single',
+        chatid: 'c1',
+        msgtype: 'text',
+        text: { content: 'hi' },
+      },
+    });
+    expect(parsed?.messageId.startsWith('c1:')).toBe(true);
+  });
+
+  it('mixed 含非 record item：跳过不崩溃', () => {
+    const parsed = parseWecomEvent({
+      body: {
+        msgid: 'm1',
+        from: { userid: 'u1' },
+        chattype: 'single',
+        chatid: 'c1',
+        msgtype: 'mixed',
+        mixed: { msg_item: ['not-object', { msgtype: 'text', text: { content: 'ok' } }] },
+      },
+    });
+    expect(parsed?.text).toBe('ok');
+  });
+
+  it('缺 body：返回 null', () => {
+    expect(parseWecomEvent({ other: 1 })).toBeNull();
+  });
+});

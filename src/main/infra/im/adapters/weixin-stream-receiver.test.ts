@@ -160,3 +160,79 @@ describe('WeixinStreamReceiver 消息过滤', () => {
     receiver.close();
   });
 });
+
+describe('WeixinStreamReceiver 兜底补充', () => {
+  it('get_updates_buf 缺失：游标不更新（下次请求保持原 cursor）', async () => {
+    const noBufFn = vi.fn(async () => {
+      await pollDelay();
+      return { errcode: 0, msgs: [] }; // 无 get_updates_buf
+    });
+    const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: noBufFn });
+    await receiver.open();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const first = fetchUpdatesFn.mock.calls[0]?.[0] as { cursor?: string };
+    const second = fetchUpdatesFn.mock.calls[1]?.[0] as { cursor?: string };
+    expect(first?.cursor).toBe('');
+    expect(second?.cursor).toBe(''); // 游标保持
+    receiver.close();
+  });
+
+  it('voice item 消息：语音文本提取', async () => {
+    const { receiver } = makeReceiver({
+      fetchUpdatesFn: makeFetchUpdates([
+        {
+          from_user_id: 'user-2',
+          message_id: 202,
+          create_time_ms: 1,
+          item_list: [{ type: 3, voice_item: { text: '语音内容' } }],
+        },
+      ]),
+    });
+    const handler = vi.fn();
+    receiver.onMessage(handler);
+    await receiver.open();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: 'user-2', text: '语音内容' }),
+    );
+    receiver.close();
+  });
+});
+
+describe('WeixinStreamReceiver 构造默认与缺失兜底', () => {
+  it('默认构造（不传 options）：默认值生效，open/close 正常', async () => {
+    const receiver = new WeixinStreamReceiver({ token: 't', baseUrl: 'https://x.local' });
+    // 默认 fetchUpdatesFn 会发真实 HTTP——只验证生命周期不抛
+    expect(() => receiver.close()).not.toThrow();
+    expect(receiver.isOpen).toBe(false);
+  });
+
+  it('响应缺 msgs 字段：不崩溃不分发', async () => {
+    const noMsgsFn = vi.fn(async () => {
+      await pollDelay();
+      return { errcode: 0, get_updates_buf: 'c1' }; // 无 msgs
+    });
+    const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: noMsgsFn });
+    const handler = vi.fn();
+    receiver.onMessage(handler);
+    await receiver.open();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(handler).not.toHaveBeenCalled();
+    expect(fetchUpdatesFn.mock.calls.length).toBeGreaterThanOrEqual(2);
+    receiver.close();
+  });
+
+  it('voice item 空文本：跳过不分发', async () => {
+    const { receiver } = makeReceiver({
+      fetchUpdatesFn: makeFetchUpdates([
+        { from_user_id: 'u1', message_id: 1, item_list: [{ type: 3, voice_item: { text: '' } }] },
+      ]),
+    });
+    const handler = vi.fn();
+    receiver.onMessage(handler);
+    await receiver.open();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(handler).not.toHaveBeenCalled();
+    receiver.close();
+  });
+});

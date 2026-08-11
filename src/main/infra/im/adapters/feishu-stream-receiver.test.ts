@@ -137,3 +137,25 @@ describe('FeishuStreamReceiver.close', () => {
     expect(() => receiver.close()).not.toThrow();
   });
 });
+
+describe('FeishuStreamReceiver 兜底补充', () => {
+  it('缺 sender.open_id：senderId undefined 不分发错误', async () => {
+    const { receiver, dispatcher } = makeReceiver();
+    const handler = vi.fn();
+    receiver.onMessage(handler);
+    await receiver.open();
+    dispatcher.emit(feishuEvent({ sender: {} }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'oc_1' }));
+    receiver.close();
+  });
+
+  it('message 缺 content：parse null 不分发', async () => {
+    const { receiver, dispatcher } = makeReceiver();
+    const handler = vi.fn();
+    receiver.onMessage(handler);
+    await receiver.open();
+    dispatcher.emit(feishuEvent({ message: { message_id: 'om_1', chat_id: 'oc_1' } }));
+    expect(handler).not.toHaveBeenCalled();
+    receiver.close();
+  });
+});

@@ -223,3 +223,122 @@ describe('ImAgentBridge', () => {
     expect(createArgs.workingDir).toBe(IM_DEFAULT_WORKING_DIR);
   });
 });
+
+describe('ImAgentBridge 回合事件与边界补充', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('回合事件全类型：TURN_START/TOOL_CALL/ERROR/TEXT_DELTA/TURN_END 汇总回发 + 落库', async () => {
+    const stubs = createStubs();
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+    stubs.messageHandlers[0]?.(incoming());
+    await vi.waitFor(() => expect(stubs.mockStartAgent).toHaveBeenCalled());
+    // 事件序列：START → TOOL_CALL → ERROR → TEXT_DELTA → END
+    stubs.turnListeners[0]?.({ type: TurnEventType.TURN_START, turnId: 't-1' });
+    stubs.turnListeners[0]?.({ type: TurnEventType.TOOL_CALL, toolName: 'grep' });
+    stubs.turnListeners[0]?.({ type: TurnEventType.ERROR, message: 'boom' });
+    stubs.turnListeners[0]?.({ type: TurnEventType.TEXT_DELTA, text: 'hello ' });
+    stubs.turnListeners[0]?.({ type: TurnEventType.TEXT_DELTA, text: 'world' });
+    stubs.turnListeners[0]?.({
+      type: TurnEventType.TURN_END,
+      reason: 'completed',
+      usage: { totalTokens: 123, inputTokens: 100 },
+    });
+    await vi.waitFor(() => {
+      const summary = stubs.sent.find((s) => s.text.includes('完成'));
+      expect(summary).toBeDefined();
+    });
+    const summary = stubs.sent.find((s) => s.text.includes('完成'));
+    expect(summary?.text).toContain('🔧 grep');
+    expect(summary?.text).toContain('❌ boom');
+    expect(summary?.text).toContain('Tokens: 123');
+    // TEXT_DELTA 经 flush 分条回发（间隔内合并、TURN_END 收尾 flush）
+    expect(stubs.sent.some((s) => s.text === 'hello ')).toBe(true);
+    expect(stubs.sent.some((s) => s.text === 'world')).toBe(true);
+    // 落库：user + assistant（带 turnId）
+    await vi.waitFor(() => expect(stubs.mockAppendMessage).toHaveBeenCalled());
+    const persist = stubs.mockAppendMessage.mock.calls[0]?.[0] as {
+      turnId?: string;
+      messages: unknown[];
+    };
+    expect(persist?.turnId).toBe('t-1');
+    expect(persist?.messages).toHaveLength(2);
+  });
+
+  it('mount 幂等：重复调用不重复订阅', () => {
+    const stubs = createStubs();
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+    bridge.mount();
+    expect(stubs.imService.onMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('assistantText 为空（纯工具回合）：落库仅 user 消息', async () => {
+    const stubs = createStubs();
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+    stubs.messageHandlers[0]?.(incoming());
+    await vi.waitFor(() => expect(stubs.mockStartAgent).toHaveBeenCalled());
+    stubs.turnListeners[0]?.({ type: TurnEventType.TURN_END, reason: 'completed' });
+    await vi.waitFor(() => expect(stubs.mockAppendMessage).toHaveBeenCalled());
+    const persist = stubs.mockAppendMessage.mock.calls[0]?.[0] as {
+      turnId?: string;
+      messages: unknown[];
+    };
+    expect(persist?.turnId).toBeUndefined(); // 无 TURN_START → 无 turnId（条件展开）
+    expect(persist?.messages).toHaveLength(1);
+  });
+
+  it('回合执行异常：发送错误提示 + 会话释放（可继续下一条）', async () => {
+    const stubs = createStubs();
+    stubs.mockStartAgent.mockRejectedValueOnce(new Error('agent crash'));
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+    stubs.messageHandlers[0]?.(incoming());
+    await vi.waitFor(() => {
+      expect(stubs.sent.some((s) => s.text.includes('执行异常'))).toBe(true);
+    });
+    // 会话已释放：第二条消息可执行（不再排队）
+    stubs.messageHandlers[0]?.(incoming());
+    await vi.waitFor(() => expect(stubs.mockStartAgent.mock.calls.length).toBe(2));
+  });
+
+  it('未知 reason：汇总兜底显示原文', async () => {
+    const stubs = createStubs();
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+    stubs.messageHandlers[0]?.(incoming());
+    await vi.waitFor(() => expect(stubs.mockStartAgent).toHaveBeenCalled());
+    stubs.turnListeners[0]?.({ type: TurnEventType.TURN_END, reason: 'unknown-reason' });
+    await vi.waitFor(() => {
+      expect(stubs.sent.some((s) => s.text.includes('unknown-reason'))).toBe(true);
+    });
+  });
+});

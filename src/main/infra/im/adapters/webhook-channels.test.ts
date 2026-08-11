@@ -2,6 +2,7 @@
 // Webhook 渠道单测：真实本地 HTTP 服务器接收 POST（无 mock 框架）
 
 import { createServer, type Server } from 'node:http';
+import { ErrorCode } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ChannelTarget } from '../channel/types';
 import { DingTalkAdapter } from './dingtalk-adapter';
@@ -170,5 +171,26 @@ describe('Webhook 渠道适配器', () => {
     const adapter = new DingTalkAdapter();
     await adapter.connect(`http://127.0.0.1:${address.port}/send`);
     await expect(adapter.sendMessage(target, '消息')).rejects.toThrow('渠道错误');
+  });
+});
+
+describe('Webhook token 解析补充', () => {
+  it('token 带 # 但 secret 为空：连接成功（secret=null）', async () => {
+    const adapter = new DingTalkAdapter();
+    await expect(adapter.connect('http://127.0.0.1:1/hook#')).resolves.toBeUndefined();
+  });
+
+  it('token 协议非 http/https（ftp）→ INVALID_TOKEN', async () => {
+    const adapter = new DingTalkAdapter();
+    await expect(adapter.connect('ftp://x.com/hook')).rejects.toMatchObject({
+      code: ErrorCode.IM_CHANNEL_INVALID_TOKEN,
+    });
+  });
+
+  it('token 非法 URL → INVALID_TOKEN', async () => {
+    const adapter = new DingTalkAdapter();
+    await expect(adapter.connect('not-a-url')).rejects.toMatchObject({
+      code: ErrorCode.IM_CHANNEL_INVALID_TOKEN,
+    });
   });
 });
