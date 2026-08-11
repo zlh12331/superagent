@@ -30,17 +30,17 @@ export function getIconForFileStatus(status: GitFileStatus['status']): typeof Fi
 export function getColorForFileStatus(status: GitFileStatus['status']): string {
   switch (status) {
     case 'modified':
-      return 'text-amber-600 dark:text-amber-400';
+      return 'text-[var(--warn)]';
     case 'added':
-      return 'text-emerald-600 dark:text-emerald-400';
+      return 'text-[var(--success)]';
     case 'deleted':
-      return 'text-red-600 dark:text-red-400';
+      return 'text-[var(--error)]';
     case 'renamed':
-      return 'text-blue-600 dark:text-blue-400';
+      return 'text-[var(--accent-2)]';
     case 'untracked':
       return 'text-muted-foreground';
     case 'conflicted':
-      return 'text-red-700 dark:text-red-300 font-semibold';
+      return 'text-[var(--error)] font-semibold';
   }
 }
 

@@ -56,12 +56,8 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
     <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
       <GitBranch className="size-3" strokeWidth={1.5} />
       <span className="text-foreground font-serif tracking-wide">{status.branch}</span>
-      {status.ahead > 0 && (
-        <span className="text-emerald-600 dark:text-emerald-400">↑{status.ahead}</span>
-      )}
-      {status.behind > 0 && (
-        <span className="text-amber-600 dark:text-amber-400">↓{status.behind}</span>
-      )}
+      {status.ahead > 0 && <span className="text-[var(--success)]">↑{status.ahead}</span>}
+      {status.behind > 0 && <span className="text-[var(--warn)]">↓{status.behind}</span>}
     </div>
   );
 }
@@ -75,7 +71,7 @@ export function CleanHint(): ReactElement {
   const { t } = useTranslation();
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
-      <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
+      <CheckCircle2 className="size-5 text-[var(--success)]" strokeWidth={1.5} />
       <p className="font-serif text-xs tracking-wide">{t('common.cleanWorkingTree')}</p>
       <p className="text-2xs">{t('common.noChanges')}</p>
     </div>

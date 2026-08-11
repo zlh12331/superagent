@@ -101,7 +101,7 @@ export function ImChannelsSection(): ReactElement {
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-2xs',
                     channel.running
-                      ? 'bg-emerald-50 text-emerald-700'
+                      ? 'bg-[var(--success)]/10 text-[var(--success)]'
                       : 'bg-muted text-muted-foreground',
                   )}
                 >

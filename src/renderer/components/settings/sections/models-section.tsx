@@ -151,7 +151,7 @@ export function ModelsSection(): ReactElement {
                 </span>
                 <button
                   type="button"
-                  className="text-muted-foreground hover:text-red-500 flex shrink-0 cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
+                  className="text-muted-foreground hover:text-[var(--error)] flex shrink-0 cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
                   aria-label={t('settings.removeRuntimeModel')}
                   disabled={removingId === m.id}
                   onClick={() => void handleRemoveRuntime(m.id)}
@@ -286,7 +286,7 @@ function ProviderRow({
         {isLoading ? (
           <span className="text-muted-foreground text-2xs">…</span>
         ) : isConfigured ? (
-          <span className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]">
+          <span className="bg-[var(--success)]/10 text-[var(--success)] flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]">
             <Check className="size-2.5" strokeWidth={2} />
             {t('settings.providerConfigured')}
           </span>
@@ -337,7 +337,7 @@ function ProviderRow({
                 size="sm"
                 disabled={isDeleting}
                 onClick={handleDelete}
-                className="text-muted-foreground hover:text-red-500 h-7 gap-1 px-2 text-xs"
+                className="text-muted-foreground hover:text-[var(--error)] h-7 gap-1 px-2 text-xs"
               >
                 <Trash2 className="size-3" strokeWidth={1.5} />
                 {t('settings.deleteApiKey')}

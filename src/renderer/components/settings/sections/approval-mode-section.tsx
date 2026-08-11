@@ -208,7 +208,7 @@ export function ApprovalModeSection(): ReactElement {
                 <button
                   type="button"
                   onClick={() => removeMutation.mutate(entry)}
-                  className="text-muted-foreground hover:text-red-500 flex cursor-pointer items-center rounded border px-1.5 py-1 text-2xs transition-colors"
+                  className="text-muted-foreground hover:text-[var(--error)] flex cursor-pointer items-center rounded border px-1.5 py-1 text-2xs transition-colors"
                   aria-label={t('settings.whitelistRemove')}
                 >
                   <Trash2 className="size-3" />
@@ -262,7 +262,7 @@ export function ApprovalModeSection(): ReactElement {
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAuto')}
               </span>
-              <span className="bg-emerald-500/10 text-emerald-700 rounded-full px-2 py-0.5 font-mono text-xs">
+              <span className="bg-[var(--success)]/10 text-[var(--success)] rounded-full px-2 py-0.5 font-mono text-xs">
                 auto · {autoTools.length}
               </span>
             </div>
@@ -275,7 +275,7 @@ export function ApprovalModeSection(): ReactElement {
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAsk')}
               </span>
-              <span className="bg-amber-500/10 text-amber-700 rounded-full px-2 py-0.5 font-mono text-xs">
+              <span className="bg-[var(--amber)]/10 text-[var(--warn)] rounded-full px-2 py-0.5 font-mono text-xs">
                 ask · {askTools.length}
               </span>
             </div>

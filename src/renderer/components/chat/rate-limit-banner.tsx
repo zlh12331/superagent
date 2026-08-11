@@ -39,7 +39,7 @@ export function RateLimitBanner(): ReactElement | null {
 
   return (
     <div className="flex justify-end border-b bg-gradient-to-b from-muted/60 to-background px-6 py-[7px] font-mono text-xs text-muted-foreground">
-      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border bg-card px-[9px] py-0.5 text-xs text-amber-600 dark:text-amber-400">
+      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border bg-card px-[9px] py-0.5 text-xs text-[var(--warn)]">
         <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2} />
         <span>{t('chat.rateLimited')}</span>
         <button
@@ -47,7 +47,7 @@ export function RateLimitBanner(): ReactElement | null {
           onClick={dismiss}
           aria-label={t('common.close')}
           title={t('common.close')}
-          className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent text-amber-600 transition-colors hover:bg-amber-500/15 dark:text-amber-400"
+          className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent text-[var(--warn)] transition-colors hover:bg-[var(--amber)]/15"
         >
           <X className="size-3" strokeWidth={2.5} />
         </button>

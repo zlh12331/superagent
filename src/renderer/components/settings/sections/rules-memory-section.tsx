@@ -100,7 +100,7 @@ export function RulesMemorySection(): ReactElement {
               size="sm"
               disabled={clearing}
               onClick={() => void handleClear()}
-              className="text-muted-foreground hover:text-red-500 ml-auto h-6 gap-1 px-2 text-2xs"
+              className="text-muted-foreground hover:text-[var(--error)] ml-auto h-6 gap-1 px-2 text-2xs"
             >
               {clearing ? (
                 <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />

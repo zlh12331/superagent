@@ -142,7 +142,7 @@ export function SkillsSection(): ReactElement {
             <button
               type="button"
               onClick={() => removeMutation.mutate(skill.name)}
-              className="text-muted-foreground hover:text-red-500 flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
+              className="text-muted-foreground hover:text-[var(--error)] flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
               aria-label={t('settings.skillRemove')}
             >
               <Trash2 className="size-3" />

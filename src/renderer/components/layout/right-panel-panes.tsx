@@ -422,8 +422,8 @@ export function DiffPane({
             <span
               className={
                 change.status === 'error'
-                  ? 'text-red-500 font-mono text-[9px]'
-                  : 'text-emerald-600 dark:text-emerald-400 font-mono text-[9px]'
+                  ? 'text-[var(--error)] font-mono text-[9px]'
+                  : 'text-[var(--success)] font-mono text-[9px]'
               }
             >
               {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}

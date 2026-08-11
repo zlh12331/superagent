@@ -24,12 +24,12 @@ const MCP_LIST_QUERY_KEY = ['mcp', 'servers'] as const;
 
 /** 状态徽章配色（键名与主进程 McpServerStatus 对齐，含 snake_case） */
 const STATUS_BADGE: Record<string, string> = {
-  running: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  starting: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  error: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  running: 'bg-[var(--success)]/10 text-[var(--success)]',
+  starting: 'bg-[var(--info-blue)] text-[var(--accent-2)]',
+  error: 'bg-[var(--error)]/10 text-[var(--error)]',
   stopped: 'bg-muted text-muted-foreground',
   // biome-ignore lint/style/useNamingConvention: 键名与主进程状态枚举对齐（McpServerStatus 含 snake_case）
-  stopped_with_error: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  stopped_with_error: 'bg-[var(--amber)]/10 text-[var(--warn)]',
 };
 
 /**

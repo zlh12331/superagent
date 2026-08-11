@@ -241,12 +241,12 @@ export function ChatPanel({
       />
       {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
       {interrupted && !interruptedDismissed && (
-        <div className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 flex items-center gap-2 border-b px-3 py-1 text-xs text-amber-700 dark:text-amber-300">
+        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-[var(--warn)]">
           <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
           <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
           <button
             type="button"
-            className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200"
+            className="text-[var(--warn)] hover:text-[var(--amber-dim)]"
             aria-label={t('common.close')}
             onClick={() => setInterruptedDismissed(true)}
           >

@@ -109,9 +109,9 @@ export function InlineApprovalCard({
     <div
       className={cn(
         'mx-3 mt-2 rounded-lg border bg-card px-3 py-2 text-xs',
-        isPending && 'border-l-4 border-l-amber-500',
-        isApproved && 'border-l-4 border-l-emerald-500',
-        item.status === 'rejected' && 'border-l-4 border-l-red-500',
+        isPending && 'border-l-4 border-l-[var(--warn)]',
+        isApproved && 'border-l-4 border-l-[var(--success)]',
+        item.status === 'rejected' && 'border-l-4 border-l-[var(--error)]',
         skipped && 'opacity-40',
       )}
       role="alert"
@@ -119,7 +119,10 @@ export function InlineApprovalCard({
     >
       {/* 头部：图标 + 类型 + 状态 */}
       <div className="flex items-center gap-2">
-        <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-red-500')} strokeWidth={1.5} />
+        <Icon
+          className={cn('size-3.5 shrink-0', dangerous && 'text-[var(--error)]')}
+          strokeWidth={1.5}
+        />
         <span className="text-foreground min-w-0 flex-1 truncate font-medium">
           {/* 类型标签（i18n key 带 approval. 前缀：t('approval.runCommand') 等） */}
           {t(`approval.${getLabelKeyForType(item.type)}`)}
@@ -129,8 +132,8 @@ export function InlineApprovalCard({
             className={cn(
               'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
               isApproved
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                : 'bg-red-500/10 text-red-600 dark:text-red-400',
+                ? 'bg-[var(--success)]/10 text-[var(--success)]'
+                : 'bg-[var(--error)]/10 text-[var(--error)]',
             )}
           >
             {isApproved ? t('approval.approved') : t('approval.rejected')}
@@ -175,7 +178,9 @@ export function InlineApprovalCard({
             onClick={() => void respond(true, false)}
             className={cn(
               'ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-white transition-colors',
-              dangerous ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-700',
+              dangerous
+                ? 'bg-[var(--error)] hover:bg-[var(--error)]/90'
+                : 'bg-[var(--success)] hover:bg-[var(--success)]/90',
             )}
           >
             <Check className="size-3" />

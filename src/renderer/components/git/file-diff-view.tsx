@@ -87,8 +87,8 @@ export function FileDiffView({
         {/* 增删统计（diff-match-patch 语义统计优先，回退主进程文本统计） */}
         {stats !== null && (
           <div className="flex shrink-0 items-center gap-1.5 text-[9px]">
-            <span className="text-emerald-600 dark:text-emerald-400">+{stats.additions}</span>
-            <span className="text-red-600 dark:text-red-400">-{stats.deletions}</span>
+            <span className="text-[var(--success)]">+{stats.additions}</span>
+            <span className="text-[var(--error)]">-{stats.deletions}</span>
           </div>
         )}
       </div>

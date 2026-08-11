@@ -203,8 +203,8 @@ function LogLine({ line }: { readonly line: string }): ReactElement {
 
 /** 按日志级别获取颜色 class（通过行内 [level] 标记识别） */
 function getColorForLogLevel(line: string): string {
-  if (line.includes('[error]')) return 'text-red-600 dark:text-red-400';
-  if (line.includes('[warn]')) return 'text-amber-600 dark:text-amber-400';
+  if (line.includes('[error]')) return 'text-[var(--error)]';
+  if (line.includes('[warn]')) return 'text-[var(--warn)]';
   if (line.includes('[debug]')) return 'text-muted-foreground';
   if (line.includes('[info]')) return 'text-foreground/80';
   return 'text-muted-foreground';
