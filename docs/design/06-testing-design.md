@@ -135,6 +135,18 @@
 
 ## 4. E2E 测试（Playwright）
 
+### 4.5 性能基准体系（e2e/perf/，`pnpm test:perf`）
+
+| 基准 | 阈值（基线） | 职责 |
+|---|---|---|
+| navigation.bench | 首载可交互 < 3000ms | 页面加载/路由切换/渲染稳定 |
+| render.bench | 1000 条渲染 < 5000ms / 滚动 1000px < 500ms | 大列表渲染与滚动（防回退） |
+| memory-leak | 长会话操作 heap 增长 < 15MB | 泄漏回归检测（GC 不稳定，阈值宽松） |
+| ipc-rtt | window.api 100 次平均 < 10ms | 渲染层调用路径开销（mock 模式） |
+
+> 说明：基准为宽松基线（防明显回退），随优化渐进收紧；render/memory 为 DOM 级注入验证（真实 React 长会话渲染基准后续补）；真实 IPC RTT 由 Electron E2E 链路间接覆盖。
+
+
 ### 4.1 三套 Playwright 配置
 
 | 配置 | 路径 | 触发脚本 | 目标 |
