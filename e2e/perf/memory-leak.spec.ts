@@ -22,6 +22,8 @@ import { expect, test } from '@playwright/test';
 
 /** 快照落盘目录（stats/ 已 gitignore；故障取证用） */
 const SNAPSHOT_DIR = join(process.cwd(), 'stats', 'heap-snapshots');
+/** 泄漏判定阈值（MB）：断言与落盘共用同一常量，防改一处漏另一处 */
+const GROWTH_LIMIT_MB = 15;
 
 /** CDP 导出完整 heap 快照（流式 chunk 收集，落盘 .heapsnapshot 供 DevTools/memlab 分析） */
 async function dumpHeapSnapshot(
@@ -29,11 +31,25 @@ async function dumpHeapSnapshot(
   label: string,
 ): Promise<string> {
   const chunks: string[] = [];
-  cdp.on('HeapProfiler.addHeapSnapshotChunk', (msg) => {
-    const chunk = (msg as { params?: { chunk?: string } }).params?.chunk;
+  // Playwright CDP on 回调直接接收 params（非 { params: ... } 包装），
+  // 取错层级会导致 36 个 chunk 全为空——审计实测暴露
+  cdp.on('HeapProfiler.addHeapSnapshotChunk', (params) => {
+    const chunk = (params as { chunk?: string }).chunk;
     if (chunk !== undefined) chunks.push(chunk);
   });
+  // 事件流域必须先 enable（漏了会导致 0 字节快照——审计实测暴露）
+  await cdp.send('HeapProfiler.enable');
   await cdp.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
+  // 流式协议：chunk 事件可能在命令 resolve 之后才派发完，等待排空（最多 5s）
+  const deadline = Date.now() + 5_000;
+  let stableRounds = 0;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    if (chunks.length > 0) {
+      stableRounds += 1;
+      if (stableRounds >= 3) break; // 连续 3 轮无新 chunk = 排空
+    }
+  }
   const file = join(SNAPSHOT_DIR, `heap-${label}-${Date.now()}.heapsnapshot`);
   mkdirSync(SNAPSHOT_DIR, { recursive: true });
   writeFileSync(file, chunks.join(''), 'utf8');
@@ -90,20 +106,22 @@ test.describe('内存基准：长会话 heap 趋势', () => {
       `[perf] heap 趋势: 基线 ${baseline.toFixed(1)}MB → ${samples.map((s) => `${s.toFixed(1)}MB`).join(' → ')}（增长 ${finalGrowth.toFixed(2)}MB，每轮增量 ${deltas.map((d) => d.toFixed(2)).join('/')}MB）`,
     );
 
-    expect(finalGrowth, '3 轮操作后 heap 增长应 < 15MB（基线，防明显泄漏回退）').toBeLessThan(15);
-    expect(
-      monotonicGrowth,
-      `每轮增量 ${deltas.map((d) => d.toFixed(2)).join('/')}MB：持续单调增长疑似泄漏（GC 后应回落）`,
-    ).toBe(false);
-
-    // 断言失败时自动落盘 heap 快照（故障取证：DevTools / memlab analyze 可打开）
-    // 仅失败落盘：快照文件几十 MB，正常运行不产生
-    const failed = finalGrowth >= 15 || monotonicGrowth;
-    if (failed) {
+    // ⚠️ 落盘必须先于断言执行：expect 抛错会中断后续代码，
+    // 若把落盘放断言之后，失败时永远落不了盘（审计实测暴露的缺陷）
+    const leakSuspected = finalGrowth >= GROWTH_LIMIT_MB || monotonicGrowth;
+    if (leakSuspected) {
       const file = await dumpHeapSnapshot(cdp, 'leak-suspect');
       console.log(
         `[perf] 泄漏嫌疑快照已落盘：${file}（DevTools Memory → Load 或 memlab analyze 分析）`,
       );
     }
+
+    expect(finalGrowth, '3 轮操作后 heap 增长应 < 15MB（基线，防明显泄漏回退）').toBeLessThan(
+      GROWTH_LIMIT_MB,
+    );
+    expect(
+      monotonicGrowth,
+      `每轮增量 ${deltas.map((d) => d.toFixed(2)).join('/')}MB：持续单调增长疑似泄漏（GC 后应回落）`,
+    ).toBe(false);
   });
 });
