@@ -21,10 +21,13 @@ import {
   MessageSquare,
   MessagesSquare,
   Moon,
+  PanelLeft,
+  PanelRight,
   Plus,
   Search,
   Settings,
   Sun,
+  TerminalSquare,
 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -85,6 +88,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   // 侧栏视图切换（文件树为独立视图：对齐参考项目 codex.openFileTree 命令）
   const sidebarView = useUiStore((state) => state.sidebarView);
   const setSidebarView = useUiStore((state) => state.setSidebarView);
+  // 面板折叠切换（对齐参考项目 show/hide-left/right-sidebar 命令：标题随状态切换）
+  const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
+  const rightPanelCollapsed = useUiStore((state) => state.rightPanelCollapsed);
+  const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed);
+  const setRightPanelCollapsed = useUiStore((state) => state.setRightPanelCollapsed);
 
   // 命令列表（依赖外部状态派生；React Compiler 自动缓存）
   // - 操作组：新建会话 / 切换主题 / 打开设置
@@ -98,7 +106,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
         section: t('palette.sectionActions'),
         title: t('palette.newChat'),
         icon: Plus,
-        shortcut: '⌘N',
+        // 与 settings 默认快捷键一致（Windows 显示 Ctrl 而非 Mac 风格 ⌘）
+        shortcut: 'Ctrl+N',
         action: () => {
           clearActiveSession();
           enterWelcomeMode(null);
@@ -134,6 +143,41 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
         icon: sidebarView === 'fileTree' ? MessagesSquare : FolderOpen,
         action: () => {
           setSidebarView(sidebarView === 'fileTree' ? 'threads' : 'fileTree');
+          closePalette();
+        },
+      },
+      {
+        // 对齐参考项目 show/hide-left-sidebar 命令（标题随折叠状态切换，快捷键 ⌘B/⌘1 另有绑定）
+        id: 'toggle-sidebar',
+        section: t('palette.sectionActions'),
+        title: sidebarCollapsed ? t('palette.showSidebar') : t('palette.hideSidebar'),
+        icon: PanelLeft,
+        action: () => {
+          setSidebarCollapsed(!sidebarCollapsed);
+          closePalette();
+        },
+      },
+      {
+        // 对齐参考项目 show/hide-right-sidebar 命令（标题随折叠状态切换，快捷键 ⌘J/⌘2 另有绑定）
+        id: 'toggle-right-panel',
+        section: t('palette.sectionActions'),
+        title: rightPanelCollapsed ? t('palette.showRightPanel') : t('palette.hideRightPanel'),
+        icon: PanelRight,
+        action: () => {
+          setRightPanelCollapsed(!rightPanelCollapsed);
+          closePalette();
+        },
+      },
+      {
+        // 对齐参考项目 codex.openTerminal 命令（Ctrl+` 快捷键另有绑定）
+        id: 'open-terminal',
+        section: t('palette.sectionActions'),
+        title: t('palette.openTerminal'),
+        icon: TerminalSquare,
+        action: () => {
+          // 展开右面板 + 切换到终端 tab
+          useUiStore.getState().setRightPanelCollapsed(false);
+          useUiStore.getState().setDevPanelTab('terminal');
           closePalette();
         },
       },

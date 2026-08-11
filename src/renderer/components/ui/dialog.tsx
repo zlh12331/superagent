@@ -80,13 +80,17 @@ export function DialogOverlay({
  *
  * 包含真正的对话框面板：标题、描述、内容、底部按钮等。
  * 自带 Esc 关闭、点击遮罩关闭、焦点陷阱等无障碍行为。
- * 右上角自动渲染关闭按钮（X 图标）。
+ * 默认右上角自动渲染关闭按钮（X 图标），可通过 showCloseButton 关闭。
  */
 export function DialogContent({
   className,
   children,
+  showCloseButton = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>): React.ReactElement {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** 是否渲染右上角关闭按钮（默认 true；对齐参考项目 showCloseButton prop） */
+  showCloseButton?: boolean;
+}): React.ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   return (
@@ -101,10 +105,13 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-          <XIcon />
-          <span className="sr-only">{t('common.close')}</span>
-        </DialogPrimitive.Close>
+        {/* 对齐参考项目：showCloseButton=false 时隐藏右上角关闭按钮（如搜索对话框） */}
+        {showCloseButton && (
+          <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+            <XIcon />
+            <span className="sr-only">{t('common.close')}</span>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPortal>
   );

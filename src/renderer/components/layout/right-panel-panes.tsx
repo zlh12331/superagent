@@ -8,11 +8,22 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, FileText, FolderOpen, Target } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  FolderOpen,
+  Loader2,
+  Pencil,
+  Plus,
+  Target,
+} from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
+import { GoalEditDialog } from '@/components/layout/goal-edit-dialog';
 import { useTranslation } from '@/i18n/use-translation';
+import { cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 
@@ -32,10 +43,12 @@ interface LocalGoal {
   readonly condition: string;
 }
 
-/** 待办项形状（与 shared TaskInfo 对齐） */
+/** 待办项形状（与 shared TaskInfo 对齐；status 驱动状态视觉，对齐参考项目 PlanNode 完成/活跃态） */
 interface LocalTask {
   readonly id: string;
   readonly description: string;
+  /** pending / running / completed / failed / cancelled */
+  readonly status?: string;
 }
 
 /**
@@ -104,6 +117,31 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
     },
   });
 
+  // 目标编辑对话框状态（照搬参考项目 InfoPane：Pencil 按钮打开编辑）
+  const [goalEditOpen, setGoalEditOpen] = useState(false);
+  // 创建/更新目标 mutation（goal:create，condition 字段；status/tokenBudget 无后端字段）
+  const createGoalMutation = useMutation({
+    mutationFn: async (condition: string) => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { ok: true };
+      }
+      const response = await window.api.goal.create({ sessionId, condition });
+      if ('error' in response) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...GOAL_LIST_QUERY_KEY, sessionId] });
+      setGoalEditOpen(false);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+  /** 当前目标条件（编辑对话框初始值；无目标时为空字符串） */
+  const currentCondition = goals[0]?.condition ?? '';
+
   // 引用文件（对齐原型 crpFiles）：从 tool-store 提取 read_file 调用路径（去重，保留最新）
   const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
   const referencedFiles = useMemo(() => {
@@ -130,9 +168,19 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
           <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
             <Target className="size-3" strokeWidth={1.5} />
             {t('panel.goals')}
+            {/* 编辑目标（照搬参考项目 InfoPane：Pencil 按钮打开 GoalEditDialog） */}
             <button
               type="button"
               className="text-muted-foreground hover:text-foreground ml-auto cursor-pointer text-sm leading-none"
+              title={t('panel.editGoal')}
+              aria-label={t('panel.editGoal')}
+              onClick={() => setGoalEditOpen(true)}
+            >
+              <Pencil className="size-3" strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground cursor-pointer text-sm leading-none"
               title={t('panel.clearGoal')}
               aria-label={t('panel.clearGoal')}
               onClick={() => clearGoalMutation.mutate()}
@@ -149,8 +197,36 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
           </ul>
         </div>
       )}
+      {/* 无目标时的添加入口（goal:create 的前端唯一入口；参考项目无目标时区块隐藏，
+          此处补一个轻量入口使设置目标可用） */}
+      {goals.length === 0 && (
+        <div>
+          <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
+            <Target className="size-3" strokeWidth={1.5} />
+            {t('panel.goals')}
+          </div>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-muted/50"
+            onClick={() => setGoalEditOpen(true)}
+          >
+            <Plus className="size-3" strokeWidth={1.5} />
+            {t('panel.addGoal')}
+          </button>
+        </div>
+      )}
 
-      {/* 计划待办 */}
+      {/* 目标编辑对话框（key：打开/目标变化时重新挂载，表单初始值同步） */}
+      <GoalEditDialog
+        key={`${goalEditOpen}-${currentCondition}`}
+        open={goalEditOpen}
+        onOpenChange={setGoalEditOpen}
+        initialCondition={currentCondition}
+        isSubmitting={createGoalMutation.isPending}
+        onSubmit={(condition) => createGoalMutation.mutate(condition)}
+      />
+
+      {/* 计划待办（状态视觉对齐参考项目 PlanNode：completed 删除线 / running spinner / failed error） */}
       <div>
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.tasks')}
@@ -159,11 +235,29 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
           <div className="text-muted-foreground/60">{t('panel.noTasks')}</div>
         ) : (
           <ul className="space-y-1">
-            {tasks.map((task) => (
-              <li key={task.id ?? task.description} className="text-foreground/90 leading-relaxed">
-                {task.description}
-              </li>
-            ))}
+            {tasks.map((task) => {
+              // 状态视觉（对齐参考项目 PlanNode：完成 = 删除线淡色；运行中 = spinner + accent；失败 = error 色）
+              const status = task.status;
+              const isDone = status === 'completed';
+              const isActive = status === 'running';
+              return (
+                <li
+                  key={task.id ?? task.description}
+                  className={cn(
+                    'flex items-start gap-1.5 leading-relaxed',
+                    isDone && 'text-muted-foreground/60 line-through',
+                    isActive && 'text-[var(--accent)]',
+                    status === 'failed' && 'text-destructive',
+                  )}
+                >
+                  {/* 运行中：旋转 spinner（对齐参考项目 active 态） */}
+                  {isActive && (
+                    <Loader2 className="text-[var(--accent)] mt-0.5 size-3 shrink-0 animate-spin" />
+                  )}
+                  <span className="min-w-0 flex-1">{task.description}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

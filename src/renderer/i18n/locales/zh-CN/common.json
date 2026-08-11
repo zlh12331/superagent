@@ -90,6 +90,8 @@
       "unlabeled": "未分组",
       "noSessions": "尚无会话",
       "newSessionHint": "点击上方「新建会话」开始",
+      "searchNoResults": "没有与「{{query}}」匹配的会话",
+      "searchNoResultsHint": "换个关键词试试",
       "collapseFolder": "折叠文件夹",
       "folder": "文件夹",
       "newSessionIn": "在 {{name}} 新建会话",
@@ -152,7 +154,9 @@
         "newChat": "新建会话",
         "clear": "清空当前对话",
         "compact": "压缩上下文",
-        "models": "查看可用模型"
+        "models": "查看可用模型",
+        "interrupt": "中断当前生成",
+        "goal": "设置会话目标"
       },
       "fileChange": {
         "created": "新建",
@@ -171,7 +175,8 @@
       "slashAction": {
         "models": "模型选择：请在输入栏右侧选择模型",
         "compact": "上下文压缩功能开发中",
-        "help": "可用命令：/new 新建会话 · /clear 清空对话 · /models 选择模型"
+        "help": "可用命令：/new 新建会话 · /clear 清空对话 · /models 选择模型",
+        "goal": "会话目标：请在右侧面板「会话目标」区域设置"
       }
     },
     "update": {
@@ -199,7 +204,14 @@
       "select": "选择",
       "commandPaletteShortcut": "打开命令面板",
       "openFileTree": "显示文件树",
-      "backToSessions": "显示会话列表"
+      "backToSessions": "显示会话列表",
+      "toggleSidebar": "切换左侧栏",
+      "toggleRightPanel": "切换右侧栏",
+      "showSidebar": "显示左侧栏",
+      "hideSidebar": "隐藏左侧栏",
+      "showRightPanel": "显示右侧栏",
+      "hideRightPanel": "隐藏右侧栏",
+      "openTerminal": "打开终端"
     },
     "approval": {
       "runCommand": "执行命令",
@@ -241,7 +253,10 @@
       "approved": "已批准",
       "rejected": "已拒绝",
       "whitelist": "批准并记住",
-      "whitelistHint": "批准并将该工具加入白名单，后续自动放行"
+      "whitelistHint": "批准并将该工具加入白名单，后续自动放行",
+      "editResubmit": "编辑后重提",
+      "skip": "跳过",
+      "skipped": "已跳过"
     },
     "settings": {
       "apiKeyEmpty": "API Key 不能为空",
@@ -445,6 +460,7 @@
       "providerConfigured": "已配置",
       "providerNotConfigured": "未配置",
       "apiKeyReplacePlaceholder": "输入新 API Key 替换…",
+      "apiKeyPlaceholder": "输入 API Key…",
       "apiKeyConfiguredHint": "{{label}} API Key 已保存（加密存储）。输入新 Key 可替换。",
       "apiKeyNotConfiguredHint": "{{label}} 尚未配置。保存 API Key 后即可使用其模型。",
       "saveApiKey": "保存",
@@ -579,13 +595,22 @@
       "rename": "重命名",
       "emptyDir": "空目录",
       "copyPath": "复制路径",
-      "refresh": "刷新文件树"
+      "refresh": "刷新文件树",
+      "fuzzySearch": {
+        "title": "文件搜索",
+        "placeholder": "搜索文件或会话…",
+        "ariaLabel": "搜索文件或会话",
+        "hint": "输入关键词搜索文件或会话",
+        "noResults": "未找到匹配的文件或会话",
+        "failed": "模糊搜索失败"
+      }
     },
     "terminal": {
       "createFailed": "创建终端失败: {{message}}",
       "closeFailed": "关闭终端失败: {{message}}",
       "creating": "创建中…",
       "newTerminal": "新建终端",
+      "tabsAriaLabel": "终端标签栏",
       "closed": "已结束",
       "closeTerminal": "关闭终端",
       "exited": "[进程已退出，exit code: {{code}}]"
@@ -604,6 +629,13 @@
       "noFiles": "暂无修改文件",
       "addGoal": "添加目标",
       "goalPlaceholder": "输入会话目标…",
+      "editGoal": "编辑目标",
+      "editGoalTitle": "编辑会话目标",
+      "setGoalTitle": "设置会话目标",
+      "goalDescription": "设置会话目标，让 Agent 保持对齐执行方向",
+      "goalLabel": "目标完成条件",
+      "saveGoal": "保存",
+      "savingGoal": "保存中…",
       "tabBrowser": "浏览器",
       "browserBack": "后退",
       "browserForward": "前进",
@@ -640,6 +672,8 @@
         "searchFiles": "文件搜索",
         "toggleSidebar": "切换侧栏",
         "toggleRightPanel": "切换右面板",
+        "openTerminal": "打开终端",
+        "back": "返回上一视图",
         "sendMessage": "发送消息",
         "newline": "换行",
         "closeDialog": "关闭对话框"

@@ -89,6 +89,9 @@ export function getIconForType(type: ApprovalType): LucideIcon {
       return GitCommitHorizontal;
     case 'git_push':
       return CloudUpload;
+    default:
+      // 未知类型兜底（防御：入队数据异常时不崩溃）
+      return Globe;
   }
 }
 
@@ -120,6 +123,9 @@ export function getLabelKeyForType(type: ApprovalType): string {
       return 'gitCommit';
     case 'git_push':
       return 'gitPush';
+    default:
+      // 未知类型兜底（防御：入队数据异常时不崩溃）
+      return 'externalCall';
   }
 }
 
@@ -150,6 +156,9 @@ export function getVariantForType(type: ApprovalType): {
     case 'git_commit':
     case 'git_push':
       return { className: 'bg-purple-100 text-purple-700' };
+    default:
+      // 未知类型兜底（防御：入队数据异常时不崩溃）
+      return { className: 'bg-slate-100 text-slate-700' };
   }
 }
 

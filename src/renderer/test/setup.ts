@@ -70,6 +70,12 @@ declare global {
 }
 
 window.ResizeObserver = MockResizeObserver;
+
+// ── scrollIntoView polyfill ─────────────────────────────────
+//
+// jsdom 未实现 HTMLElement.scrollIntoView（FuzzySearchDialog 等列表
+// 滚动定位依赖），补空实现避免运行时崩溃。
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
 // 也挂到 globalThis 上（某些代码用 globalThis.ResizeObserver）
 globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 

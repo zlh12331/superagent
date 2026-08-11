@@ -90,6 +90,8 @@
       "unlabeled": "Ungrouped",
       "noSessions": "No sessions yet",
       "newSessionHint": "Click \"New session\" above to start",
+      "searchNoResults": "No conversations matching \"{{query}}\"",
+      "searchNoResultsHint": "Try a different keyword",
       "collapseFolder": "Collapse folder",
       "folder": "Folder",
       "newSessionIn": "New session in {{name}}",
@@ -148,11 +150,13 @@
       "editFileLabel": "Edit {{name}}",
       "rateLimited": "AI rate limit reached, please retry later",
       "slashSuggest": {
-        "help": "显示帮助",
-        "newChat": "新建会话",
-        "clear": "清空当前对话",
-        "compact": "压缩上下文",
-        "models": "查看可用模型"
+        "help": "Show help",
+        "newChat": "New session",
+        "clear": "Clear conversation",
+        "compact": "Compact context",
+        "models": "View available models",
+        "interrupt": "Interrupt generation",
+        "goal": "Set session goal"
       },
       "fileChange": {
         "created": "Created",
@@ -171,7 +175,8 @@
       "slashAction": {
         "models": "Model picker: use the selector on the right",
         "compact": "Context compaction coming soon",
-        "help": "Commands: /new new session · /clear clear chat · /models pick model"
+        "help": "Commands: /new new session · /clear clear chat · /models pick model",
+        "goal": "Session goal: set it in the Goals section of the right panel"
       }
     },
     "update": {
@@ -199,7 +204,14 @@
       "select": "Select",
       "commandPaletteShortcut": "Open command palette",
       "openFileTree": "Show file tree",
-      "backToSessions": "Show sessions"
+      "backToSessions": "Show sessions",
+      "toggleSidebar": "Toggle sidebar",
+      "toggleRightPanel": "Toggle right panel",
+      "showSidebar": "Show sidebar",
+      "hideSidebar": "Hide sidebar",
+      "showRightPanel": "Show right panel",
+      "hideRightPanel": "Hide right panel",
+      "openTerminal": "Open terminal"
     },
     "approval": {
       "runCommand": "Run command",
@@ -241,7 +253,10 @@
       "approved": "Approved",
       "rejected": "Rejected",
       "whitelist": "Approve & remember",
-      "whitelistHint": "Approve and whitelist this tool for future automatic approval"
+      "whitelistHint": "Approve and whitelist this tool for future automatic approval",
+      "editResubmit": "Edit & resubmit",
+      "skip": "Skip",
+      "skipped": "Skipped"
     },
     "settings": {
       "apiKeyEmpty": "API Key cannot be empty",
@@ -445,6 +460,7 @@
       "providerConfigured": "Configured",
       "providerNotConfigured": "Not configured",
       "apiKeyReplacePlaceholder": "Enter a new API key to replace…",
+      "apiKeyPlaceholder": "Enter API key…",
       "apiKeyConfiguredHint": "{{label}} API key is saved (encrypted). Enter a new key to replace it.",
       "apiKeyNotConfiguredHint": "{{label}} is not configured. Save an API key to use its models.",
       "saveApiKey": "Save",
@@ -579,13 +595,22 @@
       "rename": "Rename",
       "emptyDir": "Empty directory",
       "copyPath": "Copy path",
-      "refresh": "Refresh file tree"
+      "refresh": "Refresh file tree",
+      "fuzzySearch": {
+        "title": "File Search",
+        "placeholder": "Search files or conversations…",
+        "ariaLabel": "Search files or conversations",
+        "hint": "Type a keyword to search files or conversations",
+        "noResults": "No matching files or conversations",
+        "failed": "Fuzzy search failed"
+      }
     },
     "terminal": {
       "createFailed": "Failed to create terminal: {{message}}",
       "closeFailed": "Failed to close terminal: {{message}}",
       "creating": "Creating…",
       "newTerminal": "New terminal",
+      "tabsAriaLabel": "Terminal tabs",
       "closed": "Closed",
       "closeTerminal": "Close terminal",
       "exited": "[Process exited, exit code: {{code}}]"
@@ -604,6 +629,13 @@
       "noFiles": "No modified files",
       "addGoal": "Add goal",
       "goalPlaceholder": "Enter session goal…",
+      "editGoal": "Edit goal",
+      "editGoalTitle": "Edit session goal",
+      "setGoalTitle": "Set session goal",
+      "goalDescription": "Set a session goal to keep the agent aligned",
+      "goalLabel": "Goal completion condition",
+      "saveGoal": "Save",
+      "savingGoal": "Saving…",
       "tabBrowser": "Browser",
       "browserBack": "Back",
       "browserForward": "Forward",
@@ -640,6 +672,8 @@
         "searchFiles": "File search",
         "toggleSidebar": "Toggle sidebar",
         "toggleRightPanel": "Toggle right panel",
+        "openTerminal": "Open terminal",
+        "back": "Go back",
         "sendMessage": "Send message",
         "newline": "New line",
         "closeDialog": "Close dialog"

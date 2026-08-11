@@ -52,6 +52,8 @@ interface SortableThreadItemProps {
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly isPinned: boolean;
+  /** 搜索匹配高亮（照搬参考项目：Sidebar 防抖搜索后传入，2 秒后自动移除） */
+  readonly highlighted: boolean;
   readonly onSelect: () => void;
   readonly onDelete: () => void;
   /** 置顶/取消置顶回调（对齐参考项目 pinned-header 分组） */
@@ -69,6 +71,7 @@ export function SortableThreadItem({
   isActive,
   isDeleting,
   isPinned,
+  highlighted,
   onSelect,
   onDelete,
   onTogglePin,
@@ -97,6 +100,7 @@ export function SortableThreadItem({
         isActive={isActive}
         isDeleting={isDeleting}
         isPinned={isPinned}
+        highlighted={highlighted}
         onSelect={onSelect}
         onDelete={onDelete}
         onTogglePin={onTogglePin}
@@ -118,6 +122,8 @@ interface ThreadItemProps {
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly isPinned: boolean;
+  /** 搜索匹配高亮（照搬参考项目：Sidebar 防抖搜索后传入，2 秒后自动移除） */
+  readonly highlighted: boolean;
   readonly onSelect: () => void;
   readonly onDelete: () => void;
   /** 置顶/取消置顶回调（对齐参考项目 pinned-header 分组） */
@@ -137,6 +143,7 @@ function ThreadItem({
   isActive,
   isDeleting,
   isPinned,
+  highlighted,
   onSelect,
   onDelete,
   onTogglePin,
@@ -199,7 +206,12 @@ function ThreadItem({
     <div
       role="button"
       tabIndex={0}
-      className={cn('thread-item', isActive && 'active')}
+      className={cn(
+        'thread-item',
+        isActive && 'active',
+        // I-S-001: 搜索防抖后匹配项添加临时高亮环（2 秒后由 Sidebar 清除）
+        highlighted && 'ring-1 ring-[var(--accent)]/40',
+      )}
       onClick={onSelect}
       onDoubleClick={() => setRenaming(true)}
       onContextMenu={(event) => {

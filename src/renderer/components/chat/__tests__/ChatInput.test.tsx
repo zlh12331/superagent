@@ -46,6 +46,63 @@ describe('ChatInput', () => {
     expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
   });
 
+  it('斜杠建议 7 个命令齐全（/help /new /clear /compact /models /interrupt /goal）', async () => {
+    render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
+    const input = screen.getByRole('textbox');
+    await userEvent.type(input, '/');
+
+    const commands = screen.getAllByRole('option').map((o) => o.textContent?.trim() ?? '');
+    expect(commands).toHaveLength(7);
+    // textContent 为「命令+描述」拼接（如 '/interrupt中断当前生成'），按前缀断言
+    const commandNames = commands.map((c) => c.split(/[^/a-z]/i)[0]);
+    expect(commandNames).toEqual(
+      expect.arrayContaining([
+        '/help',
+        '/new',
+        '/clear',
+        '/compact',
+        '/models',
+        '/interrupt',
+        '/goal',
+      ]),
+    );
+  });
+
+  it('斜杠过滤：输入 "/i" → 仅显示 /interrupt（command 带 / 前缀与查询词匹配）', async () => {
+    render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
+    const input = screen.getByRole('textbox');
+    await userEvent.type(input, '/i');
+
+    const commands = screen.getAllByRole('option').map((o) => o.textContent?.trim() ?? '');
+    const commandNames = commands.map((c) => c.split(/[^/a-z]/i)[0]);
+    expect(commandNames).toEqual(expect.arrayContaining(['/interrupt']));
+    expect(commandNames).not.toContain('/goal');
+  });
+
+  it('斜杠过滤：输入 "/g" → 仅显示 /goal', async () => {
+    render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
+    const input = screen.getByRole('textbox');
+    await userEvent.type(input, '/g');
+
+    const commands = screen.getAllByRole('option').map((o) => o.textContent?.trim() ?? '');
+    const commandNames = commands.map((c) => c.split(/[^/a-z]/i)[0]);
+    expect(commandNames).toEqual(expect.arrayContaining(['/goal']));
+    expect(commandNames).not.toContain('/interrupt');
+  });
+
+  it('点击 /interrupt 建议 → onSlashCommand("interrupt") + 输入框清空', async () => {
+    const onSlashCommand = vi.fn();
+    render(
+      <ChatInput status="ready" onSend={onSend} onStop={onStop} onSlashCommand={onSlashCommand} />,
+    );
+    const input = screen.getByRole('textbox');
+    await userEvent.type(input, '/i');
+    await userEvent.click(screen.getByText('/interrupt'));
+
+    expect(onSlashCommand).toHaveBeenCalledWith('interrupt');
+    expect(input).toHaveValue('');
+  });
+
   it('streaming 状态：显示停止按钮且不显示发送按钮', () => {
     render(<ChatInput status="streaming" onSend={onSend} onStop={onStop} />);
     expect(screen.getByRole('button', { name: /停止/ })).toBeTruthy();

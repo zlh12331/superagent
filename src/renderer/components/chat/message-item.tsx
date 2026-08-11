@@ -39,6 +39,7 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from 'ai';
+import { FileCode, Loader2, Terminal } from 'lucide-react';
 import { motion } from 'motion/react';
 import { memo, type ReactElement, useMemo, useState } from 'react';
 
@@ -64,12 +65,15 @@ export const MessageItem = memo(function MessageItem({
   onRegenerate,
   disableActions,
   isStreaming = false,
+  isContinuation = false,
 }: {
   message: UIMessage;
   onRegenerate: ((messageId: string) => void) | undefined;
   disableActions: boolean;
   /** 是否为正在流式输出的消息（ChatMessageList 对最后一条 assistant 传入） */
   isStreaming?: boolean;
+  /** 是否为连续 assistant 消息（前一条也是 assistant，隐藏头像与角色标签；照搬参考项目 isContinuation） */
+  isContinuation?: boolean;
 }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -113,6 +117,7 @@ export const MessageItem = memo(function MessageItem({
   if (message.role === 'assistant') {
     // assistant 消息：avatar + body（role + parts + actions）
     // 对齐原型 addMsgActions()：仅 assistant 消息显示 hover 操作栏
+    // 连续 assistant 消息（isContinuation）：隐藏头像与角色标签，内容缩进对齐（照搬参考项目）
     return (
       <motion.div
         initial={{ opacity: 0, y: 6 }}
@@ -120,17 +125,28 @@ export const MessageItem = memo(function MessageItem({
         transition={smoothEaseOut}
         className="msg assistant enter-anim"
       >
-        <div className="msg-avatar assistant" aria-hidden="true">
-          C
-        </div>
-        <div className="msg-body">
-          {/* 对齐原型 .msg-role（"codex · gpt-5-codex"）：品牌 · 当前模型 */}
-          <div className="msg-role assistant">
-            {t('chat.assistant')} · {defaultModel}
+        {!isContinuation && (
+          <div className="msg-avatar assistant" aria-hidden="true">
+            C
           </div>
+        )}
+        <div className={cn('msg-body', isContinuation && 'ml-10')}>
+          {/* 对齐原型 .msg-role（"codex · gpt-5-codex"）：品牌 · 当前模型 */}
+          {!isContinuation && (
+            <div className="msg-role assistant">
+              {t('chat.assistant')} · {defaultModel}
+            </div>
+          )}
           {/* parts 列表：按 part 类型分别渲染；流式消息在最后一条文本 part 末尾加闪烁光标 */}
           {partsWithCursor.map(({ part, key, showCursor }) => (
-            <PartView key={key} part={part} messageId={message.id} showCursor={showCursor} />
+            <PartView
+              key={key}
+              part={part}
+              messageId={message.id}
+              showCursor={showCursor}
+              // 流式消息跳过高亮（对齐参考项目：流式期间跳过语法高亮，避免每 token 反复高亮）
+              highlight={!isStreaming}
+            />
           ))}
           {/* hover 操作栏：复制 + 重新生成（对齐原型 .msg-actions） */}
           <MsgActions
@@ -169,15 +185,19 @@ function PartView({
   part,
   messageId,
   showCursor = false,
+  highlight = true,
 }: {
   part: UIMessagePart;
   /** 所属消息 id（推理块折叠态关联 store 用） */
   messageId: string;
   /** 流式光标：仅最后一条 text part 渲染（照搬参考项目 StreamingCursor） */
   showCursor?: boolean;
+  /** 是否启用代码块语法高亮（流式消息传 false，对齐参考项目流式跳过高亮） */
+  highlight?: boolean;
 }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+
   // 文本 part：Markdown 渲染（支持 GFM + 代码语法高亮）
   if (isTextUIPart(part)) {
     if (part.text.length === 0) {
@@ -185,7 +205,7 @@ function PartView({
     }
     return (
       <div className="msg-content">
-        <Markdown content={part.text} />
+        <Markdown content={part.text} highlight={highlight} />
         {/* 流式光标：当前消息正在输出时，文本末尾显示闪烁光标 */}
         {showCursor && <StreamingCursor />}
       </div>
@@ -308,8 +328,15 @@ function ToolCallView({
   const statusLabel = mapToolStateToStatusLabelKey(state);
   const localizedStatusLabel = t(`chat.${statusLabel}`);
 
+  // AI SDK part 的 toolName 带 'tool-' 前缀（如 'tool-exec_command'），
+  // 去前缀后与 COMMAND_TOOLS 匹配（对齐参考项目 toolCall.toolName 语义）
+  const toolName = type.replace(/^tool-/, '');
   // 命令工具高亮（照搬参考项目 COMMAND_TOOLS：命令行块 accent 左边条 + 深色背景）
-  const isCommandTool = COMMAND_TOOLS.has(type);
+  const isCommandTool = COMMAND_TOOLS.has(toolName);
+  // 工具图标（照搬参考项目 getToolIcon：命令工具 Terminal / 其他 FileCode，运行中换 spinner）
+  // 运行中判定复用徽章映射（AI SDK v7 状态为 input-streaming/input-accepted，非字面 'running'）
+  const isRunning = statusClass === 'running';
+  const ToolIcon = isRunning ? Loader2 : isCommandTool ? Terminal : FileCode;
 
   return (
     <div className="msg msg-tool enter-anim">
@@ -322,8 +349,12 @@ function ToolCallView({
             aria-label={t('chat.toggleToolDetails')}
             aria-expanded={open}
           >
-            <span className="card-icon">🔧</span>
-            <span className="card-title">{title ?? type}</span>
+            <span className="card-icon">
+              <ToolIcon
+                className={cn('size-3.5 text-[var(--accent)]', isRunning && 'animate-spin')}
+              />
+            </span>
+            <span className="card-title">{title ?? toolName}</span>
             <span className={cn('card-status', statusClass)}>{localizedStatusLabel}</span>
             <span className="tool-chev">▸</span>
           </button>

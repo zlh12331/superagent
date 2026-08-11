@@ -34,6 +34,7 @@ import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
+import { FuzzySearchDialog } from '@/components/file-tree/fuzzy-search-dialog';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
@@ -48,6 +49,7 @@ import { DEFAULT_GIT_REPO_PATH, DRAFT_SESSION_ID } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
@@ -100,12 +102,15 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const [sidebarWidth, setSidebarWidth] = useState(computeInitialSidebarWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState(computeInitialRightPanelWidth);
 
-  // 折叠态
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
-  // 用户是否手动切换过面板（置位后断点自动折叠不再覆盖手动意图）
-  const sidebarManualRef = useRef(false);
-  const rightPanelManualRef = useRef(false);
+  // 折叠态（统一状态源：ui-store——快捷键 / 命令面板 / Topbar / 断点联动共用）
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
+  const rightPanelCollapsed = useUiStore((s) => s.rightPanelCollapsed);
+  const sidebarManual = useUiStore((s) => s.sidebarManual);
+  const rightPanelManual = useUiStore((s) => s.rightPanelManual);
+  const setSidebarCollapsed = useUiStore((s) => s.setSidebarCollapsed);
+  const setRightPanelCollapsed = useUiStore((s) => s.setRightPanelCollapsed);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const toggleRightPanel = useUiStore((s) => s.toggleRightPanel);
 
   // 响应式断点联动：窄屏自动折叠面板（对齐原型 @media 行为）
   // <1200px：右面板自动隐藏；<900px：侧栏自动隐藏；宽屏自动恢复
@@ -116,15 +121,15 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const closeSettings = useUiStore((s) => s.closeSettings);
   useEffect(() => {
-    if (!rightPanelManualRef.current) {
+    if (!rightPanelManual) {
       setRightPanelCollapsed(isCompact);
     }
-  }, [isCompact]);
+  }, [isCompact, rightPanelManual, setRightPanelCollapsed]);
   useEffect(() => {
-    if (!sidebarManualRef.current) {
+    if (!sidebarManual) {
       setSidebarCollapsed(isNarrow);
     }
-  }, [isNarrow]);
+  }, [isNarrow, sidebarManual, setSidebarCollapsed]);
 
   const [draggingSide, setDraggingSide] = useState<ResizerSide | null>(null);
 
@@ -135,6 +140,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   // 快捷键帮助对话框（'?' 键触发）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // 文件模糊搜索对话框（⌘F 触发，对齐参考项目 FuzzySearchDialog）
+  const [fuzzyOpen, setFuzzyOpen] = useState(false);
+  // 文件查看器入口（FuzzySearchDialog 选中文件时打开）
+  const openFileViewer = useFileViewerStore((s) => s.openFile);
 
   // 路由：聊天页显示返回按钮（对齐原型 back-btn）
   const navigate = useNavigate();
@@ -147,10 +156,16 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 全局 UI store：设置对话框入口（快捷键 / 错误动作 / Topbar / 命令面板共享）
   const openSettings = useUiStore((s) => s.openSettings);
 
+  // 折叠态切换：统一走 ui-store 的 toggle（置位 manual，断点自动折叠不再覆盖手动意图）
+  // 供快捷键（Ctrl+B/1、Ctrl+J/2）、Topbar、命令面板共用
+  const handleToggleSidebar = toggleSidebar;
+  const handleToggleRightPanel = toggleRightPanel;
+
   useKeyboardShortcuts({
     onCommandPalette: () => openPalette(),
     onSaveFile: () => {},
-    onSearchFile: () => openPalette(),
+    // ⌘F 文件模糊搜索（对齐参考项目：Ctrl/Cmd + F 触发 FuzzySearchDialog）
+    onSearchFile: () => setFuzzyOpen(true),
     onToggleTheme: () => {
       const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
       setTheme(nextTheme);
@@ -160,6 +175,20 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       enterWelcomeMode();
     },
     onOpenShortcutHelp: () => setShortcutHelpOpen(true),
+    // 面板切换（Ctrl+B/1、Ctrl+J/2；对齐参考项目 toggle-left/right-sidebar 快捷键）
+    onToggleSidebar: handleToggleSidebar,
+    onToggleRightPanel: handleToggleRightPanel,
+    // 打开终端（Ctrl+`；对齐参考项目 codex.openTerminal：展开右面板 + 切终端 tab）
+    onOpenTerminal: () => {
+      useUiStore.getState().setRightPanelCollapsed(false);
+      useUiStore.getState().setDevPanelTab('terminal');
+    },
+    // 返回上一视图（Alt+←；对齐参考项目 backBtn：聊天页回首页，与 Topbar 返回按钮一致）
+    onBack: () => {
+      if (isChatRoute) {
+        navigate('/');
+      }
+    },
   });
 
   // 拖拽起始信息（ref 避免重渲染）
@@ -225,16 +254,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
-
-  // 折叠态切换回调（用户手动操作：置位 manualRef，断点自动折叠不再覆盖手动意图）
-  const handleToggleSidebar = useCallback(() => {
-    sidebarManualRef.current = true;
-    setSidebarCollapsed((prev) => !prev);
-  }, []);
-  const handleToggleRightPanel = useCallback(() => {
-    rightPanelManualRef.current = true;
-    setRightPanelCollapsed((prev) => !prev);
-  }, []);
 
   return (
     <div className="bg-background text-foreground app font-sans">
@@ -342,6 +361,12 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
       {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
       <CommandPalette open={paletteOpen} onOpenChange={closePalette} />
+      {/* 文件模糊搜索（⌘F）：文件 + 会话统一搜索（对齐参考项目 FuzzySearchDialog） */}
+      <FuzzySearchDialog
+        open={fuzzyOpen}
+        onClose={() => setFuzzyOpen(false)}
+        onSelect={openFileViewer}
+      />
       {/* 快捷键帮助对话框（'?' 触发） */}
       <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
       {/* 自动更新提示（事件驱动 toast，无 DOM） */}

@@ -131,6 +131,12 @@ interface MarkdownProps {
   content: string;
   /** 自定义容器类名 */
   className?: string;
+  /**
+   * 是否启用代码块语法高亮（默认 true）。
+   * 流式消息传 false 跳过 shiki 高亮（对齐参考项目：流式期间用空 rehype 插件，
+   * 避免每 token 到达都反复高亮长代码块的主线程开销；结束后自动恢复高亮）。
+   */
+  highlight?: boolean;
 }
 
 /**
@@ -144,13 +150,13 @@ interface MarkdownProps {
  * <Markdown content={part.text} />
  * ```
  */
-export function Markdown({ content, className }: MarkdownProps): ReactElement {
+export function Markdown({ content, className, highlight = true }: MarkdownProps): ReactElement {
   return (
     <div className={cn('markdown-body', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          code: CodeComponent,
+          code: (props) => <CodeComponent {...props} highlight={highlight} />,
           pre: PreComponent,
           a: AnchorComponent,
         }}
@@ -172,7 +178,14 @@ export function Markdown({ content, className }: MarkdownProps): ReactElement {
  * - inline code（`` `text` ``）：无 language-* className → 渲染 <code class="inline">
  * - block code（```lang\n...\n```）：有 language-* className → 渲染 CodeBlock
  */
-function CodeComponent({ className, children }: ComponentPropsWithoutRef<'code'>): ReactElement {
+function CodeComponent({
+  className,
+  children,
+  highlight = true,
+}: ComponentPropsWithoutRef<'code'> & {
+  /** 是否启用语法高亮（流式消息跳过高亮，对齐参考项目） */
+  highlight?: boolean;
+}): ReactElement {
   const match = /language-(\w+)/.exec(className ?? '');
 
   if (match === null) {
@@ -182,7 +195,7 @@ function CodeComponent({ className, children }: ComponentPropsWithoutRef<'code'>
 
   const lang = match[1] ?? 'text';
   const code = String(children ?? '').replace(/\n$/, '');
-  return <CodeBlock code={code} lang={lang} />;
+  return <CodeBlock code={code} lang={lang} highlight={highlight} />;
 }
 
 /**
@@ -217,7 +230,16 @@ function AnchorComponent({ href, children }: ComponentPropsWithoutRef<'a'>): Rea
  * - 主题跟随：resolvedTheme 变化时重新高亮
  * - 复制按钮：对齐原型 .code-block-wrapper + .code-copy-btn
  */
-function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement {
+function CodeBlock({
+  code,
+  lang,
+  highlight = true,
+}: {
+  code: string;
+  lang: string;
+  /** 是否启用语法高亮（false 时渲染纯文本 pre，流式期间跳过 shiki 开销） */
+  highlight?: boolean;
+}): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
@@ -229,7 +251,9 @@ function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement
     resolvedTheme === 'dark' ? 'github-dark' : 'github-light';
 
   // 异步高亮：code / lang / theme 变化时重新生成
+  // highlight=false（流式期间）跳过高亮——仅渲染纯文本，避免每 token 反复高亮（对齐参考项目）
   useEffect(() => {
+    if (!highlight) return;
     let cancelled = false;
     getHighlighter()
       .then((h) => {
@@ -249,7 +273,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }): ReactElement
     return () => {
       cancelled = true;
     };
-  }, [code, normalizedLang, theme]);
+  }, [code, normalizedLang, theme, highlight]);
 
   // copy 按钮 2s 复位定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

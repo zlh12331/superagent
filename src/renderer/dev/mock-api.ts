@@ -89,6 +89,13 @@ const messagesBySession: Record<string, MockMessage[]> = {
       content:
         '已完成拆分：`meta.ts` 保留纯字符串通道元数据（preload 沙箱安全），`definitions.ts` 合并 zod schema。新增 IPC 方法只需改两行 + handler 一个方法，其余全自动。',
     },
+    // 连续 assistant 消息（验证 isContinuation：第二条隐藏头像与角色标签，对齐参考项目）
+    {
+      id: 'm1-3',
+      role: 'assistant',
+      content:
+        '补充：`derive.ts` 负责类型推导（IpcApi / RequestMap / EventMap / InferHandlers），`register.ts` 统一注册 handler——定义表驱动全链路自动生成是核心资产。',
+    },
   ],
 };
 
@@ -102,6 +109,14 @@ const errorCallbacks = new Set<
 >();
 const terminalOutputCallbacks = new Set<(payload: { terminalId: string; data: string }) => void>();
 const updateStatusCallbacks = new Set<(payload: unknown) => void>();
+/** 审批请求回调（agent:approval:request 模拟推送，验证内联审批卡） */
+const approvalCallbacks = new Set<(payload: unknown) => void>();
+
+/** 模拟流定时器（sessionId → interval，agent.stop 据此真正中断模拟流） */
+const streamIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+/** mock 会话目标存储（浏览器模式持久化：goal:create → list 闭环，对齐主进程每会话一目标语义） */
+const mockGoals: Array<{ sessionId: string; condition: string }> = [];
 
 /** 模拟助手回答：按 AI SDK v7 UIMessageChunk 格式（带 id）分片推送 → end（含 usage） */
 function simulateAgentStream(sessionId: string, userText: string): void {
@@ -131,6 +146,55 @@ function simulateAgentStream(sessionId: string, userText: string): void {
   ];
   const total = answer.join('\n');
   const messageId = `mock-msg-${Date.now()}`;
+  // 模拟审批请求（对齐真实链路：命令工具执行前推送 approval:request，验证内联审批卡）
+  const approvalId = `mock-approval-${Date.now()}`;
+  for (const cb of approvalCallbacks) {
+    cb({
+      sessionId,
+      approvalId,
+      toolCallId: `mock-tool-${Date.now()}`,
+      toolName: 'exec_command',
+      input: { command: 'npm install axios', cwd: 'f:\\TraeProjects\\1', timeout: 60_000 },
+      description: '执行命令: npm install axios',
+    });
+  }
+  // 模拟工具调用（AI SDK v7 协议：tool-input-start → input-available → output-available，
+  // 先于文本推送，验证工具卡渲染；start 与 available 间隔 400ms 保留 running 态时间窗）
+  const toolCallId = `mock-tool-${Date.now()}`;
+  for (const cb of streamCallbacks) {
+    cb({
+      sessionId,
+      part: {
+        type: 'tool-input-start',
+        toolCallId,
+        toolName: 'exec_command',
+        title: 'exec_command',
+      },
+    });
+  }
+  setTimeout(() => {
+    for (const cb of streamCallbacks) {
+      cb({
+        sessionId,
+        part: {
+          type: 'tool-input-available',
+          toolCallId,
+          toolName: 'exec_command',
+          input: { command: 'ls -la' },
+        },
+      });
+    }
+    for (const cb of streamCallbacks) {
+      cb({
+        sessionId,
+        part: {
+          type: 'tool-output-available',
+          toolCallId,
+          output: { command: 'ls -la', exitCode: 0 },
+        },
+      });
+    }
+  }, 400);
   // AI SDK v7：UIMessageChunk 每个 chunk 必须带 id（text-start 先行）
   for (const cb of streamCallbacks) {
     cb({ sessionId, part: { type: 'text-start', id: messageId } });
@@ -139,6 +203,7 @@ function simulateAgentStream(sessionId: string, userText: string): void {
   const interval = setInterval(() => {
     if (index >= total.length) {
       clearInterval(interval);
+      streamIntervals.delete(sessionId);
       // 助手回复落库（对齐主进程行为：真实环境流式推送过程中持久化消息；
       // 不落库则切走再切回会话时助手回复消失）
       messagesBySession[sessionId]?.push({
@@ -158,6 +223,7 @@ function simulateAgentStream(sessionId: string, userText: string): void {
       cb({ sessionId, part: { type: 'text-delta', id: messageId, delta: chunk } });
     }
   }, 40);
+  streamIntervals.set(sessionId, interval);
 }
 
 // ── 各域 mock 实现（参数类型从 IpcApi 推导）──────────────────
@@ -419,7 +485,19 @@ function createMockApi(): IpcApi {
         setTimeout(() => simulateAgentStream(sessionId ?? 'mock-1', text), 300);
         return ok({ sessionId });
       },
-      stop: async () => ok({ stopped: true }),
+      stop: async ({ sessionId }: Req<IpcApi['agent']['stop']>) => {
+        // 真正中断模拟流（对齐主进程行为：清除定时器 + 推送 interrupted end）
+        const interval = streamIntervals.get(sessionId);
+        if (interval !== undefined) {
+          clearInterval(interval);
+          streamIntervals.delete(sessionId);
+          const usage = { inputTokens: 60, outputTokens: 120, totalTokens: 180 };
+          for (const cb of endCallbacks) {
+            cb({ sessionId, reason: 'interrupted', usage });
+          }
+        }
+        return ok({ stopped: true });
+      },
       approvalResponse: async () => ok({ ok: true }),
       respondAsk: async () => ok({ ok: true }),
       subscribeStreamPart: (cb: Parameters<IpcApi['agent']['subscribeStreamPart']>[0]) => {
@@ -436,7 +514,12 @@ function createMockApi(): IpcApi {
       },
       subscribeToolCall: () => () => {},
       subscribeToolResult: () => () => {},
-      subscribeApprovalRequest: () => () => {},
+      subscribeApprovalRequest: (
+        cb: Parameters<IpcApi['agent']['subscribeApprovalRequest']>[0],
+      ) => {
+        approvalCallbacks.add(cb as never);
+        return () => approvalCallbacks.delete(cb as never);
+      },
       subscribeAsk: () => () => {},
       subscribeTurnEvent: () => () => {},
     },
@@ -484,12 +567,61 @@ function createMockApi(): IpcApi {
       clear: async () => ok({ ok: true }),
     },
     goal: {
-      list: async () => ok({ goals: [] }),
-      create: async () => ok({ ok: true }),
-      clear: async () => ok({ ok: true }),
+      list: async ({ sessionId }: Req<IpcApi['goal']['list']>) => {
+        const goals = mockGoals
+          .filter((g) => sessionId === undefined || g.sessionId === sessionId)
+          .map((g) => ({
+            sessionId: g.sessionId,
+            condition: g.condition,
+            status: 'active',
+            iterations: 0,
+            lastReason: null,
+            createdAt: Date.now(),
+            finishedAt: null,
+          }));
+        return ok({ goals });
+      },
+      create: async ({ sessionId, condition }: Req<IpcApi['goal']['create']>) => {
+        // 对齐主进程语义：新建覆盖旧目标
+        const idx = mockGoals.findIndex((g) => g.sessionId === sessionId);
+        if (idx >= 0) {
+          mockGoals.splice(idx, 1);
+        }
+        mockGoals.push({ sessionId, condition });
+        return ok({ ok: true });
+      },
+      clear: async ({ sessionId }: Req<IpcApi['goal']['clear']>) => {
+        const idx = mockGoals.findIndex((g) => g.sessionId === sessionId);
+        if (idx >= 0) {
+          mockGoals.splice(idx, 1);
+        }
+        return ok({ ok: true });
+      },
     },
     task: {
-      list: async () => ok({ tasks: [] }),
+      list: async () =>
+        ok({
+          tasks: [
+            {
+              id: 'task-1',
+              sessionId: 'mock-1',
+              kind: 'agent-child',
+              description: '拆分 IPC 定义表：meta.ts + definitions.ts',
+              status: 'completed',
+              startTime: Date.now() - 60_000,
+              endTime: Date.now() - 30_000,
+            },
+            {
+              id: 'task-2',
+              sessionId: 'mock-1',
+              kind: 'agent-child',
+              description: '补充 derive.ts 类型推导 + register.ts 统一注册',
+              status: 'running',
+              startTime: Date.now() - 20_000,
+              endTime: null,
+            },
+          ],
+        }),
     },
 
     system: {
@@ -551,10 +683,11 @@ function createMockApi(): IpcApi {
     search: {
       grep: async () => ok({ matches: [] }),
       glob: async ({ pattern }: Req<IpcApi['search']['glob']>) => {
-        // 模拟文件匹配（@ 文件补全用）：按查询子串过滤假文件清单
+        // 模拟文件匹配（模糊搜索用）：解析 `**/*[aA]pp*` → 'app'（字符类取首字符）
         const query = pattern
           .replace(/^\*\*\/\*/, '')
           .replace(/\*$/, '')
+          .replace(/\[(.)(.)\]/g, '$1')
           .toLowerCase();
         const files = [
           'src/renderer/App.tsx',

@@ -272,4 +272,93 @@ describe('TerminalPanel', () => {
       expect(screen.queryByText('新建终端')).not.toBeInTheDocument();
     });
   });
+
+  // ── 多终端（对齐参考项目 TerminalTabs 多 tab 结构）────────────────
+  describe('多终端标签页', () => {
+    it('同一会话多个终端 → 渲染全部 tab（可切换）', () => {
+      useTerminalStore.getState().createTerminal({
+        id: 'term-1',
+        sessionId: 'session-1',
+        title: 'bash',
+        pid: null,
+        cwd: '/tmp',
+        alive: true,
+      });
+      useTerminalStore.getState().createTerminal({
+        id: 'term-2',
+        sessionId: 'session-1',
+        title: 'pwsh',
+        pid: null,
+        cwd: '/tmp',
+        alive: true,
+      });
+
+      render(<TerminalPanel sessionId="session-1" />);
+
+      // 两个 tab 标题都渲染
+      expect(screen.getByText('bash')).toBeInTheDocument();
+      expect(screen.getByText('pwsh')).toBeInTheDocument();
+      // 标签栏语义（tablist 含两个 tab）
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      // 激活 tab：store activeTerminalId 指向最后创建的 term-2
+      expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('点击非激活 tab → 切换激活终端', async () => {
+      const user = userEvent.setup();
+      useTerminalStore.getState().createTerminal({
+        id: 'term-1',
+        sessionId: 'session-1',
+        title: 'bash',
+        pid: null,
+        cwd: '/tmp',
+        alive: true,
+      });
+      useTerminalStore.getState().createTerminal({
+        id: 'term-2',
+        sessionId: 'session-1',
+        title: 'pwsh',
+        pid: null,
+        cwd: '/tmp',
+        alive: true,
+      });
+      // 先切到 term-1，再点击 term-2 tab
+      useTerminalStore.getState().setActiveTerminal('term-1');
+
+      render(<TerminalPanel sessionId="session-1" />);
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+
+      const targetTab = tabs[1];
+      expect(targetTab).toBeDefined();
+      await user.click(targetTab as HTMLElement);
+      expect(useTerminalStore.getState().activeTerminalId).toBe('term-2');
+      expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('点击「+」按钮 → 创建第二个终端并写入 store', async () => {
+      const user = userEvent.setup();
+      useTerminalStore.getState().createTerminal({
+        id: 'term-1',
+        sessionId: 'session-1',
+        title: 'bash',
+        pid: null,
+        cwd: '/tmp',
+        alive: true,
+      });
+      (window.api.terminal.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+        data: { terminalId: 'term-2' },
+      });
+
+      render(<TerminalPanel sessionId="session-1" />);
+      await user.click(screen.getByRole('button', { name: '新建终端' }));
+
+      await waitFor(() => {
+        const state = useTerminalStore.getState();
+        expect(state.terminals).toHaveLength(2);
+        expect(state.terminals[1]?.id).toBe('term-2');
+        expect(state.terminals[1]?.sessionId).toBe('session-1');
+      });
+    });
+  });
 });

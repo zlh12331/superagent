@@ -27,7 +27,6 @@ import {
   Wrench,
 } from 'lucide-react';
 import { lazy, memo, type ReactElement, Suspense, useState } from 'react';
-
 import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
@@ -35,6 +34,7 @@ import { GitPanel } from '@/components/git/GitPanel';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useUiStore } from '@/stores/transient/ui-store';
 import { DiffPane, FilesPane, InfoPane } from './right-panel-panes';
 
 // 懒加载（对齐参考项目：xterm ~200KB vendor chunk 仅在切到终端 tab 时加载，避免拖慢首屏）
@@ -74,8 +74,9 @@ export const DevPanel = memo(function DevPanel({
 }: DevPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  // 当前激活 Tab（默认会话详情，对齐原型首位）
-  const [activeTab, setActiveTab] = useState<PanelTab>('info');
+  // 当前激活 Tab（默认会话详情，对齐原型首位；集中到 ui-store——命令面板「打开终端」等入口可跨组件切换）
+  const activeTab = useUiStore((state) => state.devPanelTab);
+  const setActiveTab = useUiStore((state) => state.setDevPanelTab);
   // 开发者子视图（默认 git，对齐原 GitPanel 入口）
   const [devSubTab, setDevSubTab] = useState<DevSubTab>('git');
 

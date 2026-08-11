@@ -251,6 +251,9 @@ export function ChatMessageList({
           // 流式标记：最后一条 assistant 消息正在输出时，文本末尾显示闪烁光标（照搬参考项目 StreamingCursor）
           const isStreamingMessage =
             !showStreamingFooter && isStreaming && index === messages.length - 1;
+          // 连续 assistant 消息：前一条也是 assistant（隐藏头像与角色标签，照搬参考项目 isContinuation）
+          const isContinuation =
+            message.role === 'assistant' && messages[index - 1]?.role === 'assistant';
           return (
             <div
               key={message.id}
@@ -262,6 +265,7 @@ export function ChatMessageList({
                 onRegenerate={onRegenerate}
                 disableActions={isStreaming}
                 {...(isStreamingMessage ? { isStreaming: true } : {})}
+                {...(isContinuation ? { isContinuation: true } : {})}
               />
             </div>
           );

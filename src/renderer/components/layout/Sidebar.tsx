@@ -39,7 +39,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Plus, Search } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
@@ -85,16 +85,83 @@ export function Sidebar(): ReactElement {
   // L2 Zustand：欢迎页模式
   const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
 
-  // 搜索关键字（功能预留：仅 UI，暂不实现过滤逻辑）
+  // 派生：会话列表
+  const sessions = query.data?.sessions ?? [];
+
+  // 搜索过滤（对齐参考项目 filteredThreads：即时过滤，保持输入响应性）
   const [searchKeyword, setSearchKeyword] = useState('');
+  const isSearching = searchKeyword.trim().length > 0;
+  // 过滤会话：标题或工作目录匹配（大小写不敏感，即时生效）
+  const filteredSessions = useMemo(() => {
+    const q = searchKeyword.trim().toLowerCase();
+    if (!q) return sessions;
+    return sessions.filter(
+      (s) => s.title.toLowerCase().includes(q) || s.workingDir.toLowerCase().includes(q),
+    );
+  }, [sessions, searchKeyword]);
+
+  // 搜索高亮（照搬参考项目 I-S-001/P1-10/11）：
+  // - 300ms 防抖后计算匹配项并高亮（非即时，对齐原型 debounce 300ms）
+  // - 高亮 2 秒后自动清除（闪烁效果，对齐原型 setTimeout(() => outline='', 2000)）
+  // - 少于 2 字符不高亮（对齐原型 if (q.length < 2) return）
+  // 即时过滤（filteredSessions）不受影响，保持输入响应性
+  const [highlightedThreadIds, setHighlightedThreadIds] = useState<Set<string>>(() => new Set());
+  // 高亮过期定时器引用 — 新的防抖触发时清除之前的过期定时器，避免叠加
+  const highlightExpireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 通过 ref 读取最新 sessions，避免将 sessions 放入 effect 依赖：
+  // sessions 变化（缓存刷新、乐观更新回写）会重置防抖计时器，导致输入过程中
+  // 的高亮计算被反复打断。计时器触发时仍能读到最新的 sessions。
+  const sessionsRef = useRef(sessions);
+  // 在 effect 中同步 ref —— react-hooks/refs 规则禁止在渲染阶段写入 ref.current
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+  useEffect(() => {
+    const q = searchKeyword.trim().toLowerCase();
+
+    // 300ms 防抖后计算匹配项（对齐原型 setTimeout(..., 300)）
+    const debounceTimer = setTimeout(() => {
+      // 少于 2 字符不高亮（对齐原型 q.length < 2 检查）
+      // 不主动清除——让之前的高亮自然过期（对齐原型行为）
+      if (q.length < 2) return;
+
+      const matched = new Set<string>();
+      // 用 sessionsRef.current 读取最新会话列表，避免将其加入依赖而打断防抖
+      for (const s of sessionsRef.current) {
+        if (s.title.toLowerCase().includes(q) || s.workingDir.toLowerCase().includes(q)) {
+          matched.add(s.id);
+        }
+      }
+      setHighlightedThreadIds(matched);
+
+      // 清除之前的过期定时器（避免多次搜索叠加）
+      if (highlightExpireTimerRef.current !== null) {
+        clearTimeout(highlightExpireTimerRef.current);
+      }
+      // 2 秒后自动清除高亮（对齐原型 setTimeout(() => { item.style.outline = ''; }, 2000)）
+      highlightExpireTimerRef.current = setTimeout(() => {
+        setHighlightedThreadIds(new Set());
+        highlightExpireTimerRef.current = null;
+      }, 2000);
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+    // 仅依赖 searchKeyword；sessions 通过 ref 读取，避免防抖被打断
+  }, [searchKeyword]);
+  // 组件卸载时清除过期定时器，防止内存泄漏
+  useEffect(() => {
+    return () => {
+      if (highlightExpireTimerRef.current !== null) {
+        clearTimeout(highlightExpireTimerRef.current);
+        highlightExpireTimerRef.current = null;
+      }
+    };
+  }, []);
   // 当前激活的 tab（recent / archived；文件树是独立视图 sidebarView，不进 tablist）
   const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent');
   // 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换）
   const sidebarView = useUiStore((state) => state.sidebarView);
   const setSidebarView = useUiStore((state) => state.setSidebarView);
-
-  // 派生：会话列表
-  const sessions = query.data?.sessions ?? [];
 
   // 派生：当前激活会话的 workingDir（用于文件树面板）
   // 无激活会话时为 null，FileTreePanel 显示空状态
@@ -103,20 +170,20 @@ export function Sidebar(): ReactElement {
     return sessions.find((s) => s.id === activeSessionId)?.workingDir ?? null;
   })();
 
-  // 派生：按 workingDir basename 分组
+  // 派生：按 workingDir basename 分组（搜索时基于过滤后的会话）
   // 结构：Map<folderName, Session[]>
   // 注意：sessions 为 readonly 数组，使用 spread 创建新数组避免 push 副作用
   // 显式 useMemo：React Compiler 对 IIFE 的自动缓存可能滞后于异步 query 数据到位，
   // 导致 reload 后列表首次以空数据计算并被缓存（虚拟列表静默空渲染）
   const groupedSessions = useMemo(() => {
     const groups = new Map<string, typeof sessions>();
-    for (const session of sessions) {
+    for (const session of filteredSessions) {
       const folderName = getFolderName(session.workingDir);
       const existing = groups.get(folderName) ?? [];
       groups.set(folderName, [...existing, session]);
     }
     return groups;
-  }, [sessions]);
+  }, [filteredSessions]);
 
   // 拖拽排序覆盖 + 折叠文件夹：持久化到 localStorage（sidebar-pref-store）——
   // 用户显式操作跨重启保留（此前本地 useState 刷新即丢）
@@ -152,7 +219,8 @@ export function Sidebar(): ReactElement {
     const list: SidebarEntry[] = [];
     for (const [folderName, folderSessions] of groupedSessions) {
       list.push({ type: 'label', name: folderName });
-      if (collapsedFolders.includes(folderName)) {
+      // 搜索时忽略折叠态（自动展开匹配组，对齐参考项目 clearCollapsedFolders 语义）
+      if (collapsedFolders.includes(folderName) && !isSearching) {
         continue;
       }
       // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
@@ -166,7 +234,7 @@ export function Sidebar(): ReactElement {
       }
     }
     return list;
-  }, [groupedSessions, collapsedFolders, orderOverrides]);
+  }, [groupedSessions, collapsedFolders, orderOverrides, isSearching]);
   // dnd-kit SortableContext 所需的可见会话 id（仅未折叠文件夹）
   const sortableIds = ((): string[] => {
     const ids: string[] = [];
@@ -195,6 +263,8 @@ export function Sidebar(): ReactElement {
 
     clearActiveSession();
     enterWelcomeMode(lastWorkingDir);
+    // 清空搜索词，确保新会话界面不被过滤（对齐参考项目 handleCreateThread）
+    setSearchKeyword('');
     navigate(ROUTES.home);
   };
 
@@ -207,6 +277,8 @@ export function Sidebar(): ReactElement {
     const workingDir = folderSession?.workingDir ?? null;
     clearActiveSession();
     enterWelcomeMode(workingDir);
+    // 清空搜索词，确保新会话界面不被过滤（对齐参考项目 handleCreateThread）
+    setSearchKeyword('');
     navigate(ROUTES.home);
   };
 
@@ -285,13 +357,22 @@ export function Sidebar(): ReactElement {
             view={view}
             skeleton={<LoadingList />}
             empty={
-              // 空态无 CTA：侧栏头部已有「新建会话」按钮，重复按钮冗余（对齐原型空态）
-              <EmptyState
-                title={t('sidebar.noSessions')}
-                description={t('sidebar.newSessionHint')}
-                // h-full：空态在列表区垂直居中（对齐参考项目空态视觉）
-                className="h-full"
-              />
+              // 空态无 CTA：侧栏头部已有「新建会话」按钮，重复按钮冗余（对齐原型空态）；
+              // 搜索无结果时显示独立文案（对齐参考项目搜索空态三态）
+              isSearching ? (
+                <EmptyState
+                  title={t('sidebar.searchNoResults', { query: searchKeyword })}
+                  description={t('sidebar.searchNoResultsHint')}
+                  className="h-full"
+                />
+              ) : (
+                <EmptyState
+                  title={t('sidebar.noSessions')}
+                  description={t('sidebar.newSessionHint')}
+                  // h-full：空态在列表区垂直居中（对齐参考项目空态视觉）
+                  className="h-full"
+                />
+              )
             }
           >
             {() => (
@@ -312,38 +393,48 @@ export function Sidebar(): ReactElement {
                       虚拟化收益低，普通滚动彻底规避 */}
                   <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
                     <div className="h-full overflow-y-auto pb-2">
-                      {entries.map((entry) =>
-                        entry.type === 'label' ? (
-                          <FolderLabel
-                            key={`label:${entry.name}`}
-                            folderName={entry.name}
-                            collapsed={collapsedFolders.includes(entry.name)}
-                            onToggle={() => toggleFolder(entry.name)}
-                            onCreateInFolder={handleCreateInFolder}
-                          />
-                        ) : (
-                          <SortableThreadItem
-                            key={entry.session.id}
-                            sessionId={entry.session.id}
-                            folderName={getFolderName(entry.session.workingDir)}
-                            title={entry.session.title}
-                            lastMessage={entry.session.lastMessage}
-                            updatedAt={entry.session.updatedAt}
-                            isActive={entry.session.id === activeSessionId}
-                            isDeleting={isDeleting}
-                            isPinned={entry.session.pinned === true}
-                            onSelect={() => handleSelectSession(entry.session.id)}
-                            onDelete={() => handleDelete(entry.session.id)}
-                            onTogglePin={() =>
-                              togglePin(entry.session.id, entry.session.pinned !== true)
-                            }
-                            onOpenFiles={() => {
-                              // 对齐原型 showThreadFileTree：先切换到该会话（主区），再打开其文件树
-                              handleSelectSession(entry.session.id);
-                              setSidebarView('fileTree');
-                            }}
-                          />
-                        ),
+                      {/* 搜索无结果：显示搜索空态（对齐参考项目搜索空态三态） */}
+                      {isSearching && entries.length === 0 ? (
+                        <EmptyState
+                          title={t('sidebar.searchNoResults', { query: searchKeyword })}
+                          description={t('sidebar.searchNoResultsHint')}
+                          className="h-full"
+                        />
+                      ) : (
+                        entries.map((entry) =>
+                          entry.type === 'label' ? (
+                            <FolderLabel
+                              key={`label:${entry.name}`}
+                              folderName={entry.name}
+                              collapsed={collapsedFolders.includes(entry.name)}
+                              onToggle={() => toggleFolder(entry.name)}
+                              onCreateInFolder={handleCreateInFolder}
+                            />
+                          ) : (
+                            <SortableThreadItem
+                              key={entry.session.id}
+                              sessionId={entry.session.id}
+                              folderName={getFolderName(entry.session.workingDir)}
+                              title={entry.session.title}
+                              lastMessage={entry.session.lastMessage}
+                              updatedAt={entry.session.updatedAt}
+                              isActive={entry.session.id === activeSessionId}
+                              isDeleting={isDeleting}
+                              isPinned={entry.session.pinned === true}
+                              highlighted={highlightedThreadIds.has(entry.session.id)}
+                              onSelect={() => handleSelectSession(entry.session.id)}
+                              onDelete={() => handleDelete(entry.session.id)}
+                              onTogglePin={() =>
+                                togglePin(entry.session.id, entry.session.pinned !== true)
+                              }
+                              onOpenFiles={() => {
+                                // 对齐原型 showThreadFileTree：先切换到该会话（主区），再打开其文件树
+                                handleSelectSession(entry.session.id);
+                                setSidebarView('fileTree');
+                              }}
+                            />
+                          ),
+                        )
                       )}
                     </div>
                   </SortableContext>

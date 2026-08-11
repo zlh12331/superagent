@@ -26,6 +26,33 @@ interface UiState {
   readonly sidebarView: 'threads' | 'fileTree';
   /** 切换侧栏视图 */
   readonly setSidebarView: (view: 'threads' | 'fileTree') => void;
+
+  // ── 面板折叠状态（多入口统一状态源：快捷键 / 命令面板 / Topbar / 断点联动）──
+  // 对齐参考项目：状态在 store，命令系统操作 store（toggle-left/right-sidebar 命令）
+  /** 左侧栏是否折叠 */
+  readonly sidebarCollapsed: boolean;
+  /** 右侧栏是否折叠 */
+  readonly rightPanelCollapsed: boolean;
+  /** 用户是否手动操作过侧栏（断点自动折叠不再覆盖手动意图） */
+  readonly sidebarManual: boolean;
+  /** 用户是否手动操作过右面板 */
+  readonly rightPanelManual: boolean;
+  /** 设置侧栏折叠态 */
+  readonly setSidebarCollapsed: (collapsed: boolean) => void;
+  /** 设置右面板折叠态 */
+  readonly setRightPanelCollapsed: (collapsed: boolean) => void;
+  /** 切换侧栏折叠（置位 manual，断点不再覆盖） */
+  readonly toggleSidebar: () => void;
+  /** 切换右面板折叠（置位 manual，断点不再覆盖） */
+  readonly toggleRightPanel: () => void;
+
+  // ── DevPanel 激活 tab（命令面板「打开终端」等入口跨组件控制）──
+  /** 右面板当前激活的 tab（对齐参考项目 codex.openTerminal 命令切换） */
+  readonly devPanelTab: 'info' | 'diff' | 'files' | 'browser' | 'terminal' | 'dev';
+  /** 设置右面板激活 tab */
+  readonly setDevPanelTab: (
+    tab: 'info' | 'diff' | 'files' | 'browser' | 'terminal' | 'dev',
+  ) => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -37,4 +64,21 @@ export const useUiStore = create<UiState>()((set) => ({
   closePalette: () => set({ paletteOpen: false }),
   sidebarView: 'threads',
   setSidebarView: (view) => set({ sidebarView: view }),
+
+  sidebarCollapsed: false,
+  rightPanelCollapsed: false,
+  sidebarManual: false,
+  rightPanelManual: false,
+  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+  setRightPanelCollapsed: (collapsed) => set({ rightPanelCollapsed: collapsed }),
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed, sidebarManual: true })),
+  toggleRightPanel: () =>
+    set((state) => ({
+      rightPanelCollapsed: !state.rightPanelCollapsed,
+      rightPanelManual: true,
+    })),
+
+  devPanelTab: 'info',
+  setDevPanelTab: (tab) => set({ devPanelTab: tab }),
 }));

@@ -158,7 +158,8 @@ export const useSettingsStore = createPersistentStore<SettingsState>()(
     shortcuts: {
       commandPalette: `${MOD}+P`,
       saveFile: `${MOD}+S`,
-      searchFile: `${MOD}+Shift+F`,
+      // ⌘F 文件模糊搜索（对齐参考项目：Ctrl/Cmd + F 打开 FuzzySearchDialog）
+      searchFile: `${MOD}+F`,
       toggleTheme: `${MOD}+Shift+T`,
       openSettings: `${MOD}+,`,
       newSession: `${MOD}+N`,

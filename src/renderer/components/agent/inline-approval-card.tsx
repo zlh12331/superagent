@@ -7,8 +7,9 @@
 // - 数据源：approvals-store（单一真源，与 ApprovalDialog 弹窗共存）
 // ──────────────────────────────────────────────────────────────
 
-import { Check, ShieldCheck, X } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { Check, Pencil, ShieldCheck, X } from 'lucide-react';
+import { type ReactElement, useState } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -20,6 +21,11 @@ import { getIconForType, getLabelKeyForType, isDangerousType } from './approval-
 export interface InlineApprovalCardProps {
   /** 会话 id（只展示当前会话的审批） */
   readonly sessionId: string;
+  /**
+   * 编辑后重提回调（拒绝后显示；run_command 类型提取命令填入 composer）。
+   * 对齐参考项目 P2-10：命令编辑后重新提交。
+   */
+  readonly onEditResubmit?: (command: string) => void;
 }
 
 /**
@@ -28,7 +34,10 @@ export interface InlineApprovalCardProps {
  * 由 ChatPanel 在消息列表上方渲染；pending 时显示操作按钮，
  * 响应后（approve/reject）由 store 移动至 resolved，卡片显示状态。
  */
-export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): ReactElement | null {
+export function InlineApprovalCard({
+  sessionId,
+  onEditResubmit,
+}: InlineApprovalCardProps): ReactElement | null {
   const { t } = useTranslation();
   // 深色主题（结构化预览的 ReactDiffViewer 双栏适配）
   const { resolvedTheme } = useTheme();
@@ -44,6 +53,14 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
 
   const approve = useApprovalsStore((state) => state.approve);
   const reject = useApprovalsStore((state) => state.reject);
+  // 本地跳过（对齐参考项目 P2-10：卡片半透明 + toast 提示）——hooks 必须在 early return 之前
+  const [skipped, setSkipped] = useState(false);
+  // 审批项变化时重置跳过态（渲染期调整 state：新审批卡不继承上一张的 skipped）
+  const [prevItemId, setPrevItemId] = useState<string | undefined>(undefined);
+  if (item?.id !== prevItemId) {
+    setPrevItemId(item?.id);
+    setSkipped(false);
+  }
 
   if (item === undefined) return null;
 
@@ -77,6 +94,16 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
   const isPending = item.status === 'pending';
   const isApproved = item.status === 'approved';
   const dangerous = isDangerousType(item.type);
+  // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示）
+  const resubmitCommand = ((): string | null => {
+    if (item.type !== 'run_command') return null;
+    const input = item.input;
+    if (typeof input === 'object' && input !== null) {
+      const c = (input as Record<string, unknown>)['command'];
+      return typeof c === 'string' ? c : null;
+    }
+    return null;
+  })();
 
   return (
     <div
@@ -85,6 +112,7 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
         isPending && 'border-l-4 border-l-amber-500',
         isApproved && 'border-l-4 border-l-emerald-500',
         item.status === 'rejected' && 'border-l-4 border-l-red-500',
+        skipped && 'opacity-40',
       )}
       role="alert"
       aria-live="polite"
@@ -93,7 +121,8 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
       <div className="flex items-center gap-2">
         <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-red-500')} strokeWidth={1.5} />
         <span className="text-foreground min-w-0 flex-1 truncate font-medium">
-          {t(getLabelKeyForType(item.type))}
+          {/* 类型标签（i18n key 带 approval. 前缀：t('approval.runCommand') 等） */}
+          {t(`approval.${getLabelKeyForType(item.type)}`)}
         </span>
         {!isPending && (
           <span
@@ -151,6 +180,31 @@ export function InlineApprovalCard({ sessionId }: InlineApprovalCardProps): Reac
           >
             <Check className="size-3" />
             {t('approval.approve')}
+          </button>
+        </div>
+      )}
+      {/* 拒绝后操作：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */}
+      {item.status === 'rejected' && !skipped && (
+        <div className="mt-2 flex items-center gap-2">
+          {resubmitCommand !== null && onEditResubmit !== undefined && (
+            <button
+              type="button"
+              onClick={() => onEditResubmit(resubmitCommand)}
+              className="hover:bg-muted text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
+            >
+              <Pencil className="size-3" />
+              {t('approval.editResubmit')}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSkipped(true);
+              toast.info(t('approval.skipped'));
+            }}
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
+          >
+            {t('approval.skip')}
           </button>
         </div>
       )}

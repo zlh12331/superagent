@@ -130,6 +130,8 @@ export function ChatPanel({
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   // 中断提示条关闭状态（会话内关闭后不再显示）
   const [interruptedDismissed, setInterruptedDismissed] = useState(false);
+  // 编辑重提注入（P2-10）：审批拒绝后把命令填入 composer（对齐参考项目）
+  const [injectedComposerValue, setInjectedComposerValue] = useState<string | undefined>(undefined);
   // 错误码 → 本地化文案 hook
   const { getErrorMessage } = useErrorMessage();
 
@@ -223,7 +225,10 @@ export function ChatPanel({
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
       <RateLimitBanner />
       {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
-      <InlineApprovalCard sessionId={chatId} />
+      <InlineApprovalCard
+        sessionId={chatId}
+        onEditResubmit={(command) => setInjectedComposerValue(command)}
+      />
       {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
       <ConversationSearchBar
         visible={search.visible}
@@ -320,6 +325,7 @@ export function ChatPanel({
           status={status}
           chatId={chatId}
           workingDir={workingDir}
+          {...(injectedComposerValue !== undefined ? { injectedValue: injectedComposerValue } : {})}
           onSlashCommand={(action) => {
             // 斜杠命令执行（对齐参考项目）：/new 回欢迎页新建，/clear 清空对话，/help 打开快捷键帮助
             switch (action) {
@@ -338,6 +344,14 @@ export function ChatPanel({
               case 'compact':
                 // 模型选择/压缩：toast 引导（完整链路后续增强）
                 toast.info(t(`chat.slashAction.${action}`));
+                break;
+              case 'interrupt':
+                // /interrupt 即时中断（对齐参考项目：停止当前生成）
+                void stop();
+                break;
+              case 'goal':
+                // /goal toast 引导（对齐参考项目非即时命令行为：右侧面板设置目标）
+                toast.info(t('chat.slashAction.goal'));
                 break;
             }
           }}

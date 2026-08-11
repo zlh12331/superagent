@@ -52,7 +52,7 @@ const COMPOSER_MAX_H = 460;
 const MAX_MESSAGE_LENGTH = 8000;
 
 /** 斜杠命令动作（对齐参考项目：命令可执行而非仅填充文本） */
-type SlashAction = 'new' | 'clear' | 'compact' | 'models' | 'help';
+type SlashAction = 'new' | 'clear' | 'compact' | 'models' | 'help' | 'interrupt' | 'goal';
 
 /** 斜杠建议项：有 action 时点击执行动作；无 action 时填充文本 */
 interface SlashSuggestion {
@@ -67,6 +67,9 @@ const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
   { command: '/clear', labelKey: 'chat.slashSuggest.clear', action: 'clear' },
   { command: '/compact', labelKey: 'chat.slashSuggest.compact', action: 'compact' },
   { command: '/models', labelKey: 'chat.slashSuggest.models', action: 'models' },
+  // 对齐参考项目 SLASH_CMD_DEFS：/interrupt 即时中断（ChatPanel 调 stop）、/goal toast 引导
+  { command: '/interrupt', labelKey: 'chat.slashSuggest.interrupt', action: 'interrupt' },
+  { command: '/goal', labelKey: 'chat.slashSuggest.goal', action: 'goal' },
 ];
 
 interface ChatInputProps {
@@ -113,6 +116,13 @@ interface ChatInputProps {
   value?: string;
   /** 受控值变更回调（受控模式必需） */
   onValueChange?: (value: string) => void;
+  /**
+   * 外部注入值（可选，非受控模式下使用）
+   *
+   * 提供非 undefined 的新值时同步一次到内部值（保持非受控，不破坏草稿语义）。
+   * 对齐参考项目 P2-10：审批拒绝后「编辑重提」把命令填入 composer。
+   */
+  injectedValue?: string;
 }
 
 /**
@@ -140,6 +150,7 @@ export function ChatInput({
   chatId,
   workingDir,
   onSlashCommand,
+  injectedValue,
 }: ChatInputProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -211,10 +222,10 @@ export function ChatInput({
   const activeTrigger = slashActive ? 'slash' : mentionActive ? 'mention' : null;
   const activeQuery = activeTrigger === 'slash' ? slashQuery : mentionQuery;
 
-  // slash 建议：内置命令过滤
+  // slash 建议：内置命令过滤（command 带 '/' 前缀，查询词不含 '/'——对齐参考项目 useSlashSuggest 语义）
   const filteredSuggestions =
     activeTrigger === 'slash' && activeQuery !== null
-      ? SLASH_SUGGESTIONS.filter((s) => s.command.startsWith(activeQuery))
+      ? SLASH_SUGGESTIONS.filter((s) => s.command.slice(1).startsWith(activeQuery))
       : [];
 
   // mention 建议：search.glob 按查询过滤（200ms 防抖，对齐参考项目防抖约定）
@@ -293,6 +304,19 @@ export function ChatInput({
   useEffect(() => {
     autoResize();
   }, [value]);
+
+  // 外部注入值（编辑重提）：非受控模式下同步一次到内部值，保持草稿语义（对齐参考项目 P2-10）
+  const prevInjectedRef = useRef<string | undefined>(undefined);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: autoResize 每次渲染新引用，加入依赖会无限循环；其行为仅依赖内部 ref
+  useEffect(() => {
+    if (injectedValue === undefined || injectedValue === prevInjectedRef.current) {
+      return;
+    }
+    prevInjectedRef.current = injectedValue;
+    setInternalValue(injectedValue);
+    autoResize();
+    textareaRef.current?.focus();
+  }, [injectedValue]);
 
   // 草稿保存：非受控 + 有 chatId 时，文本/附件变化写入 draft-store（对齐参考项目 useDraftStore）
   useEffect(() => {
