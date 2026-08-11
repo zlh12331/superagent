@@ -1,93 +1,202 @@
 // src/main/ipc/settings.handler.test.ts
-// settings.handler 单测：API Key 管理 + 遥测级别（真实 keychain 文件 + mock safeStorage）
-//
-// 测试维度：正向（set/get/delete/telemetry）
+// settings.handler 单测：10 个 settings:* 方法（三件套）
+// ──────────────────────────────────────────────────────────────
+// 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
+// - keychain/telemetry-pref/approval-pref/runtimeModelStore 为文件存储
+//   外部依赖（与 fetch/WebSocket 同类）→ vi.mock
+// - toKeychainKey（纯函数）保持真实实现
+// - permissionService 经 deps 注入 fake
+// ──────────────────────────────────────────────────────────────
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// mock electron：safeStorage（可逆 mock）+ app（userData 指向临时目录）
-const { mockSafeStorage, mockApp } = vi.hoisted(() => ({
-  mockSafeStorage: {
-    isEncryptionAvailable: vi.fn(() => true),
-    getSelectedStorageBackend: vi.fn(() => 'basic_text'),
-    encryptString: vi.fn((s: string) => Buffer.from(`enc:${s}`)),
-    decryptString: vi.fn((b: Buffer) => b.toString('utf8').replace(/^enc:/, '')),
-  },
-  mockApp: {
-    getPath: vi.fn((name: string) => (name === 'userData' ? TEMP_DIR_PLACEHOLDER : `/tmp/${name}`)),
-    isPackaged: false,
-  },
-}));
-
-vi.mock('electron', () => ({
-  safeStorage: mockSafeStorage,
-  app: mockApp,
-}));
-
-import type { IPermissionService } from '../infra/ai/tools/permission-service';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSettingsHandlers } from './settings.handler';
 
-/** 临时 userData 目录（真实文件 IO，符合无 mock 测试原则） */
-const TEMP_DIR_PLACEHOLDER = '';
+const mocks = vi.hoisted(() => ({
+  getSecret: vi.fn(async () => undefined),
+  setSecret: vi.fn(async () => {}),
+  deleteSecret: vi.fn(async () => {}),
+  readTelemetryLevelSync: vi.fn(() => 'off'),
+  writeTelemetryLevel: vi.fn(async () => {}),
+  readApprovalModeSync: vi.fn(() => 'auto'),
+  writeApprovalMode: vi.fn(async () => {}),
+  runtimeAdd: vi.fn(async () => {}),
+  runtimeRemove: vi.fn(async () => {}),
+  runtimeList: vi.fn(async () => []),
+  invalidateModel: vi.fn(() => {}),
+}));
 
-let tempDir: string;
+vi.mock('../infra/storage/keychain', () => ({
+  getSecret: mocks.getSecret,
+  setSecret: mocks.setSecret,
+  deleteSecret: mocks.deleteSecret,
+}));
 
-/** 测试用 PermissionService 假实现（真实类依赖 electron，注入轻量 stub） */
-const mockPermissionService = {
-  setApprovalMode: vi.fn(),
-  getApprovalMode: vi.fn(() => 'ask'),
-} as unknown as IPermissionService;
+vi.mock('../infra/storage/telemetry-pref', () => ({
+  readTelemetryLevelSync: mocks.readTelemetryLevelSync,
+  writeTelemetryLevel: mocks.writeTelemetryLevel,
+}));
 
-/** 测试用 handlers 实例（工厂注入） */
-let settingsHandlers: ReturnType<typeof createSettingsHandlers>;
+vi.mock('../infra/storage/approval-pref', () => ({
+  readApprovalModeSync: mocks.readApprovalModeSync,
+  writeApprovalMode: mocks.writeApprovalMode,
+}));
 
-describe('settings.handler', () => {
-  beforeAll(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'code-agent-settings-test-'));
-    mockApp.getPath.mockImplementation((name: string) =>
-      name === 'userData' ? tempDir : `/tmp/${name}`,
-    );
-    settingsHandlers = createSettingsHandlers({ permissionService: mockPermissionService });
-  });
+vi.mock('../infra/ai/llm-client/ai-provider', () => ({
+  llmClient: { invalidateModel: mocks.invalidateModel },
+  runtimeModelStore: {
+    add: mocks.runtimeAdd,
+    remove: mocks.runtimeRemove,
+    list: mocks.runtimeList,
+  },
+}));
 
-  afterAll(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+const EMPTY_CTX = {} as never;
+
+describe('settings.handler API Key（三件套）', () => {
+  const permissionService = { setApprovalMode: vi.fn() };
+  const handlers = createSettingsHandlers({
+    permissionService: permissionService as never,
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSecret.mockResolvedValue(undefined);
+    mocks.readTelemetryLevelSync.mockReturnValue('off');
+    mocks.readApprovalModeSync.mockReturnValue('auto');
+    mocks.runtimeList.mockResolvedValue([]);
   });
 
-  it('setApiKey + getApiKey：加密写入后解密读取一致', async () => {
-    await settingsHandlers.setApiKey({ provider: 'deepseek', apiKey: 'sk-test-123' }, {} as never);
-    const result = await settingsHandlers.getApiKey({ provider: 'deepseek' }, {} as never);
-    expect(result.apiKey).toBe('sk-test-123');
-    expect(mockSafeStorage.encryptString).toHaveBeenCalledWith('sk-test-123');
+  it('getApiKey：provider → keychain key 转换 + 读取', async () => {
+    mocks.getSecret.mockResolvedValueOnce('sk-123');
+    const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
+    expect(mocks.getSecret).toHaveBeenCalledWith('deepseek-api-key');
+    expect(res).toEqual({ apiKey: 'sk-123' });
   });
 
-  it('getApiKey（未设置）：返回 null', async () => {
-    const result = await settingsHandlers.getApiKey({ provider: 'anthropic' }, {} as never);
-    expect(result.apiKey).toBeNull();
+  it('getApiKey：未配置 → apiKey 为 null', async () => {
+    mocks.getSecret.mockResolvedValueOnce(null);
+    const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
+    expect(res).toEqual({ apiKey: null });
   });
 
-  it('deleteApiKey：删除后 get 返回 null', async () => {
-    await settingsHandlers.setApiKey({ provider: 'openai', apiKey: 'sk-openai' }, {} as never);
-    await settingsHandlers.deleteApiKey({ provider: 'openai' }, {} as never);
-    const result = await settingsHandlers.getApiKey({ provider: 'openai' }, {} as never);
-    expect(result.apiKey).toBeNull();
+  it('setApiKey：加密存储 + ok:true', async () => {
+    const res = await handlers.setApiKey({ provider: 'deepseek', apiKey: 'sk-new' }, EMPTY_CTX);
+    expect(mocks.setSecret).toHaveBeenCalledWith('deepseek-api-key', 'sk-new');
+    expect(res).toEqual({ ok: true });
   });
 
-  it('getTelemetryLevel：默认 full', async () => {
-    const result = await settingsHandlers.getTelemetryLevel(undefined, {} as never);
-    expect(result.level).toBe('full');
+  it('deleteApiKey：删除 + ok:true（未配置也幂等）', async () => {
+    const res = await handlers.deleteApiKey({ provider: 'deepseek' }, EMPTY_CTX);
+    expect(mocks.deleteSecret).toHaveBeenCalledWith('deepseek-api-key');
+    expect(res).toEqual({ ok: true });
   });
 
-  it('setTelemetryLevel：写入后读取一致', async () => {
-    await settingsHandlers.setTelemetryLevel({ level: 'off' }, {} as never);
-    const result = await settingsHandlers.getTelemetryLevel(undefined, {} as never);
-    expect(result.level).toBe('off');
+  it('异常：keychain 抛错 → 透传', async () => {
+    mocks.getSecret.mockRejectedValueOnce(new Error('safeStorage unavailable'));
+    await expect(handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX)).rejects.toThrow(
+      'safeStorage unavailable',
+    );
+  });
+});
+
+describe('settings.handler 遥测/审批（三件套）', () => {
+  const permissionService = { setApprovalMode: vi.fn() };
+  const handlers = createSettingsHandlers({
+    permissionService: permissionService as never,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.readTelemetryLevelSync.mockReturnValue('off');
+    mocks.readApprovalModeSync.mockReturnValue('auto');
+  });
+
+  it('getTelemetryLevel：同步读取返回', async () => {
+    const res = await handlers.getTelemetryLevel(EMPTY_CTX);
+    expect(mocks.readTelemetryLevelSync).toHaveBeenCalled();
+    expect(res).toEqual({ level: 'off' });
+  });
+
+  it('setTelemetryLevel：写入 + 返回新值', async () => {
+    const res = await handlers.setTelemetryLevel({ level: 'error' }, EMPTY_CTX);
+    expect(mocks.writeTelemetryLevel).toHaveBeenCalledWith('error');
+    expect(res).toEqual({ ok: true, level: 'error' });
+  });
+
+  it('getApprovalMode：同步读取返回', async () => {
+    const res = await handlers.getApprovalMode(EMPTY_CTX);
+    expect(mocks.readApprovalModeSync).toHaveBeenCalled();
+    expect(res).toEqual({ mode: 'auto' });
+  });
+
+  it('setApprovalMode：持久化 + 通知 PermissionService 运行时更新', async () => {
+    const res = await handlers.setApprovalMode({ mode: 'ask' }, EMPTY_CTX);
+    expect(mocks.writeApprovalMode).toHaveBeenCalledWith('ask');
+    expect(permissionService.setApprovalMode).toHaveBeenCalledWith('ask');
+    expect(res).toEqual({ ok: true, mode: 'ask' });
+  });
+});
+
+describe('settings.handler 运行时模型（三件套）', () => {
+  const permissionService = { setApprovalMode: vi.fn() };
+  const handlers = createSettingsHandlers({
+    permissionService: permissionService as never,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.runtimeList.mockResolvedValue([]);
+  });
+
+  it('addRuntimeModel：add + 缓存失效；baseUrl/apiKey 条件展开', async () => {
+    await handlers.addRuntimeModel(
+      {
+        modelId: 'custom-1',
+        providerKind: 'deepseek',
+        baseUrl: 'http://localhost:8080',
+        apiKey: 'k',
+      },
+      EMPTY_CTX,
+    );
+    expect(mocks.runtimeAdd).toHaveBeenCalledWith({
+      modelId: 'custom-1',
+      providerKind: 'deepseek',
+      baseUrl: 'http://localhost:8080',
+      apiKey: 'k',
+    });
+    expect(mocks.invalidateModel).toHaveBeenCalledWith('custom-1');
+  });
+
+  it('addRuntimeModel：baseUrl/apiKey 未传 → 不包含该字段', async () => {
+    await handlers.addRuntimeModel({ modelId: 'm', providerKind: 'deepseek' }, EMPTY_CTX);
+    expect(mocks.runtimeAdd).toHaveBeenCalledWith({ modelId: 'm', providerKind: 'deepseek' });
+  });
+
+  it('removeRuntimeModel：remove + 缓存失效', async () => {
+    const res = await handlers.removeRuntimeModel({ modelId: 'm' }, EMPTY_CTX);
+    expect(mocks.runtimeRemove).toHaveBeenCalledWith('m');
+    expect(mocks.invalidateModel).toHaveBeenCalledWith('m');
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('listRuntimeModels：list → 领域形状映射（剔除敏感字段）', async () => {
+    mocks.runtimeList.mockResolvedValueOnce([
+      {
+        modelId: 'm1',
+        providerKind: 'deepseek',
+        baseUrl: 'http://x',
+        apiKey: 'secret',
+        createdAt: 123,
+      },
+    ]);
+    const res = await handlers.listRuntimeModels(EMPTY_CTX);
+    expect(res).toEqual({
+      models: [{ modelId: 'm1', providerKind: 'deepseek', baseUrl: 'http://x', createdAt: 123 }],
+    });
+  });
+
+  it('listRuntimeModels：空列表 → 空数组', async () => {
+    const res = await handlers.listRuntimeModels(EMPTY_CTX);
+    expect(res).toEqual({ models: [] });
   });
 });
