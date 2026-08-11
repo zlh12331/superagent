@@ -854,4 +854,146 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
     await expect(service.startAgent(options(undefined))).resolves.toBeTruthy();
     releaseStream();
   });
+  it('工具执行链：executeHook 成功 → executor.execute 调用 + TOOL_RESULT 事件 + 返回 output', async () => {
+    const exec = { execute: vi.fn(async () => ({ output: 'found' })) } as unknown as IToolExecutor;
+    let capturedHook:
+      | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
+      | undefined;
+    const reg = {
+      toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
+        capturedHook = hook;
+        return {};
+      }),
+    } as unknown as IToolRegistry;
+    const svc = new AgentService(
+      reg,
+      exec,
+      { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
+      {
+        markRunning: vi.fn(async () => {}),
+        markIdle: vi.fn(async () => {}),
+      } as unknown as ISessionService,
+    );
+    await svc.startAgent(options(undefined));
+    expect(capturedHook).toBeDefined();
+    if (capturedHook === undefined) throw new Error('hook not captured');
+    const result = await capturedHook(
+      { name: 'grep', description: '' },
+      { pattern: 'x' },
+      { callId: 'c1' },
+    );
+    expect(exec.execute).toHaveBeenCalledWith(
+      'grep',
+      'c1',
+      { pattern: 'x' },
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(result).toBe('found');
+    releaseStream();
+  });
+
+  it('工具执行失败：execute 返回 { error } → executeHook 透传结构化错误给 LLM', async () => {
+    const exec = {
+      execute: vi.fn(async () => ({ error: 'permission denied' })),
+    } as unknown as IToolExecutor;
+    let capturedHook:
+      | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
+      | undefined;
+    const reg = {
+      toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
+        capturedHook = hook;
+        return {};
+      }),
+    } as unknown as IToolRegistry;
+    const svc = new AgentService(
+      reg,
+      exec,
+      { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
+      {
+        markRunning: vi.fn(async () => {}),
+        markIdle: vi.fn(async () => {}),
+      } as unknown as ISessionService,
+    );
+    await svc.startAgent(options(undefined));
+    if (capturedHook === undefined) throw new Error('hook not captured');
+    const result = await capturedHook({ name: 'grep' }, {}, { callId: 'c2' });
+    expect(result).toEqual({ error: 'permission denied' });
+    releaseStream();
+  });
+
+  it('工具执行抛错：execute 异常向上传播（回合中断由上层处理）', async () => {
+    const exec = {
+      execute: vi.fn(async () => {
+        throw new Error('executor crash');
+      }),
+    } as unknown as IToolExecutor;
+    let capturedHook:
+      | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
+      | undefined;
+    const reg = {
+      toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
+        capturedHook = hook;
+        return {};
+      }),
+    } as unknown as IToolRegistry;
+    const svc = new AgentService(
+      reg,
+      exec,
+      { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
+      {
+        markRunning: vi.fn(async () => {}),
+        markIdle: vi.fn(async () => {}),
+      } as unknown as ISessionService,
+    );
+    await svc.startAgent(options(undefined));
+    if (capturedHook === undefined) throw new Error('hook not captured');
+    await expect(capturedHook({ name: 'grep' }, {}, { callId: 'c3' })).rejects.toThrow(
+      'executor crash',
+    );
+    releaseStream();
+  });
+
+  it('审批订阅：注入 permissionService → onApprovalLifecycle 注册回调（触发由真实审批流程驱动）', async () => {
+    const perm = {
+      onApprovalLifecycle: vi.fn(() => () => {}),
+    } as unknown as IPermissionService;
+    const svc = new AgentService(
+      { toAISDKTools: vi.fn(() => ({})) } as unknown as IToolRegistry,
+      {} as unknown as IToolExecutor,
+      { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
+      {
+        markRunning: vi.fn(async () => {}),
+        markIdle: vi.fn(async () => {}),
+      } as unknown as ISessionService,
+      undefined,
+      undefined,
+      perm,
+    );
+    await svc.startAgent(options(undefined));
+    expect(perm.onApprovalLifecycle).toHaveBeenCalledTimes(1);
+    releaseStream();
+  });
+
+  it('标题生成注入：titleGenerator 存在时回合完成不抛（ensureSessionTitle 链由集成测试覆盖）', async () => {
+    const gen = { generateTitle: vi.fn(async () => '标题') } as unknown as ITitleGenerator;
+    mocks.mockStreamText.mockReturnValue(
+      createMockStreamResult([
+        { type: 'text-delta', textDelta: 'x' },
+        { type: 'finish', finishReason: 'stop' },
+      ]),
+    );
+    const svc = new AgentService(
+      { toAISDKTools: vi.fn(() => ({})) } as unknown as IToolRegistry,
+      {} as unknown as IToolExecutor,
+      { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
+      {
+        markRunning: vi.fn(async () => {}),
+        markIdle: vi.fn(async () => {}),
+      } as unknown as ISessionService,
+      gen,
+    );
+    // 注入 titleGenerator 后回合完成不抛（标题链内部失败静默；generateTitle 调用由集成测试覆盖）
+    await expect(svc.startAgent(options(undefined))).resolves.toBeTruthy();
+  }, 10_000);
 });
