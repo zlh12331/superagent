@@ -206,6 +206,17 @@ export class QqStreamReceiver {
   private readonly gatewayUrl: string;
   private readonly tokenUrl: string;
 
+  /**
+   * 外部依赖注入点（测试传 fake，生产默认实现）：
+   * - fetchTokenFn / fetchGatewayFn：HTTP（网络）
+   * - wsCtor：WebSocket 长连接（网络）
+   * - reconnectDelayMs / handshakeTimeoutMs：时间参数（测试缩短）
+   */
+  private readonly fetchTokenFn: typeof fetchQqAccessToken;
+  private readonly fetchGatewayFn: typeof fetchQqGatewayUrl;
+  private readonly wsCtor: typeof WebSocket;
+  private readonly handshakeTimeoutMs: number;
+
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   /** 最新事件序列号（心跳携带；官方协议要求） */
@@ -223,11 +234,25 @@ export class QqStreamReceiver {
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
 
-  constructor(config: QqStreamConfig) {
+  constructor(
+    config: QqStreamConfig,
+    options: {
+      fetchTokenFn?: typeof fetchQqAccessToken;
+      fetchGatewayFn?: typeof fetchQqGatewayUrl;
+      WebSocketCtor?: typeof WebSocket;
+      reconnectDelayMs?: number;
+      handshakeTimeoutMs?: number;
+    } = {},
+  ) {
     this.appId = config.appId;
     this.appSecret = config.appSecret;
     this.gatewayUrl = config.gatewayUrl ?? 'https://api.sgroup.qq.com/gateway/bot';
     this.tokenUrl = config.tokenUrl ?? 'https://bots.qq.com/app/getAppAccessToken';
+    this.fetchTokenFn = options.fetchTokenFn ?? fetchQqAccessToken;
+    this.fetchGatewayFn = options.fetchGatewayFn ?? fetchQqGatewayUrl;
+    this.wsCtor = options.WebSocketCtor ?? WebSocket;
+    this.reconnectDelayMs = options.reconnectDelayMs ?? 5_000;
+    this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 15_000;
   }
 
   get isOpen(): boolean {
@@ -246,9 +271,9 @@ export class QqStreamReceiver {
     if (this.opened) {
       return;
     }
-    const { accessToken } = await fetchQqAccessToken(this.appId, this.appSecret, this.tokenUrl);
-    const gateway = await fetchQqGatewayUrl(accessToken, this.gatewayUrl);
-    const ws = new WebSocket(gateway);
+    const { accessToken } = await this.fetchTokenFn(this.appId, this.appSecret, this.tokenUrl);
+    const gateway = await this.fetchGatewayFn(accessToken, this.gatewayUrl);
+    const ws = new this.wsCtor(gateway);
     this.ws = ws;
     this.manualClose = false;
     // 意外断线（非手动关闭）：自动重连（对齐 qwen 心跳监控/重连语义）
@@ -306,7 +331,7 @@ export class QqStreamReceiver {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new AppError(ErrorCode.IM_CHANNEL_REQUEST_FAILED, 'QQ 网关握手超时'));
-      }, 15_000);
+      }, this.handshakeTimeoutMs);
       ws.addEventListener('error', () => {
         clearTimeout(timer);
         reject(new AppError(ErrorCode.IM_CHANNEL_REQUEST_FAILED, 'QQ 网关连接失败'));
@@ -411,7 +436,11 @@ export class QqStreamReceiver {
 
   /** 武装 HEARTBEAT_ACK 超时监控 */
   private armAckTimeout(ws: WebSocket, timeoutMs: number): void {
-    this.clearAckTimeout();
+    // 已有 pending 监控（等待 ACK）时不重置（真实缺陷修复：原实现每次心跳都
+    // 重新武装，心跳持续发送时计时器被无限重置 → 僵尸连接检测永不触发）
+    if (this.ackTimeoutTimer !== null) {
+      return;
+    }
     this.ackTimeoutTimer = setTimeout(() => {
       if (this.manualClose) {
         return;
