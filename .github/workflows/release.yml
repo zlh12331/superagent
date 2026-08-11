@@ -1,17 +1,14 @@
 # .github/workflows/release.yml
-# CD 流水线：tag 触发，自动构建 Windows 安装器 + 上传 Sentry 符号 + 发布 GitHub Release
+# CD 流水线：tag 触发自动构建三端安装包（Windows/macOS/Linux）+ 上传 Sentry 符号 + 创建 GitHub Release
 #
-# 触发条件：推送 v*.*.* 格式的 git tag（如 v0.1.0）
-# 工作流：
-# 1. checkout + 安装依赖
-# 2. 跑全部测试（typecheck/lint/unit/e2e-electron）作为 release gate
-# 3. 构建 Windows NSIS 安装器（electron-builder）
-# 4. 上传 Sentry 符号（@sentry/cli）
-# 5. 上传构建产物到 GitHub Release
+# 触发：推送 v*.*.* 格式 git tag（如 v0.1.0）
+# 流程：
+#   1. 三平台矩阵构建（windows/macos/linux，各自跑 release gate + 平台打包）
+#   2. release job（needs: build）：合并三平台产物 → GitHub Release
 #
-# 必需 Secrets：
+# 所需 Secrets：
 # - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
-# - 代码签名证书通过 CSC_LINK/CSC_KEY_PASSWORD 环境变量提供（可选）
+# - 代码签名（可选）：CSC_LINK + CSC_KEY_PASSWORD（Windows/macOS 签名；无证书时自动跳过签名）
 
 name: Release
 
@@ -19,21 +16,46 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch: # 允许手动触发（调试用）
+  workflow_dispatch: # 支持手动触发
 
 jobs:
-  release:
-    name: Build & Release Windows
-    runs-on: windows-latest
-    timeout-minutes: 45
+  build:
+    name: Build & Release ${{ matrix.platform }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 60
     permissions:
-      contents: write # 创建 GitHub Release 需要写权限
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            runs-on: windows-latest
+            build-cmd: pnpm build:win
+            release-files: |
+              release/*-setup.exe
+              release/latest.yml
+          - platform: macOS
+            runs-on: macos-latest
+            build-cmd: pnpm build:mac
+            release-files: |
+              release/*.dmg
+              release/*.zip
+              release/latest-mac.yml
+          - platform: Linux
+            runs-on: ubuntu-latest
+            build-cmd: pnpm build:linux
+            release-files: |
+              release/*.AppImage
+              release/*.deb
+              release/latest-linux.yml
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 获取全部历史（便于生成 changelog）
+          fetch-depth: 0 # 获取完整历史（changelog 等）
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -47,7 +69,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ── Release Gate：发布前必须通过质量门禁 ──────────────
+      # Linux 构建依赖：AppImage 打包需要 libfuse2（ubuntu-24.04 默认不装）
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfuse2
+
+      # ── Release Gate：全部门禁通过才打包 ────────────────────────────
       - name: Typecheck
         run: pnpm typecheck
 
@@ -57,47 +84,67 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      # ── 构建 Windows NSIS 安装器 ──────────────────────────
-      - name: Build & package Windows installer
-        run: pnpm build:win
+      # ── 平台打包 ───────────────────────────────────────────────────
+      - name: Build & package ${{ matrix.platform }} installer
+        run: ${{ matrix.build-cmd }}
         env:
-          # 代码签名证书（可选，未设置则跳过签名）
+          # 代码签名证书（可选）：Windows Authenticode / macOS Developer ID
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # electron-builder 发布配置（不通过 GH_TOKEN 自动 publish，手动控制）
+          # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 上传 Sentry 符号（错误堆栈符号化必需）─────────────
+      # ── 上传 Sentry 符号（仅 Windows 主发布端；其余平台产物不含符号需求）─
       - name: Upload Sentry symbols
         if: env.SENTRY_AUTH_TOKEN != ''
         run: pnpm sentry:upload:symbols
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
-      # ── 跑生产构建 smoke 测试（确保 binary 可启动）────────
+      # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run production smoke tests
         run: pnpm test:smoke
 
-      # ── 发布 GitHub Release ──────────────────────────────
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true # 自动从 commits 生成 changelog
-          files: |
-            release/*-setup.exe
-            release/latest.yml
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }} # v0.1.0-beta1 标记为 prerelease
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      # ── 上传构建产物（release job 合并）──────────────────────────────
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ github.ref_name }}
+          name: release-${{ matrix.platform }}-${{ github.ref_name }}
           path: release/
           retention-days: 30
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # 合并三平台产物到统一目录（避免文件名冲突覆盖）
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.exe" -o -name "*.yml" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.blockmap" \) -exec cp -n {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true # 自动由 commits 生成 changelog
+          files: release/**
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }} # v0.1.0-beta1 等标记为 prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

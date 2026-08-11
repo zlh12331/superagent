@@ -92,7 +92,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **dev 环境 userData 重定向到 `.electron-user-data/`**（避免沙箱拦截 %APPDATA%）
 - **dev 环境开启远程调试端口 9222**（CDP over WebSocket）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
-- **仅限 Windows 桌面端**，NSIS 安装器 x64
+- **桌面端三平台**（Windows/macOS/Linux）：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64；release.yml 三平台矩阵构建（mac 需 macOS runner，签名走 CSC_LINK）
 - **exactOptionalPropertyTypes 已启用**：可选字段传 undefined 需条件展开（`...(x !== undefined ? { x } : {})`）
 - **React Compiler 已启用**：hook 只能在顶层调用，禁止中间函数包装 hook
 
@@ -140,6 +140,6 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 ## 外部服务 / 凭据
 
-- AI Provider API Key 用 Electron `safeStorage` 加密存储（Windows DPAPI）
+- AI Provider API Key 用 Electron `safeStorage` 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
 - Sentry 自托管（http://127.0.0.1:9000），DSN 从 `.env` 读取
 - CI Sentry 符号上传需要 `SENTRY_AUTH_TOKEN` 环境变量
