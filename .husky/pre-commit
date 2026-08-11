@@ -10,6 +10,13 @@
 # - 配置见 codegraph.json（exclude 字段排除 docs/参考项目）
 # - 用户可设 SKIP_CODEGRAPH_SYNC=1 完全跳过 sync
 
+
+# 密钥扫描（gitleaks 业界标准；未安装时跳过并提示）
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact || exit 1
+else
+  echo "[pre-commit] gitleaks 未安装（winget install Gitleaks.Gitleaks），跳过密钥扫描"
+fi
 pnpm lint-staged
 
 if [ "$SKIP_CODEGRAPH_SYNC" = "1" ]; then

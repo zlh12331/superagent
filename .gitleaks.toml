@@ -1,0 +1,24 @@
+# gitleaks 配置（密钥扫描工程化）
+# 依据 docs/design/17-security-spec.md §密钥管理
+# 排除：构建产物/依赖/报告目录（gitleaks dir 扫描用）
+
+title = "code-agent-desktop"
+
+[extend]
+
+[allowlist]
+description = "构建产物与依赖目录（非源码，无需扫描）"
+paths = [
+  '''node_modules''',
+  '''out''',
+  '''release''',
+  '''dist''',
+  '''playwright-report''',
+  '''playwright-report-electron''',
+  '''playwright-report-smoke''',
+  '''test-results''',
+  '''.tmp''',
+  '''stats''',
+  '''docs/api''',
+  '''.git''',
+]
