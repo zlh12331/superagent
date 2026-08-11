@@ -181,13 +181,13 @@ export class WeixinStreamReceiver {
     let consecutiveErrors = 0;
     while (!signal.aborted) {
       try {
-        const response = await fetchWeixinUpdates(
-          this.baseUrl,
-          this.token,
-          this.cursor,
-          POLL_TIMEOUT_MS,
+        const response = await fetchWeixinUpdates({
+          baseUrl: this.baseUrl,
+          token: this.token,
+          cursor: this.cursor,
+          timeoutMs: POLL_TIMEOUT_MS,
           signal,
-        );
+        });
         if (response.errcode === -14) {
           // 会话过期：暂停后继续（token 需重新配置）
           logger.warn({}, '微信 iLink 会话过期，暂停 30s');
@@ -232,13 +232,14 @@ export class WeixinStreamReceiver {
 /**
  * getupdates 请求（端点可注入测试）
  */
-export async function fetchWeixinUpdates(
-  baseUrl: string,
-  token: string,
-  cursor: string,
-  timeoutMs: number,
-  signal: AbortSignal,
-): Promise<WeixinUpdatesResponse> {
+export async function fetchWeixinUpdates(options: {
+  readonly baseUrl: string;
+  readonly token: string;
+  readonly cursor: string;
+  readonly timeoutMs: number;
+  readonly signal: AbortSignal;
+}): Promise<WeixinUpdatesResponse> {
+  const { baseUrl, token, cursor, timeoutMs, signal } = options;
   try {
     return await postJson<WeixinUpdatesResponse>(
       `${baseUrl}/ilink/bot/getupdates`,
@@ -262,13 +263,14 @@ export async function fetchWeixinUpdates(
 /**
  * 发送文本消息（端点可注入测试）
  */
-export async function sendWeixinText(
-  baseUrl: string,
-  token: string,
-  toUserId: string,
-  text: string,
-  contextToken: string | undefined,
-): Promise<void> {
+export async function sendWeixinText(options: {
+  readonly baseUrl: string;
+  readonly token: string;
+  readonly toUserId: string;
+  readonly text: string;
+  readonly contextToken: string | undefined;
+}): Promise<void> {
+  const { baseUrl, token, toUserId, text, contextToken } = options;
   const response = await postJson<{ ret?: number; errmsg?: string }>(
     `${baseUrl}/ilink/bot/sendmsg`,
     token,

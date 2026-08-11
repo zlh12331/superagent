@@ -111,13 +111,13 @@ describe('fetchWeixinUpdates（getupdates 协议）', () => {
         get_updates_buf: 'cursor-2',
       };
     });
-    const response = await fetchWeixinUpdates(
+    const response = await fetchWeixinUpdates({
       baseUrl,
-      'tok-1',
-      'cursor-1',
-      10_000,
-      new AbortController().signal,
-    );
+      token: 'tok-1',
+      cursor: 'cursor-1',
+      timeoutMs: 10_000,
+      signal: new AbortController().signal,
+    });
     expect(response.get_updates_buf).toBe('cursor-2');
     expect(response.msgs).toHaveLength(1);
   });
@@ -128,7 +128,13 @@ describe('fetchWeixinUpdates（getupdates 协议）', () => {
       captured.push({ body, auth: undefined });
       return { ret: 0 };
     });
-    await sendWeixinText(baseUrl, 'tok-1', 'wx-user-1', '回复内容', 'ctx-9');
+    await sendWeixinText({
+      baseUrl,
+      token: 'tok-1',
+      toUserId: 'wx-user-1',
+      text: '回复内容',
+      contextToken: 'ctx-9',
+    });
     const req = captured[0]?.body as Record<string, unknown>;
     expect(req['to_user_id']).toBe('wx-user-1');
     expect(req['context_token']).toBe('ctx-9');

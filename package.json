@@ -46,6 +46,7 @@
     "check:bundle": "tsx scripts/check-bundle.ts",
     "check:static": "pnpm check:tokens && pnpm check:i18n && pnpm check:comments && pnpm check:file-size",
     "check:file-size": "tsx scripts/check-file-size.ts",
+    "check:functions": "tsx scripts/check-functions.ts",
     "check:comments": "tsx scripts/check-comments.ts",
     "depcruise": "pnpm --filter @code-agent/depcruise run check",
     "changelog": "tsx scripts/changelog/changelog-gen.ts",

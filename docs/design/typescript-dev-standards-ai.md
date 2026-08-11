@@ -811,7 +811,7 @@ AI 生成任何 TypeScript 项目时，必须使用以下完整 tsconfig.json �
     ├── package.json
     └── .eslintrc.js
 
-  规则 9.2  一个文件不超过 300 行。超过必须拆分。
+  规则 9.2  单个文件净行不超过 600 行（净行=排除空行与纯注释行；对齐 eslint max-lines 建议区间 100-500 的上限放宽，容忍 TS/React 组件文件）。超出应拆分；存量超限文件由 scripts/check-file-size.ts 豁免清单管理（渐进清理）。
   规则 9.3  一个文件只包含一个核心概念/功能。
   规则 9.4  文件名使用 kebab-case：user-service.ts, http-client.ts。
   规则 9.5  测试文件与源文件同名，后缀 .test.ts。
@@ -1477,9 +1477,9 @@ AI 生成任何 TypeScript 项目时，必须使用以下完整 tsconfig.json �
   □ 外部依赖通过构造函数注入
   □ 业务逻辑不直接依赖基础设施
   □ 依赖方向单向无循环
-  □ 文件不超过 300 行
-  □ 函数不超过 40 行
-  □ 函数参数不超过 4 个
+  - 文件净行数不超过 600 行（工具：pnpm check:file-size，豁免清单渐进清理）
+  - 函数体不超过 40 行（AST 依赖 TypeDoc/评审；工具待 TS7 API 就绪后补）
+  - 函数参数不超过 4 个，超出对象封装（工具：pnpm check:functions，error 卡关；DI 装配函数豁免）
 
   【测试】
   □ 测试描述行为而非实现

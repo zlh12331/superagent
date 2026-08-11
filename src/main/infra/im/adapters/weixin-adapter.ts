@@ -64,7 +64,13 @@ export class WeixinAdapter implements IChannelAdapter {
       throw new Error('微信：渠道未连接');
     }
     const contextToken = this.receiver?.getContextToken(target.chatId);
-    await sendWeixinText(WEIXIN_DEFAULT_BASE_URL, this.token, target.chatId, text, contextToken);
+    await sendWeixinText({
+      baseUrl: WEIXIN_DEFAULT_BASE_URL,
+      token: this.token,
+      toUserId: target.chatId,
+      text,
+      contextToken,
+    });
   }
 
   /** 订阅入站消息（多订阅者：与 im-service 兼容） */
