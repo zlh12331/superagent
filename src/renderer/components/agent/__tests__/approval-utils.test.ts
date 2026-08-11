@@ -59,9 +59,9 @@ describe('approval-utils', () => {
   });
 
   describe('getVariantForType', () => {
-    it('未知类型兜底为通用 slate', () => {
+    it('未知类型兑底为通用 muted', () => {
       expect(getVariantForType('unknown_type' as never)).toEqual({
-        className: 'bg-slate-100 text-slate-700',
+        className: 'bg-muted text-muted-foreground',
       });
     });
   });

@@ -134,31 +134,33 @@ export function getLabelKeyForType(type: ApprovalType): string {
  *
  * 按工具类别分配颜色（而非逐类型），同类操作视觉一致：
  * - 命令执行 amber / 文件编辑 blue / 危险删除 red
- * - 依赖安装 violet / 网络调用 cyan / Git 操作 purple / 其他 slate
+ * - 依赖安装 magenta / 网络调用 accent-2 / Git 操作 magenta / 其他 muted
+ * 颜色全部走语义令牌（--amber/--info-blue/--error-bg/--magenta/--accent-2-soft）
  */
 export function getVariantForType(type: ApprovalType): {
   readonly className: string;
 } {
   switch (type) {
     case 'run_command':
-      return { className: 'bg-amber-100 text-amber-700' };
+      return { className: 'bg-[var(--amber)]/15 text-[var(--warn)]' };
     case 'write_file':
     case 'edit_file':
     case 'apply_patch':
-      return { className: 'bg-blue-100 text-blue-700' };
+      return { className: 'bg-[var(--info-blue)] text-[var(--accent-2)]' };
     case 'delete_file':
-      return { className: 'bg-red-100 text-red-700' };
+      return { className: 'bg-[var(--error-bg)] text-[var(--error)]' };
     case 'install_package':
-      return { className: 'bg-violet-100 text-violet-700' };
+      return { className: 'bg-[var(--magenta)]/15 text-[var(--magenta)]' };
     case 'external_call':
-      return { className: 'bg-cyan-100 text-cyan-700' };
+      return { className: 'bg-[var(--accent-2-soft)] text-[var(--accent-2)]' };
     case 'git_add':
     case 'git_commit':
     case 'git_push':
-      return { className: 'bg-purple-100 text-purple-700' };
+      // violet/purple 视觉相近，归并 magenta 系（令牌表克制，不新增派生色）
+      return { className: 'bg-[var(--magenta)]/15 text-[var(--magenta)]' };
     default:
       // 未知类型兜底（防御：入队数据异常时不崩溃）
-      return { className: 'bg-slate-100 text-slate-700' };
+      return { className: 'bg-muted text-muted-foreground' };
   }
 }
 

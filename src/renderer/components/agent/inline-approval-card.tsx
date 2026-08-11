@@ -15,7 +15,12 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { renderStructuredPreview } from './approval-preview';
-import { getIconForType, getLabelKeyForType, isDangerousType } from './approval-utils';
+import {
+  getIconForType,
+  getLabelKeyForType,
+  getVariantForType,
+  isDangerousType,
+} from './approval-utils';
 
 /** 内联审批卡 props */
 export interface InlineApprovalCardProps {
@@ -123,7 +128,13 @@ export function InlineApprovalCard({
           className={cn('size-3.5 shrink-0', dangerous && 'text-[var(--error)]')}
           strokeWidth={1.5}
         />
-        <span className="text-foreground min-w-0 flex-1 truncate font-medium">
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate font-medium',
+            // 类型徽章 7 色（对齐原型 modal-variant，语义令牌）
+            getVariantForType(item.type).className,
+          )}
+        >
           {/* 类型标签（i18n key 带 approval. 前缀：t('approval.runCommand') 等） */}
           {t(`approval.${getLabelKeyForType(item.type)}`)}
         </span>
