@@ -498,6 +498,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/main/infra/im/adapters/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }

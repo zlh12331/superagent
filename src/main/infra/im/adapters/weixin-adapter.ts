@@ -19,6 +19,24 @@ export class WeixinAdapter implements IChannelAdapter {
   readonly implemented = true;
   readonly configHint = 'iLink 机器人 token';
 
+  /**
+   * 外部依赖注入点（测试传 fake，生产默认实现）：
+   * - sendTextFn：消息发送（网络）
+   * - Receiver：长轮询接收器（网络）
+   */
+  private readonly sendTextFn: typeof sendWeixinText;
+  private readonly receiverCtor: typeof WeixinStreamReceiver;
+
+  constructor(
+    options: {
+      sendText?: typeof sendWeixinText;
+      Receiver?: typeof WeixinStreamReceiver;
+    } = {},
+  ) {
+    this.sendTextFn = options.sendText ?? sendWeixinText;
+    this.receiverCtor = options.Receiver ?? WeixinStreamReceiver;
+  }
+
   isConnected = false;
   private token: string | null = null;
   /** from_user_id → context_token（回发携带） */
@@ -33,7 +51,7 @@ export class WeixinAdapter implements IChannelAdapter {
     }
     this.token = token.trim();
 
-    const receiver = new WeixinStreamReceiver({ token: this.token });
+    const receiver = new this.receiverCtor({ token: this.token });
     receiver.onMessage((message) => {
       for (const handler of this.messageHandlers) {
         try {
@@ -64,7 +82,7 @@ export class WeixinAdapter implements IChannelAdapter {
       throw new Error('微信：渠道未连接');
     }
     const contextToken = this.receiver?.getContextToken(target.chatId);
-    await sendWeixinText({
+    await this.sendTextFn({
       baseUrl: WEIXIN_DEFAULT_BASE_URL,
       token: this.token,
       toUserId: target.chatId,

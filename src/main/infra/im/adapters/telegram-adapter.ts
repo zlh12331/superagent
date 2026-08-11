@@ -40,6 +40,16 @@ export class TelegramAdapter implements IChannelAdapter {
   readonly implemented = true;
   readonly configHint: string = 'Bot Token（@BotFather 获取）';
 
+  /**
+   * HTTP 依赖注入点（测试传 fake fetch，生产默认全局 fetch）
+   * 注入而非 mock：网络外部依赖可替换，业务逻辑保持真实实现
+   */
+  private readonly fetchFn: typeof fetch;
+
+  constructor(options: { fetchFn?: typeof fetch } = {}) {
+    this.fetchFn = options.fetchFn ?? fetch;
+  }
+
   private botToken: string | undefined;
   private pollController: AbortController | undefined;
   private listeners = new Set<(message: ChannelIncomingMessage) => void>();
@@ -213,7 +223,7 @@ export class TelegramAdapter implements IChannelAdapter {
         body.set(key, String(value));
       }
     }
-    const response = await fetch(url, {
+    const response = await this.fetchFn(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
@@ -221,6 +231,15 @@ export class TelegramAdapter implements IChannelAdapter {
       signal: this.pollController?.signal ?? null,
     });
     if (!response.ok) {
+      // HTTP 401 = token 无效（Telegram Bot API 语义），任何方法的 401 都表示凭证问题
+      // （真实缺陷修复：原实现统一抛 REQUEST_FAILED，导致 getMe 校验时 token 无效
+      //  被错误分类，无法给出 INVALID_TOKEN 引导用户重新配置）
+      if (response.status === 401) {
+        throw new AppError(
+          ErrorCode.IM_CHANNEL_INVALID_TOKEN,
+          `Telegram API ${method} 401 token 无效`,
+        );
+      }
       throw new AppError(
         ErrorCode.IM_CHANNEL_REQUEST_FAILED,
         `Telegram API ${method} HTTP ${response.status}`,

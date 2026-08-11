@@ -26,6 +26,28 @@ export class QqAdapter implements IChannelAdapter {
   readonly implemented = true;
   readonly configHint = 'appId:appSecret（官方机器人凭证）';
 
+  /**
+   * 外部依赖注入点（测试传 fake，生产默认实现）：
+   * - fetchTokenFn：access_token 获取（网络）
+   * - Receiver：Gateway 长连接接收器（WS）
+   * - fetchFn：发送消息 HTTP（网络）
+   */
+  private readonly fetchTokenFn: typeof fetchQqAccessToken;
+  private readonly receiverCtor: typeof QqStreamReceiver;
+  private readonly fetchFn: typeof fetch;
+
+  constructor(
+    options: {
+      fetchToken?: typeof fetchQqAccessToken;
+      Receiver?: typeof QqStreamReceiver;
+      fetchFn?: typeof fetch;
+    } = {},
+  ) {
+    this.fetchTokenFn = options.fetchToken ?? fetchQqAccessToken;
+    this.receiverCtor = options.Receiver ?? QqStreamReceiver;
+    this.fetchFn = options.fetchFn ?? fetch;
+  }
+
   isConnected = false;
   private appIdValue: string | null = null;
   private appSecretValue: string | null = null;
@@ -59,7 +81,7 @@ export class QqAdapter implements IChannelAdapter {
     await this.refreshAccessToken(appId, appSecret);
 
     // 启动长连接接收
-    const receiver = new QqStreamReceiver({ appId, appSecret });
+    const receiver = new this.receiverCtor({ appId, appSecret });
     receiver.onMessage((message) => {
       // 学习 openid 类型（群/单聊路由）
       if (message.channelType !== undefined) {
@@ -105,7 +127,7 @@ export class QqAdapter implements IChannelAdapter {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), SEND_TIMEOUT_MS);
     try {
-      const response = await fetch(endpoint, {
+      const response = await this.fetchFn(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +160,7 @@ export class QqAdapter implements IChannelAdapter {
 
   /** 获取/刷新 access_token（记录过期时间） */
   private async refreshAccessToken(appId: string, appSecret: string): Promise<void> {
-    const { accessToken, expiresIn } = await fetchQqAccessToken(appId, appSecret);
+    const { accessToken, expiresIn } = await this.fetchTokenFn(appId, appSecret);
     this.accessToken = accessToken;
     this.accessTokenExpiresAt = Date.now() + expiresIn * 1000;
   }
