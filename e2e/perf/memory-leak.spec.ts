@@ -16,7 +16,29 @@
 // 运行：pnpm test:perf
 // ──────────────────────────────────────────────────────────────
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+
+/** 快照落盘目录（stats/ 已 gitignore；故障取证用） */
+const SNAPSHOT_DIR = join(process.cwd(), 'stats', 'heap-snapshots');
+
+/** CDP 导出完整 heap 快照（流式 chunk 收集，落盘 .heapsnapshot 供 DevTools/memlab 分析） */
+async function dumpHeapSnapshot(
+  cdp: import('playwright-core').CDPSession,
+  label: string,
+): Promise<string> {
+  const chunks: string[] = [];
+  cdp.on('HeapProfiler.addHeapSnapshotChunk', (msg) => {
+    const chunk = (msg as { params?: { chunk?: string } }).params?.chunk;
+    if (chunk !== undefined) chunks.push(chunk);
+  });
+  await cdp.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
+  const file = join(SNAPSHOT_DIR, `heap-${label}-${Date.now()}.heapsnapshot`);
+  mkdirSync(SNAPSHOT_DIR, { recursive: true });
+  writeFileSync(file, chunks.join(''), 'utf8');
+  return file;
+}
 
 test.describe('内存基准：长会话 heap 趋势', () => {
   test('3 轮操作后 heap 增长 < 15MB 且无持续增长趋势', async ({ page }) => {
@@ -73,5 +95,15 @@ test.describe('内存基准：长会话 heap 趋势', () => {
       monotonicGrowth,
       `每轮增量 ${deltas.map((d) => d.toFixed(2)).join('/')}MB：持续单调增长疑似泄漏（GC 后应回落）`,
     ).toBe(false);
+
+    // 断言失败时自动落盘 heap 快照（故障取证：DevTools / memlab analyze 可打开）
+    // 仅失败落盘：快照文件几十 MB，正常运行不产生
+    const failed = finalGrowth >= 15 || monotonicGrowth;
+    if (failed) {
+      const file = await dumpHeapSnapshot(cdp, 'leak-suspect');
+      console.log(
+        `[perf] 泄漏嫌疑快照已落盘：${file}（DevTools Memory → Load 或 memlab analyze 分析）`,
+      );
+    }
   });
 });

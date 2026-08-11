@@ -20,6 +20,7 @@ import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
+import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
 import { initTelemetry, shutdownTelemetry } from './infra/telemetry/otel';
 import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
@@ -451,6 +452,22 @@ app
     });
 
     logger.info({}, '应用启动');
+
+    // 主进程内存监控（生产长期趋势 + 泄漏哨兵）
+    // - 60s 采样 + 连续 3 次单调增长且累计 > 150MB 才告警（防 GC 抖动误报）
+    // - unref 定时器不阻塞应用退出；Sentry 未初始化时 captureMessage 为 no-op（安全）
+    startMemoryMonitor({
+      onAlert: (report) => {
+        Sentry.captureMessage(
+          `主进程内存疑似持续增长：${report.growthMb.toFixed(0)}MB / ${report.durationSec.toFixed(0)}s`,
+          'warning',
+        );
+        logger.warn(
+          { growthMb: report.growthMb, durationSec: report.durationSec },
+          '主进程内存疑似泄漏（连续增长）',
+        );
+      },
+    });
 
     createWindow();
 
