@@ -13,6 +13,8 @@
   "excludeExternals": true,
   "excludeInternal": true,
   "readme": "none",
+  "disableSources": true,
+  "validation": { "notDocumented": false, "notExported": false },
   "githubPages": false,
   "name": "Code Agent Desktop - Shared 类型契约"
 }

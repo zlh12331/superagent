@@ -64,7 +64,7 @@ type ChannelKey<D, K extends keyof D, M extends keyof D[K]> = D[K][M] extends {
  * key 命名：{DOMAIN}_{METHOD}（SCREAMING_SNAKE_CASE）
  * 例如：app.getStatus → APP_GET_STATUS；session.listRecentDirs → SESSION_LIST_RECENT_DIRS
  *
- * @param meta IPC 元数据表（IPC_META，纯字符串零依赖）
+ * @param defs IPC 元数据表（IPC_META，纯字符串零依赖）
  * @returns 与现有 IPC_CHANNELS 结构完全兼容的常量对象
  */
 export function deriveChannels<D extends Record<string, Record<string, MetaEntryLike>>>(

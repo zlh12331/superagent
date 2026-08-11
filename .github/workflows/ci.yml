@@ -57,6 +57,9 @@ jobs:
       - name: Dead code check (knip)
         run: pnpm knip
 
+      - name: Dependency direction (depcruise)
+        run: pnpm depcruise
+
       - name: Unit tests (shared + main + renderer)
         run: pnpm test
 

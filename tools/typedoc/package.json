@@ -5,7 +5,8 @@
   "description": "shared 类型契约文档生成器（独立 TS 6.x 环境，兼容 TypeDoc 对 TS 7 的限制）",
   "type": "module",
   "scripts": {
-    "gen": "typedoc"
+    "gen": "typedoc",
+    "check": "typedoc --treatWarningsAsErrors --out ../../.tmp/typedoc-check"
   },
   "dependencies": {
     "typedoc": "^0.28.20",

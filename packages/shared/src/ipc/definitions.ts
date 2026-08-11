@@ -205,7 +205,7 @@ import { IPC_META, type IpcMeta } from './meta';
  *
  * @param meta 来自 IPC_META 的 request 条目
  * @param schema 入参 zod schema（null 表示无入参）
- * @param res 响应类型标记（仅编译期类型用途，运行时忽略）
+ * @param _res 响应类型标记（仅编译期类型用途，运行时忽略；下划线 = 未使用参数）
  */
 export function withSchema<
   M extends { readonly kind: 'request'; readonly channel: string },
@@ -232,7 +232,7 @@ export function withSchema<
  * 在元数据基础上合并事件 payload 类型标记（event 方法）
  *
  * @param meta 来自 IPC_META 的 event 条目
- * @param payload payload 类型标记（仅编译期类型用途，运行时忽略）
+ * @param _payload payload 类型标记（仅编译期类型用途，运行时忽略；下划线 = 未使用参数）
  * @param payloadSchema 事件 payload 的 zod schema（可选；主进程发送侧 dev 校验用）
  */
 export function withPayload<
