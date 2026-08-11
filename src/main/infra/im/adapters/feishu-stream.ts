@@ -154,13 +154,29 @@ function stripBotMention(text: string): string {
 export class FeishuStreamReceiver {
   private readonly appId: string;
   private readonly appSecret: string;
+
+  /**
+   * 外部依赖注入点（测试传 fake，生产默认 lark SDK）：
+   * - EventDispatcherCtor / WSClientCtor：飞书长连接 SDK 类
+   */
+  private readonly eventDispatcherCtor: typeof lark.EventDispatcher;
+  private readonly wsClientCtor: typeof lark.WSClient;
+
   private wsClient: lark.WSClient | null = null;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private opened = false;
 
-  constructor(config: FeishuStreamConfig) {
+  constructor(
+    config: FeishuStreamConfig,
+    options: {
+      EventDispatcherCtor?: typeof lark.EventDispatcher;
+      WSClientCtor?: typeof lark.WSClient;
+    } = {},
+  ) {
     this.appId = config.appId;
     this.appSecret = config.appSecret;
+    this.eventDispatcherCtor = options.EventDispatcherCtor ?? lark.EventDispatcher;
+    this.wsClientCtor = options.WSClientCtor ?? lark.WSClient;
   }
 
   get isOpen(): boolean {
@@ -179,12 +195,12 @@ export class FeishuStreamReceiver {
     if (this.opened) {
       return;
     }
-    const eventDispatcher = new lark.EventDispatcher({}).register({
+    const eventDispatcher = new this.eventDispatcherCtor({}).register({
       'im.message.receive_v1': (data: unknown) => {
         this.dispatchEvent(data as FeishuMessageEventV1);
       },
     });
-    const wsClient = new lark.WSClient({
+    const wsClient = new this.wsClientCtor({
       appId: this.appId,
       appSecret: this.appSecret,
       loggerLevel: lark.LoggerLevel.error,

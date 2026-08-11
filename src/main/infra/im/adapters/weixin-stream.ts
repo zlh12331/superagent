@@ -128,6 +128,16 @@ export interface WeixinStreamConfig {
 export class WeixinStreamReceiver {
   private readonly token: string;
   private readonly baseUrl: string;
+
+  /**
+   * 外部依赖注入点（测试传 fake，生产默认实现）：
+   * - fetchUpdatesFn：getupdates 轮询（网络）
+   * - backoffMs / sessionPauseMs：时间参数（测试缩短验证退避/过期路径）
+   */
+  private readonly fetchUpdatesFn: typeof fetchWeixinUpdates;
+  private readonly backoffMs: number;
+  private readonly sessionPauseMs: number;
+
   private cursor = '';
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
   private abortController: AbortController | null = null;
@@ -135,9 +145,19 @@ export class WeixinStreamReceiver {
   private readonly contextTokens = new Map<string, string>();
   private opened = false;
 
-  constructor(config: WeixinStreamConfig) {
+  constructor(
+    config: WeixinStreamConfig,
+    options: {
+      fetchUpdatesFn?: typeof fetchWeixinUpdates;
+      backoffMs?: number;
+      sessionPauseMs?: number;
+    } = {},
+  ) {
     this.token = config.token;
     this.baseUrl = config.baseUrl ?? WEIXIN_DEFAULT_BASE_URL;
+    this.fetchUpdatesFn = options.fetchUpdatesFn ?? fetchWeixinUpdates;
+    this.backoffMs = options.backoffMs ?? ERROR_BACKOFF_MS;
+    this.sessionPauseMs = options.sessionPauseMs ?? SESSION_EXPIRED_PAUSE_MS;
   }
 
   get isOpen(): boolean {
@@ -181,7 +201,7 @@ export class WeixinStreamReceiver {
     let consecutiveErrors = 0;
     while (!signal.aborted) {
       try {
-        const response = await fetchWeixinUpdates({
+        const response = await this.fetchUpdatesFn({
           baseUrl: this.baseUrl,
           token: this.token,
           cursor: this.cursor,
@@ -191,7 +211,7 @@ export class WeixinStreamReceiver {
         if (response.errcode === -14) {
           // 会话过期：暂停后继续（token 需重新配置）
           logger.warn({}, '微信 iLink 会话过期，暂停 30s');
-          await sleep(SESSION_EXPIRED_PAUSE_MS, signal);
+          await sleep(this.sessionPauseMs, signal);
           continue;
         }
         consecutiveErrors = 0;
@@ -207,7 +227,7 @@ export class WeixinStreamReceiver {
         }
         consecutiveErrors += 1;
         logger.warn({ error: err, attempt: consecutiveErrors }, '微信轮询失败');
-        await sleep(Math.min(ERROR_BACKOFF_MS * consecutiveErrors, 30_000), signal);
+        await sleep(Math.min(this.backoffMs * consecutiveErrors, 30_000), signal);
       }
     }
   }
