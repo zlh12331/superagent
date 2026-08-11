@@ -111,7 +111,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 ## 测试规范
 
-- **不使用 mock**：Vitest 配置均禁用 mocking 设施，测试真实实现；electron 原生模块（app/BrowserWindow）可用 vi.mock 外壳，业务逻辑通过 DI 注入 fake 实现
+- **业务逻辑不 mock**：测试真实实现（DI 注入 fake）；基础设施（electron/SQLite 原生模块）可用 vi.mock/alias stub。注：src/renderer/dev/mock-api.ts 是运行时开发模拟层（浏览器模式 window.api），与测试原则无关
 - 测试文件与源码 colocation：`**/*.test.ts` / `**/*.test.tsx`
 - Vitest globals 启用（describe/it/expect 无需 import）
 - renderer 测试用 jsdom + `test/setup.ts`（mock `window.api` 并 polyfill ResizeObserver/IntersectionObserver/matchMedia）

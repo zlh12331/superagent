@@ -70,3 +70,26 @@ describe('db', () => {
     expect(existsSync(join(tempDir, 'sessions.db'))).toBe(true);
   });
 });
+
+// ── schema 一致性（防 drift：Drizzle 表名字符串 vs 原始 SQL 单一真源）──
+describe('schema 一致性', () => {
+  it('schema.ts 与 schema-sql.ts 表级一致', async () => {
+    const { schema } = await import('./schema');
+    const { SCHEMA_SQL } = await import('./schema-sql');
+    const sqlTables = new Set(
+      [...SCHEMA_SQL.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_]+)"?/gi)].map((m) =>
+        m[1].toLowerCase(),
+      ),
+    );
+    // sqliteTable('<表名>', ...) 的字符串参数为表名真源（导出变量名 camelCase 是惯例）
+    const drizzleTables = new Set(
+      Object.values(schema).map(
+        (t) => t[Symbol.for('drizzle:Name')] ?? t[Symbol.for('drizzle:Table')]?.name ?? '',
+      ),
+    );
+    for (const t of drizzleTables) {
+      if (t === '') continue;
+      expect(sqlTables, `Drizzle 表 ${t} 应在 SCHEMA_SQL 中定义`).toContain(t);
+    }
+  });
+});
