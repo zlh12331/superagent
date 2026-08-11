@@ -76,7 +76,7 @@ export class RemoteControlService implements IRemoteControlService {
     this.running = true;
     this.sessionToken = randomUUID();
     logger.info({ sessionToken: this.sessionToken.slice(0, 8) }, '远程控制已启动（直连模式）');
-    // TODO(阶段 2)：启动本地 WebSocket/HTTP 监听（LAN 直连 + 令牌握手）
+    // TODO(2026-08-11)：阶段 2——启动远程控制服务（WebSocket/HTTP 桥接，LAN 直连 + 局域网发现）
     return this.sessionToken;
   }
 

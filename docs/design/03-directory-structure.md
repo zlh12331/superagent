@@ -43,7 +43,7 @@ f:\TraeProjects\1\
 
 | 域 | 文件数 | 关键文件 |
 |---|---|---|
-| ai/（顶层） | 18 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts) / [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts) / [ai-provider.ts](file:///f:/TraeProjects/1/src/main/infra/ai/ai-provider.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts) / [tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool.ts) / [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/error-classifier.ts) / [context-compression.ts](file:///f:/TraeProjects/1/src/main/infra/ai/context-compression.ts) / [session-title.ts](file:///f:/TraeProjects/1/src/main/infra/ai/session-title.ts) + 8 测试 |
+| ai/（顶层） | 18 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) / [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts) / [ai-provider.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/ai-provider.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) / [tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool.ts) / [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/error-classifier.ts) / [context-compression.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/context-compression.ts) / [session-title.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/session-title.ts) + 8 测试 |
 | ai/agent-runtime/ | 8 | [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/index.ts) / [stream-reader.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/stream-reader.ts) / [turn-emitter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-emitter.ts) / [turn-runner.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-runner.ts) / [turn-translator.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-translator.ts) + 3 测试 |
 | ai/llm-client/ | 5 | [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/index.ts) / [llm-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/llm-client.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/retry.ts) + 2 测试 |
 | ai/mcp/ | 9 | [mcp-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-client.ts) / [mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts) / [mcp-tool-adapter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-tool-adapter.ts) / [mcp-types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-types.ts) + 4 测试 + index.ts |
@@ -52,7 +52,7 @@ f:\TraeProjects\1\
 | ai/providers/ | 5 | [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/registry.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/types.ts) + index.ts + 2 测试 |
 | ai/tools/ | 18 | 12 个工具 + [path-guard.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/path-guard.ts) + [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + 5 测试 |
 | storage/ | 11 | [db.ts](file:///f:/TraeProjects/1/src/main/infra/storage/db.ts) / [schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts) / [schema-sql.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema-sql.ts) / [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) / [keychain.ts](file:///f:/TraeProjects/1/src/main/infra/storage/keychain.ts) / [app-data.ts](file:///f:/TraeProjects/1/src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///f:/TraeProjects/1/src/main/infra/storage/telemetry-pref.ts) + 4 测试 |
-| code/ | 2 | [code-analyzer.ts](file:///f:/TraeProjects/1/src/main/infra/code/code-analyzer.ts) + 1 测试 |
+| code/ | 2 | [code-analyzer.ts](file:///f:/TraeProjects/1/src/main/infra/code-analysis/code-analyzer.ts) + 1 测试 |
 | codebase/ | 1 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) |
 | file/ | 2 | [file-service.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts) + 1 测试 |
 | git/ | 2 | [git-service.ts](file:///f:/TraeProjects/1/src/main/infra/git/git-service.ts) + 1 测试 |
@@ -70,8 +70,8 @@ f:\TraeProjects\1\
 |---|---|---|
 | config/ | [index.ts](file:///f:/TraeProjects/1/src/main/config/index.ts) + [config.test.ts](file:///f:/TraeProjects/1/src/main/config/config.test.ts) | 应用配置（环境变量读取、缓存） |
 | security/ | — | CSP 策略注入相关 |
-| telemetry/ | [otel.ts](file:///f:/TraeProjects/1/src/main/telemetry/otel.ts) | OpenTelemetry 初始化 |
-| utils/ | [logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) / [wrap.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/utils/retry.ts) + 测试 | 工具函数 |
+| telemetry/ | [otel.ts](file:///f:/TraeProjects/1/src/main/infra/telemetry/otel.ts) | OpenTelemetry 初始化 |
+| utils/ | [logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) / [wrap.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/retry.ts) + 测试 | 工具函数 |
 | index.ts | [src/main/index.ts](file:///f:/TraeProjects/1/src/main/index.ts) | 主进程入口 |
 | service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 14 服务统一生命周期管理 |
 

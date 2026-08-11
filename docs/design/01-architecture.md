@@ -134,15 +134,15 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 两条主流式通道结构对称：
 
-**chat:stream:part** — [chat-service.ts#L257-L282](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts#L257)
+**chat:stream:part** — [chat-service.ts#L257-L282](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L257)
 - 主进程 `streamText()` → `result.toUIMessageStream()` → reader.read() 循环 → `webContents.send(CHAT_STREAM_PART, {sessionId, part})`
 - 配套 `CHAT_STREAM_END` / `CHAT_STREAM_ERROR`
 
-**agent:stream:part** — [agent-service.ts#L310-L335](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L310)
+**agent:stream:part** — [agent-service.ts#L310-L335](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L310)
 - 同 chat 模式，额外推送 `AGENT_TOOL_CALL` / `AGENT_TOOL_RESULT` / `AGENT_APPROVAL_REQUEST`
 - 配套 `AGENT_STREAM_END` / `AGENT_STREAM_ERROR`
 
-两者都通过 `webContents.isDestroyed()` 守卫避免窗口销毁后推送（[chat-service.ts#L278](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts#L278)）。
+两者都通过 `webContents.isDestroyed()` 守卫避免窗口销毁后推送（[chat-service.ts#L278](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L278)）。
 
 ## 5. AI 核心架构
 
@@ -150,7 +150,7 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 | 项 | ChatService | AgentService |
 |---|---|---|
-| 文件 | [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts) | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts) |
+| 文件 | [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts) | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) |
 | tools 参数 | 无 | 有（`toolRegistry.toAISDKTools(ctx, executeHook)`） |
 | stopWhen | 无 | `isStepCount(options.maxSteps)` |
 | system prompt | 无 | 条件展开 `system` 字段 |
@@ -160,18 +160,18 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 二者共享：
 
-- 错误分类器 [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/error-classifier.ts)
-- dispose 模式（3s 超时兜底的 Promise.race + Promise.allSettled，[chat-service.ts#L190-L218](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts#L190) 与 [agent-service.ts#L182-L217](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L182) 一致）
+- 错误分类器 [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/error-classifier.ts)
+- dispose 模式（3s 超时兜底的 Promise.race + Promise.allSettled，[chat-service.ts#L190-L218](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L190) 与 [agent-service.ts#L182-L217](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L182) 一致）
 
 ### 5.2 工具系统三层分层
 
 | 层 | 文件 | 职责 |
 |---|---|---|
-| ToolRegistry | [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts) | 注册/查找/列出工具，`toAISDKTools(ctx, executeHook)` 转换为 AI SDK v7 原生 Tool |
-| ToolExecutor | [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts) | 统一执行入口：查找工具 → 权限决策 → 推送 AGENT_TOOL_CALL → 审批等待 → 执行 → 推送 AGENT_TOOL_RESULT |
-| PermissionService | [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts) | 权限决策（`'auto' \| 'ask'` 二态）+ 审批 Promise Map + 5 分钟记忆决策缓存 |
+| ToolRegistry | [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-registry.ts) | 注册/查找/列出工具，`toAISDKTools(ctx, executeHook)` 转换为 AI SDK v7 原生 Tool |
+| ToolExecutor | [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) | 统一执行入口：查找工具 → 权限决策 → 推送 AGENT_TOOL_CALL → 审批等待 → 执行 → 推送 AGENT_TOOL_RESULT |
+| PermissionService | [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) | 权限决策（`'auto' \| 'ask'` 二态）+ 审批 Promise Map + 5 分钟记忆决策缓存 |
 
-权限模型实际为二态 `'auto' \| 'ask'`（[tool.ts#L72](file:///f:/TraeProjects/1/src/main/infra/ai/tool.ts#L72)），无 `'deny'` 态。
+权限模型实际为二态 `'auto' \| 'ask'`（[tool.ts#L72](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool.ts#L72)），无 `'deny'` 态。
 
 ### 5.3 PromptService 角色
 

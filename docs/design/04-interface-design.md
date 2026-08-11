@@ -119,7 +119,7 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 
 ### 3.1 IChatService
 
-[src/main/infra/ai/chat-service.ts#L71-L88](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.ts#L71)：
+[src/main/infra/ai/agent/chat-service.ts#L71-L88](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L71)：
 
 ```ts
 export interface IChatService {
@@ -132,7 +132,7 @@ export interface IChatService {
 
 ### 3.2 IAgentService
 
-[src/main/infra/ai/agent-service.ts#L100-L130](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.ts#L100)：
+[src/main/infra/ai/agent/agent-service.ts#L100-L130](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L100)：
 
 ```ts
 export interface IAgentService {
@@ -240,7 +240,7 @@ export interface ISessionService {
 
 ### 3.8 IToolRegistry
 
-[src/main/infra/ai/tool-registry.ts#L38-L95](file:///f:/TraeProjects/1/src/main/infra/ai/tool-registry.ts#L38)：
+[src/main/infra/ai/tools/tool-registry.ts#L38-L95](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-registry.ts#L38)：
 
 ```ts
 export interface IToolRegistry {
@@ -257,7 +257,7 @@ export interface IToolRegistry {
 
 ### 3.9 IToolExecutor
 
-[src/main/infra/ai/tool-executor.ts#L44-L73](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.ts#L44)：
+[src/main/infra/ai/tools/tool-executor.ts#L44-L73](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts#L44)：
 
 ```ts
 export interface IToolExecutor {
@@ -273,7 +273,7 @@ export interface IToolExecutor {
 
 ### 3.10 IPermissionService
 
-[src/main/infra/ai/permission-service.ts#L68-L130](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.ts#L68)：
+[src/main/infra/ai/tools/permission-service.ts#L68-L130](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts#L68)：
 
 ```ts
 export interface IPermissionService {
