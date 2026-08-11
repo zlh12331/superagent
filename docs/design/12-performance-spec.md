@@ -4,6 +4,7 @@
 > 最后同步：2026-08-11
 
 ---
+> 🔒 工程化强制：pnpm check:bundle（构建产物门槛，超限卡关）+ pnpm analyze:bundle（体积报告）
 
 ## 一、Bundle 体积门槛
 
@@ -14,11 +15,16 @@
 
 ### 1.2 门槛（renderer 主包，gzip 前）
 
-| 指标 | 门槛 | 说明 |
+| 指标 | 门槛（基线） | 说明 |
 |---|---|---|
-| 单个 chunk | ≤ 500KB | 超过必须拆分（动态 import） |
-| 渲染层总包（js 总合） | ≤ 1.2MB | 基线参考：shadcn 模式典型增量 20-50KB/组件 |
+| 单个 chunk | ≤ 5MB | 2026-08-11 基线（当前最大 index 4.4MB）；每轮收紧 |
+| 渲染层总包（js 总合） | ≤ 16MB | 当前基线 14.5MB（shiki + tree-sitter + xterm 重依赖）；每轮收紧 |
 | 新增单个 npm 依赖 | ≤ 150KB（gzip） | 引入前用 bundlephobia 级评估；超限需论证（见 §四） |
+
+> **基线策略**：先有基线门槛卡住回退（新引入超限即失败），再渐进收紧。当前已知债务：
+> - index chunk 4.4MB（shiki 全量语言 + tree-sitter wasm 主包）——优化方向：shiki 语言按需注册（`createHighlighter` + 动态语言）、tree-sitter wasm 延迟加载
+> - cpp/emacs-lisp 语言 chunk 超 500KB——按需加载后自然消除
+> 收紧节奏：每轮重构后对比 `pnpm analyze:bundle`，总包下降则同步下调门槛。
 
 ### 1.3 依赖纪律（与 02-tech-stack / UI 架构原则联动）
 

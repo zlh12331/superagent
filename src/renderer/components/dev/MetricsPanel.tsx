@@ -61,7 +61,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
         <Button
           variant="ghost"
           size="icon"
-          className="text-muted-foreground hover:text-foreground h-5 w-5"
+          className="text-muted-foreground hover:text-foreground size-5"
           onClick={() => {
             void refetch();
           }}

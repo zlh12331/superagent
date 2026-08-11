@@ -13,6 +13,8 @@ design_tokens:
 > 机器可读的设计系统契约（供 design-md-review / design-debt-review 类工具接入）。
 > **单一真源：`src/renderer/styles/globals.css`**（本文件为契约摘要，值以 globals.css 为准，同步时以 globals.css 为准覆盖本文件）。
 
+> 🔒 工程化强制：pnpm check:tokens（扫描裸色/dark:/space-*/w+h 双写/hex，pre-push + CI 卡关）
+
 ## 1. 令牌分组总览
 
 | 分组 | 前缀/模式 | 示例 | 说明 |

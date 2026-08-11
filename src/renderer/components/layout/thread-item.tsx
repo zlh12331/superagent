@@ -287,7 +287,7 @@ function ThreadItem({
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground h-6 w-6"
+                className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground size-6"
                 aria-label={t('sidebar.sessionActions')}
                 disabled={isDeleting}
                 onClick={(event) => event.stopPropagation()}

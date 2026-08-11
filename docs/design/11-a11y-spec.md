@@ -4,6 +4,7 @@
 > 最后同步：2026-08-11
 
 ---
+> 🔒 工程化强制：E2E e2e/a11y.spec.ts（axe WCAG 2.2 AA 扫描，pnpm test:e2e）+ Biome a11y 规则组（lint 卡关）
 
 ## 一、对比度门槛（WCAG 2.1 AA）
 

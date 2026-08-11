@@ -60,24 +60,25 @@ function resolveFileIcon(name: string): IconConfig {
 
   switch (ext) {
     case 'rs':
-      return { icon: FileCode, color: '#f97316' };
+      // 图标语义色 → 现有令牌（双主题自适应）：橙=warn / 蓝=accent-2 / 黄=amber / 灰=muted / 红=error / 绿=success
+      return { icon: FileCode, color: 'var(--warn)' };
     case 'ts':
     case 'tsx':
     case 'js':
     case 'jsx':
-      return { icon: FileCode, color: '#3b82f6' };
+      return { icon: FileCode, color: 'var(--accent-2)' };
     case 'json':
-      return { icon: FileJson, color: '#eab308' };
+      return { icon: FileJson, color: 'var(--amber)' };
     case 'md':
-      return { icon: FileText, color: '#94a3b8' };
+      return { icon: FileText, color: 'var(--muted-foreground)' };
     case 'toml':
-      return { icon: FileCog, color: '#ef4444' };
+      return { icon: FileCog, color: 'var(--error)' };
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'svg':
-      return { icon: ImageIcon, color: '#22c55e' };
+      return { icon: ImageIcon, color: 'var(--success)' };
     default:
       return { icon: File, color: 'var(--text-faint)' };
   }
