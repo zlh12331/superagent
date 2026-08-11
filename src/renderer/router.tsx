@@ -19,7 +19,7 @@
 // - useChat 通过 chatId 隔离消息状态，切换时自动重置
 // - AppShell 中已集成 ApprovalDialog，所有路由下都能接收审批请求
 
-import { createBrowserRouter } from 'react-router';
+import { createHashRouter } from 'react-router';
 
 import { ROUTES } from '@/lib/constants';
 import { RootErrorBoundary, RootHydrateFallback, RootLayout } from './routes/root';
@@ -27,14 +27,16 @@ import { RootErrorBoundary, RootHydrateFallback, RootLayout } from './routes/roo
 /**
  * 应用路由配置
  *
- * 使用 RR8 Data Mode：createBrowserRouter + RouterProvider，
- * 在 App.tsx 中通过 <RouterProvider router={router} /> 挂载。
+ * 使用 RR8 Data Mode：createHashRouter + RouterProvider。
+ * hash 路由原因：生产构建以 file:// 加载（Electron loadFile），history 路由
+ * 在 file:// 下 pathname 为文件路径导致全部路由 404（真实缺陷，2026-08-11
+ * 由生产启动基准暴露）；hash 路由在 dev（http）与生产（file）均正常工作。
  *
  * 代码分割：HomePage / ChatPage 使用 route.lazy 按需加载，
  * 首屏 bundle 不再包含 shiki / diff-viewer / virtuoso 等重型依赖；
  * 加载期间由 root 路由的 HydrateFallback 提供占位。
  */
-export const router = createBrowserRouter([
+export const router = createHashRouter([
   {
     path: ROUTES.home,
     element: <RootLayout />,

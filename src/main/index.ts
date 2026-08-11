@@ -75,7 +75,10 @@ if (!app.isPackaged) {
   // - 这样能检查真实的 window.api（preload 注入）、React DevTools 面板、Electron 专属 API
   // 安全：仅在 dev 环境开启（!app.isPackaged），生产环境不暴露调试端口
   // 端口固定 9222（Chrome DevTools 协议惯例），冲突时 Electron 会自动递增
-  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+  // E2E 测试（playwright Electron 模式）用 CODE_AGENT_DEBUG_PORT 覆盖为独立端口，
+  // 避免与并行 dev 实例（electron-vite dev 自带的窗口）争抢 9222 导致 CDP 连不上
+  const debugPort = process.env['CODE_AGENT_DEBUG_PORT'] ?? '9222';
+  app.commandLine.appendSwitch('remote-debugging-port', debugPort);
 }
 
 /**

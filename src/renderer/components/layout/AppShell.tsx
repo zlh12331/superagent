@@ -146,9 +146,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const openFileViewer = useFileViewerStore((s) => s.openFile);
 
   // 路由：聊天页显示返回按钮（对齐原型 back-btn）
+  // hash 路由（生产 file:// 兼容）下 pathname 恒为 '/，需同时检查 hash
   const navigate = useNavigate();
   const location = useLocation();
-  const isChatRoute = location.pathname.startsWith('/chat/');
+  const isChatRoute = location.pathname.startsWith('/chat/') || location.hash.startsWith('#/chat/');
 
   const setTheme = useSettingsStore((s) => s.setTheme);
   const theme = useSettingsStore((s) => s.theme);
