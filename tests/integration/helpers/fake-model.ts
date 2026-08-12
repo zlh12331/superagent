@@ -17,6 +17,7 @@ import type { LanguageModel } from 'ai';
 export function createFakeModel(
   rounds: Array<Array<Record<string, unknown>>>,
   onCall?: (callIndex: number, messages: unknown[]) => void,
+  options?: { holdOpen?: boolean },
 ): LanguageModel {
   let call = 0;
   return {
@@ -27,14 +28,27 @@ export function createFakeModel(
       const index = Math.min(call, rounds.length - 1);
       onCall?.(index, input.messages);
       const parts = rounds[index] ?? [];
+      // v4 流协议：text-delta 前需要 text-start（SDK 流状态机；tool-call 不需）
+      const normalized: Array<Record<string, unknown>> = [];
+      let hasTextStart = false;
+      for (const p of parts) {
+        if (p.type === 'text-delta' && !hasTextStart) {
+          normalized.push({ type: 'text-start', id: (p.id as string) ?? 'ts-1' });
+          hasTextStart = true;
+        }
+        normalized.push(p);
+      }
       call += 1;
       const stream = new ReadableStream<Record<string, unknown>>({
         start(controller) {
-          // 注意：LanguageModelV2 流无 start part（start 是 UIMessageStream 层概念）
-          for (const p of parts) {
+          // 注意：LanguageModel 流无 start part（start 是 UIMessageStream 层概念）
+          for (const p of normalized) {
             controller.enqueue(p);
           }
-          controller.close();
+          // holdOpen：流挂起（abort 场景——模拟长时间生成中的模型）
+          if (!(options?.holdOpen ?? false)) {
+            controller.close();
+          }
         },
       });
       return { stream, rawCall: { id: `fake-call-${call}` } };
@@ -44,11 +58,11 @@ export function createFakeModel(
 
 /** 常见 part 构造器（AI SDK v7 流协议） */
 export const modelParts = {
-  textDelta: (text: string): Record<string, unknown> => ({
-    // LanguageModelV2 流的文本 part 字段是 text（delta 是 UIMessageStream 层字段）
+  textDelta: (delta: string): Record<string, unknown> => ({
+    // v4 流协议：text-delta 用 delta 字段（text-start 由 createFakeModel 自动前置）
     type: 'text-delta',
-    text,
-    id: `td-${text.length}`,
+    delta,
+    id: `td-${delta.length}`,
   }),
   finish: (finishReason = 'stop'): Record<string, unknown> => ({
     type: 'finish',
