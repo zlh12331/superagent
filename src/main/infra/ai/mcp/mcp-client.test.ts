@@ -38,7 +38,13 @@ const mocks = vi.hoisted(() => {
     stderr: null as { on?: unknown } | null,
     close: vi.fn(),
   };
-  return { mockClient, mockTransport };
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
+  return { mockClient, mockTransport, mockLogger };
 });
 
 // Mock @modelcontextprotocol/sdk 的 Client 与 StdioClientTransport
@@ -60,12 +66,7 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
 
 // Mock logger
 vi.mock('../../../utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
+  logger: mocks.mockLogger,
 }));
 
 const baseConfig: McpServerConfig = {
@@ -342,6 +343,87 @@ describe('mcp-client', () => {
   describe('getConfig', () => {
     it('返回构造时传入的配置', () => {
       expect(client.getConfig()).toBe(baseConfig);
+    });
+  });
+
+  describe('批次12 缺口补全', () => {
+    it('配置含 args/env/cwd：条件展开到 transport 构造', async () => {
+      const sdk = await import('@modelcontextprotocol/sdk/client/stdio.js');
+      const transportCtor = sdk.StdioClientTransport as unknown as ReturnType<typeof vi.fn>;
+      const client = new MCPClient({
+        ...baseConfig,
+        args: ['--flag'],
+        env: { ['FOO']: 'bar' },
+        cwd: '/tmp/work',
+      });
+      await client.connect();
+      const args = transportCtor.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+      expect(args?.['args']).toEqual(['--flag']);
+      expect(args?.['env']).toEqual({ ['FOO']: 'bar' });
+      expect(args?.['cwd']).toBe('/tmp/work');
+    });
+
+    it('stderr 流有非空文本：转写日志（debug）', async () => {
+      mocks.mockTransport.stderr = {
+        on: vi.fn((event: string, cb: (chunk: Buffer) => void) => {
+          if (event === 'data') cb(Buffer.from('server warning\n'));
+        }),
+      };
+      const client = new MCPClient(baseConfig);
+      await client.connect();
+      expect(mocks.mockLogger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({ stderr: 'server warning' }),
+        expect.stringContaining('stderr'),
+      );
+    });
+
+    it('stderr 空文本：不记录日志', async () => {
+      mocks.mockTransport.stderr = {
+        on: vi.fn((event: string, cb: (chunk: Buffer) => void) => {
+          if (event === 'data') cb(Buffer.from('   \n'));
+        }),
+      };
+      const client = new MCPClient(baseConfig);
+      await client.connect();
+      const stderrLogs = mocks.mockLogger.debug.mock.calls.filter((call) =>
+        String(call[1]).includes('stderr'),
+      );
+      expect(stderrLogs).toHaveLength(0);
+    });
+
+    it('工具带 description：条件展开保留', async () => {
+      mocks.mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool-x', description: '工具说明', inputSchema: { type: 'object' } }],
+      });
+      const client = new MCPClient(baseConfig);
+      await client.connect();
+      const tools = client.listTools();
+      expect(tools[0]?.description).toBe('工具说明');
+    });
+
+    it('启动失败抛非 Error 值：String() 兜底到错误消息', async () => {
+      mocks.mockClient.connect.mockRejectedValueOnce('boom-string');
+      const client = new MCPClient(baseConfig);
+      await expect(client.connect()).rejects.toMatchObject({
+        code: 'INTERNAL_ERROR',
+      });
+      const errorLogs = mocks.mockLogger.error.mock.calls.filter((call) =>
+        String(call[1]).includes('启动失败'),
+      );
+      expect(errorLogs.length).toBeGreaterThan(0);
+    });
+
+    it('callTool 返回无 content：content 兜底为空数组', async () => {
+      mocks.mockClient.callTool.mockResolvedValueOnce({ structuredContent: { ok: true } });
+      const client = new MCPClient(baseConfig);
+      await client.connect();
+      const ctx = {
+        abortSignal: new AbortController().signal,
+        webContents: mockWebContents,
+      } as unknown as ToolContext;
+      const result = await client.callTool('tool-x', {}, ctx);
+      expect(result.content).toEqual([]);
+      expect(result.structuredContent).toEqual({ ok: true });
     });
   });
 });

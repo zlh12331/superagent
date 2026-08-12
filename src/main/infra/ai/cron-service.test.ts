@@ -2,6 +2,7 @@
 // 定时任务服务单测：创建/删除/列表/启停/触发（内存 DB + croner 真实调度）
 
 import Database from 'better-sqlite3';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../storage/schema';
@@ -35,7 +36,7 @@ vi.mock('../storage/db', async (importOriginal) => {
   };
 });
 
-import { resetDb } from '../storage/db';
+import { getDb, resetDb } from '../storage/db';
 
 /** 秒级表达式（croner 6 字段：秒/分/时/日/月/周）——单测触发不等待分钟级 */
 const EVERY_SECOND = '* * * * * *';
@@ -157,6 +158,59 @@ describe('CronService', () => {
     const tasks = service.list();
     expect(tasks).toHaveLength(2);
     // 同毫秒 id 兜底：稳定性
+    expect(service.list().map((t) => t.id)).toEqual(tasks.map((t) => t.id));
+  });
+
+  it('setEnabled 任务不存在：返回 false', () => {
+    const service = new CronService();
+    expect(service.setEnabled('ghost-task', true)).toBe(false);
+  });
+
+  it('setEnabled 停用后重新启用：复用已有调度实例（resume 分支）', () => {
+    const service = new CronService();
+    const id = service.create('sess-1', EVERY_SECOND, '每秒任务');
+    // 停用：job 保留在 jobs Map（仅 pause）
+    expect(service.setEnabled(id, false)).toBe(true);
+    // 重新启用：复用 job（不重复创建调度实例）
+    expect(service.setEnabled(id, true)).toBe(true);
+    const jobs = (service as unknown as { jobs: Map<string, unknown> }).jobs;
+    expect(jobs.size).toBe(1);
+  });
+
+  it('start 恢复：跳过已停用任务（enabled !== 1）', async () => {
+    const service = new CronService();
+    const enabledId = service.create('sess-1', EVERY_SECOND, '启用任务');
+    const disabledId = service.create('sess-2', EVERY_SECOND, '停用任务');
+    // 模拟"重启后无调度实例"：从 jobs Map 移除 + 改库停用
+    const jobs = (service as unknown as { jobs: Map<string, unknown> }).jobs;
+    jobs.delete(disabledId);
+    getDb()
+      .update(schema.cronTasks)
+      .set({ enabled: 0 })
+      .where(eq(schema.cronTasks.id, disabledId))
+      .run();
+
+    service.start();
+    // start 幂等
+    service.start();
+
+    // 启用任务恢复调度；停用任务跳过（不创建实例）
+    expect(jobs.has(enabledId)).toBe(true);
+    expect(jobs.has(disabledId)).toBe(false);
+  });
+
+  it('list 同 createdAt：id 兜底稳定排序（改库模拟同毫秒）', async () => {
+    const service = new CronService();
+    const idA = service.create('sess-1', EVERY_SECOND, '任务 A');
+    const idB = service.create('sess-2', EVERY_SECOND, '任务 B');
+    // 把两条记录改为同一 createdAt，验证 id 兜底排序确定性
+    const db = getDb();
+    const now = 1_700_000_000_000;
+    db.update(schema.cronTasks).set({ createdAt: now }).where(eq(schema.cronTasks.id, idA)).run();
+    db.update(schema.cronTasks).set({ createdAt: now }).where(eq(schema.cronTasks.id, idB)).run();
+
+    const tasks = service.list();
+    // 排序确定性：两次调用结果一致
     expect(service.list().map((t) => t.id)).toEqual(tasks.map((t) => t.id));
   });
 });
