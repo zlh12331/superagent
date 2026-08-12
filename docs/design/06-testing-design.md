@@ -284,3 +284,19 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 | smoke-prod | windows-latest | `build:win` + `test:smoke` |
 
 源码：[.github/workflows/ci.yml](file:///f:/TraeProjects/1/.github/workflows/ci.yml)。
+
+## 9. 覆盖率豁免记录（2026-08 单元测试补全批次）
+
+依据批次耗尽规则，以下未覆盖分支经【豁免判定框架】评估后豁免（全部非核心域）：
+
+| 文件 | 分支数 | 豁免理由 |
+|---|---|---|
+| `infra/ai/tools/read-file.tool.ts` | 4 | zod schema `transform(v => v ?? undefined)` 由 tool-executor 的 parse 阶段执行，单测直接调 execute 不经过 parse（SDK 层行为） |
+| `infra/ai/tools/glob.tool.ts` | 2 | 同上（zod transform） |
+| `infra/ai/prompt/dynamic-context.ts` | 6 | 平台分支（darwin/linux 名称映射、非 win32 的 SHELL 兜底）；`process.platform` 只读不可注入，当前 win32 环境测试路径不可达 |
+| `infra/ai/agent-runtime/stream-reader.ts` | 1 | L49 `timeoutId !== undefined` false 分支；`new Promise` executor 同步赋值保证非 undefined（协议不变量死代码） |
+| `infra/storage/db.ts` | 5 | 备份数组空洞（readdirSync 无空洞）、完整性校验失败（损坏库打开即抛无法到达）、非 duplicate ALTER 错误（SCHEMA_SQL 先建表保证）、非 Error 备份异常 String() 兜底 |
+| `ipc/app.handler.ts` | 1 | v8 对 `&&` 短路组合的计数分支；http/https/file/javascript 四路径用例已覆盖全部业务语义 |
+| `infra/telemetry/otel.ts` | 1 | shutdown 的 `provider.forceFlush` 在 SDK v2 测试环境不可用（catch 兜底后状态正常重置） |
+
+豁免原则：能测不测 = 继续补；上述均为客观不可达（SDK 层 / 平台分支 / 协议不变量 / 防御兜底），附代码证据。
