@@ -21,6 +21,7 @@ const ROOT = join(import.meta.dirname, '..');
 /** IO 边界允许清单：集成测试允许替身的同仓模块（简化环境 Medium Test 的边界替身） */
 const IO_BOUNDARY_MOCKS = [
   'infra/storage', // DB 层（替换为内存实现是标准做法）
+  'llm-client/ai-provider', // LLM provider 工厂（外部服务边界，fake model 注入点）
   'utils/logger',
   'telemetry',
 ];
