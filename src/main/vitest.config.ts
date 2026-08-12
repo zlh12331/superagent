@@ -19,12 +19,14 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       // 阈值卡关：低于此值命令失败（exit code ≠ 0）
       // 设计文档 §8.6：statements 80% / branches 75% / functions 80% / lines 80%
-      // 基线门槛（2026-08-11 实测，CI test:coverage 卡关；渐进收紧至规范值 80/75/80/80）
+      // 门槛（2026-08-12 更新：14 批补测后实测 92.45/84.59/89.57，按 §3.3 收紧机制
+      // 新实测−5 缓冲 = 87/79/84，超过规范值 → 取规范值 80/75/80/80；
+      // CI(ubuntu) 平台分支差异 <0.5pp，余量仍充足）
       thresholds: {
-        statements: 70,
-        branches: 60,
-        functions: 70,
-        lines: 70,
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
       },
       // 排除测试文件本身、类型声明文件、配置文件、入口文件
       // 这些文件不参与覆盖率统计，避免拉低实际业务代码覆盖率
