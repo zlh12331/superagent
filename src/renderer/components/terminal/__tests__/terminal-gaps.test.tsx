@@ -69,6 +69,7 @@ class FakeResizeObserver {
 describe('terminal 批次5 缺口补全', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    MockTerminal.instances = 0;
     roInstances.length = 0;
     useTerminalStore.setState({ terminals: [], buffers: new Map() });
     window.ResizeObserver = FakeResizeObserver as never;

@@ -129,7 +129,7 @@
 | [packages/shared/src/__tests__/smoke.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/smoke.test.ts) | shared 包 smoke |
 | [packages/shared/src/__tests__/shared-gaps.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/shared-gaps.test.ts) | 契约补测：deriveChannels/元数据构造器/单一真源一致性/schema 拦截抽查 |
 
-#### main 主进程（59 个）
+#### main 主进程（122 个）
 
 涵盖 AI 核心（agent-service / chat-service / tool-registry / tool-executor / permission-service / error-classifier / context-compression / ai-provider / models/* / agent-runtime/* / llm-client/* / providers/*）、MCP（mcp-service / mcp-client / mcp-tool-adapter / mcp-types）、工具（file-tools / search-tools / path-guard / run-command）、基础设施（file-service / git-service / session-service / db / keychain / app-data / code-analyzer / update-service / csp）、IPC handler（全部 16 域各一个）、配置与工具（config / logger / retry / wrap）、smoke（services.smoke）。
 
@@ -147,7 +147,7 @@
 | [src/main/ipc/agent.handler.test.ts](file:///f:/TraeProjects/1/src/main/ipc/agent.handler.test.ts) | agent 域 IPC handler |
 | [src/main/security/csp.test.ts](file:///f:/TraeProjects/1/src/main/security/csp.test.ts) | CSP 安全策略 |
 
-#### renderer 渲染层（22 个）
+#### renderer 渲染层（44 个）
 
 涵盖 hooks（use-agent-bridge / use-terminal-bridge / use-git / use-update / use-api-key / use-sessions / use-tool-bridge / use-async-view）、组件（DevPanel / TerminalPanel / GitPanel / AsyncBoundary / EmptyState）、stores（terminal-store / usage-store）、lib（theme-init / error-actions / format-time / ipc / diff-stats）、mock-api、smoke。
 
@@ -259,7 +259,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 > **覆盖率门禁（2026-08-11 起 CI 卡关）**：`pnpm test:coverage` 三层门槛按实测基线设定（渐进收紧至规范值 80/75/80/80）：
 > - shared：80/19/33/80（当前 85.78/24.28/38.46/85.56，2026-08-12 提升）
 > - main：80/75/80/80（当前 92.45/84.59/89.57/92.45，2026-08-12 提升）
-> - renderer：65/55/65/65（当前 67.34/59.34/67.72/68.66）
+> - renderer：80/75/80/80（当前 92.87/87.97/90.92/94.41，2026-08-12 提升）
 > CI Unit tests step 已改为 `pnpm test:coverage`（覆盖率低于基线即失败；补测试后同步上调门槛）。
 ### 7.2 已知覆盖率缺口
 
@@ -302,20 +302,22 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 豁免原则：能测不测 = 继续补；上述均为客观不可达（SDK 层 / 平台分支 / 协议不变量 / 防御兜底），附代码证据。
 
-### 9.1 renderer ������¼��2026-08-12 ���� 1-8 ���⣩
+### 9.1 renderer 层豁免记录（2026-08-12 批次 1-8 补测）
 
-renderer �� 8 �����⣨stores/hooks/chat/agent/terminal/dev-common/layout-i18n-ui���󣬺����� 15 ģ���� 13 ��ֱ�Ӵ�꣨��֧ ��80% / ��� ��85%�����Ǻ����� 9 ģ��ȫ�� ��70%������δ���Ƿ�֧���������ж���ܡ���������⣺
+renderer 层 8 批补测（stores/hooks/chat/agent/terminal/dev-common/layout-i18n-ui）后，核心域 15 模块中 13 个直接达标（分支 ≥80% / 语句 ≥85%），非核心域 9 模块全部 ≥70%（分支口径）。以下未覆盖分支经【豁免判定框架】评估后豁免：
 
-| �ļ� | ��֧�� | �������� |
+| 文件 | 分支数 | 豁免理由 |
 |---|---|---|
-| settings-store.ts | 2 | L25/L187 IS_MAC ƽ̨��֧��macOS ��ݼ�·����win32 ���Ի������ɴ |
-| use-conversation-search.ts | 3 | L100-101 navigate �� prev=-1 ��֧��search ���ñ�֤�ǿղ�ѯʱ currentMatch��-1��-1 ״̬�ذ����ƥ�䣨navigate ��ǰ return������Э�鲻���������� |
-| use-api-key.ts | 2 | L96/L124 onError �� error instanceof Error false �ࣻunwrap ��֤�� Error��	hrow new Error ��һ·��������Э�鲻������������ |
-| use-sessions.ts | 12 | v8 &&/?? ��ϼ�����֧ + L104 id-null throw��enabled:false ��֤��ִ�У������Ѵ� 80% ���¼ |
-| ChatInput.tsx | ~30 | ��ק pointer �¼�������ϣ�jsdom �� PointerEvent ���֣��Ѳ���·�������·������applySuggestion �� action ��䣨��������ȫ�� action �����룩��applyMention atIndex<0��mention չ����֤��������֧ 85.7% ��� 92.7% |
-| pproval-utils.ts / pproval-preview.tsx | 15 | v8 ��ϼ�����?? '' ��ֵ���ˡ�input �������� false �ࡢ���� case�������Ѳ���·���ķ����� |
-| TerminalView.tsx | 3 | L50 containerRef null ���������غ�ǿգ���L97 exit ��ƥ����ˣ�output ͬģʽ�Ѳ⣩��L113 �����ظ����� clearTimeout���ڲ�ϸ�ڣ� |
-| SectionErrorBoundary.tsx | 1 | L92 info.componentStack ?? undefined����react-error-boundary SDK ��Լ��֤��ֵ |
-| Topbar.tsx / ThemeProvider.tsx / i18n/config.ts | 5 | L69 navigator.platform mac ƽ̨��֧��L63/L103 	ypeof window === 'undefined' SSR ��֧��Electron ���� window����v8 ������֧ |
+| stores/persistent/settings-store.ts | 2 | L25/L187 IS_MAC 平台分支（macOS 快捷键路径，win32 测试环境不可达） |
+| hooks/use-conversation-search.ts | 3 | L100-101 navigate 的 prev=-1 分支；search 重置保证非空查询时 currentMatch≠-1，-1 状态必伴随空匹配（navigate 提前 return）——协议不变量死代码 |
+| hooks/use-api-key.ts | 2 | L96/L124 onError 的 error instanceof Error false 侧；unwrap 保证抛 Error（throw new Error 单一路径）——协议不变量防御兜底 |
+| hooks/use-sessions.ts | 12 | v8 &&/?? 组合计数分支 + L104 id-null throw（enabled:false 保证不执行）——分支 80% 达标后记录 |
+| components/chat/ChatInput.tsx | ~25 | 补测（899fd1e）后：applySuggestion 无 action 填充（内置命令全带 action 死代码）、applyMention atIndex<0（mention 展开保证）、拖拽 pointer 剩余组合（jsdom 布局边界）——分支 85.7% / 语句 92.7% |
+| components/agent/approval-utils.ts、approval-preview.tsx | 15 | v8 组合计数（?? '' 空值回退、input 类型守卫 false 侧、共享 case）——已测主路径的防御侧 |
+| components/terminal/TerminalView.tsx | 3 | L50 containerRef null 防御（挂载后非空）、L97 exit 不匹配过滤（output 同模式已测）、L113 防抖重复触发 clearTimeout（内部细节） |
+| components/common/SectionErrorBoundary.tsx | 1 | L92 info.componentStack ?? undefined——react-error-boundary SDK 契约保证有值 |
+| components/layout/Topbar.tsx、providers/ThemeProvider.tsx、i18n/config.ts | 5 | L69 navigator.platform mac 平台分支、L63/L103 typeof window === 'undefined' SSR 分支（Electron 恒有 window）、v8 计数分支 |
 
-����ԭ�򣺺�������ϣ���������/Э�鲻�����������Ǻ�����͹۲��ɴ�ܲⲻ�� = ��������������������д���֤�ݣ���
+豁免原则：核心域从严（仅死代码/协议不变量级），非核心域客观不可达；能测不测 = 继续补（本表所有项均有代码证据）。
+
+补充口径说明（2026-08-12 审查确认）：非核心域达标指标为**分支覆盖率**（批次清单口径，与 §3.4 一致）；IM 域 4 个适配器文件（wecom/feishu/dingtalk/wecom-stream）分支 ≥70% 达标，语句/行 56.7-64.9% 低于 70% 属既有记录口径差异，列入观察（凌晨批次 0b8846e 交付，非本轮新增缺口）。

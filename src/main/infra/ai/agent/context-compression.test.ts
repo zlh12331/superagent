@@ -165,7 +165,7 @@ describe('context-compression 批次4 缺口补全', () => {
     it('末尾未配对工具调用：不 flush', () => {
       const messages: ModelMessage[] = [assistantCall('c1'), toolResult('c1'), assistantCall('c2')];
       const result = compressContext(messages, { maxMessages: 2, recentMessages: 5 });
-      // c1 配对保留；c2 未配对（末尾）不进入合并，作为 early 消息保留在 recent
+      // c1 配对保留；c2 未配对（末尾）→ 合并时丢弃（不入 recent）
       expect(result.filter((m) => m.role === 'assistant')).toHaveLength(1);
       expect(result.filter((m) => m.role === 'tool')).toHaveLength(1);
     });

@@ -138,7 +138,8 @@ export class SubagentManager {
       TaskKind.AGENT,
       `子代理 ${name}：${task.slice(0, 60)}`,
     );
-    taskService.update(taskId, TaskStatus.RUNNING);
+    // 任务状态更新统一走容错路径（任务跟踪失败不阻断执行）
+    this.updateTaskStatus(taskId, TaskStatus.RUNNING);
 
     const watchdog = new StallWatchdog({
       ...(options?.stallMs !== undefined ? { stallMs: options.stallMs } : {}),

@@ -591,9 +591,8 @@ describe('chat-service', () => {
     it('无活跃对话时立即返回', async () => {
       // 不启动任何对话，直接 dispose
       await getChatService().dispose(1000);
-      // 应该立即完成（无 stream 可等待）
-      // 这里能执行到 expect 即证明 dispose 已 resolve
-      expect(true).toBe(true);
+      // dispose 后无活跃会话可 abort（验证清理生效而非 1000ms 兜底超时返回）
+      expect(getChatService().abort('ghost-session')).toBe(false);
     });
 
     it('有活跃对话时等待 stream 完成后 resolve', async () => {

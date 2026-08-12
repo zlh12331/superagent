@@ -1,5 +1,5 @@
 // packages/shared/src/ipc/channels.ts
-// IPC Channel 字符串常量（从 IPC_DEFINITIONS 自动推导）
+// IPC Channel 字符串常量（从 IPC_META 自动推导）
 // 设计文档 §5.2 命名规范 + §5.3 完整清单
 //
 // 命名规范：

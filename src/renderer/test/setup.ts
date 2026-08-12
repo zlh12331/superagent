@@ -44,6 +44,22 @@ const emptyApi: MockApi = {
   tool: {},
 };
 
+/** 重建空骨架（afterEach 用）：避免复用单例导致注入域残留到下一测试 */
+function createEmptyApi(): MockApi {
+  return {
+    app: {},
+    chat: {},
+    agent: {},
+    session: {},
+    file: {},
+    search: {},
+    terminal: {},
+    git: {},
+    codebase: {},
+    tool: {},
+  };
+}
+
 // 注入 window.api（防止业务代码访问时报 undefined）
 Object.defineProperty(window, 'api', {
   value: emptyApi,
@@ -121,9 +137,9 @@ import { afterEach } from 'vitest';
 
 afterEach(() => {
   vi.restoreAllMocks();
-  // 重置 window.api 为空实现（防止某测试注入的方法污染下个测试）
+  // 重置 window.api 为空实现（重建对象，防止某测试注入的方法污染下个测试）
   Object.defineProperty(window, 'api', {
-    value: emptyApi,
+    value: createEmptyApi(),
     writable: true,
     configurable: true,
   });
