@@ -382,11 +382,14 @@ export function ChatInput({
       if (data.canceled || data.paths === undefined || data.paths.length === 0) {
         return;
       }
-      // 去重（已选路径跳过）
-      const existing = new Set(attachments.map((a) => a.path));
-      const next = data.paths
-        .filter((p) => !existing.has(p))
-        .map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p }));
+      // 去重（已选路径跳过；filter 内逐步去重，重复路径只留一个）
+      const seen = new Set(attachments.map((a) => a.path));
+      const next: ChatAttachment[] = [];
+      for (const p of data.paths) {
+        if (seen.has(p)) continue;
+        seen.add(p);
+        next.push({ path: p, name: p.split(/[\\/]/).pop() ?? p });
+      }
       if (next.length > 0) {
         setAttachments((prev) => [...prev, ...next]);
       }
