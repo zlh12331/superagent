@@ -99,3 +99,18 @@ describe('injectDynamicContext', () => {
     expect(provider).toHaveBeenCalledWith(expect.stringContaining('relative'));
   });
 });
+
+describe('dynamic-context 批次13 缺口补全', () => {
+  it('COMSPEC 缺失：shell 占位符回退 powershell.exe（win32）', async () => {
+    const original = process.env['COMSPEC'];
+    delete process.env['COMSPEC'];
+    try {
+      const result = await injectDynamicContext('{{shell}}', { workingDir: '/tmp' });
+      expect(result).toContain('powershell.exe');
+    } finally {
+      if (original !== undefined) {
+        process.env['COMSPEC'] = original;
+      }
+    }
+  });
+});

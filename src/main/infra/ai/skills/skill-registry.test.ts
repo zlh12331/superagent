@@ -61,3 +61,22 @@ describe('load_skill 工具', () => {
     expect(tool.category).toBe('read');
   });
 });
+
+describe('SkillRegistry 批次13 缺口补全', () => {
+  it('remove 不存在的技能：返回 false', () => {
+    const registry = new SkillRegistry();
+    expect(registry.remove('ghost-skill')).toBe(false);
+  });
+
+  it('remove 内置技能：删除后回退内置定义', () => {
+    const registry = new SkillRegistry();
+    // 内置技能存在（BUILTIN_SKILLS 有定义）
+    const builtinName = registry.list()[0]?.name;
+    expect(builtinName).toBeDefined();
+    if (builtinName === undefined) return;
+    const removed = registry.remove(builtinName);
+    expect(removed).toBe(true);
+    // 回退内置定义：仍然可查询
+    expect(registry.load(builtinName)).toBeDefined();
+  });
+});
