@@ -51,7 +51,9 @@ export function compressContext(
   for (const msg of messages) {
     if (msg.role === 'system') {
       systemMessages.push(msg);
-    } else if (msg.role === 'tool') {
+    } else if (msg.role === 'tool' || hasToolCalls(msg)) {
+      // 真实缺陷修复：带 toolCalls 的 assistant 必须与 tool 结果同列表配对，
+      // 否则 mergeToolMessages 收不到调用方 → 工具上下文在压缩时全部丢失
       toolMessages.push(msg);
     } else {
       earlyMessages.push(msg);
@@ -96,6 +98,16 @@ function messageToText(msg: ModelMessage): string {
   return Array.isArray(msg.content)
     ? msg.content.map((part) => ('text' in part ? String(part.text) : '')).join('\n')
     : String(msg.content ?? '');
+}
+
+/** 判断消息是否携带工具调用（assistant 带 toolCalls 数组且非空） */
+function hasToolCalls(msg: ModelMessage): boolean {
+  return (
+    msg.role === 'assistant' &&
+    'toolCalls' in msg &&
+    Array.isArray((msg as unknown as { toolCalls: unknown[] | null }).toolCalls) &&
+    ((msg as unknown as { toolCalls: unknown[] | null }).toolCalls?.length ?? 0) > 0
+  );
 }
 
 /**
@@ -161,12 +173,7 @@ function mergeToolMessages(messages: ModelMessage[]): ModelMessage[] {
   for (const msg of messages) {
     if (msg.role === 'tool') {
       currentToolResult = msg;
-    } else if (
-      msg.role === 'assistant' &&
-      'toolCalls' in msg &&
-      Array.isArray((msg as unknown as { toolCalls: unknown[] | null }).toolCalls) &&
-      ((msg as unknown as { toolCalls: unknown[] | null }).toolCalls?.length ?? 0) > 0
-    ) {
+    } else if (hasToolCalls(msg)) {
       if (currentToolCall !== null && currentToolResult !== null) {
         merged.push(currentToolCall);
         merged.push(currentToolResult);

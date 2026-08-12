@@ -1284,7 +1284,8 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
     expect(errCalls).toHaveLength(1);
     expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_CONTEXT_TOO_LARGE');
-  });
+    // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 2K 字符可达 5s+，放宽超时
+  }, 15_000);
 
   it('上下文 warn：记录接近压缩线日志', async () => {
     mocks.mockResolveModel.mockImplementation(() => ({
@@ -1307,8 +1308,9 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ contextTokens: 8000, compactAt: 8400 }),
       expect.stringContaining('接近压缩线'),
+      // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
     );
-  });
+  }, 15_000);
 
   it('上下文 compact：压缩消息历史后继续执行', async () => {
     mocks.mockResolveModel.mockImplementation(() => ({
@@ -1329,7 +1331,8 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     );
     const opts = mocks.mockStreamText.mock.calls[0]?.[0] as { messages: unknown[] } | undefined;
     expect(opts?.messages).toHaveLength(1);
-  });
+    // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
+  }, 15_000);
 
   it('completed + 完整 usage：recordUsage 调用 + END 含 usage + span 属性', async () => {
     const wc = createMockWebContents();
