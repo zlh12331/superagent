@@ -393,5 +393,80 @@ describe('chat 批次3 缺口补全', () => {
         '@/proj/src/main.ts',
       );
     });
+
+    it('斜杠按钮点击：填充 / 并打开建议面板', () => {
+      renderInput();
+      fireEvent.click(screen.getByLabelText('斜杠命令'));
+      expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('/');
+      expect(screen.getByRole('listbox')).toBeDefined();
+    });
+
+    it('@提及 window.api 未注入：静默清空建议', async () => {
+      Object.defineProperty(window, 'api', {
+        value: undefined,
+        writable: true,
+        configurable: true,
+      });
+      renderInput({ workingDir: '/proj' });
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: '@ma' } });
+      await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    });
+
+    it('附件读取抛异常：标注失败不阻断发送（catch 分支）', async () => {
+      const onSend = vi.fn();
+      (window.api as unknown as Record<string, unknown>)['dialog'] = {
+        pickFiles: vi.fn(async () => ({ data: { canceled: false, paths: ['/proj/c.bin'] } })),
+      };
+      (window.api as unknown as Record<string, unknown>)['file'] = {
+        read: vi.fn(async () => {
+          throw new Error('permission denied');
+        }),
+      };
+      renderInput({ onSend });
+      fireEvent.click(screen.getByLabelText('附加文件'));
+      await screen.findByText('c.bin');
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+      await waitFor(() =>
+        expect(onSend).toHaveBeenCalledWith(expect.stringContaining('内容读取失败')),
+      );
+    });
+
+    it('拖拽手柄：pointerdown/move/up 调整高度（向上拖变高）', () => {
+      // jsdom 无布局，mock 布局属性
+      const originalSetPointerCapture = HTMLElement.prototype.setPointerCapture;
+      HTMLElement.prototype.setPointerCapture = vi.fn();
+      try {
+        renderInput();
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+        Object.defineProperty(textarea, 'scrollHeight', { value: 100, configurable: true });
+        Object.defineProperty(textarea, 'offsetHeight', { value: 40, configurable: true });
+        const handle = document.querySelector('.composer-drag-handle') as HTMLElement;
+        fireEvent.pointerDown(handle, { clientY: 200, pointerId: 1 });
+        // 向上拖 100px（clientY 200 → 100）：高度 40 → 140
+        fireEvent.pointerMove(document, { clientY: 100 });
+        expect(textarea.style.height).toBe('140px');
+        expect(textarea.style.maxHeight).toBe('140px');
+        // 向下拖超下限：钳位到 dragMinH（100）
+        fireEvent.pointerMove(document, { clientY: 300 });
+        expect(textarea.style.height).toBe('100px');
+        // 拖拽结束清理
+        fireEvent.pointerUp(document);
+      } finally {
+        HTMLElement.prototype.setPointerCapture = originalSetPointerCapture;
+      }
+    });
+
+    it('拖拽手柄双击：重置高度（自动档）', () => {
+      renderInput();
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      Object.defineProperty(textarea, 'scrollHeight', { value: 80, configurable: true });
+      const handle = document.querySelector('.composer-drag-handle') as HTMLElement;
+      if (handle !== null) {
+        fireEvent.doubleClick(handle);
+        expect(textarea.style.height).toBe('80px');
+        expect(textarea.style.maxHeight).toBe('');
+      }
+    });
   });
 });
