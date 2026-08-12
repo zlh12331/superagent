@@ -184,7 +184,12 @@ export class CodebaseService implements ICodebaseService {
   async query(options: CodebaseQueryOptions): Promise<CodebaseQueryRes> {
     const { path, search, limit, kind } = options;
 
-    const args = ['query', search, '-p', path, '-l', String(limit), '-j'];
+    const args = ['query', search, '-p', path];
+    // limit 可选：直接调用方可能不传（与 zod schema 一致），避免拼出 '-l undefined'
+    if (limit !== undefined) {
+      args.push('-l', String(limit));
+    }
+    args.push('-j');
     if (kind !== undefined && kind.length > 0) {
       args.push('-k', kind);
     }
@@ -202,7 +207,11 @@ export class CodebaseService implements ICodebaseService {
    */
   async explore(options: CodebaseExploreOptions): Promise<CodebaseExploreRes> {
     const { path, query, maxFiles } = options;
-    const args = ['explore', ...query, '-p', path, '--max-files', String(maxFiles)];
+    const args = ['explore', ...query, '-p', path];
+    // maxFiles 可选：避免拼出 '--max-files undefined'
+    if (maxFiles !== undefined) {
+      args.push('--max-files', String(maxFiles));
+    }
     const { stdout } = await this.runCodegraph(args, path);
     return { markdown: stdout };
   }
@@ -321,6 +330,8 @@ export class CodebaseService implements ICodebaseService {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
+        // Windows 下 codegraph 为 .cmd 包装（npm 全局）——spawn 直接执行找不到文件
+        shell: process.platform === 'win32',
       });
       this.activeProcesses.add(child);
 
