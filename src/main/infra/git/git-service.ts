@@ -221,7 +221,11 @@ class GitService implements IGitService {
     if (staged) {
       args.push('--cached');
     }
-    args.push(ref);
+    // ref 可选（省略 = 工作区 vs index）：直接调用方可能不传（与 zod schema 一致），
+    // 避免拼出 'git diff undefined' 命令
+    if (ref !== undefined && ref.length > 0) {
+      args.push(ref);
+    }
     if (filePath !== undefined && filePath.length > 0) {
       args.push('--', filePath);
     }
@@ -284,10 +288,11 @@ class GitService implements IGitService {
    * 否则暂存指定路径。stagedCount 通过 status 统计。
    */
   async add(options: GitAddOptions): Promise<GitAddRes> {
-    const { path, paths } = options;
+    const { path, paths = [] } = options;
     await this.assertGitRepo(path);
 
     // simple-git add 透传参数：空数组 → -A（全量），否则 -- <paths>
+    // paths 可选：直接调用方可能不传（与 zod schema 默认 [] 一致），service 层防御性默认
     const args: string[] = paths.length === 0 ? ['-A'] : ['--', ...paths];
     const stdout = await this.runGit((git) => git.add(args), path);
 
