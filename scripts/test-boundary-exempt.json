@@ -1,105 +1,75 @@
 {
-  "$comment": "准集成测试登记表（测试边界门禁 §3.6）：src/ 单测目录中真实 IO 信号的测试必须登记。单模块 + 真实 DB/WebSocket/HTTP server = '准集成'（integration-ish unit test），未来随集成测试体系建设逐步迁移到 tests/integration/。",
+  "$comment": "准集成测试登记表（测试边界门禁 §3.6）：src/ 单测目录中真实 IO 信号的测试必须登记。2026-08-12 迁移：8 个跨模块真实协作测试已迁移至 tests/integration/（见已迁移列表）；剩余 12 个为单模块 + 真实 IO（非链路型），保留在单测目录。",
+  "migrated_to_integration": [
+    "src/main/infra/ai/goal-service.test.ts -> tests/integration/goal-service.test.ts",
+    "src/main/infra/ai/memory-service.test.ts -> tests/integration/memory-service.test.ts",
+    "src/main/infra/ai/subagent-manager.test.ts -> tests/integration/subagent-manager.test.ts",
+    "src/main/infra/ai/task-service.test.ts -> tests/integration/task-service.test.ts",
+    "src/main/infra/ai/team-service.test.ts -> tests/integration/team-service.test.ts",
+    "src/main/infra/ai/tools/save-memory.tool.test.ts -> tests/integration/save-memory.tool.test.ts",
+    "src/main/infra/ai/tools/task-tools.test.ts -> tests/integration/task-tools.test.ts",
+    "src/main/infra/im/adapters/webhook-channels.test.ts -> tests/integration/webhook-channels.test.ts"
+  ],
   "entries": [
     {
       "file": "src/main/infra/ai/cron-service.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证 cron 持久化"
-    },
-    {
-      "file": "src/main/infra/ai/goal-service.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证 goal 增删改查"
+      "reason": "真实 DB 验证 cron 持久化；单模块 + mock DB 工厂（非链路型，保留）"
     },
     {
       "file": "src/main/infra/ai/learn-skill-agent.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证技能学习落库"
-    },
-    {
-      "file": "src/main/infra/ai/memory-service.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证记忆存取"
+      "reason": "真实 DB 验证技能学习落库；单模块（非链路型，保留）"
     },
     {
       "file": "src/main/infra/ai/models/runtime-model-store.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证模型配置持久化"
-    },
-    {
-      "file": "src/main/infra/ai/subagent-manager.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证子代理任务跟踪"
-    },
-    {
-      "file": "src/main/infra/ai/task-service.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证任务服务"
-    },
-    {
-      "file": "src/main/infra/ai/team-service.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证团队协作"
-    },
-    {
-      "file": "src/main/infra/ai/tools/save-memory.tool.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证记忆工具落库"
-    },
-    {
-      "file": "src/main/infra/ai/tools/task-tools.test.ts",
-      "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证任务工具"
+      "reason": "真实 DB 验证模型配置持久化；单模块（非链路型，保留）"
     },
     {
       "file": "src/main/infra/im/adapters/dingtalk-stream-receiver.test.ts",
       "signals": ["WebSocket"],
-      "reason": "真实 WebSocket 协议栈验证"
+      "reason": "真实 WebSocket 协议栈验证；单模块 adapter（非链路型，保留）"
     },
     {
       "file": "src/main/infra/im/adapters/qq-stream-receiver.test.ts",
       "signals": ["WebSocket"],
-      "reason": "真实 WebSocket 协议栈验证"
+      "reason": "真实 WebSocket 协议栈验证；单模块 adapter（非链路型，保留）"
     },
     {
       "file": "src/main/infra/im/adapters/qq-stream.test.ts",
       "signals": ["http-server"],
-      "reason": "本地 HTTP server 模拟平台 API"
-    },
-    {
-      "file": "src/main/infra/im/adapters/webhook-channels.test.ts",
-      "signals": ["http-server"],
-      "reason": "本地 HTTP server 验证 webhook"
+      "reason": "本地 HTTP server 模拟平台；单模块 adapter（非链路型，保留）"
     },
     {
       "file": "src/main/infra/im/adapters/weixin-stream.test.ts",
       "signals": ["http-server"],
-      "reason": "本地 HTTP server 模拟平台 API"
+      "reason": "本地 HTTP server 模拟平台；单模块 adapter（非链路型，保留）"
     },
     {
       "file": "src/main/infra/storage/db.perf.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB 性能基准（perf）"
+      "reason": "真实 DB 性能基准（perf）；存储域单模块（非链路型，保留）"
     },
     {
       "file": "src/main/infra/storage/db.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB schema/迁移/备份"
+      "reason": "真实 DB schema/迁移/备份；存储域单模块（非链路型，保留）"
     },
     {
       "file": "src/main/infra/storage/session-service.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证会话服务"
+      "reason": "真实 DB 验证会话服务；mock db 工厂（非链路型，保留）"
     },
     {
       "file": "src/main/infra/storage/storage-gaps.test.ts",
       "signals": ["better-sqlite3"],
-      "reason": "真实 DB 验证存储缺口补测"
+      "reason": "真实 DB 验证存储缺口补测；存储域（非链路型，保留）"
     },
     {
       "file": "src/main/ipc/settings.handler.test.ts",
       "signals": ["WebSocket"],
-      "reason": "真实 WebSocket 验证设置推送"
+      "reason": "真实 WebSocket 验证设置推送；handler + mock 存储边界（非链路型，保留）"
     }
   ]
 }

@@ -86,7 +86,31 @@ jobs:
             src/renderer/coverage/
           retention-days: 7
 
-  # ── Job 2: 浏览器 E2E（dev server，轻量级）─────────────────
+  # ── Job 2: 集成测试（慢速分层门控，不阻塞单测高频反馈）──
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Integration tests (tests/integration)
+        run: pnpm test:integration
+
+  # ── Job 3: 浏览器 E2E（dev server，轻量级）─────────────────
   e2e-browser:
     name: E2E (Browser Mode)
     runs-on: ubuntu-latest
