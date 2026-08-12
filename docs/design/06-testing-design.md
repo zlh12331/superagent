@@ -300,3 +300,21 @@ DevPanel æµ‹è¯•ç”¨æ¡ä»¶æ¸²æŸ“ + `toHaveAttribute('data-state', 'active')` ç­‰å¾
 | `infra/telemetry/otel.ts` | 1 | shutdown çš„ `provider.forceFlush` åœ¨ SDK v2 æµ‹è¯•ç¯å¢ƒä¸å¯ç”¨ï¼ˆcatch å…œåº•åçŠ¶æ€æ­£å¸¸é‡ç½®ï¼‰ |
 
 è±å…åŸåˆ™ï¼šèƒ½æµ‹ä¸æµ‹ = ç»§ç»­è¡¥ï¼›ä¸Šè¿°å‡ä¸ºå®¢è§‚ä¸å¯è¾¾ï¼ˆSDK å±‚ / å¹³å°åˆ†æ”¯ / åè®®ä¸å˜é‡ / é˜²å¾¡å…œåº•ï¼‰ï¼Œé™„ä»£ç è¯æ®ã€‚
+
+### 9.1 renderer ²ã»íÃâ¼ÇÂ¼£¨2026-08-12 Åú´Î 1-8 ²¹²â£©
+
+renderer ²ã 8 Åú²¹²â£¨stores/hooks/chat/agent/terminal/dev-common/layout-i18n-ui£©ºó£¬ºËĞÄÓò 15 Ä£¿éÖĞ 13 ¸öÖ±½Ó´ï±ê£¨·ÖÖ§ ¡İ80% / Óï¾ä ¡İ85%£©£¬·ÇºËĞÄÓò 9 Ä£¿éÈ«²¿ ¡İ70%¡£ÒÔÏÂÎ´¸²¸Ç·ÖÖ§¾­¡¾»íÃâÅĞ¶¨¿ò¼Ü¡¿ÆÀ¹Àºó»íÃâ£º
+
+| ÎÄ¼ş | ·ÖÖ§Êı | »íÃâÀíÓÉ |
+|---|---|---|
+| settings-store.ts | 2 | L25/L187 IS_MAC Æ½Ì¨·ÖÖ§£¨macOS ¿ì½İ¼üÂ·¾¶£¬win32 ²âÊÔ»·¾³²»¿É´ï£© |
+| use-conversation-search.ts | 3 | L100-101 navigate µÄ prev=-1 ·ÖÖ§£»search ÖØÖÃ±£Ö¤·Ç¿Õ²éÑ¯Ê± currentMatch¡Ù-1£¬-1 ×´Ì¬±Ø°éËæ¿ÕÆ¥Åä£¨navigate ÌáÇ° return£©¡ª¡ªĞ­Òé²»±äÁ¿ËÀ´úÂë |
+| use-api-key.ts | 2 | L96/L124 onError µÄ error instanceof Error false ²à£»unwrap ±£Ö¤Å× Error£¨	hrow new Error µ¥Ò»Â·¾¶£©¡ª¡ªĞ­Òé²»±äÁ¿·ÀÓù¶µµ× |
+| use-sessions.ts | 12 | v8 &&/?? ×éºÏ¼ÆÊı·ÖÖ§ + L104 id-null throw£¨enabled:false ±£Ö¤²»Ö´ĞĞ£©¡ª¡ªÒÑ´ï 80% ºó¼ÇÂ¼ |
+| ChatInput.tsx | ~30 | ÍÏ×§ pointer ÊÂ¼ş²¿·Ö×éºÏ£¨jsdom ÎŞ PointerEvent ²¼¾Ö£¬ÒÑ²âÖ÷Â·¾¶Óë¼üÅÌÂ·¾¶£©¡¢applySuggestion ÎŞ action Ìî³ä£¨ÄÚÖÃÃüÁîÈ«´ø action ËÀ´úÂë£©¡¢applyMention atIndex<0£¨mention Õ¹¿ª±£Ö¤£©¡ª¡ª·ÖÖ§ 85.7% Óï¾ä 92.7% |
+| pproval-utils.ts / pproval-preview.tsx | 15 | v8 ×éºÏ¼ÆÊı£¨?? '' ¿ÕÖµ»ØÍË¡¢input ÀàĞÍÊØÎÀ false ²à¡¢¹²Ïí case£©¡ª¡ªÒÑ²âÖ÷Â·¾¶µÄ·ÀÓù²à |
+| TerminalView.tsx | 3 | L50 containerRef null ·ÀÓù£¨¹ÒÔØºó·Ç¿Õ£©¡¢L97 exit ²»Æ¥Åä¹ıÂË£¨output Í¬Ä£Ê½ÒÑ²â£©¡¢L113 ·À¶¶ÖØ¸´´¥·¢ clearTimeout£¨ÄÚ²¿Ï¸½Ú£© |
+| SectionErrorBoundary.tsx | 1 | L92 info.componentStack ?? undefined¡ª¡ªreact-error-boundary SDK ÆõÔ¼±£Ö¤ÓĞÖµ |
+| Topbar.tsx / ThemeProvider.tsx / i18n/config.ts | 5 | L69 navigator.platform mac Æ½Ì¨·ÖÖ§¡¢L63/L103 	ypeof window === 'undefined' SSR ·ÖÖ§£¨Electron ºãÓĞ window£©¡¢v8 ¼ÆÊı·ÖÖ§ |
+
+»íÃâÔ­Ôò£ººËĞÄÓò´ÓÑÏ£¨½öËÀ´úÂë/Ğ­Òé²»±äÁ¿¼¶£©£¬·ÇºËĞÄÓò¿Í¹Û²»¿É´ï£»ÄÜ²â²»²â = ¼ÌĞø²¹£¨±¾±íËùÓĞÏî¾ùÓĞ´úÂëÖ¤¾İ£©¡£
