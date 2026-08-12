@@ -7,8 +7,9 @@
 //   {domain}:stream:{event}  流式事件（webContents.send）
 //   {domain}:event:{name}    状态变更事件（webContents.send）
 //
-// 本文件不再手写常量：IPC_CHANNELS 由 deriveChannels(IPC_DEFINITIONS) 生成，
-// 新增/修改 IPC 方法只需编辑 definitions.ts，通道常量自动同步。
+// 本文件不再手写常量：IPC_CHANNELS 由 deriveChannels(IPC_META) 生成，
+// meta 为 channel 真源（definitions 在 meta 之上追加 zod schema 与类型标记），
+// 新增/修改 IPC 方法只需编辑 meta.ts/definitions.ts，通道常量自动同步。
 // 使用 as const 派生字面量类型，防止 ipcMain.handle / ipcRenderer.on 拼写错误
 //
 // 当前包含以下域（Code Agent 架构）：

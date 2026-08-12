@@ -115,11 +115,11 @@
 - 核心域分支追到 **80-85%**（业界拐点），中等域 **70-75%**
 - **停止判据**：分支 ≥85% 后收益递减不硬追；getter/setter/日志行不补（有效覆盖理念）
 
-### 3.5 测试文件清单（137 个）
+### 3.5 测试文件清单（176 个）
 
 > 以下按区域列出代表性文件，完整清单以 `Glob "**/*.test.{ts,tsx}"` 为准。
 
-#### shared 包（4 个）
+#### shared 包（5 个）
 
 | 文件 | 说明 |
 |------|------|
@@ -127,6 +127,7 @@
 | [packages/shared/src/__tests__/errors.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/errors.test.ts) | AppError / ErrorCode 错误码体系 |
 | [packages/shared/src/__tests__/api.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/api.test.ts) | IpcApi 接口形状 |
 | [packages/shared/src/__tests__/smoke.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/smoke.test.ts) | shared 包 smoke |
+| [packages/shared/src/__tests__/shared-gaps.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/shared-gaps.test.ts) | 契约补测：deriveChannels/元数据构造器/单一真源一致性/schema 拦截抽查 |
 
 #### main 主进程（59 个）
 
@@ -248,7 +249,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 ### 7.1 当前规模
 
-- **单元测试文件**：137 个（shared 4 + main 95 + renderer 33 + scripts 5）
+- **单元测试文件**：176 个（shared 5 + main 122 + renderer 44 + scripts 5）
 - **E2E 文件**：6 个
 - **总用例数**：约 400+（renderer 242 通过 + main/shared 用例；随测试增长）
 
@@ -256,7 +257,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 
 > **覆盖率门禁（2026-08-11 起 CI 卡关）**：`pnpm test:coverage` 三层门槛按实测基线设定（渐进收紧至规范值 80/75/80/80）：
-> - shared：80/18/33/80（当前 84.73/18.57/33.33/84.49）
+> - shared：80/19/33/80（当前 85.78/24.28/38.46/85.56，2026-08-12 提升）
 > - main：80/75/80/80（当前 92.45/84.59/89.57/92.45，2026-08-12 提升）
 > - renderer：65/55/65/65（当前 67.34/59.34/67.72/68.66）
 > CI Unit tests step 已改为 `pnpm test:coverage`（覆盖率低于基线即失败；补测试后同步上调门槛）。

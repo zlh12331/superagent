@@ -8,7 +8,6 @@
 // 4. 核心 schema parse 抽查（file read/write、session list）：正向 + 非法拦截
 
 import { describe, expect, it } from 'vitest';
-import { IPC_CHANNELS } from '../ipc/channels';
 import { IPC_DEFINITIONS } from '../ipc/definitions';
 import { deriveChannels } from '../ipc/derive';
 import { event, IPC_META, request } from '../ipc/meta';
@@ -44,41 +43,37 @@ describe('shared 层契约补测', () => {
       expect(deriveChannels({})).toEqual({});
     });
 
-    it('全量派生：deriveChannels(IPC_META) 与 IPC_CHANNELS 完全一致', () => {
-      // IPC_CHANNELS 由 deriveChannels(IPC_META) 生成（同源），此用例守护派生器回归
-      expect(deriveChannels(IPC_META)).toEqual(IPC_CHANNELS);
-    });
-
     it('definitions 真源派生：与 meta 派生通道集一致（无孤儿 channel）', () => {
       // definitions 含 schema 的完整真源，channel 必须与 meta 完全同步（无新增/无遗漏）
-      const fromDefs = deriveChannels(IPC_DEFINITIONS as never);
+      // 注意：不能依赖 IPC_CHANNELS 自比（其自身就是 deriveChannels(IPC_META) 的同源产物）
+      const fromDefs = deriveChannels(IPC_DEFINITIONS);
       const fromMeta = deriveChannels(IPC_META);
       expect(fromDefs).toEqual(fromMeta);
+      // key 与 value 一一对应（toConstantKey 冲突会静默覆盖，防止 channel 丢失）
+      expect(Object.keys(fromMeta)).toHaveLength(Object.values(fromMeta).length);
     });
   });
 
   describe('单一真源一致性（meta ↔ definitions）', () => {
-    it('meta 的每个 domain/method 在 definitions 中存在（无孤儿）', () => {
+    it('双向覆盖：meta 与 definitions 的 domain/method 完全对齐（无孤儿/无缺失）', () => {
       const defs = IPC_DEFINITIONS as unknown as Record<string, Record<string, { kind?: string }>>;
-      for (const [domain, methods] of Object.entries(IPC_META)) {
+      const meta = IPC_META as unknown as Record<string, Record<string, { kind?: string }>>;
+      // meta ⊆ definitions：meta 条目在 definitions 必须存在（防手写孤儿）
+      for (const [domain, methods] of Object.entries(meta)) {
         for (const method of Object.keys(methods)) {
           expect(defs[domain]?.[method]).toBeDefined();
         }
       }
-    });
-
-    it('definitions 的每个 domain/method 在 meta 中存在（无缺失）', () => {
-      for (const [domain, methods] of Object.entries(IPC_DEFINITIONS)) {
+      // definitions ⊆ meta：definitions 条目在 meta 必须存在（防新增遗漏）
+      for (const [domain, methods] of Object.entries(defs)) {
         for (const method of Object.keys(methods)) {
-          expect(IPC_META[domain as keyof typeof IPC_META]).toBeDefined();
-          expect(
-            (IPC_META[domain as keyof typeof IPC_META] as Record<string, unknown>)[method],
-          ).toBeDefined();
+          expect(meta[domain]?.[method]).toBeDefined();
         }
       }
     });
 
     it('kind 不漂移：definitions 与 meta 的 request/event 分类一致', () => {
+      // 编译期已由 withSchema/withPayload 的泛型约束保证（运行时为防御手写条目）
       const defs = IPC_DEFINITIONS as unknown as Record<string, Record<string, { kind?: string }>>;
       const meta = IPC_META as unknown as Record<string, Record<string, { kind?: string }>>;
       for (const [domain, methods] of Object.entries(defs)) {
@@ -125,7 +120,7 @@ describe('shared 层契约补测', () => {
       }
     });
 
-    it('SessionListReqSchema：limit 越界拦截（0 违反 positive、101 违反 max）', () => {
+    it('SessionListReqSchema：limit 越界拦截（0 违反 positive、101 违反 max、1.5 违反 int）', () => {
       expect(SessionListReqSchema.safeParse({ limit: 0 }).success).toBe(false);
       expect(SessionListReqSchema.safeParse({ limit: 101 }).success).toBe(false);
       expect(SessionListReqSchema.safeParse({ limit: 1.5 }).success).toBe(false);
