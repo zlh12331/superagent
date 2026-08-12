@@ -115,6 +115,38 @@
 - 核心域分支追到 **80-85%**（业界拐点），中等域 **70-75%**
 - **停止判据**：分支 ≥85% 后收益递减不硬追；getter/setter/日志行不补（有效覆盖理念）
 
+### 3.6 测试边界规范（程序化门禁，2026-08-12 落地）
+
+**边界定义**：单元/集成/E2E 边界 = 被测范围 × 替身位置 × 断言对象（非文件位置）。
+
+| 层 | 被测范围 | 替身位置 | 断言对象 | 位置 |
+|---|---|---|---|---|
+| 单元 | 单模块内部逻辑 | 邻居 mock | 返回值/内部状态 | src/**/*.test.{ts,tsx}（colocation） |
+| 集成 | 多真实模块链路 | 只替身外部边界（LLM/平台/IO） | 跨模块契约 | tests/integration/** |
+| E2E | 整个应用 + 真实 UI | 零替身 | 用户可感知结果 | e2e/** |
+
+**程序化强制（CI 卡关）**：
+1. **目录规则**：单测 colocation、集成 tests/integration/、E2E e2e/（目录本身即分层）。
+2. **集成禁 mock 同仓业务**（scripts/check-test-boundary.ts 规则 1）：
+   - tests/integration/** 中 vi.mock 指向同仓源码 = 假集成（error 卡关）。
+   - **IO 边界替身允许**（简化环境 Medium Test 标准做法）：infra/storage（DB 换内存实现）、
+     utils/logger、telemetry——推荐部分 mock（importOriginal）保留其余实现。
+3. **准集成登记制**（规则 2）：src/**/*.test.ts 出现真实 IO 信号
+   （better-sqlite3 真实实例/WebSocket/node:http server/new Database）= "准集成测试"，
+   必须登记 scripts/test-boundary-exempt.json（当前 20 个存量已登记），未登记 = error。
+   登记项未来随集成测试体系建设逐步迁移到 tests/integration/。
+4. **恒真断言**（规则 3，warning）：expect(true).toBe(true) 等字面量自比 = 空跑，
+   存量清零后升 error。
+5. **import 边界**（dependency-cruiser）：tests/integration 禁止依赖 src/renderer、src/preload
+   （跨进程边界，integration-not-renderer 规则）。
+6. **速度约束**（vitest 配置）：tests/integration/vitest.config.ts testTimeout 60s
+   （集成测试为秒级 Medium Test，非分钟级）。
+
+**运行**：pnpm check:test-boundary（已并入 check:static）；pnpm depcruise（含 tests/integration）。
+
+**灰色地带说明**：单模块 + 真实 DB/网络 = "准集成"（integration-ish unit test）——
+不是正式集成覆盖，登记表中标注原因，避免被误判为"集成已覆盖"。
+
 ### 3.5 测试文件清单（176 个）
 
 > 以下按区域列出代表性文件，完整清单以 `Glob "**/*.test.{ts,tsx}"` 为准。

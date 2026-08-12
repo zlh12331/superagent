@@ -25,5 +25,7 @@ export default defineConfig({
     environment: 'node',
     include: ['**/*.test.ts'],
     exclude: ['node_modules/**'],
+    // 速度约束（设计文档 §3.6）：集成测试为秒级 Medium Test，单链路 60s 上限
+    testTimeout: 60_000,
   },
 });

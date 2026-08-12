@@ -44,7 +44,7 @@
     "check:tokens": "tsx scripts/check-tokens.ts",
     "check:i18n": "tsx scripts/check-i18n.ts",
     "check:bundle": "tsx scripts/check-bundle.ts",
-    "check:static": "pnpm check:tokens && pnpm check:i18n && pnpm check:comments && pnpm check:file-size && pnpm check:functions && pnpm check:docs && pnpm check:secrets",
+    "check:static": "pnpm check:tokens && pnpm check:i18n && pnpm check:comments && pnpm check:file-size && pnpm check:functions && pnpm check:docs && pnpm check:secrets && pnpm check:test-boundary",
     "check:secrets": "gitleaks dir src --redact --no-banner",
     "tokens:build": "node scripts/build-tokens.mjs",
     "tokens:check": "node scripts/build-tokens.mjs && git diff --exit-code -- src/renderer/styles/tokens.css",
@@ -95,7 +95,8 @@
     "rebuild:native:node:auto": "node scripts/rebuild-native.mjs node --auto",
     "rebuild:native:electron:auto": "node scripts/rebuild-native.mjs electron --auto",
     "test:native": "node scripts/rebuild-native.mjs node --auto",
-    "test:integration": "vitest run --root tests/integration"
+    "test:integration": "vitest run --root tests/integration",
+    "check:test-boundary": "tsx scripts/check-test-boundary.ts"
   },
   "lint-staged": {
     "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,css}": [

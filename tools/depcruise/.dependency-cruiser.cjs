@@ -76,6 +76,16 @@ module.exports = {
       from: { path: '^src/preload' },
       to: { path: '^(src/main|src/renderer)' },
     },
+
+    // ── 测试边界：集成测试禁止依赖渲染层 / preload（跨进程边界）──
+    {
+      name: 'integration-not-renderer',
+      comment:
+        '集成测试（tests/integration）只能依赖主进程/shared，禁止依赖渲染层与 preload（跨进程边界）',
+      severity: 'error',
+      from: { path: '^tests/integration' },
+      to: { path: '^(src/renderer|src/preload)' },
+    },
   ],
   options: {
     // 不进入 node_modules / 构建产物 / 类型声明
