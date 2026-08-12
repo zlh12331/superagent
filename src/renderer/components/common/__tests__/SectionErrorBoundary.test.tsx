@@ -78,4 +78,28 @@ describe('SectionErrorBoundary', () => {
     expect(screen.getByTestId('recovered')).toBeTruthy();
     expect(screen.queryByTestId('section-error-boundary')).toBeNull();
   });
+
+  it('非 Error 错误（抛字符串）：fallback 显示 String(error) 文本', () => {
+    const ExplodingChild = (): ReactElement => {
+      throw 'plain string error';
+    };
+    // React 19 下非 Error 抛错也会进入 error boundary（error 参数为抛出的原始值）
+    expect(() =>
+      render(
+        <SectionErrorBoundary>
+          <ExplodingChild />
+        </SectionErrorBoundary>,
+      ),
+    ).not.toThrow();
+    expect(screen.getByTestId('section-error-boundary')).toBeTruthy();
+  });
+
+  it('传入 resetKeys：正常渲染不抛', () => {
+    render(
+      <SectionErrorBoundary resetKeys={['tab-1']}>
+        <div data-testid="normal-child">内容</div>
+      </SectionErrorBoundary>,
+    );
+    expect(screen.getByTestId('normal-child')).toBeTruthy();
+  });
 });
