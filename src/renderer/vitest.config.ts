@@ -45,12 +45,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      // 基线门槛（2026-08-11 实测，CI test:coverage 卡关；渐进收紧至规范值 80/75/80/80）
+      // 门槛（2026-08-12 更新：8 批补测后实测 92.87/87.97/90.92，按设计文档 §3.3 收紧机制
+      // 新实测−5 缓冲超过规范值 → 取规范值 80/75/80/80；CI(ubuntu) 平台差异余量充足）
       thresholds: {
-        statements: 65,
-        branches: 55,
-        functions: 65,
-        lines: 65,
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
       },
       // 排除测试文件本身、配置文件、入口文件
       exclude: [
