@@ -132,13 +132,15 @@ export class SubagentManager {
 
     const sessionId = randomUUID();
     const startTime = Date.now();
-    // 任务跟踪：委派即任务（增强，失败不影响主流程）
+    // 任务跟踪：委派即任务
+    // create 失败显式抛出（任务未创建属真实 DB 故障，非跟踪故障——调用方应感知）；
+    // 创建后的状态更新统一走容错路径（跟踪失败不阻断执行）
     const taskId = taskService.create(
       sessionId,
       TaskKind.AGENT,
       `子代理 ${name}：${task.slice(0, 60)}`,
     );
-    // 任务状态更新统一走容错路径（任务跟踪失败不阻断执行）
+    // 创建后的状态更新走容错路径（跟踪失败不阻断执行）
     this.updateTaskStatus(taskId, TaskStatus.RUNNING);
 
     const watchdog = new StallWatchdog({
@@ -238,7 +240,7 @@ export class SubagentManager {
   /**
    * 任务状态更新（增强链路：失败仅记录日志，不阻断回合收尾）
    *
-   * 触发场景：TURN_END / 超时兜底 / 停滞 abort 三个收尾出口共用。
+   * 触发场景：委派时的初始 RUNNING + TURN_END / 超时兜底 / 停滞 abort 四个调用点。
    * 真实缺陷修复：原实现 update 抛错会穿透 listener 的 try/catch，
    * 而 done 已置 true → 超时/停滞兜底被阻断 → 回合永久挂起。
    */

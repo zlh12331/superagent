@@ -264,7 +264,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 ### 7.2 已知覆盖率缺口
 
 - `test:coverage` 脚本现已包含 renderer（shared + main + renderer 三套覆盖率）
-- 整体覆盖率约 0.13（来自项目评估），与配置阈值 80 差距较大
+- 整体覆盖率旧口径 0.13 为早期评估（含未纳入统计文件），现以 §3.3 分层实测为准（2026-08-12 校准）
 - codebase-service / search-service / terminal-service 无专属测试文件（git-service / file-service 已有）
 - 主进程部分 IPC handler 测试较薄（仅验证 happy path）
 
@@ -320,4 +320,4 @@ renderer 层 8 批补测（stores/hooks/chat/agent/terminal/dev-common/layout-i1
 
 豁免原则：核心域从严（仅死代码/协议不变量级），非核心域客观不可达；能测不测 = 继续补（本表所有项均有代码证据）。
 
-补充口径说明（2026-08-12 审查确认）：非核心域达标指标为**分支覆盖率**（批次清单口径，与 §3.4 一致）；IM 域 4 个适配器文件（wecom/feishu/dingtalk/wecom-stream）分支 ≥70% 达标，语句/行 56.7-64.9% 低于 70% 属既有记录口径差异，列入观察（凌晨批次 0b8846e 交付，非本轮新增缺口）。
+补充口径说明（2026-08-12 审查确认）：非核心域达标指标为**分支覆盖率**（批次清单口径，与 §3.4 一致）；IM 域 4 个适配器文件（wecom/feishu/dingtalk/wecom-stream）分支 ≥70% 达标，行覆盖 56.7-64.9% 低于 70% 属既有记录口径差异（未达 §3.4 中等域 70% 行目标，列入观察），列入观察（凌晨批次 0b8846e 交付，非本轮新增缺口）。

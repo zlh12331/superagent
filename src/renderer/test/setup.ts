@@ -31,20 +31,7 @@ type MockApi = {
   [domain: string]: any;
 };
 
-const emptyApi: MockApi = {
-  app: {},
-  chat: {},
-  agent: {},
-  session: {},
-  file: {},
-  search: {},
-  terminal: {},
-  git: {},
-  codebase: {},
-  tool: {},
-};
-
-/** 重建空骨架（afterEach 用）：避免复用单例导致注入域残留到下一测试 */
+/** 重建空骨架（模块加载与 afterEach 共用）：避免复用单例导致注入域残留到下一测试 */
 function createEmptyApi(): MockApi {
   return {
     app: {},
@@ -62,7 +49,7 @@ function createEmptyApi(): MockApi {
 
 // 注入 window.api（防止业务代码访问时报 undefined）
 Object.defineProperty(window, 'api', {
-  value: emptyApi,
+  value: createEmptyApi(),
   writable: true,
   configurable: true,
 });

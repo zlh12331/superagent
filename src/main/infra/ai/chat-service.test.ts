@@ -590,8 +590,15 @@ describe('chat-service', () => {
   describe('dispose（P3-10 优雅关闭）', () => {
     it('无活跃对话时立即返回', async () => {
       // 不启动任何对话，直接 dispose
-      await getChatService().dispose(1000);
-      // dispose 后无活跃会话可 abort（验证清理生效而非 1000ms 兜底超时返回）
+      // Promise.race 验证 dispose 在 50ms 内 resolve（而非 1000ms 兜底超时返回）
+      const fast = Promise.race([
+        getChatService()
+          .dispose(1000)
+          .then(() => 'disposed'),
+        new Promise((resolve) => setTimeout(() => resolve('timeout'), 50)),
+      ]);
+      expect(await fast).toBe('disposed');
+      // dispose 后无活跃会话可 abort（清理生效）
       expect(getChatService().abort('ghost-session')).toBe(false);
     });
 

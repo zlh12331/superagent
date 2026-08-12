@@ -112,7 +112,8 @@ describe('WeixinStreamReceiver.open/轮询（三件套）', () => {
     const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: expiredFn });
     await receiver.open();
     // 会话过期后仍继续轮询（暂停 5ms 后下一轮）：用 setTimeout 验证（vi.waitFor 时序不稳）
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 等待窗口 200ms：全量并发 + coverage 插桩下事件循环延迟，50ms 窗口曾出现不足 3 轮
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fetchUpdatesFn.mock.calls.length).toBeGreaterThanOrEqual(3);
     receiver.close();
   });
@@ -124,12 +125,13 @@ describe('WeixinStreamReceiver.open/轮询（三件套）', () => {
     });
     const { receiver, fetchUpdatesFn } = makeReceiver({ fetchUpdatesFn: flakyFn });
     await receiver.open();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 退避后继续轮询：等待窗口 200ms（并发下 50ms 窗口曾不足 2 轮）
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fetchUpdatesFn.mock.calls.length).toBeGreaterThanOrEqual(2);
     receiver.close();
   });
 
-  it('边界：close → abort + isOpen=false（轮询停止）', async () => {
+  it('边界：close 后 abort + isOpen=false（轮询停止）', async () => {
     const { receiver, fetchUpdatesFn } = makeReceiver();
     await receiver.open();
     await waitForPoll(fetchUpdatesFn);
