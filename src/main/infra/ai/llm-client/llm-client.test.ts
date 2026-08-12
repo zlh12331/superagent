@@ -385,3 +385,353 @@ describe('LlmClient', () => {
     });
   });
 });
+
+describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/超时接入）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** 构造带 code 的网络错误（undici/node 网络层错误码） */
+  function networkError(code: string): Error {
+    return Object.assign(new Error(`network ${code}`), { code });
+  }
+
+  /** 构造指定状态码的 APICallError */
+  function apiError(
+    statusCode: number | undefined,
+    extra?: { isRetryable?: boolean },
+  ): APICallError {
+    return new APICallError({
+      message: `HTTP ${statusCode ?? 'unknown'}`,
+      url: 'https://api.example.com/v1/chat/completions',
+      requestBodyValues: {},
+      // exactOptionalPropertyTypes：statusCode 为 undefined 时条件展开（不显式传 undefined）
+      ...(statusCode !== undefined ? { statusCode } : {}),
+      ...extra,
+    });
+  }
+
+  describe('ModelFallback 降级链', () => {
+    // 5xx/网络错误是“可重试 + 可降级”双通道：内部 retryWithBackoff 会先重试。
+    // 为聚焦降级判定，统一传 maxAttempts: 1（禁重试），错误直接冒泡到降级层。
+
+    it('显式模型 + 5xx：降级默认模型重试并成功', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText
+        .mockRejectedValueOnce(apiError(502))
+        .mockResolvedValueOnce({ text: 'fallback ok', usage: {} });
+
+      const result = await client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 });
+
+      expect(result.text).toBe('fallback ok');
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
+      // 第二次调用使用默认模型（deepseek-v4-flash）
+      const secondArgs = mocks.mockGenerateText.mock.calls[1]?.[0] as
+        | { model: { id: string } }
+        | undefined;
+      expect(secondArgs?.model.id).toBe('deepseek:deepseek-v4-flash');
+      expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'gpt-4o', fallbackModel: 'deepseek-v4-flash' }),
+        expect.stringContaining('ModelFallback'),
+      );
+    });
+
+    it('显式模型 + 网络错误（ECONNRESET）：降级默认模型', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText
+        .mockRejectedValueOnce(networkError('ECONNRESET'))
+        .mockResolvedValueOnce({ text: 'ok', usage: {} });
+
+      await client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 });
+
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
+    });
+
+    it('网络错误码白名单：ECONNREFUSED/ETIMEDOUT/UND_ERR_* 均可降级', async () => {
+      const { client } = createClient();
+      const codes = [
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'UND_ERR_CONNECT_TIMEOUT',
+        'UND_ERR_HEADERS_TIMEOUT',
+        'UND_ERR_SOCKET',
+      ];
+      for (const code of codes) {
+        mocks.mockGenerateText
+          .mockRejectedValueOnce(networkError(code))
+          .mockResolvedValueOnce({ text: 'ok', usage: {} });
+        const result = await client.generateText({
+          model: 'gpt-4o',
+          prompt: `p-${code}`,
+          maxAttempts: 1,
+        });
+        expect(result.text).toBe('ok');
+      }
+      // 5 个码各触发一次降级（每次 2 次调用）
+      expect(mocks.mockGenerateText.mock.calls.length).toBe(10);
+    });
+
+    it('白名单外错误码（ECONNABORTED）：不降级直接抛', async () => {
+      const { client } = createClient();
+      const err = networkError('ECONNABORTED');
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(
+        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+      ).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('APICallError isRetryable=true（无状态码）：可降级', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText
+        .mockRejectedValueOnce(apiError(undefined, { isRetryable: true }))
+        .mockResolvedValueOnce({ text: 'ok', usage: {} });
+
+      await client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 });
+
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
+    });
+
+    it('APICallError isRetryable=false（无状态码）：不降级', async () => {
+      const { client } = createClient();
+      const err = apiError(undefined, { isRetryable: false });
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(
+        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+      ).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('显式模型 + 401：不降级（凭据错误换模型无意义）', async () => {
+      const { client } = createClient();
+      const err = apiError(401);
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(
+        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+      ).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('显式模型 + 429：不降级（限流非供应商故障）', async () => {
+      const { client } = createClient();
+      const err = apiError(429);
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(
+        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+      ).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('未传模型 + 5xx：不降级（默认模型降级无意义）', async () => {
+      const { client } = createClient();
+      const err = apiError(500);
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(client.generateText({ prompt: 'hi', maxAttempts: 1 })).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('显式传默认模型 id + 5xx：不降级（已是默认模型）', async () => {
+      const { client } = createClient();
+      const err = apiError(500);
+      mocks.mockGenerateText.mockRejectedValue(err);
+
+      await expect(
+        client.generateText({ model: 'deepseek-v4-flash', prompt: 'hi', maxAttempts: 1 }),
+      ).rejects.toBe(err);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('降级后仍失败：抛降级模型的错误', async () => {
+      const { client } = createClient();
+      const err = apiError(500);
+      const err2 = apiError(503);
+      mocks.mockGenerateText.mockRejectedValueOnce(err).mockRejectedValueOnce(err2);
+
+      await expect(
+        client.generateText({ model: 'gpt-4o', prompt: 'hi', maxAttempts: 1 }),
+      ).rejects.toBe(err2);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('getModel 显式覆盖透传', () => {
+    it('运行时快照仅 apiKey：工厂只收 apiKey 覆盖', async () => {
+      const { client, registry, createProviderFactory } = createClient();
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('openai', 'only-key'),
+        providerKind: 'openai',
+        modelId: 'only-key',
+        apiKey: 'sk-1',
+        createdAt: 1_700_000_000_000,
+      });
+
+      await client.getModel('only-key');
+
+      expect(createProviderFactory).toHaveBeenCalledWith('openai', { apiKey: 'sk-1' });
+    });
+
+    it('运行时快照仅 baseUrl：工厂只收 baseUrl 覆盖', async () => {
+      const { client, registry, createProviderFactory } = createClient();
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('openai', 'only-base'),
+        providerKind: 'openai',
+        modelId: 'only-base',
+        baseUrl: 'https://custom.api.com',
+        createdAt: 1_700_000_000_000,
+      });
+
+      await client.getModel('only-base');
+
+      expect(createProviderFactory).toHaveBeenCalledWith('openai', {
+        baseUrl: 'https://custom.api.com',
+      });
+    });
+  });
+
+  describe('参数展开与 usage 映射', () => {
+    it('system 传入：generateText 收到 system 参数', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
+
+      await client.generateText({ prompt: 'hi', system: '你是助手' });
+
+      const args = mocks.mockGenerateText.mock.calls[0]?.[0] as { system?: string } | undefined;
+      expect(args?.system).toBe('你是助手');
+    });
+
+    it('usage 部分字段：仅 totalTokens 时条件展开', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: { totalTokens: 42 } });
+
+      const result = await client.generateText({ prompt: 'hi' });
+
+      expect(result.usage).toEqual({ totalTokens: 42 });
+    });
+
+    it('signal 传入：generateText 收到 abortSignal', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
+      const ac = new AbortController();
+
+      await client.generateText({ prompt: 'hi', signal: ac.signal });
+
+      const args = mocks.mockGenerateText.mock.calls[0]?.[0] as
+        | { abortSignal?: AbortSignal }
+        | undefined;
+      expect(args?.abortSignal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('generateJson system 传入：generateObject 收到 system', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateObject.mockResolvedValue({ object: { ok: true } });
+
+      await client.generateJson({
+        schema: z.object({ ok: z.boolean() }),
+        prompt: 'hi',
+        system: 'sys',
+      });
+
+      const args = mocks.mockGenerateObject.mock.calls[0]?.[0] as { system?: string } | undefined;
+      expect(args?.system).toBe('sys');
+    });
+
+    it('generateJson signal 传入：generateObject 收到 abortSignal', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateObject.mockResolvedValue({ object: { ok: true } });
+      const ac = new AbortController();
+
+      await client.generateJson({
+        schema: z.object({ ok: z.boolean() }),
+        prompt: 'hi',
+        signal: ac.signal,
+      });
+
+      const args = mocks.mockGenerateObject.mock.calls[0]?.[0] as
+        | { abortSignal?: AbortSignal }
+        | undefined;
+      expect(args?.abortSignal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  describe('超时信号接入与遥测', () => {
+    it('重试触发遥测：logger.warn side query 重试', async () => {
+      vi.useFakeTimers();
+      try {
+        const { client } = createClient();
+        mocks.mockGenerateText
+          .mockRejectedValueOnce(apiError(429))
+          .mockResolvedValueOnce({ text: 'ok', usage: {} });
+
+        const promise = client.generateText({ prompt: 'hi', maxAttempts: 3 });
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(promise).resolves.toMatchObject({ text: 'ok' });
+        expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ attempt: 1, errorStatus: 429 }),
+          expect.stringContaining('side query 重试'),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('模型自带 timeoutMs：超时信号触发后中断重试（不无限重试）', async () => {
+      vi.useFakeTimers();
+      try {
+        const registry = new ModelRegistry({
+          entries: BUILTIN_MODELS.map((entry) =>
+            entry.id === 'deepseek-v4-flash'
+              ? { ...entry, generationConfig: { timeoutMs: 50 } }
+              : entry,
+          ),
+          defaultModelByKind: DEFAULT_MODEL_BY_KIND,
+          defaultKind: 'deepseek',
+        });
+        const createProviderFactory = vi.fn(
+          async (kind: ProviderKind): Promise<(modelId: string) => LanguageModel> => {
+            return (modelId: string) => ({ id: `${kind}:${modelId}` }) as unknown as LanguageModel;
+          },
+        );
+        const client = new LlmClient({ modelRegistry: registry, createProviderFactory });
+        mocks.mockGenerateText.mockRejectedValue(apiError(429));
+
+        const promise = client.generateText({ prompt: 'hi' });
+        const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
+        await vi.advanceTimersByTimeAsync(200);
+
+        await assertion;
+        // 超时中断：sleep 被 abort 打断立即重试一次，随后 signal.aborted 检查抛（不再退避重试）
+        expect(mocks.mockGenerateText.mock.calls.length).toBeLessThanOrEqual(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('defaultTimeoutMs 兜底：模型未配置超时时用全局默认', async () => {
+      vi.useFakeTimers();
+      try {
+        const { registry, createProviderFactory } = createClient();
+        const clientWithDefault = new LlmClient({
+          modelRegistry: registry,
+          createProviderFactory,
+          defaultTimeoutMs: 50,
+        });
+        mocks.mockGenerateText.mockRejectedValue(apiError(429));
+
+        const promise = clientWithDefault.generateText({ prompt: 'hi' });
+        const assertion = expect(promise).rejects.toBeInstanceOf(APICallError);
+        await vi.advanceTimersByTimeAsync(200);
+
+        await assertion;
+        expect(mocks.mockGenerateText.mock.calls.length).toBeLessThanOrEqual(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+});
