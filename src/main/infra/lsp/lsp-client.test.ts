@@ -110,9 +110,13 @@ describe('LspClient', () => {
   });
 
   it('请求超时：无响应超阈值拒绝', async () => {
-    const client = await createTestClient(200);
+    // 用默认超时构造（全量并发下 200ms 会让 initialize 握手先超时，测试在构造阶段即炸）；
+    // 通过耗时断言确认 stall 请求确实走超时拒绝路径（约等于 timeoutMs）
+    const client = await createTestClient();
     clients.push(client);
+    const startedAt = Date.now();
     await expect(client.requestRaw('textDocument/stall', null)).rejects.toThrow('超时');
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(2_900);
   });
 
   it('dispose 后请求拒绝（服务器不可用）', async () => {

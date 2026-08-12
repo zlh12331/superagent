@@ -29,7 +29,9 @@ describe('GitService（真实 git 仓库）', () => {
 
   afterEach(async () => {
     resetGitService();
-    await rm(dir, { recursive: true, force: true });
+    // Windows 上 git 子进程退出后目录句柄延迟释放，rm 立即执行会 EBUSY（push 用例最易触发）；
+    // 用 fs.rm 原生重试（maxRetries/retryDelay）兜底，避免环境性清理竞态导致测试失败
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   /** 初始化 git 仓库 + 提交初始文件 */
@@ -147,7 +149,7 @@ describe('GitService（真实 git 仓库）', () => {
       expect(second.ok).toBe(true);
       expect(second.pushedCount).toBe(1);
     } finally {
-      await rm(remoteDir, { recursive: true, force: true });
+      await rm(remoteDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
