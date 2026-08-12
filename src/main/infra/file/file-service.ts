@@ -535,7 +535,9 @@ class FileService implements IFileService {
     this.assertAbsolutePath(path);
 
     try {
-      await fs.rm(path, { recursive, force: false });
+      // 默认递归删除（rm -rf 语义，与 zod schema 默认值一致）：
+      // 直接调用方（内部 service）可能不传 recursive，service 层防御性默认
+      await fs.rm(path, { recursive: recursive ?? true, force: false });
       return { deleted: true };
     } catch (error) {
       throw this.classifyWriteError(error);
