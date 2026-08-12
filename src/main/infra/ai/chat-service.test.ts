@@ -74,6 +74,7 @@ vi.mock('node:crypto', () => ({
 
 import type { ISessionService } from '../storage/session-service';
 import { getChatService, resetChatService } from './agent/chat-service';
+import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
 import type { ITitleGenerator } from './knowledge/session-title';
 
 /**
@@ -774,5 +775,188 @@ describe('chat-service', () => {
       expect(mockTitleGenerator.generateText).not.toHaveBeenCalled();
       expect(mockSessionService.rename).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('ChatService 批次5 缺口补全（重复启动/并发门/usage/中断收尾）', () => {
+  let service: ReturnType<typeof getChatService>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetChatService();
+    mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));
+    mocks.mockRandomUUID.mockReturnValue('test-session-id');
+    service = getChatService();
+  });
+
+  afterEach(() => {
+    resetChatService();
+  });
+
+  function options(overrides: Partial<Parameters<typeof service.startChat>[0]> = {}) {
+    return {
+      messages: [{ role: 'user' as const, content: 'hi' }],
+      sessionId: undefined as string | undefined,
+      webContents: createMockWebContents(),
+      ...overrides,
+    };
+  }
+
+  it('重复 startChat 且旧流未结束：先中断旧流并等待其退出', async () => {
+    let releaseOld: () => void = () => {};
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () =>
+        new ReadableStream({
+          start(controller) {
+            releaseOld = () => {
+              try {
+                controller.close();
+              } catch {
+                /* 已关闭 */
+              }
+            };
+          },
+        }),
+    });
+
+    await service.startChat(options({ sessionId: 'dup-chat' }));
+    await service.startChat(options({ sessionId: 'dup-chat' }));
+
+    expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'dup-chat' }),
+      expect.stringContaining('已有活跃 chat stream'),
+    );
+    releaseOld();
+    await service.dispose(100);
+  }, 10_000);
+
+  it('concurrencyGate 注入：acquire 获取槽位并在流结束释放', async () => {
+    const release = vi.fn();
+    const gate = {
+      acquire: vi.fn(async (_id: string, _signal: AbortSignal) => release),
+    } as unknown as ConcurrencyGate;
+    resetChatService();
+    service = getChatService(undefined, undefined, gate);
+
+    await service.startChat(options());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(gate.acquire).toHaveBeenCalledTimes(1);
+    expect(gate.acquire).toHaveBeenCalledWith('test-session-id', expect.any(AbortSignal));
+    expect(release).toHaveBeenCalled();
+  });
+
+  it('usage 部分字段（仅 totalTokens）：END 只含 totalTokens + recordUsage 兜底 0', async () => {
+    const mockSessionService = {
+      recordUsage: vi.fn(async () => {}),
+      get: vi.fn(),
+      rename: vi.fn(),
+    } as unknown as ISessionService;
+    resetChatService();
+    service = getChatService(mockSessionService);
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () => createMockReadableStream([]),
+      totalUsage: Promise.resolve({ totalTokens: 42 }),
+    });
+
+    await service.startChat(options({ sessionId: 's-usage-part' }));
+
+    // 通过 recordUsage 断言覆盖 L422/427-429 链（END 推送经 emitEvent 已在既有用例覆盖）
+    await vi.waitFor(
+      () =>
+        expect(mockSessionService.recordUsage).toHaveBeenCalledWith(
+          expect.objectContaining({ totalTokens: 42, inputTokens: 0, outputTokens: 0 }),
+        ),
+      { timeout: 2000 },
+    );
+  });
+
+  it('usage 完整字段：recordUsage 收到全部字段（含 cacheReadTokens/reasoningTokens）', async () => {
+    const mockSessionService = {
+      recordUsage: vi.fn(async () => {}),
+      get: vi.fn(),
+      rename: vi.fn(),
+    } as unknown as ISessionService;
+    resetChatService();
+    service = getChatService(mockSessionService);
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () => createMockReadableStream([]),
+      totalUsage: Promise.resolve({
+        inputTokens: 10,
+        outputTokens: 20,
+        totalTokens: 30,
+        inputTokenDetails: { cacheReadTokens: 5 },
+        outputTokenDetails: { reasoningTokens: 2 },
+      }),
+    });
+
+    await service.startChat(options({ sessionId: 's-usage-full' }));
+
+    await vi.waitFor(
+      () =>
+        expect(mockSessionService.recordUsage).toHaveBeenCalledWith({
+          sessionId: 's-usage-full',
+          modelId: expect.any(String),
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+          cacheReadTokens: 5,
+          reasoningTokens: 2,
+        }),
+      { timeout: 2000 },
+    );
+  });
+
+  it('abort 后流收尾：推送 END(aborted) 且 CAS 不误删新 controller', async () => {
+    const wc = createMockWebContents();
+    let releaseStream: () => void = () => {};
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () =>
+        new ReadableStream({
+          start(controller) {
+            releaseStream = () => {
+              try {
+                controller.close();
+              } catch {
+                /* 已关闭 */
+              }
+            };
+          },
+        }),
+    });
+
+    await service.startChat(options({ sessionId: 's-abt', webContents: wc }));
+    service.abort('s-abt');
+    // abort 后立即重启同一 sessionId：旧流 finally 的 CAS 应跳过删除（不误删新 controller）
+    mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));
+    await service.startChat(options({ sessionId: 's-abt', webContents: wc }));
+
+    await vi.waitFor(
+      () => {
+        const endCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.CHAT_STREAM_END);
+        expect(endCalls.length).toBeGreaterThan(0);
+      },
+      { timeout: 2000 },
+    );
+    releaseStream();
+    await service.dispose(100);
+  }, 10_000);
+
+  it('webContents.isDestroyed=true + 流错误：不推送 ERROR（守卫分支）', async () => {
+    const wc = createMockWebContents({ isDestroyed: true });
+    mocks.mockStreamText.mockImplementation(() => {
+      throw new APICallError({
+        message: 'bad request',
+        url: 'https://api.test.com/v1/chat',
+        requestBodyValues: undefined,
+        statusCode: 400,
+        responseBody: '',
+      });
+    });
+
+    await service.startChat(options({ sessionId: 's-destroyed-err', webContents: wc }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(wc.send).not.toHaveBeenCalled();
   });
 });

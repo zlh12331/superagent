@@ -115,6 +115,7 @@ describe('GitService（真实 git 仓库）', () => {
   });
 
   it('push：首推建立基准，二次推送可计算 pushedCount', async () => {
+    // 真实 git 操作在全量并发下可能 >5s（init + bare 远程 + 2 次 push），放宽超时
     await initRepo();
     // 创建 bare 远程仓库
     const remoteDir = await mkdtemp(join(tmpdir(), 'git-remote-test-'));
@@ -151,7 +152,7 @@ describe('GitService（真实 git 仓库）', () => {
     } finally {
       await rm(remoteDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-  });
+  }, 15_000);
 
   it('push：无远程 → ok=false 不抛错', async () => {
     await initRepo();
