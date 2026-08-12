@@ -326,8 +326,13 @@ export class LspClient {
       }
     } else {
       // 服务器主动通知（window/logMessage 等）：记录日志
+      // 通知帧无 id；method 在请求体字段（ResponseMessage 类型不含，需类型扩展）
       logger.debug(
-        { tag: this.loggerTag, method: message.id, body: body.slice(0, 300) },
+        {
+          tag: this.loggerTag,
+          method: (message as { method?: string }).method ?? message.id,
+          body: body.slice(0, 300),
+        },
         'LSP 通知',
       );
     }
