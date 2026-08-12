@@ -168,7 +168,7 @@ export class SubagentManager {
               done = true;
               // reason 区分：completed → 完成；failed/cancelled → 失败
               const reason = event.reason;
-              taskService.update(
+              this.updateTaskStatus(
                 taskId,
                 reason === 'completed' ? TaskStatus.COMPLETED : TaskStatus.FAILED,
               );
@@ -188,7 +188,7 @@ export class SubagentManager {
               if (!done) {
                 done = true;
                 logger.warn({ subagent: name, sessionId }, '子代理回合超时');
-                taskService.update(taskId, TaskStatus.FAILED);
+                this.updateTaskStatus(taskId, TaskStatus.FAILED);
                 resolve();
               }
             }, SUBAGENT_TIMEOUT_MS);
@@ -196,7 +196,7 @@ export class SubagentManager {
             signal.addEventListener('abort', () => {
               if (!done) {
                 done = true;
-                taskService.update(taskId, TaskStatus.FAILED);
+                this.updateTaskStatus(taskId, TaskStatus.FAILED);
                 this.agentService.abort(sessionId);
                 resolve();
               }
@@ -232,6 +232,21 @@ export class SubagentManager {
    */
   register(spec: SubagentSpec): void {
     this.specs.set(spec.name, spec);
+  }
+
+  /**
+   * 任务状态更新（增强链路：失败仅记录日志，不阻断回合收尾）
+   *
+   * 触发场景：TURN_END / 超时兜底 / 停滞 abort 三个收尾出口共用。
+   * 真实缺陷修复：原实现 update 抛错会穿透 listener 的 try/catch，
+   * 而 done 已置 true → 超时/停滞兜底被阻断 → 回合永久挂起。
+   */
+  private updateTaskStatus(taskId: string, status: TaskStatus): void {
+    try {
+      taskService.update(taskId, status);
+    } catch (err: unknown) {
+      logger.error({ error: err }, '任务状态更新失败');
+    }
   }
 }
 
