@@ -16,12 +16,18 @@
 // 12. systemPrompt 未传时：调用 PromptService.resolvePrompt 注入默认 prompt
 
 import type { ChatMessage } from '@code-agent/shared/main';
-import { IPC_CHANNELS } from '@code-agent/shared/main';
+import { IPC_CHANNELS, TurnEventType } from '@code-agent/shared/main';
 import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ISessionService } from '../storage/session-service';
+import { DEFAULT_SESSION_TITLE, type ISessionService } from '../storage/session-service';
+import type { StartAgentOptions } from './agent/agent-service';
+import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
+import type { ITitleGenerator } from './knowledge/session-title';
+import type { IPromptService } from './prompt/prompt-service';
+import type { IPermissionService } from './tools/permission-service';
+import type { IToolExecutor } from './tools/tool-executor';
 import type { IToolRegistry } from './tools/tool-registry';
 
 // vi.mock 会被 hoist，工厂函数内不能引用外部 const
@@ -39,9 +45,22 @@ const mocks = vi.hoisted(() => {
   const mockRandomUUID = vi.fn(() => 'test-session-id');
   // withSpan mock：直接执行传入的函数（传 undefined span）
   const mockWithSpan = vi.fn(
-    async <T>(_name: string, _attrs: unknown, fn: (span: undefined) => Promise<T>): Promise<T> =>
-      fn(undefined),
+    async <T>(_name: string, _attrs: unknown, fn: (span: unknown) => Promise<T>): Promise<T> =>
+      fn(mockSpan),
   );
+  // mock span：验证 span?.setAttribute / end 链路（withSpan mock 传入真实形状对象）
+  const mockSpan = {
+    setAttribute: vi.fn(),
+    end: vi.fn(),
+  };
+  // 模型注册表动态化：默认无 capabilities（contextWindowSize 兜底 128K）且无超时/重试配置
+  const mockResolveModel = vi.fn(() => ({
+    modelId: 'test-model',
+    generationConfig: {},
+    capabilities: {},
+  }));
+  // 生成选项动态化：默认空对象（无采样/输出上限/providerOptions 条件展开）
+  const mockGenOptions = vi.fn(() => ({}));
   return {
     mockStreamText,
     mockGetModel,
@@ -49,16 +68,20 @@ const mocks = vi.hoisted(() => {
     mockLogger,
     mockRandomUUID,
     mockWithSpan,
+    mockSpan,
+    mockResolveModel,
+    mockGenOptions,
   };
 });
 
 // mock ai：拦截 streamText（保留 isStepCount 等真实导出）
 // mock ../models：modelRegistry.resolve 返回无超时配置（真实单例在测试环境可能带
 // timeoutMs=0 → AbortSignal.timeout(0) 立即中断流，导致活跃会话测试无法挂起）
-vi.mock('../models', () => ({
-  buildGenerationOptions: () => ({}),
+// 注意：vi.mock 路径相对测试文件（infra/ai/）解析，models 是同级目录 → './models'
+vi.mock('./models', () => ({
+  buildGenerationOptions: mocks.mockGenOptions,
   modelRegistry: {
-    resolve: () => ({ modelId: 'test-model', generationConfig: {} }),
+    resolve: mocks.mockResolveModel,
     register: () => {},
   },
 }));
@@ -87,11 +110,13 @@ vi.mock('node:crypto', () => ({
 }));
 
 // mock telemetry/otel：拦截 withSpan，避免依赖 OTel 初始化状态
-vi.mock('../../telemetry/otel', () => ({
+// 注意：otel 在 infra/telemetry/ 下，相对测试文件（infra/ai/）为 '../telemetry/otel'
+vi.mock('../telemetry/otel', () => ({
   withSpan: mocks.mockWithSpan,
 }));
 
 import { AgentService } from './agent/agent-service';
+import { TurnRunner } from './agent-runtime/turn-runner';
 
 /**
  * 创建 mock ReadableStream：按顺序推送 parts 后 close
@@ -213,33 +238,35 @@ function createMockPromptService() {
   };
 }
 
+// 崩溃恢复状态机：注入 fake sessionService（无 mock 规范，用真实接口最小实现）
+// 文件级共享：多个 describe（生命周期/缺口补全）复用同一实例
+const mockSessionService: ISessionService = {
+  markRunning: vi.fn(async () => {}),
+  markIdle: vi.fn(async () => {}),
+  markAllInterrupted: vi.fn(async () => 0),
+  exportAll: vi.fn(async () => ({ exportedAt: 0, app: 'test', sessions: [] })),
+  list: vi.fn(),
+  get: vi.fn(),
+  delete: vi.fn(),
+  rename: vi.fn(),
+  pin: vi.fn(),
+  create: vi.fn(),
+  appendMessage: vi.fn(),
+  listRecentDirs: vi.fn(),
+  recordUsage: vi.fn(async () => {}),
+  getUsageSummary: vi.fn(),
+  recordTurn: vi.fn(async () => {}),
+  getTurns: vi.fn(async () => ({ sessionId: '', turns: [] })),
+  getRecentTurns: vi.fn(async () => ({ turns: [] })),
+  getTurnMessages: vi.fn(async () => []),
+  dispose: vi.fn(),
+};
+
 describe('agent-service', () => {
   let service: AgentService;
   let mockRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockExecutor: ReturnType<typeof createMockToolExecutor>;
   let mockPromptService: ReturnType<typeof createMockPromptService>;
-  // 崩溃恢复状态机：注入 fake sessionService（无 mock 规范，用真实接口最小实现）
-  const mockSessionService: ISessionService = {
-    markRunning: vi.fn(async () => {}),
-    markIdle: vi.fn(async () => {}),
-    markAllInterrupted: vi.fn(async () => 0),
-    exportAll: vi.fn(async () => ({ exportedAt: 0, app: 'test', sessions: [] })),
-    list: vi.fn(),
-    get: vi.fn(),
-    delete: vi.fn(),
-    rename: vi.fn(),
-    pin: vi.fn(),
-    create: vi.fn(),
-    appendMessage: vi.fn(),
-    listRecentDirs: vi.fn(),
-    recordUsage: vi.fn(async () => {}),
-    getUsageSummary: vi.fn(),
-    recordTurn: vi.fn(async () => {}),
-    getTurns: vi.fn(async () => ({ sessionId: '', turns: [] })),
-    getRecentTurns: vi.fn(async () => ({ turns: [] })),
-    getTurnMessages: vi.fn(async () => []),
-    dispose: vi.fn(),
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -792,10 +819,10 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
     });
   });
 
-  function options(sessionId: string | undefined) {
-    const wc = { isDestroyed: () => false, send: vi.fn() };
+  function options(sessionId: string | undefined): StartAgentOptions {
+    const wc = { isDestroyed: () => false, send: vi.fn() } as unknown as WebContents;
     return {
-      messages: [{ role: 'user', content: '你好' }],
+      messages: [{ role: 'user' as const, content: '你好' }],
       sessionId,
       workingDir: '/tmp/project',
       systemPrompt: '测试',
@@ -877,11 +904,7 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
     await svc.startAgent(options(undefined));
     expect(capturedHook).toBeDefined();
     if (capturedHook === undefined) throw new Error('hook not captured');
-    const result = await capturedHook(
-      { name: 'grep', description: '' },
-      { pattern: 'x' },
-      { callId: 'c1' },
-    );
+    const result = await capturedHook({ name: 'grep' }, { pattern: 'x' }, { callId: 'c1' });
     expect(exec.execute).toHaveBeenCalledWith(
       'grep',
       'c1',
@@ -996,4 +1019,451 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
     // 注入 titleGenerator 后回合完成不抛（标题链内部失败静默；generateTitle 调用由集成测试覆盖）
     await expect(svc.startAgent(options(undefined))).resolves.toBeTruthy();
   }, 10_000);
+});
+
+describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/usage/超时）', () => {
+  let service: AgentService;
+  let mockRegistry: ReturnType<typeof createMockToolRegistry>;
+  let mockExecutor: ReturnType<typeof createMockToolExecutor>;
+  let mockPromptService: ReturnType<typeof createMockPromptService>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRegistry = createMockToolRegistry();
+    mockExecutor = createMockToolExecutor();
+    mockPromptService = createMockPromptService();
+    service = new AgentService(
+      mockRegistry as unknown as IToolRegistry,
+      mockExecutor,
+      mockPromptService,
+      mockSessionService,
+    );
+    // 默认 streamText 返回空流（立即 close）
+    mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));
+    mocks.mockRandomUUID.mockReturnValue('test-session-id');
+    // 恢复默认模型解析（无 capabilities → 128K 兜底；无超时）与默认生成选项（空）
+    mocks.mockResolveModel.mockImplementation(() => ({
+      modelId: 'test-model',
+      generationConfig: {},
+      capabilities: {},
+    }));
+    mocks.mockGenOptions.mockImplementation(() => ({}));
+  });
+
+  afterEach(() => {
+    // 恢复 spyOn（TurnRunner.run 的 aborted 用例专用），不影响 vi.fn 的 mockImplementation
+    vi.restoreAllMocks();
+  });
+
+  /** 基础启动参数（messages 显式 as const 保证与 ChatMessage 字面量类型兼容） */
+  function baseOptions(overrides: Partial<StartAgentOptions> = {}): StartAgentOptions {
+    return {
+      messages: [{ role: 'user' as const, content: '帮我读文件' }],
+      sessionId: undefined,
+      workingDir: '/tmp/project',
+      systemPrompt: '你是 Code Agent',
+      maxSteps: 20,
+      ...overrides,
+    };
+  }
+
+  it('重复 startAgent 且旧流未结束：先中断旧流并等待其退出', async () => {
+    const wc = createMockWebContents();
+    let releaseOld: () => void = () => {};
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () =>
+        new ReadableStream({
+          start(controller) {
+            releaseOld = () => {
+              try {
+                controller.close();
+              } catch {
+                /* 已关闭 */
+              }
+            };
+          },
+        }),
+    });
+    await service.startAgent(baseOptions({ sessionId: 'dup-session', webContents: wc }));
+    // 旧流仍活跃时再次启动同一 sessionId → 应中断旧流并等待退出（不阻塞调用方）
+    await service.startAgent(baseOptions({ sessionId: 'dup-session', webContents: wc }));
+    expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'dup-session' }),
+      expect.stringContaining('已有活跃 agent stream'),
+    );
+    releaseOld();
+    await service.dispose(100);
+  }, 10_000);
+
+  it('无头场景（不传 webContents）：ctx 不含 webContents，流程正常完成', async () => {
+    await service.startAgent(baseOptions());
+    await flushAsync();
+    const ctx = mockRegistry.toAISDKTools.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(ctx).toBeDefined();
+    expect(ctx).not.toHaveProperty('webContents');
+    expect(mockSessionService.markIdle).toHaveBeenCalled();
+  });
+
+  it('无头场景 + 流错误：不推送 ERROR，流程正常收尾', async () => {
+    mocks.mockStreamText.mockImplementation(() => {
+      throw new APICallError({
+        message: 'bad request',
+        url: 'https://api.test.com/v1/chat',
+        requestBodyValues: undefined,
+        statusCode: 400,
+        responseBody: '',
+      });
+    });
+    await expect(service.startAgent(baseOptions())).resolves.toBeTruthy();
+    await flushAsync();
+    expect(mockSessionService.markIdle).toHaveBeenCalled();
+  });
+
+  it('webContents.isDestroyed=true + 流错误：不推送 ERROR', async () => {
+    const wc = createMockWebContents({ isDestroyed: true });
+    mocks.mockStreamText.mockImplementation(() => {
+      throw new APICallError({
+        message: 'bad request',
+        url: 'https://api.test.com/v1/chat',
+        requestBodyValues: undefined,
+        statusCode: 400,
+        responseBody: '',
+      });
+    });
+    await service.startAgent(baseOptions({ sessionId: 's-destroyed-err', webContents: wc }));
+    await flushAsync();
+    expect(wc.send).not.toHaveBeenCalled();
+  });
+
+  it('messages 无 user 消息：ctx 不含 userPrompt', async () => {
+    await service.startAgent(
+      baseOptions({
+        messages: [
+          { role: 'system' as const, content: 'sys' },
+          { role: 'assistant' as const, content: 'hi' },
+        ],
+      }),
+    );
+    await flushAsync();
+    const ctx = mockRegistry.toAISDKTools.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(ctx).not.toHaveProperty('userPrompt');
+  });
+
+  it('concurrencyGate 注入：acquire 获取槽位并在回合结束释放', async () => {
+    const release = vi.fn();
+    const gate = {
+      acquire: vi.fn(async (_sessionId: string, _signal: AbortSignal) => release),
+    } as unknown as ConcurrencyGate;
+    service = new AgentService(
+      mockRegistry as unknown as IToolRegistry,
+      mockExecutor,
+      mockPromptService,
+      mockSessionService,
+      undefined,
+      gate,
+    );
+    await service.startAgent(baseOptions());
+    await flushAsync();
+    expect(gate.acquire).toHaveBeenCalledTimes(1);
+    expect(gate.acquire).toHaveBeenCalledWith('test-session-id', expect.any(AbortSignal));
+    expect(release).toHaveBeenCalled();
+  });
+
+  it('markIdle 失败：记录日志不阻断流程', async () => {
+    const sessMocks = mockSessionService as unknown as {
+      markIdle: ReturnType<typeof vi.fn>;
+    };
+    sessMocks.markIdle.mockRejectedValueOnce(new Error('db down'));
+    await service.startAgent(baseOptions());
+    await flushAsync();
+    expect(mocks.mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'test-session-id' }),
+      expect.stringContaining('markIdle'),
+    );
+  });
+
+  it('工具执行成功：TOOL_RESULT 回合事件推送（含 durationMs）', async () => {
+    const wc = createMockWebContents();
+    // 死流保持回合未结束：工具订阅在回合收尾（unsubscribeAll）前必须仍活跃
+    let releaseStream: () => void = () => {};
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () =>
+        new ReadableStream({
+          start(controller) {
+            releaseStream = () => {
+              try {
+                controller.close();
+              } catch {
+                /* 已关闭 */
+              }
+            };
+          },
+        }),
+    });
+    await service.startAgent(baseOptions({ sessionId: 's-tool-ev', webContents: wc }));
+    await flushAsync();
+    const hook = mockRegistry.toAISDKTools.mock.calls[0]?.[1] as
+      | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
+      | undefined;
+    if (hook === undefined) throw new Error('executeHook 未被注入');
+    await hook({ name: 'mock_tool' }, { x: 1 }, { callId: 'c-ev' });
+    await flushAsync();
+    const turnEvents = getTurnEventCalls(wc).map(
+      (c) => c[1] as { type: string; toolName?: string; durationMs?: number; success?: boolean },
+    );
+    const toolResult = turnEvents.find((e) => e.type === TurnEventType.TOOL_RESULT);
+    expect(toolResult).toBeDefined();
+    expect(toolResult?.toolName).toBe('mock_tool');
+    expect(toolResult?.success).toBe(true);
+    expect(toolResult?.durationMs).toBeGreaterThanOrEqual(0);
+    releaseStream();
+    await service.dispose(100);
+  });
+
+  it('onTurnEvent 监听器抛错：不阻断其他监听器（转发异常仅记录日志）', async () => {
+    const boom = vi.fn(() => {
+      throw new Error('listener crash');
+    });
+    const received: string[] = [];
+    const ok = vi.fn((event: { type: string }) => {
+      received.push(event.type);
+    });
+    service.onTurnEvent(boom);
+    service.onTurnEvent(ok);
+    const wc = createMockWebContents();
+    await service.startAgent(baseOptions({ sessionId: 's-listen', webContents: wc }));
+    await flushAsync();
+    expect(boom).toHaveBeenCalled();
+    expect(ok).toHaveBeenCalled();
+    expect(received.length).toBeGreaterThan(0);
+    expect(mocks.mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.any(Error) }),
+      '回合事件转发异常',
+    );
+  });
+
+  it('completed + titleGenerator：默认标题会话触发 generateText（标题生成链）', async () => {
+    const gen = {
+      generateText: vi.fn(async () => ({ text: '新标题' })),
+    } as unknown as ITitleGenerator;
+    const sessMocks = mockSessionService as unknown as {
+      get: ReturnType<typeof vi.fn>;
+      rename: ReturnType<typeof vi.fn>;
+    };
+    sessMocks.get.mockResolvedValue({ session: { title: DEFAULT_SESSION_TITLE } });
+    sessMocks.rename.mockResolvedValue(undefined);
+    service = new AgentService(
+      mockRegistry as unknown as IToolRegistry,
+      mockExecutor,
+      mockPromptService,
+      mockSessionService,
+      gen,
+    );
+    await service.startAgent(baseOptions({ sessionId: 's-title' }));
+    await vi.waitFor(() => expect(gen.generateText).toHaveBeenCalledTimes(1), { timeout: 2000 });
+  });
+
+  it('上下文 over-limit：抛 AI_CONTEXT_TOO_LARGE 且不调用 streamText', async () => {
+    mocks.mockResolveModel.mockImplementation(() => ({
+      modelId: 'test-model',
+      generationConfig: {},
+      capabilities: { contextWindowSize: 2000 },
+    }));
+    const wc = createMockWebContents();
+    // 2000 窗口：hardLimit = 2000 − 100 = 1900；1950 tokens 超限
+    const big = '字'.repeat(1950);
+    await service.startAgent(
+      baseOptions({
+        messages: [{ role: 'user' as const, content: big }],
+        sessionId: 's-over',
+        webContents: wc,
+      }),
+    );
+    await flushAsync();
+    expect(mocks.mockStreamText).not.toHaveBeenCalled();
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect(errCalls).toHaveLength(1);
+    expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_CONTEXT_TOO_LARGE');
+  });
+
+  it('上下文 warn：记录接近压缩线日志', async () => {
+    mocks.mockResolveModel.mockImplementation(() => ({
+      modelId: 'test-model',
+      generationConfig: {},
+      capabilities: { contextWindowSize: 12000 },
+    }));
+    const wc = createMockWebContents();
+    // 窗口 12000：compact 线 = 0.75×12000−600 = 8400，warn 线 = 7800，hardLimit = 11400；
+    // 8000 tokens 落在 warn 区（且不触发 over-limit）
+    const mid = '字'.repeat(8000);
+    await service.startAgent(
+      baseOptions({
+        messages: [{ role: 'user' as const, content: mid }],
+        sessionId: 's-warn',
+        webContents: wc,
+      }),
+    );
+    await flushAsync();
+    expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ contextTokens: 8000, compactAt: 8400 }),
+      expect.stringContaining('接近压缩线'),
+    );
+  });
+
+  it('上下文 compact：压缩消息历史后继续执行', async () => {
+    mocks.mockResolveModel.mockImplementation(() => ({
+      modelId: 'test-model',
+      generationConfig: {},
+      capabilities: { contextWindowSize: 12000 },
+    }));
+    const wc = createMockWebContents();
+    const messages: ChatMessage[] = [
+      { role: 'user', content: '字'.repeat(8600) },
+      { role: 'user', content: 'hi' },
+    ];
+    await service.startAgent(baseOptions({ messages, sessionId: 's-compact', webContents: wc }));
+    await flushAsync();
+    expect(mocks.mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ originalCount: 2, compressedCount: 1 }),
+      expect.stringContaining('上下文已压缩'),
+    );
+    const opts = mocks.mockStreamText.mock.calls[0]?.[0] as { messages: unknown[] } | undefined;
+    expect(opts?.messages).toHaveLength(1);
+  });
+
+  it('completed + 完整 usage：recordUsage 调用 + END 含 usage + span 属性', async () => {
+    const wc = createMockWebContents();
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () => createMockReadableStream([]),
+      totalUsage: Promise.resolve({
+        inputTokens: 10,
+        outputTokens: 20,
+        totalTokens: 30,
+        inputTokenDetails: { cacheReadTokens: 5 },
+        outputTokenDetails: { reasoningTokens: 2 },
+      }),
+    });
+    await service.startAgent(baseOptions({ sessionId: 's-usage', webContents: wc }));
+    await vi.waitFor(() => expect(mockSessionService.recordUsage).toHaveBeenCalled(), {
+      timeout: 2000,
+    });
+    expect(mockSessionService.recordUsage).toHaveBeenCalledWith({
+      sessionId: 's-usage',
+      modelId: 'test-model',
+      inputTokens: 10,
+      outputTokens: 20,
+      totalTokens: 30,
+      cacheReadTokens: 5,
+      reasoningTokens: 2,
+    });
+    const end = getNonTurnCalls(wc).find((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_END);
+    expect(end?.[1]).toEqual({
+      sessionId: 's-usage',
+      reason: 'completed',
+      usage: {
+        inputTokens: 10,
+        outputTokens: 20,
+        totalTokens: 30,
+        cacheReadTokens: 5,
+        reasoningTokens: 2,
+      },
+    });
+    expect(mocks.mockSpan.setAttribute).toHaveBeenCalledWith('token.total', 30);
+    expect(mocks.mockSpan.setAttribute).toHaveBeenCalledWith('token.prompt', 10);
+    expect(mocks.mockSpan.setAttribute).toHaveBeenCalledWith('token.completion', 20);
+  });
+
+  it('totalUsage reject：usage 置空不阻断，END 不含 usage', async () => {
+    const wc = createMockWebContents();
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () => createMockReadableStream([]),
+      totalUsage: Promise.reject(new Error('usage boom')),
+    });
+    await service.startAgent(baseOptions({ sessionId: 's-usage2', webContents: wc }));
+    await flushAsync();
+    const end = getNonTurnCalls(wc).find((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_END);
+    expect(end?.[1]).toEqual({ sessionId: 's-usage2', reason: 'completed' });
+    expect(mockSessionService.recordUsage).not.toHaveBeenCalled();
+  });
+
+  it('usage 部分字段：仅 totalTokens 时条件展开', async () => {
+    const wc = createMockWebContents();
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () => createMockReadableStream([]),
+      totalUsage: Promise.resolve({ totalTokens: 42 }),
+    });
+    await service.startAgent(baseOptions({ sessionId: 's-usage3', webContents: wc }));
+    await vi.waitFor(
+      () =>
+        expect(mockSessionService.recordUsage).toHaveBeenCalledWith(
+          expect.objectContaining({ totalTokens: 42, inputTokens: 0, outputTokens: 0 }),
+        ),
+      { timeout: 2000 },
+    );
+    const end = getNonTurnCalls(wc).find((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_END);
+    expect(end?.[1]).toEqual({
+      sessionId: 's-usage3',
+      reason: 'completed',
+      usage: { totalTokens: 42 },
+    });
+  });
+
+  it('模型级总时长超时：AI_TIMEOUT', async () => {
+    mocks.mockResolveModel.mockImplementation(() => ({
+      modelId: 'test-model',
+      generationConfig: { timeoutMs: 50 },
+      capabilities: {},
+    }));
+    const wc = createMockWebContents();
+    // 流在超时信号触发后关闭：模型超时(50ms)先行触发 → 完成后检查点归类 AI_TIMEOUT
+    mocks.mockStreamText.mockReturnValue({
+      toUIMessageStream: () =>
+        new ReadableStream({
+          start(controller) {
+            setTimeout(() => {
+              try {
+                controller.close();
+              } catch {
+                /* 已关闭 */
+              }
+            }, 120);
+          },
+        }),
+    });
+    await service.startAgent(baseOptions({ sessionId: 's-mto', webContents: wc }));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await flushAsync();
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect(errCalls).toHaveLength(1);
+    expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_TIMEOUT');
+  });
+
+  it('TurnRunner 返回 aborted：推送 END(aborted)，不推 ERROR', async () => {
+    // runner 的 abort 归因（read 抛 AbortError → aborted）由 turn-runner.test 单独覆盖；
+    // 此处 mock runner.run 返回 aborted，验证 agent-service 的 aborted 分支
+    // （stream.aborted 状态机事件 + completeTurn(aborted) + END 推送）
+    const runnerSpy = vi.spyOn(TurnRunner.prototype, 'run');
+    runnerSpy.mockResolvedValue({ reason: 'aborted', durationMs: 42 });
+    const wc = createMockWebContents();
+    await service.startAgent(baseOptions({ sessionId: 's-abt', webContents: wc }));
+    await flushAsync();
+    const end = getNonTurnCalls(wc).find((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_END);
+    expect(end?.[1]).toEqual({ sessionId: 's-abt', reason: 'aborted' });
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect(errCalls).toHaveLength(0);
+  });
+
+  it('genOptions 有值：samplingOptions/maxOutputTokens/providerOptions 透传 streamText', async () => {
+    mocks.mockGenOptions.mockImplementation(() => ({
+      samplingOptions: { temperature: 0.5 },
+      maxOutputTokens: 4096,
+      providerOptions: { deepseek: { thinking: { type: 'enabled' } } },
+    }));
+    await service.startAgent(baseOptions());
+    await flushAsync();
+    const opts = mocks.mockStreamText.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(opts?.['temperature']).toBe(0.5);
+    expect(opts?.['maxOutputTokens']).toBe(4096);
+    expect(opts?.['providerOptions']).toEqual({ deepseek: { thinking: { type: 'enabled' } } });
+  });
 });
