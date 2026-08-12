@@ -204,6 +204,44 @@
 
 ## 4. E2E 测试（Playwright）
 
+### 3.7 集成测试体系建设记录（2026-08-12 完成 9 批）
+
+**规模**：tests/integration/ 21 文件 / 154 用例（基线 60 用例 → 新增 94 用例）。
+
+**批次完成情况（9/9）**：
+| 批次 | 域 | 用例 | 暴露缺陷（已修复） |
+|---|---|---|---|
+| 1 | session（核心） | 17 | — |
+| 2 | agent.run 主链路（核心） | 4 + 2 豁免 | — |
+| 3 | file（核心） | 14 | FileService.delete recursive 默认 |
+| 4 | git（核心） | 11 | GitService paths/ref 可选参数防御 |
+| 5 | terminal（核心） | 7 | — |
+| 6 | settings/whitelist | 11 + 1 豁免 | — |
+| 7 | search/codebase | 10 | codegraph Windows spawn shell / undefined 参数 |
+| 8 | chat + 简单域 | 16 | — |
+| 9 | skill/mcp/task | 4 + 13 豁免 | — |
+
+**豁免清单（16 条，全部客观不可达类）**：
+1. AGENT_STREAM_ERROR 精确触发（SDK 将 model 层错误流化——需真实 HTTP provider 错误；证据：普通 Error/APICallError 注入均被 executeLanguageModelCall 流化）
+2. END(aborted) 归因推送（fake model 挂起流下 SDK 等 chunk 才检测 abort；aborted 归因由单测覆盖）
+3. keychain 并发写竞争（读-改-写无锁——生产 IPC 主进程串行不触发）
+4-16. batch 9 外部边界（audio 录音硬件 / im 平台账号 / mcp start·stop 外部服务 / update electron-updater 运行时 / skill learn 真实 LLM——全部"需真实外部环境"类，快通道复核通过，豁免比例 15% < 50%）
+
+**缺陷观察项（未修，低风险）**：
+- codebase 未初始化目录错误码漂移（注释声称 INVALID_INPUT，实现全走 INTERNAL_ERROR——语义问题，待分类逻辑完善）
+
+**测试技术沉淀**：
+- fake-model（AI SDK v7 流协议：text-delta 用 delta + text-start 前置 + holdOpen + abort 响应）
+- with-db（真实 db.ts + 临时 userData + electron SDK 替身）
+- 平台 shell（Windows ComSpec/node-pty 不查 PATH）
+- codegraph 探测（skipIf 环境依赖——CI 无 CLI 时正向自动跳过）
+
+**四道闸门判定（2026-08-12）**：
+1. 链路完备 ✓（矩阵全绿；豁免 16 条附证据）
+2. 断言有效 ✓（无恒真断言；抽查通过）
+3. 职责边界 ✓（跨模块契约；chat 无持久化职责已确认）
+4. 回报归零 ✓（5 缺陷全修复含回归锚定；batch 8/9 连续无新缺陷）
+
 ### 4.5 性能基准体系（e2e/perf/，`pnpm test:perf`）
 
 | 基准 | 阈值（基线） | 职责 |
