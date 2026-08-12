@@ -14,6 +14,7 @@ import { vi } from 'vitest';
 const itState = {
   userData: tmpdir(),
   dialogResult: { canceled: true } as { canceled: boolean; filePath?: string },
+  openDialogResult: { canceled: true } as { canceled: boolean; filePaths?: string[] },
   safeStorageAvailable: true,
 };
 
@@ -33,9 +34,15 @@ vi.mock('electron', () => ({
     getPath: () => itState.userData,
     // 测试环境视为未打包（config 加载依赖 isPackaged 布尔）
     isPackaged: false,
+    getVersion: () => '9.9.9-test',
   },
   dialog: {
     showSaveDialog: vi.fn(async () => itState.dialogResult),
+    showOpenDialog: vi.fn(async () => itState.openDialogResult),
+  },
+  shell: {
+    openExternal: vi.fn(async () => {}),
+    openPath: vi.fn(async () => ''),
   },
   safeStorage: {
     isEncryptionAvailable: () => itState.safeStorageAvailable,
