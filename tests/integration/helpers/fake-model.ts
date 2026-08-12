@@ -24,7 +24,7 @@ export function createFakeModel(
     specificationVersion: 'v2',
     provider: 'fake',
     modelId: 'fake-model',
-    async doStream(input: { messages: unknown[] }) {
+    async doStream(input: { messages: unknown[]; abortSignal?: AbortSignal }) {
       const index = Math.min(call, rounds.length - 1);
       onCall?.(index, input.messages);
       const parts = rounds[index] ?? [];
@@ -48,6 +48,20 @@ export function createFakeModel(
           // holdOpen：流挂起（abort 场景——模拟长时间生成中的模型）
           if (!(options?.holdOpen ?? false)) {
             controller.close();
+          } else {
+            // 真实 provider 行为：abort 信号触发时中断流（SDK 等 chunk 才检测 abort，
+            // 挂起流必须响应 abort 否则中断不可达）
+            input.abortSignal?.addEventListener(
+              'abort',
+              () => {
+                try {
+                  controller.close();
+                } catch {
+                  // 流已关闭：忽略
+                }
+              },
+              { once: true },
+            );
           }
         },
       });
