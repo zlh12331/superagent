@@ -14,15 +14,32 @@ import { vi } from 'vitest';
 const itState = {
   userData: tmpdir(),
   dialogResult: { canceled: true } as { canceled: boolean; filePath?: string },
+  safeStorageAvailable: true,
 };
 
 (globalThis as Record<string, unknown>)['__itState'] = itState;
 
+/** 假加密：base64（仅测试用——真实 DPAPI 由 Electron safeStorage 提供） */
+function fakeEncrypt(value: string): Buffer {
+  return Buffer.from(`enc:${value}`, 'utf-8');
+}
+function fakeDecrypt(buffer: Buffer): string {
+  const text = buffer.toString('utf-8');
+  return text.startsWith('enc:') ? text.slice(4) : text;
+}
+
 vi.mock('electron', () => ({
   app: {
     getPath: () => itState.userData,
+    // 测试环境视为未打包（config 加载依赖 isPackaged 布尔）
+    isPackaged: false,
   },
   dialog: {
     showSaveDialog: vi.fn(async () => itState.dialogResult),
+  },
+  safeStorage: {
+    isEncryptionAvailable: () => itState.safeStorageAvailable,
+    encryptString: (value: string) => fakeEncrypt(value),
+    decryptString: (buffer: Buffer) => fakeDecrypt(buffer),
   },
 }));
