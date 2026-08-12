@@ -83,11 +83,12 @@ export const modelParts = {
     finishReason,
     usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   }),
-  toolCall: (toolCallId: string, toolName: string, args: unknown): Record<string, unknown> => ({
+  toolCall: (toolCallId: string, toolName: string, input: unknown): Record<string, unknown> => ({
+    // v4 流协议：tool-call 用 input 字段（args 不被 SDK parseToolCall 识别）
     type: 'tool-call',
     toolCallId,
     toolName,
-    args,
+    input,
   }),
   error: (error: Error): Record<string, unknown> => ({ type: 'error', error }),
 } as const;
