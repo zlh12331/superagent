@@ -92,7 +92,13 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
    * @param config 含 workingDir（必填）+ 可选 systemPrompt / maxSteps
    */
   configure(config: AgentConfig): void {
-    this.config = config;
+    // 多 ChatInput 共享单例（主区 + DevPanel）：无目录实例的 configure 不应清掉
+    // 已配置实例的 workingDir——undefined 不覆盖（保留已有值）
+    this.config = {
+      ...this.config,
+      ...config,
+      workingDir: config.workingDir ?? this.config?.workingDir,
+    };
   }
 
   /**
