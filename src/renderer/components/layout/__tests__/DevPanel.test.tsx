@@ -19,6 +19,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useUiStore } from '@/stores/transient/ui-store';
 
 // ── mock 子组件 ─────────────────────────────────────────────
 const {
@@ -135,6 +136,8 @@ function renderDevPanel(props: Partial<React.ComponentProps<typeof DevPanel>> = 
 describe('DevPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 重置右面板激活 tab（动态 tab 依赖 activeTab——避免跨用例残留导致视图自动加入）
+    useUiStore.getState().setDevPanelTab('info');
     mockInfoPane.mockImplementation(MockInfoPane);
     mockDiffPane.mockImplementation(MockDiffPane);
     mockFileViewerPanel.mockImplementation(() => <div data-testid="file-viewer-panel" />);
@@ -163,9 +166,15 @@ describe('DevPanel', () => {
     expect(screen.getByTestId('info-pane')).toBeInTheDocument();
   });
 
-  // ── Tab 切换 ─────────────────────────────────────────────
-  it('切换 diff / terminal Tab 渲染对应 pane', async () => {
+  // ── Tab 切换（动态 tab：默认仅任务摘要，其余通过"+"添加）──────
+  it('切换 diff / terminal Tab 渲染对应 pane（先添加视图）', async () => {
     renderDevPanel();
+    // 通过"+"添加文件变更 / 终端视图
+    await userEvent.click(screen.getByRole('button', { name: '添加视图' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: '文件变更' }));
+    await userEvent.click(screen.getByRole('button', { name: '添加视图' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: '终端' }));
+
     await userEvent.click(screen.getByRole('tab', { name: /文件变更/ }));
     expect(screen.getByTestId('diff-pane')).toBeInTheDocument();
 
@@ -177,6 +186,9 @@ describe('DevPanel', () => {
   // ── 开发者子视图 ─────────────────────────────────────────
   it('dev Tab 默认 git 子视图，可切换 logs/metrics/inspector', async () => {
     renderDevPanel();
+    // 通过"+"添加开发者视图
+    await userEvent.click(screen.getByRole('button', { name: '添加视图' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: '开发者' }));
     await userEvent.click(screen.getByRole('tab', { name: /开发者/ }));
     expect(screen.getByTestId('git-panel')).toBeInTheDocument();
 
@@ -205,6 +217,9 @@ describe('DevPanel', () => {
 
   it('gitRepoPath 变化 → GitPanel 收到新 path', async () => {
     const { rerender } = renderDevPanel();
+    // 通过"+"添加开发者视图
+    await userEvent.click(screen.getByRole('button', { name: '添加视图' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: '开发者' }));
     await userEvent.click(screen.getByRole('tab', { name: /开发者/ }));
     expect(screen.getByTestId('git-panel').getAttribute('data-path')).toBe('/repo');
 

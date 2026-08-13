@@ -268,20 +268,6 @@ function ThreadItem({
           <div className="ti-meta">{metaText}</div>
         </div>
         <div className="ti-actions">
-          {/* 文件树按钮（对齐原型 ti-action-btn data-act=files：hover 显示，点击打开会话文件树） */}
-          <button
-            type="button"
-            className="ti-action-btn"
-            aria-label={t('sidebar.openFiles')}
-            title={t('sidebar.openFiles')}
-            disabled={isDeleting}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenFiles();
-            }}
-          >
-            <FolderTree className="size-3.5" strokeWidth={1.5} />
-          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -323,6 +309,20 @@ function ThreadItem({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {/* 文件树按钮（会话操作之后——用户要求的顺序：操作菜单在左，文件树在右） */}
+          <button
+            type="button"
+            className="ti-action-btn"
+            aria-label={t('sidebar.openFiles')}
+            title={t('sidebar.openFiles')}
+            disabled={isDeleting}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenFiles();
+            }}
+          >
+            <FolderTree className="size-3.5" strokeWidth={1.5} />
+          </button>
         </div>
       </div>
       {/* 右键菜单（照搬参考项目 ThreadContextMenu：fixed 定位 + clamp + danger 样式）

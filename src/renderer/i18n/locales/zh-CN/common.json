@@ -617,6 +617,8 @@
     },
     "panel": {
       "tabInfo": "会话详情",
+      "addView": "添加视图",
+      "closeView": "关闭",
       "tabDiff": "文件变更",
       "tabFile": "文件",
       "openFile": "打开文件",

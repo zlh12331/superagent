@@ -617,6 +617,8 @@
     },
     "panel": {
       "tabInfo": "Info",
+      "addView": "Add view",
+      "closeView": "Close",
       "tabDiff": "Diff",
       "tabFile": "File",
       "openFile": "Open file",

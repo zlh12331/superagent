@@ -21,16 +21,24 @@ import {
   GitBranch,
   Globe,
   LayoutGrid,
+  Plus,
   ScrollText,
   Target,
   TerminalSquare,
   Wrench,
+  X,
 } from 'lucide-react';
-import { lazy, memo, type ReactElement, Suspense, useState } from 'react';
+import { lazy, memo, type ReactElement, Suspense, useEffect, useState } from 'react';
 import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
 import { GitPanel } from '@/components/git/GitPanel';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -47,6 +55,40 @@ const BrowserPane = lazy(() =>
 const FileViewerPanel = lazy(() =>
   import('@/components/file-tree/FileViewerPanel').then((m) => ({ default: m.FileViewerPanel })),
 );
+
+/** 右面板可添加视图定义（默认任务摘要常驻；其余通过"+"按钮按需加入） */
+const TAB_DEFS: ReadonlyArray<{ id: PanelTab; icon: ReactElement; labelKey: string }> = [
+  {
+    id: 'info',
+    icon: <Target className="size-3 shrink-0" strokeWidth={1.5} />,
+    labelKey: 'panel.tabInfo',
+  },
+  {
+    id: 'diff',
+    icon: <FileCode2 className="size-3 shrink-0" strokeWidth={1.5} />,
+    labelKey: 'panel.tabDiff',
+  },
+  {
+    id: 'file',
+    icon: <FileText className="size-3 shrink-0" strokeWidth={1.5} />,
+    labelKey: 'panel.tabFile',
+  },
+  {
+    id: 'browser',
+    icon: <Globe className="size-3 shrink-0" strokeWidth={1.5} />,
+    labelKey: 'panel.tabBrowser',
+  },
+  {
+    id: 'terminal',
+    icon: <TerminalSquare className="size-3 shrink-0" strokeWidth={1.5} />,
+    labelKey: 'dev.tabTerminal',
+  },
+  {
+    id: 'dev',
+    icon: <LayoutGrid className="size-3 shrink-0" strokeWidth={1.5} />,
+    labelKey: 'panel.tabDev',
+  },
+];
 
 interface DevPanelProps {
   /**
@@ -83,6 +125,21 @@ export const DevPanel = memo(function DevPanel({
   // 开发者子视图（默认 git，对齐原 GitPanel 入口）
   const [devSubTab, setDevSubTab] = useState<DevSubTab>('git');
 
+  // 动态 tab 集合：默认任务摘要（info）常驻；其余通过"+"按钮按需加入（用户需求）
+  const [openTabs, setOpenTabs] = useState<PanelTab[]>(['info']);
+  const closeTab = (tab: PanelTab): void => {
+    setOpenTabs((prev) => prev.filter((t) => t !== tab));
+    if (activeTab === tab) {
+      const remaining = openTabs.filter((t) => t !== tab);
+      setActiveTab(remaining[0] ?? 'info');
+    }
+  };
+  // 外部切换（命令面板"打开终端"等）时自动加入未打开的视图
+  useEffect(() => {
+    setOpenTabs((prev) => (prev.includes(activeTab) ? prev : [...prev, activeTab]));
+    // biome-ignore lint/correctness/useExhaustiveDependencies: 函数式 set 不依赖 openTabs，仅 activeTab 变化时同步
+  }, [activeTab]);
+
   return (
     <div className={cn('border-border bg-background flex flex-col border-l', className)}>
       {/* 标题栏：Tab 切换（右面板折叠由全局机制管理：断点/AppShell 按钮，此处不重复放置） */}
@@ -97,158 +154,198 @@ export const DevPanel = memo(function DevPanel({
         >
           {/* w-full 覆盖 TabsList 基类 w-fit：tab 行随面板收缩均分，永不溢出 */}
           <TabsList className="bg-transparent h-5 min-w-0 w-full p-0">
-            <TabsTrigger value="info" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <Target className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('panel.tabInfo')}</span>
-            </TabsTrigger>
-            <TabsTrigger value="diff" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <FileCode2 className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('panel.tabDiff')}</span>
-            </TabsTrigger>
-            <TabsTrigger value="file" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <FileText className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('panel.tabFile')}</span>
-            </TabsTrigger>
-            <TabsTrigger value="browser" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <Globe className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('panel.tabBrowser')}</span>
-            </TabsTrigger>
-            <TabsTrigger value="terminal" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <TerminalSquare className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('dev.tabTerminal')}</span>
-            </TabsTrigger>
-            <TabsTrigger value="dev" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <LayoutGrid className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('panel.tabDev')}</span>
-            </TabsTrigger>
+            {openTabs.map((tab) => {
+              const def = TAB_DEFS.find((d) => d.id === tab);
+              if (def === undefined) return null;
+              return (
+                <div key={tab} className="flex min-w-0 flex-1 items-center">
+                  <TabsTrigger value={tab} className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
+                    {def.icon}
+                    <span className="truncate">{t(def.labelKey)}</span>
+                  </TabsTrigger>
+                  {tab !== 'info' && (
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center rounded p-0.5 transition-colors"
+                      aria-label={t('panel.closeView')}
+                      title={t('panel.closeView')}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeTab(tab);
+                      }}
+                    >
+                      <X className="size-2.5" strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </TabsList>
         </Tabs>
+        {/* 添加视图按钮（用户需求：默认任务摘要 + 添加按钮，按需加入其他视图） */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+              aria-label={t('panel.addView')}
+              title={t('panel.addView')}
+            >
+              <Plus className="size-3" strokeWidth={2} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            {TAB_DEFS.filter((d) => d.id !== 'info' && !openTabs.includes(d.id)).map((def) => (
+              <DropdownMenuItem
+                key={def.id}
+                onSelect={() => {
+                  setOpenTabs((prev) => [...prev, def.id]);
+                  setActiveTab(def.id);
+                }}
+              >
+                {def.icon}
+                <span>{t(def.labelKey)}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* 内容区（面板折叠由全局机制管理，此处始终展开）
-          面板常驻：所有 tab 始终在 DOM，用 hidden 切换（照搬参考项目 ContextPanel）——
-          避免 xterm 实例、滚动位置、diff 展开态在切换 tab 时丢失 */}
+          按 openTabs 条件渲染（未添加的视图不挂载；已添加的用 hidden 切换避免状态丢失） */}
       <div className="min-h-0 flex-1">
-        <div className={cn('h-full', activeTab !== 'info' && 'hidden')}>
-          <InfoPane sessionId={sessionId} />
-        </div>
-        <div className={cn('h-full', activeTab !== 'diff' && 'hidden')}>
-          <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />
-        </div>
-        <div className={cn('h-full', activeTab !== 'file' && 'hidden')}>
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                加载中…
+        {openTabs.includes('info') && (
+          <div className={cn('h-full', activeTab !== 'info' && 'hidden')}>
+            <InfoPane sessionId={sessionId} />
+          </div>
+        )}
+        {openTabs.includes('diff') && (
+          <div className={cn('h-full', activeTab !== 'diff' && 'hidden')}>
+            <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />
+          </div>
+        )}
+        {openTabs.includes('file') && (
+          <div className={cn('h-full', activeTab !== 'file' && 'hidden')}>
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  加载中…
+                </div>
+              }
+            >
+              <FileViewerPanel />
+            </Suspense>
+          </div>
+        )}
+        {openTabs.includes('browser') && (
+          <div className={cn('h-full', activeTab !== 'browser' && 'hidden')}>
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  加载中…
+                </div>
+              }
+            >
+              <BrowserPane />
+            </Suspense>
+          </div>
+        )}
+        {openTabs.includes('terminal') && (
+          <div className={cn('h-full', activeTab !== 'terminal' && 'hidden')}>
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  加载中…
+                </div>
+              }
+            >
+              <TerminalPanel sessionId={sessionId} className="h-full" />
+            </Suspense>
+          </div>
+        )}
+        {openTabs.includes('dev') && (
+          <div className={cn('h-full', activeTab !== 'dev' && 'hidden')}>
+            <div className="flex h-full flex-col">
+              {/* 开发者子视图切换（调试工具收纳） */}
+              <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
+                <button
+                  type="button"
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    devSubTab === 'git'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setDevSubTab('git')}
+                >
+                  <GitBranch className="size-2.5" strokeWidth={1.5} />
+                  Git
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    devSubTab === 'logs'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setDevSubTab('logs')}
+                >
+                  <ScrollText className="size-2.5" strokeWidth={1.5} />
+                  {t('dev.tabLogs')}
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    devSubTab === 'metrics'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setDevSubTab('metrics')}
+                >
+                  <Activity className="size-2.5" strokeWidth={1.5} />
+                  {t('dev.tabMetrics')}
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    devSubTab === 'inspector'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setDevSubTab('inspector')}
+                >
+                  <Wrench className="size-2.5" strokeWidth={1.5} />
+                  {t('dev.tabInspector')}
+                </button>
               </div>
-            }
-          >
-            <FileViewerPanel />
-          </Suspense>
-        </div>
-        <div className={cn('h-full', activeTab !== 'browser' && 'hidden')}>
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                加载中…
-              </div>
-            }
-          >
-            <BrowserPane />
-          </Suspense>
-        </div>
-        <div className={cn('h-full', activeTab !== 'terminal' && 'hidden')}>
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                加载中…
-              </div>
-            }
-          >
-            <TerminalPanel sessionId={sessionId} className="h-full" />
-          </Suspense>
-        </div>
-        <div className={cn('h-full', activeTab !== 'dev' && 'hidden')}>
-          <div className="flex h-full flex-col">
-            {/* 开发者子视图切换（调试工具收纳） */}
-            <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
-              <button
-                type="button"
-                className={cn(
-                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                  devSubTab === 'git'
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                onClick={() => setDevSubTab('git')}
-              >
-                <GitBranch className="size-2.5" strokeWidth={1.5} />
-                Git
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                  devSubTab === 'logs'
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                onClick={() => setDevSubTab('logs')}
-              >
-                <ScrollText className="size-2.5" strokeWidth={1.5} />
-                {t('dev.tabLogs')}
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                  devSubTab === 'metrics'
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                onClick={() => setDevSubTab('metrics')}
-              >
-                <Activity className="size-2.5" strokeWidth={1.5} />
-                {t('dev.tabMetrics')}
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                  devSubTab === 'inspector'
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                onClick={() => setDevSubTab('inspector')}
-              >
-                <Wrench className="size-2.5" strokeWidth={1.5} />
-                {t('dev.tabInspector')}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <div className={cn('h-full', devSubTab !== 'git' && 'hidden')}>
-                <GitPanel path={gitRepoPath} className="h-full" />
-              </div>
-              <div className={cn('h-full', devSubTab !== 'logs' && 'hidden')}>
-                {/* enabled 跟随可见性（对齐参考项目：面板不可见时不查询） */}
-                <LogsPanel
-                  enabled={activeTab === 'dev' && devSubTab === 'logs'}
-                  className="h-full"
-                />
-              </div>
-              <div className={cn('h-full', devSubTab !== 'metrics' && 'hidden')}>
-                {/* enabled 跟随可见性（对齐参考项目：面板不可见时不轮询） */}
-                <MetricsPanel
-                  enabled={activeTab === 'dev' && devSubTab === 'metrics'}
-                  className="h-full"
-                />
-              </div>
-              <div className={cn('h-full', devSubTab !== 'inspector' && 'hidden')}>
-                <InspectorPanel className="h-full" />
+              <div className="min-h-0 flex-1">
+                <div className={cn('h-full', devSubTab !== 'git' && 'hidden')}>
+                  <GitPanel path={gitRepoPath} className="h-full" />
+                </div>
+                <div className={cn('h-full', devSubTab !== 'logs' && 'hidden')}>
+                  {/* enabled 跟随可见性（对齐参考项目：面板不可见时不查询） */}
+                  <LogsPanel
+                    enabled={activeTab === 'dev' && devSubTab === 'logs'}
+                    className="h-full"
+                  />
+                </div>
+                <div className={cn('h-full', devSubTab !== 'metrics' && 'hidden')}>
+                  {/* enabled 跟随可见性（对齐参考项目：面板不可见时不轮询） */}
+                  <MetricsPanel
+                    enabled={activeTab === 'dev' && devSubTab === 'metrics'}
+                    className="h-full"
+                  />
+                </div>
+                <div className={cn('h-full', devSubTab !== 'inspector' && 'hidden')}>
+                  <InspectorPanel className="h-full" />
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

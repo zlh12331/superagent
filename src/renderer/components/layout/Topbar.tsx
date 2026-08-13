@@ -84,7 +84,7 @@ export function Topbar({
         <span className="brand-name">
           Code Agent<span>desktop</span>
         </span>
-        <span className="brand-telemetry">v0.1.0 · main</span>
+        <span className="brand-telemetry">v0.1.0</span>
       </div>
 
       {/* 中部：弹性 spacer（未来可放置命令面板入口 / 模型选择器） */}

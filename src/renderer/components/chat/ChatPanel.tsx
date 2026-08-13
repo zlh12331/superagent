@@ -379,24 +379,6 @@ export function ChatPanel({
             onModelChange={(m) => updateAi({ defaultModel: m })}
           />
         </div>
-        {/* composer-stats-bar：状态 · 消息数 · Token（对齐原型；账户/速率无后端数据源不展示） */}
-        <div className="composer-stats-bar">
-          <span className="csb-item">
-            <b>{statusText}</b>
-          </span>
-          <span className="csb-sep" aria-hidden="true">
-            ·
-          </span>
-          <span className="csb-item">
-            {t('chat.statsMessages')} <b>{messages.length}</b>
-          </span>
-          <span className="csb-sep" aria-hidden="true">
-            ·
-          </span>
-          <span className="csb-item">
-            {t('chat.statsTokens')} <b>{usageText}</b>
-          </span>
-        </div>
       </footer>
       {/* 快捷键帮助对话框（/help 触发） */}
       <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
