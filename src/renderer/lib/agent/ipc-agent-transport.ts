@@ -52,6 +52,8 @@ interface AgentConfig {
   readonly mode?: 'plan' | 'build';
   /** 思考强度（可选：渲染层设置项，覆盖主进程模型级默认） */
   readonly thinking?: ThinkingLevel;
+  /** 采样温度（可选：渲染层设置项，覆盖模型级默认；DeepSeek 思考模型忽略） */
+  readonly temperature?: number;
 }
 
 /**
@@ -121,7 +123,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         new Error('IpcAgentTransport: workingDir not configured. Call configure() first.'),
       );
     }
-    const { workingDir, systemPrompt, maxSteps, mode, thinking } = this.config;
+    const { workingDir, systemPrompt, maxSteps, mode, thinking, temperature } = this.config;
 
     // currentSessionId 在 agent.run 返回后填充，初始为 undefined
     let currentSessionId: string | undefined;
@@ -189,6 +191,8 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           mode: mode ?? 'build',
           // 思考强度：设置项覆盖主进程模型级默认（undefined = 用模型默认）
           thinking,
+          // 采样温度：设置项覆盖模型级默认（undefined = 用模型默认）
+          ...(temperature !== undefined ? { temperature } : {}),
         });
 
         // 处理响应：失败则 error stream，成功则记录 sessionId

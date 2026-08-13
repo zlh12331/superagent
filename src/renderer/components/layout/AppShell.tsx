@@ -156,6 +156,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   const setTheme = useSettingsStore((s) => s.setTheme);
   const theme = useSettingsStore((s) => s.theme);
+  // 实验功能：扫描线视觉叠加（settings.experimental.scanlines → .scanlines-overlay）
+  const scanlines = useSettingsStore((s) => s.experimental.scanlines);
   const enterWelcomeMode = useWelcomeStore((s) => s.enterWelcomeMode);
   // 全局 UI store：设置对话框入口（快捷键 / 错误动作 / Topbar / 命令面板共享）
   const openSettings = useUiStore((s) => s.openSettings);
@@ -372,6 +374,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
       {/* 自动更新提示（事件驱动 toast，无 DOM） */}
       <UpdateNotice />
+      {/* 扫描线视觉叠加（实验功能开关）：纯视觉层，不拦截任何交互 */}
+      {scanlines && <div className="scanlines-overlay" aria-hidden="true" />}
     </div>
   );
 }

@@ -91,23 +91,31 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
 ) {
   const transport = useMemo(() => getIpcAgentTransport(), []);
 
-  // 思考强度设置项（settings-store persistent；变化时重新 configure）
+  // 用户设置项（settings-store persistent；变化时重新 configure）：
+  // 思考强度 / 采样温度直接透传；系统提示词为空串时回落主进程内置默认 prompt
   const thinking = useSettingsStore((s) => s.ai.thinking);
+  const temperature = useSettingsStore((s) => s.ai.temperature);
+  const settingsSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
 
   // 解构 agent 专用字段，剩余透传给 useChat
   const { workingDir, systemPrompt, maxSteps, ...chatOptions } = options;
 
+  // 有效系统提示词：显式 options.systemPrompt > 设置项（非空）> 主进程默认
+  const effectiveSystemPrompt =
+    systemPrompt ?? (settingsSystemPrompt.trim().length > 0 ? settingsSystemPrompt : undefined);
+
   // 在 agent 配置变化时同步更新 transport（useEffect 确保在 render 后执行）
   // sendMessage 由用户交互触发（总是在 effect 执行后），不存在竞态
-  // 使用条件展开避免 exactOptionalPropertyTypes 下 `string | undefined` → `string` 报错
+  // 使用条件展开避免 exactOptionalPropertyTypes 下 string | undefined 报错
   useEffect(() => {
     transport.configure({
       workingDir,
-      ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+      ...(effectiveSystemPrompt !== undefined ? { systemPrompt: effectiveSystemPrompt } : {}),
       ...(maxSteps !== undefined ? { maxSteps } : {}),
       ...(thinking !== undefined ? { thinking } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
     });
-  }, [transport, workingDir, systemPrompt, maxSteps, thinking]);
+  }, [transport, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
 
   return useChat<Message>({
     ...chatOptions,

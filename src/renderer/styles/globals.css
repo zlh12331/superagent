@@ -3598,6 +3598,24 @@ button.card-head {
   opacity: 0.45;
 }
 
+/* ── 实验功能：扫描线视觉叠加（settings.experimental.scanlines）── */
+/* AppShell 根容器内条件渲染；固定全屏 + pointer-events:none 不拦截交互；
+   颜色走 --text 令牌（随主题自适应），无裸色/hex。 */
+.scanlines-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 3px,
+    var(--text) 3px,
+    var(--text) 4px
+  );
+  opacity: 0.04;
+}
+
 .empty-state-title {
   font-size: var(--fs-base);
   color: var(--text-dim);
