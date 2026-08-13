@@ -100,7 +100,8 @@ async function sendAndWaitRun(
         .poll(
           async () =>
             page.evaluate(() => (window as unknown as { __runCalls?: number }).__runCalls ?? 0),
-          { timeout: 5_000 },
+          // 15s：首次发送时 transport/useChat 模块可能仍在 vite 冷编译，run 延迟可达数秒
+          { timeout: 15_000 },
         )
         .toBeGreaterThan(0);
       return;
@@ -128,7 +129,13 @@ test.describe('聊天用户旅程（batch 1）', () => {
       await input.waitFor({ timeout: 10_000 });
       await input.fill('预热');
       await page.locator('.send-btn:visible').first().waitFor({ timeout: 10_000 });
-      await page.waitForTimeout(3_000);
+      // 完整发送链预热：等发送按钮可用后回车一次（transport/useChat/agent 模块冷编译）
+      await page
+        .locator('.send-btn:visible')
+        .first()
+        .waitFor({ state: 'visible', timeout: 10_000 });
+      await input.press('Enter');
+      await page.waitForTimeout(5_000);
     } catch {
       // 预热失败不影响用例（用例自身有重试）
     }
