@@ -75,6 +75,7 @@
 ### A14. 文件查看器形态失实 —— 非 Dialog，文件名也非 FileViewerDialog.tsx；「脏数据阻止关闭」仅部分
 - 文档原话（4.7）：实现 [FileViewerDialog.tsx]；脏数据阻止关闭（确认后才可退出）
 - 证据：实际文件 FileViewerPanel.tsx（组件同名），挂在右面板「文件」tab（DevPanel.tsx:226-238），非模态；脏确认仅编辑→只读切换有 confirm（FileViewerPanel.tsx:242-252），切换文件（file-viewer-store.ts:99-108 直接重置）与关闭 tab（DevPanel.tsx:130-136）均静默丢弃；i18n confirmCloseDirty（common.json:591）定义了但从未接线
+- ✅ 部分修复：切换文件前脏数据确认已接线（file-viewer-store.openFile async + confirm，取消保持当前文件）；关闭 tab 静默丢弃仍保留（查看器状态在 store，tab 重开即恢复——内容并未真正丢失，见 DevPanel 条件渲染设计）
 
 ### A15. 斜杠命令「其余 toast 引导」 —— /help 开对话框、/interrupt 真停止、/goal 真预填
 - 文档原话（4.3）：带 action 的命令点击直接执行（/new 回欢迎页、/clear 清空消息、其余 toast 引导）
@@ -126,10 +127,15 @@
 4. vim 模式仅存储（editor-section.tsx:39-44，i18n 明示「先存储偏好」—— 文档已诚实标注）
 5. /models /compact 仅 toast 引导（ChatPanel.tsx:456，注释「完整链路后续增强」—— 文档已标注）
 6. MCP 错误 message 未渲染（mcp-section.tsx:26-33 仅状态徽章，主进程 error 字段丢失）
+   ✅ 已修复：mcp-section 渲染 lastError（状态行下方 role=status 红字，error/stopped_with_error 时显示）
 7. SectionErrorBoundary 缺 resetKeys（SettingsDialog.tsx:275，pane 抛错后切分区错误态可能残留）
+   ✅ 已修复：resetKeys={[activeSection]}，切分区重置错误态
 8. Ctrl+N 新建会话不导航（AppShell.tsx:178-180 仅 enterWelcomeMode，与 Sidebar handleNewChat 的 navigate(ROUTES.home) 不一致，URL 停留当前路由）
+   ✅ 已修复：onNewSession 补 navigate(ROUTES.home)，与 Sidebar 一致
 9. 大量过期注释：Topbar.tsx:9「命令面板按钮(功能预留)」、ui-store.ts:19/AppShell.tsx:139「Shift+/ 命令面板入口」、router.tsx:47-49「首页直接渲染 ChatPanel chatId=draft」、experimental-section.tsx:5「消费方已接入」
+   ✅ 已修复：上述过期注释全部更新为当前实现（A8 接入后 experimental 注释亦为真）
 10. 文件树刷新兜底只重拉根目录一层（FileTreePanel.tsx:78-90）；sft-*、ti-action-btn 类无 CSS 规则
+    ✅ 已修复：刷新覆盖根目录 + 全部已展开目录（并行重拉）；sft-head/sft-back/sft-title 补 CSS；ti-action-btn 改为与更多菜单同款工具类样式
 
 ## D. 【总体判断】
 
@@ -141,3 +147,20 @@
 3. 真正危险的是 4 处「文档说能做、实际不能做」的反向失实：欢迎页首条消息丢失（功能性 bug）、scanlines 假开关、温度死存储、系统提示词不生效——用户按文档预期操作会得到错误结果，比「漏写」危害更大。
 4. 文件树是质量洼地：后端 IPC（file:create/createDir/delete/rename/watch）与 hooks 全部就绪，但 UI 只暴露根目录新建与展开，重命名/删除/复制停在死代码与悬空 i18n/CSS 层面，与侧栏（重命名/删除/置顶全链路）形成鲜明对比。
 5. 建议：以本次审计为准重写 08-ux-guidelines.md 的 4.x/6.x/8 节；优先修复 A1（首条消息透传）、A2（文件树操作入口）、A6-A8（三处假能力：接入或移除开关）。
+
+## E. 【修复日志】
+
+P0（第一轮，已提交）:
+- A1 首条消息透传：lib/pending-message.ts（消费即移除 + 单测 5 例）→ ChatPanel 挂载发送
+- A2 文件树操作：node-menu.tsx（目录=新建文件/目录/复制路径/重命名/删除；文件=复制路径/重命名/删除），startRename/deleteEntry 死代码激活
+- A6 温度全链路：schema(0-2) → handler → StartAgentOptions → buildGenerationOptions temperatureOverride（用户值 > 模型级默认；思考模型官方忽略）→ use-agent 读设置注入 transport；单测 main 2 例 + shared schema 2 例
+- A7 系统提示词：use-agent 读 settings ai.systemPrompt（trim 空串回落内置默认），显式 options 优先
+- A8 scanlines：AppShell 条件渲染 .scanlines-overlay（--text 令牌，pointer-events:none），开关真实生效
+- 附带：i18n copyFailed 误译修复（"笔记本电脑"→"复制失败"）；check-comments 模板插值误报修复；settings-pref.test 测试边界豁免登记
+
+P1（第二轮，已提交）:
+- 主题三态统一：THEME_CYCLE/nextTheme 单一循环（dark→light→system），快捷键/Topbar/命令面板共用；账户菜单改三选一（亮色/暗色/跟随系统 + 勾选），system 获得 UI 入口
+- Ctrl+S 真接线：file-viewer-store 保存处理器桥接（registerSaveHandler/requestSave 模块级非响应式），AppShell 全局快捷键转发，查看器本地 keydown 移除（尊重自定义快捷键设置）
+- 脏数据保护：openFile 切换文件前 confirm（取消保持原文件），单测 6 例
+- 版本号去硬编码：useAppInfo hook（app:getInfo 单一真源），Topbar/账户菜单不再硬编码 v0.1.0
+- C6 MCP lastError 渲染 / C7 SettingsDialog resetKeys / C8 Ctrl+N 导航 / C9 过期注释 / C10 深层刷新 + sft/ti CSS
