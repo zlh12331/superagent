@@ -533,8 +533,15 @@ function createMockApi(): IpcApi {
     },
 
     settings: {
-      getApiKey: async () => ok({ apiKey: null }),
-      setApiKey: async () => ok({ ok: true }),
+      getApiKey: async () => {
+        // localStorage 持久化（模拟真实 keychain 跨重启保留——E2E 前置配置后 reload 仍生效）
+        const key = localStorage.getItem('mock-api-key');
+        return ok({ apiKey: key });
+      },
+      setApiKey: async (input) => {
+        localStorage.setItem('mock-api-key', input.apiKey);
+        return ok({ ok: true });
+      },
       deleteApiKey: async () => ok({ ok: true }),
       getTelemetryLevel: async () => ok({ level: 'off' }),
       setTelemetryLevel: async () => ok({ ok: true }),
