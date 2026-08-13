@@ -71,6 +71,7 @@ export const IPC_META = {
     getTurns: request('session:getTurns'),
     getRecentTurns: request('session:getRecentTurns'),
     getTurnMessages: request('session:getTurnMessages'),
+    compact: request('session:compact'),
   },
 
   file: {

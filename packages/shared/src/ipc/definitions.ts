@@ -160,6 +160,9 @@ import {
   GrepResSchema,
 } from '../schemas/search';
 import {
+  SessionCompactReqSchema,
+  type SessionCompactRes,
+  SessionCompactResSchema,
   SessionCreateReqSchema,
   type SessionCreateRes,
   SessionCreateResSchema,
@@ -636,6 +639,12 @@ export const IPC_DEFINITIONS = {
       SessionGetTurnMessagesReqSchema,
       {} as SessionGetTurnMessagesRes,
       SessionGetTurnMessagesResSchema,
+    ),
+    compact: withSchema(
+      IPC_META.session.compact,
+      SessionCompactReqSchema,
+      {} as SessionCompactRes,
+      SessionCompactResSchema,
     ),
   },
 

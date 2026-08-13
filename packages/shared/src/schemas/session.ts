@@ -378,3 +378,25 @@ export const SessionListRecentDirsResSchema = z.object({
 export const SessionGetTurnMessagesResSchema = z.object({
   messages: z.array(z.unknown()),
 });
+
+/** session:compact 入参 schema（/compact 斜杠命令：手动压缩会话上下文） */
+export const SessionCompactReqSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+/** session:compact 响应 payload */
+export interface SessionCompactRes {
+  /** 被裁剪掉的消息条数（0 = 已在预算内） */
+  readonly removed: number;
+  /** 压缩后剩余消息条数 */
+  readonly remaining: number;
+  /** 压缩后的全量消息历史（渲染层 setMessages 同步） */
+  readonly messages: readonly unknown[];
+}
+
+/** session:compact 响应 schema（removed=0 表示已无需压缩；messages 为压缩后全量历史） */
+export const SessionCompactResSchema = z.object({
+  removed: z.number().int().nonnegative(),
+  remaining: z.number().int().nonnegative(),
+  messages: z.array(z.unknown()),
+});
