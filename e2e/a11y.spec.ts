@@ -91,7 +91,9 @@ test.describe('可访问性审计（WCAG 2.2 AA）', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const results = await new AxeBuilder({ page }).withTags(['color-contrast']).analyze();
+    // U1 修复：color-contrast 是 axe rule ID 而非 tag——此前用 withTags 传入
+    // 匹配不到任何规则，对比度用例空跑（永远 0 违规）。正确 API 是 withRules。
+    const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
 
     expect(results.violations).toEqual([]);
   });

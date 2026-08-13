@@ -126,7 +126,9 @@ function main(): number {
 
   for (const c of chunks) {
     if (c.sizeKib > CHUNK_LIMIT_KB) {
-      problems.push(`${c.name}: ${c.sizeKB.toFixed(0)}KB > ${CHUNK_LIMIT_KB}KB（单 chunk 超限）`);
+      // U1 修复：ChunkInfo 只有 sizeKib 字段，此前引用不存在的 sizeKB——
+      // 单 chunk 超限时抛 TypeError 而非报警（恰在最需要报警时失效）
+      problems.push(`${c.name}: ${c.sizeKib.toFixed(0)}KB > ${CHUNK_LIMIT_KB}KB（单 chunk 超限）`);
     }
   }
   if (totalKib > TOTAL_LIMIT_KB) {
