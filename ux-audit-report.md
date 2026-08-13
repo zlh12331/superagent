@@ -9,11 +9,13 @@
 - 文档原话（4.2）：首条消息经 sessionStorage 暂存，ChatPanel 挂载后自动发送（避免未挂载调用）
 - 证据：写入 src/renderer/routes/home.tsx:204  sessionStorage.setItem("welcome:pending-message:"+sessionId, ...)；全仓 grep pending-message 仅此一处，ChatPanel.tsx/chat.tsx/use-agent.ts 均无 getItem 消费者
 - 结论：欢迎页首条消息永远不会被发送（只建会话、消息丢失），「自动发送」未实现。
+- ✅ 已修复：key 契约统一到 lib/pending-message.ts（consumePendingMessage 读取即移除、幂等），ChatPanel 挂载后消费并自动发送（ChatPanel.tsx:180-187）；单测 pending-message.test.ts（5 例）。
 
 ### A2. 文件树节点「更多菜单：新建/重命名/删除/复制路径」 —— 组件不存在，且重命名/删除/复制全部不可达
 - 文档原话（4.7）：节点 hover「更多」菜单：新建文件/新建目录/重命名/删除/复制路径
 - 证据：FileTreeNode.tsx 仅 293 行，:279-293 的「更多操作」说明只是注释；:5 声称拆出的 node-menu.tsx 全库不存在；startRename（file-tree-store.ts:246）、deleteEntry（use-file-tree-ops.ts:105）、copyToClipboard（FileTreeNode.tsx:63）全仓零调用 → 内联重命名（FileTreeNode.tsx:171-176）因 renamingPath 永不被置位而不可达；删除/复制路径无任何 UI 入口；i18n「复制路径」(common.json:611) 与 CSS .ft-more-btn (globals.css:3018) 均悬空
 - 结论：文档宣称的 5 项菜单能力实际只有「根目录新建」可达，其余 4 项不可达（后端 IPC file:delete/rename 与 hooks 全就绪，只差 UI 触发器）。
+- ✅ 已修复：新增 node-menu.tsx（NodeMenu 组件，hover「…」按钮 + DropdownMenu），文件/目录节点均接入：目录=新建文件/新建目录/复制路径/重命名/删除，文件=复制路径/重命名/删除；startRename/deleteEntry 死代码激活，悬空 CSS .ft-more-btn 与 i18n 键复用；copyToClipboard 死导出移除。
 
 ### A3. 侧栏搜索「仅 UI 无过滤」 —— 实际有真实过滤 + 防抖高亮（文档反向失实）
 - 文档原话（4.1/8）：搜索框仅 UI（无过滤逻辑）；侧栏搜索过滤 ⚠️ 仅 UI
@@ -34,16 +36,19 @@
 - 文档原话（4.10）：模型参数（默认模型/温度/思考强度 off-low-medium-high）| 已实现
 - 证据：model-params-section.tsx:40-50 写 ai.temperature；全仓 grep：渲染层仅 settings-store 存储，ChatPanel.tsx:166-173 / use-agent.ts / agent.handler 发送路径均不读取；main 侧只消费模型级 generationConfig.temperature（generation-options.ts:61-62）
 - 结论：温度滑块改了不生效。
+- ✅ 已修复：全链路透传——AgentRunReqSchema 增 temperature（0-2）、agent.handler 条件展开、StartAgentOptions 增字段、buildGenerationOptions 增 temperatureOverride（用户值 > 模型级 generationConfig.temperature；DeepSeek 思考模型按官方限制忽略采样参数）；渲染层 use-agent.ts 读 ai.temperature → transport.configure；单测 generation-options.test.ts 增 2 例。
 
 ### A7. 设置「系统提示词保存即生效」 —— 保存了但永不进入对话
 - 文档原话（4.10）：系统提示词编辑（保存即生效，空串回退内置）
 - 证据：prompt-section.tsx:36-41 保存真实、main 支持覆盖（agent-service.ts:404-407）、transport 支持（ipc-agent-transport.ts:186）；但 ChatPanel.tsx:166-173 调 useAgentWithIpc 只传 {id, workingDir, messages, onError}，不读 ai.systemPrompt（use-agent.ts:95 仅读 thinking）
 - 结论：自定义系统提示词永不生效（settings-store.ts:52 注释「会透传」同失实）。
+- ✅ 已修复：use-agent.ts 读取 settings ai.systemPrompt（trim 空串回退主进程内置默认），经 transport.configure 注入 agent:run；显式 options.systemPrompt 优先级最高。
 
 ### A8. 实验「scanlines」 —— 假开关，零消费且注释谎称已接入
 - 文档原话（4.10）：实验 | scanlines 扫描线 / 推理块默认折叠 | 已实现
 - 证据：experimental-section.tsx:31-36 开关仅写 settings-store；全仓 grep scanlines 无消费方，也无 .scanlines-overlay CSS；:4-8 注释「消费方已接入」失实
 - 结论：scanlines 开关无任何效果（reasoningCollapsed 是真的：message-item.tsx:488-491）。
+- ✅ 已修复：AppShell 根容器条件渲染 .scanlines-overlay（pointer-events:none 纯视觉层），globals.css 新增扫描线样式（走 --text 令牌，无裸色）；开关生效。
 
 ### A9. 审批「结构化预览 JSON」 —— JSON 预览不存在
 - 文档原话（4.5）：结构化预览：按工具类型渲染（diff 双栏 / JSON）

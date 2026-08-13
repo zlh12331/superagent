@@ -135,6 +135,9 @@ function checkFileRefs(content: string, file: string, problems: Problem[]): void
   const re = /file:\/\/\/([^)\s"`]+)/g;
   for (const m of content.matchAll(re)) {
     const raw = m[1];
+    // 模板字符串插值（如 `file:///${dir.replace(...)}` 构造运行时 URL）
+    // 无法静态验证路径存在性 → 跳过（避免把真实业务代码误报为过期引用）
+    if (raw.includes('${')) continue;
     const [pathPart, linePart] = raw.split('#L');
     // docs 内为绝对路径（f:/...），src 注释内为相对路径
     const abs = pathPart.includes(':') ? pathPart : join(ROOT, pathPart.replace(/^\/+/, ''));

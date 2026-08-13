@@ -70,6 +70,11 @@
       "file": "src/main/ipc/settings.handler.test.ts",
       "signals": ["WebSocket"],
       "reason": "真实 WebSocket 验证设置推送；handler + mock 存储边界（非链路型，保留）"
+    },
+    {
+      "file": "src/main/infra/storage/settings-pref.test.ts",
+      "signals": ["better-sqlite3"],
+      "reason": "真实 DB 验证 app_settings 表读写；存储域单模块（非链路型，保留）"
     }
   ]
 }
