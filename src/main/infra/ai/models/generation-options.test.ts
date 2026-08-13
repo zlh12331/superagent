@@ -24,7 +24,7 @@ describe('buildGenerationOptions', () => {
     expect(gen.providerOptions).toEqual({ deepseek: { reasoningEffort: 'max' } });
     expect(gen.samplingOptions).toEqual({});
     // 输出上限：窗口钳制后取模型能力 384K 与窗口余量的较小值
-    expect(gen.maxOutputTokens).toBe(64_000);
+    expect(gen.maxOutputTokens).toBe(384_000);
   });
 
   it('reasoning 模型无 reasoningEffort 配置：不注入 providerOptions', () => {

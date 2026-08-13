@@ -82,11 +82,11 @@ describe('clampOutputTokens（输出预算钳制）', () => {
     expect(
       clampOutputTokens({
         ceiling: undefined,
-        modelMaxOutputTokens: 64_000,
+        modelMaxOutputTokens: 384_000,
         contextWindowSize: 1_000_000,
         promptTokens: 0,
       }),
-    ).toBe(64_000);
+    ).toBe(384_000);
   });
 
   it('模型能力上限低于用户 ceiling：以模型上限为准', () => {

@@ -350,7 +350,7 @@ describe('LlmClient', () => {
 
       const args = getLastGenerateTextArgs();
       // window 1M − prompt(≈2) − margin(50K) ≈ 950K；min(384K, 950K) = 384K
-      expect(args['maxOutputTokens']).toBe(64_000);
+      expect(args['maxOutputTokens']).toBe(384_000);
     });
 
     it('非 reasoning 模型配置采样参数：应用 temperature / topP / maxTokens', async () => {

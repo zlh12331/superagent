@@ -27,9 +27,7 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     capabilities: {
       reasoning: true,
       contextWindowSize: 1_000_000,
-      // 真实 API 校验：DeepSeek 思考模型 max_tokens 上限 64K（含思维链），
-      // 此前 384K 会在请求体里发送 max_tokens: 384000，超过 API 上限
-      maxOutputTokens: 64_000,
+      maxOutputTokens: 384_000,
     },
     // 官方默认思考强度即 high，此处显式声明为 max（用户偏好）
     generationConfig: { reasoningEffort: 'max' },
@@ -41,7 +39,7 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
     capabilities: {
       reasoning: true,
       contextWindowSize: 1_000_000,
-      maxOutputTokens: 64_000,
+      maxOutputTokens: 384_000,
     },
     generationConfig: { reasoningEffort: 'max' },
   },
