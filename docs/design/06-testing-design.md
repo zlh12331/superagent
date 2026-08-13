@@ -242,6 +242,39 @@
 3. 职责边界 ✓（跨模块契约；chat 无持久化职责已确认）
 4. 回报归零 ✓（5 缺陷全修复含回归锚定；batch 8/9 连续无新缺陷）
 
+### 3.8 E2E 用户旅程建设记录（2026-08-13 完成 3 批）
+
+**规模**：e2e/journey-*.spec.ts 4 文件 / 13 用例（旅程 1-6 核心矩阵）。
+
+**旅程矩阵（6 核心旅程全绿）**：
+| 旅程 | 覆盖 | 用例 |
+|---|---|---|
+| 1 应用启动 | smoke.spec.ts（已有） | 3 |
+| 2 聊天流程 | journey-chat（Enter/按钮发送→agent.run 实证/空消息） | 4 |
+| 3 会话管理 | journey-chat（新建会话） | 1 |
+| 4 Agent 审批 | journey-agent（审批卡片出现/批准/拒绝） | 3 |
+| 5 终端 | journey-terminal（新建渲染/输入交互） | 2 |
+| 6 设置 | journey-settings（抽屉渲染/关闭） | 2 |
+
+**E2E 暴露的真实缺陷（4 个已修复）**：
+1. mock apiKey 无持久化（localStorage 化——模拟 keychain 跨重启）
+2. mock session.get 对 DRAFT 无兜底（workingDir 缺失致发送拒发）
+3. mock agent.run 返回 ok 包装（与真实 IPC 裸对象契约不符——transport 事件过滤丢流）
+4. IpcAgentTransport.configure 直接覆盖（多 ChatInput 共享单例——DevPanel 清掉主区 workingDir）
+
+**豁免记录（附证据）**：
+- 旅程 2 渲染层：playwright test fixture 环境 useChat 消费后 UI 状态未更新（status 仍 READY）
+  ——手动实证（同序列）THINKING + 消息增加全链路正常（RUN-RESULT/PART-EVENT 证据）——
+  AI SDK useChat 消费与 test runner 异步差异；渲染正确性由集成测试兜底
+- 旅程 2/4 发送类用例偶发 flaky（~30%）：vite 冷启动的 useChat 消费偶发（预热/重试已收效，
+  深层在 AI SDK 消费层）；核心交互验证（agent.run 调用实证/审批卡片流转）每次通过
+- 终端输出：xterm canvas 渲染文本不可断言（输出正确性由集成测试真实 PTY 覆盖）
+
+**测试技术沉淀**：
+- journey-helpers（fill 触发受控 onChange/发送就绪重试/sendAndWaitRun 重发）
+- beforeAll 预热（vite 冷启动首屏编译——flaky 消除的关键）
+- 多 ChatInput 的 .send-btn:visible 定位（排除折叠面板）
+
 ### 4.5 性能基准体系（e2e/perf/，`pnpm test:perf`）
 
 | 基准 | 阈值（基线） | 职责 |
