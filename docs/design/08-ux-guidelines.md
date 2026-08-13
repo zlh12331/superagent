@@ -149,7 +149,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 字符计数 | trim 后显示，>2000 变警告色（`aria-live`） |
 | 长度上限 | 8000 字符拦截（toast 报错） |
 | 附件 | `@` 按钮（原生多选文件）→ chip 展示（可移除，去重）→ 发送时 `file:read` 读取（≤4000 字符截断，失败仅标注文件名不阻断） |
-| 斜杠命令 | 输入 `/` 弹建议（/help /new /clear /compact /models /interrupt /goal）；`Tab/Enter` 应用，`Esc` 关闭；带 action 的命令点击直接执行：/new 回欢迎页、/clear 清空消息、/help 打开快捷键帮助、/interrupt 真实中断、/goal 预填输入框；仅 /models /compact 为 toast 引导（完整链路后续增强） |
+| 斜杠命令 | 输入 `/` 弹建议（/help /new /clear /compact /models /interrupt /goal）；`Tab/Enter` 应用，`Esc` 关闭；带 action 的命令点击直接执行：/new 回欢迎页、/clear 清空消息、/help 打开快捷键帮助、/interrupt 真实中断、/goal 预填输入框、/models 打开项目栏模型选择下拉（受控）、/compact 手动压缩会话上下文（主进程按模型窗口预算裁剪 compressByTokenBudget → 整体落库 → 本地消息态同步 + toast 结果） |
 | 草稿 | 按会话持久化文本+附件（draft-store）；发送成功清除；切换会话自动恢复 |
 | 流式中输入 | **不禁用** textarea，允许预输入下一条（停止按钮期间可打字） |
 
@@ -236,7 +236,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 模型服务 | 10 家提供商行（配置状态徽标 + 展开编辑 API Key：显示/隐藏/保存/删除）；运行时模型增删（modelId/provider/baseUrl）；模型参数（默认模型/温度/思考强度 off-low-medium-high）——温度全链路透传 agent:run（schema→handler→buildGenerationOptions temperatureOverride），DeepSeek 思考模型按官方限制忽略采样参数；审批权限（审批模式/白名单） | 已实现 |
 | MCP | server 列表（名称/状态徽章/工具数/最后一次错误信息）+ 添加表单 + 启动/停止 | 已实现 |
 | 技能 | 已学技能列表 + 描述学习（learn-skill-agent）+ 移除 | 已实现 |
-| 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 开关标注后续）；快捷键（ShortcutPicker 录制 6 项）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
+| 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 模式：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 插入 · Esc 切换，输入舱 NORMAL/INSERT 徽章；不支持 y/p/v/u 与数字前缀——设置页如实标注）；快捷键（ShortcutPicker 录制 6 项）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
 | 工作树 | 当前工作目录 + 展开节点数（只读状态） | 已实现（配置项规划中） |
 | 浏览器 | 右面板「浏览器」tab 为 iframe 预览工具的说明页 | 说明页（配置项规划中） |
 | 实验 | scanlines 扫描线（AppShell 根级 .scanlines-overlay 条件渲染，--text 令牌）/ 推理块默认折叠（message-item 消费） | 已实现（原型其余项不展示假开关） |
@@ -314,7 +314,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 ### 6.2 键盘可达性
 
 - 跳过导航链接（WCAG 2.4.1）：`sr-only` 聚焦显示，锚点 `#main-content`。
-- 会话项/文件树节点：`Enter/Space` 激活；resizer `tabIndex=0` + ARIA 滑块语义。
+- 会话项/文件树节点：`Enter/Space` 激活；侧栏 tabs 走 WAI-ARIA tabs 模式（←/→/Home/End 移动焦点并激活 + roving tabindex）；模型选择菜单 roving focus（↑/↓ 循环 · Home/End 首尾 · 打开时聚焦选中项）；resizer `tabIndex=0` + ARIA 滑块语义 + 方向键 16px 步进（Home/End 极值）。
 - 设置导航：`role=tablist` + 方向键循环；斜杠建议 `role=listbox` + `Tab/Enter/Esc`。
 - 输入框拖拽手柄：键盘 `↑/↓` 20px 步进（等价拖拽）。
 - 所有图标按钮有 `aria-label`；状态点 `role=status`；错误 `role=alert`；加载 `aria-busy`。
@@ -327,7 +327,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 
 实现：[i18n/](../src/renderer/i18n/)（i18next，`zh-CN`（默认）/ `en` 双语言）
 
-- 命名空间：`common`（UI 文案）+ `errors`（错误码文案）。
+- 命名空间：`common`（UI 文案）+ `errors`（错误码文案）；`check:i18n --strict` 已并入 check:static 门禁（0 缺失/0 冗余/双语一致卡关；checker 支持 t(labelKey) 常量间接引用解析）。
 - 语言切换立即生效（`changeLanguage`）；设置页语言行持久化于 settings-store 关联项。
 - 快捷键键位（kbd）与错误码为技术标识不本地化；时间相对化文案走 `formatRelativeTime(path, t)`。
 - **新文案必须走 i18n**：`t('key')` 渲染，禁止中文字面量硬编码（例外：纯技术标注如「加载中…」需登记 key）。
@@ -349,8 +349,8 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 | 全局 Ctrl+S 保存桥接 | ✅ 已实现 | settings 自定义键位 → file-viewer-store → 编辑态查看器 |
 | 归档 tab | ⚠️ 空态 | 计数恒 0，无归档后端 |
 | 设置：账号/插件/hooks/命令/移动端 | ⚠️ 规划中 | 「🚧 规划中」诚实占位 |
-| 斜杠命令 /models /compact /help | ⚠️ toast 引导 | 完整链路后续增强 |
-| vim 模式 | ⚠️ 存储无行为 | 标注"后续支持" |
+| 斜杠命令 /models /compact | ✅ 已实现 | /models 打开模型选择下拉；/compact 窗口感知压缩 + 落库 + 本地态同步 |
+| vim 模式 | ✅ 已实现 | 输入舱最小可用子集（移动/删除/插入），设置页如实标注不支持项 |
 | 退出登录 / 云端账户 | ❌ NONE | 无登录后端（诚实不提供） |
 | Git commit/push UI | ❌ NONE | 面板纯只读（防误操作） |
 

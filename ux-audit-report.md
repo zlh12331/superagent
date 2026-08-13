@@ -174,8 +174,10 @@ P2（第三轮，已提交）:
 - 命令面板平台修饰键（macOS ⌘ / Windows Ctrl）；browser-pane 设备栏关闭 aria-label；DevPanel/mcp-section 硬编码「加载中」走 i18n
 - 重写 08-ux-guidelines 4.1-4.10/6.1/8/附录：A3/A4/A5/A9/A10/A11/A12/A13/A15/A16/A17/A18/A19 全部对齐代码现状
 
-P2 剩余（低价值/高风险，未做——实事求是记录）:
-- 侧栏 tabs / ModelSelector roving tabindex：Radix 组件自带键盘语义，收益低且焦点管理有回归风险
-- SettingsDialog 单测：Radix Sheet + 20 分区 IPC 依赖重，冒烟收益低
-- i18n 88 个冗余 key 清理（--strict 才卡关，无行为影响）
-- /models /compact 完整链路、vim 模式行为：文档已诚实标注为「后续增强/仅存储」
+P2 剩余（第四轮已全部完成）:
+- ✅ 侧栏 tabs roving tabindex：WAI-ARIA tabs 模式（←/→/Home/End 焦点移动+自动激活）；ModelSelector 菜单 roving focus（↑/↓ 循环、Home/End、打开聚焦选中项）；DevPanel 用 Radix Tabs（自带箭头键语义，核查无需改）
+- ✅ SettingsDialog 冒烟单测 2 例（5 组 15 tab 渲染 + tab 切换激活）
+- ✅ i18n 冗余清零：checker 升级支持 t(labelKey) 常量间接引用解析（消除误报）→ 删除 44 个真实死 key（双语同步）→ check:i18n --strict 并入 check:static 永久卡关
+- ✅ /models 真实链路：受控打开 composer 项目栏模型选择下拉（ModelSelector 增 open/onOpenChange 受控 props）
+- ✅ /compact 真实链路：session:compact IPC（meta+definitions+handler+组合根注入窗口感知压缩器）→ compressByTokenBudget 裁剪 → replaceMessages 事务落库 → 渲染层 setMessages 同步 + toast 结果；handler 2 例单测
+- ✅ vim 模式真实行为：lib/vim-mode 纯逻辑（h/j/k/l/w/b/0/$/x/dd/i/a/I/A/Esc，10 例单测）接入 ChatInput（normal/insert 双态 + NORMAL/INSERT 徽章 + 光标落点）；设置页描述如实标注不支持项（y/p/v/u/数字前缀）
