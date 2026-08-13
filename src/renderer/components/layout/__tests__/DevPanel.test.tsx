@@ -4,13 +4,13 @@
 // 测试要点：
 // 1. 默认展开 + 默认 activeTab=info（会话详情）
 // 2. 点击折叠按钮 → 折叠 + 不渲染内容区；再点展开
-// 3. 切换到 diff / files / terminal Tab → 渲染对应 pane
+// 3. 切换到 diff / terminal Tab → 渲染对应 pane
 // 4. 切换到 dev Tab → 默认 git 子视图；切换 logs/metrics/inspector
 // 5. sessionId / gitRepoPath props 透传
 // 6. 自定义 className
 //
 // 策略：
-// - mock 子组件（InfoPane/DiffPane/FilesPane/TerminalPanel/GitPanel/LogsPanel/MetricsPanel/InspectorPanel）
+// - mock 子组件（InfoPane/DiffPane/TerminalPanel/GitPanel/LogsPanel/MetricsPanel/InspectorPanel）
 // - 仅断言是否被渲染 + props 透传
 // - 避免依赖 xterm/TanStack Query/IPC 等外部依赖
 // ──────────────────────────────────────────────────────────────
@@ -24,7 +24,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockInfoPane,
   mockDiffPane,
-  mockFilesPane,
   mockTerminalPanel,
   mockGitPanel,
   mockLogsPanel,
@@ -33,7 +32,6 @@ const {
 } = vi.hoisted(() => ({
   mockInfoPane: vi.fn(),
   mockDiffPane: vi.fn(),
-  mockFilesPane: vi.fn(),
   mockTerminalPanel: vi.fn(),
   mockGitPanel: vi.fn(),
   mockLogsPanel: vi.fn(),
@@ -46,8 +44,6 @@ vi.mock('../right-panel-panes', () => ({
   InfoPane: mockInfoPane,
   // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
   DiffPane: mockDiffPane,
-  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
-  FilesPane: mockFilesPane,
 }));
 
 vi.mock('@/components/terminal/TerminalPanel', () => ({
@@ -84,10 +80,6 @@ function MockInfoPane(props: { sessionId: string }): ReactElement {
 
 function MockDiffPane(props: { sessionId: string }): ReactElement {
   return <div data-testid="diff-pane" data-session-id={props.sessionId} />;
-}
-
-function MockFilesPane(props: { sessionId: string }): ReactElement {
-  return <div data-testid="files-pane" data-session-id={props.sessionId} />;
 }
 
 function MockTerminalPanel(props: { sessionId: string; className?: string }): ReactElement {
@@ -138,7 +130,6 @@ describe('DevPanel', () => {
     vi.clearAllMocks();
     mockInfoPane.mockImplementation(MockInfoPane);
     mockDiffPane.mockImplementation(MockDiffPane);
-    mockFilesPane.mockImplementation(MockFilesPane);
     mockTerminalPanel.mockImplementation(MockTerminalPanel);
     mockGitPanel.mockImplementation(MockGitPanel);
     mockLogsPanel.mockImplementation(MockLogsPanel);
@@ -165,13 +156,10 @@ describe('DevPanel', () => {
   });
 
   // ── Tab 切换 ─────────────────────────────────────────────
-  it('切换 diff / files / terminal Tab 渲染对应 pane', async () => {
+  it('切换 diff / terminal Tab 渲染对应 pane', async () => {
     renderDevPanel();
     await userEvent.click(screen.getByRole('tab', { name: /文件变更/ }));
     expect(screen.getByTestId('diff-pane')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('tab', { name: /文件$/ }));
-    expect(screen.getByTestId('files-pane')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: /终端/ }));
     // lazy 加载（xterm chunk）：异步渲染，需等待 Suspense 完成

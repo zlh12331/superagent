@@ -617,7 +617,7 @@
     "panel": {
       "tabInfo": "Info",
       "tabDiff": "Diff",
-      "tabFiles": "Files",
+      "openFile": "Open file",
       "tabDev": "Dev",
       "goals": "Goals",
       "noGoals": "No goals",
@@ -625,7 +625,6 @@
       "noTasks": "No tasks",
       "sessionInfo": "Session Info",
       "noChanges": "No file changes this turn",
-      "noFiles": "No modified files",
       "addGoal": "Add goal",
       "goalPlaceholder": "Enter session goal…",
       "editGoal": "Edit goal",

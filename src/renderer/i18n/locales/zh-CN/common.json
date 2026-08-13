@@ -617,7 +617,7 @@
     "panel": {
       "tabInfo": "会话详情",
       "tabDiff": "文件变更",
-      "tabFiles": "文件",
+      "openFile": "打开文件",
       "tabDev": "开发者",
       "goals": "会话目标",
       "noGoals": "暂无目标",
@@ -625,7 +625,6 @@
       "noTasks": "暂无待办",
       "sessionInfo": "会话信息",
       "noChanges": "本轮暂无文件变更",
-      "noFiles": "暂无修改文件",
       "addGoal": "添加目标",
       "goalPlaceholder": "输入会话目标…",
       "editGoal": "编辑目标",

@@ -17,7 +17,6 @@
 import {
   Activity,
   FileCode2,
-  FolderOpen,
   GitBranch,
   Globe,
   LayoutGrid,
@@ -35,7 +34,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useUiStore } from '@/stores/transient/ui-store';
-import { DiffPane, FilesPane, InfoPane } from './right-panel-panes';
+import { DiffPane, InfoPane } from './right-panel-panes';
 
 // 懒加载（对齐参考项目：xterm ~200KB vendor chunk 仅在切到终端 tab 时加载，避免拖慢首屏）
 const TerminalPanel = lazy(() =>
@@ -59,7 +58,7 @@ interface DevPanelProps {
 }
 
 /** 顶层 Tab 类型 */
-type PanelTab = 'info' | 'diff' | 'files' | 'browser' | 'terminal' | 'dev';
+type PanelTab = 'info' | 'diff' | 'browser' | 'terminal' | 'dev';
 
 /** 开发者子视图类型 */
 type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
@@ -102,10 +101,6 @@ export const DevPanel = memo(function DevPanel({
               <FileCode2 className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabDiff')}</span>
             </TabsTrigger>
-            <TabsTrigger value="files" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
-              <FolderOpen className="size-3 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('panel.tabFiles')}</span>
-            </TabsTrigger>
             <TabsTrigger value="browser" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <Globe className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabBrowser')}</span>
@@ -131,9 +126,6 @@ export const DevPanel = memo(function DevPanel({
         </div>
         <div className={cn('h-full', activeTab !== 'diff' && 'hidden')}>
           <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />
-        </div>
-        <div className={cn('h-full', activeTab !== 'files' && 'hidden')}>
-          <FilesPane sessionId={sessionId} />
         </div>
         <div className={cn('h-full', activeTab !== 'browser' && 'hidden')}>
           <Suspense

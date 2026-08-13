@@ -1,18 +1,18 @@
 // src/renderer/components/layout/right-panel-panes.tsx
-// 右面板 pane 集：会话详情 / 文件变更 / 文件（对齐原型 chat-right-panel 的 info/diff/files）
+// 右面板 pane 集：会话详情 / 文件变更（对齐原型 chat-right-panel 的 info/diff）
 // ──────────────────────────────────────────────────────────────
 // 数据源：
 // - InfoPane：goal:list / task:list（L3 Query）+ 会话元信息（props 传入）
 // - DiffPane：tool-store 中 edit_file/write_file 调用记录（本轮文件变更）
-// - FilesPane：最近修改文件列表（点击打开 FileViewerDialog）
+// - DiffPane：tool-store 中 edit_file/write_file 调用记录（本轮文件变更；行项可展开 diff 或直接打开文件）
 // ──────────────────────────────────────────────────────────────
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   FileText,
-  FolderOpen,
   Loader2,
   Pencil,
   Plus,
@@ -309,6 +309,7 @@ export function DiffPane({
   readonly gitRepoPath?: string;
 }): ReactElement {
   const { t } = useTranslation();
+  const openFile = useFileViewerStore((state) => state.openFile);
   // 已展开的行级 diff（change.id → unified diff 文本）
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [diffCache, setDiffCache] = useState<Map<string, string>>(() => new Map());
@@ -404,31 +405,43 @@ export function DiffPane({
     <ul className="h-full flex flex-col gap-1 overflow-y-auto p-3 text-xs">
       {changes.map((change) => (
         <li key={change.id} className="flex flex-col gap-0.5">
-          <button
-            type="button"
-            onClick={() => toggleChange(change.id, change.path)}
-            className="border-border bg-muted/30 hover:bg-muted/60 flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
-            aria-expanded={expanded.has(change.id)}
-          >
-            {expanded.has(change.id) ? (
-              <ChevronDown className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
-            ) : (
-              <ChevronRight className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
-            )}
-            <FileText className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
-            <span className="text-foreground/90 min-w-0 flex-1 truncate" title={change.path}>
-              {change.path.split(/[\\/]/).pop() ?? change.path}
-            </span>
-            <span
-              className={
-                change.status === 'error'
-                  ? 'text-[var(--error)] font-mono text-[9px]'
-                  : 'text-[var(--success)] font-mono text-[9px]'
-              }
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => toggleChange(change.id, change.path)}
+              className="border-border bg-muted/30 hover:bg-muted/60 flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
+              aria-expanded={expanded.has(change.id)}
             >
-              {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
-            </span>
-          </button>
+              {expanded.has(change.id) ? (
+                <ChevronDown className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
+              ) : (
+                <ChevronRight className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
+              )}
+              <FileText className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
+              <span className="text-foreground/90 min-w-0 flex-1 truncate" title={change.path}>
+                {change.path.split(/[\\/]/).pop() ?? change.path}
+              </span>
+              <span
+                className={
+                  change.status === 'error'
+                    ? 'text-[var(--error)] font-mono text-[9px]'
+                    : 'text-[var(--success)] font-mono text-[9px]'
+                }
+              >
+                {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
+              </span>
+            </button>
+            {/* 打开文件（合并自原"文件"tab 的快速打开场景） */}
+            <button
+              type="button"
+              className="hover:bg-muted text-muted-foreground flex shrink-0 cursor-pointer items-center rounded p-1.5 transition-colors"
+              title={t('panel.openFile')}
+              aria-label={t('panel.openFile')}
+              onClick={() => openFile(change.path)}
+            >
+              <ExternalLink className="size-3" strokeWidth={1.5} />
+            </button>
+          </div>
           {/* 行级 diff（展开态；git:diff 数据源 → UnifiedDiffView 双栏渲染） */}
           {expanded.has(change.id) && (
             <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5">
@@ -441,62 +454,6 @@ export function DiffPane({
               )}
             </div>
           )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** 文件 pane：最近修改文件列表（点击打开 FileViewerDialog） */
-export function FilesPane({ sessionId }: { readonly sessionId: string }): ReactElement {
-  const { t } = useTranslation();
-  const openFile = useFileViewerStore((state) => state.openFile);
-
-  // selector 只取稳定引用（Map.get 返回的数组；无记录时用模块级常量）
-  // 在 selector 内遍历构建新数组 → 每次引用变化 → 无限重渲染
-  const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
-
-  // 派生：按路径去重（保留最新），仅真实数据变化时重算
-  const files = useMemo(() => {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const c of [...calls].reverse()) {
-      if (c.toolName !== 'edit_file' && c.toolName !== 'write_file') continue;
-      const path =
-        typeof c.input === 'object' && c.input !== null
-          ? String((c.input as Record<string, unknown>)['path'] ?? '')
-          : '';
-      if (path !== '' && !seen.has(path)) {
-        seen.add(path);
-        result.push(path);
-      }
-    }
-    return result;
-  }, [calls]);
-
-  if (files.length === 0) {
-    return (
-      <div className="text-muted-foreground/60 flex h-full flex-col items-center justify-center gap-1.5 p-3 text-xs">
-        <FolderOpen className="size-4" strokeWidth={1.5} />
-        {t('panel.noFiles')}
-      </div>
-    );
-  }
-
-  return (
-    <ul className="h-full flex flex-col gap-1 overflow-y-auto p-3 text-xs">
-      {files.map((file) => (
-        <li key={file}>
-          <button
-            type="button"
-            className="hover:bg-muted text-foreground/90 flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1 text-left transition-colors"
-            onClick={() => openFile(file)}
-          >
-            <FileText className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
-            <span className="min-w-0 flex-1 truncate" title={file}>
-              {file.split(/[\\/]/).pop() ?? file}
-            </span>
-          </button>
         </li>
       ))}
     </ul>
