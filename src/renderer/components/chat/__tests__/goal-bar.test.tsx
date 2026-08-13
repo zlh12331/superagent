@@ -3,8 +3,8 @@
 //
 // 测试要点：
 // 1. 无目标不显示目标栏；有目标显示 GOAL 标签 + 条件 + 暂停/恢复 · 编辑 · 删除
-// 2. 暂停/恢复本地切换；编辑打开 GoalEditDialog 预填条件；删除调 goal:clear
-// 3. /goal 前缀发送：只创建目标不进对话；普通消息正常发送；裸 /goal 引导 toast
+// 2. 暂停/恢复本地切换；编辑预填 /goal 条件；删除调 goal:clear
+// 3. /goal 前缀发送：只创建目标不进对话；普通消息正常发送；裸 /goal 预填引导
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';

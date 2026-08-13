@@ -2,26 +2,16 @@
 // 右面板 pane 集：会话详情 / 文件变更（对齐原型 chat-right-panel 的 info/diff）
 // ──────────────────────────────────────────────────────────────
 // 数据源：
-// - InfoPane：goal:list / task:list（L3 Query）+ 会话元信息（props 传入）
-// - DiffPane：tool-store 中 edit_file/write_file 调用记录（本轮文件变更）
+// - InfoPane：task:list（L3 Query）+ 会话元信息（props 传入）
 // - DiffPane：tool-store 中 edit_file/write_file 调用记录（本轮文件变更；行项可展开 diff 或直接打开文件）
+// - 会话目标已迁移至对话区输入框上方（ChatPanel 目标栏），右面板不再重复展示
 // ──────────────────────────────────────────────────────────────
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  FileText,
-  Loader2,
-  Pencil,
-  Plus,
-  Target,
-} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
-import { GoalEditDialog } from '@/components/layout/goal-edit-dialog';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
@@ -29,19 +19,12 @@ import { useToolStore } from '@/stores/transient/tool-store';
 
 /** 会话详情 pane props */
 export interface InfoPaneProps {
-  /** 当前会话 id（goal/task 查询按会话过滤） */
+  /** 当前会话 id（task 查询按会话过滤） */
   readonly sessionId: string;
 }
 
-/** goal:list 查询 key */
-const GOAL_LIST_QUERY_KEY = ['goal', 'list'] as const;
 /** task:list 查询 key */
 const TASK_LIST_QUERY_KEY = ['task', 'list'] as const;
-
-/** 目标项形状（与 shared GoalInfo 对齐，浏览器模式兜底空数据用） */
-interface LocalGoal {
-  readonly condition: string;
-}
 
 /** 待办项形状（与 shared TaskInfo 对齐；status 驱动状态视觉，对齐参考项目 PlanNode 完成/活跃态） */
 interface LocalTask {
@@ -52,29 +35,10 @@ interface LocalTask {
 }
 
 /**
- * 会话详情 pane（对齐原型 crpPaneInfo：会话目标 / 计划待办 / 会话信息）
+ * 会话详情 pane（对齐原型 crpPaneInfo：计划待办 / 会话信息）
  */
 export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-
-  // L3：目标列表（按会话过滤）
-  const goalsQuery = useQuery({
-    queryKey: [...GOAL_LIST_QUERY_KEY, sessionId],
-    queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        return { goals: [] as unknown[] };
-      }
-      const response = await window.api.goal.list({ sessionId: sessionId ?? undefined });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
-    },
-  });
 
   // L3：待办列表（按会话过滤）
   const tasksQuery = useQuery({
@@ -94,53 +58,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
     },
   });
 
-  const goals = (goalsQuery.data?.goals ?? []) as LocalGoal[];
   const tasks = (tasksQuery.data?.tasks ?? []) as LocalTask[];
-
-  // 清除目标 mutation（goal:clear，对齐原型 crpGoalClear × 按钮）
-  const clearGoalMutation = useMutation({
-    mutationFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        return { ok: true };
-      }
-      const response = await window.api.goal.clear({ sessionId });
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...GOAL_LIST_QUERY_KEY, sessionId] });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // 目标编辑对话框状态（照搬参考项目 InfoPane：Pencil 按钮打开编辑）
-  const [goalEditOpen, setGoalEditOpen] = useState(false);
-  // 创建/更新目标 mutation（goal:create，condition 字段；status/tokenBudget 无后端字段）
-  const createGoalMutation = useMutation({
-    mutationFn: async (condition: string) => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        return { ok: true };
-      }
-      const response = await window.api.goal.create({ sessionId, condition });
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...GOAL_LIST_QUERY_KEY, sessionId] });
-      setGoalEditOpen(false);
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-  /** 当前目标条件（编辑对话框初始值；无目标时为空字符串） */
-  const currentCondition = goals[0]?.condition ?? '';
 
   // 引用文件（对齐原型 crpFiles）：从 tool-store 提取 read_file 调用路径（去重，保留最新）
   const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
@@ -162,70 +80,6 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   }, [calls]);
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-xs">
-      {/* 会话目标（对齐原型 crpGoalSection：默认隐藏，有目标才显示 + 清除按钮） */}
-      {goals.length > 0 && (
-        <div>
-          <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
-            <Target className="size-3" strokeWidth={1.5} />
-            {t('panel.goals')}
-            {/* 编辑目标（照搬参考项目 InfoPane：Pencil 按钮打开 GoalEditDialog） */}
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground ml-auto cursor-pointer text-sm leading-none"
-              title={t('panel.editGoal')}
-              aria-label={t('panel.editGoal')}
-              onClick={() => setGoalEditOpen(true)}
-            >
-              <Pencil className="size-3" strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground cursor-pointer text-sm leading-none"
-              title={t('panel.clearGoal')}
-              aria-label={t('panel.clearGoal')}
-              onClick={() => clearGoalMutation.mutate()}
-            >
-              ×
-            </button>
-          </div>
-          <ul className="flex flex-col gap-1">
-            {goals.map((goal) => (
-              <li key={goal.condition} className="text-foreground/90 leading-relaxed">
-                {goal.condition}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {/* 无目标时的添加入口（goal:create 的前端唯一入口；参考项目无目标时区块隐藏，
-          此处补一个轻量入口使设置目标可用） */}
-      {goals.length === 0 && (
-        <div>
-          <div className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-2xs font-semibold tracking-wide uppercase">
-            <Target className="size-3" strokeWidth={1.5} />
-            {t('panel.goals')}
-          </div>
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-muted/50"
-            onClick={() => setGoalEditOpen(true)}
-          >
-            <Plus className="size-3" strokeWidth={1.5} />
-            {t('panel.addGoal')}
-          </button>
-        </div>
-      )}
-
-      {/* 目标编辑对话框（key：打开/目标变化时重新挂载，表单初始值同步） */}
-      <GoalEditDialog
-        key={`${goalEditOpen}-${currentCondition}`}
-        open={goalEditOpen}
-        onOpenChange={setGoalEditOpen}
-        initialCondition={currentCondition}
-        isSubmitting={createGoalMutation.isPending}
-        onSubmit={(condition) => createGoalMutation.mutate(condition)}
-      />
-
       {/* 计划待办（状态视觉对齐参考项目 PlanNode：completed 删除线 / running spinner / failed error） */}
       <div>
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">

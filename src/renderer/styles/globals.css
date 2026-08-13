@@ -3187,48 +3187,6 @@ button.card-head {
   max-height: none;
 }
 
-/* react-arborist 文件树导航（只读） */
-.file-tree-navigator {
-  width: 200px;
-  min-width: 200px;
-  min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elev);
-  overflow: auto;
-}
-
-.file-tree-nav-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  border-radius: 4px;
-}
-
-.file-tree-nav-row:hover {
-  background: var(--bg-elev-2);
-}
-
-.file-tree-nav-row.selected {
-  background: var(--bg-elev-2);
-  color: var(--text);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.file-tree-nav-icon {
-  flex-shrink: 0;
-}
-
-.file-tree-nav-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* shiki 高亮输出（pre.shiki 自带内联 style，background 需覆盖 shiki 输出的内联 background-color） */
 .file-viewer-dialog .file-viewer-code pre.shiki {
   margin: 0;
