@@ -141,6 +141,11 @@ export interface ISessionService {
   create(options: SessionCreateOptions): Promise<string>;
   /** 向指定会话追加消息（seq 自动递增），返回追加后的消息总数 */
   appendMessage(options: SessionAppendMessageOptions): Promise<number>;
+  /**
+   * 整体替换会话消息历史（/compact 上下文压缩：删除全部行 → 重插压缩后消息），
+   * 返回替换后的消息总数
+   */
+  replaceMessages(sessionId: string, newMessages: readonly ChatMessage[]): Promise<number>;
 
   /**
    * 查询指定回合的消息明细（Transcript 消息级回放）
@@ -516,6 +521,49 @@ export class SessionService implements ISessionService {
       '追加会话消息',
     );
     return startSeq + newMessages.length;
+  }
+
+  /**
+   * 整体替换会话消息（/compact 上下文压缩内部 API）
+   *
+   * 流程：校验会话存在 → 事务（删除全部 messages 行 → 重插压缩后消息 +
+   * 更新 sessions.messageCount/lastMessage/updatedAt）。
+   * 注意：被压缩掉的历史消息对应的回合 transcript（getTurnMessages）随之清空——
+   * 这是压缩的固有语义（旧上下文不可回放）。
+   *
+   * @throws AppError(SESSION_NOT_FOUND) 会话不存在
+   */
+  async replaceMessages(sessionId: string, newMessages: readonly ChatMessage[]): Promise<number> {
+    const db = getDb();
+    const sessionRow = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+    if (sessionRow === undefined) {
+      throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId });
+    }
+    const now = Date.now();
+    const newLastMessage = resolveLastMessagePreview(newMessages);
+    const messageInserts: MessageInsert[] = newMessages.map((msg, index) => ({
+      sessionId,
+      seq: index,
+      role: extractRole(msg),
+      content: serializeMessage(msg),
+      createdAt: now,
+    }));
+    db.transaction((tx) => {
+      tx.delete(messages).where(eq(messages.sessionId, sessionId)).run();
+      if (messageInserts.length > 0) {
+        tx.insert(messages).values(messageInserts).run();
+      }
+      tx.update(sessions)
+        .set({
+          updatedAt: now,
+          messageCount: newMessages.length,
+          ...(newLastMessage !== null ? { lastMessage: newLastMessage } : {}),
+        })
+        .where(eq(sessions.id, sessionId))
+        .run();
+    });
+    logger.info({ sessionId, messageCount: newMessages.length }, '替换会话消息（上下文压缩）');
+    return newMessages.length;
   }
 
   /**

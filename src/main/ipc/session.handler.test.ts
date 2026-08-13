@@ -42,7 +42,13 @@ function createFakeSessionService() {
     getTurns: vi.fn(async () => ({ sessionId: '', turns: [] })),
     getRecentTurns: vi.fn(async () => ({ turns: [] })),
     getTurnMessages: vi.fn(async () => []),
+    replaceMessages: vi.fn(async () => 0),
   } as unknown as SessionHandlerDeps['sessionService'];
+}
+
+/** 压缩器桩：默认恒等（removed=0），个别用例覆盖 */
+function createFakeCompactMessages(): SessionHandlerDeps['compactMessages'] {
+  return vi.fn((messages) => ({ trimmed: messages, removed: 0 }));
 }
 
 const EMPTY_CTX = {} as never;
@@ -55,7 +61,10 @@ describe('session.handler 参数转发（三件套）', () => {
     vi.clearAllMocks();
     mocks.mockShowSaveDialog.mockResolvedValue({ canceled: false, filePath: 'C:\\out.json' });
     sessionService = createFakeSessionService();
-    handlers = createSessionHandlers({ sessionService });
+    handlers = createSessionHandlers({
+      sessionService,
+      compactMessages: createFakeCompactMessages(),
+    });
   });
 
   it('list：转发 limit/offset 分页参数', async () => {
@@ -138,7 +147,10 @@ describe('session.handler.exportAll（三态）', () => {
     vi.clearAllMocks();
     mocks.mockShowSaveDialog.mockResolvedValue({ canceled: false, filePath: 'C:\\out.json' });
     sessionService = createFakeSessionService();
-    handlers = createSessionHandlers({ sessionService });
+    handlers = createSessionHandlers({
+      sessionService,
+      compactMessages: createFakeCompactMessages(),
+    });
   });
 
   it('正向：选择路径 → exportAll + 写 JSON 文件 + 返回 saved/path', async () => {
@@ -177,5 +189,51 @@ describe('session.handler.exportAll（三态）', () => {
       throw new Error('EACCES');
     });
     await expect(handlers.exportAll(undefined, EMPTY_CTX)).rejects.toThrow('EACCES');
+  });
+});
+
+describe('session.handler.compact（/compact 上下文压缩）', () => {
+  it('有裁剪：压缩器裁剪后 replaceMessages 落库 + 返回 removed/remaining/messages', async () => {
+    const sessionService = createFakeSessionService();
+    vi.mocked(sessionService.get).mockResolvedValueOnce({
+      session: { id: 's1' } as never,
+      messages: [
+        { role: 'user', content: '旧消息' },
+        { role: 'user', content: '新消息' },
+      ],
+    } as never);
+    const trimmed = [{ role: 'user', content: '新消息' }];
+    const compactMessages = vi.fn(() => ({ trimmed, removed: 1 }));
+    const handlers = createSessionHandlers({
+      sessionService,
+      compactMessages: compactMessages as unknown as SessionHandlerDeps['compactMessages'],
+    });
+
+    const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);
+
+    expect(compactMessages).toHaveBeenCalledWith([
+      { role: 'user', content: '旧消息' },
+      { role: 'user', content: '新消息' },
+    ]);
+    expect(sessionService.replaceMessages).toHaveBeenCalledWith('s1', trimmed);
+    expect(res).toEqual({ removed: 1, remaining: 1, messages: trimmed });
+  });
+
+  it('无裁剪（removed=0）：不落库，返回全量消息', async () => {
+    const sessionService = createFakeSessionService();
+    const messages = [{ role: 'user', content: '唯一消息' }];
+    vi.mocked(sessionService.get).mockResolvedValueOnce({
+      session: { id: 's1' } as never,
+      messages,
+    } as never);
+    const handlers = createSessionHandlers({
+      sessionService,
+      compactMessages: vi.fn(() => ({ trimmed: messages, removed: 0 })) as never,
+    });
+
+    const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);
+
+    expect(sessionService.replaceMessages).not.toHaveBeenCalled();
+    expect(res).toEqual({ removed: 0, remaining: 1, messages });
   });
 });

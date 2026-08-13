@@ -252,6 +252,7 @@ const mockSessionService: ISessionService = {
   pin: vi.fn(),
   create: vi.fn(),
   appendMessage: vi.fn(),
+  replaceMessages: vi.fn(async () => 0),
   listRecentDirs: vi.fn(),
   recordUsage: vi.fn(async () => {}),
   getUsageSummary: vi.fn(),

@@ -16,7 +16,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import type { ChatMessage, InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
 
 import type { ISessionService } from '../infra/storage/session-service';
@@ -25,6 +25,14 @@ import type { IpcHandlerContext } from '../utils/wrap';
 
 export interface SessionHandlerDeps {
   readonly sessionService: ISessionService;
+  /**
+   * 上下文压缩器（模型窗口感知）：由组合根注入（模型解析 + 预算 + 裁剪纯函数编排）。
+   * 独立注入而非直接 import：保持 handler 与 ai 基础设施解耦，测试可注入纯函数。
+   */
+  readonly compactMessages: (messages: readonly ChatMessage[]) => {
+    readonly trimmed: readonly ChatMessage[];
+    readonly removed: number;
+  };
 }
 
 /**
@@ -73,7 +81,7 @@ async function exportAllSessions(sessionService: ISessionService): Promise<{
 export function createSessionHandlers(
   deps: SessionHandlerDeps,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['session'] {
-  const { sessionService } = deps;
+  const { sessionService, compactMessages } = deps;
 
   return {
     // session:list - 分页列出会话
@@ -140,6 +148,17 @@ export function createSessionHandlers(
     getTurnMessages: async (input) => {
       const messages = await sessionService.getTurnMessages(input.turnId);
       return { messages };
+    },
+
+    // session:compact - /compact 斜杠命令：手动压缩会话上下文（裁剪后整体落库）
+    compact: async (input) => {
+      const session = await sessionService.get(input.sessionId);
+      const messages = session.messages as unknown as ChatMessage[];
+      const { trimmed, removed } = compactMessages(messages);
+      if (removed > 0) {
+        await sessionService.replaceMessages(input.sessionId, trimmed);
+      }
+      return { removed, remaining: trimmed.length, messages: trimmed as unknown[] };
     },
   };
 }

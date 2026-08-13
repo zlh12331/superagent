@@ -15,8 +15,10 @@ import { app, BrowserWindow, screen, session, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { getAppConfig } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
+import { compressByTokenBudget, getCompactionBudget } from './infra/ai/agent/context-compression';
 import { LearnSkillService } from './infra/ai/knowledge/learn-skill-agent';
 import { llmClient } from './infra/ai/llm-client/ai-provider';
+import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
@@ -367,7 +369,16 @@ app
         }),
         ...createAgentAskHandlers({ askService: agentAskService }),
       },
-      session: createSessionHandlers({ sessionService: serviceContainer.getSessionService() }),
+      session: createSessionHandlers({
+        sessionService: serviceContainer.getSessionService(),
+        // /compact 上下文压缩：默认模型窗口感知的预算裁剪（与 agent 主流程同一纯函数）
+        compactMessages: (messages) => {
+          const resolved = modelRegistry.resolve(undefined);
+          const budget = getCompactionBudget(resolved.capabilities.contextWindowSize ?? 128_000);
+          const trimmed = compressByTokenBudget([...messages], budget);
+          return { trimmed, removed: messages.length - trimmed.length };
+        },
+      }),
       file: createFileHandlers({ fileService: serviceContainer.getFileService() }),
       search: createSearchHandlers({ searchService: serviceContainer.getSearchService() }),
       terminal: createTerminalHandlers({ terminalService: serviceContainer.getTerminalService() }),
