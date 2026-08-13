@@ -134,6 +134,8 @@ export function ChatPanel({
   const [interruptedDismissed, setInterruptedDismissed] = useState(false);
   // 编辑重提注入（P2-10）：审批拒绝后把命令填入 composer（对齐参考项目）
   const [injectedComposerValue, setInjectedComposerValue] = useState<string | undefined>(undefined);
+  // /models 斜杠命令：受控打开 composer 项目栏的模型选择下拉
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   // 错误码 → 本地化文案 hook
   const { getErrorMessage } = useErrorMessage();
 
@@ -284,6 +286,30 @@ export function ChatPanel({
   const { t } = useTranslation();
   // 编辑器设置：字体大小真实消费（消息区字号）
   const editorFontSize = useSettingsStore((s) => s.editor.fontSize);
+
+  // /compact 上下文压缩：主进程按模型窗口预算裁剪（compressByTokenBudget）后整体落库，
+  // 渲染层同步替换本地消息态（AI SDK v7 setMessages），回合 transcript 旧消息随之清空（固有语义）
+  const handleCompact = async (): Promise<void> => {
+    if (chatId === undefined) return;
+    try {
+      const response = await window.api.session.compact({ sessionId: chatId });
+      if ('error' in response && response.error !== undefined) {
+        toast.error(response.error.message);
+        return;
+      }
+      if ('data' in response && response.data !== undefined) {
+        const data = response.data;
+        setMessages(toInitialMessages(data.messages as unknown as ChatMessage[]));
+        if (data.removed > 0) {
+          toast.success(t('chat.compactDone', { removed: data.removed }));
+        } else {
+          toast.info(t('chat.compactNothing'));
+        }
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   // 重新生成回调：透传给 ChatMessageList → MsgActions
   // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
@@ -463,9 +489,12 @@ export function ChatPanel({
                 setShortcutHelpOpen(true);
                 break;
               case 'models':
+                // 打开 composer 项目栏的模型选择下拉（受控）
+                setModelMenuOpen(true);
+                break;
               case 'compact':
-                // 模型选择/压缩：toast 引导（完整链路后续增强）
-                toast.info(t(`chat.slashAction.${action}`));
+                // 手动压缩会话上下文（主进程窗口感知裁剪 + 落库 + 本地态同步）
+                void handleCompact();
                 break;
               case 'interrupt':
                 // /interrupt 即时中断（对齐参考项目：停止当前生成）
@@ -513,6 +542,8 @@ export function ChatPanel({
             model={defaultModel}
             onProviderChange={(p) => updateAi({ defaultProvider: p })}
             onModelChange={(m) => updateAi({ defaultModel: m })}
+            open={modelMenuOpen}
+            onOpenChange={setModelMenuOpen}
           />
         </div>
       </footer>

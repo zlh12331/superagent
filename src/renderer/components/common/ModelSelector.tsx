@@ -19,6 +19,13 @@ interface ModelSelectorProps {
   readonly onProviderChange: (provider: ApiKeyProvider) => void;
   readonly onModelChange: (model: string) => void;
   readonly disabled?: boolean;
+  /**
+   * 受控开关（可选）：/models 斜杠命令等外部入口打开下拉。
+   * 传入后组件进入受控模式（open/onOpenChange 成对使用），
+   * 不传时保持内部状态（home.tsx 等独立场景不受影响）。
+   */
+  readonly open?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
 }
 
 export function ModelSelector({
@@ -27,10 +34,21 @@ export function ModelSelector({
   onProviderChange,
   onModelChange,
   disabled = false,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: ModelSelectorProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean): void => {
+    if (isControlled) {
+      controlledOnOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  };
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 模型清单：共享 useModelsQuery（P3 修复：与 ModelsSection 同源同 key，
@@ -81,6 +99,13 @@ export function ModelSelector({
       if (event.key === 'Escape') setOpen(false);
     };
     document.addEventListener('keydown', handleKeyDown);
+    // 打开时聚焦选中项（无选中取第一项）——键盘用户可直接 ↑↓ 导航
+    const container = containerRef.current;
+    if (container !== null) {
+      const items = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+      const selected = items.find((el) => el.classList.contains('active')) ?? items[0];
+      selected?.focus();
+    }
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open]);
 
@@ -121,6 +146,31 @@ export function ModelSelector({
           className="folder-dropdown-menu show model-selector-menu"
           role="menu"
           aria-label={t('common.modelSelector')}
+          // roving focus：↑/↓ 循环 · Home/End 首尾（此前仅 Tab 逐个停留，menu 键盘语义缺失）
+          onKeyDown={(event) => {
+            const items = [
+              ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+            ];
+            if (items.length === 0) return;
+            const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+            let nextIndex: number | null = null;
+            if (event.key === 'ArrowDown') {
+              nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+            } else if (event.key === 'ArrowUp') {
+              nextIndex =
+                currentIndex < 0
+                  ? items.length - 1
+                  : (currentIndex - 1 + items.length) % items.length;
+            } else if (event.key === 'Home') {
+              nextIndex = 0;
+            } else if (event.key === 'End') {
+              nextIndex = items.length - 1;
+            }
+            if (nextIndex === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            items[nextIndex]?.focus();
+          }}
         >
           <div className="fdm-scroll">
             {/* 分组：按后端返回的 providerKind 动态生成（无数据 = 空菜单 + 提示） */}
