@@ -271,8 +271,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         rightPanelCollapsed={rightPanelCollapsed}
         onToggleRightPanel={handleToggleRightPanel}
         onOpenCommandPalette={openPalette}
-        showBack={isChatRoute}
-        onBack={() => navigate('/')}
       />
       <div
         className={cn(

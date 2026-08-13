@@ -21,7 +21,6 @@ function renderTopbar(props: Partial<Parameters<typeof Topbar>[0]> = {}) {
     onToggleSidebar: vi.fn(),
     onToggleRightPanel: vi.fn(),
     onOpenCommandPalette: vi.fn(),
-    onBack: vi.fn(),
   };
   render(
     <ThemeProvider>
@@ -61,17 +60,5 @@ describe('Topbar', () => {
     renderTopbar();
     expect(screen.getByRole('button', { name: /设置/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /切换主题|主题/ })).toBeTruthy();
-  });
-
-  it('showBack=true 时渲染返回按钮并触发 onBack', async () => {
-    const handlers = renderTopbar({ showBack: true });
-    const backButton = screen.getByRole('button', { name: '返回' });
-    await userEvent.click(backButton);
-    expect(handlers.onBack).toHaveBeenCalledTimes(1);
-  });
-
-  it('showBack=false 时不渲染返回按钮', () => {
-    renderTopbar({ showBack: false });
-    expect(screen.queryByRole('button', { name: '返回' })).toBeNull();
   });
 });

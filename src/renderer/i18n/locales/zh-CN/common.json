@@ -75,8 +75,7 @@
       "collapsePanel": "折叠右侧面板",
       "commandPalette": "命令面板",
       "settings": "设置",
-      "toggleTheme": "切换主题",
-      "back": "返回"
+      "toggleTheme": "切换主题"
     },
     "sidebar": {
       "sessionList": "会话列表",

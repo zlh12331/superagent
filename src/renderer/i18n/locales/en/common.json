@@ -75,8 +75,7 @@
       "collapsePanel": "Collapse panel",
       "commandPalette": "Command palette",
       "settings": "Settings",
-      "toggleTheme": "Toggle theme",
-      "back": "Back"
+      "toggleTheme": "Toggle theme"
     },
     "sidebar": {
       "sessionList": "Sessions",
