@@ -14,8 +14,9 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
+import { useQuery } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
-import { AlertTriangle, Folder, Search, X } from 'lucide-react';
+import { AlertTriangle, Folder, Search, Target, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -171,6 +172,24 @@ export function ChatPanel({
     onError: handleError,
   });
 
+  // 会话目标（用户要求：仅 goal 命令设置后显示，置于对话区输入框上方）
+  const goalsQuery = useQuery({
+    queryKey: ['goal', 'list', chatId],
+    enabled: chatId !== undefined,
+    queryFn: async () => {
+      if (chatId === undefined) return { goals: [] as unknown[] };
+      const response = await window.api.goal.list({ sessionId: chatId });
+      if ('error' in response && response.error !== undefined) {
+        return { goals: [] as unknown[] };
+      }
+      if ('data' in response && response.data !== undefined) {
+        return response.data;
+      }
+      return { goals: [] as unknown[] };
+    },
+  });
+  const goals = (goalsQuery.data?.goals ?? []) as Array<{ condition: string }>;
+
   // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
   const search = useConversationSearch(messages);
   // 当前匹配消息索引（供 ChatMessageList 滚动 + 高亮；无匹配/关闭时为 -1）
@@ -254,17 +273,9 @@ export function ChatPanel({
           </button>
         </div>
       )}
-      {/* 顶部状态条：等宽字体遥测带（workingDir + status 指示器）
-          - 左侧：项目目录 basename（限制宽度，溢出省略）
-          - 右侧：当前状态（READY/RUNNING/THINKING/ERROR/IDLE）+ 会话 id 前 8 位 */}
+      {/* 顶部状态条：等宽字体遥测带（右侧状态指示器——用户要求：左侧目录信息删掉） */}
       <div className="thread-status-bar">
-        <div className="min-w-0 flex-1 truncate" title={workingDir}>
-          {workingDirBasename}
-        </div>
-        <span className="text-muted-foreground/70" aria-hidden="true">
-          ·
-        </span>
-        <div className="inline-flex items-center gap-1.5">
+        <div className="ml-auto inline-flex items-center gap-1.5">
           {/* 会话内搜索入口（对齐参考项目 ConversationSearchBar） */}
           <button
             type="button"
@@ -319,6 +330,13 @@ export function ChatPanel({
         />
       </div>
 
+      {/* 会话目标（用户要求：仅 goal 命令设置后显示，置于输入框上方） */}
+      {goals.length > 0 && (
+        <div className="border-border bg-muted/30 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
+          <Target className="text-accent size-3.5 shrink-0" strokeWidth={1.5} />
+          <span className="text-muted-foreground text-xs">{goals[0]?.condition}</span>
+        </div>
+      )}
       {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
       <footer className="composer">
         <ChatInput
