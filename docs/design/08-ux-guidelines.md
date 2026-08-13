@@ -123,7 +123,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 删除 | 更多菜单「删除」；删除激活会话自动回首页 | `session:delete` |
 | 打开文件树 | hover 文件夹树按钮 → 切换侧栏视图 + 激活会话 | `ui-store.sidebarView` |
 
-**诚实标注**：搜索框仅 UI（无过滤逻辑）；「归档」tab 计数恒 0 且空态（无归档后端）；右键菜单仅实现有后端支撑的 2 项（重命名/删除）+ 置顶，参考项目的归档/复制/压缩等 9 项能力**不适用（NONE）**。
+**诚实标注**：搜索框为**真实过滤**（标题/workingDir 大小写不敏感 includes + 300ms 防抖 + 命中项 2s 高亮环，Sidebar.tsx）；「归档」tab 计数恒 0 且空态（无归档后端）；右键菜单仅实现有后端支撑的 2 项（重命名/删除）+ 置顶，参考项目的归档/复制/压缩等 9 项能力**不适用（NONE）**。
 
 ### 4.2 欢迎页 → 会话创建
 
@@ -132,7 +132,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 1. 品牌区 `Code with TRAE`；输入舱居中（max-width 720px），含项目选择条 + 模型选择器。
 2. **项目选择**：下拉展示历史目录（`session:listRecentDirs`，含相对时间）、「未选择项目」、「浏览其他目录…」（原生目录选择器，取消保持菜单打开）。无历史目录时自动取第一个（仅当用户未主动选择时）。
 3. **发送校验**：未选目录 → `toast` 提示 + 自动展开项目下拉（不弹原生对话框）。
-4. **创建成功**：`session:create` → 激活 + 跳转 `/chat/:id`；首条消息经 `sessionStorage` 暂存，ChatPanel 挂载后自动发送（避免未挂载调用）。
+4. **创建成功**：`session:create` → 激活 + 跳转 `/chat/:id`；首条消息经 `sessionStorage` 暂存（key 契约 `lib/pending-message.ts`），ChatPanel 挂载后消费即移除并自动发送（`consumePendingMessage` 幂等，StrictMode 双挂载/会话重进不重复发送）。
 5. **快捷 pill ×4**（应用开发/项目理解/创意点子/工具知识）：点击仅**预填**输入框并聚焦，不自动发送。
 6. 创建中 `isPending` 禁用发送按钮与 pill，防重复提交。
 
@@ -149,7 +149,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 字符计数 | trim 后显示，>2000 变警告色（`aria-live`） |
 | 长度上限 | 8000 字符拦截（toast 报错） |
 | 附件 | `@` 按钮（原生多选文件）→ chip 展示（可移除，去重）→ 发送时 `file:read` 读取（≤4000 字符截断，失败仅标注文件名不阻断） |
-| 斜杠命令 | 输入 `/` 弹建议（/help /new /clear /compact /models）；`Tab/Enter` 应用，`Esc` 关闭；带 action 的命令点击直接执行（/new 回欢迎页、/clear 清空消息、其余 toast 引导） |
+| 斜杠命令 | 输入 `/` 弹建议（/help /new /clear /compact /models /interrupt /goal）；`Tab/Enter` 应用，`Esc` 关闭；带 action 的命令点击直接执行：/new 回欢迎页、/clear 清空消息、/help 打开快捷键帮助、/interrupt 真实中断、/goal 预填输入框；仅 /models /compact 为 toast 引导（完整链路后续增强） |
 | 草稿 | 按会话持久化文本+附件（draft-store）；发送成功清除；切换会话自动恢复 |
 | 流式中输入 | **不禁用** textarea，允许预输入下一条（停止按钮期间可打字） |
 
@@ -160,7 +160,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 实现：[ChatMessageList.tsx](../src/renderer/components/chat/ChatMessageList.tsx) + [message-item.tsx](../src/renderer/components/chat/message-item.tsx) + [streaming-footer.tsx](../src/renderer/components/chat/streaming-footer.tsx)
 
 - **智能自动滚动**：距底部 ≤80px 视为"在底部"跟随流式；用户上翻时显示「滚动到底部」按钮，新消息到达按钮带红点（`has-new`）。
-- **消息导航轨**：≥4 条消息时右侧点状导航（`data-role` 区分角色），点击居中滚动。
+- **消息导航轨**：≥2 条用户消息时右侧点状导航（圆点代表用户消息，`MAX_NAV_DOTS=10` 按比例映射），点击居中滚动。
 - **消息形态**：user 玻璃渐变气泡靠右；assistant 头像「C」+ 角色行（`assistant · 模型名`）+ 开放排版；system 居中淡灰小字。
 - **parts 渲染**：
   - text → Markdown（GFM + shiki 代码高亮，双主题跟随）；
@@ -177,10 +177,10 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 实现：[inline-approval-card.tsx](../src/renderer/components/agent/inline-approval-card.tsx) + [approval-preview.tsx](../src/renderer/components/agent/approval-preview.tsx)
 
 - **就地审批不弹窗**：pending 审批内联展示在消息列表上方（`role="alert"` + 左 warn 边条）。
-- **三按钮**：拒绝 / 白名单（批准 + `rememberDecision`，后续同工具自动放行）/ 批准（危险工具批准按钮红色）。
+- **三按钮**：拒绝 / 白名单 / 批准（危险工具批准按钮红色）。白名单 = 批准 + `rememberDecision`：按「工具 + 入参哈希」记忆 5 分钟（TTL 过期后重新询问），另有持久化命令白名单（userData/whitelist.json）。
 - **三态回显**：pending（操作按钮）/ approved（绿徽章）/ rejected（红徽章），最近一条已决审批保留回显。
 - **真实链路**：按钮 → 更新 approvals-store + `agent:approval:response` 回传主进程（PermissionService 继续/中止工具）；浏览器模式仅本地态。
-- 结构化预览：按工具类型渲染（diff 双栏 / JSON），危险类型（如 write_file/terminal 类）红色图标警示。
+- 结构化预览：按工具类型渲染——write_file/edit_file 为 ReactDiffViewer 双栏 diff、run_command 为命令预览、git 系列为专用预览；其余类型（apply_patch/delete_file/install_package/external_call）仅红色图标警示（无 JSON 预览）。
 
 ### 4.6 会话内搜索
 
@@ -191,12 +191,12 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ### 4.7 文件树与文件查看器
 
-实现：[FileTreePanel.tsx](../src/renderer/components/file-tree/FileTreePanel.tsx) + [FileTreeNode.tsx](../src/renderer/components/file-tree/FileTreeNode.tsx) + [FileViewerDialog.tsx](../src/renderer/components/file-tree/FileViewerDialog.tsx)
+实现：[FileTreePanel.tsx](../src/renderer/components/file-tree/FileTreePanel.tsx) + [FileTreeNode.tsx](../src/renderer/components/file-tree/FileTreeNode.tsx) + [node-menu.tsx](../src/renderer/components/file-tree/node-menu.tsx) + [FileViewerPanel.tsx](../src/renderer/components/file-tree/FileViewerPanel.tsx)
 
-- 入口：会话项 hover 文件夹树按钮 / 命令面板「打开文件树」；头部返回按钮回会话列表；刷新按钮手动重拉（watch 事件流之外的兜底）。
-- 根目录新建文件/目录（工具栏）；节点 hover「更多」菜单：新建文件/新建目录/重命名/删除/复制路径。
+- 入口：会话项 hover 文件夹树按钮 / 命令面板「打开文件树」；头部返回按钮回会话列表；刷新按钮重拉**根目录 + 全部已展开目录**（watch 事件流之外的兜底）。
+- 工具栏新建文件/目录（根目录）；节点 hover「…」更多菜单（node-menu.tsx）：目录 = 新建文件/新建目录/复制路径/重命名/删除，文件 = 复制路径/重命名/删除；删除为危险红字菜单项，复制成功 toast 反馈。
 - 内联编辑：新建/重命名以行内 input 呈现（Enter 提交 / Esc 取消）。
-- **文件查看器**：shiki 语法高亮（双主题跟随）；只读/编辑双模式（textarea + shiki 叠加高亮，零新依赖）；`Ctrl+S` 保存；脏数据阻止关闭（确认后才可退出）；路径面包屑 + 行数 + 复制按钮；语言按扩展名推断。
+- **文件查看器**（右面板「文件」tab 内嵌面板，非独立 Dialog）：shiki 语法高亮（双主题跟随）；只读/编辑双模式（textarea + shiki 叠加高亮，零新依赖）；保存走全局 `Ctrl+S`（settings.shortcuts.saveFile 可自定义，经 file-viewer-store 保存桥接转发到当前编辑实例）；**脏数据保护**：退出编辑模式与切换文件前均需确认（取消保持原内容）；路径面包屑 + 行数 + 复制按钮；语言按扩展名推断。
 - 文件树数据：IPC `file:list` + `file:watch:event` 实时同步（监听失效有提示文案）。
 
 ### 4.8 右面板（会话上下文面板）
@@ -205,27 +205,27 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 | Tab | 内容 | 数据源 |
 |---|---|---|
-| 会话详情 | 会话目标（goal 列表 + 清除 ×）、计划待办（task 列表）、引用文件（read_file 调用去重） | `goal:list` / `task:list` / tool-store |
+| 会话详情 | 计划待办（task 列表）、引用文件（read_file 调用去重）。会话目标已迁移至对话区输入框上方的 GOAL 栏（ChatPanel），此处不重复 | `task:list` / tool-store |
 | 文件变更 | 本轮 edit_file/write_file 调用记录（UnifiedDiffView 双栏 diff） | tool-store |
-| 文件 | 最近修改文件列表 → 点击打开 FileViewerDialog | tool-store |
+| 文件 | 文件查看器面板本体（FileViewerPanel：高亮/编辑/保存/复制）；入口 = 文件树点击、命令面板文件命令、引用文件跳转 | `file:read` |
 | 浏览器 | 内嵌浏览器（懒加载） | — |
 | 终端 | xterm.js 终端（懒加载，~200KB chunk 切到才加载） | `terminal:*` IPC |
 | 开发者 | Git / 日志 / 指标 / 检查器（调试工具收纳） | `git:*` / `logs:read` / metrics / inspector |
 
-- 终端：每会话一个 PTY 实例；输出直接 `xterm.write`（不经 store 中转）；`ResizeObserver` 防抖 100ms 同步尺寸；退出后保留输出并标「已结束」；关闭按钮 kill PTY。
+- 终端：按终端实例建 PTY（同一会话可多开终端 tab）；输出直接 `xterm.write`（use-terminal-bridge 并行写 store buffer 兜底）；`ResizeObserver` 防抖 100ms 同步尺寸；切到终端 tab 无实例时自动创建；退出后保留输出并标「已结束」；关闭按钮 kill PTY。
 - Git：**纯只读**（分支 + ahead/behind + 变更文件列表 + unified diff），不提供 commit/push，避免误操作主仓库。
 
 ### 4.9 命令面板
 
 实现：[CommandPalette.tsx](../src/renderer/components/common/CommandPalette.tsx)
 
-- 入口：`Ctrl+P` / 顶栏文字胶囊（唯一入口）/ `Shift+/`（错误动作）；集中受控于 `ui-store.paletteOpen`。
-- 分组：操作（新建会话/切换主题/打开设置/切换侧栏视图）、文件（≤50 条，来自文件树）、会话（≤20 条，按更新时间倒序）。
+- 入口：`Ctrl+P` / `Ctrl+K` / 顶栏文字胶囊；集中受控于 `ui-store.paletteOpen`。
+- 分组：操作（7 条：新建会话/切换主题（三态循环）/打开设置/切换侧栏视图/折叠侧栏/折叠右面板/打开终端）、文件（≤50 条，来自文件树，选中直达查看器）、会话（≤20 条，置顶优先 + updatedAt 倒序）。
 - 模糊搜索：fuse.js（threshold 0.4，标题+分组字段）；`↑↓` 导航 / `Enter` 执行 / `Esc` 关闭；空结果提示；底部 kbd 提示条。
 
 ### 4.10 设置全屏页
 
-实现：[SettingsDialog.tsx](../src/renderer/components/settings/SettingsDialog.tsx) + `sections/`（18 个 section 文件）
+实现：[SettingsDialog.tsx](../src/renderer/components/settings/SettingsDialog.tsx) + `sections/`（20 个 section 文件）
 
 - **形态**：全屏 Sheet（右上 140px 透明拖拽区避让窗口控件）；左上「← 返回」；打开时重置到「模型服务」分区（避免停留深层分区）。
 - **导航**：5 组 15 项，`role="tablist"` + `↑↓` 方向键循环；激活项 = accent 2px 左竖条（`border-l-[color:var(--accent)]`）+ `text-foreground font-medium`（浅色模式对比度达标）。
@@ -233,17 +233,17 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 | 分区 | 能力 | 状态 |
 |---|---|---|
-| 模型服务 | 10 家提供商行（配置状态徽标 + 展开编辑 API Key：显示/隐藏/保存/删除）；运行时模型增删（modelId/provider/baseUrl）；模型参数（默认模型/温度/思考强度 off-low-medium-high）；审批权限（审批模式/白名单） | 已实现 |
-| MCP | server 列表（名称/状态/工具数/错误）+ 添加表单 + 启动/停止 | 已实现 |
+| 模型服务 | 10 家提供商行（配置状态徽标 + 展开编辑 API Key：显示/隐藏/保存/删除）；运行时模型增删（modelId/provider/baseUrl）；模型参数（默认模型/温度/思考强度 off-low-medium-high）——温度全链路透传 agent:run（schema→handler→buildGenerationOptions temperatureOverride），DeepSeek 思考模型按官方限制忽略采样参数；审批权限（审批模式/白名单） | 已实现 |
+| MCP | server 列表（名称/状态徽章/工具数/最后一次错误信息）+ 添加表单 + 启动/停止 | 已实现 |
 | 技能 | 已学技能列表 + 描述学习（learn-skill-agent）+ 移除 | 已实现 |
 | 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 开关标注后续）；快捷键（ShortcutPicker 录制 6 项）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
 | 工作树 | 当前工作目录 + 展开节点数（只读状态） | 已实现（配置项规划中） |
 | 浏览器 | 右面板「浏览器」tab 为 iframe 预览工具的说明页 | 说明页（配置项规划中） |
-| 实验 | scanlines 扫描线 / 推理块默认折叠 | 已实现（原型其余项不展示假开关） |
+| 实验 | scanlines 扫描线（AppShell 根级 .scanlines-overlay 条件渲染，--text 令牌）/ 推理块默认折叠（message-item 消费） | 已实现（原型其余项不展示假开关） |
 | 关于 | 版本号 / Electron-Node-Chromium 运行时 / 打开数据目录 | 已实现 |
 | 账号 / 移动端 / 插件 / hooks / 命令 | 「🚧 规划中」占位（诚实标注；IM 渠道真实功能保留在移动端分区） | 占位 |
 
-- 每个 pane 独立 `SectionErrorBoundary`：单 pane 崩溃局部降级，不拖垮整个设置页。
+- 每个 pane 独立 `SectionErrorBoundary`（`resetKeys=[activeSection]` 切分区自动重置错误态）：单 pane 崩溃局部降级，不拖垮整个设置页。
 
 ### 4.11 全局反馈通道
 
@@ -297,18 +297,19 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 
 | 快捷键 | 动作 | 可配置 |
 |---|---|---|
-| `Ctrl+P` | 命令面板 | ✅ ShortcutPicker |
+| `Ctrl+P` / `Ctrl+K` | 命令面板 | ✅ ShortcutPicker |
 | `Ctrl+,` | 设置 | ✅ |
-| `Ctrl+N` | 新建会话 | ✅ |
-| `Ctrl+S` | 保存（文件查看器内实际生效） | ✅ |
-| `Ctrl+Shift+F` | 搜索文件（目前等效打开命令面板） | ✅ |
-| `Ctrl+Shift+T` | 切换主题（三态循环） | ✅ |
+| `Ctrl+N` | 新建会话（欢迎页 + 跳转首页，与侧栏新建一致） | ✅ |
+| `Ctrl+S` | 保存（编辑态文件查看器：全局快捷键 → file-viewer-store 保存桥接，尊重自定义键位） | ✅ |
+| `Ctrl+F` | 文件+会话统一搜索（FuzzySearchDialog，非命令面板） | ✅ |
+| `Ctrl+Shift+T` | 切换主题（三态循环 dark→light→system，与顶栏/命令面板/账户菜单一致） | ✅ |
+| `Ctrl+B` / `Ctrl+1` | 折叠/展开侧栏 | 固定 |
+| `Ctrl+J` / `Ctrl+2` | 折叠/展开右面板 | 固定 |
+| `` ` ``（反引号） | 打开终端（展开右面板 + 切终端 tab） | 固定 |
 | `Shift+/`（即 `?`） | 快捷键帮助 | 固定 |
 | `Enter` / `Shift+Enter` | 发送 / 换行 | 固定 |
 | `Esc` | 流式中断 / 关闭浮层 | 固定 |
 | `Alt+←` | 聊天页返回（按钮 title 提示） | 固定 |
-
-**已知不一致（实事求是）**：快捷键帮助对话框额外列出 `Ctrl+B`（折叠侧栏）与 `Ctrl+J`（折叠右面板），但全局绑定未包含这两项——帮助表为静态文案，改动需与绑定对齐。
 
 ### 6.2 键盘可达性
 
@@ -337,12 +338,15 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 |---|---|---|
 | 会话 CRUD / 置顶 / 拖拽排序 / 文件夹分组 / 重命名 | ✅ 已实现 | 后端真实持久化 |
 | 草稿持久化（文本+附件） | ✅ 已实现 | 发送即清 |
-| 内联审批 + 白名单 | ✅ 已实现 | `rememberDecision` 真实生效 |
+| 内联审批 + 白名单 | ✅ 已实现 | `rememberDecision` = 工具+入参哈希 5 分钟记忆 + 持久化命令白名单 |
 | 会话内搜索 / 消息导航轨 / 重新生成 | ✅ 已实现 | — |
 | 命令面板（操作/文件/会话） | ✅ 已实现 | — |
-| 文件树实时同步 + 查看器编辑 | ✅ 已实现 | watch 事件流 |
+| 文件树实时同步 + 节点操作菜单 + 查看器编辑 | ✅ 已实现 | watch 事件流；节点菜单 = 新建/重命名/删除/复制路径 |
 | Git 只读面板 / 终端 PTY / 用量统计 | ✅ 已实现 | — |
-| 侧栏搜索过滤 | ⚠️ 仅 UI | 无过滤逻辑（功能预留） |
+| 侧栏搜索过滤 | ✅ 已实现 | 标题/目录 includes 过滤 + 300ms 防抖 + 2s 高亮 |
+| 欢迎页首条消息透传 | ✅ 已实现 | sessionStorage 暂存 → ChatPanel 挂载消费即移除并发送（幂等） |
+| 主题三态（亮/暗/跟随系统） | ✅ 已实现 | 快捷键/顶栏/命令面板循环 + 账户菜单三选一 |
+| 全局 Ctrl+S 保存桥接 | ✅ 已实现 | settings 自定义键位 → file-viewer-store → 编辑态查看器 |
 | 归档 tab | ⚠️ 空态 | 计数恒 0，无归档后端 |
 | 设置：账号/插件/hooks/命令/移动端 | ⚠️ 规划中 | 「🚧 规划中」诚实占位 |
 | 斜杠命令 /models /compact /help | ⚠️ toast 引导 | 完整链路后续增强 |
@@ -390,7 +394,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 | 聊天 | `components/chat/ChatPanel.tsx`、`ChatInput.tsx`、`ChatMessageList.tsx`、`message-item.tsx`、`Markdown.tsx` |
 | 审批 | `components/agent/inline-approval-card.tsx`、`approval-preview.tsx` |
 | 命令面板 | `components/common/CommandPalette.tsx` |
-| 文件 | `components/file-tree/FileTreePanel.tsx`、`FileTreeNode.tsx`、`FileViewerDialog.tsx` |
+| 文件 | `components/file-tree/FileTreePanel.tsx`、`FileTreeNode.tsx`、`node-menu.tsx`、`FileViewerPanel.tsx` |
 | 右面板 | `components/layout/DevPanel.tsx`、`right-panel-panes.tsx` |
 | 终端 | `components/terminal/TerminalPanel.tsx` |
 | Git | `components/git/GitPanel.tsx` |
