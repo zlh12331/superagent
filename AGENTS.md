@@ -100,6 +100,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 - SQLite（better-sqlite3），schema 在 `src/main/infra/storage/schema.ts`
 - Drizzle Kit 从 `drizzle.config.ts` 读取配置
+- 迁移：PRAGMA user_version 版本链（`src/main/infra/storage/migrations.ts`）；新增列需三处同步：schema.ts + schema-sql.ts（新库 DDL）+ migrations.ts（老库路径）
 - 路径由 `app.getPath('userData')` 动态决定：dev 为 `.electron-user-data/sessions.db`（重定向），prod 为 `%APPDATA%/<app name>/sessions.db`
 - 原 PostgreSQL/Prisma/AGE 层已删除 — 不要尝试 prisma 相关命令
 
@@ -115,9 +116,9 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - 测试文件与源码 colocation：`**/*.test.ts` / `**/*.test.tsx`
 - Vitest globals 启用（describe/it/expect 无需 import）
 - renderer 测试用 jsdom + `test/setup.ts`（mock `window.api` 并 polyfill ResizeObserver/IntersectionObserver/matchMedia）
-- 覆盖率阈值：statements 80% / branches 75% / functions 80% / lines 80%（main 当前 ~66%，service 层为长期缺口）
+- 覆盖率阈值：statements 80% / branches 75% / functions 80% / lines 80%（以 CI 报告为准；main 实测 ~92%，数字不再在本文件维护）
 - E2E 有 3 个 Playwright 配置：`playwright.config.ts`（浏览器）、`playwright.electron.config.ts`（Electron）、`playwright.smoke.config.ts`（生产构建）
-- 集成测试目录 `tests/integration/` 当前为空
+- 集成测试目录 `tests/integration/`（20+ 测试文件，CI 有独立 integration-tests job）
 
 ## 工程化工具链
 

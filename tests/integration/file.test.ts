@@ -192,7 +192,7 @@ describe('file 域集成链路（batch 3）', () => {
   });
 
   it('异常+安全边界：相对路径拒绝', async () => {
-    await withTempDir(async (dir) => {
+    await withTempDir(async (_dir) => {
       const handlers = createFileHandlers({ fileService: getFileService() });
       await expect(
         handlers.write({ path: 'relative/path.txt', content: 'x' }),

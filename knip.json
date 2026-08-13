@@ -23,6 +23,6 @@
       ]
     }
   },
-  "ignoreBinaries": ["codegraph", "pkill"],
+  "ignoreBinaries": ["codegraph", "pkill", "gitleaks", "i18next-cli"],
   "ignoreDependencies": ["@code-agent/tsconfig", "@electron/rebuild", "tslib", "tree-sitter-wasms"]
 }

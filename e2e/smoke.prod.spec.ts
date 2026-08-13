@@ -21,10 +21,42 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { _electron as electron } from 'playwright';
 
-// win-unpacked 可执行文件路径
-// electron-builder 打包后输出到 release/win-unpacked/<productName>.exe
+// P5 修复：按平台解析打包产物可执行文件路径（此前硬编码 Windows 路径，
+// 而 CI smoke-prod 双平台 + release.yml 三平台矩阵都会跑本 spec——
+// Linux/macOS 上「可执行文件不存在」必挂，长期红灯掩盖真实回归）。
+// electron-builder 产物约定：
+// - Windows：release/win-unpacked/<productName>.exe
+// - Linux：release/linux-unpacked/code-agent-desktop（executableName）
+// - macOS：release/mac*/<productName>.app/Contents/MacOS/<productName>（arm64 与 x64 两种目录）
 const PRODUCT_NAME = 'Code Agent Desktop';
-const EXECUTABLE_PATH = join(process.cwd(), 'release', 'win-unpacked', `${PRODUCT_NAME}.exe`);
+const LINUX_EXECUTABLE = 'code-agent-desktop';
+
+function resolvePackagedExecutable(): string {
+  const releaseDir = join(process.cwd(), 'release');
+  if (process.platform === 'win32') {
+    return join(releaseDir, 'win-unpacked', `${PRODUCT_NAME}.exe`);
+  }
+  if (process.platform === 'linux') {
+    return join(releaseDir, 'linux-unpacked', LINUX_EXECUTABLE);
+  }
+  // macOS：mac-arm64 / mac 两种 unpacked 目录，按存在性选择
+  for (const dirName of ['mac-arm64', 'mac', 'mac-x64']) {
+    const candidate = join(
+      releaseDir,
+      dirName,
+      `${PRODUCT_NAME}.app`,
+      'Contents',
+      'MacOS',
+      PRODUCT_NAME,
+    );
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return join(releaseDir, 'mac-arm64', `${PRODUCT_NAME}.app`, 'Contents', 'MacOS', PRODUCT_NAME);
+}
+
+const EXECUTABLE_PATH = resolvePackagedExecutable();
 
 // 启动打包后的 Electron 应用
 async function launchPackagedApp(): Promise<{ app: ElectronApplication; page: Page }> {

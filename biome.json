@@ -106,9 +106,6 @@
     {
       "includes": [
         "**/packages/shared/src/constants/errors.ts",
-        "**/packages/shared/src/constants/pg-versions.ts",
-        "**/packages/shared/src/constants/age.ts",
-        "**/packages/shared/src/types/enums.ts",
         "**/packages/shared/src/ipc/channels.ts",
         "**/packages/shared/src/schemas/agent-events.ts",
         "**/packages/shared/src/schemas/im.ts",
@@ -192,24 +189,6 @@
       }
     },
     {
-      "includes": [
-        "**/src/main/infra/ai/ai-provider.ts",
-        "**/src/main/infra/ai/error-classifier.ts"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": {
-              "level": "error",
-              "options": {
-                "strictCase": false
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["**/src/main/**/*.test.ts"],
       "linter": {
         "rules": {
@@ -226,8 +205,6 @@
     },
     {
       "includes": [
-        "**/src/main/infra/ai/chat-service.ts",
-        "**/src/main/infra/ai/session-title.ts",
         "**/src/main/service-container.ts",
         "**/src/main/ipc/chat.handler.ts",
         "**/src/main/ipc/codebase.handler.ts",
@@ -271,22 +248,7 @@
       }
     },
     {
-      "includes": ["**/src/main/infra/code/code-analyzer.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
       "includes": [
-        "**/src/main/infra/ai/tool.ts",
-        "**/src/main/infra/ai/permission-service.ts",
-        "**/src/main/infra/ai/tool-registry.ts",
-        "**/src/main/infra/ai/tool-executor.ts",
-        "**/src/main/infra/ai/agent-service.ts",
         "**/src/main/infra/ai/tools/**/*.ts",
         "**/src/main/infra/ai/mcp/**/*.ts",
         "**/src/main/infra/ai/prompt/**/*.ts"
@@ -322,7 +284,6 @@
     {
       "includes": [
         "**/src/renderer/stores/persistent/create-persistent-store.ts",
-        "**/src/renderer/stores/server/create-ipc-stream-store.ts",
         "**/src/renderer/i18n/config.ts",
         "**/src/renderer/i18n/use-translation.ts"
       ],
@@ -343,7 +304,6 @@
       "includes": [
         "**/src/renderer/components/chat/**/*.tsx",
         "**/src/renderer/components/agent/**/*.tsx",
-        "**/src/renderer/hooks/use-chat.ts",
         "**/src/renderer/lib/chat/**/*.ts"
       ],
       "linter": {
@@ -440,77 +400,7 @@
       }
     },
     {
-      "includes": ["**/src/main/infra/ai/workflow-service.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/src/main/infra/im/adapters/webhook-channels.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/src/main/infra/im/adapters/feishu-stream.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/src/main/infra/im/adapters/wecom-stream.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/src/main/infra/im/adapters/qq-stream.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/src/main/infra/im/adapters/weixin-stream.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
       "includes": ["**/src/main/infra/im/adapters/*.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/src/main/infra/lsp/*.test.ts"],
       "linter": {
         "rules": {
           "style": {

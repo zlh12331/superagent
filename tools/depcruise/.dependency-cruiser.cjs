@@ -77,6 +77,22 @@ module.exports = {
       to: { path: '^(src/main|src/renderer)' },
     },
 
+    // ── preload 零 zod 边界（P2 修复）─────────────────────────
+    // sandbox: true 下 preload 是 CJS，引入纯 ESM 的 zod 会静默失败导致
+    // window.api 为 undefined——此前这条边界只存在于注释约定，无任何机器闸。
+    // 白名单外 shared 子路径（main / 裸入口 / definitions 等含 zod 运行时）
+    // 一律禁止；允许的只有 /ipc/meta、/ipc/channels、/preload、/renderer(类型)。
+    {
+      name: 'preload-no-zod-entry',
+      comment:
+        'preload 禁止引入含 zod 运行时的 shared 入口（main/裸入口/definitions/derive 等）；沙箱 CJS 下 zod 会静默失败',
+      severity: 'error',
+      from: { path: '^src/preload' },
+      to: {
+        path: '^packages/shared/src/(main|index|ipc/(definitions|derive|api|payloads|response))',
+      },
+    },
+
     // ── 测试边界：集成测试禁止依赖渲染层 / preload（跨进程边界）──
     {
       name: 'integration-not-renderer',

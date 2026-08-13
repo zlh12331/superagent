@@ -25,6 +25,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+    env:
+      # P5 修复：Sentry token 提升到 job 级 env——步骤级 env 对自身 if 不可见
+      # （GitHub Actions 在 if 求值时尚未注入步骤 env），此前 if 恒为 false、
+      # 符号上传从未执行。job 级 env 可被后续步骤的 if 正常读取。
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
     strategy:
       fail-fast: false
@@ -95,9 +100,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── 上传 Sentry 符号（仅 Windows 主发布端；其余平台产物不含符号需求）─
+      # P5 修复：
+      # - 步骤 if 改用 job 级 env（此前步骤级 env 对自身 if 不可见，恒跳过）
+      # - 明确只放行 Windows leg（此前注释如此宣称但条件未限制平台）
+      # - release 名动态化（此前脚本硬编码 code-agent@1.0.0，不随 tag 演进）
+      # - 上传前先创建 release（此前 CI 从未调用 release:new，上传会 404）
+      - name: Create Sentry release
+        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
+        run: pnpm sentry-cli releases new "code-agent@${{ github.ref_name }}"
+
       - name: Upload Sentry symbols
-        if: env.SENTRY_AUTH_TOKEN != ''
-        run: pnpm sentry:upload:symbols
+        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
+        run: |
+          pnpm sentry-cli sourcemaps upload --release "code-agent@${{ github.ref_name }}" --org sentry --project electron --url-prefix "app:///out/" ./out
+          pnpm sentry-cli sourcemaps upload --release "code-agent@${{ github.ref_name }}" --org sentry --project electron --url-prefix "app:///renderer/" ./out/renderer
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
