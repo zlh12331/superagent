@@ -253,7 +253,21 @@ function createMockApi(): IpcApi {
       get: async ({ id }: Req<IpcApi['session']['get']>) => {
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
-          return fail('SESSION_NOT_FOUND', 'mock 会话不存在');
+          // 宽松兜底：任意 id 返回默认会话（dev mock——首页 DRAFT 场景需 workingDir 供 agent 发送）
+          return ok({
+            session: {
+              id,
+              title: '新对话',
+              workingDir: '/tmp',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              lastMessage: undefined,
+              messageCount: 0,
+              lastRunStatus: 'idle',
+              pinned: false,
+            },
+            messages: (messagesBySession as Record<string, unknown>)[id] ?? [],
+          } as never);
         }
         return ok({ session, messages: messagesBySession[id] ?? [] } as never);
       },
@@ -483,7 +497,9 @@ function createMockApi(): IpcApi {
               : '（模拟消息）';
         // AgentRunReq.sessionId 为可选类型，运行期 transport 总是传入（chatId）
         setTimeout(() => simulateAgentStream(sessionId ?? 'mock-1', text), 300);
-        return ok({ sessionId });
+        // 注意：与真实 IPC 一致返回裸对象（transport 直接读 res.sessionId 做事件过滤）——
+        // 不能用 ok() 包装（{ data } 结构会让 transport 读到 undefined 导致事件全丢）
+        return { sessionId };
       },
       stop: async ({ sessionId }: Req<IpcApi['agent']['stop']>) => {
         // 真正中断模拟流（对齐主进程行为：清除定时器 + 推送 interrupted end）
