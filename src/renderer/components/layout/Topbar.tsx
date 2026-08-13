@@ -6,7 +6,7 @@
 // - 底部双 accent 渐变发光刻度线（青 → 蓝紫 → 青）
 // - 左侧：折叠侧栏按钮 + 品牌标识（brand-mark + 名称 + 遥测带）
 // - 中部：弹性 spacer（未来放命令面板入口）
-// - 右侧：右面板开关 + 命令面板按钮(功能预留) + 设置 + 主题切换
+// - 右侧：右面板开关 + 命令面板按钮 + 设置 + 主题切换（三态循环 dark→light→system）
 // - 高度 52px（由 --aurora-topbar-h 控制）
 //
 // 按钮位（对齐原型）：
@@ -20,9 +20,11 @@ import { Moon, PanelLeft, PanelRight, Search, Settings, Sun } from 'lucide-react
 import type { ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useAppInfo } from '@/hooks/use-app-info';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
+import { nextTheme } from '@/stores/persistent/settings-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 
 interface TopbarProps {
@@ -54,7 +56,7 @@ export function Topbar({
   onOpenCommandPalette,
   hideRightPanelToggle = false,
 }: TopbarProps): ReactElement {
-  const { resolvedTheme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   // 全局 UI store：设置对话框入口（Topbar / 命令面板 / 错误动作共享）
   const openSettings = useUiStore((state) => state.openSettings);
   // 快捷键展示平台化：macOS ⌘ / Windows-Linux Ctrl（与 settings-store 默认一致）
@@ -63,6 +65,9 @@ export function Topbar({
   const paletteKbd = isMac ? '⌘P' : 'Ctrl+P';
   // 本地化文案
   const { t } = useTranslation();
+  // 应用版本（app:getInfo 单一真源；此前硬编码 v0.1.0）
+  const appInfo = useAppInfo();
+  const appVersion = appInfo?.version !== undefined ? `v${appInfo.version}` : 'dev';
 
   return (
     <header className="topbar">
@@ -84,10 +89,10 @@ export function Topbar({
         <span className="brand-name">
           Code Agent<span>desktop</span>
         </span>
-        <span className="brand-telemetry">v0.1.0</span>
+        <span className="brand-telemetry">{appVersion}</span>
       </div>
 
-      {/* 中部：弹性 spacer（未来可放置命令面板入口 / 模型选择器） */}
+      {/* 中部：弹性 spacer（命令面板入口已在右侧，此处预留扩展） */}
       <div className="topbar-spacer" />
 
       {/* 右侧：右面板开关（欢迎页隐藏）+ 命令面板 + 设置 + 主题切换 */}
@@ -132,7 +137,8 @@ export function Topbar({
           variant="ghost"
           size="icon"
           aria-label={t('topbar.toggleTheme')}
-          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+          title={t('topbar.toggleTheme')}
+          onClick={() => setTheme(nextTheme(theme))}
           className={cn(
             'text-muted-foreground hover:bg-sidebar-accent',
             'hover:text-sidebar-accent-foreground h-8 w-8',

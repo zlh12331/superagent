@@ -20,6 +20,7 @@ import {
   FolderOpen,
   MessageSquare,
   MessagesSquare,
+  Monitor,
   Moon,
   PanelLeft,
   PanelRight,
@@ -37,6 +38,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+import { nextTheme } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -69,7 +71,7 @@ const FUSE_THRESHOLD = 0.4;
  */
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): ReactElement | null {
   const navigate = useNavigate();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   // 本地化文案
   const { t } = useTranslation();
   const clearActiveSession = useActiveSessionStore((state) => state.clearActiveSession);
@@ -118,11 +120,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
       {
         id: 'toggle-theme',
         section: t('palette.sectionActions'),
+        // 三态循环（dark→light→system）：标题与图标指向「下一个」主题
         title:
-          resolvedTheme === 'dark' ? t('palette.toggleThemeLight') : t('palette.toggleThemeDark'),
-        icon: resolvedTheme === 'dark' ? Sun : Moon,
+          nextTheme(theme) === 'light'
+            ? t('palette.toggleThemeLight')
+            : nextTheme(theme) === 'dark'
+              ? t('palette.toggleThemeDark')
+              : t('palette.toggleThemeSystem'),
+        icon: nextTheme(theme) === 'light' ? Sun : nextTheme(theme) === 'dark' ? Moon : Monitor,
         action: () => {
-          setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+          setTheme(nextTheme(theme));
           closePalette();
         },
       },

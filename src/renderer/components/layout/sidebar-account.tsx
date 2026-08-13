@@ -7,7 +7,7 @@
 // - 本地模式（local-user）：无真实登录后端，退出登录不提供（诚实标注）
 // ──────────────────────────────────────────────────────────────
 
-import { Info, Moon, Settings, Sun, User } from 'lucide-react';
+import { Check, Info, Monitor, Moon, Settings, Sun, User } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 
@@ -19,25 +19,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useAppInfo } from '@/hooks/use-app-info';
 import { useTranslation } from '@/i18n/use-translation';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useUiStore } from '@/stores/transient/ui-store';
-
-/** 应用版本（与 topbar brand-telemetry 展示一致；后续可由主进程注入） */
-const APP_VERSION = 'v0.1.0';
 
 /**
  * 侧栏账户区（触发器 + 下拉菜单）
  */
 export function SidebarAccount(): ReactElement {
   const { t } = useTranslation();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  // 应用版本（app:getInfo 单一真源；此前硬编码 v0.1.0 与 Topbar 双写）
+  const appInfo = useAppInfo();
+  const appVersion = appInfo?.version !== undefined ? `v${appInfo.version}` : 'dev';
   // 全局 UI store：设置对话框入口（与 Topbar 共享）
   const openSettings = useUiStore((state) => state.openSettings);
 
   /** 关于：toast 展示版本信息（轻量实现，后续可升级为对话框） */
   const handleAbout = (): void => {
-    toast.info(`Code Agent Desktop ${APP_VERSION}`);
+    toast.info(`Code Agent Desktop ${appVersion}`);
   };
 
   return (
@@ -65,13 +66,21 @@ export function SidebarAccount(): ReactElement {
             <Settings className="size-3.5" />
             {t('topbar.settings')}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>
-            {resolvedTheme === 'dark' ? (
-              <Sun className="size-3.5" />
-            ) : (
-              <Moon className="size-3.5" />
-            )}
-            {t('sidebar.toggleTheme')}
+          {/* 主题三选一（此前仅两态切换，system 无 UI 入口） */}
+          <DropdownMenuItem onSelect={() => setTheme('light')}>
+            <Sun className="size-3.5" />
+            {t('sidebar.themeLight')}
+            {theme === 'light' && <Check className="ml-auto size-3.5" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setTheme('dark')}>
+            <Moon className="size-3.5" />
+            {t('sidebar.themeDark')}
+            {theme === 'dark' && <Check className="ml-auto size-3.5" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setTheme('system')}>
+            <Monitor className="size-3.5" />
+            {t('sidebar.themeSystem')}
+            {theme === 'system' && <Check className="ml-auto size-3.5" />}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleAbout}>

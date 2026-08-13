@@ -36,6 +36,23 @@ const MOD = IS_MAC ? 'Meta' : 'Ctrl';
 export type Theme = 'light' | 'dark' | 'system';
 
 /**
+ * 主题循环顺序：dark → light → system → dark
+ *
+ * 所有切换入口（快捷键 / Topbar / 账户菜单 / 命令面板）共用同一循环，
+ * 保证三态均可到达（此前快捷键为三态而 UI 为两态，system 无 UI 入口）。
+ */
+export const THEME_CYCLE: Readonly<Record<Theme, Theme>> = {
+  dark: 'light',
+  light: 'system',
+  system: 'dark',
+};
+
+/** 计算下一个主题（三态循环） */
+export function nextTheme(theme: Theme): Theme {
+  return THEME_CYCLE[theme];
+}
+
+/**
  * AI 相关设置（不含 API Key，API Key 由主进程 keychain 管理）
  */
 export interface AiSettings {

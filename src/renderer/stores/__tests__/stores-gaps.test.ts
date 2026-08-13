@@ -14,6 +14,8 @@ import { useDraftStore } from '../persistent/draft-store';
 import {
   applySettingsSnapshot,
   migrateShortcuts,
+  nextTheme,
+  THEME_CYCLE,
   useSettingsStore,
 } from '../persistent/settings-store';
 import { useApprovalsStore } from '../transient/approvals-store';
@@ -90,6 +92,13 @@ describe('stores 批次1 缺口补全', () => {
     it('setTheme：更新主题', () => {
       useSettingsStore.getState().setTheme('light');
       expect(useSettingsStore.getState().theme).toBe('light');
+    });
+
+    it('nextTheme：三态循环 dark→light→system→dark（各入口共用）', () => {
+      expect(THEME_CYCLE).toEqual({ dark: 'light', light: 'system', system: 'dark' });
+      expect(nextTheme('dark')).toBe('light');
+      expect(nextTheme('light')).toBe('system');
+      expect(nextTheme('system')).toBe('dark');
     });
 
     it('updateAi：部分字段合并（保留其他字段）', () => {
