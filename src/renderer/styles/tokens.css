@@ -21,6 +21,10 @@
   --radius: 0.625rem;
   /* —— 3 层背景深度（亮色，对齐参考项目）—— */
   --bg: #f7f8fa;;
+  --bg-elev: #ffffff;;
+  --bg-elev-2: #eef0f4;;
+  --bg-elev-3: #e0e4ec;;
+  --bg-elev-4: var(--bg-elev-3);;
   /* shadcn 标准背景映射 */
   --background: var(--bg);
   --foreground: #1a2130;
@@ -168,6 +172,10 @@
 .dark {
   /* —— 3 层背景深度（亮色，对齐参考项目）—— */
   --bg: #080b10;;
+  --bg-elev: #0e1319;;
+  --bg-elev-2: #141a23;;
+  --bg-elev-3: #1a2130;;
+  --bg-elev-4: var(--bg-elev-3);;
   --foreground: #e8edf4;
   --card-foreground: #e8edf4;
   --popover-foreground: #e8edf4;

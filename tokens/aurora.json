@@ -53,6 +53,25 @@
     "comment": "—— 3 层背景深度（亮色，对齐参考项目）——",
     "dark": "#080b10;"
   },
+  "bg-elev": {
+    "value": "#ffffff;",
+    "comment": "L1 侧栏 / 顶栏 / 卡片层",
+    "dark": "#0e1319;"
+  },
+  "bg-elev-2": {
+    "value": "#eef0f4;",
+    "comment": "L2 悬浮输入区 / 卡片区 / 悬停态",
+    "dark": "#141a23;"
+  },
+  "bg-elev-3": {
+    "value": "#e0e4ec;",
+    "comment": "L3 激活态 / 强调容器",
+    "dark": "#1a2130;"
+  },
+  "bg-elev-4": {
+    "value": "var(--bg-elev-3);",
+    "comment": "兼容别名：原 --bg-elev-4 已废弃，指向 --bg-elev-3 避免破坏旧引用"
+  },
   "background": {
     "value": "var(--bg)",
     "comment": "shadcn 标准背景映射"
