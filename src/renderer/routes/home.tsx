@@ -203,7 +203,12 @@ export function HomePage(): ReactElement {
       // （避免在 navigate 前直接调用 sendMessage，因为 ChatPanel 还未挂载；
       //   key 契约见 lib/pending-message.ts，消费方为 ChatPanel）
       if (text.trim().length > 0) {
-        sessionStorage.setItem(pendingMessageKey(sessionId), JSON.stringify({ text }));
+        // createdAt 供消费方做陈旧性防护（Electron 持久化 sessionStorage，
+        // 跨应用重启残留的暂存消息不能自动发送）
+        sessionStorage.setItem(
+          pendingMessageKey(sessionId),
+          JSON.stringify({ text, createdAt: Date.now() }),
+        );
       }
     } catch {
       // onError 已在 useCreateSession 中 toast 提示

@@ -5,6 +5,7 @@
       "AI_API_KEY_INVALID": "API Key 无效",
       "AI_API_KEY_MISSING": "请先配置 API Key",
       "AI_BALANCE_INSUFFICIENT": "账户余额不足，请充值后重试",
+      "AI_EMPTY_RESPONSE": "模型返回了空回复，请检查 API Key 与账户状态",
       "AI_CONTEXT_TOO_LARGE": "上下文过长，请精简对话",
       "AI_LOOP_DETECTED": "检测到重复生成循环，回合已终止",
       "AI_MODEL_ERROR": "AI 模型错误",

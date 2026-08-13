@@ -5,6 +5,7 @@
       "AI_API_KEY_INVALID": "Invalid API key",
       "AI_API_KEY_MISSING": "Please configure API key first",
       "AI_BALANCE_INSUFFICIENT": "Insufficient account balance, please top up",
+      "AI_EMPTY_RESPONSE": "The model returned an empty reply. Check your API key and account status",
       "AI_CONTEXT_TOO_LARGE": "Context too long, please simplify",
       "AI_LOOP_DETECTED": "AI loop detected, turn terminated",
       "AI_MODEL_ERROR": "AI model error",

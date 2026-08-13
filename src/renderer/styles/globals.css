@@ -1331,22 +1331,17 @@ body.resizing iframe {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   §composer-project-bar 项目栏（cwd 切换器）
+   §composer-project-bar 项目栏（cwd 展示 + 模型选择器）
    ──────────────────────────────────────────────────────────────
    对齐原型 docs/prototype/prototype-v2.html 的 .composer-project-bar：
-   - 默认隐藏，仅在 welcome-mode 下显示
-   - 左侧：folder dropdown（切换历史目录 / 浏览其他）
-   - 右侧：模型选择器（占位，功能预留）
-   - 仅欢迎页可见，发送消息创建会话后随 composer 一起消失
+   - 欢迎页：左侧 folder dropdown（切换历史目录 / 浏览其他）+ 右侧模型选择器
+   - 对话页：左侧只读展示当前工作目录 + 右侧模型选择器
+   - 修复：此前基础样式 display:none 且仅 welcome-mode 显示——对话页
+     模型选择器完全不可见（用户反馈「输入框下面没有模型选择」）
    ────────────────────────────────────────────────────────────── */
 
-/* 基础样式：默认隐藏 */
+/* 基础样式：对话页同样可见（紧凑 flex 布局，无容器底色） */
 .composer-project-bar {
-  display: none;
-}
-
-/* welcome-mode 下显示 + 紧凑布局 */
-.view-chat.welcome-mode .composer-project-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1357,12 +1352,16 @@ body.resizing iframe {
   color: var(--text-faint);
   font-family: var(--font-sans);
   position: relative;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
   flex-shrink: 0;
   min-width: 0;
   overflow: visible;
+}
+
+/* welcome-mode：居中 720px + 高亮容器（对齐原型） */
+.view-chat.welcome-mode .composer-project-bar {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   max-width: 720px;
   width: 100%;
   margin-left: auto;

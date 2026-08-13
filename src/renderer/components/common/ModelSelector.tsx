@@ -42,13 +42,16 @@ export function ModelSelector({
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = (next: boolean): void => {
-    if (isControlled) {
-      controlledOnOpenChange?.(next);
-    } else {
-      setInternalOpen(next);
-    }
-  };
+  const setOpen = useCallback(
+    (next: boolean): void => {
+      if (isControlled) {
+        controlledOnOpenChange?.(next);
+      } else {
+        setInternalOpen(next);
+      }
+    },
+    [isControlled, controlledOnOpenChange],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 模型清单：共享 useModelsQuery（P3 修复：与 ModelsSection 同源同 key，
@@ -91,7 +94,7 @@ export function ModelSelector({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
+  }, [open, setOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,7 +110,7 @@ export function ModelSelector({
       selected?.focus();
     }
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open]);
+  }, [open, setOpen]);
 
   const handleModelSelect = useCallback(
     (providerKind: string, modelId: string) => {
@@ -115,7 +118,7 @@ export function ModelSelector({
       onModelChange(modelId);
       setOpen(false);
     },
-    [onProviderChange, onModelChange],
+    [onProviderChange, onModelChange, setOpen],
   );
 
   return (
