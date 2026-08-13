@@ -38,18 +38,48 @@ function flattenKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   return keys;
 }
 
-/** 扫描 t('...') 静态引用（单引号/双引号，排除注释行），模板串跳过 */
-function collectStaticKeys(file: string): string[] {
+/**
+ * 扫描 t('...') 静态引用（单引号/双引号，排除注释行），模板串跳过。
+ *
+ * 间接引用（const labelKey = 'x.y'; ... t(labelKey) / t(item.labelKey)）：
+ * 本文件存在非字符串实参的 t() 调用时，把文件中所有「key 形状」字符串字面量
+ * （^小写段.小写段...$）视为引用——本仓库的 labelKey/promptKey/descriptionKey
+ * 常量数组均与 t() 间接调用同文件，此规则可覆盖（此前这些 key 被误报冗余）。
+ */
+/**
+ * 扫描 t('...') 静态引用（单引号/双引号，排除注释行），模板串跳过。
+ *
+ * 间接引用（const labelKey = 'x.y'; ... t(labelKey) / t(item.labelKey)）：
+ * 本文件存在非字符串实参的 t() 调用时，把文件中所有「key 形状」字符串字面量
+ * （^小写段.小写段...$）追加为引用——本仓库的 labelKey/promptKey/descriptionKey
+ * 常量数组均与 t() 间接调用同文件，此规则可覆盖（此前这些 key 被误报冗余）。
+ * 间接候选不参与「缺失」校验（key 形状字符串未必都是 i18n key）。
+ */
+function collectStaticKeys(file: string): { direct: string[]; used: string[] } {
   const content = readFileSync(file, 'utf8');
-  const keys: string[] = [];
+  const direct: string[] = [];
   const re = /\bt\(\s*['"]([^'"`]+)['"]/g;
   const lines = content.split('\n');
+  let hasIndirectT = false;
   lines.forEach((line) => {
     const t = line.trim();
     if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
-    for (const m of line.matchAll(re)) keys.push(m[1]);
+    for (const m of line.matchAll(re)) direct.push(m[1]);
+    // 非字符串实参的 t() 调用：t(labelKey) / t(item.labelKey) 等
+    if (/\bt\(\s*[a-zA-Z_$][\w$.]*\s*\)/.test(line)) hasIndirectT = true;
   });
-  return keys;
+  const used = [...direct];
+  if (!hasIndirectT) return { direct, used };
+  // key 形状：小写字母开头，点分 1-4 段（排除 channel/错误码/URL 等含冒号连字符的串）
+  const keyRe = /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+){1,4}$/;
+  for (const line of lines) {
+    const t = line.trim();
+    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) continue;
+    for (const m of line.matchAll(/['"]([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+){1,4})['"]/g)) {
+      if (keyRe.test(m[1])) used.push(m[1]);
+    }
+  }
+  return { direct, used };
 }
 
 /** 收集动态模板前缀：t(`chat.${x}`) → 'chat.'（用于冗余豁免） */
@@ -100,8 +130,9 @@ function main(): number {
   const used = new Set<string>();
   const missing: string[] = [];
   for (const file of rendererFiles) {
-    for (const key of collectStaticKeys(file)) {
-      used.add(key);
+    const { direct, used: fileUsed } = collectStaticKeys(file);
+    for (const key of fileUsed) used.add(key);
+    for (const key of direct) {
       // errors 命名空间：useErrorMessage 用 t(`errors.${code}`)，code 无前缀
       const inCommon = en.common.has(key);
       const inErrors = key.startsWith('errors.') && en.errors.has(key.slice('errors.'.length));
