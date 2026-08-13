@@ -164,3 +164,18 @@ P1（第二轮，已提交）:
 - 脏数据保护：openFile 切换文件前 confirm（取消保持原文件），单测 6 例
 - 版本号去硬编码：useAppInfo hook（app:getInfo 单一真源），Topbar/账户菜单不再硬编码 v0.1.0
 - C6 MCP lastError 渲染 / C7 SettingsDialog resetKeys / C8 Ctrl+N 导航 / C9 过期注释 / C10 深层刷新 + sft/ti CSS
+
+P2（第三轮，已提交）:
+- 首屏 chunk 拆分：SettingsDialog/CommandPalette/FuzzySearchDialog/ShortcutHelpDialog/DevPanel 全部 React.lazy + Suspense（主 index 840KB，SettingsDialog 128KB、DevPanel 112KB、CommandPalette 76KB 独立；check:bundle 总 14.6MB 趋势 -2.1%）
+- 消息渲染 E2E：journey-chat 发送按钮路径断言 user 气泡 + assistant mock 文案渲染（原豁免记录撤销）；beforeAll 预热 ChatPanel/ChatInput 消除冷编译 flake；重试复用同一文本
+- 文件树节点菜单单测 5 例 + 命令面板冒烟 3 例（三态循环标题）
+- 分隔线键盘调整（←/→ 16px 步进 + Home/End 极值，此前仅 ARIA 语义）
+- A18 白名单按类型收敛（canRememberDecision 接线，仅 run_command/write_file/edit_file 显示）+ 已决回显 × 关闭按钮（dismiss 激活）
+- 命令面板平台修饰键（macOS ⌘ / Windows Ctrl）；browser-pane 设备栏关闭 aria-label；DevPanel/mcp-section 硬编码「加载中」走 i18n
+- 重写 08-ux-guidelines 4.1-4.10/6.1/8/附录：A3/A4/A5/A9/A10/A11/A12/A13/A15/A16/A17/A18/A19 全部对齐代码现状
+
+P2 剩余（低价值/高风险，未做——实事求是记录）:
+- 侧栏 tabs / ModelSelector roving tabindex：Radix 组件自带键盘语义，收益低且焦点管理有回归风险
+- SettingsDialog 单测：Radix Sheet + 20 分区 IPC 依赖重，冒烟收益低
+- i18n 88 个冗余 key 清理（--strict 才卡关，无行为影响）
+- /models /compact 完整链路、vim 模式行为：文档已诚实标注为「后续增强/仅存储」
