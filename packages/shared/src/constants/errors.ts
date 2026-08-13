@@ -50,6 +50,8 @@ export const ErrorCode = {
   AI_LOOP_DETECTED: 'AI_LOOP_DETECTED',
   /** HTTP 402：账户余额不足（DeepSeek 等供应商返回） */
   AI_BALANCE_INSUFFICIENT: 'AI_BALANCE_INSUFFICIENT',
+  /** 流正常结束但零文本零工具（空响应：API 配置/余额/模型名异常时供应商可能静默返回） */
+  AI_EMPTY_RESPONSE: 'AI_EMPTY_RESPONSE',
 
   // ── IM 渠道 ───────────────────────────────────────
   /** 渠道未配置 token（keychain 无凭证） */
@@ -141,6 +143,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   },
   AI_BALANCE_INSUFFICIENT: {
     userMessage: '账户余额不足，请充值后重试',
+    retryable: false,
+    severity: 'warn',
+  },
+  AI_EMPTY_RESPONSE: {
+    userMessage: '模型返回了空回复，请检查 API Key 与账户状态',
     retryable: false,
     severity: 'warn',
   },
