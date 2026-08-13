@@ -7,46 +7,34 @@ import type { ITerminalService } from '../../terminal/terminal-service';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
-const TerminalActionSchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('create'),
-    command: z
-      .string()
-      .optional()
-      .describe('启动命令（省略时打开默认 shell）')
-      .transform((v) => v ?? undefined),
-    cwd: z
-      .string()
-      .optional()
-      .describe('工作目录（相对路径基于 agent 工作目录解析，省略时用工作目录）')
-      .transform((v) => v ?? undefined),
-    cols: z.number().int().positive().max(500).default(80).describe('终端列数，默认 80'),
-    rows: z.number().int().positive().max(200).default(24).describe('终端行数，默认 24'),
-  }),
-  z.object({
-    action: z.literal('input'),
-    terminalId: z.string().min(1).describe('终端会话 id'),
-    data: z.string().describe('要写入终端的数据（命令、按键等）'),
-  }),
-  z.object({
-    action: z.literal('read'),
-    terminalId: z.string().min(1).describe('终端会话 id'),
-  }),
-  z.object({
-    action: z.literal('clear'),
-    terminalId: z.string().min(1).describe('终端会话 id'),
-  }),
-  z.object({
-    action: z.literal('resize'),
-    terminalId: z.string().min(1).describe('终端会话 id'),
-    cols: z.number().int().positive().max(500).describe('新的列数'),
-    rows: z.number().int().positive().max(200).describe('新的行数'),
-  }),
-  z.object({
-    action: z.literal('kill'),
-    terminalId: z.string().min(1).describe('终端会话 id'),
-  }),
-]);
+// 扁平 object（而非 discriminatedUnion）：DeepSeek 等 OpenAI 兼容 API 对
+// 判别联合 + transform 的 JSON Schema 序列化产出 `type: null`，整请求 400
+//（实测错误：Invalid schema for function 'terminal': ... got 'type: null'）。
+// 各 action 的必填约束由 execute 内运行时守卫兜底（对 LLM 生成宽松、对执行严格）。
+const TerminalActionSchema = z.object({
+  action: z.enum(['create', 'input', 'read', 'clear', 'resize', 'kill']).describe('操作类型'),
+  command: z.string().optional().describe('启动命令（省略时打开默认 shell；仅 create 使用）'),
+  cwd: z
+    .string()
+    .optional()
+    .describe('工作目录（相对路径基于 agent 工作目录解析，省略时用工作目录；仅 create 使用）'),
+  terminalId: z.string().optional().describe('终端会话 id（input/read/clear/resize/kill 必填）'),
+  data: z.string().optional().describe('要写入终端的数据（命令、按键等；仅 input 必填）'),
+  cols: z
+    .number()
+    .int()
+    .positive()
+    .max(500)
+    .optional()
+    .describe('终端列数（create 默认 80；resize 必填）'),
+  rows: z
+    .number()
+    .int()
+    .positive()
+    .max(200)
+    .optional()
+    .describe('终端行数（create 默认 24；resize 必填）'),
+});
 
 type TerminalInput = z.infer<typeof TerminalActionSchema>;
 
@@ -73,8 +61,8 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
             cwd,
             command: input.command,
             env: undefined,
-            cols: input.cols,
-            rows: input.rows,
+            cols: input.cols ?? 80,
+            rows: input.rows ?? 24,
             // 守卫后已收窄为非空，直接传递
             webContents: ctx.webContents,
           });
@@ -96,6 +84,9 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           };
         }
         case 'input': {
+          if (input.terminalId === undefined || input.data === undefined) {
+            return { title: '参数缺失', output: 'input 操作需要 terminalId 与 data 参数' };
+          }
           const result = await terminalService.input(input.terminalId, input.data);
           if (!result.ok) {
             return {
@@ -111,6 +102,9 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           };
         }
         case 'read': {
+          if (input.terminalId === undefined) {
+            return { title: '参数缺失', output: 'read 操作需要 terminalId 参数' };
+          }
           const output = terminalService.getOutput(input.terminalId);
           return {
             title: `读取终端: ${input.terminalId}`,
@@ -119,6 +113,9 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           };
         }
         case 'clear': {
+          if (input.terminalId === undefined) {
+            return { title: '参数缺失', output: 'clear 操作需要 terminalId 参数' };
+          }
           terminalService.clearOutput(input.terminalId);
           return {
             title: `清空终端: ${input.terminalId}`,
@@ -127,6 +124,13 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           };
         }
         case 'resize': {
+          if (
+            input.terminalId === undefined ||
+            input.cols === undefined ||
+            input.rows === undefined
+          ) {
+            return { title: '参数缺失', output: 'resize 操作需要 terminalId、cols 与 rows 参数' };
+          }
           const result = await terminalService.resize(input.terminalId, input.cols, input.rows);
           if (!result.ok) {
             return {
@@ -147,6 +151,9 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           };
         }
         case 'kill': {
+          if (input.terminalId === undefined) {
+            return { title: '参数缺失', output: 'kill 操作需要 terminalId 参数' };
+          }
           const result = await terminalService.kill(input.terminalId);
           if (!result.ok) {
             return {
