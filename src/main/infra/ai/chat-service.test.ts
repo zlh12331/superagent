@@ -694,7 +694,7 @@ describe('chat-service', () => {
         maxOutputTokens?: number;
       };
       expect(opts?.providerOptions).toEqual({ deepseek: { reasoningEffort: 'max' } });
-      expect(opts?.maxOutputTokens).toBe(384_000);
+      expect(opts?.maxOutputTokens).toBe(64_000);
     });
 
     it('注入依赖后：usage 落库 + 默认标题自动生成', async () => {

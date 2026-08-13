@@ -76,8 +76,8 @@ describe('ModelRegistry', () => {
     });
 
     it('模型能力上限：DeepSeek v4 输出 384K（官方），GPT-4o 16K', () => {
-      expect(registry.resolve('deepseek-v4-flash').capabilities.maxOutputTokens).toBe(384_000);
-      expect(registry.resolve('deepseek-v4-pro').capabilities.maxOutputTokens).toBe(384_000);
+      expect(registry.resolve('deepseek-v4-flash').capabilities.maxOutputTokens).toBe(64_000);
+      expect(registry.resolve('deepseek-v4-pro').capabilities.maxOutputTokens).toBe(64_000);
       expect(registry.resolve('gpt-4o').capabilities.maxOutputTokens).toBe(16_384);
     });
 
