@@ -280,8 +280,11 @@ describe('agent-service', () => {
       mockPromptService,
       mockSessionService,
     );
-    // 默认 streamText 返回空流（立即 close）
-    mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));
+    // 默认 streamText 返回单文本 part 流（真实 LLM 必然产出内容；
+    // 空流场景由「空回复防护」专用用例显式覆盖）
+    mocks.mockStreamText.mockReturnValue(
+      createMockStreamResult([{ type: 'text-delta', textDelta: 'hi' }]),
+    );
     mocks.mockRandomUUID.mockReturnValue('test-session-id');
   });
 
@@ -1039,8 +1042,11 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       mockPromptService,
       mockSessionService,
     );
-    // 默认 streamText 返回空流（立即 close）
-    mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));
+    // 默认 streamText 返回单文本 part 流（真实 LLM 必然产出内容；
+    // 空流场景由「空回复防护」专用用例显式覆盖）
+    mocks.mockStreamText.mockReturnValue(
+      createMockStreamResult([{ type: 'text-delta', textDelta: 'hi' }]),
+    );
     mocks.mockRandomUUID.mockReturnValue('test-session-id');
     // 恢复默认模型解析（无 capabilities → 128K 兜底；无超时）与默认生成选项（空）
     mocks.mockResolveModel.mockImplementation(() => ({
@@ -1253,6 +1259,9 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     };
     sessMocks.get.mockResolvedValue({ session: { title: DEFAULT_SESSION_TITLE } });
     sessMocks.rename.mockResolvedValue(undefined);
+    mocks.mockStreamText.mockReturnValue(
+      createMockStreamResult([{ type: 'text-delta', textDelta: 'hi' }]),
+    );
     service = new AgentService(
       mockRegistry as unknown as IToolRegistry,
       mockExecutor,
@@ -1338,7 +1347,7 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
   it('completed + 完整 usage：recordUsage 调用 + END 含 usage + span 属性', async () => {
     const wc = createMockWebContents();
     mocks.mockStreamText.mockReturnValue({
-      toUIMessageStream: () => createMockReadableStream([]),
+      toUIMessageStream: () => createMockReadableStream([{ type: 'text-delta', textDelta: 'hi' }]),
       totalUsage: Promise.resolve({
         inputTokens: 10,
         outputTokens: 20,
@@ -1380,7 +1389,7 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
   it('totalUsage reject：usage 置空不阻断，END 不含 usage', async () => {
     const wc = createMockWebContents();
     mocks.mockStreamText.mockReturnValue({
-      toUIMessageStream: () => createMockReadableStream([]),
+      toUIMessageStream: () => createMockReadableStream([{ type: 'text-delta', textDelta: 'hi' }]),
       totalUsage: Promise.reject(new Error('usage boom')),
     });
     await service.startAgent(baseOptions({ sessionId: 's-usage2', webContents: wc }));
@@ -1393,7 +1402,7 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
   it('usage 部分字段：仅 totalTokens 时条件展开', async () => {
     const wc = createMockWebContents();
     mocks.mockStreamText.mockReturnValue({
-      toUIMessageStream: () => createMockReadableStream([]),
+      toUIMessageStream: () => createMockReadableStream([{ type: 'text-delta', textDelta: 'hi' }]),
       totalUsage: Promise.resolve({ totalTokens: 42 }),
     });
     await service.startAgent(baseOptions({ sessionId: 's-usage3', webContents: wc }));
@@ -1410,6 +1419,16 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       reason: 'completed',
       usage: { totalTokens: 42 },
     });
+  });
+
+  it('空回复防护：流正常结束但零 part → 推送 AI_EMPTY_RESPONSE', async () => {
+    const wc = createMockWebContents();
+    mocks.mockStreamText.mockReturnValue(createMockStreamResult([]));
+    await service.startAgent(baseOptions({ sessionId: 's-empty', webContents: wc }));
+    await flushAsync();
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect(errCalls).toHaveLength(1);
+    expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_EMPTY_RESPONSE');
   });
 
   it('模型级总时长超时：AI_TIMEOUT', async () => {

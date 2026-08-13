@@ -30,6 +30,7 @@ import type {
   ChatMessage,
   TurnEndEvent,
   TurnEvent,
+  TurnTextDeltaEvent,
   TurnToolResultEvent,
   TurnUsage,
 } from '@code-agent/shared/main';
@@ -333,6 +334,11 @@ export class AgentService implements IAgentService {
           }
         });
         let unsubscribeAll = (): void => {};
+        // 消息持久化累积（此前主链路从未落库 messages——重启后历史丢失）：
+        // TEXT_DELTA 拼接助手全文；rawPartCount 统计流内原始 part（空回复检测）。
+        // 声明在 try 外：catch 分支（错误/中断出口）同样需要读取代传递 completeTurn
+        let assistantText = '';
+        let rawPartCount = 0;
         // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
         let releaseGate: (() => void) | undefined;
         try {
@@ -396,7 +402,27 @@ export class AgentService implements IAgentService {
             unsubscribeCall();
             unsubscribeResult();
             unsubscribeError();
+            unsubscribeTextAcc();
           };
+
+          const unsubscribeTextAcc = turnEmitter.on(TurnEventType.TEXT_DELTA, (event) => {
+            assistantText += (event as TurnTextDeltaEvent).text;
+          });
+
+          // 用户消息落库（回合开始）：失败静默（会话不存在/写入异常均不阻断对话；
+          // try/catch 兜底测试桩返回非 Promise 等同步异常）
+          const lastUserMessage = [...options.messages].reverse().find((m) => m.role === 'user');
+          if (lastUserMessage !== undefined) {
+            try {
+              void this.sessionService
+                .appendMessage({ sessionId, turnId, messages: [lastUserMessage] })
+                .catch((err: unknown) => {
+                  logger.error({ sessionId, error: err }, '用户消息落库失败');
+                });
+            } catch (err) {
+              logger.error({ sessionId, error: err }, '用户消息落库失败（同步异常）');
+            }
+          }
 
           // 1.5 解析 System Prompt
           //     - 调用方传了 systemPrompt：直接用（用户显式覆盖）
@@ -572,6 +598,7 @@ export class AgentService implements IAgentService {
             firstPart: created.firstPart,
             // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
             onPart: (part) => {
+              rawPartCount += 1;
               if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
                 const payload: AgentStreamPartPayload = { sessionId, part };
                 // dev 契约校验后发送（payloadSchema 见定义表）
@@ -593,6 +620,15 @@ export class AgentService implements IAgentService {
             throw new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时');
           }
 
+          // 空回复防护：流「正常」结束但零 part（供应商对无效 Key/余额/模型名
+          // 可能静默返回空流——此前用户侧表现为「发不出去」无任何提示）
+          if (runResult.reason === 'completed' && rawPartCount === 0) {
+            throw new AppError(
+              ErrorCode.AI_EMPTY_RESPONSE,
+              '模型返回了空回复，请检查 API Key 有效性、账户余额与模型名称',
+            );
+          }
+
           // 7+8. 结束处理：usage / AGENT_STREAM_END / turn-end / Transcript 落库
           if (runResult.reason === 'aborted') {
             logger.info({ sessionId }, 'Agent 对话被用户中断');
@@ -605,6 +641,7 @@ export class AgentService implements IAgentService {
               durationMs: runResult.durationMs,
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+              assistantText,
             });
           } else {
             // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
@@ -673,6 +710,7 @@ export class AgentService implements IAgentService {
               ...(turnUsage !== undefined ? { usage: turnUsage } : {}),
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+              assistantText,
             });
             // 标题生成（回合结束后异步，失败静默）：
             // 会话仍为默认标题时用首条用户消息生成简洁标题
@@ -700,6 +738,7 @@ export class AgentService implements IAgentService {
               durationMs: Date.now() - turnStartTime,
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+              assistantText,
             });
           } else {
             // 其他错误：分类并推送 AGENT_STREAM_ERROR
@@ -739,6 +778,7 @@ export class AgentService implements IAgentService {
               durationMs: Date.now() - turnStartTime,
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+              assistantText,
             });
             logger.error(
               { sessionId, errorCode: appError.code, error: appError },
@@ -809,6 +849,8 @@ export class AgentService implements IAgentService {
     readonly usage?: TurnUsage;
     readonly emitter: TurnEventEmitter;
     readonly webContents?: WebContents;
+    /** 助手文本（TEXT_DELTA 累积；中断/错误回合保留已流出的部分） */
+    readonly assistantText?: string;
   }): void {
     const turnEnd: TurnEndEvent = {
       type: TurnEventType.TURN_END,
@@ -838,5 +880,23 @@ export class AgentService implements IAgentService {
 
     // Transcript 落库（失败不阻断主流程）
     void this.persistTurn(turnEnd, params.modelId);
+
+    // 助手消息落库（含中断/错误回合的已流出文本——历史不因失败丢失；
+    // try/catch 兜底测试桩返回非 Promise 等同步异常）
+    if (params.assistantText !== undefined && params.assistantText.length > 0) {
+      try {
+        void this.sessionService
+          .appendMessage({
+            sessionId: params.sessionId,
+            turnId: params.turnId,
+            messages: [{ role: 'assistant', content: params.assistantText }],
+          })
+          .catch((err: unknown) => {
+            logger.error({ sessionId: params.sessionId, error: err }, '助手消息落库失败');
+          });
+      } catch (err) {
+        logger.error({ sessionId: params.sessionId, error: err }, '助手消息落库失败（同步异常）');
+      }
+    }
   }
 }
