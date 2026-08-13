@@ -102,3 +102,35 @@ export interface ReadLogsRes {
   /** 是否被截断（达到上限 2000） */
   readonly truncated: boolean;
 }
+
+/** logs:read 响应 zod schema（R4：响应契约校验） */
+export const ReadLogsResSchema = z.object({
+  lines: z.array(z.string()),
+  total: z.number().int().nonnegative(),
+  filePath: z.string(),
+  truncated: z.boolean(),
+});
+
+/** system:getStatus 响应 zod schema（R4：响应契约校验） */
+export const SystemStatusResSchema = z.object({
+  appVersion: z.string(),
+  electronVersion: z.string(),
+  nodeVersion: z.string(),
+  platform: z.string(),
+  arch: z.string(),
+  isPackaged: z.boolean(),
+  uptimeSeconds: z.number().nonnegative(),
+  pid: z.number().int().positive(),
+  memory: z.object({
+    rss: z.number(),
+    heapTotal: z.number(),
+    heapUsed: z.number(),
+    external: z.number(),
+    arrayBuffers: z.number(),
+  }),
+  cpu: z.object({
+    user: z.number(),
+    system: z.number(),
+  }),
+  timestamp: z.string(),
+});

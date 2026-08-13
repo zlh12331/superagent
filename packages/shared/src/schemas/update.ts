@@ -25,6 +25,13 @@ export interface UpdateCheckRes {
   readonly message?: string;
 }
 
+/** update:check 响应 zod schema（R4：响应契约校验） */
+export const UpdateCheckResSchema = z.object({
+  status: z.enum(['up-to-date', 'available', 'checking', 'error']),
+  version: z.string().optional(),
+  message: z.string().optional(),
+});
+
 /** 更新状态推送阶段 */
 export type UpdatePhase =
   | 'checking' // 正在检查更新
@@ -45,3 +52,11 @@ export interface UpdateStatusPayload {
   /** 错误信息（error 时提供） */
   readonly message?: string;
 }
+
+/** update:event:status payload schema（R2：主进程发送侧 dev 校验） */
+export const UpdateStatusPayloadSchema = z.object({
+  phase: z.enum(['checking', 'available', 'downloading', 'downloaded', 'not-available', 'error']),
+  version: z.string().optional(),
+  progress: z.number().min(0).max(100).optional(),
+  message: z.string().optional(),
+});

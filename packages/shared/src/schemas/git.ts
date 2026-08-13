@@ -142,6 +142,12 @@ export interface GitAddRes {
   readonly stdout: string;
 }
 
+/** git:add 响应 zod schema（R2：响应契约校验） */
+export const GitAddResSchema = z.object({
+  stagedCount: z.number().int().nonnegative(),
+  stdout: z.string(),
+});
+
 /**
  * git:commit 入参 zod schema
  *
@@ -176,6 +182,17 @@ export interface GitCommitRes {
   /** git commit 原始 stdout（用于调试） */
   readonly stdout: string;
 }
+
+/** git:commit 响应 zod schema（R2：响应契约校验） */
+export const GitCommitResSchema = z.object({
+  sha: z.string().min(1),
+  shortSha: z.string().min(1),
+  branch: z.string(),
+  filesChanged: z.number().int().nonnegative(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  stdout: z.string(),
+});
 
 /**
  * git:push 入参 zod schema
@@ -217,3 +234,13 @@ export interface GitPushRes {
   /** git push 的原始 stderr（含进度信息） */
   readonly stderr: string;
 }
+
+/** git:push 响应 zod schema（R2：响应契约校验） */
+export const GitPushResSchema = z.object({
+  ok: z.boolean(),
+  pushedCount: z.number().int().nonnegative(),
+  remote: z.string(),
+  refspec: z.string(),
+  stdout: z.string(),
+  stderr: z.string(),
+});

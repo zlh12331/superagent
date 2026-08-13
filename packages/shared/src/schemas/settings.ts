@@ -53,12 +53,19 @@ export const GetApiKeyReqSchema = z.object({
 /**
  * settings:getApiKey 响应 payload
  *
- * apiKey 为 null 表示未设置，非 null 表示已设置（返回明文）。
+ * P0 安全修复：不再向渲染层回传明文 API Key。
+ * 渲染层唯一合法的用途是判断"是否已配置"，明文只存在于主进程 keychain，
+ * 经 setApiKey 写入、由主进程内部消费（llmClient）。
  */
 export interface GetApiKeyRes {
-  /** API Key 明文（未设置时为 null） */
-  readonly apiKey: string | null;
+  /** 是否已配置（true = keychain 中存在该 provider 的 Key） */
+  readonly configured: boolean;
 }
+
+/** settings:getApiKey 响应 zod schema（R3：响应契约校验） */
+export const GetApiKeyResSchema = z.object({
+  configured: z.boolean(),
+});
 
 /**
  * settings:setApiKey 请求 payload
@@ -78,6 +85,11 @@ export interface SetApiKeyRes {
   readonly ok: boolean;
 }
 
+/** settings:setApiKey 响应 zod schema（R3：响应契约校验） */
+export const SetApiKeyResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /**
  * settings:deleteApiKey 请求 payload
  *
@@ -92,6 +104,11 @@ export interface DeleteApiKeyRes {
   /** 是否成功删除（未设置时也返回 true） */
   readonly ok: boolean;
 }
+
+/** settings:deleteApiKey 响应 zod schema（R3：响应契约校验） */
+export const DeleteApiKeyResSchema = z.object({
+  ok: z.boolean(),
+});
 
 // ─── Telemetry 用户开关（隐私合规） ─────────────────────────────
 
@@ -169,6 +186,11 @@ export interface AddRuntimeModelRes {
   readonly ok: boolean;
 }
 
+/** settings:addRuntimeModel 响应 zod schema（R4：响应契约校验） */
+export const AddRuntimeModelResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /** settings:removeRuntimeModel 入参 zod schema */
 export const RemoveRuntimeModelReqSchema = z.object({
   modelId: z.string().min(1).max(100),
@@ -178,6 +200,11 @@ export const RemoveRuntimeModelReqSchema = z.object({
 export interface RemoveRuntimeModelRes {
   readonly ok: boolean;
 }
+
+/** settings:removeRuntimeModel 响应 zod schema（R4：响应契约校验） */
+export const RemoveRuntimeModelResSchema = z.object({
+  ok: z.boolean(),
+});
 
 /** 运行时模型列表条目（settings:listRuntimeModels 响应） */
 export interface RuntimeModelInfo {
@@ -191,6 +218,21 @@ export interface RuntimeModelInfo {
 export interface ListRuntimeModelsRes {
   readonly models: readonly RuntimeModelInfo[];
 }
+
+/** settings:listRuntimeModels 响应 zod schema（R4：响应契约校验） */
+export const ListRuntimeModelsResSchema = z.object({
+  models: z.array(
+    z.object({
+      modelId: z.string(),
+      providerKind: ApiKeyProviderSchema,
+      baseUrl: z
+        .string()
+        .optional()
+        .transform((v) => v ?? undefined),
+      createdAt: z.number().int(),
+    }),
+  ),
+});
 
 /**
  * 工具审批模式（对齐 qwen ApprovalMode 谱系，配置化替代写死两级）
@@ -226,6 +268,12 @@ export const SetApprovalModeReqSchema = z.object({
 /** settings:setApprovalMode 响应 payload */
 export interface SetApprovalModeRes {
   readonly ok: boolean;
-  /** 写入后的模式（用�?UI 回显确认） */
+  /** 写入后的模式（用于 UI 回显确认） */
   readonly mode: ApprovalMode;
 }
+
+/** settings:setApprovalMode 响应 zod schema（R4：响应契约校验） */
+export const SetApprovalModeResSchema = z.object({
+  ok: z.boolean(),
+  mode: ApprovalModeSchema,
+});

@@ -6,9 +6,12 @@
 // - 定义 file:watch:event 流式事件 payload 类型
 // - 供主进程 IPC handler 校验入参
 //
-// 设计：
-// - 路径校验由 zod 完成基础形状校验（非空字符串），实际路径安全检查
-//   （防越权访问 workingDir 之外）由 FileService 在执行时校验
+// 设计（R2 修正，此前承诺"FileService 执行时做 workingDir 越权校验"从未落地，注释与实现不符）：
+// - 路径校验由 zod 完成基础形状校验（非空字符串）+ FileService.assertAbsolutePath
+//   （必须绝对路径）。文件域 IPC 的定位是"用户文件管理器"（浏览/读写任意绝对路径，
+//   由 file tree / dialog 驱动），与 Agent 工具不同——后者经 path-guard 限制在
+//   session workingDir 内；前者没有 workingDir 边界，靠 contextIsolation + CSP +
+//   显式 recursive 声明（file:delete 必填）兜底
 // - offset/limit 用 `.optional().transform(v => v ?? undefined)` 兼容 exactOptionalPropertyTypes
 // - 文件条目用 FileEntrySchema 复用，list 与 watch 都可能用到
 // - file:watch 拆分为 start/stop/event 三种 channel：
@@ -83,6 +86,11 @@ export interface FileWriteRes {
   readonly bytesWritten: number;
 }
 
+/** file:write 响应 zod schema（R2：响应契约校验） */
+export const FileWriteResSchema = z.object({
+  bytesWritten: z.number().int().nonnegative(),
+});
+
 /**
  * file:list 入参 zod schema
  *
@@ -123,6 +131,11 @@ export interface FileListRes {
   readonly entries: readonly FileEntry[];
 }
 
+/** file:list 响应 zod schema（R2：响应契约校验） */
+export const FileListResSchema = z.object({
+  entries: z.array(FileEntrySchema),
+});
+
 /**
  * file:watch:start 入参 zod schema
  *
@@ -140,6 +153,11 @@ export interface FileWatchStartRes {
   readonly watcherId: string;
 }
 
+/** file:watch:start 响应 zod schema（R2：响应契约校验） */
+export const FileWatchStartResSchema = z.object({
+  watcherId: z.string().min(1),
+});
+
 /**
  * file:watch:stop 入参 zod schema
  *
@@ -155,6 +173,11 @@ export interface FileWatchStopRes {
   /** 是否成功停止（watcherId 不存在时返回 false） */
   readonly stopped: boolean;
 }
+
+/** file:watch:stop 响应 zod schema（R2：响应契约校验） */
+export const FileWatchStopResSchema = z.object({
+  stopped: z.boolean(),
+});
 
 /**
  * file:watch:event 事件 payload（流式事件）
@@ -176,6 +199,14 @@ export interface FileWatchEventPayload {
   readonly oldPath?: string;
 }
 
+/** file:watch:event payload schema（R2：主进程发送侧 dev 校验） */
+export const FileWatchEventPayloadSchema = z.object({
+  watcherId: z.string().min(1),
+  type: z.enum(['create', 'modify', 'delete', 'rename']),
+  path: z.string().min(1),
+  oldPath: z.string().optional(),
+});
+
 // ── 文件树编辑操作（新建/删除/重命名） ──────────────────────
 
 /**
@@ -195,6 +226,11 @@ export interface FileCreateRes {
   readonly path: string;
 }
 
+/** file:create 响应 zod schema（R2：响应契约校验） */
+export const FileCreateResSchema = z.object({
+  path: z.string().min(1),
+});
+
 /**
  * file:createDir 入参 zod schema
  *
@@ -210,15 +246,22 @@ export interface FileCreateDirRes {
   readonly path: string;
 }
 
+/** file:createDir 响应 zod schema（R2：响应契约校验） */
+export const FileCreateDirResSchema = z.object({
+  path: z.string().min(1),
+});
+
 /**
  * file:delete 入参 zod schema
  *
- * 删除文件或目录（目录递归删除）。
+ * 删除文件或目录。recursive 必须显式声明（P0 修复）：
+ * 不再静默默认递归删除（rm -rf 语义），调用方必须明确选择
+ * recursive=true（递归删除目录）或 false（仅空目录/文件，非空目录报 ENOTEMPTY）。
  */
 export const FileDeleteReqSchema = z.object({
   path: z.string().min(1),
-  /** 是否递归删除目录（默认 true，避免目录非空时报错） */
-  recursive: z.boolean().default(true),
+  /** 是否递归删除目录（必填：true 递归删除；false 仅空目录，非空抛 ENOTEMPTY） */
+  recursive: z.boolean(),
 });
 
 /** file:delete 响应 payload */
@@ -226,6 +269,11 @@ export interface FileDeleteRes {
   /** 是否成功删除 */
   readonly deleted: boolean;
 }
+
+/** file:delete 响应 zod schema（R2：响应契约校验） */
+export const FileDeleteResSchema = z.object({
+  deleted: z.boolean(),
+});
 
 /**
  * file:rename 入参 zod schema
@@ -244,3 +292,8 @@ export interface FileRenameRes {
   /** 重命名后的新路径（标准化后） */
   readonly path: string;
 }
+
+/** file:rename 响应 zod schema（R2：响应契约校验） */
+export const FileRenameResSchema = z.object({
+  path: z.string().min(1),
+});

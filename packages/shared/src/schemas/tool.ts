@@ -123,3 +123,8 @@ export interface ToolListRes {
   /** 工具元数据清单（按 name 字母序） */
   readonly tools: readonly ToolDescriptor[];
 }
+
+/** tool:list 响应 zod schema（R4：响应契约校验） */
+export const ToolListResSchema = z.object({
+  tools: z.array(ToolDescriptorSchema),
+});

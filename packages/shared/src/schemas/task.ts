@@ -33,3 +33,18 @@ export const TaskListReqSchema = z.object({
 export interface TaskListRes {
   readonly tasks: readonly TaskInfo[];
 }
+
+/** task:list 响应 zod schema（R3：响应契约校验） */
+export const TaskListResSchema = z.object({
+  tasks: z.array(
+    z.object({
+      id: z.string(),
+      sessionId: z.string(),
+      kind: z.string(),
+      description: z.string(),
+      status: z.string(),
+      startTime: z.number().int(),
+      endTime: z.number().int().nullable(),
+    }),
+  ),
+});

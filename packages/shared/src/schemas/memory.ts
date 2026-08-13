@@ -27,6 +27,19 @@ export interface MemoryListRes {
   readonly memories: readonly MemoryInfo[];
 }
 
+/** memory:list 响应 zod schema（R3：响应契约校验） */
+export const MemoryListResSchema = z.object({
+  memories: z.array(
+    z.object({
+      id: z.number().int(),
+      sessionId: z.string(),
+      content: z.string(),
+      kind: z.string(),
+      createdAt: z.number().int(),
+    }),
+  ),
+});
+
 /** memory:clear 入参 zod schema */
 export const MemoryClearReqSchema = z.object({
   sessionId: z.string().min(1),
@@ -36,3 +49,8 @@ export const MemoryClearReqSchema = z.object({
 export interface MemoryClearRes {
   readonly ok: boolean;
 }
+
+/** memory:clear 响应 zod schema（R3：响应契约校验） */
+export const MemoryClearResSchema = z.object({
+  ok: z.boolean(),
+});

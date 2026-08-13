@@ -74,6 +74,12 @@ export interface GrepRes {
   readonly truncated: boolean;
 }
 
+/** search:grep 响应 zod schema（R3：响应契约校验） */
+export const GrepResSchema = z.object({
+  matches: z.array(GrepMatchSchema),
+  truncated: z.boolean(),
+});
+
 /**
  * search:glob 入参 zod schema
  *
@@ -102,3 +108,9 @@ export interface GlobRes {
   /** 是否因达到 maxResults 被截断 */
   readonly truncated: boolean;
 }
+
+/** search:glob 响应 zod schema（R3：响应契约校验） */
+export const GlobResSchema = z.object({
+  files: z.array(z.string()),
+  truncated: z.boolean(),
+});

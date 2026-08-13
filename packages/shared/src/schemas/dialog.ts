@@ -22,6 +22,12 @@ export interface DialogPickDirectoryRes {
   readonly path?: string;
 }
 
+/** dialog:pickDirectory 响应 zod schema（R4：响应契约校验） */
+export const DialogPickDirectoryResSchema = z.object({
+  canceled: z.boolean(),
+  path: z.string().optional(),
+});
+
 /** dialog:pickFiles 入参 zod schema */
 export const DialogPickFilesReqSchema = z.object({
   /** 是否允许多选（默认 true） */
@@ -41,3 +47,9 @@ export interface DialogPickFilesRes {
   /** 选中的文件路径列表（canceled=true 时为 undefined） */
   readonly paths?: string[];
 }
+
+/** dialog:pickFiles 响应 zod schema（R4：响应契约校验） */
+export const DialogPickFilesResSchema = z.object({
+  canceled: z.boolean(),
+  paths: z.array(z.string()).optional(),
+});

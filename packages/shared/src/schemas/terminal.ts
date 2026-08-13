@@ -26,8 +26,13 @@ import { z } from 'zod';
  * env 可选：传入额外环境变量（与系统 env 合并，覆盖同名系统变量）
  */
 export const TerminalCreateReqSchema = z.object({
-  // 工作目录
-  cwd: z.string().min(1),
+  // 工作目录（P3 修复：可选——省略时主进程回退到用户主目录，
+  // 此前渲染层硬编码 DEFAULT_CWD 与激活会话脱钩）
+  cwd: z
+    .string()
+    .min(1)
+    .optional()
+    .transform((v) => v ?? undefined),
   // 启动命令（省略时用默认 shell）
   command: z
     .string()
@@ -75,6 +80,11 @@ export interface TerminalInputRes {
   readonly ok: boolean;
 }
 
+/** terminal:input 响应 zod schema（R3：响应契约校验） */
+export const TerminalInputResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /** terminal:resize 入参 zod schema */
 export const TerminalResizeReqSchema = z.object({
   terminalId: z.string().min(1),
@@ -87,6 +97,11 @@ export interface TerminalResizeRes {
   readonly ok: boolean;
 }
 
+/** terminal:resize 响应 zod schema（R3：响应契约校验） */
+export const TerminalResizeResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /** terminal:kill 入参 zod schema */
 export const TerminalKillReqSchema = z.object({
   terminalId: z.string().min(1),
@@ -96,6 +111,11 @@ export const TerminalKillReqSchema = z.object({
 export interface TerminalKillRes {
   readonly ok: boolean;
 }
+
+/** terminal:kill 响应 zod schema（R3：响应契约校验） */
+export const TerminalKillResSchema = z.object({
+  ok: z.boolean(),
+});
 
 /**
  * terminal:event:output 流式事件 payload
@@ -145,3 +165,28 @@ export interface TerminalExitEventPayload {
   /** 被信号中断时的信号名（如 'SIGTERM'） */
   readonly signal?: string;
 }
+
+// ── 事件 payload zod schema（R2：主进程发送侧 dev 校验，envelope 级） ──
+
+/** terminal:event:output payload schema（data 原样透传，仅 envelope 校验） */
+export const TerminalOutputEventPayloadSchema = z.object({
+  terminalId: z.string().min(1),
+  data: z.string(),
+});
+
+/** terminal:event:created payload schema */
+export const TerminalCreatedEventPayloadSchema = z.object({
+  terminalId: z.string().min(1),
+  title: z.string(),
+  pid: z.number().int().positive(),
+  cwd: z.string(),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+});
+
+/** terminal:event:exit payload schema */
+export const TerminalExitEventPayloadSchema = z.object({
+  terminalId: z.string().min(1),
+  exitCode: z.number().int(),
+  signal: z.string().optional(),
+});

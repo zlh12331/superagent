@@ -44,3 +44,9 @@ export interface OpenDevToolsRes {
   /** 实际使用的 mode（便于渲染层反馈用户） */
   readonly mode: 'detach' | 'right' | 'bottom';
 }
+
+/** devtools:open 响应 zod schema（R4：响应契约校验） */
+export const OpenDevToolsResSchema = z.object({
+  ok: z.boolean(),
+  mode: z.enum(['detach', 'right', 'bottom']),
+});

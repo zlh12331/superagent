@@ -28,7 +28,7 @@ import { IPC_META } from '@code-agent/shared/ipc/meta';
 import { contextBridge } from 'electron';
 import { createIpcApi } from './utils/create-api';
 
-// 自动生成 window.api 命名空间（15 个域，62 个方法，零手写）
+// 自动生成 window.api 命名空间（零手写；域与方法数以 packages/shared/src/ipc/meta.ts 为唯一真源）
 const api = createIpcApi(IPC_META);
 
 // 通过 contextBridge 暴露到渲染层的 window.api（contextIsolation: true 下唯一安全方式）

@@ -261,3 +261,120 @@ export const SessionGetTurnMessagesReqSchema = z.object({
 export interface SessionGetTurnMessagesRes {
   readonly messages: readonly unknown[];
 }
+
+// ── 响应契约 zod schema（R3：补齐全域 resSchema，防 handler 返回结构漂移） ──
+
+/** session:get 响应 schema */
+export const SessionGetResSchema = z.object({
+  session: SessionMetaSchema,
+  messages: z.array(z.unknown()),
+});
+
+/** session:delete 响应 schema */
+export const SessionDeleteResSchema = z.object({
+  ok: z.boolean(),
+});
+
+/** session:rename 响应 schema */
+export const SessionRenameResSchema = z.object({
+  ok: z.boolean(),
+});
+
+/** session:pin 响应 schema */
+export const SessionPinResSchema = z.object({
+  ok: z.boolean(),
+});
+
+/** session:create 响应 schema */
+export const SessionCreateResSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+/** 用量模型汇总 schema */
+export const UsageModelSummarySchema = z.object({
+  modelId: z.string(),
+  calls: z.number().int().nonnegative(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  reasoningTokens: z.number().int().nonnegative(),
+});
+
+/** 用量按日汇总 schema */
+export const UsageDaySummarySchema = z.object({
+  date: z.string(),
+  calls: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+});
+
+/** session:getUsageSummary 响应 schema */
+export const UsageSummaryResSchema = z.object({
+  total: z.object({
+    calls: z.number().int().nonnegative(),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+  }),
+  byModel: z.array(UsageModelSummarySchema),
+  byDay: z.array(UsageDaySummarySchema),
+});
+
+/** 回合摘要 schema（inputTokens 等可选字段经 exactOptionalPropertyTypes 对齐） */
+export const TurnSummarySchema = z.object({
+  turnId: z.string().min(1),
+  seq: z.number().int().nonnegative(),
+  modelId: z.string(),
+  status: z.enum(['completed', 'aborted', 'max-steps', 'error']),
+  inputTokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .transform((v) => v ?? undefined),
+  outputTokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .transform((v) => v ?? undefined),
+  totalTokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .transform((v) => v ?? undefined),
+  durationMs: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .transform((v) => v ?? undefined),
+  createdAt: z.number().int(),
+});
+
+/** session:getTurns 响应 schema */
+export const SessionGetTurnsResSchema = z.object({
+  sessionId: z.string().min(1),
+  turns: z.array(TurnSummarySchema),
+});
+
+/** session:getRecentTurns 响应 schema */
+export const SessionRecentTurnsResSchema = z.object({
+  turns: z.array(TurnSummarySchema.extend({ sessionId: z.string() })),
+});
+
+/** session:listRecentDirs 响应 schema */
+export const SessionListRecentDirsResSchema = z.object({
+  dirs: z.array(
+    z.object({
+      workingDir: z.string().min(1),
+      lastUsed: z.number().int(),
+    }),
+  ),
+});
+
+/** session:getTurnMessages 响应 schema */
+export const SessionGetTurnMessagesResSchema = z.object({
+  messages: z.array(z.unknown()),
+});

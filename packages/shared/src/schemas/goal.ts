@@ -64,6 +64,21 @@ export interface GoalListRes {
   readonly goals: readonly GoalInfo[];
 }
 
+/** goal:list 响应 zod schema（R3：响应契约校验） */
+export const GoalListResSchema = z.object({
+  goals: z.array(
+    z.object({
+      sessionId: z.string(),
+      condition: z.string(),
+      status: z.enum(['active', 'completed', 'aborted']),
+      iterations: z.number().int().nonnegative(),
+      lastReason: z.string().nullable(),
+      createdAt: z.number().int(),
+      finishedAt: z.number().int().nullable(),
+    }),
+  ),
+});
+
 /** goal:clear 入参 zod schema（清除指定会话目标 = 标记 aborted） */
 export const GoalClearReqSchema = z.object({
   sessionId: z.string().min(1),
@@ -73,3 +88,8 @@ export const GoalClearReqSchema = z.object({
 export interface GoalClearRes {
   readonly ok: boolean;
 }
+
+/** goal:clear 响应 zod schema（R3：响应契约校验） */
+export const GoalClearResSchema = z.object({
+  ok: z.boolean(),
+});

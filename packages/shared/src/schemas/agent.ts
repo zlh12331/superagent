@@ -96,6 +96,11 @@ export interface AgentStopRes {
   readonly stopped: boolean;
 }
 
+/** agent:stop 响应 zod schema（R4：响应契约校验） */
+export const AgentStopResSchema = z.object({
+  stopped: z.boolean(),
+});
+
 /**
  * 工具调用事件 payload（主进程 → 渲染层）
  *
@@ -166,6 +171,16 @@ export interface AgentApprovalRequestPayload {
   /** 人类可读的操作摘要（如 "写入文件 /path/to/file.ts"），用于 ApprovalModal 展示 */
   readonly description: string;
 }
+
+/** agent:approval:request payload schema（R2：主进程发送侧 dev 校验；input 仅 envelope 校验） */
+export const AgentApprovalRequestPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  approvalId: z.string().min(1),
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  input: z.unknown(),
+  description: z.string().min(1),
+});
 
 /**
  * 审批响应 zod schema（渲染层 → 主进程，请求-响应）

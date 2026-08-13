@@ -73,14 +73,27 @@ export function deriveChannels<D extends Record<string, Record<string, MetaEntry
   readonly [K in keyof D as ChannelKey<D, K, keyof D[K]>]: string;
 } {
   const result: Record<string, string> = {};
-  for (const methods of Object.values(defs)) {
+  for (const [domain, methods] of Object.entries(defs)) {
     for (const def of Object.values(methods)) {
+      // P2 修复：域键与 channel 前缀一致性运行时检查——此前类型层 ChannelKey
+      // 与运行时 toConstantKey 是两套独立实现，域键与 channel 前缀不一致时
+      // 类型层产出 never（常量静默从联合消失）而运行时照常生成，静默分叉。
+      // 现在改为 fail-fast：不一致立即抛错，配合编译期 parity 检查双重兜底。
+      if (!def.channel.startsWith(`${domain}:`)) {
+        throw new Error(
+          `IPC_META channel "${def.channel}" 与域键 "${domain}" 不匹配（channel 必须以 "${domain}:" 开头）`,
+        );
+      }
       // key 从 channel 推导（app:getStatus → APP_GET_STATUS），与既有 IPC_CHANNELS 完全兼容
       const key = toConstantKey(def.channel);
       result[key] = def.channel;
     }
   }
-  return result as never;
+  // 类型断言：运行时对象形状由上述循环保证，映射类型经 ChannelKey 推导；
+  // 两端一致性的机器保证 = 上方的域前缀运行时检查 + definitions.ts 编译期 parity
+  return result as unknown as {
+    readonly [K in keyof D as ChannelKey<D, K, keyof D[K]>]: string;
+  };
 }
 
 /** channel → SCREAMING_SNAKE_CASE（app:getStatus → APP_GET_STATUS；chat:stream:part → CHAT_STREAM_PART） */
@@ -100,8 +113,20 @@ type RequestMethods<D, Domain extends keyof D> = {
   [M in keyof D[Domain]]: D[Domain][M] extends RequestDefLike ? M : never;
 }[keyof D[Domain]];
 
-/** 入参类型：schema=null → undefined（无参）；否则取 zod output 类型（wrap 校验后的 parsed.data） */
-type ReqOf<S> = S extends null ? undefined : S extends z.ZodType ? z.output<S> : never;
+/**
+ * 渲染层发送的入参类型：schema=null → undefined（无参）；否则取 zod **input** 类型。
+ *
+ * P2 修复：此前取 z.output，导致带 .default()/.transform() 的 schema 把"校验后的
+ * 形状"当"发送形状"——渲染层被迫按填充默认值后的形状传参；z.input 才与
+ * ipcRenderer.invoke 实际发送的字节语义一致。
+ */
+type ReqOf<S> = S extends null ? undefined : S extends z.ZodType ? z.input<S> : never;
+
+/**
+ * 主进程 handler 收到的入参类型：zod **output**（wrap 校验后的 parsed.data）。
+ * 与 ReqOf 语义分离：默认值已填充、transform 已应用。
+ */
+type HandlerInputOf<S> = S extends null ? undefined : S extends z.ZodType ? z.output<S> : never;
 
 /** 单个 request 方法的调用签名（无入参时不生成 input 参数） */
 type RequestSignature<Def> = Def extends {
@@ -192,7 +217,7 @@ export type HandlerSignature<Def, C> = Def extends {
   readonly schema: infer S;
   readonly res: infer R;
 }
-  ? (input: ReqOf<S>, ctx: C) => Promise<R>
+  ? (input: HandlerInputOf<S>, ctx: C) => Promise<R>
   : never;
 
 /**

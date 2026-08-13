@@ -74,3 +74,17 @@ export interface ChannelOpRes {
 export interface ChannelListRes {
   readonly channels: readonly IChannelInfo[];
 }
+
+/** im:list 响应 zod schema（R3：响应契约校验） */
+export const ChannelListResSchema = z.object({
+  channels: z.array(
+    z.object({
+      kind: z.enum(Object.values(ChannelKind) as [ChannelKind, ...ChannelKind[]]),
+      displayName: z.string(),
+      description: z.string(),
+      implemented: z.boolean(),
+      configured: z.boolean(),
+      running: z.boolean(),
+    }),
+  ),
+});

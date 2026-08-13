@@ -107,6 +107,16 @@ export interface CodebaseQueryRes {
   readonly results: readonly CodebaseQueryResult[];
 }
 
+/** codebase:query 响应 zod schema（R4：响应契约校验） */
+export const CodebaseQueryResSchema = z.object({
+  results: z.array(CodebaseQueryResultSchema),
+});
+
+/** codebase markdown 输出响应 zod schema（explore/node/callers/callees/impact 共用） */
+export const CodebaseMarkdownResSchema = z.object({
+  markdown: z.string(),
+});
+
 // ─── explore：区域探索（markdown 输出） ─────────────────────────
 
 /** codebase:explore 入参 zod schema */

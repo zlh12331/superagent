@@ -84,6 +84,11 @@ export const ChatStopReqSchema = z.object({
   sessionId: z.string().min(1),
 });
 
+/** chat:stop 响应 zod schema（R4：响应契约校验） */
+export const ChatStopResSchema = z.object({
+  stopped: z.boolean(),
+});
+
 /**
  * 聊天消息类型（P1-6 透传设计）
  *
