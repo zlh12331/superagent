@@ -16,6 +16,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { renderStructuredPreview } from './approval-preview';
 import {
+  canRememberDecision,
   getIconForType,
   getLabelKeyForType,
   getVariantForType,
@@ -58,6 +59,7 @@ export function InlineApprovalCard({
 
   const approve = useApprovalsStore((state) => state.approve);
   const reject = useApprovalsStore((state) => state.reject);
+  const dismiss = useApprovalsStore((state) => state.dismiss);
   // 本地跳过（对齐参考项目 P2-10：卡片半透明 + toast 提示）——hooks 必须在 early return 之前
   const [skipped, setSkipped] = useState(false);
   // 审批项变化时重置跳过态（渲染期调整 state：新审批卡不继承上一张的 skipped）
@@ -150,6 +152,18 @@ export function InlineApprovalCard({
             {isApproved ? t('approval.approved') : t('approval.rejected')}
           </span>
         )}
+        {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
+        {!isPending && (
+          <button
+            type="button"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto flex size-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            onClick={() => dismiss(item.id)}
+          >
+            <X className="size-3" strokeWidth={1.5} />
+          </button>
+        )}
       </div>
 
       {/* 描述 + 结构化预览 */}
@@ -175,15 +189,19 @@ export function InlineApprovalCard({
             <X className="size-3" />
             {t('approval.reject')}
           </button>
-          <button
-            type="button"
-            onClick={() => void respond(true, true)}
-            className="hover:bg-muted text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
-            title={t('approval.whitelistHint')}
-          >
-            <ShieldCheck className="size-3" />
-            {t('approval.whitelist')}
-          </button>
+          {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file；
+              此前无条件渲染，canRememberDecision 为死代码） */}
+          {canRememberDecision(item.type) && (
+            <button
+              type="button"
+              onClick={() => void respond(true, true)}
+              className="hover:bg-muted text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
+              title={t('approval.whitelistHint')}
+            >
+              <ShieldCheck className="size-3" />
+              {t('approval.whitelist')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void respond(true, false)}
