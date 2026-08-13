@@ -32,12 +32,13 @@ export function createSettingsHandlers(params: {
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['settings'] {
   const { permissionService } = params;
   return {
-    // 查询 API Key：返回明文或 null（未设置时）
-    // 渲染层据此判断是否已配置，未配置则引导用户进入设置页
+    // 查询 API Key 配置状态：仅返回布尔（P0 安全修复）
+    // 明文不回传渲染层（对比 listRuntimeModels 的剥 key 策略，此处对齐），
+    // 渲染层只关心"是否已配置"，明文仅主进程内部（llmClient）消费
     getApiKey: async (input) => {
       const key = toKeychainKey(input.provider);
       const apiKey = await getSecret(key);
-      return { apiKey };
+      return { configured: apiKey !== null };
     },
 
     // 设置 API Key：渲染层传入明文，主进程加密后存储到 keychain

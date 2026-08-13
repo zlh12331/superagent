@@ -63,6 +63,7 @@ function makeToolRegistry(): IToolRegistry & {
   register: Mock;
   unregister: Mock;
   get: Mock;
+  getAllNames: Mock;
   list: Mock;
   toAISDKTools: Mock;
 } {
@@ -73,6 +74,7 @@ function makeToolRegistry(): IToolRegistry & {
     }),
     unregister: vi.fn((name: string) => tools.delete(name)),
     get: vi.fn((name: string) => tools.get(name)),
+    getAllNames: vi.fn(() => new Set(tools.keys())),
     list: vi.fn(() => []),
     toAISDKTools: vi.fn(() => ({})),
   };
@@ -342,6 +344,30 @@ describe('mcp-service', () => {
 
     it('command 为空抛 INVALID_INPUT', () => {
       expect(() => validateMcpServerConfig({ ...validConfig, command: '' })).toThrow(AppError);
+    });
+
+    it('P0 安全：command 含路径分隔符（绝对路径）抛 INVALID_INPUT', () => {
+      expect(() =>
+        validateMcpServerConfig({ ...validConfig, command: 'C:\\Windows\\System32\\cmd.exe' }),
+      ).toThrow(AppError);
+    });
+
+    it('P0 安全：command 含路径穿越（..\\x）抛 INVALID_INPUT', () => {
+      expect(() => validateMcpServerConfig({ ...validConfig, command: '..\\evil.exe' })).toThrow(
+        AppError,
+      );
+    });
+
+    it('P0 安全：command 含空白/引号（多段命令）抛 INVALID_INPUT', () => {
+      expect(() => validateMcpServerConfig({ ...validConfig, command: 'cmd /c dir' })).toThrow(
+        AppError,
+      );
+    });
+
+    it('P0 安全：name 含非法字符抛 INVALID_INPUT', () => {
+      expect(() => validateMcpServerConfig({ ...validConfig, name: 'my server' })).toThrow(
+        AppError,
+      );
     });
 
     it('server name 与已注册工具重名抛 INVALID_INPUT', () => {

@@ -28,8 +28,14 @@ import type {
   ApprovalMode,
   WhitelistEntry,
 } from '@code-agent/shared/main';
-import { AppError, DEFAULT_APPROVAL_MODE, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import {
+  AppError,
+  DEFAULT_APPROVAL_MODE,
+  ErrorCode,
+  IPC_DEFINITIONS,
+} from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
+import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { readWhitelistSync, writeWhitelist } from '../../storage/whitelist-pref';
 import type { CommandClassifier } from './command-classifier';
@@ -573,9 +579,9 @@ export class PermissionService implements IPermissionService {
         abortSignal.addEventListener('abort', onAbort, { once: true });
       }
 
-      // 推送 AGENT_APPROVAL_REQUEST 到渲染层
+      // 推送 AGENT_APPROVAL_REQUEST 到渲染层（R2：统一出口 emitEvent——dev 契约校验）
       if (webContents !== undefined && !webContents.isDestroyed()) {
-        webContents.send(IPC_CHANNELS.AGENT_APPROVAL_REQUEST, payload);
+        emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeApprovalRequest, payload);
         logger.info(
           { approvalId: payload.approvalId, toolName: payload.toolName },
           '审批请求已推送',

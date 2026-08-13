@@ -11,27 +11,24 @@
 //
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
 //   1. ChatService.dispose()       中断活跃对话（依赖 streamText + webContents）
-//      resetChatService()          清空 ChatService 模块级单例缓存
-//   2. AgentService.dispose()      中断活跃 agent 对话（依赖 streamText + tools + ToolExecutor）
-//      AgentService 依赖 ToolExecutor（已注入到 executeHook 闭包），
-//      必须在 PermissionService.dispose 之前停止，否则 ToolExecutor 会访问已释放的 pending Map
-//   3. PermissionService.dispose() reject 所有 pending 审批 Promise
-//      ToolExecutor                无外部资源（仅协调层），无需 dispose
-//      ToolRegistry                无外部资源（仅 Map），无需 dispose
-//   4. FileService.dispose()       关闭所有 chokidar watcher（释放 fs 监听句柄）
-//      resetFileService()          清空 FileService 模块级单例缓存
-//   5. SearchService.dispose()     终止活跃的 ripgrep 子进程（释放 spawn 句柄）
-//      resetSearchService()        清空 SearchService 模块级单例缓存
-//   6. TerminalService.dispose()   kill 所有 pty 进程（释放 node-pty 句柄）
-//      resetTerminalService()      清空 TerminalService 模块级单例缓存
-//   7. GitService                  无外部资源（每次调用 spawn 子进程在请求结束时退出）
-//      resetGitService()           清空 GitService 模块级单例缓存
-//   8. CodebaseService             无外部资源（每次调用 spawn codegraph 子进程在请求结束时退出）
-//      resetCodebaseService()      清空 CodebaseService 模块级单例缓存
-//   9. SessionService              无外部资源（db 由 closeDb 单独关闭）
-//      resetSessionService()       清空 SessionService 模块级单例缓存
-//  10. resetAIProvider()           清理 AI Provider 缓存（无连接池，仅清空引用）
-//  11. closeDb()                    关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
+//   2. AgentService.dispose()      中断活跃 agent 对话（必须在 PermissionService 之前停止）
+//   3. MCPService.stopAll()        停止所有 MCP server 子进程
+//   4. GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
+//   5. ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
+//   6. ImService.stopAll()         停止 IM 渠道长连接
+//   7. PermissionService.dispose() reject 所有 pending 审批 Promise
+//   8. agentAskService.dispose()   清理 pending 提问
+//   9. FileService.dispose()       关闭所有 chokidar watcher
+//  10. SearchService.dispose()     终止活跃的 ripgrep 子进程
+//  11. TerminalService.dispose()   kill 所有 pty 进程
+//  12. GitService / CodebaseService / SessionService（无外部资源，dispose 为一致性 no-op）
+//  13. UpdateService.dispose()     更新事件收尾
+//  14. resetAIProvider()           清理 AI Provider 缓存
+//  15. closeDb()                   关闭 SQLite 连接（必须最后）
+//
+// P1 修复：
+// - 每步经 runStep 独立 try/catch：单服务清理失败不再跳过后续清理，
+//   避免 PTY/ripgrep/chokidar 句柄残留为孤儿进程（退出路径必须可靠）
 //
 // 注意：
 // - StreamBridge 已随 Vercel AI SDK v7 迁移一并删除（chat-service 内置 abort 管理）
@@ -728,113 +725,170 @@ class ServiceContainer {
    * ```
    */
   async dispose(): Promise<void> {
-    await this.lspManager?.disposeAll();
-    this.lspManager = null;
-
     logger.info({}, '开始清理应用服务');
 
+    // P1 修复：每步独立异常隔离——单个服务 dispose 抛错不再跳过后续清理，
+    // 否则 PTY/ripgrep/chokidar 句柄会残留为孤儿进程（退出路径必须可靠）。
+    const failures: string[] = [];
+    const runStep = async (name: string, fn: () => Promise<void> | void): Promise<void> => {
+      try {
+        await fn();
+      } catch (error) {
+        failures.push(name);
+        logger.error(
+          {
+            step: name,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          '服务清理失败（继续后续清理）',
+        );
+      }
+    };
+
+    await runStep('lspManager.disposeAll', async () => {
+      await this.lspManager?.disposeAll();
+      this.lspManager = null;
+    });
+
     // 1. 优雅关闭 ChatService（P3-10：中断 + 等待 stream 真正完成）
-    //    通过容器持有的实例调用（可能为测试注入的 mock），与生产路径一致
-    //    dispose 内部会先 abortAll 再 await 所有活跃 stream Promise
-    if (this.chatService !== null) {
-      await this.chatService.dispose();
-    }
-    // 同时重置模块级单例（若 ServiceContainer 缓存为空但模块单例仍存活，也需中断）
-    // resetChatService 内部会调用 abortAll（幂等，已 abort 过的不会重复触发）
-    resetChatService();
-    this.chatService = null;
+    await runStep('chatService.dispose', async () => {
+      if (this.chatService !== null) {
+        await this.chatService.dispose();
+      }
+      // 同时重置模块级单例（若 ServiceContainer 缓存为空但模块单例仍存活，也需中断）
+      resetChatService();
+      this.chatService = null;
+    });
 
     // 2. 优雅关闭 AgentService（P4：中断 + 等待活跃 agent stream 真正完成）
     //    AgentService 依赖 ToolExecutor（已注入到 executeHook 闭包），
-    //    必须在 PermissionService.dispose 之前停止，否则 ToolExecutor 会访问已释放的 pending Map
-    //    dispose 内部会先 abortAll 再 await 所有活跃 stream Promise（带 3s 超时兜底）
-    if (this.agentService !== null) {
-      await this.agentService.dispose();
-    }
-    this.agentService = null;
+    //    必须在 PermissionService.dispose 之前停止
+    await runStep('agentService.dispose', async () => {
+      if (this.agentService !== null) {
+        await this.agentService.dispose();
+      }
+      this.agentService = null;
+    });
 
     // 2.5 关闭 MCPService（停止所有 MCP server 子进程）
-    //     必须在 AgentService 停止后调用（避免活跃 agent 调用已停止的 MCP 工具）
-    //     必须在 ToolRegistry 清空之前调用（MCPService 内部会 unregister 工具，再 close client）
-    //     MCP server 子进程不关闭会导致进程退出延迟（stdio 子进程会保留在系统进程列表）
-    if (this.mcpService !== null) {
-      await this.mcpService.stopAll();
-    }
-    this.mcpService = null;
+    await runStep('mcpService.stopAll', async () => {
+      if (this.mcpService !== null) {
+        await this.mcpService.stopAll();
+      }
+      this.mcpService = null;
+    });
+
+    // 2.6 解除 GoalService / ImAgentBridge 挂载（P1 修复：此前无 unmount，监听泄漏）
+    await runStep('goalService.unmount', async () => {
+      this.goalService?.unmount();
+      this.goalService = null;
+    });
+    await runStep('imBridge.unmount', async () => {
+      this.imBridge?.unmount();
+      this.imBridge = null;
+    });
+
+    // 2.7 停止 IM 渠道长连接（QQ/微信/钉钉/Telegram/飞书/企微 webhook 收尾）
+    await runStep('imService.stopAll', async () => {
+      if (this.imService !== null) {
+        await this.imService.stopAll();
+      }
+      this.imService = null;
+    });
 
     // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
     //    ToolExecutor 与 ToolRegistry 无外部资源（仅 Map / 协调层），无需 dispose
-    if (this.permissionService !== null) {
-      this.permissionService.dispose();
-    }
-    this.permissionService = null;
-    this.toolExecutor = null;
-    this.toolRegistry = null;
+    await runStep('permissionService.dispose', async () => {
+      this.permissionService?.dispose();
+      this.permissionService = null;
+      this.toolExecutor = null;
+      this.toolRegistry = null;
+    });
+
+    // 3.5 Agent 提问 pending 清理（agentAskService 为模块单例，dispose 幂等）
+    await runStep('agentAskService.dispose', () => {
+      agentAskService.dispose();
+    });
 
     // 4. 关闭 FileService 所有 watcher（释放 chokidar fs 监听句柄）
-    //    watcher 句柄不释放会导致进程无法退出（Node.js 事件循环不空）
-    if (this.fileService !== null) {
-      await this.fileService.dispose();
-    }
-    resetFileService();
-    this.fileService = null;
+    await runStep('fileService.dispose', async () => {
+      if (this.fileService !== null) {
+        await this.fileService.dispose();
+      }
+      resetFileService();
+      this.fileService = null;
+    });
 
     // 5. 终止 SearchService 活跃子进程（释放 ripgrep spawn 句柄）
-    //    子进程不释放会导致进程退出延迟（Node.js 会等待所有子进程退出）
-    if (this.searchService !== null) {
-      await this.searchService.dispose();
-    }
-    resetSearchService();
-    this.searchService = null;
+    await runStep('searchService.dispose', async () => {
+      if (this.searchService !== null) {
+        await this.searchService.dispose();
+      }
+      resetSearchService();
+      this.searchService = null;
+    });
 
     // 6. kill 所有 TerminalService 活跃 pty 进程（释放 node-pty 句柄）
-    //    pty 进程不 kill 会导致子进程持续运行（PowerShell/bash 会保留在系统进程列表）
-    if (this.terminalService !== null) {
-      await this.terminalService.dispose();
-    }
-    resetTerminalService();
-    this.terminalService = null;
+    await runStep('terminalService.dispose', async () => {
+      if (this.terminalService !== null) {
+        await this.terminalService.dispose();
+      }
+      resetTerminalService();
+      this.terminalService = null;
+    });
 
-    // 7. GitService 无外部资源（每次调用 spawn 子进程在请求结束时退出），
-    //    dispose 是 no-op，但保持一致性便于未来扩展（如长连接 git daemon）
-    if (this.gitService !== null) {
-      await this.gitService.dispose();
-    }
-    resetGitService();
-    this.gitService = null;
+    // 7. GitService 无外部资源，dispose 是 no-op，但保持一致性便于未来扩展
+    await runStep('gitService.dispose', async () => {
+      if (this.gitService !== null) {
+        await this.gitService.dispose();
+      }
+      resetGitService();
+      this.gitService = null;
+    });
 
-    // 8. CodebaseService 无外部资源（每次调用 spawn codegraph 子进程在请求结束时退出），
-    //    dispose 是 no-op，但保持一致性便于未来扩展（如缓存查询结果）
-    if (this.codebaseService !== null) {
-      await this.codebaseService.dispose();
-    }
-    resetCodebaseService();
-    this.codebaseService = null;
+    // 8. CodebaseService 无外部资源，dispose 是 no-op，但保持一致性便于未来扩展
+    await runStep('codebaseService.dispose', async () => {
+      if (this.codebaseService !== null) {
+        await this.codebaseService.dispose();
+      }
+      resetCodebaseService();
+      this.codebaseService = null;
+    });
 
-    // 9. SessionService 无外部资源（db 由 closeDb 单独关闭）
-    //    dispose 是 no-op，但保持一致性便于未来扩展（如查询缓存）
-    //    必须在 closeDb 之前调用，避免清空引用后仍有未完成的 DB 访问
-    if (this.sessionService !== null) {
-      await this.sessionService.dispose();
-    }
-    resetSessionService();
-    this.sessionService = null;
+    // 9. SessionService 无外部资源（db 由 closeDb 单独关闭），必须在 closeDb 之前
+    await runStep('sessionService.dispose', async () => {
+      if (this.sessionService !== null) {
+        await this.sessionService.dispose();
+      }
+      resetSessionService();
+      this.sessionService = null;
+    });
 
-    // 10. PromptService 无外部资源（仅 DB），清空引用即可
+    // 10. PromptService / MemoryService 无外部资源，清空引用即可
     this.promptService = null;
+    this.memoryService = null;
 
     // 10.5 UpdateService 无外部资源（事件随进程退出释放），清空引用即可
-    this.updateService?.dispose();
-    this.updateService = null;
+    await runStep('updateService.dispose', () => {
+      this.updateService?.dispose();
+      this.updateService = null;
+    });
 
     // 11. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
-    resetAIProvider();
+    await runStep('resetAIProvider', () => {
+      resetAIProvider();
+    });
 
-    // 11. 关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
-    //    better-sqlite3 同步关闭，WAL 文件会自动 checkpoint
-    closeDb();
+    // 11.5 关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
+    await runStep('closeDb', () => {
+      closeDb();
+    });
 
-    logger.info({}, '应用服务清理完成');
+    if (failures.length > 0) {
+      logger.error({ failures }, '应用服务清理完成（部分失败）');
+    } else {
+      logger.info({}, '应用服务清理完成');
+    }
   }
 
   /**
@@ -870,6 +924,18 @@ class ServiceContainer {
     this.permissionService = null;
     this.toolExecutor = null;
     this.toolRegistry = null;
+    // P1 修复：补齐此前遗漏的服务——MCP 子进程停止、挂载解除、IM 渠道停止
+    // reset 为同步 API：stopAll 为异步收尾，fire-and-forget 避免子进程/长连接在测试中泄漏
+    void this.mcpService?.stopAll();
+    this.mcpService = null;
+    this.goalService?.unmount();
+    this.goalService = null;
+    this.imBridge?.unmount();
+    this.imBridge = null;
+    void this.imService?.stopAll();
+    this.imService = null;
+    this.memoryService = null;
+    agentAskService.dispose();
     resetFileService();
     this.fileService = null;
     resetSearchService();

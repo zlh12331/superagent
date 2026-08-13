@@ -18,6 +18,18 @@ function spawnGit(args: string[], cwd: string): void {
   }
 }
 
+/**
+ * 真实 git 集成测试的用例注册（R3 修复：显式放宽单测超时）
+ *
+ * 根因：全量并发跑主进程测试时（111 个测试文件并行），git 子进程 spawn
+ * 受 CPU/IO 饱和影响，单用例耗时从隔离跑的 ~1.2s 涨到 5-6s——恰好超过
+ * vitest 默认 5s 单测超时被强杀，且每次失败的是不同用例（表现似随机偶发）。
+ * 隔离重跑永远通过的原因即在此。真实 git CLI 集成测试放宽到 30s 属合理边界。
+ */
+const gitIt = (name: string, fn: () => Promise<void>): void => {
+  it(name, fn, 30_000);
+};
+
 describe('GitService（真实 git 仓库）', () => {
   let dir: string;
   let svc: IGitService;
@@ -44,13 +56,13 @@ describe('GitService（真实 git 仓库）', () => {
     spawnGit(['commit', '-m', 'init'], dir);
   }
 
-  it('status：非 git 仓库 → INVALID_INPUT', async () => {
+  gitIt('status：非 git 仓库 → INVALID_INPUT', async () => {
     await expect(svc.status(dir)).rejects.toMatchObject({
       code: ErrorCode.INVALID_INPUT,
     });
   });
 
-  it('status：干净仓库 → clean=true 且分支非空', async () => {
+  gitIt('status：干净仓库 → clean=true 且分支非空', async () => {
     await initRepo();
     const res = await svc.status(dir);
     expect(res.clean).toBe(true);
@@ -58,7 +70,7 @@ describe('GitService（真实 git 仓库）', () => {
     expect(res.branch.length).toBeGreaterThan(0);
   });
 
-  it('status：修改文件 → modified（未暂存）；add 后 → staged', async () => {
+  gitIt('status：修改文件 → modified（未暂存）；add 后 → staged', async () => {
     await initRepo();
     await writeFile(join(dir, 'a.txt'), 'changed\n');
     const dirty = await svc.status(dir);
@@ -71,7 +83,7 @@ describe('GitService（真实 git 仓库）', () => {
     expect(staged.files.find((f) => f.path === 'a.txt')?.staged).toBe(true);
   });
 
-  it('status：新建文件 → untracked', async () => {
+  gitIt('status：新建文件 → untracked', async () => {
     await initRepo();
     await writeFile(join(dir, 'new.txt'), 'new');
     const res = await svc.status(dir);
@@ -82,7 +94,7 @@ describe('GitService（真实 git 仓库）', () => {
     });
   });
 
-  it('diff：修改后返回 unified diff + 统计', async () => {
+  gitIt('diff：修改后返回 unified diff + 统计', async () => {
     await initRepo();
     await writeFile(join(dir, 'a.txt'), 'line1\nline2-changed\nline3\n');
     const res = await svc.diff({ path: dir, ref: 'HEAD', staged: false, filePath: undefined });
@@ -92,7 +104,7 @@ describe('GitService（真实 git 仓库）', () => {
     expect(res.filesChanged).toBe(1);
   });
 
-  it('add：指定路径只暂存该文件', async () => {
+  gitIt('add：指定路径只暂存该文件', async () => {
     await initRepo();
     await writeFile(join(dir, 'a.txt'), 'changed\n');
     await writeFile(join(dir, 'b.txt'), 'b');
@@ -103,7 +115,7 @@ describe('GitService（真实 git 仓库）', () => {
     expect(status.files.find((f) => f.path === 'a.txt')?.staged).toBe(false);
   });
 
-  it('commit：提交后返回 sha/branch/统计', async () => {
+  gitIt('commit：提交后返回 sha/branch/统计', async () => {
     await initRepo();
     await writeFile(join(dir, 'a.txt'), 'line1\nline2\nline3\n');
     await svc.add({ path: dir, paths: [] });
@@ -114,7 +126,7 @@ describe('GitService（真实 git 仓库）', () => {
     expect(res.filesChanged).toBe(1);
   });
 
-  it('push：首推建立基准，二次推送可计算 pushedCount', async () => {
+  gitIt('push：首推建立基准，二次推送可计算 pushedCount', async () => {
     // 真实 git 操作在全量并发下可能 >5s（init + bare 远程 + 2 次 push），放宽超时
     await initRepo();
     // 创建 bare 远程仓库
@@ -152,9 +164,9 @@ describe('GitService（真实 git 仓库）', () => {
     } finally {
       await rm(remoteDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-  }, 15_000);
+  });
 
-  it('push：无远程 → ok=false 不抛错', async () => {
+  gitIt('push：无远程 → ok=false 不抛错', async () => {
     await initRepo();
     const res = await svc.push({
       path: dir,

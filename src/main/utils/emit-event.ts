@@ -28,6 +28,14 @@ interface EventDefLike {
  * @param payload 事件 payload
  */
 export function emitEvent(webContents: WebContents, def: EventDefLike, payload: unknown): void {
+  // R2 修复：isDestroyed 防御内置于统一出口——此前各发送点自管守卫，
+  // 部分点位（如 agent-ask）缺失，向已销毁窗口 send 会抛 "Object has been destroyed"。
+  // 统一在这里短路，调用方不再需要重复检查。
+  if (webContents.isDestroyed()) {
+    logger.warn({ channel: def.channel }, 'webContents 已销毁，跳过事件推送');
+    return;
+  }
+
   // dev 校验：契约漂移在开发期暴露（打包环境跳过，零开销）
   // app 不可用（测试环境 mock 未提供）时跳过校验直接发送，不阻断主流程
   let isPackaged = true;

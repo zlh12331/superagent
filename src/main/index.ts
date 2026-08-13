@@ -383,7 +383,7 @@ app
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
       memory: createMemoryHandlers({ memoryService: serviceContainer.getMemoryService() }),
       models: modelsHandlers,
-      mcp: createMcpHandlers(serviceContainer.getMcpService()),
+      mcp: createMcpHandlers(serviceContainer.getMcpService(), serviceContainer.getToolRegistry()),
       skill: skillHandlers,
       whitelist: createWhitelistHandlers({
         permissionService: serviceContainer.getPermissionService(),

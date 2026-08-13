@@ -43,6 +43,8 @@ export class ImAgentBridge {
   private readonly busyChats = new Set<string>();
   /** 桥接是否已挂载（防重复 onMessage 订阅） */
   private mounted = false;
+  /** mount 注册的取消订阅函数（unmount 用；未挂载时为 null） */
+  private unsubscribeMessage: (() => void) | null = null;
 
   constructor(
     private readonly imService: ImService,
@@ -59,10 +61,24 @@ export class ImAgentBridge {
       return;
     }
     this.mounted = true;
-    this.imService.onMessage((message) => {
+    // P1 修复：保存取消订阅句柄，unmount 时精确移除（此前挂载后无法解除）
+    this.unsubscribeMessage = this.imService.onMessage((message) => {
       void this.handleMessage(message);
     });
     logger.info({}, 'IM → Agent 桥接已挂载');
+  }
+
+  /**
+   * 解除消息订阅（应用退出 / 测试隔离时由 ServiceContainer 调用；幂等）
+   */
+  unmount(): void {
+    if (!this.mounted) {
+      return;
+    }
+    this.unsubscribeMessage?.();
+    this.unsubscribeMessage = null;
+    this.mounted = false;
+    logger.info({}, 'IM → Agent 桥接已解除挂载');
   }
 
   /**

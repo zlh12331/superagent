@@ -25,9 +25,9 @@ vi.mock('./logger', () => ({
 
 import { emitEvent } from './emit-event';
 
-/** 构造最小 webContents mock（只暴露 send） */
+/** 构造最小 webContents mock（R2：emitEvent 内置 isDestroyed 防御，mock 需暴露该方法） */
 function createWebContents() {
-  return { send: mockSend } as never;
+  return { send: mockSend, isDestroyed: () => false } as never;
 }
 
 describe('emitEvent', () => {
@@ -66,5 +66,12 @@ describe('emitEvent', () => {
     const def = { channel: 'agent:stream:end' };
     emitEvent(createWebContents(), def, { whatever: true });
     expect(mockSend).toHaveBeenCalledWith('agent:stream:end', { whatever: true });
+  });
+
+  it('R2：webContents 已销毁 → 跳过推送（不 send）', () => {
+    const destroyed = { send: mockSend, isDestroyed: () => true } as never;
+    const def = { channel: 'agent:stream:end' };
+    emitEvent(destroyed, def, { whatever: true });
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

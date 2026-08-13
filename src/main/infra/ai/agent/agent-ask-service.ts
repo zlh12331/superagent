@@ -7,13 +7,15 @@
 // - dispose()：清理全部 pending（应用退出/回合中断，避免挂起）
 //
 // 与 IPC 的关系：
-// - 主进程 webContents.send('agent:event:ask', payload) 推送提问
+// - 主进程 emitEvent(IPC_DEFINITIONS.agent.subscribeAsk) 推送提问（统一出口 + dev 契约校验）
 // - 渲染层对话框提交后 invoke('agent:ask:respond', req) 回传
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
 import type { AgentAnswer, AgentQuestion } from '@code-agent/shared/main';
+import { IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
+import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 
 /** 单次提问的 pending 条目 */
@@ -63,8 +65,20 @@ export class AgentAskService {
         timer,
       });
 
-      // 推送提问事件到渲染层（Payload 含问题与 askId）
-      webContents.send('agent:event:ask', {
+      // P1 修复：webContents 已销毁时立即失败回收（此前无 isDestroyed 守卫，
+      // 会 send 到已销毁窗口且 pending 挂满 60s 超时）
+      if (webContents.isDestroyed()) {
+        clearTimeout(timer);
+        this.pending.delete(askId);
+        logger.warn({ askId }, 'webContents 已销毁，提问直接返回未响应');
+        resolve(null);
+        return;
+      }
+
+      // 推送提问事件到渲染层：走统一出口 emitEvent（dev 环境 payload 契约校验）
+      // + 定义表 channel 常量（P1 修复：此前硬编码 'agent:event:ask' 裸字符串，
+      // 不在任何真源链上，meta 改名即静默发向死通道）
+      emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeAsk, {
         askId,
         questions: questions.map((q) => ({
           question: q.question,

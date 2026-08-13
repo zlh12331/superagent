@@ -27,9 +27,10 @@ import type {
   TerminalOutputEventPayload,
   TerminalResizeRes,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { type IPty, spawn } from 'node-pty';
+import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
 /**
@@ -39,8 +40,8 @@ import { logger } from '../../utils/logger';
  * webContents 由 IPC handler 注入（ctx.sender），用于推送终端事件。
  */
 export interface TerminalCreateOptions {
-  /** 工作目录（绝对路径） */
-  readonly cwd: string;
+  /** 工作目录（绝对路径；P3 修复：可选属性——未提供时回退用户主目录） */
+  readonly cwd?: string;
   /** 启动命令（省略时用默认 shell） */
   readonly command: string | undefined;
   /** 额外环境变量（与系统 env 合并，覆盖同名系统变量） */
@@ -76,6 +77,14 @@ export interface ITerminalService {
   /** 优雅关闭：kill 所有活跃 PTY */
   dispose(): Promise<void>;
 }
+
+/**
+ * 禁止渲染层覆盖的系统关键环境变量（P0 安全）
+ *
+ * Windows 键大小写不敏感：在 win32 上按大写比较（见 isSensitiveEnvKey）。
+ * PATH / PATHEXT 决定可执行文件解析；SystemRoot / WINDIR / COMSPEC 决定系统行为。
+ */
+const SENSITIVE_ENV_KEYS = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC']);
 
 /** 输出缓冲最大字节数（环形截断，避免内存膨胀） */
 const MAX_BUFFER_BYTES = 100 * 1024;
@@ -135,17 +144,30 @@ export class TerminalService implements ITerminalService {
    */
   async create(options: TerminalCreateOptions): Promise<TerminalCreateRes> {
     const terminalId = randomUUID();
-    const { command, cwd, env, cols, rows, webContents } = options;
+    const { command, env, cols, rows, webContents } = options;
+    // P3 修复：cwd 可省略——回退到用户主目录（渲染层无 Node API 获取 home，
+    // 主进程按平台环境变量兜底），替代渲染层硬编码 DEFAULT_CWD
+    const cwd = options.cwd ?? defaultHomeDir();
 
     // 解析 shell 与 args
     const { file, args } = this.resolveShell(command);
 
-    // 合并环境变量：系统 env + 用户 env（用户覆盖系统同名）
-    // node-pty env 接受 { [key: string]: string | undefined }
+    // 合并环境变量：系统 env + 用户 env（用户覆盖系统同名，敏感键除外）
+    // P0 安全：过滤系统关键变量，防止渲染层通过 env 覆盖 PATH/PATHEXT 等
+    // 劫持终端内执行的命令（如把 ls 替换为恶意可执行文件）。
+    // 系统关键变量以主进程 process.env 为准，用户 env 仅用于注入普通变量（如 API Key）。
     const mergedEnv: Record<string, string | undefined> = {
       ...(process.env as Record<string, string | undefined>),
-      ...(env ?? {}),
     };
+    if (env !== undefined) {
+      for (const [key, value] of Object.entries(env)) {
+        if (this.isSensitiveEnvKey(key)) {
+          logger.warn({ key }, 'TerminalService 拒绝覆盖系统关键环境变量');
+          continue;
+        }
+        mergedEnv[key] = value;
+      }
+    }
 
     let pty: IPty;
     try {
@@ -176,7 +198,8 @@ export class TerminalService implements ITerminalService {
       rows,
     };
     if (!webContents.isDestroyed()) {
-      webContents.send(IPC_CHANNELS.TERMINAL_EVENT_CREATED, createdPayload);
+      // R2：统一出口 emitEvent（dev 契约校验）
+      emitEvent(webContents, IPC_DEFINITIONS.terminal.subscribeCreatedEvent, createdPayload);
     }
 
     // 初始化输出缓冲
@@ -195,12 +218,12 @@ export class TerminalService implements ITerminalService {
       } else {
         this.outputBuffers.set(terminalId, combined);
       }
-      // 推送到渲染层
+      // 推送到渲染层（R2：统一出口 emitEvent）
       if (webContents.isDestroyed()) {
         return;
       }
       const payload: TerminalOutputEventPayload = { terminalId, data };
-      webContents.send(IPC_CHANNELS.TERMINAL_EVENT_OUTPUT, payload);
+      emitEvent(webContents, IPC_DEFINITIONS.terminal.subscribeOutputEvent, payload);
     });
 
     // 绑定退出事件：推送 terminal:event:exit + 从 Map 移除
@@ -217,11 +240,24 @@ export class TerminalService implements ITerminalService {
           exitCode,
           ...(signalName !== undefined ? { signal: signalName } : {}),
         };
-        webContents.send(IPC_CHANNELS.TERMINAL_EVENT_EXIT, payload);
+        // R2：统一出口 emitEvent（dev 契约校验）
+        emitEvent(webContents, IPC_DEFINITIONS.terminal.subscribeExitEvent, payload);
       }
       // 从 Map 移除（若 dispose 已清空则 delete 无效，不报错）
       this.terminals.delete(terminalId);
+      // PTY 已退出：移除 destroyed 监听，避免窗口存活期间监听器累积
+      webContents.removeListener('destroyed', onDestroyed);
     });
+
+    // P1 修复：PTY 生命周期绑定 webContents——窗口销毁（macOS 关窗不退出 /
+    // 渲染层崩溃）时自动 kill，此前窗口销毁后 PTY 进程继续存活（仅停止推送）
+    const onDestroyed = (): void => {
+      if (this.terminals.has(terminalId)) {
+        logger.warn({ terminalId }, 'webContents 已销毁，自动 kill PTY');
+        void this.kill(terminalId);
+      }
+    };
+    webContents.once('destroyed', onDestroyed);
 
     this.terminals.set(terminalId, { pty, webContents });
     logger.info({ terminalId, file, cwd, pid: pty.pid }, 'TerminalService PTY 已创建');
@@ -335,20 +371,33 @@ export class TerminalService implements ITerminalService {
   }
 
   /**
+   * 判断环境变量键是否为系统关键变量（禁止渲染层覆盖）
+   *
+   * P0 安全：PATH/PATHEXT/SystemRoot/COMSPEC 等决定命令解析路径，
+   * 允许渲染层覆盖等同于允许劫持终端内执行的任何命令。
+   * - Windows：环境变量键大小写不敏感，统一大写比较
+   * - POSIX：PATH 等大小写敏感，直接比较
+   */
+  private isSensitiveEnvKey(key: string): boolean {
+    const normalized = process.platform === 'win32' ? key.toUpperCase() : key;
+    return SENSITIVE_ENV_KEYS.has(normalized);
+  }
+
+  /**
    * 解析 shell 与 args
    *
-   * command 非空时拆分为 file + args（按空白分割，不处理引号嵌套）。
+   * command 非空时按 shell 语义拆词（R2 修复：此前按空白 split 不支持引号，
+   * "git commit -m 'hello world'" 会被拆成 6 段错误参数）：
+   * - 支持单/双引号包裹（含空格的参数）
+   * - 支持反斜杠转义（单引号内除外，对齐 POSIX shell 语义）
+   * - 不做变量展开/管道/重定向解析（复杂命令由交互式 shell 自行解析）
    * command 为空时返回默认 shell：
    * - Windows: powershell.exe（schema 约定）
    * - macOS/Linux: $SHELL 或 /bin/bash
-   *
-   * 注意：简单 split 不处理引号嵌套（如 "git commit -m 'hello world'"）。
-   * Code Agent 场景下通常传入单个可执行文件路径，复杂命令由 shell 自行解析。
-   * 后续可引入 shell-quote 库做更健壮的解析。
    */
   private resolveShell(command: string | undefined): { file: string; args: string[] } {
     if (command !== undefined && command.length > 0) {
-      const parts = command.split(/\s+/).filter((s) => s.length > 0);
+      const parts = splitShellWords(command);
       if (parts.length === 0) {
         return this.defaultShell();
       }
@@ -395,6 +444,79 @@ export class TerminalService implements ITerminalService {
     const shell = process.env['SHELL'] ?? '/bin/bash';
     return { file: shell, args: [] };
   }
+}
+
+/**
+ * 默认终端工作目录（P3 修复：替代渲染层硬编码 DEFAULT_CWD）
+ *
+ * 渲染层无 Node API 获取用户主目录，主进程按平台环境变量兜底：
+ * - Windows：USERPROFILE（用户主目录）
+ * - POSIX：HOME
+ * 环境变量缺失时回退到平台根目录（spawn 可用路径）。
+ */
+function defaultHomeDir(): string {
+  if (process.platform === 'win32') {
+    return process.env['USERPROFILE'] ?? 'C:\\';
+  }
+  return process.env['HOME'] ?? '/';
+}
+
+/**
+ * 按 shell 语义拆词（R2 修复：此前 resolveShell 按空白 split 不支持引号）
+ *
+ * 规则（对齐 POSIX shell 的子集）：
+ * - 双引号 "..."：包裹含空格的参数；反斜杠转义在双引号内生效
+ * - 单引号 '...'：字面量，反斜杠不转义（与 POSIX 一致）
+ * - 未闭合引号：容错处理——残余内容作为最后一段参数
+ * - 不解析变量展开/管道/重定向（复杂命令交给交互式 shell）
+ *
+ * @example splitShellWords("git commit -m 'hello world'") // ['git','commit','-m','hello world']
+ */
+export function splitShellWords(input: string): string[] {
+  const words: string[] = [];
+  let current = '';
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+
+  for (const ch of input) {
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote !== null) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current.length > 0) {
+        words.push(current);
+        current = '';
+      }
+      continue;
+    }
+    current += ch;
+  }
+  // 容错：未闭合引号时丢弃悬空引号标记，残余内容作为最后参数
+  if (escaped) {
+    current += '\\';
+  }
+  if (current.length > 0) {
+    words.push(current);
+  }
+  return words;
 }
 
 /** TerminalService 单例（内部按具体实现类持有，外部暴露为 ITerminalService 接口） */

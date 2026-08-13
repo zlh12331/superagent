@@ -33,6 +33,8 @@ export class GoalService {
   private readonly transcripts = new Map<string, string>();
   /** 是否已挂载回合监听（幂等） */
   private mounted = false;
+  /** mount 注册的取消订阅函数（unmount 用；未挂载时为 null） */
+  private unsubscribeTurn: (() => void) | null = null;
 
   constructor(
     private readonly agentService: IAgentService,
@@ -47,10 +49,25 @@ export class GoalService {
       return;
     }
     this.mounted = true;
-    this.agentService.onTurnEvent((event) => {
+    // P1 修复：保存取消订阅句柄，unmount 时精确移除（此前挂载后无法解除，
+    // 容器 dispose/reset 均不清理，挂载监听成为泄漏源）
+    this.unsubscribeTurn = this.agentService.onTurnEvent((event) => {
       void this.handleTurnEvent(event);
     });
     logger.info({}, '目标服务已挂载回合监听');
+  }
+
+  /**
+   * 解除回合监听（应用退出 / 测试隔离时由 ServiceContainer 调用；幂等）
+   */
+  unmount(): void {
+    if (!this.mounted) {
+      return;
+    }
+    this.unsubscribeTurn?.();
+    this.unsubscribeTurn = null;
+    this.mounted = false;
+    logger.info({}, '目标服务已解除回合监听');
   }
 
   /**

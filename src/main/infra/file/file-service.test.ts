@@ -370,6 +370,9 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
       wc: {
         isDestroyed: () => destroyed,
         send: (_ch: string, payload: unknown) => events.push(payload),
+        // P1 生命周期绑定：watch/unwatch 会注册与移除 destroyed 监听
+        once: vi.fn(),
+        removeListener: vi.fn(),
       } as unknown as WebContents,
       events,
     };

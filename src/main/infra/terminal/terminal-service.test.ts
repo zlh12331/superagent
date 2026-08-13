@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getTerminalService,
   resetTerminalService,
+  splitShellWords,
   type TerminalCreateOptions,
   TerminalService,
 } from './terminal-service';
@@ -59,6 +60,9 @@ function fakeWebContents(destroyed = false): { wc: WebContents; events: unknown[
     send: vi.fn((_channel: string, payload: unknown) => {
       events.push(payload);
     }),
+    // P1 生命周期绑定：create/onExit 会注册与移除 destroyed 监听
+    once: vi.fn(),
+    removeListener: vi.fn(),
   } as unknown as WebContents;
   return { wc, events };
 }
@@ -102,6 +106,30 @@ function expectedDefaultShell(): { file: string } {
   }
   return { file: process.env['SHELL'] ?? '/bin/bash' };
 }
+
+describe('splitShellWords（R2：shell 语义拆词）', () => {
+  it('单引号包裹含空格参数', () => {
+    expect(splitShellWords("git commit -m 'hello world'")).toEqual([
+      'git',
+      'commit',
+      '-m',
+      'hello world',
+    ]);
+  });
+
+  it('双引号 + 反斜杠转义空格', () => {
+    expect(splitShellWords('echo "a b" c\\ d')).toEqual(['echo', 'a b', 'c d']);
+  });
+
+  it('空字符串 / 纯空白 → 空数组', () => {
+    expect(splitShellWords('')).toEqual([]);
+    expect(splitShellWords('   ')).toEqual([]);
+  });
+
+  it('未闭合引号：容错为最后一段参数', () => {
+    expect(splitShellWords("echo 'unclosed")).toEqual(['echo', 'unclosed']);
+  });
+});
 
 describe('TerminalService.create（终端创建三件套）', () => {
   let svc: TerminalService;
@@ -162,6 +190,45 @@ describe('TerminalService.create（终端创建三件套）', () => {
         process.env['CODE_AGENT_TEST_TERM'] = original;
       }
     }
+  });
+
+  it('边界（P0 安全）：env 覆盖系统关键变量被过滤——PATH 以系统值为准', async () => {
+    const original = process.env['PATH'];
+    process.env['PATH'] = 'C:\\system-path';
+    const userEnv: Record<string, string> = {};
+    userEnv['PATH'] = 'C:\\evil-path';
+    try {
+      await svc.create(makeOptions({ env: userEnv }));
+      const [, , opts] = spawnFn.mock.calls[0] ?? [];
+      // 渲染层注入的 PATH 被拒绝，系统 PATH 保持不变
+      expect(opts.env?.['PATH']).toBe('C:\\system-path');
+    } finally {
+      if (original === undefined) {
+        delete process.env['PATH'];
+      } else {
+        process.env['PATH'] = original;
+      }
+    }
+  });
+
+  it('边界（P0 安全）：env 覆盖大小写变体（Windows 不敏感）同样被过滤', async () => {
+    // Windows 上 PATH 与 path 等价；POSIX 上小写 path 是普通变量应放行
+    const userEnv: Record<string, string> = {};
+    userEnv['path'] = 'C:\\evil-path';
+    await svc.create(makeOptions({ env: userEnv }));
+    const [, , opts] = spawnFn.mock.calls[0] ?? [];
+    if (process.platform === 'win32') {
+      expect(opts.env?.['path']).toBeUndefined();
+    } else {
+      expect(opts.env?.['path']).toBe('C:\\evil-path');
+    }
+  });
+
+  it('R2：command 含引号参数 → 拆词正确（不再按空白盲拆）', async () => {
+    await svc.create(makeOptions({ command: "git commit -m 'hello world'" }));
+    const [file, args] = spawnFn.mock.calls[0] ?? [];
+    expect(file).toBe('git');
+    expect(args).toEqual(['commit', '-m', 'hello world']);
   });
 
   it('边界：command 含多空格 → split 正确', async () => {

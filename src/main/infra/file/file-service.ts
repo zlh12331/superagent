@@ -32,11 +32,12 @@ import type {
   FileWatchEventPayload,
   FileWriteRes,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import chardet from 'chardet';
 import { type FSWatcher, watch } from 'chokidar';
 import type { WebContents } from 'electron';
 import iconv from 'iconv-lite';
+import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
 /** UTF-8 同族编码（chardet 检测结果 → 无需转码直接解码） */
@@ -121,7 +122,7 @@ export interface FileCreateDirOptions {
 export interface FileDeleteOptions {
   /** 目标绝对路径（文件或目录） */
   readonly path: string;
-  /** 是否递归删除目录（默认 true） */
+  /** 是否递归删除目录（必填：true 递归删除；false 仅空目录/文件） */
   readonly recursive: boolean;
 }
 
@@ -189,7 +190,12 @@ class FileService implements IFileService {
    */
   private readonly watchers = new Map<
     string,
-    { readonly watcher: FSWatcher; readonly webContents: WebContents }
+    {
+      readonly watcher: FSWatcher;
+      readonly webContents: WebContents;
+      /** webContents destroyed 监听清理函数（unwatch 时移除，避免监听累积） */
+      readonly removeDestroyedListener: () => void;
+    }
   >();
 
   /**
@@ -421,7 +427,19 @@ class FileService implements IFileService {
       logger.info({ watcherId, path }, 'FileService watcher 已就绪');
     });
 
-    this.watchers.set(watcherId, { watcher, webContents });
+    // P1 修复：watcher 生命周期绑定 webContents——窗口销毁（macOS 关窗不退出 /
+    // 渲染层崩溃）时自动回收 watcher，此前只能靠渲染层恰好调用 watchStop，
+    // 否则 chokidar 句柄泄漏并持续推送到已销毁的 webContents
+    const onDestroyed = (): void => {
+      logger.warn({ watcherId }, 'webContents 已销毁，自动回收 watcher');
+      this.unwatch(watcherId);
+    };
+    const removeDestroyedListener = (): void => {
+      webContents.removeListener('destroyed', onDestroyed);
+    };
+    webContents.once('destroyed', onDestroyed);
+
+    this.watchers.set(watcherId, { watcher, webContents, removeDestroyedListener });
     logger.info({ watcherId, path }, 'FileService watcher 已注册');
 
     // 等待 chokidar 就绪再返回（真实竞态修复：ignoreInitial: true 下，
@@ -451,6 +469,8 @@ class FileService implements IFileService {
     if (ctx === undefined) {
       return false;
     }
+    // 移除 destroyed 监听（避免窗口存活时反复 watch/unwatch 累积监听器）
+    ctx.removeDestroyedListener();
     // void 表示不等待 close 完成（close 是异步的，但调用即视为已停止）
     void ctx.watcher.close();
     this.watchers.delete(watcherId);
@@ -537,9 +557,9 @@ class FileService implements IFileService {
     this.assertAbsolutePath(path);
 
     try {
-      // 默认递归删除（rm -rf 语义，与 zod schema 默认值一致）：
-      // 直接调用方（内部 service）可能不传 recursive，service 层防御性默认
-      await fs.rm(path, { recursive: recursive ?? true, force: false });
+      // P0 修复：recursive 必填（schema 与 options 类型均已收紧），
+      // 移除静默 rm -rf 默认——递归删除必须由调用方显式声明
+      await fs.rm(path, { recursive, force: false });
       return { deleted: true };
     } catch (error) {
       throw this.classifyWriteError(error);
@@ -624,8 +644,9 @@ class FileService implements IFileService {
     }
 
     // payload 携带 watcherId，渲染层用此 id 过滤事件来源
+    // R2：统一出口 emitEvent（dev 契约校验 + isDestroyed 防御）
     const payload: FileWatchEventPayload = { watcherId, type, path: changedPath };
-    webContents.send(IPC_CHANNELS.FILE_WATCH_EVENT, payload);
+    emitEvent(webContents, IPC_DEFINITIONS.file.subscribeWatchEvent, payload);
   }
 
   /**

@@ -21,6 +21,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS } from './migrations';
 import { schema } from './schema';
 import { SCHEMA_SQL } from './schema-sql';
 
@@ -145,41 +146,34 @@ export function initDb(): DrizzleDB {
   const db = drizzle(sqlite, { schema });
 
   // 建表（幂等，已存在则跳过）
-  // 使用原始 SQL 而非 drizzle migrate，避免引入迁移文件管理复杂度
-  // SCHEMA_SQL 为单一真源（schema-sql.ts），生产与测试共用，杜绝双源真相
+  // SCHEMA_SQL 为新库 DDL 真源（schema-sql.ts），生产与测试共用
+  // 老库迁移前记录 sessions 表是否已存在：用于区分「全新库」与「老库」路径
+  const hadSessionsTable =
+    sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sessions'").get() !==
+    undefined;
   sqlite.exec(SCHEMA_SQL);
 
-  // 迁移：已存在的数据库加 working_dir 列（幂等）
-  // 新库建表时已包含此列，ALTER 仅对老库生效
-  // "duplicate column name" 错误表示列已存在，忽略即可
-  try {
-    sqlite.exec(`ALTER TABLE sessions ADD COLUMN working_dir TEXT NOT NULL DEFAULT '';`);
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('duplicate column name')) {
-      logger.info({}, 'sessions.working_dir 列已存在，跳过 ALTER');
+  // P4 修复：版本化迁移（PRAGMA user_version 版本链）替代启动期
+  // 「ALTER + duplicate column name 字符串匹配」——后者无版本链、
+  // 无回滚路径、错误判定依赖 SQLite 错误文案。
+  // - 全新库：SCHEMA_SQL 已含最新列，直接落位当前版本
+  // - 老库：按版本逐个执行 pending 迁移（列存在性检查保证幂等）
+  const currentVersion = Number(sqlite.pragma('user_version', { simple: true }));
+  if (currentVersion < CURRENT_SCHEMA_VERSION) {
+    if (!hadSessionsTable) {
+      sqlite.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+      logger.info({ toVersion: CURRENT_SCHEMA_VERSION }, '全新数据库，schema 落位当前版本');
     } else {
-      throw err;
-    }
-  }
-
-  // 迁移：已存在的数据库加 last_run_status 列（崩溃恢复状态，幂等）
-  //（此迁移已包含在上一段注释的 try 块之后，追加 pinned 迁移）
-  try {
-    sqlite.exec(`ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`);
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('duplicate column name')) {
-      logger.info({}, 'sessions.pinned 列已存在，跳过 ALTER');
-    } else {
-      throw err;
-    }
-  }
-  try {
-    sqlite.exec(`ALTER TABLE sessions ADD COLUMN last_run_status TEXT NOT NULL DEFAULT 'idle';`);
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('duplicate column name')) {
-      logger.info({}, 'sessions.last_run_status 列已存在，跳过 ALTER');
-    } else {
-      throw err;
+      for (const migration of MIGRATIONS) {
+        if (migration.version <= currentVersion) {
+          continue;
+        }
+        sqlite.transaction(() => {
+          migration.up(sqlite);
+          sqlite.pragma(`user_version = ${migration.version}`);
+        })();
+        logger.info({ version: migration.version, name: migration.name }, '数据库迁移已应用');
+      }
     }
   }
 

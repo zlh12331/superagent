@@ -53,7 +53,9 @@ export function createTerminalHandlers(
     // 返回 terminalId，渲染层用此 id 关联后续事件并在 input/resize/kill 时传回
     create: async (input, ctx) => {
       return terminalService.create({
-        cwd: input.cwd,
+        // P3 修复：cwd 可选——渲染层传激活会话 workingDir；未传时
+        // TerminalService 回退到用户主目录（不再硬编码项目路径）
+        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         command: input.command,
         env: input.env,
         cols: input.cols,

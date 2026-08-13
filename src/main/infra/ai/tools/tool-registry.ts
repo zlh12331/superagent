@@ -65,6 +65,13 @@ export interface IToolRegistry {
   get(name: string): Tool | undefined;
 
   /**
+   * 全部已注册工具名集合（快照）
+   *
+   * 供 MCP server 启动前的重名校验使用（server name 不能与工具名冲突）。
+   */
+  getAllNames(): ReadonlySet<string>;
+
+  /**
    * 列出所有工具的元数据
    *
    * 用于 IPC tool:list channel，渲染层据此展示工具面板。
@@ -132,6 +139,11 @@ export class ToolRegistry implements IToolRegistry {
   /** @inheritDoc */
   get(name: string): Tool | undefined {
     return this.tools.get(name);
+  }
+
+  /** @inheritDoc */
+  getAllNames(): ReadonlySet<string> {
+    return new Set(this.tools.keys());
   }
 
   /** @inheritDoc */

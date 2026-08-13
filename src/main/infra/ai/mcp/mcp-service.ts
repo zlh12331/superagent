@@ -15,7 +15,12 @@
 // - 状态追踪：维护 serverName → { client, status, toolNames } 的 Map
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  MCP_COMMAND_PATTERN,
+  MCP_SERVER_NAME_PATTERN,
+} from '@code-agent/shared/main';
 
 import { logger } from '../../../utils/logger';
 import type { IToolRegistry } from '../tools/tool-registry';
@@ -247,8 +252,20 @@ export function validateMcpServerConfig(
   if (!config.name || config.name.length === 0) {
     throw new AppError(ErrorCode.INVALID_INPUT, 'MCP server name 不能为空');
   }
+  // 名称字符集约束：name 参与工具命名空间（mcp__name__tool），非法字符破坏命名空间解析
+  if (!MCP_SERVER_NAME_PATTERN.test(config.name)) {
+    throw new AppError(ErrorCode.INVALID_INPUT, 'MCP server 名称仅允许字母/数字/下划线/连字符');
+  }
   if (!config.command || config.command.length === 0) {
     throw new AppError(ErrorCode.INVALID_INPUT, `MCP server "${config.name}" 的 command 不能为空`);
+  }
+  // P0 安全：command 必须是裸可执行文件名（无路径分隔符/空白/引号），
+  // 阻断绝对路径/路径穿越/多段命令注入（与 shared MCP_COMMAND_PATTERN 同源，纵深防御）
+  if (!MCP_COMMAND_PATTERN.test(config.command)) {
+    throw new AppError(
+      ErrorCode.INVALID_INPUT,
+      `MCP server "${config.name}" 的 command 必须是裸可执行文件名（不含路径分隔符/空白/引号）`,
+    );
   }
   // 重名保护：server name 不能与现有工具重名（避免 mcp__name__xxx 与现有工具冲突）
   if (existingToolNames?.has(config.name)) {

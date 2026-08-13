@@ -25,8 +25,9 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
+import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { withSpan } from '../../telemetry/otel';
 import { HookEventName, hookRegistry } from '../agent/hook-registry';
@@ -348,7 +349,8 @@ export class ToolExecutor implements IToolExecutor {
    */
   private sendToolCall(webContents: WebContents | undefined, payload: AgentToolCallPayload): void {
     if (webContents !== undefined && !webContents.isDestroyed()) {
-      webContents.send(IPC_CHANNELS.AGENT_TOOL_CALL, payload);
+      // R2：统一出口 emitEvent（dev 契约校验）
+      emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeToolCall, payload);
     }
   }
 
@@ -363,7 +365,8 @@ export class ToolExecutor implements IToolExecutor {
     payload: AgentToolResultPayload,
   ): void {
     if (webContents !== undefined && !webContents.isDestroyed()) {
-      webContents.send(IPC_CHANNELS.AGENT_TOOL_RESULT, payload);
+      // R2：统一出口 emitEvent（dev 契约校验）
+      emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeToolResult, payload);
     }
   }
 }

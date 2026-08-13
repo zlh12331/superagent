@@ -48,6 +48,7 @@ import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
 import { TurnEventEmitter } from '../agent-runtime';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
+import { ActiveSessionRegistry } from '../agent-runtime/active-session-registry';
 import { createAgentTurnActor } from '../agent-runtime/agent-turn-machine';
 import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from '../agent-runtime/create-stream';
@@ -189,10 +190,11 @@ export class AgentService implements IAgentService {
     private readonly permissionService?: IPermissionService,
   ) {}
 
-  /** 活跃对话 Map：sessionId → AbortController */
-  private readonly activeSessions = new Map<string, AbortController>();
-  /** 活跃 stream Promise Map：sessionId → streamToWebContents 的 Promise（用于 dispose 等待） */
-  private readonly activeStreams = new Map<string, Promise<void>>();
+  /**
+   * 活跃会话注册表（R2 去重：防重/中断/等待收尾逻辑收敛为共享实现，
+   * 与 ChatService 同一语义，避免双处同步修正）
+   */
+  private readonly registry = new ActiveSessionRegistry();
   /** 类级回合事件监听器（onTurnEvent 注册；回合内转发） */
   private readonly turnListeners = new Set<(event: TurnEvent) => void>();
 
@@ -208,24 +210,11 @@ export class AgentService implements IAgentService {
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
 
-    // 防重检查：若同 sessionId 已有活跃 stream，先 abort 并等待其退出，避免孤儿 stream
-    // 触发场景：用户快速双击发送、stop 后立即 send、跨入口并发 IPC
-    const existingController = this.activeSessions.get(sessionId);
-    if (existingController !== undefined) {
-      logger.warn({ sessionId }, '检测到已有活跃 agent stream，先中断旧 stream');
-      existingController.abort();
-      const existingStream = this.activeStreams.get(sessionId);
-      if (existingStream !== undefined) {
-        // 等待旧 stream 真正退出（最多 5s 兜底，避免卡死调用方）
-        await Promise.race([
-          existingStream,
-          new Promise<void>((resolve) => setTimeout(resolve, 5000)),
-        ]);
-      }
-    }
+    // 防重检查（R2：收敛到共享注册表）：若同 sessionId 已有活跃 stream，
+    // 先 abort 并等待其退出，避免孤儿 stream
+    await this.registry.preemptExisting(sessionId, 'agent');
 
     const controller = new AbortController();
-    this.activeSessions.set(sessionId, controller);
 
     // 回合状态机：标记进行中（崩溃恢复识别；正常结束在 stream finally 归位 idle）
     void this.sessionService.markRunning(sessionId).catch((err: unknown) => {
@@ -241,14 +230,11 @@ export class AgentService implements IAgentService {
         logger.error({ sessionId, error: err }, 'AgentService 流推送异常');
       },
     );
-    this.activeStreams.set(sessionId, streamPromise);
+    this.registry.register(sessionId, controller, streamPromise);
 
-    // CAS 删除 activeStreams：streamPromise resolve 后检查 Map 是否还是自己
-    // 避免旧 stream 的清理逻辑误删新 stream 的 Promise（与 activeSessions 的 CAS 删除同理）
+    // R2：CAS 删除 stream 条目（语义内聚于共享注册表）
     streamPromise.finally(() => {
-      if (this.activeStreams.get(sessionId) === streamPromise) {
-        this.activeStreams.delete(sessionId);
-      }
+      this.registry.removeStreamIfCurrent(sessionId, streamPromise);
       // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
       void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
         logger.error({ sessionId, error: err }, 'markIdle 失败');
@@ -260,63 +246,19 @@ export class AgentService implements IAgentService {
 
   /** @inheritDoc */
   abort(sessionId: string): boolean {
-    const controller = this.activeSessions.get(sessionId);
-    if (controller === undefined) {
-      return false;
-    }
-    // 立即从 Map 删除 controller，避免以下竞态：
-    //   T0: abort(sessionId) → controller.abort()
-    //   T1: startAgent(sessionId) → activeSessions.set(sessionId, newController)  // 覆盖
-    //   T2: 旧 stream 的 finally → activeSessions.delete(sessionId)  // ❌ 误删新 controller
-    // 改为立即删除：旧 stream 的 finally 改为 CAS 检查（见 streamToWebContents finally）
-    this.activeSessions.delete(sessionId);
-    controller.abort();
-    return true;
+    // R2：委托共享注册表（立即删除 controller 再 abort 的竞态语义内聚于此）
+    return this.registry.abort(sessionId);
   }
 
   /** @inheritDoc */
   abortAll(): void {
-    for (const controller of this.activeSessions.values()) {
-      controller.abort();
-    }
+    this.registry.abortAll();
   }
 
   /** @inheritDoc */
   async dispose(timeoutMs = 3000): Promise<void> {
-    // 1. 触发所有 abort 信号
-    this.abortAll();
-
-    // 2. 收集所有活跃 stream Promise
-    const streams = Array.from(this.activeStreams.values());
-    if (streams.length === 0) {
-      return;
-    }
-
-    // 3. 等待所有 stream 完成，或超时
-    //    allSettled 而非 all：即使某个 stream 抛错也等待其他完成
-    //    （streamToWebContents 内部已 catch 所有错误，这里双保险）
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<void>((resolve) => {
-      timeoutId = setTimeout(() => {
-        logger.warn(
-          { streamCount: streams.length, timeoutMs },
-          'AgentService dispose 超时，强制清空',
-        );
-        resolve();
-      }, timeoutMs);
-    });
-
-    try {
-      await Promise.race([Promise.allSettled(streams), timeoutPromise]);
-    } finally {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-
-    // 4. 清空 Map（即使超时也清空，避免内存泄漏）
-    this.activeSessions.clear();
-    this.activeStreams.clear();
+    // R2：委托共享注册表（abort 全部 + 等待 stream 完成 + 超时强制清空）
+    await this.registry.dispose(timeoutMs);
   }
 
   /**
@@ -809,14 +751,11 @@ export class AgentService implements IAgentService {
           unsubscribeApproval?.();
           // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
           modelTimeout?.clear();
-          // CAS（Compare-And-Swap）删除 activeSessions：
-          // 仅当 Map 里存的还是自己时才删，避免以下竞态：
-          //   abort() 已从 Map 删除 → startAgent 写入新 controller → 旧 stream finally 误删新 controller
-          // 通过 controller 引用比较保证只删除自己的条目
-          // activeStreams 的 CAS 删除在 startAgent 的 .finally() 链中处理（streamPromise 是 startAgent 局部变量）
-          if (this.activeSessions.get(sessionId) === controller) {
-            this.activeSessions.delete(sessionId);
-          }
+          // CAS（Compare-And-Swap）删除 controller（R2：语义内聚于共享注册表）：
+          // 仅当注册表里存的还是自己时才删——abort() 已删除 → startAgent 写入新
+          // controller → 旧 stream finally 不误删新 controller。
+          // stream 条目的 CAS 删除在 startAgent 的 .finally() 链中处理。
+          this.registry.removeControllerIfCurrent(sessionId, controller);
 
           // 性能埋点：总耗时（从 streamText 开始到流推送完毕）
           const durationMs = Math.round(performance.now() - startTime);

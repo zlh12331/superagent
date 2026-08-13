@@ -16,7 +16,6 @@
 // - messages.sessionId + seq：get 接口按 sessionId 过滤、seq 升序
 // ──────────────────────────────────────────────────────────────
 
-import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /**
@@ -73,9 +72,10 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   /** 创建时间（Unix timestamp 毫秒） */
   createdAt: integer('created_at').notNull(),
-  // 索引：sessionId + seq 复合索引，加速 get 查询
-  // drizzle-orm/sqlite-core 不直接支持复合索引声明，
-  // 在 db.ts 初始化时通过 CREATE INDEX 创建
+  // 索引说明（P4 修正，此前注释声称 drizzle 不支持复合索引为事实错误）：
+  // 运行时索引统一由 schema-sql.ts 的 SCHEMA_SQL 声明（idx_messages_session_seq
+  // 复合索引 session_id+seq），drizzle schema 不再重复声明，避免双源漂移；
+  // 两表一致性由 db.test.ts 的「schema.ts ↔ schema-sql.ts」对照校验兜底
 });
 
 /** sessions 表类型（插入类型，id 由调用方生成） */
@@ -372,6 +372,3 @@ export const schema = {
   cronTasks,
   skills,
 };
-
-// 防止 ts 报未使用 sql 导入（未来 CREATE INDEX 会用到）
-void sql;

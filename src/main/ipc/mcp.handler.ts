@@ -11,15 +11,19 @@
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import type { IMCPService } from '../infra/ai/mcp';
+import { validateMcpServerConfig } from '../infra/ai/mcp';
+import type { IToolRegistry } from '../infra/ai/tools/tool-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**
  * MCP handler 工厂
  *
  * @param mcpService MCP 服务实例（ServiceContainer.getMcpService()）
+ * @param toolRegistry 工具注册表（启动前重名校验用）
  */
 export function createMcpHandlers(
   mcpService: IMCPService,
+  toolRegistry: IToolRegistry,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['mcp'] {
   return {
     // mcp:list - 列出所有已启动的 MCP server 及状态
@@ -30,6 +34,16 @@ export function createMcpHandlers(
 
     // mcp:start - 启动 MCP server（stdio 子进程 + 工具注册）
     start: async (input) => {
+      // P0 安全：schema 校验之后再做主进程侧配置校验（命令字符集/重名保护）。
+      // 此前 validateMcpServerConfig 只被测试引用，生产路径裸奔；现在双重防线。
+      validateMcpServerConfig(
+        {
+          name: input.name,
+          command: input.command,
+          ...(input.args !== undefined ? { args: input.args } : {}),
+        },
+        toolRegistry.getAllNames(),
+      );
       await mcpService.startServer({
         name: input.name,
         command: input.command,

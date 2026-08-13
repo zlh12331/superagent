@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { closeDb, getDb, initDb, resetDb } from './db';
+import { CURRENT_SCHEMA_VERSION } from './migrations';
 import { readWhitelistSync, writeWhitelist } from './whitelist-pref';
 
 const mocks = vi.hoisted(() => {
@@ -126,13 +127,16 @@ describe('storage 域批次9 缺口补全', () => {
       expect(mocks.mockLogger.info).toHaveBeenCalledWith({}, 'SQLite 完整性校验通过');
     });
 
-    it('旧库迁移：无新列时 ALTER 添加，重复 initDb 触发 duplicate 跳过', () => {
-      // 预建旧库（只有 sessions 基础列，无 working_dir/pinned/last_run_status）
+    it('旧库迁移（P4 版本链）：老库按 user_version 逐版本应用迁移，重复 initDb 幂等', () => {
+      // 预建旧库（只有 sessions 基础列，无 working_dir/pinned/last_run_status；
+      // user_version 缺省为 0 = 老库）
       const dbPath = join(tempDir, 'sessions.db');
       const Database = require('better-sqlite3') as new (
         p: string,
       ) => {
         exec(sql: string): void;
+        prepare(sql: string): { all(): readonly { name: string }[] };
+        pragma(p: string, opts?: { simple?: boolean }): unknown;
         close(): void;
       };
       const old = new Database(dbPath);
@@ -146,17 +150,23 @@ describe('storage 域批次9 缺口补全', () => {
       );
       old.close();
 
-      // 首次 initDb：三个 ALTER 成功（无 duplicate）
+      // 首次 initDb：pending 迁移逐个应用，user_version 落位当前版本
       initDb();
-      // 重复 initDb（单例缓存）不重新迁移——resetDb 后模拟重启，此时列已存在 → duplicate 跳过
+      const migrated = new Database(dbPath);
+      const columns = migrated
+        .prepare('PRAGMA table_info(sessions)')
+        .all()
+        .map((row) => row.name);
+      expect(columns).toEqual(expect.arrayContaining(['working_dir', 'pinned', 'last_run_status']));
+      expect(Number(migrated.pragma('user_version', { simple: true }))).toBe(
+        CURRENT_SCHEMA_VERSION,
+      );
+      migrated.close();
+
+      // 重复 initDb（resetDb 后模拟重启）：版本已最新，迁移不再执行，幂等不抛
       closeDb();
       resetDb();
-      initDb();
-      // duplicate 跳过日志（至少 working_dir 分支触发）
-      expect(mocks.mockLogger.info).toHaveBeenCalledWith(
-        {},
-        'sessions.working_dir 列已存在，跳过 ALTER',
-      );
+      expect(() => initDb()).not.toThrow();
     });
 
     it('备份轮转：保留最近 3 份，删除过期备份', async () => {

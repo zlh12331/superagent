@@ -30,6 +30,7 @@ import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
+import { ActiveSessionRegistry } from '../agent-runtime/active-session-registry';
 import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from '../agent-runtime/create-stream';
 import { readWithIdleTimeout } from '../agent-runtime/stream-reader';
@@ -104,18 +105,11 @@ export interface IChatService {
  * - 所有 IPC 推送都通过 webContents.send，渲染层通过 ipcRenderer.on 订阅
  */
 class ChatService implements IChatService {
-  /** 活跃对话 Map：sessionId → AbortController */
-  private readonly activeSessions = new Map<string, AbortController>();
   /**
-   * 活跃 stream Promise Map：sessionId → streamToWebContents 的 Promise
-   *
-   * P3-10 新增：用于 dispose 时等待所有 stream 真正完成（进入 finally 块）。
-   * 与 activeSessions 配对维护：
-   * - startChat 时同时写入两个 Map
-   * - streamToWebContents 的 finally 同时清空两个 Map
-   * - dispose 时 await 所有 Promise，确保流协程已响应 abort 并完成清理
+   * 活跃会话注册表（R2 去重：此前 activeSessions/activeStreams 双 Map 与
+   * 防重/中断/等待收尾逻辑与 AgentService 重复，现收敛为共享实现）
    */
-  private readonly activeStreams = new Map<string, Promise<void>>();
+  private readonly registry = new ActiveSessionRegistry();
 
   /**
    * 构造注入（可选依赖：标题生成 / usage 落库；未注入则跳过）
@@ -147,25 +141,11 @@ class ChatService implements IChatService {
   async startChat(options: StartChatOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
 
-    // 防重检查：若 sessionId 已有活跃 stream，先中断旧 stream 并等待其退出
-    // 避免覆盖旧 controller 导致旧 stream 无法被 abort（孤儿 stream 内存泄漏）
-    // 对齐 AgentService.startAgent 的实现
-    const existingController = this.activeSessions.get(sessionId);
-    if (existingController !== undefined) {
-      logger.warn({ sessionId }, '检测到已有活跃 chat stream，先中断旧 stream');
-      existingController.abort();
-      const existingStream = this.activeStreams.get(sessionId);
-      if (existingStream !== undefined) {
-        // 等待旧 stream 真正退出（最多 5s 兜底，避免卡死调用方）
-        await Promise.race([
-          existingStream,
-          new Promise<void>((resolve) => setTimeout(resolve, 5000)),
-        ]);
-      }
-    }
+    // 防重检查（R2：收敛到共享注册表）：若 sessionId 已有活跃 stream，
+    // 先中断旧 stream 并等待其退出，避免孤儿 stream 内存泄漏
+    await this.registry.preemptExisting(sessionId, 'chat');
 
     const controller = new AbortController();
-    this.activeSessions.set(sessionId, controller);
 
     // 异步推送流式 part（不 await，让 startChat 立即返回 sessionId）
     // 任何错误都通过 catch 推送 CHAT_STREAM_ERROR，不抛回调用方
@@ -182,7 +162,14 @@ class ChatService implements IChatService {
     ).catch((err: unknown) => {
       logger.error({ sessionId, error: err }, 'ChatService 流推送异常');
     });
-    this.activeStreams.set(sessionId, streamPromise);
+    this.registry.register(sessionId, controller, streamPromise);
+
+    // R2：CAS 删除 stream 条目（此前 chat-service 在 streamToWebContents finally 中
+    // 用普通 delete，旧 stream 的 finally 可能误删同 sessionId 的新 stream 条目；
+    // 改为与 agent-service 一致的 .finally CAS 链）
+    streamPromise.finally(() => {
+      this.registry.removeStreamIfCurrent(sessionId, streamPromise);
+    });
 
     return sessionId;
   }
@@ -199,14 +186,8 @@ class ChatService implements IChatService {
    * @returns 是否成功中断（对话已结束则返回 false）
    */
   abort(sessionId: string): boolean {
-    const controller = this.activeSessions.get(sessionId);
-    if (controller === undefined) {
-      return false;
-    }
-    // 立即从 Map 删除 controller，配合 finally 的 CAS 检查避免误删新 controller
-    this.activeSessions.delete(sessionId);
-    controller.abort();
-    return true;
+    // R2：委托共享注册表（立即删除 controller 再 abort 的竞态语义内聚于此）
+    return this.registry.abort(sessionId);
   }
 
   /**
@@ -218,9 +199,7 @@ class ChatService implements IChatService {
    * 如需等待流真正完成，应使用 dispose()（P3-10）。
    */
   abortAll(): void {
-    for (const controller of this.activeSessions.values()) {
-      controller.abort();
-    }
+    this.registry.abortAll();
   }
 
   /**
@@ -241,45 +220,8 @@ class ChatService implements IChatService {
    * @param timeoutMs 超时毫秒数，默认 3000ms
    */
   async dispose(timeoutMs = 3000): Promise<void> {
-    // 1. 触发所有 abort 信号
-    this.abortAll();
-
-    // 2. 收集所有活跃 stream Promise
-    const streams = Array.from(this.activeStreams.values());
-    if (streams.length === 0) {
-      // 无活跃对话，直接返回
-      return;
-    }
-
-    // 3. 等待所有 stream 完成，或超时
-    //    使用 Promise.race 实现：哪个先完成都行
-    //    allSettled 而非 all：即使某个 stream 抛错也等待其他完成
-    //    （streamToWebContents 内部已 catch 所有错误，这里双保险）
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<void>((resolve) => {
-      timeoutId = setTimeout(() => {
-        logger.warn(
-          { streamCount: streams.length, timeoutMs },
-          'ChatService dispose 超时，强制清空',
-        );
-        resolve();
-      }, timeoutMs);
-    });
-
-    try {
-      await Promise.race([Promise.allSettled(streams), timeoutPromise]);
-    } finally {
-      // 清理 timeout（若 allSettled 先完成，取消超时任务）
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-
-    // 4. 清空 Map（即使超时也清空，避免内存泄漏）
-    //    注意：streamToWebContents 的 finally 也会 delete，但 dispose 可能在超时后调用，
-    //    此时 stream 协程仍在运行，强制清空避免后续 startChat 复用同一 sessionId 时冲突
-    this.activeSessions.clear();
-    this.activeStreams.clear();
+    // R2：委托共享注册表（abort 全部 + 等待 stream 完成 + 超时强制清空）
+    await this.registry.dispose(timeoutMs);
   }
 
   /**
@@ -488,14 +430,9 @@ class ChatService implements IChatService {
       releaseGate?.();
       // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
       modelTimeout?.clear();
-      // 无论正常/异常/abort，都从两个 Map 同步移除
-      // P3-10：activeStreams 也需清空，dispose 通过 Promise.allSettled 等待其 resolve
-      // CAS 检查：abort() 已立即删除 controller，若 startChat 写入了新 controller，
-      // 引用比较不一致则跳过删除，避免误删新 controller（对齐 AgentService 实现）
-      if (this.activeSessions.get(sessionId) === controller) {
-        this.activeSessions.delete(sessionId);
-      }
-      this.activeStreams.delete(sessionId);
+      // 无论正常/异常/abort，都从注册表同步移除（R2：CAS 删除内聚于共享注册表）
+      // stream 条目的 CAS 删除由 startChat 的 streamPromise.finally 链负责
+      this.registry.removeControllerIfCurrent(sessionId, controller);
 
       // 性能埋点：总耗时
       const durationMs = Math.round(performance.now() - startTime);

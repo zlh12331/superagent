@@ -15,8 +15,9 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { UpdateCheckRes, UpdateStatusPayload } from '@code-agent/shared/main';
-import { IPC_CHANNELS } from '@code-agent/shared/main';
+import { IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { BrowserWindow } from 'electron';
+import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
 /**
@@ -122,11 +123,11 @@ export class UpdateService implements IUpdateService {
     // electron-updater 的事件监听随进程退出释放，无显式 off API
   }
 
-  /** 推送更新状态到所有渲染窗口（事件由定义表驱动） */
+  /** 推送更新状态到所有渲染窗口（R2：统一出口 emitEvent——dev 契约校验） */
   private emit(payload: UpdateStatusPayload): void {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
-        win.webContents.send(IPC_CHANNELS.UPDATE_EVENT_STATUS, payload);
+        emitEvent(win.webContents, IPC_DEFINITIONS.update.subscribeStatus, payload);
       }
     }
   }

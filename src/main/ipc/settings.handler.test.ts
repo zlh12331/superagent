@@ -66,17 +66,19 @@ describe('settings.handler API Key（三件套）', () => {
     mocks.runtimeList.mockResolvedValue([]);
   });
 
-  it('getApiKey：provider → keychain key 转换 + 读取', async () => {
+  it('getApiKey：provider → keychain key 转换 + 读取（只返回配置状态，不回传明文）', async () => {
     mocks.getSecret.mockResolvedValueOnce('sk-123' as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(mocks.getSecret).toHaveBeenCalledWith('deepseek-api-key');
-    expect(res).toEqual({ apiKey: 'sk-123' });
+    expect(res).toEqual({ configured: true });
+    // P0 安全：响应中不得包含明文
+    expect(JSON.stringify(res)).not.toContain('sk-123');
   });
 
-  it('getApiKey：未配置 → apiKey 为 null', async () => {
+  it('getApiKey：未配置 → configured 为 false', async () => {
     mocks.getSecret.mockResolvedValueOnce(null as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
-    expect(res).toEqual({ apiKey: null });
+    expect(res).toEqual({ configured: false });
   });
 
   it('setApiKey：加密存储 + ok:true', async () => {

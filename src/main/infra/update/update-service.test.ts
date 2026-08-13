@@ -40,10 +40,10 @@ function fire(updater: ReturnType<typeof createFakeUpdater>, event: string, arg?
   }
 }
 
-/** 创建 fake 窗口（记录 webContents.send） */
+/** 创建 fake 窗口（记录 webContents.send；R2：emitEvent 需要 webContents.isDestroyed） */
 function createFakeWindow() {
   const send = vi.fn();
-  return { isDestroyed: () => false, webContents: { send } };
+  return { isDestroyed: () => false, webContents: { isDestroyed: () => false, send } };
 }
 
 describe('UpdateService', () => {
