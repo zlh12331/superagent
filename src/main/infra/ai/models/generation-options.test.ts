@@ -59,4 +59,26 @@ describe('buildGenerationOptions', () => {
 
     expect(gen.maxOutputTokens).toBe(8_000);
   });
+
+  it('用户温度覆盖：非 reasoning 模型以 temperatureOverride 为准', () => {
+    const customRegistry = new ModelRegistry({
+      entries: BUILTIN_MODELS.map((entry) =>
+        entry.id === 'gpt-4o'
+          ? { ...entry, generationConfig: { temperature: 0.7, topP: 0.9, maxTokens: 8_000 } }
+          : entry,
+      ),
+      defaultModelByKind: DEFAULT_MODEL_BY_KIND,
+      defaultKind: DEFAULT_KIND,
+    });
+    const gen = buildGenerationOptions(customRegistry.resolve('gpt-4o'), 0, undefined, 1.2);
+
+    expect(gen.samplingOptions).toEqual({ temperature: 1.2, topP: 0.9 });
+  });
+
+  it('用户温度覆盖：reasoning 模型忽略采样参数（思考模式官方限制）', () => {
+    const gen = buildGenerationOptions(registry.resolve('deepseek-v4-flash'), 100, undefined, 0.3);
+
+    expect(gen.samplingOptions).toEqual({});
+    expect(gen.providerOptions).toEqual({ deepseek: { reasoningEffort: 'max' } });
+  });
 });

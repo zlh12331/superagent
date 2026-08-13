@@ -39,6 +39,7 @@ describe('agent.handler', () => {
       maxSteps: 20,
       mode: 'plan' as const,
       thinking: undefined,
+      temperature: undefined,
     };
     const result = await handlers.run(input, createCtx());
     expect(agentService.startAgent).toHaveBeenCalledWith({

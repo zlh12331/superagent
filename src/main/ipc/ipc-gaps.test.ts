@@ -157,6 +157,7 @@ describe('IPC 薄层批次8 缺口补全', () => {
           maxSteps: 10,
           mode: 'build',
           thinking: undefined,
+          temperature: undefined,
         },
         createCtx(),
       );
@@ -196,6 +197,7 @@ describe('IPC 薄层批次8 缺口补全', () => {
           maxSteps: 10,
           mode: 'build',
           thinking: 'high',
+          temperature: 0.5,
         },
         createCtx(),
       );

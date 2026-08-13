@@ -66,6 +66,7 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
         maxSteps: input.maxSteps,
         mode: input.mode,
         ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
+        ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
         webContents: ctx.sender,
       });
       return { sessionId };

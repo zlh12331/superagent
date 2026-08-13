@@ -44,23 +44,24 @@ export type ThinkingOverride = ReasoningEffort | 'off';
  * @param resolved 模型解析结果（ModelRegistry.resolve 产物）
  * @param promptTokens 估算的 prompt 大小（含 system；输出预算钳制用）
  * @param thinkingOverride 用户思考强度档位（可选；覆盖模型级默认）
+ * @param temperatureOverride 用户采样温度（可选；覆盖模型级 generationConfig.temperature）
  */
 export function buildGenerationOptions(
   resolved: ResolvedModel,
   promptTokens: number,
   thinkingOverride?: ThinkingOverride,
+  temperatureOverride?: number,
 ): GenerationOptions {
   const generationConfig = resolved.generationConfig;
   const isReasoning = resolved.capabilities.reasoning === true;
 
   // 思考模型：跳过采样参数（DeepSeek 官方：思考模式忽略 temperature/top_p），
-  // 注入 reasoningEffort；非思考模型：应用采样参数
+  // 注入 reasoningEffort；非思考模型：应用采样参数（用户温度 > 模型级默认）
+  const temperature = temperatureOverride ?? generationConfig?.temperature;
   const samplingOptions = isReasoning
     ? {}
     : {
-        ...(generationConfig?.temperature !== undefined
-          ? { temperature: generationConfig.temperature }
-          : {}),
+        ...(temperature !== undefined ? { temperature } : {}),
         ...(generationConfig?.topP !== undefined ? { topP: generationConfig.topP } : {}),
       };
 
