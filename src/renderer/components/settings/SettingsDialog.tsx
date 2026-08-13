@@ -89,7 +89,7 @@ interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
-/** 导航分组（4 组，语义归组） */
+/** 导航分组（5 组 15 项，语义归组） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.accountGeneral',

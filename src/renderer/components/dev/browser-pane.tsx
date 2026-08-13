@@ -266,6 +266,7 @@ export function BrowserPane(): ReactElement {
           <button
             type="button"
             title={t('panel.browserCloseDeviceBar')}
+            aria-label={t('panel.browserCloseDeviceBar')}
             onClick={() => setShowDeviceBar(false)}
             className={cn(TOOLBAR_BTN_CLASS, 'ml-auto shrink-0')}
           >

@@ -228,7 +228,7 @@ export const DevPanel = memo(function DevPanel({
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                  加载中…
+                  {t('common.loading')}
                 </div>
               }
             >
@@ -241,7 +241,7 @@ export const DevPanel = memo(function DevPanel({
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                  加载中…
+                  {t('common.loading')}
                 </div>
               }
             >
@@ -254,7 +254,7 @@ export const DevPanel = memo(function DevPanel({
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                  加载中…
+                  {t('common.loading')}
                 </div>
               }
             >

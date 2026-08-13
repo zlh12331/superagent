@@ -74,6 +74,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const { theme, setTheme } = useTheme();
   // 本地化文案
   const { t } = useTranslation();
+  // 平台修饰键：macOS ⌘ / Windows-Linux Ctrl（快捷键展示与 settings 默认一致）
+  const isMac =
+    typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') === true;
+  const modKey = isMac ? '⌘' : 'Ctrl';
   const clearActiveSession = useActiveSessionStore((state) => state.clearActiveSession);
   const setActiveSession = useActiveSessionStore((state) => state.setActiveSession);
   const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
@@ -108,8 +112,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
         section: t('palette.sectionActions'),
         title: t('palette.newChat'),
         icon: Plus,
-        // 与 settings 默认快捷键一致（Windows 显示 Ctrl 而非 Mac 风格 ⌘）
-        shortcut: 'Ctrl+N',
+        // 与 settings 默认快捷键一致，按平台显示修饰键（此前硬编码 Ctrl+N）
+        shortcut: `${modKey}+N`,
         action: () => {
           clearActiveSession();
           enterWelcomeMode(null);

@@ -121,7 +121,7 @@ export function McpSection(): ReactElement {
       <p className="text-muted-foreground text-xs leading-[1.5]">{t('settings.mcpHint')}</p>
 
       {/* 服务器列表 */}
-      {isLoading && <div className="text-muted-foreground text-xs">Loading…</div>}
+      {isLoading && <div className="text-muted-foreground text-xs">{t('common.loading')}</div>}
       {!isLoading && servers.length === 0 && (
         <div className="text-muted-foreground rounded-md border border-dashed px-3 py-4 text-center text-xs">
           {t('settings.mcpEmpty')}
