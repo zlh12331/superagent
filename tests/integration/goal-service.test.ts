@@ -124,9 +124,11 @@ describe('GoalService', () => {
     await service.create(sid, '目标 B');
     const goals = await service.list(sid);
     expect(goals).toHaveLength(2);
-    expect(goals[0]?.status).toBe('aborted');
-    expect(goals[1]?.status).toBe('active');
-    expect(goals[1]?.condition).toBe('目标 B');
+    // 按创建时间倒序：最新目标在前（前端 goals[0] 即当前目标）
+    expect(goals[0]?.status).toBe('active');
+    expect(goals[0]?.condition).toBe('目标 B');
+    expect(goals[1]?.status).toBe('aborted');
+    expect(goals[1]?.condition).toBe('目标 A');
   });
 
   it('clear：标记 aborted（幂等）', async () => {

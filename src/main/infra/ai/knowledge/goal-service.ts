@@ -15,7 +15,7 @@
 
 import type { GoalInfo, GoalStatus, TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 import { getDb } from '../../storage/db';
 import { goals } from '../../storage/schema';
@@ -78,14 +78,20 @@ export class GoalService {
   }
 
   /**
-   * 查询目标（指定会话或全部）
+   * 查询目标（指定会话或全部；按创建时间倒序——最新目标在前，
+   * 前端 goals[0] 即当前最新目标，避免取到被覆盖的旧 aborted 目标）
    */
   async list(sessionId?: string): Promise<GoalInfo[]> {
     const db = getDb();
     const rows =
       sessionId !== undefined
-        ? db.select().from(goals).where(eq(goals.sessionId, sessionId)).all()
-        : db.select().from(goals).all();
+        ? db
+            .select()
+            .from(goals)
+            .where(eq(goals.sessionId, sessionId))
+            .orderBy(desc(goals.createdAt))
+            .all()
+        : db.select().from(goals).orderBy(desc(goals.createdAt)).all();
     return rows.map(rowToInfo);
   }
 

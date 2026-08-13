@@ -186,7 +186,8 @@
       "goalPause": "暂停目标",
       "goalResume": "恢复目标",
       "goalEdit": "编辑目标",
-      "goalClear": "删除目标"
+      "goalClear": "删除目标",
+      "goalCompleted": "已完成"
     },
     "update": {
       "noticeAvailable": "发现新版本",

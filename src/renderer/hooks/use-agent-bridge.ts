@@ -33,6 +33,8 @@ function handleSessionEnd(sessionId: string, usage?: AgentStreamEndPayload['usag
   void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
   if (sessionId.length > 0) {
     void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
+    // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
+    void queryClient.invalidateQueries({ queryKey: ['goal', 'list', sessionId] });
   }
 
   // 2. L2 清理：工具调用 + 审批缓冲（对齐 turn_done 清空原则）

@@ -61,7 +61,12 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     });
   });
 
-  function renderPanel(goals: Array<{ condition: string }> = []): void {
+  type GoalEntry = {
+    condition: string;
+    status: 'active' | 'completed' | 'aborted';
+  };
+
+  function renderPanel(goals: GoalEntry[] = []): void {
     goalListMock.mockResolvedValue({ data: { goals } });
     render(
       <QueryClientProvider client={queryClient}>
@@ -79,8 +84,35 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     expect(screen.queryByText('GOAL')).toBeNull();
   });
 
+  it('仅 aborted 目标（已清除/被覆盖）：不显示目标栏', async () => {
+    renderPanel([{ condition: '旧目标', status: 'aborted' }]);
+    // query 异步：等待后确认不显示
+    await waitFor(() => {
+      expect(screen.queryByText('GOAL')).toBeNull();
+    });
+  });
+
+  it('completed 目标：显示目标栏 + 已完成徽标，无暂停按钮', async () => {
+    renderPanel([{ condition: '已完成的目标', status: 'completed' }]);
+    expect(await screen.findByText('GOAL')).toBeInTheDocument();
+    expect(screen.getByText('已完成')).toBeInTheDocument();
+    expect(screen.queryByLabelText('暂停目标')).toBeNull();
+    expect(screen.getByLabelText('编辑目标')).toBeInTheDocument();
+    expect(screen.getByLabelText('删除目标')).toBeInTheDocument();
+  });
+
+  it('active + aborted 混合：优先展示 active 目标', async () => {
+    renderPanel([
+      { condition: '旧目标', status: 'aborted' },
+      { condition: '当前目标', status: 'active' },
+    ]);
+    expect(await screen.findByText('GOAL')).toBeInTheDocument();
+    expect(screen.getByText('当前目标')).toBeInTheDocument();
+    expect(screen.queryByText('旧目标')).toBeNull();
+  });
+
   it('有目标：显示 GOAL 标签 + 条件 + 暂停/编辑/删除三按钮', async () => {
-    renderPanel([{ condition: '修复登录页 500 错误' }]);
+    renderPanel([{ condition: '修复登录页 500 错误', status: 'active' }]);
     expect(await screen.findByText('GOAL')).toBeInTheDocument();
     expect(screen.getByText('修复登录页 500 错误')).toBeInTheDocument();
     expect(screen.getByLabelText('暂停目标')).toBeInTheDocument();
@@ -90,7 +122,7 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   it('暂停/恢复切换：按钮互转', async () => {
     const user = userEvent.setup();
-    renderPanel([{ condition: '目标A' }]);
+    renderPanel([{ condition: '目标A', status: 'active' }]);
     await user.click(await screen.findByLabelText('暂停目标'));
     expect(screen.getByLabelText('恢复目标')).toBeInTheDocument();
     expect(screen.queryByLabelText('暂停目标')).toBeNull();
@@ -100,7 +132,7 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   it('编辑按钮：把 /goal 条件填入输入框', async () => {
     const user = userEvent.setup();
-    renderPanel([{ condition: '目标A' }]);
+    renderPanel([{ condition: '目标A', status: 'active' }]);
     await user.click(await screen.findByLabelText('编辑目标'));
     // 预填 "/goal 目标A" 到输入框（用户修改后回车即覆盖创建）
     await waitFor(() => {
@@ -111,10 +143,23 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   it('删除按钮：调 goal:clear', async () => {
     const user = userEvent.setup();
-    renderPanel([{ condition: '目标A' }]);
+    renderPanel([{ condition: '目标A', status: 'active' }]);
     await user.click(await screen.findByLabelText('删除目标'));
     await waitFor(() => {
       expect(goalClearMock).toHaveBeenCalledWith({ sessionId: 'chat-1' });
+    });
+  });
+
+  it('删除后：目标栏消失（clear 后 list 返回 aborted 不再展示）', async () => {
+    const user = userEvent.setup();
+    renderPanel([{ condition: '目标A', status: 'active' }]);
+    // 先更新 mock：clear 后 list 返回 aborted（真实环境后端同步落库，invalidate 拉取新数据）
+    goalListMock.mockResolvedValue({
+      data: { goals: [{ condition: '目标A', status: 'aborted' }] },
+    });
+    await user.click(await screen.findByLabelText('删除目标'));
+    await waitFor(() => {
+      expect(screen.queryByText('GOAL')).toBeNull();
     });
   });
 

@@ -16,7 +16,7 @@
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
-import { AlertTriangle, Folder, Pause, Pencil, Play, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Folder, Pause, Pencil, Play, Search, Trash2, X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -188,7 +188,15 @@ export function ChatPanel({
       return { goals: [] as unknown[] };
     },
   });
-  const goals = (goalsQuery.data?.goals ?? []) as Array<{ condition: string }>;
+  const goals = (goalsQuery.data?.goals ?? []) as Array<{
+    condition: string;
+    status: 'active' | 'completed' | 'aborted';
+  }>;
+  // 当前目标：active 优先，其次 completed（可能刚完成待用户确认）；
+  // aborted（已清除/被覆盖的旧目标）不展示——避免“删除后目标栏仍在”
+  const currentGoal =
+    goals.find((g) => g.status === 'active') ?? goals.find((g) => g.status === 'completed');
+  const isGoalCompleted = currentGoal?.status === 'completed';
   const queryClient = useQueryClient();
   // 暂停状态（用户设计：右按钮区 暂停/恢复 · 编辑 · 删除）
   const [goalPaused, setGoalPaused] = useState(false);
@@ -367,37 +375,46 @@ export function ChatPanel({
         />
       </div>
 
-      {/* 会话目标栏（用户设计：左 GOAL 标签 · 中条件 · 右 暂停/恢复 · 编辑 · 删除——仅 goal 命令设置后显示） */}
-      {goals.length > 0 && (
-        <div className="border-border bg-muted/30 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
-          <span className="bg-accent/10 text-accent rounded px-1.5 py-0.5 font-mono text-[10px] font-bold">
+      {/* 会话目标栏（左 GOAL 标签 · 中条件 · 右 暂停/恢复 · 编辑 · 删除——仅存在 active/completed 目标时显示） */}
+      {currentGoal !== undefined && (
+        <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
+          <span className="bg-accent/20 text-accent rounded px-1.5 py-0.5 font-mono text-[10px] font-bold">
             GOAL
           </span>
+          {isGoalCompleted && (
+            <span className="bg-success/10 text-success flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+              <Check className="size-3" strokeWidth={2.5} />
+              {t('chat.goalCompleted')}
+            </span>
+          )}
           <span
             className={cn(
               'text-foreground/90 min-w-0 flex-1 truncate text-xs',
               goalPaused && 'text-muted-foreground/60 line-through',
             )}
-            title={goals[0]?.condition}
+            title={currentGoal.condition}
           >
-            {goals[0]?.condition}
+            {currentGoal.condition}
           </span>
           <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
-              title={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
-              aria-label={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
-              onClick={() => setGoalPaused((p) => !p)}
-            >
-              {goalPaused ? <Play className="size-3" /> : <Pause className="size-3" />}
-            </button>
+            {/* 暂停/恢复仅对进行中的目标有意义（completed 已无需暂停） */}
+            {!isGoalCompleted && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+                title={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
+                aria-label={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
+                onClick={() => setGoalPaused((p) => !p)}
+              >
+                {goalPaused ? <Play className="size-3" /> : <Pause className="size-3" />}
+              </button>
+            )}
             <button
               type="button"
               className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
               title={t('chat.goalEdit')}
               aria-label={t('chat.goalEdit')}
-              onClick={() => prefillGoalInput(`/goal ${goals[0]?.condition ?? ''}`)}
+              onClick={() => prefillGoalInput(`/goal ${currentGoal.condition}`)}
             >
               <Pencil className="size-3" />
             </button>

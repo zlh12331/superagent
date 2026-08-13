@@ -186,7 +186,8 @@
       "goalPause": "Pause goal",
       "goalResume": "Resume goal",
       "goalEdit": "Edit goal",
-      "goalClear": "Delete goal"
+      "goalClear": "Delete goal",
+      "goalCompleted": "Completed"
     },
     "update": {
       "noticeAvailable": "Update available",
