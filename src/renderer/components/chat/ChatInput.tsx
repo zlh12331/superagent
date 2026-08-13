@@ -203,7 +203,7 @@ export function ChatInput({
       el.focus();
     }
     setPendingCursor(null);
-  }, [pendingCursor, value]);
+  }, [pendingCursor]);
 
   /** 自动调整 textarea 高度（对齐原型 input.style.height = 'auto' + scrollHeight）
    *
