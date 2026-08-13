@@ -137,7 +137,6 @@ export const DevPanel = memo(function DevPanel({
   // 外部切换（命令面板"打开终端"等）时自动加入未打开的视图
   useEffect(() => {
     setOpenTabs((prev) => (prev.includes(activeTab) ? prev : [...prev, activeTab]));
-    // biome-ignore lint/correctness/useExhaustiveDependencies: 函数式 set 不依赖 openTabs，仅 activeTab 变化时同步
   }, [activeTab]);
 
   return (

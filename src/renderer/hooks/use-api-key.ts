@@ -33,26 +33,26 @@ export const API_KEY_QUERY_KEY = (provider: ApiKeyProvider) => ['api-key', provi
 /**
  * API Key 查询 hook
  *
- * 调用 settings:getApiKey IPC 获取指定 provider 的 API Key 明文。
- * 主进程从 keychain 读取并解密后返回，未设置时返回 null。
+ * 调用 settings:getApiKey IPC 查询指定 provider 的配置状态。
+ * P0 安全修复：主进程只返回 { configured } 布尔，明文不回传渲染层。
  *
  * @param provider API 提供商标识（如 'deepseek'）
- * @returns TanStack Query 结果（data 为 string | null）
+ * @returns TanStack Query 结果（data 为 boolean：true = 已配置）
  *
  * @example
  * ```tsx
- * const { data: apiKey, isLoading } = useApiKey('deepseek');
+ * const { data: configured, isLoading } = useApiKeyQuery('deepseek');
  * if (isLoading) return <Loading />;
- * return apiKey ? <Badge>已配置</Badge> : <Button>设置 API Key</Button>;
+ * return configured ? <Badge>已配置</Badge> : <Button>设置 API Key</Button>;
  * ```
  */
 export function useApiKeyQuery(provider: ApiKeyProvider) {
   return useQuery({
     queryKey: API_KEY_QUERY_KEY(provider),
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) return null;
+      if (typeof window === 'undefined' || window.api === undefined) return false;
       const response = await window.api.settings.getApiKey({ provider });
-      return unwrap<{ apiKey: string | null }>(response).apiKey;
+      return unwrap<{ configured: boolean }>(response).configured;
     },
     // API Key 不应自动 refetch（变更频率低，且每次查询都需访问 keychain）
     staleTime: Number.POSITIVE_INFINITY,

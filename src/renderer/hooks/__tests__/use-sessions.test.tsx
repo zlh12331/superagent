@@ -39,13 +39,15 @@ describe('use-sessions hooks', () => {
     } as never;
   });
 
-  it('useSessionsQuery：成功返回会话列表', async () => {
+  it('useSessionsQuery：成功返回会话列表（P3：无限分页 pages 结构）', async () => {
     (window.api.session.list as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok({ sessions: [{ id: 's1', title: '会话1' }], total: 1 }),
     );
     const { result } = renderHook(() => useSessionsQuery(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.data?.total).toBe(1));
-    expect(window.api.session.list).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(result.current.data?.pages[0]?.sessions).toEqual([{ id: 's1', title: '会话1' }]),
+    );
+    expect(window.api.session.list).toHaveBeenCalledWith({ limit: 50, offset: 0 });
   });
 
   it('useSessionDetail：按 id 获取会话详情', async () => {

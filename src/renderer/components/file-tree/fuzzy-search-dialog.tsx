@@ -155,7 +155,8 @@ export function FuzzySearchDialog({
 
   // 会话列表（TanStack Query；会话搜索 + workingDir 派生共用）
   const sessionsQuery = useSessionsQuery();
-  const sessions = sessionsQuery.data?.sessions ?? [];
+  // P3：无限分页——平铺 pages
+  const sessions = sessionsQuery.data?.pages.flatMap((page) => page.sessions) ?? [];
   // 激活会话的 workingDir（文件搜索根目录；无激活会话时仅会话搜索可用）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const workingDir = ((): string | null => {

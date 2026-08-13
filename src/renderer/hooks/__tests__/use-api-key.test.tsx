@@ -34,25 +34,25 @@ describe('use-api-key hooks', () => {
   });
 
   describe('useApiKeyQuery', () => {
-    it('成功：返回 apiKey 明文', async () => {
+    it('已配置：返回 true（不回传明文）', async () => {
       (window.api.settings.getApiKey as ReturnType<typeof vi.fn>).mockResolvedValue(
-        ok({ apiKey: 'sk-123' }),
+        ok({ configured: true }),
       );
       const { result } = renderHook(() => useApiKeyQuery('deepseek'), {
         wrapper: createWrapper(),
       });
-      await waitFor(() => expect(result.current.data).toBe('sk-123'));
+      await waitFor(() => expect(result.current.data).toBe(true));
       expect(window.api.settings.getApiKey).toHaveBeenCalledWith({ provider: 'deepseek' });
     });
 
-    it('未设置：返回 null', async () => {
+    it('未配置：返回 false', async () => {
       (window.api.settings.getApiKey as ReturnType<typeof vi.fn>).mockResolvedValue(
-        ok({ apiKey: null }),
+        ok({ configured: false }),
       );
       const { result } = renderHook(() => useApiKeyQuery('openai'), {
         wrapper: createWrapper(),
       });
-      await waitFor(() => expect(result.current.data).toBeNull());
+      await waitFor(() => expect(result.current.data).toBe(false));
     });
 
     it('错误：IpcResponse.error → isError', async () => {

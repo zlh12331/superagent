@@ -82,6 +82,12 @@ export interface ToolCallItem {
 }
 
 /**
+ * 每会话工具调用保留上限（P3 修复：回合结束不再清空——右面板数据源，
+ * 改为环形淘汰最旧项，兼顾可回看与内存上限）
+ */
+const MAX_CALLS_PER_SESSION = 500;
+
+/**
  * 工具状态形状
  */
 interface ToolState {
@@ -134,7 +140,14 @@ export const useToolStore = create<ToolState>()((set) => ({
         createdAt: Date.now(),
         resolvedAt: null,
       };
-      newMap.set(item.sessionId, [...existing, newItem]);
+      // P3 修复：每会话环形淘汰（保留最近 MAX_CALLS_PER_SESSION 条），
+      // 回合结束不再清空后仍需防止长会话内存无限增长
+      const next = [...existing, newItem];
+      const trimmed =
+        next.length > MAX_CALLS_PER_SESSION
+          ? next.slice(next.length - MAX_CALLS_PER_SESSION)
+          : next;
+      newMap.set(item.sessionId, trimmed);
       return { callsBySession: newMap };
     }),
 

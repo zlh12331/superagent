@@ -44,10 +44,11 @@ import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useTranslation } from '@/i18n/use-translation';
-import { DEFAULT_GIT_REPO_PATH, DRAFT_SESSION_ID } from '@/lib/constants';
+import { DRAFT_SESSION_ID } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
@@ -92,6 +93,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // L2 Zustand：激活会话 id（用于关联 DevPanel 中的终端实例）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const devPanelSessionId = activeSessionId ?? DRAFT_SESSION_ID;
+  // P3 修复：Git 面板仓库路径绑定激活会话 workingDir（file-tree rootPath），
+  // 无激活会话时传空串 → GitPanel 禁用查询（此前硬编码 f:\TraeProjects\1）
+  const workingDir = useFileTreeStore((state) => state.rootPath);
 
   // L2 Zustand：欢迎页模式（控制 .view-chat.welcome-mode class）
   // 欢迎页模式下隐藏右面板 + 右分隔线，主区域改为居中 flex 容器
@@ -336,7 +340,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
               <DevPanel
                 sessionId={devPanelSessionId}
-                gitRepoPath={DEFAULT_GIT_REPO_PATH}
+                gitRepoPath={workingDir ?? ''}
                 className="h-full border-t-0"
               />
             </SectionErrorBoundary>

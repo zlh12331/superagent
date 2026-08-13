@@ -6,19 +6,12 @@
 // 后端没有就是没有（浏览器模式无 window.api 时降级为空列表）。
 // ──────────────────────────────────────────────────────────────
 
-import type {
-  ApiKeyProvider,
-  AvailableModelInfo,
-  ModelsListRes,
-} from '@code-agent/shared/renderer';
-import { useQuery } from '@tanstack/react-query';
+import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
-
-/** 模型清单查询 key */
-const MODELS_QUERY_KEY = ['models', 'list'] as const;
 
 interface ModelSelectorProps {
   readonly provider: ApiKeyProvider;
@@ -40,23 +33,9 @@ export function ModelSelector({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 模型清单：models:list（主进程真实数据；浏览器模式守卫降级空列表）
-  const { data: modelsData } = useQuery({
-    queryKey: MODELS_QUERY_KEY,
-    queryFn: async (): Promise<ModelsListRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        return { models: [] };
-      }
-      const response = await window.api.models.list();
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
-    },
-  });
+  // 模型清单：共享 useModelsQuery（P3 修复：与 ModelsSection 同源同 key，
+  // 新增运行时模型后 composer 下拉即时刷新）
+  const { data: modelsData } = useModelsQuery();
   const allModels = modelsData?.models ?? [];
 
   // 当前模型展示名（来自后端清单；未知 id 回退原始 id）

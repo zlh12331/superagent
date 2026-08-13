@@ -22,7 +22,6 @@ import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessio
 import { queryClient } from '@/lib/query/query-client';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
-import { useToolStore } from '@/stores/transient/tool-store';
 import { useUsageStore } from '@/stores/transient/usage-store';
 
 /**
@@ -35,10 +34,17 @@ function handleSessionEnd(sessionId: string, usage?: AgentStreamEndPayload['usag
     void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
     // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
     void queryClient.invalidateQueries({ queryKey: ['goal', 'list', sessionId] });
+    // P3 修复：task 列表此前遗漏失效——回合内新增/更新的 task 在回合结束后
+    // 30s（staleTime）内右面板 InfoPane 仍显示旧状态，而回合结束恰是
+    // 最需要看任务收敛的时刻。前缀匹配覆盖 ['task', 'list', sessionId] 等子 key。
+    void queryClient.invalidateQueries({ queryKey: ['task'] });
   }
 
-  // 2. L2 清理：工具调用 + 审批缓冲（对齐 turn_done 清空原则）
-  useToolStore.getState().clearBySession(sessionId);
+  // 2. L2 清理：仅审批缓冲（对齐 turn_done 清空原则）
+  //    P3 修复：tool-store 不再随回合结束清空——右面板 DiffPane/InfoPane 的
+  //    「本轮文件变更/引用文件」数据源正是 callsBySession，回合结束瞬间清空
+  //    会让用户恰在回合后想回看变更时无数据。内存上限由 tool-store 的
+  //    MAX_CALLS_PER_SESSION 环形淘汰保证（会话切换时按 sessionId 过滤，无串扰）
   useApprovalsStore.getState().clearBySession(sessionId);
 
   // 3. usage 累积（per-session，completed 时携带）

@@ -95,8 +95,10 @@ export function createPersistentStore<TState extends object>() {
             }
             return data as Partial<TSlice>;
           }),
-        // migrate 透传（未提供时 zustand 默认直接返回旧 state）
-        ...(migrate !== undefined ? { migrate } : {}),
+        // P4 修复：migrate 显式兜底——版本升级（version 递增）时必须由业务 store
+        // 提供 migrate 做字段迁移；未提供时保留 zustand 默认行为（旧 state 原样透传，
+        // 不静默丢数据），但注释强调约定：version 递增 = migrate 必填
+        migrate: migrate ?? ((persisted) => persisted as never),
         ...rest,
       }),
     );

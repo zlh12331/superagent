@@ -15,6 +15,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { IPC_PROTOCOL_VERSION, type IpcApi, type SessionMeta } from '@code-agent/shared/renderer';
+import type { ModelMessage } from 'ai';
 
 /** IPC 方法入参类型推导（mock 实现标注用） */
 type Req<M> = M extends (input: infer P) => unknown ? P : never;
@@ -474,8 +475,11 @@ function createMockApi(): IpcApi {
 
     agent: {
       run: async ({ sessionId, messages }: Req<IpcApi['agent']['run']>) => {
+        // ChatMessageSchema 是 z.custom<ModelMessage>（宽松校验），z.input 为 unknown——
+        // mock 层显式收窄回 ModelMessage（真实运行链路经主进程校验后即为此类型）
+        const msgs = messages as ModelMessage[];
         // convertToModelMessages 后 content 可能是字符串或数组（多 part），兼容两种
-        const lastUserText = [...messages].reverse().find((m) => m.role === 'user');
+        const lastUserText = [...msgs].reverse().find((m) => m.role === 'user');
         const rawContent = lastUserText?.content;
         // TS7 对复杂三目+闭包捕获的收窄不稳定：显式标注 text 类型
         const text: string =
@@ -497,9 +501,11 @@ function createMockApi(): IpcApi {
               : '（模拟消息）';
         // AgentRunReq.sessionId 为可选类型，运行期 transport 总是传入（chatId）
         setTimeout(() => simulateAgentStream(sessionId ?? 'mock-1', text), 300);
-        // 注意：与真实 IPC 一致返回裸对象（transport 直接读 res.sessionId 做事件过滤）——
-        // 不能用 ok() 包装（{ data } 结构会让 transport 读到 undefined 导致事件全丢）
-        return { sessionId };
+        // P0 修复：与真实 IPC 信封一致返回 { data: { sessionId } }。
+        // 此前返回裸 { sessionId } 与 IpcResponse 契约相悖（真实链路经 wrap 包装为 { data }），
+        // transport 按 response.data.sessionId 解包，裸对象导致 currentSessionId 恒为 undefined、
+        // 流式事件按 sessionId 过滤后全部丢失（浏览器模式 agent 流式即坏）
+        return ok({ sessionId: sessionId ?? 'mock-1' });
       },
       stop: async ({ sessionId }: Req<IpcApi['agent']['stop']>) => {
         // 真正中断模拟流（对齐主进程行为：清除定时器 + 推送 interrupted end）
@@ -551,8 +557,9 @@ function createMockApi(): IpcApi {
     settings: {
       getApiKey: async () => {
         // localStorage 持久化（模拟真实 keychain 跨重启保留——E2E 前置配置后 reload 仍生效）
+        // P0 安全对齐：与真实 handler 一致只返回配置状态布尔，不回传明文
         const key = localStorage.getItem('mock-api-key');
-        return ok({ apiKey: key });
+        return ok({ configured: key !== null && key !== '' });
       },
       setApiKey: async (input: Req<IpcApi['settings']['setApiKey']>) => {
         localStorage.setItem('mock-api-key', input.apiKey);

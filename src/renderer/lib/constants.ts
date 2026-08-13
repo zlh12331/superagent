@@ -13,14 +13,6 @@ export const TOPBAR_HEIGHT = 52;
 export const RESIZER_WIDTH = 6;
 
 /**
- * 默认 Git 仓库路径
- *
- * 用于 DevPanel 中 GitPanel 的初始仓库路径。
- * 后续可改为从用户配置读取（如最近打开的仓库列表）。
- */
-export const DEFAULT_GIT_REPO_PATH = 'f:\\TraeProjects\\1';
-
-/**
  * 草稿会话 id
  *
  * 当无激活会话时使用，作为 TerminalPanel/GitPanel 的 sessionId 占位。

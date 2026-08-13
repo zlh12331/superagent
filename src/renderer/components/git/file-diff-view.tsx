@@ -27,7 +27,6 @@ import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/i18n/use-translation';
-import { countSemanticDiffLines } from '@/lib/diff/diff-stats';
 
 interface FileDiffViewProps {
   readonly filePath: string;
@@ -47,16 +46,11 @@ export function FileDiffView({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
 
-  // 语义统计（diff-match-patch 行级 diff）：比 git 文本统计更准（移动的行不计增删）
-  const semanticStats = useMemo(
-    () => (diff !== undefined && diff.length > 0 ? countSemanticDiffLines(diff) : null),
-    [diff],
-  );
-
-  // 展示统计：优先语义统计，回退主进程文本统计
+  // R5 修复：统计口径单一化——直接使用主进程 GitDiffRes 的 git numstat 统计
+  // （此前渲染层用 diff-match-patch 从 diff 文本重算一套"语义行数"，
+  // 与 git 统计并存且数字互相矛盾；现统一为 git 口径，与状态徽标/DiffPane 一致）
   const stats =
-    semanticStats ??
-    (additions !== undefined && deletions !== undefined ? { additions, deletions } : null);
+    additions !== undefined && deletions !== undefined ? { additions, deletions } : null;
 
   // 派生：diff 文件名（截取 basename）
   const basename = useMemo(() => {

@@ -74,13 +74,13 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     term.open(container);
     fitAddon.fit();
 
-    // 从 store buffer 读取历史行作为兜底（接受 ANSI 序列可能错位）
+    // 从 store buffer 读取历史输出作为兜底（P3 修复：原始 ANSI 字符串原样恢复，
+    // 不再切行拼接——此前切行破坏转义序列导致恢复输出损坏）
     // 仅用于组件卸载重挂时恢复可见内容，新输出由 IPC 直接消费
     const { buffers } = useTerminalStore.getState();
     const initialBuffer = buffers.get(terminalId);
     if (initialBuffer !== undefined && initialBuffer.length > 0) {
-      // 把历史行拼接后 write（每行加 \n 还原换行）
-      term.write(initialBuffer.join('\n'));
+      term.write(initialBuffer);
     }
 
     // 订阅 IPC output 事件：按 terminalId 过滤，直接 write 到 xterm

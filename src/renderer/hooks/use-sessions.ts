@@ -20,7 +20,13 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { SessionMeta } from '@code-agent/shared/renderer';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 /**
@@ -32,41 +38,41 @@ import { toast } from 'sonner';
 export const SESSIONS_QUERY_KEY = ['sessions'] as const;
 export const SESSION_DETAIL_QUERY_KEY = (id: string) => ['session', id] as const;
 
-/** 默认分页大小（一次拉取 50 条，足够侧栏展示） */
+/** 默认分页大小（一页 50 条） */
 const DEFAULT_PAGE_SIZE = 50;
 
-/** 会话列表缓存数据类型（useSessionsQuery 返回，乐观更新用） */
-type SessionListData = {
+/** 会话列表缓存数据类型（单页形状；乐观更新与视图适配用） */
+export type SessionListData = {
   readonly sessions: readonly SessionMeta[];
   readonly total: number;
 };
 
 /**
- * 会话列表查询 hook
+ * 会话列表查询 hook（P3 修复：无限分页）
  *
- * 调用 session:list IPC 获取 SQLite 中持久化的会话列表。
- * 默认按 updatedAt 倒序排列，每页 50 条。
+ * 调用 session:list IPC 按页拉取（默认按 updatedAt 倒序，每页 50 条）。
+ * 此前固定拉 50 条：会话超限时侧栏静默截断且无「加载更多」。
+ * 现改为 useInfiniteQuery：消费方用 data.pages 平铺 + fetchNextPage 加载更多。
  *
- * @returns TanStack Query 结果（data / isLoading / error / refetch 等）
+ * @returns InfiniteQuery 结果（data.pages 为分页数组）
  *
  * @example
  * ```tsx
- * const { data: sessions, isLoading } = useSessionsQuery();
- * if (isLoading) return <Loading />;
- * return sessions?.map((s) => <SessionItem key={s.id} session={s} />);
+ * const query = useSessionsQuery();
+ * const sessions = query.data?.pages.flatMap((p) => p.sessions) ?? [];
  * ```
  */
 export function useSessionsQuery() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: SESSIONS_QUERY_KEY,
-    queryFn: async () => {
+    queryFn: async ({ pageParam }) => {
       // E2E 浏览器模式下 window.api 未注入（无 preload），返回空列表
       if (typeof window === 'undefined' || window.api === undefined) {
         return { sessions: [], total: 0 };
       }
       const response = await window.api.session.list({
         limit: DEFAULT_PAGE_SIZE,
-        offset: 0,
+        offset: pageParam,
       });
       if ('error' in response && response.error !== undefined) {
         throw new Error(`[${response.error.code}] ${response.error.message}`);
@@ -76,6 +82,12 @@ export function useSessionsQuery() {
       }
       // 不可达：IpcResponse 是 discriminated union，必然有 error 或 data
       throw new Error('Unexpected response: missing data and error');
+    },
+    initialPageParam: 0,
+    // 下一页 offset = 已加载条数；已加载数达 total 时停止
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.sessions.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
     },
   });
 }
@@ -155,14 +167,18 @@ export function useDeleteSession() {
       }
       return response.data;
     },
-    // 乐观更新：先本地移除，失败回滚（避免全量重拉 50 条的等待）
+    // 乐观更新：先本地移除，失败回滚（避免全量重拉的等待）
+    // P3：缓存形状为 InfiniteData——按 pages 逐页过滤
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
-      const prev = queryClient.getQueryData<SessionListData>(SESSIONS_QUERY_KEY);
+      const prev = queryClient.getQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY);
       if (prev !== undefined) {
-        queryClient.setQueryData<SessionListData>(SESSIONS_QUERY_KEY, {
+        queryClient.setQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY, {
           ...prev,
-          sessions: prev.sessions.filter((s) => s.id !== id),
+          pages: prev.pages.map((page) => ({
+            ...page,
+            sessions: page.sessions.filter((s) => s.id !== id),
+          })),
         });
       }
       return { prev };
@@ -209,16 +225,20 @@ export function useRenameSession() {
       }
       return response.data;
     },
-    // 乐观更新：先本地改标题，失败回滚（避免全量重拉 50 条的等待）
+    // 乐观更新：先本地改标题，失败回滚（避免全量重拉的等待）
+    // P3：缓存形状为 InfiniteData——按 pages 逐页替换
     onMutate: async (params: { id: string; title: string }) => {
       await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
-      const prev = queryClient.getQueryData<SessionListData>(SESSIONS_QUERY_KEY);
+      const prev = queryClient.getQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY);
       if (prev !== undefined) {
-        queryClient.setQueryData<SessionListData>(SESSIONS_QUERY_KEY, {
+        queryClient.setQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY, {
           ...prev,
-          sessions: prev.sessions.map((s) =>
-            s.id === params.id ? { ...s, title: params.title } : s,
-          ),
+          pages: prev.pages.map((page) => ({
+            ...page,
+            sessions: page.sessions.map((s) =>
+              s.id === params.id ? { ...s, title: params.title } : s,
+            ),
+          })),
         });
       }
       return { prev };

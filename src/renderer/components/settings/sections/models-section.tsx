@@ -10,13 +10,15 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Eye, EyeOff, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
+import { MODELS_QUERY_KEY, useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { ApprovalModeSection } from './approval-mode-section';
@@ -43,47 +45,25 @@ const BUILTIN_PROVIDERS: readonly { readonly kind: ApiKeyProvider; readonly labe
  */
 export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
 
-  // 运行时模型（models:list 真实清单，isRuntime 过滤）
-  const [runtimeModels, setRuntimeModels] = useState<readonly { id: string; label: string }[]>([]);
+  // P3 修复：运行时模型改走共享 useModelsQuery（与 ModelSelector 同 key），
+  // 此前 useState 手动拉取 + 仅本组件刷新，新增模型后 composer 下拉不刷新
+  const { data: modelsData } = useModelsQuery();
+  const runtimeModels = (modelsData?.models ?? [])
+    .filter((m) => m.isRuntime)
+    .map((m) => ({ id: m.id, label: m.label }));
+
   // 添加表单
   const [newModelId, setNewModelId] = useState('');
   const [newProvider, setNewProvider] = useState<ApiKeyProvider>('deepseek');
   const [newBaseUrl, setNewBaseUrl] = useState('');
-  const [adding, setAdding] = useState(false);
   // 删除中标记
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const loadRuntimeModels = async (): Promise<void> => {
-    if (typeof window === 'undefined' || window.api === undefined) {
-      setRuntimeModels([]);
-      return;
-    }
-    try {
-      const res = await window.api.models.list();
-      if ('data' in res && res.data !== undefined) {
-        setRuntimeModels(
-          res.data.models.filter((m) => m.isRuntime).map((m) => ({ id: m.id, label: m.label })),
-        );
-      }
-    } catch {
-      setRuntimeModels([]);
-    }
-  };
-
-  // 仅挂载时加载一次（loadRuntimeModels 每次渲染重建，勿入依赖）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 仅挂载时加载一次
-  useEffect(() => {
-    void loadRuntimeModels();
-  }, []);
-
-  const handleAddRuntime = async (): Promise<void> => {
-    if (newModelId.trim() === '') {
-      toast.error(t('settings.runtimeModelIdEmpty'));
-      return;
-    }
-    setAdding(true);
-    try {
+  // 添加 mutation：成功后统一失效共享 models key（composer 同步刷新）
+  const addMutation = useMutation({
+    mutationFn: async () => {
       await window.api.settings.addRuntimeModel({
         modelId: newModelId.trim(),
         providerKind: newProvider,
@@ -91,25 +71,44 @@ export function ModelsSection(): ReactElement {
         apiKey: undefined,
         baseUrl: newBaseUrl.trim() !== '' ? newBaseUrl.trim() : undefined,
       });
+    },
+    onSuccess: () => {
       toast.success(t('settings.runtimeModelAdded'));
       setNewModelId('');
       setNewBaseUrl('');
-      await loadRuntimeModels();
-    } catch {
+      void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
+    },
+    onError: () => {
       toast.error(t('settings.runtimeModelLoadFailed'));
-    } finally {
-      setAdding(false);
+    },
+  });
+
+  // 删除 mutation：成功后统一失效共享 models key
+  const removeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await window.api.settings.removeRuntimeModel({ modelId: id });
+    },
+    onSuccess: () => {
+      toast.success(t('settings.runtimeModelRemoved'));
+      void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
+    },
+    onError: () => {
+      toast.error(t('settings.runtimeModelLoadFailed'));
+    },
+  });
+
+  const handleAddRuntime = async (): Promise<void> => {
+    if (newModelId.trim() === '') {
+      toast.error(t('settings.runtimeModelIdEmpty'));
+      return;
     }
+    await addMutation.mutateAsync();
   };
 
   const handleRemoveRuntime = async (id: string): Promise<void> => {
     setRemovingId(id);
     try {
-      await window.api.settings.removeRuntimeModel({ modelId: id });
-      toast.success(t('settings.runtimeModelRemoved'));
-      await loadRuntimeModels();
-    } catch {
-      toast.error(t('settings.runtimeModelLoadFailed'));
+      await removeMutation.mutateAsync(id);
     } finally {
       setRemovingId(null);
     }
@@ -198,11 +197,11 @@ export function ModelsSection(): ReactElement {
           <Button
             variant="outline"
             size="sm"
-            disabled={adding}
+            disabled={addMutation.isPending}
             onClick={() => void handleAddRuntime()}
             className="h-8 gap-1 px-2 text-xs"
           >
-            {adding ? (
+            {addMutation.isPending ? (
               <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
             ) : (
               <Plus className="size-3" strokeWidth={1.5} />
@@ -234,7 +233,7 @@ function ProviderRow({
   readonly label: string;
 }): ReactElement {
   const { t } = useTranslation();
-  const { data: apiKey, isLoading } = useApiKeyQuery(kind);
+  const { data: configured, isLoading } = useApiKeyQuery(kind);
   const { mutate: setApiKey, isPending: isSaving } = useSetApiKey();
   const { mutate: deleteApiKey, isPending: isDeleting } = useDeleteApiKey();
 
@@ -242,7 +241,8 @@ function ProviderRow({
   const [inputValue, setInputValue] = useState('');
   const [showPlain, setShowPlain] = useState(false);
 
-  const isConfigured = apiKey !== null && apiKey !== undefined && apiKey !== '';
+  // P0 安全修复：主进程只返回配置状态布尔，明文不再进渲染层
+  const isConfigured = configured === true;
 
   const handleSave = (): void => {
     if (inputValue.trim() === '') {

@@ -302,16 +302,16 @@ describe('hooks 批次2 缺口补全', () => {
   });
 
   describe('use-api-key', () => {
-    it('useApiKeyQuery 成功：返回 apiKey', async () => {
+    it('useApiKeyQuery 成功：返回配置状态布尔', async () => {
       injectApi('settings', {
-        getApiKey: vi.fn(async () => ({ data: { apiKey: 'sk-test' } })),
+        getApiKey: vi.fn(async () => ({ data: { configured: true } })),
       });
       const { wrapper } = createWrapper();
       const { result } = renderHook(() => useApiKeyQuery('deepseek'), { wrapper });
-      await waitFor(() => expect(result.current.data).toBe('sk-test'));
+      await waitFor(() => expect(result.current.data).toBe(true));
     });
 
-    it('useApiKeyQuery window.api 未注入：返回 null', async () => {
+    it('useApiKeyQuery window.api 未注入：返回 false', async () => {
       Object.defineProperty(window, 'api', {
         value: undefined,
         writable: true,
@@ -319,7 +319,7 @@ describe('hooks 批次2 缺口补全', () => {
       });
       const { wrapper } = createWrapper();
       const { result } = renderHook(() => useApiKeyQuery('deepseek'), { wrapper });
-      await waitFor(() => expect(result.current.data).toBeNull());
+      await waitFor(() => expect(result.current.data).toBe(false));
     });
 
     it('useSetApiKey 成功：调用 IPC 并返回 ok', async () => {
@@ -380,7 +380,10 @@ describe('hooks 批次2 缺口补全', () => {
       });
       const { wrapper } = createWrapper();
       const { result } = renderHook(() => useSessionsQuery(), { wrapper });
-      await waitFor(() => expect(result.current.data?.total).toBe(1));
+      // P3：无限分页——断言 pages 结构
+      await waitFor(() =>
+        expect(result.current.data?.pages[0]?.sessions).toEqual([{ id: 's1', title: '会话' }]),
+      );
     });
 
     it('useSessionsQuery window.api 未注入：返回空列表', async () => {
@@ -391,7 +394,8 @@ describe('hooks 批次2 缺口补全', () => {
       });
       const { wrapper } = createWrapper();
       const { result } = renderHook(() => useSessionsQuery(), { wrapper });
-      await waitFor(() => expect(result.current.data).toEqual({ sessions: [], total: 0 }));
+      // P3：无限分页——空列表为 pages 结构
+      await waitFor(() => expect(result.current.data?.pages).toEqual([{ sessions: [], total: 0 }]));
     });
 
     it('useSessionsQuery 错误：抛出错误', async () => {

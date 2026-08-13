@@ -1,10 +1,10 @@
 // src/renderer/lib/diff/line-diff.ts
 // 行级 diff 渲染数据（diff-match-patch 行编码，供 FileChangeCard 渲染）
 // ──────────────────────────────────────────────────────────────
-// 与 diff-stats.ts 的关系：
-// - diff-stats：只统计增删行数（语义对齐，移动行不计）
-// - 本文件：产出带类型的行列表（context/add/del），供 UI 逐行渲染
-// 复用同一"行 → 字符编码"技巧（避免 checklines 短文本退化）
+// R5 说明：diff-stats.ts 已删除（git diff 统计口径统一为主进程 numstat）。
+// 本文件是唯一保留的 dmp 用途：agent 工具 write_file 的**原文前后对比**
+// （oldText/newText 原始字符串对，非 unified diff 文本）——这是与
+// react-diff-viewer-continued（unified diff 渲染）不同的输入形态，不构成重复实现。
 // ──────────────────────────────────────────────────────────────
 
 import {

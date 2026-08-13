@@ -25,9 +25,15 @@ import { QueryClient } from '@tanstack/react-query';
  * ```tsx
  * import { queryClient } from '@/lib/query/query-client';
  *
+ * // window.api 是 preload 生成的命名空间 API（如 window.api.file.list），
+ * // 不存在 window.api.invoke（invoke 是 preload 内部实现，渲染层不可见）
  * const files = useQuery({
- *   queryKey: ['files', projectId],
- *   queryFn: () => window.api.invoke('files:get', projectId),
+ *   queryKey: ['files', dirPath],
+ *   queryFn: async () => {
+ *     const response = await window.api.file.list({ path: dirPath });
+ *     if ('error' in response) throw new Error(response.error.message);
+ *     return response.data;
+ *   },
  * });
  * ```
  */

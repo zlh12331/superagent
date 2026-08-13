@@ -160,12 +160,12 @@ describe('terminal 批次5 缺口补全', () => {
       expect(mockTerm.loadAddon).toHaveBeenCalled();
     });
 
-    it('历史 buffer 非空：挂载时写入（按行拼接）', () => {
+    it('历史 buffer 非空：挂载时原样写入（P3：原始 ANSI 字符串）', () => {
       useTerminalStore.setState({
-        buffers: new Map([['term-1', ['line1', 'line2']]]),
+        buffers: new Map([['term-1', 'line1\r\nline2\r\n']]),
       });
       render(<TerminalView session={session} />);
-      expect(mockTerm.write).toHaveBeenCalledWith('line1\nline2');
+      expect(mockTerm.write).toHaveBeenCalledWith('line1\r\nline2\r\n');
     });
 
     it('历史 buffer 空：不写入', () => {

@@ -5,8 +5,9 @@
 // - 记忆：memory:list 真实列表 + memory:clear（主进程 SQLite 持久化）
 // ──────────────────────────────────────────────────────────────
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpenText, BrainCircuit, Loader2, Trash2 } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
@@ -17,59 +18,64 @@ interface MemoryEntry {
   readonly content: string;
 }
 
+/** 记忆查询 key 工厂（按会话隔离） */
+const MEMORY_QUERY_KEY = (sessionId: string) => ['memory', 'list', sessionId] as const;
+
 /** 规则与记忆 pane */
 export function RulesMemorySection(): ReactElement {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   // 记忆按会话隔离：展示当前激活会话的记忆
   const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
-  const [memories, setMemories] = useState<MemoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [clearing, setClearing] = useState(false);
 
-  const loadMemories = async (): Promise<void> => {
-    if (typeof window === 'undefined' || window.api === undefined || activeSessionId === null) {
-      setMemories([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      const res = await window.api.memory.list({ sessionId: activeSessionId });
+  // P3 修复：memory:list 改走 TanStack Query（此前 useState 手动拉取，
+  // 无缓存/去重/竞态取消，与同面板 useQuery 用法不一致）
+  const { data: memoriesData, isLoading: loading } = useQuery({
+    queryKey: MEMORY_QUERY_KEY(activeSessionId ?? 'none'),
+    enabled: activeSessionId !== null,
+    queryFn: async () => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { memories: [] as MemoryEntry[] };
+      }
+      const sid = activeSessionId as string;
+      const res = await window.api.memory.list({ sessionId: sid });
+      if ('error' in res && res.error !== undefined) {
+        throw new Error(`[ERROR] ${res.error.message}`);
+      }
       if ('data' in res && res.data !== undefined) {
-        setMemories(
-          (res.data.memories ?? []).map((m) => ({
+        return {
+          memories: (res.data.memories ?? []).map((m) => ({
             id: String(m.id),
             content: String(m.content ?? ''),
           })),
-        );
+        };
       }
-    } catch {
-      setMemories([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { memories: [] as MemoryEntry[] };
+    },
+  });
+  const memories = memoriesData?.memories ?? [];
 
-  // 会话变化时重载记忆（loadMemories 每次渲染重建，勿入依赖）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 会话变化时重载记忆
-  useEffect(() => {
-    setLoading(true);
-    void loadMemories();
-  }, [activeSessionId]);
+  // 清除 mutation：成功后失效当前会话记忆缓存
+  const clearMutation = useMutation({
+    mutationFn: async () => {
+      if (activeSessionId === null) {
+        return;
+      }
+      await window.api.memory.clear({ sessionId: activeSessionId });
+    },
+    onSuccess: () => {
+      toast.success(t('settings.memoryCleared'));
+      if (activeSessionId !== null) {
+        void queryClient.invalidateQueries({ queryKey: MEMORY_QUERY_KEY(activeSessionId) });
+      }
+    },
+    onError: () => {
+      toast.error(t('settings.memoryClearFailed'));
+    },
+  });
 
   const handleClear = async (): Promise<void> => {
-    if (activeSessionId === null) {
-      return;
-    }
-    setClearing(true);
-    try {
-      await window.api.memory.clear({ sessionId: activeSessionId });
-      toast.success(t('settings.memoryCleared'));
-      await loadMemories();
-    } catch {
-      toast.error(t('settings.memoryClearFailed'));
-    } finally {
-      setClearing(false);
-    }
+    await clearMutation.mutateAsync();
   };
 
   return (
@@ -98,11 +104,11 @@ export function RulesMemorySection(): ReactElement {
             <Button
               variant="ghost"
               size="sm"
-              disabled={clearing}
+              disabled={clearMutation.isPending}
               onClick={() => void handleClear()}
               className="text-muted-foreground hover:text-[var(--error)] ml-auto h-6 gap-1 px-2 text-2xs"
             >
-              {clearing ? (
+              {clearMutation.isPending ? (
                 <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
               ) : (
                 <Trash2 className="size-3" strokeWidth={1.5} />

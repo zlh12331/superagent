@@ -52,7 +52,15 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
 
   // L3 TanStack Query：工作区状态
-  const { data: status, isLoading, error, refetch, isFetching } = useGitStatusQuery(path);
+  // P3 修复：无激活会话（path 为空）时禁用查询——此前硬编码默认仓库路径
+  // 会在无会话时也发起 git:status 请求
+  const {
+    data: status,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useGitStatusQuery(path, path.length > 0);
 
   // L3 TanStack Query：选中文件的 diff（仅当 selectedFilePath 不为 null 时启用）
   const { data: diff, isLoading: isDiffLoading } = useGitDiffQuery(

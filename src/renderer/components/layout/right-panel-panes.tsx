@@ -10,8 +10,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
+import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
@@ -153,6 +153,58 @@ interface ToolCallEntry {
 /** 空调用列表（模块级常量：selector 返回稳定引用，避免无限重渲染） */
 const EMPTY_CALLS: readonly ToolCallEntry[] = [];
 
+/**
+ * 单个变更项的行级 diff 主体（P3 修复）
+ *
+ * 此前 DiffPane 手写 diffCache + loadingDiff 状态机直调 git:diff——
+ * 无竞态取消、无错误状态语义、跨会话残留风险。现改用 useGitDiffQuery：
+ * 仅展开时启用（enabled），缓存/竞态/错误处理统一走 TanStack Query。
+ */
+function ChangeDiffBody({
+  changePath,
+  gitRepoPath,
+  expanded,
+}: {
+  readonly changePath: string;
+  readonly gitRepoPath: string | undefined;
+  readonly expanded: boolean;
+}): ReactElement {
+  const { t } = useTranslation();
+  const {
+    data: diffData,
+    isLoading,
+    isError,
+  } = useGitDiffQuery(
+    {
+      path: gitRepoPath ?? '',
+      ref: 'HEAD',
+      staged: false,
+      filePath: changePath,
+    },
+    expanded && gitRepoPath !== undefined && gitRepoPath.length > 0,
+  );
+
+  if (isLoading) {
+    return (
+      <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5">
+        <span className="text-muted-foreground">{t('panel.diffLoading')}</span>
+      </div>
+    );
+  }
+  if (isError || diffData === undefined) {
+    return (
+      <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5">
+        <span className="text-muted-foreground">{t('panel.diffUnavailable')}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5">
+      <UnifiedDiffView diff={diffData.diff} />
+    </div>
+  );
+}
+
 /** 文件变更 pane：从 tool-store 提取 edit_file/write_file 记录（本轮文件变更） */
 export function DiffPane({
   sessionId,
@@ -164,18 +216,13 @@ export function DiffPane({
 }): ReactElement {
   const { t } = useTranslation();
   const openFile = useFileViewerStore((state) => state.openFile);
-  // 已展开的行级 diff（change.id → unified diff 文本）
+  // 已展开的变更项（change.id 集合；行级 diff 由 ChangeDiffBody 经 useGitDiffQuery 拉取）
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const [diffCache, setDiffCache] = useState<Map<string, string>>(() => new Map());
-  // 加载中标记（change.id → true）
-  const [loadingDiff, setLoadingDiff] = useState<Set<string>>(() => new Set());
 
-  // 会话切换清空行级 diff 缓存（DevPanel 跨会话保持，避免孤儿缓存持续累积）
+  // 会话切换清空展开态（DevPanel 跨会话保持，避免旧会话展开态残留）
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId 是故意的触发键（effect 仅用 setter）
   useEffect(() => {
     setExpanded(new Set());
-    setDiffCache(new Map());
-    setLoadingDiff(new Set());
   }, [sessionId]);
 
   // selector 只取稳定引用（Map.get 返回的数组；无记录时用模块级常量）：
@@ -213,8 +260,10 @@ export function DiffPane({
     );
   }
 
-  // 展开/收起一个变更项（首次展开时拉取行级 diff）
-  const toggleChange = (changeId: string, changePath: string): void => {
+  // 展开/收起一个变更项（P3 修复：仅切换展开态——行级 diff 改由
+  // ChangeDiffBody 的 useGitDiffQuery 拉取，删除手写 diffCache/loadingDiff 状态机，
+  // 获得竞态取消、错误语义与缓存一致性）
+  const toggleChange = (changeId: string, _changePath: string): void => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(changeId)) {
@@ -224,35 +273,6 @@ export function DiffPane({
       next.add(changeId);
       return next;
     });
-    // 已缓存或不在加载中：无需重复拉取
-    if (diffCache.has(changeId) || loadingDiff.has(changeId)) {
-      return;
-    }
-    if (typeof window === 'undefined' || window.api === undefined || gitRepoPath === undefined) {
-      return;
-    }
-    setLoadingDiff((prev) => new Set(prev).add(changeId));
-    window.api.git
-      .diff({ path: gitRepoPath, filePath: changePath, ref: 'HEAD', staged: false })
-      .then((res) => {
-        if ('data' in res && res.data !== undefined) {
-          setDiffCache((prev) => {
-            const next = new Map(prev);
-            next.set(changeId, res.data.diff);
-            return next;
-          });
-        }
-      })
-      .catch(() => {
-        toast.error(t('panel.diffLoadFailed'));
-      })
-      .finally(() => {
-        setLoadingDiff((prev) => {
-          const next = new Set(prev);
-          next.delete(changeId);
-          return next;
-        });
-      });
   };
 
   return (
@@ -296,17 +316,13 @@ export function DiffPane({
               <ExternalLink className="size-3" strokeWidth={1.5} />
             </button>
           </div>
-          {/* 行级 diff（展开态；git:diff 数据源 → UnifiedDiffView 双栏渲染） */}
+          {/* 行级 diff（展开态；useGitDiffQuery → UnifiedDiffView 双栏渲染） */}
           {expanded.has(change.id) && (
-            <div className="border-border bg-background overflow-x-auto rounded border px-2 py-1.5">
-              {loadingDiff.has(change.id) ? (
-                <span className="text-muted-foreground">{t('panel.diffLoading')}</span>
-              ) : diffCache.has(change.id) ? (
-                <UnifiedDiffView diff={diffCache.get(change.id) ?? ''} />
-              ) : (
-                <span className="text-muted-foreground">{t('panel.diffUnavailable')}</span>
-              )}
-            </div>
+            <ChangeDiffBody
+              changePath={change.path}
+              gitRepoPath={gitRepoPath}
+              expanded={expanded.has(change.id)}
+            />
           )}
         </li>
       ))}

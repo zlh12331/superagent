@@ -14,13 +14,14 @@
 // - xterm.js 实例由 TerminalView 持有，不进入 Zustand store
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
 import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
 import { TerminalTabs } from './TerminalTabs';
@@ -36,9 +37,6 @@ interface TerminalPanelProps {
   /** 自定义容器类名 */
   readonly className?: string;
 }
-
-/** 终端默认工作目录（项目根，后续可改为可配置） */
-const DEFAULT_CWD = 'f:\\TraeProjects\\1';
 
 /** 终端默认列数（与 FitAddon 自动适配后的实际值无关，仅用于初始化） */
 const DEFAULT_COLS = 80;
@@ -78,6 +76,9 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   const setActiveTerminal = useTerminalStore((state) => state.setActiveTerminal);
   const createTerminalInStore = useTerminalStore((state) => state.createTerminal);
   const closeTerminalInStore = useTerminalStore((state) => state.closeTerminal);
+  // P3 修复：终端 cwd 绑定激活会话 workingDir（file-tree rootPath），
+  // 无激活会话时传 undefined → 主进程回退用户主目录（此前硬编码 f:\TraeProjects\1）
+  const workingDir = useFileTreeStore((state) => state.rootPath);
 
   // 「正在创建终端」状态（避免点击按钮后用户重复点击）
   const [isCreating, setIsCreating] = useState(false);
@@ -89,7 +90,9 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
 
   // 创建终端：调用 IPC create → 写入 store
   // store.createTerminal 触发 terminals 数组变化 → TerminalView 初始化 xterm
-  const handleCreate = async (): Promise<void> => {
+  // P3 修复：useCallback 稳定引用（auto-create effect 依赖 handleCreate，
+  // 普通函数每渲染重建会触发 effect 反复执行）
+  const handleCreate = useCallback(async (): Promise<void> => {
     if (isCreating) return;
     setIsCreating(true);
     try {
@@ -97,7 +100,8 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       // 但 zod 的 .optional().transform() 让类型变为 `string | undefined`（属性必填）
       // 因此必须显式传入 undefined（表示使用默认 shell）
       const response = await window.api.terminal.create({
-        cwd: DEFAULT_CWD,
+        // 无激活会话时 undefined → 主进程回退用户主目录
+        cwd: workingDir ?? undefined,
         command: undefined,
         env: undefined,
         cols: DEFAULT_COLS,
@@ -113,7 +117,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
           sessionId,
           title: 'bash',
           pid: null,
-          cwd: DEFAULT_CWD,
+          cwd: workingDir ?? '',
           alive: true,
         });
       }
@@ -124,15 +128,16 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [isCreating, workingDir, sessionId, createTerminalInStore, t]);
 
   // 自动创建：进入终端视图时无终端则直接创建（用户要求：点击终端 tab 直接打开终端）
+  // P3 修复：依赖表补 handleCreate（此前 biome-ignore 已失效——规则在 hook 调用位
+  // 报告，忽略注释错位）；sessionId 不在依赖中（terminals 为空是全局触发条件）
   useEffect(() => {
     if (terminals.length === 0 && !isCreating) {
       void handleCreate();
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleCreate（依赖不变时引用稳定）
-  }, [terminals.length, isCreating, sessionId]);
+  }, [terminals.length, isCreating, handleCreate]);
 
   // 关闭终端：调用 IPC kill → 从 store 移除
   const handleClose = async (terminalId: string): Promise<void> => {

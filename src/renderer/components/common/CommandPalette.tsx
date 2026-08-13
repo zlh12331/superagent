@@ -207,7 +207,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     }
 
     // 会话切换命令：从 useSessionsQuery 派生（按 updatedAt 倒序，最多 20 条避免列表过长）
-    const sessions = sessionsData?.sessions ?? [];
+    // P3：无限分页——平铺 pages
+    const sessions = sessionsData?.pages.flatMap((page) => page.sessions) ?? [];
     const sessionCommands: readonly CommandItemData[] = sessions.slice(0, 20).map((session) => ({
       id: `session:${session.id}`,
       section: t('palette.sectionSessions'),

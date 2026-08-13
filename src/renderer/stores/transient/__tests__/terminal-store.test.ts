@@ -107,8 +107,8 @@ describe('terminal-store', () => {
         cwd: '/tmp',
         alive: true,
       });
-      useTerminalStore.getState().appendOutput('term-1', ['line-1', 'line-2']);
-      expect(useTerminalStore.getState().buffers.get('term-1')).toHaveLength(2);
+      useTerminalStore.getState().appendOutput('term-1', 'line-1\nline-2');
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('line-1\nline-2');
 
       useTerminalStore.getState().closeTerminal('term-1');
 
@@ -210,16 +210,16 @@ describe('terminal-store', () => {
         cwd: '/tmp',
         alive: true,
       });
-      useTerminalStore.getState().appendOutput('term-1', ['line-1']);
+      useTerminalStore.getState().appendOutput('term-1', 'line-1');
       useTerminalStore.getState().markExited('term-1');
       // buffer 不应被清理
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual(['line-1']);
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('line-1');
     });
   });
 
-  // ── appendOutput + 环形截断 ─────────────────────────────
+  // ── appendOutput（P3：原始 ANSI 字符串累积）+ 字节环形截断 ──
   describe('appendOutput', () => {
-    it('追加行到空 buffer', () => {
+    it('追加原始片段到空 buffer（ANSI 序列保持完整）', () => {
       useTerminalStore.getState().createTerminal({
         id: 'term-1',
         sessionId: 'session-1',
@@ -229,12 +229,14 @@ describe('terminal-store', () => {
         alive: true,
       });
 
-      useTerminalStore.getState().appendOutput('term-1', ['hello', 'world']);
+      useTerminalStore.getState().appendOutput('term-1', '\x1b[32mhello\x1b[0m world\r\n');
 
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual(['hello', 'world']);
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe(
+        '\x1b[32mhello\x1b[0m world\r\n',
+      );
     });
 
-    it('追加到已有 buffer（保留原内容）', () => {
+    it('追加到已有 buffer（原样拼接，不切行）', () => {
       useTerminalStore.getState().createTerminal({
         id: 'term-1',
         sessionId: 'session-1',
@@ -243,17 +245,13 @@ describe('terminal-store', () => {
         cwd: '/tmp',
         alive: true,
       });
-      useTerminalStore.getState().appendOutput('term-1', ['line-1']);
-      useTerminalStore.getState().appendOutput('term-1', ['line-2', 'line-3']);
+      useTerminalStore.getState().appendOutput('term-1', 'line-1\n');
+      useTerminalStore.getState().appendOutput('term-1', 'line-2\nline-3');
 
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual([
-        'line-1',
-        'line-2',
-        'line-3',
-      ]);
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('line-1\nline-2\nline-3');
     });
 
-    it('环形截断：超过 MAX_BUFFER_LINES 时保留尾部 5000 行', () => {
+    it('字节环形截断：超过 MAX_BUFFER_BYTES 时保留尾部字节', () => {
       useTerminalStore.getState().createTerminal({
         id: 'term-1',
         sessionId: 'session-1',
@@ -263,24 +261,26 @@ describe('terminal-store', () => {
         alive: true,
       });
 
-      // 先填充 5000 行（达上限）
-      const firstBatch = Array.from({ length: 5000 }, (_, i) => `line-${i}`);
-      useTerminalStore.getState().appendOutput('term-1', firstBatch);
-      expect(useTerminalStore.getState().buffers.get('term-1')).toHaveLength(5000);
+      // 先填充 100KB（达上限）
+      const firstChunk = 'a'.repeat(100 * 1024);
+      useTerminalStore.getState().appendOutput('term-1', firstChunk);
+      expect(
+        new TextEncoder().encode(useTerminalStore.getState().buffers.get('term-1') ?? '')
+          .byteLength,
+      ).toBe(100 * 1024);
 
-      // 再追加 100 行，应截断保留尾部 5000 行
-      const secondBatch = Array.from({ length: 100 }, (_, i) => `new-line-${i}`);
-      useTerminalStore.getState().appendOutput('term-1', secondBatch);
+      // 再追加 1KB，应截断保留尾部 100KB（前 1KB 被淘汰）
+      const secondChunk = 'b'.repeat(1024);
+      useTerminalStore.getState().appendOutput('term-1', secondChunk);
 
-      const buffer = useTerminalStore.getState().buffers.get('term-1');
-      expect(buffer).toHaveLength(5000);
-      // 前 100 行应为被淘汰的旧内容
-      expect(buffer?.[0]).toBe('line-100');
-      // 末尾应为最新追加的内容
-      expect(buffer?.[buffer.length - 1]).toBe('new-line-99');
+      const buffer = useTerminalStore.getState().buffers.get('term-1') ?? '';
+      expect(new TextEncoder().encode(buffer).byteLength).toBe(100 * 1024);
+      // 保留尾部 100KB：前 1KB 'a' 被淘汰，剩余 99KB 'a' + 1KB 'b'
+      expect(buffer.startsWith('a'.repeat(99 * 1024))).toBe(true);
+      expect(buffer.endsWith('b'.repeat(1024))).toBe(true);
     });
 
-    it('追加空数组不报错（no-op）', () => {
+    it('追加空字符串不报错（no-op）', () => {
       useTerminalStore.getState().createTerminal({
         id: 'term-1',
         sessionId: 'session-1',
@@ -289,15 +289,16 @@ describe('terminal-store', () => {
         cwd: '/tmp',
         alive: true,
       });
-      useTerminalStore.getState().appendOutput('term-1', []);
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual([]);
+      useTerminalStore.getState().appendOutput('term-1', '');
+      // no-op：空片段不产生 buffer 条目（返回原 state）
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBeUndefined();
     });
 
     it('对未创建的 terminalId 也能追加（自动创建 buffer 条目）', () => {
       // 即使终端未注册，appendOutput 也应创建 buffer 条目
       // （虽然正常流程不会这样调用，但 store 应有容错）
-      useTerminalStore.getState().appendOutput('unknown-id', ['orphan-line']);
-      expect(useTerminalStore.getState().buffers.get('unknown-id')).toEqual(['orphan-line']);
+      useTerminalStore.getState().appendOutput('unknown-id', 'orphan-line');
+      expect(useTerminalStore.getState().buffers.get('unknown-id')).toBe('orphan-line');
     });
   });
 
@@ -312,7 +313,7 @@ describe('terminal-store', () => {
         cwd: '/tmp',
         alive: true,
       });
-      useTerminalStore.getState().appendOutput('term-1', ['line-1', 'line-2']);
+      useTerminalStore.getState().appendOutput('term-1', 'line-1\nline-2');
 
       useTerminalStore.getState().clearBuffer('term-1');
 

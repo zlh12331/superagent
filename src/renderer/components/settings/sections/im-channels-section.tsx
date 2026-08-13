@@ -5,8 +5,9 @@
 // ──────────────────────────────────────────────
 
 import type { ChannelListRes } from '@code-agent/shared/renderer';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -16,46 +17,71 @@ import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
+/** IM 渠道列表查询 key */
+const IM_CHANNELS_QUERY_KEY = ['im', 'channels'] as const;
+
 export function ImChannelsSection(): ReactElement {
   const { t } = useTranslation();
-  const [channels, setChannels] = useState<ChannelListRes['channels'] | null>(null);
+  const queryClient = useQueryClient();
   const [tokenInputs, setTokenInputs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
-  const loadChannels = useCallback(() => {
-    // 浏览器模式（dev 预览）无 window.api：静默空列表
-    if (typeof window === 'undefined' || window.api === undefined) {
-      setChannels([]);
-      return;
-    }
-    window.api.im
-      .list()
-      .then((res) => {
-        setChannels(unwrap<ChannelListRes>(res).channels);
-      })
-      .catch(() => {
+  // P3 修复：im:list 改走 TanStack Query（此前 useState 手动拉取）
+  const { data: channelsData, isLoading: channelsLoading } = useQuery({
+    queryKey: IM_CHANNELS_QUERY_KEY,
+    queryFn: async () => {
+      // 浏览器模式（dev 预览）无 window.api：静默空列表
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { channels: [] as ChannelListRes['channels'] };
+      }
+      const res = await window.api.im.list();
+      if ('error' in res && res.error !== undefined) {
         // 列表加载失败：静默（渠道功能不可用时降级）
-      });
-  }, []);
+        return { channels: [] as ChannelListRes['channels'] };
+      }
+      return unwrap<ChannelListRes>(res);
+    },
+  });
+  const channels = channelsData?.channels ?? [];
 
-  useEffect(() => {
-    loadChannels();
-  }, [loadChannels]);
+  // 启动 mutation：成功后失效渠道列表
+  const startMutation = useMutation({
+    mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
+      const token = tokenInputs[kind];
+      await window.api.im.start({
+        kind,
+        // zod transform 输出为 string | undefined：显式传 undefined
+        token: token !== undefined && token.trim().length > 0 ? token.trim() : undefined,
+      });
+    },
+    onSuccess: (_data, kind) => {
+      toast.success(t('settings.imChannelStarted'));
+      setTokenInputs((prev) => ({ ...prev, [kind]: '' }));
+      void queryClient.invalidateQueries({ queryKey: IM_CHANNELS_QUERY_KEY });
+    },
+    onError: () => {
+      toast.error(t('settings.imChannelStartFailed'));
+    },
+  });
+
+  // 停止 mutation：成功后失效渠道列表
+  const stopMutation = useMutation({
+    mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
+      await window.api.im.stop({ kind });
+    },
+    onSuccess: () => {
+      toast.success(t('settings.imChannelStopSuccess'));
+      void queryClient.invalidateQueries({ queryKey: IM_CHANNELS_QUERY_KEY });
+    },
+    onError: () => {
+      toast.error(t('settings.imChannelStopFailed'));
+    },
+  });
 
   const handleStart = async (kind: string): Promise<void> => {
     setBusy(kind);
     try {
-      const token = tokenInputs[kind];
-      await window.api.im.start({
-        kind: kind as ChannelListRes['channels'][number]['kind'],
-        // zod transform 输出为 string | undefined：显式传 undefined
-        token: token !== undefined && token.trim().length > 0 ? token.trim() : undefined,
-      });
-      toast.success(t('settings.imChannelStarted'));
-      setTokenInputs((prev) => ({ ...prev, [kind]: '' }));
-      loadChannels();
-    } catch {
-      toast.error(t('settings.imChannelStartFailed'));
+      await startMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
     } finally {
       setBusy(null);
     }
@@ -64,17 +90,13 @@ export function ImChannelsSection(): ReactElement {
   const handleStop = async (kind: string): Promise<void> => {
     setBusy(kind);
     try {
-      await window.api.im.stop({ kind: kind as ChannelListRes['channels'][number]['kind'] });
-      toast.success(t('settings.imChannelStopSuccess'));
-      loadChannels();
-    } catch {
-      toast.error(t('settings.imChannelStopFailed'));
+      await stopMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
     } finally {
       setBusy(null);
     }
   };
 
-  if (channels === null) {
+  if (channelsLoading && channelsData === undefined) {
     return <div className="flex flex-col gap-2 pt-2" />;
   }
 

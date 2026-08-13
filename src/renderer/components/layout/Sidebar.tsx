@@ -38,16 +38,21 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
 import { SidebarAccount } from '@/components/layout/sidebar-account';
 import { useAsyncView } from '@/hooks/use-async-view';
-import { useDeleteSession, usePinSession, useSessionsQuery } from '@/hooks/use-sessions';
+import {
+  type SessionListData,
+  useDeleteSession,
+  usePinSession,
+  useSessionsQuery,
+} from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -67,10 +72,23 @@ export function Sidebar(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
 
-  // L3 TanStack Query：会话列表数据
+  // L3 TanStack Query：会话列表数据（P3：无限分页）
   const query = useSessionsQuery();
+  // 平铺分页数据为会话列表（useInfiniteQuery 的 data.pages 结构）
+  const sessions = useMemo(
+    () => query.data?.pages.flatMap((page) => page.sessions) ?? [],
+    [query.data],
+  );
+  const hasMore = query.hasNextPage === true && query.isFetchingNextPage === false;
   // 视图状态机映射（五态：loading / refreshing / error / empty / ready）
-  const view = useAsyncView(query, { isEmpty: (d) => d.sessions.length === 0 });
+  // 适配：useAsyncView 消费 UseQueryResult 形状，此处把分页数据投影为单页形状
+  const view = useAsyncView(
+    {
+      ...query,
+      data: query.data === undefined ? undefined : { sessions, total: sessions.length },
+    } as unknown as UseQueryResult<SessionListData, Error>,
+    { isEmpty: (d) => d.sessions.length === 0 },
+  );
   // L3 TanStack Mutation：删除会话
   const { mutate: deleteSession, isPending: isDeleting } = useDeleteSession();
   // L3 TanStack Mutation：置顶/取消置顶（对齐参考项目 pinned-header 分组）
@@ -85,9 +103,6 @@ export function Sidebar(): ReactElement {
   const clearActiveSession = useActiveSessionStore((state) => state.clearActiveSession);
   // L2 Zustand：欢迎页模式
   const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
-
-  // 派生：会话列表
-  const sessions = query.data?.sessions ?? [];
 
   // 搜索过滤（对齐参考项目 filteredThreads：即时过滤，保持输入响应性）
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -473,6 +488,15 @@ export function Sidebar(): ReactElement {
                             />
                           ),
                         )
+                      )}
+                      {hasMore && !isSearching && (
+                        <button
+                          type="button"
+                          onClick={() => void query.fetchNextPage()}
+                          className="text-muted-foreground hover:text-foreground hover:border-border mt-1 w-full cursor-pointer rounded border border-dashed px-2 py-1.5 text-xs transition-colors"
+                        >
+                          {t('sidebar.loadMore')}
+                        </button>
                       )}
                     </div>
                   </SortableContext>

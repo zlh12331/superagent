@@ -54,15 +54,9 @@ export function useTerminalBridge(): void {
     // 此处仅写入 buffer 作为兜底（用于组件卸载重挂时恢复可见内容）
     const unsubscribeOutput = window.api.terminal.subscribeOutputEvent((payload) => {
       const typedPayload = payload as TerminalOutputEventPayload;
-      // data 通常是「一行 + \n」或「部分行（无 \n）」
-      // 简化策略：按 \n 切分，保留所有完整行 + 末尾未完成行
-      // xterm.js 渲染不依赖此切分，此处仅用于 buffer 兜底
-      const lines = typedPayload.data.split('\n');
-      // 若末尾为空字符串（即 data 以 \n 结尾），移除空字符串避免多一个空行
-      if (lines.length > 0 && lines[lines.length - 1] === '') {
-        lines.pop();
-      }
-      useTerminalStore.getState().appendOutput(typedPayload.terminalId, lines);
+      // P3 修复：原样累积原始 ANSI 字符串（不按 \n 切行——切行会拦腰截断
+      // 转义序列，恢复输出损坏）；字节级截断在 store 内完成
+      useTerminalStore.getState().appendOutput(typedPayload.terminalId, typedPayload.data);
     });
 
     // 订阅终端退出事件：PTY 进程结束（用户输入 exit 或被 kill）

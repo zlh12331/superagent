@@ -83,7 +83,7 @@ describe('useTerminalBridge', () => {
     expect(unsubscribeExitMock).toHaveBeenCalledTimes(1);
   });
 
-  // ── output 事件处理：按 \n 切分 ────────────────────────
+  // ── output 事件处理：P3 原样累积原始 ANSI 字符串（不切行） ──
   describe('output 事件处理', () => {
     it('带末尾 \\n 的 data 切分后移除末尾空字符串', () => {
       renderHook(() => {
@@ -105,8 +105,8 @@ describe('useTerminalBridge', () => {
         outputCallback?.({ terminalId: 'term-1', data: 'line1\nline2\n' });
       });
 
-      // 切分后应为 ['line1', 'line2']（末尾空字符串被移除）
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual(['line1', 'line2']);
+      // P3：原样累积（含末尾换行），不再切行丢空串
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('line1\nline2\n');
     });
 
     it('不带 \\n 的部分行直接追加为单独一行', () => {
@@ -127,7 +127,7 @@ describe('useTerminalBridge', () => {
         outputCallback?.({ terminalId: 'term-1', data: 'partial line' });
       });
 
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual(['partial line']);
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('partial line');
     });
 
     it('多次 output 事件追加到同一 buffer', () => {
@@ -150,11 +150,7 @@ describe('useTerminalBridge', () => {
         outputCallback?.({ terminalId: 'term-1', data: 'line3' });
       });
 
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual([
-        'line1',
-        'line2',
-        'line3',
-      ]);
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('line1\nline2\nline3');
     });
 
     it('多行 data 一次追加', () => {
@@ -175,7 +171,7 @@ describe('useTerminalBridge', () => {
         outputCallback?.({ terminalId: 'term-1', data: 'a\nb\nc\nd\n' });
       });
 
-      expect(useTerminalStore.getState().buffers.get('term-1')).toEqual(['a', 'b', 'c', 'd']);
+      expect(useTerminalStore.getState().buffers.get('term-1')).toBe('a\nb\nc\nd\n');
     });
 
     it('对未注册的 terminalId 也能追加（store 容错）', () => {
@@ -187,7 +183,7 @@ describe('useTerminalBridge', () => {
         outputCallback?.({ terminalId: 'unknown-id', data: 'hello\n' });
       });
 
-      expect(useTerminalStore.getState().buffers.get('unknown-id')).toEqual(['hello']);
+      expect(useTerminalStore.getState().buffers.get('unknown-id')).toBe('hello\n');
     });
   });
 
@@ -206,7 +202,7 @@ describe('useTerminalBridge', () => {
         cwd: '/tmp',
         alive: true,
       });
-      useTerminalStore.getState().appendOutput('term-1', ['some output']);
+      useTerminalStore.getState().appendOutput('term-1', 'some output');
 
       act(() => {
         exitCallback?.({ terminalId: 'term-1', exitCode: 0 });
@@ -215,8 +211,8 @@ describe('useTerminalBridge', () => {
       const state = useTerminalStore.getState();
       const term = state.terminals.find((t) => t.id === 'term-1');
       expect(term?.alive).toBe(false);
-      // buffer 应保留（用于退出后查看历史）
-      expect(state.buffers.get('term-1')).toEqual(['some output']);
+      // buffer 应保留（用于退出后查看历史；P3：原始字符串原样保留）
+      expect(state.buffers.get('term-1')).toBe('some output');
     });
 
     it('非零 exitCode 也标记 alive=false', () => {

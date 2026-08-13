@@ -94,7 +94,7 @@ describe('use-agent-bridge', () => {
     expect(useUsageStore.getState().usageBySession.has('s1')).toBe(false);
   });
 
-  it('stream:end：清理 L2 缓冲（tool/approvals clearBySession）', () => {
+  it('stream:end：仅清理审批缓冲；tool 缓冲保留（P3：右面板数据源）', () => {
     // 预置 L2 数据
     useToolStore.getState().appendToolCall({
       id: 'call-1',
@@ -118,7 +118,8 @@ describe('use-agent-bridge', () => {
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
     fireEnd({ sessionId: 's1', reason: 'aborted' });
 
-    expect(useToolStore.getState().callsBySession.has('s1')).toBe(false);
+    // P3 修复：tool 缓冲回合后保留（右面板 DiffPane 数据源），仅审批缓冲清空
+    expect(useToolStore.getState().callsBySession.get('s1')?.length).toBe(1);
     expect(useApprovalsStore.getState().pending.length).toBe(0);
   });
 

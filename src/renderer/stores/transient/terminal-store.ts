@@ -46,8 +46,13 @@ interface TerminalState {
   readonly terminals: TerminalMeta[];
   /** 当前激活的终端 id（无激活终端时为 null） */
   readonly activeTerminalId: string | null;
-  /** 输出缓冲：terminalId -> 行数组（环形截断） */
-  readonly buffers: ReadonlyMap<string, readonly string[]>;
+  /**
+   * 输出缓冲：terminalId -> 原始 ANSI 字符串（字节级环形截断）
+   *
+   * P3 修复：此前按「行」切分存储，ANSI 转义序列被拦腰截断，
+   * 兜底恢复（卸载重挂）时输出损坏。现改为原样累积，仅按字节上限截断。
+   */
+  readonly buffers: ReadonlyMap<string, string>;
 
   // ── 操作方法 ────────────────────────────────────────
   /** 创建新终端并设为激活 */
@@ -58,14 +63,14 @@ interface TerminalState {
   readonly closeTerminal: (id: string) => void;
   /** 标记终端 exit（pty 退出后调用，UI 显示已结束状态） */
   readonly markExited: (id: string) => void;
-  /** 追加输出行（环形截断到 MAX_BUFFER_LINES） */
-  readonly appendOutput: (id: string, lines: readonly string[]) => void;
+  /** 追加原始输出片段（原样累积，环形截断到 MAX_BUFFER_BYTES 字节） */
+  readonly appendOutput: (id: string, data: string) => void;
   /** 清空指定终端的输出缓冲 */
   readonly clearBuffer: (id: string) => void;
 }
 
-/** 单个终端输出缓冲最大行数（环形截断，避免内存膨胀） */
-const MAX_BUFFER_LINES = 5000;
+/** 单个终端输出缓冲最大字节数（环形截断，避免内存膨胀；与主进程 MAX_BUFFER_BYTES 对齐） */
+const MAX_BUFFER_BYTES = 100 * 1024;
 
 /**
  * 终端状态 store
@@ -82,7 +87,7 @@ const MAX_BUFFER_LINES = 5000;
 export const useTerminalStore = create<TerminalState>()((set) => ({
   terminals: [],
   activeTerminalId: null,
-  buffers: new Map<string, readonly string[]>(),
+  buffers: new Map<string, string>(),
 
   createTerminal: (meta) => {
     const id = meta.id;
@@ -118,15 +123,23 @@ export const useTerminalStore = create<TerminalState>()((set) => ({
       terminals: state.terminals.map((t) => (t.id === id ? { ...t, alive: false } : t)),
     })),
 
-  appendOutput: (id, lines) =>
+  appendOutput: (id, data) =>
     set((state) => {
-      const existing = state.buffers.get(id) ?? [];
-      // 环形截断：保留尾部 MAX_BUFFER_LINES 行
-      const combined = [...existing, ...lines];
-      const truncated =
-        combined.length > MAX_BUFFER_LINES
-          ? combined.slice(combined.length - MAX_BUFFER_LINES)
-          : combined;
+      // P3 修复：原始 ANSI 字符串原样累积（不切行，转义序列保持完整），
+      // 超过 MAX_BUFFER_BYTES 时按字节保留尾部（与主进程环形截断策略一致）
+      if (data.length === 0) {
+        return state;
+      }
+      const existing = state.buffers.get(id) ?? '';
+      const combined = existing + data;
+      let truncated = combined;
+      // 渲染层无 Node Buffer：用 TextEncoder/TextDecoder 做字节级截断
+      // （与主进程 Buffer 环形截断策略一致；截断点可能切开多字节字符，
+      // 产生单个替换符，与主进程行为对齐，可接受）
+      const bytes = new TextEncoder().encode(combined);
+      if (bytes.byteLength > MAX_BUFFER_BYTES) {
+        truncated = new TextDecoder().decode(bytes.subarray(bytes.byteLength - MAX_BUFFER_BYTES));
+      }
       const buffers = new Map(state.buffers);
       buffers.set(id, truncated);
       return { buffers };
