@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { IPC_DEFINITIONS } from '../ipc/definitions';
 import { deriveChannels } from '../ipc/derive';
 import { event, IPC_META, request } from '../ipc/meta';
+import { AgentRunReqSchema } from '../schemas/agent';
 import { FileReadReqSchema, FileWriteReqSchema } from '../schemas/file';
 import { SessionListReqSchema } from '../schemas/session';
 
@@ -124,6 +125,35 @@ describe('shared 层契约补测', () => {
       expect(SessionListReqSchema.safeParse({ limit: 0 }).success).toBe(false);
       expect(SessionListReqSchema.safeParse({ limit: 101 }).success).toBe(false);
       expect(SessionListReqSchema.safeParse({ limit: 1.5 }).success).toBe(false);
+    });
+
+    it('AgentRunReqSchema：temperature 缺省 → undefined；0-2 正向解析', () => {
+      const base = {
+        messages: [{ role: 'user', content: 'hi' }],
+        sessionId: 's1',
+        workingDir: '/tmp/proj',
+        maxSteps: 5,
+      };
+      const omitted = AgentRunReqSchema.safeParse(base);
+      expect(omitted.success).toBe(true);
+      if (omitted.success) {
+        expect(omitted.data.temperature).toBeUndefined();
+      }
+      const parsed = AgentRunReqSchema.safeParse({ ...base, temperature: 0.3 });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.temperature).toBe(0.3);
+      }
+    });
+
+    it('AgentRunReqSchema：temperature 越界/非法类型 → 拦截', () => {
+      const base = {
+        messages: [{ role: 'user', content: 'hi' }],
+        workingDir: '/tmp/proj',
+      };
+      expect(AgentRunReqSchema.safeParse({ ...base, temperature: -0.1 }).success).toBe(false);
+      expect(AgentRunReqSchema.safeParse({ ...base, temperature: 2.1 }).success).toBe(false);
+      expect(AgentRunReqSchema.safeParse({ ...base, temperature: 'hot' }).success).toBe(false);
     });
   });
 });

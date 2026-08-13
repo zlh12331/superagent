@@ -69,6 +69,14 @@ export const AgentRunReqSchema = z.object({
   mode: AgentRunModeSchema.default('build'),
   // 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort）
   thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
+  // 采样温度（可选：渲染层设置项，覆盖模型级默认 generationConfig.temperature；
+  // 范围 0-2；DeepSeek 思考模型忽略采样参数，主进程按模型能力决定是否生效）
+  temperature: z
+    .number()
+    .min(0)
+    .max(2)
+    .optional()
+    .transform((v) => v ?? undefined),
 });
 
 /** Agent 中断入参 zod schema */
