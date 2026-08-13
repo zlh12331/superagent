@@ -72,6 +72,20 @@ export const MIGRATIONS: readonly SchemaMigration[] = [
       );
     },
   },
+  {
+    // S1：渲染层 settings 下沉 SQLite（用户决策：合并到 SQLite 单一真源）
+    version: 4,
+    name: 'app_settings',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+    },
+  },
 ] as const;
 
 /** 当前 schema 版本（= 最新迁移版本；新库直接落位此版本） */

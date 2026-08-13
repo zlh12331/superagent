@@ -358,6 +358,24 @@ export type RuntimeModelRow = typeof runtimeModels.$inferSelect;
 /** runtime_models 表插入类型 */
 export type RuntimeModelInsert = typeof runtimeModels.$inferInsert;
 
+/**
+ * app_settings 表：渲染层用户设置（主题/AI/编辑器/快捷键/实验性）
+ *
+ * S1 设计（settings 下沉 SQLite，用户决策）：
+ * - 此前 settings 只活在 renderer localStorage——清缓存即丢、主进程读不到，
+ *   且与 SQLite 数据层形成双持久化后端；现收敛为 SQLite 单一真源
+ * - key：设置域标识（'theme' / 'ai' / 'editor' / 'shortcuts' / 'experimental'）
+ * - value：JSON 字符串（结构由渲染层 settings-store 定义，主进程不解析）
+ */
+export const appSettings = sqliteTable('app_settings', {
+  /** 设置域 key（主键） */
+  key: text('key').primaryKey(),
+  /** JSON 序列化值 */
+  value: text('value').notNull(),
+  /** 最后更新时间（Unix 毫秒） */
+  updatedAt: integer('updated_at').notNull(),
+});
+
 // 导出 schema 对象供 db.ts 创建表
 export const schema = {
   sessions,
@@ -371,4 +389,5 @@ export const schema = {
   tasks,
   cronTasks,
   skills,
+  appSettings,
 };

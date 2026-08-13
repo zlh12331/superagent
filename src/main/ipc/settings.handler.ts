@@ -1,7 +1,8 @@
 // src/main/ipc/settings.handler.ts
 // Settings 域 IPC handler（API Key 管理 + 遥测级别 + 自定义模型，定义表驱动）
 //
-// 实现 8 个请求-响应方法：
+// 实现 10 个请求-响应方法：
+// - getAll / set   渲染层用户设置（app_settings 表，SQLite 单一真源）
 // - getApiKey / setApiKey / deleteApiKey   API Key 管理（safeStorage 加密存 keychain）
 // - getTelemetryLevel / setTelemetryLevel  遥测级别开关
 // - addRuntimeModel / removeRuntimeModel / listRuntimeModels  自定义模型（运行时快照）
@@ -18,6 +19,7 @@ import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { readApprovalModeSync, writeApprovalMode } from '../infra/storage/approval-pref';
 import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
+import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -32,6 +34,17 @@ export function createSettingsHandlers(params: {
 }): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['settings'] {
   const { permissionService } = params;
   return {
+    // S1：读取全部渲染层设置（app_settings 表快照；启动时 main.tsx 顶层 await 调用）
+    getAll: async () => {
+      return { settings: readAllSettings() };
+    },
+
+    // S1：写穿透落库（渲染层内存态变更后 fire-and-forget）
+    set: async (input) => {
+      writeSetting(input.key, input.value);
+      return { ok: true };
+    },
+
     // 查询 API Key 配置状态：仅返回布尔（P0 安全修复）
     // 明文不回传渲染层（对比 listRuntimeModels 的剥 key 策略，此处对齐），
     // 渲染层只关心"是否已配置"，明文仅主进程内部（llmClient）消费

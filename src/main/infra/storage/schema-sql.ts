@@ -89,6 +89,12 @@ export const SCHEMA_SQL = `
       created_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS cron_tasks (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,

@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   runtimeRemove: vi.fn(async () => {}),
   runtimeList: vi.fn(async () => []),
   invalidateModel: vi.fn(() => {}),
+  readAllSettings: vi.fn(() => ({})),
+  writeSetting: vi.fn(() => {}),
 }));
 
 vi.mock('../infra/storage/keychain', () => ({
@@ -41,6 +43,11 @@ vi.mock('../infra/storage/approval-pref', () => ({
   writeApprovalMode: mocks.writeApprovalMode,
 }));
 
+vi.mock('../infra/storage/settings-pref', () => ({
+  readAllSettings: mocks.readAllSettings,
+  writeSetting: mocks.writeSetting,
+}));
+
 vi.mock('../infra/ai/llm-client/ai-provider', () => ({
   llmClient: { invalidateModel: mocks.invalidateModel },
   runtimeModelStore: {
@@ -51,6 +58,29 @@ vi.mock('../infra/ai/llm-client/ai-provider', () => ({
 }));
 
 const EMPTY_CTX = {} as never;
+
+describe('settings.handler 渲染层设置（S1：SQLite 单一真源）', () => {
+  const permissionService = { setApprovalMode: vi.fn() };
+  const handlers = createSettingsHandlers({
+    permissionService: permissionService as never,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('getAll：返回 readAllSettings 快照', async () => {
+    mocks.readAllSettings.mockReturnValueOnce({ theme: 'light', ai: { temperature: 0.9 } });
+    const res = await handlers.getAll({}, EMPTY_CTX);
+    expect(res).toEqual({ settings: { theme: 'light', ai: { temperature: 0.9 } } });
+  });
+
+  it('set：写穿透调用 writeSetting + 返回 ok', async () => {
+    const res = await handlers.set({ key: 'theme', value: 'dark' }, EMPTY_CTX);
+    expect(mocks.writeSetting).toHaveBeenCalledWith('theme', 'dark');
+    expect(res).toEqual({ ok: true });
+  });
+});
 
 describe('settings.handler API Key（三件套）', () => {
   const permissionService = { setApprovalMode: vi.fn() };
