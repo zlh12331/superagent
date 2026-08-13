@@ -24,17 +24,22 @@
 // ──────────────────────────────────────────────────────────────
 
 import { ChevronRight } from 'lucide-react';
-import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  type ReactElement,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { AskDialog } from '@/components/agent/ask-dialog';
-import { CommandPalette } from '@/components/common/CommandPalette';
 import { DialogHost } from '@/components/common/DialogHost';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
-import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
-import { FuzzySearchDialog } from '@/components/file-tree/fuzzy-search-dialog';
-import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
@@ -53,7 +58,6 @@ import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
-import { DevPanel } from './DevPanel';
 import {
   computeInitialRightPanelWidth,
   computeInitialSidebarWidth,
@@ -64,6 +68,30 @@ import {
 } from './layout-utils';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+
+// ── 首屏 chunk 拆分：浮层与右面板重组件全部 lazy ──────────────────────
+// 主 chunk 不再包含 cmdk/fuse/shiki/xterm 等重型依赖；
+// 打开对应浮层 / 展开右面板时才拉取（Suspense fallback 为空，瞬时占位可接受）
+const LazySettingsDialog = lazy(async () => {
+  const mod = await import('@/components/settings/SettingsDialog');
+  return { default: mod.SettingsDialog };
+});
+const LazyCommandPalette = lazy(async () => {
+  const mod = await import('@/components/common/CommandPalette');
+  return { default: mod.CommandPalette };
+});
+const LazyFuzzySearchDialog = lazy(async () => {
+  const mod = await import('@/components/file-tree/fuzzy-search-dialog');
+  return { default: mod.FuzzySearchDialog };
+});
+const LazyShortcutHelpDialog = lazy(async () => {
+  const mod = await import('@/components/common/ShortcutHelpDialog');
+  return { default: mod.ShortcutHelpDialog };
+});
+const LazyDevPanel = lazy(async () => {
+  const mod = await import('./DevPanel');
+  return { default: mod.DevPanel };
+});
 
 interface AppShellProps {
   /** 主内容区（通常由 RouterProvider 通过 <Outlet /> 传入） */
@@ -267,6 +295,40 @@ export function AppShell({ children }: AppShellProps): ReactElement {
     };
   }, [handleMouseMove, handleMouseUp]);
 
+  // 键盘调整分隔线（此前仅 ARIA 语义 + tabIndex，无方向键行为）：
+  // ←/→ 16px 步进（右侧分隔线右移 = 面板变窄），Home/End 极值
+  const ResizerKeyStep = 16;
+  const handleResizerKeyDown = useCallback(
+    (side: ResizerSide) => (event: React.KeyboardEvent<HTMLHRElement>) => {
+      let handled = true;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const delta = event.key === 'ArrowLeft' ? -ResizerKeyStep : ResizerKeyStep;
+        if (side === 'left') {
+          setSidebarWidth((w) =>
+            Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, w + delta)),
+          );
+        } else {
+          setRightPanelWidth((w) =>
+            Math.max(RIGHT_PANEL_WIDTH_MIN, Math.min(RIGHT_PANEL_WIDTH_MAX, w - delta)),
+          );
+        }
+      } else if (event.key === 'Home') {
+        if (side === 'left') setSidebarWidth(SIDEBAR_WIDTH_MIN);
+        else setRightPanelWidth(RIGHT_PANEL_WIDTH_MIN);
+      } else if (event.key === 'End') {
+        if (side === 'left') setSidebarWidth(SIDEBAR_WIDTH_MAX);
+        else setRightPanelWidth(RIGHT_PANEL_WIDTH_MAX);
+      } else {
+        handled = false;
+      }
+      if (handled) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    [],
+  );
+
   return (
     <div className="bg-background text-foreground app font-sans">
       {/* WCAG 2.4.1 Bypass Blocks：跳过导航链接 */}
@@ -307,6 +369,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             tabIndex={0}
             className={cn('resizer resizer-left', draggingSide === 'left' && 'dragging')}
             onMouseDown={handleMouseDown('left')}
+            onKeyDown={handleResizerKeyDown('left')}
           />
         )}
 
@@ -327,6 +390,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
             tabIndex={0}
             className={cn('resizer resizer-right', draggingSide === 'right' && 'dragging')}
             onMouseDown={handleMouseDown('right')}
+            onKeyDown={handleResizerKeyDown('right')}
           />
         )}
 
@@ -346,11 +410,13 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           </button>
           {!rightPanelCollapsed && (
             <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
-              <DevPanel
-                sessionId={devPanelSessionId}
-                gitRepoPath={workingDir ?? ''}
-                className="h-full border-t-0"
-              />
+              <Suspense fallback={<div className="h-full" />}>
+                <LazyDevPanel
+                  sessionId={devPanelSessionId}
+                  gitRepoPath={workingDir ?? ''}
+                  className="h-full border-t-0"
+                />
+              </Suspense>
             </SectionErrorBoundary>
           )}
         </aside>
@@ -366,18 +432,29 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       {/* 文件查看器已改为右面板"文件"tab（FileViewerPanel——侧边栏树点击文件显示内容） */}
 
       {/* 设置对话框：根级渲染，由 useUiStore 控制（Topbar / 命令面板 / 错误动作共用入口） */}
-      <SettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
+      <Suspense fallback={null}>
+        <LazySettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
+      </Suspense>
 
       {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
-      <CommandPalette open={paletteOpen} onOpenChange={closePalette} />
+      <Suspense fallback={null}>
+        <LazyCommandPalette open={paletteOpen} onOpenChange={closePalette} />
+      </Suspense>
       {/* 文件模糊搜索（⌘F）：文件 + 会话统一搜索（对齐参考项目 FuzzySearchDialog） */}
-      <FuzzySearchDialog
-        open={fuzzyOpen}
-        onClose={() => setFuzzyOpen(false)}
-        onSelect={openFileViewer}
-      />
+      <Suspense fallback={null}>
+        <LazyFuzzySearchDialog
+          open={fuzzyOpen}
+          onClose={() => setFuzzyOpen(false)}
+          onSelect={openFileViewer}
+        />
+      </Suspense>
       {/* 快捷键帮助对话框（'?' 触发） */}
-      <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
+      <Suspense fallback={null}>
+        <LazyShortcutHelpDialog
+          open={shortcutHelpOpen}
+          onClose={() => setShortcutHelpOpen(false)}
+        />
+      </Suspense>
       {/* 自动更新提示（事件驱动 toast，无 DOM） */}
       <UpdateNotice />
       {/* 扫描线视觉叠加（实验功能开关）：纯视觉层，不拦截任何交互 */}
