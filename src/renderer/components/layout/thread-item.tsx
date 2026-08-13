@@ -26,7 +26,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useSortable } from '@dnd-kit/sortable';
-import { FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
+import { FolderOpen, FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -60,13 +60,14 @@ interface SortableThreadItemProps {
   readonly onTogglePin: () => void;
   /** 打开会话文件树回调（对齐原型 ti-action-btn data-act=files） */
   readonly onOpenFiles: () => void;
+  /** 在资源管理器中打开会话工作目录（shell.openPath） */
+  readonly onOpenInExplorer: () => void;
 }
 
 export function SortableThreadItem({
   sessionId,
   folderName,
   title,
-  lastMessage,
   updatedAt,
   isActive,
   isDeleting,
@@ -76,6 +77,7 @@ export function SortableThreadItem({
   onDelete,
   onTogglePin,
   onOpenFiles,
+  onOpenInExplorer,
 }: SortableThreadItemProps): ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sessionId,
@@ -95,7 +97,6 @@ export function SortableThreadItem({
       <ThreadItem
         sessionId={sessionId}
         title={title}
-        lastMessage={lastMessage}
         updatedAt={updatedAt}
         isActive={isActive}
         isDeleting={isDeleting}
@@ -105,6 +106,7 @@ export function SortableThreadItem({
         onDelete={onDelete}
         onTogglePin={onTogglePin}
         onOpenFiles={onOpenFiles}
+        onOpenInExplorer={onOpenInExplorer}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -117,7 +119,6 @@ interface ThreadItemProps {
   /** 会话 id（重命名提交用） */
   readonly sessionId: string;
   readonly title: string;
-  readonly lastMessage: string | undefined;
   readonly updatedAt: number;
   readonly isActive: boolean;
   readonly isDeleting: boolean;
@@ -130,6 +131,8 @@ interface ThreadItemProps {
   readonly onTogglePin: () => void;
   /** 打开会话文件树回调（对齐原型 ti-action-btn data-act=files） */
   readonly onOpenFiles: () => void;
+  /** 在资源管理器中打开会话工作目录（shell.openPath） */
+  readonly onOpenInExplorer: () => void;
   /** 拖拽手柄属性（@dnd-kit useSortable 的 attributes + listeners，挂在 ti-dot 上） */
   readonly dragHandleProps?: Record<string, unknown>;
 }
@@ -138,7 +141,6 @@ interface ThreadItemProps {
 function ThreadItem({
   sessionId,
   title,
-  lastMessage,
   updatedAt,
   isActive,
   isDeleting,
@@ -148,6 +150,7 @@ function ThreadItem({
   onDelete,
   onTogglePin,
   onOpenFiles,
+  onOpenInExplorer,
   dragHandleProps,
 }: ThreadItemProps): ReactElement {
   // 本地化文案
@@ -193,13 +196,8 @@ function ThreadItem({
     }
     void renameSession({ id: sessionId, title: trimmed });
   };
-  // 元信息：时间 + 预览（取 lastMessage 前 20 字符）
-  const metaParts: string[] = [formatRelativeTime(updatedAt, t)];
-  if (lastMessage !== undefined && lastMessage.length > 0) {
-    const preview = lastMessage.length > 20 ? `${lastMessage.slice(0, 20)}…` : lastMessage;
-    metaParts.push(preview);
-  }
-  const metaText = metaParts.join(' · ');
+  // 元信息：仅时间（用户要求——不显示消息预览）
+  const metaText = formatRelativeTime(updatedAt, t);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: 外层含 DropdownMenu 触发器（button），HTML 禁止 button 嵌套
@@ -292,6 +290,22 @@ function ThreadItem({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {
+                  onOpenInExplorer();
+                }}
+              >
+                <FolderOpen className="size-3.5" strokeWidth={1.5} />
+                {t('sidebar.openInExplorer')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  onOpenFiles();
+                }}
+              >
+                <FolderTree className="size-3.5" strokeWidth={1.5} />
+                {t('sidebar.fileManager')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
                   setRenaming(true);
                 }}
               >
@@ -346,6 +360,30 @@ function ThreadItem({
             >
               <Pin className="size-3.5" strokeWidth={1.5} />
               {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
+              onClick={() => {
+                onOpenInExplorer();
+                setCtxMenu(null);
+              }}
+            >
+              <FolderOpen className="size-3.5" strokeWidth={1.5} />
+              {t('sidebar.openInExplorer')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
+              onClick={() => {
+                onOpenFiles();
+                setCtxMenu(null);
+              }}
+            >
+              <FolderTree className="size-3.5" strokeWidth={1.5} />
+              {t('sidebar.fileManager')}
             </button>
             <button
               type="button"

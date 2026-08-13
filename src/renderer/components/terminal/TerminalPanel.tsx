@@ -14,13 +14,11 @@
 // - xterm.js 实例由 TerminalView 持有，不进入 Zustand store
 // ──────────────────────────────────────────────────────────────
 
-import { Plus } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
 import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
-import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
@@ -128,6 +126,14 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     }
   };
 
+  // 自动创建：进入终端视图时无终端则直接创建（用户要求：点击终端 tab 直接打开终端）
+  useEffect(() => {
+    if (terminals.length === 0 && !isCreating) {
+      void handleCreate();
+    }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleCreate（依赖不变时引用稳定）
+  }, [terminals.length, isCreating, sessionId]);
+
   // 关闭终端：调用 IPC kill → 从 store 移除
   const handleClose = async (terminalId: string): Promise<void> => {
     try {
@@ -142,26 +148,15 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     }
   };
 
-  // 无终端：显示创建按钮
+  // 无终端：自动创建中显示 loading（用户要求：不需要"新建终端"按钮）
   if (terminals.length === 0) {
     return (
-      <div className={className}>
-        <Button
-          variant="outline"
-          className="w-full justify-start gap-2 font-serif tracking-wide"
-          onClick={() => {
-            void handleCreate();
-          }}
-          disabled={isCreating}
-        >
-          <Plus className="size-3.5" strokeWidth={1.5} />
-          {isCreating ? (
-            // 创建中：终端光标闪烁动画（loading-ui）替代文字提示
-            <TerminalLoader className="text-muted-foreground" prompt="$" />
-          ) : (
-            t('terminal.newTerminal')
-          )}
-        </Button>
+      <div className={cn('flex h-full items-center justify-center', className)}>
+        {isCreating ? (
+          <TerminalLoader className="text-muted-foreground" prompt="$" />
+        ) : (
+          <span className="text-muted-foreground text-xs">{t('terminal.creating')}</span>
+        )}
       </div>
     );
   }
@@ -175,9 +170,6 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
         onSelect={setActiveTerminal}
         onClose={(id) => {
           void handleClose(id);
-        }}
-        onAdd={() => {
-          void handleCreate();
         }}
       />
       {/* 全部终端同时挂载，display:none 切换激活（照搬参考项目：xterm 实例存活 + 保留输出） */}

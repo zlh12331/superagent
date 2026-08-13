@@ -110,6 +110,12 @@
       "pin": "Pin",
       "unpin": "Unpin",
       "openFiles": "Show files",
+      "openInExplorer": "Open in Explorer",
+      "fileManager": "File manager",
+      "newTaskInFolder": "New task in folder",
+      "deleteFolder": "Delete folder",
+      "deleteFolderConfirmTitle": "Delete folder \"{{name}}\"?",
+      "deleteFolderConfirmDesc": "All tasks in this folder will be deleted. This cannot be undone",
       "backToThreads": "Back to threads"
     },
     "chat": {
@@ -592,6 +598,8 @@
       "newDirInRoot": "New directory in root",
       "newDir": "New directory",
       "moreActions": "More actions",
+      "addFolder": "Add folder",
+      "addFile": "Add file",
       "rename": "Rename",
       "emptyDir": "Empty directory",
       "copyPath": "Copy path",

@@ -84,90 +84,6 @@ describe('TerminalPanel', () => {
     } as never;
   });
 
-  // ── 无终端时显示「新建终端」按钮 ───────────────────────
-  describe('无终端状态', () => {
-    it('渲染「新建终端」按钮', () => {
-      render(<TerminalPanel sessionId="session-1" />);
-
-      expect(screen.getByText('新建终端')).toBeInTheDocument();
-    });
-
-    it('点击「新建终端」按钮 → 调用 IPC create + 写入 store', async () => {
-      const user = userEvent.setup();
-      (window.api.terminal.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-        data: { terminalId: 'term-1' },
-      });
-
-      render(<TerminalPanel sessionId="session-1" />);
-      await user.click(screen.getByText('新建终端'));
-
-      // 验证 IPC 调用参数
-      expect(window.api.terminal.create).toHaveBeenCalledWith({
-        cwd: 'f:\\TraeProjects\\1',
-        command: undefined,
-        env: undefined,
-        cols: 80,
-        rows: 24,
-      });
-
-      // 验证 store 写入
-      await waitFor(() => {
-        const state = useTerminalStore.getState();
-        expect(state.terminals).toHaveLength(1);
-        expect(state.terminals[0]?.id).toBe('term-1');
-        expect(state.terminals[0]?.sessionId).toBe('session-1');
-        expect(state.terminals[0]?.alive).toBe(true);
-      });
-    });
-
-    it('创建中显示终端光标动画并禁用按钮', async () => {
-      const user = userEvent.setup();
-      // 让 create 永远 pending（不 resolve）
-      (window.api.terminal.create as ReturnType<typeof vi.fn>).mockImplementation(
-        () => new Promise(() => {}),
-      );
-
-      render(<TerminalPanel sessionId="session-1" />);
-      await user.click(screen.getByText('新建终端'));
-
-      // 创建中：按钮禁用 + 终端光标动画（loading-ui，role=status，sr-only 文本 Loading）
-      const button = screen.getByRole('button', { name: /Loading/ });
-      expect(button).toBeDisabled();
-      expect(screen.getByRole('status')).toBeInTheDocument();
-    });
-
-    it('IPC create 返回 error → toast.error 提示', async () => {
-      const user = userEvent.setup();
-      (window.api.terminal.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-        error: { code: 'PTY_ERROR', message: 'Failed to spawn' },
-      });
-
-      render(<TerminalPanel sessionId="session-1" />);
-      await user.click(screen.getByText('新建终端'));
-
-      await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith('创建终端失败: [PTY_ERROR] Failed to spawn');
-      });
-
-      // 创建失败后 store 应未写入
-      expect(useTerminalStore.getState().terminals).toHaveLength(0);
-    });
-
-    it('IPC create 抛异常 → toast.error 提示', async () => {
-      const user = userEvent.setup();
-      (window.api.terminal.create as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Network error'),
-      );
-
-      render(<TerminalPanel sessionId="session-1" />);
-      await user.click(screen.getByText('新建终端'));
-
-      await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith('创建终端失败: Network error');
-      });
-    });
-  });
-
   // ── 有终端时显示工具栏 ─────────────────────────────────
   describe('有终端状态', () => {
     function seedTerminal(overrides?: Partial<{ alive: boolean; title: string }>): void {
@@ -262,14 +178,13 @@ describe('TerminalPanel', () => {
       });
 
       const { rerender } = render(<TerminalPanel sessionId="session-1" />);
-      // session-1 无终端 → 显示「新建终端」
-      expect(screen.getByText('新建终端')).toBeInTheDocument();
+      // session-1 无终端 → 自动创建（用户要求：点击终端直接打开——无需新建按钮）
+      expect(screen.queryByText('新建终端')).not.toBeInTheDocument();
 
       // 切换到 session-2
       rerender(<TerminalPanel sessionId="session-2" />);
       // session-2 有终端 → 显示标题
       expect(screen.getByText('bash')).toBeInTheDocument();
-      expect(screen.queryByText('新建终端')).not.toBeInTheDocument();
     });
   });
 
@@ -334,31 +249,6 @@ describe('TerminalPanel', () => {
       await user.click(targetTab as HTMLElement);
       expect(useTerminalStore.getState().activeTerminalId).toBe('term-2');
       expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
-    });
-
-    it('点击「+」按钮 → 创建第二个终端并写入 store', async () => {
-      const user = userEvent.setup();
-      useTerminalStore.getState().createTerminal({
-        id: 'term-1',
-        sessionId: 'session-1',
-        title: 'bash',
-        pid: null,
-        cwd: '/tmp',
-        alive: true,
-      });
-      (window.api.terminal.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-        data: { terminalId: 'term-2' },
-      });
-
-      render(<TerminalPanel sessionId="session-1" />);
-      await user.click(screen.getByRole('button', { name: '新建终端' }));
-
-      await waitFor(() => {
-        const state = useTerminalStore.getState();
-        expect(state.terminals).toHaveLength(2);
-        expect(state.terminals[1]?.id).toBe('term-2');
-        expect(state.terminals[1]?.sessionId).toBe('session-1');
-      });
     });
   });
 });

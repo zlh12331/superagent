@@ -83,13 +83,7 @@ describe('terminal 批次5 缺口补全', () => {
 
     it('渲染 tab 列表 + 激活高亮 + 标题', () => {
       render(
-        <TerminalTabs
-          terminals={terminals}
-          activeId="t1"
-          onSelect={vi.fn()}
-          onClose={vi.fn()}
-          onAdd={vi.fn()}
-        />,
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={vi.fn()} onClose={vi.fn()} />,
       );
       expect(screen.getByRole('tablist')).toBeDefined();
       const tabs = screen.getAllByRole('tab');
@@ -103,13 +97,7 @@ describe('terminal 批次5 缺口补全', () => {
     it('点击 tab：触发 onSelect', () => {
       const onSelect = vi.fn();
       render(
-        <TerminalTabs
-          terminals={terminals}
-          activeId="t1"
-          onSelect={onSelect}
-          onClose={vi.fn()}
-          onAdd={vi.fn()}
-        />,
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={vi.fn()} />,
       );
       fireEvent.click(screen.getAllByRole('tab')[1] as HTMLElement);
       expect(onSelect).toHaveBeenCalledWith('t2');
@@ -119,13 +107,7 @@ describe('terminal 批次5 缺口补全', () => {
       const onSelect = vi.fn();
       const onClose = vi.fn();
       render(
-        <TerminalTabs
-          terminals={terminals}
-          activeId="t1"
-          onSelect={onSelect}
-          onClose={onClose}
-          onAdd={vi.fn()}
-        />,
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={onClose} />,
       );
       const tab = screen.getAllByRole('tab')[1] as HTMLElement;
       fireEvent.keyDown(tab, { key: 'Enter' });
@@ -142,46 +124,11 @@ describe('terminal 批次5 缺口补全', () => {
       const onSelect = vi.fn();
       const onClose = vi.fn();
       render(
-        <TerminalTabs
-          terminals={terminals}
-          activeId="t1"
-          onSelect={onSelect}
-          onClose={onClose}
-          onAdd={vi.fn()}
-        />,
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={onClose} />,
       );
       fireEvent.click(screen.getAllByLabelText('关闭终端')[0] as HTMLElement);
       expect(onClose).toHaveBeenCalledWith('t1');
       expect(onSelect).not.toHaveBeenCalled();
-    });
-
-    it('点击 + 按钮：触发 onAdd', () => {
-      const onAdd = vi.fn();
-      render(
-        <TerminalTabs
-          terminals={terminals}
-          activeId={null}
-          onSelect={vi.fn()}
-          onClose={vi.fn()}
-          onAdd={onAdd}
-        />,
-      );
-      fireEvent.click(screen.getByLabelText('新建终端'));
-      expect(onAdd).toHaveBeenCalled();
-    });
-
-    it('空列表：仅渲染新建按钮', () => {
-      render(
-        <TerminalTabs
-          terminals={[]}
-          activeId={null}
-          onSelect={vi.fn()}
-          onClose={vi.fn()}
-          onAdd={vi.fn()}
-        />,
-      );
-      expect(screen.queryAllByRole('tab')).toHaveLength(0);
-      expect(screen.getByLabelText('新建终端')).toBeDefined();
     });
   });
 

@@ -35,7 +35,6 @@ import { cn } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { InlineCreateInput } from './inline-create-input';
 import { InlineRenameInput } from './inline-rename-input';
-import { NodeMenu } from './node-menu';
 
 // src/renderer/components/file-tree/FileTreeNode.tsx
 // 文件树节点（递归渲染）
@@ -116,10 +115,7 @@ export function FileTreeNode({
 
   // store actions
   const toggleExpand = useFileTreeStore((s) => s.toggleExpand);
-  const setExpanded = useFileTreeStore((s) => s.setExpanded);
   const setActiveFile = useFileTreeStore((s) => s.setActiveFile);
-  const startRename = useFileTreeStore((s) => s.startRename);
-  const startCreate = useFileTreeStore((s) => s.startCreate);
 
   // IPC 操作 hook
   const ops = useFileTreeOps();
@@ -143,17 +139,6 @@ export function FileTreeNode({
         e.stopPropagation();
         toggleExpand(path);
       }
-    };
-
-    /**
-     * 触发新建操作
-     *
-     * 先展开目录（确保子条目容器可见），然后启动内联编辑流程。
-     * 即使目录原本就是展开状态，重复 setExpanded(true) 也不会有副作用。
-     */
-    const handleStartCreate = (createType: 'file' | 'directory'): void => {
-      setExpanded(path, true);
-      startCreate(path, createType);
     };
 
     return (
@@ -195,17 +180,6 @@ export function FileTreeNode({
               </span>
             )}
           </button>
-          {!isRenaming && (
-            <NodeMenu
-              type="directory"
-              disabled={isPending}
-              onNewFile={() => handleStartCreate('file')}
-              onNewDir={() => handleStartCreate('directory')}
-              onRename={() => startRename(path)}
-              onDelete={() => void ops.deleteEntry(path)}
-              onCopyPath={() => void copyToClipboard(path)}
-            />
-          )}
         </div>
         {expanded && (
           <fieldset className="ft-children">
@@ -297,15 +271,6 @@ export function FileTreeNode({
             </span>
           )}
         </button>
-        {!isRenaming && (
-          <NodeMenu
-            type="file"
-            disabled={isPending}
-            onRename={() => startRename(path)}
-            onDelete={() => void ops.deleteEntry(path)}
-            onCopyPath={() => void copyToClipboard(path)}
-          />
-        )}
       </div>
     </div>
   );

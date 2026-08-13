@@ -14,8 +14,14 @@
 // - 视觉对齐 Sidebar 文学风：根目录显示 workingDir basename
 // ──────────────────────────────────────────────────────────────
 
-import { ArrowLeft, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Ellipsis, FilePlus, FolderOpen, FolderPlus, RefreshCw } from 'lucide-react';
 import { type ReactElement, useCallback } from 'react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 import { useFileTree } from '@/hooks/use-file-tree';
 import { useTranslation } from '@/i18n/use-translation';
@@ -68,6 +74,33 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   // 文件点击回调：打开文件查看器（右侧面板显示内容）
   const openFile = useFileViewerStore((s) => s.openFile);
 
+  // 头部菜单操作（用户要求：三点点按钮 → 添加文件夹 / 添加文件 / 刷新）
+  const refreshTree = useCallback(async (): Promise<void> => {
+    if (typeof window === 'undefined' || window.api === undefined || rootPath === null) {
+      return;
+    }
+    try {
+      const res = await window.api.file.list({ path: rootPath, depth: 1, includeHidden: false });
+      if ('data' in res && res.data) {
+        useFileTreeStore.getState().setEntries(rootPath, res.data.entries);
+      }
+    } catch {
+      // 刷新失败静默（watch 事件流仍在运行）
+    }
+  }, [rootPath]);
+  const setExpanded = useFileTreeStore((s) => s.setExpanded);
+  const startCreate = useFileTreeStore((s) => s.startCreate);
+  const handleNewFile = useCallback((): void => {
+    if (rootPath === null) return;
+    setExpanded(rootPath, true);
+    startCreate(rootPath, 'file');
+  }, [rootPath, setExpanded, startCreate]);
+  const handleNewDir = useCallback((): void => {
+    if (rootPath === null) return;
+    setExpanded(rootPath, true);
+    startCreate(rootPath, 'directory');
+  }, [rootPath, setExpanded, startCreate]);
+
   // 文件点击回调：打开文件查看器（右侧面板显示内容）
   const handleOpenFile = useCallback(
     (filePath: string) => {
@@ -113,6 +146,44 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
           <ArrowLeft className="size-3.5" strokeWidth={2} />
         </button>
         <span className="sft-title">{t('sidebar.fileTree')}</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="sft-more-btn text-muted-foreground hover:bg-muted hover:text-foreground ml-auto flex size-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+              aria-label={t('fileTree.moreActions')}
+              title={t('fileTree.moreActions')}
+            >
+              <Ellipsis className="size-3.5" strokeWidth={1.5} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() => {
+                handleNewDir();
+              }}
+            >
+              <FolderPlus className="size-3.5" strokeWidth={1.5} />
+              {t('fileTree.addFolder')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                handleNewFile();
+              }}
+            >
+              <FilePlus className="size-3.5" strokeWidth={1.5} />
+              {t('fileTree.addFile')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                void refreshTree();
+              }}
+            >
+              <RefreshCw className="size-3.5" strokeWidth={1.5} />
+              {t('fileTree.refresh')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div
         className="file-tree min-h-0 flex-1"

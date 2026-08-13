@@ -53,6 +53,7 @@ import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
@@ -409,6 +410,35 @@ export function Sidebar(): ReactElement {
                               collapsed={collapsedFolders.includes(entry.name)}
                               onToggle={() => toggleFolder(entry.name)}
                               onCreateInFolder={handleCreateInFolder}
+                              onOpenInExplorer={(folderName) => {
+                                // 在资源管理器中打开文件夹（取该组第一个会话的 workingDir）
+                                const dir = sessions.find(
+                                  (s) => getFolderName(s.workingDir) === folderName,
+                                )?.workingDir;
+                                if (dir !== undefined) {
+                                  void window.api.app
+                                    .openExternal({ url: `file:///${dir.replace(/\\/g, '/')}` })
+                                    .catch(() => {});
+                                }
+                              }}
+                              onDeleteFolder={(folderName) => {
+                                // 删除文件夹：确认弹窗后批量删除该组会话
+                                const folderSessions = sessions.filter(
+                                  (s) => getFolderName(s.workingDir) === folderName,
+                                );
+                                void confirm({
+                                  title: t('sidebar.deleteFolderConfirmTitle', {
+                                    name: folderName,
+                                  }),
+                                  message: t('sidebar.deleteFolderConfirmDesc'),
+                                  danger: true,
+                                }).then((ok) => {
+                                  if (!ok) return;
+                                  for (const s of folderSessions) {
+                                    deleteSession(s.id);
+                                  }
+                                });
+                              }}
                             />
                           ) : (
                             <SortableThreadItem
@@ -431,6 +461,14 @@ export function Sidebar(): ReactElement {
                                 // 对齐原型 showThreadFileTree：先切换到该会话（主区），再打开其文件树
                                 handleSelectSession(entry.session.id);
                                 setSidebarView('fileTree');
+                              }}
+                              onOpenInExplorer={() => {
+                                // 在资源管理器中打开会话工作目录（对齐同类桌面应用惯例）
+                                void window.api.app
+                                  .openExternal({
+                                    url: `file:///${entry.session.workingDir.replace(/\\/g, '/')}`,
+                                  })
+                                  .catch(() => {});
                               }}
                             />
                           ),

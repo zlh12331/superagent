@@ -110,6 +110,12 @@
       "pin": "置顶",
       "unpin": "取消置顶",
       "openFiles": "查看文件",
+      "openInExplorer": "在资源管理器中打开",
+      "fileManager": "文件管理",
+      "newTaskInFolder": "创建新任务",
+      "deleteFolder": "删除文件夹",
+      "deleteFolderConfirmTitle": "删除文件夹「{{name}}」？",
+      "deleteFolderConfirmDesc": "该文件夹下的所有任务将被删除，此操作不可撤销",
       "backToThreads": "返回会话列表"
     },
     "chat": {
@@ -592,6 +598,8 @@
       "newDirInRoot": "在根目录新建目录",
       "newDir": "新建目录",
       "moreActions": "更多操作",
+      "addFolder": "添加文件夹",
+      "addFile": "添加文件",
       "rename": "重命名",
       "emptyDir": "空目录",
       "copyPath": "复制路径",

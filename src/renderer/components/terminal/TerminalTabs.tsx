@@ -7,7 +7,7 @@
 // 纯展示组件，数据与回调全部通过 props 传入。
 // ──────────────────────────────────────────────────────────────
 
-import { Plus, Terminal as TerminalIcon } from 'lucide-react';
+import { Terminal as TerminalIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
@@ -23,8 +23,6 @@ interface TerminalTabsProps {
   readonly onSelect: (id: string) => void;
   /** 点击关闭按钮回调（关闭对应终端） */
   readonly onClose: (id: string) => void;
-  /** 点击「+」按钮回调（新建终端） */
-  readonly onAdd: () => void;
 }
 
 /**
@@ -37,7 +35,6 @@ export function TerminalTabs({
   activeId,
   onSelect,
   onClose,
-  onAdd,
 }: TerminalTabsProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -96,15 +93,6 @@ export function TerminalTabs({
           </div>
         );
       })}
-      <button
-        type="button"
-        className="text-muted-foreground hover:bg-muted/50 hover:text-foreground inline-flex h-[30px] w-7 shrink-0 cursor-pointer items-center justify-center rounded-[3px] border-none bg-transparent transition-colors"
-        onClick={onAdd}
-        aria-label={t('terminal.newTerminal')}
-        title={t('terminal.newTerminal')}
-      >
-        <Plus className="size-3.5" strokeWidth={1.5} />
-      </button>
     </div>
   );
 }
