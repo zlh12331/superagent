@@ -181,8 +181,12 @@
         "models": "模型选择：请在输入栏右侧选择模型",
         "compact": "上下文压缩功能开发中",
         "help": "可用命令：/new 新建会话 · /clear 清空对话 · /models 选择模型",
-        "goal": "会话目标：请在右侧面板「会话目标」区域设置"
-      }
+        "goal": "会话目标：请在输入框输入 /goal 需求"
+      },
+      "goalPause": "暂停目标",
+      "goalResume": "恢复目标",
+      "goalEdit": "编辑目标",
+      "goalClear": "删除目标"
     },
     "update": {
       "noticeAvailable": "发现新版本",

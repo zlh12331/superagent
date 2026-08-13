@@ -14,16 +14,17 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
-import { AlertTriangle, Folder, Search, Target, X } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { AlertTriangle, Folder, Pause, Pencil, Play, Search, Trash2, X } from 'lucide-react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
+import { GoalEditDialog } from '@/components/layout/goal-edit-dialog';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -189,6 +190,41 @@ export function ChatPanel({
     },
   });
   const goals = (goalsQuery.data?.goals ?? []) as Array<{ condition: string }>;
+  const queryClient = useQueryClient();
+  // 目标编辑对话框 + 暂停状态（用户设计：右按钮区 暂停/恢复 · 编辑 · 删除）
+  const [goalEditOpen, setGoalEditOpen] = useState(false);
+  const [goalPaused, setGoalPaused] = useState(false);
+  // chatId 切换：重置目标栏 UI 状态（暂停/编辑框不跨会话残留）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chatId 是故意的触发键（effect 仅用 setter）
+  useEffect(() => {
+    setGoalPaused(false);
+    setGoalEditOpen(false);
+  }, [chatId]);
+  const createGoalMutation = useMutation({
+    mutationFn: async (condition: string) => {
+      if (chatId === undefined) return;
+      const response = await window.api.goal.create({ sessionId: chatId, condition });
+      if ('error' in response && response.error !== undefined) {
+        throw new Error(response.error.message);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
+      setGoalEditOpen(false);
+    },
+  });
+  const clearGoalMutation = useMutation({
+    mutationFn: async () => {
+      if (chatId === undefined) return;
+      const response = await window.api.goal.clear({ sessionId: chatId });
+      if ('error' in response && response.error !== undefined) {
+        throw new Error(response.error.message);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
+    },
+  });
 
   // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
   const search = useConversationSearch(messages);
@@ -330,13 +366,60 @@ export function ChatPanel({
         />
       </div>
 
-      {/* 会话目标（用户要求：仅 goal 命令设置后显示，置于输入框上方） */}
+      {/* 会话目标栏（用户设计：左 GOAL 标签 · 中条件 · 右 暂停/恢复 · 编辑 · 删除——仅 goal 命令设置后显示） */}
       {goals.length > 0 && (
         <div className="border-border bg-muted/30 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
-          <Target className="text-accent size-3.5 shrink-0" strokeWidth={1.5} />
-          <span className="text-muted-foreground text-xs">{goals[0]?.condition}</span>
+          <span className="bg-accent/10 text-accent rounded px-1.5 py-0.5 font-mono text-[10px] font-bold">
+            GOAL
+          </span>
+          <span
+            className={cn(
+              'text-foreground/90 min-w-0 flex-1 truncate text-xs',
+              goalPaused && 'text-muted-foreground/60 line-through',
+            )}
+            title={goals[0]?.condition}
+          >
+            {goals[0]?.condition}
+          </span>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+              title={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
+              aria-label={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
+              onClick={() => setGoalPaused((p) => !p)}
+            >
+              {goalPaused ? <Play className="size-3" /> : <Pause className="size-3" />}
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+              title={t('chat.goalEdit')}
+              aria-label={t('chat.goalEdit')}
+              onClick={() => setGoalEditOpen(true)}
+            >
+              <Pencil className="size-3" />
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:bg-destructive/15 hover:text-destructive flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+              title={t('chat.goalClear')}
+              aria-label={t('chat.goalClear')}
+              onClick={() => clearGoalMutation.mutate()}
+            >
+              <Trash2 className="size-3" />
+            </button>
+          </div>
         </div>
       )}
+      {/* 目标编辑对话框（复用右面板同款；key 随开关变化强制重挂载，打开时读到最新条件） */}
+      <GoalEditDialog
+        key={String(goalEditOpen)}
+        open={goalEditOpen}
+        onOpenChange={setGoalEditOpen}
+        initialCondition={goals[0]?.condition ?? ''}
+        onSubmit={(condition) => createGoalMutation.mutate(condition)}
+      />
       {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
       <footer className="composer">
         <ChatInput
@@ -368,12 +451,26 @@ export function ChatPanel({
                 void stop();
                 break;
               case 'goal':
-                // /goal toast 引导（对齐参考项目非即时命令行为：右侧面板设置目标）
-                toast.info(t('chat.slashAction.goal'));
+                // /goal 斜杠建议：直接打开目标编辑对话框（用户需求：goal 命令要真正可用，
+                // 点建议 → 输入需求 → 保存 → 目标栏显示，替代原来的 toast 引导）
+                setGoalEditOpen(true);
                 break;
             }
           }}
           onSend={(text) => {
+            // /goal 前缀：创建会话目标（用户需求：输入 /goal 需求 → 发送 → 输入框上方显示目标栏；
+            // 目标命令不进对话，避免把 "/goal xxx" 当普通消息发给 AI）
+            const trimmed = text.trim();
+            if (trimmed.startsWith('/goal')) {
+              const condition = trimmed.slice(5).trim();
+              if (condition.length > 0 && chatId !== undefined) {
+                createGoalMutation.mutate(condition);
+              } else {
+                // /goal 无需求：打开目标编辑对话框（与斜杠建议项行为一致）
+                setGoalEditOpen(true);
+              }
+              return;
+            }
             // sendMessage 接受 { text: string } 格式
             void sendMessage({ text });
           }}

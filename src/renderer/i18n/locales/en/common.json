@@ -181,8 +181,12 @@
         "models": "Model picker: use the selector on the right",
         "compact": "Context compaction coming soon",
         "help": "Commands: /new new session · /clear clear chat · /models pick model",
-        "goal": "Session goal: set it in the Goals section of the right panel"
-      }
+        "goal": "Session goal: type /goal plus your requirement in the input"
+      },
+      "goalPause": "Pause goal",
+      "goalResume": "Resume goal",
+      "goalEdit": "Edit goal",
+      "goalClear": "Delete goal"
     },
     "update": {
       "noticeAvailable": "Update available",
