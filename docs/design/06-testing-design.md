@@ -244,13 +244,13 @@
 
 ### 3.8 E2E 用户旅程建设记录（2026-08-13 完成 3 批）
 
-**规模**：e2e/journey-*.spec.ts 4 文件 / 13 用例（旅程 1-6 核心矩阵）。
+**规模**：e2e/journey-*.spec.ts 4 文件 / 新增 11 用例（旅程 1-6 核心矩阵；旅程 1 由既有 smoke 3 用例覆盖）。
 
 **旅程矩阵（6 核心旅程全绿）**：
 | 旅程 | 覆盖 | 用例 |
 |---|---|---|
-| 1 应用启动 | smoke.spec.ts（已有） | 3 |
-| 2 聊天流程 | journey-chat（Enter/按钮发送→agent.run 实证/空消息） | 4 |
+| 1 应用启动 | smoke.spec.ts（既有） | 3 |
+| 2 聊天流程 | journey-chat（Enter/按钮发送→agent.run 实证/空消息） | 3 |
 | 3 会话管理 | journey-chat（新建会话） | 1 |
 | 4 Agent 审批 | journey-agent（审批卡片出现/批准/拒绝） | 3 |
 | 5 终端 | journey-terminal（新建渲染/输入交互） | 2 |
