@@ -27,6 +27,7 @@ import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { consumePendingMessage } from '@/lib/pending-message';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { EMPTY_USAGE, useUsageStore } from '@/stores/transient/usage-store';
@@ -171,6 +172,16 @@ export function ChatPanel({
       : {}),
     onError: handleError,
   });
+
+  // 欢迎页首条消息透传（A1 修复）：home.tsx 创建会话时把首条消息暂存 sessionStorage，
+  // ChatPanel 挂载后消费一次并自动发送。useAgentWithIpc 的 transport configure effect
+  // 先于本 effect 执行（同组件内按声明顺序），发送时 transport 已就绪。
+  // 消费即移除：sendMessage 引用变化 / StrictMode 双挂载导致的重复执行均为 no-op。
+  useEffect(() => {
+    const text = consumePendingMessage(sessionStorage, chatId);
+    if (text === null) return;
+    void sendMessage({ text });
+  }, [chatId, sendMessage]);
 
   // 会话目标（用户要求：仅 goal 命令设置后显示，置于对话区输入框上方）
   const goalsQuery = useQuery({

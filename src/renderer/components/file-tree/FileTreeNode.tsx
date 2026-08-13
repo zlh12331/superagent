@@ -1,28 +1,18 @@
 // src/renderer/components/file-tree/FileTreeNode.tsx
-// 文件树节点 · 组装层（菜单/重命名/新建输入提取至独立文件）
-// ──────────────────────────────
-// 拆分背景（2026-08 重构）：原文件 564 行，按职责拆分：
-// - node-menu.tsx：节点右键菜单
-// - inline-rename-input.tsx：行内重命名
-// - inline-create-input.tsx：行内新建
-// ──────────────────────────────
-
-// src/renderer/components/file-tree/FileTreeNode.tsx
-// 文件树节点（递归渲染）
+// 文件树节点（递归渲染）· 组装层（菜单/重命名/新建输入提取至独立文件）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 渲染单个目录或文件节点
 // - 目录节点：展开/折叠箭头 + 文件夹图标 + 名称 + 递归渲染子节点
 // - 文件节点：文件图标 + 名称（点击触发 onOpenFile 回调）
 // - 通过 depth 控制缩进层级
-// - hover 显示「更多操作」按钮（DropdownMenu 触发）
+// - hover 显示「更多操作」按钮（NodeMenu，node-menu.tsx）
 // - 内联重命名输入框（renamingPath === path 时替换名称为 input）
 // - 内联新建临时节点（creatingEntry.parentDir === path 时在子条目顶部渲染 input）
 //
 // 设计：
 // - 自包含：从 store 读取自身展开状态、子条目、加载状态、内联编辑状态
 // - memo 优化：仅当 props（path/name/type/depth/onOpenFile）变化时重渲染
-// - ft-node 作为 position: relative 承载「更多」按钮的绝对定位
 // - 文学风视觉：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
 // ──────────────────────────────────────────────────────────────
 
@@ -35,40 +25,13 @@ import { cn } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { InlineCreateInput } from './inline-create-input';
 import { InlineRenameInput } from './inline-rename-input';
-
-// src/renderer/components/file-tree/FileTreeNode.tsx
-// 文件树节点（递归渲染）
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渲染单个目录或文件节点
-// - 目录节点：展开/折叠箭头 + 文件夹图标 + 名称 + 递归渲染子节点
-// - 文件节点：文件图标 + 名称（点击触发 onOpenFile 回调）
-// - 通过 depth 控制缩进层级
-// - hover 显示「更多操作」按钮（DropdownMenu 触发）
-// - 内联重命名输入框（renamingPath === path 时替换名称为 input）
-// - 内联新建临时节点（creatingEntry.parentDir === path 时在子条目顶部渲染 input）
-//
-// 设计：
-// - 自包含：从 store 读取自身展开状态、子条目、加载状态、内联编辑状态
-// - memo 优化：仅当 props（path/name/type/depth/onOpenFile）变化时重渲染
-// - ft-node 作为 position: relative 承载「更多」按钮的绝对定位
-// - 文学风视觉：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
-// ──────────────────────────────────────────────────────────────
+import { NodeMenu } from './node-menu';
 
 /** 文件类型简化为「目录」或「文件」（symlink 暂按文件渲染） */
 type NodeType = 'directory' | 'file';
 
-const EMPTY_ENTRIES: readonly FileEntry[] = [];
-
-export async function copyToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // 静默失败：剪贴板权限被拒或不可用，不影响主流程
-  }
-}
-
 // 空条目常量：避免每次渲染创建新数组引用导致 memo 失效
+const EMPTY_ENTRIES: readonly FileEntry[] = [];
 
 interface FileTreeNodeProps {
   /** 节点绝对路径（作为 store key + 唯一标识） */
@@ -180,6 +143,7 @@ export function FileTreeNode({
               </span>
             )}
           </button>
+          <NodeMenu path={path} type="directory" disabled={isRenaming} />
         </div>
         {expanded && (
           <fieldset className="ft-children">
@@ -271,23 +235,8 @@ export function FileTreeNode({
             </span>
           )}
         </button>
+        <NodeMenu path={path} type="file" disabled={isRenaming} />
       </div>
     </div>
   );
 }
-
-// ── 子组件：节点「更多操作」菜单 ────────────────────────────
-
-/**
- * 节点「更多操作」按钮 + 下拉菜单
- *
- * 通过 DropdownMenu 实现上下文菜单：
- * - hover 时 ft-node 显示按钮（CSS opacity 控制）
- * - 点击按钮弹出菜单
- * - 菜单项根据节点类型动态生成
- *
- * 设计要点：
- * - 按钮在 ft-node 内部（不在 row button 内），避免 button 嵌套 button（HTML 不允许）
- * - 通过 stopPropagation 避免点击按钮触发 row 的 click
- * - 使用 onSelect + setTimeout(0) 打开后续 Dialog/输入框（Radix 推荐模式）
- */

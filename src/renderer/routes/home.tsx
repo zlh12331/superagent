@@ -26,6 +26,7 @@ import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
+import { pendingMessageKey } from '@/lib/pending-message';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -199,9 +200,10 @@ export function HomePage(): ReactElement {
       exitWelcomeMode();
       navigate(ROUTES.chatPath(sessionId));
       // 透传首条消息：通过 sessionStorage 暂存，ChatPanel 挂载后读取并发送
-      // （避免在 navigate 前直接调用 sendMessage，因为 ChatPanel 还未挂载）
+      // （避免在 navigate 前直接调用 sendMessage，因为 ChatPanel 还未挂载；
+      //   key 契约见 lib/pending-message.ts，消费方为 ChatPanel）
       if (text.trim().length > 0) {
-        sessionStorage.setItem(`welcome:pending-message:${sessionId}`, JSON.stringify({ text }));
+        sessionStorage.setItem(pendingMessageKey(sessionId), JSON.stringify({ text }));
       }
     } catch {
       // onError 已在 useCreateSession 中 toast 提示

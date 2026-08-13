@@ -66,7 +66,7 @@
       "noModels": "暂无已配置模型，请到设置中配置 API Key 或添加运行时模型",
       "noModelConfigured": "未配置模型",
       "confirm": "确认",
-      "copyFailed": "笔记本电脑"
+      "copyFailed": "复制失败：剪贴板不可用"
     },
     "topbar": {
       "expandSidebar": "展开侧边栏",
