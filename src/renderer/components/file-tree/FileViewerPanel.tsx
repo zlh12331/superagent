@@ -153,19 +153,19 @@ export function FileViewerPanel(): ReactElement {
     }
   };
 
-  // Ctrl+S / Cmd+S 快捷键保存
+  // 全局 Ctrl+S 桥接：编辑态打开时把 handleSave 注册到 file-viewer-store，
+  // AppShell 的全局快捷键（settings.shortcuts.saveFile，可自定义）→ requestSave() 触发；
+  // 关闭/退出编辑态/卸载时注销，避免无查看器时快捷键误触。
   useEffect(() => {
-    if (!editMode || !open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isSaveShortcut = (e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S');
-      if (isSaveShortcut) {
-        e.preventDefault();
-        void handleSave();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleSave（依赖不变时引用稳定），无需 useCallback；未缓存时重复绑定仅低效不错误
+    if (!editMode || !open) {
+      useFileViewerStore.getState().registerSaveHandler(null);
+      return undefined;
+    }
+    useFileViewerStore.getState().registerSaveHandler(() => {
+      void handleSave();
+    });
+    return () => useFileViewerStore.getState().registerSaveHandler(null);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleSave（依赖不变时引用稳定），无需 useCallback；未缓存时重复注册仅低效不错误
   }, [editMode, open, handleSave]);
 
   // textarea ref（用于滚动同步）

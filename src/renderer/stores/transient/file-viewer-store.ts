@@ -16,6 +16,8 @@
 
 import { create } from 'zustand';
 
+import { i18n } from '@/i18n';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 
 /**
@@ -38,10 +40,19 @@ interface FileViewerState {
   readonly isDirty: boolean;
 
   // ── 操作方法 ────────────────────────────────────────
-  /** 打开指定文件（FileTreePanel 点击文件时调用），自动重置编辑态 */
-  readonly openFile: (filePath: string) => void;
-  /** 关闭 Dialog（Esc / 点击遮罩 / 关闭按钮时调用） */
+  /**
+   * 打开指定文件（FileTreePanel / 命令面板 / 引用文件跳转共用），自动重置编辑态。
+   * 脏数据保护：当前文件有未保存修改时先确认，取消则保持当前文件。
+   */
+  readonly openFile: (filePath: string) => Promise<void>;
+  /** 关闭查看器（Esc / 关闭按钮时调用） */
   readonly close: () => void;
+
+  // ── 全局保存桥接（AppShell Ctrl+S 快捷键 → 查看器实例） ──
+  /** 注册当前查看器实例的保存处理器（编辑态打开时注册，关闭/卸载时注销） */
+  readonly registerSaveHandler: (handler: (() => void) | null) => void;
+  /** 触发保存（无处理器时 no-op；处理器内部自带 isDirty/保存中防重） */
+  readonly requestSave: () => void;
 
   /**
    * 设置从 IPC 加载的原始内容
@@ -71,6 +82,14 @@ function computeDirty(original: string, edited: string): boolean {
 }
 
 /**
+ * 当前保存处理器（模块级变量，非响应式状态）
+ *
+ * 仅作 AppShell 全局 Ctrl+S 快捷键 → FileViewerPanel.handleSave 的桥接；
+ * 不放进 zustand state：注册/注销不应触发任何订阅者重渲染。
+ */
+let saveHandler: (() => void) | null = null;
+
+/**
  * 文件查看器 store
  *
  * @example
@@ -96,7 +115,17 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
   editedContent: '',
   isDirty: false,
 
-  openFile: (filePath) => {
+  openFile: async (filePath) => {
+    const current = useFileViewerStore.getState();
+    // 脏数据保护：切换文件前确认未保存修改（重复打开同一文件不提示）
+    if (current.open && current.isDirty && current.filePath !== filePath) {
+      const ok = await confirm({
+        title: i18n.t('fileViewer.unsaved'),
+        message: i18n.t('fileViewer.confirmDiscardChanges'),
+        danger: true,
+      });
+      if (!ok) return;
+    }
     set({
       open: true,
       filePath,
@@ -112,6 +141,14 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
   },
 
   close: () => set({ open: false, editMode: false }),
+
+  registerSaveHandler: (handler) => {
+    saveHandler = handler;
+  },
+
+  requestSave: () => {
+    saveHandler?.();
+  },
 
   setLoadedContent: (content) =>
     set({

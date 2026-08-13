@@ -44,10 +44,10 @@ import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useTranslation } from '@/i18n/use-translation';
-import { DRAFT_SESSION_ID } from '@/lib/constants';
+import { DRAFT_SESSION_ID, ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
-import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { nextTheme, useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -136,7 +136,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   const [draggingSide, setDraggingSide] = useState<ResizerSide | null>(null);
 
-  // 命令面板 open 状态（多入口：⌘P 快捷键 / Topbar / Shift+/ / 错误动作；集中到 ui-store）
+  // 命令面板 open 状态（多入口：⌘P/Ctrl+K 快捷键 / Topbar / 错误动作；集中到 ui-store）
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const openPalette = useUiStore((s) => s.openPalette);
   const closePalette = useUiStore((s) => s.closePalette);
@@ -169,16 +169,22 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   useKeyboardShortcuts({
     onCommandPalette: () => openPalette(),
-    onSaveFile: () => {},
+    // 全局保存：转发给文件查看器实例（编辑态打开时已注册 handleSave 到 store）；
+    // 无查看器 / 非编辑态时 no-op——修复此前空绑定死代码（真实保存被困在查看器本地 keydown）
+    onSaveFile: () => {
+      useFileViewerStore.getState().requestSave();
+    },
     // ⌘F 文件模糊搜索（对齐参考项目：Ctrl/Cmd + F 触发 FuzzySearchDialog）
     onSearchFile: () => setFuzzyOpen(true),
     onToggleTheme: () => {
-      const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
-      setTheme(nextTheme);
+      setTheme(nextTheme(theme));
     },
     onOpenSettings: openSettings,
+    // 与 Sidebar handleNewChat 保持一致：欢迎页（内部清激活会话）+ 跳转首页
+    //（此前仅 enterWelcomeMode，URL 停留当前路由）
     onNewSession: () => {
-      enterWelcomeMode();
+      enterWelcomeMode(null);
+      navigate(ROUTES.home);
     },
     onOpenShortcutHelp: () => setShortcutHelpOpen(true),
     // 面板切换（Ctrl+B/1、Ctrl+J/2；对齐参考项目 toggle-left/right-sidebar 快捷键）
