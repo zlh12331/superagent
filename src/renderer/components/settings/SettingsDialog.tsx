@@ -271,8 +271,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
 
           {/* 内容区 */}
           <div className="overflow-y-auto overflow-x-hidden px-5 py-[18px]">
-            {/* 组件级错误边界：pane 抛错局部降级（不拖垮整个设置抽屉） */}
-            <SectionErrorBoundary name={`settings:${activeSection}`}>
+            {/* 组件级错误边界：pane 抛错局部降级（不拖垮整个设置抽屉）；
+               resetKeys 随分区切换重置错误态——此前切分区后错误残留 */}
+            <SectionErrorBoundary name={`settings:${activeSection}`} resetKeys={[activeSection]}>
               {renderSection(activeSection, open)}
             </SectionErrorBoundary>
           </div>

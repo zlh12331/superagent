@@ -2949,6 +2949,41 @@ button.card-head {
   padding: 4px 0 8px;
 }
 
+/* ── 文件树视图头部（返回按钮 + 标题 + 更多菜单；此前 sft-* 无 CSS 规则）── */
+.sft-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sft-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sft-back:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+.sft-title {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  color: var(--sidebar-foreground);
+}
+
 /* 单个节点容器 */
 .ft-node {
   user-select: none;

@@ -326,7 +326,8 @@ function ThreadItem({
           {/* 文件树按钮（会话操作之后——用户要求的顺序：操作菜单在左，文件树在右） */}
           <button
             type="button"
-            className="ti-action-btn"
+            // 与左侧更多菜单按钮同款工具类样式（此前 .ti-action-btn 无任何 CSS 规则，裸奔渲染）
+            className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
             aria-label={t('sidebar.openFiles')}
             title={t('sidebar.openFiles')}
             disabled={isDeleting}

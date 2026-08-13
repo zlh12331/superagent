@@ -174,6 +174,12 @@ export function McpSection(): ReactElement {
               <Square className="size-3" />
             </Button>
           </SettingRow>
+          {/* 最后一次错误（主进程 lastError 字段，此前仅展示状态徽章、错误信息丢失） */}
+          {server.lastError !== undefined && server.lastError !== '' && (
+            <p className="text-[var(--error)]/90 px-1 font-mono text-2xs break-all" role="status">
+              {server.lastError}
+            </p>
+          )}
           {/* 工具列表详情（展开态，对齐参考项目 McpServerDetailDialog） */}
           {expandedServer === server.config.name && (
             <div className="bg-card rounded-lg border px-3 py-2">

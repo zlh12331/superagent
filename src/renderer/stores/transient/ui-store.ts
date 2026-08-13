@@ -16,7 +16,7 @@ interface UiState {
   readonly openSettings: () => void;
   /** 关闭设置对话框 */
   readonly closeSettings: () => void;
-  /** 命令面板是否打开（多入口：顶栏按钮 / Ctrl+P / Shift+/ / 错误动作；集中到 store 避免双模式） */
+  /** 命令面板是否打开（多入口：顶栏按钮 / Ctrl+P / Ctrl+K / 错误动作；集中到 store 避免双模式） */
   readonly paletteOpen: boolean;
   /** 打开命令面板 */
   readonly openPalette: () => void;

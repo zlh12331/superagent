@@ -5,19 +5,19 @@
 // 职责：
 // - 使用 createBrowserRouter（Data Mode）声明全应用路由
 // - 根布局 root.tsx 挂载 AppShell（Topbar + Sidebar + 内容区）
-// - index 路由渲染 HomePage（新对话草稿区，直接渲染 ChatPanel）
-// - /chat/:sessionId 路由渲染 ChatPage（历史会话续传）
+// - index 路由渲染 HomePage（欢迎页：品牌区 + 输入框 + 快捷动作 + 项目选择）
+// - /chat/:sessionId 路由渲染 ChatPage（历史会话续传，内部渲染 ChatPanel）
 // - 提供 RootErrorBoundary 作为顶层错误边界
 //
 // 路由树：
 //   /                            → RootLayout (AppShell)
-//     index                      → HomePage（新对话草稿，chatId='draft'）
+//     index                      → HomePage（欢迎页 / 新会话创建入口）
 //     /chat/:sessionId           → ChatPage（历史会话，chatId=sessionId）
 //
 // 说明：
-// - HomePage 和 ChatPage 都渲染 ChatPanel，仅 chatId 不同
+// - HomePage 创建会话后跳转 /chat/:id，ChatPanel 仅在聊天路由渲染
 // - useChat 通过 chatId 隔离消息状态，切换时自动重置
-// - AppShell 中已集成 ApprovalDialog，所有路由下都能接收审批请求
+// - AppShell 中已集成 AskDialog，所有路由下都能接收 Agent 提问
 
 import { createHashRouter } from 'react-router';
 
@@ -44,7 +44,7 @@ export const router = createHashRouter([
     // biome-ignore lint/style/useNamingConvention: React Router 8 路由 API 要求 PascalCase 属性名
     HydrateFallback: RootHydrateFallback,
     children: [
-      // 首页：新对话草稿区（直接渲染 ChatPanel，chatId='draft'）
+      // 首页：欢迎页（品牌区 + composer + 快捷动作）
       {
         index: true,
         lazy: async () => {

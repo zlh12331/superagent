@@ -75,18 +75,22 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   const openFile = useFileViewerStore((s) => s.openFile);
 
   // 头部菜单操作（用户要求：三点点按钮 → 添加文件夹 / 添加文件 / 刷新）
+  // 刷新范围：根目录 + 所有已展开目录（此前只重拉根目录一层，展开的子树刷新不到）
   const refreshTree = useCallback(async (): Promise<void> => {
     if (typeof window === 'undefined' || window.api === undefined || rootPath === null) {
       return;
     }
-    try {
-      const res = await window.api.file.list({ path: rootPath, depth: 1, includeHidden: false });
-      if ('data' in res && res.data) {
-        useFileTreeStore.getState().setEntries(rootPath, res.data.entries);
-      }
-    } catch {
-      // 刷新失败静默（watch 事件流仍在运行）
-    }
+    const state = useFileTreeStore.getState();
+    const paths = [...new Set([rootPath, ...state.expandedPaths])];
+    await Promise.allSettled(
+      paths.map(async (path) => {
+        const res = await window.api.file.list({ path, depth: 1, includeHidden: false });
+        if ('data' in res && res.data) {
+          useFileTreeStore.getState().setEntries(path, res.data.entries);
+        }
+      }),
+    );
+    // 失败静默：file:watch 事件流仍在运行，个别目录失败由下次展开自然恢复
   }, [rootPath]);
   const setExpanded = useFileTreeStore((s) => s.setExpanded);
   const startCreate = useFileTreeStore((s) => s.startCreate);
