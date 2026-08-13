@@ -163,6 +163,8 @@ export const gitMocks = {
  * Settings 域默认 mock 响应
  */
 export const settingsMocks = {
+  getAll: () => ok({ settings: {} }),
+  set: () => ok({ ok: true }),
   getApiKey: () => ok({ configured: false }),
   setApiKey: () => ok({ ok: true }),
   deleteApiKey: () => ok({ ok: true }),

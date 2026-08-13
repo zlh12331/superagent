@@ -8,14 +8,18 @@
 // 4. approvals：FIFO/approve/reject/dismiss/clearBySession/resolved 上限
 // 5. create-persistent：key 前缀/partialize 过滤函数/migrate 透传
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPersistentStore } from '../persistent/create-persistent-store';
 import { useDraftStore } from '../persistent/draft-store';
-import { useSettingsStore } from '../persistent/settings-store';
+import {
+  applySettingsSnapshot,
+  migrateShortcuts,
+  useSettingsStore,
+} from '../persistent/settings-store';
 import { useApprovalsStore } from '../transient/approvals-store';
 import { useToolStore } from '../transient/tool-store';
 
-/** persist 中间件附加的 rehydrate API（工厂返回类型未暴露，运行时存在） */
+/** persist 中间件附加的 rehydrate API（工厂返回类型未暴露，运行时存在；create-persistent 测试用） */
 const rehydrate = (store: unknown): Promise<void> =>
   (store as unknown as { persist: { rehydrate: () => Promise<void> } }).persist.rehydrate();
 
@@ -25,6 +29,9 @@ describe('stores 批次1 缺口补全', () => {
     useDraftStore.setState({ drafts: {} });
     useToolStore.setState({ callsBySession: new Map() });
     useApprovalsStore.setState({ pending: [], resolved: [] });
+    // S1：settings 下沉 SQLite——内存态不再经 persist rehydrate 重置，
+    // 显式重置回默认值（applySettingsSnapshot({}) = 全默认）
+    applySettingsSnapshot({});
   });
 
   describe('draft-store', () => {
@@ -104,93 +111,59 @@ describe('stores 批次1 缺口补全', () => {
       expect(s.experimental).toMatchObject({ scanlines: true, reasoningCollapsed: true });
     });
 
-    it('持久化：updateAi 后写入 localStorage', () => {
+    it('S1 写穿透：updateAi 后经 settings:set IPC 落库（不再写 localStorage）', () => {
+      const setMock = vi.fn(async () => ({ data: { ok: true } }));
+      // 仅注入被测路径用到的方法（测试骨架为最小 mock）
+      window.api.settings = { set: setMock } as never;
       useSettingsStore.getState().updateAi({ temperature: 0.5 });
-      const raw = localStorage.getItem('code-agent:settings');
-      expect(raw).not.toBeNull();
-      if (raw !== null) {
-        expect(JSON.parse(raw)).toMatchObject({ state: { ai: { temperature: 0.5 } } });
-      }
+      expect(setMock).toHaveBeenCalledWith({
+        key: 'ai',
+        value: expect.objectContaining({ temperature: 0.5 }),
+      });
+      // 不再写 localStorage（真源已迁移 SQLite）
+      expect(localStorage.getItem('code-agent:settings')).toBeNull();
     });
 
-    it('migrate v2→v3：Meta+ 快捷键归一化为 Ctrl+（非 mac）', async () => {
-      // 预置 v2 数据（Meta 前缀），触发 rehydrate 执行 migrate
-      localStorage.setItem(
-        'code-agent:settings',
-        JSON.stringify({
-          state: {
-            theme: 'dark',
-            ai: {
-              defaultProvider: 'deepseek',
-              defaultModel: 'deepseek-v4-flash',
-              temperature: 0.7,
-              systemPrompt: '',
-              thinking: 'high',
-            },
-            editor: { fontSize: 14, vimMode: false },
-            shortcuts: {
-              commandPalette: 'Meta+P',
-              saveFile: 'Meta+S',
-              searchFile: 'Meta+F',
-              toggleTheme: 'Meta+Shift+T',
-              openSettings: 'Meta+,',
-              newSession: 'Meta+N',
-            },
-            experimental: { scanlines: false, reasoningCollapsed: true },
-          },
-          version: 2,
-        }),
-      );
-      await rehydrate(useSettingsStore);
+    it('migrate v2→v3：Meta+ 快捷键归一化为 Ctrl+（非 mac）', () => {
+      const legacy = {
+        theme: 'dark',
+        shortcuts: {
+          commandPalette: 'Meta+P',
+          saveFile: 'Meta+S',
+          newSession: 'Meta+N',
+        },
+      };
+      const migrated = migrateShortcuts(legacy);
+      expect((migrated.shortcuts as Record<string, string>)['commandPalette']).toBe('Ctrl+P');
+      expect((migrated.shortcuts as Record<string, string>)['saveFile']).toBe('Ctrl+S');
+      expect((migrated.shortcuts as Record<string, string>)['newSession']).toBe('Ctrl+N');
+    });
+
+    it('migrate：旧数据缺 shortcuts → 返回原状态不抛', () => {
+      expect(migrateShortcuts({ theme: 'light' })).toEqual({ theme: 'light' });
+    });
+
+    it('migrate：非 Meta 前缀快捷键保持原值', () => {
+      const migrated = migrateShortcuts({
+        theme: 'dark',
+        shortcuts: {
+          commandPalette: 'Ctrl+Shift+P',
+          saveFile: 'Ctrl+X',
+          searchFile: 'Meta+F',
+        },
+      });
+      const shortcuts = migrated.shortcuts as Record<string, string>;
+      expect(shortcuts['commandPalette']).toBe('Ctrl+Shift+P');
+      expect(shortcuts['saveFile']).toBe('Ctrl+X');
+      expect(shortcuts['searchFile']).toBe('Ctrl+F');
+    });
+
+    it('applySettingsSnapshot：快照合并默认值（缺字段补默认）', () => {
+      applySettingsSnapshot({ theme: 'light', ai: { temperature: 1.1 } });
       const s = useSettingsStore.getState();
-      expect(s.shortcuts.commandPalette).toBe('Ctrl+P');
-      expect(s.shortcuts.saveFile).toBe('Ctrl+S');
-      expect(s.shortcuts.newSession).toBe('Ctrl+N');
-    });
-
-    it('migrate：旧数据缺 shortcuts → 返回原状态不抛', async () => {
-      localStorage.setItem(
-        'code-agent:settings',
-        JSON.stringify({ state: { theme: 'light' }, version: 2 }),
-      );
-      await rehydrate(useSettingsStore);
-      // shortcuts 缺失：migrate 直接返回原 state（不抛、不重建快捷键）
-      expect(useSettingsStore.getState().theme).toBe('light');
-    });
-
-    it('migrate：非 Meta 前缀快捷键保持原值', async () => {
-      localStorage.setItem(
-        'code-agent:settings',
-        JSON.stringify({
-          state: {
-            theme: 'dark',
-            ai: {
-              defaultProvider: 'deepseek',
-              defaultModel: 'deepseek-v4-flash',
-              temperature: 0.7,
-              systemPrompt: '',
-              thinking: 'high',
-            },
-            editor: { fontSize: 14, vimMode: false },
-            shortcuts: {
-              commandPalette: 'Ctrl+Shift+P',
-              saveFile: 'Ctrl+X',
-              searchFile: 'Meta+F',
-              toggleTheme: 'Meta+Shift+T',
-              openSettings: 'Meta+,',
-              newSession: 'Meta+N',
-            },
-            experimental: { scanlines: false, reasoningCollapsed: true },
-          },
-          version: 2,
-        }),
-      );
-      await rehydrate(useSettingsStore);
-      const s = useSettingsStore.getState();
-      // 非 Meta 前缀保持原值；Meta 前缀归一化
-      expect(s.shortcuts.commandPalette).toBe('Ctrl+Shift+P');
-      expect(s.shortcuts.saveFile).toBe('Ctrl+X');
-      expect(s.shortcuts.searchFile).toBe('Ctrl+F');
+      expect(s.theme).toBe('light');
+      expect(s.ai).toMatchObject({ temperature: 1.1, defaultProvider: 'deepseek' });
+      expect(s.shortcuts.commandPalette).toContain('Ctrl+P');
     });
   });
 

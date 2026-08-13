@@ -55,9 +55,14 @@ export function resolveSystemTheme(): 'light' | 'dark' {
  * 在 React 渲染前同步应用初始主题，消除首屏闪烁
  *
  * 必须在 createRoot(...).render() 之前调用。
+ *
+ * S1（settings 下沉 SQLite）：theme 参数由 settings-bootstrap 传入
+ * （启动快照 / legacy 迁移结果）；未传时回退读 localStorage（测试与
+ * 浏览器模式保持原行为）。
  */
-export function applyInitialTheme(): void {
-  const theme = readStoredTheme(window.localStorage);
-  const resolved: 'light' | 'dark' = theme === 'system' ? resolveSystemTheme() : theme;
+export function applyInitialTheme(theme?: StoredTheme): void {
+  const resolvedTheme = theme ?? readStoredTheme(window.localStorage);
+  const resolved: 'light' | 'dark' =
+    resolvedTheme === 'system' ? resolveSystemTheme() : resolvedTheme;
   document.documentElement.classList.toggle('dark', resolved === 'dark');
 }

@@ -555,6 +555,19 @@ function createMockApi(): IpcApi {
     },
 
     settings: {
+      // S1：settings 下沉 SQLite 的 mock 实现（浏览器模式持久化到 localStorage）
+      getAll: async () => {
+        const raw = localStorage.getItem('mock-settings');
+        return ok({ settings: raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>) });
+      },
+      set: async (input: Req<IpcApi['settings']['set']>) => {
+        const raw = localStorage.getItem('mock-settings');
+        const cur: Record<string, unknown> =
+          raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>);
+        cur[input.key] = input.value;
+        localStorage.setItem('mock-settings', JSON.stringify(cur));
+        return ok({ ok: true });
+      },
       getApiKey: async () => {
         // localStorage 持久化（模拟真实 keychain 跨重启保留——E2E 前置配置后 reload 仍生效）
         // P0 安全对齐：与真实 handler 一致只返回配置状态布尔，不回传明文

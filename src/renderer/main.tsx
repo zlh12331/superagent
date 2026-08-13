@@ -34,7 +34,15 @@ window.addEventListener('unhandledrejection', (event) => {
   console.error('[unhandledrejection]', reason);
 });
 
-applyInitialTheme();
+// S1（settings 下沉 SQLite）：render 前拉取设置快照（顶层 await）
+// - Electron：settings:getAll 读 SQLite；空库时一次性迁移 legacy localStorage
+// - 浏览器模式：回退 localStorage（mock window.api 由上一分支注入）
+import { bootstrapSettings } from '@/lib/settings-bootstrap';
+import { applySettingsSnapshot } from '@/stores/persistent/settings-store';
+
+const { theme, snapshot } = await bootstrapSettings();
+applySettingsSnapshot(snapshot);
+applyInitialTheme(theme);
 // React 19 createRoot API
 const rootElement = document.getElementById('root');
 if (!rootElement) {

@@ -6,14 +6,16 @@
 // - 替代 ThemeProvider 中手写的 localStorage 逻辑（ThemeProvider 改为副作用消费方）
 // - 跨应用重启保留用户设置
 //
-// 设计：
-// - 使用 createPersistentStore 工厂统一 storage key 前缀 + 版本迁移
-// - 字段按业务域分组（theme / ai / editor），便于扩展
+// S1 设计（settings 下沉 SQLite，用户决策）：
+// - 持久化真源从 localStorage 迁移到主进程 SQLite（app_settings 表）
+// - 本 store 保持纯内存态（即时性）；写穿透：每次变更 fire-and-forget
+//   经 settings:set IPC 落库；启动时 main.tsx 经 settings:getAll 拉取快照后
+//   applySettingsSnapshot() 注入（首帧前完成，无主题闪烁）
 // - 仅存储用户偏好，不存储敏感数据（API Key 由主进程 keychain 管理）
 // ──────────────────────────────────────────────────────────────
 
 import type { ApiKeyProvider, ThinkingLevel } from '@code-agent/shared/renderer';
-import { createPersistentStore } from './create-persistent-store';
+import { create } from 'zustand';
 
 /**
  * 平台修饰键：macOS 用 Meta（⌘），Windows/Linux 用 Ctrl
@@ -49,8 +51,6 @@ export interface AiSettings {
    * 空字符串表示使用主进程内置默认 system prompt；
    * 非空字符串会通过 AgentRunReq.systemPrompt 透传给主进程，
    * 覆盖内置默认值。
-   *
-   * 用途：让用户自定义 Agent 行为（如"使用中文回复"、"专注于 TypeScript 代码"等）。
    */
   readonly systemPrompt: string;
   /**
@@ -105,9 +105,9 @@ export interface ExperimentalSettings {
 }
 
 /**
- * 用户设置状态形状
+ * 用户设置数据形状（不含操作方法；DEFAULT_SETTINGS 与快照共用）
  */
-interface SettingsState {
+interface SettingsData {
   /** 主题设置 */
   readonly theme: Theme;
   /** AI 设置 */
@@ -118,7 +118,12 @@ interface SettingsState {
   readonly shortcuts: KeyboardShortcuts;
   /** 实验性功能 */
   readonly experimental: ExperimentalSettings;
+}
 
+/**
+ * 用户设置状态形状
+ */
+interface SettingsState extends SettingsData {
   // ── 操作方法 ────────────────────────────────────────
   /** 设置主题 */
   readonly setTheme: (theme: Theme) => void;
@@ -133,7 +138,74 @@ interface SettingsState {
 }
 
 /**
- * 用户设置 Store（持久化）
+ * 写穿透：设置变更后 fire-and-forget 经 IPC 落库（SQLite 单一真源）
+ *
+ * window.api 未注入（浏览器模式/单测）时静默跳过——内存态仍可用。
+ */
+function persistSetting(key: string, value: unknown): void {
+  const api = window.api;
+  const setter = api?.settings?.set;
+  if (typeof setter !== 'function') {
+    return;
+  }
+  void setter({ key, value }).catch(() => {
+    // 落库失败静默：下次变更会重写；不阻断 UI
+  });
+}
+
+/**
+ * 旧版 v3 快捷键迁移（Meta+ → Ctrl+，Windows/Linux 平台归一化）
+ *
+ * S1：从 persist migrate 迁移为纯函数，供 settings-bootstrap 对
+ * localStorage 旧数据与 SQLite 快照统一应用。
+ */
+export function migrateShortcuts<T extends object>(state: T): T {
+  const shortcuts = (state as { readonly shortcuts?: unknown }).shortcuts as
+    | Record<string, string>
+    | undefined;
+  if (shortcuts === undefined || IS_MAC) {
+    return state;
+  }
+  const migrated: Record<string, string> = {};
+  for (const [key, value] of Object.entries(shortcuts)) {
+    migrated[key] =
+      typeof value === 'string' && value.startsWith('Meta+')
+        ? value.replace(/^Meta\+/, 'Ctrl+')
+        : (value as string);
+  }
+  return { ...state, shortcuts: migrated } as T;
+}
+
+/** 默认设置（模块级常量；applySettingsSnapshot 覆盖） */
+const DEFAULT_SETTINGS: SettingsData = {
+  theme: 'dark',
+  ai: {
+    defaultProvider: 'deepseek',
+    defaultModel: 'deepseek-v4-flash',
+    temperature: 0.7,
+    systemPrompt: '',
+    thinking: 'high',
+  },
+  editor: {
+    fontSize: 14,
+    vimMode: false,
+  },
+  shortcuts: {
+    commandPalette: `${MOD}+P`,
+    saveFile: `${MOD}+S`,
+    searchFile: `${MOD}+F`,
+    toggleTheme: `${MOD}+Shift+T`,
+    openSettings: `${MOD}+,`,
+    newSession: `${MOD}+N`,
+  },
+  experimental: {
+    scanlines: false,
+    reasoningCollapsed: true,
+  },
+};
+
+/**
+ * 用户设置 Store（S1：内存态 + 写穿透落库）
  *
  * @example
  * ```tsx
@@ -141,63 +213,59 @@ interface SettingsState {
  * const setTheme = useSettingsStore((s) => s.setTheme);
  * ```
  */
-export const useSettingsStore = createPersistentStore<SettingsState>()(
-  (set) => ({
-    theme: 'dark',
-    ai: {
-      defaultProvider: 'deepseek',
-      defaultModel: 'deepseek-v4-flash',
-      temperature: 0.7,
-      systemPrompt: '',
-      thinking: 'high',
-    },
+export const useSettingsStore = create<SettingsState>()((set) => ({
+  ...DEFAULT_SETTINGS,
+
+  setTheme: (theme) => {
+    set({ theme });
+    persistSetting('theme', theme);
+  },
+  updateAi: (patch) =>
+    set((state) => {
+      const ai = { ...state.ai, ...patch };
+      persistSetting('ai', ai);
+      return { ai };
+    }),
+  updateEditor: (patch) =>
+    set((state) => {
+      const editor = { ...state.editor, ...patch };
+      persistSetting('editor', editor);
+      return { editor };
+    }),
+  updateShortcuts: (patch) =>
+    set((state) => {
+      const shortcuts = { ...state.shortcuts, ...patch };
+      persistSetting('shortcuts', shortcuts);
+      return { shortcuts };
+    }),
+  updateExperimental: (patch) =>
+    set((state) => {
+      const experimental = { ...state.experimental, ...patch };
+      persistSetting('experimental', experimental);
+      return { experimental };
+    }),
+}));
+
+/**
+ * 应用启动快照（S1：main.tsx 在 render 前调用，覆盖默认值）
+ *
+ * @param snapshot settings:getAll 返回的 key → JSON 值映射（已含迁移处理）
+ */
+export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>>): void {
+  useSettingsStore.setState({
+    theme: (snapshot['theme'] as Theme | undefined) ?? DEFAULT_SETTINGS.theme,
+    ai: { ...DEFAULT_SETTINGS.ai, ...((snapshot['ai'] as Partial<AiSettings> | undefined) ?? {}) },
     editor: {
-      fontSize: 14,
-      vimMode: false,
+      ...DEFAULT_SETTINGS.editor,
+      ...((snapshot['editor'] as Partial<EditorSettings> | undefined) ?? {}),
     },
     shortcuts: {
-      commandPalette: `${MOD}+P`,
-      saveFile: `${MOD}+S`,
-      // ⌘F 文件模糊搜索（对齐参考项目：Ctrl/Cmd + F 打开 FuzzySearchDialog）
-      searchFile: `${MOD}+F`,
-      toggleTheme: `${MOD}+Shift+T`,
-      openSettings: `${MOD}+,`,
-      newSession: `${MOD}+N`,
+      ...DEFAULT_SETTINGS.shortcuts,
+      ...((snapshot['shortcuts'] as Partial<KeyboardShortcuts> | undefined) ?? {}),
     },
     experimental: {
-      scanlines: false,
-      reasoningCollapsed: true,
+      ...DEFAULT_SETTINGS.experimental,
+      ...((snapshot['experimental'] as Partial<ExperimentalSettings> | undefined) ?? {}),
     },
-
-    setTheme: (theme) => set({ theme }),
-    updateAi: (patch) => set((state) => ({ ai: { ...state.ai, ...patch } })),
-    updateEditor: (patch) => set((state) => ({ editor: { ...state.editor, ...patch } })),
-    updateShortcuts: (patch) => set((state) => ({ shortcuts: { ...state.shortcuts, ...patch } })),
-    updateExperimental: (patch) =>
-      set((state) => ({ experimental: { ...state.experimental, ...patch } })),
-  }),
-  {
-    name: 'settings',
-    version: 3,
-    // v3 迁移：v2 默认快捷键均为 Meta 前缀（Windows 用户按 Ctrl+P 无效），
-    // 按平台归一化——Windows/Linux 上 'Meta+P' → 'Ctrl+P'（macOS 保持）
-    migrate: (persisted): Partial<SettingsState> => {
-      const state = persisted as Partial<SettingsState> | null;
-      if (state === null || state.shortcuts === undefined || IS_MAC) {
-        return state ?? {};
-      }
-      const migrated: Record<string, string> = {};
-      for (const [key, value] of Object.entries(state.shortcuts)) {
-        migrated[key] =
-          typeof value === 'string' && value.startsWith('Meta+')
-            ? value.replace(/^Meta\+/, 'Ctrl+')
-            : (value as string);
-      }
-      // KeyboardShortcuts 为全必填接口，Record 结果经 unknown 断言（迁移保证 6 键齐全）
-      return {
-        ...state,
-        shortcuts: migrated as unknown as KeyboardShortcuts,
-      };
-    },
-  },
-);
+  });
+}

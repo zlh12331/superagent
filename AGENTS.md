@@ -101,6 +101,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - SQLite（better-sqlite3），schema 在 `src/main/infra/storage/schema.ts`
 - Drizzle Kit 从 `drizzle.config.ts` 读取配置
 - 迁移：PRAGMA user_version 版本链（`src/main/infra/storage/migrations.ts`）；新增列需三处同步：schema.ts + schema-sql.ts（新库 DDL）+ migrations.ts（老库路径）
+- **渲染层用户设置（theme/ai/editor/shortcuts/experimental）持久化真源 = SQLite `app_settings` 表**（用户决策：localStorage 合并到 SQLite）。渲染层 settings-store 保持内存态，写穿透经 `settings:set` 落库；启动快照经 `settings:getAll` 在 main.tsx 顶层 await 拉取（`settings-bootstrap.ts`）。legacy localStorage 数据首启自动迁移。draft/sidebar/activeSession 等纯 UI 态仍留 localStorage
 - 路径由 `app.getPath('userData')` 动态决定：dev 为 `.electron-user-data/sessions.db`（重定向），prod 为 `%APPDATA%/<app name>/sessions.db`
 - 原 PostgreSQL/Prisma/AGE 层已删除 — 不要尝试 prisma 相关命令
 
@@ -138,6 +139,12 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 进 CHANGELOG，其余不进）
 - 发版流程：`pnpm changelog` 生成 → 手动改版本号 + [Unreleased]→[vX.Y.Z] → `git tag vX.Y.Z` → release.yml 自动构建发布
 - 自动更新：electron-updater（generic provider，electron-builder.yml publish 配置）；开发模式 check 返回明确错误
+
+## 架构决策记录（用户已拍板，勿重复讨论）
+
+- **IM 子系统不独立化**：7 渠道适配器（QQ/微信/钉钉/Telegram/飞书/企微/webhook）继续留在主进程包内，不拆子包。
+- **TS7 工具链不收敛**：自研正则解析检查脚本（check-*）为 TS7 原生版无编译器 API 期间的临时方案，等待生态成熟稳定后再评估收敛，当前不投入。
+- **设置持久化合并到 SQLite**：已完成（见「数据库」节 app_settings 说明）。
 
 ## 外部服务 / 凭据
 
