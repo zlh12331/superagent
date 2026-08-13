@@ -15,7 +15,8 @@
 // - codegraph 是本地代码智能工具（@colbymchenry/codegraph），已通过 codegraph init 索引项目
 // - query 用 --json 输出结构化数据，其他命令输出 markdown 文本
 // - path 必须为已初始化 codegraph 索引的项目根目录
-// - 错误分类：路径未初始化 → INVALID_INPUT；codegraph 命令失败 → INTERNAL_ERROR
+// - 错误分类：codegraph 命令失败（超时/执行失败/退出码/JSON 解析）→ INTERNAL_ERROR
+//   （注：未初始化目录暂未单独分类 INVALID_INPUT——需 codegraph 退出码语义，待分类逻辑完善）
 // - 单例模式：与 FileService / GitService 一致，便于统一生命周期管理
 //
 // 内存泄漏防护（M5）：

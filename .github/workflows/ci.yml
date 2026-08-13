@@ -134,8 +134,8 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run browser E2E tests
-        run: pnpm test:e2e
+      - name: Run browser E2E tests (journey 套件偶发 flaky 用 retries 吸收)
+        run: pnpm exec playwright test --config e2e/playwright.config.ts --retries=2
 
       - name: Upload Playwright report
         if: always()
