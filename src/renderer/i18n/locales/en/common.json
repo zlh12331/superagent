@@ -569,6 +569,7 @@
     },
     "fileViewer": {
       "copyFailed": "Copy failed: clipboard unavailable",
+      "selectFile": "Select a file from the file tree",
       "saved": "Saved",
       "editor": "Editor",
       "unsaved": "Unsaved",
@@ -617,6 +618,7 @@
     "panel": {
       "tabInfo": "Info",
       "tabDiff": "Diff",
+      "tabFile": "File",
       "openFile": "Open file",
       "tabDev": "Dev",
       "goals": "Goals",

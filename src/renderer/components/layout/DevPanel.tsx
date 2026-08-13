@@ -17,6 +17,7 @@
 import {
   Activity,
   FileCode2,
+  FileText,
   GitBranch,
   Globe,
   LayoutGrid,
@@ -43,6 +44,9 @@ const TerminalPanel = lazy(() =>
 const BrowserPane = lazy(() =>
   import('@/components/dev/browser-pane').then((m) => ({ default: m.BrowserPane })),
 );
+const FileViewerPanel = lazy(() =>
+  import('@/components/file-tree/FileViewerPanel').then((m) => ({ default: m.FileViewerPanel })),
+);
 
 interface DevPanelProps {
   /**
@@ -58,7 +62,7 @@ interface DevPanelProps {
 }
 
 /** 顶层 Tab 类型 */
-type PanelTab = 'info' | 'diff' | 'browser' | 'terminal' | 'dev';
+type PanelTab = 'info' | 'diff' | 'file' | 'browser' | 'terminal' | 'dev';
 
 /** 开发者子视图类型 */
 type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
@@ -101,6 +105,10 @@ export const DevPanel = memo(function DevPanel({
               <FileCode2 className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabDiff')}</span>
             </TabsTrigger>
+            <TabsTrigger value="file" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
+              <FileText className="size-3 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">{t('panel.tabFile')}</span>
+            </TabsTrigger>
             <TabsTrigger value="browser" className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
               <Globe className="size-3 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('panel.tabBrowser')}</span>
@@ -126,6 +134,17 @@ export const DevPanel = memo(function DevPanel({
         </div>
         <div className={cn('h-full', activeTab !== 'diff' && 'hidden')}>
           <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />
+        </div>
+        <div className={cn('h-full', activeTab !== 'file' && 'hidden')}>
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                加载中…
+              </div>
+            }
+          >
+            <FileViewerPanel />
+          </Suspense>
         </div>
         <div className={cn('h-full', activeTab !== 'browser' && 'hidden')}>
           <Suspense

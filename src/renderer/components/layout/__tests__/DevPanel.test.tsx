@@ -24,6 +24,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockInfoPane,
   mockDiffPane,
+  mockFileViewerPanel,
   mockTerminalPanel,
   mockGitPanel,
   mockLogsPanel,
@@ -32,6 +33,7 @@ const {
 } = vi.hoisted(() => ({
   mockInfoPane: vi.fn(),
   mockDiffPane: vi.fn(),
+  mockFileViewerPanel: vi.fn(),
   mockTerminalPanel: vi.fn(),
   mockGitPanel: vi.fn(),
   mockLogsPanel: vi.fn(),
@@ -44,6 +46,11 @@ vi.mock('../right-panel-panes', () => ({
   InfoPane: mockInfoPane,
   // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
   DiffPane: mockDiffPane,
+}));
+
+vi.mock('@/components/file-tree/FileViewerPanel', () => ({
+  // biome-ignore lint/style/useNamingConvention: 保持与模块导出名一致
+  FileViewerPanel: mockFileViewerPanel,
 }));
 
 vi.mock('@/components/terminal/TerminalPanel', () => ({
@@ -130,6 +137,7 @@ describe('DevPanel', () => {
     vi.clearAllMocks();
     mockInfoPane.mockImplementation(MockInfoPane);
     mockDiffPane.mockImplementation(MockDiffPane);
+    mockFileViewerPanel.mockImplementation(() => <div data-testid="file-viewer-panel" />);
     mockTerminalPanel.mockImplementation(MockTerminalPanel);
     mockGitPanel.mockImplementation(MockGitPanel);
     mockLogsPanel.mockImplementation(MockLogsPanel);

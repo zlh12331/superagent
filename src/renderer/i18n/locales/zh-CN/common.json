@@ -569,6 +569,7 @@
     },
     "fileViewer": {
       "copyFailed": "复制失败：剪贴板不可用",
+      "selectFile": "从文件树选择文件",
       "saved": "已保存",
       "editor": "编辑器",
       "unsaved": "未保存",
@@ -617,6 +618,7 @@
     "panel": {
       "tabInfo": "会话详情",
       "tabDiff": "文件变更",
+      "tabFile": "文件",
       "openFile": "打开文件",
       "tabDev": "开发者",
       "goals": "会话目标",

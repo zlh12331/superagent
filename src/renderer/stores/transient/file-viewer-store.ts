@@ -16,6 +16,8 @@
 
 import { create } from 'zustand';
 
+import { useUiStore } from '@/stores/transient/ui-store';
+
 /**
  * 文件查看器状态形状
  */
@@ -94,7 +96,7 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
   editedContent: '',
   isDirty: false,
 
-  openFile: (filePath) =>
+  openFile: (filePath) => {
     set({
       open: true,
       filePath,
@@ -103,7 +105,11 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
       originalContent: '',
       editedContent: '',
       isDirty: false,
-    }),
+    });
+    // 右侧面板显示（用户要求：点击文件在右侧边栏显示内容——展开右面板并切到"文件"tab）
+    useUiStore.getState().setRightPanelCollapsed(false);
+    useUiStore.getState().setDevPanelTab('file');
+  },
 
   close: () => set({ open: false, editMode: false }),
 

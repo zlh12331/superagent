@@ -14,7 +14,7 @@
 // - 视觉对齐 Sidebar 文学风：根目录显示 workingDir basename
 // ──────────────────────────────────────────────────────────────
 
-import { ArrowLeft, FilePlus, FolderOpen, FolderPlus, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FolderOpen } from 'lucide-react';
 import { type ReactElement, useCallback } from 'react';
 
 import { useFileTree } from '@/hooks/use-file-tree';
@@ -65,44 +65,16 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   // 读取根路径（用于判断是否已初始化）
   const rootPath = useFileTreeStore((s) => s.rootPath);
 
-  // 文件点击回调：打开 FileViewerDialog（shiki 语法高亮只读查看器）
+  // 文件点击回调：打开文件查看器（右侧面板显示内容）
   const openFile = useFileViewerStore((s) => s.openFile);
-  const refreshTree = useCallback(async (): Promise<void> => {
-    // 手动刷新：重新拉取根目录（watch 事件流之外的兜底）
-    if (typeof window === 'undefined' || window.api === undefined || rootPath === null) {
-      return;
-    }
-    try {
-      const res = await window.api.file.list({ path: rootPath, depth: 1, includeHidden: false });
-      if ('data' in res && res.data) {
-        useFileTreeStore.getState().setEntries(rootPath, res.data.entries);
-      }
-    } catch {
-      // 刷新失败静默（watch 事件流仍在运行）
-    }
-  }, [rootPath]);
 
-  // 文件点击回调：打开 FileViewerDialog（shiki 语法高亮只读查看器）
+  // 文件点击回调：打开文件查看器（右侧面板显示内容）
   const handleOpenFile = useCallback(
     (filePath: string) => {
       openFile(filePath);
     },
     [openFile],
   );
-
-  // 工具栏：在根目录下新建文件/目录
-  const setExpanded = useFileTreeStore((s) => s.setExpanded);
-  const startCreate = useFileTreeStore((s) => s.startCreate);
-  const handleNewFile = useCallback((): void => {
-    if (rootPath === null) return;
-    setExpanded(rootPath, true);
-    startCreate(rootPath, 'file');
-  }, [rootPath, setExpanded, startCreate]);
-  const handleNewDir = useCallback((): void => {
-    if (rootPath === null) return;
-    setExpanded(rootPath, true);
-    startCreate(rootPath, 'directory');
-  }, [rootPath, setExpanded, startCreate]);
 
   // 无激活会话或 workingDir 为空
   if (workingDir === null) {
@@ -141,43 +113,12 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
           <ArrowLeft className="size-3.5" strokeWidth={2} />
         </button>
         <span className="sft-title">{t('sidebar.fileTree')}</span>
-        <button
-          type="button"
-          className="sft-refresh"
-          onClick={() => void refreshTree()}
-          aria-label={t('fileTree.refresh')}
-          title={t('fileTree.refresh')}
-        >
-          <RefreshCw className="size-3.5" strokeWidth={1.5} />
-        </button>
       </div>
       <div
         className="file-tree min-h-0 flex-1"
         role="tree"
         aria-label={t('fileTree.treeLabel', { name: basename(rootPath) })}
       >
-        <div className="ft-toolbar" role="toolbar" aria-label={t('fileTree.toolbarLabel')}>
-          <button
-            type="button"
-            className="ft-toolbar-btn"
-            onClick={handleNewFile}
-            aria-label={t('fileTree.newFileInRoot')}
-            title={t('fileTree.newFile')}
-            tabIndex={-1}
-          >
-            <FilePlus size={12} strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            className="ft-toolbar-btn"
-            onClick={handleNewDir}
-            aria-label={t('fileTree.newDirInRoot')}
-            title={t('fileTree.newDir')}
-            tabIndex={-1}
-          >
-            <FolderPlus size={12} strokeWidth={1.75} />
-          </button>
-        </div>
         <FileTreeNode
           path={rootPath}
           name={basename(rootPath)}

@@ -48,11 +48,9 @@ interface UiState {
 
   // ── DevPanel 激活 tab（命令面板「打开终端」等入口跨组件控制）──
   /** 右面板当前激活的 tab（对齐参考项目 codex.openTerminal 命令切换） */
-  readonly devPanelTab: 'info' | 'diff' | 'files' | 'browser' | 'terminal' | 'dev';
+  readonly devPanelTab: 'info' | 'diff' | 'file' | 'browser' | 'terminal' | 'dev';
   /** 设置右面板激活 tab */
-  readonly setDevPanelTab: (
-    tab: 'info' | 'diff' | 'files' | 'browser' | 'terminal' | 'dev',
-  ) => void;
+  readonly setDevPanelTab: (tab: 'info' | 'diff' | 'file' | 'browser' | 'terminal' | 'dev') => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({

@@ -33,7 +33,6 @@ import { DialogHost } from '@/components/common/DialogHost';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { UpdateNotice } from '@/components/common/UpdateNotice';
-import { FileViewerDialog } from '@/components/file-tree/FileViewerDialog';
 import { FuzzySearchDialog } from '@/components/file-tree/fuzzy-search-dialog';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
@@ -352,8 +351,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           避免与内联卡双 UI 重复（同一审批两处呈现） */}
       <AskDialog />
 
-      {/* 文件查看器对话框：根级渲染，由 useFileViewerStore 控制 */}
-      <FileViewerDialog />
+      {/* 文件查看器已改为右面板"文件"tab（FileViewerPanel——侧边栏树点击文件显示内容） */}
 
       {/* 设置对话框：根级渲染，由 useUiStore 控制（Topbar / 命令面板 / 错误动作共用入口） */}
       <SettingsDialog open={settingsOpen} onOpenChange={closeSettings} />

@@ -26,14 +26,8 @@ import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getHighlighter } from '@/components/chat/Markdown';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useFileContent } from '@/hooks/use-file-content';
+
 import { useFileWrite } from '@/hooks/use-file-write';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -41,17 +35,14 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
-import { FileTreeNavigator } from './FileTreeNavigator';
-
 import { basename, detectLangFromPath } from './file-viewer-utils';
 
-export function FileViewerDialog(): ReactElement {
+export function FileViewerPanel(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   // 受控状态
   const open = useFileViewerStore((s) => s.open);
   const filePath = useFileViewerStore((s) => s.filePath);
-  const close = useFileViewerStore((s) => s.close);
 
   // 编辑模式状态
   const editMode = useFileViewerStore((s) => s.editMode);
@@ -177,24 +168,6 @@ export function FileViewerDialog(): ReactElement {
     // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleSave（依赖不变时引用稳定），无需 useCallback；未缓存时重复绑定仅低效不错误
   }, [editMode, open, handleSave]);
 
-  // Dialog 关闭回调（Esc / 点击遮罩 / 点关闭按钮）
-  // 脏数据保护：未保存时阻止关闭，命令式 confirm 确认后丢弃（照搬参考项目 confirm-dialog）
-  const handleOpenChange = async (next: boolean): Promise<void> => {
-    if (!next) {
-      if (isDirty) {
-        const confirmed = await confirm({
-          title: t('fileViewer.unsaved'),
-          message: t('fileViewer.confirmCloseDirty'),
-          danger: true,
-        });
-        if (!confirmed) return;
-        // 用户确认丢弃修改
-        exitEditMode();
-      }
-      close();
-    }
-  };
-
   // textarea ref（用于滚动同步）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -211,160 +184,168 @@ export function FileViewerDialog(): ReactElement {
   const fileName = filePath !== null ? basename(filePath) : '';
   const totalLines = data?.totalLines ?? displayContent.split('\n').length;
 
+  // 未选择文件时显示引导（右面板"文件"tab 空态）
+  if (!open) {
+    return (
+      <div className="text-muted-foreground/60 flex h-full flex-col items-center justify-center gap-1.5 p-3 text-xs">
+        <FileText className="size-4" strokeWidth={1.5} />
+        {t('fileViewer.selectFile')}
+      </div>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="file-viewer-dialog sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText size={16} strokeWidth={1.75} className="text-accent" />
-            <span className="font-serif">{fileName}</span>
-            {editMode && (
-              <span className="file-viewer-edit-badge">
-                <Pencil size={10} strokeWidth={2} />
-                <span>{t('fileViewer.editor')}</span>
-              </span>
-            )}
-            {isDirty && <span className="file-viewer-dirty-dot" title={t('fileViewer.unsaved')} />}
-          </DialogTitle>
-          <DialogDescription className="font-mono text-2xs break-all opacity-70">
-            {filePath}
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* 工具栏：行数 + 模式切换 + 复制/保存按钮 */}
-        <div className="file-viewer-toolbar">
-          <span className="file-viewer-meta">
-            {totalLines} {t('fileViewer.lines', { count: totalLines })}
-            {lang !== 'text' ? ` · ${lang}` : ''}
+    <div className="file-viewer-panel flex h-full flex-col">
+      {/* 标题：文件名 + 编辑态 badge + 脏数据标记 + 完整路径 */}
+      <div className="file-viewer-header flex shrink-0 items-center gap-2 border-b px-3 py-2">
+        <FileText size={16} strokeWidth={1.75} className="text-accent" />
+        <span className="font-serif">{fileName}</span>
+        {editMode && (
+          <span className="file-viewer-edit-badge">
+            <Pencil size={10} strokeWidth={2} />
+            <span>{t('fileViewer.editor')}</span>
           </span>
-          <div className="file-viewer-actions">
-            {/* 模式切换按钮 */}
-            {!editMode ? (
-              <button
-                type="button"
-                className="file-viewer-mode-btn"
-                onClick={enterEditMode}
-                disabled={isLoading || error !== null}
-                title={t('fileViewer.switchToEdit')}
-                aria-label={t('fileViewer.switchToEdit')}
-              >
-                <Pencil size={12} />
-                <span>{t('fileViewer.edit')}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="file-viewer-mode-btn"
-                onClick={async () => {
-                  if (isDirty) {
-                    const confirmed = await confirm({
-                      title: t('fileViewer.unsaved'),
-                      message: t('fileViewer.confirmExitEdit'),
-                      danger: true,
-                    });
-                    if (!confirmed) return;
-                  }
-                  exitEditMode();
-                }}
-                title={t('fileViewer.switchToPreview')}
-                aria-label={t('fileViewer.switchToPreview')}
-              >
-                <Eye size={12} />
-                <span>{t('fileViewer.view')}</span>
-              </button>
-            )}
+        )}
+        {isDirty && <span className="file-viewer-dirty-dot" title={t('fileViewer.unsaved')} />}
+        <span
+          className="text-muted-foreground/70 ml-auto min-w-0 flex-1 truncate text-right font-mono text-2xs"
+          title={filePath ?? undefined}
+        >
+          {filePath}
+        </span>
+      </div>
 
-            {/* 保存按钮（仅编辑态可见） */}
-            {editMode && (
-              <button
-                type="button"
-                className={cn('file-viewer-save-btn', isDirty && 'dirty')}
-                onClick={handleSave}
-                disabled={!isDirty || isSaving}
-                title={`${t('common.save')} (Ctrl+S)`}
-                aria-label={t('common.save')}
-              >
-                {isSaving ? (
-                  <span className="file-viewer-spinner" role="status" />
-                ) : (
-                  <Save size={12} />
-                )}
-                <span>{isSaving ? t('fileViewer.saving') : t('common.save')}</span>
-              </button>
-            )}
-
-            {/* 复制按钮（始终可见） */}
+      {/* 工具栏：行数 + 模式切换 + 复制/保存按钮 */}
+      <div className="file-viewer-toolbar">
+        <span className="file-viewer-meta">
+          {totalLines} {t('fileViewer.lines', { count: totalLines })}
+          {lang !== 'text' ? ` · ${lang}` : ''}
+        </span>
+        <div className="file-viewer-actions">
+          {/* 模式切换按钮 */}
+          {!editMode ? (
             <button
               type="button"
-              className={cn('file-viewer-copy-btn', copied && 'copied')}
-              onClick={handleCopy}
-              disabled={displayContent === ''}
-              aria-label={copied ? t('common.copied') : t('fileViewer.copyContent')}
-              title={copied ? t('common.copied') : t('fileViewer.copyContent')}
+              className="file-viewer-mode-btn"
+              onClick={enterEditMode}
+              disabled={isLoading || error !== null}
+              title={t('fileViewer.switchToEdit')}
+              aria-label={t('fileViewer.switchToEdit')}
             >
-              {copied ? <Check size={12} /> : <Copy size={12} />}
-              <span>{copied ? t('common.copied') : t('common.copy')}</span>
+              <Pencil size={12} />
+              <span>{t('fileViewer.edit')}</span>
             </button>
-          </div>
-        </div>
+          ) : (
+            <button
+              type="button"
+              className="file-viewer-mode-btn"
+              onClick={async () => {
+                if (isDirty) {
+                  const confirmed = await confirm({
+                    title: t('fileViewer.unsaved'),
+                    message: t('fileViewer.confirmExitEdit'),
+                    danger: true,
+                  });
+                  if (!confirmed) return;
+                }
+                exitEditMode();
+              }}
+              title={t('fileViewer.switchToPreview')}
+              aria-label={t('fileViewer.switchToPreview')}
+            >
+              <Eye size={12} />
+              <span>{t('fileViewer.view')}</span>
+            </button>
+          )}
 
-        {/* 内容区：左侧文件树导航（仅查看态）+ 右侧内容 */}
-        <div className="file-viewer-layout">
-          {/* react-arborist 只读文件树：点击切换当前查看的文件（编辑态隐藏，避免脏数据切换） */}
-          {!editMode && <FileTreeNavigator />}
-          <div className="file-viewer-body">
-            {isLoading ? (
-              <div className="file-viewer-loading">{t('common.loading')}</div>
-            ) : error !== null ? (
-              <div className="file-viewer-error">
-                <p>{t('common.fileLoadFailed')}</p>
-                <p className="file-viewer-error-detail">
-                  {error instanceof Error ? error.message : String(error)}
-                </p>
-              </div>
-            ) : displayContent === '' ? (
-              <div className="file-viewer-empty">
-                {editMode ? t('common.emptyFileEdit') : t('common.emptyFile')}
-              </div>
-            ) : editMode ? (
-              // 编辑态：textarea + shiki 叠加
-              <div className="file-viewer-editor">
-                {/* 高亮层（背景，pointer-events: none） */}
-                {html !== null && (
-                  <div
-                    ref={highlightRef}
-                    className="file-viewer-editor-highlight"
-                    // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML
-                    dangerouslySetInnerHTML={{ __html: html }}
-                  />
-                )}
-                {/* textarea 层（前景，文字透明、caret 不透明） */}
-                <textarea
-                  ref={textareaRef}
-                  className="file-viewer-editor-textarea"
-                  value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
-                  onScroll={handleTextareaScroll}
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  wrap="off"
-                  aria-label={t('chat.editFileLabel', { name: fileName })}
-                />
-              </div>
-            ) : html !== null ? (
-              // 查看态：shiki 高亮
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
-              <div className="file-viewer-code" dangerouslySetInnerHTML={{ __html: html }} />
-            ) : (
-              <pre className="file-viewer-plaintext">
-                <code>{displayContent}</code>
-              </pre>
-            )}
-          </div>
+          {/* 保存按钮（仅编辑态可见） */}
+          {editMode && (
+            <button
+              type="button"
+              className={cn('file-viewer-save-btn', isDirty && 'dirty')}
+              onClick={handleSave}
+              disabled={!isDirty || isSaving}
+              title={`${t('common.save')} (Ctrl+S)`}
+              aria-label={t('common.save')}
+            >
+              {isSaving ? (
+                <span className="file-viewer-spinner" role="status" />
+              ) : (
+                <Save size={12} />
+              )}
+              <span>{isSaving ? t('fileViewer.saving') : t('common.save')}</span>
+            </button>
+          )}
+
+          {/* 复制按钮（始终可见） */}
+          <button
+            type="button"
+            className={cn('file-viewer-copy-btn', copied && 'copied')}
+            onClick={handleCopy}
+            disabled={displayContent === ''}
+            aria-label={copied ? t('common.copied') : t('fileViewer.copyContent')}
+            title={copied ? t('common.copied') : t('fileViewer.copyContent')}
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            <span>{copied ? t('common.copied') : t('common.copy')}</span>
+          </button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+
+      {/* 内容区：文件内容（侧边栏文件树已提供目录导航——面板只显示内容） */}
+      <div className="file-viewer-layout">
+        <div className="file-viewer-body">
+          {isLoading ? (
+            <div className="file-viewer-loading">{t('common.loading')}</div>
+          ) : error !== null ? (
+            <div className="file-viewer-error">
+              <p>{t('common.fileLoadFailed')}</p>
+              <p className="file-viewer-error-detail">
+                {error instanceof Error ? error.message : String(error)}
+              </p>
+            </div>
+          ) : displayContent === '' ? (
+            <div className="file-viewer-empty">
+              {editMode ? t('common.emptyFileEdit') : t('common.emptyFile')}
+            </div>
+          ) : editMode ? (
+            // 编辑态：textarea + shiki 叠加
+            <div className="file-viewer-editor">
+              {/* 高亮层（背景，pointer-events: none） */}
+              {html !== null && (
+                <div
+                  ref={highlightRef}
+                  className="file-viewer-editor-highlight"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML
+                  dangerouslySetInnerHTML={{ __html: html }}
+                />
+              )}
+              {/* textarea 层（前景，文字透明、caret 不透明） */}
+              <textarea
+                ref={textareaRef}
+                className="file-viewer-editor-textarea"
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                onScroll={handleTextareaScroll}
+                spellCheck={false}
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                wrap="off"
+                aria-label={t('chat.editFileLabel', { name: fileName })}
+              />
+            </div>
+          ) : html !== null ? (
+            // 查看态：shiki 高亮
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
+            <div className="file-viewer-code" dangerouslySetInnerHTML={{ __html: html }} />
+          ) : (
+            <pre className="file-viewer-plaintext">
+              <code>{displayContent}</code>
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
