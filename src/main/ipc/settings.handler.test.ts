@@ -67,14 +67,14 @@ describe('settings.handler API Key（三件套）', () => {
   });
 
   it('getApiKey：provider → keychain key 转换 + 读取', async () => {
-    mocks.getSecret.mockResolvedValueOnce('sk-123');
+    mocks.getSecret.mockResolvedValueOnce('sk-123' as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(mocks.getSecret).toHaveBeenCalledWith('deepseek-api-key');
     expect(res).toEqual({ apiKey: 'sk-123' });
   });
 
   it('getApiKey：未配置 → apiKey 为 null', async () => {
-    mocks.getSecret.mockResolvedValueOnce(null);
+    mocks.getSecret.mockResolvedValueOnce(null as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(res).toEqual({ apiKey: null });
   });
@@ -112,19 +112,19 @@ describe('settings.handler 遥测/审批（三件套）', () => {
   });
 
   it('getTelemetryLevel：同步读取返回', async () => {
-    const res = await handlers.getTelemetryLevel(EMPTY_CTX);
+    const res = await handlers.getTelemetryLevel(undefined, EMPTY_CTX);
     expect(mocks.readTelemetryLevelSync).toHaveBeenCalled();
     expect(res).toEqual({ level: 'off' });
   });
 
   it('setTelemetryLevel：写入 + 返回新值', async () => {
-    const res = await handlers.setTelemetryLevel({ level: 'error' }, EMPTY_CTX);
-    expect(mocks.writeTelemetryLevel).toHaveBeenCalledWith('error');
-    expect(res).toEqual({ ok: true, level: 'error' });
+    const res = await handlers.setTelemetryLevel({ level: 'error-only' }, EMPTY_CTX);
+    expect(mocks.writeTelemetryLevel).toHaveBeenCalledWith('error-only');
+    expect(res).toEqual({ ok: true, level: 'error-only' });
   });
 
   it('getApprovalMode：同步读取返回', async () => {
-    const res = await handlers.getApprovalMode(EMPTY_CTX);
+    const res = await handlers.getApprovalMode(undefined, EMPTY_CTX);
     expect(mocks.readApprovalModeSync).toHaveBeenCalled();
     expect(res).toEqual({ mode: 'auto' });
   });
@@ -168,7 +168,7 @@ describe('settings.handler 运行时模型（三件套）', () => {
   });
 
   it('addRuntimeModel：baseUrl/apiKey 未传 → 不包含该字段', async () => {
-    await handlers.addRuntimeModel({ modelId: 'm', providerKind: 'deepseek' }, EMPTY_CTX);
+    await handlers.addRuntimeModel({ modelId: 'm', providerKind: 'deepseek' } as never, EMPTY_CTX);
     expect(mocks.runtimeAdd).toHaveBeenCalledWith({ modelId: 'm', providerKind: 'deepseek' });
   });
 
@@ -188,15 +188,15 @@ describe('settings.handler 运行时模型（三件套）', () => {
         apiKey: 'secret',
         createdAt: 123,
       },
-    ]);
-    const res = await handlers.listRuntimeModels(EMPTY_CTX);
+    ] as never);
+    const res = await handlers.listRuntimeModels(undefined, EMPTY_CTX);
     expect(res).toEqual({
       models: [{ modelId: 'm1', providerKind: 'deepseek', baseUrl: 'http://x', createdAt: 123 }],
     });
   });
 
   it('listRuntimeModels：空列表 → 空数组', async () => {
-    const res = await handlers.listRuntimeModels(EMPTY_CTX);
+    const res = await handlers.listRuntimeModels(undefined, EMPTY_CTX);
     expect(res).toEqual({ models: [] });
   });
 });

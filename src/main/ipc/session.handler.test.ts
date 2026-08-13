@@ -101,7 +101,7 @@ describe('session.handler 参数转发（三件套）', () => {
   });
 
   it('getUsageSummary：无参转发', async () => {
-    await handlers.getUsageSummary(EMPTY_CTX);
+    await handlers.getUsageSummary(undefined, EMPTY_CTX);
     expect(sessionService.getUsageSummary).toHaveBeenCalledTimes(1);
   });
 
@@ -116,14 +116,16 @@ describe('session.handler 参数转发（三件套）', () => {
   });
 
   it('getTurnMessages：转发 turnId + 返回 { messages }', async () => {
-    sessionService.getTurnMessages.mockResolvedValueOnce([{ id: 'm1' }]);
+    vi.mocked(sessionService.getTurnMessages).mockResolvedValueOnce([
+      { role: 'assistant', content: 'ok' } as never,
+    ]);
     const res = await handlers.getTurnMessages({ turnId: 't1' }, EMPTY_CTX);
     expect(sessionService.getTurnMessages).toHaveBeenCalledWith('t1');
-    expect(res).toEqual({ messages: [{ id: 'm1' }] });
+    expect(res).toEqual({ messages: [{ role: 'assistant', content: 'ok' }] });
   });
 
   it('异常：service 抛错 → 透传不包装', async () => {
-    sessionService.get.mockRejectedValueOnce(new Error('db down'));
+    vi.mocked(sessionService.get).mockRejectedValueOnce(new Error('db down'));
     await expect(handlers.get({ id: 's1' }, EMPTY_CTX)).rejects.toThrow('db down');
   });
 });
@@ -140,20 +142,24 @@ describe('session.handler.exportAll（三态）', () => {
   });
 
   it('正向：选择路径 → exportAll + 写 JSON 文件 + 返回 saved/path', async () => {
-    sessionService.exportAll.mockResolvedValueOnce({ sessions: [{ id: 's1' }], total: 1 });
-    const res = await handlers.exportAll(EMPTY_CTX);
+    vi.mocked(sessionService.exportAll).mockResolvedValueOnce({
+      sessions: [{ sessionId: 's1' } as never],
+      total: 1,
+    } as never);
+    const res = await handlers.exportAll(undefined, EMPTY_CTX);
     expect(sessionService.exportAll).toHaveBeenCalledTimes(1);
     expect(writeFileSync).toHaveBeenCalledWith(
       'C:\\out.json',
-      JSON.stringify({ sessions: [{ id: 's1' }], total: 1 }, null, 2),
+      JSON.stringify({ sessions: [{ sessionId: 's1' }], total: 1 }, null, 2),
       'utf8',
     );
     expect(res).toEqual({ saved: true, path: 'C:\\out.json' });
   });
 
   it('边界：用户取消 → { saved: false } 不写文件', async () => {
-    mocks.mockShowSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: undefined });
-    const res = await handlers.exportAll(EMPTY_CTX);
+    // exactOptionalPropertyTypes：filePath 类型必需——取消时传空串（handler 忽略）
+    mocks.mockShowSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: '' });
+    const res = await handlers.exportAll(undefined, EMPTY_CTX);
     expect(res).toEqual({ saved: false });
     expect(sessionService.exportAll).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
@@ -161,7 +167,7 @@ describe('session.handler.exportAll（三态）', () => {
 
   it('边界：filePath 空串 → { saved: false }', async () => {
     mocks.mockShowSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: '' });
-    const res = await handlers.exportAll(EMPTY_CTX);
+    const res = await handlers.exportAll(undefined, EMPTY_CTX);
     expect(res).toEqual({ saved: false });
   });
 
@@ -170,6 +176,6 @@ describe('session.handler.exportAll（三态）', () => {
     writeSpy.mockImplementationOnce(() => {
       throw new Error('EACCES');
     });
-    await expect(handlers.exportAll(EMPTY_CTX)).rejects.toThrow('EACCES');
+    await expect(handlers.exportAll(undefined, EMPTY_CTX)).rejects.toThrow('EACCES');
   });
 });

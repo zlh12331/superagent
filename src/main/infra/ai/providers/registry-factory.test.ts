@@ -97,7 +97,7 @@ describe('其余内置工厂真实实例化（SDK 消费集成）', () => {
     ['siliconflow', 'deepseek-ai/DeepSeek-V3'],
     ['openrouter', 'anthropic/claude-3.5-sonnet'],
   ])('%s：OpenAI Compatible 工厂真实实例化成功', (kind, modelId) => {
-    const factory = registry.createFactory(kind, { apiKey: 'sk-test' });
+    const factory = registry.createFactory(kind as never, { apiKey: 'sk-test' });
     const model = factory(modelId) as { doGenerate?: unknown; doStream?: unknown };
     expect(typeof model.doGenerate).toBe('function');
     expect(typeof model.doStream).toBe('function');

@@ -24,7 +24,9 @@ async function pollDelay(): Promise<void> {
 }
 
 /** 按 API method 分发的 fake fetch */
-function makeFetch(handlers: Record<string, () => FetchResult>): ReturnType<typeof vi.fn> {
+function makeFetch(
+  handlers: Record<string, () => FetchResult | Promise<FetchResult>>,
+): ReturnType<typeof vi.fn> {
   return vi.fn(async (url: string) => {
     const method = String(url).split('/').pop();
     const handler = handlers[method ?? ''];
@@ -36,7 +38,7 @@ function makeFetch(handlers: Record<string, () => FetchResult>): ReturnType<type
   });
 }
 
-function makeAdapter(handlers: Record<string, () => FetchResult>): {
+function makeAdapter(handlers: Record<string, () => FetchResult | Promise<FetchResult>>): {
   adapter: TelegramAdapter;
   fetchFn: ReturnType<typeof vi.fn>;
 } {

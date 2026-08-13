@@ -7,7 +7,7 @@
 // - args 断言验证 CLI 参数构造正确性（各方法的正/边界分支）
 // ──────────────────────────────────────────────────────────────
 
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
@@ -62,9 +62,10 @@ function createFakeChild(behavior: FakeChildBehavior = {}): ChildProcess {
 /** 创建被测服务（注入 fake spawn + 短超时） */
 function createService(behavior: FakeChildBehavior = {}): {
   service: CodebaseService;
-  spawnMock: ReturnType<typeof vi.fn>;
+  spawnMock: ReturnType<typeof vi.fn> & typeof spawn;
 } {
-  const spawnMock = vi.fn(() => createFakeChild(behavior));
+  const spawnMock = vi.fn(() => createFakeChild(behavior)) as unknown as ReturnType<typeof vi.fn> &
+    typeof spawn;
   const service = new CodebaseService({ spawnFn: spawnMock, timeoutMs: 50 });
   return { service, spawnMock };
 }

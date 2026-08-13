@@ -46,7 +46,8 @@ let currentWs: FakeWebSocket;
 
 class SharedWebSocketCtor {
   constructor(url: string) {
-    currentWs.url = url;
+    // 同步更新 url（endpoint 在异步链中才确定）——WebSocket.url 只读，类型断言绕过
+    (currentWs as unknown as { url: string }).url = url;
     // biome-ignore lint/correctness/noConstructorReturn: 测试桩返回共享实例（保持 new 语义）
     return currentWs;
   }

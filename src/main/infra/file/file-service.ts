@@ -428,7 +428,9 @@ class FileService implements IFileService {
     // ready 之前创建的文件会被当作初始状态吞掉 add 事件——调用方在
     // watch() resolve 后立刻创建文件会丢事件，单测暴露）
     await new Promise<void>((resolve, reject) => {
-      if (watcher.optionsReady) {
+      // optionsReady 为 Node 20.13+ 的 FSWatcher 属性（@types/node 版本差异——类型断言）
+      const watcherWithReady = watcher as FSWatcher & { optionsReady?: boolean };
+      if (watcherWithReady.optionsReady) {
         resolve();
         return;
       }

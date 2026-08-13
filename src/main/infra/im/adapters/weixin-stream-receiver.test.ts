@@ -64,8 +64,8 @@ function makeReceiver(
 }
 
 /** 等待轮询跑一轮 */
-async function waitForPoll(fetchFn: ReturnType<typeof vi.fn>): Promise<void> {
-  await vi.waitFor(() => expect(fetchFn.mock.calls.length).toBeGreaterThanOrEqual(1));
+async function waitForPoll(fetchFn: ReturnType<typeof vi.fn>, times = 1): Promise<void> {
+  await vi.waitFor(() => expect(fetchFn.mock.calls.length).toBeGreaterThanOrEqual(times));
 }
 
 describe('WeixinStreamReceiver.open/轮询（三件套）', () => {

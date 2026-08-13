@@ -219,9 +219,9 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
           requiresApiKey: true,
           isDefault: false,
         },
-        // @ts-expect-error 故意传未注册 kind
+        // 故意传未注册 kind（as never 绕过类型收窄——运行时验证抛错）
         {
-          kind: 'nonexistent',
+          kind: 'nonexistent' as never,
           displayName: 'X',
           defaultModel: 'm',
           requiresApiKey: true,
@@ -238,7 +238,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
 
   it('getDefinition 异常：未知 kind 抛错', () => {
     const registry = new ProviderRegistry();
-    expect(() => registry.getDefinition('nonexistent')).toThrow('未知模型供应商');
+    expect(() => registry.getDefinition('nonexistent' as never)).toThrow('未知模型供应商');
   });
 
   it('getDefaultKind：无 isDefault 标记时回落第一个注册', () => {
@@ -274,7 +274,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
 
   it('createFactory 异常：未知 kind 抛错', () => {
     const registry = new ProviderRegistry();
-    expect(() => registry.createFactory('nonexistent', { apiKey: undefined })).toThrow(
+    expect(() => registry.createFactory('nonexistent' as never, { apiKey: undefined })).toThrow(
       '未知模型供应商',
     );
   });

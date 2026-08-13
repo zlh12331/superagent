@@ -554,7 +554,7 @@ function createMockApi(): IpcApi {
         const key = localStorage.getItem('mock-api-key');
         return ok({ apiKey: key });
       },
-      setApiKey: async (input) => {
+      setApiKey: async (input: Req<IpcApi['settings']['setApiKey']>) => {
         localStorage.setItem('mock-api-key', input.apiKey);
         return ok({ ok: true });
       },

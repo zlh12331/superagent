@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ErrorCode } from '@code-agent/shared/main';
+import type { WebContents } from 'electron';
 import iconv from 'iconv-lite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getFileService, type IFileService } from './file-service';
@@ -369,7 +370,7 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
       wc: {
         isDestroyed: () => destroyed,
         send: (_ch: string, payload: unknown) => events.push(payload),
-      },
+      } as unknown as WebContents,
       events,
     };
   }

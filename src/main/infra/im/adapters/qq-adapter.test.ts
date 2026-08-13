@@ -147,7 +147,8 @@ describe('QqAdapter 消息分发（chatTypeMap 学习）', () => {
   it('正向：无 channelType 消息 → 不学习（回发默认单聊）', async () => {
     const { adapter, receiver } = makeAdapter();
     await adapter.connect('app123:secret456');
-    receiver.emit(incoming({ channelType: undefined }));
+    // exactOptionalPropertyTypes：channelType 省略等价 undefined（不显式传 undefined）
+    receiver.emit(incoming({}));
     await adapter.sendMessage({ chatId: 'unknown-id' }, 'reply');
     const url = adapter as unknown as { fetchFn: ReturnType<typeof vi.fn> };
     expect(String(url.fetchFn.mock.calls[0]?.[0])).toContain('/v2/users/unknown-id/messages');
