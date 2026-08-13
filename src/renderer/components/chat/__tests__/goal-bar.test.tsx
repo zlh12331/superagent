@@ -13,6 +13,7 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from '@/providers/ThemeProvider';
+import { useDraftStore } from '@/stores/persistent/draft-store';
 
 import { ChatPanel } from '../ChatPanel';
 
@@ -41,6 +42,8 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // 清草稿：注入预填会写入 draft-store，避免跨测试残留（chatId 相同恢复旧草稿）
+    useDraftStore.setState({ drafts: {} });
     goalCreateMock.mockResolvedValue({ data: { ok: true } });
     goalClearMock.mockResolvedValue({ data: { ok: true } });
     goalListMock.mockResolvedValue({ data: { goals: [] } });
@@ -95,21 +98,15 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     expect(screen.getByLabelText('暂停目标')).toBeInTheDocument();
   });
 
-  it('编辑按钮：打开对话框并预填条件；保存调 goal:create', async () => {
+  it('编辑按钮：把 /goal 条件填入输入框', async () => {
     const user = userEvent.setup();
     renderPanel([{ condition: '目标A' }]);
     await user.click(await screen.findByLabelText('编辑目标'));
-    const textarea = await screen.findByLabelText('目标完成条件');
-    expect(textarea).toHaveValue('目标A');
-    await user.clear(textarea);
-    await user.type(textarea, '新目标');
-    await user.click(screen.getByRole('button', { name: '保存' }));
+    // 预填 "/goal 目标A" 到输入框（用户修改后回车即覆盖创建）
     await waitFor(() => {
-      expect(goalCreateMock).toHaveBeenCalledWith({
-        sessionId: 'chat-1',
-        condition: '新目标',
-      });
+      expect(screen.getByRole('textbox')).toHaveValue('/goal 目标A');
     });
+    expect(goalCreateMock).not.toHaveBeenCalled();
   });
 
   it('删除按钮：调 goal:clear', async () => {
@@ -146,23 +143,27 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     expect(goalCreateMock).not.toHaveBeenCalled();
   });
 
-  it('裸 /goal 发送：打开编辑对话框，不创建不发送', async () => {
+  it('裸 /goal 发送：重新填入 /goal 等待补充需求，不创建不发送', async () => {
     const user = userEvent.setup();
     renderPanel();
     await user.type(screen.getByRole('textbox'), '/goal');
     await user.keyboard('{Enter}');
-    // 打开目标编辑对话框（无目标 → “设置会话目标”标题）
-    expect(await screen.findByText('设置会话目标')).toBeInTheDocument();
+    // 建议面板拦截 Enter → 填入 "/goal "（用户补需求后发送）
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toHaveValue('/goal ');
+    });
     expect(goalCreateMock).not.toHaveBeenCalled();
     expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
-  it('点击 /goal 斜杠建议项：打开编辑对话框', async () => {
+  it('点击 /goal 斜杠建议项：填入 /goal 到输入框', async () => {
     const user = userEvent.setup();
     renderPanel();
     await user.type(screen.getByRole('textbox'), '/g');
     await user.click(await screen.findByText('/goal'));
-    expect(await screen.findByText('设置会话目标')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toHaveValue('/goal ');
+    });
     expect(goalCreateMock).not.toHaveBeenCalled();
     expect(sendMessageMock).not.toHaveBeenCalled();
   });

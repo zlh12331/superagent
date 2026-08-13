@@ -24,7 +24,6 @@ import { toast } from 'sonner';
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
-import { GoalEditDialog } from '@/components/layout/goal-edit-dialog';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -191,15 +190,18 @@ export function ChatPanel({
   });
   const goals = (goalsQuery.data?.goals ?? []) as Array<{ condition: string }>;
   const queryClient = useQueryClient();
-  // 目标编辑对话框 + 暂停状态（用户设计：右按钮区 暂停/恢复 · 编辑 · 删除）
-  const [goalEditOpen, setGoalEditOpen] = useState(false);
+  // 暂停状态（用户设计：右按钮区 暂停/恢复 · 编辑 · 删除）
   const [goalPaused, setGoalPaused] = useState(false);
-  // chatId 切换：重置目标栏 UI 状态（暂停/编辑框不跨会话残留）
+  // chatId 切换：重置目标栏 UI 状态（暂停不跨会话残留）
   // biome-ignore lint/correctness/useExhaustiveDependencies: chatId 是故意的触发键（effect 仅用 setter）
   useEffect(() => {
     setGoalPaused(false);
-    setGoalEditOpen(false);
   }, [chatId]);
+  // 目标预填：把文本填入输入框并聚焦（用户补需求后发送；注入后下一轮重置，允许重复触发）
+  const prefillGoalInput = (text: string): void => {
+    setInjectedComposerValue(text);
+    window.setTimeout(() => setInjectedComposerValue(undefined), 0);
+  };
   const createGoalMutation = useMutation({
     mutationFn: async (condition: string) => {
       if (chatId === undefined) return;
@@ -210,7 +212,6 @@ export function ChatPanel({
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
-      setGoalEditOpen(false);
     },
   });
   const clearGoalMutation = useMutation({
@@ -396,7 +397,7 @@ export function ChatPanel({
               className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
               title={t('chat.goalEdit')}
               aria-label={t('chat.goalEdit')}
-              onClick={() => setGoalEditOpen(true)}
+              onClick={() => prefillGoalInput(`/goal ${goals[0]?.condition ?? ''}`)}
             >
               <Pencil className="size-3" />
             </button>
@@ -412,14 +413,6 @@ export function ChatPanel({
           </div>
         </div>
       )}
-      {/* 目标编辑对话框（复用右面板同款；key 随开关变化强制重挂载，打开时读到最新条件） */}
-      <GoalEditDialog
-        key={String(goalEditOpen)}
-        open={goalEditOpen}
-        onOpenChange={setGoalEditOpen}
-        initialCondition={goals[0]?.condition ?? ''}
-        onSubmit={(condition) => createGoalMutation.mutate(condition)}
-      />
       {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
       <footer className="composer">
         <ChatInput
@@ -451,9 +444,9 @@ export function ChatPanel({
                 void stop();
                 break;
               case 'goal':
-                // /goal 斜杠建议：直接打开目标编辑对话框（用户需求：goal 命令要真正可用，
-                // 点建议 → 输入需求 → 保存 → 目标栏显示，替代原来的 toast 引导）
-                setGoalEditOpen(true);
+                // /goal 斜杠建议：填入输入框（用户需求：唯一交互 = 输入 /goal 需求直接发送；
+                // 点建议后输入框预填 "/goal "，用户补需求回车即创建目标）
+                prefillGoalInput('/goal ');
                 break;
             }
           }}
@@ -466,8 +459,8 @@ export function ChatPanel({
               if (condition.length > 0 && chatId !== undefined) {
                 createGoalMutation.mutate(condition);
               } else {
-                // /goal 无需求：打开目标编辑对话框（与斜杠建议项行为一致）
-                setGoalEditOpen(true);
+                // /goal 无需求：重新填入输入框让用户补充需求（与斜杠建议项行为一致）
+                prefillGoalInput('/goal ');
               }
               return;
             }

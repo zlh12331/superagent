@@ -305,14 +305,14 @@ export function ChatInput({
     autoResize();
   }, [value]);
 
-  // 外部注入值（编辑重提）：非受控模式下同步一次到内部值，保持草稿语义（对齐参考项目 P2-10）
-  const prevInjectedRef = useRef<string | undefined>(undefined);
+  // 外部注入值（编辑重提 / 目标预填）：非受控模式下同步到内部值，保持草稿语义（对齐参考项目 P2-10）
+  // 不做 ref 去重：父级“注入 → 重置 undefined → 再注入相同值”循环需要重复生效
+  // （React 跳过相同值的 setState，不会重复注入；注入本身幂等）
   // biome-ignore lint/correctness/useExhaustiveDependencies: autoResize 每次渲染新引用，加入依赖会无限循环；其行为仅依赖内部 ref
   useEffect(() => {
-    if (injectedValue === undefined || injectedValue === prevInjectedRef.current) {
+    if (injectedValue === undefined) {
       return;
     }
-    prevInjectedRef.current = injectedValue;
     setInternalValue(injectedValue);
     autoResize();
     textareaRef.current?.focus();
