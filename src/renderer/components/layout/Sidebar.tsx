@@ -335,12 +335,41 @@ export function Sidebar(): ReactElement {
             onChange={(e) => setSearchKeyword(e.target.value)}
           />
         </div>
-        <div className="sidebar-tabs" role="tablist">
+        {/* ARIA tabs 键盘语义：←/→/Home/End 移动焦点并激活（自动激活模式）；
+            roving tabindex：仅激活 tab 参与 Tab 序列（WAI-ARIA tabs 模式） */}
+        <div
+          className="sidebar-tabs"
+          role="tablist"
+          aria-label={t('sidebar.tabsLabel')}
+          onKeyDown={(event) => {
+            const tabs: Array<'recent' | 'archived'> = ['recent', 'archived'];
+            const currentIndex = tabs.indexOf(activeTab);
+            let nextIndex: number | null = null;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              nextIndex = (currentIndex + 1) % tabs.length;
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+              nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            } else if (event.key === 'Home') {
+              nextIndex = 0;
+            } else if (event.key === 'End') {
+              nextIndex = tabs.length - 1;
+            }
+            if (nextIndex === null) return;
+            const nextTab = tabs[nextIndex];
+            if (nextTab === undefined) return;
+            event.preventDefault();
+            setActiveTab(nextTab);
+            event.currentTarget
+              .querySelectorAll<HTMLButtonElement>('[role="tab"]')
+              [nextIndex]?.focus();
+          }}
+        >
           <button
             type="button"
             className={cn('sidebar-tab', activeTab === 'recent' && 'active')}
             role="tab"
             aria-selected={activeTab === 'recent'}
+            tabIndex={activeTab === 'recent' ? 0 : -1}
             onClick={() => setActiveTab('recent')}
           >
             {t('sidebar.tabsRecent')} <span className="count">{sessions.length}</span>
@@ -350,6 +379,7 @@ export function Sidebar(): ReactElement {
             className={cn('sidebar-tab', activeTab === 'archived' && 'active')}
             role="tab"
             aria-selected={activeTab === 'archived'}
+            tabIndex={activeTab === 'archived' ? 0 : -1}
             onClick={() => setActiveTab('archived')}
           >
             {t('sidebar.tabsArchived')} <span className="count">0</span>

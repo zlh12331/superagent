@@ -3633,6 +3633,25 @@ button.card-head {
   opacity: 0.45;
 }
 
+/* ── vim 模式徽章（输入舱底部，settings.editor.vimMode 消费）── */
+.vim-mode-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  margin-right: 6px;
+  user-select: none;
+}
+
+.vim-mode-badge.insert {
+  color: var(--success);
+  border-color: var(--success);
+}
+
 /* ── 实验功能：扫描线视觉叠加（settings.experimental.scanlines）── */
 /* AppShell 根容器内条件渲染；固定全屏 + pointer-events:none 不拦截交互；
    颜色走 --text 令牌（随主题自适应），无裸色/hex。 */

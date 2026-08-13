@@ -28,7 +28,9 @@ import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
 import { useDraftStore } from '@/stores/persistent/draft-store';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 
 /** 附件项（对齐参考项目 ChatInputAttachments） */
 interface ChatAttachment {
@@ -154,6 +156,11 @@ export function ChatInput({
 }: ChatInputProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  // vim 模式（settings.editor.vimMode 真实消费——此前仅存储无行为）
+  const vimEnabled = useSettingsStore((s) => s.editor.vimMode);
+  const [vimState, setVimState] = useState<VimState>(INITIAL_VIM_STATE);
+  // vim 编辑/移动后的光标落点（受控 textarea 需在下一次渲染后手动 setSelectionRange）
+  const [pendingCursor, setPendingCursor] = useState<number | null>(null);
   const [internalValue, setInternalValue] = useState(() => {
     // 草稿恢复：非受控 + 有 chatId 时从 draft-store 初始化（对齐参考项目 useDraftStore）
     return (
@@ -186,6 +193,17 @@ export function ChatInput({
     }
     onValueChange?.(next);
   };
+
+  // vim 光标落点：值渲染完成后应用（受控/非受控通用；同时聚焦保持操作连续性）
+  useEffect(() => {
+    if (pendingCursor === null) return;
+    const el = textareaRef.current;
+    if (el !== null) {
+      el.setSelectionRange(pendingCursor, pendingCursor);
+      el.focus();
+    }
+    setPendingCursor(null);
+  }, [pendingCursor, value]);
 
   /** 自动调整 textarea 高度（对齐原型 input.style.height = 'auto' + scrollHeight）
    *
@@ -540,6 +558,31 @@ export function ChatInput({
    * - Esc（流式状态）：中断生成，对齐原型 composer-hint "Esc 中断"
    */
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // ── vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）──
+    if (vimEnabled) {
+      // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
+      const isStreamEsc = event.key === 'Escape' && isStreaming;
+      if (!isStreamEsc) {
+        const result = vimHandleKey(
+          vimState,
+          event.key,
+          value,
+          event.currentTarget.selectionStart ?? value.length,
+        );
+        if (result.type !== 'noop' || vimState.mode === 'normal') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (result.type === 'edit' && result.value !== undefined) {
+            setValue(result.value);
+            setPendingCursor(result.cursor ?? 0);
+          } else if (result.type === 'move' && result.cursor !== undefined) {
+            setPendingCursor(result.cursor);
+          }
+          setVimState(result.state);
+          return;
+        }
+      }
+    }
     // 流式状态按 Esc：中断生成
     if (event.key === 'Escape' && isStreaming) {
       event.preventDefault();
@@ -714,6 +757,14 @@ export function ChatInput({
         </div>
         {/* 快捷键提示（等宽字体 kbd） */}
         <span className="composer-hint">
+          {vimEnabled && (
+            <span
+              className={cn('vim-mode-badge', vimState.mode === 'insert' && 'insert')}
+              role="status"
+            >
+              {vimState.mode === 'normal' ? t('chat.vimNormal') : t('chat.vimInsert')}
+            </span>
+          )}
           <kbd>⏎</kbd> {t('chat.send')} · <kbd>⇧⏎</kbd> {t('chat.newline')}
           {isStreaming ? (
             <>
