@@ -123,6 +123,8 @@ export const IPC_META = {
   },
 
   settings: {
+    getAll: request('settings:getAll'),
+    set: request('settings:set'),
     getApiKey: request('settings:getApiKey'),
     setApiKey: request('settings:setApiKey'),
     deleteApiKey: request('settings:deleteApiKey'),

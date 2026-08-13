@@ -67,6 +67,27 @@ export const GetApiKeyResSchema = z.object({
   configured: z.boolean(),
 });
 
+// ── 渲染层设置下沉 SQLite（settings 持久化单一真源） ─────────────
+
+/** settings:getAll 入参（无入参） */
+export const SettingsGetAllReqSchema = z.object({});
+
+/** settings:getAll 响应（key → JSON 值；渲染层设置按域分 key 存储） */
+export const SettingsGetAllResSchema = z.object({
+  settings: z.record(z.string(), z.unknown()),
+});
+
+/** settings:set 入参（写穿透：渲染层内存态变更后同步落库） */
+export const SettingsSetReqSchema = z.object({
+  key: z.string().min(1).max(64),
+  value: z.unknown(),
+});
+
+/** settings:set 响应 */
+export const SettingsSetResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /**
  * settings:setApiKey 请求 payload
  *

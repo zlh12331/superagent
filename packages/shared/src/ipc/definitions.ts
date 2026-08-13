@@ -221,6 +221,10 @@ import {
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
   SetTelemetryLevelResSchema,
+  SettingsGetAllReqSchema,
+  SettingsGetAllResSchema,
+  SettingsSetReqSchema,
+  SettingsSetResSchema,
 } from '../schemas/settings';
 import {
   SkillLearnReqSchema,
@@ -796,6 +800,18 @@ export const IPC_DEFINITIONS = {
   },
 
   settings: {
+    getAll: withSchema(
+      IPC_META.settings.getAll,
+      SettingsGetAllReqSchema,
+      {} as { settings: Record<string, unknown> },
+      SettingsGetAllResSchema,
+    ),
+    set: withSchema(
+      IPC_META.settings.set,
+      SettingsSetReqSchema,
+      {} as { ok: boolean },
+      SettingsSetResSchema,
+    ),
     getApiKey: withSchema(
       IPC_META.settings.getApiKey,
       GetApiKeyReqSchema,
