@@ -21,9 +21,13 @@
   --radius: 0.625rem;
   /* —— 3 层背景深度（亮色，对齐参考项目）—— */
   --bg: #f7f8fa;;
+  /* L1 侧栏 / 顶栏 / 卡片层 */
   --bg-elev: #ffffff;;
+  /* L2 悬浮输入区 / 卡片区 / 悬停态 */
   --bg-elev-2: #eef0f4;;
+  /* L3 激活态 / 强调容器 */
   --bg-elev-3: #e0e4ec;;
+  /* 兼容别名：原 --bg-elev-4 已废弃，指向 --bg-elev-3 避免破坏旧引用 */
   --bg-elev-4: var(--bg-elev-3);;
   /* shadcn 标准背景映射 */
   --background: var(--bg);
@@ -172,10 +176,12 @@
 .dark {
   /* —— 3 层背景深度（亮色，对齐参考项目）—— */
   --bg: #080b10;;
+  /* L1 侧栏 / 顶栏 / 卡片层 */
   --bg-elev: #0e1319;;
+  /* L2 悬浮输入区 / 卡片区 / 悬停态 */
   --bg-elev-2: #141a23;;
+  /* L3 激活态 / 强调容器 */
   --bg-elev-3: #1a2130;;
-  --bg-elev-4: var(--bg-elev-3);;
   --foreground: #e8edf4;
   --card-foreground: #e8edf4;
   --popover-foreground: #e8edf4;
