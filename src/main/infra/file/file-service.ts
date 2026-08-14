@@ -356,8 +356,10 @@ class FileService implements IFileService {
         path: itemPath,
         type,
         size: stats.size,
-        // Unix timestamp（毫秒）
-        modifiedAt: stats.mtimeMs,
+        // Unix timestamp（毫秒）——mtimeMs 是浮点（NTFS 100ns 精度），
+        // FileEntrySchema 要求 int：不取整会触发 INVALID_RESPONSE（目录有文件时
+        // file:list 必失败 → 文件树显示「空目录」，实测 bug）
+        modifiedAt: Math.floor(stats.mtimeMs),
       });
 
       // 递归子目录

@@ -188,6 +188,15 @@ describe('FileService.list（目录列举三件套）', () => {
     expect(res.entries.map((e) => e.name)).toContain('b.ts');
   });
 
+  it('契约：modifiedAt/size 为整数（mtimeMs 浮点不取整会触发 INVALID_RESPONSE，实测 bug）', async () => {
+    const res = await svc.list({ path: dir, depth: 2, includeHidden: false });
+    expect(res.entries.length).toBeGreaterThan(0);
+    for (const entry of res.entries) {
+      expect(Number.isInteger(entry.modifiedAt)).toBe(true);
+      expect(Number.isInteger(entry.size)).toBe(true);
+    }
+  });
+
   it('边界：includeHidden=false 跳过点开头', async () => {
     const res = await svc.list({ path: dir, depth: 1, includeHidden: false });
     expect(res.entries.map((e) => e.name)).not.toContain('.hidden');
