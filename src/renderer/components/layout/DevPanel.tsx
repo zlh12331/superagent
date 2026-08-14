@@ -28,7 +28,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { lazy, memo, type ReactElement, Suspense, useEffect, useState } from 'react';
+import { lazy, memo, type ReactElement, Suspense, useEffect, useRef, useState } from 'react';
 import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
@@ -127,6 +127,17 @@ export const DevPanel = memo(function DevPanel({
 
   // 动态 tab 集合：默认任务摘要（info）常驻；其余通过"+"按钮按需加入（用户需求）
   const [openTabs, setOpenTabs] = useState<PanelTab[]>(['info']);
+  // tab 行横向滚动容器：tab 多时横向滚动而非挤压文字（此前均分导致标签被压到 0 宽，实测 bug）
+  const tabListRef = useRef<HTMLDivElement | null>(null);
+  // 新增视图后滚动到末尾（关闭视图不触发，保留用户当前视区）
+  const prevTabCountRef = useRef(openTabs.length);
+  useEffect(() => {
+    const el = tabListRef.current;
+    if (el !== null && openTabs.length > prevTabCountRef.current) {
+      el.scrollLeft = el.scrollWidth;
+    }
+    prevTabCountRef.current = openTabs.length;
+  }, [openTabs]);
   const closeTab = (tab: PanelTab): void => {
     setOpenTabs((prev) => prev.filter((t) => t !== tab));
     if (activeTab === tab) {
@@ -151,14 +162,17 @@ export const DevPanel = memo(function DevPanel({
           }}
           className="min-w-0 flex-1"
         >
-          {/* w-full 覆盖 TabsList 基类 w-fit：tab 行随面板收缩均分，永不溢出 */}
-          <TabsList className="bg-transparent h-5 min-w-0 w-full p-0">
+          {/* tab 行可横向滚动：标签保持自然宽度不被挤压（对齐 TerminalTabs 滚动模式） */}
+          <TabsList
+            ref={tabListRef}
+            className="bg-transparent h-5 min-w-0 w-full overflow-x-auto overflow-y-hidden p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {openTabs.map((tab) => {
               const def = TAB_DEFS.find((d) => d.id === tab);
               if (def === undefined) return null;
               return (
-                <div key={tab} className="flex min-w-0 flex-1 items-center">
-                  <TabsTrigger value={tab} className="h-5 min-w-0 flex-1 gap-1 px-1 py-0 text-2xs">
+                <div key={tab} className="flex shrink-0 items-center">
+                  <TabsTrigger value={tab} className="h-5 flex-none gap-1 px-1.5 py-0 text-2xs">
                     {def.icon}
                     <span className="truncate">{t(def.labelKey)}</span>
                   </TabsTrigger>

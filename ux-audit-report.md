@@ -181,3 +181,14 @@ P2 剩余（第四轮已全部完成）:
 - ✅ /models 真实链路：受控打开 composer 项目栏模型选择下拉（ModelSelector 增 open/onOpenChange 受控 props）
 - ✅ /compact 真实链路：session:compact IPC（meta+definitions+handler+组合根注入窗口感知压缩器）→ compressByTokenBudget 裁剪 → replaceMessages 事务落库 → 渲染层 setMessages 同步 + toast 结果；handler 2 例单测
 - ✅ vim 模式真实行为：lib/vim-mode 纯逻辑（h/j/k/l/w/b/0/$/x/dd/i/a/I/A/Esc，10 例单测）接入 ChatInput（normal/insert 双态 + NORMAL/INSERT 徽章 + 光标落点）；设置页描述如实标注不支持项（y/p/v/u/数字前缀）
+
+P3（设计修复轮 · CDP 实测驱动）:
+- ✅ 消息列对齐：.messages-inner 居中限宽容器此前 CSS 已定义但从未渲染（消息通栏全宽 vs 820px 输入框错位）→ ChatMessageList 真实渲染；用户气泡 flex-end + max-width:72%；回归单测 ChatMessageList.test.tsx 8 例锁定
+- ✅ composer 项目栏：基础样式改 820px 居中（此前全宽）；只读工作目录 .cpb-select.static（禁点击态样式）
+- ✅ 焦点环统一：:where(a,button,[role=treeitem],[role=tab],.thread-item,.welcome-pill,.nav-dot):focus-visible 2px accent 焦点环（此前 button 焦点环缺失/不统一）
+- ✅ 欢迎页挂载同步 enterWelcomeMode（/new/返回/删除回首页后品牌区与快捷操作曾隐藏）
+- ✅ API Key 保存后模型列表失效刷新（模型选择器不再停留「未配置模型」）
+- ✅ 导航轨定位核实（CDP 实测）：calc((100% - 820px)/2 + 24px) 圆点落在消息列 24px 内边距槽内、不与用户气泡重叠（气泡右缘 966 vs 圆点 982-994）——非缺陷，保持
+- ✅ 右面板 tab 栏标签挤压修复（CDP 实测 bug）：6 个视图全开时标签被均分挤压至 0 宽（仅剩图标，首个 tab 显示半字残片）→ 改横向滚动模式（对齐 TerminalTabs：shrink-0 自然宽度 + overflow-x-auto 隐藏滚动条），新增视图自动滚动到末尾；实测 6 tab 全标签完整（span 20-40px）且列表可滚动
+- ✅ 会话条目右键菜单 / 命令面板 / 设置分组几何 CDP 实测通过（160px 菜单 5 项 32px 行高、视口内；560px 居中面板、39px 行高选中态）
+
