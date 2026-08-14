@@ -1678,6 +1678,7 @@ body.resizing iframe {
    此前多数按钮/会话项/树节点使用 UA 默认黄框或完全无焦点指示，
    键盘 Tab 导航时焦点位置不可见或样式不一致 */
 :where(
+  a,
   button,
   [role="treeitem"],
   [role="tab"],
