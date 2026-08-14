@@ -1674,6 +1674,21 @@ body.resizing iframe {
   }
 }
 
+/* ── 键盘焦点可见性：统一 accent 焦点环 ──
+   此前多数按钮/会话项/树节点使用 UA 默认黄框或完全无焦点指示，
+   键盘 Tab 导航时焦点位置不可见或样式不一致 */
+:where(
+  button,
+  [role="treeitem"],
+  [role="tab"],
+  .thread-item,
+  .welcome-pill,
+  .nav-dot
+):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* 尊重系统的"减弱动态效果"设置 */
 @media (prefers-reduced-motion: reduce) {
   .brand-mark,
