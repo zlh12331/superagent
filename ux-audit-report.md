@@ -199,5 +199,6 @@ P3（设计修复轮 · CDP 实测驱动）:
 - ✅ 流程实测：/goal 需求回车 → 目标栏出现在输入框上方（672px 居中、accent 边框、条件文本 truncate）；重命名菜单 → 内联输入自动聚焦；文件变更/文件/浏览器三个 pane 空态文案正常渲染；顶栏按钮簇（折叠/命令面板/设置/主题）几何无裁切
 - ✅ file:list 契约修复（CDP 实测）：modifiedAt 用 stats.mtimeMs 浮点（NTFS 100ns 精度）直接返回，FileEntrySchema 要求 int → 任何非空目录列表必 INVALID_RESPONSE → 文件树静默显示「空目录」。Math.floor 取整 + 契约单测（entries 全字段 int）；实测修复后文件树正常列出文件
 - ✅ 文件查看器重复打开同文件清空 bug（CDP 实测）：同一文件二次触发（双击/事件重放）会重置 originalContent，而同步 effect 依赖 [data] 不变化不重跑 → 内容已加载却永久卡「空文件」。openFile 幂等化（同文件且无脏数据只确保面板可见），补单测；实测二次点击内容保持。附带实测：查看态纯文本回退正常（shiki 离线下优雅降级），编辑态 textarea 282×489 与高亮层同字体/同 padding/同行高（Martian Mono 12px/lh1.6/pad 14px 16px）对齐
+- ✅ CSP 修复代码高亮全失效（CDP 实测根因）：script-src 缺 wasm-unsafe-eval → shiki WASM 引擎 WebAssembly.instantiate 被 CSP 拦截 → 消息代码块与文件查看器的语法高亮全部静默降级为纯文本（无任何报错）。两套 CSP（生产/开发）加 CSP3 专用关键字 wasm-unsafe-eval（不开 JS eval），csp.test 补断言；实测修复后文件查看器 pre.shiki 渲染 87 个彩色 token span
 - ✅ 会话条目右键菜单 / 命令面板 / 设置分组几何 CDP 实测通过（160px 菜单 5 项 32px 行高、视口内；560px 居中面板、39px 行高选中态）
 

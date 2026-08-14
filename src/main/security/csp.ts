@@ -20,7 +20,9 @@
  *
  * 严格策略：
  * - default-src 'self'：默认仅允许同源
- * - script-src 'self'：禁止内联脚本与外部脚本
+ * - script-src 'self' 'wasm-unsafe-eval'：禁止内联/外部脚本，但放开 WebAssembly 编译
+ *   （shiki 语法高亮的 WASM 引擎必需；'wasm-unsafe-eval' 是 CSP3 专用关键字，
+ *   不放开 JS eval，比 'unsafe-eval' 面窄——实测缺它所有代码高亮静默失效）
  * - style-src 'unsafe-inline'：React 19 + Tailwind v4 运行时注入内联样式，必须放开
  * - connect-src：仅允许 AI API（DeepSeek / OpenAI / Anthropic）+ 本地 Ollama，
  *   与 ProviderRegistry 内置供应商对齐（新增供应商时需同步此列表）
@@ -29,7 +31,7 @@
  */
 const PRODUCTION_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' https://api.deepseek.com https://api.openai.com https://api.anthropic.com http://localhost:*",
@@ -53,10 +55,12 @@ const PRODUCTION_CSP = [
  *   'none' 会触发 ERR_BLOCKED_BY_RESPONSE 导致 Components/Profiler 面板无法打开
  *   仅 dev 环境放开，生产环境仍保持 'none'
  * - 不放开 'unsafe-eval'：Vite 8 使用原生 ESM，无需 eval
+ * - script-src 增加 'wasm-unsafe-eval'：shiki 语法高亮 WASM 引擎（与生产一致，
+ *   实测缺失时消息/文件查看器的代码高亮全部静默降级为纯文本）
  */
 const DEVELOPMENT_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' http://localhost:* ws://localhost:* https://api.deepseek.com https://api.openai.com",
