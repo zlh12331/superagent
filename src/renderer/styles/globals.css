@@ -1427,6 +1427,16 @@ body.resizing iframe {
   white-space: nowrap;
 }
 
+/* 只读变体（对话页工作目录展示）：去掉交互暗示 */
+.cpb-select.static {
+  cursor: default;
+}
+
+.cpb-select.static:hover {
+  color: inherit;
+  background: transparent;
+}
+
 .cpb-caret {
   font-size: 9px;
   opacity: 0.5;

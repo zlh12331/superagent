@@ -532,7 +532,9 @@ export function ChatPanel({
         {/* composer-project-bar：项目 + 模型选择（对齐原型；对话模式项目只读展示当前工作目录） */}
         <div className="composer-project-bar">
           <div className="cpb-folder-group">
-            <span className="cpb-select" title={workingDir}>
+            {/* 对话模式只读展示（static：禁用 pointer 光标与 hover 高亮——
+               避免只读元素伪装成可交互的下拉按钮） */}
+            <span className="cpb-select static" title={workingDir}>
               <Folder className="size-3" strokeWidth={1.5} />
               <span className="max-w-40 truncate">{workingDirBasename}</span>
             </span>
