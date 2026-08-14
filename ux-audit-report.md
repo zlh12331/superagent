@@ -193,5 +193,7 @@ P3（设计修复轮 · CDP 实测驱动）:
 - ✅ 快捷键帮助对话框读设置真源（此前硬编码默认键：实测用户改 searchFile 为 Ctrl+Shift+F 后帮助表仍显示 Ctrl+F，与实际绑定不符）→ 5 个可自定义键动态渲染 + formatKeys 空格排版；F1 实测帮助表显示 Ctrl + Shift + F
 - ✅ AskDialog 进度条 accent 填充（此前 bg-primary 与注释「accent 填充」不符，对齐导航圆点/热力图等进度视觉）+ 补 10 例单测（此前零覆盖）
 - ✅ 日志面板两处布局修复（CDP 实测）：工具栏 5 个级别 chip + 行数 + 统计/刷新在 284px 面板横向溢出 55px → flex-wrap 换行；日志行容器被 Radix ScrollArea 内层 display:table 撑宽到 391px、横向滚动条不可达（长行尾部永远看不到）→ 改普通 overflow-y-auto 容器，实测 pre 273px 且 scrollW>clientW 可横向滚动
+- ✅ 斜杠建议面板宽度修复（CDP 实测）：left-0 right-0 w-full 拉伸到输入舱全宽 728px，短命令行面板过宽失衡 → 左对齐 + max-w-sm，实测 384px
+- ✅ 设置全屏 Sheet 15 个分区逐一切换实测：内容区零横向溢出（1133px 列）；暗色主题全量扫描（body/composer/消息气泡/右面板/设置 Sheet）：令牌全部正确翻转，无裸色残留（此前 cpb-select 暗色下 rgb(26,33,48) 系 color 0.15s 过渡瞬间采样假象，稳态 inherit 正确）；窄窗 1000/860/720px 实测无横向溢出（侧栏 <860px 自动收起）
 - ✅ 会话条目右键菜单 / 命令面板 / 设置分组几何 CDP 实测通过（160px 菜单 5 项 32px 行高、视口内；560px 居中面板、39px 行高选中态）
 

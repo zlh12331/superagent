@@ -647,7 +647,9 @@ export function ChatInput({
         <div
           role="listbox"
           aria-label={t('chat.slashCommand')}
-          className="bg-popover text-popover-foreground absolute bottom-full left-0 right-0 z-10 mx-auto mb-2 w-full overflow-hidden rounded-md border shadow-md"
+          // 左对齐 + 紧凑上限：此前 left-0 right-0 w-full 拉伸到输入舱全宽（实测 728px），
+          // 短命令行的 7 行建议面板过宽失衡；长路径（@ 提及）由 truncate + title 处理
+          className="bg-popover text-popover-foreground absolute bottom-full left-0 z-10 mb-2 w-full max-w-sm overflow-hidden rounded-md border shadow-md"
         >
           {slashOpen &&
             filteredSuggestions.map((s) => (
