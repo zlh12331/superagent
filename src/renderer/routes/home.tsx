@@ -75,6 +75,7 @@ export function HomePage(): ReactElement {
   const pendingWorkingDir = useWelcomeStore((state) => state.pendingWorkingDir);
   const exitWelcomeMode = useWelcomeStore((state) => state.exitWelcomeMode);
   const setPendingWorkingDir = useWelcomeStore((state) => state.setPendingWorkingDir);
+  const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
 
   const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
@@ -92,6 +93,15 @@ export function HomePage(): ReactElement {
 
   // 派生：当前显示的 folder 名（pendingWorkingDir 的 basename，或「未选择项目」）
   const currentFolderLabel = pendingWorkingDir ? basename(pendingWorkingDir) : t('home.noProject');
+
+  // 路由与欢迎页模式同步：/new 斜杠命令、返回按钮、删除激活会话等任意路径回首页
+  // 都必须进入欢迎页模式。此前仅侧栏「新建会话」入口调用 enterWelcomeMode——
+  // 其它入口回首页时品牌区与快捷动作整体隐藏（只剩输入框悬空）。
+  // enterWelcomeMode(null) 清空 pending 目录，由下方兜底逻辑从历史目录回填。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 仅挂载时执行一次（enterWelcomeMode 为 zustand 稳定引用）
+  useEffect(() => {
+    enterWelcomeMode(null);
+  }, []);
 
   // 兜底初始化 pendingWorkingDir（对齐原型 prototype-v2.html:13312-13315）
   // 场景：首次启动 / 通过 URL 直接访问 /home / 进入欢迎页时无激活会话
