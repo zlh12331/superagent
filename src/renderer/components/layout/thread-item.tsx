@@ -265,7 +265,8 @@ function ThreadItem({
           )}
           <div className="ti-meta">{metaText}</div>
         </div>
-        <div className="ti-actions">
+        {/* 重命名中隐藏操作按钮：给输入框让出整行宽度（此前 97px 挤在 52px 操作按钮旁） */}
+        <div className={cn('ti-actions', renaming && 'hidden')}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

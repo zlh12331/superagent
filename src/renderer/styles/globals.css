@@ -1029,6 +1029,13 @@ body::after {
   opacity: 1;
 }
 
+/* 内联重命名时收起操作按钮：输入框获得整行宽度
+   （.hidden 工具类会被本文件 .ti-actions display:flex 覆盖——同特异性后者胜，
+   故用更高特异性显式声明） */
+.thread-item .ti-actions.hidden {
+  display: none;
+}
+
 .sidebar-foot {
   padding: 10px;
   border-top: 1px solid var(--sidebar-border);
