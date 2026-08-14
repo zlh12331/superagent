@@ -50,7 +50,8 @@ function QuestionProgressBar({
         <div key={i} className="bg-muted relative flex-1 overflow-hidden rounded-full">
           <div
             className={cn(
-              'bg-primary absolute inset-0 origin-left rounded-full transition-transform duration-300',
+              // accent 填充（与导航圆点/热力图/骨架屏等进度类视觉一致；此前 bg-primary 与注释「accent 填充」不符）
+              'bg-accent absolute inset-0 origin-left rounded-full transition-transform duration-300',
               i < current ? 'scale-x-100' : 'scale-x-0',
             )}
           />
