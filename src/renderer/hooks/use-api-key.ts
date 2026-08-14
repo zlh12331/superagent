@@ -22,6 +22,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { MODELS_QUERY_KEY } from './use-models';
 
 /**
  * Query key 工厂（按 provider 分桶）
@@ -89,8 +90,11 @@ export function useSetApiKey() {
       return unwrap<{ ok: boolean }>(response);
     },
     onSuccess: (_data, variables) => {
-      // 失效对应 provider 的查询缓存，触发重新拉取
+      // 失效对应 provider 的查询缓存 + 共享 models 清单缓存：
+      // 保存 Key 后 composer 模型选择器必须立即出现该提供商的模型
+      //（此前仅失效 key 状态查询——聊天区选择器一直停留在「未配置模型」）
       void queryClient.invalidateQueries({ queryKey: API_KEY_QUERY_KEY(variables.provider) });
+      void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -118,7 +122,9 @@ export function useDeleteApiKey() {
       return unwrap<{ ok: boolean }>(response);
     },
     onSuccess: (_data, provider) => {
+      // 删除 Key 同样失效 models 清单：该提供商模型应从选择器消失
       void queryClient.invalidateQueries({ queryKey: API_KEY_QUERY_KEY(provider) });
+      void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
