@@ -18,7 +18,6 @@
 import { AlertCircle, FileText, RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLogsReadQuery } from '@/hooks/use-system';
 import { useTranslation } from '@/i18n/use-translation';
@@ -78,8 +77,8 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* 顶部：工具栏（级别过滤 + 行数 + 刷新） */}
-      <div className="border-border bg-muted/30 flex items-center gap-2 border-b px-2 py-1">
+      {/* 顶部：工具栏（级别过滤 + 行数 + 刷新）；窄面板（240-480px）下换行而非横向溢出（实测 284px 时统计/刷新被挤出面板） */}
+      <div className="border-border bg-muted/30 flex flex-wrap items-center gap-2 border-b px-2 py-1">
         {/* 级别过滤按钮组 */}
         <div className="flex items-center gap-0.5">
           {LEVEL_FILTERS.map((filter) => (
@@ -149,8 +148,9 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         </div>
       </div>
 
-      {/* 日志列表 */}
-      <ScrollArea className="min-h-0 flex-1">
+      {/* 日志列表：普通滚动容器（Radix ScrollArea 内层 display:table 会随最长日志行撑宽
+          到 391px，超出 283px 面板被裁剪且横向滚动条不可达——长行尾部永远看不到） */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading ? (
           <LogsSkeleton />
         ) : error !== null ? (
@@ -162,7 +162,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         ) : (
           <LogLines lines={data.lines} filePath={data.filePath} />
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
