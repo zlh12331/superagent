@@ -126,6 +126,14 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
       });
       if (!ok) return;
     }
+    // 幂等：已打开同一文件且无未保存修改 → 不重置内容，只确保面板可见。
+    // 此前重复触发（双击/事件重放）会清空 originalContent，而 FileViewerPanel
+    // 的同步 effect 依赖 [data,...] 不变化不重跑 → 内容已加载却卡在「空文件」（实测 bug）
+    if (current.open && current.filePath === filePath && !current.isDirty) {
+      useUiStore.getState().setRightPanelCollapsed(false);
+      useUiStore.getState().setDevPanelTab('file');
+      return;
+    }
     set({
       open: true,
       filePath,

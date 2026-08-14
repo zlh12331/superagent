@@ -93,5 +93,17 @@ describe('file-viewer-store', () => {
       await useFileViewerStore.getState().openFile('C:\\same.ts');
       expect(confirmMock).not.toHaveBeenCalled();
     });
+
+    it('重复打开同一文件（无脏数据）：内容不重置（幂等，防双击清空卡空文件）', async () => {
+      await useFileViewerStore.getState().openFile('C:\\same.ts');
+      useFileViewerStore.getState().setLoadedContent('content');
+      await useFileViewerStore.getState().openFile('C:\\same.ts');
+      const s = useFileViewerStore.getState();
+      expect(s.originalContent).toBe('content');
+      expect(s.editedContent).toBe('content');
+      expect(s.filePath).toBe('C:\\same.ts');
+      expect(s.open).toBe(true);
+      expect(s.isDirty).toBe(false);
+    });
   });
 });
