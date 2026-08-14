@@ -1340,7 +1340,9 @@ body.resizing iframe {
      模型选择器完全不可见（用户反馈「输入框下面没有模型选择」）
    ────────────────────────────────────────────────────────────── */
 
-/* 基础样式：对话页同样可见（紧凑 flex 布局，无容器底色） */
+/* 基础样式：对话页同样可见（紧凑 flex 布局，无容器底色）；
+   与输入舱 .composer-box 对齐（max-width 820px 居中——此前项目栏通栏
+   全宽，模型选择器贴屏幕右缘，与居中的输入框严重错位） */
 .composer-project-bar {
   display: flex;
   align-items: center;
@@ -1355,6 +1357,10 @@ body.resizing iframe {
   flex-shrink: 0;
   min-width: 0;
   overflow: visible;
+  max-width: 820px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* welcome-mode：居中 720px + 高亮容器（对齐原型） */
@@ -1756,6 +1762,18 @@ body.resizing iframe {
   box-shadow:
     var(--shadow-card),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* 用户消息：右对齐 + 气泡限宽（对齐设计「玻璃渐变气泡靠右」；
+   此前无 .msg.user 规则——用户消息渲染为通栏气泡）。
+   .msg-body 为 flex:1 撑满整行，需在 body 内再 flex-end 才能把气泡推右 */
+.msg.user .msg-body {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg.user .msg-content {
+  max-width: 72%;
 }
 
 /* assistant 消息：开放排版，去掉气泡 */
@@ -3814,7 +3832,9 @@ button.card-head {
 .msg-nav-rail {
   position: absolute;
   top: 50%;
-  right: 8px;
+  /* 与 820px 居中的消息列对齐：容器右缘再减去列右侧的居中余量 + 24px 内边距 + 8px 间距；
+     容器宽度随侧栏/右面板变化，calc 自适应（此前固定 right:8px——列居中后轨贴屏幕右缘错位） */
+  right: calc((100% - 820px) / 2 + 24px);
   transform: translateY(-50%);
   z-index: 5;
   display: flex;

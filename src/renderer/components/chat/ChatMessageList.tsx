@@ -247,35 +247,43 @@ export function ChatMessageList({
     <div className={cn('relative h-full', className)}>
       {/* 消息滚动区（普通滚动渲染） */}
       <div ref={scrollerRef} className="messages h-full overflow-y-auto" onScroll={handleScroll}>
-        {messages.map((message, index) => {
-          // 流式标记：最后一条 assistant 消息正在输出时，文本末尾显示闪烁光标（照搬参考项目 StreamingCursor）
-          const isStreamingMessage =
-            !showStreamingFooter && isStreaming && index === messages.length - 1;
-          // 连续 assistant 消息：前一条也是 assistant（隐藏头像与角色标签，照搬参考项目 isContinuation）
-          const isContinuation =
-            message.role === 'assistant' && messages[index - 1]?.role === 'assistant';
-          return (
-            <div
-              key={message.id}
-              {...{ [MSG_INDEX_ATTR]: index }}
-              className={cn('transition-colors', index === searchActiveIndex && 'search-highlight')}
-            >
-              <MessageItem
-                message={message}
-                onRegenerate={onRegenerate}
-                disableActions={isStreaming}
-                {...(isStreamingMessage ? { isStreaming: true } : {})}
-                {...(isContinuation ? { isContinuation: true } : {})}
-              />
-            </div>
-          );
-        })}
-        {/* 流式占位：assistant 尚未开始输出时显示打字指示（避免与真实 assistant 消息双头像重复） */}
-        {showStreamingFooter && <StreamingFooter />}
+        {/* 居中限宽容器（CSS .messages-inner 已定义但此前从未渲染——消息通栏全宽，
+            与 820px 居中的输入框严重错位） */}
+        <div className="messages-inner">
+          {messages.map((message, index) => {
+            // 流式标记：最后一条 assistant 消息正在输出时，文本末尾显示闪烁光标（照搬参考项目 StreamingCursor）
+            const isStreamingMessage =
+              !showStreamingFooter && isStreaming && index === messages.length - 1;
+            // 连续 assistant 消息：前一条也是 assistant（隐藏头像与角色标签，照搬参考项目 isContinuation）
+            const isContinuation =
+              message.role === 'assistant' && messages[index - 1]?.role === 'assistant';
+            return (
+              <div
+                key={message.id}
+                {...{ [MSG_INDEX_ATTR]: index }}
+                className={cn(
+                  'transition-colors',
+                  index === searchActiveIndex && 'search-highlight',
+                )}
+              >
+                <MessageItem
+                  message={message}
+                  onRegenerate={onRegenerate}
+                  disableActions={isStreaming}
+                  {...(isStreamingMessage ? { isStreaming: true } : {})}
+                  {...(isContinuation ? { isContinuation: true } : {})}
+                />
+              </div>
+            );
+          })}
+          {/* 流式占位：assistant 尚未开始输出时显示打字指示（避免与真实 assistant 消息双头像重复） */}
+          {showStreamingFooter && <StreamingFooter />}
+        </div>
       </div>
       {/* 消息导航轨（对齐参考项目 VerticalProgressBar：圆点代表用户消息位置，
           竖线连接、滚动联动高亮、hover tooltip、数量上限 10 比例映射）
-          仅当用户消息 ≥2 条时显示（对齐参考项目：少于 2 条无导航意义） */}
+          仅当用户消息 ≥2 条时显示；挂在与 .messages 同级的相对容器上、
+          right 用 calc 对齐 820px 居中列（详见 CSS .msg-nav-rail）。 */}
       {userMessageIndices.length >= 2 && (
         <ul className="msg-nav-rail visible" aria-label={t('chat.msgNavRail')}>
           {/* 竖线连接所有圆点 */}
