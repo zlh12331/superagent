@@ -313,40 +313,8 @@ export function ChatPanel({
       className={cn('flex h-full flex-col', className)}
       style={{ fontSize: `${editorFontSize}px` }}
     >
-      {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard）
+      {/* 顶部状态条：等宽字体遥测带（右侧状态指示器——用户要求：左侧目录信息删掉）
           置顶（用户要求：与限流横幅互换位置） */}
-      <InlineApprovalCard
-        sessionId={chatId}
-        onEditResubmit={(command) => setInjectedComposerValue(command)}
-      />
-      {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
-      <RateLimitBanner />
-      {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
-      <ConversationSearchBar
-        visible={search.visible}
-        query={search.query}
-        totalMatches={search.matchIndexes.length}
-        currentMatch={search.currentMatch >= 0 ? search.currentMatch + 1 : 0}
-        onSearch={search.actions.search}
-        onNavigate={search.actions.navigate}
-        onClose={search.actions.close}
-      />
-      {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
-      {interrupted && !interruptedDismissed && (
-        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-[var(--warn)]">
-          <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
-          <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
-          <button
-            type="button"
-            className="text-[var(--warn)] hover:text-[var(--amber-dim)]"
-            aria-label={t('common.close')}
-            onClick={() => setInterruptedDismissed(true)}
-          >
-            <X className="size-3.5" strokeWidth={2} />
-          </button>
-        </div>
-      )}
-      {/* 顶部状态条：等宽字体遥测带（右侧状态指示器——用户要求：左侧目录信息删掉） */}
       <div className="thread-status-bar">
         <div className="ml-auto inline-flex items-center gap-1.5">
           {/* 会话内搜索入口（对齐参考项目 ConversationSearchBar） */}
@@ -379,6 +347,40 @@ export function ChatPanel({
           </span>
         </div>
       </div>
+
+      {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
+      <InlineApprovalCard
+        sessionId={chatId}
+        onEditResubmit={(command) => setInjectedComposerValue(command)}
+      />
+      {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
+      <ConversationSearchBar
+        visible={search.visible}
+        query={search.query}
+        totalMatches={search.matchIndexes.length}
+        currentMatch={search.currentMatch >= 0 ? search.currentMatch + 1 : 0}
+        onSearch={search.actions.search}
+        onNavigate={search.actions.navigate}
+        onClose={search.actions.close}
+      />
+      {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
+      {interrupted && !interruptedDismissed && (
+        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-[var(--warn)]">
+          <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
+          <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
+          <button
+            type="button"
+            className="text-[var(--warn)] hover:text-[var(--amber-dim)]"
+            aria-label={t('common.close')}
+            onClick={() => setInterruptedDismissed(true)}
+          >
+            <X className="size-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      )}
+      {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store）
+          位于状态条原位置（用户要求：与顶部状态条互换） */}
+      <RateLimitBanner />
 
       {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">
