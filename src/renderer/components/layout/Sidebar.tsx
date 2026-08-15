@@ -424,7 +424,7 @@ export function Sidebar(): ReactElement {
             {() => (
               // h-full：高度链传递（sidebar-list → nav → Virtuoso），
               // 缺链时 Virtuoso 视口高度 0 → 虚拟列表不渲染任何会话项
-              <nav aria-label={t('sidebar.sessionList')} className="h-full">
+              <nav aria-label={t('sidebar.sessionList')} className="flex h-full flex-col">
                 <div className="thread-group-label">
                   <span>{t('sidebar.recentSessions')}</span>
                 </div>
@@ -438,7 +438,9 @@ export function Sidebar(): ReactElement {
                       下存在 data 空→非空更新时序 bug（reload 后列表静默空渲染），
                       虚拟化收益低，普通滚动彻底规避 */}
                   <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-                    <div className="h-full overflow-y-auto pb-2">
+                    {/* min-h-0 flex-1：label 占高后列表区占剩余高度，避免 nav 溢出导致
+                        内容未占满时也显示滚动条（用户标注：2 个会话不该出滚动条） */}
+                    <div className="min-h-0 flex-1 overflow-y-auto pb-2">
                       {/* 搜索无结果：显示搜索空态（对齐参考项目搜索空态三态） */}
                       {isSearching && entries.length === 0 ? (
                         <EmptyState

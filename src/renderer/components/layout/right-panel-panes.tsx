@@ -117,8 +117,8 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
         )}
       </div>
 
-      {/* 分割线（用户要求：计划待办与引用文件之间） */}
-      <div className="border-border shrink-0 border-t" aria-hidden="true" />
+      {/* 分割线（用户要求：计划待办与引用文件之间；加深——--border 在暗背景对比弱） */}
+      <div className="border-muted-foreground/40 shrink-0 border-t" aria-hidden="true" />
       {/* 引用文件（占 60% 空间，用户要求）：从 tool-store 提取 read_file 路径去重 */}
       <div className="min-h-0 flex-[3] overflow-y-auto">
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">

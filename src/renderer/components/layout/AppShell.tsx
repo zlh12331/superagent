@@ -23,7 +23,6 @@
 // - .sb-collapsed / .crp-collapsed（折叠态 class）
 // ──────────────────────────────────────────────────────────────
 
-import { ChevronRight } from 'lucide-react';
 import {
   lazy,
   type ReactElement,
@@ -394,20 +393,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
           />
         )}
 
-        {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector） */}
+        {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector）
+            折叠展开按钮已删除（用户要求）：折叠态展开走顶栏右面板开关 */}
         <aside className="chat-right-panel" aria-label={t('common.rightPanel')}>
-          {/* 折叠按钮：点击切换 rightPanelCollapsed */}
-          <button
-            type="button"
-            className="crp-collapse-btn"
-            onClick={handleToggleRightPanel}
-            aria-label={
-              rightPanelCollapsed ? t('common.expandRightPanel') : t('common.collapseRightPanel')
-            }
-            aria-expanded={!rightPanelCollapsed}
-          >
-            <ChevronRight className="size-3" strokeWidth={1.5} />
-          </button>
           {!rightPanelCollapsed && (
             <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
               <Suspense fallback={<div className="h-full" />}>

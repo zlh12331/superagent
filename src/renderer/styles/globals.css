@@ -1168,31 +1168,10 @@ body.resizing iframe {
 }
 
 /* 右面板折叠按钮 */
-.crp-collapse-btn {
-  position: absolute;
-  top: 10px;
-  left: -20px;
-  width: 20px;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-right: none;
-  background: var(--sidebar);
-  color: var(--muted-foreground);
-  cursor: pointer;
-  border-radius: 6px 0 0 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  transition: transform 0.2s;
-}
+/* 右面板折叠展开按钮已删除（用户要求）：展开走顶栏开关 */
 
 .crp-collapse-btn:hover {
   color: var(--foreground);
-}
-
-.view-chat.crp-collapsed .crp-collapse-btn {
-  transform: rotate(180deg);
 }
 
 /* ──────────────────────────────────────────────────────────────
