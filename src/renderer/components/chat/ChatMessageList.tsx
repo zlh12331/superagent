@@ -309,6 +309,8 @@ interface QuestionJumpBarProps {
  * 状态：hovered（磁性目标）/ active（滚动联动）
  * 依赖：无（原生 div/button）
  * 可访问性：nav + button 键盘可达；jump-item focus-visible 光环；预览 role=tooltip
+ * 备注：预览不用 shadcn Tooltip——Radix Tooltip 锚定触发器，无法实现"位置跟随鼠标"
+ *       语义（参考项目同款交互），故用自研 div + role=tooltip（功能性例外）
  * ──────────────────────────────
  */
 function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps): ReactElement {

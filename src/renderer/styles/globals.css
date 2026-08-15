@@ -3869,6 +3869,8 @@ button.card-head {
 /* ──────────────────────────────────────────────────────────────
    消息跳转条（对齐参考项目 DeepSeek-Reasonix QuestionJumpBar：
    磁性吸附横条 + 整轨热区 + 预览跟随 + 内部滚动渐隐）
+   样式已 token 化：文字用 --text、阴影用 --shadow-pop、字号用 --font-size-sm；
+   mask 的 #000 为功能性（mask 亮度语义，非视觉色）；z-index 5 与滚动到底部按钮同层
    ────────────────────────────────────────────────────────────── */
 .jump-bar {
   position: absolute;
@@ -3972,9 +3974,9 @@ button.card-head {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-elev);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  color: var(--fg);
-  font-size: 12px;
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-size: var(--font-size-sm);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
