@@ -438,7 +438,8 @@ body::after {
 
 /* ── 侧边栏基础样式（须在折叠态规则之前，避免特异性降序告警） ── */
 .sidebar {
-  background: linear-gradient(180deg, var(--sidebar) 0%, var(--background) 100%);
+  /* 横向渐变：左端独立色 → 右端主区背景色，交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
+  background: linear-gradient(90deg, var(--sidebar) 0%, var(--background) 100%);
   /* 用户要求：侧边栏与对话区间隔肉眼不可见——去掉右侧分隔线，hover resizer 时才显示 */
   border-right: 1px solid transparent;
   display: flex;
@@ -1143,7 +1144,8 @@ body.resizing iframe {
 
 /* ── 右面板 ── */
 .chat-right-panel {
-  background: var(--sidebar);
+  /* 横向渐变：右端独立色 → 左端主区背景色，交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
+  background: linear-gradient(270deg, var(--sidebar) 0%, var(--background) 100%);
   /* 用户要求：右面板与对话区间隔肉眼不可见——去掉左侧分隔线，hover resizer 时才显示 */
   border-left: 1px solid transparent;
   display: flex;
