@@ -154,8 +154,8 @@ export const DevPanel = memo(function DevPanel({
   return (
     <div className={cn('bg-background flex flex-col', className)}>
       {/* 标题栏：Tab 切换（右面板折叠由全局机制管理：断点/AppShell 按钮，此处不重复放置）
-          背景透明：与状态条 --background 连续（用户标注：亮色 tab 栏与状态条交界像间隔） */}
-      <div className="border-border flex items-center gap-2 border-b px-2 py-1">
+          背景透明 + h-30px：与状态条同高对齐（用户要求：两者 30px，消除交界不齐） */}
+      <div className="border-border flex h-[30px] items-center gap-2 border-b px-2 py-1">
         {/* Tab 切换 */}
         <Tabs
           value={activeTab}

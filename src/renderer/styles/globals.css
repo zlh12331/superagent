@@ -691,7 +691,9 @@ body::after {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 7px 24px;
+  /* 高度与右面板 tab 栏对齐（用户要求：两者 30px，消除交界不齐） */
+  height: 30px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--border);
   /* 不透明背景：与 resizer 透明热区（--background）完全同色，消除两侧 6px 间隔感
      （玻璃渐变/透明均会暴露 thread-bg 氛围层色差，用户标注） */
