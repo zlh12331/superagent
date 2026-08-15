@@ -233,14 +233,10 @@ export function Sidebar(): ReactElement {
   // 显式 useMemo（同 groupedSessions）：避免 Compiler 缓存异步数据到位前的空计算
   const entries = useMemo((): SidebarEntry[] => {
     const list: SidebarEntry[] = [];
-    // 置顶独立分组（对齐参考项目 pinned-header）：置顶会话跨文件夹置顶到列表最顶部，
-    // 不再跟随文件夹分组（用户要求：置顶后位置明显变化）
+    // 置顶会话直接排列表最前（用户选择：ChatGPT 式，无独立分组标签；带图钉图标标识）
     const pinnedSessions = sessions.filter((s) => s.pinned === true);
-    if (pinnedSessions.length > 0) {
-      list.push({ type: 'label', name: t('sidebar.pinnedHeader') });
-      for (const session of pinnedSessions) {
-        list.push({ type: 'item', session });
-      }
+    for (const session of pinnedSessions) {
+      list.push({ type: 'item', session });
     }
     for (const [folderName, folderSessions] of groupedSessions) {
       list.push({ type: 'label', name: folderName });
@@ -248,7 +244,7 @@ export function Sidebar(): ReactElement {
       if (collapsedFolders.includes(folderName) && !isSearching) {
         continue;
       }
-      // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）；置顶会话已提前到顶部组，此处跳过
+      // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）；置顶会话已提前到列表最前，此处跳过
       const byId = new Map(folderSessions.map((s) => [s.id, s]));
       const ordered = orderOverrides[folderName] ?? folderSessions.map((s) => s.id);
       for (const id of ordered) {
@@ -259,7 +255,7 @@ export function Sidebar(): ReactElement {
       }
     }
     return list;
-  }, [groupedSessions, collapsedFolders, orderOverrides, isSearching, sessions, t]);
+  }, [groupedSessions, collapsedFolders, orderOverrides, isSearching, sessions]);
   // dnd-kit SortableContext 所需的可见会话 id（仅未折叠文件夹）
   const sortableIds = ((): string[] => {
     const ids: string[] = [];
