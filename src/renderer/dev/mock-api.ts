@@ -260,9 +260,8 @@ function simulateAllPartsDemo(sessionId: string): void {
       }
     }, delay);
   };
-  // 1. start-step：新步骤分隔线
-  push({ type: 'start-step' });
-  // 2. reasoning：折叠式推理块（流式协议：reasoning-start → delta → end）
+  // 1. reasoning：折叠式推理块（流式协议：reasoning-start → delta → end；
+  //    start-step 已按用户要求移除（不再演示步骤分隔线））
   push({ type: 'reasoning-start', id: demoMessageId }, 150);
   push(
     {
