@@ -260,20 +260,19 @@ function simulateAllPartsDemo(sessionId: string): void {
       }
     }, delay);
   };
-  // 1. step-start：新步骤分隔线
+  // 1. start-step：新步骤分隔线
   push({ type: 'start-step' });
-  // 2. reasoning：折叠式推理块（text-delta 流式内容）
+  // 2. reasoning：折叠式推理块（流式协议：reasoning-start → delta → end）
+  push({ type: 'reasoning-start', id: demoMessageId }, 150);
   push(
     {
-      type: 'reasoning',
-      id: `${demoMessageId}-r`,
-      reasoning: {
-        type: 'text-delta',
-        text: '正在分析用户需求：先拆分问题，再规划执行步骤，最后验证结果。',
-      },
+      type: 'reasoning-delta',
+      id: demoMessageId,
+      delta: '正在分析用户需求：先拆分问题，再规划执行步骤，最后验证结果。',
     },
-    150,
+    250,
   );
+  push({ type: 'reasoning-end', id: demoMessageId }, 350);
   // 3. text：Markdown（标题/列表/行内代码/代码块）
   const demoText =
     '### 全类型演示\n\n' +
