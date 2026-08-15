@@ -776,31 +776,32 @@ export function ChatInput({
             </>
           ) : null}
         </span>
-        {/* 右区插槽：模型选择等（用户要求：放输入框内、发送按钮左侧） */}
-        {rightSlot}
-        {/* 右侧：发送 / 停止按钮（margin-left:auto 推到右侧） */}
-        {isStreaming ? (
-          <button
-            type="button"
-            className="stop-gen-btn ml-auto"
-            onClick={onStop}
-            aria-label={t('chat.stopGenerating')}
-            title={t('chat.stopGenerating')}
-          >
-            <Square className="size-3.5" strokeWidth={2.5} fill="currentColor" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="send-btn ml-auto"
-            disabled={!canSend}
-            onClick={handleSend}
-            aria-label={t('chat.sendMessage')}
-            title={t('chat.send')}
-          >
-            <Send className="size-3.5" strokeWidth={2.5} />
-          </button>
-        )}
+        {/* 右区：模型选择 + 发送按钮（整体右对齐，用户要求模型紧贴发送按钮左侧） */}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {rightSlot}
+          {isStreaming ? (
+            <button
+              type="button"
+              className="stop-gen-btn"
+              onClick={onStop}
+              aria-label={t('chat.stopGenerating')}
+              title={t('chat.stopGenerating')}
+            >
+              <Square className="size-3.5" strokeWidth={2.5} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="send-btn"
+              disabled={!canSend}
+              onClick={handleSend}
+              aria-label={t('chat.sendMessage')}
+              title={t('chat.send')}
+            >
+              <Send className="size-3.5" strokeWidth={2.5} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

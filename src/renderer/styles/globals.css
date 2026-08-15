@@ -1817,7 +1817,8 @@ body.resizing iframe {
 }
 
 .msg.user .msg-content {
-  max-width: 72%;
+  /* 宽度占满对话区（用户要求） */
+  max-width: 100%;
 }
 
 /* assistant 消息：开放排版，去掉气泡 */
@@ -2087,7 +2088,8 @@ body.resizing iframe {
 .composer {
   border-top: 1px solid var(--border);
   background: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
-  padding: 14px 24px 18px;
+  /* 四边 10px（用户要求） */
+  padding: 10px;
   position: relative;
   min-width: 0;
 }

@@ -166,7 +166,7 @@ export const DevPanel = memo(function DevPanel({
           {/* tab 行可横向滚动：标签保持自然宽度不被挤压（对齐 TerminalTabs 滚动模式） */}
           <TabsList
             ref={tabListRef}
-            className="bg-transparent h-5 min-w-0 w-full overflow-x-auto overflow-y-hidden p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="bg-transparent h-5 min-w-0 w-full justify-start overflow-x-auto overflow-y-hidden p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {openTabs.map((tab) => {
               const def = TAB_DEFS.find((d) => d.id === tab);
