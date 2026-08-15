@@ -439,7 +439,8 @@ body::after {
 /* ── 侧边栏基础样式（须在折叠态规则之前，避免特异性降序告警） ── */
 .sidebar {
   background: linear-gradient(180deg, var(--sidebar) 0%, var(--background) 100%);
-  border-right: 1px solid var(--sidebar-border);
+  /* 用户要求：侧边栏与对话区间隔肉眼不可见——去掉右侧分隔线，hover resizer 时才显示 */
+  border-right: 1px solid transparent;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1116,7 +1117,8 @@ body::after {
   width: 1px;
   height: 100%;
   max-height: 100%;
-  background: var(--border);
+  /* 用户要求：默认不可见（侧边栏与对话区无缝衔接）；hover/拖拽时显示 accent 提示线 */
+  background: transparent;
   transition:
     background 0.15s ease,
     width 0.15s ease;
@@ -1142,7 +1144,8 @@ body.resizing iframe {
 /* ── 右面板 ── */
 .chat-right-panel {
   background: var(--sidebar);
-  border-left: 1px solid var(--border);
+  /* 用户要求：右面板与对话区间隔肉眼不可见——去掉左侧分隔线，hover resizer 时才显示 */
+  border-left: 1px solid transparent;
   display: flex;
   flex-direction: column;
   min-width: 0;
