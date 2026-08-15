@@ -24,7 +24,6 @@ import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { InlineCreateInput } from './inline-create-input';
-import { InlineRenameInput } from './inline-rename-input';
 
 /** 文件类型简化为「目录」或「文件」（symlink 暂按文件渲染） */
 type NodeType = 'directory' | 'file';
@@ -71,18 +70,16 @@ export function FileTreeNode({
   const isLoading = useFileTreeStore((s) => s.loadingPaths.has(path));
   // 订阅操作中状态
   const isPending = useFileTreeStore((s) => s.pendingOps.has(path));
-  // 订阅内联编辑状态
-  const renamingPath = useFileTreeStore((s) => s.renamingPath);
+  // 订阅内联创建状态（重命名状态已随 NodeMenu 移除）
   const creatingEntry = useFileTreeStore((s) => s.creatingEntry);
 
   // store actions
   const toggleExpand = useFileTreeStore((s) => s.toggleExpand);
   const setActiveFile = useFileTreeStore((s) => s.setActiveFile);
 
-  // IPC 操作 hook
+  // IPC 操作 hook（新建文件/目录；删除/重命名已随 NodeMenu 移除）
   const ops = useFileTreeOps();
 
-  const isRenaming = renamingPath === path;
   const isCreatingHere = creatingEntry?.parentDir === path;
 
   // 缩进：每层 12px（对齐 VS Code 风格）
@@ -118,7 +115,6 @@ export function FileTreeNode({
             onClick={handleClick}
             // 让外层 treeitem 承担焦点，button 不参与 Tab 序列以避免双重停留
             tabIndex={-1}
-            disabled={isRenaming}
           >
             <span className={cn('ft-chevron', expanded && 'expanded')}>
               <ChevronRight size={10} strokeWidth={2.5} />
@@ -130,17 +126,9 @@ export function FileTreeNode({
                 <Folder size={13} strokeWidth={1.75} />
               )}
             </span>
-            {isRenaming ? (
-              <InlineRenameInput
-                initialName={name}
-                onConfirm={(newName) => void ops.renameEntry(path, newName)}
-                onCancel={() => useFileTreeStore.getState().cancelRename()}
-              />
-            ) : (
-              <span className="ft-name" title={name}>
-                {name}
-              </span>
-            )}
+            <span className="ft-name" title={name}>
+              {name}
+            </span>
           </button>
         </div>
         {expanded && (
@@ -216,22 +204,13 @@ export function FileTreeNode({
           onClick={handleClick}
           title={name}
           tabIndex={-1}
-          disabled={isRenaming}
         >
           <span className="ft-icon ft-file-icon">
             <File size={13} strokeWidth={1.5} />
           </span>
-          {isRenaming ? (
-            <InlineRenameInput
-              initialName={name}
-              onConfirm={(newName) => void ops.renameEntry(path, newName)}
-              onCancel={() => useFileTreeStore.getState().cancelRename()}
-            />
-          ) : (
-            <span className="ft-name" title={name}>
-              {name}
-            </span>
-          )}
+          <span className="ft-name" title={name}>
+            {name}
+          </span>
         </button>
       </div>
     </div>

@@ -231,6 +231,14 @@ function ThreadItem({
                 />
               ) : (
                 <div className="ti-title" title={`${title}（${t('sidebar.doubleClickRename')}）`}>
+                  {/* 置顶标识（用户要求：置顶/未置顶有明显区别） */}
+                  {isPinned && (
+                    <Pin
+                      className="text-[var(--accent)] mr-1 inline size-2.5 shrink-0 -translate-y-px"
+                      strokeWidth={2.5}
+                      fill="currentColor"
+                    />
+                  )}
                   {title}
                 </div>
               )}

@@ -239,10 +239,15 @@ export function Sidebar(): ReactElement {
       if (collapsedFolders.includes(folderName) && !isSearching) {
         continue;
       }
-      // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）
+      // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）；置顶优先（用户要求：置顶/未置顶有明显区别）
       const byId = new Map(folderSessions.map((s) => [s.id, s]));
       const ordered = orderOverrides[folderName] ?? folderSessions.map((s) => s.id);
-      for (const id of ordered) {
+      const pinnedFirst = [...ordered].sort((a, b) => {
+        const ap = byId.get(a)?.pinned === true;
+        const bp = byId.get(b)?.pinned === true;
+        return ap === bp ? 0 : ap ? -1 : 1;
+      });
+      for (const id of pinnedFirst) {
         const session = byId.get(id);
         if (session !== undefined) {
           list.push({ type: 'item', session });

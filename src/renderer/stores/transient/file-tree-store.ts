@@ -53,8 +53,6 @@ interface FileTreeState {
   readonly loadingPaths: ReadonlySet<string>;
   /** 新建条目的内联编辑状态（null 表示未在新建流程） */
   readonly creatingEntry: CreatingEntry | null;
-  /** 重命名目标的路径（null 表示未在重命名流程） */
-  readonly renamingPath: string | null;
   /** 操作中的路径集合（创建/删除/重命名进行中，用于禁用相关 UI 防止重复操作） */
   readonly pendingOps: ReadonlySet<string>;
 
@@ -78,17 +76,13 @@ interface FileTreeState {
   /** 设置目录加载状态（list IPC 请求前后调用） */
   readonly setLoading: (path: string, loading: boolean) => void;
 
-  // ── 新建/重命名内联编辑方法 ────────────────────────
+  // ── 新建内联编辑方法 ────────────────────────────
   /** 开始新建流程：在指定父目录下显示临时节点，tempName 初始为空 */
   readonly startCreate: (parentDir: string, type: 'file' | 'directory') => void;
   /** 更新临时节点名称（用户输入时实时调用） */
   readonly setCreatingName: (name: string) => void;
   /** 取消新建流程（用户按 Esc 或失焦时调用） */
   readonly cancelCreate: () => void;
-  /** 开始重命名流程：标记目标路径，UI 在该节点上显示内联输入框 */
-  readonly startRename: (path: string) => void;
-  /** 取消重命名流程 */
-  readonly cancelRename: () => void;
 
   // ── 操作中状态方法 ──────────────────────────────────
   /** 标记路径为操作中（创建/删除/重命名 IPC 发起前调用，IPC 完成后清除） */
@@ -121,7 +115,6 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
   entries: new Map<string, readonly FileEntry[]>(),
   loadingPaths: new Set<string>(),
   creatingEntry: null,
-  renamingPath: null,
   pendingOps: new Set<string>(),
 
   setRootPath: (path) =>
@@ -134,7 +127,6 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
           entries: new Map<string, readonly FileEntry[]>(),
           loadingPaths: new Set<string>(),
           creatingEntry: null,
-          renamingPath: null,
           pendingOps: new Set<string>(),
         };
       }
@@ -146,7 +138,6 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
         entries: new Map<string, readonly FileEntry[]>(),
         loadingPaths: new Set<string>(),
         creatingEntry: null,
-        renamingPath: null,
         pendingOps: new Set<string>(),
       };
     }),
@@ -227,12 +218,10 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
       return { loadingPaths: next };
     }),
 
-  // ── 新建/重命名内联编辑 ─────────────────────────────
+  // ── 新建内联编辑 ─────────────────────────────────
   startCreate: (parentDir, type) =>
     set(() => ({
       creatingEntry: { parentDir, type, tempName: '' },
-      // 进入新建流程时取消可能的重命名流程，避免两个内联输入框同时显示
-      renamingPath: null,
     })),
 
   setCreatingName: (name) =>
@@ -242,15 +231,6 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
     }),
 
   cancelCreate: () => set(() => ({ creatingEntry: null })),
-
-  startRename: (path) =>
-    set(() => ({
-      renamingPath: path,
-      // 进入重命名流程时取消可能的新建流程
-      creatingEntry: null,
-    })),
-
-  cancelRename: () => set(() => ({ renamingPath: null })),
 
   // ── 操作中状态 ──────────────────────────────────────
   setPendingOp: (path, pending) =>
@@ -272,7 +252,6 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
       entries: new Map<string, readonly FileEntry[]>(),
       loadingPaths: new Set<string>(),
       creatingEntry: null,
-      renamingPath: null,
       pendingOps: new Set<string>(),
     })),
 

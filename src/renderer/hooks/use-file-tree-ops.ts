@@ -4,7 +4,7 @@
 // 职责：
 // - 封装 file:create / file:createDir / file:delete / file:rename IPC 调用
 // - 自动管理 pendingOps 状态（IPC 前后置位/清除，防止重复操作）
-// - 成功后取消内联编辑状态（cancelCreate / cancelRename）
+// - 成功后取消内联编辑状态（cancelCreate）
 // - 依赖 file:watch 事件自动同步文件树状态（useFileTree 已订阅）
 // - 错误时 toast 提示
 //
@@ -42,7 +42,6 @@ export function useFileTreeOps() {
   const { t } = useTranslation();
   const setPendingOp = useFileTreeStore((s) => s.setPendingOp);
   const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
-  const cancelRename = useFileTreeStore((s) => s.cancelRename);
 
   /**
    * 创建新文件
@@ -97,58 +96,9 @@ export function useFileTreeOps() {
     }
   }
 
-  /**
-   * 删除文件或目录
-   *
-   * @param path 目标绝对路径
-   */
-  async function deleteEntry(path: string): Promise<boolean> {
-    setPendingOp(path, true);
-    try {
-      const res = await window.api.file.delete({ path, recursive: true });
-      if ('error' in res) {
-        toast.error(t('common.deleteFailed'), { description: res.error.message });
-        return false;
-      }
-      return true;
-    } catch (err) {
-      toast.error(t('common.deleteFailed'), { description: String(err) });
-      return false;
-    } finally {
-      setPendingOp(path, false);
-    }
-  }
+  // 删除/重命名已随 NodeMenu 菜单移除（用户要求：文件树节点更多操作不需要）——无 UI 入口的死代码清理
 
-  /**
-   * 重命名/移动文件或目录
-   *
-   * @param oldPath 原路径
-   * @param newName 新名称（不含路径分隔符，新路径自动通过 dirname 拼接）
-   */
-  async function renameEntry(oldPath: string, newName: string): Promise<boolean> {
-    const newPath = joinPath(dirname(oldPath), newName);
-    setPendingOp(oldPath, true);
-    try {
-      const res = await window.api.file.rename({
-        oldPath,
-        newPath,
-        overwrite: false,
-      });
-      if ('error' in res) {
-        toast.error(t('common.moveFailed'), { description: res.error.message });
-        return false;
-      }
-      cancelRename();
-      return true;
-    } catch (err) {
-      toast.error(t('common.moveFailed'), { description: String(err) });
-      return false;
-    } finally {
-      setPendingOp(oldPath, false);
-    }
-  }
-
-  return { createFile, createDir, deleteEntry, renameEntry };
+  return { createFile, createDir };
 }
 
 /**
@@ -166,15 +116,4 @@ function joinPath(parentDir: string, name: string): string {
   const trimmedParent = parentDir.replace(/[\\/]+$/, '');
   const trimmedName = name.replace(/^[\\/]+/, '');
   return `${trimmedParent}${sep}${trimmedName}`;
-}
-
-/**
- * 计算父目录路径（与 use-file-tree.ts 中的 dirname 行为一致）
- */
-function dirname(path: string): string {
-  const lastSlash = path.lastIndexOf('/');
-  const lastBackslash = path.lastIndexOf('\\');
-  const idx = Math.max(lastSlash, lastBackslash);
-  if (idx <= 0) return path;
-  return path.slice(0, idx);
 }
