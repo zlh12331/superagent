@@ -150,8 +150,9 @@ export const DevPanel = memo(function DevPanel({
     setOpenTabs((prev) => (prev.includes(activeTab) ? prev : [...prev, activeTab]));
   }, [activeTab]);
 
+  // 用户要求：右面板与对话区间隔不可见——根容器不加左边线（像素实测 border-l 产生 --border 色亮线）
   return (
-    <div className={cn('border-border bg-background flex flex-col border-l', className)}>
+    <div className={cn('bg-background flex flex-col', className)}>
       {/* 标题栏：Tab 切换（右面板折叠由全局机制管理：断点/AppShell 按钮，此处不重复放置） */}
       <div className="border-border bg-muted/30 flex items-center gap-2 border-b px-2 py-1">
         {/* Tab 切换 */}

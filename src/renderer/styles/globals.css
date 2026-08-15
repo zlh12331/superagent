@@ -424,6 +424,8 @@ body::after {
 /* ── 主体容器：水平 grid（sidebar | resizer | main | resizer | right-panel） ──
    对齐原型 .view-chat，合并了原型的 .body + .view-chat 两层 */
 .view-chat {
+  /* 背景锚定到主区色：resizer 列（透明）不露 body 氛围层，交界处与两侧完全一致 */
+  background: var(--background);
   display: grid;
   grid-template-columns:
     var(--aurora-sidebar-w)
@@ -440,8 +442,7 @@ body::after {
 .sidebar {
   /* 横向渐变：左端独立色 → 右端主区背景色，交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
   background: linear-gradient(90deg, var(--sidebar) 0%, var(--background) 100%);
-  /* 用户要求：侧边栏与对话区间隔肉眼不可见——去掉右侧分隔线，hover resizer 时才显示 */
-  border-right: 1px solid transparent;
+  /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1091,8 +1092,8 @@ body::after {
   /* h-full 必须显式：Tailwind preflight 给 hr 默认 height 0.67px，
      align-self: stretch 无法覆盖显式高度 → 命中区塌陷不可拖（同抽屉调宽条坑） */
   height: 100%;
-  /* 视觉宽度恒 1px（用户要求）：grid 列宽 6px 是拖拽热区，视觉线靠 ::after 1px 居中 */
-  width: 1px;
+  /* 热区 = 列宽 6px（用户要求：好拖）；视觉线由 ::after 1px 居中承担，默认透明 */
+  width: 6px;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -1146,8 +1147,7 @@ body.resizing iframe {
 .chat-right-panel {
   /* 横向渐变：右端独立色 → 左端主区背景色，交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
   background: linear-gradient(270deg, var(--sidebar) 0%, var(--background) 100%);
-  /* 用户要求：右面板与对话区间隔肉眼不可见——去掉左侧分隔线，hover resizer 时才显示 */
-  border-left: 1px solid transparent;
+  /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
   display: flex;
   flex-direction: column;
   min-width: 0;
