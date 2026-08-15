@@ -1,72 +1,42 @@
 // src/renderer/components/ui/switch.tsx
-// 开关组件（零依赖 button + role="switch"，对齐原型 .toggle-switch）
-// ──────────────────────────────────────────────────────────────
-// 设计：
-// - button 元素 + role="switch" + aria-checked（键盘原生支持 Space/Enter）
-// - 视觉：轨道 + 滑动圆点（checked 时 accent 色）
-// - 受控组件：checked + onCheckedChange
-// ──────────────────────────────────────────────────────────────
+// 开关组件（shadcn/ui new-york 风格，基于 @radix-ui/react-switch）
+// 设计文档 §2.3 shadcn/ui 组件库
 
-import type { ReactElement } from 'react';
+import * as SwitchPrimitive from '@radix-ui/react-switch';
+import type * as React from 'react';
+
 import { cn } from '@/lib/utils';
-
-/**
- * Switch props
- * ──────────────────────────────
- * 变体：无（尺寸由 className 控制）
- * 状态：受控（checked + onCheckedChange）
- * 依赖：无（自研 button + role="switch"）
- * 可访问性：button 原生键盘（Space/Enter）+ aria-checked；无可见文字时须传 aria-label
- * ──────────────────────────────
- */
-export interface SwitchProps {
-  /** 是否选中（受控） */
-  readonly checked: boolean;
-  /** 切换回调 */
-  readonly onCheckedChange: (checked: boolean) => void;
-  /** 无障碍标签（无可见文字时必填） */
-  readonly 'aria-label'?: string;
-  /** 额外 className */
-  readonly className?: string;
-  /** 禁用态 */
-  readonly disabled?: boolean;
-}
 
 /**
  * 开关组件
  *
- * @example
- * ```tsx
- * <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="自动滚动" />
- * ```
+ * 包装 Radix Switch Primitive，受控组件（checked + onCheckedChange）。
+ * ──────────────────────────────
+ * 变体：无（尺寸由 className 控制）
+ * 状态：受控（checked + onCheckedChange）| 非受控（defaultChecked）
+ * 依赖：@radix-ui/react-switch
+ * 可访问性：Radix 内置 role=switch + aria-checked + Space/Enter 键盘切换
+ * ──────────────────────────────
  */
 export function Switch({
-  checked,
-  onCheckedChange,
   className,
-  disabled,
-  ...rest
-}: SwitchProps): ReactElement {
+  ...props
+}: React.ComponentProps<typeof SwitchPrimitive.Root>): React.ReactElement {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onCheckedChange(!checked)}
+    <SwitchPrimitive.Root
+      data-slot="switch"
       className={cn(
-        'focus-visible:ring-ring relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-        checked ? 'bg-primary' : 'bg-input',
+        'peer data-[state=checked]:bg-primary data-[state=unchecked]:bg-input focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-xs transition-all outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
-      {...rest}
+      {...props}
     >
-      <span
+      <SwitchPrimitive.Thumb
+        data-slot="switch-thumb"
         className={cn(
-          'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-sm transition-transform',
-          checked ? 'translate-x-4' : 'translate-x-0',
+          'bg-background pointer-events-none block size-4 rounded-full ring-0 shadow-lg transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0',
         )}
       />
-    </button>
+    </SwitchPrimitive.Root>
   );
 }

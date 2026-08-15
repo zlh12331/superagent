@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
+import { Badge } from '@/components/ui/badge';
 import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -295,15 +296,16 @@ export function DiffPane({
               <span className="text-foreground/90 min-w-0 flex-1 truncate" title={change.path}>
                 {change.path.split(/[\\/]/).pop() ?? change.path}
               </span>
-              <span
+              <Badge
+                variant="outline"
                 className={
                   change.status === 'error'
-                    ? 'text-[var(--error)] font-mono text-[9px]'
-                    : 'text-[var(--success)] font-mono text-[9px]'
+                    ? 'text-[var(--error)] border-transparent font-mono text-[9px]'
+                    : 'text-[var(--success)] border-transparent font-mono text-[9px]'
                 }
               >
                 {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
-              </span>
+              </Badge>
             </button>
             {/* 打开文件（合并自原"文件"tab 的快速打开场景） */}
             <button

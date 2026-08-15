@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
+import { Badge } from '@/components/ui/badge';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -415,14 +416,20 @@ export function ChatPanel({
       {/* 会话目标栏（左 GOAL 标签 · 中条件 · 右 暂停/恢复 · 编辑 · 删除——仅存在 active/completed 目标时显示） */}
       {currentGoal !== undefined && (
         <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
-          <span className="bg-accent/20 text-accent rounded px-1.5 py-0.5 font-mono text-[10px] font-bold">
+          <Badge
+            variant="outline"
+            className="bg-accent/20 text-accent border-transparent px-1.5 py-0.5 font-mono text-[10px] font-bold"
+          >
             GOAL
-          </span>
+          </Badge>
           {isGoalCompleted && (
-            <span className="bg-success/10 text-success flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+            <Badge
+              variant="outline"
+              className="bg-success/10 text-success border-transparent gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+            >
               <Check className="size-3" strokeWidth={2.5} />
               {t('chat.goalCompleted')}
-            </span>
+            </Badge>
           )}
           <span
             className={cn(
