@@ -26,8 +26,13 @@
 // ──────────────────────────────────────────────────────────────
 
 import { FolderOpen, Plus, Trash2 } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import type { ReactElement } from 'react';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
@@ -55,138 +60,88 @@ export function FolderLabel({
 }: FolderLabelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  // 右键菜单位置（照搬 thread-item 的 ThreadContextMenu 模式）
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  const ctxMenuRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (ctxMenu === null) return;
-    const close = (): void => setCtxMenu(null);
-    window.addEventListener('mousedown', close);
-    window.addEventListener('blur', close);
-    return () => {
-      window.removeEventListener('mousedown', close);
-      window.removeEventListener('blur', close);
-    };
-  }, [ctxMenu]);
 
   return (
-    <>
-      <button
-        type="button"
-        className={cn('folder-label', collapsed && 'collapsed')}
-        onClick={onToggle}
-        onContextMenu={(event) => {
-          // 右键：显示文件夹操作菜单（创建新任务 / 在资源管理器中打开 / 删除）
-          event.preventDefault();
-          setCtxMenu({ x: event.clientX, y: event.clientY });
-        }}
-        aria-expanded={!collapsed}
-      >
-        <span className="fl-chevron">
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            role="img"
-            aria-label={t('sidebar.collapseFolder')}
-          >
-            <title>{t('sidebar.collapseFolder')}</title>
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </span>
-        <span className="fl-icon">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            role="img"
-            aria-label={t('sidebar.folder')}
-          >
-            <title>{t('sidebar.folder')}</title>
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
-        </span>
-        <span className="fl-name">
-          {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
-        </span>
-        {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
-        {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
-        <span
-          className="fl-add-btn"
-          role="button"
-          tabIndex={0}
-          aria-label={t('sidebar.newSessionIn', { name: folderName })}
-          title={t('sidebar.newSessionInFolder')}
-          onClick={(event) => {
-            event.stopPropagation();
-            onCreateInFolder(folderName);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn('folder-label', collapsed && 'collapsed')}
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+        >
+          <span className="fl-chevron">
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              role="img"
+              aria-label={t('sidebar.collapseFolder')}
+            >
+              <title>{t('sidebar.collapseFolder')}</title>
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+          <span className="fl-icon">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              role="img"
+              aria-label={t('sidebar.folder')}
+            >
+              <title>{t('sidebar.folder')}</title>
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+          </span>
+          <span className="fl-name">
+            {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
+          </span>
+          {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
+          {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
+          <span
+            className="fl-add-btn"
+            role="button"
+            tabIndex={0}
+            aria-label={t('sidebar.newSessionIn', { name: folderName })}
+            title={t('sidebar.newSessionInFolder')}
+            onClick={(event) => {
               event.stopPropagation();
               onCreateInFolder(folderName);
-            }
-          }}
-        >
-          <Plus className="size-3" strokeWidth={2.5} />
-        </span>
-      </button>
-      {/* 右键菜单：创建新任务 / 在资源管理器中打开 / 删除（删除含确认弹窗——由 Sidebar 回调处理） */}
-      {ctxMenu !== null &&
-        createPortal(
-          <div
-            ref={ctxMenuRef}
-            className="bg-popover text-popover-foreground fixed z-[var(--z-drawer)] min-w-[160px] rounded-lg border p-1 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
-            role="menu"
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
                 onCreateInFolder(folderName);
-                setCtxMenu(null);
-              }}
-            >
-              <Plus className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.newTaskInFolder')}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                onOpenInExplorer(folderName);
-                setCtxMenu(null);
-              }}
-            >
-              <FolderOpen className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.openInExplorer')}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="text-error hover:bg-error/10 flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                onDeleteFolder(folderName);
-                setCtxMenu(null);
-              }}
-            >
-              <Trash2 className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.deleteFolder')}
-            </button>
-          </div>,
-          document.body,
-        )}
-    </>
+              }
+            }}
+          >
+            <Plus className="size-3" strokeWidth={2.5} />
+          </span>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onCreateInFolder(folderName)}>
+          <Plus className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.newTaskInFolder')}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpenInExplorer(folderName)}>
+          <FolderOpen className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.openInExplorer')}
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={() => onDeleteFolder(folderName)}>
+          <Trash2 className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.deleteFolder')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

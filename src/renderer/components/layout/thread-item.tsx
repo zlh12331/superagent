@@ -27,10 +27,15 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { FolderOpen, FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -157,35 +162,8 @@ function ThreadItem({
   const { t } = useTranslation();
   // 内联重命名状态（双击标题或更多菜单触发；对齐参考项目 ThreadItem 内联重命名）
   const [renaming, setRenaming] = useState(false);
-  // 右键菜单位置（照搬参考项目 ThreadContextMenu：fixed 定位 + clamp）
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  // 右键菜单 ref（外部 mousedown 关闭判定）
-  const ctxMenuRef = useRef<HTMLDivElement | null>(null);
   // 重命名提交（useRenameSession：mutation + invalidate 自动刷新列表）
   const { mutateAsync: renameSession } = useRenameSession();
-
-  // 外部 mousedown / Escape 关闭右键菜单（参考项目 bug 修复：检查 e.defaultPrevented，
-  // 避免刚打开的新菜单被同一次交互的关闭监听吞掉）
-  useEffect(() => {
-    if (ctxMenu === null) return;
-    const handleMouseDown = (e: MouseEvent): void => {
-      if (e.defaultPrevented) return;
-      if (ctxMenuRef.current !== null && !ctxMenuRef.current.contains(e.target as Node)) {
-        setCtxMenu(null);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        setCtxMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [ctxMenu]);
 
   /** 提交重命名：空值/未变化时直接退出编辑态 */
   const commitRename = (next: string): void => {
@@ -200,221 +178,165 @@ function ThreadItem({
   const metaText = formatRelativeTime(updatedAt, t);
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: 外层含 DropdownMenu 触发器（button），HTML 禁止 button 嵌套
-    <div
-      role="button"
-      tabIndex={0}
-      className={cn(
-        'thread-item',
-        isActive && 'active',
-        // I-S-001: 搜索防抖后匹配项添加临时高亮环（2 秒后由 Sidebar 清除）
-        highlighted && 'ring-1 ring-[var(--accent)]/40',
-      )}
-      onClick={onSelect}
-      onDoubleClick={() => setRenaming(true)}
-      onContextMenu={(event) => {
-        // 右键菜单（照搬参考项目 ThreadContextMenu：fixed 定位 + 视口 clamp）
-        event.preventDefault();
-        setCtxMenu({
-          x: Math.min(event.clientX, window.innerWidth - 200),
-          y: Math.min(event.clientY, window.innerHeight - 200),
-        });
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      aria-current={isActive ? 'page' : undefined}
-    >
-      <div className="ti-row">
-        {/* ti-dot：拖拽手柄（dnd-kit），hover 显示抓取光标；不参与点击选择（title 提供可访问说明） */}
-        <span
-          className="ti-dot cursor-grab active:cursor-grabbing"
-          title={t('sidebar.dragSort')}
-          {...dragHandleProps}
-        />
-        <div className="ti-content">
-          {renaming ? (
-            // 内联重命名输入框（uncontrolled + key：切换标题时重置 defaultValue）
-            <input
-              key={`rename-${title}`}
-              type="text"
-              defaultValue={title}
-              // biome-ignore lint/a11y/noAutofocus: 内联重命名需要即时聚焦（对齐参考项目编辑模式）
-              autoFocus
-              className="bg-background border-border text-foreground w-full rounded border px-1 py-0.5 text-xs"
-              aria-label={t('sidebar.renameTitle')}
-              onBlur={(event) => {
-                void commitRename(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void commitRename(event.currentTarget.value);
-                } else if (event.key === 'Escape') {
-                  setRenaming(false);
-                }
-              }}
-            />
-          ) : (
-            <div className="ti-title" title={`${title}（${t('sidebar.doubleClickRename')}）`}>
-              {title}
-            </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          role="button"
+          tabIndex={0}
+          className={cn(
+            'thread-item',
+            isActive && 'active',
+            // I-S-001: 搜索防抖后匹配项添加临时高亮环（2 秒后由 Sidebar 清除）
+            highlighted && 'ring-1 ring-[var(--accent)]/40',
           )}
-          <div className="ti-meta">{metaText}</div>
-        </div>
-        {/* 重命名中隐藏操作按钮：给输入框让出整行宽度（此前 97px 挤在 52px 操作按钮旁） */}
-        <div className={cn('ti-actions', renaming && 'hidden')}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground size-6"
-                aria-label={t('sidebar.sessionActions')}
+          onClick={onSelect}
+          onDoubleClick={() => setRenaming(true)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onSelect();
+            }
+          }}
+          aria-current={isActive ? 'page' : undefined}
+        >
+          <div className="ti-row">
+            {/* ti-dot：拖拽手柄（dnd-kit），hover 显示抓取光标；不参与点击选择（title 提供可访问说明） */}
+            <span
+              className="ti-dot cursor-grab active:cursor-grabbing"
+              title={t('sidebar.dragSort')}
+              {...dragHandleProps}
+            />
+            <div className="ti-content">
+              {renaming ? (
+                // 内联重命名输入框（uncontrolled + key：切换标题时重置 defaultValue）
+                <input
+                  key={`rename-${title}`}
+                  type="text"
+                  defaultValue={title}
+                  // biome-ignore lint/a11y/noAutofocus: 内联重命名需要即时聚焦（对齐参考项目编辑模式）
+                  autoFocus
+                  className="bg-background border-border text-foreground w-full rounded border px-1 py-0.5 text-xs"
+                  aria-label={t('sidebar.renameTitle')}
+                  onBlur={(event) => {
+                    void commitRename(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void commitRename(event.currentTarget.value);
+                    } else if (event.key === 'Escape') {
+                      setRenaming(false);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="ti-title" title={`${title}（${t('sidebar.doubleClickRename')}）`}>
+                  {title}
+                </div>
+              )}
+              <div className="ti-meta">{metaText}</div>
+            </div>
+            {/* 重命名中隐藏操作按钮：给输入框让出整行宽度（此前 97px 挤在 52px 操作按钮旁） */}
+            <div className={cn('ti-actions', renaming && 'hidden')}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground size-6"
+                    aria-label={t('sidebar.sessionActions')}
+                    disabled={isDeleting}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <MoreVertical className="size-3.5" strokeWidth={1.5} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onTogglePin();
+                    }}
+                  >
+                    <Pin className="size-3.5" strokeWidth={1.5} />
+                    {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onOpenInExplorer();
+                    }}
+                  >
+                    <FolderOpen className="size-3.5" strokeWidth={1.5} />
+                    {t('sidebar.openInExplorer')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onOpenFiles();
+                    }}
+                  >
+                    <FolderTree className="size-3.5" strokeWidth={1.5} />
+                    {t('sidebar.fileManager')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setRenaming(true);
+                    }}
+                  >
+                    <Pencil className="size-3.5" strokeWidth={1.5} />
+                    {t('sidebar.rename')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onDelete();
+                    }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" strokeWidth={1.5} />
+                    {t('sidebar.deleteSession')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {/* 文件树按钮（会话操作之后——用户要求的顺序：操作菜单在左，文件树在右） */}
+              <button
+                type="button"
+                // 与左侧更多菜单按钮同款工具类样式（此前 .ti-action-btn 无任何 CSS 规则，裸奔渲染）
+                className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
+                aria-label={t('sidebar.openFiles')}
+                title={t('sidebar.openFiles')}
                 disabled={isDeleting}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <MoreVertical className="size-3.5" strokeWidth={1.5} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => {
-                  onTogglePin();
-                }}
-              >
-                <Pin className="size-3.5" strokeWidth={1.5} />
-                {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  onOpenInExplorer();
-                }}
-              >
-                <FolderOpen className="size-3.5" strokeWidth={1.5} />
-                {t('sidebar.openInExplorer')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
+                onClick={(event) => {
+                  event.stopPropagation();
                   onOpenFiles();
                 }}
               >
                 <FolderTree className="size-3.5" strokeWidth={1.5} />
-                {t('sidebar.fileManager')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setRenaming(true);
-                }}
-              >
-                <Pencil className="size-3.5" strokeWidth={1.5} />
-                {t('sidebar.rename')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  onDelete();
-                }}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="size-3.5" strokeWidth={1.5} />
-                {t('sidebar.deleteSession')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {/* 文件树按钮（会话操作之后——用户要求的顺序：操作菜单在左，文件树在右） */}
-          <button
-            type="button"
-            // 与左侧更多菜单按钮同款工具类样式（此前 .ti-action-btn 无任何 CSS 规则，裸奔渲染）
-            className="text-muted-foreground hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50"
-            aria-label={t('sidebar.openFiles')}
-            title={t('sidebar.openFiles')}
-            disabled={isDeleting}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenFiles();
-            }}
-          >
-            <FolderTree className="size-3.5" strokeWidth={1.5} />
-          </button>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-      {/* 右键菜单（照搬参考项目 ThreadContextMenu：fixed 定位 + clamp + danger 样式）
-          createPortal 到 body：dnd-kit 的 transform 容器会破坏 fixed 定位（creating block） */}
-      {ctxMenu !== null &&
-        createPortal(
-          <div
-            ref={ctxMenuRef}
-            className="bg-popover text-popover-foreground fixed z-[var(--z-drawer)] min-w-[160px] rounded-lg border p-1 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
-            role="menu"
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                onTogglePin();
-                setCtxMenu(null);
-              }}
-            >
-              <Pin className="size-3.5" strokeWidth={1.5} />
-              {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                onOpenInExplorer();
-                setCtxMenu(null);
-              }}
-            >
-              <FolderOpen className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.openInExplorer')}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                onOpenFiles();
-                setCtxMenu(null);
-              }}
-            >
-              <FolderTree className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.fileManager')}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                setRenaming(true);
-                setCtxMenu(null);
-              }}
-            >
-              <Pencil className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.rename')}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="text-error hover:bg-error/10 flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-[7px] text-left text-[12px] transition-colors"
-              onClick={() => {
-                onDelete();
-                setCtxMenu(null);
-              }}
-            >
-              <Trash2 className="size-3.5" strokeWidth={1.5} />
-              {t('sidebar.deleteSession')}
-            </button>
-          </div>,
-          document.body,
-        )}
-    </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onTogglePin()}>
+          <Pin className="size-3.5" strokeWidth={1.5} />
+          {isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpenInExplorer()}>
+          <FolderOpen className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.openInExplorer')}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpenFiles()}>
+          <FolderTree className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.fileManager')}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => setRenaming(true)}>
+          <Pencil className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.rename')}
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={() => onDelete()}>
+          <Trash2 className="size-3.5" strokeWidth={1.5} />
+          {t('sidebar.deleteSession')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
