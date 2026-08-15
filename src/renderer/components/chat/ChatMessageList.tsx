@@ -14,10 +14,18 @@
 
 import type { UIMessage } from 'ai';
 import { ChevronDown, Sparkles } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactElement,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { MessageItem } from './message-item';
@@ -43,21 +51,19 @@ interface ChatMessageListProps {
 /** 距底部阈值（px）：小于该值视为"在底部" */
 const AT_BOTTOM_THRESHOLD = 80;
 
-/** 导航圆点数量上限（对齐参考项目：超过时按比例映射，避免溢出） */
-const MAX_NAV_DOTS = 10;
+/** 用户消息预览截断长度（跳转条预览） */
+const PREVIEW_MAX_CHARS = 60;
 
-/** 导航圆点渲染数据 */
-interface NavDot {
-  /** React key */
-  readonly key: string;
-  /** 用户消息序号（0-based，aria-label/tooltip 用） */
-  readonly userIndex: number;
-  /** 消息列表中的索引（点击滚动用） */
+/** 跳转条锚点（对齐参考项目 QuestionAnchor：每个用户消息一个锚点） */
+interface QuestionAnchor {
+  /** React key（消息索引派生） */
+  readonly id: string;
+  /** 用户消息序号（0-based） */
+  readonly turn: number;
+  /** 消息列表索引（点击滚动用） */
   readonly messageIndex: number;
-  /** 是否活跃（滚动联动） */
-  readonly isActive: boolean;
-  /** 用户消息内容预览（tooltip 展示，截断） */
-  readonly preview: string;
+  /** 用户消息内容预览（截断） */
+  readonly text: string;
 }
 
 export function ChatMessageList({
@@ -99,41 +105,18 @@ export function ChatMessageList({
   // 滚动联动的活跃用户消息序（0-based；null = 无活跃）
   const [activeUserIndex, setActiveUserIndex] = useState<number | null>(null);
 
-  // 导航圆点：未超上限全量展示（活跃 = 序号相等）；超过 MAX_NAV_DOTS 按比例映射
-  // （对齐参考项目 I-M-012，active 用区间 [srcIdx, nextSrcIdx) 判断，避免映射后索引错位）
-  const navDots = useMemo<readonly NavDot[]>(() => {
-    const n = userMessageIndices.length;
-    if (n === 0) return [];
-    // 预览：用户消息文本（对齐参考实现 hover peek 内容；截断 60 字符）
-    const previewOf = (messageIndex: number): string => {
+  // 跳转条锚点：全量用户消息（对齐参考项目 QuestionAnchor——跳转条内部滚动承载，无需比例映射）
+  const questions = useMemo<readonly QuestionAnchor[]>(() => {
+    return userMessageIndices.map((messageIndex, i) => {
       const text = extractText(messages[messageIndex]?.parts ?? []);
-      return text.length > 60 ? `${text.slice(0, 60)}…` : text;
-    };
-    if (n <= MAX_NAV_DOTS) {
-      return userMessageIndices.map((messageIndex, i) => ({
-        key: `dot-${i}`,
-        userIndex: i,
-        messageIndex,
-        isActive: activeUserIndex === i,
-        preview: previewOf(messageIndex),
-      }));
-    }
-    return Array.from({ length: MAX_NAV_DOTS }, (_, dotIdx) => {
-      const srcIdx = Math.min(Math.floor((dotIdx * n) / MAX_NAV_DOTS), n - 1);
-      const nextSrcIdx = Math.min(Math.floor(((dotIdx + 1) * n) / MAX_NAV_DOTS), n - 1);
-      const isActive =
-        activeUserIndex !== null &&
-        srcIdx <= activeUserIndex &&
-        (dotIdx === MAX_NAV_DOTS - 1 || nextSrcIdx > activeUserIndex);
       return {
-        key: `dot-${dotIdx}`,
-        userIndex: srcIdx,
-        messageIndex: userMessageIndices[srcIdx] ?? -1,
-        isActive,
-        preview: previewOf(userMessageIndices[srcIdx] ?? -1),
+        id: `q-${messageIndex}`,
+        turn: i,
+        messageIndex,
+        text: text.length > PREVIEW_MAX_CHARS ? `${text.slice(0, PREVIEW_MAX_CHARS)}…` : text,
       };
     });
-  }, [userMessageIndices, activeUserIndex, messages]);
+  }, [userMessageIndices, messages]);
 
   /**
    * 滚动回调：底部检测（替代 Virtuoso atBottomStateChange）
@@ -280,39 +263,14 @@ export function ChatMessageList({
           {showStreamingFooter && <StreamingFooter />}
         </div>
       </div>
-      {/* 消息导航轨（对齐参考项目 VerticalProgressBar：圆点代表用户消息位置，
-          竖线连接、滚动联动高亮、hover tooltip、数量上限 10 比例映射）
-          仅当用户消息 ≥2 条时显示；挂在与 .messages 同级的相对容器上、
-          right 用 calc 对齐 820px 居中列（详见 CSS .msg-nav-rail）。 */}
-      {userMessageIndices.length >= 2 && (
-        <ul className="msg-nav-rail visible" aria-label={t('chat.msgNavRail')}>
-          {/* 竖线连接所有圆点 */}
-          <li className="nav-rail-line" aria-hidden="true" />
-          {navDots.map((dot) => (
-            <li key={dot.key}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="nav-dot"
-                    data-active={dot.isActive}
-                    data-role="user"
-                    onClick={() => scrollToIndex(dot.messageIndex)}
-                    aria-label={`${t('chat.msgNavGoTo')} ${dot.userIndex + 1}`}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  <span className="block truncate">{`${t('chat.msgNavGoTo')} ${dot.userIndex + 1}`}</span>
-                  {dot.preview !== '' && (
-                    <span className="text-muted-foreground mt-0.5 block max-w-[200px] truncate text-2xs">
-                      {dot.preview}
-                    </span>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </li>
-          ))}
-        </ul>
+      {/* 消息跳转条（对齐参考项目 QuestionJumpBar：磁性吸附横条 + 整轨热区 + 预览跟随）
+          仅当用户消息 ≥2 条时显示；挂在与 .messages 同级的相对容器上 */}
+      {questions.length >= 2 && (
+        <QuestionJumpBar
+          questions={questions}
+          activeTurn={activeUserIndex}
+          onJump={(question) => scrollToIndex(question.messageIndex)}
+        />
       )}
       {/* 滚动到底部按钮（对齐原型 .scroll-to-bottom，作为 .messages 的兄弟元素） */}
       <button
@@ -326,5 +284,164 @@ export function ChatMessageList({
         <span className="new-msg-dot" aria-hidden="true" />
       </button>
     </div>
+  );
+}
+
+// ── 消息跳转条（对齐参考项目 DeepSeek-Reasonix QuestionJumpBar） ──────────────
+// 设计：磁性吸附（hover 按距离涟漪放大）+ 整轨热区（吸附最近锚点）+ 预览跟随鼠标
+
+interface QuestionJumpBarProps {
+  /** 用户消息锚点（全量） */
+  readonly questions: readonly QuestionAnchor[];
+  /** 当前活跃锚点 turn（滚动联动） */
+  readonly activeTurn: number | null;
+  /** 跳转回调（平滑滚动到消息） */
+  readonly onJump: (question: QuestionAnchor) => void;
+}
+
+/**
+ * 消息跳转条
+ *
+ * 磁性吸附横条：鼠标在轨道上移动时按距离涟漪放大（最近 32px / 相邻 20px / 隔 1 个 14px），
+ * 颜色按距离递减；预览跟随鼠标位置（role=tooltip）。
+ * ──────────────────────────────
+ * 变体：无
+ * 状态：hovered（磁性目标）/ active（滚动联动）
+ * 依赖：无（原生 div/button）
+ * 可访问性：nav + button 键盘可达；jump-item focus-visible 光环；预览 role=tooltip
+ * ──────────────────────────────
+ */
+function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps): ReactElement {
+  const { t } = useTranslation();
+  const [hovered, setHovered] = useState<number | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const previewTop = useRef(0);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const hoverIdx = hovered !== null ? questions.findIndex((q) => q.turn === hovered) : -1;
+  const hoveredQuestion = hovered !== null ? questions.find((q) => q.turn === hovered) : undefined;
+
+  /** 吸附：找到离指针最近的锚点（整轨热区——无需精确点中横条） */
+  const closestQuestionFromY = (
+    clientY: number,
+  ): { question: QuestionAnchor; previewY: number } | null => {
+    const el = barRef.current;
+    if (el === null) return null;
+    const markers = el.querySelectorAll<HTMLElement>('.jump-item');
+    const barRect = el.getBoundingClientRect();
+    let closest = -1;
+    let closestDist = Infinity;
+    let closestY = 0;
+    markers.forEach((item, index) => {
+      const rect = item.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const dist = Math.abs(clientY - midY);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = index;
+        closestY = midY - barRect.top;
+      }
+    });
+    const question = questions[closest];
+    if (question === undefined) return null;
+    return { question, previewY: closestY };
+  };
+
+  const onMove = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    const closest = closestQuestionFromY(e.clientY);
+    if (closest === null) return;
+    previewTop.current = closest.previewY;
+    setHovered(closest.question.turn);
+    setShowPreview(true);
+  };
+
+  const scrollTo = (question: QuestionAnchor): void => {
+    onJump(question);
+  };
+
+  const onRailMouseDown = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    const closest = closestQuestionFromY(e.clientY);
+    if (closest === null) return;
+    e.preventDefault();
+    previewTop.current = closest.previewY;
+    setHovered(closest.question.turn);
+    setShowPreview(true);
+    scrollTo(closest.question);
+  };
+
+  const onItemMouseDown = (
+    e: ReactMouseEvent<HTMLButtonElement>,
+    question: QuestionAnchor,
+  ): void => {
+    e.preventDefault();
+    scrollTo(question);
+  };
+
+  /** 磁性宽度/颜色：未 hover 时仅 active 加宽；hover 时按距离涟漪级联（transitionDelay 错峰） */
+  const dotProps = (idx: number, turn: number): { style: CSSProperties; 'data-d'?: string } => {
+    const isActive = activeTurn === turn;
+    if (hoverIdx < 0) {
+      return isActive
+        ? { style: { width: 18, background: 'var(--accent)' } }
+        : { style: { width: 12 } };
+    }
+    const d = Math.abs(idx - hoverIdx);
+    const width = d === 0 ? 32 : d === 1 ? 20 : d === 2 ? 14 : isActive ? 18 : 12;
+    const background = d <= 2 ? undefined : isActive ? 'var(--accent)' : undefined;
+    return {
+      style: {
+        width,
+        transitionDelay: `${d * 20}ms`,
+        ...(background !== undefined ? { background } : {}),
+      },
+      ...(d <= 2 ? { 'data-d': String(d) } : {}),
+    };
+  };
+
+  return (
+    <nav
+      className="jump-bar"
+      ref={barRef}
+      aria-label={t('chat.msgNavRail')}
+      onMouseMove={onMove}
+      onMouseLeave={() => {
+        setHovered(null);
+        setShowPreview(false);
+      }}
+    >
+      {/* 轨道：整轨热区（吸附最近锚点点击跳转）；键盘路径由内部 jump-item button 提供，
+          轨道点击为鼠标增强（对齐参考项目同款交互） */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 有 role=group 容器语义，真实交互元素为内部 button */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: 键盘用户通过内部 jump-item 的 Enter/Space 跳转，轨道点击是鼠标增强路径 */}
+      <div
+        role="group"
+        className="jump-scroll"
+        onMouseDown={onRailMouseDown}
+        onClick={onRailMouseDown}
+      >
+        {questions.map((question, index) => (
+          <button
+            className="jump-item"
+            key={question.id}
+            type="button"
+            data-turn={question.turn}
+            aria-label={`${t('chat.msgNavGoTo')} ${question.turn + 1}`}
+            onMouseDown={(e) => onItemMouseDown(e, question)}
+            onClick={(e) => {
+              e.stopPropagation();
+              // 键盘 Enter/Space 触发（e.detail === 0）；鼠标路径走 onMouseDown 避免与轨道点击冲突
+              if (e.detail === 0) scrollTo(question);
+            }}
+          >
+            <span className="jump-dot" {...dotProps(index, question.turn)} />
+          </button>
+        ))}
+      </div>
+      {showPreview && hoveredQuestion !== undefined && (
+        <div className="jump-preview" style={{ top: previewTop.current }} role="tooltip">
+          <span className="jump-text">{hoveredQuestion.text}</span>
+        </div>
+      )}
+    </nav>
   );
 }

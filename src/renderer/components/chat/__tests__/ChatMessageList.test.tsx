@@ -110,10 +110,13 @@ describe('ChatMessageList 组装层', () => {
         mkMsg('assistant', 'a2'),
       ]);
       expect(screen.getByLabelText('消息导航轨')).toBeInTheDocument();
-      // 圆点 aria-label = 「跳转到消息 {序号}」；jsdom 视口高度 0 → 视口中线 0，
-      // 全部消息 offsetTop 0 → 活跃 = 最后一条用户消息（第 2 条）
-      expect(screen.getByLabelText('跳转到消息 2').getAttribute('data-active')).toBe('true');
-      expect(screen.getByLabelText('跳转到消息 1').getAttribute('data-active')).toBe('false');
+      // 跳转条（对齐参考项目 QuestionJumpBar）：活跃横条 18px accent、非活跃 12px；
+      // jsdom 视口高度 0 → 视口中线 0，全部消息 offsetTop 0 → 活跃 = 最后一条用户消息（第 2 条）
+      const dot2 = screen.getByLabelText('跳转到消息 2').querySelector('.jump-dot');
+      const dot1 = screen.getByLabelText('跳转到消息 1').querySelector('.jump-dot');
+      expect(dot2).toHaveStyle({ width: '18px' });
+      expect(dot2).toHaveStyle({ background: 'var(--accent)' });
+      expect(dot1).toHaveStyle({ width: '12px' });
     });
   });
 

@@ -3867,75 +3867,132 @@ button.card-head {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   消息导航轨（对齐原型 .msg-nav-rail：右侧点导航）
+   消息跳转条（对齐参考项目 DeepSeek-Reasonix QuestionJumpBar：
+   磁性吸附横条 + 整轨热区 + 预览跟随 + 内部滚动渐隐）
    ────────────────────────────────────────────────────────────── */
-.msg-nav-rail {
+.jump-bar {
   position: absolute;
   top: 50%;
-  /* 与 820px 居中的消息列对齐：容器右缘再减去列右侧的居中余量 + 24px 内边距 + 8px 间距；
-     容器宽度随侧栏/右面板变化，calc 自适应（此前固定 right:8px——列居中后轨贴屏幕右缘错位） */
-  right: calc((100% - 820px) / 2 + 24px);
-  transform: translateY(-50%);
+  right: 0;
   z-index: 5;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 9px;
-  padding: 6px 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow-pop);
-  list-style: none;
-  margin: 0;
-  pointer-events: auto;
+  align-items: flex-end;
+  width: 56px;
+  height: 240px;
+  padding: 0 12px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  animation: jump-bar-in 0.18s ease-out 0.08s forwards;
 }
 
-/* 竖线连接所有圆点（对齐参考项目 .nav-rail-line：1.5px、border 色、1px 圆角） */
-.msg-nav-rail .nav-rail-line {
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 50%;
-  width: 1.5px;
-  transform: translateX(-50%);
-  background: var(--border);
-  border-radius: 1px;
+.jump-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-height: 100%;
+  padding: 8px 0;
+  overflow-y: auto;
+  cursor: pointer;
+  pointer-events: auto;
+  scrollbar-width: none;
+  /* 上下渐隐：内容超长时边缘柔和过渡（对齐参考项目 mask 方案） */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 16%,
+    #000 84%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%);
+}
+
+.jump-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.jump-item {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  width: 32px;
+  min-height: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   pointer-events: none;
 }
 
-.msg-nav-rail .nav-dot {
-  /* 视觉 6px 圆点；padding 扩大命中区（WCAG 最小可点击目标 24px） */
-  position: relative;
-  width: 6px;
-  height: 6px;
-  padding: 6px;
-  background-clip: content-box;
-  background-color: var(--text-faint);
-  border-radius: 50%;
-  border: none;
-  opacity: 0.4;
-  cursor: pointer;
+/* 磁性横条：默认 12px；active 18px accent；hover 时按距离涟漪（宽度/颜色由 JS dotProps 驱动） */
+.jump-dot {
+  pointer-events: none;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
   transition:
-    background-color 0.2s ease,
-    opacity 0.2s ease,
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    background 200ms,
+    width 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 150ms;
 }
 
-/* 滚动联动的活跃圆点（对齐参考项目：accent 色 + accent-2 蓝色发光，尺寸放大） */
-.msg-nav-rail .nav-dot[data-active="true"] {
-  background-color: var(--accent);
-  opacity: 1;
-  box-shadow: 0 0 6px var(--accent-2);
-  transform: scale(1.15);
+.jump-item:focus {
+  outline: none;
 }
 
-.msg-nav-rail .nav-dot:hover {
-  opacity: 0.7;
-  transform: scale(1.2);
+.jump-item:focus-visible .jump-dot {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.jump-dot[data-d="0"] {
+  background: var(--accent);
+}
+
+.jump-dot[data-d="1"] {
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.jump-dot[data-d="2"] {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* 预览：跟随鼠标位置（top 由 JS previewTop 驱动），显示紧凑问题文本 */
+.jump-preview {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  max-width: 240px;
+  margin-right: 12px;
+  padding: 4px 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.jump-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes jump-bar-in {
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────
