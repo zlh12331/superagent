@@ -80,6 +80,7 @@
       "sessionList": "会话列表",
       "searchSessions": "搜索会话…",
       "recentSessions": "最近会话",
+      "pinnedHeader": "已置顶",
       "loadMore": "加载更多会话",
       "newSession": "新建会话",
       "tabsRecent": "最近",
