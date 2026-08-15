@@ -17,6 +17,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
 import { MODELS_QUERY_KEY, useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
@@ -175,18 +182,21 @@ export function ModelsSection(): ReactElement {
             placeholder={t('settings.runtimeModelIdPlaceholder')}
             className="min-w-0 flex-1 text-xs"
           />
-          <select
-            value={newProvider}
-            onChange={(e) => setNewProvider(e.target.value as ApiKeyProvider)}
-            className="border-border bg-background h-8 rounded-md border px-2 text-xs"
-            aria-label={t('settings.runtimeModelProvider')}
-          >
-            {BUILTIN_PROVIDERS.map((p) => (
-              <option key={p.kind} value={p.kind}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <Select value={newProvider} onValueChange={(v) => setNewProvider(v as ApiKeyProvider)}>
+            <SelectTrigger
+              className="h-8 w-32 text-xs"
+              aria-label={t('settings.runtimeModelProvider')}
+            >
+              <SelectValue placeholder={t('settings.runtimeModelProvider')} />
+            </SelectTrigger>
+            <SelectContent>
+              {BUILTIN_PROVIDERS.map((p) => (
+                <SelectItem key={p.kind} value={p.kind} className="text-xs">
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input
             type="text"
             value={newBaseUrl}

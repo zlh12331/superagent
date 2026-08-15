@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -150,10 +151,16 @@ export function ApprovalModeSection(): ReactElement {
         </Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.approvalModeHint')}</p>
-      <div className="grid gap-1.5">
+      <RadioGroup
+        value={mode}
+        onValueChange={(v) => void setMode(v as (typeof options)[number]['value'])}
+        className="grid gap-1.5"
+        aria-label={t('settings.approvalModeSection')}
+      >
         {options.map((option) => (
           <label
             key={option.value}
+            htmlFor={`approval-mode-${option.value}`}
             className={cn(
               'flex cursor-pointer items-start gap-2 rounded border px-2.5 py-1.5',
               mode === option.value
@@ -161,12 +168,10 @@ export function ApprovalModeSection(): ReactElement {
                 : 'border-border hover:border-border',
             )}
           >
-            <input
-              type="radio"
-              name="approval-mode"
-              checked={mode === option.value}
-              onChange={() => void setMode(option.value)}
-              className="mt-0.5 size-3.5 accent-foreground"
+            <RadioGroupItem
+              value={option.value}
+              id={`approval-mode-${option.value}`}
+              className="mt-0.5"
             />
             <span className="min-w-0">
               <span className="text-foreground block text-xs font-medium font-sans">
@@ -176,7 +181,7 @@ export function ApprovalModeSection(): ReactElement {
             </span>
           </label>
         ))}
-      </div>
+      </RadioGroup>
 
       {/* 命令白名单（对齐原型 whitelist-panel：增删命令自动放行）
           持久化于主进程 userData/whitelist.json，跨会话生效 */}
