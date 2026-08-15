@@ -3,13 +3,14 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 订阅 rate-limit-store：回合失败（429 限流）时显示提示
-// - 对齐原型 .tsb-rate pill 形态：warn 色 + 图标 + 文案 + 关闭按钮
+// - shadcn Alert 形态（用户要求：pill → Alert 横幅）：warn 色 + 图标 + 标题 + 关闭按钮
 // - 自动隐藏：触发 5 分钟后自动消失（isRateLimitExpired）
 // - 手动关闭：× 按钮
 // ──────────────────────────────────────────────────────────────
 
 import { AlertTriangle, X } from 'lucide-react';
 import { type ReactElement, useEffect } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTranslation } from '@/i18n/use-translation';
 import { isRateLimitExpired, useRateLimitStore } from '@/stores/transient/rate-limit-store';
 
@@ -38,20 +39,20 @@ export function RateLimitBanner(): ReactElement | null {
   if (!visible || isRateLimitExpired(triggeredAt)) return null;
 
   return (
-    <div className="flex justify-end border-b bg-gradient-to-b from-muted/60 to-background px-6 py-[7px] font-mono text-xs text-muted-foreground">
-      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border bg-card px-[9px] py-0.5 text-xs text-[var(--warn)]">
-        <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2} />
-        <span>{t('chat.rateLimited')}</span>
+    <Alert className="border-[var(--amber)]/40 bg-[var(--amber)]/10 text-[var(--warn)] font-mono text-xs">
+      <AlertTriangle className="text-[var(--warn)]" strokeWidth={2} />
+      <AlertTitle className="font-mono text-xs">{t('chat.rateLimited')}</AlertTitle>
+      <AlertDescription className="font-mono text-xs">
         <button
           type="button"
           onClick={dismiss}
           aria-label={t('common.close')}
           title={t('common.close')}
-          className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent text-[var(--warn)] transition-colors hover:bg-[var(--amber)]/15"
+          className="text-[var(--warn)] flex size-4 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors hover:bg-[var(--amber)]/15"
         >
           <X className="size-3" strokeWidth={2.5} />
         </button>
-      </div>
-    </div>
+      </AlertDescription>
+    </Alert>
   );
 }
