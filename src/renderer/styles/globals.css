@@ -696,6 +696,10 @@ body::after {
   /* 不透明背景：与 resizer 透明热区（--background）完全同色，消除两侧 6px 间隔感
      （玻璃渐变/透明均会暴露 thread-bg 氛围层色差，用户标注） */
   background: var(--background);
+  /* 竖缝根因：paper-texture::before 光晕层（absolute + z-index 0）叠在 static 状态条上，
+     青绿光把状态条染成 8,15,19（两侧 resizer 纯 8,11,16）→ 竖缝；z-index 1 让状态条盖住光晕 */
+  position: relative;
+  z-index: 1;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted-foreground);
