@@ -340,6 +340,27 @@ export function usePinSession() {
       }
       return response.data;
     },
+    // 乐观更新：直接改缓存内对应会话的 pinned（实测 invalidate 的 refetch 在
+    // 浏览器 mock 环境下时序不可靠，取消置顶后列表数据仍为旧值 → 会话不回文件夹）；
+    // 成功后再 invalidate 兜底重拉对齐服务端排序
+    onMutate: async (params) => {
+      await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
+      queryClient.setQueryData(
+        SESSIONS_QUERY_KEY,
+        (old: InfiniteData<SessionListData> | undefined) => {
+          if (old === undefined) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              sessions: page.sessions.map((s) =>
+                s.id === params.id ? { ...s, pinned: params.pinned } : s,
+              ),
+            })),
+          };
+        },
+      );
+    },
     // 最终一致：无论成败都触发重新拉取（置顶分组重排）
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
