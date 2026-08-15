@@ -313,13 +313,14 @@ export function ChatPanel({
       className={cn('flex h-full flex-col', className)}
       style={{ fontSize: `${editorFontSize}px` }}
     >
-      {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
-      <RateLimitBanner />
-      {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
+      {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard）
+          置顶（用户要求：与限流横幅互换位置） */}
       <InlineApprovalCard
         sessionId={chatId}
         onEditResubmit={(command) => setInjectedComposerValue(command)}
       />
+      {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store） */}
+      <RateLimitBanner />
       {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
       <ConversationSearchBar
         visible={search.visible}
