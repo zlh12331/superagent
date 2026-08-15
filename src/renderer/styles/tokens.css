@@ -7,7 +7,13 @@
   --drawer-w: 540px;
   --topbar-h: 52px;
   /* z-index 层级体系 — 从低到高，确保所有浮层层级一致 */
-  --z-base: 1;;
+  --z-base: 1;
+  /* 浮起内容（状态条/滚动按钮等盖住氛围层） */
+  --z-raised: 100;
+  /* 下拉/悬浮层（DropdownMenu/Popover/Tooltip） */
+  --z-dropdown: 1000;
+  /* 模态遮罩（Dialog/命令面板） */
+  --z-modal: 2000;
   --sans: var(--font-sans);
   --serif: var(--font-serif);
   /* 字号阶梯 — 6 级（对齐参考项目 --font-size-*） */
