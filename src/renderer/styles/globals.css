@@ -1089,6 +1089,8 @@ body::after {
   /* h-full 必须显式：Tailwind preflight 给 hr 默认 height 0.67px，
      align-self: stretch 无法覆盖显式高度 → 命中区塌陷不可拖（同抽屉调宽条坑） */
   height: 100%;
+  /* 视觉宽度恒 1px（用户要求）：grid 列宽 6px 是拖拽热区，视觉线靠 ::after 1px 居中 */
+  width: 1px;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -1121,10 +1123,10 @@ body::after {
   border-radius: 1px;
 }
 
+/* hover/拖拽仅变色 + 光晕提示可拖拽，宽度保持 1px（用户要求：分隔线恒 1px） */
 .resizer:hover::after,
 .resizer.dragging::after {
   background: var(--aurora-accent);
-  width: 2px;
   box-shadow: 0 0 8px var(--aurora-accent-glow);
 }
 
