@@ -42,7 +42,7 @@ export function RateLimitBanner(): ReactElement | null {
     <Alert className="border-[var(--amber)]/40 bg-[var(--amber)]/10 text-[var(--warn)] font-mono text-xs">
       <AlertTriangle className="text-[var(--warn)]" strokeWidth={2} />
       <AlertTitle className="font-mono text-xs">{t('chat.rateLimited')}</AlertTitle>
-      <AlertDescription className="font-mono text-xs">
+      <AlertDescription className="font-mono text-xs justify-items-end">
         <button
           type="button"
           onClick={dismiss}
