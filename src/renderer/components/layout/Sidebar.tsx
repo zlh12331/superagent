@@ -234,7 +234,10 @@ export function Sidebar(): ReactElement {
   const entries = useMemo((): SidebarEntry[] => {
     const list: SidebarEntry[] = [];
     // 置顶会话直接排列表最前（用户选择：ChatGPT 式，无独立分组标签；带图钉图标标识）
-    const pinnedSessions = sessions.filter((s) => s.pinned === true);
+    // 置顶内部按 updatedAt 倒序：后置顶的排更前（pin 操作会刷新 updatedAt，对齐主进程排序）
+    const pinnedSessions = sessions
+      .filter((s) => s.pinned === true)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
     for (const session of pinnedSessions) {
       list.push({ type: 'item', session });
     }

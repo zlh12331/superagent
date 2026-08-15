@@ -429,8 +429,14 @@ function createMockApi(): IpcApi {
     },
 
     session: {
-      list: async ({ limit }: Req<IpcApi['session']['list']>) =>
-        ok({ sessions: mockSessions.slice(0, limit), total: mockSessions.length }),
+      list: async ({ limit }: Req<IpcApi['session']['list']>) => {
+        // 对齐主进程排序：置顶优先，同置顶内 updatedAt 倒序
+        const sorted = [...mockSessions].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          return b.updatedAt - a.updatedAt;
+        });
+        return ok({ sessions: sorted.slice(0, limit), total: sorted.length });
+      },
       get: async ({ id }: Req<IpcApi['session']['get']>) => {
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
@@ -485,6 +491,8 @@ function createMockApi(): IpcApi {
         const s = mockSessions.find((x) => x.id === id);
         if (s !== undefined) {
           s.pinned = pinned;
+          // 对齐主进程：pin 操作刷新 updatedAt（置顶排序依据）
+          s.updatedAt = Date.now();
         }
         return ok({ ok: true });
       },
