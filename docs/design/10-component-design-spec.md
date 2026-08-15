@@ -74,7 +74,52 @@
  */
 ```
 
-## 六、新组件开发检查清单
+## 六、组件状态设计规范
+
+### 6.1 组件分类（决定状态集）
+
+设计状态前先回答「这个组件和用户怎么交互」，按四类确定状态集：
+
+- **展示型**（Badge / Alert / Skeleton）：无用户操作，只需自身语义（如 role="alert"），不硬加交互态。
+- **交互型**（Button / Input / Tabs / Switch）：可点击或输入，需要基线五态加 hover / pressed / selected。
+- **数据型**（列表 / 详情 / 面板）：含异步数据，需要基线五态加 empty / refreshing（走 AsyncBoundary 五态契约）。
+- **复合型**（MessageItem / ToolCallView / Composer）：交互加数据加流程，全量状态外还需流程状态机。
+
+### 6.2 基线五态（每个组件必须）
+
+- **enabled**：基础渲染态，组件存在即必须有。
+- **disabled**：禁用态，防止对不可用项操作，disabled:opacity-50 加禁 pointer 事件。
+- **focused**：聚焦态，键盘可达性硬性要求，focus-visible 光环。
+- **loading**：加载态，含异步数据的组件必须有（否则白屏），骨架屏优先且首载超 200ms 才显示。
+- **error**：错误态，可能失败的组件必须有（否则静默失败），错误提示加重试按钮。
+
+### 6.3 状态四要素（每状态写全）
+
+设计每个状态时必须同时定义四要素，缺一不可：视觉（颜色/透明度/图标）、语义（disabled 属性 / aria-* / data-state）、行为（点击无响应 / 不进 Tab 序列 / 重试动作）、过渡（transition 时长与缓动）。
+
+### 6.4 互斥与组合规则
+
+互斥态：loading 与 ready 互斥（五态 discriminated union 保证 TS 穷尽性）；error 与 empty 通常互斥。可组合态：selected 加 hover、selected 加 disabled（如 Tabs 的 data-[state=active]:bg-muted 叠加 disabled:opacity-50）。流程状态机（复合型）：idle 至 running 至 success/error（如 ToolCallView 的 input-streaming 至 input-available 至 output-available 至 output-error）。
+
+### 6.5 实现落点（按状态性质分四层）
+
+纯视觉交互态用 CSS 类（hover:/active:/data-*）；组件内瞬态用 useState/useRef（L1）；跨组件共享用 Zustand（L2，persistent 跨重启/transient 会话内）；服务端数据用 TanStack Query（L3）加 AsyncBoundary 五态。状态变更的数据一致性：服务端状态变更用乐观更新加 invalidate 兑底（禁止依赖 refetch 时序）；组件内状态用函数式 setState（避免闭包旧值）。
+
+### 6.6 ARIA 同步（每视觉状态配语义）
+
+active/selected 配 aria-selected 或 data-state；checked 配 aria-checked；expanded 配 aria-expanded；loading 配 aria-busy 或 role=status；error 即时播报配 role=alert 或 aria-live；动态内容配 aria-live="polite"。禁止只有视觉状态无语义状态。
+
+### 6.7 状态验收检查单
+
+- [ ] 基线五态齐全（enabled/disabled/focused/loading/error）
+- [ ] 每状态四要素齐全（视觉+语义+行为+过渡）
+- [ ] 组合态有覆盖（selected+hover、selected+disabled）
+- [ ] 数据组件走 AsyncBoundary 五态（loading/refreshing/error/empty/ready）
+- [ ] 每个视觉状态有对应 ARIA
+- [ ] 状态变更数据一致（乐观更新+invalidate 兑底，不依赖 refetch 时序）
+- [ ] JSDoc 规格段与实际实现一致（注释声称的状态必须有对应代码）
+
+## 七、新组件开发检查清单
 
 - [ ] 基于 Radix 原语或现有 ui/ 组件组合，不重复造轮子
 - [ ] 全部颜色/间距/字体走语义令牌，零硬编码、零 `dark:` 双写
