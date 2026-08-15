@@ -80,9 +80,9 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
     return result;
   }, [calls]);
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-xs">
-      {/* 计划待办（状态视觉对齐参考项目 PlanNode：completed 删除线 / running spinner / failed error） */}
-      <div>
+    <div className="flex h-full flex-col gap-3 p-3 text-xs">
+      {/* 计划待办（占 40% 空间，用户要求）：状态视觉对齐参考项目 PlanNode（completed 删除线 / running spinner / failed error） */}
+      <div className="min-h-0 flex-[2] overflow-y-auto">
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.tasks')}
         </div>
@@ -117,8 +117,8 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
         )}
       </div>
 
-      {/* 引用文件（对齐原型 crpFiles：从 tool-store 提取 read_file 路径去重） */}
-      <div>
+      {/* 引用文件（占 60% 空间，用户要求）：从 tool-store 提取 read_file 路径去重 */}
+      <div className="min-h-0 flex-[3] overflow-y-auto">
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.referencedFiles')}
         </div>

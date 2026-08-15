@@ -125,6 +125,10 @@ interface ChatInputProps {
    * 对齐参考项目 P2-10：审批拒绝后「编辑重提」把命令填入 composer。
    */
   injectedValue?: string;
+  /**
+   * 右区插槽（可选）：渲染在发送按钮左侧（用户要求：模型选择等控件放输入框内）
+   */
+  rightSlot?: ReactElement;
 }
 
 /**
@@ -153,6 +157,7 @@ export function ChatInput({
   workingDir,
   onSlashCommand,
   injectedValue,
+  rightSlot,
 }: ChatInputProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -385,10 +390,6 @@ export function ChatInput({
 
   // 是否可以发送（非空文本 + 非流式 + 未禁用）
   const canSend = value.trim().length > 0 && !isStreaming && !disabled;
-
-  // 字符计数（对齐原型 #charCount：trim 后长度，>2000 警告）
-  const charCount = value.trim().length;
-  const isOverLimit = charCount > 2000;
 
   /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
   const handlePickFiles = async (): Promise<void> => {
@@ -775,10 +776,8 @@ export function ChatInput({
             </>
           ) : null}
         </span>
-        {/* 字符计数（对齐原型 .char-count：trim 后长度，>2000 警告） */}
-        <span className={cn('char-count', isOverLimit && 'warn')} aria-live="polite">
-          {charCount > 0 ? charCount : ''}
-        </span>
+        {/* 右区插槽：模型选择等（用户要求：放输入框内、发送按钮左侧） */}
+        {rightSlot}
         {/* 右侧：发送 / 停止按钮（margin-left:auto 推到右侧） */}
         {isStreaming ? (
           <button

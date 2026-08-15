@@ -16,7 +16,7 @@
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
-import { AlertTriangle, Check, Folder, Pause, Pencil, Play, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Pause, Pencil, Play, Search, Trash2, X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -31,7 +31,6 @@ import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { consumePendingMessage } from '@/lib/pending-message';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-import { EMPTY_USAGE, useUsageStore } from '@/stores/transient/usage-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
 import { ConversationSearchBar } from './conversation-search-bar';
@@ -257,9 +256,6 @@ export function ChatPanel({
       ? (search.matchIndexes[search.currentMatch] ?? -1)
       : -1;
 
-  // 派生：workingDir basename（用于状态条展示，避免显示完整路径污染视觉）
-  const workingDirBasename = workingDir.split(/[\\/]/).pop() ?? workingDir;
-
   // 派生：状态指示文本（用于状态条右侧）
   const statusText =
     status === 'streaming'
@@ -272,17 +268,10 @@ export function ChatPanel({
             ? 'ERROR'
             : 'IDLE';
 
-  // 模型选择（对齐原型 composer-project-bar .model-select：输入栏底部条）
+  // 模型选择（右区插槽：输入框内发送按钮左侧，用户要求）
   const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
   const updateAi = useSettingsStore((state) => state.updateAi);
-
-  // 派生：当前会话累积 token 用量（per-session，回合结束后由 usage-store 累积）
-  const usage = useUsageStore((s) => s.usageBySession.get(chatId) ?? EMPTY_USAGE);
-  const usageText =
-    usage.totalTokens > 0
-      ? `${usage.totalTokens >= 1000 ? `${(usage.totalTokens / 1000).toFixed(1)}k` : usage.totalTokens} tok`
-      : null;
   // 本地化文案
   const { t } = useTranslation();
   // 编辑器设置：字体大小真实消费（消息区字号）
@@ -388,19 +377,6 @@ export function ChatPanel({
             {statusText}
           </span>
         </div>
-        {/* token 用量（回合结束后显示，悬浮提示明细） */}
-        {usageText !== null && (
-          <span
-            className="text-muted-foreground/60 font-mono text-2xs"
-            title={t('chat.tokenUsage', {
-              input: usage.inputTokens,
-              output: usage.outputTokens,
-              total: usage.totalTokens,
-            })}
-          >
-            {usageText}
-          </span>
-        )}
       </div>
 
       {/* 中间消息列表 */}
@@ -535,26 +511,17 @@ export function ChatPanel({
             // stop 是同步操作，但返回 Promise（兼容 abortSignal）
             void stop();
           }}
+          rightSlot={
+            <ModelSelector
+              provider={defaultProvider}
+              model={defaultModel}
+              onProviderChange={(p) => updateAi({ defaultProvider: p })}
+              onModelChange={(m) => updateAi({ defaultModel: m })}
+              open={modelMenuOpen}
+              onOpenChange={setModelMenuOpen}
+            />
+          }
         />
-        {/* composer-project-bar：项目 + 模型选择（对齐原型；对话模式项目只读展示当前工作目录） */}
-        <div className="composer-project-bar">
-          <div className="cpb-folder-group">
-            {/* 对话模式只读展示（static：禁用 pointer 光标与 hover 高亮——
-               避免只读元素伪装成可交互的下拉按钮） */}
-            <span className="cpb-select static" title={workingDir}>
-              <Folder className="size-3" strokeWidth={1.5} />
-              <span className="max-w-40 truncate">{workingDirBasename}</span>
-            </span>
-          </div>
-          <ModelSelector
-            provider={defaultProvider}
-            model={defaultModel}
-            onProviderChange={(p) => updateAi({ defaultProvider: p })}
-            onModelChange={(m) => updateAi({ defaultModel: m })}
-            open={modelMenuOpen}
-            onOpenChange={setModelMenuOpen}
-          />
-        </div>
       </footer>
       {/* 快捷键帮助对话框（/help 触发） */}
       <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />

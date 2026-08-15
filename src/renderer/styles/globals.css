@@ -1802,6 +1802,10 @@ body.resizing iframe {
   box-shadow:
     var(--shadow-card),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* 长文本换行（用户标注：无空格长串溢出） */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 /* 用户消息：右对齐 + 气泡限宽（对齐设计「玻璃渐变气泡靠右」；
@@ -2286,20 +2290,7 @@ body.resizing iframe {
   justify-content: center;
 }
 
-.char-count {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-faint);
-  margin-left: auto;
-  transition: color 0.2s ease;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-}
-
-.char-count.warn {
-  color: var(--warning);
-}
+/* 输入框字符计数（已删除：用户要求移除字符计数器） */
 
 /* 发送按钮：双 accent 渐变 + 发光 */
 .send-btn {
@@ -3815,7 +3806,8 @@ button.card-head {
 .scroll-to-bottom {
   display: none;
   position: absolute;
-  bottom: 140px;
+  /* 紧贴输入框上边（用户要求）：按钮位于消息区底部 = composer 顶部 */
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   width: 36px;

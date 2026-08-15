@@ -153,14 +153,6 @@ describe('chat 批次3 缺口补全', () => {
       expect(screen.getByLabelText('发送消息')).toBeDisabled();
     });
 
-    it('字符计数：>2000 时警告类', () => {
-      renderInput();
-      fireEvent.change(screen.getByRole('textbox'), { target: { value: '字'.repeat(2001) } });
-      const count = document.querySelector('.char-count');
-      expect(count?.textContent).toBe('2001');
-      expect(count?.className).toContain('warn');
-    });
-
     it('草稿恢复：chatId + 预置草稿 → 初始值', () => {
       useDraftStore.getState().setDraft('chat-a', { text: '草稿内容', attachments: [] });
       renderInput({ chatId: 'chat-a' });
