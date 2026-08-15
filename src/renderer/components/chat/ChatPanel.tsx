@@ -488,6 +488,12 @@ export function ChatPanel({
                 // 点建议后输入框预填 "/goal "，用户补需求回车即创建目标）
                 prefillGoalInput('/goal ');
                 break;
+              case 'demo':
+              case 'limit':
+                // mock 演示命令（前端开发专用）：直接发送触发 mock 流
+                //（/demo 全类型消息演示 · /limit 限流横幅）
+                void sendMessage({ text: action === 'demo' ? '/demo' : '/limit' });
+                break;
             }
           }}
           onSend={(text) => {

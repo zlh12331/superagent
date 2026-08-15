@@ -165,7 +165,9 @@
         "compact": "压缩上下文",
         "models": "查看可用模型",
         "interrupt": "中断当前生成",
-        "goal": "设置会话目标"
+        "goal": "设置会话目标",
+        "demo": "演示全部消息类型（mock）",
+        "limit": "演示限流横幅（mock）"
       },
       "fileChange": {
         "created": "新建",

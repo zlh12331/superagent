@@ -165,7 +165,9 @@
         "compact": "Compact context",
         "models": "View available models",
         "interrupt": "Interrupt generation",
-        "goal": "Set session goal"
+        "goal": "Set session goal",
+        "demo": "Demo all message parts (mock)",
+        "limit": "Demo rate-limit banner (mock)"
       },
       "fileChange": {
         "created": "Created",

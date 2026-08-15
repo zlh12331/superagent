@@ -54,7 +54,16 @@ const COMPOSER_MAX_H = 460;
 const MAX_MESSAGE_LENGTH = 8000;
 
 /** 斜杠命令动作（对齐参考项目：命令可执行而非仅填充文本） */
-type SlashAction = 'new' | 'clear' | 'compact' | 'models' | 'help' | 'interrupt' | 'goal';
+type SlashAction =
+  | 'new'
+  | 'clear'
+  | 'compact'
+  | 'models'
+  | 'help'
+  | 'interrupt'
+  | 'goal'
+  | 'demo'
+  | 'limit';
 
 /** 斜杠建议项：有 action 时点击执行动作；无 action 时填充文本 */
 interface SlashSuggestion {
@@ -72,6 +81,9 @@ const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
   // 对齐参考项目 SLASH_CMD_DEFS：/interrupt 即时中断（ChatPanel 调 stop）、/goal toast 引导
   { command: '/interrupt', labelKey: 'chat.slashSuggest.interrupt', action: 'interrupt' },
   { command: '/goal', labelKey: 'chat.slashSuggest.goal', action: 'goal' },
+  // mock 演示命令（前端开发专用）：/demo 全类型消息演示、/limit 限流横幅
+  { command: '/demo', labelKey: 'chat.slashSuggest.demo', action: 'demo' },
+  { command: '/limit', labelKey: 'chat.slashSuggest.limit', action: 'limit' },
 ];
 
 interface ChatInputProps {
