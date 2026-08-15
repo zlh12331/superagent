@@ -1115,6 +1115,9 @@ body::after {
   /* 溢出覆盖 main/面板边缘后仍可命中（默认透明不影响视觉） */
   z-index: 10;
   margin: 0;
+  /* 关键：preflight 给 hr 设了 border-top-width: 1px + color inherit（亮色）——
+     6px 溢出条顶部有 1px 亮白横线，正是用户多轮反馈的"状态条与侧边栏间隔"竖缝；显式归零 */
+  border-width: 0;
 }
 
 .resizer:hover {
