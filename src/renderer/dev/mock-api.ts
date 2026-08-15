@@ -363,7 +363,26 @@ function simulateAllPartsDemo(sessionId: string): void {
     },
     2500,
   );
-  // 7. file：附件卡片
+  // 7. 工具错误态：tool-output-error（红色错误卡）
+  const errId = `demo-err-${Date.now()}`;
+  push(
+    { type: 'tool-input-start', toolCallId: errId, toolName: 'read_file', title: 'read_file' },
+    2900,
+  );
+  push(
+    {
+      type: 'tool-input-available',
+      toolCallId: errId,
+      toolName: 'read_file',
+      input: { path: 'src/nonexistent.ts' },
+    },
+    3100,
+  );
+  push(
+    { type: 'tool-output-error', toolCallId: errId, errorText: '文件不存在: src/nonexistent.ts' },
+    3300,
+  );
+  // 8. file：附件卡片
   push(
     {
       type: 'file',
@@ -374,9 +393,9 @@ function simulateAllPartsDemo(sessionId: string): void {
         data: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"/>',
       },
     },
-    2700,
+    3500,
   );
-  // 8. 结束：end（含 usage）
+  // 9. 结束：end（含 usage）
   setTimeout(() => {
     messagesBySession[sessionId]?.push({
       id: demoMessageId,
@@ -387,7 +406,7 @@ function simulateAllPartsDemo(sessionId: string): void {
     for (const cb of endCallbacks) {
       cb({ sessionId, reason: 'completed', usage });
     }
-  }, 3000);
+  }, 3900);
 }
 
 // ── 各域 mock 实现（参数类型从 IpcApi 推导）──────────────────
