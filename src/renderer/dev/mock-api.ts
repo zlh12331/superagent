@@ -121,6 +121,14 @@ const mockGoals: Array<{ sessionId: string; condition: string }> = [];
 
 /** 模拟助手回答：按 AI SDK v7 UIMessageChunk 格式（带 id）分片推送 → end（含 usage） */
 function simulateAgentStream(sessionId: string, userText: string): void {
+  // 限流模拟（前端开发专用）：发送 "/limit" 触发 AI_RATE_LIMITED 错误流
+  // → use-agent-bridge 触发 rate-limit-store → 顶部限流横幅（pill 形态）显示
+  if (userText.trim() === '/limit') {
+    for (const cb of errorCallbacks) {
+      cb({ sessionId, code: 'AI_RATE_LIMITED', message: '请求过于频繁，请稍后重试' });
+    }
+    return;
+  }
   messagesBySession[sessionId] ??= [];
   messagesBySession[sessionId].push({
     id: `u-${Date.now()}`,
