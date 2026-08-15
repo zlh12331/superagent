@@ -129,6 +129,11 @@ function simulateAgentStream(sessionId: string, userText: string): void {
     }
     return;
   }
+  // 全类型演示（前端开发专用）：发送 "/demo" 推送 step-start/reasoning/text/通用工具/edit_file/dynamic-tool/file 全部 part
+  if (userText.trim() === '/demo') {
+    simulateAllPartsDemo(sessionId);
+    return;
+  }
   messagesBySession[sessionId] ??= [];
   messagesBySession[sessionId].push({
     id: `u-${Date.now()}`,
@@ -233,6 +238,156 @@ function simulateAgentStream(sessionId: string, userText: string): void {
     }
   }, 40);
   streamIntervals.set(sessionId, interval);
+}
+
+/**
+ * 全类型 part 演示（前端开发专用）：发送 "/demo" 触发
+ * 覆盖 AI SDK v7 全部消息 part 类型：step-start / reasoning / text / 通用工具 /
+ * edit_file（FileChangeCard）/ dynamic-tool / file 附件，验证各类展示组件
+ */
+function simulateAllPartsDemo(sessionId: string): void {
+  messagesBySession[sessionId] ??= [];
+  messagesBySession[sessionId].push({
+    id: `u-${Date.now()}`,
+    role: 'user',
+    content: '/demo',
+  });
+  const demoMessageId = `demo-msg-${Date.now()}`;
+  const push = (part: unknown, delay = 0): void => {
+    setTimeout(() => {
+      for (const cb of streamCallbacks) {
+        cb({ sessionId, part });
+      }
+    }, delay);
+  };
+  // 1. step-start：新步骤分隔线
+  push({ type: 'start-step' });
+  // 2. reasoning：折叠式推理块（text-delta 流式内容）
+  push(
+    {
+      type: 'reasoning',
+      id: `${demoMessageId}-r`,
+      reasoning: {
+        type: 'text-delta',
+        text: '正在分析用户需求：先拆分问题，再规划执行步骤，最后验证结果。',
+      },
+    },
+    150,
+  );
+  // 3. text：Markdown（标题/列表/行内代码/代码块）
+  const demoText =
+    '### 全类型演示\n\n' +
+    '这是一条包含**全部 part 类型**的模拟回复：\n\n' +
+    '- step-start：步骤分隔线\n' +
+    '- reasoning：折叠推理块\n' +
+    '- tool：通用工具卡片 + `edit_file` diff 卡片\n' +
+    '- dynamic-tool：动态工具\n' +
+    '- file：附件卡片\n\n' +
+    '```ts\nexport function demo(): string {\n  return "all parts";\n}\n```';
+  push({ type: 'text-start', id: demoMessageId }, 400);
+  push({ type: 'text-delta', id: demoMessageId, delta: demoText.slice(0, 60) }, 500);
+  push({ type: 'text-delta', id: demoMessageId, delta: demoText.slice(60, 140) }, 700);
+  push({ type: 'text-delta', id: demoMessageId, delta: demoText.slice(140) }, 900);
+  // 4. 通用工具：exec_command（input-start → input-available → output-available）
+  const toolId = `demo-tool-${Date.now()}`;
+  push(
+    {
+      type: 'tool-input-start',
+      toolCallId: toolId,
+      toolName: 'exec_command',
+      title: 'exec_command',
+    },
+    900,
+  );
+  push(
+    {
+      type: 'tool-input-available',
+      toolCallId: toolId,
+      toolName: 'exec_command',
+      input: { command: 'pnpm test', cwd: 'f:\\TraeProjects\\1', timeout: 60_000 },
+    },
+    1100,
+  );
+  push(
+    {
+      type: 'tool-output-available',
+      toolCallId: toolId,
+      output: { command: 'pnpm test', exitCode: 0, stdout: 'Test Files  1 passed (1)' },
+    },
+    1300,
+  );
+  // 5. edit_file：FileChangeCard（diff 卡片）
+  const editId = `demo-edit-${Date.now()}`;
+  push(
+    { type: 'tool-input-start', toolCallId: editId, toolName: 'edit_file', title: 'edit_file' },
+    1500,
+  );
+  push(
+    {
+      type: 'tool-input-available',
+      toolCallId: editId,
+      toolName: 'edit_file',
+      input: {
+        path: 'src/renderer/components/chat/ChatPanel.tsx',
+        oldString: '旧代码',
+        newString: '新代码',
+      },
+    },
+    1700,
+  );
+  push(
+    {
+      type: 'tool-output-available',
+      toolCallId: editId,
+      output: { ok: true, path: 'src/renderer/components/chat/ChatPanel.tsx' },
+    },
+    1900,
+  );
+  // 6. dynamic-tool：动态工具（dynamic-tool-input-start → input-available → output-available）
+  const dynId = `demo-dyn-${Date.now()}`;
+  push({ type: 'dynamic-tool-input-start', toolCallId: dynId, toolName: 'search_snippets' }, 2100);
+  push(
+    {
+      type: 'tool-input-available',
+      toolCallId: dynId,
+      toolName: 'search_snippets',
+      input: { query: 'IPC 定义表' },
+    },
+    2300,
+  );
+  push(
+    {
+      type: 'tool-output-available',
+      toolCallId: dynId,
+      output: { results: [{ path: 'packages/shared/src/ipc/meta.ts', snippet: 'goal: { ... }' }] },
+    },
+    2500,
+  );
+  // 7. file：附件卡片
+  push(
+    {
+      type: 'file',
+      id: demoMessageId,
+      file: {
+        type: 'image',
+        mediaType: 'image/svg+xml',
+        data: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"/>',
+      },
+    },
+    2700,
+  );
+  // 8. 结束：end（含 usage）
+  setTimeout(() => {
+    messagesBySession[sessionId]?.push({
+      id: demoMessageId,
+      role: 'assistant',
+      content: demoText,
+    });
+    const usage = { inputTokens: 260, outputTokens: 640, totalTokens: 900 };
+    for (const cb of endCallbacks) {
+      cb({ sessionId, reason: 'completed', usage });
+    }
+  }, 3000);
 }
 
 // ── 各域 mock 实现（参数类型从 IpcApi 推导）──────────────────
