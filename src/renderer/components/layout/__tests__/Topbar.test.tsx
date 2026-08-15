@@ -56,9 +56,8 @@ describe('Topbar', () => {
     expect(handlers.onOpenCommandPalette).toHaveBeenCalledTimes(1);
   });
 
-  it('渲染设置与主题切换按钮', () => {
+  it('渲染主题切换按钮（设置按钮已删除）', () => {
     renderTopbar();
-    expect(screen.getByRole('button', { name: /设置/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /切换主题|主题/ })).toBeTruthy();
   });
 });

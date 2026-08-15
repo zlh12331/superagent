@@ -9,7 +9,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-import { useUiStore } from '@/stores/transient/ui-store';
 import { Topbar } from '../Topbar';
 
 describe('layout 批次7 缺口补全', () => {
@@ -51,11 +50,9 @@ describe('layout 批次7 缺口补全', () => {
     expect(document.querySelector('.lucide-moon')).not.toBeNull();
   });
 
-  it('设置按钮：触发 ui-store openSettings', () => {
-    const openSettings = vi.spyOn(useUiStore.getState(), 'openSettings');
+  it('设置按钮已删除：顶栏不再渲染设置入口（入口在命令面板/账户菜单）', () => {
     renderTopbar();
-    fireEvent.click(screen.getByLabelText('设置'));
-    expect(openSettings).toHaveBeenCalled();
+    expect(screen.queryByLabelText('设置')).toBeNull();
   });
 
   it('hideRightPanelToggle：隐藏右面板开关', () => {
