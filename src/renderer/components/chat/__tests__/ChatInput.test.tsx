@@ -46,13 +46,13 @@ describe('ChatInput', () => {
     expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
   });
 
-  it('斜杠建议 7 个命令齐全（/help /new /clear /compact /models /interrupt /goal）', async () => {
+  it('斜杠建议 9 个命令齐全（/help /new /clear /compact /models /interrupt /goal /demo /limit）', async () => {
     render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
     const input = screen.getByRole('textbox');
     await userEvent.type(input, '/');
 
     const commands = screen.getAllByRole('option').map((o) => o.textContent?.trim() ?? '');
-    expect(commands).toHaveLength(7);
+    expect(commands).toHaveLength(9);
     // textContent 为「命令+描述」拼接（如 '/interrupt中断当前生成'），按前缀断言
     const commandNames = commands.map((c) => c.split(/[^/a-z]/i)[0]);
     expect(commandNames).toEqual(
@@ -64,6 +64,8 @@ describe('ChatInput', () => {
         '/models',
         '/interrupt',
         '/goal',
+        '/demo',
+        '/limit',
       ]),
     );
   });
