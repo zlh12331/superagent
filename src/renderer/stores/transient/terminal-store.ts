@@ -95,10 +95,16 @@ export const useTerminalStore = create<TerminalState>()((set) => ({
       ...meta,
       createdAt: Date.now(),
     };
-    set((state) => ({
-      terminals: [...state.terminals, terminal],
-      activeTerminalId: id,
-    }));
+    set((state) => {
+      // 去重：StrictMode 双执行 effect 可能对同一 id 重复写入（实测 2 个 bash 标签 + same key 错误）
+      if (state.terminals.some((t) => t.id === id)) {
+        return state;
+      }
+      return {
+        terminals: [...state.terminals, terminal],
+        activeTerminalId: id,
+      };
+    });
     return id;
   },
 

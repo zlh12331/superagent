@@ -440,8 +440,9 @@ body::after {
 
 /* ── 侧边栏基础样式（须在折叠态规则之前，避免特异性降序告警） ── */
 .sidebar {
-  /* 横向渐变：左端独立色 → 右端主区背景色，交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
-  background: linear-gradient(90deg, var(--sidebar) 0%, var(--background) 100%);
+  /* 横向渐变：左端独立色 → 右端主区背景色（渐变带 12% ≈ 30px 平缓过渡）；
+     交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
+  background: linear-gradient(90deg, var(--sidebar) 0%, var(--sidebar) 88%, var(--background) 100%);
   /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
   display: flex;
   flex-direction: column;
@@ -1151,8 +1152,14 @@ body.resizing iframe {
 
 /* ── 右面板 ── */
 .chat-right-panel {
-  /* 横向渐变：右端独立色 → 左端主区背景色，交界处与对话区完全一致（用户要求：间隔肉眼不可见） */
-  background: linear-gradient(270deg, var(--sidebar) 0%, var(--background) 100%);
+  /* 横向渐变：右端独立色 → 左端主区背景色（渐变带 12% ≈ 30px 平缓过渡）；
+     与状态条/对话区交界完全一致（用户要求：间隔肉眼不可见） */
+  background: linear-gradient(
+    270deg,
+    var(--sidebar) 0%,
+    var(--sidebar) 88%,
+    var(--background) 100%
+  );
   /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
   display: flex;
   flex-direction: column;

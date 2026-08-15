@@ -14,7 +14,7 @@
 // - xterm.js 实例由 TerminalView 持有，不进入 Zustand store
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
@@ -82,6 +82,9 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
 
   // 「正在创建终端」状态（避免点击按钮后用户重复点击）
   const [isCreating, setIsCreating] = useState(false);
+  // ref 防重入：StrictMode 双执行 effect 时 state 未 flush，闭包读到旧值 false → 双调 IPC
+  //（实测同毫秒双调 mock create → 同 id 双条目）；ref 同步写入无闭包陷阱
+  const creatingRef = useRef(false);
 
   // 激活终端：store.activeTerminalId 属于当前会话则用之，否则回退第一个
   const activeId = terminals.some((term) => term.id === activeTerminalId)
@@ -93,7 +96,8 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   // P3 修复：useCallback 稳定引用（auto-create effect 依赖 handleCreate，
   // 普通函数每渲染重建会触发 effect 反复执行）
   const handleCreate = useCallback(async (): Promise<void> => {
-    if (isCreating) return;
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     setIsCreating(true);
     try {
       // exactOptionalPropertyTypes：TerminalCreateReqSchema 的 command/env 虽为可选
@@ -126,9 +130,10 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       const message = error instanceof Error ? error.message : String(error);
       toast.error(t('terminal.createFailed', { message }));
     } finally {
+      creatingRef.current = false;
       setIsCreating(false);
     }
-  }, [isCreating, workingDir, sessionId, createTerminalInStore, t]);
+  }, [workingDir, sessionId, createTerminalInStore, t]);
 
   // 自动创建：进入终端视图时无终端则直接创建（用户要求：点击终端 tab 直接打开终端）
   // P3 修复：依赖表补 handleCreate（此前 biome-ignore 已失效——规则在 hook 调用位
