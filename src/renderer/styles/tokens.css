@@ -3,7 +3,7 @@
   /* 布局尺寸 — clamp() 实现响应式宽度约束 */
   --sidebar-w: clamp(200px, 17vw, 280px);
   --right-panel-w: clamp(260px, 22vw, 360px);
-  --resizer-w: 6px;
+  --resizer-w: 0px;
   --drawer-w: 540px;
   --topbar-h: 52px;
   /* z-index 层级体系 — 从低到高，确保所有浮层层级一致 */

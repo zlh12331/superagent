@@ -16,7 +16,7 @@
 // - 设置/主题切换：项目独有功能，保留在右侧末尾
 // ──────────────────────────────────────────────────────────────
 
-import { Moon, PanelLeft, PanelRight, Search, Settings, Sun } from 'lucide-react';
+import { Moon, PanelLeft, PanelRight, Search, Sun } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,6 @@ import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { nextTheme } from '@/stores/persistent/settings-store';
-import { useUiStore } from '@/stores/transient/ui-store';
 
 interface TopbarProps {
   /** 侧栏是否已折叠（控制 sb-collapse-btn 图标方向） */
@@ -57,8 +56,7 @@ export function Topbar({
   hideRightPanelToggle = false,
 }: TopbarProps): ReactElement {
   const { theme, resolvedTheme, setTheme } = useTheme();
-  // 全局 UI store：设置对话框入口（Topbar / 命令面板 / 错误动作共享）
-  const openSettings = useUiStore((state) => state.openSettings);
+  // 设置按钮已删除（用户要求）：入口保留在命令面板与账户菜单
   // 快捷键展示平台化：macOS ⌘ / Windows-Linux Ctrl（与 settings-store 默认一致）
   const isMac =
     typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') === true;
@@ -121,18 +119,7 @@ export function Topbar({
           <span>{t('topbar.commandPalette')}</span>
           <kbd className="text-muted-foreground/70 font-mono text-[9px]">{paletteKbd}</kbd>
         </button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t('topbar.settings')}
-          onClick={openSettings}
-          className={cn(
-            'text-muted-foreground hover:bg-sidebar-accent',
-            'hover:text-sidebar-accent-foreground h-8 w-8',
-          )}
-        >
-          <Settings className="size-4" strokeWidth={1.5} />
-        </Button>
+        {/* 设置按钮已删除（用户要求）：入口保留在命令面板与账户菜单 */}
         <Button
           variant="ghost"
           size="icon"

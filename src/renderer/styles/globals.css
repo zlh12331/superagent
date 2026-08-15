@@ -1094,7 +1094,8 @@ body::after {
   /* h-full 必须显式：Tailwind preflight 给 hr 默认 height 0.67px，
      align-self: stretch 无法覆盖显式高度 → 命中区塌陷不可拖（同抽屉调宽条坑） */
   height: 100%;
-  /* 热区 = 列宽 6px（用户要求：好拖）；视觉线由 ::after 1px 居中承担，默认透明 */
+  /* 热区 = 元素 6px（用户要求：好拖）；grid 列宽已为 0（--resizer-w: 0px，用户要求：
+     无视觉间隔），元素溢出覆盖相邻列边缘承担热区；视觉线由 ::after 1px 居中承担，默认透明 */
   width: 6px;
   cursor: col-resize;
   display: flex;
@@ -1106,6 +1107,9 @@ body::after {
   background: transparent;
   transition: background 0.15s ease;
   position: relative;
+  /* 溢出覆盖 main/面板边缘后仍可命中（默认透明不影响视觉） */
+  z-index: 10;
+  margin: 0;
 }
 
 .resizer:hover {
