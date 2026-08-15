@@ -25,7 +25,6 @@ import { cn } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { InlineCreateInput } from './inline-create-input';
 import { InlineRenameInput } from './inline-rename-input';
-import { NodeMenu } from './node-menu';
 
 /** 文件类型简化为「目录」或「文件」（symlink 暂按文件渲染） */
 type NodeType = 'directory' | 'file';
@@ -143,7 +142,6 @@ export function FileTreeNode({
               </span>
             )}
           </button>
-          <NodeMenu path={path} type="directory" disabled={isRenaming} />
         </div>
         {expanded && (
           <fieldset className="ft-children">
@@ -235,7 +233,6 @@ export function FileTreeNode({
             </span>
           )}
         </button>
-        <NodeMenu path={path} type="file" disabled={isRenaming} />
       </div>
     </div>
   );
