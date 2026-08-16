@@ -566,6 +566,7 @@ function createMockApi(): IpcApi {
             { id: 'qwen3-coder', label: 'Qwen3 Coder', providerKind: 'qwen', isRuntime: false },
           ],
         } as never),
+      test: async () => ok({ ok: true }),
     },
 
     file: {
@@ -772,8 +773,30 @@ function createMockApi(): IpcApi {
       getApprovalMode: async () => ok({ mode: 'ask' }),
       setApprovalMode: async () => ok({ ok: true }),
       addRuntimeModel: async () => ok({ ok: true }),
+      updateRuntimeModel: async () => ok({ ok: true }),
       removeRuntimeModel: async () => ok({ ok: true }),
-      listRuntimeModels: async () => ok({ models: [] }),
+      // 浏览器模式演示数据：模型管理列表页行形态（展示名/启停）
+      listRuntimeModels: async () =>
+        ok({
+          models: [
+            {
+              modelId: 'my-coder',
+              providerKind: 'deepseek',
+              baseUrl: undefined,
+              displayName: '我的编码器',
+              isEnabled: true,
+              createdAt: 1,
+            },
+            {
+              modelId: 'local-gemma',
+              providerKind: 'ollama',
+              baseUrl: 'http://localhost:11434',
+              displayName: undefined,
+              isEnabled: false,
+              createdAt: 2,
+            },
+          ],
+        }),
     },
 
     whitelist: {
