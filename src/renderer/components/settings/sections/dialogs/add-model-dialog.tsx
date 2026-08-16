@@ -1,18 +1,18 @@
 // src/renderer/components/settings/sections/dialogs/add-model-dialog.tsx
 // 添加模型弹窗（模型选择器）
 // ──────────────────────────────────────────────────────────────
-// 网格项 = models:list 真实清单按 providerKind 分组派生（后端单一真源，
-// 空则空态不伪造）+「自定义模型」固定入口（非数据派生，始终显示）。
+// 网格项 = 本项目已适配厂商清单（PROVIDER_LABELS，kind 单一真源为
+// shared ApiKeyProviderSchema，全量展示不依赖 key 配置状态）
+// +「自定义模型」固定入口（非数据派生，始终显示）。
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
+import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { ChevronRight, X } from 'lucide-react';
-import { type ReactElement, useMemo } from 'react';
+import type { ReactElement } from 'react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
-import { providerLabel } from '../provider-labels';
+import { PROVIDER_LABELS } from '../provider-labels';
 
 export interface AddModelDialogProps {
   /** 弹窗开关（受控） */
@@ -25,17 +25,11 @@ export interface AddModelDialogProps {
   readonly onSelectCustom: () => void;
 }
 
-/** 厂商网格项（由 models:list 派生） */
-interface ProviderGridItem {
-  readonly kind: ApiKeyProvider;
-  readonly label: string;
-}
-
 /**
  * 添加模型弹窗
  *
- * 数据源：models:list（主进程已配置可用清单）按 providerKind 去重派生厂商；
- * 未配置 API Key 的厂商其内置模型不会出现在清单中（配置好才显示）。
+ * 网格项 = 本项目已适配厂商（ApiKeyProviderSchema 单一真源，10 家全量）。
+ * 未配置 API Key 的厂商同样展示——密钥在配置弹窗内填写（保存时落 keychain）。
  */
 export function AddModelDialog({
   open,
@@ -44,18 +38,6 @@ export function AddModelDialog({
   onSelectCustom,
 }: AddModelDialogProps): ReactElement {
   const { t } = useTranslation();
-  const { data } = useModelsQuery();
-
-  const providers = useMemo<readonly ProviderGridItem[]>(() => {
-    const seen = new Set<ApiKeyProvider>();
-    const items: ProviderGridItem[] = [];
-    for (const model of (data?.models ?? []) as readonly AvailableModelInfo[]) {
-      if (seen.has(model.providerKind)) continue;
-      seen.add(model.providerKind);
-      items.push({ kind: model.providerKind, label: providerLabel(model.providerKind) });
-    }
-    return items;
-  }, [data]);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -73,7 +55,7 @@ export function AddModelDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-2 py-2">
-          {providers.map((item) => (
+          {PROVIDER_LABELS.map((item) => (
             <button
               key={item.kind}
               type="button"
@@ -102,11 +84,6 @@ export function AddModelDialog({
             <ChevronRight className="text-muted-foreground size-3.5 shrink-0" strokeWidth={1.5} />
           </button>
         </div>
-        {providers.length === 0 && (
-          <p className="text-muted-foreground py-2 text-center text-xs">
-            {t('settings.modelMgmt.noProviderHint')}
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );

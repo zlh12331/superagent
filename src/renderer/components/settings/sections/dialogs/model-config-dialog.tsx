@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useSetApiKey } from '@/hooks/use-api-key';
 import { useModelsQuery } from '@/hooks/use-models';
 import {
   useAddRuntimeModel,
@@ -86,6 +87,7 @@ export function ModelConfigDialog({
   const addMutation = useAddRuntimeModel();
   const updateMutation = useUpdateRuntimeModel();
   const testMutation = useTestModel();
+  const setApiKeyMutation = useSetApiKey();
 
   const [values, setValues] = useState<ModelConfigFormValues>(createDefaultValues);
   const [errors, setErrors] = useState<{ readonly modelId?: string; readonly test?: string }>({});
@@ -94,6 +96,7 @@ export function ModelConfigDialog({
 
   const isEdit = mode === 'edit';
   const isCustom = mode === 'custom';
+  const isProviderMode = mode === 'provider';
 
   // 打开时按模式初始化表单（编辑模式预填；切换弹窗重置）
   useEffect(() => {
@@ -206,11 +209,27 @@ export function ModelConfigDialog({
           ...(apiKey !== undefined ? { apiKey } : {}),
         });
         toast.success(t('settings.modelMgmt.modelUpdated'));
-      } else {
+      } else if (isProviderMode) {
+        // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
+        // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）
+        if (apiKey !== undefined) {
+          await setApiKeyMutation.mutateAsync({
+            provider: values.providerKind,
+            apiKey,
+          });
+        }
         await addMutation.mutateAsync({
           modelId: effectiveModelId,
           providerKind: values.providerKind,
-          ...(isCustom && requestUrl !== undefined ? { baseUrl: requestUrl } : {}),
+          ...(displayName !== undefined ? { displayName } : {}),
+        });
+        toast.success(t('settings.modelMgmt.modelAdded'));
+      } else {
+        // 自定义模式：API 密钥走模型级 keychain（addRuntimeModel 的 apiKey 参数）
+        await addMutation.mutateAsync({
+          modelId: effectiveModelId,
+          providerKind: values.providerKind,
+          ...(requestUrl !== undefined ? { baseUrl: requestUrl } : {}),
           ...(apiKey !== undefined ? { apiKey } : {}),
           ...(displayName !== undefined ? { displayName } : {}),
         });

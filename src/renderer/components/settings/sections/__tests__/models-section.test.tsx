@@ -19,11 +19,6 @@ const mocks = vi.hoisted(() => ({
   addRuntimeModel: vi.fn(async () => ({ data: { ok: true } })),
   modelsList: vi.fn(async () => ({ data: { models: [] } })),
   modelsTest: vi.fn(async () => ({ data: { ok: true } })),
-  getApiKey: vi.fn(async () => ({ data: { configured: false } })),
-  getApprovalMode: vi.fn(async () => ({ data: { mode: 'ask' } })),
-  setApprovalMode: vi.fn(async () => ({ data: { ok: true, mode: 'ask' } })),
-  settingsGet: vi.fn(async () => ({ data: { settings: {} } })),
-  settingsSet: vi.fn(async () => ({ data: { ok: true } })),
 }));
 
 function renderSection(): void {
@@ -46,11 +41,7 @@ describe('ModelsSection 模型管理列表页', () => {
         updateRuntimeModel: mocks.updateRuntimeModel,
         removeRuntimeModel: mocks.removeRuntimeModel,
         addRuntimeModel: mocks.addRuntimeModel,
-        getApiKey: mocks.getApiKey,
-        getApprovalMode: mocks.getApprovalMode,
-        setApprovalMode: mocks.setApprovalMode,
-        get: mocks.settingsGet,
-        set: mocks.settingsSet,
+        setApiKey: vi.fn(async () => ({ data: { ok: true } })),
       },
       models: { list: mocks.modelsList, test: mocks.modelsTest },
     } as never;
@@ -86,8 +77,8 @@ describe('ModelsSection 模型管理列表页', () => {
     await waitFor(() => {
       expect(screen.getByText('我的编码器')).toBeTruthy();
       expect(screen.getByText('my-coder')).toBeTruthy();
-      // DeepSeek 同时出现在提供商行与表格服务商列（多匹配）
-      expect(screen.getAllByText('DeepSeek').length).toBeGreaterThan(0);
+      // 服务商列（提供商行区块已拆出，DeepSeek 仅出现一次）
+      expect(screen.getByText('DeepSeek')).toBeTruthy();
     });
   });
 

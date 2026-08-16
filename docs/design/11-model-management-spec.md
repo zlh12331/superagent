@@ -141,7 +141,7 @@ interface Model {
 | 模型网格 | 2 列网格 | 模型卡片（数量 = 本项目实际适配厂商数） | 正常 | 内容区 | 圆角卡片  |
 | 模型卡片 | 卡片项   | 品牌 Logo + 名称 + 右箭头 > | 正常 | 网格项 | 圆角卡片、悬停背景色加深 |
 
-网格项由 `models:list` 真实清单按 providerKind 分组派生，另置「自定义模型」入口。本项目已适配厂商（shared `ApiKeyProviderSchema` 单一真源）：DeepSeek / OpenAI / Anthropic / Ollama / Moonshot Kimi / 智谱 GLM / 通义千问 / 豆包（火山方舟）/ 硅基流动 / OpenRouter。
+网格项 = 本项目已适配厂商全量清单（kind 单一真源 shared `ApiKeyProviderSchema`，渲染层 `PROVIDER_LABELS` 静态展示映射）：DeepSeek / OpenAI / Anthropic / Ollama / Moonshot Kimi / 智谱 GLM / 通义千问 / 豆包（火山方舟）/ 硅基流动 / OpenRouter，另置「自定义模型」入口。全量展示不依赖 API Key 配置状态（密钥在配置弹窗内填写）。
 
 > 注：产品截图中的厂商（MiniMax CN、阿里云、小米 MiMo 等）为参考项目的适配清单，本项目未适配则不显示，不照抄。
 
@@ -157,16 +157,14 @@ interface Model {
 * 状态：弹窗开关（L1 useState）
 
 * 接口（IPC 通道，非 REST）：
-  - 模型/厂商清单：`models:list`（返回模型清单，按 providerKind 分组派生厂商列表；空则空态，不伪造）
+  - 厂商网格：本项目已适配厂商全量（kind 单一真源 `ApiKeyProviderSchema`，无 IPC 拉取）
   - 品牌图标：取配置，无则默认图标（推断：现有实现无图标数据源，提供商行头为首字母色块，无单独接口）
 
 * 跨页数据：传递 `provider` 或 `mode='custom'` 给配置弹窗
 
 #### 3.2.5 动态与条件逻辑
 
-* 模型卡片由 `models:list` 动态派生；空厂商列表显示空态
-
-* 「自定义模型」为固定入口（非数据派生），始终显示
+* 厂商卡片 = 已适配厂商全量清单（静态映射，非数据派生）；「自定义模型」为固定入口（非数据派生），始终显示
 
 ***
 
@@ -372,8 +370,11 @@ interface ModelConfig {
 * 自定义模式：走 `settings:addRuntimeModel` 的 apiKey 参数（模型级显式 key，可选，省略走 keychain 默认 key）
 * 现有契约已支持，无需新增通道
 
-### 6.4 与现有 ModelsSection 的整合
+### 6.4 与现有 ModelsSection 的整合（整体重构，非叠加）
 
-* 新列表页 + 3 弹窗**替换现有「运行时模型」区块**（原增删表单）；提供商 API Key 配置行、模型参数、审批权限保留在 pane 内不变
-* 数据统一走 `useModelsQuery`（`MODELS_QUERY_KEY`），增删改启停后失效刷新
+* 「模型」pane **整体重构**为文档蓝图形态：标题区（主标题/副标题/说明 + 添加按钮）+ 表格 + 3 类弹窗，不再保留旧「API 提供商」行列表区块
+* 提供商 API Key 配置入口迁移到配置弹窗内：服务商模式保存走 `settings:setApiKey`（提供商级 keychain）+ addRuntimeModel 省略 apiKey（回退读 keychain）；自定义模式走 addRuntimeModel 的 apiKey 参数
+* 「模型参数」「审批权限」自模型 pane **拆出为独立导航 pane**（能力组 + 智能与行为组），导航从 15 项变 17 项
+* 添加弹窗厂商网格 = 本项目已适配厂商全量（`PROVIDER_LABELS`，kind 单一真源 `ApiKeyProviderSchema`），不依赖 key 配置状态
+* 数据统一走 `useRuntimeModelsQuery`（`RUNTIME_MODELS_QUERY_KEY`），增删改启停后失效刷新
 * 列表页无搜索/分页（首版），数据量小

@@ -21,6 +21,8 @@ import {
   Puzzle,
   Server as ServerIcon,
   Settings as SettingsIcon,
+  ShieldCheck,
+  SlidersHorizontal,
   Smartphone,
   Sparkles,
   TerminalSquare,
@@ -33,10 +35,12 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { AboutSection } from './sections/about-section';
+import { ApprovalModeSection } from './sections/approval-mode-section';
 import { BrowserSection } from './sections/browser-section';
 import { ExperimentalSection } from './sections/experimental-section';
 import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
+import { ModelParamsSection } from './sections/model-params-section';
 import { ModelsSection } from './sections/models-section';
 import {
   AccountSection,
@@ -69,6 +73,8 @@ type SectionId =
   | 'commands'
   | 'rules-memory'
   | 'models'
+  | 'model-params'
+  | 'approval-mode'
   | 'mcp'
   | 'skills'
   | 'hooks'
@@ -89,7 +95,7 @@ interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
-/** 导航分组（5 组 15 项，语义归组） */
+/** 导航分组（5 组 17 项，语义归组） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.accountGeneral',
@@ -103,8 +109,10 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.capabilities',
     items: [
-      // 模型服务：提供商/API Key/运行时模型统一管理（对齐同类桌面 LLM 客户端）
+      // 模型：模型管理列表页 + 弹窗（文档蓝图形态）
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
+      // 模型参数：全局默认模型/温度/思考强度（自模型 pane 拆出独立）
+      { id: 'model-params', labelKey: 'settings.nav.modelParams', icon: SlidersHorizontal },
       { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'plugins', labelKey: 'settings.nav.plugins', icon: Puzzle },
@@ -118,6 +126,8 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { id: 'commands', labelKey: 'settings.nav.commands', icon: TerminalSquare },
       { id: 'rules-memory', labelKey: 'settings.nav.rulesMemory', icon: BookOpenText },
+      // 审批权限：工具审批策略（自模型 pane 拆出独立，属智能与行为域）
+      { id: 'approval-mode', labelKey: 'settings.nav.approvalMode', icon: ShieldCheck },
     ],
   },
   {
@@ -155,6 +165,10 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <RulesMemorySection />;
     case 'models':
       return <ModelsSection />;
+    case 'model-params':
+      return <ModelParamsSection />;
+    case 'approval-mode':
+      return <ApprovalModeSection />;
     case 'mcp':
       return <McpSection />;
     case 'skills':

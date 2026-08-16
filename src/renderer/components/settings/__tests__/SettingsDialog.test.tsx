@@ -46,26 +46,24 @@ describe('SettingsDialog 冒烟', () => {
     );
   }
 
-  it('打开：渲染 5 组导航（15 tab）+ 默认模型服务分区', () => {
+  it('打开：渲染 5 组导航（17 tab）+ 默认模型分区', () => {
     renderDialog();
     // 组标题（zh-CN 默认语言；「关于」同现于 tab 名——用 getAllByText 容许多匹配）
     for (const label of ['账户与通用', '能力', '智能与行为', '实验', '关于']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
-    // 15 个导航 tab
-    expect(screen.getAllByRole('tab').length).toBe(15);
-    // 默认分区 = 模型服务（tab 激活态；分区内容在 SectionErrorBoundary 内渲染不崩溃）
-    const modelsTab = screen.getByRole('tab', { name: '模型服务' });
+    // 17 个导航 tab（模型 + 模型参数拆出独立；审批权限归智能与行为组）
+    expect(screen.getAllByRole('tab').length).toBe(17);
+    // 默认分区 = 模型（tab 激活态 + 模型管理页面正常渲染）
+    const modelsTab = screen.getByRole('tab', { name: '模型' });
     expect(modelsTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByTestId('section-error-boundary')).toBeDefined();
+    expect(screen.getByText('模型管理')).toBeTruthy();
   });
 
   it('tab 键盘切换：激活区随点击变化（错误边界 resetKeys 已覆盖切换重置）', () => {
     renderDialog();
     fireEvent.click(screen.getByRole('tab', { name: '关于' }));
     expect(screen.getByRole('tab', { name: '关于' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: '模型服务' }).getAttribute('aria-selected')).toBe(
-      'false',
-    );
+    expect(screen.getByRole('tab', { name: '模型' }).getAttribute('aria-selected')).toBe('false');
   });
 });
