@@ -2,123 +2,104 @@
 // 模型服务 pane（对齐同类桌面 LLM 客户端：统一的提供商/模型管理）
 // ──────────────────────────────────────────────────────────────
 // 合并原「API 密钥」+「运行时模型」两个 pane：
-// - 提供商列表行：内置 4 家，每行显示配置状态徽标（已配置/未配置），
+// - 提供商列表行：每行显示配置状态徽标（已配置/未配置），
 //   点击行展开 API Key 编辑（显示/隐藏/保存/删除）
-// - 运行时模型：models:list 拉取真实清单（isRuntime），
-//   添加表单（modelId/providerKind/baseUrl）+ 删除
+// - 模型管理列表页：settings:listRuntimeModels 拉取（用户添加的模型），
+//   表格 + 启停开关 + 编辑/删除 + 添加模型弹窗/配置弹窗/删除确认弹窗
 // - 数据源：keychain（API Key 加密存储）+ SQLite（运行时模型持久化）
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider } from '@code-agent/shared/renderer';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Eye, EyeOff, Loader2, Plus, Radio, Trash2 } from 'lucide-react';
+import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
+import { Check, Eye, EyeOff, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '@/hooks/use-api-key';
-import { MODELS_QUERY_KEY, useModelsQuery } from '@/hooks/use-models';
+import {
+  useRemoveRuntimeModel,
+  useRuntimeModelsQuery,
+  useUpdateRuntimeModel,
+} from '@/hooks/use-runtime-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { ApprovalModeSection } from './approval-mode-section';
+import { AddModelDialog } from './dialogs/add-model-dialog';
+import { ModelConfigDialog, type ModelConfigMode } from './dialogs/model-config-dialog';
 import { ModelParamsSection } from './model-params-section';
+import { PROVIDER_LABELS, providerLabel } from './provider-labels';
 
-/** 内置提供商列表（显示名 + 供应商枚举） */
-const BUILTIN_PROVIDERS: readonly { readonly kind: ApiKeyProvider; readonly label: string }[] = [
-  { kind: 'deepseek', label: 'DeepSeek' },
-  { kind: 'openai', label: 'OpenAI' },
-  { kind: 'anthropic', label: 'Anthropic' },
-  { kind: 'ollama', label: 'Ollama' },
-  { kind: 'moonshot', label: 'Moonshot Kimi' },
-  { kind: 'zhipu', label: '智谱 GLM' },
-  { kind: 'qwen', label: '通义千问' },
-  { kind: 'doubao', label: '豆包（火山方舟）' },
-  { kind: 'siliconflow', label: '硅基流动' },
-  { kind: 'openrouter', label: 'OpenRouter' },
-];
+/** 配置弹窗状态（null = 关闭） */
+interface ConfigDialogState {
+  readonly mode: ModelConfigMode;
+  readonly providerKind?: ApiKeyProvider;
+  readonly editingModel?: RuntimeModelInfo;
+}
 
 /**
  * 模型服务 pane
  *
- * 提供商列表 + 运行时模型管理 + 模型参数 + 审批权限（导航收敛后并入）。
+ * 提供商列表 + 模型管理列表页（增删改启停）+ 模型参数 + 审批权限。
  */
 export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
 
-  // P3 修复：运行时模型改走共享 useModelsQuery（与 ModelSelector 同 key），
-  // 此前 useState 手动拉取 + 仅本组件刷新，新增模型后 composer 下拉不刷新
-  const { data: modelsData } = useModelsQuery();
-  const runtimeModels = (modelsData?.models ?? [])
-    .filter((m) => m.isRuntime)
-    .map((m) => ({ id: m.id, label: m.label }));
+  // 模型管理列表（L3：settings:listRuntimeModels，用户添加的模型）
+  const { data: runtimeData } = useRuntimeModelsQuery();
+  const runtimeModels = runtimeData?.models ?? [];
+  const updateMutation = useUpdateRuntimeModel();
+  const removeMutation = useRemoveRuntimeModel();
 
-  // 添加表单
-  const [newModelId, setNewModelId] = useState('');
-  const [newProvider, setNewProvider] = useState<ApiKeyProvider>('deepseek');
-  const [newBaseUrl, setNewBaseUrl] = useState('');
-  // 删除中标记
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  // 弹窗状态（L1）
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [configState, setConfigState] = useState<ConfigDialogState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RuntimeModelInfo | null>(null);
 
-  // 添加 mutation：成功后统一失效共享 models key（composer 同步刷新）
-  const addMutation = useMutation({
-    mutationFn: async () => {
-      await window.api.settings.addRuntimeModel({
-        modelId: newModelId.trim(),
-        providerKind: newProvider,
-        // apiKey/baseUrl 经 zod optional+transform 推断为必填属性（值可为 undefined）
-        apiKey: undefined,
-        baseUrl: newBaseUrl.trim() !== '' ? newBaseUrl.trim() : undefined,
-      });
-    },
-    onSuccess: () => {
-      toast.success(t('settings.runtimeModelAdded'));
-      setNewModelId('');
-      setNewBaseUrl('');
-      void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
-    },
-    onError: () => {
-      toast.error(t('settings.runtimeModelLoadFailed'));
-    },
-  });
-
-  // 删除 mutation：成功后统一失效共享 models key
-  const removeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await window.api.settings.removeRuntimeModel({ modelId: id });
-    },
-    onSuccess: () => {
-      toast.success(t('settings.runtimeModelRemoved'));
-      void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
-    },
-    onError: () => {
-      toast.error(t('settings.runtimeModelLoadFailed'));
-    },
-  });
-
-  const handleAddRuntime = async (): Promise<void> => {
-    if (newModelId.trim() === '') {
-      toast.error(t('settings.runtimeModelIdEmpty'));
-      return;
-    }
-    await addMutation.mutateAsync();
+  /** 从添加弹窗选厂商 → 配置弹窗·服务商模式 */
+  const handleSelectProvider = (kind: ApiKeyProvider): void => {
+    setAddDialogOpen(false);
+    setConfigState({ mode: 'provider', providerKind: kind });
   };
 
-  const handleRemoveRuntime = async (id: string): Promise<void> => {
-    setRemovingId(id);
-    try {
-      await removeMutation.mutateAsync(id);
-    } finally {
-      setRemovingId(null);
-    }
+  /** 从添加弹窗选自定义 → 配置弹窗·自定义模式 */
+  const handleSelectCustom = (): void => {
+    setAddDialogOpen(false);
+    setConfigState({ mode: 'custom' });
+  };
+
+  /** 行编辑 → 配置弹窗·编辑模式（预填） */
+  const handleEdit = (model: RuntimeModelInfo): void => {
+    setConfigState({ mode: 'edit', editingModel: model });
+  };
+
+  /** 启停开关：partial 更新 isEnabled（乐观由 query 失效后刷新） */
+  const handleToggle = (model: RuntimeModelInfo, enabled: boolean): void => {
+    updateMutation.mutate(
+      { modelId: model.modelId, isEnabled: enabled },
+      {
+        onError: () => toast.error(t('settings.modelMgmt.saveFailed')),
+      },
+    );
+  };
+
+  /** 删除确认 */
+  const handleConfirmDelete = (): void => {
+    if (deleteTarget === null) return;
+    removeMutation.mutate(deleteTarget.modelId, {
+      onSuccess: () => toast.success(t('settings.modelMgmt.modelDeleted')),
+      onError: () => toast.error(t('settings.modelMgmt.saveFailed')),
+    });
+    setDeleteTarget(null);
   };
 
   return (
@@ -128,97 +109,106 @@ export function ModelsSection(): ReactElement {
         <Label className="font-serif text-sm tracking-wide">{t('settings.providersTitle')}</Label>
         <p className="text-muted-foreground mt-0.5 text-xs">{t('settings.providersHint')}</p>
         <div className="mt-2 flex flex-col gap-1.5">
-          {BUILTIN_PROVIDERS.map((p) => (
+          {PROVIDER_LABELS.map((p) => (
             <ProviderRow key={p.kind} kind={p.kind} label={p.label} />
           ))}
         </div>
       </div>
 
-      {/* 运行时模型（用户自定义，SQLite 持久化） */}
-      <div className="border-border rounded-md border p-3">
-        <div className="flex items-center gap-2">
-          <Radio className="text-muted-foreground size-3.5" strokeWidth={1.5} />
-          <Label className="font-serif text-sm tracking-wide">
-            {t('settings.runtimeModelsTitle')}
-          </Label>
-        </div>
-        <p className="text-muted-foreground mt-0.5 text-xs">{t('settings.runtimeModelsHint')}</p>
-
-        {/* 已添加列表 */}
-        {runtimeModels.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1">
-            {runtimeModels.map((m) => (
-              <li
-                key={m.id}
-                className="border-border bg-muted/30 flex items-center gap-2 rounded border px-2 py-1.5"
-              >
-                <span className="text-foreground min-w-0 flex-1 truncate font-mono text-xs">
-                  {m.id}
-                </span>
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-[var(--error)] flex shrink-0 cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
-                  aria-label={t('settings.removeRuntimeModel')}
-                  disabled={removingId === m.id}
-                  onClick={() => void handleRemoveRuntime(m.id)}
-                >
-                  {removingId === m.id ? (
-                    <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
-                  ) : (
-                    <Trash2 className="size-3" strokeWidth={1.5} />
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* 添加表单 */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <Input
-            type="text"
-            value={newModelId}
-            onChange={(e) => setNewModelId(e.target.value)}
-            placeholder={t('settings.runtimeModelIdPlaceholder')}
-            className="min-w-0 flex-1 text-xs"
-          />
-          <Select value={newProvider} onValueChange={(v) => setNewProvider(v as ApiKeyProvider)}>
-            <SelectTrigger
-              className="h-8 w-32 text-xs"
-              aria-label={t('settings.runtimeModelProvider')}
-            >
-              <SelectValue placeholder={t('settings.runtimeModelProvider')} />
-            </SelectTrigger>
-            <SelectContent>
-              {BUILTIN_PROVIDERS.map((p) => (
-                <SelectItem key={p.kind} value={p.kind} className="text-xs">
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            type="text"
-            value={newBaseUrl}
-            onChange={(e) => setNewBaseUrl(e.target.value)}
-            placeholder={t('settings.runtimeModelBaseUrl')}
-            className="min-w-0 w-40 text-xs"
-          />
+      {/* 模型管理列表页（用户添加的模型：表格 + 开关 + 增删改入口） */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-0.5">
+            <Label className="font-serif text-sm tracking-wide">
+              {t('settings.modelMgmt.title')}
+            </Label>
+            <p className="text-muted-foreground text-xs">{t('settings.modelMgmt.hint')}</p>
+          </div>
           <Button
             variant="outline"
             size="sm"
-            disabled={addMutation.isPending}
-            onClick={() => void handleAddRuntime()}
             className="h-8 gap-1 px-2 text-xs"
+            onClick={() => setAddDialogOpen(true)}
           >
-            {addMutation.isPending ? (
-              <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
-            ) : (
-              <Plus className="size-3" strokeWidth={1.5} />
-            )}
-            {t('settings.runtimeModelAdd')}
+            <Plus className="size-3.5" strokeWidth={1.5} />
+            {t('settings.modelMgmt.addModelTitle')}
           </Button>
         </div>
+
+        {runtimeModels.length === 0 ? (
+          <p className="text-muted-foreground border-border rounded-md border border-dashed px-3 py-6 text-center text-xs">
+            {t('settings.modelMgmt.emptyHint')}
+          </p>
+        ) : (
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-muted-foreground border-border border-b text-left text-2xs">
+                <th className="px-2 py-1.5 font-medium">{t('settings.modelMgmt.modelHeader')}</th>
+                <th className="px-2 py-1.5 font-medium">
+                  {t('settings.modelMgmt.providerHeader')}
+                </th>
+                <th className="px-2 py-1.5 text-right font-medium">
+                  {t('settings.modelMgmt.actionsHeader')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {runtimeModels.map((model) => (
+                <tr key={model.modelId} className="border-border border-b">
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-2">
+                      {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
+                      <span className="bg-accent/10 text-accent flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
+                        {providerLabel(model.providerKind)[0]}
+                      </span>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="text-foreground truncate">
+                          {model.displayName ?? model.modelId}
+                        </span>
+                        <span className="text-muted-foreground truncate font-mono text-2xs">
+                          {model.modelId}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="text-foreground px-2 py-1.5">
+                    {providerLabel(model.providerKind)}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+                        aria-label={t('settings.modelMgmt.editModel')}
+                        onClick={() => handleEdit(model)}
+                      >
+                        <Pencil className="size-3.5" strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-[var(--error)] flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+                        aria-label={t('settings.modelMgmt.deleteModel')}
+                        disabled={removeMutation.isPending}
+                        onClick={() => setDeleteTarget(model)}
+                      >
+                        {removeMutation.isPending ? (
+                          <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
+                        ) : (
+                          <Trash2 className="size-3.5" strokeWidth={1.5} />
+                        )}
+                      </button>
+                      <Switch
+                        checked={model.isEnabled}
+                        aria-label={t('settings.modelMgmt.toggleModel')}
+                        onCheckedChange={(checked) => handleToggle(model, checked)}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* 模型参数（默认模型/温度/思考强度，导航收敛后并入） */}
@@ -230,6 +220,42 @@ export function ModelsSection(): ReactElement {
       <div>
         <ApprovalModeSection />
       </div>
+
+      {/* 添加模型弹窗 */}
+      <AddModelDialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        onSelectProvider={handleSelectProvider}
+        onSelectCustom={handleSelectCustom}
+      />
+
+      {/* 模型配置弹窗（服务商/自定义/编辑三模式） */}
+      <ModelConfigDialog
+        open={configState !== null}
+        mode={configState?.mode ?? 'custom'}
+        providerKind={configState?.providerKind}
+        editingModel={configState?.editingModel}
+        onClose={() => setConfigState(null)}
+        onSaved={() => setConfigState(null)}
+      />
+
+      {/* 删除确认弹窗（无确认提示文案，仅标题 + 操作按钮） */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('settings.modelMgmt.deleteModelTitle')}</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel>{t('settings.modelMgmt.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete}>
+              {t('settings.modelMgmt.deleteModel')}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
