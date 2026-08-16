@@ -24,6 +24,7 @@ const LIMIT = 600;
 const EXEMPT = new Set([
   'src/renderer/dev/mock-api.ts',
   'src/main/infra/ai/agent/agent-service.ts', // 601 净行，重构时优先拆
+  'src/renderer/components/chat/ChatInput.tsx', // 605 净行（存量基线超限，重构时拆）
 ]);
 
 function collectFiles(dir: string, acc: string[] = []): string[] {

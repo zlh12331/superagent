@@ -413,7 +413,7 @@ function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps
     >
       {/* 轨道：整轨热区（吸附最近锚点点击跳转）；键盘路径由内部 jump-item button 提供，
           轨道点击为鼠标增强（对齐参考项目同款交互） */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 有 role=group 容器语义，真实交互元素为内部 button */}
+      {/* biome-ignore lint/a11y/useSemanticElements: role=group 滚动热区容器（非表单分组），fieldset 语义不符 */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: 键盘用户通过内部 jump-item 的 Enter/Space 跳转，轨道点击是鼠标增强路径 */}
       <div
         role="group"

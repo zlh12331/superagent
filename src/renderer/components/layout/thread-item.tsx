@@ -180,6 +180,7 @@ function ThreadItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
+        {/* biome-ignore lint/a11y/useSemanticElements: 会话行同时承载右键菜单与双击重命名，div 组合语义优于 button 嵌套 */}
         <div
           role="button"
           tabIndex={0}
