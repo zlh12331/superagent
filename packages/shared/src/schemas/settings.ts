@@ -200,6 +200,14 @@ export const AddRuntimeModelReqSchema = z.object({
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
+  // 展示名称（可选；省略 = 回退 modelId）
+  displayName: z
+    .string()
+    .max(32)
+    .optional()
+    .transform((v) => v ?? undefined),
+  // 启停状态（可选；省略 = 启用）
+  isEnabled: z.boolean().optional(),
 });
 
 /** settings:addRuntimeModel 响应 payload */
@@ -227,11 +235,52 @@ export const RemoveRuntimeModelResSchema = z.object({
   ok: z.boolean(),
 });
 
+/**
+ * settings:updateRuntimeModel 入参 zod schema（编辑 + 启停）
+ *
+ * 省略字段不修改（partial 语义）；apiKey 传入时更新 keychain。
+ */
+export const UpdateRuntimeModelReqSchema = z.object({
+  modelId: z.string().min(1).max(100),
+  // 展示名称（可选；null/undefined = 不修改）
+  displayName: z
+    .string()
+    .max(32)
+    .optional()
+    .transform((v) => v ?? undefined),
+  // 显式 baseUrl（可选；不传 = 不修改）
+  baseUrl: z
+    .string()
+    .url()
+    .optional()
+    .transform((v) => v ?? undefined),
+  // 显式 API Key（可选；不传 = 不修改，传入则更新 keychain）
+  apiKey: z
+    .string()
+    .min(1)
+    .optional()
+    .transform((v) => v ?? undefined),
+  // 启停状态（可选；不传 = 不修改）
+  isEnabled: z.boolean().optional(),
+});
+
+/** settings:updateRuntimeModel 响应 payload */
+export interface UpdateRuntimeModelRes {
+  readonly ok: boolean;
+}
+
+/** settings:updateRuntimeModel 响应 zod schema（R4：响应契约校验） */
+export const UpdateRuntimeModelResSchema = z.object({
+  ok: z.boolean(),
+});
+
 /** 运行时模型列表条目（settings:listRuntimeModels 响应） */
 export interface RuntimeModelInfo {
   readonly modelId: string;
   readonly providerKind: ApiKeyProvider;
   readonly baseUrl: string | undefined;
+  readonly displayName: string | undefined;
+  readonly isEnabled: boolean;
   readonly createdAt: number;
 }
 
@@ -250,6 +299,11 @@ export const ListRuntimeModelsResSchema = z.object({
         .string()
         .optional()
         .transform((v) => v ?? undefined),
+      displayName: z
+        .string()
+        .optional()
+        .transform((v) => v ?? undefined),
+      isEnabled: z.boolean(),
       createdAt: z.number().int(),
     }),
   ),

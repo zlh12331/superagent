@@ -150,7 +150,13 @@ import {
   type MemoryListRes,
   MemoryListResSchema,
 } from '../schemas/memory';
-import { type ModelsListRes, ModelsListResSchema } from '../schemas/models';
+import {
+  type ModelsListRes,
+  ModelsListResSchema,
+  TestModelReqSchema,
+  type TestModelRes,
+  TestModelResSchema,
+} from '../schemas/models';
 import {
   GlobReqSchema,
   type GlobRes,
@@ -228,6 +234,9 @@ import {
   SettingsGetAllResSchema,
   SettingsSetReqSchema,
   SettingsSetResSchema,
+  UpdateRuntimeModelReqSchema,
+  type UpdateRuntimeModelRes,
+  UpdateRuntimeModelResSchema,
 } from '../schemas/settings';
 import {
   SkillLearnReqSchema,
@@ -881,6 +890,12 @@ export const IPC_DEFINITIONS = {
       {} as ListRuntimeModelsRes,
       ListRuntimeModelsResSchema,
     ),
+    updateRuntimeModel: withSchema(
+      IPC_META.settings.updateRuntimeModel,
+      UpdateRuntimeModelReqSchema,
+      {} as UpdateRuntimeModelRes,
+      UpdateRuntimeModelResSchema,
+    ),
   },
 
   system: {
@@ -894,6 +909,12 @@ export const IPC_DEFINITIONS = {
 
   models: {
     list: withSchema(IPC_META.models.list, null, {} as ModelsListRes, ModelsListResSchema),
+    test: withSchema(
+      IPC_META.models.test,
+      TestModelReqSchema,
+      {} as TestModelRes,
+      TestModelResSchema,
+    ),
   },
 
   memory: {

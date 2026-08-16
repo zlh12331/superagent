@@ -42,3 +42,40 @@ export const ModelsListResSchema = z.object({
     }),
   ),
 });
+
+/**
+ * models:test 入参 zod schema（连通性测试）
+ *
+ * baseUrl/apiKey 省略时回退主进程默认端点与 keychain 已存 key。
+ */
+export const TestModelReqSchema = z.object({
+  providerKind: ApiKeyProviderSchema,
+  // 模型 id（可选；用于请求体 model 字段，省略用占位值）
+  modelId: z.string().min(1).max(100).optional(),
+  // 显式 baseUrl（可选；省略走主进程默认端点）
+  baseUrl: z
+    .string()
+    .url()
+    .optional()
+    .transform((v) => v ?? undefined),
+  // 显式 API Key（可选；省略回退 keychain 提供商/运行时模型 key）
+  apiKey: z
+    .string()
+    .min(1)
+    .optional()
+    .transform((v) => v ?? undefined),
+});
+
+/** models:test 响应 payload */
+export interface TestModelRes {
+  /** 是否连通 */
+  readonly ok: boolean;
+  /** 失败原因（ok=false 时非空） */
+  readonly error?: string;
+}
+
+/** models:test 响应 zod schema（R4：响应契约校验） */
+export const TestModelResSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+});

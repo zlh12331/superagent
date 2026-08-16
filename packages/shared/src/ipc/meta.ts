@@ -136,6 +136,7 @@ export const IPC_META = {
     addRuntimeModel: request('settings:addRuntimeModel'),
     removeRuntimeModel: request('settings:removeRuntimeModel'),
     listRuntimeModels: request('settings:listRuntimeModels'),
+    updateRuntimeModel: request('settings:updateRuntimeModel'),
   },
 
   system: {
@@ -144,6 +145,7 @@ export const IPC_META = {
 
   models: {
     list: request('models:list'),
+    test: request('models:test'),
   },
 
   memory: {
