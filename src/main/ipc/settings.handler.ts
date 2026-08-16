@@ -101,8 +101,22 @@ export function createSettingsHandlers(params: {
         providerKind: input.providerKind,
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       });
       // 缓存失效：同模型下次 getModel 重建（读取新 baseUrl/apiKey）
+      llmClient.invalidateModel(input.modelId);
+      return { ok: true };
+    },
+
+    // settings:updateRuntimeModel - 编辑 + 启停（partial 语义）
+    updateRuntimeModel: async (input) => {
+      await runtimeModelStore.update({
+        modelId: input.modelId,
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+        ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+        ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
+      });
       llmClient.invalidateModel(input.modelId);
       return { ok: true };
     },
@@ -114,15 +128,17 @@ export function createSettingsHandlers(params: {
       return { ok: true };
     },
 
-    // settings:listRuntimeModels - 列出自定义模型（设置页展示）
+    // settings:listRuntimeModels - 列出自定义模型（设置页列表展示）
     listRuntimeModels: async () => {
-      const snapshots = await runtimeModelStore.list();
+      const records = await runtimeModelStore.list();
       return {
-        models: snapshots.map((s) => ({
-          modelId: s.modelId,
-          providerKind: s.providerKind,
-          baseUrl: s.baseUrl,
-          createdAt: s.createdAt,
+        models: records.map((r) => ({
+          modelId: r.modelId,
+          providerKind: r.providerKind,
+          baseUrl: r.baseUrl,
+          displayName: r.displayName,
+          isEnabled: r.isEnabled,
+          createdAt: r.createdAt,
         })),
       };
     },

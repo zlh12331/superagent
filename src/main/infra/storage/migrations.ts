@@ -86,6 +86,20 @@ export const MIGRATIONS: readonly SchemaMigration[] = [
       `);
     },
   },
+  {
+    // 模型设置页：展示名 + 启停开关（runtime_models 扩展）
+    version: 5,
+    name: 'runtime_models.display_name/is_enabled',
+    up: (db) => {
+      addColumnIfMissing(db, 'runtime_models', 'display_name', 'display_name TEXT');
+      addColumnIfMissing(
+        db,
+        'runtime_models',
+        'is_enabled',
+        'is_enabled INTEGER NOT NULL DEFAULT 1',
+      );
+    },
+  },
 ] as const;
 
 /** 当前 schema 版本（= 最新迁移版本；新库直接落位此版本） */

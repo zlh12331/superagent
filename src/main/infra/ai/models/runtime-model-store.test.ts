@@ -134,6 +134,62 @@ describe('RuntimeModelStore', () => {
     await expect(store.remove('nonexistent')).resolves.toBeUndefined();
   });
 
+  it('update：displayName/baseUrl 落库 + 注册表重建最新快照', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+
+    await store.update({
+      modelId: 'my-coder',
+      displayName: '我的编码器',
+      baseUrl: 'https://updated.api.com',
+    });
+
+    const record = await store.get('my-coder');
+    expect(record).toMatchObject({
+      modelId: 'my-coder',
+      displayName: '我的编码器',
+      baseUrl: 'https://updated.api.com',
+    });
+    // 注册表已重建为最新 baseUrl
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.isRuntime).toBe(true);
+    expect(resolved.explicitBaseUrl).toBe('https://updated.api.com');
+  });
+
+  it('update：isEnabled=false 停用 → 注销注册（不可路由）+ 落库', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+
+    await store.update({ modelId: 'my-coder', isEnabled: false });
+
+    expect((await store.get('my-coder'))?.isEnabled).toBe(false);
+    // 停用后注销：解析回退非运行时
+    expect(modelRegistry.resolve('my-coder').isRuntime).toBe(false);
+  });
+
+  it('update：isEnabled=true 重新启用 → 重新注册', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+    await store.update({ modelId: 'my-coder', isEnabled: false });
+
+    await store.update({ modelId: 'my-coder', isEnabled: true });
+
+    expect((await store.get('my-coder'))?.isEnabled).toBe(true);
+    expect(modelRegistry.resolve('my-coder').isRuntime).toBe(true);
+  });
+
+  it('update 不存在的模型：抛 NOT_FOUND', async () => {
+    await expect(store.update({ modelId: 'ghost' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('update：apiKey 传入时写入 keychain', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'openai' });
+    vi.clearAllMocks();
+
+    await store.update({ modelId: 'my-coder', apiKey: 'sk-updated' });
+
+    expect(mocks.mockEncrypt).toHaveBeenCalledWith('sk-updated');
+  });
+
   it('loadAll：启动时注册全部已保存模型', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'openai' });
     // 模拟重启：新 store 实例 loadAll

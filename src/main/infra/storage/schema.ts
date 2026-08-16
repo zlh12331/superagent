@@ -216,6 +216,10 @@ export const runtimeModels = sqliteTable('runtime_models', {
   providerKind: text('provider_kind').notNull(),
   /** 显式 baseUrl（覆盖供应商默认端点；null = 用默认） */
   baseUrl: text('base_url'),
+  /** 模型展示名称（自定义模式选填；null = 回退 modelId） */
+  displayName: text('display_name'),
+  /** 启停状态（0=停用 1=启用；默认启用） */
+  isEnabled: integer('is_enabled').notNull().default(1),
   /** 创建时间（Unix timestamp 毫秒） */
   createdAt: integer('created_at').notNull(),
 });

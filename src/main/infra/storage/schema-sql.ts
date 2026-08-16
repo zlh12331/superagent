@@ -78,6 +78,8 @@ export const SCHEMA_SQL = `
       model_id TEXT PRIMARY KEY,
       provider_kind TEXT NOT NULL,
       base_url TEXT,
+      display_name TEXT,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL
     );
 

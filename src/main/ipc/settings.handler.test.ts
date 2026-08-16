@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   writeApprovalMode: vi.fn(async () => {}),
   runtimeAdd: vi.fn(async () => {}),
   runtimeRemove: vi.fn(async () => {}),
+  runtimeUpdate: vi.fn(async () => {}),
   runtimeList: vi.fn(async () => []),
   invalidateModel: vi.fn(() => {}),
   readAllSettings: vi.fn(() => ({})),
@@ -53,6 +54,7 @@ vi.mock('../infra/ai/llm-client/ai-provider', () => ({
   runtimeModelStore: {
     add: mocks.runtimeAdd,
     remove: mocks.runtimeRemove,
+    update: mocks.runtimeUpdate,
     list: mocks.runtimeList,
   },
 }));
@@ -187,6 +189,8 @@ describe('settings.handler 运行时模型（三件套）', () => {
         providerKind: 'deepseek',
         baseUrl: 'http://localhost:8080',
         apiKey: 'k',
+        displayName: undefined,
+        isEnabled: undefined,
       },
       EMPTY_CTX,
     );
@@ -211,19 +215,49 @@ describe('settings.handler 运行时模型（三件套）', () => {
     expect(res).toEqual({ ok: true });
   });
 
+  it('updateRuntimeModel：partial 条件展开 + 缓存失效', async () => {
+    const res = await handlers.updateRuntimeModel(
+      {
+        modelId: 'm',
+        displayName: '展示名',
+        baseUrl: undefined,
+        apiKey: undefined,
+        isEnabled: true,
+      },
+      EMPTY_CTX,
+    );
+    expect(mocks.runtimeUpdate).toHaveBeenCalledWith({
+      modelId: 'm',
+      displayName: '展示名',
+      isEnabled: true,
+    });
+    expect(mocks.invalidateModel).toHaveBeenCalledWith('m');
+    expect(res).toEqual({ ok: true });
+  });
+
   it('listRuntimeModels：list → 领域形状映射（剔除敏感字段）', async () => {
     mocks.runtimeList.mockResolvedValueOnce([
       {
         modelId: 'm1',
         providerKind: 'deepseek',
         baseUrl: 'http://x',
-        apiKey: 'secret',
+        displayName: undefined,
+        isEnabled: true,
         createdAt: 123,
       },
     ] as never);
     const res = await handlers.listRuntimeModels(undefined, EMPTY_CTX);
     expect(res).toEqual({
-      models: [{ modelId: 'm1', providerKind: 'deepseek', baseUrl: 'http://x', createdAt: 123 }],
+      models: [
+        {
+          modelId: 'm1',
+          providerKind: 'deepseek',
+          baseUrl: 'http://x',
+          displayName: undefined,
+          isEnabled: true,
+          createdAt: 123,
+        },
+      ],
     });
   });
 
