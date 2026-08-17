@@ -73,11 +73,11 @@ f:\TraeProjects\1\
 | telemetry/ | [otel.ts](file:///f:/TraeProjects/1/src/main/infra/telemetry/otel.ts) | OpenTelemetry 初始化 |
 | utils/ | [logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) / [wrap.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/retry.ts) + 测试 | 工具函数 |
 | index.ts | [src/main/index.ts](file:///f:/TraeProjects/1/src/main/index.ts) | 主进程入口 |
-| service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 14 服务统一生命周期管理 |
+| service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 18 服务统一生命周期管理（2026-08-17 实测） |
 
-### 2.4 src/main/infra/ai/tools/ — 内置工具（12 个）
+### 2.4 src/main/infra/ai/tools/ — 内置工具（29 个）
 
-实际注册 12 个工具（[index.ts#L81-L99](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L81)）：
+实际注册 29 个工具（[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools`）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / git_add+commit+push / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / web_fetch / save_memory / load_skill / lsp_definition / lsp_references：
 
 | 工具文件 | 工具名 | 权限 | 依赖 |
 |---|---|---|---|
@@ -268,12 +268,12 @@ e2e/
 
 采用 **`__tests__` 内联**为主 + **`.test.ts` 同目录**为辅的混合策略：
 
-| 位置 | 模式 | 文件数 |
+| 位置 | 模式 | 文件数（2026-08-17 实测） |
 |---|---|---|
-| packages/shared/src/__tests__/ | 内联 __tests__ 目录 | 4 |
-| src/main/ 同目录 .test.ts | colocation | 12 |
-| src/renderer/components/{域}/__tests__/ | 内联 __tests__ | 3（DevPanel / GitPanel / TerminalPanel） |
-| src/renderer/hooks/__tests__/ | 内联 __tests__ | 2（use-git / use-terminal-bridge） |
-| src/renderer/stores/transient/__tests__/ | 内联 __tests__ | 1（terminal-store） |
-| src/renderer/test/ | 独立测试目录 | 3（setup / msw-handlers / smoke.test）+ __tests__/mock-api.test |
+| packages/shared/src/__tests__/ | 内联 __tests__ 目录 | 5（api / channels / errors / smoke / shared-gaps） |
+| src/main/ 同目录 .test.ts | colocation | 114 |
+| src/renderer/components/{域}/__tests__/ | 内联 __tests__ | 24（分布 chat/agent/common/layout/terminal/git/file-tree/settings/ui/dev 各域） |
+| src/renderer/hooks/__tests__/ | 内联 __tests__ | 10 |
+| src/renderer/stores/transient/__tests__/ | 内联 __tests__ | 3（terminal / rate-limit / usage） |
+| src/renderer/test/ | 独立测试目录 | 5（setup / setup-lang / msw-handlers / smoke.test + __tests__/mock-api.test） |
 | e2e/ | 独立 Playwright E2E | 6 spec 文件 |

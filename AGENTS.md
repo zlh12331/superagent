@@ -1,6 +1,6 @@
 # AGENTS.md — code-agent-desktop
 
-Windows 桌面端生产级 Code Agent 桌面模板，Electron 43 + React 19 + TypeScript + Vercel AI SDK v7。
+Windows 桌面端生产级 Code Agent 桌面应用，Electron 43 + React 19 + TypeScript + Vercel AI SDK v7。
 
 ## 重要命令
 
@@ -53,7 +53,7 @@ scripts/         → 脚手架与工具（scaffold / changelog）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
-- 主进程是 Service Container 模式（`service-container.ts`），集中管理 12+ 服务（Chat/Agent/File/Search/Terminal/Git/Codebase/Session/Update 等），dispose 顺序按反向依赖
+- 主进程是 Service Container 模式（`service-container.ts`），集中管理 18 个服务（Chat/File/Search/Terminal/Git/Codebase/Session/Update/Tool/Permission/ToolExecutor/MCP/Prompt/Agent/Memory/LSP/Goal/IM；2026-08-17 实测），dispose 顺序按反向依赖
 - IPC 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，渲染层用 `window.api.*` 调用
 - 流式事件用 subscribe 回调模式（返回 unsubscribe 函数）
 - Channel 命名：`{domain}:{action}`（请求-响应）、`{domain}:stream:{event}`（流式）、`{domain}:event:{name}`（状态事件），常量表在 `packages/shared/src/ipc/channels.ts`

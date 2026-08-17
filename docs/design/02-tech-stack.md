@@ -9,7 +9,7 @@
 |---|---|---|
 | name | `code-agent-desktop` | [package.json#L2](file:///f:/TraeProjects/1/package.json#L2) |
 | version | `1.0.0` | [package.json#L3](file:///f:/TraeProjects/1/package.json#L3) |
-| description | Code Agent Desktop - 生产级 Electron Code Agent 模板（Windows 桌面端） | [package.json#L4](file:///f:/TraeProjects/1/package.json#L4) |
+| description | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json#L4](file:///f:/TraeProjects/1/package.json#L4) |
 | type | `module` | [package.json#L7](file:///f:/TraeProjects/1/package.json#L7) |
 | main | `./out/main/index.js` | [package.json#L8](file:///f:/TraeProjects/1/package.json#L8) |
 | packageManager | `pnpm@10.0.0` | [package.json#L9](file:///f:/TraeProjects/1/package.json#L9) |

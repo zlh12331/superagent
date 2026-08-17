@@ -1,6 +1,6 @@
 # Code Agent Desktop
 
-生产级 **Electron Code Agent 模板**（Windows/macOS/Linux 桌面端），开箱即用：多轮工具调用、权限审批流、多模型供应商路由、代码智能、终端与 Git 集成、会话持久化、Sentry + OpenTelemetry 双遥测。
+生产级 **Electron Code Agent 桌面应用**（Windows/macOS/Linux 桌面端），开箱即用：多轮工具调用、权限审批流、多模型供应商路由、代码智能、终端与 Git 集成、会话持久化、Sentry + OpenTelemetry 双遥测。
 
 ## 技术栈
 
@@ -60,7 +60,7 @@ pnpm test:coverage          # 覆盖率（80% 门禁）
                            │
 ┌─────────────────────────────────────────────────────────┐
 │  Main（Node.js，sandbox）                               │
-│  ServiceContainer → 12+ 服务                            │
+│  ServiceContainer → 18 服务（2026-08-17 实测）          │
 │  Chat / Agent / File / Search / Terminal / Git          │
 │  Codebase / Session / Tool / MCP / Permission / Prompt  │
 └─────────────────────────────────────────────────────────┘

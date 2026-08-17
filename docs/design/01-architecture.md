@@ -29,7 +29,7 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 文件：[src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts)（约 800 行）
 
-### 2.1 持有的 15 个服务 + 2 个核心组件
+### 2.1 持有的 16 个服务 + 2 个核心组件（共 18 个容器 getter）
 
 | # | 服务 | 接口 | 初始化方式 |
 |---|---|---|---|
@@ -50,30 +50,37 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 | 15 | goalService | —（直接 export class GoalService） | class `new GoalService(agentService, GoalJudge(llmClient), …)` |
 | 16 | imService | —（直接 export class ImService） | class `new ImService()`（+ ImAgentBridge 桥接，懒执行） |
 | 17 | memoryService | —（直接 export class MemoryService） | class `new MemoryService(llmClient)` |
+| 18 | lspManager | —（直接 export class LspServerManager） | class `new LspServerManager()`（懒加载，首次工具调用才有） |
 
 - 模块级单例（getXXXService 模式）：7 个
-- class 直接 new：10 个（含 toolRegistry/toolExecutor 2 个核心组件）
+- class 直接 new：11 个（含 toolRegistry/toolExecutor 2 个核心组件）
 
-> 2026-08-11 同步：服务表由 14 行扩充至 17 行（新增 goalService / imService / memoryService，对齐 service-container 实际注册）；dispose 12 步不变（新增服务随容器引用释放，无独立 dispose）。
+> 同步口径 2026-08-17 实测：服务表 18 行（14 基础 + goal/im/memory + lspManager）、getter 服务 18 个、dispose 18 步 runStep（见 §2.2）。行号随 service-container.ts 演进漂移，以函数名为准。
 
-### 2.2 dispose 顺序（12 步，反向依赖）
+### 2.2 dispose 顺序（18 步 runStep，反向依赖）
 
-定义在 [src/main/service-container.ts#L590-L695](file:///f:/TraeProjects/1/src/main/service-container.ts#L590)：
+定义在 [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) `ServiceContainer.dispose()`（每步 `runStep` 独立 try/catch，单步失败不阻断后续）：
 
 | 步 | 动作 | 释放资源 |
 |---|---|---|
-| 1 | ChatService.dispose() + resetChatService() | 中断活跃对话 + 清空模块级单例 |
-| 2 | AgentService.dispose() | 中断活跃 agent stream（等待 Promise.allSettled + 3s 超时兜底） |
-| 3 | MCPService.stopAll() | 关闭所有 MCP server 子进程（必须在 AgentService 停止后、ToolRegistry 清空前） |
-| 4 | PermissionService.dispose() + toolExecutor/registry = null | reject pending 审批 Promise |
-| 5 | FileService.dispose() + resetFileService() | 关闭 chokidar watcher |
-| 6 | SearchService.dispose() + resetSearchService() | 终止 ripgrep 子进程 |
-| 7 | TerminalService.dispose() + resetTerminalService() | kill 所有 pty 进程 |
-| 8 | GitService.dispose() + resetGitService() | no-op（每次 spawn 即退） |
-| 9 | CodebaseService.dispose() + resetCodebaseService() | no-op |
-| 10 | SessionService.dispose() + resetSessionService() | no-op（db 由 closeDb 单独关闭） |
-| 11 | promptService = null + UpdateService.dispose() | 清空引用 + 释放更新服务事件 |
-| 12 | resetAIProvider() → closeDb() | SQLite 必须最后关闭 |
+| 1 | lspManager.disposeAll() | 关闭 LSP server 子进程 |
+| 2 | ChatService.dispose() + resetChatService() | 中断活跃对话 + 等待 stream 收尾 + 清空模块级单例 |
+| 3 | AgentService.dispose() | 中断活跃 agent stream（等待 Promise.allSettled + 3s 超时兜底） |
+| 4 | MCPService.stopAll() | 关闭所有 MCP server 子进程（必须先于 ToolRegistry 清空） |
+| 5 | GoalService.unmount() | 解除回合监听（防泄漏） |
+| 6 | ImAgentBridge.unmount() | 解除 IM 消息订阅 |
+| 7 | ImService.stopAll() | 停止全部 IM 渠道长连接 |
+| 8 | PermissionService.dispose() + toolExecutor/registry = null | reject 所有 pending 审批 Promise |
+| 9 | agentAskService.dispose() | 清理 pending 提问 |
+| 10 | FileService.dispose() + resetFileService() | 关闭 chokidar watcher |
+| 11 | SearchService.dispose() + resetSearchService() | 终止 ripgrep 子进程 |
+| 12 | TerminalService.dispose() + resetTerminalService() | kill 所有 pty 进程 |
+| 13 | GitService.dispose() + resetGitService() | no-op（每次 spawn 即退，保持一致性） |
+| 14 | CodebaseService.dispose() + resetCodebaseService() | no-op |
+| 15 | SessionService.dispose() + resetSessionService() | no-op |
+| 16 | promptService/memoryService = null | 清空引用 |
+| 17 | UpdateService.dispose() | 更新事件收尾 |
+| 18 | resetAIProvider() → closeDb() | SQLite 必须最后关闭 |
 
 设计依据：[L12-L42](file:///f:/TraeProjects/1/src/main/service-container.ts#L12) 注释说明 dispose 严格按反向依赖顺序，db 必须最后关闭避免 SessionService 访问已关闭连接。每个服务的 dispose 都有 3 秒超时兜底避免 hang 死。
 
@@ -196,14 +203,14 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 ## 7. 关键风险点
 
-1. **service-container.ts 单文件约 800 行**：14 个服务的 getter/setter + dispose + reset 全部集中，随服务增加会进一步膨胀
-2. **注释与代码漂移**：[service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) 部分注释仍称"注册 5 个内置工具"，但 [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) 实际注册 12 个工具（read_file / write_file / list_directory / code_review / grep / glob / terminal / run_command / edit_file / git_add / git_commit / git_push）
+1. **service-container.ts 单文件约 800 行**：18 个服务的 getter/setter + dispose + reset 全部集中，随服务增加会进一步膨胀
+2. **注释与代码漂移**：[service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) 注释曾称"注册 5 个内置工具"，[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools` 现实际注册 **29 个工具**（read/write/edit/file/list/**grep/glob/terminal/run_command/ask_user_question/plan_mode/git_*/task_*/cron_*/subagent/team/code_review/web_fetch/save_memory/load_skill/lsp_definition/lsp_references）
 3. **MCPService 无独立 IPC handler**：MCP 配置只能从主进程侧管理，渲染层无 MCP 管理 UI 入口
 4. **chat 域保留但被 agent 域替代**：channels.ts 注释明确"保留兼容旧 chat:send"，存在双轨制维护负担
 
 ## 8. 关键亮点
 
-1. **ServiceContainer 模式**：14 个服务统一生命周期管理，dispose 顺序严格按反向依赖，3s 超时兜底避免 hang 死
+1. **ServiceContainer 模式**：18 个服务统一生命周期管理，dispose 顺序严格按反向依赖，3s 超时兜底避免 hang 死
 2. **接口化设计**：所有服务都抽出 I*Service 接口，ServiceContainer 提供 `setXxxService()` 注入点便于测试 mock
 3. **类型契约单一来源**：`IPC_DEFINITIONS` 定义在 shared，preload 通过 `createIpcApi(IPC_META)` 自动生成 IpcApi，channel 名通过 `IPC_CHANNELS` 常量表 + `as const` 派生字面量类型防拼写错误
 4. **沙箱友好的 preload 设计**：子路径导入 `@code-agent/shared/ipc/meta` 避免 zod 拉进 CJS 产物（[preload/index.ts#L27](file:///f:/TraeProjects/1/src/preload/index.ts#L27)），使用全局 `crypto.randomUUID()` 替代 node:crypto
@@ -213,4 +220,4 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 ---
 
-**统计摘要**：14 个服务实例 / 16 个 IPC 域 / 74 个 channel（59 invoke + 15 push）/ 16 个 IPC handler 文件 / 4 层进程隔离。
+**统计摘要**：18 个服务实例（16 服务 + ToolRegistry/ToolExecutor 2 核心组件） / 16 个 IPC 域 / 74 个 channel（59 invoke + 15 push）/ 16 个 IPC handler 文件 / 4 层进程隔离。
