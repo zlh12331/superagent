@@ -130,6 +130,11 @@
   ],
   "vitest.include": ["**/*.test.{ts,tsx}"],
 
+  // ── Coverage Gutters：从当前文件向上查找 lcov.info，适配四个 vitest root 各自的 coverage/ 目录 ──
+  // 跑 pnpm test:coverage 后，点状态栏 Watch 即可在 gutter 看行级覆盖
+  "coverage-gutters.coverageFileNames": ["coverage/lcov.info"],
+  "coverage-gutters.showLineCoverage": true,
+
   // ── Markdown：docs 文档多，关闭保存时格式化避免与手写排版冲突 ──
   "[markdown]": {
     "editor.formatOnSave": false

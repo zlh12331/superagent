@@ -14,7 +14,7 @@
 
 ## 首次上手
 
-1. 打开项目后按提示「安装工作区推荐扩展」（10 个插件）
+1. 打开项目后按提示「安装工作区推荐扩展」（12 个插件）
 2. `pnpm install`（postinstall 自动重编译原生模块 ABI）
 3. 右下角确认 TypeScript 版本为工作区 7.x（`typescript.tsdk` 已自动指向）
 4. `Ctrl+Shift+B` 跑默认构建任务验证链路
@@ -42,6 +42,7 @@
 - 默认构建任务（Ctrl+Shift+B）：`build`
 - 后台常驻：`dev` / `dev:web` / `typecheck:watch` / `test:main (watch)` / `test:renderer (watch)`（带就绪探测 matcher）
 - 质量门禁顺序对齐 CI：`typecheck` → `lint` → `check:static` → `test` → `knip`
+- 覆盖率可视化：跑 `pnpm test:coverage` 后点状态栏 Coverage Gutters 的 Watch，行级覆盖直接显示在 gutter（自动从当前文件向上查找对应 root 的 `coverage/lcov.info`）
 
 ## 代码片段
 

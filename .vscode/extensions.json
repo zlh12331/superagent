@@ -9,7 +9,9 @@
     "vivaxy.vscode-conventional-commits",
     "dsznajder.es7-react-js-snippets",
     "ms-azuretools.vscode-docker",
-    "qwtel.sqlite-viewer"
+    "qwtel.sqlite-viewer",
+    "ryanluker.vscode-coverage-gutters",
+    "yzhang.markdown-all-in-one"
   ],
   "unwantedRecommendations": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
 }
