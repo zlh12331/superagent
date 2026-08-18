@@ -1,4 +1,5 @@
 {
+  // ── 格式化 / lint：Biome 是唯一真源（与 biome.json 对齐，禁用一切 Prettier/ESLint）──
   "editor.defaultFormatter": "biomejs.biome",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
@@ -10,9 +11,101 @@
   "[jsonc]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
+
+  // ── TypeScript：强制使用工作区 TS7（内置版本行为不一致）+ 自动导入/内联提示 ──
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+  "typescript.preferences.autoImportSpecifierExcludeRegexes": ["^\\./.*\\.test"],
+  "typescript.suggest.autoImports": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "typescript.inlayHints.parameterNames.enabled": "literals",
+  "typescript.inlayHints.functionLikeReturnTypes.enabled": false,
+  "typescript.inlayHints.propertyDeclarationTypes.enabled": false,
+  "typescript.inlayHints.variableTypes.enabled": false,
+  // CodeLens 在大仓库下显著拖慢语言服务，本项目按需手动查引用
+  "typescript.referencesCodeLens.enabled": false,
+  "typescript.implementationsCodeLens.enabled": false,
+  "javascript.updateImportsOnFileMove.enabled": "always",
+
+  // ── 包管理器：pnpm workspace（运行脚本/终端集成识别）──
+  "npm.packageManager": "pnpm",
+
+  // ── 文件换行与编码（biome lineEnding: lf）──
   "files.eol": "\n",
+  "files.encoding": "utf8",
+
+  // ── 资源管理器：隐藏构建产物与运行时目录，减少视觉噪音 ──
+  "files.exclude": {
+    "**/out": true,
+    "**/release": true,
+    "**/stats": true,
+    "**/coverage": true,
+    "**/test-results": true,
+    "**/playwright-report": true,
+    "**/playwright-report-electron": true,
+    "**/playwright-report-smoke": true,
+    "**/.stryker-tmp": true,
+    "**/.vite": true,
+    "**/.codegraph": true,
+    "**/.qoder": true,
+    "**/.electron-cache": true,
+    "**/.electron-user-data": true,
+    "**/.e2e-user-data": true,
+    "**/*.tsbuildinfo": true
+  },
+
+  // ── 文件监视排除：Windows 下 watcher 是卡顿主因，产物/运行时目录全部排除 ──
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/out/**": true,
+    "**/release/**": true,
+    "**/dist/**": true,
+    "**/stats/**": true,
+    "**/coverage/**": true,
+    "**/test-results/**": true,
+    "**/playwright-report*/**": true,
+    "**/.vite/**": true,
+    "**/.electron-user-data/**": true,
+    "**/.e2e-user-data/**": true,
+    "**/.electron-cache/**": true,
+    "**/.tmp/**": true,
+    "**/.stryker-tmp/**": true,
+    "**/.codegraph/**": true,
+    "**/.qoder/**": true,
+    "**/_template/**": true,
+    "**/docs/参考项目/**": true
+  },
+
+  // ── 搜索排除：.gitignore 已覆盖大部分，此处显式兜底非 git 噪音源 ──
+  "search.useIgnoreFiles": true,
+  "search.exclude": {
+    "**/pnpm-lock.yaml": true,
+    "**/.tmp": true,
+    "**/.electron-user-data": true,
+    "**/.e2e-user-data": true,
+    "**/.codegraph": true,
+    "**/.qoder": true,
+    "**/playwright-report*": true,
+    "**/test-results": true,
+    "**/_template": true,
+    "**/docs/参考项目": true,
+    "**/*.tsbuildinfo": true
+  },
+
+  // ── 资源管理器文件嵌套：配置/锁文件收敛，测试文件跟随源码（colocation 规范）──
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "pnpm-lock.yaml, pnpm-workspace.yaml, .npmrc",
+    "tsconfig.json": "tsconfig.*.json",
+    "biome.json": ".editorconfig, .gitattributes",
+    "electron.vite.config.ts": "vite.web.config.ts, i18next.config.ts, drizzle.config.ts, knip.json, codegraph.json",
+    "*.ts": "${capture}.test.ts",
+    "*.tsx": "${capture}.test.tsx"
+  },
+
+  // ── i18n Ally：对齐 i18next.config.ts（locales/{language}/{namespace}.json）──
   "i18n-ally.localesPaths": "src/renderer/i18n/locales",
   "i18n-ally.keystyle": "nested",
   "i18n-ally.sourceLanguage": "zh-CN",
@@ -20,8 +113,24 @@
   "i18n-ally.namespace": true,
   "i18n-ally.enabledFrameworks": ["i18next"],
   "i18n-ally.dirStructure": "directory",
+
+  // ── Tailwind CSS v4：classRegex 适配 cva/cx（shadcn 风格）──
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
     ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
-  ]
+  ],
+
+  // ── Vitest Explorer：四个独立 root（--root 模式无 workspace 文件，需显式声明）──
+  "vitest.rootConfig": [
+    "src/main/vitest.config.ts",
+    "src/renderer/vitest.config.ts",
+    "scripts/vitest.config.ts",
+    "tests/integration/vitest.config.ts"
+  ],
+  "vitest.include": ["**/*.test.{ts,tsx}"],
+
+  // ── Markdown：docs 文档多，关闭保存时格式化避免与手写排版冲突 ──
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
 }

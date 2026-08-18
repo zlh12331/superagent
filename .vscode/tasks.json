@@ -1,0 +1,171 @@
+{
+  // 常用 pnpm 脚本任务化：Ctrl+Shift+B 跑默认构建任务，终端→运行任务看全量
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "detail": "electron-vite build（主/preload/渲染三进程产物）",
+      "type": "shell",
+      "command": "pnpm build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "dev",
+      "detail": "electron-vite dev（dev server + Electron 窗口，HMR）",
+      "type": "shell",
+      "command": "pnpm dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "severity": "info",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE|electron-vite",
+          "endsPattern": "ready in \\d+"
+        }
+      }
+    },
+    {
+      "label": "dev:web",
+      "detail": "渲染层独立开发（浏览器 + mock window.api，端口 5173）",
+      "type": "shell",
+      "command": "pnpm dev:web",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "severity": "info",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE|electron-vite",
+          "endsPattern": "ready in \\d+"
+        }
+      }
+    },
+    {
+      "label": "typecheck",
+      "detail": "tsc --build（项目引用全量类型检查）",
+      "type": "shell",
+      "command": "pnpm typecheck",
+      "group": "test",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "typecheck:watch",
+      "detail": "tsc --build --watch（增量类型检查）",
+      "type": "shell",
+      "command": "pnpm typecheck:watch",
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch"
+    },
+    {
+      "label": "lint",
+      "detail": "biome check .（lint + 格式检查）",
+      "type": "shell",
+      "command": "pnpm lint",
+      "problemMatcher": []
+    },
+    {
+      "label": "lint:fix",
+      "detail": "biome check --write .（自动修复）",
+      "type": "shell",
+      "command": "pnpm lint:fix",
+      "problemMatcher": []
+    },
+    {
+      "label": "check:static",
+      "detail": "静态审计全家桶（tokens/i18n/comments/file-size/functions/docs/test-boundary）",
+      "type": "shell",
+      "command": "pnpm check:static",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "test",
+      "detail": "全部单测（shared → main → renderer → integration → scripts）",
+      "type": "shell",
+      "command": "pnpm test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "test:main (watch)",
+      "detail": "主进程单测 watch 模式",
+      "type": "shell",
+      "command": "pnpm test:main:watch",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vitest",
+        "severity": "info",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITEST|Vitest",
+          "endsPattern": "Waiting for file changes"
+        }
+      }
+    },
+    {
+      "label": "test:renderer (watch)",
+      "detail": "渲染层单测 watch 模式",
+      "type": "shell",
+      "command": "pnpm test:renderer:watch",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vitest",
+        "severity": "info",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITEST|Vitest",
+          "endsPattern": "Waiting for file changes"
+        }
+      }
+    },
+    {
+      "label": "test:integration",
+      "detail": "集成测试（真实 SQLite + mock Electron SDK 边界）",
+      "type": "shell",
+      "command": "pnpm test:integration",
+      "problemMatcher": []
+    },
+    {
+      "label": "test:e2e",
+      "detail": "E2E 浏览器模式（dev server）",
+      "type": "shell",
+      "command": "pnpm test:e2e",
+      "problemMatcher": []
+    },
+    {
+      "label": "test:e2e:electron",
+      "detail": "E2E Electron 真实窗口",
+      "type": "shell",
+      "command": "pnpm test:e2e:electron",
+      "problemMatcher": []
+    },
+    {
+      "label": "test:smoke",
+      "detail": "生产构建 smoke（需先 build）",
+      "type": "shell",
+      "command": "pnpm test:smoke",
+      "dependsOn": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "knip",
+      "detail": "死代码/死依赖检测（CI 卡关项）",
+      "type": "shell",
+      "command": "pnpm knip",
+      "problemMatcher": []
+    },
+    {
+      "label": "changelog",
+      "detail": "从 git log 生成 CHANGELOG [Unreleased] 段",
+      "type": "shell",
+      "command": "pnpm changelog",
+      "problemMatcher": []
+    }
+  ]
+}

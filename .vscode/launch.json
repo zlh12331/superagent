@@ -1,0 +1,62 @@
+{
+  // Electron 调试配置（与项目约定对齐）：
+  // - 主进程产物 out/main/index.js（electron-vite build），sourcemap 已开启
+  // - dev 窗口远程调试端口 9222（main/index.ts appendSwitch，CODE_AGENT_DEBUG_PORT 可覆盖）
+  // - pnpm perf:inspect 以 --inspect=9229 启动 Electron，供「Attach 主进程」连接
+  // - pnpm dev:web 渲染层独立开发模式，端口 5173
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 构建后启动 Electron 并调试主进程（断点打在 src/main/**/*.ts 源码上）
+      "name": "Electron: 主进程（构建后调试）",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+      "windows": {
+        "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
+      },
+      "runtimeArgs": [".", "--remote-debugging-port=9222"],
+      "outFiles": ["${workspaceFolder}/out/main/**/*.js"],
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "preLaunchTask": "build",
+      "console": "integratedTerminal"
+    },
+    {
+      // 附加到 pnpm perf:inspect（electron --inspect=9229）启动的实例
+      "name": "Electron: Attach 主进程（9229）",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "outFiles": ["${workspaceFolder}/out/main/**/*.js"],
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"]
+    },
+    {
+      // 附加到 dev 窗口的渲染进程（CDP 9222），断点打在 src/renderer 源码上
+      "name": "渲染进程: Attach Electron 窗口（CDP 9222）",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/src/renderer"
+    },
+    {
+      // 渲染层独立开发（pnpm dev:web + mock window.api），浏览器中调试
+      "name": "渲染进程: web 模式（5173）",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src/renderer",
+      "preLaunchTask": "dev:web"
+    }
+  ],
+  "compounds": [
+    {
+      // 先调试主进程，窗口起来后附加渲染进程（Attach 配置会在 CDP 就绪后连接）
+      "name": "Electron: 全栈（主进程 + 渲染进程）",
+      "configurations": [
+        "Electron: 主进程（构建后调试）",
+        "渲染进程: Attach Electron 窗口（CDP 9222）"
+      ]
+    }
+  ]
+}

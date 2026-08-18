@@ -6,7 +6,10 @@
     "ms-playwright.playwright",
     "lokalise.i18n-ally",
     "redhat.vscode-yaml",
-    "vivaxy.vscode-conventional-commits"
+    "vivaxy.vscode-conventional-commits",
+    "dsznajder.es7-react-js-snippets",
+    "ms-azuretools.vscode-docker",
+    "qwtel.sqlite-viewer"
   ],
   "unwantedRecommendations": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
 }
