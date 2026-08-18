@@ -1,0 +1,74 @@
+{
+  // 项目级代码片段（工作区 snippets，入库共享）
+  // 设计原则：只收录有明确项目规范的骨架；IPC/Tool 全链路生成走 pnpm scaffold:* CLI，不做 snippet
+  // ──────────────────────────────────────────────────────────────
+
+  "React 组件骨架（项目规范）": {
+    "scope": "typescriptreact",
+    "prefix": "rcomp",
+    "description": "渲染层组件骨架：named export + readonly props + useTranslation + cn + 文件头注释",
+    "body": [
+      "// ${TM_DIRECTORY/^.*src[\\\\\\/](.*)$/${1:}/}/${TM_FILENAME}",
+      "// ${1:组件职责一句话}",
+      "// ──────────────────────────────────────────────────────────────",
+      "// ${2:设计要点 / 状态归属（L1-L4）说明}",
+      "// ──────────────────────────────────────────────────────────────",
+      "",
+      "import { type ReactElement } from 'react';",
+      "import { useTranslation } from '@/i18n/use-translation';",
+      "import { cn } from '@/lib/utils';",
+      "",
+      "/** ${3:Component} props */",
+      "export interface ${3:Component}Props {",
+      "  /** ${4:prop 说明} */",
+      "  readonly className?: string;",
+      "}",
+      "",
+      "/**",
+      " * ${5:组件中文名}",
+      " */",
+      "export function ${3:Component}({ className }: ${3:Component}Props): ReactElement {",
+      "  const { t } = useTranslation();",
+      "",
+      "  return <div className={cn('${6:styles}', className)}>${0}</div>;",
+      "}",
+      ""
+    ]
+  },
+
+  "Zustand transient store 骨架（项目规范）": {
+    "scope": "typescript",
+    "prefix": "zstore",
+    "description": "L2 transient store 骨架：readonly state 接口 + create + 文件头注释（持久化 store 请改用 createPersistentStore 工厂）",
+    "body": [
+      "// ${TM_DIRECTORY/^.*src[\\\\\\/](.*)$/${1:}/}/${TM_FILENAME}",
+      "// ${1:状态职责一句话}（L2 客户端共享状态 - transient）",
+      "// ──────────────────────────────────────────────────────────────",
+      "// 职责：",
+      "// - ${2:写入方（谁在什么时机写）}",
+      "// - ${3:订阅方（哪些组件消费）}",
+      "// - 不持久化：${4:为什么是会话内瞬态}",
+      "// ──────────────────────────────────────────────────────────────",
+      "",
+      "import { create } from 'zustand';",
+      "",
+      "/** ${5:xxx} 状态形状 */",
+      "interface ${6:Xxx}State {",
+      "  /** ${7:字段说明} */",
+      "  readonly value: ${8:string};",
+      "  /** ${9:action 说明} */",
+      "  readonly setValue: (value: ${8:string}) => void;",
+      "}",
+      "",
+      "/**",
+      " * ${10:store 中文名}",
+      " */",
+      "export const use${6:Xxx}Store = create<${6:Xxx}State>()((set) => ({",
+      "  value: '',",
+      "",
+      "  setValue: (value) => set({ value }),",
+      "}));",
+      ""
+    ]
+  }
+}

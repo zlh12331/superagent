@@ -114,7 +114,8 @@
   "i18n-ally.enabledFrameworks": ["i18next"],
   "i18n-ally.dirStructure": "directory",
 
-  // ── Tailwind CSS v4：classRegex 适配 cva/cx（shadcn 风格）──
+  // ── Tailwind CSS v4：指定入口文件（@theme 令牌精准补全）+ classRegex 适配 cva/cx ──
+  "tailwindCSS.experimental.configFile": "src/renderer/index.css",
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
     ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]

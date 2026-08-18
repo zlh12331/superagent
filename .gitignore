@@ -18,6 +18,8 @@ release/
 !.vscode/settings.json
 !.vscode/launch.json
 !.vscode/tasks.json
+!.vscode/project.code-snippets
+!.vscode/README.md
 .idea/
 
 # 系统文件
