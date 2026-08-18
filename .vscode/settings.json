@@ -9,12 +9,9 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "[jsonc]": {
-    "editor.defaultFormatter": "biomejs.biome"
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
-
   // ── TypeScript：强制使用工作区 TS7（内置版本行为不一致）+ 自动导入/内联提示 ──
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "non-relative",
   "typescript.preferences.autoImportSpecifierExcludeRegexes": ["^\\./.*\\.test"],
   "typescript.suggest.autoImports": true,
@@ -27,14 +24,11 @@
   "typescript.referencesCodeLens.enabled": false,
   "typescript.implementationsCodeLens.enabled": false,
   "javascript.updateImportsOnFileMove.enabled": "always",
-
   // ── 包管理器：pnpm workspace（运行脚本/终端集成识别）──
   "npm.packageManager": "pnpm",
-
   // ── 文件换行与编码（biome lineEnding: lf）──
   "files.eol": "\n",
   "files.encoding": "utf8",
-
   // ── 资源管理器：隐藏构建产物与运行时目录，减少视觉噪音 ──
   "files.exclude": {
     "**/out": true,
@@ -54,7 +48,6 @@
     "**/.e2e-user-data": true,
     "**/*.tsbuildinfo": true
   },
-
   // ── 文件监视排除：Windows 下 watcher 是卡顿主因，产物/运行时目录全部排除 ──
   "files.watcherExclude": {
     "**/node_modules/**": true,
@@ -76,7 +69,6 @@
     "**/_template/**": true,
     "**/docs/参考项目/**": true
   },
-
   // ── 搜索排除：.gitignore 已覆盖大部分，此处显式兜底非 git 噪音源 ──
   "search.useIgnoreFiles": true,
   "search.exclude": {
@@ -92,7 +84,6 @@
     "**/docs/参考项目": true,
     "**/*.tsbuildinfo": true
   },
-
   // ── 资源管理器文件嵌套：配置/锁文件收敛，测试文件跟随源码（colocation 规范）──
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
@@ -104,7 +95,6 @@
     "*.ts": "${capture}.test.ts",
     "*.tsx": "${capture}.test.tsx"
   },
-
   // ── i18n Ally：对齐 i18next.config.ts（locales/{language}/{namespace}.json）──
   "i18n-ally.localesPaths": "src/renderer/i18n/locales",
   "i18n-ally.keystyle": "nested",
@@ -112,29 +102,19 @@
   "i18n-ally.displayLanguage": "zh-CN",
   "i18n-ally.namespace": true,
   "i18n-ally.enabledFrameworks": ["i18next"],
-  "i18n-ally.dirStructure": "directory",
-
+  "i18n-ally.dirStructure": "dir",
   // ── Tailwind CSS v4：指定入口文件（@theme 令牌精准补全）+ classRegex 适配 cva/cx ──
   "tailwindCSS.experimental.configFile": "src/renderer/index.css",
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
     ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
   ],
-
   // ── Vitest Explorer：四个独立 root（--root 模式无 workspace 文件，需显式声明）──
-  "vitest.rootConfig": [
-    "src/main/vitest.config.ts",
-    "src/renderer/vitest.config.ts",
-    "scripts/vitest.config.ts",
-    "tests/integration/vitest.config.ts"
-  ],
-  "vitest.include": ["**/*.test.{ts,tsx}"],
-
+  "vitest.workspaceConfig": "./vitest.workspace.ts",
   // ── Coverage Gutters：从当前文件向上查找 lcov.info，适配四个 vitest root 各自的 coverage/ 目录 ──
   // 跑 pnpm test:coverage 后，点状态栏 Watch 即可在 gutter 看行级覆盖
   "coverage-gutters.coverageFileNames": ["coverage/lcov.info"],
   "coverage-gutters.showLineCoverage": true,
-
   // ── Markdown：docs 文档多，关闭保存时格式化避免与手写排版冲突 ──
   "[markdown]": {
     "editor.formatOnSave": false

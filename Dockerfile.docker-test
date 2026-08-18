@@ -1,0 +1,44 @@
+# Dockerfile.docker-test
+# Linux 容器内跑项目质量门禁与测试（对应 CI quality / integration-tests job 的环境）
+# 构建：docker build -f Dockerfile.docker-test -t code-agent-test .
+# 说明：
+# - Node 24（对齐 .nvmrc / CI），pnpm 走 corepack（packageManager 字段锁定版本）
+# - SKIP_ELECTRON_REBUILD=1：跳过 postinstall 的 Electron ABI 重编译（容器内只跑 Node 侧测试）
+# - ELECTRON_SKIP_BINARY_DOWNLOAD=1：不下载 Electron 二进制（unit/integration 不需要）
+
+FROM node:24-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        ca-certificates \
+        python3 \
+        make \
+        g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV SKIP_ELECTRON_REBUILD=1 \
+    ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    SENTRYCLI_SKIP_DOWNLOAD=1 \
+    CI=true
+
+WORKDIR /work
+
+# 依赖分层缓存：先拷 lockfile 与各 workspace package.json
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/tsconfig/package.json packages/tsconfig/
+COPY tools/depcruise/package.json tools/depcruise/
+COPY tools/typedoc/package.json tools/typedoc/
+
+RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
+
+# 全量源码（.dockerignore 排除 node_modules/产物/用户数据）
+COPY . .
+
+RUN pnpm install --frozen-lockfile && chown -R node:node /work
+
+# 非 root 运行（root 下 chmod 只读测试失效，无法真实模拟用户环境）
+USER node
+
+CMD ["pnpm", "typecheck"]
