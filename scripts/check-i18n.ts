@@ -93,6 +93,37 @@ function collectDynamicPrefixes(files: string[]): Set<string> {
   return prefixes;
 }
 
+/**
+ * 检测 JSX 文本节点里的中文字符串是否未走 t()。
+ *
+ * check-i18n 原只能校验「已写的 t() key 存在」，无法发现「JSX 直接写中文却不国际化」。
+ * 本规则在 .tsx（排除测试 / 注释 / 含 t() 调用行）中匹配 `>…中文…<` 形态的单行文本节点。
+ *
+ * @param file 渲染层 .tsx/.ts 文件绝对路径
+ * @returns 命中描述列表（文件:行号 + 片段）；无则空数组
+ */
+function collectHardcodedZhText(file: string): string[] {
+  if (!file.endsWith('.tsx')) return [];
+  const rel = relative(ROOT, file).split('\\').join('/');
+  if (rel.includes('/__tests__/') || rel.includes('/test/') || rel.endsWith('.test.tsx')) {
+    return [];
+  }
+  const content = readFileSync(file, 'utf8');
+  // 单行 JSX 文本节点：>…中文…< ；排除 {}、<>、=、+ 形似者（表达式/片段/箭头）。
+  // 中文用 BMP 范围 [\u4e00-\u9fff]，不依赖 unicode property escape（跨运行环境更稳）。
+  const nodeRe = />\s*[^<>{}=\r\n]*[\u4e00-\u9fff][^<>{}=\r\n]*</g;
+  const hits: string[] = [];
+  content.split('\n').forEach((line, idx) => {
+    const t = line.trim();
+    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+    if (/\bt\(/.test(line)) return; // 该行已含 i18n 调用，跳过避免误报
+    for (const m of line.matchAll(nodeRe)) {
+      hits.push(`  ${rel}:${idx + 1}  ${m[0].trim().slice(0, 60)}`);
+    }
+  });
+  return hits;
+}
+
 function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } {
   const dir = join(LOCALES, lang);
   // 资源文件内部含 "translation" 顶层（i18next 约定），config.ts 挂载 .translation 为命名空间
@@ -150,11 +181,22 @@ function main(): number {
     if (!used.has(k) && !dynamic) unused.push(`en common.${k} 未被引用`);
   }
 
+  // 4. JSX 中文文案未走 t()（盲区：原只校验已写的 t() key，查不出「直接写死中文」）
+  const hardcodedText: string[] = [];
+  for (const file of rendererFiles) hardcodedText.push(...collectHardcodedZhText(file));
+
   for (const p of missing) problems.push(`缺失: ${p}`);
   if (strict) for (const p of unused) problems.push(`冗余: ${p}`);
   else if (unused.length > 0) {
     console.warn(
       `[check-i18n] ⚠️ ${unused.length} 个冗余 key（死文案，--strict 时卡关；建议清理：${unused.slice(0, 3).join('、')}…）`,
+    );
+  }
+  if (strict) {
+    for (const p of hardcodedText) problems.push(`未国际化文案: ${p}`);
+  } else if (hardcodedText.length > 0) {
+    console.warn(
+      `[check-i18n] ⚠️ ${hardcodedText.length} 处 JSX 中文文案未走 t()（--strict 时卡关；建议迁移到 i18n：${hardcodedText[0].trim().slice(0, 60)}…）`,
     );
   }
 

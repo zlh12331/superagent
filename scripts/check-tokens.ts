@@ -61,6 +61,9 @@ const SPACE_UTIL_RE = /(?:^|\s)space-[xy]-[0-9.]+/g;
 // className 中的硬编码 hex 颜色
 const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/g;
 
+// className 中的硬编码 rgba()/rgb() 颜色（此前只查 #hex，rgba 色会漏网）
+const RGB_COLOR_RE = /rgba?\([^\n)]*\)/g;
+
 interface Violation {
   readonly file: string;
   readonly line: number;
@@ -121,6 +124,9 @@ function checkFile(file: string, violations: Violation[]): void {
     if (classMatch2 && !classMatch2[1].includes('var(--')) {
       for (const m of classMatch2[1].matchAll(HEX_COLOR_RE)) {
         violations.push({ file: rel, line: lineNo, rule: 'hex-color', detail: m[0] });
+      }
+      for (const m of classMatch2[1].matchAll(RGB_COLOR_RE)) {
+        violations.push({ file: rel, line: lineNo, rule: 'rgb-color', detail: m[0] });
       }
     }
   });
