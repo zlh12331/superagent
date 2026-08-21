@@ -7,7 +7,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ApiKeyProvider } from '@code-agent/shared/renderer';
-import { ChevronRight, X } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -44,14 +44,6 @@ export function AddModelDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t('settings.modelMgmt.addModelTitle')}</DialogTitle>
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground absolute right-4 top-4 size-6 cursor-pointer rounded transition-colors"
-            aria-label={t('common.close')}
-            onClick={onClose}
-          >
-            <X className="size-4" strokeWidth={1.5} />
-          </button>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-2 py-2">
