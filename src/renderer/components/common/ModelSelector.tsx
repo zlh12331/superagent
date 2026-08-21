@@ -135,7 +135,7 @@ export function ModelSelector({
         <span className="dot size-1.5 rounded-full bg-accent" />
         {hasConfiguredModels ? (
           <>
-            <span>{currentProvider}</span>
+            <span className="text-foreground">{currentProvider}</span>
             <span className="text-muted-foreground text-xs">· {currentModelName}</span>
           </>
         ) : (

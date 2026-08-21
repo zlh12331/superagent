@@ -100,7 +100,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
                   key={task.id ?? task.description}
                   className={cn(
                     'flex items-start gap-1.5 leading-relaxed',
-                    isDone && 'text-muted-foreground/60 line-through',
+                    isDone && 'text-muted-foreground line-through',
                     isActive && 'text-[var(--accent)]',
                     status === 'failed' && 'text-destructive',
                   )}
@@ -125,7 +125,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
           {t('panel.referencedFiles')}
         </div>
         {referencedFiles.length === 0 ? (
-          <div className="text-muted-foreground/60">{t('panel.noReferencedFiles')}</div>
+          <div className="text-muted-foreground">{t('panel.noReferencedFiles')}</div>
         ) : (
           <ul className="flex flex-col gap-1">
             {referencedFiles.map((filePath) => (

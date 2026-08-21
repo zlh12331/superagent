@@ -117,7 +117,7 @@ export function Topbar({
         >
           <Search className="size-3" strokeWidth={1.5} />
           <span>{t('topbar.commandPalette')}</span>
-          <kbd className="text-muted-foreground/70 font-mono text-[9px]">{paletteKbd}</kbd>
+          <kbd className="text-muted-foreground font-mono text-[9px]">{paletteKbd}</kbd>
         </button>
         {/* 设置按钮已删除（用户要求）：入口保留在命令面板与账户菜单 */}
         <Button

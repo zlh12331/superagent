@@ -672,7 +672,7 @@ body {
 }
 
 .sidebar-tab.active {
-  color: var(--aurora-accent);
+  color: var(--sidebar-foreground);
   background: var(--sidebar-accent);
   box-shadow: inset 0 0 0 1px var(--aurora-accent-glow);
 }
@@ -689,7 +689,7 @@ body {
 }
 
 .sidebar-tab.active .count {
-  color: var(--aurora-accent);
+  color: var(--sidebar-foreground);
   /* 徽章背景恒为 --bg（对齐参考项目 SidebarTabButton：bg-[var(--bg)]，仅文字色随激活变化） */
   background: var(--bg);
 }

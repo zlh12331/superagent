@@ -413,7 +413,7 @@ export function ChatPanel({
           <span
             className={cn(
               'text-foreground/90 min-w-0 flex-1 truncate text-xs',
-              goalPaused && 'text-muted-foreground/60 line-through',
+              goalPaused && 'text-muted-foreground line-through',
             )}
             title={currentGoal.condition}
           >
