@@ -4,9 +4,9 @@
     ".": {
       "entry": [
         "src/renderer/index.html",
-        "src/renderer/main.tsx",
         "src/renderer/test/setup.ts",
         "src/renderer/test/setup-lang.ts",
+        "src/**/*.test.{ts,tsx}",
         "**/vitest.config.ts",
         "scripts/**/*.ts",
         "e2e/**/*.ts",
@@ -19,7 +19,8 @@
         "src/**/*.css",
         "scripts/**/*.ts",
         "e2e/**/*.ts",
-        "*.{ts,js}"
+        "*.{ts,js}",
+        "!vitest.workspace.ts"
       ]
     }
   },
