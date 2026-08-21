@@ -93,7 +93,7 @@ flowchart LR
 
 ## 二、UI 设计体系（Aurora 2.0）
 
-唯一真源：[globals.css](../../src/renderer/styles/globals.css)（4496 行）。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
+唯一真源：[globals.css](../../src/renderer/styles/globals.css)（4224 行）。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
 
 ### 2.1 颜色总览（亮 / 暗两套）
 
