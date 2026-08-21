@@ -20,6 +20,16 @@ import type { ModelMessage } from 'ai';
 /** IPC 方法入参类型推导（mock 实现标注用） */
 type Req<M> = M extends (input: infer P) => unknown ? P : never;
 
+/** 运行时模型类型（从 listRuntimeModels 响应契约推导；避免依赖 renderer 单独导出） */
+type MockRuntimeModel = Extract<
+  Awaited<ReturnType<IpcApi['settings']['listRuntimeModels']>>,
+  { data: unknown }
+>['data'] extends { models: infer M }
+  ? M extends readonly (infer E)[]
+    ? E
+    : never
+  : never;
+
 /** 成功响应 */
 function ok<T>(data: T): { data: T } {
   return { data };
@@ -33,6 +43,26 @@ function fail(code: string, message: string): { error: { code: string; message: 
 // ── 内存假数据库 ──────────────────────────────────────────────
 
 const now = Date.now();
+
+// 运行时模型（可变状态：list/update/remove 联动，Web 预览下开关/删除实时生效）
+let mockRuntimeModels: MockRuntimeModel[] = [
+  {
+    modelId: 'my-coder',
+    providerKind: 'deepseek',
+    baseUrl: undefined,
+    displayName: '我的编码器',
+    isEnabled: true,
+    createdAt: 1,
+  },
+  {
+    modelId: 'local-gemma',
+    providerKind: 'ollama',
+    baseUrl: 'http://localhost:11434',
+    displayName: undefined,
+    isEnabled: false,
+    createdAt: 2,
+  },
+];
 
 const mockSessions: SessionMeta[] = [
   {
@@ -773,30 +803,17 @@ function createMockApi(): IpcApi {
       getApprovalMode: async () => ok({ mode: 'ask' }),
       setApprovalMode: async () => ok({ ok: true }),
       addRuntimeModel: async () => ok({ ok: true }),
-      updateRuntimeModel: async () => ok({ ok: true }),
-      removeRuntimeModel: async () => ok({ ok: true }),
-      // 浏览器模式演示数据：模型管理列表页行形态（展示名/启停）
-      listRuntimeModels: async () =>
-        ok({
-          models: [
-            {
-              modelId: 'my-coder',
-              providerKind: 'deepseek',
-              baseUrl: undefined,
-              displayName: '我的编码器',
-              isEnabled: true,
-              createdAt: 1,
-            },
-            {
-              modelId: 'local-gemma',
-              providerKind: 'ollama',
-              baseUrl: 'http://localhost:11434',
-              displayName: undefined,
-              isEnabled: false,
-              createdAt: 2,
-            },
-          ],
-        }),
+      updateRuntimeModel: async (input: Req<IpcApi['settings']['updateRuntimeModel']>) => {
+        const model = mockRuntimeModels.find((m) => m.modelId === input.modelId);
+        if (model !== undefined) model.isEnabled = input.isEnabled;
+        return ok({ ok: true });
+      },
+      removeRuntimeModel: async (modelId: Req<IpcApi['settings']['removeRuntimeModel']>) => {
+        mockRuntimeModels = mockRuntimeModels.filter((m) => m.modelId !== modelId);
+        return ok({ ok: true });
+      },
+      // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）
+      listRuntimeModels: async () => ok({ models: mockRuntimeModels }),
     },
 
     whitelist: {
