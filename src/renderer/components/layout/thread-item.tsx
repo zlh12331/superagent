@@ -180,34 +180,38 @@ function ThreadItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        {/* biome-ignore lint/a11y/useSemanticElements: 会话行同时承载右键菜单与双击重命名，div 组合语义优于 button 嵌套 */}
+        {/* 会话行：外层为定位/样式容器（普通 div，非可聚焦），交互由各自控件承载，
+            避免外层 role=button 包裹内部按钮造成嵌套交互（axe nested-interactive） */}
         <div
-          role="button"
-          tabIndex={0}
           className={cn(
             'thread-item',
             isActive && 'active',
             // I-S-001: 搜索防抖后匹配项添加临时高亮环（2 秒后由 Sidebar 清除）
             highlighted && 'ring-1 ring-[var(--accent)]/40',
           )}
-          onClick={onSelect}
-          onDoubleClick={() => setRenaming(true)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              onSelect();
-            }
-          }}
           aria-current={isActive ? 'page' : undefined}
         >
           <div className="ti-row">
-            {/* ti-dot：拖拽手柄（dnd-kit），hover 显示抓取光标；不参与点击选择（title 提供可访问说明） */}
+            {/* ti-dot：拖拽手柄（dnd-kit），独立可聚焦，不含选择交互（title 提供可访问说明） */}
             <span
               className="ti-dot cursor-grab active:cursor-grabbing"
               title={t('sidebar.dragSort')}
               {...dragHandleProps}
             />
-            <div className="ti-content">
+            {/* biome-ignore lint/a11y/useSemanticElements: 标题区含块级 div（ti-title/ti-meta），HTML button 内容模型不允许 div；用可聚焦 role=button 的 div，自身无嵌套可聚焦子（elm ti-content 内子元素非可聚焦） */}
+            <div
+              role="button"
+              tabIndex={0}
+              className="ti-content"
+              onClick={onSelect}
+              onDoubleClick={() => setRenaming(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelect();
+                }
+              }}
+            >
               {renaming ? (
                 // 内联重命名输入框（uncontrolled + key：切换标题时重置 defaultValue）
                 <input
