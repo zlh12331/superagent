@@ -57,9 +57,9 @@ function resolveClamp(cv: ClampValues, viewportWidth: number): number {
   return Math.max(cv.min, Math.min(cv.max, preferred));
 }
 
-// ── 安全回退值（仅在 CSS 变量缺失 / SSR 时使用） ──────────────────
-const SIDEBAR_FALLBACK: ClampValues = { min: 160, max: 480, preferredVw: 0.17 };
-const RIGHT_PANEL_FALLBACK: ClampValues = { min: 200, max: 560, preferredVw: 0.22 };
+// ── 安全回退值（仅在 CSS 变量缺失 / SSR 时使用；与 aurora.json 的 clamp 对齐） ──
+const SIDEBAR_FALLBACK: ClampValues = { min: 200, max: 280, preferredVw: 0.17 };
+const RIGHT_PANEL_FALLBACK: ClampValues = { min: 260, max: 360, preferredVw: 0.22 };
 
 /** 侧边栏宽度约束（从 CSS --sidebar-w 解析） */
 export function getSidebarClamp(): ClampValues {
