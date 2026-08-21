@@ -12,6 +12,7 @@
 // - 新增对应 IPC payload 类型映射（见 ./ipc/payloads.ts）
 // - 所有 schema 均为单一真源，主进程 IPC handler 用于校验入参，避免类型与 schema 双向漂移
 
+export * from './constants/defaults';
 // 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';

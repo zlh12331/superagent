@@ -11,6 +11,8 @@
 // - 能力元数据（reasoning / vision / contextWindowSize / fastOnly）驱动功能路由
 // ──────────────────────────────────────────────────────────────
 
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '@code-agent/shared/main';
+
 import type { ProviderKind } from '../providers/types';
 import type { ModelEntry } from './types';
 
@@ -181,7 +183,7 @@ export const BUILTIN_MODELS: readonly ModelEntry[] = [
  *   （避免双源维护导致 getModel 与 getAIProvider 路由分裂）
  */
 export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
-  deepseek: 'deepseek-v4-flash',
+  deepseek: DEFAULT_MODEL,
   openai: 'gpt-4o',
   anthropic: 'claude-sonnet-4-20250514',
   ollama: 'qwen2.5-coder:7b',
@@ -198,4 +200,4 @@ export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
  *
  * 单一真源：providers/registry.ts 的 isDefault 标记从此处派生。
  */
-export const DEFAULT_KIND: ProviderKind = 'deepseek';
+export const DEFAULT_KIND: ProviderKind = DEFAULT_PROVIDER;

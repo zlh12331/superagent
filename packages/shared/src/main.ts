@@ -10,6 +10,7 @@
 // preload（sandbox 沙箱）与渲染层（浏览器）应使用各自专用出口。
 // ──────────────────────────────────────────────────────────────
 
+export * from './constants/defaults';
 // 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';

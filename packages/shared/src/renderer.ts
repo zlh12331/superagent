@@ -11,6 +11,7 @@
 // 保持打包体积最小、依赖边界清晰（主进程专属逻辑不泄漏到浏览器环境）。
 // ──────────────────────────────────────────────────────────────
 
+export { DEFAULT_MODEL, DEFAULT_PROVIDER } from './constants/defaults';
 export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';

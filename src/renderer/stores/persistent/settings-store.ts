@@ -14,7 +14,12 @@
 // - 仅存储用户偏好，不存储敏感数据（API Key 由主进程 keychain 管理）
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider, ThinkingLevel } from '@code-agent/shared/renderer';
+import {
+  type ApiKeyProvider,
+  DEFAULT_MODEL,
+  DEFAULT_PROVIDER,
+  type ThinkingLevel,
+} from '@code-agent/shared/renderer';
 import { create } from 'zustand';
 
 /**
@@ -197,8 +202,8 @@ export function migrateShortcuts<T extends object>(state: T): T {
 const DEFAULT_SETTINGS: SettingsData = {
   theme: 'dark',
   ai: {
-    defaultProvider: 'deepseek',
-    defaultModel: 'deepseek-v4-flash',
+    defaultProvider: DEFAULT_PROVIDER,
+    defaultModel: DEFAULT_MODEL,
     temperature: 0.7,
     systemPrompt: '',
     thinking: 'high',
