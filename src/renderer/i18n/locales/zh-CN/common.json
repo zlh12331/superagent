@@ -360,19 +360,6 @@
         "beta": "Beta"
       },
       "sectionsAriaLabel": "设置分区导航",
-      "modelParams": {
-        "selection": "模型选择",
-        "parameters": "模型参数",
-        "defaultModel": "默认模型",
-        "defaultModelDesc": "聊天与 Agent 默认使用的模型 ID（如 deepseek-v4-flash）",
-        "temperature": "默认温度",
-        "thinking": "思考强度",
-        "thinkingDesc": "思考模型生效（off = 不注入，用模型默认档位）",
-        "thinkingOff": "off",
-        "thinkingLow": "low",
-        "thinkingMedium": "medium",
-        "thinkingHigh": "high"
-      },
       "whitelistTitle": "命令白名单",
       "whitelistHint": "白名单中的命令自动批准，无需每次审批（跨会话持久化）。",
       "whitelistEmpty": "暂无白名单条目",

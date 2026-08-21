@@ -360,19 +360,6 @@
         "beta": "Beta"
       },
       "sectionsAriaLabel": "Settings sections navigation",
-      "modelParams": {
-        "selection": "Model Selection",
-        "parameters": "Model Parameters",
-        "defaultModel": "Default Model",
-        "defaultModelDesc": "Default model ID for chat & agent (e.g. deepseek-v4-flash)",
-        "temperature": "Default Temperature",
-        "thinking": "Thinking Level",
-        "thinkingDesc": "Applies to reasoning models (off = model default)",
-        "thinkingOff": "off",
-        "thinkingLow": "low",
-        "thinkingMedium": "medium",
-        "thinkingHigh": "high"
-      },
       "whitelistTitle": "Command Whitelist",
       "whitelistHint": "Commands in the whitelist are approved automatically (persists across sessions).",
       "whitelistEmpty": "No whitelist entries",

@@ -805,11 +805,11 @@ function createMockApi(): IpcApi {
       addRuntimeModel: async () => ok({ ok: true }),
       updateRuntimeModel: async (input: Req<IpcApi['settings']['updateRuntimeModel']>) => {
         const model = mockRuntimeModels.find((m) => m.modelId === input.modelId);
-        if (model !== undefined) model.isEnabled = input.isEnabled;
+        if (model !== undefined) Object.assign(model, { isEnabled: input.isEnabled });
         return ok({ ok: true });
       },
-      removeRuntimeModel: async (modelId: Req<IpcApi['settings']['removeRuntimeModel']>) => {
-        mockRuntimeModels = mockRuntimeModels.filter((m) => m.modelId !== modelId);
+      removeRuntimeModel: async (input: Req<IpcApi['settings']['removeRuntimeModel']>) => {
+        mockRuntimeModels = mockRuntimeModels.filter((m) => m.modelId !== input.modelId);
         return ok({ ok: true });
       },
       // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）

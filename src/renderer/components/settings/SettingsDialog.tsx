@@ -22,7 +22,6 @@ import {
   Server as ServerIcon,
   Settings as SettingsIcon,
   ShieldCheck,
-  SlidersHorizontal,
   Smartphone,
   Sparkles,
   TerminalSquare,
@@ -40,7 +39,6 @@ import { BrowserSection } from './sections/browser-section';
 import { ExperimentalSection } from './sections/experimental-section';
 import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
-import { ModelParamsSection } from './sections/model-params-section';
 import { ModelsSection } from './sections/models-section';
 import {
   AccountSection,
@@ -73,7 +71,6 @@ type SectionId =
   | 'commands'
   | 'rules-memory'
   | 'models'
-  | 'model-params'
   | 'approval-mode'
   | 'mcp'
   | 'skills'
@@ -95,7 +92,7 @@ interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
-/** 导航分组（5 组 17 项，语义归组） */
+/** 导航分组（5 组 16 项，语义归组） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.accountGeneral',
@@ -111,8 +108,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       // 模型：模型管理列表页 + 弹窗（文档蓝图形态）
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
-      // 模型参数：全局默认模型/温度/思考强度（自模型 pane 拆出独立）
-      { id: 'model-params', labelKey: 'settings.nav.modelParams', icon: SlidersHorizontal },
       { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'plugins', labelKey: 'settings.nav.plugins', icon: Puzzle },
@@ -165,8 +160,6 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <RulesMemorySection />;
     case 'models':
       return <ModelsSection />;
-    case 'model-params':
-      return <ModelParamsSection />;
     case 'approval-mode':
       return <ApprovalModeSection />;
     case 'mcp':

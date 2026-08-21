@@ -52,8 +52,8 @@ describe('SettingsDialog 冒烟', () => {
     for (const label of ['账户与通用', '能力', '智能与行为', '实验', '关于']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
-    // 17 个导航 tab（模型 + 模型参数拆出独立；审批权限归智能与行为组）
-    expect(screen.getAllByRole('tab').length).toBe(17);
+    // 16 个导航 tab（模型 + 模型参数拆出独立；审批权限归智能与行为组）
+    expect(screen.getAllByRole('tab').length).toBe(16);
     // 默认分区 = 模型（tab 激活态 + 模型管理页面正常渲染）
     const modelsTab = screen.getByRole('tab', { name: '模型' });
     expect(modelsTab.getAttribute('aria-selected')).toBe('true');
