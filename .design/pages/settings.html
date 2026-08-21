@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440, initial-scale=1">
+  <title>设置 — Code Agent</title>
+  <link rel="stylesheet" href="../traework-tokens.css">
+  <style>
+    /* ════════════════════════════════════════════════════════
+       Supplementary component styles (not in token CSS)
+       All colors reference CSS variables from traework-tokens.css
+       ════════════════════════════════════════════════════════ */
+
+    /* App shell dimming when settings dialog is open */
+    .app-shell-dimmed {
+      filter: brightness(0.8);
+      pointer-events: none;
+    }
+
+    /* Settings dialog close button */
+    .settings-close-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      color: var(--text-tertiary);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .settings-close-btn:hover {
+      background: var(--bg-overlay-l1);
+      color: var(--text-default);
+    }
+
+    /* Settings nav icon wrapper */
+    .settings-nav-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Settings dialog footer */
+    .settings-dialog-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-neutral-l1);
+      flex-shrink: 0;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      border-radius: var(--radius-full);
+      background: var(--bg-base-tertiary);
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--bg-base-default);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+      transition: transform 0.2s ease;
+    }
+    .toggle.on {
+      background: var(--bg-brand);
+    }
+    .toggle.on::after {
+      transform: translateX(16px);
+    }
+
+    /* Segmented control */
+    .segmented {
+      display: inline-flex;
+      border: 1px solid var(--border-neutral-l2);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--bg-base-secondary);
+    }
+    .segmented-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      border: none;
+      background: transparent;
+      color: var(--text-tertiary);
+      font-size: var(--font-size-sm);
+      font-family: var(--font-family-default);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .segmented-item:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+    .segmented-item.active {
+      background: var(--bg-base-default);
+      color: var(--text-default);
+      font-weight: var(--font-weight-medium);
+      box-shadow: var(--glow-sm);
+    }
+
+    /* Select dropdown (static appearance) */
+    .settings-select {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 8px 4px 10px;
+      border: 1px solid var(--border-neutral-l2);
+      border-radius: var(--radius-md);
+      background: var(--bg-base-default);
+      color: var(--text-default);
+      font-size: var(--font-size-sm);
+      cursor: pointer;
+      min-width: 120px;
+    }
+    .settings-select-chevron {
+      color: var(--text-tertiary);
+      display: flex;
+      align-items: center;
+    }
+
+    /* Number input group */
+    .settings-input-group {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border-neutral-l2);
+      border-radius: var(--radius-md);
+      background: var(--bg-base-default);
+      overflow: hidden;
+    }
+    .settings-input-group input {
+      border: none;
+      background: transparent;
+      outline: none;
+      padding: 4px 8px;
+      width: 48px;
+      text-align: center;
+      color: var(--text-default);
+      font-size: var(--font-size-sm);
+      font-family: var(--font-family-mono);
+    }
+    .settings-input-suffix {
+      padding-right: 8px;
+      color: var(--text-tertiary);
+      font-size: var(--font-size-xs);
+      font-family: var(--font-family-mono);
+    }
+
+    /* Welcome placeholder (empty main area) */
+    .welcome-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 8px;
+    }
+    .welcome-placeholder-text {
+      font-size: var(--font-size-sm);
+      color: var(--text-tertiary);
+    }
+
+    /* Sidebar foot user chip */
+    .sidebar-user-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius-md);
+    }
+    .sidebar-user-avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--bg-brand);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: var(--font-weight-strong);
+      color: var(--text-onbrand);
+      flex-shrink: 0;
+    }
+    .sidebar-user-name {
+      font-size: var(--font-size-sm);
+      color: var(--text-default);
+    }
+    .sidebar-user-plan {
+      margin-left: auto;
+      font-size: var(--font-size-2xs);
+      color: var(--text-tertiary);
+    }
+
+    /* Topbar avatar */
+    .topbar-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--bg-overlay-l2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: var(--font-weight-strong);
+      color: var(--text-secondary);
+    }
+    .topbar-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border-neutral-l2);
+      margin: 0 4px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     App Shell (dimmed behind settings dialog)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="app app-shell-dimmed">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-name">Trae<span>work</span></div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <button class="icon-btn" title="历史">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+        <path d="M12 7v5l4 2"/>
+      </svg>
+    </button>
+    <button class="icon-btn" title="通知">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+      </svg>
+    </button>
+    <button class="icon-btn" title="设置">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+    <div class="topbar-divider"></div>
+    <div class="topbar-avatar">U</div>
+  </div>
+
+  <!-- View: sidebar + empty main area (welcome mode) -->
+  <div class="view-chat welcome-mode">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-head">
+        <button class="new-thread-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/><path d="M12 5v14"/>
+          </svg>
+          新建对话
+        </button>
+        <div class="sidebar-search">
+          <span class="sidebar-search-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.3-4.3"/>
+            </svg>
+          </span>
+          <input class="sidebar-search-input" placeholder="搜索对话..." disabled>
+        </div>
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active">全部</button>
+          <button class="sidebar-tab">置顶</button>
+        </div>
+      </div>
+
+      <div class="sidebar-list">
+        <div class="thread-group-label">今天</div>
+        <div class="thread-item active">
+          <div class="ti-row">
+            <span class="ti-dot" style="background: var(--bg-brand);"></span>
+            <div class="ti-content">
+              <div class="ti-title">重构认证模块</div>
+              <div class="ti-meta">2 分钟前</div>
+            </div>
+          </div>
+        </div>
+        <div class="thread-item">
+          <div class="ti-row">
+            <span class="ti-dot"></span>
+            <div class="ti-content">
+              <div class="ti-title">修复数据库连接池泄漏</div>
+              <div class="ti-meta">1 小时前</div>
+            </div>
+          </div>
+        </div>
+        <div class="thread-item">
+          <div class="ti-row">
+            <span class="ti-dot"></span>
+            <div class="ti-content">
+              <div class="ti-title">API 速率限制中间件</div>
+              <div class="ti-meta">3 小时前</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="thread-group-label">昨天</div>
+        <div class="thread-item">
+          <div class="ti-row">
+            <span class="ti-dot"></span>
+            <div class="ti-content">
+              <div class="ti-title">E2E 测试套件搭建</div>
+              <div class="ti-meta">昨天 14:30</div>
+            </div>
+          </div>
+        </div>
+        <div class="thread-item">
+          <div class="ti-row">
+            <span class="ti-dot"></span>
+            <div class="ti-content">
+              <div class="ti-title">CI/CD 流水线优化</div>
+              <div class="ti-meta">昨天 10:15</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="thread-group-label">本周</div>
+        <div class="thread-item">
+          <div class="ti-row">
+            <span class="ti-dot"></span>
+            <div class="ti-content">
+              <div class="ti-title">组件库迁移到设计系统</div>
+              <div class="ti-meta">周一</div>
+            </div>
+          </div>
+        </div>
+        <div class="thread-item">
+          <div class="ti-row">
+            <span class="ti-dot"></span>
+            <div class="ti-content">
+              <div class="ti-title">暗色主题适配</div>
+              <div class="ti-meta">周日</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-foot">
+        <div class="sidebar-user-chip">
+          <div class="sidebar-user-avatar">U</div>
+          <span class="sidebar-user-name">用户</span>
+          <span class="sidebar-user-plan">Pro</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resizer -->
+    <div class="resizer"></div>
+
+    <!-- Main area (empty) -->
+    <div class="thread-bg">
+      <div class="welcome-placeholder">
+        <div class="welcome-placeholder-text">选择一个对话或新建对话开始</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     Settings Overlay + Dialog
+     ═══════════════════════════════════════════════════════════ -->
+<div class="settings-overlay">
+  <div class="settings-dialog">
+
+    <!-- Header -->
+    <div class="settings-dialog-header">
+      <span class="settings-dialog-title">设置</span>
+      <button class="settings-close-btn" title="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"/>
+          <path d="m6 6 12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="settings-dialog-body">
+
+      <!-- Left sidebar: navigation -->
+      <div class="settings-dialog-sidebar">
+
+        <div class="settings-nav-item active">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </span>
+          通用
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+              <path d="M2 12h20"/>
+            </svg>
+          </span>
+          模型供应商
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+              <path d="m15 5 4 4"/>
+            </svg>
+          </span>
+          编辑器
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+            </svg>
+          </span>
+          审批模式
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22v-5"/>
+              <path d="M9 8V2"/>
+              <path d="M15 8V2"/>
+              <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>
+            </svg>
+          </span>
+          MCP 工具
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+              <path d="M20 3v4"/>
+              <path d="M22 5h-4"/>
+              <path d="M4 17v2"/>
+              <path d="M5 18H3"/>
+            </svg>
+          </span>
+          Skills 技能
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </span>
+          IM 渠道
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5a3 3 0 1 0-5.997.142 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+              <path d="M12 5a3 3 0 1 1 5.997.142 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+              <path d="M17.599 6.5a4 4 0 0 0-2.326-2.675A3.5 3.5 0 0 0 12 3"/>
+            </svg>
+          </span>
+          规则与记忆
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" x2="18" y1="20" y2="10"/>
+              <line x1="12" x2="12" y1="20" y2="4"/>
+              <line x1="6" x2="6" y1="20" y2="16"/>
+            </svg>
+          </span>
+          遥测
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 8h.01"/>
+              <path d="M12 12h.01"/>
+              <path d="M14 8h.01"/>
+              <path d="M16 12h.01"/>
+              <path d="M18 8h.01"/>
+              <path d="M6 8h.01"/>
+              <path d="M7 16h10"/>
+              <path d="M8 12h.01"/>
+              <rect width="20" height="16" x="2" y="4" rx="2"/>
+            </svg>
+          </span>
+          快捷键
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/>
+              <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
+              <path d="M3 12A9 3 0 0 0 21 12"/>
+            </svg>
+          </span>
+          数据
+        </div>
+
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4"/>
+              <path d="M12 8h.01"/>
+            </svg>
+          </span>
+          关于
+        </div>
+
+      </div>
+
+      <!-- Right content: 通用 settings -->
+      <div class="settings-dialog-content">
+        <div class="settings-section-title">通用设置</div>
+
+        <!-- 1. Language -->
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-name">界面语言</span>
+            <span class="settings-row-desc">应用界面显示语言</span>
+          </div>
+          <div class="settings-select">
+            <span>中文</span>
+            <span class="settings-select-chevron">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+
+        <!-- 2. Theme -->
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-name">主题</span>
+            <span class="settings-row-desc">深色/浅色/跟随系统</span>
+          </div>
+          <div class="segmented">
+            <button class="segmented-item active">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+              </svg>
+              深色
+            </button>
+            <button class="segmented-item">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2"/>
+                <path d="M12 20v2"/>
+                <path d="m4.93 4.93 1.41 1.41"/>
+                <path d="m17.66 17.66 1.41 1.41"/>
+                <path d="M2 12h2"/>
+                <path d="M20 12h2"/>
+                <path d="m6.34 17.66-1.41 1.41"/>
+                <path d="m19.07 4.93-1.41 1.41"/>
+              </svg>
+              浅色
+            </button>
+            <button class="segmented-item">系统</button>
+          </div>
+        </div>
+
+        <!-- 3. Font size -->
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-name">编辑器字号</span>
+            <span class="settings-row-desc">消息区和编辑器文字大小</span>
+          </div>
+          <div class="settings-input-group">
+            <input type="text" value="14" readonly>
+            <span class="settings-input-suffix">px</span>
+          </div>
+        </div>
+
+        <!-- 4. Scanlines (off) -->
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-name">扫描线效果</span>
+            <span class="settings-row-desc">实验性视觉叠加</span>
+          </div>
+          <button class="toggle" aria-label="扫描线效果"></button>
+        </div>
+
+        <!-- 5. Telemetry (on, purple) -->
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-name">遥测上报</span>
+            <span class="settings-row-desc">Sentry + OpenTelemetry 错误监控</span>
+          </div>
+          <button class="toggle on" aria-label="遥测上报"></button>
+        </div>
+
+        <!-- 6. Auto-update (on) -->
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-name">自动更新</span>
+            <span class="settings-row-desc">检查并安装新版本</span>
+          </div>
+          <button class="toggle on" aria-label="自动更新"></button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="settings-dialog-footer">
+      <button class="btn ghost">取消</button>
+      <button class="btn primary">保存</button>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

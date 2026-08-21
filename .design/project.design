@@ -1,0 +1,79 @@
+{
+  "data": [
+    {
+      "id": "page-main-chat",
+      "title": "主聊天界面",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1724254800000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-a0d2b59e",
+          "measuredAt": 1787315641931
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/main-chat.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-welcome",
+      "title": "欢迎页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1724254800000,
+      "canvasData": {
+        "x": 480,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-ff039de3",
+          "measuredAt": 1787315641931
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/welcome.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings",
+      "title": "设置对话框",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1724254800000,
+      "canvasData": {
+        "x": 960,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-fcf1a31f",
+          "measuredAt": 1787315641931
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "Code Agent Desktop 设计稿",
+    "visualEditorEnabled": true
+  }
+}

@@ -1,112 +1,125 @@
 /* ⚠️ 生成文件（Style Dictionary）——请勿手改；修改 tokens/aurora.json 后运行 pnpm tokens:build */
 :root {
-  /* 布局尺寸 — clamp() 实现响应式宽度约束 */
-  --sidebar-w: clamp(200px, 17vw, 280px);
-  --right-panel-w: clamp(260px, 22vw, 360px);
+  /* 布局尺寸 — clamp() 实现响应式宽度约束，拖拽时由 JS 动态覆盖为 px 值 */
+  --sidebar-w: clamp(160px, 17vw, 480px);
+  --right-panel-w: clamp(200px, 22vw, 560px);
   --resizer-w: 0px;
   --drawer-w: 540px;
   --topbar-h: 52px;
   /* z-index 层级体系 — 从低到高，确保所有浮层层级一致 */
   --z-base: 1;
-  /* 浮起内容（状态条/滚动按钮等盖住氛围层） */
-  --z-raised: 100;
-  /* 下拉/悬浮层（DropdownMenu/Popover/Tooltip） */
-  --z-dropdown: 1000;
-  /* 模态遮罩（Dialog/命令面板） */
-  --z-modal: 2000;
   --sans: var(--font-sans);
   --serif: var(--font-serif);
-  /* 字号阶梯 — 6 级（对齐参考项目 --font-size-*） */
+  /* 字号阶梯 — 6 级 */
   --font-size-2xs: 10px;
   --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-base: 13px;
   --font-size-md: 14px;
   --font-size-lg: 16px;
-  /* 圆角 — 对齐参考项目 0.625rem (10px) */
-  --radius: 0.625rem;
-  /* —— 3 层背景深度（亮色，对齐参考项目）—— */
-  --bg: #f7f8fa;;
-  /* L1 侧栏 / 顶栏 / 卡片层 */
-  --bg-elev: #ffffff;;
-  /* L2 悬浮输入区 / 卡片区 / 悬停态 */
-  --bg-elev-2: #eef0f4;;
-  /* L3 激活态 / 强调容器 */
-  --bg-elev-3: #e0e4ec;;
-  /* 兼容别名：原 --bg-elev-4 已废弃，指向 --bg-elev-3 避免破坏旧引用 */
-  --bg-elev-4: var(--bg-elev-3);;
+  /* 圆角 — TraeWork 默认容器圆角 --radius-8 */
+  --radius: 8px;
+  /* 页面基底色 — TraeWork --bg-base-default */
+  --bg: #FFFFFF;
+  /* L1 侧栏 / 顶栏 / 卡片层 — TraeWork --bg-base-secondary */
+  --bg-elev: #F5F5F5;
+  /* L2 悬浮输入区 / 卡片区 / 悬停态 — TraeWork --bg-base-tertiary */
+  --bg-elev-2: #E5E5E5;
+  /* L3 激活态 / 强调容器 — TraeWork --brand-grey-300 */
+  --bg-elev-3: #D4D4D4;
+  /* 兼容别名：指向 --bg-elev-3 避免破坏旧引用 */
+  --bg-elev-4: var(--bg-elev-3);
   /* shadcn 标准背景映射 */
   --background: var(--bg);
-  --foreground: #1a2130;
+  --foreground: #171717;
   --card: var(--bg-elev);
-  --card-foreground: #1a2130;
+  --card-foreground: #171717;
   --popover: var(--bg-elev);
-  --popover-foreground: #1a2130;
-  /* 描边：两级 */
-  --border: #e1e4eb;
-  --border-strong: #cbd0db;
+  --popover-foreground: #171717;
+  /* 描边：两级 — TraeWork --border-neutral-l1 */
+  --border: rgba(115, 115, 115, 0.12);
+  /* TraeWork --border-neutral-l2 */
+  --border-strong: rgba(115, 115, 115, 0.18);
   --input: var(--border);
-  /* 文字：三级明度 */
-  --text: #1a2130;;
-  /* 双 accent：青绿（主）+ 蓝色（辅），对齐参考项目 */
-  --accent: #00b89e;
-  --accent-dim: #009a82;
-  --accent-2: #2b7fff;;
+  /* 文字主色 — TraeWork --text-default */
+  --text: #171717;
+  /* TraeWork --text-secondary */
+  --text-secondary: #404040;
+  /* TraeWork --text-tertiary */
+  --text-tertiary: #737373;
+  /* 兼容别名 — 指向 --text-secondary */
+  --text-dim: #404040;
+  /* TraeWork --text-disabled */
+  --text-faint: #A1A1A1;
+  /* shadcn muted-foreground — TraeWork --text-tertiary */
+  --muted-foreground: #737373;
+  /* 品牌色上的前景色 — TraeWork --text-onbrand */
+  --on-accent: #FFFFFF;
+  /* 品牌主色 — TraeWork --bg-brand */
+  --accent: #4B3FE3;
+  /* TraeWork --bg-brand-active */
+  --accent-dim: #3F31C6;
+  /* 辅助色 — TraeWork --accent-blue */
+  --accent-2: #3F85FF;
   --primary-foreground: var(--on-accent);
   --ring: var(--accent);
   --secondary: var(--bg-elev-2);
   --secondary-foreground: var(--text);
   --muted: var(--bg-elev-2);
   --accent-foreground: var(--muted-foreground);
-  /* accent 氛围色 */
-  --accent-glow: rgba(0, 184, 158, 0.15);
-  --accent-soft: rgba(0, 184, 158, 0.08);
-  --accent-2-glow: rgba(43, 127, 255, 0.12);
-  --accent-2-soft: rgba(43, 127, 255, 0.06);
-  --info-blue: rgba(43, 127, 255, 0.1);
-  --info-amber: rgba(232, 144, 56, 0.12);
-  --error-bg: rgba(197, 48, 48, 0.08);
-  /* 多级发光阴影（亮色降低不透明度，仅做润色） */
-  --glow-sm: 0 0 8px rgba(0, 184, 158, 0.14);
-  --glow-md: 0 0 16px rgba(0, 184, 158, 0.14), 0 0 36px rgba(0, 184, 158, 0.05);
-  --glow-lg: 0 0 24px rgba(0, 184, 158, 0.18), 0 0 70px rgba(0, 184, 158, 0.08);
-  --glow-2-sm: 0 0 8px rgba(43, 127, 255, 0.14);
-  --glow-2-md: 0 0 16px rgba(43, 127, 255, 0.16), 0 0 36px rgba(43, 127, 255, 0.06);
-  /* 背景纹理：网格线 / 扫描线 / 噪点 */
-  --grid-line: rgba(0, 0, 0, 0.025);
-  --scan-line: rgba(0, 0, 0, 0.012);
-  --noise-opacity: 0.015;
-  --noise-blend: multiply;
-  /* 语义色 */
-  --amber: #e89038;
-  --amber-dim: #d07828;
-  --amber-glow: rgba(232, 144, 56, 0.15);
+  /* 品牌色氛围色（柔和、无发光 — TraeWork quiet by default） */
+  --accent-glow: rgba(75, 63, 227, 0.08);
+  --accent-soft: rgba(75, 63, 227, 0.04);
+  --accent-2-glow: rgba(63, 133, 255, 0.08);
+  --accent-2-soft: rgba(63, 133, 255, 0.04);
+  --info-blue: rgba(63, 133, 255, 0.08);
+  --info-amber: rgba(226, 121, 0, 0.10);
+  --error-bg: rgba(232, 70, 58, 0.08);
+  /* 柔和阴影（替代发光 — TraeWork 无 glow） */
+  --glow-sm: 0 1px 3px rgba(115, 115, 115, 0.08);
+  --glow-md: 0 4px 12px rgba(115, 115, 115, 0.06), 0 0 0 1px rgba(115, 115, 115, 0.04);
+  --glow-lg: 0 8px 24px rgba(115, 115, 115, 0.04);
+  --glow-2-sm: 0 1px 3px rgba(115, 115, 115, 0.06);
+  --glow-2-md: 0 4px 12px rgba(115, 115, 115, 0.04), 0 0 0 1px rgba(115, 115, 115, 0.03);
+  /* 背景纹理：TraeWork 无装饰背景，纹理关闭 */
+  --grid-line: transparent;
+  --scan-line: transparent;
+  --noise-opacity: 0;
+  --noise-blend: normal;
+  /* 语义色 — TraeWork --status-warning-default */
+  --amber: #E27900;
+  /* TraeWork --status-warning-active */
+  --amber-dim: #C46F11;
+  --amber-glow: rgba(226, 121, 0, 0.10);
   --warning: var(--amber);
   --warn: var(--amber);
-  --error: #c53030;
+  /* TraeWork --status-error-default */
+  --error: #E8463A;
   --destructive: var(--error);
-  --destructive-foreground: #ffffff;
-  --magenta: #a855f7;
-  --success: #00d9c0;
+  --destructive-foreground: #FFFFFF;
+  /* TraeWork --accent-violet */
+  --magenta: #9570FF;
+  /* TraeWork --status-success-default */
+  --success: #15A877;
   /* 图表色 */
   --chart-1: var(--accent);
   --chart-2: var(--accent-2);
   --chart-3: var(--amber);
   --chart-4: var(--success);
   --chart-5: var(--error);
-  /* 消息气泡 */
-  --msg-bubble-user: #e8edf5;
+  /* 消息气泡 — TraeWork --bg-base-secondary */
+  --msg-bubble-user: #F5F5F5;
   --msg-bubble-assistant: transparent;
-  /* 兼容别名：旧 --user-bubble 指向 --msg-bubble-user */
+  /* 兼容别名 */
   --user-bubble: var(--msg-bubble-user);
   /* 遮罩 / 玻璃 */
-  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --overlay-bg: rgba(0, 0, 0, 0.25);
   --overlay-blur: 8px;
-  --drawer-overlay: rgba(245, 247, 250, 0.55);
-  --glass-bg: rgba(255, 255, 255, 0.78);
+  --drawer-overlay: rgba(245, 245, 245, 0.55);
+  --glass-bg: rgba(255, 255, 255, 0.85);
   /* 滚动条令牌 */
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  --scrollbar-thumb: rgba(115, 115, 115, 0.15);
+  --scrollbar-thumb-hover: rgba(115, 115, 115, 0.25);
   /* 侧边栏（与 L1 同色） */
   --sidebar: var(--bg-elev);
   --sidebar-foreground: var(--text);
@@ -116,21 +129,23 @@
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--accent);
-  /* 字体族 */
-  --font-sans: "Bricolage Grotesque", "Bricolage Grotesque Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Instrument Serif", Georgia, "Songti SC", serif;
-  --font-mono: "Martian Mono", "Martian Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* 字体族 — TraeWork --font-family-default */
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* TraeWork --font-family-heading（用于标题） */
+  --font-serif: "SF Pro", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* TraeWork --font-family-mono */
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* 旧字号别名（兼容已有组件代码） */
   --fs-2xs: 10px;
   --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-md: 13px;
-  --fs-base: 15px;
+  --fs-base: 14px;
   --fs-lg: 16px;
   --fs-xl: 18px;
   --fs-2xl: 22px;
   --fs-3xl: 28px;
-  /* 16px 呼吸感间距基线 */
+  /* 间距基线 — TraeWork --spacer 体系 */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -138,15 +153,15 @@
   --sp-5: 24px;
   --sp-6: 32px;
   --sp-7: 48px;
-  /* 阴影体系 — 对齐参考项目 */
-  --shadow-elev: 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
-  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--accent-glow);
-  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.1);
-  /* 扩展阴影（保留以兼容已有组件） */
+  /* 阴影体系 — TraeWork 中性阴影 */
+  --shadow-elev: 0 4px 16px rgba(115, 115, 115, 0.08), 0 0 0 1px rgba(115, 115, 115, 0.04);
+  --shadow-modal: 0 16px 48px rgba(115, 115, 115, 0.12), 0 0 0 1px rgba(115, 115, 115, 0.06);
+  --shadow-dropdown: 0 8px 24px rgba(115, 115, 115, 0.1);
+  /* 扩展阴影（兼容已有组件） */
   --shadow-pop: var(--shadow-dropdown);
-  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.08);
-  --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
-  /* 动效缓动函数 */
+  --shadow-card: 0 2px 10px rgba(115, 115, 115, 0.06);
+  --shadow-card-hover: 0 12px 32px rgba(115, 115, 115, 0.1), 0 0 0 1px rgba(115, 115, 115, 0.04);
+  /* 动效缓动函数 — TraeWork 120ms hover / 200ms state / 300ms reveal */
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-paper: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -161,6 +176,7 @@
   --text-primary: var(--text);
   --bg-ter: var(--bg-elev-2);
   --danger: var(--error);
+  /* 兼容别名 — 指向 TraeWork 品牌色 */
   --aurora-accent: var(--accent);
   --aurora-accent-2: var(--accent-2);
   --aurora-accent-glow: var(--accent-glow);
@@ -169,7 +185,7 @@
   --aurora-glow-md: var(--glow-md);
   /* 玻璃质感 - 顶栏背景（半透明 + 模糊） */
   --aurora-glass-bg: var(--glass-bg);
-  /* 布局尺寸别名（指向主题无关的统一布局令牌） */
+  /* 布局尺寸别名 */
   --aurora-sidebar-w: var(--sidebar-w);
   --aurora-right-panel-w: var(--right-panel-w);
   --aurora-resizer-w: var(--resizer-w);
@@ -180,63 +196,74 @@
 }
 
 .dark {
-  /* —— 3 层背景深度（亮色，对齐参考项目）—— */
-  --bg: #080b10;;
-  /* L1 侧栏 / 顶栏 / 卡片层 */
-  --bg-elev: #0e1319;;
-  /* L2 悬浮输入区 / 卡片区 / 悬停态 */
-  --bg-elev-2: #141a23;;
-  /* L3 激活态 / 强调容器 */
-  --bg-elev-3: #1a2130;;
-  --foreground: #e8edf4;
-  --card-foreground: #e8edf4;
-  --popover-foreground: #e8edf4;
-  /* 描边：两级 */
-  --border: #1c2330;
-  --border-strong: #2d3848;
-  /* 文字：三级明度 */
-  --text: #e8edf4;;
-  /* 双 accent：青绿（主）+ 蓝色（辅），对齐参考项目 */
-  --accent: #00e5c7;
-  --accent-dim: #00b89e;
-  --accent-2: #4a9eff;;
-  /* accent 氛围色 */
-  --accent-glow: rgba(0, 229, 199, 0.15);
-  --accent-soft: rgba(0, 229, 199, 0.06);
-  --accent-2-glow: rgba(74, 158, 255, 0.16);
-  --accent-2-soft: rgba(74, 158, 255, 0.07);
-  --info-blue: rgba(74, 158, 255, 0.12);
-  --info-amber: rgba(255, 193, 7, 0.15);
-  --error-bg: rgba(255, 107, 107, 0.1);
-  /* 多级发光阴影（亮色降低不透明度，仅做润色） */
-  --glow-sm: 0 0 8px rgba(0, 229, 199, 0.22);
-  --glow-md: 0 0 18px rgba(0, 229, 199, 0.24), 0 0 44px rgba(0, 229, 199, 0.08);
-  --glow-lg: 0 0 28px rgba(0, 229, 199, 0.32), 0 0 90px rgba(0, 229, 199, 0.14);
-  --glow-2-sm: 0 0 8px rgba(74, 158, 255, 0.25);
-  --glow-2-md: 0 0 18px rgba(74, 158, 255, 0.28), 0 0 44px rgba(74, 158, 255, 0.1);
-  /* 背景纹理：网格线 / 扫描线 / 噪点 */
-  --grid-line: rgba(255, 255, 255, 0.015);
-  --scan-line: rgba(255, 255, 255, 0.008);
-  --noise-opacity: 0.025;
-  --noise-blend: overlay;
-  /* 语义色 */
-  --amber: #ffb454;
-  --amber-dim: #e89038;
-  --amber-glow: rgba(255, 180, 84, 0.12);
-  --error: #ff6b6b;
-  --magenta: #e879f9;
-  /* 消息气泡 */
-  --msg-bubble-user: #1a2332;
+  /* 页面基底色 — TraeWork --bg-base-default */
+  --bg: #0A0A0A;
+  /* L1 侧栏 / 顶栏 / 卡片层 — TraeWork --bg-base-secondary */
+  --bg-elev: #171717;
+  /* L2 悬浮输入区 / 卡片区 / 悬停态 — TraeWork --bg-base-tertiary */
+  --bg-elev-2: #262626;
+  /* L3 激活态 / 强调容器 — TraeWork --brand-grey-300 */
+  --bg-elev-3: #404040;
+  --foreground: #F5F5F5;
+  --card-foreground: #F5F5F5;
+  --popover-foreground: #F5F5F5;
+  /* 描边：两级 — TraeWork --border-neutral-l1 */
+  --border: rgba(255, 255, 255, 0.12);
+  /* TraeWork --border-neutral-l2 */
+  --border-strong: rgba(255, 255, 255, 0.18);
+  /* 文字主色 — TraeWork --text-default */
+  --text: #F5F5F5;
+  /* TraeWork --text-secondary */
+  --text-secondary: #D4D4D4;
+  /* TraeWork --text-tertiary */
+  --text-tertiary: #A1A1A1;
+  /* 兼容别名 — 指向 --text-secondary */
+  --text-dim: #D4D4D4;
+  /* TraeWork --text-disabled */
+  --text-faint: #737373;
+  /* shadcn muted-foreground — TraeWork --text-tertiary */
+  --muted-foreground: #A1A1A1;
+  /* 品牌主色 — TraeWork --bg-brand */
+  --accent: #6A6FFF;
+  /* TraeWork --bg-brand-active */
+  --accent-dim: #4B3FE3;
+  /* 辅助色 — TraeWork --accent-blue */
+  --accent-2: #4C88FF;
+  /* 品牌色氛围色（柔和、无发光 — TraeWork quiet by default） */
+  --accent-glow: rgba(106, 111, 255, 0.12);
+  --accent-soft: rgba(106, 111, 255, 0.06);
+  --accent-2-glow: rgba(76, 136, 255, 0.12);
+  --accent-2-soft: rgba(76, 136, 255, 0.06);
+  --info-blue: rgba(76, 136, 255, 0.12);
+  --info-amber: rgba(243, 154, 53, 0.12);
+  --error-bg: rgba(234, 87, 76, 0.10);
+  /* 柔和阴影（替代发光 — TraeWork 无 glow） */
+  --glow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --glow-md: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --glow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --glow-2-sm: 0 1px 3px rgba(0, 0, 0, 0.15);
+  --glow-2-md: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  /* 语义色 — TraeWork --status-warning-default */
+  --amber: #F39A35;
+  /* TraeWork --status-warning-active */
+  --amber-dim: #E27900;
+  --amber-glow: rgba(243, 154, 53, 0.12);
+  /* TraeWork --status-error-default */
+  --error: #EA574C;
+  /* TraeWork --accent-violet */
+  --magenta: #B655FC;
+  /* 消息气泡 — TraeWork --bg-base-secondary */
+  --msg-bubble-user: #262626;
   /* 遮罩 / 玻璃 */
   --overlay-bg: rgba(0, 0, 0, 0.5);
-  --drawer-overlay: rgba(8, 11, 16, 0.55);
-  --glass-bg: rgba(10, 15, 25, 0.72);
+  --drawer-overlay: rgba(10, 10, 10, 0.55);
+  --glass-bg: rgba(23, 23, 23, 0.85);
   /* 滚动条令牌 */
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
-  /* 阴影体系 — 对齐参考项目 */
+  /* 阴影体系 — TraeWork 中性阴影 */
   --shadow-elev: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
-  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-glow);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02);
   --shadow-dropdown: 0 12px 36px rgba(0, 0, 0, 0.5);
   --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.3);
   --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);

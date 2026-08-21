@@ -9,17 +9,17 @@
 }
 
 /* src/renderer/styles/globals.css
-   Aurora 设计系统 2.0 · 设计令牌
+   TraeWork 设计系统 · 设计令牌
    ──────────────────────────────────────────────────────────────
-   设计哲学（对齐原型 docs/prototype/prototype-v2.html 与参考项目）：
-   - 双 accent 系统：青绿（主）+ 蓝色（辅）
-   - 3 层背景深度 + 多级发光（glow-sm / glow-md / glow-lg）
+   设计哲学（对齐 TraeWork Design Library）：
+   - 品牌色：紫色 #4B3FE3（--bg-brand），稀缺使用
+   - 中性灰表面体系：白 → 浅灰 → 灰 → 深灰
    - 6 级字号阶梯：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-*）
      兼容旧 7 级 --fs-* 别名
    - 暗色 / 亮色双主题，通过 <html class="dark"> 切换
-   - 页面氛围层：双 accent 渐变光晕 + 精细技术网格 + 扫描线 + SVG 噪点
+   - Quiet by default：无装饰背景、无发光氛围、无噪点纹理
+   - 中性阴影替代发光效果
    - 完整 z-index 层级体系（--z-base 到 --z-boundary）
-   - 目标：Linear / Arc 级别的高端深色 UI
    ────────────────────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────────────────────
@@ -27,11 +27,11 @@
    ────────────────────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────────────────────
-   亮色主题（默认）· Aurora Light
+   亮色主题（默认）· TraeWork Light
    ────────────────────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────────────────────
-   暗色主题（.dark 类切换）· Aurora Dark（默认推荐）
+   暗色主题（.dark 类切换）· TraeWork Dark
    ────────────────────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* 扩展颜色（Aurora 设计系统专属） */
+  /* 扩展颜色（TraeWork 设计系统） */
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-error: var(--error);
@@ -107,12 +107,12 @@
   --color-accent-glow: var(--accent-glow);
   --color-accent-soft: var(--accent-soft);
   /*
-   * 品牌强调色（--accent 青绿色）上的前景色 token。
+   * 品牌强调色（--accent 紫色 #4B3FE3）上的前景色 token。
    *
    * 注意：shadcn 语义的 --color-accent / --color-accent-foreground 指悬停背景色，
-   * 与项目自定义的 --accent（青绿色品牌色）是不同概念。
+   * 与项目自定义的 --accent（紫色品牌色）是不同概念。
    * 此处 --color-on-accent 专用于「在 --accent 背景上的文字/图标颜色」，
-   * 浅色与深色主题统一使用 #001814（深青色），对比度约 7.6:1，通过 WCAG AA。
+   * 浅色与深色主题统一使用 #FFFFFF，对比度通过 WCAG AA。
    *
    * 用法：Tailwind 工具类 text-on-accent / bg-on-accent / border-on-accent
    */
@@ -149,55 +149,12 @@ body {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   页面氛围层 1：双 accent 渐变光晕 + 精细技术网格 + 扫描线
-   对齐原型 docs/prototype/prototype-v2.html body::before
+   TraeWork：Quiet by default — 无装饰背景层
+   原 Aurora 氛围层（渐变光晕 / 网格线 / 扫描线 / 噪点）已移除
    ────────────────────────────────────────────────────────────── */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 55% 45% at 12% -5%, var(--accent-glow), transparent 62%),
-    radial-gradient(ellipse 45% 40% at 88% 105%, var(--accent-2-glow), transparent 62%),
-    radial-gradient(ellipse 35% 30% at 60% 45%, var(--accent-soft), transparent 70%),
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent 2px,
-      var(--scan-line) 2px,
-      var(--scan-line) 3px
-    );
-  background-size:
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    44px 44px,
-    44px 44px,
-    auto;
-  pointer-events: none;
-  z-index: -1;
-}
 
 /* ──────────────────────────────────────────────────────────────
-   页面氛围层 2：SVG 噪点纹理
-   对齐原型 body::after，增加纸面颗粒感
-   ────────────────────────────────────────────────────────────── */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.9 0 0 0 0 0.95 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: var(--noise-opacity);
-  pointer-events: none;
-  z-index: -1;
-  mix-blend-mode: var(--noise-blend);
-}
-
-/* ──────────────────────────────────────────────────────────────
-   滚动条样式 · Aurora 科技感
-   对齐参考项目：使用 --scrollbar-thumb / --scrollbar-thumb-hover 令牌
+   滚动条样式 · TraeWork
    ────────────────────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
@@ -379,21 +336,12 @@ body::after {
   border-radius: 1px;
 }
 
-/* 纸张纹理 · Aurora 风格（兼容旧 class，主编辑区氛围由 .thread-bg 提供） */
+/* 纸张纹理 · TraeWork（安静表面，无装饰渐变） */
 .paper-texture {
   position: relative;
 }
 
-.paper-texture::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(circle at 20% 30%, var(--accent-soft) 0%, transparent 50%),
-    radial-gradient(circle at 80% 70%, var(--accent-2-soft) 0%, transparent 50%);
-  pointer-events: none;
-  z-index: 0;
-}
+/* TraeWork：无装饰光晕背景层 */
 
 /* ──────────────────────────────────────────────────────────────
    布局复刻 · 对齐原型 class 命名（docs/prototype/prototype-v2.html）
@@ -500,15 +448,13 @@ body::after {
     0;
 }
 
-/* ── 顶栏：玻璃质感 + 双 accent 发光刻度线 ── */
+/* ── 顶栏：干净中性表面（TraeWork quiet by default）── */
 .topbar {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 18px;
-  background: var(--aurora-glass-bg);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  backdrop-filter: blur(16px) saturate(1.4);
+  background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
   position: relative;
   /* frameless 窗口（titleBarStyle: hidden）：顶栏即窗口标题栏
@@ -532,28 +478,9 @@ body::after {
   -webkit-app-region: no-drag;
 }
 
-/* 底部双 accent 渐变发光刻度线 */
-.topbar::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--aurora-accent) 22%,
-    var(--aurora-accent-2) 50%,
-    var(--aurora-accent) 78%,
-    transparent 100%
-  );
-  opacity: 0.55;
-  filter: drop-shadow(0 0 6px var(--aurora-accent-glow));
-  pointer-events: none;
-}
+/* TraeWork：移除底部发光刻度线（quiet by default — 纯 border 分割） */
 
-/* ── 品牌标识：双 accent 渐变 + 呼吸脉冲 ── */
+/* ── 品牌标识：纯色品牌方块（TraeWork — brand color is scarce）── */
 .brand {
   display: flex;
   align-items: center;
@@ -566,9 +493,8 @@ body::after {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: linear-gradient(135deg, var(--aurora-accent), var(--aurora-accent-2) 130%);
+  background: var(--accent);
   position: relative;
-  animation: brand-pulse 3.2s ease-in-out infinite;
   flex-shrink: 0;
 }
 
@@ -612,41 +538,7 @@ body::after {
 .topbar-spacer {
   flex: 1;
 }
-@keyframes brand-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 12px rgba(0, 184, 158, 0.35),
-      0 0 32px rgba(0, 184, 158, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  }
-  50% {
-    box-shadow:
-      0 0 22px rgba(0, 184, 158, 0.55),
-      0 0 64px rgba(0, 184, 158, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  }
-}
-
-.dark .brand-mark {
-  animation: brand-pulse-dark 3.2s ease-in-out infinite;
-}
-
-@keyframes brand-pulse-dark {
-  0%,
-  100% {
-    box-shadow:
-      0 0 12px rgba(0, 240, 208, 0.35),
-      0 0 32px rgba(0, 240, 208, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  }
-  50% {
-    box-shadow:
-      0 0 22px rgba(0, 240, 208, 0.55),
-      0 0 64px rgba(0, 240, 208, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  }
-}
+/* TraeWork：移除品牌呼吸脉冲动画（无发光装饰） */
 
 /* ── 顶栏图标按钮（对齐原型 .icon-btn） ── */
 .icon-btn {
@@ -670,8 +562,8 @@ body::after {
   color: var(--accent-foreground);
 }
 
-/* ── 主内容区背景：多层光晕氛围（不含 grid，父级是 .view-chat 的列）
-   对齐原型 .thread：三层 radial 光晕（青→蓝紫→环境光） */
+/* ── 主内容区背景：TraeWork 安静表面（无装饰光晕）
+   原 Aurora 三层 radial 光晕已移除 */
 .thread-bg {
   min-width: 0;
   min-height: 0;
@@ -680,10 +572,6 @@ body::after {
      auto 放置会把 main 放进第 1 列（0px）→ 主区崩溃 */
   grid-column: 3;
   background: var(--background);
-  background-image:
-    radial-gradient(ellipse 45% 32% at 18% -4%, var(--accent-glow), transparent 65%),
-    radial-gradient(ellipse 40% 30% at 85% 104%, var(--accent-2-glow), transparent 65%),
-    radial-gradient(ellipse 30% 24% at 55% 50%, var(--accent-soft), transparent 75%);
 }
 
 /* ── 会话顶部状态条：等宽字体遥测带 ── */
@@ -1161,15 +1049,8 @@ body.resizing iframe {
 
 /* ── 右面板 ── */
 .chat-right-panel {
-  /* 横向渐变：右端独立色 → 左端主区背景色（渐变带 12% ≈ 30px 平缓过渡）；
-     与状态条/对话区交界完全一致（用户要求：间隔肉眼不可见） */
-  background: linear-gradient(
-    270deg,
-    var(--sidebar) 0%,
-    var(--sidebar) 88%,
-    var(--background) 100%
-  );
-  /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
+  /* 镜像渐变：左端主区背景色 → 右端侧栏色（与左栏对称，形成左右灰底包裹白色主区） */
+  background: linear-gradient(90deg, var(--background) 0%, var(--sidebar) 12%, var(--sidebar) 100%);
   display: flex;
   flex-direction: column;
   min-width: 0;

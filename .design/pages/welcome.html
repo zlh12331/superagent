@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440, initial-scale=1">
+  <title>Code Agent · 欢迎页</title>
+  <link rel="stylesheet" href="../traework-tokens.css">
+  <style>
+    /* Welcome-page layout extensions (colors from CSS variables; no glow) */
+    .welcome-brand-lg {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-lg);
+      flex-shrink: 0;
+    }
+    .welcome-brand-lg::after {
+      inset: 10px;
+    }
+    .welcome-composer .composer-box {
+      padding: 10px 12px;
+      box-shadow: var(--glow-md);
+    }
+    .welcome-composer .composer-textarea {
+      min-height: 56px;
+    }
+    .welcome-composer-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-neutral-l1);
+    }
+    .project-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      background: var(--bg-base-default);
+      border: 1px solid var(--border-neutral-l1);
+      font-size: var(--font-size-xs);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .project-pill:hover {
+      background: var(--bg-overlay-l1);
+      color: var(--text-default);
+    }
+    .model-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .model-pill:hover {
+      background: var(--bg-overlay-l1);
+      color: var(--text-default);
+    }
+    .composer-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .suggest-chips {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .suggest-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--border-neutral-l1);
+      background: var(--bg-base-default);
+      font-size: var(--font-size-xs);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .suggest-chip:hover {
+      background: var(--bg-overlay-l1);
+      color: var(--text-default);
+      border-color: var(--border-neutral-l2);
+    }
+    .suggest-chip .cmd {
+      font-family: var(--font-family-mono);
+      color: var(--text-brand);
+    }
+    .welcome-examples {
+      width: 100%;
+      max-width: 640px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .example-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border-neutral-l1);
+      border-radius: var(--radius-lg);
+      background: var(--bg-base-default);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .example-card:hover {
+      border-color: var(--border-neutral-l2);
+      background: var(--bg-overlay-l1);
+    }
+    .example-card-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-md);
+      background: var(--bg-overlay-l1);
+      color: var(--icon-brand);
+      flex-shrink: 0;
+    }
+    .example-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .example-card-title {
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-medium);
+      color: var(--text-default);
+    }
+    .example-card-desc {
+      font-size: var(--font-size-xs);
+      color: var(--text-tertiary);
+      line-height: 1.5;
+    }
+    .sidebar-foot-user {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .sidebar-foot-user:hover {
+      background: var(--bg-overlay-l1);
+    }
+    .user-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-full);
+      background: var(--bg-brand);
+      color: var(--text-onbrand);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--font-size-2xs);
+      font-weight: var(--font-weight-strong);
+      flex-shrink: 0;
+    }
+    .user-meta {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .user-name {
+      font-size: var(--font-size-xs);
+      color: var(--text-default);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-plan {
+      font-size: var(--font-size-2xs);
+      color: var(--text-tertiary);
+    }
+    .ico { width: 16px; height: 16px; flex-shrink: 0; }
+    .ico-sm { width: 14px; height: 14px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ═══ Topbar (52px) — welcome mode: no right-panel toggle ═══ -->
+    <header class="topbar">
+      <button class="icon-btn" title="切换侧边栏" aria-label="切换侧边栏">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2"/>
+          <path d="M9 3v18"/>
+        </svg>
+      </button>
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-name">Code Agent<span>desktop</span></div>
+        <div class="brand-telemetry">v1.0.0</div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="palette-entry" title="命令面板">
+        <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m15 7-5 5 5 5"/>
+          <path d="M6 12h4"/>
+          <path d="M14 12h4"/>
+        </svg>
+        <span>搜索命令</span>
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="icon-btn" title="切换主题" aria-label="切换主题">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2"/>
+          <path d="M12 20v2"/>
+          <path d="m4.93 4.93 1.41 1.41"/>
+          <path d="m17.66 17.66 1.41 1.41"/>
+          <path d="M2 12h2"/>
+          <path d="M20 12h2"/>
+          <path d="m6.34 17.66-1.41 1.41"/>
+          <path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- ═══ Body: welcome mode (grid 240 | 1px | 1fr | 0 | 0) ═══ -->
+    <div class="view-chat welcome-mode">
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <button class="new-thread-btn">
+            <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12h14"/>
+              <path d="M12 5v14"/>
+            </svg>
+            新建会话
+          </button>
+          <div class="sidebar-search">
+            <svg class="ico-sm sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input class="sidebar-search-input" type="text" placeholder="搜索会话..." />
+          </div>
+          <div class="sidebar-tabs">
+            <button class="sidebar-tab active">全部 <span class="count">2</span></button>
+            <button class="sidebar-tab">置顶</button>
+            <button class="sidebar-tab">归档</button>
+          </div>
+        </div>
+
+        <div class="sidebar-list">
+          <div class="thread-group-label">今天</div>
+          <div class="thread-item active">
+            <div class="ti-row">
+              <span class="ti-dot" style="background: var(--bg-brand);"></span>
+              <div class="ti-content">
+                <div class="ti-title">分析项目结构与依赖</div>
+                <div class="ti-meta">2 分钟前 · 12 条消息</div>
+              </div>
+            </div>
+          </div>
+          <div class="thread-item">
+            <div class="ti-row">
+              <span class="ti-dot"></span>
+              <div class="ti-content">
+                <div class="ti-title">修复登录表单校验 bug</div>
+                <div class="ti-meta">1 小时前 · 8 条消息</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="thread-group-label">本周</div>
+          <div class="thread-item">
+            <div class="ti-row">
+              <span class="ti-dot"></span>
+              <div class="ti-content">
+                <div class="ti-title">为 utils.ts 添加单元测试</div>
+                <div class="ti-meta">3 天前 · 24 条消息</div>
+              </div>
+            </div>
+          </div>
+          <div class="thread-item">
+            <div class="ti-row">
+              <span class="ti-dot"></span>
+              <div class="ti-content">
+                <div class="ti-title">重构支付模块的回调处理</div>
+                <div class="ti-meta">5 天前 · 16 条消息</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-foot">
+          <div class="sidebar-foot-user">
+            <div class="user-avatar">CA</div>
+            <div class="user-meta">
+              <div class="user-name">开发者</div>
+              <div class="user-plan">Pro 计划</div>
+            </div>
+            <svg class="ico-sm ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Resizer (1px column) -->
+      <div class="resizer"></div>
+
+      <!-- Main: welcome area -->
+      <main class="thread-bg paper-texture">
+        <div class="welcome-container">
+
+          <!-- Brand mark (48x48, purple) -->
+          <div class="brand-mark welcome-brand-lg"></div>
+
+          <h1 class="welcome-title">Code Agent</h1>
+          <p class="welcome-subtitle">你的 AI 代码智能体 · 多轮工具调用 · 代码理解 · 生成 · 编辑 · 执行</p>
+
+          <!-- Composer -->
+          <div class="welcome-composer">
+            <div class="composer-box">
+
+              <!-- Project bar -->
+              <div class="welcome-composer-bar">
+                <div class="project-pill">
+                  <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+                  </svg>
+                  <span>选择项目...</span>
+                </div>
+                <div class="model-pill ml-auto">
+                  <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--icon-brand);">
+                    <path d="M12 8V4H8"/>
+                    <rect width="16" height="12" x="4" y="8" rx="2"/>
+                    <path d="M2 14h2"/>
+                    <path d="M20 14h2"/>
+                    <path d="M15 13v2"/>
+                    <path d="M9 13v2"/>
+                  </svg>
+                  <span>Claude 3.5 Sonnet</span>
+                  <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m6 9 6 6 6-6"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Input -->
+              <textarea class="composer-textarea" placeholder="描述你的需求，或输入 / 查看命令..." rows="3"></textarea>
+
+              <!-- Bottom row: suggestion chips + send -->
+              <div class="composer-foot">
+                <div class="suggest-chips">
+                  <span class="suggest-chip"><span class="cmd">/goal</span> 设置目标</span>
+                  <span class="suggest-chip"><span class="cmd">/models</span> 切换模型</span>
+                  <span class="suggest-chip"><span class="cmd">/help</span> 快捷键</span>
+                </div>
+                <button class="send-btn" title="发送" aria-label="发送">
+                  <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m22 2-7 20-4-9-9-4Z"/>
+                    <path d="M22 2 11 13"/>
+                  </svg>
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Example prompt cards -->
+          <div class="welcome-examples">
+            <div class="example-card">
+              <div class="example-card-icon">
+                <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="16" y="16" width="6" height="6" rx="1"/>
+                  <rect x="2" y="16" width="6" height="6" rx="1"/>
+                  <rect x="9" y="2" width="6" height="6" rx="1"/>
+                  <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/>
+                  <path d="M12 12V8"/>
+                </svg>
+              </div>
+              <div class="example-card-body">
+                <div class="example-card-title">分析项目结构</div>
+                <div class="example-card-desc">扫描目录树、依赖关系与模块划分</div>
+              </div>
+            </div>
+
+            <div class="example-card">
+              <div class="example-card-icon">
+                <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/>
+                </svg>
+              </div>
+              <div class="example-card-body">
+                <div class="example-card-title">修复这个 bug</div>
+                <div class="example-card-desc">定位根因并给出可验证的修复方案</div>
+              </div>
+            </div>
+
+            <div class="example-card">
+              <div class="example-card-icon">
+                <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="m8.5 12 2.5 2.5 4.5-5"/>
+                </svg>
+              </div>
+              <div class="example-card-body">
+                <div class="example-card-title">添加单元测试</div>
+                <div class="example-card-desc">为指定模块生成覆盖率足够的测试</div>
+              </div>
+            </div>
+
+            <div class="example-card">
+              <div class="example-card-icon">
+                <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m18 16 4-4-4-4"/>
+                  <path d="m6 8-4 4 4 4"/>
+                  <path d="m14.5 4-5 16"/>
+                </svg>
+              </div>
+              <div class="example-card-body">
+                <div class="example-card-title">重构这个函数</div>
+                <div class="example-card-desc">改善命名、拆分职责并保持行为不变</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+    </div>
+  </div>
+</body>
+</html>
