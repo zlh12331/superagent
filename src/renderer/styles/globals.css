@@ -817,11 +817,11 @@ body {
   transition: opacity 0.15s ease;
 }
 
-.folder-label:hover .fl-add-btn {
+.folder-label-cell:hover .fl-add-btn {
   opacity: 1;
 }
 
-.folder-label .fl-add-btn:hover {
+.folder-label-cell .fl-add-btn:hover {
   color: var(--primary);
   background: var(--sidebar-accent);
 }

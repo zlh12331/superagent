@@ -64,68 +64,59 @@ export function FolderLabel({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn('folder-label', collapsed && 'collapsed')}
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-        >
-          <span className="fl-chevron">
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              role="img"
-              aria-label={t('sidebar.collapseFolder')}
-            >
-              <title>{t('sidebar.collapseFolder')}</title>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </span>
-          <span className="fl-icon">
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              role="img"
-              aria-label={t('sidebar.folder')}
-            >
-              <title>{t('sidebar.folder')}</title>
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            </svg>
-          </span>
-          <span className="fl-name">
-            {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
-          </span>
-          {/* fl-add-btn：在此文件夹新建会话（对齐原型 5975-5980 行，hover 显示） */}
-          {/* biome-ignore lint/a11y/useSemanticElements: 嵌套在 <button> 内，HTML 规范禁止 button-in-button，用 span[role=button] 绕过 */}
-          <span
+        {/* 文件夹标签行：折叠开关 + 独立"新建"按钮平级可聚焦（避免 button 内嵌 button / span 的嵌套交互） */}
+        <div className="folder-label-cell">
+          <button
+            type="button"
+            className={cn('folder-label', collapsed && 'collapsed')}
+            onClick={onToggle}
+            aria-expanded={!collapsed}
+          >
+            <span className="fl-chevron">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                role="img"
+                aria-label={t('sidebar.collapseFolder')}
+              >
+                <title>{t('sidebar.collapseFolder')}</title>
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+            <span className="fl-icon">
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                role="img"
+                aria-label={t('sidebar.folder')}
+              >
+                <title>{t('sidebar.folder')}</title>
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+            </span>
+            <span className="fl-name">
+              {folderName.length > 0 ? folderName : t('sidebar.unlabeled')}
+            </span>
+          </button>
+          {/* 独立"新建"按钮（由原内嵌 span 移出为平级 button，消除嵌套交互；hover 显示见 .folder-label-cell） */}
+          <button
+            type="button"
             className="fl-add-btn"
-            role="button"
-            tabIndex={0}
             aria-label={t('sidebar.newSessionIn', { name: folderName })}
             title={t('sidebar.newSessionInFolder')}
-            onClick={(event) => {
-              event.stopPropagation();
-              onCreateInFolder(folderName);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                event.stopPropagation();
-                onCreateInFolder(folderName);
-              }
-            }}
+            onClick={() => onCreateInFolder(folderName)}
           >
             <Plus className="size-3" strokeWidth={2.5} />
-          </span>
-        </button>
+          </button>
+        </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => onCreateInFolder(folderName)}>
