@@ -23,6 +23,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { Button } from '@/components/ui/button';
+import { i18n } from '@/i18n';
 
 /**
  * 区块级 fallback：内联小卡片（不占全屏），保留重试入口
@@ -30,7 +31,8 @@ import { Button } from '@/components/ui/button';
  * 设计约束：fallback 不依赖任何 hook/context（错误边界 fallback 必须零依赖——
  * 若错误源恰是 Provider/context，fallback 复用它会二次失败；
  * 且 React 19 的 render 阶段错误恢复对 fallback 内 hook 调用有限制）。
- * 文案用静态常量（错误场景语言回退到默认中文，可接受权衡）。
+ * 文案经 i18next 全局单例 i18n.t() 取（纯数据访问，非 React hook/context，
+ * 不破坏 fallback 零依赖约束），并随当前语言自动切换、无需双份硬编码。
  */
 function SectionFallback({
   error,
@@ -48,13 +50,15 @@ function SectionFallback({
       className="bg-error/5 border-error/20 text-error flex flex-col items-center gap-2 rounded-md border px-4 py-6"
     >
       <AlertTriangle className="size-5" strokeWidth={1.5} />
-      <p className="text-xs leading-relaxed">区块加载失败，请重试</p>
+      <p className="text-xs leading-relaxed">
+        {i18n.t('common.sectionLoadFailed', { defaultValue: '区块加载失败，请重试' })}
+      </p>
       <p className="text-muted-foreground max-w-full truncate font-mono text-2xs" title={message}>
         {message}
       </p>
       <Button variant="outline" size="sm" onClick={resetErrorBoundary}>
         <RefreshCw className="size-3" strokeWidth={1.5} />
-        重试
+        {i18n.t('common.retry', { defaultValue: '重试' })}
       </Button>
     </div>
   );

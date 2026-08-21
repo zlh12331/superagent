@@ -54,7 +54,12 @@ import {
   useSessionsQuery,
 } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
-import { ROUTES } from '@/lib/constants';
+import {
+  ROUTES,
+  SEARCH_HIGHLIGHT_DEBOUNCE_MS,
+  SEARCH_HIGHLIGHT_EXPIRE_MS,
+  SEARCH_HIGHLIGHT_MIN_CHARS,
+} from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
@@ -137,9 +142,9 @@ export function Sidebar(): ReactElement {
 
     // 300ms 防抖后计算匹配项（对齐原型 setTimeout(..., 300)）
     const debounceTimer = setTimeout(() => {
-      // 少于 2 字符不高亮（对齐原型 q.length < 2 检查）
+      // 少于 SEARCH_HIGHLIGHT_MIN_CHARS 字符不高亮（对齐原型 q.length < 2 检查）
       // 不主动清除——让之前的高亮自然过期（对齐原型行为）
-      if (q.length < 2) return;
+      if (q.length < SEARCH_HIGHLIGHT_MIN_CHARS) return;
 
       const matched = new Set<string>();
       // 用 sessionsRef.current 读取最新会话列表，避免将其加入依赖而打断防抖
@@ -158,8 +163,8 @@ export function Sidebar(): ReactElement {
       highlightExpireTimerRef.current = setTimeout(() => {
         setHighlightedThreadIds(new Set());
         highlightExpireTimerRef.current = null;
-      }, 2000);
-    }, 300);
+      }, SEARCH_HIGHLIGHT_EXPIRE_MS);
+    }, SEARCH_HIGHLIGHT_DEBOUNCE_MS);
 
     return () => clearTimeout(debounceTimer);
     // 仅依赖 searchKeyword；sessions 通过 ref 读取，避免防抖被打断

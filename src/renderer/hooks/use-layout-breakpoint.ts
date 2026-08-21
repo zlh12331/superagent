@@ -17,6 +17,8 @@
 
 import { useEffect, useState } from 'react';
 
+import { BREAKPOINT_COMPACT, BREAKPOINT_NARROW } from '@/lib/constants';
+
 /**
  * 响应式断点状态。
  */
@@ -48,8 +50,8 @@ export function useLayoutBreakpoint(): LayoutBreakpoint {
       return DEFAULT_BREAKPOINT;
     }
     return {
-      isCompact: window.matchMedia('(max-width: 1200px)').matches,
-      isNarrow: window.matchMedia('(max-width: 900px)').matches,
+      isCompact: window.matchMedia(`(max-width: ${BREAKPOINT_COMPACT}px)`).matches,
+      isNarrow: window.matchMedia(`(max-width: ${BREAKPOINT_NARROW}px)`).matches,
     };
   });
 
@@ -59,11 +61,11 @@ export function useLayoutBreakpoint(): LayoutBreakpoint {
     // 2 档断点的 MediaQueryList 与对应状态键
     const mqls = [
       {
-        mq: window.matchMedia('(max-width: 1200px)'),
+        mq: window.matchMedia(`(max-width: ${BREAKPOINT_COMPACT}px)`),
         key: 'isCompact' as const,
       },
       {
-        mq: window.matchMedia('(max-width: 900px)'),
+        mq: window.matchMedia(`(max-width: ${BREAKPOINT_NARROW}px)`),
         key: 'isNarrow' as const,
       },
     ];

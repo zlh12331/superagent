@@ -49,3 +49,20 @@ export const ROUTES = {
    */
   chatPath: (sessionId: string): string => `/chat/${sessionId}`,
 } as const;
+
+/**
+ * 响应式断点（px）— 与 useLayoutBreakpoint 对齐
+ *
+ * 低于该宽度时触发对应面板自动显隐：
+ * - BREAKPOINT_COMPACT：右面板应自动隐藏（可浮层抽屉唤出）
+ * - BREAKPOINT_NARROW：侧栏应自动隐藏（可浮层抽屉唤出）
+ */
+export const BREAKPOINT_COMPACT = 1200;
+export const BREAKPOINT_NARROW = 900;
+
+/**
+ * 侧栏会话搜索高亮（对齐原型 debounce/过期行为）
+ */
+export const SEARCH_HIGHLIGHT_DEBOUNCE_MS = 300;
+export const SEARCH_HIGHLIGHT_EXPIRE_MS = 2000;
+export const SEARCH_HIGHLIGHT_MIN_CHARS = 2;

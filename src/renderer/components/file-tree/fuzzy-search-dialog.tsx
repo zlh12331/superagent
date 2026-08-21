@@ -128,7 +128,7 @@ function highlightMatch(title: string, query: string): React.ReactNode {
   return (
     <>
       {title.slice(0, idx)}
-      <mark className="rounded bg-[rgba(0,255,136,0.2)] px-0.5 text-[var(--accent)]">
+      <mark className="rounded bg-[color-mix(in_srgb,var(--success)_20%,transparent)] px-0.5 text-[var(--accent)]">
         {title.slice(idx, idx + q.length)}
       </mark>
       {title.slice(idx + q.length)}
@@ -301,7 +301,7 @@ export function FuzzySearchDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="top-[20vh] translate-y-0 left-[50%] translate-x-[-50%] w-[90vw] max-w-[560px] gap-0 rounded-[10px] border p-0 shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
+        className="top-[20vh] translate-y-0 left-[50%] translate-x-[-50%] w-[90vw] max-w-[560px] gap-0 rounded-[10px] border p-0 shadow-[var(--shadow-modal)]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{t('fileTree.fuzzySearch.title')}</DialogTitle>

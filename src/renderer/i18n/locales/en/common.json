@@ -7,6 +7,7 @@
       "cancel": "Cancel",
       "close": "Close",
       "retry": "Retry",
+      "sectionLoadFailed": "This section failed to load",
       "goToSettings": "Configure",
       "noResults": "No results",
       "reload": "Reload",

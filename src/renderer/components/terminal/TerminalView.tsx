@@ -12,11 +12,12 @@
 // - 每个终端一个组件实例，由 TerminalPanel 全部挂载、display:none 切换，
 //   xterm 实例保持存活，切 Tab 无需重建、保留历史输出
 // - 输出真源：直接订阅 IPC 事件（不走 store buffer）
-// - 主题：文学风米黄纸张底色（与 paper-texture 对齐）
+// - 主题：从 CSS 令牌读取（--bg/--text 等），跟随全局明暗主题，
+//   并通过监听 <html>.dark 类变更实时同步（避免在组件内硬编码色值）
 // ──────────────────────────────────────────────────────────────
 
 import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
+import { type ITheme, Terminal } from '@xterm/xterm';
 import { CircleSlash } from 'lucide-react';
 import { type ReactElement, useEffect, useRef } from 'react';
 
@@ -26,6 +27,34 @@ import { useTerminalStore } from '@/stores/transient/terminal-store';
 
 /** ResizeObserver 防抖时间（ms），避免快速拖动产生多次 IPC resize */
 const RESIZE_DEBOUNCE_MS = 100;
+
+/**
+ * 从当前生效的 CSS 令牌解析 xterm 色板。
+ *
+ * 与 tokens.css 的明暗色板联动（--bg/--text/--text-secondary/--border），
+ * 避免在组件内硬编码颜色，暗色/亮色随全局主题自动同步。
+ *
+ * @remarks 读取前调用方需确保 <html> 的 .dark 类已反映目标主题（见 ThemeProvider.applyTheme）；
+ * @returns xterm ITheme 色板对象
+ */
+function resolveTerminalTheme(): ITheme {
+  const readToken = (name: string): string => {
+    if (typeof window === 'undefined' || !window.getComputedStyle) return '';
+    return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  };
+  const background = readToken('--bg');
+  const foreground = readToken('--text');
+  const cursor = readToken('--text-secondary');
+  const selection = readToken('--border');
+  // 令牌缺失（jsdom/解析失败）时回退中性值，避免空色破坏 xterm 渲染
+  return {
+    background: background || '#1E1E1E',
+    foreground: foreground || '#CCCCCC',
+    cursor: cursor || '#5C5C5C',
+    cursorAccent: background || '#1E1E1E',
+    selectionBackground: selection || 'rgba(120,120,120,0.3)',
+  };
+}
 
 /** TerminalView props */
 interface TerminalViewProps {
@@ -60,19 +89,23 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
       cursorBlink: true,
       cursorStyle: 'bar',
       allowProposedApi: true,
-      theme: {
-        background: '#faf7f0', // 米黄纸张底色（与 paper-texture 对齐）
-        foreground: '#3d3d3d', // 墨色文字
-        cursor: '#5c5c5c',
-        cursorAccent: '#faf7f0',
-        selectionBackground: 'rgba(93, 93, 93, 0.2)',
-      },
+      theme: resolveTerminalTheme(),
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(container);
     fitAddon.fit();
+
+    // 主题实时同步：监听 <html>.dark 类变更（由 ThemeProvider.applyTheme 驱动），
+    // 类切换后重读 CSS 令牌更新 xterm 色板，无需重建终端实例
+    const themeObserver = new MutationObserver(() => {
+      if (term.options) term.options.theme = resolveTerminalTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
 
     // 从 store buffer 读取历史输出作为兜底（P3 修复：原始 ANSI 字符串原样恢复，
     // 不再切行拼接——此前切行破坏转义序列导致恢复输出损坏）
@@ -133,6 +166,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
         clearTimeout(resizeTimer);
       }
       resizeObserver.disconnect();
+      themeObserver.disconnect();
       unsubscribeOutput();
       unsubscribeExit();
       term.dispose();
