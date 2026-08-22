@@ -39,6 +39,7 @@ import type { WebContents } from 'electron';
 import iconv from 'iconv-lite';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
+import { DEFAULT_TREE_IGNORE_PATTERNS, matchIgnorePattern } from './tree-ignore';
 
 /** UTF-8 同族编码（chardet 检测结果 → 无需转码直接解码） */
 const UTF8_LIKE_ENCODINGS = new Set(['UTF-8', 'ASCII']);
@@ -88,6 +89,11 @@ export interface FileListOptions {
   readonly depth: number;
   /** 是否包含隐藏文件（点开头文件/目录） */
   readonly includeHidden: boolean;
+  /**
+   * 忽略模式列表（名称级匹配：精确 / * / ?；叠加在内置 node_modules 基线之上）
+   * 缺省 = 仅内置基线。来源：设置 workspace.treeIgnorePatterns（handler 每次现读，改后即生效）
+   */
+  readonly ignorePatterns?: readonly string[];
 }
 
 /** watch 方法入参 */
@@ -301,10 +307,12 @@ class FileService implements IFileService {
   async list(options: FileListOptions): Promise<FileListRes> {
     const { path, depth, includeHidden } = options;
     this.assertAbsolutePath(path);
+    // 忽略模式：用户配置 + 内置基线（node_modules 与 watch ignored 对齐）
+    const ignorePatterns = [...DEFAULT_TREE_IGNORE_PATTERNS, ...(options.ignorePatterns ?? [])];
 
     try {
       const entries: FileEntry[] = [];
-      await this.listRecursive(path, depth, includeHidden, entries);
+      await this.listRecursive(path, depth, includeHidden, entries, ignorePatterns);
       return { entries };
     } catch (error) {
       throw this.classifyReadError(error);
@@ -318,12 +326,14 @@ class FileService implements IFileService {
    * @param remainingDepth 剩余深度（0 时停止递归）
    * @param includeHidden 是否包含隐藏文件
    * @param output 输出数组（递归填充）
+   * @param ignorePatterns 忽略模式（名称级匹配；命中即跳过，目录不递归）
    */
   private async listRecursive(
     currentPath: string,
     remainingDepth: number,
     includeHidden: boolean,
     output: FileEntry[],
+    ignorePatterns: readonly string[],
   ): Promise<void> {
     // 深度耗尽，停止递归
     if (remainingDepth <= 0) {
@@ -334,6 +344,10 @@ class FileService implements IFileService {
     for (const item of items) {
       // 跳过隐藏文件（除非显式要求包含）
       if (!includeHidden && item.name.startsWith('.')) {
+        continue;
+      }
+      // 用户忽略模式（名称级；命中后文件不展示、目录不递归）
+      if (matchIgnorePattern(item.name, ignorePatterns)) {
         continue;
       }
 
@@ -364,7 +378,13 @@ class FileService implements IFileService {
 
       // 递归子目录
       if (item.isDirectory()) {
-        await this.listRecursive(itemPath, remainingDepth - 1, includeHidden, output);
+        await this.listRecursive(
+          itemPath,
+          remainingDepth - 1,
+          includeHidden,
+          output,
+          ignorePatterns,
+        );
       }
     }
   }

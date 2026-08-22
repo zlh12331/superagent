@@ -36,6 +36,26 @@ export function readAllSettings(): Record<string, unknown> {
 }
 
 /**
+ * 同步读取单个设置（未设置返回 undefined；损坏值视为未设置）
+ *
+ * 用于高频读取场景（如 file:list 每次调用读忽略配置）：仅查单行，避免全表扫描。
+ */
+export function readSetting(key: string): unknown {
+  assertKey(key);
+  const rows = getDb().select().from(appSettings).where(eq(appSettings.key, key)).all();
+  const row = rows[0];
+  if (row === undefined) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    // 损坏条目：视为未设置（调用方走默认值）
+    return undefined;
+  }
+}
+
+/**
  * 同步写入单个设置（upsert；value 为 JSON 可序列化结构）
  *
  * 渲染层写穿透：每次内存态变更后 fire-and-forget 调用。

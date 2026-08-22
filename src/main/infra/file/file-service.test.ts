@@ -207,6 +207,32 @@ describe('FileService.list（目录列举三件套）', () => {
     expect(res.entries.map((e) => e.name)).toContain('.hidden');
   });
 
+  it('忽略模式：内置 node_modules 基线 + 用户模式（精确/通配），命中目录不递归', async () => {
+    await mkdir(join(dir, 'node_modules'), { recursive: true });
+    await writeFile(join(dir, 'node_modules', 'x.js'), 'x');
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await writeFile(join(dir, 'dist', 'y.js'), 'y');
+    await writeFile(join(dir, 'debug.log'), 'log');
+
+    const res = await svc.list({
+      path: dir,
+      depth: 2,
+      includeHidden: false,
+      ignorePatterns: ['dist', '*.log'],
+    });
+    const names = res.entries.map((e) => e.name);
+    // 内置基线
+    expect(names).not.toContain('node_modules');
+    // 用户模式：目录不展示且不递归（depth=2 下无 dist 子文件）
+    expect(names).not.toContain('dist');
+    expect(names).not.toContain('y.js');
+    // 通配
+    expect(names).not.toContain('debug.log');
+    // 未命中正常保留
+    expect(names).toContain('a.ts');
+    expect(names).toContain('sub');
+  });
+
   it('异常：路径不存在 → 抛错', async () => {
     await expect(
       svc.list({ path: join(dir, 'missing'), depth: 1, includeHidden: false }),

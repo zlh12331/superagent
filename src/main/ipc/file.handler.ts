@@ -25,6 +25,8 @@
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import type { IFileService } from '../infra/file/file-service';
+import { normalizeTreeIgnorePatterns } from '../infra/file/tree-ignore';
+import { readSetting } from '../infra/storage/settings-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**
@@ -76,10 +78,20 @@ export function createFileHandlers(
     // 列出目录内容：递归深度可控（默认 1 层，最大 10 层）
     // includeHidden=false 时跳过 .git / .vscode 等隐藏文件/目录
     list: async (input) => {
+      // 忽略模式：现读用户设置（workspace.treeIgnorePatterns）——改后下一次 list 即生效。
+      // 读取失败（DB 异常等）降级为无用户模式，不阻断文件树；内置 node_modules 基线由 service 合并
+      let userPatterns: string[] = [];
+      try {
+        const workspace = readSetting('workspace') as { treeIgnorePatterns?: unknown } | undefined;
+        userPatterns = normalizeTreeIgnorePatterns(workspace?.treeIgnorePatterns);
+      } catch {
+        // 降级路径
+      }
       return fileService.list({
         path: input.path,
         depth: input.depth,
         includeHidden: input.includeHidden,
+        ...(userPatterns.length > 0 ? { ignorePatterns: userPatterns } : {}),
       });
     },
 
