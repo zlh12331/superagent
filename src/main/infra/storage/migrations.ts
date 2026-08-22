@@ -37,9 +37,22 @@ function hasColumn(db: Database, table: string, column: string): boolean {
   return rows.some((row) => row.name === column);
 }
 
-/** 追加列 helper：列不存在时执行 ALTER（幂等） */
+/** 检查表是否存在（P2 修复：迁移先于 SCHEMA_SQL 执行的顺序下，老 fixture 可能缺后续版本才引入的表） */
+function hasTable(db: Database, table: string): boolean {
+  const row = db
+    .prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?')
+    .get('table', table) as { readonly name: string } | undefined;
+  return row !== undefined;
+}
+
+/**
+ * 追加列 helper：列不存在时执行 ALTER（幂等）
+ *
+ * 表不存在时跳过：缺失的表随后由 SCHEMA_SQL 以最新结构创建，列天然包含；
+ * 若不守卫，vN 早期迁移 ALTER 一张 v0 老库尚不存在的表会直接抛错中断迁移链。
+ */
 function addColumnIfMissing(db: Database, table: string, column: string, ddl: string): void {
-  if (!hasColumn(db, table, column)) {
+  if (hasTable(db, table) && !hasColumn(db, table, column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl};`);
   }
 }
@@ -98,6 +111,17 @@ export const MIGRATIONS: readonly SchemaMigration[] = [
         'is_enabled',
         'is_enabled INTEGER NOT NULL DEFAULT 1',
       );
+    },
+  },
+  {
+    // P1 修复：turn_id 列诞生于迁移系统之前（41c4ed4），从未有过 ALTER 路径。
+    // 老库（无该列）直接执行含 idx_messages_turn 的 SCHEMA_SQL 会抛
+    // 「no such column: turn_id」导致启动崩溃——本条目补齐版本链。
+    // 配套：db.ts 已改为「老库先迁移再执行 SCHEMA_SQL」的顺序。
+    version: 6,
+    name: 'messages.turn_id',
+    up: (db) => {
+      addColumnIfMissing(db, 'messages', 'turn_id', 'turn_id TEXT');
     },
   },
 ] as const;

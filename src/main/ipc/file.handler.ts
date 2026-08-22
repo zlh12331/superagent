@@ -130,7 +130,8 @@ export function createFileHandlers(
       });
     },
 
-    // 删除文件或目录：recursive=true（默认）递归删除目录
+    // 删除文件或目录：recursive 必填（P0 契约，schema 已收紧）——
+    // true 递归删除目录；false 仅空目录/文件（非空抛 ENOTEMPTY）
     delete: async (input) => {
       return fileService.delete({
         path: input.path,

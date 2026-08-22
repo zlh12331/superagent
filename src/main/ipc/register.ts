@@ -51,6 +51,11 @@ export function registerIpcHandlers(
       if (handler === undefined) {
         throw new Error(`IPC handler 缺失: ${domain}.${method} (${def.channel})`);
       }
+      // P2 修复：响应契约必填断言——resSchema 此前实质可选，新方法漏配时
+      // 「响应防漂移」静默失效。启动即抛错（而非运行期才发现）。
+      if (def.resSchema === undefined) {
+        throw new Error(`IPC 响应契约缺失: ${domain}.${method} (${def.channel})——resSchema 必填`);
+      }
       // 复用 wrap：traceId 贯穿 / sender 校验 / zod 校验（入参 + 响应契约）/ 错误分类 / Sentry
       // P2 说明：此处 as never 是异构循环的固有成本——def.schema 是各方法 ZodType 的联合，
       // 无法为 wrap 推断单一 TInput/TOutput；编译期一致性由上方 InferHandlers

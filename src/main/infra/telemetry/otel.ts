@@ -22,6 +22,7 @@ import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tra
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
+import { readTelemetryLevelSync } from '../storage/telemetry-pref';
 
 /**
  * 全局 Tracer 实例
@@ -64,6 +65,17 @@ export function initTelemetry(): void {
     const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
     const serviceName = `code-agent-agent-${app.isPackaged ? 'prod' : 'dev'}`;
     const serviceVersion = app.getVersion();
+
+    // P2 修复：尊重用户遥测级别——'off' 时完全不注册 provider。此前设置页的
+    // 「关闭遥测」只作用于 Sentry，OTel spans 照常导出（级别语义不一致）。
+    // 'error'/'full' 对 traces 语义相同（span 是链路而非错误日志），仅 off 控制启停；
+    // Sentry 级别仍受重启限制（见 settings.handler setTelemetryLevel 注释）。
+    if (readTelemetryLevelSync() === 'off') {
+      logger.info({}, 'OpenTelemetry 未初始化（遥测级别 = off）');
+      tracer = null;
+      initialized = false;
+      return;
+    }
 
     const resource = resourceFromAttributes({
       'service.name': serviceName,

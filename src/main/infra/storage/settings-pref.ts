@@ -55,16 +55,25 @@ export function readSetting(key: string): unknown {
   }
 }
 
+/** 单条设置值序列化后的字符数上限（256K chars；UTF-8 下 CJK 至多 3 字节/字符） */
+const MAX_SETTING_VALUE_CHARS = 256 * 1024;
+
 /**
  * 同步写入单个设置（upsert；value 为 JSON 可序列化结构）
  *
  * 渲染层写穿透：每次内存态变更后 fire-and-forget 调用。
+ * P2 修复：value 无大小约束时，渲染层 bug 可把任意大 JSON 写入 app_settings，
+ * 之后每次启动全表加载 parse（readAllSettings）——此处按序列化尺寸硬上限拒绝。
  */
 export function writeSetting(key: string, value: unknown): void {
   assertKey(key);
+  const serialized = JSON.stringify(value);
+  if (serialized.length > MAX_SETTING_VALUE_CHARS) {
+    throw new Error(`设置值过大（${serialized.length} > ${MAX_SETTING_VALUE_CHARS} 字符）：${key}`);
+  }
   getDb()
     .insert(appSettings)
-    .values({ key, value: JSON.stringify(value), updatedAt: Date.now() })
+    .values({ key, value: serialized, updatedAt: Date.now() })
     .onConflictDoUpdate({
       target: appSettings.key,
       set: { value: sql`excluded.value`, updatedAt: sql`excluded.updated_at` },

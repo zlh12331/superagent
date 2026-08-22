@@ -14,7 +14,7 @@
 // - Drizzle 的 better-sqlite3 driver 是同步的，无需 await
 // ──────────────────────────────────────────────────────────────
 
-import { chmodSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { chmodSync, closeSync, mkdirSync, openSync, readdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -66,6 +66,16 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
     mkdirSync(backupDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const backupPath = join(backupDir, `sessions-${stamp}.db`);
+    // 安全修复：先以 0600 预创建空文件再交给 sqlite.backup 截断写入——
+    // 此前备份以默认 umask（644）完整落盘后才 chmod，POSIX 下存在
+    // 其他进程读到明文对话历史的窗口期。openSync 'a' 不截断已存在文件。
+    if (process.platform !== 'win32') {
+      try {
+        closeSync(openSync(backupPath, 'a', 0o600));
+      } catch {
+        // 预创建失败不阻断（backup 会按原逻辑创建，restrictFilePermissions 兜底）
+      }
+    }
     await sqlite.backup(backupPath);
     // 安全修复：备份含完整对话历史，同样限制为仅属主可读写
     restrictFilePermissions(backupPath);
@@ -150,9 +160,18 @@ export function initDb(): DrizzleDB {
   // 启用外键约束（SQLite 默认关闭，drizzle schema 中 references 依赖此）
   sqlite.pragma('foreign_keys = ON');
 
+  // P2：外部工具（drizzle-kit studio / sqlite CLI）占用库文件时短暂等待，
+  // 而非立刻抛 SQLITE_BUSY 表现为随机 IPC INTERNAL_ERROR（单实例锁不约束外部进程）
+  sqlite.pragma('busy_timeout = 3000');
+  // WAL 标准搭配：NORMAL 在多数崩溃场景与 FULL 持久性等同，写入吞吐更优
+  sqlite.pragma('synchronous = NORMAL');
+
   // 启动完整性校验：损坏时提前暴露（替代崩溃后才发现）
-  const integrity = sqlite.pragma('integrity_check', { simple: true }) as unknown;
-  if (Array.isArray(integrity) && integrity.length > 0 && integrity[0] !== 'ok') {
+  // P2 修复：simple:true 返回标量字符串（'ok' 或首个错误描述），此前
+  // Array.isArray 判定恒为 false——损坏库也会打出「校验通过」（死代码判定）。
+  // 用 quick_check 替代 integrity_check：跳过索引逐项交叉校验，启动开销更低。
+  const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
+  if (typeof integrity === 'string' && integrity !== 'ok') {
     logger.error({ result: integrity }, 'SQLite 完整性校验失败，数据库可能已损坏');
     // 不阻断启动（只读场景仍可用），但明确记录供诊断
   } else {
@@ -168,25 +187,27 @@ export function initDb(): DrizzleDB {
   // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });
 
-  // 建表（幂等，已存在则跳过）
-  // SCHEMA_SQL 为新库 DDL 真源（schema-sql.ts），生产与测试共用
-  // 老库迁移前记录 sessions 表是否已存在：用于区分「全新库」与「老库」路径
+  // 建表与迁移顺序（P1 修复：老库必须先补列、再执行 SCHEMA_SQL）：
+  // SCHEMA_SQL 尾部包含 CREATE INDEX ... ON messages(turn_id)，若老库缺该列，
+  // 先执行 SCHEMA_SQL 会在索引处抛「no such column」中断启动。
+  // 因此以 sessions 表是否已存在区分两条路径：
+  // - 全新库：直接执行最新 SCHEMA_SQL，落位当前版本
+  // - 老库：先按版本链执行 pending 迁移（幂等），再执行 SCHEMA_SQL
+  //   （此时建表/建索引全部 IF NOT EXISTS，no-op 或安全补齐）
   const hadSessionsTable =
     sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sessions'").get() !==
     undefined;
-  sqlite.exec(SCHEMA_SQL);
 
-  // P4 修复：版本化迁移（PRAGMA user_version 版本链）替代启动期
-  // 「ALTER + duplicate column name 字符串匹配」——后者无版本链、
-  // 无回滚路径、错误判定依赖 SQLite 错误文案。
-  // - 全新库：SCHEMA_SQL 已含最新列，直接落位当前版本
-  // - 老库：按版本逐个执行 pending 迁移（列存在性检查保证幂等）
-  const currentVersion = Number(sqlite.pragma('user_version', { simple: true }));
-  if (currentVersion < CURRENT_SCHEMA_VERSION) {
-    if (!hadSessionsTable) {
-      sqlite.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
-      logger.info({ toVersion: CURRENT_SCHEMA_VERSION }, '全新数据库，schema 落位当前版本');
-    } else {
+  if (!hadSessionsTable) {
+    sqlite.exec(SCHEMA_SQL);
+    sqlite.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+    logger.info({ toVersion: CURRENT_SCHEMA_VERSION }, '全新数据库，schema 落位当前版本');
+  } else {
+    // P4 修复：版本化迁移（PRAGMA user_version 版本链）替代启动期
+    // 「ALTER + duplicate column name 字符串匹配」——后者无版本链、
+    // 无回滚路径、错误判定依赖 SQLite 错误文案。列存在性检查保证幂等。
+    const currentVersion = Number(sqlite.pragma('user_version', { simple: true }));
+    if (currentVersion < CURRENT_SCHEMA_VERSION) {
       for (const migration of MIGRATIONS) {
         if (migration.version <= currentVersion) {
           continue;
@@ -198,6 +219,7 @@ export function initDb(): DrizzleDB {
         logger.info({ version: migration.version, name: migration.name }, '数据库迁移已应用');
       }
     }
+    sqlite.exec(SCHEMA_SQL);
   }
 
   dbInstance = db;

@@ -462,30 +462,60 @@ function defaultHomeDir(): string {
 }
 
 /**
- * 按 shell 语义拆词（R2 修复：此前 resolveShell 按空白 split 不支持引号）
+ * 按 shell 语义拆词（R2 修复：此前 resolveShell 按空白 split 不支持引号；
+ * P1 修复：win32 下反斜杠按路径分隔符字面量处理，不再被当作 POSIX 转义符吞掉）
  *
- * 规则（对齐 POSIX shell 的子集）：
- * - 双引号 "..."：包裹含空格的参数；反斜杠转义在双引号内生效
- * - 单引号 '...'：字面量，反斜杠不转义（与 POSIX 一致）
+ * 规则按平台分别定义：
+ * - 非 win32（POSIX 子集）：双引号 "..." 包裹含空格参数且内含转义；
+ *   单引号 '...' 全字面量；引号外反斜杠转义下一字符
+ * - win32：反斜杠为字面量路径分隔符，仅双引号内 \" 转义引号本身
+ *   （CommandLineToArgvW 常用子集）；单双引号分组语义同 POSIX
  * - 未闭合引号：容错处理——残余内容作为最后一段参数
  * - 不解析变量展开/管道/重定向（复杂命令交给交互式 shell）
  *
  * @example splitShellWords("git commit -m 'hello world'") // ['git','commit','-m','hello world']
+ * @example splitShellWords('C:\\WINDOWS\\system32\\cmd.exe /c dir', 'win32')
+ *   // ['C:\\WINDOWS\\system32\\cmd.exe', '/c', 'dir']
  */
-export function splitShellWords(input: string): string[] {
+export function splitShellWords(
+  input: string,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  const windows = platform === 'win32';
+  const chars = [...input];
   const words: string[] = [];
   let current = '';
   let quote: "'" | '"' | null = null;
-  let escaped = false;
+  let posixEscaped = false;
 
-  for (const ch of input) {
-    if (escaped) {
+  for (let i = 0; i < chars.length; i += 1) {
+    const ch = chars[i] as string;
+
+    if (ch === '\\') {
+      if (!windows) {
+        // POSIX：反斜杠转义下一字符；单引号内不转义（与 shell 一致）
+        if (quote !== "'") {
+          const next = chars[i + 1];
+          if (next !== undefined) {
+            current += next;
+            i += 1;
+          } else {
+            posixEscaped = true;
+          }
+          continue;
+        }
+        current += ch;
+        continue;
+      }
+      // Windows：反斜杠是路径分隔符（字面量），仅双引号内 \" 转义引号本身
+      // （CommandLineToArgvW 约定常用子集）。修复前 C:\Users\foo 会被拆成 C:Usersfoo，
+      // 导致任何含 Windows 路径的命令 spawn 失败（集成测试 terminal batch 5 实证）。
+      if (quote === '"' && chars[i + 1] === '"') {
+        current += '"';
+        i += 1;
+        continue;
+      }
       current += ch;
-      escaped = false;
-      continue;
-    }
-    if (ch === '\\' && quote !== "'") {
-      escaped = true;
       continue;
     }
     if (quote !== null) {
@@ -509,8 +539,8 @@ export function splitShellWords(input: string): string[] {
     }
     current += ch;
   }
-  // 容错：未闭合引号时丢弃悬空引号标记，残余内容作为最后参数
-  if (escaped) {
+  // 容错：POSIX 悬空转义保留反斜杠；未闭合引号丢弃标记，残余作为最后参数
+  if (posixEscaped) {
     current += '\\';
   }
   if (current.length > 0) {

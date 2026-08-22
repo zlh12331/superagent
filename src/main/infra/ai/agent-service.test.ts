@@ -244,6 +244,7 @@ const mockSessionService: ISessionService = {
   markRunning: vi.fn(async () => {}),
   markIdle: vi.fn(async () => {}),
   markAllInterrupted: vi.fn(async () => 0),
+  pruneExpiredUsage: vi.fn(() => 0),
   exportAll: vi.fn(async () => ({ exportedAt: 0, app: 'test', sessions: [] })),
   list: vi.fn(),
   get: vi.fn(),

@@ -35,7 +35,7 @@ import {
   type AskRespondRes,
   AskRespondResSchema,
 } from '../schemas/agent-ask';
-import type { TurnEvent } from '../schemas/agent-events';
+import { type TurnEvent, TurnEventType } from '../schemas/agent-events';
 import type { AppInfoRes } from '../schemas/app';
 import { AppInfoResSchema, AppStatusResSchema } from '../schemas/app';
 import {
@@ -424,6 +424,61 @@ const AgentToolResultPayloadSchema = z.object({
   error: z.object({ code: z.string().min(1), message: z.string().min(1) }).optional(),
 });
 
+/** agent:turn:event payload schema：TurnEvent 判别联合（与 schemas/agent-events.ts 类型一一对应） */
+const TurnEventContextSchema = z.object({
+  sessionId: z.string().min(1),
+  turnId: z.string().min(1),
+  timestamp: z.number(),
+});
+const TurnUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  totalTokens: z.number().int().nonnegative().optional(),
+  cacheReadTokens: z.number().int().nonnegative().optional(),
+  reasoningTokens: z.number().int().nonnegative().optional(),
+});
+const TurnEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal(TurnEventType.TURN_START),
+    ...TurnEventContextSchema.shape,
+    modelId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal(TurnEventType.TEXT_DELTA),
+    ...TurnEventContextSchema.shape,
+    text: z.string(),
+  }),
+  z.object({
+    type: z.literal(TurnEventType.TOOL_CALL),
+    ...TurnEventContextSchema.shape,
+    toolCallId: z.string().min(1),
+    toolName: z.string().min(1),
+    input: z.unknown(),
+  }),
+  z.object({
+    type: z.literal(TurnEventType.TOOL_RESULT),
+    ...TurnEventContextSchema.shape,
+    toolCallId: z.string().min(1),
+    toolName: z.string().min(1),
+    success: z.boolean(),
+    error: z.object({ code: z.string(), message: z.string() }).optional(),
+    durationMs: z.number().int().nonnegative().optional(),
+  }),
+  z.object({
+    type: z.literal(TurnEventType.TURN_END),
+    ...TurnEventContextSchema.shape,
+    reason: z.enum(['completed', 'aborted', 'max-steps', 'error']),
+    usage: TurnUsageSchema.optional(),
+    durationMs: z.number().int().nonnegative(),
+  }),
+  z.object({
+    type: z.literal(TurnEventType.ERROR),
+    ...TurnEventContextSchema.shape,
+    code: z.string(),
+    message: z.string(),
+  }),
+]);
+
 /** audio:start 响应 schema（R4：响应契约校验） */
 const AudioStartResSchema = z.object({
   sessionId: z.string().min(1),
@@ -573,7 +628,13 @@ export const IPC_DEFINITIONS = {
       {} as AgentApprovalRequestPayload,
       AgentApprovalRequestPayloadSchema,
     ),
-    subscribeTurnEvent: withPayload(IPC_META.agent.subscribeTurnEvent, {} as TurnEvent),
+    // P1 修复：补齐全表唯一缺失的 payload 契约——此前 TurnEvent 漂移会
+    // 静默直达渲染层，定义表「防漂移」承诺在此通道完全失效
+    subscribeTurnEvent: withPayload(
+      IPC_META.agent.subscribeTurnEvent,
+      {} as TurnEvent,
+      TurnEventSchema,
+    ),
   },
 
   session: {
@@ -946,7 +1007,9 @@ export const IPC_DEFINITIONS = {
     ),
     listLearned: withSchema(
       IPC_META.skill.listLearned,
-      z.object({}),
+      // P2 修复：无参方法统一 null 约定（与 skill.list 等其余 7 处一致）；
+      // wrap 对 null schema 强制 input === undefined，z.object({}) 旧写法放行任意对象
+      null,
       {} as Array<{ name: string; description: string; prompt: string }>,
       SkillListLearnedResSchema,
     ),

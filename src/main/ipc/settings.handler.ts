@@ -1,11 +1,11 @@
 // src/main/ipc/settings.handler.ts
 // Settings 域 IPC handler（API Key 管理 + 遥测级别 + 自定义模型，定义表驱动）
 //
-// 实现 10 个请求-响应方法：
+// 实现 11 个请求-响应方法：
 // - getAll / set   渲染层用户设置（app_settings 表，SQLite 单一真源）
 // - getApiKey / setApiKey / deleteApiKey   API Key 管理（safeStorage 加密存 keychain）
 // - getTelemetryLevel / setTelemetryLevel  遥测级别开关
-// - addRuntimeModel / removeRuntimeModel / listRuntimeModels  自定义模型（运行时快照）
+// - addRuntimeModel / updateRuntimeModel / removeRuntimeModel / listRuntimeModels  自定义模型（运行时快照）
 //
 // 设计要点：
 // - 不依赖 ServiceContainer：keychain / telemetry-pref / runtimeModelStore 均为无状态模块单例
@@ -77,7 +77,7 @@ export function createSettingsHandlers(params: {
 
     // 设置遥测级别：写入 JSON 文件，需重启应用生效
     setTelemetryLevel: async (input) => {
-      await writeTelemetryLevel(input.level);
+      await writeTelemetryLevel(input.level); // 生效时机：Sentry 级别需重启；OTel 于下次启动按此级别决定是否初始化
       return { ok: true, level: input.level };
     },
 

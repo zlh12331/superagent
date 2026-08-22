@@ -69,6 +69,14 @@ function getRegisteredHandler(): InternalHandler {
   return firstCall[1] as unknown as InternalHandler;
 }
 
+/**
+ * 合法来源 sender mock：prod 入口页 URL 命中 isAllowedSenderUrl 白名单
+ * （P2 加固后 wrap 会校验 evt.sender.url()）
+ */
+const allowedSender = {
+  getURL: () => 'file:///C:/app/out/renderer/index.html',
+};
+
 describe('wrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,7 +95,7 @@ describe('wrap', () => {
     const registeredHandler = getRegisteredHandler();
 
     // 模拟 IPC 调用：渲染层传入 { name } 与 traceId
-    const mockEvent = { sender: {} };
+    const mockEvent = { sender: allowedSender };
     const result = await registeredHandler(mockEvent, { name: 'test' }, 'trace-123');
 
     expect(result).toEqual({ data: { id: 1, name: 'test' } });
@@ -107,7 +115,7 @@ describe('wrap', () => {
     wrap('test:channel', schema, handler);
 
     const registeredHandler = getRegisteredHandler();
-    const mockEvent = { sender: {} };
+    const mockEvent = { sender: allowedSender };
     const result = await registeredHandler(mockEvent, { name: '' }, 'trace-456');
 
     expect(result).toHaveProperty('error');
@@ -125,7 +133,7 @@ describe('wrap', () => {
     wrap('test:channel', schema, handler);
 
     const registeredHandler = getRegisteredHandler();
-    const mockEvent = { sender: {} };
+    const mockEvent = { sender: allowedSender };
     const result = await registeredHandler(mockEvent, { name: 'test' }, undefined);
 
     expect(result).toHaveProperty('error');
@@ -144,7 +152,7 @@ describe('wrap', () => {
     wrap('test:channel', schema, handler);
 
     const registeredHandler = getRegisteredHandler();
-    const mockEvent = { sender: {} };
+    const mockEvent = { sender: allowedSender };
     const result = await registeredHandler(mockEvent, { name: 'test' }, undefined);
 
     expect(result).toHaveProperty('error');
@@ -163,7 +171,7 @@ describe('wrap', () => {
     wrap('test:channel', schema, handler);
 
     const registeredHandler = getRegisteredHandler();
-    const mockEvent = { sender: {} };
+    const mockEvent = { sender: allowedSender };
     const result = await registeredHandler(mockEvent, { name: 'test' }, undefined);
 
     expect(result).toHaveProperty('error');
@@ -182,7 +190,7 @@ describe('wrap', () => {
     wrap('test:channel', schema, handler);
 
     const registeredHandler = getRegisteredHandler();
-    const mockEvent = { sender: {} };
+    const mockEvent = { sender: allowedSender };
     await registeredHandler(mockEvent, { name: 'test' }, undefined);
 
     // handler 的第二参数 ctx 应包含自动生成的 traceId
@@ -205,7 +213,7 @@ describe('wrap', () => {
     wrap('test:channel', null, handler, resSchema);
 
     const registeredHandler = getRegisteredHandler();
-    const result = await registeredHandler({ sender: {} }, undefined, undefined);
+    const result = await registeredHandler({ sender: allowedSender }, undefined, undefined);
 
     expect(result).toEqual({ data: { sessionId: 'session-1' } });
   });
@@ -221,10 +229,67 @@ describe('wrap', () => {
     wrap('test:channel', null, handler, resSchema);
 
     const registeredHandler = getRegisteredHandler();
-    const result = await registeredHandler({ sender: {} }, undefined, undefined);
+    const result = await registeredHandler({ sender: allowedSender }, undefined, undefined);
 
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
     expect(error.code).toBe(ErrorCode.INVALID_RESPONSE);
+  });
+
+  // ── P2 加固回归：traceId 形状 / sender 白名单 / null-schema 严格分支 ──
+
+  it('P2 加固：非法外部 traceId 被丢弃并替换为生成的 UUID', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    const schema = z.object({ name: z.string() });
+    const handler = vi.fn().mockResolvedValue({ ok: true });
+
+    wrap('test:channel', schema, handler);
+
+    const registeredHandler = getRegisteredHandler();
+    // 换行注入 / 超长 / 空白 均不合法
+    await registeredHandler({ sender: allowedSender }, { name: 'x' }, 'bad id\\nINJECTED');
+
+    const ctx = handler.mock.calls[0]?.[1] as { traceId: string } | undefined;
+    if (!ctx) {
+      throw new Error('handler 未被调用或 ctx 缺失');
+    }
+    expect(ctx.traceId).not.toContain('bad id');
+    expect(ctx.traceId).toMatch(/^[\w-]{8,64}$/);
+  });
+
+  it('P2 加固：非白名单来源 URL 返回 IPC_SENDER_INVALID', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    const schema = z.object({ name: z.string() });
+    const handler = vi.fn();
+
+    wrap('test:channel', schema, handler);
+
+    const registeredHandler = getRegisteredHandler();
+    const evilSender = { getURL: () => 'https://evil.example.com/payload' };
+    const result = await registeredHandler({ sender: evilSender }, { name: 'x' }, undefined);
+
+    expect(handler).not.toHaveBeenCalled();
+    const error = (result as { error: { code: string } }).error;
+    expect(error.code).toBe(ErrorCode.IPC_SENDER_INVALID);
+  });
+
+  it('P2 加固：null schema 时收到非 undefined 入参返回 INVALID_INPUT', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    const handler = vi.fn().mockResolvedValue({ ok: true });
+
+    wrap('test:channel', null, handler);
+
+    const registeredHandler = getRegisteredHandler();
+    const result = await registeredHandler({ sender: allowedSender }, { sneaky: true }, undefined);
+
+    expect(handler).not.toHaveBeenCalled();
+    const error = (result as { error: { code: string } }).error;
+    expect(error.code).toBe(ErrorCode.INVALID_INPUT);
   });
 });

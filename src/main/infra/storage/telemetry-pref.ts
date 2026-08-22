@@ -12,7 +12,7 @@
 //   因为 initSentry 在 app.whenReady() 之前调用，且 Sentry.init 必须同步
 // ──────────────────────────────────────────────────────────────
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TelemetryLevel } from '@code-agent/shared/main';
 import { app } from 'electron';
@@ -71,13 +71,7 @@ export async function writeTelemetryLevel(level: TelemetryLevel): Promise<void> 
     mkdirSync(dir, { recursive: true });
   }
   const pref: TelemetryPref = { level };
-  writeFileSync(path, JSON.stringify(pref, null, 2), 'utf8');
-  // 安全修复：限制权限为仅属主可读写（同机其他进程不应读取遥测偏好）
-  if (process.platform !== 'win32') {
-    try {
-      chmodSync(path, 0o600);
-    } catch {
-      // 权限设置失败不阻断写入
-    }
-  }
+  // 安全修复：mode 在文件创建时即生效——此前先以默认 0644 落盘再 chmod，
+  // 存在其他进程读到明文偏好的窗口期（Windows 忽略 mode，无副作用）
+  writeFileSync(path, JSON.stringify(pref, null, 2), { encoding: 'utf8', mode: 0o600 });
 }

@@ -23,6 +23,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import type {
   AgentApprovalRequestPayload,
   ApprovalMode,
@@ -38,6 +40,7 @@ import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { readWhitelistSync, writeWhitelist } from '../../storage/whitelist-pref';
+import { splitShellWords } from '../../terminal/terminal-service';
 import type { CommandClassifier } from './command-classifier';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
 import type { DenialState } from './denial-tracking';
@@ -105,8 +108,17 @@ export interface IPermissionService {
    * @param tool 待执行的工具
    * @param input 工具入参（用于构建记忆 key）
    * @param userPrompt 用户原始 prompt（意图豁免：显式提及 discard/wipe 等豁免破坏性拦截）
+   * @param options 可选决策约束：pathBoundary 为本会话工作目录边界——auto 模式下
+   *   exec 命令引用边界外的绝对路径（含 ~ 展开的 home 敏感目录）时降级 ask。
+   *   P2 修复（IM 外泄向量）：无头 IM 会话的输出直达外部渠道，
+   *   `cat ~/.ssh/id_rsa` 这类越界读取此前可被只读快速路径静默放行。
    */
-  decide(tool: Tool, input: unknown, userPrompt?: string): Promise<PermissionDecision>;
+  decide(
+    tool: Tool,
+    input: unknown,
+    userPrompt?: string,
+    options?: { readonly pathBoundary?: string },
+  ): Promise<PermissionDecision>;
 
   /**
    * 请求用户审批
@@ -382,7 +394,14 @@ export class PermissionService implements IPermissionService {
   /**
    * 白名单匹配：工具名相等 + 模式匹配（空模式 = 该工具全部放行）
    *
-   * 命令子串匹配（对齐原型 whitelist-panel 的按命令放行语义）：
+   * P0 安全修复前的实现为任意位置子串匹配（includes），存在提权路径：
+   * 白名单 'git status' 会自动放行 'git status && rm -rf ~' 等复合命令，
+   * 整体短路步骤 3 的 Layer-0 危险命令拦截。修复后语义：
+   * - 复合命令（含 ; | & ` $() 或换行）一律不命中白名单——前缀只约束
+   *   第一段命令，串联/管道的后继段落不在用户放行意图内，必须交回
+   *   完整决策链（Layer-0 / 分类器 / 保守 ask）
+   * - 非复合命令改用 token 级边界前缀匹配（见 matchesWhitelistPattern），
+   *   'echo git status' / 'git status-helper' 不再命中 'git status'
    * 非命令工具（write_file 等）无 command 字段时仅空模式可命中。
    */
   private isWhitelisted(tool: Tool, input: unknown): boolean {
@@ -394,12 +413,20 @@ export class PermissionService implements IPermissionService {
         return true;
       }
       const command = extractCommandFromInput(input);
-      return command?.includes(entry.pattern) === true;
+      if (command === undefined || isCompositeCommand(command)) {
+        return false;
+      }
+      return matchesWhitelistPattern(command, entry.pattern);
     });
   }
 
   /** @inheritDoc */
-  async decide(tool: Tool, input: unknown, userPrompt?: string): Promise<PermissionDecision> {
+  async decide(
+    tool: Tool,
+    input: unknown,
+    userPrompt?: string,
+    options?: { readonly pathBoundary?: string },
+  ): Promise<PermissionDecision> {
     // 1. 检查记忆决策
     const key = this.buildRememberKey(tool.name, input);
     const remembered = this.remembered.get(key);
@@ -440,7 +467,7 @@ export class PermissionService implements IPermissionService {
     }
 
     // 3. 按审批模式分级决策（对齐 qwen ApprovalMode 谱系）
-    const decision = await this.decideByMode(tool, input, userPrompt);
+    const decision = await this.decideByMode(tool, input, userPrompt, options);
     return {
       permission: decision.permission,
       description: decision.description,
@@ -461,6 +488,7 @@ export class PermissionService implements IPermissionService {
     tool: Tool,
     input: unknown,
     userPrompt?: string,
+    options?: { readonly pathBoundary?: string },
   ): Promise<{
     permission: 'auto' | 'ask' | 'deny';
     description: string;
@@ -491,7 +519,21 @@ export class PermissionService implements IPermissionService {
                 description: `${tool.description}（⚠️ ${dangerous.reason}）`,
               };
             }
-            if (isSafeReadOnlyCommand(command)) {
+            // P0：复合命令不走只读安全快速路径——SAFE_READ_ONLY 的 ^ 前缀锚定
+            // 只覆盖第一段命令，'&&'/'|' 后继段落不受任何保护
+            if (!isCompositeCommand(command) && isSafeReadOnlyCommand(command)) {
+              // P2（IM 外泄向量）：路径边界约束——命令引用工作目录之外的绝对路径
+              // （含 ~ 展开的 home 敏感目录）时不走快速路径，降级 ask。
+              // 桌面端同样生效：越界读取本就该经用户确认，而非静默放行。
+              if (
+                options?.pathBoundary !== undefined &&
+                commandTargetsOutsideBoundary(command, options.pathBoundary)
+              ) {
+                return {
+                  permission: 'ask',
+                  description: `${tool.description}（⚠️ 引用工作目录之外的路径，需确认）`,
+                };
+              }
               // 只读安全命令自动放行（对齐 AUTO 分类器安全命令收敛）
               return { permission: 'auto', description: tool.description };
             }
@@ -725,6 +767,92 @@ function stableStringifyInternal(value: unknown, visited: WeakSet<object>): stri
         `${JSON.stringify(k)}:${stableStringifyInternal((value as Record<string, unknown>)[k], visited)}`,
     )
     .join(',')}}`;
+}
+
+/**
+ * 复合命令特征（P0 安全修复）
+ *
+ * 含任一特征说明不是单一简单命令：`;' `|` `&` 串联/后台、反引号与 `$(`
+ * 命令替换、换行续行。此类命令在两处被禁用快速通道（安全方向保守）：
+ * 1. 用户白名单不命中（isWhitelisted）——放行意图只针对单一命令
+ * 2. SAFE_READ_ONLY 只读自动放行跳过——其 ^ 前缀锚定不覆盖后继段落
+ * 引号内的误判（如 URL 查询串含 '&'）只会降级走完整决策链，不会放大权限。
+ */
+const COMPOSITE_COMMAND_PATTERN = /[;|&`]|\$\(|\n/;
+
+/** Windows 盘符绝对路径（C:\ 或 C:/）；POSIX 根路径单独以 '/' 起判 */
+const WIN_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
+
+/**
+ * P2 安全加固：判断命令是否引用了边界目录之外的路径目标。
+ *
+ * 判定保守：任何绝对路径 token（盘符 / POSIX 根 / ~ 展开）或解析后逃逸边界的
+ * 相对路径（../ 链）都视为越界。命令分词复用 splitShellWords（跨平台引号/转义语义），
+ * 仅对「像路径」的 token 判定——选项开关（如 --force）、URL 等不误伤。
+ */
+export function commandTargetsOutsideBoundary(command: string, boundary: string): boolean {
+  let tokens: string[];
+  try {
+    tokens = splitShellWords(command, process.platform);
+  } catch {
+    // 分词失败按越界处理（保守：交给 ask 分支人工确认）
+    return true;
+  }
+  const normBoundary = normalize(boundary).toLowerCase();
+  for (const raw of tokens) {
+    if (!isPathLikeToken(raw)) continue;
+    let resolved: string;
+    try {
+      resolved = resolvePathToken(raw, boundary);
+    } catch {
+      return true;
+    }
+    const rel = relative(normBoundary, resolved.toLowerCase());
+    if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** token 是否可能指向文件系统目标：绝对路径 / ~ 前缀 / 含 .. 段的相对路径 */
+function isPathLikeToken(token: string): boolean {
+  if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/') || token.startsWith('~')) {
+    return true;
+  }
+  return token === '..' || token.startsWith('../') || token.startsWith('..\\');
+}
+
+/** 把路径 token 解析为绝对路径（~ → home；相对 → 相对边界） */
+function resolvePathToken(token: string, boundary: string): string {
+  if (token.startsWith('~')) {
+    return resolve(join(homedir(), token.slice(1)));
+  }
+  if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/')) {
+    return normalize(token);
+  }
+  return resolve(boundary, token);
+}
+
+export function isCompositeCommand(command: string): boolean {
+  return COMPOSITE_COMMAND_PATTERN.test(command);
+}
+
+/**
+ * 白名单 token 级前缀匹配（P0 安全修复，替代任意位置 includes 子串）
+ *
+ * 规则：command.trim() 与 pattern 相等，或以 pattern 开头且紧随空白边界。
+ * pattern='npm test'：命中 'npm test -- --watch'；
+ * 不命中 'echo npm test'（前缀不符）、'npm testcase'（无词边界）。
+ * 大小写敏感（与 shell 命令语义一致）。
+ */
+function matchesWhitelistPattern(command: string, pattern: string): boolean {
+  const normalized = command.trim();
+  const pat = pattern.trim();
+  if (normalized === pat) {
+    return true;
+  }
+  return normalized.startsWith(pat) && /\s/.test(normalized.charAt(pat.length));
 }
 
 /**

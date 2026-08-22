@@ -193,6 +193,95 @@ describe('PermissionService', () => {
       expect(decision.permission).toBe('ask');
     });
 
+    it('P0：白名单命中但命令为复合结构 → 不短路，Layer-0 拦截后继破坏段', async () => {
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'mock_tool', pattern: 'git status' },
+      ]);
+      service = new PermissionService();
+      service.setApprovalMode('auto');
+      const decision = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git status && git reset --hard HEAD~1',
+      });
+      expect(decision.permission).toBe('ask');
+      expect(decision.description).toContain('破坏性');
+    });
+
+    it('P2 路径边界：auto 模式只读命令引用边界外绝对路径 → ask（IM 外泄向量封堵）', async () => {
+      service = new PermissionService();
+      service.setApprovalMode('auto');
+      const decision = await service.decide(
+        createMockTool('ask', 'exec'),
+        { command: 'cat ~/.ssh/id_rsa' },
+        undefined,
+        { pathBoundary: 'F:\\TraeProjects\\1' },
+      );
+      expect(decision.permission).toBe('ask');
+    });
+
+    it('P2 路径边界：边界内相对路径保持 auto；盘符越界同样降级', async () => {
+      service = new PermissionService();
+      service.setApprovalMode('auto');
+      const inside = await service.decide(
+        createMockTool('ask', 'exec'),
+        { command: 'cat docs/README.md' },
+        undefined,
+        { pathBoundary: 'F:\\TraeProjects\\1' },
+      );
+      expect(inside.permission).toBe('auto');
+
+      const outside = await service.decide(
+        createMockTool('ask', 'exec'),
+        { command: 'type C:\\Windows\\win.ini' },
+        undefined,
+        { pathBoundary: 'F:\\TraeProjects\\1' },
+      );
+      expect(outside.permission).toBe('ask');
+    });
+
+    it('P2 路径边界：未传边界时行为不变（向后兼容）', async () => {
+      service = new PermissionService();
+      service.setApprovalMode('auto');
+      const decision = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'cat ~/.ssh/id_rsa',
+      });
+      expect(decision.permission).toBe('auto');
+    });
+    it('P0：白名单命中的复合命令即使第二段看似只读也不自动放行', async () => {
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'mock_tool', pattern: 'git status' },
+      ]);
+      service = new PermissionService();
+      service.setApprovalMode('auto');
+      const decision = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git status && cat package.json',
+      });
+      // 复合命令跳过 SAFE_READ_ONLY 快速路径，无分类器时保守 ask
+      expect(decision.permission).toBe('ask');
+    });
+
+    it('P0：token 边界——前缀伪装与无词边界均不命中白名单', async () => {
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'mock_tool', pattern: 'git status' },
+      ]);
+      service = new PermissionService();
+      const disguised = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git status-helper --do-things',
+      });
+      expect(disguised.permission).toBe('ask');
+      const exact = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git status',
+      });
+      expect(exact.permission).toBe('auto');
+    });
+
+    it('P0：auto 模式下安全命令串联后继段落不受只读快速路径保护', async () => {
+      service.setApprovalMode('auto');
+      const decision = await service.decide(createMockTool('ask', 'exec'), {
+        command: 'git diff && git reset --hard',
+      });
+      expect(decision.permission).toBe('ask');
+    });
+
     it('setApprovalMode(plan)：edit/exec 工具 deny，read 工具 auto（只读探索零副作用）', async () => {
       service.setApprovalMode('plan');
       expect((await service.decide(createMockTool('ask', 'edit'), {})).permission).toBe('deny');

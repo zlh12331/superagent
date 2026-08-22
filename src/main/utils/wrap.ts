@@ -16,6 +16,33 @@ import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import type { ZodType } from 'zod';
 import { logger } from './logger';
 
+/** 外部传入 traceId 的合法形状：8-64 位字母数字/连字符/下划线（UUID 与测试 id 均命中；拒绝换行/引号/空白） */
+const TRACE_ID_PATTERN = /^[\w-]{8,64}$/;
+
+/**
+ * P2 加固：sender 来源 URL 白名单
+ *
+ * - prod：仅应用自身入口页（file://…/renderer/index.html）
+ * - dev：electron-vite dev server 同源（ELECTRON_RENDERER_URL，如 http://localhost:5173）
+ *
+ * 防止同进程内其他 BrowserWindow / webview 借道调用 IPC。
+ */
+function isAllowedSenderUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol === 'file:') {
+      return parsed.pathname.endsWith('/renderer/index.html');
+    }
+    const devUrl = process.env['ELECTRON_RENDERER_URL'];
+    if (devUrl !== undefined && devUrl.length > 0) {
+      return parsed.origin === new URL(devUrl).origin;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * IPC handler 上下文（main 进程专用）
  *
@@ -49,13 +76,20 @@ export function wrap<TInput, TOutput>(
 ): void {
   ipcMain.handle(channel, async (evt, input: unknown, incomingTraceId?: string) => {
     // 1. traceId 生成或复用（渲染层可显式传入）
-    const traceId = incomingTraceId ?? randomUUID();
+    // P2 加固：校验外部 traceId 形状（preload 传 crypto.randomUUID()）——
+    // 此前任意字符串（超长/换行/控制字符）可原样进入结构化日志与 Sentry tags（日志注入面）
+    const traceId =
+      typeof incomingTraceId === 'string' && TRACE_ID_PATTERN.test(incomingTraceId)
+        ? incomingTraceId
+        : randomUUID();
     const ctx: IpcHandlerContext = { traceId, sender: evt.sender };
 
     // 2. sender 校验（Electron Security #17）：防止跨窗口越权调用
+    // P2 加固：除「属于应用窗口」外，再校验来源 URL 属于应用自身页面
+    // （dev: electron-vite dev server；prod: file:// 应用入口），防其他窗口借道
     const win = BrowserWindow.fromWebContents(evt.sender);
-    if (win === null) {
-      logger.error({ traceId, channel }, 'IPC sender 无效');
+    if (win === null || !isAllowedSenderUrl(evt.sender.getURL())) {
+      logger.error({ traceId, channel, senderUrl: evt.sender.getURL() }, 'IPC sender 无效');
       const error = new AppError(ErrorCode.IPC_SENDER_INVALID).toIpcError();
       return { error } satisfies IpcResponse<TOutput>;
     }
@@ -74,6 +108,13 @@ export function wrap<TInput, TOutput>(
       parsedInput = parsed.data;
     } else {
       // schema 为 null，input 必须为 undefined
+      // P2 修复：此前静默放行任意 input，「无参方法」契约名存实亡——
+      // 渲染层 bug 传参不会被发现。现在非 undefined 一律 INVALID_INPUT 拒绝。
+      if (input !== undefined) {
+        logger.warn({ traceId, channel }, 'IPC 无参方法收到非 undefined 入参');
+        const error = new AppError(ErrorCode.INVALID_INPUT, '该方法不接受入参').toIpcError();
+        return { error } satisfies IpcResponse<TOutput>;
+      }
       parsedInput = undefined as TInput;
     }
 

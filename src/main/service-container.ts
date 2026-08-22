@@ -1,4 +1,4 @@
-﻿// src/main/service-container.ts
+// src/main/service-container.ts
 // ServiceContainer：应用单例统一生命周期管理入口
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
@@ -519,11 +519,26 @@ class ServiceContainer {
 
   /**
    * 释放 IM 渠道（应用退出）
+   *
+   * P1 修复：仅收尾已存在的实例——此前经 getImService() 懒初始化，IM 从未启用时
+   * 退出反而会在 teardown 路径凭空构建并挂载（mount 含 mkdirSync + onMessage 订阅）
+   * 整套 IM 服务再立刻销毁；且 imBridge 置空前未 unmount（回合事件订阅残留）。
+   * 顺序对齐 dispose() 主链：先停桥接订阅，再停渠道长连接。
    */
   async disposeImChannels(): Promise<void> {
-    await this.getImService().stopAll();
-    this.imService = null;
+    this.imBridge?.unmount();
     this.imBridge = null;
+    if (this.imService !== null) {
+      await this.imService.stopAll();
+      this.imService = null;
+    }
+  }
+
+  /**
+   * 统计数据保留：删除用量统计窗口外的 token_usage 行（启动时调用一次）
+   */
+  pruneExpiredUsage(): number {
+    return this.getSessionService().pruneExpiredUsage();
   }
 
   /**

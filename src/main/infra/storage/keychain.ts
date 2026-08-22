@@ -139,10 +139,17 @@ export async function getSecret(key: string): Promise<string | null> {
  * @param key secret 名称
  */
 export async function deleteSecret(key: string): Promise<void> {
-  const store = await readStore();
-  if (store[key] !== undefined) {
-    delete store[key];
-    await writeStore(store);
+  // P1 修复：delete 是读改写，必须与 setSecret 同锁——否则运行时模型删除密钥
+  // 与设置页保存密钥并发时，delete 的旧读会覆盖 set 刚写入的 key（丢更新）
+  const release = acquireLock();
+  try {
+    const store = await readStore();
+    if (store[key] !== undefined) {
+      delete store[key];
+      await writeStore(store);
+    }
+  } finally {
+    release();
   }
 }
 

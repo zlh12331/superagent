@@ -178,6 +178,14 @@ export class ImAgentBridge {
     let currentTurnId: string | undefined;
     let completionResolve: (() => void) | undefined;
     const unsubscribe = this.agentService.onTurnEvent((event) => {
+      // P1 修复：onTurnEvent 是类级全局监听，事件流包含桌面端所有并发会话。
+      // 不按 sessionId 过滤时，其他会话的增量文本会被 flush 回发到本群聊、
+      // 工具名混入结束摘要、transcript 落库串入他人会话内容。
+      // 仅在事件携带 sessionId 且不同时丢弃——真实翻译器产出的事件恒带
+      // sessionId；容忍缺省字段的历史事件（防御性，不改变主流程）。
+      if (event.sessionId !== undefined && event.sessionId !== sessionId) {
+        return;
+      }
       try {
         switch (event.type) {
           case TurnEventType.TURN_START: {

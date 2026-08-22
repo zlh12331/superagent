@@ -212,8 +212,22 @@ function createWindow(): BrowserWindow {
   });
 
   // 限制导航（Security #13）：只允许应用内导航
+  // P2 加固：dev 仅允许 electron-vite dev server 同源；prod（file:// 入口）
+  // 不再放行任意 http://localhost:*——本机其他端口的服务同样能借此导航窗口
+  const navRendererUrl = process.env['ELECTRON_RENDERER_URL'];
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('http://localhost') && !url.startsWith('app://')) {
+    let allowed = false;
+    try {
+      const parsed = new URL(url);
+      if (navRendererUrl !== undefined && parsed.origin === new URL(navRendererUrl).origin) {
+        allowed = true;
+      } else if (parsed.protocol === 'file:') {
+        allowed = parsed.pathname.endsWith('/renderer/index.html');
+      }
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
       event.preventDefault();
     }
   });
@@ -354,12 +368,16 @@ app
     registerGlobalErrorHandlers();
     // 崩溃恢复：上次异常退出时把残留 running 会话标记为 interrupted（渲染层提示恢复）
     void recoverFromCrash();
+    // 统计保留策略：清理 90 天窗口外的 token_usage（与用量页查询窗口对齐，防无限膨胀）
+    serviceContainer.pruneExpiredUsage();
     // 运行时模型加载：自定义模型注册到 ModelRegistry（LLM 首次调用前）
     void initRuntimeModels();
     // 已学习技能合并加载（skills 表 → 注册表，重启保留）
     skillRegistry.loadFromRows(new LearnSkillService(llmClient).listLearned());
     // IM 渠道恢复：已配置渠道自动连接（含 IM → Agent 桥接挂载）
-    void serviceContainer.initImChannels();
+    // 竞态修复：保存初始化 Promise——before-quit 需等待其完成再 stopAll，
+    // 避免早退场景下 restore 与 stopAll 在同一实例上并发执行
+    imChannelsInit = serviceContainer.initImChannels();
     // 子代理管理器初始化（run_subagent 工具依赖）
     serviceContainer.initSubagents();
     // 注册全部 IPC handler（定义表驱动，registerIpcHandlers 统一执行）
@@ -523,6 +541,8 @@ app.on('window-all-closed', () => {
 // （带 3s 超时兜底），避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
 // 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
 let isQuitting = false;
+// IM 渠道初始化 Promise（whenReady 内赋值；before-quit 等待其落定，见下）
+let imChannelsInit: Promise<void> | null = null;
 app.on('before-quit', async (event) => {
   if (isQuitting) {
     return;
@@ -532,6 +552,14 @@ app.on('before-quit', async (event) => {
   isQuitting = true;
   try {
     // IM 渠道停止（长轮询等后台协程先停，避免退出时残留请求）
+    // 先等启动期 restore() 落定（3s 超时兜底），防止与 stopAll 并发
+    if (imChannelsInit !== null) {
+      await Promise.race([
+        imChannelsInit.catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+      imChannelsInit = null;
+    }
     await serviceContainer.disposeImChannels();
     await disposeServices();
     // 关闭 OpenTelemetry：flush 所有 pending span 到 exporter，避免丢失 trace 数据

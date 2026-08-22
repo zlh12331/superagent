@@ -14,7 +14,7 @@
 // - SessionService 的 appendMessage 是内部 API（非 IPC 通道）
 //   由 AgentService / ChatService 直接调用，不在此 handler 中注册
 
-import { writeFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatMessage, InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
@@ -56,7 +56,9 @@ async function exportAllSessions(sessionService: ISessionService): Promise<{
   }
   try {
     const payload = await sessionService.exportAll();
-    writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    // P2 修复：紧凑序列化 + 异步写——此前 null,2 美化显著放大体积，
+    // writeFileSync 同步阻塞主进程（重度使用时秒级卡顿，全部 IPC 停摆）
+    await writeFile(filePath, JSON.stringify(payload), 'utf8');
     logger.info({ filePath, sessions: payload.sessions.length }, '会话导出完成');
     return { saved: true, path: filePath };
   } catch (error) {

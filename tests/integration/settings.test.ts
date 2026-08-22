@@ -29,11 +29,12 @@ describe('settings 域集成链路（batch 6）', () => {
       });
       await handlers.setApiKey({ provider: 'openai', apiKey: 'sk-test-123' });
       const res = await handlers.getApiKey({ provider: 'openai' });
-      expect(res.apiKey).toBe('sk-test-123');
+      // 安全契约（P0 加固）：getApiKey 只回传 configured 布尔，不回传明文 key
+      expect(res.configured).toBe(true);
     });
   });
 
-  it('正向：deleteApiKey → 读取为 null', async () => {
+  it('正向：deleteApiKey → 读取为未配置', async () => {
     resetSessionService();
     await withTempUserData(async () => {
       const handlers = createSettingsHandlers({
@@ -43,7 +44,7 @@ describe('settings 域集成链路（batch 6）', () => {
       await handlers.setApiKey({ provider: 'deepseek', apiKey: 'sk-ds' });
       await handlers.deleteApiKey({ provider: 'deepseek' });
       const res = await handlers.getApiKey({ provider: 'deepseek' });
-      expect(res.apiKey).toBeNull();
+      expect(res.configured).toBe(false);
     });
   });
 
@@ -88,7 +89,7 @@ describe('settings 域集成链路（batch 6）', () => {
     });
   });
 
-  it('边界：getApiKey 未设置 → null（不抛）', async () => {
+  it('边界：getApiKey 未设置 → configured=false（不抛）', async () => {
     resetSessionService();
     await withTempUserData(async () => {
       const handlers = createSettingsHandlers({
@@ -96,7 +97,7 @@ describe('settings 域集成链路（batch 6）', () => {
         permissionService: new PermissionService(),
       });
       const res = await handlers.getApiKey({ provider: 'nonexistent-provider' });
-      expect(res.apiKey).toBeNull();
+      expect(res.configured).toBe(false);
     });
   });
 
@@ -132,7 +133,7 @@ describe('settings 域集成链路（batch 6）', () => {
     });
   });
 
-  it('幂等：重复 setApiKey 覆盖', async () => {
+  it('幂等：重复 setApiKey 覆盖（新契约只暴露 configured）', async () => {
     resetSessionService();
     await withTempUserData(async () => {
       const handlers = createSettingsHandlers({
@@ -142,7 +143,8 @@ describe('settings 域集成链路（batch 6）', () => {
       await handlers.setApiKey({ provider: 'openai', apiKey: 'v1' });
       await handlers.setApiKey({ provider: 'openai', apiKey: 'v2' });
       const res = await handlers.getApiKey({ provider: 'openai' });
-      expect(res.apiKey).toBe('v2');
+      // 明文不再回传（防 IPC 侧泄露）；覆盖语义由 keychain 单测保证
+      expect(res.configured).toBe(true);
     });
   });
 
@@ -179,7 +181,7 @@ describe('settings 域集成链路（batch 6）', () => {
       }
       for (let i = 0; i < 5; i++) {
         const res = await handlers.getApiKey({ provider: `provider-${i}` });
-        expect(res.apiKey).toBe(`sk-${i}`);
+        expect(res.configured).toBe(true);
       }
     });
   });

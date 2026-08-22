@@ -86,8 +86,9 @@ describe('file 域集成链路（batch 3）', () => {
       await handlers.createDir({ path: dirPath });
       await handlers.create({ path: join(dirPath, 'inner.txt') });
 
-      await handlers.delete({ path: filePath });
-      await handlers.delete({ path: join(dir, 'nested') });
+      // P0 契约：recursive 必填（文件 false / 目录树 true）
+      await handlers.delete({ path: filePath, recursive: false });
+      await handlers.delete({ path: join(dir, 'nested'), recursive: true });
 
       const list = await handlers.list({ path: dir, depth: 5 });
       expect(list.entries).toHaveLength(0);
@@ -212,12 +213,14 @@ describe('file 域集成链路（batch 3）', () => {
   it('异常：delete 不存在 → 报错（严格模式 force:false）', async () => {
     await withTempDir(async (dir) => {
       const handlers = createFileHandlers({ fileService: getFileService() });
-      await expect(handlers.delete({ path: join(dir, 'never-existed') })).rejects.toBeDefined();
+      await expect(
+        handlers.delete({ path: join(dir, 'never-existed'), recursive: false }),
+      ).rejects.toBeDefined();
       // 已删除文件的再次删除同样报错（严格语义）
       const filePath = join(dir, 'gone.txt');
       await handlers.create({ path: filePath });
-      await handlers.delete({ path: filePath });
-      await expect(handlers.delete({ path: filePath })).rejects.toBeDefined();
+      await handlers.delete({ path: filePath, recursive: false });
+      await expect(handlers.delete({ path: filePath, recursive: false })).rejects.toBeDefined();
     });
   });
 

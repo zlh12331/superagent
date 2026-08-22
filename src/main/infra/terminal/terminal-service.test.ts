@@ -117,8 +117,12 @@ describe('splitShellWords（R2：shell 语义拆词）', () => {
     ]);
   });
 
-  it('双引号 + 反斜杠转义空格', () => {
-    expect(splitShellWords('echo "a b" c\\ d')).toEqual(['echo', 'a b', 'c d']);
+  it('双引号 + 反斜杠转义空格（POSIX 语义，显式 linux 平台）', () => {
+    expect(splitShellWords('echo "a b" c\\ d', 'linux')).toEqual(['echo', 'a b', 'c d']);
+  });
+
+  it('平台缺省跟随 process.platform（无反斜杠命令两平台行为一致）', () => {
+    expect(splitShellWords('npm run dev')).toEqual(['npm', 'run', 'dev']);
   });
 
   it('空字符串 / 纯空白 → 空数组', () => {
@@ -128,6 +132,41 @@ describe('splitShellWords（R2：shell 语义拆词）', () => {
 
   it('未闭合引号：容错为最后一段参数', () => {
     expect(splitShellWords("echo 'unclosed")).toEqual(['echo', 'unclosed']);
+  });
+});
+
+describe('splitShellWords（P1：win32 反斜杠字面量化）', () => {
+  it('Windows 绝对路径不被剥反斜杠（修复前拆成 C:WINDOWSsystem32cmd.exe）', () => {
+    expect(splitShellWords('C:\\WINDOWS\\system32\\cmd.exe /c echo hi', 'win32')).toEqual([
+      'C:\\WINDOWS\\system32\\cmd.exe',
+      '/c',
+      'echo',
+      'hi',
+    ]);
+  });
+
+  it('win32 双引号分组保留组内特殊字符', () => {
+    expect(splitShellWords('cmd /c "echo a & echo b"', 'win32')).toEqual([
+      'cmd',
+      '/c',
+      'echo a & echo b',
+    ]);
+  });
+
+  it('win32 双引号内 \\" 转义引号本身（CommandLineToArgvW 常用子集）', () => {
+    expect(splitShellWords('node -e "console.log(\\"hi\\")"', 'win32')).toEqual([
+      'node',
+      '-e',
+      'console.log("hi")',
+    ]);
+  });
+
+  it('POSIX 行为不受影响：linux 下引号外反斜杠仍转义下一字符', () => {
+    expect(splitShellWords('tar -xf archive\\ backup.tar', 'linux')).toEqual([
+      'tar',
+      '-xf',
+      'archive backup.tar',
+    ]);
   });
 });
 

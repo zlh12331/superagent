@@ -129,7 +129,11 @@ export class ToolExecutor implements IToolExecutor {
         }
 
         // 2. 决策权限（userPrompt 用于意图豁免破坏性拦截）
-        const decision = await this.permissionService.decide(tool, input, ctx.userPrompt);
+        // P2（IM 外泄向量）：ctx.workingDir 作为路径边界传入——auto 模式下
+        // 命令引用边界外的绝对路径时降级 ask，不再被只读快速路径静默放行
+        const decision = await this.permissionService.decide(tool, input, ctx.userPrompt, {
+          pathBoundary: ctx.workingDir,
+        });
 
         // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
         this.sendToolCall(webContents, {
@@ -234,6 +238,9 @@ export class ToolExecutor implements IToolExecutor {
           if (!approved) {
             // 用户拒绝
             logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
+            // A4 接线：拒绝计入 PermissionService 拒绝统计（auto 模式连续拒绝
+            // 降级手动确认的数据源——此前记录方法存在但无人调用，机制死亡）
+            this.permissionService.recordUserDenial();
             const result = this.buildErrorResult(
               ctx.sessionId,
               toolCallId,
@@ -247,6 +254,8 @@ export class ToolExecutor implements IToolExecutor {
           }
 
           logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
+          // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
+          this.permissionService.recordUserAllowance();
         }
 
         // 5. 检查中断信号（审批等待期间用户可能中断了对话）

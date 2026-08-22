@@ -40,7 +40,7 @@ import type {
   UsageSummaryRes,
 } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import { count, desc, eq, gte, sql } from 'drizzle-orm';
+import { count, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb } from './db';
 import {
@@ -157,6 +157,15 @@ export interface ISessionService {
 
   /** 查询最近使用的目录列表（去重 + 按 lastUsed 倒序） */
   listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes>;
+
+  /**
+   * 统计保留策略：删除用量统计窗口（90 天）外的 token_usage 行
+   *
+   * P2 修复：该表此前只写不删，重度使用一年可累积数十万行，
+   * 库文件与备份轮转体积随之无限膨胀。窗口与 getUsageSummary 对齐，
+   * 删除不改变统计语义。turns 表不在此列——它与回放/Transcript 结构绑定。
+   */
+  pruneExpiredUsage(): number;
 
   // ── 崩溃恢复（回合状态机） ──────────────────────────────
 
@@ -680,6 +689,17 @@ export class SessionService implements ISessionService {
         lastUsed: row.lastUsed,
       })),
     };
+  }
+
+  /** @inheritDoc */
+  pruneExpiredUsage(): number {
+    const db = getDb();
+    const cutoff = Date.now() - USAGE_SUMMARY_WINDOW_MS;
+    const result = db.delete(tokenUsage).where(lt(tokenUsage.createdAt, cutoff)).run();
+    if (result.changes > 0) {
+      logger.info({ removed: result.changes }, '已清理统计窗口外的 token_usage 行');
+    }
+    return result.changes;
   }
 
   /** @inheritDoc */

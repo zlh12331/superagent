@@ -7,7 +7,7 @@
 // - exportAll 三态：取消 / 成功写文件 / 写文件失败
 // ──────────────────────────────────────────────────────────────
 
-import { writeFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSessionHandlers, type SessionHandlerDeps } from './session.handler';
 
@@ -22,9 +22,9 @@ vi.mock('electron', () => ({
   dialog: { showSaveDialog: mocks.mockShowSaveDialog },
 }));
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, writeFileSync: vi.fn() };
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, writeFile: vi.fn() };
 });
 
 /** fake SessionService：12 个方法全部可编程 */
@@ -160,9 +160,9 @@ describe('session.handler.exportAll（三态）', () => {
     } as never);
     const res = await handlers.exportAll(undefined, EMPTY_CTX);
     expect(sessionService.exportAll).toHaveBeenCalledTimes(1);
-    expect(writeFileSync).toHaveBeenCalledWith(
+    expect(writeFile).toHaveBeenCalledWith(
       'C:\\out.json',
-      JSON.stringify({ sessions: [{ sessionId: 's1' }], total: 1 }, null, 2),
+      JSON.stringify({ sessions: [{ sessionId: 's1' }], total: 1 }),
       'utf8',
     );
     expect(res).toEqual({ saved: true, path: 'C:\\out.json' });
@@ -174,7 +174,7 @@ describe('session.handler.exportAll（三态）', () => {
     const res = await handlers.exportAll(undefined, EMPTY_CTX);
     expect(res).toEqual({ saved: false });
     expect(sessionService.exportAll).not.toHaveBeenCalled();
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
   });
 
   it('边界：filePath 空串 → { saved: false }', async () => {
@@ -184,7 +184,7 @@ describe('session.handler.exportAll（三态）', () => {
   });
 
   it('异常：写文件失败 → 异常向上抛', async () => {
-    const writeSpy = vi.mocked(writeFileSync);
+    const writeSpy = vi.mocked(writeFile);
     writeSpy.mockImplementationOnce(() => {
       throw new Error('EACCES');
     });
