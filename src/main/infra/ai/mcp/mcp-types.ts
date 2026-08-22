@@ -2,44 +2,64 @@
 // MCP（Model Context Protocol）类型定义
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 定义 MCP server 配置类型（stdio 传输）
+// - 定义 MCP server 配置类型（stdio / sse / streamable-http 三态传输）
 // - 定义工具命名空间 helper：避免与内置工具重名
 // - 定义 MCP server 状态枚举
 //
 // 设计原则：
-// - 仅支持 stdio 传输（最常见，npx/node 启动 MCP server）
-//   HTTP/SSE 传输留待后续迭代
+// - transport 三态：stdio（本地子进程，最常见）/ sse / streamable-http（远程 HTTP）
+//   缺省 stdio（向后兼容：旧配置无 transport 字段视为 stdio）
 // - 工具命名空间：mcp__${serverName}__${toolName}（与 Claude Code 一致）
 //   避免与内置工具（read_file 等）重名，且便于按 server 名批量过滤
 // - MCP server 配置可由 settings store 持久化，运行时动态加载
 // ──────────────────────────────────────────────────────────────
 
+/** MCP 传输类型（与 shared MCP_TRANSPORTS 对齐；缺省 stdio） */
+export type McpTransportType = 'stdio' | 'sse' | 'streamable-http';
+
 /**
- * MCP server 配置（stdio 传输）
+ * MCP server 配置
  *
- * 与 @modelcontextprotocol/sdk 的 StdioServerParameters 对齐，
- * 额外增加 name 字段作为 server 唯一标识（用于工具命名空间与日志追踪）。
+ * - stdio：对齐 @modelcontextprotocol/sdk 的 StdioServerParameters，
+ *   command 必填（裸可执行文件名 + 可选 args/env/cwd）
+ * - sse / streamable-http：url 必填（http/https），可选 headers（如 Authorization）
  *
- * @example
+ * name 字段作为 server 唯一标识（用于工具命名空间与日志追踪）。
+ *
+ * @example stdio
  * ```ts
  * const config: McpServerConfig = {
  *   name: 'filesystem',
  *   command: 'npx',
  *   args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/allowed'],
- *   env: { NODE_ENV: 'production' },
+ * };
+ * ```
+ * @example 远程 HTTP
+ * ```ts
+ * const config: McpServerConfig = {
+ *   name: 'remote',
+ *   transport: 'streamable-http',
+ *   url: 'https://mcp.example.com/mcp',
+ *   headers: { Authorization: 'Bearer xxx' },
  * };
  * ```
  */
 export interface McpServerConfig {
   /** server 唯一名称（用于工具命名空间 mcp__${name}__${tool}） */
   readonly name: string;
-  /** 启动 MCP server 的命令（如 'npx' / 'node'） */
-  readonly command: string;
-  /** 命令行参数 */
+  /** 传输类型（缺省 stdio） */
+  readonly transport?: McpTransportType;
+  /** 远程 server URL（sse / streamable-http 必填；仅 http/https） */
+  readonly url?: string;
+  /** HTTP 请求头（如 Authorization；仅远程 transport 生效） */
+  readonly headers?: Readonly<Record<string, string>>;
+  /** 启动 MCP server 的命令（如 'npx' / 'node'；仅 stdio 必填） */
+  readonly command?: string;
+  /** 命令行参数（仅 stdio） */
   readonly args?: readonly string[];
-  /** 环境变量（覆盖进程默认 env） */
+  /** 环境变量（覆盖进程默认 env；仅 stdio） */
   readonly env?: Readonly<Record<string, string>>;
-  /** 子进程工作目录（默认继承父进程） */
+  /** 子进程工作目录（默认继承父进程；仅 stdio） */
   readonly cwd?: string;
   /**
    * 工具权限覆盖（可选）
@@ -51,6 +71,11 @@ export interface McpServerConfig {
    * 此字段允许用户强制覆盖默认权限决策。
    */
   readonly permissionOverride?: 'auto' | 'ask';
+}
+
+/** 解析生效的传输类型（缺省 stdio；校验/客户端分支统一入口） */
+export function resolveMcpTransport(config: Pick<McpServerConfig, 'transport'>): McpTransportType {
+  return config.transport ?? 'stdio';
 }
 
 /**

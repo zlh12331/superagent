@@ -378,5 +378,34 @@ describe('mcp-service', () => {
     it('existingToolNames 为 undefined 时不检查重名', () => {
       expect(() => validateMcpServerConfig(validConfig, undefined)).not.toThrow();
     });
+
+    it('远程 transport：合法 https url 通过（command 缺省）', () => {
+      expect(() =>
+        validateMcpServerConfig({
+          name: 'remote',
+          transport: 'streamable-http',
+          url: 'https://mcp.example.com/mcp',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        validateMcpServerConfig({ name: 'remote', transport: 'sse', url: 'http://127.0.0.1:3000' }),
+      ).not.toThrow();
+    });
+
+    it('远程 transport：缺 url 抛 INVALID_INPUT', () => {
+      expect(() => validateMcpServerConfig({ name: 'x', transport: 'sse' })).toThrow(
+        /需要合法的 http\(s\) url/,
+      );
+    });
+
+    it('远程 transport：非 http(s) 协议抛 INVALID_INPUT', () => {
+      expect(() =>
+        validateMcpServerConfig({
+          name: 'x',
+          transport: 'streamable-http',
+          url: 'file:///etc/passwd',
+        }),
+      ).toThrow(AppError);
+    });
   });
 });

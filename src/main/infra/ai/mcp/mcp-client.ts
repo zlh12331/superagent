@@ -2,26 +2,81 @@
 // MCPClient：单个 MCP server 的客户端封装
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 启动 MCP server 子进程（stdio 传输）
+// - 按配置创建传输层（stdio 子进程 / sse / streamable-http 远程 HTTP）
 // - 完成 MCP 协议初始化握手（capabilities 协商）
 // - listTools：获取 server 提供的工具列表
 // - callTool：转发工具调用到 MCP server
-// - close：关闭连接 + 终止子进程
+// - close：关闭连接 + 终止子进程（stdio）
 //
 // 设计原则：
 // - 单 server 单 client：每个 McpServerConfig 对应一个 MCPClient 实例
 // - 错误隔离：单个 server 启动失败不影响其他 server
 // - 日志追踪：所有关键操作打 log（含 serverName 便于排查）
-// - StdioClientTransport 内部管理子进程，close 时会 kill 子进程
+// - 传输创建收敛在 createMcpTransport：按 resolveMcpTransport 分支，便于测试
 // ──────────────────────────────────────────────────────────────
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 import { logger } from '../../../utils/logger';
 import type { McpCallToolFn, McpToolCallResult, McpToolDescriptor } from './mcp-tool-adapter';
 import type { McpServerConfig } from './mcp-types';
+import { resolveMcpTransport } from './mcp-types';
+
+/**
+ * 按配置创建传输层实例
+ *
+ * - stdio：StdioClientTransport（启动本地子进程；stderr pipe 到日志由调用方处理）
+ * - sse：SSEClientTransport（HTTP 轮询降级通道）
+ * - streamable-http：StreamableHTTPClientTransport（现代远程传输）
+ *
+ * 远程传输通过 requestInit.headers 注入授权头（如 Authorization）。
+ *
+ * 返回具体类联合而非 SDK Transport 接口：SDK 的 StreamableHTTPClientTransport
+ * 在 exactOptionalPropertyTypes 下与自身 Transport 接口不结构兼容（sessionId 可选性），
+ * 具体联合可保留类型信息，connect 处按需断言。
+ *
+ * @param config MCP server 配置（transport 缺省 stdio）
+ */
+export function createMcpTransport(config: McpServerConfig): McpTransportInstance {
+  const transport = resolveMcpTransport(config);
+  if (transport === 'stdio') {
+    // exactOptionalPropertyTypes 下，可选属性不能显式赋 undefined，
+    // 必须用条件展开（仅当值存在时才写入属性）
+    return new StdioClientTransport({
+      command: config.command ?? '',
+      ...(config.args !== undefined ? { args: [...config.args] } : {}),
+      ...(config.env !== undefined ? { env: { ...config.env } } : {}),
+      ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
+      // 把 stderr pipe 到日志（避免 server 日志污染主进程 stderr）
+      stderr: 'pipe',
+    });
+  }
+  // 远程 transport：url 必填（schema + validateMcpServerConfig 已保证，防御性兜底）
+  if (config.url === undefined || config.url.length === 0) {
+    throw new AppError(ErrorCode.INVALID_INPUT, `MCP server "${config.name}" 缺少 url 配置`);
+  }
+  const url = new URL(config.url);
+  const requestInit: RequestInit | undefined =
+    config.headers !== undefined ? { headers: { ...config.headers } } : undefined;
+  if (transport === 'sse') {
+    return new SSEClientTransport(url, ...(requestInit !== undefined ? [{ requestInit }] : []));
+  }
+  return new StreamableHTTPClientTransport(
+    url,
+    ...(requestInit !== undefined ? [{ requestInit }] : []),
+  );
+}
+
+/** MCPClient 支持的传输实例联合 */
+export type McpTransportInstance =
+  | StdioClientTransport
+  | SSEClientTransport
+  | StreamableHTTPClientTransport;
 
 /**
  * MCPClient：管理与单个 MCP server 的连接
@@ -54,8 +109,8 @@ import type { McpServerConfig } from './mcp-types';
 export class MCPClient {
   /** MCP SDK Client 实例（connect 后创建） */
   private client: Client | null = null;
-  /** Stdio 传输实例（connect 后创建，用于 close 时释放子进程） */
-  private transport: StdioClientTransport | null = null;
+  /** 传输实例（connect 后创建；stdio=StdioClientTransport / 远程=SSE/StreamableHTTP） */
+  private transport: McpTransportInstance | null = null;
   /** 缓存的工具描述（connect 时一次性拉取，避免每次 listTools 都请求 server） */
   private cachedTools: readonly McpToolDescriptor[] = [];
   /** server 报告的名称（capabilities 协商时获得） */
@@ -87,32 +142,38 @@ export class MCPClient {
       return;
     }
 
-    const { name, command, args, env, cwd } = this.config;
-    logger.info({ serverName: name, command, args }, '正在启动 MCP server');
+    const { name } = this.config;
+    const transportKind = resolveMcpTransport(this.config);
+    logger.info(
+      {
+        serverName: name,
+        transport: transportKind,
+        ...(transportKind === 'stdio'
+          ? { command: this.config.command, args: this.config.args }
+          : { url: this.config.url }),
+      },
+      '正在启动 MCP server',
+    );
 
     try {
-      // 1. 创建 stdio 传输（启动子进程）
-      // 注意：exactOptionalPropertyTypes 下，可选属性不能显式赋 undefined，
-      // 必须用条件展开（仅当值存在时才写入属性）
-      this.transport = new StdioClientTransport({
-        command,
-        ...(args !== undefined ? { args: [...args] } : {}),
-        ...(env !== undefined ? { env: { ...env } } : {}),
-        ...(cwd !== undefined ? { cwd } : {}),
-        // 把 stderr pipe 到日志（避免 server 日志污染主进程 stderr）
-        stderr: 'pipe',
-      });
+      // 1. 创建传输层（stdio 子进程 / sse / streamable-http）
+      this.transport = createMcpTransport(this.config);
 
-      // 监听子进程 stderr，转写到日志（debug 级别）
-      const stderrStream = this.transport.stderr;
-      if (stderrStream !== null && typeof (stderrStream as { on?: unknown }).on === 'function') {
-        const stream = stderrStream as { on: (event: string, cb: (chunk: Buffer) => void) => void };
-        stream.on('data', (chunk: Buffer) => {
-          const text = chunk.toString('utf-8').trim();
-          if (text.length > 0) {
-            logger.debug({ serverName: name, stderr: text }, 'MCP server stderr');
-          }
-        });
+      // stdio：监听子进程 stderr，转写到日志（debug 级别；远程传输无 stderr）
+      if (transportKind === 'stdio') {
+        // 配置已收敛为 stdio 分支，断言取回 Stdio 专有 stderr 流
+        const stderrStream = (this.transport as StdioClientTransport).stderr;
+        if (stderrStream !== null && typeof (stderrStream as { on?: unknown }).on === 'function') {
+          const stream = stderrStream as {
+            on: (event: string, cb: (chunk: Buffer) => void) => void;
+          };
+          stream.on('data', (chunk: Buffer) => {
+            const text = chunk.toString('utf-8').trim();
+            if (text.length > 0) {
+              logger.debug({ serverName: name, stderr: text }, 'MCP server stderr');
+            }
+          });
+        }
       }
 
       // 2. 创建 MCP Client 并连接
@@ -120,7 +181,9 @@ export class MCPClient {
         { name: 'code-agent-agent', version: '0.1.0' },
         { capabilities: {} },
       );
-      await this.client.connect(this.transport);
+      // 断言为 SDK Transport：StreamableHTTPClientTransport 在 exactOptionalPropertyTypes
+      // 下与自身接口不结构兼容（sessionId 可选性），运行时行为符合接口契约
+      await this.client.connect(this.transport as Transport);
 
       // 3. 缓存 server 元数据
       const serverInfo = this.client.getServerVersion();

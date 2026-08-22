@@ -27,7 +27,7 @@ import type { IToolRegistry } from '../tools/tool-registry';
 import { MCPClient } from './mcp-client';
 import { adaptMcpTool } from './mcp-tool-adapter';
 import type { McpServerConfig, McpServerInfo, McpServerStatus } from './mcp-types';
-import { buildMcpToolName, isMcpTool } from './mcp-types';
+import { buildMcpToolName, isMcpTool, resolveMcpTransport } from './mcp-types';
 
 /**
  * 单个 server 的运行时条目
@@ -237,9 +237,11 @@ export function isMcpToolName(toolName: string): boolean {
 }
 
 /**
- * 校验工具配置：name 不能为空、不能与内置工具重名
+ * 校验工具配置：name 不能为空、传输字段按 transport 分支校验
  *
  * 在 startServer 前调用，提前拦截非法配置。
+ * - stdio：command 必填且为裸可执行文件名（P0 安全，与 shared MCP_COMMAND_PATTERN 同源）
+ * - sse / streamable-http：url 必填且为 http(s) 地址
  *
  * @param config 待校验的 MCP server 配置
  * @param existingToolNames 已注册的工具名集合（用于重名检查）
@@ -256,16 +258,38 @@ export function validateMcpServerConfig(
   if (!MCP_SERVER_NAME_PATTERN.test(config.name)) {
     throw new AppError(ErrorCode.INVALID_INPUT, 'MCP server 名称仅允许字母/数字/下划线/连字符');
   }
-  if (!config.command || config.command.length === 0) {
-    throw new AppError(ErrorCode.INVALID_INPUT, `MCP server "${config.name}" 的 command 不能为空`);
-  }
-  // P0 安全：command 必须是裸可执行文件名（无路径分隔符/空白/引号），
-  // 阻断绝对路径/路径穿越/多段命令注入（与 shared MCP_COMMAND_PATTERN 同源，纵深防御）
-  if (!MCP_COMMAND_PATTERN.test(config.command)) {
-    throw new AppError(
-      ErrorCode.INVALID_INPUT,
-      `MCP server "${config.name}" 的 command 必须是裸可执行文件名（不含路径分隔符/空白/引号）`,
-    );
+  const transport = resolveMcpTransport(config);
+  if (transport === 'stdio') {
+    const command = config.command ?? '';
+    if (command.length === 0) {
+      throw new AppError(
+        ErrorCode.INVALID_INPUT,
+        `MCP server "${config.name}" 的 command 不能为空`,
+      );
+    }
+    // P0 安全：command 必须是裸可执行文件名（无路径分隔符/空白/引号），
+    // 阻断绝对路径/路径穿越/多段命令注入（与 shared MCP_COMMAND_PATTERN 同源，纵深防御）
+    if (!MCP_COMMAND_PATTERN.test(command)) {
+      throw new AppError(
+        ErrorCode.INVALID_INPUT,
+        `MCP server "${config.name}" 的 command 必须是裸可执行文件名（不含路径分隔符/空白/引号）`,
+      );
+    }
+  } else {
+    // 远程传输：url 必填 + http(s) 协议白名单（阻断 file:/ftp: 等非 HTTP 场景）
+    const url = config.url ?? '';
+    let parsed: URL | undefined;
+    try {
+      parsed = url.length > 0 ? new URL(url) : undefined;
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed === undefined || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
+      throw new AppError(
+        ErrorCode.INVALID_INPUT,
+        `MCP server "${config.name}" 的 ${transport} 传输需要合法的 http(s) url`,
+      );
+    }
   }
   // 重名保护：server name 不能与现有工具重名（避免 mcp__name__xxx 与现有工具冲突）
   if (existingToolNames?.has(config.name)) {

@@ -3,7 +3,8 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 列出已启动的 MCP server（名称 / 状态徽章 / 工具数 / 错误信息）
-// - 添加服务器表单（名称 / 命令 / 参数，对齐主进程 McpServerConfig）
+// - 添加服务器表单：transport 三态（stdio 本地进程 / sse / streamable-http 远程）
+//   · stdio → 命令 + 参数；远程 → URL + 可选请求头（每行 Key: Value）
 // - 启动 / 停止操作（mcp:start / mcp:stop IPC）
 // - 数据源：mcp:list（L3 TanStack Query，启动/停止后 invalidate）
 // ──────────────────────────────────────────────────────────────
@@ -22,6 +23,11 @@ import { SectionTitle, SettingRow } from '../settings-controls';
 /** mcp:list 查询 key */
 const MCP_LIST_QUERY_KEY = ['mcp', 'servers'] as const;
 
+/** 传输类型三态（与 shared MCP_TRANSPORTS 对齐） */
+type McpTransport = 'stdio' | 'sse' | 'streamable-http';
+
+const TRANSPORT_OPTIONS: readonly McpTransport[] = ['stdio', 'sse', 'streamable-http'];
+
 /** 状态徽章配色（键名与主进程 McpServerStatus 对齐，含 snake_case） */
 const STATUS_BADGE: Record<string, string> = {
   running: 'bg-[var(--success)]/10 text-[var(--success)]',
@@ -33,15 +39,51 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 /**
+ * 解析请求头文本为 Record（每行 `Key: Value`；空行忽略）
+ *
+ * @returns 合法时返回记录与 null；存在无冒号等非法行时返回 null 与首个非法行号
+ */
+export function parseHeadersText(text: string): {
+  headers: Record<string, string> | null;
+  invalidLine: number | null;
+} {
+  const trimmedLines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((l) => l.length > 0);
+  if (trimmedLines.length === 0) {
+    return { headers: {}, invalidLine: null };
+  }
+  const headers: Record<string, string> = {};
+  for (const [index, line] of trimmedLines.entries()) {
+    const sepIdx = line.indexOf(':');
+    const key = sepIdx > 0 ? line.slice(0, sepIdx).trim() : '';
+    const value = sepIdx > 0 ? line.slice(sepIdx + 1).trim() : '';
+    if (key.length === 0 || value.length === 0) {
+      return { headers: null, invalidLine: index + 1 };
+    }
+    headers[key] = value;
+  }
+  return { headers, invalidLine: null };
+}
+
+/**
  * MCP 服务器管理 pane
  */
 export function McpSection(): ReactElement {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  // 添加表单状态（对齐参考项目 McpSettingsPane 添加行）
+  // 添加表单状态（transport 三态 + 按 transport 切换字段组）
   const [name, setName] = useState('');
+  const [transport, setTransport] = useState<McpTransport>('stdio');
   const [command, setCommand] = useState('');
   const [args, setArgs] = useState('');
+  const [url, setUrl] = useState('');
+  const [headersText, setHeadersText] = useState('');
+  const isRemote = transport !== 'stdio';
+  // 请求头实时解析（非法行 → 禁用启动按钮 + 行内错误提示）
+  const parsedHeaders = parseHeadersText(headersText);
+  const headersInvalid = parsedHeaders.headers === null;
 
   // L3 查询：服务器列表
   const { data, isLoading } = useQuery({
@@ -68,11 +110,21 @@ export function McpSection(): ReactElement {
 
   // 启动 mutation
   const startMutation = useMutation({
-    mutationFn: async (config: { name: string; command: string; args?: string[] }) => {
+    mutationFn: async (config: {
+      name: string;
+      transport: McpTransport;
+      command: string;
+      args?: string[];
+      url?: string;
+      headers?: Record<string, string>;
+    }) => {
       const response = await window.api.mcp.start({
         name: config.name,
+        ...(config.transport !== 'stdio' ? { transport: config.transport } : {}),
+        ...(config.url !== undefined ? { url: config.url } : {}),
+        ...(config.headers !== undefined ? { headers: config.headers } : {}),
         command: config.command,
-        args: config.args ?? undefined,
+        ...(config.args !== undefined ? { args: config.args } : {}),
       });
       if ('error' in response) {
         throw new Error(`[${response.error.code}] ${response.error.message}`);
@@ -84,6 +136,8 @@ export function McpSection(): ReactElement {
       setName('');
       setCommand('');
       setArgs('');
+      setUrl('');
+      setHeadersText('');
       invalidate();
     },
     onError: (error: Error) => {
@@ -132,8 +186,15 @@ export function McpSection(): ReactElement {
           <SettingRow
             key={server.config.name}
             label={server.config.name}
-            description={`${server.config.command} ${(server.config.args ?? []).join(' ')}`}
+            description={
+              server.config.transport !== undefined && server.config.transport !== 'stdio'
+                ? (server.config.url ?? '')
+                : `${server.config.command ?? ''} ${(server.config.args ?? []).join(' ')}`.trim()
+            }
           >
+            <span className="text-muted-foreground rounded bg-muted px-1 py-0.5 font-mono text-2xs">
+              {server.config.transport ?? 'stdio'}
+            </span>
             <span
               className={cn(
                 'rounded-full px-1.5 py-0.5 font-mono text-2xs',
@@ -212,30 +273,87 @@ export function McpSection(): ReactElement {
           onChange={(e) => setName(e.target.value)}
           spellCheck={false}
         />
-        <Input
-          placeholder={t('settings.mcpCommandPlaceholder')}
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          spellCheck={false}
-        />
-        <Input
-          placeholder={t('settings.mcpArgsPlaceholder')}
-          value={args}
-          onChange={(e) => setArgs(e.target.value)}
-          spellCheck={false}
-        />
+        {/* 传输类型三态切换（stdio 本地进程 / sse / streamable-http 远程；toggle button 组模式） */}
+        <p className="text-muted-foreground text-2xs">{t('settings.mcpTransport')}</p>
+        <div className="border-border bg-muted/30 flex w-fit gap-0.5 rounded-md border p-0.5">
+          {TRANSPORT_OPTIONS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={transport === option}
+              onClick={() => setTransport(option)}
+              className={cn(
+                'rounded px-2 py-1 font-mono text-2xs transition-colors',
+                transport === option
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground cursor-pointer',
+              )}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        {isRemote ? (
+          <>
+            <Input
+              placeholder={t('settings.mcpUrlPlaceholder')}
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              spellCheck={false}
+              inputMode="url"
+            />
+            <Input
+              placeholder={t('settings.mcpHeadersPlaceholder')}
+              value={headersText}
+              onChange={(e) => setHeadersText(e.target.value)}
+              spellCheck={false}
+            />
+            {headersInvalid && (
+              <p className="text-[var(--error)]/90 px-1 text-2xs" role="status">
+                {t('settings.mcpHeadersInvalid', { line: parsedHeaders.invalidLine ?? 1 })}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <Input
+              placeholder={t('settings.mcpCommandPlaceholder')}
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              spellCheck={false}
+            />
+            <Input
+              placeholder={t('settings.mcpArgsPlaceholder')}
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+              spellCheck={false}
+            />
+          </>
+        )}
         <Button
           variant="outline"
           size="sm"
           className="self-start"
-          disabled={startMutation.isPending || name.trim() === '' || command.trim() === ''}
-          onClick={() =>
+          disabled={
+            startMutation.isPending ||
+            name.trim() === '' ||
+            (isRemote && (url.trim() === '' || headersInvalid)) ||
+            (!isRemote && command.trim() === '')
+          }
+          onClick={() => {
             startMutation.mutate({
               name: name.trim(),
-              command: command.trim(),
-              ...(args.trim() !== '' ? { args: args.trim().split(/\s+/) } : {}),
-            })
-          }
+              transport,
+              command: isRemote ? '' : command.trim(),
+              ...(!isRemote && args.trim() !== '' ? { args: args.trim().split(/\s+/) } : {}),
+              ...(isRemote ? { url: url.trim() } : {}),
+              ...(isRemote &&
+              parsedHeaders.headers !== null &&
+              Object.keys(parsedHeaders.headers).length > 0
+                ? { headers: parsedHeaders.headers }
+                : {}),
+            });
+          }}
         >
           <Plus className="size-3.5" />
           {t('settings.mcpStart')}

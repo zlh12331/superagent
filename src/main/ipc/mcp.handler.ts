@@ -32,22 +32,30 @@ export function createMcpHandlers(
       return { servers };
     },
 
-    // mcp:start - 启动 MCP server（stdio 子进程 + 工具注册）
+    // mcp:start - 启动 MCP server（stdio 子进程 / sse / streamable-http + 工具注册）
     start: async (input) => {
-      // P0 安全：schema 校验之后再做主进程侧配置校验（命令字符集/重名保护）。
+      // 解构取值（TS4111：包装后的请求类型含索引签名，成员点访问受限）
+      const { name, transport, url, headers, command, args } = input;
+      // P0 安全：schema 校验之后再做主进程侧配置校验（命令字符集/URL/重名保护）。
       // 此前 validateMcpServerConfig 只被测试引用，生产路径裸奔；现在双重防线。
       validateMcpServerConfig(
         {
-          name: input.name,
-          command: input.command,
-          ...(input.args !== undefined ? { args: input.args } : {}),
+          name,
+          ...(transport !== undefined ? { transport } : {}),
+          ...(url !== undefined ? { url } : {}),
+          ...(headers !== undefined ? { headers } : {}),
+          command,
+          ...(args !== undefined ? { args } : {}),
         },
         toolRegistry.getAllNames(),
       );
       await mcpService.startServer({
-        name: input.name,
-        command: input.command,
-        ...(input.args !== undefined ? { args: input.args } : {}),
+        name,
+        ...(transport !== undefined ? { transport } : {}),
+        ...(url !== undefined ? { url } : {}),
+        ...(headers !== undefined ? { headers } : {}),
+        command,
+        ...(args !== undefined ? { args } : {}),
       });
       return { ok: true };
     },
