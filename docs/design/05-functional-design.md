@@ -415,5 +415,5 @@ PromptService
 
 ### 14.3 安全风险
 
-- `.env` 硬编码 `SENTRY_AUTH_TOKEN`，应改由 CI secrets 注入
+- ~~`.env` 硬编码 `SENTRY_AUTH_TOKEN`~~：已核实为误报——`.env` gitignore 未入仓，git 历史仅含脱敏占位符，release.yml 经 `secrets.SENTRY_AUTH_TOKEN` 注入
 - `run_command` 工具的 `ask` 权限仅弹窗确认，无沙箱隔离

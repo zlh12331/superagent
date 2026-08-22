@@ -315,7 +315,7 @@ tsconfig 启用以下严格选项：
 | 变量 | 用途 | 风险 |
 |------|------|------|
 | `SENTRY_DSN` | Sentry 项目 DSN | 低（公开 DSN） |
-| `SENTRY_AUTH_TOKEN` | Sentry CLI 认证 | **高**（硬编码，应改由 CI secrets 注入） |
+| `SENTRY_AUTH_TOKEN` | Sentry CLI 认证 | 低（仅本地 `.env` 持有且 gitignore；CI 走 `secrets.SENTRY_AUTH_TOKEN`） |
 | `OPENAI_API_KEY`（如有） | LLM provider | 高 |
 
 ## 9. Source Map 与符号化
@@ -374,7 +374,7 @@ sentry-cli releases new "code-agent@1.0.0"
 
 | 项 | 说明 | 建议 |
 |----|------|------|
-| `.env` 硬编码 `SENTRY_AUTH_TOKEN` | 安全风险 | 改由 CI secrets 注入 |
+| ~~`.env` 硬编码 `SENTRY_AUTH_TOKEN`~~ | ~~安全风险~~ | 已解决：`.env` gitignore 未入仓，历史无真实 token，CI 走 secrets 注入 |
 | Lint 失败未修复 | 3 个 lint 格式化错误 | `pnpm lint:fix` |
 | 设计文档同步滞后 | 旧文档已删除，新文档已生成 | 持续维护 |
 | git 状态大量未提交修改 | 影响回滚 | 整理提交 |

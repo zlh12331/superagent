@@ -229,7 +229,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 - `SENTRY_DSN="http://b24f47b022820d979452bf4ef3d43473@127.0.0.1:9000/3"`
 - `SENTRY_TRACES_SAMPLE_RATE=1.0`
 - `SENTRY_URL` / `SENTRY_ORG` / `SENTRY_PROJECT`
-- `SENTRY_AUTH_TOKEN="sntryu_..."`（**硬编码真实 token，需轮换并改为 CI secrets**）
+- `SENTRY_AUTH_TOKEN`（仅本地 `.env` 持有，`.env` 已 gitignore；CI 经 `secrets.SENTRY_AUTH_TOKEN` 注入，仓库历史无真实 token）
 
 ### sentry.properties
 
@@ -242,11 +242,10 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ## 9. 关键风险点
 
-1. **真实凭证泄露**：`.env` 硬编码 `SENTRY_AUTH_TOKEN`，应改由 CI secrets 注入并立即轮换
-2. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
-3. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
-4. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
-5. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///f:/TraeProjects/1/electron-builder.yml#L97) `publish.url: https://code-agent.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
+1. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
+2. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
+3. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
+4. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///f:/TraeProjects/1/electron-builder.yml#L97) `publish.url: https://code-agent.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
 
 ## 10. 关键亮点
 
