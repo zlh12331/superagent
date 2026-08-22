@@ -18,15 +18,11 @@ import {
   Globe,
   Info,
   Plug,
-  Puzzle,
   Server as ServerIcon,
   Settings as SettingsIcon,
   ShieldCheck,
   Smartphone,
   Sparkles,
-  TerminalSquare,
-  User,
-  Workflow,
 } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -40,13 +36,7 @@ import { ExperimentalSection } from './sections/experimental-section';
 import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
 import { ModelsSection } from './sections/models-section';
-import {
-  AccountSection,
-  CommandsSection,
-  HooksSection,
-  MobileSection,
-  PluginsSection,
-} from './sections/placeholders';
+import { MobileSection } from './sections/placeholders';
 import { RulesMemorySection } from './sections/rules-memory-section';
 import { SkillsSection } from './sections/skills-section';
 import { UsageSection } from './sections/usage-section';
@@ -62,20 +52,16 @@ export interface SettingsDialogProps {
 
 /** 设置分区 ID */
 type SectionId =
-  | 'account'
   | 'usage'
   | 'general'
   | 'mobile'
   | 'browser'
   | 'workspace'
-  | 'commands'
   | 'rules-memory'
   | 'models'
   | 'approval-mode'
   | 'mcp'
   | 'skills'
-  | 'hooks'
-  | 'plugins'
   | 'beta'
   | 'about';
 
@@ -92,12 +78,11 @@ interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
-/** 导航分组（5 组 16 项，语义归组） */
+/** 导航分组（5 组 12 项，语义归组；未实现的规划入口已移除，见 docs/design/05 §14） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
-    labelKey: 'settings.group.accountGeneral',
+    labelKey: 'settings.group.general',
     items: [
-      { id: 'account', labelKey: 'settings.nav.account', icon: User },
       { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
       { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
       { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
@@ -110,8 +95,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'models', labelKey: 'settings.nav.models', icon: ServerIcon },
       { id: 'mcp', labelKey: 'settings.nav.mcp', icon: Plug },
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
-      { id: 'plugins', labelKey: 'settings.nav.plugins', icon: Puzzle },
-      { id: 'hooks', labelKey: 'settings.nav.hooks', icon: Workflow },
       { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
       { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
     ],
@@ -119,7 +102,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.agent',
     items: [
-      { id: 'commands', labelKey: 'settings.nav.commands', icon: TerminalSquare },
       { id: 'rules-memory', labelKey: 'settings.nav.rulesMemory', icon: BookOpenText },
       // 审批权限：工具审批策略（自模型 pane 拆出独立，属智能与行为域）
       { id: 'approval-mode', labelKey: 'settings.nav.approvalMode', icon: ShieldCheck },
@@ -142,8 +124,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
  */
 function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
   switch (section) {
-    case 'account':
-      return <AccountSection />;
     case 'usage':
       return <UsageSection />;
     case 'general':
@@ -154,8 +134,6 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <BrowserSection />;
     case 'workspace':
       return <WorkspaceSection />;
-    case 'commands':
-      return <CommandsSection />;
     case 'rules-memory':
       return <RulesMemorySection />;
     case 'models':
@@ -166,10 +144,6 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
       return <McpSection />;
     case 'skills':
       return <SkillsSection />;
-    case 'hooks':
-      return <HooksSection />;
-    case 'plugins':
-      return <PluginsSection />;
     case 'beta':
       return <ExperimentalSection />;
     case 'about':

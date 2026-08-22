@@ -1,8 +1,10 @@
 // src/renderer/components/settings/sections/placeholders.tsx
 // 轻量 pane 集合（对齐 Trae Work 设置导航结构；无对应后端的功能诚实占位）
 // ──────────────────────────────────────────────────────────────
-// 包含：账号 / 移动端 / 插件 / hooks / 命令
-// - 占位 pane 明确标注"规划中/不可用"，不伪造假功能（实事求是原则）
+// 包含：移动端（承载真实 IM 渠道配置）
+// - 纯规划的 pane（账号/插件/hooks/命令）已移除导航入口（2026-08-22 决策：
+//   未实现功能不暴露入口），后续落地时随实现一并恢复
+// - 占位说明明确标注"规划中"，不伪造假功能（实事求是原则）
 // ──────────────────────────────────────────────────────────────
 
 import type { ReactElement } from 'react';
@@ -28,14 +30,6 @@ function PlaceholderPane({
   );
 }
 
-/** 账号（无登录后端：诚实占位） */
-export function AccountSection(): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <PlaceholderPane title={t('settings.nav.account')} description={t('settings.accountHint')} />
-  );
-}
-
 /** 移动端（纯桌面应用：不可用标注；IM 渠道真实功能保留于此） */
 export function MobileSection(): ReactElement {
   const { t } = useTranslation();
@@ -50,27 +44,5 @@ export function MobileSection(): ReactElement {
         </div>
       </div>
     </div>
-  );
-}
-
-/** 插件（无插件系统：规划占位） */
-export function PluginsSection(): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <PlaceholderPane title={t('settings.nav.plugins')} description={t('settings.pluginsHint')} />
-  );
-}
-
-/** hooks（无 hooks 系统：规划占位） */
-export function HooksSection(): ReactElement {
-  const { t } = useTranslation();
-  return <PlaceholderPane title={t('settings.nav.hooks')} description={t('settings.hooksHint')} />;
-}
-
-/** 命令（命令面板操作命令只读列表——静态展示，配置化规划中） */
-export function CommandsSection(): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <PlaceholderPane title={t('settings.nav.commands')} description={t('settings.commandsHint')} />
   );
 }
