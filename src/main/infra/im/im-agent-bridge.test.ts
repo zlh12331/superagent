@@ -10,6 +10,14 @@ import type { ISessionService } from '../storage/session-service';
 import { IM_DEFAULT_WORKING_DIR, ImAgentBridge } from './im-agent-bridge';
 import type { ImService } from './im-service';
 
+// 安全修复：IM_DEFAULT_WORKING_DIR 从 homedir() 改为 app.getPath('userData')/im-workspace
+// 需要 mock electron 的 app.getPath 模块级调用
+vi.mock('electron', () => ({
+  app: {
+    getPath: (name: string) => `/tmp/test-userdata/${name}`,
+  },
+}));
+
 /** 桥接依赖的轻量 stub（无 mock 框架：手写最小实现） */
 function createStubs() {
   const sent: Array<{ kind: string; chatId: string; text: string }> = [];

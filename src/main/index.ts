@@ -333,7 +333,14 @@ app
     // - Sentry 采集错误 + 性能事务（自动 instrumentation）
     // - OTel 采集自定义业务 trace span（agent.streamText / tool.execute / IPC）
     // - 失败容忍：未配置 OTEL_EXPORTER_OTLP_ENDPOINT 时退化为 Console exporter
-    initTelemetry();
+    // 安全修复：遥测开关对齐（Sentry 已接入，OTel 同样需检查用户偏好——
+    // telemetry-pref 为 off 时跳过初始化，避免用户关闭遥测后 span 仍外发）
+    const otelTelemetryLevel = readTelemetryLevelSync();
+    if (otelTelemetryLevel !== 'off') {
+      initTelemetry();
+    } else {
+      logger.warn({}, '遥测已关闭（telemetry-pref.json: off），跳过 OpenTelemetry 初始化');
+    }
     // 初始化 SQLite + Drizzle（必须在注册任何依赖 DB 的服务之前）
     // - 建表 + 索引（幂等，已存在则跳过）
     // - 启用 WAL 模式 + 外键约束

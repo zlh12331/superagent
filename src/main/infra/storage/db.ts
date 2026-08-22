@@ -14,7 +14,7 @@
 // - Drizzle 的 better-sqlite3 driver 是同步的，无需 await
 // ──────────────────────────────────────────────────────────────
 
-import { mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -37,6 +37,23 @@ const BACKUP_KEEP = 3;
 const BACKUP_DIR = 'backups';
 
 /**
+ * 限制敏感数据文件权限为仅属主可读写（0o600）
+ *
+ * 安全修复：SQLite 含完整对话历史（工具参数/文件内容/命令输出），
+ * 默认 umask（Linux 常为 644）下同机其他进程可读。Windows 依赖 OS ACL，跳过。
+ */
+function restrictFilePermissions(filePath: string): void {
+  if (process.platform === 'win32') {
+    return;
+  }
+  try {
+    chmodSync(filePath, 0o600);
+  } catch {
+    // 权限设置失败不阻断（只读文件系统等场景）
+  }
+}
+
+/**
  * 启动时热备份数据库（better-sqlite3 内置 backup API，不中断服务）
  *
  * 轮转策略：写入 backups/sessions-<时间戳>.db，删除超出 BACKUP_KEEP 的最旧备份。
@@ -50,6 +67,8 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const backupPath = join(backupDir, `sessions-${stamp}.db`);
     await sqlite.backup(backupPath);
+    // 安全修复：备份含完整对话历史，同样限制为仅属主可读写
+    restrictFilePermissions(backupPath);
     logger.info({ backupPath }, '数据库热备份完成');
 
     // 轮转：删除超出保留份数的最旧备份
@@ -121,9 +140,13 @@ export function initDb(): DrizzleDB {
   // 打开 SQLite 连接（同步）
   // better-sqlite3 是同步驱动，所有操作都是阻塞的，适合 Electron 主进程
   const sqlite = new Database(dbPath);
+  // 安全修复：限制数据库文件权限为仅属主可读写（含后续 WAL/SHM 伴随文件）
+  restrictFilePermissions(dbPath);
   // 启用 WAL 模式（Write-Ahead Logging）：提升并发读性能
   // 写入仍为串行，但读不阻塞写；崩溃后由 WAL 自动恢复
   sqlite.pragma('journal_mode = WAL');
+  restrictFilePermissions(`${dbPath}-wal`);
+  restrictFilePermissions(`${dbPath}-shm`);
   // 启用外键约束（SQLite 默认关闭，drizzle schema 中 references 依赖此）
   sqlite.pragma('foreign_keys = ON');
 

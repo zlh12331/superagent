@@ -12,7 +12,7 @@
 // 2. 不需要 native rebuild（keytar 需要）
 // 3. 跨平台一致 API
 
-import { promises as fs } from 'node:fs';
+import { chmodSync, promises as fs } from 'node:fs';
 import { safeStorage } from 'electron';
 import { getKeychainPath } from './app-data';
 
@@ -73,11 +73,21 @@ async function readStore(): Promise<KeychainStore> {
 
 /**
  * 写入 keychain 文件
+ *
+ * 安全修复：keychain.dat 含加密的 API Key，限制为仅属主可读写（0o600）。
+ * - writeFile mode 仅对新建文件生效，后续覆盖写入需显式 chmod 兜底
  */
 async function writeStore(store: KeychainStore): Promise<void> {
   const filePath = getKeychainPath();
   const content = JSON.stringify(store, null, 2);
-  await fs.writeFile(filePath, content, 'utf8');
+  await fs.writeFile(filePath, content, { encoding: 'utf8', mode: 0o600 });
+  if (process.platform !== 'win32') {
+    try {
+      chmodSync(filePath, 0o600);
+    } catch {
+      // 权限设置失败不阻断写入（只读文件系统等场景）
+    }
+  }
 }
 
 /**

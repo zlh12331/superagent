@@ -16,8 +16,10 @@
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { TurnEventType } from '@code-agent/shared/main';
+import { app } from 'electron';
 import { logger } from '../../utils/logger';
 import type { IAgentService } from '../ai/agent/agent-service';
 import type { IPermissionService } from '../ai/tools/permission-service';
@@ -30,8 +32,14 @@ function sessionKey(channel: string, chatId: string): string {
   return `${channel}:${chatId}`;
 }
 
-/** IM 渠道 agent 的默认工作目录（用户主目录；IM 无窗口工作区概念） */
-export const IM_DEFAULT_WORKING_DIR = homedir();
+/**
+ * IM 渠道 agent 的沙箱工作目录
+ *
+ * 安全修复：禁止以用户主目录作为 IM 无头执行的工作目录（否则群聊第三方
+ * 可诱导 agent 读取 ~/.ssh、~/.aws 等任意文件并回发群聊）。
+ * 改为应用 userData 下的专用沙箱目录，隔离 IM agent 的读写边界。
+ */
+export const IM_DEFAULT_WORKING_DIR = join(app.getPath('userData'), 'im-workspace');
 
 /**
  * IM 消息 → Agent 桥接（模块单例，由 ServiceContainer 初始化挂载）
@@ -61,6 +69,13 @@ export class ImAgentBridge {
       return;
     }
     this.mounted = true;
+    // 安全修复：确保 IM agent 沙箱工作目录存在（首启自动创建）
+    try {
+      mkdirSync(IM_DEFAULT_WORKING_DIR, { recursive: true });
+    } catch (err: unknown) {
+      // 目录创建失败不阻断桥接（agent 工具会在无目录时返回明确错误）
+      logger.warn({ error: err }, 'IM agent 沙箱工作目录创建失败');
+    }
     // P1 修复：保存取消订阅句柄，unmount 时精确移除（此前挂载后无法解除）
     this.unsubscribeMessage = this.imService.onMessage((message) => {
       void this.handleMessage(message);
