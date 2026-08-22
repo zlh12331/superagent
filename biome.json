@@ -26,6 +26,7 @@
       "!**/docs/参考项目",
       "!**/prototype-v2.html",
       "!**/codex-desktop-prototype.design",
+      "!**/.design",
       "!_template"
     ]
   },
