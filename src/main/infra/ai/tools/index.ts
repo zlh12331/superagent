@@ -2,12 +2,13 @@
 // 工具系统 barrel 导出：统一注册入口与工具工厂函数
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 导出 7 个工具工厂函数（createReadFileTool / createWriteFileTool / ...）
+// - 导出各工具工厂函数（createReadFileTool / createWriteFileTool / ...）
 // - 导出 registerBuiltinTools：将所有内置工具注册到 ToolRegistry
 // - 导出 path-guard 供其他模块复用路径安全检查
 //
 // 设计原则：
-// - 工厂模式：每个工具通过工厂函数创建，注入 IFileService / ISearchService 依赖
+// - 工厂模式：每个工具通过工厂函数创建，注入 IFileService / ISearchService 等依赖
+//   （无外部依赖的编排/元数据类工具直接使用模块级单例）
 // - 单一注册入口：ServiceContainer 调用 registerBuiltinTools 一次完成所有注册
 // - 开闭原则：新增工具只需添加文件并在 registerBuiltinTools 中追加注册
 // ──────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ import { createReadFileTool } from './read-file.tool';
 import { createRunCommandTool } from './run-command.tool';
 import { createRunSubagentTool } from './run-subagent.tool';
 import { createRunTeamTool } from './run-team.tool';
+import { createRunWorkflowTool } from './run-workflow.tool';
 import { createSaveMemoryTool } from './save-memory.tool';
 import { createTaskCreateTool } from './task-create.tool';
 import { createTaskListTool } from './task-list.tool';
@@ -70,34 +72,21 @@ export { createWriteFileTool } from './write-file.tool';
 /**
  * 注册所有内置工具到 ToolRegistry
  *
- * ServiceContainer 在初始化时调用一次，把 12 个内置工具全部注册：
- * - read_file / write_file / list_directory / code_review（依赖 IFileService）
- * - grep / glob（依赖 ISearchService）
- * - terminal（依赖 ITerminalService）
- * - run_command / edit_file（无外部依赖）
- * - git_add / git_commit / git_push（依赖 IGitService，写操作 permission='ask'）
- *
- * 工具列表（按注册顺序，与 ToolRegistry.list 返回的字母序无关）：
- * | 工具名           | 权限  | 依赖            |
- * |-----------------|-------|----------------|
- * | read_file       | auto  | IFileService   |
- * | write_file      | ask   | IFileService   |
- * | list_directory  | auto  | IFileService   |
- * | code_review     | auto  | IFileService   |
- * | grep            | auto  | ISearchService |
- * | glob            | auto  | ISearchService |
- * | terminal        | ask   | ITerminalService |
- * | run_command     | ask   | 无             |
- * | edit_file       | ask   | 无             |
- * | git_add         | ask   | IGitService    |
- * | git_commit      | ask   | IGitService    |
- * | git_push        | ask   | IGitService    |
+ * ServiceContainer 在初始化时调用一次，把 30 个内置工具全部注册：
+ * - 文件/搜索/终端/命令/Git 基础工具（依赖注入对应服务）
+ * - 交互与模式工具（ask_user_question / plan_mode，注入 askService / permissionService）
+ * - 编排工具（run_subagent / run_team / run_workflow / task×4，模块级单例）
+ * - 扩展工具（load_skill / web_fetch / save_memory / cron×3 / lsp×2）
  *
  * @param registry 工具注册表
  * @param fileService 文件服务实例
  * @param searchService 搜索服务实例
  * @param terminalService 终端服务实例
  * @param gitService Git 服务实例
+ * @param memoryService 记忆服务实例
+ * @param lspManager LSP 服务器管理器
+ * @param askService Agent 提问服务
+ * @param permissionService 权限服务（plan 模式拦截）
  */
 export function registerBuiltinTools(
   registry: IToolRegistry,
@@ -131,6 +120,8 @@ export function registerBuiltinTools(
   registry.register(createRunSubagentTool());
   // 团队协作工具（多代理并行委派）
   registry.register(createRunTeamTool());
+  // 工作流编排工具（多步骤串行委派 + 产出注入）
+  registry.register(createRunWorkflowTool());
   // 任务跟踪工具（任务面板登记/状态机/列表）
   registry.register(createTaskCreateTool());
   registry.register(createTaskUpdateTool());

@@ -1,10 +1,12 @@
-// src/main/infra/ai/workflow-service.ts
+// src/main/infra/ai/agent/workflow-service.ts
 // 工作流编排：多步骤计划执行 + 预算 + 日志（对齐 qwen workflow 域语义收敛）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - WorkflowRun：目标驱动的步骤序列容器（status 状态机）
 // - 步骤生命周期：idle → running → completed / failed
 // - 预算：步骤数软闸（isBudgetExhausted）；日志：执行轨迹（journal）
+// - runWorkflow：串行编排——逐步委派子代理，前一步产出注入下一步上下文
+//   （与 TeamService 的并行独立委派互补：workflow 面向依赖链任务）
 //
 // 借鉴声明：
 // 本模块参考 qwen-code 参考项目 packages/core/src/agents/runtime/
@@ -17,6 +19,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../utils/logger';
+import { getSubagentManager, type SubagentManager } from './subagent-manager';
 
 /** 工作流状态 */
 export const WorkflowStatus = {
@@ -73,11 +77,59 @@ const TERMINAL_STATUSES: readonly WorkflowStatus[] = [
   WorkflowStatus.CANCELLED,
 ];
 
+/** 上一步产出注入下一步任务的截断长度（字符；对齐 TeamService leader 序列化口径） */
+const PREV_OUTPUT_INJECT_LIMIT = 1500;
+
+/** 工作流步骤委派（串行执行的最小单元） */
+export interface WorkflowStepTask {
+  /** 步骤名（journal 与结果展示用） */
+  readonly name: string;
+  /** 委派任务描述 */
+  readonly task: string;
+  /** 子代理名（缺省 general） */
+  readonly agent?: string;
+}
+
+/** 单步执行结果 */
+export interface WorkflowStepResult {
+  readonly name: string;
+  readonly agent: string;
+  readonly success: boolean;
+  readonly output: string;
+  readonly durationMs: number;
+}
+
+/** 串行编排执行结果 */
+export interface WorkflowRunResult {
+  readonly runId: string;
+  readonly status: WorkflowStatus;
+  readonly steps: readonly WorkflowStepResult[];
+  readonly succeeded: number;
+  readonly failed: number;
+  /** 未执行的步骤数（预算软闸 / 中止 / 取消导致跳过） */
+  readonly skipped: number;
+}
+
+/** 串行编排选项 */
+export interface WorkflowRunOptions {
+  /** 步骤预算软闸（缺省 = steps.length；超出后剩余步骤跳过） */
+  readonly budgetSteps?: number;
+  /** 单步失败策略：halt 中止后续（默认）/ continue 继续执行剩余步骤 */
+  readonly onFailure?: 'halt' | 'continue';
+  /** 父回合中断信号（每步执行前检查，触发则取消工作流） */
+  readonly abortSignal?: AbortSignal;
+}
+
 /**
  * 工作流服务（可复用实例；内存编排）
  */
 export class WorkflowService {
   private readonly runs = new Map<string, WorkflowRun>();
+
+  /**
+   * 构造注入（测试可控；缺省回退模块级单例，与 TeamService 同款）
+   */
+  constructor(private readonly manager?: SubagentManager) {}
 
   /**
    * 创建工作流（idle，步骤预算由 goal 阶段确定）
@@ -202,6 +254,120 @@ export class WorkflowService {
     return [...this.runs.values()].sort(
       (a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id),
     );
+  }
+
+  /**
+   * 串行编排执行：按顺序逐步委派子代理，前一步产出注入下一步上下文
+   *
+   * - 状态机全程跟踪：addStep → startStep → completeStep / failStep
+   * - 预算软闸：已执行步数达预算后剩余步骤跳过（journal 记录）
+   * - 失败策略：halt（默认）立即 fail 终止；continue 记录失败继续后续步骤
+   * - 中断：abortSignal 已中止时 cancel 工作流并跳过剩余步骤
+   *
+   * @param goal 工作流目标描述
+   * @param steps 步骤委派列表（1-8 个）
+   * @param workingDir 工作目录（子代理工具执行根目录）
+   * @param options 编排选项（预算 / 失败策略 / 中断信号）
+   */
+  async runWorkflow(
+    goal: string,
+    steps: readonly WorkflowStepTask[],
+    workingDir: string,
+    options?: WorkflowRunOptions,
+  ): Promise<WorkflowRunResult> {
+    const manager = this.manager ?? getSubagentManager();
+    const budget = options?.budgetSteps ?? steps.length;
+    const haltOnFailure = (options?.onFailure ?? 'halt') === 'halt';
+    const runId = this.create(goal, budget);
+    const results: WorkflowStepResult[] = [];
+    let prevOutput: string | null = null;
+    let halted = false;
+
+    for (const step of steps) {
+      // 父回合中断 → 取消工作流，剩余步骤计入 skipped
+      if (options?.abortSignal?.aborted === true) {
+        this.addJournal(runId, `中断取消：剩余 ${steps.length - results.length} 步未执行`);
+        this.cancel(runId);
+        return this.buildResult(runId, results, steps.length);
+      }
+      // 预算软闸：剩余步骤跳过（软闸不抛错，journal 留痕）
+      if (this.isBudgetExhausted(runId)) {
+        this.addJournal(runId, `预算耗尽：剩余 ${steps.length - results.length} 步未执行`);
+        break;
+      }
+      const stepId = this.addStep(runId, step.name);
+      if (stepId === null) {
+        break; // 工作流已终端（防御：正常路径不会到达）
+      }
+      // 上一步产出注入下一步任务（截断；失败信息同样传递供后续步骤感知）
+      const taskText =
+        prevOutput !== null
+          ? `${step.task}\n\n【上一步产出】\n${prevOutput.slice(0, PREV_OUTPUT_INJECT_LIMIT)}`
+          : step.task;
+      const agent = step.agent ?? 'general';
+      const startTime = Date.now();
+      this.startStep(runId, stepId);
+      try {
+        const result = await manager.run(agent, taskText, workingDir);
+        this.completeStep(runId, stepId, result.output.trim().slice(0, 300));
+        results.push({
+          name: step.name,
+          agent,
+          success: true,
+          output: result.output,
+          durationMs: result.durationMs,
+        });
+        prevOutput = result.output.trim();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.failStep(runId, stepId, message.slice(0, 300));
+        results.push({
+          name: step.name,
+          agent,
+          success: false,
+          output: `步骤执行失败：${message}`,
+          durationMs: Date.now() - startTime,
+        });
+        logger.warn({ workflow: runId, step: step.name, error: err }, '工作流步骤执行失败');
+        if (haltOnFailure) {
+          this.fail(runId, message);
+          halted = true;
+          break;
+        }
+        prevOutput = `步骤 ${step.name} 失败：${message}`;
+      }
+    }
+
+    // 收尾（halt 路径已在循环内 fail；此处处理正常完成 / continue 带失败）
+    // 预算软闸内全部成功视为正常完成（skipped 步骤经 journal 与结果计数体现）
+    if (!halted) {
+      const run = this.requireRun(runId);
+      if (!TERMINAL_STATUSES.includes(run.status)) {
+        if (results.some((r) => !r.success)) {
+          this.fail(runId, '存在失败步骤');
+        } else {
+          this.complete(runId);
+        }
+      }
+    }
+    return this.buildResult(runId, results, steps.length);
+  }
+
+  /** 汇总运行结果（succeeded/failed/skipped 计数 + 终态快照） */
+  private buildResult(
+    runId: string,
+    results: readonly WorkflowStepResult[],
+    declared: number,
+  ): WorkflowRunResult {
+    const status = this.get(runId)?.status ?? WorkflowStatus.FAILED;
+    return {
+      runId,
+      status,
+      steps: results,
+      succeeded: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      skipped: declared - results.length,
+    };
   }
 
   /** 获取单个工作流 */

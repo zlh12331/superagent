@@ -1,4 +1,4 @@
-// src/main/service-container.ts
+﻿// src/main/service-container.ts
 // ServiceContainer：应用单例统一生命周期管理入口
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
@@ -231,7 +231,7 @@ class ServiceContainer {
    * ToolRegistry 实例缓存
    *
    * 设计：由 ServiceContainer 直接 new ToolRegistry（class 实现，非模块级单例）。
-   * - 首次访问时延迟初始化，并调用 registerBuiltinTools 注册 29 个内置工具
+   * - 首次访问时延迟初始化，并调用 registerBuiltinTools 注册 30 个内置工具
    *   （read_file / write_file / list_directory / grep / glob）
    * - 测试可通过 setToolRegistry() 注入 mock 实现（如空注册表或预填充工具）
    *
@@ -265,14 +265,14 @@ class ServiceContainer {
    *
    * 首次调用延迟初始化：
    * 1. new ToolRegistry() 创建空注册表
-   * 2. 调用 registerBuiltinTools(registry, fileService, searchService) 注册 29 个内置工具
+   * 2. 调用 registerBuiltinTools(registry, fileService, searchService) 注册 30 个内置工具
    *
    * 依赖 FileService + SearchService 实例：先确保已初始化。
    */
   getToolRegistry(): IToolRegistry {
     if (this.toolRegistry === null) {
       const registry = new ToolRegistry();
-      // 注册全部内置工具（29 个，清单见 tools/index.ts registerBuiltinTools）
+      // 注册全部内置工具（30 个，清单见 tools/index.ts registerBuiltinTools）
       // 依赖 FileService + SearchService 实例
       registerBuiltinTools(
         registry,
