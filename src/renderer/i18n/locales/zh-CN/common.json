@@ -483,7 +483,13 @@
       "workspaceRoot": "当前工作目录",
       "workspaceEmpty": "未选择项目",
       "workspaceExpanded": "已展开目录",
-      "workspaceHint": "工作树展示当前激活会话的项目文件；忽略列表/默认展开层级配置规划中",
+      "tree": {
+        "title": "文件树行为",
+        "expandDepth": "默认展开层级",
+        "expandDepthHint": "打开/切换项目时自动展开的目录层数（下次生效）",
+        "ignorePatterns": "忽略模式",
+        "ignoreHint": "每行一条，支持 * 和 ? 通配；内置忽略 node_modules。保存后立即生效"
+      },
       "lsp": {
         "title": "语言服务器",
         "hint": "LSP 代码智能（跳转定义/查找引用/悬停信息）按文件类型路由语言服务器。留空使用内置默认；修改后重启应用生效。需对应服务器已在 PATH 中安装。"

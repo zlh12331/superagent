@@ -137,6 +137,18 @@ export interface LspSettings {
 }
 
 /**
+ * 工作区设置（文件树行为；忽略模式由主进程 file:list 每次现读——改后即生效）
+ */
+export interface WorkspaceSettings {
+  /**
+   * 文件树忽略模式列表（名称级：精确 / * / ?；内置 node_modules 基线之外的用户追加项）
+   */
+  readonly treeIgnorePatterns: readonly string[];
+  /** 文件树默认展开层级（1-3；1 = 仅展开根目录，即既有行为） */
+  readonly defaultExpandDepth: number;
+}
+
+/**
  * 用户设置数据形状（不含操作方法；DEFAULT_SETTINGS 与快照共用）
  */
 interface SettingsData {
@@ -152,6 +164,8 @@ interface SettingsData {
   readonly experimental: ExperimentalSettings;
   /** 语言服务器 */
   readonly lsp: LspSettings;
+  /** 工作区（文件树行为） */
+  readonly workspace: WorkspaceSettings;
 }
 
 /**
@@ -171,6 +185,8 @@ interface SettingsState extends SettingsData {
   readonly updateExperimental: (patch: Partial<ExperimentalSettings>) => void;
   /** 更新语言服务器设置（部分字段） */
   readonly updateLsp: (patch: Partial<LspSettings>) => void;
+  /** 更新工作区设置（部分字段） */
+  readonly updateWorkspace: (patch: Partial<WorkspaceSettings>) => void;
 }
 
 /**
@@ -241,6 +257,10 @@ const DEFAULT_SETTINGS: SettingsData = {
   lsp: {
     serverCommands: {},
   },
+  workspace: {
+    treeIgnorePatterns: [],
+    defaultExpandDepth: 1,
+  },
 };
 
 /**
@@ -289,6 +309,12 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
       persistSetting('lsp', lsp);
       return { lsp };
     }),
+  updateWorkspace: (patch) =>
+    set((state) => {
+      const workspace = { ...state.workspace, ...patch };
+      persistSetting('workspace', workspace);
+      return { workspace };
+    }),
 }));
 
 /**
@@ -315,6 +341,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     lsp: {
       ...DEFAULT_SETTINGS.lsp,
       ...((snapshot['lsp'] as Partial<LspSettings> | undefined) ?? {}),
+    },
+    workspace: {
+      ...DEFAULT_SETTINGS.workspace,
+      ...((snapshot['workspace'] as Partial<WorkspaceSettings> | undefined) ?? {}),
     },
   });
 }

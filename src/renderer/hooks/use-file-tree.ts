@@ -17,10 +17,12 @@
 // - 被调方：file-tree-store（状态写入）、preload file API（IPC 调用）
 // ──────────────────────────────────────────────────────────────
 
+import type { FileEntry } from '@code-agent/shared/renderer';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
 /**
@@ -49,11 +51,14 @@ export function useFileTree(workingDir: string | null): void {
   const setEntries = useFileTreeStore((s) => s.setEntries);
   const setLoading = useFileTreeStore((s) => s.setLoading);
   const removeEntry = useFileTreeStore((s) => s.removeEntry);
+  const expandPaths = useFileTreeStore((s) => s.expandPaths);
   const reset = useFileTreeStore((s) => s.reset);
 
   // 跟踪已加载的目录，避免展开/折叠切换时重复请求
   // 注意：不放入 store，避免 setEntries 后触发已加载标记重置
   const loadedDirsRef = useRef<Set<string>>(new Set());
+  // 默认展开剩余深度：每完成一波加载递减，归零后停止自动注入子目录
+  const autoExpandLeftRef = useRef(0);
 
   /**
    * 加载指定目录的条目列表
@@ -62,9 +67,11 @@ export function useFileTree(workingDir: string | null): void {
    * 错误处理：失败时移除 loadedDirs 标记，允许下次重试；静默不提示（后台加载）。
    *
    * 用 useCallback 包装以稳定引用，避免 useEffect 频繁触发。
+   *
+   * @returns 成功时返回条目列表（默认展开链读取子目录用）；失败返回 null
    */
   const loadDir = useCallback(
-    async (path: string): Promise<void> => {
+    async (path: string): Promise<readonly FileEntry[] | null> => {
       setLoading(path, true);
       try {
         const response = await window.api.file.list({
@@ -74,13 +81,15 @@ export function useFileTree(workingDir: string | null): void {
         });
         if ('data' in response) {
           setEntries(path, response.data.entries);
-        } else if ('error' in response) {
-          // 加载失败：移除标记，允许下次展开时重试
-          loadedDirsRef.current.delete(path);
+          return response.data.entries;
         }
+        // 加载失败：移除标记，允许下次展开时重试
+        loadedDirsRef.current.delete(path);
+        return null;
       } catch {
         // 异常：移除标记，允许下次重试
         loadedDirsRef.current.delete(path);
+        return null;
       } finally {
         setLoading(path, false);
       }
@@ -89,13 +98,18 @@ export function useFileTree(workingDir: string | null): void {
   );
 
   // 1. 同步 workingDir 到 store（切换会话时重置状态，默认展开根目录）
+  //    同时重置自动展开剩余深度（getState 现读：层级设置在挂载/切换项目时生效）
   useEffect(() => {
     setRootPath(workingDir);
     // 重置已加载标记，让新根目录下的目录都能重新加载
     loadedDirsRef.current = new Set();
+    autoExpandLeftRef.current = Math.max(
+      0,
+      useSettingsStore.getState().workspace.defaultExpandDepth - 1,
+    );
   }, [workingDir, setRootPath]);
 
-  // 2. 对已展开但未加载的目录触发 file:list
+  // 2. 对已展开但未加载的目录触发 file:list；完成后按剩余深度自动注入下一层子目录
   useEffect(() => {
     if (workingDir === null) return;
 
@@ -110,11 +124,31 @@ export function useFileTree(workingDir: string | null): void {
 
     if (toLoad.length === 0) return;
 
-    // 并行加载所有待加载目录
-    for (const path of toLoad) {
-      void loadDir(path);
-    }
-  }, [workingDir, expandedPaths, loadDir]);
+    let cancelled = false;
+    void Promise.all(toLoad.map((path) => loadDir(path))).then(() => {
+      if (cancelled) return;
+      // 默认展开层级链：把本波新加载目录中的子目录注入展开集，
+      // 触发本 effect 下一轮加载，直到剩余深度归零
+      if (autoExpandLeftRef.current > 0) {
+        autoExpandLeftRef.current -= 1;
+        const childDirs: string[] = [];
+        for (const dir of toLoad) {
+          const entries = useFileTreeStore.getState().entries.get(dir) ?? [];
+          for (const entry of entries) {
+            if (entry.type === 'directory') {
+              childDirs.push(entry.path);
+            }
+          }
+        }
+        if (childDirs.length > 0) {
+          expandPaths(childDirs);
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workingDir, expandedPaths, loadDir, expandPaths]);
 
   // 3. 启动 file:watch + 订阅 file:watch:event
   useEffect(() => {

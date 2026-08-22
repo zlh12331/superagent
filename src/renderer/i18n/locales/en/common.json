@@ -483,7 +483,13 @@
       "workspaceRoot": "Working directory",
       "workspaceEmpty": "No project selected",
       "workspaceExpanded": "Expanded dirs",
-      "workspaceHint": "Shows the active session project tree; ignore list / default depth planned",
+      "tree": {
+        "title": "File Tree Behavior",
+        "expandDepth": "Default expand depth",
+        "expandDepthHint": "Directory levels auto-expanded when opening/switching a project (applies next time)",
+        "ignorePatterns": "Ignore patterns",
+        "ignoreHint": "One per line; * and ? wildcards supported; node_modules always ignored. Applies immediately"
+      },
       "lsp": {
         "title": "Language Servers",
         "hint": "LSP intelligence (definition/references/hover) routes to language servers by file type. Leave empty for built-in defaults; restart the app to apply. Servers must be installed in PATH."

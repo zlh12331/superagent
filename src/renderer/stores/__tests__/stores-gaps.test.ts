@@ -19,6 +19,7 @@ import {
   useSettingsStore,
 } from '../persistent/settings-store';
 import { useApprovalsStore } from '../transient/approvals-store';
+import { useFileTreeStore } from '../transient/file-tree-store';
 import { useToolStore } from '../transient/tool-store';
 
 /** persist 中间件附加的 rehydrate API（工厂返回类型未暴露，运行时存在；create-persistent 测试用） */
@@ -152,6 +153,26 @@ describe('stores 批次1 缺口补全', () => {
       });
     });
 
+    it('updateWorkspace：文件树忽略模式与展开层级合并', () => {
+      useSettingsStore.getState().updateWorkspace({
+        treeIgnorePatterns: ['dist'],
+        defaultExpandDepth: 2,
+      });
+      const ws = useSettingsStore.getState().workspace;
+      expect([...ws.treeIgnorePatterns]).toEqual(['dist']);
+      expect(ws.defaultExpandDepth).toBe(2);
+    });
+
+    it('S1 写穿透：updateWorkspace 落库 key=workspace（file:list 现读）', () => {
+      const setMock = vi.fn(async () => ({ data: { ok: true } }));
+      window.api.settings = { set: setMock } as never;
+      useSettingsStore.getState().updateWorkspace({ defaultExpandDepth: 3 });
+      expect(setMock).toHaveBeenCalledWith({
+        key: 'workspace',
+        value: expect.objectContaining({ defaultExpandDepth: 3 }),
+      });
+    });
+
     it('migrate v2→v3：Meta+ 快捷键归一化为 Ctrl+（非 mac）', () => {
       const legacy = {
         theme: 'dark',
@@ -192,6 +213,14 @@ describe('stores 批次1 缺口补全', () => {
       expect(s.theme).toBe('light');
       expect(s.ai).toMatchObject({ temperature: 1.1, defaultProvider: 'deepseek' });
       expect(s.shortcuts.commandPalette).toContain('Ctrl+P');
+    });
+
+    it('applySettingsSnapshot：workspace 分组缺字段补默认（含新增 lsp）', () => {
+      applySettingsSnapshot({ workspace: { defaultExpandDepth: 3 } });
+      const s = useSettingsStore.getState();
+      expect(s.workspace.defaultExpandDepth).toBe(3);
+      expect([...s.workspace.treeIgnorePatterns]).toEqual([]);
+      expect(s.lsp.serverCommands).toEqual({});
     });
   });
 
@@ -263,6 +292,27 @@ describe('stores 批次1 缺口补全', () => {
       useToolStore.getState().appendToolCall(callInput);
       useToolStore.getState().clearBySession('sess-a');
       expect(useToolStore.getState().callsBySession.get('sess-a')).toBeUndefined();
+    });
+  });
+
+  describe('file-tree-store expandPaths（默认展开层级用）', () => {
+    it('批量展开：去重追加到 expandedPaths', () => {
+      useFileTreeStore.getState().setRootPath('/proj');
+      useFileTreeStore.getState().expandPaths(['/proj/a', '/proj/b', '/proj']);
+      const expanded = [...useFileTreeStore.getState().expandedPaths].sort();
+      expect(expanded).toEqual([...expanded].sort());
+      expect(useFileTreeStore.getState().expandedPaths.has('/proj/a')).toBe(true);
+      expect(useFileTreeStore.getState().expandedPaths.has('/proj/b')).toBe(true);
+      // 根目录仍在（setRootPath 默认展开根）
+      expect(useFileTreeStore.getState().expandedPaths.has('/proj')).toBe(true);
+    });
+
+    it('全部已展开：返回原 Set 引用（不触发下游 effect 空转）', () => {
+      useFileTreeStore.getState().setRootPath('/proj');
+      useFileTreeStore.getState().expandPaths(['/proj/x']);
+      const before = useFileTreeStore.getState().expandedPaths;
+      useFileTreeStore.getState().expandPaths(['/proj/x']);
+      expect(useFileTreeStore.getState().expandedPaths).toBe(before);
     });
   });
 

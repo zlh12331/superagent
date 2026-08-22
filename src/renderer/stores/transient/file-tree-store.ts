@@ -63,6 +63,8 @@ interface FileTreeState {
   readonly toggleExpand: (path: string) => void;
   /** 显式设置目录展开状态 */
   readonly setExpanded: (path: string, expanded: boolean) => void;
+  /** 批量展开（去重追加；默认展开层级用） */
+  readonly expandPaths: (paths: readonly string[]) => void;
   /** 设置激活的文件路径（点击文件时调用） */
   readonly setActiveFile: (path: string | null) => void;
   /** 设置指定目录的子条目（list IPC 返回后调用） */
@@ -162,6 +164,18 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
         next.delete(path);
       }
       return { expandedPaths: next };
+    }),
+
+  expandPaths: (paths) =>
+    set((state) => {
+      const next = new Set(state.expandedPaths);
+      for (const path of paths) {
+        next.add(path);
+      }
+      // 无新增时返回原 Set 引用（避免触发下游 effect 空转）
+      return next.size === state.expandedPaths.size
+        ? { expandedPaths: state.expandedPaths }
+        : { expandedPaths: next };
     }),
 
   setActiveFile: (path) => set(() => ({ activeFilePath: path })),
