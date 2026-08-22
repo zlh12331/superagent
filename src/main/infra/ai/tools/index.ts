@@ -1,4 +1,4 @@
-// src/main/infra/ai/tools/index.ts
+﻿// src/main/infra/ai/tools/index.ts
 // 工具系统 barrel 导出：统一注册入口与工具工厂函数
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -35,6 +35,7 @@ import { createGrepTool } from './grep.tool';
 import { createListDirectoryTool } from './list-directory.tool';
 import { createLoadSkillTool } from './load-skill.tool';
 import { createLspDefinitionTool } from './lsp-definition.tool';
+import { createLspHoverTool } from './lsp-hover.tool';
 import { createLspReferencesTool } from './lsp-references.tool';
 import type { IPermissionService } from './permission-service';
 import { createEnterPlanModeTool, createExitPlanModeTool } from './plan-mode.tools';
@@ -72,7 +73,7 @@ export { createWriteFileTool } from './write-file.tool';
 /**
  * 注册所有内置工具到 ToolRegistry
  *
- * ServiceContainer 在初始化时调用一次，把 30 个内置工具全部注册：
+ * ServiceContainer 在初始化时调用一次，把 31 个内置工具全部注册：
  * - 文件/搜索/终端/命令/Git 基础工具（依赖注入对应服务）
  * - 交互与模式工具（ask_user_question / plan_mode，注入 askService / permissionService）
  * - 编排工具（run_subagent / run_team / run_workflow / task×4，模块级单例）
@@ -135,7 +136,8 @@ export function registerBuiltinTools(
   registry.register(createCronCreateTool());
   registry.register(createCronListTool());
   registry.register(createCronDeleteTool());
-  // 代码智能工具（LSP 定义/引用；只读自动放行）
+  // 代码智能工具（LSP 定义/引用/悬停；只读自动放行）
   registry.register(createLspDefinitionTool(lspManager));
   registry.register(createLspReferencesTool(lspManager));
+  registry.register(createLspHoverTool(lspManager));
 }

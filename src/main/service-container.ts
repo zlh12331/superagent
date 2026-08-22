@@ -80,6 +80,7 @@ import type { IGitService } from './infra/git/git-service';
 import { getGitService, resetGitService } from './infra/git/git-service';
 import { ImAgentBridge } from './infra/im/im-agent-bridge';
 import { ImService } from './infra/im/im-service';
+import { readLsServerOverrides } from './infra/lsp/ls-settings';
 import { LspServerManager } from './infra/lsp/lsp-server-manager';
 import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
@@ -231,7 +232,7 @@ class ServiceContainer {
    * ToolRegistry 实例缓存
    *
    * 设计：由 ServiceContainer 直接 new ToolRegistry（class 实现，非模块级单例）。
-   * - 首次访问时延迟初始化，并调用 registerBuiltinTools 注册 30 个内置工具
+   * - 首次访问时延迟初始化，并调用 registerBuiltinTools 注册 31 个内置工具
    *   （read_file / write_file / list_directory / grep / glob）
    * - 测试可通过 setToolRegistry() 注入 mock 实现（如空注册表或预填充工具）
    *
@@ -265,14 +266,14 @@ class ServiceContainer {
    *
    * 首次调用延迟初始化：
    * 1. new ToolRegistry() 创建空注册表
-   * 2. 调用 registerBuiltinTools(registry, fileService, searchService) 注册 30 个内置工具
+   * 2. 调用 registerBuiltinTools(registry, fileService, searchService) 注册 31 个内置工具
    *
    * 依赖 FileService + SearchService 实例：先确保已初始化。
    */
   getToolRegistry(): IToolRegistry {
     if (this.toolRegistry === null) {
       const registry = new ToolRegistry();
-      // 注册全部内置工具（30 个，清单见 tools/index.ts registerBuiltinTools）
+      // 注册全部内置工具（31 个，清单见 tools/index.ts registerBuiltinTools）
       // 依赖 FileService + SearchService 实例
       registerBuiltinTools(
         registry,
@@ -452,10 +453,13 @@ class ServiceContainer {
   }
   /**
    * 获取 LSP 服务器管理器（懒加载：首次工具调用才创建）
+   *
+   * 用户覆盖来源：SQLite app_settings 的 `lsp.serverCommands`（按语言命令行，
+   * 渲染层设置页写穿透；构造时读取一次，修改后重启应用生效）。
    */
   getLspManager(): LspServerManager {
     if (this.lspManager === null) {
-      this.lspManager = new LspServerManager();
+      this.lspManager = new LspServerManager({ serverOverrides: readLsServerOverrides() });
     }
     return this.lspManager;
   }

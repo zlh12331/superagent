@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LspServerManager } from '../../lsp/lsp-server-manager';
 import { createLspDefinitionTool } from './lsp-definition.tool';
+import { createLspHoverTool } from './lsp-hover.tool';
 import { createLspReferencesTool } from './lsp-references.tool';
 import type { ToolContext } from './tool';
 
@@ -30,6 +31,9 @@ function handle(body) {
         { uri: 'file:///proj/src/a.ts', range: { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } } },
         { uri: 'file:///proj/src/b.ts', range: { start: { line: 9, character: 0 }, end: { line: 9, character: 1 } } },
       ] });
+      break;
+    case 'textDocument/hover':
+      send({ jsonrpc: '2.0', id: msg.id, result: { contents: { value: 'function foo(x: number): string' }, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } } } });
       break;
     case 'shutdown':
       send({ jsonrpc: '2.0', id: msg.id, result: null });
@@ -72,10 +76,12 @@ describe('LSP 工具', () => {
     managers.length = 0;
   });
 
+  /** 注入 fake 服务器（typescript 语言 → node 执行脚本） */
   function createManager(): LspServerManager {
     const manager = new LspServerManager({
-      command: process.execPath,
-      args: ['-e', FAKE_SERVER_SCRIPT],
+      serverOverrides: {
+        typescript: { command: process.execPath, args: ['-e', FAKE_SERVER_SCRIPT] },
+      },
     });
     managers.push(manager);
     return manager;
@@ -102,11 +108,30 @@ describe('LSP 工具', () => {
     expect(result.output).toContain('b.ts');
   });
 
+  it('lsp_hover：返回悬停类型签名（MarkedString value 归一化）', async () => {
+    const tool = createLspHoverTool(createManager());
+    const result = await tool.execute(
+      { filePath: 'D:\\proj\\src\\main.ts', line: 0, character: 0 },
+      makeCtx(),
+    );
+    expect(result.title).toContain('main.ts');
+    expect(result.output).toBe('function foo(x: number): string');
+  });
+
+  it('未收录文件类型：返回明确错误（不抛异常）', async () => {
+    const tool = createLspDefinitionTool(createManager());
+    const result = await tool.execute(
+      { filePath: 'D:\\proj\\README.md', line: 0, character: 0 },
+      makeCtx(),
+    );
+    expect(result.title).toContain('失败');
+    expect(result.output).toContain('不支持的文件类型');
+  });
+
   it('服务器不可用：返回明确错误（不抛异常）', async () => {
     // 命令不存在 → 启动失败 → 明确错误
     const manager = new LspServerManager({
-      command: 'nonexistent-server-binary-xyz',
-      args: ['--stdio'],
+      serverOverrides: { typescript: { command: 'nonexistent-server-binary-xyz', args: [] } },
       timeoutMs: 500,
     });
     managers.push(manager);

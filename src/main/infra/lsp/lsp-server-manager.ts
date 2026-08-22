@@ -1,8 +1,10 @@
 // src/main/infra/lsp/lsp-server-manager.ts
-// LSP 服务器管理器：按根目录懒加载 + 复用（对齐 qwen LspServerManager 语义收敛）
+// LSP 服务器管理器：按 根目录×语言 懒加载 + 复用（对齐 qwen LspServerManager 语义收敛）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 根目录 → LspClient 的懒加载注册表（同一根目录复用同一语言服务器）
+// - （根目录 × 语言）→ LspClient 的懒加载注册表（同根同语言复用同一服务器）
+// - 服务器解析：按工具入参的文件扩展名路由到对应 language server
+//   （内置默认 + 用户覆盖，见 ls-config.ts）
 // - 并发安全：并发 getClient 共享同一初始化 Promise（防重复握手）
 // - disposeAll：应用退出/切换工作区时统一释放
 //
@@ -10,29 +12,28 @@
 // 本模块参考 qwen-code 参考项目 packages/core/src/lsp/LspServerManager.ts
 // （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
 // 多服务器编排语义，按我们的技术栈收敛重写：
-// - 移除配置加载器/连接工厂（服务器命令由构造注入，配置走我们的 settings）
+// - 移除配置加载器/连接工厂（用户覆盖经构造注入，来源 settings 的 lsp.serverCommands）
 // - 保留核心语义：懒加载 + 复用 + 统一释放
 // ──────────────────────────────────────────────────────────────
 
 import { logger } from '../../utils/logger';
+import type { LsLanguage, LsServerSpec } from './ls-config';
+import { languageForFile, SUPPORTED_LS_LANGUAGES, serverSpecForLanguage } from './ls-config';
 import { LspClient } from './lsp-client';
 
-/** 语言服务器命令配置 */
+/** 语言服务器管理器选项 */
 export interface LspServerManagerOptions {
-  /** 启动命令（缺省 typescript-language-server） */
-  readonly command?: string;
-  /** 启动参数（缺省 ['--stdio']） */
-  readonly args?: readonly string[];
+  /** 按语言覆盖服务器启动规格（结构化；来自设置 lsp.serverCommands 经 parseServerCommand 转换） */
+  readonly serverOverrides?: Readonly<Record<string, LsServerSpec>>;
   /** 请求超时（毫秒） */
   readonly timeoutMs?: number;
 }
 
 /**
- * LSP 服务器管理器（可复用实例；按根目录复用语言服务器）
+ * LSP 服务器管理器（可复用实例；按 根目录×语言 复用语言服务器）
  */
 export class LspServerManager {
-  private readonly command: string;
-  private readonly args: readonly string[];
+  private readonly serverOverrides: Readonly<Record<string, LsServerSpec>>;
   private readonly timeoutMs: number;
 
   /**
@@ -46,37 +47,48 @@ export class LspServerManager {
   private disposed = false;
 
   constructor(options?: LspServerManagerOptions & { lspClientCtor?: typeof LspClient }) {
-    this.command = options?.command ?? 'typescript-language-server';
-    this.args = options?.args ?? ['--stdio'];
+    this.serverOverrides = options?.serverOverrides ?? {};
     this.timeoutMs = options?.timeoutMs ?? 15_000;
     this.clientCtor = options?.lspClientCtor ?? LspClient;
   }
 
   /**
-   * 获取（或懒启动）指定根目录的语言服务器
+   * 获取（或懒启动）指定根目录与文件语言的服务器
    *
+   * 语言由 filePath 扩展名决定；同一根目录下不同语言各自独立客户端。
    * 并发安全：并发调用共享同一初始化 Promise。
+   *
+   * @param rootUri 工作区根目录（file:// URI）
+   * @param filePath 目标文件绝对路径（扩展名 → 语言路由）
+   * @throws 文件类型未收录 / 已释放 / 启动失败
    */
-  async getClient(rootUri: string): Promise<LspClient> {
+  async getClient(rootUri: string, filePath: string): Promise<LspClient> {
     if (this.disposed) {
       throw new Error('LspServerManager 已释放');
     }
-    const cached = this.clients.get(rootUri);
+    const language = languageForFile(filePath);
+    if (language === undefined) {
+      throw new Error(
+        `不支持的文件类型：${filePath}（已注册语言服务器：${SUPPORTED_LS_LANGUAGES.join('/')}）`,
+      );
+    }
+    const cacheKey = `${rootUri}::${language}`;
+    const cached = this.clients.get(cacheKey);
     if (cached !== undefined) {
       return cached;
     }
-    const inFlight = this.pending.get(rootUri);
+    const inFlight = this.pending.get(cacheKey);
     if (inFlight !== undefined) {
       return inFlight;
     }
-    const boot = this.boot(rootUri);
-    this.pending.set(rootUri, boot);
+    const boot = this.boot(rootUri, language);
+    this.pending.set(cacheKey, boot);
     try {
       const client = await boot;
-      this.clients.set(rootUri, client);
+      this.clients.set(cacheKey, client);
       return client;
     } finally {
-      this.pending.delete(rootUri);
+      this.pending.delete(cacheKey);
     }
   }
 
@@ -93,10 +105,11 @@ export class LspServerManager {
   }
 
   /** 启动单个服务器（initialize 失败清理资源） */
-  private async boot(rootUri: string): Promise<LspClient> {
+  private async boot(rootUri: string, language: LsLanguage): Promise<LspClient> {
+    const spec = serverSpecForLanguage(language, this.serverOverrides);
     const client = new this.clientCtor({
-      command: this.command,
-      args: this.args,
+      command: spec.command,
+      args: spec.args,
       rootUri,
       timeoutMs: this.timeoutMs,
     });

@@ -32,14 +32,14 @@ export function createLspDefinitionTool(manager: LspServerManager): Tool<LspDefi
   return {
     name: 'lsp_definition',
     description:
-      '查询文件指定位置符号的声明位置（跳转定义）。返回目标文件与行列；多结果时全部返回。需要语言服务器可用（typescript-language-server）。',
+      '查询文件指定位置符号的声明位置（跳转定义）。返回目标文件与行列；多结果时全部返回。按文件扩展名路由语言服务器（TypeScript/JavaScript、Python、Go、Rust 内置支持，可在设置中覆盖命令）。',
     inputSchema: LspDefinitionInputSchema,
     permission: 'auto',
     category: 'read',
     execute: async (input: LspDefinitionInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
         const rootUri = pathToFileURL(ctx.workingDir).href;
-        const client = await manager.getClient(rootUri);
+        const client = await manager.getClient(rootUri, input.filePath);
         const locations = await client.definition(pathToFileURL(input.filePath).href, {
           line: input.line,
           character: input.character,

@@ -46,11 +46,15 @@ class SharedlspClientCtor {
 }
 
 function makeManager(
-  options: { command?: string; args?: readonly string[]; timeoutMs?: number } = {},
+  options: {
+    serverOverrides?: Record<string, { command: string; args: readonly string[] }>;
+    timeoutMs?: number;
+  } = {},
 ): LspServerManager {
   FakeLspClient.instances = [];
   return new LspServerManager({
-    ...options,
+    ...(options.serverOverrides !== undefined ? { serverOverrides: options.serverOverrides } : {}),
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
     lspClientCtor: SharedlspClientCtor as unknown as typeof LspClient,
   });
 }
@@ -62,11 +66,13 @@ describe('LspServerManager.getClient（三件套）', () => {
 
   it('正向：首次获取 → 懒启动 + initialize + 缓存（第二次复用同一实例）', async () => {
     const manager = makeManager();
-    const first = await manager.getClient('file:///repo');
-    const second = await manager.getClient('file:///repo');
-    expect(first).toBe(second); // 复用
+    const first = await manager.getClient('file:///repo', '/repo/src/main.ts');
+    const second = await manager.getClient('file:///repo', '/repo/src/other.ts');
+    expect(first).toBe(second); // 同根同语言复用
     expect(FakeLspClient.instances).toHaveLength(1); // 只启动一次
     expect(FakeLspClient.instances[0]?.initialize).toHaveBeenCalledTimes(1);
+    // 内置默认：typescript → tsserver
+    expect(FakeLspClient.instances[0]?.options.command).toBe('typescript-language-server');
   });
 
   it('正向：并发 getClient 共享同一初始化 Promise（防重复握手）', async () => {
@@ -95,8 +101,8 @@ describe('LspServerManager.getClient（三件套）', () => {
         }
       } as unknown as typeof LspClient,
     });
-    const p1 = manager2.getClient('file:///repo');
-    const p2 = manager2.getClient('file:///repo');
+    const p1 = manager2.getClient('file:///repo', '/repo/a.py');
+    const p2 = manager2.getClient('file:///repo', '/repo/b.py');
     // 两个调用共享 pending promise：只有 1 次构造
     expect(FakeLspClient.instances).toHaveLength(1);
     resolveInit?.();
@@ -106,15 +112,31 @@ describe('LspServerManager.getClient（三件套）', () => {
 
   it('边界：不同 rootUri → 各自独立的客户端', async () => {
     const manager = makeManager();
-    const a = await manager.getClient('file:///a');
-    const b = await manager.getClient('file:///b');
+    const a = await manager.getClient('file:///a', '/a/x.go');
+    const b = await manager.getClient('file:///b', '/b/y.rs');
     expect(a).not.toBe(b);
     expect(FakeLspClient.instances).toHaveLength(2);
   });
 
-  it('边界：自定义配置透传（command/args/timeoutMs）', async () => {
-    const manager = makeManager({ command: 'my-lsp', args: ['--port', '8080'], timeoutMs: 500 });
-    await manager.getClient('file:///repo');
+  it('边界：同根不同语言 → 各自独立客户端（按语言路由）', async () => {
+    // 独立构造桩（Shared 桩按 rootUri 去重，无法体现语言维度）
+    FakeLspClient.instances = [];
+    const manager = new LspServerManager({
+      lspClientCtor: FakeLspClient as unknown as typeof LspClient,
+    });
+    const ts = await manager.getClient('file:///repo', '/repo/a.ts');
+    const py = await manager.getClient('file:///repo', '/repo/b.py');
+    expect(ts).not.toBe(py);
+    expect(FakeLpCommand(0)).toBe('typescript-language-server');
+    expect(FakeLpCommand(1)).toBe('pyright-langserver');
+  });
+
+  it('边界：用户覆盖透传（结构化 override → 启动规格）', async () => {
+    const manager = makeManager({
+      serverOverrides: { typescript: { command: 'my-lsp', args: ['--port', '8080'] } },
+      timeoutMs: 500,
+    });
+    await manager.getClient('file:///repo', '/repo/src/main.ts');
     expect(FakeLspClient.instances[0]?.options).toEqual({
       command: 'my-lsp',
       args: ['--port', '8080'],
@@ -139,17 +161,32 @@ describe('LspServerManager.getClient（三件套）', () => {
         }
       } as unknown as typeof LspClient,
     });
-    await expect(manager2.getClient('file:///repo')).rejects.toThrow('lsp boot failed');
+    await expect(manager2.getClient('file:///repo', '/repo/a.ts')).rejects.toThrow(
+      'lsp boot failed',
+    );
     expect(badClient.dispose).toHaveBeenCalled(); // 半开资源清理
     // 不缓存：下次调用重新启动
-    await expect(manager2.getClient('file:///repo')).rejects.toThrow('lsp boot failed');
+    await expect(manager2.getClient('file:///repo', '/repo/a.ts')).rejects.toThrow(
+      'lsp boot failed',
+    );
     expect(badClient.initialize).toHaveBeenCalledTimes(2);
   });
 
   it('异常：disposed 后 getClient → 抛错', async () => {
     const manager = makeManager();
     await manager.disposeAll();
-    await expect(manager.getClient('file:///repo')).rejects.toThrow('已释放');
+    await expect(manager.getClient('file:///repo', '/repo/a.ts')).rejects.toThrow('已释放');
+  });
+
+  it('异常：未收录文件类型 → 明确错误（不启动服务器）', async () => {
+    const manager = makeManager();
+    await expect(manager.getClient('file:///repo', '/repo/README.md')).rejects.toThrow(
+      /不支持的文件类型/,
+    );
+    await expect(manager.getClient('file:///repo', '/repo/noext')).rejects.toThrow(
+      /不支持的文件类型/,
+    );
+    expect(FakeLspClient.instances).toHaveLength(0);
   });
 });
 
@@ -160,8 +197,8 @@ describe('LspServerManager.disposeAll', () => {
 
   it('正向：全部释放 + 幂等（重复调用 no-op）', async () => {
     const manager = makeManager();
-    await manager.getClient('file:///a');
-    await manager.getClient('file:///b');
+    await manager.getClient('file:///a', '/a/x.ts');
+    await manager.getClient('file:///b', '/b/y.ts');
     await manager.disposeAll();
     expect(FakeLspClient.instances[0]?.dispose).toHaveBeenCalled();
     expect(FakeLspClient.instances[1]?.dispose).toHaveBeenCalled();
@@ -170,8 +207,8 @@ describe('LspServerManager.disposeAll', () => {
 
   it('异常：dispose 抛错 → 不阻断其余客户端释放', async () => {
     const manager = makeManager();
-    await manager.getClient('file:///a');
-    await manager.getClient('file:///b');
+    await manager.getClient('file:///a', '/a/x.ts');
+    await manager.getClient('file:///b', '/b/y.ts');
     FakeLspClient.instances[0]?.dispose.mockRejectedValueOnce(new Error('dispose failed'));
     await expect(manager.disposeAll()).resolves.toBeUndefined();
     expect(FakeLspClient.instances[1]?.dispose).toHaveBeenCalled();
@@ -182,3 +219,8 @@ describe('LspServerManager.disposeAll', () => {
     await expect(manager.disposeAll()).resolves.toBeUndefined();
   });
 });
+
+/** 取第 i 个 fake 实例的启动命令（断言辅助） */
+function FakeLpCommand(index: number): string {
+  return FakeLspClient.instances[index]?.options.command ?? '';
+}

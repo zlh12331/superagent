@@ -31,14 +31,14 @@ export function createLspReferencesTool(manager: LspServerManager): Tool<LspRefe
   return {
     name: 'lsp_references',
     description:
-      '查找文件指定位置符号的全部引用位置（含声明）。返回引用文件与行列列表，用于评估改动影响面。需要语言服务器可用。',
+      '查找文件指定位置符号的全部引用位置（含声明）。返回引用文件与行列列表，用于评估改动影响面。按文件扩展名路由语言服务器（TypeScript/JavaScript、Python、Go、Rust 内置支持）。',
     inputSchema: LspReferencesInputSchema,
     permission: 'auto',
     category: 'read',
     execute: async (input: LspReferencesInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
         const rootUri = pathToFileURL(ctx.workingDir).href;
-        const client = await manager.getClient(rootUri);
+        const client = await manager.getClient(rootUri, input.filePath);
         const locations = await client.references(pathToFileURL(input.filePath).href, {
           line: input.line,
           character: input.character,
