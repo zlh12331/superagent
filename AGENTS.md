@@ -8,7 +8,7 @@ Windows 桌面端生产级 Code Agent 桌面应用，Electron 43 + React 19 + Ty
 pnpm dev                    # 启动 dev server + Electron 窗口
 pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会自动增量编译）
 pnpm lint                   # biome check .（含格式/import 排序）
-pnpm test                   # 全部 unit tests: shared → main → renderer → scripts
+pnpm test                   # 全部 unit tests（&& 链式，任一层失败即中断）: shared → main → renderer → scripts；集成测试单独跑 pnpm test:integration
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
 pnpm check:static           # 静态审计：check:tokens（样式铁律）+ check:i18n（i18n 缺失卡关），pre-push/CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）

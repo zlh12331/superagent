@@ -188,9 +188,8 @@
 | 文件 | 说明 |
 |------|------|
 | [src/renderer/test/__tests__/mock-api.test.ts](file:///f:/TraeProjects/1/src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
-| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///f:/TraeProjects/1/src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook |
+| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///f:/TraeProjects/1/src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
 | [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///f:/TraeProjects/1/src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
-| [src/renderer/stores/transient/__tests__/usage-store.test.ts](file:///f:/TraeProjects/1/src/renderer/stores/transient/__tests__/usage-store.test.ts) | 用量统计 store |
 
 #### scripts 工具链（5 个）
 
