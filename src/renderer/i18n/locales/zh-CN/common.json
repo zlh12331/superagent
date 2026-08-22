@@ -484,6 +484,10 @@
       "workspaceEmpty": "未选择项目",
       "workspaceExpanded": "已展开目录",
       "workspaceHint": "工作树展示当前激活会话的项目文件；忽略列表/默认展开层级配置规划中",
+      "lsp": {
+        "title": "语言服务器",
+        "hint": "LSP 代码智能（跳转定义/查找引用/悬停信息）按文件类型路由语言服务器。留空使用内置默认；修改后重启应用生效。需对应服务器已在 PATH 中安装。"
+      },
       "browserHint": "右侧面板「浏览器」tab 为内置 iframe 预览工具；高级策略（加载拦截/设备预设）规划中",
       "rulesTitle": "规则（AGENTS.md）",
       "rulesHint": "项目根 AGENTS.md 为 Agent 行为准则（工程规范/命令/架构），Agent 回合加载",

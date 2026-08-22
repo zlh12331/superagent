@@ -484,6 +484,10 @@
       "workspaceEmpty": "No project selected",
       "workspaceExpanded": "Expanded dirs",
       "workspaceHint": "Shows the active session project tree; ignore list / default depth planned",
+      "lsp": {
+        "title": "Language Servers",
+        "hint": "LSP intelligence (definition/references/hover) routes to language servers by file type. Leave empty for built-in defaults; restart the app to apply. Servers must be installed in PATH."
+      },
       "browserHint": "Right-panel Browser tab is a built-in iframe preview; advanced policies planned",
       "rulesTitle": "Rules (AGENTS.md)",
       "rulesHint": "Project AGENTS.md defines agent behavior (engineering standards/commands/architecture)",

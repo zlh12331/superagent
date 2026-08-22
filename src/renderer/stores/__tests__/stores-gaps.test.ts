@@ -120,6 +120,15 @@ describe('stores 批次1 缺口补全', () => {
       expect(s.experimental).toMatchObject({ scanlines: true, reasoningCollapsed: true });
     });
 
+    it('updateLsp：按语言命令行合并（默认空覆盖）', () => {
+      useSettingsStore.getState().updateLsp({
+        serverCommands: { python: 'custom-pylsp --stdio' },
+      });
+      const lsp = useSettingsStore.getState().lsp;
+      expect(lsp.serverCommands['python']).toBe('custom-pylsp --stdio');
+      expect(Object.keys(lsp.serverCommands)).toHaveLength(1);
+    });
+
     it('S1 写穿透：updateAi 后经 settings:set IPC 落库（不再写 localStorage）', () => {
       const setMock = vi.fn(async () => ({ data: { ok: true } }));
       // 仅注入被测路径用到的方法（测试骨架为最小 mock）
@@ -131,6 +140,16 @@ describe('stores 批次1 缺口补全', () => {
       });
       // 不再写 localStorage（真源已迁移 SQLite）
       expect(localStorage.getItem('code-agent:settings')).toBeNull();
+    });
+
+    it('S1 写穿透：updateLsp 落库 key=lsp（主进程 getLspManager 读取）', () => {
+      const setMock = vi.fn(async () => ({ data: { ok: true } }));
+      window.api.settings = { set: setMock } as never;
+      useSettingsStore.getState().updateLsp({ serverCommands: { go: 'my-gopls' } });
+      expect(setMock).toHaveBeenCalledWith({
+        key: 'lsp',
+        value: { serverCommands: { go: 'my-gopls' } },
+      });
     });
 
     it('migrate v2→v3：Meta+ 快捷键归一化为 Ctrl+（非 mac）', () => {

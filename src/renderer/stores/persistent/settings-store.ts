@@ -127,6 +127,16 @@ export interface ExperimentalSettings {
 }
 
 /**
+ * 语言服务器设置（LSP 按语言覆盖；主进程 getLspManager 构造时读取）
+ *
+ * serverCommands：语言标识 → 完整命令行（如 'pyright-langserver --stdio'；
+ * 空串/缺省 = 内置默认）。修改后重启应用生效。
+ */
+export interface LspSettings {
+  readonly serverCommands: Readonly<Record<string, string>>;
+}
+
+/**
  * 用户设置数据形状（不含操作方法；DEFAULT_SETTINGS 与快照共用）
  */
 interface SettingsData {
@@ -140,6 +150,8 @@ interface SettingsData {
   readonly shortcuts: KeyboardShortcuts;
   /** 实验性功能 */
   readonly experimental: ExperimentalSettings;
+  /** 语言服务器 */
+  readonly lsp: LspSettings;
 }
 
 /**
@@ -157,6 +169,8 @@ interface SettingsState extends SettingsData {
   readonly updateShortcuts: (patch: Partial<KeyboardShortcuts>) => void;
   /** 更新实验性功能（部分字段） */
   readonly updateExperimental: (patch: Partial<ExperimentalSettings>) => void;
+  /** 更新语言服务器设置（部分字段） */
+  readonly updateLsp: (patch: Partial<LspSettings>) => void;
 }
 
 /**
@@ -224,6 +238,9 @@ const DEFAULT_SETTINGS: SettingsData = {
     scanlines: false,
     reasoningCollapsed: true,
   },
+  lsp: {
+    serverCommands: {},
+  },
 };
 
 /**
@@ -266,6 +283,12 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
       persistSetting('experimental', experimental);
       return { experimental };
     }),
+  updateLsp: (patch) =>
+    set((state) => {
+      const lsp = { ...state.lsp, ...patch };
+      persistSetting('lsp', lsp);
+      return { lsp };
+    }),
 }));
 
 /**
@@ -288,6 +311,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     experimental: {
       ...DEFAULT_SETTINGS.experimental,
       ...((snapshot['experimental'] as Partial<ExperimentalSettings> | undefined) ?? {}),
+    },
+    lsp: {
+      ...DEFAULT_SETTINGS.lsp,
+      ...((snapshot['lsp'] as Partial<LspSettings> | undefined) ?? {}),
     },
   });
 }
