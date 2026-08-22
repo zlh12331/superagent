@@ -50,7 +50,7 @@ f:\TraeProjects\1\
 | ai/models/ | 13 | [builtin-models.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/builtin-models.ts) / [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/registry.ts) / [runtime-model-store.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/runtime-model-store.ts) / [generation-options.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/generation-options.ts) / [reasoning-effort.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/reasoning-effort.ts) / [token-limits.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/token-limits.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/types.ts) + index.ts + 6 测试 |
 | ai/prompt/ | 5 | [prompt-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts) / [default-prompt.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/default-prompt.ts) / [dynamic-context.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/dynamic-context.ts) / [agents-md.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/agents-md.ts) + 1 测试 |
 | ai/providers/ | 5 | [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/registry.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/types.ts) + index.ts + 2 测试 |
-| ai/tools/ | 18 | 12 个工具 + [path-guard.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/path-guard.ts) + [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + 5 测试 |
+| ai/tools/ | 50 | 31 个内置工具（29 个 `*.tool.ts` + [plan-mode.tools.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/plan-mode.tools.ts)）+ 注册/执行/权限基础设施（[index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) / [path-guard.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/path-guard.ts) / command-classifier / dangerous-commands / denial-tracking / error-classifier / read-tracker / tool.ts）+ 9 测试 |
 | storage/ | 11 | [db.ts](file:///f:/TraeProjects/1/src/main/infra/storage/db.ts) / [schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts) / [schema-sql.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema-sql.ts) / [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) / [keychain.ts](file:///f:/TraeProjects/1/src/main/infra/storage/keychain.ts) / [app-data.ts](file:///f:/TraeProjects/1/src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///f:/TraeProjects/1/src/main/infra/storage/telemetry-pref.ts) + 4 测试 |
 | code/ | 2 | [code-analyzer.ts](file:///f:/TraeProjects/1/src/main/infra/code-analysis/code-analyzer.ts) + 1 测试 |
 | codebase/ | 1 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) |
@@ -75,9 +75,9 @@ f:\TraeProjects\1\
 | index.ts | [src/main/index.ts](file:///f:/TraeProjects/1/src/main/index.ts) | 主进程入口 |
 | service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 18 服务统一生命周期管理（2026-08-17 实测） |
 
-### 2.4 src/main/infra/ai/tools/ — 内置工具（29 个）
+### 2.4 src/main/infra/ai/tools/ — 内置工具（31 个）
 
-实际注册 29 个工具（[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools`）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / git_add+commit+push / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / web_fetch / save_memory / load_skill / lsp_definition / lsp_references：
+实际注册 31 个工具（[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools`，2026-08-22 实测）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / **run_workflow** / web_fetch / save_memory / load_skill / lsp_definition / lsp_references / **lsp_hover**：
 
 | 工具文件 | 工具名 | 权限 | 依赖 |
 |---|---|---|---|

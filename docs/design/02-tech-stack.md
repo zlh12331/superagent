@@ -65,7 +65,7 @@
 | `@ai-sdk/anthropic` | `^4.0.27` | Anthropic provider |
 | `@ai-sdk/openai-compatible` | `^3.0.13` | DeepSeek 等 OpenAI 兼容 provider |
 | `@ai-sdk/react` | `^4.0.35` | useChat 等 React hooks |
-| `@modelcontextprotocol/sdk` | `^1.30.0` | MCP server 集成（仅 stdio transport） |
+| `@modelcontextprotocol/sdk` | `^1.30.0` | MCP server 集成（stdio / sse / streamable-http 三态 transport） |
 | `gpt-tokenizer` | `^3.4.0` | token 计数 |
 
 ### 3.4 数据库

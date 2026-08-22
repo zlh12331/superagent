@@ -13,7 +13,7 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 |---|--------|---------|---------|
 | 1 | AI Agent 核心 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) | 多轮工具调用循环、流式响应、中断控制 |
 | 2 | 纯对话 Chat | [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts) | 不带工具的流式响应 |
-| 3 | 工具系统 | [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) + [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) | 12 个内置工具 + 权限审批 + IPC 推送 |
+| 3 | 工具系统 | [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) + [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) | 31 个内置工具 + 权限审批 + IPC 推送 |
 | 4 | MCP 集成 | [mcp/mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts) | stdio transport 多 server 管理 |
 | 5 | 会话管理 | [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) | DB 持久化会话历史 |
 | 6 | 代码理解 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) | 调用 codegraph CLI 做符号检索 |
@@ -108,26 +108,52 @@ ToolExecutor（执行 + IPC 推送）
 PermissionService（权限决策 + 审批）
 ```
 
-### 3.2 内置工具清单（12 个）
+### 3.2 内置工具清单（31 个）
 
-[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) 的 `registerBuiltinTools` 注册：
+[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) 的 `registerBuiltinTools` 注册（2026-08-22 实测）：
 
-| 工具名 | 权限 | 依赖 | 说明 |
-|--------|------|------|------|
-| `read_file` | auto | IFileService | 读文件内容 |
-| `write_file` | ask | IFileService | 写文件 |
-| `list_directory` | auto | IFileService | 列目录 |
-| `code_review` | auto | IFileService | 代码审查 |
-| `grep` | auto | ISearchService | ripgrep 内容搜索 |
-| `glob` | auto | ISearchService | glob 模式文件查找 |
-| `terminal` | ask | ITerminalService | 终端会话操作 |
-| `run_command` | ask | 无 | 子进程命令执行 |
-| `edit_file` | ask | 无 | 基于 diff-match-patch 的文件编辑 |
-| `git_add` | ask | IGitService | git 暂存改动 |
-| `git_commit` | ask | IGitService | git 提交 |
-| `git_push` | ask | IGitService | git 推送远程 |
+**基础文件/搜索/终端/Git（12 个，依赖注入对应服务）：**
 
-源码：[tools/index.ts#L81-L100](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L81)（registerBuiltinTools 函数体）。
+| 工具名 | 权限 | 类别 | 依赖 | 说明 |
+|--------|------|------|------|------|
+| `read_file` | auto | read | IFileService | 读文件内容 |
+| `write_file` | ask | edit | IFileService | 写文件 |
+| `list_directory` | auto | read | IFileService | 列目录 |
+| `code_review` | auto | read | IFileService | 代码审查 |
+| `grep` | auto | read | ISearchService | ripgrep 内容搜索 |
+| `glob` | auto | read | ISearchService | glob 模式文件查找 |
+| `terminal` | ask | exec | ITerminalService | 终端会话操作 |
+| `run_command` | ask | exec | 无 | 子进程命令执行 |
+| `edit_file` | ask | edit | 无 | 基于 diff-match-patch 的文件编辑 |
+| `git_add` / `git_commit` / `git_push` | ask | edit | IGitService | Git 暂存/提交/推送 |
+
+**交互与模式（4 个）：**
+
+| 工具名 | 权限 | 说明 |
+|--------|------|------|
+| `ask_user_question` | ask | 向用户提问（单选/多选 + 自由输入，AskDialog 渲染） |
+| `enter_plan_mode` / `exit_plan_mode` | auto | plan/build 双模式切换标记 |
+
+**编排体系（9 个，qwen-code 对齐；模块级单例）：**
+
+| 工具名 | 权限 | 说明 |
+|--------|------|------|
+| `run_subagent` | ask | 委派子代理（general/code_review/plan 内置定义，独立无头回合） |
+| `run_team` | ask | 多成员并行委派 + 领导汇总（TeamService，失败隔离） |
+| `run_workflow` | ask | 串行多步工作流：前一步产出注入下一步上下文 + 预算软闸（WorkflowService） |
+| `task_create` / `task_update` / `task_stop` / `task_list` | auto | 任务面板登记与状态机（SQLite 持久化） |
+| `save_memory` | auto | 知识记忆主动存储 |
+
+**扩展能力（6 个）：**
+
+| 工具名 | 权限 | 说明 |
+|--------|------|------|
+| `load_skill` | auto | 按名加载技能提示词（skillRegistry） |
+| `web_fetch` | ask | 网页抓取 |
+| `cron_create` / `cron_list` / `cron_delete` | ask/auto | cron 表达式定时任务 |
+| `lsp_definition` / `lsp_references` / `lsp_hover` | auto | LSP 代码智能（跳转定义/查找引用/悬停信息），按文件扩展名路由语言服务器（TypeScript/Python/Go/Rust 内置默认，可在设置中覆盖命令） |
+
+源码：[tools/index.ts#L102-L155](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L102)（registerBuiltinTools 函数体）。
 
 ### 3.3 权限模型
 
@@ -190,11 +216,12 @@ interface ToolContext {
 
 ### 4.1 实现范围
 
-- **transport**：仅实现 stdio（不支持 sse / streamable-http）
-- 多 server 管理：每个 server 一个独立子进程
+- **transport 三态**（2026-08-22 起）：`stdio`（本地子进程，缺省）/ `sse` / `streamable-http`（远程 HTTP，支持 headers 注入授权头；URL 限 http/https 协议白名单）
+- 多 server 管理：stdio 每个 server 一个独立子进程
 - 工具命名空间：`mcp__{serverName}__{toolName}`
+- 管理界面：设置页 MCP 分区（mcp:list/start/stop IPC + 添加表单按 transport 切换字段组）
 
-源码：[mcp/mcp-types.ts#L11-L12](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-types.ts#L11)（transport 类型定义）、[mcp/mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts)。
+源码：[mcp/mcp-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-client.ts)（createMcpTransport 工厂）、[mcp/mcp-types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-types.ts)、[mcp/mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts)。
 
 ### 4.2 与 ToolRegistry 的关系
 
@@ -223,7 +250,7 @@ SessionService 暴露多组方法：
 
 源码：[session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts)。
 
-### 5.2 数据库表（6 张）
+### 5.2 数据库表（12 张）
 
 - `sessions`：id / title / createdAt / updatedAt / lastMessage / messageCount / workingDir / lastRunStatus
 - `messages`：id / sessionId / seq / role / content / createdAt（外键 cascade 删除）
@@ -231,8 +258,14 @@ SessionService 暴露多组方法：
 - `token_usage`：id / sessionId / modelId / inputTokens / outputTokens / totalTokens / cacheReadTokens / reasoningTokens / createdAt
 - `turns`：id / turnId / sessionId / seq / modelId / status / inputTokens / outputTokens / totalTokens / durationMs / createdAt
 - `runtime_models`：modelId / providerKind / baseUrl / createdAt
+- `goals`：会话目标（GoalService 目标驱动判定）
+- `memories`：知识记忆（MemoryService recall/store/dream）
+- `tasks`：任务跟踪（task_* 工具 + 任务面板状态机）
+- `cron_tasks`：cron 定时任务
+- `skills`：已学技能（load_skill 工具 + 技能管理 pane）
+- `app_settings`：渲染层用户设置 key→JSON（settings:set 写穿透单一真源）
 
-源码：[storage/schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts)。
+源码：[storage/schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts)（12 张 sqliteTable，2026-08-22 实测）。
 
 ### 5.3 消息存储格式
 
@@ -399,19 +432,22 @@ PromptService
 
 ## 14. 限制与已知缺口
 
+> 2026-08-22 全量同步：本节对齐当前代码现状。历史失实项（多 provider 路由、本地 LLM、MCP sse/http transport、MCP 管理 UI）均已随迭代落地，从缺口清单移除。
+
 ### 14.1 未实现的能力
 
-- **MCP transport**：仅 stdio，不支持 sse / streamable-http
-- **MCP UI 管理**：无 server 启停/配置界面（仅服务端实现）
-- **多 LLM provider 路由**：当前 `getModel()` 仅支持 OpenAI-compatible 单 provider
-- **本地 LLM**：不支持
+- **MCP OAuth 授权**：远程 transport 支持 headers 手动注入授权头，无 OAuth 流程
+- **workflow 持久化**：WorkflowService 为内存编排（重启丢失；与任务/记忆先例一致，先功能后存储）
+- **LSP 语言扩展**：内置默认仅 TypeScript/Python/Go/Rust 四语言（可在设置中覆盖命令，但新增语言需扩展 ls-config 映射表）
+- **remote-control**：纯骨架（令牌生成/校验/路由已实现），WebSocket/HTTP 桥接 + LAN 发现未实现且未挂载 ServiceContainer（见 remote-control.ts TODO 阶段 2）
+- **hooks / 插件系统**：设置页规划入口已移除（2026-08-22 决策：未实现不暴露入口），待落地时随实现恢复
 
 ### 14.2 待优化项
 
-- service-container.ts 注释漂移：注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///f:/TraeProjects/1/src/main/service-container.ts#L205)、[service-container.ts#L239](file:///f:/TraeProjects/1/src/main/service-container.ts#L239)、[service-container.ts#L246](file:///f:/TraeProjects/1/src/main/service-container.ts#L246)）；`tools/index.ts` 文件头注释也说"7 个工具工厂函数"（[L5](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L5)），实际 12 个
-- `InspectorPanel` 标签页仅打开 DevTools，可能冗余
-- DevPanel 仅 Logs/Metrics，无 Network/Performance 子标签
+- ~~service-container.ts 注释漂移~~：已修正（工具计数随注册清单同步维护）
+- `InspectorPanel` 标签页仅打开 DevTools，可能冗余（现为 DevPanel git/logs/metrics/inspector 四 tab 之一）
 - codebase-service 每次调用 spawn codegraph 子进程，可考虑常驻
+- LSP 用户配置修改后需重启应用生效（manager 构造时读取一次设置）
 
 ### 14.3 安全风险
 

@@ -119,15 +119,17 @@ e2e/                Playwright 三套配置
 
 ### 新增工具
 
-在 `src/main/infra/ai/tools/` 新建 `*.tool.ts`，实现 `Tool` 接口（name / description / inputSchema / permission / execute），在 `tools/index.ts` 注册。
+在 `src/main/infra/ai/tools/` 新建 `*.tool.ts`，实现 `Tool` 接口（name / description / inputSchema / permission / execute），在 `tools/index.ts` 的 `registerBuiltinTools` 注册。内置 31 个工具可作参考；编排类新能力优先复用模块级单例模式（如 WorkflowService + run_workflow）。
 
-### 新增 IPC 域
+### 新增 IPC 方法（定义表驱动，全链路自动生成）
 
-1. `packages/shared/src/ipc/channels.ts` 加通道常量
-2. `packages/shared/src/ipc/payloads.ts` 加 req/res 类型
-3. `packages/shared/src/ipc/api.ts` 加域接口
-4. `src/main/ipc/` 新建 handler 并在 `src/main/index.ts` 注册
-5. `src/preload/index.ts` 实现域方法
+只需三处改动，其余（通道常量 / preload API / 类型推导 / 统一注册）全部自动：
+
+1. `packages/shared/src/ipc/meta.ts`：加一行纯字符串元数据
+2. `packages/shared/src/ipc/definitions.ts`：加一行 zod schema + 类型标记
+3. `src/main/ipc/` 对应 handler 加一个方法（缺失编译期报错）
+
+也可用脚手架生成骨架：`pnpm scaffold:ipc --domain <name> --method <m>`
 
 ## 已知事项
 

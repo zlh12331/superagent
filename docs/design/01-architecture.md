@@ -203,9 +203,9 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 ## 7. 关键风险点
 
-1. **service-container.ts 单文件约 800 行**：18 个服务的 getter/setter + dispose + reset 全部集中，随服务增加会进一步膨胀
-2. **注释与代码漂移**：[service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) 注释曾称"注册 5 个内置工具"，[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools` 现实际注册 **29 个工具**（read/write/edit/file/list/**grep/glob/terminal/run_command/ask_user_question/plan_mode/git_*/task_*/cron_*/subagent/team/code_review/web_fetch/save_memory/load_skill/lsp_definition/lsp_references）
-3. **MCPService 无独立 IPC handler**：MCP 配置只能从主进程侧管理，渲染层无 MCP 管理 UI 入口
+1. **service-container.ts 单文件约 1000 行**：18 个服务的 getter/setter + dispose + reset 全部集中，随服务增加会进一步膨胀
+2. **注释与代码漂移**：工具计数随迭代快速增长（12→29→31），需与 [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools` 保持同步（2026-08-22 实测 **31 个**）
+3. ~~**MCPService 无独立 IPC handler**~~：已解决——mcp.handler.ts 提供 list/start/stop，设置页有 MCP 管理分区（2026-08-22 起另支持 sse/streamable-http 远程传输）
 4. **chat 域保留但被 agent 域替代**：channels.ts 注释明确"保留兼容旧 chat:send"，存在双轨制维护负担
 
 ## 8. 关键亮点
