@@ -8,13 +8,14 @@ import { Check, Database, Languages } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
+import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
 import { DataSection } from './data-section';
 import { EditorSection } from './editor-section';
 import { PromptSection } from './prompt-section';
 import { ShortcutsSection } from './shortcuts-section';
 import { TelemetrySection } from './telemetry-section';
 
-/** 语言切换行（真实 i18n：changeLanguage 立即生效） */
+/** 语言切换行（真实 i18n：changeLanguage 立即生效；P2：同步写入 SQLite 设置链路） */
 function LanguageRow(): ReactElement {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language?.startsWith('en') ? 'en' : 'zh-CN';
@@ -23,6 +24,9 @@ function LanguageRow(): ReactElement {
   const handleSelect = (next: string): void => {
     setLang(next);
     void changeLanguage(next as SupportedLanguage);
+    // P2 修复：语言此前只进 localStorage（detector 缓存），重装/多窗口不同步——
+    // 经 settings-store 写穿透落 SQLite 真源
+    useSettingsStore.getState().setLanguage(next as AppLanguage);
   };
 
   return (

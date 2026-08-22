@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
 import { queryClient as globalQueryClient } from '@/lib/query/query-client';
+import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useToolStore } from '@/stores/transient/tool-store';
-import { useUsageStore } from '@/stores/transient/usage-store';
 
 import { useAgentBridge } from '../use-agent-bridge';
 
@@ -42,7 +42,7 @@ describe('use-agent-bridge', () => {
     // 清空 L2 store 与全局 queryClient 残留
     useToolStore.getState().clearBySession('s1');
     useApprovalsStore.getState().clearBySession('s1');
-    useUsageStore.getState().clearBySession('s1');
+    useAgentAskStore.getState().clearAsk();
     globalQueryClient.clear();
 
     // 订阅回调捕获
@@ -71,27 +71,32 @@ describe('use-agent-bridge', () => {
     expect(window.api.agent.subscribeStreamError).toHaveBeenCalledOnce();
   });
 
-  it('stream:end（completed + usage）：invalidate 会话缓存 + 累积 usage', async () => {
+  it('stream:end（completed）：invalidate 会话缓存 + 用量汇总缓存', async () => {
     const invalidateSpy = vi.spyOn(globalQueryClient, 'invalidateQueries');
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
 
     fireEnd({ sessionId: 's1', reason: 'completed', usage: { totalTokens: 150 } });
 
-    // usage 累积到 store
-    expect(useUsageStore.getState().usageBySession.get('s1')?.totalTokens).toBe(150);
-    // invalidate 已调用（会话列表 + 会话详情）
+    // invalidate 已调用（会话列表 + 会话详情 + 用量汇总前缀）
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: SESSIONS_QUERY_KEY }),
     );
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: ['session', 's1'] }),
     );
+    expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['usage'] }));
   });
 
-  it('stream:end（completed 无 usage）：invalidate 但不累积', async () => {
+  it('stream:end：清理 agent-ask 弹窗状态（P2：超时后弹窗不得悬挂）', () => {
+    useAgentAskStore
+      .getState()
+      .setAsk('ask-1', [{ id: 'q1', question: '继续吗？', header: '确认', options: [] }] as never);
+    expect(useAgentAskStore.getState().askId).toBe('ask-1');
+
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
     fireEnd({ sessionId: 's1', reason: 'completed' });
-    expect(useUsageStore.getState().usageBySession.has('s1')).toBe(false);
+
+    expect(useAgentAskStore.getState().askId).toBeNull();
   });
 
   it('stream:end：仅清理审批缓冲；tool 缓冲保留（P3：右面板数据源）', () => {

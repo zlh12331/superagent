@@ -43,7 +43,7 @@ export function SkillsSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { learned: [] as LearnedSkill[] };
       }
-      const response = await window.api.skill.listLearned({});
+      const response = await window.api.skill.listLearned();
       if ('error' in response && response.error !== undefined) {
         throw new Error(`[${response.error.code}] ${response.error.message}`);
       }

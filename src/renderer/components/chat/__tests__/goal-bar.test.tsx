@@ -111,23 +111,21 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     expect(screen.queryByText('旧目标')).toBeNull();
   });
 
-  it('有目标：显示 GOAL 标签 + 条件 + 暂停/编辑/删除三按钮', async () => {
+  it('有目标：显示 GOAL 标签 + 条件 + 编辑/删除两按钮（暂停已移除）', async () => {
     renderPanel([{ condition: '修复登录页 500 错误', status: 'active' }]);
     expect(await screen.findByText('GOAL')).toBeInTheDocument();
     expect(screen.getByText('修复登录页 500 错误')).toBeInTheDocument();
-    expect(screen.getByLabelText('暂停目标')).toBeInTheDocument();
+    // P2 修复：假「暂停」按钮已移除——goal:pause IPC 未实现，本地翻转纯欺骗
+    expect(screen.queryByLabelText('暂停目标')).toBeNull();
     expect(screen.getByLabelText('编辑目标')).toBeInTheDocument();
     expect(screen.getByLabelText('删除目标')).toBeInTheDocument();
   });
 
-  it('暂停/恢复切换：按钮互转', async () => {
-    const user = userEvent.setup();
+  it('active 目标也不渲染暂停按钮（待真实 goal:pause IPC 后恢复入口）', async () => {
     renderPanel([{ condition: '目标A', status: 'active' }]);
-    await user.click(await screen.findByLabelText('暂停目标'));
-    expect(screen.getByLabelText('恢复目标')).toBeInTheDocument();
+    expect(await screen.findByText('GOAL')).toBeInTheDocument();
     expect(screen.queryByLabelText('暂停目标')).toBeNull();
-    await user.click(screen.getByLabelText('恢复目标'));
-    expect(screen.getByLabelText('暂停目标')).toBeInTheDocument();
+    expect(screen.queryByLabelText('恢复目标')).toBeNull();
   });
 
   it('编辑按钮：把 /goal 条件填入输入框', async () => {

@@ -125,23 +125,25 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
     }
     const { workingDir, systemPrompt, maxSteps, mode, thinking, temperature } = this.config;
 
-    // currentSessionId 在 agent.run 返回后填充，初始为 undefined
-    let currentSessionId: string | undefined;
-    // 统一清理函数
+    // P1 修复：直接用同步已知的 chatId 过滤事件流。此前等 agent.run 响应返回才填
+    // currentSessionId，而主进程 push 事件可能先于 invoke 响应到达（startAgent 为
+    // fire-and-forget 启动后立即 return），导致首段 token / 首个工具事件被静默丢弃、
+    // abort 窗口内 stop 因 id 未定而失效。主进程以入参 sessionId（= chatId）回显与
+    // 推送，二者恒等，无需等待响应。
     let cleanup: (() => void) | null = null;
 
     const stream = new ReadableStream<UIMessageChunk>({
       async start(controller) {
-        // 订阅 agent:stream:* 三个 IPC 事件（按 sessionId 过滤）
+        // 订阅 agent:stream:* 三个 IPC 事件（按 chatId 过滤）
         const offPart = window.api.agent.subscribeStreamPart(({ sessionId, part }) => {
-          if (sessionId !== currentSessionId) {
+          if (sessionId !== options.chatId) {
             return;
           }
           controller.enqueue(part as UIMessageChunk);
         });
 
         const offEnd = window.api.agent.subscribeStreamEnd(({ sessionId }) => {
-          if (sessionId !== currentSessionId) {
+          if (sessionId !== options.chatId) {
             return;
           }
           cleanup?.();
@@ -149,7 +151,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         });
 
         const offError = window.api.agent.subscribeStreamError(({ sessionId, code, message }) => {
-          if (sessionId !== currentSessionId) {
+          if (sessionId !== options.chatId) {
             return;
           }
           cleanup?.();
@@ -163,13 +165,12 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         };
 
         // abortSignal 处理：用户点击 stop 按钮时触发
+        // （chatId 同步可用，in-flight 的 run invoke 期间中断同样生效）
         if (options.abortSignal !== undefined) {
           options.abortSignal.addEventListener(
             'abort',
             () => {
-              if (currentSessionId !== undefined) {
-                void window.api.agent.stop({ sessionId: currentSessionId });
-              }
+              void window.api.agent.stop({ sessionId: options.chatId });
             },
             { once: true },
           );
@@ -195,22 +196,16 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           ...(temperature !== undefined ? { temperature } : {}),
         });
 
-        // 处理响应：失败则 error stream，成功则记录 sessionId
+        // 处理响应：失败则 error stream（成功无需记录 sessionId——过滤已按 chatId 完成）
         if ('error' in response && response.error !== undefined) {
           cleanup?.();
           controller.error(new Error(`[${response.error.code}] ${response.error.message}`));
-          return;
-        }
-        if ('data' in response && response.data !== undefined) {
-          currentSessionId = response.data.sessionId;
         }
       },
       // cancel：流被 useChat 主动取消（如组件卸载）时触发
       cancel() {
         cleanup?.();
-        if (currentSessionId !== undefined) {
-          void window.api.agent.stop({ sessionId: currentSessionId });
-        }
+        void window.api.agent.stop({ sessionId: options.chatId });
       },
     });
 

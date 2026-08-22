@@ -16,7 +16,7 @@
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
-import { AlertTriangle, Check, Pause, Pencil, Play, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Pencil, Search, Trash2, X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { Badge } from '@/components/ui/badge';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
+import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { consumePendingMessage } from '@/lib/pending-message';
 import { cn } from '@/lib/utils';
@@ -211,13 +212,9 @@ export function ChatPanel({
     goals.find((g) => g.status === 'active') ?? goals.find((g) => g.status === 'completed');
   const isGoalCompleted = currentGoal?.status === 'completed';
   const queryClient = useQueryClient();
-  // 暂停状态（用户设计：右按钮区 暂停/恢复 · 编辑 · 删除）
-  const [goalPaused, setGoalPaused] = useState(false);
-  // chatId 切换：重置目标栏 UI 状态（暂停不跨会话残留）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chatId 是故意的触发键（effect 仅用 setter）
-  useEffect(() => {
-    setGoalPaused(false);
-  }, [chatId]);
+  // P2 修复：移除假「暂停/恢复」按钮——goalPaused 只是本地 useState 翻转，
+  // 主进程并无 goal:pause IPC（GoalService 无暂停语义），按钮给用户的承诺
+  // 是假的（回合照跑、重启后状态丢失）。待实现真实暂停 IPC 后再恢复入口。
   // 目标预填：把文本填入输入框并聚焦（用户补需求后发送；注入后下一轮重置，允许重复触发）
   const prefillGoalInput = (text: string): void => {
     setInjectedComposerValue(text);
@@ -279,27 +276,33 @@ export function ChatPanel({
 
   // /compact 上下文压缩：主进程按模型窗口预算裁剪（compressByTokenBudget）后整体落库，
   // 渲染层同步替换本地消息态（AI SDK v7 setMessages），回合 transcript 旧消息随之清空（固有语义）
-  const handleCompact = async (): Promise<void> => {
-    if (chatId === undefined) return;
-    try {
+  // P2 修复：改走 useMutation 并失效会话详情缓存——此前直连 IPC 不失效，
+  // staleTime 内重进会话会以压缩前旧消息重新初始化 useChat（压缩看似白做）
+  const compactMutation = useMutation({
+    mutationFn: async () => {
+      if (chatId === undefined) throw new Error(t('chat.noActiveSession'));
       const response = await window.api.session.compact({ sessionId: chatId });
       if ('error' in response && response.error !== undefined) {
-        toast.error(response.error.message);
-        return;
+        throw new Error(response.error.message);
       }
       if ('data' in response && response.data !== undefined) {
-        const data = response.data;
-        setMessages(toInitialMessages(data.messages as unknown as ChatMessage[]));
-        if (data.removed > 0) {
-          toast.success(t('chat.compactDone', { removed: data.removed }));
-        } else {
-          toast.info(t('chat.compactNothing'));
-        }
+        return response.data;
       }
-    } catch (error) {
+      throw new Error('compact: empty response');
+    },
+    onSuccess: (data) => {
+      setMessages(toInitialMessages(data.messages as unknown as ChatMessage[]));
+      void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(chatId) });
+      if (data.removed > 0) {
+        toast.success(t('chat.compactDone', { removed: data.removed }));
+      } else {
+        toast.info(t('chat.compactNothing'));
+      }
+    },
+    onError: (error) => {
       toast.error(error instanceof Error ? error.message : String(error));
-    }
-  };
+    },
+  });
 
   // 重新生成回调：透传给 ChatMessageList → MsgActions
   // useChat.regenerate({ messageId }) 会自动移除该 assistant 消息及后续所有消息，
@@ -411,27 +414,12 @@ export function ChatPanel({
             </Badge>
           )}
           <span
-            className={cn(
-              'text-foreground/90 min-w-0 flex-1 truncate text-xs',
-              goalPaused && 'text-muted-foreground line-through',
-            )}
+            className="text-foreground/90 min-w-0 flex-1 truncate text-xs"
             title={currentGoal.condition}
           >
             {currentGoal.condition}
           </span>
           <div className="flex shrink-0 items-center gap-0.5">
-            {/* 暂停/恢复仅对进行中的目标有意义（completed 已无需暂停） */}
-            {!isGoalCompleted && (
-              <button
-                type="button"
-                className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
-                title={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
-                aria-label={goalPaused ? t('chat.goalResume') : t('chat.goalPause')}
-                onClick={() => setGoalPaused((p) => !p)}
-              >
-                {goalPaused ? <Play className="size-3" /> : <Pause className="size-3" />}
-              </button>
-            )}
             <button
               type="button"
               className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
@@ -479,8 +467,8 @@ export function ChatPanel({
                 setModelMenuOpen(true);
                 break;
               case 'compact':
-                // 手动压缩会话上下文（主进程窗口感知裁剪 + 落库 + 本地态同步）
-                void handleCompact();
+                // 手动压缩会话上下文（主进程窗口感知裁剪 + 落库 + 本地态同步 + 缓存失效）
+                compactMutation.mutate();
                 break;
               case 'interrupt':
                 // /interrupt 即时中断（对齐参考项目：停止当前生成）

@@ -22,6 +22,8 @@ import {
 } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
 
+import { LANGUAGE_STORAGE_KEY } from '@/i18n/config';
+
 /**
  * 平台修饰键：macOS 用 Meta（⌘），Windows/Linux 用 Ctrl
  *
@@ -149,11 +151,22 @@ export interface WorkspaceSettings {
 }
 
 /**
+ * 应用界面语言
+ *
+ * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
+ * 游离于 settings 写穿透链路之外（重装/多窗口不同步）。现在 SQLite 为真源，
+ * localStorage 的 code-agent:lang 仅作 detector 的同步派生缓存。
+ */
+export type AppLanguage = 'zh-CN' | 'en';
+
+/**
  * 用户设置数据形状（不含操作方法；DEFAULT_SETTINGS 与快照共用）
  */
 interface SettingsData {
   /** 主题设置 */
   readonly theme: Theme;
+  /** 界面语言（P2：纳入 SQLite 真源，见 AppLanguage 注释） */
+  readonly language: AppLanguage;
   /** AI 设置 */
   readonly ai: AiSettings;
   /** 编辑器设置 */
@@ -175,6 +188,8 @@ interface SettingsState extends SettingsData {
   // ── 操作方法 ────────────────────────────────────────
   /** 设置主题 */
   readonly setTheme: (theme: Theme) => void;
+  /** 设置界面语言（写穿透落库 + 镜像 detector 缓存） */
+  readonly setLanguage: (language: AppLanguage) => void;
   /** 更新 AI 设置（部分字段） */
   readonly updateAi: (patch: Partial<AiSettings>) => void;
   /** 更新编辑器设置（部分字段） */
@@ -231,6 +246,7 @@ export function migrateShortcuts<T extends object>(state: T): T {
 /** 默认设置（模块级常量；applySettingsSnapshot 覆盖） */
 const DEFAULT_SETTINGS: SettingsData = {
   theme: 'dark',
+  language: 'zh-CN',
   ai: {
     defaultProvider: DEFAULT_PROVIDER,
     defaultModel: DEFAULT_MODEL,
@@ -279,42 +295,51 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     set({ theme });
     persistSetting('theme', theme);
   },
-  updateAi: (patch) =>
-    set((state) => {
-      const ai = { ...state.ai, ...patch };
-      persistSetting('ai', ai);
-      return { ai };
-    }),
-  updateEditor: (patch) =>
-    set((state) => {
-      const editor = { ...state.editor, ...patch };
-      persistSetting('editor', editor);
-      return { editor };
-    }),
-  updateShortcuts: (patch) =>
-    set((state) => {
-      const shortcuts = { ...state.shortcuts, ...patch };
-      persistSetting('shortcuts', shortcuts);
-      return { shortcuts };
-    }),
-  updateExperimental: (patch) =>
-    set((state) => {
-      const experimental = { ...state.experimental, ...patch };
-      persistSetting('experimental', experimental);
-      return { experimental };
-    }),
-  updateLsp: (patch) =>
-    set((state) => {
-      const lsp = { ...state.lsp, ...patch };
-      persistSetting('lsp', lsp);
-      return { lsp };
-    }),
-  updateWorkspace: (patch) =>
-    set((state) => {
-      const workspace = { ...state.workspace, ...patch };
-      persistSetting('workspace', workspace);
-      return { workspace };
-    }),
+  setLanguage: (language) => {
+    set({ language });
+    persistSetting('language', language);
+    // 镜像 detector 缓存：i18next init 在 React 渲染期（早于任何 store 消费），
+    // LanguageDetector 只能同步读 localStorage；SQLite 才是真源，此键仅派生缓存
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    } catch {
+      // 无痕模式等场景静默（真源已落 SQLite）
+    }
+  },
+  // P2 修复：persistSetting 移出 set() updater——zustand updater 应为纯函数，
+  // StrictMode/并发特性下 updater 可能被重复调用，产生重复 IPC 写穿透
+  // （幂等但浪费；且违背「updater 内禁副作用」约定）。
+  // 模式：先基于 getState() 计算新值 → set() 提交 → 再写穿透
+  updateAi: (patch) => {
+    const ai = { ...useSettingsStore.getState().ai, ...patch };
+    set({ ai });
+    persistSetting('ai', ai);
+  },
+  updateEditor: (patch) => {
+    const editor = { ...useSettingsStore.getState().editor, ...patch };
+    set({ editor });
+    persistSetting('editor', editor);
+  },
+  updateShortcuts: (patch) => {
+    const shortcuts = { ...useSettingsStore.getState().shortcuts, ...patch };
+    set({ shortcuts });
+    persistSetting('shortcuts', shortcuts);
+  },
+  updateExperimental: (patch) => {
+    const experimental = { ...useSettingsStore.getState().experimental, ...patch };
+    set({ experimental });
+    persistSetting('experimental', experimental);
+  },
+  updateLsp: (patch) => {
+    const lsp = { ...useSettingsStore.getState().lsp, ...patch };
+    set({ lsp });
+    persistSetting('lsp', lsp);
+  },
+  updateWorkspace: (patch) => {
+    const workspace = { ...useSettingsStore.getState().workspace, ...patch };
+    set({ workspace });
+    persistSetting('workspace', workspace);
+  },
 }));
 
 /**
@@ -325,6 +350,7 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
 export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>>): void {
   useSettingsStore.setState({
     theme: (snapshot['theme'] as Theme | undefined) ?? DEFAULT_SETTINGS.theme,
+    language: (snapshot['language'] as AppLanguage | undefined) ?? DEFAULT_SETTINGS.language,
     ai: { ...DEFAULT_SETTINGS.ai, ...((snapshot['ai'] as Partial<AiSettings> | undefined) ?? {}) },
     editor: {
       ...DEFAULT_SETTINGS.editor,

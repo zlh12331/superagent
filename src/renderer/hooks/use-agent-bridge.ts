@@ -6,8 +6,8 @@
 //    - 修正"回合结束但会话详情缓存仍是旧数据"的正确性问题
 // 2. 回合结束 → 清理 L2 流式缓冲（tool-store / approvals-store clearBySession）
 //    - 对齐"turn_done 清空流式缓冲"原则，防止长会话内存累积
-// 3. 回合结束（completed）→ token 用量写入 usage-store（per-session 累积）
-//    - 对齐参考设计 usage 累积放 store action
+// 3. 回合结束 → 失效用量汇总缓存（['usage'] 前缀；真实 UI 读 SQLite 聚合）
+//    - 孤儿 usage-store 已移除（2026-08 P2 清理）
 //
 // 设计：
 // - 在 AppShell 根布局初始化一次（与 useToolBridge 相同的桥接模式）
@@ -20,14 +20,14 @@ import { useEffect } from 'react';
 
 import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
 import { queryClient } from '@/lib/query/query-client';
+import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
-import { useUsageStore } from '@/stores/transient/usage-store';
 
 /**
- * Agent 回合结束统一处理（invalidate 缓存 + 清理 L2 缓冲 + usage 累积）
+ * Agent 回合结束统一处理（invalidate 缓存 + 清理 L2 缓冲）
  */
-function handleSessionEnd(sessionId: string, usage?: AgentStreamEndPayload['usage']): void {
+function handleSessionEnd(sessionId: string): void {
   // 1. L3 模式 B：失效会话列表 + 详情缓存（回合结束后重新拉取）
   void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
   if (sessionId.length > 0) {
@@ -38,19 +38,25 @@ function handleSessionEnd(sessionId: string, usage?: AgentStreamEndPayload['usag
     // 30s（staleTime）内右面板 InfoPane 仍显示旧状态，而回合结束恰是
     // 最需要看任务收敛的时刻。前缀匹配覆盖 ['task', 'list', sessionId] 等子 key。
     void queryClient.invalidateQueries({ queryKey: ['task'] });
+    // P2 修复：用量汇总此前无人失效——设置页 usage-section 读 SQLite
+    // session:getUsageSummary（queryKey ['usage','summary']），回合结束
+    // 不失效则展示过期数据。前缀匹配覆盖 summary 及其派生 key。
+    void queryClient.invalidateQueries({ queryKey: ['usage'] });
   }
 
-  // 2. L2 清理：仅审批缓冲（对齐 turn_done 清空原则）
+  // 2. L2 清理：审批缓冲 + 提问弹窗（对齐 turn_done 清空原则）
   //    P3 修复：tool-store 不再随回合结束清空——右面板 DiffPane/InfoPane 的
   //    「本轮文件变更/引用文件」数据源正是 callsBySession，回合结束瞬间清空
   //    会让用户恰在回合后想回看变更时无数据。内存上限由 tool-store 的
   //    MAX_CALLS_PER_SESSION 环形淘汰保证（会话切换时按 sessionId 过滤，无串扰）
   useApprovalsStore.getState().clearBySession(sessionId);
+  // P2 修复：agent-ask-store 此前遗漏——ask_user_question 弹窗是全屏模态，
+  // 主进程 60s 超时后回合继续至 end/error，但渲染层 askId 不清则弹窗持续
+  // 遮挡整个界面（此时提交只会收到"未匹配 pending"错误 toast）
+  useAgentAskStore.getState().clearAsk();
 
-  // 3. usage 累积（per-session，completed 时携带）
-  if (usage !== undefined) {
-    useUsageStore.getState().addUsage(sessionId, usage);
-  }
+  // 3. usage 累积已移除：原 usage-store 是无人消费的孤儿 store（仅本桥接写入），
+  //    真实用量 UI 读 SQLite session:getUsageSummary，失效已在上方统一处理
 }
 
 /**
@@ -73,7 +79,7 @@ export function useAgentBridge(): void {
     // 回合正常结束 / 用户中断：invalidate 缓存 + 清理缓冲 + usage 累积
     const unsubscribeEnd = window.api.agent.subscribeStreamEnd((payload) => {
       const typedPayload = payload as AgentStreamEndPayload;
-      handleSessionEnd(typedPayload.sessionId, typedPayload.usage);
+      handleSessionEnd(typedPayload.sessionId);
     });
 
     // 回合异常结束：同样 invalidate + 清理（错误可能已部分落库）

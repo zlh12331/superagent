@@ -185,8 +185,7 @@
       },
       "compactDone": "上下文已压缩：移除 {{removed}} 条历史消息",
       "compactNothing": "上下文已在预算内，无需压缩",
-      "goalPause": "暂停目标",
-      "goalResume": "恢复目标",
+      "noActiveSession": "无活跃会话",
       "goalEdit": "编辑目标",
       "goalClear": "删除目标",
       "goalCompleted": "已完成"

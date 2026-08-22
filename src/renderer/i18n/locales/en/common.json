@@ -185,8 +185,7 @@
       },
       "compactDone": "Context compacted: removed {{removed}} history messages",
       "compactNothing": "Context already within budget, nothing to compact",
-      "goalPause": "Pause goal",
-      "goalResume": "Resume goal",
+      "noActiveSession": "No active session",
       "goalEdit": "Edit goal",
       "goalClear": "Delete goal",
       "goalCompleted": "Completed"

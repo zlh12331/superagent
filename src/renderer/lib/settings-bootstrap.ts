@@ -31,19 +31,17 @@ function readLegacySettings(): LegacyPersisted | null {
   }
 }
 
-/** 把旧设置逐 key 写入主进程（迁移；失败不阻断——下次启动重试） */
-function migrateToMain(settings: Readonly<Record<string, unknown>>): void {
+/** 把旧设置逐 key 写入主进程（迁移）；全部成功返回 true（P2：调用方据此决定是否清 legacy） */
+async function migrateToMain(settings: Readonly<Record<string, unknown>>): Promise<boolean> {
   const api = window.api;
   if (api === undefined || api.settings === undefined) {
-    return;
+    return false;
   }
-  for (const [key, value] of Object.entries(settings)) {
-    void api.settings.set({ key, value }).catch(() => {});
-  }
+  const results = await Promise.allSettled(
+    Object.entries(settings).map(([key, value]) => api.settings.set({ key, value })),
+  );
+  return results.every((r) => r.status === 'fulfilled');
 }
-
-/** 设置域 key 列表（迁移与快照提取共用） */
-const SETTING_KEYS = ['theme', 'ai', 'editor', 'shortcuts', 'experimental'] as const;
 
 /**
  * 启动引导：返回 { theme, snapshot }
@@ -75,8 +73,13 @@ export async function bootstrapSettings(): Promise<{
         // SQLite 为空：迁移 legacy localStorage（一次性）
         if (legacy?.state !== undefined) {
           const migrated = migrateShortcuts(legacy.state);
-          migrateToMain(migrated);
-          localStorage.removeItem(SETTINGS_STORAGE_KEY);
+          // P2 修复（原子性）：全部写库成功才清 legacy——原实现 fire-and-forget
+          // 写库后同步删 localStorage，任一 set 失败或进程在落库前退出，
+          // 设置既不在 SQLite 也无副本，永久丢失回落默认值
+          const allWritten = await migrateToMain(migrated);
+          if (allWritten) {
+            localStorage.removeItem(SETTINGS_STORAGE_KEY);
+          }
           return {
             theme: (migrated['theme'] as Theme | undefined) ?? 'dark',
             snapshot: migrated,
@@ -100,5 +103,3 @@ export async function bootstrapSettings(): Promise<{
   }
   return { theme: 'dark', snapshot: {} };
 }
-
-export { SETTING_KEYS };
