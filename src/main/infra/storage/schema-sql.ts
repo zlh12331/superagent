@@ -117,15 +117,6 @@ export const SCHEMA_SQL = `
       end_time INTEGER
     );
 
-    CREATE TABLE IF NOT EXISTS memories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      content TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      source_turn_id TEXT,
-      created_at INTEGER NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS goals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,

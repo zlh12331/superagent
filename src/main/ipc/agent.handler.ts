@@ -25,6 +25,10 @@
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 
 import type { IAgentService } from '../infra/ai/agent/agent-service';
+import type { IPromptService } from '../infra/ai/prompt/prompt-service';
+import type { MemoryCaptureWire } from '../infra/memory-hub/capture-wire';
+import { extractLastUserText } from '../infra/memory-hub/capture-wire';
+import type { MemoryPort } from '../infra/memory-hub/types';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**
@@ -37,6 +41,12 @@ import type { IpcHandlerContext } from '../utils/wrap';
 export interface AgentHandlerDeps {
   /** AgentService 实例（由 ServiceContainer 注入） */
   readonly agentService: IAgentService;
+  /** 记忆捕获接线（可选：注入后每轮对话自动写入 MemoryHub L0） */
+  readonly memoryWire?: MemoryCaptureWire;
+  /** 记忆引擎端口（可选：用于 run 前预取召回注入） */
+  readonly memoryPort?: MemoryPort;
+  /** Prompt 服务（可选：召回注入时解析基础系统提示词） */
+  readonly promptService?: IPromptService;
 }
 
 /** agent 域对话生命周期子集（与 agent-approval.handler 的 approvalResponse 合并成完整 agent 域） */
@@ -51,18 +61,40 @@ type AgentLifecycleHandlers = Pick<
  * @param deps 依赖项：包含 IAgentService 实例（由 ServiceContainer 注入）
  */
 export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandlers {
-  const { agentService } = deps;
+  const { agentService, memoryWire, memoryPort, promptService } = deps;
 
   return {
     // 发起 agent 对话：启动 streamText 流（带 tools + stopWhen），立即返回 sessionId
     // 后续流式事件通过 AGENT_STREAM_PART / AGENT_TOOL_CALL / AGENT_TOOL_RESULT / AGENT_APPROVAL_REQUEST 推送
     // 渲染层用返回的 sessionId 订阅后续事件并支持中断
     run: async (input, ctx) => {
+      const lastUser = extractLastUserText(input.messages);
+      memoryWire?.noteLastUser(input.sessionId ?? '', lastUser);
+      // 记忆预取召回：仅在渲染层未显式指定 systemPrompt 时注入一次性上下文块
+      let systemPrompt = input.systemPrompt;
+      if (
+        systemPrompt === undefined &&
+        memoryPort !== undefined &&
+        promptService !== undefined &&
+        lastUser.length > 0
+      ) {
+        try {
+          const [base, mem] = await Promise.all([
+            promptService.resolvePrompt(undefined, input.workingDir),
+            memoryPort.recall({ query: lastUser }),
+          ]);
+          if (mem.ok && mem.context.trim().length > 0) {
+            systemPrompt = `${base}\n\n<memory_context>\n${mem.context.trim()}\n</memory_context>`;
+          }
+        } catch {
+          // 召回失败不阻断对话（sidecar 冷启动/未配置等场景静默降级）
+        }
+      }
       const sessionId = await agentService.startAgent({
         messages: input.messages,
         sessionId: input.sessionId,
         workingDir: input.workingDir,
-        systemPrompt: input.systemPrompt,
+        systemPrompt,
         maxSteps: input.maxSteps,
         mode: input.mode,
         ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),

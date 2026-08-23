@@ -20,6 +20,7 @@ import { LearnSkillService } from './infra/ai/knowledge/learn-skill-agent';
 import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
+import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
@@ -388,7 +389,15 @@ app
       app: appHandlers,
       chat: createChatHandlers({ chatService: serviceContainer.getChatService() }),
       agent: {
-        ...createAgentHandlers({ agentService: serviceContainer.getAgentService() }),
+        ...createAgentHandlers({
+          agentService: serviceContainer.getAgentService(),
+          memoryWire: createMemoryCaptureWire({
+            agentService: serviceContainer.getAgentService(),
+            port: serviceContainer.getMemoryPort(),
+          }),
+          memoryPort: serviceContainer.getMemoryPort(),
+          promptService: serviceContainer.getPromptService(),
+        }),
         ...createAgentApprovalHandlers({
           permissionService: serviceContainer.getPermissionService(),
         }),
@@ -417,7 +426,7 @@ app
       }),
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
-      memory: createMemoryHandlers({ memoryService: serviceContainer.getMemoryService() }),
+      memory: createMemoryHandlers({ getPort: () => serviceContainer.getMemoryPort() }),
       models: modelsHandlers,
       mcp: createMcpHandlers(serviceContainer.getMcpService(), serviceContainer.getToolRegistry()),
       skill: skillHandlers,

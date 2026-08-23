@@ -1,4 +1,4 @@
-﻿// src/main/infra/ai/tools/index.ts
+// src/main/infra/ai/tools/index.ts
 // 工具系统 barrel 导出：统一注册入口与工具工厂函数
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -16,10 +16,10 @@
 import type { IFileService } from '../../file/file-service';
 import type { IGitService } from '../../git/git-service';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
+import type { MemoryPort } from '../../memory-hub/types';
 import type { ISearchService } from '../../search/search-service';
 import type { ITerminalService } from '../../terminal/terminal-service';
 import type { AgentAskService } from '../agent/agent-ask-service';
-import type { MemoryService } from '../knowledge/memory-service';
 import { skillRegistry } from '../skills/skill-registry';
 import { createAskUserQuestionTool } from './ask-user-question.tool';
 import { createCodeReviewTool } from './code-review.tool';
@@ -40,6 +40,7 @@ import { createLspReferencesTool } from './lsp-references.tool';
 import type { IPermissionService } from './permission-service';
 import { createEnterPlanModeTool, createExitPlanModeTool } from './plan-mode.tools';
 import { createReadFileTool } from './read-file.tool';
+import { createRecallMemoryTool } from './recall-memory.tool';
 import { createRunCommandTool } from './run-command.tool';
 import { createRunSubagentTool } from './run-subagent.tool';
 import { createRunTeamTool } from './run-team.tool';
@@ -84,7 +85,7 @@ export { createWriteFileTool } from './write-file.tool';
  * @param searchService 搜索服务实例
  * @param terminalService 终端服务实例
  * @param gitService Git 服务实例
- * @param memoryService 记忆服务实例
+ * @param memoryPort 记忆引擎端口（MemoryHub）
  * @param lspManager LSP 服务器管理器
  * @param askService Agent 提问服务
  * @param permissionService 权限服务（plan 模式拦截）
@@ -95,7 +96,7 @@ export function registerBuiltinTools(
   searchService: ISearchService,
   terminalService: ITerminalService,
   gitService: IGitService,
-  memoryService: MemoryService,
+  memoryPort: MemoryPort,
   lspManager: LspServerManager,
   askService: AgentAskService,
   permissionService: IPermissionService,
@@ -131,7 +132,9 @@ export function registerBuiltinTools(
   // 网页抓取工具（资料查阅）
   registry.register(createWebFetchTool());
   // 记忆主动存储工具
-  registry.register(createSaveMemoryTool(memoryService));
+  registry.register(createSaveMemoryTool(memoryPort));
+  // 记忆按需检索工具（只读；L0/L1 不进 prompt，模型主动查询）
+  registry.register(createRecallMemoryTool(memoryPort));
   // 定时任务工具（cron 表达式调度）
   registry.register(createCronCreateTool());
   registry.register(createCronListTool());

@@ -254,36 +254,6 @@ export const goals = sqliteTable('goals', {
 });
 
 /**
- * memories 表：跨会话记忆条目（对齐 qwen channel-memory 语义收敛）
- *
- * 设计：
- * - 记忆条目（content + kind：fact 事实 / preference 偏好）绑定会话
- * - 回合结束后由 MemoryService 用 LLM 提取（转录证据），敏感信息过滤
- * - 会话开始时注入上下文（systemPrompt 附加记忆摘要）
- */
-export const memories = sqliteTable('memories', {
-  /** 自增主键 */
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 所属会话 id（外键关联 sessions.id） */
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  /** 记忆内容 */
-  content: text('content').notNull(),
-  /** 记忆类别：fact 事实 / preference 偏好 */
-  kind: text('kind').notNull(),
-  /** 来源回合 id（去重用） */
-  sourceTurnId: text('source_turn_id'),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-});
-
-/** memories 表类型 */
-export type MemoryRow = typeof memories.$inferSelect;
-/** memories 表插入类型 */
-export type MemoryInsert = typeof memories.$inferInsert;
-
-/**
  * tasks 表：任务状态机持久化（对齐 qwen tasks 语义收敛）
  *
  * 设计：
@@ -389,7 +359,6 @@ export const schema = {
   turns,
   runtimeModels,
   goals,
-  memories,
   tasks,
   cronTasks,
   skills,

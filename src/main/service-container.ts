@@ -38,6 +38,7 @@
 // - 各模块内部已处理 null 检查，本模块无需重复判空
 // - 幂等：多次调用 disposeServices 安全
 
+import { join } from 'node:path';
 import { app } from 'electron';
 // electron-updater 是 CJS 包：ESM 下 named import 运行时失败（cjs-module-lexer 无法静态分析），
 // 必须默认导入后解构（Node ESM 对 CJS 的 default = module.exports，可靠）
@@ -58,7 +59,6 @@ import {
 } from './infra/ai/agent-runtime/concurrency-gate';
 import { GoalJudge } from './infra/ai/knowledge/goal-judge';
 import { GoalService } from './infra/ai/knowledge/goal-service';
-import { MemoryService } from './infra/ai/knowledge/memory-service';
 import type { LlmClient } from './infra/ai/llm-client';
 import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/llm-client/ai-provider';
 import { type IMCPService, MCPService } from './infra/ai/mcp';
@@ -82,6 +82,9 @@ import { ImAgentBridge } from './infra/im/im-agent-bridge';
 import { ImService } from './infra/im/im-service';
 import { readLsServerOverrides } from './infra/lsp/ls-settings';
 import { LspServerManager } from './infra/lsp/lsp-server-manager';
+import { resolveDistillLlmConfig } from './infra/memory-hub/llm-config';
+import { createDeferredMemoryPort, MemoryHubService } from './infra/memory-hub/memory-hub-service';
+import type { MemoryPort } from './infra/memory-hub/types';
 import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
 import { readApprovalModeSync } from './infra/storage/approval-pref';
@@ -281,7 +284,7 @@ class ServiceContainer {
         this.getSearchService(),
         this.getTerminalService(),
         this.getGitService(),
-        this.getMemoryService(),
+        this.getMemoryPort(),
         this.getLspManager(),
         agentAskService,
         this.getPermissionService(),
@@ -443,13 +446,28 @@ class ServiceContainer {
   }
 
   /**
-   * 获取记忆服务（延迟初始化）
+   * 获取记忆引擎端口（注册期同步可用；首次调用懒启动 sidecar）
    */
-  getMemoryService(): MemoryService {
-    if (this.memoryService === null) {
-      this.memoryService = new MemoryService(this.getLlmClient());
+  getMemoryPort(): MemoryPort {
+    return createDeferredMemoryPort(() => this.getMemoryHubService());
+  }
+
+  /**
+   * 获取 MemoryHub sidecar 服务（上游 TencentDB-Agent-Memory 记忆引擎，懒启动）
+   *
+   * hubRoot 来源：环境变量 MEMORY_HUB_ROOT（dev 指向上游源码目录；
+   * 打包环境由启动器注入 resources/memory-hub）。未配置时服务内部降级为空实现。
+   */
+  getMemoryHubService(): MemoryHubService {
+    if (this.memoryHub === null) {
+      this.memoryHub = new MemoryHubService({
+        hubRoot: process.env['MEMORY_HUB_ROOT'],
+        dataDir: join(app.getPath('userData'), 'memory-hub'),
+        // 蒸馏 LLM：复用应用默认供应商 + keychain（协议不兼容/未配 Key 时优雅降级）
+        llm: resolveDistillLlmConfig,
+      });
     }
-    return this.memoryService;
+    return this.memoryHub;
   }
   /**
    * 获取 LSP 服务器管理器（懒加载：首次工具调用才创建）
@@ -486,8 +504,8 @@ class ServiceContainer {
   private imBridge: ImAgentBridge | null = null;
   /** 会话目标服务实例（挂载回合监听 + handler 注入） */
   private goalService: GoalService | null = null;
-  /** 记忆服务实例（提取/召回 + handler 注入） */
-  private memoryService: MemoryService | null = null;
+  /** MemoryHub sidecar 实例（上游记忆引擎） */
+  private memoryHub: MemoryHubService | null = null;
   private lspManager: LspServerManager | null = null;
   /** 子代理管理器（已初始化标记） */
   private subagentsInitialized = false;
@@ -883,9 +901,16 @@ class ServiceContainer {
       this.sessionService = null;
     });
 
-    // 10. PromptService / MemoryService 无外部资源，清空引用即可
+    // 10. PromptService 无外部资源，清空引用即可
     this.promptService = null;
-    this.memoryService = null;
+
+    // 10.2 停止 MemoryHub sidecar 子进程（上游记忆引擎）
+    await runStep('memoryHub.stop', async () => {
+      if (this.memoryHub !== null) {
+        await this.memoryHub.stop();
+      }
+      this.memoryHub = null;
+    });
 
     // 10.5 UpdateService 无外部资源（事件随进程退出释放），清空引用即可
     await runStep('updateService.dispose', () => {
@@ -953,7 +978,9 @@ class ServiceContainer {
     this.imBridge = null;
     void this.imService?.stopAll();
     this.imService = null;
-    this.memoryService = null;
+    // MemoryHub 子进程异步收尾（reset 为同步 API，fire-and-forget 防泄漏）
+    void this.memoryHub?.stop();
+    this.memoryHub = null;
     agentAskService.dispose();
     resetFileService();
     this.fileService = null;
