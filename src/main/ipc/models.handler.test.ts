@@ -11,7 +11,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { modelsHandlers } from './models.handler';
 
 const mocks = vi.hoisted(() => ({
-  listModels: vi.fn(() => []),
+  // 返回类型显式标注：避免 vi.fn(() => []) 推导 never[] 导致 mockReturnValue 赋值报错
+  listModels: vi.fn((): Array<Record<string, unknown>> => []),
   getSecret: vi.fn(async () => undefined),
   getProviders: vi.fn(() => ({
     deepseek: 'https://api.deepseek.com',
@@ -52,6 +53,59 @@ function respond(status: number, body?: unknown): Response {
     json: async () => body ?? {},
   } as Response;
 }
+
+describe('models:listBuiltin（配置页厂商下拉数据源）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSecret.mockResolvedValue(undefined);
+  });
+
+  it('不做 keychain 过滤：未配置 Key 的厂商内置模型也返回（修复配置页死锁）', async () => {
+    mocks.listModels.mockReturnValue([
+      {
+        id: 'deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        providerKind: 'deepseek',
+        isRuntime: false,
+        capabilities: {},
+      },
+      {
+        id: 'gpt-4o',
+        label: 'GPT-4o',
+        providerKind: 'openai',
+        isRuntime: false,
+        capabilities: {},
+      },
+    ]);
+    // keychain 全空（新用户场景）——list 会过滤掉全部，listBuiltin 必须返回
+    const res = await modelsHandlers.listBuiltin({ providerKind: 'deepseek' });
+    expect(res.models).toHaveLength(1);
+    expect(res.models[0]?.id).toBe('deepseek-v4-flash');
+    expect(mocks.getSecret).not.toHaveBeenCalled();
+  });
+
+  it('providerKind 省略：返回全部厂商内置模型（排除运行时模型）', async () => {
+    mocks.listModels.mockReturnValue([
+      {
+        id: 'deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        providerKind: 'deepseek',
+        isRuntime: false,
+        capabilities: {},
+      },
+      {
+        id: 'my-custom-model',
+        label: 'my-custom-model',
+        providerKind: 'openai',
+        isRuntime: true,
+        capabilities: {},
+      },
+    ]);
+    const res = await modelsHandlers.listBuiltin({});
+    expect(res.models).toHaveLength(1);
+    expect(res.models[0]?.id).toBe('deepseek-v4-flash');
+  });
+});
 
 describe('models.handler test（连通性探测）', () => {
   beforeEach(() => {

@@ -145,6 +145,7 @@ export const IPC_META = {
 
   models: {
     list: request('models:list'),
+    listBuiltin: request('models:listBuiltin'),
     test: request('models:test'),
   },
 

@@ -44,6 +44,30 @@ export const ModelsListResSchema = z.object({
 });
 
 /**
+ * models:listBuiltin 入参（配置页厂商下拉数据源）
+ *
+ * 与 list 的区别：不依赖 keychain 配置状态（配置页恰恰为未配置用户服务，
+ * "配置好才显示"的过滤只适用于聊天框模型选择器）。
+ */
+export const ModelsListBuiltinReqSchema = z.object({
+  /** 供应商（空串 = 全部厂商内置模型） */
+  providerKind: ApiKeyProviderSchema.optional(),
+});
+
+/** models:listBuiltin 入参类型 */
+export interface ModelsListBuiltinReq {
+  readonly providerKind?: z.infer<typeof ApiKeyProviderSchema>;
+}
+
+/** models:listBuiltin 响应（复用 AvailableModelInfo 形状） */
+export interface ModelsListBuiltinRes {
+  readonly models: readonly AvailableModelInfo[];
+}
+
+/** models:listBuiltin 响应 zod schema */
+export const ModelsListBuiltinResSchema = ModelsListResSchema;
+
+/**
  * models:test 入参 zod schema（连通性测试）
  *
  * baseUrl/apiKey 省略时回退主进程默认端点与 keychain 已存 key。

@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useSetApiKey } from '@/hooks/use-api-key';
-import { useModelsQuery } from '@/hooks/use-models';
+import { useBuiltinModelsQuery } from '@/hooks/use-models';
 import {
   useAddRuntimeModel,
   useTestModel,
@@ -83,7 +83,6 @@ export function ModelConfigDialog({
   onSaved,
 }: ModelConfigDialogProps): ReactElement {
   const { t } = useTranslation();
-  const { data: modelsData } = useModelsQuery();
   const addMutation = useAddRuntimeModel();
   const updateMutation = useUpdateRuntimeModel();
   const testMutation = useTestModel();
@@ -93,6 +92,12 @@ export function ModelConfigDialog({
   const [errors, setErrors] = useState<{ readonly modelId?: string; readonly test?: string }>({});
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  // 服务商模式：厂商内置模型全集（listBuiltin，不依赖 keychain——
+  // 配置页为未配置用户服务；此前误用 models:list 的"已配置才显示"过滤导致死锁）
+  const { data: builtinData } = useBuiltinModelsQuery(
+    mode === 'provider' ? values.providerKind : undefined,
+  );
 
   const isEdit = mode === 'edit';
   const isCustom = mode === 'custom';
@@ -119,11 +124,11 @@ export function ModelConfigDialog({
     setAdvancedExpanded(false);
   }, [open, isEdit, editingModel, providerKind]);
 
-  /** 当前厂商在 models:list 中的可选模型（服务商模式下拉） */
+  /** 当前厂商的内置模型全集（服务商模式下拉；listBuiltin 已按厂商过滤） */
   const providerModels = useMemo(() => {
     if (isCustom || isEdit) return [];
-    return (modelsData?.models ?? []).filter((m) => m.providerKind === values.providerKind);
-  }, [modelsData, values.providerKind, isCustom, isEdit]);
+    return builtinData?.models ?? [];
+  }, [builtinData, isCustom, isEdit]);
 
   /** 服务商模式：下拉选中的模型 id（未选「使用其他模型」时作为最终 modelId） */
   const effectiveModelId =
@@ -171,9 +176,9 @@ export function ModelConfigDialog({
       const res = await testMutation.mutateAsync({
         providerKind: values.providerKind,
         ...(effectiveModelId !== '' ? { modelId: effectiveModelId } : {}),
-        ...(!isEdit && values.requestUrl.trim() !== ''
-          ? { baseUrl: values.requestUrl.trim() }
-          : {}),
+        // 表单里填了请求地址就传给主进程探测——编辑模式下改地址同样要测新地址
+        // （此前 !isEdit 守卫导致编辑模式永远测默认端点，改了地址不生效）
+        ...(values.requestUrl.trim() !== '' ? { baseUrl: values.requestUrl.trim() } : {}),
         ...(values.apiKey.trim() !== '' ? { apiKey: values.apiKey.trim() } : {}),
       });
       if (!res.ok) {

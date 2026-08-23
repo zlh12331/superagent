@@ -37,3 +37,32 @@ export function useModelsQuery() {
     },
   });
 }
+
+/**
+ * 厂商内置模型全集查询（models:listBuiltin IPC）
+ *
+ * 配置页下拉数据源：不做 keychain 过滤（未配置厂商也能看到全部官方模型）。
+ * providerKind 随 queryKey 变化自动重查；浏览器模式降级空列表。
+ */
+export function useBuiltinModelsQuery(providerKind: string | undefined) {
+  return useQuery({
+    queryKey: ['models', 'listBuiltin', providerKind ?? 'all'],
+    queryFn: async (): Promise<ModelsListRes> => {
+      if (typeof window === 'undefined' || window.api === undefined) {
+        return { models: [] };
+      }
+      const response = await window.api.models.listBuiltin({
+        ...(providerKind !== undefined
+          ? { providerKind: providerKind as ModelsListRes['models'][number]['providerKind'] }
+          : {}),
+      });
+      if ('error' in response && response.error !== undefined) {
+        throw new Error(`[${response.error.code}] ${response.error.message}`);
+      }
+      if ('data' in response && response.data !== undefined) {
+        return response.data;
+      }
+      throw new Error('Unexpected response');
+    },
+  });
+}

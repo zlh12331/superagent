@@ -151,6 +151,9 @@ import {
   MemoryListResSchema,
 } from '../schemas/memory';
 import {
+  ModelsListBuiltinReqSchema,
+  type ModelsListBuiltinRes,
+  ModelsListBuiltinResSchema,
   type ModelsListRes,
   ModelsListResSchema,
   TestModelReqSchema,
@@ -970,6 +973,12 @@ export const IPC_DEFINITIONS = {
 
   models: {
     list: withSchema(IPC_META.models.list, null, {} as ModelsListRes, ModelsListResSchema),
+    listBuiltin: withSchema(
+      IPC_META.models.listBuiltin,
+      ModelsListBuiltinReqSchema,
+      {} as ModelsListBuiltinRes,
+      ModelsListBuiltinResSchema,
+    ),
     test: withSchema(
       IPC_META.models.test,
       TestModelReqSchema,

@@ -1,13 +1,16 @@
 // src/main/ipc/models.handler.ts
-// 模型域 handler（models:list + models:test）
+// 模型域 handler（models:list + models:listBuiltin + models:test）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - models:list：暴露主进程 modelRegistry 中**已配置可用**的模型清单
 //   （对齐同类桌面 LLM 客户端：配置好才显示，未配置不出现——没有就是没有）
+//   仅适用于聊天框模型选择器
+// - models:listBuiltin：厂商内置模型全集（不依赖 keychain 配置状态）——
+//   配置页数据源（配置页恰恰为未配置用户服务，"配置好才显示"会造成死锁）
 // - models:test：连通性测试——真实 HTTP 探测供应商端点（不落库、不改状态）
 // ──────────────────────────────────────────────────────────────
 
-import type { ModelsListRes, TestModelRes } from '@code-agent/shared/main';
+import type { ModelsListBuiltinRes, ModelsListRes, TestModelRes } from '@code-agent/shared/main';
 
 import { getAppConfig } from '../config';
 import { modelRegistry } from '../infra/ai/models';
@@ -56,6 +59,31 @@ export const modelsHandlers = {
     }
     return {
       models: configured.map((m) => ({
+        id: m.id,
+        label: m.label,
+        providerKind: m.providerKind,
+        isRuntime: m.isRuntime,
+        capabilities: { ...m.capabilities } as Record<string, unknown>,
+      })),
+    };
+  },
+
+  /**
+   * 厂商内置模型全集（配置页下拉数据源）
+   *
+   * 不做 keychain 过滤：配置页为未配置用户服务，需展示厂商全部官方模型
+   * 供选择（未配置也能看到要配什么）。providerKind 省略时返回全部厂商。
+   */
+  listBuiltin: async (input: {
+    providerKind?: ProviderKind | undefined;
+  }): Promise<ModelsListBuiltinRes> => {
+    const all = modelRegistry.listModels();
+    const builtins = all.filter(
+      (m) =>
+        !m.isRuntime && (input.providerKind === undefined || m.providerKind === input.providerKind),
+    );
+    return {
+      models: builtins.map((m) => ({
         id: m.id,
         label: m.label,
         providerKind: m.providerKind,

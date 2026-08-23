@@ -111,7 +111,13 @@ export function ModelConfigFields({
             <Select
               value={values.providerKind}
               disabled={providerKindLocked}
-              onValueChange={(v) => onFieldChange('providerKind', v as ApiKeyProvider)}
+              onValueChange={(v) => {
+                // 切换厂商时清空已选模型：旧厂商的 selectedModel 对新厂商无效
+                // （否则 effectiveModelId 残留跨厂商模型 id → 保存出错配模型）
+                onFieldChange('providerKind', v as ApiKeyProvider);
+                onFieldChange('selectedModel', '');
+                onFieldChange('useOtherModel', false);
+              }}
             >
               <SelectTrigger className={cn('h-8', inputClass)}>
                 <SelectValue />
