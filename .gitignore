@@ -79,6 +79,13 @@ resources/pg/
 # PG 下载脚本的临时目录（zip + 解压目录，盘符内同盘移动避免 EXDEV）
 .tmp/
 
+# 记忆引擎运行目录（TencentDB-Agent-Memory · MemoryCore，由 scripts/prepare-memory-hub.mjs 生成）
+# 体积大（含 node_modules），不入仓；打包前执行 pnpm prepare:memory-hub 生成
+resources/memory-hub/
+
+# 上游 MemoryCore 源码压缩包（本地参考，不入仓；源码已复制进 resources/memory-hub）
+docs/TencentDB-Agent-Memory-2.0.1-beta.2.zip
+
 # electron-builder 打包产物（NSIS 安装包、latest.yml 等）
 release/
 

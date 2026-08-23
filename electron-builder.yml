@@ -57,6 +57,13 @@ extraResources:
     to: icons
     filter:
       - "**/*"
+  # 记忆引擎（TencentDB-Agent-Memory · MemoryCore 运行目录）
+  # 由 scripts/prepare-memory-hub.mjs 生成；MemoryHubService 在打包环境读取
+  # process.resourcesPath/memory-hub（src/gateway/server.ts + node_modules，tsx 直跑）
+  - from: resources/memory-hub
+    to: memory-hub
+    filter:
+      - "**/*"
 
 # ── Windows 平台配置 ──────────────────────────────────────────
 # 代码签名：证书通过环境变量提供（CSC_LINK/CSC_KEY_PASSWORD），

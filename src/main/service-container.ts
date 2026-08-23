@@ -97,6 +97,19 @@ import { type IUpdateService, UpdateService } from './infra/update/update-servic
 import { clearCrashMarker, hasCrashMarker, logger } from './utils/logger';
 
 /**
+ * 解析 MemoryCore（上游 TencentDB-Agent-Memory）根目录：
+ * - 打包环境：process.resourcesPath/memory-hub（prepare-memory-hub.mjs 生成的运行目录）
+ * - dev 环境：环境变量 MEMORY_HUB_ROOT（指向解压的上游源码目录）
+ * 未配置时返回 undefined，由 MemoryHubService 内部降级为空实现。
+ */
+function resolveMemoryHubRoot(): string | undefined {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'memory-hub');
+  }
+  return process.env['MEMORY_HUB_ROOT'];
+}
+
+/**
  * 服务容器：持有应用核心服务实例
  *
  * 通过 `serviceContainer.getChatService()` 获取服务实例，
@@ -455,13 +468,16 @@ class ServiceContainer {
   /**
    * 获取 MemoryHub sidecar 服务（上游 TencentDB-Agent-Memory 记忆引擎，懒启动）
    *
-   * hubRoot 来源：环境变量 MEMORY_HUB_ROOT（dev 指向上游源码目录；
-   * 打包环境由启动器注入 resources/memory-hub）。未配置时服务内部降级为空实现。
+   * hubRoot 来源：
+   * - 打包环境（app.isPackaged）：resources/memory-hub（prepare-memory-hub.mjs 生成的
+   *   MemoryCore 运行目录，经 electron-builder extraResources 部署到 process.resourcesPath）
+   * - dev 环境：环境变量 MEMORY_HUB_ROOT 指向上游源码目录
+   * 未配置时服务内部降级为空实现（记忆功能静默不可用，不阻断应用）。
    */
   getMemoryHubService(): MemoryHubService {
     if (this.memoryHub === null) {
       this.memoryHub = new MemoryHubService({
-        hubRoot: process.env['MEMORY_HUB_ROOT'],
+        hubRoot: resolveMemoryHubRoot(),
         dataDir: join(app.getPath('userData'), 'memory-hub'),
         // 蒸馏 LLM：复用应用默认供应商 + keychain（协议不兼容/未配 Key 时优雅降级）
         llm: resolveDistillLlmConfig,
