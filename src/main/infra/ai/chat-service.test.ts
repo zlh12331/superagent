@@ -17,7 +17,7 @@ import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { APICallError, LoadAPIKeyError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // vi.mock 会被 hoist，工厂函数内不能引用外部 const
 // 必须用 vi.hoisted 导出 mock 对象

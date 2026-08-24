@@ -4,7 +4,7 @@
 import Database from 'better-sqlite3';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../storage/schema';
 import { SCHEMA_SQL } from '../storage/schema-sql';
 import { CronService } from './cron-service';

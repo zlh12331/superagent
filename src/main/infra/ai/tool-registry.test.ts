@@ -1,7 +1,7 @@
 // src/main/infra/ai/tool-registry.test.ts
 // ToolRegistry 单测：注册 / 查找 / 注销 / 列表 / AI SDK 转换
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tool } from './tools/tool';
 import { ToolRegistry } from './tools/tool-registry';
 
