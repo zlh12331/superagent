@@ -175,8 +175,14 @@ describe('ModelRegistry', () => {
       expect(registry.resolve('gpt-4o').available).toBe(false);
     });
 
-    it('默认模型 resolve(undefined) 不受停用集合影响', () => {
+    it('默认模型被停用 → resolve(undefined) 返回 available=false（对话主链路拦截）', () => {
       registry.registerDisabledModel('deepseek-v4-flash');
+      const resolved = registry.resolve(undefined);
+      expect(resolved.available).toBe(false);
+      expect(resolved.modelId).toBe('deepseek-v4-flash');
+    });
+
+    it('默认模型未停用 → resolve(undefined) 正常可路由', () => {
       const resolved = registry.resolve(undefined);
       expect(resolved.available).toBe(true);
       expect(resolved.modelId).toBe('deepseek-v4-flash');

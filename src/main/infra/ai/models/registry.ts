@@ -93,11 +93,13 @@ export class ModelRegistry {
    * @returns 解析结果（永不抛错）
    */
   resolve(modelId: string | undefined): ResolvedModel {
-    // 停用模型：明确不可用（用户关闭），不落入"任意 id 透传"兜底
-    if (modelId !== undefined && this.disabledModels.has(modelId)) {
-      const entry = this.modelIndex.get(modelId);
+    // 目标模型 id：显式 id 优先；省略 = 默认供应商默认模型。
+    // 停用检查覆盖两条路径：显式 id 停用 + 默认模型被停用（resolve(undefined)）。
+    const target = modelId ?? this.defaultModelByKind[this.defaultKind];
+    if (this.disabledModels.has(target)) {
+      const entry = this.modelIndex.get(target);
       return {
-        modelId,
+        modelId: target,
         providerKind: entry?.providerKind ?? this.defaultKind,
         capabilities: entry?.capabilities ?? {},
         generationConfig: entry?.generationConfig,

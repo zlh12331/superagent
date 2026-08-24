@@ -20,7 +20,7 @@ import { IPC_CHANNELS, TurnEventType } from '@code-agent/shared/main';
 import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SESSION_TITLE, type ISessionService } from '../storage/session-service';
 import type { StartAgentOptions } from './agent/agent-service';
 import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
