@@ -44,6 +44,8 @@ export const ErrorCode = {
   AI_RATE_LIMITED: 'AI_RATE_LIMITED',
   AI_TIMEOUT: 'AI_TIMEOUT',
   AI_MODEL_ERROR: 'AI_MODEL_ERROR',
+  /** 模型已被用户停用（设置页关闭开关；resolve 返回 available=false） */
+  MODEL_DISABLED: 'MODEL_DISABLED',
   AI_STREAM_INTERRUPTED: 'AI_STREAM_INTERRUPTED',
   AI_CONTEXT_TOO_LARGE: 'AI_CONTEXT_TOO_LARGE',
   /** 检测到工具调用/文件读取循环，回合已终止（对齐 qwen loopDetection） */
@@ -130,6 +132,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   AI_RATE_LIMITED: { userMessage: 'AI 调用频繁，正在重试', retryable: true, severity: 'warn' },
   AI_TIMEOUT: { userMessage: 'AI 调用超时', retryable: true, severity: 'warn' },
   AI_MODEL_ERROR: { userMessage: 'AI 模型错误', retryable: false, severity: 'error' },
+  MODEL_DISABLED: {
+    userMessage: '该模型已停用，请在设置中重新启用',
+    retryable: false,
+    severity: 'warn',
+  },
   AI_STREAM_INTERRUPTED: { userMessage: 'AI 流式响应中断', retryable: true, severity: 'warn' },
   AI_CONTEXT_TOO_LARGE: {
     userMessage: '上下文过长，请精简对话',

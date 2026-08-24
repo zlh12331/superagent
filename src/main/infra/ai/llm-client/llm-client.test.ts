@@ -114,6 +114,16 @@ describe('LlmClient', () => {
       expect(model).toMatchObject({ id: 'deepseek:custom-model-xyz' });
     });
 
+    it('已停用模型：getModel 抛 MODEL_DISABLED（不落入透传兜底）', async () => {
+      const { client, registry, createProviderFactory } = createClient();
+      registry.registerDisabledModel('my-disabled-model');
+
+      await expect(client.getModel('my-disabled-model')).rejects.toMatchObject({
+        code: 'MODEL_DISABLED',
+      });
+      expect(createProviderFactory).not.toHaveBeenCalled();
+    });
+
     it('运行时快照：explicitApiKey / explicitBaseUrl 透传到工厂', async () => {
       const { client, registry, createProviderFactory } = createClient();
       registry.registerRuntimeModel({

@@ -141,8 +141,9 @@ export class RuntimeModelStore {
     if (input.apiKey !== undefined) {
       await setSecret(runtimeModelKeychainKey(input.modelId), input.apiKey);
     }
-    // 注册到模型注册表（与内置模型统一解析；停用模型不注册）
+    // 注册到模型注册表（与内置模型统一解析；停用模型不注册，仅登记停用身份）
     if (input.isEnabled === false) {
+      modelRegistry.registerDisabledModel(input.modelId);
       return;
     }
     modelRegistry.registerRuntimeModel({
@@ -186,12 +187,15 @@ export class RuntimeModelStore {
     if (input.apiKey !== undefined) {
       await setSecret(runtimeModelKeychainKey(input.modelId), input.apiKey);
     }
-    // 注册表同步：注销旧快照后按最新记录重建（停用则仅注销）
+    // 注册表同步：注销旧快照后按最新记录重建（停用则仅注销 + 登记停用身份）
     const snapshotId = buildRuntimeSnapshotId(existing.providerKind as ProviderKind, input.modelId);
     modelRegistry.unregisterRuntimeModel(snapshotId);
+    modelRegistry.unregisterDisabledModel(input.modelId);
     const updated = await this.get(input.modelId);
     if (updated?.isEnabled) {
       modelRegistry.registerRuntimeModel(toSnapshot(updated));
+    } else {
+      modelRegistry.registerDisabledModel(input.modelId);
     }
   }
 
@@ -204,21 +208,26 @@ export class RuntimeModelStore {
     const db = getDb();
     db.delete(runtimeModels).where(eq(runtimeModels.modelId, modelId)).run();
     await deleteSecret(runtimeModelKeychainKey(modelId));
+    // 删除即移除停用身份（后续可重新添加为启用模型）
+    modelRegistry.unregisterDisabledModel(modelId);
     if (existing !== undefined) {
       modelRegistry.unregisterRuntimeModel(buildRuntimeSnapshotId(existing.providerKind, modelId));
     }
   }
 
   /**
-   * 启动时加载：DB 全部启用中的运行时模型注册到 ModelRegistry
+   * 启动时加载：DB 全部运行时模型同步到 ModelRegistry
+   * - 启用中 → 注册快照（可路由）
+   * - 停用 → 登记停用身份（resolve 拦截，重启后关闭仍生效）
    *
    * 由 ServiceContainer init 阶段调用（在 LLM 首次调用前）。
    */
   async loadAll(): Promise<void> {
     const records = await this.list();
     for (const record of records) {
-      // 停用模型不注册（不可路由）
+      // 停用模型不注册（不可路由），仅登记停用身份
       if (!record.isEnabled) {
+        modelRegistry.registerDisabledModel(record.modelId);
         continue;
       }
       modelRegistry.registerRuntimeModel(toSnapshot(record));

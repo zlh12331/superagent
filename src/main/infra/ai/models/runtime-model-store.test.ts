@@ -155,24 +155,29 @@ describe('RuntimeModelStore', () => {
     expect(resolved.explicitBaseUrl).toBe('https://updated.api.com');
   });
 
-  it('update：isEnabled=false 停用 → 注销注册（不可路由）+ 落库', async () => {
+  it('update：isEnabled=false 停用 → 注销注册 + 登记停用（不可路由）', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
 
     await store.update({ modelId: 'my-coder', isEnabled: false });
 
     expect((await store.get('my-coder'))?.isEnabled).toBe(false);
-    // 停用后注销：解析回退非运行时
-    expect(modelRegistry.resolve('my-coder').isRuntime).toBe(false);
+    // 停用后注销快照 + 登记停用身份：resolve 返回 available=false（不再透传兜底）
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.isRuntime).toBe(false);
+    expect(resolved.available).toBe(false);
   });
 
-  it('update：isEnabled=true 重新启用 → 重新注册', async () => {
+  it('update：isEnabled=true 重新启用 → 重新注册 + 清除停用身份', async () => {
     await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
     await store.update({ modelId: 'my-coder', isEnabled: false });
+    expect(modelRegistry.resolve('my-coder').available).toBe(false);
 
     await store.update({ modelId: 'my-coder', isEnabled: true });
 
     expect((await store.get('my-coder'))?.isEnabled).toBe(true);
-    expect(modelRegistry.resolve('my-coder').isRuntime).toBe(true);
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.isRuntime).toBe(true);
+    expect(resolved.available).toBe(true);
   });
 
   it('update 不存在的模型：抛 NOT_FOUND', async () => {
@@ -198,5 +203,19 @@ describe('RuntimeModelStore', () => {
 
     const resolved = modelRegistry.resolve('my-coder');
     expect(resolved.isRuntime).toBe(true);
+  });
+
+  it('loadAll：停用模型不注册 + 恢复停用身份（重启后关闭仍生效）', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+    await store.update({ modelId: 'my-coder', isEnabled: false });
+
+    // 模拟重启：新 store 实例 + 清空注册表（内存态丢失）后 loadAll 恢复
+    modelRegistry.clearRuntimeModels();
+    const freshStore = new RuntimeModelStore();
+    await freshStore.loadAll();
+
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.isRuntime).toBe(false);
+    expect(resolved.available).toBe(false);
   });
 });

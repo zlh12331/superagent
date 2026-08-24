@@ -41,6 +41,8 @@ export class ModelRegistry {
   private readonly defaultKind: ProviderKind;
   /** 运行时快照：快照 id → 快照（用户手动配置的模型） */
   private readonly runtimeSnapshots = new Map<string, RuntimeModelSnapshot>();
+  /** 已停用模型 id 集合（用户关闭；resolve 返回 available=false，LLM 层拦截） */
+  private readonly disabledModels = new Set<string>();
 
   constructor(options: ModelRegistryOptions) {
     this.defaultModelByKind = options.defaultModelByKind;
@@ -59,9 +61,29 @@ export class ModelRegistry {
   }
 
   /**
+   * 标记模型停用（关闭开关；启动时从 DB 恢复）
+   *
+   * 停用模型不注册运行时快照，但保留禁用身份供 resolve 拦截。
+   */
+  registerDisabledModel(modelId: string): void {
+    this.disabledModels.add(modelId);
+  }
+
+  /** 取消停用标记（重新启用） */
+  unregisterDisabledModel(modelId: string): void {
+    this.disabledModels.delete(modelId);
+  }
+
+  /** 模型当前是否处于停用状态 */
+  isModelDisabled(modelId: string): boolean {
+    return this.disabledModels.has(modelId);
+  }
+
+  /**
    * 解析模型 id → 完整解析结果
    *
    * 优先级：
+   * 0. modelId 已停用 → 返回 available=false（不可路由；区别于任意 id 的测试透传）
    * 1. modelId 显式提供且已注册（内置或运行时快照）→ 该模型条目
    * 2. modelId 显式提供但未注册 → 默认供应商默认模型 + 原始 id 透传
    *    （兼容旧行为：测试连接场景可传任意 modelId）
@@ -71,6 +93,21 @@ export class ModelRegistry {
    * @returns 解析结果（永不抛错）
    */
   resolve(modelId: string | undefined): ResolvedModel {
+    // 停用模型：明确不可用（用户关闭），不落入"任意 id 透传"兜底
+    if (modelId !== undefined && this.disabledModels.has(modelId)) {
+      const entry = this.modelIndex.get(modelId);
+      return {
+        modelId,
+        providerKind: entry?.providerKind ?? this.defaultKind,
+        capabilities: entry?.capabilities ?? {},
+        generationConfig: entry?.generationConfig,
+        isRuntime: false,
+        explicitApiKey: undefined,
+        explicitBaseUrl: undefined,
+        available: false,
+      };
+    }
+
     const explicit = modelId !== undefined ? this.resolveExplicit(modelId) : undefined;
     if (explicit !== undefined) {
       return explicit;
@@ -87,6 +124,7 @@ export class ModelRegistry {
       isRuntime: false,
       explicitApiKey: undefined,
       explicitBaseUrl: undefined,
+      available: true,
     };
   }
 
@@ -160,6 +198,7 @@ export class ModelRegistry {
         isRuntime: true,
         explicitApiKey: snapshot.apiKey,
         explicitBaseUrl: snapshot.baseUrl,
+        available: true,
       };
     }
 
@@ -176,6 +215,7 @@ export class ModelRegistry {
       isRuntime: false,
       explicitApiKey: undefined,
       explicitBaseUrl: undefined,
+      available: true,
     };
   }
 

@@ -13,6 +13,7 @@
 // - generateText 走 retryWithBackoff（错误码感知 + 指数退避 + 遥测回调）
 // ──────────────────────────────────────────────────────────────
 
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import {
   APICallError,
   generateObject as generateObjectAi,
@@ -152,6 +153,11 @@ export class LlmClient {
    */
   async getModel(modelId?: string): Promise<LanguageModel> {
     const resolved = this.deps.modelRegistry.resolve(modelId);
+    // 停用模型拦截：用户关闭后不可路由（resolve 返回 available=false），
+    // 不得落入"任意 id 透传"兜底继续调用
+    if (!resolved.available) {
+      throw new AppError(ErrorCode.MODEL_DISABLED, undefined, undefined, { modelId });
+    }
     // 显式传入的 modelId 未注册（非内置条目、非运行时快照）：回退默认供应商透传。
     // 生产上多为配置错误（拼错模型名），打 warn 便于定位（resolve 本身保持纯函数）。
     if (

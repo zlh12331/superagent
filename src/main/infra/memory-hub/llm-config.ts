@@ -45,6 +45,15 @@ export async function resolveDistillLlmConfig(): Promise<MemoryHubLlmConfig | un
     const resolved = modelRegistry.resolve(requestedModel);
     const kind = resolved.providerKind;
 
+    // 默认模型已被用户停用 → 蒸馏降级（L0 照常，L1 提取停用）
+    if (!resolved.available) {
+      logger.warn(
+        { model: resolved.modelId },
+        `${TAG} 蒸馏 LLM 未接线：默认模型已停用（L0 记录不受影响，L1 提取停用）`,
+      );
+      return undefined;
+    }
+
     if (INCOMPATIBLE_KINDS.has(kind)) {
       logger.warn(
         { kind, model: resolved.modelId },

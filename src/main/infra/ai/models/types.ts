@@ -141,6 +141,13 @@ export interface ResolvedModel {
   readonly explicitApiKey: string | undefined;
   /** 运行时快照携带的显式 baseUrl（undefined = 供应商默认端点） */
   readonly explicitBaseUrl: string | undefined;
+  /**
+   * 是否可路由（false = 模型已停用，调用方应拒绝使用）
+   *
+   * 停用模型不注册运行时快照，但保留"曾配置"身份：resolve 返回 available=false，
+   * 供 LLM 层拦截（区别于"未注册任意 id"的测试连接透传兜底）。
+   */
+  readonly available: boolean;
 }
 
 /**

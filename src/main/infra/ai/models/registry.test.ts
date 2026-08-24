@@ -145,6 +145,44 @@ describe('ModelRegistry', () => {
     });
   });
 
+  describe('停用模型（registerDisabledModel / available）', () => {
+    it('标记停用 → resolve 返回 available=false（不落入任意 id 透传兜底）', () => {
+      registry.registerDisabledModel('my-custom-model');
+
+      const resolved = registry.resolve('my-custom-model');
+
+      expect(resolved.available).toBe(false);
+      expect(resolved.modelId).toBe('my-custom-model');
+    });
+
+    it('取消停用 → resolve 恢复可路由（available=true）', () => {
+      registry.registerDisabledModel('my-custom-model');
+      registry.unregisterDisabledModel('my-custom-model');
+
+      const resolved = registry.resolve('my-custom-model');
+
+      expect(resolved.available).toBe(true);
+    });
+
+    it('isModelDisabled 反映停用状态', () => {
+      expect(registry.isModelDisabled('my-custom-model')).toBe(false);
+      registry.registerDisabledModel('my-custom-model');
+      expect(registry.isModelDisabled('my-custom-model')).toBe(true);
+    });
+
+    it('停用内置模型 id → 返回 available=false（关闭覆盖内置）', () => {
+      registry.registerDisabledModel('gpt-4o');
+      expect(registry.resolve('gpt-4o').available).toBe(false);
+    });
+
+    it('默认模型 resolve(undefined) 不受停用集合影响', () => {
+      registry.registerDisabledModel('deepseek-v4-flash');
+      const resolved = registry.resolve(undefined);
+      expect(resolved.available).toBe(true);
+      expect(resolved.modelId).toBe('deepseek-v4-flash');
+    });
+  });
+
   describe('listModels（设置 UI 下拉）', () => {
     it('列出全部内置模型（10 个）', () => {
       const models = registry.listModels();
