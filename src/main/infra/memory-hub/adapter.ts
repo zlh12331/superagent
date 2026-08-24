@@ -136,11 +136,15 @@ export class HttpMemoryPort implements MemoryPort {
   async searchConversations(
     query: string,
     limit?: number,
+    sessionKey?: string,
   ): Promise<MemoryConversationSearchResult> {
     try {
       const body: Record<string, unknown> = { query };
       if (limit !== undefined) {
         body['limit'] = limit;
+      }
+      if (sessionKey !== undefined) {
+        body['session_key'] = sessionKey;
       }
       const data = (await this.requestJson('POST', '/search/conversations', body)) as {
         results?: string;

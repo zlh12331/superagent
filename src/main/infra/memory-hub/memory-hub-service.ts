@@ -15,7 +15,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 
@@ -37,6 +37,13 @@ export interface MemoryHubLlmConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+}
+
+/** L0 对话记录（上游 conversations JSONL 只读行；供设置页按会话列出） */
+export interface L0Record {
+  readonly role: 'user' | 'assistant' | string;
+  readonly content: string;
+  readonly timestamp: number;
 }
 
 /** MemoryHubService 构造选项 */
@@ -86,7 +93,8 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
     capture: (input) => via((p) => p.capture(input)),
     recall: (input) => via((p) => p.recall(input)),
     searchMemories: (query, limit) => via((p) => p.searchMemories(query, limit)),
-    searchConversations: (query, limit) => via((p) => p.searchConversations(query, limit)),
+    searchConversations: (query, limit, sessionKey) =>
+      via((p) => p.searchConversations(query, limit, sessionKey)),
   };
 }
 
@@ -105,6 +113,51 @@ export class MemoryHubService {
   /** 是否已配置上游根目录 */
   isConfigured(): boolean {
     return this.options.hubRoot !== undefined && this.options.hubRoot.length > 0;
+  }
+
+  /**
+   * 按会话读取 L0 对话记录（读上游落盘的 conversations JSONL，只读展示）。
+   *
+   * 不触发 sidecar 启动：直接读数据文件，即使记忆引擎未配置/未运行也可列出
+   * 既有记录（此前走 gateway /search/conversations 需语义 query，无法"列出"某会话）。
+   */
+  async listL0BySession(sessionKey: string, limit = 20): Promise<L0Record[]> {
+    const dir = join(this.options.dataDir, 'data', 'conversations');
+    if (!existsSync(dir)) {
+      return [];
+    }
+    const records: L0Record[] = [];
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.jsonl')) continue;
+      let text: string;
+      try {
+        text = readFileSync(join(dir, file), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const line of text.split(/\r?\n/)) {
+        if (line.trim().length === 0) continue;
+        try {
+          const rec = JSON.parse(line) as {
+            sessionKey?: unknown;
+            role?: unknown;
+            content?: unknown;
+            timestamp?: unknown;
+          };
+          if (rec.sessionKey === sessionKey) {
+            records.push({
+              role: typeof rec.role === 'string' ? rec.role : 'unknown',
+              content: typeof rec.content === 'string' ? rec.content : '',
+              timestamp: typeof rec.timestamp === 'number' ? rec.timestamp : 0,
+            });
+          }
+        } catch {
+          // 跳过损坏行（上游日志文件，容忍脏数据）
+        }
+      }
+    }
+    records.sort((a, b) => a.timestamp - b.timestamp);
+    return records.slice(-limit);
   }
 
   /**

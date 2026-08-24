@@ -5,6 +5,10 @@
 // （需 MEMORY_HUB_ROOT，CI 自动跳过）。本文件覆盖无需子进程的纯逻辑与降级语义。
 // ──────────────────────────────────────────────────────────────
 
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDeferredMemoryPort, MemoryHubService } from './memory-hub-service';
@@ -70,6 +74,87 @@ describe('MemoryHubService 生命周期', () => {
     const service = new MemoryHubService({ hubRoot: undefined, dataDir: '/tmp/m' });
     const [a, b] = await Promise.all([service.ensureStarted(), service.ensureStarted()]);
     expect(a).toBe(b);
+  });
+});
+
+describe('MemoryHubService.listL0BySession', () => {
+  /** 构造含 conversations JSONL 的临时数据目录 */
+  function createDataDir(linesByFile: Record<string, string>): string {
+    const root = mkdtempSync(join(tmpdir(), 'memory-hub-l0-'));
+    const convDir = join(root, 'data', 'conversations');
+    mkdirSync(convDir, { recursive: true });
+    for (const [file, content] of Object.entries(linesByFile)) {
+      writeFileSync(join(convDir, file), content, 'utf8');
+    }
+    return root;
+  }
+
+  function createService(dataDir: string): MemoryHubService {
+    return new MemoryHubService({ hubRoot: undefined, dataDir });
+  }
+
+  it('按会话过滤 + 按时间升序 + 取最近 limit 条', async () => {
+    const dir = createDataDir({
+      '2026-08-24.jsonl': [
+        JSON.stringify({ sessionKey: 'sess-1', role: 'user', content: '第一条', timestamp: 100 }),
+        JSON.stringify({ sessionKey: 'sess-2', role: 'user', content: '别人的', timestamp: 150 }),
+        JSON.stringify({
+          sessionKey: 'sess-1',
+          role: 'assistant',
+          content: '第二条',
+          timestamp: 200,
+        }),
+      ].join('\n'),
+    });
+    const service = createService(dir);
+    const records = await service.listL0BySession('sess-1', 20);
+    expect(records.map((r) => r.content)).toEqual(['第一条', '第二条']);
+  });
+
+  it('跨多天文件合并（sessionKey 命中即纳入）', async () => {
+    const dir = createDataDir({
+      '2026-08-23.jsonl': JSON.stringify({
+        sessionKey: 'sess-1',
+        role: 'user',
+        content: '昨天',
+        timestamp: 1,
+      }),
+      '2026-08-24.jsonl': JSON.stringify({
+        sessionKey: 'sess-1',
+        role: 'user',
+        content: '今天',
+        timestamp: 2,
+      }),
+    });
+    const service = createService(dir);
+    const records = await service.listL0BySession('sess-1');
+    expect(records.map((r) => r.content)).toEqual(['昨天', '今天']);
+  });
+
+  it('limit 截断：只返回最近 limit 条', async () => {
+    const lines = [1, 2, 3].map((n) =>
+      JSON.stringify({ sessionKey: 'sess-1', role: 'user', content: `m${n}`, timestamp: n }),
+    );
+    const dir = createDataDir({ '2026-08-24.jsonl': lines.join('\n') });
+    const service = createService(dir);
+    const records = await service.listL0BySession('sess-1', 2);
+    expect(records.map((r) => r.content)).toEqual(['m2', 'm3']);
+  });
+
+  it('损坏行跳过 + 非 jsonl 忽略 + 目录不存在返回空', async () => {
+    const dir = createDataDir({
+      '2026-08-24.jsonl': [
+        '{"sessionKey":"sess-1","role":"user","content":"ok","timestamp":1}',
+        'not-json{broken',
+      ].join('\n'),
+      'readme.txt': 'ignore me',
+    });
+    const service = createService(dir);
+    const records = await service.listL0BySession('sess-1');
+    expect(records.map((r) => r.content)).toEqual(['ok']);
+
+    const empty = createService(join(tmpdir(), 'memory-hub-no-such-dir'));
+    await expect(empty.listL0BySession('sess-1')).resolves.toEqual([]);
   });
 });
 

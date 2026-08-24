@@ -426,7 +426,10 @@ app
       }),
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
-      memory: createMemoryHandlers({ getPort: () => serviceContainer.getMemoryPort() }),
+      memory: createMemoryHandlers({
+        listL0BySession: (sessionKey, limit) =>
+          serviceContainer.getMemoryHubService().listL0BySession(sessionKey, limit),
+      }),
       models: modelsHandlers,
       mcp: createMcpHandlers(serviceContainer.getMcpService(), serviceContainer.getToolRegistry()),
       skill: skillHandlers,

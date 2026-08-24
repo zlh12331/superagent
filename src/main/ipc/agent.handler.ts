@@ -69,7 +69,6 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
     // 渲染层用返回的 sessionId 订阅后续事件并支持中断
     run: async (input, ctx) => {
       const lastUser = extractLastUserText(input.messages);
-      memoryWire?.noteLastUser(input.sessionId ?? '', lastUser);
       // 记忆预取召回：仅在渲染层未显式指定 systemPrompt 时注入一次性上下文块
       let systemPrompt = input.systemPrompt;
       if (
@@ -101,6 +100,13 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
         ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
         webContents: ctx.sender,
       });
+      // P2 修复：用最终 sessionId 注入本轮用户输入。此前用 `input.sessionId ?? ''`，
+      // 首次对话时 input.sessionId 为 undefined → key='' 与 turn event 的
+      // 真实 sessionId（startAgent 生成的 UUID）不匹配 → TURN_END 捕获时
+      // user_content 为空 → 上游 /capture 400 → 自动捕获永不生效。
+      if (lastUser.trim().length > 0) {
+        memoryWire?.noteLastUser(sessionId, lastUser);
+      }
       return { sessionId };
     },
 

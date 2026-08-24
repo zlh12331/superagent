@@ -76,6 +76,10 @@ export interface MemoryPort {
   recall(input: MemoryRecallInput): Promise<MemoryRecallResult>;
   /** L1 结构化记忆检索 */
   searchMemories(query: string, limit?: number): Promise<MemorySearchResult>;
-  /** L0 会话内容检索 */
-  searchConversations(query: string, limit?: number): Promise<MemoryConversationSearchResult>;
+  /** L0 会话内容检索（sessionKey 可选：命中后按会话过滤） */
+  searchConversations(
+    query: string,
+    limit?: number,
+    sessionKey?: string,
+  ): Promise<MemoryConversationSearchResult>;
 }

@@ -20,7 +20,9 @@ function createCtx(sessionId = 'sess-1'): ToolContext {
 }
 
 function createTool() {
-  const recall = vi.fn(async () => ({ ok: true, context: '召回上下文', memoryCount: 3 }));
+  const recall = vi.fn<
+    () => Promise<{ ok: boolean; context: string; memoryCount: number; message?: string }>
+  >(async () => ({ ok: true, context: '召回上下文', memoryCount: 3 }));
   const port = { recall } as unknown as MemoryPort;
   return { tool: createRecallMemoryTool(port), recall };
 }
