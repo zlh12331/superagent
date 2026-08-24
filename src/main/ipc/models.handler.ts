@@ -13,6 +13,7 @@
 import type { ModelsListBuiltinRes, ModelsListRes, TestModelRes } from '@code-agent/shared/main';
 
 import { getAppConfig } from '../config';
+import { runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { modelRegistry } from '../infra/ai/models';
 import { runtimeModelKeychainKey } from '../infra/ai/models/runtime-model-store';
 import type { ProviderKind } from '../infra/ai/providers/types';
@@ -41,31 +42,30 @@ function buildTestUrl(providerKind: ProviderKind, baseUrl: string): string {
 
 /** models 域 handler（定义表驱动，InferHandlers 编译期约束） */
 export const modelsHandlers = {
-  /** 已配置可用模型清单（内置需 API Key 已配置 + 运行时全部） */
+  /**
+   * 对话区模型清单：返回用户显式配置且启用的模型（runtime_models 中 enabled）
+   *
+   * 语义（对应用户心智）：
+   * - 只显示用户自己添加的模型，不把内置模型全家桶带出（补 key 不该让全部内置冒出来）
+   * - 关闭（isEnabled=false）的模型不显示，重新启用后才出现
+   * 真实数据源 = runtimeModelStore（用户配置的模型唯一入口），
+   * 内置模型清单仅在配置页经 listBuiltin 提供（作为"待添加"来源）。
+   */
   list: async (): Promise<ModelsListRes> => {
-    const all = modelRegistry.listModels();
-    const configured = [];
-    for (const m of all) {
-      // 运行时模型自带配置：始终可用
-      if (m.isRuntime) {
-        configured.push(m);
-        continue;
-      }
-      // 内置模型：提供商 API Key 已保存才显示（配置好才出现）
-      const apiKey = await getSecret(`${m.providerKind}-api-key`);
-      if (apiKey !== null && apiKey !== '') {
-        configured.push(m);
-      }
+    const records = await runtimeModelStore.list();
+    const models = [];
+    for (const r of records) {
+      if (!r.isEnabled) continue;
+      const entry = modelRegistry.findBuiltin(r.modelId);
+      models.push({
+        id: r.modelId,
+        label: r.displayName ?? entry?.displayName ?? r.modelId,
+        providerKind: r.providerKind,
+        isRuntime: true,
+        capabilities: { ...(entry?.capabilities ?? {}) } as Record<string, unknown>,
+      });
     }
-    return {
-      models: configured.map((m) => ({
-        id: m.id,
-        label: m.label,
-        providerKind: m.providerKind,
-        isRuntime: m.isRuntime,
-        capabilities: { ...m.capabilities } as Record<string, unknown>,
-      })),
-    };
+    return { models };
   },
 
   /**

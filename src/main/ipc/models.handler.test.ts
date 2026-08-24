@@ -13,6 +13,8 @@ import { modelsHandlers } from './models.handler';
 const mocks = vi.hoisted(() => ({
   // 返回类型显式标注：避免 vi.fn(() => []) 推导 never[] 导致 mockReturnValue 赋值报错
   listModels: vi.fn((): Array<Record<string, unknown>> => []),
+  findBuiltin: vi.fn((_modelId: string) => undefined as Record<string, unknown> | undefined),
+  listRuntimeModels: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
   getSecret: vi.fn(async () => undefined),
   getProviders: vi.fn(() => ({
     deepseek: 'https://api.deepseek.com',
@@ -30,7 +32,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../infra/ai/models', () => ({
-  modelRegistry: { listModels: mocks.listModels },
+  modelRegistry: { listModels: mocks.listModels, findBuiltin: mocks.findBuiltin },
+}));
+
+vi.mock('../infra/ai/llm-client/ai-provider', () => ({
+  runtimeModelStore: { list: mocks.listRuntimeModels },
 }));
 
 vi.mock('../infra/storage/keychain', () => ({
@@ -104,6 +110,69 @@ describe('models:listBuiltin（配置页厂商下拉数据源）', () => {
     const res = await modelsHandlers.listBuiltin({});
     expect(res.models).toHaveLength(1);
     expect(res.models[0]?.id).toBe('deepseek-v4-flash');
+  });
+});
+
+/** 构造运行时模型记录（list 数据源形状） */
+function runtimeModel(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    modelId: 'my-model',
+    providerKind: 'deepseek',
+    isEnabled: true,
+    createdAt: 1_700_000_000_000,
+    ...overrides,
+  };
+}
+
+describe('models:list（对话区模型清单：仅启用配置的模型）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.listRuntimeModels.mockResolvedValue([]);
+  });
+
+  it('只返回用户配置且启用的运行时模型（不把内置全家桶带出）', async () => {
+    mocks.listRuntimeModels.mockResolvedValue([runtimeModel()]);
+    const res = await modelsHandlers.list();
+    expect(res.models).toHaveLength(1);
+    expect(res.models[0]).toMatchObject({
+      id: 'my-model',
+      providerKind: 'deepseek',
+      isRuntime: true,
+    });
+    // 不依赖 keychain 过滤内置模型（list 彻底不管内置，除非用户显式添加）
+    expect(mocks.getSecret).not.toHaveBeenCalled();
+  });
+
+  it('关闭（isEnabled=false）的模型不显示；启用才出现', async () => {
+    mocks.listRuntimeModels.mockResolvedValue([
+      runtimeModel({ modelId: 'disabled-model', isEnabled: false }),
+    ]);
+    const res = await modelsHandlers.list();
+    expect(res.models).toHaveLength(0);
+  });
+
+  it('启用多个 → 全部显示；label 优先 displayName → 内置 displayName → modelId', async () => {
+    mocks.listRuntimeModels.mockResolvedValue([
+      runtimeModel({ modelId: 'a', displayName: '我的模型', isEnabled: true }),
+    ]);
+    mocks.findBuiltin.mockReturnValue({ displayName: '内置名' } as never);
+    const res = await modelsHandlers.list();
+    expect(res.models[0]?.label).toBe('我的模型');
+
+    // 无 displayName + 无内置条目 → 回退 modelId
+    mocks.findBuiltin.mockReturnValue(undefined);
+    mocks.listRuntimeModels.mockResolvedValue([
+      runtimeModel({ modelId: 'b', displayName: undefined }),
+    ]);
+    const res2 = await modelsHandlers.list();
+    expect(res2.models[0]?.label).toBe('b');
+  });
+
+  it('runtime 模型无内置条目时 capabilities 为空对象（不抛错）', async () => {
+    mocks.listRuntimeModels.mockResolvedValue([runtimeModel()]);
+    mocks.findBuiltin.mockReturnValue(undefined);
+    const res = await modelsHandlers.list();
+    expect(res.models[0]?.capabilities).toEqual({});
   });
 });
 
