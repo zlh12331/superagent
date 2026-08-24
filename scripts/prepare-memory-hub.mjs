@@ -137,6 +137,34 @@ run(
   TARGET,
 );
 
+// 5.1 清理运行时不需要的重型 peer/optional 平台二进制（体积优化）
+//    - node-llama-cpp：本地 LLM 推理引擎（peerDependency，多平台二进制共 ~670MB，
+//      含 @node-llama-cpp/<platform> 各平台包）。我们的蒸馏走 OpenAI 兼容 HTTP
+//      （MemoryHubLlmConfig），不落地推理，可安全移除。
+//    - openclaw：上游插件宿主（peerDependency），sidecar 以独立 gateway 启动，不经过宿主。
+//    这两者仅存在于 .pnpm 缓存目录，删除后 node_modules 虚拟链接可能残留断链，但依赖树
+//    无硬引用（peer/optional），运行时不会 require。
+const PRUNE_PREFIXES = ['node-llama-cpp', '@node-llama-cpp', 'openclaw'];
+const pruneDir = join(TARGET, 'node_modules', '.pnpm');
+if (existsSync(pruneDir)) {
+  let prunedMb = 0;
+  for (const dir of readdirSync(pruneDir, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    // .pnpm 目录名形如 node-llama-cpp@… / @node-llama-cpp+win-x64-cuda3.20.0 / openclaw…_…
+    if (!PRUNE_PREFIXES.some((prefix) => dir.name.startsWith(prefix))) continue;
+    try {
+      const size = dirSizeMb(join(pruneDir, dir.name));
+      rmSync(join(pruneDir, dir.name), { recursive: true, force: true });
+      prunedMb += Number(size);
+    } catch {
+      // 个别目录被占用时跳过（不阻断整体流程）
+    }
+  }
+  if (prunedMb > 0) {
+    console.log(`[prepare-memory-hub] 已清理重型插件二进制 ~${prunedMb.toFixed(0)} MB`);
+  }
+}
+
 // 6. 摘要
 const sizeMb = dirSizeMb(TARGET);
 const files = countFiles(TARGET);
