@@ -25,6 +25,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -142,11 +143,33 @@ run(
 //      含 @node-llama-cpp/<platform> 各平台包）。我们的蒸馏走 OpenAI 兼容 HTTP
 //      （MemoryHubLlmConfig），不落地推理，可安全移除。
 //    - openclaw：上游插件宿主（peerDependency），sidecar 以独立 gateway 启动，不经过宿主。
-//    这两者仅存在于 .pnpm 缓存目录，删除后 node_modules 虚拟链接可能残留断链，但依赖树
-//    无硬引用（peer/optional），运行时不会 require。
+// 注意：pnpm 用 junction（目录符号链接）链接 .pnpm/<pkg>@<ver> 到 node_modules/<pkg> 与
+//    .pnpm/node_modules/<pkg>。仅删 .pnpm 目录会留下指向已删目标的断链 junction——electron-builder
+//    的 7zip 压缩遇到断链会报"系统找不到指定的路径"并失败。因此必须先删除所有指向这些包的
+//    junction/symlink（unlinkSync 只删链接不删目标），再删实体目录。
+/** 递归删除 node_modules 下所有 name 命中 PRUNE_PREFIXES 的符号链接/目录 */
+function pruneSymlinks(root) {
+  const entries = readdirSync(root, { withFileTypes: true });
+  for (const ent of entries) {
+    const p = join(root, ent.name);
+    if (ent.isSymbolicLink() && PRUNE_PREFIXES.some((prefix) => ent.name.startsWith(prefix))) {
+      // junction/symlink：只摘除链接本身，不跟随删除目标
+      unlinkSync(p);
+      continue;
+    }
+    if (ent.isDirectory()) {
+      // 跳过 .pnpm 实体缓存目录（它们在下一段单独按需删除）
+      if (ent.name === '.pnpm') continue;
+      pruneSymlinks(p);
+    }
+  }
+}
 const PRUNE_PREFIXES = ['node-llama-cpp', '@node-llama-cpp', 'openclaw'];
 const pruneDir = join(TARGET, 'node_modules', '.pnpm');
 if (existsSync(pruneDir)) {
+  // 1) 递归摘除 node_modules 树中指向目标包的 junction（防断链）
+  pruneSymlinks(join(TARGET, 'node_modules'));
+  // 2) 删除 .pnpm 中的实体目录（体积回收）
   let prunedMb = 0;
   for (const dir of readdirSync(pruneDir, { withFileTypes: true })) {
     if (!dir.isDirectory()) continue;
@@ -158,6 +181,21 @@ if (existsSync(pruneDir)) {
       prunedMb += Number(size);
     } catch {
       // 个别目录被占用时跳过（不阻断整体流程）
+    }
+  }
+  // 3) 摘除 .pnpm/node_modules 下的相关 junction（含 @node-llama-cpp/win-* 子项）
+  const pnpmNodeModules = join(pruneDir, 'node_modules');
+  if (existsSync(pnpmNodeModules)) {
+    for (const ent of readdirSync(pnpmNodeModules, { withFileTypes: true })) {
+      const p = join(pnpmNodeModules, ent.name);
+      if (PRUNE_PREFIXES.some((prefix) => ent.name.startsWith(prefix))) {
+        if (ent.isSymbolicLink()) {
+          unlinkSync(p);
+        } else {
+          // @node-llama-cpp 等是普通目录，内含 win-* junction → 整目录删除（递归删链接+空壳）
+          rmSync(p, { recursive: true, force: true });
+        }
+      }
     }
   }
   if (prunedMb > 0) {
