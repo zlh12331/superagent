@@ -60,8 +60,15 @@ extraResources:
   # 记忆引擎（TencentDB-Agent-Memory · MemoryCore 运行目录）
   # 由 scripts/prepare-memory-hub.mjs 生成；MemoryHubService 在打包环境读取
   # process.resourcesPath/memory-hub（src/gateway/server.ts + node_modules，tsx 直跑）
+  # ── 已知限制：electron-builder 的 extraResources 默认跳过名为 node_modules 的所有目录
+  #    （github electron-userland/electron-builder#3104/#3185），即使 filter "**/*" 也不生效。
+  #    因此单独加一条 from 以 node_modules 结尾的 extraResources 强制包含（参考 #1492 的解法）。
   - from: resources/memory-hub
     to: memory-hub
+    filter:
+      - "**/*"
+  - from: resources/memory-hub/node_modules
+    to: memory-hub/node_modules
     filter:
       - "**/*"
 
