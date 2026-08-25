@@ -82,6 +82,7 @@
 | `0000_baseline` | 全新库基线（全量 `IF NOT EXISTS` 建表+索引，老库幂等跳过） |
 | `0001_legacy_upgrade` | 老库（手写 schema 时代）→ 数据保真重建 5 张安全表（messages/turns/skills/cron_tasks/runtime_models）补齐 CHECK/UNIQUE |
 | `0002_sessions_last_run_status` | sessions 的 last_run_status 触发器约束（INSERT + UPDATE 校验） |
+| `0003_uniq_session_seq` | messages / turns 新增 `(session_id, seq)` UNIQUE 索引（会话内业务游标 DB 层兜底，防并发/重试写入双行；SQLite 对已有表加 UNIQUE = CREATE UNIQUE INDEX，无需重建表） |
 
 **schema 演化规范**（重要）：
 - **加列/加表/改索引**：改 `schema.ts` → `pnpm exec drizzle-kit generate`（自动生成迁移 + journal + snapshot）→ `pnpm exec drizzle-kit check` 验证。

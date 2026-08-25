@@ -44,8 +44,8 @@ pnpm audit          # audit-ci（moderate 以上门禁）
 ### 4.1 单元（Vitest）
 
 ```bash
-pnpm test:main        # vitest --root src/main（1314 用例）
-pnpm test:renderer    # vitest --root src/renderer（489）
+pnpm test:main        # vitest --root src/main（参考 ~1300+ 用例）
+pnpm test:renderer    # vitest --root src/renderer（参考 ~490）
 pnpm test:scripts     # vitest --root scripts
 pnpm test:integration # vitest --root tests/integration
 pnpm test:coverage    # 覆盖率（80% 门禁）

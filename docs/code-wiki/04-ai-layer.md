@@ -6,16 +6,17 @@
 
 ```
 ai/
- ├─ agent/          高层编排：ChatService、AgentService、Workflow/Task/Team/Branch、Hook 注册表、上下文压缩
+ ├─ agent/          高层编排：ChatService、AgentService、Workflow/Task/Team/Branch、Hook 注册表、上下文压缩、子代理、Agent 提问、工具入参修复
  ├─ agent-runtime/  回合执行原语：TurnMachine、TurnRunner、create-stream、stream-reader、并发闸、活跃会话、循环检测
  ├─ llm-client/     LlmClient 封装 + ai-provider + retry
  ├─ models/         模型注册表、运行时模型存储、generation-options、token-limits、reasoning-effort
  ├─ providers/      供应商工厂与内置定义（deepseek/openai/anthropic/ollama）
- ├─ prompt/         PromptService + dynamic-context + agents-md
- ├─ skills/         技能注册表
+ ├─ prompt/         PromptService + dynamic-context + agents-md + default-prompt
+ ├─ skills/         技能注册表（skill-registry，learned + builtin）
  ├─ mcp/            MCP 客户端与服务（见 05）
  ├─ tools/          工具系统（见 05）
- └─ knowledge/      goal-judge/goal-service、memory-service、session-title、learn-skill-agent
+ ├─ cron-service    定时任务调度服务（cron_tasks 表 + croner）
+ └─ knowledge/      goal-judge/goal-service、session-title、learn-skill-agent（记忆已迁至 memory-hub，见 07）
 ```
 
 ## 2. ChatService（基础聊天）
@@ -87,6 +88,7 @@ ai/
 - `registry.ts`：`BUILTIN_DEFINITIONS` + `BUILTIN_FACTORIES`（新增供应商 = 注册一条定义 + 一个工厂）；`registry-factory.ts` 工厂装配。
 - 路由：`getModel(kind, modelId)` → ProviderRegistry；deepseek/ollama 走 `@ai-sdk/openai-compatible`，openai 走 `@ai-sdk/openai`，anthropic 走 `@ai-sdk/anthropic`。
 - API Key 按供应商存 keychain（safeStorage）；baseURL 可 `.env` 覆盖（`*_API_BASE`）。
+- **默认供应商/模型单一真源**：`packages/shared/src/constants/defaults.ts` 定义 `DEFAULT_PROVIDER`（deepseek）与 `DEFAULT_MODEL`（deepseek-v4-flash），渲染层对话区模型选择器与主进程 `ModelRegistry.resolve(undefined)` 共用，保证"默认模型"三端一致。
 
 ## 6. Prompt 层（`prompt/`）
 
@@ -103,9 +105,9 @@ ai/
 
 `knowledge/`：
 - `goal-service.ts` + `goal-judge.ts`：会话目标（Goals）——挂载回合监听，用 LLM 判断目标是否达成（GoalJudge），迭代执行。
-- `memory-service.ts`：记忆提取/召回（`memories` 表，`save-memory` 工具写入，`memory` 域 handler 读取）。
 - `session-title.ts`：会话标题生成（llmClient side query）。
 - `learn-skill-agent.ts`：技能学习（把用户场景沉淀为可复用技能，写 `skills` 表，`skill-registry` 加载）。
+- **记忆已迁出本目录**：`save-memory.tool` / `recall-memory.tool` 经 `MemoryPort` 读写 **memory-hub sidecar**（TencentDB-Agent-Memory 引擎，见 07 记忆章节）；`agent.handler` 注入 `createMemoryCaptureWire`（`memory-hub/capture-wire.ts`）在回合结束后自动提取用户意图做记忆捕获（落 L0 JSONL + 引擎侧写入）。不再有自研 `memories` 表。
 
 ## 8. Hook 与工作流
 
@@ -114,6 +116,7 @@ ai/
 - `task-service.ts` + `branch-service.ts`：任务（tasks 表）+ 分支（git 分支管理，`git-branch` 工具）。
 - `team-service.ts`：团队协作（多 Agent）。
 - `stall-watchdog.ts`：LLM 长时间不响应（TCP 未断但无数据）的看门狗——per-part 60s 超时，推送 `AI_TIMEOUT` 错误，避免前端无限等待。
+- `repair-tool-call.ts`：工具调用入参自动修复引擎——以 llmClient 为依赖，接 AI SDK `streamText` 的 `repairToolCall` 钩子，工具入参解析失败时用 LLM 重试修复入参，并覆写 OTel 模型级 span。
 
 ## 9. 关键辅助
 

@@ -44,21 +44,37 @@
 **IM 渠道** `im/`：适配 Telegram / 钉钉 / 微信 / 企业微信 / 飞书 / QQ（各 `*-adapter` + `*-stream` / `webhook-channel`），`im-service` 管理渠道、`im-agent-bridge` 把 IM 消息路由进 Agent（无头），`im.handler` 暴露 IPC。
 **自动更新** `update/update-service.ts`：electron-updater（generic provider）+ `app-update.yml`；IPC 域 `update`（check/install/subscribeStatus）。
 
-## 8. 遥测（`telemetry/`）
+## 8. MemoryHub 记忆引擎（`memory-hub/`，sidecar）
+
+记忆能力整体基于 **上游 TencentDB-Agent-Memory 引擎**（memory-hub sidecar 子进程），不再自研记忆存储。
+
+| 文件 | 职责 |
+|---|---|
+| `memory-hub-service.ts` | `MemoryHubService`：管理 sidecar 生命周期（懒启动/停止）、HTTP 端口通信、L0 JSONL 审计镜像（`listL0BySession` / `removeL0JsonlBySession`）；`createDeferredMemoryPort(getService)` 返回注册期可用的延迟端口 |
+| `adapter.ts` | `HttpMemoryPort`：实现 `MemoryPort` 接口（capture / recall / search / clear），over HTTP 与引擎交互 |
+| `capture-wire.ts` | `createMemoryCaptureWire`：回合结束后从 AgentService 提取用户意图文本 → 引擎记忆捕获（agent.handler 注入）；`extractLastUserText` 解析消息 |
+| `llm-config.ts` | `resolveDistillLlmConfig`：蒸馏 LLM 复用应用默认供应商 + keychain（协议不兼容/未配 Key 时优雅降级） |
+| `types.ts` | `MemoryPort` / `MemoryCaptureInput` / `MemoryRecallResult` 等契约类型 |
+
+- **hubRoot 来源**：打包 → `process.resourcesPath/memory-hub`（`prepare-memory-hub.mjs` 生成运行目录，extraResources 部署）；dev → 环境变量 `MEMORY_HUB_ROOT`；未配置时 `MemoryHubService` 内部降级为空实现（记忆静默不可用，不阻断应用）。
+- **消费方**：`save_memory` / `recall_memory` 工具（经 `ToolRegistry` 注入 `MemoryPort`）、`memory` 域 IPC handler、`agent:run` 的记忆自动捕获。
+
+## 9. 遥测（`telemetry/`）
 
 | 文件 | 职责 |
 |---|---|
 | `otel.ts` | OpenTelemetry 初始化/关闭（`initTelemetry`/`shutdownTelemetry`），无 endpoint 退化为 Console |
+| `sdk-telemetry.ts` | OTel SDK 装配（resources / processor / exporter） |
 | `memory-monitor.ts` | 主进程内存监控（60s 采样、连续增长阈值告警） |
 | `event-loop-lag.ts` | 事件循环延迟检测 |
 
-## 9. 安全（`security/csp.ts`）
+## 10. 安全（`security/csp.ts`）
 
 - `buildCsp(isDev)`：返回 CSP 响应头。生产严格（禁外联）、开发宽松（允许 HMR）。
 - CSP 允许 Google Fonts（Typography）；跳过 `chrome-extension://`（见 02-§3.3）。
 - 配套：主进程索引里的权限请求拒绝、导航/新窗口白名单。
 
-## 10. 跨服务工具（`utils/`）
+## 11. 跨服务工具（`utils/`）
 
 | 文件 | 职责 |
 |---|---|
@@ -67,6 +83,6 @@
 | `emit-event.ts` | 事件发送统一封装（推送渲染层，含 webContents 销毁保护） |
 | `window-state.ts` | 窗口状态记忆（move/resize 防抖 + close 落盘） |
 
-## 11. 依赖注入要点
+## 12. 依赖注入要点
 
 这些服务大多以"模块级 `getXxxService()` 单例 + 容器 `setXxxService()` 注入"方式对外。容器定义的安全顺序（见 `service-container.ts`）：`file`/`search`/`terminal`/`git`/`session` 等被工具系统与 AI 层依赖，因此 `getToolRegistry()` 首访时必须先 `getFileService()`/`getSearchService()`。dispose 时这些服务在工具/权限/AI 之后清理。

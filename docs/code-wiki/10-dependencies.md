@@ -29,18 +29,19 @@ main/infra 服务  ──不反向依赖 ipc──
                     ┌──► FileService ────────────────┐
                     ├──► SearchService ──────────────┤
                     ├──► TerminalService ────────────┤
-ToolRegistry ───────┤──► GitService ─────────────────┼──► 内置工具注册
-   │                ├──► MemoryService ─────────────┤
+ToolRegistry ───────┤──► GitService ─────────────────┼──► 内置工具注册（32 个）
+   │                ├──► MemoryPort（memory-hub）────┤
    │                ├──► LspManager ────────────────┤
    │                ├──► agentAskService ───────────┤
    │                └──► PermissionService ◄─────────┤
    │
 ToolExecutor ──► ToolRegistry + PermissionService
-AgentService ◄─ ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient + ConcurrencyGate + PermissionService
+AgentService ◄─ ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient（标题 + repairToolCall 修复）+ ConcurrencyGate + PermissionService + MemoryPort（自动记忆捕获）
 ChatService  ◄─ SessionService + llmClient + ConcurrencyGate
 MCPService   ◄─ ToolRegistry
 GoalService  ◄─ AgentService + GoalJudge(llmClient)
 ImService / ImAgentBridge ◄─ AgentService + PermissionService + SessionService
+MemoryHubService（懒启动 sidecar）◄─ 工具（MemoryPort）+ memory 域 handler + 记忆自动捕获
 PromptService、MemoryService、LspManager、UpdateService、CodebaseService、SessionService、GitService 等 ◄─ 惰性加载
 ```
 
@@ -72,11 +73,13 @@ Agent-Service ──► ToolRegistry.toAISDKTools(executeHook=ToolExecutor.execu
 | grep / glob | SearchService（ripgrep） |
 | terminal / run_command | TerminalService + CommandClassifier + dangerous-commands + DenialTracking |
 | git_commit/add/push | GitService + PermissionService |
-| lsp_definition / lsp_references | LspManager |
-| task_* / cron_* | SessionService(tasks/cron_tasks) + croner |
+| lsp_definition / lsp_references / lsp_hover | LspManager |
+| task_* / cron_* | SessionService(tasks/cron_tasks) + croner + cron-service |
+| run_workflow | WorkflowService（module 级单例） |
 | run_subagent / run_team | SubagentManager + AgentService |
 | ask_user_question | AgentAskService |
-| load_skill / save_memory | SkillRegistry / MemoryService |
+| load_skill | SkillRegistry |
+| save_memory / recall_memory | MemoryPort（memory-hub sidecar） |
 | MCP 工具（动态） | MCPService + ToolRegistry 注册 |
 
 ## 6. IPC 域 → 服务映射（`src/main/index.ts` registerIpcHandlers）
@@ -91,7 +94,7 @@ Agent-Service ──► ToolRegistry.toAISDKTools(executeHook=ToolExecutor.execu
 | tool | ToolRegistry |
 | settings | PermissionService（审批/API Key/运行时模型） + SessionService(app_settings) + keychain + telegram/sentry prefs |
 | mcp | MCPService + ToolRegistry |
-| goal / memory | GoalService / MemoryService |
+| goal / memory | GoalService / MemoryHubService（memory-hub sidecar，经 memory 域 handler） |
 | im | ImService |
 | update | UpdateService |
 | system / logs / devtools / dialog / app | 系统级 handler |

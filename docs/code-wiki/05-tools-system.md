@@ -10,7 +10,7 @@ Tool<TInput> 接口（tool.ts）
   ├─ ToolExecutor     统一执行入口：权限决策 + 审批 + 事件推送（tool-executor.ts）
   │    └─ PermissionService  审批/拒绝/白名单/记忆决策（permission-service.ts）
   ├─ 上下文             ToolContext（tool.ts）：workingDir/sessionId/messageId/callId/abortSignal/webContents/metadata/mode/userPrompt
-  └─ registerBuiltinTools  内置工具注册（index.ts）→ 29 个 + MCP 适配工具
+  └─ registerBuiltinTools  内置工具注册（index.ts）→ 32 个 + MCP 适配工具
 ```
 
 ## 2. 核心抽象 `tool.ts`
@@ -74,31 +74,31 @@ interface Tool<TInput> {
 - `git-commit.tool.ts` / `git-add.tool.ts` / `git-push.tool.ts`
 
 **代码智能 / LSP**：
-- `lsp-definition.tool.ts` / `lsp-references.tool.ts`（LSP 定位/引用）
+- `lsp-definition.tool.ts` / `lsp-references.tool.ts` / `lsp-hover.tool.ts`（LSP 定位/引用/悬停）
 - 其余 codebase 查询经 `codebase` 域 handler
 
-**网络 / Web**：
+**网络 / 代码评审 / 模式**：
 - `web-fetch.tool.ts`（web_fetch）
+- `code-review.tool.ts`（code_review）
+- `plan-mode.tools.ts`（enter_plan_mode / exit_plan_mode，plan 模式下写工具拒绝）
 
-**任务 / 定时**：
+**任务 / 定时 / 工作流**：
 - `task-create/list/update/stop.tool.ts`（tasks 表）
-- `cron-create/delete/list.tool.ts`（croner + cron_tasks 表）
+- `cron-create/delete/list.tool.ts`（croner + cron_tasks 表，配合 `cron-service.ts`）
+- `run-workflow.tool.ts`（run_workflow，多步工作流编排，依赖 module 级 WorkflowService 单例）
 
 **协作 / 子代理**：
-- `run-subagent.tool.ts`（子代理）、`run-team.tool.ts`（团队）
+- `run-subagent.tool.ts`（子代理）、`run-team.tool.ts`（团队，依赖 SubagentManager）
 - `ask-user-question.tool.ts`（agentAskService）
 
 **技能 / 记忆**：
-- `load-skill.tool.ts`（加载技能）
-- `save-memory.tool.ts`（记忆写入）
-
-**代码评审 / 计划**：
-- `code-review.tool.ts`、`plan-mode.tools.ts`
-- `lsp-tools` 测试见 `lsp-tools.test.ts`
+- `load-skill.tool.ts`（加载技能，只读自动放行）
+- `save-memory.tool.ts`（记忆主动写入，经 MemoryPort）
+- `recall-memory.tool.ts`（记忆按需检索，只读；L0/L1 不进 prompt，模型主动查询）
 
 **错误分类**：`error-classifier.ts`（工具错误 → ErrorCode）。
 
-> 完整注册清单见 `tools/index.ts` 的 `registerBuiltinTools(registry, fileService, searchService, terminalService, gitService, memoryService, lspManager, agentAskService, permissionService)` —— 工具工厂依赖这些服务注入。
+> 完整注册清单见 `tools/index.ts` 的 `registerBuiltinTools(registry, fileService, searchService, terminalService, gitService, memoryPort, lspManager, askService, permissionService)` —— 工具工厂依赖这些服务注入（memoryPort 为 memory-hub 的 `MemoryPort`，见 07 记忆章节）。
 
 ## 7. MCP 集成（`mcp/`）
 

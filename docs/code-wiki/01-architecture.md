@@ -16,7 +16,7 @@
                                │ ipcRenderer.invoke / on
 ┌──────────────────────────────┴───────────────────────────────┐
 │ Main（Node.js）                                               │
-│   ServiceContainer ── 18+ 服务（延迟初始化 + 反向依赖 dispose）│
+│   ServiceContainer ── 20+ 服务（延迟初始化 + 反向依赖 dispose）│
 │   Chat / Agent / File / Search / Terminal / Git / Codebase    │
 │   Session / Tool(Runtime+Executor) / MCP / Permission / Prompt │
 │   LSP / Memory / Goal / IM / Update / Telemetry(OTel+Sentry)  │
@@ -60,6 +60,7 @@ src/main/          主进程（service-container + infra 服务 + ipc handlers�
   infra/git/       简单 Git 操作封装
   infra/im/        即时通讯渠道适配器（Telegram/钉钉/微信/企微/飞书/QQ）
   infra/lsp/       LSP 客户端 + 语言服务器管理器
+  infra/memory-hub/ 记忆引擎 sidecar（上游 TencentDB-Agent-Memory，MemoryPort/capture-wire）
   infra/remote/    远程控制
   infra/search/    ripgrep 搜索（grep/glob）
   infra/storage/   SQLite + Drizzle + keychain + 偏好持久化

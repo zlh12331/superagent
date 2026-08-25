@@ -16,11 +16,12 @@ whenReady
  ├─ promptService.initialize()  幂等插入默认 Code Agent prompt（onConflictDoNothing）
  ├─ registerGlobalErrorHandlers()
  ├─ recoverFromCrash()     上次异常退出 → 残留 running 会话标 interrupted + 清崩溃标记
+ ├─ pruneExpiredUsage()    清理 90 天窗口外的 token_usage（与用量页查询窗口对齐）
  ├─ initRuntimeModels()    自定义模型注册到 ModelRegistry（LLM 调用前）
- ├─ skillRegistry.loadFromRows(learnSkillService.listLearned())  已学技能合并
- ├─ serviceContainer.initImChannels()  已配置 IM 渠道自动连接
+ ├─ skillRegistry.loadFromRows(new LearnSkillService(llmClient).listLearned())  已学技能合并
+ ├─ serviceContainer.initImChannels()  已配置 IM 渠道自动连接（含 IM→Agent 桥接挂载）
  ├─ serviceContainer.initSubagents()   run_subagent 工具依赖
- ├─ registerIpcHandlers({...18 域 handler})   定义表驱动，缺失编译期报错
+ ├─ registerIpcHandlers({...25 域 handler})   定义表驱动，缺失编译期报错
  ├─ updateService.start()  注册 autoUpdater 事件
  ├─ 注入 CSP 响应头（buildCsp）+ 权限请求拒绝
  ├─ startMemoryMonitor()   主进程内存泄漏哨兵
@@ -63,14 +64,16 @@ serviceContainer.setChatService(mock | null);          // 仅测试用注入
 | getter | 初始化依赖 | 备注 |
 |---|---|---|
 | `getChatService()` | SessionService + llmClient + concurrencyGate | 全局并发公平调度门（chat+agent 共用 FIFO 槽位，防 429） |
-| `getAgentService()` | ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient + gate + PermissionService | 通过 `ToolRegistry.toAISDKTools` 注入 `executeHook`（=ToolExecutor.execute） |
-| `getToolRegistry()` | FileService + SearchService + TerminalService + GitService + MemoryService + LspManager + agentAskService + PermissionService | 首次访问注册 29 个内置工具 |
+| `getAgentService()` | ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient（标题生成 + repairToolCall 工具入参修复）+ gate + PermissionService | 通过 `ToolRegistry.toAISDKTools` 注入 `executeHook`（=ToolExecutor.execute） |
+| `getToolRegistry()` | FileService + SearchService + TerminalService + GitService + MemoryPort（memory-hub）+ LspManager + agentAskService + PermissionService | 首次访问注册 32 个内置工具 |
 | `getPermissionService()` | CommandClassifier(llmClient) + 启动时 `readApprovalModeSync()` | 控制写操作审批 |
 | `getMcpService()` | ToolRegistry | stopAll 关闭 MCP server 子进程 |
+| `getMemoryPort()` | MemoryHubService（懒启动 sidecar） | save_memory / recall_memory 工具注册期即可用，首次调用启动引擎 |
+| `getMemoryHubService()` | memory-hub sidecar（上游 TencentDB-Agent-Memory） | 未配置 hubRoot 时内部降级为空实现（记忆静默不可用） |
 | `getCodebaseService()/getFileService()/...` | 各自模块单例 | 惰性包装 |
 | `getGoalService()` | AgentService + GoalJudge(llmClient) | mount 回合监听 |
 | `getImService()` | AgentService + PermissionService + SessionService（经 ImAgentBridge） | mount IM→Agent 桥 |
-| `getLspManager()` | 首次工具调用才创建 | 懒加载 |
+| `getLspManager()` | 首次工具调用才创建（读 app_settings `lsp.serverCommands` 覆盖） | 懒加载 |
 
 ### 2.3 dispose() 顺序（反向依赖，每步 try/catch 隔离）
 
@@ -79,8 +82,11 @@ lspManager.disposeAll → chatService.dispose → agentService.dispose
 → mcpService.stopAll → goalService.unmount → imBridge.unmount → imService.stopAll
 → permissionService.dispose → agentAskService.dispose → fileService.dispose
 → searchService.dispose → terminalService.dispose → gitService / codebaseService / sessionService.dispose
-→ prompt/memory/updateService 清引用 → resetAIProvider → closeDb（最后）
+→ promptService 清引用 → memoryHub.stop（sidecar 子进程）→ updateService.dispose
+→ resetAIProvider → closeDb（最后）
 ```
+
+当前共约 20 步（2026-08-25 实测 service-container.ts `dispose()`）：
 
 - `runStep` 独立 try/catch：单步失败不跳过后续，`failures[]` 汇总记录。
 - `ChatService.dispose()` 等待活跃 stream 真正进入 finally（3s 超时兜底），避免 IPC send 丢失/渲染层 loading 卡死。
