@@ -196,4 +196,40 @@ describe('HttpMemoryPort', () => {
       expect(url).toBe('http://127.0.0.1:43210/recall');
     });
   });
+
+  describe('clear', () => {
+    it('POST /v2/conversation/delete：session_ids 快照 + 解析 envelope.deleted_count', async () => {
+      mocks.fetch.mockResolvedValueOnce(
+        // biome-ignore lint/style/useNamingConvention: 上游 v2 envelope 协议字段（snake_case）
+        respond(200, { code: 0, message: 'ok', request_id: 'r1', data: { deleted_count: 3 } }),
+      );
+      const result = await createPort().clear('sess-1');
+      expect(result).toEqual({ ok: true, deletedCount: 3 });
+      const [url, init] = mocks.fetch.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe('http://127.0.0.1:43210/v2/conversation/delete');
+      expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer test-api-key');
+      expect(JSON.parse(String(init.body))).toEqual({
+        // biome-ignore lint/style/useNamingConvention: 上游 gateway 协议字段（snake_case）
+        session_ids: ['sess-1'],
+      });
+    });
+
+    it('envelope code !== 0 → ok=false + message', async () => {
+      mocks.fetch.mockResolvedValueOnce(respond(200, { code: 404, message: '会话不存在' }));
+      const result = await createPort().clear('sess-x');
+      expect(result).toEqual({ ok: false, deletedCount: 0, message: '会话不存在' });
+    });
+
+    it('deleted_count 缺失 → ok=true 且 deletedCount=0（idempotent）', async () => {
+      mocks.fetch.mockResolvedValueOnce(respond(200, { code: 0, data: {} }));
+      const result = await createPort().clear('sess-0');
+      expect(result).toEqual({ ok: true, deletedCount: 0 });
+    });
+
+    it('网络异常 → ok=false + 异常信息（不抛错）', async () => {
+      mocks.fetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+      const result = await createPort().clear('sess-1');
+      expect(result).toEqual({ ok: false, deletedCount: 0, message: 'ECONNREFUSED' });
+    });
+  });
 });

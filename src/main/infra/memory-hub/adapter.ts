@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger';
 import type {
   MemoryCaptureInput,
   MemoryCaptureResult,
+  MemoryClearResult,
   MemoryConversationSearchResult,
   MemoryPort,
   MemoryRecallInput,
@@ -160,6 +161,39 @@ export class HttpMemoryPort implements MemoryPort {
         '[memory-hub] searchConversations 失败',
       );
       return { content: '', total: 0 };
+    }
+  }
+
+  async clear(sessionKey: string): Promise<MemoryClearResult> {
+    try {
+      // 上游 v2 envelope：成功 { code:0, message:'ok', data:{ deleted_count } }
+      // 删除映射 l0_conversations.session_key = sessionId（capture 写入的字段）
+      // 注意：不传 message_ids（空数组会触发 zod .min(1) 校验失败 → 400）
+      const data = (await this.requestJson('POST', '/v2/conversation/delete', {
+        // biome-ignore lint/style/useNamingConvention: 上游 gateway 协议字段（snake_case）
+        session_ids: [sessionKey],
+      })) as {
+        code?: number;
+        message?: string;
+        data?: {
+          // biome-ignore lint/style/useNamingConvention: 上游 v2 envelope 协议字段（snake_case）
+          deleted_count?: number;
+        };
+      };
+      if (typeof data.code === 'number' && data.code !== 0) {
+        return {
+          ok: false,
+          deletedCount: 0,
+          message: data.message ?? `code=${data.code}`,
+        };
+      }
+      const deletedCount =
+        typeof data.data?.deleted_count === 'number' ? data.data.deleted_count : 0;
+      return { ok: true, deletedCount };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn({ error: message, sessionKey }, '[memory-hub] clear 失败（返回 ok=false）');
+      return { ok: false, deletedCount: 0, message };
     }
   }
 

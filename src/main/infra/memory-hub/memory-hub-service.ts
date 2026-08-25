@@ -15,7 +15,15 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 
@@ -80,6 +88,9 @@ class UnavailableMemoryPort implements MemoryPort {
   async searchConversations(): Promise<{ content: string; total: number }> {
     return { content: '', total: 0 };
   }
+  async clear(): Promise<{ ok: boolean; deletedCount: number; message?: string }> {
+    return { ok: false, deletedCount: 0, message: 'memory-hub not configured' };
+  }
 }
 
 /**
@@ -95,6 +106,7 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
     searchMemories: (query, limit) => via((p) => p.searchMemories(query, limit)),
     searchConversations: (query, limit, sessionKey) =>
       via((p) => p.searchConversations(query, limit, sessionKey)),
+    clear: (sessionKey) => via((p) => p.clear(sessionKey)),
   };
 }
 
@@ -158,6 +170,71 @@ export class MemoryHubService {
     }
     records.sort((a, b) => a.timestamp - b.timestamp);
     return records.slice(-limit);
+  }
+
+  /**
+   * 从 JSONL 审计镜像中移除指定会话的行（与引擎 SQLite 删除保持同步）。
+   *
+   * 背景：上游 standalone 模式下 L0 同时落两份——
+   * - SQLite l0_conversations（引擎权威，/v2/conversation/delete 可删）
+   * - <dataDir>/conversations/<date>.jsonl（可 grep 的审计日志，append-only）
+   * memory:list 面板读 JSONL 展示，若只删 SQLite，UI 会残留旧条目造成"假清空"。
+   * 本方法配合 clear 让 UI 列表与引擎存储一致（原子写：临时文件 + rename）。
+   *
+   * @returns 移除的行数
+   */
+  removeL0JsonlBySession(sessionKey: string): number {
+    const dir = join(this.options.dataDir, 'data', 'conversations');
+    if (!existsSync(dir) || sessionKey.trim().length === 0) {
+      return 0;
+    }
+    let removed = 0;
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.jsonl')) continue;
+      const filePath = join(dir, file);
+      let lines: string[];
+      try {
+        lines = readFileSync(filePath, 'utf8').split(/\r?\n/);
+      } catch {
+        continue; // 文件读取失败（占用/权限）跳过
+      }
+      const kept: string[] = [];
+      for (const raw of lines) {
+        if (raw.trim().length === 0) continue;
+        try {
+          const rec = JSON.parse(raw) as {
+            sessionKey?: unknown;
+            // biome-ignore lint/style/useNamingConvention: 上游 JSONL 镜像字段（snake_case）
+            session_id?: unknown;
+          };
+          // 索引访问绕过属性命名规则（字段来自上游数据，非本地 API）
+          if (rec.sessionKey === sessionKey || rec['session_id'] === sessionKey) {
+            removed += 1;
+            continue; // 丢弃该会话的行
+          }
+          kept.push(raw);
+        } catch {
+          kept.push(raw); // 损坏行保留（不因清理误伤）
+        }
+      }
+      const keptText = kept.length > 0 ? `${kept.join('\n')}\n` : '';
+      const tmpPath = `${filePath}.tmp`;
+      try {
+        writeFileSync(tmpPath, keptText, 'utf8');
+        renameSync(tmpPath, filePath);
+      } catch (error) {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error), file },
+          '[memory-hub] JSONL 清理写回失败（保留原文件）',
+        );
+        try {
+          unlinkSync(tmpPath);
+        } catch {
+          // tmp 清理失败不阻断
+        }
+      }
+    }
+    return removed;
   }
 
   /**

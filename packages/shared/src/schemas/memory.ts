@@ -48,9 +48,12 @@ export const MemoryClearReqSchema = z.object({
 /** memory:clear 响应 payload */
 export interface MemoryClearRes {
   readonly ok: boolean;
+  /** 实际删除的 L0 条数（上游无该能力/失败时省略或为 0） */
+  readonly deletedCount?: number;
 }
 
 /** memory:clear 响应 zod schema（R3：响应契约校验） */
 export const MemoryClearResSchema = z.object({
   ok: z.boolean(),
+  deletedCount: z.number().int().optional(),
 });

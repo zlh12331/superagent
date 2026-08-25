@@ -429,6 +429,30 @@ app
       memory: createMemoryHandlers({
         listL0BySession: (sessionKey, limit) =>
           serviceContainer.getMemoryHubService().listL0BySession(sessionKey, limit),
+        clearBySession: async (sessionKey) => {
+          try {
+            const service = serviceContainer.getMemoryHubService();
+            const port = await service.ensureStarted();
+            const res = await port.clear(sessionKey);
+            // 引擎 SQLite 是权威存储；JSONL 为 UI 列表数据源（审计镜像），
+            // 同步清理该会话的行，保证清除后列表中不再残留（杜绝"假清空"）
+            const jsonlRemoved = service.removeL0JsonlBySession(sessionKey);
+            if (res.ok && jsonlRemoved > 0) {
+              logger.info(
+                { sessionKey, jsonlRemoved },
+                '记忆清除完成（含 JSONL 审计镜像同步清理）',
+              );
+            }
+            return res;
+          } catch (error) {
+            // 引擎未配置/启动失败 → 降级 ok=false（不抛给 IPC，前端走失败 toast）
+            return {
+              ok: false,
+              deletedCount: 0,
+              message: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
       }),
       models: modelsHandlers,
       mcp: createMcpHandlers(serviceContainer.getMcpService(), serviceContainer.getToolRegistry()),

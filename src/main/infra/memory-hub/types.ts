@@ -61,6 +61,16 @@ export interface MemoryConversationSearchResult {
   readonly total: number;
 }
 
+/** clear 结果（按会话删除 L0 对话记录） */
+export interface MemoryClearResult {
+  /** 是否成功（false 时 deletedCount 恒为 0；message 附失败原因） */
+  readonly ok: boolean;
+  /** 实际删除的 L0 条数 */
+  readonly deletedCount: number;
+  /** 失败说明（ok=true 时省略） */
+  readonly message?: string;
+}
+
 /**
  * 记忆引擎端口（唯一边界接口）
  *
@@ -82,4 +92,6 @@ export interface MemoryPort {
     limit?: number,
     sessionKey?: string,
   ): Promise<MemoryConversationSearchResult>;
+  /** 按会话删除 L0 对话记录（上游 /v2/conversation/delete）；失败不抛错，返回 ok=false */
+  clear(sessionKey: string): Promise<MemoryClearResult>;
 }

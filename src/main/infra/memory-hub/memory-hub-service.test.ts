@@ -5,7 +5,7 @@
 // （需 MEMORY_HUB_ROOT，CI 自动跳过）。本文件覆盖无需子进程的纯逻辑与降级语义。
 // ──────────────────────────────────────────────────────────────
 
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -158,6 +158,62 @@ describe('MemoryHubService.listL0BySession', () => {
   });
 });
 
+describe('MemoryHubService.removeL0JsonlBySession', () => {
+  function createDataDir(linesByFile: Record<string, string>): string {
+    const root = mkdtempSync(join(tmpdir(), 'memory-hub-clear-'));
+    const convDir = join(root, 'data', 'conversations');
+    mkdirSync(convDir, { recursive: true });
+    for (const [file, content] of Object.entries(linesByFile)) {
+      writeFileSync(join(convDir, file), content, 'utf8');
+    }
+    return root;
+  }
+
+  function createService(dataDir: string): MemoryHubService {
+    return new MemoryHubService({ hubRoot: undefined, dataDir });
+  }
+
+  it('仅移除目标会话行，保留其他会话与损坏行（原子重写）', () => {
+    const dir = createDataDir({
+      '2026-08-24.jsonl': [
+        JSON.stringify({ sessionKey: 'sess-1', role: 'user', content: '要删', timestamp: 1 }),
+        JSON.stringify({ sessionKey: 'sess-2', role: 'user', content: '保留', timestamp: 2 }),
+        'not-json{broken',
+      ].join('\n'),
+    });
+    const service = createService(dir);
+    const removed = service.removeL0JsonlBySession('sess-1');
+    expect(removed).toBe(1);
+
+    // 其余数据完好（其他会话 + 损坏行不误伤）
+    const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    expect(remaining).toHaveLength(2);
+    expect(remaining.join('\n')).toContain('sess-2');
+    expect(remaining.join('\n')).toContain('not-json{broken');
+  });
+
+  it('跨多文件清理（sessionKey 或 session_id 命中即删）', () => {
+    const dir = createDataDir({
+      '2026-08-23.jsonl': JSON.stringify({ sessionKey: 'sess-1', content: '昨天' }),
+      // biome-ignore lint/style/useNamingConvention: 模拟上游 JSONL 镜像字段（snake_case）
+      '2026-08-24.jsonl': JSON.stringify({ session_id: 'sess-1', content: '旧格式' }),
+    });
+    const service = createService(dir);
+    const removed = service.removeL0JsonlBySession('sess-1');
+    expect(removed).toBe(2);
+  });
+
+  it('空 sessionKey / 目录不存在 → 0（不抛错）', () => {
+    const dir = createDataDir({ '2026-08-24.jsonl': 'x\n' });
+    const service = createService(dir);
+    expect(service.removeL0JsonlBySession('   ')).toBe(0);
+    const empty = createService(join(tmpdir(), 'memory-hub-no-such-clear'));
+    expect(empty.removeL0JsonlBySession('sess-1')).toBe(0);
+  });
+});
+
 describe('createDeferredMemoryPort', () => {
   const fakePort: MemoryPort = {
     health: vi.fn(async () => true),
@@ -165,6 +221,7 @@ describe('createDeferredMemoryPort', () => {
     recall: vi.fn(async () => ({ ok: true, context: 'c', memoryCount: 1 })),
     searchMemories: vi.fn(async () => ({ content: 'c', total: 1 })),
     searchConversations: vi.fn(async () => ({ content: 'c', total: 1 })),
+    clear: vi.fn(async () => ({ ok: true, deletedCount: 2 })),
   };
 
   function createDeferred() {
