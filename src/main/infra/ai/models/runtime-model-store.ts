@@ -176,10 +176,17 @@ export class RuntimeModelStore {
       throw new AppError(ErrorCode.NOT_FOUND, undefined, undefined, { modelId: input.modelId });
     }
     // 仅当有落库字段时执行 UPDATE（仅 apiKey 时 set 空对象会被 drizzle 拒绝）
-    const dbSet = {
+    // isEnabled 落库为 0/1（与 schema 的 $type<0 | 1> 对齐）
+    const dbSet: {
+      displayName?: string;
+      baseUrl?: string;
+      isEnabled?: 0 | 1;
+    } = {
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-      ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled ? 1 : 0 } : {}),
+      ...(input.isEnabled !== undefined
+        ? { isEnabled: input.isEnabled ? (1 as const) : (0 as const) }
+        : {}),
     };
     if (Object.keys(dbSet).length > 0) {
       db.update(runtimeModels).set(dbSet).where(eq(runtimeModels.modelId, input.modelId)).run();

@@ -10,20 +10,12 @@
 // 唯一隔离：getDb 指向内存 DB（与单测同模式的环境注入，非业务 mock）。
 // ──────────────────────────────────────────────────────────────
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { schema } from '../../src/main/infra/storage/schema';
-import { SCHEMA_SQL } from '../../src/main/infra/storage/schema-sql';
+import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
 // 内存 DB 注入（环境隔离：测试不使用真实 userData 文件）
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {

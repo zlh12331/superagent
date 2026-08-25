@@ -45,6 +45,7 @@ import { logger } from '../../utils/logger';
 import { getDb } from './db';
 import {
   type MessageInsert,
+  type MessageRole,
   messages,
   type SessionInsert,
   sessions,
@@ -989,14 +990,9 @@ function findLastUserText(messageList: readonly ChatMessage[]): string | null {
   return null;
 }
 
-/**
- * 从 ChatMessage 提取角色字符串（存入 messages.role 列）
- *
- * ModelMessage 的 role 字段是联合类型 'user' | 'assistant' | 'system' | 'tool'，
- * 直接存储便于按角色过滤查询。
- */
-function extractRole(msg: ChatMessage): string {
-  return msg.role;
+/** 从 ChatMessage 提取角色（与 messages.role 列的 $type<MessageRole> 对齐） */
+function extractRole(msg: ChatMessage): MessageRole {
+  return msg.role as MessageRole;
 }
 
 /**

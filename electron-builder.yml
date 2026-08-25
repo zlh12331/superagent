@@ -57,6 +57,13 @@ extraResources:
     to: icons
     filter:
       - "**/*"
+  # drizzle 迁移文件（schema.ts 单一真源的运行时迁移产物）
+  # 由 drizzle-kit generate 生成；db.ts initDb 在打包环境读取
+  # process.resourcesPath/drizzle（dev 环境读项目根 drizzle/）
+  - from: drizzle
+    to: drizzle
+    filter:
+      - "**/*"
   # 记忆引擎（TencentDB-Agent-Memory · MemoryCore 运行目录）
   # 由 scripts/prepare-memory-hub.mjs 生成；MemoryHubService 在打包环境读取
   # process.resourcesPath/memory-hub（src/gateway/server.ts + node_modules，tsx 直跑）

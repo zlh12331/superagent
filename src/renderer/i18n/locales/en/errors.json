@@ -23,6 +23,7 @@
       "INTERNAL_ERROR": "Internal error",
       "INVALID_INPUT": "Invalid input",
       "INVALID_RESPONSE": "Invalid response data",
+      "MODEL_DISABLED": "This model is disabled. Enable it in Settings first",
       "IPC_CHANNEL_NOT_FOUND": "IPC channel not found",
       "IPC_SENDER_INVALID": "Invalid IPC sender",
       "NOT_FOUND": "Resource not found",

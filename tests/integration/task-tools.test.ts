@@ -1,25 +1,17 @@
 // src/main/infra/ai/tools/task-tools.test.ts
 // 任务工具单测：task_create / task_update / task_list 真实执行（内存 DB）
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTaskCreateTool } from '../../src/main/infra/ai/tools/task-create.tool';
 import { createTaskListTool } from '../../src/main/infra/ai/tools/task-list.tool';
 import { createTaskUpdateTool } from '../../src/main/infra/ai/tools/task-update.tool';
 import type { ToolContext } from '../../src/main/infra/ai/tools/tool';
-import { schema } from '../../src/main/infra/storage/schema';
-import { SCHEMA_SQL } from '../../src/main/infra/storage/schema-sql';
 import { SessionService } from '../../src/main/infra/storage/session-service';
+import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// mock getDb：内存数据库（建表 SQL 单一真源）
+// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {

@@ -1,19 +1,11 @@
 // src/main/infra/ai/subagent-manager.test.ts
 // 子代理管理器单测：内置代理列表/委派执行/结果收集/会话过滤
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { schema } from '../../src/main/infra/storage/schema';
-import { SCHEMA_SQL } from '../../src/main/infra/storage/schema-sql';
+import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {

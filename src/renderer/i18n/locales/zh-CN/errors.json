@@ -23,6 +23,7 @@
       "INTERNAL_ERROR": "内部错误",
       "INVALID_INPUT": "输入参数有误",
       "INVALID_RESPONSE": "响应数据不符合约定",
+      "MODEL_DISABLED": "该模型已被停用，请在设置中启用后再使用",
       "IPC_CHANNEL_NOT_FOUND": "IPC 通道不存在",
       "IPC_SENDER_INVALID": "IPC 调用来源无效",
       "NOT_FOUND": "资源不存在",

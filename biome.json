@@ -14,6 +14,7 @@
       "!**/node_modules",
       "!**/out",
       "!**/dist",
+      "!**/drizzle",
       "!**/.codegraph",
       "!**/playwright-report",
       "!**/playwright-report-electron",

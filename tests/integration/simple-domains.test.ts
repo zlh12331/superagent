@@ -10,16 +10,11 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PermissionService } from '../../src/main/infra/ai/tools/permission-service';
 import { ToolRegistry } from '../../src/main/infra/ai/tools/tool-registry';
-import {
-  getSessionService,
-  resetSessionService,
-} from '../../src/main/infra/storage/session-service';
+import { resetSessionService } from '../../src/main/infra/storage/session-service';
 import { appHandlers } from '../../src/main/ipc/app.handler';
 import { dialogHandlers } from '../../src/main/ipc/dialog.handler';
 import { modelsHandlers } from '../../src/main/ipc/models.handler';
-import { createSettingsHandlers } from '../../src/main/ipc/settings.handler';
 import { logsHandlers, systemHandlers } from '../../src/main/ipc/system.handler';
 import { createToolHandlers } from '../../src/main/ipc/tool.handler';
 import { withTempUserData } from './helpers/with-db';
@@ -112,18 +107,21 @@ describe('简单域聚合（batch 8）', () => {
     });
   });
 
-  it('models：list 返回配置的模型（内置需 API Key）', async () => {
+  it('models：listBuiltin 返回厂商内置模型（配置页数据源，无需 API Key）', async () => {
     resetSessionService();
     await withTempUserData(async () => {
-      const settings = createSettingsHandlers({
-        sessionService: getSessionService(),
-        permissionService: new PermissionService(),
-      });
-      // 配置 API Key 后内置模型可见（真实 keychain 链路）
-      await settings.setApiKey({ provider: 'deepseek', apiKey: 'sk-test' });
-      const res = await modelsHandlers.list();
-      expect(res.models.length).toBeGreaterThan(0);
+      // 配置页数据源：未配置 key 也能看到厂商全部官方模型（供"待添加"选择）
+      const res = await modelsHandlers.listBuiltin({});
       expect(res.models.some((m) => m.providerKind === 'deepseek')).toBe(true);
+      expect(res.models.some((m) => m.isRuntime)).toBe(false);
+    });
+  });
+
+  it('models：list 未配置运行时模型时返回空（只列用户添加的模型）', async () => {
+    resetSessionService();
+    await withTempUserData(async () => {
+      const res = await modelsHandlers.list();
+      expect(res.models).toEqual([]);
     });
   });
 

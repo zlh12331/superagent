@@ -19,24 +19,13 @@ vi.mock('electron', () => ({
   },
 }));
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { resetDb } from './db';
-import { schema } from './schema';
-import { SCHEMA_SQL } from './schema-sql';
 import { SessionService } from './session-service';
+import { createTestDb } from './test-utils';
 
 /** 创建内存数据库 + drizzle 实例（绕过 app.getPath） */
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-
-  // 建表 SQL 单一真源（schema-sql.ts），与生产 db.ts 共用，杜绝双源真相
-  sqlite.exec(SCHEMA_SQL);
-
-  return { db, sqlite };
+  return createTestDb();
 }
 
 // mock getDb 返回内存数据库

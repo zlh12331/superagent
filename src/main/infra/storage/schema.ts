@@ -1,22 +1,50 @@
 // src/main/infra/storage/schema.ts
-// Drizzle ORM Schema：会话持久化表结构定义
+// Drizzle ORM Schema：SQLite 持久化表结构定义（全库唯一真源）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 定义 sessions / messages 两张表的列结构
+// - 定义全部 11 张表的列结构 + 领域约束（CHECK / UNIQUE / 外键）
 // - 作为 drizzle-orm 类型推导的单一真源（无需手写 TypeScript 类型）
+// - DDL 与迁移由 drizzle-kit 从本文件自动派生（schema-sql.ts / migrations.ts 已退役）
 //
-// 表设计：
-// - sessions：会话元数据（id / title / createdAt / updatedAt / lastMessage / messageCount）
-// - messages：消息历史（id / sessionId / seq / role / content / createdAt）
-//   - seq 是消息序号（从 0 递增），用于排序与范围查询
-//   - content 是 JSON 字符串（完整 ModelMessage 序列化）
+// 表清单（11 张）：
+// - sessions：会话元数据
+// - messages：消息历史
+// - prompts：System Prompt 模板
+// - token_usage：LLM token 用量
+// - turns：Agent 回合记录（Transcript）
+// - runtime_models：运行时模型配置快照
+// - goals：会话目标跟踪
+// - tasks：任务状态机持久化
+// - cron_tasks：定时任务
+// - skills：学习到的技能
+// - app_settings：渲染层用户设置（key-value）
 //
-// 索引：
-// - sessions.updatedAt DESC：list 接口按 updatedAt 倒序
-// - messages.sessionId + seq：get 接口按 sessionId 过滤、seq 升序
+// 约束策略（2026-08-24 数据设计收敛）：
+// - 稳定枚举 → DB CHECK 约束（一劳永逸，几乎不变）
+// - 演进枚举 → TS 联合类型（$type<>），DB 不建 CHECK（SQLite 改 CHECK 需重建表）
+// - 唯一性 → UNIQUE 约束（防重复写入）
+// - 归属关系 → 外键 + ON DELETE CASCADE（防孤儿行）
 // ──────────────────────────────────────────────────────────────
 
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { check, index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+
+// ── 领域枚举（单一真源：storage 层定义，ai 层需要时从此导入，避免重复定义）──
+
+/** 消息角色（稳定枚举 → DB CHECK 兜底） */
+export type MessageRole = 'user' | 'assistant' | 'tool' | 'system';
+/** 会话最近运行状态（稳定枚举 → DB CHECK 兜底） */
+export type RunStatus = 'idle' | 'running' | 'interrupted';
+/** 技能来源（稳定枚举 → DB CHECK 兜底） */
+export type SkillSource = 'learned' | 'builtin';
+/** 回合终止原因（演进枚举 → 应用层类型约束） */
+export type TurnStatus = 'completed' | 'aborted' | 'max-steps' | 'error';
+/** 目标状态（演进枚举 → 应用层类型约束） */
+export type GoalStatus = 'active' | 'completed' | 'aborted';
+/** 任务状态（演进枚举 → 应用层类型约束） */
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+/** 任务种类（演进枚举 → 应用层类型约束） */
+export type TaskKind = 'agent' | 'shell';
 
 /**
  * sessions 表：会话元数据
@@ -25,26 +53,38 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
  * title 用户可编辑，默认取首条用户消息前 50 字符。
  * lastMessage 是最后一条用户消息预览（前 100 字符，用于列表展示）。
  */
-export const sessions = sqliteTable('sessions', {
-  /** 会话唯一 id（UUID，由 SessionService.create 生成） */
-  id: text('id').primaryKey(),
-  /** 会话标题（用户可编辑，默认取首条用户消息前 50 字符） */
-  title: text('title').notNull(),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-  /** 最后更新时间（Unix timestamp 毫秒） */
-  updatedAt: integer('updated_at').notNull(),
-  /** 最后一条用户消息预览（前 100 字符，用于列表展示） */
-  lastMessage: text('last_message'),
-  /** 消息数量（冗余字段，避免 list 时 COUNT(*) 全表扫描） */
-  messageCount: integer('message_count').notNull().default(0),
-  /** 会话级项目工作目录（绝对路径，agent 工具操作边界） */
-  workingDir: text('working_dir').notNull(),
-  /** 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别） */
-  lastRunStatus: text('last_run_status').notNull().default('idle'),
-  /** 是否置顶（对齐参考项目 pinned-header 分组；置顶会话优先展示） */
-  pinned: integer('pinned').notNull().default(0),
-});
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    /** 会话唯一 id（UUID，由 SessionService.create 生成） */
+    id: text('id').primaryKey(),
+    /** 会话标题（用户可编辑，默认取首条用户消息前 50 字符） */
+    title: text('title').notNull(),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+    /** 最后更新时间（Unix timestamp 毫秒） */
+    updatedAt: integer('updated_at').notNull(),
+    /** 最后一条用户消息预览（前 100 字符，用于列表展示） */
+    lastMessage: text('last_message'),
+    /** 消息数量（冗余字段，事务内维护，避免 list 时 COUNT(*) 全表扫描） */
+    messageCount: integer('message_count').notNull().default(0),
+    /** 会话级项目工作目录（绝对路径，agent 工具操作边界） */
+    workingDir: text('working_dir').notNull(),
+    /** 最近运行状态：idle=空闲，running=进行中，interrupted=异常中断（崩溃恢复识别） */
+    lastRunStatus: text('last_run_status').$type<RunStatus>().notNull().default('idle'),
+    /** 是否置顶（对齐参考项目 pinned-header 分组；置顶会话优先展示） */
+    pinned: integer('pinned').notNull().default(0),
+  },
+  (t) => [
+    // 稳定枚举：运行状态三值恒定，DB 层兜底非法值
+    check(
+      'chk_sessions_last_run_status',
+      sql`${t.lastRunStatus} IN ('idle','running','interrupted')`,
+    ),
+    // 查询索引：list 接口按 updatedAt 倒序（SQLite 索引可反向扫描，无需显式 DESC）
+    index('idx_sessions_updated_at').on(t.updatedAt),
+  ],
+);
 
 /**
  * messages 表：消息历史
@@ -54,29 +94,40 @@ export const sessions = sqliteTable('sessions', {
  * 由 SessionService 序列化/反序列化。
  *
  * seq 是消息序号（从 0 递增），同一 sessionId 内唯一递增。
+ *
+ * turn_id 关联 turns.turnId 但**不加外键**（有意）：
+ * 消息在回合进行中即写入（用户消息回合开始落库、助手消息流式落库），
+ * 而 turns 行在回合结束（TURN_END）才写入——若加 FK 会在回合未结束时
+ * 插入消息即触发外键违规。仅由 turns.turn_id UNIQUE 保证回合行不重复。
  */
-export const messages = sqliteTable('messages', {
-  /** 消息唯一 id（自增，SQLite rowid） */
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 所属会话 id（外键关联 sessions.id） */
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  /** 所属回合 id（Transcript 消息级明细；null = 旧数据/未归属回合） */
-  turnId: text('turn_id'),
-  /** 消息序号（从 0 递增，用于排序） */
-  seq: integer('seq').notNull(),
-  /** 消息角色（user / assistant / tool / system，便于按角色过滤） */
-  role: text('role').notNull(),
-  /** 完整 ModelMessage 的 JSON 序列化字符串 */
-  content: text('content').notNull(),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-  // 索引说明（P4 修正，此前注释声称 drizzle 不支持复合索引为事实错误）：
-  // 运行时索引统一由 schema-sql.ts 的 SCHEMA_SQL 声明（idx_messages_session_seq
-  // 复合索引 session_id+seq），drizzle schema 不再重复声明，避免双源漂移；
-  // 两表一致性由 db.test.ts 的「schema.ts ↔ schema-sql.ts」对照校验兜底
-});
+export const messages = sqliteTable(
+  'messages',
+  {
+    /** 消息唯一 id（自增，SQLite rowid） */
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 所属会话 id（外键关联 sessions.id，级联删除） */
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    /** 所属回合 id（Transcript 消息级明细；null = 旧数据/未归属回合） */
+    turnId: text('turn_id'),
+    /** 消息序号（从 0 递增，用于排序） */
+    seq: integer('seq').notNull(),
+    /** 消息角色（user / assistant / tool / system） */
+    role: text('role').$type<MessageRole>().notNull(),
+    /** 完整 ModelMessage 的 JSON 序列化字符串 */
+    content: text('content').notNull(),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [
+    // 稳定枚举：消息角色四值恒定
+    check('chk_messages_role', sql`${t.role} IN ('user','assistant','tool','system')`),
+    // 查询索引：get 接口按 sessionId 过滤 + seq 升序；transcript 按 turnId 查
+    index('idx_messages_session_seq').on(t.sessionId, t.seq),
+    index('idx_messages_turn').on(t.turnId),
+  ],
+);
 
 /** sessions 表类型（插入类型，id 由调用方生成） */
 export type SessionRow = typeof sessions.$inferSelect;
@@ -96,24 +147,31 @@ export type SessionInsert = typeof sessions.$inferInsert;
  * - isDefault 标记内置 prompt，防止用户误删
  * - updatedAt 用于追踪用户编辑
  */
-export const prompts = sqliteTable('prompts', {
-  /** Prompt 唯一标识（如 'code-agent'，主键） */
-  id: text('id').primaryKey(),
-  /** 显示名称（如 'Code Agent'） */
-  name: text('name').notNull(),
-  /** 描述（如 '通用代码助手默认行为'） */
-  description: text('description').notNull(),
-  /** Agent 角色标识（当前仅 'code-agent'，预留扩展） */
-  role: text('role').notNull(),
-  /** Prompt 内容（支持模板变量：{{workingDir}} / {{os}} / {{gitBranch}} 等） */
-  content: text('content').notNull(),
-  /** 是否为内置默认 prompt（true 不可删除，但可编辑） */
-  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(true),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-  /** 最后更新时间（Unix timestamp 毫秒） */
-  updatedAt: integer('updated_at').notNull(),
-});
+export const prompts = sqliteTable(
+  'prompts',
+  {
+    /** Prompt 唯一标识（如 'code-agent'，主键） */
+    id: text('id').primaryKey(),
+    /** 显示名称（如 'Code Agent'） */
+    name: text('name').notNull(),
+    /** 描述（如 '通用代码助手默认行为'） */
+    description: text('description').notNull(),
+    /** Agent 角色标识（当前仅 'code-agent'，预留扩展） */
+    role: text('role').notNull(),
+    /** Prompt 内容（支持模板变量：{{workingDir}} / {{os}} / {{gitBranch}} 等） */
+    content: text('content').notNull(),
+    /** 是否为内置默认 prompt（true 不可删除，但可编辑） */
+    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(true),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+    /** 最后更新时间（Unix timestamp 毫秒） */
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [
+    // 查询索引：按角色过滤 prompt
+    index('idx_prompts_role').on(t.role),
+  ],
+);
 
 /** messages 表类型 */
 export type MessageRow = typeof messages.$inferSelect;
@@ -133,28 +191,35 @@ export type PromptInsert = typeof prompts.$inferInsert;
  * - cacheReadTokens：KV cache 命中（DeepSeek 非标准字段已映射为 cacheRead）
  * - reasoningTokens：思维链 token（reasoning 模型）
  */
-export const tokenUsage = sqliteTable('token_usage', {
-  /** 记录唯一 id（自增） */
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 所属会话 id（外键关联 sessions.id，级联删除） */
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  /** 使用的模型 id（如 deepseek-v4-flash） */
-  modelId: text('model_id').notNull(),
-  /** 输入 token 数 */
-  inputTokens: integer('input_tokens').notNull(),
-  /** 输出 token 数 */
-  outputTokens: integer('output_tokens').notNull(),
-  /** 总 token 数 */
-  totalTokens: integer('total_tokens').notNull(),
-  /** KV cache 命中 token 数（DeepSeek prompt_cache_hit_tokens） */
-  cacheReadTokens: integer('cache_read_tokens'),
-  /** 思维链 token 数（reasoning 模型） */
-  reasoningTokens: integer('reasoning_tokens'),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-});
+export const tokenUsage = sqliteTable(
+  'token_usage',
+  {
+    /** 记录唯一 id（自增） */
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 所属会话 id（外键关联 sessions.id，级联删除） */
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    /** 使用的模型 id（如 deepseek-v4-flash） */
+    modelId: text('model_id').notNull(),
+    /** 输入 token 数 */
+    inputTokens: integer('input_tokens').notNull(),
+    /** 输出 token 数 */
+    outputTokens: integer('output_tokens').notNull(),
+    /** 总 token 数 */
+    totalTokens: integer('total_tokens').notNull(),
+    /** KV cache 命中 token 数（DeepSeek prompt_cache_hit_tokens） */
+    cacheReadTokens: integer('cache_read_tokens'),
+    /** 思维链 token 数（reasoning 模型） */
+    reasoningTokens: integer('reasoning_tokens'),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [
+    // 查询索引：用量页按时间窗口聚合
+    index('idx_token_usage_created_at').on(t.createdAt),
+  ],
+);
 
 /** token_usage 表类型 */
 export type TokenUsageRow = typeof tokenUsage.$inferSelect;
@@ -168,33 +233,45 @@ export type TokenUsageInsert = typeof tokenUsage.$inferInsert;
  * - 一次 agent:run 的多轮循环 = 一个回合（turnId 由 AgentRuntime 生成）
  * - 回合结束时写入一行（含模型/终止原因/耗时/token 统计）
  * - 支持回合级查询（续传 / 审计 / 回放的地基）
+ *
+ * turnId UNIQUE：防同一回合因写入重试产生重复行
+ * （messages.turn_id 不设外键的原因见 messages 表注释）
  */
-export const turns = sqliteTable('turns', {
-  /** 记录唯一 id（自增） */
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 回合唯一 id（UUID，关联 TurnEvent.turnId） */
-  turnId: text('turn_id').notNull(),
-  /** 所属会话 id（外键关联 sessions.id，级联删除） */
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  /** 回合序号（会话内递增，从 0 开始） */
-  seq: integer('seq').notNull(),
-  /** 使用的模型 id */
-  modelId: text('model_id').notNull(),
-  /** 终止原因：completed/aborted/max-steps/error */
-  status: text('status').notNull(),
-  /** 输入 token 数 */
-  inputTokens: integer('input_tokens'),
-  /** 输出 token 数 */
-  outputTokens: integer('output_tokens'),
-  /** 总 token 数 */
-  totalTokens: integer('total_tokens'),
-  /** 回合总耗时（毫秒） */
-  durationMs: integer('duration_ms'),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-});
+export const turns = sqliteTable(
+  'turns',
+  {
+    /** 记录唯一 id（自增） */
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 回合唯一 id（UUID，关联 TurnEvent.turnId） */
+    turnId: text('turn_id').notNull(),
+    /** 所属会话 id（外键关联 sessions.id，级联删除） */
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    /** 回合序号（会话内递增，从 0 开始） */
+    seq: integer('seq').notNull(),
+    /** 使用的模型 id */
+    modelId: text('model_id').notNull(),
+    /** 终止原因：completed/aborted/max-steps/error */
+    status: text('status').$type<TurnStatus>().notNull(),
+    /** 输入 token 数 */
+    inputTokens: integer('input_tokens'),
+    /** 输出 token 数 */
+    outputTokens: integer('output_tokens'),
+    /** 总 token 数 */
+    totalTokens: integer('total_tokens'),
+    /** 回合总耗时（毫秒） */
+    durationMs: integer('duration_ms'),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [
+    // 唯一：防同一回合重复落库
+    unique('uq_turns_turn_id').on(t.turnId),
+    // 查询索引：按会话取回合列表（seq 升序）
+    index('idx_turns_session_seq').on(t.sessionId, t.seq),
+  ],
+);
 
 /** turns 表类型 */
 export type TurnRow = typeof turns.$inferSelect;
@@ -209,20 +286,27 @@ export type TurnInsert = typeof turns.$inferInsert;
  * - apiKey 不落库：存 keychain（key = `runtime:${modelId}`，与 AI 域约定一致）
  * - 应用启动时由 RuntimeModelStore 加载并注册到 modelRegistry
  */
-export const runtimeModels = sqliteTable('runtime_models', {
-  /** 模型 id（主键，全局唯一） */
-  modelId: text('model_id').primaryKey(),
-  /** 所属供应商 kind（决定 SDK 协议） */
-  providerKind: text('provider_kind').notNull(),
-  /** 显式 baseUrl（覆盖供应商默认端点；null = 用默认） */
-  baseUrl: text('base_url'),
-  /** 模型展示名称（自定义模式选填；null = 回退 modelId） */
-  displayName: text('display_name'),
-  /** 启停状态（0=停用 1=启用；默认启用） */
-  isEnabled: integer('is_enabled').notNull().default(1),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-});
+export const runtimeModels = sqliteTable(
+  'runtime_models',
+  {
+    /** 模型 id（主键，全局唯一） */
+    modelId: text('model_id').primaryKey(),
+    /** 所属供应商 kind（决定 SDK 协议） */
+    providerKind: text('provider_kind').notNull(),
+    /** 显式 baseUrl（覆盖供应商默认端点；null = 用默认） */
+    baseUrl: text('base_url'),
+    /** 模型展示名称（自定义模式选填；null = 回退 modelId） */
+    displayName: text('display_name'),
+    /** 启停状态（0=停用 1=启用；默认启用） */
+    isEnabled: integer('is_enabled').$type<0 | 1>().notNull().default(1),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [
+    // 布尔字段：只允许 0/1
+    check('chk_runtime_models_is_enabled', sql`${t.isEnabled} IN (0,1)`),
+  ],
+);
 
 /**
  * goals 表：会话目标跟踪（对齐 qwen /goal 语义，持久化替代内存态）
@@ -232,26 +316,33 @@ export const runtimeModels = sqliteTable('runtime_models', {
  * - 回合结束后由 GoalService 用 LLM 判定 condition 是否满足（goalJudge）
  * - status：active（进行中）/ completed（判定满足）/ aborted（用户清除）
  */
-export const goals = sqliteTable('goals', {
-  /** 自增主键 */
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 所属会话 id（外键关联 sessions.id） */
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  /** 目标条件描述（用户注册的完成条件） */
-  condition: text('condition').notNull(),
-  /** 状态：active / completed / aborted */
-  status: text('status').notNull(),
-  /** 已判定回合数 */
-  iterations: integer('iterations').notNull().default(0),
-  /** 最近一次判定理由（LLM 输出或错误说明） */
-  lastReason: text('last_reason'),
-  /** 创建时间（Unix timestamp 毫秒） */
-  createdAt: integer('created_at').notNull(),
-  /** 完成/清除时间（null = 未结束） */
-  finishedAt: integer('finished_at'),
-});
+export const goals = sqliteTable(
+  'goals',
+  {
+    /** 自增主键 */
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** 所属会话 id（外键关联 sessions.id） */
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    /** 目标条件描述（用户注册的完成条件） */
+    condition: text('condition').notNull(),
+    /** 状态：active / completed / aborted */
+    status: text('status').$type<GoalStatus>().notNull(),
+    /** 已判定回合数 */
+    iterations: integer('iterations').notNull().default(0),
+    /** 最近一次判定理由（LLM 输出或错误说明） */
+    lastReason: text('last_reason'),
+    /** 创建时间（Unix timestamp 毫秒） */
+    createdAt: integer('created_at').notNull(),
+    /** 完成/清除时间（null = 未结束） */
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [
+    // 查询索引：按会话取目标
+    index('idx_goals_session').on(t.sessionId),
+  ],
+);
 
 /**
  * tasks 表：任务状态机持久化（对齐 qwen tasks 语义收敛）
@@ -259,6 +350,7 @@ export const goals = sqliteTable('goals', {
  * 设计：
  * - 任务条目（委派工作单元）绑定会话
  * - 内存注册表升级为 sqlite 持久化（重启后任务历史保留）
+ * - session_id **不加外键**（有意）：任务可关联任意 id，含子代理内部回合的 sessionId
  */
 export const tasks = sqliteTable('tasks', {
   /** 任务 id（uuid 主键） */
@@ -266,11 +358,11 @@ export const tasks = sqliteTable('tasks', {
   /** 所属会话 id（无外键：任务可关联任意 id，含子代理内部回合 sessionId） */
   sessionId: text('session_id').notNull(),
   /** 任务种类（agent / shell） */
-  kind: text('kind').notNull(),
+  kind: text('kind').$type<TaskKind>().notNull(),
   /** 人类可读描述 */
   description: text('description').notNull(),
   /** 状态（pending / running / completed / failed / cancelled） */
-  status: text('status').notNull(),
+  status: text('status').$type<TaskStatus>().notNull(),
   /** 创建时间（Unix timestamp 毫秒） */
   startTime: integer('start_time').notNull(),
   /** 结束时间（null = 未结束） */
@@ -279,41 +371,53 @@ export const tasks = sqliteTable('tasks', {
 
 /**
  * cron_tasks 表：定时任务（对齐 qwen cronScheduler durable 语义收敛）
+ *
+ * session_id **不加外键**（有意，与 tasks 表一致）：定时任务可由 agent 工具
+ * 在任意会话上下文创建（含子代理内部回合的 sessionId），不保证一定对应
+ * sessions 表中的持久会话；加外键会在这些场景触发 FOREIGN KEY 违规。
  */
-export const cronTasks = sqliteTable('cron_tasks', {
-  /** 任务 id（uuid 主键） */
-  id: text('id').primaryKey(),
-  /** 所属会话 id（创建者） */
-  sessionId: text('session_id').notNull(),
-  /** cron 表达式（5 字段） */
-  expression: text('expression').notNull(),
-  /** 任务描述 */
-  description: text('description').notNull(),
-  /** 下次触发时间（Unix 毫秒；null = 未启用） */
-  nextFireAt: integer('next_fire_at'),
-  /** 是否启用 */
-  enabled: integer('enabled').notNull().default(1),
-  /** 创建时间 */
-  createdAt: integer('created_at').notNull(),
-});
+export const cronTasks = sqliteTable(
+  'cron_tasks',
+  {
+    /** 任务 id（uuid 主键） */
+    id: text('id').primaryKey(),
+    /** 所属会话 id（无外键：任务可关联任意 id，含子代理内部回合 sessionId） */
+    sessionId: text('session_id').notNull(),
+    /** cron 表达式（5 字段） */
+    expression: text('expression').notNull(),
+    /** 任务描述 */
+    description: text('description').notNull(),
+    /** 下次触发时间（Unix 毫秒；null = 未启用） */
+    nextFireAt: integer('next_fire_at'),
+    /** 是否启用（0/1） */
+    enabled: integer('enabled').$type<0 | 1>().notNull().default(1),
+    /** 创建时间 */
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [check('chk_cron_tasks_enabled', sql`${t.enabled} IN (0,1)`)],
+);
 
 export type CronTaskRow = typeof cronTasks.$inferSelect;
 
 /**
  * skills 表：学习到的技能（learn-skill-agent 产物；source=learned）
  */
-export const skills = sqliteTable('skills', {
-  /** 技能名（snake_case 主键） */
-  name: text('name').primaryKey(),
-  /** 一句话描述 */
-  description: text('description').notNull(),
-  /** 技能提示词 */
-  prompt: text('prompt').notNull(),
-  /** 来源（learned / builtin） */
-  source: text('source').notNull().default('learned'),
-  /** 创建时间 */
-  createdAt: integer('created_at').notNull(),
-});
+export const skills = sqliteTable(
+  'skills',
+  {
+    /** 技能名（snake_case 主键） */
+    name: text('name').primaryKey(),
+    /** 一句话描述 */
+    description: text('description').notNull(),
+    /** 技能提示词 */
+    prompt: text('prompt').notNull(),
+    /** 来源（learned / builtin） */
+    source: text('source').$type<SkillSource>().notNull().default('learned'),
+    /** 创建时间 */
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [check('chk_skills_source', sql`${t.source} IN ('learned','builtin')`)],
+);
 
 export type SkillRow = typeof skills.$inferSelect;
 

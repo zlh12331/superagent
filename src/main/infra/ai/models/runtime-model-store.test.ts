@@ -26,19 +26,11 @@ vi.mock('electron', () => ({
   },
 }));
 
-// mock getDb：内存数据库（建表 SQL 单一真源 schema-sql.ts，与生产共用）
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { schema } from '../../storage/schema';
-import { SCHEMA_SQL } from '../../storage/schema-sql';
+// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
+import { createTestDb } from '../../storage/test-utils';
 
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../../storage/db', async (importOriginal) => {

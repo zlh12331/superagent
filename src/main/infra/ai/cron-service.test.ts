@@ -1,22 +1,15 @@
 // src/main/infra/ai/cron-service.test.ts
 // 定时任务服务单测：创建/删除/列表/启停/触发（内存 DB + croner 真实调度）
 
-import Database from 'better-sqlite3';
 import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schema } from '../storage/schema';
-import { SCHEMA_SQL } from '../storage/schema-sql';
+import { createTestDb } from '../storage/test-utils';
 import { CronService } from './cron-service';
 
-// mock getDb：内存数据库（建表 SQL 单一真源）
+// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../storage/db', async (importOriginal) => {

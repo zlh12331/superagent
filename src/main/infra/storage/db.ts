@@ -19,11 +19,10 @@ import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
-import { CURRENT_SCHEMA_VERSION, MIGRATIONS } from './migrations';
 import { schema } from './schema';
-import { SCHEMA_SQL } from './schema-sql';
 
 /**
  * 数据库文件名
@@ -123,6 +122,19 @@ let dbInstance: DrizzleDB | null = null;
 let sqliteInstance: Database.Database | null = null;
 
 /**
+ * 解析 drizzle 迁移目录
+ *
+ * - dev / 测试：项目根 drizzle/（drizzle-kit generate 的产物，入仓管理）
+ * - 打包环境：resources/drizzle（electron-builder extraResources 复制）
+ */
+function resolveMigrationsDir(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'drizzle');
+  }
+  return join(app.getAppPath(), 'drizzle');
+}
+
+/**
  * 初始化数据库
  *
  * 流程：
@@ -130,8 +142,7 @@ let sqliteInstance: Database.Database | null = null;
  * 2. 打开 better-sqlite3 连接（同步）
  * 3. 配置 WAL 模式（提升并发读性能）
  * 4. 创建 drizzle 实例
- * 5. 建表（CREATE TABLE IF NOT EXISTS，幂等）
- * 6. 创建索引（CREATE INDEX IF NOT EXISTS，幂等）
+ * 5. 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生，幂等）
  *
  * @returns drizzle 实例（后续 SessionService 使用）
  */
@@ -187,39 +198,20 @@ export function initDb(): DrizzleDB {
   // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });
 
-  // 建表与迁移顺序（P1 修复：老库必须先补列、再执行 SCHEMA_SQL）：
-  // SCHEMA_SQL 尾部包含 CREATE INDEX ... ON messages(turn_id)，若老库缺该列，
-  // 先执行 SCHEMA_SQL 会在索引处抛「no such column」中断启动。
-  // 因此以 sessions 表是否已存在区分两条路径：
-  // - 全新库：直接执行最新 SCHEMA_SQL，落位当前版本
-  // - 老库：先按版本链执行 pending 迁移（幂等），再执行 SCHEMA_SQL
-  //   （此时建表/建索引全部 IF NOT EXISTS，no-op 或安全补齐）
-  const hadSessionsTable =
-    sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sessions'").get() !==
-    undefined;
-
-  if (!hadSessionsTable) {
-    sqlite.exec(SCHEMA_SQL);
-    sqlite.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
-    logger.info({ toVersion: CURRENT_SCHEMA_VERSION }, '全新数据库，schema 落位当前版本');
-  } else {
-    // P4 修复：版本化迁移（PRAGMA user_version 版本链）替代启动期
-    // 「ALTER + duplicate column name 字符串匹配」——后者无版本链、
-    // 无回滚路径、错误判定依赖 SQLite 错误文案。列存在性检查保证幂等。
-    const currentVersion = Number(sqlite.pragma('user_version', { simple: true }));
-    if (currentVersion < CURRENT_SCHEMA_VERSION) {
-      for (const migration of MIGRATIONS) {
-        if (migration.version <= currentVersion) {
-          continue;
-        }
-        sqlite.transaction(() => {
-          migration.up(sqlite);
-          sqlite.pragma(`user_version = ${migration.version}`);
-        })();
-        logger.info({ version: migration.version, name: migration.name }, '数据库迁移已应用');
-      }
-    }
-    sqlite.exec(SCHEMA_SQL);
+  // 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生）：
+  // - migrate() 维护 __drizzle_migrations journal 表，幂等执行未应用的迁移
+  // - 全新库：应用基线迁移（建全部表/索引/约束）落位当前版本
+  // - 老库：仅应用 journal 中缺失的增量迁移
+  const migrationsDir = resolveMigrationsDir();
+  try {
+    migrate(db, { migrationsFolder: migrationsDir });
+    logger.info({ migrationsDir }, 'SQLite 迁移已应用');
+  } catch (error) {
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error), migrationsDir },
+      'SQLite 迁移执行失败（迁移目录缺失或损坏）',
+    );
+    throw error;
   }
 
   dbInstance = db;

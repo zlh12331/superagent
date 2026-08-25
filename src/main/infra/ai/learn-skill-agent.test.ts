@@ -1,24 +1,16 @@
 // src/main/infra/ai/learn-skill-agent.test.ts
 // 技能学习单测：引导模板 + 学习/列出/删除（内存 DB + fake LLM）
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDb } from '../storage/db';
-import { schema } from '../storage/schema';
-import { SCHEMA_SQL } from '../storage/schema-sql';
+import { createTestDb } from '../storage/test-utils';
 import { buildLearnSkillPrompt, LearnSkillService } from './knowledge/learn-skill-agent';
 import type { LlmClient } from './llm-client/llm-client';
 import { skillRegistry } from './skills/skill-registry';
 
-// mock getDb：内存数据库
+// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../storage/db', async (importOriginal) => {

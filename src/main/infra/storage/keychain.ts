@@ -14,6 +14,7 @@
 
 import { chmodSync, promises as fs } from 'node:fs';
 import { safeStorage } from 'electron';
+import { logger } from '../../utils/logger';
 import { getKeychainPath } from './app-data';
 
 /**
@@ -62,11 +63,21 @@ async function readStore(): Promise<KeychainStore> {
     const content = await fs.readFile(filePath, 'utf8');
     return JSON.parse(content) as KeychainStore;
   } catch (error: unknown) {
-    // 文件不存在（ENOENT）或解析失败，返回空存储
+    // 文件不存在（ENOENT）：首次使用，返回空存储
     if (error instanceof Error && error.message.includes('ENOENT')) {
       return {};
     }
-    // 其他错误（如 JSON 解析失败）也返回空存储，避免阻塞应用
+    // 其他错误（如 JSON 解析失败 = 文件损坏）：记录日志便于诊断，
+    // 保留损坏文件为 .corrupt（避免全部 API Key 静默丢失后无法归因）
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error), filePath },
+      'keychain.dat 读取失败（可能已损坏）——密钥将重写覆盖',
+    );
+    try {
+      await fs.rename(filePath, `${filePath}.corrupt`);
+    } catch {
+      // 重命名失败（权限等）不阻断：应用仍可继续，仅丢失损坏文件的诊断依据
+    }
     return {};
   }
 }

@@ -1,19 +1,11 @@
 // src/main/infra/ai/team-service.test.ts
 // 团队服务单测：并行委派 + 结果汇总 + 失败隔离
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { schema } from '../../src/main/infra/storage/schema';
-import { SCHEMA_SQL } from '../../src/main/infra/storage/schema-sql';
+import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {

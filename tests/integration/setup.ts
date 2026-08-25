@@ -34,6 +34,8 @@ vi.mock('electron', () => ({
     getPath: () => itState.userData,
     // 测试环境视为未打包（config 加载依赖 isPackaged 布尔）
     isPackaged: false,
+    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
+    getAppPath: () => process.cwd(),
     getVersion: () => '9.9.9-test',
   },
   dialog: {

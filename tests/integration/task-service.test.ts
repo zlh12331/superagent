@@ -1,21 +1,13 @@
 // src/main/infra/ai/task-service.test.ts
 // 任务状态机单测：创建/更新/列表/终端状态锁定（内存 DB）
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskKind, TaskService, TaskStatus } from '../../src/main/infra/ai/agent/task-service';
-import { schema } from '../../src/main/infra/storage/schema';
-import { SCHEMA_SQL } from '../../src/main/infra/storage/schema-sql';
+import { createTestDb } from '../../src/main/infra/storage/test-utils';
 
-// mock getDb：内存数据库（建表 SQL 单一真源）
+// mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  const db = drizzle(sqlite, { schema });
-  sqlite.exec(SCHEMA_SQL);
-  return { db, sqlite };
+  return createTestDb();
 }
 
 vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {

@@ -11,7 +11,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { closeDb, getDb, initDb, resetDb } from './db';
-import { CURRENT_SCHEMA_VERSION } from './migrations';
 import { readWhitelistSync, writeWhitelist } from './whitelist-pref';
 
 const mocks = vi.hoisted(() => {
@@ -26,7 +25,12 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('electron', () => ({
-  app: { getPath: mocks.mockGetPath },
+  app: {
+    getPath: mocks.mockGetPath,
+    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
+    getAppPath: () => process.cwd(),
+    isPackaged: false,
+  },
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -127,43 +131,53 @@ describe('storage 域批次9 缺口补全', () => {
       expect(mocks.mockLogger.info).toHaveBeenCalledWith({}, 'SQLite 完整性校验通过');
     });
 
-    it('旧库迁移（P4 版本链）：老库按 user_version 逐版本应用迁移，重复 initDb 幂等', () => {
-      // 预建旧库（只有 sessions 基础列，无 working_dir/pinned/last_run_status；
-      // user_version 缺省为 0 = 老库）
+    it('drizzle 迁移：全新库建全表 + journal 幂等 + 约束生效，重复 initDb 不抛', () => {
+      initDb();
       const dbPath = join(tempDir, 'sessions.db');
       const Database = require('better-sqlite3') as new (
         p: string,
       ) => {
         exec(sql: string): void;
-        prepare(sql: string): { all(): readonly { name: string }[] };
+        prepare(sql: string): {
+          all(): readonly { name: string }[];
+          run(...args: unknown[]): unknown;
+        };
         pragma(p: string, opts?: { simple?: boolean }): unknown;
         close(): void;
       };
-      const old = new Database(dbPath);
-      old.exec(
-        `CREATE TABLE sessions (
-          id TEXT PRIMARY KEY,
-          title TEXT NOT NULL DEFAULT '',
-          created_at INTEGER NOT NULL DEFAULT 0,
-          updated_at INTEGER NOT NULL DEFAULT 0
-        );`,
-      );
-      old.close();
-
-      // 首次 initDb：pending 迁移逐个应用，user_version 落位当前版本
-      initDb();
-      const migrated = new Database(dbPath);
-      const columns = migrated
-        .prepare('PRAGMA table_info(sessions)')
+      const check = new Database(dbPath);
+      // 全部 11 张表 + drizzle journal 表
+      const tables = check
+        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
         .all()
-        .map((row) => row.name);
-      expect(columns).toEqual(expect.arrayContaining(['working_dir', 'pinned', 'last_run_status']));
-      expect(Number(migrated.pragma('user_version', { simple: true }))).toBe(
-        CURRENT_SCHEMA_VERSION,
+        .map((r) => r.name);
+      expect(tables).toEqual(
+        expect.arrayContaining([
+          'sessions',
+          'messages',
+          'prompts',
+          'token_usage',
+          'turns',
+          'runtime_models',
+          'goals',
+          'tasks',
+          'cron_tasks',
+          'skills',
+          'app_settings',
+          '__drizzle_migrations',
+        ]),
       );
-      migrated.close();
+      // 约束生效：非法 role 插入被 CHECK 拒绝
+      expect(() =>
+        check
+          .prepare(
+            "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES ('s','0','bogus','x',0)",
+          )
+          .run(),
+      ).toThrow(/CHECK/);
+      check.close();
 
-      // 重复 initDb（resetDb 后模拟重启）：版本已最新，迁移不再执行，幂等不抛
+      // 重复 initDb（resetDb 后模拟重启）：journal 已记录，迁移不再执行，幂等不抛
       closeDb();
       resetDb();
       expect(() => initDb()).not.toThrow();

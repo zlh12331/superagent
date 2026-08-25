@@ -16,7 +16,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  app: { getPath: mocks.mockGetPath },
+  app: {
+    getPath: mocks.mockGetPath,
+    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
+    getAppPath: () => process.cwd(),
+    isPackaged: false,
+  },
 }));
 
 vi.mock('../../utils/logger', () => ({
