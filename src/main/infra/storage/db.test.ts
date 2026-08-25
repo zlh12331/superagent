@@ -104,6 +104,8 @@ describe('db', () => {
         'idx_turns_session_seq',
         'idx_goals_session',
         'uq_turns_turn_id',
+        'uq_messages_session_seq',
+        'uq_turns_session_seq',
       ]),
     );
   });
@@ -193,6 +195,57 @@ describe('领域约束生效', () => {
       raw(db)
         .prepare(
           "INSERT INTO turns (turn_id, session_id, seq, model_id, status, created_at) VALUES ('t1', 's1', 1, 'm', 'completed', 100)",
+        )
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/i);
+  });
+
+  it('唯一：同会话同 seq 的消息重复插入被拒（0003）', () => {
+    const db = initDb();
+    raw(db)
+      .prepare(
+        "INSERT INTO sessions (id, title, created_at, updated_at, working_dir) VALUES ('s4', 't', 0, 0, '/w')",
+      )
+      .run();
+    raw(db)
+      .prepare(
+        "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES ('s4', 0, 'user', 'x', 100)",
+      )
+      .run();
+    // 同 (session_id, seq) 重试写入 → UNIQUE 拒绝（防并发/重试双行）
+    expect(() =>
+      raw(db)
+        .prepare(
+          "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES ('s4', 0, 'user', 'y', 100)",
+        )
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/i);
+    // 同会话不同 seq 不冲突（唯一是 (session_id, seq) 组合）
+    expect(() =>
+      raw(db)
+        .prepare(
+          "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES ('s4', 1, 'user', 'z', 100)",
+        )
+        .run(),
+    ).not.toThrow();
+  });
+
+  it('唯一：同会话同回合序号的 turns 重复插入被拒（0003）', () => {
+    const db = initDb();
+    raw(db)
+      .prepare(
+        "INSERT INTO sessions (id, title, created_at, updated_at, working_dir) VALUES ('s6', 't', 0, 0, '/w')",
+      )
+      .run();
+    raw(db)
+      .prepare(
+        "INSERT INTO turns (turn_id, session_id, seq, model_id, status, created_at) VALUES ('u1', 's6', 0, 'm', 'completed', 100)",
+      )
+      .run();
+    expect(() =>
+      raw(db)
+        .prepare(
+          "INSERT INTO turns (turn_id, session_id, seq, model_id, status, created_at) VALUES ('u2', 's6', 0, 'm', 'completed', 100)",
         )
         .run(),
     ).toThrow(/UNIQUE constraint failed/i);
@@ -431,9 +484,9 @@ describe('老库升级（增量迁移）', () => {
           .run(),
       ).toThrow(/UNIQUE constraint failed/i);
 
-      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 + 0001 + 0002）
+      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0003）
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(3);
+      expect(migs).toHaveLength(4);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
       closeDb();
@@ -453,7 +506,7 @@ describe('老库升级（增量迁移）', () => {
     }
   });
 
-  it('新库：0000 + 0001 + 0002 均执行（journal 三条），约束齐全', async () => {
+  it('新库：0000 ~ 0003 全执行（journal 四条），约束齐全', async () => {
     resetDb();
     closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -461,7 +514,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(3);
+      expect(migs).toHaveLength(4);
       // 约束仍生效（0001 重建未破坏 0000 语义）
       expect(() =>
         raw(db)

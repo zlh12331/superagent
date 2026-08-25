@@ -123,6 +123,8 @@ export const messages = sqliteTable(
   (t) => [
     // 稳定枚举：消息角色四值恒定
     check('chk_messages_role', sql`${t.role} IN ('user','assistant','tool','system')`),
+    // 会话内序号唯一：防并发/重试写入同 seq 产生双行（会话历史错乱的根源）
+    unique('uq_messages_session_seq').on(t.sessionId, t.seq),
     // 查询索引：get 接口按 sessionId 过滤 + seq 升序；transcript 按 turnId 查
     index('idx_messages_session_seq').on(t.sessionId, t.seq),
     index('idx_messages_turn').on(t.turnId),
@@ -268,6 +270,8 @@ export const turns = sqliteTable(
   (t) => [
     // 唯一：防同一回合重复落库
     unique('uq_turns_turn_id').on(t.turnId),
+    // 会话内回合序号唯一：防 transcript 序号重复
+    unique('uq_turns_session_seq').on(t.sessionId, t.seq),
     // 查询索引：按会话取回合列表（seq 升序）
     index('idx_turns_session_seq').on(t.sessionId, t.seq),
   ],
