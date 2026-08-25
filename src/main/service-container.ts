@@ -439,10 +439,13 @@ class ServiceContainer {
         this.getToolExecutor(),
         this.getPromptService(),
         this.getSessionService(),
+        // titleGenerator：LlmClient 鸭子匹配 ITitleGenerator（同签名 generateText）
         this.getLlmClient(),
         this.concurrencyGate,
         // 审批生命周期 → 回合状态机 waitingApproval（AgentService 依赖）
         this.getPermissionService(),
+        // llmClient：工具入参自动修复引擎（SDK repairToolCall 钩子）
+        this.getLlmClient(),
       );
     }
     return this.agentService;

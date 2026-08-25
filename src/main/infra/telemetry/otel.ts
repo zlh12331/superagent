@@ -15,7 +15,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { Tracer } from '@opentelemetry/api';
-import { context, trace } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -126,6 +126,10 @@ export function getTracer(): Tracer | null {
  *
  * 工具函数：包装一个 async 函数为带 trace 的版本
  *
+ * 使用 startActiveSpan：fn 执行期间激活 span 为当前 context，
+ * 使 fn 内部新建的 span（如 AI SDK telemetry 回调创建的模型调用 span）
+ * 自动成为本 span 的子 span（OTel AsyncLocalStorage 跨 await 传播）。
+ *
  * @example
  * ```ts
  * const result = await withSpan('agent.streamText', { sessionId }, async (span) => {
@@ -145,23 +149,21 @@ export async function withSpan<T>(
     return fn(undefined as unknown as import('@opentelemetry/api').Span);
   }
 
-  const span = tracer.startSpan(name, { attributes });
-  try {
-    const result = await fn(span);
-    span.setStatus({ code: 1 /* OK */ });
-    return result;
-  } catch (error) {
-    span.setStatus({
-      code: 2 /* ERROR */,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    span.recordException(error as Error);
-    throw error;
-  } finally {
-    span.end();
-    // 显式触发 context 传播
-    context.active();
-  }
+  // startActiveSpan：激活 context + 自动 end（含异常路径）
+  return tracer.startActiveSpan(name, { attributes }, async (span) => {
+    try {
+      const result = await fn(span);
+      span.setStatus({ code: 1 /* OK */ });
+      return result;
+    } catch (error) {
+      span.setStatus({
+        code: 2 /* ERROR */,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      span.recordException(error as Error);
+      throw error;
+    }
+  });
 }
 
 /**

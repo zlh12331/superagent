@@ -41,6 +41,7 @@ import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
+import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { TurnEventEmitter } from '../agent-runtime';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { ActiveSessionRegistry } from '../agent-runtime/active-session-registry';
@@ -56,6 +57,7 @@ import {
   lastUserMessageText,
 } from '../knowledge/session-title';
 import { getModel } from '../llm-client/ai-provider';
+import type { LlmClient } from '../llm-client/llm-client';
 import { buildGenerationOptions, modelRegistry } from '../models';
 import type { IPromptService } from '../prompt/prompt-service';
 import { classifyError, isAbortError } from '../tools/error-classifier';
@@ -68,6 +70,7 @@ import {
   getCompactionBudget,
   getTokenBudgetDecision,
 } from './context-compression';
+import { createRepairToolCall } from './repair-tool-call';
 
 /**
  * Agent 启动选项
@@ -185,6 +188,13 @@ export class AgentService implements IAgentService {
     private readonly concurrencyGate?: ConcurrencyGate,
     /** 权限服务（审批生命周期 → 回合状态机 waitingApproval；未注入则跳过订阅） */
     private readonly permissionService?: IPermissionService,
+    /**
+     * LLM 客户端（工具入参自动修复引擎；未注入则不启用 repairToolCall）
+     *
+     * 用于 SDK v7 repairToolCall 钩子：LLM 生成非法工具入参时用轻量调用重生成。
+     * 与工具执行链路（ToolExecutor）解耦，仅作为修复 side-query 出口。
+     */
+    private readonly llmClient?: LlmClient,
   ) {}
 
   /**
@@ -569,6 +579,24 @@ export class AgentService implements IAgentService {
                 ...(effectiveAbortSignal !== undefined
                   ? { abortSignal: effectiveAbortSignal }
                   : {}),
+                // 工具入参自动修复（SDK v7 repairToolCall 钩子）：
+                // LLM 生成非法工具入参（zod 校验失败）时用轻量 LLM 调用重生成，
+                // 避免 parse 阶段失败导致工具调用静默丢弃。未注入 llmClient 时不启用。
+                ...(this.llmClient !== undefined
+                  ? {
+                      repairToolCall: createRepairToolCall({
+                        llmClient: this.llmClient,
+                        modelId: resolvedModel.modelId,
+                        ...(effectiveAbortSignal !== undefined
+                          ? { signal: effectiveAbortSignal }
+                          : {}),
+                      }),
+                    }
+                  : {}),
+                // 模型级遥测（SDK telemetry integration）：在回合 span 之下自动
+                // 生成单次 LLM 调用 span（latency / usage / finishReason）。
+                // integration 内部对未初始化 OTel（getTracer 为 null）判空跳过。
+                telemetry: { integrations: [createSdkTelemetryIntegration()] },
               }),
             controller,
             // 模型级重试：generationConfig.maxRetries（默认 2 次重试 = 3 次尝试）
