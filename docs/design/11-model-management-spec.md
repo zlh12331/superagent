@@ -346,7 +346,7 @@ interface ModelConfig {
 
 ### 6.1 数据库变更（runtime_models 表）
 
-新增两列（三处同步：schema.ts + schema-sql.ts + migrations.ts，PRAGMA user_version 版本链）：
+新增两列（schema.ts 唯一真源 + drizzle-kit generate 自动出迁移）：
 
 | 列 | 类型 | 说明 |
 |---|---|---|

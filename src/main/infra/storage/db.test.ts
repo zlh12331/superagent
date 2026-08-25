@@ -148,6 +148,24 @@ describe('领域约束生效', () => {
     ).toThrow(/CHECK constraint failed/i);
   });
 
+  it('触发器（0002）：非法 sessions.last_run_status UPDATE 被拒', () => {
+    const db = initDb();
+    raw(db)
+      .prepare(
+        "INSERT INTO sessions (id, title, created_at, updated_at, working_dir) VALUES ('s3', 't', 0, 0, '/w')",
+      )
+      .run();
+    expect(() =>
+      raw(db).prepare("UPDATE sessions SET last_run_status = 'bogus' WHERE id = 's3'").run(),
+    ).toThrow(/CHECK constraint failed/i);
+    // 合法值仍可写（崩溃恢复链路 markRunning/markInterrupted/idle 不受影响）
+    raw(db).prepare("UPDATE sessions SET last_run_status = 'running' WHERE id = 's3'").run();
+    const row = raw(db)
+      .prepare("SELECT last_run_status AS lastRunStatus FROM sessions WHERE id = 's3'")
+      .get() as { lastRunStatus: string };
+    expect(row.lastRunStatus).toBe('running');
+  });
+
   it('CHECK：非法 skills.source 插入被拒', () => {
     const db = initDb();
     expect(() =>
@@ -413,9 +431,9 @@ describe('老库升级（增量迁移）', () => {
           .run(),
       ).toThrow(/UNIQUE constraint failed/i);
 
-      // 4) journal 记录两条迁移（进入 drizzle 版本体系）
+      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 + 0001 + 0002）
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(2);
+      expect(migs).toHaveLength(3);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
       closeDb();
@@ -435,7 +453,7 @@ describe('老库升级（增量迁移）', () => {
     }
   });
 
-  it('新库：0000 + 0001 均执行（journal 两条），约束齐全', async () => {
+  it('新库：0000 + 0001 + 0002 均执行（journal 三条），约束齐全', async () => {
     resetDb();
     closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -443,7 +461,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(2);
+      expect(migs).toHaveLength(3);
       // 约束仍生效（0001 重建未破坏 0000 语义）
       expect(() =>
         raw(db)

@@ -98,11 +98,17 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 ## 数据库
 
-- SQLite（better-sqlite3），schema 在 `src/main/infra/storage/schema.ts`
-- Drizzle Kit 从 `drizzle.config.ts` 读取配置
-- 迁移：PRAGMA user_version 版本链（`src/main/infra/storage/migrations.ts`）；新增列需三处同步：schema.ts + schema-sql.ts（新库 DDL）+ migrations.ts（老库路径）
+- SQLite（better-sqlite3）+ Drizzle ORM，**schema.ts 是全库唯一真源**（`src/main/infra/storage/schema.ts`，11 张表 + 领域约束 CHECK/UNIQUE/外键 + 查询索引）
+- Drizzle Kit（`drizzle.config.ts`）从 schema.ts **自动派生** DDL 与迁移（`drizzle/*.sql` + `drizzle/meta/` journal/snapshot）——**禁止手写第二份建表 SQL**
+- 迁移运行时：`db.ts initDb()` 调 `drizzle-orm/better-sqlite3/migrator.migrate()`，按 `_journal.json` 的 `when`（folderMillis）前进执行，`__drizzle_migrations` 表幂等记录。迁移目录 dev 读 `drizzle/`、打包读 `process.resourcesPath/drizzle`（extraResources）
+- **schema 演化规范**：
+  - 加列/加表/改索引：改 `schema.ts` → `pnpm exec drizzle-kit generate`（自动出迁移）+ 登记 journal/snapshot。验证 `pnpm exec drizzle-kit check`
+  - 给已有表加 CHECK/UNIQUE：SQLite 无法 `ALTER TABLE ADD CHECK`，两条路径——① 重建式迁移（`0001_legacy_upgrade` 先例，仅限**无其他表外键引用**的表，数据保真 INSERT SELECT）；② **触发器兜底**（`0002_sessions_last_run_status` 先例，被 FK 引用的表如 sessions——直接重建会触发 ON DELETE CASCADE 清空全部会话数据，绝对禁止）
+- 领域约束策略：稳定枚举 → DB CHECK/触发器（`messages.role`、`sessions.last_run_status` 等）；演进枚举 → `$type<T>()` 应用层约束（`goals.status`、`tasks.status/kind`，SQLite 改 CHECK 需重建表代价高）
+- 上层模块（ai 层）需要枚举类型时从 `schema.ts` 导入，勿重复定义
 - **渲染层用户设置（theme/ai/editor/shortcuts/experimental）持久化真源 = SQLite `app_settings` 表**（用户决策：localStorage 合并到 SQLite）。渲染层 settings-store 保持内存态，写穿透经 `settings:set` 落库；启动快照经 `settings:getAll` 在 main.tsx 顶层 await 拉取（`settings-bootstrap.ts`）。legacy localStorage 数据首启自动迁移。draft/sidebar/activeSession 等纯 UI 态仍留 localStorage
 - 路径由 `app.getPath('userData')` 动态决定：dev 为 `.electron-user-data/sessions.db`（重定向），prod 为 `%APPDATA%/<app name>/sessions.db`
+- keychain.dat 损坏：读失败记日志并保留 `.corrupt` 副本（不静默丢失全部 API Key）
 - 原 PostgreSQL/Prisma/AGE 层已删除 — 不要尝试 prisma 相关命令
 
 ## 代码风格（Biome 非默认项）

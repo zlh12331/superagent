@@ -111,7 +111,7 @@ Agent-Service ──► ToolRegistry.toAISDKTools(executeHook=ToolExecutor.execu
 
 **新增一个模型供应商**：`settings.ts` 的 `ApiKeyProviderSchema` → `providers/types.ts` 的 `PROVIDER_KINDS` → `providers/registry.ts` 的 `BUILTIN_DEFINITIONS`/`BUILTIN_FACTORIES`。
 
-**新增一张表**：`storage/schema-sql.ts`（SCHEMA_SQL + 索引）→ `storage/schema.ts`（Drizzle 定义）→（如需迁移）`storage/migrations.ts` → 若非 idempotent 需重跑测试。
+**新增一张表**：在 `storage/schema.ts` 定义（列 + CHECK/UNIQUE/外键 + 查询索引）→ `pnpm exec drizzle-kit generate` 自动生成迁移 + journal/snapshot → `pnpm exec drizzle-kit check` 验证 → db.test 断言约束生效。若给**已有表**加 CHECK/UNIQUE：用重建式迁移（0001 先例，仅限无 FK 引用表）或触发器（0002 先例，被引用表），禁止手写第二份建表 SQL。
 
 ## 9. 第三方关键依赖（运行时）
 

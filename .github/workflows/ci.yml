@@ -68,6 +68,10 @@ jobs:
       - name: Dependency direction (depcruise)
         run: pnpm depcruise
 
+      - name: Schema drift check (drizzle-kit)
+        # 防 schema.ts 与 drizzle/ 迁移快照漂移（数据层单一真源一致性）
+        run: pnpm exec drizzle-kit check
+
       - name: Unit tests + coverage gate (shared + main + renderer)
         run: pnpm test:coverage
 

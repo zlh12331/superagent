@@ -398,7 +398,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 | `infra/ai/tools/glob.tool.ts` | 2 | 同上（zod transform） |
 | `infra/ai/prompt/dynamic-context.ts` | 6 | 平台分支（darwin/linux 名称映射、非 win32 的 SHELL 兜底）；`process.platform` 只读不可注入，当前 win32 环境测试路径不可达 |
 | `infra/ai/agent-runtime/stream-reader.ts` | 1 | L49 `timeoutId !== undefined` false 分支；`new Promise` executor 同步赋值保证非 undefined（协议不变量死代码） |
-| `infra/storage/db.ts` | 5 | 备份数组空洞（readdirSync 无空洞）、完整性校验失败（损坏库打开即抛无法到达）、非 duplicate ALTER 错误（SCHEMA_SQL 先建表保证）、非 Error 备份异常 String() 兜底 |
+| `infra/storage/db.ts` | 5 | 备份数组空洞（readdirSync 无空洞）、完整性校验失败（损坏库打开即抛无法到达）、迁移失败路径（migrate 事务回滚后抛错）、非 Error 备份异常 String() 兜底 |
 | `ipc/app.handler.ts` | 1 | v8 对 `&&` 短路组合的计数分支；http/https/file/javascript 四路径用例已覆盖全部业务语义 |
 | `infra/telemetry/otel.ts` | 1 | shutdown 的 `provider.forceFlush` 在 SDK v2 测试环境不可用（catch 兜底后状态正常重置） |
 
