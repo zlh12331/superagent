@@ -10,7 +10,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -221,5 +221,246 @@ describe('领域约束生效', () => {
     expect(count('messages').c).toBe(0);
     expect(count('turns').c).toBe(0);
     expect(count('goals').c).toBe(0);
+  });
+});
+
+// ── 老库升级（drizzle 增量迁移路径）────────────────────────
+// 场景：手写 schema-sql.ts 时代建的老库（11 表 + 旧索引，无 CHECK / UNIQUE，
+// 且无 __drizzle_migrations journal）。initDb 时应：
+//   1. 0000 全量 IF NOT EXISTS 幂等跳过（不再因 "index already exists" 崩）
+//   2. 0001_legacy_upgrade 数据保真重建 5 张表，补齐领域约束
+//   3. journal 记录两条迁移（此后进入 drizzle 版本体系）
+describe('老库升级（增量迁移）', () => {
+  /** 旧手写 schema 的全部建表 + 索引 SQL（对齐已退役的 schema-sql.ts） */
+  const LegacySchemaSql = `
+    CREATE TABLE sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_message TEXT,
+      message_count INTEGER NOT NULL DEFAULT 0,
+      working_dir TEXT NOT NULL DEFAULT '',
+      last_run_status TEXT NOT NULL DEFAULT 'idle',
+      pinned INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      turn_id TEXT,
+      seq INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE prompts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE token_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      model_id TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL,
+      output_tokens INTEGER NOT NULL,
+      total_tokens INTEGER NOT NULL,
+      cache_read_tokens INTEGER,
+      reasoning_tokens INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE turns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      turn_id TEXT NOT NULL,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      seq INTEGER NOT NULL,
+      model_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      total_tokens INTEGER,
+      duration_ms INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE runtime_models (
+      model_id TEXT PRIMARY KEY,
+      provider_kind TEXT NOT NULL,
+      base_url TEXT,
+      display_name TEXT,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE skills (
+      name TEXT PRIMARY KEY,
+      description TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'learned',
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE cron_tasks (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      expression TEXT NOT NULL,
+      description TEXT NOT NULL,
+      next_fire_at INTEGER,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE tasks (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL,
+      start_time INTEGER NOT NULL,
+      end_time INTEGER
+    );
+    CREATE TABLE goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      condition TEXT NOT NULL,
+      status TEXT NOT NULL,
+      iterations INTEGER NOT NULL DEFAULT 0,
+      last_reason TEXT,
+      created_at INTEGER NOT NULL,
+      finished_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(turn_id);
+    CREATE INDEX IF NOT EXISTS idx_prompts_role ON prompts(role);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at);
+    CREATE INDEX IF NOT EXISTS idx_turns_session_seq ON turns(session_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_goals_session ON goals(session_id);
+  `;
+
+  function raw(db: ReturnType<typeof initDb>): Database.Database {
+    return (db as unknown as { $client: Database.Database }).$client;
+  }
+
+  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 两条，重复 initDb 幂等', async () => {
+    resetDb();
+    closeDb();
+    const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
+    mockApp.getPath.mockReturnValue(legacyDir);
+    try {
+      // 构造旧手写 schema 老库 + 数据（messages/turns 等 FK 需先插 sessions）
+      const lg = new Database(getDbPath());
+      lg.pragma('foreign_keys = ON');
+      lg.exec(LegacySchemaSql);
+      lg.exec(`
+        INSERT INTO sessions (id, title, created_at, updated_at, working_dir)
+          VALUES ('legacy-session', 'Legacy', 100, 100, '/w');
+        INSERT INTO messages (session_id, turn_id, seq, role, content, created_at)
+          VALUES ('legacy-session', 'legacy-turn', 0, 'user', '老消息', 100);
+        INSERT INTO turns (turn_id, session_id, seq, model_id, status, created_at)
+          VALUES ('legacy-turn', 'legacy-session', 0, 'm', 'completed', 100);
+        INSERT INTO skills (name, description, prompt, source, created_at)
+          VALUES ('legacy-skill', 'd', 'p', 'learned', 100);
+        INSERT INTO cron_tasks (id, session_id, expression, description, enabled, created_at)
+          VALUES ('legacy-cron', 'legacy-session', '* * * * *', 'dc', 1, 100);
+        INSERT INTO runtime_models (model_id, provider_kind, is_enabled, created_at)
+          VALUES ('legacy-model', 'deepseek', 1, 100);
+      `);
+      lg.close();
+
+      // 修复前：0000 CREATE INDEX（无 IF NOT EXISTS）会在既有同名索引处
+      // 抛 "index already exists" 中断迁移 → initDb 崩。修复后应成功。
+      const db = initDb();
+
+      // 1) 数据保真（0001 重建表不丢数据）
+      const msg = raw(db)
+        .prepare("SELECT role, content FROM messages WHERE session_id = 'legacy-session'")
+        .get() as { role: string; content: string };
+      expect(msg).toEqual({ role: 'user', content: '老消息' });
+      expect(
+        raw(db).prepare("SELECT name FROM skills WHERE name = 'legacy-skill'").get(),
+      ).toBeDefined();
+      expect(
+        raw(db).prepare("SELECT id FROM cron_tasks WHERE id = 'legacy-cron'").get(),
+      ).toBeDefined();
+      expect(
+        raw(db)
+          .prepare("SELECT model_id FROM runtime_models WHERE model_id = 'legacy-model'")
+          .get(),
+      ).toBeDefined();
+
+      // 2) 约束补齐：非法 role 插入被 CHECK 拒绝（0001 重建后生效）
+      expect(() =>
+        raw(db)
+          .prepare(
+            "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES ('legacy-session', 1, 'bogus', 'x', 0)",
+          )
+          .run(),
+      ).toThrow(/CHECK constraint failed/i);
+
+      // 3) UNIQUE 索引补齐：重复 turn_id 被拒
+      expect(() =>
+        raw(db)
+          .prepare(
+            "INSERT INTO turns (turn_id, session_id, seq, model_id, status, created_at) VALUES ('legacy-turn', 'legacy-session', 1, 'm', 'completed', 100)",
+          )
+          .run(),
+      ).toThrow(/UNIQUE constraint failed/i);
+
+      // 4) journal 记录两条迁移（进入 drizzle 版本体系）
+      const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
+      expect(migs).toHaveLength(2);
+
+      // 5) 幂等：重复 initDb 不重跑迁移、不崩
+      closeDb();
+      resetDb();
+      expect(() => initDb()).not.toThrow();
+
+      // 等待异步热备份日志落定（避免 teardown 竞态）
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      closeDb();
+      mockApp.getPath.mockReturnValue(tempDir);
+      try {
+        rmSync(legacyDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      } catch {
+        // 句柄未释放时跳过清理（临时目录由系统回收）
+      }
+    }
+  });
+
+  it('新库：0000 + 0001 均执行（journal 两条），约束齐全', async () => {
+    resetDb();
+    closeDb();
+    const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
+    mockApp.getPath.mockReturnValue(freshDir);
+    try {
+      const db = initDb();
+      const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
+      expect(migs).toHaveLength(2);
+      // 约束仍生效（0001 重建未破坏 0000 语义）
+      expect(() =>
+        raw(db)
+          .prepare(
+            "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES ('s', 0, 'bogus', 'x', 0)",
+          )
+          .run(),
+      ).toThrow(/CHECK constraint failed/i);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      closeDb();
+      mockApp.getPath.mockReturnValue(tempDir);
+      try {
+        rmSync(freshDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      } catch {
+        // 句柄未释放时跳过清理
+      }
+    }
   });
 });
