@@ -28,10 +28,11 @@ import {
 } from '@/hooks/use-runtime-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { providerApiKeyUrl } from '../provider-labels';
-import { ModelConfigFields, type ModelConfigFormValues } from './model-config-fields';
-
-/** 弹窗模式 */
-export type ModelConfigMode = 'provider' | 'custom' | 'edit';
+import {
+  ModelConfigFields,
+  type ModelConfigFormValues,
+  type ModelConfigMode,
+} from './model-config-fields';
 
 export interface ModelConfigDialogProps {
   readonly open: boolean;

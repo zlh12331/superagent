@@ -28,7 +28,8 @@ import {
 } from '@/hooks/use-runtime-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { AddModelDialog } from './dialogs/add-model-dialog';
-import { ModelConfigDialog, type ModelConfigMode } from './dialogs/model-config-dialog';
+import { ModelConfigDialog } from './dialogs/model-config-dialog';
+import type { ModelConfigMode } from './dialogs/model-config-fields';
 import { providerLabel } from './provider-labels';
 
 /** 配置弹窗状态（null = 关闭） */

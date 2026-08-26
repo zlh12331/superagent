@@ -22,7 +22,9 @@ import {
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { PROVIDER_LABELS, providerLabel } from '../provider-labels';
-import type { ModelConfigMode } from './model-config-dialog';
+
+/** 弹窗模式（定义于底层组件，避免 dialog ↔ fields 循环依赖） */
+export type ModelConfigMode = 'provider' | 'custom' | 'edit';
 
 /** 表单值（数字类字段以字符串承载输入态） */
 export interface ModelConfigFormValues {
