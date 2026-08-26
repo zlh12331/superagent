@@ -33,7 +33,6 @@
       "telemetryUpdated": "遥测级别已更新为 {{level}}，重启应用后生效",
       "telemetryUpdateFailed": "遥测级别更新失败：{{message}}",
       "apiKeySaveFailed": "API Key 保存失败：{{message}}",
-      "apiKeyDeleteFailed": "API Key 删除失败：{{message}}",
       "writeFailed": "写入失败",
       "reactTreeDesc": "React 组件树 / Hooks / Props / Profiler 性能分析",
       "logsEmpty": "日志面板为空",

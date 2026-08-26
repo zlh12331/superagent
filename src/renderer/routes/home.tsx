@@ -379,6 +379,3 @@ export function HomePage(): ReactElement {
     </>
   );
 }
-
-export default HomePage;
-export const Component = HomePage;

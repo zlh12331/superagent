@@ -33,7 +33,6 @@
       "telemetryUpdated": "Telemetry level updated to {{level}}. Restart to apply",
       "telemetryUpdateFailed": "Failed to update telemetry level: {{message}}",
       "apiKeySaveFailed": "Failed to save API Key: {{message}}",
-      "apiKeyDeleteFailed": "Failed to delete API Key: {{message}}",
       "writeFailed": "Write failed",
       "reactTreeDesc": "React component tree / Hooks / Props / Profiler performance",
       "logsEmpty": "Log panel is empty",

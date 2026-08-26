@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { useToolStore } from '@/stores/transient/tool-store';
-import { useApiKeyQuery, useDeleteApiKey, useSetApiKey } from '../use-api-key';
+import { useSetApiKey } from '../use-api-key';
 import { findMessageMatches, useConversationSearch } from '../use-conversation-search';
 import {
   useCreateSession,
@@ -302,26 +302,6 @@ describe('hooks 批次2 缺口补全', () => {
   });
 
   describe('use-api-key', () => {
-    it('useApiKeyQuery 成功：返回配置状态布尔', async () => {
-      injectApi('settings', {
-        getApiKey: vi.fn(async () => ({ data: { configured: true } })),
-      });
-      const { wrapper } = createWrapper();
-      const { result } = renderHook(() => useApiKeyQuery('deepseek'), { wrapper });
-      await waitFor(() => expect(result.current.data).toBe(true));
-    });
-
-    it('useApiKeyQuery window.api 未注入：返回 false', async () => {
-      Object.defineProperty(window, 'api', {
-        value: undefined,
-        writable: true,
-        configurable: true,
-      });
-      const { wrapper } = createWrapper();
-      const { result } = renderHook(() => useApiKeyQuery('deepseek'), { wrapper });
-      await waitFor(() => expect(result.current.data).toBe(false));
-    });
-
     it('useSetApiKey 成功：调用 IPC 并返回 ok', async () => {
       const setApiKey = vi.fn(async () => ({ data: { ok: true } }));
       injectApi('settings', { setApiKey });
@@ -344,30 +324,6 @@ describe('hooks 批次2 缺口补全', () => {
       const { result } = renderHook(() => useSetApiKey(), { wrapper });
       await act(async () => {
         await result.current.mutateAsync({ provider: 'deepseek', apiKey: 'x' }).catch(() => {});
-      });
-      expect(toast.error).toHaveBeenCalled();
-    });
-
-    it('useDeleteApiKey 成功：调用 IPC', async () => {
-      const deleteApiKey = vi.fn(async () => ({ data: { ok: true } }));
-      injectApi('settings', { deleteApiKey });
-      const { wrapper } = createWrapper();
-      const { result } = renderHook(() => useDeleteApiKey(), { wrapper });
-      await act(async () => {
-        await result.current.mutateAsync('deepseek');
-      });
-      expect(deleteApiKey).toHaveBeenCalledWith({ provider: 'deepseek' });
-    });
-
-    it('useDeleteApiKey 失败：toast.error 提示', async () => {
-      injectApi('settings', {
-        deleteApiKey: vi.fn(async () => ({ error: { code: 'DB_ERROR', message: '删除失败' } })),
-      });
-      const { toast } = await import('sonner');
-      const { wrapper } = createWrapper();
-      const { result } = renderHook(() => useDeleteApiKey(), { wrapper });
-      await act(async () => {
-        await result.current.mutateAsync('deepseek').catch(() => {});
       });
       expect(toast.error).toHaveBeenCalled();
     });

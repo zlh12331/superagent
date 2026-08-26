@@ -93,6 +93,3 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     />
   );
 }
-
-export default ChatPage;
-export const Component = ChatPage;
