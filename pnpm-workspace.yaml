@@ -1,5 +1,7 @@
 # pnpm-workspace.yaml
 # pnpm workspace 配置：声明 packages/ 与 tools/ 下所有子目录为 workspace 包
+# 注：overrides / onlyBuiltDependencies / packageExtensions 在 pnpm 10 下
+# 位于 package.json#pnpm 字段（pnpm 11 才迁移到本文件，本项目用 pnpm 10）
 packages:
   - 'packages/*'
   - 'tools/*'
