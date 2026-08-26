@@ -6,41 +6,10 @@
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=24.13.0",
-    "pnpm": ">=10.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "esbuild",
-      "node-pty"
-    ],
-    "packageExtensions": {
-      "dependency-cruiser": {
-        "peerDependencies": {
-          "typescript": "*"
-        },
-        "peerDependenciesMeta": {
-          "typescript": {
-            "optional": true
-          }
-        }
-      }
-    },
-    "overrides": {
-      "ip-address": "10.3.1",
-      "hono": "4.12.34",
-      "@hono/node-server": "1.19.15",
-      "postcss": "8.5.23",
-      "fast-uri": "3.1.5",
-      "nanoid": "3.3.18",
-      "tar": "7.5.21",
-      "undici@>=7.0.0": "7.29.0",
-      "undici@<7": "6.28.0",
-      "js-yaml@>=4.0.0": "4.3.1"
-    }
+    "pnpm": ">=11.0.0"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall-rebuild.mjs",

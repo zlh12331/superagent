@@ -1,9 +1,49 @@
 # pnpm-workspace.yaml
-# pnpm workspace 配置：声明 packages/ 与 tools/ 下所有子目录为 workspace 包
-# 注：overrides / onlyBuiltDependencies / packageExtensions 在 pnpm 10 下
-# 位于 package.json#pnpm 字段（pnpm 11 才迁移到本文件，本项目用 pnpm 10）
+# pnpm 11 起所有非 auth/registry 配置统一在本文件声明（不再读 package.json#pnpm）
+# 参考 https://pnpm.io/settings
+
 packages:
   - 'packages/*'
   - 'tools/*'
   # 排除下划线前缀的模板目录（如 tools/_ts6-template），不作为真实 workspace 包
   - '!tools/_*'
+
+# ── 仅允许执行构建脚本的依赖（pnpm 11: onlyBuiltDependencies）────────────────
+# electron 的 postinstall 会下载平台二进制，必须放行，否则运行时报
+# "Electron failed to install correctly"
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - esbuild
+  - node-pty
+
+# ── peerDependencies 补丁（pnpm 11: packageExtensions）─────────────────────────
+packageExtensions:
+  dependency-cruiser:
+    peerDependencies:
+      typescript: '*'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
+# ── 依赖覆盖（pnpm 11: overrides）─────────────────────────────────────────────
+overrides:
+  ip-address: 10.3.1
+  hono: 4.12.34
+  '@hono/node-server': 1.19.15
+  postcss: 8.5.23
+  fast-uri: 3.1.5
+  nanoid: 3.3.18
+  tar: 7.5.21
+  'undici@>=7.0.0': 7.29.0
+  'undici@<7': 6.28.0
+  'js-yaml@>=4.0.0': 4.3.1
+
+# ── 供应链策略 ──────────────────────────────────────────────────────────────
+# pnpm 11 默认 minimumReleaseAge=1440（发布不足 24h 的包拒绝安装）。
+# lockfile 内 rolldown/tanstack 等当日新版本会被误拦，项目用 npmmirror 镜像
+# + lockfile 版本锁定，供应链风险已受控，故显式关闭该 age gate。
+minimumReleaseAge: 0
+
+# ── 存储与缓存：固定到项目内（TRAE 沙箱不允许写系统根目录 F:\.pnpm-store）───
+storeDir: .pnpm-store
