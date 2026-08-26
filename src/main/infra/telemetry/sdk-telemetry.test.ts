@@ -8,12 +8,14 @@
 // - getTracer 为 null（OTel 未初始化）→ 不创建 span
 // ──────────────────────────────────────────────────────────────
 
+import type { Tracer } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const span = { setAttribute: vi.fn(), end: vi.fn() };
-  const tracer = { startSpan: vi.fn(() => span) };
-  return { span, tracer };
+  const startSpan = vi.fn(() => span);
+  const tracer = { startSpan } as unknown as Tracer;
+  return { span, tracer, startSpan };
 });
 
 vi.mock('./otel', () => ({
@@ -26,7 +28,7 @@ import { createSdkTelemetryIntegration } from './sdk-telemetry';
 describe('createSdkTelemetryIntegration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.tracer.startSpan.mockReturnValue(mocks.span);
+    mocks.startSpan.mockReturnValue(mocks.span);
     vi.mocked(getTracer).mockReturnValue(mocks.tracer);
   });
 
