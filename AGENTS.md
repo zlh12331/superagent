@@ -12,7 +12,7 @@ pnpm test                   # 全部 unit tests（&& 链式，任一层失败即
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
 pnpm check:static           # 静态审计：check:tokens（样式铁律）+ check:i18n（i18n 缺失卡关），pre-push/CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
-pnpm check:i18n             # i18n 审计：引用缺失卡关 + 双语一致性；冗余加 --strict 卡关
+pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
 pnpm changelog              # 从 git log 自动生成 CHANGELOG [Unreleased] 段
 
@@ -22,7 +22,7 @@ pnpm test:main              # vitest --root src/main
 pnpm test:renderer
 pnpm test:scripts
 
-# E2E（3 套 Playwright 配置）
+# E2E（3 套 Playwright 配置；@playwright/test 升级后需 `npx playwright install` 同步浏览器，否则本地全挂）
 pnpm test:e2e               # 浏览器模式（dev server）
 pnpm test:e2e:electron      # Electron 真实窗口
 pnpm test:smoke             # 生产构建 smoke
@@ -53,7 +53,7 @@ scripts/         → 脚手架与工具（scaffold / changelog）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
-- 主进程是 Service Container 模式（`service-container.ts`），集中管理 18 个服务（Chat/File/Search/Terminal/Git/Codebase/Session/Update/Tool/Permission/ToolExecutor/MCP/Prompt/Agent/Memory/LSP/Goal/IM；2026-08-17 实测），dispose 顺序按反向依赖
+- 主进程是 Service Container 模式（`service-container.ts`），集中管理 19 个服务（Chat/File/Search/Terminal/Git/Codebase/Session/Update/Tool/Permission/ToolExecutor/MCP/Prompt/Agent/AgentAsk/MemoryHub/LSP/Goal/IM，2026-08-27 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖
 - IPC 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，渲染层用 `window.api.*` 调用
 - 流式事件用 subscribe 回调模式（返回 unsubscribe 函数）
 - Channel 命名：`{domain}:{action}`（请求-响应）、`{domain}:stream:{event}`（流式）、`{domain}:event:{name}`（状态事件），常量表在 `packages/shared/src/ipc/channels.ts`
