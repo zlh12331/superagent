@@ -114,6 +114,8 @@
   --user-bubble: var(--msg-bubble-user);
   /* 遮罩 / 玻璃 */
   --overlay-bg: rgba(0, 0, 0, 0.25);
+  /* 命令/代码块深色背景（双主题一致，终端风格） */
+  --code-block-bg: #070A0E;
   --overlay-blur: 8px;
   --drawer-overlay: rgba(245, 245, 245, 0.55);
   --glass-bg: rgba(255, 255, 255, 0.85);

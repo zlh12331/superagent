@@ -467,7 +467,7 @@ function CodeBlock({
         className={cn(
           'text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-xs leading-snug',
           commandStyle
-            ? 'border-l-[var(--accent-dim)] bg-[#070A0E] border-l-2'
+            ? 'border-l-[var(--accent-dim)] bg-[var(--code-block-bg)] border-l-2'
             : 'bg-background/50',
         )}
       >

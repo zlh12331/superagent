@@ -130,7 +130,7 @@ export function AskDialog(): ReactElement | null {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--overlay-bg)] p-4">
       <div className="bg-card border-border max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-lg border shadow-lg">
         {/* 头部 */}
         <div className="border-border flex items-center gap-2 border-b px-4 py-3">

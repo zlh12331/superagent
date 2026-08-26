@@ -195,7 +195,7 @@ export function renderGitPreview(
         <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.commitMessage')}</span>
         </div>
-        <pre className="whitespace-pre-wrap break-all rounded bg-white/60 p-2 text-foreground">
+        <pre className="bg-[var(--glass-bg)] text-foreground whitespace-pre-wrap break-all rounded p-2">
           {message}
         </pre>
       </div>

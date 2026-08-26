@@ -30,7 +30,8 @@ describe('ui/button 批次8 缺口补全', () => {
     expect(buttonVariants({ size: 'default' })).toContain('h-9');
     expect(buttonVariants({ size: 'sm' })).toContain('h-8');
     expect(buttonVariants({ size: 'lg' })).toContain('h-10');
-    expect(buttonVariants({ size: 'icon' })).toContain('w-9');
+    // icon 尺寸用 size-9（宽高相等语义，样式铁律⑤）
+    expect(buttonVariants({ size: 'icon' })).toContain('size-9');
   });
 
   it('disabled：透传到原生 button', () => {

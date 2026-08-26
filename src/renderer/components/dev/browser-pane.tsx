@@ -30,7 +30,7 @@ const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number }>
 
 /** 工具栏按钮基础样式 */
 const TOOLBAR_BTN_CLASS =
-  'flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
+  'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
 
 /** 规范化 URL：缺少协议时自动补 https:// */
 function normalizeUrl(raw: string): string {

@@ -128,7 +128,7 @@ export function Topbar({
           onClick={() => setTheme(nextTheme(theme))}
           className={cn(
             'text-muted-foreground hover:bg-sidebar-accent',
-            'hover:text-sidebar-accent-foreground h-8 w-8',
+            'hover:text-sidebar-accent-foreground size-8',
           )}
         >
           {resolvedTheme === 'dark' ? (

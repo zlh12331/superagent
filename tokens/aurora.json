@@ -315,6 +315,11 @@
     "comment": "遮罩 / 玻璃",
     "dark": "rgba(0, 0, 0, 0.5)"
   },
+  "code-block-bg": {
+    "value": "#070A0E",
+    "comment": "命令/代码块深色背景（双主题一致，终端风格）",
+    "dark": "#070A0E"
+  },
   "overlay-blur": {
     "value": "8px"
   },
