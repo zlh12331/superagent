@@ -4,7 +4,7 @@
 // 依据 eslint max-lines 官方建议（100-500 区间，本项目取 600 容忍 TS/React 组件文件）
 // 与 typescript-dev-standards-ai.md §工程 同步修订。
 // 净行 = 总行数 - 空行 - 纯注释行（对齐 eslint 的 skipBlankLines + skipComments 选项）。
-// 策略：豁免清单记录存量超限文件（2026-08-11 基线 1 个），清单外文件超限即卡关。
+// 策略：豁免清单记录存量超限文件（2026-08-11 基线，当前 3 个），清单外文件超限即卡关。
 //
 // 运行：pnpm check:file-size
 // ──────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ const SCAN_DIRS = [
 ];
 const LIMIT = 600;
 
-// 存量超限豁免清单（2026-08-11 基线 2 个；重构拆短后移除）
+// 存量超限豁免清单（2026-08-11 基线，当前 3 个；重构拆短后移除）
 const EXEMPT = new Set([
   'src/renderer/dev/mock-api.ts',
   'src/main/infra/ai/agent/agent-service.ts', // 601 净行，重构时优先拆

@@ -208,7 +208,9 @@ function main(): number {
     checkJsDoc(content, rel, problems);
     checkFileRefs(content, rel, problems);
     // TODO 过期检查仅针对 src 代码（docs 文档内 TODO 为格式示例，非待办管理对象）
-    if (file.startsWith(join('src'))) checkTodos(content, rel, problems);
+    // 注：file 为绝对路径，必须与 ROOT 拼接后的 src 前缀比较（此前误用相对串
+    // 'src' 导致条件恒假，TODO 检查静默失效）
+    if (file.startsWith(join(ROOT, 'src'))) checkTodos(content, rel, problems);
   }
 
   const errors = problems.filter((p) => p.level === 'error');

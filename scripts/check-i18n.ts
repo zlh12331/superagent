@@ -43,14 +43,6 @@ function flattenKeys(obj: Record<string, unknown>, prefix = ''): string[] {
  *
  * 间接引用（const labelKey = 'x.y'; ... t(labelKey) / t(item.labelKey)）：
  * 本文件存在非字符串实参的 t() 调用时，把文件中所有「key 形状」字符串字面量
- * （^小写段.小写段...$）视为引用——本仓库的 labelKey/promptKey/descriptionKey
- * 常量数组均与 t() 间接调用同文件，此规则可覆盖（此前这些 key 被误报冗余）。
- */
-/**
- * 扫描 t('...') 静态引用（单引号/双引号，排除注释行），模板串跳过。
- *
- * 间接引用（const labelKey = 'x.y'; ... t(labelKey) / t(item.labelKey)）：
- * 本文件存在非字符串实参的 t() 调用时，把文件中所有「key 形状」字符串字面量
  * （^小写段.小写段...$）追加为引用——本仓库的 labelKey/promptKey/descriptionKey
  * 常量数组均与 t() 间接调用同文件，此规则可覆盖（此前这些 key 被误报冗余）。
  * 间接候选不参与「缺失」校验（key 形状字符串未必都是 i18n key）。
@@ -82,10 +74,10 @@ function collectStaticKeys(file: string): { direct: string[]; used: string[] } {
   return { direct, used };
 }
 
-/** 收集动态模板前缀：t(`chat.${x}`) → 'chat.'（用于冗余豁免） */
+/** 收集动态模板前缀：t(`chat.${x}`) / t(`settings.appearance.${x}`) → 对应前缀（用于冗余豁免；支持多段前缀） */
 function collectDynamicPrefixes(files: string[]): Set<string> {
   const prefixes = new Set<string>();
-  const re = /\bt\(\s*`([a-z]+)\.\$\{/g;
+  const re = /\bt\(\s*`([a-z][\w]*(?:\.[a-z][\w]*)*)\.\$\{/g;
   for (const file of files) {
     const content = readFileSync(file, 'utf8');
     for (const m of content.matchAll(re)) prefixes.add(`${m[1]}.`);

@@ -72,16 +72,6 @@ function isIoBoundaryMock(specifier: string): boolean {
   return IO_BOUNDARY_MOCKS.some((p) => specifier.includes(p));
 }
 
-/** 提取 vi.mock 的参数 */
-function extractViMockSpecifiers(content: string): string[] {
-  const result: string[] = [];
-  const re = /vi\.mock\(\s*['"]([^'"]+)['"]/g;
-  for (let m = re.exec(content); m !== null; m = re.exec(content)) {
-    result.push(m[1] as string);
-  }
-  return result;
-}
-
 function main(): void {
   const errors: Finding[] = [];
   const warnings: Finding[] = [];
@@ -97,18 +87,24 @@ function main(): void {
   for (const f of collectFiles(integrationDir, /\.test\.ts$/)) {
     const content = readFileSync(f, 'utf-8');
     const rel = relative(ROOT, f).replaceAll('\\', '/');
-    const lines = content.split('\n');
-    for (const [idx, line] of lines.entries()) {
-      for (const spec of extractViMockSpecifiers(line)) {
-        if (!isSameRepoPath(spec)) continue;
-        // IO 边界替身（infra/storage 等）是简化环境 Medium Test 的标准做法，完全允许
-        if (isIoBoundaryMock(spec)) continue;
-        errors.push({
-          file: rel,
-          line: idx + 1,
-          detail: `vi.mock('${spec}') 指向同仓业务模块 = 假集成（集成测试必须真实协作，只替身 IO 边界）`,
-        });
-      }
+    // 全文扫描（含跨行 vi.mock(\n '...' )），按匹配位置换算行号；
+    // 提取时剔除注释行内容（避免把注释里的示例误报）
+    const contentNoComments = content
+      .split('\n')
+      .map((l) => (l.trim().startsWith('//') || l.trim().startsWith('*') ? '' : l))
+      .join('\n');
+    const re = /vi\.mock\(\s*['"]([^'"]+)['"]/g;
+    for (const m of contentNoComments.matchAll(re)) {
+      const spec = m[1] as string;
+      if (!isSameRepoPath(spec)) continue;
+      // IO 边界替身（infra/storage 等）是简化环境 Medium Test 的标准做法，完全允许
+      if (isIoBoundaryMock(spec)) continue;
+      const line = contentNoComments.slice(0, m.index).split('\n').length;
+      errors.push({
+        file: rel,
+        line,
+        detail: `vi.mock('${spec}') 指向同仓业务模块 = 假集成（集成测试必须真实协作，只替身 IO 边界）`,
+      });
     }
   }
 
@@ -127,18 +123,20 @@ function main(): void {
     }
   }
 
-  // ── 规则 3：恒真断言（warning，存量清零后升 error）──────────
-  for (const f of collectFiles(join(ROOT, 'src'), /\.test\.(ts|tsx)$/)) {
-    const content = readFileSync(f, 'utf-8');
-    const rel = relative(ROOT, f).replaceAll('\\', '/');
-    const lines = content.split('\n');
-    for (const [idx, line] of lines.entries()) {
-      if (TAUTOLOGY_PATTERNS.some((p) => p.test(line))) {
-        warnings.push({
-          file: rel,
-          line: idx + 1,
-          detail: '恒真断言（字面量自比）= 空跑，应断言真实副作用',
-        });
+  // ── 规则 3：恒真断言（warning，存量清零后升 error；覆盖单测 + 集成）────────
+  for (const dir of [join(ROOT, 'src'), join(ROOT, 'tests', 'integration')]) {
+    for (const f of collectFiles(dir, /\.test\.(ts|tsx)$/)) {
+      const content = readFileSync(f, 'utf-8');
+      const rel = relative(ROOT, f).replaceAll('\\', '/');
+      const lines = content.split('\n');
+      for (const [idx, line] of lines.entries()) {
+        if (TAUTOLOGY_PATTERNS.some((p) => p.test(line))) {
+          warnings.push({
+            file: rel,
+            line: idx + 1,
+            detail: '恒真断言（字面量自比）= 空跑，应断言真实副作用',
+          });
+        }
       }
     }
   }

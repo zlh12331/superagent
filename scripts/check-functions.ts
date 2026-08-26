@@ -39,11 +39,22 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+/** 剔除泛型内容（支持多层嵌套）：防 Map<string, number> 的逗号被参数切分误计 */
+function stripGenerics(text: string): string {
+  let prev = '';
+  let cur = text;
+  while (cur !== prev) {
+    prev = cur;
+    cur = cur.replace(/<[^<>]*>/g, '');
+  }
+  return cur;
+}
+
 /** 提取函数签名参数（跨行/可选/默认值），返回参数名列表；解构对象返回 null（对象封装豁免） */
 function extractParams(signature: string): string[] | null {
   const paren = signature.match(/\(([\s\S]*)\)/);
   if (paren === null) return [];
-  const params = paren[1];
+  const params = stripGenerics(paren[1] ?? '');
   // 解构对象/数组参数 → 对象封装，整函数豁免
   if (/\{\s*[^}]*\}/.test(params) || /\[\s*[^\]]*\]/.test(params)) return null;
   const names: string[] = [];
@@ -61,12 +72,13 @@ function checkFile(file: string, findings: Finding[]): void {
   const lines = readFileSync(file, 'utf8').split('\n');
   const rel = relative(ROOT, file).replace(/\\/g, '/');
   const fnRe =
-    /(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([\s\S]*?)\)\s*(?::[^{}]*)?(?=\s*\{)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(([\s\S]*?)\)|(\w+))\s*=>/g;
+    /(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([\s\S]*?)\)\s*(?::[^{}]*)?(?=\s*\{)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(([\s\S]*?)\)|(\w+))\s*=>|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(([\s\S]*?)\)/g;
   const source = lines.join('\n');
 
   for (const m of source.matchAll(fnRe)) {
-    const name = m[1] ?? m[3] ?? 'anonymous';
-    const paramsText = m[2] ?? m[4];
+    // 三种形态：function 声明（1/2）、箭头函数（3/4/5）、const f = function 表达式（6/7）
+    const name = m[1] ?? m[3] ?? m[6] ?? 'anonymous';
+    const paramsText = m[2] ?? m[4] ?? m[7];
     if (paramsText === undefined) continue;
     if (EXEMPT_FUNCTIONS.has(name)) continue; // DI 装配豁免
     // 跳过注释中的函数声明

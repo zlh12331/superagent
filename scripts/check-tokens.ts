@@ -46,17 +46,31 @@ const COLOR_PALETTE = [
   'fuchsia',
 ];
 
-// 裸色类模式：bg-red-500 / text-blue-600 / border-amber-200 等
+// 裸色类模式：bg-red-500 / text-blue-600 / border-amber-200 等（带数字后缀）
+// 前缀 (?:^|\s|")：className 首位类名紧贴引号也必须命中（此前漏检）
 const BARE_COLOR_RE = new RegExp(
-  `(?:^|\\s)(bg|text|border|ring|from|to|via|divide|outline|fill|stroke|shadow)-(${COLOR_PALETTE.join('|')})-[0-9]+`,
+  `(?:^|\\s|")(bg|text|border|ring|from|to|via|divide|outline|fill|stroke|shadow)-(${COLOR_PALETTE.filter((c) => c !== 'white' && c !== 'black').join('|')})-[0-9]+`,
   'g',
 );
 
+// 无阶裸色：bg-white / text-black（白/黑无数字后缀，需独立模式；此前漏检）
+const BARE_MONO_RE = /(?:^|\s|")(bg|text|border|ring|shadow)-(white|black)(?=[\s"'/:\][]|$)/g;
+
+// 存量豁免基线（白/黑裸色历史用法，新增违规仍卡关；重构为语义令牌后移除）：
+//   badge.tsx = shadcn 官方 destructive 变体；browser-pane = iframe 白底；
+//   inline-approval-card / DialogHost = 语义色背景上的白字（对比度需求）
+const MONO_EXEMPT_FILES = new Set([
+  'src/renderer/components/ui/badge.tsx',
+  'src/renderer/components/dev/browser-pane.tsx',
+  'src/renderer/components/agent/inline-approval-card.tsx',
+  'src/renderer/components/common/DialogHost.tsx',
+]);
+
 // 手动 dark: 双写
-const DARK_OVERRIDE_RE = /(?:^|\s)dark:[a-z-]+/g;
+const DARK_OVERRIDE_RE = /(?:^|\s|")dark:[a-z-]+/g;
 
 // space-x/y
-const SPACE_UTIL_RE = /(?:^|\s)space-[xy]-[0-9.]+/g;
+const SPACE_UTIL_RE = /(?:^|\s|")space-[xy]-[0-9.]+/g;
 
 // className 中的硬编码 hex 颜色
 const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/g;
@@ -88,26 +102,47 @@ function isCommentLine(line: string): boolean {
   return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*');
 }
 
+/** 类名形态判定：含至少一个工具类词根（覆盖多行 cn( 续行的类名字符串，
+ * 同时避免把 i18n key/查询 key 等非样式字符串误当类名扫描） */
+const CLASS_LIKE_RE =
+  /\b(bg|text|border|ring|shadow|outline|fill|stroke|from|to|via|divide|rounded|flex|grid|block|hidden|absolute|relative|fixed|sticky|items|justify|gap|space|size|w|h|p|m|px|py|mx|my|pt|pb|pl|pr|mt|mb|ml|mr|z|top|left|right|bottom|inset|min-w|max-w|min-h|max-h|font|tracking|leading|overflow|whitespace|cursor|select|opacity|transition|animate|data|dark|hover|focus|active|disabled)[-\][:]/;
+
+/** 提取本行候选类名字符串：静态 className="..." + 本行全部类名形态引号串（含多行 cn( 续行） */
+function extractClassStrings(line: string): string[] {
+  const results: string[] = [];
+  const staticMatch = line.match(/className="([^"]+)"/);
+  if (staticMatch !== null) results.push(staticMatch[1] as string);
+  for (const m of line.matchAll(/['"]([^'"`\n]+)['"]/g)) {
+    const s = m[1] as string;
+    if (s === staticMatch?.[1]) continue;
+    if (CLASS_LIKE_RE.test(s)) results.push(s);
+  }
+  return results;
+}
+
 function checkFile(file: string, violations: Violation[]): void {
+  const rel = relative(ROOT, file).replace(/\\/g, '/');
   const lines = readFileSync(file, 'utf8').split('\n');
   lines.forEach((line, idx) => {
     if (isCommentLine(line)) return;
     const lineNo = idx + 1;
-    const rel = relative(ROOT, file);
 
-    for (const m of line.matchAll(BARE_COLOR_RE)) {
-      violations.push({ file: rel, line: lineNo, rule: 'bare-color', detail: m[0].trim() });
-    }
-    for (const m of line.matchAll(DARK_OVERRIDE_RE)) {
-      violations.push({ file: rel, line: lineNo, rule: 'dark-override', detail: m[0].trim() });
-    }
-    for (const m of line.matchAll(SPACE_UTIL_RE)) {
-      violations.push({ file: rel, line: lineNo, rule: 'space-util', detail: m[0].trim() });
-    }
-    // 仅当 className 字符串中出现 w-N 与 h-N 且数值相等（size-N 语义）
-    const classMatch = line.match(/className="([^"]+)"/);
-    if (classMatch) {
-      const cls = classMatch[1];
+    for (const cls of extractClassStrings(line)) {
+      for (const m of cls.matchAll(BARE_COLOR_RE)) {
+        violations.push({ file: rel, line: lineNo, rule: 'bare-color', detail: m[0].trim() });
+      }
+      if (!MONO_EXEMPT_FILES.has(rel)) {
+        for (const m of cls.matchAll(BARE_MONO_RE)) {
+          violations.push({ file: rel, line: lineNo, rule: 'bare-color', detail: m[0].trim() });
+        }
+      }
+      for (const m of cls.matchAll(DARK_OVERRIDE_RE)) {
+        violations.push({ file: rel, line: lineNo, rule: 'dark-override', detail: m[0].trim() });
+      }
+      for (const m of cls.matchAll(SPACE_UTIL_RE)) {
+        violations.push({ file: rel, line: lineNo, rule: 'space-util', detail: m[0].trim() });
+      }
+      // 仅当 className 字符串中出现 w-N 与 h-N 且数值相等（size-N 语义）
       const w = cls.match(/(?:^|\s)w-(\d+)(?=\s|$)/);
       const h = cls.match(/(?:^|\s)h-(\d+)(?=\s|$)/);
       if (w !== null && h !== null && w[1] === h[1]) {
@@ -118,14 +153,12 @@ function checkFile(file: string, violations: Violation[]): void {
           detail: `w-${w[1]} h-${h[1]}`,
         });
       }
-    }
-    // 硬编码 hex：仅查 className 字符串（UI 类样式）；JS 对象字面量（xterm 主题等库配置）豁免
-    const classMatch2 = line.match(/className="([^"]+)"/);
-    if (classMatch2 && !classMatch2[1].includes('var(--')) {
-      for (const m of classMatch2[1].matchAll(HEX_COLOR_RE)) {
+      // 硬编码颜色：先剔除 var(--…) 片段再查（豁免收窄到片段级，此前整行豁免会漏检）
+      const withoutVars = cls.replace(/var\(--[^)]*\)/g, '');
+      for (const m of withoutVars.matchAll(HEX_COLOR_RE)) {
         violations.push({ file: rel, line: lineNo, rule: 'hex-color', detail: m[0] });
       }
-      for (const m of classMatch2[1].matchAll(RGB_COLOR_RE)) {
+      for (const m of withoutVars.matchAll(RGB_COLOR_RE)) {
         violations.push({ file: rel, line: lineNo, rule: 'rgb-color', detail: m[0] });
       }
     }

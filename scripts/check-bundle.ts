@@ -106,6 +106,12 @@ function main(): number {
     return 0;
   }
 
+  // 边界：assets 目录存在但无 .js 产物（异常构建）——跳过历史记录避免写入 -Infinity 趋势数据
+  if (chunks.length === 0) {
+    console.log('[check-bundle] ⏭️ assets 目录无 .js 产物，跳过（异常构建请检查 build 输出）');
+    return 0;
+  }
+
   // 主进程产物报告（告警不卡关）
   if (existsSync(MAIN_ENTRY)) {
     const mainKib = statSync(MAIN_ENTRY).size / 1024;
