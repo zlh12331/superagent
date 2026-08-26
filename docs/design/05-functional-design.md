@@ -25,7 +25,7 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 | 12 | i18n | [i18n/](file:///f:/TraeProjects/1/src/renderer/i18n) | 中英双语 |
 | 13 | 目标系统 | [goal-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/goal-service.ts) | 目标驱动会话（GoalJudge LLM 判定） |
 | 14 | IM 接入 | [im-service.ts](file:///f:/TraeProjects/1/src/main/infra/im/im-service.ts) | 飞书/企微消息桥接（ImAgentBridge） |
-| 15 | 记忆系统 | [memory-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/memory-service.ts) | 知识记忆 recall/store/dream |
+| 15 | 记忆系统 | [memory-hub-service.ts](file:///f:/TraeProjects/1/src/main/infra/memory-hub/memory-hub-service.ts) | TencentDB-Agent-Memory sidecar（L0 对话 + L1 蒸馏记忆；MemoryPort 唯一接口） |
 
 > 2026-08-11 同步：总览表由 12 行扩充至 15 行（新增目标/IM/记忆三系统）。前端交互侧另有对齐参考项目的功能集（侧边栏即时搜索 + 防抖高亮、⌘F 模糊搜索、目标编辑对话框、终端多标签、斜杠命令 /interrupt /goal、审批卡编辑重提/跳过、命令面板面板命令、快捷键体系 Ctrl+B/J、Ctrl+` 等，详见 09-ux-interaction-spec 与 10-component-design-spec）。
 

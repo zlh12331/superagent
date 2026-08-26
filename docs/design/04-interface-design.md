@@ -376,22 +376,20 @@ export class ImService {
 }
 ```
 
-### 3.17 MemoryService
+### 3.17 MemoryPort
 
-[src/main/infra/ai/knowledge/memory-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/memory-service.ts)：无独立接口，直接 export class。
+[src/main/infra/memory-hub/types.ts](file:///f:/TraeProjects/1/src/main/infra/memory-hub/types.ts)：记忆引擎唯一边界接口（capture / recall / searchMemories / clear），实现由 memory-hub sidecar（TencentDB-Agent-Memory）提供。
 
 ```ts
-export class MemoryService {
-  recall(query: string): Promise<MemoryEntry[]>;
-  store(content: string): Promise<void>;
-  clear(): Promise<void>;
-  dream(): Promise<void>;               // 梦境整理（LLM 摘要）
-  forget(entryId: string): Promise<void>;
-  extractAndStore(text: string): Promise<void>;
+export interface MemoryPort {
+  capture(input: MemoryCaptureInput): Promise<MemoryCaptureResult>;
+  recall(input: MemoryRecallInput): Promise<MemoryRecallResult>;
+  searchMemories(query: string, limit?: number): Promise<MemorySearchResult>;
+  clear(sessionKey: string): Promise<MemoryClearResult>;
 }
 ```
 
-> 2026-08-11 同步：Service 小节由 14 扩充至 17（新增 GoalService / ImService / MemoryService，均为直接 export class 无独立接口）。
+> 2026-08-11 同步：Service 小节由 14 扩充至 17（新增 GoalService / ImService / MemoryService，均为直接 export class 无独立接口）。2026-08-25 更新：记忆模块迁至 memory-hub sidecar（TencentDB-Agent-Memory），接口收敛为 MemoryPort。
 
 ## 4. 数据类型定义
 
