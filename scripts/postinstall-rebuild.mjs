@@ -9,6 +9,10 @@
 //
 // 跳过方式（CI / 无需原生模块的场景）：
 //   设置环境变量 SKIP_ELECTRON_REBUILD=1
+//
+// 失败策略：重编译失败仅告警不阻断 install（本机工具链缺失等环境问题不应让
+// pnpm install/add 整体失败；dev/test 脚本会按需重新编译，或手动运行）：
+//   pnpm rebuild:native:electron（Electron ABI）/ pnpm rebuild:native:node（Node ABI）
 // ──────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';
@@ -26,7 +30,10 @@ const result = spawnSync(
 );
 
 if (result.status !== 0) {
-  console.error('[postinstall] electron-rebuild 失败（可设 SKIP_ELECTRON_REBUILD=1 跳过）');
-  process.exit(result.status ?? 1);
+  console.warn(
+    '[postinstall] ⚠️ electron-rebuild 失败（不阻断 install）：本机工具链可能缺失。' +
+      '需要原生模块时手动重编：pnpm rebuild:native:electron（或设 SKIP_ELECTRON_REBUILD=1 静默跳过）',
+  );
+  process.exit(0);
 }
 console.log('[postinstall] 原生模块重编译完成');
