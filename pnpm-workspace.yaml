@@ -8,14 +8,22 @@ packages:
   # 排除下划线前缀的模板目录（如 tools/_ts6-template），不作为真实 workspace 包
   - '!tools/_*'
 
-# ── 仅允许执行构建脚本的依赖（pnpm 11: onlyBuiltDependencies）────────────────
+# ── 构建脚本决策（pnpm 11: allowBuilds 取代 onlyBuiltDependencies）────────────────
 # electron 的 postinstall 会下载平台二进制，必须放行，否则运行时报
-# "Electron failed to install correctly"
-onlyBuiltDependencies:
-  - better-sqlite3
-  - electron
-  - esbuild
-  - node-pty
+# "Electron failed to install correctly"；better-sqlite3/node-pty 需原生编译；
+# esbuild 需 postinstall 安装平台二进制。其余包显式 false：@swc/core 走平台
+# 可选包、@sentry/cli 二进制按需下载、msw/protobufjs/electron-winstaller 的脚本非运行必需。
+# pnpm 11 对未决策包报 ERR_PNPM_IGNORED_BUILDS 阻断 install，必须逐一表态。
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  esbuild: true
+  node-pty: true
+  '@sentry/cli': false
+  '@swc/core': false
+  electron-winstaller: false
+  msw: false
+  protobufjs: false
 
 # ── peerDependencies 补丁（pnpm 11: packageExtensions）─────────────────────────
 packageExtensions:
