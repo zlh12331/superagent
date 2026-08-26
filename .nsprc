@@ -9,7 +9,8 @@
     "GHSA-frvp-7c67-39w9",
     "GHSA-v2hh-gcrm-f6hx",
     "GHSA-mh99-v99m-4gvg",
-    "GHSA-r292-9mhp-454m"
+    "GHSA-r292-9mhp-454m",
+    "GHSA-rgw5-rvv9-x895"
   ],
   "packages": {}
 }
