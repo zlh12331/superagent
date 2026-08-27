@@ -27,6 +27,15 @@ const DANGEROUS_PATTERNS: readonly { pattern: RegExp; reason: string }[] = [
   { pattern: /\b(shutdown|reboot|halt|poweroff)\b/i, reason: '禁止执行关机/重启命令' },
   { pattern: /\bformat\s+[a-z]:/i, reason: '禁止格式化磁盘' },
   { pattern: /\bdiskpart\b/i, reason: '禁止磁盘分区操作' },
+  // 2026-08 安全审计加固：变量展开变体 + cd 组合攻击（黑名单是审批主防线后的兜底）
+  {
+    pattern: /\brm\s+(-[a-z]*r[a-z]*f?|-[a-z]*f[a-z]*r?)\s+\$\{HOME\}/i,
+    reason: '禁止递归删除用户目录（变量展开变体）',
+  },
+  {
+    pattern: /\bcd\s+[/~]\s*(&&|;)\s*rm\s+(-[a-z]*r[a-z]*f?)\b/i,
+    reason: '禁止切换到根/用户目录后递归删除（组合攻击）',
+  },
 ];
 
 const RunCommandInputSchema = z.object({
@@ -53,6 +62,10 @@ interface RunCommandOutput {
   readonly stdout: string;
   readonly stderr: string;
   readonly timedOut: boolean;
+  /** stdout 是否被截断（超 MAX_OUTPUT_BYTES，保留头部） */
+  readonly stdoutTruncated: boolean;
+  /** stderr 是否被截断 */
+  readonly stderrTruncated: boolean;
 }
 
 export function createRunCommandTool(): Tool<RunCommandInput> {
@@ -176,6 +189,8 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
             stdout: stdoutBuf,
             stderr: stderrBuf,
             timedOut,
+            stdoutTruncated,
+            stderrTruncated,
           });
         });
 
@@ -189,6 +204,8 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
             stdout: stdoutBuf,
             stderr: `${stderrBuf}\n[spawn error] ${err.message}`,
             timedOut: false,
+            stdoutTruncated,
+            stderrTruncated,
           });
         });
       });
@@ -199,6 +216,12 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
       }
       if (result.stderr) {
         outputParts.push(result.stderr);
+      }
+      // 截断可见性（2026-08 审计修正）：此前截断静默发生，LLM 不知输出不完整；
+      // 保留头部（错误通常在尾部——截断后明确提示）
+      const truncated = result.stdoutTruncated || result.stderrTruncated;
+      if (truncated) {
+        outputParts.push(`[输出已截断：超 ${MAX_OUTPUT_BYTES / 1024}KB 上限，仅保留开头部分]`);
       }
       const output = outputParts.join('\n') || '(无输出)';
 
@@ -219,6 +242,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
           stdout: result.stdout,
           stderr: result.stderr,
           timedOut: result.timedOut,
+          truncated,
           status: exitDesc,
         },
       };

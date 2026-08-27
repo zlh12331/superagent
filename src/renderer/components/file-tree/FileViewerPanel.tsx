@@ -28,6 +28,9 @@ import { getHighlighter } from '@/components/chat/Markdown';
 import { Spinner } from '@/components/ui/spinner';
 import { useFileContent } from '@/hooks/use-file-content';
 
+/** 大文件高亮降级阈值（行）：shiki 整文件 tokenize 超过则跳过高亮渲染纯文本 */
+const MAX_HIGHLIGHT_LINES = 5000;
+
 import { useFileWrite } from '@/hooks/use-file-write';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -85,6 +88,12 @@ export function FileViewerPanel(): ReactElement {
   const displayContent = editMode ? editedContent : originalContent;
   useEffect(() => {
     if (displayContent === '' || open === false) {
+      setHtml(null);
+      return;
+    }
+    // 大文件降级（2026-08 性能审计）：shiki 整文件 tokenize 在大文件上主线程卡顿
+    // （2MB 上限内仍可近 2 万行）；超过阈值跳过高亮渲染纯文本，保 UI 流畅
+    if (displayContent.split('\n').length > MAX_HIGHLIGHT_LINES) {
       setHtml(null);
       return;
     }

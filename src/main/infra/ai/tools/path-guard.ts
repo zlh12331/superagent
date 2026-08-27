@@ -18,8 +18,38 @@
 // ```
 // ──────────────────────────────────────────────────────────────
 
-import { isAbsolute, relative, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
+
+/**
+ * 解析路径的最终落点（含符号链接）
+ *
+ * 字符串级路径检查不解析 symlink——workingDir 内 `link -> /etc` 时读写实际
+ * 发生在外部。本函数用 realpathSync 解析真实落点：
+ * - 路径存在：直接 realpath（文件/目录本身）
+ * - 路径不存在（新建文件等）：对最近已存在的祖先目录 realpath，再拼回剩余
+ *   basename 段（新建文件的落点 = 父目录真实位置 + 文件名；父目录链中若含
+ *   symlink 同样被解析）
+ *
+ * @returns 最终落点绝对路径（解析失败等极端情况回退原路径，由上层 IO 报错兜底）
+ */
+function resolveRealTarget(p: string): string {
+  const tail: string[] = [];
+  let current = p;
+  // 上限防深路径死循环（正常路径解析次数远小于此）
+  for (let i = 0; i < 64; i += 1) {
+    try {
+      return resolve(realpathSync(current), ...tail);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return p; // 到根仍失败，回退原路径
+      tail.unshift(basename(current));
+      current = parent;
+    }
+  }
+  return p;
+}
 
 /**
  * 解析路径并确保在 workingDir 内
@@ -54,6 +84,19 @@ export function resolveWithinWorkspace(inputPath: string, workingDir: string): s
     throw new AppError(
       ErrorCode.UNAUTHORIZED,
       `路径越权访问：${inputPath} 解析为 ${resolved}，超出工作目录 ${workingDir}`,
+    );
+  }
+
+  // P1 安全修复（2026-08 安全审计）：字符串级检查不解析符号链接——
+  // workingDir 内 symlink 指向外部时，实际 IO 发生在外部。
+  // 解析最终落点（realpath）后重新校验边界；仅校验落点，
+  // 不拒绝工作目录内的合法 symlink（如 pnpm node_modules 结构）。
+  const realTarget = resolveRealTarget(resolved);
+  const relReal = relative(workingDir, realTarget);
+  if (relReal.startsWith('..') || isAbsolute(relReal)) {
+    throw new AppError(
+      ErrorCode.UNAUTHORIZED,
+      `路径符号链接指向工作目录之外：${resolved} -> ${realTarget}`,
     );
   }
 

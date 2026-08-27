@@ -12,7 +12,9 @@
 // 2. 不需要 native rebuild（keytar 需要）
 // 3. 跨平台一致 API
 
+import { execFileSync } from 'node:child_process';
 import { chmodSync, promises as fs } from 'node:fs';
+import { join } from 'node:path';
 import { safeStorage } from 'electron';
 import { logger } from '../../utils/logger';
 import { getKeychainPath } from './app-data';
@@ -97,6 +99,24 @@ async function writeStore(store: KeychainStore): Promise<void> {
       chmodSync(filePath, 0o600);
     } catch {
       // 权限设置失败不阻断写入（只读文件系统等场景）
+    }
+  } else {
+    // Windows：0o600 在 NTFS 上语义弱，用 icacls 显式收紧 ACL（仅当前用户读写）。
+    // DPAPI 加密是主防线，ACL 是纵深防御——失败仅告警不阻断（系统环境差异兜底）
+    try {
+      const user = process.env['USERNAME'] ?? process.env['USER'] ?? '';
+      if (user.length > 0) {
+        // 解析系统绝对路径（不依赖 PATH）：%SystemRoot%\System32\icacls.exe
+        const icaclsExe =
+          process.env['SystemRoot'] !== undefined
+            ? join(process.env['SystemRoot'], 'System32', 'icacls.exe')
+            : 'icacls';
+        execFileSync(icaclsExe, [filePath, '/inheritance:r', '/grant:r', `${user}:F`], {
+          stdio: 'ignore',
+        });
+      }
+    } catch {
+      logger.warn({ filePath }, 'keychain.dat Windows ACL 收紧失败（DPAPI 仍为主防线）');
     }
   }
 }
