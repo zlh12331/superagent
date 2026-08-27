@@ -14,7 +14,15 @@
 // - Drizzle 的 better-sqlite3 driver 是同步的，无需 await
 // ──────────────────────────────────────────────────────────────
 
-import { chmodSync, closeSync, mkdirSync, openSync, readdirSync, unlinkSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  unlinkSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -124,14 +132,31 @@ let sqliteInstance: Database.Database | null = null;
 /**
  * 解析 drizzle 迁移目录
  *
- * - dev / 测试：项目根 drizzle/（drizzle-kit generate 的产物，入仓管理）
+ * - dev / 测试：仓库根 drizzle/（drizzle-kit generate 的产物，入仓管理）；
+ *   启动方式导致 getAppPath() 非仓库根时（如 electron 直接执行入口文件），
+ *   按候选路径探测回退（见实现）
  * - 打包环境：resources/drizzle（electron-builder extraResources 复制）
  */
 function resolveMigrationsDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'drizzle');
   }
-  return join(app.getAppPath(), 'drizzle');
+  // dev / E2E：app.getAppPath() 随启动方式变化——`electron .` 为仓库根，
+  // 但 `electron out/main/index.js`（Playwright _electron.launch 即如此）会
+  // 返回入口文件目录 out/main，导致 drizzle 目录解析丢失（2026-08-27 实测）。
+  // 按优先级探测候选路径，取首个含 meta/_journal.json 的有效目录。
+  const candidates = [
+    join(app.getAppPath(), 'drizzle'),
+    join(process.cwd(), 'drizzle'),
+    // appPath 为 out/main 时，上溯两级即仓库根（与 electron-vite 产物布局对齐）
+    join(app.getAppPath(), '..', '..', 'drizzle'),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'meta', '_journal.json'))) {
+      return dir;
+    }
+  }
+  return candidates[0] as string;
 }
 
 /**
