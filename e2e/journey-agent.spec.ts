@@ -8,18 +8,34 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  chatInput,
+  openExistingSession,
   sendAndWaitApproval,
+  setupApiKey,
   setupChatSession,
   typeMessage,
   waitSendReady,
 } from './journey-helpers';
 
 test.describe('Agent 审批用户旅程（batch 2）', () => {
-  // 预热：vite 冷启动首屏编译慢——先行访问触发编译
+  // 预热：vite 冷启动首屏编译慢——先行访问触发编译；
+  // 并走一次完整发送链（transport/useChat/审批卡片组件冷编译——
+  // 本批首个用例 :26 最慢，对齐 journey-chat 预热策略）
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
     await page.goto('/');
-    await page.waitForTimeout(5_000);
+    try {
+      await setupApiKey(page);
+      await page.reload();
+      await openExistingSession(page);
+      const input = chatInput(page);
+      await input.fill('预热');
+      await page.locator('.send-btn:visible').first().waitFor({ timeout: 10_000 });
+      await input.press('Enter');
+      await page.waitForTimeout(5_000);
+    } catch {
+      // 预热失败不影响用例（用例自身有重试）
+    }
     await page.close();
   });
 
@@ -29,7 +45,7 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     await waitSendReady(page);
     // 发送并等待审批卡片（重试——mock 推送时序）
     await sendAndWaitApproval(page, async () => {
-      await page.locator('.send-btn:visible').first().click();
+      await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
   });
 
@@ -39,7 +55,7 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     await waitSendReady(page);
     // 等待审批卡片出现 → 点击批准
     const approveBtn = await sendAndWaitApproval(page, async () => {
-      await page.locator('.send-btn:visible').first().click();
+      await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
     await approveBtn.click();
 
@@ -53,7 +69,7 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     await waitSendReady(page);
     // 等待审批卡片出现 → 点击拒绝
     await sendAndWaitApproval(page, async () => {
-      await page.locator('.send-btn:visible').first().click();
+      await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
     const rejectBtn = page.getByRole('button', { name: /拒绝|取消/ }).first();
     await expect(rejectBtn).toBeVisible({ timeout: 5_000 });

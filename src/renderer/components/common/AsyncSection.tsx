@@ -90,7 +90,7 @@ export function AsyncSection({
   emptyText,
   onRetry,
   children,
-}: AsyncSectionProps): React.ReactElement {
+}: AsyncSectionProps): React.ReactElement | null {
   const { t } = useTranslation();
 
   if (isPending) {

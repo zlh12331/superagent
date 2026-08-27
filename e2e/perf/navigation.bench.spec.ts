@@ -46,8 +46,17 @@ test.describe('性能基准：页面加载与渲染', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // 右面板默认展开（rightPanelCollapsed=false），Tab 直接可见——找不到则失败（不许静默跳过）
-    // Tab 文本随语言（zh 会话详情/en Info），用双语言正则匹配
+    // 动态 tab 制（2026-08 对齐）：默认仅任务摘要常驻，经「添加视图」下拉加入文件变更视图
+    await page
+      .getByRole('button', { name: /添加视图|Add view/ })
+      .first()
+      .click();
+    await page
+      .getByRole('menuitem', { name: /文件变更|Diff/ })
+      .first()
+      .click();
+
+    // Tab 文本随语言（zh 文件变更/en Diff），用双语言正则匹配
     const diffTab = page.getByRole('tab', { name: /文件变更|Diff/ }).first();
     await expect(diffTab).toBeVisible({ timeout: 10_000 });
     const start = performance.now();

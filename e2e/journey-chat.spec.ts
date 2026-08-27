@@ -173,7 +173,7 @@ test.describe('聊天用户旅程（batch 1）', () => {
     await typeMessage(page, '用发送按钮');
     await waitSendReady(page);
     await sendAndWaitRun(page, '用发送按钮', async () => {
-      await page.locator('.send-btn:visible').first().click();
+      await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
     // 渲染断言：发送按钮路径渲染 user 气泡（含所发文本）
     await expect(page.locator('.msg.user .msg-content', { hasText: '用发送按钮' })).toBeVisible({

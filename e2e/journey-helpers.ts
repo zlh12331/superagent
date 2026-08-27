@@ -49,11 +49,12 @@ export async function openExistingSession(page: Page): Promise<void> {
   await expect(chatInput(page)).toBeVisible({ timeout: 10_000 });
 }
 
-/** 等待发送按钮可用（value 生效后 canSend true；isStreaming 期间禁用） */
+/** 等待发送按钮可用（value 生效后 canSend true；isStreaming 期间禁用）
+ * 重试 5 次：vite dev 冷编译下 ChatPanel/模型可用性查询可能超过 15s */
 export async function waitSendReady(page: Page): Promise<void> {
   const sendBtn = page.locator('.send-btn:visible').first();
   await expect(sendBtn).toBeVisible({ timeout: 10_000 });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       await expect(sendBtn).toBeEnabled({ timeout: 5_000 });
       return;
@@ -63,7 +64,7 @@ export async function waitSendReady(page: Page): Promise<void> {
       await page.waitForTimeout(500);
     }
   }
-  throw new Error('发送按钮不可用（3 次重试）');
+  throw new Error('发送按钮不可用（5 次重试）');
 }
 
 /** 输入消息（fill 触发 input 事件；验证 value + React state 同步） */
@@ -82,7 +83,9 @@ export async function typeMessage(page: Page, text: string): Promise<Locator> {
   throw new Error(`输入失败（3 次尝试）: ${text}`);
 }
 
-/** 发送并等待 agent.run 调用（重试——vite dev 环境偶发 UI 时序丢事件） */
+/** 发送并等待 agent.run 调用（重试——vite dev 环境偶发 UI 时序丢事件）
+ * 重试路径同 sendAndWaitApproval：若首次 send 已触发 streaming（runCalls 因 wrap 时机漏计），
+ * typeMessage 重试会撞 disabled 死锁——reload 重建后再发。 */
 export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await send();
@@ -96,9 +99,14 @@ export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Pro
         .toBeGreaterThan(0);
       return;
     } catch {
-      // 发送未触发——完整重试（重输 + 等待就绪）
-      await typeMessage(page, '重试消息');
-      await waitSendReady(page);
+      // 发送未触发——重建会话完整重试（最后尝试除外，交给外层报错）
+      if (attempt < 2) {
+        await page.reload();
+        await wrapAgentRun(page);
+        await openExistingSession(page);
+        await typeMessage(page, '重试消息');
+        await waitSendReady(page);
+      }
     }
   }
   throw new Error('发送失败（3 次尝试——agent.run 未被调用）');
@@ -113,7 +121,9 @@ export async function setupChatSession(page: Page): Promise<void> {
   await openExistingSession(page);
 }
 
-/** 发送并等待审批卡片出现（mock 每次推审批——偶发订阅时序丢事件，重发重试） */
+/** 发送并等待审批卡片出现（mock 每次推审批——偶发订阅时序丢事件，重发重试）
+ * 注：卡片丢失时上一轮 streaming 永挂（等审批响应）→ send-btn 永久 disabled，
+ * 重试不能走 typeMessage（必挂）——整页 reload 重建会话与订阅后再发。 */
 export async function sendAndWaitApproval(page: Page, send: () => Promise<void>): Promise<Locator> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await sendAndWaitRun(page, send);
@@ -123,9 +133,14 @@ export async function sendAndWaitApproval(page: Page, send: () => Promise<void>)
       await expect(btn).toBeVisible({ timeout: 12_000 });
       return btn;
     } catch {
-      // 卡片未出现——重发
-      await typeMessage(page, '重试审批请求');
-      await waitSendReady(page);
+      // 卡片未出现：streaming 死锁风险——重建会话后重发（最后尝试除外，交给外层报错）
+      if (attempt < 2) {
+        await page.reload();
+        await wrapAgentRun(page);
+        await openExistingSession(page);
+        await typeMessage(page, '重试审批请求');
+        await waitSendReady(page);
+      }
     }
   }
   throw new Error('审批卡片未出现（3 次发送尝试）');

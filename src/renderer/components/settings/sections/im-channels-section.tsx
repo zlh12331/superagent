@@ -8,8 +8,8 @@ import type { ChannelListRes } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
-
 import { toast } from 'sonner';
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

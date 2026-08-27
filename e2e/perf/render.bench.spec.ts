@@ -89,7 +89,15 @@ test.describe('渲染性能基准', () => {
     // 交互前基线
     const before = await cdp.send('Performance.getMetrics');
 
-    // 真实交互：切换右面板「文件变更」Tab（真实 React 渲染路径；双语言正则）
+    // 真实交互：动态加入并切换右面板「文件变更」Tab（真实 React 渲染路径；双语言正则）
+    await page
+      .getByRole('button', { name: /添加视图|Add view/ })
+      .first()
+      .click();
+    await page
+      .getByRole('menuitem', { name: /文件变更|Diff/ })
+      .first()
+      .click();
     const diffTab = page.getByRole('tab', { name: /文件变更|Diff/ }).first();
     await expect(diffTab).toBeVisible({ timeout: 10_000 });
     await diffTab.click();
