@@ -762,15 +762,6 @@ function createMockApi(): IpcApi {
         return () => approvalCallbacks.delete(cb as never);
       },
       subscribeAsk: () => () => {},
-      subscribeTurnEvent: () => () => {},
-    },
-
-    chat: {
-      send: async () => ok({ sessionId: 'mock-chat' }),
-      stop: async () => ok({ ok: true }),
-      subscribePart: () => () => {},
-      subscribeEnd: () => () => {},
-      subscribeError: () => () => {},
     },
 
     settings: {
@@ -982,11 +973,6 @@ function createMockApi(): IpcApi {
       callers: async () => ok({ callers: [] }),
       callees: async () => ok({ callees: [] }),
       impact: async () => ok({ impact: [] }),
-    },
-    audio: {
-      start: async () => ok({ ok: true }),
-      append: async () => ok({ ok: true }),
-      stop: async () => ok({ ok: true }),
     },
   } as unknown as IpcApi;
 }

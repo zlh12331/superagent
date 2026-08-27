@@ -140,38 +140,6 @@ export interface ChatStopRes {
  *
  * 渲染层在 IpcChatTransport 中把 unknown 重新喂给 useChat 的 ReadableStream。
  */
-export interface ChatStreamPartPayload {
-  /** 本次对话的 sessionId，渲染层按 id 过滤事件 */
-  readonly sessionId: string;
-  /**
-   * UIMessageStreamPart 的 JSON 序列化对象。
-   * 主进程从 toUIMessageStream() 读出后原样转发，渲染层直接 enqueue。
-   */
-  readonly part: unknown;
-}
-
-/** chat:stream:end 事件 payload：流正常结束 */
-export interface ChatStreamEndPayload {
-  /** 本次对话的 sessionId */
-  readonly sessionId: string;
-  /** token 使用量（AI SDK totalUsage，可选） */
-  readonly usage?: {
-    readonly inputTokens?: number;
-    readonly outputTokens?: number;
-    readonly totalTokens?: number;
-  };
-}
-
-/** chat:stream:error 事件 payload：流异常结束 */
-export interface ChatStreamErrorPayload {
-  /** 本次对话的 sessionId */
-  readonly sessionId: string;
-  /** 错误码（与 AppError.code 对齐） */
-  readonly code: string;
-  /** 错误消息（人类可读，用于渲染层 toast） */
-  readonly message: string;
-}
-
 // ─── Agent 域 Req 派生（Code Agent 核心） ─────────────────────
 
 /** agent:run 请求 payload：发起一次 agent 对话 */

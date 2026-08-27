@@ -366,44 +366,10 @@ export class AgentService implements IAgentService {
             modelTimeout?.signal,
           ]);
 
-          // 1.1 回合事件系统：订阅事件并推送 agent:turn:event 通道
-          //     - AgentRuntime 组件（emitter + translator）负责事件形状
-          //     - 本层订阅后推送（传输职责）；Transcript（回合落库）在回合结束时写入
-          // P1 修复：统一走 emitEvent 出口——此前 6 处复制 isDestroyed 守卫直接
-          // webContents.send，绕过 dev payload 契约校验与销毁守卫收敛。
-          // 无头场景（IM/子代理，webContents 缺省）与窗口已销毁时静默跳过，
-          // 避免高频 TEXT_DELTA 在销毁后刷屏 warn 日志。
-          const pushTurnEvent = (event: TurnEvent): void => {
-            if (options.webContents === undefined || options.webContents.isDestroyed()) {
-              return;
-            }
-            emitEvent(options.webContents, IPC_DEFINITIONS.agent.subscribeTurnEvent, event);
-          };
-          const unsubscribeStart = turnEmitter.on(TurnEventType.TURN_START, (event) => {
-            pushTurnEvent(event);
-          });
-          const unsubscribeEnd = turnEmitter.on(TurnEventType.TURN_END, (event) => {
-            pushTurnEvent(event);
-          });
-          const unsubscribeDelta = turnEmitter.on(TurnEventType.TEXT_DELTA, (event) => {
-            pushTurnEvent(event);
-          });
-          const unsubscribeCall = turnEmitter.on(TurnEventType.TOOL_CALL, (event) => {
-            pushTurnEvent(event);
-          });
-          const unsubscribeResult = turnEmitter.on(TurnEventType.TOOL_RESULT, (event) => {
-            pushTurnEvent(event);
-          });
-          const unsubscribeError = turnEmitter.on(TurnEventType.ERROR, (event) => {
-            pushTurnEvent(event);
-          });
+          // 回合事件仅内部消费：类级监听器（onTurnEvent，供记忆捕获）与
+          // TEXT_DELTA 累积（落库）订阅；不再向渲染层 IPC 推送——渲染层
+          // 流式渲染走 agent:stream:part，回合历史走 session:getTurns 拉取
           unsubscribeAll = () => {
-            unsubscribeStart();
-            unsubscribeEnd();
-            unsubscribeDelta();
-            unsubscribeCall();
-            unsubscribeResult();
-            unsubscribeError();
             unsubscribeTextAcc();
           };
 

@@ -22,25 +22,11 @@ export const event = <C extends string>(channel: C) => ({ kind: 'event', channel
  * preload 生成器（createIpcApi）直接遍历本表，无需加载 zod。
  */
 export const IPC_META = {
-  audio: {
-    start: request('audio:start'),
-    append: request('audio:append'),
-    stop: request('audio:stop'),
-  },
-
   app: {
     getStatus: request('app:getStatus'),
     getInfo: request('app:getInfo'),
     openExternal: request('app:openExternal'),
     openDataDir: request('app:openDataDir'),
-  },
-
-  chat: {
-    send: request('chat:send'),
-    stop: request('chat:stop'),
-    subscribePart: event('chat:stream:part'),
-    subscribeEnd: event('chat:stream:end'),
-    subscribeError: event('chat:stream:error'),
   },
 
   agent: {
@@ -55,7 +41,6 @@ export const IPC_META = {
     subscribeToolCall: event('agent:tool:call'),
     subscribeToolResult: event('agent:tool:result'),
     subscribeApprovalRequest: event('agent:approval:request'),
-    subscribeTurnEvent: event('agent:turn:event'),
   },
 
   session: {

@@ -35,15 +35,8 @@ import {
   type AskRespondRes,
   AskRespondResSchema,
 } from '../schemas/agent-ask';
-import { type TurnEvent, TurnEventType } from '../schemas/agent-events';
 import type { AppInfoRes } from '../schemas/app';
 import { AppInfoResSchema, AppStatusResSchema } from '../schemas/app';
-import {
-  ChatSendReqSchema,
-  ChatSendResSchema,
-  ChatStopReqSchema,
-  ChatStopResSchema,
-} from '../schemas/chat';
 import {
   CodebaseCalleesReqSchema,
   type CodebaseCalleesRes,
@@ -355,39 +348,16 @@ export function withPayload<
  * 新增方法：在 IPC_META 加一行，再在本文件用 withSchema/withPayload 合并 schema。
  * preload 生成器自动同步（消费 IPC_META），handler 缺失在编译期报错（InferHandlers）。
  */
-const AudioStartReqSchema = z.object({
-  sampleRate: z.number().int().positive().max(48000).optional(),
-  channels: z.number().int().positive().max(2).optional(),
-});
-const AudioAppendReqSchema = z.object({
-  sessionId: z.string(),
-  chunk: z.instanceof(Uint8Array),
-});
-const AudioStopReqSchema = z.object({
-  sessionId: z.string(),
-});
 
 // ─── 事件 payload zod schema（主进程发送侧 dev 校验，envelope 级） ───
 
-/** agent:stream:part / chat:stream:part 事件 envelope（part 为 SDK 结构，仅校验 sessionId） */
+/** agent:stream:part 事件 envelope（part 为 SDK 结构，仅校验 sessionId） */
 const StreamPartPayloadSchema = z.object({
   sessionId: z.string().min(1),
   part: z.unknown(),
 });
 
-/** chat:stream:end 事件 payload schema */
-const ChatStreamEndPayloadSchema = z.object({
-  sessionId: z.string().min(1),
-  usage: z
-    .object({
-      inputTokens: z.number().int().nonnegative().optional(),
-      outputTokens: z.number().int().nonnegative().optional(),
-      totalTokens: z.number().int().nonnegative().optional(),
-    })
-    .optional(),
-});
-
-/** chat:stream:error / agent:stream:error 事件 payload schema */
+/** agent:stream:error 事件 payload schema */
 const StreamErrorPayloadSchema = z.object({
   sessionId: z.string().min(1),
   code: z.string().min(1),
@@ -427,108 +397,7 @@ const AgentToolResultPayloadSchema = z.object({
   error: z.object({ code: z.string().min(1), message: z.string().min(1) }).optional(),
 });
 
-/** agent:turn:event payload schema：TurnEvent 判别联合（与 schemas/agent-events.ts 类型一一对应） */
-const TurnEventContextSchema = z.object({
-  sessionId: z.string().min(1),
-  turnId: z.string().min(1),
-  timestamp: z.number(),
-});
-const TurnUsageSchema = z.object({
-  inputTokens: z.number().int().nonnegative().optional(),
-  outputTokens: z.number().int().nonnegative().optional(),
-  totalTokens: z.number().int().nonnegative().optional(),
-  cacheReadTokens: z.number().int().nonnegative().optional(),
-  reasoningTokens: z.number().int().nonnegative().optional(),
-});
-const TurnEventSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal(TurnEventType.TURN_START),
-    ...TurnEventContextSchema.shape,
-    modelId: z.string().min(1),
-  }),
-  z.object({
-    type: z.literal(TurnEventType.TEXT_DELTA),
-    ...TurnEventContextSchema.shape,
-    text: z.string(),
-  }),
-  z.object({
-    type: z.literal(TurnEventType.TOOL_CALL),
-    ...TurnEventContextSchema.shape,
-    toolCallId: z.string().min(1),
-    toolName: z.string().min(1),
-    input: z.unknown(),
-  }),
-  z.object({
-    type: z.literal(TurnEventType.TOOL_RESULT),
-    ...TurnEventContextSchema.shape,
-    toolCallId: z.string().min(1),
-    toolName: z.string().min(1),
-    success: z.boolean(),
-    error: z.object({ code: z.string(), message: z.string() }).optional(),
-    durationMs: z.number().int().nonnegative().optional(),
-  }),
-  z.object({
-    type: z.literal(TurnEventType.TURN_END),
-    ...TurnEventContextSchema.shape,
-    reason: z.enum(['completed', 'aborted', 'max-steps', 'error']),
-    usage: TurnUsageSchema.optional(),
-    durationMs: z.number().int().nonnegative(),
-  }),
-  z.object({
-    type: z.literal(TurnEventType.ERROR),
-    ...TurnEventContextSchema.shape,
-    code: z.string(),
-    message: z.string(),
-  }),
-]);
-
-/** audio:start 响应 schema（R4：响应契约校验） */
-const AudioStartResSchema = z.object({
-  sessionId: z.string().min(1),
-});
-
-/** audio:append 响应 schema（R4：响应契约校验） */
-const AudioAppendResSchema = z.object({
-  received: z.number().int().nonnegative(),
-});
-
-/** audio:stop 响应 schema（R4：响应契约校验） */
-const AudioStopResSchema = z.object({
-  path: z.string(),
-  durationMs: z.number().int().nonnegative(),
-  sampleRate: z.number().int().positive(),
-  channels: z.number().int().positive(),
-  byteLength: z.number().int().nonnegative(),
-});
-
 export const IPC_DEFINITIONS = {
-  audio: {
-    start: withSchema(
-      IPC_META.audio.start,
-      AudioStartReqSchema,
-      {} as { sessionId: string },
-      AudioStartResSchema,
-    ),
-    append: withSchema(
-      IPC_META.audio.append,
-      AudioAppendReqSchema,
-      {} as { received: number },
-      AudioAppendResSchema,
-    ),
-    stop: withSchema(
-      IPC_META.audio.stop,
-      AudioStopReqSchema,
-      {} as {
-        path: string;
-        durationMs: number;
-        sampleRate: number;
-        channels: number;
-        byteLength: number;
-      },
-      AudioStopResSchema,
-    ),
-  },
-
   app: {
     getStatus: withSchema(
       IPC_META.app.getStatus,
@@ -544,36 +413,6 @@ export const IPC_DEFINITIONS = {
       OkResSchema,
     ),
     openDataDir: withSchema(IPC_META.app.openDataDir, null, {} as { ok: boolean }, OkResSchema),
-  },
-
-  chat: {
-    send: withSchema(
-      IPC_META.chat.send,
-      ChatSendReqSchema,
-      {} as { sessionId: string },
-      ChatSendResSchema,
-    ),
-    stop: withSchema(
-      IPC_META.chat.stop,
-      ChatStopReqSchema,
-      {} as { stopped: boolean },
-      ChatStopResSchema,
-    ),
-    subscribePart: withPayload(
-      IPC_META.chat.subscribePart,
-      {} as AgentStreamPartPayload,
-      StreamPartPayloadSchema,
-    ),
-    subscribeEnd: withPayload(
-      IPC_META.chat.subscribeEnd,
-      {} as AgentStreamEndPayload,
-      ChatStreamEndPayloadSchema,
-    ),
-    subscribeError: withPayload(
-      IPC_META.chat.subscribeError,
-      {} as AgentStreamErrorPayload,
-      StreamErrorPayloadSchema,
-    ),
   },
 
   agent: {
@@ -630,13 +469,6 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeApprovalRequest,
       {} as AgentApprovalRequestPayload,
       AgentApprovalRequestPayloadSchema,
-    ),
-    // P1 修复：补齐全表唯一缺失的 payload 契约——此前 TurnEvent 漂移会
-    // 静默直达渲染层，定义表「防漂移」承诺在此通道完全失效
-    subscribeTurnEvent: withPayload(
-      IPC_META.agent.subscribeTurnEvent,
-      {} as TurnEvent,
-      TurnEventSchema,
     ),
   },
 

@@ -3,28 +3,27 @@
 // 设计文档 §4.1 分层架构 / §7.6 生命周期管理
 //
 // 设计目标：
-// 1. 集中持有核心服务实例（IChatService / IAgentService / IFileService / ISearchService
+// 1. 集中持有核心服务实例（IAgentService / IFileService / ISearchService
 //    / IToolRegistry / IPermissionService / IToolExecutor），统一对外暴露获取接口
 // 2. 应用退出时统一清理（替代 index.ts 中分散的 cleanup 调用）
 // 3. 测试隔离时统一 reset（避免每个测试手动调用各模块 reset）
 // 4. 支持依赖注入：IPC handler 通过容器获取服务实例，而非直接 import 模块级单例
 //
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
-//   1. ChatService.dispose()       中断活跃对话（依赖 streamText + webContents）
-//   2. AgentService.dispose()      中断活跃 agent 对话（必须在 PermissionService 之前停止）
-//   3. MCPService.stopAll()        停止所有 MCP server 子进程
-//   4. GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
-//   5. ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
-//   6. ImService.stopAll()         停止 IM 渠道长连接
-//   7. PermissionService.dispose() reject 所有 pending 审批 Promise
-//   8. agentAskService.dispose()   清理 pending 提问
-//   9. FileService.dispose()       关闭所有 chokidar watcher
-//  10. SearchService.dispose()     终止活跃的 ripgrep 子进程
-//  11. TerminalService.dispose()   kill 所有 pty 进程
-//  12. GitService / CodebaseService / SessionService（无外部资源，dispose 为一致性 no-op）
-//  13. UpdateService.dispose()     更新事件收尾
-//  14. resetAIProvider()           清理 AI Provider 缓存
-//  15. closeDb()                   关闭 SQLite 连接（必须最后）
+//   1. AgentService.dispose()      中断活跃 agent 对话（必须在 PermissionService 之前停止）
+//   2. MCPService.stopAll()        停止所有 MCP server 子进程
+//   3. GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
+//   4. ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
+//   5. ImService.stopAll()         停止 IM 渠道长连接
+//   6. PermissionService.dispose() reject 所有 pending 审批 Promise
+//   7. agentAskService.dispose()   清理 pending 提问
+//   8. FileService.dispose()       关闭所有 chokidar watcher
+//   9. SearchService.dispose()     终止活跃的 ripgrep 子进程
+//  10. TerminalService.dispose()   kill 所有 pty 进程
+//  11. GitService / CodebaseService / SessionService（无外部资源，dispose 为一致性 no-op）
+//  12. UpdateService.dispose()     更新事件收尾
+//  13. resetAIProvider()           清理 AI Provider 缓存
+//  14. closeDb()                   关闭 SQLite 连接（必须最后）
 //
 // P1 修复：
 // - 每步经 runStep 独立 try/catch：单服务清理失败不再跳过后续清理，
@@ -49,8 +48,6 @@ const { autoUpdater } = electronUpdater;
 import { resetConfigCache } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
 import { AgentService, type IAgentService } from './infra/ai/agent/agent-service';
-import type { IChatService } from './infra/ai/agent/chat-service';
-import { getChatService, resetChatService } from './infra/ai/agent/chat-service';
 import { initSubagentManager } from './infra/ai/agent/subagent-manager';
 import {
   type ConcurrencyGate,
@@ -112,25 +109,10 @@ function resolveMemoryHubRoot(): string | undefined {
 /**
  * 服务容器：持有应用核心服务实例
  *
- * 通过 `serviceContainer.getChatService()` 获取服务实例，
- * 而非直接 import 模块级 getChatService()，便于：
  * - 集中管理生命周期（dispose 时统一中断/重置）
- * - 测试时通过 setChatService 注入 mock 实现
  * - 未来扩展支持服务替换（如多 LLM provider 路由）
  */
 class ServiceContainer {
-  /**
-   * ChatService 实例缓存
-   *
-   * 设计：内部按 IChatService 接口持有，首次访问时延迟初始化。
-   * - 生产环境：通过 getChatService() 拿到默认 ChatService 实现
-   * - 测试环境：通过 setChatService() 注入 mock 实现，绕过真实 streamText
-   *
-   * 缓存值与 getChatService() 模块级单例保持一致：
-   * 调用 setChatService(null) 或 reset() 后，下次 getChatService() 会重新拿默认实现。
-   */
-  private chatService: IChatService | null = null;
-
   /**
    * 并发公平调度门（多会话共享执行槽位）
    *
@@ -146,30 +128,6 @@ class ServiceContainer {
    */
   getConcurrencyGate(): ConcurrencyGate {
     return this.concurrencyGate;
-  }
-
-  /**
-   * 获取 ChatService 实例
-   *
-   * 首次调用延迟初始化为默认 ChatService 实现（与 getChatService() 单例一致）。
-   * 测试可通过 setChatService() 注入 mock 实现覆盖。
-   */
-  getChatService(): IChatService {
-    if (this.chatService === null) {
-      // 注入 sessionService（usage 落库）+ llmClient（标题生成）+ 并发调度门
-      this.chatService = getChatService(this.getSessionService(), llmClient, this.concurrencyGate);
-    }
-    return this.chatService;
-  }
-
-  /**
-   * 注入 ChatService 实例（仅测试用）
-   *
-   * 用于测试用例隔离：注入 mock 实现，避免依赖真实 streamText / 网络。
-   * 传 null 清空缓存，下次 getChatService() 会重新拿默认实现。
-   */
-  setChatService(service: IChatService | null): void {
-    this.chatService = service;
   }
 
   /**

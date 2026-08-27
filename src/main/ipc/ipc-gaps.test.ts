@@ -4,12 +4,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IAgentService } from '../infra/ai/agent/agent-service';
-import type { IChatService } from '../infra/ai/agent/chat-service';
 import type { IToolRegistry } from '../infra/ai/tools/tool-registry';
 import type { IpcHandlerContext } from '../utils/wrap';
 import { createAgentHandlers } from './agent.handler';
 import { appHandlers } from './app.handler';
-import { createChatHandlers } from './chat.handler';
 import { dialogHandlers } from './dialog.handler';
 import { createToolHandlers } from './tool.handler';
 
@@ -205,63 +203,6 @@ describe('IPC 薄层批次8 缺口补全', () => {
       const args = (agentService as unknown as { startAgent: ReturnType<typeof vi.fn> }).startAgent
         .mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(args?.['thinking']).toBe('high');
-    });
-  });
-
-  describe('chat handler', () => {
-    it('thinking 省略：startChat 不传 thinking（条件展开）', async () => {
-      const chatService = {
-        startChat: vi.fn(async () => 'sess-2'),
-      } as unknown as IChatService;
-      const handlers = createChatHandlers({ chatService });
-
-      const result = await handlers.send(
-        {
-          messages: [{ role: 'user', content: 'hi' }],
-          sessionId: 'sess-2',
-          thinking: undefined,
-        },
-        createCtx(),
-      );
-
-      expect(result.sessionId).toBe('sess-2');
-      const args = (chatService as unknown as { startChat: ReturnType<typeof vi.fn> }).startChat
-        .mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect(args?.['thinking']).toBeUndefined();
-    });
-
-    it('stop：转发 abort 结果', async () => {
-      const chatService = {
-        abort: vi.fn(() => true),
-      } as unknown as IChatService;
-      const handlers = createChatHandlers({ chatService });
-
-      const result = await handlers.stop({ sessionId: 'sess-2' }, {} as never);
-
-      expect(result.stopped).toBe(true);
-      expect(
-        (chatService as unknown as { abort: ReturnType<typeof vi.fn> }).abort,
-      ).toHaveBeenCalledWith('sess-2');
-    });
-
-    it('thinking 传入：条件展开到 startChat', async () => {
-      const chatService = {
-        startChat: vi.fn(async () => 'sess-2'),
-      } as unknown as IChatService;
-      const handlers = createChatHandlers({ chatService });
-
-      await handlers.send(
-        {
-          messages: [{ role: 'user', content: 'hi' }],
-          sessionId: 'sess-2',
-          thinking: 'medium',
-        },
-        createCtx(),
-      );
-
-      const args = (chatService as unknown as { startChat: ReturnType<typeof vi.fn> }).startChat
-        .mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect(args?.['thinking']).toBe('medium');
     });
   });
 

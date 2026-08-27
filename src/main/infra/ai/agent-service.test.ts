@@ -16,7 +16,7 @@
 // 12. systemPrompt 未传时：调用 PromptService.resolvePrompt 注入默认 prompt
 
 import type { ChatMessage } from '@code-agent/shared/main';
-import { IPC_CHANNELS, TurnEventType } from '@code-agent/shared/main';
+import { IPC_CHANNELS } from '@code-agent/shared/main';
 import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
@@ -170,17 +170,10 @@ async function flushAsync(): Promise<void> {
 }
 
 /**
- * 回合事件通道的 send 调用（agent:turn:event 独立断言）
- */
-function getTurnEventCalls(wc: MockedWebContents): unknown[][] {
-  return wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_TURN_EVENT);
-}
-
-/**
- * 非回合事件通道的 send 调用（原有流/工具/审批通道断言用）
+ * webContents.send 调用（agent:turn:event 通道已移除，全部调用均为流/工具/审批通道）
  */
 function getNonTurnCalls(wc: MockedWebContents): unknown[][] {
-  return wc.send.mock.calls.filter((c) => c[0] !== IPC_CHANNELS.AGENT_TURN_EVENT);
+  return wc.send.mock.calls;
 }
 
 /**
@@ -438,9 +431,8 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 非回合通道：2 个 part + 1 个 end；回合通道：turn-start + turn-end
+      // 流式事件：2 个 part + 1 个 end
       expect(getNonTurnCalls(wc)).toHaveLength(3);
-      expect(getTurnEventCalls(wc)).toHaveLength(2);
 
       const firstCall = getNonTurnCalls(wc)[0];
       if (!firstCall) throw new Error('webContents.send 未被调用');
@@ -499,10 +491,8 @@ describe('agent-service', () => {
 
       await flushAsync();
 
-      // 非回合通道：仅 AGENT_STREAM_END（aborted）
-      // 回合通道：仅 turn-end（组装阶段中断，TurnRunner 未运行故无 turn-start）
+      // 流式事件：仅 AGENT_STREAM_END（aborted）
       expect(getNonTurnCalls(wc)).toHaveLength(1);
-      expect(getTurnEventCalls(wc)).toHaveLength(1);
       const call = getNonTurnCalls(wc)[0];
       if (!call) throw new Error('webContents.send 未被调用');
       expect(call[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
@@ -1188,44 +1178,6 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       expect.objectContaining({ sessionId: 'test-session-id' }),
       expect.stringContaining('markIdle'),
     );
-  });
-
-  it('工具执行成功：TOOL_RESULT 回合事件推送（含 durationMs）', async () => {
-    const wc = createMockWebContents();
-    // 死流保持回合未结束：工具订阅在回合收尾（unsubscribeAll）前必须仍活跃
-    let releaseStream: () => void = () => {};
-    mocks.mockStreamText.mockReturnValue({
-      toUIMessageStream: () =>
-        new ReadableStream({
-          start(controller) {
-            releaseStream = () => {
-              try {
-                controller.close();
-              } catch {
-                /* 已关闭 */
-              }
-            };
-          },
-        }),
-    });
-    await service.startAgent(baseOptions({ sessionId: 's-tool-ev', webContents: wc }));
-    await flushAsync();
-    const hook = mockRegistry.toAISDKTools.mock.calls[0]?.[1] as
-      | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
-      | undefined;
-    if (hook === undefined) throw new Error('executeHook 未被注入');
-    await hook({ name: 'mock_tool' }, { x: 1 }, { callId: 'c-ev' });
-    await flushAsync();
-    const turnEvents = getTurnEventCalls(wc).map(
-      (c) => c[1] as { type: string; toolName?: string; durationMs?: number; success?: boolean },
-    );
-    const toolResult = turnEvents.find((e) => e.type === TurnEventType.TOOL_RESULT);
-    expect(toolResult).toBeDefined();
-    expect(toolResult?.toolName).toBe('mock_tool');
-    expect(toolResult?.success).toBe(true);
-    expect(toolResult?.durationMs).toBeGreaterThanOrEqual(0);
-    releaseStream();
-    await service.dispose(100);
   });
 
   it('onTurnEvent 监听器抛错：不阻断其他监听器（转发异常仅记录日志）', async () => {

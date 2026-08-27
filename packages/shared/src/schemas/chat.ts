@@ -22,8 +22,6 @@
 import type { ModelMessage } from 'ai';
 import { z } from 'zod';
 
-import { ThinkingLevelSchema } from './thinking';
-
 /**
  * 聊天消息 zod schema（P1-6 透传设计）
  *
@@ -51,43 +49,6 @@ export const ChatMessageSchema: z.ZodType<ModelMessage> = z.custom<ModelMessage>
     return typeof obj['role'] === 'string' && 'content' in obj;
   },
 );
-
-/**
- * chat:send 入参 zod schema
- *
- * sessionId 用 `.optional().transform(v => v ?? undefined)`：
- * - 运行时允许字段缺失（渲染层首次发起对话时不传 sessionId）
- * - transform 把缺失值统一转为 undefined，让 output 类型为 `string | undefined`
- *   （必填字段，值可为 undefined，兼容 exactOptionalPropertyTypes）
- *
- * 这样与 ChatSendReq.sessionId: `string | undefined` 类型完全对齐。
- */
-export const ChatSendReqSchema = z.object({
-  messages: z.array(ChatMessageSchema).min(1),
-  sessionId: z
-    .string()
-    .optional()
-    .transform((v) => v ?? undefined),
-  // 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort）
-  thinking: ThinkingLevelSchema.optional().transform((v) => v ?? undefined),
-});
-
-/** chat:send 响应 zod schema（响应契约校验用） */
-export const ChatSendResSchema = z.object({
-  sessionId: z.string().min(1),
-});
-
-/**
- * chat:stop 入参 zod schema
- */
-export const ChatStopReqSchema = z.object({
-  sessionId: z.string().min(1),
-});
-
-/** chat:stop 响应 zod schema（R4：响应契约校验） */
-export const ChatStopResSchema = z.object({
-  stopped: z.boolean(),
-});
 
 /**
  * 聊天消息类型（P1-6 透传设计）
