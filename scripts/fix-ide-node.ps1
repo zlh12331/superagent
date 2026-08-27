@@ -1,4 +1,4 @@
-# scripts/fix-ide-node.ps1
+﻿# scripts/fix-ide-node.ps1
 # 根治 Qoder IDE 扩展 node.exe 缺失（0xc0000142 弹窗根因之一）
 # ──────────────────────────────────────────────────────────────
 # 背景（2026-08-27 排查实证）：
@@ -8,11 +8,22 @@
 #   缺失的 node.exe → node.exe 0xc0000142 弹窗（"总是弹出"）
 # - 本脚本给目标目录授权当前用户写权限 → IDE 重启后自动完成 node.exe 下载
 #
-# 用法（必须以管理员运行）：
+# 用法（普通双击/终端运行即可——非管理员时自动弹 UAC 提权）：
 #   powershell -ExecutionPolicy Bypass -File scripts/fix-ide-node.ps1
 # 完成后：完全退出并重启 Qoder IDE
 # ──────────────────────────────────────────────────────────────
 $ErrorActionPreference = 'Continue'
+
+# 非管理员时自动请求 UAC 提权重启（用户点击"是"后以管理员继续）
+$isAdmin = (
+    [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host '需要管理员权限——正在请求提升（请在弹出的 UAC 对话框点击"是"）...'
+    Start-Process powershell -Verb RunAs -ArgumentList `
+        "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    exit
+}
 
 $dirs = @(
     'C:\Program Files\Qoder CN IDE\resources\app\resources\bin\x86_64_windows',
