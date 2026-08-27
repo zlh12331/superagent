@@ -45,6 +45,14 @@ import { DEFAULT_TREE_IGNORE_PATTERNS, matchIgnorePattern } from './tree-ignore'
 const UTF8_LIKE_ENCODINGS = new Set(['UTF-8', 'ASCII']);
 
 /**
+ * 文件读取字节上限（P1：防 OOM）
+ *
+ * fs.readFile 一次性全量读入内存（offset/limit 仅做行切片，不降低内存峰值），
+ * 超大文件会进程 OOM。读取前 stat 前置检查，超过上限明确报错而非崩溃。
+ */
+const MAX_READ_BYTES = 2 * 1024 * 1024;
+
+/**
  * 规范化 chardet 检测结果 → iconv-lite 可解码的编码名
  *
  * - null / UTF-8 同族 → 'utf-8'（直接 Buffer.toString）
@@ -214,7 +222,8 @@ class FileService implements IFileService {
    * 4. 按换行符分割为行数组，应用 offset/limit 切片
    * 5. 返回切片后的内容 + 总行数 + 实际编码
    *
-   * 注意：当前实现一次性读取整个文件到内存，超大文件（>100MB）可能 OOM。
+   * 注意：读取前 stat 前置检查（>2MB 拒绝），避免超大文件全量进内存导致 OOM；
+   * offset/limit 仅控制返回行切片，不影响内存峰值。
    */
   async read(options: FileReadOptions): Promise<FileReadRes> {
     const { path, offset, limit } = options;
@@ -222,6 +231,15 @@ class FileService implements IFileService {
     this.assertAbsolutePath(path);
 
     try {
+      // P1 修复：超大文件明确报错而非 OOM（fs.readFile 全量读入内存，
+      // limit 只是行切片——先 stat 检查大小，>2MB 拒绝）
+      const stat = await fs.stat(path);
+      if (stat.size > MAX_READ_BYTES) {
+        throw new AppError(
+          ErrorCode.FS_READ_FAILED,
+          `文件过大（${(stat.size / (1024 * 1024)).toFixed(1)}MB），超过读取上限 ${MAX_READ_BYTES / (1024 * 1024)}MB`,
+        );
+      }
       const buffer = await fs.readFile(path);
       // 编码检测：chardet 返回 null（ASCII/无法识别）→ 按 UTF-8 处理
       const detected = chardet.detect(buffer);

@@ -1,6 +1,6 @@
 # AGENTS.md — code-agent-desktop
 
-Windows 桌面端生产级 Code Agent 桌面应用，Electron 43 + React 19 + TypeScript + Vercel AI SDK v7。
+跨平台桌面端（Windows/macOS/Linux）生产级 Code Agent 桌面应用，Electron 43 + React 19 + TypeScript + Vercel AI SDK v7。
 
 ## 重要命令
 

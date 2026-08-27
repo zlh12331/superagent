@@ -65,6 +65,22 @@ describe('FileService（真实文件系统）', () => {
       svc.read({ path: join(dir, 'nope.txt'), offset: undefined, limit: undefined }),
     ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND });
   });
+
+  it('read：>2MB 文件拒绝（防 OOM，明确报错而非崩溃）', async () => {
+    const file = join(dir, 'big.txt');
+    // 2MB + 1 字节
+    await writeFile(file, Buffer.alloc(2 * 1024 * 1024 + 1, 0x61));
+    await expect(
+      svc.read({ path: file, offset: undefined, limit: undefined }),
+    ).rejects.toMatchObject({ code: ErrorCode.FS_READ_FAILED });
+  });
+
+  it('read：恰好 2MB 允许（边界）', async () => {
+    const file = join(dir, 'edge.txt');
+    await writeFile(file, Buffer.alloc(2 * 1024 * 1024, 0x61));
+    const res = await svc.read({ path: file, offset: undefined, limit: undefined });
+    expect(res.totalLines).toBe(1);
+  });
 });
 
 describe('FileService.write（写入三件套）', () => {
