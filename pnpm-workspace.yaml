@@ -46,6 +46,10 @@ overrides:
   'undici@>=7.0.0': 7.29.0
   'undici@<7': 6.28.0
   'js-yaml@>=4.0.0': 4.3.1
+  # Dependabot GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895：DoS，仅命中 typedoc 工具链的 4.x 线；1.x/2.x 合法共存不动
+  'brace-expansion@>=4.0.0': ^5.0.9
+  # Dependabot GHSA-67mh-4wv8-2f99：dev server 请求伪造，命中 drizzle-kit→@esbuild-kit 的 0.18.x
+  'esbuild@<0.25.0': ^0.25.12
 
 # ── 供应链策略 ──────────────────────────────────────────────────────────────
 # pnpm 11 默认 minimumReleaseAge=1440（发布不足 24h 的包拒绝安装）。

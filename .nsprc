@@ -4,13 +4,6 @@
   "high": true,
   "critical": true,
   "report-type": "summary",
-  "allowlist": [
-    "GHSA-67mh-4wv8-2f99",
-    "GHSA-frvp-7c67-39w9",
-    "GHSA-v2hh-gcrm-f6hx",
-    "GHSA-mh99-v99m-4gvg",
-    "GHSA-r292-9mhp-454m",
-    "GHSA-rgw5-rvv9-x895"
-  ],
+  "allowlist": [],
   "packages": {}
 }
