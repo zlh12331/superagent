@@ -15,7 +15,7 @@
 ```bash
 pnpm install            # 安装依赖 + 原生模块编译 + postinstall-rebuild
 cp .env.example .env    # 可选：Sentry DSN / 供应商 baseURL
-pnpm dev                # rebuild-native electron --auto && electron-vite dev -w
+pnpm dev                # electron-vite dev -w
 ```
 
 - `pnpm dev`：启动 dev server + Electron 窗口；dev 下 userData 重定向到 `.electron-user-data/`、CDP 端口 9222。
@@ -51,8 +51,7 @@ pnpm test:integration # vitest --root tests/integration
 pnpm test:coverage    # 覆盖率（80% 门禁）
 ```
 
-- 主进程原生模块单测需先 `pnpm rebuild-native-mjs node --auto`（better-sqlite3 ABI 与 Electron 互斥，切换环境需重编译）。
-- timeline：`pnpm test` 统一走 `scripts/rebuild-native.mjs node --auto`。
+- 原生模块 ABI：Electron 44 与 Node 24 同构（NODE_MODULE_VERSION=137），无需切换脚本（rebuild-native.mjs 已删，2026-08）；若未来版本再次分叉，按 process.versions.modules 对比重新引入。
 
 ### 4.2 E2E / Electron / Smoke（Playwright）
 
@@ -90,7 +89,7 @@ pnpm sentry:release:new / pnpm sentry:upload:symbols
 - **每次代码改动同步 CodeGraph 索引**：`pnpm codegraph:sync`（仓库根）。
 - **每次实现轮次做 git commit**（`gh` / 常规 commit；commitlint conventional 规范 + husky pre-commit/pre-push）。
 - **前端 mock 层保留**：渲染层 `dev/mock-api.ts` + MSW，前端可独立开发。
-- **原生模块双环境**：Node 测试环境 vs Electron 运行时需 `pnpm rebuild-native-mjs` 重编译（ABI 互斥）。
+- **原生模块双环境**：Node 测试环境与 Electron 运行时同 ABI（Electron 44 = Node 24，modules 137），无需重编译（rebuild-native.mjs 已删）。
 - **CSS 令牌**：改令牌改 `tokens/aurora.json`（`pnpm tokens:build` 生成），禁止手改 `tokens.css`（`check:tokens` 卡关）。
 - **i18n**：新增 key 需补全 en/zh-CN 两组（`check:i18n` 严格卡关）。
 - **changelog**：`pnpm changeset` 记录变更，`pnpm changelog` 生成（scripts/changelog）。

@@ -62,6 +62,6 @@ IPC / AI Tool 骨架不用 snippet——跑 `pnpm scaffold:ipc` / `pnpm scaffold
 
 ## 常见问题
 
-- **原生模块 ABI 报错**（better-sqlite3 / node-pty）：`pnpm rebuild:native:electron:auto`（跑测试前用 `rebuild:native:node:auto`）
+- **原生模块 ABI**（better-sqlite3 / node-pty）：Electron 44 与 Node 24 同 ABI（modules=137），无需切换（rebuild:native:* 脚本已删，2026-08）
 - **9222 端口被占**：`$env:CODE_AGENT_DEBUG_PORT="9224"; pnpm dev`
 - **i18n 缺失 key 标红**：门禁 `pnpm check:i18n` 同款规则，补 `src/renderer/i18n/locales/` 对应命名空间
