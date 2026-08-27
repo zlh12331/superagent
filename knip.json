@@ -24,6 +24,6 @@
       ]
     }
   },
-  "ignoreBinaries": ["pkill", "gitleaks", "icacls"],
+  "ignoreBinaries": ["gitleaks"],
   "ignoreDependencies": ["@code-agent/tsconfig", "@electron/rebuild", "tslib", "tree-sitter-wasms"]
 }
