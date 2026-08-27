@@ -259,6 +259,7 @@ class ServiceContainer {
         this.getLspManager(),
         agentAskService,
         this.getPermissionService(),
+        this.getCodebaseService(),
       );
       this.toolRegistry = registry;
     }
@@ -764,17 +765,7 @@ class ServiceContainer {
       this.lspManager = null;
     });
 
-    // 1. 优雅关闭 ChatService（P3-10：中断 + 等待 stream 真正完成）
-    await runStep('chatService.dispose', async () => {
-      if (this.chatService !== null) {
-        await this.chatService.dispose();
-      }
-      // 同时重置模块级单例（若 ServiceContainer 缓存为空但模块单例仍存活，也需中断）
-      resetChatService();
-      this.chatService = null;
-    });
-
-    // 2. 优雅关闭 AgentService（P4：中断 + 等待活跃 agent stream 真正完成）
+    // 优雅关闭 AgentService（P4：中断 + 等待活跃 agent stream 真正完成）
     //    AgentService 依赖 ToolExecutor（已注入到 executeHook 闭包），
     //    必须在 PermissionService.dispose 之前停止
     await runStep('agentService.dispose', async () => {
@@ -937,8 +928,6 @@ class ServiceContainer {
    * - 调用此函数前应确保已停止相关外部服务
    */
   reset(): void {
-    resetChatService();
-    this.chatService = null;
     // AgentService 无模块级单例，直接清空 ServiceContainer 缓存引用
     this.agentService = null;
     // 工具系统无模块级单例，直接清空 ServiceContainer 缓存引用

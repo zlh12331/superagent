@@ -23,15 +23,6 @@ import type {
   AgentRunReqSchema,
   AgentStopReqSchema,
 } from '../schemas/agent';
-import type { ChatSendReqSchema, ChatStopReqSchema } from '../schemas/chat';
-import type {
-  CodebaseCalleesReqSchema,
-  CodebaseCallersReqSchema,
-  CodebaseExploreReqSchema,
-  CodebaseImpactReqSchema,
-  CodebaseNodeReqSchema,
-  CodebaseQueryReqSchema,
-} from '../schemas/codebase';
 import type {
   FileCreateDirReqSchema,
   FileCreateReqSchema,
@@ -97,49 +88,6 @@ export interface AppStatus {
   readonly protocolVersion: number;
 }
 
-// ─── Chat 域 payload（保留兼容，Vercel AI SDK v7） ─────────────
-
-/**
- * chat:send 请求 payload
- *
- * 类型从 ChatSendReqSchema 派生（z.infer），schema 为单一真源。
- *
- * 消息列表由渲染层维护，每次发起对话把完整历史传给主进程，
- * 主进程不持有对话上下文（无状态设计，便于多窗口/多会话扩展）。
- *
- * P1-6 透传设计：messages 类型为 ChatMessage[]（= ModelMessage[]），
- * 渲染层用 convertToModelMessages 转换后直接透传，主进程无需手动转换。
- *
- * sessionId 使用 `string | undefined` 而非 `?: string`：
- * exactOptionalPropertyTypes 严格模式下，zod `.optional().transform()` 推断为 `string | undefined`，
- * 显式声明 `| undefined` 才能兼容 zod schema 推断的类型。
- */
-export type ChatSendReq = z.infer<typeof ChatSendReqSchema>;
-
-/** chat:send 响应 payload：返回本次对话的 sessionId */
-export interface ChatSendRes {
-  /** 本次对话的唯一标识，渲染层用此 id 订阅后续流式事件并支持中断 */
-  readonly sessionId: string;
-}
-
-/** chat:stop 请求 payload：中断指定 sessionId 的对话 */
-export type ChatStopReq = z.infer<typeof ChatStopReqSchema>;
-
-/** chat:stop 响应 payload */
-export interface ChatStopRes {
-  /** 是否成功中断（若对话已结束则返回 false） */
-  readonly stopped: boolean;
-}
-
-/**
- * chat:stream:part 事件 payload
- *
- * part 类型为 Vercel AI SDK 官方 UIMessageStreamPart 的 JSON 序列化形式。
- * 通过 IPC 传输时使用 unknown 而非具体类型，避免 shared 包依赖 ai 包
- * （shared 包应保持零运行时依赖，仅暴露类型契约）。
- *
- * 渲染层在 IpcChatTransport 中把 unknown 重新喂给 useChat 的 ReadableStream。
- */
 // ─── Agent 域 Req 派生（Code Agent 核心） ─────────────────────
 
 /** agent:run 请求 payload：发起一次 agent 对话 */
@@ -218,26 +166,6 @@ export type GitCommitReq = z.infer<typeof GitCommitReqSchema>;
 
 /** git:push 请求 payload：推送本地提交到远程（git push） */
 export type GitPushReq = z.infer<typeof GitPushReqSchema>;
-
-// ─── Codebase 域 Req 派生（codegraph CLI 封装） ────────────────
-
-/** codebase:query 请求 payload：结构化符号搜索 */
-export type CodebaseQueryReq = z.infer<typeof CodebaseQueryReqSchema>;
-
-/** codebase:explore 请求 payload：区域探索（自然语言查询） */
-export type CodebaseExploreReq = z.infer<typeof CodebaseExploreReqSchema>;
-
-/** codebase:node 请求 payload：符号详情或文件内容 */
-export type CodebaseNodeReq = z.infer<typeof CodebaseNodeReqSchema>;
-
-/** codebase:callers 请求 payload：调用方查询 */
-export type CodebaseCallersReq = z.infer<typeof CodebaseCallersReqSchema>;
-
-/** codebase:callees 请求 payload：被调用方查询 */
-export type CodebaseCalleesReq = z.infer<typeof CodebaseCalleesReqSchema>;
-
-/** codebase:impact 请求 payload：影响分析 */
-export type CodebaseImpactReq = z.infer<typeof CodebaseImpactReqSchema>;
 
 // ─── Session 域 Req 派生（SQLite 持久化） ──────────────────────
 

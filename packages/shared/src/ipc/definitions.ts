@@ -38,22 +38,6 @@ import {
 import type { AppInfoRes } from '../schemas/app';
 import { AppInfoResSchema, AppStatusResSchema } from '../schemas/app';
 import {
-  CodebaseCalleesReqSchema,
-  type CodebaseCalleesRes,
-  CodebaseCallersReqSchema,
-  type CodebaseCallersRes,
-  CodebaseExploreReqSchema,
-  type CodebaseExploreRes,
-  CodebaseImpactReqSchema,
-  type CodebaseImpactRes,
-  CodebaseMarkdownResSchema,
-  CodebaseNodeReqSchema,
-  type CodebaseNodeRes,
-  CodebaseQueryReqSchema,
-  type CodebaseQueryRes,
-  CodebaseQueryResSchema,
-} from '../schemas/codebase';
-import {
   OpenDevToolsReqSchema,
   type OpenDevToolsRes,
   OpenDevToolsResSchema,
@@ -668,45 +652,6 @@ export const IPC_DEFINITIONS = {
       GitCommitResSchema,
     ),
     push: withSchema(IPC_META.git.push, GitPushReqSchema, {} as GitPushRes, GitPushResSchema),
-  },
-
-  codebase: {
-    query: withSchema(
-      IPC_META.codebase.query,
-      CodebaseQueryReqSchema,
-      {} as CodebaseQueryRes,
-      CodebaseQueryResSchema,
-    ),
-    explore: withSchema(
-      IPC_META.codebase.explore,
-      CodebaseExploreReqSchema,
-      {} as CodebaseExploreRes,
-      CodebaseMarkdownResSchema,
-    ),
-    node: withSchema(
-      IPC_META.codebase.node,
-      CodebaseNodeReqSchema,
-      {} as CodebaseNodeRes,
-      CodebaseMarkdownResSchema,
-    ),
-    callers: withSchema(
-      IPC_META.codebase.callers,
-      CodebaseCallersReqSchema,
-      {} as CodebaseCallersRes,
-      CodebaseMarkdownResSchema,
-    ),
-    callees: withSchema(
-      IPC_META.codebase.callees,
-      CodebaseCalleesReqSchema,
-      {} as CodebaseCalleesRes,
-      CodebaseMarkdownResSchema,
-    ),
-    impact: withSchema(
-      IPC_META.codebase.impact,
-      CodebaseImpactReqSchema,
-      {} as CodebaseImpactRes,
-      CodebaseMarkdownResSchema,
-    ),
   },
 
   tool: {

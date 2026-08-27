@@ -78,6 +78,13 @@ extraResources:
     to: memory-hub/node_modules
     filter:
       - "**/*"
+  # codegraph 代码智能 CLI（平台捆绑包：vendored Node 24 + app）
+  # 由 scripts/prepare-codegraph.mjs 生成；CodebaseService 打包环境读取
+  # process.resourcesPath/codegraph（dev 直接定位 node_modules/.pnpm 平台包）
+  - from: resources/codegraph
+    to: codegraph
+    filter:
+      - "**/*"
 
 # ── Windows 平台配置 ──────────────────────────────────────────
 # 代码签名：证书通过环境变量提供（CSC_LINK/CSC_KEY_PASSWORD），

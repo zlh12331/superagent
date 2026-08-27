@@ -27,6 +27,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import { type ChildProcess, spawn } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import type {
   CodebaseCalleesRes,
   CodebaseCallersRes,
@@ -37,10 +39,63 @@ import type {
   CodebaseQueryResult,
 } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
+import { app } from 'electron';
 import { logger } from '../../utils/logger';
 
-/** 单条 codegraph 命令的默认超时（毫秒）：60s（explore/impact 可能遍历大量符号） */
+/** 超时后 SIGTERM 子进程并 reject（explore/impact 可能较慢） */
 const CODEGRAPH_COMMAND_TIMEOUT_MS = 60_000;
+
+/** 平台包启动命令（command + 前置 args） */
+export interface CodegraphBundle {
+  /** 可执行文件路径（Windows = 捆绑 node.exe；其他 = bin/codegraph 启动器） */
+  readonly command: string;
+  /** 前置参数（Windows liftoff 标志 + 入口，非 Windows 为空） */
+  readonly args: readonly string[];
+}
+
+/**
+ * 解析 codegraph 平台包启动命令（生产 process.resourcesPath / dev pnpm .pnpm）
+ *
+ * @colbymchenry/codegraph 以 optionalDependencies 分发各平台捆绑包
+ * （vendored Node 24 + app，esbuild 同款模式）。Windows 包内含 node.exe 与
+ * lib/dist/bin/codegraph.js 入口（npm-shim 同款：--liftoff-only 规避
+ * tree-sitter WASM 在 Node≥22 的 Zone OOM）；其他平台为 bin/codegraph 启动器。
+ */
+export function resolveCodegraphBundle(): CodegraphBundle {
+  const target = `${process.platform}-${process.arch}`;
+  let dir: string;
+  if (app.isPackaged) {
+    // 生产：electron-builder extraResources 拷贝（resources/codegraph/）
+    dir = join(process.resourcesPath, 'codegraph');
+  } else {
+    // dev：pnpm 隔离布局 node_modules/.pnpm/@colbymchenry+codegraph-<target>@*/
+    const pnpmRoot = join(process.cwd(), 'node_modules', '.pnpm');
+    const prefix = `@colbymchenry+codegraph-${target}@`;
+    const candidates = readdirSync(pnpmRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith(prefix))
+      .map((e) => e.name)
+      .sort();
+    const latest = candidates.at(-1);
+    if (latest === undefined) {
+      throw new AppError(
+        ErrorCode.INTERNAL_ERROR,
+        `codegraph 平台包未安装（${target}）——请执行 pnpm install 或检查 node_modules/.pnpm`,
+      );
+    }
+    dir = join(pnpmRoot, latest, 'node_modules', '@colbymchenry', `codegraph-${target}`);
+  }
+  if (process.platform === 'win32') {
+    return {
+      command: join(dir, 'node.exe'),
+      args: [
+        '--liftoff-only',
+        '--disable-warning=ExperimentalWarning',
+        join(dir, 'lib', 'dist', 'bin', 'codegraph.js'),
+      ],
+    };
+  }
+  return { command: join(dir, 'bin', 'codegraph'), args: [] };
+}
 
 /**
  * query 方法入参
@@ -132,6 +187,10 @@ export interface ICodebaseService {
   /** 影响分析 */
   impact(options: CodebaseImpactOptions): Promise<CodebaseImpactRes>;
   /**
+   * 确保目标目录已建立 codegraph 索引（懒索引：未索引时执行 init，首次较慢）
+   */
+  ensureIndexed(path: string): Promise<void>;
+  /**
    * 优雅关闭：kill 所有活跃子进程
    *
    * 应用退出时调用，避免 spawn 出去的 codegraph 子进程未结束导致进程退出延迟。
@@ -163,10 +222,19 @@ export class CodebaseService implements ICodebaseService {
   private readonly spawnFn: typeof spawn;
   /** 单条命令超时（DI 注入点：测试可缩短验证超时路径） */
   private readonly commandTimeoutMs: number;
+  /** 平台包定位（DI 注入点：测试传 fake 保持断言稳定；生产默认 resolveCodegraphBundle） */
+  private readonly resolveBundle: () => CodegraphBundle;
 
-  constructor(options: { spawnFn?: typeof spawn; timeoutMs?: number } = {}) {
+  constructor(
+    options: {
+      spawnFn?: typeof spawn;
+      timeoutMs?: number;
+      resolveBundle?: () => CodegraphBundle;
+    } = {},
+  ) {
     this.spawnFn = options.spawnFn ?? spawn;
     this.commandTimeoutMs = options.timeoutMs ?? CODEGRAPH_COMMAND_TIMEOUT_MS;
+    this.resolveBundle = options.resolveBundle ?? resolveCodegraphBundle;
   }
 
   /**
@@ -318,6 +386,21 @@ export class CodebaseService implements ICodebaseService {
   // ─── 内部辅助方法 ───────────────────────────────────
 
   /**
+   * 确保目标目录已建立 codegraph 索引（懒索引，方案 A）
+   *
+   * 检查 <path>/.codegraph 目录是否存在：
+   * - 存在：直接返回（已索引）
+   * - 不存在：执行 `codegraph init <path>` 建初始索引——大项目首次较慢，
+   *   由 runCodegraph 的 60s 超时兜底（超时抛 AppError，工具层向 LLM 返回提示）
+   */
+  async ensureIndexed(path: string): Promise<void> {
+    if (existsSync(join(path, '.codegraph'))) {
+      return;
+    }
+    await this.runCodegraph(['init', path], path);
+  }
+
+  /**
    * 执行 codegraph 命令并返回 stdout
    *
    * @param args codegraph 命令参数（如 ['query', 'AgentService', '-j']）
@@ -327,12 +410,13 @@ export class CodebaseService implements ICodebaseService {
    */
   private runCodegraph(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const child = this.spawnFn('codegraph', args, {
+      // 平台包定位（DI 可注入）：Windows 用捆绑 node.exe + liftoff 标志（npm-shim 同款），
+      // 其他平台用 bin/codegraph——生产走 resourcesPath，dev 走 .pnpm，不再依赖 PATH
+      const bundle = this.resolveBundle();
+      const child = this.spawnFn(bundle.command, [...bundle.args, ...args], {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
-        // Windows 下 codegraph 为 .cmd 包装（npm 全局）——spawn 直接执行找不到文件
-        shell: process.platform === 'win32',
       });
       this.activeProcesses.add(child);
 

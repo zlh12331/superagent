@@ -13,6 +13,7 @@
 // - 开闭原则：新增工具只需添加文件并在 registerBuiltinTools 中追加注册
 // ──────────────────────────────────────────────────────────────
 
+import type { ICodebaseService } from '../../codebase/codebase-service';
 import type { IFileService } from '../../file/file-service';
 import type { IGitService } from '../../git/git-service';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
@@ -23,6 +24,7 @@ import type { AgentAskService } from '../agent/agent-ask-service';
 import { skillRegistry } from '../skills/skill-registry';
 import { createAskUserQuestionTool } from './ask-user-question.tool';
 import { createCodeReviewTool } from './code-review.tool';
+import { createCodebaseTool } from './codebase.tool';
 import { createCronCreateTool } from './cron-create.tool';
 import { createCronDeleteTool } from './cron-delete.tool';
 import { createCronListTool } from './cron-list.tool';
@@ -100,6 +102,7 @@ export function registerBuiltinTools(
   lspManager: LspServerManager,
   askService: AgentAskService,
   permissionService: IPermissionService,
+  codebaseService: ICodebaseService,
 ): void {
   registry.register(createReadFileTool(fileService));
   registry.register(createAskUserQuestionTool(askService));
@@ -143,4 +146,6 @@ export function registerBuiltinTools(
   registry.register(createLspDefinitionTool(lspManager));
   registry.register(createLspReferencesTool(lspManager));
   registry.register(createLspHoverTool(lspManager));
+  // codegraph 代码库智能查询（懒索引：首次查询自动 init；只读自动放行）
+  registry.register(createCodebaseTool(codebaseService));
 }

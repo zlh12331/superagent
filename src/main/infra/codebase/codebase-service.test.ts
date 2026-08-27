@@ -66,7 +66,12 @@ function createService(behavior: FakeChildBehavior = {}): {
 } {
   const spawnMock = vi.fn(() => createFakeChild(behavior)) as unknown as ReturnType<typeof vi.fn> &
     typeof spawn;
-  const service = new CodebaseService({ spawnFn: spawnMock, timeoutMs: 50 });
+  const service = new CodebaseService({
+    spawnFn: spawnMock,
+    timeoutMs: 50,
+    // 平台包定位注入 fake：保持断言针对命令参数本身（真实 resolve 只在生产/真实调用路径生效）
+    resolveBundle: () => ({ command: 'codegraph', args: [] }),
+  });
   return { service, spawnMock };
 }
 

@@ -966,14 +966,6 @@ function createMockApi(): IpcApi {
         return ok({ files, truncated: false });
       },
     },
-    codebase: {
-      query: async () => ok({ results: [] }),
-      explore: async () => ok({ nodes: [] }),
-      node: async () => ok({ node: null }),
-      callers: async () => ok({ callers: [] }),
-      callees: async () => ok({ callees: [] }),
-      impact: async () => ok({ impact: [] }),
-    },
   } as unknown as IpcApi;
 }
 

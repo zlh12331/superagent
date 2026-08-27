@@ -29,7 +29,6 @@ import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { createAgentAskHandlers } from './ipc/agent-ask.handler';
 import { appHandlers } from './ipc/app.handler';
-import { createCodebaseHandlers } from './ipc/codebase.handler';
 import { devtoolsHandlers } from './ipc/devtools.handler';
 import { dialogHandlers } from './ipc/dialog.handler';
 import { createFileHandlers } from './ipc/file.handler';
@@ -413,9 +412,6 @@ app
       search: createSearchHandlers({ searchService: serviceContainer.getSearchService() }),
       terminal: createTerminalHandlers({ terminalService: serviceContainer.getTerminalService() }),
       git: createGitHandlers({ gitService: serviceContainer.getGitService() }),
-      codebase: createCodebaseHandlers({
-        codebaseService: serviceContainer.getCodebaseService(),
-      }),
       tool: createToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() }),
       settings: createSettingsHandlers({
         permissionService: serviceContainer.getPermissionService(),

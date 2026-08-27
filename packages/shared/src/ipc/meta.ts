@@ -95,15 +95,6 @@ export const IPC_META = {
     push: request('git:push'),
   },
 
-  codebase: {
-    query: request('codebase:query'),
-    explore: request('codebase:explore'),
-    node: request('codebase:node'),
-    callers: request('codebase:callers'),
-    callees: request('codebase:callees'),
-    impact: request('codebase:impact'),
-  },
-
   tool: {
     list: request('tool:list'),
   },
