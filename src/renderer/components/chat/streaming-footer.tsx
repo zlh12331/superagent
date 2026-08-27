@@ -51,7 +51,7 @@ export function StreamingFooter(): ReactElement {
  * - 'system'：居中淡灰小字
  */
 
-export function StreamingPlaceholder(): ReactElement {
+function StreamingPlaceholder(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   return (

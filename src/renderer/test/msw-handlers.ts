@@ -182,7 +182,7 @@ export const logsMocks = {
 /**
  * DevTools 域默认 mock 响应
  */
-export const devtoolsMocks = {
+const devtoolsMocks = {
   open: () => ok({ ok: true }),
 };
 

@@ -62,12 +62,12 @@ const SIDEBAR_FALLBACK: ClampValues = { min: 200, max: 280, preferredVw: 0.17 };
 const RIGHT_PANEL_FALLBACK: ClampValues = { min: 260, max: 360, preferredVw: 0.22 };
 
 /** 侧边栏宽度约束（从 CSS --sidebar-w 解析） */
-export function getSidebarClamp(): ClampValues {
+function getSidebarClamp(): ClampValues {
   return parseClamp('--sidebar-w', SIDEBAR_FALLBACK);
 }
 
 /** 右面板宽度约束（从 CSS --right-panel-w 解析） */
-export function getRightPanelClamp(): ClampValues {
+function getRightPanelClamp(): ClampValues {
   return parseClamp('--right-panel-w', RIGHT_PANEL_FALLBACK);
 }
 

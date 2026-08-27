@@ -6,7 +6,7 @@
 // 此前只有写入端、没有读取端 → 首条消息永久丢失。
 // ──────────────────────────────────────────────────────────────
 
-export const WELCOME_PENDING_MESSAGE_PREFIX = 'welcome:pending-message:';
+const WELCOME_PENDING_MESSAGE_PREFIX = 'welcome:pending-message:';
 
 /** sessionId → sessionStorage key */
 export function pendingMessageKey(sessionId: string): string {

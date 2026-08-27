@@ -167,7 +167,7 @@ export function registerGlobalErrorHandlers(): void {
 }
 
 /** 崩溃标记文件路径（位于 userData 下） */
-export function getCrashMarkerPath(): string {
+function getCrashMarkerPath(): string {
   return join(app.getPath('userData'), '.crash-marker');
 }
 
