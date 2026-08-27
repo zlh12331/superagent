@@ -13,7 +13,13 @@
 // - E2E 测试直接访问 http://localhost:5173，测试纯 Web UI
 // - 真实 Electron 环境测试留待打包阶段（Phase 11）
 
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+
+// 仓库根（webServer 的 cwd 默认是配置文件目录，不显式指定会导致 vite 在
+// e2e/ 下找不到 --config 相对路径而提前退出，2026-08-27 实测暴露）
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export default defineConfig({
   testDir: '.',
@@ -40,6 +46,7 @@ export default defineConfig({
   // （development 模式，无 mock）区分：ipc-rtt 等 mock 链路基准依赖 web 模式
   webServer: {
     command: 'pnpm exec vite --config vite.web.config.ts --mode web',
+    cwd: ROOT,
     url: 'http://localhost:5173',
     timeout: 60_000,
     reuseExistingServer: true,

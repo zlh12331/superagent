@@ -19,7 +19,13 @@
 // - playwright.electron.config.ts：_electron.launch 启动 Electron，有 preload + IPC 全链路
 // ──────────────────────────────────────────────────────────────
 
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@playwright/test';
+
+// 仓库根（webServer 的 cwd 默认是配置文件目录，不显式指定会导致
+// electron-vite/vite 在 e2e/ 下找不到根配置而提前退出，2026-08-27 实测暴露）
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export default defineConfig({
   testDir: '.',
@@ -40,6 +46,7 @@ export default defineConfig({
   // 自动启动 dev server（与 playwright.config.ts 一致；本地已手动运行时自动复用）
   webServer: {
     command: 'pnpm exec electron-vite dev',
+    cwd: ROOT,
     url: 'http://localhost:5173',
     reuseExistingServer: true,
     timeout: 60_000,
