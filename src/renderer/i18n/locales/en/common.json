@@ -132,6 +132,7 @@
       "startNewChat": "Start a new chat",
       "startNewChatDesc": "Type your question below and press Enter to send",
       "scrollToBottom": "Scroll to bottom",
+      "loadedMessages": "Loaded {{count}} / {{total}} messages · scroll up for earlier",
       "msgNavRail": "Message navigation",
       "msgNavGoTo": "Go to message",
       "assistant": "Assistant",

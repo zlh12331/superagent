@@ -20,6 +20,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -30,6 +31,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { MessageItem } from './message-item';
 import { extractText } from './message-utils';
+import { clampStart, ensureIndexStart, initialWindowStart, nextPageStart } from './message-window';
 import { StreamingFooter } from './streaming-footer';
 
 /** 消息导航轨元素的数据属性（滚动定位用） */
@@ -50,6 +52,9 @@ interface ChatMessageListProps {
 
 /** 距底部阈值（px）：小于该值视为"在底部" */
 const AT_BOTTOM_THRESHOLD = 80;
+
+/** 距顶部阈值（px）：小于该值且窗口未到开头时加载更早消息（分页渲染） */
+const AT_TOP_THRESHOLD = 200;
 
 /** 用户消息预览截断长度（跳转条预览） */
 const PREVIEW_MAX_CHARS = 60;
@@ -87,6 +92,38 @@ export function ChatMessageList({
 
   // 流式状态（streaming / submitted）时显示占位"..."
   const isStreaming = status === 'streaming' || status === 'submitted';
+
+  // 分页渲染窗口（2026-08 长会话性能根治）：数据全量保留在 messages（LLM 上下文
+  // 完整），仅裁剪 DOM——默认只渲染最近一页，滚动到顶加载更早；首屏挂载成本固定
+  const [windowStart, setWindowStart] = useState<number>(() => initialWindowStart(messages.length));
+  // 加载更早前的滚动高度（渲染后补偿，保持视口内容不跳）
+  const prevScrollHeightRef = useRef(0);
+  // 目标在窗口外时的待滚动索引（窗口扩展渲染后执行）
+  const pendingScrollIndexRef = useRef<number | null>(null);
+
+  /** 加载更早一页消息（滚动到顶触发；锚定补偿由 useLayoutEffect 处理） */
+  const loadEarlier = useCallback((): void => {
+    setWindowStart((prev) => nextPageStart(prev));
+  }, []);
+
+  // 会话切换（messages 骤变）时重置窗口；流式 append（长度增长）不重置
+  useEffect(() => {
+    setWindowStart((prev) => {
+      if (messages.length === 0) return 0;
+      return prev >= messages.length ? initialWindowStart(messages.length) : prev;
+    });
+  }, [messages.length]);
+
+  // 加载更早后补偿滚动位置（保持视口内容不跳）
+  useLayoutEffect(() => {
+    if (prevScrollHeightRef.current > 0) {
+      const el = scrollerRef.current;
+      if (el !== null) {
+        el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
+      }
+      prevScrollHeightRef.current = 0;
+    }
+  }, [windowStart]);
 
   // 流式占位显示条件：
   // - submitted（思考中，assistant 尚未开始输出）：总是显示打字指示
@@ -160,6 +197,12 @@ export function ChatMessageList({
     // 导航轨滚动联动：更新活跃圆点（相同值不触发重渲染）
     const nextActive = computeActiveUserIndex(el);
     setActiveUserIndex((prev) => (prev === nextActive ? prev : nextActive));
+
+    // 分页渲染：滚动到顶部附近且窗口未到开头 → 加载更早（记录高度供补偿）
+    if (el.scrollTop <= AT_TOP_THRESHOLD && windowStart > 0) {
+      prevScrollHeightRef.current = el.scrollHeight;
+      loadEarlier();
+    }
   };
 
   // 初始/用户消息数变化时同步一次活跃圆点（内容不满一屏时无滚动事件，
@@ -184,11 +227,34 @@ export function ChatMessageList({
     isAtBottomRef.current = true;
   };
 
-  /** 滚动到指定消息（导航轨/搜索定位；居中） */
+  /** 滚动到指定消息（导航轨/搜索定位；居中）；目标在窗口外时先扩展窗口 */
   const scrollToIndex = useCallback((index: number): void => {
     const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`);
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (el !== null) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    // 目标未渲染（分页窗口外）：扩展窗口后由 effect 执行滚动
+    pendingScrollIndexRef.current = index;
+    setWindowStart((prev) => ensureIndexStart(index, prev));
   }, []);
+
+  // 窗口扩展渲染后执行待滚动（导航轨/搜索跳转到窗口外消息）
+  useEffect(() => {
+    const pending = pendingScrollIndexRef.current;
+    if (pending === null) return;
+    const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${pending}"]`);
+    if (el !== null) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      pendingScrollIndexRef.current = null;
+    }
+  }, [windowStart]);
+
+  // 渲染窗口裁剪：数据全量在 messages，仅 DOM 层分页（切换会话后 clamp 兜底）
+  const visibleMessages = useMemo(
+    () => messages.slice(clampStart(windowStart, messages.length)),
+    [messages, windowStart],
+  );
 
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
   // - 用户在底部附近：直接滚动跟随新内容（替代 Virtuoso followOutput）
@@ -233,7 +299,18 @@ export function ChatMessageList({
         {/* 居中限宽容器（CSS .messages-inner 已定义但此前从未渲染——消息通栏全宽，
             与 820px 居中的输入框严重错位） */}
         <div className="messages-inner">
-          {messages.map((message, index) => {
+          {/* 分页提示：窗口未到开头（滚动到顶可加载更早消息） */}
+          {windowStart > 0 && (
+            <div className="text-muted-foreground/60 py-1 text-center text-[10px]">
+              {t('chat.loadedMessages', {
+                count: messages.length - windowStart,
+                total: messages.length,
+              })}
+            </div>
+          )}
+          {visibleMessages.map((message, relativeIndex) => {
+            // 全量索引（流式标记/连续判定/MSG_INDEX_ATTR 用）
+            const index = windowStart + relativeIndex;
             // 流式标记：最后一条 assistant 消息正在输出时，文本末尾显示闪烁光标（照搬参考项目 StreamingCursor）
             const isStreamingMessage =
               !showStreamingFooter && isStreaming && index === messages.length - 1;
