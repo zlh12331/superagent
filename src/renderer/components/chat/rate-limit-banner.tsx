@@ -39,8 +39,8 @@ export function RateLimitBanner(): ReactElement | null {
   if (!visible || isRateLimitExpired(triggeredAt)) return null;
 
   return (
-    <Alert className="border-[var(--amber)]/40 bg-[var(--amber)]/10 text-[var(--warn)] font-mono text-xs">
-      <AlertTriangle className="text-[var(--warn)]" strokeWidth={2} />
+    <Alert className="border-[var(--amber)]/40 bg-[var(--amber)]/10 text-warn-text font-mono text-xs">
+      <AlertTriangle className="text-warn-text" strokeWidth={2} />
       {/* 单行形态（用户要求）：标题与关闭按钮同行，× 在行尾 */}
       <AlertTitle className="font-mono text-xs flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate">{t('chat.rateLimited')}</span>
@@ -49,7 +49,7 @@ export function RateLimitBanner(): ReactElement | null {
           onClick={dismiss}
           aria-label={t('common.close')}
           title={t('common.close')}
-          className="text-[var(--warn)] flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors hover:bg-[var(--amber)]/15"
+          className="text-warn-text flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors hover:bg-[var(--amber)]/15"
         >
           <X className="size-3" strokeWidth={2.5} />
         </button>

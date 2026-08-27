@@ -74,6 +74,14 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+
+  /* WCAG AA 文本安全层与实底强调层（语义色三态拆分，见 aurora.json 各 comment） */
+  --color-error-emphasis: var(--error-emphasis);
+  --color-error-text: var(--error-text);
+  --color-success-emphasis: var(--success-emphasis);
+  --color-success-text: var(--success-text);
+  --color-warn-text: var(--warn-text);
+  --color-accent-text: var(--accent-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -3287,23 +3295,6 @@ button.card-head {
 
 .file-viewer-save-btn:disabled {
   cursor: not-allowed;
-}
-
-/* 加载旋转动画（保存中） */
-.file-viewer-spinner {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: file-viewer-spin 0.6s linear infinite;
-}
-
-@keyframes file-viewer-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* 编辑中徽章 */

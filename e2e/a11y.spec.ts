@@ -1,45 +1,63 @@
 // e2e/a11y.spec.ts
-// 可访问性审计测试：WCAG 2.2 AA 合规校验
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 用 @axe-core/playwright 在 E2E 测试中顺手跑 a11y 审计
-// - 零额外成本：复用已有 Playwright 浏览器实例
-// - 审计 WCAG 2.2 A + AA 级别规则
-//
-// 运行方式：
-//   pnpm test:e2e
-//
-// 规则参考：
-// - WCAG 2.2 AA：https://www.w3.org/TR/WCAG22/
-// - axe-core 规则集：https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md
-//
-// 设计：
-// - 不审计第三方组件内部（Radix UI 已内置 a11y），只审计整体页面
-// - 排除动态加载内容（终端输出/聊天消息），这些由组件测试覆盖
-// ──────────────────────────────────────────────────────────────
+// 可访问性审计（WCAG 2.2 AA）——浏览器模式 E2E
+// ──────────────────────────────
+// 覆盖策略（2026-08 审计后重构）：
+// - 首页整体 axe 扫描 × 亮/暗 双主题（themeToken 类切换，不依赖用户设置持久化）
+// - color-contrast 单规则 × 亮/暗 双主题 —— 此前仅亮色，暗色 accent/error 前景
+//   对比度缺陷曾因此漏网
+// - 动态内容排除项：终端输出流 / 聊天消息流（滚动噪声）；Radix Tabs 折叠态
+//   aria-controls 指向懒渲染 content 为库标准行为，非真实问题
+// ──────────────────────────────
 
 import AxeBuilder from '@axe-core/playwright';
+import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
-test.describe('可访问性审计（WCAG 2.2 AA）', () => {
-  test('首页无 a11y 违规', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    // 等待应用渲染稳定
-    await page.waitForTimeout(1000);
+/** 双主题矩阵：Axios 令牌按 <html class="dark"> 切换，evaluate 直加类即可令全部 CSS 变量翻转 */
+const THEMES = ['light', 'dark'] as const;
+type Theme = (typeof THEMES)[number];
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .exclude('[data-testid="terminal-output"]') // 终端动态内容
-      .exclude('[data-testid="chat-message-list"]') // 聊天动态内容
-      // Radix Tabs 在 DevPanel 折叠态下 aria-controls 指向未渲染的 content，
-      // 这是 Radix 的标准行为（content 懒渲染），非真实 a11y 问题
-      .exclude('[data-slot="tabs-trigger"]')
-      .analyze();
+/** 导航至稳定态并应用目标主题 */
+async function gotoWithTheme(page: Page, theme: Theme): Promise<void> {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  if (theme === 'dark') {
+    await page.evaluate(() => {
+      document.documentElement.classList.add('dark');
+    });
+  }
+  // 等待应用渲染稳定（含主题过渡 transition）
+  await page.waitForTimeout(1000);
+}
 
-    // 违规数为 0 才通过
-    expect(results.violations).toEqual([]);
-  });
+test.describe('可访问性审计（WCAG 2.2 AA · 亮/暗双主题矩阵）', () => {
+  for (const theme of THEMES) {
+    test(`首页无 a11y 违规（${theme}）`, async ({ page }) => {
+      await gotoWithTheme(page, theme);
+
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .exclude('[data-testid="terminal-output"]') // 终端动态内容
+        .exclude('[data-testid="chat-message-list"]') // 聊天动态内容
+        // Radix Tabs 在 DevPanel 折叠态下 aria-controls 指向未渲染的 content，
+        // 这是 Radix 的标准行为（content 懒渲染），非真实 a11y 问题
+        .exclude('[data-slot="tabs-trigger"]')
+        .analyze();
+
+      // 违规数为 0 才通过
+      expect(results.violations).toEqual([]);
+    });
+
+    test(`颜色对比度满足 AA 标准（${theme}）`, async ({ page }) => {
+      await gotoWithTheme(page, theme);
+
+      // U1 修复：color-contrast 是 axe rule ID 而非 tag——此前用 withTags 传入
+      // 匹配不到任何规则，对比度用例空跑（永远 0 违规）。正确 API 是 withRules。
+      const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
+
+      expect(results.violations).toEqual([]);
+    });
+  }
 
   test('页面包含 lang 属性', async ({ page }) => {
     await page.goto('/');
@@ -85,16 +103,5 @@ test.describe('可访问性审计（WCAG 2.2 AA）', () => {
         `按钮缺少可访问名称: ${await button.evaluate((el) => el.outerHTML)}`,
       ).toBeTruthy();
     }
-  });
-
-  test('颜色对比度满足 AA 标准', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // U1 修复：color-contrast 是 axe rule ID 而非 tag——此前用 withTags 传入
-    // 匹配不到任何规则，对比度用例空跑（永远 0 违规）。正确 API 是 withRules。
-    const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
-
-    expect(results.violations).toEqual([]);
   });
 });

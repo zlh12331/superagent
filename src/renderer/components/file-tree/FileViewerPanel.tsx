@@ -24,8 +24,8 @@
 import { Check, Copy, Eye, FileText, Pencil, Save } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
 import { getHighlighter } from '@/components/chat/Markdown';
+import { Spinner } from '@/components/ui/spinner';
 import { useFileContent } from '@/hooks/use-file-content';
 
 import { useFileWrite } from '@/hooks/use-file-write';
@@ -268,11 +268,7 @@ export function FileViewerPanel(): ReactElement {
               title={`${t('common.save')} (Ctrl+S)`}
               aria-label={t('common.save')}
             >
-              {isSaving ? (
-                <span className="file-viewer-spinner" role="status" />
-              ) : (
-                <Save size={12} />
-              )}
+              {isSaving ? <Spinner className="size-2.5" /> : <Save size={12} />}
               <span>{isSaving ? t('fileViewer.saving') : t('common.save')}</span>
             </button>
           )}

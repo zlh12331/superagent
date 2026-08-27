@@ -36,7 +36,7 @@ export function SheetOverlay({
     <DialogPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-[var(--overlay-bg)]',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-popover bg-[var(--overlay-bg)]',
         className,
       )}
       {...props}
@@ -57,7 +57,7 @@ export function SheetContent({
         data-slot="sheet-content"
         className={cn(
           // 无开合动画（当前唯一使用方 SettingsDialog 为全屏设置页，瞬时切换）
-          'bg-background fixed inset-0 z-50 h-full w-full shadow-lg',
+          'bg-background fixed inset-0 z-popover h-full w-full shadow-lg',
           className,
         )}
         {...props}

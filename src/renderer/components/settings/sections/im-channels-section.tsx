@@ -27,7 +27,12 @@ export function ImChannelsSection(): ReactElement {
   const [busy, setBusy] = useState<string | null>(null);
 
   // P3 修复：im:list 改走 TanStack Query（此前 useState 手动拉取）
-  const { data: channelsData, isLoading: channelsLoading } = useQuery({
+  const {
+    data: channelsData,
+    isError: channelsFailed,
+    error: channelsError,
+    refetch: refetchChannels,
+  } = useQuery({
     queryKey: IM_CHANNELS_QUERY_KEY,
     queryFn: async () => {
       // 浏览器模式（dev 预览）无 window.api：静默空列表
@@ -43,7 +48,6 @@ export function ImChannelsSection(): ReactElement {
     },
   });
   const channels = channelsData?.channels ?? [];
-
   // 启动 mutation：成功后失效渠道列表
   const startMutation = useMutation({
     mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
@@ -96,10 +100,6 @@ export function ImChannelsSection(): ReactElement {
     }
   };
 
-  if (channelsLoading && channelsData === undefined) {
-    return <div className="flex flex-col gap-2 pt-2" />;
-  }
-
   return (
     <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
@@ -109,6 +109,12 @@ export function ImChannelsSection(): ReactElement {
         </Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.imChannelsHint')}</p>
+
+      <QueryErrorRow
+        isError={channelsFailed}
+        errorMessage={channelsError instanceof Error ? channelsError.message : null}
+        onRetry={() => void refetchChannels()}
+      />
 
       <ul className="flex flex-col gap-2 text-xs font-sans">
         {channels.map((channel) => (
@@ -123,7 +129,7 @@ export function ImChannelsSection(): ReactElement {
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-2xs',
                     channel.running
-                      ? 'bg-[var(--success)]/10 text-[var(--success)]'
+                      ? 'bg-success/10 text-success-text'
                       : 'bg-muted text-muted-foreground',
                   )}
                 >

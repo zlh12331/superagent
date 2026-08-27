@@ -45,14 +45,18 @@ function resolveTerminalTheme(): ITheme {
   const background = readToken('--bg');
   const foreground = readToken('--text');
   const cursor = readToken('--text-secondary');
-  const selection = readToken('--border');
+  // 选区色用专用令牌（0.25～0.30 保证可见性）；此前沿用 --border（透明度仅 0.12）选中几乎不可见
+  const selection = readToken('--terminal-selection') || 'rgba(120,120,120,0.3)';
+  // 亮色主题下白底终端中 ANSI brightWhite 文本会隐形：映射为可辨识中灰；暗色主题维持 xterm 默认
+  const isDark = document.documentElement.classList.contains('dark');
   // 令牌缺失（jsdom/解析失败）时回退中性值，避免空色破坏 xterm 渲染
   return {
     background: background || '#1E1E1E',
     foreground: foreground || '#CCCCCC',
     cursor: cursor || '#5C5C5C',
     cursorAccent: background || '#1E1E1E',
-    selectionBackground: selection || 'rgba(120,120,120,0.3)',
+    selectionBackground: selection,
+    ...(isDark ? {} : { brightWhite: '#555555' }),
   };
 }
 

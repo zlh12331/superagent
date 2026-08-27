@@ -56,8 +56,8 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
     <div className="text-muted-foreground flex items-center gap-1.5 text-2xs">
       <GitBranch className="size-3" strokeWidth={1.5} />
       <span className="text-foreground font-serif tracking-wide">{status.branch}</span>
-      {status.ahead > 0 && <span className="text-[var(--success)]">↑{status.ahead}</span>}
-      {status.behind > 0 && <span className="text-[var(--warn)]">↓{status.behind}</span>}
+      {status.ahead > 0 && <span className="text-success-text">↑{status.ahead}</span>}
+      {status.behind > 0 && <span className="text-warn-text">↓{status.behind}</span>}
     </div>
   );
 }
@@ -71,7 +71,7 @@ export function CleanHint(): ReactElement {
   const { t } = useTranslation();
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-1 p-4 text-center">
-      <CheckCircle2 className="size-5 text-[var(--success)]" strokeWidth={1.5} />
+      <CheckCircle2 className="size-5 text-success-text" strokeWidth={1.5} />
       <p className="font-serif text-xs tracking-wide">{t('common.cleanWorkingTree')}</p>
       <p className="text-2xs">{t('common.noChanges')}</p>
     </div>
@@ -84,7 +84,7 @@ export function ErrorHint({ message }: { readonly message: string }): ReactEleme
   // 本地化文案
   const { t } = useTranslation();
   return (
-    <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
+    <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
       <p className="font-serif text-xs">{t('common.gitStatusFailed')}</p>
       <p className="text-muted-foreground truncate text-2xs" title={message}>

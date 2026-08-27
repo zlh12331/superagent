@@ -142,7 +142,7 @@ export function ModelsSection(): ReactElement {
                   <td className="px-2 py-1.5">
                     <div className="flex items-center gap-2">
                       {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
-                      <span className="bg-accent/10 text-accent flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
+                      <span className="bg-accent/10 text-accent-text flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
                         {providerLabel(model.providerKind)[0]}
                       </span>
                       <div className="flex min-w-0 flex-col">
@@ -170,7 +170,7 @@ export function ModelsSection(): ReactElement {
                       </button>
                       <button
                         type="button"
-                        className="text-muted-foreground hover:text-[var(--error)] flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+                        className="text-muted-foreground hover:text-error-text flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
                         aria-label={t('settings.modelMgmt.deleteModel')}
                         disabled={removeMutation.isPending}
                         onClick={() => setDeleteTarget(model)}

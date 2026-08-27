@@ -87,7 +87,7 @@ export function PromptSection({ open }: { open: boolean }): React.ReactElement {
                 variant="ghost"
                 size="sm"
                 onClick={handlePromptClear}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="text-error-text hover:bg-destructive/10 hover:text-error-text"
               >
                 {t('settings.clear')}
               </Button>

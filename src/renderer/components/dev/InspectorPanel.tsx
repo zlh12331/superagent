@@ -174,8 +174,8 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           <div
             className={cn(
               'flex items-center gap-1.5 border-b px-2 py-1 text-2xs',
-              status === 'success' && 'border-[var(--success)]/30 text-[var(--success)]',
-              status === 'error' && 'border-[var(--error)]/30 text-[var(--error)]',
+              status === 'success' && 'border-[var(--success)]/30 text-success-text',
+              status === 'error' && 'border-[var(--error)]/30 text-error-text',
               status === 'loading' && 'border-border text-muted-foreground',
             )}
           >

@@ -130,9 +130,9 @@ export function DialogHost(): React.ReactElement | null {
   const cancelText = confirmOpts?.cancelText ?? promptOpts?.cancelText ?? t('common.cancel');
   const danger = confirmOpts?.danger ?? false;
 
-  // 确认按钮样式：danger → 红色；否则 accent 色
+  // 确认按钮样式：danger → 实底强调红（--error-emphasis 双主题锁定白字 CR≥4.5）；否则 accent 色
   const confirmButtonClass = danger
-    ? 'bg-[var(--error)] text-white hover:bg-[var(--error)]/90'
+    ? 'bg-error-emphasis text-destructive-foreground hover:bg-error-emphasis/90'
     : 'bg-[var(--accent)] text-on-accent hover:bg-[var(--accent-dim)]';
 
   return (

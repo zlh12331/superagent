@@ -333,8 +333,8 @@ export function ChatPanel({
           <span
             className={cn(
               'inline-flex items-center gap-1.5',
-              status === 'streaming' && 'text-[var(--aurora-accent)]',
-              status === 'error' && 'text-destructive',
+              status === 'streaming' && 'text-accent-text',
+              status === 'error' && 'text-error-text',
             )}
             role="status"
             aria-label={t('chat.sessionStatus', { status: statusText })}
@@ -368,12 +368,12 @@ export function ChatPanel({
       />
       {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
       {interrupted && !interruptedDismissed && (
-        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-[var(--warn)]">
+        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-warn-text">
           <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
           <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
           <button
             type="button"
-            className="text-[var(--warn)] hover:text-[var(--amber-dim)]"
+            className="text-warn-text hover:text-foreground"
             aria-label={t('common.close')}
             onClick={() => setInterruptedDismissed(true)}
           >
@@ -400,14 +400,14 @@ export function ChatPanel({
         <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
           <Badge
             variant="outline"
-            className="bg-accent/20 text-accent border-transparent px-1.5 py-0.5 font-mono text-[10px] font-bold"
+            className="bg-accent/20 text-accent-text border-transparent px-1.5 py-0.5 font-mono text-[10px] font-bold"
           >
             GOAL
           </Badge>
           {isGoalCompleted && (
             <Badge
               variant="outline"
-              className="bg-success/10 text-success border-transparent gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+              className="bg-success/10 text-success-text border-transparent gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
             >
               <Check className="size-3" strokeWidth={2.5} />
               {t('chat.goalCompleted')}
@@ -431,7 +431,7 @@ export function ChatPanel({
             </button>
             <button
               type="button"
-              className="text-muted-foreground hover:bg-destructive/15 hover:text-destructive flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+              className="text-muted-foreground hover:bg-destructive/15 hover:text-error-text flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
               title={t('chat.goalClear')}
               aria-label={t('chat.goalClear')}
               onClick={() => clearGoalMutation.mutate()}

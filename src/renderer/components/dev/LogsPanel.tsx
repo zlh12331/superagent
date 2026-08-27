@@ -203,8 +203,8 @@ function LogLine({ line }: { readonly line: string }): ReactElement {
 
 /** 按日志级别获取颜色 class（通过行内 [level] 标记识别） */
 function getColorForLogLevel(line: string): string {
-  if (line.includes('[error]')) return 'text-[var(--error)]';
-  if (line.includes('[warn]')) return 'text-[var(--warn)]';
+  if (line.includes('[error]')) return 'text-error-text';
+  if (line.includes('[warn]')) return 'text-warn-text';
   if (line.includes('[debug]')) return 'text-muted-foreground';
   if (line.includes('[info]')) return 'text-foreground/80';
   return 'text-muted-foreground';
@@ -243,7 +243,7 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   return (
-    <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
+    <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
       <p className="font-serif text-xs">{t('common.logsLoadFailed')}</p>
       <p className="text-muted-foreground truncate text-2xs">{message}</p>

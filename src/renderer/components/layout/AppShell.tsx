@@ -333,7 +333,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       {/* WCAG 2.4.1 Bypass Blocks：跳过导航链接 */}
       <a
         href="#main-content"
-        className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+        className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-boundary focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
       >
         {t('common.skipToContent')}
       </a>

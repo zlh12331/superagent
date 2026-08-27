@@ -79,7 +79,8 @@ export function InlineCreateInput({
 
   return (
     <div className="ft-row-wrap" style={indentStyle}>
-      <button type="button" className="ft-row ft-creating" tabIndex={-1} disabled>
+      {/* 非交互行容器：用 div 而非 disabled button（HTML 规范上禁用按钮的后代表单控件不可交互，且屏幕阅读器会先读到无意义禁用态） */}
+      <div className="ft-row ft-creating">
         <span className="ft-chevron" aria-hidden>
           {/* 无展开箭头，对齐文件节点缩进 */}
         </span>
@@ -101,7 +102,7 @@ export function InlineCreateInput({
           onBlur={handleBlur}
           onClick={(e) => e.stopPropagation()}
         />
-      </button>
+      </div>
     </div>
   );
 }

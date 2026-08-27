@@ -222,7 +222,7 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   return (
-    <div className="text-destructive flex flex-col items-center gap-1 p-3 text-center">
+    <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">
       <AlertCircle className="size-4" strokeWidth={1.5} />
       <p className="font-serif text-xs">{t('dev.metricsFailed')}</p>
       <p className="text-muted-foreground truncate text-2xs">{message}</p>

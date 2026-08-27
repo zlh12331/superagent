@@ -8,7 +8,7 @@ import type { SessionRecentTurnsRes, TurnStatusText } from '@code-agent/shared/r
 import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 import type { ReactElement } from 'react';
-
+import { AsyncSection } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -17,7 +17,14 @@ export function TurnsSection(): ReactElement {
   const { t } = useTranslation();
 
   // 最近回合：TanStack Query（L3 服务端数据；浏览器模式守卫返回空列表）
-  const { data: turns } = useQuery({
+  // 四态契约：pending→行内加载、error→提示+重试（此前 error 被静默渲染成空态）
+  const {
+    data: turns,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['turns', 'recent'],
     queryFn: async (): Promise<SessionRecentTurnsRes['turns']> => {
       if (typeof window === 'undefined' || window.api === undefined) {
@@ -28,7 +35,7 @@ export function TurnsSection(): ReactElement {
     },
   });
 
-  const isEmpty = turns === undefined || turns.length === 0;
+  const turnsList = turns ?? [];
   const statusKey: TurnStatusText = {
     completed: t('settings.turnStatusCompleted'),
     aborted: t('settings.turnStatusAborted'),
@@ -44,11 +51,16 @@ export function TurnsSection(): ReactElement {
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.turnsHint')}</p>
 
-      {isEmpty ? (
-        <p className="text-xs text-muted-foreground font-sans">{t('settings.turnsEmpty')}</p>
-      ) : (
+      <AsyncSection
+        isPending={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : null}
+        onRetry={() => void refetch()}
+        isEmpty={turnsList.length === 0}
+        emptyText={t('settings.turnsEmpty')}
+      >
         <ul className="flex flex-col gap-1 text-xs font-sans">
-          {turns.map((turn) => (
+          {turnsList.map((turn) => (
             <li
               key={turn.turnId}
               className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1"
@@ -65,7 +77,7 @@ export function TurnsSection(): ReactElement {
             </li>
           ))}
         </ul>
-      )}
+      </AsyncSection>
     </div>
   );
 }

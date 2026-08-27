@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
@@ -132,6 +132,11 @@ export function SkillsSection(): ReactElement {
       <p className="text-muted-foreground text-xs leading-[1.5]">
         {t('settings.skillLearnedHint')}
       </p>
+      <QueryErrorRow
+        isError={learnedQuery.isError}
+        errorMessage={learnedQuery.error instanceof Error ? learnedQuery.error.message : null}
+        onRetry={() => void learnedQuery.refetch()}
+      />
       {learned.length === 0 ? (
         <div className="text-muted-foreground rounded-md border border-dashed px-3 py-4 text-center text-xs">
           {t('settings.skillEmpty')}
@@ -142,7 +147,7 @@ export function SkillsSection(): ReactElement {
             <button
               type="button"
               onClick={() => removeMutation.mutate(skill.name)}
-              className="text-muted-foreground hover:text-[var(--error)] flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
+              className="text-muted-foreground hover:text-error-text flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
               aria-label={t('settings.skillRemove')}
             >
               <Trash2 className="size-3" />

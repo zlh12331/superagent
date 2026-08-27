@@ -63,7 +63,7 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
   const rows = lines.map((line, i) => ({ ...line, rowKey: `${line.type}:${i}` }));
   // 变更类型徽章：created（accent 软底）/ modified（蓝底）——纯语义令牌（照搬参考项目 FileChangeCard）
   const badgeClass = isCreate
-    ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+    ? 'bg-[var(--accent-soft)] text-accent-text'
     : 'bg-[var(--info-blue)] text-[var(--accent-2)]';
   const badgeText = isCreate ? t('chat.fileChange.created') : t('chat.fileChange.modified');
   const fileName = path.split(/[\\/]/).pop() ?? path;
@@ -102,8 +102,8 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
                 className={cn(
                   'flex gap-2 px-2 whitespace-pre-wrap break-all',
                   // diff 行配色：纯语义令牌（照搬参考项目 FileChangeCard，无 dark: 双写）
-                  line.type === 'add' && 'bg-[var(--accent)]/10 text-[var(--accent)]',
-                  line.type === 'del' && 'bg-[var(--error)]/10 text-[var(--error)]',
+                  line.type === 'add' && 'bg-[var(--accent)]/10 text-accent-text',
+                  line.type === 'del' && 'bg-[var(--error)]/10 text-error-text',
                   line.type === 'context' && 'text-muted-foreground',
                 )}
               >

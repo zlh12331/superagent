@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Shield, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -191,6 +191,11 @@ export function ApprovalModeSection(): ReactElement {
           <Label className="font-serif text-sm tracking-wide">{t('settings.whitelistTitle')}</Label>
         </div>
         <p className="text-xs text-muted-foreground font-sans">{t('settings.whitelistHint')}</p>
+        <QueryErrorRow
+          isError={whitelistQuery.isError}
+          errorMessage={whitelistQuery.error instanceof Error ? whitelistQuery.error.message : null}
+          onRetry={() => void whitelistQuery.refetch()}
+        />
         <div className="mt-1.5 flex flex-col gap-1.5">
           {entries.length === 0 ? (
             <p className="text-xs text-muted-foreground font-sans">
@@ -213,7 +218,7 @@ export function ApprovalModeSection(): ReactElement {
                 <button
                   type="button"
                   onClick={() => removeMutation.mutate(entry)}
-                  className="text-muted-foreground hover:text-[var(--error)] flex cursor-pointer items-center rounded border px-1.5 py-1 text-2xs transition-colors"
+                  className="text-muted-foreground hover:text-error-text flex cursor-pointer items-center rounded border px-1.5 py-1 text-2xs transition-colors"
                   aria-label={t('settings.whitelistRemove')}
                 >
                   <Trash2 className="size-3" />
@@ -267,7 +272,7 @@ export function ApprovalModeSection(): ReactElement {
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAuto')}
               </span>
-              <span className="bg-[var(--success)]/10 text-[var(--success)] rounded-full px-2 py-0.5 font-mono text-xs">
+              <span className="bg-success/10 text-success-text rounded-full px-2 py-0.5 font-mono text-xs">
                 auto · {autoTools.length}
               </span>
             </div>
@@ -280,7 +285,7 @@ export function ApprovalModeSection(): ReactElement {
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAsk')}
               </span>
-              <span className="bg-[var(--amber)]/10 text-[var(--warn)] rounded-full px-2 py-0.5 font-mono text-xs">
+              <span className="bg-[var(--amber)]/10 text-warn-text rounded-full px-2 py-0.5 font-mono text-xs">
                 ask · {askTools.length}
               </span>
             </div>

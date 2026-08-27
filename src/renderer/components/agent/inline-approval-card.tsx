@@ -144,9 +144,7 @@ export function InlineApprovalCard({
           <span
             className={cn(
               'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
-              isApproved
-                ? 'bg-[var(--success)]/10 text-[var(--success)]'
-                : 'bg-[var(--error)]/10 text-[var(--error)]',
+              isApproved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
             )}
           >
             {isApproved ? t('approval.approved') : t('approval.rejected')}
@@ -206,10 +204,11 @@ export function InlineApprovalCard({
             type="button"
             onClick={() => void respond(true, false)}
             className={cn(
-              'ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-white transition-colors',
+              // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
+              'ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-primary-foreground transition-colors',
               dangerous
-                ? 'bg-[var(--error)] hover:bg-[var(--error)]/90'
-                : 'bg-[var(--success)] hover:bg-[var(--success)]/90',
+                ? 'bg-error-emphasis hover:bg-error-emphasis/90'
+                : 'bg-success-emphasis hover:bg-success-emphasis/90',
             )}
           >
             <Check className="size-3" />

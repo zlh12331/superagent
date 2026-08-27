@@ -15,6 +15,7 @@ import { isRouteErrorResponse, Outlet, useRouteError } from 'react-router';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useTranslation } from '@/i18n/use-translation';
 
 /**
@@ -40,7 +41,7 @@ export function RootLayout(): ReactElement {
 export function RootHydrateFallback(): ReactElement {
   return (
     <div className="text-muted-foreground flex h-full items-center justify-center">
-      <div className="border-border size-6 animate-spin rounded-full border-2 border-t-transparent" />
+      <Spinner className="size-6" />
     </div>
   );
 }

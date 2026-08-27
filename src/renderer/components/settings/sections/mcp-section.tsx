@@ -30,12 +30,12 @@ const TRANSPORT_OPTIONS: readonly McpTransport[] = ['stdio', 'sse', 'streamable-
 
 /** 状态徽章配色（键名与主进程 McpServerStatus 对齐，含 snake_case） */
 const STATUS_BADGE: Record<string, string> = {
-  running: 'bg-[var(--success)]/10 text-[var(--success)]',
+  running: 'bg-success/10 text-success-text',
   starting: 'bg-[var(--info-blue)] text-[var(--accent-2)]',
-  error: 'bg-[var(--error)]/10 text-[var(--error)]',
+  error: 'bg-error/10 text-error-text',
   stopped: 'bg-muted text-muted-foreground',
   // biome-ignore lint/style/useNamingConvention: 键名与主进程状态枚举对齐（McpServerStatus 含 snake_case）
-  stopped_with_error: 'bg-[var(--amber)]/10 text-[var(--warn)]',
+  stopped_with_error: 'bg-[var(--amber)]/10 text-warn-text',
 };
 
 /**
@@ -237,7 +237,7 @@ export function McpSection(): ReactElement {
           </SettingRow>
           {/* 最后一次错误（主进程 lastError 字段，此前仅展示状态徽章、错误信息丢失） */}
           {server.lastError !== undefined && server.lastError !== '' && (
-            <p className="text-[var(--error)]/90 px-1 font-mono text-2xs break-all" role="status">
+            <p className="text-error-text px-1 font-mono text-2xs break-all" role="status">
               {server.lastError}
             </p>
           )}
@@ -309,7 +309,7 @@ export function McpSection(): ReactElement {
               spellCheck={false}
             />
             {headersInvalid && (
-              <p className="text-[var(--error)]/90 px-1 text-2xs" role="status">
+              <p className="text-error-text px-1 text-2xs" role="status">
                 {t('settings.mcpHeadersInvalid', { line: parsedHeaders.invalidLine ?? 1 })}
               </p>
             )}

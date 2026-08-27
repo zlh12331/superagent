@@ -6,8 +6,18 @@
   --resizer-w: 0px;
   --drawer-w: 540px;
   --topbar-h: 52px;
-  /* z-index 层级体系 — 从低到高，确保所有浮层层级一致 */
+  /* z-index 层级体系 — 从低到高（surface < popover < modal < toast < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌 */
   --z-base: 1;
+  /* 面板内容之上的行内浮层（进度条/斜杠建议面板等，同一 stacking context 内竞争） */
+  --z-surface: 2;
+  /* Radix 浮层统一档（dialog/sheet/dropdown/select/context-menu/tooltip） */
+  --z-popover: 50;
+  /* 强制顶层模态（AskDialog 等需压过一切浮层的场景） */
+  --z-modal: 100;
+  /* 通知层（sonner） */
+  --z-toast: 110;
+  /* 层级边界值（skip-link 聚焦等不遮挡内容的最高层） */
+  --z-boundary: 999;
   --sans: var(--font-sans);
   --serif: var(--font-serif);
   /* 字号阶梯 — 6 级 */
@@ -55,7 +65,7 @@
   --muted-foreground: #737373;
   /* 品牌色上的前景色 — TraeWork --text-onbrand */
   --on-accent: #FFFFFF;
-  /* 品牌主色 — TraeWork --bg-brand */
+  /* 品牌主色 — TraeWork --bg-brand；暗色档加深至白字前景达 WCAG AA（primary 按钮 CR≥4.5） */
   --accent: #4B3FE3;
   /* TraeWork --bg-brand-active */
   --accent-dim: #3F31C6;
@@ -93,14 +103,27 @@
   --amber-glow: rgba(226, 121, 0, 0.10);
   --warning: var(--amber);
   --warn: var(--amber);
-  /* TraeWork --status-error-default */
+  /* 警告文本橙（亮色加深保 4.5:1；暗色对黑底复用基色即达标） */
+  --warn-text: #A85C00;
+  /* TraeWork --status-error-default（基色：图形/边框/氛围；文字用 --error-text，实底+白字用 --error-emphasis） */
   --error: #E8463A;
-  --destructive: var(--error);
+  /* 错误强调红（实底+白字场景专属，双主题同值：白色前景 CR=4.57 达 AA） */
+  --error-emphasis: #D93A2F;
+  /* 错误文本红（亮色加深保 4.5:1；暗色对黑底直接复用基色即达标） */
+  --error-text: #C93A2F;
+  /* 终端选区色（xterm selectionBackground，0.30 保证可见性，禁再用 --border 的 0.12） */
+  --terminal-selection: rgba(115, 115, 115, 0.30);
+  /* shadcn destructive 语义 = 实底强调红（bg-destructive+白字场景）；原弱红迁移见 error/error-text */
+  --destructive: var(--error-emphasis);
   --destructive-foreground: #FFFFFF;
   /* TraeWork --accent-violet */
   --magenta: #9570FF;
-  /* TraeWork --status-success-default */
+  /* TraeWork --status-success-default（基色：图形/边框/氛围；实底+白字用 --success-emphasis） */
   --success: #15A877;
+  /* 成功强调绿（实底+白字场景专属，双主题同值：白色前景 CR=5.55 达 AA；原基色仅 3.04） */
+  --success-emphasis: #047857;
+  /* 成功文本绿（亮色用深档保 4.5:1；暗色对黑底复用基色即达标） */
+  --success-text: #047857;
   /* 图表色 */
   --chart-1: var(--accent);
   --chart-2: var(--accent-2);
@@ -225,15 +248,15 @@
   --text-faint: #737373;
   /* shadcn muted-foreground — TraeWork --text-tertiary */
   --muted-foreground: #A1A1A1;
-  /* 品牌主色 — TraeWork --bg-brand */
-  --accent: #6A6FFF;
+  /* 品牌主色 — TraeWork --bg-brand；暗色档加深至白字前景达 WCAG AA（primary 按钮 CR≥4.5） */
+  --accent: #5D62FF;
   /* TraeWork --bg-brand-active */
   --accent-dim: #4B3FE3;
   /* 辅助色 — TraeWork --accent-blue */
   --accent-2: #4C88FF;
   /* 品牌色氛围色（柔和、无发光 — TraeWork quiet by default） */
-  --accent-glow: rgba(106, 111, 255, 0.12);
-  --accent-soft: rgba(106, 111, 255, 0.06);
+  --accent-glow: rgba(93, 98, 255, 0.12);
+  --accent-soft: rgba(93, 98, 255, 0.06);
   --accent-2-glow: rgba(76, 136, 255, 0.12);
   --accent-2-soft: rgba(76, 136, 255, 0.06);
   --info-blue: rgba(76, 136, 255, 0.12);
@@ -250,10 +273,18 @@
   /* TraeWork --status-warning-active */
   --amber-dim: #E27900;
   --amber-glow: rgba(243, 154, 53, 0.12);
-  /* TraeWork --status-error-default */
+  /* 警告文本橙（亮色加深保 4.5:1；暗色对黑底复用基色即达标） */
+  --warn-text: var(--amber);
+  /* TraeWork --status-error-default（基色：图形/边框/氛围；文字用 --error-text，实底+白字用 --error-emphasis） */
   --error: #EA574C;
+  /* 错误文本红（亮色加深保 4.5:1；暗色对黑底直接复用基色即达标） */
+  --error-text: var(--error);
+  /* 终端选区色（xterm selectionBackground，0.30 保证可见性，禁再用 --border 的 0.12） */
+  --terminal-selection: rgba(212, 212, 212, 0.25);
   /* TraeWork --accent-violet */
   --magenta: #B655FC;
+  /* 成功文本绿（亮色用深档保 4.5:1；暗色对黑底复用基色即达标） */
+  --success-text: var(--success);
   /* 消息气泡 — TraeWork --bg-base-secondary */
   --msg-bubble-user: #262626;
   /* 遮罩 / 玻璃 */

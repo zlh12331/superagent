@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpenText, BrainCircuit, Loader2, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
+import { AsyncSection } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -30,7 +31,13 @@ export function RulesMemorySection(): ReactElement {
 
   // P3 修复：memory:list 改走 TanStack Query（此前 useState 手动拉取，
   // 无缓存/去重/竞态取消，与同面板 useQuery 用法不一致）
-  const { data: memoriesData, isLoading: loading } = useQuery({
+  const {
+    data: memoriesData,
+    isLoading: loading,
+    isError: memoriesFailed,
+    error: memoriesError,
+    refetch: refetchMemories,
+  } = useQuery({
     queryKey: MEMORY_QUERY_KEY(activeSessionId ?? 'none'),
     enabled: activeSessionId !== null,
     queryFn: async () => {
@@ -106,7 +113,7 @@ export function RulesMemorySection(): ReactElement {
               size="sm"
               disabled={clearMutation.isPending}
               onClick={() => void handleClear()}
-              className="text-muted-foreground hover:text-[var(--error)] ml-auto h-6 gap-1 px-2 text-2xs"
+              className="text-muted-foreground hover:text-error-text ml-auto h-6 gap-1 px-2 text-2xs"
             >
               {clearMutation.isPending ? (
                 <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
@@ -117,15 +124,16 @@ export function RulesMemorySection(): ReactElement {
             </Button>
           )}
         </div>
-        {loading ? (
-          <div className="text-muted-foreground mt-2 text-xs">{t('common.loading')}</div>
-        ) : activeSessionId === null ? (
-          <div className="text-muted-foreground/60 mt-2 text-xs">
-            {t('settings.memoryNoSession')}
-          </div>
-        ) : memories.length === 0 ? (
-          <div className="text-muted-foreground/60 mt-2 text-xs">{t('settings.memoryEmpty')}</div>
-        ) : (
+        <AsyncSection
+          isPending={loading}
+          isError={memoriesFailed}
+          errorMessage={memoriesError instanceof Error ? memoriesError.message : null}
+          onRetry={() => void refetchMemories()}
+          isEmpty={activeSessionId === null || memories.length === 0}
+          emptyText={
+            activeSessionId === null ? t('settings.memoryNoSession') : t('settings.memoryEmpty')
+          }
+        >
           <ul className="mt-2 max-h-64 flex flex-col gap-1 overflow-y-auto">
             {memories.map((m) => (
               <li
@@ -136,7 +144,7 @@ export function RulesMemorySection(): ReactElement {
               </li>
             ))}
           </ul>
-        )}
+        </AsyncSection>
       </div>
     </div>
   );

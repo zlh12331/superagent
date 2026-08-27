@@ -215,7 +215,7 @@ export function ModelConfigFields({
           className={cn(inputClass, isProvider && !values.useOtherModel && 'opacity-60')}
           onChange={(e) => onFieldChange('modelId', e.target.value)}
         />
-        {error !== undefined && <p className="text-[var(--error)] text-2xs">{error}</p>}
+        {error !== undefined && <p className="text-error-text text-2xs">{error}</p>}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -263,7 +263,7 @@ export function ModelConfigFields({
         </button>
       </div>
 
-      {testError !== undefined && <p className="text-[var(--error)] text-2xs">{testError}</p>}
+      {testError !== undefined && <p className="text-error-text text-2xs">{testError}</p>}
 
       {/* ── 高级配置区（折叠） ──────────────────────────── */}
       <button

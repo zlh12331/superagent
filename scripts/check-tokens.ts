@@ -78,6 +78,10 @@ const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/g;
 // className 中的硬编码 rgba()/rgb() 颜色（此前只查 #hex，rgba 色会漏网）
 const RGB_COLOR_RE = /rgba?\([^\n)]*\)/g;
 
+// 裸 z-* 数字层级（收口到 --z-* 令牌体系）：z-10/z-50/z-[100] 及 hover:/focus: 变体均违例；
+// z-(--z-popover) 等变量引用形式放行（Tailwind v4 圆括号语法）
+const BARE_Z_RE = /(?:^|\s|")((?:[a-z-]+:)*)z-(\[?-?\d+)/g;
+
 interface Violation {
   readonly file: string;
   readonly line: number;
@@ -160,6 +164,10 @@ function checkFile(file: string, violations: Violation[]): void {
       }
       for (const m of withoutVars.matchAll(RGB_COLOR_RE)) {
         violations.push({ file: rel, line: lineNo, rule: 'rgb-color', detail: m[0] });
+      }
+      // z 层级收口：浮层一律引用 --z-* 令牌（见 aurora.json z-* 条目），禁裸数字
+      for (const m of cls.matchAll(BARE_Z_RE)) {
+        violations.push({ file: rel, line: lineNo, rule: 'bare-z-index', detail: m[0].trim() });
       }
     }
   });

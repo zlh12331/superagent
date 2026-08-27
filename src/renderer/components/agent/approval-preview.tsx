@@ -74,7 +74,7 @@ export function renderStructuredPreview(
           <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {append && (
-            <span className="ml-2 rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-[var(--warn)]">
+            <span className="ml-2 rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-warn-text">
               {t('approval.appendMode')}
             </span>
           )}
@@ -113,7 +113,7 @@ export function renderStructuredPreview(
           <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {replaceAll && (
-            <span className="ml-2 rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-[var(--warn)]">
+            <span className="ml-2 rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-warn-text">
               {t('approval.replaceAll')}
             </span>
           )}
@@ -187,7 +187,7 @@ export function renderGitPreview(
           <span className="font-sans">{t('approval.operation')}</span>
           <span>{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
           {amend && (
-            <span className="rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-[var(--warn)]">
+            <span className="rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-warn-text">
               {t('approval.unavailable')}
             </span>
           )}
@@ -221,7 +221,7 @@ export function renderGitPreview(
             </span>
           )}
           {force && (
-            <span className="rounded bg-[var(--error-bg)] px-1.5 py-0.5 text-2xs text-[var(--error)]">
+            <span className="rounded bg-[var(--error-bg)] px-1.5 py-0.5 text-2xs text-error-text">
               {t('approval.forcePush')}
             </span>
           )}
@@ -231,7 +231,7 @@ export function renderGitPreview(
             </span>
           )}
         </div>
-        <div className="text-xs text-[var(--warn)]">{t('approval.pushWarning')}</div>
+        <div className="text-xs text-warn-text">{t('approval.pushWarning')}</div>
       </div>
     );
   }

@@ -18,6 +18,7 @@ import { type ReactElement, useMemo } from 'react';
 import { ActivityCalendar } from 'react-activity-calendar';
 import 'react-activity-calendar/tooltips.css';
 
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -66,7 +67,13 @@ export function UsageSection(): ReactElement {
   const { t } = useTranslation();
 
   // 用量汇总：TanStack Query（L3 服务端数据；浏览器模式守卫返回空骨架）
-  const { data: summary } = useQuery({
+  // 失败态以 QueryErrorRow 呈现（此前静默渲染成全零骨架，误导用户）
+  const {
+    data: summary,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['usage', 'summary'],
     queryFn: async (): Promise<UsageSummaryRes> => {
       // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
@@ -161,6 +168,12 @@ export function UsageSection(): ReactElement {
         <Label className="font-serif text-sm tracking-wide">{t('settings.usageSection')}</Label>
       </div>
       <p className="text-xs text-muted-foreground font-sans">{t('settings.usageHint')}</p>
+
+      <QueryErrorRow
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : null}
+        onRetry={() => void refetch()}
+      />
 
       {isEmpty ? (
         <p className="text-xs text-muted-foreground font-sans">{t('settings.usageEmpty')}</p>

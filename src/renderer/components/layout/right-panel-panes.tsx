@@ -101,13 +101,13 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
                   className={cn(
                     'flex items-start gap-1.5 leading-relaxed',
                     isDone && 'text-muted-foreground line-through',
-                    isActive && 'text-[var(--accent)]',
-                    status === 'failed' && 'text-destructive',
+                    isActive && 'text-accent-text',
+                    status === 'failed' && 'text-error-text',
                   )}
                 >
                   {/* 运行中：旋转 spinner（对齐参考项目 active 态） */}
                   {isActive && (
-                    <Loader2 className="text-[var(--accent)] mt-0.5 size-3 shrink-0 animate-spin" />
+                    <Loader2 className="text-accent-text mt-0.5 size-3 shrink-0 animate-spin" />
                   )}
                   <span className="min-w-0 flex-1">{task.description}</span>
                 </li>
@@ -302,8 +302,8 @@ export function DiffPane({
                 variant="outline"
                 className={
                   change.status === 'error'
-                    ? 'text-[var(--error)] border-transparent font-mono text-[9px]'
-                    : 'text-[var(--success)] border-transparent font-mono text-[9px]'
+                    ? 'text-error-text border-transparent font-mono text-[9px]'
+                    : 'text-success-text border-transparent font-mono text-[9px]'
                 }
               >
                 {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}

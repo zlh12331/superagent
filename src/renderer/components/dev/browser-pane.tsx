@@ -12,10 +12,11 @@
 
 import { ArrowLeft, ArrowRight, Link2, MonitorSmartphone, RotateCw, X } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from 'react';
-
+import { Spinner } from '@/components/ui/spinner';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+// 色彩架构：text-primary 仅限按钮实底前景（白字场景）；彩色文本一律 text-accent-text（AA 安全层）
 /** 设备预设类型（对齐参考项目 BrowserPane：含 laptop） */
 type DevicePreset = 'responsive' | 'desktop' | 'laptop' | 'tablet' | 'mobile';
 
@@ -206,7 +207,7 @@ export function BrowserPane(): ReactElement {
           title={t('panel.browserDeviceBar')}
           aria-label={t('panel.browserDeviceBar')}
           onClick={() => setShowDeviceBar((v) => !v)}
-          className={cn(TOOLBAR_BTN_CLASS, showDeviceBar && 'bg-primary/10 text-primary')}
+          className={cn(TOOLBAR_BTN_CLASS, showDeviceBar && 'bg-primary/10 text-accent-text')}
         >
           <MonitorSmartphone className="size-3.5" strokeWidth={1.5} />
         </button>
@@ -278,7 +279,7 @@ export function BrowserPane(): ReactElement {
       {/* 内容区：加载进度条 + 空状态 / iframe 预览 */}
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
         {loading && (
-          <div className="bg-primary absolute right-0 top-0 left-0 z-[2] h-0.5 origin-left animate-[br-loading-bar_1.5s_ease-in-out_infinite]" />
+          <div className="bg-primary absolute right-0 top-0 left-0 z-surface h-0.5 origin-left animate-[br-loading-bar_1.5s_ease-in-out_infinite]" />
         )}
         {loadedUrl === null && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
@@ -288,6 +289,12 @@ export function BrowserPane(): ReactElement {
         )}
         {loadedUrl !== null && (
           <div className="absolute inset-0 overflow-auto" style={iframeWrapperStyle}>
+            {/* iframe 导航中遮罩：暗色主题下避免白底内容首帧闪屏 */}
+            {loading && loadedUrl !== null && (
+              <div className="bg-bg-elev absolute inset-0 z-surface flex items-center justify-center">
+                <Spinner className="text-muted-foreground size-5" />
+              </div>
+            )}
             <iframe
               key={loadedUrl}
               src={loadedUrl}

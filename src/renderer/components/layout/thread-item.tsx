@@ -301,7 +301,7 @@ function ThreadItem({
                     onSelect={() => {
                       onDelete();
                     }}
-                    className="text-destructive focus:text-destructive"
+                    className="text-error-text focus:text-error-text"
                   >
                     <Trash2 className="size-3.5" strokeWidth={1.5} />
                     {t('sidebar.deleteSession')}
