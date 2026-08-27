@@ -16,6 +16,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 
 if (process.env['SKIP_ELECTRON_REBUILD'] === '1') {
   console.log('[postinstall] SKIP_ELECTRON_REBUILD=1，跳过原生模块重编译');
@@ -23,9 +24,20 @@ if (process.env['SKIP_ELECTRON_REBUILD'] === '1') {
 }
 
 console.log('[postinstall] 重编译原生模块为 Electron ABI（better-sqlite3, node-pty）...');
+// 直接 node 调用 @electron/rebuild CLI（与 rebuild-native.mjs 同源路径）：
+// 此前经 pnpm exec + shell 包装在部分环境必败（spawnSync pnpm.cmd 链路脆弱），
+// 直调实测可成功。
+const electronRebuildCli = join(
+  process.cwd(),
+  'node_modules',
+  '@electron',
+  'rebuild',
+  'lib',
+  'cli.js',
+);
 const result = spawnSync(
-  process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-  ['exec', 'electron-rebuild', '-f', '-w', 'better-sqlite3', '-w', 'node-pty'],
+  process.execPath,
+  [electronRebuildCli, '-f', '-w', 'better-sqlite3', '-w', 'node-pty'],
   { stdio: 'inherit' },
 );
 
