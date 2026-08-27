@@ -18,6 +18,8 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { _electron as electron } from 'playwright';
 
+import { closeElectronApp } from './helpers/close-electron';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -67,9 +69,15 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
     env: testEnv(),
   });
 
-  const page = await waitForMainWindow(app);
-  await page.waitForLoadState('domcontentloaded');
-  return { app, page };
+  try {
+    const page = await waitForMainWindow(app);
+    await page.waitForLoadState('domcontentloaded');
+    return { app, page };
+  } catch (err) {
+    // 启动半途失败必须回收已拉起的实例，否则残留进程导致 worker teardown 超时
+    await closeElectronApp(app);
+    throw err;
+  }
 }
 
 /** 多次采样取中位数 */
@@ -110,7 +118,7 @@ test.describe('真实 Electron IPC 性能基准', () => {
       expect(median, '真实 IPC RTT 中位数应 < 20ms（基线，渐进收紧）').toBeLessThan(20);
       expect(p95, '真实 IPC RTT p95 应 < 50ms（防长尾）').toBeLessThan(50);
     } finally {
-      await app.close();
+      await closeElectronApp(app);
     }
   });
 
@@ -141,7 +149,7 @@ test.describe('真实 Electron IPC 性能基准', () => {
       expect(result.sizeBytes, '500KB 文件内容应完整返回（防空转）').toBeGreaterThan(400 * 1024);
       expect(avg, '500KB 大 payload 往返应 < 300ms（基线含编码检测，渐进收紧）').toBeLessThan(300);
     } finally {
-      await app.close();
+      await closeElectronApp(app);
     }
   });
 
@@ -209,7 +217,7 @@ test.describe('真实 Electron IPC 性能基准', () => {
         500,
       );
     } finally {
-      await app.close();
+      await closeElectronApp(app);
     }
   });
 
@@ -237,7 +245,7 @@ test.describe('真实 Electron IPC 性能基准', () => {
       );
       expect(p95, '并发争用下单路 invoke 均摊 p95 应 < 100ms（基线，渐进收紧）').toBeLessThan(100);
     } finally {
-      await app.close();
+      await closeElectronApp(app);
     }
   });
 
@@ -260,6 +268,6 @@ test.describe('真实 Electron IPC 性能基准', () => {
     console.log(
       `[perf:electron] 启动分段（dev 模式，仅报告）：launch ${launchElapsed.toFixed(0)}ms / firstWindow ${windowElapsed.toFixed(0)}ms / domcontentloaded ${loadElapsed.toFixed(0)}ms`,
     );
-    await app.close();
+    await closeElectronApp(app);
   });
 });

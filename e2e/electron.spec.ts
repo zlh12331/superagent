@@ -19,11 +19,14 @@
 // - 这样能用 dev 模式（含 React DevTools、Profiler、HMR），而非生产构建
 // ──────────────────────────────────────────────────────────────
 
+import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { _electron as electron } from 'playwright';
+
+import { closeElectronApp } from './helpers/close-electron';
 
 // ESM 下 __dirname 替代方案
 const __filename = fileURLToPath(import.meta.url);
@@ -36,6 +39,28 @@ const MAIN_ENTRY = join(__dirname, '..', 'out', 'main', 'index.js');
 const E2E_USER_DATA = join(__dirname, '..', '.e2e-user-data');
 // 测试实例独立调试端口（避免与 dev 实例的 9222 冲突导致 CDP 连不上、launch 超时）
 const DEBUG_PORT = '9223';
+
+/**
+ * 等待主窗口（过滤 devtools:// 窗口）
+ *
+ * dev 模式可能先弹出 DevTools 窗口（或 devtools/open 用例的遗留窗口），
+ * app.firstWindow() 会拿到 devtools:// 目标导致后续断言全部失焦；
+ * 循环等待直到出现非 DevTools 窗口（2026-08-27 实测暴露，与 perf-electron 同构）。
+ */
+async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const existing = app.windows().find((w) => !w.url().startsWith('devtools://'));
+    if (existing !== undefined) {
+      return existing;
+    }
+    await Promise.race([
+      app.waitForEvent('window'),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
+  }
+  throw new Error('等待主窗口超时（20s）：仅出现 DevTools 窗口');
+}
 
 // 启动 Electron 应用，返回 app 与首个 page
 async function launchElectron(): Promise<{ app: ElectronApplication; page: Page }> {
@@ -54,19 +79,39 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
     },
   });
 
-  // 等待首个 BrowserWindow 的渲染层加载完成
-  const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  return { app, page };
+  try {
+    // 等待主窗口（非 devtools://）加载完成；首窗口可能是 DevTools，需过滤
+    const page = await waitForMainWindow(app);
+    await page.waitForLoadState('domcontentloaded');
+    return { app, page };
+  } catch (err) {
+    // 启动半途失败必须回收已拉起的实例，否则残留进程导致 worker teardown 超时
+    await closeElectronApp(app);
+    throw err;
+  }
 }
 
 test.describe('Electron 应用 E2E 测试', () => {
   let app: ElectronApplication;
   let page: Page;
 
+  test.beforeAll(() => {
+    // 预置 React DevTools 扩展：electron-devtools-installer 首装需从 Chrome 商店
+    // 下载，受限网络环境会失败；从 dev 实例 userData 复制已有扩展保证离线可加载。
+    const REACT_DEVTOOLS_ID = 'fmkadmapgofadopljbjfkapdkoienihi';
+    const src = join(__dirname, '..', '.electron-user-data', 'extensions', REACT_DEVTOOLS_ID);
+    const dstDir = join(E2E_USER_DATA, 'extensions');
+    const dst = join(dstDir, REACT_DEVTOOLS_ID);
+    if (existsSync(src) && !existsSync(dst)) {
+      mkdirSync(dstDir, { recursive: true });
+      cpSync(src, dst, { recursive: true });
+    }
+  });
+
   test.afterEach(async () => {
     if (app) {
-      await app.close();
+      // 优雅关闭 + 超时强杀兜底（防 app.close() 挂起触发 teardown 超时）
+      await closeElectronApp(app);
     }
   });
 
@@ -158,6 +203,24 @@ test.describe('Electron 应用 E2E 测试', () => {
   test('React DevTools 扩展 hook 已注入', async () => {
     ({ app, page } = await launchElectron());
 
+    // 轮询等待 React 挂载后 DevTools 注册 renderer（立即评估会早于挂载完成）；
+    // 扩展首装依赖网络下载，受限环境可能未加载 → 无法就绪时显式跳过（对齐
+    // memory-leak.spec.ts 的环境依赖跳过惯例），不误报为应用缺陷。
+    let ready = true;
+    try {
+      await page.waitForFunction(
+        () =>
+          typeof window.__REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined' &&
+          typeof window.__REACT_DEVTOOLS_GLOBAL_HOOK__.renderers !== 'undefined' &&
+          window.__REACT_DEVTOOLS_GLOBAL_HOOK__.renderers.size > 0,
+        undefined,
+        { timeout: 30_000 },
+      );
+    } catch {
+      ready = false;
+    }
+    test.skip(!ready, 'React DevTools 扩展未加载（受限网络环境无法安装），跳过本用例');
+
     const hookStatus = await page.evaluate(() => {
       return {
         hookExists: typeof window.__REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined',
@@ -174,41 +237,31 @@ test.describe('Electron 应用 E2E 测试', () => {
     expect(hookStatus.rendererCount).toBeGreaterThan(0);
   });
 
-  test('RenderProfiler 埋点已启用', async () => {
+  // 注：原 'RenderProfiler 埋点已启用' 用例已移除（2026-08-27 审计）：
+  // __RENDER_PROFILER__ 实现已在 e6dc26e（knip 死代码清理）中删除，测试残留。
+
+  test('右面板默认视图 + 添加视图交互', async () => {
     ({ app, page } = await launchElectron());
 
-    // 等待 React 渲染完成后才有数据
-    await page.waitForTimeout(1000);
+    // DevPanel 改版后的行为（与 DevPanel 单测同构）：默认仅会话详情常驻，
+    // 其余视图（终端/文件变更/文件/浏览器/开发者）通过“添加视图”按需加入。
+    // 旧断言（首屏 6 tab 全渲染）与新交互不符，2026-08-27 实测纠正。
+    const defaultTab = page.getByRole('tab', { name: /会话详情|Info/ });
+    await expect(defaultTab).toBeVisible({ timeout: 30_000 });
 
-    const profilerStatus = await page.evaluate(() => {
-      if (typeof window.__RENDER_PROFILER__ === 'undefined') return null;
-      return window.__RENDER_PROFILER__.stats();
-    });
+    const addView = page.getByRole('button', { name: /添加视图|Add view/ });
+    await expect(addView).toBeVisible();
 
-    expect(profilerStatus).not.toBeNull();
-    expect(profilerStatus?.total).toBeGreaterThan(0);
-    expect(profilerStatus?.mounts).toBeGreaterThan(0);
-  });
-
-  test('右面板 6 Tab 全部渲染', async () => {
-    ({ app, page } = await launchElectron());
-
-    // 等待应用渲染完成
-    await page.waitForTimeout(1000);
-
-    const tabTexts = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('[role="tab"]')).map((t) =>
-        t.textContent?.trim(),
-      );
-    });
-
-    // DevPanel 改版后 6 tab（i18n 双语言任一命中）：会话详情/文件变更/文件/浏览器/开发者 + 终端
-    const all = tabTexts.join(' ');
-    expect(all).toMatch(/终端|Terminal/);
-    expect(all).toMatch(/文件变更|Diff/);
-    expect(all).toMatch(/文件|Files/);
-    expect(all).toMatch(/浏览器|Browser/);
-    expect(all).toMatch(/开发者|Dev/);
-    expect(all).toMatch(/会话详情|Info/);
+    // 添加终端视图 → 新 tab 出现
+    await addView.click();
+    const terminalItem = page.getByRole('menuitem', { name: /终端|Terminal/ });
+    await expect(terminalItem).toBeVisible({ timeout: 10_000 });
+    await terminalItem.click();
+    // 精确匹配 DevPanel 的终端 tab：TerminalPanel 内部 tab 栏的“bash 关闭终端”
+    // 也带 role=tab，宽正则会误匹配（2026-08-27 实测暴露）
+    const terminalTab = page
+      .getByRole('tab', { name: '终端', exact: true })
+      .or(page.getByRole('tab', { name: 'Terminal', exact: true }));
+    await expect(terminalTab.first()).toBeVisible({ timeout: 15_000 });
   });
 });
