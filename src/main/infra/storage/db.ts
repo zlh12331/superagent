@@ -130,6 +130,38 @@ let dbInstance: DrizzleDB | null = null;
 let sqliteInstance: Database.Database | null = null;
 
 /**
+ * 极老库兼容补丁：迁移前为 runtime_models 补齐缺失列（幂等）
+ *
+ * 背景（2026-08-27 生产库实测暴露）：手写 schema-sql.ts 时代早期创建的库，
+ * runtime_models 只有 model_id/provider_kind/base_url/created_at 4 列——
+ * 后来新增的 display_name/is_enabled 只随 CREATE TABLE IF NOT EXISTS 落在
+ * 新库，老库从未 ALTER。迁移 0001 的 INSERT...SELECT 显式列举全列 →
+ * 极老库报 "no such column: display_name"，整批迁移回滚，应用启动失败。
+ * 此处按 pragma table_info 探测缺列并 ALTER 补齐，使 0001 可正常执行。
+ */
+function normalizeLegacyRuntimeModels(sqlite: Database.Database): void {
+  const table = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runtime_models'")
+    .get();
+  // 表不存在：全新库由 0000 基线直接建出完整定义，无需补丁
+  if (table === undefined) return;
+
+  const columns = new Set(
+    (sqlite.prepare('PRAGMA table_info(runtime_models)').all() as Array<{ name: string }>).map(
+      (c) => c.name,
+    ),
+  );
+  if (!columns.has('display_name')) {
+    sqlite.exec('ALTER TABLE runtime_models ADD COLUMN display_name TEXT');
+    logger.info({}, 'runtime_models 极老库补丁：补齐 display_name 列');
+  }
+  if (!columns.has('is_enabled')) {
+    sqlite.exec('ALTER TABLE runtime_models ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1');
+    logger.info({}, 'runtime_models 极老库补丁：补齐 is_enabled 列');
+  }
+}
+
+/**
  * 解析 drizzle 迁移目录
  *
  * - dev / 测试：仓库根 drizzle/（drizzle-kit generate 的产物，入仓管理）；
@@ -222,6 +254,9 @@ export function initDb(): DrizzleDB {
 
   // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });
+
+  // 极老库兼容：迁移前补齐 runtime_models 缺失列（幂等，新库/已迁移库无操作）
+  normalizeLegacyRuntimeModels(sqlite);
 
   // 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生）：
   // - migrate() 维护 __drizzle_migrations journal 表，幂等执行未应用的迁移
