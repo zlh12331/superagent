@@ -45,11 +45,13 @@ export class AgentAskService {
    *
    * @param webContents 接收提问的窗口
    * @param questions 问题列表（一次可多问）
+   * @param sessionId 发起提问的会话（多会话并发时按会话归属弹窗与清理）
    * @returns 用户回答（超时返回 null）
    */
   ask(
     webContents: WebContents,
     questions: readonly AgentQuestion[],
+    sessionId: string,
   ): Promise<AgentAnswer[] | null> {
     const askId = randomUUID();
     return new Promise((resolve) => {
@@ -79,6 +81,7 @@ export class AgentAskService {
       // + 定义表 channel 常量（P1 修复：此前硬编码 'agent:event:ask' 裸字符串，
       // 不在任何真源链上，meta 改名即静默发向死通道）
       emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeAsk, {
+        sessionId,
         askId,
         questions: questions.map((q) => ({
           question: q.question,

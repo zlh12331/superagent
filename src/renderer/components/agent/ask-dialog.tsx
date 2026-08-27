@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 
 /** 单选答案记录 */
@@ -64,9 +65,11 @@ function QuestionProgressBar({
 /** Agent 提问对话框 */
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
-  const { askId, questions, clearAsk } = useAgentAskStore();
+  const { sessionId: askSessionId, askId, questions, clearAsk } = useAgentAskStore();
   const [answers, setAnswers] = useState<AnswerState[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // 会话归属校验：多会话并发回合时，仅渲染当前激活会话的提问（防后台回合串扰前台弹窗）
+  const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
 
   // 新提问到达时初始化回答状态
   useEffect(() => {
@@ -76,7 +79,8 @@ export function AskDialog(): ReactElement | null {
     }
   }, [askId, questions]);
 
-  if (askId === null) {
+  // 非当前会话的提问不渲染（askSessionId 为 null 的旧数据照常显示，向后兼容）
+  if (askId === null || (askSessionId !== null && askSessionId !== activeSessionId)) {
     return null;
   }
 

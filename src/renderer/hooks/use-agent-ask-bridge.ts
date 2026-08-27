@@ -28,7 +28,8 @@ export function useAgentAskBridge(): void {
       return;
     }
     const unsubscribe = window.api.agent.subscribeAsk((payload: AgentAskEventPayload) => {
-      useAgentAskStore.getState().setAsk(payload.askId, payload.questions);
+      // sessionId 归属：多会话并发时按会话记录，回合结束按会话精确清理
+      useAgentAskStore.getState().setAsk(payload.sessionId, payload.askId, payload.questions);
     });
     return unsubscribe;
   }, []);

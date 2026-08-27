@@ -52,8 +52,9 @@ function handleSessionEnd(sessionId: string): void {
   useApprovalsStore.getState().clearBySession(sessionId);
   // P2 修复：agent-ask-store 此前遗漏——ask_user_question 弹窗是全屏模态，
   // 主进程 60s 超时后回合继续至 end/error，但渲染层 askId 不清则弹窗持续
-  // 遮挡整个界面（此时提交只会收到"未匹配 pending"错误 toast）
-  useAgentAskStore.getState().clearAsk();
+  // 遮挡整个界面（此时提交只会收到"未匹配 pending"错误 toast）。
+  // 按会话精确清理：并发回合时 A 会话结束不清 B 会话的提问弹窗
+  useAgentAskStore.getState().clearAsk(sessionId);
 
   // 3. usage 累积已移除：原 usage-store 是无人消费的孤儿 store（仅本桥接写入），
   //    真实用量 UI 读 SQLite session:getUsageSummary，失效已在上方统一处理

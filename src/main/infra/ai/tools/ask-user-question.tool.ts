@@ -64,7 +64,7 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
         };
       }
 
-      const answers = await askService.ask(webContents, questions);
+      const answers = await askService.ask(webContents, questions, ctx.sessionId);
       if (answers === null) {
         return {
           title: '用户未响应',

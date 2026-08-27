@@ -88,9 +88,12 @@ describe('use-agent-bridge', () => {
   });
 
   it('stream:end：清理 agent-ask 弹窗状态（P2：超时后弹窗不得悬挂）', () => {
+    // 会话归属：setAsk 带 sessionId，回合 end 按会话精确清理
     useAgentAskStore
       .getState()
-      .setAsk('ask-1', [{ id: 'q1', question: '继续吗？', header: '确认', options: [] }] as never);
+      .setAsk('s1', 'ask-1', [
+        { id: 'q1', question: '继续吗？', header: '确认', options: [] } as never,
+      ]);
     expect(useAgentAskStore.getState().askId).toBe('ask-1');
 
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });

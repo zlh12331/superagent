@@ -97,8 +97,8 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
   const temperature = useSettingsStore((s) => s.ai.temperature);
   const settingsSystemPrompt = useSettingsStore((s) => s.ai.systemPrompt);
 
-  // 解构 agent 专用字段，剩余透传给 useChat
-  const { workingDir, systemPrompt, maxSteps, ...chatOptions } = options;
+  // 解构 agent 专用字段（id 用于按会话配置 transport），剩余透传给 useChat
+  const { id, workingDir, systemPrompt, maxSteps, ...chatOptions } = options;
 
   // 有效系统提示词：显式 options.systemPrompt > 设置项（非空）> 主进程默认
   const effectiveSystemPrompt =
@@ -107,15 +107,16 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
   // 在 agent 配置变化时同步更新 transport（useEffect 确保在 render 后执行）
   // sendMessage 由用户交互触发（总是在 effect 执行后），不存在竞态
   // 使用条件展开避免 exactOptionalPropertyTypes 下 string | undefined 报错
+  // 按会话 id 配置（并发回合支持）：各 ChatPanel 的 useChat id = chatId，互不覆盖
   useEffect(() => {
-    transport.configure({
+    transport.configureFor(id ?? 'agent-chat', {
       workingDir,
       ...(effectiveSystemPrompt !== undefined ? { systemPrompt: effectiveSystemPrompt } : {}),
       ...(maxSteps !== undefined ? { maxSteps } : {}),
       ...(thinking !== undefined ? { thinking } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
     });
-  }, [transport, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
+  }, [transport, id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
 
   return useChat<Message>({
     ...chatOptions,

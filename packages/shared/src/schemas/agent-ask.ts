@@ -57,6 +57,8 @@ export const AskRespondResSchema = z.object({
 
 /** 提问事件 payload（主进程 agent:event:ask 推送） */
 export const AskEventPayloadSchema = z.object({
+  /** 发起提问的会话 id（多会话并发时按会话归属弹窗与清理） */
+  sessionId: z.string().min(1),
   /** 提问 id（渲染层回传时原样带回） */
   askId: z.string(),
   /** 问题列表 */
