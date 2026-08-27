@@ -21,15 +21,9 @@ import 'react-activity-calendar/tooltips.css';
 import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
+import { formatCompactNumber } from '@/lib/format-intl';
 import { unwrap } from '@/lib/ipc';
 import { TurnsSection } from './turns-section';
-
-/** token 数量友好格式化：≥1M → x.xM；≥1k → x.xk；否则原值 */
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
 
 /** 生成近 N 天日期列表（倒序，today 在前；与 byDay 数据格式一致） */
 function recentDays(count: number): string[] {
@@ -64,7 +58,7 @@ const HEAT_THEME = [
 ];
 
 export function UsageSection(): ReactElement {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // 用量汇总：TanStack Query（L3 服务端数据；浏览器模式守卫返回空骨架）
   // 失败态以 QueryErrorRow 呈现（此前静默渲染成全零骨架，误导用户）
@@ -249,7 +243,7 @@ export function UsageSection(): ReactElement {
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-foreground">{m.modelId}</span>
                         <span className="text-muted-foreground shrink-0">
-                          {formatTokens(m.tokens)} · {m.share.toFixed(0)}%
+                          {formatCompactNumber(m.tokens, i18n.language)} · {m.share.toFixed(0)}%
                         </span>
                       </div>
                       {/* 占比条（accent 宽度 = 占比） */}

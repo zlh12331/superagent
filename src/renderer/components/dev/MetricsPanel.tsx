@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSystemStatusQuery } from '@/hooks/use-system';
 import { useTranslation } from '@/i18n/use-translation';
+import { formatClockTime } from '@/lib/format-intl';
 import { cn } from '@/lib/utils';
 
 interface MetricsPanelProps {
@@ -42,7 +43,7 @@ interface MetricsPanelProps {
  */
 export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): ReactElement {
   // 本地化文案
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data, isLoading, error, refetch, isFetching } = useSystemStatusQuery(enabled);
 
   return (
@@ -54,7 +55,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
           <span className="font-serif tracking-wide">{t('dev.runtimeMetrics')}</span>
           {data !== undefined && (
             <span className="text-muted-foreground/70 font-mono">
-              · {formatTime(data.timestamp)}
+              · {formatClockTime(data.timestamp, i18n.language)}
             </span>
           )}
         </div>
@@ -255,13 +256,4 @@ function formatUptime(seconds: number): string {
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
-}
-
-/** ISO 时间戳 → HH:MM:SS */
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  const ss = String(date.getSeconds()).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
 }
