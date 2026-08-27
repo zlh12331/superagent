@@ -163,14 +163,13 @@
 
 #### main 主进程（122 个）
 
-涵盖 AI 核心（agent-service / chat-service / tool-registry / tool-executor / permission-service / error-classifier / context-compression / ai-provider / models/* / agent-runtime/* / llm-client/* / providers/*）、MCP（mcp-service / mcp-client / mcp-tool-adapter / mcp-types）、工具（file-tools / search-tools / path-guard / run-command）、基础设施（file-service / git-service / session-service / db / keychain / app-data / code-analyzer / update-service / csp）、IPC handler（全部 16 域各一个）、配置与工具（config / logger / retry / wrap）、smoke（services.smoke）。
+涵盖 AI 核心（agent-service / tool-registry / tool-executor / permission-service / error-classifier / context-compression / ai-provider / models/* / agent-runtime/* / llm-client/* / providers/*）、MCP（mcp-service / mcp-client / mcp-tool-adapter / mcp-types）、工具（file-tools / search-tools / path-guard / run-command / codebase）、基础设施（file-service / git-service / session-service / db / keychain / app-data / code-analyzer / update-service / csp）、IPC handler（全部 14 域各一个）、配置与工具（config / logger / retry / wrap）、smoke（services.smoke）。
 
 代表性文件：
 
 | 文件 | 说明 |
 |------|------|
 | [src/main/infra/ai/agent-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
-| [src/main/infra/ai/chat-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/chat-service.test.ts) | ChatService 流式 + abort + dispose |
 | [src/main/infra/ai/tool-executor.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.test.ts) | 工具执行 + 权限审批 |
 | [src/main/infra/ai/permission-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.test.ts) | 权限决策 + 记忆缓存 |
 | [src/main/infra/storage/session-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.test.ts) | 会话 CRUD + 用量统计 + 回合记录 |

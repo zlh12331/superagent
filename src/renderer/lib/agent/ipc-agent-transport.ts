@@ -83,15 +83,16 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
   implements ChatTransport<Message>
 {
   /**
-   * 各会话的 agent 配置（chatId → config；多会话并发回合时互不覆盖）
+   * 各会话的 agent 配置（chatId → config）
    *
-   * configureFor(chatId, config) 按 useChat id 记录；sendMessages 用
-   * options.chatId 查专属配置。此前单例覆盖式 configure 在多 ChatPanel
-   * 并发时后配置者覆盖先配置者（workingDir 串号）。
+   * configureFor(chatId, config) 按 useChat id 记录；sendMessages 优先按
+   * options.chatId 精确匹配，匹配失败回落 lastConfig（useChat 的 chatId 为
+   * 内部随机值、不与传入 id 恒等——兜底保证单会话架构稳定，
+   * 未来 chatId 可复现时 Map 提供精确并发隔离）。
    */
   private readonly configs = new Map<string, AgentConfig>();
-  /** 无会话 id 调用（configure）的兜底配置（历史 API 兼容） */
-  private defaultConfig: AgentConfig | undefined;
+  /** 最近一次配置（任意 configure/configureFor 均更新；sendMessages 兜底） */
+  private lastConfig: AgentConfig | undefined;
 
   /**
    * 更新 agent 配置（无会话 id：写入兜底配置，供未显式按会话配置的调用）
@@ -100,17 +101,17 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
    * 配置在下次 sendMessages 调用时生效。
    */
   configure(config: AgentConfig): void {
-    this.defaultConfig = {
-      ...this.defaultConfig,
+    this.lastConfig = {
+      ...this.lastConfig,
       ...config,
-      workingDir: config.workingDir ?? this.defaultConfig?.workingDir,
+      workingDir: config.workingDir ?? this.lastConfig?.workingDir,
     };
   }
 
   /**
-   * 按会话配置 agent 配置（并发回合支持）
+   * 按会话配置 agent 配置
    *
-   * @param chatId useChat id（= 会话 id），sendMessages 时按此查专属配置
+   * @param chatId useChat id（= 会话 id），sendMessages 时优先按此查专属配置
    */
   configureFor(chatId: string, config: AgentConfig): void {
     const prev = this.configs.get(chatId);
@@ -119,6 +120,13 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
       ...config,
       workingDir: config.workingDir ?? prev?.workingDir,
     });
+    // 同步兜底配置：useChat 的 chatId 为内部随机值，sendMessages 无法精确
+    // 命中 Map 时回落最近配置（单会话架构等价于原单例行为）
+    this.lastConfig = {
+      ...this.lastConfig,
+      ...config,
+      workingDir: config.workingDir ?? this.lastConfig?.workingDir,
+    };
   }
 
   /**
@@ -136,19 +144,20 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
       abortSignal: AbortSignal | undefined;
     } & ChatRequestOptions,
   ): Promise<ReadableStream<UIMessageChunk>> {
-    if (this.configs.size === 0 && this.defaultConfig === undefined) {
+    if (this.configs.size === 0 && this.lastConfig === undefined) {
       return Promise.reject(
         new Error(
           'IpcAgentTransport: workingDir not configured. Call configure()/configureFor() first.',
         ),
       );
     }
-    // 按会话查专属配置（chatId = useChat id）；未配置的会话回落兜底配置
-    const config = this.configs.get(options.chatId) ?? this.defaultConfig;
+    // 优先按会话查专属配置（chatId = useChat 内部值，可能为随机串）；
+    // 匹配失败回落最近配置（单会话架构的稳定路径）
+    const config = this.configs.get(options.chatId) ?? this.lastConfig;
     if (config === undefined) {
       return Promise.reject(
         new Error(
-          `IpcAgentTransport: chatId ${options.chatId} 未配置 workingDir——请先 configureFor()`,
+          'IpcAgentTransport: workingDir not configured. Call configure()/configureFor() first.',
         ),
       );
     }

@@ -103,14 +103,12 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 | 域 | channel 数 | handler 文件 |
 |---|---|---|
 | app | 3 | [app.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/app.handler.ts) |
-| chat | 5 (3 推送) | [chat.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/chat.handler.ts) |
 | agent | 10 (7 推送) | [agent.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/agent.handler.ts) + [agent-approval.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/agent-approval.handler.ts) |
 | session | 10 | [session.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/session.handler.ts) |
 | file | 10 (1 推送) | [file.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/file.handler.ts) |
 | search | 2 | [search.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/search.handler.ts) |
 | terminal | 7 (3 推送) | [terminal.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/terminal.handler.ts) |
 | git | 5 | [git.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/git.handler.ts) |
-| codebase | 6 | [codebase.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/codebase.handler.ts) |
 | tool | 1 | [tool.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/tool.handler.ts) |
 | settings | 8 | [settings.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/settings.handler.ts) |
 | system | 1 | [system.handler.ts](file:///f:/TraeProjects/1/src/main/ipc/system.handler.ts) |
@@ -139,36 +137,34 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///f:/TraeProj
 
 ### 4.2 流式推送机制
 
-两条主流式通道结构对称：
-
-**chat:stream:part** — [chat-service.ts#L257-L282](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L257)
-- 主进程 `streamText()` → `result.toUIMessageStream()` → reader.read() 循环 → `webContents.send(CHAT_STREAM_PART, {sessionId, part})`
-- 配套 `CHAT_STREAM_END` / `CHAT_STREAM_ERROR`
+唯一流式通道（chat 域已随死链路清理删除，统一走 agent）：
 
 **agent:stream:part** — [agent-service.ts#L310-L335](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L310)
-- 同 chat 模式，额外推送 `AGENT_TOOL_CALL` / `AGENT_TOOL_RESULT` / `AGENT_APPROVAL_REQUEST`
+- 主进程 `streamText()` → `result.toUIMessageStream()` → reader.read() 循环 → `webContents.send(AGENT_STREAM_PART, {sessionId, part})`
+- 额外推送 `AGENT_TOOL_CALL` / `AGENT_TOOL_RESULT` / `AGENT_APPROVAL_REQUEST`
 - 配套 `AGENT_STREAM_END` / `AGENT_STREAM_ERROR`
-
-两者都通过 `webContents.isDestroyed()` 守卫避免窗口销毁后推送（[chat-service.ts#L278](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L278)）。
+- 通过 `webContents.isDestroyed()` 守卫避免窗口销毁后推送
 
 ## 5. AI 核心架构
 
-### 5.1 AgentService vs ChatService
+### 5.1 AgentService（唯一会话执行服务）
 
-| 项 | ChatService | AgentService |
-|---|---|---|
-| 文件 | [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts) | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) |
-| tools 参数 | 无 | 有（`toolRegistry.toAISDKTools(ctx, executeHook)`） |
-| stopWhen | 无 | `isStepCount(options.maxSteps)` |
-| system prompt | 无 | 条件展开 `system` 字段 |
-| 工作目录约束 | 无 | 有（写入 `ToolContext.workingDir`） |
-| 依赖 | ai-provider | ai-provider + toolRegistry + toolExecutor + promptService |
-| OTel span | 无 | `withSpan('agent.streamText', ...)` |
+ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功能设计审计轮），会话执行统一由 AgentService 承担：
 
-二者共享：
+| 项 | AgentService |
+|---|---|
+| 文件 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) |
+| tools 参数 | 有（`toolRegistry.toAISDKTools(ctx, executeHook)`） |
+| stopWhen | `isStepCount(options.maxSteps)` |
+| system prompt | 条件展开 `system` 字段 |
+| 工作目录约束 | 有（写入 `ToolContext.workingDir`） |
+| 依赖 | ai-provider + toolRegistry + toolExecutor + promptService |
+| OTel span | `withSpan('agent.streamText', ...)` |
+
+关键机制：
 
 - 错误分类器 [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/error-classifier.ts)
-- dispose 模式（3s 超时兜底的 Promise.race + Promise.allSettled，[chat-service.ts#L190-L218](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L190) 与 [agent-service.ts#L182-L217](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L182) 一致）
+- dispose 模式（3s 超时兜底的 Promise.race + Promise.allSettled，[agent-service.ts#L182-L217](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L182)）
 
 ### 5.2 工具系统三层分层
 

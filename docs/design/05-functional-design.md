@@ -11,9 +11,8 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 
 | # | 子系统 | 实现位置 | 核心能力 |
 |---|--------|---------|---------|
-| 1 | AI Agent 核心 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) | 多轮工具调用循环、流式响应、中断控制 |
-| 2 | 纯对话 Chat | [chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts) | 不带工具的流式响应 |
-| 3 | 工具系统 | [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) + [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) | 31 个内置工具 + 权限审批 + IPC 推送 |
+| 1 | AI Agent 核心 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) | 多轮工具调用循环、流式响应、中断控制（ChatService 纯对话模式已随死链路清理删除） |
+| 2 | 工具系统 | [tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) + [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) + [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) | 32 个内置工具 + 权限审批 + IPC 推送 |
 | 4 | MCP 集成 | [mcp/mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts) | stdio transport 多 server 管理 |
 | 5 | 会话管理 | [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) | DB 持久化会话历史 |
 | 6 | 代码理解 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) | 调用 codegraph CLI 做符号检索 |
@@ -84,17 +83,15 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 
 源码：[agent-service.ts#L322-L347](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L322)（回合事件推送前的 isDestroyed 守卫）、[agent-service.ts#L488](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L488)（流推送循环内的守卫）。
 
-### 2.3 与 ChatService 的差异
+### 2.3 AgentService 执行细节
 
-| 维度 | ChatService | AgentService |
-|------|-------------|--------------|
-| 工具调用 | 不带 tools | 带 tools + stopWhen 多轮循环 |
-| 使用场景 | 纯对话 | Code Agent（文件/终端/Git 操作） |
-| System Prompt | 不解析 | 默认 PromptService 解析（可被调用方覆盖） |
-| 中断 | abort / abortAll / dispose | 一致 |
-| 错误处理 | error-classifier 分类 | 一致 |
-
-源码：[chat-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts)。
+| 维度 | AgentService |
+|------|--------------|
+| 工具调用 | 带 tools + stopWhen 多轮循环（ChatService 纯对话模式已删除，无独立对比） |
+| 使用场景 | Code Agent（文件/终端/Git 操作） |
+| System Prompt | 默认 PromptService 解析（可被调用方覆盖） |
+| 中断 | abort / abortAll / dispose |
+| 错误处理 | error-classifier 分类 |
 
 ## 3. 工具系统
 

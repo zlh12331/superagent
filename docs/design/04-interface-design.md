@@ -117,20 +117,7 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 
 接口定义在各自服务文件内（与具体类同文件，未单独抽到 `types.ts`）。每个接口遵循"接口 + 默认实现 + 单例 getter + reset 测试工具"四件套模式（UpdateService 例外，由 ServiceContainer 直接 `new`）。
 
-### 3.1 IChatService
-
-[src/main/infra/ai/agent/chat-service.ts#L71-L88](file:///f:/TraeProjects/1/src/main/infra/ai/agent/chat-service.ts#L71)：
-
-```ts
-export interface IChatService {
-  startChat(options: StartChatOptions): Promise<string>;
-  abort(sessionId: string): boolean;
-  abortAll(): void;
-  dispose(timeoutMs?: number): Promise<void>;
-}
-```
-
-### 3.2 IAgentService
+### 3.1 IAgentService
 
 [src/main/infra/ai/agent/agent-service.ts#L100-L130](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts#L100)：
 

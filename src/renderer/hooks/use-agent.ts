@@ -60,6 +60,8 @@ export function getIpcAgentTransport(): IpcAgentTransport {
  * 只能用交叉类型。
  */
 type UseAgentOptions<Message extends UIMessage> = UseChatOptions<Message> & {
+  /** useChat 会话 id（透传：AI SDK 内部聊天标识，transport 按此配置会话专属参数） */
+  readonly id?: string;
   /** 工作目录（必填）：限制所有文件操作的根目录 */
   readonly workingDir: string;
   /** 可选系统提示词（覆盖主进程默认 system prompt） */
