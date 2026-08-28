@@ -244,7 +244,7 @@ function send() {
   var bubble = text('assistant', '');
   bubble.classList.add('cursor');
   var streamed = 0;
-  // 老浏览器（iOS < 14.1）无 fetch 响应流：不声明 SSE 能力，服务端回退同步 JSON
+  // 老浏览器（Safari < 14.1 / iOS < 14.5）无 fetch 响应流：不声明 SSE 能力，服务端回退同步 JSON
   var canStream = typeof window.ReadableStream === 'function';
   var onFrame = function (name, data) {
     if (name === 'delta') {
