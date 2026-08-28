@@ -44,6 +44,7 @@ export type * from './schemas/goal';
 export type * from './schemas/im';
 export type * from './schemas/memory';
 export type * from './schemas/models';
+export type * from './schemas/remote';
 export type * from './schemas/search';
 export type * from './schemas/session';
 export type * from './schemas/settings';

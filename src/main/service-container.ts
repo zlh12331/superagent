@@ -15,7 +15,7 @@
 //   3. GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
 //   4. ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
 //   5. ImService.stopAll()         停止 IM 渠道长连接
-//   5.5 RemoteControlService.stop() 停止远程控制 HTTP 监听 + UDP 发现广播
+//   5.5 RemoteControl.release()    解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
 //   6. PermissionService.dispose() reject 所有 pending 审批 Promise
 //   7. agentAskService.dispose()   清理 pending 提问
 //   8. FileService.dispose()       关闭所有 chokidar watcher
@@ -83,6 +83,7 @@ import { LspServerManager } from './infra/lsp/lsp-server-manager';
 import { resolveDistillLlmConfig } from './infra/memory-hub/llm-config';
 import { createDeferredMemoryPort, MemoryHubService } from './infra/memory-hub/memory-hub-service';
 import type { MemoryPort } from './infra/memory-hub/types';
+import { RemoteAgentBridge } from './infra/remote/remote-agent-bridge';
 import { type IRemoteControlService, RemoteControlService } from './infra/remote/remote-control';
 import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
@@ -484,6 +485,8 @@ class ServiceContainer {
   private imBridge: ImAgentBridge | null = null;
   /** 远程控制服务实例（LAN 直连 HTTP 入口 + UDP 发现广播） */
   private remoteControlService: IRemoteControlService | null = null;
+  /** 远程命令 → Agent 桥接实例（挂载后订阅 onCommand 无头执行） */
+  private remoteAgentBridge: RemoteAgentBridge | null = null;
   /** 会话目标服务实例（挂载回合监听 + handler 注入） */
   private goalService: GoalService | null = null;
   /** MemoryHub sidecar 实例（上游记忆引擎） */
@@ -536,13 +539,37 @@ class ServiceContainer {
 
   /**
    * 获取远程控制服务（延迟初始化）：LAN 直连 HTTP 命令入口 + UDP 发现广播。
-   * 命令执行由桥接层订阅 onCommand 挂载（复用 IM 无头执行路径），本容器只管生命周期。
+   * 命令执行由 RemoteAgentBridge 订阅 onCommand 挂载（与 IM 桥接同款无头执行路径），
+   * 本容器只管生命周期。
    */
   getRemoteControlService(): IRemoteControlService {
     if (this.remoteControlService === null) {
       this.remoteControlService = new RemoteControlService();
+      this.remoteAgentBridge = new RemoteAgentBridge(
+        this.remoteControlService,
+        this.getAgentService(),
+        this.getPermissionService(),
+        this.getSessionService(),
+      );
+      this.remoteAgentBridge.mount();
     }
     return this.remoteControlService;
+  }
+
+  /**
+   * 收尾远程控制（应用退出 / 测试隔离）
+   *
+   * 只在实例已存在时收尾：经 getter 懒初始化会在 teardown 路径凭空构造
+   * 服务 + 桥接（mount 含 mkdirSync + 订阅）再立刻销毁——对齐 IM 的 P1 教训。
+   * 顺序：先解除桥接订阅（不再接管新命令），再关闭 HTTP 监听与发现广播。
+   */
+  async releaseRemoteControl(): Promise<void> {
+    this.remoteAgentBridge?.unmount();
+    this.remoteAgentBridge = null;
+    if (this.remoteControlService !== null) {
+      await this.remoteControlService.stop();
+      this.remoteControlService = null;
+    }
   }
 
   /**
@@ -816,12 +843,9 @@ class ServiceContainer {
       this.imService = null;
     });
 
-    // 2.8 停止远程控制监听（LAN 直连 HTTP 命令入口 + UDP 发现广播收尾）
-    await runStep('remoteControlService.stop', async () => {
-      if (this.remoteControlService !== null) {
-        await this.remoteControlService.stop();
-      }
-      this.remoteControlService = null;
+    // 2.8 收尾远程控制：解除命令桥接订阅 + 停止 HTTP 监听与 UDP 发现广播
+    await runStep('remoteControl.release', async () => {
+      await this.releaseRemoteControl();
     });
 
     // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
@@ -967,6 +991,8 @@ class ServiceContainer {
     this.imBridge = null;
     void this.imService?.stopAll();
     this.imService = null;
+    // 远程控制：桥接订阅解除 + HTTP/UDP 收尾（异步 fire-and-forget，防端口泄漏）
+    void this.releaseRemoteControl();
     // MemoryHub 子进程异步收尾（reset 为同步 API，fire-and-forget 防泄漏）
     void this.memoryHub?.stop();
     this.memoryHub = null;

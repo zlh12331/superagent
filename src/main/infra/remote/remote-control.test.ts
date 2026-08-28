@@ -52,17 +52,17 @@ describe('RemoteControlService（生命周期与路由）', () => {
     await service.stop(); // 可重入 no-op
   });
 
-  it('validateAndRoute：令牌匹配时路由到监听器', async () => {
+  it('validateAndRoute：令牌匹配时路由到监听器并透出执行结果', async () => {
     const { service, token } = await startService();
-    const handler = vi.fn(async () => true);
+    const handler = vi.fn(async () => ({ accepted: true, reply: '已完成' }));
     service.onCommand(handler);
 
-    const handled = await service.validateAndRoute({
+    const routed = await service.validateAndRoute({
       sessionToken: token,
       text: '查看状态',
       clientId: 'mobile-1',
     });
-    expect(handled).toBe(true);
+    expect(routed).toEqual({ accepted: true, reply: '已完成' });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ text: '查看状态', clientId: 'mobile-1' }),
     );
@@ -70,26 +70,83 @@ describe('RemoteControlService（生命周期与路由）', () => {
 
   it('validateAndRoute：令牌不匹配拒绝', async () => {
     const { service } = await startService();
-    const handler = vi.fn(async () => true);
+    const handler = vi.fn(async () => ({ accepted: true }));
     service.onCommand(handler);
 
-    const handled = await service.validateAndRoute({
+    const routed = await service.validateAndRoute({
       sessionToken: 'wrong-token',
       text: '危险命令',
       clientId: 'mobile-1',
     });
-    expect(handled).toBe(false);
+    expect(routed.accepted).toBe(false);
     expect(handler).not.toHaveBeenCalled();
   });
 
   it('validateAndRoute：未启动时拒绝', async () => {
     const service = new RemoteControlService();
-    const handled = await service.validateAndRoute({
+    const routed = await service.validateAndRoute({
       sessionToken: 'any',
       text: 'x',
       clientId: 'm',
     });
-    expect(handled).toBe(false);
+    expect(routed).toEqual({ accepted: false });
+  });
+
+  it('getActivity：命令执行期间计数 +1，完成后归零并记录到达时间', async () => {
+    const { service, token } = await startService();
+    let releaseTurn!: () => void;
+    const turnDone = new Promise<void>((resolve) => {
+      releaseTurn = resolve;
+    });
+    service.onCommand(async () => {
+      await turnDone;
+      return { accepted: true, reply: 'ok' };
+    });
+
+    expect(service.getActivity()).toEqual({ activeCommands: 0, lastCommandAt: null });
+    const inflight = service.validateAndRoute({
+      sessionToken: token,
+      text: '长任务',
+      clientId: 'mobile-1',
+    });
+    await vi.waitFor(() => expect(service.getActivity().activeCommands).toBe(1));
+    expect(service.getActivity().lastCommandAt).toBeTypeOf('number');
+
+    releaseTurn();
+    await inflight;
+    expect(service.getActivity().activeCommands).toBe(0);
+  });
+
+  it('stop 保留命令订阅：关闭再开启后命令仍能被桥接接管', async () => {
+    const service = new RemoteControlService();
+    activeServices.push(service);
+    const handler = vi.fn(async () => ({ accepted: true, reply: 'ok' }));
+    service.onCommand(handler);
+
+    await service.start();
+    await service.stop();
+    const token = await service.start();
+
+    const routed = await service.validateAndRoute({
+      sessionToken: token,
+      text: '重连后的命令',
+      clientId: 'mobile-1',
+    });
+    expect(routed).toEqual({ accepted: true, reply: 'ok' });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('start 归零活动计数（新配对话轮不残留上一轮状态）', async () => {
+    const service = new RemoteControlService();
+    activeServices.push(service);
+    service.onCommand(async () => ({ accepted: true }));
+    const first = await service.start();
+    await service.validateAndRoute({ sessionToken: first, text: 'a', clientId: 'm' });
+    expect(service.getActivity().lastCommandAt).not.toBeNull();
+
+    await service.stop();
+    await service.start();
+    expect(service.getActivity()).toEqual({ activeCommands: 0, lastCommandAt: null });
   });
 });
 
@@ -114,9 +171,9 @@ describe('RemoteControlService（HTTP 桥接）', () => {
     expect(JSON.stringify(body)).not.toContain(service.getSessionToken() ?? '');
   });
 
-  it('POST /command：令牌匹配 → 路由监听器并返回 accepted', async () => {
+  it('POST /command：令牌匹配 → 同步回传桥接执行结果文本', async () => {
     const { service, token } = await startService();
-    const handler = vi.fn(async () => true);
+    const handler = vi.fn(async () => ({ accepted: true, reply: '34 个测试文件全部通过' }));
     service.onCommand(handler);
 
     const res = await fetch(`${baseUrl(service)}/command`, {
@@ -125,15 +182,28 @@ describe('RemoteControlService（HTTP 桥接）', () => {
       body: JSON.stringify({ sessionToken: token, text: '运行测试', clientId: 'mobile-1' }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ accepted: true });
+    expect(await res.json()).toEqual({ accepted: true, reply: '34 个测试文件全部通过' });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ text: '运行测试', clientId: 'mobile-1' }),
     );
   });
 
+  it('POST /command：无监听器接管 → accepted=false 且不泄露令牌', async () => {
+    const { service, token } = await startService();
+    const res = await fetch(`${baseUrl(service)}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken: token, text: '无人执行的命令', clientId: 'm' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ accepted: false });
+    expect(JSON.stringify(body)).not.toContain(token);
+  });
+
   it('POST /command：令牌不匹配 → 403（监听器不触发）', async () => {
     const { service } = await startService();
-    const handler = vi.fn(async () => true);
+    const handler = vi.fn(async () => ({ accepted: true }));
     service.onCommand(handler);
 
     const res = await fetch(`${baseUrl(service)}/command`, {

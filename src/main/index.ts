@@ -21,6 +21,7 @@ import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
+import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
@@ -39,6 +40,7 @@ import { createMcpHandlers } from './ipc/mcp.handler';
 import { createMemoryHandlers } from './ipc/memory.handler';
 import { modelsHandlers } from './ipc/models.handler';
 import { registerIpcHandlers } from './ipc/register';
+import { createRemoteHandlers } from './ipc/remote.handler';
 import { createSearchHandlers } from './ipc/search.handler';
 import { createSessionHandlers } from './ipc/session.handler';
 import { createSettingsHandlers } from './ipc/settings.handler';
@@ -454,6 +456,13 @@ app
       }),
       task: taskHandlers,
       im: createImHandlers({ imService: serviceContainer.getImService() }),
+      remote: createRemoteHandlers({
+        remoteControl: serviceContainer.getRemoteControlService(),
+        network: {
+          listAddresses: getLanIPv4Addresses,
+          buildEndpoints: buildRemoteEndpoints,
+        },
+      }),
       logs: logsHandlers,
       devtools: devtoolsHandlers,
       dialog: dialogHandlers,

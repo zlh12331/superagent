@@ -14,12 +14,20 @@
 //   移动端在发现端口监听公告即可拿到直连地址
 // - WebSocket 流式回推为后续阶段（需引入 ws 依赖，随移动端客户端一起评估）
 //
+// 阶段 2.5 交付（可驱动 Agent）：
+// - 命令监听器返回 RemoteCommandResult { accepted, reply }：POST /command 同步等待
+//   桥接执行完成后把结果文本随响应回传（局域网直连可接受分钟级长请求）
+// - 活动计数（activeCommands / lastCommandAt）供设置面板展示执行状态
+// - stop() 不清命令订阅：订阅是桥接层的结构性挂载（与配对话轮无关），
+//   清掉会导致"关闭再开启"后命令被接收却无人执行
+//
 // 安全设计：
 // - 会话令牌：每次 start 生成（移动端扫码/输码配对），命令路由前校验
 // - 令牌永不通过发现公告 / /info 泄露
 // - 命令体上限 64KB（防滥用）；未知路径 404
-// - 命令执行复用 IM 桥接的无头执行路径（approvalMode 受控），不新开执行通道：
-//   由桥接层订阅 onCommand 挂载执行器，本层只管校验与路由
+// - 命令执行复用 IM 桥接同款无头执行路径（AgentService.startAgent 无头 +
+//   approvalMode 门控 + transcript 落库），不新开执行通道：
+//   由 RemoteAgentBridge 订阅 onCommand 挂载执行器，本层只管校验与路由
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
@@ -54,6 +62,16 @@ export interface RemoteCommand {
 }
 
 /**
+ * 远程控制命令执行结果（桥接层 → 传输层 → 移动端响应）
+ */
+export interface RemoteCommandResult {
+  /** 是否已被某个监听器接管执行 */
+  readonly accepted: boolean;
+  /** 回传给移动端的执行结果文本（未接管时可缺省） */
+  readonly reply?: string;
+}
+
+/**
  * 远程控制服务构造参数（测试注入用；生产全部走默认值）
  */
 export interface RemoteControlOptions {
@@ -74,9 +92,10 @@ export interface RemoteControlOptions {
  *
  * 实现约定：
  * - start 幂等：重复调用返回已启动状态；令牌每次启动重新生成
- * - stop 可重入：未启动时 no-op；关闭 HTTP 监听与发现广播
- * - onCommand 返回 unsubscribe；stop 时自动清理
- * - 命令执行结果由调用方（桥接层）回发，本层只管校验与路由
+ * - stop 可重入：未启动时 no-op；关闭 HTTP 监听与发现广播（不清 onCommand 订阅——
+ *   订阅由桥接层生命周期管理，与配对话轮无关）
+ * - onCommand 返回 unsubscribe（桥接层 unmount 调用；stop 不清理）
+ * - 命令执行结果由桥接层回传（reply 字段随 HTTP 响应返回移动端）
  */
 export interface IRemoteControlService {
   /** 启动 HTTP 监听 + 发现广播（LAN 直连），返回本次会话令牌 */
@@ -89,29 +108,46 @@ export interface IRemoteControlService {
   getSessionToken(): string | null;
   /** HTTP 监听端口（未启动为 null；配对二维码 / 手动输入展示用） */
   getPort(): number | null;
+  /** 实例名（发现公告展示名 = 主机名，配对界面标题用） */
+  getInstanceName(): string;
+  /** 命令执行活动（设置面板实时状态：执行中命令数 + 最近到达时间） */
+  getActivity(): { activeCommands: number; lastCommandAt: number | null };
   /**
    * 订阅命令（移动端命令路由挂载点）
    *
-   * 收到命令后先校验令牌：不匹配直接拒绝（返回 false）。
-   * 匹配则调用监听器；监听器返回 true 表示已处理。
+   * 收到命令后先校验令牌：不匹配直接拒绝。
+   * 匹配则依次调用监听器，首个 accepted=true 的监听器结果即为响应结果。
    */
-  onCommand(handler: (command: RemoteCommand) => Promise<boolean>): () => void;
+  onCommand(handler: (command: RemoteCommand) => Promise<RemoteCommandResult>): () => void;
+  /**
+   * 校验令牌并路由命令（传输层收到命令后调用）
+   *
+   * @returns accepted=true 表示已被监听器执行（含回传文本）；
+   *          未启动 / 令牌不匹配 / 无监听器接管时 accepted=false
+   */
+  validateAndRoute(command: RemoteCommand): Promise<RemoteCommandResult>;
 }
 
 /**
- * 远程控制服务（阶段 2：HTTP 桥接 + UDP 局域网发现）
+ * 远程控制服务（阶段 2：HTTP 桥接 + UDP 局域网发现；阶段 2.5：命令执行结果回传）
  *
  * @example
  * ```ts
  * const token = await service.start();
- * service.onCommand(async (cmd) => bridge.execute(cmd));
+ * service.onCommand(async (cmd) => bridge.execute(cmd)); // 返回 { accepted, reply }
  * ```
  */
 export class RemoteControlService implements IRemoteControlService {
   private running = false;
   private sessionToken: string | null = null;
   private httpPort: number | null = null;
-  private readonly commandListeners = new Set<(command: RemoteCommand) => Promise<boolean>>();
+  /** 执行中命令数（监听器 in-flight 计数；面板状态展示） */
+  private activeCommands = 0;
+  /** 最近一次命令到达时间（当前配对话轮内） */
+  private lastCommandAt: number | null = null;
+  private readonly commandListeners = new Set<
+    (command: RemoteCommand) => Promise<RemoteCommandResult>
+  >();
 
   private readonly httpPortOption: number;
   private readonly discoveryPort: number;
@@ -136,6 +172,9 @@ export class RemoteControlService implements IRemoteControlService {
       return this.sessionToken ?? '';
     }
     this.sessionToken = randomUUID();
+    // 新的配对话轮：活动计数归零（面板不残留上一轮的执行时间与在跑计数）
+    this.activeCommands = 0;
+    this.lastCommandAt = null;
     await this.startHttpServer();
     this.startDiscovery();
     this.running = true;
@@ -170,7 +209,9 @@ export class RemoteControlService implements IRemoteControlService {
     }
     this.running = false;
     this.sessionToken = null;
-    this.commandListeners.clear();
+    this.activeCommands = 0;
+    // 不清 commandListeners：订阅是桥接层的结构性挂载（RemoteAgentBridge.unmount
+    // 负责解除）。此处清空会导致"关闭再开启"后命令被接收却无人执行。
     logger.info({}, '远程控制已停止');
   }
 
@@ -186,7 +227,15 @@ export class RemoteControlService implements IRemoteControlService {
     return this.httpPort;
   }
 
-  onCommand(handler: (command: RemoteCommand) => Promise<boolean>): () => void {
+  getInstanceName(): string {
+    return this.instanceName;
+  }
+
+  getActivity(): { activeCommands: number; lastCommandAt: number | null } {
+    return { activeCommands: this.activeCommands, lastCommandAt: this.lastCommandAt };
+  }
+
+  onCommand(handler: (command: RemoteCommand) => Promise<RemoteCommandResult>): () => void {
     this.commandListeners.add(handler);
     return () => {
       this.commandListeners.delete(handler);
@@ -196,27 +245,33 @@ export class RemoteControlService implements IRemoteControlService {
   /**
    * 校验令牌并路由命令（传输层收到命令后调用）
    *
-   * @returns true = 已处理；false = 令牌不匹配或监听器均未处理
+   * @returns 首个 accepted=true 的监听器结果；未启动/令牌不匹配/无人接管时 accepted=false
    */
-  async validateAndRoute(command: RemoteCommand): Promise<boolean> {
+  async validateAndRoute(command: RemoteCommand): Promise<RemoteCommandResult> {
     if (!this.running || this.sessionToken === null) {
-      return false;
+      return { accepted: false };
     }
     if (command.sessionToken !== this.sessionToken) {
       logger.warn({ clientId: command.clientId }, '远程命令令牌不匹配，已拒绝');
-      return false;
+      return { accepted: false };
     }
-    let handled = false;
-    for (const listener of this.commandListeners) {
-      try {
-        if (await listener(command)) {
-          handled = true;
+    this.activeCommands += 1;
+    this.lastCommandAt = Date.now();
+    try {
+      for (const listener of this.commandListeners) {
+        try {
+          const result = await listener(command);
+          if (result.accepted) {
+            return result;
+          }
+        } catch (err: unknown) {
+          logger.error({ error: err }, '远程命令监听器异常');
         }
-      } catch (err: unknown) {
-        logger.error({ error: err }, '远程命令监听器异常');
       }
+      return { accepted: false };
+    } finally {
+      this.activeCommands -= 1;
     }
-    return handled;
   }
 
   /** 启动 HTTP 命令入口（0.0.0.0，端口缺省随机） */
@@ -337,8 +392,9 @@ export class RemoteControlService implements IRemoteControlService {
         done(403, { error: 'forbidden' });
         return;
       }
-      void this.validateAndRoute(command).then((accepted) => {
-        done(200, { accepted });
+      // 同步等待桥接执行完成：结果文本随本响应回传（局域网直连，长请求可接受）
+      void this.validateAndRoute(command).then((result) => {
+        done(200, result);
       });
     });
     req.on('error', () => {

@@ -159,6 +159,12 @@ export const IPC_META = {
     stop: request('im:stop'),
   },
 
+  remote: {
+    getStatus: request('remote:getStatus'),
+    start: request('remote:start'),
+    stop: request('remote:stop'),
+  },
+
   logs: {
     read: request('logs:read'),
   },

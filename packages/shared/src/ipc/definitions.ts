@@ -137,6 +137,8 @@ import {
   type TestModelRes,
   TestModelResSchema,
 } from '../schemas/models';
+import type { RemoteStatusRes } from '../schemas/remote';
+import { RemoteStatusResSchema } from '../schemas/remote';
 import {
   GlobReqSchema,
   type GlobRes,
@@ -838,6 +840,17 @@ export const IPC_DEFINITIONS = {
     list: withSchema(IPC_META.im.list, null, {} as ChannelListRes, ChannelListResSchema),
     start: withSchema(IPC_META.im.start, ChannelStartReqSchema, {} as ChannelOpRes, OkResSchema),
     stop: withSchema(IPC_META.im.stop, ChannelStopReqSchema, {} as ChannelOpRes, OkResSchema),
+  },
+
+  remote: {
+    getStatus: withSchema(
+      IPC_META.remote.getStatus,
+      null,
+      {} as RemoteStatusRes,
+      RemoteStatusResSchema,
+    ),
+    start: withSchema(IPC_META.remote.start, null, {} as RemoteStatusRes, RemoteStatusResSchema),
+    stop: withSchema(IPC_META.remote.stop, null, {} as RemoteStatusRes, RemoteStatusResSchema),
   },
 
   logs: {
