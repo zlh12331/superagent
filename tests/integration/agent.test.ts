@@ -145,6 +145,53 @@ describe('agent.run 主链路（batch 2/9 · 2a 无工具）', () => {
     });
   });
 
+  it('推理链路：reasoning part 全链路透传至 stream:part（推理块数据源）', async () => {
+    resetSessionService();
+    await withTempUserData(async () => {
+      currentFakeModel = createFakeModel([
+        [
+          modelParts.reasoningStart(),
+          modelParts.reasoningDelta('思考中…'),
+          modelParts.reasoningEnd(),
+          modelParts.textDelta('答案'),
+          modelParts.finish('stop'),
+        ],
+      ]);
+      const { handlers, sessionService } = createHarness();
+      const { wc, sent } = createFakeWebContents();
+
+      const sid = await sessionService.create({
+        workingDir: '/proj',
+        title: undefined,
+        messages: [],
+      });
+      await handlers.run(
+        {
+          messages: [{ role: 'user', content: 'hi' }],
+          sessionId: sid,
+          workingDir: '/proj',
+          systemPrompt: undefined,
+          maxSteps: 5,
+          mode: 'chat',
+        },
+        { traceId: 't5', sender: wc } as never,
+      );
+      await vi.waitFor(() => {
+        expect(sent.some((s) => s.channel.includes('stream:end'))).toBe(true);
+      });
+      // SDK toUIMessageStream（sendReasoning 默认 true）→ TurnRunner/onPart
+      // 原样透传 → agent:stream:part 携带 reasoning-* chunk（渲染层推理块数据源）
+      const parts = sent
+        .filter((s) => s.channel.includes('stream:part'))
+        .map((s) => (s.payload as { part: { type: string; delta?: string } }).part);
+      const reasoningDeltas = parts.filter((p) => p.type === 'reasoning-delta');
+      expect(reasoningDeltas.length).toBeGreaterThan(0);
+      expect(reasoningDeltas[0]?.delta).toBe('思考中…');
+      // 文本照常：text-delta 与 reasoning-delta 并存（同流多 part 类型）
+      expect(parts.some((p) => p.type === 'text-delta')).toBe(true);
+    });
+  });
+
   it('异常容错：fake model 抛错 → 回合不崩溃 + 会话归位 idle', async () => {
     resetSessionService();
     await withTempUserData(async () => {

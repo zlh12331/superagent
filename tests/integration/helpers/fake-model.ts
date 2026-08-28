@@ -90,5 +90,12 @@ export const modelParts = {
     toolName,
     input,
   }),
+  reasoningStart: (id = 'rs-1'): Record<string, unknown> => ({ type: 'reasoning-start', id }),
+  reasoningDelta: (delta: string, id = 'rs-1'): Record<string, unknown> => ({
+    type: 'reasoning-delta',
+    id,
+    delta,
+  }),
+  reasoningEnd: (id = 'rs-1'): Record<string, unknown> => ({ type: 'reasoning-end', id }),
   error: (error: Error): Record<string, unknown> => ({ type: 'error', error }),
 } as const;
