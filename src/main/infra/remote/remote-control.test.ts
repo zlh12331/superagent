@@ -7,7 +7,11 @@
 
 import { createSocket } from 'node:dgram';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RemoteControlService } from './remote-control';
+import {
+  type RemoteCommand,
+  type RemoteCommandEmitter,
+  RemoteControlService,
+} from './remote-control';
 
 /** 本用例启动的服务（afterEach 统一 stop，防端口/定时器残留） */
 const activeServices: RemoteControlService[] = [];
@@ -65,6 +69,7 @@ describe('RemoteControlService（生命周期与路由）', () => {
     expect(routed).toEqual({ accepted: true, reply: '已完成' });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ text: '查看状态', clientId: 'mobile-1' }),
+      expect.any(Function),
     );
   });
 
@@ -185,7 +190,27 @@ describe('RemoteControlService（HTTP 桥接）', () => {
     expect(await res.json()).toEqual({ accepted: true, reply: '34 个测试文件全部通过' });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ text: '运行测试', clientId: 'mobile-1' }),
+      expect.any(Function),
     );
+  });
+
+  it('validateAndRoute：显式传入 emit 时原样透传给监听器（流式增量通道）', async () => {
+    const { service, token } = await startService();
+    const emitted: unknown[] = [];
+    const handler = vi.fn(async (_command: RemoteCommand, emit: RemoteCommandEmitter) => {
+      emit({ type: 'delta', text: '片段' });
+      return { accepted: true, reply: '片段' };
+    });
+    service.onCommand(handler);
+
+    const routed = await service.validateAndRoute(
+      { sessionToken: token, text: '任务', clientId: 'mobile-1' },
+      (event) => {
+        emitted.push(event);
+      },
+    );
+    expect(routed.accepted).toBe(true);
+    expect(emitted).toEqual([{ type: 'delta', text: '片段' }]);
   });
 
   it('POST /command：无监听器接管 → accepted=false 且不泄露令牌', async () => {
@@ -237,6 +262,61 @@ describe('RemoteControlService（HTTP 桥接）', () => {
       body: JSON.stringify({ sessionToken: token, text: 'x'.repeat(70 * 1024), clientId: 'm' }),
     });
     expect(res.status).toBe(413);
+  });
+
+  it('GET /：返回内置手机控制页（严格 CSP，不含令牌）', async () => {
+    const { service, token } = await startService();
+    const res = await fetch(`${baseUrl(service)}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    expect(res.headers.get('content-security-policy')).toContain("script-src 'sha256-");
+    const html = await res.text();
+    expect(html).toContain('<textarea id="input"');
+    expect(html).not.toContain(token);
+  });
+
+  it('POST /command + SSE Accept：按 hello/delta/tool/end 帧序增量回传', async () => {
+    const { service, token } = await startService();
+    service.onCommand(async (_command, emit) => {
+      emit({ type: 'delta', text: '第一段' });
+      emit({ type: 'tool', toolName: 'bash' });
+      emit({ type: 'delta', text: '第二段' });
+      return { accepted: true, reply: '第一段第二段', reason: 'completed' };
+    });
+
+    const res = await fetch(`${baseUrl(service)}/command`, {
+      method: 'POST',
+      headers: [
+        ['Content-Type', 'application/json'],
+        ['Accept', 'text/event-stream'],
+      ],
+      body: JSON.stringify({ sessionToken: token, text: '任务', clientId: 'mobile-1' }),
+    });
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const stream = await res.text();
+    expect([...stream.matchAll(/^event: (\w+)$/gm)].map((m) => m[1])).toEqual([
+      'hello',
+      'delta',
+      'tool',
+      'delta',
+      'end',
+    ]);
+    expect(stream).toContain('data: {"type":"delta","text":"第一段"}');
+    expect(stream.slice(stream.indexOf('event: end'))).toContain('"reason":"completed"');
+  });
+
+  it('POST /command + SSE Accept：令牌不匹配仍在开启流之前返回 403 JSON', async () => {
+    const { service } = await startService();
+    const res = await fetch(`${baseUrl(service)}/command`, {
+      method: 'POST',
+      headers: [
+        ['Content-Type', 'application/json'],
+        ['Accept', 'text/event-stream'],
+      ],
+      body: JSON.stringify({ sessionToken: 'wrong', text: 'x', clientId: 'm' }),
+    });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('content-type')).toContain('application/json');
   });
 
   it('stop：HTTP 监听关闭（连接被拒）', async () => {

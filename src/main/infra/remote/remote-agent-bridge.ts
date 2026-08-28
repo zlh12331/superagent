@@ -9,6 +9,9 @@
 // - 多轮上下文：每回合从 DB 回读该会话历史再追加本条命令（IM 桥接当前只发
 //   单条消息、无历史回读，此处按远程控制"连续对话"的定位补齐）
 // - 执行结果作为 HTTP /command 响应体回传移动端（无 WebSocket 前的同步语义）
+// - 阶段 3 增量回传：文本/工具/错误事件经传输层注入的 emit 通道逐帧回推
+//   （SSE 请求写事件帧；JSON 请求 emit 为 noop，只取最终 reply）——
+//   本层不为「有无流式」写两套逻辑，emit 一律调用即可
 //
 // 安全设计（对齐"远程执行默认保守"）：
 // - 仅 approvalMode 为 auto / yolo 时执行（ask/plan 无审批通道，回传提示）
@@ -30,7 +33,12 @@ import { logger } from '../../utils/logger';
 import type { IAgentService } from '../ai/agent/agent-service';
 import type { IPermissionService } from '../ai/tools/permission-service';
 import type { ISessionService } from '../storage/session-service';
-import type { IRemoteControlService, RemoteCommand, RemoteCommandResult } from './remote-control';
+import type {
+  IRemoteControlService,
+  RemoteCommand,
+  RemoteCommandEmitter,
+  RemoteCommandResult,
+} from './remote-control';
 
 /**
  * 远程命令 agent 的沙箱工作目录（与 IM 沙箱同级、同策略）
@@ -85,8 +93,8 @@ export class RemoteAgentBridge {
       // 目录创建失败不阻断挂载（agent 工具会在无目录时返回明确错误）
       logger.warn({ error: err }, '远程控制 agent 沙箱工作目录创建失败');
     }
-    this.unsubscribeCommand = this.remoteControl.onCommand((command) =>
-      this.handleCommand(command),
+    this.unsubscribeCommand = this.remoteControl.onCommand((command, emit) =>
+      this.handleCommand(command, emit),
     );
     logger.info({}, '远程控制 → Agent 桥接已挂载');
   }
@@ -110,7 +118,10 @@ export class RemoteAgentBridge {
    * 始终 accepted=true：命令到达即视为已接管，拒绝原因写在 reply 里
    * （移动端拿到的是一条可读的助手回复，而不是无解释的 accepted:false）。
    */
-  private async handleCommand(command: RemoteCommand): Promise<RemoteCommandResult> {
+  private async handleCommand(
+    command: RemoteCommand,
+    emit: RemoteCommandEmitter,
+  ): Promise<RemoteCommandResult> {
     const { clientId, text } = command;
 
     if (this.busyClients.has(clientId)) {
@@ -131,8 +142,8 @@ export class RemoteAgentBridge {
     this.busyClients.add(clientId);
     try {
       const sessionId = await this.ensureSession(clientId);
-      const reply = await this.runTurn(sessionId, text);
-      return { accepted: true, reply };
+      const { reply, reason } = await this.runTurn(sessionId, text, emit);
+      return { accepted: true, reply, reason };
     } catch (err: unknown) {
       logger.error({ clientId, error: err }, '远程控制回合失败');
       return { accepted: true, reply: '❌ 执行异常，请查看桌面端日志。' };
@@ -171,9 +182,14 @@ export class RemoteAgentBridge {
   /**
    * 执行单回合：回读历史 + 追加本条命令 → startAgent（无头）→ 等待 TURN_END
    *
-   * @returns 回传给移动端的执行结果文本
+   * @param emit 增量事件通道（流式请求逐帧回推移动端；非流式为 noop）
+   * @returns 回传给移动端的执行结果文本与回合结束原因
    */
-  private async runTurn(sessionId: string, userText: string): Promise<string> {
+  private async runTurn(
+    sessionId: string,
+    userText: string,
+    emit: RemoteCommandEmitter,
+  ): Promise<{ reply: string; reason: string }> {
     const history = await this.loadHistory(sessionId);
     const messages: ChatMessage[] = [...history, { role: 'user', content: userText }];
 
@@ -206,14 +222,17 @@ export class RemoteAgentBridge {
         }
         case TurnEventType.TEXT_DELTA: {
           assistantText += event.text;
+          emit({ type: 'delta', text: event.text });
           break;
         }
         case TurnEventType.TOOL_CALL: {
           turnEvents.push(`🔧 ${event.toolName}`);
+          emit({ type: 'tool', toolName: event.toolName });
           break;
         }
         case TurnEventType.ERROR: {
           turnEvents.push(`❌ ${event.message}`);
+          emit({ type: 'error', message: event.message });
           break;
         }
         case TurnEventType.TURN_END: {
@@ -243,7 +262,7 @@ export class RemoteAgentBridge {
     }
 
     void this.persistTurnMessages(sessionId, currentTurnId, userText, assistantText);
-    return buildReply(assistantText, turnEvents, reason);
+    return { reply: buildReply(assistantText, turnEvents, reason), reason };
   }
 
   /**
