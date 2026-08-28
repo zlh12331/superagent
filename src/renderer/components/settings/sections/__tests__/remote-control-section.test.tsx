@@ -1,8 +1,9 @@
 // src/renderer/components/settings/sections/__tests__/remote-control-section.test.tsx
-// RemoteControlSection 单测：启停开关 / 配对凭据展示 / 复制令牌 / 审批模式警告
+// RemoteControlSection 单测：启停开关 / 配对凭据与二维码 / 复制令牌 / 审批模式警告
 // ──────────────────────────────────────────────────────────────
 // 数据源 mock：window.api.remote.*（getStatus/start/stop）+ settings.getApprovalMode
-// 全部 stub；开关交互、凭据渲染规则保持真实实现断言。
+// 全部 stub；qrcode 只 stub 到 data URL 生成边界（本用例锁"编码了什么"，
+// 二维码点阵正确性由 qrcode 自身保证）。开关交互、凭据渲染规则走真实实现。
 // ──────────────────────────────────────────────────────────────
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,6 +12,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RemoteControlSection } from '../remote-control-section';
+
+// 二维码 stub：只 mock 到 data URL 生成边界，编码内容/参数由下方断言锁定
+const qrMock = vi.hoisted(() => ({
+  encode: vi.fn(async (): Promise<string> => 'data:image/png;base64,QR'),
+}));
+// biome-ignore lint/style/useNamingConvention: 必须保留 qrcode 的真实导出名
+vi.mock('qrcode', () => ({ toDataURL: qrMock.encode }));
 
 const IDLE = {
   running: false,
@@ -147,5 +155,32 @@ describe('RemoteControlSection 远程控制面板', () => {
     stubStatus({ ...ONLINE, addresses: [] });
     renderSection();
     expect(await screen.findByText(/未检测到局域网 IPv4 地址/)).toBeTruthy();
+  });
+
+  it('配对二维码：编码「端点#令牌」（fragment 不落服务端日志）', async () => {
+    stubStatus(ONLINE);
+    renderSection();
+    expect(await screen.findByAltText('远程控制配对二维码')).toBeTruthy();
+    expect(qrMock.encode).toHaveBeenCalledWith(
+      'http://192.168.1.10:45918#tok-abc123',
+      expect.objectContaining({ errorCorrectionLevel: 'M' }),
+    );
+  });
+
+  it('无局域网端点：不生成二维码（无地址可编码）', async () => {
+    stubStatus({ ...ONLINE, addresses: [] });
+    renderSection();
+    await screen.findByText('tok-abc123');
+    expect(qrMock.encode).not.toHaveBeenCalled();
+    expect(screen.queryByAltText('远程控制配对二维码')).toBeNull();
+  });
+
+  it('二维码生成失败：静默降级，令牌文本仍可用于手动配对', async () => {
+    stubStatus(ONLINE);
+    qrMock.encode.mockRejectedValueOnce(new Error('canvas unavailable'));
+    renderSection();
+    expect(await screen.findByText('tok-abc123')).toBeTruthy();
+    await waitFor(() => expect(qrMock.encode).toHaveBeenCalled());
+    expect(screen.queryByAltText('远程控制配对二维码')).toBeNull();
   });
 });

@@ -353,7 +353,9 @@
         "stopped": "Remote control disabled",
         "toggleFailed": "Failed to toggle remote control",
         "tokenCopied": "Pairing token copied",
-        "tokenCopyFailed": "Failed to copy token"
+        "tokenCopyFailed": "Failed to copy token",
+        "qrAlt": "Remote control pairing QR code",
+        "qrHint": "Scan with your phone camera to open the pairing page"
       },
       "group": {
         "general": "General",

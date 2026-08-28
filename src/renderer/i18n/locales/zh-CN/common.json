@@ -353,7 +353,9 @@
         "stopped": "远程控制已关闭",
         "toggleFailed": "远程控制开关切换失败",
         "tokenCopied": "配对令牌已复制",
-        "tokenCopyFailed": "令牌复制失败"
+        "tokenCopyFailed": "令牌复制失败",
+        "qrAlt": "远程控制配对二维码",
+        "qrHint": "手机相机扫码直接打开配对页"
       },
       "group": {
         "general": "通用",

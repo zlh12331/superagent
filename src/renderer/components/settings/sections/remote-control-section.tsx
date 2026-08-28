@@ -3,13 +3,17 @@
 // ──────────────────────────────────────────────────────────────
 // 阶段 2.5 落地：主进程 RemoteControlService（HTTP 桥接 + UDP 发现）与
 // RemoteAgentBridge（无头执行）已就绪，本面板提供启停开关与配对凭据展示。
+// 阶段 3 追加：配对二维码——编码「端点#令牌」，手机相机扫开即进入内置控制页。
+// 令牌放 fragment 是有意的：fragment 不随请求发往服务端，也不进日志与 Referer。
 // 安全基线：令牌仅在运行期由 remote:getStatus 快照下发（停止后主进程置 null），
 // 面板不持久化令牌；关闭服务即撤销全部局域网入口。
 // ──────────────────────────────────────────────────────────────
 
 import type { RemoteStatusRes } from '@code-agent/shared/renderer';
 import { Copy, Loader2, ShieldAlert, Smartphone } from 'lucide-react';
+import { toDataURL } from 'qrcode';
 import type { ReactElement } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
@@ -24,7 +28,46 @@ import { formatRelativeTime } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 import { SettingRow, ToggleRow } from '../settings-controls';
 
-/** 配对信息卡：令牌 + 局域网端点（令牌为 null 时不渲染） */
+/**
+ * 配对二维码（端点 + #令牌）
+ *
+ * 生成失败（无 canvas 等异常环境）静默不渲染：令牌与端点文本始终在，
+ * 手输同样能完成配对——二维码是加速器，不是唯一路径。
+ */
+function PairingQrCode({ payload }: { readonly payload: string }): ReactElement | null {
+  const { t } = useTranslation();
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    toDataURL(payload, { margin: 2, errorCorrectionLevel: 'M' })
+      .then((url) => {
+        if (active) {
+          setDataUrl(url);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDataUrl(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [payload]);
+
+  if (dataUrl === null) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col items-center gap-1">
+      {/* 二维码白底由 PNG 自身携带（深色主题下反色码大多扫不出来） */}
+      <img src={dataUrl} alt={t('settings.remote.qrAlt')} className="size-36 rounded" />
+      <span className="text-muted-foreground text-2xs">{t('settings.remote.qrHint')}</span>
+    </div>
+  );
+}
+
+/** 配对信息卡：令牌 + 局域网端点 + 扫码配对（令牌为 null 时不渲染） */
 function PairingCard({
   status,
   onCopyToken,
@@ -33,11 +76,14 @@ function PairingCard({
   readonly onCopyToken: () => void;
 }): ReactElement | null {
   const { t } = useTranslation();
-  if (status.token === null) {
+  const token = status.token;
+  const endpoint = status.addresses[0];
+  if (token === null) {
     return null;
   }
   return (
     <div className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5">
+      {endpoint !== undefined && <PairingQrCode payload={`${endpoint}#${token}`} />}
       <div className="flex items-center justify-between gap-2">
         <span className="text-foreground text-sm">{t('settings.remote.tokenLabel')}</span>
         <Button variant="outline" size="sm" className="h-7" onClick={onCopyToken}>
@@ -45,7 +91,7 @@ function PairingCard({
           {t('settings.remote.copyToken')}
         </Button>
       </div>
-      <p className="text-foreground font-mono text-xs break-all">{status.token}</p>
+      <p className="text-foreground font-mono text-xs break-all">{token}</p>
       <div className="flex flex-col gap-1">
         <span className="text-muted-foreground text-2xs">
           {t('settings.remote.endpointsLabel')}
