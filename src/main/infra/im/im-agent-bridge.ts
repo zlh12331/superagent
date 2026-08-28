@@ -126,18 +126,21 @@ export class ImAgentBridge {
     // 3. 建立/复用会话（首次消息：落库创建，标题标记 IM 渠道来源）
     let sessionId = this.sessionMap.get(key);
     if (sessionId === undefined) {
-      sessionId = randomUUID();
       try {
-        await this.sessionService.create({
+        // 关键：会话 id 由 create 内部生成并以返回值给出。此前用自造 uuid
+        // 当作 id，与落库行不一致 → appendMessage 恒抛 SESSION_NOT_FOUND、
+        // markRunning 找不到行，IM 回合 transcript 实际从未落库。
+        sessionId = await this.sessionService.create({
           workingDir: IM_DEFAULT_WORKING_DIR,
           title: `IM:${message.channel}:${message.chatId}`,
           messages: undefined,
         });
+        this.sessionMap.set(key, sessionId);
       } catch (err: unknown) {
-        // 会话创建失败不阻断执行（仅影响落库）
-        logger.warn({ error: err }, 'IM 会话创建失败');
+        // 会话创建失败不阻断执行（仅影响落库）；不缓存一次性 id，下条消息重试建会话
+        logger.warn({ error: err }, 'IM 会话创建失败（本回合降级为一次性执行）');
+        sessionId = randomUUID();
       }
-      this.sessionMap.set(key, sessionId);
     }
 
     // 4. 执行回合（无头：不传 webContents）

@@ -230,6 +230,85 @@ describe('ImAgentBridge', () => {
     expect(createArgs.title).toBe('IM:telegram:chat-99');
     expect(createArgs.workingDir).toBe(IM_DEFAULT_WORKING_DIR);
   });
+
+  it('会话 id 取自 create 返回值：startAgent 与落库共用落库行 id（防幽灵会话）', async () => {
+    const stubs = createStubs();
+    // 真实 create 内部自行生成 UUID 并以返回值给出——stub 必须返回不同 id
+    // 才能暴露"自造 id 与落库行不一致"的缺陷
+    stubs.mockSessionCreate.mockResolvedValue('db-session-uuid');
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+
+    stubs.messageHandlers[0]?.(incoming({ chatId: 'chat-7' }));
+    await vi.waitFor(() => {
+      expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
+    });
+    const runArgs = stubs.mockStartAgent.mock.calls[0]?.[0] as { sessionId: string };
+    expect(runArgs.sessionId).toBe('db-session-uuid');
+
+    stubs.turnListeners[0]?.({
+      type: TurnEventType.TURN_END,
+      sessionId: 'db-session-uuid',
+      turnId: 'turn-9',
+      timestamp: Date.now(),
+      reason: 'completed',
+    });
+    await vi.waitFor(() => {
+      expect(stubs.mockAppendMessage).toHaveBeenCalledTimes(1);
+    });
+    const appendArgs = stubs.mockAppendMessage.mock.calls[0]?.[0] as { sessionId: string };
+    expect(appendArgs.sessionId).toBe('db-session-uuid');
+  });
+
+  it('create 失败：本回合降级一次性执行，不缓存 id（下条消息重试建会话）', async () => {
+    const stubs = createStubs();
+    stubs.mockSessionCreate.mockRejectedValue(new Error('db down'));
+    const bridge = new ImAgentBridge(
+      stubs.imService,
+      stubs.agentService,
+      stubs.permissionService,
+      stubs.sessionService,
+    );
+    bridge.mount();
+
+    stubs.messageHandlers[0]?.(incoming({ chatId: 'chat-f' }));
+    await vi.waitFor(() => {
+      expect(stubs.mockStartAgent).toHaveBeenCalledTimes(1);
+    });
+    expect(stubs.mockSessionCreate).toHaveBeenCalledTimes(1);
+    const firstRunArgs = stubs.mockStartAgent.mock.calls[0]?.[0] as { sessionId: string };
+    const firstSessionId = firstRunArgs.sessionId;
+    expect(firstSessionId).toBeTruthy();
+
+    // 结束回合，释放串行锁
+    stubs.turnListeners[0]?.({
+      type: TurnEventType.TURN_END,
+      sessionId: firstSessionId,
+      turnId: 'turn-1',
+      timestamp: Date.now(),
+      reason: 'completed',
+    });
+    await vi.waitFor(() => {
+      expect(stubs.sent.some((s) => s.text.includes('✅ 完成'))).toBe(true);
+    });
+    // 让出一个宏任务：汇总回发在 TURN_END 回调内同步完成，串行锁在其后
+    // 的微任务链末尾才释放——不等会导致第二条消息命中排队分支
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // 第二条消息：重新尝试建会话（失败 id 不入 sessionMap）
+    stubs.messageHandlers[0]?.(incoming({ chatId: 'chat-f', messageId: 'm2' }));
+    await vi.waitFor(() => {
+      expect(stubs.mockSessionCreate).toHaveBeenCalledTimes(2);
+      expect(stubs.mockStartAgent).toHaveBeenCalledTimes(2);
+    });
+    const secondRunArgs = stubs.mockStartAgent.mock.calls[1]?.[0] as { sessionId: string };
+    expect(secondRunArgs.sessionId).not.toBe(firstSessionId);
+  });
 });
 
 describe('ImAgentBridge 回合事件与边界补充', () => {
