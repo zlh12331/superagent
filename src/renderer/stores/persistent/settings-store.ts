@@ -150,6 +150,32 @@ export interface WorkspaceSettings {
   readonly defaultExpandDepth: number;
 }
 
+/** 浏览器预览设备预设（与 BrowserPane 视口映射一一对应） */
+export type BrowserDevicePreset = 'responsive' | 'desktop' | 'laptop' | 'tablet' | 'mobile';
+
+/** 浏览器预览缩放档位（与工具栏下拉一致，避免任意值把视口拉出可用范围） */
+export type BrowserZoom = 50 | 75 | 100 | 125 | 150 | 200;
+
+/**
+ * 浏览器 pane 设置（右面板 iframe 预览工具）
+ *
+ * 前两项是 pane 挂载时的初值（工具栏内可临时改，不写回）；
+ * strictSandbox 是安全策略，每次渲染都生效。
+ */
+export interface BrowserSettings {
+  /** 默认设备预设 */
+  readonly defaultDevicePreset: BrowserDevicePreset;
+  /** 默认缩放百分比 */
+  readonly defaultZoom: BrowserZoom;
+  /**
+   * 严格沙箱：iframe 不放行 allow-scripts
+   *
+   * 预览页多为外站，放行脚本意味着远端代码可在应用内执行（重定向、指纹采集、
+   * 表单劫持）。代价：依赖 JS 的站点渲染为静态骨架，故默认关闭（保持既有行为）。
+   */
+  readonly strictSandbox: boolean;
+}
+
 /**
  * 应用界面语言
  *
@@ -179,6 +205,8 @@ interface SettingsData {
   readonly lsp: LspSettings;
   /** 工作区（文件树行为） */
   readonly workspace: WorkspaceSettings;
+  /** 浏览器 pane（iframe 预览） */
+  readonly browser: BrowserSettings;
 }
 
 /**
@@ -202,6 +230,8 @@ interface SettingsState extends SettingsData {
   readonly updateLsp: (patch: Partial<LspSettings>) => void;
   /** 更新工作区设置（部分字段） */
   readonly updateWorkspace: (patch: Partial<WorkspaceSettings>) => void;
+  /** 更新浏览器 pane 设置（部分字段） */
+  readonly updateBrowser: (patch: Partial<BrowserSettings>) => void;
 }
 
 /**
@@ -277,6 +307,11 @@ const DEFAULT_SETTINGS: SettingsData = {
     treeIgnorePatterns: [],
     defaultExpandDepth: 1,
   },
+  browser: {
+    defaultDevicePreset: 'responsive',
+    defaultZoom: 100,
+    strictSandbox: false,
+  },
 };
 
 /**
@@ -340,6 +375,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     set({ workspace });
     persistSetting('workspace', workspace);
   },
+  updateBrowser: (patch) => {
+    const browser = { ...useSettingsStore.getState().browser, ...patch };
+    set({ browser });
+    persistSetting('browser', browser);
+  },
 }));
 
 /**
@@ -371,6 +411,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     workspace: {
       ...DEFAULT_SETTINGS.workspace,
       ...((snapshot['workspace'] as Partial<WorkspaceSettings> | undefined) ?? {}),
+    },
+    browser: {
+      ...DEFAULT_SETTINGS.browser,
+      ...((snapshot['browser'] as Partial<BrowserSettings> | undefined) ?? {}),
     },
   });
 }

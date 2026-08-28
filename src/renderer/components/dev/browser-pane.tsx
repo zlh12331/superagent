@@ -3,11 +3,13 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 地址栏 + 后退/前进/刷新导航（iframe 真实加载）
-// - 设备预设切换（responsive/desktop/tablet/mobile，缩放预览）
+// - 设备预设切换（responsive/desktop/laptop/tablet/mobile，缩放预览）
 // - 空状态：未加载 URL 时提示输入地址
 //
-// 数据源：纯前端 iframe（无后端依赖）；跨域页面仅展示页面本身，
+// 数据来源：纯前端 iframe（无后端依赖）；跨域页面仅展示页面本身，
 // 无法注入内容（诚实边界：不做远程调试/CDP 注入）。
+// 设置消费（设置 → 浏览器）：默认设备预设/默认缩放为挂载初值（工具栏内临时
+// 改动不写回设置），严格沙箱开关实时决定 iframe 是否放行 allow-scripts。
 // ──────────────────────────────────────────────────────────────
 
 import { ArrowLeft, ArrowRight, Link2, MonitorSmartphone, RotateCw, X } from 'lucide-react';
@@ -15,10 +17,11 @@ import { type CSSProperties, type ReactElement, useEffect, useRef, useState } fr
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { type BrowserDevicePreset, useSettingsStore } from '@/stores/persistent/settings-store';
 
 // 色彩架构：text-primary 仅限按钮实底前景（白字场景）；彩色文本一律 text-accent-text（AA 安全层）
-/** 设备预设类型（对齐参考项目 BrowserPane：含 laptop） */
-type DevicePreset = 'responsive' | 'desktop' | 'laptop' | 'tablet' | 'mobile';
+/** 设备预设类型（真源在 settings-store，浏览器 pane 与设置面板共用） */
+type DevicePreset = BrowserDevicePreset;
 
 /** 设备预设 → 默认宽高映射（对齐参考项目 DEVICE_DIMENSIONS） */
 const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number }> = {
@@ -28,6 +31,15 @@ const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number }>
   tablet: { width: 768, height: 1024 },
   mobile: { width: 375, height: 667 },
 };
+
+/**
+ * iframe 沙箱策略（设置项「严格沙箱」切换）
+ *
+ * 不放行 allow-scripts 时，外站预览页的脚本一律不执行：静态骨架仍能渲染，
+ * 但远端代码无法在应用内跳转、采集指纹或改写表单。
+ */
+const IFRAME_SANDBOX_PERMISSIVE = 'allow-scripts allow-same-origin allow-forms allow-popups';
+const IFRAME_SANDBOX_STRICT = 'allow-same-origin allow-forms allow-popups';
 
 /** 工具栏按钮基础样式 */
 const TOOLBAR_BTN_CLASS =
@@ -46,6 +58,8 @@ function normalizeUrl(raw: string): string {
  */
 export function BrowserPane(): ReactElement {
   const { t } = useTranslation();
+  // 设置分组：预设/缩放是挂载初值（工具栏内临时改不写回），沙箱策略实时生效
+  const browserSettings = useSettingsStore((s) => s.browser);
   // URL 输入框当前值
   const [urlInput, setUrlInput] = useState('');
   // 已加载的 URL（null = 未加载，显示空状态）
@@ -58,10 +72,16 @@ export function BrowserPane(): ReactElement {
   // 设备工具栏可见性
   const [showDeviceBar, setShowDeviceBar] = useState(false);
   // 设备预设与宽高
-  const [devicePreset, setDevicePreset] = useState<DevicePreset>('responsive');
-  const [deviceWidth, setDeviceWidth] = useState(0);
-  const [deviceHeight, setDeviceHeight] = useState(0);
-  const [deviceZoom, setDeviceZoom] = useState(100);
+  const [devicePreset, setDevicePreset] = useState<DevicePreset>(
+    browserSettings.defaultDevicePreset,
+  );
+  const [deviceWidth, setDeviceWidth] = useState(
+    DEVICE_DIMENSIONS[browserSettings.defaultDevicePreset].width,
+  );
+  const [deviceHeight, setDeviceHeight] = useState(
+    DEVICE_DIMENSIONS[browserSettings.defaultDevicePreset].height,
+  );
+  const [deviceZoom, setDeviceZoom] = useState<number>(browserSettings.defaultZoom);
   // 刷新用的 timer 句柄（卸载时清理）
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -296,12 +316,14 @@ export function BrowserPane(): ReactElement {
               </div>
             )}
             <iframe
-              key={loadedUrl}
+              key={`${loadedUrl}:${browserSettings.strictSandbox ? 'strict' : 'permissive'}`}
               src={loadedUrl}
               title={t('panel.browserPreview')}
               onLoad={handleIframeLoad}
               className="h-full w-full border-none bg-white"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              sandbox={
+                browserSettings.strictSandbox ? IFRAME_SANDBOX_STRICT : IFRAME_SANDBOX_PERMISSIVE
+              }
             />
           </div>
         )}

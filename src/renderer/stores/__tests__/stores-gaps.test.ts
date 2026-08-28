@@ -222,6 +222,36 @@ describe('stores 批次1 缺口补全', () => {
       expect([...s.workspace.treeIgnorePatterns]).toEqual([]);
       expect(s.lsp.serverCommands).toEqual({});
     });
+
+    it('updateBrowser：浅合并 + 写穿透 key=browser（浏览器 pane 消费）', () => {
+      const setMock = vi.fn(async () => ({ data: { ok: true } }));
+      window.api.settings = { set: setMock } as never;
+      useSettingsStore.getState().updateBrowser({
+        defaultDevicePreset: 'mobile',
+        strictSandbox: true,
+      });
+      expect(useSettingsStore.getState().browser).toEqual({
+        defaultDevicePreset: 'mobile',
+        defaultZoom: 100,
+        strictSandbox: true,
+      });
+      expect(setMock).toHaveBeenCalledWith({
+        key: 'browser',
+        value: expect.objectContaining({
+          defaultDevicePreset: 'mobile',
+          strictSandbox: true,
+        }),
+      });
+    });
+
+    it('applySettingsSnapshot：browser 分组缺字段补默认', () => {
+      applySettingsSnapshot({ browser: { strictSandbox: true } });
+      expect(useSettingsStore.getState().browser).toEqual({
+        defaultDevicePreset: 'responsive',
+        defaultZoom: 100,
+        strictSandbox: true,
+      });
+    });
   });
 
   describe('tool-store', () => {

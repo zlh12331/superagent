@@ -518,7 +518,15 @@
         "title": "Language Servers",
         "hint": "LSP intelligence (definition/references/hover) routes to language servers by file type. Leave empty for built-in defaults; restart the app to apply. Servers must be installed in PATH."
       },
-      "browserHint": "Right-panel Browser tab is a built-in iframe preview; advanced policies planned",
+      "browser": {
+        "hint": "The right-panel Browser tab is a built-in iframe preview: address bar navigation plus device viewport emulation. Cross-origin pages render as-is; nothing is injected into them.",
+        "defaultPreset": "Default device preset",
+        "defaultPresetHint": "Initial viewport when the browser pane opens; the toolbar can override it per session without writing back",
+        "defaultZoom": "Default zoom",
+        "defaultZoomHint": "Preview scale for fixed viewports; the responsive preset ignores it",
+        "strictSandbox": "Strict sandbox (block preview scripts)",
+        "strictSandboxHint": "Stop previewed sites from running JavaScript: static content still renders, script-driven pages look incomplete. The current preview reloads immediately after toggling"
+      },
       "rulesTitle": "Rules (AGENTS.md)",
       "rulesHint": "Project AGENTS.md defines agent behavior (engineering standards/commands/architecture)",
       "rulesFileHint": "Root file of working directory",

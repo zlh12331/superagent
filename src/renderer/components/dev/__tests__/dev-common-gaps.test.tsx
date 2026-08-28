@@ -9,7 +9,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@/providers/ThemeProvider';
-import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { applySettingsSnapshot } from '@/stores/persistent/settings-store';
 import { UnifiedDiffView } from '../../common/UnifiedDiffView';
 import { BrowserPane } from '../browser-pane';
 
@@ -28,7 +28,8 @@ const DIFF_TWO_HUNKS = `${DIFF_SAMPLE}
 describe('dev/common 批次6 缺口补全', () => {
   beforeEach(() => {
     localStorage.clear();
-    useSettingsStore.setState({ theme: 'dark' });
+    // 设置全量重置为默认（browser 分组由各用例注入初值，避免用例间串味）
+    applySettingsSnapshot({});
   });
 
   describe('browser-pane', () => {
@@ -142,6 +143,40 @@ describe('dev/common 批次6 缺口补全', () => {
       fireEvent.load(iframe);
       // onLoad 后不再抛错即可（loading 状态已结束）
       expect(screen.getByTitle('浏览器预览')).toBeDefined();
+    });
+
+    it('设置消费：默认预设与缩放作为 pane 初值', () => {
+      applySettingsSnapshot({
+        browser: { defaultDevicePreset: 'mobile', defaultZoom: 75 },
+      });
+      render(<BrowserPane />);
+      fireEvent.click(screen.getByLabelText('设备工具栏'));
+      expect((screen.getByLabelText('设备预设') as HTMLSelectElement).value).toBe('mobile');
+      expect((screen.getByLabelText('宽度') as HTMLInputElement).value).toBe('375');
+      expect((screen.getByLabelText('高度') as HTMLInputElement).value).toBe('667');
+      expect((screen.getByLabelText('缩放') as HTMLSelectElement).value).toBe('75');
+    });
+
+    it('设置消费：严格沙箱下 iframe 不放行 allow-scripts', () => {
+      applySettingsSnapshot({ browser: { strictSandbox: true } });
+      render(<BrowserPane />);
+      const input = screen.getByLabelText('输入网址，回车打开…');
+      fireEvent.change(input, { target: { value: 'a.com' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const sandbox = (screen.getByTitle('浏览器预览') as HTMLIFrameElement).getAttribute(
+        'sandbox',
+      );
+      expect(sandbox).toBe('allow-same-origin allow-forms allow-popups');
+    });
+
+    it('默认策略：不改变既有行为（脚本仍放行）', () => {
+      render(<BrowserPane />);
+      const input = screen.getByLabelText('输入网址，回车打开…');
+      fireEvent.change(input, { target: { value: 'a.com' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(
+        (screen.getByTitle('浏览器预览') as HTMLIFrameElement).getAttribute('sandbox'),
+      ).toContain('allow-scripts');
     });
   });
 

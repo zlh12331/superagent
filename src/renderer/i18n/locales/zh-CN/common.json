@@ -518,7 +518,15 @@
         "title": "语言服务器",
         "hint": "LSP 代码智能（跳转定义/查找引用/悬停信息）按文件类型路由语言服务器。留空使用内置默认；修改后重启应用生效。需对应服务器已在 PATH 中安装。"
       },
-      "browserHint": "右侧面板「浏览器」tab 为内置 iframe 预览工具；高级策略（加载拦截/设备预设）规划中",
+      "browser": {
+        "hint": "右侧面板「浏览器」tab 为内置 iframe 预览工具：地址栏导航 + 设备视口模拟。跨域页面仅展示页面本身，不注入内容。",
+        "defaultPreset": "默认设备预设",
+        "defaultPresetHint": "打开浏览器 pane 时的初始视口；工具栏内可临时切换，不写回设置",
+        "defaultZoom": "默认缩放",
+        "defaultZoomHint": "固定视口下的预览缩放比例；自适应预设不受影响",
+        "strictSandbox": "严格沙箱（禁用预览页脚本）",
+        "strictSandboxHint": "阻止外站预览页执行 JavaScript：静态内容仍可看，依赖脚本的站点会显示不完整。切换后立即重载当前预览"
+      },
       "rulesTitle": "规则（AGENTS.md）",
       "rulesHint": "项目根 AGENTS.md 为 Agent 行为准则（工程规范/命令/架构），Agent 回合加载",
       "rulesFileHint": "工作目录根文件",
