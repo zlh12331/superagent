@@ -115,6 +115,7 @@ export function ChatMessageList({
   }, [messages.length]);
 
   // 加载更早后补偿滚动位置（保持视口内容不跳）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: windowStart 变化需重跑补偿（窗口扩展后重算 scrollTop）
   useLayoutEffect(() => {
     if (prevScrollHeightRef.current > 0) {
       const el = scrollerRef.current;
@@ -229,7 +230,7 @@ export function ChatMessageList({
 
   /** 滚动到指定消息（导航轨/搜索定位；居中）；目标在窗口外时先扩展窗口 */
   const scrollToIndex = useCallback((index: number): void => {
-    const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`);
+    const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`) ?? null;
     if (el !== null) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
@@ -240,10 +241,11 @@ export function ChatMessageList({
   }, []);
 
   // 窗口扩展渲染后执行待滚动（导航轨/搜索跳转到窗口外消息）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: windowStart 变化需重跑（扩展渲染后才找得到目标节点）
   useEffect(() => {
     const pending = pendingScrollIndexRef.current;
     if (pending === null) return;
-    const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${pending}"]`);
+    const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${pending}"]`) ?? null;
     if (el !== null) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       pendingScrollIndexRef.current = null;

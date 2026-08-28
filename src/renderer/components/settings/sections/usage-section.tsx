@@ -178,21 +178,21 @@ export function UsageSection(): ReactElement {
             <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageToday')}</p>
               <p className="mt-0.5 font-medium text-foreground">
-                {formatTokens(todayTokens)}{' '}
+                {formatCompactNumber(todayTokens, i18n.language)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
             <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageMonth')}</p>
               <p className="mt-0.5 font-medium text-foreground">
-                {formatTokens(monthTokens)}{' '}
+                {formatCompactNumber(monthTokens, i18n.language)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
             <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageTotal')}</p>
               <p className="mt-0.5 font-medium text-foreground">
-                {formatTokens(summary?.total.totalTokens ?? 0)}{' '}
+                {formatCompactNumber(summary?.total.totalTokens ?? 0, i18n.language)}{' '}
                 <span className="text-muted-foreground font-normal">tokens</span>
               </p>
             </div>
@@ -220,7 +220,7 @@ export function UsageSection(): ReactElement {
                   tooltips={{
                     activity: {
                       text: (activity) =>
-                        `${activity.date} · ${formatTokens(activity.count)} tokens`,
+                        `${activity.date} · ${formatCompactNumber(activity.count, i18n.language)} tokens`,
                     },
                   }}
                 />
