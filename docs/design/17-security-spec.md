@@ -16,7 +16,7 @@
 
 ## 二、CSP（内容安全策略）
 
-- 实现：[src/main/security/csp.ts](file:///f:/TraeProjects/1/src/main/security/csp.ts)（+ csp.test.ts 门禁）
+- 实现：[src/main/security/csp.ts](file:///src/main/security/csp.ts)（+ csp.test.ts 门禁）
 - **约束**：渲染层资源（script/style/img/connect）白名单化；`unsafe-inline`/`unsafe-eval` 禁止（dev 模式例外需显式标注）
 - **变更流程**：改 CSP 必须同步更新 csp.test.ts 断言（测试卡关）
 

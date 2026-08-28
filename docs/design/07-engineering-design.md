@@ -22,7 +22,7 @@
 
 ## 2. 构建脚本
 
-来自 [package.json#L33-L72](file:///f:/TraeProjects/1/package.json#L33)：
+来自 [package.json#L33-L72](file:///package.json#L33)：
 
 ### 2.1 核心构建
 
@@ -89,7 +89,7 @@
 
 ## 3. CI 流水线
 
-源码：[.github/workflows/ci.yml](file:///f:/TraeProjects/1/.github/workflows/ci.yml)。
+源码：[.github/workflows/ci.yml](file:///.github/workflows/ci.yml)。
 
 ### 3.1 触发条件
 
@@ -166,7 +166,7 @@ concurrency:
 **Windows 签名**（可选）：Authenticode 证书 → 同一 `CSC_LINK`/`CSC_KEY_PASSWORD` 自动签名
 ## 4. Release 流水线
 
-源码：[.github/workflows/release.yml](file:///f:/TraeProjects/1/.github/workflows/release.yml)。
+源码：[.github/workflows/release.yml](file:///.github/workflows/release.yml)。
 
 ### 4.1 触发条件
 
@@ -254,7 +254,7 @@ tsconfig 启用以下严格选项：
 
 ### 6.2 Biome 配置
 
-源码：[biome.json](file:///f:/TraeProjects/1/biome.json)。
+源码：[biome.json](file:///biome.json)。
 
 22 组 overrides 精细化命名约定，主要分类：
 
@@ -274,11 +274,11 @@ tsconfig 启用以下严格选项：
 
 ### 7.1 husky
 
-`prepare` 脚本安装钩子（[package.json#L72](file:///f:/TraeProjects/1/package.json#L72)）。
+`prepare` 脚本安装钩子（[package.json#L72](file:///package.json#L72)）。
 
 ### 7.2 lint-staged
 
-[package.json#L74-L78](file:///f:/TraeProjects/1/package.json#L74)：
+[package.json#L74-L78](file:///package.json#L74)：
 
 ```json
 "lint-staged": {
@@ -345,7 +345,7 @@ sentry-cli releases new "code-agent@1.0.0"
 
 ### 9.3 sentry.properties
 
-[sentry.properties](file:///f:/TraeProjects/1/sentry.properties) 配置 sentry-cli 默认 org / project / url。
+[sentry.properties](file:///sentry.properties) 配置 sentry-cli 默认 org / project / url。
 
 ## 10. CodeGraph 索引同步
 
@@ -355,7 +355,7 @@ sentry-cli releases new "code-agent@1.0.0"
 
 ### 10.2 脚本
 
-[package.json#L65](file:///f:/TraeProjects/1/package.json#L65)：
+[package.json#L65](file:///package.json#L65)：
 
 ```json
 "codegraph:sync": "codegraph sync"
@@ -384,7 +384,7 @@ sentry-cli releases new "code-agent@1.0.0"
 | 项 | 说明 |
 |----|------|
 | `test:bench` 脚本不存在 | 实际只有 `test:perf`（与文档/记忆中提及的不符） |
-| service-container.ts 注释漂移 | 注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///f:/TraeProjects/1/src/main/service-container.ts#L205) / L239 / L246）；`tools/index.ts` 文件头注释说"7 个"（[L5](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts#L5)），实际 12 个 |
+| service-container.ts 注释漂移 | 注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///src/main/service-container.ts#L205) / L239 / L246）；`tools/index.ts` 文件头注释说"7 个"（[L5](file:///src/main/infra/ai/tools/index.ts#L5)），实际 12 个 |
 | 整体覆盖率约 0.13 | 与 vitest 配置阈值 80 差距较大（`test:coverage` 现已包含 renderer） |
 
 ### 11.3 低优先级

@@ -43,56 +43,56 @@ f:\TraeProjects\1\
 
 | 域 | 文件数 | 关键文件 |
 |---|---|---|
-| ai/（顶层） | 17 | [agent-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/agent-service.ts) / [ai-provider.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/ai-provider.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) / [tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool.ts) / [error-classifier.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/error-classifier.ts) / [context-compression.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent/context-compression.ts) / [session-title.ts](file:///f:/TraeProjects/1/src/main/infra/ai/knowledge/session-title.ts) + 8 测试 |
-| ai/agent-runtime/ | 8 | [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/index.ts) / [stream-reader.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/stream-reader.ts) / [turn-emitter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-emitter.ts) / [turn-runner.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-runner.ts) / [turn-translator.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-runtime/turn-translator.ts) + 3 测试 |
-| ai/llm-client/ | 5 | [index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/index.ts) / [llm-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/llm-client.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/retry.ts) + 2 测试 |
-| ai/mcp/ | 9 | [mcp-client.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-client.ts) / [mcp-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-service.ts) / [mcp-tool-adapter.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-tool-adapter.ts) / [mcp-types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/mcp/mcp-types.ts) + 4 测试 + index.ts |
-| ai/models/ | 13 | [builtin-models.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/builtin-models.ts) / [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/registry.ts) / [runtime-model-store.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/runtime-model-store.ts) / [generation-options.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/generation-options.ts) / [reasoning-effort.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/reasoning-effort.ts) / [token-limits.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/token-limits.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/models/types.ts) + index.ts + 6 测试 |
-| ai/prompt/ | 5 | [prompt-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/prompt-service.ts) / [default-prompt.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/default-prompt.ts) / [dynamic-context.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/dynamic-context.ts) / [agents-md.ts](file:///f:/TraeProjects/1/src/main/infra/ai/prompt/agents-md.ts) + 1 测试 |
-| ai/providers/ | 5 | [registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/registry.ts) / [types.ts](file:///f:/TraeProjects/1/src/main/infra/ai/providers/types.ts) + index.ts + 2 测试 |
-| ai/tools/ | 50 | 31 个内置工具（29 个 `*.tool.ts` + [plan-mode.tools.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/plan-mode.tools.ts)）+ 注册/执行/权限基础设施（[index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) / [tool-registry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/permission-service.ts) / [path-guard.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/path-guard.ts) / command-classifier / dangerous-commands / denial-tracking / error-classifier / read-tracker / tool.ts）+ 9 测试 |
-| storage/ | 11 | [db.ts](file:///f:/TraeProjects/1/src/main/infra/storage/db.ts) / [schema.ts](file:///f:/TraeProjects/1/src/main/infra/storage/schema.ts) / [session-service.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.ts) / [keychain.ts](file:///f:/TraeProjects/1/src/main/infra/storage/keychain.ts) / [app-data.ts](file:///f:/TraeProjects/1/src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///f:/TraeProjects/1/src/main/infra/storage/telemetry-pref.ts) + 4 测试 |
-| code/ | 2 | [code-analyzer.ts](file:///f:/TraeProjects/1/src/main/infra/code-analysis/code-analyzer.ts) + 1 测试 |
-| codebase/ | 1 | [codebase-service.ts](file:///f:/TraeProjects/1/src/main/infra/codebase/codebase-service.ts) |
-| file/ | 2 | [file-service.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.ts) + 1 测试 |
-| git/ | 2 | [git-service.ts](file:///f:/TraeProjects/1/src/main/infra/git/git-service.ts) + 1 测试 |
-| search/ | 1 | [search-service.ts](file:///f:/TraeProjects/1/src/main/infra/search/search-service.ts) |
-| terminal/ | 1 | [terminal-service.ts](file:///f:/TraeProjects/1/src/main/infra/terminal/terminal-service.ts) |
-| update/ | 2 | [update-service.ts](file:///f:/TraeProjects/1/src/main/infra/update/update-service.ts) + 1 测试 |
+| ai/（顶层） | 17 | [agent-service.ts](file:///src/main/infra/ai/agent/agent-service.ts) / [ai-provider.ts](file:///src/main/infra/ai/llm-client/ai-provider.ts) / [tool-registry.ts](file:///src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///src/main/infra/ai/tools/permission-service.ts) / [tool.ts](file:///src/main/infra/ai/tools/tool.ts) / [error-classifier.ts](file:///src/main/infra/ai/tools/error-classifier.ts) / [context-compression.ts](file:///src/main/infra/ai/agent/context-compression.ts) / [session-title.ts](file:///src/main/infra/ai/knowledge/session-title.ts) + 8 测试 |
+| ai/agent-runtime/ | 8 | [index.ts](file:///src/main/infra/ai/agent-runtime/index.ts) / [stream-reader.ts](file:///src/main/infra/ai/agent-runtime/stream-reader.ts) / [turn-emitter.ts](file:///src/main/infra/ai/agent-runtime/turn-emitter.ts) / [turn-runner.ts](file:///src/main/infra/ai/agent-runtime/turn-runner.ts) / [turn-translator.ts](file:///src/main/infra/ai/agent-runtime/turn-translator.ts) + 3 测试 |
+| ai/llm-client/ | 5 | [index.ts](file:///src/main/infra/ai/llm-client/index.ts) / [llm-client.ts](file:///src/main/infra/ai/llm-client/llm-client.ts) / [retry.ts](file:///src/main/infra/ai/llm-client/retry.ts) + 2 测试 |
+| ai/mcp/ | 9 | [mcp-client.ts](file:///src/main/infra/ai/mcp/mcp-client.ts) / [mcp-service.ts](file:///src/main/infra/ai/mcp/mcp-service.ts) / [mcp-tool-adapter.ts](file:///src/main/infra/ai/mcp/mcp-tool-adapter.ts) / [mcp-types.ts](file:///src/main/infra/ai/mcp/mcp-types.ts) + 4 测试 + index.ts |
+| ai/models/ | 13 | [builtin-models.ts](file:///src/main/infra/ai/models/builtin-models.ts) / [registry.ts](file:///src/main/infra/ai/models/registry.ts) / [runtime-model-store.ts](file:///src/main/infra/ai/models/runtime-model-store.ts) / [generation-options.ts](file:///src/main/infra/ai/models/generation-options.ts) / [reasoning-effort.ts](file:///src/main/infra/ai/models/reasoning-effort.ts) / [token-limits.ts](file:///src/main/infra/ai/models/token-limits.ts) / [types.ts](file:///src/main/infra/ai/models/types.ts) + index.ts + 6 测试 |
+| ai/prompt/ | 5 | [prompt-service.ts](file:///src/main/infra/ai/prompt/prompt-service.ts) / [default-prompt.ts](file:///src/main/infra/ai/prompt/default-prompt.ts) / [dynamic-context.ts](file:///src/main/infra/ai/prompt/dynamic-context.ts) / [agents-md.ts](file:///src/main/infra/ai/prompt/agents-md.ts) + 1 测试 |
+| ai/providers/ | 5 | [registry.ts](file:///src/main/infra/ai/providers/registry.ts) / [types.ts](file:///src/main/infra/ai/providers/types.ts) + index.ts + 2 测试 |
+| ai/tools/ | 50 | 31 个内置工具（29 个 `*.tool.ts` + [plan-mode.tools.ts](file:///src/main/infra/ai/tools/plan-mode.tools.ts)）+ 注册/执行/权限基础设施（[index.ts](file:///src/main/infra/ai/tools/index.ts) / [tool-registry.ts](file:///src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///src/main/infra/ai/tools/permission-service.ts) / [path-guard.ts](file:///src/main/infra/ai/tools/path-guard.ts) / command-classifier / dangerous-commands / denial-tracking / error-classifier / read-tracker / tool.ts）+ 9 测试 |
+| storage/ | 11 | [db.ts](file:///src/main/infra/storage/db.ts) / [schema.ts](file:///src/main/infra/storage/schema.ts) / [session-service.ts](file:///src/main/infra/storage/session-service.ts) / [keychain.ts](file:///src/main/infra/storage/keychain.ts) / [app-data.ts](file:///src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///src/main/infra/storage/telemetry-pref.ts) + 4 测试 |
+| code/ | 2 | [code-analyzer.ts](file:///src/main/infra/code-analysis/code-analyzer.ts) + 1 测试 |
+| codebase/ | 1 | [codebase-service.ts](file:///src/main/infra/codebase/codebase-service.ts) |
+| file/ | 2 | [file-service.ts](file:///src/main/infra/file/file-service.ts) + 1 测试 |
+| git/ | 2 | [git-service.ts](file:///src/main/infra/git/git-service.ts) + 1 测试 |
+| search/ | 1 | [search-service.ts](file:///src/main/infra/search/search-service.ts) |
+| terminal/ | 1 | [terminal-service.ts](file:///src/main/infra/terminal/terminal-service.ts) |
+| update/ | 2 | [update-service.ts](file:///src/main/infra/update/update-service.ts) + 1 测试 |
 
 ### 2.2 src/main/ipc/ — IPC Handler（16 个 handler 文件）
 
-按域对应关系见 [01-architecture.md §3.1](file:///f:/TraeProjects/1/docs/design/01-architecture.md) 的 IPC 表格。每个 handler 文件注册本域的 invoke + subscribe 通道。
+按域对应关系见 [01-architecture.md §3.1](file:///docs/design/01-architecture.md) 的 IPC 表格。每个 handler 文件注册本域的 invoke + subscribe 通道。
 
 ### 2.3 其他 src/main 子目录
 
 | 目录 | 文件 | 职责 |
 |---|---|---|
-| config/ | [index.ts](file:///f:/TraeProjects/1/src/main/config/index.ts) + [config.test.ts](file:///f:/TraeProjects/1/src/main/config/config.test.ts) | 应用配置（环境变量读取、缓存） |
+| config/ | [index.ts](file:///src/main/config/index.ts) + [config.test.ts](file:///src/main/config/config.test.ts) | 应用配置（环境变量读取、缓存） |
 | security/ | — | CSP 策略注入相关 |
-| telemetry/ | [otel.ts](file:///f:/TraeProjects/1/src/main/infra/telemetry/otel.ts) | OpenTelemetry 初始化 |
-| utils/ | [logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) / [wrap.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.ts) / [retry.ts](file:///f:/TraeProjects/1/src/main/infra/ai/llm-client/retry.ts) + 测试 | 工具函数 |
-| index.ts | [src/main/index.ts](file:///f:/TraeProjects/1/src/main/index.ts) | 主进程入口 |
-| service-container.ts | [src/main/service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 18 服务统一生命周期管理（2026-08-17 实测） |
+| telemetry/ | [otel.ts](file:///src/main/infra/telemetry/otel.ts) | OpenTelemetry 初始化 |
+| utils/ | [logger.ts](file:///src/main/utils/logger.ts) / [wrap.ts](file:///src/main/utils/wrap.ts) / [retry.ts](file:///src/main/infra/ai/llm-client/retry.ts) + 测试 | 工具函数 |
+| index.ts | [src/main/index.ts](file:///src/main/index.ts) | 主进程入口 |
+| service-container.ts | [src/main/service-container.ts](file:///src/main/service-container.ts) | 18 服务统一生命周期管理（2026-08-17 实测） |
 
 ### 2.4 src/main/infra/ai/tools/ — 内置工具（31 个）
 
-实际注册 31 个工具（[tools/index.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/index.ts) `registerBuiltinTools`，2026-08-22 实测）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / **run_workflow** / web_fetch / save_memory / load_skill / lsp_definition / lsp_references / **lsp_hover**：
+实际注册 31 个工具（[tools/index.ts](file:///src/main/infra/ai/tools/index.ts) `registerBuiltinTools`，2026-08-22 实测）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / **run_workflow** / web_fetch / save_memory / load_skill / lsp_definition / lsp_references / **lsp_hover**：
 
 | 工具文件 | 工具名 | 权限 | 依赖 |
 |---|---|---|---|
-| [read-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/read-file.tool.ts) | read_file | auto | IFileService |
-| [write-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/write-file.tool.ts) | write_file | ask | IFileService |
-| [list-directory.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/list-directory.tool.ts) | list_directory | auto | IFileService |
-| [code-review.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/code-review.tool.ts) | code_review | auto | IFileService |
-| [grep.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/grep.tool.ts) | grep | auto | ISearchService |
-| [glob.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/glob.tool.ts) | glob | auto | ISearchService |
-| [terminal.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/terminal.tool.ts) | terminal | ask | ITerminalService |
-| [run-command.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/run-command.tool.ts) | run_command | ask | 无 |
-| [edit-file.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/edit-file.tool.ts) | edit_file | ask | 无 |
-| [git-add.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/git-add.tool.ts) | git_add | ask | IGitService |
-| [git-commit.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/git-commit.tool.ts) | git_commit | ask | IGitService |
-| [git-push.tool.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tools/git-push.tool.ts) | git_push | ask | IGitService |
+| [read-file.tool.ts](file:///src/main/infra/ai/tools/read-file.tool.ts) | read_file | auto | IFileService |
+| [write-file.tool.ts](file:///src/main/infra/ai/tools/write-file.tool.ts) | write_file | ask | IFileService |
+| [list-directory.tool.ts](file:///src/main/infra/ai/tools/list-directory.tool.ts) | list_directory | auto | IFileService |
+| [code-review.tool.ts](file:///src/main/infra/ai/tools/code-review.tool.ts) | code_review | auto | IFileService |
+| [grep.tool.ts](file:///src/main/infra/ai/tools/grep.tool.ts) | grep | auto | ISearchService |
+| [glob.tool.ts](file:///src/main/infra/ai/tools/glob.tool.ts) | glob | auto | ISearchService |
+| [terminal.tool.ts](file:///src/main/infra/ai/tools/terminal.tool.ts) | terminal | ask | ITerminalService |
+| [run-command.tool.ts](file:///src/main/infra/ai/tools/run-command.tool.ts) | run_command | ask | 无 |
+| [edit-file.tool.ts](file:///src/main/infra/ai/tools/edit-file.tool.ts) | edit_file | ask | 无 |
+| [git-add.tool.ts](file:///src/main/infra/ai/tools/git-add.tool.ts) | git_add | ask | IGitService |
+| [git-commit.tool.ts](file:///src/main/infra/ai/tools/git-commit.tool.ts) | git_commit | ask | IGitService |
+| [git-push.tool.ts](file:///src/main/infra/ai/tools/git-push.tool.ts) | git_push | ask | IGitService |
 
 ## 3. src/preload/ — Preload 脚本
 
@@ -178,7 +178,7 @@ src/renderer/
 
 ## 5. packages/shared/ — 跨进程共享包
 
-[packages/shared/src/index.ts](file:///f:/TraeProjects/1/packages/shared/src/index.ts) 统一导出，31 个 .ts 文件（含 4 测试）：
+[packages/shared/src/index.ts](file:///packages/shared/src/index.ts) 统一导出，31 个 .ts 文件（含 4 测试）：
 
 ```
 packages/shared/src/
@@ -219,7 +219,7 @@ packages/shared/src/
     └── smoke.test.ts
 ```
 
-**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///f:/TraeProjects/1/src/preload/index.ts#L27)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
+**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///src/preload/index.ts#L27)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
 
 ## 6. packages/tsconfig/ — TS 预设包
 
@@ -250,19 +250,19 @@ e2e/
 
 | 文件 | 路径 |
 |---|---|
-| 根 tsconfig | [tsconfig.json](file:///f:/TraeProjects/1/tsconfig.json) |
-| main tsconfig | [src/main/tsconfig.json](file:///f:/TraeProjects/1/src/main/tsconfig.json) |
-| renderer tsconfig | [src/renderer/tsconfig.json](file:///f:/TraeProjects/1/src/renderer/tsconfig.json) |
-| preload tsconfig | [src/preload/tsconfig.json](file:///f:/TraeProjects/1/src/preload/tsconfig.json) |
-| shared tsconfig | [packages/shared/tsconfig.json](file:///f:/TraeProjects/1/packages/shared/tsconfig.json) |
-| TS 预设包 | [packages/tsconfig/](file:///f:/TraeProjects/1/packages/tsconfig/tsconfig.json) |
-| electron-vite 配置 | [electron.vite.config.ts](file:///f:/TraeProjects/1/electron.vite.config.ts) |
-| biome 配置 | [biome.json](file:///f:/TraeProjects/1/biome.json) |
-| electron-builder | [electron-builder.yml](file:///f:/TraeProjects/1/electron-builder.yml) |
-| vitest（3 套） | [src/main/vitest.config.ts](file:///f:/TraeProjects/1/src/main/vitest.config.ts) / [src/renderer/vitest.config.ts](file:///f:/TraeProjects/1/src/renderer/vitest.config.ts) / [packages/shared/vitest.config.ts](file:///f:/TraeProjects/1/packages/shared/vitest.config.ts) |
-| playwright（3 套） | [e2e/playwright.config.ts](file:///f:/TraeProjects/1/e2e/playwright.config.ts) / [e2e/playwright.electron.config.ts](file:///f:/TraeProjects/1/e2e/playwright.electron.config.ts) / [e2e/playwright.smoke.config.ts](file:///f:/TraeProjects/1/e2e/playwright.smoke.config.ts) |
-| sentry | [sentry.properties](file:///f:/TraeProjects/1/sentry.properties) + [.env](file:///f:/TraeProjects/1/.env) |
-| audit 白名单 | [.nsprc](file:///f:/TraeProjects/1/.nsprc) |
+| 根 tsconfig | [tsconfig.json](file:///tsconfig.json) |
+| main tsconfig | [src/main/tsconfig.json](file:///src/main/tsconfig.json) |
+| renderer tsconfig | [src/renderer/tsconfig.json](file:///src/renderer/tsconfig.json) |
+| preload tsconfig | [src/preload/tsconfig.json](file:///src/preload/tsconfig.json) |
+| shared tsconfig | [packages/shared/tsconfig.json](file:///packages/shared/tsconfig.json) |
+| TS 预设包 | [packages/tsconfig/](file:///packages/tsconfig/tsconfig.json) |
+| electron-vite 配置 | [electron.vite.config.ts](file:///electron.vite.config.ts) |
+| biome 配置 | [biome.json](file:///biome.json) |
+| electron-builder | [electron-builder.yml](file:///electron-builder.yml) |
+| vitest（3 套） | [src/main/vitest.config.ts](file:///src/main/vitest.config.ts) / [src/renderer/vitest.config.ts](file:///src/renderer/vitest.config.ts) / [packages/shared/vitest.config.ts](file:///packages/shared/vitest.config.ts) |
+| playwright（3 套） | [e2e/playwright.config.ts](file:///e2e/playwright.config.ts) / [e2e/playwright.electron.config.ts](file:///e2e/playwright.electron.config.ts) / [e2e/playwright.smoke.config.ts](file:///e2e/playwright.smoke.config.ts) |
+| sentry | [sentry.properties](file:///sentry.properties) + [.env](file:///.env) |
+| audit 白名单 | [.nsprc](file:///.nsprc) |
 
 ## 9. 测试目录布局
 

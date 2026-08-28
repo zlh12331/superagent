@@ -41,7 +41,7 @@
 | jsdom | `^29.1.1` | 浏览器环境模拟 |
 | @axe-core/playwright | `^4.12.1` | 可访问性审计 |
 
-源码：[package.json#L79-L117](file:///f:/TraeProjects/1/package.json#L79)（devDependencies）。
+源码：[package.json#L79-L117](file:///package.json#L79)（devDependencies）。
 
 > 注：`msw` 已从 devDependencies 中移除，渲染层 mock 由独立 mock-api 层实现（见 §5.1）。
 
@@ -53,13 +53,13 @@
 
 | 配置 | 路径 | 作用域 |
 |------|------|------|
-| 配置 1 | [src/main/vitest.config.ts](file:///f:/TraeProjects/1/src/main/vitest.config.ts) | 主进程测试 |
-| 配置 2 | [src/renderer/vitest.config.ts](file:///f:/TraeProjects/1/src/renderer/vitest.config.ts) | 渲染进程测试 |
-| 配置 3 | [packages/shared/vitest.config.ts](file:///f:/TraeProjects/1/packages/shared/vitest.config.ts) | shared 包测试 |
+| 配置 1 | [src/main/vitest.config.ts](file:///src/main/vitest.config.ts) | 主进程测试 |
+| 配置 2 | [src/renderer/vitest.config.ts](file:///src/renderer/vitest.config.ts) | 渲染进程测试 |
+| 配置 3 | [packages/shared/vitest.config.ts](file:///packages/shared/vitest.config.ts) | shared 包测试 |
 
 ### 3.2 跑测试脚本
 
-来自 [package.json#L33-L58](file:///f:/TraeProjects/1/package.json#L33)：
+来自 [package.json#L33-L58](file:///package.json#L33)：
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
@@ -155,11 +155,11 @@
 
 | 文件 | 说明 |
 |------|------|
-| [packages/shared/src/__tests__/channels.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/channels.test.ts) | IPC_CHANNELS 常量与 IpcChannel 类型校验 |
-| [packages/shared/src/__tests__/errors.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/errors.test.ts) | AppError / ErrorCode 错误码体系 |
-| [packages/shared/src/__tests__/api.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/api.test.ts) | IpcApi 接口形状 |
-| [packages/shared/src/__tests__/smoke.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/smoke.test.ts) | shared 包 smoke |
-| [packages/shared/src/__tests__/shared-gaps.test.ts](file:///f:/TraeProjects/1/packages/shared/src/__tests__/shared-gaps.test.ts) | 契约补测：deriveChannels/元数据构造器/单一真源一致性/schema 拦截抽查 |
+| [packages/shared/src/__tests__/channels.test.ts](file:///packages/shared/src/__tests__/channels.test.ts) | IPC_CHANNELS 常量与 IpcChannel 类型校验 |
+| [packages/shared/src/__tests__/errors.test.ts](file:///packages/shared/src/__tests__/errors.test.ts) | AppError / ErrorCode 错误码体系 |
+| [packages/shared/src/__tests__/api.test.ts](file:///packages/shared/src/__tests__/api.test.ts) | IpcApi 接口形状 |
+| [packages/shared/src/__tests__/smoke.test.ts](file:///packages/shared/src/__tests__/smoke.test.ts) | shared 包 smoke |
+| [packages/shared/src/__tests__/shared-gaps.test.ts](file:///packages/shared/src/__tests__/shared-gaps.test.ts) | 契约补测：deriveChannels/元数据构造器/单一真源一致性/schema 拦截抽查 |
 
 #### main 主进程（122 个）
 
@@ -169,14 +169,14 @@
 
 | 文件 | 说明 |
 |------|------|
-| [src/main/infra/ai/agent-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
-| [src/main/infra/ai/tool-executor.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/tool-executor.test.ts) | 工具执行 + 权限审批 |
-| [src/main/infra/ai/permission-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/ai/permission-service.test.ts) | 权限决策 + 记忆缓存 |
-| [src/main/infra/storage/session-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/storage/session-service.test.ts) | 会话 CRUD + 用量统计 + 回合记录 |
-| [src/main/infra/git/git-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/git/git-service.test.ts) | Git 操作（status / diff / add / commit / push） |
-| [src/main/infra/file/file-service.test.ts](file:///f:/TraeProjects/1/src/main/infra/file/file-service.test.ts) | 文件读写 + 目录列举 + 监听 |
-| [src/main/ipc/agent.handler.test.ts](file:///f:/TraeProjects/1/src/main/ipc/agent.handler.test.ts) | agent 域 IPC handler |
-| [src/main/security/csp.test.ts](file:///f:/TraeProjects/1/src/main/security/csp.test.ts) | CSP 安全策略 |
+| [src/main/infra/ai/agent-service.test.ts](file:///src/main/infra/ai/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
+| [src/main/infra/ai/tool-executor.test.ts](file:///src/main/infra/ai/tool-executor.test.ts) | 工具执行 + 权限审批 |
+| [src/main/infra/ai/permission-service.test.ts](file:///src/main/infra/ai/permission-service.test.ts) | 权限决策 + 记忆缓存 |
+| [src/main/infra/storage/session-service.test.ts](file:///src/main/infra/storage/session-service.test.ts) | 会话 CRUD + 用量统计 + 回合记录 |
+| [src/main/infra/git/git-service.test.ts](file:///src/main/infra/git/git-service.test.ts) | Git 操作（status / diff / add / commit / push） |
+| [src/main/infra/file/file-service.test.ts](file:///src/main/infra/file/file-service.test.ts) | 文件读写 + 目录列举 + 监听 |
+| [src/main/ipc/agent.handler.test.ts](file:///src/main/ipc/agent.handler.test.ts) | agent 域 IPC handler |
+| [src/main/security/csp.test.ts](file:///src/main/security/csp.test.ts) | CSP 安全策略 |
 
 #### renderer 渲染层（44 个）
 
@@ -186,19 +186,19 @@
 
 | 文件 | 说明 |
 |------|------|
-| [src/renderer/test/__tests__/mock-api.test.ts](file:///f:/TraeProjects/1/src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
-| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///f:/TraeProjects/1/src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
-| [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///f:/TraeProjects/1/src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
+| [src/renderer/test/__tests__/mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
+| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
+| [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
 
 #### scripts 工具链（5 个）
 
 | 文件 | 说明 |
 |------|------|
-| [scripts/i18n/locales-consistency.test.ts](file:///f:/TraeProjects/1/scripts/i18n/locales-consistency.test.ts) | i18n 语言包一致性校验 |
-| [scripts/changelog/lib/parse.test.ts](file:///f:/TraeProjects/1/scripts/changelog/lib/parse.test.ts) | changelog 解析 |
-| [scripts/scaffold/lib/text.test.ts](file:///f:/TraeProjects/1/scripts/scaffold/lib/text.test.ts) | scaffold 文本工具 |
-| [scripts/scaffold/lib/naming.test.ts](file:///f:/TraeProjects/1/scripts/scaffold/lib/naming.test.ts) | scaffold 命名工具 |
-| [scripts/scaffold/lib/args.test.ts](file:///f:/TraeProjects/1/scripts/scaffold/lib/args.test.ts) | scaffold 参数工具 |
+| [scripts/i18n/locales-consistency.test.ts](file:///scripts/i18n/locales-consistency.test.ts) | i18n 语言包一致性校验 |
+| [scripts/changelog/lib/parse.test.ts](file:///scripts/changelog/lib/parse.test.ts) | changelog 解析 |
+| [scripts/scaffold/lib/text.test.ts](file:///scripts/scaffold/lib/text.test.ts) | scaffold 文本工具 |
+| [scripts/scaffold/lib/naming.test.ts](file:///scripts/scaffold/lib/naming.test.ts) | scaffold 命名工具 |
+| [scripts/scaffold/lib/args.test.ts](file:///scripts/scaffold/lib/args.test.ts) | scaffold 参数工具 |
 
 ## 4. E2E 测试（Playwright）
 
@@ -289,26 +289,26 @@
 
 | 配置 | 路径 | 触发脚本 | 目标 |
 |------|------|---------|------|
-| Browser | [e2e/playwright.config.ts](file:///f:/TraeProjects/1/e2e/playwright.config.ts) | `pnpm test:e2e` | dev server 浏览器模式 |
-| Electron | [e2e/playwright.electron.config.ts](file:///f:/TraeProjects/1/e2e/playwright.electron.config.ts) | `pnpm test:e2e:electron` | 真实 Electron 窗口 |
-| Smoke | [e2e/playwright.smoke.config.ts](file:///f:/TraeProjects/1/e2e/playwright.smoke.config.ts) | `pnpm test:smoke` | 生产构建 smoke |
+| Browser | [e2e/playwright.config.ts](file:///e2e/playwright.config.ts) | `pnpm test:e2e` | dev server 浏览器模式 |
+| Electron | [e2e/playwright.electron.config.ts](file:///e2e/playwright.electron.config.ts) | `pnpm test:e2e:electron` | 真实 Electron 窗口 |
+| Smoke | [e2e/playwright.smoke.config.ts](file:///e2e/playwright.smoke.config.ts) | `pnpm test:smoke` | 生产构建 smoke |
 
-源码：[package.json#L52-L54](file:///f:/TraeProjects/1/package.json#L52)（test:e2e / test:e2e:electron / test:smoke 脚本）。
+源码：[package.json#L52-L54](file:///package.json#L52)（test:e2e / test:e2e:electron / test:smoke 脚本）。
 
 ### 4.2 E2E 文件清单（6 个）
 
 | 文件 | 类型 | 说明 |
 |------|------|------|
-| [e2e/smoke.spec.ts](file:///f:/TraeProjects/1/e2e/smoke.spec.ts) | Browser | dev server smoke |
-| [e2e/visual.spec.ts](file:///f:/TraeProjects/1/e2e/visual.spec.ts) | Browser | 视觉回归（脚本：`test:visual`） |
-| [e2e/a11y.spec.ts](file:///f:/TraeProjects/1/e2e/a11y.spec.ts) | Browser | 可访问性审计（axe-core，脚本：`test:a11y`） |
-| [e2e/electron.spec.ts](file:///f:/TraeProjects/1/e2e/electron.spec.ts) | Electron | 真实 Electron 窗口 |
-| [e2e/smoke.prod.spec.ts](file:///f:/TraeProjects/1/e2e/smoke.prod.spec.ts) | Smoke | 生产构建 smoke |
-| [e2e/perf/navigation.bench.spec.ts](file:///f:/TraeProjects/1/e2e/perf/navigation.bench.spec.ts) | Perf | 性能基准（脚本：`test:perf`） |
+| [e2e/smoke.spec.ts](file:///e2e/smoke.spec.ts) | Browser | dev server smoke |
+| [e2e/visual.spec.ts](file:///e2e/visual.spec.ts) | Browser | 视觉回归（脚本：`test:visual`） |
+| [e2e/a11y.spec.ts](file:///e2e/a11y.spec.ts) | Browser | 可访问性审计（axe-core，脚本：`test:a11y`） |
+| [e2e/electron.spec.ts](file:///e2e/electron.spec.ts) | Electron | 真实 Electron 窗口 |
+| [e2e/smoke.prod.spec.ts](file:///e2e/smoke.prod.spec.ts) | Smoke | 生产构建 smoke |
+| [e2e/perf/navigation.bench.spec.ts](file:///e2e/perf/navigation.bench.spec.ts) | Perf | 性能基准（脚本：`test:perf`） |
 
 ### 4.3 专项测试脚本
 
-来自 [package.json#L55-L57](file:///f:/TraeProjects/1/package.json#L55)（test:visual / test:a11y / test:perf 脚本）：
+来自 [package.json#L55-L57](file:///package.json#L55)（test:visual / test:a11y / test:perf 脚本）：
 
 | 脚本 | grep 模式 |
 |------|----------|
@@ -326,8 +326,8 @@
 
 渲染层维护独立 mock 层，使前端独立开发：
 
-- 位置：[src/renderer/test/](file:///f:/TraeProjects/1/src/renderer/test/)
-- 形状一致性测试：[mock-api.test.ts](file:///f:/TraeProjects/1/src/renderer/test/__tests__/mock-api.test.ts) 确保 mock 与真实 IpcApi 接口一致
+- 位置：[src/renderer/test/](file:///src/renderer/test/)
+- 形状一致性测试：[mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) 确保 mock 与真实 IpcApi 接口一致
 
 ### 5.2 关键 mock 约定（来自 project memory）
 
@@ -344,7 +344,7 @@ E2E browser mode 下无主进程，Sentry IPC 会失败，需加入 filter allow
 
 DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等待 Git trigger 激活，避免时序问题。
 
-源码：[DevPanel.test.tsx](file:///f:/TraeProjects/1/src/renderer/components/layout/__tests__/DevPanel.test.tsx)。
+源码：[DevPanel.test.tsx](file:///src/renderer/components/layout/__tests__/DevPanel.test.tsx)。
 
 ## 7. 测试质量评估
 
@@ -376,7 +376,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 ## 8. CI 中的测试矩阵
 
-详见 [07-engineering-design.md](file:///f:/TraeProjects/1/docs/design/07-engineering-design.md) §3 CI 矩阵。本节仅列出测试相关 job：
+详见 [07-engineering-design.md](file:///docs/design/07-engineering-design.md) §3 CI 矩阵。本节仅列出测试相关 job：
 
 | Job | OS | 测试范围 |
 |-----|-----|---------|
@@ -385,7 +385,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 | e2e-electron | windows-latest | `build` + `test:e2e:electron` |
 | smoke-prod | windows-latest | `build:win` + `test:smoke` |
 
-源码：[.github/workflows/ci.yml](file:///f:/TraeProjects/1/.github/workflows/ci.yml)。
+源码：[.github/workflows/ci.yml](file:///.github/workflows/ci.yml)。
 
 ## 9. 覆盖率豁免记录（2026-08 单元测试补全批次）
 

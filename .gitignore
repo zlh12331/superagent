@@ -115,3 +115,6 @@ docs/prototype/
 
 # 外部参考代码（docs/参考项目/，含 node_modules 约 2.6GB，不入仓）
 /docs/参考项目/
+
+# AI 会话生成的临时图片素材（不入仓）
+/vibe_images/

@@ -1,27 +1,27 @@
 # 技术栈文档
 
-> 基于 `code-agent-desktop` v1.0.0 实际 [package.json](file:///f:/TraeProjects/1/package.json) 整理。
+> 基于 `code-agent-desktop` v1.0.0 实际 [package.json](file:///package.json) 整理。
 > 整理时间：2026-07-23（依赖清单 2026-08-11 同步）
 
 ## 1. 项目基本信息
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| name | `code-agent-desktop` | [package.json#L2](file:///f:/TraeProjects/1/package.json#L2) |
-| version | `1.0.0` | [package.json#L3](file:///f:/TraeProjects/1/package.json#L3) |
-| description | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json#L4](file:///f:/TraeProjects/1/package.json#L4) |
-| type | `module` | [package.json#L7](file:///f:/TraeProjects/1/package.json#L7) |
-| main | `./out/main/index.js` | [package.json#L8](file:///f:/TraeProjects/1/package.json#L8) |
-| packageManager | `pnpm@10.0.0` | [package.json#L9](file:///f:/TraeProjects/1/package.json#L9) |
+| name | `code-agent-desktop` | [package.json#L2](file:///package.json#L2) |
+| version | `1.0.0` | [package.json#L3](file:///package.json#L3) |
+| description | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json#L4](file:///package.json#L4) |
+| type | `module` | [package.json#L7](file:///package.json#L7) |
+| main | `./out/main/index.js` | [package.json#L8](file:///package.json#L8) |
+| packageManager | `pnpm@10.0.0` | [package.json#L9](file:///package.json#L9) |
 
 ## 2. engines 与运行时要求
 
 | 依赖 | 版本要求 | 来源 |
 |---|---|---|
-| Node.js | `>=24.13.0` | [package.json#L10-L13](file:///f:/TraeProjects/1/package.json#L10) |
-| pnpm | `>=10.0.0` | [package.json#L10-L13](file:///f:/TraeProjects/1/package.json#L10) |
+| Node.js | `>=24.13.0` | [package.json#L10-L13](file:///package.json#L10) |
+| pnpm | `>=10.0.0` | [package.json#L10-L13](file:///package.json#L10) |
 
-`pnpm.onlyBuiltDependencies` 限制仅 3 个原生模块参与编译：`better-sqlite3` / `esbuild` / `node-pty`（[package.json#L14-L20](file:///f:/TraeProjects/1/package.json#L14)）。
+`pnpm.onlyBuiltDependencies` 限制仅 3 个原生模块参与编译：`better-sqlite3` / `esbuild` / `node-pty`（[package.json#L14-L20](file:///package.json#L14)）。
 
 ## 3. 依赖分类清单
 
@@ -74,7 +74,7 @@
 |---|---|---|
 | `better-sqlite3` | `^12.11.1` | SQLite 原生绑定 |
 | `drizzle-orm` | `^0.45.2` | TypeScript ORM |
-| `drizzle-kit` | `^0.31.10` | devDep，迁移工具（[drizzle.config.ts](file:///f:/TraeProjects/1/drizzle.config.ts) 已在根目录提供） |
+| `drizzle-kit` | `^0.31.10` | devDep，迁移工具（[drizzle.config.ts](file:///drizzle.config.ts) 已在根目录提供） |
 | `@types/better-sqlite3` | `^7.6.13` | devDep |
 
 ### 3.5 UI / 样式
@@ -152,20 +152,20 @@
 
 ## 4. Monorepo 结构
 
-[pnpm-workspace.yaml](file:///f:/TraeProjects/1/pnpm-workspace.yaml) 配置 `packages/*`，包含两个子包：
+[pnpm-workspace.yaml](file:///pnpm-workspace.yaml) 配置 `packages/*`，包含两个子包：
 
-- [packages/shared](file:///f:/TraeProjects/1/packages/shared)：跨进程共享包（含独立 vitest.config.ts、tsconfig）
-- [packages/tsconfig](file:///f:/TraeProjects/1/packages/tsconfig)：暴露 `base.json` / `node.json` / `web.json` 三个预设
+- [packages/shared](file:///packages/shared)：跨进程共享包（含独立 vitest.config.ts、tsconfig）
+- [packages/tsconfig](file:///packages/tsconfig)：暴露 `base.json` / `node.json` / `web.json` 三个预设
 
 ## 5. TypeScript 配置
 
-根 [tsconfig.json](file:///f:/TraeProjects/1/tsconfig.json) 是 solution-style 配置，无 `compilerOptions`，通过 `references` 编排 5 个子项目：
+根 [tsconfig.json](file:///tsconfig.json) 是 solution-style 配置，无 `compilerOptions`，通过 `references` 编排 5 个子项目：
 
 ```
 references: packages/tsconfig, packages/shared, src/main, src/preload, src/renderer
 ```
 
-严格模式集中在 [packages/tsconfig/base.json](file:///f:/TraeProjects/1/packages/tsconfig/base.json)：
+严格模式集中在 [packages/tsconfig/base.json](file:///packages/tsconfig/base.json)：
 
 - `target`: `ES2024`
 - `module`: `ESNext`
@@ -191,7 +191,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ## 6. Vite 构建配置
 
-[electron.vite.config.ts](file:///f:/TraeProjects/1/electron.vite.config.ts) 三入口分别配置：
+[electron.vite.config.ts](file:///electron.vite.config.ts) 三入口分别配置：
 
 | 入口 | input | sourcemap | 特殊处理 |
 |---|---|---|---|
@@ -207,7 +207,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ## 7. Biome 配置
 
-[biome.json](file:///f:/TraeProjects/1/biome.json)（schema 2.5.4）：
+[biome.json](file:///biome.json)（schema 2.5.4）：
 
 - **formatter**：space 缩进 2，lineWidth 100，LF 行尾
 - **linter**：`recommended` preset + 自定义规则
@@ -224,7 +224,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ### .env / .env.example（项目根目录）
 
-[.env.example](file:///f:/TraeProjects/1/.env.example) 提供环境变量模板，[.env](file:///f:/TraeProjects/1/.env) 为实际值：
+[.env.example](file:///.env.example) 提供环境变量模板，[.env](file:///.env) 为实际值：
 
 - `SENTRY_DSN="http://b24f47b022820d979452bf4ef3d43473@127.0.0.1:9000/3"`
 - `SENTRY_TRACES_SAMPLE_RATE=1.0`
@@ -233,7 +233,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ### sentry.properties
 
-[sentry.properties](file:///f:/TraeProjects/1/sentry.properties)：
+[sentry.properties](file:///sentry.properties)：
 
 - `defaults.url=http://127.0.0.1:9000`
 - `defaults.org=sentry`
@@ -245,7 +245,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 1. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
 2. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
 3. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
-4. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///f:/TraeProjects/1/electron-builder.yml#L97) `publish.url: https://code-agent.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
+4. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///electron-builder.yml#L97) `publish.url: https://code-agent.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
 
 ## 10. 关键亮点
 
