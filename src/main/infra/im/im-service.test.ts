@@ -34,7 +34,7 @@ class FakeAdapter implements IChannelAdapter {
   }
 
   async connect(): Promise<void> {
-    // 骨架渠道（implemented=false）：抛 NOT_IMPLEMENTED（对齐 SkeletonChannelAdapter）
+    // 未实现渠道（implemented=false）：抛 NOT_IMPLEMENTED（对齐 IChannelAdapter 契约）
     if (!this.implemented) {
       throw new Error('IM_CHANNEL_NOT_IMPLEMENTED');
     }

@@ -8,50 +8,13 @@
 // - wechat：完整实现（iLink 智能机器人：长轮询接收 + 消息发送）
 // ──────────────────────────────────────────────────────────────
 
-import type { ChannelKind } from '@code-agent/shared/main';
-import { AppError, ErrorCode } from '@code-agent/shared/main';
-import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
+import type { IChannelAdapter } from '../channel/types';
 import { DingTalkAdapter } from './dingtalk-adapter';
 import { FeishuAdapter } from './feishu-adapter';
 import { QqAdapter } from './qq-adapter';
 import { TelegramAdapter } from './telegram-adapter';
 import { WecomAdapter } from './wecom-adapter';
 import { WeixinAdapter } from './weixin-adapter';
-
-/**
- * 骨架渠道适配器（未实现渠道的统一占位）
- *
- * connect 抛 IM_CHANNEL_NOT_IMPLEMENTED；设置页展示为"待接入"。
- */
-export class SkeletonChannelAdapter implements IChannelAdapter {
-  readonly kind: ChannelKind;
-  readonly displayName: string;
-  readonly implemented = false;
-  readonly isConnected = false;
-  readonly configHint: string;
-
-  constructor(kind: ChannelKind, displayName: string, note: string) {
-    this.kind = kind;
-    this.displayName = displayName;
-    this.configHint = note;
-  }
-
-  async connect(): Promise<void> {
-    throw new AppError(ErrorCode.IM_CHANNEL_NOT_IMPLEMENTED, this.configHint);
-  }
-
-  async disconnect(): Promise<void> {
-    // 骨架无连接，no-op
-  }
-
-  async sendMessage(_target: ChannelTarget, _text: string): Promise<void> {
-    throw new AppError(ErrorCode.IM_CHANNEL_NOT_IMPLEMENTED, this.configHint);
-  }
-
-  onMessage(_handler: (message: ChannelIncomingMessage) => void): () => void {
-    return () => {};
-  }
-}
 
 /**
  * 全部渠道适配器实例（设置页列表 + 管理器注册共用）
