@@ -3,9 +3,9 @@
 > **文档用途**：本文档为开发蓝图——依据产品截图逆向推导，用于开发本项目全新的模型设置页面（前端：列表页 + 3 类弹窗；后端配套：`runtime_models` 表迁移 + 新增 IPC，见六、后端开发范围）。
 >
 > 依据产品截图逆向推导（列表页 + 添加模型选择器 + 配置弹窗 + 编辑弹窗 + 删除确认弹窗）。
-> 本文档为待评审稿，规格中推断项以「推断」标注，待产品确认后更新。
 >
-> **现状与目标差距**：本文档描述的是目标设计。现有实现（设置页「模型」pane，`models-section.tsx`）仅具备部分能力：提供商 API Key 配置行 + 运行时模型增删 + 模型参数 + 审批权限；本文的模型列表表格、添加模型弹窗、配置弹窗、删除确认弹窗、启停开关、编辑均为目标形态，落地前需评审。
+> **实现状态（已落地）**：本文描述的目标形态已全部实现——列表页 `models-section.tsx`、三类弹窗 `sections/dialogs/{add-model-dialog,model-config-dialog,model-config-fields}.tsx`、删除确认；后端 `settings:addRuntimeModel / updateRuntimeModel / removeRuntimeModel / listRuntimeModels` 与 `models:test` 均已进定义表并接线。
+> 表单锁定规则：编辑模式下 `providerKind` 与 `modelId` 均为只读（`updateRuntimeModel` 以 `modelId` 为主键定位行，允许改动会导致保存静默失效）。
 
 ## 一、设置页面全局概览
 

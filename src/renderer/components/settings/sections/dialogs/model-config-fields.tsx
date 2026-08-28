@@ -93,6 +93,8 @@ export function ModelConfigFields({
 
   const isProvider = mode === 'provider';
   const isEdit = mode === 'edit';
+  /** modelId 锁定：编辑模式（update 主键）或服务商下拉已选定 */
+  const modelIdLocked = isEdit || (isProvider && !values.useOtherModel);
 
   const apiFormat = t('settings.modelMgmt.apiFormatOpenAI');
   const inputClass = 'text-xs';
@@ -207,12 +209,13 @@ export function ModelConfigFields({
 
       <div className="flex flex-col gap-1.5">
         <Label className={labelClass}>{t('settings.modelMgmt.modelIdLabel')} *</Label>
+        {/* 锁定：编辑模式（update 以 modelId 为主键，改动即保存静默无效）或服务商下拉已选定 */}
         <Input
           type="text"
           value={isProvider && !values.useOtherModel ? values.selectedModel : values.modelId}
           placeholder={t('settings.modelMgmt.modelIdPlaceholder')}
-          disabled={isProvider && !values.useOtherModel}
-          className={cn(inputClass, isProvider && !values.useOtherModel && 'opacity-60')}
+          disabled={modelIdLocked}
+          className={cn(inputClass, modelIdLocked && 'opacity-60')}
           onChange={(e) => onFieldChange('modelId', e.target.value)}
         />
         {error !== undefined && <p className="text-error-text text-2xs">{error}</p>}

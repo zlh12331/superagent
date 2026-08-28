@@ -127,4 +127,12 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
     });
     expect(testArg().baseUrl).toBe('https://old.example.com');
   });
+
+  it('modelId 只读：编辑模式锁定主键（改动会让 update 命中不到行）', async () => {
+    renderDialog();
+
+    const modelIdInput = (await screen.findByPlaceholderText('请输入模型 ID')) as HTMLInputElement;
+    expect(modelIdInput.value).toBe('my-coder');
+    expect(modelIdInput.disabled).toBe(true);
+  });
 });
