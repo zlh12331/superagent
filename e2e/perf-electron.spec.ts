@@ -27,10 +27,11 @@ const MAIN_ENTRY = join(__dirname, '..', 'out', 'main', 'index.js');
 const E2E_USER_DATA = join(__dirname, '..', '.e2e-user-data');
 /** 大 payload 测试文件（500KB，测试进程预写入） */
 const PAYLOAD_PATH = join(E2E_USER_DATA, 'perf-payload.txt');
-/** 事件推送通道：chat:stream:part（渲染层无业务 hook 订阅，测纯 IPC 分发吞吐）
+/** 事件推送通道：agent:stream:part（chat 域已从定义表移除）
+ * 渲染层仅在 sendMessages 期间订阅该通道，空闲态无业务 hook → 测纯 IPC 分发吞吐。
  * 注意：terminal:event:output 有业务 hook（terminal-store→xterm），其全链路吞吐受
  * 渲染层路径限制（实测 ~1-6 事件/s，见 12-performance-spec 待优化项），不适合测 IPC 层 */
-const EVENT_CHANNEL = 'chat:stream:part';
+const EVENT_CHANNEL = 'agent:stream:part';
 /** 事件吞吐用例的推送数量 */
 const EVENT_COUNT = 200;
 /** 测试实例独立调试端口（避免与 dev 实例的 9222 冲突，CDP 连不上会 launch 超时） */
@@ -167,7 +168,7 @@ test.describe('真实 Electron IPC 性能基准', () => {
           new Promise<{ received: number; elapsed: number }>((resolve) => {
             let received = 0;
             const start = performance.now();
-            const off = window.api.chat.subscribePart(() => {
+            const off = window.api.agent.subscribeStreamPart(() => {
               received += 1;
               if (received >= count) {
                 off();

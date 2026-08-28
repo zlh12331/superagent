@@ -147,7 +147,8 @@ test.describe('Electron 应用 E2E 测试', () => {
     expect(apiKeys).toContain('agent');
     expect(apiKeys).toContain('file');
     expect(apiKeys).toContain('git');
-    expect(apiKeys).toContain('codebase');
+    // codebase 域已移除（4824e3f：改为 Agent 工具），改校验 terminal 域
+    expect(apiKeys).toContain('terminal');
     expect(apiKeys).toContain('tool');
     expect(apiKeys).toContain('settings');
   });
