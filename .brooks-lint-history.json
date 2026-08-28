@@ -1,9 +1,0 @@
-[
-  {
-    "date": "2026-08-24",
-    "mode": "health",
-    "score": 94,
-    "findings": { "critical": 0, "warning": 2, "suggestion": 2 },
-    "scope": "entire project f:\\TraeProjects\\1"
-  }
-]

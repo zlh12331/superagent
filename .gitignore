@@ -15,6 +15,9 @@ release/
 .vite/
 # 工具运行时状态（钩子会话锁等机器生成文件）
 .mimosa/
+.mimocode/
+# AI 代码评审插件历史状态（本地审计存档，不入仓）
+.brooks-lint-history.json
 
 # IDE
 .vscode/*
