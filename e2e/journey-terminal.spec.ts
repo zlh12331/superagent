@@ -64,8 +64,16 @@ test.describe('终端用户旅程（batch 3）', () => {
     // 输入区（xterm 隐藏 textarea——键盘输入入口）存在
     const termInput = page.locator('.xterm-helper-textarea, .xterm textarea').first();
     await expect(termInput).toBeVisible({ timeout: 10_000 });
-    // 输入交互可用（焦点可获——xterm 渲染层正确性由集成测试覆盖）
-    await termInput.click();
+    // 交互入口 = 点击终端可视区（真实用户路径）：helper textarea 是跟随光标的
+    // 1px 输入代理，光标在首列时正好位于右面板 resizer 热区下方，不能直接点它
+    await page.locator('.xterm-screen, .xterm').first().click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.activeElement?.classList.contains('xterm-helper-textarea') ?? false,
+        ),
+      )
+      .toBe(true);
     await termInput.pressSequentially('echo hello');
     await termInput.press('Enter');
     await page.waitForTimeout(500);

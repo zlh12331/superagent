@@ -56,12 +56,24 @@ async function openExistingSession(page: import('@playwright/test').Page): Promi
   });
 }
 
-/** 等待发送按钮可用（value 生效后 canSend true；isStreaming 期间禁用；
-    vite dev 冷编译下 React state 同步可达数秒——放宽至 15s） */
-async function waitSendReady(page: import('@playwright/test').Page): Promise<void> {
+/** 等待发送按钮可用（value 生效后 canSend true；isStreaming 期间禁用）
+ *  偶发失败签名是 .send-btn[disabled] 持续超时（streaming 态渲染的是 .stop-gen-btn，
+ *  故非流式阻塞）——vite dev 冷编译下 fill 后 React value/state 脱节，重填同一文本
+ *  触发 onChange 重同步（复用 helper 手法；文本不变以保末尾 user 气泡断言） */
+async function waitSendReady(page: import('@playwright/test').Page, text: string): Promise<void> {
   const sendBtn = page.locator('.send-btn:visible').first();
   await expect(sendBtn).toBeVisible({ timeout: 15_000 });
-  await expect(sendBtn).toBeEnabled({ timeout: 15_000 });
+  const input = page.locator('.composer-box textarea, .composer textarea').first();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await expect(sendBtn).toBeEnabled({ timeout: 4_000 });
+      return;
+    } catch {
+      await input.fill(text);
+      await page.waitForTimeout(500);
+    }
+  }
+  throw new Error(`发送按钮不可用（3 次重填）: ${text}`);
 }
 
 /** 输入消息（fill 触发 input 事件更可靠——pressSequentially 偶发不触发 React onChange；验证 value） */
@@ -108,7 +120,7 @@ async function sendAndWaitRun(
     } catch {
       // 发送未触发——完整重试（重输同一文本 + 等待就绪）
       await typeMessage(page, retryText);
-      await waitSendReady(page);
+      await waitSendReady(page, retryText);
     }
   }
   throw new Error('发送失败（3 次尝试——agent.run 未被调用）');
@@ -154,11 +166,12 @@ test.describe('聊天用户旅程（batch 1）', () => {
     // 进入已有会话（首页草稿无 workingDir——发送被产品设计拦截）
     await openExistingSession(page);
 
-    const input = await typeMessage(page, '你好，帮我看看这个项目');
+    const text = '你好，帮我看看这个项目';
+    const input = await typeMessage(page, text);
     // 等待发送就绪（canSend——防 Enter 丢失）
-    await waitSendReady(page);
+    await waitSendReady(page, text);
     // 发送并等待 transport 调用（重试复用同一文本——vite dev 时序）
-    await sendAndWaitRun(page, '你好，帮我看看这个项目', async () => {
+    await sendAndWaitRun(page, text, async () => {
       await input.press('Enter');
     });
   });
@@ -170,13 +183,14 @@ test.describe('聊天用户旅程（batch 1）', () => {
     await wrapAgentRun(page);
     await openExistingSession(page);
 
-    await typeMessage(page, '用发送按钮');
-    await waitSendReady(page);
-    await sendAndWaitRun(page, '用发送按钮', async () => {
+    const text = '用发送按钮';
+    await typeMessage(page, text);
+    await waitSendReady(page, text);
+    await sendAndWaitRun(page, text, async () => {
       await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
     // 渲染断言：发送按钮路径渲染 user 气泡（含所发文本）
-    await expect(page.locator('.msg.user .msg-content', { hasText: '用发送按钮' })).toBeVisible({
+    await expect(page.locator('.msg.user .msg-content', { hasText: text })).toBeVisible({
       timeout: 10_000,
     });
     // 渲染断言：assistant 流式回复最终渲染 mock 文案（消息渲染核心路径自动化兜底）
