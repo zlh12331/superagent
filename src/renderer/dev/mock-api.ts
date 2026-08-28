@@ -14,7 +14,12 @@
 //   保证与 shared 契约同步。
 // ──────────────────────────────────────────────────────────────
 
-import { IPC_PROTOCOL_VERSION, type IpcApi, type SessionMeta } from '@code-agent/shared/renderer';
+import {
+  IPC_PROTOCOL_VERSION,
+  type IpcApi,
+  type RemoteStatusRes,
+  type SessionMeta,
+} from '@code-agent/shared/renderer';
 import type { ModelMessage } from 'ai';
 
 /** IPC 方法入参类型推导（mock 实现标注用） */
@@ -148,6 +153,32 @@ const streamIntervals = new Map<string, ReturnType<typeof setInterval>>();
 
 /** mock 会话目标存储（浏览器模式持久化：goal:create → list 闭环，对齐主进程每会话一目标语义） */
 const mockGoals: Array<{ sessionId: string; condition: string }> = [];
+
+/** 远程控制模拟状态（可变：开启后返回假令牌/端点，Web 预览可联调配对面板） */
+let mockRemoteRunning = false;
+
+/** 远程控制状态快照（对齐真实 handler：停止时令牌与端点置空） */
+function mockRemoteStatus(): RemoteStatusRes {
+  return mockRemoteRunning
+    ? {
+        running: true,
+        port: 4173,
+        token: 'mock-remote-token-0123456789abcdef',
+        instanceName: 'web-preview',
+        addresses: ['http://192.168.1.10:4173'],
+        activeCommands: 0,
+        lastCommandAt: null,
+      }
+    : {
+        running: false,
+        port: null,
+        token: null,
+        instanceName: 'web-preview',
+        addresses: [],
+        activeCommands: 0,
+        lastCommandAt: null,
+      };
+}
 
 /** 模拟助手回答：按 AI SDK v7 UIMessageChunk 格式（带 id）分片推送 → end（含 usage） */
 function simulateAgentStream(sessionId: string, userText: string): void {
@@ -938,6 +969,17 @@ function createMockApi(): IpcApi {
       list: async () => ok({ channels: [] }),
       start: async () => ok({ ok: true }),
       stop: async () => ok({ ok: true }),
+    },
+    remote: {
+      getStatus: async () => ok(mockRemoteStatus()),
+      start: async () => {
+        mockRemoteRunning = true;
+        return ok(mockRemoteStatus());
+      },
+      stop: async () => {
+        mockRemoteRunning = false;
+        return ok(mockRemoteStatus());
+      },
     },
     tool: {
       list: async () => ok({ tools: [] }),
