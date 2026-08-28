@@ -15,6 +15,7 @@
 //   3. GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
 //   4. ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
 //   5. ImService.stopAll()         停止 IM 渠道长连接
+//   5.5 RemoteControlService.stop() 停止远程控制 HTTP 监听 + UDP 发现广播
 //   6. PermissionService.dispose() reject 所有 pending 审批 Promise
 //   7. agentAskService.dispose()   清理 pending 提问
 //   8. FileService.dispose()       关闭所有 chokidar watcher
@@ -82,6 +83,7 @@ import { LspServerManager } from './infra/lsp/lsp-server-manager';
 import { resolveDistillLlmConfig } from './infra/memory-hub/llm-config';
 import { createDeferredMemoryPort, MemoryHubService } from './infra/memory-hub/memory-hub-service';
 import type { MemoryPort } from './infra/memory-hub/types';
+import { type IRemoteControlService, RemoteControlService } from './infra/remote/remote-control';
 import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
 import { readApprovalModeSync } from './infra/storage/approval-pref';
@@ -480,6 +482,8 @@ class ServiceContainer {
   private imService: ImService | null = null;
   /** IM → Agent 桥接实例（挂载后订阅渠道消息） */
   private imBridge: ImAgentBridge | null = null;
+  /** 远程控制服务实例（LAN 直连 HTTP 入口 + UDP 发现广播） */
+  private remoteControlService: IRemoteControlService | null = null;
   /** 会话目标服务实例（挂载回合监听 + handler 注入） */
   private goalService: GoalService | null = null;
   /** MemoryHub sidecar 实例（上游记忆引擎） */
@@ -528,6 +532,17 @@ class ServiceContainer {
       await this.imService.stopAll();
       this.imService = null;
     }
+  }
+
+  /**
+   * 获取远程控制服务（延迟初始化）：LAN 直连 HTTP 命令入口 + UDP 发现广播。
+   * 命令执行由桥接层订阅 onCommand 挂载（复用 IM 无头执行路径），本容器只管生命周期。
+   */
+  getRemoteControlService(): IRemoteControlService {
+    if (this.remoteControlService === null) {
+      this.remoteControlService = new RemoteControlService();
+    }
+    return this.remoteControlService;
   }
 
   /**
@@ -799,6 +814,14 @@ class ServiceContainer {
         await this.imService.stopAll();
       }
       this.imService = null;
+    });
+
+    // 2.8 停止远程控制监听（LAN 直连 HTTP 命令入口 + UDP 发现广播收尾）
+    await runStep('remoteControlService.stop', async () => {
+      if (this.remoteControlService !== null) {
+        await this.remoteControlService.stop();
+      }
+      this.remoteControlService = null;
     });
 
     // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
