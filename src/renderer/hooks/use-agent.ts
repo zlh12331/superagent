@@ -120,8 +120,11 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
     });
   }, [transport, id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
 
+  // id 必须透传给 useChat：transport.sendMessages 用 options.chatId 作为 IPC sessionId，
+  // 只有 chatId === 会话 id，主进程回流的审批/事件才能按 sessionId 正确匹配（内联审批卡渲染）
   return useChat<Message>({
     ...chatOptions,
+    ...(id !== undefined ? { id } : {}),
     transport,
   });
 }

@@ -86,9 +86,9 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
    * 各会话的 agent 配置（chatId → config）
    *
    * configureFor(chatId, config) 按 useChat id 记录；sendMessages 优先按
-   * options.chatId 精确匹配，匹配失败回落 lastConfig（useChat 的 chatId 为
-   * 内部随机值、不与传入 id 恒等——兜底保证单会话架构稳定，
-   * 未来 chatId 可复现时 Map 提供精确并发隔离）。
+   * options.chatId 精确匹配（调用方透传 id 时 chatId === 会话 id），
+   * 未命中则回落 lastConfig（调用方未传 id 时 useChat 自生成随机 chatId，
+   * 兜底保证单会话架构稳定）。
    */
   private readonly configs = new Map<string, AgentConfig>();
   /** 最近一次配置（任意 configure/configureFor 均更新；sendMessages 兜底） */
@@ -120,8 +120,8 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
       ...config,
       workingDir: config.workingDir ?? prev?.workingDir,
     });
-    // 同步兜底配置：useChat 的 chatId 为内部随机值，sendMessages 无法精确
-    // 命中 Map 时回落最近配置（单会话架构等价于原单例行为）
+    // 同步兜底配置：调用方未传 id 时 useChat 自生成随机 chatId，sendMessages
+    // 无法命中 Map 时回落最近配置（单会话架构等价于原单例行为）
     this.lastConfig = {
       ...this.lastConfig,
       ...config,
@@ -151,8 +151,8 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         ),
       );
     }
-    // 优先按会话查专属配置（chatId = useChat 内部值，可能为随机串）；
-    // 匹配失败回落最近配置（单会话架构的稳定路径）
+    // 优先按会话查专属配置（调用方透传 id 时 chatId = 会话 id）；
+    // 未命中回落最近配置（调用方未传 id 的稳定路径）
     const config = this.configs.get(options.chatId) ?? this.lastConfig;
     if (config === undefined) {
       return Promise.reject(
