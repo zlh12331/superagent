@@ -9,9 +9,9 @@
 // 状态空间（对齐回合真实生命周期）：
 //   pendingGate     等待并发槽位（FIFO 排队）
 //   running         流执行中（流读取 / 工具调用）
-//   waitingApproval 等待用户审批（工具 permission=ask）——预留状态：
-//                   审批等待封装在 ToolExecutor 内部，运行时事件接入点
-//                   待 ToolExecutor 审批钩子暴露后接入（诚实标注）
+//   waitingApproval 等待用户审批（工具 permission=ask）
+//                   permission-service 审批生命周期监听 agent:approval:request 推送
+//                   触发 approval.requested 进入；决议完成 approval.responded 恢复
 //   completed       正常结束（final）
 //   aborted         用户中断（final）
 //   error           异常结束（final）
@@ -79,7 +79,7 @@ export const agentTurnMachine = createMachine({
     // 流执行中：文本/推理/工具调用均在 running 内（状态不细分，避免过度建模）
     running: {
       on: {
-        // 工具审批等待（预留：接入点 = ToolExecutor 审批钩子暴露后）
+        // 工具审批等待（permission-service 审批生命周期监听推送后触发）
         'approval.requested': { target: 'waitingApproval' },
         'stream.finished': { target: 'completed' },
         'stream.aborted': { target: 'aborted' },

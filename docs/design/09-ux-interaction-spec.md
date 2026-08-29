@@ -710,7 +710,7 @@ flowchart LR
 
 ### 8.4 hooks 关键逻辑（补全）
 
-**use-git**：status stale 10s；diff stale 0（不缓存）；diff queryKey 含 ref/staged/filePath。**use-file-tree**：loadedDirsRef 在 ref 而非 store（避免 setEntries 后重置标记）；loadDir 失败静默可重试；watch 事件过滤 watcherId；卸载 reset。**use-file-tree-ops**：joinPath 自动去重分隔符；delete 带 recursive:true、rename overwrite:false。**use-approval-bridge**：respondApproval 用 useMemo 缓存函数引用（防子组件重渲染）；rememberDecision 默认 false。**use-approval-mode**：乐观更新 + 失败回滚（setApprovalMode）。**use-tool-bridge**：toolName==='terminal' 且 action==='create' 且有 terminalId 时写 terminal-store（字段逐一 typeof 守卫）。**use-agent-bridge**：stream:error 且 code==='AI_RATE_LIMITED' 时触发限流横幅。**use-conversation-search**：匹配用 extractText + toLowerCase includes；navigate 循环取模。**use-system**：浏览器模式返回全 0 假数据（dev 预览形态完整）。
+**use-git**：status stale 10s；diff stale 0（不缓存）；diff queryKey 含 ref/staged/filePath。**use-file-tree**：loadedDirsRef 在 ref 而非 store（避免 setEntries 后重置标记）；loadDir 失败静默可重试；watch 事件过滤 watcherId；卸载 reset。**use-file-tree-ops**：joinPath 自动去重分隔符；delete 带 recursive:true、rename overwrite:false。**use-approval-bridge**：订阅 agent:approval:request 推送 → enqueue approvals-store；toolName→ApprovalType 由 classifyTool 映射（顺序敏感）；审批结果回传由 InlineApprovalCard 直接调用 approvalResponse，不入此 hook。**use-approval-mode**：乐观更新 + 失败回滚（setApprovalMode）。**use-tool-bridge**：toolName==='terminal' 且 action==='create' 且有 terminalId 时写 terminal-store（字段逐一 typeof 守卫）。**use-agent-bridge**：stream:error 且 code==='AI_RATE_LIMITED' 时触发限流横幅。**use-conversation-search**：匹配用 extractText + toLowerCase includes；navigate 循环取模。**use-system**：浏览器模式返回全 0 假数据（dev 预览形态完整）。
 
 ## 九、占位 / 不适用 / 已知不一致
 

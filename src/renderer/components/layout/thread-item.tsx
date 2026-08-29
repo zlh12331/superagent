@@ -10,7 +10,7 @@
 // 职责：
 // - sidebar-head：新建会话按钮 + 搜索框 + tabs（最近/归档）
 // - sidebar-list：会话列表（thread-item 结构，按 folder 分组）
-// - sidebar-foot：用户信息区域（占位，功能预留）
+// - sidebar-foot：用户信息区域（SidebarAccount 账户触发器 + 下拉菜单）
 //
 // 设计（对齐原型 docs/prototype/prototype-v2.html）：
 // - class 命名：sidebar / sidebar-head / sidebar-search / sidebar-tabs /
