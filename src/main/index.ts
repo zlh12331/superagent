@@ -406,8 +406,18 @@ app
         compactMessages: (messages) => {
           const resolved = modelRegistry.resolve(undefined);
           const budget = getCompactionBudget(resolved.capabilities.contextWindowSize ?? 128_000);
-          const trimmed = compressByTokenBudget([...messages], budget);
-          return { trimmed, removed: messages.length - trimmed.length };
+          const original = [...messages];
+          const trimmed = compressByTokenBudget(original, budget);
+          // 压缩效果 = 整条丢弃 + 就地裁剪（旧推理块 / 窗口外工具上下文）。
+          // 只按条数差计会漏掉就地裁剪（条数不变），handler 的 removed > 0 门槛
+          // 就会把裁剪结果整份丢弃 → /compact 白做。pruneMessages 只改写被裁剪的
+          // 消息（新建对象），故按引用即可识别。
+          const untouched = new Set(original);
+          const rewritten = trimmed.filter((msg) => !untouched.has(msg)).length;
+          return {
+            trimmed,
+            removed: messages.length - trimmed.length + rewritten,
+          };
         },
       }),
       file: createFileHandlers({ fileService: serviceContainer.getFileService() }),
