@@ -42,6 +42,26 @@ interface GitSummary {
 export type GitSummaryProvider = (workingDir: string) => Promise<GitSummary | null>;
 
 /**
+ * 从「异步 git 状态查询」构造 GitSummaryProvider
+ *
+ * 只依赖查询的返回形状（branch / clean / files），不绑定具体 GitService
+ * 实现。非 git 仓库等场景下查询抛错时向上传播，由
+ * injectDynamicContext 捕获并回落为占位符。
+ */
+export function gitSummaryProviderFrom(
+  getStatus: (workingDir: string) => Promise<{
+    readonly branch: string;
+    readonly clean: boolean;
+    readonly files: readonly unknown[];
+  }>,
+): GitSummaryProvider {
+  return async (workingDir) => {
+    const status = await getStatus(workingDir);
+    return { branch: status.branch, clean: status.clean, changedFiles: status.files.length };
+  };
+}
+
+/**
  * 动态上下文注入选项
  */
 export interface DynamicContextOptions {

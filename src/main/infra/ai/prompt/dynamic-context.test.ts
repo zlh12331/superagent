@@ -3,7 +3,11 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { type GitSummaryProvider, injectDynamicContext } from './dynamic-context';
+import {
+  type GitSummaryProvider,
+  gitSummaryProviderFrom,
+  injectDynamicContext,
+} from './dynamic-context';
 
 /** git 提供者 mock：返回 dirty 状态 */
 const dirtyProvider: GitSummaryProvider = async () => ({
@@ -112,5 +116,55 @@ describe('dynamic-context 批次13 缺口补全', () => {
         process.env['COMSPEC'] = original;
       }
     }
+  });
+});
+
+describe('gitSummaryProviderFrom（GitService → GitSummary 适配）', () => {
+  it('映射 branch / clean / files.length 到 GitSummary', async () => {
+    const provider = gitSummaryProviderFrom(async () => ({
+      branch: 'feature/agent',
+      clean: false,
+      files: [{ path: 'a' }, { path: 'b' }, { path: 'c' }],
+    }));
+    expect(await provider('/tmp/proj')).toEqual({
+      branch: 'feature/agent',
+      clean: false,
+      changedFiles: 3,
+    });
+  });
+
+  it('clean 仓库：changedFiles 为 0', async () => {
+    const provider = gitSummaryProviderFrom(async () => ({
+      branch: 'main',
+      clean: true,
+      files: [],
+    }));
+    expect(await provider('/tmp/proj')).toEqual({ branch: 'main', clean: true, changedFiles: 0 });
+  });
+
+  it('workingDir 原样透传给底层查询', async () => {
+    const getStatus = vi.fn(async () => ({ branch: 'main', clean: true, files: [] }));
+    await gitSummaryProviderFrom(getStatus)('/tmp/proj');
+    expect(getStatus).toHaveBeenCalledWith('/tmp/proj');
+  });
+
+  it('查询抛错：向上抛出（由 injectDynamicContext 兜底为占位符）', async () => {
+    const provider = gitSummaryProviderFrom(async () => {
+      throw new Error('not a git repository');
+    });
+    await expect(provider('/tmp/proj')).rejects.toThrow('not a git repository');
+  });
+
+  it('接入 injectDynamicContext：模板变量替换为真实 git 状态', async () => {
+    const provider = gitSummaryProviderFrom(async () => ({
+      branch: 'main',
+      clean: false,
+      files: [{ path: 'a' }],
+    }));
+    const result = await injectDynamicContext('{{gitBranch}}|{{gitStatus}}', {
+      workingDir: '/tmp/proj',
+      gitSummaryProvider: provider,
+    });
+    expect(result).toBe('main|dirty (1 个文件未提交)');
   });
 });

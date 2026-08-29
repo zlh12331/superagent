@@ -60,6 +60,7 @@ import { GoalService } from './infra/ai/knowledge/goal-service';
 import type { LlmClient } from './infra/ai/llm-client';
 import { llmClient, resetAIProvider, runtimeModelStore } from './infra/ai/llm-client/ai-provider';
 import { type IMCPService, MCPService } from './infra/ai/mcp';
+import { gitSummaryProviderFrom } from './infra/ai/prompt/dynamic-context';
 import type { IPromptService } from './infra/ai/prompt/prompt-service';
 import { PromptService } from './infra/ai/prompt/prompt-service';
 import { registerBuiltinTools } from './infra/ai/tools';
@@ -364,7 +365,14 @@ class ServiceContainer {
 
   getPromptService(): IPromptService {
     if (this.promptService === null) {
-      this.promptService = new PromptService();
+      // 注入 git 状态查询：动态上下文的 {{gitBranch}}/{{gitStatus}} 由此变为真实值。
+      // 闭包内延迟取 getGitService()：尊重测试经 setGitService() 注入的 mock；
+      // 非 git 仓库时 status() 抛错，injectDynamicContext 会兜底为占位符。
+      this.promptService = new PromptService({
+        gitSummaryProvider: gitSummaryProviderFrom((workingDir) =>
+          this.getGitService().status(workingDir),
+        ),
+      });
     }
     return this.promptService;
   }

@@ -41,7 +41,7 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///electron.vi
 | 6 | toolExecutor | IToolExecutor | class `new ToolExecutor(registry, permission)` |
 | 7 | mcpService | IMCPService | class `new MCPService(toolRegistry)` |
 | 8 | agentService | IAgentService | class `new AgentService(registry, executor, prompt, session, llmClient)` |
-| 9 | promptService | IPromptService | class `new PromptService()`（未注入 gitSummaryProvider） |
+| 9 | promptService | IPromptService | class `new PromptService({ gitSummaryProvider })`（经 `gitSummaryProviderFrom` 适配 GitService.status） |
 | 10 | terminalService | ITerminalService | 模块级单例 `getTerminalService()` |
 | 11 | gitService | IGitService | 模块级单例 `getGitService()` |
 | 12 | codebaseService | ICodebaseService | 模块级单例 `getCodebaseService()` |
@@ -187,7 +187,7 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 3. **动态上下文注入**：`resolvePrompt(id, workingDir)` 每次调用重新收集环境信息，返回 `{ content, source }`
 4. **失败回退**：DB 读取失败时回退到 [default-prompt.ts](file:///src/main/infra/ai/prompt/default-prompt.ts) 硬编码默认值
 
-依赖注入：`PromptServiceOptions` 支持 `gitSummaryProvider` 注入（[dynamic-context.ts](file:///src/main/infra/ai/prompt/dynamic-context.ts) 定义 `GitSummaryProvider` 类型）。**当前 ServiceContainer 通过 `new PromptService()` 创建实例时未注入 gitSummaryProvider**，prompt 中 git 状态显示"未知"。`GitSummaryProvider` 接口已就绪，待后续接入。
+依赖注入：`PromptServiceOptions` 支持 `gitSummaryProvider` 注入（[dynamic-context.ts](file:///src/main/infra/ai/prompt/dynamic-context.ts) 定义 `GitSummaryProvider` 类型）。ServiceContainer 创建 `PromptService` 时经 `gitSummaryProviderFrom(gitService.status)` 注入：`{{gitBranch}}` / `{{gitStatus}}` 为真实值；非 git 仓库或查询失败时由 `injectDynamicContext` 兜底为占位符。
 
 ## 6. traceId 贯穿机制
 
