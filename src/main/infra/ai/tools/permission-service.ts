@@ -35,6 +35,7 @@ import {
   DEFAULT_APPROVAL_MODE,
   ErrorCode,
   IPC_DEFINITIONS,
+  REMEMBER_TTL_MS,
 } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
@@ -75,14 +76,6 @@ export { DEFAULT_APPROVAL_MODE } from '@code-agent/shared/main';
  * 超时后视为拒绝，工具不会被执行。
  */
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
-
-/**
- * 记忆决策有效期（毫秒）
- *
- * 5 分钟，与审批超时对齐。
- * 过期后下次调用同一工具+入参组合会重新询问。
- */
-const REMEMBER_TTL_MS = 5 * 60 * 1000;
 
 /**
  * PermissionService 接口

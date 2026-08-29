@@ -7,6 +7,7 @@
 // - 数据源：approvals-store（单一真源，与 ApprovalDialog 弹窗共存）
 // ──────────────────────────────────────────────────────────────
 
+import { REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
 import { Check, Pencil, ShieldCheck, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
@@ -197,7 +198,7 @@ export function InlineApprovalCard({
               title={t('approval.whitelistHint')}
             >
               <ShieldCheck className="size-3" />
-              {t('approval.whitelist')}
+              {t('approval.whitelist', { minutes: REMEMBER_TTL_MINUTES })}
             </button>
           )}
           <button

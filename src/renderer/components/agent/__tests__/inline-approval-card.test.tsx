@@ -9,6 +9,7 @@
 // 5. 非 run_command 类型不显示编辑重提（仅跳过）
 // ──────────────────────────────────────────────────────────────
 
+import { REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -67,7 +68,9 @@ describe('InlineApprovalCard', () => {
 
     expect(screen.getByText('执行命令')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '拒绝' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '批准并记住' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: `批准并记住（${REMEMBER_TTL_MINUTES} 分钟）` }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '批准' })).toBeInTheDocument();
   });
 
