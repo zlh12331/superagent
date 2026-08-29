@@ -1,12 +1,13 @@
 // src/main/infra/telemetry/otel.test.ts
-// otel 单测：初始化分支（OTLP/Console/失败容忍）、withSpan 生命周期、shutdown
+// otel 单测：初始化分支（OTLP/Console/失败容忍）、打包版端点门控、withSpan、shutdown
 //
 // 测试要点：
-// 1. initTelemetry：无 endpoint → Console exporter（dev）；有 endpoint → OTLP exporter
-// 2. serviceName：dev/prod 区分
-// 3. 幂等：重复调用跳过
-// 4. withSpan：未初始化直接执行 / 初始化后 span 生命周期 / 异常设置错误状态
-// 5. shutdownTelemetry：未初始化跳过 / 初始化后 flush + 重置
+// 1. initTelemetry：dev 无 endpoint → Console exporter；有 endpoint → OTLP exporter
+// 2. 打包版无 endpoint → 不注册（span 属性含路径/上下文，不落 stdout）
+// 3. serviceName：dev/prod 区分
+// 4. 幂等：重复调用跳过
+// 5. withSpan：未初始化直接执行 / 初始化后 span 生命周期 / 异常设置错误状态
+// 6. shutdownTelemetry：未初始化跳过 / 初始化后 flush + 重置
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,12 +80,25 @@ describe('otel 批次11 缺口补全', () => {
     expect(getTracer()).not.toBeNull();
   });
 
-  it('initTelemetry 生产环境：serviceName 带 prod 后缀', () => {
+  it('initTelemetry 打包版无 endpoint：不注册（span 属性含路径/上下文，不落 stdout）', () => {
     mocks.mockApp.isPackaged = true;
     initTelemetry();
-    // 资源属性含 service.name=code-agent-agent-prod（经 provider 注册可观察）
+    expect(mocks.mockLogger.info).toHaveBeenCalledWith(
+      {},
+      'OpenTelemetry 未初始化（打包版未配置 OTLP 端点）',
+    );
+    expect(getTracer()).toBeNull();
+  });
+
+  it('initTelemetry 打包版有 endpoint：OTLP exporter 正常初始化', () => {
+    mocks.mockApp.isPackaged = true;
+    process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] = 'http://localhost:4318/v1/traces';
+    initTelemetry();
+    expect(mocks.mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'http://localhost:4318/v1/traces' }),
+      'OpenTelemetry 初始化完成（OTLP exporter）',
+    );
     expect(getTracer()).not.toBeNull();
-    expect(mocks.mockLogger.info).toHaveBeenCalled();
   });
 
   it('initTelemetry 幂等：重复调用跳过（只初始化一次）', () => {

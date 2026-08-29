@@ -53,7 +53,8 @@ let initialized = false;
  *
  * 配置策略：
  * - OTEL_EXPORTER_OTLP_ENDPOINT 环境变量存在：用 OTLP HTTP exporter
- * - 不存在：用 ConsoleSpanExporter（仅 dev 环境，便于调试）
+ * - 不存在且 dev：用 ConsoleSpanExporter（便于本地调试）
+ * - 不存在且打包版：不注册（span 属性含路径/上下文，不打 stdout）
  * - 任何失败：标记为未初始化，业务代码继续运行
  */
 export function initTelemetry(): void {
@@ -84,6 +85,15 @@ export function initTelemetry(): void {
       'host.arch': process.arch,
       'host.platform': process.platform,
     });
+
+    // 打包版未配置端点：不落 Console——span 属性会携带文件路径与上下文片段，
+    // 全量打到 stdout 既是噪音也有信息外泄风险；此时 tracing 保持 no-op。
+    if ((endpoint === undefined || endpoint === '') && app.isPackaged) {
+      logger.info({}, 'OpenTelemetry 未初始化（打包版未配置 OTLP 端点）');
+      tracer = null;
+      initialized = false;
+      return;
+    }
 
     // OTel v2.x：spanProcessors 在构造函数传入，不再支持 addSpanProcessor 方法
     let spanProcessor: SimpleSpanProcessor;
