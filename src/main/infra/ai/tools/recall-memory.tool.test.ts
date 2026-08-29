@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { describe, expect, it, vi } from 'vitest';
+import type { ZodType } from 'zod';
 
 import type { MemoryPort } from '../../memory-hub/types';
 import { createRecallMemoryTool } from './recall-memory.tool';
@@ -54,7 +55,7 @@ describe('createRecallMemoryTool', () => {
 
   it('schema 校验：空 query 拒绝', () => {
     const { tool } = createTool();
-    const parsed = tool.inputSchema.safeParse({ query: '' });
+    const parsed = (tool.inputSchema as ZodType).safeParse({ query: '' });
     expect(parsed.success).toBe(false);
   });
 });

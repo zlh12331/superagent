@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { describe, expect, it, vi } from 'vitest';
+import type { ZodType } from 'zod';
 
 import type { MemoryPort } from '../../memory-hub/types';
 import { createSaveMemoryTool } from './save-memory.tool';
@@ -64,7 +65,7 @@ describe('createSaveMemoryTool', () => {
 
   it('schema 校验：空 content 拒绝', () => {
     const { tool } = createTool();
-    const parsed = tool.inputSchema.safeParse({ content: '' });
+    const parsed = (tool.inputSchema as ZodType).safeParse({ content: '' });
     expect(parsed.success).toBe(false);
   });
 });

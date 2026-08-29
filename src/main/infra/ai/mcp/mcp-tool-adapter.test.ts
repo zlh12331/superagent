@@ -7,6 +7,7 @@
 // 3. adaptMcpTool：适配 Tool 实例（命名空间、权限、execute 转发）
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
+import type { Schema } from 'ai';
 import type { WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -260,11 +261,39 @@ describe('mcp-tool-adapter', () => {
       });
     });
 
-    it('inputSchema 为宽松 zod schema（z.record）', () => {
-      const tool = adaptMcpTool(baseConfig, makeDescriptor(), vi.fn() as unknown as McpCallToolFn);
-      // 宽松 schema 接受任意对象
-      expect(tool.inputSchema.safeParse({ any: 'value' }).success).toBe(true);
-      expect(tool.inputSchema.safeParse({}).success).toBe(true);
+    it('inputSchema 透传 server 的 JSON Schema（不再降级为宽松 zod）', () => {
+      const tool = adaptMcpTool(
+        baseConfig,
+        makeDescriptor({
+          inputSchema: {
+            type: 'object',
+            properties: { path: { type: 'string' } },
+            required: ['path'],
+          },
+        }),
+        vi.fn() as unknown as McpCallToolFn,
+      );
+      const schema = tool.inputSchema as Schema<unknown>;
+      // 参数定义原样进工具定义（模型据此生成入参）
+      expect(schema.jsonSchema).toEqual({
+        type: 'object',
+        properties: { path: { type: 'string' } },
+        required: ['path'],
+      });
+      // 不挂客户端 validate：MCP server 是入参校验真源
+      expect(schema.validate).toBeUndefined();
+    });
+
+    it('inputSchema 缺失时退化为空对象 schema', () => {
+      const tool = adaptMcpTool(
+        baseConfig,
+        {
+          name: 'read_file',
+          inputSchema: undefined as unknown as McpToolDescriptor['inputSchema'],
+        },
+        vi.fn() as unknown as McpCallToolFn,
+      );
+      expect((tool.inputSchema as Schema<unknown>).jsonSchema).toEqual({ type: 'object' });
     });
   });
 });

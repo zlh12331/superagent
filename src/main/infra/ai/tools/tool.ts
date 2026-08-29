@@ -9,7 +9,8 @@
 // 设计原则：
 // - Tool 接口是工具系统的核心抽象，所有具体工具都实现此接口
 // - permission 字段与用户决策对齐：白名单自动 + 危险询问
-// - inputSchema 使用 ZodType，运行时校验 LLM 生成的入参
+// - inputSchema 支持 Zod schema 或 AI SDK Schema（jsonSchema() 产物）：
+//   内置工具用 zod 做运行时校验；MCP 工具透传上游 JSON Schema（校验由 server 完成）
 // - execute 函数返回 ToolResult，统一 title / output / metadata 结构
 //
 // 与 AI SDK v7 的关系：
@@ -19,6 +20,7 @@
 // - ToolResult.output 会作为 AI SDK tool.execute 的返回值（给 LLM 看）
 // ──────────────────────────────────────────────────────────────
 
+import type { Schema } from 'ai';
 import type { WebContents } from 'electron';
 import type { ZodType } from 'zod';
 
@@ -122,8 +124,14 @@ export interface Tool<TInput = unknown> {
   readonly name: string;
   /** 工具描述（LLM 据此决定是否调用，应清晰说明用途与入参含义） */
   readonly description: string;
-  /** 入参 zod schema（运行时校验 LLM 生成的入参） */
-  readonly inputSchema: ZodType<TInput>;
+  /**
+   * 入参 schema
+   *
+   * - `ZodType`：内置工具，AI SDK 在调用 execute 前做运行时校验
+   * - `Schema`（`jsonSchema()` 产物）：MCP 等上游只提供 JSON Schema 的工具，
+   *   schema 原样进模型的工具定义，入参校验交给上游 server
+   */
+  readonly inputSchema: ZodType<TInput> | Schema<TInput>;
   /** 权限级别：'auto' 自动执行 / 'ask' 需用户审批 */
   readonly permission: 'auto' | 'ask';
   /** 工具类别（ApprovalMode 分级决策依据：read 只读 / edit 编辑 / exec 执行） */

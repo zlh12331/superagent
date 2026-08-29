@@ -8,14 +8,15 @@
 //
 // 设计原则：
 // - 适配器不持有 MCP Client 引用（避免生命周期耦合），通过 callTool 回调注入
-// - inputSchema 用宽松 Zod schema（z.record(z.string(), z.unknown())），
-//   实际入参校验由 MCP server 自行完成（MCP 协议规定 server 必须 validate input）
+// - inputSchema 用 AI SDK jsonSchema() 原样透传 MCP server 的 JSON Schema，
+//   让模型看到真实参数定义（此前降级为宽松 zod，模型只能猜字段名）；
+//   入参运行时校验由 MCP server 完成（MCP 协议规定 server 必须 validate input）
 // - 工具名加命名空间前缀（mcp__${serverName}__${toolName}），避免与内置工具重名
 // - 工具描述透传 server 返回的 description，让 LLM 据此决定是否调用
 // ──────────────────────────────────────────────────────────────
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import { z } from 'zod';
+import { jsonSchema } from 'ai';
 import type { Tool, ToolContext, ToolResult } from '../tools/tool';
 import type { McpServerConfig } from './mcp-types';
 import { buildMcpToolName } from './mcp-types';
@@ -34,8 +35,9 @@ export interface McpToolDescriptor {
   /**
    * 入参 JSON Schema（MCP 协议规定）
    *
-   * 适配器不会用此 schema 在客户端做严格校验（MCP server 自行校验），
-   * 仅作为元数据透传给 AI SDK。
+   * 由 `adaptMcpTool` 经 AI SDK `jsonSchema()` 原样透传进工具定义，
+   * 模型据此生成参数——因此不可在此处改写或降级其结构。
+   * 客户端不做重复校验（MCP server 必须自行 validate）。
    */
   readonly inputSchema: {
     readonly type: 'object';
@@ -186,7 +188,7 @@ export function normalizeMcpToolResult(result: McpToolCallResult): unknown {
  * 适配后的 Tool：
  * - name：命名空间后的工具名（mcp__${serverName}__${toolName}）
  * - description：透传 MCP server 返回的 description
- * - inputSchema：宽松 Zod schema（z.record(z.string(), z.unknown())），实际校验由 MCP server 完成
+ * - inputSchema：透传 MCP server 的 JSON Schema（经 jsonSchema() 包装），校验由 server 完成
  * - permission：基于 annotations.readOnlyHint 或 config.permissionOverride 决定
  * - execute：通过 callTool 回调转发到 MCPClient
  *
@@ -208,9 +210,8 @@ export function adaptMcpTool(
   return {
     name: namespacedName,
     description,
-    // 宽松 schema：MCP server 自行校验入参（MCP 协议规定）
-    // 用 z.record(z.string(), z.unknown()) 允许任意对象，避免复杂 JSON Schema → Zod 转换
-    inputSchema: mcpLooseInputSchema,
+    // 透传 server 的 JSON Schema：模型能看到参数定义，客户端不重复校验
+    inputSchema: toAiSdkInputSchema(descriptor.inputSchema),
     permission,
     // MCP 工具一律按 exec 分类：第三方代码无法静态信任（对齐 qwen 白名单排除 MCP 的语义），
     // auto 模式下不自动放行，仍需审批
@@ -242,14 +243,16 @@ export function adaptMcpTool(
 }
 
 /**
- * 宽松入参 schema：允许任意对象（实际校验由 MCP server 完成）
+ * MCP inputSchema → AI SDK Schema
  *
- * 设计权衡：
- * - MCP 工具的 inputSchema 是 JSON Schema，转 Zod 复杂且易出错
- * - MCP 协议规定 server 必须 validate input，客户端重复校验是冗余
- * - 用宽松 schema 让 AI SDK 把 LLM 生成的入参原样传给 server
+ * jsonSchema() 不带 validate 即不做客户端校验（MCP server 是校验真源），
+ * 但 schema 本身会原样进入工具定义，模型据此生成参数。
  *
- * 注意：z.record(z.string(), z.unknown()) 要求顶层是对象；非对象入参会被 AI SDK 拒绝。
- * MCP 协议规定工具入参必须是对象，因此这是合理的约束。
+ * descriptor.inputSchema 是 JSON Schema 的只读子集视图，与 JSONSchema7 结构等价，
+ * 故此处做一次类型转换而非逐字段重建。
  */
-const mcpLooseInputSchema = z.record(z.string(), z.unknown());
+function toAiSdkInputSchema(schema: McpToolDescriptor['inputSchema'] | undefined) {
+  type JsonSchemaInput = Parameters<typeof jsonSchema>[0];
+  const jsonSchemaValue = (schema ?? { type: 'object' }) as unknown as JsonSchemaInput;
+  return jsonSchema(jsonSchemaValue);
+}
