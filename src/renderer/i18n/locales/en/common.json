@@ -183,7 +183,7 @@
         "help": "Commands: /new new session · /clear clear chat · /models pick model · /compact compact context",
         "goal": "Session goal: type /goal plus your requirement in the input"
       },
-      "compactDone": "Context compacted: removed {{removed}} history messages",
+      "compactDone": "Context compacted: reclaimed {{tokens}} tokens",
       "compactNothing": "Context already within budget, nothing to compact",
       "noActiveSession": "No active session",
       "goalEdit": "Edit goal",

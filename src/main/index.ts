@@ -15,7 +15,11 @@ import { app, BrowserWindow, screen, session, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { getAppConfig } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
-import { compressByTokenBudget, getCompactionBudget } from './infra/ai/agent/context-compression';
+import {
+  compressByTokenBudget,
+  estimateMessagesTokens,
+  getCompactionBudget,
+} from './infra/ai/agent/context-compression';
 import { LearnSkillService } from './infra/ai/knowledge/learn-skill-agent';
 import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
@@ -403,20 +407,19 @@ app
       session: createSessionHandlers({
         sessionService: serviceContainer.getSessionService(),
         // /compact 上下文压缩：默认模型窗口感知的预算裁剪（与 agent 主流程同一纯函数）
+        // removed 只计整条丢弃；就地裁剪（条数不变）体现在 reclaimedTokens，
+        // handler 以回收的 token 数作为落库与展示口径
         compactMessages: (messages) => {
           const resolved = modelRegistry.resolve(undefined);
           const budget = getCompactionBudget(resolved.capabilities.contextWindowSize ?? 128_000);
-          const original = [...messages];
-          const trimmed = compressByTokenBudget(original, budget);
-          // 压缩效果 = 整条丢弃 + 就地裁剪（旧推理块 / 窗口外工具上下文）。
-          // 只按条数差计会漏掉就地裁剪（条数不变），handler 的 removed > 0 门槛
-          // 就会把裁剪结果整份丢弃 → /compact 白做。pruneMessages 只改写被裁剪的
-          // 消息（新建对象），故按引用即可识别。
-          const untouched = new Set(original);
-          const rewritten = trimmed.filter((msg) => !untouched.has(msg)).length;
+          const trimmed = compressByTokenBudget([...messages], budget);
           return {
             trimmed,
-            removed: messages.length - trimmed.length + rewritten,
+            removed: messages.length - trimmed.length,
+            reclaimedTokens: Math.max(
+              0,
+              estimateMessagesTokens([...messages]) - estimateMessagesTokens(trimmed),
+            ),
           };
         },
       }),

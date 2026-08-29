@@ -46,9 +46,9 @@ function createFakeSessionService() {
   } as unknown as SessionHandlerDeps['sessionService'];
 }
 
-/** 压缩器桩：默认恒等（removed=0），个别用例覆盖 */
+/** 压缩器桩：默认恒等（无回收），个别用例覆盖 */
 function createFakeCompactMessages(): SessionHandlerDeps['compactMessages'] {
-  return vi.fn((messages) => ({ trimmed: messages, removed: 0 }));
+  return vi.fn((messages) => ({ trimmed: messages, removed: 0, reclaimedTokens: 0 }));
 }
 
 const EMPTY_CTX = {} as never;
@@ -193,7 +193,7 @@ describe('session.handler.exportAll（三态）', () => {
 });
 
 describe('session.handler.compact（/compact 上下文压缩）', () => {
-  it('有裁剪：压缩器裁剪后 replaceMessages 落库 + 返回 removed/remaining/messages', async () => {
+  it('有裁剪：压缩器裁剪后 replaceMessages 落库 + 返回 removed/remaining/reclaimedTokens/messages', async () => {
     const sessionService = createFakeSessionService();
     vi.mocked(sessionService.get).mockResolvedValueOnce({
       session: { id: 's1' } as never,
@@ -203,7 +203,7 @@ describe('session.handler.compact（/compact 上下文压缩）', () => {
       ],
     } as never);
     const trimmed = [{ role: 'user', content: '新消息' }];
-    const compactMessages = vi.fn(() => ({ trimmed, removed: 1 }));
+    const compactMessages = vi.fn(() => ({ trimmed, removed: 1, reclaimedTokens: 42 }));
     const handlers = createSessionHandlers({
       sessionService,
       compactMessages: compactMessages as unknown as SessionHandlerDeps['compactMessages'],
@@ -216,10 +216,10 @@ describe('session.handler.compact（/compact 上下文压缩）', () => {
       { role: 'user', content: '新消息' },
     ]);
     expect(sessionService.replaceMessages).toHaveBeenCalledWith('s1', trimmed);
-    expect(res).toEqual({ removed: 1, remaining: 1, messages: trimmed });
+    expect(res).toEqual({ removed: 1, remaining: 1, reclaimedTokens: 42, messages: trimmed });
   });
 
-  it('无裁剪（removed=0）：不落库，返回全量消息', async () => {
+  it('无回收（reclaimedTokens=0）：不落库，返回全量消息', async () => {
     const sessionService = createFakeSessionService();
     const messages = [{ role: 'user', content: '唯一消息' }];
     vi.mocked(sessionService.get).mockResolvedValueOnce({
@@ -228,12 +228,38 @@ describe('session.handler.compact（/compact 上下文压缩）', () => {
     } as never);
     const handlers = createSessionHandlers({
       sessionService,
-      compactMessages: vi.fn(() => ({ trimmed: messages, removed: 0 })) as never,
+      compactMessages: vi.fn(() => ({
+        trimmed: messages,
+        removed: 0,
+        reclaimedTokens: 0,
+      })) as never,
     });
 
     const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);
 
     expect(sessionService.replaceMessages).not.toHaveBeenCalled();
-    expect(res).toEqual({ removed: 0, remaining: 1, messages });
+    expect(res).toEqual({ removed: 0, remaining: 1, reclaimedTokens: 0, messages });
+  });
+
+  it('就地裁剪（条数不变但回收了 token）：仍然落库（旧条数门槛会漏掉）', async () => {
+    const sessionService = createFakeSessionService();
+    vi.mocked(sessionService.get).mockResolvedValueOnce({
+      session: { id: 's1' } as never,
+      messages: [{ role: 'assistant', content: [{ type: 'reasoning', text: '长推理' }] }],
+    } as never);
+    const trimmed = [{ role: 'assistant', content: [] }];
+    const handlers = createSessionHandlers({
+      sessionService,
+      compactMessages: vi.fn(() => ({
+        trimmed,
+        removed: 0,
+        reclaimedTokens: 15,
+      })) as unknown as SessionHandlerDeps['compactMessages'],
+    });
+
+    const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);
+
+    expect(sessionService.replaceMessages).toHaveBeenCalledWith('s1', trimmed);
+    expect(res).toEqual({ removed: 0, remaining: 1, reclaimedTokens: 15, messages: trimmed });
   });
 });

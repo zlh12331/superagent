@@ -32,6 +32,7 @@ export interface SessionHandlerDeps {
   readonly compactMessages: (messages: readonly ChatMessage[]) => {
     readonly trimmed: readonly ChatMessage[];
     readonly removed: number;
+    readonly reclaimedTokens: number;
   };
 }
 
@@ -153,14 +154,20 @@ export function createSessionHandlers(
     },
 
     // session:compact - /compact 斜杠命令：手动压缩会话上下文（裁剪后整体落库）
+    // 落库门槛用回收的 token 数：纯条数差会漏掉就地裁剪（条数不变但内容变少）
     compact: async (input) => {
       const session = await sessionService.get(input.sessionId);
       const messages = session.messages as unknown as ChatMessage[];
-      const { trimmed, removed } = compactMessages(messages);
-      if (removed > 0) {
+      const { trimmed, removed, reclaimedTokens } = compactMessages(messages);
+      if (reclaimedTokens > 0) {
         await sessionService.replaceMessages(input.sessionId, trimmed);
       }
-      return { removed, remaining: trimmed.length, messages: trimmed as unknown[] };
+      return {
+        removed,
+        remaining: trimmed.length,
+        reclaimedTokens,
+        messages: trimmed as unknown[],
+      };
     },
   };
 }

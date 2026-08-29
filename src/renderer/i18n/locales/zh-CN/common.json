@@ -183,7 +183,7 @@
         "help": "可用命令：/new 新建会话 · /clear 清空对话 · /models 选择模型 · /compact 压缩上下文",
         "goal": "会话目标：请在输入框输入 /goal 需求"
       },
-      "compactDone": "上下文已压缩：移除 {{removed}} 条历史消息",
+      "compactDone": "上下文已压缩：回收 {{tokens}} tokens",
       "compactNothing": "上下文已在预算内，无需压缩",
       "noActiveSession": "无活跃会话",
       "goalEdit": "编辑目标",

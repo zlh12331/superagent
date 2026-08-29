@@ -293,8 +293,8 @@ export function ChatPanel({
     onSuccess: (data) => {
       setMessages(toInitialMessages(data.messages as unknown as ChatMessage[]));
       void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(chatId) });
-      if (data.removed > 0) {
-        toast.success(t('chat.compactDone', { removed: data.removed }));
+      if (data.reclaimedTokens > 0) {
+        toast.success(t('chat.compactDone', { tokens: data.reclaimedTokens }));
       } else {
         toast.info(t('chat.compactNothing'));
       }
