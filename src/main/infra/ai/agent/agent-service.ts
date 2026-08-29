@@ -526,6 +526,11 @@ export class AgentService implements IAgentService {
 
           // 5+6. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；
           //    首 part 成功后不重试——流中错误重试会重复工具副作用）
+          //
+          //    重试分层（避免嵌套放大请求数）：
+          //    - model call 级：SDK maxRetries（下方显式传入），每一步都生效，
+          //      含工具调用之后的步骤；SDK 自带指数退避并尊重 retry-after 头
+          //    - 请求级：createStreamWithRetry 只兜 SDK 覆盖不到的传输层失败
           const created = await createStreamWithRetry({
             create: () =>
               streamText({
@@ -542,6 +547,8 @@ export class AgentService implements IAgentService {
                   : {}),
                 tools,
                 stopWhen: isStepCount(options.maxSteps),
+                // model call 级重试真源：模型级 maxRetries（默认 2 次重试 = 3 次尝试）
+                maxRetries: resolvedModel.generationConfig?.maxRetries ?? 2,
                 ...(effectiveAbortSignal !== undefined
                   ? { abortSignal: effectiveAbortSignal }
                   : {}),
@@ -565,8 +572,8 @@ export class AgentService implements IAgentService {
                 telemetry: { integrations: [createSdkTelemetryIntegration()] },
               }),
             controller,
-            // 模型级重试：generationConfig.maxRetries（默认 2 次重试 = 3 次尝试）
-            maxAttempts: (resolvedModel.generationConfig?.maxRetries ?? 2) + 1,
+            // 请求级尝试次数走 createStreamWithRetry 默认值：与 SDK 的 model call
+            // 级重试互不重叠（仅兜传输层失败），不再由 maxRetries 换算
           });
           const uiStream = created.stream;
 

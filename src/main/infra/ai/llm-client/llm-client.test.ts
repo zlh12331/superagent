@@ -231,6 +231,18 @@ describe('LlmClient', () => {
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
     });
 
+    it('SDK 内置 model call 重试已关闭：重试由本层 retryWithBackoff 独占', async () => {
+      const { client } = createClient();
+      mocks.mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} });
+
+      await client.generateText({ prompt: 'hi', maxAttempts: 1 });
+
+      // 两层重试相乘会把 maxAttempts 放大成 maxAttempts × (1 + SDK maxRetries)
+      expect(mocks.mockGenerateText).toHaveBeenCalledWith(
+        expect.objectContaining({ maxRetries: 0 }),
+      );
+    });
+
     it('模型级 maxRetries：控制重试次数（maxRetries=1 → 最多 2 次尝试）', async () => {
       vi.useFakeTimers();
       try {
@@ -283,6 +295,8 @@ describe('LlmClient', () => {
       // schema 透传给 generateObject
       const args = mocks.mockGenerateObject.mock.calls[0]?.[0] as { schema: unknown } | undefined;
       expect(args?.schema).toBe(schema);
+      // SDK 内置重试关闭：side query 重试由本层 retryWithBackoff 独占
+      expect(args).toEqual(expect.objectContaining({ maxRetries: 0 }));
     });
 
     it('可重试错误：重试后成功', async () => {

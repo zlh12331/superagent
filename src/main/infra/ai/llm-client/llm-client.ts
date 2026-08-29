@@ -33,6 +33,15 @@ import { getErrorCode, getErrorStatus, retryWithBackoff } from './retry';
 const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
 
 /**
+ * 关闭 SDK 内置的 model call 级重试（side query 专用）
+ *
+ * side query 是单步调用，重试真源是本层 retryWithBackoff（Retry-After 优先、
+ * 网络错误码识别、abort 贯穿、onRetry 遥测）。SDK 默认还会自己重试 2 次，
+ * 两层相乘会把 maxAttempts=3 变成 9 次真实请求，故显式关掉。
+ */
+const SDK_MODEL_CALL_RETRY_DISABLED = { maxRetries: 0 } as const;
+
+/**
  * 模型降级资格判定（ModelFallback）：
  * - 可降级：HTTP 5xx / SDK 网络层错误 / 超时 / 流中断（供应商侧故障，换默认模型可能可用）
  * - 不降级：401/400/402/429/模型不存在（Key/余额/限流/配置问题，换模型无意义）
@@ -252,6 +261,7 @@ export class LlmClient {
       const result = await generateTextAi({
         model,
         prompt: options.prompt,
+        ...SDK_MODEL_CALL_RETRY_DISABLED,
         ...gen.samplingOptions,
         ...(gen.maxOutputTokens !== undefined ? { maxOutputTokens: gen.maxOutputTokens } : {}),
         ...(options.system !== undefined ? { system: options.system } : {}),
@@ -285,6 +295,7 @@ export class LlmClient {
         model,
         schema: options.schema,
         prompt: options.prompt,
+        ...SDK_MODEL_CALL_RETRY_DISABLED,
         ...(options.system !== undefined ? { system: options.system } : {}),
         ...(signal !== undefined ? { abortSignal: signal } : {}),
       });

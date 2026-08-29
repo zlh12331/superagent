@@ -5,19 +5,18 @@
 // 重试语义（务实边界）：
 // - 覆盖"创建 + 首 part 读取"：连接失败 / 认证失败 / 首包超时（请求级失败）
 // - 首 part 成功后不重试：流中错误（半流/工具副作用已发生）重试会重复副作用
+// - 只兜传输层失败：HTTP 类错误（429/5xx）的重试真源是 SDK 的 model call 级
+//   maxRetries（每一步都生效且尊重 retry-after），本层再重试会把请求数放大成 N×M
 //
 // 调用方责任：
 // - 重试后把 { reader, firstPart } 传入 TurnRunner.run（复用 reader，避免重复 getReader）
 // ──────────────────────────────────────────────────────────────
 
+import { APICallError, RetryError } from 'ai';
+
 import { logger } from '../../../utils/logger';
 import type { RetryAttemptInfo } from '../llm-client/retry';
-import {
-  getErrorStatus,
-  getRetryAfterDelayMs,
-  isRetryableError,
-  retryWithBackoff,
-} from '../llm-client/retry';
+import { isRetryableError, retryWithBackoff } from '../llm-client/retry';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 
 /** 可转为 UIMessageStream 的 streamText 结果（agent/chat 共用形状） */
@@ -46,7 +45,7 @@ export interface CreateStreamWithRetryOptions<T extends MessageStreamSource = Me
   readonly controller: AbortController;
   /** 流空闲超时（默认 10 分钟，与 TurnRunner 一致） */
   readonly idleTimeoutMs?: number;
-  /** 重试次数上限（默认 3 次尝试；模型级 maxRetries 由调用方换算传入） */
+  /** 重试次数上限（默认 3 次尝试；仅作用于传输层失败，HTTP 类由 SDK 重试） */
   readonly maxAttempts?: number;
 }
 
@@ -80,17 +79,16 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
     {
       maxAttempts: options.maxAttempts ?? 3,
       ...(options.controller.signal !== undefined ? { signal: options.controller.signal } : {}),
-      // 主流程重试语义：网络错误（5xx/超时/连接）重试；
-      // 429 限流：仅当服务端给出 Retry-After 指示时重试（尊重服务端限流窗口，
-      // 退避时长由 Retry-After 决定）；无 Retry-After 时快速失败
-      // （盲目指数退避体验差，且回合可能已产生副作用）
+      // 主流程重试语义：只兜 SDK 覆盖不到的传输层失败（裸 TypeError / undici 网络错误码）。
+      // HTTP 类错误（429/5xx/连接失败）已由 streamText 的 model call 级 maxRetries 重试：
+      // - APICallError：SDK 重试真源（指数退避 + 按 retry-after 头定时长）
+      // - RetryError：SDK 重试耗尽后的包装，再重试等于把两层尝试次数相乘
       // （side query 保持完整重试，见 llm-client.runSideQuery）
       shouldRetryOnError: (error: unknown) => {
-        if (!isRetryableError(error)) return false;
-        if (getErrorStatus(error) === 429) {
-          return getRetryAfterDelayMs(error) !== undefined;
+        if (APICallError.isInstance(error) || RetryError.isInstance(error)) {
+          return false;
         }
-        return true;
+        return isRetryableError(error);
       },
       onRetry: (info: RetryAttemptInfo) => {
         logger.warn(

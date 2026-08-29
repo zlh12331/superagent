@@ -380,6 +380,7 @@ describe('agent-service', () => {
         system: string;
         allowSystemInMessages: boolean;
         abortSignal: AbortSignal;
+        maxRetries: number;
       };
       expect(opts.model).toBe(mocks.mockModel);
       expect(opts.messages).toEqual(messages);
@@ -388,6 +389,40 @@ describe('agent-service', () => {
       expect(opts.system).toBe('你是 Code Agent');
       expect(opts.allowSystemInMessages).toBe(true);
       expect(opts.abortSignal).toBeInstanceOf(AbortSignal);
+      // model call 级重试真源交 SDK：模型未配置时显式传默认 2 次重试
+      expect(opts.maxRetries).toBe(2);
+    });
+
+    it('模型级 maxRetries 透传 streamText（不再复用为外层请求级尝试次数）', async () => {
+      mocks.mockResolveModel.mockImplementation(() => ({
+        modelId: 'test-model',
+        generationConfig: { maxRetries: 5 },
+        capabilities: {},
+      }));
+      const wc = createMockWebContents();
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: undefined,
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 15,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      const callArgs = mocks.mockStreamText.mock.calls[0];
+      if (!callArgs) throw new Error('streamText 未被调用');
+      const opts = callArgs[0] as { maxRetries: number };
+      expect(opts.maxRetries).toBe(5);
+
+      // clearAllMocks 不恢复实现：还原默认解析结果，避免污染后续用例
+      mocks.mockResolveModel.mockImplementation(() => ({
+        modelId: 'test-model',
+        generationConfig: {},
+        capabilities: {},
+      }));
     });
 
     it('systemPrompt 未传时：调用 PromptService.resolvePrompt 注入默认 prompt', async () => {
