@@ -34,7 +34,7 @@ export type ToolCallStatus = 'pending' | 'success' | 'error';
  * 工具调用权限级别
  *
  * - auto：自动执行（无需用户审批）
- * - ask：需要用户审批（会触发 ApprovalDialog）
+ * - ask：需要用户审批（触发 InlineApprovalCard 内联审批卡）
  * - deny：被拒绝（plan/审批模式约束，工具卡片直接展示拒绝态）
  */
 export type ToolPermission = 'auto' | 'ask' | 'deny';

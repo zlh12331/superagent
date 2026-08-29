@@ -4,7 +4,7 @@
 // 职责：
 // - 在消息流中内联展示审批请求（对齐参考项目：审批不弹窗打断，就地呈现）
 // - 三态：pending（左 warn 边条 + 批准/拒绝按钮）/ approved / rejected（状态徽章）
-// - 数据源：approvals-store（单一真源，与 ApprovalDialog 弹窗共存）
+// - 数据源：approvals-store（单一真源；全局弹窗 ApprovalDialog 已移除，卡片是唯一审批 UI）
 // ──────────────────────────────────────────────────────────────
 
 import { REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';

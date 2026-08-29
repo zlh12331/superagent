@@ -1,26 +1,11 @@
-// approval-preview.tsx（自 ApprovalDialog 拆分）
-// 审批载荷结构化预览（JSON / Git 变更）
+// approval-preview.tsx（自原 ApprovalDialog 拆分，弹窗已删除仅存渲染函数）
+// 审批载荷结构化预览（命令 / 文件 diff / Git 变更），由 InlineApprovalCard 消费
 // ──────────────────────────────
-// 拆分背景：ApprovalDialog 539 行，渲染函数与组件混合，按职责提取
-// ──────────────────────────────
-
-// src/renderer/components/agent/ApprovalDialog.tsx
-// 审批对话框 · 结构化展示 + 记住决策
-// ──────────────────────────────────────────────────────────────
 // 职责：
-// - 从 useApprovalsStore 读取 pending 队列首项
-// - 按 ApprovalType 结构化展示工具入参（命令预览 / 文件路径 / diff 预览）
-// - 提供「批准」/「拒绝」两个操作按钮
-// - 「记住决策」复选框（透传 rememberDecision 到主进程）
-// - pending 为空时自动关闭
-//
-// 设计：
-// - 文学风：衬线字体标题 + 米色背景 + 圆角
-// - 不同 ApprovalType 使用不同 lucide 图标（增强视觉辨识）
-// - 描述区使用 pre-wrap 保留换行（命令 / diff 内容）
-// - 危险操作（delete_file / run_command / install_package）的拒绝按钮使用 destructive variant
-// - 结构化展示区使用 monospace 字体 + 暗色背景，便于查看代码 / 命令
-// ──────────────────────────────────────────────────────────────
+// - renderStructuredPreview：按 ApprovalType 结构化展示工具入参
+//   （run_command 命令预览 / write_file、edit_file diff 预览 / git_* 变更摘要）
+// - 结构化展示区使用 monospace 字体 + 边框容器，便于查看代码 / 命令
+// ──────────────────────────────
 
 import type { TFunction } from 'i18next';
 import type { ReactElement } from 'react';
@@ -238,18 +223,3 @@ export function renderGitPreview(
 
   return null;
 }
-
-/**
- * 审批对话框
- *
- * 受理 useApprovalsStore.pending 队首项，展示给用户决策。
- * 自动开关：pending 非空时打开，空时关闭。
- *
- * @example
- * ```tsx
- * function AppRoot() {
- *   const { respondApproval } = useApprovalBridge();
- *   return <ApprovalDialog onRespond={respondApproval} />;
- * }
- * ```
- */

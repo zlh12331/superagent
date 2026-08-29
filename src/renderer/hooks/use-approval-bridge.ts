@@ -3,13 +3,13 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 订阅主进程 approval:request 事件，将 payload 转换为 ApprovalItem 入队 store
-// - 暴露 respondApproval(id, approved) 方法，回传审批结果给主进程
 // - 在组件挂载时自动订阅，卸载时自动取消订阅
+// （审批结果回传不在此 hook：由 InlineApprovalCard 按钮直接调用 approvalResponse）
 //
 // 设计：
 // - 纯桥接层：不做业务决策（批准/拒绝由用户在 UI 中操作）
 // - toolName → ApprovalType 的映射规则集中在此 hook，UI 组件不感知工具名
-// - rememberDecision 由 ApprovalDialog 复选框传入，透传到主进程
+// - rememberDecision 由 InlineApprovalCard「批准并记住」按钮传入，透传到主进程
 //
 // 数据流：
 //   主进程 ToolExecutor
@@ -17,13 +17,12 @@
 //   useApprovalBridge（本 hook）
 //     ↓ enqueue
 //   useApprovalsStore.pending[]
-//     ↓ 用户点击批准/拒绝
-//   ApprovalDialog 调用 respondApproval
+//     ↓ 用户点击拒绝 / 批准并记住 / 批准（InlineApprovalCard）
 //     ↓ agent:approval:response IPC 回传
 //   主进程 PermissionService.handleApprovalResponse
 // ──────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 
 import { type ApprovalType, useApprovalsStore } from '@/stores/transient/approvals-store';
 
@@ -92,31 +91,11 @@ function classifyTool(toolName: string): ApprovalType {
 /**
  * 审批桥接 Hook
  *
- * 在根组件挂载一次即可（通常放在 AppShell 或 Router 根部）。
- * 订阅 IPC approval:request 事件，入队到 useApprovalsStore；
- * 同时提供 respondApproval 方法供 ApprovalDialog 调用。
- *
- * @example
- * ```tsx
- * function AppRoot() {
- *   const { respondApproval } = useApprovalBridge();
- *   return (
- *     <>
- *       <Routes />
- *       <ApprovalDialog onRespond={respondApproval} />
- *     </>
- *   );
- * }
- * ```
+ * 在根组件挂载一次即可（AppShell）。
+ * 纯订阅副作用：接 IPC approval:request 事件，入队到 useApprovalsStore；
+ * 审批结果的回传由 InlineApprovalCard 直接调用 window.api.agent.approvalResponse。
  */
-export function useApprovalBridge(): {
-  /** 回传审批结果给主进程（approve=true 执行，approve=false 中止） */
-  readonly respondApproval: (
-    approvalId: string,
-    approved: boolean,
-    rememberDecision?: boolean,
-  ) => Promise<void>;
-} {
+export function useApprovalBridge(): void {
   // 订阅 IPC approval:request 事件，将 payload 入队到 store
   useEffect(() => {
     if (typeof window === 'undefined' || window.api === undefined) {
@@ -138,36 +117,4 @@ export function useApprovalBridge(): {
     });
     return unsubscribe;
   }, []);
-
-  // 回传审批结果给主进程
-  // 使用 useMemo 缓存函数引用，避免子组件因 prop 引用变化无意义重渲染
-  const respondApproval = useMemo(
-    () =>
-      async (
-        approvalId: string,
-        approved: boolean,
-        rememberDecision: boolean = false,
-      ): Promise<void> => {
-        // 1. 更新本地 store 状态（从 pending 移到 resolved）
-        if (approved) {
-          useApprovalsStore.getState().approve(approvalId);
-        } else {
-          useApprovalsStore.getState().reject(approvalId);
-        }
-        // 2. 回传给主进程（让 ToolExecutor 继续/中止）
-        if (typeof window === 'undefined' || window.api === undefined) {
-          return;
-        }
-        await window.api.agent.approvalResponse({
-          approvalId,
-          approved,
-          // 由 ApprovalDialog 复选框传入：true 表示用户选择记住决策
-          // 主进程 PermissionService 收到后会缓存该决策供后续同类型工具调用复用
-          rememberDecision,
-        });
-      },
-    [],
-  );
-
-  return { respondApproval };
 }

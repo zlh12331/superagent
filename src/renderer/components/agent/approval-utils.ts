@@ -1,7 +1,7 @@
-// approval-utils.ts（自 ApprovalDialog 拆分）
+// approval-utils.ts（自原 ApprovalDialog 拆分，弹窗已删除）
 // 审批载荷解析与类型元数据（纯函数）
 // ──────────────────────────────
-// 拆分背景：ApprovalDialog 539 行，纯函数与组件混合，按职责提取
+// 拆分背景：原 ApprovalDialog 539 行，纯函数与组件混合，按职责提取
 // ──────────────────────────────
 
 import type { LucideIcon } from 'lucide-react';
