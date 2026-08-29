@@ -22,7 +22,9 @@
 //   1. 先裁剪低价值 token（旧推理块 + 窗口外的工具调用/结果）：SDK
 //      pruneMessages 按 toolCallId 成对删除，不会留下 provider 拒绝的孤儿
 //      tool_use，且能在保住对话轮次的前提下回收预算
-//   2. 裁剪后仍超预算，才从后往前整条丢弃（先丢最早的消息）
+//   2. 裁剪后仍超预算，才从后往前整条丢弃（先丢最早的消息）。后缀切点
+//      可能把 tool-call 与它的 tool-result 劈开，留下孤儿 result →
+//      dropOrphanToolResults 按 id 剥掉这些段，补齐切片破坏的配对
 // - 压缩服务化（getCompactionBudget / getCompactionDecision）：
 //   对标 qwen chatCompressionService 阈值体系：压缩预算按模型窗口比例计算
 //   （75% 窗口 − 输出预留），warn 提前缓冲提醒，避免一次性硬压缩
@@ -136,11 +138,36 @@ function joinTextParts(texts: string[]): string {
 interface PartShape {
   readonly type?: unknown;
   readonly text?: unknown;
+  readonly toolCallId?: unknown;
   readonly toolName?: unknown;
   readonly input?: unknown;
   readonly output?: unknown;
   readonly value?: unknown;
   readonly data?: unknown;
+}
+
+/** 消息的 content part 数组（string content 不含 part → 空数组） */
+function contentParts(msg: ModelMessage): unknown[] {
+  const content = msg.content as unknown;
+  return Array.isArray(content) ? content : [];
+}
+
+/** content part 的 type 字段（非对象 / 缺失 → 空串） */
+function partType(part: unknown): string {
+  if (part === null || typeof part !== 'object') {
+    return '';
+  }
+  const kind = (part as PartShape).type;
+  return typeof kind === 'string' ? kind : '';
+}
+
+/** content part 的 toolCallId（缺失 → 空串；配对时空串视为无调用方可匹配） */
+function toolCallIdOf(part: unknown): string {
+  if (part === null || typeof part !== 'object') {
+    return '';
+  }
+  const id = (part as PartShape).toolCallId;
+  return typeof id === 'string' ? id : '';
 }
 
 /** 提取 part 负载中的内联文本（二进制/URL 负载没有文本可计） */
@@ -161,7 +188,7 @@ function partToText(part: unknown): string {
     return '';
   }
   const p = part as PartShape;
-  const kind = typeof p.type === 'string' ? p.type : '';
+  const kind = partType(part);
   if (kind === 'text' || kind === 'reasoning') {
     return typeof p.text === 'string' ? p.text : '';
   }
@@ -209,11 +236,7 @@ function stringifyToText(value: unknown): string {
 
 /** 判断 content part 是否为多模态负载（image / file / reasoning-file） */
 function isMultimodalPart(part: unknown): boolean {
-  if (part === null || typeof part !== 'object') {
-    return false;
-  }
-  const kind = (part as PartShape).type;
-  return typeof kind === 'string' && MULTIMODAL_PART_TYPES.has(kind);
+  return MULTIMODAL_PART_TYPES.has(partType(part));
 }
 
 /** 是否为按固定块计费的资产 part（多模态且非内联文本） */
@@ -227,12 +250,8 @@ function isAssetPart(part: unknown): boolean {
 
 /** 消息中资产型 part 数量（含 tool-result 内嵌的 content 段） */
 function countAssetParts(msg: ModelMessage): number {
-  const content = msg.content;
-  if (typeof content === 'string' || !Array.isArray(content)) {
-    return 0;
-  }
   let count = 0;
-  for (const part of content) {
+  for (const part of contentParts(msg)) {
     if (isAssetPart(part)) {
       count += 1;
       continue;
@@ -299,13 +318,59 @@ export function pruneContext(
 }
 
 /**
+ * 丢弃「调用已被切掉」的孤儿 tool_result
+ *
+ * 第二档保留的是消息后缀，切点可能落在 assistant 的 tool-call 与后续
+ * tool-result 之间：结果留在切片里、调用却被切掉 → 供应商 400
+ * （tool_result 找不到对应 tool_use）。第一档 pruneMessages 按 id
+ * 成对删除，没有这个问题，故只需在切片后补这一刀。
+ *
+ * 反方向（tool_use 无 result）无需处理：结果总在调用之后，后缀切片
+ * 不可能只留调用。剥离后 content 清空的消息整条丢弃。
+ *
+ * @param messages 切片后的消息列表（不被修改）
+ * @returns 配对完整的消息列表
+ */
+function dropOrphanToolResults(messages: ModelMessage[]): ModelMessage[] {
+  const callIds = new Set<string>();
+  for (const msg of messages) {
+    for (const part of contentParts(msg)) {
+      if (partType(part) === 'tool-call') {
+        const id = toolCallIdOf(part);
+        if (id.length > 0) {
+          callIds.add(id);
+        }
+      }
+    }
+  }
+
+  const isOrphanResult = (part: unknown): boolean =>
+    partType(part) === 'tool-result' && !callIds.has(toolCallIdOf(part));
+
+  const result: ModelMessage[] = [];
+  for (const msg of messages) {
+    const parts = contentParts(msg);
+    if (!parts.some(isOrphanResult)) {
+      result.push(msg);
+      continue;
+    }
+    const keptParts = parts.filter((part) => !isOrphanResult(part));
+    if (keptParts.length > 0) {
+      result.push({ ...msg, content: keptParts } as unknown as ModelMessage);
+    }
+  }
+  return result;
+}
+
+/**
  * 按 token 预算压缩消息（gpt-tokenizer 精确计数）
  *
  * 策略（两档，先廉价后昂贵）：
  * - 预算内：原样返回，不做任何有信息损失的裁剪
  * - 第一档：pruneContext 回收旧推理块 + 窗口外工具上下文
  *   → 通常这一步就把预算腾出来了，对话轮次完整保住
- * - 第二档：仍超预算 → 从后往前整条保留（先丢最早的消息）
+ * - 第二档：仍超预算 → 从后往前整条保留（先丢最早的消息），
+ *   再用 dropOrphanToolResults 补上切点破坏的工具配对
  * - system 消息无条件保留，且其占用先从预算扣除
  *
  * @param messages 原始消息列表
@@ -353,7 +418,13 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
     }
   }
 
-  return [...systemMessages, ...kept];
+  const stripped = dropOrphanToolResults(kept);
+  if (stripped.length > 0) {
+    return [...systemMessages, ...stripped];
+  }
+  // 整条切片都是孤儿结果：有 system 就只发 system；连 system 都没有时
+  // 带回未剥离的切片——空 messages 会被 SDK 直接拒绝，比配对不全更糟
+  return systemMessages.length > 0 ? systemMessages : kept;
 }
 
 /**

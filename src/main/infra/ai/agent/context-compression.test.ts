@@ -6,6 +6,7 @@
 //    真实可见文本（text / reasoning / tool-call 入参 / tool-result 输出 / 多模态）
 // 2. pruneContext：旧推理块回收、窗口外工具上下文成对删除（不留孤儿）、空消息清理
 // 3. compressByTokenBudget：预算内不动 / 两档压缩（先裁剪后丢弃）/ system 扣额
+//    / 切点不制造孤儿 tool_result（供应商 400）/ 兜底永不返回空列表
 // 4. compressContext：数量压缩（system 保留 + early 切片 + 工具消息合并）
 // 5. getCompactionBudget：大/中/小/极小窗口预算
 // 6. getCompactionDecision / getTokenBudgetDecision：四档判定与边界
@@ -53,6 +54,18 @@ const toolResult = (id: string, value: string): ModelMessage =>
         output: { type: 'text', value },
       },
     ],
+  }) as unknown as ModelMessage;
+
+/** v7 允许一条 tool 消息携带多个 tool-result 段 */
+const toolResults = (ids: string[]): ModelMessage =>
+  ({
+    role: 'tool',
+    content: ids.map((id) => ({
+      type: 'tool-result',
+      toolCallId: id,
+      toolName: 'read_file',
+      output: { type: 'text', value: `${id}_output` },
+    })),
   }) as unknown as ModelMessage;
 
 /** 带工具调用的 assistant 消息（旧版 toolCalls 字段形态，供 compressContext 用例） */
@@ -392,6 +405,53 @@ describe('compressByTokenBudget（两档预算压缩）', () => {
     const sparse: ModelMessage[] = [];
     sparse[2] = user('b');
     expect(compressByTokenBudget(sparse, 1)).toContainEqual(user('b'));
+  });
+
+  it('切点落在调用与结果之间：孤儿 tool_result 整条丢弃（防供应商 400）', () => {
+    const call = assistantParts([toolCallPart('c1')]);
+    const result = toolResult('c1', '工具输出');
+    const tail = user('最新问题');
+    // 预算刚好够 result + tail → call 被切掉，result 成了无主孤儿
+    const compressed = compressByTokenBudget(
+      [call, result, tail],
+      estimateMessagesTokens([result, tail]),
+    );
+    expect(compressed).toEqual([tail]);
+    expect(collectToolIds(compressed).results).toEqual([]);
+  });
+
+  it('结果消息混有「已切掉的调用」与「保留的调用」：只剥孤儿段', () => {
+    const oldCall = assistantParts([toolCallPart('c_old')]);
+    const newCall = assistantParts([toolCallPart('c_new')]);
+    const mixed = toolResults(['c_old', 'c_new']);
+    const tail = user('最新问题');
+    const compressed = compressByTokenBudget(
+      [oldCall, newCall, mixed, tail],
+      estimateMessagesTokens([newCall, mixed, tail]),
+    );
+    expect(compressed).toHaveLength(3);
+    expect(collectToolIds(compressed)).toEqual({ calls: ['c_new'], results: ['c_new'] });
+    const json = JSON.stringify(compressed);
+    expect(json).toContain('c_new_output');
+    expect(json).not.toContain('c_old_output');
+  });
+
+  it('切片全是孤儿结果：只留 system（不返回空 messages）', () => {
+    const sys = system('系统提示词');
+    const compressed = compressByTokenBudget(
+      [sys, assistantParts([toolCallPart('c1')]), toolResult('c1', '工具输出')],
+      estimateMessagesTokens([sys, toolResult('c1', '工具输出')]),
+    );
+    expect(compressed).toEqual([sys]);
+  });
+
+  it('无 system 且全是孤儿结果：带回未剥离切片（空 prompt 会被 SDK 直接拒绝）', () => {
+    const result = toolResult('c1', '工具输出');
+    const compressed = compressByTokenBudget(
+      [assistantParts([toolCallPart('c1')]), result],
+      estimateMessagesTokens([result]),
+    );
+    expect(compressed).toEqual([result]);
   });
 });
 
