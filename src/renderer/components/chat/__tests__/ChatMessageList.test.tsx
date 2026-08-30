@@ -6,6 +6,7 @@
 // 2. 导航轨仅在用户消息 ≥2 条时显示，且最后圆点默认高亮
 // 3. 连续 assistant 消息透传 isContinuation；流式尾条透传 isStreaming
 // 4. 空列表显示 EmptyState（开始新对话）
+// 5. 分页窗口：DOM 层只渲染最近一页，data-msg-index 基线与"已加载 x / y 条"计数同源
 //
 // MessageItem/StreamingFooter 渲染较重（Markdown/shiki/工具调用），
 // 本测试聚焦组装层结构，mock 叶子组件并记录透传 props。
@@ -145,6 +146,47 @@ describe('ChatMessageList 组装层', () => {
     it('submitted 状态：assistant 尚未输出时显示流式占位', () => {
       renderList([mkMsg('user', 'u1')], { status: 'submitted' });
       expect(screen.getByTestId('streaming-footer')).toBeInTheDocument();
+    });
+  });
+
+  describe('分页窗口（DOM 层裁剪）', () => {
+    // 长会话仅首条为 user：导航轨需 ≥2 条用户消息，避免顺手渲染数百个圆点
+    function mkSession(total: number): Msg[] {
+      return Array.from({ length: total }, (_, i) =>
+        mkMsg(i === 0 ? 'user' : 'assistant', `m${i}`),
+      );
+    }
+    const renderedItems = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('.messages-inner [data-msg-index]')).map((el) =>
+        Number(el.getAttribute('data-msg-index')),
+      );
+
+    it('500 条会话只渲染最近一页（200 条），索引基线与"已加载 x / y"计数同源', () => {
+      const { container } = renderList(mkSession(500));
+      const indexes = renderedItems(container);
+      expect(indexes).toHaveLength(200);
+      expect(indexes[0]).toBe(300);
+      expect(indexes.at(-1)).toBe(499);
+      // 断言三者对齐：渲染条数、索引基线、分页提示计数
+      const hint = screen.getByText(/已加载|Loaded/);
+      expect(hint.textContent).toContain(`${indexes.length} / 500`);
+    });
+
+    // 越界那帧的判别证据在纯函数用例（message-window.test.ts）：
+    // RTL 的 act 会先 flush 重置 effect，渲染层只能断言收敛态
+    it('切换到更短会话后仍渲染消息，索引从 0 连续', () => {
+      const { container, rerender } = renderList(mkSession(500));
+      const short = mkSession(60);
+      rerender(
+        <TooltipProvider>
+          <ChatMessageList messages={short} status="ready" onRegenerate={undefined} />
+        </TooltipProvider>,
+      );
+      const indexes = renderedItems(container);
+      expect(indexes).toHaveLength(60);
+      expect(indexes[0]).toBe(0);
+      expect(indexes.at(-1)).toBe(59);
+      expect(screen.queryByText(/已加载|Loaded/)).toBeNull();
     });
   });
 });
