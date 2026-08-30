@@ -9,10 +9,13 @@
 // 设计：
 // - 无 ServiceContainer 依赖（dialog 是 Electron 全局 API，无状态）
 // - properties 固定为目录选择（directory + 单选）
+// - pickFiles 的选中路径即「用户手势授权」，登记进 user-grants 供 file:read 放行
+//   （否则工作区收口后，用户自己选的附件会因在工作区外而读不到）
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { dialog } from 'electron';
 
+import { grantUserReadPaths } from '../infra/file/user-grants';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /** Dialog 域 handler 实现 */
@@ -48,6 +51,9 @@ export const dialogHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerCon
     if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true };
     }
+
+    // 用户亲手选中 = 授权读取：登记后 file:read 才放行（工作区外附件的唯一合法通道）
+    grantUserReadPaths(result.filePaths);
 
     return { canceled: false, paths: result.filePaths };
   },

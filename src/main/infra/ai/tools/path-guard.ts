@@ -34,7 +34,7 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
  *
  * @returns 最终落点绝对路径（解析失败等极端情况回退原路径，由上层 IO 报错兜底）
  */
-function resolveRealTarget(p: string): string {
+export function resolveRealTarget(p: string): string {
   const tail: string[] = [];
   let current = p;
   // 上限防深路径死循环（正常路径解析次数远小于此）

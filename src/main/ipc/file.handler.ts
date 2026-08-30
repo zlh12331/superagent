@@ -36,8 +36,9 @@
 // 1. 收口粒度是「历史打开过的项目集合」，不是「当前窗口正在使用的项目」——
 //    IpcHandlerContext 只有 traceId + sender，主进程无法得知渲染层当前会话，
 //    要收窄到单会话需改 wrap.ts/定义表由渲染层显式携带 sessionId（跨 owner 协作项）
-// 2. 通过 dialog:pickFiles 选中的工作区外文件（聊天附件）会被拒绝读取，
-//    需要「用户显式授权单次路径」机制才能真正支持；当前降级表现为附件读取失败。
+// 2. 通过 dialog:pickFiles 选中的工作区外文件（聊天附件）走「用户手势授权」通道：
+//    原生对话框返回的路径登记进 infra/file/user-grants，仅 file:read 查询该表，
+//    命中判定是 realpath 后的精确路径相等（不放开子树）；写/删/改名一律不看此表。
 // ──────────────────────────────────────────────────────────────
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
@@ -46,6 +47,7 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { resolveWithinWorkspace } from '../infra/ai/tools/path-guard';
 import type { IFileService } from '../infra/file/file-service';
 import { normalizeTreeIgnorePatterns } from '../infra/file/tree-ignore';
+import { matchUserGrantedReadPath } from '../infra/file/user-grants';
 import { readSetting } from '../infra/storage/settings-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -98,11 +100,23 @@ export async function defaultWorkspaceRoots(): Promise<readonly string[]> {
   return roots;
 }
 
+/** confineToWorkspace 可选行为 */
+export interface ConfineOptions {
+  /**
+   * 是否查询「用户手势授权」表（仅 file:read 置 true）
+   *
+   * true 时：路径若为用户用原生对话框亲手选中并登记过的精确文件，直接放行——
+   * 这是工作区外文件（聊天附件）的唯一合法读取通道，授权来源在主进程，渲染层无法伪造。
+   */
+  readonly allowUserGrant?: boolean;
+}
+
 /**
  * 将渲染层传入的路径收口到工作区内
  *
  * @param inputPath 渲染层路径（相对或绝对）
  * @param rootsProvider 边界来源
+ * @param opts 可选行为（allowUserGrant：登记过的用户选中路径放行）
  * @returns 通过校验的绝对路径（交给 FileService 的即此值）
  * @throws AppError(UNAUTHORIZED) 越界 / 无任何工作区根（fail closed）
  * @throws AppError(INVALID_INPUT) 空路径（由 resolveWithinWorkspace 抛出）
@@ -110,7 +124,13 @@ export async function defaultWorkspaceRoots(): Promise<readonly string[]> {
 export async function confineToWorkspace(
   inputPath: string,
   rootsProvider: () => Promise<readonly string[]>,
+  opts?: ConfineOptions,
 ): Promise<string> {
+  // 用户手势授权优先于工作区边界：命中即返回 canonical 路径（不放开子树）
+  if (opts?.allowUserGrant === true) {
+    const granted = matchUserGrantedReadPath(inputPath);
+    if (granted !== null) return granted;
+  }
   const roots = await rootsProvider();
   if (roots.length === 0) {
     throw new AppError(
@@ -138,6 +158,21 @@ export async function confineToWorkspace(
 }
 
 /**
+ * 构建路径收口函数对
+ *
+ * - guard：写/列/删/改名一律严格，只看工作区边界
+ * - guardRead：读取专用，额外允许命中「用户手势授权」表。只有 read 走这条通道——
+ *   用户原生对话框选中的工作区外附件才读得到；写/删/改名不查该表，
+ *   避免授权面从「读一个文件」扩成「改一个文件」。
+ */
+function makePathGuards(rootsProvider: () => Promise<readonly string[]>) {
+  const guard = (path: string): Promise<string> => confineToWorkspace(path, rootsProvider);
+  const guardRead = (path: string): Promise<string> =>
+    confineToWorkspace(path, rootsProvider, { allowUserGrant: true });
+  return { guard, guardRead };
+}
+
+/**
  * 创建文件域 handler 实现
  *
  * @param deps 依赖项：包含 IFileService 实例与可选工作区根提供者
@@ -146,9 +181,7 @@ export function createFileHandlers(
   deps: FileHandlerDeps,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['file'] {
   const { fileService } = deps;
-  const rootsProvider = deps.workspaceRoots ?? defaultWorkspaceRoots;
-  /** 单路径收口 */
-  const guard = (path: string): Promise<string> => confineToWorkspace(path, rootsProvider);
+  const { guard, guardRead } = makePathGuards(deps.workspaceRoots ?? defaultWorkspaceRoots);
 
   return {
     // 读取文件：支持大文件分批读取（offset/limit）
@@ -156,7 +189,7 @@ export function createFileHandlers(
     // 返回文件内容（UTF-8 解码）+ 总行数（渲染层据此判断是否分批）
     read: async (input) => {
       return fileService.read({
-        path: await guard(input.path),
+        path: await guardRead(input.path),
         offset: input.offset,
         limit: input.limit,
       });

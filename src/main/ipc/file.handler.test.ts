@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clearUserReadGrants, grantUserReadPaths } from '../infra/file/user-grants';
 import { confineToWorkspace, createFileHandlers, type FileHandlerDeps } from './file.handler';
 
 /** 创建 fake FileService */
@@ -58,12 +59,14 @@ describe('file.handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearUserReadGrants();
     workspace = makeTempDir('code-agent-fh-ws');
     outside = makeTempDir('code-agent-fh-out');
     tempDirs.push(workspace, outside);
   });
 
   afterEach(() => {
+    clearUserReadGrants();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -281,6 +284,68 @@ describe('file.handler', () => {
     it('返回值为绝对路径（交给 service 的不再是相对路径）', async () => {
       const confined = await confineToWorkspace('a/b.ts', async () => [workspace]);
       expect(confined).toBe(resolve(workspace, 'a/b.ts'));
+    });
+  });
+
+  describe('用户手势授权（工作区外附件的只读放行通道）', () => {
+    /** 工作区外的真实附件文件 */
+    function makeOutsideAttachment(name: string): string {
+      const file = join(outside, name);
+      writeFileSync(file, 'content', 'utf8');
+      return file;
+    }
+
+    it('read：登记过的越界文件放行（即使没有任何工作区根）', async () => {
+      const attachment = makeOutsideAttachment('att.txt');
+      grantUserReadPaths([attachment]);
+      const handlers = build([]);
+      await handlers.read({ path: attachment, offset: undefined, limit: undefined }, EMPTY_CTX);
+      expect(fileService.read).toHaveBeenCalledWith({
+        path: attachment,
+        offset: undefined,
+        limit: undefined,
+      });
+    });
+
+    it('read：未登记的越界文件仍拒绝', async () => {
+      const handlers = build([workspace]);
+      await expectDenied(
+        handlers.read(
+          { path: makeOutsideAttachment('steal.txt'), offset: undefined, limit: undefined },
+          EMPTY_CTX,
+        ),
+      );
+      expect(fileService.read).not.toHaveBeenCalled();
+    });
+
+    it('write / delete / list：授权表不生效（授权面不从「读」扩到「改」）', async () => {
+      const attachment = makeOutsideAttachment('att2.txt');
+      grantUserReadPaths([attachment]);
+      const handlers = build([workspace]);
+      await expectDenied(
+        handlers.write(
+          { path: attachment, content: 'x', append: false, createDirs: false },
+          EMPTY_CTX,
+        ),
+      );
+      await expectDenied(handlers.delete({ path: attachment, recursive: false }, EMPTY_CTX));
+      await expectDenied(
+        handlers.list({ path: attachment, depth: 1, includeHidden: false }, EMPTY_CTX),
+      );
+      expect(fileService.write).not.toHaveBeenCalled();
+      expect(fileService.delete).not.toHaveBeenCalled();
+      expect(fileService.list).not.toHaveBeenCalled();
+    });
+
+    it('授权目录本身不放开子树：同目录其他文件 read 仍拒绝', async () => {
+      grantUserReadPaths([makeOutsideAttachment('att3.txt')]);
+      const handlers = build([workspace]);
+      await expectDenied(
+        handlers.read(
+          { path: join(outside, 'sibling.txt'), offset: undefined, limit: undefined },
+          EMPTY_CTX,
+        ),
+      );
     });
   });
 });
