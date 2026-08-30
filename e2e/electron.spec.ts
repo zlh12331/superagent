@@ -40,6 +40,9 @@ const E2E_USER_DATA = join(__dirname, '..', '.e2e-user-data');
 // 测试实例独立调试端口（避免与 dev 实例的 9222 冲突导致 CDP 连不上、launch 超时）
 const DEBUG_PORT = '9223';
 
+// 桌面布局视口：宽度需 > 右面板折叠断点（1200px，见 use-layout-breakpoint）
+const DESKTOP_VIEWPORT = { width: 1600, height: 1000 };
+
 /**
  * 等待主窗口（过滤 devtools:// 窗口）
  *
@@ -83,6 +86,8 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
     // 等待主窗口（非 devtools://）加载完成；首窗口可能是 DevTools，需过滤
     const page = await waitForMainWindow(app);
     await page.waitForLoadState('domcontentloaded');
+    // 固定为桌面视口：CI runner 虚拟屏窄于 1200px 断点时右面板会自动折叠、DevPanel 不挂载
+    await page.setViewportSize(DESKTOP_VIEWPORT);
     return { app, page };
   } catch (err) {
     // 启动半途失败必须回收已拉起的实例，否则残留进程导致 worker teardown 超时
