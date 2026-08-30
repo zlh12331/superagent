@@ -396,7 +396,7 @@ sentry-cli releases new "code-agent@1.0.0"
 
 ## 12. 与参考项目的工程化对比
 
-参考项目（位于 `docs/参考项目/`）：qwen-code-main、gemini-cli-main、codex-main、opencode-dev、MiMo-Code-main、cognee-main、cognee-rs-main。
+参考项目：qwen-code、gemini-cli、codex、opencode、MiMo-Code、cognee、cognee-rs、electron-shadcn 共 8 个公开仓库（本地副本已于 2026-08-30 清理，需要时从 GitHub 重新 clone）。
 
 | 维度 | Code Agent | 参考项目常见做法 |
 |------|-----------|----------------|

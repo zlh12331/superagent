@@ -10,28 +10,30 @@
 // 4. 支持依赖注入：IPC handler 通过容器获取服务实例，而非直接 import 模块级单例
 //
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
-//   1. AgentService.dispose()      中断活跃 agent 对话（必须在 PermissionService 之前停止）
-//   2. MCPService.stopAll()        停止所有 MCP server 子进程
-//   3. GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
-//   4. ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
-//   5. ImService.stopAll()         停止 IM 渠道长连接
-//   5.5 RemoteControl.release()    解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
-//   6. PermissionService.dispose() reject 所有 pending 审批 Promise
-//   7. agentAskService.dispose()   清理 pending 提问
-//   8. FileService.dispose()       关闭所有 chokidar watcher
-//   9. SearchService.dispose()     终止活跃的 ripgrep 子进程
-//  10. TerminalService.dispose()   kill 所有 pty 进程
-//  11. GitService / CodebaseService / SessionService（无外部资源，dispose 为一致性 no-op）
-//  12. UpdateService.dispose()     更新事件收尾
-//  13. resetAIProvider()           清理 AI Provider 缓存
-//  14. closeDb()                   关闭 SQLite 连接（必须最后）
+//   1.  lspManager.disposeAll()     关闭全部 language server（最外层依赖，最先收）
+//   2.  AgentService.dispose()      中断活跃 agent 对话（必须在 PermissionService 之前停止）
+//   3.  MCPService.stopAll()        停止所有 MCP server 子进程
+//   4.  GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
+//   5.  ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
+//   6.  ImService.stopAll()         停止 IM 渠道长连接
+//   7.  RemoteControl.release()     解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
+//   8.  PermissionService.dispose() reject 所有 pending 审批 Promise
+//   9.  agentAskService.dispose()   清理 pending 提问
+//  10.  FileService.dispose()       关闭所有 chokidar watcher
+//  11.  SearchService.dispose()     终止活跃的 ripgrep 子进程
+//  12.  TerminalService.dispose()   kill 所有 pty 进程
+//  13.  GitService / CodebaseService.dispose()（no-op，保持一致性）
+//  14.  SessionService（resetSessionService，不关 db，由 resetDb 单独处理）
+//  15.  MemoryHub.stop()            sidecar 异步收尾（fire-and-forget）
+//  16.  UpdateService.dispose()     更新事件收尾
+//  17.  resetAIProvider()           清理 AI Provider 缓存
+//  18.  closeDb()                   关闭 SQLite 连接（必须最后）
 //
 // P1 修复：
 // - 每步经 runStep 独立 try/catch：单服务清理失败不再跳过后续清理，
 //   避免 PTY/ripgrep/chokidar 句柄残留为孤儿进程（退出路径必须可靠）
 //
 // 注意：
-// - StreamBridge 已随 Vercel AI SDK v7 迁移一并删除（chat-service 内置 abort 管理）
 // - ToolRegistry / ToolExecutor / PermissionService 是 class（非模块级单例），
 //   由 ServiceContainer 直接 new，无需 reset 函数
 // - AppConfig 无需 dispose（纯内存对象，进程退出即回收）

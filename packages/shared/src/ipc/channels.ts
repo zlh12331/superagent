@@ -12,9 +12,8 @@
 // 新增/修改 IPC 方法只需编辑 meta.ts/definitions.ts，通道常量自动同步。
 // 使用 as const 派生字面量类型，防止 ipcMain.handle / ipcRenderer.on 拼写错误
 //
-// 当前包含以下域（Code Agent 架构）：
+// 当前包含 23 个域（Code Agent 架构）。完整清单以 meta.ts 为唯一真源，以下仅为示例：
 // - 应用级：app:getStatus / app:openExternal
-// - 聊天域（保留兼容旧 chat:send，新业务用 agent 域）：chat:* 系列
 // - Agent 域（Code Agent 核心）：agent:run / agent:stop / agent:stream:* / agent:tool:* / agent:approval:*
 // - 会话域：session:list / session:get / session:delete / session:rename
 // - 文件域：file:read / file:write / file:list / file:watch:* / file:event

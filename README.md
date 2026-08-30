@@ -6,7 +6,7 @@
 
 | 层 | 选型 |
 |---|---|
-| 桌面框架 | Electron 43 + electron-vite 6 |
+| 桌面框架 | Electron 44 + electron-vite 6 |
 | 前端 | React 19 + React Router 8 + Vite 8（React Compiler 已启用） |
 | UI | Radix UI + Tailwind CSS 4 + Lucide + shiki |
 | 状态 | Zustand + TanStack Query |

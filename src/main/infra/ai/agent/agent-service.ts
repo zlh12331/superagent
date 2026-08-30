@@ -1,4 +1,4 @@
-// src/main/infra/ai/agent-service.ts
+// src/main/infra/ai/agent/agent-service.ts
 // AgentService：Code Agent 核心服务，封装 streamText + tools + stopWhen 多轮工具调用循环
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -11,10 +11,10 @@
 // 7. 错误分类（复用 error-classifier）→ AppError → AGENT_STREAM_ERROR 推送
 // 8. webContents.isDestroyed 守卫，避免销毁后继续推送
 //
-// 与 ChatService 的区别：
-// - ChatService：单轮流式响应（streamText 不带 tools），用于纯对话
-// - AgentService：多轮工具调用（streamText 带 tools + stopWhen），用于 Code Agent
-// - 二者复用相同的错误分类逻辑（error-classifier.ts）与流推送模式
+// 与 agent-runtime/ 的分工：
+// - 本文件：回合编排宿主（XState 回合状态机、上下文压缩、落库、IPC 推送，感知 webContents/DB）
+// - agent-runtime/：纯函数执行层（turn-runner 流翻译、循环检测、并发门，不感知 webContents/DB）
+// - 错误分类复用 error-classifier.ts，错误 → AppError → AGENT_STREAM_ERROR 推送
 //
 // 与 AI SDK v7 的关系：
 // - streamText 接收 tools 参数：Record<string, Tool>，AI SDK 自动多轮调用直到模型不再请求工具
