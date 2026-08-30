@@ -56,7 +56,7 @@
     "test:perf:main": "vitest run --root src/main --config vitest.perf.config.ts",
     "perf:inspect": "electron --inspect=9229 .",
     "test:perf:electron": "playwright test --config e2e/playwright.electron.config.ts --grep \"性能基准\"",
-    "test:coverage": "pnpm --filter \"@code-agent/shared\" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage",
+    "test:coverage": "pnpm --filter \"@code-agent/shared\" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage",
     "audit": "audit-ci --config .nsprc --moderate --high --critical --report-type summary --registry https://registry.npmjs.org",
     "prepare:memory-hub": "node scripts/prepare-memory-hub.mjs",
     "prepare:codegraph": "node scripts/prepare-codegraph.mjs",
