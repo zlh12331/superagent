@@ -5,7 +5,7 @@
 // 1. 初始窗口：只渲染最近 PAGE_SIZE 条；消息少时从 0 开始
 // 2. 向上翻页：每次前进一页，不低于 0
 // 3. 跳转扩展：窗口外目标对齐到所在页起点
-// 4. 安全裁剪：切换会话后窗口越界时 clamp 到消息总数
+// 4. 安全裁剪：切换会话后窗口起点越界时回退默认窗口起点（不变量：不得渲染空窗口）
 
 import { describe, expect, it } from 'vitest';
 
@@ -57,8 +57,19 @@ describe('clampStart', () => {
     expect(clampStart(2000, 5000)).toBe(2000);
   });
 
-  it('起点越界（切换会话后）：钳制到消息总数', () => {
-    expect(clampStart(4800, 3000)).toBe(3000);
+  it('起点越界（切换到更短会话后）：回退到该总数下的默认窗口起点', () => {
+    expect(clampStart(4800, 3000)).toBe(2800);
+  });
+
+  it('起点等于总数（旧实现返回 total → slice 得空列表）：仍渲染最近一页', () => {
+    expect(clampStart(3000, 3000)).toBe(2800);
+    expect(clampStart(300, 300)).toBe(100);
+  });
+
+  it('不变量：total 不少于单页时裁剪后至少渲染一页（不得为空）', () => {
+    for (const total of [MESSAGE_PAGE_SIZE, 300, 5000]) {
+      expect(total - clampStart(total, total)).toBeGreaterThanOrEqual(MESSAGE_PAGE_SIZE);
+    }
   });
 
   it('空会话：0', () => {

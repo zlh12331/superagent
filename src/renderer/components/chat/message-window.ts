@@ -32,8 +32,11 @@ export function ensureIndexStart(index: number, start: number): number {
   return start;
 }
 
-/** 渲染时安全裁剪：起点不超过消息总数（切换会话后窗口可能越界） */
+/**
+ * 渲染时安全裁剪：起点越界（切换到更短会话后，重置 effect 尚未落地）时回退到
+ * 该总数下的默认窗口起点。钳到 total 本身会让 slice 得到空列表（白屏一帧）。
+ */
 export function clampStart(start: number, total: number): number {
   if (total <= 0) return 0;
-  return Math.min(start, total);
+  return Math.min(start, initialWindowStart(total));
 }

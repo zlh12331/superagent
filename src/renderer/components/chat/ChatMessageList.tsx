@@ -78,6 +78,8 @@ export function ChatMessageList({
   // 分页渲染窗口（2026-08 长会话性能根治）：数据全量保留在 messages（LLM 上下文
   // 完整），仅裁剪 DOM——默认只渲染最近一页，滚动到顶加载更早；首屏挂载成本固定
   const [windowStart, setWindowStart] = useState<number>(() => initialWindowStart(messages.length));
+  // 实际渲染起点：state 越界时回退默认窗口；slice / 索引基线 / 计数统一用它
+  const clampedStart = clampStart(windowStart, messages.length);
   // 加载更早前的滚动高度（渲染后补偿，保持视口内容不跳）
   const prevScrollHeightRef = useRef(0);
   // 目标在窗口外时的待滚动索引（窗口扩展渲染后执行）
@@ -119,7 +121,7 @@ export function ChatMessageList({
   // 导航轨（锚点 + 滚动联动活跃圆点）状态提取至独立 hook，本组件只负责消费与滚动定位
   const { questions, activeTurn, scheduleSync } = useMessageNavRail({
     messages,
-    windowStart,
+    windowStart: clampedStart,
     scrollerRef,
   });
 
@@ -145,7 +147,7 @@ export function ChatMessageList({
     scheduleSync();
 
     // 分页渲染：滚动到顶部附近且窗口未到开头 → 加载更早（记录高度供补偿）
-    if (el.scrollTop <= AT_TOP_THRESHOLD && windowStart > 0) {
+    if (el.scrollTop <= AT_TOP_THRESHOLD && clampedStart > 0) {
       prevScrollHeightRef.current = el.scrollHeight;
       loadEarlier();
     }
@@ -188,11 +190,8 @@ export function ChatMessageList({
     }
   }, [windowStart]);
 
-  // 渲染窗口裁剪：数据全量在 messages，仅 DOM 层分页（切换会话后 clamp 兜底）
-  const visibleMessages = useMemo(
-    () => messages.slice(clampStart(windowStart, messages.length)),
-    [messages, windowStart],
-  );
+  // 渲染窗口裁剪：数据全量在 messages，仅 DOM 层分页（起点口径统一见 clampedStart）
+  const visibleMessages = useMemo(() => messages.slice(clampedStart), [messages, clampedStart]);
 
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
   // - 用户在底部附近：直接滚动跟随新内容（替代 Virtuoso followOutput）
@@ -238,17 +237,17 @@ export function ChatMessageList({
             与 820px 居中的输入框严重错位） */}
         <div className="messages-inner">
           {/* 分页提示：窗口未到开头（滚动到顶可加载更早消息） */}
-          {windowStart > 0 && (
+          {clampedStart > 0 && (
             <div className="text-muted-foreground/60 py-1 text-center text-[10px]">
               {t('chat.loadedMessages', {
-                count: messages.length - windowStart,
+                count: messages.length - clampedStart,
                 total: messages.length,
               })}
             </div>
           )}
           {visibleMessages.map((message, relativeIndex) => {
             // 全量索引（流式标记/连续判定/MSG_INDEX_ATTR 用）
-            const index = windowStart + relativeIndex;
+            const index = clampedStart + relativeIndex;
             // 流式标记：最后一条 assistant 消息正在输出时，文本末尾显示闪烁光标（照搬参考项目 StreamingCursor）
             const isStreamingMessage =
               !showStreamingFooter && isStreaming && index === messages.length - 1;
