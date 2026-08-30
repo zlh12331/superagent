@@ -76,8 +76,8 @@ describe('SQLite 存储基准（perf）', () => {
     service = new SessionService();
   });
 
-  afterAll(() => {
-    closeDb();
+  afterAll(async () => {
+    await closeDb();
     try {
       rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     } catch {

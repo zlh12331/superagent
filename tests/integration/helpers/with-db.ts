@@ -36,13 +36,13 @@ export async function withTempUserData<T>(fn: (db: DrizzleDB) => Promise<T> | T)
   const dir = mkdtempSync(join(tmpdir(), 'code-agent-it-'));
   getItState().userData = dir;
   try {
-    closeDb();
+    await closeDb();
     resetDb();
     const db = initDb();
     return await fn(db);
   } finally {
     // 真正关闭连接释放句柄（resetDb 仅清缓存不 close）——否则 Windows 下临时目录清理 EPERM
-    closeDb();
+    await closeDb();
     resetDb();
     rmSync(dir, { recursive: true, maxRetries: 5 });
   }

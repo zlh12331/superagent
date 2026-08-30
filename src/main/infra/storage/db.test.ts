@@ -45,10 +45,7 @@ describe('db', () => {
   });
 
   afterAll(async () => {
-    // 等待 initDb 触发的异步热备份日志落定，避免其在 vitest worker 关闭后
-    // 到达触发 EnvironmentTeardownError（onUserConsoleLog pending）
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    closeDb();
+    await closeDb();
     // WAL 文件可能仍被短暂占用；清理失败不阻塞测试结果（Windows 句柄延迟释放）
     try {
       rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -123,7 +120,7 @@ describe('db', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       expect(baseline).toHaveLength(1);
-      closeDb();
+      await closeDb();
 
       // 基础设施边界 stub：仅让启动完整性探测返回损坏结果，其余 pragma 透传
       proto.pragma = function (this: unknown, sql: string, opts?: unknown): unknown {
@@ -145,7 +142,45 @@ describe('db', () => {
       expect(warnMock).toHaveBeenCalledWith({}, expect.stringContaining('跳过启动备份'));
     } finally {
       proto.pragma = originalPragma;
-      closeDb();
+      await closeDb();
+      resetDb();
+      mockApp.getPath.mockReturnValue(tempDir);
+    }
+  });
+
+  it('closeDb：等待在途启动备份落地后才关闭连接（不产出截断备份）', async () => {
+    const isolatedDir = mkdtempSync(join(tempDir, 'drain-'));
+    mockApp.getPath.mockReturnValue(isolatedDir);
+    const backupDir = join(isolatedDir, 'backups');
+    const errorMock = vi.mocked(logger.error);
+    errorMock.mockClear();
+
+    try {
+      resetDb();
+      initDb();
+      // 此刻 sqlite.backup 仍在途；closeDb 必须先 drain 再关连接
+      await closeDb();
+
+      // 不做轮询即应看到完整备份——证明 closeDb 真的等待过，而非关在备份中途
+      const names = readdirSync(backupDir);
+      const backups = names.filter((n) => n.endsWith('.db'));
+      const [backupFile] = backups;
+      expect(backups).toHaveLength(1);
+      expect(names.filter((n) => n.endsWith('.tmp'))).toEqual([]);
+      if (backupFile === undefined) throw new Error('备份文件未生成');
+      // 修复前的失败形态：备份打在已关闭的连接上
+      expect(errorMock).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringContaining('数据库备份失败'),
+      );
+
+      const backup = Database(join(backupDir, backupFile), { readonly: true });
+      try {
+        expect(backup.pragma('integrity_check', { simple: true })).toBe('ok');
+      } finally {
+        backup.close();
+      }
+    } finally {
       resetDb();
       mockApp.getPath.mockReturnValue(tempDir);
     }
@@ -508,7 +543,7 @@ describe('老库升级（增量迁移）', () => {
 
   it('旧 schema 库 → 数据保真 + 约束补齐 + journal 五条，重复 initDb 幂等', async () => {
     resetDb();
-    closeDb();
+    await closeDb();
     const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
     mockApp.getPath.mockReturnValue(legacyDir);
     try {
@@ -576,14 +611,11 @@ describe('老库升级（增量迁移）', () => {
       expect(migs).toHaveLength(5);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
-      closeDb();
+      await closeDb();
       resetDb();
       expect(() => initDb()).not.toThrow();
-
-      // 等待异步热备份日志落定（避免 teardown 竞态）
-      await new Promise((resolve) => setTimeout(resolve, 200));
     } finally {
-      closeDb();
+      await closeDb();
       mockApp.getPath.mockReturnValue(tempDir);
       try {
         rmSync(legacyDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -595,7 +627,7 @@ describe('老库升级（增量迁移）', () => {
 
   it('新库：0000 ~ 0004 全执行（journal 五条），约束齐全', async () => {
     resetDb();
-    closeDb();
+    await closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
     mockApp.getPath.mockReturnValue(freshDir);
     try {
@@ -610,9 +642,8 @@ describe('老库升级（增量迁移）', () => {
           )
           .run(),
       ).toThrow(/CHECK constraint failed/i);
-      await new Promise((resolve) => setTimeout(resolve, 200));
     } finally {
-      closeDb();
+      await closeDb();
       mockApp.getPath.mockReturnValue(tempDir);
       try {
         rmSync(freshDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

@@ -74,9 +74,8 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
     mkdirSync(backupDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const backupPath = join(backupDir, `sessions-${stamp}.db`);
-    // 原子落盘：先写 .db.tmp 成功后再 rename。backup() 中途失败（initDb 以 void
-    // 异步发起，退出时 closeDb 可能先关掉连接）会留下半截文件，而轮转按 *.db
-    // 计数——残缺备份会被误当成可用恢复点。
+    // 原子落盘：先写 .db.tmp 成功后再 rename。backup() 中途失败（磁盘满、进程被
+    // 强杀）会留下半截文件，而轮转按 *.db 计数——残缺备份会被误当成可用恢复点。
     const tmpPath = `${backupPath}.tmp`;
     // 安全修复：先以 0600 预创建空文件再交给 sqlite.backup 截断写入——
     // 此前备份以默认 umask（644）完整落盘后才 chmod，POSIX 下存在
@@ -144,7 +143,8 @@ function probeIntegrityAndScheduleBackup(sqlite: Database.Database, dbPath: stri
     return;
   }
   logger.info({}, 'SQLite 完整性校验通过');
-  void backupDatabase(sqlite, dbPath).catch((error: unknown) => {
+  // backupDatabase 内部已捕获全部异常，此 Promise 永不 reject，可安全 await
+  pendingBackup = backupDatabase(sqlite, dbPath).catch((error: unknown) => {
     logger.error({ error: String(error) }, '数据库备份失败');
   });
 }
@@ -168,8 +168,17 @@ type DrizzleDB = BetterSQLite3Database<typeof schema>;
 
 /** 数据库实例缓存（单例，首次调用 initDb 创建） */
 let dbInstance: DrizzleDB | null = null;
+
 /** better-sqlite3 原始实例缓存（用于关闭连接） */
 let sqliteInstance: Database.Database | null = null;
+
+/**
+ * 在途启动备份 Promise（无则在 idle）
+ *
+ * 备份是异步的，关闭连接前必须等待它落地——否则备份会在连接已关闭后继续写
+ * 临时文件，产出截断的备份副本混入轮转环（看似健康的假恢复点）。
+ */
+let pendingBackup: Promise<void> | null = null;
 
 /**
  * 极老库兼容补丁：迁移前为 runtime_models 补齐缺失列（幂等）
@@ -327,9 +336,16 @@ export function getDb(): DrizzleDB {
  * 应用退出时调用，释放 SQLite 文件句柄。
  * WAL 模式下关闭会自动 checkpoint（合并 WAL 到主数据库）。
  *
+ * 关闭前先等待在途启动备份落地：备份若继续跑在已关闭的连接上会产出截断副本，
+ * 而轮转按 *.db 计数——假恢复点比没有备份更危险。
+ *
  * 幂等：多次调用安全。
  */
-export function closeDb(): void {
+export async function closeDb(): Promise<void> {
+  if (pendingBackup !== null) {
+    await pendingBackup;
+    pendingBackup = null;
+  }
   if (sqliteInstance !== null) {
     sqliteInstance.close();
     sqliteInstance = null;

@@ -284,7 +284,7 @@ describe('session 域集成链路（batch 1）', () => {
       });
 
       // 模拟重启：关闭连接后重新初始化（同一 userData 目录）
-      closeDb();
+      await closeDb();
       initDb();
       const svc2 = getSessionService() as SessionService;
       const handlers2 = createSessionHandlers({ sessionService: svc2 });

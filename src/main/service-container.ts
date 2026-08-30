@@ -947,8 +947,8 @@ class ServiceContainer {
     });
 
     // 11.5 关闭 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
-    await runStep('closeDb', () => {
-      closeDb();
+    await runStep('closeDb', async () => {
+      await closeDb();
     });
 
     if (failures.length > 0) {

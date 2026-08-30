@@ -48,8 +48,8 @@ describe('storage 域批次9 缺口补全', () => {
     resetDb();
   });
 
-  afterEach(() => {
-    closeDb();
+  afterEach(async () => {
+    await closeDb();
     resetDb();
     rmSync(tempDir, { recursive: true, force: true });
   });
@@ -117,13 +117,13 @@ describe('storage 域批次9 缺口补全', () => {
       expect(getDb()).toBe(db);
     });
 
-    it('closeDb：关闭后 getDb 抛错；再次 closeDb 幂等', () => {
+    it('closeDb：关闭后 getDb 抛错；再次 closeDb 幂等', async () => {
       const db = initDb();
       expect(db).toBeDefined();
-      closeDb();
+      await closeDb();
       expect(() => getDb()).toThrow('数据库未初始化');
       // 幂等：二次调用不抛
-      expect(() => closeDb()).not.toThrow();
+      await expect(closeDb()).resolves.toBeUndefined();
     });
 
     it('完整性校验通过：记录日志（新库 integrity=ok）', () => {
@@ -131,7 +131,7 @@ describe('storage 域批次9 缺口补全', () => {
       expect(mocks.mockLogger.info).toHaveBeenCalledWith({}, 'SQLite 完整性校验通过');
     });
 
-    it('drizzle 迁移：全新库建全表 + journal 幂等 + 约束生效，重复 initDb 不抛', () => {
+    it('drizzle 迁移：全新库建全表 + journal 幂等 + 约束生效，重复 initDb 不抛', async () => {
       initDb();
       const dbPath = join(tempDir, 'sessions.db');
       const Database = require('better-sqlite3') as new (
@@ -178,7 +178,7 @@ describe('storage 域批次9 缺口补全', () => {
       check.close();
 
       // 重复 initDb（resetDb 后模拟重启）：journal 已记录，迁移不再执行，幂等不抛
-      closeDb();
+      await closeDb();
       resetDb();
       expect(() => initDb()).not.toThrow();
     });

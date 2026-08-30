@@ -37,8 +37,8 @@ describe('settings-pref（app_settings 表，SQLite 单一真源）', () => {
     initDb();
   });
 
-  afterEach(() => {
-    closeDb();
+  afterEach(async () => {
+    await closeDb();
     resetDb();
     rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
