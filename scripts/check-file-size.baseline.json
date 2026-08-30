@@ -1,0 +1,38 @@
+{
+  "packages/shared/src/ipc/definitions.ts": {
+    "net": 841,
+    "raw": 932
+  },
+  "src/main/index.ts": {
+    "net": 401,
+    "raw": 628
+  },
+  "src/main/infra/ai/agent/agent-service.ts": {
+    "net": 576,
+    "raw": 895
+  },
+  "src/main/infra/ai/tools/permission-service.ts": {
+    "net": 483,
+    "raw": 873
+  },
+  "src/main/infra/file/file-service.ts": {
+    "net": 418,
+    "raw": 795
+  },
+  "src/main/infra/storage/session-service.ts": {
+    "net": 588,
+    "raw": 1042
+  },
+  "src/main/service-container.ts": {
+    "net": 503,
+    "raw": 1080
+  },
+  "src/renderer/components/chat/ChatInput.tsx": {
+    "net": 605,
+    "raw": 820
+  },
+  "src/renderer/dev/mock-api.ts": {
+    "net": 910,
+    "raw": 1022
+  }
+}

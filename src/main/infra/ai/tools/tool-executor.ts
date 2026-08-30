@@ -31,7 +31,7 @@ import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { withSpan } from '../../telemetry/otel';
 import { HookEventName, hookRegistry } from '../agent/hook-registry';
-import type { IPermissionService } from './permission-service';
+import type { IPermissionService, PermissionDecision } from './permission-service';
 import { generateApprovalId } from './permission-service';
 import type { ToolContext, ToolResult } from './tool';
 import type { IToolRegistry } from './tool-registry';
@@ -131,9 +131,28 @@ export class ToolExecutor implements IToolExecutor {
         // 2. 决策权限（userPrompt 用于意图豁免破坏性拦截）
         // P2（IM 外泄向量）：ctx.workingDir 作为路径边界传入——auto 模式下
         // 命令引用边界外的绝对路径时降级 ask，不再被只读快速路径静默放行
-        const decision = await this.permissionService.decide(tool, input, ctx.userPrompt, {
-          pathBoundary: ctx.workingDir,
-        });
+        //
+        // fail-closed：decide 内部（stableStringify / 白名单匹配）的异常契约是
+        // "由调用方 catch"，而这里是唯一生产调用点。不兜住会让异常冒泡出
+        // execute()，AGENT_TOOL_RESULT 永远不推送，渲染层工具卡片卡在"执行中"。
+        let decision: PermissionDecision;
+        try {
+          decision = await this.permissionService.decide(tool, input, ctx.userPrompt, {
+            pathBoundary: ctx.workingDir,
+          });
+        } catch (error: unknown) {
+          logger.error({ toolName, toolCallId, error }, '权限决策异常，已拒绝执行');
+          const result = this.buildErrorResult(
+            ctx.sessionId,
+            toolCallId,
+            toolName,
+            '权限决策失败',
+            ErrorCode.TOOL_PERMISSION_DENIED,
+            `权限决策失败，已拒绝执行：${toolName}`,
+          );
+          this.sendToolResult(webContents, result);
+          return result;
+        }
 
         // 3. 推送 AGENT_TOOL_CALL 事件（渲染层据此展示 ToolCallView）
         this.sendToolCall(webContents, {

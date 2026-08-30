@@ -124,9 +124,10 @@ export const messages = sqliteTable(
     // 稳定枚举：消息角色四值恒定
     check('chk_messages_role', sql`${t.role} IN ('user','assistant','tool','system')`),
     // 会话内序号唯一：防并发/重试写入同 seq 产生双行（会话历史错乱的根源）
+    // 该 UNIQUE 同时承担"按 sessionId 过滤 + seq 升序"的查询索引职责——
+    // drizzle 会把它发成具名 UNIQUE 索引 uq_messages_session_seq，列序 (session_id, seq)
+    // 的最左前缀即可服务该查询，故无需再建同列普通索引（只会带来写放大）
     unique('uq_messages_session_seq').on(t.sessionId, t.seq),
-    // 查询索引：get 接口按 sessionId 过滤 + seq 升序；transcript 按 turnId 查
-    index('idx_messages_session_seq').on(t.sessionId, t.seq),
     index('idx_messages_turn').on(t.turnId),
   ],
 );

@@ -7,7 +7,7 @@
 // CHECK / UNIQUE / 外键由迁移落库并被 SQLite 强制执行。
 // ──────────────────────────────────────────────────────────────
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -64,6 +64,40 @@ describe('db', () => {
     expect(getDbPath()).toBe(join(tempDir, 'sessions.db'));
   });
 
+  it('initDb 热备份：原子落位 sessions-*.db、无 .tmp 残留、备份可校验', async () => {
+    resetDb();
+    initDb();
+    const backupDir = join(tempDir, 'backups');
+
+    // 备份以 void 异步发起（不阻断启动），轮询等待 rename 落定
+    let names: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      names = readdirSync(backupDir);
+      if (names.some((n) => n.endsWith('.db'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const backups = names.filter((n) => n.endsWith('.db'));
+    expect(backups.length).toBeGreaterThanOrEqual(1);
+    // 关键断言：失败的半成品只可能是 .db.tmp，不可混入 .db 恢复点；
+    // 成功路径 rename 后不应留下任何 tmp
+    expect(names.filter((n) => n.endsWith('.tmp'))).toEqual([]);
+
+    const backupFile = backups.sort().at(-1);
+    if (backupFile === undefined) throw new Error('备份文件未生成');
+    const backup = Database(join(backupDir, backupFile), { readonly: true });
+    try {
+      expect(backup.pragma('integrity_check', { simple: true })).toBe('ok');
+      // 备份发生在迁移之后：表结构完整
+      const tables = backup.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+        name: string;
+      }[];
+      expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(['sessions', 'messages']));
+    } finally {
+      backup.close();
+    }
+  });
+
   it('initDb：创建数据库并建表（全部 11 张表）', () => {
     const db = initDb();
     const rows = db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type='table'`);
@@ -97,7 +131,6 @@ describe('db', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'idx_sessions_updated_at',
-        'idx_messages_session_seq',
         'idx_messages_turn',
         'idx_prompts_role',
         'idx_token_usage_created_at',
@@ -300,7 +333,8 @@ describe('领域约束生效', () => {
 // 且无 __drizzle_migrations journal）。initDb 时应：
 //   1. 0000 全量 IF NOT EXISTS 幂等跳过（不再因 "index already exists" 崩）
 //   2. 0001_legacy_upgrade 数据保真重建 5 张表，补齐领域约束
-//   3. journal 记录两条迁移（此后进入 drizzle 版本体系）
+//   3. 0002 ~ 0004 续跑（补 sessions 约束、会话内 seq UNIQUE、清理冗余索引）
+//   4. journal 记录全部迁移（此后进入 drizzle 版本体系）
 describe('老库升级（增量迁移）', () => {
   /** 旧手写 schema 的全部建表 + 索引 SQL（对齐已退役的 schema-sql.ts） */
   const LegacySchemaSql = `
@@ -419,7 +453,7 @@ describe('老库升级（增量迁移）', () => {
     return (db as unknown as { $client: Database.Database }).$client;
   }
 
-  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 两条，重复 initDb 幂等', async () => {
+  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 五条，重复 initDb 幂等', async () => {
     resetDb();
     closeDb();
     const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
@@ -484,9 +518,9 @@ describe('老库升级（增量迁移）', () => {
           .run(),
       ).toThrow(/UNIQUE constraint failed/i);
 
-      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0003）
+      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0004）
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(4);
+      expect(migs).toHaveLength(5);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
       closeDb();
@@ -506,7 +540,7 @@ describe('老库升级（增量迁移）', () => {
     }
   });
 
-  it('新库：0000 ~ 0003 全执行（journal 四条），约束齐全', async () => {
+  it('新库：0000 ~ 0004 全执行（journal 五条），约束齐全', async () => {
     resetDb();
     closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -514,7 +548,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(4);
+      expect(migs).toHaveLength(5);
       // 约束仍生效（0001 重建未破坏 0000 语义）
       expect(() =>
         raw(db)

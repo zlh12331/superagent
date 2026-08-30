@@ -23,13 +23,15 @@ const ANALYZE_BUNDLE = process.env.ANALYZE_BUNDLE === '1';
 function rendererPlugins() {
   const plugins = [
     react({
-      // React Compiler：annotation 模式（仅标记 'use memo' 的文件编译）
-      // 原因：全量模式与 react-virtuoso 的 ref 内部状态不兼容——Virtuoso 组件
-      // data 更新不触发渲染（侧栏会话列表静默空渲染，CDP 实测定位）。
-      // 'use no memo' 文件级指令实测未生效，故用编译模式级 opt-in 方案。
-      babel: {
-        plugins: [['babel-plugin-react-compiler', { compilationMode: 'annotation' }]],
-      },
+      // React Compiler：未启用（编译器实际不参与本次构建）。
+      // 事实：@vitejs/plugin-react v6 已移除 `babel` 选项，Vite 8（Rolldown）链路上
+      // 不存在 Babel 通道——此前 `babel.plugins: [['babel-plugin-react-compiler', ...]]`
+      // 被静默忽略（实测证据：产物无 react/compiler-runtime 引用、渲染层 0 个 'use memo'）。
+      // 因此 annotation / full 两种模式都无处生效，历史注释里的 virtuoso 阻塞理由已不成立。
+      // 真正开启方式（需先补可选依赖，属工程门禁/依赖对齐范围）：
+      //   pnpm add -D oxc-transform-react → react({ compiler: { compilationMode: 'all' } })
+      // 或 pnpm add -D @rolldown/plugin-babel → babel({ presets: [reactCompilerPreset()] })
+      // 在此之前，渲染层的 useMemo/useCallback 仍是必需的，不可依赖编译器自动记忆化。
     }),
     // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
     // 文档：https://tailwindcss.com/docs/installation/using-vite

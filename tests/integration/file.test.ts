@@ -5,8 +5,9 @@
 // 替身：仅 webContents（watch 事件推送目标）
 //
 // 维度覆盖：接口契约 / 错误传播（classify*Error → 错误码）/ 资源生命周期（watch 清理）
-// 场景：安全边界（相对路径拒绝）/ 幂等（重复 delete）/ 并发（并行 write）/
-//       事件流完整性（watch 事件序列）/ 持久化往返（write→read 文件系统真实落盘）
+// 场景：安全边界（工作区收口：越界/遍历拒绝、无边界 fail closed）/ 幂等（重复 delete）/
+//       并发（并行 write）/ 事件流完整性（watch 事件序列）/
+//       持久化往返（write→read 文件系统真实落盘）
 // ──────────────────────────────────────────────────────────────
 
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,10 +35,23 @@ function withTempDir<T>(fn: (dir: string) => Promise<T> | T): Promise<T> {
   })();
 }
 
+/**
+ * 构造文件域 handler：把本用例临时目录注入工作区边界
+ *
+ * handler 层会先把渲染层路径收口到「工作区根集合」（生产环境来自会话 workingDir），
+ * 测试没有会话表 → 必须显式注入边界，否则一律 fail closed 被拒。
+ */
+function makeHandlers(dir: string): ReturnType<typeof createFileHandlers> {
+  return createFileHandlers({
+    fileService: getFileService(),
+    workspaceRoots: async () => [dir],
+  });
+}
+
 describe('file 域集成链路（batch 3）', () => {
   it('正向：write→read 往返（真实文件系统落盘）', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const filePath = join(dir, 'hello.txt');
 
       const written = await handlers.write({ path: filePath, content: '第一行\n第二行' });
@@ -51,7 +65,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('正向：append 追加累积内容', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const filePath = join(dir, 'log.txt');
 
       await handlers.write({ path: filePath, content: 'line1\n' });
@@ -63,7 +77,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('正向：create/createDir + list 目录结构', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       await handlers.createDir({ path: join(dir, 'src', 'components') });
       await handlers.create({ path: join(dir, 'src', 'index.ts') });
       await handlers.create({ path: join(dir, 'README.md') });
@@ -79,7 +93,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('正向：delete 文件与递归目录', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const filePath = join(dir, 'a.txt');
       const dirPath = join(dir, 'nested', 'deep');
       await handlers.write({ path: filePath, content: 'x' });
@@ -97,7 +111,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('正向：rename 文件与目录（移动语义）', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const from = join(dir, 'old.txt');
       const to = join(dir, 'new.txt');
       await handlers.write({ path: from, content: '内容' });
@@ -111,7 +125,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('正向：watch 变更事件序列（watchStart→write→事件→watchStop）', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const { wc, sent } = createFakeWebContents();
 
       const { watcherId } = await handlers.watchStart({ path: dir }, {
@@ -146,7 +160,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('边界：read 分片（offset/limit）', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const filePath = join(dir, 'big.txt');
       const lines = Array.from({ length: 10 }, (_, i) => `line-${i}`);
       await handlers.write({ path: filePath, content: lines.join('\n') });
@@ -161,7 +175,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('边界：空文件与 offset 超界', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const filePath = join(dir, 'empty.txt');
       await handlers.create({ path: filePath });
 
@@ -177,7 +191,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('边界：createDirs 自动创建父目录', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const deepPath = join(dir, 'a', 'b', 'c', 'deep.txt');
       await handlers.write({ path: deepPath, content: 'x', createDirs: true });
       const read = await handlers.read({ path: deepPath });
@@ -187,23 +201,43 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('异常：read 不存在 → 错误码', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       await expect(handlers.read({ path: join(dir, 'missing.txt') })).rejects.toMatchObject({});
     });
   });
 
-  it('异常+安全边界：相对路径拒绝', async () => {
-    await withTempDir(async (_dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+  it('安全边界：工作区收口拒绝越权路径（越界 / 遍历 / 无边界 fail closed）', async () => {
+    await withTempDir(async (dir) => {
+      const handlers = makeHandlers(dir);
+      // 相对路径按工作区根解析：落在根内，但无法借此读越权路径
+      await handlers.write({ path: 'inside.txt', content: 'x' });
+      expect((await handlers.read({ path: join(dir, 'inside.txt') })).content).toBe('x');
+      // .. 遍历逃出根 → 越权
+      await expect(handlers.read({ path: join('..', 'Windows', 'win.ini') })).rejects.toMatchObject(
+        { code: 'UNAUTHORIZED' },
+      );
+      // 工作区外绝对路径 → 越权
       await expect(
-        handlers.write({ path: 'relative/path.txt', content: 'x' }),
-      ).rejects.toBeDefined();
+        handlers.read({ path: join(tmpdir(), 'outside-secret.txt') }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+  });
+
+  it('安全边界：无工作区根时 fail closed（拒绝一切路径）', async () => {
+    await withTempDir(async (dir) => {
+      const handlers = createFileHandlers({
+        fileService: getFileService(),
+        workspaceRoots: async () => [],
+      });
+      await expect(handlers.read({ path: join(dir, 'x.txt') })).rejects.toMatchObject({
+        code: 'UNAUTHORIZED',
+      });
     });
   });
 
   it('异常：create 已存在 → 报错', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       const filePath = join(dir, 'exists.txt');
       await handlers.create({ path: filePath });
       await expect(handlers.create({ path: filePath })).rejects.toBeDefined();
@@ -212,7 +246,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('异常：delete 不存在 → 报错（严格模式 force:false）', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       await expect(
         handlers.delete({ path: join(dir, 'never-existed'), recursive: false }),
       ).rejects.toBeDefined();
@@ -226,7 +260,7 @@ describe('file 域集成链路（batch 3）', () => {
 
   it('并发：并行 write 互不干扰', async () => {
     await withTempDir(async (dir) => {
-      const handlers = createFileHandlers({ fileService: getFileService() });
+      const handlers = makeHandlers(dir);
       await Promise.all(
         Array.from({ length: 10 }, (_, i) =>
           handlers.write({ path: join(dir, `f-${i}.txt`), content: `内容${i}` }),

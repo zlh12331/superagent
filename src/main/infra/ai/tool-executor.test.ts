@@ -126,6 +126,38 @@ describe('ToolExecutor', () => {
     });
   });
 
+  describe('权限决策异常（fail-closed 兜底）', () => {
+    it('decide 抛错：返回 TOOL_PERMISSION_DENIED 并推送 TOOL_RESULT，工具不执行', async () => {
+      const execute = vi.fn(
+        async (): Promise<ToolResult> => ({
+          title: '不应执行',
+          output: 'ok',
+        }),
+      );
+      createExecutor(createMockTool('auto', execute));
+      const wc = createMockWebContents();
+      permissionService.decide.mockRejectedValueOnce(
+        new TypeError('Converting circular structure to JSON in stableStringify'),
+      );
+
+      const result = await executor.execute(
+        'mock_tool',
+        'call-1',
+        { a: 1 },
+        createBaseCtx({ webContents: wc }),
+        wc,
+      );
+
+      expect(result.error?.code).toBe(ErrorCode.TOOL_PERMISSION_DENIED);
+      expect(execute).not.toHaveBeenCalled();
+      expect(permissionService.requestApproval).not.toHaveBeenCalled();
+      expect(wc.send).toHaveBeenCalledWith(
+        IPC_CHANNELS.AGENT_TOOL_RESULT,
+        expect.objectContaining({ toolName: 'mock_tool' }),
+      );
+    });
+  });
+
   describe('build 模式（默认）', () => {
     it('permission=auto：直接执行，不请求审批', async () => {
       const tool = createMockTool('auto');

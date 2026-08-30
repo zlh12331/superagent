@@ -1,0 +1,1 @@
+DROP INDEX `idx_messages_session_seq`;

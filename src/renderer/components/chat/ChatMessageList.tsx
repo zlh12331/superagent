@@ -30,12 +30,9 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { MessageItem } from './message-item';
-import { extractText } from './message-utils';
 import { clampStart, ensureIndexStart, initialWindowStart, nextPageStart } from './message-window';
 import { StreamingFooter } from './streaming-footer';
-
-/** 消息导航轨元素的数据属性（滚动定位用） */
-const MSG_INDEX_ATTR = 'data-msg-index';
+import { MSG_INDEX_ATTR, type QuestionAnchor, useMessageNavRail } from './use-message-nav-rail';
 
 interface ChatMessageListProps {
   /** 消息列表（useChat/useAgentWithIpc 的 messages） */
@@ -55,21 +52,6 @@ const AT_BOTTOM_THRESHOLD = 80;
 
 /** 距顶部阈值（px）：小于该值且窗口未到开头时加载更早消息（分页渲染） */
 const AT_TOP_THRESHOLD = 200;
-
-/** 用户消息预览截断长度（跳转条预览） */
-const PREVIEW_MAX_CHARS = 60;
-
-/** 跳转条锚点（对齐参考项目 QuestionAnchor：每个用户消息一个锚点） */
-interface QuestionAnchor {
-  /** React key（消息索引派生） */
-  readonly id: string;
-  /** 用户消息序号（0-based） */
-  readonly turn: number;
-  /** 消息列表索引（点击滚动用） */
-  readonly messageIndex: number;
-  /** 用户消息内容预览（截断） */
-  readonly text: string;
-}
 
 export function ChatMessageList({
   messages,
@@ -134,27 +116,12 @@ export function ChatMessageList({
   const lastRole = messages.length > 0 ? messages[messages.length - 1]?.role : undefined;
   const showStreamingFooter = isStreaming && (status === 'submitted' || lastRole !== 'assistant');
 
-  // 导航轨数据源：用户消息位置（对齐参考项目 VerticalProgressBar——圆点代表用户消息而非每条消息）
-  const userMessageIndices = useMemo(
-    () => messages.map((m, i) => (m.role === 'user' ? i : -1)).filter((i) => i >= 0),
-    [messages],
-  );
-
-  // 滚动联动的活跃用户消息序（0-based；null = 无活跃）
-  const [activeUserIndex, setActiveUserIndex] = useState<number | null>(null);
-
-  // 跳转条锚点：全量用户消息（对齐参考项目 QuestionAnchor——跳转条内部滚动承载，无需比例映射）
-  const questions = useMemo<readonly QuestionAnchor[]>(() => {
-    return userMessageIndices.map((messageIndex, i) => {
-      const text = extractText(messages[messageIndex]?.parts ?? []);
-      return {
-        id: `q-${messageIndex}`,
-        turn: i,
-        messageIndex,
-        text: text.length > PREVIEW_MAX_CHARS ? `${text.slice(0, PREVIEW_MAX_CHARS)}…` : text,
-      };
-    });
-  }, [userMessageIndices, messages]);
+  // 导航轨（锚点 + 滚动联动活跃圆点）状态提取至独立 hook，本组件只负责消费与滚动定位
+  const { questions, activeTurn, scheduleSync } = useMessageNavRail({
+    messages,
+    windowStart,
+    scrollerRef,
+  });
 
   /**
    * 滚动回调：底部检测（替代 Virtuoso atBottomStateChange）
@@ -162,27 +129,6 @@ export function ChatMessageList({
    * - 在底部附近：隐藏按钮，清除 hasNew
    * - 不在底部：显示按钮
    */
-  // 导航轨滚动联动（对齐参考项目 I-M-011）：视口中线对应的最后一条消息  // → 其之前最近的用户消息 → 返回用户消息序（null = 无活跃）
-  const computeActiveUserIndex = useCallback(
-    (el: HTMLElement): number | null => {
-      const midpoint = el.scrollTop + el.clientHeight / 2;
-      let activeMsgIndex = -1;
-      for (const node of el.querySelectorAll(`[${MSG_INDEX_ATTR}]`)) {
-        const msgIndex = Number(node.getAttribute(MSG_INDEX_ATTR));
-        const top = (node as HTMLElement).offsetTop;
-        if (msgIndex > activeMsgIndex && top <= midpoint) {
-          activeMsgIndex = msgIndex;
-        }
-      }
-      const lastUserMsgIndex =
-        activeMsgIndex >= 0
-          ? [...userMessageIndices].reverse().find((idx) => idx <= activeMsgIndex)
-          : undefined;
-      return lastUserMsgIndex !== undefined ? userMessageIndices.indexOf(lastUserMsgIndex) : null;
-    },
-    [userMessageIndices],
-  );
-
   const handleScroll = (): void => {
     const el = scrollerRef.current;
     if (el === null) return;
@@ -195,9 +141,8 @@ export function ChatMessageList({
       setShowScrollBtn(true);
     }
 
-    // 导航轨滚动联动：更新活跃圆点（相同值不触发重渲染）
-    const nextActive = computeActiveUserIndex(el);
-    setActiveUserIndex((prev) => (prev === nextActive ? prev : nextActive));
+    // 导航轨滚动联动：合帧更新活跃圆点
+    scheduleSync();
 
     // 分页渲染：滚动到顶部附近且窗口未到开头 → 加载更早（记录高度供补偿）
     if (el.scrollTop <= AT_TOP_THRESHOLD && windowStart > 0) {
@@ -205,15 +150,6 @@ export function ChatMessageList({
       loadEarlier();
     }
   };
-
-  // 初始/用户消息数变化时同步一次活跃圆点（内容不满一屏时无滚动事件，
-  // 挂载即按当前视口计算，保证底部场景下最后一个圆点默认高亮）
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (el === null) return;
-    const nextActive = computeActiveUserIndex(el);
-    setActiveUserIndex((prev) => (prev === nextActive ? prev : nextActive));
-  }, [computeActiveUserIndex]);
 
   /**
    * 滚动到底部并隐藏按钮
@@ -347,7 +283,7 @@ export function ChatMessageList({
       {questions.length >= 2 && (
         <QuestionJumpBar
           questions={questions}
-          activeTurn={activeUserIndex}
+          activeTurn={activeTurn}
           onJump={(question) => scrollToIndex(question.messageIndex)}
         />
       )}

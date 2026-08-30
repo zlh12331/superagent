@@ -26,10 +26,10 @@ import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
-import { pendingMessageKey } from '@/lib/pending-message';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 /** 快捷动作定义（对齐原型 4 个 welcome-pill） */
@@ -72,6 +72,7 @@ export function HomePage(): ReactElement {
   const { mutateAsync: createSession, isPending: isCreating } = useCreateSession();
   const { data: recentDirsData } = useRecentDirs();
   const setActiveSession = useActiveSessionStore((state) => state.setActiveSession);
+  const stashPendingMessage = usePendingMessageStore((state) => state.stash);
   const pendingWorkingDir = useWelcomeStore((state) => state.pendingWorkingDir);
   const exitWelcomeMode = useWelcomeStore((state) => state.exitWelcomeMode);
   const setPendingWorkingDir = useWelcomeStore((state) => state.setPendingWorkingDir);
@@ -204,22 +205,17 @@ export function HomePage(): ReactElement {
     // 步骤 2：创建会话
     try {
       const { sessionId } = await createSession({ workingDir: pendingWorkingDir });
-      // 步骤 3：设置激活 + 跳转
+      // 步骤 3：设置激活 + 暂存首条消息 + 跳转
       setActiveSession(sessionId);
+      // 透传首条消息：暂存进 transient store，ChatPanel 挂载后 consume 一次并自动发送
+      // （必须在 navigate 之前写入：内存 store 无跨进程落盘，跳转后本函数不再有机会执行；
+      //   消费端与过期规则见 stores/transient/pending-message-store.ts）
+      if (text.trim().length > 0) {
+        stashPendingMessage(sessionId, text);
+      }
       // 退出欢迎页模式（与 navigate 同一 React commit，避免视觉闪烁）
       exitWelcomeMode();
       navigate(ROUTES.chatPath(sessionId));
-      // 透传首条消息：通过 sessionStorage 暂存，ChatPanel 挂载后读取并发送
-      // （避免在 navigate 前直接调用 sendMessage，因为 ChatPanel 还未挂载；
-      //   key 契约见 lib/pending-message.ts，消费方为 ChatPanel）
-      if (text.trim().length > 0) {
-        // createdAt 供消费方做陈旧性防护（Electron 持久化 sessionStorage，
-        // 跨应用重启残留的暂存消息不能自动发送）
-        sessionStorage.setItem(
-          pendingMessageKey(sessionId),
-          JSON.stringify({ text, createdAt: Date.now() }),
-        );
-      }
     } catch {
       // onError 已在 useCreateSession 中 toast 提示
       // 保持欢迎页打开，允许重试
@@ -240,7 +236,7 @@ export function HomePage(): ReactElement {
   // 派生：是否禁用发送（创建中禁用，避免重复提交）
   const isDisabled = isCreating;
 
-  // 派生：quick action 按钮列表（React Compiler 自动缓存，无需手写 useMemo）
+  // 派生：quick action 按钮列表（渲染期直接映射；仅 4 项且无 memo 边界，无需 useMemo）
   const quickActionButtons = QUICK_ACTIONS.map((action) => {
     const Icon = action.icon;
     return (
@@ -257,7 +253,7 @@ export function HomePage(): ReactElement {
     );
   });
 
-  // 派生：folder dropdown 项列表（React Compiler 自动缓存）
+  // 派生：folder dropdown 项列表（渲染期映射，长度受最近目录数限制）
   const folderItems = dirs.map((dir) => {
     const name = basename(dir.workingDir);
     const isActive = pendingWorkingDir === dir.workingDir;

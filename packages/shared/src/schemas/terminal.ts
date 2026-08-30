@@ -17,6 +17,58 @@
 import { z } from 'zod';
 
 /**
+ * 渲染层禁止注入的环境变量键（P0 安全）
+ *
+ * 这些键决定「进程启动后命令/代码从哪里解析」，允许 IPC 侧覆盖等同于
+ * 劫持终端内执行的每一条命令（渲染层被 XSS 攻破时即可 RCE）：
+ * - PATH / PATHEXT / SYSTEMROOT / WINDIR / COMSPEC：可执行文件与系统行为解析
+ * - LD_PRELOAD / LD_LIBRARY_PATH / DYLD_*：动态库加载劫持
+ * - NODE_OPTIONS / NODE_PATH / PYTHONPATH / PYTHONHOME / PERL5OPT / RUBYOPT /
+ *   JAVA_TOOL_OPTIONS：解释器启动即执行注入代码
+ * - PSModulePath / GIT_SSH / GIT_SSH_COMMAND / GIT_CONFIG_GLOBAL / SSH_AUTH_SOCK：
+ *   模块与 git/ssh 外联行为重定向
+ *
+ * 与 terminal-service 的 SENSITIVE_ENV_KEYS 同源（service 保留二次过滤作为兜底）。
+ */
+export const TERMINAL_ENV_DENY_KEYS: ReadonlySet<string> = new Set([
+  'PATH',
+  'PATHEXT',
+  'SYSTEMROOT',
+  'WINDIR',
+  'COMSPEC',
+  'PROMPT',
+  'PSMODULEPATH',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+  'DYLD_INSERT_LIBRARIES',
+  'DYLD_LIBRARY_PATH',
+  'DYLD_FRAMEWORK_PATH',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'PERL5OPT',
+  'RUBYOPT',
+  'JAVA_TOOL_OPTIONS',
+  '_JAVA_OPTIONS',
+  'GIT_SSH',
+  'GIT_SSH_COMMAND',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
+  'SSH_AUTH_SOCK',
+]);
+
+/**
+ * 判断环境变量键是否属于禁止注入清单
+ *
+ * 统一按大写比较：Windows 环境变量本身大小写不敏感（`path` 与 `PATH` 同义），
+ * POSIX 侧这些关键变量亦全为大写惯例，故大写归一不会误伤普通自定义变量。
+ */
+export function isTerminalEnvDenied(key: string): boolean {
+  return TERMINAL_ENV_DENY_KEYS.has(key.trim().toUpperCase());
+}
+
+/**
  * terminal:create 入参 zod schema
  *
  * command 省略时使用默认 shell：
@@ -25,29 +77,45 @@ import { z } from 'zod';
  *
  * env 可选：传入额外环境变量（与系统 env 合并，覆盖同名系统变量）
  */
-export const TerminalCreateReqSchema = z.object({
-  // 工作目录（P3 修复：可选——省略时主进程回退到用户主目录，
-  // 此前渲染层硬编码 DEFAULT_CWD 与激活会话脱钩）
-  cwd: z
-    .string()
-    .min(1)
-    .optional()
-    .transform((v) => v ?? undefined),
-  // 启动命令（省略时用默认 shell）
-  command: z
-    .string()
-    .optional()
-    .transform((v) => v ?? undefined),
-  // 环境变量（键值对）
-  env: z
-    .record(z.string(), z.string())
-    .optional()
-    .transform((v) => v ?? undefined),
-  // 终端列数（默认 80，上限 500）
-  cols: z.number().int().positive().max(500).default(80),
-  // 终端行数（默认 24，上限 200）
-  rows: z.number().int().positive().max(200).default(24),
-});
+export const TerminalCreateReqSchema = z
+  .object({
+    // 工作目录（P3 修复：可选——省略时主进程回退到用户主目录，
+    // 此前渲染层硬编码 DEFAULT_CWD 与激活会话脱钩）
+    cwd: z
+      .string()
+      .min(1)
+      .optional()
+      .transform((v) => v ?? undefined),
+    // 启动命令（省略时用默认 shell）
+    command: z
+      .string()
+      .optional()
+      .transform((v) => v ?? undefined),
+    // 环境变量（键值对）
+    env: z
+      .record(z.string(), z.string())
+      .optional()
+      .transform((v) => v ?? undefined),
+    // 终端列数（默认 80，上限 500）
+    cols: z.number().int().positive().max(500).default(80),
+    // 终端行数（默认 24，上限 200）
+    rows: z.number().int().positive().max(200).default(24),
+  })
+  .superRefine((cfg, ctx) => {
+    // P0 安全：IPC 边界直接拒绝覆盖系统关键变量（类型化校验错误，
+    // 而不是静默丢弃——静默丢弃会让调用方误以为注入生效）
+    if (cfg.env === undefined) {
+      return;
+    }
+    const denied = Object.keys(cfg.env).filter(isTerminalEnvDenied);
+    if (denied.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['env'],
+        message: `终端 env 不允许覆盖系统关键环境变量：${denied.join(', ')}`,
+      });
+    }
+  });
 
 /** terminal:create 响应 payload */
 export interface TerminalCreateRes {

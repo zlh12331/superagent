@@ -8,6 +8,7 @@
         "src/renderer/test/setup-lang.ts",
         "src/**/*.test.{ts,tsx}",
         "**/vitest.config.ts",
+        "**/vitest.*.config.ts",
         "scripts/**/*.ts",
         "e2e/**/*.ts",
         "*.config.{js,ts}",

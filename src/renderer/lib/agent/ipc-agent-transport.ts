@@ -37,6 +37,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from 'ai';
+import { createStreamChunkBatcher } from './stream-chunk-batcher';
 
 /**
  * Agent 配置（通过 configure 注入到 transport 实例）
@@ -172,18 +173,26 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
 
     const stream = new ReadableStream<UIMessageChunk>({
       async start(controller) {
+        // 出口批处理器：合并相邻 text-delta ⇒ 每 token 一次 DOM 提交降为每窗口一次
+        // （长回复的 react-markdown 全量重解析从 O(n²) 降为 O(n·窗口提交数)）
+        const batcher = createStreamChunkBatcher({
+          emit: (chunk) => controller.enqueue(chunk),
+        });
+
         // 订阅 agent:stream:* 三个 IPC 事件（按 chatId 过滤）
         const offPart = window.api.agent.subscribeStreamPart(({ sessionId, part }) => {
           if (sessionId !== options.chatId) {
             return;
           }
-          controller.enqueue(part as UIMessageChunk);
+          batcher.push(part as UIMessageChunk);
         });
 
         const offEnd = window.api.agent.subscribeStreamEnd(({ sessionId }) => {
           if (sessionId !== options.chatId) {
             return;
           }
+          // 先落地缓冲文本再关闭：否则末段 token 会随定时器一起被丢弃
+          batcher.flush();
           cleanup?.();
           controller.close();
         });
@@ -192,6 +201,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           if (sessionId !== options.chatId) {
             return;
           }
+          batcher.flush();
           cleanup?.();
           controller.error(new Error(`[${code}] ${message}`));
         });
@@ -200,6 +210,7 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           offPart();
           offEnd();
           offError();
+          batcher.dispose();
         };
 
         // abortSignal 处理：用户点击 stop 按钮时触发

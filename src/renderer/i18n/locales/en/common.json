@@ -151,6 +151,8 @@
       "regenerate": "Regenerate",
       "generating": "Generating…",
       "runInterrupted": "The previous run was interrupted by an abnormal exit. Please start again",
+      "historyTextOnly": "Restored history is text-only: tool calls and reasoning are not persisted and are not shown after reopening",
+      "historyDroppedParts": "History content of type {{types}} cannot be displayed yet",
       "truncatedJson": "(truncated)",
       "editFileLabel": "Edit {{name}}",
       "rateLimited": "AI rate limit reached, please retry later",

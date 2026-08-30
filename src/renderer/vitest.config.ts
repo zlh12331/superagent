@@ -9,11 +9,28 @@
 // 设计：
 // - 参考官方文档 https://vitest.dev/config/
 // - 与 main/shared 配置分离：渲染层需要 jsdom + 路径别名 + setup
-// - 覆盖率门槛分层维护（设计文档 §3.3 收紧机制；当前基线见下方 thresholds 注释）
+// - 覆盖率门槛分层维护（设计文档 §3.3 收紧机制；唯一真源 scripts/coverage-floors.json）
 // ──────────────────────────────────────────────────────────────
 
-import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+// 覆盖率门槛唯一真源：scripts/coverage-floors.json（本文件刻意不内联数字）
+// 渲染层真实门槛低于规范值 80/75/80/80，具体数值与该层定位说明只在真源维护，
+// 避免「配置是一套、对外表述是另一套」。
+type FloorsFile = {
+  layers: {
+    renderer: {
+      floor: { statements: number; branches: number; functions: number; lines: number };
+    };
+  };
+};
+const rendererFloor = (
+  JSON.parse(
+    readFileSync(join(__dirname, '../../scripts/coverage-floors.json'), 'utf-8'),
+  ) as FloorsFile
+).layers.renderer.floor;
 
 // biome-ignore lint/style/noDefaultExport: vitest config 框架要求必须使用 export default
 export default defineConfig({
@@ -32,12 +49,12 @@ export default defineConfig({
     setupFiles: ['./test/setup-lang.ts', './test/setup.ts'],
     // 测试文件位置：与源码同目录（colocation 模式）
     include: ['**/*.test.{ts,tsx}'],
-    // 排除 main 进程、preload、参考项目、构建产物
+    // 排除 main 进程、preload、本地参考项目目录（_template，3.9 万文件）、构建产物
     exclude: [
       'node_modules/**',
       'dist/**',
       'out/**',
-      '../../docs/**',
+      '../../_template/**',
       '../../src/main/**',
       '../../src/preload/**',
     ],
@@ -45,22 +62,19 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      // 门槛按设计文档 §3.3 收紧机制维护：新实测−5 缓冲，逼近规范值 80/75/80/80。
-      // 2026-08-27 全链审计实测 64.06/55.91/59.96/64.87（此前注释声称 92.87 与实测不符，
-      // 已纠正：技术栈全量升级后口径变化 + settings/chat 组件存量缺口）。
-      // 本轮已补测 stores 层（+42 用例，60.71→64.06），剩余缺口（settings 组件 ~21%、
-      // Markdown/message-item 等）待后续批次补测后按机制上调。
+      // 门槛按设计文档 §3.3 收紧机制维护；floor/ratchet/measured 三元组见真源
       thresholds: {
-        statements: 59,
-        branches: 50,
-        functions: 54,
-        lines: 59,
+        statements: rendererFloor.statements,
+        branches: rendererFloor.branches,
+        functions: rendererFloor.functions,
+        lines: rendererFloor.lines,
       },
-      // 排除测试文件本身、配置文件、入口文件
+      // 排除测试文件本身、配置文件、入口文件、参考项目目录
       exclude: [
         '**/*.test.{ts,tsx}',
         '**/*.config.ts',
         '**/*.d.ts',
+        '../../_template/**',
         'test/**',
         'main.tsx',
         'app.tsx',

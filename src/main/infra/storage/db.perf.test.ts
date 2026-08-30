@@ -24,7 +24,14 @@ const { mockApp } = vi.hoisted(() => ({
   mockApp: { getPath: vi.fn(() => '/tmp/db-perf') },
 }));
 
-vi.mock('electron', () => ({ app: mockApp }));
+vi.mock('electron', () => ({
+  app: {
+    ...mockApp,
+    // initDb 的 resolveMigrationsDir 需要：dev 环境指向项目根 drizzle/
+    getAppPath: () => process.cwd(),
+    isPackaged: false,
+  },
+}));
 
 import { closeDb, getDb, initDb, resetDb } from './db';
 import { SessionService } from './session-service';
@@ -196,14 +203,14 @@ describe('SQLite 存储基准（perf）', () => {
   // ── 索引验证（防全表扫描回归） ─────────────────────────────
 
   describe('索引命中验证', () => {
-    it('messages 按 session_id 查询走 idx_messages_session_seq 索引', () => {
+    it('messages 按 session_id 查询走 uq_messages_session_seq 索引', () => {
       const db = getDb();
       const plan = db.all<{ detail: string }>(sql`EXPLAIN QUERY PLAN
         SELECT * FROM messages WHERE session_id = 'perf-nonexistent'`);
       const detail = plan.map((r) => r.detail).join(' | ');
       console.log(`[perf] EXPLAIN QUERY PLAN: ${detail}`);
-      expect(detail, 'session_id 查询必须走索引（SEARCH messages USING INDEX）').toContain(
-        'USING INDEX',
+      expect(detail, 'session_id 查询必须走具名 UNIQUE 索引（最左前缀）').toContain(
+        'uq_messages_session_seq',
       );
     });
   });

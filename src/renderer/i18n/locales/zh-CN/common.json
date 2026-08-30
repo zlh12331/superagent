@@ -151,6 +151,8 @@
       "regenerate": "重新生成",
       "generating": "正在生成中…",
       "runInterrupted": "上次回合因应用异常退出而中断，请重新发起",
+      "historyTextOnly": "已恢复的历史仅含文本：工具调用与思考过程当前不落库，重开会话后不再显示",
+      "historyDroppedParts": "历史中 {{types}} 类型的消息内容暂不支持回显",
       "truncatedJson": "(已截断)",
       "editFileLabel": "编辑 {{name}}",
       "rateLimited": "AI 调用过于频繁，请稍后重试",

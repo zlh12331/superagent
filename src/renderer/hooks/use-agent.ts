@@ -27,7 +27,7 @@
 
 import { type UseChatOptions, useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { IpcAgentTransport } from '../lib/agent/ipc-agent-transport';
 
@@ -91,7 +91,8 @@ type UseAgentOptions<Message extends UIMessage> = UseChatOptions<Message> & {
 export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
   options: UseAgentOptions<Message>,
 ) {
-  const transport = useMemo(() => getIpcAgentTransport(), []);
+  // 模块级单例：每次调用返回同一实例，无需 useMemo 包裹（依赖数组里也恒定）
+  const transport = getIpcAgentTransport();
 
   // 用户设置项（settings-store persistent；变化时重新 configure）：
   // 思考强度 / 采样温度直接透传；系统提示词为空串时回落主进程内置默认 prompt
@@ -110,6 +111,7 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
   // sendMessage 由用户交互触发（总是在 effect 执行后），不存在竞态
   // 使用条件展开避免 exactOptionalPropertyTypes 下 string | undefined 报错
   // 按会话 id 配置（并发回合支持）：各 ChatPanel 的 useChat id = chatId，互不覆盖
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transport 为模块级单例（引用恒定），不入依赖
   useEffect(() => {
     transport.configureFor(id ?? 'agent-chat', {
       workingDir,
@@ -118,7 +120,7 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
       ...(thinking !== undefined ? { thinking } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
     });
-  }, [transport, id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
+  }, [id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
 
   // id 必须透传给 useChat：transport.sendMessages 用 options.chatId 作为 IPC sessionId，
   // 只有 chatId === 会话 id，主进程回流的审批/事件才能按 sessionId 正确匹配（内联审批卡渲染）

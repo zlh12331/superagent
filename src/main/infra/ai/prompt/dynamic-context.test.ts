@@ -1,6 +1,8 @@
 // src/main/infra/ai/prompt/dynamic-context.test.ts
 // dynamic-context 单测：模板变量注入（git 提供者注入 + 失败容忍）
 
+import { homedir } from 'node:os';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -101,6 +103,52 @@ describe('injectDynamicContext', () => {
       gitSummaryProvider: provider,
     });
     expect(provider).toHaveBeenCalledWith(expect.stringContaining('relative'));
+  });
+
+  it('替换值含 `$&`：不得被解释为"整段匹配"模式（workingDir）', async () => {
+    const result = await injectDynamicContext('{{workingDir}}', {
+      workingDir: '/tmp/x$&y',
+    });
+    expect(result).not.toContain('{{workingDir}}');
+    expect(result).toContain('$&y');
+  });
+
+  it('替换值含 `$&`：不得被解释为"整段匹配"模式（gitBranch）', async () => {
+    const provider: GitSummaryProvider = async () => ({
+      branch: '$&',
+      clean: true,
+      changedFiles: 0,
+    });
+    const result = await injectDynamicContext('分支: {{gitBranch}}', {
+      workingDir: '/tmp/proj',
+      gitSummaryProvider: provider,
+    });
+    expect(result).toBe('分支: $&');
+  });
+
+  it('单次遍历：仓库可控值里的 `{{homeDir}}` 字面量不得被二次替换', async () => {
+    const provider: GitSummaryProvider = async () => ({
+      branch: '{{homeDir}}',
+      clean: true,
+      changedFiles: 0,
+    });
+    const result = await injectDynamicContext('{{gitBranch}} | {{homeDir}}', {
+      workingDir: '/tmp/proj',
+      gitSummaryProvider: provider,
+    });
+    const home = homedir();
+    // 只有模板自身的 homeDir 占位符被替换（出现一次），注入进来的字面量保持原样
+    expect(result.match(new RegExp(home.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'))).toHaveLength(
+      1,
+    );
+    expect(result.startsWith('{{homeDir}} | ')).toBe(true);
+  });
+
+  it('未登记的占位符保持原样', async () => {
+    const result = await injectDynamicContext('{{unknownVar}}-{{os}}', {
+      workingDir: '/tmp/proj',
+    });
+    expect(result.startsWith('{{unknownVar}}-')).toBe(true);
   });
 });
 

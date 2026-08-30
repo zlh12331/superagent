@@ -78,14 +78,24 @@ describe('settings 域集成链路（batch 6）', () => {
     resetSessionService();
     await withTempUserData(async () => {
       const whitelist = createWhitelistHandlers({ permissionService: new PermissionService() });
-      await whitelist.add({ command: 'pnpm install', reason: '依赖安装' });
+      const entry = { toolName: 'run_command', pattern: 'pnpm install' };
+      await whitelist.add(entry);
       const listed = await whitelist.list();
       expect(listed.entries).toHaveLength(1);
-      expect(listed.entries[0]?.command).toBe('pnpm install');
+      expect(listed.entries[0]?.pattern).toBe('pnpm install');
 
-      await whitelist.remove({ id: listed.entries[0]?.id ?? '' });
+      await whitelist.remove(entry);
       const after = await whitelist.list();
       expect(after.entries).toHaveLength(0);
+    });
+  });
+
+  it('安全：通配/空模式添加被拒（白名单不等于该工具免审批）', async () => {
+    resetSessionService();
+    await withTempUserData(async () => {
+      const whitelist = createWhitelistHandlers({ permissionService: new PermissionService() });
+      await expect(whitelist.add({ toolName: 'run_command', pattern: '*' })).rejects.toBeDefined();
+      expect((await whitelist.list()).entries).toHaveLength(0);
     });
   });
 

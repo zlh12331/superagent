@@ -6,6 +6,13 @@
 // - McpServerConfig 与主进程 mcp-types 对齐（name/transport/url/headers/command/args）
 // - transport 三态：stdio（本地子进程）/ sse / streamable-http（远程 HTTP）
 // - McpServerInfo 由主进程 listServers() 返回，前端仅透传展示
+//
+// 安全策略（P0，2026-08 安全审计）：
+// - command 仅允许裸可执行文件名（MCP_COMMAND_PATTERN）
+// - args 额外过 exec-trampoline deny-list（detectMcpExecTrampoline）：
+//   shell/解释器 + `-c|-e|/c|/k|-Command` 之类代码串开关一律拒绝
+// - 定位澄清：用户亲手配置的 MCP server 仍是"用户信任的提权面"（可读写工作区、
+//   起子进程），本 deny-list 是配置文件注入的绊线，不是沙箱
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
@@ -32,6 +39,117 @@ export const MCP_COMMAND_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 /** MCP 参数上限（防御性：异常长/多的参数没有合法场景） */
 export const MCP_MAX_ARGS = 64;
 export const MCP_MAX_ARG_LENGTH = 2048;
+
+/**
+ * Shell / 解释器命令集合（stdio MCP server 的 exec trampoline 候选面）
+ *
+ * 这些命令本身不是 MCP server，只有在配合"脚本参数"时才有意义
+ * （`node build/index.js` / `python server.py`）。与下面的"代码串开关"
+ * 组合时，args 成为任意代码入口——MCP_COMMAND_PATTERN 只约束 command
+ * token（无分隔符/空白），对 args 无效，因此必须在 schema 层补 deny-list。
+ */
+export const MCP_TRAMPOLINE_COMMANDS: ReadonlySet<string> = new Set([
+  'ash',
+  'bash',
+  'bun',
+  'cmd',
+  'csh',
+  'dash',
+  'deno',
+  'expect',
+  'fish',
+  'groovy',
+  'jshell',
+  'ksh',
+  'lua',
+  'node',
+  'osascript',
+  'perl',
+  'php',
+  'powershell',
+  'pwsh',
+  'pypy',
+  'pypy3',
+  'python',
+  'python2',
+  'python3',
+  'ruby',
+  'sh',
+  'tclsh',
+  'zsh',
+]);
+
+/** 交互式 shell 子集：无参数时从 stdin 读命令（stdio 传输的 stdin 正是协议通道） */
+const MCP_INTERACTIVE_SHELLS: ReadonlySet<string> = new Set([
+  'ash',
+  'bash',
+  'cmd',
+  'csh',
+  'dash',
+  'fish',
+  'ksh',
+  'powershell',
+  'pwsh',
+  'sh',
+  'zsh',
+]);
+
+/** "把紧随其后的参数当代码执行"的开关（POSIX 与 Windows 常见写法） */
+const MCP_TRAMPOLINE_FLAGS: ReadonlySet<string> = new Set([
+  '-c',
+  '-command',
+  '-e',
+  '-encodedcommand',
+  '-eval',
+  '-exec',
+  '-r',
+  '/c',
+  '/command',
+  '/enc',
+  '/e',
+  '/exec',
+  '/k',
+  '--command',
+  '--eval',
+  '--input-string',
+]);
+
+/**
+ * 检测 stdio MCP 配置是否为「解释器 + 代码串」执行跳板
+ *
+ * 命中即应拒绝：
+ * - 解释器/shell + 代码串开关（bash -c "curl … | sh" / node -e / cmd /k / powershell -EncodedCommand）
+ * - 裸交互式 shell（无脚本参数：stdin 就是命令入口）
+ *
+ * 刻意不做的事：MCP server 由用户亲手配置，属"用户信任的提权面"（能读工作区、
+ * 能起子进程）。本 deny-list 是**配置文件注入的绊线**（恶意 mcp.json / 渲染层
+ * 被劫持时塞进 `bash -c`），不是沙箱——真要沙箱得靠容器/权限隔离。
+ *
+ * @returns 命中原因（未命中返回 null）
+ */
+export function detectMcpExecTrampoline(
+  command: string,
+  args: readonly string[] | undefined,
+): string | null {
+  const name = command
+    .trim()
+    .toLowerCase()
+    .replace(/\.exe$/, '');
+  if (!MCP_TRAMPOLINE_COMMANDS.has(name)) {
+    return null;
+  }
+  const list = args ?? [];
+  for (const arg of list) {
+    const flag = arg.trim().toLowerCase();
+    if (MCP_TRAMPOLINE_FLAGS.has(flag)) {
+      return `${name} ${flag} 会把后续参数当作代码执行`;
+    }
+  }
+  if (MCP_INTERACTIVE_SHELLS.has(name) && list.length === 0) {
+    return `${name} 无脚本参数（交互式 shell，stdin 即命令入口）`;
+  }
+  return null;
+}
 
 /** MCP transport 类型（缺省 stdio；向后兼容：旧配置无此字段视为 stdio） */
 export const MCP_TRANSPORTS = ['stdio', 'sse', 'streamable-http'] as const;
@@ -112,6 +230,17 @@ export const McpServerConfigSchema = z
           path: ['command'],
           message: 'command 必须是裸可执行文件名（不含路径分隔符/空白/引号）',
         });
+      } else {
+        // P0 安全：args 不受 MCP_COMMAND_PATTERN 约束，解释器 + 代码串开关
+        // （bash -c / node -e / cmd /c）等价于任意代码执行——schema 层绊线拦截
+        const trampoline = detectMcpExecTrampoline(cfg.command, cfg.args);
+        if (trampoline !== null) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['args'],
+            message: `拒绝执行跳板配置：${trampoline}。MCP server 应指向脚本/包本身`,
+          });
+        }
       }
       return;
     }

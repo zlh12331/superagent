@@ -15,6 +15,7 @@ import { Navigate, useParams } from 'react-router';
 
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import { useSessionDetail } from '@/hooks/use-sessions';
+import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
@@ -52,6 +53,8 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   const { data: session, isLoading } = useSessionDetail(sessionId);
+  // 唯一权威入口：详情已到位时以详情值为权威，否则回落会话列表索引
+  const workingDir = useWorkingDir(sessionId, session?.session.workingDir);
   const setWelcomeMode = useWelcomeStore((state) => state.setWelcomeMode);
 
   // 进入聊天页时退出欢迎页模式（兜底：HomePage 已调用 exitWelcomeMode，
@@ -74,8 +77,8 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     return <Navigate to={ROUTES.home} replace />;
   }
 
-  // workingDir 为空（旧 chat 会话兼容，数据异常）：显示错误状态
-  if (session.session.workingDir === '') {
+  // workingDir 未知（旧 chat 会话空目录兼容 / 列表与详情都无数据）：显示错误状态
+  if (workingDir === null) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center">
         <p>{t('common.chatLoadFailed')}</p>
@@ -86,7 +89,7 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   return (
     <ChatPanel
       chatId={sessionId}
-      workingDir={session.session.workingDir}
+      workingDir={workingDir}
       interrupted={session.session.lastRunStatus === 'interrupted'}
       // 历史消息注入 useChat（ChatMessage = ModelMessage，useChat 直接消费）
       initialMessages={session.messages as unknown as ChatMessage[]}

@@ -29,6 +29,12 @@ interface GitSummary {
   readonly changedFiles: number;
 }
 
+/** 注入 prompt 的 git 摘要视图（分支名 + 可读状态串） */
+interface GitSummaryView {
+  readonly branch: string;
+  readonly status: string;
+}
+
 /**
  * Git 状态查询函数签名
  *
@@ -121,6 +127,28 @@ function formatGitStatus(summary: GitSummary): string {
   return `dirty (${summary.changedFiles} 个文件未提交)`;
 }
 
+/** git 状态缺失时的占位摘要（provider 未注入 / 非仓库 / 查询失败） */
+const GIT_UNKNOWN: GitSummaryView = { branch: '非 git 仓库', status: '未知' };
+
+/**
+ * 收集 git 分支与状态摘要
+ *
+ * 失败一律回退占位符而非抛错：prompt 注入不该因仓库查询中断。
+ */
+async function collectGitSummary(
+  provider: DynamicContextOptions['gitSummaryProvider'],
+  workingDir: string,
+): Promise<GitSummaryView> {
+  if (provider === undefined) return GIT_UNKNOWN;
+  try {
+    const summary = await provider(workingDir);
+    if (summary === null) return GIT_UNKNOWN;
+    return { branch: summary.branch, status: formatGitStatus(summary) };
+  } catch {
+    return GIT_UNKNOWN;
+  }
+}
+
 /**
  * 收集动态上下文并替换模板变量
  *
@@ -143,20 +171,10 @@ export async function injectDynamicContext(
   const shell = getDefaultShell(osPlatform);
   const workingDir = resolve(options.workingDir);
 
-  // 收集 git 状态（失败时用占位符，不抛错）
-  let gitBranch = '非 git 仓库';
-  let gitStatus = '未知';
-  if (options.gitSummaryProvider !== undefined) {
-    try {
-      const summary = await options.gitSummaryProvider(workingDir);
-      if (summary !== null) {
-        gitBranch = summary.branch;
-        gitStatus = formatGitStatus(summary);
-      }
-    } catch {
-      // git 查询失败，保持占位符
-    }
-  }
+  const { branch: gitBranch, status: gitStatus } = await collectGitSummary(
+    options.gitSummaryProvider,
+    workingDir,
+  );
 
   // 收集 AGENTS.md（失败时用空字符串）
   let agentsMd = '';
@@ -166,16 +184,23 @@ export async function injectDynamicContext(
     // AGENTS.md 发现失败，用空字符串
   }
 
-  // 替换模板变量
-  const result = template
-    .replace(/\{\{workingDir\}\}/g, workingDir)
-    .replace(/\{\{os\}\}/g, osPlatform)
-    .replace(/\{\{platform\}\}/g, platformName)
-    .replace(/\{\{shell\}\}/g, shell)
-    .replace(/\{\{gitBranch\}\}/g, gitBranch)
-    .replace(/\{\{gitStatus\}\}/g, gitStatus)
-    .replace(/\{\{agentsMd\}\}/g, agentsMd)
-    .replace(/\{\{homeDir\}\}/g, homedir());
-
-  return result;
+  // 替换模板变量：单次遍历 + 函数 replacer
+  //   1) 函数 replacer：替换值里的 `$&` / `$1` / `$<name>` 不会被当作捕获组模式解释
+  //      （workingDir / gitBranch / gitStatus / agentsMd 均来自仓库与文件系统，可含 `$`）
+  //   2) 单次遍历：先插入的值（如 AGENTS.md 正文）里出现的 `{{homeDir}}` 字面量不会被二次替换
+  //   未登记的占位符保持原样。
+  const values: Record<string, string> = {
+    workingDir,
+    os: osPlatform,
+    platform: platformName,
+    shell,
+    gitBranch,
+    gitStatus,
+    agentsMd,
+    homeDir: homedir(),
+  };
+  return template.replace(/\{\{(\w+)\}\}/g, (placeholder: string, key: string) => {
+    const value = values[key];
+    return value ?? placeholder;
+  });
 }

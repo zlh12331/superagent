@@ -1,0 +1,152 @@
+// src/main/infra/ai/tools/command-guards.ts
+// 权限决策的确定性判定原语（纯函数，无状态、无 IPC 依赖）
+//
+// 从 permission-service.ts 抽出：这些判定是「字符串/路径层面的纯计算」，
+// 与审批流（pending Promise、记忆缓存、webContents 推送）无关，独立成模块
+// 便于单测直接覆盖边界用例，也让 PermissionService 专注决策编排。
+//
+// 包含三组判定：
+// 1. 白名单模式语义：通用模式（空/通配符）识别 + token 级前缀匹配
+// 2. 命令结构：复合命令识别 + 命令文本提取 + 路径越界识别
+// 3. plan 模式控制面逃生舱名单
+
+import { homedir } from 'node:os';
+import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
+import { splitShellWords } from '../../terminal/terminal-service';
+
+/**
+ * 「等同放行该工具全部调用」的白名单模式（P0 安全修复）
+ *
+ * 历史上 `pattern === ''` 被解释为「该工具无条件放行」，于是
+ * - 设置页留空 pattern 点添加 = 给 write_file / run_command 开了免审批全局通道；
+ * - 老版本持久化在 whitelist.json 里的空模式条目应用重启后继续静默生效。
+ * 纯通配符（`*` / `**` / `.*` / `?` / 仅空白）语义上等价，一并视为无效条目。
+ * 现在：插入时拒绝、加载时清理、匹配时永不命中（fail closed）。
+ */
+const UNIVERSAL_WHITELIST_PATTERN = /^[\s.*?]*$/;
+
+/** 模式是否等同「放行该工具的全部调用」（空串 / 纯通配符 / 仅空白） */
+export function isUniversalWhitelistPattern(pattern: string): boolean {
+  return UNIVERSAL_WHITELIST_PATTERN.test(pattern);
+}
+
+/**
+ * 白名单 token 级前缀匹配（P0 安全修复，替代任意位置 includes 子串）
+ *
+ * 规则：command.trim() 与 pattern 相等，或以 pattern 开头且紧随空白边界。
+ * pattern='npm test'：命中 'npm test -- --watch'；
+ * 不命中 'echo npm test'（前缀不符）、'npm testcase'（无词边界）。
+ * 大小写敏感（与 shell 命令语义一致）。
+ */
+export function matchesWhitelistPattern(command: string, pattern: string): boolean {
+  const normalized = command.trim();
+  const pat = pattern.trim();
+  if (normalized === pat) {
+    return true;
+  }
+  return normalized.startsWith(pat) && /\s/.test(normalized.charAt(pat.length));
+}
+
+/**
+ * 计划模式下仍然放行的 auto 控制面工具（P0 修复的显式逃生舱）
+ *
+ * plan 模式语义 = 只读探索，非只读的 auto 工具一律回落到模式判定（deny）。
+ * 但下列工具改的是「agent 自己的记账/模式状态」，不触碰工作区与外部系统：
+ * - enter_plan_mode / exit_plan_mode：若 exit_plan_mode 也被 deny，
+ *   模型和用户都再也走不出计划模式（审批死锁）
+ * - task_create / task_update / task_stop：计划期维护 todo 列表正是 plan 的用途
+ * - save_memory：写记忆库，非工作区文件
+ * 新增工具不在此列时按「非只读」处理（fail closed），需要放行就显式加名。
+ */
+export const PLAN_MODE_CONTROL_TOOLS: ReadonlySet<string> = new Set([
+  'enter_plan_mode',
+  'exit_plan_mode',
+  'task_create',
+  'task_update',
+  'task_stop',
+  'save_memory',
+]);
+
+/**
+ * 复合命令特征（P0 安全修复）
+ *
+ * 含任一特征说明不是单一简单命令：`;' `|` `&` 串联/后台、反引号与 `$(`
+ * 命令替换、换行续行。此类命令在两处被禁用快速通道（安全方向保守）：
+ * 1. 用户白名单不命中（isWhitelisted）——放行意图只针对单一命令
+ * 2. SAFE_READ_ONLY 只读自动放行跳过——其 ^ 前缀锚定不覆盖后继段落
+ * 引号内的误判（如 URL 查询串含 '&'）只会降级走完整决策链，不会放大权限。
+ */
+const COMPOSITE_COMMAND_PATTERN = /[;|&`]|\$\(|\n/;
+
+/** 命令是否为复合结构（串联 / 管道 / 命令替换 / 换行） */
+export function isCompositeCommand(command: string): boolean {
+  return COMPOSITE_COMMAND_PATTERN.test(command);
+}
+
+/** Windows 盘符绝对路径（C:\ 或 C:/）；POSIX 根路径单独以 '/' 起判 */
+const WIN_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
+
+/**
+ * P2 安全加固：判断命令是否引用了边界目录之外的路径目标。
+ *
+ * 判定保守：任何绝对路径 token（盘符 / POSIX 根 / ~ 展开）或解析后逃逸边界的
+ * 相对路径（../ 链）都视为越界。命令分词复用 splitShellWords（跨平台引号/转义语义），
+ * 仅对「像路径」的 token 判定——选项开关（如 --force）、URL 等不误伤。
+ */
+export function commandTargetsOutsideBoundary(command: string, boundary: string): boolean {
+  let tokens: string[];
+  try {
+    tokens = splitShellWords(command, process.platform);
+  } catch {
+    // 分词失败按越界处理（保守：交给 ask 分支人工确认）
+    return true;
+  }
+  const normBoundary = normalize(boundary).toLowerCase();
+  for (const raw of tokens) {
+    if (!isPathLikeToken(raw)) continue;
+    let resolved: string;
+    try {
+      resolved = resolvePathToken(raw, boundary);
+    } catch {
+      return true;
+    }
+    const rel = relative(normBoundary, resolved.toLowerCase());
+    if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** token 是否可能指向文件系统目标：绝对路径 / ~ 前缀 / 含 .. 段的相对路径 */
+function isPathLikeToken(token: string): boolean {
+  if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/') || token.startsWith('~')) {
+    return true;
+  }
+  return token === '..' || token.startsWith('../') || token.startsWith('..\\');
+}
+
+/** 把路径 token 解析为绝对路径（~ → home；相对 → 相对边界） */
+function resolvePathToken(token: string, boundary: string): string {
+  if (token.startsWith('~')) {
+    return resolve(join(homedir(), token.slice(1)));
+  }
+  if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/')) {
+    return normalize(token);
+  }
+  return resolve(boundary, token);
+}
+
+/**
+ * 从工具入参提取命令文本（run_command: { command }；terminal: { command? }）
+ *
+ * 无命令字段的工具入参返回 undefined（跳过命令级检测）。
+ */
+export function extractCommandFromInput(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return undefined;
+  }
+  const record = input as Record<string, unknown>;
+  const command = record['command'];
+  return typeof command === 'string' && command.trim().length > 0 ? command : undefined;
+}

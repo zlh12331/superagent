@@ -18,11 +18,52 @@
 // - handler 内不直接调用 webContents.send，所有事件推送由 TerminalService 内部处理
 // - input / resize / kill 仅返回 ok 布尔值：
 //   false 表示 terminalId 不存在或 pty 已退出，渲染层据此标记终端已关闭
+//
+// ── 安全边界：为什么终端不做工作区路径收口（与 file:* 的关键差异）──────
+// file:* 的语义是「程序替用户读写某个路径」，渲染层可在用户无感知时静默读写
+// 任意磁盘文件，所以必须在 handler 层收口到工作区（见 file.handler.ts）。
+// terminal:create 的语义是「给用户开一个交互式 shell」：
+// 1. 由用户主动点「新建终端」触发，命令由用户键入/粘贴，输出全量回显——
+//    没有「静默执行」的余地；
+// 2. 收口 cwd 无收益：交互 shell 里一条 `cd /` 就出去了。真正的边界是
+//    「是否允许执行任意命令」，那归审批模式管（terminal 工具 permission:'ask'
+//    + category:'exec' + Layer-0 危险命令检测），不是路径守卫能解决的；
+// 3. 强行限制 cwd 会破坏集成终端既有用法（用户可选任意目录开终端）。
+// 因此这里只加两条不影响合法用途的约束：
+// - env 不得覆盖系统关键变量（PATH/PATHEXT/LD_PRELOAD/NODE_OPTIONS…）：
+//   否则可用「开终端」这个用户动作劫持其后续执行的每一条命令。
+//   IPC 边界由 TerminalCreateReqSchema.superRefine 直接拒绝（类型化错误），
+//   TerminalService 再过滤一次（防绕过 IPC 的内部调用方）。
+// - cwd 必须真实存在且是目录：spawn 不存在的目录时 node-pty 抛的是无上下文的
+//   spawn 失败，这里转成类型化 NOT_FOUND / INVALID_INPUT。
+// ──────────────────────────────────────────────────────────────
 
+import { statSync } from 'node:fs';
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 import type { ITerminalService } from '../infra/terminal/terminal-service';
 import type { IpcHandlerContext } from '../utils/wrap';
+
+/**
+ * 校验终端工作目录真实存在且为目录
+ *
+ * 不做「必须在工作区内」的检查——理由见文件头「安全边界」说明。
+ *
+ * @throws AppError(NOT_FOUND) 路径不存在 / 不可访问
+ * @throws AppError(INVALID_INPUT) 存在但不是目录
+ */
+export function assertExistingDirectory(cwd: string): void {
+  let isDirectory: boolean;
+  try {
+    isDirectory = statSync(cwd).isDirectory();
+  } catch {
+    throw new AppError(ErrorCode.NOT_FOUND, `终端工作目录不存在：${cwd}`);
+  }
+  if (!isDirectory) {
+    throw new AppError(ErrorCode.INVALID_INPUT, `终端工作目录不是目录：${cwd}`);
+  }
+}
 
 /**
  * 终端域 handler 依赖
@@ -52,6 +93,10 @@ export function createTerminalHandlers(
     // 后续输出和退出事件会通过 terminal:event:* 推送到该 webContents
     // 返回 terminalId，渲染层用此 id 关联后续事件并在 input/resize/kill 时传回
     create: async (input, ctx) => {
+      // P2 加固：显式传入的 cwd 必须是真实目录（省略时由 service 兜底用户主目录）
+      if (input.cwd !== undefined) {
+        assertExistingDirectory(input.cwd);
+      }
       return terminalService.create({
         // P3 修复：cwd 可选——渲染层传激活会话 workingDir；未传时
         // TerminalService 回退到用户主目录（不再硬编码项目路径）

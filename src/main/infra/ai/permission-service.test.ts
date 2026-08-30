@@ -150,6 +150,27 @@ describe('PermissionService', () => {
       expect(service.listWhitelist()).toEqual([]);
       expect(whitelistMocks.writeWhitelist).toHaveBeenCalledTimes(2);
     });
+
+    it('P0 addWhitelistEntry：拒绝空/纯通配符模式（显式报错，不落库）', async () => {
+      for (const pattern of ['', '   ', '*', '.*']) {
+        await expect(
+          service.addWhitelistEntry({ toolName: 'run_command', pattern }),
+        ).rejects.toMatchObject({ code: ErrorCode.INVALID_INPUT });
+      }
+      expect(service.listWhitelist()).toEqual([]);
+      expect(whitelistMocks.writeWhitelist).not.toHaveBeenCalled();
+    });
+
+    it('P0 加载即迁移：清理后回写持久化，避免下次启动复活免审批通道', () => {
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'run_command', pattern: 'npm test' },
+        { toolName: 'write_file', pattern: '' },
+      ]);
+      service = new PermissionService();
+      expect(whitelistMocks.writeWhitelist).toHaveBeenCalledWith([
+        { toolName: 'run_command', pattern: 'npm test' },
+      ]);
+    });
   });
 
   describe('decide', () => {
@@ -165,12 +186,34 @@ describe('PermissionService', () => {
       expect(decision.permission).toBe('ask');
     });
 
-    it('用户白名单（空 pattern）：该工具全部自动放行', async () => {
+    it('P0 白名单空 pattern：加载即清理 + 永不命中（旧语义「该工具全部放行」是免审批后门）', async () => {
       const tool = createMockTool('ask');
       whitelistMocks.readWhitelistSync.mockReturnValue([{ toolName: 'mock_tool', pattern: '' }]);
       service = new PermissionService();
+      // 加载即迁移：无效条目不进入内存白名单
+      expect(service.listWhitelist()).toEqual([]);
       const decision = await service.decide(tool, { path: '/tmp/a.ts' });
-      expect(decision.permission).toBe('auto');
+      expect(decision.permission).toBe('ask');
+    });
+
+    it('P0 白名单纯通配符/仅空白模式：与空串等价，同样不命中', async () => {
+      const tool = createMockTool('ask', 'exec');
+      for (const pattern of ['*', '**', '.*', '?', '   ', ' .* ']) {
+        whitelistMocks.readWhitelistSync.mockReturnValue([{ toolName: 'mock_tool', pattern }]);
+        service = new PermissionService();
+        expect(service.listWhitelist()).toEqual([]);
+        const decision = await service.decide(tool, { command: 'rm -rf /' });
+        expect(decision.permission).toBe('ask');
+      }
+    });
+
+    it('有效条目不误伤：具体前缀保留，只剔除无效模式', () => {
+      whitelistMocks.readWhitelistSync.mockReturnValue([
+        { toolName: 'mock_tool', pattern: 'npm test' },
+        { toolName: 'other_tool', pattern: '*' },
+      ]);
+      service = new PermissionService();
+      expect(service.listWhitelist()).toEqual([{ toolName: 'mock_tool', pattern: 'npm test' }]);
     });
 
     it('用户白名单（命令模式）：命令包含 pattern 时自动放行', async () => {
@@ -404,6 +447,24 @@ describe('PermissionService', () => {
       service.rememberDecision(tool, { path: '/tmp/a.ts', mode: 'write' }, true);
       const decision = await service.decide(tool, { mode: 'write', path: '/tmp/a.ts' });
       expect(decision.permission).toBe('auto');
+    });
+
+    it('共享子对象（DAG）：不误判为循环引用，记忆 key 正常命中', async () => {
+      // 回归：stableStringifyInternal 曾在出栈时不清除 visited，
+      // 导致 { files: [o], primary: o } 这类兄弟引用抛 TypeError，
+      // 而原生 JSON.stringify 对同样输入是能序列化的。
+      const tool = createMockTool('ask');
+      const shared = { path: '/tmp/a.ts' };
+      service.rememberDecision(tool, { files: [shared], primary: shared }, true);
+      const decision = await service.decide(tool, { files: [shared], primary: shared });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('真循环引用：decide 抛 TypeError（契约「由调用方 catch」，ToolExecutor fail-closed）', async () => {
+      const tool = createMockTool('ask');
+      const cyclic: Record<string, unknown> = { path: '/tmp/a.ts' };
+      cyclic['self'] = cyclic;
+      await expect(service.decide(tool, cyclic)).rejects.toThrow(TypeError);
     });
   });
 

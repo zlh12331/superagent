@@ -1,7 +1,25 @@
 // packages/shared/vitest.config.ts
 // Vitest 配置：@code-agent/shared 工作空间包单测
 // 参考 Vitest 4 官方文档 https://vitest.dev/config/
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+// 覆盖率门槛唯一真源：scripts/coverage-floors.json（本文件刻意不内联数字）
+// shared 是 IPC schema/常量/类型包，分支与函数天然低于业务层——该定位说明与
+// floor/ratchet/measured 三元组都只在真源维护，避免文档口径与配置口径两套数字。
+type FloorsFile = {
+  layers: {
+    shared: {
+      floor: { statements: number; branches: number; functions: number; lines: number };
+    };
+  };
+};
+const sharedFloor = (
+  JSON.parse(
+    readFileSync(join(__dirname, '../../scripts/coverage-floors.json'), 'utf-8'),
+  ) as FloorsFile
+).layers.shared.floor;
 
 // biome-ignore lint/style/noDefaultExport: Vitest 框架要求 config 文件必须使用 export default
 export default defineConfig({
@@ -15,16 +33,11 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       // 阈值卡关：低于此值命令失败（exit code ≠ 0）
-      // 分层规范值（设计文档 §3.3）：shared 是 IPC schema/常量/类型声明包——
-      // zod schema 与类型映射的"有效分支"天然难以覆盖，分支/函数显著低于
-      // 业务层 80/75/80/80 是**有意的类型包定位**（不是漏测）。规范目标 80/30/40/80。
-      // 2026-08-27 全链审计按棘轮机制上调：实测 89.06/44.44/44.82/88.95，
-      // 分支取规范值 30，函数取实测−5=39（低于规范 40，补测后继续上调）。
       thresholds: {
-        statements: 80,
-        branches: 30,
-        functions: 39,
-        lines: 80,
+        statements: sharedFloor.statements,
+        branches: sharedFloor.branches,
+        functions: sharedFloor.functions,
+        lines: sharedFloor.lines,
       },
       // 排除测试文件本身、类型声明文件、配置文件、入口文件
       exclude: [

@@ -13,8 +13,10 @@
 // 注意：
 // - xterm.js 在 jsdom 中无法渲染（依赖 canvas），通过 mock Terminal + FitAddon 跳过
 // - 测试聚焦于组件交互逻辑（按钮点击、store 同步），不测试 xterm 内部渲染
+// - 面板经 useWorkingDir 读会话工作目录（底层 useInfiniteQuery），渲染需 QueryClientProvider
 // ──────────────────────────────────────────────────────────────
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -61,6 +63,16 @@ vi.mock('sonner', () => ({
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { TerminalPanel } from '../TerminalPanel';
 
+/** 面板 + QueryClientProvider（useWorkingDir 底层是 useInfiniteQuery，无 provider 会直接抛错） */
+function withQueryPanel(sessionId: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={client}>
+      <TerminalPanel sessionId={sessionId} />
+    </QueryClientProvider>
+  );
+}
+
 describe('TerminalPanel', () => {
   beforeEach(() => {
     // 重置 store
@@ -100,7 +112,7 @@ describe('TerminalPanel', () => {
     it('渲染工具栏（标题 + 关闭按钮）', () => {
       seedTerminal({ title: 'pwsh' });
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
 
       // 标题渲染
       expect(screen.getByText('pwsh')).toBeInTheDocument();
@@ -111,7 +123,7 @@ describe('TerminalPanel', () => {
     it('alive=true 时不显示「已结束」标识', () => {
       seedTerminal({ alive: true });
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
 
       expect(screen.queryByText('已结束')).not.toBeInTheDocument();
     });
@@ -119,7 +131,7 @@ describe('TerminalPanel', () => {
     it('alive=false 时显示「已结束」标识', () => {
       seedTerminal({ alive: false });
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
 
       expect(screen.getByText('已结束')).toBeInTheDocument();
     });
@@ -130,7 +142,7 @@ describe('TerminalPanel', () => {
         data: { ok: true },
       });
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
       const closeButton = screen.getByRole('button', { name: '关闭终端' });
       fireEvent.click(closeButton);
 
@@ -150,7 +162,7 @@ describe('TerminalPanel', () => {
         new Error('kill failed'),
       );
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
       fireEvent.click(screen.getByRole('button', { name: '关闭终端' }));
 
       await waitFor(() => {
@@ -177,12 +189,12 @@ describe('TerminalPanel', () => {
         alive: true,
       });
 
-      const { rerender } = render(<TerminalPanel sessionId="session-1" />);
+      const { rerender } = render(withQueryPanel('session-1'));
       // session-1 无终端 → 自动创建（用户要求：点击终端直接打开——无需新建按钮）
       expect(screen.queryByText('新建终端')).not.toBeInTheDocument();
 
       // 切换到 session-2
-      rerender(<TerminalPanel sessionId="session-2" />);
+      rerender(withQueryPanel('session-2'));
       // session-2 有终端 → 显示标题
       expect(screen.getByText('bash')).toBeInTheDocument();
     });
@@ -208,7 +220,7 @@ describe('TerminalPanel', () => {
         alive: true,
       });
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
 
       // 两个 tab 标题都渲染
       expect(screen.getByText('bash')).toBeInTheDocument();
@@ -240,7 +252,7 @@ describe('TerminalPanel', () => {
       // 先切到 term-1，再点击 term-2 tab
       useTerminalStore.getState().setActiveTerminal('term-1');
 
-      render(<TerminalPanel sessionId="session-1" />);
+      render(withQueryPanel('session-1'));
       const tabs = screen.getAllByRole('tab');
       expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 

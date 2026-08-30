@@ -47,12 +47,12 @@ import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
+import { useActiveWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import { DRAFT_SESSION_ID, ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { nextTheme, useSettingsStore } from '@/stores/persistent/settings-store';
-import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
@@ -120,9 +120,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // L2 Zustand：激活会话 id（用于关联 DevPanel 中的终端实例）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const devPanelSessionId = activeSessionId ?? DRAFT_SESSION_ID;
-  // P3 修复：Git 面板仓库路径绑定激活会话 workingDir（file-tree rootPath），
+  // P3 修复：Git 面板仓库路径绑定激活会话 workingDir（唯一权威入口 useActiveWorkingDir）
+  // 此前读 file-tree 的 rootPath 镜像：侧栏不在文件树视图时镜像未同步 → 拿到 null
   // 无激活会话时传空串 → GitPanel 禁用查询（此前硬编码 f:\TraeProjects\1）
-  const workingDir = useFileTreeStore((state) => state.rootPath);
+  const workingDir = useActiveWorkingDir();
 
   // L2 Zustand：欢迎页模式（控制 .view-chat.welcome-mode class）
   // 欢迎页模式下隐藏右面板 + 右分隔线，主区域改为居中 flex 容器

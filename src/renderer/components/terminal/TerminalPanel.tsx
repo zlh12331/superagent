@@ -19,9 +19,9 @@ import { toast } from 'sonner';
 
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
 import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
+import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
-import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
 import { TerminalTabs } from './TerminalTabs';
@@ -76,9 +76,10 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   const setActiveTerminal = useTerminalStore((state) => state.setActiveTerminal);
   const createTerminalInStore = useTerminalStore((state) => state.createTerminal);
   const closeTerminalInStore = useTerminalStore((state) => state.closeTerminal);
-  // P3 修复：终端 cwd 绑定激活会话 workingDir（file-tree rootPath），
-  // 无激活会话时传 undefined → 主进程回退用户主目录（此前硬编码 f:\TraeProjects\1）
-  const workingDir = useFileTreeStore((state) => state.rootPath);
+  // P3 修复：终端 cwd 绑定本面板会话的 workingDir（唯一权威入口 useWorkingDir），
+  // 此前读 file-tree rootPath 镜像：文件树未挂载时镜像为 null
+  // 草稿会话 id 不在会话索引中 → null → 主进程回退用户主目录（此前硬编码 f:\TraeProjects\1）
+  const workingDir = useWorkingDir(sessionId);
 
   // 「正在创建终端」状态（避免点击按钮后用户重复点击）
   const [isCreating, setIsCreating] = useState(false);

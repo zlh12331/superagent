@@ -257,6 +257,14 @@
             "turn_id"
           ],
           "isUnique": false
+        },
+        "uq_messages_session_seq": {
+          "name": "uq_messages_session_seq",
+          "columns": [
+            "session_id",
+            "seq"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -804,6 +812,14 @@
           "name": "uq_turns_turn_id",
           "columns": [
             "turn_id"
+          ],
+          "isUnique": true
+        },
+        "uq_turns_session_seq": {
+          "name": "uq_turns_session_seq",
+          "columns": [
+            "session_id",
+            "seq"
           ],
           "isUnique": true
         }

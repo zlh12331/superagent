@@ -1,6 +1,6 @@
 # AGENTS.md — code-agent-desktop
 
-跨平台桌面端（Windows/macOS/Linux）生产级 Code Agent 桌面应用，Electron 43 + React 19 + TypeScript + Vercel AI SDK v7。
+跨平台桌面端（Windows/macOS/Linux）生产级 Code Agent 桌面应用，Electron 44 + React 19 + TypeScript + Vercel AI SDK v7。
 
 ## 重要命令
 
@@ -53,7 +53,8 @@ scripts/         → 脚手架与工具（scaffold / changelog）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
-- 主进程是 Service Container 模式（`service-container.ts`），集中管理 19 个服务（Chat/File/Search/Terminal/Git/Codebase/Session/Update/Tool/Permission/ToolExecutor/MCP/Prompt/Agent/AgentAsk/MemoryHub/LSP/Goal/IM，2026-08-27 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖
+- 主进程是 Service Container 模式（`service-container.ts`），集中管理 20 个 lazy accessor（ConcurrencyGate/File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent，2026-08-30 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖
+- `agentAskService` 不是容器 accessor，在 `service-container.ts:50` 以模块级单例 import 引入
 - IPC 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，渲染层用 `window.api.*` 调用
 - 流式事件用 subscribe 回调模式（返回 unsubscribe 函数）
 - Channel 命名：`{domain}:{action}`（请求-响应）、`{domain}:stream:{event}`（流式）、`{domain}:event:{name}`（状态事件），常量表在 `packages/shared/src/ipc/channels.ts`
@@ -94,7 +95,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
 - **桌面端三平台**（Windows/macOS/Linux）：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64；release.yml 三平台矩阵构建（mac 需 macOS runner，签名走 CSC_LINK）
 - **exactOptionalPropertyTypes 已启用**：可选字段传 undefined 需条件展开（`...(x !== undefined ? { x } : {})`）
-- **React Compiler 已启用**：hook 只能在顶层调用，禁止中间函数包装 hook
+- **React Compiler 未启用**（`@vitejs/plugin-react` v6 已无 `babel` 选项，旧 `babel.plugins: [['babel-plugin-react-compiler', …]]` 配置被静默忽略、已从 `electron.vite.config.ts` 删除）⇒ 渲染层不会自动记忆化，useMemo/useCallback 仍需手写；hook 只能在顶层调用，禁止中间函数包装 hook
 
 ## 数据库
 
@@ -140,7 +141,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 构建产物 & Git
 
 - `out/` = electron-vite build 产物，`release/` = electron-builder 打包产物，`stats/` = 体积分析产物
-- `docs/参考项目/`、`_template/` = 外部参考代码（codegraph 索引排除，见 `codegraph.json`）
+- `_template/` = 外部参考代码（未纳入 git 跟踪，codegraph 索引排除，见 `codegraph.json`）
 - 预提交钩子：lint-staged（Biome 自动修复）+ codegraph sync（60s 超时，`SKIP_CODEGRAPH_SYNC=1` 跳过）
 - 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 进 CHANGELOG，其余不进）
 - 发版流程：`pnpm changelog` 生成 → 手动改版本号 + [Unreleased]→[vX.Y.Z] → `git tag vX.Y.Z` → release.yml 自动构建发布

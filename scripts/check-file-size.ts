@@ -1,90 +1,119 @@
 // scripts/check-file-size.ts
-// 文件净行数门槛（工程化强制）：新文件 ≤600 净行（业界 eslint max-lines 建议区间上限）
+// 文件体积门槛（工程化强制）：原始行 + 净行双口径 + 棘轮基线
 // ──────────────────────────────────────────────────────────────
-// 依据 eslint max-lines 官方建议（100-500 区间，本项目取 600 容忍 TS/React 组件文件）
-// 与 typescript-dev-standards-ai.md §工程 同步修订。
-// 净行 = 总行数 - 空行 - 纯注释行（对齐 eslint 的 skipBlankLines + skipComments 选项）。
-// 策略：豁免清单记录存量超限文件（2026-08-11 基线，当前 3 个），清单外文件超限即卡关。
+// 规则（两条同时生效，缺一即被绕过）：
+//   RAW_LIMIT = 600 原始行——物理行数，无法靠注释刷量规避（业界 eslint max-lines 口径）
+//   NET_LIMIT = 600 净行——去掉空行/纯注释后的代码量（对齐 skipBlankLines + skipComments）
+// 范围：src/{main,renderer,preload} + packages/*/src（契约层曾长期在扫描范围外，
+//       definitions.ts 932 原始行无人管，2026-08-30 审计纠正）。
+//
+// 存量违规不再写在源码里的豁免清单（会漂移、会谎报行数），而是外置为
+// scripts/check-file-size.baseline.json，按 lib/ratchet.ts 的棘轮规则单向收紧：
+//   新增超限 / 基线值变大 / 基线条目已消解未清理 → 均卡关
 //
 // 运行：pnpm check:file-size
+//       pnpm check:file-size --update-baseline   # 重构后收紧基线
+//       （--force 才允许写高基线值，等价于「显式承认放宽」，diff 可见）
 // ──────────────────────────────────────────────────────────────
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { collectSourceFiles, discoverPackageSrcDirs, measureFile } from './lib/file-metrics';
+import {
+  evaluateRatchet,
+  formatMetrics,
+  type Metrics,
+  parseBaseline,
+  proposeBaseline,
+  renderProblems,
+  serializeBaseline,
+  wantsBaselineUpdate,
+  wantsForce,
+} from './lib/ratchet';
 
 const ROOT = join(import.meta.dirname, '..');
-const SCAN_DIRS = [
-  join(ROOT, 'src', 'main'),
-  join(ROOT, 'src', 'renderer'),
-  join(ROOT, 'src', 'preload'),
-];
-const LIMIT = 600;
+const BASELINE_PATH = join(import.meta.dirname, 'check-file-size.baseline.json');
+const RAW_LIMIT = 600;
+const NET_LIMIT = 600;
+const METRICS = ['raw', 'net'] as const;
 
-// 存量超限豁免清单（2026-08-11 基线，当前 3 个；重构拆短后移除）
-const EXEMPT = new Set([
-  'src/renderer/dev/mock-api.ts',
-  'src/main/infra/ai/agent/agent-service.ts', // 601 净行，重构时优先拆
-  'src/renderer/components/chat/ChatInput.tsx', // 605 净行（存量基线超限，重构时拆）
-]);
-
-function collectFiles(dir: string, acc: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) collectFiles(full, acc);
-    else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
-      if (!entry.name.includes('.test.')) acc.push(full);
-    }
-  }
-  return acc;
+function scanDirs(): string[] {
+  return [
+    join(ROOT, 'src', 'main'),
+    join(ROOT, 'src', 'renderer'),
+    join(ROOT, 'src', 'preload'),
+    ...discoverPackageSrcDirs(ROOT),
+  ];
 }
 
-/** 净行数：跳过空行与纯注释行（eslint max-lines skipBlankLines + skipComments） */
-function countNetLines(file: string): number {
-  const lines = readFileSync(file, 'utf8').split('\n');
-  let inBlockComment = false;
-  let net = 0;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line === '') continue;
-    if (inBlockComment) {
-      if (line.includes('*/')) inBlockComment = false;
-      continue;
-    }
-    if (line.startsWith('//')) continue;
-    if (line.startsWith('/*')) {
-      if (!line.includes('*/')) inBlockComment = true;
-      continue;
-    }
-    if (line.startsWith('*')) continue;
-    net++;
+/** 超限判定：任一口径超限即进入违规集 */
+function isViolating(m: { raw: number; net: number }): boolean {
+  return m.raw > RAW_LIMIT || m.net > NET_LIMIT;
+}
+
+function loadBaseline(): Record<string, Metrics> {
+  // 文件缺失 → 空基线（首次 --update-baseline 得以创建；普通运行把所有超限报成 new）
+  if (!existsSync(BASELINE_PATH)) return {};
+  try {
+    return parseBaseline(readFileSync(BASELINE_PATH, 'utf8'), METRICS);
+  } catch (error: unknown) {
+    console.error(
+      `[check-file-size] ❌ 基线读取失败（${BASELINE_PATH}）：${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
   }
-  return net;
 }
 
 function main(): number {
-  const files = SCAN_DIRS.flatMap((d) => collectFiles(d));
-  const problems: Array<{ file: string; lines: number }> = [];
+  const files = scanDirs().flatMap((d) => collectSourceFiles(d));
+  const current = new Map<string, Metrics>();
+  const violatingRows: Array<{ path: string; raw: number; net: number }> = [];
 
   for (const file of files) {
-    const rel = relative(ROOT, file).replace(/\\/g, '/');
-    const lines = countNetLines(file);
-    if (lines > LIMIT && !EXEMPT.has(rel)) {
-      problems.push({ file: rel, lines });
-    }
+    const m = measureFile(ROOT, file);
+    if (!isViolating(m)) continue;
+    current.set(m.path, { raw: m.raw, net: m.net });
+    violatingRows.push(m);
   }
 
-  if (problems.length === 0) {
+  const baseline = loadBaseline();
+
+  if (wantsBaselineUpdate(process.argv.slice(2))) {
+    const next = proposeBaseline(current, baseline, METRICS, wantsForce(process.argv.slice(2)));
+    writeFileSync(BASELINE_PATH, serializeBaseline(next), 'utf8');
     console.log(
-      `[check-file-size] ✅ 通过：${files.length} 文件，0 超限（门槛 ${LIMIT} 净行，豁免 ${EXEMPT.size} 个存量）`,
+      `[check-file-size] 基线已更新：${Object.keys(baseline).length} → ${Object.keys(next).length} 条（${BASELINE_PATH}，请连同代码一起提交）`,
     );
     return 0;
   }
 
-  console.error(`[check-file-size] ❌ ${problems.length} 个文件超 ${LIMIT} 净行（豁免清单外）：`);
-  for (const p of problems) console.error(`  ${p.file}: ${p.lines} 净行`);
+  const problems = evaluateRatchet(current, baseline, METRICS);
+  const sorted = violatingRows.sort((a, b) => b.raw - a.raw);
+
+  if (problems.length === 0) {
+    console.log(
+      `[check-file-size] ✅ 通过：${files.length} 文件，${current.size} 处超限全部在棘轮基线内` +
+        `（基线 ${Object.keys(baseline).length} 条，只允许收紧）`,
+    );
+    console.log(`  门槛：原始 ≤${RAW_LIMIT} 行 / 净 ≤${NET_LIMIT} 行`);
+    for (const r of sorted) {
+      const base = baseline[r.path];
+      console.log(
+        `  存量 ${r.path}: raw ${r.raw} net ${r.net}（基线 raw ${base?.raw ?? '-'} / net ${base?.net ?? '-'}）`,
+      );
+    }
+    return 0;
+  }
+
   console.error(
-    '[check-file-size] 修复指引：拆分文件；存量文件移除豁免需先重构（typescript-dev-standards-ai.md §工程）',
+    `[check-file-size] ❌ ${problems.length} 处棘轮违规（门槛 raw ${RAW_LIMIT} / net ${NET_LIMIT}）：`,
+  );
+  for (const line of renderProblems(problems)) console.error(line);
+  console.error(
+    `[check-file-size] 当前超限 ${current.size} 处：\n${sorted.map((r) => `  ${r.path}: raw ${r.raw} net ${r.net}（${formatMetrics(r, METRICS)}）`).join('\n')}`,
+  );
+  console.error(
+    '[check-file-size] 修复指引：拆文件（typescript-dev-standards-ai.md §工程）；已重构请跑 pnpm check:file-size --update-baseline 收紧基线',
   );
   return 1;
 }

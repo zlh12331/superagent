@@ -53,6 +53,7 @@ import {
   usePinSession,
   useSessionsQuery,
 } from '@/hooks/use-sessions';
+import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import {
   ROUTES,
@@ -186,10 +187,8 @@ export function Sidebar(): ReactElement {
 
   // 派生：当前激活会话的 workingDir（用于文件树面板）
   // 无激活会话时为 null，FileTreePanel 显示空状态
-  const workingDir = ((): string | null => {
-    if (activeSessionId === null) return null;
-    return sessions.find((s) => s.id === activeSessionId)?.workingDir ?? null;
-  })();
+  // 唯一权威入口 useWorkingDir（此前为本地 IIFE find，与 AppShell/终端各读一份镜像）
+  const workingDir = useWorkingDir(activeSessionId);
 
   // 派生：按 workingDir basename 分组（搜索时基于过滤后的会话）
   // 结构：Map<folderName, Session[]>

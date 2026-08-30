@@ -23,8 +23,6 @@
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
-import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import type {
   AgentApprovalRequestPayload,
   ApprovalMode,
@@ -41,8 +39,15 @@ import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { readWhitelistSync, writeWhitelist } from '../../storage/whitelist-pref';
-import { splitShellWords } from '../../terminal/terminal-service';
 import type { CommandClassifier } from './command-classifier';
+import {
+  commandTargetsOutsideBoundary,
+  extractCommandFromInput,
+  isCompositeCommand,
+  isUniversalWhitelistPattern,
+  matchesWhitelistPattern,
+  PLAN_MODE_CONTROL_TOOLS,
+} from './command-guards';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
 import type { DenialState } from './denial-tracking';
 import {
@@ -91,12 +96,15 @@ export interface IPermissionService {
    * 决策顺序（对齐 qwen ApprovalMode + autoMode 三层过滤）：
    * 1. 检查记忆决策：若用户之前对此 tool+input 组合选了"5分钟内不再询问"且未过期，
    *    返回记忆结果（approved → 'auto'；denied → 'ask' 让用户重新决策）
-   * 2. 按工具类别 + ApprovalMode 分级决策：
+   * 2. 工具自身 permission='auto'：只有 **category='read'** 才走免审批快速路径；
+   *    非只读的 auto 工具不再无条件短路——先过 Layer-0（危险/复合命令升级为 'ask'），
+   *    再在 plan 模式下按控制面逃生舱之外一律 'deny'（P0 修复，详见实现处注释）
+   * 3. 用户持久化白名单命中 → 'auto'（空/通配符模式无效，见 addWhitelistEntry）
+   * 4. 按工具类别 + ApprovalMode 分级决策：
    *    - plan：edit/exec 工具 → 'deny'（只读探索零副作用）；read 工具 → 'auto'
    *    - ask：permission='ask' → 'ask'；permission='auto' → 'auto'（保守默认）
    *    - auto：edit 工具 → 'auto'（工作区编辑快速路径）；exec 工具 → 'ask'（危险命令仍审批）；read → 'auto'
    *    - yolo：全部 → 'auto'（无审批）
-   * 3. 工具自身 permission='auto' 时恒为 'auto'（只读白名单，任何模式不弹审批）
    *
    * @param tool 待执行的工具
    * @param input 工具入参（用于构建记忆 key）
@@ -272,7 +280,20 @@ export class PermissionService implements IPermissionService {
   constructor(classifier?: CommandClassifier) {
     this.classifier = classifier;
     // 启动时读入持久化白名单（空列表 = 全部走审批流）
-    this.whitelist = readWhitelistSync();
+    // P0 修复：加载即迁移——丢弃历史「空模式 / 纯通配符」条目（等同放行该工具
+    // 一切调用，且旧版本静默生效）。回写持久化，避免下次启动复活。
+    const loaded = readWhitelistSync();
+    const valid = loaded.filter((entry) => !isUniversalWhitelistPattern(entry.pattern));
+    this.whitelist = valid;
+    if (valid.length !== loaded.length) {
+      logger.warn(
+        { dropped: loaded.length - valid.length, kept: valid.length },
+        '白名单存在空/通配符模式条目，已清理并重写持久化文件（这类条目等同放行该工具全部调用）',
+      );
+      void writeWhitelist(valid).catch((error: unknown) => {
+        logger.error({ error }, '白名单清理回写失败（内存侧已生效，下次启动会再次清理）');
+      });
+    }
   }
   /** pending 审批 Map：approvalId → PendingApproval */
   private readonly pending = new Map<string, PendingApproval>();
@@ -286,7 +307,7 @@ export class PermissionService implements IPermissionService {
   private denialState: DenialState = createDenialState();
   /** 命令安全分类器（AUTO 模式 exec 命令分层；可选注入，缺省降级保守 ask） */
   private readonly classifier: CommandClassifier | undefined;
-  /** 命令白名单（跨会话持久化；空 pattern = 该工具全部放行） */
+  /** 命令白名单（跨会话持久化；模式必须是非空具体前缀，空/通配符一律无效） */
   private whitelist: WhitelistEntry[];
 
   /** @inheritDoc */
@@ -326,9 +347,19 @@ export class PermissionService implements IPermissionService {
 
   /** @inheritDoc */
   async addWhitelistEntry(entry: WhitelistEntry): Promise<void> {
-    // 幂等：同工具 + 同模式已存在则不重复添加
+    // P0 修复：拒绝「等同放行该工具全部调用」的条目。
+    // 白名单的合法语义只有「工具 + 具体命令前缀」（见 matchesWhitelistPattern），
+    // 空/通配符模式会把 run_command / write_file 变成永久免审批通道。
+    // 这里显式报错而不是静默丢弃：调用方（设置页 / agent）必须给出真实范围。
+    if (isUniversalWhitelistPattern(entry.pattern)) {
+      throw new AppError(
+        ErrorCode.INVALID_INPUT,
+        `白名单模式不能为空或纯通配符（等同放行 ${entry.toolName} 的全部调用），请填写具体命令前缀，例如 "npm test"`,
+      );
+    }
+    // 幂等：同工具 + 同模式（忽略首尾空白）已存在则不重复添加
     const exists = this.whitelist.some(
-      (e) => e.toolName === entry.toolName && e.pattern === entry.pattern,
+      (e) => e.toolName === entry.toolName && e.pattern.trim() === entry.pattern.trim(),
     );
     if (!exists) {
       this.whitelist = [...this.whitelist, entry];
@@ -339,7 +370,7 @@ export class PermissionService implements IPermissionService {
   /** @inheritDoc */
   async removeWhitelistEntry(entry: WhitelistEntry): Promise<void> {
     const next = this.whitelist.filter(
-      (e) => !(e.toolName === entry.toolName && e.pattern === entry.pattern),
+      (e) => !(e.toolName === entry.toolName && e.pattern.trim() === entry.pattern.trim()),
     );
     if (next.length !== this.whitelist.length) {
       this.whitelist = next;
@@ -385,7 +416,7 @@ export class PermissionService implements IPermissionService {
   }
 
   /**
-   * 白名单匹配：工具名相等 + 模式匹配（空模式 = 该工具全部放行）
+   * 白名单匹配：工具名相等 + 命令前缀模式匹配
    *
    * P0 安全修复前的实现为任意位置子串匹配（includes），存在提权路径：
    * 白名单 'git status' 会自动放行 'git status && rm -rf ~' 等复合命令，
@@ -395,15 +426,19 @@ export class PermissionService implements IPermissionService {
    *   完整决策链（Layer-0 / 分类器 / 保守 ask）
    * - 非复合命令改用 token 级边界前缀匹配（见 matchesWhitelistPattern），
    *   'echo git status' / 'git status-helper' 不再命中 'git status'
-   * 非命令工具（write_file 等）无 command 字段时仅空模式可命中。
+   * - 空 / 纯通配符模式**永不命中**（P0：旧语义「空 = 该工具全部放行」
+   *   等同于把 write_file / run_command 变成永久免审批通道）。
+   *   这里匹配层再兜一次底：即便持久化文件被手工改坏、或别处直接写入
+   *   whitelist 数组，也不会放行。
+   * 非命令工具（write_file 等）无 command 字段时不命中任何模式。
    */
   private isWhitelisted(tool: Tool, input: unknown): boolean {
     return this.whitelist.some((entry) => {
       if (entry.toolName !== tool.name) {
         return false;
       }
-      if (entry.pattern === '') {
-        return true;
+      if (isUniversalWhitelistPattern(entry.pattern)) {
+        return false;
       }
       const command = extractCommandFromInput(input);
       if (command === undefined || isCompositeCommand(command)) {
@@ -442,8 +477,47 @@ export class PermissionService implements IPermissionService {
       }
     }
 
-    // 2. 工具自身白名单（permission='auto'）：任何模式自动放行（只读工具）
+    // 2. 工具自身 permission='auto'（只读快速路径）
+    //
+    // P0 修复：此前这里是**无条件短路**（`if (tool.permission === 'auto') return auto`），
+    // 排在 plan 模式判定与 Layer-0 危险命令拦截之前，于是：
+    // - plan 模式下任何被标成 auto 的写类/执行类工具照样执行（Plan/Apply 分离失效）
+    // - auto 工具入参携带 shell 命令时完全绕过 Layer-0 确定性拦截
+    // - MCP 工具尤其危险：category 恒为 'exec'，而 permission 只要 server 自报
+    //   annotations.readOnlyHint（或用户设 permissionOverride:'auto'）就是 auto
+    //   → 一个撒谎/被攻陷的 MCP server 拿到「任何模式免审批」的任意调用通道
+    // 现在 auto 只担保「只读工具免打扰」，其余一律回落到完整决策链并 fail closed。
     if (tool.permission === 'auto') {
+      // 2a. 只读工具：保持快速路径（plan/auto/ask/yolo 都不弹审批，零副作用）
+      if (tool.category === 'read') {
+        return { permission: 'auto', description: tool.description };
+      }
+      // 2b. 命令形状入参：Layer-0 确定性拦截对 auto 同样生效（不可被 auto 标记绕过）
+      const command = extractCommandFromInput(input);
+      if (command !== undefined) {
+        const dangerous = detectDangerousCommand(command, userPrompt);
+        if (dangerous.isDangerous) {
+          return {
+            permission: 'ask',
+            description: `${tool.description}（⚠️ ${dangerous.reason}）`,
+          };
+        }
+        // 复合命令（; | && ` $() 换行）：前缀式只读判定不覆盖后继段落，必须确认
+        if (isCompositeCommand(command)) {
+          return {
+            permission: 'ask',
+            description: `${tool.description}（复合命令，后继段落不受白名单约束）`,
+          };
+        }
+      }
+      // 2c. plan 模式：非只读且不在控制面逃生舱内的 auto 工具一律 deny
+      if (this.approvalMode === 'plan' && !PLAN_MODE_CONTROL_TOOLS.has(tool.name)) {
+        return {
+          permission: 'deny',
+          description: `${tool.description}（计划模式只读，非只读工具需先退出计划模式）`,
+        };
+      }
+      // 2d. 其余（控制面工具 / 非 plan 模式的无命令 auto 工具）维持免审批
       return {
         permission: 'auto',
         description: tool.description,
@@ -748,118 +822,25 @@ function stableStringifyInternal(value: unknown, visited: WeakSet<object>): stri
     throw new TypeError('Converting circular structure to JSON in stableStringify');
   }
   visited.add(value);
+  let serialized: string;
   // 对于数组，递归处理元素
   if (Array.isArray(value)) {
-    return `[${value.map((v) => stableStringifyInternal(v, visited)).join(',')}]`;
+    serialized = `[${value.map((v) => stableStringifyInternal(v, visited)).join(',')}]`;
+  } else {
+    // 对于对象，按键排序后递归处理值
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    serialized = `{${keys
+      .map(
+        (k) =>
+          `${JSON.stringify(k)}:${stableStringifyInternal((value as Record<string, unknown>)[k], visited)}`,
+      )
+      .join(',')}}`;
   }
-  // 对于对象，按键排序后递归处理值
-  const keys = Object.keys(value as Record<string, unknown>).sort();
-  return `{${keys
-    .map(
-      (k) =>
-        `${JSON.stringify(k)}:${stableStringifyInternal((value as Record<string, unknown>)[k], visited)}`,
-    )
-    .join(',')}}`;
-}
-
-/**
- * 复合命令特征（P0 安全修复）
- *
- * 含任一特征说明不是单一简单命令：`;' `|` `&` 串联/后台、反引号与 `$(`
- * 命令替换、换行续行。此类命令在两处被禁用快速通道（安全方向保守）：
- * 1. 用户白名单不命中（isWhitelisted）——放行意图只针对单一命令
- * 2. SAFE_READ_ONLY 只读自动放行跳过——其 ^ 前缀锚定不覆盖后继段落
- * 引号内的误判（如 URL 查询串含 '&'）只会降级走完整决策链，不会放大权限。
- */
-const COMPOSITE_COMMAND_PATTERN = /[;|&`]|\$\(|\n/;
-
-/** Windows 盘符绝对路径（C:\ 或 C:/）；POSIX 根路径单独以 '/' 起判 */
-const WIN_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
-
-/**
- * P2 安全加固：判断命令是否引用了边界目录之外的路径目标。
- *
- * 判定保守：任何绝对路径 token（盘符 / POSIX 根 / ~ 展开）或解析后逃逸边界的
- * 相对路径（../ 链）都视为越界。命令分词复用 splitShellWords（跨平台引号/转义语义），
- * 仅对「像路径」的 token 判定——选项开关（如 --force）、URL 等不误伤。
- */
-export function commandTargetsOutsideBoundary(command: string, boundary: string): boolean {
-  let tokens: string[];
-  try {
-    tokens = splitShellWords(command, process.platform);
-  } catch {
-    // 分词失败按越界处理（保守：交给 ask 分支人工确认）
-    return true;
-  }
-  const normBoundary = normalize(boundary).toLowerCase();
-  for (const raw of tokens) {
-    if (!isPathLikeToken(raw)) continue;
-    let resolved: string;
-    try {
-      resolved = resolvePathToken(raw, boundary);
-    } catch {
-      return true;
-    }
-    const rel = relative(normBoundary, resolved.toLowerCase());
-    if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** token 是否可能指向文件系统目标：绝对路径 / ~ 前缀 / 含 .. 段的相对路径 */
-function isPathLikeToken(token: string): boolean {
-  if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/') || token.startsWith('~')) {
-    return true;
-  }
-  return token === '..' || token.startsWith('../') || token.startsWith('..\\');
-}
-
-/** 把路径 token 解析为绝对路径（~ → home；相对 → 相对边界） */
-function resolvePathToken(token: string, boundary: string): string {
-  if (token.startsWith('~')) {
-    return resolve(join(homedir(), token.slice(1)));
-  }
-  if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/')) {
-    return normalize(token);
-  }
-  return resolve(boundary, token);
-}
-
-export function isCompositeCommand(command: string): boolean {
-  return COMPOSITE_COMMAND_PATTERN.test(command);
-}
-
-/**
- * 白名单 token 级前缀匹配（P0 安全修复，替代任意位置 includes 子串）
- *
- * 规则：command.trim() 与 pattern 相等，或以 pattern 开头且紧随空白边界。
- * pattern='npm test'：命中 'npm test -- --watch'；
- * 不命中 'echo npm test'（前缀不符）、'npm testcase'（无词边界）。
- * 大小写敏感（与 shell 命令语义一致）。
- */
-function matchesWhitelistPattern(command: string, pattern: string): boolean {
-  const normalized = command.trim();
-  const pat = pattern.trim();
-  if (normalized === pat) {
-    return true;
-  }
-  return normalized.startsWith(pat) && /\s/.test(normalized.charAt(pat.length));
-}
-
-/**
- * 从工具入参提取命令文本（run_command: { command }；terminal: { command? }）
- *
- * 无命令字段的工具入参返回 undefined（跳过命令级检测）。
- */
-function extractCommandFromInput(input: unknown): string | undefined {
-  if (typeof input !== 'object' || input === null) {
-    return undefined;
-  }
-  const record = input as Record<string, unknown>;
-  const command = record['command'];
-  return typeof command === 'string' && command.trim().length > 0 ? command : undefined;
+  // 出栈时移除：visited 的语义是「当前递归路径上的祖先」，不是「曾经访问过」。
+  // 不移除会把同一子对象的兄弟引用（DAG，如 {a: obj, b: obj}）误判成循环引用
+  // 而抛 TypeError —— 原生 JSON.stringify 对这种输入是能正常序列化的。
+  visited.delete(value);
+  return serialized;
 }
 
 /**

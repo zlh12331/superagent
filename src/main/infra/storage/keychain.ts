@@ -28,22 +28,27 @@ import { getKeychainPath } from './app-data';
  *
  * 实现：用 Promise 链式调用实现简单的互斥锁，
  * 每个操作必须等待前一个操作完成才能执行。
+ *
+ * P1 修复：旧实现只在链上登记槽位后**同步返回 release**，调用方从未等待
+ * 前一个持有者——链形同虚设，并发 setSecret 的「读-改-写」互相覆盖（丢更新）。
+ * 现在返回 `Promise<release>`，必须 `await` 才算真正进入临界区。
  */
 let lock: Promise<void> = Promise.resolve();
 
 /**
- * 获取互斥锁
+ * 获取互斥锁（等待前一个持有者释放）
  *
- * @returns 释放锁的函数
+ * @returns resolve 后即为「已持锁」，resolve 值为释放锁的函数
  */
-function acquireLock(): () => void {
-  const releaseRef: { value: () => void } = { value: () => {} };
-  const next = new Promise<void>((resolve) => {
-    releaseRef.value = resolve;
+function acquireLock(): Promise<() => void> {
+  // 登记必须同步完成（保证 FIFO），只有「等待」是异步的
+  const waiting = lock;
+  let release: () => void = () => {};
+  const slot = new Promise<void>((resolve) => {
+    release = resolve;
   });
-  const current = lock;
-  lock = current.then(() => next);
-  return releaseRef.value;
+  lock = waiting.then(() => slot);
+  return waiting.then(() => release);
 }
 
 /**
@@ -55,32 +60,125 @@ function acquireLock(): () => void {
 type KeychainStore = Record<string, number[]>;
 
 /**
- * 读取 keychain 文件
+ * 文件损坏处置结果（供上层向用户显式告警，而非静默返回空）
  *
- * 文件不存在时返回空对象
+ * - corrupted：本次读取遇到无法整体解析的 keychain.dat
+ * - recoverable：至少一条条目经解密校验后已回写恢复
+ * - salvaged / lost： salvage 存活条目数 / 无法恢复条目数
+ */
+export interface KeychainIntegrity {
+  readonly corrupted: boolean;
+  readonly recoverable: boolean;
+  readonly salvaged: number;
+  readonly lost: number;
+}
+
+/** 最近一次损坏处置报告（未发生损坏为 null；设置页可据此提示用户重新录入密钥） */
+let lastIntegrity: KeychainIntegrity | null = null;
+
+/** 读取最近一次 keychain 完整性报告（无损坏历史时 null） */
+export function getKeychainIntegrity(): KeychainIntegrity | null {
+  return lastIntegrity;
+}
+
+/** 值是否为「加密字节数组」形状（number[] 且元素在 0..255） */
+function isEncryptedArray(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.every((n) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 255)
+  );
+}
+
+/** 整体结构校验：仅接受 key → 字节数组 的平对象（其余按损坏处理） */
+function isKeychainStore(value: unknown): value is KeychainStore {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every(isEncryptedArray);
+}
+
+/** 条目片段正则：`"key": [ 1,2,3 ]`——截断写入时仍能逐条捞出完整配对（忽略未闭合尾巴） */
+const ENTRY_FRAGMENT_PATTERN = /"((?:[^"\\]|\\.)+)"\s*:\s*(\[[^\][]*\])/g;
+
+/**
+ * 逐条抢救损坏文件（P1 修复：此前整文件判损坏即弃，全部 API Key 静默消失）
+ *
+ * 只保留「能解析出字节数组」且「safeStorage 能解开」的条目——解不开的
+ * （跨系统用户 / DPAPI 主密钥轮换）留也只会反复报错，计入 lost。
+ */
+function salvageEntries(raw: string): { store: KeychainStore; candidates: number } {
+  const store: KeychainStore = {};
+  let candidates = 0;
+  for (const match of raw.matchAll(ENTRY_FRAGMENT_PATTERN)) {
+    const [, rawKey, rawArray] = match;
+    if (rawKey === undefined || rawArray === undefined) {
+      continue;
+    }
+    candidates += 1;
+    try {
+      const parsed = JSON.parse(rawArray) as unknown;
+      if (!isEncryptedArray(parsed)) {
+        continue;
+      }
+      safeStorage.decryptString(Buffer.from(parsed));
+      store[JSON.parse(`"${rawKey}"`) as string] = parsed;
+    } catch {
+      // 单条不可解析/不可解密：跳过（计入 lost），不阻断其余条目
+    }
+  }
+  return { store, candidates };
+}
+
+/**
+ * 读取 keychain 文件（损坏时逐条抢救并回写健康子集）
+ *
+ * 文件不存在时返回空对象（首次使用，不算损坏）。
  */
 async function readStore(): Promise<KeychainStore> {
   const filePath = getKeychainPath();
+  let content: string;
   try {
-    const content = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(content) as KeychainStore;
+    content = await fs.readFile(filePath, 'utf8');
   } catch (error: unknown) {
-    // 文件不存在（ENOENT）：首次使用，返回空存储
-    if (error instanceof Error && error.message.includes('ENOENT')) {
-      return {};
+    // ENOENT = 首次使用；其他读错误（权限等）不谎报损坏，静默按空处理由写入覆盖
+    if (!(error instanceof Error && error.message.includes('ENOENT'))) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error), filePath },
+        'keychain.dat 读取失败',
+      );
     }
-    // 其他错误（如 JSON 解析失败 = 文件损坏）：记录日志便于诊断，
-    // 保留损坏文件为 .corrupt（避免全部 API Key 静默丢失后无法归因）
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (isKeychainStore(parsed)) {
+      return parsed;
+    }
+    throw new Error('keychain.dat 结构不符合契约');
+  } catch {
+    // 结构损坏（半截写入 / 手工改坏）：先逐条抢救，再隔离原件，最后回写健康子集
+    const { store: salvaged, candidates } = salvageEntries(content);
+    const report: KeychainIntegrity = {
+      corrupted: true,
+      recoverable: Object.keys(salvaged).length > 0,
+      salvaged: Object.keys(salvaged).length,
+      lost: Math.max(candidates - Object.keys(salvaged).length, 0),
+    };
+    lastIntegrity = report;
     logger.error(
-      { error: error instanceof Error ? error.message : String(error), filePath },
-      'keychain.dat 读取失败（可能已损坏）——密钥将重写覆盖',
+      { filePath, ...report },
+      'keychain.dat 已损坏——按条目抢救（salvaged/lost），原件保留为 .corrupt',
     );
     try {
       await fs.rename(filePath, `${filePath}.corrupt`);
     } catch {
-      // 重命名失败（权限等）不阻断：应用仍可继续，仅丢失损坏文件的诊断依据
+      // 重命名失败（权限等）不阻断：仍继续回写健康子集
     }
-    return {};
+    if (report.recoverable) {
+      await writeStore(salvaged);
+    }
+    return salvaged;
   }
 }
 
@@ -132,7 +230,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
     throw new Error('safeStorage 加密不可用，无法存储敏感数据');
   }
 
-  const release = acquireLock();
+  const release = await acquireLock();
   try {
     const encrypted = safeStorage.encryptString(value);
     const store = await readStore();
@@ -154,14 +252,21 @@ export async function getSecret(key: string): Promise<string | null> {
     return null;
   }
 
-  const store = await readStore();
-  const encryptedArray = store[key];
-  if (encryptedArray === undefined) {
-    return null;
-  }
+  // P1 修复：读路径同样持锁——此前 get 无锁，可与 set/delete 的「读-改-写」
+  // 以及损坏文件的 rename 交错，读到随即被隔离的孤儿快照（甚至丢条目）
+  const release = await acquireLock();
+  try {
+    const store = await readStore();
+    const encryptedArray = store[key];
+    if (encryptedArray === undefined) {
+      return null;
+    }
 
-  const encrypted = Buffer.from(encryptedArray);
-  return safeStorage.decryptString(encrypted);
+    const encrypted = Buffer.from(encryptedArray);
+    return safeStorage.decryptString(encrypted);
+  } finally {
+    release();
+  }
 }
 
 /**
@@ -172,7 +277,7 @@ export async function getSecret(key: string): Promise<string | null> {
 export async function deleteSecret(key: string): Promise<void> {
   // P1 修复：delete 是读改写，必须与 setSecret 同锁——否则运行时模型删除密钥
   // 与设置页保存密钥并发时，delete 的旧读会覆盖 set 刚写入的 key（丢更新）
-  const release = acquireLock();
+  const release = await acquireLock();
   try {
     const store = await readStore();
     if (store[key] !== undefined) {
@@ -190,6 +295,12 @@ export async function deleteSecret(key: string): Promise<void> {
  * @returns secret key 数组
  */
 export async function listSecrets(): Promise<string[]> {
-  const store = await readStore();
-  return Object.keys(store);
+  // 读路径持锁：readStore 可能触发损坏抢救（rename + 回写），不能与 set/delete 交错
+  const release = await acquireLock();
+  try {
+    const store = await readStore();
+    return Object.keys(store);
+  } finally {
+    release();
+  }
 }

@@ -14,7 +14,7 @@ import { z } from 'zod';
 export const WhitelistEntrySchema = z.object({
   /** 工具名（如 run_command / write_file） */
   toolName: z.string().min(1).max(64),
-  /** 命令匹配模式（子串匹配；空串 = 该工具全部放行） */
+  /** 命令匹配模式（token 级前缀匹配；空/纯通配符被拒 —— 等同放行该工具全部调用） */
   pattern: z.string().max(512).default(''),
 });
 

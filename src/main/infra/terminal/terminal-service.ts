@@ -27,7 +27,12 @@ import type {
   TerminalOutputEventPayload,
   TerminalResizeRes,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  IPC_DEFINITIONS,
+  TERMINAL_ENV_DENY_KEYS,
+} from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { type IPty, spawn } from 'node-pty';
 import { emitEvent } from '../../utils/emit-event';
@@ -78,13 +83,13 @@ export interface ITerminalService {
   dispose(): Promise<void>;
 }
 
-/**
- * 禁止渲染层覆盖的系统关键环境变量（P0 安全）
- *
- * Windows 键大小写不敏感：在 win32 上按大写比较（见 isSensitiveEnvKey）。
- * PATH / PATHEXT 决定可执行文件解析；SystemRoot / WINDIR / COMSPEC 决定系统行为。
- */
-const SENSITIVE_ENV_KEYS = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC']);
+// ── 禁止渲染层覆盖的系统关键环境变量（P0 安全，兜底过滤）──────────────
+// 单一真源在共享层 schemas/terminal.ts（TERMINAL_ENV_DENY_KEYS / isTerminalEnvDenied）：
+// IPC schema 已在边界直接拒绝这类 env（类型化校验错误），create() 内保留二次过滤，
+// 防止绕过 IPC 的内部调用方（工具/桥接）把劫持变量传进 PTY。
+// PATH / PATHEXT 决定可执行文件解析；LD_PRELOAD / NODE_OPTIONS 等决定
+// 「进程一启动就加载哪里的代码」，同属命令劫持面。
+// ──────────────────────────────────────────────────────────────
 
 /** 输出缓冲最大字节数（环形截断，避免内存膨胀） */
 const MAX_BUFFER_BYTES = 100 * 1024;
@@ -379,8 +384,11 @@ export class TerminalService implements ITerminalService {
    * - POSIX：PATH 等大小写敏感，直接比较
    */
   private isSensitiveEnvKey(key: string): boolean {
+    // 集合来自共享层单一真源；平台语义保持原样：
+    // - Windows：环境变量键大小写不敏感 → 统一大写比较
+    // - POSIX：大小写敏感（小写 path 是普通自定义变量，不应误伤）→ 原样比较
     const normalized = process.platform === 'win32' ? key.toUpperCase() : key;
-    return SENSITIVE_ENV_KEYS.has(normalized);
+    return TERMINAL_ENV_DENY_KEYS.has(normalized);
   }
 
   /**

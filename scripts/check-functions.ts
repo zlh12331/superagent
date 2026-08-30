@@ -1,123 +1,155 @@
 // scripts/check-functions.ts
-// 函数参数审计（工程化强制）：参数 ≤4（对象封装豁免）
+// 函数门禁（工程化强制）：形参数 ≤4 + 函数体 ≤40 行，双指标棘轮
 // ──────────────────────────────────────────────────────────────
-// 依据 typescript-dev-standards-ai.md §函数（参数≤4 对象封装）
-// 与业界实践（eslint max-params 常见 3-4）。
-// 实现说明：根 typescript@7 不暴露编译器 API（native port），
-// 采用正则解析（多行/可选/默认值/解构豁免已覆盖，对齐 check-comments 经验）。
-// 函数体 ≤40 行依赖 AST，由 TypeDoc/代码评审兜底（文档标注）。
-// 级别：默认 warning（摸底存量）；--strict 时 error 卡关（存量清零后切换）。
+// 依据 typescript-dev-standards-ai.md §函数（参数≤4 对象封装 / 函数体≤40 行）
+// 与业界实践（eslint max-params 3-4、max-lines-per-function 常见 50）。
 //
-// 运行：pnpm check:functions [--strict]
+// 2026-08-30 审计修复（原实现三处静默失效）：
+//   1. 原「函数体 ≤40 行依赖 AST，由 TypeDoc/代码评审兜底」= 从未度量。
+//      现以花括号深度扫描度量（lib/function-metrics.ts，零新增依赖）。
+//   2. 原「解构对象参数 → 整函数 return null 跳过」= 最常见的 React 组件
+//      （props 解构）与对象封装写法全部逃逸参数统计。现解构按 1 个形参计数。
+//   3. 原 `const f = x => {}` 裸标识符单参箭头完全不匹配 → 现按 1 参 + 度量体长。
+//   4. 原豁免只有一处手写 Set；现存量违规外置棘轮基线（只能收紧）。
+//
+// 已知边界（漏报方向，不误报）：对象字面量方法 / class 方法签名不被正则覆盖；
+// 返回类型含对象字面量类型的函数可能漏配。故基线数字是**下界**，不可当上限解读。
+//
+// 运行：pnpm check:functions
+//       pnpm check:functions --update-baseline   # 重构后收紧基线
 // ──────────────────────────────────────────────────────────────
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { collectSourceFiles, toPosixRelative } from './lib/file-metrics';
+import { type FnMetric, scanFunctions } from './lib/function-metrics';
+import {
+  evaluateRatchet,
+  type Metrics,
+  parseBaseline,
+  proposeBaseline,
+  renderProblems,
+  serializeBaseline,
+  wantsBaselineUpdate,
+  wantsForce,
+} from './lib/ratchet';
 
 const ROOT = join(import.meta.dirname, '..');
+const BASELINE_PATH = join(import.meta.dirname, 'check-functions.baseline.json');
 const SCAN_DIRS = [join(ROOT, 'src', 'main'), join(ROOT, 'src', 'renderer')];
 const PARAM_LIMIT = 4;
+const BODY_LIMIT = 40;
+const METRICS = ['params', 'body'] as const;
 
-// 豁免：DI 装配集合点（依赖注入函数参数多为服务实例，业界 max-params 对注入点放宽）
-const EXEMPT_FUNCTIONS = new Set(['registerBuiltinTools']);
-
-interface Finding {
+/** 一处超限（key = `相对路径#函数名`，行号不入 key 以免代码上方插入注释即漂移） */
+interface Violation extends FnMetric {
   readonly file: string;
-  readonly line: number;
-  readonly detail: string;
+  readonly key: string;
 }
 
-function collectFiles(dir: string, acc: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) collectFiles(full, acc);
-    else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
-      if (!entry.name.includes('.test.') && !entry.name.includes('mock-api')) acc.push(full);
-    }
-  }
-  return acc;
+/** 单次全量扫描结果（避免同一文件被重复解析） */
+interface ScanResult {
+  readonly all: Array<FnMetric & { file: string }>;
+  readonly violations: Violation[];
 }
 
-/** 剔除泛型内容（支持多层嵌套）：防 Map<string, number> 的逗号被参数切分误计 */
-function stripGenerics(text: string): string {
-  let prev = '';
-  let cur = text;
-  while (cur !== prev) {
-    prev = cur;
-    cur = cur.replace(/<[^<>]*>/g, '');
-  }
-  return cur;
+function collectFiles(): string[] {
+  // 与 check-file-size 保持同一收集口径；mock-api.ts 这类「运行时开发模拟层」
+  // 同样受函数门禁约束（原实现整体排除），排除只会让长函数藏在不被看的文件里。
+  return SCAN_DIRS.flatMap((d) => collectSourceFiles(d));
 }
 
-/** 提取函数签名参数（跨行/可选/默认值），返回参数名列表；解构对象返回 null（对象封装豁免） */
-function extractParams(signature: string): string[] | null {
-  const paren = signature.match(/\(([\s\S]*)\)/);
-  if (paren === null) return [];
-  const params = stripGenerics(paren[1] ?? '');
-  // 解构对象/数组参数 → 对象封装，整函数豁免
-  if (/\{\s*[^}]*\}/.test(params) || /\[\s*[^\]]*\]/.test(params)) return null;
-  const names: string[] = [];
-  for (const p of params.split(',')) {
-    const clean = p.trim().replace(/^\.\.\./, '');
-    if (clean === '') continue;
-    const name = clean.split(':')[0]?.trim().replace(/\?$/, '').split('=')[0]?.trim();
-    if (name && !name.includes(' ')) names.push(name);
-  }
-  return names;
-}
-
-/** 正则扫描函数签名（function 声明 + 箭头函数 + 方法），跳过注释行 */
-function checkFile(file: string, findings: Finding[]): void {
-  const lines = readFileSync(file, 'utf8').split('\n');
-  const rel = relative(ROOT, file).replace(/\\/g, '/');
-  const fnRe =
-    /(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([\s\S]*?)\)\s*(?::[^{}]*)?(?=\s*\{)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(([\s\S]*?)\)|(\w+))\s*=>|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(([\s\S]*?)\)/g;
-  const source = lines.join('\n');
-
-  for (const m of source.matchAll(fnRe)) {
-    // 三种形态：function 声明（1/2）、箭头函数（3/4/5）、const f = function 表达式（6/7）
-    const name = m[1] ?? m[3] ?? m[6] ?? 'anonymous';
-    const paramsText = m[2] ?? m[4] ?? m[7];
-    if (paramsText === undefined) continue;
-    if (EXEMPT_FUNCTIONS.has(name)) continue; // DI 装配豁免
-    // 跳过注释中的函数声明
-    const lineNo = source.slice(0, m.index).split('\n').length;
-    const line = lines[lineNo - 1]?.trim() ?? '';
-    if (line.startsWith('//') || line.startsWith('*')) continue;
-
-    const params = extractParams(m[0]);
-    if (params === null) continue; // 解构对象封装豁免
-    if (params.length > PARAM_LIMIT) {
-      findings.push({
+/** 全量扫描：一次读文件，产出全部函数度量 + 超限集 */
+function scanAll(): ScanResult {
+  const all: Array<FnMetric & { file: string }> = [];
+  const violations: Violation[] = [];
+  for (const file of collectFiles()) {
+    const rel = toPosixRelative(ROOT, file);
+    const seen = new Map<string, number>();
+    for (const fn of scanFunctions(readFileSync(file, 'utf8'))) {
+      all.push({ ...fn, file: rel });
+      const times = (seen.get(fn.name) ?? 0) + 1;
+      seen.set(fn.name, times);
+      if (fn.params <= PARAM_LIMIT && fn.bodyLines <= BODY_LIMIT) continue;
+      violations.push({
+        ...fn,
         file: rel,
-        line: lineNo,
-        detail: `${name}() 参数 ${params.length} 个 > ${PARAM_LIMIT}（应对象封装：${params.join(', ')}）`,
+        key: times === 1 ? `${rel}#${fn.name}` : `${rel}#${fn.name}#${times}`,
       });
     }
+  }
+  return { all, violations };
+}
+
+function toMetricMap(violations: readonly Violation[]): Map<string, Metrics> {
+  const map = new Map<string, Metrics>();
+  for (const v of violations) map.set(v.key, { params: v.params, body: v.bodyLines });
+  return map;
+}
+
+function loadBaseline(): Record<string, Metrics> {
+  // 文件缺失 → 空基线（首次 --update-baseline 得以创建；普通运行把所有超限报成 new）
+  if (!existsSync(BASELINE_PATH)) return {};
+  try {
+    return parseBaseline(readFileSync(BASELINE_PATH, 'utf8'), METRICS);
+  } catch (error: unknown) {
+    console.error(
+      `[check-functions] ❌ 基线读取失败（${BASELINE_PATH}）：${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
   }
 }
 
 function main(): number {
-  // 存量已清零（2026-08-11），默认 error 卡关；--no-strict 可降级观察
-  const strict = !process.argv.includes('--no-strict');
-  const files = SCAN_DIRS.flatMap((d) => collectFiles(d));
-  const findings: Finding[] = [];
-  for (const file of files) checkFile(file, findings);
+  const { all, violations } = scanAll();
+  const current = toMetricMap(violations);
+  const baseline = loadBaseline();
+  const longest = all.filter((f) => f.bodyLines > 0).sort((a, b) => b.bodyLines - a.bodyLines);
 
-  if (findings.length === 0) {
-    console.log(`[check-functions] ✅ 通过：${files.length} 文件，0 参数超限`);
+  if (wantsBaselineUpdate(process.argv.slice(2))) {
+    const next = proposeBaseline(current, baseline, METRICS, wantsForce(process.argv.slice(2)));
+    writeFileSync(BASELINE_PATH, serializeBaseline(next), 'utf8');
+    console.log(
+      `[check-functions] 基线已更新：${Object.keys(baseline).length} → ${Object.keys(next).length} 条（${BASELINE_PATH}）`,
+    );
     return 0;
   }
 
-  console.log(
-    `[check-functions] ${strict ? '❌' : '⚠️'} ${findings.length} 处参数 >${PARAM_LIMIT}${strict ? '' : '（--no-strict 观察模式）'}：`,
-  );
-  for (const f of findings.slice(0, 30)) {
-    console.log(`  ${f.file}:${f.line} ${f.detail}`);
+  const problems = evaluateRatchet(current, baseline, METRICS);
+  const paramHits = violations.filter((v) => v.params > PARAM_LIMIT).length;
+  const bodyHits = violations.filter((v) => v.bodyLines > BODY_LIMIT).length;
+
+  if (problems.length === 0) {
+    console.log(
+      `[check-functions] ✅ 通过：${all.length} 个函数签名（体长可测 ${longest.length} 个），` +
+        `${violations.length} 处超限（形参 ${paramHits} / 体长 ${bodyHits}）全部在棘轮基线内` +
+        `（基线 ${Object.keys(baseline).length} 条，只允许收紧）`,
+    );
+    console.log(
+      `  门槛：形参 ≤${PARAM_LIMIT} / 函数体 ≤${BODY_LIMIT} 行（体长 = 花括号深度扫描，含首尾花括号行）`,
+    );
+    console.log('  最长函数体 Top 10（含未超限项，供重构排期）：');
+    for (const r of longest.slice(0, 10)) {
+      console.log(`    ${r.bodyLines} 行  ${r.file}:${r.line} ${r.name}()`);
+    }
+    return 0;
   }
-  if (findings.length > 30) console.log(`  … 其余 ${findings.length - 30} 处省略`);
-  return strict && findings.length > 0 ? 1 : 0;
+
+  console.error(
+    `[check-functions] ❌ ${problems.length} 处棘轮违规（门槛：形参 ≤${PARAM_LIMIT} / 体 ≤${BODY_LIMIT} 行）：`,
+  );
+  for (const line of renderProblems(problems)) console.error(line);
+  console.error(`[check-functions] 当前全部超限 ${violations.length} 处（按体长降序）：`);
+  for (const v of [...violations].sort((a, b) => b.bodyLines - a.bodyLines).slice(0, 30)) {
+    console.error(
+      `  ${v.file}:${v.line} ${v.name}() params=${v.params} body=${v.bodyLines}${v.destructured ? ' (解构首参)' : ''}`,
+    );
+  }
+  if (violations.length > 30) console.error(`  … 其余 ${violations.length - 30} 处省略`);
+  console.error(
+    '[check-functions] 修复指引：拆分函数/提取 hook；已重构请跑 pnpm check:functions --update-baseline',
+  );
+  return 1;
 }
 
 process.exitCode = main();

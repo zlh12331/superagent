@@ -15,9 +15,8 @@
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { UIMessage } from 'ai';
 import { AlertTriangle, Check, Pencil, Search, Trash2, X } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
@@ -29,50 +28,18 @@ import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { consumePendingMessage } from '@/lib/pending-message';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
+import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
 import { ConversationSearchBar } from './conversation-search-bar';
+import { reconstructHistory, toInitialMessages } from './history-parts';
 import { RateLimitBanner } from './rate-limit-banner';
 
-/**
- * ModelMessage → UIMessage（历史消息回显用）
- *
- * AI SDK v7 的 useChat messages 字段需要 UIMessage 格式（id/role/parts），
- * 但 session:get 返回的是 ModelMessage 格式（role/content，与 SQLite 存储一致）；
- * v7 只导出 UIMessage→ModelMessage 的 convertToModelMessages，反向需手写。
- * 仅提取文本内容（tool/reasoning 等复杂 part 不参与回显）。
- */
-function toInitialMessages(messages: readonly ChatMessage[]): UIMessage[] {
-  return messages.map((m, index) => {
-    const role: UIMessage['role'] =
-      m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user';
-    const content = m.content;
-    const text =
-      typeof content === 'string'
-        ? content
-        : Array.isArray(content)
-          ? content
-              .filter(
-                (p): p is { type: 'text'; text: string } =>
-                  typeof p === 'object' &&
-                  p !== null &&
-                  'type' in p &&
-                  p.type === 'text' &&
-                  typeof (p as { text?: unknown }).text === 'string',
-              )
-              .map((p) => p.text)
-              .join('\n')
-          : '';
-    return {
-      id: `hist-${index}`,
-      role,
-      parts: [{ type: 'text', text }],
-    };
-  });
-}
+/** 稳定空数组：initialMessages 未传时复用同一引用，避免每轮渲染重算历史 */
+const NO_STORED_MESSAGES: readonly ChatMessage[] = [];
 
 interface ChatPanelProps {
   /**
@@ -133,12 +100,16 @@ export function ChatPanel({
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   // 中断提示条关闭状态（会话内关闭后不再显示）
   const [interruptedDismissed, setInterruptedDismissed] = useState(false);
+  // 历史回显缺口提示的已关闭会话（按 chatId 记录：切换会话后重新提示）
+  const [historyNoticeDismissedFor, setHistoryNoticeDismissedFor] = useState<string | null>(null);
   // 编辑重提注入（P2-10）：审批拒绝后把命令填入 composer（对齐参考项目）
   const [injectedComposerValue, setInjectedComposerValue] = useState<string | undefined>(undefined);
   // /models 斜杠命令：受控打开 composer 项目栏的模型选择下拉
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   // 错误码 → 本地化文案 hook
   const { getErrorMessage } = useErrorMessage();
+  // 本地化文案（声明置于组件前部：派生文案在渲染前即需使用）
+  const { t } = useTranslation();
 
   // 错误处理回调：一次性触发，避免 useEffect 双 toast
   // 策略：尝试从 error.message 提取 [CODE] 前缀匹配 i18n 文案，失败则展示原始消息
@@ -161,6 +132,14 @@ export function ChatPanel({
     }
   };
 
+  // 历史重建（纯函数 memo）：session:get 返回 ModelMessage 形态（role/content），
+  // v7 只导出 UIMessage→ModelMessage，反向需手写；重建保留存储里真实存在的
+  // tool/reasoning/file part，并如实登记无法回显的类型（见 history-parts.ts）。
+  const history = useMemo(
+    () => reconstructHistory(initialMessages ?? NO_STORED_MESSAGES),
+    [initialMessages],
+  );
+
   // useAgentWithIpc：Agent 模式专用 hook
   // - id: 控制消息状态隔离
   // - workingDir: agent 工具操作边界（注入 IpcAgentTransport）
@@ -170,21 +149,20 @@ export function ChatPanel({
   const { messages, sendMessage, status, stop, regenerate, setMessages } = useAgentWithIpc({
     id: chatId,
     workingDir,
-    ...(initialMessages !== undefined && initialMessages.length > 0
-      ? { messages: toInitialMessages(initialMessages) }
-      : {}),
+    ...(history.messages.length > 0 ? { messages: history.messages } : {}),
     onError: handleError,
   });
 
-  // 欢迎页首条消息透传（A1 修复）：home.tsx 创建会话时把首条消息暂存 sessionStorage，
-  // ChatPanel 挂载后消费一次并自动发送。useAgentWithIpc 的 transport configure effect
-  // 先于本 effect 执行（同组件内按声明顺序），发送时 transport 已就绪。
-  // 消费即移除：sendMessage 引用变化 / StrictMode 双挂载导致的重复执行均为 no-op。
+  // 欢迎页首条消息透传：home.tsx 创建会话后 stash，本组件挂载后 consume 一次并发送。
+  // useAgentWithIpc 的 transport configure effect 先于本 effect 执行（同组件内按声明
+  // 顺序），发送时 transport 已就绪。consume 先删后判：StrictMode 双挂载 /
+  // sendMessage 引用变化导致的重复执行均为 no-op。
+  const consumePendingMessage = usePendingMessageStore((state) => state.consume);
   useEffect(() => {
-    const text = consumePendingMessage(sessionStorage, chatId);
+    const text = consumePendingMessage(chatId);
     if (text === null) return;
     void sendMessage({ text });
-  }, [chatId, sendMessage]);
+  }, [chatId, sendMessage, consumePendingMessage]);
 
   // 会话目标（用户要求：仅 goal 命令设置后显示，置于对话区输入框上方）
   const goalsQuery = useQuery({
@@ -253,24 +231,17 @@ export function ChatPanel({
       ? (search.matchIndexes[search.currentMatch] ?? -1)
       : -1;
 
+  // 历史回显能力缺口（纯派生见 chat-panel-derives.ts：如实告知，不假装历史完整）
+  const historyNotices = collectHistoryNotices(history, t);
+  const showHistoryNotice = historyNotices.length > 0 && historyNoticeDismissedFor !== chatId;
+
   // 派生：状态指示文本（用于状态条右侧）
-  const statusText =
-    status === 'streaming'
-      ? 'RUNNING'
-      : status === 'submitted'
-        ? 'THINKING'
-        : status === 'ready'
-          ? 'READY'
-          : status === 'error'
-            ? 'ERROR'
-            : 'IDLE';
+  const statusText = statusLabel(status);
 
   // 模型选择（右区插槽：输入框内发送按钮左侧，用户要求）
   const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
   const updateAi = useSettingsStore((state) => state.updateAi);
-  // 本地化文案
-  const { t } = useTranslation();
   // 编辑器设置：字体大小真实消费（消息区字号）
   const editorFontSize = useSettingsStore((s) => s.editor.fontSize);
 
@@ -384,6 +355,28 @@ export function ChatPanel({
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store）
           位于状态条原位置（用户要求：与顶部状态条互换） */}
       <RateLimitBanner />
+
+      {/* 历史回显缺口提示：重开会话时明确告知「哪些内容没落库/没回显」，避免用户误以为工具调用消失是渲染 bug */}
+      {showHistoryNotice && (
+        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-start gap-2 border-b px-3 py-1 text-xs text-warn-text">
+          <AlertTriangle className="mt-0.5 size-3 shrink-0" strokeWidth={2} />
+          <span className="min-w-0 flex flex-1 flex-col gap-0.5">
+            {historyNotices.map((notice) => (
+              <span key={notice} className="block">
+                {notice}
+              </span>
+            ))}
+          </span>
+          <button
+            type="button"
+            className="text-warn-text hover:text-foreground shrink-0"
+            aria-label={t('common.close')}
+            onClick={() => setHistoryNoticeDismissedFor(chatId)}
+          >
+            <X className="size-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      )}
 
       {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">

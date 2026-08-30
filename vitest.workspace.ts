@@ -5,4 +5,11 @@
 // （knip 同样按此格式加载）
 
 // biome-ignore lint/style/noDefaultExport: vitest workspace 要求 export default
-export default ['src/main', 'src/renderer', 'scripts', 'tests/integration', 'packages/shared'];
+export default [
+  'src/main',
+  'src/main/vitest.perf.config.ts',
+  'src/renderer',
+  'scripts',
+  'tests/integration',
+  'packages/shared',
+];

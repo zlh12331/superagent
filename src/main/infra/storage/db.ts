@@ -21,6 +21,7 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  renameSync,
   unlinkSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -73,19 +74,24 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
     mkdirSync(backupDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const backupPath = join(backupDir, `sessions-${stamp}.db`);
+    // 原子落盘：先写 .db.tmp 成功后再 rename。backup() 中途失败（initDb 以 void
+    // 异步发起，退出时 closeDb 可能先关掉连接）会留下半截文件，而轮转按 *.db
+    // 计数——残缺备份会被误当成可用恢复点。
+    const tmpPath = `${backupPath}.tmp`;
     // 安全修复：先以 0600 预创建空文件再交给 sqlite.backup 截断写入——
     // 此前备份以默认 umask（644）完整落盘后才 chmod，POSIX 下存在
     // 其他进程读到明文对话历史的窗口期。openSync 'a' 不截断已存在文件。
     if (process.platform !== 'win32') {
       try {
-        closeSync(openSync(backupPath, 'a', 0o600));
+        closeSync(openSync(tmpPath, 'a', 0o600));
       } catch {
         // 预创建失败不阻断（backup 会按原逻辑创建，restrictFilePermissions 兜底）
       }
     }
-    await sqlite.backup(backupPath);
+    await sqlite.backup(tmpPath);
     // 安全修复：备份含完整对话历史，同样限制为仅属主可读写
-    restrictFilePermissions(backupPath);
+    restrictFilePermissions(tmpPath);
+    renameSync(tmpPath, backupPath);
     logger.info({ backupPath }, '数据库热备份完成');
 
     // 轮转：删除超出保留份数的最旧备份
@@ -99,6 +105,17 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
       logger.info({ stale }, '轮转删除过期备份');
     }
   } catch (error) {
+    // 失败清理：残缺的 .db.tmp 不留存（不匹配轮转的 .db 过滤，但避免目录堆积）
+    const partial = join(dirname(dbPath), BACKUP_DIR);
+    try {
+      for (const name of readdirSync(partial)) {
+        if (name.endsWith('.db.tmp')) {
+          unlinkSync(join(partial, name));
+        }
+      }
+    } catch {
+      // 备份目录尚未创建，无残留可清
+    }
     // 备份失败不阻断启动（日志中可诊断）
     logger.error(
       { error: error instanceof Error ? error.message : String(error) },

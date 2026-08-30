@@ -1,51 +1,35 @@
 // src/renderer/lib/pending-message.ts
-// 欢迎页首条消息透传辅助（A1 修复）
+// 欢迎页首条消息透传的纯解析逻辑（无存储依赖，可单测）
 // ──────────────────────────────────────────────────────────────
-// 背景：home.tsx 创建会话后把首条消息暂存 sessionStorage（避免 ChatPanel
-// 未挂载时直接 sendMessage 丢失），ChatPanel 挂载后消费并自动发送。
-// 此前只有写入端、没有读取端 → 首条消息永久丢失。
+// 职责：判定一条暂存记录是否应当被自动发送。
+// 暂存位置在 stores/transient/pending-message-store.ts（内存 + 消费即清除），
+// 本模块只保留与状态容器无关的陈旧性/空值规则。
 // ──────────────────────────────────────────────────────────────
 
-const WELCOME_PENDING_MESSAGE_PREFIX = 'welcome:pending-message:';
-
-/** sessionId → sessionStorage key */
-export function pendingMessageKey(sessionId: string): string {
-  return WELCOME_PENDING_MESSAGE_PREFIX + sessionId;
+/** 暂存记录：文本 + 写入时间（消费方据此做过期判定） */
+export interface PendingMessageRecord {
+  readonly text: string;
+  readonly createdAt: number;
 }
 
-/** 暂存消息有效期（毫秒）：超过则视为陈旧（应用重启/跨会话残留），丢弃不发送 */
+/** 暂存消息有效期（毫秒）：超过则视为陈旧残留，丢弃不发送 */
 export const PENDING_MESSAGE_TTL_MS = 10 * 60 * 1000;
 
 /**
- * 消费暂存的首条消息（读取后立即移除，幂等：第二次调用返回 null）
+ * 解析暂存记录 → 可自动发送的文本
  *
- * 陈旧性防护：消息携带 createdAt 时间戳，超过 PENDING_MESSAGE_TTL_MS 视为
- * 上次应用会话的残留（Electron 会持久化 sessionStorage）——自动发送陈旧消息
- * 会打断用户当前操作（幽灵发送），必须丢弃。
+ * 陈旧性防护：自动发送会打断用户当前操作（幽灵发送），因此过期记录一律丢弃。
  *
- * @param storage 存储实现（渲染层传 sessionStorage；测试可注入内存 Map）
- * @param sessionId 会话 id
- * @returns 有效消息文本（trim 后非空），不存在/解析失败/空文本/陈旧时返回 null
+ * @param record 暂存记录（undefined = 未暂存）
+ * @param now 当前时间戳（测试可注入）
+ * @returns trim 后非空且未过期的文本，否则 null
  */
-export function consumePendingMessage(
-  storage: Pick<Storage, 'getItem' | 'removeItem'>,
-  sessionId: string,
+export function resolvePendingMessage(
+  record: PendingMessageRecord | undefined,
+  now: number = Date.now(),
 ): string | null {
-  const key = pendingMessageKey(sessionId);
-  const raw = storage.getItem(key);
-  if (raw === null) return null;
-  // 先移除再解析：任何解析失败都不会残留坏数据阻塞后续挂载
-  storage.removeItem(key);
-  try {
-    const parsed = JSON.parse(raw) as { readonly text?: unknown; readonly createdAt?: unknown };
-    const text = typeof parsed?.text === 'string' ? parsed.text.trim() : '';
-    if (text.length === 0) return null;
-    const createdAt = typeof parsed?.createdAt === 'number' ? parsed.createdAt : 0;
-    if (Date.now() - createdAt > PENDING_MESSAGE_TTL_MS) {
-      return null;
-    }
-    return text;
-  } catch {
-    return null;
-  }
+  if (record === undefined) return null;
+  if (now - record.createdAt > PENDING_MESSAGE_TTL_MS) return null;
+  const text = record.text.trim();
+  return text.length > 0 ? text : null;
 }
