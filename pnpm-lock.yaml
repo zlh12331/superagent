@@ -322,9 +322,6 @@ importers:
       audit-ci:
         specifier: ^7.1.0
         version: 7.1.0
-      babel-plugin-react-compiler:
-        specifier: ^1.0.0
-        version: 1.0.0
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
@@ -10276,6 +10273,7 @@ snapshots:
   babel-plugin-react-compiler@1.0.0:
     dependencies:
       '@babel/types': 7.29.8
+    optional: true
 
   bail@2.0.2: {}
 

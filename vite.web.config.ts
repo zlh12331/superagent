@@ -23,12 +23,9 @@ export default defineConfig({
     },
   },
   plugins: [
-    react({
-      // React Compiler：annotation 模式（与 electron-vite 配置一致）
-      babel: {
-        plugins: [['babel-plugin-react-compiler', { compilationMode: 'annotation' }]],
-      },
-    }),
+    // React Compiler 未启用：@vitejs/plugin-react v6 已无 Babel 通道，旧 babel.plugins
+    // 配置会被静默忽略（与 electron.vite.config.ts 一致），渲染层仍需手写 useMemo/useCallback
+    react(),
     tailwindcss(),
   ],
   server: {
