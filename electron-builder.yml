@@ -50,6 +50,10 @@ files:
   - "!**/coverage/**"
   - "!**/playwright-report/**"
   - "!**/test-results/**"
+  # source map 不入包：electron.vite.config.ts 的 'hidden' 只是不写 sourceMappingURL 注释，
+  # .map 文件本身连同原始 TS 源码仍会被打成产物（实测 98.4MB / asar 总量 24.3%）。
+  # 运行时不读 asar 内的 map；Sentry 符号化在 release.yml 从构建机 ./out 上传，与安装包无关。
+  - "!**/*.map"
 
 # 额外资源（不打入 asar，部署到 process.resourcesPath）
 extraResources:
