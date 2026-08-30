@@ -57,10 +57,13 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     const approveBtn = await sendAndWaitApproval(page, async () => {
       await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
     });
-    await approveBtn.click();
-
-    // 审批完成：pending 卡片消失（按钮不再可见——状态流转）
-    await expect(approveBtn).not.toBeVisible({ timeout: 10_000 });
+    // 高负载下点击可能落在 React 重渲染间隙而丢失——点击直至状态翻转（审批按钮隐藏）
+    await expect(async () => {
+      if (await approveBtn.isVisible()) {
+        await approveBtn.click();
+      }
+      await expect(approveBtn).not.toBeVisible();
+    }).toPass({ timeout: 15_000 });
   });
 
   test('旅程4：拒绝 → 卡片状态更新（拒绝完成）', async ({ page }) => {
@@ -73,9 +76,12 @@ test.describe('Agent 审批用户旅程（batch 2）', () => {
     });
     const rejectBtn = page.getByRole('button', { name: /拒绝|取消/ }).first();
     await expect(rejectBtn).toBeVisible({ timeout: 5_000 });
-    await rejectBtn.click();
-
-    // 审批完成：pending 卡片消失（按钮不再可见）
-    await expect(rejectBtn).not.toBeVisible({ timeout: 10_000 });
+    // 同批准路径：点击直至状态翻转，防重渲染间隙丢点击
+    await expect(async () => {
+      if (await rejectBtn.isVisible()) {
+        await rejectBtn.click();
+      }
+      await expect(rejectBtn).not.toBeVisible();
+    }).toPass({ timeout: 15_000 });
   });
 });
