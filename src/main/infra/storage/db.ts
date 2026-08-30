@@ -125,6 +125,31 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
 }
 
 /**
+ * 启动完整性探测 + 条件热备份（异步发起，不阻塞启动）
+ *
+ * P2 修复：simple:true 返回标量字符串（'ok' 或首个错误描述），此前
+ * Array.isArray 判定恒为 false——损坏库也会打出「校验通过」（死代码判定）。
+ * 用 quick_check 替代 integrity_check：跳过索引逐项交叉校验，启动开销更低。
+ *
+ * 损坏库必须跳过备份：备份按时间戳进入轮转环，每次重启都会挤掉一份旧备份，
+ * BACKUP_KEEP 次重启后即把唯一健康的恢复点全部覆盖为损坏副本。
+ */
+function probeIntegrityAndScheduleBackup(sqlite: Database.Database, dbPath: string): void {
+  const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
+  const integrityOk = !(typeof integrity === 'string' && integrity !== 'ok');
+  if (!integrityOk) {
+    // 不阻断启动（只读场景仍可用），但明确记录供诊断
+    logger.error({ result: integrity }, 'SQLite 完整性校验失败，数据库可能已损坏');
+    logger.warn({}, '数据库完整性校验未通过，跳过启动备份以保留既有健康备份');
+    return;
+  }
+  logger.info({}, 'SQLite 完整性校验通过');
+  void backupDatabase(sqlite, dbPath).catch((error: unknown) => {
+    logger.error({ error: String(error) }, '数据库备份失败');
+  });
+}
+
+/**
  * 获取数据库文件路径
  *
  * 路径：%APPDATA%/<AppName>/sessions.db
@@ -251,23 +276,7 @@ export function initDb(): DrizzleDB {
   // WAL 标准搭配：NORMAL 在多数崩溃场景与 FULL 持久性等同，写入吞吐更优
   sqlite.pragma('synchronous = NORMAL');
 
-  // 启动完整性校验：损坏时提前暴露（替代崩溃后才发现）
-  // P2 修复：simple:true 返回标量字符串（'ok' 或首个错误描述），此前
-  // Array.isArray 判定恒为 false——损坏库也会打出「校验通过」（死代码判定）。
-  // 用 quick_check 替代 integrity_check：跳过索引逐项交叉校验，启动开销更低。
-  const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
-  if (typeof integrity === 'string' && integrity !== 'ok') {
-    logger.error({ result: integrity }, 'SQLite 完整性校验失败，数据库可能已损坏');
-    // 不阻断启动（只读场景仍可用），但明确记录供诊断
-  } else {
-    logger.info({}, 'SQLite 完整性校验通过');
-  }
-
-  // 启动时自动轮转备份（热备份，不中断服务）：保留最近 BACKUP_KEEP 份
-  // 异步执行，不阻塞启动流程
-  void backupDatabase(sqlite, dbPath).catch((error: unknown) => {
-    logger.error({ error: String(error) }, '数据库备份失败');
-  });
+  probeIntegrityAndScheduleBackup(sqlite, dbPath);
 
   // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });

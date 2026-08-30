@@ -33,6 +33,7 @@ vi.mock('../../utils/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+import { logger } from '../../utils/logger';
 import { closeDb, getDbPath, initDb, resetDb } from './db';
 
 let tempDir: string;
@@ -95,6 +96,58 @@ describe('db', () => {
       expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(['sessions', 'messages']));
     } finally {
       backup.close();
+    }
+  });
+
+  it('initDb：完整性校验未通过时跳过启动备份（保护既有健康恢复点）', async () => {
+    const isolatedDir = mkdtempSync(join(tempDir, 'integrity-'));
+    mockApp.getPath.mockReturnValue(isolatedDir);
+    const backupDir = join(isolatedDir, 'backups');
+    const proto = Database.prototype as unknown as {
+      pragma(this: unknown, sql: string, opts?: unknown): unknown;
+    };
+    const originalPragma = proto.pragma;
+    const listDbs = () =>
+      readdirSync(backupDir)
+        .filter((n) => n.endsWith('.db'))
+        .sort();
+
+    try {
+      // 基线：正常库确实会产出备份，用于证明"无新备份"不是备份通道本身失效
+      resetDb();
+      initDb();
+      let baseline: string[] = [];
+      for (let i = 0; i < 100; i++) {
+        baseline = listDbs();
+        if (baseline.length > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(baseline).toHaveLength(1);
+      closeDb();
+
+      // 基础设施边界 stub：仅让启动完整性探测返回损坏结果，其余 pragma 透传
+      proto.pragma = function (this: unknown, sql: string, opts?: unknown): unknown {
+        if (sql.trim().toLowerCase().startsWith('quick_check')) {
+          return 'database disk image is malformed';
+        }
+        return originalPragma.call(this, sql, opts);
+      };
+      const warnMock = vi.mocked(logger.warn);
+      warnMock.mockClear();
+
+      resetDb();
+      initDb();
+      // 备份以 void 异步发起，等待足够时间确认未落盘
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(listDbs()).toEqual(baseline);
+      expect(readdirSync(backupDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+      expect(warnMock).toHaveBeenCalledWith({}, expect.stringContaining('跳过启动备份'));
+    } finally {
+      proto.pragma = originalPragma;
+      closeDb();
+      resetDb();
+      mockApp.getPath.mockReturnValue(tempDir);
     }
   });
 
