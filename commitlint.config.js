@@ -1,6 +1,6 @@
 // commitlint.config.js
 // Conventional Commits 1.0.0 + 官方默认规则
-// 设计文档 §9.8
+// 设计文档 docs/design/07-engineering-design.md §7.3
 // 注意：commitlint 21.x 起规则名必须使用 kebab-case（如 type-enum）
 
 export default {
