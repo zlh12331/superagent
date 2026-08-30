@@ -21,7 +21,7 @@ whenReady
  ├─ skillRegistry.loadFromRows(new LearnSkillService(llmClient).listLearned())  已学技能合并
  ├─ serviceContainer.initImChannels()  已配置 IM 渠道自动连接（含 IM→Agent 桥接挂载）
  ├─ serviceContainer.initSubagents()   run_subagent 工具依赖
- ├─ registerIpcHandlers({...25 域 handler})   定义表驱动，缺失编译期报错
+ ├─ registerIpcHandlers({...23 域 handler})   定义表驱动，缺失编译期报错
  ├─ updateService.start()  注册 autoUpdater 事件
  ├─ 注入 CSP 响应头（buildCsp）+ 权限请求拒绝
  ├─ startMemoryMonitor()   主进程内存泄漏哨兵
@@ -53,8 +53,8 @@ whenReady
 
 ```ts
 export const serviceContainer = new ServiceContainer();
-let serviceContainer.getChatService(): IChatService;   // get 惰性初始化
-serviceContainer.setChatService(mock | null);          // 仅测试用注入
+serviceContainer.getAgentService();        // get 惰性初始化
+serviceContainer.setAgentService(mock | null);  // 仅测试用注入
 ```
 
 每个服务都遵循 "get 惰性 + set 注入 + dispose 反向依赖" 三段式。工具系统三件套 `ToolRegistry / PermissionService / ToolExecutor` 由容器直接 `new`（非模块级单例）。
@@ -63,9 +63,9 @@ serviceContainer.setChatService(mock | null);          // 仅测试用注入
 
 | getter | 初始化依赖 | 备注 |
 |---|---|---|
-| `getChatService()` | SessionService + llmClient + concurrencyGate | 全局并发公平调度门（chat+agent 共用 FIFO 槽位，防 429） |
+| `getPromptService()` | gitSummaryProvider 闭包（动态上下文取真实 git 值） | DB 模板 + `{{gitBranch}}`/`{{gitStatus}}`/`{{agentsMd}}` 注入 |
 | `getAgentService()` | ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient（标题生成 + repairToolCall 工具入参修复）+ gate + PermissionService | 通过 `ToolRegistry.toAISDKTools` 注入 `executeHook`（=ToolExecutor.execute） |
-| `getToolRegistry()` | FileService + SearchService + TerminalService + GitService + MemoryPort（memory-hub）+ LspManager + agentAskService + PermissionService | 首次访问注册 32 个内置工具 |
+| `getToolRegistry()` | FileService + SearchService + TerminalService + GitService + MemoryPort（memory-hub）+ LspManager + agentAskService + PermissionService | 首次访问注册 33 个内置工具 |
 | `getPermissionService()` | CommandClassifier(llmClient) + 启动时 `readApprovalModeSync()` | 控制写操作审批 |
 | `getMcpService()` | ToolRegistry | stopAll 关闭 MCP server 子进程 |
 | `getMemoryPort()` | MemoryHubService（懒启动 sidecar） | save_memory / recall_memory 工具注册期即可用，首次调用启动引擎 |
@@ -78,18 +78,19 @@ serviceContainer.setChatService(mock | null);          // 仅测试用注入
 ### 2.3 dispose() 顺序（反向依赖，每步 try/catch 隔离）
 
 ```
-lspManager.disposeAll → chatService.dispose → agentService.dispose
+lspManager.disposeAll → agentService.dispose
 → mcpService.stopAll → goalService.unmount → imBridge.unmount → imService.stopAll
-→ permissionService.dispose → agentAskService.dispose → fileService.dispose
-→ searchService.dispose → terminalService.dispose → gitService / codebaseService / sessionService.dispose
-→ promptService 清引用 → memoryHub.stop（sidecar 子进程）→ updateService.dispose
+→ remoteControl.release → permissionService.dispose → agentAskService.dispose
+→ fileService.dispose → searchService.dispose → terminalService.dispose
+→ gitService / codebaseService.dispose → resetSessionService（不关 db）
+→ memoryHub.stop（sidecar 子进程）→ updateService.dispose
 → resetAIProvider → closeDb（最后）
 ```
 
-当前共约 20 步（2026-08-25 实测 service-container.ts `dispose()`）：
+当前共约 20 步（2026-08-30 实测 service-container.ts `dispose()`）：
 
 - `runStep` 独立 try/catch：单步失败不跳过后续，`failures[]` 汇总记录。
-- `ChatService.dispose()` 等待活跃 stream 真正进入 finally（3s 超时兜底），避免 IPC send 丢失/渲染层 loading 卡死。
+- `AgentService.dispose()` 等待活跃 stream 真正进入 finally（3s 超时兜底），避免 IPC send 丢失/渲染层 loading 卡死。
 
 ### 2.4 reset()（测试用）
 

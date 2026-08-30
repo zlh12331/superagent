@@ -31,7 +31,7 @@
 | 01 | [整体架构](01-architecture.md) | 进程模型、分层、目录结构、依赖流向、关键架构决策 |
 | 02 | [主进程入口与生命周期](02-main-entry.md) | `main/index.ts` 启动链、ServiceContainer 生命周期、安全基线 |
 | 03 | [IPC 通信层](03-ipc-layer.md) | 类型契约单一真源、channel 命名、preload 桥、handler 注册 |
-| 04 | [AI 智能体层](04-ai-layer.md) | ChatService / AgentService / 回合运行时 / LLM 客户端 / Provider / Prompt |
+| 04 | [AI 智能体层](04-ai-layer.md) | AgentService / 回合运行时 / LLM 客户端 / Provider / Prompt |
 | 05 | [工具系统与 MCP](05-tools-system.md) | Tool 抽象、注册表、执行器、权限审批、内置工具、MCP 集成 |
 | 06 | [数据层与存储](06-data-storage.md) | SQLite schema、SessionService、keychain、偏好持久化 |
 | 07 | [支撑服务与守护](07-support-services.md) | 文件/搜索/终端/Git/Codebase/LSP/远程/音频/更新/遥测/安全 |
@@ -42,6 +42,6 @@
 ## 快速上手读法
 
 1. 先读 `01-architecture.md` 建立整体心智模型（进程模型 + 分层）。
-2. 需要理解"一条消息如何变成 AI 回复" → 读 `04` 的 ChatService + `05` 的工具系统。
+2. 需要理解"一条消息如何变成 AI 回复" → 读 `04` 的 AgentService + agent-runtime，`05` 的工具系统。
 3. 需要给前端加功能 → 读 `03`（新增 IPC）+ `08`（渲染层）。
 4. 需要排查数据问题 → 读 `06`。

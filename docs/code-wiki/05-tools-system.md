@@ -10,7 +10,7 @@ Tool<TInput> 接口（tool.ts）
   ├─ ToolExecutor     统一执行入口：权限决策 + 审批 + 事件推送（tool-executor.ts）
   │    └─ PermissionService  审批/拒绝/白名单/记忆决策（permission-service.ts）
   ├─ 上下文             ToolContext（tool.ts）：workingDir/sessionId/messageId/callId/abortSignal/webContents/metadata/mode/userPrompt
-  └─ registerBuiltinTools  内置工具注册（index.ts）→ 32 个 + MCP 适配工具
+  └─ registerBuiltinTools  内置工具注册（index.ts）→ 33 个 + MCP 适配工具
 ```
 
 ## 2. 核心抽象 `tool.ts`

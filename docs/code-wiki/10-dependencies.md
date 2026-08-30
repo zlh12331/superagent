@@ -29,7 +29,7 @@ main/infra 服务  ──不反向依赖 ipc──
                     ┌──► FileService ────────────────┐
                     ├──► SearchService ──────────────┤
                     ├──► TerminalService ────────────┤
-ToolRegistry ───────┤──► GitService ─────────────────┼──► 内置工具注册（32 个）
+ToolRegistry ───────┤──► GitService ─────────────────┼──► 内置工具注册（33 个）
    │                ├──► MemoryPort（memory-hub）────┤
    │                ├──► LspManager ────────────────┤
    │                ├──► agentAskService ───────────┤
@@ -37,7 +37,6 @@ ToolRegistry ───────┤──► GitService ───────�
    │
 ToolExecutor ──► ToolRegistry + PermissionService
 AgentService ◄─ ToolRegistry + ToolExecutor + PromptService + SessionService + llmClient（标题 + repairToolCall 修复）+ ConcurrencyGate + PermissionService + MemoryPort（自动记忆捕获）
-ChatService  ◄─ SessionService + llmClient + ConcurrencyGate
 MCPService   ◄─ ToolRegistry
 GoalService  ◄─ AgentService + GoalJudge(llmClient)
 ImService / ImAgentBridge ◄─ AgentService + PermissionService + SessionService
@@ -45,7 +44,7 @@ MemoryHubService（懒启动 sidecar）◄─ 工具（MemoryPort）+ memory 域
 PromptService、MemoryService、LspManager、UpdateService、CodebaseService、SessionService、GitService 等 ◄─ 惰性加载
 ```
 
-**并发闸**（`ConcurrencyGate`）：chat + agent 回合共用同一 FIFO 槽位，防供应商 API 429。
+**并发闸**（`ConcurrencyGate`）：agent 回合共用同一 FIFO 槽位，防供应商 API 429。
 
 **dispose/初始化顺序**（依赖反向）：AgentService/AI 先于 PermissionService；File/Search/Terminal/Git/Session 在其后；`resetAIProvider` 与 `closeDb` 最后。不可逆。
 
@@ -86,7 +85,6 @@ Agent-Service ──► ToolRegistry.toAISDKTools(executeHook=ToolExecutor.execu
 
 | 域 | 后端服务 |
 |---|---|
-| chat | ChatService |
 | agent | AgentService + PermissionService + agentAskService |
 | session | SessionService +（compact 用 context-compression） |
 | file / search / terminal / git | FileService / SearchService / TerminalService / GitService |
