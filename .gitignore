@@ -96,10 +96,6 @@ docs/TencentDB-Agent-Memory-2.0.1-beta.2.zip
 # electron-builder 打包产物（NSIS 安装包、latest.yml 等）
 release/
 
-# 原型设计文件（仅本地参考，不入仓）
-# P2-9：prototype-v2.html 已从根目录移入 docs/prototype/，避免污染项目根
-docs/prototype/
-
 # Qoder 工具缓存（repowiki 索引等，运行时自动生成，不入仓）
 .qoder/
 
@@ -113,13 +109,6 @@ docs/prototype/
 /lint_output2.txt
 /rebuild-node-pty.ps1
 /rebuild-node-pty-step2.ps1
-
-# 本地模板/原型参考资产（含运行时产物与 .env，不入仓）
-/_template/
-/codex-desktop-prototype.design/
-
-# 外部参考代码（docs/参考项目/，含 node_modules 约 2.6GB，不入仓）
-/docs/参考项目/
 
 # AI 会话生成的临时图片素材（不入仓）
 /vibe_images/

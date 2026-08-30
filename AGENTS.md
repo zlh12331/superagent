@@ -142,7 +142,6 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 构建产物 & Git
 
 - `out/` = electron-vite build 产物，`release/` = electron-builder 打包产物，`stats/` = 体积分析产物
-- `_template/` = 外部参考代码（未纳入 git 跟踪，codegraph 索引排除，见 `codegraph.json`）
 - 预提交钩子：lint-staged（Biome 自动修复）+ codegraph sync（60s 超时，`SKIP_CODEGRAPH_SYNC=1` 跳过）
 - 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 进 CHANGELOG，其余不进）
 - 发版流程：`pnpm changelog` 生成 → 手动改版本号 + [Unreleased]→[vX.Y.Z] → `git tag vX.Y.Z` → release.yml 自动构建发布

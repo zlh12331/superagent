@@ -217,7 +217,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
   - complexity: `useLiteralKeys` off
 - **javascript formatter**：单引号、分号必加、尾逗号 all、箭头括号 always
 - **css parser**：`tailwindDirectives: true`
-- **ignore 列表**：`resources/pg`、`release`、`coverage`、`node_modules`、`out`、`dist`、`.codegraph`、`playwright-report`、`playwright-report-electron`、`playwright-report-smoke`、`test-results`、`playwright/.cache`、`docs/design`、`docs/参考项目`、`prototype-v2.html`、`codex-desktop-prototype.design`、`_template`
+- **ignore 列表**：`resources/pg`、`release`、`coverage`、`node_modules`、`out`、`dist`、`.codegraph`、`playwright-report`、`playwright-report-electron`、`playwright-report-smoke`、`test-results`、`playwright/.cache`、`docs/design`
 - **overrides**（22 组）：`src/renderer/**/*.tsx` 关闭 `noDefaultExport`；常量/枚举文件关闭 `useNamingConvention`；AI 服务层 + storage + IPC handler 关闭 `strictCase`；`tests/**`、`e2e/**`、`scripts/**` 关闭 `noConsole`
 
 ## 8. 环境变量与配置文件

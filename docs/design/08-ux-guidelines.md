@@ -13,7 +13,7 @@
 | 原则 | 含义 | 代码体现 |
 |---|---|---|
 | **实事求是** | 后端无数据源的能力不渲染假 UI；规划中功能诚实标注 | 侧栏搜索框仅 UI 不过滤；归档 tab 计数恒 0；设置页 account/plugins/hooks 等为"规划中"占位；侧栏底部账户无"退出登录" |
-| **原型对齐** | 以 `docs/prototype/prototype-v2.html` 为布局与交互真源，删除冗余/补充缺失结构 | 三段式 grid、welcome-mode、composer-project-bar、composer-stats-bar、消息导航轨、滚动到底部按钮等 |
+| **原型对齐** | 原型阶段已结束：`docs/prototype/prototype-v2.html` 与 `codex-desktop-prototype.design/` 已于 2026-08-30 删除，交互真源改为已实现代码与 09-ux-interaction-spec | 三段式 grid、welcome-mode、composer-project-bar、composer-stats-bar、消息导航轨、滚动到底部按钮等 |
 | **可访问性（WCAG AA）** | 文字对比度 ≥4.5:1；全部颜色经设计令牌输出 | `globals.css` 注释标注关键对比度实测值；浅色导航激活态用 `text-foreground` 而非青色 `text-primary`（2.51:1 不达标） |
 
 ### 1.2 状态管理四层架构（UX 侧约定）
