@@ -80,7 +80,8 @@ describe('FileService（真实文件系统）', () => {
     await writeFile(file, Buffer.alloc(2 * 1024 * 1024, 0x61));
     const res = await svc.read({ path: file, offset: undefined, limit: undefined });
     expect(res.totalLines).toBe(1);
-  });
+    // IO 重负载边界用例：全量并行跑时 Windows 临时目录 + 杀毒扫描易超默认 5s
+  }, 15_000);
 });
 
 describe('FileService.write（写入三件套）', () => {
