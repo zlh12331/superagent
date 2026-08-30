@@ -76,7 +76,7 @@ export { createWriteFileTool } from './write-file.tool';
 /**
  * 注册所有内置工具到 ToolRegistry
  *
- * ServiceContainer 在初始化时调用一次，把 31 个内置工具全部注册：
+ * ServiceContainer 在初始化时调用一次，把全部内置工具注册：
  * - 文件/搜索/终端/命令/Git 基础工具（依赖注入对应服务）
  * - 交互与模式工具（ask_user_question / plan_mode，注入 askService / permissionService）
  * - 编排工具（run_subagent / run_team / run_workflow / task×4，模块级单例）

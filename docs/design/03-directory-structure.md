@@ -50,7 +50,7 @@ f:\TraeProjects\1\
 | ai/models/ | 13 | [builtin-models.ts](file:///src/main/infra/ai/models/builtin-models.ts) / [registry.ts](file:///src/main/infra/ai/models/registry.ts) / [runtime-model-store.ts](file:///src/main/infra/ai/models/runtime-model-store.ts) / [generation-options.ts](file:///src/main/infra/ai/models/generation-options.ts) / [reasoning-effort.ts](file:///src/main/infra/ai/models/reasoning-effort.ts) / [token-limits.ts](file:///src/main/infra/ai/models/token-limits.ts) / [types.ts](file:///src/main/infra/ai/models/types.ts) + index.ts + 6 测试 |
 | ai/prompt/ | 5 | [prompt-service.ts](file:///src/main/infra/ai/prompt/prompt-service.ts) / [default-prompt.ts](file:///src/main/infra/ai/prompt/default-prompt.ts) / [dynamic-context.ts](file:///src/main/infra/ai/prompt/dynamic-context.ts) / [agents-md.ts](file:///src/main/infra/ai/prompt/agents-md.ts) + 1 测试 |
 | ai/providers/ | 5 | [registry.ts](file:///src/main/infra/ai/providers/registry.ts) / [types.ts](file:///src/main/infra/ai/providers/types.ts) + index.ts + 2 测试 |
-| ai/tools/ | 50 | 31 个内置工具（29 个 `*.tool.ts` + [plan-mode.tools.ts](file:///src/main/infra/ai/tools/plan-mode.tools.ts)）+ 注册/执行/权限基础设施（[index.ts](file:///src/main/infra/ai/tools/index.ts) / [tool-registry.ts](file:///src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///src/main/infra/ai/tools/permission-service.ts) / [path-guard.ts](file:///src/main/infra/ai/tools/path-guard.ts) / command-classifier / dangerous-commands / denial-tracking / error-classifier / read-tracker / tool.ts）+ 9 测试 |
+| ai/tools/ | 55 | 33 个内置工具（31 个 `*.tool.ts` + [plan-mode.tools.ts](file:///src/main/infra/ai/tools/plan-mode.tools.ts)）+ 注册/执行/权限基础设施（[index.ts](file:///src/main/infra/ai/tools/index.ts) / [tool-registry.ts](file:///src/main/infra/ai/tools/tool-registry.ts) / [tool-executor.ts](file:///src/main/infra/ai/tools/tool-executor.ts) / [permission-service.ts](file:///src/main/infra/ai/tools/permission-service.ts) / [path-guard.ts](file:///src/main/infra/ai/tools/path-guard.ts) / command-classifier / dangerous-commands / denial-tracking / error-classifier / read-tracker / tool.ts）+ 11 测试 |
 | storage/ | 11 | [db.ts](file:///src/main/infra/storage/db.ts) / [schema.ts](file:///src/main/infra/storage/schema.ts) / [session-service.ts](file:///src/main/infra/storage/session-service.ts) / [keychain.ts](file:///src/main/infra/storage/keychain.ts) / [app-data.ts](file:///src/main/infra/storage/app-data.ts) / [telemetry-pref.ts](file:///src/main/infra/storage/telemetry-pref.ts) + 4 测试 |
 | code/ | 2 | [code-analyzer.ts](file:///src/main/infra/code-analysis/code-analyzer.ts) + 1 测试 |
 | codebase/ | 1 | [codebase-service.ts](file:///src/main/infra/codebase/codebase-service.ts) |
@@ -75,9 +75,9 @@ f:\TraeProjects\1\
 | index.ts | [src/main/index.ts](file:///src/main/index.ts) | 主进程入口 |
 | service-container.ts | [src/main/service-container.ts](file:///src/main/service-container.ts) | 18 服务统一生命周期管理（2026-08-17 实测） |
 
-### 2.4 src/main/infra/ai/tools/ — 内置工具（31 个）
+### 2.4 src/main/infra/ai/tools/ — 内置工具（33 个）
 
-实际注册 31 个工具（[tools/index.ts](file:///src/main/infra/ai/tools/index.ts) `registerBuiltinTools`，2026-08-22 实测）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / **run_workflow** / web_fetch / save_memory / load_skill / lsp_definition / lsp_references / **lsp_hover**：
+实际注册 33 个工具（[tools/index.ts](file:///src/main/infra/ai/tools/index.ts) `registerBuiltinTools`，2026-08-30 实测）；下表列出核心 12 个，另含 ask_user_question / enter+exit_plan_mode / task_create+update+stop+list / cron_create+list+delete / run_subagent / run_team / **run_workflow** / web_fetch / save_memory / load_skill / lsp_definition / lsp_references / **lsp_hover**：
 
 | 工具文件 | 工具名 | 权限 | 依赖 |
 |---|---|---|---|
@@ -178,7 +178,7 @@ src/renderer/
 
 ## 5. packages/shared/ — 跨进程共享包
 
-[packages/shared/src/index.ts](file:///packages/shared/src/index.ts) 统一导出，31 个 .ts 文件（含 4 测试）：
+[packages/shared/src/index.ts](file:///packages/shared/src/index.ts) 统一导出，49 个 .ts 文件（含 7 测试）：
 
 ```
 packages/shared/src/
