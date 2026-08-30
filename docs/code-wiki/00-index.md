@@ -11,7 +11,7 @@
 | 层 | 选型 |
 |---|---|
 | 桌面框架 | Electron 43 + electron-vite 6 (beta.1) |
-| 前端 | React 19 + React Router 8 + Vite 8（React Compiler 注解模式） |
+| 前端 | React 19 + React Router 8 + Vite 8（React Compiler 自动模式） |
 | UI | Radix UI + Tailwind CSS 4 + Lucide + shiki + xterm.js |
 | 状态 | Zustand（瞬时/持久 store）+ TanStack Query（IPC invoke 服务端状态） |
 | AI | Vercel AI SDK v7（`streamText` + `tools` + `stopWhen` 多轮循环） |

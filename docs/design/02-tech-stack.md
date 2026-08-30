@@ -38,7 +38,7 @@
 | `electron-devtools-installer` | `^4.0.0` | devDep |
 | `vite` | `^8` | dep |
 | `@vitejs/plugin-react` | `^6.0.3` | devDep |
-| `babel-plugin-react-compiler` | `^1.0.0` | devDep |
+| `oxc-transform-react` | `^0.147.0` | devDep（React Compiler oxc 通道） |
 
 ### 3.2 React 全家桶
 
@@ -202,7 +202,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 关键配置：
 
 - **Sourcemap 模式**：`'hidden'`（生成 `.map` 但不写 `sourceMappingURL`，便于 Sentry 上传）
-- **renderer 插件**：`@vitejs/plugin-react`（启用 `babel-plugin-react-compiler`）+ `@tailwindcss/vite`（Tailwind v4 官方插件）
+- **renderer 插件**：`@vitejs/plugin-react`（启用 React Compiler：oxc 通道 `compiler: { compilationMode: 'infer' }`，依赖 `oxc-transform-react`）+ `@tailwindcss/vite`（Tailwind v4 官方插件）
 - **Sentry plugin**：未集成进 Vite 构建链，source map 通过独立 `sentry-cli` 命令上传
 
 ## 7. Biome 配置
@@ -251,7 +251,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 1. **顶配 TypeScript 严格度**：`base.json` 开启了几乎所有严格选项，远超默认 `strict: true`
 2. **Biome v2 统一工具链**：用 Biome 2.5.4 同时替代 ESLint + Prettier，配合 22 组 overrides 精细化放宽命名约定
-3. **React 19.2 + React Compiler**：渲染层启用 `babel-plugin-react-compiler`（React 19 官方推荐自动 memoize）
+3. **React 19.2 + React Compiler**：渲染层经 `oxc-transform-react` 启用 React Compiler（`compilationMode: 'infer'` 自动 memoize；`check:compiler` 门禁防 oxc 依赖缺失导致的静默失效）
 4. **Tailwind v4 官方 Vite 插件**：弃用 v3 postcss 流程，改用 `@tailwindcss/vite`，与 Vite 8 原生集成
 5. **完整 monorepo**：pnpm workspace + 两个内部包，主应用三入口严格分离
 6. **preload CJS 输出**：明确注释 sandbox: true 限制，preload 强制 `format: 'cjs'` + `.cjs` 扩展名

@@ -95,8 +95,8 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
 - **桌面端三平台**（Windows/macOS/Linux）：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64；release.yml 三平台矩阵构建（mac 需 macOS runner，签名走 CSC_LINK）
 - **exactOptionalPropertyTypes 已启用**：可选字段传 undefined 需条件展开（`...(x !== undefined ? { x } : {})`）
-- **React Compiler 未启用**（`@vitejs/plugin-react` v6 已无 `babel` 选项，旧 `babel.plugins: [['babel-plugin-react-compiler', …]]` 配置在 `electron.vite.config.ts` 与 `vite.web.config.ts` 中均被静默忽略，两处已删除）⇒ 渲染层不会自动记忆化，useMemo/useCallback 仍需手写；hook 只能在顶层调用，禁止中间函数包装 hook
-- **根级 `*.config.ts` 不在任何 tsconfig 项目内**（根 `tsconfig.json` = `files: []` + 5 个 project references）⇒ `pnpm typecheck` 查不出配置文件里的类型错误/excess property，上述失效配置因此长期存活；改配置需 `pnpm exec vite build` 实测
+- **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
+- **根级 `*.config.ts` 不在任何 tsconfig 项目内**（根 `tsconfig.json` = `files: []` + 5 个 project references）⇒ `pnpm typecheck` 查不出配置文件里的类型错误/excess property，历史失效配置（如 React Compiler 旧 babel 通道）因此长期存活；改配置需 `pnpm exec vite build` 实测
 
 ## 数据库
 

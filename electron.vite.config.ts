@@ -23,15 +23,12 @@ const ANALYZE_BUNDLE = process.env.ANALYZE_BUNDLE === '1';
 function rendererPlugins() {
   const plugins = [
     react({
-      // React Compiler：未启用（编译器实际不参与本次构建）。
-      // 事实：@vitejs/plugin-react v6 已移除 `babel` 选项，Vite 8（Rolldown）链路上
-      // 不存在 Babel 通道——此前 `babel.plugins: [['babel-plugin-react-compiler', ...]]`
-      // 被静默忽略（实测证据：产物无 react/compiler-runtime 引用、渲染层 0 个 'use memo'）。
-      // 因此 annotation / full 两种模式都无处生效，历史注释里的 virtuoso 阻塞理由已不成立。
-      // 真正开启方式（需先补可选依赖，属工程门禁/依赖对齐范围）：
-      //   pnpm add -D oxc-transform-react → react({ compiler: { compilationMode: 'all' } })
-      // 或 pnpm add -D @rolldown/plugin-babel → babel({ presets: [reactCompilerPreset()] })
-      // 在此之前，渲染层的 useMemo/useCallback 仍是必需的，不可依赖编译器自动记忆化。
+      // React Compiler：启用（oxc 通道）。@vitejs/plugin-react v6 已移除 `babel` 选项，
+      // compiler 选项经 oxc-transform-react（peerDep）生效；该依赖缺失时本选项会静默
+      // 不产生任何效果（本项目 2026-08 就踩过一次"配置静默忽略"），因此设
+      // scripts/check-compiler.ts 在 build 后断言产物含 react/compiler-runtime 编译痕迹。
+      // compilationMode 'infer'：自动识别组件/Hook，与存量手写 useMemo/useCallback 共存。
+      compiler: { compilationMode: 'infer' },
     }),
     // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
     // 文档：https://tailwindcss.com/docs/installation/using-vite

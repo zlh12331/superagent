@@ -36,7 +36,7 @@
 
 ### 2.1 已启用的机制（不得回退）
 
-- **React Compiler**（babel-plugin-react-compiler）——自动 memo，禁止用注释/配置绕过
+- **React Compiler**（oxc-transform-react，`compilationMode: 'infer'`）——自动 memo，禁止用注释/配置绕过；生效性由 `check:compiler` 门禁断言（产物须含 react/compiler-runtime 痕迹）
 - **memo 包裹**：高频重渲染组件（MessageItem 等）显式 `memo`
 - **动态 import**：路由（router.tsx）与低频面板（DevPanel 等）按需加载（lazy）
 

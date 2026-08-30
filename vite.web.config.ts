@@ -23,9 +23,9 @@ export default defineConfig({
     },
   },
   plugins: [
-    // React Compiler 未启用：@vitejs/plugin-react v6 已无 Babel 通道，旧 babel.plugins
-    // 配置会被静默忽略（与 electron.vite.config.ts 一致），渲染层仍需手写 useMemo/useCallback
-    react(),
+    // React Compiler 与 electron.vite.config.ts 对齐启用（oxc 通道，'infer' 自动识别组件/Hook）；
+    // 静默失效防护同 check:compiler 门禁（oxc-transform-react 缺失时 compiler 选项不生效）
+    react({ compiler: { compilationMode: 'infer' } }),
     tailwindcss(),
   ],
   server: {

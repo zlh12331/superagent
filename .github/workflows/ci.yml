@@ -192,6 +192,10 @@ jobs:
       - name: Bundle size gate
         run: pnpm check:bundle
 
+      - name: React Compiler gate
+        # 防静默失效：oxc-transform-react（可选 peerDep）缺失时 compiler 选项无效且无报错
+        run: pnpm check:compiler
+
       - name: Run Electron E2E tests
         # Linux 无头环境需要 xvfb（GitHub ubuntu runner 预装 Xvfb）
         run: pnpm test:e2e:electron
