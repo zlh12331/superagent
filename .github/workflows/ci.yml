@@ -79,8 +79,8 @@ jobs:
         run: pnpm test:coverage
 
       - name: Dependency audit
-        run: pnpm audit
-        continue-on-error: true # 先警告不阻断（待 .nsprc 白名单稳定后再卡关）
+        # audit-ci + .nsprc 白名单（2026-08-30 收紧为卡关；本地已验证 0 命中）
+        run: pnpm run audit
 
       - name: Upload coverage
         if: always()
