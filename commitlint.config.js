@@ -46,10 +46,40 @@ export default {
     // footer 每行最长 100
     'footer-max-line-length': [2, 'always', 100],
     // scope 降为 warning（Conventional Commits scope 是 optional）
+    // 枚举取自现有架构：进程边界 + src/main/infra 领域目录 + 测试/构建分类。
+    // 曾包含 prisma / pg / rag，这三层已从仓库删除，保留会让门禁指向不存在的模块。
     'scope-enum': [
       1,
       'always',
-      ['main', 'renderer', 'preload', 'shared', 'ipc', 'prisma', 'ai', 'rag', 'pg', 'e2e', 'deps'],
+      [
+        'main',
+        'renderer',
+        'preload',
+        'shared',
+        'ipc',
+        'ai',
+        'agent',
+        'tools',
+        'storage',
+        'file',
+        'terminal',
+        'memory',
+        'git',
+        'im',
+        'lsp',
+        'remote',
+        'telemetry',
+        'update',
+        'ui',
+        'i18n',
+        'tokens',
+        'security',
+        'e2e',
+        'integration',
+        'scripts',
+        'build',
+        'deps',
+      ],
     ],
   },
 };
