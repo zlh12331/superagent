@@ -11,9 +11,15 @@
 //   node_modules（在目标原地 install 而非拷贝，保证 pnpm 符号链接正确）。
 //
 // 用法：
-//   node scripts/prepare-memory-hub.mjs [--skip-if-exists]
+//   TAM_SRC=<上游解压根目录> node scripts/prepare-memory-hub.mjs [--skip-if-exists]
 // 环境变量：
-//   TAM_SRC  上游根目录（默认 C:\Users\26592\AppData\Local\Temp\tam-src\TencentDB-Agent-Memory-2.0.1-beta.2）
+//   TAM_SRC             上游 TencentDB-Agent-Memory 根目录（必填）
+//   MEMORY_HUB_OPTIONAL 置为 '1' 时，上游不可用则生成占位目录并告警退出 0
+//                       （CI 打包用：产物不含记忆引擎，运行时自动降级为空实现）
+//
+// 为什么没有默认路径：上游源码不入仓（见 .gitignore），npm registry 上
+//   @tencentdb-agent-memory/memory-tencentdb-v2 只有 1.0.0-beta.1，供不起本项目
+//   需要的 2.0.x，因此唯一来源是维护者本地持有的压缩包，必须显式指路。
 // ──────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';
@@ -33,10 +39,9 @@ import { join } from 'node:path';
 
 const ROOT = process.cwd();
 const TARGET = join(ROOT, 'resources', 'memory-hub');
-const DEFAULT_SRC =
-  'C:\\Users\\26592\\AppData\\Local\\Temp\\tam-src\\TencentDB-Agent-Memory-2.0.1-beta.2';
-const SRC = process.env['TAM_SRC'] ?? DEFAULT_SRC;
-const CORE = join(SRC, 'MemoryCore');
+const SRC = process.env['TAM_SRC'];
+const CORE = join(SRC ?? '', 'MemoryCore');
+const MARKER = '.memory-hub-placeholder';
 
 const skipIfExists = process.argv.includes('--skip-if-exists');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -70,20 +75,56 @@ function countFiles(dir) {
 }
 
 // 1. 校验上游
-if (!existsSync(join(CORE, 'src', 'gateway', 'server.ts'))) {
+const upstreamEntry = join(CORE, 'src', 'gateway', 'server.ts');
+const targetReady =
+  existsSync(join(TARGET, 'src', 'gateway', 'server.ts')) &&
+  existsSync(join(TARGET, 'node_modules'));
+
+if (!existsSync(upstreamEntry)) {
+  if (targetReady) {
+    console.log(`[prepare-memory-hub] 上游不可用，沿用已有产物（${TARGET}）`);
+    process.exit(0);
+  }
+  if (process.env['MEMORY_HUB_OPTIONAL'] === '1') {
+    writePlaceholder();
+    process.exit(0);
+  }
   console.error(
-    `[prepare-memory-hub] 未找到上游入口：${join(CORE, 'src', 'gateway', 'server.ts')}`,
+    SRC === undefined
+      ? '[prepare-memory-hub] 环境变量 TAM_SRC 未设置（上游 TencentDB-Agent-Memory 根目录）'
+      : `[prepare-memory-hub] 未找到上游入口：${upstreamEntry}（TAM_SRC=${SRC}）`,
   );
-  console.error(`  请设置 TAM_SRC 指向 TencentDB-Agent-Memory 解压根目录（当前：${SRC}）`);
+  console.error('  请设置 TAM_SRC 后重试，记忆引擎随包分发。');
+  console.error('  CI 暂不集成记忆引擎时，设置 MEMORY_HUB_OPTIONAL=1 打包无引擎产物。');
   process.exit(1);
 }
 
+/**
+ * 生成占位运行目录：让 electron-builder 的两个 extraResources `from` 路径都存在，
+ * 产物可正常打包安装；记忆引擎在运行时（MemoryHubService）降级为空实现。
+ */
+function writePlaceholder() {
+  rmSync(TARGET, { recursive: true, force: true });
+  mkdirSync(join(TARGET, 'node_modules'), { recursive: true });
+  const note = [
+    'Placeholder for resources/memory-hub (upstream TencentDB-Agent-Memory / MemoryCore).',
+    '',
+    'This build intentionally ships WITHOUT the memory engine: TAM_SRC was not provided',
+    'and MEMORY_HUB_OPTIONAL=1 was set. MemoryHubService detects the missing entry and',
+    'falls back to the no-op MemoryPort, so every memory call degrades instead of failing.',
+    '',
+    'To bundle the real engine: TAM_SRC=<upstream root> node scripts/prepare-memory-hub.mjs',
+    '',
+  ].join('\n');
+  writeFileSync(join(TARGET, MARKER), note, 'utf8');
+  writeFileSync(join(TARGET, 'node_modules', MARKER), note, 'utf8');
+  console.warn(
+    '[prepare-memory-hub] ⚠ 上游缺失，已生成占位目录 —— 本产物不含记忆引擎（运行时降级空实现）',
+  );
+}
+
 // 2. 已存在且跳过
-if (
-  skipIfExists &&
-  existsSync(join(TARGET, 'src', 'gateway', 'server.ts')) &&
-  existsSync(join(TARGET, 'node_modules'))
-) {
+if (skipIfExists && targetReady) {
   console.log(`[prepare-memory-hub] 目标已就绪，跳过（${TARGET}）`);
   process.exit(0);
 }

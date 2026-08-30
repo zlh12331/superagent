@@ -32,6 +32,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        # gitleaks 扫描 base^..head 区间：浅克隆会让区间无提交 → "0 leaks" 假绿
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -234,7 +237,11 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Build production artifacts
+        # CI 无上游 MemoryCore 源码（不入仓，registry 只有 1.0.0-beta.1）：
+        # 显式打包无记忆引擎产物，运行时自动降级空实现（release.yml 不加此变量）
         run: pnpm build:${{ runner.os == 'Windows' && 'win' || 'linux' }}
+        env:
+          MEMORY_HUB_OPTIONAL: '1'
 
       - name: Run production smoke tests
         run: pnpm test:smoke
@@ -281,7 +288,11 @@ jobs:
 
       - name: Build + package
         # macos runner 需签名工具（跳过：未提供证书时 electron-builder 自动跳过）
+        # CI 无上游 MemoryCore 源码（不入仓，registry 只有 1.0.0-beta.1）：
+        # 显式打包无记忆引擎产物，运行时自动降级空实现（release.yml 不加此变量）
         run: pnpm build:${{ runner.os == 'Windows' && 'win' || runner.os == 'macOS' && 'mac' || 'linux' }}
+        env:
+          MEMORY_HUB_OPTIONAL: '1'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

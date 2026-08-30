@@ -2,7 +2,7 @@
 // Terminal 域集成测试（batch 5/9 · 核心链路）
 // ──────────────────────────────────────────────────────────────
 // 链路：IPC handler（真实）→ TerminalService（真实）→ node-pty（真实 PTY 进程）
-// 替身：仅 webContents（事件推送目标）
+// 替身：webContents（事件推送目标）；仅 spawn 失败用例额外注入抛错 spawnFn（PTY 失败语义平台相关）
 // 进程选择：node 子进程（跨平台稳定；node -e 一次性输出 / node REPL 交互输入）
 //
 // 维度覆盖：接口契约 / 时序编排（create→output→exit 顺序）/ 状态一致性（outputBuffer）/
@@ -144,9 +144,17 @@ describe('terminal 域集成链路（batch 5）', () => {
     });
   });
 
-  it('异常：spawn 失败 → 错误传播（TERMINAL_SPAWN_FAILED）', async () => {
+  it('异常：spawn 抛错 → 错误传播（TERMINAL_SPAWN_FAILED）', async () => {
     await withTempCwd(async (cwd) => {
-      const handlers = createTerminalHandlers({ terminalService: new TerminalService() });
+      // PTY spawn 经 DI 注入抛错：真实 node-pty 对不存在的命令在 POSIX 上不抛（正常返回 pid），
+      // 失败语义平台相关不可断言。本用例要验的是 handler→service→AppError 错误桥接，非 node-pty 行为。
+      const handlers = createTerminalHandlers({
+        terminalService: new TerminalService({
+          spawnFn: () => {
+            throw new Error('pty spawn failed');
+          },
+        }),
+      });
       const { wc } = createFakeWebContents();
       await expect(
         handlers.create({ command: 'definitely-not-exist-cmd-xyz', cwd, cols: 80, rows: 24 }, {

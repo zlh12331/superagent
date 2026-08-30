@@ -63,6 +63,30 @@ describe('MemoryHubService 未配置降级（空实现）', () => {
   });
 });
 
+describe('MemoryHubService 无引擎产物降级（hubRoot 存在但入口缺失）', () => {
+  /** 模拟打包期未捆绑记忆引擎：hubRoot 目录存在，但里面没有上游入口 */
+  function createHubless(): MemoryHubService {
+    const dir = mkdtempSync(join(tmpdir(), 'memory-hub-hubless-'));
+    mkdirSync(join(dir, 'node_modules'), { recursive: true });
+    return new MemoryHubService({ hubRoot: dir, dataDir: join(dir, 'data') });
+  }
+
+  it('ensureStarted 不抛错，返回空实现端口', async () => {
+    const port = await createHubless().ensureStarted();
+    await expect(port.health()).resolves.toBe(false);
+    await expect(
+      port.capture({ sessionKey: 's', userContent: 'u', assistantContent: 'a' }),
+    ).resolves.toEqual({ l0Recorded: 0, schedulerNotified: false });
+  });
+
+  it('降级端口被缓存（后续调用复用同一实例，不重复启动/报错）', async () => {
+    const service = createHubless();
+    const first = await service.ensureStarted();
+    const second = await service.ensureStarted();
+    expect(second).toBe(first);
+  });
+});
+
 describe('MemoryHubService 生命周期', () => {
   it('未启动时 stop() 幂等（不抛错）', async () => {
     const service = new MemoryHubService({ hubRoot: undefined, dataDir: '/tmp/m' });

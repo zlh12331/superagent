@@ -291,7 +291,12 @@ export class MemoryHubService {
     }
     const entry = this.resolveEntry(hubRoot);
     if (entry === null) {
-      throw new Error(`${TAG} 上游入口不存在（hubRoot=${hubRoot}）`);
+      logger.error(
+        { hubRoot },
+        `${TAG} hubRoot 下找不到上游入口（dist/gateway/server.js 或 src/gateway/server.ts），` +
+          `本产物未捆绑记忆引擎，以空实现运行`,
+      );
+      return new UnavailableMemoryPort();
     }
 
     const port = await this.pickFreePort();

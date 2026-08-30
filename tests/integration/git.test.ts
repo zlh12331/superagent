@@ -35,11 +35,24 @@ async function withGitRepo<T>(fn: (dir: string) => Promise<T> | T): Promise<T> {
   }
 }
 
-/** 初始化本地 bare 远程（push 测试用） */
+/** 初始化本地 bare 远程（bare 仓库路径） */
 function initBareRemote(parentDir: string, name = 'origin.git'): string {
   const bare = join(parentDir, name);
   execFileSync('git', ['init', '--bare', '-q', bare]);
   return bare;
+}
+
+/**
+ * bare 远程独立临时目录（push 测试用）
+ * 必须使用独立临时目录：放在 withGitRepo 的 dir 外侧会逃逸其清理，每次运行泄漏一个仓库。
+ */
+async function withBareRemote<T>(fn: (bare: string) => Promise<T> | T): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), 'code-agent-git-remote-'));
+  try {
+    return await fn(initBareRemote(dir));
+  } finally {
+    rmSync(dir, { recursive: true, maxRetries: 5 });
+  }
 }
 
 describe('git 域集成链路（batch 4）', () => {
@@ -121,20 +134,21 @@ describe('git 域集成链路（batch 4）', () => {
       await handlers.add({ path: dir });
       await handlers.commit({ path: dir, message: 'init' });
 
-      const bare = initBareRemote(join(dir, '..', '..', `bare-${Date.now()}`));
-      const pushRes = await handlers.push({
-        path: dir,
-        remote: bare,
-        refspec: 'master',
-        setUpstream: true,
+      await withBareRemote(async (bare) => {
+        const pushRes = await handlers.push({
+          path: dir,
+          remote: bare,
+          refspec: 'master',
+          setUpstream: true,
+        });
+        expect(pushRes.ok).toBe(true);
+        // 真实验证：bare 仓库收到提交（pushedCount 解析受 simple-git stdout 格式影响）
+        const bareLog = execFileSync('git', ['log', '-1', '--format=%H'], {
+          cwd: bare,
+          encoding: 'utf-8',
+        });
+        expect(bareLog.trim().length).toBeGreaterThan(0);
       });
-      expect(pushRes.ok).toBe(true);
-      // 真实验证：bare 仓库收到提交（pushedCount 解析受 simple-git stdout 格式影响）
-      const bareLog = execFileSync('git', ['log', '-1', '--format=%H'], {
-        cwd: bare,
-        encoding: 'utf-8',
-      });
-      expect(bareLog.trim().length).toBeGreaterThan(0);
     });
   });
 
