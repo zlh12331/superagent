@@ -13,7 +13,7 @@
 // - 行为：默认在 input/textarea/contentEditable 内不触发（库默认，与原实现一致）
 // ──────────────────────────────────────────────────────────────
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -101,8 +101,12 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
   const shortcuts = useSettingsStore((s) => s.shortcuts);
 
   // 最新 handlers 引用（避免依赖变化导致重复绑定/解绑）
+  // 赋值放 effect：render 期写 ref 是 React 反模式，React Compiler 会因此跳过优化本 hook；
+  // 事件回调总在 commit 之后触发，effect 内赋值语义等价
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
 
   const hotkeys = useMemo(
     () => ({

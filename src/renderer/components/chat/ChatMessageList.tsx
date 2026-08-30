@@ -331,7 +331,9 @@ function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps
   const { t } = useTranslation();
   const [hovered, setHovered] = useState<number | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
-  const previewTop = useRef(0);
+  // 预览垂直位置用 state（曾用 ref：render 期读 ref 是 React 反模式，
+  // 且 ref 变化不触发重渲染导致 tooltip 位置停留在旧值；React Compiler 也会因此跳过优化本组件）
+  const [previewTop, setPreviewTop] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
 
   const hoverIdx = hovered !== null ? questions.findIndex((q) => q.turn === hovered) : -1;
@@ -366,7 +368,7 @@ function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps
   const onMove = (e: ReactMouseEvent<HTMLDivElement>): void => {
     const closest = closestQuestionFromY(e.clientY);
     if (closest === null) return;
-    previewTop.current = closest.previewY;
+    setPreviewTop(closest.previewY);
     setHovered(closest.question.turn);
     setShowPreview(true);
   };
@@ -379,7 +381,7 @@ function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps
     const closest = closestQuestionFromY(e.clientY);
     if (closest === null) return;
     e.preventDefault();
-    previewTop.current = closest.previewY;
+    setPreviewTop(closest.previewY);
     setHovered(closest.question.turn);
     setShowPreview(true);
     scrollTo(closest.question);
@@ -454,7 +456,7 @@ function QuestionJumpBar({ questions, activeTurn, onJump }: QuestionJumpBarProps
         ))}
       </div>
       {showPreview && hoveredQuestion !== undefined && (
-        <div className="jump-preview" style={{ top: previewTop.current }} role="tooltip">
+        <div className="jump-preview" style={{ top: previewTop }} role="tooltip">
           <span className="jump-text">{hoveredQuestion.text}</span>
         </div>
       )}
