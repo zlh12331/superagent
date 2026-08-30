@@ -36,22 +36,27 @@ import type {
   SessionPinRes,
   SessionRecentTurnsRes,
   SessionRenameRes,
-  TurnSummary,
   UsageSummaryRes,
 } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import { count, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { count, desc, eq, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
-import { getDb } from './db';
+import { getDb, reclaimFreePages } from './db';
 import {
   type MessageInsert,
   type MessageRole,
   messages,
   type SessionInsert,
   sessions,
-  tokenUsage,
-  turns,
 } from './schema';
+import {
+  getRecentTurns as storeGetRecentTurns,
+  getTurns as storeGetTurns,
+  getUsageSummary as storeGetUsageSummary,
+  pruneExpiredUsage as storePruneExpiredUsage,
+  recordTurn as storeRecordTurn,
+  recordUsage as storeRecordUsage,
+} from './usage-turn-store';
 
 /**
  * create 方法入参
@@ -352,6 +357,8 @@ export class SessionService implements ISessionService {
     const db = getDb();
     // 外键级联：sessions 行删除时，messages 表相关行自动删除
     db.delete(sessions).where(eq(sessions.id, id)).run();
+    // 级联删除只把页放进 freelist，文件不会自己缩小
+    reclaimFreePages();
     return { ok: true };
   }
 
@@ -573,6 +580,8 @@ export class SessionService implements ISessionService {
         .run();
     });
     logger.info({ sessionId, messageCount: newMessages.length }, '替换会话消息（上下文压缩）');
+    // 压缩掉的旧消息页需在事务外回收：VACUUM 类 pragma 不能在事务内执行
+    reclaimFreePages();
     return newMessages.length;
   }
 
@@ -694,13 +703,7 @@ export class SessionService implements ISessionService {
 
   /** @inheritDoc */
   pruneExpiredUsage(): number {
-    const db = getDb();
-    const cutoff = Date.now() - USAGE_SUMMARY_WINDOW_MS;
-    const result = db.delete(tokenUsage).where(lt(tokenUsage.createdAt, cutoff)).run();
-    if (result.changes > 0) {
-      logger.info({ removed: result.changes }, '已清理统计窗口外的 token_usage 行');
-    }
-    return result.changes;
+    return storePruneExpiredUsage();
   }
 
   /** @inheritDoc */
@@ -713,86 +716,12 @@ export class SessionService implements ISessionService {
     readonly cacheReadTokens: number | undefined;
     readonly reasoningTokens: number | undefined;
   }): Promise<void> {
-    const db = getDb();
-    db.insert(tokenUsage)
-      .values({
-        sessionId: usage.sessionId,
-        modelId: usage.modelId,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        totalTokens: usage.totalTokens,
-        // exactOptionalPropertyTypes：可空列 undefined 时条件展开
-        ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-        ...(usage.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
-        createdAt: Date.now(),
-      })
-      .run();
+    return storeRecordUsage(usage);
   }
 
   /** @inheritDoc */
   async getUsageSummary(): Promise<UsageSummaryRes> {
-    const db = getDb();
-    // 90 天窗口过滤：设置页只关心近期消耗；全表扫描随数据增长变慢，
-    // 窗口限制保证查询成本有界（token_usage 按日索引命中）
-    const windowStart = Date.now() - USAGE_SUMMARY_WINDOW_MS;
-    const rows = db
-      .select()
-      .from(tokenUsage)
-      .where(gte(tokenUsage.createdAt, windowStart))
-      .orderBy(desc(tokenUsage.createdAt))
-      .all();
-
-    // 总量汇总
-    const total = { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-    // 聚合中间态（可变，避免触碰 readonly 接口字段）
-    type MutableModelSummary = {
-      modelId: string;
-      calls: number;
-      inputTokens: number;
-      outputTokens: number;
-      totalTokens: number;
-      cacheReadTokens: number;
-      reasoningTokens: number;
-    };
-    type MutableDaySummary = { date: string; calls: number; totalTokens: number };
-    const byModelMap = new Map<string, MutableModelSummary>();
-    const byDayMap = new Map<string, MutableDaySummary>();
-
-    for (const row of rows) {
-      total.calls += 1;
-      total.inputTokens += row.inputTokens;
-      total.outputTokens += row.outputTokens;
-      total.totalTokens += row.totalTokens;
-
-      const model = byModelMap.get(row.modelId) ?? {
-        modelId: row.modelId,
-        calls: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        cacheReadTokens: 0,
-        reasoningTokens: 0,
-      };
-      model.calls += 1;
-      model.inputTokens += row.inputTokens;
-      model.outputTokens += row.outputTokens;
-      model.totalTokens += row.totalTokens;
-      model.cacheReadTokens += row.cacheReadTokens ?? 0;
-      model.reasoningTokens += row.reasoningTokens ?? 0;
-      byModelMap.set(row.modelId, model);
-
-      const date = formatLocalDate(row.createdAt);
-      const day = byDayMap.get(date) ?? { date, calls: 0, totalTokens: 0 };
-      day.calls += 1;
-      day.totalTokens += row.totalTokens;
-      byDayMap.set(date, day);
-    }
-
-    // 按模型用量倒序、按日倒序（近 90 天，热力图数据源）
-    const byModel = [...byModelMap.values()].sort((a, b) => b.totalTokens - a.totalTokens);
-    const byDay = [...byDayMap.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 90);
-
-    return { total, byModel, byDay };
+    return storeGetUsageSummary();
   }
 
   /** @inheritDoc */
@@ -807,87 +736,21 @@ export class SessionService implements ISessionService {
     readonly totalTokens: number | undefined;
     readonly durationMs: number | undefined;
   }): Promise<void> {
-    const db = getDb();
-    db.insert(turns)
-      .values({
-        turnId: turn.turnId,
-        sessionId: turn.sessionId,
-        seq: turn.seq,
-        modelId: turn.modelId,
-        status: turn.status,
-        // exactOptionalPropertyTypes：可空列 undefined 时条件展开
-        ...(turn.inputTokens !== undefined ? { inputTokens: turn.inputTokens } : {}),
-        ...(turn.outputTokens !== undefined ? { outputTokens: turn.outputTokens } : {}),
-        ...(turn.totalTokens !== undefined ? { totalTokens: turn.totalTokens } : {}),
-        ...(turn.durationMs !== undefined ? { durationMs: turn.durationMs } : {}),
-        createdAt: Date.now(),
-      })
-      .run();
+    return storeRecordTurn(turn);
   }
 
   /** @inheritDoc */
   async getTurns(sessionId: string): Promise<SessionGetTurnsRes> {
-    const db = getDb();
-    const rows = db
-      .select()
-      .from(turns)
-      .where(eq(turns.sessionId, sessionId))
-      .orderBy(turns.seq)
-      .all();
-    const summaries: TurnSummary[] = rows.map((row) => ({
-      turnId: row.turnId,
-      seq: row.seq,
-      modelId: row.modelId,
-      status: row.status as TurnSummary['status'],
-      inputTokens: row.inputTokens ?? undefined,
-      outputTokens: row.outputTokens ?? undefined,
-      totalTokens: row.totalTokens ?? undefined,
-      durationMs: row.durationMs ?? undefined,
-      createdAt: row.createdAt,
-    }));
-    return { sessionId, turns: summaries };
+    return storeGetTurns(sessionId);
   }
 
   /** @inheritDoc */
   async getRecentTurns(req: { readonly limit: number }): Promise<SessionRecentTurnsRes> {
-    const db = getDb();
-    // createdAt 同毫秒时按 id 倒序兑底（后写入的排前），保证排序稳定
-    const rows = db
-      .select()
-      .from(turns)
-      .orderBy(desc(turns.createdAt), desc(turns.id))
-      .limit(req.limit)
-      .all();
-    const summaries = rows.map((row) => ({
-      turnId: row.turnId,
-      sessionId: row.sessionId,
-      seq: row.seq,
-      modelId: row.modelId,
-      status: row.status as TurnSummary['status'],
-      inputTokens: row.inputTokens ?? undefined,
-      outputTokens: row.outputTokens ?? undefined,
-      totalTokens: row.totalTokens ?? undefined,
-      durationMs: row.durationMs ?? undefined,
-      createdAt: row.createdAt,
-    }));
-    return { turns: summaries };
+    return storeGetRecentTurns(req);
   }
 }
 
 // ─── 辅助函数（模块私有，不导出） ──────────────────────────────
-
-/** 用量统计窗口（90 天）：查询成本有界 + 关注近期消耗 */
-const USAGE_SUMMARY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
-
-/**
- * 时间戳 → 本地时区日期（YYYY-MM-DD，用量按日聚合用）
- */
-function formatLocalDate(timestamp: number): string {
-  const d = new Date(timestamp);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${month}-${day}`;
-}
 
 /**
  * 将 SessionRow 转换为 SessionMeta（IPC 响应类型）

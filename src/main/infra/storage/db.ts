@@ -43,6 +43,15 @@ const DB_FILENAME = 'sessions.db';
 const BACKUP_KEEP = 3;
 /** 备份目录名（位于 userData 下） */
 const BACKUP_DIR = 'backups';
+/** PRAGMA auto_vacuum 的 INCREMENTAL 取值（0=NONE 默认 / 1=FULL / 2=INCREMENTAL） */
+const AUTO_VACUUM_INCREMENTAL = 2;
+/**
+ * freelist 达到该页数才做增量回收（默认页 4KB ⇒ 约 4MB）
+ *
+ * 阈值而非"每次删除后都跑"：incremental_vacuum 要遍历 freelist 并截断文件，
+ * 放在每条删除路径上会让主进程为小改动反复付截断代价。
+ */
+const FREELIST_RECLAIM_PAGES = 1024;
 
 /**
  * 限制敏感数据文件权限为仅属主可读写（0o600）
@@ -285,6 +294,10 @@ export function initDb(): DrizzleDB {
   // WAL 标准搭配：NORMAL 在多数崩溃场景与 FULL 持久性等同，写入吞吐更优
   sqlite.pragma('synchronous = NORMAL');
 
+  // 空间回收前提：把库切到 auto_vacuum=INCREMENTAL（老库需一次性 VACUUM，见函数注释）
+  // 必须在启动备份之前：一次性 VACUUM 会截断文件，与在途热备份抢同一份页
+  ensureIncrementalAutoVacuum(sqlite);
+
   probeIntegrityAndScheduleBackup(sqlite, dbPath);
 
   // 创建 drizzle 实例
@@ -328,6 +341,62 @@ export function getDb(): DrizzleDB {
     throw new Error('数据库未初始化，请先调用 initDb()');
   }
   return dbInstance;
+}
+
+/**
+ * 确保库处于 auto_vacuum=INCREMENTAL（幂等，仅首次需要一次 VACUUM）
+ *
+ * 缺陷背景：SQLite 默认 auto_vacuum=NONE，DELETE 释放的页只进 freelist，
+ * 文件永不缩小——实测 20000 行消息删掉 90% 后文件仍为 82.47MB
+ * （freelist 9016 / page_count 10025）。且 NONE 模式下 `PRAGMA incremental_vacuum`
+ * 是空操作（实测 freed_pages=0），所以光加回收调用并不能修复，必须先转换模式。
+ *
+ * 已有表的库仅改 pragma 不生效，必须跟随一次 VACUUM 重写页布局
+ * （实测 82MB 库 35ms，之后 auto_vacuum 持久记在文件头，只付一次）。
+ */
+function ensureIncrementalAutoVacuum(sqlite: Database.Database): void {
+  const current = Number(sqlite.pragma('auto_vacuum', { simple: true }));
+  if (current === AUTO_VACUUM_INCREMENTAL) {
+    return;
+  }
+  const startedAt = Date.now();
+  sqlite.pragma('auto_vacuum = INCREMENTAL');
+  // VACUUM 是 SQL 语句而非 PRAGMA：`pragma('vacuum')` 会被当作未知 pragma 静默忽略
+  sqlite.exec('VACUUM');
+  logger.info(
+    { from: current, ms: Date.now() - startedAt },
+    'SQLite auto_vacuum 已转换为 INCREMENTAL（一次性）',
+  );
+}
+
+/**
+ * 把 freelist 空闲页归还给磁盘
+ *
+ * 由删除路径在批量删除后调用（会话级联删除、统计窗口清理）。未达
+ * {@link FREELIST_RECLAIM_PAGES} 阈值时直接返回 0，避免小改动反复截断。
+ *
+ * WAL 模式下必须跟一次 checkpoint：incremental_vacuum 只更新主库页布局，
+ * 被释放的字节仍留在 -wal 中，不做 checkpoint 磁盘占用不会下降。
+ *
+ * @returns 归还给磁盘的页数
+ * @throws Error 数据库未初始化
+ */
+export function reclaimFreePages(): number {
+  if (sqliteInstance === null) {
+    throw new Error('数据库未初始化，请先调用 initDb()');
+  }
+  const freelist = Number(sqliteInstance.pragma('freelist_count', { simple: true }));
+  if (freelist < FREELIST_RECLAIM_PAGES) {
+    return 0;
+  }
+  const before = Number(sqliteInstance.pragma('page_count', { simple: true }));
+  sqliteInstance.pragma('incremental_vacuum');
+  sqliteInstance.pragma('wal_checkpoint(TRUNCATE)');
+  const freed = before - Number(sqliteInstance.pragma('page_count', { simple: true }));
+  if (freed > 0) {
+    logger.info({ freed, pagesBefore: before }, 'SQLite 空闲页已归还磁盘');
+  }
+  return freed;
 }
 
 /**

@@ -7,7 +7,7 @@
 // CHECK / UNIQUE / 外键由迁移落库并被 SQLite 强制执行。
 // ──────────────────────────────────────────────────────────────
 
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -34,7 +34,8 @@ vi.mock('../../utils/logger', () => ({
 }));
 
 import { logger } from '../../utils/logger';
-import { closeDb, getDbPath, initDb, resetDb } from './db';
+import { closeDb, getDbPath, initDb, reclaimFreePages, resetDb } from './db';
+import { SessionService } from './session-service';
 
 let tempDir: string;
 
@@ -651,5 +652,275 @@ describe('老库升级（增量迁移）', () => {
         // 句柄未释放时跳过清理
       }
     }
+  });
+});
+
+// ── 空间回收（SQLite 磁盘占用）────────────────────────────
+// 缺陷回归：auto_vacuum=NONE（SQLite 默认）下 DELETE 只把页放进 freelist，
+// 文件永不缩小；且 `PRAGMA incremental_vacuum` 在该模式下是空操作
+// （实测 20000 行删掉 90% 后文件仍 82.47MB、freelist 9016、freed_pages=0）。
+// 修复分两步：initDb 一次性把库转成 INCREMENTAL（必须跟一次真实 VACUUM 才生效），
+// 删除路径再调 reclaimFreePages() 归还空闲页 + WAL checkpoint。
+// 本组用真实文件库跑生产删除路径，断言「磁盘占用确实下降」；并保留未转换库
+// 的对照组——没有对照组，断言在修复被回退后仍可能恒真。
+describe('空间回收（SQLite 磁盘占用）', () => {
+  /** 制造足量可回收页：4000 行 × 2KB ≈ 8MB ≈ 2000 页，明显高于回收阈值 */
+  const BulkRows = 4000;
+  const BulkPayload = 'x'.repeat(2000);
+  /** 断言用最小归还页数：远小于实际可回收量，但足以证明回收真的发生了 */
+  const MinFreedPages = 1000;
+
+  const service = new SessionService();
+
+  function raw(db: ReturnType<typeof initDb>): Database.Database {
+    return (db as unknown as { $client: Database.Database }).$client;
+  }
+
+  function pragmaNumber(sqlite: Database.Database, statement: string): number {
+    return Number(sqlite.pragma(statement, { simple: true }));
+  }
+
+  /** 把 WAL 落回主库后再测占用：不 checkpoint 时字节数含 WAL，前后不可比 */
+  function footprint(sqlite: Database.Database): { pages: number; bytes: number } {
+    sqlite.pragma('wal_checkpoint(TRUNCATE)');
+    return {
+      pages: pragmaNumber(sqlite, 'page_count'),
+      bytes: statSync(getDbPath()).size,
+    };
+  }
+
+  function seedSession(sqlite: Database.Database, id: string): void {
+    sqlite
+      .prepare(
+        'INSERT INTO sessions (id, title, created_at, updated_at, working_dir)' +
+          " VALUES (?, 't', 100, 100, '/w')",
+      )
+      .run(id);
+  }
+
+  /** 灌入大消息（事务内批量插入，seq 连续以满足 (session_id, seq) UNIQUE） */
+  function seedBulkMessages(sqlite: Database.Database, sessionId: string): void {
+    const insert = sqlite.prepare(
+      'INSERT INTO messages (session_id, seq, role, content, created_at)' +
+        " VALUES (?, ?, 'user', ?, 100)",
+    );
+    const insertAll = sqlite.transaction((rows: number) => {
+      for (let i = 0; i < rows; i++) insert.run(sessionId, i, BulkPayload);
+    });
+    insertAll(BulkRows);
+  }
+
+  /** token_usage 全是整型列，靠 model_id 撑体积；created_at=1 落在统计窗口外 */
+  function seedBulkUsage(sqlite: Database.Database, sessionId: string): void {
+    const insert = sqlite.prepare(
+      'INSERT INTO token_usage' +
+        ' (session_id, model_id, input_tokens, output_tokens, total_tokens, created_at)' +
+        ' VALUES (?, ?, 1, 1, 2, 1)',
+    );
+    const insertAll = sqlite.transaction((rows: number) => {
+      for (let i = 0; i < rows; i++) insert.run(sessionId, BulkPayload);
+    });
+    insertAll(BulkRows);
+  }
+
+  /** 隔离文件库：重定向 userData，结束后关连接 + 还原 + 清理临时目录 */
+  async function withIsolatedDb(
+    prefix: string,
+    run: (dir: string) => void | Promise<void>,
+  ): Promise<void> {
+    await closeDb();
+    resetDb();
+    const dir = mkdtempSync(join(tmpdir(), `code-agent-${prefix}-`));
+    mockApp.getPath.mockReturnValue(dir);
+    try {
+      await run(dir);
+    } finally {
+      await closeDb();
+      resetDb();
+      mockApp.getPath.mockReturnValue(tempDir);
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      } catch {
+        // 句柄未释放时跳过清理（临时目录由系统回收）
+      }
+    }
+  }
+
+  it('对照组：未转换的库（auto_vacuum=NONE）删除后 incremental_vacuum 归还不了任何页', async () => {
+    await withIsolatedDb('vac-none-', () => {
+      // 刻意不走 initDb：对照组必须保持 SQLite 默认 auto_vacuum=NONE
+      const sqlite = new Database(getDbPath());
+      try {
+        sqlite.pragma('journal_mode = WAL');
+        sqlite.exec(
+          'CREATE TABLE messages (' +
+            'session_id TEXT NOT NULL, seq INTEGER NOT NULL,' +
+            'role TEXT NOT NULL, content TEXT NOT NULL, created_at INTEGER NOT NULL)',
+        );
+        seedBulkMessages(sqlite, 'ctrl');
+        const before = footprint(sqlite);
+
+        sqlite.exec("DELETE FROM messages WHERE session_id = 'ctrl'");
+        // 前提：确实存在大量可回收页，否则「没缩小」毫无意义
+        expect(pragmaNumber(sqlite, 'auto_vacuum')).toBe(0);
+        expect(pragmaNumber(sqlite, 'freelist_count')).toBeGreaterThan(MinFreedPages);
+
+        // 生产同款回收调用——NONE 模式下必须毫无效果（修复被回退就长这样）
+        sqlite.pragma('incremental_vacuum');
+        const after = footprint(sqlite);
+        expect(after.pages).toBe(before.pages);
+        expect(after.bytes).toBeGreaterThanOrEqual(before.bytes);
+      } finally {
+        sqlite.close();
+      }
+    });
+  }, 60_000);
+
+  it('initDb：把老库一次性转成 auto_vacuum=INCREMENTAL（文件头持久 + 数据完好）', async () => {
+    await withIsolatedDb('vac-legacy-', async () => {
+      const legacy = new Database(getDbPath());
+      legacy.pragma('journal_mode = WAL');
+      legacy.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)');
+      const insert = legacy.prepare('INSERT INTO notes (body) VALUES (?)');
+      const insertAll = legacy.transaction((rows: number) => {
+        for (let i = 0; i < rows; i++) insert.run(BulkPayload);
+      });
+      insertAll(2000);
+      expect(Number(legacy.pragma('auto_vacuum', { simple: true }))).toBe(0);
+      legacy.close();
+
+      const db = initDb();
+      const sqlite = raw(db);
+      // 仅 `PRAGMA auto_vacuum=INCREMENTAL` 不会改写文件头，必须跟随真实 VACUUM
+      expect(pragmaNumber(sqlite, 'auto_vacuum')).toBe(2);
+      // 转换重写页布局，不能破坏既有数据
+      const notes = sqlite.prepare('SELECT COUNT(*) AS c FROM notes').get() as { c: number };
+      expect(notes.c).toBe(2000);
+
+      // 持久性：重开连接后仍是 INCREMENTAL（一次性成本，不每次启动重跑）
+      await closeDb();
+      resetDb();
+      const probe = new Database(getDbPath());
+      try {
+        expect(Number(probe.pragma('auto_vacuum', { simple: true }))).toBe(2);
+      } finally {
+        probe.close();
+      }
+    });
+  }, 60_000);
+
+  it('会话级联删除：page_count 与文件字节同时下降（回收真的落到磁盘）', async () => {
+    await withIsolatedDb('vac-delete-', async () => {
+      const sqlite = raw(initDb());
+      seedSession(sqlite, 'vac-session');
+      seedBulkMessages(sqlite, 'vac-session');
+      const before = footprint(sqlite);
+
+      await service.delete('vac-session');
+
+      const rows = sqlite
+        .prepare("SELECT COUNT(*) AS c FROM messages WHERE session_id = 'vac-session'")
+        .get() as { c: number };
+      expect(rows.c).toBe(0);
+      const after = footprint(sqlite);
+      expect(before.pages - after.pages).toBeGreaterThanOrEqual(MinFreedPages);
+      expect(after.bytes).toBeLessThan(before.bytes);
+    });
+  }, 60_000);
+
+  it('上下文压缩（replaceMessages）：压缩掉的旧消息页被归还', async () => {
+    await withIsolatedDb('vac-replace-', async () => {
+      const sqlite = raw(initDb());
+      seedSession(sqlite, 'vac-session');
+      seedBulkMessages(sqlite, 'vac-session');
+      const before = footprint(sqlite);
+
+      const count = await service.replaceMessages('vac-session', [
+        { role: 'user', content: '压缩后保留' },
+      ]);
+      expect(count).toBe(1);
+
+      const after = footprint(sqlite);
+      expect(before.pages - after.pages).toBeGreaterThanOrEqual(MinFreedPages);
+      expect(after.bytes).toBeLessThan(before.bytes);
+    });
+  }, 60_000);
+
+  it('统计窗口清理（pruneExpiredUsage）：删除行后回收空闲页', async () => {
+    await withIsolatedDb('vac-prune-', async () => {
+      const sqlite = raw(initDb());
+      seedSession(sqlite, 'vac-session');
+      seedBulkUsage(sqlite, 'vac-session');
+      const before = footprint(sqlite);
+
+      expect(service.pruneExpiredUsage()).toBe(BulkRows);
+
+      const after = footprint(sqlite);
+      expect(before.pages - after.pages).toBeGreaterThanOrEqual(MinFreedPages);
+      expect(after.bytes).toBeLessThan(before.bytes);
+    });
+  }, 60_000);
+
+  it('阈值守卫：freelist 未达阈值时返回 0，不动文件（小改动不反复截断）', async () => {
+    await withIsolatedDb('vac-small-', () => {
+      const sqlite = raw(initDb());
+      seedSession(sqlite, 'small');
+      const insert = sqlite.prepare(
+        "INSERT INTO messages (session_id, seq, role, content, created_at) VALUES (?, ?, 'user', ?, 100)",
+      );
+      for (let i = 0; i < 5; i++) insert.run('small', i, BulkPayload);
+      const before = footprint(sqlite);
+
+      sqlite.exec("DELETE FROM messages WHERE session_id = 'small'");
+      expect(pragmaNumber(sqlite, 'freelist_count')).toBeGreaterThan(0);
+      expect(reclaimFreePages()).toBe(0);
+      expect(footprint(sqlite).bytes).toBe(before.bytes);
+    });
+  }, 60_000);
+
+  it('在途启动备份期间回收：不抛错，且备份副本仍是有效恢复点', async () => {
+    await withIsolatedDb('vac-backup-', async (dir) => {
+      // 先落成有 8MB 数据的库；closeDb 会 drain 掉这一轮备份
+      const sqlite = raw(initDb());
+      seedSession(sqlite, 'vac-session');
+      seedBulkMessages(sqlite, 'vac-session');
+      await closeDb();
+      resetDb();
+
+      const errorMock = vi.mocked(logger.error);
+      errorMock.mockClear();
+
+      // 重开：备份需拷完整 8MB，跨多个 tick；删除触发的 wal_checkpoint(TRUNCATE)
+      // 必然发生在读事务仍持有期间——修复前无人验证过这一共存性
+      initDb();
+      await service.delete('vac-session');
+      await closeDb();
+
+      const backupDir = join(dir, 'backups');
+      const names = readdirSync(backupDir);
+      const backups = names.filter((n) => n.endsWith('.db'));
+      expect(backups.length).toBeGreaterThanOrEqual(1);
+      expect(names.filter((n) => n.endsWith('.tmp'))).toEqual([]);
+      for (const name of backups) {
+        const copy = Database(join(backupDir, name), { readonly: true });
+        try {
+          expect(copy.pragma('integrity_check', { simple: true })).toBe('ok');
+        } finally {
+          copy.close();
+        }
+      }
+      expect(errorMock).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringContaining('数据库备份失败'),
+      );
+    });
+  }, 60_000);
+
+  it('reclaimFreePages：连接未初始化时抛错（不静默返回 0 掩盖问题）', async () => {
+    await closeDb();
+    resetDb();
+    expect(() => reclaimFreePages()).toThrow(/未初始化/);
+    // 恢复单例，避免污染 afterAll 的 closeDb
+    initDb();
   });
 });

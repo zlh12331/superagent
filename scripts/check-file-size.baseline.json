@@ -12,16 +12,16 @@
     "raw": 895
   },
   "src/main/infra/ai/tools/permission-service.ts": {
-    "net": 483,
-    "raw": 873
+    "net": 475,
+    "raw": 854
   },
   "src/main/infra/file/file-service.ts": {
     "net": 418,
     "raw": 795
   },
   "src/main/infra/storage/session-service.ts": {
-    "net": 588,
-    "raw": 1042
+    "net": 469,
+    "raw": 905
   },
   "src/main/service-container.ts": {
     "net": 503,
