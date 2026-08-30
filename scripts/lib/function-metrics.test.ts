@@ -159,4 +159,40 @@ describe('scanFunctions', () => {
     const source = 'const handlers = {\n  snapshot(a, b, c, d, e, f) {\n    return 1;\n  },\n};';
     expect(scanFunctions(source)).toEqual([]);
   });
+
+  it('显式返回类型标注的箭头不再跨行吞并（回归：曾误报 params 膨胀）', () => {
+    const source = [
+      'function makeGuards(rootsProvider: () => Promise<string[]>) {',
+      '  const guard = (path: string): Promise<string> => confine(path, rootsProvider);',
+      '  const guardRead = (path: string): Promise<string> =>',
+      '    confine(path, rootsProvider, { allowUserGrant: true });',
+      '  return { guard, guardRead };',
+      '}',
+      'function next(a, b, c, d, e, f) {',
+      '  return 1;',
+      '}',
+    ].join('\n');
+    const fns = scanFunctions(source);
+    expect(fns.map((f) => [f.name, f.params, f.bodyLines])).toEqual([
+      ['makeGuards', 1, 6],
+      ['guard', 1, 0],
+      ['guardRead', 1, 0],
+      ['next', 6, 3],
+    ]);
+  });
+
+  it('块体箭头带返回类型：形参与体长各自正确', () => {
+    const [fn] = scanFunctions('const wide = (a: number, b: number): Foo => {\n  x();\n};');
+    expect(fn).toMatchObject({ name: 'wide', params: 2, bodyLines: 3 });
+  });
+
+  it('返回类型本身含函数类型仍能闭合签名', () => {
+    const [fn] = scanFunctions('const mk = (): (() => void) => {\n  return f;\n};');
+    expect(fn).toMatchObject({ name: 'mk', params: 0, bodyLines: 3 });
+  });
+
+  it('解构/对象默认值形参按声明个数计', () => {
+    const [fn] = scanFunctions('const f = (opts: { a: number } = {}) => {\n  b();\n};');
+    expect(fn).toMatchObject({ name: 'f', params: 1, bodyLines: 3 });
+  });
 });
