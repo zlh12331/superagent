@@ -128,6 +128,17 @@ test.describe('真实 Electron IPC 性能基准', () => {
     try {
       await expect(page.getByText('Code Agent').first()).toBeVisible({ timeout: 15_000 });
 
+      // P1 路径收口适配：file.read 经 confineToWorkspace fail-closed（边界 = 会话
+      // workingDir 并集）。payload 在 .e2e-user-data 下，需先经公共 API 创建一个
+      // 以该目录为 workingDir 的会话，将 payload 目录登记进边界（TTL 2s 缓存过期后生效）。
+      await page.evaluate(async (dir) => {
+        const res = await window.api.session.create({ workingDir: dir, title: 'perf-payload' });
+        if ('error' in res) {
+          throw new Error(`session.create 失败：${String(res.error?.message)}`);
+        }
+      }, E2E_USER_DATA);
+      await page.waitForTimeout(2200);
+
       const result = await page.evaluate(async (payloadPath) => {
         // 预热一次（编码检测缓存/模块加载不计入）
         await window.api.file.read({ path: payloadPath });
