@@ -7,8 +7,8 @@
     "shared": {
       "$comment": "契约层：zod schema/类型映射的有效分支天然难覆盖，分支/函数低于业务层是有意的类型包定位（非漏测），故 specTarget 单独定为 80/30/40/80",
       "specTarget": { "statements": 80, "branches": 30, "functions": 40, "lines": 80 },
-      "floor": { "statements": 80, "branches": 30, "functions": 39, "lines": 80 },
-      "ratchet": { "statements": 80, "branches": 30, "functions": 39, "lines": 80 },
+      "floor": { "statements": 80, "branches": 30, "functions": 40, "lines": 80 },
+      "ratchet": { "statements": 80, "branches": 30, "functions": 40, "lines": 80 },
       "measured": { "statements": 91.5, "branches": 59.09, "functions": 57.14, "lines": 91.42 },
       "measuredAt": "2026-08-31"
     },
@@ -21,11 +21,11 @@
       "measuredAt": "2026-08-31"
     },
     "renderer": {
-      "$comment": "渲染层真实门槛显著低于业务层规范值（存量缺口：settings 组件约 21%、Markdown/message-item 等）。此处记录的是**真实下限**，不得对外表述为 80/75/80/80；缺口以本文件 measured 与 specTarget 之差为准",
+      "$comment": "渲染层真实门槛显著低于业务层规范值（存量缺口：settings 组件约 21%、Markdown/message-item 等纯展示组件由 E2E journey+visual 兑底）。此处记录的是**真实下限**，不得对外表述为 80/75/80/80；缺口以本文件 measured 与 specTarget 之差为准。2026-08-31 P1 补测（ipc-agent-transport/ChatMessageList/ModelSelector）后实测由 72.08/63.42/68.39/73.04 提升至 75.35/66.16/71.25/76.36",
       "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
-      "floor": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },
-      "ratchet": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },
-      "measured": { "statements": 72.08, "branches": 63.42, "functions": 68.39, "lines": 73.04 },
+      "floor": { "statements": 70, "branches": 61, "functions": 66, "lines": 71 },
+      "ratchet": { "statements": 70, "branches": 61, "functions": 66, "lines": 71 },
+      "measured": { "statements": 75.35, "branches": 66.16, "functions": 71.25, "lines": 76.36 },
       "measuredAt": "2026-08-31"
     }
   }

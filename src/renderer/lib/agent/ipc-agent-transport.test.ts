@@ -11,18 +11,26 @@ import { IpcAgentTransport } from './ipc-agent-transport';
 
 type PartCb = (payload: { sessionId: string; part: unknown }) => void;
 type EndCb = (payload: { sessionId: string }) => void;
+type ErrCb = (payload: { sessionId: string; code: string; message: string }) => void;
 
 /** 订阅回调捕获（模拟主进程推送） */
 const ipc = vi.hoisted(() => ({
   part: null as PartCb | null,
   end: null as EndCb | null,
+  error: null as ErrCb | null,
+  runArgs: null as Record<string, unknown> | null,
 }));
 
-function stubAgentApi(): void {
+function stubAgentApi(runResponse: unknown = { data: { ok: true } }): void {
   ipc.part = null;
   ipc.end = null;
+  ipc.error = null;
+  ipc.runArgs = null;
   window.api.agent = {
-    run: vi.fn(async () => ({ data: { ok: true } })),
+    run: vi.fn(async (args: Record<string, unknown>) => {
+      ipc.runArgs = args;
+      return runResponse;
+    }),
     stop: vi.fn(async () => ({ data: { ok: true } })),
     subscribeStreamPart: vi.fn((cb: PartCb) => {
       ipc.part = cb;
@@ -36,7 +44,12 @@ function stubAgentApi(): void {
         ipc.end = null;
       };
     }),
-    subscribeStreamError: vi.fn(() => () => {}),
+    subscribeStreamError: vi.fn((cb: ErrCb) => {
+      ipc.error = cb;
+      return () => {
+        ipc.error = null;
+      };
+    }),
   } as never;
 }
 
@@ -115,5 +128,159 @@ describe('IpcAgentTransport 流式出口批处理', () => {
 
     const chunks = await drain(stream);
     expect(chunks).toEqual([]);
+  });
+});
+
+describe('IpcAgentTransport 配置注入与分支覆盖', () => {
+  beforeEach(() => {
+    stubAgentApi();
+  });
+
+  it('未配置 workingDir 时 sendMessages 直接拒绝（不触碰 IPC）', async () => {
+    const transport = new IpcAgentTransport();
+    const messages: UIMessage[] = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] },
+    ];
+    await expect(
+      transport.sendMessages({
+        trigger: 'submit-message',
+        chatId: 's1',
+        messageId: undefined,
+        messages,
+        abortSignal: undefined,
+      }),
+    ).rejects.toThrow('workingDir not configured');
+    expect(window.api.agent.run).not.toHaveBeenCalled();
+  });
+
+  it('configure() 兜底配置 + 增量合并；未命中 chatId 时回落 lastConfig', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configure({ workingDir: '/a' });
+    transport.configureFor('other', { workingDir: '/b', systemPrompt: 'sp' });
+
+    const stream = await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 'unknown-chat',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+    expect(window.api.agent.run).toHaveBeenCalledOnce();
+    // 未命中 unknown-chat → 回落 lastConfig（configureFor('other') 同步更新为 '/b'）
+    expect(ipc.runArgs).toMatchObject({ workingDir: '/b', systemPrompt: 'sp' });
+    void stream;
+  });
+
+  it('run 入参默认值：maxSteps=20 / mode=build；thinking 透传；temperature 仅在定义时下发', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w', thinking: 'high', maxSteps: 5, mode: 'plan' });
+    const messages: UIMessage[] = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] },
+    ];
+    await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages,
+      abortSignal: undefined,
+    });
+    await tick();
+    expect(ipc.runArgs).toMatchObject({
+      sessionId: 's1',
+      workingDir: '/w',
+      maxSteps: 5,
+      mode: 'plan',
+      thinking: 'high',
+    });
+    expect(ipc.runArgs).not.toHaveProperty('temperature');
+  });
+
+  it('temperature 已定义时透传给 run', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w', temperature: 0.3 });
+    await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+    expect(ipc.runArgs).toMatchObject({ temperature: 0.3 });
+  });
+
+  it('stream error 事件 → 流错误 + 三订阅全部退订 + 批处理器释放', async () => {
+    const stream = await openStream();
+    ipc.error?.({ sessionId: 's1', code: 'AI_TIMEOUT', message: 'boom' });
+
+    await expect(drain(stream)).rejects.toThrow('[AI_TIMEOUT] boom');
+    expect(ipc.part).toBeNull();
+    expect(ipc.end).toBeNull();
+    expect(ipc.error).toBeNull();
+  });
+
+  it('其它会话的 error 事件不影响当前流', async () => {
+    const stream = await openStream();
+    ipc.error?.({ sessionId: 'other', code: 'X', message: 'nope' });
+    pushPart({ type: 'text-delta', id: 't1', delta: 'ok' });
+    ipc.end?.({ sessionId: 's1' });
+
+    const chunks = await drain(stream);
+    expect(chunks).toEqual([{ type: 'text-delta', id: 't1', delta: 'ok' }]);
+  });
+
+  it('run 响应携带 error → controller.error + 退订', async () => {
+    stubAgentApi({ error: { code: 'E1', message: 'bad request' } });
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w' });
+    const stream = await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+
+    await expect(drain(stream)).rejects.toThrow('[E1] bad request');
+    expect(ipc.part).toBeNull();
+    expect(ipc.error).toBeNull();
+  });
+
+  it('abortSignal 触发 → stop({ sessionId }) 中断主进程', async () => {
+    const controller = new AbortController();
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w' });
+    await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: controller.signal,
+    });
+    await tick();
+    expect(window.api.agent.stop).not.toHaveBeenCalled();
+
+    controller.abort();
+    await tick();
+    expect(window.api.agent.stop).toHaveBeenCalledWith({ sessionId: 's1' });
+  });
+
+  it('流被消费方取消 → 退订三订阅 + stop 主进程', async () => {
+    const stream = await openStream();
+    const reader = stream.getReader();
+    await reader.cancel();
+    await tick();
+
+    expect(window.api.agent.stop).toHaveBeenCalledWith({ sessionId: 's1' });
+    expect(ipc.part).toBeNull();
+    expect(ipc.end).toBeNull();
+    expect(ipc.error).toBeNull();
+  });
+
+  it('reconnectToStream 恒返回 null（主进程不持久化流状态）', async () => {
+    const transport = new IpcAgentTransport();
+    await expect(transport.reconnectToStream()).resolves.toBeNull();
   });
 });
