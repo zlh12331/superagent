@@ -20,7 +20,7 @@ import type {
   RemoteTurnEvent,
 } from './remote-control';
 
-// REMOTE_DEFAULT_WORKING_DIR 取 app.getPath('userData')/remote-workspace（模块级调用）
+// 沙箱目录取 app.getPath('userData')/remote-workspace（使用点求值，W9）
 vi.mock('electron', () => ({
   app: {
     getPath: (name: string) => `/tmp/test-userdata/${name}`,

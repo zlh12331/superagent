@@ -7,11 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IAgentService } from '../ai/agent/agent-service';
 import type { IPermissionService } from '../ai/tools/permission-service';
 import type { ISessionService } from '../storage/session-service';
-import { IM_DEFAULT_WORKING_DIR, ImAgentBridge } from './im-agent-bridge';
+import { getImDefaultWorkingDir, ImAgentBridge } from './im-agent-bridge';
 import type { ImService } from './im-service';
 
-// 安全修复：IM_DEFAULT_WORKING_DIR 从 homedir() 改为 app.getPath('userData')/im-workspace
-// 需要 mock electron 的 app.getPath 模块级调用
+// 安全修复：沙箱目录从 homedir() 改为 app.getPath('userData')/im-workspace（使用点求值）
 vi.mock('electron', () => ({
   app: {
     getPath: (name: string) => `/tmp/test-userdata/${name}`,
@@ -123,7 +122,7 @@ describe('ImAgentBridge', () => {
       workingDir: string;
       sessionId: string;
     };
-    expect(callArgs.workingDir).toBe(IM_DEFAULT_WORKING_DIR);
+    expect(callArgs.workingDir).toBe(getImDefaultWorkingDir());
     expect(callArgs.webContents).toBeUndefined();
     expect(callArgs.sessionId).toBeTruthy();
 
@@ -228,7 +227,7 @@ describe('ImAgentBridge', () => {
       title: string;
     };
     expect(createArgs.title).toBe('IM:telegram:chat-99');
-    expect(createArgs.workingDir).toBe(IM_DEFAULT_WORKING_DIR);
+    expect(createArgs.workingDir).toBe(getImDefaultWorkingDir());
   });
 
   it('会话 id 取自 create 返回值：startAgent 与落库共用落库行 id（防幽灵会话）', async () => {

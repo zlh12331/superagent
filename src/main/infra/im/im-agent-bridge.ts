@@ -38,8 +38,15 @@ function sessionKey(channel: string, chatId: string): string {
  * 安全修复：禁止以用户主目录作为 IM 无头执行的工作目录（否则群聊第三方
  * 可诱导 agent 读取 ~/.ssh、~/.aws 等任意文件并回发群聊）。
  * 改为应用 userData 下的专用沙箱目录，隔离 IM agent 的读写边界。
+ *
+ * 使用点求值（W9 修复）：模块加载期 app.getPath('userData') 早于 index.ts
+ * 的 dev 重定向（app.setPath），快照常量会把沙箱目录落在重定向目标之外
+ * （dev/E2E 隔离失效）。改为函数在使用时求值——mount/首回合均发生在
+ * whenReady 之后，此时 setPath 已生效。
  */
-export const IM_DEFAULT_WORKING_DIR = join(app.getPath('userData'), 'im-workspace');
+export function getImDefaultWorkingDir(): string {
+  return join(app.getPath('userData'), 'im-workspace');
+}
 
 /**
  * IM 消息 → Agent 桥接（模块单例，由 ServiceContainer 初始化挂载）
@@ -71,7 +78,7 @@ export class ImAgentBridge {
     this.mounted = true;
     // 安全修复：确保 IM agent 沙箱工作目录存在（首启自动创建）
     try {
-      mkdirSync(IM_DEFAULT_WORKING_DIR, { recursive: true });
+      mkdirSync(getImDefaultWorkingDir(), { recursive: true });
     } catch (err: unknown) {
       // 目录创建失败不阻断桥接（agent 工具会在无目录时返回明确错误）
       logger.warn({ error: err }, 'IM agent 沙箱工作目录创建失败');
@@ -131,7 +138,7 @@ export class ImAgentBridge {
         // 当作 id，与落库行不一致 → appendMessage 恒抛 SESSION_NOT_FOUND、
         // markRunning 找不到行，IM 回合 transcript 实际从未落库。
         sessionId = await this.sessionService.create({
-          workingDir: IM_DEFAULT_WORKING_DIR,
+          workingDir: getImDefaultWorkingDir(),
           title: `IM:${message.channel}:${message.chatId}`,
           messages: undefined,
         });
@@ -265,7 +272,7 @@ export class ImAgentBridge {
       await this.agentService.startAgent({
         messages: [{ role: 'user', content: message.text }],
         sessionId,
-        workingDir: IM_DEFAULT_WORKING_DIR,
+        workingDir: getImDefaultWorkingDir(),
         systemPrompt: undefined,
         maxSteps: 20,
         // 无头：不传 webContents（推送跳过；exec 工具拒绝、edit 按 auto 快速路径放行）

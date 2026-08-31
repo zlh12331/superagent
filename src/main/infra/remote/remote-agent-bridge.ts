@@ -42,8 +42,13 @@ import type {
 
 /**
  * 远程命令 agent 的沙箱工作目录（与 IM 沙箱同级、同策略）
+ *
+ * 使用点求值（W9 修复）：与 IM 桥同因——模块加载期快照早于 dev 的
+ * app.setPath('userData') 重定向，会导致 dev/E2E 数据分叉。
  */
-export const REMOTE_DEFAULT_WORKING_DIR = join(app.getPath('userData'), 'remote-workspace');
+export function getRemoteDefaultWorkingDir(): string {
+  return join(app.getPath('userData'), 'remote-workspace');
+}
 
 /** 单回合最大工具调用轮数（与 IM 桥接一致） */
 const MAX_STEPS = 20;
@@ -88,7 +93,7 @@ export class RemoteAgentBridge {
     }
     this.mounted = true;
     try {
-      mkdirSync(REMOTE_DEFAULT_WORKING_DIR, { recursive: true });
+      mkdirSync(getRemoteDefaultWorkingDir(), { recursive: true });
     } catch (err: unknown) {
       // 目录创建失败不阻断挂载（agent 工具会在无目录时返回明确错误）
       logger.warn({ error: err }, '远程控制 agent 沙箱工作目录创建失败');
@@ -165,7 +170,7 @@ export class RemoteAgentBridge {
     }
     try {
       const sessionId = await this.sessionService.create({
-        workingDir: REMOTE_DEFAULT_WORKING_DIR,
+        workingDir: getRemoteDefaultWorkingDir(),
         title: `Remote:${clientId}`,
         messages: undefined,
       });
@@ -249,7 +254,7 @@ export class RemoteAgentBridge {
       await this.agentService.startAgent({
         messages,
         sessionId,
-        workingDir: REMOTE_DEFAULT_WORKING_DIR,
+        workingDir: getRemoteDefaultWorkingDir(),
         systemPrompt: undefined,
         maxSteps: MAX_STEPS,
         // 无头：不传 webContents（流式推送跳过；exec 工具拒绝、edit 按 auto 快速路径放行）
