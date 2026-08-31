@@ -161,6 +161,8 @@ const terminalOutputCallbacks = new Set<(payload: { terminalId: string; data: st
 const updateStatusCallbacks = new Set<(payload: unknown) => void>();
 /** 审批请求回调（agent:approval:request 模拟推送，验证内联审批卡） */
 const approvalCallbacks = new Set<(payload: unknown) => void>();
+/** Agent 提问回调（agent:event:ask 模拟推送，验证 AskDialog） */
+const askCallbacks = new Set<(payload: unknown) => void>();
 
 /** 模拟流定时器（sessionId → interval，agent.stop 据此真正中断模拟流） */
 const streamIntervals = new Map<string, ReturnType<typeof setInterval>>();
@@ -765,6 +767,27 @@ function createMockApi(): IpcApi {
               : '（模拟消息）';
         // AgentRunReq.sessionId 为可选类型，运行期 transport 总是传入（chatId）
         setTimeout(() => simulateAgentStream(sessionId ?? 'mock-1', text), 300);
+        // 模拟 Agent 提问（AskDialog E2E 用）：输入以 /ask 开头时，流式期间推送一条提问事件
+        if (text.startsWith('/ask')) {
+          setTimeout(() => {
+            const askPayload = {
+              sessionId: sessionId ?? 'mock-1',
+              askId: `mock-ask-${Date.now()}`,
+              questions: [
+                {
+                  question: '是否确认执行此操作？',
+                  options: [
+                    { label: '确认执行', value: 'yes' },
+                    { label: '取消', value: 'no' },
+                  ],
+                },
+              ],
+            };
+            for (const cb of askCallbacks) {
+              cb(askPayload);
+            }
+          }, 600);
+        }
         // P0 修复：与真实 IPC 信封一致返回 { data: { sessionId } }。
         // 此前返回裸 { sessionId } 与 IpcResponse 契约相悖（真实链路经 wrap 包装为 { data }），
         // transport 按 response.data.sessionId 解包，裸对象导致 currentSessionId 恒为 undefined、
@@ -806,7 +829,10 @@ function createMockApi(): IpcApi {
         approvalCallbacks.add(cb as never);
         return () => approvalCallbacks.delete(cb as never);
       },
-      subscribeAsk: () => () => {},
+      subscribeAsk: (cb: Parameters<IpcApi['agent']['subscribeAsk']>[0]) => {
+        askCallbacks.add(cb as never);
+        return () => askCallbacks.delete(cb as never);
+      },
     },
 
     settings: {
