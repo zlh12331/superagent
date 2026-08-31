@@ -88,7 +88,7 @@ const mockSessions: SessionMeta[] = [
     createdAt: now - 86_400_000,
     updatedAt: now - 2 * 3_600_000,
     lastMessage: 'grid-column: 3 一行业务修复，CDP 实测 794px',
-    messageCount: 0,
+    messageCount: 2,
     pinned: false,
     lastRunStatus: 'idle',
   },
@@ -131,6 +131,20 @@ const messagesBySession: Record<string, MockMessage[]> = {
       role: 'assistant',
       content:
         '补充：`derive.ts` 负责类型推导（IpcApi / RequestMap / EventMap / InferHandlers），`register.ts` 统一注册 handler——定义表驱动全链路自动生成是核心资产。',
+    },
+  ],
+  // mock-2 预置消息（多会话切换 E2E 用：切换后聊天区显示本会话历史，不串 mock-1）
+  'mock-2': [
+    {
+      id: 'm2-1',
+      role: 'user',
+      content: '修复双折叠态主区崩溃',
+    },
+    {
+      id: 'm2-2',
+      role: 'assistant',
+      content:
+        '问题定位：侧栏 + 右面板同时折叠的 `sb-collapsed`/`crp-collapsed` 组合态，grid 五列塌缩为 1 列时主区宽度计算越界。修复后 CDP 实测 794px 正常。',
     },
   ],
 };
