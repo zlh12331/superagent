@@ -14,8 +14,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Check, Pencil, Search, Trash2, X } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Search, X } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -23,7 +23,6 @@ import { toast } from 'sonner';
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
-import { Badge } from '@/components/ui/badge';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
@@ -35,8 +34,12 @@ import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
 import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
 import { ConversationSearchBar } from './conversation-search-bar';
+import { GoalBar } from './GoalBar';
 import { reconstructHistory, toInitialMessages } from './history-parts';
 import { RateLimitBanner } from './rate-limit-banner';
+import { executeSlashCommand } from './slash-commands';
+import { useAutoCompact } from './use-auto-compact';
+import { useChatGoals } from './use-chat-goals';
 
 /** 稳定空数组：initialMessages 未传时复用同一引用，避免每轮渲染重算历史 */
 const NO_STORED_MESSAGES: readonly ChatMessage[] = [];
@@ -164,64 +167,13 @@ export function ChatPanel({
     void sendMessage({ text });
   }, [chatId, sendMessage, consumePendingMessage]);
 
-  // 会话目标（用户要求：仅 goal 命令设置后显示，置于对话区输入框上方）
-  const goalsQuery = useQuery({
-    queryKey: ['goal', 'list', chatId],
-    enabled: chatId !== undefined,
-    queryFn: async () => {
-      if (chatId === undefined) return { goals: [] as unknown[] };
-      const response = await window.api.goal.list({ sessionId: chatId });
-      if ('error' in response && response.error !== undefined) {
-        return { goals: [] as unknown[] };
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      return { goals: [] as unknown[] };
-    },
-  });
-  const goals = (goalsQuery.data?.goals ?? []) as Array<{
-    condition: string;
-    status: 'active' | 'completed' | 'aborted';
-  }>;
-  // 当前目标：active 优先，其次 completed（可能刚完成待用户确认）；
-  // aborted（已清除/被覆盖的旧目标）不展示——避免“删除后目标栏仍在”
-  const currentGoal =
-    goals.find((g) => g.status === 'active') ?? goals.find((g) => g.status === 'completed');
-  const isGoalCompleted = currentGoal?.status === 'completed';
-  const queryClient = useQueryClient();
-  // P2 修复：移除假「暂停/恢复」按钮——goalPaused 只是本地 useState 翻转，
-  // 主进程并无 goal:pause IPC（GoalService 无暂停语义），按钮给用户的承诺
-  // 是假的（回合照跑、重启后状态丢失）。待实现真实暂停 IPC 后再恢复入口。
+  // 会话目标（use-chat-goals.ts：goal:list/create/clear + active→completed 展示策略）
+  const { currentGoal, isGoalCompleted, createGoal, clearGoal } = useChatGoals(chatId);
   // 目标预填：把文本填入输入框并聚焦（用户补需求后发送；注入后下一轮重置，允许重复触发）
   const prefillGoalInput = (text: string): void => {
     setInjectedComposerValue(text);
     window.setTimeout(() => setInjectedComposerValue(undefined), 0);
   };
-  const createGoalMutation = useMutation({
-    mutationFn: async (condition: string) => {
-      if (chatId === undefined) return;
-      const response = await window.api.goal.create({ sessionId: chatId, condition });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(response.error.message);
-      }
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
-    },
-  });
-  const clearGoalMutation = useMutation({
-    mutationFn: async () => {
-      if (chatId === undefined) return;
-      const response = await window.api.goal.clear({ sessionId: chatId });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(response.error.message);
-      }
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
-    },
-  });
 
   // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
   const search = useConversationSearch(messages);
@@ -249,6 +201,7 @@ export function ChatPanel({
   // 渲染层同步替换本地消息态（AI SDK v7 setMessages），回合 transcript 旧消息随之清空（固有语义）
   // P2 修复：改走 useMutation 并失效会话详情缓存——此前直连 IPC 不失效，
   // staleTime 内重进会话会以压缩前旧消息重新初始化 useChat（压缩看似白做）
+  const queryClient = useQueryClient();
   const compactMutation = useMutation({
     mutationFn: async () => {
       if (chatId === undefined) throw new Error(t('chat.noActiveSession'));
@@ -273,6 +226,15 @@ export function ChatPanel({
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : String(error));
     },
+  });
+
+  // 长会话自动压缩（实验性 opt-in，默认关）：消息达阈值且回合空闲时自动 compact
+  // （压缩会替换本地消息态，消息数骤降后不再触发；失败也不风暴——水位线机制见 hook）
+  useAutoCompact({
+    chatId,
+    messages,
+    status,
+    compact: () => compactMutation.mutate(),
   });
 
   // 重新生成回调：透传给 ChatMessageList → MsgActions
@@ -388,51 +350,14 @@ export function ChatPanel({
         />
       </div>
 
-      {/* 会话目标栏（左 GOAL 标签 · 中条件 · 右 暂停/恢复 · 编辑 · 删除——仅存在 active/completed 目标时显示） */}
+      {/* 会话目标栏（GoalBar.tsx：左 GOAL 徽标 · 中条件 · 右 编辑/删除——仅存在 active/completed 目标时显示） */}
       {currentGoal !== undefined && (
-        <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
-          <Badge
-            variant="outline"
-            className="bg-accent/20 text-accent-text border-transparent px-1.5 py-0.5 font-mono text-[10px] font-bold"
-          >
-            GOAL
-          </Badge>
-          {isGoalCompleted && (
-            <Badge
-              variant="outline"
-              className="bg-success/10 text-success-text border-transparent gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
-            >
-              <Check className="size-3" strokeWidth={2.5} />
-              {t('chat.goalCompleted')}
-            </Badge>
-          )}
-          <span
-            className="text-foreground/90 min-w-0 flex-1 truncate text-xs"
-            title={currentGoal.condition}
-          >
-            {currentGoal.condition}
-          </span>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
-              title={t('chat.goalEdit')}
-              aria-label={t('chat.goalEdit')}
-              onClick={() => prefillGoalInput(`/goal ${currentGoal.condition}`)}
-            >
-              <Pencil className="size-3" />
-            </button>
-            <button
-              type="button"
-              className="text-muted-foreground hover:bg-destructive/15 hover:text-error-text flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
-              title={t('chat.goalClear')}
-              aria-label={t('chat.goalClear')}
-              onClick={() => clearGoalMutation.mutate()}
-            >
-              <Trash2 className="size-3" />
-            </button>
-          </div>
-        </div>
+        <GoalBar
+          goal={currentGoal}
+          isCompleted={isGoalCompleted}
+          onEdit={() => prefillGoalInput(`/goal ${currentGoal.condition}`)}
+          onClear={clearGoal}
+        />
       )}
       {/* 底部输入框：.composer 提供顶部渐变 + padding，内部 .composer-box 由 ChatInput 渲染 */}
       <footer className="composer">
@@ -442,43 +367,21 @@ export function ChatPanel({
           workingDir={workingDir}
           {...(injectedComposerValue !== undefined ? { injectedValue: injectedComposerValue } : {})}
           onSlashCommand={(action) => {
-            // 斜杠命令执行（对齐参考项目）：/new 回欢迎页新建，/clear 清空对话，/help 打开快捷键帮助
-            switch (action) {
-              case 'new':
-                navigate('/');
-                break;
-              case 'clear':
-                // 清空对话（AI SDK v7 无 clearMessages，用 setMessages([])）
-                setMessages([]);
-                break;
-              case 'help':
-                // 即时打开快捷键帮助对话框（照搬参考项目 /help 行为）
-                setShortcutHelpOpen(true);
-                break;
-              case 'models':
-                // 打开 composer 项目栏的模型选择下拉（受控）
-                setModelMenuOpen(true);
-                break;
-              case 'compact':
-                // 手动压缩会话上下文（主进程窗口感知裁剪 + 落库 + 本地态同步 + 缓存失效）
-                compactMutation.mutate();
-                break;
-              case 'interrupt':
-                // /interrupt 即时中断（对齐参考项目：停止当前生成）
+            // 斜杠命令分发（slash-commands.ts：命令 → 动作唯一映射点，纯函数可测）
+            executeSlashCommand(action, {
+              navigateToHome: () => navigate('/'),
+              clearMessages: () => setMessages([]),
+              openShortcutHelp: () => setShortcutHelpOpen(true),
+              openModelMenu: () => setModelMenuOpen(true),
+              compact: () => compactMutation.mutate(),
+              interrupt: () => {
                 void stop();
-                break;
-              case 'goal':
-                // /goal 斜杠建议：填入输入框（用户需求：唯一交互 = 输入 /goal 需求直接发送；
-                // 点建议后输入框预填 "/goal "，用户补需求回车即创建目标）
-                prefillGoalInput('/goal ');
-                break;
-              case 'demo':
-              case 'limit':
-                // mock 演示命令（前端开发专用）：直接发送触发 mock 流
-                //（/demo 全类型消息演示 · /limit 限流横幅）
-                void sendMessage({ text: action === 'demo' ? '/demo' : '/limit' });
-                break;
-            }
+              },
+              sendMessage: (text) => {
+                void sendMessage({ text });
+              },
+              prefillGoal: () => prefillGoalInput('/goal '),
+            });
           }}
           onSend={(text) => {
             // /goal 前缀：创建会话目标（用户需求：输入 /goal 需求 → 发送 → 输入框上方显示目标栏；
@@ -487,7 +390,7 @@ export function ChatPanel({
             if (trimmed.startsWith('/goal')) {
               const condition = trimmed.slice(5).trim();
               if (condition.length > 0 && chatId !== undefined) {
-                createGoalMutation.mutate(condition);
+                createGoal(condition);
               } else {
                 // /goal 无需求：重新填入输入框让用户补充需求（与斜杠建议项行为一致）
                 prefillGoalInput('/goal ');

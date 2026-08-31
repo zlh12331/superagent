@@ -168,7 +168,7 @@
     "params": 1
   },
   "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
-    "body": 648,
+    "body": 519,
     "params": 1
   },
   "src/renderer/components/chat/ChatInput.tsx#handleKeyDown": {
@@ -184,7 +184,11 @@
     "params": 1
   },
   "src/renderer/components/chat/ChatPanel.tsx#ChatPanel": {
-    "body": 425,
+    "body": 325,
+    "params": 1
+  },
+  "src/renderer/components/chat/GoalBar.tsx#GoalBar": {
+    "body": 46,
     "params": 1
   },
   "src/renderer/components/chat/Markdown.tsx#CodeBlock": {
@@ -217,6 +221,14 @@
   },
   "src/renderer/components/chat/message-item.tsx#ToolCallView": {
     "body": 87,
+    "params": 1
+  },
+  "src/renderer/components/chat/use-chat-goals.ts#useChatGoals": {
+    "body": 58,
+    "params": 1
+  },
+  "src/renderer/components/chat/use-composer-drag.ts#useComposerDrag": {
+    "body": 88,
     "params": 1
   },
   "src/renderer/components/common/AppErrorBoundary.tsx#AppFallback": {

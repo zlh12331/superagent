@@ -31,60 +31,18 @@ import { cn } from '@/lib/utils';
 import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
 import { useDraftStore } from '@/stores/persistent/draft-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-
-/** 附件项（对齐参考项目 ChatInputAttachments） */
-interface ChatAttachment {
-  /** 绝对路径（发送时 file:read 读取内容） */
-  readonly path: string;
-  /** 展示名称（路径 basename） */
-  readonly name: string;
-}
-
-/** 附件内容读取上限（字符，超出截断避免消息膨胀） */
-const ATTACHMENT_MAX_CHARS = 4000;
-
-/** 输入框拖拽高度下限（单行，约 40px） */
-const COMPOSER_MIN_H = 40;
-/** 输入框拖拽高度上限（对齐原型 maxExtra 300 + 基础 160） */
-const COMPOSER_MAX_H = 460;
-
-/** 斜杠命令建议列表（对齐参考项目 useSlashSuggest；命令执行链路为后续增强） */
+import { attachmentName, buildTextWithAttachments, type ChatAttachment } from './attachments';
+import {
+  filterSlashSuggestions,
+  findSlashSuggestion,
+  type SlashAction,
+  type SlashSuggestion,
+} from './slash-suggestions';
+import { detectSuggestTrigger } from './suggest-trigger';
+import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 
 /** 消息最大长度（对齐原型 8000 字符上限拦截） */
 const MAX_MESSAGE_LENGTH = 8000;
-
-/** 斜杠命令动作（对齐参考项目：命令可执行而非仅填充文本） */
-type SlashAction =
-  | 'new'
-  | 'clear'
-  | 'compact'
-  | 'models'
-  | 'help'
-  | 'interrupt'
-  | 'goal'
-  | 'demo'
-  | 'limit';
-
-/** 斜杠建议项：有 action 时点击执行动作；无 action 时填充文本 */
-interface SlashSuggestion {
-  readonly command: string;
-  readonly labelKey: string;
-  readonly action?: SlashAction;
-}
-
-const SLASH_SUGGESTIONS: readonly SlashSuggestion[] = [
-  { command: '/help', labelKey: 'chat.slashSuggest.help', action: 'help' },
-  { command: '/new', labelKey: 'chat.slashSuggest.newChat', action: 'new' },
-  { command: '/clear', labelKey: 'chat.slashSuggest.clear', action: 'clear' },
-  { command: '/compact', labelKey: 'chat.slashSuggest.compact', action: 'compact' },
-  { command: '/models', labelKey: 'chat.slashSuggest.models', action: 'models' },
-  // 对齐参考项目 SLASH_CMD_DEFS：/interrupt 即时中断（ChatPanel 调 stop）、/goal toast 引导
-  { command: '/interrupt', labelKey: 'chat.slashSuggest.interrupt', action: 'interrupt' },
-  { command: '/goal', labelKey: 'chat.slashSuggest.goal', action: 'goal' },
-  // mock 演示命令（前端开发专用）：/demo 全类型消息演示、/limit 限流横幅
-  { command: '/demo', labelKey: 'chat.slashSuggest.demo', action: 'demo' },
-  { command: '/limit', labelKey: 'chat.slashSuggest.limit', action: 'limit' },
-];
 
 interface ChatInputProps {
   /**
@@ -194,7 +152,7 @@ export function ChatInput({
     }
     const draft = useDraftStore.getState().getDraft(chatId);
     // 草稿附件恢复：仅恢复仍存在的文件路径（历史路径可能已删除）
-    return draft.attachments.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p }));
+    return draft.attachments.map((p) => ({ path: p, name: attachmentName(p) }));
   });
   // 占位符：props 优先，缺省走 i18n
   const isControlled = controlledValue !== undefined;
@@ -234,34 +192,20 @@ export function ChatInput({
     el.style.height = 'auto';
     // 自动增长封顶：手动拖拽/键盘设置过 maxHeight 时跟随手动档，否则默认 240px
     const manualCap = Number.parseFloat(el.style.maxHeight);
-    const cap = Number.isFinite(manualCap) && manualCap > 0 ? Math.max(240, manualCap) : 240;
+    const cap =
+      Number.isFinite(manualCap) && manualCap > 0
+        ? Math.max(COMPOSER_AUTO_MAX, manualCap)
+        : COMPOSER_AUTO_MAX;
     el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   };
 
   // ── 斜杠/提及建议状态（照搬参考项目 useSlashSuggest：支持任意位置触发，取位置靠后者）──
-  // 触发条件：查询段无空格；slash 1-20 字符、mention ≤30 字符（允许空串）
-  const slashIndex = value.lastIndexOf('/');
-  const atIndex = value.lastIndexOf('@');
-  const slashQuery = slashIndex >= 0 ? value.slice(slashIndex + 1) : null;
-  const mentionQuery = atIndex >= 0 ? value.slice(atIndex + 1) : null;
-  const slashActive =
-    slashIndex > atIndex &&
-    slashQuery !== null &&
-    slashQuery.length <= 20 &&
-    !slashQuery.includes(' ');
-  const mentionActive =
-    atIndex > slashIndex &&
-    mentionQuery !== null &&
-    mentionQuery.length <= 30 &&
-    !mentionQuery.includes(' ');
-  const activeTrigger = slashActive ? 'slash' : mentionActive ? 'mention' : null;
-  const activeQuery = activeTrigger === 'slash' ? slashQuery : mentionQuery;
+  // 触发检测为纯函数（suggest-trigger.ts）：slash 1-20 字符、mention ≤30 字符（允许空串）
+  const { atIndex, activeTrigger, activeQuery } = detectSuggestTrigger(value);
 
   // slash 建议：内置命令过滤（command 带 '/' 前缀，查询词不含 '/'——对齐参考项目 useSlashSuggest 语义）
-  const filteredSuggestions =
-    activeTrigger === 'slash' && activeQuery !== null
-      ? SLASH_SUGGESTIONS.filter((s) => s.command.slice(1).startsWith(activeQuery))
-      : [];
+  const filteredSuggestions: readonly SlashSuggestion[] =
+    activeTrigger === 'slash' && activeQuery !== null ? filterSlashSuggestions(activeQuery) : [];
 
   // mention 建议：search.glob 按查询过滤（200ms 防抖，对齐参考项目防抖约定）
   const [mentionFiles, setMentionFiles] = useState<string[]>([]);
@@ -312,7 +256,7 @@ export function ChatInput({
   /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
   const applySuggestion = (command: string): void => {
     // 带 action 的命令：执行动作（对齐参考项目），不填充文本
-    const suggestion = SLASH_SUGGESTIONS.find((s) => s.command === command);
+    const suggestion = findSlashSuggestion(command);
     if (suggestion?.action !== undefined) {
       // 清空输入（suggestOpen 派生自输入值，自动关闭建议面板）
       setValue('');
@@ -375,7 +319,7 @@ export function ChatInput({
     prevChatIdRef.current = chatId;
     const draft = useDraftStore.getState().getDraft(chatId);
     setInternalValue(draft.text);
-    setAttachments(draft.attachments.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p })));
+    setAttachments(draft.attachments.map((p) => ({ path: p, name: attachmentName(p) })));
     autoResize();
   }, [chatId, isControlled]);
 
@@ -433,115 +377,14 @@ export function ChatInput({
   };
 
   /**
-   * 读取附件内容并拼接进消息文本（file:read 支持 GBK 自动转码）
-   * 读取失败（二进制/超大）跳过该附件，不影响发送。
+   * 附件内容拼接已提取至 attachments.ts（buildTextWithAttachments）：
+   * file:read 读取 + GBK 转码 + 失败降级标注，本组件只负责调用。
    */
-  const buildTextWithAttachments = async (baseText: string): Promise<string> => {
-    if (attachments.length === 0 || typeof window === 'undefined' || window.api === undefined) {
-      return baseText;
-    }
-    let text = baseText;
-    for (const att of attachments) {
-      try {
-        const response = await window.api.file.read({
-          path: att.path,
-          offset: undefined,
-          limit: 200,
-        });
-        if ('error' in response && response.error !== undefined) {
-          text += `\n\n[附件: ${att.name}]（内容读取失败）`;
-          continue;
-        }
-        if ('data' in response && response.data !== undefined) {
-          const content = response.data.content.slice(0, ATTACHMENT_MAX_CHARS);
-          text += `\n\n[附件: ${att.name}]\n\`\`\`\n${content}\n\`\`\``;
-        }
-      } catch {
-        // 读取失败（二进制文件/权限）：仅附加文件名标注，不阻断发送
-        text += `\n\n[附件: ${att.name}]（内容读取失败）`;
-      }
-    }
-    return text;
-  };
 
-  /**
-   * 发送当前文本
-   *
-   * 清空输入框并触发 onSend 回调。
-   * 若文本为空或处于流式状态，直接返回。
-   */
-  /** 输入框高度拖拽（对齐原型 composerDragHandle：向上拖变高，钳位 [dragMinH, 460]；双击重置） */
-  const composerDragRef = useRef<{
-    startY: number;
-    startH: number;
-    dragMinH: number;
-  } | null>(null);
+  /** 输入框高度拖拽（use-composer-drag.ts：手柄事件 props） */
+  const { handleProps: dragHandleProps } = useComposerDrag(textareaRef);
 
-  /** 测量 textarea 自然高度（临时解除高度/上限限制，对齐原型 measureNaturalH） */
-  const measureNaturalHeight = (el: HTMLTextAreaElement): number => {
-    const prevHeight = el.style.height;
-    const prevMax = el.style.maxHeight;
-    el.style.height = 'auto';
-    el.style.maxHeight = 'none';
-    const height = el.scrollHeight;
-    el.style.height = prevHeight;
-    el.style.maxHeight = prevMax;
-    return height;
-  };
-
-  /** 拖拽开始：记录起点 + 指针捕获，注册全局 pointer 监听（对齐原型 onDown/onMove/onUp） */
-  const handleComposerDragStart = (event: React.PointerEvent<HTMLDivElement>): void => {
-    const el = textareaRef.current;
-    if (el === null) {
-      return;
-    }
-    event.preventDefault();
-    // 指针捕获：拖拽过程中 pointer 移出手柄元素不丢失事件
-    event.currentTarget.setPointerCapture(event.pointerId);
-    // 拖拽下限 = 内容自然高度与 baseMax 的较小者（对齐原型 dragMinH：
-    // 拖小不能小于当前内容所需高度，避免内容被裁剪不可见）
-    const naturalHeight = measureNaturalHeight(el);
-    composerDragRef.current = {
-      startY: event.clientY,
-      startH: el.offsetHeight,
-      dragMinH: Math.min(naturalHeight, 160),
-    };
-    const handleMove = (ev: PointerEvent): void => {
-      const state = composerDragRef.current;
-      if (state === null) {
-        return;
-      }
-      // 方向对齐原型：向上拖（clientY 减小）→ dy 增大 → 高度增大（手柄在输入框上方，向上拉高）
-      const dy = state.startY - ev.clientY;
-      const clamped = Math.max(state.dragMinH, Math.min(COMPOSER_MAX_H, state.startH + dy));
-      if (clamped <= state.dragMinH) {
-        el.style.maxHeight = '160px';
-        el.style.height = `${state.dragMinH}px`;
-      } else {
-        el.style.maxHeight = `${clamped}px`;
-        el.style.height = `${clamped}px`;
-      }
-    };
-    const handleUp = (): void => {
-      composerDragRef.current = null;
-      document.removeEventListener('pointermove', handleMove);
-      document.removeEventListener('pointerup', handleUp);
-    };
-    document.addEventListener('pointermove', handleMove);
-    document.addEventListener('pointerup', handleUp);
-  };
-
-  /** 双击手柄重置：恢复自动高度（对齐原型 resetResize：maxHeight 清空 + 自动增长） */
-  const handleComposerReset = (): void => {
-    const el = textareaRef.current;
-    if (el === null) {
-      return;
-    }
-    el.style.maxHeight = '';
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  };
-
+  /** 发送当前文本：超长拦截 → 附件拼接 → 清空草稿与输入 */
   const handleSend = async (): Promise<void> => {
     if (!canSend) {
       return;
@@ -553,7 +396,7 @@ export function ChatInput({
       toast.error(t('chat.messageTooLong'));
       return;
     }
-    const text = await buildTextWithAttachments(base);
+    const text = await buildTextWithAttachments(base, attachments);
     onSend(text);
     // 发送成功：清除本会话草稿（草稿只保留未发送内容）
     if (chatId !== undefined) {
@@ -634,26 +477,12 @@ export function ChatInput({
     // .composer：输入舱外壳（顶部渐变 + 底部 padding，由父级 footer 提供）
     // 此处仅渲染 .composer-box 内层（外层 .composer 由 ChatPanel footer 提供）
     <div className={cn('composer-box relative', className)}>
-      {/* 输入框高度拖拽手柄（对齐原型 .composer-drag-handle：hover 显示、ns-resize 调整高度）
-          语义：hr + separator（键盘可达：ArrowUp/Down 20px 步进调整） */}
+      {/* 输入框高度拖拽手柄（use-composer-drag.ts：拖拽/双击重置/键盘步进，语义 hr + separator） */}
       <hr
         className="composer-drag-handle"
         aria-label={t('chat.resizeComposer')}
         tabIndex={0}
-        onPointerDown={handleComposerDragStart}
-        onDoubleClick={handleComposerReset}
-        onKeyDown={(event) => {
-          const el = textareaRef.current;
-          if (el === null || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
-            return;
-          }
-          event.preventDefault();
-          const delta = event.key === 'ArrowUp' ? 20 : -20;
-          const current = el.offsetHeight;
-          const next = Math.max(COMPOSER_MIN_H, Math.min(COMPOSER_MAX_H, current + delta));
-          el.style.maxHeight = `${next}px`;
-          el.style.height = `${next}px`;
-        }}
+        {...dragHandleProps}
       />
       {/* 斜杠/提及建议下拉（照搬参考项目 useSlashSuggest：/ 命令 + @ 文件，位置靠后者触发） */}
       {suggestOpen && (
