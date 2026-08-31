@@ -11,13 +11,13 @@ import { defineConfig } from 'i18next-cli';
 
 export default defineConfig({
   locales: ['en', 'zh-CN'],
-  // 项目 config.ts defaultNS: 'common'；i18next-cli 默认 'translation'，必须对齐
-  defaultNamespace: 'common',
   extract: {
     input: ['src/renderer/**/*.{ts,tsx}', '!**/__tests__/**', '!**/test/**'],
     output: 'src/renderer/i18n/locales/{{language}}/{{namespace}}.json',
+    // 项目 config.ts defaultNS: 'common'；i18next-cli 默认 'translation'，必须对齐
+    // biome-ignore lint/style/useNamingConvention: defaultNS 是 i18next-cli 上游 API 属性名，不可改
+    defaultNS: 'common',
   },
-  sync: {
-    primary: 'zh-CN',
-  },
+  // 注：i18next-cli 当前类型（I18nextToolkitConfig）无 sync 字段——
+  // 状态报告/漏翻检测仅消费 locales + extract，占位语义不受影响
 });

@@ -7,6 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import { visualizer } from 'rollup-plugin-visualizer';
+import type { Plugin } from 'vite';
 
 // Source Map 生成配置（用于 Sentry 符号上传）
 // - main/preload: 'hidden' 生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
@@ -17,11 +18,13 @@ const SOURCEMAP_MODE = 'hidden' as const;
 // 包体积分析：`pnpm analyze:bundle` 时启用 rollup-plugin-visualizer
 // - 渲染层产物生成交互式 treemap（stats/renderer-bundle.html）+ 机器可读 stats.json
 // - 不注入 ANALYZE_BUNDLE=1 时零开销（不参与日常构建）
-const ANALYZE_BUNDLE = process.env.ANALYZE_BUNDLE === '1';
+const ANALYZE_BUNDLE = process.env['ANALYZE_BUNDLE'] === '1';
 
 /** 渲染层插件列表（analyze 模式追加体积分析插件） */
-function rendererPlugins() {
-  const plugins = [
+function rendererPlugins(): Plugin[] {
+  // concat 对数组参数有展平语义：@vitejs/plugin-react v6 返回 Plugin[]，
+  // 用 concat 统一拍平，避免元素类型推断成 Plugin | Plugin[] 联合
+  const plugins: Plugin[] = ([] as Plugin[]).concat(
     react({
       // React Compiler：启用（oxc 通道）。@vitejs/plugin-react v6 已移除 `babel` 选项，
       // compiler 选项经 oxc-transform-react（peerDep）生效；该依赖缺失时本选项会静默
@@ -33,9 +36,11 @@ function rendererPlugins() {
     // Tailwind v4 官方 Vite 插件（替代 v3 的 postcss 配置）
     // 文档：https://tailwindcss.com/docs/installation/using-vite
     tailwindcss(),
-  ];
+  );
   if (ANALYZE_BUNDLE) {
     plugins.push(
+      // rollup-plugin-visualizer 的返回类型（VisualizerPlugin）与 Vite Plugin
+      // 结构兼容但声明独立，push 到 Vite 插件数组需显式兑现
       visualizer({
         filename: 'stats/renderer-bundle.html',
         gzipSize: true,
@@ -43,7 +48,7 @@ function rendererPlugins() {
         // 同时输出 stats.json 供脚本/CI 解析对比
         json: true,
         template: 'treemap',
-      }),
+      }) as Plugin,
     );
   }
   return plugins;

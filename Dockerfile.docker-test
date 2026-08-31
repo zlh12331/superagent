@@ -31,7 +31,7 @@ COPY packages/tsconfig/package.json packages/tsconfig/
 COPY tools/depcruise/package.json tools/depcruise/
 COPY tools/typedoc/package.json tools/typedoc/
 
-RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 
 # 全量源码（.dockerignore 排除 node_modules/产物/用户数据）
 COPY . .
