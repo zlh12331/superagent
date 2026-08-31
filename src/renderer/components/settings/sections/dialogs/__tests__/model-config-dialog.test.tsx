@@ -113,7 +113,8 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
       expect(mocks.updateRuntimeModel).toHaveBeenCalledTimes(1);
     });
     expect(updateArg().baseUrl).toBe('https://new.example.com');
-  });
+    // 逐字符输入 24 字符 + 弹窗渲染，全量并发 + coverage 插桩下会超默认 5000ms
+  }, 15_000);
 
   it('不改地址：连通性测试用表单预填的模型自身 baseUrl（而非厂商默认端点）', async () => {
     const user = userEvent.setup();
@@ -126,7 +127,8 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
       expect(mocks.modelsTest).toHaveBeenCalledTimes(1);
     });
     expect(testArg().baseUrl).toBe('https://old.example.com');
-  });
+    // 全量并发 + coverage 插桩下弹窗渲染 + 保存链可超默认 5000ms，放宽超时
+  }, 15_000);
 
   it('modelId 只读：编辑模式锁定主键（改动会让 update 命中不到行）', async () => {
     renderDialog();

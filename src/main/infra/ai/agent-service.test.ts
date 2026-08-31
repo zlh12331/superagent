@@ -1330,7 +1330,8 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     const opts = mocks.mockStreamText.mock.calls[0]?.[0] as { messages: unknown[] } | undefined;
     expect(opts?.messages).toHaveLength(1);
     // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
-  }, 15_000);
+    // 本用例编码量（8600 字）高于 warn 用例（8000 字），超时预算须 ≥ warn 的 30_000
+  }, 30_000);
 
   it('completed + 完整 usage：recordUsage 调用 + END 含 usage + span 属性', async () => {
     const wc = createMockWebContents();

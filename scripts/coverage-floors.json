@@ -1,6 +1,6 @@
 {
   "$comment": "覆盖率门槛单一真源（禁止在各层 vitest.config.ts 内联数字）。各层字段语义：specTarget=该层规范目标；floor=当前强制门槛（vitest 读取）；ratchet=已批准的历史最高门槛（只能升不能降）；measured=最近一次真实实测（报告口径，禁止只公布最好看的数字）。",
-  "updatedAt": "2026-08-30",
+  "updatedAt": "2026-08-31",
   "maxStaleDays": 60,
   "$comment2": "校验规则（scripts/check-coverage-floors.ts）：① 各层 vitest.config.ts 不得再内联数字，只能读本文件；② floor ≥ ratchet（棘轮只能升，降级需显式改 ratchet 并说明理由）；③ measured ≥ floor（数字必须自洽，禁止美化实测）；④ measuredAt 不得超过 maxStaleDays 天，否则重跑 pnpm test:coverage 回填。",
   "layers": {
@@ -9,24 +9,24 @@
       "specTarget": { "statements": 80, "branches": 30, "functions": 40, "lines": 80 },
       "floor": { "statements": 80, "branches": 30, "functions": 39, "lines": 80 },
       "ratchet": { "statements": 80, "branches": 30, "functions": 39, "lines": 80 },
-      "measured": { "statements": 89.06, "branches": 44.44, "functions": 44.82, "lines": 88.95 },
-      "measuredAt": "2026-08-27"
+      "measured": { "statements": 91.5, "branches": 59.09, "functions": 57.14, "lines": 91.42 },
+      "measuredAt": "2026-08-31"
     },
     "main": {
-      "$comment": "主进程：floor 已达业务层规范值，实测余量约 12pp",
+      "$comment": "主进程：floor 已达业务层规范值，实测余量约 8pp（2026-08-31 实测，源码增长后较 2026-08-12 的 92.45 回落）",
       "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
       "floor": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
       "ratchet": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
-      "measured": { "statements": 92.45, "branches": 84.59, "functions": 89.57, "lines": 92 },
-      "measuredAt": "2026-08-12"
+      "measured": { "statements": 87.98, "branches": 80.33, "functions": 87.04, "lines": 88.16 },
+      "measuredAt": "2026-08-31"
     },
     "renderer": {
       "$comment": "渲染层真实门槛显著低于业务层规范值（存量缺口：settings 组件约 21%、Markdown/message-item 等）。此处记录的是**真实下限**，不得对外表述为 80/75/80/80；缺口以本文件 measured 与 specTarget 之差为准",
       "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
       "floor": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },
       "ratchet": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },
-      "measured": { "statements": 64.06, "branches": 55.91, "functions": 59.96, "lines": 64.87 },
-      "measuredAt": "2026-08-27"
+      "measured": { "statements": 72.08, "branches": 63.42, "functions": 68.39, "lines": 73.04 },
+      "measuredAt": "2026-08-31"
     }
   }
 }

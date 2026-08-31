@@ -220,7 +220,15 @@ describe('QqStreamReceiver 心跳与 ack 监控（三件套）', () => {
     ws.emit('message', { data: frames.ready('sess-1', 3) }); // 先 ready（seq=3）
     ws.emit('message', { data: frames.groupAt() }); // 后 groupAt（seq=5 覆盖）
     await p;
-    await new Promise((resolve) => setTimeout(resolve, 35));
+    // 轮询等待 ≥2 次心跳（10ms 间隔）：固定 35ms 睡眠在 coverage 插桩下会因
+    // 定时器漂移只发出 1 次心跳而 flake
+    const deadline = Date.now() + 1000;
+    while (
+      ws.send.mock.calls.filter((c) => String(c[0]).includes('"op":1')).length < 2 &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     const heartbeatSends = ws.send.mock.calls.filter((c) => String(c[0]).includes('"op":1'));
     expect(heartbeatSends.length).toBeGreaterThanOrEqual(2);
     expect(String(heartbeatSends[0]?.[0])).toContain('"d":5'); // 携带最新 lastSeq
