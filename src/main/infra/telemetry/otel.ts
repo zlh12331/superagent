@@ -47,6 +47,14 @@ let tracer: Tracer | null = null;
 let initialized = false;
 
 /**
+ * NodeTracerProvider 实例引用
+ *
+ * register() 注册到全局的 provider 是 ProxyTracerProvider（无 forceFlush/shutdown），
+ * shutdownTelemetry 必须用本引用收尾，否则退出时在途 span 导出丢失。
+ */
+let tracerProvider: NodeTracerProvider | null = null;
+
+/**
  * 初始化 OpenTelemetry
  *
  * 必须在 app.whenReady() 之后调用（需要 app.getVersion）
@@ -114,6 +122,7 @@ export function initTelemetry(): void {
     });
 
     provider.register();
+    tracerProvider = provider;
     tracer = trace.getTracer('code-agent', serviceVersion);
     initialized = true;
   } catch (error) {
@@ -186,10 +195,14 @@ export async function shutdownTelemetry(): Promise<void> {
     return;
   }
   try {
+    if (tracerProvider === null) {
+      logger.warn({}, 'OpenTelemetry provider 引用缺失，跳过 flush');
+      return;
+    }
     // NodeTracerProvider 的 forceFlush 会等待所有 span processor 完成
-    const provider = trace.getTracerProvider() as NodeTracerProvider;
-    await provider.forceFlush();
-    await provider.shutdown();
+    await tracerProvider.forceFlush();
+    await tracerProvider.shutdown();
+    tracerProvider = null;
     logger.info({}, 'OpenTelemetry 已关闭');
   } catch (error) {
     logger.warn({ error }, 'OpenTelemetry 关闭失败');
