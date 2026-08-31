@@ -3,25 +3,17 @@
     "net": 841,
     "raw": 932
   },
-  "src/main/index.ts": {
-    "net": 413,
-    "raw": 648
-  },
   "src/main/infra/ai/agent/agent-service.ts": {
     "net": 576,
     "raw": 895
   },
   "src/main/infra/ai/tools/permission-service.ts": {
-    "net": 492,
-    "raw": 877
+    "net": 440,
+    "raw": 678
   },
   "src/main/infra/file/file-service.ts": {
     "net": 421,
     "raw": 800
-  },
-  "src/main/infra/storage/session-service.ts": {
-    "net": 469,
-    "raw": 905
   },
   "src/main/infra/terminal/terminal-service.ts": {
     "net": 333,
@@ -29,11 +21,11 @@
   },
   "src/main/service-container.ts": {
     "net": 546,
-    "raw": 1148
+    "raw": 1038
   },
   "src/renderer/components/chat/ChatInput.tsx": {
-    "net": 605,
-    "raw": 820
+    "net": 468,
+    "raw": 649
   },
   "src/renderer/dev/mock-api.ts": {
     "net": 947,

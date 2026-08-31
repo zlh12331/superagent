@@ -1,8 +1,4 @@
 {
-  "src/main/index.ts#createWindow": {
-    "body": 129,
-    "params": 0
-  },
   "src/main/index.ts#initSentry": {
     "body": 57,
     "params": 0
@@ -150,6 +146,10 @@
   "src/main/utils/window-state.ts#trackWindowState": {
     "body": 62,
     "params": 2
+  },
+  "src/main/window.ts#createWindow": {
+    "body": 129,
+    "params": 0
   },
   "src/renderer/components/agent/approval-preview.tsx#renderGitPreview": {
     "body": 85,
