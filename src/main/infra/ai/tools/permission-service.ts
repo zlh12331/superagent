@@ -509,6 +509,18 @@ export class PermissionService implements IPermissionService {
             description: `${tool.description}（复合命令，后继段落不受白名单约束）`,
           };
         }
+        // P2 补全：非危险、非复合的只读命令引用工作目录边界外的路径时，
+        // 同样降级 ask（与 decideByMode auto 分支同语义）。此前 2b→2d 直达
+        // auto，MCP readOnlyHint 工具可借 command 入参越界读取（如 ~/.ssh）。
+        if (
+          options?.pathBoundary !== undefined &&
+          commandTargetsOutsideBoundary(command, options.pathBoundary)
+        ) {
+          return {
+            permission: 'ask',
+            description: `${tool.description}（⚠️ 引用工作目录之外的路径，需确认）`,
+          };
+        }
       }
       // 2c. plan 模式：非只读且不在控制面逃生舱内的 auto 工具一律 deny
       if (this.approvalMode === 'plan' && !PLAN_MODE_CONTROL_TOOLS.has(tool.name)) {
@@ -650,6 +662,12 @@ export class PermissionService implements IPermissionService {
         cleanupAbort();
         this.pending.delete(payload.approvalId);
         logger.warn({ approvalId: payload.approvalId, toolName: payload.toolName }, '审批超时');
+        // 状态机修复：超时 reject 也必须通知审批决议完成，否则 agent 回合
+        // 状态机永久卡在 waitingApproval（stream.finished 转换在该状态下非法）
+        this.notifyApprovalResolved({
+          sessionId: payload.sessionId,
+          approvalId: payload.approvalId,
+        });
         reject(new AppError(ErrorCode.TOOL_PERMISSION_DENIED, `审批超时：${payload.toolName}`));
       }, APPROVAL_TIMEOUT_MS);
 
@@ -662,6 +680,11 @@ export class PermissionService implements IPermissionService {
           { approvalId: payload.approvalId, toolName: payload.toolName },
           '审批等待期间收到中断信号',
         );
+        // 与超时路径同因：abort reject 前通知决议完成，保证状态机出口一致
+        this.notifyApprovalResolved({
+          sessionId: payload.sessionId,
+          approvalId: payload.approvalId,
+        });
         reject(new AppError(ErrorCode.TOOL_ABORTED, '工具执行已被中断'));
       };
 
