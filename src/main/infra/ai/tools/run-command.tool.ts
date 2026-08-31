@@ -2,7 +2,7 @@
 // run_command 工具：在沙箱工作目录内执行 shell 命令
 // ──────────────────────────────────────────────────────────────
 
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { z } from 'zod';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -55,6 +55,37 @@ const RunCommandInputSchema = z.object({
 });
 
 type RunCommandInput = z.infer<typeof RunCommandInputSchema>;
+
+/**
+ * 进程树终止：shell（cmd.exe / sh）只是包装层，真正的孙进程（npm/ping 等）
+ * 持有 stdio 写端句柄——仅 kill shell 本体时 close 事件永不触发（Node 要求
+ * 进程退出且 stdio 流关闭才 emit），Promise 悬挂到回合看门狗兜底。
+ * - win32：taskkill /T 连同整棵子进程树终止
+ * - POSIX：spawn detached 使 shell 为进程组组长，负 pid 信号覆盖全组
+ */
+function killTree(child: ChildProcess, force: boolean): void {
+  const pid = child.pid;
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(pid), '/T', ...(force ? ['/F'] : [])], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } else {
+      process.kill(-pid, force ? 'SIGKILL' : 'SIGTERM');
+    }
+  } catch {
+    // 组杀失败（已退出/无权限）：回退到直杀 shell 本体
+    try {
+      child.kill(force ? 'SIGKILL' : 'SIGTERM');
+    } catch {
+      // ignore
+    }
+  }
+}
 
 interface RunCommandOutput {
   readonly exitCode: number | null;
@@ -110,6 +141,8 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
           env: process.env,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
+          // POSIX：detached 使子进程成为进程组组长，kill(-pid) 才能覆盖孙进程
+          ...(isWin ? {} : { detached: true }),
         });
 
         let stdoutBuf = '';
@@ -145,29 +178,42 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         }
 
         let timedOut = false;
+        // 防重复 resolve：强制收尾路径与 close 事件竞争时只取先到者
+        let settled = false;
         const timer = setTimeout(() => {
           timedOut = true;
-          try {
-            child.kill('SIGTERM');
-          } catch {
-            // ignore
-          }
+          // 树杀而非仅杀 shell：孙进程持有 stdio 写端，只杀 shell 时
+          // close 事件永不触发（Node 要求进程退出且 stdio 流关闭）
+          killTree(child, false);
+          // 升级强杀：2s 后仍未退出则整组 SIGKILL
           setTimeout(() => {
-            try {
-              child.kill('SIGKILL');
-            } catch {
-              // ignore
+            if (!settled) {
+              killTree(child, true);
             }
           }, 2000).unref();
+          // 终极兑底：close 依赖 stdio 流关闭，极端情况下孙进程句柄滞留
+          // 时永不触发——5s 后直接以已缓冲输出 resolve，避免悬挂到看门狗
+          setTimeout(() => {
+            if (!settled) {
+              settled = true;
+              ctx.abortSignal.removeEventListener('abort', onAbort);
+              resolve({
+                exitCode: null,
+                signal: 'SIGKILL',
+                stdout: stdoutBuf,
+                stderr: stderrBuf,
+                timedOut,
+                stdoutTruncated,
+                stderrTruncated,
+              });
+            }
+          }, 5000).unref();
         }, input.timeout);
         timer.unref();
 
         const onAbort = (): void => {
-          try {
-            child.kill('SIGTERM');
-          } catch {
-            // ignore
-          }
+          // 中断同样需要树杀：仅杀 shell 会留下孤儿孙进程（同超时路径）
+          killTree(child, false);
         };
         if (!ctx.abortSignal.aborted) {
           ctx.abortSignal.addEventListener('abort', onAbort, { once: true });
@@ -180,6 +226,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         }
 
         child.on('close', (code, signal) => {
+          settled = true;
           clearTimeout(timer);
           ctx.abortSignal.removeEventListener('abort', onAbort);
 
