@@ -2,9 +2,15 @@
 // SessionService：会话持久化服务（基于 SQLite + Drizzle ORM）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 会话 CRUD：list / get / delete / rename（暴露为 IPC handler）
-// - 内部 API：create + appendMessage（供 AgentService / ChatService 持久化对话历史）
-// - 消息序列化：ChatMessage[] ↔ JSON string（messages.content 列）
+// - 会话 CRUD：list / get / delete / rename / pin（暴露为 IPC handler）
+// - 内部 API：create + appendMessage / replaceMessages（供 AgentService / ChatService 持久化对话历史）
+// - 崩溃恢复：markRunning / markIdle / markAllInterrupted（回合状态机）
+// - 用量与回合：委托 usage-turn-store（薄委托层，见文件尾部 import）
+//
+// 拆分（2026-08-31 重构，行为不变）：
+// - session-types.ts：ISessionService 接口 + 入参/导出 payload 类型（本文件 re-export 保持外部 import 路径不变）
+// - session-helpers.ts：行转换与标题/序列化辅助函数
+// - 本文件：SessionService 实现 + 单例管理
 //
 // 设计：
 // - 通过 Drizzle ORM 操作 sessions / messages 两张表（schema 定义见 schema.ts）
@@ -32,7 +38,6 @@ import type {
   SessionGetTurnsRes,
   SessionListRecentDirsRes,
   SessionListRes,
-  SessionMeta,
   SessionPinRes,
   SessionRecentTurnsRes,
   SessionRenameRes,
@@ -42,13 +47,22 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { count, desc, eq, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb, reclaimFreePages } from './db';
+import { type MessageInsert, messages, type SessionInsert, sessions } from './schema';
 import {
-  type MessageInsert,
-  type MessageRole,
-  messages,
-  type SessionInsert,
-  sessions,
-} from './schema';
+  extractRole,
+  resolveLastMessagePreview,
+  resolveTitle,
+  rowToMeta,
+  serializeMessage,
+} from './session-helpers';
+import {
+  DEFAULT_SESSION_TITLE,
+  type ISessionService,
+  type SessionAppendMessageOptions,
+  type SessionCreateOptions,
+  type SessionExportItem,
+  type SessionExportPayload,
+} from './session-types';
 import {
   getRecentTurns as storeGetRecentTurns,
   getTurns as storeGetTurns,
@@ -58,195 +72,15 @@ import {
   recordUsage as storeRecordUsage,
 } from './usage-turn-store';
 
-/**
- * create 方法入参
- *
- * 设计：title 与 initialMessages 均为可选，由调用方决定是否在创建时就写入消息。
- * - AgentService.startAgent 流结束后调用 create 持久化（仅传入 messages，title 自动生成）
- * - 渲染层若需要"先创建空会话再发消息"模式，可省略 initialMessages
- */
-export interface SessionCreateOptions {
-  /**
-   * 项目工作目录（绝对路径，必填）
-   *
-   * 限制 agent 工具操作的根目录，每个会话绑定独立 workingDir。
-   */
-  readonly workingDir: string;
-  /**
-   * 可选标题
-   *
-   * 省略时自动生成：取首条 user 消息内容前 50 字符；无 user 消息则用 '新会话'。
-   */
-  readonly title: string | undefined;
-  /**
-   * 初始消息历史（可选）
-   *
-   * 通常为 AgentService.startAgent 收到的完整 messages 数组。
-   * 省略时创建空会话，后续通过 appendMessage 追加。
-   */
-  readonly messages: readonly ChatMessage[] | undefined;
-}
-
-/**
- * appendMessage 方法入参
- */
-export interface SessionAppendMessageOptions {
-  /** 目标会话 id */
-  readonly sessionId: string;
-  /** 要追加的消息数组（按顺序写入，seq 自动递增） */
-  readonly messages: readonly ChatMessage[];
-  /** 归属回合 id（Transcript 消息级明细；省略 = 不归属） */
-  readonly turnId?: string;
-}
-
-/**
- * SessionService 接口
- *
- * 解耦 IPC handler 对具体类的依赖，便于：
- * - 单元测试：注入 mock 实现，不依赖真实 SQLite
- * - 未来扩展：替换为 Postgres / IndexedDB 等其他存储后端
- *
- * 两组方法：
- * 1. IPC 暴露（list/get/delete/rename）：渲染层通过 IPC 调用
- * 2. 内部 API（create/appendMessage）：AgentService / ChatService 调用
- */
-/**
- * 导出单个会话（元数据 + 消息历史）
- */
-export interface SessionExportItem {
-  readonly meta: SessionMeta;
-  readonly messages: readonly unknown[];
-}
-
-/**
- * 导出全部会话的 payload（数据资产可迁移格式）
- */
-export interface SessionExportPayload {
-  readonly exportedAt: number;
-  readonly app: string;
-  readonly sessions: readonly SessionExportItem[];
-}
-
-export interface ISessionService {
-  // ── IPC 暴露方法 ───────────────────────────────────
-
-  /** 分页列出所有会话（按 updatedAt 倒序） */
-  list(limit: number, offset: number): Promise<SessionListRes>;
-  /** 获取指定会话的完整消息历史 */
-  get(id: string): Promise<SessionGetRes>;
-  /** 删除指定会话（连同 messages 表级联删除） */
-  delete(id: string): Promise<SessionDeleteRes>;
-  /** 重命名会话标题 */
-  rename(id: string, title: string): Promise<SessionRenameRes>;
-  /** 置顶/取消置顶会话（对齐参考项目 pinned-header 分组） */
-  pin(id: string, pinned: boolean): Promise<SessionPinRes>;
-
-  // ── 内部 API（供 AgentService / ChatService 调用） ────
-
-  /** 创建新会话（可选写入初始消息历史），返回 sessionId */
-  create(options: SessionCreateOptions): Promise<string>;
-  /** 向指定会话追加消息（seq 自动递增），返回追加后的消息总数 */
-  appendMessage(options: SessionAppendMessageOptions): Promise<number>;
-  /**
-   * 整体替换会话消息历史（/compact 上下文压缩：删除全部行 → 重插压缩后消息），
-   * 返回替换后的消息总数
-   */
-  replaceMessages(sessionId: string, newMessages: readonly ChatMessage[]): Promise<number>;
-
-  /**
-   * 查询指定回合的消息明细（Transcript 消息级回放）
-   *
-   * @param turnId 回合 id（turns.turn_id）
-   * @returns 该回合的全部消息（按 seq 升序；无归属消息返回空数组）
-   */
-  getTurnMessages(turnId: string): Promise<ChatMessage[]>;
-
-  /** 查询最近使用的目录列表（去重 + 按 lastUsed 倒序） */
-  listRecentDirs(req: { readonly limit: number }): Promise<SessionListRecentDirsRes>;
-
-  /**
-   * 统计保留策略：删除用量统计窗口（90 天）外的 token_usage 行
-   *
-   * P2 修复：该表此前只写不删，重度使用一年可累积数十万行，
-   * 库文件与备份轮转体积随之无限膨胀。窗口与 getUsageSummary 对齐，
-   * 删除不改变统计语义。turns 表不在此列——它与回放/Transcript 结构绑定。
-   */
-  pruneExpiredUsage(): number;
-
-  // ── 崩溃恢复（回合状态机） ──────────────────────────────
-
-  /** 标记会话回合开始（崩溃恢复状态机） */
-  markRunning(id: string): Promise<void>;
-  /** 标记会话回合结束（正常结束/错误/中断都归位 idle） */
-  markIdle(id: string): Promise<void>;
-  /** 启动恢复：把所有 running 残留置为 interrupted，返回影响数 */
-  markAllInterrupted(): Promise<number>;
-
-  /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
-  exportAll(): Promise<SessionExportPayload>;
-
-  // ── token 用量统计（设置页展示） ──────────────────────────
-
-  /** 记录一次 LLM 调用用量（agent/chat 回合结束时写入一行） */
-  recordUsage(usage: {
-    readonly sessionId: string;
-    readonly modelId: string;
-    readonly inputTokens: number;
-    readonly outputTokens: number;
-    readonly totalTokens: number;
-    readonly cacheReadTokens: number | undefined;
-    readonly reasoningTokens: number | undefined;
-  }): Promise<void>;
-  /** 用量统计汇总（总量 / 按模型 / 按日） */
-  getUsageSummary(): Promise<UsageSummaryRes>;
-
-  // ── Transcript（回合记录，对齐 qwen chatRecordingService） ──────
-
-  /** 记录一个回合（agent:run 结束后写入一行） */
-  recordTurn(turn: {
-    readonly turnId: string;
-    readonly sessionId: string;
-    readonly seq: number;
-    readonly modelId: string;
-    readonly status: 'completed' | 'aborted' | 'max-steps' | 'error';
-    readonly inputTokens: number | undefined;
-    readonly outputTokens: number | undefined;
-    readonly totalTokens: number | undefined;
-    readonly durationMs: number | undefined;
-  }): Promise<void>;
-  /** 查询会话的回合列表（按 seq 升序，Transcript 查询） */
-  getTurns(sessionId: string): Promise<SessionGetTurnsRes>;
-  /** 查询最近回合（跨会话，按 createdAt 倒序，设置页展示） */
-  getRecentTurns(req: { readonly limit: number }): Promise<SessionRecentTurnsRes>;
-
-  /** 优雅关闭（无外部资源，db 由 closeDb 在 ServiceContainer.dispose 中关闭） */
-  dispose(): Promise<void>;
-}
-
-/**
- * 默认空会话标题
- *
- * 当传入 messages 中无 user 角色消息时使用。
- */
-const DEFAULT_SESSION_TITLE = '新会话';
-
-/** 默认会话标题（AgentService 标题生成判断用，导出供跨模块复用） */
-export { DEFAULT_SESSION_TITLE };
-
-/**
- * 会话标题最大长度（与 SessionRenameReqSchema 一致）
- */
-const TITLE_MAX_LENGTH = 100;
-
-/**
- * 标题预览长度（从首条 user 消息截取）
- */
-const TITLE_PREVIEW_LENGTH = 50;
-
-/**
- * lastMessage 预览长度（从最后一条 user 消息截取）
- */
-const LAST_MESSAGE_PREVIEW_LENGTH = 100;
+// 契约层 re-export：外部 import 路径保持 './session-service' 不变（26 处引用零改动）
+export {
+  DEFAULT_SESSION_TITLE,
+  type ISessionService,
+  type SessionAppendMessageOptions,
+  type SessionCreateOptions,
+  type SessionExportItem,
+  type SessionExportPayload,
+} from './session-types';
 
 /**
  * SessionService 默认实现
@@ -261,12 +95,13 @@ const LAST_MESSAGE_PREVIEW_LENGTH = 100;
  * - db.delete(...).where(...).run()
  * - db.transaction(() => { ... }) 事务包裹复合操作
  */
-export class SessionService implements ISessionService {
+export class SessionService {
   /**
    * 分页列出所有会话
    *
    * 返回按 updatedAt 倒序的会话列表 + 总数（用于分页计算）。
    * 不包含完整消息历史，仅元数据（SessionMeta）。
+   * 置顶优先，同置顶内按 updatedAt 倒序——对齐参考项目 pinned-header 分组。
    *
    * @param limit 单页数量（已由 zod schema 校验，1-100）
    * @param offset 偏移量（已由 zod schema 校验，>=0）
@@ -274,7 +109,7 @@ export class SessionService implements ISessionService {
   async list(limit: number, offset: number): Promise<SessionListRes> {
     const db = getDb();
 
-    // 1. 查询当前页会话（置顶优先，同置顶内按 updatedAt 倒序——对齐参考项目 pinned-header 分组）
+    // 1. 查询当前页会话
     const rows = db
       .select()
       .from(sessions)
@@ -295,12 +130,6 @@ export class SessionService implements ISessionService {
 
   /**
    * 获取指定会话的完整消息历史
-   *
-   * 流程：
-   * 1. 查询 sessions 行（不存在则抛 SESSION_NOT_FOUND）
-   * 2. 查询 messages 行（按 seq 升序）
-   * 3. 反序列化 content JSON → ChatMessage
-   * 4. 组装 SessionGetRes
    *
    * @param id 会话 id（已由 zod schema 校验非空）
    * @throws AppError(SESSION_NOT_FOUND) 会话不存在
@@ -323,9 +152,7 @@ export class SessionService implements ISessionService {
       .orderBy(messages.seq)
       .all();
 
-    // 3. 反序列化 content JSON → ChatMessage
-    //    content 存储完整 ModelMessage 的 JSON 字符串，由 create/appendMessage 序列化
-    //    反序列化为 unknown[]（对齐 SessionGetRes.messages 类型，避免泄漏 ChatMessage 类型到 shared）
+    // 3. 反序列化 content JSON（content 存储完整 ModelMessage 的 JSON 字符串）
     const messageList: unknown[] = messageRows.map((row) => {
       try {
         return JSON.parse(row.content) as unknown;
@@ -350,12 +177,9 @@ export class SessionService implements ISessionService {
    *
    * 利用外键 ON DELETE CASCADE：删除 sessions 行时自动级联删除 messages 表相关行。
    * 幂等：删除不存在的 sessionId 不报错，返回 ok=true。
-   *
-   * @param id 会话 id（已由 zod schema 校验非空）
    */
   async delete(id: string): Promise<SessionDeleteRes> {
     const db = getDb();
-    // 外键级联：sessions 行删除时，messages 表相关行自动删除
     db.delete(sessions).where(eq(sessions.id, id)).run();
     // 级联删除只把页放进 freelist，文件不会自己缩小
     reclaimFreePages();
@@ -363,16 +187,13 @@ export class SessionService implements ISessionService {
   }
 
   /**
-   * 重命名会话标题
+   * 重命名会话标题（同时更新 updatedAt）
    *
-   * @param id 会话 id（已由 zod schema 校验非空）
-   * @param title 新标题（已由 zod schema 校验 1-100 字符）
    * @throws AppError(SESSION_NOT_FOUND) 会话不存在
    */
   async rename(id: string, title: string): Promise<SessionRenameRes> {
     const db = getDb();
 
-    // 执行重命名（同时更新 updatedAt）
     const result = db
       .update(sessions)
       .set({ title, updatedAt: Date.now() })
@@ -389,6 +210,8 @@ export class SessionService implements ISessionService {
 
   /**
    * 置顶/取消置顶会话（对齐参考项目 pinned-header 分组）
+   *
+   * 不存在的会话：返回 ok: false（幂等，不抛错）
    */
   async pin(id: string, pinned: boolean): Promise<SessionPinRes> {
     const db = getDb();
@@ -397,7 +220,6 @@ export class SessionService implements ISessionService {
       .set({ pinned: pinned ? 1 : 0, updatedAt: Date.now() })
       .where(eq(sessions.id, id))
       .run();
-    // 不存在的会话：返回 ok: false（幂等，不抛错）
     return { ok: result.changes > 0 };
   }
 
@@ -410,10 +232,6 @@ export class SessionService implements ISessionService {
    * 3. 计算 lastMessage（最后一条 user 消息前 100 字符，无则 null）
    * 4. 事务：插入 sessions 行 + 批量插入 messages 行
    * 5. 返回 sessionId
-   *
-   * @param options.title 可选标题
-   * @param options.messages 可选初始消息历史
-   * @returns 新建会话的 sessionId
    */
   async create(options: SessionCreateOptions): Promise<string> {
     const db = getDb();
@@ -422,7 +240,7 @@ export class SessionService implements ISessionService {
     const initialMessages = options.messages ?? [];
 
     // 计算标题与 lastMessage 预览（事务外，避免持有 DB 锁）
-    const title = resolveTitle(options.title, initialMessages);
+    const title = resolveTitle(options.title, initialMessages, DEFAULT_SESSION_TITLE);
     const lastMessagePreview = resolveLastMessagePreview(initialMessages);
 
     // 预序列化 messages（M2 修复：在事务外完成 JSON.stringify）
@@ -468,16 +286,13 @@ export class SessionService implements ISessionService {
   /**
    * 向指定会话追加消息（内部 API）
    *
-   * 流程：
-   * 1. 校验 sessionId 存在（不存在抛 SESSION_NOT_FOUND）
-   * 2. 查询当前 messageCount（作为起始 seq）
-   * 3. 事务：批量插入 messages 行 + 更新 sessions.updatedAt/lastMessage/messageCount
-   * 4. 返回追加后的消息总数
+   * 流程：校验会话存在 → 事务（批量插入 messages 行 + 更新 sessions.updatedAt/messageCount/lastMessage）
    *
    * 设计：
    * - 使用事务保证原子性（messages 与 sessions 同步更新）
    * - 不校验 messages 非空（空数组为 no-op，但仍更新 updatedAt）
    * - lastMessage 取追加的最后一条 user 消息预览（若追加消息中无 user，保留原 lastMessage）
+   * - M2 修复：serializeMessage 在事务外完成，避免 JSON.stringify 延长 SQLite 写锁
    *
    * @throws AppError(SESSION_NOT_FOUND) 会话不存在
    * @throws AppError(INTERNAL_ERROR) 消息 JSON 序列化失败
@@ -499,7 +314,6 @@ export class SessionService implements ISessionService {
     }
 
     // 3. 预计算（事务外）：startSeq / now / newLastMessage / messageInserts
-    //    M2 修复：serializeMessage 在事务外完成，避免 JSON.stringify 延长 SQLite 写锁
     const startSeq = sessionRow.messageCount;
     const now = Date.now();
     const newLastMessage = resolveLastMessagePreview(newMessages);
@@ -522,7 +336,6 @@ export class SessionService implements ISessionService {
       tx.insert(messages).values(messageInserts).run();
 
       // 更新 sessions：updatedAt + messageCount（+ lastMessage 若有新 user 消息）
-      // 条件展开避免显式传 undefined，符合 exactOptionalPropertyTypes
       tx.update(sessions)
         .set({
           updatedAt: now,
@@ -645,6 +458,7 @@ export class SessionService implements ISessionService {
     return result.changes;
   }
 
+  /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
   async exportAll(): Promise<SessionExportPayload> {
     const db = getDb();
     const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
@@ -701,6 +515,8 @@ export class SessionService implements ISessionService {
     };
   }
 
+  // ── token 用量统计 / Transcript（薄委托 usage-turn-store） ──────────
+
   /** @inheritDoc */
   pruneExpiredUsage(): number {
     return storePruneExpiredUsage();
@@ -747,130 +563,6 @@ export class SessionService implements ISessionService {
   /** @inheritDoc */
   async getRecentTurns(req: { readonly limit: number }): Promise<SessionRecentTurnsRes> {
     return storeGetRecentTurns(req);
-  }
-}
-
-// ─── 辅助函数（模块私有，不导出） ──────────────────────────────
-
-/**
- * 将 SessionRow 转换为 SessionMeta（IPC 响应类型）
- *
- * 字段对齐：
- * - id / title / createdAt / updatedAt / messageCount 直接透传
- * - lastMessage 是 nullable text，转为 string | undefined（对齐 zod schema 推断类型）
- */
-function rowToMeta(row: typeof sessions.$inferSelect): SessionMeta {
-  return {
-    id: row.id,
-    title: row.title,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    lastMessage: row.lastMessage ?? undefined,
-    messageCount: row.messageCount,
-    workingDir: row.workingDir,
-    lastRunStatus: row.lastRunStatus as SessionMeta['lastRunStatus'],
-    pinned: row.pinned === 1,
-  };
-}
-
-/**
- * 解析会话标题
- *
- * 优先级：
- * 1. 调用方显式传入的 title（非空时直接使用，超长截断到 100 字符）
- * 2. 首条 user 消息内容前 50 字符
- * 3. '新会话'（默认值）
- */
-function resolveTitle(title: string | undefined, messageList: readonly ChatMessage[]): string {
-  // 1. 调用方显式传入
-  if (title !== undefined && title.length > 0) {
-    return title.length > TITLE_MAX_LENGTH ? title.slice(0, TITLE_MAX_LENGTH) : title;
-  }
-
-  // 2. 首条 user 消息预览
-  const firstUserContent = findFirstUserText(messageList);
-  if (firstUserContent !== null) {
-    const preview =
-      firstUserContent.length > TITLE_PREVIEW_LENGTH
-        ? firstUserContent.slice(0, TITLE_PREVIEW_LENGTH)
-        : firstUserContent;
-    return preview;
-  }
-
-  // 3. 默认值
-  return DEFAULT_SESSION_TITLE;
-}
-
-/**
- * 解析 lastMessage 预览
- *
- * 取消息历史中最后一条 user 消息内容前 100 字符。
- * 若消息历史中无 user 消息，返回 null（表示 lastMessage 字段为空）。
- */
-function resolveLastMessagePreview(messageList: readonly ChatMessage[]): string | null {
-  const lastUserContent = findLastUserText(messageList);
-  if (lastUserContent === null) {
-    return null;
-  }
-  return lastUserContent.length > LAST_MESSAGE_PREVIEW_LENGTH
-    ? lastUserContent.slice(0, LAST_MESSAGE_PREVIEW_LENGTH)
-    : lastUserContent;
-}
-
-/**
- * 从消息历史中提取首条 user 角色消息的文本内容
- *
- * ChatMessage 是 AI SDK 的 ModelMessage 联合类型，content 可为：
- * - string：简单文本
- * - 数组：多模态（如 [{type: 'text', text}, {type: 'image', image}]）
- *
- * 仅提取 string 类型 content，数组类型跳过（Code Agent 场景下 user 消息通常为纯文本）。
- *
- * @returns 首条 user 消息文本，无则 null
- */
-function findFirstUserText(messageList: readonly ChatMessage[]): string | null {
-  for (const msg of messageList) {
-    if (msg.role === 'user' && typeof msg.content === 'string') {
-      return msg.content;
-    }
-  }
-  return null;
-}
-
-/**
- * 从消息历史中提取最后一条 user 角色消息的文本内容
- *
- * 与 findFirstUserText 对应，但反向遍历取最后一条。
- * 用于 lastMessage 预览（展示用户最近一次提问）。
- */
-function findLastUserText(messageList: readonly ChatMessage[]): string | null {
-  for (let i = messageList.length - 1; i >= 0; i -= 1) {
-    const msg = messageList[i];
-    if (msg !== undefined && msg.role === 'user' && typeof msg.content === 'string') {
-      return msg.content;
-    }
-  }
-  return null;
-}
-
-/** 从 ChatMessage 提取角色（与 messages.role 列的 $type<MessageRole> 对齐） */
-function extractRole(msg: ChatMessage): MessageRole {
-  return msg.role as MessageRole;
-}
-
-/**
- * 序列化 ChatMessage 为 JSON 字符串（存入 messages.content 列）
- *
- * 完整序列化 ModelMessage（含 content / tool-call / tool-result 等字段），
- * 反序列化时通过 JSON.parse 还原。
- *
- * @throws AppError(INTERNAL_ERROR) 序列化失败（理论不会，除非循环引用）
- */
-function serializeMessage(msg: ChatMessage): string {
-  try {
-    return JSON.stringify(msg);
-  } catch (error) {
-    throw new AppError(ErrorCode.INTERNAL_ERROR, '消息 JSON 序列化失败', error, { role: msg.role });
   }
 }
 
