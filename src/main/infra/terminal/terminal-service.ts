@@ -131,9 +131,17 @@ export class TerminalService implements ITerminalService {
    * 终端输出缓冲：terminalId → 累积输出字符串
    *
    * 独立于 terminals Map 维护，PTY 退出后仍保留缓冲供历史读取。
-   * 使用环形截断策略（MAX_BUFFER_BYTES），避免内存膨胀。
+   * 使用环形截断策略（MAX_BUFFER_BYTES），避免单缓冲内存膨胀；
+   * 已退出终端的缓冲按 FIFO 保留最近 MAX_RETAINED_EXITED_BUFFERS 个，
+   * 防长会话中逐个累积（每终端 ≤100KB）的无界增长。
    */
   private readonly outputBuffers = new Map<string, string>();
+
+  /** 已退出终端的缓冲保留队列（FIFO，超上限淘汰最旧） */
+  private readonly exitedBufferOrder: string[] = [];
+
+  /** 已退出终端保留的输出缓冲数量上限 */
+  private static readonly MAX_RETAINED_EXITED_BUFFERS = 20;
 
   /**
    * 创建终端会话
@@ -212,6 +220,10 @@ export class TerminalService implements ITerminalService {
 
     // 绑定输出事件：推送 terminal:event:output + 追加到 outputBuffer
     pty.onData((data: string) => {
+      // dispose 后 in-flight 数据不再写回缓冲（防止已清空的 Map 被重新填充）
+      if (!this.terminals.has(terminalId)) {
+        return;
+      }
       // 追加到输出缓冲（环形截断）
       const current = this.outputBuffers.get(terminalId) ?? '';
       const combined = current + data;
@@ -250,6 +262,8 @@ export class TerminalService implements ITerminalService {
       }
       // 从 Map 移除（若 dispose 已清空则 delete 无效，不报错）
       this.terminals.delete(terminalId);
+      // 淘汰策略：已退出终端的缓冲按 FIFO 保留最近 N 个，防无界增长
+      this.retireOutputBuffer(terminalId);
       // PTY 已退出：移除 destroyed 监听，避免窗口存活期间监听器累积
       webContents.removeListener('destroyed', onDestroyed);
     });
@@ -350,6 +364,29 @@ export class TerminalService implements ITerminalService {
    */
   clearOutput(terminalId: string): void {
     this.outputBuffers.delete(terminalId);
+    const idx = this.exitedBufferOrder.indexOf(terminalId);
+    if (idx !== -1) {
+      this.exitedBufferOrder.splice(idx, 1);
+    }
+  }
+
+  /**
+   * 淘汰已退出终端的输出缓冲（FIFO 上限）
+   *
+   * 缓冲按设计保留供历史读取，但无上限会在长会话中累积。
+   * 仅保留最近 MAX_RETAINED_EXITED_BUFFERS 个，超出即删除最旧缓冲。
+   */
+  private retireOutputBuffer(terminalId: string): void {
+    if (!this.outputBuffers.has(terminalId)) {
+      return;
+    }
+    this.exitedBufferOrder.push(terminalId);
+    while (this.exitedBufferOrder.length > TerminalService.MAX_RETAINED_EXITED_BUFFERS) {
+      const oldest = this.exitedBufferOrder.shift();
+      if (oldest !== undefined && !this.terminals.has(oldest)) {
+        this.outputBuffers.delete(oldest);
+      }
+    }
   }
 
   /**
@@ -372,6 +409,7 @@ export class TerminalService implements ITerminalService {
     }
     // 清理所有输出缓冲（包括已退出终端的残留缓冲）
     this.outputBuffers.clear();
+    this.exitedBufferOrder.length = 0;
     logger.info({}, 'TerminalService 所有 PTY 已清理');
   }
 
