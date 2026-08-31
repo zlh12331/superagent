@@ -10,24 +10,25 @@
 // 4. 支持依赖注入：IPC handler 通过容器获取服务实例，而非直接 import 模块级单例
 //
 // dispose 顺序（反向依赖，先停依赖方再停被依赖方）：
-//   1.  lspManager.disposeAll()     关闭全部 language server（最外层依赖，最先收）
-//   2.  AgentService.dispose()      中断活跃 agent 对话（必须在 PermissionService 之前停止）
-//   3.  MCPService.stopAll()        停止所有 MCP server 子进程
-//   4.  GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
-//   5.  ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
-//   6.  ImService.stopAll()         停止 IM 渠道长连接
-//   7.  RemoteControl.release()     解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
-//   8.  PermissionService.dispose() reject 所有 pending 审批 Promise
-//   9.  agentAskService.dispose()   清理 pending 提问
-//  10.  FileService.dispose()       关闭所有 chokidar watcher
-//  11.  SearchService.dispose()     终止活跃的 ripgrep 子进程
-//  12.  TerminalService.dispose()   kill 所有 pty 进程
-//  13.  GitService / CodebaseService.dispose()（no-op，保持一致性）
-//  14.  SessionService（resetSessionService，不关 db，由 resetDb 单独处理）
-//  15.  MemoryHub.stop()            sidecar 异步收尾（fire-and-forget）
-//  16.  UpdateService.dispose()     更新事件收尾
-//  17.  resetAIProvider()           清理 AI Provider 缓存
-//  18.  closeDb()                   关闭 SQLite 连接（必须最后）
+//   1.  cronService.stop()          停止定时调度（fire 会触发 agent 回合，最先停）
+//   2.  GoalService.unmount()       解除回合监听（P1 新增 unmount，此前泄漏）
+//   3.  ImAgentBridge.unmount()     解除 IM 消息订阅（P1 新增 unmount）
+//   4.  ImService.stopAll()         停止 IM 渠道长连接
+//   5.  RemoteControl.release()     解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
+//   6.  AgentService.dispose()      中断活跃 agent 对话（drain 完成后再收下层）
+//   7.  MCPService.stopAll()        停止所有 MCP server 子进程
+//   8.  lspManager.disposeAll()     关闭全部 language server（drain 后收，活跃回合仍需）
+//   9.  PermissionService.dispose() reject 所有 pending 审批 Promise
+//  10.  agentAskService.dispose()   清理 pending 提问
+//  11.  FileService.dispose()       关闭所有 chokidar watcher
+//  12.  SearchService.dispose()     终止活跃的 ripgrep 子进程
+//  13.  TerminalService.dispose()   kill 所有 pty 进程
+//  14.  GitService / CodebaseService.dispose()（no-op，保持一致性）
+//  15.  SessionService（resetSessionService，不关 db，由 resetDb 单独处理）
+//  16.  MemoryHub.stop()            sidecar 异步收尾（fire-and-forget）
+//  17.  UpdateService.dispose()     更新事件收尾
+//  18.  resetAIProvider()           清理 AI Provider 缓存
+//  19.  closeDb()                   关闭 SQLite 连接（必须最后）
 //
 // P1 修复：
 // - 每步经 runStep 独立 try/catch：单服务清理失败不再跳过后续清理，
@@ -57,6 +58,7 @@ import {
   createConcurrencyGate,
   DEFAULT_MAX_CONCURRENT_TURNS,
 } from './infra/ai/agent-runtime/concurrency-gate';
+import { cronService } from './infra/ai/cron-service';
 import { GoalJudge } from './infra/ai/knowledge/goal-judge';
 import { GoalService } from './infra/ai/knowledge/goal-service';
 import type { LlmClient } from './infra/ai/llm-client';
@@ -122,19 +124,17 @@ class ServiceContainer {
   /**
    * 并发公平调度门（多会话共享执行槽位）
    *
-   * 全局唯一实例：chat + agent 回合共用同一上限，FIFO 先来先得（平均分配）。
+   * 全局唯一实例：agent 回合共用同一上限，FIFO 先来先得（平均分配）。
    * 会话并发超过上限时排队等待，避免打满供应商 API 触发 429。
    */
   private readonly concurrencyGate: ConcurrencyGate = createConcurrencyGate(
     DEFAULT_MAX_CONCURRENT_TURNS,
   );
 
-  /**
-   * 获取并发公平调度门（chat + agent 回合共用）
-   */
-  getConcurrencyGate(): ConcurrencyGate {
-    return this.concurrencyGate;
-  }
+  /** cron 触发订阅取消函数（initCronScheduler 注册，dispose 释放） */
+  private cronUnsubscribe: (() => void) | null = null;
+  /** cron 调度是否已初始化（幂等标记） */
+  private cronInitialized = false;
 
   /**
    * FileService 实例缓存
@@ -531,6 +531,55 @@ class ServiceContainer {
   }
 
   /**
+   * 初始化定时任务调度（应用启动时调用；幂等；必须在 initDb 之后）
+   *
+   * 接线 cron-service 的三条生产链路（此前建成未接线，任务「能建不会跑」）：
+   * - 触发动作：fire → 取会话 workingDir → 落触发 prompt 为用户消息 →
+   *   startAgent 无头执行（无 webContents，推送跳过）
+   * - 启动恢复：start() 从 sqlite 恢复全部启用任务
+   * - 退出清理：dispose() 中 cronService.stop()（先于 AgentService 收尾）
+   */
+  initCronScheduler(): void {
+    if (this.cronInitialized) {
+      return;
+    }
+    this.cronInitialized = true;
+    this.cronUnsubscribe = cronService.onFire((task) => this.runCronTurn(task));
+    cronService.start();
+  }
+
+  /**
+   * cron 触发 → 无头 agent 回合（会话已删除时仅告警，由用户手动清理任务）
+   */
+  private async runCronTurn(task: {
+    readonly id: string;
+    readonly sessionId: string;
+    readonly description: string;
+  }): Promise<void> {
+    try {
+      const session = await this.getSessionService().get(task.sessionId);
+      const { workingDir } = session.session;
+      const prompt = `【定时任务触发】${task.description}`;
+      // 先落触发 prompt 为用户消息（与桌面端渲染层先 append 再 run 的时序一致），
+      // 保证 transcript 完整
+      await this.getSessionService().appendMessage({
+        sessionId: task.sessionId,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      await this.getAgentService().startAgent({
+        messages: [{ role: 'user', content: prompt }],
+        sessionId: task.sessionId,
+        workingDir,
+        systemPrompt: undefined,
+        maxSteps: 20,
+      });
+      logger.info({ taskId: task.id, sessionId: task.sessionId }, '定时任务回合已执行');
+    } catch (err: unknown) {
+      logger.error({ error: err, taskId: task.id }, '定时任务回合执行失败');
+    }
+  }
+
+  /**
    * 释放 IM 渠道（应用退出）
    *
    * P1 修复：仅收尾已存在的实例——此前经 getImService() 懒初始化，IM 从未启用时
@@ -812,9 +861,37 @@ class ServiceContainer {
       }
     };
 
-    await runStep('lspManager.disposeAll', async () => {
-      await this.lspManager?.disposeAll();
-      this.lspManager = null;
+    // 1.8 停止定时任务调度（fire 会触发 agent 回合，必须最先停——
+    //     先于桥接卸载与 AgentService drain，防半拆解容器再起新回合）
+    await runStep('cronService.stop', () => {
+      this.cronUnsubscribe?.();
+      this.cronUnsubscribe = null;
+      this.cronInitialized = false;
+      cronService.stop();
+    });
+
+    // 1.9 先停 agent 回合的依赖方（桥接/渠道/远程控制）：drain 窗口内到达的
+    //     IM/远程命令不得再发起新回合（S14 修复：此前卸载晚于 agent drain）
+    await runStep('goalService.unmount', async () => {
+      this.goalService?.unmount();
+      this.goalService = null;
+    });
+    await runStep('imBridge.unmount', async () => {
+      this.imBridge?.unmount();
+      this.imBridge = null;
+    });
+
+    // 1.10 停止 IM 渠道长连接（QQ/微信/钉钉/Telegram/飞书/企微 webhook 收尾）
+    await runStep('imService.stopAll', async () => {
+      if (this.imService !== null) {
+        await this.imService.stopAll();
+      }
+      this.imService = null;
+    });
+
+    // 1.11 收尾远程控制：解除命令桥接订阅 + 停止 HTTP 监听与 UDP 发现广播
+    await runStep('remoteControl.release', async () => {
+      await this.releaseRemoteControl();
     });
 
     // 优雅关闭 AgentService（P4：中断 + 等待活跃 agent stream 真正完成）
@@ -835,27 +912,11 @@ class ServiceContainer {
       this.mcpService = null;
     });
 
-    // 2.6 解除 GoalService / ImAgentBridge 挂载（P1 修复：此前无 unmount，监听泄漏）
-    await runStep('goalService.unmount', async () => {
-      this.goalService?.unmount();
-      this.goalService = null;
-    });
-    await runStep('imBridge.unmount', async () => {
-      this.imBridge?.unmount();
-      this.imBridge = null;
-    });
-
-    // 2.7 停止 IM 渠道长连接（QQ/微信/钉钉/Telegram/飞书/企微 webhook 收尾）
-    await runStep('imService.stopAll', async () => {
-      if (this.imService !== null) {
-        await this.imService.stopAll();
-      }
-      this.imService = null;
-    });
-
-    // 2.8 收尾远程控制：解除命令桥接订阅 + 停止 HTTP 监听与 UDP 发现广播
-    await runStep('remoteControl.release', async () => {
-      await this.releaseRemoteControl();
+    // 2.6 关闭全部 language server（S14 修复：移到 agent drain 之后——
+    //     drain 窗口内活跃回合的 LSP 工具调用仍需可用）
+    await runStep('lspManager.disposeAll', async () => {
+      await this.lspManager?.disposeAll();
+      this.lspManager = null;
     });
 
     // 3. 清理 PermissionService（reject 所有 pending 审批 Promise，避免内存泄漏）
@@ -993,6 +1054,11 @@ class ServiceContainer {
     this.toolRegistry = null;
     // P1 修复：补齐此前遗漏的服务——MCP 子进程停止、挂载解除、IM 渠道停止
     // reset 为同步 API：stopAll 为异步收尾，fire-and-forget 避免子进程/长连接在测试中泄漏
+    // 定时任务调度停止（防测试间 cron 实例泄漏）
+    this.cronUnsubscribe?.();
+    this.cronUnsubscribe = null;
+    this.cronInitialized = false;
+    cronService.stop();
     void this.mcpService?.stopAll();
     this.mcpService = null;
     this.goalService?.unmount();

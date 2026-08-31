@@ -28,6 +28,7 @@ import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
+import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
 import { initTelemetry, shutdownTelemetry } from './infra/telemetry/otel';
 import { createAgentHandlers } from './ipc/agent.handler';
@@ -384,6 +385,10 @@ app
     imChannelsInit = serviceContainer.initImChannels();
     // 子代理管理器初始化（run_subagent 工具依赖）
     serviceContainer.initSubagents();
+    // 定时任务调度接线（C2 修复：cron-service 建成未接线——任务能建不会跑）；
+    // 必须在 initDb 之后（start 从 sqlite 恢复启用任务），fire 触发的回合经
+    // initCronScheduler 注册的 handler 无头执行
+    serviceContainer.initCronScheduler();
     // 注册全部 IPC handler（定义表驱动，registerIpcHandlers 统一执行）
     // - handler 对象形状受 InferHandlers 约束：定义表新增方法而 handler 缺失 → 编译期报错
     // - channel / schema / traceId / sender 校验 / Sentry 由 wrap 统一处理
@@ -555,6 +560,16 @@ app
       },
     });
 
+    // 事件循环延迟监控（W5 接线：遥测子系统建成未接线的模块）
+    // 阻塞告警走 Sentry + logger，与内存监控同一通道；应用退出时 stop
+    lagMonitor = new EventLoopLagMonitor({
+      onLag: (sample) => {
+        Sentry.captureMessage(`主进程事件循环阻塞：${sample.lagMs.toFixed(0)}ms`, 'warning');
+        logger.warn({ lagMs: sample.lagMs, intervalMs: sample.intervalMs }, '主进程事件循环阻塞');
+      },
+    });
+    lagMonitor.start();
+
     createWindow();
 
     // macOS: 点击 dock 图标时若无窗口则重建
@@ -593,6 +608,8 @@ app.on('window-all-closed', () => {
 let isQuitting = false;
 // IM 渠道初始化 Promise（whenReady 内赋值；before-quit 等待其落定，见下）
 let imChannelsInit: Promise<void> | null = null;
+// 事件循环延迟监控器（whenReady 内赋值；before-quit 停止）
+let lagMonitor: EventLoopLagMonitor | null = null;
 app.on('before-quit', async (event) => {
   if (isQuitting) {
     return;
@@ -601,6 +618,9 @@ app.on('before-quit', async (event) => {
   event.preventDefault();
   isQuitting = true;
   try {
+    // 事件循环延迟监控先停（避免退出路径上仍产生告警样本）
+    lagMonitor?.stop();
+    lagMonitor = null;
     // IM 渠道停止（长轮询等后台协程先停，避免退出时残留请求）
     // 先等启动期 restore() 落定（3s 超时兜底），防止与 stopAll 并发
     if (imChannelsInit !== null) {

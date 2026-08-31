@@ -57,17 +57,24 @@ export class CronService {
     const db = getDb();
     const now = Date.now();
     const nextFireAt = job.nextRun()?.getTime() ?? null;
-    db.insert(cronTasks)
-      .values({
-        id,
-        sessionId,
-        expression,
-        description,
-        nextFireAt,
-        enabled: 1,
-        createdAt: now,
-      })
-      .run();
+    try {
+      db.insert(cronTasks)
+        .values({
+          id,
+          sessionId,
+          expression,
+          description,
+          nextFireAt,
+          enabled: 1,
+          createdAt: now,
+        })
+        .run();
+    } catch (err: unknown) {
+      // 回滚调度实例：insert 失败不留幽灵 job（否则 delete 对无 DB 行
+      // early-return，运行中实例永远无法清除，周期空转）
+      this.stopJob(id);
+      throw err;
+    }
     logger.info({ id, expression, nextFireAt }, '定时任务已创建');
     return id;
   }
@@ -76,12 +83,13 @@ export class CronService {
    * 删除定时任务（幂等）：停止调度实例 + 删除记录
    */
   delete(taskId: string): boolean {
+    // 先停调度实例再查 DB：即使 DB 行缺失（历史幽灵 job）也能清除运行中实例
+    this.stopJob(taskId);
     const db = getDb();
     const existing = db.select().from(cronTasks).where(eq(cronTasks.id, taskId)).get();
     if (existing === undefined) {
       return false;
     }
-    this.stopJob(taskId);
     db.delete(cronTasks).where(eq(cronTasks.id, taskId)).run();
     return true;
   }
