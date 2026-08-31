@@ -77,6 +77,8 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
       ELECTRON_RENDERER_URL: 'http://localhost:5173',
       // 独立 userData：避免与 dev 实例（.electron-user-data）冲突
       CODE_AGENT_USER_DATA: E2E_USER_DATA,
+      // S16：本地 E2E 会话错误不报 Sentry（...process.env 会透传本地 .env 的 DSN）
+      SENTRY_DSN: '',
       // 独立调试端口：dev 实例（electron-vite dev 自带窗口）已占 9222
       CODE_AGENT_DEBUG_PORT: DEBUG_PORT,
     },
