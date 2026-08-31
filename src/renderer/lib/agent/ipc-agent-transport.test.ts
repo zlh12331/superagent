@@ -21,7 +21,7 @@ const ipc = vi.hoisted(() => ({
   runArgs: null as Record<string, unknown> | null,
 }));
 
-function stubAgentApi(runResponse: unknown = { data: { ok: true } }): void {
+function stubAgentApi(runResponse: unknown = { data: { sessionId: 's1' } }): void {
   ipc.part = null;
   ipc.end = null;
   ipc.error = null;
@@ -277,6 +277,33 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     expect(ipc.part).toBeNull();
     expect(ipc.end).toBeNull();
     expect(ipc.error).toBeNull();
+  });
+
+  it('run 响应 sessionId 与 chatId 不一致 → IPC_CONTRACT 错误 + 退订（契约守卫）', async () => {
+    stubAgentApi({ data: { sessionId: 'other-session' } });
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w' });
+    const stream = await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+
+    await expect(drain(stream)).rejects.toThrow('[IPC_CONTRACT]');
+    expect(ipc.part).toBeNull();
+    expect(ipc.end).toBeNull();
+    expect(ipc.error).toBeNull();
+  });
+
+  it('run 响应 sessionId 回显一致 → 流正常接收推送', async () => {
+    const stream = await openStream();
+    pushPart({ type: 'text-delta', id: 't1', delta: 'ok' });
+    ipc.end?.({ sessionId: 's1' });
+    const chunks = await drain(stream);
+    expect(chunks).toEqual([{ type: 'text-delta', id: 't1', delta: 'ok' }]);
   });
 
   it('reconnectToStream 恒返回 null（主进程不持久化流状态）', async () => {

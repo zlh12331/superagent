@@ -245,10 +245,26 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           ...(temperature !== undefined ? { temperature } : {}),
         });
 
-        // 处理响应：失败则 error stream（成功无需记录 sessionId——过滤已按 chatId 完成）
+        // 处理响应：失败则 error stream；成功则校验 sessionId 回显（契约显式化）
         if ('error' in response && response.error !== undefined) {
           cleanup?.();
           controller.error(new Error(`[${response.error.code}] ${response.error.message}`));
+          return;
+        }
+        // 跨进程契约守卫：AgentRunRes.sessionId 必须与发起时的 chatId 一致
+        // （主进程以入参 sessionId 回显；后续所有流式事件按 chatId 过滤）。
+        // 不一致 = 契约被破坏（事件永远无法匹配，流悬挂到超时），fail-loud 而非静默。
+        if (
+          'data' in response &&
+          response.data !== undefined &&
+          response.data.sessionId !== options.chatId
+        ) {
+          cleanup?.();
+          controller.error(
+            new Error(
+              `[IPC_CONTRACT] agent.run sessionId 回显不一致：${response.data.sessionId}（期望 ${options.chatId}）`,
+            ),
+          );
         }
       },
       // cancel：流被 useChat 主动取消（如组件卸载）时触发
