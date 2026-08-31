@@ -86,6 +86,8 @@ export function ImChannelsSection(): ReactElement {
     setBusy(kind);
     try {
       await startMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
+    } catch {
+      // 启动失败：onError 已 toast，这里补 catch 防未处理的 rejection 冒泡
     } finally {
       setBusy(null);
     }
@@ -95,6 +97,8 @@ export function ImChannelsSection(): ReactElement {
     setBusy(kind);
     try {
       await stopMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
+    } catch {
+      // 停止失败：onError 已 toast，这里补 catch 防未处理的 rejection 冒泡
     } finally {
       setBusy(null);
     }

@@ -187,6 +187,10 @@ export function ModelConfigDialog({
         return false;
       }
       return true;
+    } catch (err) {
+      // 连通性测试抛错（网络/权限）：视为测试失败，阻止提交
+      setErrors((prev) => ({ ...prev, test: err instanceof Error ? err.message : String(err) }));
+      return false;
     } finally {
       setTesting(false);
     }

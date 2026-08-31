@@ -100,18 +100,8 @@ export function UsageSection(): ReactElement {
   );
 
   /** 热力图色档：0 → 空档；>0 按最大值分位 4 档（与图例 HEAT_THEME 对应） */
-  const heatLevel = (count: number | undefined): number => {
-    if (count === undefined || count <= 0 || heatMax <= 0) return 0;
-    const ratio = count / heatMax;
-    if (ratio <= 0.25) return 1;
-    if (ratio <= 0.5) return 2;
-    if (ratio <= 0.75) return 3;
-    return 4;
-  };
-
-  // 热力图：react-activity-calendar 数据（date yyyy-MM-dd + count + level 0-4）
-  // 首尾补空条目控制显示范围（v3 语义：无条目日期视为无活动）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 日期锚点固定，仅依赖 summary
+  // 内联进 heatValue（读 heatMax）；不再独立成函数——函数引用每次 render 重建，
+  // 若作为 useMemo 依赖会导致 heatValue 每 render 重算（React Compiler 也会因此 PreserveManualMemo 告警）
   const heatValue = useMemo(() => {
     const days = summary?.byDay ?? [];
     // 空数据兑底：近 90 天 0 值（ActivityCalendar 不允许 data 为空，否则抛错）
@@ -120,9 +110,17 @@ export function UsageSection(): ReactElement {
     }
     const first = days[days.length - 1];
     const last = days[0];
+    const levelOf = (count: number | undefined): number => {
+      if (count === undefined || count <= 0 || heatMax <= 0) return 0;
+      const ratio = count / heatMax;
+      if (ratio <= 0.25) return 1;
+      if (ratio <= 0.5) return 2;
+      if (ratio <= 0.75) return 3;
+      return 4;
+    };
     const items = [...days]
       .reverse()
-      .map((d) => ({ date: d.date, count: d.totalTokens, level: heatLevel(d.totalTokens) }));
+      .map((d) => ({ date: d.date, count: d.totalTokens, level: levelOf(d.totalTokens) }));
     // 首尾空条目（范围锚点）：仅当数据未覆盖边界时补
     if (first !== undefined && items[0]?.date !== heatStartIso) {
       items.unshift({ date: heatStartIso, count: 0, level: 0 });
@@ -131,7 +129,7 @@ export function UsageSection(): ReactElement {
       items.push({ date: heatEndIso, count: 0, level: 0 });
     }
     return items;
-  }, [summary]);
+  }, [summary, heatStartIso, heatEndIso, heatMax]);
 
   // 近 30 天合计（"本月"近似：byDay 为近 90 天倒序，取前 30 项）
   const monthTokens = useMemo(
