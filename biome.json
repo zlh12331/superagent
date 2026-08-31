@@ -10,7 +10,7 @@
       "**",
       "!**/resources/pg",
       "!**/release",
-      "!**/coverage",
+      "!**/coverage*",
       "!**/node_modules",
       "!**/out",
       "!**/dist",

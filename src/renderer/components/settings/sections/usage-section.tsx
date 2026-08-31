@@ -11,7 +11,7 @@
 // 数据源：session:getUsageSummary（byDay 近 30 天倒序）
 // ──────────────────────────────────────────────
 
-import type { UsageSummaryRes } from '@code-agent/shared/renderer';
+import type { UsageDaySummary, UsageSummaryRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3 } from 'lucide-react';
 import { type ReactElement, useMemo } from 'react';
@@ -26,7 +26,7 @@ import { unwrap } from '@/lib/ipc';
 import { TurnsSection } from './turns-section';
 
 /** 生成近 N 天日期列表（倒序，today 在前；与 byDay 数据格式一致） */
-function recentDays(count: number): string[] {
+export function recentDays(count: number): string[] {
   const days: string[] = [];
   const now = new Date();
   for (let i = 0; i < count; i += 1) {
@@ -41,11 +41,62 @@ function recentDays(count: number): string[] {
 }
 
 /** Date → yyyy-MM-dd（与 byDay 数据格式一致） */
-function toIsoDate(d: Date): string {
+export function toIsoDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/** 热力图条目（react-activity-calendar data 项） */
+export interface HeatValueItem {
+  readonly date: string;
+  readonly count: number;
+  readonly level: number;
+}
+
+/** 热力图色档：0 → 空档；>0 按最大值分位 4 档（与图例 HEAT_THEME 对应） */
+function heatLevel(count: number | undefined, heatMax: number): number {
+  if (count === undefined || count <= 0 || heatMax <= 0) return 0;
+  const ratio = count / heatMax;
+  if (ratio <= 0.25) return 1;
+  if (ratio <= 0.5) return 2;
+  if (ratio <= 0.75) return 3;
+  return 4;
+}
+
+/**
+ * 构建热力图数据（纯派生，无 React 依赖——便于单测）
+ *
+ * @param byDay 按日用量（近 90 天倒序）
+ * @param heatStartIso 热力图起始日期（ISO，用于首尾空条目锚点）
+ * @param heatEndIso 热力图结束日期（ISO）
+ */
+export function buildHeatValue(
+  byDay: readonly UsageDaySummary[] | undefined,
+  heatStartIso: string,
+  heatEndIso: string,
+): HeatValueItem[] {
+  const days = byDay ?? [];
+  // 空数据兑底：近 90 天 0 值（ActivityCalendar 不允许 data 为空，否则抛错）
+  if (days.length === 0) {
+    return recentDays(90).map((date) => ({ date, count: 0, level: 0 }));
+  }
+  // 当日最大值（全 0 时所有格子取最低档）
+  const heatMax = days.reduce((m, d) => Math.max(m, d.totalTokens), 0);
+  const first = days[days.length - 1];
+  const last = days[0];
+  const items: HeatValueItem[] = [...days]
+    .reverse()
+    .map((d) => ({ date: d.date, count: d.totalTokens, level: heatLevel(d.totalTokens, heatMax) }));
+  // 首尾空条目（范围锚点）：仅当数据未覆盖边界时补
+  if (first !== undefined && items[0]?.date !== heatStartIso) {
+    items.unshift({ date: heatStartIso, count: 0, level: 0 });
+  }
+  if (last !== undefined && items[items.length - 1]?.date !== heatEndIso) {
+    items.push({ date: heatEndIso, count: 0, level: 0 });
+  }
+  return items;
 }
 
 /** 热力图色档（react-activity-calendar theme：0 = 空，1-4 = accent 透明度递进，CSS 变量主题自适应） */
@@ -93,43 +144,12 @@ export function UsageSection(): ReactElement {
   const heatStartIso = useMemo(() => toIsoDate(heatStart), [heatStart]);
   const heatEndIso = useMemo(() => toIsoDate(heatEnd), [heatEnd]);
 
-  // 热力图色档分位基准（当日最大值；全 0 时所有格子取最低档）
-  const heatMax = useMemo(
-    () => (summary?.byDay ?? []).reduce((m, d) => Math.max(m, d.totalTokens), 0),
-    [summary],
+  /** 热力图数据（色档按当日最大值分位；纯派生，抽 buildHeatValue 便于测试）
+   * 不手写 heatMax/heatLevel——buildHeatValue 内部计算，编译器和 biome 依赖推导完整 */
+  const heatValue = useMemo(
+    () => buildHeatValue(summary?.byDay, heatStartIso, heatEndIso),
+    [summary, heatStartIso, heatEndIso],
   );
-
-  /** 热力图色档：0 → 空档；>0 按最大值分位 4 档（与图例 HEAT_THEME 对应） */
-  // 内联进 heatValue（读 heatMax）；不再独立成函数——函数引用每次 render 重建，
-  // 若作为 useMemo 依赖会导致 heatValue 每 render 重算（React Compiler 也会因此 PreserveManualMemo 告警）
-  const heatValue = useMemo(() => {
-    const days = summary?.byDay ?? [];
-    // 空数据兑底：近 90 天 0 值（ActivityCalendar 不允许 data 为空，否则抛错）
-    if (days.length === 0) {
-      return recentDays(90).map((date) => ({ date, count: 0, level: 0 }));
-    }
-    const first = days[days.length - 1];
-    const last = days[0];
-    const levelOf = (count: number | undefined): number => {
-      if (count === undefined || count <= 0 || heatMax <= 0) return 0;
-      const ratio = count / heatMax;
-      if (ratio <= 0.25) return 1;
-      if (ratio <= 0.5) return 2;
-      if (ratio <= 0.75) return 3;
-      return 4;
-    };
-    const items = [...days]
-      .reverse()
-      .map((d) => ({ date: d.date, count: d.totalTokens, level: levelOf(d.totalTokens) }));
-    // 首尾空条目（范围锚点）：仅当数据未覆盖边界时补
-    if (first !== undefined && items[0]?.date !== heatStartIso) {
-      items.unshift({ date: heatStartIso, count: 0, level: 0 });
-    }
-    if (last !== undefined && items[items.length - 1]?.date !== heatEndIso) {
-      items.push({ date: heatEndIso, count: 0, level: 0 });
-    }
-    return items;
-  }, [summary, heatStartIso, heatEndIso, heatMax]);
 
   // 近 30 天合计（"本月"近似：byDay 为近 90 天倒序，取前 30 项）
   const monthTokens = useMemo(
