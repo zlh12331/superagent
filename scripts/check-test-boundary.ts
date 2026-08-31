@@ -22,6 +22,7 @@ const ROOT = join(import.meta.dirname, '..');
 const IO_BOUNDARY_MOCKS = [
   'infra/storage', // DB 层（替换为内存实现是标准做法）
   'llm-client/ai-provider', // LLM provider 工厂（外部服务边界，fake model 注入点）
+  'mcp/mcp-client', // MCP SDK 客户端（外部 MCP server 子进程边界，fake client 注入点）
   'utils/logger',
   'telemetry',
 ];

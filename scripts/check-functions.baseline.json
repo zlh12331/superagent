@@ -432,7 +432,7 @@
     "params": 1
   },
   "src/renderer/dev/mock-api.ts#createMockApi": {
-    "body": 540,
+    "body": 564,
     "params": 0
   },
   "src/renderer/dev/mock-api.ts#simulateAgentStream": {
