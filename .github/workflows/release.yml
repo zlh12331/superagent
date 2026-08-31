@@ -98,22 +98,40 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # C1 修复：与 ci.yml 对齐——CI checkout 无记忆引擎上游（resources/memory-hub
+          # 不入仓），不设此变量 prepare-memory-hub 会 exit(1) 中断 && 链，三平台全部失败
+          MEMORY_HUB_OPTIONAL: '1'
+
+      - name: "Notice: update feed is placeholder"
+        run: >-
+          echo "::warning::electron-builder publish.url 仍为占位域名（example.com），
+          打包产物的自动更新检查将失败；latest*.yml 已随 GitHub Releases 发布，
+          上线前需替换 publish.url 或改用 provider: github"
 
       # ── 上传 Sentry 符号（仅 Windows 主发布端；其余平台产物不含符号需求）─
       # P5 修复：
       # - 步骤 if 改用 job 级 env（此前步骤级 env 对自身 if 不可见，恒跳过）
       # - 明确只放行 Windows leg（此前注释如此宣称但条件未限制平台）
-      # - release 名动态化（此前脚本硬编码 code-agent@1.0.0，不随 tag 演进）
       # - 上传前先创建 release（此前 CI 从未调用 release:new，上传会 404）
+      # C3 修复：release 名剥 tag 的 v 前缀（code-agent@1.0.0），与运行时
+      # app.getVersion() 及本地 sentry-release.mjs 对齐——Sentry release 是精确
+      # 字符串匹配，此前 tag 带 v 而运行时无 v，符号化永远不命中
+      - name: Compute Sentry release name
+        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
+        shell: bash
+        run: echo "SENTRY_RELEASE=code-agent@${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
       - name: Create Sentry release
         if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        run: pnpm sentry-cli releases new "code-agent@${{ github.ref_name }}"
+        run: pnpm sentry-cli releases new "$SENTRY_RELEASE"
 
       - name: Upload Sentry symbols
         if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
         run: |
-          pnpm sentry-cli sourcemaps upload --release "code-agent@${{ github.ref_name }}" --org sentry --project electron --url-prefix "app:///out/" ./out
-          pnpm sentry-cli sourcemaps upload --release "code-agent@${{ github.ref_name }}" --org sentry --project electron --url-prefix "app:///renderer/" ./out/renderer
+          pnpm sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" --org sentry --project electron --url-prefix "app:///out/" ./out
+          pnpm sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" --org sentry --project electron --url-prefix "app:///renderer/" ./out/renderer
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
