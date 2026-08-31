@@ -4,7 +4,8 @@
 // 设计：
 // - MemoryPort 是本项目对记忆引擎的抽象视图；上游 HTTP API 细节被 adapter 吸收，
 //   其余模块（工具 / IPC / agent）只依赖本文件，不接触上游任何类型
-// - 方法命名对齐上游语义：capture=L0 对话写入，recall=预取召回，searchMemories=L1 检索
+// - 方法命名对齐上游语义：capture=L0 对话写入，recall=预取召回，searchMemories=L1 检索，
+//   searchConversations=L0 会话内容检索（两者经 recall_memory 工具 mode 参数暴露）
 // ──────────────────────────────────────────────────────────────
 
 /** capture 入参（一轮对话的双向内容；L0 原样落盘） */
@@ -53,7 +54,7 @@ export interface MemorySearchResult {
   readonly total: number;
 }
 
-/** searchConversations 结果（L0 会话内容检索，供设置页列表与兜底注入） */
+/** searchConversations 结果（L0 会话内容检索，经 recall_memory 工具 mode='conversations' 暴露） */
 export interface MemoryConversationSearchResult {
   /** 引擎格式化的检索结果文本 */
   readonly content: string;

@@ -1,4 +1,4 @@
-// src/main/infra/code/code-analyzer.ts
+// src/main/infra/code-analysis/code-analyzer.ts
 // CodeAnalyzer：代码结构分析服务（web-tree-sitter）
 // ──────────────────────────────────────────────────────────────
 // 职责：

@@ -24,6 +24,7 @@ import type { AgentAskService } from '../agent/agent-ask-service';
 import { skillRegistry } from '../skills/skill-registry';
 import { createAskUserQuestionTool } from './ask-user-question.tool';
 import { createCodeReviewTool } from './code-review.tool';
+import { createCodeSymbolsTool } from './code-symbols.tool';
 import { createCodebaseTool } from './codebase.tool';
 import { createCronCreateTool } from './cron-create.tool';
 import { createCronDeleteTool } from './cron-delete.tool';
@@ -148,4 +149,6 @@ export function registerBuiltinTools(
   registry.register(createLspHoverTool(lspManager));
   // codegraph 代码库智能查询（懒索引：首次查询自动 init；只读自动放行）
   registry.register(createCodebaseTool(codebaseService));
+  // 代码符号提取工具（web-tree-sitter 语法树；只读自动放行；W5 接线）
+  registry.register(createCodeSymbolsTool());
 }

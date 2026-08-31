@@ -15,6 +15,13 @@ import type { Tool, ToolResult } from './tool';
 const RecallMemoryInputSchema = z.object({
   /** 检索查询（关键词/主题描述） */
   query: z.string().min(1).max(200),
+  /**
+   * 检索模式（W5 接线补全：此前 searchMemories/searchConversations 建成未接线）：
+   * - recall（默认）：引擎预取召回，返回格式化上下文
+   * - memories：L1 结构化记忆检索
+   * - conversations：L0 会话内容检索（跨会话历史对话）
+   */
+  mode: z.enum(['recall', 'memories', 'conversations']).optional(),
 });
 
 type RecallMemoryInput = z.infer<typeof RecallMemoryInputSchema>;
@@ -26,11 +33,28 @@ export function createRecallMemoryTool(memoryPort: MemoryPort): Tool<RecallMemor
   return {
     name: 'recall_memory',
     description:
-      '检索跨会话记忆（用户事实、偏好、历史约定）。在需要回忆用户之前说过的偏好/约定/背景信息时调用。',
+      '检索跨会话记忆（用户事实、偏好、历史约定、过往对话内容）。默认模式为引擎预取召回；mode="memories" 为 L1 结构化记忆检索；mode="conversations" 为 L0 历史会话内容检索。在需要回忆用户之前说过的偏好/约定/背景信息时调用。',
     inputSchema: RecallMemoryInputSchema,
     permission: 'auto',
     category: 'read',
     execute: async (input: RecallMemoryInput): Promise<ToolResult> => {
+      // L1 结构化记忆检索
+      if (input.mode === 'memories') {
+        const result = await memoryPort.searchMemories(input.query, 10);
+        if (result.content.trim().length === 0) {
+          return { title: '记忆检索（L1）', output: '未找到相关记忆。' };
+        }
+        return { title: `记忆检索（L1，${result.total} 条）`, output: result.content };
+      }
+      // L0 会话内容检索（跨会话历史对话）
+      if (input.mode === 'conversations') {
+        const result = await memoryPort.searchConversations(input.query, 10);
+        if (result.content.trim().length === 0) {
+          return { title: '会话检索（L0）', output: '未找到相关对话内容。' };
+        }
+        return { title: `会话检索（L0，${result.total} 条）`, output: result.content };
+      }
+      // 默认：预取召回
       const result = await memoryPort.recall({ query: input.query });
       if (!result.ok || result.context.trim().length === 0) {
         return { title: '记忆检索', output: '未找到相关记忆。' };
