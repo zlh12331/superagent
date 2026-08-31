@@ -1308,7 +1308,7 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       expect.stringContaining('接近压缩线'),
       // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
     );
-  }, 15_000);
+  }, 30_000);
 
   it('上下文 compact：压缩消息历史后继续执行', async () => {
     mocks.mockResolveModel.mockImplementation(() => ({

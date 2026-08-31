@@ -51,9 +51,7 @@ const UTF8_LIKE_ENCODINGS = new Set(['UTF-8', 'ASCII']);
  * 超大文件会进程 OOM。读取前 stat 前置检查，超过上限明确报错而非崩溃。
  */
 const MAX_READ_BYTES = 2 * 1024 * 1024;
-/** 编码检测采样上限（字节）：编码特征（BOM/多字节序列）集中于文件头部，
- * 64KB 样本远超判定所需；对整个 buffer 检测在大文件上代价高且无增益
- * （2MB 全量检测实测秒级耗时且方差大，coverage 插桩下达 24s）。 */
+/** 编码检测采样上限：编码特征集中于文件头部，64KB 远超判定所需（全量检测大文件秒级且方差大） */
 const CHARDET_SAMPLE_BYTES = 64 * 1024;
 
 /**
@@ -246,7 +244,7 @@ class FileService implements IFileService {
       }
       const buffer = await fs.readFile(path);
       // 编码检测：chardet 返回 null（ASCII/无法识别）→ 按 UTF-8 处理
-      // 只取头部样本检测（见 CHARDET_SAMPLE_BYTES 注释）
+      // 只取头部样本（见 CHARDET_SAMPLE_BYTES）：编码特征集中于文件头
       const detectBuffer =
         buffer.length > CHARDET_SAMPLE_BYTES ? buffer.subarray(0, CHARDET_SAMPLE_BYTES) : buffer;
       const detected = chardet.detect(detectBuffer);

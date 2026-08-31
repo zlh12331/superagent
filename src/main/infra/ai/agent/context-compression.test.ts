@@ -381,7 +381,8 @@ describe('compressByTokenBudget（两档预算压缩）', () => {
     expect(result).toContainEqual(user('最早的问题'));
     expect(result).toContainEqual(user('最早的追问'));
     expect(result).toHaveLength(messages.length - 2);
-  });
+    // coverage 插桩放大 gpt-tokenizer 编码 5K 字符多次遍历的耗时，放宽超时
+  }, 20_000);
 
   it('裁剪后仍超预算：继续从后往前整条丢弃', () => {
     const messages: ModelMessage[] = [system('系统提示词')];
