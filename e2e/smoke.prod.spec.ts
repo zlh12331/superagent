@@ -121,7 +121,8 @@ test.describe('生产构建冒烟测试', () => {
     expect(apiKeys).toContain('agent');
     expect(apiKeys).toContain('file');
     expect(apiKeys).toContain('git');
-    expect(apiKeys).toContain('codebase');
+    // codebase 查询走工具（codebase tool）而非独立 IPC 域，此处断言现役 models 域
+    expect(apiKeys).toContain('models');
     expect(apiKeys).toContain('tool');
     expect(apiKeys).toContain('settings');
   });
