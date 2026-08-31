@@ -319,6 +319,13 @@ export function initDb(): DrizzleDB {
       { error: error instanceof Error ? error.message : String(error), migrationsDir },
       'SQLite 迁移执行失败（迁移目录缺失或损坏）',
     );
+    // 迁移失败时关闭已打开的 SQLite 连接（测试/重试场景防句柄泄漏；
+    // 生产路径由 index.ts 启动失败 → app.exit 兜底）
+    try {
+      sqlite.close();
+    } catch {
+      // ignore
+    }
     throw error;
   }
 

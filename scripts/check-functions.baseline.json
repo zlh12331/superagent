@@ -44,11 +44,11 @@
     "params": 1
   },
   "src/main/infra/ai/tools/index.ts#registerBuiltinTools": {
-    "body": 46,
+    "body": 48,
     "params": 10
   },
   "src/main/infra/ai/tools/run-command.tool.ts#createRunCommandTool": {
-    "body": 181,
+    "body": 197,
     "params": 0
   },
   "src/main/infra/ai/tools/run-team.tool.ts#createRunTeamTool": {
@@ -96,7 +96,7 @@
     "params": 2
   },
   "src/main/infra/storage/db.ts#initDb": {
-    "body": 64,
+    "body": 71,
     "params": 0
   },
   "src/main/infra/storage/keychain.ts#readStore": {
@@ -108,7 +108,7 @@
     "params": 3
   },
   "src/main/infra/telemetry/otel.ts#initTelemetry": {
-    "body": 64,
+    "body": 65,
     "params": 0
   },
   "src/main/infra/terminal/terminal-service.ts#splitShellWords": {
