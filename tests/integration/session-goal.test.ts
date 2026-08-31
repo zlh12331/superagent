@@ -32,6 +32,9 @@ vi.mock('../../src/main/infra/storage/db', async (importOriginal) => {
     resetDb: () => {
       memoryDb = null;
     },
+    // reclaimFreePages 内部引原模块 getDb（读真实 dbInstance，未初始化即抛错）：
+    // 集成测试用内存库，回收是 no-op，避免 delete 用例崩
+    reclaimFreePages: () => {},
   };
 });
 
