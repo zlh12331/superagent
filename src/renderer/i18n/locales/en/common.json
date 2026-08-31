@@ -438,7 +438,9 @@
         "scanlines": "Scanline overlay",
         "scanlinesDesc": "CRT-style scanline visual overlay",
         "reasoningCollapsed": "Collapse reasoning blocks by default",
-        "reasoningCollapsedDesc": "Assistant reasoning blocks start collapsed (off = expanded by default)"
+        "reasoningCollapsedDesc": "Assistant reasoning blocks start collapsed (off = expanded by default)",
+        "autoCompact": "Auto-compact long sessions",
+        "autoCompactDesc": "Automatically compact context at 600+ messages when the turn is idle (off by default)"
       },
       "modelMgmt": {
         "mainTitle": "Models",

@@ -438,7 +438,9 @@
         "scanlines": "扫描线叠加",
         "scanlinesDesc": "致敬终端 CRT 的扫描线视觉叠加",
         "reasoningCollapsed": "推理块默认折叠",
-        "reasoningCollapsedDesc": "助手思考过程默认折叠展示（关闭 = 默认展开）"
+        "reasoningCollapsedDesc": "助手思考过程默认折叠展示（关闭 = 默认展开）",
+        "autoCompact": "长会话自动压缩",
+        "autoCompactDesc": "消息数达到 600 条且回合空闲时自动压缩上下文（默认关闭）"
       },
       "modelMgmt": {
         "mainTitle": "模型",

@@ -4,6 +4,7 @@
 // 诚实原则：只列真实生效的开关（消费方已接入）：
 // - scanlines：扫描线视觉叠加（AppShell 根容器 class）
 // - reasoningCollapsed：推理块默认折叠（message-item ReasoningBlock）
+// - autoCompact：长会话自动压缩（use-auto-compact，opt-in 默认关）
 // 原型其余项（realtime-audio/remote-control/collaboration/sandbox）为参考项目
 // 专有或未接入功能，不展示占位开关（避免假功能）。
 // ──────────────────────────────────────────────────────────────
@@ -39,6 +40,12 @@ export function ExperimentalSection(): ReactElement {
         description={t('settings.experimental.reasoningCollapsedDesc')}
         checked={experimental.reasoningCollapsed}
         onChange={(checked) => updateExperimental({ reasoningCollapsed: checked })}
+      />
+      <ToggleRow
+        name={t('settings.experimental.autoCompact')}
+        description={t('settings.experimental.autoCompactDesc')}
+        checked={experimental.autoCompact}
+        onChange={(checked) => updateExperimental({ autoCompact: checked })}
       />
     </div>
   );

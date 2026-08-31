@@ -120,12 +120,15 @@ export interface KeyboardShortcuts {
  * 只列真实生效的开关：
  * - scanlines：扫描线视觉叠加（致敬终端，CSS 类驱动）
  * - reasoningCollapsed：推理块默认折叠（消息渲染消费）
+ * - autoCompact：长会话自动压缩（use-auto-compact 消费，默认关闭）
  */
 export interface ExperimentalSettings {
   /** 扫描线视觉叠加（.scanlines-overlay） */
   readonly scanlines: boolean;
   /** 推理块默认折叠（false = 默认展开） */
   readonly reasoningCollapsed: boolean;
+  /** 长会话自动压缩：消息达阈值且回合空闲时自动调 session:compact（默认关闭） */
+  readonly autoCompact: boolean;
 }
 
 /**
@@ -299,6 +302,7 @@ const DEFAULT_SETTINGS: SettingsData = {
   experimental: {
     scanlines: false,
     reasoningCollapsed: true,
+    autoCompact: false,
   },
   lsp: {
     serverCommands: {},
