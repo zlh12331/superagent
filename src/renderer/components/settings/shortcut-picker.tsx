@@ -20,7 +20,7 @@ const IGNORED_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta', 'CapsLock', 'Ta
  *
  * 纯修饰键组合返回 null（还需主键才有效）。
  */
-function formatShortcut(e: React.KeyboardEvent): string | null {
+export function formatShortcut(e: React.KeyboardEvent): string | null {
   const parts: string[] = [];
   if (e.ctrlKey) parts.push('Ctrl');
   if (e.altKey) parts.push('Alt');
