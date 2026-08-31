@@ -80,8 +80,3 @@ export const useActiveSessionStore = createPersistentStore<ActiveSessionState>()
     }),
   },
 );
-
-// ── 兼容别名（便于渐进式重构，业务方可逐步迁移） ────────────────
-// 旧代码引用 useSessionsStore 的位置可暂改为 useActiveSessionStore
-// 待 P8.4-P8.6 重构完成后，此别名可删除
-export const useSessionsStore = useActiveSessionStore;

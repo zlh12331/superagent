@@ -63,21 +63,4 @@ export function AlertTitle({
   );
 }
 
-/** 警示描述（正文/操作区） */
-export function AlertDescription({
-  className,
-  ...props
-}: React.ComponentProps<'div'>): React.ReactElement {
-  return (
-    <div
-      data-slot="alert-description"
-      className={cn(
-        'text-muted-foreground col-start-2 grid justify-items-start gap-1 text-sm [&_p]:leading-relaxed',
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
 export { alertVariants };

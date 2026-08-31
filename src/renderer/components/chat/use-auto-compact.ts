@@ -19,9 +19,6 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 /** 自动压缩触发阈值（消息条数；长会话护栏，实验性默认关闭） */
 export const AUTO_COMPACT_THRESHOLD = 600;
 
-/** 会话回合空闲状态（仅此状态触发——流式中压缩会与在途回合竞争） */
-export type CompactStatus = 'ready' | 'error';
-
 export interface AutoCompactOptions {
   /** 会话 id（切换会话时重置水位线） */
   readonly chatId: string;

@@ -85,21 +85,3 @@ export function TabsTrigger({
     />
   );
 }
-
-/**
- * 标签页内容面板
- *
- * 只有当对应 value 被激活时才会渲染。
- */
-export function TabsContent({
-  className,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.Content>): React.ReactElement {
-  return (
-    <TabsPrimitive.Content
-      data-slot="tabs-content"
-      className={cn('flex-1 outline-none', className)}
-      {...props}
-    />
-  );
-}

@@ -26,13 +26,6 @@ export function Select(
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
-/** 选项分组容器（透传 Radix Group） */
-export function SelectGroup(
-  props: React.ComponentProps<typeof SelectPrimitive.Group>,
-): React.ReactElement {
-  return <SelectPrimitive.Group data-slot="select-group" {...props} />;
-}
-
 /** 当前值展示（placeholder 空态自动显示） */
 export function SelectValue(
   props: React.ComponentProps<typeof SelectPrimitive.Value>,
@@ -109,20 +102,6 @@ export function SelectContent({
 }
 
 /** 单个选项（选中态 Check 标记；键盘方向键导航） */
-export function SelectLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Label>): React.ReactElement {
-  return (
-    <SelectPrimitive.Label
-      data-slot="select-label"
-      className={cn('text-muted-foreground px-2 py-1.5 text-xs', className)}
-      {...props}
-    />
-  );
-}
-
-/** 单个选项（选中态 Check 标记；键盘方向键导航） */
 export function SelectItem({
   className,
   children,
@@ -144,20 +123,6 @@ export function SelectItem({
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
-  );
-}
-
-/** 选项分隔线 */
-export function SelectSeparator({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Separator>): React.ReactElement {
-  return (
-    <SelectPrimitive.Separator
-      data-slot="select-separator"
-      className={cn('bg-border pointer-events-none -mx-1 my-1 h-px', className)}
-      {...props}
-    />
   );
 }
 

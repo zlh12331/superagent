@@ -1027,12 +1027,3 @@ export async function recoverFromCrash(): Promise<void> {
 export async function disposeServices(): Promise<void> {
   await serviceContainer.dispose();
 }
-
-/**
- * 重置所有服务缓存（仅测试用，兼容旧 API）
- *
- * 内部委托给 serviceContainer.reset()，保留旧导出避免上层大改。
- */
-export function resetServices(): void {
-  serviceContainer.reset();
-}

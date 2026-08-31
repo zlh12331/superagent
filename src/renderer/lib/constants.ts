@@ -7,10 +7,8 @@
 // - 路由常量 ROUTES 提供 path 模板 + 工厂函数，避免字符串拼接 typo
 
 /** 顶部栏高度（px） - 与原型 --topbar-h 一致 */
-export const TOPBAR_HEIGHT = 52;
 
 /** 拖拽分隔线宽度（px） - 与原型 --resizer-w 一致 */
-export const RESIZER_WIDTH = 6;
 
 /**
  * 草稿会话 id

@@ -48,9 +48,6 @@ const CLASSIFIER_SYSTEM_PROMPT = [
   '仅返回 JSON：{"safe": boolean, "reason": "一句话理由"}',
 ].join('\n');
 
-/** 分类请求超时（对齐 qwen STAGE1_TIMEOUT_MS=10s 的收敛值，由调用方 AbortSignal 实现） */
-export const CLASSIFIER_TIMEOUT_MS = 10_000;
-
 /**
  * 命令安全分类器（依赖 LlmClient 注入，可替换为 fake）
  */

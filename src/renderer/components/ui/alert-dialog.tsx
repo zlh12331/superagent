@@ -27,13 +27,6 @@ export function AlertDialog(
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
 
-/** 触发器 */
-export function AlertDialogTrigger(
-  props: React.ComponentProps<typeof AlertDialogPrimitive.Trigger>,
-): React.ReactElement {
-  return <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />;
-}
-
 /** 传送门（渲染到 body 末尾） */
 export function AlertDialogPortal(
   props: React.ComponentProps<typeof AlertDialogPrimitive.Portal>,

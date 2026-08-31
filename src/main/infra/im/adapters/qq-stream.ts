@@ -67,11 +67,6 @@ export interface ParsedQqMessage {
   readonly timestamp: number;
 }
 
-/** 网关响应 */
-export interface QqGatewayResponse {
-  readonly url: string;
-}
-
 /**
  * 获取网关地址（官方：GET /gateway/bot，可注入测试）
  */

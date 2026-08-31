@@ -27,18 +27,6 @@ export function Dialog(
 }
 
 /**
- * 对话框触发器
- *
- * 通常包裹一个按钮，点击后打开对话框。
- * 通过 asChild 把事件合并到子元素。
- */
-export function DialogTrigger(
-  props: React.ComponentProps<typeof DialogPrimitive.Trigger>,
-): React.ReactElement {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
-}
-
-/**
  * 对话框传送门
  *
  * 把内容渲染到 body 末尾，避免被父级 overflow / transform 影响。
@@ -47,17 +35,6 @@ export function DialogPortal(
   props: React.ComponentProps<typeof DialogPrimitive.Portal>,
 ): React.ReactElement {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
-}
-
-/**
- * 对话框关闭按钮
- *
- * 可放在 Header/Footer 中作为「取消」按钮使用。
- */
-export function DialogClose(
-  props: React.ComponentProps<typeof DialogPrimitive.Close>,
-): React.ReactElement {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
 /**

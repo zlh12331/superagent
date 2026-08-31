@@ -162,34 +162,3 @@ export function SegControl({ value, options, onChange, className }: SegControlPr
     </fieldset>
   );
 }
-
-/** 垂直字段 props */
-export interface SettingFieldProps {
-  /** 字段标签（顶部） */
-  readonly label: string;
-  /** 可选描述（底部） */
-  readonly description?: string;
-  /** 控件（Input/Select 等） */
-  readonly children: ReactNode;
-  readonly className?: string;
-}
-
-/**
- * 垂直堆叠字段（label 在上，控件在下，适用于完整宽度控件）
- */
-export function SettingField({
-  label,
-  description,
-  children,
-  className,
-}: SettingFieldProps): ReactElement {
-  return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
-      <span className="text-foreground text-sm font-medium">{label}</span>
-      {children}
-      {description !== undefined && (
-        <p className="text-muted-foreground text-xs leading-[1.5]">{description}</p>
-      )}
-    </div>
-  );
-}
