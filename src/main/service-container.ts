@@ -136,29 +136,50 @@ class ServiceContainer {
   /** cron 调度是否已初始化（幂等标记） */
   private cronInitialized = false;
 
-  /**
-   * FileService 实例缓存
-   *
-   * 设计与 ChatService 一致：
-   * - 生产环境：通过 getFileService() 拿到默认 FileService 实现（基于 chokidar v5）
-   * - 测试环境：通过 setFileService() 注入 mock 实现，避免依赖真实文件系统
-   *
-   * 缓存值与 getFileService() 模块级单例保持一致：
-   * 调用 setFileService(null) 或 reset() 后，下次 getFileService() 会重新拿默认实现。
-   */
-  private fileService: IFileService | null = null;
+  // ─── 服务实例缓存（全部懒初始化；按域分组，声明顺序与初始化顺序无关） ───
 
-  /**
-   * SearchService 实例缓存
-   *
-   * 设计与 ChatService 一致：
-   * - 生产环境：通过 getSearchService() 拿到默认 SearchService 实现（基于 @vscode/ripgrep）
-   * - 测试环境：通过 setSearchService() 注入 mock 实现，避免依赖真实 ripgrep 子进程
-   *
-   * 缓存值与 getSearchService() 模块级单例保持一致：
-   * 调用 setSearchService(null) 或 reset() 后，下次 getSearchService() 会重新拿默认实现。
-   */
+  // 存储与查询域
+  /** FileService（生产 get 单例；测试 set 注入 mock） */
+  private fileService: IFileService | null = null;
+  /** SearchService（生产 get 单例；测试 set 注入 mock） */
   private searchService: ISearchService | null = null;
+  /** SessionService（内部不持有 DB 连接，getDb() 动态获取） */
+  private sessionService: ISessionService | null = null;
+  private gitService: IGitService | null = null;
+  private codebaseService: ICodebaseService | null = null;
+  private terminalService: ITerminalService | null = null;
+
+  // AI 域
+  /** ToolRegistry：容器直接 new（非模块单例），首次访问时注册全部内置工具 */
+  private toolRegistry: IToolRegistry | null = null;
+  /** PermissionService：dispose 时 rejectAllPendingApprovals 防内存泄漏 */
+  private permissionService: IPermissionService | null = null;
+  /** ToolExecutor：依赖 ToolRegistry + PermissionService，无外部资源 */
+  private toolExecutor: IToolExecutor | null = null;
+  /** MCPService：依赖 ToolRegistry（register/unregister 管理 MCP 工具） */
+  private mcpService: IMCPService | null = null;
+  private promptService: IPromptService | null = null;
+  /** AgentService：依赖 ToolRegistry/ToolExecutor/Prompt/Session/Llm/ConcurrencyGate/Permission */
+  private agentService: IAgentService | null = null;
+  /** GoalService：挂载回合监听（mount），dispose/reset 时 unmount */
+  private goalService: GoalService | null = null;
+  /** MemoryHub sidecar（上游记忆引擎） */
+  private memoryHub: MemoryHubService | null = null;
+  private lspManager: LspServerManager | null = null;
+
+  // 通信域
+  private imService: ImService | null = null;
+  /** IM → Agent 桥接（挂载后订阅渠道消息） */
+  private imBridge: ImAgentBridge | null = null;
+  /** 远程控制（LAN HTTP 入口 + UDP 发现广播） */
+  private remoteControlService: IRemoteControlService | null = null;
+  /** 远程命令 → Agent 桥接（无头执行） */
+  private remoteAgentBridge: RemoteAgentBridge | null = null;
+
+  // 其他
+  /** 子代理管理器已初始化标记（initSubagents 幂等） */
+  private subagentsInitialized = false;
+  private updateService: IUpdateService | null = null;
 
   /**
    * 获取 FileService 实例
@@ -207,39 +228,6 @@ class ServiceContainer {
   }
 
   // ─── 工具系统（ToolRegistry / PermissionService / ToolExecutor） ───
-
-  /**
-   * ToolRegistry 实例缓存
-   *
-   * 设计：由 ServiceContainer 直接 new ToolRegistry（class 实现，非模块级单例）。
-   * - 首次访问时延迟初始化，并调用 registerBuiltinTools 注册全部内置工具
-   *   （read_file / write_file / list_directory / grep / glob）
-   * - 测试可通过 setToolRegistry() 注入 mock 实现（如空注册表或预填充工具）
-   *
-   * 依赖：FileService + SearchService 实例（用于工具工厂创建）
-   * 初始化顺序：必须先 getFileService / getSearchService，再初始化 ToolRegistry
-   */
-  private toolRegistry: IToolRegistry | null = null;
-
-  /**
-   * PermissionService 实例缓存
-   *
-   * 设计：由 ServiceContainer 直接 new PermissionService（class 实现）。
-   * - 首次访问时延迟初始化
-   * - 测试可通过 setPermissionService() 注入 mock 实现
-   * - dispose 时调用 rejectAllPendingApprovals，避免内存泄漏
-   */
-  private permissionService: IPermissionService | null = null;
-
-  /**
-   * ToolExecutor 实例缓存
-   *
-   * 设计：由 ServiceContainer 直接 new ToolExecutor（class 实现，依赖 ToolRegistry + PermissionService）。
-   * - 首次访问时延迟初始化，注入 toolRegistry + permissionService
-   * - 测试可通过 setToolExecutor() 注入 mock 实现
-   * - ToolExecutor 无外部资源（仅协调层），dispose 时无需调用
-   */
-  private toolExecutor: IToolExecutor | null = null;
 
   /**
    * 获取 ToolRegistry 实例
@@ -328,19 +316,6 @@ class ServiceContainer {
   // ─── MCPService（多 MCP server 管理器） ───
 
   /**
-   * MCPService 实例缓存
-   *
-   * 设计：由 ServiceContainer 直接 new MCPService（class 实现，依赖 IToolRegistry）。
-   * - 首次访问时延迟初始化，注入当前 ToolRegistry 实例
-   * - 测试可通过 setMcpService() 注入 mock 实现（不依赖真实子进程）
-   * - dispose 时调用 stopAll()，关闭所有 MCP server 子进程
-   *
-   * 依赖顺序：必须先 getToolRegistry，再初始化 MCPService
-   * （MCPService 通过 ToolRegistry.register / unregister 管理 MCP 工具）
-   */
-  private mcpService: IMCPService | null = null;
-
-  /**
    * 获取 MCPService 实例
    *
    * 首次调用延迟初始化，注入当前 ToolRegistry 实例。
@@ -363,7 +338,6 @@ class ServiceContainer {
   }
 
   // ─── PromptService ───
-  private promptService: IPromptService | null = null;
 
   getPromptService(): IPromptService {
     if (this.promptService === null) {
@@ -384,18 +358,6 @@ class ServiceContainer {
   }
 
   // ─── AgentService ───
-
-  /**
-   * AgentService 实例缓存
-   *
-   * 设计：由 ServiceContainer 直接 new AgentService（class 实现，依赖 ToolRegistry + ToolExecutor）。
-   * - 首次访问时延迟初始化，注入 toolRegistry + toolExecutor 实例
-   * - 测试可通过 setAgentService() 注入 mock 实现（不依赖真实 streamText）
-   * - dispose 时调用 AgentService.dispose() 等待活跃 stream 真正完成
-   *
-   * 依赖顺序：必须先 getToolRegistry / getToolExecutor，再初始化 AgentService
-   */
-  private agentService: IAgentService | null = null;
 
   /**
    * 获取 AgentService 实例
@@ -486,24 +448,6 @@ class ServiceContainer {
     }
     return this.goalService;
   }
-
-  /**
-   * IM 渠道服务实例（模块单例，与 handler 共享）
-   */
-  private imService: ImService | null = null;
-  /** IM → Agent 桥接实例（挂载后订阅渠道消息） */
-  private imBridge: ImAgentBridge | null = null;
-  /** 远程控制服务实例（LAN 直连 HTTP 入口 + UDP 发现广播） */
-  private remoteControlService: IRemoteControlService | null = null;
-  /** 远程命令 → Agent 桥接实例（挂载后订阅 onCommand 无头执行） */
-  private remoteAgentBridge: RemoteAgentBridge | null = null;
-  /** 会话目标服务实例（挂载回合监听 + handler 注入） */
-  private goalService: GoalService | null = null;
-  /** MemoryHub sidecar 实例（上游记忆引擎） */
-  private memoryHub: MemoryHubService | null = null;
-  private lspManager: LspServerManager | null = null;
-  /** 子代理管理器（已初始化标记） */
-  private subagentsInitialized = false;
 
   /**
    * 获取 IM 渠道服务（延迟初始化）
@@ -665,18 +609,6 @@ class ServiceContainer {
   // ─── TerminalService（node-pty 终端会话池） ───
 
   /**
-   * TerminalService 实例缓存
-   *
-   * 设计与 ChatService / FileService 一致：
-   * - 生产环境：通过 getTerminalService() 拿到默认 TerminalService 实现（基于 node-pty）
-   * - 测试环境：通过 setTerminalService() 注入 mock 实现，避免依赖真实 PTY 子进程
-   *
-   * 缓存值与 getTerminalService() 模块级单例保持一致：
-   * 调用 setTerminalService(null) 或 reset() 后，下次 getTerminalService() 会重新拿默认实现。
-   */
-  private terminalService: ITerminalService | null = null;
-
-  /**
    * 获取 TerminalService 实例
    *
    * 首次调用延迟初始化为默认 TerminalService 实现（与 getTerminalService() 单例一致）。
@@ -700,18 +632,6 @@ class ServiceContainer {
   }
 
   // ─── GitService（Git CLI 封装，只读查询） ───
-
-  /**
-   * GitService 实例缓存
-   *
-   * 设计与 ChatService / FileService 一致：
-   * - 生产环境：通过 getGitService() 拿到默认 GitService 实现（基于 child_process.spawn('git')）
-   * - 测试环境：通过 setGitService() 注入 mock 实现，避免依赖真实 git CLI
-   *
-   * 缓存值与 getGitService() 模块级单例保持一致：
-   * 调用 setGitService(null) 或 reset() 后，下次 getGitService() 会重新拿默认实现。
-   */
-  private gitService: IGitService | null = null;
 
   /**
    * 获取 GitService 实例
@@ -739,19 +659,6 @@ class ServiceContainer {
   // ─── CodebaseService（codegraph CLI 封装，代码智能查询） ───
 
   /**
-   * CodebaseService 实例缓存
-   *
-   * 设计与 ChatService / FileService / GitService 一致：
-   * - 生产环境：通过 getCodebaseService() 拿到默认 CodebaseService 实现
-   *   （基于 child_process.spawn('codegraph')）
-   * - 测试环境：通过 setCodebaseService() 注入 mock 实现，避免依赖真实 codegraph CLI
-   *
-   * 缓存值与 getCodebaseService() 模块级单例保持一致：
-   * 调用 setCodebaseService(null) 或 reset() 后，下次 getCodebaseService() 会重新拿默认实现。
-   */
-  private codebaseService: ICodebaseService | null = null;
-
-  /**
    * 获取 CodebaseService 实例
    *
    * 首次调用延迟初始化为默认 CodebaseService 实现（与 getCodebaseService() 单例一致）。
@@ -775,21 +682,6 @@ class ServiceContainer {
   }
 
   // ─── SessionService（SQLite 持久化，会话历史存储） ───
-
-  /**
-   * SessionService 实例缓存
-   *
-   * 设计与 ChatService / FileService / GitService 一致：
-   * - 生产环境：通过 getSessionService() 拿到默认 SessionService 实现（基于 drizzle + better-sqlite3）
-   * - 测试环境：通过 setSessionService() 注入 mock 实现，避免依赖真实 SQLite
-   *
-   * 缓存值与 getSessionService() 模块级单例保持一致：
-   * 调用 setSessionService(null) 或 reset() 后，下次 getSessionService() 会重新拿默认实现。
-   *
-   * 注意：SessionService 内部不持有 DB 连接（通过 getDb() 动态获取），
-   * db 实例由 initDb() 在应用启动时创建，由 closeDb() 在 dispose 中关闭。
-   */
-  private sessionService: ISessionService | null = null;
 
   /**
    * 获取 SessionService 实例
@@ -1033,8 +925,6 @@ class ServiceContainer {
     }
     return this.updateService;
   }
-
-  private updateService: IUpdateService | null = null;
 
   /**
    * 重置所有服务缓存（仅测试用）
