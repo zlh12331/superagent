@@ -8,6 +8,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { unwrap } from '@/lib/ipc';
+
 /** 目标栏展示形态（供 GoalBar 组件消费） */
 export interface ChatGoalView {
   readonly condition: string;
@@ -38,14 +40,12 @@ export function useChatGoals(chatId: string): ChatGoals {
     enabled: chatId !== undefined,
     queryFn: async () => {
       if (chatId === undefined) return { goals: [] as unknown[] };
-      const response = await window.api.goal.list({ sessionId: chatId });
-      if ('error' in response && response.error !== undefined) {
+      try {
+        return unwrap(await window.api.goal.list({ sessionId: chatId }));
+      } catch {
+        // 拉取失败非关键路径：返回空目标，不抛错中断查询
         return { goals: [] as unknown[] };
       }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      return { goals: [] as unknown[] };
     },
   });
   const goals = (goalsQuery.data?.goals ?? []) as ReadonlyArray<ChatGoalView>;
@@ -53,10 +53,7 @@ export function useChatGoals(chatId: string): ChatGoals {
   const createGoalMutation = useMutation({
     mutationFn: async (condition: string) => {
       if (chatId === undefined) return;
-      const response = await window.api.goal.create({ sessionId: chatId, condition });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(response.error.message);
-      }
+      unwrap(await window.api.goal.create({ sessionId: chatId, condition }));
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
@@ -66,10 +63,7 @@ export function useChatGoals(chatId: string): ChatGoals {
   const clearGoalMutation = useMutation({
     mutationFn: async () => {
       if (chatId === undefined) return;
-      const response = await window.api.goal.clear({ sessionId: chatId });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(response.error.message);
-      }
+      unwrap(await window.api.goal.clear({ sessionId: chatId }));
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });

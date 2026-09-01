@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { SectionTitle, SettingRow } from '../settings-controls';
 
@@ -92,14 +93,7 @@ export function McpSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { servers: [] };
       }
-      const response = await window.api.mcp.list({});
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(await window.api.mcp.list({}));
     },
   });
 
@@ -118,18 +112,16 @@ export function McpSection(): ReactElement {
       url?: string;
       headers?: Record<string, string>;
     }) => {
-      const response = await window.api.mcp.start({
-        name: config.name,
-        ...(config.transport !== 'stdio' ? { transport: config.transport } : {}),
-        ...(config.url !== undefined ? { url: config.url } : {}),
-        ...(config.headers !== undefined ? { headers: config.headers } : {}),
-        command: config.command,
-        ...(config.args !== undefined ? { args: config.args } : {}),
-      });
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(
+        await window.api.mcp.start({
+          name: config.name,
+          ...(config.transport !== 'stdio' ? { transport: config.transport } : {}),
+          ...(config.url !== undefined ? { url: config.url } : {}),
+          ...(config.headers !== undefined ? { headers: config.headers } : {}),
+          command: config.command,
+          ...(config.args !== undefined ? { args: config.args } : {}),
+        }),
+      );
     },
     onSuccess: () => {
       toast.success(t('settings.mcpStarted'));
@@ -149,11 +141,7 @@ export function McpSection(): ReactElement {
   // 停止 mutation
   const stopMutation = useMutation({
     mutationFn: async (serverName: string) => {
-      const response = await window.api.mcp.stop({ name: serverName });
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(await window.api.mcp.stop({ name: serverName }));
     },
     onSuccess: () => {
       toast.success(t('settings.mcpStopped'));

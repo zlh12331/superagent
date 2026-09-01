@@ -15,6 +15,8 @@
 import type { ReadLogsRes, SystemStatusRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
+import { unwrap } from '@/lib/ipc';
+
 /** system:getStatus Query key */
 export const SYSTEM_STATUS_QUERY_KEY = ['system', 'getStatus'] as const;
 
@@ -54,13 +56,7 @@ export function useSystemStatusQuery(enabled = true, refetchInterval = 10_000) {
         } satisfies SystemStatusRes;
       }
       const response = await window.api.system.getStatus();
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     enabled,
     refetchInterval: enabled ? refetchInterval : false,
@@ -91,13 +87,7 @@ export function useLogsReadQuery(
       }
       const input = level !== undefined ? { lines, level } : { lines };
       const response = await window.api.logs.read(input);
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     enabled,
     staleTime: 0, // 日志查看器每次都需要最新数据

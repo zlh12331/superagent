@@ -29,7 +29,7 @@
 // - workingDir 由渲染层传入，主进程 path-guard 二次校验
 // - sessionId 用于过滤当前对话的事件
 
-import type { ChatMessage, ThinkingLevel } from '@code-agent/shared/renderer';
+import type { AgentRunRes, ChatMessage, ThinkingLevel } from '@code-agent/shared/renderer';
 import {
   type ChatRequestOptions,
   type ChatTransport,
@@ -37,6 +37,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from 'ai';
+import { unwrap } from '@/lib/ipc';
 import { createStreamChunkBatcher } from './stream-chunk-batcher';
 
 /**
@@ -228,41 +229,40 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
         // 转换消息：UIMessage[] → ChatMessage[]（= ModelMessage[]）
         const chatMessages: ChatMessage[] = await convertToModelMessages(options.messages);
 
-        // 触发主进程 agent:run（异步推送 part）
-        const response = await window.api.agent.run({
-          messages: chatMessages,
-          // 传入 chatId 作为 sessionId：让主进程关联到持久化的会话
-          // （messages 落库 + workingDir 校验 + 事件按 sessionId 过滤）
-          sessionId: options.chatId,
-          workingDir,
-          systemPrompt,
-          maxSteps: maxSteps ?? 20,
-          // plan 模式：写操作被主进程直接拒绝（只读探索）；缺省 build
-          mode: mode ?? 'build',
-          // 思考强度：设置项覆盖主进程模型级默认（undefined = 用模型默认）
-          thinking,
-          // 采样温度：设置项覆盖模型级默认（undefined = 用模型默认）
-          ...(temperature !== undefined ? { temperature } : {}),
-        });
-
         // 处理响应：失败则 error stream；成功则校验 sessionId 回显（契约显式化）
-        if ('error' in response && response.error !== undefined) {
+        // 错误响应由 unwrap 抛 [CODE] message
+        let data: AgentRunRes;
+        try {
+          data = unwrap(
+            await window.api.agent.run({
+              messages: chatMessages,
+              // 传入 chatId 作为 sessionId：让主进程关联到持久化的会话
+              // （messages 落库 + workingDir 校验 + 事件按 sessionId 过滤）
+              sessionId: options.chatId,
+              workingDir,
+              systemPrompt,
+              maxSteps: maxSteps ?? 20,
+              // plan 模式：写操作被主进程直接拒绝（只读探索）；缺省 build
+              mode: mode ?? 'build',
+              // 思考强度：设置项覆盖主进程模型级默认（undefined = 用模型默认）
+              thinking,
+              // 采样温度：设置项覆盖模型级默认（undefined = 用模型默认）
+              ...(temperature !== undefined ? { temperature } : {}),
+            }),
+          );
+        } catch (err) {
           cleanup?.();
-          controller.error(new Error(`[${response.error.code}] ${response.error.message}`));
+          controller.error(err instanceof Error ? err : new Error(String(err)));
           return;
         }
         // 跨进程契约守卫：AgentRunRes.sessionId 必须与发起时的 chatId 一致
         // （主进程以入参 sessionId 回显；后续所有流式事件按 chatId 过滤）。
         // 不一致 = 契约被破坏（事件永远无法匹配，流悬挂到超时），fail-loud 而非静默。
-        if (
-          'data' in response &&
-          response.data !== undefined &&
-          response.data.sessionId !== options.chatId
-        ) {
+        if (data.sessionId !== options.chatId) {
           cleanup?.();
           controller.error(
             new Error(
-              `[IPC_CONTRACT] agent.run sessionId 回显不一致：${response.data.sessionId}（期望 ${options.chatId}）`,
+              `[IPC_CONTRACT] agent.run sessionId 回显不一致：${data.sessionId}（期望 ${options.chatId}）`,
             ),
           );
         }

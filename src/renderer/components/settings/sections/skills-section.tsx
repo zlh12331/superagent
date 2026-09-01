@@ -16,6 +16,7 @@ import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { SectionTitle, SettingRow } from '../settings-controls';
 
 /** skill:listLearned 查询 key */
@@ -43,14 +44,7 @@ export function SkillsSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { learned: [] as LearnedSkill[] };
       }
-      const response = await window.api.skill.listLearned();
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return { learned: response.data };
-      }
-      throw new Error('Unexpected response');
+      return { learned: unwrap(await window.api.skill.listLearned()) };
     },
   });
 
@@ -61,14 +55,7 @@ export function SkillsSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { skills: [] as LearnedSkill[] };
       }
-      const response = await window.api.skill.list();
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(await window.api.skill.list());
     },
   });
 
@@ -83,11 +70,7 @@ export function SkillsSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { name: '', description: '', prompt: '', replaced: false };
       }
-      const response = await window.api.skill.learn({ rawInput });
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(await window.api.skill.learn({ rawInput }));
     },
     onSuccess: () => {
       toast.success(t('settings.skillLearned'));
@@ -105,11 +88,7 @@ export function SkillsSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { removed: true };
       }
-      const response = await window.api.skill.removeLearned({ name });
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(await window.api.skill.removeLearned({ name }));
     },
     onSuccess: () => {
       invalidate();

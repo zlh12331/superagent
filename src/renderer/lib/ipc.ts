@@ -15,11 +15,15 @@ import type { IpcResponse } from '@code-agent/shared/renderer';
  * - 成功：返回 data
  * - 失败：抛 Error（格式 `[CODE] message`，供上层 toast/本地化）
  *
- * @throws Error 当响应为 error，或既无 data 也无 error（协议异常）
+ * @throws Error 当响应为 error、data 缺失（协议异常）、或既无 data 也无 error 时
  */
 export function unwrap<T>(response: IpcResponse<T>): T {
   if ('error' in response) {
     throw new Error(`[${response.error.code}] ${response.error.message}`);
+  }
+  if (response.data === undefined) {
+    // 既无 error 也无 data = 协议异常（正常响应必为 { data } | { error } 二选一）
+    throw new Error('[INVALID_RESPONSE] IPC 响应缺少 data（协议异常）');
   }
   return response.data;
 }

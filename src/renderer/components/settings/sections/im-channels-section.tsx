@@ -39,24 +39,20 @@ export function ImChannelsSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { channels: [] as ChannelListRes['channels'] };
       }
-      const res = await window.api.im.list();
-      if ('error' in res && res.error !== undefined) {
+      try {
+        return unwrap<ChannelListRes>(await window.api.im.list());
+      } catch {
         // 列表加载失败：静默（渠道功能不可用时降级）
         return { channels: [] as ChannelListRes['channels'] };
       }
-      return unwrap<ChannelListRes>(res);
     },
   });
   const channels = channelsData?.channels ?? [];
   // 启动 mutation：成功后失效渠道列表
   const startMutation = useMutation({
     mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
-      const token = tokenInputs[kind];
-      await window.api.im.start({
-        kind,
-        // zod transform 输出为 string | undefined：显式传 undefined
-        token: token !== undefined && token.trim().length > 0 ? token.trim() : undefined,
-      });
+      const token = (tokenInputs[kind] ?? '').trim();
+      unwrap(await window.api.im.start({ kind, token: token !== '' ? token : undefined }));
     },
     onSuccess: (_data, kind) => {
       toast.success(t('settings.imChannelStarted'));
@@ -71,7 +67,7 @@ export function ImChannelsSection(): ReactElement {
   // 停止 mutation：成功后失效渠道列表
   const stopMutation = useMutation({
     mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
-      await window.api.im.stop({ kind });
+      unwrap(await window.api.im.stop({ kind }));
     },
     onSuccess: () => {
       toast.success(t('settings.imChannelStopSuccess'));

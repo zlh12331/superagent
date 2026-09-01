@@ -17,6 +17,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { FILE_CONTENT_QUERY_KEY } from './use-file-content';
 
 /**
@@ -43,13 +44,7 @@ export function useFileWrite() {
         return { bytesWritten: input.content.length };
       }
       const response = await window.api.file.write(input);
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     onSuccess: (_data, variables) => {
       // 失效对应文件路径的 read 缓存，保证下次打开是最新内容

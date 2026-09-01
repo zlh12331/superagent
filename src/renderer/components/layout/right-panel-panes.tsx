@@ -14,6 +14,7 @@ import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { Badge } from '@/components/ui/badge';
 import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -48,14 +49,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { tasks: [] as unknown[] };
       }
-      const response = await window.api.task.list({ sessionId: sessionId ?? undefined });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(await window.api.task.list({ sessionId: sessionId ?? undefined }));
     },
   });
 

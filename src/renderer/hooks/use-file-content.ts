@@ -20,6 +20,8 @@
 import type { FileReadRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
+import { unwrap } from '@/lib/ipc';
+
 /** 文件内容 query key 工厂（保持 queryKey 一致性，便于失效） */
 export const FILE_CONTENT_QUERY_KEY = (path: string) => ['file', path] as const;
 
@@ -60,16 +62,7 @@ export function useFileContent(filePath: string | null) {
         offset: undefined,
         limit: undefined,
       });
-      // IpcResponse 是 discriminated union：
-      // - 'error' in response → 错误分支，throw 让 query 进入 error 状态
-      // - 否则 → data 分支，TS 自动收窄类型
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     // 仅当 filePath 不为 null 时启用查询
     enabled: filePath !== null,

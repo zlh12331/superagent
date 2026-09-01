@@ -18,6 +18,7 @@ import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } fr
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** DevTools 停靠模式 */
@@ -81,25 +82,16 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       setLoadingMode(mode);
 
       try {
-        const response = await window.api.devtools.open({ mode });
-
-        if ('error' in response && response.error !== undefined) {
-          setStatus('error');
-          setStatusMessage(`[${response.error.code}] ${response.error.message}`);
-        } else if ('data' in response && response.data !== undefined) {
-          const data = response.data as OpenDevToolsRes;
-          if (data.ok) {
-            setStatus('success');
-            setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
-          } else {
-            setStatus('error');
-            setStatusMessage(t('dev.openFailedSender'));
-          }
+        const data = unwrap(await window.api.devtools.open({ mode })) as OpenDevToolsRes;
+        if (data.ok) {
+          setStatus('success');
+          setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
         } else {
           setStatus('error');
-          setStatusMessage(t('dev.unknownResponse'));
+          setStatusMessage(t('dev.openFailedSender'));
         }
       } catch (err) {
+        // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示
         setStatus('error');
         setStatusMessage(err instanceof Error ? err.message : String(err));
       } finally {

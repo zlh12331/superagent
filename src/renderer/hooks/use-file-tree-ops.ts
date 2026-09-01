@@ -22,6 +22,7 @@
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
 /**
@@ -56,15 +57,13 @@ export function useFileTreeOps() {
     const fullPath = joinPath(parentDir, name);
     setPendingOp(fullPath, true);
     try {
-      const res = await window.api.file.create({ path: fullPath, createDirs: false });
-      if ('error' in res) {
-        toast.error(t('common.createFileFailed'), { description: res.error.message });
-        return false;
-      }
+      unwrap(await window.api.file.create({ path: fullPath, createDirs: false }));
       cancelCreate();
       return true;
     } catch (err) {
-      toast.error(t('common.createFileFailed'), { description: String(err) });
+      toast.error(t('common.createFileFailed'), {
+        description: err instanceof Error ? err.message : String(err),
+      });
       return false;
     } finally {
       setPendingOp(fullPath, false);
@@ -81,15 +80,13 @@ export function useFileTreeOps() {
     const fullPath = joinPath(parentDir, name);
     setPendingOp(fullPath, true);
     try {
-      const res = await window.api.file.createDir({ path: fullPath });
-      if ('error' in res) {
-        toast.error(t('common.createDirFailed'), { description: res.error.message });
-        return false;
-      }
+      unwrap(await window.api.file.createDir({ path: fullPath }));
       cancelCreate();
       return true;
     } catch (err) {
-      toast.error(t('common.createDirFailed'), { description: String(err) });
+      toast.error(t('common.createDirFailed'), {
+        description: err instanceof Error ? err.message : String(err),
+      });
       return false;
     } finally {
       setPendingOp(fullPath, false);

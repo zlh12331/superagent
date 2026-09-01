@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
@@ -21,6 +22,14 @@ import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 interface AnswerState {
   readonly selectedIndexes: number[];
   readonly text: string;
+}
+
+/** 回答载荷：仅带非空字段（单选索引/自由文本二选一或并存） */
+function toAnswerPayload(a: AnswerState): { selectedIndexes?: number[]; text?: string } {
+  return {
+    ...(a.selectedIndexes.length > 0 ? { selectedIndexes: [...a.selectedIndexes] } : {}),
+    ...(a.text !== '' ? { text: a.text } : {}),
+  };
 }
 
 /**
@@ -110,18 +119,12 @@ export function AskDialog(): ReactElement | null {
     }
     setSubmitting(true);
     try {
-      const res = await window.api.agent.respondAsk({
-        askId,
-        answers: answers.map((a) => ({
-          ...(a.selectedIndexes.length > 0 ? { selectedIndexes: a.selectedIndexes } : {}),
-          ...(a.text !== '' ? { text: a.text } : {}),
-        })),
-      });
-      if ('error' in res && res.error !== undefined) {
-        toast.error(`[${res.error.code}] ${res.error.message}`);
-      }
-    } catch {
-      toast.error(t('agent.askSubmitFailed'));
+      // 错误响应由 unwrap 抛 [CODE] message；异常走下方 catch 统一提示
+      unwrap(await window.api.agent.respondAsk({ askId, answers: answers.map(toAnswerPayload) }));
+    } catch (err) {
+      // 区分 IPC 错误响应（已含具体原因）与异常（回退通用提交失败文案）
+      const isIpcError = err instanceof Error && /^\[[A-Z_]+\]/.test(err.message);
+      toast.error(isIpcError ? err.message : t('agent.askSubmitFailed'));
     } finally {
       clearAsk();
       setSubmitting(false);

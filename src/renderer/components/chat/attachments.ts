@@ -5,6 +5,8 @@
 // 读取失败（二进制/超大/权限）跳过内容仅保留文件名标注，不阻断发送。
 // ──────────────────────────────────────────────
 
+import { unwrap } from '@/lib/ipc';
+
 /** 附件项（对齐参考项目 ChatInputAttachments） */
 export interface ChatAttachment {
   /** 绝对路径（发送时 file:read 读取内容） */
@@ -36,21 +38,17 @@ export async function buildTextWithAttachments(
   let text = baseText;
   for (const att of attachments) {
     try {
-      const response = await window.api.file.read({
-        path: att.path,
-        offset: undefined,
-        limit: 200,
-      });
-      if ('error' in response && response.error !== undefined) {
-        text += `\n\n[附件: ${att.name}]（内容读取失败）`;
-        continue;
-      }
-      if ('data' in response && response.data !== undefined) {
-        const content = response.data.content.slice(0, ATTACHMENT_MAX_CHARS);
-        text += `\n\n[附件: ${att.name}]\n\`\`\`\n${content}\n\`\`\``;
-      }
+      const data = unwrap(
+        await window.api.file.read({
+          path: att.path,
+          offset: undefined,
+          limit: 200,
+        }),
+      );
+      const content = data.content.slice(0, ATTACHMENT_MAX_CHARS);
+      text += `\n\n[附件: ${att.name}]\n\`\`\`\n${content}\n\`\`\``;
     } catch {
-      // 读取失败（二进制文件/权限）：仅附加文件名标注，不阻断发送
+      // 读取失败（二进制/权限/错误响应）：仅附加文件名标注，不阻断发送
       text += `\n\n[附件: ${att.name}]（内容读取失败）`;
     }
   }

@@ -26,6 +26,7 @@ import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -164,16 +165,12 @@ export function HomePage(): ReactElement {
    */
   const handleBrowseFolder = async (): Promise<void> => {
     try {
-      const response = await window.api.dialog.pickDirectory({});
-      if ('error' in response) {
-        toast.error(`[${response.error.code}] ${response.error.message}`);
-        return;
-      }
-      if (response.data.canceled || response.data.path === undefined) {
+      const data = unwrap(await window.api.dialog.pickDirectory({}));
+      if (data.canceled || data.path === undefined) {
         // 用户取消：保持 dropdown 打开
         return;
       }
-      setPendingWorkingDir(response.data.path);
+      setPendingWorkingDir(data.path);
       setFolderMenuOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));

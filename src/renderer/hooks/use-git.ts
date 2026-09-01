@@ -22,6 +22,8 @@
 import type { GitDiffRes, GitStatusRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
+import { unwrap } from '@/lib/ipc';
+
 /**
  * Query key 常量（避免手写字符串导致 typo）
  *
@@ -54,17 +56,7 @@ export function useGitStatusQuery(path: string, enabled = true) {
     queryKey: GIT_STATUS_QUERY_KEY(path),
     queryFn: async (): Promise<GitStatusRes> => {
       const response = await window.api.git.status({ path });
-      // IpcResponse 是 discriminated union：
-      // - 'error' in response → 错误分支，throw 让 Query 进入 isError
-      // - 否则 → data 分支，TS 自动收窄类型
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      // 不可达：IpcResponse 是 discriminated union，必然有 error 或 data
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     enabled,
     staleTime: GIT_STATUS_STALE_TIME,
@@ -121,13 +113,7 @@ export function useGitDiffQuery(
         staged: params.staged ?? false,
         filePath: params.filePath,
       });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     enabled,
     // 不缓存 diff：staleTime=0 让 Query 每次都重新请求

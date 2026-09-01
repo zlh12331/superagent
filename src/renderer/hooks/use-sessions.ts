@@ -29,6 +29,8 @@ import {
 } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import { unwrap } from '@/lib/ipc';
+
 /**
  * Query key 常量（避免手写字符串导致 typo）
  *
@@ -74,14 +76,7 @@ export function useSessionsQuery() {
         limit: DEFAULT_PAGE_SIZE,
         offset: pageParam,
       });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      // 不可达：IpcResponse 是 discriminated union，必然有 error 或 data
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     initialPageParam: 0,
     // 下一页 offset = 已加载条数；已加载数达 total 时停止
@@ -119,13 +114,7 @@ export function useSessionDetail(id: string | null) {
         throw new Error('id is null');
       }
       const response = await window.api.session.get({ id });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
     // 仅当 id 不为 null 时启用查询
     enabled: id !== null,
@@ -159,13 +148,7 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: async (id: string) => {
       const response = await window.api.session.delete({ id });
-      // IpcResponse 是 discriminated union：
-      // - 'error' in response → 错误分支，throw 让 mutation 进入 onError
-      // - 否则 → data 分支，TS 自动收窄类型
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(response);
     },
     // 乐观更新：先本地移除，失败回滚（避免全量重拉的等待）
     // P3：缓存形状为 InfiniteData——按 pages 逐页过滤
@@ -217,13 +200,7 @@ export function useRenameSession() {
   return useMutation({
     mutationFn: async (params: { id: string; title: string }) => {
       const response = await window.api.session.rename(params);
-      // IpcResponse 是 discriminated union：
-      // - 'error' in response → 错误分支，throw 让 mutation 进入 onError
-      // - 否则 → data 分支，TS 自动收窄类型
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(response);
     },
     // 乐观更新：先本地改标题，失败回滚（避免全量重拉的等待）
     // P3：缓存形状为 InfiniteData——按 pages 逐页替换
@@ -275,13 +252,7 @@ export function useRecentDirs() {
         return { dirs: [] };
       }
       const response = await window.api.session.listRecentDirs({ limit: 10 });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response: missing data and error');
+      return unwrap(response);
     },
   });
 }
@@ -307,10 +278,7 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: async (params: { workingDir: string; title?: string }) => {
       const response = await window.api.session.create(params);
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(response);
     },
     onSuccess: () => {
       // 失效会话列表 + 最近目录列表缓存
@@ -335,10 +303,7 @@ export function usePinSession() {
   return useMutation({
     mutationFn: async (params: { id: string; pinned: boolean }) => {
       const response = await window.api.session.pin(params);
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(response);
     },
     // 乐观更新：直接改缓存内对应会话的 pinned（实测 invalidate 的 refetch 在
     // 浏览器 mock 环境下时序不可靠，取消置顶后列表数据仍为旧值 → 会话不回文件夹）；

@@ -8,6 +8,7 @@
 // 4. 快照经 migrateShortcuts 应用 v3 快捷键归一化迁移
 // ──────────────────────────────────────────────────────────────
 
+import { unwrap } from '@/lib/ipc';
 import { SETTINGS_STORAGE_KEY } from '@/lib/theme-init';
 import { migrateShortcuts, type Theme } from '@/stores/persistent/settings-store';
 
@@ -57,39 +58,33 @@ export async function bootstrapSettings(): Promise<{
 
   if (api !== undefined && api.settings !== undefined) {
     try {
-      const response = await api.settings.getAll({});
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(response.error.message);
+      const data = unwrap(await api.settings.getAll({}));
+      const settings = data.settings as Record<string, unknown>;
+      if (Object.keys(settings).length > 0) {
+        const migrated = migrateShortcuts(settings);
+        return {
+          theme: (migrated['theme'] as Theme | undefined) ?? 'dark',
+          snapshot: migrated,
+        };
       }
-      if ('data' in response && response.data !== undefined) {
-        const settings = response.data.settings as Record<string, unknown>;
-        if (Object.keys(settings).length > 0) {
-          const migrated = migrateShortcuts(settings);
-          return {
-            theme: (migrated['theme'] as Theme | undefined) ?? 'dark',
-            snapshot: migrated,
-          };
+      // SQLite 为空：迁移 legacy localStorage（一次性）
+      if (legacy?.state !== undefined) {
+        const migrated = migrateShortcuts(legacy.state);
+        // P2 修复（原子性）：全部写库成功才清 legacy——原实现 fire-and-forget
+        // 写库后同步删 localStorage，任一 set 失败或进程在落库前退出，
+        // 设置既不在 SQLite 也无副本，永久丢失回落默认值
+        const allWritten = await migrateToMain(migrated);
+        if (allWritten) {
+          localStorage.removeItem(SETTINGS_STORAGE_KEY);
         }
-        // SQLite 为空：迁移 legacy localStorage（一次性）
-        if (legacy?.state !== undefined) {
-          const migrated = migrateShortcuts(legacy.state);
-          // P2 修复（原子性）：全部写库成功才清 legacy——原实现 fire-and-forget
-          // 写库后同步删 localStorage，任一 set 失败或进程在落库前退出，
-          // 设置既不在 SQLite 也无副本，永久丢失回落默认值
-          const allWritten = await migrateToMain(migrated);
-          if (allWritten) {
-            localStorage.removeItem(SETTINGS_STORAGE_KEY);
-          }
-          return {
-            theme: (migrated['theme'] as Theme | undefined) ?? 'dark',
-            snapshot: migrated,
-          };
-        }
-        return { theme: 'dark', snapshot: {} };
+        return {
+          theme: (migrated['theme'] as Theme | undefined) ?? 'dark',
+          snapshot: migrated,
+        };
       }
-      throw new Error('Unexpected response');
+      return { theme: 'dark', snapshot: {} };
     } catch {
-      // IPC 失败：回退 legacy（不阻断启动）
+      // IPC 失败 / 错误响应：回退 legacy（不阻断启动）
     }
   }
 

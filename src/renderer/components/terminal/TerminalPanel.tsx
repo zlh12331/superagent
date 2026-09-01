@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
@@ -104,28 +105,24 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       // exactOptionalPropertyTypes：TerminalCreateReqSchema 的 command/env 虽为可选
       // 但 zod 的 .optional().transform() 让类型变为 `string | undefined`（属性必填）
       // 因此必须显式传入 undefined（表示使用默认 shell）
-      const response = await window.api.terminal.create({
-        // 无激活会话时 undefined → 主进程回退用户主目录
-        cwd: workingDir ?? undefined,
-        command: undefined,
-        env: undefined,
-        cols: DEFAULT_COLS,
-        rows: DEFAULT_ROWS,
+      const { terminalId } = unwrap(
+        await window.api.terminal.create({
+          // 无激活会话时 undefined → 主进程回退用户主目录
+          cwd: workingDir ?? undefined,
+          command: undefined,
+          env: undefined,
+          cols: DEFAULT_COLS,
+          rows: DEFAULT_ROWS,
+        }),
+      );
+      createTerminalInStore({
+        id: terminalId,
+        sessionId,
+        title: 'bash',
+        pid: null,
+        cwd: workingDir ?? '',
+        alive: true,
       });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        const { terminalId } = response.data;
-        createTerminalInStore({
-          id: terminalId,
-          sessionId,
-          title: 'bash',
-          pid: null,
-          cwd: workingDir ?? '',
-          alive: true,
-        });
-      }
     } catch (error) {
       // 终端创建失败时通过 toast 提示用户（不阻塞 UI）
       const message = error instanceof Error ? error.message : String(error);

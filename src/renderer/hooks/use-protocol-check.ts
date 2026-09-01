@@ -12,6 +12,7 @@ import { IPC_PROTOCOL_VERSION } from '@code-agent/shared/renderer';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 
 /**
  * 启动时校验 IPC 协议版本（AppShell 挂载一次）
@@ -30,22 +31,18 @@ export function useProtocolCheck(): void {
     window.api.app
       .getStatus()
       .then((res) => {
-        if (cancelled || ('error' in res && res.error !== undefined)) {
-          return;
-        }
-        if (
-          'data' in res &&
-          res.data !== undefined &&
-          res.data.protocolVersion !== IPC_PROTOCOL_VERSION
-        ) {
+        if (cancelled) return;
+        // error 响应由 unwrap 抛错 → 走下方 catch 静默（非关键路径）
+        const data = unwrap(res);
+        if (data.protocolVersion !== IPC_PROTOCOL_VERSION) {
           toast.warning(t('common.protocolMismatch'), {
-            description: `${t('common.protocolMismatchDesc')} (main=${res.data.protocolVersion} / renderer=${IPC_PROTOCOL_VERSION})`,
+            description: `${t('common.protocolMismatchDesc')} (main=${data.protocolVersion} / renderer=${IPC_PROTOCOL_VERSION})`,
             duration: 10_000,
           });
         }
       })
       .catch(() => {
-        // 健康检查失败静默：非关键路径，不打扰用户
+        // 健康检查失败/错误响应静默：非关键路径，不打扰用户
       });
     return () => {
       cancelled = true;

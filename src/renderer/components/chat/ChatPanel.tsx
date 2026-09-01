@@ -27,6 +27,7 @@ import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
@@ -205,14 +206,7 @@ export function ChatPanel({
   const compactMutation = useMutation({
     mutationFn: async () => {
       if (chatId === undefined) throw new Error(t('chat.noActiveSession'));
-      const response = await window.api.session.compact({ sessionId: chatId });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(response.error.message);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('compact: empty response');
+      return unwrap(await window.api.session.compact({ sessionId: chatId }));
     },
     onSuccess: (data) => {
       setMessages(toInitialMessages(data.messages as unknown as ChatMessage[]));

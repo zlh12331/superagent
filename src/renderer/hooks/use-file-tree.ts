@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
@@ -168,21 +169,21 @@ export function useFileTree(workingDir: string | null): void {
           }
           return;
         }
-        if ('data' in response) {
-          watcherId = response.data.watcherId;
-        } else if ('error' in response) {
-          // watcher 启动失败：一次性 toast 提示，不影响已有数据
+        // 成功取 watcherId；error 响应（IPC）或异常统一走 catch 提示
+        watcherId = unwrap(response).watcherId;
+      } catch (err) {
+        // 区分 IPC 错误响应（watchFailed，提示可刷新目录重试）与异常（watchAbnormal）
+        if (err instanceof Error && /^\[[A-Z_]+\]/.test(err.message)) {
           toast.warning(t('common.watchFailed'), {
             description: t('common.watchFailedDesc'),
             duration: 4000,
           });
+        } else {
+          toast.warning(t('common.watchAbnormal'), {
+            description: t('common.watchAbnormalDesc'),
+            duration: 4000,
+          });
         }
-      } catch {
-        // 异常情况：同上，toast 提示
-        toast.warning(t('common.watchAbnormal'), {
-          description: t('common.watchAbnormalDesc'),
-          duration: 4000,
-        });
       }
     })();
 

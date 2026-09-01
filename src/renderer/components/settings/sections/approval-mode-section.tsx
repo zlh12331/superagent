@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** whitelist:list 查询 key */
@@ -61,14 +62,7 @@ export function ApprovalModeSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { entries: [] as Array<{ toolName: string; pattern: string }> };
       }
-      const response = await window.api.whitelist.list();
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(await window.api.whitelist.list());
     },
   });
 
@@ -79,14 +73,7 @@ export function ApprovalModeSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { tools: [] as Array<{ name: string; permission: 'auto' | 'ask' }> };
       }
-      const response = await window.api.tool.list({ permission: undefined });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(await window.api.tool.list({ permission: undefined }));
     },
   });
 
@@ -101,11 +88,7 @@ export function ApprovalModeSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { ok: true };
       }
-      const response = await window.api.whitelist.add(entry);
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(await window.api.whitelist.add(entry));
     },
     onSuccess: () => {
       setWlPattern('');
@@ -123,11 +106,7 @@ export function ApprovalModeSection(): ReactElement {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { ok: true };
       }
-      const response = await window.api.whitelist.remove(entry);
-      if ('error' in response) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      return response.data;
+      return unwrap(await window.api.whitelist.remove(entry));
     },
     onSuccess: () => {
       invalidateWhitelist();

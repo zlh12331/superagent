@@ -27,6 +27,7 @@ import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } fr
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
 import { useDraftStore } from '@/stores/persistent/draft-store';
@@ -350,13 +351,10 @@ export function ChatInput({
   /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
   const handlePickFiles = async (): Promise<void> => {
     if (typeof window === 'undefined' || window.api === undefined) return;
-    const response = await window.api.dialog.pickFiles({ multiple: true });
-    if ('error' in response && response.error !== undefined) return;
-    if ('data' in response && response.data !== undefined) {
-      const data = response.data;
-      if (data.canceled || data.paths === undefined || data.paths.length === 0) {
-        return;
-      }
+    try {
+      // 选择器错误响应/取消均静默（非关键路径，用户可重试）
+      const data = unwrap(await window.api.dialog.pickFiles({ multiple: true }));
+      if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
       // 去重（已选路径跳过；filter 内逐步去重，重复路径只留一个）
       const seen = new Set(attachments.map((a) => a.path));
       const next: ChatAttachment[] = [];
@@ -365,9 +363,9 @@ export function ChatInput({
         seen.add(p);
         next.push({ path: p, name: p.split(/[\\/]/).pop() ?? p });
       }
-      if (next.length > 0) {
-        setAttachments((prev) => [...prev, ...next]);
-      }
+      if (next.length > 0) setAttachments((prev) => [...prev, ...next]);
+    } catch {
+      return;
     }
   };
 

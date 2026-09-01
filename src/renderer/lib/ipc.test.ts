@@ -20,4 +20,12 @@ describe('unwrap', () => {
     expect(unwrap({ data: 0 })).toBe(0);
     expect(unwrap({ data: '' })).toBe('');
   });
+
+  it('既无 data 也无 error（协议异常）：抛 INVALID_RESPONSE', () => {
+    expect(() => unwrap({} as never)).toThrow('[INVALID_RESPONSE]');
+  });
+
+  it('data 为 undefined（协议异常）：抛 INVALID_RESPONSE', () => {
+    expect(() => unwrap({ data: undefined } as never)).toThrow('[INVALID_RESPONSE]');
+  });
 });

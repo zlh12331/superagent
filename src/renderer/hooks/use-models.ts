@@ -10,6 +10,8 @@
 import type { ModelsListRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
+import { unwrap } from '@/lib/ipc';
+
 /** 模型清单查询 key（全局共享：ModelSelector / ModelsSection 等） */
 export const MODELS_QUERY_KEY = ['models', 'list'] as const;
 
@@ -27,13 +29,7 @@ export function useModelsQuery() {
         return { models: [] };
       }
       const response = await window.api.models.list();
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(response);
     },
   });
 }
@@ -56,13 +52,7 @@ export function useBuiltinModelsQuery(providerKind: string | undefined) {
           ? { providerKind: providerKind as ModelsListRes['models'][number]['providerKind'] }
           : {}),
       });
-      if ('error' in response && response.error !== undefined) {
-        throw new Error(`[${response.error.code}] ${response.error.message}`);
-      }
-      if ('data' in response && response.data !== undefined) {
-        return response.data;
-      }
-      throw new Error('Unexpected response');
+      return unwrap(response);
     },
   });
 }

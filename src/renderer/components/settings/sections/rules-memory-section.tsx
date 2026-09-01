@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { AsyncSection } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
 interface MemoryEntry {
@@ -45,19 +46,13 @@ export function RulesMemorySection(): ReactElement {
         return { memories: [] as MemoryEntry[] };
       }
       const sid = activeSessionId as string;
-      const res = await window.api.memory.list({ sessionId: sid });
-      if ('error' in res && res.error !== undefined) {
-        throw new Error(`[ERROR] ${res.error.message}`);
-      }
-      if ('data' in res && res.data !== undefined) {
-        return {
-          memories: (res.data.memories ?? []).map((m) => ({
-            id: String(m.id),
-            content: String(m.content ?? ''),
-          })),
-        };
-      }
-      return { memories: [] as MemoryEntry[] };
+      const data = unwrap(await window.api.memory.list({ sessionId: sid }));
+      return {
+        memories: (data.memories ?? []).map((m) => ({
+          id: String(m.id),
+          content: String(m.content ?? ''),
+        })),
+      };
     },
   });
   const memories = memoriesData?.memories ?? [];

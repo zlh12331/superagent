@@ -160,7 +160,7 @@
     "params": 4
   },
   "src/renderer/components/agent/ask-dialog.tsx#AskDialog": {
-    "body": 193,
+    "body": 187,
     "params": 0
   },
   "src/renderer/components/agent/inline-approval-card.tsx#InlineApprovalCard": {
@@ -168,7 +168,7 @@
     "params": 1
   },
   "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
-    "body": 519,
+    "body": 516,
     "params": 1
   },
   "src/renderer/components/chat/ChatInput.tsx#handleKeyDown": {
@@ -184,7 +184,7 @@
     "params": 1
   },
   "src/renderer/components/chat/ChatPanel.tsx#ChatPanel": {
-    "body": 325,
+    "body": 318,
     "params": 1
   },
   "src/renderer/components/chat/GoalBar.tsx#GoalBar": {
@@ -224,7 +224,7 @@
     "params": 1
   },
   "src/renderer/components/chat/use-chat-goals.ts#useChatGoals": {
-    "body": 58,
+    "body": 50,
     "params": 1
   },
   "src/renderer/components/chat/use-composer-drag.ts#useComposerDrag": {
@@ -260,7 +260,7 @@
     "params": 0
   },
   "src/renderer/components/dev/InspectorPanel.tsx#InspectorPanel": {
-    "body": 137,
+    "body": 128,
     "params": 1
   },
   "src/renderer/components/dev/LogsPanel.tsx#LogsPanel": {
@@ -336,7 +336,7 @@
     "params": 1
   },
   "src/renderer/components/layout/right-panel-panes.tsx#InfoPane": {
-    "body": 105,
+    "body": 98,
     "params": 1
   },
   "src/renderer/components/layout/sidebar-account.tsx#SidebarAccount": {
@@ -356,7 +356,7 @@
     "params": 0
   },
   "src/renderer/components/settings/sections/approval-mode-section.tsx#ApprovalModeSection": {
-    "body": 275,
+    "body": 253,
     "params": 0
   },
   "src/renderer/components/settings/sections/browser-section.tsx#BrowserSection": {
@@ -384,11 +384,11 @@
     "params": 1
   },
   "src/renderer/components/settings/sections/im-channels-section.tsx#ImChannelsSection": {
-    "body": 171,
+    "body": 167,
     "params": 0
   },
   "src/renderer/components/settings/sections/mcp-section.tsx#McpSection": {
-    "body": 292,
+    "body": 279,
     "params": 0
   },
   "src/renderer/components/settings/sections/models-section.tsx#ModelsSection": {
@@ -404,11 +404,11 @@
     "params": 0
   },
   "src/renderer/components/settings/sections/rules-memory-section.tsx#RulesMemorySection": {
-    "body": 126,
+    "body": 120,
     "params": 0
   },
   "src/renderer/components/settings/sections/skills-section.tsx#SkillsSection": {
-    "body": 163,
+    "body": 141,
     "params": 0
   },
   "src/renderer/components/settings/sections/telemetry-section.tsx#TelemetrySection": {
@@ -432,7 +432,7 @@
     "params": 1
   },
   "src/renderer/components/terminal/TerminalPanel.tsx#TerminalPanel": {
-    "body": 136,
+    "body": 132,
     "params": 1
   },
   "src/renderer/components/terminal/TerminalTabs.tsx#TerminalTabs": {
@@ -456,7 +456,7 @@
     "params": 1
   },
   "src/renderer/hooks/use-file-tree-ops.ts#useFileTreeOps": {
-    "body": 63,
+    "body": 59,
     "params": 0
   },
   "src/renderer/hooks/use-file-tree.ts#useFileTree": {
@@ -469,14 +469,6 @@
   },
   "src/renderer/hooks/use-layout-breakpoint.ts#useLayoutBreakpoint": {
     "body": 45,
-    "params": 0
-  },
-  "src/renderer/hooks/use-sessions.ts#useDeleteSession": {
-    "body": 44,
-    "params": 0
-  },
-  "src/renderer/hooks/use-sessions.ts#useRenameSession": {
-    "body": 46,
     "params": 0
   },
   "src/renderer/hooks/use-tool-bridge.ts#useToolBridge": {
@@ -500,7 +492,7 @@
     "params": 1
   },
   "src/renderer/routes/home.tsx#HomePage": {
-    "body": 310,
+    "body": 306,
     "params": 0
   },
   "src/renderer/test/msw-handlers.ts#createMockApi": {
