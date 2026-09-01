@@ -4,6 +4,14 @@
 // 背景：切换会话/重启后输入草稿丢失——用户在 A 会话输入到一半切到 B，
 // 回来时内容清空（同类软件均保留草稿）。
 //
+// 持久化真源决策（2026-09-01）：草稿刻意保留在 localStorage，不迁 SQLite。
+// 理由：
+// - 草稿是渲染层私有的 UX 输入缓冲（非领域数据），无多窗口/多进程并发写；
+// - 单一来源即 localStorage（不存在与 SQLite 的双写一致性问题）；
+// - 设置（S1）迁 SQLite 是为了解决「localStorage + SQLite 双份一致性」，
+//   草稿仅一份，无此问题；迁移只会引入 IPC 往返与失败路径。
+// 若未来出现多窗口共享草稿/跨设备同步需求，再迁 SQLite 并走 IPC。
+//
 // 设计：
 // - key：chatId → { text, attachments }（附件为路径列表，可跨重启恢复）
 // - persist 到 localStorage（zustand persist v3 协议）

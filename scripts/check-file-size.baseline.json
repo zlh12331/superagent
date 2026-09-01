@@ -20,12 +20,12 @@
     "raw": 627
   },
   "src/main/service-container.ts": {
-    "net": 546,
-    "raw": 1038
+    "net": 543,
+    "raw": 1029
   },
   "src/renderer/components/chat/ChatInput.tsx": {
-    "net": 468,
-    "raw": 649
+    "net": 466,
+    "raw": 648
   },
   "src/renderer/dev/mock-api.ts": {
     "net": 947,

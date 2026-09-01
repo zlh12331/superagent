@@ -12,7 +12,14 @@
 // ──────────────────────────────────────────────────────────────
 
 export { REMEMBER_TTL_MINUTES } from './constants/approval';
-export { DEFAULT_MODEL, DEFAULT_PROVIDER } from './constants/defaults';
+export {
+  ATTACHMENT_MAX_CHARS,
+  DEFAULT_MODEL,
+  DEFAULT_PROVIDER,
+  MAX_MESSAGE_LENGTH_CHARS,
+  TERMINAL_DEFAULT_COLS,
+  TERMINAL_DEFAULT_ROWS,
+} from './constants/defaults';
 export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';

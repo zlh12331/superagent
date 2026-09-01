@@ -5,6 +5,8 @@
 // 读取失败（二进制/超大/权限）跳过内容仅保留文件名标注，不阻断发送。
 // ──────────────────────────────────────────────
 
+import { ATTACHMENT_MAX_CHARS as SHARED_ATTACHMENT_MAX_CHARS } from '@code-agent/shared/renderer';
+
 import { unwrap } from '@/lib/ipc';
 
 /** 附件项（对齐参考项目 ChatInputAttachments） */
@@ -15,8 +17,8 @@ export interface ChatAttachment {
   readonly name: string;
 }
 
-/** 附件内容读取上限（字符，超出截断避免消息膨胀） */
-export const ATTACHMENT_MAX_CHARS = 4000;
+/** 附件内容读取上限（字符；对齐 shared 单一真源 ATTACHMENT_MAX_CHARS=4000） */
+export const ATTACHMENT_MAX_CHARS = SHARED_ATTACHMENT_MAX_CHARS;
 
 /** 由路径派生展示名（basename，兼容 win32/posix 分隔符） */
 export function attachmentName(path: string): string {

@@ -47,7 +47,6 @@ export interface ApprovalLifecycleListener {
  * - 单元测试：注入 mock 实现，不依赖真实 IPC 推送
  * - 未来扩展：支持基于角色/策略的权限系统
  */
-// biome-ignore lint/style/useNamingConvention: I 前缀接口为项目既有命名约定（IPermissionService 全仓多处引用）
 export interface IPermissionService {
   /**
    * 决策工具调用的权限级别

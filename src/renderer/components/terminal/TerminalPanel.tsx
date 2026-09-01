@@ -14,6 +14,7 @@
 // - xterm.js 实例由 TerminalView 持有，不进入 Zustand store
 // ──────────────────────────────────────────────────────────────
 
+import { TERMINAL_DEFAULT_COLS, TERMINAL_DEFAULT_ROWS } from '@code-agent/shared/renderer';
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -39,11 +40,11 @@ interface TerminalPanelProps {
   readonly className?: string;
 }
 
-/** 终端默认列数（与 FitAddon 自动适配后的实际值无关，仅用于初始化） */
-const DEFAULT_COLS = 80;
+/** 终端默认列数（与 FitAddon 自动适配后的实际值无关，仅用于初始化；对齐 shared 单一真源） */
+const DEFAULT_COLS = TERMINAL_DEFAULT_COLS;
 
 /** 终端默认行数 */
-const DEFAULT_ROWS = 24;
+const DEFAULT_ROWS = TERMINAL_DEFAULT_ROWS;
 
 /**
  * 终端面板

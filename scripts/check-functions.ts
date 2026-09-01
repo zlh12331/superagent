@@ -36,9 +36,19 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 const BASELINE_PATH = join(import.meta.dirname, 'check-functions.baseline.json');
+const LIMITS_PATH = join(import.meta.dirname, 'limits.json');
 const SCAN_DIRS = [join(ROOT, 'src', 'main'), join(ROOT, 'src', 'renderer')];
-const PARAM_LIMIT = 4;
-const BODY_LIMIT = 40;
+/** 函数门槛（单一真源：scripts/limits.json；与 check-file-size 共用） */
+function loadLimits(): { params: number; body: number } {
+  const parsed = JSON.parse(readFileSync(LIMITS_PATH, 'utf8')) as {
+    functionSize?: { params?: number; body?: number };
+  };
+  return {
+    params: parsed.functionSize?.params ?? 4,
+    body: parsed.functionSize?.body ?? 40,
+  };
+}
+const { params: PARAM_LIMIT, body: BODY_LIMIT } = loadLimits();
 const METRICS = ['params', 'body'] as const;
 
 /** 一处超限（key = `相对路径#函数名`，行号不入 key 以免代码上方插入注释即漂移） */

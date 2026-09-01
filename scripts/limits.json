@@ -1,0 +1,10 @@
+{
+  "fileSize": {
+    "raw": 600,
+    "net": 600
+  },
+  "functionSize": {
+    "params": 4,
+    "body": 40
+  }
+}

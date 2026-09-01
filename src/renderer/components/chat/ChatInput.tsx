@@ -22,6 +22,7 @@
 // - 这样 ChatInput 是纯展示+交互组件，可在测试中独立 mock
 // - sendMessage / stop 回调签名与 useChat 返回值对齐
 
+import { MAX_MESSAGE_LENGTH_CHARS } from '@code-agent/shared/renderer';
 import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -42,8 +43,8 @@ import {
 import { detectSuggestTrigger } from './suggest-trigger';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 
-/** 消息最大长度（对齐原型 8000 字符上限拦截） */
-const MAX_MESSAGE_LENGTH = 8000;
+/** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
+const MAX_MESSAGE_LENGTH = MAX_MESSAGE_LENGTH_CHARS;
 
 interface ChatInputProps {
   /**
@@ -389,9 +390,9 @@ export function ChatInput({
     }
     // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
     const base = value.trim();
-    // 超长拦截（对齐原型 8000 字符上限）
+    // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
     if (base.length > MAX_MESSAGE_LENGTH) {
-      toast.error(t('chat.messageTooLong'));
+      toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
       return;
     }
     const text = await buildTextWithAttachments(base, attachments);

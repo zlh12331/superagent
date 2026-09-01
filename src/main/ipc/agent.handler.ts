@@ -23,6 +23,7 @@
 // - 本 handler 实现 agent:run / agent:stop（agent 对话生命周期）
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import { AppError, ErrorCode, MAX_USER_INPUT_HARD_CAP } from '@code-agent/shared/main';
 
 import type { IAgentService } from '../infra/ai/agent/agent-service';
 import type { IPromptService } from '../infra/ai/prompt/prompt-service';
@@ -56,6 +57,22 @@ type AgentLifecycleHandlers = Pick<
 >;
 
 /**
+ * 主进程纵深防御：提取最后一条用户消息，超出硬上限即拒绝
+ *
+ * 渲染层已拦截 base ≤ MAX_MESSAGE_LENGTH_CHARS（8000）并允许附件追加文本；
+ * 本函数仅拦截绕过渲染层的病态超大输入（正常 UI 消息含附件也不会触达硬上限）。
+ *
+ * @returns 最后一条用户文本（供 handler 用于记忆捕获）
+ */
+function assertUserInputWithinCap(messages: unknown): string {
+  const lastUser = extractLastUserText(messages);
+  if (lastUser.length > MAX_USER_INPUT_HARD_CAP) {
+    throw new AppError(ErrorCode.INVALID_INPUT, `消息过长，上限 ${MAX_USER_INPUT_HARD_CAP} 字符`);
+  }
+  return lastUser;
+}
+
+/**
  * 创建 Agent 域 handler 实现
  *
  * @param deps 依赖项：包含 IAgentService 实例（由 ServiceContainer 注入）
@@ -68,7 +85,7 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
     // 后续流式事件通过 AGENT_STREAM_PART / AGENT_TOOL_CALL / AGENT_TOOL_RESULT / AGENT_APPROVAL_REQUEST 推送
     // 渲染层用返回的 sessionId 订阅后续事件并支持中断
     run: async (input, ctx) => {
-      const lastUser = extractLastUserText(input.messages);
+      const lastUser = assertUserInputWithinCap(input.messages);
       // 记忆预取召回：仅在渲染层未显式指定 systemPrompt 时注入一次性上下文块
       let systemPrompt = input.systemPrompt;
       if (

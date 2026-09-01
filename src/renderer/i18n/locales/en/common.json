@@ -180,7 +180,7 @@
       "resizeComposer": "Drag to resize composer",
       "statsMessages": "Messages",
       "statsTokens": "Tokens",
-      "messageTooLong": "Message too long (max 8000 characters)",
+      "messageTooLong": "Message too long (max {{max}} characters)",
       "slashAction": {
         "help": "Commands: /new new session · /clear clear chat · /models pick model · /compact compact context",
         "goal": "Session goal: type /goal plus your requirement in the input"

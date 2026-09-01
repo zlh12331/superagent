@@ -20,21 +20,11 @@
 import type { IpcResponse } from '@code-agent/shared/renderer';
 import { vi } from 'vitest';
 
-/**
- * 构造成功响应（{ data: T }）
- *
- * 用于 mock window.api.*.method 的返回值
- */
-export function ok<T>(data: T): IpcResponse<T> {
-  return { data } as IpcResponse<T>;
-}
+// 成功/错误响应工厂收敛到共享单一真源（lib/ipc-factories），
+// 与 dev mock（mock-api.ts）使用同一实现，避免双写。
+import { ipcErr as err, ipcOk as ok } from '@/lib/ipc-factories';
 
-/**
- * 构造错误响应（{ error: { code, message } }）
- */
-export function err(code: string, message: string): IpcResponse<never> {
-  return { error: { code, message } } as IpcResponse<never>;
-}
+export { err, ok };
 
 /** Mock 方法类型：返回 Promise 的函数（避免引用 vi.fn Procedure 类型） */
 type MockFn<T = unknown> = (input: unknown) => Promise<IpcResponse<T>>;

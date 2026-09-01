@@ -33,8 +33,18 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 const BASELINE_PATH = join(import.meta.dirname, 'check-file-size.baseline.json');
-const RAW_LIMIT = 600;
-const NET_LIMIT = 600;
+const LIMITS_PATH = join(import.meta.dirname, 'limits.json');
+/** 文件大小门槛（单一真源：scripts/limits.json；与 check-functions 共用） */
+function loadLimits(): { raw: number; net: number } {
+  const parsed = JSON.parse(readFileSync(LIMITS_PATH, 'utf8')) as {
+    fileSize?: { raw?: number; net?: number };
+  };
+  return {
+    raw: parsed.fileSize?.raw ?? 600,
+    net: parsed.fileSize?.net ?? 600,
+  };
+}
+const { raw: RAW_LIMIT, net: NET_LIMIT } = loadLimits();
 const METRICS = ['raw', 'net'] as const;
 
 function scanDirs(): string[] {

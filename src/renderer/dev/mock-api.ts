@@ -15,12 +15,21 @@
 // ──────────────────────────────────────────────────────────────
 
 import {
+  type AgentApprovalRequestPayload,
+  type AgentStreamEndPayload,
+  type AgentStreamPartPayload,
+  type AskEventPayload,
+  type GoalInfo,
   IPC_PROTOCOL_VERSION,
   type IpcApi,
   type RemoteStatusRes,
   type SessionMeta,
+  type UpdateStatusPayload,
 } from '@code-agent/shared/renderer';
 import type { ModelMessage } from 'ai';
+
+import { ipcOk } from '@/lib/ipc-factories';
+import { mockGitStatus, mockModels, mockSystemStatus, mockUsageSummary } from './mock-data';
 
 /** IPC 方法入参类型推导（mock 实现标注用） */
 type Req<M> = M extends (input: infer P) => unknown ? P : never;
@@ -34,16 +43,6 @@ type MockRuntimeModel = Extract<
     ? E
     : never
   : never;
-
-/** 成功响应 */
-function ok<T>(data: T): { data: T } {
-  return { data };
-}
-
-/** 错误响应 */
-function fail(code: string, message: string): { error: { code: string; message: string } } {
-  return { error: { code, message } };
-}
 
 // ── 内存假数据库 ──────────────────────────────────────────────
 
@@ -149,20 +148,18 @@ const messagesBySession: Record<string, MockMessage[]> = {
   ],
 };
 
-/** 当前会话流式回调（agent.run 后由模拟器推送） */
-const streamCallbacks = new Set<(payload: { sessionId: string; part: unknown }) => void>();
-const endCallbacks = new Set<
-  (payload: { sessionId: string; reason: string; usage: unknown }) => void
->();
+/** 当前会话流式回调（agent.run 后由模拟器推送；类型对齐 shared 契约 payload） */
+const streamCallbacks = new Set<(payload: AgentStreamPartPayload) => void>();
+const endCallbacks = new Set<(payload: AgentStreamEndPayload) => void>();
 const errorCallbacks = new Set<
   (payload: { sessionId: string; code: string; message: string }) => void
 >();
 const terminalOutputCallbacks = new Set<(payload: { terminalId: string; data: string }) => void>();
-const updateStatusCallbacks = new Set<(payload: unknown) => void>();
+const updateStatusCallbacks = new Set<(payload: UpdateStatusPayload) => void>();
 /** 审批请求回调（agent:approval:request 模拟推送，验证内联审批卡） */
-const approvalCallbacks = new Set<(payload: unknown) => void>();
+const approvalCallbacks = new Set<(payload: AgentApprovalRequestPayload) => void>();
 /** Agent 提问回调（agent:event:ask 模拟推送，验证 AskDialog） */
-const askCallbacks = new Set<(payload: unknown) => void>();
+const askCallbacks = new Set<(payload: AskEventPayload) => void>();
 
 /** 模拟流定时器（sessionId → interval，agent.stop 据此真正中断模拟流） */
 const streamIntervals = new Map<string, ReturnType<typeof setInterval>>();
@@ -489,20 +486,19 @@ function simulateAllPartsDemo(sessionId: string): void {
 function createMockApi(): IpcApi {
   return {
     app: {
-      getStatus: async () =>
-        ok({ protocolVersion: IPC_PROTOCOL_VERSION, status: 'ready' } as never),
+      getStatus: async () => ipcOk({ ready: true, protocolVersion: IPC_PROTOCOL_VERSION }),
       getInfo: async () =>
-        ok({
+        ipcOk({
           version: '0.1.0-mock',
           electron: 'mock',
           node: 'mock',
-          chromium: 'mock',
+          chrome: 'mock',
           platform: 'web',
           arch: 'x64',
           userDataPath: '（浏览器模式）',
-        } as never),
-      openExternal: async () => ok({ ok: true }),
-      openDataDir: async () => ok({ ok: true }),
+        }),
+      openExternal: async () => ipcOk({ ok: true }),
+      openDataDir: async () => ipcOk({ ok: true }),
     },
 
     session: {
@@ -512,13 +508,13 @@ function createMockApi(): IpcApi {
           if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
           return b.updatedAt - a.updatedAt;
         });
-        return ok({ sessions: sorted.slice(0, limit), total: sorted.length });
+        return ipcOk({ sessions: sorted.slice(0, limit), total: sorted.length });
       },
       get: async ({ id }: Req<IpcApi['session']['get']>) => {
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
           // 宽松兜底：任意 id 返回默认会话（dev mock——首页 DRAFT 场景需 workingDir 供 agent 发送）
-          return ok({
+          return ipcOk({
             session: {
               id,
               title: '新对话',
@@ -530,10 +526,10 @@ function createMockApi(): IpcApi {
               lastRunStatus: 'idle',
               pinned: false,
             },
-            messages: (messagesBySession as Record<string, unknown>)[id] ?? [],
-          } as never);
+            messages: messagesBySession[id] ?? [],
+          });
         }
-        return ok({ session, messages: messagesBySession[id] ?? [] } as never);
+        return ipcOk({ session, messages: messagesBySession[id] ?? [] });
       },
       create: async ({ workingDir }: Req<IpcApi['session']['create']>) => {
         const id = `mock-${Date.now()}`;
@@ -548,21 +544,21 @@ function createMockApi(): IpcApi {
           pinned: false,
           lastRunStatus: 'idle',
         });
-        return ok({ sessionId: id });
+        return ipcOk({ sessionId: id });
       },
       delete: async ({ id }: Req<IpcApi['session']['delete']>) => {
         const idx = mockSessions.findIndex((s) => s.id === id);
         if (idx >= 0) {
           mockSessions.splice(idx, 1);
         }
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       rename: async ({ id, title }: Req<IpcApi['session']['rename']>) => {
         const s = mockSessions.find((x) => x.id === id);
         if (s !== undefined) {
           s.title = title;
         }
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       pin: async ({ id, pinned }: Req<IpcApi['session']['pin']>) => {
         const s = mockSessions.find((x) => x.id === id);
@@ -571,49 +567,24 @@ function createMockApi(): IpcApi {
           // 对齐主进程：pin 操作刷新 updatedAt（置顶排序依据）
           s.updatedAt = Date.now();
         }
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       listRecentDirs: async () =>
-        ok({
+        ipcOk({
           dirs: [
             { workingDir: 'f:\\TraeProjects\\1', lastUsed: now },
             { workingDir: 'f:\\TraeProjects\\2', lastUsed: now - 86_400_000 },
           ],
         }),
-      exportAll: async () => ok({ saved: false }),
-      getUsageSummary: async () =>
-        ok({
-          total: { calls: 12, inputTokens: 12_000, outputTokens: 28_000, totalTokens: 40_000 },
-          byModel: [
-            {
-              modelId: 'deepseek-v4-flash',
-              calls: 8,
-              inputTokens: 8_000,
-              outputTokens: 20_000,
-              totalTokens: 28_000,
-              reasoningTokens: 3_000,
-            },
-            {
-              modelId: 'gpt-5-codex',
-              calls: 4,
-              inputTokens: 4_000,
-              outputTokens: 8_000,
-              totalTokens: 12_000,
-              reasoningTokens: 1_000,
-            },
-          ],
-          byDay: Array.from({ length: 90 }, (_, i) => ({
-            date: new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10),
-            calls: i % 3 === 0 ? 1 : 0,
-            totalTokens: i % 3 === 0 ? 400 + i * 13 : 0,
-          })),
-        } as never),
-      getTurns: async () => ok({ turns: [] }),
+      exportAll: async () => ipcOk({ saved: false }),
+      compact: async () => ipcOk({ removed: 0, remaining: 0, reclaimedTokens: 0, messages: [] }),
+      getUsageSummary: async () => ipcOk(mockUsageSummary()),
+      getTurns: async () => ipcOk({ sessionId: 'mock-1', turns: [] }),
       getRecentTurns: async () =>
-        ok({
+        ipcOk({
           turns: [
             {
-              id: 't1',
+              turnId: 't1',
               sessionId: 'mock-1',
               seq: 3,
               modelId: 'deepseek-v4-flash',
@@ -622,28 +593,17 @@ function createMockApi(): IpcApi {
               outputTokens: 320,
               totalTokens: 440,
               durationMs: 8_400,
-              startedAt: now - 3_600_000,
+              createdAt: now - 3_600_000,
             },
           ],
-        } as never),
-      getTurnMessages: async () => ok({ messages: [] }),
+        }),
+      getTurnMessages: async () => ipcOk({ messages: [] }),
     },
 
     models: {
-      list: async () =>
-        ok({
-          models: [
-            {
-              id: 'deepseek-v4-flash',
-              label: 'DeepSeek V4 Flash',
-              providerKind: 'deepseek',
-              isRuntime: false,
-            },
-            { id: 'gpt-5-codex', label: 'GPT-5 Codex', providerKind: 'openai', isRuntime: false },
-            { id: 'qwen3-coder', label: 'Qwen3 Coder', providerKind: 'qwen', isRuntime: false },
-          ],
-        } as never),
-      test: async () => ok({ ok: true }),
+      list: async () => ipcOk(mockModels()),
+      listBuiltin: async () => ipcOk({ models: [] }),
+      test: async () => ipcOk({ ok: true }),
     },
 
     file: {
@@ -671,45 +631,54 @@ function createMockApi(): IpcApi {
             modifiedAt: now,
           },
         ];
-        return ok({ entries });
+        return ipcOk({ entries });
       },
       read: async ({ path }: Req<IpcApi['file']['read']>) => {
         const content = path.endsWith('.json')
           ? '{\n  "name": "mock"\n}\n'
           : '// MOCK 文件内容（前端独立开发模式）\nexport const hello = "world";\n';
-        return ok({ content, totalLines: content.split('\n').length, encoding: 'utf-8' });
+        return ipcOk({ content, totalLines: content.split('\n').length, encoding: 'utf-8' });
       },
       write: async ({ content }: Req<IpcApi['file']['write']>) =>
-        ok({ bytesWritten: content.length }),
-      create: async ({ path }: Req<IpcApi['file']['create']>) => ok({ path }),
-      createDir: async ({ path }: Req<IpcApi['file']['createDir']>) => ok({ path }),
-      delete: async () => ok({ ok: true }),
-      rename: async () => ok({ ok: true }),
-      watchStart: async () => ok({ watcherId: 'mock-watcher' }),
-      watchStop: async () => ok({ ok: true }),
+        ipcOk({ bytesWritten: content.length }),
+      create: async ({ path }: Req<IpcApi['file']['create']>) => ipcOk({ path }),
+      createDir: async ({ path }: Req<IpcApi['file']['createDir']>) => ipcOk({ path }),
+      delete: async () => ipcOk({ deleted: true }),
+      rename: async ({ newPath }: Req<IpcApi['file']['rename']>) => ipcOk({ path: newPath }),
+      watchStart: async () => ipcOk({ watcherId: 'mock-watcher' }),
+      watchStop: async () => ipcOk({ stopped: true }),
       subscribeWatchEvent: () => () => {},
     },
 
     git: {
-      status: async () =>
-        ok({
-          branch: 'main',
-          ahead: 2,
-          behind: 0,
-          files: [
-            { path: 'src/renderer/dev/mock-api.ts', status: 'untracked' },
-            { path: 'docs/design/09-ux-interaction-spec.md', status: 'modified' },
-          ],
-        } as never),
+      status: async () => ipcOk(mockGitStatus()),
       diff: async () =>
-        ok({
+        ipcOk({
           diff: '--- a/docs/design/09-ux-interaction-spec.md\n+++ b/docs/design/09-ux-interaction-spec.md\n@@ -1 +1 @@\n-旧内容\n+新内容\n',
           additions: 1,
           deletions: 1,
+          filesChanged: 1,
         }),
-      add: async () => ok({ ok: true }),
-      commit: async () => ok({ ok: true }),
-      push: async () => ok({ ok: true }),
+      add: async () => ipcOk({ stagedCount: 2, stdout: '' }),
+      commit: async () =>
+        ipcOk({
+          sha: 'a'.repeat(40),
+          shortSha: 'aaaaaaa',
+          branch: 'main',
+          filesChanged: 2,
+          additions: 1,
+          deletions: 1,
+          stdout: '',
+        }),
+      push: async () =>
+        ipcOk({
+          ok: true,
+          pushedCount: 1,
+          remote: 'origin',
+          refspec: 'main',
+          stdout: '',
+          stderr: '',
+        }),
     },
 
     terminal: {
@@ -720,21 +689,21 @@ function createMockApi(): IpcApi {
             cb({ terminalId, data: `MOCK PTY：cwd=${cwd}\r\nPS> ` });
           }
         }, 100);
-        return ok({ terminalId });
+        return ipcOk({ terminalId, pid: 0 });
       },
       input: async ({ terminalId, data }: Req<IpcApi['terminal']['input']>) => {
         // 回显输入（模拟 shell）
         for (const cb of terminalOutputCallbacks) {
           cb({ terminalId, data: `\r\n${data}\r\nPS> ` });
         }
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
-      resize: async () => ok({ ok: true }),
-      kill: async () => ok({ ok: true }),
+      resize: async () => ipcOk({ ok: true }),
+      kill: async () => ipcOk({ ok: true }),
       subscribeCreatedEvent: () => () => {},
       subscribeOutputEvent: (cb: Parameters<IpcApi['terminal']['subscribeOutputEvent']>[0]) => {
         terminalOutputCallbacks.add(cb as (payload: { terminalId: string; data: string }) => void);
-        return () => terminalOutputCallbacks.delete(cb as never);
+        return () => terminalOutputCallbacks.delete(cb);
       },
       subscribeExitEvent: () => () => {},
     },
@@ -792,7 +761,7 @@ function createMockApi(): IpcApi {
         // 此前返回裸 { sessionId } 与 IpcResponse 契约相悖（真实链路经 wrap 包装为 { data }），
         // transport 按 response.data.sessionId 解包，裸对象导致 currentSessionId 恒为 undefined、
         // 流式事件按 sessionId 过滤后全部丢失（浏览器模式 agent 流式即坏）
-        return ok({ sessionId: sessionId ?? 'mock-1' });
+        return ipcOk({ sessionId: sessionId ?? 'mock-1' });
       },
       stop: async ({ sessionId }: Req<IpcApi['agent']['stop']>) => {
         // 真正中断模拟流（对齐主进程行为：清除定时器 + 推送 interrupted end）
@@ -802,36 +771,36 @@ function createMockApi(): IpcApi {
           streamIntervals.delete(sessionId);
           const usage = { inputTokens: 60, outputTokens: 120, totalTokens: 180 };
           for (const cb of endCallbacks) {
-            cb({ sessionId, reason: 'interrupted', usage });
+            cb({ sessionId, reason: 'aborted', usage });
           }
         }
-        return ok({ stopped: true });
+        return ipcOk({ stopped: true });
       },
-      approvalResponse: async () => ok({ ok: true }),
-      respondAsk: async () => ok({ ok: true }),
+      approvalResponse: async () => ipcOk({ ok: true }),
+      respondAsk: async () => ipcOk({ ok: true }),
       subscribeStreamPart: (cb: Parameters<IpcApi['agent']['subscribeStreamPart']>[0]) => {
-        streamCallbacks.add(cb as never);
-        return () => streamCallbacks.delete(cb as never);
+        streamCallbacks.add(cb);
+        return () => streamCallbacks.delete(cb);
       },
       subscribeStreamEnd: (cb: Parameters<IpcApi['agent']['subscribeStreamEnd']>[0]) => {
-        endCallbacks.add(cb as never);
-        return () => endCallbacks.delete(cb as never);
+        endCallbacks.add(cb);
+        return () => endCallbacks.delete(cb);
       },
       subscribeStreamError: (cb: Parameters<IpcApi['agent']['subscribeStreamError']>[0]) => {
-        errorCallbacks.add(cb as never);
-        return () => errorCallbacks.delete(cb as never);
+        errorCallbacks.add(cb);
+        return () => errorCallbacks.delete(cb);
       },
       subscribeToolCall: () => () => {},
       subscribeToolResult: () => () => {},
       subscribeApprovalRequest: (
         cb: Parameters<IpcApi['agent']['subscribeApprovalRequest']>[0],
       ) => {
-        approvalCallbacks.add(cb as never);
-        return () => approvalCallbacks.delete(cb as never);
+        approvalCallbacks.add(cb);
+        return () => approvalCallbacks.delete(cb);
       },
       subscribeAsk: (cb: Parameters<IpcApi['agent']['subscribeAsk']>[0]) => {
-        askCallbacks.add(cb as never);
-        return () => askCallbacks.delete(cb as never);
+        askCallbacks.add(cb);
+        return () => askCallbacks.delete(cb);
       },
     },
 
@@ -839,7 +808,9 @@ function createMockApi(): IpcApi {
       // S1：settings 下沉 SQLite 的 mock 实现（浏览器模式持久化到 localStorage）
       getAll: async () => {
         const raw = localStorage.getItem('mock-settings');
-        return ok({ settings: raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>) });
+        return ipcOk({
+          settings: raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>),
+        });
       },
       set: async (input: Req<IpcApi['settings']['set']>) => {
         const raw = localStorage.getItem('mock-settings');
@@ -847,61 +818,61 @@ function createMockApi(): IpcApi {
           raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>);
         cur[input.key] = input.value;
         localStorage.setItem('mock-settings', JSON.stringify(cur));
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       getApiKey: async () => {
         // localStorage 持久化（模拟真实 keychain 跨重启保留——E2E 前置配置后 reload 仍生效）
         // P0 安全对齐：与真实 handler 一致只返回配置状态布尔，不回传明文
         const key = localStorage.getItem('mock-api-key');
-        return ok({ configured: key !== null && key !== '' });
+        return ipcOk({ configured: key !== null && key !== '' });
       },
       setApiKey: async (input: Req<IpcApi['settings']['setApiKey']>) => {
         localStorage.setItem('mock-api-key', input.apiKey);
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
-      deleteApiKey: async () => ok({ ok: true }),
-      getTelemetryLevel: async () => ok({ level: 'off' }),
-      setTelemetryLevel: async () => ok({ ok: true }),
-      getApprovalMode: async () => ok({ mode: 'ask' }),
-      setApprovalMode: async () => ok({ ok: true }),
-      addRuntimeModel: async () => ok({ ok: true }),
+      deleteApiKey: async () => ipcOk({ ok: true }),
+      getTelemetryLevel: async () => ipcOk({ level: 'off' }),
+      setTelemetryLevel: async () => ipcOk({ ok: true, level: 'off' }),
+      getApprovalMode: async () => ipcOk({ mode: 'ask' }),
+      setApprovalMode: async () => ipcOk({ ok: true, mode: 'ask' }),
+      addRuntimeModel: async () => ipcOk({ ok: true }),
       updateRuntimeModel: async (input: Req<IpcApi['settings']['updateRuntimeModel']>) => {
         const model = mockRuntimeModels.find((m) => m.modelId === input.modelId);
         if (model !== undefined) Object.assign(model, { isEnabled: input.isEnabled });
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       removeRuntimeModel: async (input: Req<IpcApi['settings']['removeRuntimeModel']>) => {
         mockRuntimeModels = mockRuntimeModels.filter((m) => m.modelId !== input.modelId);
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）
-      listRuntimeModels: async () => ok({ models: mockRuntimeModels }),
+      listRuntimeModels: async () => ipcOk({ models: mockRuntimeModels }),
     },
 
     whitelist: {
-      list: async () => ok({ rules: [] }),
-      add: async () => ok({ ok: true }),
-      remove: async () => ok({ ok: true }),
+      list: async () => ipcOk({ entries: [] }),
+      add: async () => ipcOk({ ok: true }),
+      remove: async () => ipcOk({ ok: true }),
     },
 
     mcp: {
-      list: async () => ok({ servers: [] }),
-      start: async () => ok({ ok: true }),
-      stop: async () => ok({ ok: true }),
+      list: async () => ipcOk({ servers: [] }),
+      start: async () => ipcOk({ ok: true }),
+      stop: async () => ipcOk({ ok: true }),
     },
     skill: {
-      list: async () => ok({ skills: [] }),
-      listLearned: async () => ok({ skills: [] }),
-      learn: async () => ok({ ok: true }),
-      removeLearned: async () => ok({ ok: true }),
+      list: async () => ipcOk({ skills: [] }),
+      listLearned: async () => ipcOk([]),
+      learn: async () => ipcOk({ name: '', description: '', prompt: '', replaced: false }),
+      removeLearned: async () => ipcOk({ removed: true }),
     },
     memory: {
-      list: async () => ok({ memories: [] }),
-      clear: async () => ok({ ok: true }),
+      list: async () => ipcOk({ memories: [] }),
+      clear: async () => ipcOk({ ok: true }),
     },
     goal: {
       list: async ({ sessionId }: Req<IpcApi['goal']['list']>) => {
-        const goals = mockGoals
+        const goals: GoalInfo[] = mockGoals
           .filter((g) => sessionId === undefined || g.sessionId === sessionId)
           .map((g) => ({
             sessionId: g.sessionId,
@@ -912,7 +883,7 @@ function createMockApi(): IpcApi {
             createdAt: Date.now(),
             finishedAt: null,
           }));
-        return ok({ goals });
+        return ipcOk({ goals });
       },
       create: async ({ sessionId, condition }: Req<IpcApi['goal']['create']>) => {
         // 对齐主进程语义：新建覆盖旧目标
@@ -921,19 +892,19 @@ function createMockApi(): IpcApi {
           mockGoals.splice(idx, 1);
         }
         mockGoals.push({ sessionId, condition });
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
       clear: async ({ sessionId }: Req<IpcApi['goal']['clear']>) => {
         const idx = mockGoals.findIndex((g) => g.sessionId === sessionId);
         if (idx >= 0) {
           mockGoals.splice(idx, 1);
         }
-        return ok({ ok: true });
+        return ipcOk({ ok: true });
       },
     },
     task: {
       list: async () =>
-        ok({
+        ipcOk({
           tasks: [
             {
               id: 'task-1',
@@ -958,28 +929,12 @@ function createMockApi(): IpcApi {
     },
 
     system: {
-      getStatus: async () =>
-        ok({
-          memory: {
-            rss: 320_000_000,
-            heapUsed: 120_000_000,
-            heapTotal: 180_000_000,
-            external: 40_000_000,
-          },
-          cpu: { user: 1_200, system: 300 },
-          uptime: 3_600,
-          pid: 0,
-          appVersion: '0.1.0-mock',
-          platform: 'web',
-          arch: 'x64',
-          isPackaged: false,
-          timestamp: Date.now(),
-        } as never),
+      getStatus: async () => ipcOk(mockSystemStatus()),
     },
 
     logs: {
       read: async () =>
-        ok({
+        ipcOk({
           filePath: '（浏览器模式无日志文件）',
           total: 3,
           truncated: false,
@@ -988,44 +943,44 @@ function createMockApi(): IpcApi {
     },
 
     devtools: {
-      open: async () => ok({ ok: true, mode: 'detach' }),
+      open: async () => ipcOk({ ok: true, mode: 'detach' }),
     },
 
     dialog: {
-      pickDirectory: async () => ok({ canceled: true }),
-      pickFiles: async () => ok({ canceled: true, paths: [] }),
+      pickDirectory: async () => ipcOk({ canceled: true }),
+      pickFiles: async () => ipcOk({ canceled: true, paths: [] }),
     },
 
     update: {
-      check: async () => fail('UPDATE_NOT_AVAILABLE', '浏览器模式无更新服务（预期）'),
-      install: async () => ok({ ok: true }),
+      check: async () => ipcOk({ status: 'up-to-date' }),
+      install: async () => ipcOk({ ok: true }),
       subscribeStatus: (cb: Parameters<IpcApi['update']['subscribeStatus']>[0]) => {
-        updateStatusCallbacks.add(cb as never);
-        return () => updateStatusCallbacks.delete(cb as never);
+        updateStatusCallbacks.add(cb);
+        return () => updateStatusCallbacks.delete(cb);
       },
     },
 
     im: {
-      list: async () => ok({ channels: [] }),
-      start: async () => ok({ ok: true }),
-      stop: async () => ok({ ok: true }),
+      list: async () => ipcOk({ channels: [] }),
+      start: async () => ipcOk({ ok: true }),
+      stop: async () => ipcOk({ ok: true }),
     },
     remote: {
-      getStatus: async () => ok(mockRemoteStatus()),
+      getStatus: async () => ipcOk(mockRemoteStatus()),
       start: async () => {
         mockRemoteRunning = true;
-        return ok(mockRemoteStatus());
+        return ipcOk(mockRemoteStatus());
       },
       stop: async () => {
         mockRemoteRunning = false;
-        return ok(mockRemoteStatus());
+        return ipcOk(mockRemoteStatus());
       },
     },
     tool: {
-      list: async () => ok({ tools: [] }),
+      list: async () => ipcOk({ tools: [] }),
     },
     search: {
-      grep: async () => ok({ matches: [] }),
+      grep: async () => ipcOk({ matches: [], truncated: false }),
       glob: async ({ pattern }: Req<IpcApi['search']['glob']>) => {
         // 模拟文件匹配（模糊搜索用）：解析 `**/*[aA]pp*` → 'app'（字符类取首字符）
         const query = pattern
@@ -1045,10 +1000,10 @@ function createMockApi(): IpcApi {
           'README.md',
           'electron.vite.config.ts',
         ].filter((f) => f.toLowerCase().includes(query));
-        return ok({ files, truncated: false });
+        return ipcOk({ files, truncated: false });
       },
     },
-  } as unknown as IpcApi;
+  } satisfies IpcApi;
 }
 
 /** 注入 mock window.api（仅前端独立开发模式调用） */
