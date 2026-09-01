@@ -164,7 +164,30 @@ E2E 兑底是正式策略而非欠账：
   非漏测；逻辑模块（hooks/stores/lib）覆盖率均在 90%+。
 - 补测准入：只补逻辑分支（含错误路径），不为凑数写"断言渲染了 DOM"的伪测试。
 
-### 3.5 测试文件清单（176 个）
+### 3.8 属性测试试点（2026-09-01 落地）
+
+**背景**（2026-08 讨论收敛）：对测试类型做过收益评估——其余生成类/变异测试
+边际收益递减不引入，仅对**强纯函数**试点 fast-check 属性测试作为既有 gaps 契约
+测试体系的有益补充。
+
+**选型**：`@fast-check/vitest`（fast-check 官方 Vitest 集成，无编排成本）。
+
+**试点范围（2 个，均为无 IO/DOM 的纯函数）**：
+
+| 文件 | 目标函数 | 覆盖的不变量 |
+|---|---|---|
+| [src/main/infra/ai/models/token-limits.property.test.ts](file:///src/main/infra/ai/models/token-limits.property.test.ts) | `clampOutputTokens` | 恒整非负；≤ 有效上限；有窗口时满足 `prompt + output + margin ≤ window`（唯一例外 MIN 保底）；下限保护；无窗口仅应用能力上限 |
+| [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | `joinPath` | 空 parentDir 原样返回；前缀/后缀保真；连接处恰一个分隔符；混合分隔符共存 |
+
+**试点收获**：joinPath 属性测试首轮即抓到手写用例未覆盖的断言缺陷——"全串不含 `//`"
+错误地假设了 parentDir 中部既有的连续分隔符在函数职责内（实际只负责连接处），
+修正为精确的"连接处单分隔符"不变量。这印证了属性测试对纯函数输入域系统性
+扫描的价值。
+
+**纳入门槛**：试点文件走常规单测通道（`pnpm test:main` / `pnpm test:renderer`）、
+普通覆盖率统计与 knip 死代码检查，无特殊豁免。
+
+### 3.5 测试文件清单（179 个）
 
 > 以下按区域列出代表性文件，完整清单以 `Glob "**/*.test.{ts,tsx}"` 为准。
 
@@ -178,7 +201,7 @@ E2E 兑底是正式策略而非欠账：
 | [packages/shared/src/__tests__/smoke.test.ts](file:///packages/shared/src/__tests__/smoke.test.ts) | shared 包 smoke |
 | [packages/shared/src/__tests__/shared-gaps.test.ts](file:///packages/shared/src/__tests__/shared-gaps.test.ts) | 契约补测：deriveChannels/元数据构造器/单一真源一致性/schema 拦截抽查 |
 
-#### main 主进程（122 个）
+#### main 主进程（123 个）
 
 涵盖 AI 核心（agent-service / tool-registry / tool-executor / permission-service / error-classifier / context-compression / ai-provider / models/* / agent-runtime/* / llm-client/* / providers/*）、MCP（mcp-service / mcp-client / mcp-tool-adapter / mcp-types）、工具（file-tools / search-tools / path-guard / run-command / codebase）、基础设施（file-service / git-service / session-service / db / keychain / app-data / code-analyzer / update-service / csp）、IPC handler（全部 14 域各一个）、配置与工具（config / logger / retry / wrap）、smoke（services.smoke）。
 
@@ -188,6 +211,7 @@ E2E 兑底是正式策略而非欠账：
 |------|------|
 | [src/main/infra/ai/agent-service.test.ts](file:///src/main/infra/ai/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
 | [src/main/infra/ai/tool-executor.test.ts](file:///src/main/infra/ai/tool-executor.test.ts) | 工具执行 + 权限审批 |
+| [src/main/infra/ai/models/token-limits.property.test.ts](file:///src/main/infra/ai/models/token-limits.property.test.ts) | fast-check 属性测试试点：clampOutputTokens 数学不变量（窗口余量/上限/下限保护） |
 | [src/main/infra/ai/permission-service.test.ts](file:///src/main/infra/ai/permission-service.test.ts) | 权限决策 + 记忆缓存 |
 | [src/main/infra/storage/session-service.test.ts](file:///src/main/infra/storage/session-service.test.ts) | 会话 CRUD + 用量统计 + 回合记录 |
 | [src/main/infra/git/git-service.test.ts](file:///src/main/infra/git/git-service.test.ts) | Git 操作（status / diff / add / commit / push） |
@@ -195,7 +219,7 @@ E2E 兑底是正式策略而非欠账：
 | [src/main/ipc/agent.handler.test.ts](file:///src/main/ipc/agent.handler.test.ts) | agent 域 IPC handler |
 | [src/main/security/csp.test.ts](file:///src/main/security/csp.test.ts) | CSP 安全策略 |
 
-#### renderer 渲染层（44 个）
+#### renderer 渲染层（45 个）
 
 涵盖 hooks（use-agent-bridge / use-terminal-bridge / use-git / use-update / use-api-key / use-sessions / use-tool-bridge / use-async-view）、组件（DevPanel / TerminalPanel / GitPanel / AsyncBoundary / EmptyState）、stores（terminal-store / usage-store）、lib（theme-init / error-actions / format-time / ipc / diff-stats）、mock-api、smoke。
 
@@ -205,6 +229,7 @@ E2E 兑底是正式策略而非欠账：
 |------|------|
 | [src/renderer/test/__tests__/mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
 | [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
+| [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
 | [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
 
 #### scripts 工具链（5 个）
@@ -367,7 +392,7 @@ DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等�
 
 ### 7.1 当前规模
 
-- **单元测试文件**：176 个（shared 5 + main 122 + renderer 44 + scripts 5）
+- **单元测试文件**：179 个（shared 5 + main 123 + renderer 45 + scripts 5 + integration 1）
 - **E2E 文件**：6 个
 - **总用例数**：约 400+（renderer 242 通过 + main/shared 用例；随测试增长）
 

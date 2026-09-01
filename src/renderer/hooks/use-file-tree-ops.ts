@@ -107,7 +107,7 @@ export function useFileTreeOps() {
  * 自动处理分隔符：若 parentDir 以分隔符结尾或 name 以分隔符开头，
  * 避免重复分隔符。空 parentDir 时直接返回 name。
  */
-function joinPath(parentDir: string, name: string): string {
+export function joinPath(parentDir: string, name: string): string {
   if (parentDir === '') return name;
   // 同时支持 \ 和 / 分隔符，取最后出现的作为当前分隔符
   const lastSlash = parentDir.lastIndexOf('/');
