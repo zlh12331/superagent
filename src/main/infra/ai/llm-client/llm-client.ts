@@ -19,11 +19,13 @@ import {
   generateObject as generateObjectAi,
   generateText as generateTextAi,
   type LanguageModel,
+  wrapLanguageModel,
 } from 'ai';
 import type { ZodType } from 'zod';
 import { logger } from '../../../utils/logger';
 import { estimateTokenCount } from '../agent/context-compression';
 import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
+import { modelObservabilityMiddleware } from '../middleware/model-observability';
 import type { ModelRegistry } from '../models';
 import { buildGenerationOptions } from '../models/generation-options';
 import type { ProviderKind } from '../providers/types';
@@ -31,6 +33,14 @@ import { getErrorCode, getErrorStatus, retryWithBackoff } from './retry';
 
 /** 全局模型超时兜底（毫秒）：模型未自带 timeoutMs 时的默认总时长 */
 const DEFAULT_MODEL_TIMEOUT_MS = 60_000;
+
+/**
+ * wrapLanguageModel 可接受的模型类型（LanguageModelV2|V3|V4）
+ *
+ * AI SDK 的 LanguageModel 还含 GlobalProviderModelId（id 字符串形态）；
+ * 本层工厂恒返回真实 v4 实例，此处收窄让 wrap 入参类型通过。
+ */
+type WrapableModel = Parameters<typeof wrapLanguageModel>[0]['model'];
 
 /**
  * 关闭 SDK 内置的 model call 级重试（side query 专用）
@@ -201,7 +211,13 @@ export class LlmClient {
         : []),
     );
     const model = factory(resolved.modelId);
-    this.modelCache.set(resolved.modelId, model);
+    // 统一观测中间件：per-model 缓存 wrapped 实例，agent 主回合 / chat /
+    // side query 的所有调用零改动即可获得耗时与错误的统一打点
+    const wrappedModel = wrapLanguageModel({
+      model: model as WrapableModel,
+      middleware: modelObservabilityMiddleware,
+    });
+    this.modelCache.set(resolved.modelId, wrappedModel);
     logger.debug(
       {
         modelId: resolved.modelId,
@@ -210,7 +226,7 @@ export class LlmClient {
       },
       'LlmClient 已创建 LanguageModel',
     );
-    return model;
+    return wrappedModel;
   }
 
   /**

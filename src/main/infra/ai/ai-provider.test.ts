@@ -19,7 +19,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // 必须用 vi.hoisted 导出 mock 对象（工厂内部直接 return，不能嵌套 const）
 const mocks = vi.hoisted(() => {
   // provider 工厂 mock（createOpenAICompatible 返回值）
-  const mockProviderFactory = vi.fn();
+  // 默认实现返回合法 v4 model：常规路径（getModel → LlmClient）会在
+  // wrapLanguageModel 中检查 specificationVersion 并透传 provider/modelId
+  const mockProviderFactory = vi.fn((modelId: string) => ({
+    specificationVersion: 'v4',
+    provider: 'test-provider',
+    modelId,
+    doGenerate: async () => ({ text: 'mock' }),
+    doStream: async () => ({ stream: {} }),
+  }));
   // createOpenAICompatible mock
   const mockCreateOpenAICompatible = vi.fn(() => mockProviderFactory);
   // createOpenAI mock（OpenAI 官方 provider）
@@ -232,8 +240,12 @@ describe('ai-provider', () => {
 
       // 应使用供应商定义中的默认模型 id 调用 provider 工厂
       expect(providerFactory).toHaveBeenCalledWith('deepseek-v4-flash');
-      // 返回值就是 provider 工厂的返回值
-      expect(model).toBe(mocks.mockProviderFactory());
+      // 常规路径经 LlmClient wrap：modelId/provider 透传，streamText 能力保留
+      expect(model).toMatchObject({
+        specificationVersion: 'v4',
+        provider: 'test-provider',
+        modelId: 'deepseek-v4-flash',
+      });
     });
 
     it('显式 modelId：覆盖默认值', async () => {

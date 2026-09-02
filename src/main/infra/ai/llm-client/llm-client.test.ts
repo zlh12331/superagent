@@ -57,9 +57,17 @@ function createClient() {
     defaultModelByKind: DEFAULT_MODEL_BY_KIND,
     defaultKind: 'deepseek',
   });
+  // 合法 v4 model（wrap 后 modelId/provider 才是真实 SDK 语义；id 字段会被丢弃）
   const createProviderFactory = vi.fn(
     async (kind: ProviderKind): Promise<(modelId: string) => LanguageModel> => {
-      return (modelId: string) => ({ id: `${kind}:${modelId}` }) as unknown as LanguageModel;
+      return (modelId: string) =>
+        ({
+          specificationVersion: 'v4',
+          provider: kind,
+          modelId,
+          doGenerate: async () => ({ text: 'mock' }),
+          doStream: async () => ({ stream: {} }),
+        }) as unknown as LanguageModel;
     },
   );
   const client = new LlmClient({ modelRegistry: registry, createProviderFactory });
@@ -82,7 +90,7 @@ describe('LlmClient', () => {
       const model = await client.getModel();
 
       expect(createProviderFactory).toHaveBeenCalledWith('deepseek');
-      expect(model).toMatchObject({ id: 'deepseek:deepseek-v4-flash' });
+      expect(model).toMatchObject({ modelId: 'deepseek-v4-flash' });
     });
 
     it('显式模型 id：跨供应商解析（gpt-4o-mini → openai）', async () => {
@@ -91,7 +99,7 @@ describe('LlmClient', () => {
       const model = await client.getModel('gpt-4o-mini');
 
       expect(createProviderFactory).toHaveBeenCalledWith('openai');
-      expect(model).toMatchObject({ id: 'openai:gpt-4o-mini' });
+      expect(model).toMatchObject({ modelId: 'gpt-4o-mini' });
     });
 
     it('per-model 缓存：同模型第二次调用不重复创建工厂', async () => {
@@ -111,7 +119,7 @@ describe('LlmClient', () => {
       const model = await client.getModel('custom-model-xyz');
 
       expect(createProviderFactory).toHaveBeenCalledWith('deepseek');
-      expect(model).toMatchObject({ id: 'deepseek:custom-model-xyz' });
+      expect(model).toMatchObject({ modelId: 'custom-model-xyz' });
     });
 
     it('已停用模型：getModel 抛 MODEL_DISABLED（不落入透传兜底）', async () => {
@@ -141,7 +149,7 @@ describe('LlmClient', () => {
         apiKey: 'sk-custom',
         baseUrl: 'https://custom.api.com',
       });
-      expect(model).toMatchObject({ id: 'openai:custom-endpoint' });
+      expect(model).toMatchObject({ modelId: 'custom-endpoint' });
     });
 
     it('reset：清空 per-model 缓存，重新创建实例', async () => {
@@ -451,9 +459,9 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
       // 第二次调用使用默认模型（deepseek-v4-flash）
       const secondArgs = mocks.mockGenerateText.mock.calls[1]?.[0] as
-        | { model: { id: string } }
+        | { model: { modelId: string } }
         | undefined;
-      expect(secondArgs?.model.id).toBe('deepseek:deepseek-v4-flash');
+      expect(secondArgs?.model.modelId).toBe('deepseek-v4-flash');
       expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'gpt-4o', fallbackModel: 'deepseek-v4-flash' }),
         expect.stringContaining('ModelFallback'),

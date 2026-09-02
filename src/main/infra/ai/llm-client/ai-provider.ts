@@ -159,6 +159,8 @@ export const runtimeModelStore = new RuntimeModelStore();
  *
  * 调用方注意：业务代码请走无覆盖参数路径；kind/apiKey 覆盖路径
  * 不具备模型级解析/缓存/容错能力，请勿在业务逻辑中使用。
+ * 覆盖路径也不经过观测中间件（LlmClient 常规链路专用，见
+ * middleware/model-observability.ts 边界说明）。
  *
  * @param modelId 模型 id（省略时使用默认模型）
  * @param options kind 供应商 / apiKey 覆盖（仅用于测试连接）
