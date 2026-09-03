@@ -32,8 +32,13 @@ function main(): void {
     process.exit(1);
   }
 
-  // 1. 提取裸 <script> 内联块（首帧主题脚本；type="module" 的入口脚本带属性不匹配）
-  const inline = /<script>([\s\S]*?)<\/script>/.exec(html);
+  // 1. 提取 head 内首个裸 <script> 内联块（首帧主题脚本；type="module" 的入口脚本带属性不匹配）
+  //    锚定 <head> 并先剥离 HTML 注释：裸 <script> 的正则是惰性匹配（第一个开标签到最近的
+  //    闭标签），但不锚定位置——若注释里出现裸 <script>（如注释掉旧版主题脚本），会误提旧
+  //    脚本算出旧 hash，旧 hash 仍在 csp.ts 中 → 闸静默放行真实失效，故必须先剥离注释
+  const inline = /<head>[\s\S]*?<script>([\s\S]*?)<\/script>/.exec(
+    html.replace(/<!--[\s\S]*?-->/g, ''),
+  );
   if (inline === null || inline[1] === undefined || inline[1].trim() === '') {
     console.error(
       '[check-csp-hash] ❌ index.html 缺失首帧主题内联脚本（裸 <script> 块）——防闪失效',
