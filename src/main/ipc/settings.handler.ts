@@ -22,6 +22,7 @@ import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
 import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
+import { syncTitleBarOverlayFromTheme } from '../window';
 
 /**
  * Settings 域 handler 工厂
@@ -36,12 +37,20 @@ export function createSettingsHandlers(params: {
   return {
     // S1：读取全部渲染层设置（app_settings 表快照；启动时 main.tsx 顶层 await 调用）
     getAll: async () => {
-      return { settings: readAllSettings() };
+      const settings = readAllSettings();
+      // 启动校正：窗口控件色（titleBarOverlay）按 SQLite 实际主题设置——
+      // createWindow 时静态配置只反映默认值（dark），此处是权威同步时机
+      syncTitleBarOverlayFromTheme(settings['theme']);
+      return { settings };
     },
 
     // S1：写穿透落库（渲染层内存态变更后 fire-and-forget）
     set: async (input) => {
       writeSetting(input.key, input.value);
+      // 主题变更联动窗口控件色（Windows titleBarOverlay，零新增 IPC 的主进程收口）
+      if (input.key === 'theme') {
+        syncTitleBarOverlayFromTheme(input.value);
+      }
       return { ok: true };
     },
 

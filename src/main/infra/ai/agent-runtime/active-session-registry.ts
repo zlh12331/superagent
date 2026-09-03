@@ -26,6 +26,11 @@ export class ActiveSessionRegistry {
   /** 活跃 stream Promise（catch 后恒 fulfilled） */
   private readonly streams = new Map<string, Promise<void>>();
 
+  /** 当前活跃会话数（关窗协商用：>0 表示有回合在跑） */
+  get activeCount(): number {
+    return this.controllers.size;
+  }
+
   /** 获取指定会话的 controller（无活跃会话返回 undefined） */
   getController(sessionId: string): AbortController | undefined {
     return this.controllers.get(sessionId);

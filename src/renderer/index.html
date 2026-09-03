@@ -12,15 +12,29 @@
     （见 src/main/security/csp.ts + src/main/index.ts）
     不在 HTML 中声明 CSP meta，避免与响应头策略冲突
   ──────────────────────────────────────────────────────────────
+  首帧防闪（FOUC，进程与窗口/UI 维度）：
+  - <html style="background:#0A0A0A">：首绘兜底深底（默认主题 dark 的 --bg 值，
+    见 tokens.css .dark --bg）——主进程 settings:getAll 往返期间按系统白绘制会闪
+  - head 内联同步脚本：读 localStorage 镜像键 code-agent:theme 切 .dark class，
+    然后移除兜底背景交还 token 体系。亮色用户首帧即白（class 已切 light），
+    暗色用户兜底色与 token 背景同值，两端均无跳变
+  - ⚠️ CSP 契约：内联脚本被生产 CSP script-src 'sha256-…' 放行
+    （src/main/security/csp.ts PRODUCTION_CSP）——修改本脚本任何字符
+    都必须重算 hash 并同步更新（重算：
+    node -e "console.log(require('crypto').createHash('sha256')
+    .update(<脚本内容>).digest('base64'))"）
+  - 镜像写入点：settings-store setTheme / applySettingsSnapshot
+    （mirrorThemeForFirstPaint，见 src/renderer/lib/theme-init.ts）
   注意：
   - 用 preconnect 提前建立 TLS，降低字体加载延迟
   - 字体在 globals.css 中通过 --font-serif/--font-sans/--font-mono 变量定义并附本地回退
   - 加载失败时自动降级到系统字体（Songti SC / Microsoft YaHei / Consolas 等）
 -->
-<html lang="zh-CN">
+<html lang="zh-CN" style="background:#0A0A0A">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>(function(){try{var t=localStorage.getItem('code-agent:theme');if(t!=='light'&&t!=='dark'&&t!=='system'){t='dark'}var dark=t==='dark'||(t==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);var d=document.documentElement;if(dark){d.classList.add('dark');}else{d.classList.remove('dark');}d.style.removeProperty('background');}catch(_e){document.documentElement.style.removeProperty('background');}})();</script>
     <!-- 预连接 Google Fonts 域名，降低首次字体请求延迟 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

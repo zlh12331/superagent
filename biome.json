@@ -410,6 +410,19 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/src/renderer/index.html"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noInnerDeclarations": "off"
+          },
+          "complexity": {
+            "useArrowFunction": "off"
+          }
+        }
+      }
     }
   ]
 }

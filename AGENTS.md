@@ -59,6 +59,20 @@ tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 - 流式事件用 subscribe 回调模式（返回 unsubscribe 函数）
 - Channel 命名：`{domain}:{action}`（请求-响应）、`{domain}:stream:{event}`（流式）、`{domain}:event:{name}`（状态事件），常量表在 `packages/shared/src/ipc/channels.ts`
 
+## 进程与崩溃影响分级（显式取舍，对照 VS Code 六进程模型）
+
+当前是**扁平三进程模型**（main / preload / renderer），所有重活（IM 长连接、LSP、node-pty 终端、Agent 回合、MCP 子进程）都在主进程内跑，无 VS Code 式 Extension Host / Shared Process / PtyHost 拆分。各故障域的影响：
+
+| 故障 | 影响 | 恢复机制 |
+|---|---|---|
+| 渲染进程崩溃 | 整窗消失（单窗口设计，无独立重开） | Electron 自动重建 webContents；数据真源在 SQLite 无损 |
+| 主进程崩溃 | 应用退出 | `.crash-marker` + 启动 `recoverFromCrash()` 把 running 回合标 interrupted |
+| MCP server / LSP / pty / ripgrep 子进程崩溃 | 对应功能降级，主进程存活 | 各 service 自管重启/报错（run-command killTree 防孤儿） |
+| MemoryHub sidecar 崩溃 | 记忆功能降级 | service 层报错，主流程不依赖 |
+| 断电/强杀 | running 会话残留 | 下次启动 `markAllInterrupted()`（启动期无条件执行，不依赖崩溃标记） |
+
+退出路径双层保障：**关窗协商**（`window.ts` close 拦截：运行中回合弹确认，`CODE_AGENT_SKIP_CLOSE_GUARD=1` 豁免）+ **退出善后**（dispose 链 `markInterruptedOnShutdown`：agentService drain 后把残留 running 标 interrupted，消除"干净退出留 stale running"窗口）。取舍说明：单窗口 Agent 应用暂不做进程拆分（重活隔离的收益 < utilityProcess 拆分的复杂度），若未来多窗口/插件化再评估。
+
 ## IPC 自动化体系（自研，核心资产）
 
 定义表驱动全链路自动生成，新增 IPC 方法只需改定义表 + handler：

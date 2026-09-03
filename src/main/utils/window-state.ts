@@ -13,7 +13,7 @@
 // - 零依赖（不依赖 logger/config），文件路径由调用方传入（测试注入临时路径）
 // ──────────────────────────────────────────────────────────────
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { BrowserWindow, Rectangle } from 'electron';
 
@@ -117,7 +117,11 @@ export function trackWindowState(win: BrowserWindow, filePath: string): () => vo
     try {
       // 确保目录存在（首次启动 userData 可能尚未创建）
       mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, JSON.stringify(state), 'utf8');
+      // 原子写：先写 tmp 再 rename（同文件系统 rename 原子）——
+      // 直写时断电/崩溃可能产生半截 JSON（load 虽有损坏回退，但重启即丢窗口记忆）
+      const tmpPath = `${filePath}.tmp`;
+      writeFileSync(tmpPath, JSON.stringify(state), 'utf8');
+      renameSync(tmpPath, filePath);
     } catch {
       // 写入失败静默（磁盘满/权限问题不应影响窗口使用）
     }

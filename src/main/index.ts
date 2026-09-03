@@ -11,7 +11,7 @@
 import { join } from 'node:path';
 import * as Sentry from '@sentry/electron/main';
 import { startupTracingIntegration } from '@sentry/electron/main';
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, nativeTheme, session } from 'electron';
 import { getAppConfig } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
 import {
@@ -26,6 +26,7 @@ import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
+import { readAllSettings } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
@@ -58,12 +59,19 @@ import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { buildCsp } from './security/csp';
 import {
   disposeServices,
+  hasRunningAgentTurns,
   initRuntimeModels,
   recoverFromCrash,
   serviceContainer,
 } from './service-container';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
-import { createWindow } from './window';
+import {
+  confirmInterruptRunningTurns,
+  createWindow,
+  isCloseConfirmed,
+  setCloseConfirmed,
+  syncTitleBarOverlayFromTheme,
+} from './window';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
@@ -434,6 +442,12 @@ app
 
     createWindow();
 
+    // 系统主题变化 → 窗口控件色联动（theme='system' 时与渲染层 matchMedia 行为对齐；
+    // 手动主题路径由 settings:set / settings:getAll 收口，见 settings.handler.ts）
+    nativeTheme.on('updated', () => {
+      syncTitleBarOverlayFromTheme(readAllSettings()['theme']);
+    });
+
     // macOS: 点击 dock 图标时若无窗口则重建
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -463,6 +477,20 @@ app.on('window-all-closed', () => {
   }
 });
 
+// ── 信号优雅退出（进程与窗口维度：非 GUI 退出路径也要走善后）──
+// SIGINT（dev 终端 Ctrl+C）/ SIGTERM（kill / CI 超时终止）默认直接杀进程，
+// before-quit / before-quit 的 drain（agentService 3s + markInterruptedOnShutdown）
+// 全部不执行 → 孤儿 PTY / 残留 running 会话。转为 app.quit() 后走完整退出链。
+// 语义选择：信号 = 无 GUI 确认场景，直接置 closeConfirmed 跳过协商弹框，
+// 但保留 drain 善后（强杀意图明确，善后是尽力而为的 3s 窗口）。
+// Windows 注意：taskkill 默认不投递信号（需 /ESP），此注册主要服务 dev 与 POSIX CI。
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    setCloseConfirmed();
+    app.quit();
+  });
+}
+
 // 应用退出前统一清理所有服务（设计文档 §1.1 应用生命周期 / §7.6 生命周期管理）
 // P3-10 改造：disposeServices 内部调用 ChatService.dispose() 等待所有活跃 stream 真正完成
 // （带 3s 超时兜底），避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
@@ -474,6 +502,28 @@ let imChannelsInit: Promise<void> | null = null;
 let lagMonitor: EventLoopLagMonitor | null = null;
 app.on('before-quit', async (event) => {
   if (isQuitting) {
+    return;
+  }
+  // ── 进程级关窗协商（覆盖 macOS Cmd+Q / app.quit() 路径）──
+  // Cmd+Q 不经过窗口 close 事件（before-quit 先行），Windows 点 X 的协商在
+  // window.ts close handler——两条路径共享 isCloseConfirmed 标志，任一通过即放行。
+  if (
+    !isCloseConfirmed() &&
+    process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] !== '1' &&
+    hasRunningAgentTurns()
+  ) {
+    event.preventDefault();
+    const win = BrowserWindow.getAllWindows()[0];
+    // 窗口已不存在（window-all-closed 后的 quit）→ 无协商对象，直接放行清理
+    const confirmed = win !== undefined ? await confirmInterruptRunningTurns(win) : true;
+    if (!confirmed) {
+      logger.info({}, '用户取消退出，运行中回合继续（应用保持运行）');
+      return;
+    }
+    setCloseConfirmed();
+    logger.info({}, '用户确认退出（运行中回合将被中断标记）');
+    // 重新触发 before-quit：此时协商已通过，走下方清理流程
+    app.quit();
     return;
   }
   // preventDefault 必须在事件循环开始处同步调用，确保能阻止默认退出

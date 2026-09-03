@@ -81,6 +81,8 @@ async function launchElectron(): Promise<{ app: ElectronApplication; page: Page 
       SENTRY_DSN: '',
       // 独立调试端口：dev 实例（electron-vite dev 自带窗口）已占 9222
       CODE_AGENT_DEBUG_PORT: DEBUG_PORT,
+      // 关窗协商豁免：E2E 无头场景跳过"运行中回合确认"模态框（防测试卡死）
+      CODE_AGENT_SKIP_CLOSE_GUARD: '1',
     },
   });
 

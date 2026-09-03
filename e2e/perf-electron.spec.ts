@@ -45,6 +45,8 @@ function testEnv(): Record<string, string | undefined> {
     ELECTRON_RENDERER_URL: 'http://localhost:5173',
     CODE_AGENT_USER_DATA: E2E_USER_DATA,
     CODE_AGENT_DEBUG_PORT: DEBUG_PORT,
+    // 关窗协商豁免：E2E 无头场景跳过"运行中回合确认"模态框（防测试卡死）
+    CODE_AGENT_SKIP_CLOSE_GUARD: '1',
   };
 }
 

@@ -9,15 +9,104 @@
 // ──────────────────────────────────────────────────────────────
 
 import { join } from 'node:path';
-import { app, BrowserWindow, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
-
-import { logger } from './utils/logger';
+import { hasRunningAgentTurns } from './service-container';
+import { captureSentryMessage, logger } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
+
+/** Windows/Linux 窗口控件（最小化/最大化/关闭）符号色 —— 按主题切换 */
+const TITLE_BAR_SYMBOL = {
+  /** stone-400：暗色玻璃背景上清晰可见（纯黑会隐身） */
+  dark: '#a8a29e',
+  /** stone-600：亮色背景上清晰可见（与 stone-400 同色系加深） */
+  light: '#57534e',
+} as const;
+
+/**
+ * 应用主题化窗口控件色（titleBarOverlay）
+ *
+ * 仅 Windows 支持 setTitleBarOverlay 运行时更新（Linux 的 WCO 无此 API，
+ * macOS 红绿灯由系统绘制不需要）——其余平台静默跳过。
+ */
+export function applyTitleBarOverlayTheme(resolved: 'light' | 'dark'): void {
+  if (process.platform !== 'win32') {
+    return;
+  }
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win === undefined || win.isDestroyed()) {
+    return;
+  }
+  try {
+    win.setTitleBarOverlay({
+      // 透明底：让顶栏玻璃背景统一延伸（深色实底会形成突兀黑块）
+      color: '#00000000',
+      symbolColor: resolved === 'dark' ? TITLE_BAR_SYMBOL.dark : TITLE_BAR_SYMBOL.light,
+    });
+  } catch (err) {
+    // 部分 Windows 版本/窗口态下 API 可能抛错（非致命，控件色退化为创建时配置）
+    logger.warn({ error: String(err) }, 'titleBarOverlay 主题切换失败（控件色保持原值）');
+  }
+}
+
+/**
+ * 按用户主题设置解析并应用窗口控件色
+ *
+ * 主进程收口点：settings:set（渲染层切主题）/ settings:getAll（启动校正）/
+ * nativeTheme updated（system 模式 OS 切换）三个事件统一走此函数。
+ * 'system' 用主进程 nativeTheme 解析（与渲染层 matchMedia 同源信号）。
+ */
+export function syncTitleBarOverlayFromTheme(theme: unknown): void {
+  const t = theme === 'light' || theme === 'dark' || theme === 'system' ? theme : 'dark';
+  const resolved = t === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : t;
+  applyTitleBarOverlayTheme(resolved);
+}
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
 // 详见 https://electron-vite.org/guide/dev#limitations-of-sandboxing
+
+// ── 关窗协商共享状态（进程与窗口维度）──
+// close 路径（Windows/Linux 点 X）与 before-quit 进程级路径（macOS Cmd+Q / app.quit()）
+// 共享同一个"用户已确认"标志：任一路径确认后，另一路径直接放行。
+// macOS Cmd+Q 不触发窗口 close 事件（before-quit 先行），因此标志必须模块级。
+let closeConfirmed = false;
+
+/** 用户是否已确认退出（关窗协商通过后置位） */
+export function isCloseConfirmed(): boolean {
+  return closeConfirmed;
+}
+
+/** 标记用户已确认退出（协商弹窗"退出"按钮回调） */
+export function setCloseConfirmed(): void {
+  closeConfirmed = true;
+}
+
+/**
+ * 运行中回合退出确认弹窗（close 协商与 before-quit 协商共用）
+ *
+ * @returns true = 用户确认退出（中断回合，交由退出善后标记 interrupted）
+ *          false = 用户取消（回合继续，应用保持运行）
+ */
+export async function confirmInterruptRunningTurns(win: BrowserWindow): Promise<boolean> {
+  try {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: app.getName(),
+      message: 'Agent 回合正在运行',
+      detail: '现在退出将中断当前回合（已生成内容保留，下次启动可从中断处恢复）。确定退出吗？',
+      buttons: ['取消', '退出'],
+      defaultId: 0, // 默认聚焦"取消"——误按 Enter 不至于丢回合
+      cancelId: 0,
+      noLink: true,
+    });
+    return response === 1;
+  } catch (err) {
+    // dialog 失败（窗口已销毁等）：保守放行，交给 before-quit 兜底清理
+    logger.warn({ error: String(err) }, '关窗确认对话框失败，放行关闭（before-quit 兜底）');
+    return true;
+  }
+}
 
 /**
  * 创建主窗口
@@ -48,13 +137,15 @@ export function createWindow(): BrowserWindow {
     // - Windows/Linux：titleBarOverlay 保留窗口控件（系统绘制，原生交互全保留）
     titleBarStyle: 'hidden',
     // 非 macOS 平台用 overlay 窗口控件（Electron 官方推荐平台分支写法）
+    // symbolColor 取暗色值（默认主题 dark）；启动时 syncTitleBarOverlayFromTheme
+    // 会按 SQLite 实际设置校正，主题切换实时联动
     ...(process.platform !== 'darwin'
       ? {
           titleBarOverlay: {
             // 透明底：让顶栏玻璃背景统一延伸（深色实底会形成突兀黑块）
             color: '#00000000',
             // stone-400：暗色玻璃背景上清晰可见（纯黑会隐身）
-            symbolColor: '#a8a29e',
+            symbolColor: TITLE_BAR_SYMBOL.dark,
             // 与 --aurora-topbar-h（52px）对齐
             height: 52,
           },
@@ -112,10 +203,69 @@ export function createWindow(): BrowserWindow {
     win.show();
   });
 
+  // ── 关窗协商（进程与窗口维度：关窗前与用户确认运行中回合）──
+  // 有 Agent 回合在跑时拦截 close，弹确认框（对齐 VS Code"未保存工作退出确认"）：
+  // - 取消 → 窗口保留，回合继续（用户可等回合自然结束再关）
+  // - 退出 → 置共享标志放行本次 close，退出路径由 before-quit
+  //   的 agentService.dispose drain + markInterruptedOnShutdown 善后
+  // 豁免：CODE_AGENT_SKIP_CLOSE_GUARD=1（E2E / 无头场景跳过协商，防模态框卡死测试）
+  win.on('close', (event) => {
+    if (isCloseConfirmed() || process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] === '1') {
+      return;
+    }
+    if (!hasRunningAgentTurns()) {
+      return;
+    }
+    event.preventDefault();
+    logger.info({}, '检测到运行中的 Agent 回合，拦截窗口关闭并请求用户确认');
+    void confirmInterruptRunningTurns(win).then((confirmed) => {
+      if (confirmed) {
+        setCloseConfirmed();
+        win.close();
+      }
+    });
+  });
+
   // 恢复最大化状态（必须在 show 前，避免先显示普通窗口再跳变）
   if (windowState.isMaximized) {
     win.maximize();
   }
+
+  // ── 渲染进程崩溃自愈（进程与窗口维度：渲染崩 ≠ 整窗死）──
+  // reason 分类（Electron webContents 'render-process-gone'）：
+  // - clean-exit：正常退出路径（如 win.close 流程），不处理
+  // - crashed / oom / killed / launch-failed 等：自动 reload 恢复窗口
+  //   数据真源在 SQLite + 持久 store，reload 仅丢 transient 内存态（可接受）
+  // 防循环：60s 窗口内最多 2 次自愈，超限停止 reload（避免"崩→reload→再崩"死循环）
+  let crashRecoveryCount = 0;
+  let crashWindowStart = 0;
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') {
+      return;
+    }
+    logger.error(
+      { reason: details.reason, exitCode: details.exitCode },
+      '渲染进程异常退出，尝试自动恢复',
+    );
+    void captureSentryMessage(
+      `渲染进程崩溃：reason=${details.reason} exitCode=${details.exitCode}`,
+    );
+    const now = Date.now();
+    if (now - crashWindowStart > 60_000) {
+      crashWindowStart = now;
+      crashRecoveryCount = 0;
+    }
+    crashRecoveryCount += 1;
+    if (crashRecoveryCount > 2) {
+      logger.error(
+        { reason: details.reason, crashRecoveryCount },
+        '渲染进程短时间反复崩溃，停止自动恢复（请手动重启应用）',
+      );
+      void captureSentryMessage('渲染进程反复崩溃，已停止自动恢复', 'warning');
+      return;
+    }
+    win.webContents.reload();
+  });
 
   // 窗口状态跟踪：move/resize 防抖 + 最大化即时 + close 同步落盘
   trackWindowState(win, join(app.getPath('userData'), 'window-state.json'));

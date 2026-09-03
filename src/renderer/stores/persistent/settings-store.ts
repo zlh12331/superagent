@@ -23,6 +23,7 @@ import {
 import { create } from 'zustand';
 
 import { LANGUAGE_STORAGE_KEY } from '@/i18n/config';
+import { mirrorThemeForFirstPaint } from '@/lib/theme-init';
 
 /**
  * 平台修饰键：macOS 用 Meta（⌘），Windows/Linux 用 Ctrl
@@ -333,6 +334,9 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   setTheme: (theme) => {
     set({ theme });
     persistSetting('theme', theme);
+    // 首帧防闪镜像：index.html 内联脚本（CSP hash 放行）在主进程 settings:getAll
+    // 往返完成前读此键切 .dark——与 LANGUAGE_STORAGE_KEY 镜像同构的派生缓存
+    mirrorThemeForFirstPaint(theme);
   },
   setLanguage: (language) => {
     set({ language });
@@ -392,8 +396,12 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
  * @param snapshot settings:getAll 返回的 key → JSON 值映射（已含迁移处理）
  */
 export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>>): void {
+  const theme = (snapshot['theme'] as Theme | undefined) ?? DEFAULT_SETTINGS.theme;
+  // 首帧镜像随快照同步：新用户（无镜像）首帧脚本按默认 dark 渲染，
+  // 首次改主题后镜像即生效；SQLite 快照是权威值，此处补写保持一致
+  mirrorThemeForFirstPaint(theme);
   useSettingsStore.setState({
-    theme: (snapshot['theme'] as Theme | undefined) ?? DEFAULT_SETTINGS.theme,
+    theme,
     language: (snapshot['language'] as AppLanguage | undefined) ?? DEFAULT_SETTINGS.language,
     ai: { ...DEFAULT_SETTINGS.ai, ...((snapshot['ai'] as Partial<AiSettings> | undefined) ?? {}) },
     editor: {

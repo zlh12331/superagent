@@ -16,6 +16,8 @@
 //   4.  ImService.stopAll()         停止 IM 渠道长连接
 //   5.  RemoteControl.release()     解除命令桥接订阅 + 停 HTTP 监听/UDP 发现广播
 //   6.  AgentService.dispose()      中断活跃 agent 对话（drain 完成后再收下层）
+//   6.5 markInterruptedOnShutdown   退出善后：残留 running 回合标 interrupted
+//       （消除"干净退出留 stale running"窗口，须在 closeDb 前落库）
 //   7.  MCPService.stopAll()        停止所有 MCP server 子进程
 //   8.  lspManager.disposeAll()     关闭全部 language server（drain 后收，活跃回合仍需）
 //   9.  PermissionService.dispose() reject 所有 pending 审批 Promise
@@ -796,6 +798,25 @@ class ServiceContainer {
       this.agentService = null;
     });
 
+    // 1.12 退出善后：把仍在 running 的回合标记为 interrupted
+    //     agentService.dispose 已 drain（正常路径 stream finally 已 markIdle），
+    //     但 3s 超时强清的 stream 协程仍悬挂 → DB 残留 running。
+    //     此步消除"干净退出却留 stale running、依赖下次启动 recoverFromCrash
+    //     才纠正"的窗口（退出后外部工具/备份脚本读到的一律是终态）。
+    //     幂等：markAllInterrupted 只影响 last_run_status='running' 的行；
+    //     必须在 sessionService.dispose / closeDb 之前（此后无人再写 sessions 表）。
+    await runStep('markInterruptedOnShutdown', async () => {
+      if (this.sessionService !== null) {
+        const interrupted = await this.sessionService.markAllInterrupted();
+        if (interrupted > 0) {
+          logger.info(
+            { interrupted },
+            '退出善后：未收尾回合已标记为 interrupted（下次启动可恢复）',
+          );
+        }
+      }
+    });
+
     // 2.5 关闭 MCPService（停止所有 MCP server 子进程）
     await runStep('mcpService.stopAll', async () => {
       if (this.mcpService !== null) {
@@ -927,6 +948,17 @@ class ServiceContainer {
   }
 
   /**
+   * 是否有 Agent 回合正在运行（关窗协商用）
+   *
+   * 窗口 close 事件的"运行中回合确认弹窗"判定依据：
+   * - AgentService 未初始化（从未跑过回合）→ false，不打扰正常关闭
+   * - 不触发懒初始化，只查询现有实例
+   */
+  hasRunningAgentTurns(): boolean {
+    return this.agentService?.hasActiveSessions() ?? false;
+  }
+
+  /**
    * 重置所有服务缓存（仅测试用）
    *
    * 用于测试用例隔离：重置所有模块级单例缓存，让下一个测试用例重新初始化。
@@ -1026,4 +1058,15 @@ export async function recoverFromCrash(): Promise<void> {
  */
 export async function disposeServices(): Promise<void> {
   await serviceContainer.dispose();
+}
+
+/**
+ * 是否有 Agent 回合正在运行（关窗协商用）
+ *
+ * 窗口 close 事件的"运行中回合确认弹窗"判定依据：
+ * - 未初始化 AgentService（从未跑过回合）→ false，不打扰正常关闭
+ * - E2E / 特殊场景可用环境变量 CODE_AGENT_SKIP_CLOSE_GUARD=1 豁免协商
+ */
+export function hasRunningAgentTurns(): boolean {
+  return serviceContainer.hasRunningAgentTurns();
 }

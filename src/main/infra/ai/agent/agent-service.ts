@@ -143,6 +143,13 @@ export interface IAgentService {
   /** 中断所有活跃 agent 对话（用于应用退出 / 窗口关闭场景） */
   abortAll(): void;
   /**
+   * 是否存在活跃 agent 回合（关窗协商用）
+   *
+   * 窗口关闭前询问用户"回合运行中，确认中断退出"的判定依据；
+   * 空注册表（无回合或已全部收尾）返回 false，不打扰正常退出。
+   */
+  hasActiveSessions(): boolean;
+  /**
    * 优雅关闭：中断所有活跃 agent 对话并等待 stream 真正完成
    *
    * 与 IChatService.dispose 一致，用于应用退出场景。
@@ -260,6 +267,11 @@ export class AgentService implements IAgentService {
   /** @inheritDoc */
   abortAll(): void {
     this.registry.abortAll();
+  }
+
+  /** @inheritDoc */
+  hasActiveSessions(): boolean {
+    return this.registry.activeCount > 0;
   }
 
   /** @inheritDoc */

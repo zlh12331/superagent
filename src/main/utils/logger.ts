@@ -215,3 +215,21 @@ async function captureToSentry(error: Error): Promise<void> {
     // Sentry 未初始化或不可用时静默降级（logger 已记录）
   }
 }
+
+/**
+ * 上报消息级事件到 Sentry（供非 Error 的系统事件：进程崩溃/内存告警等）
+ *
+ * Sentry 可能未初始化（遥测 off / DSN 未配置），try 包裹保证不抛。
+ * 供 window.ts 渲染崩溃自愈等模块复用，避免各自动态 import。
+ */
+export async function captureSentryMessage(
+  message: string,
+  level: 'warning' | 'error' = 'error',
+): Promise<void> {
+  try {
+    const Sentry = await import('@sentry/electron/main');
+    Sentry.captureMessage(message, level);
+  } catch {
+    // Sentry 未初始化或不可用时静默降级（调用方应已 logger 记录）
+  }
+}
