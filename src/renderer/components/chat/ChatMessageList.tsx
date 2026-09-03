@@ -274,7 +274,13 @@ export function ChatMessageList({
     // 外层 wrapper：position: relative 让 .scroll-to-bottom（absolute）正确定位
     <div className={cn('relative h-full', className)}>
       {/* 消息滚动区（普通滚动渲染） */}
-      <div ref={scrollerRef} className="messages h-full overflow-y-auto" onScroll={handleScroll}>
+      {/* data-testid 供 e2e/perf/render.bench.spec.ts 布局基准与 DOM 节点断言定位 */}
+      <div
+        ref={scrollerRef}
+        data-testid="chat-message-list"
+        className="messages h-full overflow-y-auto"
+        onScroll={handleScroll}
+      >
         {/* 居中限宽容器（CSS .messages-inner 已定义但此前从未渲染——消息通栏全宽，
             与 820px 居中的输入框严重错位） */}
         <div className="messages-inner">
