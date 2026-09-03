@@ -6,6 +6,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
+// 渲染层 Sentry 初始化（必须在 React render 之前；production 生效，dev/test/web 跳过）
+// 边界组件（AppErrorBoundary/SectionErrorBoundary）的 captureException 依赖它建立 IPC
+// 通道，否则事件被 @sentry/electron 空实现静默丢弃（2026-09-04 修复）
+import { initRendererInstrumentation } from '@/lib/instrumentation';
+
+initRendererInstrumentation();
 
 // 前端独立开发模式（pnpm dev:web）：无 Electron preload 时注入完整 mock window.api
 // - 仅当 vite 以 --mode web 运行时生效（import.meta.env.MODE === 'web'）
