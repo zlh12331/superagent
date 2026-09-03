@@ -90,6 +90,12 @@ export function ChatMessageList({
     setWindowStart((prev) => nextPageStart(prev));
   }, []);
 
+  // 滚动事件合帧（2026-09 优化）：rAF 内只执行一次状态更新 + 分页判定，
+  // 避免单次滚动事件同步多次 setState（对齐 useMessageNavRail.scheduleSync 模式）。
+  // 底部按钮/新消息标记/分页加载是"帧级"状态，无需每滚动事件实时。
+  const scrollFrameRef = useRef<number | null>(null);
+  const pendingHasNewRef = useRef(false);
+
   // 会话切换（messages 骤变）时重置窗口；流式 append（长度增长）不重置
   useEffect(() => {
     setWindowStart((prev) => {
@@ -126,10 +132,11 @@ export function ChatMessageList({
   });
 
   /**
-   * 滚动回调：底部检测（替代 Virtuoso atBottomStateChange）
+   * 滚动回调：底部检测 + 分页加载（rAF 合帧，2026-09 优化）
    *
-   * - 在底部附近：隐藏按钮，清除 hasNew
-   * - 不在底部：显示按钮
+   * 替代 Virtuoso atBottomStateChange。isAtBottomRef 是最实时语义（滚动回调内
+   * 同步写入，供流式自动滚动/分页补偿读取）；UI 反映（按钮显隐、新消息红点）
+   * 与分页加载统一推迟到下一帧执行一次，避免滚动事件风暴下多次 setState。
    */
   const handleScroll = (): void => {
     const el = scrollerRef.current;
@@ -137,21 +144,49 @@ export function ChatMessageList({
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD;
     isAtBottomRef.current = atBottom;
     if (atBottom) {
-      setShowScrollBtn(false);
-      setHasNew(false);
+      pendingHasNewRef.current = false;
     } else {
-      setShowScrollBtn(true);
+      pendingHasNewRef.current = true;
     }
 
-    // 导航轨滚动联动：合帧更新活跃圆点
-    scheduleSync();
-
-    // 分页渲染：滚动到顶部附近且窗口未到开头 → 加载更早（记录高度供补偿）
+    // 分页渲染：滚动到顶部附近且窗口未到开头 → 加载更早（记录高度供补偿）。
+    // 移到 rAF 帧内执行，避免单次滚动事件重复触发 loadEarlier（clampedStart>0
+    // 已有约束：窗口推进后 clampedStart 变小，自然不再命中，合帧只为收敛状态写入）。
     if (el.scrollTop <= AT_TOP_THRESHOLD && clampedStart > 0) {
       prevScrollHeightRef.current = el.scrollHeight;
-      loadEarlier();
     }
+    // 导航轨滚动联动：合帧更新活跃圆点（其实现内部已 rAF 合帧）
+    scheduleSync();
+    scheduleScrollFrame();
   };
+
+  /** 合帧执行滚动派生状态更新（每帧至多一次） */
+  const scheduleScrollFrame = useCallback((): void => {
+    if (scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      const el = scrollerRef.current;
+      if (el !== null) {
+        setShowScrollBtn(
+          !(el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD),
+        );
+        setHasNew(pendingHasNewRef.current);
+        if (el.scrollTop <= AT_TOP_THRESHOLD && clampedStart > 0) {
+          loadEarlier();
+        }
+      }
+    });
+  }, [clampedStart, loadEarlier]);
+
+  // 组件卸载时取消挂起帧（防 setState on unmounted）
+  useEffect(
+    () => () => {
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current);
+      }
+    },
+    [],
+  );
 
   /**
    * 滚动到底部并隐藏按钮
@@ -196,12 +231,19 @@ export function ChatMessageList({
   // 智能自动滚动：messages 长度变化或流式状态变化时触发
   // - 用户在底部附近：直接滚动跟随新内容（替代 Virtuoso followOutput）
   // - 用户不在底部：标记 hasNew（按钮显示新消息红点）
+  // 2026-09 优化：流式期间用瞬时定位（scrollTop 赋值，无动画）——smooth 动画在高频
+  // chunk 追加下会持续滚动重排，是流式抖动主疑点；用户显式点击"滚动到底部"按钮
+  // 仍走 smooth（scrollToBottom），一次性意图不受影响。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages.length 与 isStreaming，触发标记而不读取其值
   useEffect(() => {
     if (isAtBottomRef.current) {
       const el = scrollerRef.current;
       if (el !== null) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        if (isStreaming) {
+          el.scrollTop = el.scrollHeight;
+        } else {
+          el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        }
       }
     } else {
       setHasNew(true);

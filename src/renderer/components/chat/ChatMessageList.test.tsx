@@ -7,7 +7,7 @@
 // 本文件测的是 ChatMessageList 自身的逻辑编排，不是消息渲染内部。
 // ──────────────────────────────────────────────
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { UIMessage } from 'ai';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -77,14 +77,15 @@ describe('ChatMessageList', () => {
     expect(screen.queryByText(i18n.t('chat.loadedMessages', { count: 3, total: 3 }))).toBeNull();
   });
 
-  it('滚动到顶 → 向上扩展一页（加载更早消息）', () => {
+  it('滚动到顶 → 向上扩展一页（加载更早消息）', async () => {
     const { container } = renderList(makeMsgs(521));
     const scroller = container.querySelector('.messages') as HTMLElement;
     scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
 
+    // 合帧（rAF）后 loadEarlier 生效，窗口起点 321 → 121，渲染 400 条
+    await waitFor(() => expect(screen.getAllByTestId('mi')).toHaveLength(400));
     const items = screen.getAllByTestId('mi');
-    expect(items).toHaveLength(400);
     expect(items[0]).toHaveAttribute('data-mid', 'm121');
   });
 
@@ -112,7 +113,7 @@ describe('ChatMessageList', () => {
     expect(row).toHaveClass('search-highlight');
   });
 
-  it('距底部超过阈值 → 显示滚动到底按钮；点击后隐藏并触发滚动', () => {
+  it('距底部超过阈值 → 显示滚动到底按钮；点击后隐藏并触发滚动', async () => {
     const { container } = renderList(makeMsgs(3));
     const scroller = container.querySelector('.messages') as HTMLElement;
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
@@ -121,7 +122,8 @@ describe('ChatMessageList', () => {
 
     const btn = container.querySelector('.scroll-to-bottom') as HTMLButtonElement;
     fireEvent.scroll(scroller);
-    expect(btn).toHaveClass('visible');
+    // 按钮显隐为 rAF 合帧后生效
+    await waitFor(() => expect(btn).toHaveClass('visible'));
 
     fireEvent.click(btn);
     expect(btn).not.toHaveClass('visible');
