@@ -29,99 +29,17 @@ import {
 } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { createHighlighter, type Highlighter } from 'shiki';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { ensureLangLoaded, getHighlighter, normalizeLang } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 
-// ──────────────────────────────────────────────────────────────
-// shiki highlighter 单例
-// ──────────────────────────────────────────────────────────────
-
-/**
- * 预加载的常用语言
- *
- * 未在此列表中的语言会降级为 'text'（不高亮，但保留 pre 格式）。
- */
-const PRELOADED_LANGS = [
-  'typescript',
-  'javascript',
-  'tsx',
-  'jsx',
-  'bash',
-  'shell',
-  'json',
-  'python',
-  'rust',
-  'go',
-  'java',
-  'html',
-  'css',
-  'markdown',
-  'sql',
-  'yaml',
-  'xml',
-  'diff',
-] as const;
-
-/**
- * 语言别名映射 → shiki 标准 lang ID
- *
- * 处理 Markdown 中常用的语言缩写。
- */
-const LANG_ALIASES: Readonly<Record<string, string>> = {
-  sh: 'bash',
-  py: 'python',
-  rs: 'rust',
-  golang: 'go',
-  md: 'markdown',
-  yml: 'yaml',
-  jsonc: 'json',
-  shell: 'bash',
-  zsh: 'bash',
-  ts: 'typescript',
-  js: 'javascript',
-};
-
-let _highlighter: Highlighter | null = null;
-let _highlighterPromise: Promise<Highlighter> | null = null;
-
-/**
- * 获取 shiki highlighter（单例）
- *
- * 首次调用异步初始化（加载 WASM + 语言数据），后续调用返回缓存。
- *
- * 导出供 FileViewerDialog 等其它需要语法高亮的组件复用，
- * 避免重复初始化 highlighter 实例（WASM + 语言数据加载成本高）。
- */
-export function getHighlighter(): Promise<Highlighter> {
-  if (_highlighter !== null) return Promise.resolve(_highlighter);
-  if (_highlighterPromise === null) {
-    _highlighterPromise = createHighlighter({
-      themes: ['github-dark', 'github-light'],
-      langs: [...PRELOADED_LANGS],
-    }).then((h) => {
-      _highlighter = h;
-      return h;
-    });
-  }
-  return _highlighterPromise;
-}
-
-/**
- * 规范化语言标识
- *
- * - 解析别名（sh → bash, py → python 等）
- * - 未预加载的语言降级为 'text'
- *
- * 导出供其它组件复用，确保别名解析逻辑一致。
- */
-export function normalizeLang(lang: string): string {
-  const resolved = LANG_ALIASES[lang] ?? lang;
-  return (PRELOADED_LANGS as readonly string[]).includes(resolved) ? resolved : 'text';
-}
-
+// shiki highlighter 单例已移至 @/lib/highlight（2026-09 语言按需加载优化）：
+// - getHighlighter()：createHighlighter 只预载热语言（'shiki/bundle/web' 入口）
+// - normalizeLang()：canonical 解析（预载 ∪ 延迟表），不再静态降级
+// - ensureLangLoaded()：首次遇到 go/rust 等延迟语言按需 loadLanguage
+// 三者导出供 Markdown / FileViewerPanel 复用同一单例与加载去重表。
 // ──────────────────────────────────────────────────────────────
 // Markdown 主组件
 // ──────────────────────────────────────────────────────────────
@@ -252,24 +170,24 @@ function CodeBlock({
 
   // 异步高亮：code / lang / theme 变化时重新生成
   // highlight=false（流式期间）跳过高亮——仅渲染纯文本，避免每 token 反复高亮（对齐参考项目）
+  // 2026-09 优化：高亮前先 ensureLangLoaded——首次遇到 go/rust 等延迟语言时
+  // 按需 loadLanguage（await 到就绪再 codeToHtml），未收录语言走 fail-safe 降级
   useEffect(() => {
     if (!highlight) return;
     let cancelled = false;
-    getHighlighter()
-      .then((h) => {
+    void (async () => {
+      try {
+        const h = await getHighlighter();
         if (cancelled) return;
-        try {
-          const result = h.codeToHtml(code, { lang: normalizedLang, theme });
-          setHtml(result);
-        } catch {
-          // lang 不支持等异常：降级为纯文本 pre
-          setHtml(null);
-        }
-      })
-      .catch(() => {
-        // highlighter 初始化失败：降级为纯文本
-        setHtml(null);
-      });
+        await ensureLangLoaded(h, normalizedLang);
+        if (cancelled) return;
+        const result = h.codeToHtml(code, { lang: normalizedLang, theme });
+        setHtml(result);
+      } catch {
+        // lang 不支持 / loadLanguage 失败等异常：降级为纯文本 pre
+        if (!cancelled) setHtml(null);
+      }
+    })();
     return () => {
       cancelled = true;
     };

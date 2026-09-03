@@ -24,9 +24,9 @@
 import { Check, Copy, Eye, FileText, Pencil, Save } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { getHighlighter } from '@/components/chat/Markdown';
 import { Spinner } from '@/components/ui/spinner';
 import { useFileContent } from '@/hooks/use-file-content';
+import { ensureLangLoaded, getHighlighter } from '@/lib/highlight';
 
 /** 大文件高亮降级阈值（行）：shiki 整文件 tokenize 超过则跳过高亮渲染纯文本 */
 const MAX_HIGHLIGHT_LINES = 5000;
@@ -98,20 +98,20 @@ export function FileViewerPanel(): ReactElement {
       return;
     }
     let cancelled = false;
-    getHighlighter()
-      .then((h) => {
+    void (async () => {
+      try {
+        const h = await getHighlighter();
         if (cancelled) return;
-        try {
-          const result = h.codeToHtml(displayContent, { lang, theme });
-          setHtml(result);
-        } catch {
-          // lang 不支持等异常：降级为纯文本 pre
-          setHtml(null);
-        }
-      })
-      .catch(() => {
-        setHtml(null);
-      });
+        // 2026-09 优化：首见延迟语言（go/rust 等）按需 loadLanguage，而非静态降级 'text'
+        await ensureLangLoaded(h, lang);
+        if (cancelled) return;
+        const result = h.codeToHtml(displayContent, { lang, theme });
+        setHtml(result);
+      } catch {
+        // lang 不支持等异常：降级为纯文本 pre
+        if (!cancelled) setHtml(null);
+      }
+    })();
     return () => {
       cancelled = true;
     };

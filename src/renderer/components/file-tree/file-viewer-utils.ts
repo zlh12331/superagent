@@ -2,7 +2,7 @@
 // 文件预览纯函数（语言检测 / 文件名提取）
 // ──────────────────────────────
 // 拆分背景：FileViewerDialog 427 行，纯函数与组件混合，按职责提取
-import { normalizeLang } from '@/components/chat/Markdown';
+import { normalizeLang } from '@/lib/highlight';
 
 const EXT_TO_LANG: Readonly<Record<string, string>> = {
   ts: 'typescript',

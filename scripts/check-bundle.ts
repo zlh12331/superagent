@@ -13,6 +13,8 @@ import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const ASSETS_DIR = join(ROOT, 'out', 'renderer', 'assets');
+/** 渲染层入口 HTML（其 script/modulepreload 集 = 首载同步可达 chunk） */
+const RENDERER_HTML = join(ROOT, 'out', 'renderer', 'index.html');
 /** 包体积历史记录（趋势对比用，stats/ 已 gitignore） */
 const HISTORY_PATH = join(ROOT, 'stats', 'bundle-history.json');
 /** 历史保留条数 */
@@ -23,6 +25,10 @@ const TREND_ALERT_RATIO = 0.15;
 // 基线门槛（依据 12-performance-spec §1.2，渐进收紧）：
 const CHUNK_LIMIT_KB = 5 * 1024;
 const TOTAL_LIMIT_KB = 16 * 1024;
+// 首载同步体积门槛（12-performance-spec §1.2，2026-09 新增）：
+// index.html 的 script/modulepreload 所列 chunk 合计（Electron 首帧需下载的 JS）。
+// shiki 按需加载后 index 4.4MB → ~0.8MB；此门槛防语言包被误打回主入口。
+const INITIAL_LOAD_LIMIT_KB = 3 * 1024;
 
 interface ChunkInfo {
   readonly name: string;
@@ -128,6 +134,22 @@ function main(): number {
   }
 
   const totalKib = chunks.reduce((sum, c) => sum + c.sizeKib, 0);
+
+  // 首载同步体积（12-performance-spec §1.2，2026-09 新增）：
+  // 解析 index.html 的 <script> / <link rel="modulepreload">，汇总其引用的 chunk——
+  // 即 Electron 首帧必须下载的 JS 集（Vite/Rollup 生成的入口可达链）。
+  // shiki 按需加载后 index 4.4MB → ~0.8MB；此门槛防语言包被误打回主入口。
+  let initialLoadKib = 0;
+  if (existsSync(RENDERER_HTML)) {
+    const html = readFileSync(RENDERER_HTML, 'utf8');
+    const refs = [...html.matchAll(/(?:src|href)="\.\/assets\/([a-zA-Z0-9_-]+)\.js"/g)].map(
+      (m) => m[1],
+    );
+    initialLoadKib = refs.reduce((sum, name) => {
+      const f = chunks.find((c) => c.name === `${name}.js`);
+      return sum + (f?.sizeKib ?? 0);
+    }, 0);
+  }
   const problems: string[] = [];
 
   for (const c of chunks) {
@@ -139,6 +161,18 @@ function main(): number {
   }
   if (totalKib > TOTAL_LIMIT_KB) {
     problems.push(`渲染层总包 ${totalKib.toFixed(0)}KB > ${TOTAL_LIMIT_KB}KB（总包超限）`);
+  }
+  if (!existsSync(RENDERER_HTML)) {
+    console.log('[check-bundle] ⏭️ 无 renderer/index.html，首载体积指标跳过（构建后生效）');
+  } else if (initialLoadKib > INITIAL_LOAD_LIMIT_KB) {
+    problems.push(
+      `首载同步体积 ${initialLoadKib.toFixed(0)}KB > ${INITIAL_LOAD_LIMIT_KB}KB` +
+        '（首帧下载量超限——检查是否有重依赖被静态打回主入口）',
+    );
+  } else {
+    console.log(
+      `[check-bundle] 首载同步体积 ${initialLoadKib.toFixed(0)}KB（门槛 ${INITIAL_LOAD_LIMIT_KB}KB）`,
+    );
   }
 
   if (problems.length === 0) {
