@@ -499,6 +499,8 @@ function createMockApi(): IpcApi {
         }),
       openExternal: async () => ipcOk({ ok: true }),
       openDataDir: async () => ipcOk({ ok: true }),
+      // 深度链接：浏览器模式无协议注册，订阅即返回 no-op unsubscribe
+      subscribeDeepLink: () => () => {},
     },
 
     session: {

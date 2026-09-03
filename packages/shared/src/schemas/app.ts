@@ -47,3 +47,19 @@ export interface AppInfoRes {
   /** 用户数据目录 */
   readonly userDataPath: string;
 }
+
+/** app:event:deep-link 事件 payload（自定义协议唤起） */
+export const DeepLinkPayloadSchema = z.object({
+  /** 目标会话 id（`code-agent://session/<id>` 时非空；否则为 null 表示仅唤起） */
+  sessionId: z.string().nullable(),
+  /** 原始协议 URL（保留完整参数供扩展：查询串、附加动作等） */
+  url: z.string(),
+});
+
+/** app:event:deep-link 事件 payload：深度链接解析结果 */
+export interface DeepLinkPayload {
+  /** 目标会话 id（`code-agent://session/<id>` 时非空；null = 仅唤起/聚焦） */
+  readonly sessionId: string | null;
+  /** 原始协议 URL 全量（保留扩展性） */
+  readonly url: string;
+}

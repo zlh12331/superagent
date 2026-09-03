@@ -102,6 +102,12 @@ win:
     - target: nsis
       arch:
         - x64
+  # 自定义协议（深度链接）：注册 `code-agent://` 为 Windows URL 协议
+  # （注册表 HKCR，卸载时自动清理）；与 src/main/deep-link.ts CODE_AGENT_PROTOCOL 一致
+  protocol:
+    - name: code-agent
+      schemes:
+        - code-agent
 
 # NSIS 安装器配置（设计文档 §3 NSIS）
 nsis:
@@ -142,6 +148,12 @@ mac:
   category: public.app-category.developer-tools
   # 深色模式支持
   darkModeSupport: true
+  # 自定义协议（深度链接）：electron-builder 映射 CFBundleURLTypes 到 Info.plist，
+  # macOS 协议唤起走 open-url 事件（见 src/main/index.ts）
+  protocol:
+    - name: code-agent
+      schemes:
+        - code-agent
   # 应用商店分发：false = 直接分发（非 App Store）
   notarize: false
 

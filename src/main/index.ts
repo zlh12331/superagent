@@ -13,6 +13,7 @@ import * as Sentry from '@sentry/electron/main';
 import { startupTracingIntegration } from '@sentry/electron/main';
 import { app, BrowserWindow, nativeTheme, session } from 'electron';
 import { getAppConfig } from './config';
+import { broadcastDeepLink, parseDeepLink, registerDeepLinkProtocol } from './deep-link';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
 import {
   compressByTokenBudget,
@@ -56,6 +57,7 @@ import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
+import { mountTurnNotifications } from './notification';
 import { buildCsp } from './security/csp';
 import {
   disposeServices,
@@ -64,6 +66,7 @@ import {
   recoverFromCrash,
   serviceContainer,
 } from './service-container';
+import { createTray } from './tray';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 import {
   confirmInterruptRunningTurns,
@@ -197,8 +200,8 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  // 用户再次启动应用（双击 exe / 命令行）时：聚焦已有主窗口而不是新开实例
-  app.on('second-instance', () => {
+  // 用户再次启动应用（双击 exe / 命令行 / 协议唤起）时：聚焦已有主窗口而不是新开实例
+  app.on('second-instance', (_event, argv) => {
     const win = BrowserWindow.getAllWindows()[0];
     if (win !== undefined) {
       if (win.isMinimized()) {
@@ -206,8 +209,26 @@ if (!gotTheLock) {
       }
       win.focus();
     }
+    // Windows/Linux 深度链接：协议唤起时 argv 携 code-agent:// URL，解析并广播
+    broadcastDeepLink(parseDeepLink(argv.find((a) => a.startsWith('code-agent://')) ?? ''));
   });
 }
+
+// 注册自定义协议（code-agent://）：Windows/Linux 直接 here；macOS 走 open-url 事件
+registerDeepLinkProtocol();
+// macOS 深度链接：open-url 事件在 app ready 前可能触发（Cold Launch），
+// 窗口尚未创建时广播无线索——由 handleOpenUrl 缓存，createWindow 后补发
+let coldLaunchDeepLink: string | null = null;
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win === undefined) {
+    // 冷启动：缓存 URL，createWindow 完成后补发
+    coldLaunchDeepLink = url;
+  } else {
+    broadcastDeepLink(parseDeepLink(url));
+  }
+});
 
 // 应用就绪后初始化 logger + SQLite + 全局错误捕获 + IPC handler + 创建窗口
 app
@@ -256,6 +277,9 @@ app
     imChannelsInit = serviceContainer.initImChannels();
     // 子代理管理器初始化（run_subagent 工具依赖）
     serviceContainer.initSubagents();
+    // 系统通知：Agent 回合完成后台提醒（窗口不可见时才弹，前台不打扰）
+    // 订阅 onTurnEvent（TURN_END），unsubscribe 随进程退出自然回收
+    mountTurnNotifications(serviceContainer.getAgentService());
     // 定时任务调度接线（C2 修复：cron-service 建成未接线——任务能建不会跑）；
     // 必须在 initDb 之后（start 从 sqlite 恢复启用任务），fire 触发的回合经
     // initCronScheduler 注册的 handler 无头执行
@@ -442,6 +466,16 @@ app
     lagMonitor.start();
 
     createWindow();
+
+    // 系统托盘：后台驻留 + 窗口唤回（图标/菜单，含"显示窗口/退出"）
+    createTray();
+
+    // 冷启动深度链接补发（macOS open-url 早于窗口创建；Windows/Linux 冷启动
+    // 的黑参数已在 process.argv 中，由渲染层启动时主动拉取一次）
+    if (coldLaunchDeepLink !== null) {
+      broadcastDeepLink(parseDeepLink(coldLaunchDeepLink));
+      coldLaunchDeepLink = null;
+    }
 
     // 系统主题变化 → 窗口控件色联动（theme='system' 时与渲染层 matchMedia 行为对齐；
     // 手动主题路径由 settings:set / settings:getAll 收口，见 settings.handler.ts）

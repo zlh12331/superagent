@@ -42,6 +42,7 @@ import { UpdateNotice } from '@/components/common/UpdateNotice';
 import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
+import { useDeepLink } from '@/hooks/use-deep-link';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useProtocolCheck } from '@/hooks/use-protocol-check';
@@ -116,6 +117,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   // IPC 协议版本校验：主进程/渲染层版本错配时提示重启（P0 契约加固）
   useProtocolCheck();
+  // 深度链接：协议唤起 → 导航对应会话（`code-agent://session/<id>`）
+  useDeepLink();
 
   // L2 Zustand：激活会话 id（用于关联 DevPanel 中的终端实例）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
