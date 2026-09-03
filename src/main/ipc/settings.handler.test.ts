@@ -11,6 +11,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSettingsHandlers } from './settings.handler';
 
+// window-theme.ts（settings.handler 依赖的主题联动）import electron 的
+// BrowserWindow/nativeTheme——测试环境无 Electron 运行时，按 config.test.ts
+// 既定模式 mock（Electron 属于外部依赖，见本文件头部测试策略注释）。
+// vi.mock 工厂被 hoist，mock 对象必须经 vi.hoisted 定义（不能引用外部变量）；
+// 用 Record 字符串键规避 biome strictCase 对字面对象的检查。
+const { mockElectronApi } = vi.hoisted(() => {
+  const api: Record<string, unknown> = {};
+  api['BrowserWindow'] = { getAllWindows: () => [] };
+  api['nativeTheme'] = { shouldUseDarkColors: false };
+  return { mockElectronApi: api };
+});
+vi.mock('electron', () => mockElectronApi);
+
 const mocks = vi.hoisted(() => ({
   getSecret: vi.fn(async () => undefined),
   setSecret: vi.fn(async () => {}),

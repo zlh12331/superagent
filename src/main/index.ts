@@ -70,8 +70,9 @@ import {
   createWindow,
   isCloseConfirmed,
   setCloseConfirmed,
-  syncTitleBarOverlayFromTheme,
 } from './window';
+// 主题联动独立模块（无 service-container 依赖的纯 Electron 关注点）
+import { syncTitleBarOverlayFromTheme } from './window-theme';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）

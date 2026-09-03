@@ -22,7 +22,9 @@ import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
 import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
 import type { IpcHandlerContext } from '../utils/wrap';
-import { syncTitleBarOverlayFromTheme } from '../window';
+// 独立主题联动模块（无 service-container 依赖）——IPC 层引用它不会穿透
+// 到 electron-updater 初始化链（2026-09-03 回归修复，见 window-theme.ts 头注释）
+import { syncTitleBarOverlayFromTheme } from '../window-theme';
 
 /**
  * Settings 域 handler 工厂
