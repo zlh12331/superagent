@@ -3,6 +3,7 @@
 // 设计文档 §2.3 shadcn/ui 组件库
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { ChevronRight } from 'lucide-react';
 import type * as React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -132,6 +133,74 @@ export function DropdownMenuSeparator({
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
       className={cn('bg-border -mx-1 my-1 h-px', className)}
+      {...props}
+    />
+  );
+}
+
+/**
+ * 子菜单根容器
+ *
+ * 嵌套在 DropdownMenuItem 内，实现二级菜单（hover/键盘展开）。
+ */
+export function DropdownMenuSub(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>,
+): React.ReactElement {
+  return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
+}
+
+/**
+ * 子菜单触发器
+ *
+ * 渲染为带展开箭头的菜单项，hover/聚焦/方向键展开子菜单。
+ * @example
+ * <DropdownMenuSub>
+ *   <DropdownMenuSubTrigger>语言</DropdownMenuSubTrigger>
+ *   <DropdownMenuSubContent>
+ *     <DropdownMenuItem>简体中文</DropdownMenuItem>
+ *   </DropdownMenuSubContent>
+ * </DropdownMenuSub>
+ */
+export function DropdownMenuSubTrigger({
+  className,
+  inset,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
+  inset?: boolean;
+}): React.ReactElement {
+  return (
+    <DropdownMenuPrimitive.SubTrigger
+      data-slot="dropdown-menu-sub-trigger"
+      data-inset={inset}
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRight className="ml-auto" />
+    </DropdownMenuPrimitive.SubTrigger>
+  );
+}
+
+/**
+ * 子菜单浮层内容
+ *
+ * 与 Sub 配对的二级菜单面板（自动定位 + 键盘导航）。
+ */
+export function DropdownMenuSubContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>): React.ReactElement {
+  return (
+    <DropdownMenuPrimitive.SubContent
+      data-slot="dropdown-menu-sub-content"
+      className={cn(
+        'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-popover min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-md border p-1 shadow-md',
+        className,
+      )}
       {...props}
     />
   );
