@@ -1,11 +1,11 @@
 {
   "packages/shared/src/ipc/definitions.ts": {
-    "net": 841,
-    "raw": 932
+    "net": 857,
+    "raw": 950
   },
   "src/main/infra/ai/agent/agent-service.ts": {
-    "net": 576,
-    "raw": 895
+    "net": 580,
+    "raw": 907
   },
   "src/main/infra/ai/tools/permission-service.ts": {
     "net": 440,
@@ -20,15 +20,15 @@
     "raw": 627
   },
   "src/main/service-container.ts": {
-    "net": 543,
-    "raw": 1029
+    "net": 560,
+    "raw": 1072
   },
   "src/renderer/components/chat/ChatInput.tsx": {
     "net": 466,
     "raw": 648
   },
   "src/renderer/dev/mock-api.ts": {
-    "net": 947,
-    "raw": 1062
+    "net": 907,
+    "raw": 1021
   }
 }

@@ -92,8 +92,12 @@
     "params": 2
   },
   "src/main/infra/storage/db.ts#initDb": {
-    "body": 71,
+    "body": 65,
     "params": 0
+  },
+  "src/main/infra/storage/db.ts#tryRestoreFromBackup": {
+    "body": 48,
+    "params": 1
   },
   "src/main/infra/storage/keychain.ts#readStore": {
     "body": 47,
@@ -132,7 +136,7 @@
     "params": 1
   },
   "src/main/ipc/settings.handler.ts#createSettingsHandlers": {
-    "body": 113,
+    "body": 121,
     "params": 1
   },
   "src/main/ipc/system.handler.ts#readTailLines": {
@@ -143,12 +147,20 @@
     "body": 45,
     "params": 1
   },
+  "src/main/notification.ts#mountTurnNotifications": {
+    "body": 49,
+    "params": 1
+  },
+  "src/main/tray.ts#createTray": {
+    "body": 44,
+    "params": 0
+  },
   "src/main/utils/window-state.ts#trackWindowState": {
-    "body": 62,
+    "body": 66,
     "params": 2
   },
   "src/main/window.ts#createWindow": {
-    "body": 129,
+    "body": 190,
     "params": 0
   },
   "src/renderer/components/agent/approval-preview.tsx#renderGitPreview": {
@@ -176,7 +188,7 @@
     "params": 1
   },
   "src/renderer/components/chat/ChatMessageList.tsx#ChatMessageList": {
-    "body": 241,
+    "body": 289,
     "params": 1
   },
   "src/renderer/components/chat/ChatMessageList.tsx#QuestionJumpBar": {
@@ -312,7 +324,7 @@
     "params": 1
   },
   "src/renderer/components/layout/AppShell.tsx#AppShell": {
-    "body": 353,
+    "body": 355,
     "params": 1
   },
   "src/renderer/components/layout/DevPanel.tsx#DevPanel": {
@@ -444,7 +456,7 @@
     "params": 1
   },
   "src/renderer/dev/mock-api.ts#createMockApi": {
-    "body": 564,
+    "body": 526,
     "params": 0
   },
   "src/renderer/dev/mock-api.ts#simulateAgentStream": {
