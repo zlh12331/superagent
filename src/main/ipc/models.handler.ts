@@ -10,7 +10,12 @@
 // - models:test：连通性测试——真实 HTTP 探测供应商端点（不落库、不改状态）
 // ──────────────────────────────────────────────────────────────
 
-import type { ModelsListBuiltinRes, ModelsListRes, TestModelRes } from '@code-agent/shared/main';
+import type {
+  AvailableModelInfo,
+  ModelsListBuiltinRes,
+  ModelsListRes,
+  TestModelRes,
+} from '@code-agent/shared/main';
 
 import { getAppConfig } from '../config';
 import { runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
@@ -43,17 +48,19 @@ function buildTestUrl(providerKind: ProviderKind, baseUrl: string): string {
 /** models 域 handler（定义表驱动，InferHandlers 编译期约束） */
 export const modelsHandlers = {
   /**
-   * 对话区模型清单：返回用户显式配置且启用的模型（runtime_models 中 enabled）
+   * 模型清单（对话区/设置页共用）：返回用户显式配置且启用的模型记录
    *
-   * 语义（对应用户心智）：
-   * - 只显示用户自己添加的模型，不把内置模型全家桶带出（补 key 不该让全部内置冒出来）
-   * - 关闭（isEnabled=false）的模型不显示，重新启用后才出现
-   * 真实数据源 = runtimeModelStore（用户配置的模型唯一入口），
-   * 内置模型清单仅在配置页经 listBuiltin 提供（作为"待添加"来源）。
+   * 语义（2026-09-04 与用户确认）：
+   * - 一个模型一条记录，设置页配置/启停后此处才出现（配置一个显示一个）。
+   * - 服务商模式的记录同样存于 runtimeModelStore（providerKind + 具体 modelId，
+   *   API Key 走厂商级 keychain）——服务商直连 = 配 Key 即用，但"模型"本身
+   *   由配置弹窗选择并保存，不做"未配置就凭空并入"（无论默认模型或全量内置）。
+   * - 真实数据源 = runtimeModelStore（用户配置的模型唯一入口）。
+   *   厂商内置模型全集在配置页经 listBuiltin 提供（作为服务商模式的下拉候选）。
    */
   list: async (): Promise<ModelsListRes> => {
     const records = await runtimeModelStore.list();
-    const models = [];
+    const models: AvailableModelInfo[] = [];
     for (const r of records) {
       if (!r.isEnabled) continue;
       const entry = modelRegistry.findBuiltin(r.modelId);

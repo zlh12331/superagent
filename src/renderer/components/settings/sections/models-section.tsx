@@ -45,7 +45,9 @@ interface ConfigDialogState {
 export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
 
-  // 模型管理列表（L3：settings:listRuntimeModels，用户添加的模型）
+  // 模型管理列表（L3：settings:listRuntimeModels，用户配置的模型记录）
+  // 说明：服务商模式保存的模型也落 runtimeModelStore（providerKind + 具体 modelId，
+  // API Key 走厂商级 keychain）——"配置一个模型显示一条记录"，不并入未配置的内置模型。
   const { data: runtimeData } = useRuntimeModelsQuery();
   const runtimeModels = runtimeData?.models ?? [];
   const updateMutation = useUpdateRuntimeModel();

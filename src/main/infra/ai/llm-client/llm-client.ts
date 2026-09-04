@@ -97,6 +97,12 @@ export interface LlmClientDeps {
     kind: ProviderKind,
     options?: { readonly apiKey?: string; readonly baseUrl?: string },
   ) => Promise<(modelId: string) => LanguageModel>;
+  /**
+   * 模型配置门禁（可选）：每次获取模型前执行的校验。
+   * 业务装配（ai-provider）注入"未配置任何启用模型时拒绝对话"的守卫；
+   * 测试/内部工具可不注入（默认放行）。
+   */
+  readonly modelGate?: () => Promise<void>;
 }
 
 /**
@@ -171,6 +177,11 @@ export class LlmClient {
    * @returns LanguageModel 实例（供 streamText / generateText 使用）
    */
   async getModel(modelId?: string): Promise<LanguageModel> {
+    // 模型配置门禁：未配置任何启用模型时禁止一切 LLM 调用（对话/side-query/分类器）
+    // ——前端不显示配置模型 = 后端不可用，防止"默认模型直连"绕过配置直接调用 API
+    if (this.deps.modelGate !== undefined) {
+      await this.deps.modelGate();
+    }
     const resolved = this.deps.modelRegistry.resolve(modelId);
     // 停用模型拦截：用户关闭后不可路由（resolve 返回 available=false），
     // 不得落入"任意 id 透传"兜底继续调用

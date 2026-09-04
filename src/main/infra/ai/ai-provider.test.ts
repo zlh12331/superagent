@@ -36,6 +36,12 @@ const mocks = vi.hoisted(() => {
   const mockCreateAnthropic = vi.fn(() => mockProviderFactory);
   // keychain.getSecret mock
   const mockGetSecret = vi.fn();
+  // runtime-model-store mock（模型配置门禁：默认返回一条启用记录，放行 getModel）
+  const mockListRuntimeModels = vi.fn(
+    async (): Promise<Array<Record<string, unknown>>> => [
+      { modelId: 'deepseek-chat', providerKind: 'deepseek', isEnabled: true },
+    ],
+  );
   // electron app mock（config 依赖 app.isPackaged）
   const mockApp = {
     isPackaged: false,
@@ -54,6 +60,7 @@ const mocks = vi.hoisted(() => {
     mockCreateOpenAI,
     mockCreateAnthropic,
     mockGetSecret,
+    mockListRuntimeModels,
     mockApp,
     mockLogger,
   };
@@ -92,6 +99,7 @@ import {
   getModel,
   getProviderCacheSize,
   resetAIProvider,
+  runtimeModelStore,
 } from './llm-client/ai-provider';
 import { ProviderRegistry } from './providers';
 
@@ -102,6 +110,10 @@ describe('ai-provider', () => {
     resetAIProvider();
     // 默认：keychain 中存在 API Key
     mocks.mockGetSecret.mockResolvedValue('sk-test-api-key');
+    // 默认：存在一条启用模型记录 → 放行模型配置门禁
+    vi.spyOn(runtimeModelStore, 'list').mockResolvedValue([
+      { modelId: 'deepseek-chat', providerKind: 'deepseek', isEnabled: true } as never,
+    ]);
   });
 
   describe('getAIProvider（默认 deepseek）', () => {
@@ -255,6 +267,17 @@ describe('ai-provider', () => {
       await getModel('deepseek-reasoner');
 
       expect(providerFactory).toHaveBeenCalledWith('deepseek-reasoner');
+    });
+
+    it('未配置任何启用模型：门禁拒绝（AI_MODEL_NOT_CONFIGURED，不创建 provider）', async () => {
+      (runtimeModelStore.list as unknown as Mock).mockResolvedValueOnce([]);
+      const providerFactory = (await getAIProvider()) as unknown as Mock;
+      providerFactory.mockClear();
+
+      await expect(getModel()).rejects.toMatchObject({
+        code: ErrorCode.AI_MODEL_NOT_CONFIGURED,
+      });
+      expect(providerFactory).not.toHaveBeenCalled();
     });
 
     it('显式 kind + modelId：路由到对应供应商并覆盖模型', async () => {

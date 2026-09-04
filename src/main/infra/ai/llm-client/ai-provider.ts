@@ -119,6 +119,9 @@ export async function getAIProvider(
  * 依赖装配：
  * - modelRegistry：内置模型注册表（模型 id → 供应商解析）
  * - createProviderFactory：委托 getAIProvider（keychain 读取 + kind 级缓存）
+ * - modelGate：模型配置门禁——未配置任何启用模型时禁止一切 LLM 调用
+ *   （2026-09-04：修复"前端未显示配置模型仍能对话"；配置记录用于设置页/选择器展示，
+ *   也作为对话许可，杜绝默认模型直连绕过配置）
  */
 export const llmClient = new LlmClient({
   modelRegistry,
@@ -135,7 +138,22 @@ export const llmClient = new LlmClient({
     // 常规路径：kind 级缓存 + keychain 读取
     return getAIProvider({ kind });
   },
+  modelGate: ensureModelConfigured,
 });
+
+/**
+ * 模型配置门禁：至少存在一条启用的模型记录才允许 LLM 调用
+ *
+ * （2026-09-04 用户语义）服务商直连/自定义模式配置的模型都落 runtimeModelStore，
+ * 前端"配置一个显示一个"；此处确保"前端不显示 = 后端不可用"——没有任何启用记录时
+ * 抛 AI_MODEL_NOT_CONFIGURED，阻止默认模型直连绕过配置调 API。
+ */
+async function ensureModelConfigured(): Promise<void> {
+  const records = await runtimeModelStore.list();
+  if (!records.some((r) => r.isEnabled)) {
+    throw new AppError(ErrorCode.AI_MODEL_NOT_CONFIGURED, '请先在设置中配置模型');
+  }
+}
 
 /**
  * 运行时模型存储单例（自定义模型持久化 + 注册）

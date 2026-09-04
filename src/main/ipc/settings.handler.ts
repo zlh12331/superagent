@@ -146,8 +146,11 @@ export function createSettingsHandlers(params: {
         models: records.map((r) => ({
           modelId: r.modelId,
           providerKind: r.providerKind,
-          baseUrl: r.baseUrl,
-          displayName: r.displayName,
+          // null → undefined：DB 可空列（base_url/display_name 未填为 NULL），
+          // 渲染层 resSchema 用 .optional() 只放行 undefined——原样返回 null 会
+          // 触发契约校验失败 → 前端列表读不到已配置模型（2026-09-04 修复）
+          baseUrl: r.baseUrl ?? undefined,
+          displayName: r.displayName ?? undefined,
           isEnabled: r.isEnabled,
           createdAt: r.createdAt,
         })),

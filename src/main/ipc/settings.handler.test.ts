@@ -8,6 +8,7 @@
 // - permissionService 经 deps 注入 fake
 // ──────────────────────────────────────────────────────────────
 
+import { ListRuntimeModelsResSchema } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSettingsHandlers } from './settings.handler';
 
@@ -277,5 +278,35 @@ describe('settings.handler 运行时模型（三件套）', () => {
   it('listRuntimeModels：空列表 → 空数组', async () => {
     const res = await handlers.listRuntimeModels(undefined, EMPTY_CTX);
     expect(res).toEqual({ models: [] });
+  });
+
+  it('listRuntimeModels：DB 可空列（baseUrl/displayName 为 null）→ 归一为 undefined，契约校验可通过', async () => {
+    // 回归（2026-09-04）：DB 未填 base_url/display_name 时返回 NULL，渲染层
+    // resSchema 用 .optional()（只放行 undefined）会校验失败 → 前端看不到已配置模型。
+    mocks.runtimeList.mockResolvedValueOnce([
+      {
+        modelId: 'm2',
+        providerKind: 'deepseek',
+        baseUrl: null,
+        displayName: null,
+        isEnabled: true,
+        createdAt: 456,
+      },
+    ] as never);
+    const res = await handlers.listRuntimeModels(undefined, EMPTY_CTX);
+    expect(res).toEqual({
+      models: [
+        {
+          modelId: 'm2',
+          providerKind: 'deepseek',
+          baseUrl: undefined,
+          displayName: undefined,
+          isEnabled: true,
+          createdAt: 456,
+        },
+      ],
+    });
+    // 渲染层契约原样校验（还原"null 直出"会在此失败——回归保障）
+    expect(ListRuntimeModelsResSchema.safeParse(res).success).toBe(true);
   });
 });

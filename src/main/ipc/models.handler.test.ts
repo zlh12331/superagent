@@ -124,13 +124,13 @@ function runtimeModel(overrides: Partial<Record<string, unknown>> = {}): Record<
   };
 }
 
-describe('models:list（对话区模型清单：仅启用配置的模型）', () => {
+describe('models:list（模型清单 = 用户配置且启用的模型记录，一条记录一个模型）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listRuntimeModels.mockResolvedValue([]);
   });
 
-  it('只返回用户配置且启用的运行时模型（不把内置全家桶带出）', async () => {
+  it('只返回用户配置且启用的模型记录（未配置的厂商内置模型不出现）', async () => {
     mocks.listRuntimeModels.mockResolvedValue([runtimeModel()]);
     const res = await modelsHandlers.list();
     expect(res.models).toHaveLength(1);
@@ -139,7 +139,7 @@ describe('models:list（对话区模型清单：仅启用配置的模型）', ()
       providerKind: 'deepseek',
       isRuntime: true,
     });
-    // 不依赖 keychain 过滤内置模型（list 彻底不管内置，除非用户显式添加）
+    // list 不做 keychain 探测（厂商内置模型全量绝不凭空并入——配置一个显示一个）
     expect(mocks.getSecret).not.toHaveBeenCalled();
   });
 

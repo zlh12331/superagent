@@ -46,6 +46,8 @@ export const ErrorCode = {
   AI_MODEL_ERROR: 'AI_MODEL_ERROR',
   /** 模型已被用户停用（设置页关闭开关；resolve 返回 available=false） */
   MODEL_DISABLED: 'MODEL_DISABLED',
+  /** 未配置任何启用的模型（设置页无模型记录）：禁止对话——前端不显示 = 后端不可用 */
+  AI_MODEL_NOT_CONFIGURED: 'AI_MODEL_NOT_CONFIGURED',
   AI_STREAM_INTERRUPTED: 'AI_STREAM_INTERRUPTED',
   AI_CONTEXT_TOO_LARGE: 'AI_CONTEXT_TOO_LARGE',
   /** 检测到工具调用/文件读取循环，回合已终止（对齐 qwen loopDetection） */
@@ -134,6 +136,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   AI_MODEL_ERROR: { userMessage: 'AI 模型错误', retryable: false, severity: 'error' },
   MODEL_DISABLED: {
     userMessage: '该模型已停用，请在设置中重新启用',
+    retryable: false,
+    severity: 'warn',
+  },
+  AI_MODEL_NOT_CONFIGURED: {
+    userMessage: '请先在设置中配置模型',
     retryable: false,
     severity: 'warn',
   },
