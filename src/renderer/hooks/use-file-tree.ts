@@ -74,6 +74,7 @@ export function useFileTree(workingDir: string | null): void {
   const loadDir = useCallback(
     async (path: string): Promise<readonly FileEntry[] | null> => {
       setLoading(path, true);
+      let entries: readonly FileEntry[] | null = null;
       try {
         const response = await window.api.file.list({
           path,
@@ -82,18 +83,19 @@ export function useFileTree(workingDir: string | null): void {
         });
         if ('data' in response) {
           setEntries(path, response.data.entries);
-          return response.data.entries;
+          entries = response.data.entries;
+        } else {
+          // 加载失败：移除标记，允许下次展开时重试
+          loadedDirsRef.current.delete(path);
         }
-        // 加载失败：移除标记，允许下次展开时重试
-        loadedDirsRef.current.delete(path);
-        return null;
       } catch {
         // 异常：移除标记，允许下次重试
         loadedDirsRef.current.delete(path);
-        return null;
-      } finally {
-        setLoading(path, false);
       }
+      // finally 语义（React Compiler 不优化 try/finally）：try 内不 rethrow，
+      // 统一在这里复位加载态后再返回结果
+      setLoading(path, false);
+      return entries;
     },
     [setEntries, setLoading],
   );

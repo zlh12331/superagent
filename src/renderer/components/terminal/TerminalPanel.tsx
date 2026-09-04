@@ -128,10 +128,10 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       // 终端创建失败时通过 toast 提示用户（不阻塞 UI）
       const message = error instanceof Error ? error.message : String(error);
       toast.error(t('terminal.createFailed', { message }));
-    } finally {
-      creatingRef.current = false;
-      setIsCreating(false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：catch 已吞掉全部异常
+    creatingRef.current = false;
+    setIsCreating(false);
   }, [workingDir, sessionId, createTerminalInStore, t]);
 
   // 自动创建：进入终端视图时无终端则直接创建（用户要求：点击终端 tab 直接打开终端）
@@ -151,10 +151,9 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       // 关闭失败时通过 toast 提示用户，但仍从 store 移除（避免 UI 卡住）
       const message = error instanceof Error ? error.message : String(error);
       toast.error(t('terminal.closeFailed', { message }));
-    } finally {
-      // 无论 IPC 是否成功，都从 store 移除（避免 UI 卡住）
-      closeTerminalInStore(terminalId);
     }
+    // 无论 IPC 是否成功，都从 store 移除（避免 UI 卡住）
+    closeTerminalInStore(terminalId);
   };
 
   // 无终端：自动创建中显示 loading（用户要求：不需要"新建终端"按钮）

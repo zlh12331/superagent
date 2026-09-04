@@ -94,18 +94,18 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示
         setStatus('error');
         setStatusMessage(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoadingMode(null);
-        // 3s 后自动清除状态
-        if (statusTimerRef.current !== null) {
-          clearTimeout(statusTimerRef.current);
-        }
-        statusTimerRef.current = setTimeout(() => {
-          statusTimerRef.current = null;
-          setStatus('idle');
-          setStatusMessage('');
-        }, STATUS_CLEAR_DELAY);
       }
+      // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
+      // 成功/失败路径统一走到这里复位 + 3s 后自动清除状态
+      setLoadingMode(null);
+      if (statusTimerRef.current !== null) {
+        clearTimeout(statusTimerRef.current);
+      }
+      statusTimerRef.current = setTimeout(() => {
+        statusTimerRef.current = null;
+        setStatus('idle');
+        setStatusMessage('');
+      }, STATUS_CLEAR_DELAY);
     },
     [t],
   );

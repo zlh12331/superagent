@@ -125,10 +125,11 @@ export function AskDialog(): ReactElement | null {
       // 区分 IPC 错误响应（已含具体原因）与异常（回退通用提交失败文案）
       const isIpcError = err instanceof Error && /^\[[A-Z_]+\]/.test(err.message);
       toast.error(isIpcError ? err.message : t('agent.askSubmitFailed'));
-    } finally {
-      clearAsk();
-      setSubmitting(false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
+    // 成功/失败路径统一在这里关闭弹窗并复位提交态
+    clearAsk();
+    setSubmitting(false);
   };
 
   const handleCancel = (): void => {

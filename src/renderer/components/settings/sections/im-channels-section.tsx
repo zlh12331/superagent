@@ -84,9 +84,10 @@ export function ImChannelsSection(): ReactElement {
       await startMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
     } catch {
       // 启动失败：onError 已 toast，这里补 catch 防未处理的 rejection 冒泡
-    } finally {
-      setBusy(null);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：catch 吞掉全部异常，
+    // 成功/失败路径都落到这里复位忙碌状态
+    setBusy(null);
   };
 
   const handleStop = async (kind: string): Promise<void> => {
@@ -95,9 +96,8 @@ export function ImChannelsSection(): ReactElement {
       await stopMutation.mutateAsync(kind as ChannelListRes['channels'][number]['kind']);
     } catch {
       // 停止失败：onError 已 toast，这里补 catch 防未处理的 rejection 冒泡
-    } finally {
-      setBusy(null);
     }
+    setBusy(null);
   };
 
   return (

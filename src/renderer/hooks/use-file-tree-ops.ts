@@ -56,18 +56,20 @@ export function useFileTreeOps() {
   async function createFile(parentDir: string, name: string): Promise<boolean> {
     const fullPath = joinPath(parentDir, name);
     setPendingOp(fullPath, true);
+    let ok = false;
     try {
       unwrap(await window.api.file.create({ path: fullPath, createDirs: false }));
       cancelCreate();
-      return true;
+      ok = true;
     } catch (err) {
       toast.error(t('common.createFileFailed'), {
         description: err instanceof Error ? err.message : String(err),
       });
-      return false;
-    } finally {
-      setPendingOp(fullPath, false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：成功后不提前 return，
+    // 统一在这里复位 pending 后再返回结果
+    setPendingOp(fullPath, false);
+    return ok;
   }
 
   /**
@@ -79,18 +81,20 @@ export function useFileTreeOps() {
   async function createDir(parentDir: string, name: string): Promise<boolean> {
     const fullPath = joinPath(parentDir, name);
     setPendingOp(fullPath, true);
+    let ok = false;
     try {
       unwrap(await window.api.file.createDir({ path: fullPath }));
       cancelCreate();
-      return true;
+      ok = true;
     } catch (err) {
       toast.error(t('common.createDirFailed'), {
         description: err instanceof Error ? err.message : String(err),
       });
-      return false;
-    } finally {
-      setPendingOp(fullPath, false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：成功后不提前 return，
+    // 统一在这里复位 pending 后再返回结果
+    setPendingOp(fullPath, false);
+    return ok;
   }
 
   // 删除/重命名已随 NodeMenu 菜单移除（用户要求：文件树节点更多操作不需要）——无 UI 入口的死代码清理
