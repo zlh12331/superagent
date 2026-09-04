@@ -8,7 +8,7 @@
     "check": "cd ../.. && depcruise src packages/shared tests/integration --config tools/depcruise/.dependency-cruiser.cjs --output-type err-long"
   },
   "dependencies": {
-    "dependency-cruiser": "^17.0.0",
-    "typescript": "^6.0.2"
+    "dependency-cruiser": "^18.2.0",
+    "typescript": "^7.0.2"
   }
 }

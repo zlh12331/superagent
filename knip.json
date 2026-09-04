@@ -27,5 +27,10 @@
     }
   },
   "ignoreBinaries": ["gitleaks"],
-  "ignoreDependencies": ["@code-agent/tsconfig", "@electron/rebuild", "tslib", "tree-sitter-wasms"]
+  "ignoreDependencies": [
+    "@code-agent/tsconfig",
+    "@electron/rebuild",
+    "tslib",
+    "@cursorless/tree-sitter-wasms"
+  ]
 }

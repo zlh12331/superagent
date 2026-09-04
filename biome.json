@@ -9,6 +9,7 @@
     "includes": [
       "**",
       "!**/resources/pg",
+      "!**/third_party",
       "!**/release",
       "!**/coverage*",
       "!**/node_modules",

@@ -8,23 +8,28 @@
 //
 // 设计：
 // - 懒加载：首次 analyze 才初始化 web-tree-sitter（WASM 加载约几十 ms）
-// - 语言映射：扩展名 → tree-sitter 语言 id（tree-sitter-wasms 提供的子集）
+// - 语言映射：扩展名 → tree-sitter 语言 id（@cursorless/tree-sitter-wasms 提供的子集）
 // - 失败降级：WASM 缺失/解析异常 → 返回空符号 + parseFailed=true（不阻塞主流程）
 // - 单例模式：与 FileService / SearchService 一致
+//
+// 版本钉扎（2026-09-04 升级核实）：web-tree-sitter 0.27.x + @cursorless/tree-sitter-wasms
+// 0.10.x（语言 wasm 提供者，2026-08 更新，单包覆盖全所需语言）——新 dylink.0 ABI 与
+// 0.25+ 运行时匹配（实测 9/9 语言加载解析通过）。旧的 tree-sitter-wasms 0.1.13 仍用旧
+// dylink 格式，与 0.25+ 运行时 Language.load 不兼容（dylink 元数据错误），勿回退混用。
 // ──────────────────────────────────────────────────────────────
 
 import { promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import { extname } from 'node:path';
-// web-tree-sitter 0.24：default export（Parser 命名空间，静态 Language.load）；
-// 与 tree-sitter-wasms 0.1.x 的 wasm ABI 匹配（qwen-code 生产验证组合）
-import type Parser from 'web-tree-sitter';
+// web-tree-sitter 0.27：命名导出（Parser 运行时、Language 语言加载、Tree 语法树）；与
+// @cursorless/tree-sitter-wasms 0.10.x 的 wasm ABI 匹配
+import { Language, Parser, type Tree } from 'web-tree-sitter';
 
 import { logger } from '../../utils/logger';
 
 const require = createRequire(import.meta.url);
 
-/** 扩展名 → tree-sitter 语言 id（tree-sitter-wasms 支持子集） */
+/** 扩展名 → tree-sitter 语言 id（@cursorless/tree-sitter-wasms 支持子集） */
 const EXT_TO_LANG: Readonly<Record<string, string>> = {
   '.ts': 'typescript',
   '.tsx': 'tsx',
@@ -88,7 +93,7 @@ let parserClass: typeof Parser | null = null;
 let parserInstance: Parser | null = null;
 let initPromise: Promise<void> | null = null;
 /** 语言缓存：language id → Language（wasm 加载一次复用） */
-const languageCache = new Map<string, Parser.Language>();
+const languageCache = new Map<string, Language>();
 /** 初始化永久失败标记（避免反复重试挂起） */
 let initFailed = false;
 
@@ -114,16 +119,14 @@ async function ensureParser(): Promise<void> {
     return initPromise;
   }
   initPromise = (async () => {
-    // web-tree-sitter 0.24：default export
-    const mod = await import('web-tree-sitter');
-    const ParserClass = mod.default;
-    const runtimeWasm = resolveWasm('web-tree-sitter/tree-sitter.wasm');
+    // web-tree-sitter 0.27：命名导出；wasmBinary 显式注入（asar 打包后文件定位不可靠）
+    const runtimeWasm = resolveWasm('web-tree-sitter/web-tree-sitter.wasm');
     if (runtimeWasm === null) {
       throw new Error('web-tree-sitter 运行时 wasm 缺失');
     }
-    await ParserClass.init({ wasmBinary: runtimeWasm });
-    parserClass = ParserClass;
-    parserInstance = new ParserClass();
+    await Parser.init({ wasmBinary: runtimeWasm });
+    parserClass = Parser;
+    parserInstance = new Parser();
   })().catch((error: unknown) => {
     initFailed = true;
     initPromise = null;
@@ -134,7 +137,7 @@ async function ensureParser(): Promise<void> {
 }
 
 /** 按需加载语言 wasm（带缓存） */
-async function loadLanguage(lang: string): Promise<Parser.Language> {
+async function loadLanguage(lang: string): Promise<Language> {
   const cached = languageCache.get(lang);
   if (cached !== undefined) {
     return cached;
@@ -142,17 +145,17 @@ async function loadLanguage(lang: string): Promise<Parser.Language> {
   if (parserClass === null) {
     throw new Error('Parser 未初始化');
   }
-  const wasm = resolveWasm(`tree-sitter-wasms/out/tree-sitter-${lang}.wasm`);
+  const wasm = resolveWasm(`@cursorless/tree-sitter-wasms/out/tree-sitter-${lang}.wasm`);
   if (wasm === null) {
     throw new Error(`语言 wasm 缺失: ${lang}`);
   }
-  const language = await parserClass.Language.load(wasm);
+  const language = await Language.load(wasm);
   languageCache.set(lang, language);
   return language;
 }
 
 /** 遍历语法树提取符号（递归 walk） */
-function extractSymbols(tree: Parser.Tree): CodeSymbol[] {
+function extractSymbols(tree: Tree): CodeSymbol[] {
   const symbols: CodeSymbol[] = [];
   const cursor = tree.walk();
   let done = false;
@@ -220,6 +223,10 @@ class CodeAnalyzer implements ICodeAnalyzer {
       }
       parserInstance.setLanguage(language);
       const tree = parserInstance.parse(source);
+      if (tree === null) {
+        // 0.27 parse 返回 Tree | null：语言未设置/解析中止时为 null
+        throw new Error('解析中止，未产出语法树');
+      }
       return { language: lang, symbols: extractSymbols(tree), parseFailed: false };
     } catch (error) {
       // 降级：返回空结果，不阻塞调用方（工具/搜索等上层自行处理）

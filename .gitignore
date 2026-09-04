@@ -4,6 +4,8 @@
 node_modules/
 # pnpm 本地内容寻址存储（沙箱/无全局 store 环境安装时生成）
 .pnpm-store/
+# TRAE 本地工具产物（会话文档等，不入仓）
+.trae/
 
 # 构建产物
 dist/

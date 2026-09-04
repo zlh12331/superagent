@@ -41,7 +41,9 @@ overrides:
   hono: 4.12.34
   '@hono/node-server': 1.19.15
   postcss: 8.5.23
-  fast-uri: 3.1.5
+  # 2026-09-04 升级：3.1.5 → 3.1.6（CVE-2026-75899/75931/75975 系列 SSRF 修复版）
+  # GHSA-fph4-wmhf-6fwf / GHSA-5jgf-p345-68v8 / GHSA-f65p-4m7j-42xc / GHSA-jqff-g426-hqxp
+  fast-uri: 3.1.6
   nanoid: 3.3.18
   tar: 7.5.21
   'undici@>=7.0.0': 7.29.0

@@ -92,7 +92,7 @@ function reportTrend(previous: BundleHistoryEntry | null, totalKib: number): voi
 }
 
 // P5 修复：主进程产物体积报告（此前门槛只测渲染层，主进程 ~250MB 运行时依赖
-// 完全无监控——tree-sitter-wasms 49MB、gpt-tokenizer 50MB、lark SDK 28MB 等）。
+// 完全无监控——@cursorless/tree-sitter-wasms 48MB、gpt-tokenizer 50MB、lark SDK 28MB 等）。
 // 第一阶段：out/main/index.js 体积告警不卡关（真实 asar 门禁需依赖清单基线，
 // 避免新门槛误伤 CI；先让膨胀可见，再收紧为卡关门禁）
 const MAIN_ENTRY = join(ROOT, 'out', 'main', 'index.js');
@@ -124,7 +124,7 @@ function main(): number {
     if (mainKib > MAIN_WARN_KB) {
       console.warn(
         `[check-bundle] ⚠️ 主进程 bundle ${mainKib.toFixed(0)}KB > ${MAIN_WARN_KB}KB（告警不卡关）：` +
-          '主进程运行时依赖（tree-sitter-wasms/gpt-tokenizer/lark SDK 等）体积需收敛',
+          '主进程运行时依赖（@cursorless/tree-sitter-wasms/gpt-tokenizer/lark SDK 等）体积需收敛',
       );
     } else {
       console.log(

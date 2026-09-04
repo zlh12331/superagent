@@ -7,8 +7,11 @@
 pnpm workspace（`pnpm-workspace.yaml`）：
 
 - `code-agent-desktop`（根应用）
+
 - `@code-agent/shared`（packages/shared）→ 被 main / preload / renderer 消费
+
 - `@code-agent/tsconfig`（packages/tsconfig，base/node/web 三档）
+
 - `@code-agent/depcruise`、`@code-agent/typedoc-docs`（工程辅助，被根 `check:docs`/`depcruise` 调用）
 
 依赖方向：`code-agent-desktop → @code-agent/shared`（运行时）+ `@code-agent/tsconfig`（构建期）。
@@ -66,42 +69,45 @@ Agent-Service ──► ToolRegistry.toAISDKTools(executeHook=ToolExecutor.execu
 
 ## 5. 工具 → 服务依赖
 
-| 工具 | 依赖服务 |
-|---|---|
-| read_file / write_file / edit_file / list_directory | FileService（+ PathGuard） |
-| grep / glob | SearchService（ripgrep） |
-| terminal / run_command | TerminalService + CommandClassifier + dangerous-commands + DenialTracking |
-| git_commit/add/push | GitService + PermissionService |
-| lsp_definition / lsp_references / lsp_hover | LspManager |
-| task_* / cron_* | SessionService(tasks/cron_tasks) + croner + cron-service |
-| run_workflow | WorkflowService（module 级单例） |
-| run_subagent / run_team | SubagentManager + AgentService |
-| ask_user_question | AgentAskService |
-| load_skill | SkillRegistry |
-| save_memory / recall_memory | MemoryPort（memory-hub sidecar） |
-| MCP 工具（动态） | MCPService + ToolRegistry 注册 |
+| 工具                                                      | 依赖服务                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| read\_file / write\_file / edit\_file / list\_directory | FileService（+ PathGuard）                                                  |
+| grep / glob                                             | SearchService（ripgrep）                                                    |
+| terminal / run\_command                                 | TerminalService + CommandClassifier + dangerous-commands + DenialTracking |
+| git\_commit/add/push                                    | GitService + PermissionService                                            |
+| lsp\_definition / lsp\_references / lsp\_hover          | LspManager                                                                |
+| task\_\* / cron\_\*                                     | SessionService(tasks/cron\_tasks) + croner + cron-service                 |
+| run\_workflow                                           | WorkflowService（module 级单例）                                               |
+| run\_subagent / run\_team                               | SubagentManager + AgentService                                            |
+| ask\_user\_question                                     | AgentAskService                                                           |
+| load\_skill                                             | SkillRegistry                                                             |
+| save\_memory / recall\_memory                           | MemoryPort（memory-hub sidecar）                                            |
+| MCP 工具（动态）                                              | MCPService + ToolRegistry 注册                                              |
 
 ## 6. IPC 域 → 服务映射（`src/main/index.ts` registerIpcHandlers）
 
-| 域 | 后端服务 |
-|---|---|
-| agent | AgentService + PermissionService + agentAskService |
-| session | SessionService +（compact 用 context-compression） |
-| file / search / terminal / git | FileService / SearchService / TerminalService / GitService |
-| codebase | CodebaseService |
-| tool | ToolRegistry |
-| settings | PermissionService（审批/API Key/运行时模型） + SessionService(app_settings) + keychain + telegram/sentry prefs |
-| mcp | MCPService + ToolRegistry |
-| goal / memory | GoalService / MemoryHubService（memory-hub sidecar，经 memory 域 handler） |
-| im | ImService |
-| update | UpdateService |
-| system / logs / devtools / dialog / app | 系统级 handler |
+| 域                                       | 后端服务                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| agent                                   | AgentService + PermissionService + agentAskService                                                     |
+| session                                 | SessionService +（compact 用 context-compression）                                                        |
+| file / search / terminal / git          | FileService / SearchService / TerminalService / GitService                                             |
+| codebase                                | CodebaseService                                                                                        |
+| tool                                    | ToolRegistry                                                                                           |
+| settings                                | PermissionService（审批/API Key/运行时模型） + SessionService(app\_settings) + keychain + telegram/sentry prefs |
+| mcp                                     | MCPService + ToolRegistry                                                                              |
+| goal / memory                           | GoalService / MemoryHubService（memory-hub sidecar，经 memory 域 handler）                                  |
+| im                                      | ImService                                                                                              |
+| update                                  | UpdateService                                                                                          |
+| system / logs / devtools / dialog / app | 系统级 handler                                                                                            |
 
 ## 7. 渲染层依赖
 
 - **数据源**：`use-*` hooks → `lib/ipc.ts`（`window.api`）→ `@code-agent/shared` 类型。
+
 - **状态**：TanStack Query（invoke 的 server state）+ Zustand stores（on 推送事件）。
+
 - **AI 传输**：`lib/agent/ipc-agent-transport.ts`（@ai-sdk/react 接主进程 IPC）。
+
 - **主题/样式**：`providers/ThemeProvider` + `styles/tokens.css`（由 `tokens/aurora.json` 生成）；i18n 最外层。
 
 ## 8. 新增功能依赖心智图
@@ -119,7 +125,7 @@ Agent-Service ──► ToolRegistry.toAISDKTools(executeHook=ToolExecutor.execu
 AI：`ai` / `@ai-sdk/{react,openai,openai-compatible,anthropic}`
 数据：`better-sqlite3` + `drizzle-orm` + `drizzle-kit`
 终端：`@xterm/xterm` + `@xterm/addon-fit` + `node-pty`
-搜索：`@vscode/ripgrep`；代码结构：`tree-sitter-wasms` + `web-tree-sitter`
+搜索：`@vscode/ripgrep`；代码结构：`@cursorless/tree-sitter-wasms` + `web-tree-sitter`（2026-09-04 升级：旧 tree-sitter-wasms 0.1.13 ABI 停更）
 UI：`@radix-ui/*` + `tailwindcss` + `lucide-react` + `class-variance-authority` + `tailwind-merge`
 状态：`zustand` + `@tanstack/react-query`；动画：`motion` + `tw-animate-css`
 框架：`react`/`react-dom`/`react-router`/`vite`；electron：`electron` + `electron-vite` + `electron-updater` + `electron-builder` + `electron-log`
@@ -128,3 +134,4 @@ UI：`@radix-ui/*` + `tailwindcss` + `lucide-react` + `class-variance-authority`
 定时：`croner`；diff：`diff-match-patch` + `react-diff-viewer-continued`；模糊搜索：`fuse.js`
 
 > 完整清单见根 `package.json` dependencies/devDependencies。
+
