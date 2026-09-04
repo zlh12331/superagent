@@ -79,12 +79,17 @@ export class EventLoopLagMonitor {
 
   /**
    * 启动监控（幂等）
+   *
+   * 基准语义：lastExpectedAt 存"下一个 tick 的期望时刻"。
+   * 首个 tick 期望在 `启动时刻 + interval`，故起始基准提前一个 interval——
+   * 否则空闲首个 tick 会被误判为滞后一个周期（2026-09-04 实测修复：
+   * 旧实现 start 后恒报 lag≈interval，空闲环境 5s/条误告警并污染 Sentry）。
    */
   start(): void {
     if (this.timer !== null) {
       return;
     }
-    this.lastExpectedAt = Date.now();
+    this.lastExpectedAt = Date.now() + this.intervalMs;
     this.timer = setInterval(() => {
       this.sample();
     }, this.intervalMs);
@@ -102,14 +107,16 @@ export class EventLoopLagMonitor {
 
   /**
    * 采集一次样本（手动触发可测；tick 自动调用）
+   *
+   * @param now 采样时刻（默认 Date.now()；测试可注入确定性时刻）
    */
-  sample(): EventLoopLagSample {
-    const now = Date.now();
+  sample(now = Date.now()): EventLoopLagSample {
     // 首采（未启动/无基准）：仅记录基准时刻，不产生告警
     const firstSample = this.lastExpectedAt === 0;
     const lagMs = firstSample ? 0 : measureLag(this.lastExpectedAt, now);
-    // 期望时刻前移（若严重滞后，按期望推进避免瞬时假象累积）
-    this.lastExpectedAt = now;
+    // 期望时刻按 interval 前移：lag 只反映"实际采样间隔超出期望间隔"的部分，
+    // 而不是把正常的采样周期误判为阻塞（修复前恒报 lag≈interval 的误告警）。
+    this.lastExpectedAt = now + this.intervalMs;
     const sample: EventLoopLagSample = {
       lagMs,
       intervalMs: this.intervalMs,
