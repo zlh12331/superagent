@@ -10,6 +10,8 @@ dist/
 out/
 release/
 *.tsbuildinfo
+# SBOM 生成产物（cdxgen 输出到根目录，release 归档副本在 release/ 已忽略）
+bom.json
 
 # electron-vite 临时
 .vite/

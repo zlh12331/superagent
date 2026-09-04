@@ -8,6 +8,7 @@
 // 说明：handler 对象形状受 InferHandlers 约束（缺方法编译期报错）；
 // channel / schema 由 IPC_DEFINITIONS 提供，本文件只写业务实现。
 
+import { join } from 'node:path';
 import type { InferHandlers } from '@code-agent/shared/main';
 import {
   AppError,
@@ -15,8 +16,10 @@ import {
   type IPC_DEFINITIONS,
   IPC_PROTOCOL_VERSION,
 } from '@code-agent/shared/main';
-import { app, shell } from 'electron';
+import { app, dialog, shell } from 'electron';
 
+import { exportDiagnosticsPackage } from '../diagnostics';
+import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /** 应用级 handler 实现（app 域） */
@@ -53,5 +56,27 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     const dir = app.getPath('userData');
     const error = await shell.openPath(dir);
     return { ok: error.length === 0 };
+  },
+
+  // 诊断包导出：日志 + 设置（脱敏）+ 版本清单 → 用户选定路径的 zip
+  // 流程：dialog 选保存路径 → 组装 zip → 返回 saved/path（用户取消时 saved=false）
+  exportDiagnostics: async () => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出诊断包',
+      defaultPath: join(app.getPath('documents'), `diagnostics-${stamp}.zip`),
+      filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }],
+    });
+    if (canceled || filePath === undefined || filePath === '') {
+      return { saved: false };
+    }
+    try {
+      await exportDiagnosticsPackage({ filePath, userDataPath: app.getPath('userData') });
+      logger.info({ filePath }, '诊断包导出完成');
+      return { saved: true, path: filePath };
+    } catch (error) {
+      logger.error({ error: String(error), filePath }, '诊断包导出失败');
+      throw error;
+    }
   },
 };

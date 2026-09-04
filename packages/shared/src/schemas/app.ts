@@ -63,3 +63,19 @@ export interface DeepLinkPayload {
   /** 原始协议 URL 全量（保留扩展性） */
   readonly url: string;
 }
+
+/** app:exportDiagnostics 响应 zod schema（诊断包导出结果） */
+export const ExportDiagnosticsResSchema = z.object({
+  /** 是否已保存（用户取消时 false） */
+  saved: z.boolean(),
+  /** 诊断包保存路径（saved=true 时提供） */
+  path: z.string().optional(),
+});
+
+/** app:exportDiagnostics 响应 payload */
+export interface ExportDiagnosticsRes {
+  /** 是否已保存（用户取消时 false） */
+  readonly saved: boolean;
+  /** 诊断包保存路径（saved=true 时提供） */
+  readonly path?: string;
+}

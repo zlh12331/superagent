@@ -27,6 +27,8 @@ export const IPC_META = {
     getInfo: request('app:getInfo'),
     openExternal: request('app:openExternal'),
     openDataDir: request('app:openDataDir'),
+    // 诊断包导出（日志 + 版本信息 → 用户选择路径的 zip，支持排障闭环）
+    exportDiagnostics: request('app:exportDiagnostics'),
     // 深度链接事件（协议唤起 `code-agent://` 时主进程广播，渲染层导航）
     subscribeDeepLink: event('app:event:deepLink'),
   },

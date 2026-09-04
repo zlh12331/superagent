@@ -4,19 +4,19 @@
 
 ## 技术栈
 
-| 层 | 选型 |
-|---|---|
-| 桌面框架 | Electron 44 + electron-vite 6 |
-| 前端 | React 19 + React Router 8 + Vite 8（React Compiler 已启用） |
-| UI | Radix UI + Tailwind CSS 4 + Lucide + shiki |
-| 状态 | Zustand + TanStack Query |
-| AI | Vercel AI SDK v7（streamText + tools + stopWhen 多轮循环） |
-| 供应商 | DeepSeek / OpenAI / Anthropic / Ollama（可插拔路由） |
-| 数据库 | SQLite（better-sqlite3）+ Drizzle ORM |
-| 终端 | xterm.js + node-pty |
-| 搜索 | @vscode/ripgrep |
-| 遥测 | Sentry（自托管）+ OpenTelemetry |
-| 测试 | Vitest（无 mock）+ Playwright（E2E / Electron / Smoke 三套） |
+| 层    | 选型                                                     |
+| ---- | ------------------------------------------------------ |
+| 桌面框架 | Electron 44 + electron-vite 6                          |
+| 前端   | React 19 + React Router 8 + Vite 8（React Compiler 已启用） |
+| UI   | Radix UI + Tailwind CSS 4 + Lucide + shiki             |
+| 状态   | Zustand + TanStack Query                               |
+| AI   | Vercel AI SDK v7（streamText + tools + stopWhen 多轮循环）   |
+| 供应商  | DeepSeek / OpenAI / Anthropic / Ollama（可插拔路由）          |
+| 数据库  | SQLite（better-sqlite3）+ Drizzle ORM                    |
+| 终端   | xterm.js + node-pty                                    |
+| 搜索   | @vscode/ripgrep                                        |
+| 遥测   | Sentry（自托管）+ OpenTelemetry                             |
+| 测试   | Vitest（无 mock）+ Playwright（E2E / Electron / Smoke 三套）  |
 
 ## 快速开始
 
@@ -67,7 +67,9 @@ pnpm test:coverage          # 覆盖率（80% 门禁）
 ```
 
 - **类型契约单一来源**：`packages/shared` 定义 `IpcApi` 接口 + IPC 通道常量 + zod schema，preload 用 `satisfies IpcApi` 编译期校验
+
 - **IPC 命名**：`{domain}:{action}`（请求-响应）/ `{domain}:stream:{event}`（流式）/ `{domain}:event:{name}`（状态事件）
+
 - **主进程**：Service Container 模式，延迟初始化 + 按反向依赖统一 dispose
 
 ### AI Provider 路由
@@ -82,13 +84,17 @@ graph LR
 ```
 
 - 新增供应商：在 `src/main/infra/ai/providers/registry.ts` 注册一条定义 + 一个工厂即可
+
 - API Key 按供应商独立存储在 keychain（safeStorage 加密）
+
 - baseURL 可经 `.env` 覆盖（`DEEPSEEK_API_BASE` / `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` / `OLLAMA_API_BASE`）
 
 ### Agent 工作流（plan / build 分离）
 
 - **plan 模式**：只读探索。`agent:run` 传 `mode: 'plan'`，写工具（permission='ask'）被 ToolExecutor 直接拒绝并返回 `TOOL_PERMISSION_DENIED`，零副作用生成实施方案
+
 - **build 模式**：写操作走审批流（PermissionService → 渲染层 ApprovalModal → 用户批准/拒绝）
+
 - 会话恢复：先 plan 出方案，再以 build 模式续传同一 `sessionId` 执行
 
 ## 目录结构
@@ -119,7 +125,7 @@ e2e/                Playwright 三套配置
 
 ### 新增工具
 
-在 `src/main/infra/ai/tools/` 新建 `*.tool.ts`，实现 `Tool` 接口（name / description / inputSchema / permission / execute），在 `tools/index.ts` 的 `registerBuiltinTools` 注册。内置 31 个工具可作参考；编排类新能力优先复用模块级单例模式（如 WorkflowService + run_workflow）。
+在 `src/main/infra/ai/tools/` 新建 `*.tool.ts`，实现 `Tool` 接口（name / description / inputSchema / permission / execute），在 `tools/index.ts` 的 `registerBuiltinTools` 注册。内置 31 个工具可作参考；编排类新能力优先复用模块级单例模式（如 WorkflowService + run\_workflow）。
 
 ### 新增 IPC 方法（定义表驱动，全链路自动生成）
 
@@ -134,5 +140,8 @@ e2e/                Playwright 三套配置
 ## 已知事项
 
 - `electron-vite` 使用 `6.0.0-beta.1`（Vite 8 的官方配套预发布版本；`5.0.0` 稳定版 peer 依赖 Vite ≤7）。`6.0.0` 稳定版发布后应升级
+
 - 发布安装包：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64（release.yml 三平台矩阵；macOS 公证与代码签名需配置证书后启用）
+
 - dev 环境 userData 重定向到 `.electron-user-data/`，远程调试端口 9222（生产环境不暴露）
+

@@ -35,6 +35,10 @@ directories:
 # asar 打包（设计文档 §3 Electron 安全基线）
 # - asar: true 把源码打包成 app.asar，避免直接暴露 .js 源文件
 asar: true
+# asar 完整性校验（防篡改）：electron-builder 生成 asar 内容的 SHA-256 校验和，
+# 应用启动时 Electron 验证校验和，被篡改则拒绝启动（2026-09-04 供应链加固）。
+# 依赖：Electron ≥ 9（本项目 44 远高于此）。开启后 app.asar 不可再被随意替换注入。
+asarIntegrity: true
 
 # 需要打入 asar 的文件白名单（out/ 是 electron-vite 构建产物）
 # 排除：测试文件、配置文件、源码、文档、缓存

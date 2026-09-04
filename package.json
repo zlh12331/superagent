@@ -78,7 +78,8 @@
     "docs:types": "pnpm --filter @code-agent/typedoc-docs run gen",
     "prepare": "husky",
     "test:integration": "vitest run --root tests/integration",
-    "check:test-boundary": "tsx scripts/check-test-boundary.ts"
+    "check:test-boundary": "tsx scripts/check-test-boundary.ts",
+    "sbom:generate": "cdxgen -t pnpm --spec-version 1.6 -o bom.json"
   },
   "lint-staged": {
     "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,css}": [
@@ -127,9 +128,11 @@
     "style-dictionary": "^5.5.2",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@cyclonedx/cdxgen": "^12.8.4"
   },
   "dependencies": {
+    "adm-zip": "^0.6.0",
     "@ai-sdk/anthropic": "^4.0.42",
     "@ai-sdk/openai": "^4.0.47",
     "@ai-sdk/openai-compatible": "^3.0.37",

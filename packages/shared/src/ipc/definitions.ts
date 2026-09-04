@@ -35,8 +35,13 @@ import {
   type AskRespondRes,
   AskRespondResSchema,
 } from '../schemas/agent-ask';
-import type { AppInfoRes, DeepLinkPayload } from '../schemas/app';
-import { AppInfoResSchema, AppStatusResSchema, DeepLinkPayloadSchema } from '../schemas/app';
+import type { AppInfoRes, DeepLinkPayload, ExportDiagnosticsRes } from '../schemas/app';
+import {
+  AppInfoResSchema,
+  AppStatusResSchema,
+  DeepLinkPayloadSchema,
+  ExportDiagnosticsResSchema,
+} from '../schemas/app';
 import {
   OpenDevToolsReqSchema,
   type OpenDevToolsRes,
@@ -399,6 +404,13 @@ export const IPC_DEFINITIONS = {
       OkResSchema,
     ),
     openDataDir: withSchema(IPC_META.app.openDataDir, null, {} as { ok: boolean }, OkResSchema),
+    // 诊断包导出：无入参，响应（saved/path）
+    exportDiagnostics: withSchema(
+      IPC_META.app.exportDiagnostics,
+      null,
+      {} as ExportDiagnosticsRes,
+      ExportDiagnosticsResSchema,
+    ),
     // 深度链接事件：主进程广播协议唤起（payload 由渲染层消费）
     subscribeDeepLink: withPayload(
       IPC_META.app.subscribeDeepLink,

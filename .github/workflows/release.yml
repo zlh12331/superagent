@@ -74,6 +74,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # ── SBOM 生成（供应链合规：CycloneDX 物料清单，随 release 归档）───────
+      # 2026-09-04 供应链加固：发布构建产物附 SBOM，供审计/合规/漏洞联动。
+      # cdxgen（Node 实现免 Java）从 pnpm lockfile 生成；各平台独立命名防 matrix
+      # 覆盖；release job 的 Collect 步骤统一收集 sbom-*.cdx.json。
+      - name: Generate SBOM (CycloneDX)
+        shell: bash
+        run: |
+          mkdir -p release
+          pnpm sbom:generate
+          cp bom.json release/sbom-${{ matrix.platform }}.cdx.json
+
       # Linux 构建依赖：AppImage 打包需要 libfuse2（ubuntu-24.04 默认不装）
       - name: Install Linux build dependencies
         if: matrix.platform == 'Linux'
@@ -170,7 +181,7 @@ jobs:
       - name: Collect release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.exe" -o -name "*.yml" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.blockmap" \) -exec cp -n {} release/ \;
+          find artifacts -type f \( -name "*.exe" -o -name "*.yml" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.blockmap" -o -name "sbom-*.cdx.json" \) -exec cp -n {} release/ \;
           ls -la release/
 
       - name: Create GitHub Release

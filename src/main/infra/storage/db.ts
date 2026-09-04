@@ -17,11 +17,13 @@
 import {
   chmodSync,
   closeSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
   readdirSync,
   renameSync,
+  rmSync,
   unlinkSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -159,6 +161,131 @@ function probeIntegrityAndScheduleBackup(sqlite: Database.Database, dbPath: stri
 }
 
 /**
+ * 从最近健康备份恢复数据库文件（2026-09-04 新增：损坏自愈）
+ *
+ * 策略：从新到旧遍历 backups/ 轮转环，逐份 quick_check 验证，
+ * 取第一份健康备份覆盖主库文件（并清理可能不匹配的 WAL/SHM 残件）。
+ * 若轮转环全部损坏（极端情况）返回 false。
+ */
+function tryRestoreFromBackup(dbPath: string): boolean {
+  const backupDir = join(dirname(dbPath), BACKUP_DIR);
+  let backups: string[];
+  try {
+    backups = readdirSync(backupDir)
+      .filter((name) => name.startsWith('sessions-') && name.endsWith('.db'))
+      .sort();
+  } catch {
+    // 备份目录不存在（从未成功备份）
+    return false;
+  }
+  if (backups.length === 0) {
+    return false;
+  }
+  // 从新到旧：优先最新健康备份（数据最新）
+  for (const name of [...backups].reverse()) {
+    const candidate = join(backupDir, name);
+    try {
+      const probe = new Database(candidate, { readonly: true });
+      const integrity = probe.pragma('quick_check', { simple: true }) as unknown;
+      probe.close();
+      const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
+      if (!healthy) {
+        logger.warn({ backup: name }, '备份完整性校验失败，尝试更早备份');
+        continue;
+      }
+      // 覆盖主库（先清 WAL/SHM 残件：旧日志与恢复文件不匹配，SQLite 会误读）
+      for (const suffix of ['', '-wal', '-shm'] as const) {
+        try {
+          rmSync(`${dbPath}${suffix}`, { force: true });
+        } catch {
+          // 忽略清理失败（文件可能被占用，copyFileSync 随后抛错会走 catch）
+        }
+      }
+      copyFileSync(candidate, dbPath);
+      restrictFilePermissions(dbPath);
+      logger.warn({ from: candidate }, '已从备份恢复数据库文件');
+      return true;
+    } catch (error) {
+      // 备份文件损坏/不可读：尝试更早一份
+      logger.warn(
+        { backup: name, error: error instanceof Error ? error.message : String(error) },
+        '备份恢复尝试失败',
+      );
+    }
+  }
+  return false;
+}
+
+/**
+ * 数据库损坏自愈（quick_check 失败 → 恢复/重建）
+ *
+ * @param sqlite 当前（已打开但可能损坏的）连接
+ * @param dbPath 数据库文件路径
+ * @returns 修复后的新连接；数据库健康时返回 null（调用方继续用原连接）
+ *
+ * 策略：
+ * 1. quick_check 通过 → 返回 null（健康，不动作）
+ * 2. 损坏 → 从最近健康备份恢复并重开连接（返回新连接，走默认 pragma）
+ * 3. 无健康备份 → 将损坏文件归档为 *.corrupt-<ts>（保留诊断），重建空库保启动
+ *    （对齐 VS Code 设置损坏重建语义：丢数据但应用可继续用）
+ */
+function restoreCorruptDatabase(
+  sqlite: Database.Database,
+  dbPath: string,
+): Database.Database | null {
+  const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
+  const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
+  if (healthy) {
+    return null;
+  }
+  logger.error({ result: integrity }, 'SQLite 完整性校验失败，进入损坏自愈流程');
+  sqlite.close();
+
+  if (tryRestoreFromBackup(dbPath)) {
+    const reopened = new Database(dbPath);
+    applyDefaultPragmas(reopened, dbPath);
+    return reopened;
+  }
+
+  // 无健康备份：归档损坏文件（保留人工诊断可能性），重建空库保启动
+  const corruptPath = `${dbPath}.corrupt-${Date.now()}`;
+  try {
+    renameSync(dbPath, corruptPath);
+    logger.error({ corruptPath }, '数据库损坏且无可用备份，已归档损坏文件');
+  } catch (error) {
+    // 归档失败（文件被占用等）：直接建空库（覆盖）
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      '损坏数据库归档失败，直接重建',
+    );
+  }
+  const fresh = new Database(dbPath);
+  restrictFilePermissions(dbPath);
+  applyDefaultPragmas(fresh, dbPath);
+  logger.warn({}, '已重建空数据库（前提数据已归档，后续迁移建表）');
+  return fresh;
+}
+
+/**
+ * 应用默认 pragma（打开连接后统一调用）
+ *
+ * 集中化：initDb 与损坏恢复（restoreCorruptDatabase 重开连接）共用，
+ * 避免两处 pragma 漂移。
+ */
+function applyDefaultPragmas(sqlite: Database.Database, dbPath: string): void {
+  // 启用 WAL 模式（Write-Ahead Logging）：提升并发读性能
+  sqlite.pragma('journal_mode = WAL');
+  restrictFilePermissions(`${dbPath}-wal`);
+  restrictFilePermissions(`${dbPath}-shm`);
+  // 启用外键约束（SQLite 默认关闭，drizzle schema 中 references 依赖此）
+  sqlite.pragma('foreign_keys = ON');
+  // P2：外部工具（drizzle-kit studio / sqlite CLI）占用库文件时短暂等待
+  sqlite.pragma('busy_timeout = 3000');
+  // WAL 标准搭配：NORMAL 在多数崩溃场景与 FULL 持久性等同，写入吞吐更优
+  sqlite.pragma('synchronous = NORMAL');
+}
+
+/**
  * 获取数据库文件路径
  *
  * 路径：%APPDATA%/<AppName>/sessions.db
@@ -277,26 +404,20 @@ export function initDb(): DrizzleDB {
 
   // 打开 SQLite 连接（同步）
   // better-sqlite3 是同步驱动，所有操作都是阻塞的，适合 Electron 主进程
-  const sqlite = new Database(dbPath);
+  let sqlite: Database.Database = new Database(dbPath);
   // 安全修复：限制数据库文件权限为仅属主可读写（含后续 WAL/SHM 伴随文件）
   restrictFilePermissions(dbPath);
-  // 启用 WAL 模式（Write-Ahead Logging）：提升并发读性能
-  // 写入仍为串行，但读不阻塞写；崩溃后由 WAL 自动恢复
-  sqlite.pragma('journal_mode = WAL');
-  restrictFilePermissions(`${dbPath}-wal`);
-  restrictFilePermissions(`${dbPath}-shm`);
-  // 启用外键约束（SQLite 默认关闭，drizzle schema 中 references 依赖此）
-  sqlite.pragma('foreign_keys = ON');
-
-  // P2：外部工具（drizzle-kit studio / sqlite CLI）占用库文件时短暂等待，
-  // 而非立刻抛 SQLITE_BUSY 表现为随机 IPC INTERNAL_ERROR（单实例锁不约束外部进程）
-  sqlite.pragma('busy_timeout = 3000');
-  // WAL 标准搭配：NORMAL 在多数崩溃场景与 FULL 持久性等同，写入吞吐更优
-  sqlite.pragma('synchronous = NORMAL');
+  // 统一默认 pragma（WAL / 外键 / busy_timeout / synchronous）
+  applyDefaultPragmas(sqlite, dbPath);
 
   // 空间回收前提：把库切到 auto_vacuum=INCREMENTAL（老库需一次性 VACUUM，见函数注释）
   // 必须在启动备份之前：一次性 VACUUM 会截断文件，与在途热备份抢同一份页
   ensureIncrementalAutoVacuum(sqlite);
+
+  // ── 损坏自愈（2026-09-04）：quick_check 失败 → 从最近健康备份恢复 / 重建空库 ──
+  // 返回新连接则说明已恢复/重建（迁移在下方统一执行）；返回 null 说明库健康，沿用原连接。
+  // 注意：恢复分支重开连接后需重新应用 pragma（applyDefaultPragmas 已覆盖）。
+  sqlite = restoreCorruptDatabase(sqlite, dbPath) ?? sqlite;
 
   probeIntegrityAndScheduleBackup(sqlite, dbPath);
 

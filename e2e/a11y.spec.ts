@@ -105,3 +105,63 @@ test.describe('可访问性审计（WCAG 2.2 AA · 亮/暗双主题矩阵）', (
     }
   });
 });
+
+// ── 键盘可达性（WCAG 2.1.1 键盘 / 2.4.7 焦点可见）──────────────────
+test.describe('键盘 Tab 遍历', () => {
+  test('Tab 键焦点可在主要交互区遍历且焦点可见', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    // 等首屏渲染稳定（虚影/动画过渡结束），避免 Tab 落在半成品元素上
+    await page.waitForTimeout(800);
+
+    // 连续 Tab 30 次，记录每次聚焦的可交互元素（跳过 body/丢失焦点的空步）
+    const stops: Array<{ tag: string; text: string; focusVisible: boolean }> = [];
+    for (let i = 0; i < 30; i += 1) {
+      await page.keyboard.press('Tab');
+      // 焦点转移是同步的，小等待仅为避免 CPU 突发导致 evaluate 竞态
+      await page.waitForTimeout(40);
+      const active = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (el === null || el === document.body || el.tagName === 'HTML') return null;
+        return {
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40),
+          focusVisible: el.matches(':focus-visible'),
+        };
+      });
+      if (active !== null) {
+        stops.push(active);
+      }
+    }
+
+    // 1) 焦点必须在元素间移动，而不是卡死/跳出文档
+    expect(stops.length, 'Tab 至少应命中多个可交互元素').toBeGreaterThan(10);
+    const distinctStops = new Set(stops.map((s) => `${s.tag}:${s.text}`));
+    expect(distinctStops.size, '焦点应在不同元素间移动（非反复落回同一元素）').toBeGreaterThan(5);
+
+    // 2) 键盘触发的聚焦必须有可见焦点样式（:focus-visible）——WCAG 2.4.7
+    const focusVisibleCount = stops.filter((s) => s.focusVisible).length;
+    expect(
+      focusVisibleCount,
+      '键盘 Tab 聚焦的元素应带 :focus-visible 焦点样式（大部分制表位命中）',
+    ).toBeGreaterThanOrEqual(10);
+  });
+
+  test('Tab+Enter 可激活焦点按钮（键盘可操作性）', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+
+    // 找到一个可见的 button：聚焦 → Enter 激活，验证其仍可通过键盘操作
+    const button = page.locator('button:visible').first();
+    await button.waitFor({ state: 'visible' });
+    await button.focus();
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('BUTTON');
+
+    // Enter 不抛错（说明按钮可被键盘激活，无 JS 异常/死链）
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    // 应用未被 Enter 搞崩（根节点仍在）
+    await expect(page.locator('#root')).toBeAttached();
+  });
+});

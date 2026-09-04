@@ -24,6 +24,7 @@ allowBuilds:
   electron-winstaller: false
   msw: false
   protobufjs: false
+  libxmljs2: true
 
 # ── peerDependencies 补丁（pnpm 11: packageExtensions）─────────────────────────
 packageExtensions:
