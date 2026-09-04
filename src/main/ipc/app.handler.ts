@@ -22,6 +22,36 @@ import { exportDiagnosticsPackage } from '../diagnostics';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/**
+ * 构建信息（由 scripts/generate-build-info.mjs 在发布构建时写入 resources/build-info.json；
+ * dev 直跑不生成 → channel 兜底 'dev'）
+ */
+interface BuildInfo {
+  readonly version?: string;
+  readonly channel?: string;
+  readonly commitSha?: string;
+  readonly buildTime?: string;
+}
+
+/** 读取构建信息：优先打包资源（process.resourcesPath），dev 回退项目根 resources */
+function readBuildInfo(): BuildInfo {
+  try {
+    const candidates = app.isPackaged
+      ? [join(process.resourcesPath, 'build-info.json')]
+      : [join(app.getAppPath(), 'resources', 'build-info.json')];
+    for (const file of candidates) {
+      const data = require('node:fs').readFileSync(file, 'utf-8');
+      const parsed = JSON.parse(data) as BuildInfo;
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed;
+      }
+    }
+  } catch {
+    // 文件缺失/损坏：非阻塞，回退 dev 标记
+  }
+  return { channel: 'dev' };
+}
+
 /** 应用级 handler 实现（app 域） */
 export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['app'] = {
   // 应用状态查询：返回就绪标记 + IPC 协议版本（渲染层启动校验，防版本错配）
@@ -31,6 +61,7 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
 
   // 应用信息查询：版本与环境信息（「关于」面板数据源）
   getInfo: async () => {
+    const build = readBuildInfo();
     return {
       version: app.getVersion(),
       electron: process.versions.electron ?? 'unknown',
@@ -39,6 +70,9 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
       platform: process.platform,
       arch: process.arch,
       userDataPath: app.getPath('userData'),
+      ...(build.channel !== undefined ? { channel: build.channel } : {}),
+      ...(build.buildTime !== undefined ? { buildTime: build.buildTime } : {}),
+      ...(build.commitSha !== undefined ? { commitSha: build.commitSha } : {}),
     };
   },
 

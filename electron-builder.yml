@@ -62,6 +62,12 @@ files:
 
 # 额外资源（不打入 asar，部署到 process.resourcesPath）
 extraResources:
+  # 构建信息（scripts/generate-build-info.mjs 生成）：版本/渠道/提交/构建时间，
+  # 「关于」页数据源（app:getInfo 读取 process.resourcesPath/build-info.json）
+  - from: resources/build-info.json
+    to: build-info.json
+    filter:
+      - "**/*"
   - from: resources/icons
     to: icons
     filter:

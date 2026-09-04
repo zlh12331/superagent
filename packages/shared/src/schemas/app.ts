@@ -28,6 +28,12 @@ export const AppInfoResSchema = z.object({
   arch: z.string(),
   /** 用户数据目录 */
   userDataPath: z.string(),
+  /** 发布渠道（stable / beta / dev；构建信息，dev 未生成时为 'dev'） */
+  channel: z.string().optional(),
+  /** 构建时间（ISO 8601；由构建脚本写入 build-info.json） */
+  buildTime: z.string().optional(),
+  /** 源码提交短哈希（构建脚本 git rev-parse；不可得时为 undefined） */
+  commitSha: z.string().optional(),
 });
 
 /** app:getInfo 响应 payload：应用版本与环境信息 */
@@ -46,6 +52,12 @@ export interface AppInfoRes {
   readonly arch: string;
   /** 用户数据目录 */
   readonly userDataPath: string;
+  /** 发布渠道（stable / beta / dev） */
+  readonly channel?: string;
+  /** 构建时间（ISO 8601） */
+  readonly buildTime?: string;
+  /** 源码提交短哈希 */
+  readonly commitSha?: string;
 }
 
 /** app:event:deep-link 事件 payload（自定义协议唤起） */

@@ -774,18 +774,26 @@ body {
 }
 
 /* 文件夹标签 */
+/* 单元格：flex 同行布局——folder-label（折叠+图标+名称）与 fl-add-btn（+号）水平排列，
+   默认 block 会让两个按钮垂直堆叠（+号落到名称下一行，2026-09-04 修复） */
+.folder-label-cell {
+  display: flex;
+  align-items: center;
+}
+
 .folder-label {
   /* button 默认样式重置（元素从 div 改为 button 以满足 a11y 语义化要求） */
   background: none;
   border: none;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
   font: inherit;
   /* 布局 */
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 10px 4px 6px;
+  padding: 6px 4px 4px 6px;
   margin-top: 2px;
   font-size: 11.5px;
   font-weight: 600;
