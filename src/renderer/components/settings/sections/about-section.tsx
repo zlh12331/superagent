@@ -1,5 +1,5 @@
 // src/renderer/components/settings/sections/about-section.tsx
-// 关于 pane（2026-09-04 重设计 v2：品牌展示为主 + 诊断增强）
+// 关于 pane（2026-09-04 重设计 v2：品牌展示为主 + 诊断增强；v3：去边框纸感）
 // ──────────────────────────────────────────────────────────────
 // 板块：
 // - 品牌 Hero（居中视觉中心）：大标识/产品名/标语/版本 + 渠道 + 更新区
@@ -8,19 +8,14 @@
 // - 诊断与支持：复制诊断信息（新增）/打开数据目录/导出诊断包
 // - 更新状态：失败时展示完整错误信息 + 重试 + 打开数据目录
 // - 许可与致谢：MIT 许可证 + 开源依赖致谢（文本，不伪造外链）
+//
+// 视觉（v3）：信息行去边框卡片（原 SettingRow 形态），改为无边框
+// label-值 左右行，纸感极简；顶部不再显示「关于」标题（导航已标识）
 // ──────────────────────────────────────────────────────────────
 
 import type { AppInfoRes, ExportDiagnosticsRes, UpdatePhase } from '@code-agent/shared/renderer';
-import {
-  Clipboard,
-  FolderOpen,
-  Info,
-  Loader2,
-  PackageCheck,
-  RefreshCw,
-  Rocket,
-} from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import { Clipboard, FolderOpen, Loader2, PackageCheck, RefreshCw, Rocket } from 'lucide-react';
+import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -28,7 +23,23 @@ import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
-import { SectionTitle, SettingRow } from '../settings-controls';
+import { SectionTitle } from '../settings-controls';
+
+/** 无边框信息行（label 左 + 值右，纸感极简布局；替代 SettingRow 的卡片+边框形态） */
+function InfoRow({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: ReactNode;
+}): ReactElement {
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      <span className="text-foreground shrink-0 text-sm">{label}</span>
+      <div className="min-w-0 shrink text-xs">{children}</div>
+    </div>
+  );
+}
 
 /** 格式化构建时间为本地可读时间（解析失败返回原文） */
 function formatBuildTime(iso: string): string {
@@ -214,13 +225,6 @@ export function AboutSection(): ReactElement {
 
   return (
     <div className="flex flex-col gap-3 pt-2">
-      <div className="flex items-center gap-2">
-        <Info className="size-4 text-muted-foreground" strokeWidth={1.5} />
-        <span className="text-foreground font-serif text-sm tracking-wide">
-          {t('settings.aboutSection')}
-        </span>
-      </div>
-
       {/* 品牌 Hero：居中视觉中心——大标识 + 渐变光晕 + 版本/渠道 + 更新 */}
       <div className="bg-card border-border relative overflow-hidden rounded-lg border px-4 py-6">
         {/* 装饰光晕（top 覆盖，配合圆角溢出隐藏） */}
@@ -248,20 +252,20 @@ export function AboutSection(): ReactElement {
 
       {/* 构建信息 */}
       <SectionTitle>{t('settings.aboutBuildTitle')}</SectionTitle>
-      <div className="bg-card rounded-lg border px-3 py-1">
-        <SettingRow label={t('settings.aboutBuildChannel')}>
-          <span className="text-muted-foreground font-mono text-xs">{channel ?? '-'}</span>
-        </SettingRow>
-        <SettingRow label={t('settings.aboutBuildTime')}>
-          <span className="text-muted-foreground font-mono text-xs">
+      <div className="flex flex-col px-1">
+        <InfoRow label={t('settings.aboutBuildChannel')}>
+          <span className="text-muted-foreground font-mono">{channel ?? '-'}</span>
+        </InfoRow>
+        <InfoRow label={t('settings.aboutBuildTime')}>
+          <span className="text-muted-foreground font-mono">
             {info?.buildTime === undefined ? '-' : formatBuildTime(info.buildTime)}
           </span>
-        </SettingRow>
-        <SettingRow label={t('settings.aboutBuildCommit')}>
+        </InfoRow>
+        <InfoRow label={t('settings.aboutBuildCommit')}>
           {info?.commitSha !== undefined ? (
             <button
               type="button"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded font-mono text-xs transition-colors"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded font-mono transition-colors"
               aria-label={t('settings.aboutCopy')}
               title={t('settings.aboutCopy')}
               onClick={() => void copyText(info.commitSha ?? '')}
@@ -274,36 +278,36 @@ export function AboutSection(): ReactElement {
               )}
             </button>
           ) : (
-            <span className="text-muted-foreground font-mono text-xs">-</span>
+            <span className="text-muted-foreground font-mono">-</span>
           )}
-        </SettingRow>
+        </InfoRow>
       </div>
 
       {/* 环境信息 */}
       <SectionTitle>{t('settings.aboutRuntime')}</SectionTitle>
-      <div className="bg-card rounded-lg border px-3 py-1">
-        <SettingRow label="Electron">
-          <span className="text-muted-foreground font-mono text-xs">{info?.electron ?? '…'}</span>
-        </SettingRow>
-        <SettingRow label="Node.js">
-          <span className="text-muted-foreground font-mono text-xs">{info?.node ?? '…'}</span>
-        </SettingRow>
-        <SettingRow label="Chromium">
-          <span className="text-muted-foreground font-mono text-xs">{info?.chrome ?? '…'}</span>
-        </SettingRow>
-        <SettingRow label={t('settings.aboutPlatform')}>
-          <span className="text-muted-foreground font-mono text-xs">
+      <div className="flex flex-col px-1">
+        <InfoRow label="Electron">
+          <span className="text-muted-foreground font-mono">{info?.electron ?? '…'}</span>
+        </InfoRow>
+        <InfoRow label="Node.js">
+          <span className="text-muted-foreground font-mono">{info?.node ?? '…'}</span>
+        </InfoRow>
+        <InfoRow label="Chromium">
+          <span className="text-muted-foreground font-mono">{info?.chrome ?? '…'}</span>
+        </InfoRow>
+        <InfoRow label={t('settings.aboutPlatform')}>
+          <span className="text-muted-foreground font-mono">
             {info === null ? '…' : `${info.platform} ${info.arch}`}
           </span>
-        </SettingRow>
-        <SettingRow label={t('settings.aboutUserData')}>
+        </InfoRow>
+        <InfoRow label={t('settings.aboutUserData')}>
           <span
-            className="text-muted-foreground min-w-0 max-w-[220px] truncate font-mono text-xs"
+            className="text-muted-foreground inline-block max-w-[220px] truncate align-bottom font-mono"
             title={info?.userDataPath}
           >
             {info?.userDataPath ?? '…'}
           </span>
-        </SettingRow>
+        </InfoRow>
       </div>
 
       {/* 诊断与支持 */}
@@ -354,14 +358,12 @@ export function AboutSection(): ReactElement {
 
       {/* 许可与致谢 */}
       <SectionTitle>{t('settings.aboutLegalTitle')}</SectionTitle>
-      <div className="bg-card rounded-lg border px-3 py-1">
-        <SettingRow label="License">
-          <span className="text-muted-foreground font-mono text-xs">
-            {t('settings.aboutLicenseValue')}
-          </span>
-        </SettingRow>
+      <div className="flex flex-col px-1">
+        <InfoRow label="License">
+          <span className="text-muted-foreground font-mono">{t('settings.aboutLicenseValue')}</span>
+        </InfoRow>
       </div>
-      <p className="text-muted-foreground px-1 text-2xs">{t('settings.aboutThanks')}</p>
+      <p className="text-muted-foreground px-1.5 text-2xs">{t('settings.aboutThanks')}</p>
     </div>
   );
 }
