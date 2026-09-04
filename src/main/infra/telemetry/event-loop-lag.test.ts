@@ -5,7 +5,7 @@
 // lag≈interval），空闲环境 5s/条误告警并污染 Sentry。修复后 lag 只反映
 // "实际采样间隔超出期望间隔"的部分；本文件同步对齐该语义并补回归用例。
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventLoopLagMonitor, measureLag } from './event-loop-lag';
 
 const monitors: EventLoopLagMonitor[] = [];
@@ -36,10 +36,6 @@ describe('measureLag（纯函数）', () => {
 });
 
 describe('EventLoopLagMonitor（采样语义：lag = 实际间隔 − 期望间隔）', () => {
-  beforeEach(() => {
-    // 集中配置默认：告警阈值 1000ms，期望间隔 5000ms（与生产一致）
-  });
-
   it('首采为基准：不告警，且只记录期望时刻', () => {
     const monitor = createMonitor({ warnThresholdMs: 1000 });
     const fired: string[] = [];

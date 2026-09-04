@@ -48,7 +48,6 @@ function setupTempEnvironment(): void {
   writeSetting('tokens', ['t-1', 't-2']);
 }
 
-/** 环境初始化在 beforeEach 中执行（覆盖纯函数与打包两组用例） */
 beforeEach(() => {
   setupTempEnvironment();
 });

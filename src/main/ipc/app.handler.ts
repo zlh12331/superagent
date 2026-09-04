@@ -58,8 +58,7 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     return { ok: error.length === 0 };
   },
 
-  // 诊断包导出：日志 + 设置（脱敏）+ 版本清单 → 用户选定路径的 zip
-  // 流程：dialog 选保存路径 → 组装 zip → 返回 saved/path（用户取消时 saved=false）
+  // 诊断包导出：日志 + 设置（脱敏）+ 版本清单 → 用户选定路径的 zip（取消时 saved=false）
   exportDiagnostics: async () => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const { canceled, filePath } = await dialog.showSaveDialog({
