@@ -23,6 +23,7 @@
 // - .sb-collapsed / .crp-collapsed（折叠态 class）
 // ──────────────────────────────────────────────────────────────
 
+import { MotionConfig } from 'motion/react';
 import {
   lazy,
   type ReactElement,
@@ -333,124 +334,128 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   );
 
   return (
-    <div className="bg-background text-foreground app font-sans">
-      {/* WCAG 2.4.1 Bypass Blocks：跳过导航链接 */}
-      <a
-        href="#main-content"
-        className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-boundary focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
-      >
-        {t('common.skipToContent')}
-      </a>
-      <Topbar
-        sidebarCollapsed={sidebarCollapsed}
-        onToggleSidebar={handleToggleSidebar}
-        rightPanelCollapsed={rightPanelCollapsed}
-        onToggleRightPanel={handleToggleRightPanel}
-        onOpenCommandPalette={openPalette}
-      />
-      <div
-        className={cn(
-          'view-chat',
-          sidebarCollapsed && 'sb-collapsed',
-          rightPanelCollapsed && 'crp-collapsed',
-          isWelcomeMode && 'welcome-mode',
-        )}
-      >
-        {/* 列 1：侧边栏（组件级错误边界：单组件报错局部降级，不拖垮整个 App） */}
-        <SectionErrorBoundary name="sidebar">
-          <Sidebar />
-        </SectionErrorBoundary>
-
-        {/* 列 2：左分隔线（可拖拽调整 sidebar 宽度） */}
-        {!sidebarCollapsed && (
-          <hr
-            aria-orientation="vertical"
-            aria-label={t('common.sidebarResizer')}
-            aria-valuenow={sidebarWidth}
-            aria-valuemin={SIDEBAR_WIDTH_MIN}
-            aria-valuemax={SIDEBAR_WIDTH_MAX}
-            tabIndex={0}
-            className={cn('resizer resizer-left', draggingSide === 'left' && 'dragging')}
-            onMouseDown={handleMouseDown('left')}
-            onKeyDown={handleResizerKeyDown('left')}
-          />
-        )}
-
-        {/* 列 3：主内容区（thread 背景：多层光晕氛围 + 纸张噪点纹理）
-            组件级错误边界：聊天区单组件报错局部降级，不整页崩溃 */}
-        <main id="main-content" className="thread-bg paper-texture">
-          <SectionErrorBoundary name="main-content">{children}</SectionErrorBoundary>
-        </main>
-
-        {/* 列 4：右分隔线（可拖拽调整右面板宽度；欢迎页也保留——右面板常驻） */}
-        {!rightPanelCollapsed && (
-          <hr
-            aria-orientation="vertical"
-            aria-label={t('common.panelResizer')}
-            aria-valuenow={rightPanelWidth}
-            aria-valuemin={RIGHT_PANEL_WIDTH_MIN}
-            aria-valuemax={RIGHT_PANEL_WIDTH_MAX}
-            tabIndex={0}
-            className={cn('resizer resizer-right', draggingSide === 'right' && 'dragging')}
-            onMouseDown={handleMouseDown('right')}
-            onKeyDown={handleResizerKeyDown('right')}
-          />
-        )}
-
-        {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector）
-            折叠展开按钮已删除（用户要求）：折叠态展开走顶栏右面板开关 */}
-        <aside className="chat-right-panel" aria-label={t('common.rightPanel')}>
-          {!rightPanelCollapsed && (
-            <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
-              <Suspense fallback={<div className="h-full" />}>
-                <LazyDevPanel
-                  sessionId={devPanelSessionId}
-                  gitRepoPath={workingDir ?? ''}
-                  className="h-full border-t-0"
-                />
-              </Suspense>
-            </SectionErrorBoundary>
+    // MotionConfig reducedMotion="user"：系统开启"减弱动态效果"时，
+    // motion 自动降级为透明度动画（a11y 全局开关，motion.dev/react-motion-config）
+    <MotionConfig reducedMotion="user">
+      <div className="bg-background text-foreground app font-sans">
+        {/* WCAG 2.4.1 Bypass Blocks：跳过导航链接 */}
+        <a
+          href="#main-content"
+          className="bg-background text-foreground sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-boundary focus:rounded focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+        >
+          {t('common.skipToContent')}
+        </a>
+        <Topbar
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={handleToggleSidebar}
+          rightPanelCollapsed={rightPanelCollapsed}
+          onToggleRightPanel={handleToggleRightPanel}
+          onOpenCommandPalette={openPalette}
+        />
+        <div
+          className={cn(
+            'view-chat',
+            sidebarCollapsed && 'sb-collapsed',
+            rightPanelCollapsed && 'crp-collapsed',
+            isWelcomeMode && 'welcome-mode',
           )}
-        </aside>
-      </div>
+        >
+          {/* 列 1：侧边栏（组件级错误边界：单组件报错局部降级，不拖垮整个 App） */}
+          <SectionErrorBoundary name="sidebar">
+            <Sidebar />
+          </SectionErrorBoundary>
 
-      {/* 命令式确认/输入对话框（confirm()/prompt()，照搬参考项目） */}
-      <DialogHost />
-      {/* 审批：就地内联展示（inline-approval-card 在 ChatPanel）——
+          {/* 列 2：左分隔线（可拖拽调整 sidebar 宽度） */}
+          {!sidebarCollapsed && (
+            <hr
+              aria-orientation="vertical"
+              aria-label={t('common.sidebarResizer')}
+              aria-valuenow={sidebarWidth}
+              aria-valuemin={SIDEBAR_WIDTH_MIN}
+              aria-valuemax={SIDEBAR_WIDTH_MAX}
+              tabIndex={0}
+              className={cn('resizer resizer-left', draggingSide === 'left' && 'dragging')}
+              onMouseDown={handleMouseDown('left')}
+              onKeyDown={handleResizerKeyDown('left')}
+            />
+          )}
+
+          {/* 列 3：主内容区（thread 背景：多层光晕氛围 + 纸张噪点纹理）
+            组件级错误边界：聊天区单组件报错局部降级，不整页崩溃 */}
+          <main id="main-content" className="thread-bg paper-texture">
+            <SectionErrorBoundary name="main-content">{children}</SectionErrorBoundary>
+          </main>
+
+          {/* 列 4：右分隔线（可拖拽调整右面板宽度；欢迎页也保留——右面板常驻） */}
+          {!rightPanelCollapsed && (
+            <hr
+              aria-orientation="vertical"
+              aria-label={t('common.panelResizer')}
+              aria-valuenow={rightPanelWidth}
+              aria-valuemin={RIGHT_PANEL_WIDTH_MIN}
+              aria-valuemax={RIGHT_PANEL_WIDTH_MAX}
+              tabIndex={0}
+              className={cn('resizer resizer-right', draggingSide === 'right' && 'dragging')}
+              onMouseDown={handleMouseDown('right')}
+              onKeyDown={handleResizerKeyDown('right')}
+            />
+          )}
+
+          {/* 列 5：右面板（DevPanel：Terminal + Git + Logs + Metrics + Inspector）
+            折叠展开按钮已删除（用户要求）：折叠态展开走顶栏右面板开关 */}
+          <aside className="chat-right-panel" aria-label={t('common.rightPanel')}>
+            {!rightPanelCollapsed && (
+              <SectionErrorBoundary name="right-panel" resetKeys={[devPanelSessionId]}>
+                <Suspense fallback={<div className="h-full" />}>
+                  <LazyDevPanel
+                    sessionId={devPanelSessionId}
+                    gitRepoPath={workingDir ?? ''}
+                    className="h-full border-t-0"
+                  />
+                </Suspense>
+              </SectionErrorBoundary>
+            )}
+          </aside>
+        </div>
+
+        {/* 命令式确认/输入对话框（confirm()/prompt()，照搬参考项目） */}
+        <DialogHost />
+        {/* 审批：就地内联展示（inline-approval-card 在 ChatPanel）——
           移除全局 ApprovalDialog 弹窗：对齐原型 .card.paused 就地审批，
           避免与内联卡双 UI 重复（同一审批两处呈现） */}
-      <AskDialog />
+        <AskDialog />
 
-      {/* 文件查看器已改为右面板"文件"tab（FileViewerPanel——侧边栏树点击文件显示内容） */}
+        {/* 文件查看器已改为右面板"文件"tab（FileViewerPanel——侧边栏树点击文件显示内容） */}
 
-      {/* 设置对话框：根级渲染，由 useUiStore 控制（Topbar / 命令面板 / 错误动作共用入口） */}
-      <Suspense fallback={null}>
-        <LazySettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
-      </Suspense>
+        {/* 设置对话框：根级渲染，由 useUiStore 控制（Topbar / 命令面板 / 错误动作共用入口） */}
+        <Suspense fallback={null}>
+          <LazySettingsDialog open={settingsOpen} onOpenChange={closeSettings} />
+        </Suspense>
 
-      {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
-      <Suspense fallback={null}>
-        <LazyCommandPalette open={paletteOpen} onOpenChange={closePalette} />
-      </Suspense>
-      {/* 文件模糊搜索（⌘F）：文件 + 会话统一搜索（对齐参考项目 FuzzySearchDialog） */}
-      <Suspense fallback={null}>
-        <LazyFuzzySearchDialog
-          open={fuzzyOpen}
-          onClose={() => setFuzzyOpen(false)}
-          onSelect={openFileViewer}
-        />
-      </Suspense>
-      {/* 快捷键帮助对话框（'?' 触发） */}
-      <Suspense fallback={null}>
-        <LazyShortcutHelpDialog
-          open={shortcutHelpOpen}
-          onClose={() => setShortcutHelpOpen(false)}
-        />
-      </Suspense>
-      {/* 自动更新提示（事件驱动 toast，无 DOM） */}
-      <UpdateNotice />
-      {/* 扫描线视觉叠加（实验功能开关）：纯视觉层，不拦截任何交互 */}
-      {scanlines && <div className="scanlines-overlay" aria-hidden="true" />}
-    </div>
+        {/* 命令面板（⌘P）：根级渲染，受控 open 状态 */}
+        <Suspense fallback={null}>
+          <LazyCommandPalette open={paletteOpen} onOpenChange={closePalette} />
+        </Suspense>
+        {/* 文件模糊搜索（⌘F）：文件 + 会话统一搜索（对齐参考项目 FuzzySearchDialog） */}
+        <Suspense fallback={null}>
+          <LazyFuzzySearchDialog
+            open={fuzzyOpen}
+            onClose={() => setFuzzyOpen(false)}
+            onSelect={openFileViewer}
+          />
+        </Suspense>
+        {/* 快捷键帮助对话框（'?' 触发） */}
+        <Suspense fallback={null}>
+          <LazyShortcutHelpDialog
+            open={shortcutHelpOpen}
+            onClose={() => setShortcutHelpOpen(false)}
+          />
+        </Suspense>
+        {/* 自动更新提示（事件驱动 toast，无 DOM） */}
+        <UpdateNotice />
+        {/* 扫描线视觉叠加（实验功能开关）：纯视觉层，不拦截任何交互 */}
+        {scanlines && <div className="scanlines-overlay" aria-hidden="true" />}
+      </div>
+    </MotionConfig>
   );
 }

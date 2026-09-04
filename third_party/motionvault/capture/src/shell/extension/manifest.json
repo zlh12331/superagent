@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "MotionLens 动效透镜",
+  "version": "0.1.0",
+  "description": "指着任何网页动效，结构化提取并生成 AI 复现 prompt（BYOK）",
+  "permissions": ["activeTab", "scripting", "storage", "tabCapture"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

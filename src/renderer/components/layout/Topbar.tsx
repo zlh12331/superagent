@@ -17,11 +17,13 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Moon, PanelLeft, PanelRight, Search, Sun } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { ReactElement } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useAppInfo } from '@/hooks/use-app-info';
 import { useTranslation } from '@/i18n/use-translation';
+import { microTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { nextTheme } from '@/stores/persistent/settings-store';
@@ -131,11 +133,23 @@ export function Topbar({
             'hover:text-sidebar-accent-foreground size-8',
           )}
         >
-          {resolvedTheme === 'dark' ? (
-            <Sun className="size-4" strokeWidth={1.5} />
-          ) : (
-            <Moon className="size-4" strokeWidth={1.5} />
-          )}
+          {/* 主题图标切换：旋转 + 缩放过渡（motion.dev AnimatePresence 官方模式） */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={resolvedTheme}
+              className="inline-flex"
+              initial={{ rotate: -90, scale: 0.6, opacity: 0 }}
+              animate={{ rotate: 0, scale: 1, opacity: 1 }}
+              exit={{ rotate: 90, scale: 0.6, opacity: 0 }}
+              transition={microTransition}
+            >
+              {resolvedTheme === 'dark' ? (
+                <Sun className="size-4" strokeWidth={1.5} />
+              ) : (
+                <Moon className="size-4" strokeWidth={1.5} />
+              )}
+            </motion.span>
+          </AnimatePresence>
         </Button>
       </div>
     </header>

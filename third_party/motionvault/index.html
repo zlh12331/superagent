@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <title>灵感库 MotionVault — 个人动效灵感库</title>
+    <script>
+      // 探测站点基路径：项目站点部署在 /<仓库名>/ 子路径（仓库名任意，fork 亦然），
+      // 取当前路径末段之前的部分作为基路径；部署在域名根时自然得到 '/'。
+      // 必须先于下方“还原路由”脚本执行——它会改写地址，之后就拿不到基路径了。
+      window.__MV_BASE__ = window.location.pathname.replace(/\/[^/]*$/, '/');
+    </script>
+    <script>
+      // GitHub Pages SPA fallback：404.html 回跳后在此还原真实路径（见 public/404.html）。
+      // 必须在应用 bundle 之前同步执行，React Router 初始化时才能读到正确路径。
+      (function () {
+        try {
+          var target = sessionStorage.getItem('motionvault:redirect');
+          if (target) {
+            sessionStorage.removeItem('motionvault:redirect');
+            history.replaceState(null, '', target);
+          }
+        } catch (e) {
+          /* sessionStorage 不可用时按首页启动 */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

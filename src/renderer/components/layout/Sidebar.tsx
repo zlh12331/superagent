@@ -40,6 +40,7 @@ import {
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
+import { motion } from 'motion/react';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
@@ -61,6 +62,7 @@ import {
   SEARCH_HIGHLIGHT_EXPIRE_MS,
   SEARCH_HIGHLIGHT_MIN_CHARS,
 } from '@/lib/constants';
+import { springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
@@ -326,10 +328,17 @@ export function Sidebar(): ReactElement {
     <aside className="sidebar" aria-label={t('sidebar.sessionList')}>
       {/* 顶部：新建会话按钮 + 搜索框 + tabs */}
       <div className="sidebar-head">
-        <button type="button" className="new-thread-btn" onClick={handleNewChat}>
+        <motion.button
+          type="button"
+          className="new-thread-btn"
+          onClick={handleNewChat}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.96 }}
+          transition={springTransition}
+        >
           <Plus className="size-3.5" strokeWidth={2.5} />
           {t('sidebar.newSession')}
-        </button>
+        </motion.button>
         <div className="sidebar-search">
           <Search className="sidebar-search-icon" size={13} strokeWidth={2} />
           <input
@@ -379,6 +388,13 @@ export function Sidebar(): ReactElement {
             onClick={() => setActiveTab('recent')}
           >
             {t('sidebar.tabsRecent')} <span className="count">{sessions.length}</span>
+            {activeTab === 'recent' && (
+              <motion.span
+                layoutId="sidebar-tab-active-bar"
+                className="bg-[var(--accent)] absolute inset-x-2 bottom-0 h-[2px] rounded-full"
+                transition={springTransition}
+              />
+            )}
           </button>
           <button
             type="button"
@@ -389,6 +405,13 @@ export function Sidebar(): ReactElement {
             onClick={() => setActiveTab('archived')}
           >
             {t('sidebar.tabsArchived')} <span className="count">0</span>
+            {activeTab === 'archived' && (
+              <motion.span
+                layoutId="sidebar-tab-active-bar"
+                className="bg-[var(--accent)] absolute inset-x-2 bottom-0 h-[2px] rounded-full"
+                transition={springTransition}
+              />
+            )}
           </button>
         </div>
       </div>

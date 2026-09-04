@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>灵感库 MotionVault</title>
+    <script>
+      // GitHub Pages SPA fallback：BrowserRouter 使用路径路由，Pages 对 /text 等二级路径
+      // 直接返回 404。这里先把目标路径（含 query/hash）存进 sessionStorage，再回跳到
+      // 站点入口（支持根路径与 /repo/ 子路径两种部署），由 index.html 的恢复脚本
+      // history.replaceState 还原路由后交给 React Router 渲染。
+      (function () {
+        var l = window.location;
+        var base = l.pathname.slice(0, l.pathname.lastIndexOf('/') + 1);
+        try {
+          sessionStorage.setItem('motionvault:redirect', l.pathname + l.search + l.hash);
+        } catch (e) {
+          /* 隐私模式等场景静默降级：直接回首页 */
+        }
+        l.replace(base);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

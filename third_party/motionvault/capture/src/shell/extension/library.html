@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MotionLens 灵感库</title>
+  <style>
+    :root {
+      --bg: #ffffff; --fg: #18181b; --muted: #71717a; --line: #e4e4e7;
+      --soft: #fafafa; --ok: #16a34a; --warn: #d97706;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--fg); min-height: 100vh;
+      font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .topbar {
+      position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.92);
+      backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 24px; flex-wrap: wrap;
+    }
+    .topbar h1 { font-size: 16px; font-weight: 600; letter-spacing: .02em; }
+    .topbar .spacer { flex: 1; }
+    #search {
+      padding: 7px 12px; width: 220px; font: inherit; font-size: 13px;
+      border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    }
+    #search:focus { outline: 1.5px solid var(--fg); outline-offset: -1px; }
+    .btn {
+      font: inherit; font-size: 13px; cursor: pointer; border-radius: 8px;
+      padding: 7px 14px; border: 1px solid var(--line); background: #fff; color: var(--fg);
+      transition: background .15s ease;
+    }
+    .btn:hover { background: var(--soft); }
+    .btn.danger:hover { color: #dc2626; border-color: #fecaca; }
+    main { max-width: 880px; margin: 0 auto; padding: 20px 24px 60px; }
+    .empty { color: var(--muted); text-align: center; padding: 80px 0; font-size: 13px; }
+    .card {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px;
+      margin-bottom: 12px; background: #fff; transition: box-shadow .15s ease;
+    }
+    .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+    .card-head { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+    .card-head .title { font-weight: 600; font-size: 14px; }
+    .badge {
+      font-size: 11px; padding: 1px 8px; border-radius: 999px;
+      border: 1px solid var(--line); color: var(--muted); background: var(--soft);
+      flex: none;
+    }
+    .badge.raw { color: var(--warn); border-color: #fde68a; background: #fffbeb; }
+    .meta { margin-left: auto; color: var(--muted); font-size: 12px; flex: none; display: flex; gap: 10px; }
+    .conf { color: var(--ok); }
+    .detail { display: none; margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
+    .card.open .detail { display: block; }
+    .detail h3 { font-size: 12px; color: var(--muted); font-weight: 500; margin: 10px 0 4px; }
+    .detail h3:first-child { margin-top: 0; }
+    .detail p { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+    .prompt-box {
+      background: var(--soft); border: 1px solid var(--line); border-radius: 8px;
+      padding: 10px 12px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word;
+    }
+    .copy-row { margin-top: 6px; display: flex; gap: 8px; }
+    .copy-btn { font-size: 12px; padding: 4px 10px; }
+    .copy-btn.copied { color: var(--ok); border-color: #bbf7d0; }
+    .src-link { color: var(--muted); font-size: 12px; text-decoration: none; }
+    .src-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>MotionLens 灵感库</h1>
+    <span class="spacer"></span>
+    <input id="search" type="search" placeholder="搜索标题 / 域名…" />
+    <button class="btn" id="export">导出全部 JSON</button>
+    <button class="btn danger" id="clear">清空</button>
+  </div>
+  <main id="list"><p class="empty">加载中…</p></main>
+  <script src="library.js"></script>
+</body>
+</html>

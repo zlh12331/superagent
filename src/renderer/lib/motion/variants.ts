@@ -144,6 +144,30 @@ export const popVariants: Variants = {
   },
 };
 
+/**
+ * 模糊上浮变体（MotionVault blur-fade 思路）
+ *
+ * 适合：欢迎页品牌区、首屏标题、强调内容入场。
+ * filter: blur 动画由 motion 在独立合成层驱动，结束时归零不残留。
+ */
+export const blurUpVariants: Variants = {
+  hidden: { opacity: 0, y: 16, filter: 'blur(8px)' },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.5,
+      ease: easePaper,
+    },
+  },
+  exit: {
+    opacity: 0,
+    filter: 'blur(8px)',
+    transition: microTransition,
+  },
+};
+
 /* ──────────────────────────────────────────────────────────────
    列表 stagger 变体（配合 children 使用）
    ────────────────────────────────────────────────────────────── */
@@ -203,6 +227,44 @@ export const staggerContainerSlow: Variants = {
     transition: {
       staggerChildren: 0.08,
       delayChildren: 0.15,
+    },
+  },
+};
+
+/* ──────────────────────────────────────────────────────────────
+   字母级变体（欢迎页品牌 / 标题逐字入场）
+   用法：容器元素 variants={letterContainerVariants} initial="hidden" animate="visible"，
+   子元素每个字符一个 <motion.span variants={letterUpVariants}>。
+   子元素 inline-block 包裹，父级需保留空格（渲染时对空格字符插入 \u00A0）。
+   ────────────────────────────────────────────────────────────── */
+
+/**
+ * 字母 stagger 容器（逐字延迟 35ms 起笔）
+ */
+export const letterContainerVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.035,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+/**
+ * 单字母上浮 + 模糊入场变体（MotionVault letter-stagger 思路）
+ *
+ * 隐藏态：下移 0.4em + 4px 模糊；可见态：归位清晰。
+ */
+export const letterUpVariants: Variants = {
+  hidden: { opacity: 0, y: '0.4em', filter: 'blur(4px)' },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.45,
+      ease: easePaper,
     },
   },
 };

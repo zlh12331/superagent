@@ -15,23 +15,30 @@
 // - 本组件仅负责渲染内容，welcome-mode class 由 AppShell 根据 useWelcomeStore 切换
 // ──────────────────────────────────────────────────────────────
 
+import type { ApiKeyProvider } from '@code-agent/shared/renderer';
 import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
+import { motion } from 'motion/react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ModelSelector } from '@/components/common/ModelSelector';
+import { MotionReveal } from '@/components/common/MotionReveal';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
 import { unwrap } from '@/lib/ipc';
+import { fadeInVariants, letterContainerVariants, letterUpVariants } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
+
+/** 品牌文案（欢迎页逐字入场用；读屏以容器 aria-label 暴露，逐字 span 隐藏） */
+const BRAND_TEXT = 'Code with TRAE';
 
 /** 快捷动作定义（对齐原型 4 个 welcome-pill） */
 interface QuickAction {
@@ -81,7 +88,6 @@ export function HomePage(): ReactElement {
 
   const defaultProvider = useSettingsStore((state) => state.ai.defaultProvider);
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
-  const updateAi = useSettingsStore((state) => state.updateAi);
 
   // 受控输入值（支持快捷 pill 预填）
   const [inputValue, setInputValue] = useState('');
@@ -230,23 +236,21 @@ export function HomePage(): ReactElement {
   // ChatInput status：创建中视为 submitted（显示禁用 + loading 态）
   const chatStatus: 'submitted' | 'ready' = isCreating ? 'submitted' : 'ready';
 
-  // 派生：是否禁用发送（创建中禁用，避免重复提交）
-  const isDisabled = isCreating;
-
   // 派生：quick action 按钮列表（渲染期直接映射；仅 4 项且无 memo 边界，无需 useMemo）
   const quickActionButtons = QUICK_ACTIONS.map((action) => {
     const Icon = action.icon;
     return (
-      <button
+      <motion.button
         key={action.key}
         type="button"
         className="welcome-pill"
+        variants={fadeInVariants}
         onClick={() => handleQuickAction(t(action.promptKey))}
         disabled={isCreating}
       >
         <Icon strokeWidth={2} />
         {t(action.labelKey)}
-      </button>
+      </motion.button>
     );
   });
 
@@ -274,101 +278,199 @@ export function HomePage(): ReactElement {
   return (
     // 欢迎页容器：空 div 即可，CSS .view-chat.welcome-mode 会重排 .thread-bg 为居中 flex
     // 内部四层结构对齐原型：welcome-view + composer(含 project-bar) + quick-actions
+    // 动效（MotionVault 灵感，lib/motion 落地）：
+    // - welcome-logo：品牌标记先入，然后字母逐字上浮+去模糊
+    // - composer：品牌完成后滑入（delay 0.45）
+    // - quick-actions：最后错落入场（delay 0.6，逐项 50ms）
     <>
       {/* 品牌区：welcome-view（默认隐藏，welcome-mode 下显示） */}
       <div className="welcome-view">
-        <div className="welcome-logo">
-          <span className="wl-icon">⟨/⟩</span>
-          <span>Code with TRAE</span>
-        </div>
+        <motion.div
+          className="welcome-logo"
+          role="heading"
+          aria-level={1}
+          aria-label={BRAND_TEXT}
+          variants={letterContainerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.span aria-hidden="true" variants={letterUpVariants} className="wl-icon">
+            ⟨/⟩
+          </motion.span>
+          {BRAND_TEXT.split('').map((ch, index) => (
+            <motion.span
+              // biome-ignore lint/suspicious/noArrayIndexKey: 品牌文案逐字静态拆分，字符位置稳定
+              key={index}
+              aria-hidden="true"
+              variants={letterUpVariants}
+              style={{ display: 'inline-block', whiteSpace: 'pre' }}
+            >
+              {ch === ' ' ? '\u00A0' : ch}
+            </motion.span>
+          ))}
+        </motion.div>
       </div>
 
       {/* 输入区：.composer 外壳 + ChatInput（.composer-box 内层）+ composer-project-bar
           对齐原型：composer 在 welcome-mode 下透明背景 + 最大宽度 720px */}
-      <footer className="composer">
-        <ChatInput
-          status={chatStatus}
-          onSend={handleSend}
-          onStop={() => {
-            // 欢迎页无流式生成，stop 仅用于满足 ChatInput 接口
-          }}
-          value={inputValue}
+      <MotionReveal variant="slideUp" delay={0.45} className="composer">
+        <FooterContent
+          isCreating={isCreating}
+          chatStatus={chatStatus}
+          inputValue={inputValue}
           onValueChange={setInputValue}
-          disabled={isDisabled}
-          placeholder={t('chat.inputPlaceholder')}
+          onSend={handleSend}
+          folderMenuOpen={folderMenuOpen}
+          setFolderMenuOpen={setFolderMenuOpen}
+          folderGroupRef={folderGroupRef}
+          currentFolderLabel={currentFolderLabel}
+          pendingWorkingDir={pendingWorkingDir}
+          handleBrowseFolder={handleBrowseFolder}
+          handleSelectFolder={handleSelectFolder}
+          folderItems={folderItems}
+          defaultProvider={defaultProvider}
+          defaultModel={defaultModel}
         />
+      </MotionReveal>
 
-        {/* composer-project-bar：folder dropdown + 模型选择器占位
-            对齐原型：仅在 welcome-mode 下显示（基础样式 display:none） */}
-        <div className="composer-project-bar">
-          <div className="cpb-folder-group" ref={folderGroupRef}>
-            {/* 当前 folder 显示 + 展开按钮 */}
-            <button
-              type="button"
-              className="cpb-select"
-              aria-expanded={folderMenuOpen}
-              aria-haspopup="menu"
-              aria-label={t('home.chooseProjectLabel')}
-              onClick={() => setFolderMenuOpen((prev) => !prev)}
-            >
-              <Folder size={12} strokeWidth={2} />
-              <span>{currentFolderLabel}</span>
-              <ChevronDown className="cpb-caret" size={10} strokeWidth={2} />
-            </button>
+      {/* 快捷动作区：welcome-quick-actions（默认隐藏，welcome-mode 下显示）
+          错落入场：品牌(≈0.5s)与 composer(0.45s)之后起笔，逐项 50ms 淡入 */}
+      <motion.div
+        className="welcome-quick-actions"
+        variants={{
+          hidden: {},
+          visible: { transition: { staggerChildren: 0.05, delayChildren: 0.65 } },
+        }}
+        initial="hidden"
+        animate="visible"
+      >
+        {quickActionButtons}
+      </motion.div>
+    </>
+  );
+}
 
-            {/* folder dropdown menu */}
-            {folderMenuOpen && (
-              <div className="folder-dropdown-menu show" role="menu" aria-label={t('home.dirList')}>
-                <div className="fdm-scroll">
-                  {dirs.length === 0 ? (
-                    <div className="fdm-empty">{t('home.noRecentDirs')}</div>
-                  ) : (
-                    <>
-                      {/* 清空选择（回到「未选择项目」） */}
-                      <button
-                        type="button"
-                        className={cn('fdm-item', pendingWorkingDir === null && 'active')}
-                        onClick={() => handleSelectFolder(null)}
-                      >
-                        <span className="fdm-icon">
-                          <Folder size={13} strokeWidth={2} />
-                        </span>
-                        <span className="fdm-name">{t('home.noProject')}</span>
-                      </button>
-                      {dirs.length > 0 && <div className="fdm-sep" />}
-                      {folderItems}
-                    </>
-                  )}
-                </div>
-                {/* 浏览其他目录：触发原生目录选择器 */}
-                <button
-                  type="button"
-                  className="fdm-action-btn"
-                  onClick={() => {
-                    void handleBrowseFolder();
-                  }}
-                >
-                  <span className="fdm-icon">
-                    <Plus size={13} strokeWidth={2} />
-                  </span>
-                  <span>{t('home.chooseFolder')}</span>
-                </button>
+/** composer 内容（与欢迎页入场动画解耦：动画包装只需最外层，避免每次渲染重计算） */
+interface FooterContentProps {
+  readonly isCreating: boolean;
+  readonly chatStatus: 'submitted' | 'ready';
+  readonly inputValue: string;
+  readonly onValueChange: (value: string) => void;
+  readonly onSend: (text: string) => Promise<void>;
+  readonly folderMenuOpen: boolean;
+  /** zustand setter 原样传入（支持函数式更新） */
+  readonly setFolderMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  readonly folderGroupRef: React.RefObject<HTMLDivElement | null>;
+  readonly currentFolderLabel: string;
+  readonly pendingWorkingDir: string | null;
+  readonly handleBrowseFolder: () => Promise<void>;
+  readonly handleSelectFolder: (workingDir: string | null) => void;
+  readonly folderItems: ReactElement[];
+  readonly defaultProvider: ApiKeyProvider;
+  readonly defaultModel: string;
+}
+
+function FooterContent({
+  isCreating,
+  chatStatus,
+  inputValue,
+  onValueChange,
+  onSend,
+  folderMenuOpen,
+  setFolderMenuOpen,
+  folderGroupRef,
+  currentFolderLabel,
+  pendingWorkingDir,
+  handleBrowseFolder,
+  handleSelectFolder,
+  folderItems,
+  defaultProvider,
+  defaultModel,
+}: FooterContentProps): ReactElement {
+  const { t } = useTranslation();
+  // 模型选择器设置项直接来自全局 store（避免逐层透传 updateAi 类型擦除）
+  const updateAi = useSettingsStore((state) => state.updateAi);
+  return (
+    <>
+      <ChatInput
+        status={chatStatus}
+        onSend={onSend}
+        onStop={() => {
+          // 欢迎页无流式生成，stop 仅用于满足 ChatInput 接口
+        }}
+        value={inputValue}
+        onValueChange={onValueChange}
+        disabled={isCreating}
+        placeholder={t('chat.inputPlaceholder')}
+      />
+
+      {/* composer-project-bar：folder dropdown + 模型选择器占位
+          对齐原型：仅在 welcome-mode 下显示（基础样式 display:none） */}
+      <div className="composer-project-bar">
+        <div className="cpb-folder-group" ref={folderGroupRef}>
+          {/* 当前 folder 显示 + 展开按钮 */}
+          <button
+            type="button"
+            className="cpb-select"
+            aria-expanded={folderMenuOpen}
+            aria-haspopup="menu"
+            aria-label={t('home.chooseProjectLabel')}
+            onClick={() => setFolderMenuOpen((prev) => !prev)}
+          >
+            <Folder size={12} strokeWidth={2} />
+            <span>{currentFolderLabel}</span>
+            <ChevronDown className="cpb-caret" size={10} strokeWidth={2} />
+          </button>
+
+          {/* folder dropdown menu */}
+          {folderMenuOpen && (
+            <div className="folder-dropdown-menu show" role="menu" aria-label={t('home.dirList')}>
+              <div className="fdm-scroll">
+                {folderItems.length === 0 ? (
+                  <div className="fdm-empty">{t('home.noRecentDirs')}</div>
+                ) : (
+                  <>
+                    {/* 清空选择（回到「未选择项目」） */}
+                    <button
+                      type="button"
+                      className={cn('fdm-item', pendingWorkingDir === null && 'active')}
+                      onClick={() => handleSelectFolder(null)}
+                    >
+                      <span className="fdm-icon">
+                        <Folder size={13} strokeWidth={2} />
+                      </span>
+                      <span className="fdm-name">{t('home.noProject')}</span>
+                    </button>
+                    {folderItems.length > 0 && <div className="fdm-sep" />}
+                    {folderItems}
+                  </>
+                )}
               </div>
-            )}
-          </div>
-
-          <ModelSelector
-            provider={defaultProvider}
-            model={defaultModel}
-            onProviderChange={(p) => updateAi({ defaultProvider: p })}
-            onModelChange={(m) => updateAi({ defaultModel: m })}
-            disabled={isCreating}
-          />
+              {/* 浏览其他目录：触发原生目录选择器 */}
+              <button
+                type="button"
+                className="fdm-action-btn"
+                onClick={() => {
+                  void handleBrowseFolder();
+                }}
+              >
+                <span className="fdm-icon">
+                  <Plus size={13} strokeWidth={2} />
+                </span>
+                <span>{t('home.chooseFolder')}</span>
+              </button>
+            </div>
+          )}
         </div>
-      </footer>
 
-      {/* 快捷动作区：welcome-quick-actions（默认隐藏，welcome-mode 下显示） */}
-      <div className="welcome-quick-actions">{quickActionButtons}</div>
+        <ModelSelector
+          provider={defaultProvider}
+          model={defaultModel}
+          onProviderChange={(p) => updateAi({ defaultProvider: p })}
+          onModelChange={(m) => updateAi({ defaultModel: m })}
+          disabled={isCreating}
+        />
+      </div>
     </>
   );
 }

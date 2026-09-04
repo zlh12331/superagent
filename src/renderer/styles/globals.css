@@ -672,6 +672,8 @@ body {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  /* 激活态底条（sidebar-tab-active-bar，layoutId 滑动动画）定位基准 */
+  position: relative;
 }
 
 .sidebar-tab:hover {
@@ -3730,6 +3732,20 @@ button.card-head {
 
 .scroll-to-bottom.has-new .new-msg-dot {
   display: block;
+}
+
+/* ── 模态打开时隐藏聊天区悬浮控件（2026-09-04 修复）──
+   背景：Radix modal overlay 亮色仅 25%/暗色 50% 透明度，线程状态条 / 消息跳转条 /
+   滚动到底部按钮（z≤10 < modal z-popover=50）仍透过遮罩清晰可见，
+   用户在设置页反馈"这几个组件一直置顶"。modal 打开即隐藏：这些控件只属于聊天视图，
+   模态交互期间不抢占视觉；关闭后（无 [role="dialog"]）自动恢复。
+   采用 body:has() 而非 JS 开关：自动覆盖设置/命令面板/搜索/快捷键/AskDialog 等所有模态，
+   无需在 AppShell 维护开关列表。 */
+body:has(div[role="dialog"]) .thread-status-bar,
+body:has(div[role="dialog"]) .jump-bar,
+body:has(div[role="dialog"]) .jump-scroll,
+body:has(div[role="dialog"]) .scroll-to-bottom {
+  visibility: hidden;
 }
 
 /* ──────────────────────────────────────────────────────────────

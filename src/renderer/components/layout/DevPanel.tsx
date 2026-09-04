@@ -150,6 +150,14 @@ export const DevPanel = memo(function DevPanel({
     setOpenTabs((prev) => (prev.includes(activeTab) ? prev : [...prev, activeTab]));
   }, [activeTab]);
 
+  /**
+   * 面板内容淡入：hidden ↔ 显示切换时用 tw-animate-css 重播 fade。
+   * 保留"hidden 切换不卸载 DOM"的设计（XTerm/表单状态不丢），
+   * display 从 none 恢复时 animation 自动重播，零 JS 开销。
+   */
+  const paneCls = (visible: boolean): string =>
+    cn('h-full', !visible && 'hidden', visible && 'animate-in fade-in-0 duration-150');
+
   // 右面板背景透明，透出 .chat-right-panel 的镜像渐变（与左栏对称）
   return (
     <div className={cn('flex flex-col bg-transparent', className)}>
@@ -230,17 +238,17 @@ export const DevPanel = memo(function DevPanel({
           按 openTabs 条件渲染（未添加的视图不挂载；已添加的用 hidden 切换避免状态丢失） */}
       <div className="min-h-0 flex-1">
         {openTabs.includes('info') && (
-          <div className={cn('h-full', activeTab !== 'info' && 'hidden')}>
+          <div className={paneCls(activeTab === 'info')}>
             <InfoPane sessionId={sessionId} />
           </div>
         )}
         {openTabs.includes('diff') && (
-          <div className={cn('h-full', activeTab !== 'diff' && 'hidden')}>
+          <div className={paneCls(activeTab === 'diff')}>
             <DiffPane sessionId={sessionId} gitRepoPath={gitRepoPath} />
           </div>
         )}
         {openTabs.includes('file') && (
-          <div className={cn('h-full', activeTab !== 'file' && 'hidden')}>
+          <div className={paneCls(activeTab === 'file')}>
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -253,7 +261,7 @@ export const DevPanel = memo(function DevPanel({
           </div>
         )}
         {openTabs.includes('browser') && (
-          <div className={cn('h-full', activeTab !== 'browser' && 'hidden')}>
+          <div className={paneCls(activeTab === 'browser')}>
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -266,7 +274,7 @@ export const DevPanel = memo(function DevPanel({
           </div>
         )}
         {openTabs.includes('terminal') && (
-          <div className={cn('h-full', activeTab !== 'terminal' && 'hidden')}>
+          <div className={paneCls(activeTab === 'terminal')}>
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -279,7 +287,7 @@ export const DevPanel = memo(function DevPanel({
           </div>
         )}
         {openTabs.includes('dev') && (
-          <div className={cn('h-full', activeTab !== 'dev' && 'hidden')}>
+          <div className={paneCls(activeTab === 'dev')}>
             <div className="flex h-full flex-col">
               {/* 开发者子视图切换（调试工具收纳） */}
               <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
@@ -337,24 +345,24 @@ export const DevPanel = memo(function DevPanel({
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <div className={cn('h-full', devSubTab !== 'git' && 'hidden')}>
+                <div className={paneCls(devSubTab === 'git')}>
                   <GitPanel path={gitRepoPath} className="h-full" />
                 </div>
-                <div className={cn('h-full', devSubTab !== 'logs' && 'hidden')}>
+                <div className={paneCls(devSubTab === 'logs')}>
                   {/* enabled 跟随可见性（对齐参考项目：面板不可见时不查询） */}
                   <LogsPanel
                     enabled={activeTab === 'dev' && devSubTab === 'logs'}
                     className="h-full"
                   />
                 </div>
-                <div className={cn('h-full', devSubTab !== 'metrics' && 'hidden')}>
+                <div className={paneCls(devSubTab === 'metrics')}>
                   {/* enabled 跟随可见性（对齐参考项目：面板不可见时不轮询） */}
                   <MetricsPanel
                     enabled={activeTab === 'dev' && devSubTab === 'metrics'}
                     className="h-full"
                   />
                 </div>
-                <div className={cn('h-full', devSubTab !== 'inspector' && 'hidden')}>
+                <div className={paneCls(devSubTab === 'inspector')}>
                   <InspectorPanel className="h-full" />
                 </div>
               </div>

@@ -24,11 +24,13 @@
 
 import { MAX_MESSAGE_LENGTH_CHARS } from '@code-agent/shared/renderer';
 import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
 import { useDraftStore } from '@/stores/persistent/draft-store';
@@ -619,28 +621,55 @@ export function ChatInput({
         {/* 右区：模型选择 + 发送按钮（整体右对齐，用户要求模型紧贴发送按钮左侧） */}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {rightSlot}
-          {isStreaming ? (
-            <button
-              type="button"
-              className="stop-gen-btn"
-              onClick={onStop}
-              aria-label={t('chat.stopGenerating')}
-              title={t('chat.stopGenerating')}
-            >
-              <Square className="size-3.5" strokeWidth={2.5} fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="send-btn"
-              disabled={!canSend}
-              onClick={handleSend}
-              aria-label={t('chat.sendMessage')}
-              title={t('chat.send')}
-            >
-              <Send className="size-3.5" strokeWidth={2.5} />
-            </button>
-          )}
+          {/* 发送/停止按钮切换：AnimatePresence 实现图标旋转淡入 + 弹簧按压缩放
+               （MotionVault button 类交互、motion.dev react-hover-animation 官方模式） */}
+          <AnimatePresence mode="wait" initial={false}>
+            {isStreaming ? (
+              <motion.button
+                key="stop"
+                type="button"
+                className="stop-gen-btn"
+                onClick={onStop}
+                aria-label={t('chat.stopGenerating')}
+                title={t('chat.stopGenerating')}
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.92 }}
+                transition={springTransition}
+              >
+                <motion.span
+                  className="inline-flex"
+                  initial={{ rotate: -90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: 90, opacity: 0 }}
+                  transition={microTransition}
+                >
+                  <Square className="size-3.5" strokeWidth={2.5} fill="currentColor" />
+                </motion.span>
+              </motion.button>
+            ) : (
+              <motion.button
+                key="send"
+                type="button"
+                className="send-btn"
+                disabled={!canSend}
+                onClick={handleSend}
+                aria-label={t('chat.sendMessage')}
+                title={t('chat.send')}
+                {...(canSend ? { whileHover: { scale: 1.06 }, whileTap: { scale: 0.92 } } : {})}
+                transition={springTransition}
+              >
+                <motion.span
+                  className="inline-flex"
+                  initial={{ rotate: 90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: -90, opacity: 0 }}
+                  transition={microTransition}
+                >
+                  <Send className="size-3.5" strokeWidth={2.5} />
+                </motion.span>
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

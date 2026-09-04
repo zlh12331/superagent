@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MotionLens</title>
+  <style>
+    :root {
+      --bg: #ffffff; --fg: #18181b; --muted: #71717a; --line: #e4e4e7;
+      --soft: #fafafa; --accent: #18181b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 300px; background: var(--bg); color: var(--fg);
+      font: 13px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 16px 10px;
+    }
+    header .logo {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 1.5px solid var(--fg); position: relative; flex: none;
+    }
+    header .logo::after {
+      content: ""; position: absolute; inset: 6px; border-radius: 50%;
+      background: var(--fg);
+    }
+    header h1 { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+    header .ver { color: var(--muted); font-size: 11px; margin-left: auto; }
+    main { padding: 4px 16px 14px; }
+    button {
+      font: inherit; cursor: pointer; border-radius: 8px;
+      transition: opacity .15s ease, background .15s ease;
+    }
+    .btn-primary {
+      width: 100%; padding: 10px 12px; margin-top: 6px;
+      background: var(--accent); color: #fff; border: none; font-weight: 500;
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-secondary {
+      width: 100%; padding: 9px 12px; margin-top: 8px;
+      background: #fff; color: var(--fg); border: 1px solid var(--line);
+    }
+    .btn-secondary:hover { background: var(--soft); }
+    .hint { color: var(--muted); font-size: 11px; margin-top: 6px; }
+    details {
+      margin-top: 12px; border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 12px;
+    }
+    summary { cursor: pointer; color: var(--muted); font-size: 12px; user-select: none; }
+    .field { margin-top: 10px; }
+    .field label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+    .field input, .field select {
+      width: 100%; padding: 6px 8px; font: inherit; font-size: 12px;
+      border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--fg);
+    }
+    .field input:focus, .field select:focus { outline: 1.5px solid var(--fg); outline-offset: -1px; }
+    #save-settings { margin-top: 10px; width: 100%; padding: 7px; background: var(--soft); border: 1px solid var(--line); }
+    #save-status { color: #16a34a; font-size: 11px; margin-top: 4px; min-height: 14px; }
+    footer {
+      display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid var(--line); padding: 10px 16px;
+      color: var(--muted); font-size: 12px;
+    }
+    #open-library { background: none; border: none; color: var(--fg); text-decoration: underline; padding: 0; }
+    #popup-status { color: var(--muted); font-size: 11px; margin-top: 8px; min-height: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo"></span>
+    <h1>MotionLens 动效透镜</h1>
+    <span class="ver" id="version"></span>
+  </header>
+  <main>
+    <button class="btn-primary" id="capture">🎯 捕捉动效</button>
+    <button class="btn-secondary" id="record">📹 录制捕捉（canvas/WebGL）</button>
+    <p class="hint">录制模式先录 3 秒屏幕，再点选元素，结构化提取失败时走 vision 分析。</p>
+    <details id="settings-details">
+      <summary>设置（BYOK）</summary>
+      <div class="field">
+        <label for="provider">Provider</label>
+        <select id="provider">
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openai-compatible">OpenAI 兼容（DeepSeek / 通义 / vLLM…）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="apiKey">API Key</label>
+        <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="model">Model（留空用默认）</label>
+        <input id="model" type="text" placeholder="gpt-4o / claude-sonnet-4-5 / deepseek-chat" />
+      </div>
+      <div class="field">
+        <label for="baseUrl">Base URL（兼容模式必填）</label>
+        <input id="baseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
+      </div>
+      <button id="save-settings">保存设置</button>
+      <div id="save-status"></div>
+    </details>
+    <div id="popup-status"></div>
+  </main>
+  <footer>
+    <span id="lib-count">已捕捉 0 条</span>
+    <button id="open-library">打开灵感库</button>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>

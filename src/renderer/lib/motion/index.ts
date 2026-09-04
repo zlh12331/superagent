@@ -51,7 +51,11 @@ export {
 // 动画变体
 export {
   // 单元素
+  blurUpVariants,
   fadeInVariants,
+  // 字母级
+  letterContainerVariants,
+  letterUpVariants,
   popVariants,
   scaleVariants,
   slideRightVariants,

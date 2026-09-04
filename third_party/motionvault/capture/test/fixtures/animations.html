@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>MotionLens E2E Fixture — Animations</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 40px; background: #fafafa; }
+  .row { display: flex; gap: 40px; align-items: flex-start; }
+
+  /* ① CSS keyframes 无限旋转 loader */
+  @keyframes ml-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  #loader {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 4px solid #e4e4e7; border-top-color: #4f8cff;
+    animation: ml-spin 0.9s linear infinite;
+  }
+
+  /* ② mouseenter 时 el.animate() 的 WAAPI 卡片 */
+  #waapi-card {
+    width: 160px; padding: 20px; background: #fff; border: 1px solid #e4e4e7;
+    border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  /* ③ rAF 内联样式脉冲（对 getAnimations 隐身，靠采样兜底） */
+  #raf-pulse {
+    width: 72px; height: 72px; border-radius: 16px;
+    background: #18181b; will-change: transform, opacity;
+  }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div id="loader" data-fixture="css-loader"></div>
+    <div id="waapi-card" data-fixture="waapi-card">WAAPI hover card</div>
+    <div id="raf-pulse" data-fixture="raf-pulse"></div>
+  </div>
+<script>
+  // ② WAAPI：mouseenter 时播放一次位移动画
+  const card = document.getElementById('waapi-card');
+  card.addEventListener('mouseenter', () => {
+    card.animate(
+      [
+        { transform: 'translateY(0) scale(1)', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' },
+        { transform: 'translateY(-10px) scale(1.04)', boxShadow: '0 12px 30px rgba(0,0,0,0.15)' },
+      ],
+      { duration: 600, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }
+    );
+  });
+
+  // ③ GSAP 风格：rAF 驱动的内联样式脉冲（呼吸缩放），不使用任何动画 API
+  const pulse = document.getElementById('raf-pulse');
+  const period = 1200;
+  function tick(now) {
+    const t = (now % period) / period;              // 0..1
+    const s = 1 + 0.25 * Math.sin(t * Math.PI * 2); // 0.75..1.25
+    pulse.style.transform = 'scale(' + s.toFixed(4) + ')';
+    pulse.style.opacity = (0.6 + 0.4 * Math.sin(t * Math.PI * 2)).toFixed(4);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -1,0 +1,1794 @@
+{
+  "meta": {
+    "startedAt": "2026-08-31T08:09:38.051Z",
+    "durationMs": 667866,
+    "perCategory": 6,
+    "routes": [
+      "/text",
+      "/cards",
+      "/layout",
+      "/3d",
+      "/particles",
+      "/backgrounds",
+      "/buttons",
+      "/scroll",
+      "/svg",
+      "/loaders",
+      "/spring",
+      "/lab"
+    ]
+  },
+  "total": 72,
+  "covered": 46,
+  "coverage": 0.639,
+  "sourceTotals": {
+    "css": 2,
+    "transition": 7,
+    "waapi": 53,
+    "sampled": 27
+  },
+  "sampledCards": 23,
+  "triggerTotals": {
+    "load": 45,
+    "unknown": 0,
+    "hover": 9,
+    "click": 8
+  },
+  "avgSegmentError": 0.114,
+  "categories": [
+    {
+      "category": "text",
+      "route": "/text",
+      "total": 6,
+      "covered": 4,
+      "coverage": 0.667,
+      "noAnimation": 2,
+      "errors": 0
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "total": 6,
+      "covered": 5,
+      "coverage": 0.833,
+      "noAnimation": 1,
+      "errors": 0
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "total": 6,
+      "covered": 6,
+      "coverage": 1,
+      "noAnimation": 0,
+      "errors": 0
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "total": 6,
+      "covered": 0,
+      "coverage": 0,
+      "noAnimation": 6,
+      "errors": 0
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "total": 6,
+      "covered": 0,
+      "coverage": 0,
+      "noAnimation": 6,
+      "errors": 0
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "total": 6,
+      "covered": 4,
+      "coverage": 0.667,
+      "noAnimation": 2,
+      "errors": 0
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "total": 6,
+      "covered": 6,
+      "coverage": 1,
+      "noAnimation": 0,
+      "errors": 0
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "total": 6,
+      "covered": 6,
+      "coverage": 1,
+      "noAnimation": 0,
+      "errors": 0
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "total": 6,
+      "covered": 4,
+      "coverage": 0.667,
+      "noAnimation": 2,
+      "errors": 0
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "total": 6,
+      "covered": 6,
+      "coverage": 1,
+      "noAnimation": 0,
+      "errors": 0
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "total": 6,
+      "covered": 5,
+      "coverage": 0.833,
+      "noAnimation": 1,
+      "errors": 0
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "total": 6,
+      "covered": 0,
+      "coverage": 0,
+      "noAnimation": 6,
+      "errors": 0
+    }
+  ],
+  "failures": [
+    {
+      "id": "text-3-乱序解码",
+      "category": "text",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "text-4-流光文字",
+      "category": "text",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "cards-1-聚光灯卡片",
+      "category": "cards",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "3d-0-浮动几何体群",
+      "category": "3d",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "3d-1-粒子球体",
+      "category": "3d",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "3d-2-波浪平面",
+      "category": "3d",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "3d-3-噪声扭曲球体",
+      "category": "3d",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "3d-4-旋转圆环组",
+      "category": "3d",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "3d-5-星空穿梭",
+      "category": "3d",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "particles-0-星座网络",
+      "category": "particles",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "particles-1-漂浮粒子场",
+      "category": "particles",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "particles-2-粒子文字",
+      "category": "particles",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "particles-3-彩带爆发",
+      "category": "particles",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "particles-4-流星雨",
+      "category": "particles",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "particles-5-烟花绽放",
+      "category": "particles",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "backgrounds-4-噪声波纹",
+      "category": "backgrounds",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "backgrounds-5-闪烁方格",
+      "category": "backgrounds",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "svg-1-图标描绘",
+      "category": "svg",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "svg-2-环形进度",
+      "category": "svg",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "spring-0-果冻按钮",
+      "category": "spring",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "lab-0-织物印字",
+      "category": "lab",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "lab-1-暖帘",
+      "category": "lab",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "lab-2-生长之树",
+      "category": "lab",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "lab-3-球面文字",
+      "category": "lab",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "lab-4-液态金属",
+      "category": "lab",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    },
+    {
+      "id": "lab-5-雨滴水潭",
+      "category": "lab",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道"
+    }
+  ],
+  "cards": [
+    {
+      "category": "text",
+      "route": "/text",
+      "index": 0,
+      "id": "text-0-模糊浮现",
+      "title": "模糊浮现",
+      "status": "ok",
+      "tookMs": 3198,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 9,
+        "sampled": 0
+      },
+      "animationCount": 9,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 9
+      }
+    },
+    {
+      "category": "text",
+      "route": "/text",
+      "index": 1,
+      "id": "text-1-逐字弹入",
+      "title": "逐字弹入",
+      "status": "ok",
+      "tookMs": 3175,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 11,
+        "sampled": 0
+      },
+      "animationCount": 11,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 11
+      }
+    },
+    {
+      "category": "text",
+      "route": "/text",
+      "index": 2,
+      "id": "text-2-打字机",
+      "title": "打字机",
+      "status": "ok",
+      "tookMs": 2359,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 1
+      }
+    },
+    {
+      "category": "text",
+      "route": "/text",
+      "index": 3,
+      "id": "text-3-乱序解码",
+      "title": "乱序解码",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "text",
+      "route": "/text",
+      "index": 4,
+      "id": "text-4-流光文字",
+      "title": "流光文字",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "text",
+      "route": "/text",
+      "index": 5,
+      "id": "text-5-垂直词轮换",
+      "title": "垂直词轮换",
+      "status": "ok",
+      "tookMs": 2356,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 2,
+        "sampled": 0
+      },
+      "animationCount": 2,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 2
+      }
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "index": 0,
+      "id": "cards-0-3D-倾斜卡片",
+      "title": "3D 倾斜卡片",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 2
+      },
+      "animationCount": 0,
+      "segmentCount": 2,
+      "avgSegmentError": 0.063,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "index": 1,
+      "id": "cards-1-聚光灯卡片",
+      "title": "聚光灯卡片",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "index": 2,
+      "id": "cards-2-发光边框卡",
+      "title": "发光边框卡",
+      "status": "ok",
+      "tookMs": 2359,
+      "sources": {
+        "css": 2,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 2,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 2
+      }
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "index": 3,
+      "id": "cards-3-磁吸卡",
+      "title": "磁吸卡",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 2
+      },
+      "animationCount": 0,
+      "segmentCount": 2,
+      "avgSegmentError": 0.483,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "index": 4,
+      "id": "cards-4-3D-翻转卡",
+      "title": "3D 翻转卡",
+      "status": "ok",
+      "tookMs": 4049,
+      "sources": {
+        "css": 0,
+        "transition": 1,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "hover": 1
+      }
+    },
+    {
+      "category": "cards",
+      "route": "/cards",
+      "index": 5,
+      "id": "cards-5-滚动堆叠卡",
+      "title": "滚动堆叠卡",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.062,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "index": 0,
+      "id": "layout-0-悬停扩展卡片组",
+      "title": "悬停扩展卡片组",
+      "status": "ok",
+      "tookMs": 3165,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 4,
+        "sampled": 0
+      },
+      "animationCount": 4,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 4
+      }
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "index": 1,
+      "id": "layout-1-扇形卡叠",
+      "title": "扇形卡叠",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.01,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "index": 2,
+      "id": "layout-2-拖拽卡堆",
+      "title": "拖拽卡堆",
+      "status": "ok",
+      "tookMs": 3159,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 2,
+        "sampled": 0
+      },
+      "animationCount": 2,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 2
+      }
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "index": 3,
+      "id": "layout-3-点击展开画廊",
+      "title": "点击展开画廊",
+      "status": "ok",
+      "tookMs": 4873,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 4,
+        "sampled": 0
+      },
+      "animationCount": 4,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "click": 4
+      }
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "index": 4,
+      "id": "layout-4-通知卡叠展开",
+      "title": "通知卡叠展开",
+      "status": "ok",
+      "tookMs": 4049,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 2,
+        "sampled": 0
+      },
+      "animationCount": 2,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "hover": 2
+      }
+    },
+    {
+      "category": "layout",
+      "route": "/layout",
+      "index": 5,
+      "id": "layout-5-手风琴画廊",
+      "title": "手风琴画廊",
+      "status": "ok",
+      "tookMs": 4050,
+      "sources": {
+        "css": 0,
+        "transition": 3,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 3,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "hover": 3
+      }
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "index": 0,
+      "id": "3d-0-浮动几何体群",
+      "title": "浮动几何体群",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "index": 1,
+      "id": "3d-1-粒子球体",
+      "title": "粒子球体",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "index": 2,
+      "id": "3d-2-波浪平面",
+      "title": "波浪平面",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "index": 3,
+      "id": "3d-3-噪声扭曲球体",
+      "title": "噪声扭曲球体",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "index": 4,
+      "id": "3d-4-旋转圆环组",
+      "title": "旋转圆环组",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "3d",
+      "route": "/3d",
+      "index": 5,
+      "id": "3d-5-星空穿梭",
+      "title": "星空穿梭",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "index": 0,
+      "id": "particles-0-星座网络",
+      "title": "星座网络",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "index": 1,
+      "id": "particles-1-漂浮粒子场",
+      "title": "漂浮粒子场",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "index": 2,
+      "id": "particles-2-粒子文字",
+      "title": "粒子文字",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "index": 3,
+      "id": "particles-3-彩带爆发",
+      "title": "彩带爆发",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "index": 4,
+      "id": "particles-4-流星雨",
+      "title": "流星雨",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "particles",
+      "route": "/particles",
+      "index": 5,
+      "id": "particles-5-烟花绽放",
+      "title": "烟花绽放",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "index": 0,
+      "id": "backgrounds-0-流动渐变网格",
+      "title": "流动渐变网格",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.006,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "index": 1,
+      "id": "backgrounds-1-呼吸点阵",
+      "title": "呼吸点阵",
+      "status": "ok",
+      "tookMs": 2488,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 1
+      }
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "index": 2,
+      "id": "backgrounds-2-极光",
+      "title": "极光",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.005,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "index": 3,
+      "id": "backgrounds-3-透视网格线",
+      "title": "透视网格线",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 1,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "index": 4,
+      "id": "backgrounds-4-噪声波纹",
+      "title": "噪声波纹",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "backgrounds",
+      "route": "/backgrounds",
+      "index": 5,
+      "id": "backgrounds-5-闪烁方格",
+      "title": "闪烁方格",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "index": 0,
+      "id": "buttons-0-边框光束",
+      "title": "边框光束",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.001,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "index": 1,
+      "id": "buttons-1-扫光按钮",
+      "title": "扫光按钮",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "index": 2,
+      "id": "buttons-2-点击波纹",
+      "title": "点击波纹",
+      "status": "ok",
+      "tookMs": 4855,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "click": 1
+      }
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "index": 3,
+      "id": "buttons-3-磁吸按钮",
+      "title": "磁吸按钮",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.005,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "index": 4,
+      "id": "buttons-4-液体填充",
+      "title": "液体填充",
+      "status": "ok",
+      "tookMs": 4067,
+      "sources": {
+        "css": 0,
+        "transition": 2,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 2,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "hover": 2
+      }
+    },
+    {
+      "category": "buttons",
+      "route": "/buttons",
+      "index": 5,
+      "id": "buttons-5-微光按钮",
+      "title": "微光按钮",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "index": 0,
+      "id": "scroll-0-滚动缩放封面",
+      "title": "滚动缩放封面",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.012,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "index": 1,
+      "id": "scroll-1-横向滚动画廊",
+      "title": "横向滚动画廊",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.009,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "index": 2,
+      "id": "scroll-2-滚动聚焦文字",
+      "title": "滚动聚焦文字",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 2
+      },
+      "animationCount": 0,
+      "segmentCount": 2,
+      "avgSegmentError": 0.033,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "index": 3,
+      "id": "scroll-3-钉住步骤切换",
+      "title": "钉住步骤切换",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.007,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "index": 4,
+      "id": "scroll-4-视差分层山谷",
+      "title": "视差分层山谷",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.006,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "scroll",
+      "route": "/scroll",
+      "index": 5,
+      "id": "scroll-5-滚动穿越卡片",
+      "title": "滚动穿越卡片",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.009,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "index": 0,
+      "id": "svg-0-签名描绘",
+      "title": "签名描绘",
+      "status": "ok",
+      "tookMs": 3161,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 2,
+        "sampled": 0
+      },
+      "animationCount": 2,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 2
+      }
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "index": 1,
+      "id": "svg-1-图标描绘",
+      "title": "图标描绘",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "index": 2,
+      "id": "svg-2-环形进度",
+      "title": "环形进度",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "index": 3,
+      "id": "svg-3-描绘打勾",
+      "title": "描绘打勾",
+      "status": "ok",
+      "tookMs": 3157,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 1
+      }
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "index": 4,
+      "id": "svg-4-路径变形",
+      "title": "路径变形",
+      "status": "ok",
+      "tookMs": 4859,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "click": 1
+      }
+    },
+    {
+      "category": "svg",
+      "route": "/svg",
+      "index": 5,
+      "id": "svg-5-折线图生长",
+      "title": "折线图生长",
+      "status": "ok",
+      "tookMs": 2355,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 1
+      }
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "index": 0,
+      "id": "loaders-0-三点跳跃",
+      "title": "三点跳跃",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.724,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "index": 1,
+      "id": "loaders-1-渐变环",
+      "title": "渐变环",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.001,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "index": 2,
+      "id": "loaders-2-音浪条",
+      "title": "音浪条",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.015,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "index": 3,
+      "id": "loaders-3-方块变形",
+      "title": "方块变形",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 2
+      },
+      "animationCount": 0,
+      "segmentCount": 2,
+      "avgSegmentError": 0.06,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "index": 4,
+      "id": "loaders-4-双星环绕",
+      "title": "双星环绕",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.109,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "loaders",
+      "route": "/loaders",
+      "index": 5,
+      "id": "loaders-5-文字呼吸",
+      "title": "文字呼吸",
+      "status": "ok",
+      "tookMs": 2360,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 6,
+        "sampled": 0
+      },
+      "animationCount": 6,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 6
+      }
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "index": 0,
+      "id": "spring-0-果冻按钮",
+      "title": "果冻按钮",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "index": 1,
+      "id": "spring-1-弹簧弹窗",
+      "title": "弹簧弹窗",
+      "status": "ok",
+      "tookMs": 4867,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "click": 1
+      }
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "index": 2,
+      "id": "spring-2-弹性勾选",
+      "title": "弹性勾选",
+      "status": "ok",
+      "tookMs": 3159,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 3,
+        "sampled": 0
+      },
+      "animationCount": 3,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "load": 3
+      }
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "index": 3,
+      "id": "spring-3-弹性气泡",
+      "title": "弹性气泡",
+      "status": "ok",
+      "tookMs": 4057,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 1,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "hover": 1
+      }
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "index": 4,
+      "id": "spring-4-抖动输入框",
+      "title": "抖动输入框",
+      "status": "ok",
+      "tookMs": 4849,
+      "sources": {
+        "css": 0,
+        "transition": 1,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 1,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {
+        "click": 1
+      }
+    },
+    {
+      "category": "spring",
+      "route": "/spring",
+      "index": 5,
+      "id": "spring-5-弹性开关",
+      "title": "弹性开关",
+      "status": "ok",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 1
+      },
+      "animationCount": 0,
+      "segmentCount": 1,
+      "avgSegmentError": 0.004,
+      "triggers": {
+        "unknown": 0
+      }
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "index": 0,
+      "id": "lab-0-织物印字",
+      "title": "织物印字",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "index": 1,
+      "id": "lab-1-暖帘",
+      "title": "暖帘",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "index": 2,
+      "id": "lab-2-生长之树",
+      "title": "生长之树",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "index": 3,
+      "id": "lab-3-球面文字",
+      "title": "球面文字",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "index": 4,
+      "id": "lab-4-液态金属",
+      "title": "液态金属",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    },
+    {
+      "category": "lab",
+      "route": "/lab",
+      "index": 5,
+      "id": "lab-5-雨滴水潭",
+      "title": "雨滴水潭",
+      "status": "no-animation",
+      "reason": "结构化提取为空且采样无有效通道",
+      "tookMs": 0,
+      "sources": {
+        "css": 0,
+        "transition": 0,
+        "waapi": 0,
+        "sampled": 0
+      },
+      "animationCount": 0,
+      "segmentCount": 0,
+      "avgSegmentError": null,
+      "triggers": {}
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "motionlens",
+  "version": "0.1.0",
+  "description": "MotionLens 动效透镜 — 指着任何网页动效，结构化提取并生成 AI 复现 prompt",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build:bookmarklet": "esbuild src/shell/bookmarklet/index.ts --bundle --format=iife --minify --outfile=dist/motionlens.bookmarklet.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}
