@@ -31,6 +31,7 @@ import type {
   TurnEndEvent,
   TurnEvent,
   TurnTextDeltaEvent,
+  TurnToolCallEvent,
   TurnToolResultEvent,
   TurnUsage,
 } from '@code-agent/shared/main';
@@ -50,6 +51,8 @@ import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from '../agent-runtime/create-stream';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../agent-runtime/stream-reader';
 import { TurnRunner } from '../agent-runtime/turn-runner';
+import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
+import { buildAssistantTurnMessages } from '../agent-runtime/turn-transcript';
 import type { ITitleGenerator } from '../knowledge/session-title';
 import {
   ensureSessionTitle,
@@ -71,6 +74,7 @@ import {
   getTokenBudgetDecision,
 } from './context-compression';
 import { createRepairToolCall } from './repair-tool-call';
+import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
 /**
  * Agent 启动选项
@@ -354,6 +358,9 @@ export class AgentService implements IAgentService {
         // TEXT_DELTA 拼接助手全文；rawPartCount 统计流内原始 part（空回复检测）。
         // 声明在 try 外：catch 分支（错误/中断出口）同样需要读取代传递 completeTurn
         let assistantText = '';
+        // 回合转录累积（reasoning/tool-call/tool-result，落库为富 parts——重开会话可见）
+        // 声明在 try 外：catch 分支（错误/中断出口）同样需要把已发生的部分传给 completeTurn
+        const transcriptEntries: TurnTranscriptEntry[] = [];
         let rawPartCount = 0;
         // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
         let releaseGate: (() => void) | undefined;
@@ -383,10 +390,22 @@ export class AgentService implements IAgentService {
           // 流式渲染走 agent:stream:part，回合历史走 session:getTurns 拉取
           unsubscribeAll = () => {
             unsubscribeTextAcc();
+            unsubscribeToolCallAcc();
           };
 
           const unsubscribeTextAcc = turnEmitter.on(TurnEventType.TEXT_DELTA, (event) => {
             assistantText += (event as TurnTextDeltaEvent).text;
+          });
+
+          // 工具调用转录（tool-call：模型发起，含入参；结果在 executeHook 处累积 output）
+          const unsubscribeToolCallAcc = turnEmitter.on(TurnEventType.TOOL_CALL, (event) => {
+            const e = event as TurnToolCallEvent;
+            transcriptEntries.push({
+              kind: 'tool-call',
+              toolCallId: e.toolCallId,
+              toolName: e.toolName,
+              input: e.input,
+            });
           });
 
           // 用户消息落库（回合开始）：失败静默（会话不存在/写入异常均不阻断对话；
@@ -463,6 +482,13 @@ export class AgentService implements IAgentService {
               ...(result.error !== undefined ? { error: result.error } : {}),
               ...(result.error === undefined ? { durationMs: Date.now() - toolStartTime } : {}),
             } satisfies TurnToolResultEvent);
+            // 工具结果转录（output/error 在执行侧最全，与上方 TOOL_RESULT 事件同源）
+            transcriptEntries.push({
+              kind: 'tool-result',
+              toolCallId: ctx.callId,
+              toolName: tool.name,
+              ...(result.error !== undefined ? { error: result.error } : { output: result.output }),
+            });
             // 失败时返回结构化错误对象（让 LLM 看到错误信息）
             // 成功时返回 output（LLM 据此继续推理）
             if (result.error !== undefined) {
@@ -604,6 +630,10 @@ export class AgentService implements IAgentService {
             // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
             onPart: (part) => {
               rawPartCount += 1;
+              // 思考过程转录（SDK reasoning-delta；TOOL_* 走事件订阅，见 executeHook）
+              if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
+                transcriptEntries.push({ kind: 'reasoning', text: part.delta });
+              }
               if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
                 const payload: AgentStreamPartPayload = { sessionId, part };
                 // dev 契约校验后发送（payloadSchema 见定义表）
@@ -647,63 +677,20 @@ export class AgentService implements IAgentService {
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
               assistantText,
+              transcriptEntries,
             });
           } else {
-            // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默
+            // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默；
+            // 投影/遥测/持久化细节见 turn-usage-report（自本方法提取）
             const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
-            const turnUsage: TurnUsage | undefined =
-              usage !== null && usage !== undefined
-                ? {
-                    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-                    ...(usage.outputTokens !== undefined
-                      ? { outputTokens: usage.outputTokens }
-                      : {}),
-                    ...(usage.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
-                    ...(usage.inputTokenDetails?.cacheReadTokens !== undefined
-                      ? { cacheReadTokens: usage.inputTokenDetails.cacheReadTokens }
-                      : {}),
-                    ...(usage.outputTokenDetails?.reasoningTokens !== undefined
-                      ? { reasoningTokens: usage.outputTokenDetails.reasoningTokens }
-                      : {}),
-                  }
-                : undefined;
-
-            // token 使用量统计（AI SDK v7 原生支持，免费数据）
-            if (usage !== null && usage !== undefined) {
-              logger.info(
-                {
-                  sessionId,
-                  inputTokens: usage.inputTokens,
-                  outputTokens: usage.outputTokens,
-                  totalTokens: usage.totalTokens,
-                },
-                'Agent token 使用量',
-              );
-              // 用量持久化（设置页用量统计）：失败不阻断主流程
-              void this.sessionService
-                .recordUsage({
-                  sessionId,
-                  modelId: resolvedModel.modelId,
-                  inputTokens: usage.inputTokens ?? 0,
-                  outputTokens: usage.outputTokens ?? 0,
-                  totalTokens: usage.totalTokens ?? 0,
-                  cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens,
-                  reasoningTokens: usage.outputTokenDetails?.reasoningTokens,
-                })
-                .catch((err: unknown) => {
-                  logger.error({ sessionId, error: err }, 'recordUsage 失败');
-                });
-              // setAttribute 不接受 undefined，需显式守卫
-              if (usage.totalTokens !== undefined) {
-                span?.setAttribute('token.total', usage.totalTokens);
-              }
-              if (usage.inputTokens !== undefined) {
-                span?.setAttribute('token.prompt', usage.inputTokens);
-              }
-              if (usage.outputTokens !== undefined) {
-                span?.setAttribute('token.completion', usage.outputTokens);
-              }
-            }
+            const turnUsage = projectTurnUsage(usage);
+            reportTurnUsage(
+              {
+                recordUsage: (input) => this.sessionService.recordUsage(input),
+                ...(span !== undefined ? { span } : {}),
+              },
+              { sessionId, modelId: resolvedModel.modelId, usage },
+            );
 
             this.completeTurn({
               sessionId,
@@ -716,6 +703,7 @@ export class AgentService implements IAgentService {
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
               assistantText,
+              transcriptEntries,
             });
             // 标题生成（回合结束后异步，失败静默）：
             // 会话仍为默认标题时用首条用户消息生成简洁标题
@@ -744,6 +732,7 @@ export class AgentService implements IAgentService {
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
               assistantText,
+              transcriptEntries,
             });
           } else {
             // 其他错误：分类并推送 AGENT_STREAM_ERROR
@@ -784,6 +773,7 @@ export class AgentService implements IAgentService {
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
               assistantText,
+              transcriptEntries,
             });
             logger.error(
               { sessionId, errorCode: appError.code, error: appError },
@@ -856,6 +846,8 @@ export class AgentService implements IAgentService {
     readonly webContents?: WebContents;
     /** 助手文本（TEXT_DELTA 累积；中断/错误回合保留已流出的部分） */
     readonly assistantText?: string;
+    /** 回合转录条目（reasoning/tool-call/tool-result，见 turn-transcript.ts） */
+    readonly transcriptEntries?: readonly TurnTranscriptEntry[];
   }): void {
     const turnEnd: TurnEndEvent = {
       type: TurnEventType.TURN_END,
@@ -886,15 +878,20 @@ export class AgentService implements IAgentService {
     // Transcript 落库（失败不阻断主流程）
     void this.persistTurn(turnEnd, params.modelId);
 
-    // 助手消息落库（含中断/错误回合的已流出文本——历史不因失败丢失；
+    // 助手消息落库（含富 parts：reasoning/tool-call/tool-result——重开会话可见；
+    // 中断/错误回合保留已发生的部分——历史不因失败丢失；
     // try/catch 兜底测试桩返回非 Promise 等同步异常）
-    if (params.assistantText !== undefined && params.assistantText.length > 0) {
+    const turnMessages = buildAssistantTurnMessages(
+      params.assistantText ?? '',
+      params.transcriptEntries ?? [],
+    );
+    if (turnMessages.length > 0) {
       try {
         void this.sessionService
           .appendMessage({
             sessionId: params.sessionId,
             turnId: params.turnId,
-            messages: [{ role: 'assistant', content: params.assistantText }],
+            messages: turnMessages,
           })
           .catch((err: unknown) => {
             logger.error({ sessionId: params.sessionId, error: err }, '助手消息落库失败');

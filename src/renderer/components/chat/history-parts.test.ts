@@ -150,6 +150,38 @@ describe('reconstructHistory', () => {
     ]);
     expect(r.messages.map((m) => m.role)).toEqual(['assistant', 'system', 'user']);
   });
+
+  it('落库的富回合（turn-transcript 形态）→ reasoning + 工具卡 + 文本完整重建', () => {
+    // 模拟 agent-service 落库产物：reasoning/tool-call/text 的 assistant 消息
+    // + SDK 包装形态 output 的 tool 消息（{type:'text', value}）
+    const r = reconstructHistory([
+      msg('assistant', [
+        { type: 'reasoning', text: '先定位问题' },
+        { type: 'tool-call', toolCallId: 'c9', toolName: 'read_file', input: { path: 'a.ts' } },
+        { type: 'text', text: '回答文本' },
+      ]),
+      msg('tool', [
+        {
+          type: 'tool-result',
+          toolCallId: 'c9',
+          toolName: 'read_file',
+          output: { type: 'text', value: '文件内容' },
+        },
+      ]),
+    ]);
+    // tool 消息的结果被合并进工具卡，自身无剩余 parts → 整条跳过
+    expect(r.messages).toHaveLength(1);
+    const types = r.messages[0]?.parts.map((p) => p.type);
+    expect(types).toEqual(['reasoning', 'tool-read_file', 'text']);
+    const toolPart = r.messages[0]?.parts.find((p) => 'toolCallId' in p);
+    expect(toolPart).toMatchObject({
+      type: 'tool-read_file',
+      state: 'output-available',
+      output: '文件内容', // unwrapOutput 还原包装
+    });
+    expect(r.hasRichParts).toBe(true); // textOnly 横幅条件不再成立
+    expect(r.droppedPartTypes).toEqual([]);
+  });
 });
 
 describe('toInitialMessages', () => {
