@@ -14,6 +14,7 @@
 
 import { ArrowLeft, ArrowRight, Link2, MonitorSmartphone, RotateCw, X } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -173,8 +174,9 @@ export function BrowserPane(): ReactElement {
     <div className="flex h-full flex-col">
       {/* 工具栏：导航 + 地址栏 + 设备按钮 */}
       <div className="border-border bg-muted/30 flex h-8 shrink-0 items-center gap-1.5 border-b px-2">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           title={t('panel.browserBack')}
           aria-label={t('panel.browserBack')}
           onClick={goBack}
@@ -182,9 +184,10 @@ export function BrowserPane(): ReactElement {
           className={TOOLBAR_BTN_CLASS}
         >
           <ArrowLeft className="size-3.5" strokeWidth={1.5} />
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           title={t('panel.browserForward')}
           aria-label={t('panel.browserForward')}
           onClick={goForward}
@@ -192,9 +195,10 @@ export function BrowserPane(): ReactElement {
           className={TOOLBAR_BTN_CLASS}
         >
           <ArrowRight className="size-3.5" strokeWidth={1.5} />
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           title={t('panel.browserRefresh')}
           aria-label={t('panel.browserRefresh')}
           onClick={refresh}
@@ -202,7 +206,7 @@ export function BrowserPane(): ReactElement {
           className={TOOLBAR_BTN_CLASS}
         >
           <RotateCw className="size-3.5" strokeWidth={1.5} />
-        </button>
+        </Button>
 
         {/* 地址栏 */}
         <div className="border-border bg-background flex h-6 min-w-0 flex-1 items-center rounded-full border px-2 transition-colors focus-within:border-primary">
@@ -222,15 +226,16 @@ export function BrowserPane(): ReactElement {
         </div>
 
         {/* 设备工具栏开关 */}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           title={t('panel.browserDeviceBar')}
           aria-label={t('panel.browserDeviceBar')}
           onClick={() => setShowDeviceBar((v) => !v)}
           className={cn(TOOLBAR_BTN_CLASS, showDeviceBar && 'bg-primary/10 text-accent-text')}
         >
           <MonitorSmartphone className="size-3.5" strokeWidth={1.5} />
-        </button>
+        </Button>
       </div>
 
       {/* 设备工具栏（可切换显示） */}
@@ -284,15 +289,16 @@ export function BrowserPane(): ReactElement {
             <option value={150}>150%</option>
             <option value={200}>200%</option>
           </select>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             title={t('panel.browserCloseDeviceBar')}
             aria-label={t('panel.browserCloseDeviceBar')}
             onClick={() => setShowDeviceBar(false)}
             className={cn(TOOLBAR_BTN_CLASS, 'ml-auto shrink-0')}
           >
             <X className="size-3" strokeWidth={1.5} />
-          </button>
+          </Button>
         </div>
       )}
 

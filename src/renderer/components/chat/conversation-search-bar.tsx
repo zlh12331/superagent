@@ -8,8 +8,8 @@
 
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { cn } from '@/lib/utils';
 
 /** 搜索栏 props（受控） */
 export interface ConversationSearchBarProps {
@@ -93,39 +93,40 @@ export function ConversationSearchBar({
         </span>
       )}
       {/* 上一个匹配（↑） */}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => onNavigate(-1)}
         disabled={!hasMatches}
         aria-label={t('chat.searchPrev')}
         title={t('chat.searchPrev')}
-        className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center justify-center rounded-[3px] px-1.5 py-[3px] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[3px] px-1.5 py-[3px]"
       >
         <ChevronUp className="size-3" />
-      </button>
+      </Button>
       {/* 下一个匹配（↓） */}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => onNavigate(1)}
         disabled={!hasMatches}
         aria-label={t('chat.searchNext')}
         title={t('chat.searchNext')}
-        className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center justify-center rounded-[3px] px-1.5 py-[3px] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[3px] px-1.5 py-[3px]"
       >
         <ChevronDown className="size-3" />
-      </button>
+      </Button>
       {/* 关闭（X） */}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={onClose}
         aria-label={t('common.close')}
         title={t('common.close')}
-        className={cn(
-          'text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center justify-center rounded-[3px] px-1.5 py-[3px] transition-colors',
-        )}
+        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[3px] px-1.5 py-[3px]"
       >
         <X className="size-3.5" />
-      </button>
+      </Button>
     </search>
   );
 }

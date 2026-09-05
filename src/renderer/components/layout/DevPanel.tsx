@@ -33,6 +33,7 @@ import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
 import { GitPanel } from '@/components/git/GitPanel';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -187,9 +188,10 @@ export const DevPanel = memo(function DevPanel({
                     <span className="truncate">{t(def.labelKey)}</span>
                   </TabsTrigger>
                   {tab !== 'info' && (
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground flex shrink-0 cursor-pointer items-center rounded p-0.5 transition-colors"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 p-0.5"
                       aria-label={t('panel.closeView')}
                       title={t('panel.closeView')}
                       onClick={(event) => {
@@ -198,7 +200,7 @@ export const DevPanel = memo(function DevPanel({
                       }}
                     >
                       <X className="size-2.5" strokeWidth={2} />
-                    </button>
+                    </Button>
                   )}
                 </div>
               );
@@ -208,14 +210,15 @@ export const DevPanel = memo(function DevPanel({
         {/* 添加视图按钮（用户需求：默认任务摘要 + 添加按钮，按需加入其他视图） */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground size-5"
               aria-label={t('panel.addView')}
               title={t('panel.addView')}
             >
               <Plus className="size-3" strokeWidth={2} />
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-36">
             {TAB_DEFS.filter((d) => d.id !== 'info' && !openTabs.includes(d.id)).map((def) => (
