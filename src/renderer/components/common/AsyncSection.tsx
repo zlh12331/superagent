@@ -78,6 +78,18 @@ export function QueryErrorRow({
     </div>
   );
 }
+
+/** 加载警示行（pending 时插入大块渲染区之前，与 QueryErrorRow 同款行内形态） */
+export function QueryPendingRow({ isPending }: { isPending: boolean }): React.ReactElement | null {
+  const { t } = useTranslation();
+  if (!isPending) return null;
+  return (
+    <div className="text-muted-foreground mt-2 flex items-center gap-2 text-xs" role="status">
+      <Spinner className="size-3.5" />
+      {t('common.loading')}
+    </div>
+  );
+}
 /** 外层统一间距与字号的四态容器 */
 
 const WRAPPER_CLASS = 'mt-2 text-xs leading-relaxed';

@@ -58,7 +58,8 @@ describe('AskDialog', () => {
   it('提问到达：渲染标题/问题/选项/自由输入/提交取消按钮', () => {
     setAsk('ask-1', [mkQuestion()]);
     render(<AskDialog />);
-    expect(screen.getByText('Agent 提问')).toBeInTheDocument();
+    // Radix 迁移后 sr-only DialogTitle 与可见头部并存：用 getAllByText 断言
+    expect(screen.getAllByText('Agent 提问').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('选择后续方向？')).toBeInTheDocument();
     expect(screen.getByText('方案 A')).toBeInTheDocument();
     expect(screen.getByText('方案 B')).toBeInTheDocument();

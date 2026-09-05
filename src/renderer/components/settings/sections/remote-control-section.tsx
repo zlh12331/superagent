@@ -15,7 +15,7 @@ import { toDataURL } from 'qrcode';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { QueryErrorRow } from '@/components/common/AsyncSection';
+import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
 import {
@@ -125,7 +125,7 @@ function HeadlessModeWarning({ mode }: { readonly mode: string }): ReactElement 
 
 export function RemoteControlSection(): ReactElement {
   const { t } = useTranslation();
-  const { data, isError, error, refetch } = useRemoteStatusQuery();
+  const { data, isPending: statusLoading, isError, error, refetch } = useRemoteStatusQuery();
   const { mode } = useApprovalMode();
   const startMutation = useStartRemoteControl();
   const stopMutation = useStopRemoteControl();
@@ -189,6 +189,7 @@ export function RemoteControlSection(): ReactElement {
         errorMessage={error instanceof Error ? error.message : null}
         onRetry={() => void refetch()}
       />
+      <QueryPendingRow isPending={statusLoading} />
 
       <ToggleRow
         name={t('settings.remote.toggle')}

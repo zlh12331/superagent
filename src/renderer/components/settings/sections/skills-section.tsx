@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-import { QueryErrorRow } from '@/components/common/AsyncSection';
+import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
@@ -117,6 +117,7 @@ export function SkillsSection(): ReactElement {
         errorMessage={learnedQuery.error instanceof Error ? learnedQuery.error.message : null}
         onRetry={() => void learnedQuery.refetch()}
       />
+      <QueryPendingRow isPending={learnedQuery.isPending} />
       {learned.length === 0 ? (
         <div className="text-muted-foreground rounded-md border border-dashed px-3 py-4 text-center text-xs">
           {t('settings.skillEmpty')}

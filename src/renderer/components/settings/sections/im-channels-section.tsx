@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-import { QueryErrorRow } from '@/components/common/AsyncSection';
+import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,7 @@ export function ImChannelsSection(): ReactElement {
   // P3 修复：im:list 改走 TanStack Query（此前 useState 手动拉取）
   const {
     data: channelsData,
+    isPending: channelsLoading,
     isError: channelsFailed,
     error: channelsError,
     refetch: refetchChannels,
@@ -115,6 +116,7 @@ export function ImChannelsSection(): ReactElement {
         errorMessage={channelsError instanceof Error ? channelsError.message : null}
         onRetry={() => void refetchChannels()}
       />
+      <QueryPendingRow isPending={channelsLoading} />
 
       <ul className="flex flex-col gap-2 text-xs font-sans">
         {channels.map((channel) => (

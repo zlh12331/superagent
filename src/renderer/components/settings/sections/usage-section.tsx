@@ -18,7 +18,7 @@ import { type ReactElement, useMemo } from 'react';
 import { ActivityCalendar } from 'react-activity-calendar';
 import 'react-activity-calendar/tooltips.css';
 
-import { QueryErrorRow } from '@/components/common/AsyncSection';
+import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatCompactNumber } from '@/lib/format-intl';
@@ -115,6 +115,7 @@ export function UsageSection(): ReactElement {
   // 失败态以 QueryErrorRow 呈现（此前静默渲染成全零骨架，误导用户）
   const {
     data: summary,
+    isPending,
     isError,
     error,
     refetch,
@@ -186,6 +187,7 @@ export function UsageSection(): ReactElement {
         errorMessage={error instanceof Error ? error.message : null}
         onRetry={() => void refetch()}
       />
+      <QueryPendingRow isPending={isPending} />
 
       {isEmpty ? (
         <p className="text-xs text-muted-foreground font-sans">{t('settings.usageEmpty')}</p>

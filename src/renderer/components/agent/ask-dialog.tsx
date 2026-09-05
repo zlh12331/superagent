@@ -11,6 +11,7 @@ import { X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -89,7 +90,8 @@ export function AskDialog(): ReactElement | null {
   }, [askId, questions]);
 
   // 非当前会话的提问不渲染（askSessionId 为 null 的旧数据照常显示，向后兼容）
-  if (askId === null || (askSessionId !== null && askSessionId !== activeSessionId)) {
+  const open = askId !== null && (askSessionId === null || askSessionId === activeSessionId);
+  if (!open) {
     return null;
   }
 
@@ -138,8 +140,28 @@ export function AskDialog(): ReactElement | null {
   };
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-[var(--overlay-bg)] p-4">
-      <div className="bg-card border-border max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-lg border shadow-lg">
+    // Radix Dialog：Esc/遮罩关闭 = 取消（回传空回答，与按钮取消同语义）；
+    // 自带焦点陷阱/滚动锁定/动画，替代此前自研 fixed 浮层
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) void handleCancel();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="bg-card max-h-[80vh] w-full max-w-lg gap-0 overflow-y-auto p-0"
+        onEscapeKeyDown={(event) => {
+          // 提交中禁 Esc（避免半提交态被取消路径覆盖）
+          if (submitting) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (submitting) event.preventDefault();
+        }}
+      >
+        {/* sr-only 标题：满足 Radix 无障碍契约（视觉标题在下方头部行） */}
+        <DialogTitle className="sr-only">{t('agent.askTitle')}</DialogTitle>
+
         {/* 头部 */}
         <div className="border-border flex items-center gap-2 border-b px-4 py-3">
           <span className="bg-primary/10 text-accent-text flex size-5 items-center justify-center rounded text-2xs font-bold">
@@ -256,7 +278,7 @@ export function AskDialog(): ReactElement | null {
             {t('agent.askSubmit')}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

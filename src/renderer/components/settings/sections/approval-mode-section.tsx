@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Shield, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-import { QueryErrorRow } from '@/components/common/AsyncSection';
+import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -176,6 +176,7 @@ export function ApprovalModeSection(): ReactElement {
           errorMessage={whitelistQuery.error instanceof Error ? whitelistQuery.error.message : null}
           onRetry={() => void whitelistQuery.refetch()}
         />
+        <QueryPendingRow isPending={whitelistQuery.isPending} />
         <div className="mt-1.5 flex flex-col gap-1.5">
           {entries.length === 0 ? (
             <p className="text-xs text-muted-foreground font-sans">
