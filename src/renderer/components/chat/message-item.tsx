@@ -88,6 +88,7 @@ export const MessageItem = memo(function MessageItem({
       message.role === 'assistant'
         ? message.parts.map((part, index) => ({
             part,
+            index,
             key: `${message.id}-${index}`,
             showCursor: isStreaming && index === message.parts.length - 1,
           }))
@@ -142,7 +143,7 @@ export const MessageItem = memo(function MessageItem({
             <PartView
               key={key}
               part={part}
-              messageId={message.id}
+              collapseKey={key}
               showCursor={showCursor}
               // 流式消息跳过高亮（对齐参考项目：流式期间跳过语法高亮，避免每 token 反复高亮）
               highlight={!isStreaming}
@@ -183,13 +184,13 @@ export const MessageItem = memo(function MessageItem({
  */
 function PartView({
   part,
-  messageId,
+  collapseKey,
   showCursor = false,
   highlight = true,
 }: {
   part: UIMessagePart;
-  /** 所属消息 id（推理块折叠态关联 store 用） */
-  messageId: string;
+  /** 折叠态 key（`${message.id}-${index}`，part 级：同消息多个推理块各自独立） */
+  collapseKey: string;
   /** 流式光标：仅最后一条 text part 渲染（照搬参考项目 StreamingCursor） */
   showCursor?: boolean;
   /** 是否启用代码块语法高亮（流式消息传 false，对齐参考项目流式跳过高亮） */
@@ -212,9 +213,9 @@ function PartView({
     );
   }
 
-  // 思考 part：.reasoning-block 折叠式推理块
+  // 思考 part：.reasoning-block 折叠式推理块（折叠 key 到 part 级：一条消息可含多段思考）
   if (isReasoningUIPart(part)) {
-    return <ReasoningBlock text={part.text} messageId={messageId} />;
+    return <ReasoningBlock text={part.text} collapseKey={collapseKey} />;
   }
 
   // 静态工具调用（tool-{name}）
@@ -483,10 +484,16 @@ function CodeBlock({
  * 折叠式：默认折叠，点击 head 切换 .open 类。
  * accent 左光条 + 等宽字体展示思考内容。
  */
-function ReasoningBlock({ text, messageId }: { text: string; messageId: string }): ReactElement {
+function ReasoningBlock({
+  text,
+  collapseKey,
+}: {
+  text: string;
+  collapseKey: string;
+}): ReactElement {
   // 折叠态：用户显式覆盖优先（L2 store，滚动卸载不丢失）；未覆盖时实时跟随实验设置
   const reasoningCollapsed = useSettingsStore((s) => s.experimental.reasoningCollapsed);
-  const override = useReasoningCollapseStore((s) => s.overrides.get(messageId));
+  const override = useReasoningCollapseStore((s) => s.overrides.get(collapseKey));
   const setCollapsed = useReasoningCollapseStore((s) => s.setCollapsed);
   const open = override === undefined ? !reasoningCollapsed : !override;
   // 本地化文案
@@ -497,7 +504,7 @@ function ReasoningBlock({ text, messageId }: { text: string; messageId: string }
       <button
         type="button"
         className="reasoning-head"
-        onClick={() => setCollapsed(messageId, open)}
+        onClick={() => setCollapsed(collapseKey, open)}
         aria-expanded={open}
       >
         <span className="reasoning-title">{t('chat.thinking')}</span>
