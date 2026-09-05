@@ -9,6 +9,7 @@ import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/rend
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -244,9 +245,10 @@ export function ModelConfigFields({
             className={cn(inputClass, 'min-w-0 flex-1')}
             onChange={(e) => onFieldChange('apiKey', e.target.value)}
           />
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground flex size-7 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground size-7 shrink-0 border"
             aria-label={showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')}
             onClick={() => setShowApiKey((prev) => !prev)}
           >
@@ -255,23 +257,25 @@ export function ModelConfigFields({
             ) : (
               <Eye className="size-3.5" strokeWidth={1.5} />
             )}
-          </button>
+          </Button>
         </div>
-        <button
-          type="button"
-          className="text-accent hover:text-accent/80 w-fit cursor-pointer text-2xs underline-offset-2 hover:underline"
+        <Button
+          variant="link"
+          size="sm"
+          className="text-accent hover:text-accent/80 h-auto w-fit p-0 text-2xs underline-offset-2"
           onClick={onOpenApiKeyUrl}
         >
           {t('settings.modelMgmt.getApiKey')}
-        </button>
+        </Button>
       </div>
 
       {testError !== undefined && <p className="text-error-text text-2xs">{testError}</p>}
 
       {/* ── 高级配置区（折叠） ──────────────────────────── */}
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground flex w-fit cursor-pointer items-center gap-1 text-xs transition-colors"
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:text-foreground h-auto w-fit px-0 text-xs"
         onClick={onToggleAdvanced}
       >
         {advancedExpanded ? (
@@ -280,7 +284,7 @@ export function ModelConfigFields({
           <ChevronRight className="size-3.5" strokeWidth={1.5} />
         )}
         {t('settings.modelMgmt.advancedConfig')}
-      </button>
+      </Button>
 
       {advancedExpanded && (
         <div className="flex flex-col gap-3 rounded-md border p-3">

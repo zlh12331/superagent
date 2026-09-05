@@ -168,14 +168,15 @@ export function AskDialog(): ReactElement | null {
             ?
           </span>
           <span className="text-foreground text-sm font-semibold">{t('agent.askTitle')}</span>
-          <button
-            type="button"
-            onClick={() => void handleCancel()}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto flex size-6 cursor-pointer items-center justify-center rounded"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto size-6"
             aria-label={t('common.close')}
+            onClick={() => void handleCancel()}
           >
             <X className="size-3.5" />
-          </button>
+          </Button>
         </div>
 
         {/* 多问题引导进度条（tool-ui Question Flow 借鉴） */}
