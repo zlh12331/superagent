@@ -196,8 +196,11 @@ export function ApprovalModeSection(): ReactElement {
                     <span className="text-muted-foreground"> · *</span>
                   )}
                 </span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-error-text size-6 rounded border"
+                  aria-label={t('settings.whitelistRemove')}
                   onClick={() => {
                     // 破坏性操作统一 confirm() store（此前直接删除无确认）
                     void confirm({
@@ -208,11 +211,9 @@ export function ApprovalModeSection(): ReactElement {
                       if (ok) removeMutation.mutate(entry);
                     });
                   }}
-                  className="text-muted-foreground hover:text-error-text flex cursor-pointer rounded border px-1.5 py-1 text-2xs transition-colors"
-                  aria-label={t('settings.whitelistRemove')}
                 >
                   <Trash2 className="size-3" />
-                </button>
+                </Button>
               </div>
             ))
           )}

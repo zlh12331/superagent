@@ -140,17 +140,19 @@ export function ModelsSection(): ReactElement {
                   </td>
                   <td className="px-2 py-1.5">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-foreground size-6 hover:bg-transparent"
                         aria-label={t('settings.modelMgmt.editModel')}
                         onClick={() => handleEdit(model)}
                       >
                         <Pencil className="size-3.5" strokeWidth={1.5} />
-                      </button>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-error-text flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-error-text size-6 hover:bg-transparent"
                         aria-label={t('settings.modelMgmt.deleteModel')}
                         disabled={removeMutation.isPending}
                         onClick={() => {
@@ -173,7 +175,7 @@ export function ModelsSection(): ReactElement {
                         ) : (
                           <Trash2 className="size-3.5" strokeWidth={1.5} />
                         )}
-                      </button>
+                      </Button>
                       <Switch
                         checked={model.isEnabled}
                         aria-label={t('settings.modelMgmt.toggleModel')}
