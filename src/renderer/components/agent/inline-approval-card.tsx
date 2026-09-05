@@ -11,6 +11,7 @@ import { REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
 import { Check, Pencil, ShieldCheck, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -153,15 +154,16 @@ export function InlineApprovalCard({
         )}
         {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
         {!isPending && (
-          <button
-            type="button"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto flex size-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto size-5"
             aria-label={t('common.close')}
             title={t('common.close')}
             onClick={() => dismiss(item.id)}
           >
             <X className="size-3" strokeWidth={1.5} />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -180,66 +182,70 @@ export function InlineApprovalCard({
       {/* pending 操作按钮：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */}
       {isPending && (
         <div className="mt-2 flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 border px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => void respond(false, false)}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
           >
             <X className="size-3" />
             {t('approval.reject')}
-          </button>
+          </Button>
           {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file；
               此前无条件渲染，canRememberDecision 为死代码） */}
           {canRememberDecision(item.type) && (
-            <button
-              type="button"
-              onClick={() => void respond(true, true)}
-              className="hover:bg-muted text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 px-2 py-1"
               title={t('approval.whitelistHint')}
+              onClick={() => void respond(true, true)}
             >
               <ShieldCheck className="size-3" />
               {t('approval.whitelist', { minutes: REMEMBER_TTL_MINUTES })}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={() => void respond(true, false)}
+          <Button
+            size="sm"
             className={cn(
               // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
-              'ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs text-primary-foreground transition-colors',
+              'ml-auto gap-1 px-2 py-1',
               dangerous
                 ? 'bg-error-emphasis hover:bg-error-emphasis/90'
                 : 'bg-success-emphasis hover:bg-success-emphasis/90',
             )}
+            onClick={() => void respond(true, false)}
           >
             <Check className="size-3" />
             {t('approval.approve')}
-          </button>
+          </Button>
         </div>
       )}
       {/* 拒绝后操作：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */}
       {item.status === 'rejected' && !skipped && (
         <div className="mt-2 flex items-center gap-2">
           {resubmitCommand !== null && onEditResubmit !== undefined && (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 px-2 py-1"
               onClick={() => onEditResubmit(resubmitCommand)}
-              className="hover:bg-muted text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
             >
               <Pencil className="size-3" />
               {t('approval.editResubmit')}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => {
               setSkipped(true);
               toast.info(t('approval.skipped'));
             }}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors"
           >
             {t('approval.skip')}
-          </button>
+          </Button>
         </div>
       )}
     </div>
