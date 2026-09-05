@@ -224,7 +224,7 @@ export function AboutSection(): ReactElement {
     );
 
   return (
-    <div className="flex flex-col gap-3 pt-2">
+    <div className="flex flex-col gap-3">
       {/* 品牌 Hero：居中视觉中心——大标识 + 渐变光晕 + 版本/渠道 + 更新 */}
       <div className="bg-card relative overflow-hidden rounded-lg px-4 py-8">
         {/* 装饰光晕（top 覆盖，配合圆角溢出隐藏） */}
