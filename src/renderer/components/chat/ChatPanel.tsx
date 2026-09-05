@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
+import { Button } from '@/components/ui/button';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
@@ -243,15 +244,16 @@ export function ChatPanel({
       <div className="thread-status-bar">
         <div className="ml-auto inline-flex items-center gap-1.5">
           {/* 会话内搜索入口（对齐参考项目 ConversationSearchBar） */}
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground -mr-1 flex size-5 cursor-pointer items-center justify-center rounded transition-colors"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground -mr-1 size-5"
             onClick={search.actions.open}
             aria-label={t('chat.searchInConversation')}
             title={t('chat.searchInConversation')}
           >
             <Search className="size-3.5" strokeWidth={1.5} />
-          </button>
+          </Button>
           <span
             className={cn(
               'inline-flex items-center gap-1.5',
@@ -297,14 +299,15 @@ export function ChatPanel({
         <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-warn-text">
           <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
           <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
-          <button
-            type="button"
-            className="text-warn-text hover:text-foreground"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-warn-text hover:text-foreground hover:bg-transparent size-auto"
             aria-label={t('common.close')}
             onClick={() => setInterruptedDismissedFor(chatId ?? null)}
           >
             <X className="size-3.5" strokeWidth={2} />
-          </button>
+          </Button>
         </div>
       )}
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store）
@@ -322,14 +325,15 @@ export function ChatPanel({
               </span>
             ))}
           </span>
-          <button
-            type="button"
-            className="text-warn-text hover:text-foreground shrink-0"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-warn-text hover:text-foreground hover:bg-transparent size-auto shrink-0"
             aria-label={t('common.close')}
             onClick={() => setHistoryNoticeDismissedFor(chatId)}
           >
             <X className="size-3.5" strokeWidth={2} />
-          </button>
+          </Button>
         </div>
       )}
 

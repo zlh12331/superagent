@@ -47,6 +47,7 @@ import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
 import { SidebarAccount } from '@/components/layout/sidebar-account';
+import { Button } from '@/components/ui/button';
 import { useAsyncView } from '@/hooks/use-async-view';
 import {
   type SessionListData,
@@ -551,13 +552,14 @@ export function Sidebar(): ReactElement {
                         )
                       )}
                       {hasMore && !isSearching && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-foreground hover:border-border mt-1 w-full border border-dashed"
                           onClick={() => void query.fetchNextPage()}
-                          className="text-muted-foreground hover:text-foreground hover:border-border mt-1 w-full cursor-pointer rounded border border-dashed px-2 py-1.5 text-xs transition-colors"
                         >
                           {t('sidebar.loadMore')}
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </SortableContext>

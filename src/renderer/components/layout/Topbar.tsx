@@ -111,16 +111,17 @@ export function Topbar({
         )}
         {/* 命令面板文字入口（对齐原型 .palette-entry-btn：icon + 文案 + kbd，单一入口）
             始终显示（不随断点隐藏）：删除重复的图标按钮后，此入口是唯一命令面板触发点 */}
-        <button
-          type="button"
-          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground gap-1.5 px-2 py-1 text-xs"
           aria-label={t('topbar.commandPalette')}
           onClick={onOpenCommandPalette}
         >
           <Search className="size-3" strokeWidth={1.5} />
           <span>{t('topbar.commandPalette')}</span>
           <kbd className="text-muted-foreground font-mono text-[9px]">{paletteKbd}</kbd>
-        </button>
+        </Button>
         {/* 设置按钮已删除（用户要求）：入口保留在命令面板与账户菜单 */}
         <Button
           variant="ghost"
