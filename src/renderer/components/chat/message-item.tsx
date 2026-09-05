@@ -52,7 +52,12 @@ import { useToolStore } from '@/stores/transient/tool-store';
 import { FileChangeCard } from './file-change-card';
 import { Markdown } from './Markdown';
 import { MsgActions } from './message-actions';
-import { extractText, formatJson } from './message-utils';
+import {
+  extractText,
+  formatJson,
+  mapToolStateToStatusClass,
+  mapToolStateToStatusLabelKey,
+} from './message-utils';
 import { StreamingCursor } from './streaming-cursor';
 
 /** part 类型（UIMessage['parts'][number] 派生） */
@@ -399,48 +404,6 @@ function ToolCallView({
       </div>
     </div>
   );
-}
-
-/**
- * 工具状态映射 → 本地化 key（组件内 t(`chat.${key}`) 渲染）
- *
- * AI SDK 的 tool.state 可能值：
- * - 'input-streaming' / 'input-accepted'：输入阶段（等待）
- * - 'output-available'：完成（成功）
- * - 'output-error'：错误（error）
- */
-function mapToolStateToStatusLabelKey(state: string): string {
-  if (state === 'output-error') {
-    return 'statusError';
-  }
-  if (state === 'output-available') {
-    return 'statusSuccess';
-  }
-  if (state === 'input-streaming' || state === 'input-accepted') {
-    return 'statusRunning';
-  }
-  return 'statusWaiting';
-}
-
-/**
- * 工具状态映射 → .card-status 类名
- *
- * AI SDK 的 tool.state 可能值：
- * - 'input-streaming' / 'input-accepted'：输入阶段（pending）
- * - 'output-available'：完成（success）
- * - 'output-error'：错误（error）
- */
-function mapToolStateToStatusClass(state: string): string {
-  if (state === 'output-error') {
-    return 'error';
-  }
-  if (state === 'output-available') {
-    return 'success';
-  }
-  if (state === 'input-streaming' || state === 'input-accepted') {
-    return 'running';
-  }
-  return 'pending';
 }
 
 /**

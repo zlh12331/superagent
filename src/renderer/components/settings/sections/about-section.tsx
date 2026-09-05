@@ -19,6 +19,7 @@ import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -226,7 +227,7 @@ export function AboutSection(): ReactElement {
   return (
     <div className="flex flex-col gap-3">
       {/* 品牌 Hero：居中视觉中心——大标识 + 渐变光晕 + 版本/渠道 + 更新 */}
-      <div className="bg-card relative overflow-hidden rounded-lg px-4 py-8">
+      <Card className="relative overflow-hidden px-4 py-8">
         {/* 装饰光晕（top 覆盖，配合圆角溢出隐藏） */}
         <div
           aria-hidden
@@ -248,11 +249,11 @@ export function AboutSection(): ReactElement {
           </div>
           <div className="mt-4 flex w-full justify-center">{updateBlock}</div>
         </div>
-      </div>
+      </Card>
 
       {/* 构建信息 */}
       <SectionTitle>{t('settings.aboutBuildTitle')}</SectionTitle>
-      <div className="bg-card flex flex-col rounded-lg px-3 py-2">
+      <Card className="flex flex-col">
         <InfoRow label={t('settings.aboutBuildChannel')}>
           <span className="text-muted-foreground font-mono">{channel ?? '-'}</span>
         </InfoRow>
@@ -281,11 +282,11 @@ export function AboutSection(): ReactElement {
             <span className="text-muted-foreground font-mono">-</span>
           )}
         </InfoRow>
-      </div>
+      </Card>
 
       {/* 环境信息 */}
       <SectionTitle>{t('settings.aboutRuntime')}</SectionTitle>
-      <div className="bg-card flex flex-col rounded-lg px-3 py-2">
+      <Card className="flex flex-col">
         <InfoRow label="Electron">
           <span className="text-muted-foreground font-mono">{info?.electron ?? '…'}</span>
         </InfoRow>
@@ -308,11 +309,11 @@ export function AboutSection(): ReactElement {
             {info?.userDataPath ?? '…'}
           </span>
         </InfoRow>
-      </div>
+      </Card>
 
       {/* 诊断与支持 */}
       <SectionTitle>{t('settings.aboutDiagnosticsTitle')}</SectionTitle>
-      <div className="bg-card rounded-lg px-3 py-2">
+      <Card>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
@@ -354,15 +355,15 @@ export function AboutSection(): ReactElement {
             {t('settings.aboutExportDiagnostics')}
           </Button>
         </div>
-      </div>
+      </Card>
 
       {/* 许可与致谢 */}
       <SectionTitle>{t('settings.aboutLegalTitle')}</SectionTitle>
-      <div className="bg-card flex flex-col rounded-lg px-3 py-2">
+      <Card className="flex flex-col">
         <InfoRow label="License">
           <span className="text-muted-foreground font-mono">{t('settings.aboutLicenseValue')}</span>
         </InfoRow>
-      </div>
+      </Card>
       <p className="text-muted-foreground px-1.5 text-2xs">{t('settings.aboutThanks')}</p>
     </div>
   );
