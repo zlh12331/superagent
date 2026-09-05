@@ -6,13 +6,15 @@
 
 ```bash
 pnpm dev                    # 启动 dev server + Electron 窗口
+pnpm dev:web                # 浏览器模式 dev（vite.web.config.ts，配合 src/renderer/dev/mock-api.ts）
 pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会自动增量编译）
 pnpm lint                   # biome check .（含格式/import 排序）
-pnpm test                   # 全部 unit tests（&& 链式，任一层失败即中断）: shared → main → renderer → scripts；集成测试单独跑 pnpm test:integration
+pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计：check:tokens（样式铁律）+ check:i18n（i18n 缺失卡关），pre-push/CI 卡关
+pnpm check:static           # 静态审计 9 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮）+ functions（形参≤4/体≤40 行棘轮）+ coverage-floors + docs + test-boundary + csp-hash，pre-push/CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
+pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
 pnpm changelog              # 从 git log 自动生成 CHANGELOG [Unreleased] 段
 
@@ -26,6 +28,8 @@ pnpm test:scripts
 pnpm test:e2e               # 浏览器模式（dev server）
 pnpm test:e2e:electron      # Electron 真实窗口
 pnpm test:smoke             # 生产构建 smoke
+pnpm test:perf              # e2e 性能子集（渲染性能/内存/IPC 基准）；主进程 perf 用 test:perf:main
+pnpm test:visual            # e2e 视觉回归子集
 
 # 脚手架（定义表体系专属红利）
 pnpm scaffold:ipc --domain <name> --method <m> [--kind request|event]
@@ -53,8 +57,9 @@ scripts/         → 脚手架与工具（scaffold / changelog）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
-- 主进程是 Service Container 模式（`service-container.ts`），集中管理 20 个 lazy accessor（ConcurrencyGate/File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent，2026-08-30 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖
-- `agentAskService` 不是容器 accessor，在 `service-container.ts:50` 以模块级单例 import 引入
+- 主进程是 Service Container 模式（`service-container.ts`），集中管理 19 个 lazy accessor（File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent，2026-09-05 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖。ConcurrencyGate 不是 accessor，是容器上直接初始化的 `readonly` 字段
+- **agentAskService 与 cronService 都不是容器 accessor**，以模块级单例 import 引入（`service-container.ts:55,63`）；cronService 由 AgentService accessor 内部 `start()` + `onFire` 订阅（fire 触发 agent 回合），dispose 链中 `cronService.stop()` 排第一位（先于 AgentService 收尾）
+- 桌面系统集成在 main 根目录：`tray.ts`（托盘）/ `deep-link.ts`（`code-agent://` 协议，scheme 常量与 electron-builder.yml 的 protocol 配置必须保持一致）/ `notification.ts`（回合通知）/ `theme-linkage`（系统主题联动，独立模块）
 - IPC 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，渲染层用 `window.api.*` 调用
 - 流式事件用 subscribe 回调模式（返回 unsubscribe 函数）
 - Channel 命名：`{domain}:{action}`（请求-响应）、`{domain}:stream:{event}`（流式）、`{domain}:event:{name}`（状态事件），常量表在 `packages/shared/src/ipc/channels.ts`
@@ -108,9 +113,10 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **dev 环境开启远程调试端口 9222**（CDP over WebSocket）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
 - **桌面端三平台**（Windows/macOS/Linux）：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64；release.yml 三平台矩阵构建（mac 需 macOS runner，签名走 CSC_LINK）
-- **exactOptionalPropertyTypes 已启用**：可选字段传 undefined 需条件展开（`...(x !== undefined ? { x } : {})`）
-- **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
-- **根级 `*.config.ts` 不在任何 tsconfig 项目内**（根 `tsconfig.json` = `files: []` + 5 个 project references）⇒ `pnpm typecheck` 查不出配置文件里的类型错误/excess property，历史失效配置（如 React Compiler 旧 babel 通道）因此长期存活；改配置需 `pnpm exec vite build` 实测
+- **exactOptionalPropertyTypes 已启用**：可选字段传 undefined 需条件展开（`...(x !== undefined ? { x } : {})`）；同时启用了 `noUncheckedIndexedAccess`（索引访问返回 T|undefined）与 `isolatedDeclarations`（**所有导出必须显式标注类型**）
+- **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。存量编译器 bail-out（try/finally 违规）已于 455c476 清零，新代码禁止引入。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
+- **根级 `*.config.ts` 已纳入 typecheck 但 include 是枚举式**（根 `tsconfig.json` = `files: []` + 6 个 project references，其中 `tsconfig.configs.json` 显式枚举 electron.vite.config.ts / vite.web.config.ts / drizzle.config.ts / i18next.config.ts / vitest.workspace.ts / commitlint.config.js）⇒ **新增根级配置文件必须手动加进 `tsconfig.configs.json` 的 include**，否则 typecheck 查不出它的类型错误/excess property；改配置仍需 `pnpm exec vite build` 实测行为
+- **渲染层动效统一走 MotionVault**（`src/renderer/lib/motion/`：transitions/variants 集中定义），不要散写 CSS transition/手搓动画；shiki 语言按需加载（`loadLanguage`），受首载体积门槛约束
 
 ## 数据库
 
@@ -124,6 +130,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - 上层模块（ai 层）需要枚举类型时从 `schema.ts` 导入，勿重复定义
 - **渲染层用户设置（theme/ai/editor/shortcuts/experimental）持久化真源 = SQLite `app_settings` 表**（用户决策：localStorage 合并到 SQLite）。渲染层 settings-store 保持内存态，写穿透经 `settings:set` 落库；启动快照经 `settings:getAll` 在 main.tsx 顶层 await 拉取（`settings-bootstrap.ts`）。legacy localStorage 数据首启自动迁移。draft/sidebar/activeSession 等纯 UI 态仍留 localStorage
 - 路径由 `app.getPath('userData')` 动态决定：dev 为 `.electron-user-data/sessions.db`（重定向），prod 为 `%APPDATA%/<app name>/sessions.db`
+- **启动备份 + 损坏自愈**（`db.ts`，2026-09-04 落地）：启动期热备份轮转（`backups/sessions-<时间戳>.db`，超出 BACKUP_KEEP 删最旧）；`restoreCorruptDatabase` 用 quick_check 判损坏 → 从最近健康备份恢复/重建空库；probe 通过后才调度备份。better-sqlite3 的 `backup()` 是异步 API 必须 await
 - keychain.dat 损坏：读失败记日志并保留 `.corrupt` 副本（不静默丢失全部 API Key）
 - 原 PostgreSQL/Prisma/AGE 层已删除 — 不要尝试 prisma 相关命令
 
@@ -139,8 +146,9 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - 测试文件与源码 colocation：`**/*.test.ts` / `**/*.test.tsx`
 - Vitest globals 启用（describe/it/expect 无需 import）
 - renderer 测试用 jsdom + `test/setup.ts`（mock `window.api` 并 polyfill ResizeObserver/IntersectionObserver/matchMedia）
-- 覆盖率阈值：statements 80% / branches 75% / functions 80% / lines 80%（以 CI 报告为准；main 实测 ~92%，数字不再在本文件维护）
-- E2E 有 3 个 Playwright 配置：`playwright.config.ts`（浏览器）、`playwright.electron.config.ts`（Electron）、`playwright.smoke.config.ts`（生产构建）
+- 覆盖率阈值：statements 80% / branches 75% / functions 80% / lines 80%（以 CI 报告为准；main 实测 ~92%，数字不再在本文件维护）；**覆盖率下限是棘轮门禁**（`check:coverage-floors`，`coverage-floors:tighten` 收紧基线——继续收紧必须先补测试，renderer 覆盖率距规范仍有缺口）
+- **fast-check 属性测试已试点**（如 clampOutputTokens/joinPath），纯函数适合用属性测试补强
+- E2E 有 3 个 Playwright 配置：`e2e/playwright.config.ts`（浏览器）、`e2e/playwright.electron.config.ts`（Electron）、`e2e/playwright.smoke.config.ts`（生产构建）；另有 visual/a11y/perf 子集按 grep 分组
 - 集成测试目录 `tests/integration/`（20+ 测试文件，CI 有独立 integration-tests job）
 
 ## 工程化工具链
@@ -149,6 +157,8 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **changelog 自动生成**（`pnpm changelog`）：从 git log（Conventional Commits）生成 CHANGELOG [Unreleased] 段；tag 锚点幂等（自最近 v*.*.* 起）；排除 docs/chore/test 等类型
 - **CHANGELOG 手动维护**：根应用是 pnpm workspace 根包，changesets 不支持（known limitation）；发版时手动把 [Unreleased] 改为版本段 + 升 package.json version + 打 tag
 - **Renovate**：依赖自动更新（周末批次，electron major 人工评审）
+- **供应链加固**（2026-09 落地）：asar 完整性校验 + SBOM 生成 + `check:csp-hash`（CSP 内联脚本哈希锚定，防注释旧脚本静默放行）；`pnpm audit` 走 audit-ci（--moderate 起卡关）
+- **主进程遥测**：EventLoopLagMonitor 事件循环延迟监控（基准按期望间隔推进，空闲不误报）
 - **pre-push 钩子**：gitleaks 密钥扫描（`gitleaks dir .`）+ typecheck + lint + check:static（check:tokens + check:i18n）+ depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）
 - **TypeDoc**：`pnpm docs:types` 在 tools/typedoc 子包运行（TS6 隔离，规避 TS7 不兼容）
 - **包体积分析**：`pnpm analyze:bundle`（rollup-plugin-visualizer，ANALYZE_BUNDLE=1）
@@ -170,5 +180,5 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 外部服务 / 凭据
 
 - AI Provider API Key 用 Electron `safeStorage` 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
-- Sentry 自托管（http://127.0.0.1:9000），DSN 从 `.env` 读取
+- Sentry 自托管（http://127.0.0.1:9000），DSN 从 `.env` 读取；遥测为 Sentry + OpenTelemetry 双通道（设计见 docs/design/23-otel-spec.md）
 - CI Sentry 符号上传需要 `SENTRY_AUTH_TOKEN` 环境变量
