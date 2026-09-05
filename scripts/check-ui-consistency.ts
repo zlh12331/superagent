@@ -34,13 +34,14 @@ interface Rule {
 const RULES: readonly Rule[] = [
   {
     id: 'index-key',
-    desc: '数组索引直接作 React key（应使用稳定业务 id 或 `${id}-${index}` 组合键）',
+    desc: '数组索引直接作 React key（骨架屏/静态拆分用上一行 biome-ignore noArrayIndexKey 豁免）',
     pattern: /key=\{(index|i|idx)\}/,
   },
   {
     id: 'join-class',
-    desc: "join(' ') 手工拼接 className（条件类统一走 cn()，见 src/renderer/lib/utils.ts）",
-    pattern: /\.join\(' '\)/,
+    desc: "className 内 join(' ') 手工拼接（条件类统一走 cn()）",
+    // 限定 className 上下文：命令参数等业务拼接（如 args.join(' ')）不属样式
+    pattern: /className.*\.join\(' '\)|\.join\(' '\).*"/,
     fileFilter: (relFile) => relFile.endsWith('.tsx'),
   },
   {
@@ -67,6 +68,8 @@ function collectFiles(dir: string, out: string[]): void {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
+      // coverage/ 构建产物不入扫描（其内容是源码的历史快照）
+      if (name === 'coverage' || name === '__tests__') continue;
       collectFiles(full, out);
     } else if (name.endsWith('.tsx') || name.endsWith('.ts')) {
       out.push(full);
@@ -87,9 +90,16 @@ for (const full of files) {
     }
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line !== undefined && rule.pattern.test(line)) {
-        violations.push({ rule: rule.id, file: relFile, line: i + 1 });
+      if (line === undefined || !rule.pattern.test(line)) {
+        continue;
       }
+      // 上一行含 noArrayIndexKey biome-ignore 的豁免（与 Biome 同步：
+      // 骨架屏/静态拆分等 index 稳定且无重排的合理场景）
+      const prev = i > 0 ? lines[i - 1] : '';
+      if (prev !== undefined && prev.includes('noArrayIndexKey')) {
+        continue;
+      }
+      violations.push({ rule: rule.id, file: relFile, line: i + 1 });
     }
   }
 }

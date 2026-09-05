@@ -161,9 +161,12 @@ export function useFileTree(workingDir: string | null): void {
       try {
         const response = await window.api.file.watchStart({ path: workingDir });
         if (cancelled) {
-          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏
-          if ('data' in response) {
-            await window.api.file.watchStop({ watcherId: response.data.watcherId });
+          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏；
+          // error 响应无 watcherId 可停，unwrap 抛错由 catch 吞掉（与旧行为等价）
+          try {
+            await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
+          } catch {
+            // 无 watcherId 可停
           }
           return;
         }

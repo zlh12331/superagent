@@ -237,8 +237,11 @@ export function ChatInput({
           maxResults: 10,
         })
         .then((res) => {
-          if ('data' in res && res.data !== undefined) {
-            setMentionFiles([...res.data.files]);
+          try {
+            setMentionFiles([...unwrap(res).files]);
+          } catch {
+            // error 响应：清空候选（与下方网络异常同策略）
+            setMentionFiles([]);
           }
         })
         .catch(() => {
