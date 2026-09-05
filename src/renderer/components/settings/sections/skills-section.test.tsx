@@ -8,6 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillsSection } from './skills-section';
 
+// 删除确认收敛至命令式 confirm() store：测试默认确认通过
+vi.mock('@/stores/transient/confirm-dialog-store', () => ({
+  confirm: vi.fn().mockResolvedValue(true),
+}));
+
 const mocks = vi.hoisted(() => ({
   listLearned: vi.fn(async () => ({ data: [{ name: 'ts-unit', description: 'TS 单测骨架' }] })),
   list: vi.fn(async () => ({

@@ -17,6 +17,7 @@ import { useApprovalMode } from '@/hooks/use-approval-mode';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 
 /** whitelist:list 查询 key */
 const WHITELIST_QUERY_KEY = ['whitelist', 'entries'] as const;
@@ -196,8 +197,17 @@ export function ApprovalModeSection(): ReactElement {
                 </span>
                 <button
                   type="button"
-                  onClick={() => removeMutation.mutate(entry)}
-                  className="text-muted-foreground hover:text-error-text flex cursor-pointer items-center rounded border px-1.5 py-1 text-2xs transition-colors"
+                  onClick={() => {
+                    // 破坏性操作统一 confirm() store（此前直接删除无确认）
+                    void confirm({
+                      title: t('settings.whitelistRemove'),
+                      message: t('common.deleteConfirmDesc'),
+                      danger: true,
+                    }).then((ok) => {
+                      if (ok) removeMutation.mutate(entry);
+                    });
+                  }}
+                  className="text-muted-foreground hover:text-error-text flex cursor-pointer rounded border px-1.5 py-1 text-2xs transition-colors"
                   aria-label={t('settings.whitelistRemove')}
                 >
                   <Trash2 className="size-3" />

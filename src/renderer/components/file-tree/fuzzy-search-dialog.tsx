@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
@@ -93,10 +94,11 @@ async function searchFiles(query: string, rootDir: string): Promise<string[]> {
     includeHidden: false,
     maxResults: FILE_RESULTS_LIMIT,
   });
-  if ('data' in response && response.data !== undefined) {
-    return [...response.data.files];
+  try {
+    return [...unwrap(response).files];
+  } catch {
+    return [];
   }
-  return [];
 }
 
 /** 从完整路径提取文件名 */

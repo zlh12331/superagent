@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { SectionTitle, SettingRow } from '../settings-controls';
 
 /** skill:listLearned 查询 key */
@@ -125,7 +126,16 @@ export function SkillsSection(): ReactElement {
           <SettingRow key={skill.name} label={skill.name} description={skill.description}>
             <button
               type="button"
-              onClick={() => removeMutation.mutate(skill.name)}
+              onClick={() => {
+                // 破坏性操作统一 confirm() store（此前直接删除无确认）
+                void confirm({
+                  title: t('settings.skillRemove'),
+                  message: t('settings.skillRemoveConfirmDesc', { name: skill.name }),
+                  danger: true,
+                }).then((ok) => {
+                  if (ok) removeMutation.mutate(skill.name);
+                });
+              }}
               className="text-muted-foreground hover:text-error-text flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-2xs transition-colors"
               aria-label={t('settings.skillRemove')}
             >

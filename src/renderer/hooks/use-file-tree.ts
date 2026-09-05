@@ -81,15 +81,11 @@ export function useFileTree(workingDir: string | null): void {
           depth: 1,
           includeHidden: false,
         });
-        if ('data' in response) {
-          setEntries(path, response.data.entries);
-          entries = response.data.entries;
-        } else {
-          // 加载失败：移除标记，允许下次展开时重试
-          loadedDirsRef.current.delete(path);
-        }
+        const data = unwrap(response);
+        setEntries(path, data.entries);
+        entries = data.entries;
       } catch {
-        // 异常：移除标记，允许下次重试
+        // 加载失败/异常：移除标记，允许下次展开时重试
         loadedDirsRef.current.delete(path);
       }
       // finally 语义（React Compiler 不优化 try/finally）：try 内不 rethrow，

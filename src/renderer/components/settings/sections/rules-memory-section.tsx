@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 
 interface MemoryEntry {
   readonly id: string;
@@ -77,6 +78,13 @@ export function RulesMemorySection(): ReactElement {
   });
 
   const handleClear = async (): Promise<void> => {
+    // 一键清空全部记忆属破坏性操作：确认后才执行（此前直接执行无确认）
+    const ok = await confirm({
+      title: t('settings.memoryClear'),
+      message: t('settings.memoryClearConfirmDesc', { count: memories.length }),
+      danger: true,
+    });
+    if (!ok) return;
     await clearMutation.mutateAsync();
   };
 

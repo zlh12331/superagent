@@ -25,6 +25,7 @@ import {
 
 import { useFileTree } from '@/hooks/use-file-tree';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -85,9 +86,8 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
     await Promise.allSettled(
       paths.map(async (path) => {
         const res = await window.api.file.list({ path, depth: 1, includeHidden: false });
-        if ('data' in res && res.data) {
-          useFileTreeStore.getState().setEntries(path, res.data.entries);
-        }
+        // allSettled 吞掉 unwrap 抛出的错误响应（与旧手写分支同语义：失败静默跳过）
+        useFileTreeStore.getState().setEntries(path, unwrap(res).entries);
       }),
     );
     // 失败静默：file:watch 事件流仍在运行，个别目录失败由下次展开自然恢复

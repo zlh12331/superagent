@@ -14,9 +14,19 @@ import type {
   TestModelRes,
 } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
-import { unwrap } from '@/lib/ipc';
+import { useErrorMessage } from '@/i18n/use-translation';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { MODELS_QUERY_KEY } from './use-models';
+
+/** mutation 失败反馈（一致性收敛：错误经 [CODE] 解析本地化，杜绝静默失败） */
+function useMutationOnError(): (error: Error) => void {
+  const { getErrorMessage } = useErrorMessage();
+  return (error: Error): void => {
+    toast.error(unwrapErrorMessage(error, getErrorMessage));
+  };
+}
 
 /** 运行时模型列表查询 key（模型设置页列表） */
 export const RUNTIME_MODELS_QUERY_KEY = ['settings', 'runtime-models'] as const;
@@ -46,6 +56,7 @@ export interface AddRuntimeModelInput {
 /** 新增 mutation：成功后失效运行时模型 key + 全局模型清单 key */
 export function useAddRuntimeModel() {
   const queryClient = useQueryClient();
+  const onError = useMutationOnError();
   return useMutation({
     mutationFn: async (input: AddRuntimeModelInput) => {
       if (window.api === undefined) return;
@@ -63,6 +74,7 @@ export function useAddRuntimeModel() {
       void queryClient.invalidateQueries({ queryKey: RUNTIME_MODELS_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
     },
+    onError,
   });
 }
 
@@ -78,6 +90,7 @@ export interface UpdateRuntimeModelInput {
 /** 编辑/启停 mutation：成功后失效运行时模型 key + 全局模型清单 key */
 export function useUpdateRuntimeModel() {
   const queryClient = useQueryClient();
+  const onError = useMutationOnError();
   return useMutation({
     mutationFn: async (input: UpdateRuntimeModelInput) => {
       if (window.api === undefined) return;
@@ -95,12 +108,14 @@ export function useUpdateRuntimeModel() {
       void queryClient.invalidateQueries({ queryKey: RUNTIME_MODELS_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
     },
+    onError,
   });
 }
 
 /** 删除 mutation：成功后失效运行时模型 key + 全局模型清单 key */
 export function useRemoveRuntimeModel() {
   const queryClient = useQueryClient();
+  const onError = useMutationOnError();
   return useMutation({
     mutationFn: async (modelId: string) => {
       if (window.api === undefined) return;
@@ -110,6 +125,7 @@ export function useRemoveRuntimeModel() {
       void queryClient.invalidateQueries({ queryKey: RUNTIME_MODELS_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
     },
+    onError,
   });
 }
 
@@ -127,6 +143,7 @@ export interface TestModelInput {
  * 浏览器模式降级为失败结果（无主进程可探测）。
  */
 export function useTestModel() {
+  const onError = useMutationOnError();
   return useMutation({
     mutationFn: async (input: TestModelInput): Promise<TestModelRes> => {
       if (typeof window === 'undefined' || window.api === undefined) {
@@ -141,5 +158,6 @@ export function useTestModel() {
         }),
       );
     },
+    onError,
   });
 }

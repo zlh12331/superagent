@@ -25,6 +25,7 @@ import { Check, Copy, Eye, FileText, Pencil, Save } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Spinner } from '@/components/ui/spinner';
+import { useCopy } from '@/hooks/use-copy';
 import { useFileContent } from '@/hooks/use-file-content';
 import { ensureLangLoaded, getHighlighter } from '@/lib/highlight';
 
@@ -117,32 +118,10 @@ export function FileViewerPanel(): ReactElement {
     };
   }, [displayContent, lang, theme, open]);
 
-  // 复制按钮
-  const [copied, setCopied] = useState(false);
-  // copy 按钮 2s 复位定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-    },
-    [],
-  );
+  // 复制反馈统一走 useCopy（copied 2s 复位 + 失败 toast，文案收敛 common.copyFailed）
+  const { copied, copy } = useCopy();
   const handleCopy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(displayContent);
-      setCopied(true);
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-      copyTimerRef.current = setTimeout(() => {
-        copyTimerRef.current = null;
-        setCopied(false);
-      }, 2000);
-    } catch {
-      toast.error(t('fileViewer.copyFailed'));
-    }
+    await copy(displayContent);
   };
 
   // 保存处理

@@ -7,8 +7,10 @@
 // ──────────────────────────────────────────────
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
-import { unwrap } from '@/lib/ipc';
+import { useErrorMessage } from '@/i18n/use-translation';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 
 /** 目标栏展示形态（供 GoalBar 组件消费） */
 export interface ChatGoalView {
@@ -50,6 +52,12 @@ export function useChatGoals(chatId: string): ChatGoals {
   });
   const goals = (goalsQuery.data?.goals ?? []) as ReadonlyArray<ChatGoalView>;
 
+  // 错误反馈（一致性审计：写路径 mutation 必须有 onError——此前创建/清除失败静默）
+  const { getErrorMessage } = useErrorMessage();
+  const onError = (error: Error): void => {
+    toast.error(unwrapErrorMessage(error, getErrorMessage));
+  };
+
   const createGoalMutation = useMutation({
     mutationFn: async (condition: string) => {
       if (chatId === undefined) return;
@@ -58,6 +66,7 @@ export function useChatGoals(chatId: string): ChatGoals {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
     },
+    onError,
   });
 
   const clearGoalMutation = useMutation({
@@ -68,6 +77,7 @@ export function useChatGoals(chatId: string): ChatGoals {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
     },
+    onError,
   });
 
   // 当前目标：active 优先，其次 completed（可能刚完成待用户确认）；

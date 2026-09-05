@@ -8,6 +8,7 @@ import { Check, Database, Languages } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
+import { cn } from '@/lib/utils';
 import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
 import { DataSection } from './data-section';
 import { EditorSection } from './editor-section';
@@ -53,10 +54,11 @@ function LanguageRow(): ReactElement {
 }
 
 function cnRow(active: boolean): string {
-  return [
+  // 条件类统一走 cn()（样式铁律：此前 join(' ') 绕开了 cn）
+  return cn(
     'flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors',
     active ? 'bg-muted text-foreground border-border' : 'text-muted-foreground border-transparent',
-  ].join(' ');
+  );
 }
 
 /** 通用 pane：语言 + 数据管理 + 遥测 + 编辑器/快捷键/提示词（导航收敛后并入） */

@@ -19,17 +19,10 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Check, Copy } from 'lucide-react';
-import {
-  type ComponentPropsWithoutRef,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ComponentPropsWithoutRef, type ReactElement, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { toast } from 'sonner';
+import { useCopy } from '@/hooks/use-copy';
 import { useTranslation } from '@/i18n/use-translation';
 import { ensureLangLoaded, getHighlighter, normalizeLang } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
@@ -162,7 +155,8 @@ function CodeBlock({
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
   const [html, setHtml] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // 复制反馈统一走 useCopy（copied 2s 复位 + 失败 toast）
+  const { copied, copy } = useCopy();
 
   const normalizedLang = normalizeLang(lang);
   const theme: 'github-dark' | 'github-light' =
@@ -193,32 +187,9 @@ function CodeBlock({
     };
   }, [code, normalizedLang, theme, highlight]);
 
-  // copy 按钮 2s 复位定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-    },
-    [],
-  );
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-      copyTimerRef.current = setTimeout(() => {
-        copyTimerRef.current = null;
-        setCopied(false);
-      }, 2000);
-    } catch {
-      // clipboard 不可用时提示（照搬参考项目：复制失败 toast）
-      toast.error(t('common.copyFailed'));
-    }
-  }, [code, t]);
+  const handleCopy = async (): Promise<void> => {
+    await copy(code);
+  };
 
   return (
     // group 容器：头栏 + 高亮区（对齐参考项目 CodeBlock：rounded-lg border + 头栏）

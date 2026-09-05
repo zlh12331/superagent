@@ -11,7 +11,7 @@ pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计 9 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮）+ functions（形参≤4/体≤40 行棘轮）+ coverage-floors + docs + test-boundary + csp-hash，pre-push/CI 卡关
+pnpm check:static           # 静态审计 10 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮）+ functions（形参≤4/体≤40 行棘轮）+ coverage-floors + docs + test-boundary + csp-hash + ui-consistency（写法一致性棘轮），pre-push/CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
@@ -117,6 +117,17 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。存量编译器 bail-out（try/finally 违规）已于 455c476 清零，新代码禁止引入。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
 - **根级 `*.config.ts` 已纳入 typecheck 但 include 是枚举式**（根 `tsconfig.json` = `files: []` + 6 个 project references，其中 `tsconfig.configs.json` 显式枚举 electron.vite.config.ts / vite.web.config.ts / drizzle.config.ts / i18next.config.ts / vitest.workspace.ts / commitlint.config.js）⇒ **新增根级配置文件必须手动加进 `tsconfig.configs.json` 的 include**，否则 typecheck 查不出它的类型错误/excess property；改配置仍需 `pnpm exec vite build` 实测行为
 - **渲染层动效统一走 MotionVault**（`src/renderer/lib/motion/`：transitions/variants 集中定义），不要散写 CSS transition/手搓动画；shiki 语言按需加载（`loadLanguage`），受首载体积门槛约束
+
+## 渲染层写法标准（2026-09 一致性收敛）
+
+标准设施已全部建成，新代码必须使用（存量由 `check:ui-consistency` 棘轮看护，只许下降）：
+
+- **请求-响应**：TanStack Query，query 逻辑放 `hooks/` 域文件并导出 queryKey 常量（禁组件内联定义 key）；响应一律 `unwrap()`（`lib/ipc.ts`），禁手写 `'data' in` 判别
+- **变更操作**：useMutation 定义处**必须挂 onError** → `toast.error(unwrapErrorMessage(error, getErrorMessage))`（错误码解析单一真源在 `lib/ipc.ts`，勿再抄正则）；调用层不重复挂 onError（防双弹）
+- **危险操作**（删除/清空类）：一律命令式 `confirm()` store（`confirm-dialog-store`，DialogHost 全局宿主），禁内联 AlertDialog 重复造轮子
+- **复制反馈**：统一 `useCopy()`（`hooks/use-copy.ts`，copied 2s 复位 + 失败 toast），勿手写 copied state + 定时器
+- **条件 className**：一律 `cn()`；裸 `<button>` 禁止（用 `ui/button` 的 Button，icon 钮 `size="icon"`）
+- **组件单实例多入口**：对话框状态收敛 ui-store（先例：settingsOpen/paletteOpen/shortcutHelpOpen），禁双份 state + 双份挂载
 
 ## 数据库
 

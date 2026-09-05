@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 
 /** 系统提示词区块（Code Agent 专用） */
 export function PromptSection({ open }: { open: boolean }): React.ReactElement {
@@ -41,10 +42,18 @@ export function PromptSection({ open }: { open: boolean }): React.ReactElement {
   };
 
   const handlePromptClear = (): void => {
-    updateAi({ systemPrompt: '' });
-    setPromptEditing(false);
-    setPromptDraft('');
-    toast.success(t('settings.promptReset'));
+    // 清空提示词属破坏性操作：确认后才执行（此前直接执行无确认）
+    void confirm({
+      title: t('common.clear'),
+      message: t('settings.promptResetConfirmDesc'),
+      danger: true,
+    }).then((ok) => {
+      if (!ok) return;
+      updateAi({ systemPrompt: '' });
+      setPromptEditing(false);
+      setPromptDraft('');
+      toast.success(t('settings.promptReset'));
+    });
   };
 
   return (

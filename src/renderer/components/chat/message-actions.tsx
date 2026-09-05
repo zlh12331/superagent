@@ -32,7 +32,8 @@
 // type-only import：仅引入类型，不引入运行时依赖
 // AI SDK 官方类型守卫：在运行时判断 part 类型并收窄 TypeScript 类型
 import { Copy, RefreshCw } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
+import { useCopy } from '@/hooks/use-copy';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -48,36 +49,10 @@ export function MsgActions({
   onRegenerate: ((messageId: string) => void) | undefined;
   disabled: boolean;
 }): ReactElement {
-  const [copied, setCopied] = useState(false);
+  // 剪贴板复制统一走 useCopy（含失败 toast 反馈，此前静默失败）
+  const { copied, copy } = useCopy();
   // 本地化文案
   const { t } = useTranslation();
-  // copy 按钮 2s 复位定时器：组件卸载时清理，避免 setState on unmounted component 内存泄漏
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  const handleCopy = async (): Promise<void> => {
-    if (text.length === 0) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-      copyTimerRef.current = setTimeout(() => {
-        copyTimerRef.current = null;
-        setCopied(false);
-      }, 2000);
-    } catch {
-      // clipboard 不可用时静默失败
-    }
-  };
 
   const handleRegenerate = (): void => {
     if (disabled) return;
@@ -89,7 +64,7 @@ export function MsgActions({
       <button
         type="button"
         className={cn('msg-action-btn', copied && 'copied')}
-        onClick={handleCopy}
+        onClick={() => void copy(text)}
         aria-label={copied ? t('chat.copied') : t('chat.copy')}
         title={copied ? t('chat.copied') : t('chat.copy')}
       >

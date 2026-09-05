@@ -22,6 +22,13 @@ interface UiState {
   readonly openPalette: () => void;
   /** 关闭命令面板 */
   readonly closePalette: () => void;
+  /** 快捷键帮助对话框是否打开（多入口：Topbar 快捷键 / /help 命令；集中到 store，
+   *  收敛此前 AppShell + ChatPanel 双份 state 双份挂载——单一 lazy 实例服务多入口） */
+  readonly shortcutHelpOpen: boolean;
+  /** 打开快捷键帮助对话框 */
+  readonly openShortcutHelp: () => void;
+  /** 关闭快捷键帮助对话框 */
+  readonly closeShortcutHelp: () => void;
   /** 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换，不进头部 tab） */
   readonly sidebarView: 'threads' | 'fileTree';
   /** 切换侧栏视图 */
@@ -60,6 +67,9 @@ export const useUiStore = create<UiState>()((set) => ({
   paletteOpen: false,
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
+  shortcutHelpOpen: false,
+  openShortcutHelp: () => set({ shortcutHelpOpen: true }),
+  closeShortcutHelp: () => set({ shortcutHelpOpen: false }),
   sidebarView: 'threads',
   setSidebarView: (view) => set({ sidebarView: view }),
 

@@ -10,6 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApprovalModeSection } from './approval-mode-section';
 
+// 删除确认收敛至命令式 confirm() store：测试默认确认通过
+vi.mock('@/stores/transient/confirm-dialog-store', () => ({
+  confirm: vi.fn().mockResolvedValue(true),
+}));
+
 const mocks = vi.hoisted(() => ({
   getApprovalMode: vi.fn(async () => ({ data: { mode: 'ask' } })),
   setApprovalMode: vi.fn(async () => ({ data: { ok: true } })),

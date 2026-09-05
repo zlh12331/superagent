@@ -173,8 +173,11 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   const openPalette = useUiStore((s) => s.openPalette);
   const closePalette = useUiStore((s) => s.closePalette);
 
-  // 快捷键帮助对话框（'?' 键触发）
-  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // 快捷键帮助对话框（'?' 键触发；状态收敛 ui-store——/help 命令为第二入口，
+  // 此前双份 state 双份挂载 ShortcutHelpDialog，收敛后单一 lazy 实例）
+  const shortcutHelpOpen = useUiStore((s) => s.shortcutHelpOpen);
+  const closeShortcutHelp = useUiStore((s) => s.closeShortcutHelp);
+  const openShortcutHelp = useUiStore((s) => s.openShortcutHelp);
   // 文件模糊搜索对话框（⌘F 触发，对齐参考项目 FuzzySearchDialog）
   const [fuzzyOpen, setFuzzyOpen] = useState(false);
   // 文件查看器入口（FuzzySearchDialog 选中文件时打开）
@@ -218,7 +221,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       enterWelcomeMode(null);
       navigate(ROUTES.home);
     },
-    onOpenShortcutHelp: () => setShortcutHelpOpen(true),
+    onOpenShortcutHelp: openShortcutHelp,
     // 面板切换（Ctrl+B/1、Ctrl+J/2；对齐参考项目 toggle-left/right-sidebar 快捷键）
     onToggleSidebar: handleToggleSidebar,
     onToggleRightPanel: handleToggleRightPanel,
@@ -446,10 +449,7 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         </Suspense>
         {/* 快捷键帮助对话框（'?' 触发） */}
         <Suspense fallback={null}>
-          <LazyShortcutHelpDialog
-            open={shortcutHelpOpen}
-            onClose={() => setShortcutHelpOpen(false)}
-          />
+          <LazyShortcutHelpDialog open={shortcutHelpOpen} onClose={closeShortcutHelp} />
         </Suspense>
         {/* 自动更新提示（事件驱动 toast，无 DOM） */}
         <UpdateNotice />

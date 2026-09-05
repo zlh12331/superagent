@@ -22,15 +22,15 @@ import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
-import { ShortcutHelpDialog } from '@/components/common/ShortcutHelpDialog';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
+import { useUiStore } from '@/stores/transient/ui-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
 import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
@@ -100,8 +100,9 @@ export function ChatPanel({
 }: ChatPanelProps): ReactElement {
   // 路由导航（斜杠命令 /new 回欢迎页）
   const navigate = useNavigate();
-  // 快捷键帮助对话框（/help 斜杠命令触发；对齐参考项目：命令即时执行而非 toast）
-  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // 快捷键帮助对话框（/help 斜杠命令触发）：状态收敛 ui-store，
+  // 实例由 AppShell 单一 lazy 挂载（此前 ChatPanel 双份 state + 双份挂载）
+  const openShortcutHelp = useUiStore((s) => s.openShortcutHelp);
   // 中断提示条关闭状态（按 chatId 记录：切换会话后重新提示——
   // 此前单一 boolean 跨会话复用，A 会话关过一次后 B 会话的中断信号被静默抑制）
   const [interruptedDismissedFor, setInterruptedDismissedFor] = useState<string | null>(null);
@@ -122,15 +123,8 @@ export function ChatPanel({
   // （onError 抛错会中断 AI SDK 状态机 setStatus(error)，界面永久卡 THINKING）
   const handleError = (error: Error): void => {
     try {
-      // 尝试从 error.message 提取错误码（格式 "[CODE] message"）
-      const codeMatch = /^\[([A-Z_]+)\]/.exec(error.message);
-      if (codeMatch !== null) {
-        const code = codeMatch[1] as Parameters<typeof getErrorMessage>[0];
-        toast.error(getErrorMessage(code));
-      } else {
-        // 兜底：直接展示原始 error.message
-        toast.error(error.message);
-      }
+      // [CODE] 前缀匹配 i18n 文案，失败回退原始消息（解析收敛至 lib/ipc 单一真源）
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
     } catch {
       // 极端保险：本地化失败时仍展示原始消息（onError 绝不允许抛错）
       toast.error(error.message);
@@ -373,7 +367,7 @@ export function ChatPanel({
             executeSlashCommand(action, {
               navigateToHome: () => navigate('/'),
               clearMessages: () => setMessages([]),
-              openShortcutHelp: () => setShortcutHelpOpen(true),
+              openShortcutHelp,
               openModelMenu: () => setModelMenuOpen(true),
               compact: () => compactMutation.mutate(),
               interrupt: () => {
@@ -419,8 +413,6 @@ export function ChatPanel({
           }
         />
       </footer>
-      {/* 快捷键帮助对话框（/help 触发） */}
-      <ShortcutHelpDialog open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
     </div>
   );
 }

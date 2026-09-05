@@ -12,6 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ModelsSection } from '../models-section';
 
+// 删除确认收敛至命令式 confirm() store：测试默认确认通过
+vi.mock('@/stores/transient/confirm-dialog-store', () => ({
+  confirm: vi.fn().mockResolvedValue(true),
+}));
+
 const mocks = vi.hoisted(() => ({
   listRuntimeModels: vi.fn(async () => ({ data: { models: [] } })),
   updateRuntimeModel: vi.fn(async () => ({ data: { ok: true } })),
@@ -123,13 +128,9 @@ describe('ModelsSection 模型管理列表页', () => {
       },
     } as never);
     renderSection();
+    // confirm() store mock 默认确认通过：点行内删除按钮即触发删除
     const deleteBtn = await screen.findByRole('button', { name: '删除' });
     await userEvent.click(deleteBtn);
-    // 确认弹窗（标题「删除模型」+ 操作按钮）
-    expect(await screen.findByText('删除模型')).toBeTruthy();
-    // 点弹窗内的删除确认（按钮名「删除」存在多个：行内 aria-label + 弹窗按钮）
-    const confirmBtn = screen.getAllByRole('button', { name: '删除' }).pop();
-    await userEvent.click(confirmBtn as never);
     await waitFor(() => {
       expect(mocks.removeRuntimeModel).toHaveBeenCalledWith(
         expect.objectContaining({ modelId: 'my-coder' }),

@@ -27,3 +27,35 @@ export function unwrap<T>(response: IpcResponse<T>): T {
   }
   return response.data;
 }
+
+/** 匹配 unwrap 抛出错误前缀 `[CODE]` 中的错误码形态 */
+const ERROR_CODE_PREFIX = /^\[([A-Z_]+)\]/;
+
+/**
+ * 错误 → 用户可见文案（unwrap 抛出的 `[CODE] message` 的统一解析口）
+ *
+ * - 前缀含错误码 → 交给 localize 做 i18n（调用方传 getErrorMessage）
+ * - 无前缀 / localize 抛错 → 回退原始 message（绝不让调用方的 onError 抛错）
+ *
+ * 单一真源：此前该逻辑在 AsyncBoundary / ChatPanel / error-actions 各抄一份
+ * （2026-09 一致性审计收敛项）。
+ */
+export function unwrapErrorMessage<C extends string>(
+  error: Error,
+  localize: (code: C) => string,
+): string {
+  const match = error.message.match(ERROR_CODE_PREFIX);
+  if (match === null) {
+    return error.message;
+  }
+  const code = match[1];
+  if (code === undefined) {
+    return error.message;
+  }
+  try {
+    // 正则形态约束（[A-Z_] 大写码）与调用方错误码联合的契约收窄点
+    return localize(code as C);
+  } catch {
+    return error.message;
+  }
+}

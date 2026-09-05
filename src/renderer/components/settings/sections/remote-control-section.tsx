@@ -133,17 +133,16 @@ export function RemoteControlSection(): ReactElement {
   const running = data?.running === true;
   const pending = startMutation.isPending || stopMutation.isPending;
 
-  const handleToggle = async (checked: boolean): Promise<void> => {
-    try {
-      if (checked) {
-        await startMutation.mutateAsync();
-        toast.success(t('settings.remote.started'));
-      } else {
-        await stopMutation.mutateAsync();
-        toast.success(t('settings.remote.stopped'));
-      }
-    } catch {
-      toast.error(t('settings.remote.toggleFailed'));
+  const handleToggle = (checked: boolean): void => {
+    // 失败反馈由 hook 层 onError 统一 toast（本地化错误文案），此处只处理成功
+    if (checked) {
+      startMutation.mutate(undefined, {
+        onSuccess: () => toast.success(t('settings.remote.started')),
+      });
+    } else {
+      stopMutation.mutate(undefined, {
+        onSuccess: () => toast.success(t('settings.remote.stopped')),
+      });
     }
   };
 

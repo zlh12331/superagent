@@ -11,14 +11,6 @@ import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/render
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -27,6 +19,7 @@ import {
   useUpdateRuntimeModel,
 } from '@/hooks/use-runtime-models';
 import { useTranslation } from '@/i18n/use-translation';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { AddModelDialog } from './dialogs/add-model-dialog';
 import { ModelConfigDialog } from './dialogs/model-config-dialog';
 import type { ModelConfigMode } from './dialogs/model-config-fields';
@@ -56,7 +49,6 @@ export function ModelsSection(): ReactElement {
   // 弹窗状态（L1）
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [configState, setConfigState] = useState<ConfigDialogState | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<RuntimeModelInfo | null>(null);
 
   /** 从添加弹窗选厂商 → 配置弹窗·服务商模式 */
   const handleSelectProvider = (kind: ApiKeyProvider): void => {
@@ -77,22 +69,8 @@ export function ModelsSection(): ReactElement {
 
   /** 启停开关：partial 更新 isEnabled（乐观由 query 失效后刷新） */
   const handleToggle = (model: RuntimeModelInfo, enabled: boolean): void => {
-    updateMutation.mutate(
-      { modelId: model.modelId, isEnabled: enabled },
-      {
-        onError: () => toast.error(t('settings.modelMgmt.saveFailed')),
-      },
-    );
-  };
-
-  /** 删除确认 */
-  const handleConfirmDelete = (): void => {
-    if (deleteTarget === null) return;
-    removeMutation.mutate(deleteTarget.modelId, {
-      onSuccess: () => toast.success(t('settings.modelMgmt.modelDeleted')),
-      onError: () => toast.error(t('settings.modelMgmt.saveFailed')),
-    });
-    setDeleteTarget(null);
+    // onError 由 hook 层统一 toast（unwrapErrorMessage 本地化），调用层不重复
+    updateMutation.mutate({ modelId: model.modelId, isEnabled: enabled });
   };
 
   return (
@@ -175,7 +153,20 @@ export function ModelsSection(): ReactElement {
                         className="text-muted-foreground hover:text-error-text flex size-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
                         aria-label={t('settings.modelMgmt.deleteModel')}
                         disabled={removeMutation.isPending}
-                        onClick={() => setDeleteTarget(model)}
+                        onClick={() => {
+                          // 破坏性操作统一 confirm() store（收敛此前内联 AlertDialog 双轨）
+                          void confirm({
+                            title: t('settings.modelMgmt.deleteModelTitle'),
+                            message: t('common.deleteConfirmDesc'),
+                            danger: true,
+                          }).then((ok) => {
+                            if (ok)
+                              removeMutation.mutate(model.modelId, {
+                                onSuccess: () =>
+                                  toast.success(t('settings.modelMgmt.modelDeleted')),
+                              });
+                          });
+                        }}
                       >
                         {removeMutation.isPending ? (
                           <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
@@ -214,24 +205,6 @@ export function ModelsSection(): ReactElement {
         onClose={() => setConfigState(null)}
         onSaved={() => setConfigState(null)}
       />
-
-      {/* 删除确认弹窗（无确认提示文案，仅标题 + 操作按钮） */}
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={(next) => !next && setDeleteTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('settings.modelMgmt.deleteModelTitle')}</AlertDialogTitle>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t('settings.modelMgmt.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>
-              {t('settings.modelMgmt.deleteModel')}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

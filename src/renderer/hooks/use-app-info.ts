@@ -9,6 +9,8 @@
 import type { AppInfoRes } from '@code-agent/shared/renderer';
 import { useEffect, useState } from 'react';
 
+import { unwrap } from '@/lib/ipc';
+
 /**
  * 拉取应用信息（挂载后一次性；浏览器模式 / IPC 失败时返回 null，调用方自兜底）
  *
@@ -38,9 +40,10 @@ export function useAppInfo(): AppInfoRes | null {
     getInfo()
       .then((res) => {
         if (cancelled) return;
-        if ('data' in res && res.data !== undefined) {
-          setInfo(res.data);
-        } else {
+        try {
+          setInfo(unwrap(res));
+        } catch {
+          // error 响应 / 协议异常：与 IPC 失败同策略（调用方自兜底占位）
           setInfo(null);
         }
       })

@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import type { AsyncView } from '@/hooks/use-async-view';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { resolveErrorAction } from '@/lib/error-actions';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { useUiStore } from '@/stores/transient/ui-store';
 
 /** 默认骨架屏延迟（毫秒）：低于此时长的首次加载不显示骨架屏，防闪烁 */
@@ -76,15 +77,8 @@ export function AsyncBoundary<T>({
   const openSettings = useUiStore((state) => state.openSettings);
 
   // 从 Error 解析本地化文案：约定错误格式为 "[CODE] message"（见 lib/ipc unwrap）；
-  // 解析出合法错误码则本地化，否则回退原始 message。
-  const resolveErrorMessage = (error: Error): string => {
-    const codeMatch = /^\[([A-Z_]+)\]/.exec(error.message);
-    if (codeMatch !== null) {
-      const code = codeMatch[1] as Parameters<typeof getErrorMessage>[0];
-      return getErrorMessage(code);
-    }
-    return error.message;
-  };
+  // 解析收敛至 unwrapErrorMessage 单一真源（含 localize 抛错回退）
+  const resolveErrorMessage = (error: Error): string => unwrapErrorMessage(error, getErrorMessage);
 
   // 防闪烁：仅在 loading 持续超过 skeletonDelay 后才显示骨架屏
   const [showSkeleton, setShowSkeleton] = useState(false);
