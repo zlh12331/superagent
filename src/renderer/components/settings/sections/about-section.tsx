@@ -226,7 +226,7 @@ export function AboutSection(): ReactElement {
   return (
     <div className="flex flex-col gap-3 pt-2">
       {/* 品牌 Hero：居中视觉中心——大标识 + 渐变光晕 + 版本/渠道 + 更新 */}
-      <div className="bg-card border-border relative overflow-hidden rounded-lg border px-4 py-6">
+      <div className="bg-card relative overflow-hidden rounded-lg px-4 py-8">
         {/* 装饰光晕（top 覆盖，配合圆角溢出隐藏） */}
         <div
           aria-hidden
@@ -236,12 +236,12 @@ export function AboutSection(): ReactElement {
           <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-xl">
             <Rocket className="size-7" strokeWidth={1.25} />
           </div>
-          <div className="mt-3 text-foreground text-lg leading-tight font-semibold">
+          <div className="text-foreground mt-3.5 text-lg leading-tight font-semibold tracking-wide">
             Code Agent Desktop
           </div>
           <div className="text-muted-foreground mt-1 text-xs">{t('settings.aboutTagline')}</div>
-          <div className="mt-3 flex items-center gap-x-2">
-            <span className="text-foreground font-mono text-sm">
+          <div className="mt-3.5 flex items-center gap-1.5">
+            <span className="bg-muted text-foreground inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-xs">
               {info === null ? '…' : `v${info.version}`}
             </span>
             {channelBadge}
@@ -252,7 +252,7 @@ export function AboutSection(): ReactElement {
 
       {/* 构建信息 */}
       <SectionTitle>{t('settings.aboutBuildTitle')}</SectionTitle>
-      <div className="flex flex-col px-1">
+      <div className="bg-card flex flex-col rounded-lg px-3 py-2">
         <InfoRow label={t('settings.aboutBuildChannel')}>
           <span className="text-muted-foreground font-mono">{channel ?? '-'}</span>
         </InfoRow>
@@ -285,7 +285,7 @@ export function AboutSection(): ReactElement {
 
       {/* 环境信息 */}
       <SectionTitle>{t('settings.aboutRuntime')}</SectionTitle>
-      <div className="flex flex-col px-1">
+      <div className="bg-card flex flex-col rounded-lg px-3 py-2">
         <InfoRow label="Electron">
           <span className="text-muted-foreground font-mono">{info?.electron ?? '…'}</span>
         </InfoRow>
@@ -358,7 +358,7 @@ export function AboutSection(): ReactElement {
 
       {/* 许可与致谢 */}
       <SectionTitle>{t('settings.aboutLegalTitle')}</SectionTitle>
-      <div className="flex flex-col px-1">
+      <div className="bg-card flex flex-col rounded-lg px-3 py-2">
         <InfoRow label="License">
           <span className="text-muted-foreground font-mono">{t('settings.aboutLicenseValue')}</span>
         </InfoRow>
