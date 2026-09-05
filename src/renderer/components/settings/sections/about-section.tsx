@@ -312,7 +312,7 @@ export function AboutSection(): ReactElement {
 
       {/* 诊断与支持 */}
       <SectionTitle>{t('settings.aboutDiagnosticsTitle')}</SectionTitle>
-      <div className="bg-card rounded-lg border px-3 py-2">
+      <div className="bg-card rounded-lg px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
