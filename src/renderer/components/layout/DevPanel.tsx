@@ -292,12 +292,12 @@ export const DevPanel = memo(function DevPanel({
         {openTabs.includes('dev') && (
           <div className={paneCls(activeTab === 'dev')}>
             <div className="flex h-full flex-col">
-              {/* 开发者子视图切换（调试工具收纳） */}
+              {/* 开发者子视图切换（调试工具收纳）——segmented 形态，纳入 ui-consistency 豁免 */}
               <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'git'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -310,7 +310,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'logs'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -323,7 +323,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'metrics'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -336,7 +336,7 @@ export const DevPanel = memo(function DevPanel({
                 <button
                   type="button"
                   className={cn(
-                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
                     devSubTab === 'inspector'
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',

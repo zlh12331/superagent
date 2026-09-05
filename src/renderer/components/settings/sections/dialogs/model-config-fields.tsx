@@ -299,14 +299,15 @@ export function ModelConfigFields({
                 onChange={(e) => onFieldChange('contextInput', e.target.value)}
               />
               {CONTEXT_INPUT_SHORTCUTS.map((v) => (
-                <button
+                <Button
                   key={v}
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer rounded-full border px-1.5 py-0.5 text-2xs transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground h-auto shrink-0 rounded-full border px-1.5 py-0.5 text-2xs"
                   onClick={() => onFieldChange('contextInput', v)}
                 >
                   {v}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -322,14 +323,15 @@ export function ModelConfigFields({
                 onChange={(e) => onFieldChange('contextOutput', e.target.value)}
               />
               {CONTEXT_OUTPUT_SHORTCUTS.map((v) => (
-                <button
+                <Button
                   key={v}
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer rounded-full border px-1.5 py-0.5 text-2xs transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground h-auto shrink-0 rounded-full border px-1.5 py-0.5 text-2xs"
                   onClick={() => onFieldChange('contextOutput', v)}
                 >
                   {v}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

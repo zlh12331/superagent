@@ -192,9 +192,10 @@ export function McpSection(): ReactElement {
               {server.status}
             </span>
             {server.toolNames.length > 0 && (
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-0.5 font-mono text-2xs transition-colors"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground h-auto gap-0.5 px-0 font-mono text-2xs"
                 title={server.toolNames.join('\n')}
                 onClick={() =>
                   setExpandedServer((prev) =>
@@ -209,7 +210,7 @@ export function McpSection(): ReactElement {
                   <ChevronRight className="size-3" strokeWidth={1.5} />
                 )}
                 {server.toolNames.length} tools
-              </button>
+              </Button>
             )}
             <Button
               variant="outline"

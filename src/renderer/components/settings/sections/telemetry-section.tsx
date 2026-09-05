@@ -6,6 +6,7 @@
 
 import type { TelemetryLevel } from '@code-agent/shared/renderer';
 import { Shield } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useSetTelemetryLevel, useTelemetryLevelQuery } from '@/hooks/use-telemetry';
 import { useTranslation } from '@/i18n/use-translation';
@@ -38,13 +39,14 @@ export function TelemetrySection(): React.ReactElement {
         ).map((option) => {
           const isActive = telemetryLevel === option.value;
           return (
-            <button
+            <Button
               key={option.value}
-              type="button"
+              variant="outline"
+              size="sm"
               disabled={isSavingTelemetry || isLoadingTelemetry}
               onClick={() => setTelemetryLevel(option.value as TelemetryLevel)}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-center transition-colors',
+                'h-auto flex-col items-center gap-0.5 px-2 py-1.5 text-center',
                 isActive
                   ? 'border-border bg-muted/60 text-foreground'
                   : 'border-border bg-transparent text-muted-foreground hover:bg-muted',
@@ -52,7 +54,7 @@ export function TelemetrySection(): React.ReactElement {
             >
               <span className="font-serif text-xs tracking-wide">{option.label}</span>
               <span className="text-[9px] text-muted-foreground">{option.desc}</span>
-            </button>
+            </Button>
           );
         })}
       </div>

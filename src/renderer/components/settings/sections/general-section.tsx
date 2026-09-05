@@ -6,6 +6,7 @@
 
 import { Check, Database, Languages } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -38,26 +39,24 @@ function LanguageRow(): ReactElement {
       </div>
       <div className="flex items-center gap-1">
         {SUPPORTED_LANGUAGES.map((code) => (
-          <button
+          <Button
             key={code}
-            type="button"
-            className={cnRow(lang === code)}
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'h-auto gap-1 rounded px-2 py-1 text-xs',
+              lang === code
+                ? 'bg-muted text-foreground border-border'
+                : 'text-muted-foreground border-transparent',
+            )}
             onClick={() => handleSelect(code)}
           >
             {code === 'zh-CN' ? '简体中文' : 'English'}
             {lang === code && <Check className="size-3" strokeWidth={2} />}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
-  );
-}
-
-function cnRow(active: boolean): string {
-  // 条件类统一走 cn()（样式铁律：此前 join(' ') 绕开了 cn）
-  return cn(
-    'flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors',
-    active ? 'bg-muted text-foreground border-border' : 'text-muted-foreground border-transparent',
   );
 }
 

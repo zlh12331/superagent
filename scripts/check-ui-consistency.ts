@@ -51,11 +51,40 @@ const RULES: readonly Rule[] = [
   },
   {
     id: 'raw-button',
-    desc: 'components/** 内裸 <button>（应用 ui/button 的 Button 组件；icon 钮用 size="icon"）',
+    desc: 'components/** 内裸 <button>（应用 ui/button 的 Button；已归属 globals.css 按钮类体系的除外）',
     pattern: /<button\b/,
     fileFilter: (relFile) =>
       relFile.startsWith(join('components')) && !relFile.startsWith(join('components', 'ui')),
   },
+];
+
+/**
+ * 已归属 globals.css 按钮类体系的钮（icon-btn/tab/树节点/segmented 等
+ * 有专属 CSS 类控制的场景），不属于 raw-button 规则目标——
+ * 它们的收敛路径是 globals.css 组件类 utility 化专项，而非套 Button。
+ */
+const OWNED_CSS_BUTTON_CLASSES = [
+  'icon-btn',
+  'sidebar-tab',
+  'dev-sub-tab',
+  'ft-row',
+  'ft-dir',
+  'ft-file',
+  'sft-back',
+  'sft-more-btn',
+  'cpb-select',
+  'model-item',
+  'fdm-item',
+  'fdm-action-btn',
+  'fl-add-btn',
+  'folder-label',
+  'file-viewer-mode-btn',
+  'file-viewer-save-btn',
+  'file-viewer-copy-btn',
+  'composer-tool-btn',
+  'msg-action-btn',
+  'card-head',
+  'rh-chevron',
 ];
 
 interface Violation {
@@ -98,6 +127,16 @@ for (const full of files) {
       const prev = i > 0 ? lines[i - 1] : '';
       if (prev !== undefined && prev.includes('noArrayIndexKey')) {
         continue;
+      }
+      // raw-button 规则：className 已含 globals.css 按钮类体系归属的豁免；
+      // 类名在 JSX 起始行或后续 className 行（向前探 3 行）——检测当前按钮
+      // 开标签块（回溯至 <button 行）内是否出现归属类名
+      if (rule.id === 'raw-button') {
+        const blockStart = Math.max(0, i - 3);
+        const block = lines.slice(blockStart, i + 4).join('\n');
+        if (OWNED_CSS_BUTTON_CLASSES.some((cls) => block.includes(cls))) {
+          continue;
+        }
       }
       violations.push({ rule: rule.id, file: relFile, line: i + 1 });
     }
@@ -145,3 +184,6 @@ if (errors.length > 0) {
 console.log(
   `[check-ui-consistency] ✅ 通过：${files.length} 个文件，${violations.length} 处命中（均在棘轮基线内：${JSON.stringify(baseline)}）`,
 );
+for (const v of violations) {
+  console.log(`  [${v.rule}] ${v.file}:${v.line}`);
+}

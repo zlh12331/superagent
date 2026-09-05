@@ -27,7 +27,7 @@ import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
+import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { microTransition, springTransition } from '@/lib/motion';
@@ -554,34 +554,36 @@ export function ChatInput({
         >
           {slashOpen &&
             filteredSuggestions.map((s, i) => (
-              <button
+              <Button
                 key={s.command}
                 id={`suggest-opt-${i}`}
-                type="button"
+                variant="ghost"
+                size="sm"
                 role="option"
                 aria-selected={i === suggestIndex}
                 onClick={() => applySuggestion(s.command)}
                 className={cn(
-                  'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                  'w-full justify-start px-3 py-2 text-left text-sm font-normal',
                   i === suggestIndex ? 'bg-muted' : 'hover:bg-muted',
                 )}
               >
                 <Slash className="text-muted-foreground size-3.5 shrink-0" />
                 <span className="font-mono text-xs">{s.command}</span>
                 <span className="text-muted-foreground ml-auto text-xs">{t(s.labelKey)}</span>
-              </button>
+              </Button>
             ))}
           {mentionOpen &&
             mentionFiles.map((filePath, i) => (
-              <button
+              <Button
                 key={filePath}
                 id={`suggest-opt-${i}`}
-                type="button"
+                variant="ghost"
+                size="sm"
                 role="option"
                 aria-selected={i === suggestIndex}
                 onClick={() => applyMention(filePath)}
                 className={cn(
-                  'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                  'w-full justify-start px-3 py-2 text-left text-sm font-normal',
                   i === suggestIndex ? 'bg-muted' : 'hover:bg-muted',
                 )}
               >
@@ -589,7 +591,7 @@ export function ChatInput({
                 <span className="min-w-0 flex-1 truncate font-mono text-xs" title={filePath}>
                   {filePath}
                 </span>
-              </button>
+              </Button>
             ))}
         </div>
       )}
@@ -605,14 +607,15 @@ export function ChatInput({
               <span className="max-w-40 truncate" title={att.path}>
                 {att.name}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => removeAttachment(att.path)}
                 aria-label={t('common.close')}
-                className="hover:text-foreground cursor-pointer rounded-full transition-colors"
+                className="hover:text-foreground size-auto rounded-full"
               >
                 <X className="size-3" />
-              </button>
+              </Button>
             </span>
           ))}
         </div>
