@@ -102,8 +102,9 @@ export function ChatPanel({
   const navigate = useNavigate();
   // 快捷键帮助对话框（/help 斜杠命令触发；对齐参考项目：命令即时执行而非 toast）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
-  // 中断提示条关闭状态（会话内关闭后不再显示）
-  const [interruptedDismissed, setInterruptedDismissed] = useState(false);
+  // 中断提示条关闭状态（按 chatId 记录：切换会话后重新提示——
+  // 此前单一 boolean 跨会话复用，A 会话关过一次后 B 会话的中断信号被静默抑制）
+  const [interruptedDismissedFor, setInterruptedDismissedFor] = useState<string | null>(null);
   // 历史回显缺口提示的已关闭会话（按 chatId 记录：切换会话后重新提示）
   const [historyNoticeDismissedFor, setHistoryNoticeDismissedFor] = useState<string | null>(null);
   // 编辑重提注入（P2-10）：审批拒绝后把命令填入 composer（对齐参考项目）
@@ -281,7 +282,11 @@ export function ChatPanel({
       {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
       <InlineApprovalCard
         sessionId={chatId}
-        onEditResubmit={(command) => setInjectedComposerValue(command)}
+        onEditResubmit={(command) => {
+          // 注入后下一轮复位：相同命令二次「编辑重提」时 state 能再次变化触发注入 effect
+          setInjectedComposerValue(command);
+          window.setTimeout(() => setInjectedComposerValue(undefined), 0);
+        }}
       />
       {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
       <ConversationSearchBar
@@ -294,7 +299,7 @@ export function ChatPanel({
         onClose={search.actions.close}
       />
       {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
-      {interrupted && !interruptedDismissed && (
+      {interrupted && interruptedDismissedFor !== chatId && (
         <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-warn-text">
           <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
           <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
@@ -302,7 +307,7 @@ export function ChatPanel({
             type="button"
             className="text-warn-text hover:text-foreground"
             aria-label={t('common.close')}
-            onClick={() => setInterruptedDismissed(true)}
+            onClick={() => setInterruptedDismissedFor(chatId ?? null)}
           >
             <X className="size-3.5" strokeWidth={2} />
           </button>
@@ -337,6 +342,9 @@ export function ChatPanel({
       {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">
         <ChatMessageList
+          // key=chatId：会话切换强制重挂载——分页窗口/底部状态不跨会话滞留
+          //（此前切到大分会话时旧 windowStart 滞留，分页被旁路且落点错位）
+          key={chatId}
           messages={messages}
           status={status}
           onRegenerate={handleRegenerate}
@@ -381,7 +389,8 @@ export function ChatPanel({
             // /goal 前缀：创建会话目标（用户需求：输入 /goal 需求 → 发送 → 输入框上方显示目标栏；
             // 目标命令不进对话，避免把 "/goal xxx" 当普通消息发给 AI）
             const trimmed = text.trim();
-            if (trimmed.startsWith('/goal')) {
+            // 精确前缀匹配：startsWith('/goal') 会把 '/goals' 等误判成目标命令
+            if (trimmed === '/goal' || trimmed.startsWith('/goal ')) {
               const condition = trimmed.slice(5).trim();
               if (condition.length > 0 && chatId !== undefined) {
                 createGoal(condition);

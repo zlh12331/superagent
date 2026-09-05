@@ -29,10 +29,16 @@ export function attachmentName(path: string): string {
  * 读取附件内容并拼接进消息文本
  *
  * 浏览器模式（window.api 缺失）或无附件时原样返回 baseText。
+ * label 传入 i18n 化的文案工厂（随界面语言）——此前硬编码中文会进入
+ * 消息内容与模型上下文，且为 check:i18n 门禁盲区。
  */
 export async function buildTextWithAttachments(
   baseText: string,
   attachments: readonly ChatAttachment[],
+  label: {
+    readonly attached: (name: string) => string;
+    readonly readFailed: (name: string) => string;
+  },
 ): Promise<string> {
   if (attachments.length === 0 || typeof window === 'undefined' || window.api === undefined) {
     return baseText;
@@ -48,10 +54,10 @@ export async function buildTextWithAttachments(
         }),
       );
       const content = data.content.slice(0, ATTACHMENT_MAX_CHARS);
-      text += `\n\n[附件: ${att.name}]\n\`\`\`\n${content}\n\`\`\``;
+      text += `\n\n${label.attached(att.name)}\n\`\`\`\n${content}\n\`\`\``;
     } catch {
       // 读取失败（二进制/权限/错误响应）：仅附加文件名标注，不阻断发送
-      text += `\n\n[附件: ${att.name}]（内容读取失败）`;
+      text += `\n\n${label.readFailed(att.name)}`;
     }
   }
   return text;

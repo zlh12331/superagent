@@ -183,6 +183,8 @@
       "statsMessages": "消息数",
       "statsTokens": "Token",
       "messageTooLong": "消息过长（最多 {{max}} 字符）",
+      "attachmentLabel": "[附件: {{name}}]",
+      "attachmentReadFailed": "[附件: {{name}}]（内容读取失败）",
       "slashAction": {
         "help": "可用命令：/new 新建会话 · /clear 清空对话 · /models 选择模型 · /compact 压缩上下文",
         "goal": "会话目标：请在输入框输入 /goal 需求"

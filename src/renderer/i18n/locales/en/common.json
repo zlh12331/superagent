@@ -183,6 +183,8 @@
       "statsMessages": "Messages",
       "statsTokens": "Tokens",
       "messageTooLong": "Message too long (max {{max}} characters)",
+      "attachmentLabel": "[Attachment: {{name}}]",
+      "attachmentReadFailed": "[Attachment: {{name}}] (failed to read content)",
       "slashAction": {
         "help": "Commands: /new new session · /clear clear chat · /models pick model · /compact compact context",
         "goal": "Session goal: type /goal plus your requirement in the input"

@@ -23,18 +23,28 @@ describe('attachmentName', () => {
 });
 
 describe('buildTextWithAttachments', () => {
+  /** 测试用中文文案（生产由调用方传 i18n 工厂） */
+  const label = {
+    attached: (name: string) => `[附件: ${name}]`,
+    readFailed: (name: string) => `[附件: ${name}]（内容读取失败）`,
+  };
+
   beforeEach(() => {
     window.api.file = {} as never;
   });
 
   it('无附件 → 原样返回', async () => {
-    const text = await buildTextWithAttachments('hello', []);
+    const text = await buildTextWithAttachments('hello', [], label);
     expect(text).toBe('hello');
   });
 
   it('附件读取成功 → 文件名 + 代码块拼接', async () => {
     stubFileRead(() => ({ data: { content: 'const x = 1;\n'.repeat(10) } }));
-    const text = await buildTextWithAttachments('hello', [{ path: 'C:\\r\\a.ts', name: 'a.ts' }]);
+    const text = await buildTextWithAttachments(
+      'hello',
+      [{ path: 'C:\\r\\a.ts', name: 'a.ts' }],
+      label,
+    );
     expect(text).toContain('hello');
     expect(text).toContain('[附件: a.ts]');
     expect(text).toContain('```');
@@ -43,14 +53,14 @@ describe('buildTextWithAttachments', () => {
 
   it('附件内容超上限截断（4000 字符）', async () => {
     stubFileRead(() => ({ data: { content: 'x'.repeat(5000) } }));
-    const text = await buildTextWithAttachments('m', [{ path: '/r/big', name: 'big' }]);
+    const text = await buildTextWithAttachments('m', [{ path: '/r/big', name: 'big' }], label);
     const body = (text.split('```')[1] ?? '').trim();
     expect(body.length).toBe(4000);
   });
 
   it('IPC error 响应 → 降级为文件名标注，不阻断', async () => {
     stubFileRead(() => ({ error: { code: 'FILE_NOT_FOUND', message: 'missing' } }));
-    const text = await buildTextWithAttachments('m', [{ path: '/r/gone', name: 'gone' }]);
+    const text = await buildTextWithAttachments('m', [{ path: '/r/gone', name: 'gone' }], label);
     expect(text).toBe('m\n\n[附件: gone]（内容读取失败）');
   });
 
@@ -58,7 +68,7 @@ describe('buildTextWithAttachments', () => {
     stubFileRead(() => {
       throw new Error('binary');
     });
-    const text = await buildTextWithAttachments('m', [{ path: '/r/bin', name: 'bin' }]);
+    const text = await buildTextWithAttachments('m', [{ path: '/r/bin', name: 'bin' }], label);
     expect(text).toContain('[附件: bin]（内容读取失败）');
   });
 
@@ -74,7 +84,7 @@ describe('buildTextWithAttachments', () => {
       { path: '/r/bad', name: 'bad' },
       { path: '/r/good', name: 'good' },
     ];
-    const text = await buildTextWithAttachments('m', atts);
+    const text = await buildTextWithAttachments('m', atts, label);
     expect(text).toContain('[附件: bad]（内容读取失败）');
     expect(text).toContain('ok-content');
   });
@@ -83,7 +93,7 @@ describe('buildTextWithAttachments', () => {
     const w = window as unknown as { api?: unknown };
     const saved = w.api;
     w.api = undefined;
-    const text = await buildTextWithAttachments('m', [{ path: '/r/a', name: 'a' }]);
+    const text = await buildTextWithAttachments('m', [{ path: '/r/a', name: 'a' }], label);
     expect(text).toBe('m');
     w.api = saved;
   });

@@ -93,9 +93,13 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
       dragRef.current = null;
       document.removeEventListener('pointermove', handleMove);
       document.removeEventListener('pointerup', handleUp);
+      document.removeEventListener('pointercancel', handleUp);
     };
     document.addEventListener('pointermove', handleMove);
     document.addEventListener('pointerup', handleUp);
+    // pointercancel（触摸板手势接管/窗口拖动等系统取消）不走 pointerup——
+    // 缺失会导致 dragRef 滞留，之后任意移动持续改写高度
+    document.addEventListener('pointercancel', handleUp);
   };
 
   /** 双击手柄重置：恢复自动高度（对齐原型 resetResize：maxHeight 清空 + 自动增长） */

@@ -256,6 +256,13 @@ export function ChatInput({
   const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
   // 统一建议面板开关（两者互斥，取靠后者触发）
   const suggestOpen = slashOpen || mentionOpen;
+  // 键盘高亮索引：ArrowUp/Down 循环选择，Enter/Tab 应用选中项（此前固定第 0 项，
+  // 键盘用户无法选择第 2+ 条建议）；输入内容变化时重置回第一项
+  const [suggestIndex, setSuggestIndex] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 value/activeTrigger 变化重置高亮，不读取其值
+  useEffect(() => {
+    setSuggestIndex(0);
+  }, [value, activeTrigger]);
 
   /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
   const applySuggestion = (command: string): void => {
@@ -302,8 +309,16 @@ export function ChatInput({
   }, [injectedValue]);
 
   // 草稿保存：非受控 + 有 chatId 时，文本/附件变化写入 draft-store（对齐参考项目 useDraftStore）
+  // 切换帧守卫：chatId 变化的那次渲染 internalValue 仍是旧会话内容，
+  // 若此时保存会把旧会话草稿写进新会话 key（交叉污染），故跳过——
+  // 旧会话草稿在每次键入时已实时保存，无丢失。
+  const draftSyncedChatIdRef = useRef(chatId);
   useEffect(() => {
     if (isControlled || chatId === undefined) {
+      return;
+    }
+    if (chatId !== draftSyncedChatIdRef.current) {
+      draftSyncedChatIdRef.current = chatId;
       return;
     }
     useDraftStore.getState().setDraft(chatId, {
@@ -349,7 +364,11 @@ export function ChatInput({
   }, [isStreaming, onStop]);
 
   // 是否可以发送（非空文本 + 非流式 + 未禁用）
-  const canSend = value.trim().length > 0 && !isStreaming && !disabled;
+  // 是否可以发送（非空文本 + 非流式 + 未禁用 + 不在发送中）
+  const [sending, setSending] = useState(false);
+  /** in-flight 发送守卫（ref 同步拦截同帧重复触发；state 驱动按钮禁用渲染） */
+  const sendingRef = useRef(false);
+  const canSend = value.trim().length > 0 && !isStreaming && !disabled && !sending;
 
   /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
   const handlePickFiles = async (): Promise<void> => {
@@ -387,24 +406,39 @@ export function ChatInput({
 
   /** 发送当前文本：超长拦截 → 附件拼接 → 清空草稿与输入 */
   const handleSend = async (): Promise<void> => {
-    if (!canSend) {
+    // in-flight 守卫：附件拼接含真实 IPC 往返，await 窗口内 status 仍为
+    // ready，二次 Enter/点击会重复发送；此处硬拦截（不依赖渲染期的 canSend）
+    if (!canSend || sendingRef.current) {
       return;
     }
-    // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
-    const base = value.trim();
-    // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
-    if (base.length > MAX_MESSAGE_LENGTH) {
-      toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
-      return;
+    sendingRef.current = true;
+    setSending(true);
+    // 快照本次发送的输入（供超长校验使用）
+    const sentValue = value;
+    try {
+      // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
+      const base = sentValue.trim();
+      // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
+      if (base.length > MAX_MESSAGE_LENGTH) {
+        toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
+        return;
+      }
+      const text = await buildTextWithAttachments(base, attachments, {
+        attached: (name) => t('chat.attachmentLabel', { name }),
+        readFailed: (name) => t('chat.attachmentReadFailed', { name }),
+      });
+      onSend(text);
+      // 发送成功：清除本会话草稿（草稿只保留未发送内容）
+      if (chatId !== undefined) {
+        useDraftStore.getState().clearDraft(chatId);
+      }
+      // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
+      setValue('');
+      setAttachments([]);
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
-    const text = await buildTextWithAttachments(base, attachments);
-    onSend(text);
-    // 发送成功：清除本会话草稿（草稿只保留未发送内容）
-    if (chatId !== undefined) {
-      useDraftStore.getState().clearDraft(chatId);
-    }
-    setValue('');
-    setAttachments([]);
   };
 
   /**
@@ -419,7 +453,9 @@ export function ChatInput({
     if (vimEnabled) {
       // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
       const isStreamEsc = event.key === 'Escape' && isStreaming;
-      if (!isStreamEsc) {
+      // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
+      // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
+      if (!isStreamEsc && !event.ctrlKey && !event.metaKey && !event.altKey) {
         const result = vimHandleKey(
           vimState,
           event.key,
@@ -446,24 +482,41 @@ export function ChatInput({
       onStop();
       return;
     }
-    // 斜杠/提及建议展开时：Tab/Enter 应用建议，Esc 关闭（对齐参考项目键盘优先级）
+    // 斜杠/提及建议展开时：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭
     if (suggestOpen) {
-      const firstSuggestion = slashOpen ? filteredSuggestions[0] : undefined;
-      const firstMention = mentionOpen ? mentionFiles[0] : undefined;
+      const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
+      const selected = Math.min(suggestIndex, Math.max(0, count - 1));
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (count > 0) {
+          setSuggestIndex((i) =>
+            event.key === 'ArrowDown' ? (i + 1) % count : (i - 1 + count) % count,
+          );
+        }
+        return;
+      }
       if (event.key === 'Tab' || event.key === 'Enter') {
-        if (firstSuggestion !== undefined) {
+        const selectedSuggestion = filteredSuggestions[selected];
+        const selectedMention = mentionFiles[selected];
+        if (slashOpen && selectedSuggestion !== undefined) {
           event.preventDefault();
-          applySuggestion(firstSuggestion.command);
-        } else if (firstMention !== undefined) {
+          applySuggestion(selectedSuggestion.command);
+        } else if (mentionOpen && selectedMention !== undefined) {
           event.preventDefault();
-          applyMention(firstMention);
+          applyMention(selectedMention);
         }
         return;
       }
       if (event.key === 'Escape') {
         event.preventDefault();
-        // 关闭建议：清空斜杠/提及输入
-        setValue('');
+        // 关闭建议：只清除触发段（"/xxx" 或 "@xxx"），保留用户其余输入——
+        // 此前 setValue('') 会清空整个输入框且同步覆盖草稿（数据丢失）
+        const caret = event.currentTarget.selectionStart ?? value.length;
+        const triggerChar = slashOpen ? '/' : '@';
+        const at = value.lastIndexOf(triggerChar, Math.max(0, caret - 1));
+        if (at >= 0) {
+          setValue(value.slice(0, at) + value.slice(caret));
+        }
         return;
       }
     }
@@ -490,18 +543,25 @@ export function ChatInput({
         <div
           role="listbox"
           aria-label={t('chat.slashCommand')}
+          aria-activedescendant={`suggest-opt-${suggestIndex}`}
+          tabIndex={-1}
           // 左对齐 + 紧凑上限：此前 left-0 right-0 w-full 拉伸到输入舱全宽（实测 728px），
           // 短命令行的 7 行建议面板过宽失衡；长路径（@ 提及）由 truncate + title 处理
           className="bg-popover text-popover-foreground absolute bottom-full left-0 z-surface mb-2 w-full max-w-sm overflow-hidden rounded-md border shadow-md"
         >
           {slashOpen &&
-            filteredSuggestions.map((s) => (
+            filteredSuggestions.map((s, i) => (
               <button
                 key={s.command}
+                id={`suggest-opt-${i}`}
                 type="button"
                 role="option"
+                aria-selected={i === suggestIndex}
                 onClick={() => applySuggestion(s.command)}
-                className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
+                className={cn(
+                  'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                  i === suggestIndex ? 'bg-muted' : 'hover:bg-muted',
+                )}
               >
                 <Slash className="text-muted-foreground size-3.5 shrink-0" />
                 <span className="font-mono text-xs">{s.command}</span>
@@ -509,13 +569,18 @@ export function ChatInput({
               </button>
             ))}
           {mentionOpen &&
-            mentionFiles.map((filePath) => (
+            mentionFiles.map((filePath, i) => (
               <button
                 key={filePath}
+                id={`suggest-opt-${i}`}
                 type="button"
                 role="option"
+                aria-selected={i === suggestIndex}
                 onClick={() => applyMention(filePath)}
-                className="hover:bg-muted flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors"
+                className={cn(
+                  'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                  i === suggestIndex ? 'bg-muted' : 'hover:bg-muted',
+                )}
               >
                 <FileText className="text-muted-foreground size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs" title={filePath}>
@@ -591,8 +656,8 @@ export function ChatInput({
             title={`${t('chat.slashCommand')} (/)`}
             onClick={() => {
               // 点击斜杠按钮：以 / 开头打开建议面板（对齐原型 suggest-pop）
-              // 此前追加到末尾（value+//），输入不以 / 开头时面板永不显示
-              setValue('/');
+              // 已有输入时前缀而非覆盖——覆盖会吞掉用户已输入的全文（不可撤销）
+              setValue(value.startsWith('/') ? value : `/${value}`);
               textareaRef.current?.focus();
               autoResize();
             }}
