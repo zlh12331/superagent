@@ -110,7 +110,12 @@ export function ChatMessageList({
     if (prevScrollHeightRef.current > 0) {
       const el = scrollerRef.current;
       if (el !== null) {
-        el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
+        // behavior:'instant' 显式瞬时：容器 CSS scroll-behavior:smooth 会让
+        // scrollTop 赋值走平滑动画，动画期间再次触发到顶判定 → 连翻数页
+        el.scrollTo({
+          top: el.scrollTop + (el.scrollHeight - prevScrollHeightRef.current),
+          behavior: 'instant',
+        });
       }
       prevScrollHeightRef.current = 0;
     }
@@ -143,10 +148,10 @@ export function ChatMessageList({
     if (el === null) return;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD;
     isAtBottomRef.current = atBottom;
+    // 仅在回到底部时清位；"不在底部"的置位由 auto-scroll effect 负责——
+    // 此处置位会让单纯向上翻看历史也点亮"新消息"红点（语义漂移）
     if (atBottom) {
       pendingHasNewRef.current = false;
-    } else {
-      pendingHasNewRef.current = true;
     }
 
     // 分页渲染：滚动到顶部附近且窗口未到开头 → 加载更早（记录高度供补偿）。
@@ -228,27 +233,29 @@ export function ChatMessageList({
   // 渲染窗口裁剪：数据全量在 messages，仅 DOM 层分页（起点口径统一见 clampedStart）
   const visibleMessages = useMemo(() => messages.slice(clampedStart), [messages, clampedStart]);
 
-  // 智能自动滚动：messages 长度变化或流式状态变化时触发
+  // 智能自动滚动：messages 身份变化（流式期间每个合帧 chunk 都产生新数组——
+  // delta 合并进同一条消息，length 不变，仅监听 length 会让视口在长回复
+  // 流式时停在开头）或流式状态变化时触发
   // - 用户在底部附近：直接滚动跟随新内容（替代 Virtuoso followOutput）
   // - 用户不在底部：标记 hasNew（按钮显示新消息红点）
-  // 2026-09 优化：流式期间用瞬时定位（scrollTop 赋值，无动画）——smooth 动画在高频
-  // chunk 追加下会持续滚动重排，是流式抖动主疑点；用户显式点击"滚动到底部"按钮
-  // 仍走 smooth（scrollToBottom），一次性意图不受影响。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages.length 与 isStreaming，触发标记而不读取其值
+  // 瞬时定位（behavior:'instant'）：容器 CSS smooth 会让赋值走动画，高频
+  // chunk 下持续滚动重排；用户显式点击按钮仍走 smooth（scrollToBottom）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 messages 身份（每 chunk 变化）以驱动跟随，不读取其值
   useEffect(() => {
     if (isAtBottomRef.current) {
       const el = scrollerRef.current;
       if (el !== null) {
         if (isStreaming) {
-          el.scrollTop = el.scrollHeight;
+          el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
         } else {
           el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
         }
       }
     } else {
+      pendingHasNewRef.current = true;
       setHasNew(true);
     }
-  }, [messages.length, isStreaming]);
+  }, [messages, isStreaming]);
 
   // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
   useEffect(() => {

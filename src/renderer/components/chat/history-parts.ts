@@ -107,9 +107,9 @@ function toFilePart(part: StoredPart): UiPart {
   let url = rawUrl;
   if (url.length === 0) {
     if (typeof data === 'string') {
-      url = /^(?:data:|https?:|file:|blob:|\.\/|\/)/.test(data)
-        ? data
-        : `data:${mediaType};base64,${data}`;
+      // 白名单仅认真 URL scheme：裸 base64 可能以 "/" 开头（JPEG 恒为
+      // "/9j/..."），早前把 "./|/" 当路径前缀会让整图被当根相对路径裂掉
+      url = /^(?:data:|https?:|file:|blob:)/.test(data) ? data : `data:${mediaType};base64,${data}`;
     } else if (data instanceof Uint8Array) {
       let binary = '';
       for (const byte of data) binary += String.fromCharCode(byte);

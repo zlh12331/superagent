@@ -97,10 +97,18 @@ export function getHighlighter(): Promise<Highlighter> {
     _highlighterPromise = createHighlighter({
       themes: ['github-dark', 'github-light'],
       langs: [...PRELOADED_LANGS],
-    }).then((h) => {
-      _highlighter = h;
-      return h;
-    });
+    }).then(
+      (h) => {
+        _highlighter = h;
+        return h;
+      },
+      // 初始化失败清缓存：rejected promise 永久持有会导致本次会话
+      // 内所有代码块无高亮（瞬时失败如 chunk 加载失败无法重试）
+      (err) => {
+        _highlighterPromise = null;
+        throw err;
+      },
+    );
   }
   return _highlighterPromise;
 }
@@ -119,9 +127,16 @@ export async function ensureLangLoaded(h: Highlighter, lang: string): Promise<vo
   const load = DEFERRED_LANG_MODULES[lang];
   if (load === undefined) return; // 未收录 → 调用方 codeToHtml 抛错走 'text' fallback
   if (loadingDictionary[lang] === undefined) {
-    loadingDictionary[lang] = h.loadLanguage(load).then(() => {
-      loadedLangs.add(lang);
-    });
+    loadingDictionary[lang] = h.loadLanguage(load).then(
+      () => {
+        loadedLangs.add(lang);
+      },
+      // 失败清缓存键：允许下一个代码块重试（否则永久降级纯文本）
+      (err) => {
+        delete loadingDictionary[lang];
+        throw err;
+      },
+    );
   }
   await loadingDictionary[lang];
 }

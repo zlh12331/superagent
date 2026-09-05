@@ -88,16 +88,21 @@ export const MessageItem = memo(function MessageItem({
       message.role === 'assistant'
         ? message.parts.map((part, index) => ({
             part,
-            index,
             key: `${message.id}-${index}`,
             showCursor: isStreaming && index === message.parts.length - 1,
           }))
-        : [],
+        : message.parts.map((part, index) => ({
+            part,
+            key: `${message.id}-${index}`,
+            showCursor: false,
+          })),
     [message.parts, message.id, isStreaming, message.role],
   );
 
   if (message.role === 'user') {
-    // user 消息：仅 .msg-body > .msg-content，气泡样式由 .msg-content 提供（玻璃渐变）
+    // user 消息：text 拼接为气泡内容；非 text parts（历史重建产生的孤儿
+    // 工具结果 / 附件 file）此前一律不渲染——留下空气泡且工具卡丢失
+    const text = extractText(message.parts);
     return (
       <motion.div
         initial={{ opacity: 0, y: 6 }}
@@ -106,10 +111,10 @@ export const MessageItem = memo(function MessageItem({
         className="msg user enter-anim"
       >
         <div className="msg-body">
-          <div className="msg-content">
-            {/* user 消息仅渲染 text parts（拼接为单一字符串，保留换行） */}
-            {extractText(message.parts)}
-          </div>
+          {text.length > 0 && <div className="msg-content">{text}</div>}
+          {partsWithCursor.map(({ part, key }) =>
+            isTextUIPart(part) ? null : <PartView key={key} part={part} collapseKey={key} />,
+          )}
         </div>
       </motion.div>
     );

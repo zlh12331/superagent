@@ -25,7 +25,8 @@ export function RateLimitBanner(): ReactElement | null {
   const triggeredAt = useRateLimitStore((s) => s.triggeredAt);
   const dismiss = useRateLimitStore((s) => s.dismiss);
 
-  // 自动隐藏：触发超过 5 分钟后消失（定时器兜底，避免 store 残留）
+  // 自动隐藏：触发超过 5 分钟后消失（定时器兜底，避免 store 残留）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 triggeredAt 重置调度（重复限流时 60s 检查点重启），体内读 store 最新值
   useEffect(() => {
     if (!visible) return;
     const timer = setTimeout(() => {
@@ -34,7 +35,7 @@ export function RateLimitBanner(): ReactElement | null {
       }
     }, 60_000);
     return () => clearTimeout(timer);
-  }, [visible]);
+  }, [visible, triggeredAt]);
 
   if (!visible || isRateLimitExpired(triggeredAt)) return null;
 
