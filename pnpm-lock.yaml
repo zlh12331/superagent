@@ -423,10 +423,10 @@ importers:
     dependencies:
       typedoc:
         specifier: ^0.28.20
-        version: 0.28.20(typescript@7.0.2)
+        version: 0.28.20(typescript@6.0.3)
       typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
+        specifier: ^6.0.0
+        version: 6.0.3
 
 packages:
 
@@ -14220,17 +14220,16 @@ snapshots:
       media-typer: 1.1.1
       mime-types: 3.0.2
 
-  typedoc@0.28.20(typescript@7.0.2):
+  typedoc@0.28.20(typescript@6.0.3):
     dependencies:
       '@gerrit0/mini-shiki': 3.23.0
       lunr: 2.3.9
       markdown-it: 14.3.1
       minimatch: 10.2.6
-      typescript: 7.0.2
+      typescript: 6.0.3
       yaml: 2.9.0
 
-  typescript@6.0.3:
-    optional: true
+  typescript@6.0.3: {}
 
   typescript@7.0.2:
     optionalDependencies:
