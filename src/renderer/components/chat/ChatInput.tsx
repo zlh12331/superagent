@@ -17,7 +17,7 @@ import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useDraftStore } from '@/stores/persistent/draft-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-import { attachmentName, buildTextWithAttachments, type ChatAttachment } from './attachments';
+import { buildTextWithAttachments } from './attachments';
 import { AttachmentsChips } from './attachments-chips';
 import { SlashSuggestPanel } from './slash-suggest-panel';
 import {
@@ -28,6 +28,7 @@ import {
 } from './slash-suggestions';
 import { detectSuggestTrigger } from './suggest-trigger';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
+import { useComposerInput } from './use-composer-input';
 import { useVimMode } from './use-vim-mode';
 
 /** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
@@ -122,38 +123,25 @@ export function ChatInput({
   const { t } = useTranslation();
   // vim 模式（settings.editor.vimMode 真实消费——此前仅存储无行为）
   const vimEnabled = useSettingsStore((s) => s.editor.vimMode);
-  const [internalValue, setInternalValue] = useState(() => {
-    // 草稿恢复：非受控 + 有 chatId 时从 draft-store 初始化（对齐参考项目 useDraftStore）
-    return (
-      controlledValue ??
-      (chatId !== undefined ? useDraftStore.getState().getDraft(chatId).text : '')
-    );
+  // 输入状态（值 + 附件 + 草稿，自 ChatInput 拆出：use-composer-input.ts）
+  const {
+    value,
+    setValue,
+    attachments,
+    pickAttachments,
+    removeAttachment,
+    clear: clearInput,
+  } = useComposerInput({
+    chatId,
+    controlledValue,
+    onValueChange,
+    injectedValue,
   });
   // 占位符：props 优先，缺省走 i18n
   const effectivePlaceholder = placeholder ?? t('chat.inputPlaceholder');
-  // 附件列表（对齐参考项目 ChatInputAttachments：选择 → chip 展示 → 发送时读取拼接）
-  const [attachments, setAttachments] = useState<ChatAttachment[]>(() => {
-    if (chatId === undefined) {
-      return [];
-    }
-    const draft = useDraftStore.getState().getDraft(chatId);
-    // 草稿附件恢复：仅恢复仍存在的文件路径（历史路径可能已删除）
-    return draft.attachments.map((p) => ({ path: p, name: attachmentName(p) }));
-  });
-  // 占位符：props 优先，缺省走 i18n
-  const isControlled = controlledValue !== undefined;
-  const value = isControlled ? controlledValue : internalValue;
 
   // textarea ref：用于 auto-resize + 快捷 pill 预填后聚焦
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  /** 更新值：受控模式触发回调，非受控模式更新内部 state */
-  const setValue = (next: string): void => {
-    if (!isControlled) {
-      setInternalValue(next);
-    }
-    onValueChange?.(next);
-  };
 
   // vim 模式状态机（自 ChatInput 拆出：use-vim-mode.ts）
   const { vimState, pendingCursor, processKey, clearPendingCursor } = useVimMode({
@@ -285,53 +273,6 @@ export function ChatInput({
     autoResize();
   }, [value]);
 
-  // 外部注入值（编辑重提 / 目标预填）：非受控模式下同步到内部值，保持草稿语义（对齐参考项目 P2-10）
-  // 不做 ref 去重：父级“注入 → 重置 undefined → 再注入相同值”循环需要重复生效
-  // （React 跳过相同值的 setState，不会重复注入；注入本身幂等）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: autoResize 每次渲染新引用，加入依赖会无限循环；其行为仅依赖内部 ref
-  useEffect(() => {
-    if (injectedValue === undefined) {
-      return;
-    }
-    setInternalValue(injectedValue);
-    autoResize();
-    textareaRef.current?.focus();
-  }, [injectedValue]);
-
-  // 草稿保存：非受控 + 有 chatId 时，文本/附件变化写入 draft-store（对齐参考项目 useDraftStore）
-  // 切换帧守卫：chatId 变化的那次渲染 internalValue 仍是旧会话内容，
-  // 若此时保存会把旧会话草稿写进新会话 key（交叉污染），故跳过——
-  // 旧会话草稿在每次键入时已实时保存，无丢失。
-  const draftSyncedChatIdRef = useRef(chatId);
-  useEffect(() => {
-    if (isControlled || chatId === undefined) {
-      return;
-    }
-    if (chatId !== draftSyncedChatIdRef.current) {
-      draftSyncedChatIdRef.current = chatId;
-      return;
-    }
-    useDraftStore.getState().setDraft(chatId, {
-      text: internalValue,
-      attachments: attachments.map((a) => a.path),
-    });
-  }, [internalValue, attachments, chatId, isControlled]);
-
-  // 会话切换（chatId 变化）：恢复新会话草稿（对齐参考项目 prevThreadId 模式）
-  const prevChatIdRef = useRef(chatId);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: autoResize 每次渲染新引用，加入依赖会无限循环；其行为仅依赖内部 ref
-  useEffect(() => {
-    if (chatId === prevChatIdRef.current || chatId === undefined || isControlled) {
-      prevChatIdRef.current = chatId;
-      return;
-    }
-    prevChatIdRef.current = chatId;
-    const draft = useDraftStore.getState().getDraft(chatId);
-    setInternalValue(draft.text);
-    setAttachments(draft.attachments.map((p) => ({ path: p, name: attachmentName(p) })));
-    autoResize();
-  }, [chatId, isControlled]);
-
   // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
 
@@ -367,23 +308,10 @@ export function ChatInput({
       // 选择器错误响应/取消均静默（非关键路径，用户可重试）
       const data = unwrap(await window.api.dialog.pickFiles({ multiple: true }));
       if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
-      // 去重（已选路径跳过；filter 内逐步去重，重复路径只留一个）
-      const seen = new Set(attachments.map((a) => a.path));
-      const next: ChatAttachment[] = [];
-      for (const p of data.paths) {
-        if (seen.has(p)) continue;
-        seen.add(p);
-        next.push({ path: p, name: p.split(/[\\/]/).pop() ?? p });
-      }
-      if (next.length > 0) setAttachments((prev) => [...prev, ...next]);
+      pickAttachments(data.paths);
     } catch {
       return;
     }
-  };
-
-  /** 移除附件 */
-  const removeAttachment = (path: string): void => {
-    setAttachments((prev) => prev.filter((a) => a.path !== path));
   };
 
   /**
@@ -423,8 +351,7 @@ export function ChatInput({
         useDraftStore.getState().clearDraft(chatId);
       }
       // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
-      setValue('');
-      setAttachments([]);
+      clearInput();
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -438,6 +365,49 @@ export function ChatInput({
    * - Shift+Enter：换行（默认行为，不阻止）
    * - Esc（流式状态）：中断生成，对齐原型 composer-hint "Esc 中断"
    */
+  /** 建议面板键盘处理：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭仅清除触发段 */
+  const handleSuggestKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (!suggestOpen) {
+      return false;
+    }
+    const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
+    const selected = Math.min(suggestIndex, Math.max(0, count - 1));
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (count > 0) {
+        setSuggestIndex((i) =>
+          event.key === 'ArrowDown' ? (i + 1) % count : (i - 1 + count) % count,
+        );
+      }
+      return true;
+    }
+    if (event.key === 'Tab' || event.key === 'Enter') {
+      const selectedSuggestion = filteredSuggestions[selected];
+      const selectedMention = mentionFiles[selected];
+      if (slashOpen && selectedSuggestion !== undefined) {
+        event.preventDefault();
+        applySuggestion(selectedSuggestion.command);
+      } else if (mentionOpen && selectedMention !== undefined) {
+        event.preventDefault();
+        applyMention(selectedMention);
+      }
+      return true;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      // 关闭建议：只清除触发段（"/xxx" 或 "@xxx"），保留用户其余输入——
+      // 此前 setValue('') 会清空整个输入框且同步覆盖草稿（数据丢失）
+      const caret = event.currentTarget.selectionStart ?? value.length;
+      const triggerChar = slashOpen ? '/' : '@';
+      const at = value.lastIndexOf(triggerChar, Math.max(0, caret - 1));
+      if (at >= 0) {
+        setValue(value.slice(0, at) + value.slice(caret));
+      }
+      return true;
+    }
+    return false;
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // ── vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）──
     if (vimEnabled) {
@@ -463,43 +433,9 @@ export function ChatInput({
       onStop();
       return;
     }
-    // 斜杠/提及建议展开时：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭
-    if (suggestOpen) {
-      const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
-      const selected = Math.min(suggestIndex, Math.max(0, count - 1));
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        if (count > 0) {
-          setSuggestIndex((i) =>
-            event.key === 'ArrowDown' ? (i + 1) % count : (i - 1 + count) % count,
-          );
-        }
-        return;
-      }
-      if (event.key === 'Tab' || event.key === 'Enter') {
-        const selectedSuggestion = filteredSuggestions[selected];
-        const selectedMention = mentionFiles[selected];
-        if (slashOpen && selectedSuggestion !== undefined) {
-          event.preventDefault();
-          applySuggestion(selectedSuggestion.command);
-        } else if (mentionOpen && selectedMention !== undefined) {
-          event.preventDefault();
-          applyMention(selectedMention);
-        }
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        // 关闭建议：只清除触发段（"/xxx" 或 "@xxx"），保留用户其余输入——
-        // 此前 setValue('') 会清空整个输入框且同步覆盖草稿（数据丢失）
-        const caret = event.currentTarget.selectionStart ?? value.length;
-        const triggerChar = slashOpen ? '/' : '@';
-        const at = value.lastIndexOf(triggerChar, Math.max(0, caret - 1));
-        if (at >= 0) {
-          setValue(value.slice(0, at) + value.slice(caret));
-        }
-        return;
-      }
+    // 建议面板键盘处理（方向键/录入/Esc）
+    if (handleSuggestKeyDown(event)) {
+      return;
     }
     // Enter 且无 Shift / Ctrl / Cmd 同时按：发送
     if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {

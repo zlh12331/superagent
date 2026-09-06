@@ -23,10 +23,6 @@
     "net": 560,
     "raw": 1072
   },
-  "src/renderer/components/chat/ChatInput.tsx": {
-    "net": 466,
-    "raw": 648
-  },
   "src/renderer/dev/mock-api.ts": {
     "net": 907,
     "raw": 1021

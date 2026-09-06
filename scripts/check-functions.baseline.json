@@ -68,7 +68,7 @@
     "params": 1
   },
   "src/main/infra/code-analysis/code-analyzer.ts#extractSymbols": {
-    "body": 102,
+    "body": 106,
     "params": 1
   },
   "src/main/infra/im/adapters/wecom-stream.ts#extractWecomText": {
@@ -136,7 +136,7 @@
     "params": 1
   },
   "src/main/ipc/settings.handler.ts#createSettingsHandlers": {
-    "body": 121,
+    "body": 124,
     "params": 1
   },
   "src/main/ipc/system.handler.ts#readTailLines": {
@@ -172,23 +172,23 @@
     "params": 4
   },
   "src/renderer/components/agent/ask-dialog.tsx#AskDialog": {
-    "body": 187,
+    "body": 211,
     "params": 0
   },
   "src/renderer/components/agent/inline-approval-card.tsx#InlineApprovalCard": {
-    "body": 201,
+    "body": 206,
     "params": 1
   },
   "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
-    "body": 516,
+    "body": 474,
     "params": 1
   },
-  "src/renderer/components/chat/ChatInput.tsx#handleKeyDown": {
-    "body": 59,
+  "src/renderer/components/chat/ChatInput.tsx#handleSuggestKeyDown": {
+    "body": 41,
     "params": 1
   },
   "src/renderer/components/chat/ChatMessageList.tsx#ChatMessageList": {
-    "body": 289,
+    "body": 296,
     "params": 1
   },
   "src/renderer/components/chat/ChatMessageList.tsx#QuestionJumpBar": {
@@ -196,19 +196,19 @@
     "params": 1
   },
   "src/renderer/components/chat/ChatPanel.tsx#ChatPanel": {
-    "body": 318,
+    "body": 322,
     "params": 1
   },
   "src/renderer/components/chat/GoalBar.tsx#GoalBar": {
-    "body": 46,
+    "body": 48,
     "params": 1
   },
   "src/renderer/components/chat/Markdown.tsx#CodeBlock": {
-    "body": 99,
+    "body": 78,
     "params": 1
   },
   "src/renderer/components/chat/conversation-search-bar.tsx#ConversationSearchBar": {
-    "body": 89,
+    "body": 90,
     "params": 1
   },
   "src/renderer/components/chat/file-change-card.tsx#FileChangeCard": {
@@ -219,12 +219,8 @@
     "body": 76,
     "params": 1
   },
-  "src/renderer/components/chat/message-actions.tsx#MsgActions": {
-    "body": 63,
-    "params": 1
-  },
   "src/renderer/components/chat/message-item.tsx#MessageItem": {
-    "body": 95,
+    "body": 101,
     "params": 1
   },
   "src/renderer/components/chat/message-item.tsx#PartView": {
@@ -235,12 +231,24 @@
     "body": 87,
     "params": 1
   },
+  "src/renderer/components/chat/slash-suggest-panel.tsx#SlashSuggestPanel": {
+    "body": 59,
+    "params": 1
+  },
   "src/renderer/components/chat/use-chat-goals.ts#useChatGoals": {
-    "body": 50,
+    "body": 58,
+    "params": 1
+  },
+  "src/renderer/components/chat/use-composer-drag.ts#handleDragStart": {
+    "body": 42,
     "params": 1
   },
   "src/renderer/components/chat/use-composer-drag.ts#useComposerDrag": {
-    "body": 88,
+    "body": 92,
+    "params": 1
+  },
+  "src/renderer/components/chat/use-composer-input.ts#useComposerInput": {
+    "body": 93,
     "params": 1
   },
   "src/renderer/components/common/AppErrorBoundary.tsx#AppFallback": {
@@ -272,11 +280,11 @@
     "params": 0
   },
   "src/renderer/components/dev/InspectorPanel.tsx#InspectorPanel": {
-    "body": 128,
+    "body": 129,
     "params": 1
   },
   "src/renderer/components/dev/LogsPanel.tsx#LogsPanel": {
-    "body": 106,
+    "body": 107,
     "params": 1
   },
   "src/renderer/components/dev/MetricsPanel.tsx#MetricsGrid": {
@@ -288,7 +296,7 @@
     "params": 1
   },
   "src/renderer/components/dev/browser-pane.tsx#BrowserPane": {
-    "body": 275,
+    "body": 280,
     "params": 0
   },
   "src/renderer/components/file-tree/FileTreeNode.tsx#FileTreeNode": {
@@ -296,11 +304,11 @@
     "params": 1
   },
   "src/renderer/components/file-tree/FileTreePanel.tsx#FileTreePanel": {
-    "body": 146,
+    "body": 145,
     "params": 1
   },
   "src/renderer/components/file-tree/FileViewerPanel.tsx#FileViewerPanel": {
-    "body": 314,
+    "body": 292,
     "params": 0
   },
   "src/renderer/components/file-tree/fuzzy-search-dialog.tsx#FuzzySearchDialog": {
@@ -316,27 +324,27 @@
     "params": 1
   },
   "src/renderer/components/git/file-diff-view.tsx#FileDiffView": {
-    "body": 64,
+    "body": 65,
     "params": 1
   },
   "src/renderer/components/git/file-list.tsx#FileList": {
-    "body": 41,
+    "body": 42,
     "params": 1
   },
   "src/renderer/components/layout/AppShell.tsx#AppShell": {
-    "body": 355,
+    "body": 359,
     "params": 1
   },
   "src/renderer/components/layout/DevPanel.tsx#DevPanel": {
-    "body": 249,
+    "body": 259,
     "params": 1
   },
   "src/renderer/components/layout/Sidebar.tsx#Sidebar": {
-    "body": 477,
+    "body": 499,
     "params": 0
   },
   "src/renderer/components/layout/Topbar.tsx#Topbar": {
-    "body": 87,
+    "body": 100,
     "params": 1
   },
   "src/renderer/components/layout/folder-label.tsx#FolderLabel": {
@@ -344,7 +352,7 @@
     "params": 1
   },
   "src/renderer/components/layout/right-panel-panes.tsx#DiffPane": {
-    "body": 117,
+    "body": 119,
     "params": 1
   },
   "src/renderer/components/layout/right-panel-panes.tsx#InfoPane": {
@@ -352,7 +360,7 @@
     "params": 1
   },
   "src/renderer/components/layout/sidebar-account.tsx#SidebarAccount": {
-    "body": 65,
+    "body": 112,
     "params": 0
   },
   "src/renderer/components/layout/thread-item.tsx#ThreadItem": {
@@ -360,15 +368,15 @@
     "params": 1
   },
   "src/renderer/components/settings/SettingsDialog.tsx#SettingsDialog": {
-    "body": 109,
+    "body": 110,
     "params": 1
   },
   "src/renderer/components/settings/sections/about-section.tsx#AboutSection": {
-    "body": 102,
+    "body": 300,
     "params": 0
   },
   "src/renderer/components/settings/sections/approval-mode-section.tsx#ApprovalModeSection": {
-    "body": 253,
+    "body": 264,
     "params": 0
   },
   "src/renderer/components/settings/sections/browser-section.tsx#BrowserSection": {
@@ -384,7 +392,7 @@
     "params": 1
   },
   "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx#ModelConfigDialog": {
-    "body": 236,
+    "body": 237,
     "params": 1
   },
   "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx#handleSave": {
@@ -392,23 +400,27 @@
     "params": 0
   },
   "src/renderer/components/settings/sections/dialogs/model-config-fields.tsx#ModelConfigFields": {
-    "body": 334,
+    "body": 339,
     "params": 1
   },
+  "src/renderer/components/settings/sections/general-section.tsx#LanguageRow": {
+    "body": 41,
+    "params": 0
+  },
   "src/renderer/components/settings/sections/im-channels-section.tsx#ImChannelsSection": {
-    "body": 167,
+    "body": 169,
     "params": 0
   },
   "src/renderer/components/settings/sections/mcp-section.tsx#McpSection": {
-    "body": 279,
+    "body": 280,
     "params": 0
   },
   "src/renderer/components/settings/sections/models-section.tsx#ModelsSection": {
-    "body": 191,
+    "body": 175,
     "params": 0
   },
   "src/renderer/components/settings/sections/prompt-section.tsx#PromptSection": {
-    "body": 101,
+    "body": 109,
     "params": 1
   },
   "src/renderer/components/settings/sections/remote-control-section.tsx#RemoteControlSection": {
@@ -416,15 +428,15 @@
     "params": 0
   },
   "src/renderer/components/settings/sections/rules-memory-section.tsx#RulesMemorySection": {
-    "body": 120,
+    "body": 127,
     "params": 0
   },
   "src/renderer/components/settings/sections/skills-section.tsx#SkillsSection": {
-    "body": 141,
+    "body": 152,
     "params": 0
   },
   "src/renderer/components/settings/sections/telemetry-section.tsx#TelemetrySection": {
-    "body": 47,
+    "body": 48,
     "params": 0
   },
   "src/renderer/components/settings/sections/turns-section.tsx#TurnsSection": {
@@ -432,7 +444,7 @@
     "params": 0
   },
   "src/renderer/components/settings/sections/usage-section.tsx#UsageSection": {
-    "body": 177,
+    "body": 179,
     "params": 0
   },
   "src/renderer/components/settings/sections/workspace-section.tsx#WorkspaceSection": {
@@ -444,11 +456,11 @@
     "params": 1
   },
   "src/renderer/components/terminal/TerminalPanel.tsx#TerminalPanel": {
-    "body": 132,
+    "body": 131,
     "params": 1
   },
   "src/renderer/components/terminal/TerminalTabs.tsx#TerminalTabs": {
-    "body": 61,
+    "body": 62,
     "params": 1
   },
   "src/renderer/components/terminal/TerminalView.tsx#TerminalView": {
@@ -467,12 +479,16 @@
     "body": 161,
     "params": 1
   },
+  "src/renderer/hooks/use-app-info.ts#useAppInfo": {
+    "body": 41,
+    "params": 0
+  },
   "src/renderer/hooks/use-file-tree-ops.ts#useFileTreeOps": {
-    "body": 59,
+    "body": 63,
     "params": 0
   },
   "src/renderer/hooks/use-file-tree.ts#useFileTree": {
-    "body": 201,
+    "body": 202,
     "params": 1
   },
   "src/renderer/hooks/use-keyboard-shortcuts.ts#useKeyboardShortcuts": {
@@ -503,8 +519,12 @@
     "body": 47,
     "params": 1
   },
+  "src/renderer/routes/home.tsx#FooterContent": {
+    "body": 88,
+    "params": 1
+  },
   "src/renderer/routes/home.tsx#HomePage": {
-    "body": 306,
+    "body": 276,
     "params": 0
   },
   "src/renderer/test/msw-handlers.ts#createMockApi": {
