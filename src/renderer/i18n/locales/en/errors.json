@@ -9,6 +9,7 @@
       "AI_CONTEXT_TOO_LARGE": "Context too long, please simplify",
       "AI_LOOP_DETECTED": "AI loop detected, turn terminated",
       "AI_MODEL_ERROR": "AI model error",
+      "AI_MODEL_NOT_CONFIGURED": "Please configure a model in Settings first",
       "AI_RATE_LIMITED": "AI rate limited, retrying",
       "AI_STREAM_INTERRUPTED": "AI stream interrupted",
       "AI_TIMEOUT": "AI request timeout",

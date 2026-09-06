@@ -9,6 +9,7 @@
       "AI_CONTEXT_TOO_LARGE": "上下文过长，请精简对话",
       "AI_LOOP_DETECTED": "检测到重复生成循环，回合已终止",
       "AI_MODEL_ERROR": "AI 模型错误",
+      "AI_MODEL_NOT_CONFIGURED": "请先在设置中配置模型",
       "AI_RATE_LIMITED": "AI 调用频繁，正在重试",
       "AI_STREAM_INTERRUPTED": "AI 流式响应中断",
       "AI_TIMEOUT": "AI 调用超时",
