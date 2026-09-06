@@ -1,26 +1,10 @@
 // src/renderer/components/chat/ChatInput.tsx
-// 聊天输入框 + 发送 / 停止按钮 · Aurora 设计系统
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 多行文本输入（Enter 发送，Shift+Enter 换行）
-// - 流式状态时显示"停止"按钮，否则显示"发送"按钮
-// - 字符计数（>2000 警告，对齐原型 .char-count）
-// - Esc 中断流式生成（对齐原型 composer-hint "Esc 中断"）
-// - 透传 disabled / placeholder 等原生属性
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - 容器：.composer（顶部渐变 + 底部 padding）
-// - 输入舱：.composer-box（悬浮卡片 + focus 发光 + 上浮）
-// - 文本域：.composer-input（透明背景，focus 时 box 上浮发光）
-// - 工具栏：.composer-bar > .composer-hint + .send-btn / .stop-gen-btn
-// - 发送按钮：.send-btn（双 accent 渐变 + 发光）
-// - 停止按钮：.stop-gen-btn（error 色 + 红色发光）
-// ──────────────────────────────────────────────────────────────
-//
-// 说明：
+// 聊天输入框 + 发送/停止按钮 · Aurora 设计系统
+// ──────────────────────────────────────────────
+// 约束（调用方须知）：
 // - 不在此组件内调用 useChat，所有状态由父组件（ChatPanel）传入
-// - 这样 ChatInput 是纯展示+交互组件，可在测试中独立 mock
-// - sendMessage / stop 回调签名与 useChat 返回值对齐
+// - 纯展示+交互，可在测试中独立 mock；sendMessage/stop 签名与 useChat 返回值对齐
+// ──────────────────────────────────────────────
 
 import { MAX_MESSAGE_LENGTH_CHARS } from '@code-agent/shared/renderer';
 import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
