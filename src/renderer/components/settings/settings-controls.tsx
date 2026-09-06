@@ -10,8 +10,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ReactElement, ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 
 /** 分区小标题 props */
@@ -134,33 +134,25 @@ export interface SegControlProps {
  * 分段控件（互斥选项，对齐原型 .seg-control）
  *
  * 选中项 accent 底 + 深色文字，未选中浅底 + 次级文字。
+ * 2026-09 迁移到 Radix ToggleGroup：获得方向键切换/roving tabindex/
+ * ARIA toggle 语义（此前手写 aria-pressed 无 roving 导航）。
  */
 export function SegControl({ value, options, onChange, className }: SegControlProps): ReactElement {
   return (
-    <fieldset
+    <ToggleGroup
+      type="single"
+      value={value}
+      onValueChange={onChange}
       className={cn(
-        // flex-wrap：窄容器下分段按钮自动折行，避免溢出裁切
-        'border-border m-0 flex min-w-0 flex-wrap overflow-hidden rounded-md border p-0',
+        'flex min-w-0 flex-wrap gap-0 overflow-hidden rounded-md border border-border',
         className,
       )}
     >
       {options.map((opt) => (
-        <Button
-          key={opt.value}
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange(opt.value)}
-          aria-pressed={value === opt.value}
-          className={cn(
-            'shrink border-none px-[11px] py-1 font-mono text-xs',
-            value === opt.value
-              ? 'bg-primary text-primary-foreground font-semibold'
-              : 'bg-card text-muted-foreground hover:text-foreground',
-          )}
-        >
+        <ToggleGroupItem key={opt.value} value={opt.value} className="shrink px-[11px] py-1">
           {opt.label}
-        </Button>
+        </ToggleGroupItem>
       ))}
-    </fieldset>
+    </ToggleGroup>
   );
 }

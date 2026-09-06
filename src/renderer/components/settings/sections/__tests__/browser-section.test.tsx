@@ -27,16 +27,15 @@ describe('BrowserSection 浏览器设置面板', () => {
 
   it('默认值渲染：自适应预设 / 100% 缩放 / 严格沙箱关闭', () => {
     renderSection();
-    expect(screen.getByRole('button', { name: '自适应' }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
-    expect(screen.getByRole('button', { name: '100%' }).getAttribute('aria-pressed')).toBe('true');
+    // SegControl 迁 ToggleGroup：item 是 radio 语义（激活态 data-state=on）
+    expect(screen.getByRole('radio', { name: '自适应' }).getAttribute('data-state')).toBe('on');
+    expect(screen.getByRole('radio', { name: '100%' }).getAttribute('data-state')).toBe('on');
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false');
   });
 
   it('选择设备预设：写入 defaultDevicePreset 并落库', async () => {
     renderSection();
-    await userEvent.click(screen.getByRole('button', { name: '手机' }));
+    await userEvent.click(screen.getByRole('radio', { name: '手机' }));
     expect(useSettingsStore.getState().browser.defaultDevicePreset).toBe('mobile');
     expect(window.api.settings.set).toHaveBeenCalledWith({
       key: 'browser',
@@ -46,7 +45,7 @@ describe('BrowserSection 浏览器设置面板', () => {
 
   it('选择缩放档位：写入 defaultZoom', async () => {
     renderSection();
-    await userEvent.click(screen.getByRole('button', { name: '75%' }));
+    await userEvent.click(screen.getByRole('radio', { name: '75%' }));
     expect(useSettingsStore.getState().browser.defaultZoom).toBe(75);
   });
 
@@ -61,8 +60,8 @@ describe('BrowserSection 浏览器设置面板', () => {
       browser: { defaultDevicePreset: 'tablet', defaultZoom: 150, strictSandbox: true },
     });
     renderSection();
-    expect(screen.getByRole('button', { name: '平板' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: '150%' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('radio', { name: '平板' }).getAttribute('data-state')).toBe('on');
+    expect(screen.getByRole('radio', { name: '150%' }).getAttribute('data-state')).toBe('on');
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
   });
 

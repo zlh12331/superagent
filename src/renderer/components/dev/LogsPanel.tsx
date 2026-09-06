@@ -19,6 +19,7 @@ import { AlertCircle, FileText, RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useLogsReadQuery } from '@/hooks/use-system';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -79,53 +80,52 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
     <div className={cn('flex h-full flex-col', className)}>
       {/* 顶部：工具栏（级别过滤 + 行数 + 刷新）；窄面板（240-480px）下换行而非横向溢出（实测 284px 时统计/刷新被挤出面板） */}
       <div className="border-border bg-muted/30 flex flex-wrap items-center gap-2 border-b px-2 py-1">
-        {/* 级别过滤按钮组 */}
-        <div className="flex items-center gap-0.5">
+        {/* 级别过滤按钮组（单选） */}
+        <ToggleGroup
+          type="single"
+          value={level}
+          onValueChange={(v) => {
+            if (v) setLevel(v as LogLevelFilter);
+          }}
+          className="gap-0.5"
+        >
           {LEVEL_FILTERS.map((filter) => (
-            <Button
+            <ToggleGroupItem
               key={filter.value}
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[9px] font-mono',
-                level === filter.value
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-              )}
-              onClick={() => {
-                setLevel(filter.value);
-              }}
+              value={filter.value}
               disabled={!enabled}
+              className="rounded px-1.5 py-0.5 text-[9px] font-mono"
             >
               {filter.labelKey !== null ? t(filter.labelKey) : filter.label}
-            </Button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
 
         <div className="bg-border mx-0.5 h-3 w-px" />
 
-        {/* 行数选择按钮组 */}
-        <div className="flex items-center gap-0.5">
+        {/* 行数选择按钮组（单选） */}
+        <ToggleGroup
+          type="single"
+          value={String(lines)}
+          onValueChange={(v) => {
+            const parsed = Number(v);
+            if (!Number.isNaN(parsed)) {
+              setLines(parsed as 100 | 200 | 500);
+            }
+          }}
+          className="gap-0.5"
+        >
           {LINE_OPTIONS.map((option) => (
-            <Button
+            <ToggleGroupItem
               key={option}
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[9px] font-mono',
-                lines === option
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-              )}
-              onClick={() => {
-                setLines(option);
-              }}
+              value={String(option)}
               disabled={!enabled}
+              className="rounded px-1.5 py-0.5 text-[9px] font-mono"
             >
               {option}
-            </Button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
 
         {/* 右侧：行数统计 + 刷新按钮 */}
         <div className="ml-auto flex items-center gap-1.5">
