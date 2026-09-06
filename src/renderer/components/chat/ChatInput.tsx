@@ -7,19 +7,19 @@
 // ──────────────────────────────────────────────
 
 import { MAX_MESSAGE_LENGTH_CHARS } from '@code-agent/shared/renderer';
-import { AtSign, FileText, Send, Slash, Square, X } from 'lucide-react';
+import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
 import { useDraftStore } from '@/stores/persistent/draft-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { attachmentName, buildTextWithAttachments, type ChatAttachment } from './attachments';
+import { AttachmentsChips } from './attachments-chips';
+import { SlashSuggestPanel } from './slash-suggest-panel';
 import {
   filterSlashSuggestions,
   findSlashSuggestion,
@@ -28,6 +28,7 @@ import {
 } from './slash-suggestions';
 import { detectSuggestTrigger } from './suggest-trigger';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
+import { useVimMode } from './use-vim-mode';
 
 /** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
 const MAX_MESSAGE_LENGTH = MAX_MESSAGE_LENGTH_CHARS;
@@ -121,9 +122,6 @@ export function ChatInput({
   const { t } = useTranslation();
   // vim 模式（settings.editor.vimMode 真实消费——此前仅存储无行为）
   const vimEnabled = useSettingsStore((s) => s.editor.vimMode);
-  const [vimState, setVimState] = useState<VimState>(INITIAL_VIM_STATE);
-  // vim 编辑/移动后的光标落点（受控 textarea 需在下一次渲染后手动 setSelectionRange）
-  const [pendingCursor, setPendingCursor] = useState<number | null>(null);
   const [internalValue, setInternalValue] = useState(() => {
     // 草稿恢复：非受控 + 有 chatId 时从 draft-store 初始化（对齐参考项目 useDraftStore）
     return (
@@ -157,6 +155,11 @@ export function ChatInput({
     onValueChange?.(next);
   };
 
+  // vim 模式状态机（自 ChatInput 拆出：use-vim-mode.ts）
+  const { vimState, pendingCursor, processKey, clearPendingCursor } = useVimMode({
+    setValue,
+  });
+
   // vim 光标落点：值渲染完成后应用（受控/非受控通用；同时聚焦保持操作连续性）
   useEffect(() => {
     if (pendingCursor === null) return;
@@ -165,8 +168,8 @@ export function ChatInput({
       el.setSelectionRange(pendingCursor, pendingCursor);
       el.focus();
     }
-    setPendingCursor(null);
-  }, [pendingCursor]);
+    clearPendingCursor();
+  }, [pendingCursor, clearPendingCursor]);
 
   /** 自动调整 textarea 高度（对齐原型 input.style.height = 'auto' + scrollHeight）
    *
@@ -443,22 +446,13 @@ export function ChatInput({
       // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
       // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
       if (!isStreamEsc && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        const result = vimHandleKey(
-          vimState,
-          event.key,
+        const consumed = processKey(
+          { key: event.key, selectionStart: event.currentTarget.selectionStart },
           value,
-          event.currentTarget.selectionStart ?? value.length,
         );
-        if (result.type !== 'noop' || vimState.mode === 'normal') {
+        if (consumed) {
           event.preventDefault();
           event.stopPropagation();
-          if (result.type === 'edit' && result.value !== undefined) {
-            setValue(result.value);
-            setPendingCursor(result.cursor ?? 0);
-          } else if (result.type === 'move' && result.cursor !== undefined) {
-            setPendingCursor(result.cursor);
-          }
-          setVimState(result.state);
           return;
         }
       }
@@ -525,85 +519,17 @@ export function ChatInput({
         tabIndex={0}
         {...dragHandleProps}
       />
-      {/* 斜杠/提及建议下拉（照搬参考项目 useSlashSuggest：/ 命令 + @ 文件，位置靠后者触发） */}
-      {suggestOpen && (
-        <div
-          role="listbox"
-          aria-label={t('chat.slashCommand')}
-          aria-activedescendant={`suggest-opt-${suggestIndex}`}
-          tabIndex={-1}
-          // 左对齐 + 紧凑上限：此前 left-0 right-0 w-full 拉伸到输入舱全宽（实测 728px），
-          // 短命令行的 7 行建议面板过宽失衡；长路径（@ 提及）由 truncate + title 处理
-          className="bg-popover text-popover-foreground absolute bottom-full left-0 z-surface mb-2 w-full max-w-sm overflow-hidden rounded-md border shadow-md"
-        >
-          {slashOpen &&
-            filteredSuggestions.map((s, i) => (
-              <Button
-                key={s.command}
-                id={`suggest-opt-${i}`}
-                variant="ghost"
-                size="sm"
-                role="option"
-                aria-selected={i === suggestIndex}
-                onClick={() => applySuggestion(s.command)}
-                className={cn(
-                  'w-full justify-start px-3 py-2 text-left text-sm font-normal',
-                  i === suggestIndex ? 'bg-muted' : 'hover:bg-muted',
-                )}
-              >
-                <Slash className="text-muted-foreground size-3.5 shrink-0" />
-                <span className="font-mono text-xs">{s.command}</span>
-                <span className="text-muted-foreground ml-auto text-xs">{t(s.labelKey)}</span>
-              </Button>
-            ))}
-          {mentionOpen &&
-            mentionFiles.map((filePath, i) => (
-              <Button
-                key={filePath}
-                id={`suggest-opt-${i}`}
-                variant="ghost"
-                size="sm"
-                role="option"
-                aria-selected={i === suggestIndex}
-                onClick={() => applyMention(filePath)}
-                className={cn(
-                  'w-full justify-start px-3 py-2 text-left text-sm font-normal',
-                  i === suggestIndex ? 'bg-muted' : 'hover:bg-muted',
-                )}
-              >
-                <FileText className="text-muted-foreground size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs" title={filePath}>
-                  {filePath}
-                </span>
-              </Button>
-            ))}
-        </div>
-      )}
-      {/* 附件 chip 列表（对齐参考项目 ChatInputAttachments） */}
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pb-1.5">
-          {attachments.map((att) => (
-            <span
-              key={att.path}
-              className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
-            >
-              <FileText className="size-3 shrink-0" />
-              <span className="max-w-40 truncate" title={att.path}>
-                {att.name}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => removeAttachment(att.path)}
-                aria-label={t('common.close')}
-                className="hover:text-foreground size-auto rounded-full"
-              >
-                <X className="size-3" />
-              </Button>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* 斜杠/提及建议下拉（自 ChatInput 拆出：slash-suggest-panel.tsx） */}
+      <SlashSuggestPanel
+        trigger={activeTrigger}
+        slashSuggestions={filteredSuggestions}
+        mentionFiles={mentionFiles}
+        activeIndex={suggestIndex}
+        onSelectCommand={applySuggestion}
+        onSelectFile={applyMention}
+      />
+      {/* 附件 chip 列表（自 ChatInput 拆出：attachments-chips.tsx） */}
+      <AttachmentsChips attachments={attachments} onRemove={removeAttachment} />
       {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光）
           ref 必须绑定：autoResize 依赖 textareaRef 调整高度（此前漏绑定导致多行不增高） */}
       <textarea

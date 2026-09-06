@@ -4,8 +4,8 @@
     "raw": 950
   },
   "src/main/infra/ai/agent/agent-service.ts": {
-    "net": 580,
-    "raw": 907
+    "net": 572,
+    "raw": 904
   },
   "src/main/infra/ai/tools/permission-service.ts": {
     "net": 440,
