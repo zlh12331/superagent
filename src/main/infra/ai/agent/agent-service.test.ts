@@ -21,14 +21,14 @@ import { APICallError } from 'ai';
 import type { WebContents } from 'electron';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SESSION_TITLE, type ISessionService } from '../storage/session-service';
-import type { StartAgentOptions } from './agent/agent-service';
-import type { ConcurrencyGate } from './agent-runtime/concurrency-gate';
-import type { ITitleGenerator } from './knowledge/session-title';
-import type { IPromptService } from './prompt/prompt-service';
-import type { IPermissionService } from './tools/permission-service';
-import type { IToolExecutor } from './tools/tool-executor';
-import type { IToolRegistry } from './tools/tool-registry';
+import { DEFAULT_SESSION_TITLE, type ISessionService } from '../../storage/session-service';
+import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
+import type { ITitleGenerator } from '../knowledge/session-title';
+import type { IPromptService } from '../prompt/prompt-service';
+import type { IPermissionService } from '../tools/permission-service';
+import type { IToolExecutor } from '../tools/tool-executor';
+import type { IToolRegistry } from '../tools/tool-registry';
+import type { StartAgentOptions } from './agent-service';
 
 // vi.mock 会被 hoist，工厂函数内不能引用外部 const
 // 必须用 vi.hoisted 导出 mock 对象
@@ -78,7 +78,7 @@ const mocks = vi.hoisted(() => {
 // mock ../models：modelRegistry.resolve 返回无超时配置（真实单例在测试环境可能带
 // timeoutMs=0 → AbortSignal.timeout(0) 立即中断流，导致活跃会话测试无法挂起）
 // 注意：vi.mock 路径相对测试文件（infra/ai/）解析，models 是同级目录 → './models'
-vi.mock('./models', () => ({
+vi.mock('../models', () => ({
   buildGenerationOptions: mocks.mockGenOptions,
   modelRegistry: {
     resolve: mocks.mockResolveModel,
@@ -95,12 +95,12 @@ vi.mock('ai', async (importOriginal) => {
 });
 
 // mock ai-provider：拦截 getModel
-vi.mock('./llm-client/ai-provider', () => ({
+vi.mock('../llm-client/ai-provider', () => ({
   getModel: mocks.mockGetModel,
 }));
 
 // mock logger
-vi.mock('../../utils/logger', () => ({
+vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
@@ -111,12 +111,12 @@ vi.mock('node:crypto', () => ({
 
 // mock telemetry/otel：拦截 withSpan，避免依赖 OTel 初始化状态
 // 注意：otel 在 infra/telemetry/ 下，相对测试文件（infra/ai/）为 '../telemetry/otel'
-vi.mock('../telemetry/otel', () => ({
+vi.mock('../../telemetry/otel', () => ({
   withSpan: mocks.mockWithSpan,
 }));
 
-import { AgentService } from './agent/agent-service';
-import { TurnRunner } from './agent-runtime/turn-runner';
+import { TurnRunner } from '../agent-runtime/turn-runner';
+import { AgentService } from './agent-service';
 
 /**
  * 创建 mock ReadableStream：按顺序推送 parts 后 close

@@ -2,8 +2,8 @@
 // 命令分类器单测：safe/dangerous/unknown（fail-closed）/ 缓存
 
 import { describe, expect, it, vi } from 'vitest';
-import type { LlmClient } from './llm-client';
-import { CommandClassifier } from './tools/command-classifier';
+import type { LlmClient } from '../llm-client';
+import { CommandClassifier } from './command-classifier';
 
 /** fake LlmClient（手写最小实现，符合无 mock 原则的 fake 注入） */
 function createFakeLlm(output: unknown, throwError = false): LlmClient {

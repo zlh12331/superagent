@@ -2,19 +2,19 @@
 // 技能学习单测：引导模板 + 学习/列出/删除（内存 DB + fake LLM）
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDb, resetDb } from '../storage/db';
-import { createTestDb } from '../storage/test-utils';
-import { buildLearnSkillPrompt, LearnSkillService } from './knowledge/learn-skill-agent';
-import type { LlmClient } from './llm-client/llm-client';
-import { skillRegistry } from './skills/skill-registry';
+import { getDb, resetDb } from '../../storage/db';
+import { createTestDb } from '../../storage/test-utils';
+import type { LlmClient } from '../llm-client/llm-client';
+import { skillRegistry } from '../skills/skill-registry';
+import { buildLearnSkillPrompt, LearnSkillService } from './learn-skill-agent';
 
 // mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
 function createInMemoryDb() {
   return createTestDb();
 }
 
-vi.mock('../storage/db', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../storage/db')>();
+vi.mock('../../storage/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../storage/db')>();
   let memoryDb: ReturnType<typeof createInMemoryDb> | null = null;
   return {
     ...actual,

@@ -2,7 +2,7 @@
 // 钩子注册表单测：注册/取消/阻断/错误隔离
 
 import { describe, expect, it, vi } from 'vitest';
-import { HookEventName, HookRegistry } from './agent/hook-registry';
+import { HookEventName, HookRegistry } from './hook-registry';
 
 describe('HookRegistry', () => {
   it('注册 + 触发：handler 收到上下文', async () => {

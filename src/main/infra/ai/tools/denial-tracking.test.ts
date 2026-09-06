@@ -8,7 +8,7 @@ import {
   recordAllowance,
   recordDenial,
   shouldFallbackToManual,
-} from './tools/denial-tracking';
+} from './denial-tracking';
 
 describe('denial-tracking', () => {
   it('初始状态：全零，不降级', () => {

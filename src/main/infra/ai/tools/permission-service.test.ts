@@ -12,14 +12,14 @@ import { ErrorCode, IPC_CHANNELS } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateApprovalId, PermissionService } from './tools/permission-service';
-import type { Tool } from './tools/tool';
+import { generateApprovalId, PermissionService } from './permission-service';
+import type { Tool } from './tool';
 
 const mocks = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-vi.mock('../../utils/logger', () => ({ logger: mocks.mockLogger }));
+vi.mock('../../../utils/logger', () => ({ logger: mocks.mockLogger }));
 
 // 白名单持久化：测试环境隔离（内存假实现，避免依赖 electron app.getPath）
 const whitelistMocks = vi.hoisted(() => ({
@@ -28,7 +28,7 @@ const whitelistMocks = vi.hoisted(() => ({
   writeWhitelist: vi.fn(async () => {}),
 }));
 
-vi.mock('../storage/whitelist-pref', () => ({
+vi.mock('../../storage/whitelist-pref', () => ({
   readWhitelistSync: whitelistMocks.readWhitelistSync,
   writeWhitelist: whitelistMocks.writeWhitelist,
 }));

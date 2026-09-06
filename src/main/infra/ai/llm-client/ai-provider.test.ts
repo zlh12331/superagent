@@ -82,7 +82,7 @@ vi.mock('@ai-sdk/anthropic', () => ({
 }));
 
 // mock keychain：拦截 getSecret，避免真实文件 IO
-vi.mock('../storage/keychain', () => ({
+vi.mock('../../storage/keychain', () => ({
   getSecret: mocks.mockGetSecret,
 }));
 
@@ -90,18 +90,18 @@ vi.mock('../storage/keychain', () => ({
 vi.mock('electron', () => ({ app: mocks.mockApp }));
 
 // mock logger：避免触发真实 electron-log 初始化
-vi.mock('../../utils/logger', () => ({
+vi.mock('../../../utils/logger', () => ({
   logger: mocks.mockLogger,
 }));
 
+import { ProviderRegistry } from '../providers';
 import {
   getAIProvider,
   getModel,
   getProviderCacheSize,
   resetAIProvider,
   runtimeModelStore,
-} from './llm-client/ai-provider';
-import { ProviderRegistry } from './providers';
+} from './ai-provider';
 
 describe('ai-provider', () => {
   beforeEach(() => {
