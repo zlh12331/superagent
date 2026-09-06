@@ -89,6 +89,7 @@ const OWNED_CSS_BUTTON_CLASSES = [
   'scroll-to-bottom',
   'jump-item',
   'ask-option',
+  'fuzzy-result',
 ];
 
 interface Violation {

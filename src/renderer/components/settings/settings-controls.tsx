@@ -10,6 +10,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ReactElement, ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
@@ -144,20 +145,21 @@ export function SegControl({ value, options, onChange, className }: SegControlPr
       )}
     >
       {options.map((opt) => (
-        <button
+        <Button
           key={opt.value}
-          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
           className={cn(
-            'shrink cursor-pointer border-none px-[11px] py-1 font-mono text-xs transition-colors',
+            'shrink border-none px-[11px] py-1 font-mono text-xs',
             value === opt.value
               ? 'bg-primary text-primary-foreground font-semibold'
               : 'bg-card text-muted-foreground hover:text-foreground',
           )}
         >
           {opt.label}
-        </button>
+        </Button>
       ))}
     </fieldset>
   );

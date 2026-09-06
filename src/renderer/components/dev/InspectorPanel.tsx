@@ -16,6 +16,7 @@
 import type { OpenDevToolsRes } from '@code-agent/shared/renderer';
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -128,11 +129,12 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
               const Icon = btn.icon;
               const isLoading = loadingMode === btn.mode;
               return (
-                <button
+                <Button
                   key={btn.mode}
-                  type="button"
+                  variant="outline"
+                  size="sm"
                   className={cn(
-                    'flex items-center gap-1 rounded border px-2 py-1 text-2xs font-mono transition-colors',
+                    'gap-1 rounded border px-2 py-1 text-2xs font-mono',
                     'border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                     isLoading && 'opacity-50',
                   )}
@@ -144,7 +146,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
                 >
                   <Icon className="size-2.5" strokeWidth={1.5} />
                   {t(`dev.${btn.labelKey}`)}
-                </button>
+                </Button>
               );
             })}
           </div>

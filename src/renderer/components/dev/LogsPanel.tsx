@@ -82,11 +82,12 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         {/* 级别过滤按钮组 */}
         <div className="flex items-center gap-0.5">
           {LEVEL_FILTERS.map((filter) => (
-            <button
+            <Button
               key={filter.value}
-              type="button"
+              variant="ghost"
+              size="sm"
               className={cn(
-                'rounded px-1.5 py-0.5 text-[9px] font-mono transition-colors',
+                'rounded px-1.5 py-0.5 text-[9px] font-mono',
                 level === filter.value
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
@@ -97,7 +98,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
               disabled={!enabled}
             >
               {filter.labelKey !== null ? t(filter.labelKey) : filter.label}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -106,11 +107,12 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         {/* 行数选择按钮组 */}
         <div className="flex items-center gap-0.5">
           {LINE_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option}
-              type="button"
+              variant="ghost"
+              size="sm"
               className={cn(
-                'rounded px-1.5 py-0.5 text-[9px] font-mono transition-colors',
+                'rounded px-1.5 py-0.5 text-[9px] font-mono',
                 lines === option
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
@@ -121,7 +123,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
               disabled={!enabled}
             >
               {option}
-            </button>
+            </Button>
           ))}
         </div>
 
