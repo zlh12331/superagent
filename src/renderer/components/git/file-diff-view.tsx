@@ -24,6 +24,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/i18n/use-translation';
@@ -62,9 +63,10 @@ export function FileDiffView({
     <div className="border-border bg-muted/20 flex h-40 flex-col border-t">
       {/* 标题栏：折叠按钮 + 文件名 + 增删统计 */}
       <div className="border-border flex items-center justify-between border-b px-2 py-1">
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 items-center gap-1 text-2xs transition-colors"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground h-auto min-w-0 flex-1 justify-start gap-1 px-0 text-2xs"
           onClick={() => {
             setExpanded((prev) => !prev);
           }}
@@ -76,7 +78,7 @@ export function FileDiffView({
             <ChevronRight className="size-3 shrink-0" strokeWidth={1.5} />
           )}
           <span className="font-mono truncate">{basename}</span>
-        </button>
+        </Button>
 
         {/* 增删统计（diff-match-patch 语义统计优先，回退主进程文本统计） */}
         {stats !== null && (

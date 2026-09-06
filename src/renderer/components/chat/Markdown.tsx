@@ -22,6 +22,7 @@ import { Check, Copy } from 'lucide-react';
 import { type ComponentPropsWithoutRef, type ReactElement, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Button } from '@/components/ui/button';
 import { useCopy } from '@/hooks/use-copy';
 import { useTranslation } from '@/i18n/use-translation';
 import { ensureLangLoaded, getHighlighter, normalizeLang } from '@/lib/highlight';
@@ -199,10 +200,11 @@ function CodeBlock({
         <span className="text-muted-foreground font-mono text-[10px] tracking-wider uppercase">
           {normalizedLang}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           className={cn(
-            'text-muted-foreground hover:text-foreground absolute top-2 right-2 flex size-6 cursor-pointer items-center justify-center rounded transition-all duration-200',
+            'text-muted-foreground hover:text-foreground absolute top-2 right-2 size-6 hover:bg-transparent',
             copied && 'text-accent',
             'opacity-0 group-hover:opacity-100',
           )}
@@ -211,7 +213,7 @@ function CodeBlock({
           title={copied ? t('common.copied') : t('common.copyCode')}
         >
           {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-        </button>
+        </Button>
       </div>
       {/* 高亮区（overflow-x-auto 防长行溢出） */}
       <div className="overflow-x-auto">

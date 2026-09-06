@@ -13,7 +13,7 @@
 
 import { Check, ExternalLink, Languages, Monitor, Moon, Settings, Sun, User } from 'lucide-react';
 import type { ReactElement } from 'react';
-
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,9 +62,9 @@ export function SidebarAccount(): ReactElement {
     <div className="sidebar-foot">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/50 focus:outline-none"
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted/50 focus:outline-none"
             aria-label={t('sidebar.accountMenu')}
           >
             <span className="avatar" aria-hidden="true">
@@ -74,7 +74,7 @@ export function SidebarAccount(): ReactElement {
               <span className="uname">{t('sidebar.notLoggedIn')}</span>
               <span className="uemail">local-user</span>
             </span>
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-48">
           <DropdownMenuLabel>{t('sidebar.accountMenu')}</DropdownMenuLabel>

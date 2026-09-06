@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
+import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -173,15 +174,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
 
         {/* 头部（左上角返回按钮；右侧预留窗口控件 overlay 区 140px 透明拖拽） */}
         <div className="bg-muted/50 flex shrink-0 items-center gap-2.5 border-b px-[18px] py-3.5">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onOpenChange(false)}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground h-9 gap-1.5 rounded-lg px-3 text-sm"
             aria-label={t('settings.back')}
           >
             <ArrowLeft className="size-4" strokeWidth={2} />
             {t('settings.back')}
-          </button>
+          </Button>
           <SettingsIcon className="text-primary size-4" strokeWidth={1.5} />
           <span className="text-foreground text-sm font-semibold">{t('settings.title')}</span>
           <span className="text-muted-foreground font-mono text-xs">{t('settings.desc')}</span>

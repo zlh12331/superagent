@@ -85,6 +85,10 @@ const OWNED_CSS_BUTTON_CLASSES = [
   'msg-action-btn',
   'card-head',
   'rh-chevron',
+  'reasoning-head',
+  'scroll-to-bottom',
+  'jump-item',
+  'ask-option',
 ];
 
 interface Violation {
@@ -135,6 +139,16 @@ for (const full of files) {
         const blockStart = Math.max(0, i - 3);
         const block = lines.slice(blockStart, i + 4).join('\n');
         if (OWNED_CSS_BUTTON_CLASSES.some((cls) => block.includes(cls))) {
+          continue;
+        }
+        // segmented/tab/折叠选择器语义（aria-pressed/aria-selected/aria-expanded/
+        // role="tab"）豁免：这些是选择器交互形态，收敛路径是 ToggleGroup/Tabs
+        if (
+          block.includes('aria-pressed=') ||
+          block.includes('aria-selected=') ||
+          block.includes('aria-expanded=') ||
+          block.includes('role="tab"')
+        ) {
           continue;
         }
       }

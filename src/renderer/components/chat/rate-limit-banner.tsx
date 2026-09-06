@@ -11,6 +11,7 @@
 import { AlertTriangle, X } from 'lucide-react';
 import { type ReactElement, useEffect } from 'react';
 import { Alert, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { isRateLimitExpired, useRateLimitStore } from '@/stores/transient/rate-limit-store';
 
@@ -45,15 +46,16 @@ export function RateLimitBanner(): ReactElement | null {
       {/* 单行形态（用户要求）：标题与关闭按钮同行，× 在行尾 */}
       <AlertTitle className="font-mono text-xs flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate">{t('chat.rateLimited')}</span>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={dismiss}
           aria-label={t('common.close')}
           title={t('common.close')}
-          className="text-warn-text flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors hover:bg-[var(--amber)]/15"
+          className="text-warn-text size-4 shrink-0 hover:bg-[var(--amber)]/15"
         >
           <X className="size-3" strokeWidth={2.5} />
-        </button>
+        </Button>
       </AlertTitle>
     </Alert>
   );

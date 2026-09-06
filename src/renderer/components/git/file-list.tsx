@@ -23,6 +23,7 @@
 
 import type { GitFileStatus } from '@code-agent/shared/renderer';
 import type { ReactElement } from 'react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -52,10 +53,11 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
 
         return (
           <li key={file.path}>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               className={cn(
-                'hover:bg-accent/50 flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left transition-colors',
+                'hover:bg-accent/50 w-full justify-start gap-1.5 rounded px-1.5 py-1 text-left font-normal',
                 isSelected && 'bg-accent/70',
               )}
               onClick={() => {
@@ -73,7 +75,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
                 {file.path}
               </span>
               <span className={cn('text-[9px] shrink-0', colorClass)}>{label}</span>
-            </button>
+            </Button>
           </li>
         );
       })}

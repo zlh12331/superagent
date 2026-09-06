@@ -204,12 +204,13 @@ export function AskDialog(): ReactElement | null {
                   {q.options.map((opt, optIndex) => {
                     const selected = answers[qIndex]?.selectedIndexes.includes(optIndex) ?? false;
                     return (
-                      <button
+                      <Button
                         key={`${askId}-${q.question}-${opt.label}`}
-                        type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => toggleOption(qIndex, optIndex)}
                         className={cn(
-                          'group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
+                          'group relative w-full justify-start gap-2.5 rounded-lg border px-3 py-2 text-left text-xs font-normal',
                           selected
                             ? 'bg-primary/10 border-primary/40'
                             : 'border-border bg-background hover:bg-muted/40',
@@ -241,7 +242,7 @@ export function AskDialog(): ReactElement | null {
                             </span>
                           )}
                         </span>
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>

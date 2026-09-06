@@ -264,9 +264,10 @@ export function AboutSection(): ReactElement {
         </InfoRow>
         <InfoRow label={t('settings.aboutBuildCommit')}>
           {info?.commitSha !== undefined ? (
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded font-mono transition-colors"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground h-auto gap-1 rounded px-0 font-mono"
               aria-label={t('settings.aboutCopy')}
               title={t('settings.aboutCopy')}
               onClick={() => void copyText(info.commitSha ?? '')}
@@ -277,7 +278,7 @@ export function AboutSection(): ReactElement {
               ) : (
                 <Clipboard className="size-3" strokeWidth={1.5} />
               )}
-            </button>
+            </Button>
           ) : (
             <span className="text-muted-foreground font-mono">-</span>
           )}

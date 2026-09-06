@@ -10,6 +10,7 @@
 import { Terminal as TerminalIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import type { TerminalMeta } from '@/stores/transient/terminal-store';
@@ -75,10 +76,11 @@ export function TerminalTabs({
             <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-[11px]">
               {terminal.title}
             </span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon"
               className={cn(
-                'text-muted-foreground hover:bg-destructive/15 hover:text-destructive ml-0.5 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[3px] border-none bg-transparent text-[14px] leading-none transition-colors',
+                'text-muted-foreground hover:bg-destructive/15 hover:text-destructive ml-0.5 size-4 shrink-0 rounded-[3px] text-[14px] leading-none',
                 isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
               )}
               onClick={(e) => {
@@ -89,7 +91,7 @@ export function TerminalTabs({
               title={t('terminal.closeTerminal')}
             >
               ×
-            </button>
+            </Button>
           </div>
         );
       })}

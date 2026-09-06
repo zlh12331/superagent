@@ -11,6 +11,7 @@ import { Check, Pencil, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 
 import type { ChatGoalView } from './use-chat-goals';
@@ -60,24 +61,26 @@ export function GoalBar({ goal, isCompleted, onEdit, onClear }: GoalBarProps): R
         {goal.condition}
       </span>
       <div className="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground size-6"
           title={t('chat.goalEdit')}
           aria-label={t('chat.goalEdit')}
           onClick={onEdit}
         >
           <Pencil className="size-3" />
-        </button>
-        <button
-          type="button"
-          className="text-muted-foreground hover:bg-destructive/15 hover:text-error-text flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:bg-destructive/15 hover:text-error-text size-6"
           title={t('chat.goalClear')}
           aria-label={t('chat.goalClear')}
           onClick={onClear}
         >
           <Trash2 className="size-3" />
-        </button>
+        </Button>
       </div>
     </div>
   );

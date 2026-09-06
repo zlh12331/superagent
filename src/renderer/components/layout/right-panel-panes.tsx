@@ -12,6 +12,7 @@ import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'luci
 import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -277,10 +278,11 @@ export function DiffPane({
       {changes.map((change) => (
         <li key={change.id} className="flex flex-col gap-0.5">
           <div className="flex items-center gap-1">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-border bg-muted/30 hover:bg-muted/60 h-auto w-full justify-start gap-2 rounded border px-2 py-1.5 text-left font-normal"
               onClick={() => toggleChange(change.id, change.path)}
-              className="border-border bg-muted/30 hover:bg-muted/60 flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
               aria-expanded={expanded.has(change.id)}
             >
               {expanded.has(change.id) ? (
@@ -302,17 +304,18 @@ export function DiffPane({
               >
                 {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}
               </Badge>
-            </button>
+            </Button>
             {/* 打开文件（合并自原"文件"tab 的快速打开场景） */}
-            <button
-              type="button"
-              className="hover:bg-muted text-muted-foreground flex shrink-0 cursor-pointer items-center rounded p-1.5 transition-colors"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-muted text-muted-foreground size-6 p-1.5"
               title={t('panel.openFile')}
               aria-label={t('panel.openFile')}
               onClick={() => openFile(change.path)}
             >
               <ExternalLink className="size-3" strokeWidth={1.5} />
-            </button>
+            </Button>
           </div>
           {/* 行级 diff（展开态；useGitDiffQuery → UnifiedDiffView 双栏渲染） */}
           {expanded.has(change.id) && (
