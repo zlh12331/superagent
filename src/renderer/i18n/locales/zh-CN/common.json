@@ -273,7 +273,8 @@
       "whitelistHint": "有效期内同一操作自动放行，过期后重新询问",
       "editResubmit": "编辑后重提",
       "skip": "跳过",
-      "skipped": "已跳过"
+      "skipped": "已跳过",
+      "responseFailed": "审批响应发送失败，请重试"
     },
     "settings": {
       "hideApiKey": "隐藏 API Key",
@@ -574,7 +575,13 @@
       "usageTotal": "累计",
       "usageHeatmap": "消耗热力图（近 90 天）",
       "usageHeatmapHint": "色深 = 当日消耗量；悬停查看日期与数值",
-      "usageCalls": "总调用次数"
+      "usageCalls": "总调用次数",
+      "imAllowedGroupsTitle": "允许执行的群聊",
+      "imAllowedGroupsHint": "私聊默认放行；群聊需登记 `渠道:会话ID` 后才执行（防群内任意成员驱动 agent）",
+      "imAllowedGroupsPlaceholder": "telegram:123456789",
+      "imAllowedGroupsSave": "保存",
+      "imAllowedGroupsSaved": "允许列表已保存",
+      "imAllowedGroupsFailed": "允许列表保存失败"
     },
     "home": {
       "justNow": "刚刚",

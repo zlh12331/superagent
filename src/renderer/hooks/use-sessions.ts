@@ -28,8 +28,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { toast } from 'sonner';
-
-import { unwrap } from '@/lib/ipc';
+import { useErrorMessage } from '@/i18n/use-translation';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 
 /**
  * Query key 常量（避免手写字符串导致 typo）
@@ -293,12 +293,33 @@ export function useCreateSession() {
 }
 
 /**
+ * 把某会话的 pinned 写入分页缓存（模块级纯函数：从 onMutate 提取）
+ *
+ * @returns 新缓存；old 为 undefined 时原样返回
+ */
+function applyPinnedToCache(
+  old: InfiniteData<SessionListData> | undefined,
+  id: string,
+  pinned: boolean,
+): InfiniteData<SessionListData> | undefined {
+  if (old === undefined) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      sessions: page.sessions.map((s) => (s.id === id ? { ...s, pinned } : s)),
+    })),
+  };
+}
+
+/**
  * 置顶/取消置顶会话 mutation hook（对齐参考项目 pinned-header 分组）
  *
  * 调用 session:pin IPC，成功后 invalidate sessions 列表缓存（置顶会话排序在前）。
  */
 export function usePinSession() {
   const queryClient = useQueryClient();
+  const { getErrorMessage } = useErrorMessage();
 
   return useMutation({
     mutationFn: async (params: { id: string; pinned: boolean }) => {
@@ -310,21 +331,22 @@ export function usePinSession() {
     // 成功后再 invalidate 兜底重拉对齐服务端排序
     onMutate: async (params) => {
       await queryClient.cancelQueries({ queryKey: SESSIONS_QUERY_KEY });
+      // 快照用于失败回滚（2026-09-08 修复：此前不返回 context，
+      // IPC 失败时乐观值留在缓存里，置顶状态与 SQLite 不一致且用户无感知）
+      const prev = queryClient.getQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY);
       queryClient.setQueryData(
         SESSIONS_QUERY_KEY,
-        (old: InfiniteData<SessionListData> | undefined) => {
-          if (old === undefined) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              sessions: page.sessions.map((s) =>
-                s.id === params.id ? { ...s, pinned: params.pinned } : s,
-              ),
-            })),
-          };
-        },
+        (old: InfiniteData<SessionListData> | undefined) =>
+          applyPinnedToCache(old, params.id, params.pinned),
       );
+      return { prev };
+    },
+    onError: (error, _params, context) => {
+      // 回滚乐观更新，恢复原列表
+      if (context?.prev !== undefined) {
+        queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
+      }
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
     },
     // 最终一致：无论成败都触发重新拉取（置顶分组重排）
     onSettled: () => {

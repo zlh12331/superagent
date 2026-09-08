@@ -24,6 +24,19 @@ interface MemoryEntry {
 /** 记忆查询 key 工厂（按会话隔离） */
 const MEMORY_QUERY_KEY = (sessionId: string) => ['memory', 'list', sessionId] as const;
 
+/**
+ * 清空会话记忆（模块级：从组件提取以保持函数体精简）
+ *
+ * 主进程在引擎不可用时返回 `{ ok: false }`（不是 `{ error }`），
+ * 因此必须显式检查 ok 并抛错，否则清除失败会被当作成功提示。
+ */
+async function clearMemoryOrThrow(sessionId: string): Promise<void> {
+  const res = unwrap(await window.api.memory.clear({ sessionId }));
+  if (!res.ok) {
+    throw new Error('memory clear failed');
+  }
+}
+
 /** 规则与记忆 pane */
 export function RulesMemorySection(): ReactElement {
   const { t } = useTranslation();
@@ -64,7 +77,7 @@ export function RulesMemorySection(): ReactElement {
       if (activeSessionId === null) {
         return;
       }
-      await window.api.memory.clear({ sessionId: activeSessionId });
+      await clearMemoryOrThrow(activeSessionId);
     },
     onSuccess: () => {
       toast.success(t('settings.memoryCleared'));

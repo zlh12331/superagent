@@ -13,6 +13,7 @@ import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
@@ -34,6 +35,24 @@ export interface InlineApprovalCardProps {
    * 对齐参考项目 P2-10：命令编辑后重新提交。
    */
   readonly onEditResubmit?: (command: string) => void;
+}
+
+/**
+ * 发送审批响应（模块级：从组件提取以保持函数体精简）
+ *
+ * @returns 是否成功（失败由调用方 toast，主进程侧 5 分钟超时兜底仍生效）
+ */
+async function sendApprovalResponse(
+  approvalId: string,
+  approved: boolean,
+  rememberDecision: boolean,
+): Promise<boolean> {
+  try {
+    unwrap(await window.api.agent.approvalResponse({ approvalId, approved, rememberDecision }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -92,11 +111,10 @@ export function InlineApprovalCard({
     if (typeof window === 'undefined' || window.api === undefined) {
       return;
     }
-    await window.api.agent.approvalResponse({
-      approvalId: item.id,
-      approved,
-      rememberDecision,
-    });
+    const ok = await sendApprovalResponse(item.id, approved, rememberDecision);
+    if (!ok) {
+      toast.error(t('approval.responseFailed'));
+    }
   };
 
   const Icon = getIconForType(item.type);

@@ -273,7 +273,8 @@
       "whitelistHint": "Auto-approve this exact operation within the validity period; asks again after it expires",
       "editResubmit": "Edit & resubmit",
       "skip": "Skip",
-      "skipped": "Skipped"
+      "skipped": "Skipped",
+      "responseFailed": "Failed to send approval response. Please retry."
     },
     "settings": {
       "hideApiKey": "Hide API Key",
@@ -574,7 +575,13 @@
       "usageTotal": "Total",
       "usageHeatmap": "Usage heatmap (90 days)",
       "usageHeatmapHint": "Darker = more tokens that day; hover for details",
-      "usageCalls": "Total calls"
+      "usageCalls": "Total calls",
+      "imAllowedGroupsTitle": "Allowed groups",
+      "imAllowedGroupsHint": "Direct messages are allowed by default. Groups must be listed as `channel:chatId` before the agent will execute (prevents any group member from driving the agent).",
+      "imAllowedGroupsPlaceholder": "telegram:123456789",
+      "imAllowedGroupsSave": "Save",
+      "imAllowedGroupsSaved": "Allowlist saved",
+      "imAllowedGroupsFailed": "Failed to save allowlist"
     },
     "home": {
       "justNow": "Just now",

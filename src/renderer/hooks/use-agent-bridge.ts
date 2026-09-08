@@ -42,6 +42,14 @@ function handleSessionEnd(sessionId: string): void {
     // session:getUsageSummary（queryKey ['usage','summary']），回合结束
     // 不失效则展示过期数据。前缀匹配覆盖 summary 及其派生 key。
     void queryClient.invalidateQueries({ queryKey: ['usage'] });
+    // 2026-09-08 修复：回合内 git/file/turns 的写入此前无人失效——
+    // Agent 通过 git_add/git_commit 改动工作区后 GitPanel（staleTime 10s）不刷新；
+    // write_file/edit_file 落盘后已打开的文件面板（staleTime 30s）显示旧内容；
+    // 设置页回合记录（['turns','recent']）从定义起无任何失效点，永远等 gc。
+    // 前缀匹配：['git',...] / ['file',...] / ['turns',...]。
+    void queryClient.invalidateQueries({ queryKey: ['git'] });
+    void queryClient.invalidateQueries({ queryKey: ['file'] });
+    void queryClient.invalidateQueries({ queryKey: ['turns'] });
   }
 
   // 2. L2 清理：审批缓冲 + 提问弹窗（对齐 turn_done 清空原则）
