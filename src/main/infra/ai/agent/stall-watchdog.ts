@@ -146,6 +146,11 @@ export class StallWatchdog {
       return await dispatch(controller.signal, bridged);
     } finally {
       clearInterval(timer);
+      // 2026-09-08 修复：父 signal 监听此前从不移除——每次 guard 都会在
+      // 长生命周期的父 signal 上遗留一个监听器（重试次数 × 调用次数无界累积）。
+      if (parentSignal !== undefined) {
+        parentSignal.removeEventListener('abort', parentListener);
+      }
     }
   }
 }

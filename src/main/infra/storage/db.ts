@@ -227,25 +227,46 @@ interface RecoveryOutcome {
 /**
  * 数据库损坏自愈（quick_check 失败 → 恢复/重建）
  *
- * @param sqlite 当前（已打开但可能损坏的）连接
+ * @param sqlite 当前（已打开但可能损坏的）连接；打开阶段即失败时传 null
  * @param dbPath 数据库文件路径
  * @returns 可用连接 + 结论状态（healthy 时原样返回入参连接）
  *
  * 策略：
- * 1. quick_check 通过 → 返回 null（健康，不动作）
+ * 1. quick_check 通过 → 返回 healthy（健康，不动作）
  * 2. 损坏 → 从最近健康备份恢复并重开连接（返回新连接，走默认 pragma）
  * 3. 无健康备份 → 将损坏文件归档为 *.corrupt-<ts>（保留诊断），重建空库保启动
  *    （对齐 VS Code 设置损坏重建语义：丢数据但应用可继续用）
+ *
+ * 2026-09-08 安全/可靠性修复（P0）：入参允许 null。
+ * 此前 initDb 先 `applyDefaultPragmas`（内含 `journal_mode = WAL`）再调本函数，
+ * 而文件头损坏/截断/非 SQLite 文件时 `new Database` 能成功打开、`journal_mode`
+ * 却直接抛 `file is not a database`——initDb 在 pragma 处就抛出，
+ * 永远走不到自愈分支，三份备份形同虚设（用户表现为「应用打不开」）。
+ * 现在打开/pragma 阶段的失败会被捕获并转入本函数（sqlite=null 表示连接不可用）。
  */
-function restoreCorruptDatabase(sqlite: Database.Database, dbPath: string): RecoveryOutcome {
-  const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
-  const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
-  if (healthy) {
-    logger.info({}, 'SQLite 完整性校验通过');
-    return { sqlite, status: 'healthy' };
+function restoreCorruptDatabase(sqlite: Database.Database | null, dbPath: string): RecoveryOutcome {
+  if (sqlite !== null) {
+    let integrity: unknown;
+    try {
+      integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
+    } catch (error) {
+      // 打开后 pragma 即失败（文件头损坏）→ 等同完整性校验失败
+      integrity = error instanceof Error ? error.message : String(error);
+    }
+    const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
+    if (healthy) {
+      logger.info({}, 'SQLite 完整性校验通过');
+      return { sqlite, status: 'healthy' };
+    }
+    logger.error({ result: integrity }, 'SQLite 完整性校验失败，进入损坏自愈流程');
+    try {
+      sqlite.close();
+    } catch {
+      // 连接已损坏时 close 可能抛错，忽略（下面会重开）
+    }
+  } else {
+    logger.error({ dbPath }, '数据库打开阶段失败，进入损坏自愈流程');
   }
-  logger.error({ result: integrity }, 'SQLite 完整性校验失败，进入损坏自愈流程');
-  sqlite.close();
 
   if (tryRestoreFromBackup(dbPath)) {
     const reopened = new Database(dbPath);
@@ -264,6 +285,14 @@ function restoreCorruptDatabase(sqlite: Database.Database, dbPath: string): Reco
       { error: error instanceof Error ? error.message : String(error) },
       '损坏数据库归档失败，直接重建',
     );
+  }
+  // 归档失败时旧文件仍在，WAL/SHM 伴随文件也可能残留脏页 → 一并清理
+  for (const suffix of ['-wal', '-shm']) {
+    try {
+      rmSync(`${dbPath}${suffix}`, { force: true });
+    } catch {
+      // 清理失败不阻断重建
+    }
   }
   const fresh = new Database(dbPath);
   restrictFilePermissions(dbPath);
@@ -385,6 +414,40 @@ function resolveMigrationsDir(): string {
 }
 
 /**
+ * 打开连接并应用默认 pragma（2026-09-08 提取）
+ *
+ * 从 initDb 抽出，一是让 initDb 保持可读（函数体门禁 ≤40 行），
+ * 二是把「打开阶段可能失败」这一事实封装在单点：
+ * 文件头损坏/截断/非 SQLite 文件时 `new Database` 能成功打开，但
+ * `journal_mode = WAL` 会抛 `file is not a database`。返回 null 表示
+ * 连接不可用，由调用方交给 restoreCorruptDatabase 自愈。
+ *
+ * @returns 可用连接；打开或 pragma 阶段失败返回 null
+ */
+function openWithDefaultPragmas(dbPath: string): Database.Database | null {
+  let sqlite: Database.Database | null = null;
+  try {
+    sqlite = new Database(dbPath);
+    // 安全修复：限制数据库文件权限为仅属主可读写（含后续 WAL/SHM 伴随文件）
+    restrictFilePermissions(dbPath);
+    // 统一默认 pragma（WAL / 外键 / busy_timeout / synchronous）
+    applyDefaultPragmas(sqlite, dbPath);
+    return sqlite;
+  } catch (openError: unknown) {
+    logger.error(
+      { dbPath, error: openError instanceof Error ? openError.message : String(openError) },
+      '数据库打开/pragma 失败，转入损坏自愈流程',
+    );
+    try {
+      sqlite?.close();
+    } catch {
+      // 已损坏连接的 close 可能失败，忽略
+    }
+    return null;
+  }
+}
+
+/**
  * 初始化数据库
  *
  * 流程：
@@ -394,10 +457,12 @@ function resolveMigrationsDir(): string {
  * 4. 创建 drizzle 实例
  * 5. 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生，幂等）
  *
- * 启动顺序（2026-09-06 审计修复）：
+ * 启动顺序（2026-09-06 审计修复，2026-09-08 加固）：
  * - **先损坏自愈再 VACUUM**：损坏库上任何写操作（含 VACUUM）都会先抛
  *   SQLITE_CORRUPT，把 auto_vacuum 转换放在前面会让自愈永远走不到
  *   （auto_vacuum=NONE 的老库一旦损坏 = 每次启动即死，健康备份形同虚设）
+ * - **打开/pragma 失败也转入自愈**：文件头损坏时 `journal_mode = WAL` 会抛
+ *   `file is not a database`，若不让该异常进入自愈流程，备份将永远用不上
  * - **迁移成功后才调度备份**：空库被备份会按时间戳挤掉轮转环里唯一健康的恢复点
  *
  * @returns drizzle 实例（后续 SessionService 使用）
@@ -414,17 +479,9 @@ export function initDb(): DrizzleDB {
 
   logger.info({ dbPath }, '初始化 SQLite 数据库');
 
-  // 打开 SQLite 连接（同步）
-  // better-sqlite3 是同步驱动，所有操作都是阻塞的，适合 Electron 主进程
-  let sqlite: Database.Database = new Database(dbPath);
-  // 安全修复：限制数据库文件权限为仅属主可读写（含后续 WAL/SHM 伴随文件）
-  restrictFilePermissions(dbPath);
-  // 统一默认 pragma（WAL / 外键 / busy_timeout / synchronous）
-  applyDefaultPragmas(sqlite, dbPath);
-
-  // 启动顺序见函数头注释：自愈 → auto_vacuum → 迁移 → 备份
-  const recovery = restoreCorruptDatabase(sqlite, dbPath);
-  sqlite = recovery.sqlite;
+  // 打开连接（打开/pragma 失败降级为 null，交由自愈流程处理）
+  const recovery = restoreCorruptDatabase(openWithDefaultPragmas(dbPath), dbPath);
+  const sqlite = recovery.sqlite;
   // 空间回收前提：一次性 VACUUM 必须在启动备份之前（否则与在途热备份抢同一份页）
   ensureIncrementalAutoVacuum(sqlite);
 

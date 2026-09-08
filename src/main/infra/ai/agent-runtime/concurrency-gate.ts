@@ -55,6 +55,46 @@ export function createGateAbortError(): Error {
 }
 
 /**
+ * 入队等待槽位（模块级，从 createConcurrencyGate 提取以保持其函数体精简）
+ *
+ * 含 abort 竞态修复（2026-09-08）：注册监听后复查 signal.aborted——
+ * 首次检查与注册之间存在窗口，若 signal 在窗口内 abort，监听器不会再触发，
+ * 条目会滞留队列直到被 dequeue 后照常放行（中断语义被违反）。
+ *
+ * @param queue FIFO 队列（调用方持有）
+ * @param sessionId 会话标识
+ * @param signal 中断信号（可选）
+ */
+function enqueueGateEntry(
+  queue: GateEntry[],
+  sessionId: string,
+  signal: AbortSignal | undefined,
+): Promise<() => void> {
+  return new Promise<() => void>((resolve, reject) => {
+    const entry: GateEntry = {
+      sessionId,
+      resolve,
+      reject,
+      signal,
+      onAbort: () => {
+        const index = queue.indexOf(entry);
+        if (index >= 0) {
+          queue.splice(index, 1);
+          reject(createGateAbortError());
+        }
+      },
+    };
+    // 排队期间 abort：移除队列并拒绝（让位给后续会话）
+    signal?.addEventListener('abort', entry.onAbort, { once: true });
+    queue.push(entry);
+    // 注册后复查：命中则立即出队拒绝
+    if (signal?.aborted === true) {
+      entry.onAbort();
+    }
+  });
+}
+
+/**
  * 创建并发槽位门
  *
  * @param maxConcurrent 最大同时执行回合数（必须为正整数）
@@ -114,24 +154,7 @@ export function createConcurrencyGate(maxConcurrent: number): ConcurrencyGate {
         return Promise.resolve(createRelease());
       }
       // 排队等待（FIFO）
-      return new Promise<() => void>((resolve, reject) => {
-        const entry: GateEntry = {
-          sessionId,
-          resolve,
-          reject,
-          signal,
-          onAbort: () => {
-            const index = queue.indexOf(entry);
-            if (index >= 0) {
-              queue.splice(index, 1);
-              reject(createGateAbortError());
-            }
-          },
-        };
-        // 排队期间 abort：移除队列并拒绝（让位给后续会话）
-        signal?.addEventListener('abort', entry.onAbort, { once: true });
-        queue.push(entry);
-      });
+      return enqueueGateEntry(queue, sessionId, signal);
     },
     getStats: () => ({ running, queued: queue.length }),
   };

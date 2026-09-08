@@ -183,29 +183,26 @@ export class SubagentManager {
           }
         });
 
+        // 完成信号：TURN_END / 超时兜底 / 停滞 abort
+        // 2026-09-08 修复：① 超时分支此前只标 FAILED 并 resolve，**未中断回合**——
+        // 子代理在后台继续跑、继续消耗 token/工具副作用并占用并发槽位；
+        // ② setTimeout 与 abort 监听不清理，最长持有闭包 5 分钟。
+        // 逻辑已提取为 waitForTurnCompletion（下方）。
         try {
-          // 完成信号：TURN_END / 超时兜底 / 停滞 abort
-          const completion = new Promise<void>((resolve) => {
-            resolveDone = resolve;
-            setTimeout(() => {
-              if (!done) {
-                done = true;
-                logger.warn({ subagent: name, sessionId }, '子代理回合超时');
-                this.updateTaskStatus(taskId, TaskStatus.FAILED);
-                resolve();
-              }
-            }, SUBAGENT_TIMEOUT_MS);
-            // 停滞 abort：真实中断回合（agentService.abort）+ 本次尝试失败
-            signal.addEventListener('abort', () => {
-              if (!done) {
-                done = true;
-                this.updateTaskStatus(taskId, TaskStatus.FAILED);
-                this.agentService.abort(sessionId);
-                resolve();
-              }
-            });
+          // 启动无头回合；完成信号由 waitForTurnCompletion 统一管理
+          const completion = this.waitForTurnCompletion({
+            name,
+            sessionId,
+            taskId,
+            signal,
+            isDone: () => done,
+            markDone: () => {
+              done = true;
+            },
+            setResolve: (fn) => {
+              resolveDone = fn;
+            },
           });
-
           await this.agentService.startAgent({
             messages: [{ role: 'user', content: task }],
             sessionId,
@@ -214,7 +211,6 @@ export class SubagentManager {
             maxSteps: spec.maxSteps ?? 15,
             // 无头：不传 webContents
           });
-
           await completion;
           return output;
         } finally {
@@ -228,6 +224,64 @@ export class SubagentManager {
       durationMs: Date.now() - startTime,
       hasOutput: finalOutput.trim().length > 0,
     };
+  }
+
+  /**
+   * 等待子代理回合结束（TURN_END / 超时兜底 / 停滞 abort）
+   *
+   * 从 run 提取（2026-09-08）：保持 run 可读并满足函数体门禁。
+   * 语义：超时与停滞 abort 都**真实中断回合**（agentService.abort），
+   * 避免子代理在后台继续消耗 token 并占用并发槽位；
+   * 定时器与 abort 监听在结束时清理。
+   */
+  private async waitForTurnCompletion(params: {
+    readonly name: string;
+    readonly sessionId: string;
+    readonly taskId: string;
+    readonly signal: AbortSignal;
+    readonly isDone: () => boolean;
+    readonly markDone: () => void;
+    readonly setResolve: (fn: () => void) => void;
+  }): Promise<void> {
+    const { name, sessionId, taskId, signal, isDone, markDone, setResolve } = params;
+    const fail = (): void => {
+      if (isDone()) {
+        return;
+      }
+      markDone();
+      this.updateTaskStatus(taskId, TaskStatus.FAILED);
+      this.agentService.abort(sessionId);
+    };
+    const abortListener = (): void => {
+      fail();
+      resolveCompletion?.();
+    };
+    let resolveCompletion: (() => void) | undefined;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await new Promise<void>((resolve) => {
+        resolveCompletion = resolve;
+        setResolve(resolve);
+        timeoutTimer = setTimeout(() => {
+          if (!isDone()) {
+            markDone();
+            logger.warn({ subagent: name, sessionId }, '子代理回合超时');
+            // 与停滞分支对齐：真实中断回合，避免后台空跑
+            this.agentService.abort(sessionId);
+            this.updateTaskStatus(taskId, TaskStatus.FAILED);
+            resolve();
+          }
+        }, SUBAGENT_TIMEOUT_MS);
+        timeoutTimer.unref?.();
+        // 停滞 abort：真实中断回合（agentService.abort）+ 本次尝试失败
+        signal.addEventListener('abort', abortListener);
+      });
+    } finally {
+      if (timeoutTimer !== undefined) {
+        clearTimeout(timeoutTimer);
+      }
+      signal.removeEventListener('abort', abortListener);
+    }
   }
 
   /**

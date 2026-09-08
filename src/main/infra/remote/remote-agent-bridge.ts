@@ -201,7 +201,6 @@ export class RemoteAgentBridge {
     const turnEvents: string[] = [];
     let assistantText = '';
     let reason = 'completed';
-    let currentTurnId: string | undefined;
     let resolveCompletion!: () => void;
 
     const completion = new Promise<void>((resolve) => {
@@ -221,10 +220,6 @@ export class RemoteAgentBridge {
         return;
       }
       switch (event.type) {
-        case TurnEventType.TURN_START: {
-          currentTurnId = event.turnId;
-          break;
-        }
         case TurnEventType.TEXT_DELTA: {
           assistantText += event.text;
           emit({ type: 'delta', text: event.text });
@@ -266,7 +261,12 @@ export class RemoteAgentBridge {
       unsubscribe();
     }
 
-    void this.persistTurnMessages(sessionId, currentTurnId, userText, assistantText);
+    // 2026-09-08 修复（S1 重复落库）：此处不再自行落库。
+    // AgentService 已是唯一写入方——回合开始落最后一条 user 消息
+    // （agent-service.ts:414-425），回合结束落 assistant 富 parts
+    // （completeTurn → appendMessage）。桥接再写一遍会让同一条消息
+    // 带不同 seq 落库两次（UNIQUE 不冲突 → 静默重复），历史翻倍 +
+    // loadHistory 回读到重复轮次。桥接只负责回传文本。
     return { reply: buildReply(assistantText, turnEvents, reason), reason };
   }
 
@@ -283,35 +283,6 @@ export class RemoteAgentBridge {
     } catch (err: unknown) {
       logger.warn({ sessionId, error: err }, '远程控制历史回读失败（本回合无上下文）');
       return [];
-    }
-  }
-
-  /**
-   * 回合消息落库（Transcript）：user + assistant 写入会话历史
-   *
-   * 失败静默（不影响回传）；assistant 文本为空（纯工具回合）时仅落 user 消息。
-   */
-  private async persistTurnMessages(
-    sessionId: string,
-    turnId: string | undefined,
-    userText: string,
-    assistantText: string,
-  ): Promise<void> {
-    try {
-      const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-        { role: 'user', content: userText },
-      ];
-      if (assistantText.trim().length > 0) {
-        messages.push({ role: 'assistant', content: assistantText });
-      }
-      await this.sessionService.appendMessage({
-        sessionId,
-        // exactOptionalPropertyTypes：turnId 未捕获时条件展开
-        ...(turnId !== undefined ? { turnId } : {}),
-        messages,
-      });
-    } catch (err: unknown) {
-      logger.warn({ sessionId, error: err }, '远程控制回合消息落库失败');
     }
   }
 }

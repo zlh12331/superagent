@@ -7,7 +7,7 @@
 // CHECK / UNIQUE / 外键由迁移落库并被 SQLite 强制执行。
 // ──────────────────────────────────────────────────────────────
 
-import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -34,7 +34,7 @@ vi.mock('../../utils/logger', () => ({
 }));
 
 import { logger } from '../../utils/logger';
-import { closeDb, getDbPath, initDb, reclaimFreePages, resetDb } from './db';
+import { closeDb, getDb, getDbPath, initDb, reclaimFreePages, resetDb } from './db';
 import { SessionService } from './session-service';
 
 let tempDir: string;
@@ -143,6 +143,37 @@ describe('db', () => {
       expect(warnMock).toHaveBeenCalledWith({}, expect.stringContaining('跳过启动备份'));
     } finally {
       proto.pragma = originalPragma;
+      await closeDb();
+      resetDb();
+      mockApp.getPath.mockReturnValue(tempDir);
+    }
+  });
+
+  it('initDb：文件头损坏（非 SQLite 文件）也能自愈重建，不抛错（2026-09-08 P0 修复）', async () => {
+    const isolatedDir = mkdtempSync(join(tempDir, 'corrupt-header-'));
+    mockApp.getPath.mockReturnValue(isolatedDir);
+    const dbPath = join(isolatedDir, 'sessions.db');
+
+    try {
+      // 真实损坏形态：写入垃圾字节（文件头无效）。
+      // 修复前：new Database 能打开，但 applyDefaultPragmas 的 journal_mode=WAL
+      // 直接抛 'file is not a database'，initDb 在 pragma 处就抛出，
+      // 永远走不到 restoreCorruptDatabase → 应用打不开、备份形同虚设。
+      writeFileSync(dbPath, 'this is definitely not a sqlite database file at all');
+
+      resetDb();
+      // 修复后：打开失败被捕获并转入自愈流程（无备份 → 归档 + 重建空库）
+      expect(() => initDb()).not.toThrow();
+
+      // 损坏文件已归档保留（供人工诊断）
+      const archived = readdirSync(isolatedDir).filter((n) => n.includes('.corrupt-'));
+      expect(archived.length).toBeGreaterThan(0);
+
+      // 重建后的库可用：能建表并写入
+      const db = getDb();
+      expect(db).toBeDefined();
+      await closeDb();
+    } finally {
       await closeDb();
       resetDb();
       mockApp.getPath.mockReturnValue(tempDir);
@@ -542,7 +573,7 @@ describe('老库升级（增量迁移）', () => {
     return (db as unknown as { $client: Database.Database }).$client;
   }
 
-  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 六条，重复 initDb 幂等', async () => {
+  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 七条，重复 initDb 幂等', async () => {
     resetDb();
     await closeDb();
     const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
@@ -607,9 +638,9 @@ describe('老库升级（增量迁移）', () => {
           .run(),
       ).toThrow(/UNIQUE constraint failed/i);
 
-      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0005）
+      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0006）
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(6);
+      expect(migs).toHaveLength(7);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
       await closeDb();
@@ -626,7 +657,7 @@ describe('老库升级（增量迁移）', () => {
     }
   });
 
-  it('新库：0000 ~ 0005 全执行（journal 六条），约束齐全', async () => {
+  it('新库：0000 ~ 0006 全执行（journal 七条），约束齐全', async () => {
     resetDb();
     await closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -634,7 +665,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(6);
+      expect(migs).toHaveLength(7);
       // 约束仍生效（0001 重建未破坏 0000 语义）
       expect(() =>
         raw(db)

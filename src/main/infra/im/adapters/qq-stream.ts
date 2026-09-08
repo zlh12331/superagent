@@ -36,6 +36,12 @@ export const QqIntent = {
   GROUP_AND_C2C_EVENT: 1 << 25,
 } as const;
 
+/** 重连退避上限（毫秒）——超过后固定按此间隔重试（2026-09-08 修复） */
+const RECONNECT_MAX_DELAY_MS = 60_000;
+
+/** 最大连续重连次数（达上限停止，避免 token 永久有效时无限重连刷日志） */
+const RECONNECT_MAX_ATTEMPTS = 10;
+
 /** QQ 消息事件形状 */
 export interface QqMessageEvent {
   readonly id: string;
@@ -224,6 +230,10 @@ export class QqStreamReceiver {
   private reconnectDelayMs = 5_000;
   /** 重连中（防并发重连） */
   private reconnecting = false;
+  /** 挂起的重连定时器句柄（close 时清除，2026-09-08 修复） */
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 连续重连次数（成功建连后归零；达上限停止重试） */
+  private reconnectAttempts = 0;
   /** 会话 id（READY 下发；断线 RESUME 恢复用） */
   private sessionId: string | null = null;
   private messageHandler: ((message: ChannelIncomingMessage) => void) | null = null;
@@ -286,25 +296,58 @@ export class QqStreamReceiver {
     });
     await this.handshake(ws, accessToken);
     this.opened = true;
+    // 建连成功：重连计数归零（下次断线重新从最小退避开始）
+    this.reconnectAttempts = 0;
     logger.info({}, 'QQ 长连接已建立（接收就绪）');
   }
 
-  /** 计划重连（固定退避；token 有效则持续重试） */
+  /**
+   * 计划重连（指数退避 + 次数上限；2026-09-08 可靠性修复）
+   *
+   * 修复前：固定 5s、无退避、无次数上限、timer 句柄不保存——
+   * 用户在 5s 窗口内 close() 无法取消挂起的重连，回调仍会 open()（并把
+   * manualClose 重置为 false），导致「用户已关闭渠道 / 应用退出后仍重建长连接」。
+   * 现：退避 5s → 10s → 20s → …（上限 60s），最多 RECONNECT_MAX_ATTEMPTS 次，
+   * 句柄保存并在 close() 中清除。
+   */
   private scheduleReconnect(): void {
+    if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+      logger.error(
+        { attempts: this.reconnectAttempts },
+        'QQ 长连接重连次数达上限，停止重试（请检查网络或 token）',
+      );
+      return;
+    }
     this.reconnecting = true;
-    logger.warn({ delayMs: this.reconnectDelayMs }, 'QQ 长连接断开，计划重连');
-    setTimeout(() => {
+    this.reconnectAttempts += 1;
+    const delayMs = Math.min(
+      this.reconnectDelayMs * 2 ** (this.reconnectAttempts - 1),
+      RECONNECT_MAX_DELAY_MS,
+    );
+    logger.warn(
+      { delayMs, attempt: this.reconnectAttempts },
+      'QQ 长连接断开，计划重连（指数退避）',
+    );
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.reconnecting = false;
       void this.open().catch((err: unknown) => {
         logger.error({ error: err }, 'QQ 重连失败，再次计划');
         this.scheduleReconnect();
       });
-    }, this.reconnectDelayMs);
+    }, delayMs);
+    this.reconnectTimer.unref?.();
   }
 
   /** 关闭长连接（幂等；手动关闭不触发重连） */
   close(): void {
     this.manualClose = true;
+    // 清除挂起的重连定时器（2026-09-08 修复：此前无法取消）
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnecting = false;
     this.clearAckTimeout();
     if (this.heartbeatTimer !== null) {
       clearInterval(this.heartbeatTimer);

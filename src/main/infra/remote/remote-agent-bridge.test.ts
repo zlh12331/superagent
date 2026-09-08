@@ -218,7 +218,8 @@ describe('RemoteAgentBridge', () => {
     expect(call.maxSteps).toBe(20);
     // 无头：不传 webContents（流式推送跳过）
     expect(call.webContents).toBeUndefined();
-    expect(stubs.appended[0]?.sessionId).toBe('session-1');
+    // 桥接不再自行落库（2026-09-08 修复 S1）：AgentService 是唯一写入方
+    expect(stubs.mockAppendMessage).not.toHaveBeenCalled();
   });
 
   it('ask 模式：拒绝执行并回传可读提示（不启动 agent）', async () => {
@@ -365,7 +366,7 @@ describe('RemoteAgentBridge', () => {
     expect(result?.reply).toContain('内容已截断');
   });
 
-  it('落库失败静默：仍回传执行结果', async () => {
+  it('桥接不参与落库：回传结果与 appendMessage 无关（2026-09-08 修复 S1）', async () => {
     const stubs = createStubs();
     const bridge = new RemoteAgentBridge(
       stubs.remoteControl,
@@ -374,6 +375,7 @@ describe('RemoteAgentBridge', () => {
       stubs.sessionService,
     );
     bridge.mount();
+    // 即便 appendMessage 会失败，桥接也不再调用它（落库归 AgentService）
     stubs.mockAppendMessage.mockRejectedValue(new Error('SESSION_NOT_FOUND'));
 
     const pending = callHandler(stubs, command({ text: '任务' }));
@@ -382,9 +384,7 @@ describe('RemoteAgentBridge', () => {
     emitTurn(stubs, { type: TurnEventType.TURN_END, sessionId: 'session-1', reason: 'completed' });
     const result = await pending;
     expect(result.reply).toBe('结果');
-    // persistTurnMessages 是 fire-and-forget：等一个轮次让失败分支在测试内跑完
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(stubs.mockAppendMessage).toHaveBeenCalled();
+    expect(stubs.mockAppendMessage).not.toHaveBeenCalled();
   });
 
   it('历史回读失败：降级为单轮执行（不拒绝命令）', async () => {

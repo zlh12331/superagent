@@ -245,6 +245,13 @@ export class CodebaseService implements ICodebaseService {
    */
   private readonly activeProcesses = new Set<ChildProcess>();
   /**
+   * 索引中路径 → in-flight Promise（2026-09-08 修复）
+   *
+   * 并发 ensureIndexed 合并到同一 Promise，避免多个 codegraph init
+   * 同时写同一 .codegraph 目录。
+   */
+  private readonly indexingInFlight = new Map<string, Promise<void>>();
+  /**
    * 结构化符号搜索
    *
    * 调用 `codegraph query <search> -p <path> -l <limit> -k <kind> -j`
@@ -392,12 +399,26 @@ export class CodebaseService implements ICodebaseService {
    * - 存在：直接返回（已索引）
    * - 不存在：执行 `codegraph init <path>` 建初始索引——大项目首次较慢，
    *   由 runCodegraph 的 60s 超时兜底（超时抛 AppError，工具层向 LLM 返回提示）
+   *
+   * 并发去重（2026-09-08 修复）：同一路径的并发调用合并为同一个 in-flight
+   * Promise——此前多会话/子代理并行调用会对同一目录同时跑 `codegraph init`，
+   * 多个进程并发写同一 .codegraph 索引可能产出损坏/半写索引。
    */
   async ensureIndexed(path: string): Promise<void> {
     if (existsSync(join(path, '.codegraph'))) {
       return;
     }
-    await this.runCodegraph(['init', path], path);
+    const inFlight = this.indexingInFlight.get(path);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+    const task = this.runCodegraph(['init', path], path)
+      .then(() => undefined)
+      .finally(() => {
+        this.indexingInFlight.delete(path);
+      });
+    this.indexingInFlight.set(path, task);
+    return task;
   }
 
   /**
