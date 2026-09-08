@@ -55,6 +55,7 @@ import { resetConfigCache } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
 import { AgentService, type IAgentService } from './infra/ai/agent/agent-service';
 import { initSubagentManager } from './infra/ai/agent/subagent-manager';
+import { taskService } from './infra/ai/agent/task-service';
 import {
   type ConcurrencyGate,
   createConcurrencyGate,
@@ -1047,6 +1048,12 @@ export async function recoverFromCrash(): Promise<void> {
     const interrupted = await serviceContainer.getSessionService().markAllInterrupted();
     if (interrupted > 0 || wasCrash) {
       logger.info({ interrupted, wasCrash }, '崩溃恢复：残留 running 会话已标记为 interrupted');
+    }
+    // 2026-09-08 修复：tasks 表同样持久化 status，此前异常退出后残留 running
+    // 任务在面板永久显示「运行中」。与 sessions 同阶段无条件修正。
+    const failedTasks = taskService.markAllRunningFailed();
+    if (failedTasks > 0) {
+      logger.info({ failedTasks }, '崩溃恢复：残留 running 任务已标记为 failed');
     }
   } finally {
     clearCrashMarker();

@@ -52,8 +52,11 @@ export class CronService {
    */
   create(sessionId: string, expression: string, description: string): string {
     const id = randomUUID();
-    // croner 构造即校验表达式（非法抛错）；enabled=1 直接运行
-    const job = this.createJob(id, expression, false);
+    // 2026-09-08 修复（首次触发丢失）：此前 createJob(id, expression, false) 直接
+    // 启动，而 DB insert 在其后——若触发点落在两者之间，fire() 读不到任务行会
+    // early-return，首次触发被静默吞掉。现在先以 paused 创建（校验表达式 +
+    // 取得 nextRun），insert 成功后再 resume 启动。
+    const job = this.createJob(id, expression, true);
     const db = getDb();
     const now = Date.now();
     const nextFireAt = job.nextRun()?.getTime() ?? null;
@@ -75,6 +78,8 @@ export class CronService {
       this.stopJob(id);
       throw err;
     }
+    // DB 行就位后启动调度
+    job.resume();
     logger.info({ id, expression, nextFireAt }, '定时任务已创建');
     return id;
   }
@@ -194,6 +199,10 @@ export class CronService {
       expression,
       {
         paused: initialPaused, // 本地时区（与 sqlite next_fire_at 语义一致）
+        // 2026-09-08 可靠性修复：此前未设 protect——上一次 fire 的 handler 还在跑
+        // 时下一次触发会重叠（同一会话并发回合）。protect 让 croner 跳过
+        // 上一次尚未结束的触发。
+        protect: true,
       },
       (self) => {
         void this.fire(taskId, expression, self);
@@ -211,8 +220,12 @@ export class CronService {
     if (job !== undefined) {
       try {
         job.stop();
-      } catch {
-        // 已停止实例忽略
+      } catch (error: unknown) {
+        // 2026-09-08：此前空 catch 吞掉异常，stop 失败无任何痕迹
+        logger.warn(
+          { taskId, error: error instanceof Error ? error.message : String(error) },
+          '定时任务停止失败（忽略，继续移除引用）',
+        );
       }
       this.jobs.delete(taskId);
     }

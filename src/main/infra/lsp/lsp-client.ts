@@ -17,6 +17,7 @@
 
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { logger } from '../../utils/logger';
+import { terminateChild } from '../../utils/terminate-child';
 
 /** LSP 位置（行/列均 0 基） */
 export interface LspPosition {
@@ -211,7 +212,9 @@ export class LspClient {
         // shutdown 失败不阻断清理
       }
       this.notify('exit', null);
-      this.child.kill();
+      // 2026-09-08 可靠性修复：SIGTERM → 3s SIGKILL 升级（此前只发一次 SIGTERM，
+      // 语言服务器忽略信号时会残留句柄，Electron 延迟退出）
+      await terminateChild(this.child, this.loggerTag);
       this.child = null;
     }
     this.failAllPending(new Error(`${this.loggerTag} 已释放`));

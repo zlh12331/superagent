@@ -141,6 +141,25 @@ export class TaskService {
     const row = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
     return row === undefined ? undefined : rowToTask(row);
   }
+
+  /**
+   * 启动期恢复：把所有残留 running 任务置为 failed（2026-09-08 可靠性修复）
+   *
+   * 背景：tasks 表持久化 status，但进程异常退出后没有任何恢复逻辑——
+   * 任务面板永久显示「运行中」（用户无法分辨是真的在跑还是残留）。
+   * 与 sessions 的 markAllInterrupted 同语义，在启动期无条件执行。
+   *
+   * @returns 被修正的行数
+   */
+  markAllRunningFailed(): number {
+    const db = getDb();
+    const result = db
+      .update(tasks)
+      .set({ status: TaskStatus.FAILED })
+      .where(eq(tasks.status, TaskStatus.RUNNING))
+      .run();
+    return result.changes;
+  }
 }
 
 /** 行 → 领域类型 */

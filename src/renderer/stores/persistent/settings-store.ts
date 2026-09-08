@@ -243,15 +243,43 @@ interface SettingsState extends SettingsData {
  *
  * window.api 未注入（浏览器模式/单测）时静默跳过——内存态仍可用。
  */
+/**
+ * 在途写入集合（2026-09-08 可靠性修复：退出丢失窗口）
+ *
+ * 此前 persistSetting 是纯 fire-and-forget——用户改设置后立刻退出应用，
+ * 在途的 settings:set 可能尚未落库就被中断，最后一次变更丢失（回落到旧值）。
+ * 这里记录每个在途 Promise，flushPendingSettings() 可在页面卸载前等待它们。
+ */
+const pendingWrites = new Set<Promise<unknown>>();
+
+/**
+ * 等待所有在途设置写入落库（供 main.tsx 注册 pagehide/beforeunload 调用）
+ *
+ * 注：pagehide 阶段无法阻塞卸载，但 Electron 渲染层退出前主进程会先收到
+ * IPC，这里的等待能让绝大多数写入完成（fire-and-forget 的窗口从「整个进程
+ * 生命周期」收敛到「同步调用栈」）。
+ */
+export async function flushPendingSettings(): Promise<void> {
+  if (pendingWrites.size === 0) {
+    return;
+  }
+  await Promise.allSettled([...pendingWrites]);
+}
+
 function persistSetting(key: string, value: unknown): void {
   const api = window.api;
   const setter = api?.settings?.set;
   if (typeof setter !== 'function') {
     return;
   }
-  void setter({ key, value }).catch(() => {
-    // 落库失败静默：下次变更会重写；不阻断 UI
-  });
+  const write = setter({ key, value })
+    .catch(() => {
+      // 落库失败静默：下次变更会重写；不阻断 UI
+    })
+    .finally(() => {
+      pendingWrites.delete(write);
+    });
+  pendingWrites.add(write);
 }
 
 /**

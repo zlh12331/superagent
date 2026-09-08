@@ -41,6 +41,7 @@ import type {
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
+import { terminateChild } from '../../utils/terminate-child';
 
 /** 超时后 SIGTERM 子进程并 reject（explore/impact 可能较慢） */
 const CODEGRAPH_COMMAND_TIMEOUT_MS = 60_000;
@@ -378,14 +379,8 @@ export class CodebaseService implements ICodebaseService {
       return;
     }
     const processes = Array.from(this.activeProcesses);
-    for (const proc of processes) {
-      try {
-        // SIGTERM 优雅终止（SIGKILL 会损坏子进程输出缓冲区）
-        proc.kill('SIGTERM');
-      } catch (error) {
-        logger.warn({ error }, 'CodebaseService 子进程 kill 失败');
-      }
-    }
+    // 2026-09-08 可靠性修复：SIGTERM → 3s SIGKILL 升级
+    await Promise.all(processes.map((proc) => terminateChild(proc, 'codegraph')));
     this.activeProcesses.clear();
     logger.info({}, 'CodebaseService 所有子进程已清理');
   }

@@ -45,7 +45,13 @@ import { LANGUAGE_STORAGE_KEY } from '@/i18n/config';
 // - Electron：settings:getAll 读 SQLite；空库时一次性迁移 legacy localStorage
 // - 浏览器模式：回退 localStorage（mock window.api 由上一分支注入）
 import { bootstrapSettings } from '@/lib/settings-bootstrap';
-import { applySettingsSnapshot } from '@/stores/persistent/settings-store';
+import { applySettingsSnapshot, flushPendingSettings } from '@/stores/persistent/settings-store';
+
+// 2026-09-08 可靠性修复：退出前等待在途设置写入落库
+// （settings-store 写穿透是 fire-and-forget，改设置后立即关窗会丢最后一次变更）
+window.addEventListener('pagehide', () => {
+  void flushPendingSettings();
+});
 
 const { theme, snapshot } = await bootstrapSettings();
 applySettingsSnapshot(snapshot);

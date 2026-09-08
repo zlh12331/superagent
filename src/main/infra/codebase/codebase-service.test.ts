@@ -377,7 +377,8 @@ describe('CodebaseService.dispose（生命周期）', () => {
     const child = spawnMock.mock.results[0]?.value as ChildProcess & {
       kill: ReturnType<typeof vi.fn>;
     };
-    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    // 2026-09-08：dispose 改为 terminateChild（无参 kill = SIGTERM，3s 后升级 SIGKILL）
+    expect(child.kill).toHaveBeenCalledWith();
     await pending; // 超时 reject 已被吞
   }, 5_000);
 

@@ -55,6 +55,44 @@ const MAX_READ_BYTES = 2 * 1024 * 1024;
 const CHARDET_SAMPLE_BYTES = 64 * 1024;
 
 /**
+ * chokidar 忽略判定（2026-09-08 从 watch 提取，保持其函数体在棘轮基线内）
+ *
+ * - 目录放行（chokidar 递归扫描，由子项 filter）
+ * - 跳过 node_modules 与点开头文件
+ *
+ * L1 修复保留：chokidar 在 Windows 上传入的 testPath 可能混合 \\ 与 /，
+ * 单独用 sep split 会漏掉以 / 分隔的路径（node_modules/.git 子文件未被过滤），
+ * 故用正则 [\\/] 同时匹配两种分隔符。
+ */
+function shouldIgnoreWatchPath(testPath: string, stats?: Stats): boolean {
+  if (stats?.isDirectory()) {
+    return false;
+  }
+  const normalized = testPath.split(/[\\/]/).pop() ?? '';
+  return normalized === 'node_modules' || normalized.startsWith('.');
+}
+
+/**
+ * 查找同 (path, webContents) 的已有 watcher（2026-09-08 修复句柄累积）
+ *
+ * 从 FileService.watch 提取（模块级，保持其函数体在棘轮基线内）。
+ *
+ * @returns 已存在的 watcherId；无匹配返回 null
+ */
+function findExistingWatcher(
+  watchers: ReadonlyMap<string, { readonly path: string; readonly webContents: WebContents }>,
+  path: string,
+  webContents: WebContents,
+): string | null {
+  for (const [id, entry] of watchers) {
+    if (entry.path === path && entry.webContents === webContents) {
+      return id;
+    }
+  }
+  return null;
+}
+
+/**
  * 规范化 chardet 检测结果 → iconv-lite 可解码的编码名
  *
  * - null / UTF-8 同族 → 'utf-8'（直接 Buffer.toString）
@@ -209,6 +247,8 @@ class FileService implements IFileService {
     {
       readonly watcher: FSWatcher;
       readonly webContents: WebContents;
+      /** 被监听路径（2026-09-08：同路径去重复用判定用） */
+      readonly path: string;
       /** webContents destroyed 监听清理函数（unwatch 时移除，避免监听累积） */
       readonly removeDestroyedListener: () => void;
     }
@@ -433,25 +473,15 @@ class FileService implements IFileService {
     const { path, webContents } = options;
     this.assertAbsolutePath(path);
 
+    // 同 (path, webContents) 复用已有 watcher（2026-09-08 修复句柄累积）
+    const existingId = findExistingWatcher(this.watchers, path, webContents);
+    if (existingId !== null) return { watcherId: existingId };
     const watcherId = randomUUID();
     // 忽略隐藏文件和 node_modules（与 list 默认行为一致）
     // 注意：chokidar v5 ignored 接受 string | RegExp | 函数 | 数组
     const watcher = watch(path, {
       ignoreInitial: true,
-      ignored: (testPath: string, stats?: Stats) => {
-        // 目录直接放行（chokidar 会递归扫描，由子项 filter）
-        if (stats?.isDirectory()) {
-          return false;
-        }
-        // 跳过 node_modules 与点开头文件
-        // L1 修复：chokidar 在 Windows 上传入的 testPath 可能混合使用 \\ 和 /
-        // （内部路径标准化不彻底，尤其是 UNC 路径或符号链接场景），
-        // 单独用 sep（'\\' on Windows）split 会漏掉以 / 分隔的路径，
-        // 导致 node_modules / .git 等目录的子文件未被正确过滤。
-        // 用正则 [\\/] 同时匹配两种分隔符，跨平台兼容。
-        const normalized = testPath.split(/[\\/]/).pop() ?? '';
-        return normalized === 'node_modules' || normalized.startsWith('.');
-      },
+      ignored: shouldIgnoreWatchPath,
       depth: 10,
     });
 
@@ -484,7 +514,7 @@ class FileService implements IFileService {
     };
     webContents.once('destroyed', onDestroyed);
 
-    this.watchers.set(watcherId, { watcher, webContents, removeDestroyedListener });
+    this.watchers.set(watcherId, { watcher, webContents, path, removeDestroyedListener });
     logger.info({ watcherId, path }, 'FileService watcher 已注册');
 
     // 等待 chokidar 就绪再返回（真实竞态修复：ignoreInitial: true 下，

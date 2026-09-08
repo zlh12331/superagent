@@ -65,7 +65,7 @@ import { buildGenerationOptions, modelRegistry } from '../models';
 import type { IPromptService } from '../prompt/prompt-service';
 import { classifyError, isAbortError } from '../tools/error-classifier';
 import type { IPermissionService } from '../tools/permission-service';
-import type { IToolExecutor } from '../tools/tool-executor';
+import { clampToolPartOutput, type IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
 import {
   compressByTokenBudget,
@@ -76,6 +76,29 @@ import {
 import { createRepairToolCall } from './repair-tool-call';
 import { resolveTokenBudgetBasis } from './token-overhead';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
+
+/**
+ * 推送单个流式 part 到渲染层（2026-09-08 从 streamToWebContents 提取）
+ *
+ * 含输出闸门（此前只加在 tool-executor 的 tool-result 通道，本通道会原样
+ * 透传 tool-output-available 的完整 output，read_file 可带 2MB → 约 50 万
+ * token 进渲染层与后续上下文）。
+ */
+function forwardStreamPart(
+  part: { readonly type: string; readonly delta?: unknown },
+  sessionId: string,
+  webContents: WebContents | undefined,
+): void {
+  if (webContents === undefined || webContents.isDestroyed()) {
+    return;
+  }
+  const payload: AgentStreamPartPayload = {
+    sessionId,
+    part: clampToolPartOutput(part),
+  };
+  // dev 契约校验后发送（payloadSchema 见定义表）
+  emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
+}
 
 /**
  * Agent 启动选项
@@ -216,6 +239,16 @@ export class AgentService implements IAgentService {
   private readonly registry = new ActiveSessionRegistry();
   /** 类级回合事件监听器（onTurnEvent 注册；回合内转发） */
   private readonly turnListeners = new Set<(event: TurnEvent) => void>();
+  /**
+   * 启动中的 sessionId 集合（2026-09-08 修复 startAgent 注册 TOCTOU）
+   *
+   * `await preemptExisting(...)` 与 `registry.register(...)` 之间跨越 await 边界：
+   * 同 sessionId 的两次并发 startAgent 都会通过「无活跃」判定，再先后 register，
+   * 后者覆盖前者 → 孤儿 controller/stream + 后续 persistTurn 的 seq 冲突。
+   * 该 Set 在进入临界区时同步占用、注册完成后释放，把「检查—注册」变成原子操作。
+   * （Node 单线程 + better-sqlite3 同步驱动，Set 操作间不会插入其他 await。）
+   */
+  private readonly startingSessions = new Set<string>();
 
   /** @inheritDoc */
   onTurnEvent(listener: (event: TurnEvent) => void): () => void {
@@ -229,38 +262,53 @@ export class AgentService implements IAgentService {
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
 
-    // 防重检查（R2：收敛到共享注册表）：若同 sessionId 已有活跃 stream，
-    // 先 abort 并等待其退出，避免孤儿 stream
-    await this.registry.preemptExisting(sessionId, 'agent');
+    // 2026-09-08 修复（注册 TOCTOU）：同 sessionId 已在启动中 → 等待其完成再继续，
+    // 避免两次并发调用都通过「无活跃」判定后重复注册（后者覆盖前者的
+    // controller/stream，产生孤儿流与 persistTurn 的 seq 冲突）。
+    // 用微任务轮询等待而非抛错：调用方语义是「启动/复用该会话的回合」，
+    // 等待后走正常 preempt 流程（会中断前一个回合）更符合预期。
+    while (this.startingSessions.has(sessionId)) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    this.startingSessions.add(sessionId);
 
-    const controller = new AbortController();
+    try {
+      // 防重检查（R2：收敛到共享注册表）：若同 sessionId 已有活跃 stream，
+      // 先 abort 并等待其退出，避免孤儿 stream
+      await this.registry.preemptExisting(sessionId, 'agent');
 
-    // 回合状态机：标记进行中（崩溃恢复识别；正常结束在 stream finally 归位 idle）
-    void this.sessionService.markRunning(sessionId).catch((err: unknown) => {
-      logger.error({ sessionId, error: err }, 'markRunning 失败');
-    });
+      const controller = new AbortController();
 
-    // 异步推送流式 part（不 await，让 startAgent 立即返回 sessionId）
-    // 任何错误都通过 catch 推送 AGENT_STREAM_ERROR，不抛回调用方
-    // catch 内部仅记录日志，不改变 Promise 状态（仍为 fulfilled），
-    // 这样 dispose 的 Promise.allSettled 不会被 reject 影响
-    const streamPromise = this.streamToWebContents(sessionId, options, controller).catch(
-      (err: unknown) => {
-        logger.error({ sessionId, error: err }, 'AgentService 流推送异常');
-      },
-    );
-    this.registry.register(sessionId, controller, streamPromise);
-
-    // R2：CAS 删除 stream 条目（语义内聚于共享注册表）
-    streamPromise.finally(() => {
-      this.registry.removeStreamIfCurrent(sessionId, streamPromise);
-      // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
-      void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
-        logger.error({ sessionId, error: err }, 'markIdle 失败');
+      // 回合状态机：标记进行中（崩溃恢复识别；正常结束在 stream finally 归位 idle）
+      void this.sessionService.markRunning(sessionId).catch((err: unknown) => {
+        logger.error({ sessionId, error: err }, 'markRunning 失败');
       });
-    });
 
-    return sessionId;
+      // 异步推送流式 part（不 await，让 startAgent 立即返回 sessionId）
+      // 任何错误都通过 catch 推送 AGENT_STREAM_ERROR，不抛回调用方
+      // catch 内部仅记录日志，不改变 Promise 状态（仍为 fulfilled），
+      // 这样 dispose 的 Promise.allSettled 不会被 reject 影响
+      const streamPromise = this.streamToWebContents(sessionId, options, controller).catch(
+        (err: unknown) => {
+          logger.error({ sessionId, error: err }, 'AgentService 流推送异常');
+        },
+      );
+      this.registry.register(sessionId, controller, streamPromise);
+
+      // R2：CAS 删除 stream 条目（语义内聚于共享注册表）
+      streamPromise.finally(() => {
+        this.registry.removeStreamIfCurrent(sessionId, streamPromise);
+        // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
+        void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
+          logger.error({ sessionId, error: err }, 'markIdle 失败');
+        });
+      });
+
+      return sessionId;
+    } finally {
+      // 注册完成（或异常）即释放，后续并发调用可正常走 preempt 路径
+      this.startingSessions.delete(sessionId);
+    }
   }
 
   /** @inheritDoc */
@@ -638,11 +686,7 @@ export class AgentService implements IAgentService {
               if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
                 transcriptEntries.push({ kind: 'reasoning', text: part.delta });
               }
-              if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
-                const payload: AgentStreamPartPayload = { sessionId, part };
-                // dev 契约校验后发送（payloadSchema 见定义表）
-                emitEvent(options.webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
-              }
+              forwardStreamPart(part, sessionId, options.webContents);
             },
           });
           const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
@@ -815,13 +859,19 @@ export class AgentService implements IAgentService {
    *
    * seq 取会话已有回合数（单会话串行执行，无并发冲突）。
    */
+  /**
+   * 持久化回合流水（失败不阻断主流程）
+   *
+   * seq 由 usage-turn-store.recordTurn 内部用 `MAX(seq)+1` 原子计算
+   * （2026-09-08 修复：此前这里全量查 turns 取 length，既 O(n²) 又在
+   * 并发写同一会话时产生重复 seq）。此处传 0 占位，实际值以存储层为准。
+   */
   private async persistTurn(turn: TurnEndEvent, modelId: string): Promise<void> {
     try {
-      const { turns: existing } = await this.sessionService.getTurns(turn.sessionId);
       await this.sessionService.recordTurn({
         turnId: turn.turnId,
         sessionId: turn.sessionId,
-        seq: existing.length,
+        seq: 0,
         modelId,
         status: turn.reason,
         inputTokens: turn.usage?.inputTokens,

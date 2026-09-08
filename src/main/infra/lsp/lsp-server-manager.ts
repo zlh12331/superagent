@@ -85,6 +85,15 @@ export class LspServerManager {
     this.pending.set(cacheKey, boot);
     try {
       const client = await boot;
+      // 2026-09-08 修复（dispose 竞态）：await 期间可能已 disposeAll——
+      // 此时 clients 已被清空、disposed=true，若仍写回则该 client 永不被回收
+      // （disposeAll 只遍历当次快照）。这里复查并就地释放。
+      if (this.disposed) {
+        await client.dispose().catch(() => {
+          // 释放失败不阻断（进程退出路径已由 disposeAll 兜底）
+        });
+        throw new Error('LspServerManager 已释放');
+      }
       this.clients.set(cacheKey, client);
       return client;
     } finally {
@@ -98,6 +107,11 @@ export class LspServerManager {
       return;
     }
     this.disposed = true;
+    // 2026-09-08 修复：等待在途 boot 完成，避免它们完成后把 client 写回已清空的表
+    const pendingBoots = [...this.pending.values()];
+    if (pendingBoots.length > 0) {
+      await Promise.allSettled(pendingBoots);
+    }
     const clients = [...this.clients.values()];
     this.clients.clear();
     await Promise.allSettled(clients.map((client) => client.dispose()));

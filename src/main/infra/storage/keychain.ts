@@ -15,6 +15,7 @@
 import { execFileSync } from 'node:child_process';
 import { chmodSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { safeStorage } from 'electron';
 import { logger } from '../../utils/logger';
 import { getKeychainPath } from './app-data';
@@ -134,20 +135,35 @@ function salvageEntries(raw: string): { store: KeychainStore; candidates: number
  *
  * 文件不存在时返回空对象（首次使用，不算损坏）。
  */
+/**
+ * 读取失败时抛错（2026-09-08 修复数据丢失，从 readStore 提取）
+ *
+ * 此前静默返回空对象，后续 set 会基于空对象读-改-写，把原有密钥全部覆盖为
+ * 空。现在抛错阻止写入，用户看到明确失败而非密钥被静默清空。
+ */
+function throwKeychainReadError(error: unknown, filePath: string): never {
+  const message = error instanceof Error ? error.message : String(error);
+  logger.error(
+    { error: message, filePath },
+    'keychain.dat 读取失败（拒绝以降级空库继续，避免覆盖既有密钥）',
+  );
+  throw new AppError(
+    ErrorCode.INTERNAL_ERROR,
+    `密钥库读取失败，已中止本次操作以保护既有密钥：${message}`,
+  );
+}
+
 async function readStore(): Promise<KeychainStore> {
   const filePath = getKeychainPath();
   let content: string;
   try {
     content = await fs.readFile(filePath, 'utf8');
   } catch (error: unknown) {
-    // ENOENT = 首次使用；其他读错误（权限等）不谎报损坏，静默按空处理由写入覆盖
-    if (!(error instanceof Error && error.message.includes('ENOENT'))) {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error), filePath },
-        'keychain.dat 读取失败',
-      );
+    // ENOENT = 首次使用（合法空态）
+    if (error instanceof Error && error.message.includes('ENOENT')) {
+      return {};
     }
-    return {};
+    throwKeychainReadError(error, filePath);
   }
 
   try {
