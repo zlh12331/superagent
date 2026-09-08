@@ -130,77 +130,62 @@ export function countParams(paramsText: string): { count: number; destructured: 
 }
 
 /**
- * 从函数体起始位置向后扫花括号深度，返回体行数
+ * 从函数体起始位置向后扫花括号深度，返回体**净行数**
+ *
+ * 2026-09-08 口径修正（与 check-file-size 对齐）：此前统计物理行数，注释与
+ * 空行都被计入——而本项目 check-comments 强制写注释，等价于「惩罚写文档」；
+ * check-file-size 已因同样问题改为净行口径（其文件头注释记录：原始行口径曾
+ * 把 5 条存量永久锁死）。现改为排除空行、纯注释行（行注释 / 块注释 / 续行 *）。
+ *
+ * 实现：先按花括号深度定位函数体结束位置，再对该区间做逐行净行统计
+ * （复用与 measureLines 一致的判定规则，避免两处口径漂移）。
  *
  * @param source 全文
  * @param bodyOpenIdx 函数签名之后第一个 `{` 的下标（表达式体传 -1 → 返回 0）
- * @returns 行数（首行到闭合花括号行，含两端）；未闭合时返回到文件末尾
+ * @returns 净行数；未闭合时统计到文件末尾
  */
 export function measureBodyLines(source: string, bodyOpenIdx: number): number {
-  if (bodyOpenIdx < 0 || bodyOpenIdx >= source.length) return 0;
+  const endIdx = findBodyEnd(source, bodyOpenIdx);
+  if (endIdx < 0) return 0;
+  const body = source.slice(bodyOpenIdx, endIdx + 1);
+  return countNetLines(body);
+}
+
+/**
+ * 定位函数体闭合花括号的下标（深度扫描，跳过注释与字符串）
+ *
+ * @param source 全文
+ * @param bodyOpenIdx 函数体起始 `{` 的下标
+ * @returns 闭合 `}` 的下标；未闭合返回 -1
+ */
+function findBodyEnd(source: string, bodyOpenIdx: number): number {
+  if (bodyOpenIdx < 0 || bodyOpenIdx >= source.length) return -1;
   let depth = 0;
-  let line = 1;
   let i = bodyOpenIdx;
   while (i < source.length) {
     const ch = source[i] as string;
     const next = source[i + 1];
-    if (ch === '\n') {
-      line += 1;
-      i += 1;
-      continue;
-    }
     // 行注释 / 块注释：整块跳过（注释内的花括号不计深度）
     if (ch === '/' && (next === '/' || next === '*')) {
       if (next === '/') {
         const eol = source.indexOf('\n', i);
-        if (eol === -1) return line;
+        if (eol === -1) return -1;
         i = eol;
         continue;
       }
       const end = source.indexOf('*/', i + 2);
-      const stop = end === -1 ? source.length : end + 2;
-      line += source.slice(i, stop).split('\n').length - 1;
-      i = stop;
+      i = end === -1 ? source.length : end + 2;
       continue;
     }
-    // 正则字面量（2026-09-08 修复误判）：`/['"`]/g` 这类正则内含引号/反引号时，
-    // 会被下方字符串分支当作字符串起始，跳到下一个引号——曾把整个函数体
-    // 误算成 296 行。正则的识别条件：前一非空白字符不是标识符/右括号
-    // （即不可能是除法运算符），且后续在同一行内能闭合。
+    // 正则字面量：含引号/反引号时会被下方字符串分支误判，需先识别
     if (ch === '/' && next !== '/' && next !== '*') {
-      let prev = i - 1;
-      while (prev >= 0 && /\s/.test(source[prev] as string)) prev -= 1;
-      const prevCh = prev >= 0 ? (source[prev] as string) : '';
-      const prevIsOperand = /[\w$)\]]/.test(prevCh);
-      if (!prevIsOperand) {
-        let j = i + 1;
-        let closed = false;
-        let inClass = false;
-        while (j < source.length) {
-          const c = source[j] as string;
-          if (c === '\\') {
-            j += 2;
-            continue;
-          }
-          if (c === '\n') break;
-          if (c === '[') inClass = true;
-          else if (c === ']') inClass = false;
-          else if (c === '/' && !inClass) {
-            closed = true;
-            break;
-          }
-          j += 1;
-        }
-        if (closed) {
-          // 跳到正则结束后的 flags（字母）
-          let k = j + 1;
-          while (k < source.length && /[a-z]/.test(source[k] as string)) k += 1;
-          i = k;
-          continue;
-        }
+      const skip = trySkipRegexLiteral(source, i);
+      if (skip > i) {
+        i = skip;
+        continue;
       }
     }
-    // 字符串 / 模板串：跳到闭合引号（模板串内换行合法，需计入行数）
+    // 字符串 / 模板串：跳到闭合引号
     if (ch === '"' || ch === "'" || ch === '`') {
       let j = i + 1;
       while (j < source.length) {
@@ -210,7 +195,6 @@ export function measureBodyLines(source: string, bodyOpenIdx: number): number {
           continue;
         }
         if (c === ch) break;
-        if (c === '\n') line += 1;
         j += 1;
       }
       i = j + 1;
@@ -219,11 +203,71 @@ export function measureBodyLines(source: string, bodyOpenIdx: number): number {
     if (ch === '{') depth += 1;
     else if (ch === '}') {
       depth -= 1;
-      if (depth === 0) return line;
+      if (depth === 0) return i;
     }
     i += 1;
   }
-  return line;
+  return -1;
+}
+
+/**
+ * 尝试把 i 处的 `/` 识别为正则字面量并跳到结束位置
+ *
+ * @returns 正则结束后的下标（含 flags）；不是正则字面量时原样返回 i
+ */
+function trySkipRegexLiteral(source: string, i: number): number {
+  let prev = i - 1;
+  while (prev >= 0 && /\s/.test(source[prev] as string)) prev -= 1;
+  const prevCh = prev >= 0 ? (source[prev] as string) : '';
+  // 前一字符是标识符/右括号 → 除法运算符，不是正则
+  if (/[\w$)\]]/.test(prevCh)) return i;
+  let j = i + 1;
+  let inClass = false;
+  while (j < source.length) {
+    const c = source[j] as string;
+    if (c === '\\') {
+      j += 2;
+      continue;
+    }
+    if (c === '\n') return i;
+    if (c === '[') inClass = true;
+    else if (c === ']') inClass = false;
+    else if (c === '/' && !inClass) {
+      let k = j + 1;
+      while (k < source.length && /[a-z]/.test(source[k] as string)) k += 1;
+      return k;
+    }
+    j += 1;
+  }
+  return i;
+}
+
+/**
+ * 统计代码片段的净行数（排除空行与纯注释行）
+ *
+ * 判定规则与 lib/file-metrics.ts 的 measureLines 保持一致：
+ * 空行、`//` 行注释、`/* … *\/` 块注释（含多行）与续行 `*` 均不计。
+ */
+export function countNetLines(source: string): number {
+  const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  let inBlockComment = false;
+  let net = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line === '') continue;
+    if (inBlockComment) {
+      if (line.includes('*/')) inBlockComment = false;
+      continue;
+    }
+    if (line.startsWith('//')) continue;
+    if (line.startsWith('/*')) {
+      if (!line.includes('*/')) inBlockComment = true;
+      continue;
+    }
+    if (line.startsWith('*')) continue;
+    net++;
+  }
+  return net;
 }
 
 /**

@@ -51,7 +51,17 @@ function loadLimits(): { params: number; body: number } {
 const { params: PARAM_LIMIT, body: BODY_LIMIT } = loadLimits();
 const METRICS = ['params', 'body'] as const;
 
-/** 一处超限（key = `相对路径#函数名`，行号不入 key 以免代码上方插入注释即漂移） */
+/**
+ * 一处超限（key = `相对路径#函数名`，行号不入 key 以免代码上方插入注释即漂移）
+ *
+ * key 稳定性评估（2026-09-08，实测后决定保持现状）：
+ * 同名函数用 `#2`/`#3` 序号区分。理论缺陷是「在文件中间插入一个同名函数」
+ * 会让原有条目的序号位移（语义漂移）；但实测两种替代方案都更差：
+ * - 行号 key（`name@行`）：任何上方增删行都漂移——本项目改代码时几乎每次都动行号
+ * - 内容哈希 key：同名函数体相同即冲突，且改动函数体就换 key
+ * 且当前基线 143 条中带序号的条目为 **0 条**（同名函数同时超限的场景未出现），
+ * 该风险在实践中未发生。故保持序号方案，不在无收益的情况下引入新漂移源。
+ */
 interface Violation extends FnMetric {
   readonly file: string;
   readonly key: string;
@@ -136,7 +146,7 @@ function main(): number {
         `（基线 ${Object.keys(baseline).length} 条，只允许收紧）`,
     );
     console.log(
-      `  门槛：形参 ≤${PARAM_LIMIT} / 函数体 ≤${BODY_LIMIT} 行（体长 = 花括号深度扫描，含首尾花括号行）`,
+      `  门槛：形参 ≤${PARAM_LIMIT} / 函数体 ≤${BODY_LIMIT} 净行（净行 = 排除空行与纯注释，与 check-file-size 同口径）`,
     );
     console.log('  最长函数体 Top 10（含未超限项，供重构排期）：');
     for (const r of longest.slice(0, 10)) {

@@ -68,17 +68,19 @@ describe('measureBodyLines', () => {
     const s = src('  const a = "{{{";\n  const b = `}}`;\n  return a + b;');
     expect(measureBodyLines(s, idxOf(s))).toBe(5);
   });
-  it('注释中的花括号不计深度', () => {
+  it('注释中的花括号不计深度，且注释行不计入净行', () => {
     const s = src('  // }}}\n  /* {{{ */\n  return 1;');
-    expect(measureBodyLines(s, idxOf(s))).toBe(5);
+    // 净行口径（2026-09-08）：{ 行 + return 行 + } 行 = 3（两行注释不计）
+    expect(measureBodyLines(s, idxOf(s))).toBe(3);
   });
-  it('跨行模板串按物理行计数', () => {
+  it('跨行模板串按净行计数（模板串内换行是代码行）', () => {
     const s = src('  const t = `a\nb\nc`;');
+    // 净行：{ 行 + const 行（含模板串 3 物理行）+ } 行 = 5
     expect(measureBodyLines(s, idxOf(s))).toBe(5);
   });
-  it('未闭合时返回到文件末尾（不误返回 0）', () => {
+  it('未闭合时返回 0（无法确定体范围，按不参与门禁处理）', () => {
     const s = 'function f() {\n  a();\n  b();';
-    expect(measureBodyLines(s, s.indexOf('{'))).toBe(3);
+    expect(measureBodyLines(s, s.indexOf('{'))).toBe(0);
   });
   it('起始下标非法返回 0', () => {
     expect(measureBodyLines('abc', -1)).toBe(0);
