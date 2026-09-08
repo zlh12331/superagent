@@ -22,6 +22,13 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('视觉回归测试', () => {
+  // 基线仅在 Windows 生成（e2e/visual.spec.ts-snapshots/*-win32.png）。
+  // Playwright 默认快照名含平台后缀，CI 的 e2e-browser job 跑在 ubuntu-latest，
+  // 期望 -linux.png 而基线不存在 → 必然假红。跨平台字体渲染差异无法用阈值抹平，
+  // 故非 win32 平台显式跳过（2026-09-06 审计修复；如需 Linux 基线，
+  // 应在容器内 --update-snapshots 生成并提交）。
+  test.skip(process.platform !== 'win32', '视觉基线仅 Windows 维护（需在目标平台生成基线后放开）');
+
   test('首页主界面快照', async ({ page }) => {
     await page.goto('/');
     // 等待应用完全渲染（React 挂载 + 网络资源加载）

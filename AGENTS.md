@@ -157,7 +157,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - 测试文件与源码 colocation：`**/*.test.ts` / `**/*.test.tsx`
 - Vitest globals 启用（describe/it/expect 无需 import）
 - renderer 测试用 jsdom + `test/setup.ts`（mock `window.api` 并 polyfill ResizeObserver/IntersectionObserver/matchMedia）
-- 覆盖率阈值：statements 80% / branches 75% / functions 80% / lines 80%（以 CI 报告为准；main 实测 ~92%，数字不再在本文件维护）；**覆盖率下限是棘轮门禁**（`check:coverage-floors`，`coverage-floors:tighten` 收紧基线——继续收紧必须先补测试，renderer 覆盖率距规范仍有缺口）
+- 覆盖率阈值：statements 80% / branches 75% / functions 80% / lines 80%（**数字真源 = `scripts/coverage-floors.json`，本文件不维护任何实测值**）；**覆盖率下限是棘轮门禁**（`check:coverage-floors`，`coverage-floors:tighten` 收紧基线——继续收紧必须先补测试，renderer 覆盖率距规范仍有缺口）
 - **fast-check 属性测试已试点**（如 clampOutputTokens/joinPath），纯函数适合用属性测试补强
 - E2E 有 3 个 Playwright 配置：`e2e/playwright.config.ts`（浏览器）、`e2e/playwright.electron.config.ts`（Electron）、`e2e/playwright.smoke.config.ts`（生产构建）；另有 visual/a11y/perf 子集按 grep 分组
 - 集成测试目录 `tests/integration/`（20+ 测试文件，CI 有独立 integration-tests job）

@@ -76,11 +76,11 @@
 | 配置 | statements | branches | functions | lines | 说明 |
 |------|-----------|----------|-----------|-------|------|
 | shared 规范值 | 80 | 30 | 40 | 80 | IPC schema/常量/类型声明包，分支/函数天然低（有效覆盖理念，不套业务层标准） |
-| shared 当前门槛 | 80 | 30 | 39 | 80 | 2026-08-27 全链审计按棘轮机制上调：实测 89.06/44.44/44.82/88.95，分支取规范值 30，函数取实测−5=39（逼近规范 80/30/40/80） |
+| shared 当前门槛 | 80 | 30 | 40 | 80 | 与 scripts/coverage-floors.json 一致（2026-08-31 实测 91.5/59.09/57.14/91.42）；分支按声明包定位取规范值 30 |
 | main 规范值 | 80 | 75 | 80 | 80 | 业务核心层（与 §3.4 核心域目标一致） |
-| main 当前门槛 | 80 | 75 | 80 | 80 | 2026-08-12 更新：14 批补测后实测 92.45/84.59/89.57，实测−5 缓冲超过规范值 → 取规范值 |
+| main 当前门槛 | 80 | 75 | 80 | 80 | 与 scripts/coverage-floors.json 一致（2026-08-31 实测 87.98/80.33/87.04/88.16），实测余量已超规范值 → 取规范值 |
 | renderer 规范值 | 80 | 75 | 80 | 80 | 业务核心层 |
-| renderer 当前门槛 | 59 | 50 | 54 | 59 | 2026-08-27 全链审计纠正：此前记录的 92.87 与实测不符（技术栈全量升级后口径变化 + 存量缺口）；实测 64.06/55.91/59.96/64.87，实测−5 取整；后续补测后按机制上调 |
+| renderer 当前门槛 | 70 | 61 | 66 | 71 | 与 scripts/coverage-floors.json 一致（2026-08-31 实测 75.35/66.16/71.25/76.36），仍低于业务层规范值 10~14pp，缺口以该文件 measured 与 specTarget 之差为准 |
 
 **门槛定位与收紧机制**：
 - 门槛 = 防倒退（拦显著下降），**不是目标值**；缓冲取实测 −5 点，避免小幅波动误伤 CI
@@ -209,10 +209,10 @@ E2E 兑底是正式策略而非欠账：
 
 | 文件 | 说明 |
 |------|------|
-| [src/main/infra/ai/agent-service.test.ts](file:///src/main/infra/ai/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
-| [src/main/infra/ai/tool-executor.test.ts](file:///src/main/infra/ai/tool-executor.test.ts) | 工具执行 + 权限审批 |
+| [src/main/infra/ai/agent/agent-service.test.ts](file:///src/main/infra/ai/agent/agent-service.test.ts) | AgentService 多轮工具调用 + abort + dispose |
+| [src/main/infra/ai/tools/tool-executor.test.ts](file:///src/main/infra/ai/tools/tool-executor.test.ts) | 工具执行 + 权限审批 |
 | [src/main/infra/ai/models/token-limits.property.test.ts](file:///src/main/infra/ai/models/token-limits.property.test.ts) | fast-check 属性测试试点：clampOutputTokens 数学不变量（窗口余量/上限/下限保护） |
-| [src/main/infra/ai/permission-service.test.ts](file:///src/main/infra/ai/permission-service.test.ts) | 权限决策 + 记忆缓存 |
+| [src/main/infra/ai/tools/permission-service.test.ts](file:///src/main/infra/ai/tools/permission-service.test.ts) | 权限决策 + 记忆缓存 |
 | [src/main/infra/storage/session-service.test.ts](file:///src/main/infra/storage/session-service.test.ts) | 会话 CRUD + 用量统计 + 回合记录 |
 | [src/main/infra/git/git-service.test.ts](file:///src/main/infra/git/git-service.test.ts) | Git 操作（status / diff / add / commit / push） |
 | [src/main/infra/file/file-service.test.ts](file:///src/main/infra/file/file-service.test.ts) | 文件读写 + 目录列举 + 监听 |

@@ -4,12 +4,12 @@
     "raw": 950
   },
   "src/main/infra/ai/agent/agent-service.ts": {
-    "net": 572,
-    "raw": 904
+    "net": 578,
+    "raw": 908
   },
   "src/main/infra/ai/tools/permission-service.ts": {
     "net": 440,
-    "raw": 678
+    "raw": 680
   },
   "src/main/infra/file/file-service.ts": {
     "net": 421,
@@ -20,8 +20,8 @@
     "raw": 627
   },
   "src/main/service-container.ts": {
-    "net": 560,
-    "raw": 1072
+    "net": 564,
+    "raw": 1074
   },
   "src/renderer/dev/mock-api.ts": {
     "net": 907,

@@ -59,10 +59,6 @@
     "body": 134,
     "params": 1
   },
-  "src/main/infra/ai/tools/web-fetch.tool.ts#createWebFetchTool": {
-    "body": 53,
-    "params": 0
-  },
   "src/main/infra/ai/tools/write-file.tool.ts#createWriteFileTool": {
     "body": 41,
     "params": 1
@@ -92,7 +88,7 @@
     "params": 2
   },
   "src/main/infra/storage/db.ts#initDb": {
-    "body": 65,
+    "body": 63,
     "params": 0
   },
   "src/main/infra/storage/db.ts#tryRestoreFromBackup": {
@@ -304,7 +300,7 @@
     "params": 1
   },
   "src/renderer/components/file-tree/FileTreePanel.tsx#FileTreePanel": {
-    "body": 145,
+    "body": 135,
     "params": 1
   },
   "src/renderer/components/file-tree/FileViewerPanel.tsx#FileViewerPanel": {
@@ -524,7 +520,7 @@
     "params": 1
   },
   "src/renderer/routes/home.tsx#HomePage": {
-    "body": 276,
+    "body": 277,
     "params": 0
   },
   "src/renderer/test/msw-handlers.ts#createMockApi": {

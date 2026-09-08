@@ -113,11 +113,22 @@ jobs:
           # 不入仓），不设此变量 prepare-memory-hub 会 exit(1) 中断 && 链，三平台全部失败
           MEMORY_HUB_OPTIONAL: '1'
 
-      - name: "Notice: update feed is placeholder"
-        run: >-
-          echo "::warning::electron-builder publish.url 仍为占位域名（example.com），
-          打包产物的自动更新检查将失败；latest*.yml 已随 GitHub Releases 发布，
-          上线前需替换 publish.url 或改用 provider: github"
+      # 硬门禁（2026-09-06 审计修复）：此前只 echo warning，占位 feed 会被静默发版。
+      # 出厂包更新源指向 example.com = 自动更新永远失败（且域名被抢注即供应链风险）。
+      # 确需临时发版：设 ALLOW_PLACEHOLDER_FEED=1 显式豁免（有痕）。
+      - name: "Guard: update feed must not be a placeholder"
+        shell: bash
+        env:
+          ALLOW_PLACEHOLDER_FEED: ${{ vars.ALLOW_PLACEHOLDER_FEED }}
+        run: |
+          if grep -q 'code-agent\.example\.com' electron-builder.yml; then
+            echo "::error::electron-builder.yml 的 publish.url 仍是占位域名——出厂包自动更新会失败。"
+            echo "::error::请替换为真实 HTTPS 源（或改用 provider: github）后重新发版。"
+            if [ "$ALLOW_PLACEHOLDER_FEED" != "1" ]; then
+              exit 1
+            fi
+            echo "::warning::ALLOW_PLACEHOLDER_FEED=1，已豁免本次发版。"
+          fi
 
       # ── 上传 Sentry 符号（仅 Windows 主发布端；其余平台产物不含符号需求）─
       # P5 修复：

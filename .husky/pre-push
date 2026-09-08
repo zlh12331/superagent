@@ -21,11 +21,16 @@ fi
 
 echo "[pre-push] 运行密钥扫描 + 快速门禁（typecheck + lint + test:scripts）..."
 
-# 密钥扫描（gitleaks 业界标准；未安装时跳过并提示）
+# 密钥扫描（gitleaks 业界标准）：未安装时**失败**而非静默跳过——
+# 静默放行等于这道闸门不存在（2026-09-06 审计修复）。
+# 紧急情况仍可用 SKIP_PREPUSH=1 显式跳过（有痕、可追溯）。
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks dir . --redact --no-banner || exit 1
 else
-  echo "[pre-push] gitleaks 未安装，跳过密钥扫描"
+  echo "[pre-push] ❌ gitleaks 未安装——密钥扫描无法执行。"
+  echo "[pre-push]    安装：https://github.com/gitleaks/gitleaks#installing"
+  echo "[pre-push]    或显式跳过：SKIP_PREPUSH=1 git push"
+  exit 1
 fi
 
 pnpm typecheck || exit 1

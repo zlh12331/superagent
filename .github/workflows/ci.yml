@@ -78,6 +78,11 @@ jobs:
       - name: Unit tests + coverage gate (shared + main + renderer)
         run: pnpm test:coverage
 
+      - name: Gate scripts self-test
+        # 守卫门禁自身的测试（棘轮/覆盖率真源/文件度量等 9 个文件）——
+        # 此前只在本地 pre-push 跑，CI 不跑等于门禁自己没人看（2026-09-06 审计修复）
+        run: pnpm test:scripts
+
       - name: Dependency audit
         # audit-ci + .nsprc 白名单（2026-08-30 收紧为卡关；本地已验证 0 命中）
         run: pnpm run audit
