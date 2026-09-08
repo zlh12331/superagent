@@ -31,9 +31,15 @@ export interface RatchetProblem {
 /**
  * 读取基线 JSON；文件缺失或结构非法时抛错（门禁宁可显式失败也不静默放行）
  *
+ * 2026-09-08 语义调整（棘轮只锁「超限」维度）：
+ * - `metrics` 从「必须全部存在」改为「允许出现的指标集」——某函数 params 合规、
+ *   仅 body 超限时，条目不记 params。缺失指标视为「该维度未超限」。
+ * - 未知字段由「静默丢弃」改为报错：防止基线里塞入无人校验的字段（此前
+ *   `{"net":100,"extra":999}` 会静默丢 extra）。
+ *
  * @param raw 基线文件原始内容
- * @param metrics 必须存在的指标名集合
- * @returns 解析后的基线映射
+ * @param metrics 允许出现的指标名集合
+ * @returns 解析后的基线映射（每条至少含一个指标）
  */
 export function parseBaseline(raw: string, metrics: readonly string[]): Baseline {
   const parsed: unknown = JSON.parse(raw);
@@ -47,12 +53,17 @@ export function parseBaseline(raw: string, metrics: readonly string[]): Baseline
     }
     const entry = value as Record<string, unknown>;
     const metrics_: Metrics = {};
-    for (const m of metrics) {
-      const v = entry[m];
+    for (const [m, v] of Object.entries(entry)) {
+      if (!metrics.includes(m)) {
+        throw new Error(`基线条目 ${key} 含未知指标 ${m}（允许：${metrics.join('/')}）`);
+      }
       if (typeof v !== 'number' || !Number.isFinite(v)) {
-        throw new Error(`基线条目 ${key} 缺少数值字段 ${m}`);
+        throw new Error(`基线条目 ${key} 的 ${m} 必须是数值，当前为 ${JSON.stringify(v)}`);
       }
       metrics_[m] = v;
+    }
+    if (Object.keys(metrics_).length === 0) {
+      throw new Error(`基线条目 ${key} 不含任何指标`);
     }
     out[key] = metrics_;
   }
@@ -75,10 +86,16 @@ export function serializeBaseline(baseline: Baseline): string {
 /**
  * 棘轮比对：实测违规集 vs 基线
  *
- * @param current 实测违规（key → 指标）；只包含**超限**的条目
+ * @param current 实测违规（key → 指标）；只包含**超限**的条目与**超限**的指标
  * @param baseline 已提交基线
- * @param metrics 参与比对的指标名（全部指标都必须劣化才算 grown）
+ * @param metrics 参与比对的指标名集合
  * @returns 问题列表（空数组表示门禁通过）
+ *
+ * 2026-09-08 修正（棘轮只锁超限维度）：此前比对 `metrics` 里的全部指标，
+ * 于是「params 超限、body 合规」的函数，其 body 从 30 涨到 39（仍未超限）
+ * 也会报 grown——把棘轮从「超限维度不得劣化」扩大成「该函数所有维度永久
+ * 锁死」。现改为只比对**基线中记录的**指标：基线只记超限维度，故合规维度
+ * 上涨不再卡关（由门槛本身约束）。
  */
 export function evaluateRatchet(
   current: ReadonlyMap<string, Metrics>,
@@ -97,7 +114,9 @@ export function evaluateRatchet(
       });
       continue;
     }
-    const grown = metrics.filter((m) => (cur[m] ?? 0) > (base[m] ?? 0));
+    // 只比对基线记录的指标（= 上次超限的维度）
+    const tracked = Object.keys(base);
+    const grown = tracked.filter((m) => (cur[m] ?? 0) > (base[m] ?? 0));
     if (grown.length > 0) {
       problems.push({
         kind: 'grown',
@@ -122,8 +141,12 @@ export function evaluateRatchet(
 }
 
 /**
- * 计算收紧后的基线：仅保留当前仍超限的条目，数值取 min(旧值, 实测值)。
- * 高于旧值的新实测（劣化）不会被写入——除非 force=true。
+ * 计算收紧后的基线：仅保留当前仍超限的条目与**超限的指标**，
+ * 数值取 min(旧值, 实测值)；高于旧值的新实测（劣化）不写入——除非 force=true。
+ *
+ * 2026-09-08：改为只遍历 `cur` 实际记录的指标（= 超限维度）。此前遍历全部
+ * metrics 并把缺失指标补 0，会把「合规维度」也写进基线（例如 body 未超限
+ * 却记 body:0），既污染基线又让后续判定语义混乱。
  */
 export function proposeBaseline(
   current: ReadonlyMap<string, Metrics>,
@@ -135,12 +158,12 @@ export function proposeBaseline(
   for (const [key, cur] of current) {
     const base = baseline[key];
     const merged: Metrics = {};
-    for (const m of metrics) {
-      const c = cur[m] ?? 0;
+    for (const [m, c] of Object.entries(cur)) {
+      if (!metrics.includes(m)) continue;
       const b = base?.[m];
       merged[m] = b === undefined || force || c <= b ? c : b;
     }
-    out[key] = merged;
+    if (Object.keys(merged).length > 0) out[key] = merged;
   }
   return out;
 }

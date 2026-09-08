@@ -101,9 +101,21 @@ function scanAll(): ScanResult {
   return { all, violations };
 }
 
+/**
+ * 超限集 → 指标映射（2026-09-08：只记**超限**的指标）
+ *
+ * 此前记录全部指标值，导致「params 超限、body 合规」的函数其 body 也被
+ * 永久锁死（body 从 30 涨到 39 仍未超限却报 grown）。现只记超限维度，
+ * 与 ratchet.ts 的「棘轮只锁超限维度」语义一致。
+ */
 function toMetricMap(violations: readonly Violation[]): Map<string, Metrics> {
   const map = new Map<string, Metrics>();
-  for (const v of violations) map.set(v.key, { params: v.params, body: v.bodyLines });
+  for (const v of violations) {
+    const entry: Metrics = {};
+    if (v.params > PARAM_LIMIT) entry['params'] = v.params;
+    if (v.bodyLines > BODY_LIMIT) entry['body'] = v.bodyLines;
+    map.set(v.key, entry);
+  }
   return map;
 }
 
@@ -148,6 +160,17 @@ function main(): number {
     console.log(
       `  门槛：形参 ≤${PARAM_LIMIT} / 函数体 ≤${BODY_LIMIT} 净行（净行 = 排除空行与纯注释，与 check-file-size 同口径）`,
     );
+    // 2026-09-08：像 check-coverage-floors 一样打印「距规范目标的差距」，
+    // 避免棘轮把「暂时容忍」静默变成「永久合法」——基线里的条目是债，不是成就
+    const overBody = violations.filter((v) => v.bodyLines > BODY_LIMIT);
+    const worst = overBody.sort((a, b) => b.bodyLines - a.bodyLines)[0];
+    if (worst !== undefined) {
+      const over = worst.bodyLines - BODY_LIMIT;
+      console.log(
+        `  距规范目标：${overBody.length} 个函数体超 ${BODY_LIMIT} 净行，最长 ${worst.bodyLines} 净行` +
+          `（超 ${over} 行，${worst.file}）——基线只保证不劣化，不代偿重构`,
+      );
+    }
     console.log('  最长函数体 Top 10（含未超限项，供重构排期）：');
     for (const r of longest.slice(0, 10)) {
       console.log(`    ${r.bodyLines} 行  ${r.file}:${r.line} ${r.name}()`);

@@ -20,8 +20,13 @@ describe('parseBaseline', () => {
     expect(base['a.ts']).toEqual({ raw: 700, net: 650 });
   });
 
-  it('缺指标字段时报错（宁可不放行）', () => {
-    expect(() => parseBaseline('{"a.ts":{"raw":700}}', METRICS)).toThrow(/raw|net/);
+  it('缺指标合法（未超限维度不记录），未知指标报错', () => {
+    // 2026-09-08：棘轮只锁超限维度，缺指标 = 该维度未超限，属合法
+    expect(parseBaseline('{"a.ts":{"raw":700}}', METRICS)['a.ts']).toEqual({ raw: 700 });
+    // 未知指标是配置错误（此前静默丢弃，现报错）
+    expect(() => parseBaseline('{"a.ts":{"raw":700,"extra":1}}', METRICS)).toThrow(/未知指标/);
+    // 空指标对象也是错误
+    expect(() => parseBaseline('{"a.ts":{}}', METRICS)).toThrow(/不含任何指标/);
   });
 
   it('非对象顶层 / 非数值条目报错', () => {
