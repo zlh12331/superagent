@@ -414,10 +414,10 @@ importers:
     dependencies:
       dependency-cruiser:
         specifier: ^18.2.0
-        version: 18.2.0(typescript@7.0.2)
+        version: 18.2.0(typescript@6.0.3)
       typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
+        specifier: ^6.0.0
+        version: 6.0.3
 
   tools/typedoc:
     dependencies:
@@ -11141,7 +11141,7 @@ snapshots:
 
   depd@2.0.0: {}
 
-  dependency-cruiser@18.2.0(typescript@7.0.2):
+  dependency-cruiser@18.2.0(typescript@6.0.3):
     dependencies:
       acorn: 8.18.0
       acorn-jsx: 5.3.2(acorn@8.18.0)
@@ -11162,7 +11162,7 @@ snapshots:
       tsconfig-paths-webpack-plugin: 4.2.0
       watskeburt: 6.0.0
     optionalDependencies:
-      typescript: 7.0.2
+      typescript: 6.0.3
 
   dequal@2.0.3: {}
 

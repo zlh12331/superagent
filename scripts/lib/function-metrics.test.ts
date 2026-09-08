@@ -155,9 +155,29 @@ describe('scanFunctions', () => {
     expect(scanFunctions(source)[0]?.params).toBe(5);
   });
 
-  it('已知漏报边界：对象字面量方法不被正则覆盖（诚实标注）', () => {
+  it('对象字面量方法已被覆盖（2026-09-08 补 class/对象方法度量后）', () => {
     const source = 'const handlers = {\n  snapshot(a, b, c, d, e, f) {\n    return 1;\n  },\n};';
-    expect(scanFunctions(source)).toEqual([]);
+    const fns = scanFunctions(source);
+    // 对象字面量方法形参与 class 方法同形，现已被 METHOD_RE 覆盖
+    expect(fns.map((f) => [f.name, f.params, f.bodyLines])).toEqual([['snapshot', 6, 3]]);
+  });
+
+  it('控制流语句不被误配为方法（2026-09-08 修复 if#N 幽灵条目）', () => {
+    const source = [
+      'function outer(x: number) {',
+      '  if (x > 0) {',
+      '    return 1;',
+      '  }',
+      '  for (let i = 0; i < 3; i++) {',
+      '    x += i;',
+      '  }',
+      '  return x;',
+      '}',
+    ].join('\n');
+    const names = scanFunctions(source).map((f) => f.name);
+    expect(names).toEqual(['outer']);
+    expect(names).not.toContain('if');
+    expect(names).not.toContain('for');
   });
 
   it('显式返回类型标注的箭头不再跨行吞并（回归：曾误报 params 膨胀）', () => {

@@ -37,6 +37,19 @@ pnpm typecheck || exit 1
 pnpm lint || exit 1
 pnpm check:static || exit 1
 pnpm depcruise || exit 1
+
+# schema 漂移检测（2026-09-08 新增）：
+# `drizzle-kit check` 只校验迁移快照链自身，不读 schema.ts——改了 schema 忘
+# generate 时它会误报绿。这里用 generate + git status 做真实漂移检测。
+echo "[pre-push] schema 漂移检测（drizzle-kit generate + git status）..."
+pnpm exec drizzle-kit generate --name prepush_drift_check >/dev/null 2>&1 || exit 1
+if [ -n "$(git status --porcelain -- drizzle/)" ]; then
+  echo "[pre-push] ❌ schema.ts 与 drizzle/ 迁移不同步（请提交 generate 产物）："
+  git status --porcelain -- drizzle/
+  exit 1
+fi
+pnpm exec drizzle-kit check || exit 1
+
 pnpm test:scripts || exit 1
 
 echo "[pre-push] 快速门禁通过 ✓"

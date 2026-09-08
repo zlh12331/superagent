@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["src/renderer/*"],
+      "@code-agent/shared": ["packages/shared/src/index.ts"],
+      "@code-agent/shared/*": ["packages/shared/src/*"],
+      "@main/*": ["src/main/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "packages/shared/src/**/*.ts",
+    "tests/integration/**/*.ts"
+  ]
+}

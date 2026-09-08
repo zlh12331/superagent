@@ -43,6 +43,44 @@ export interface FnMetric {
 const FN_RE =
   /(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([\s\S]*?)\)\s*(?::[^{}]*)?(?=\s*\{)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(((?:[^()]|\([^()]*\))*)\)|(\w+))\s*(?::(?:[^(){};=]|\((?:[^()]|\([^()]*\))*\))*)?=>|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(([\s\S]*?)\)/g;
 
+/**
+ * class 方法签名正则（2026-09-08 补覆盖）
+ *
+ * 此前 class 方法完全不被度量——最长的三处（AgentService.streamToWebContents
+ * 约 511 行、ServiceContainer.dispose 约 199 行、SessionService.appendMessage）
+ * 全部逃逸门禁，报告里 0 命中给人「函数都合规」的错觉。
+ *
+ * 覆盖形态：
+ * - 修饰符：public/private/protected/readonly/static/abstract/override/async/get/set
+ *   任意组合（如 `private async foo(...)`、`static get bar()`）
+ * - 可选方法名 `#private`、计算属性跳过（正则不匹配，属漏报方向）
+ * - 形参区同样有界（最多一层嵌套括号），允许显式返回类型
+ * - 泛型方法 `foo<T>(...)` 由泛型段 `(?:<[^(]*>)?` 吸收
+ *
+ * 排除：constructor 单独计（体长同样受门禁约束，不豁免）
+ */
+const METHOD_RE =
+  /^[ \t]+(?:(?:public|private|protected|readonly|static|abstract|override|declare|async|get|set)\s+)*([A-Za-z_$#][\w$]*|constructor)\s*(?:<[^(]*>)?\s*\(((?:[^()]|\([^()]*\))*)\)\s*(?::(?:[^(){};=]|\((?:[^()]|\([^()]*\))*\))*)?(?=\s*\{)/gm;
+
+/**
+ * 控制流关键字（2026-09-08 修复误配）
+ *
+ * METHOD_RE 按「缩进 + 标识符 + 形参区 + {」匹配，`if (x) {` / `for (…) {`
+ * 这类语句形态完全符合，会被误当方法（曾产出 `if#5 body=67` 的幽灵条目）。
+ * 这些关键字不是方法名，显式排除。
+ */
+const CONTROL_FLOW_KEYWORDS = new Set([
+  'if',
+  'for',
+  'while',
+  'switch',
+  'catch',
+  'return',
+  'do',
+  'else',
+  'with',
+]);
+
 /** 剔除泛型内容（支持多层嵌套）：防 Map<string, number> 的逗号被误计为参数分隔 */
 export function stripGenerics(text: string): string {
   let prev = '';
@@ -176,6 +214,7 @@ export function findBodyOpen(source: string, afterIdx: number): number {
 export function scanFunctions(source: string): FnMetric[] {
   const lines = source.split('\n');
   const out: FnMetric[] = [];
+  const seenAt = new Set<number>();
   for (const match of source.matchAll(FN_RE)) {
     const index = match.index ?? 0;
     // 四种形态：function 声明(1,2)、括号箭头(3,4)、裸标识符箭头(3,5)、const = function(6,7)
@@ -195,6 +234,34 @@ export function scanFunctions(source: string): FnMetric[] {
     const bodyOpen = findBodyOpen(source, index + match[0].length);
     const bodyLines = bodyOpen === -1 ? 0 : measureBodyLines(source, bodyOpen);
     out.push({ name, line, params: counted.count, bodyLines, destructured: counted.destructured });
+    seenAt.add(index);
+  }
+
+  // class 方法（2026-09-08 补覆盖）：正则按行锚定缩进 + 修饰符前缀，
+  // 与 FN_RE 的匹配位置不会重叠（方法签名不以 function/const 开头），
+  // seenAt 仅作防御性去重。
+  for (const match of source.matchAll(METHOD_RE)) {
+    const index = match.index ?? 0;
+    if (seenAt.has(index)) continue;
+    const name = match[1] ?? 'method';
+    // 控制流语句形态（if/for/while…）不是方法，跳过
+    if (CONTROL_FLOW_KEYWORDS.has(name)) continue;
+    const paramsText = match[2] ?? '';
+    const line = source.slice(0, index).split('\n').length;
+    const lineText = (lines[line - 1] ?? '').trim();
+    if (lineText.startsWith('//') || lineText.startsWith('*') || lineText.startsWith('/*'))
+      continue;
+
+    const counted = countParams(paramsText);
+    const bodyOpen = findBodyOpen(source, index + match[0].length);
+    const bodyLines = bodyOpen === -1 ? 0 : measureBodyLines(source, bodyOpen);
+    out.push({
+      name,
+      line,
+      params: counted.count,
+      bodyLines,
+      destructured: counted.destructured,
+    });
   }
   return out;
 }

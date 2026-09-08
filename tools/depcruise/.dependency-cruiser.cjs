@@ -108,9 +108,14 @@ module.exports = {
     doNotFollow: {
       path: '(^node_modules|node_modules|^src/main/(node_modules|out|coverage)|^src/renderer/(node_modules|out)|^out/)',
     },
-    // 解析 tsconfig 路径别名（@code-agent/* 等）
+    // 解析 tsconfig 路径别名（@/* 与 @code-agent/*）
+    // 2026-09-08 修复：此前指向根 tsconfig.json——那是 solution 文件
+    // （files: [] + project references），不含 paths，导致 renderer 的 574 条
+    // 别名依赖全部解析失败，renderer-not-main / no-circular 等规则对 renderer
+    // 内部边形同虚设。现指向仓库根的 tsconfig.depcruise.json（集中声明全部别名，
+    // 仅服务依赖图解析、不参与 tsc --build）。
     tsConfig: {
-      fileName: 'tsconfig.json',
+      fileName: 'tsconfig.depcruise.json',
     },
     enhancedResolveOptions: {
       exportsFields: ['exports'],

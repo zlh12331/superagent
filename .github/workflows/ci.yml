@@ -72,8 +72,18 @@ jobs:
         run: pnpm depcruise
 
       - name: Schema drift check (drizzle-kit)
-        # 防 schema.ts 与 drizzle/ 迁移快照漂移（数据层单一真源一致性）
-        run: pnpm exec drizzle-kit check
+        # 防 schema.ts 与 drizzle/ 迁移快照漂移（数据层单一真源一致性）。
+        # 2026-09-08 修复：此前只跑 `drizzle-kit check`，实测它只校验迁移快照链
+        # 自身（版本/父子 id），**从不读 schema.ts**——改了 schema 忘 generate
+        # 时 CI 依旧全绿。现在用 generate + git diff 做真实漂移检测。
+        run: |
+          pnpm exec drizzle-kit generate
+          if ! git diff --quiet -- drizzle/; then
+            echo "::error::schema.ts 与 drizzle/ 迁移不同步——请提交 pnpm exec drizzle-kit generate 的产物"
+            git diff --stat -- drizzle/
+            exit 1
+          fi
+          pnpm exec drizzle-kit check
 
       - name: Unit tests + coverage gate (shared + main + renderer)
         run: pnpm test:coverage
