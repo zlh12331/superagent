@@ -1,9 +1,15 @@
 // scripts/check-file-size.ts
-// 文件体积门槛（工程化强制）：原始行 + 净行双口径 + 棘轮基线
+// 文件体积门槛（工程化强制）：净行硬门槛 + 原始行告警 + 棘轮基线
 // ──────────────────────────────────────────────────────────────
-// 规则（两条同时生效，缺一即被绕过）：
-//   RAW_LIMIT = 600 原始行——物理行数，无法靠注释刷量规避（业界 eslint max-lines 口径）
-//   NET_LIMIT = 600 净行——去掉空行/纯注释后的代码量（对齐 skipBlankLines + skipComments）
+// 规则（对齐 typescript-dev-standards-ai.md 规则 9.2「单个文件净行不超过 600 行」）：
+//   NET_LIMIT = 600 净行——**唯一卡关口径**（净行 = 去掉空行与纯注释行）
+//   RAW_LIMIT = 600 原始行——**仅告警**（物理行数，提示注释密度/导航成本）
+//
+// 为什么原始行不卡关（2026-09-06 修正）：本项目用 check:comments 强制写注释，
+//   把原始行也当硬门槛等价于「600 行含注释」——文档写的是净行口径，实现曾比规范更严，
+//   结果 7 条存量里 5 条（net 578/564/445/421/333）只因注释多被永久锁死。
+//   原始行保留为告警，既能提示体积，又不惩罚文档化的代码。
+//
 // 范围：src/{main,renderer,preload} + packages/*/src（契约层曾长期在扫描范围外，
 //       definitions.ts 932 原始行无人管，2026-08-30 审计纠正）。
 //
@@ -44,8 +50,10 @@ function loadLimits(): { raw: number; net: number } {
     net: parsed.fileSize?.net ?? 600,
   };
 }
-const { raw: RAW_LIMIT, net: NET_LIMIT } = loadLimits();
-const METRICS = ['raw', 'net'] as const;
+/** 卡关口径：净行 */
+const { net: NET_LIMIT, raw: RAW_WARN_LIMIT } = loadLimits();
+/** 棘轮只锁净行（原始行仅告警，不参与基线比对） */
+const METRICS = ['net'] as const;
 
 function scanDirs(): string[] {
   return [
@@ -56,9 +64,14 @@ function scanDirs(): string[] {
   ];
 }
 
-/** 超限判定：任一口径超限即进入违规集 */
+/** 违规判定：净行超限（唯一卡关口径，见文件头注释） */
 function isViolating(m: { raw: number; net: number }): boolean {
-  return m.raw > RAW_LIMIT || m.net > NET_LIMIT;
+  return m.net > NET_LIMIT;
+}
+
+/** 原始行告警：净行合规但物理行数偏大（注释密度高，仅提示） */
+function isRawWarning(m: { raw: number; net: number }): boolean {
+  return m.net <= NET_LIMIT && m.raw > RAW_WARN_LIMIT;
 }
 
 function loadBaseline(): Record<string, Metrics> {
@@ -78,11 +91,15 @@ function main(): number {
   const files = scanDirs().flatMap((d) => collectSourceFiles(d));
   const current = new Map<string, Metrics>();
   const violatingRows: Array<{ path: string; raw: number; net: number }> = [];
+  const rawWarnings: Array<{ path: string; raw: number; net: number }> = [];
 
   for (const file of files) {
     const m = measureFile(ROOT, file);
+    if (isRawWarning(m)) {
+      rawWarnings.push(m);
+    }
     if (!isViolating(m)) continue;
-    current.set(m.path, { raw: m.raw, net: m.net });
+    current.set(m.path, { net: m.net });
     violatingRows.push(m);
   }
 
@@ -98,29 +115,29 @@ function main(): number {
   }
 
   const problems = evaluateRatchet(current, baseline, METRICS);
-  const sorted = violatingRows.sort((a, b) => b.raw - a.raw);
+  const sorted = violatingRows.sort((a, b) => b.net - a.net);
+  const rawWarnLines = rawWarnings
+    .sort((a, b) => b.raw - a.raw)
+    .map((w) => `  [warn] ${w.path}: raw ${w.raw}（净行 ${w.net} 合规，仅注释密度提示）`);
 
   if (problems.length === 0) {
     console.log(
-      `[check-file-size] ✅ 通过：${files.length} 文件，${current.size} 处超限全部在棘轮基线内` +
+      `[check-file-size] ✅ 通过：${files.length} 文件，${current.size} 处净行超限全部在棘轮基线内` +
         `（基线 ${Object.keys(baseline).length} 条，只允许收紧）`,
     );
-    console.log(`  门槛：原始 ≤${RAW_LIMIT} 行 / 净 ≤${NET_LIMIT} 行`);
+    console.log(`  门槛：净 ≤${NET_LIMIT} 行（原始行 >${RAW_WARN_LIMIT} 仅告警）`);
     for (const r of sorted) {
       const base = baseline[r.path];
-      console.log(
-        `  存量 ${r.path}: raw ${r.raw} net ${r.net}（基线 raw ${base?.raw ?? '-'} / net ${base?.net ?? '-'}）`,
-      );
+      console.log(`  存量 ${r.path}: net ${r.net} raw ${r.raw}（基线 net ${base?.net ?? '-'}）`);
     }
+    for (const line of rawWarnLines) console.log(line);
     return 0;
   }
 
-  console.error(
-    `[check-file-size] ❌ ${problems.length} 处棘轮违规（门槛 raw ${RAW_LIMIT} / net ${NET_LIMIT}）：`,
-  );
+  console.error(`[check-file-size] ❌ ${problems.length} 处棘轮违规（门槛 net ${NET_LIMIT}）：`);
   for (const line of renderProblems(problems)) console.error(line);
   console.error(
-    `[check-file-size] 当前超限 ${current.size} 处：\n${sorted.map((r) => `  ${r.path}: raw ${r.raw} net ${r.net}（${formatMetrics(r, METRICS)}）`).join('\n')}`,
+    `[check-file-size] 当前净行超限 ${current.size} 处：\n${sorted.map((r) => `  ${r.path}: net ${r.net} raw ${r.raw}（${formatMetrics(r, METRICS)}）`).join('\n')}`,
   );
   console.error(
     '[check-file-size] 修复指引：拆文件（typescript-dev-standards-ai.md §工程）；已重构请跑 pnpm check:file-size --update-baseline 收紧基线',

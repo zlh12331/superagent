@@ -1,4 +1,5 @@
 {
+  "$comment": "fileSize.net = 净行硬门槛（唯一卡关口径，对齐 typescript-dev-standards-ai.md 规则 9.2）；fileSize.raw = 原始行告警线（不卡关，仅提示注释密度）。见 scripts/check-file-size.ts 头注释。",
   "fileSize": {
     "raw": 600,
     "net": 600

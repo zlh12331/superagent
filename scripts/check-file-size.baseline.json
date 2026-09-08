@@ -1,30 +1,8 @@
 {
   "packages/shared/src/ipc/definitions.ts": {
-    "net": 857,
-    "raw": 950
-  },
-  "src/main/infra/ai/agent/agent-service.ts": {
-    "net": 578,
-    "raw": 908
-  },
-  "src/main/infra/ai/tools/permission-service.ts": {
-    "net": 440,
-    "raw": 680
-  },
-  "src/main/infra/file/file-service.ts": {
-    "net": 421,
-    "raw": 800
-  },
-  "src/main/infra/terminal/terminal-service.ts": {
-    "net": 333,
-    "raw": 627
-  },
-  "src/main/service-container.ts": {
-    "net": 564,
-    "raw": 1074
+    "net": 857
   },
   "src/renderer/dev/mock-api.ts": {
-    "net": 907,
-    "raw": 1021
+    "net": 907
   }
 }
