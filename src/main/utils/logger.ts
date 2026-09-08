@@ -50,6 +50,16 @@ export function initLogger(): void {
   log.transports.file.fileName = 'main.log';
   log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
 
+  // 异步写盘（2026-09-08 性能修复）：
+  // electron-log v5 文件传输默认 sync: true（内部 fs.writeFileSync），而
+  // wrap.ts 每次 IPC invoke 固定记 2 条 info（请求开始 + 请求成功）——
+  // 即每个 IPC 请求 2 次同步写盘。实测单次 appendFileSync 约 0.15 ms，
+  // Windows + Defender 实时扫描下可放大到 1–5 ms，高频 channel
+  // （session:list / system:getStatus）累计延迟可观。
+  // 改异步后由 electron-log 内部队列合并写入，崩溃时最多丢失队列尾部若干行
+  // （应用退出路径有 Sentry.close + 显式 flush，日志丢失窗口可接受）。
+  log.transports.file.sync = false;
+
   // 日志格式：[ISO时间] [级别] [traceId] 消息
   log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
   log.transports.console.format = '{level} {text}';

@@ -83,6 +83,12 @@ export const sessions = sqliteTable(
     ),
     // 查询索引：list 接口按 updatedAt 倒序（SQLite 索引可反向扫描，无需显式 DESC）
     index('idx_sessions_updated_at').on(t.updatedAt),
+    // 复合索引（2026-09-08 性能修复）：list 的排序键是 (pinned DESC, updated_at DESC)，
+    // 单列 idx_sessions_updated_at 因 pinned 是前导排序键而无法服务，
+    // EXPLAIN QUERY PLAN 实测为 SCAN sessions + USE TEMP B-TREE FOR ORDER BY。
+    index('idx_sessions_pinned_updated').on(t.pinned, t.updatedAt),
+    // working_dir 索引：listRecentDirs 的 GROUP BY working_dir 实测 SCAN + TEMP B-TREE
+    index('idx_sessions_working_dir').on(t.workingDir, t.updatedAt),
   ],
 );
 
@@ -279,6 +285,10 @@ export const turns = sqliteTable(
     // （最左前缀 session_id + seq 有序），无需再建同列普通索引——
     // 2026-09-06 审计删除冗余的 idx_turns_session_seq（每回合双份索引写）
     unique('uq_turns_session_seq').on(t.sessionId, t.seq),
+    // created_at 索引（2026-09-08 性能修复）：getRecentTurns 按
+    // ORDER BY created_at DESC, id DESC 取最近回合，此前实测 SCAN turns
+    // + TEMP B-TREE（turns 无 created_at 索引）
+    index('idx_turns_created_at').on(t.createdAt),
   ],
 );
 

@@ -88,15 +88,57 @@ export function compressContext(
 }
 
 /**
+ * token 计数缓存（2026-09-08 性能修复）
+ *
+ * BPE encode 约 33 KB/ms：单回合内 estimateMessagesTokens 至少被调 5 次
+ * （agent-service 的预算判定 + compressByTokenBudget 内部 3~4 次），
+ * 同一批消息文本会被反复全量编码。400 KB 上下文 ≈ 65–80 ms 纯主线程阻塞，
+ * 1 MB ≈ 150–180 ms（长会话首 token 延迟肉眼可见）。
+ *
+ * 缓存键用「长度 + 首尾片段」指纹：避免为每次调用生成完整文本哈希
+ * （那本身就是 O(n) 开销）；同长度同首尾而内容不同的概率极低，
+ * 且命中错误最多让估算偏差（不是安全边界），可接受。
+ *
+ * 上限 512 条 LRU：单会话消息数 + 系统提示 + 工具 schema 的合理工作集；
+ * 超出按插入顺序淘汰（Map 迭代序 = 插入序，删除最旧）。
+ */
+const TOKEN_CACHE_MAX = 512;
+const tokenCountCache = new Map<string, number>();
+
+/** 缓存键：长度 + 首尾 64 字符（低开销指纹） */
+function tokenCacheKey(text: string): string {
+  const head = text.slice(0, 64);
+  const tail = text.length > 64 ? text.slice(-64) : '';
+  return `${text.length}:${head}:${tail}`;
+}
+
+/**
  * 估算文本的 token 数（gpt-tokenizer 精确计数，cl100k_base 词表）
  *
- * 用于 token 预算压缩与 UI 展示上下文消耗。
+ * 用于 token 预算压缩与 UI 展示上下文消耗。结果带 LRU 缓存
+ * （见 tokenCountCache 注释：单回合重复编码是长上下文首 token 延迟主因）。
  */
 export function estimateTokenCount(text: string): number {
   if (text.length === 0) {
     return 0;
   }
-  return encode(text).length;
+  const key = tokenCacheKey(text);
+  const cached = tokenCountCache.get(key);
+  if (cached !== undefined) {
+    // LRU：命中后移到末尾（Map 迭代序 = 插入序，末尾为最近使用）
+    tokenCountCache.delete(key);
+    tokenCountCache.set(key, cached);
+    return cached;
+  }
+  const count = encode(text).length;
+  tokenCountCache.set(key, count);
+  if (tokenCountCache.size > TOKEN_CACHE_MAX) {
+    const oldest = tokenCountCache.keys().next().value;
+    if (oldest !== undefined) {
+      tokenCountCache.delete(oldest);
+    }
+  }
+  return count;
 }
 
 /**

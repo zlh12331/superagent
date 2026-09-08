@@ -43,6 +43,13 @@
       "when": 1788861966622,
       "tag": "0005_index_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788871000309,
+      "tag": "0006_add_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

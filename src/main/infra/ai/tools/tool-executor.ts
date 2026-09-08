@@ -75,6 +75,39 @@ export interface IToolExecutor {
 }
 
 /**
+ * 工具输出统一字节闸门（2026-09-08 性能/成本修复）
+ *
+ * 背景：各工具的截断策略不一致——run_command 100KB、web_fetch 4000 字符，
+ * 而 read_file 只透传 fileService 结果（其 2MB 上限是「超过就报错」而非截断），
+ * 省略 limit 时读全文 → 2MB ≈ 50 万 token 灌入上下文，足以报废一个回合
+ * （既烧钱又挤掉有效上下文）。
+ *
+ * 位置选择：放在 ToolExecutor 出口而非各工具内——单点保证「任何工具的输出
+ * 都不可能无界进上下文」，新增工具无需重复实现。
+ *
+ * 阈值 200KB（约 5 万 token）：明显高于正常工具输出（读文件按需分段、
+ * grep 有 maxResults），又远低于能报废回合的量级。截断保留头部并标注
+ * 后续字节数，模型可据此改用 offset/limit 分段读取。
+ */
+const MAX_TOOL_OUTPUT_BYTES = 200 * 1024;
+
+/**
+ * 按字节截断工具输出（超限时保留头部 + 标注）
+ *
+ * 用 Buffer 按字节切分再转回字符串，避免按字符数截断导致多字节字符被劈开。
+ */
+export function clampToolOutput(output: string): string {
+  const bytes = Buffer.byteLength(output, 'utf8');
+  if (bytes <= MAX_TOOL_OUTPUT_BYTES) {
+    return output;
+  }
+  const head = Buffer.from(output, 'utf8').subarray(0, MAX_TOOL_OUTPUT_BYTES).toString('utf8');
+  // 多字节字符在切点处可能产生替换字符，去掉末尾可能不完整的字符
+  const safeHead = head.endsWith('\uFFFD') ? head.slice(0, -1) : head;
+  return `${safeHead}\n\n…（输出超过 ${MAX_TOOL_OUTPUT_BYTES / 1024}KB 已截断，共 ${(bytes / 1024).toFixed(0)}KB；请缩小范围或分段读取）`;
+}
+
+/**
  * ToolExecutor 默认实现
  *
  * 依赖：
@@ -314,7 +347,7 @@ export class ToolExecutor implements IToolExecutor {
             toolCallId,
             toolName,
             title: toolResult.title,
-            output: toolResult.output,
+            output: clampToolOutput(toolResult.output),
             ...(toolResult.metadata !== undefined ? { metadata: toolResult.metadata } : {}),
           };
           this.sendToolResult(webContents, result);
