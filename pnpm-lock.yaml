@@ -33,21 +33,12 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^3.0.43
         version: 3.0.43(zod@4.5.4)
-      '@ai-sdk/react':
-        specifier: ^4.0.95
-        version: 4.0.95(react@19.2.8)(zod@4.5.4)
       '@colbymchenry/codegraph':
         specifier: ^1.6.0
         version: 1.6.0
       '@cursorless/tree-sitter-wasms':
         specifier: ^0.10.0
         version: 0.10.0
-      '@dnd-kit/core':
-        specifier: ^6.3.1
-        version: 6.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@dnd-kit/sortable':
-        specifier: ^10.0.0
-        version: 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@larksuiteoapi/node-sdk':
         specifier: ^1.73.3
         version: 1.73.3(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
@@ -69,6 +60,106 @@ importers:
       '@opentelemetry/sdk-trace-node':
         specifier: ^2.11.0
         version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@sentry/electron':
+        specifier: ^7.18.0
+        version: 7.18.0(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))(supports-color@7.2.0)
+      '@vscode/ripgrep':
+        specifier: ^1.18.0
+        version: 1.18.0
+      '@wecom/aibot-node-sdk':
+        specifier: ^1.0.7
+        version: 1.0.7(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
+      adm-zip:
+        specifier: ^0.6.0
+        version: 0.6.0
+      ai:
+        specifier: ^7.0.92
+        version: 7.0.92(zod@4.5.4)
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+      chardet:
+        specifier: ^2.2.0
+        version: 2.2.0
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
+      electron-log:
+        specifier: ^5.4.4
+        version: 5.4.4
+      electron-updater:
+        specifier: ^6.8.9
+        version: 6.8.9(supports-color@7.2.0)
+      gpt-tokenizer:
+        specifier: ^4.0.0
+        version: 4.0.0
+      iconv-lite:
+        specifier: ^0.7.3
+        version: 0.7.3
+      node-pty:
+        specifier: ^1.1.0
+        version: 1.1.0
+      simple-git:
+        specifier: ^3.36.0
+        version: 3.36.0(supports-color@7.2.0)
+      web-tree-sitter:
+        specifier: ^0.27.0
+        version: 0.27.0
+      xstate:
+        specifier: ^5.32.6
+        version: 5.32.6
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@ai-sdk/react':
+        specifier: ^4.0.95
+        version: 4.0.95(react@19.2.8)(zod@4.5.4)
+      '@axe-core/playwright':
+        specifier: ^4.13.0
+        version: 4.13.0(playwright-core@1.62.1)
+      '@biomejs/biome':
+        specifier: ^2.5.12
+        version: 2.5.12
+      '@changesets/cli':
+        specifier: ^3.0.2
+        version: 3.0.2
+      '@code-agent/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      '@code-agent/tsconfig':
+        specifier: workspace:*
+        version: link:packages/tsconfig
+      '@commitlint/cli':
+        specifier: ^21.2.2
+        version: 21.2.2(@types/node@26.4.1)(conventional-commits-parser@7.1.2)(typescript@7.0.2)
+      '@commitlint/config-conventional':
+        specifier: ^21.2.2
+        version: 21.2.2
+      '@cyclonedx/cdxgen':
+        specifier: ^12.8.4
+        version: 12.8.4(supports-color@7.2.0)
+      '@dnd-kit/core':
+        specifier: ^6.3.1
+        version: 6.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@dnd-kit/sortable':
+        specifier: ^10.0.0
+        version: 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+      '@electron/rebuild':
+        specifier: ^4.2.0
+        version: 4.2.0(supports-color@7.2.0)
+      '@fast-check/vitest':
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@5.0.0)
+      '@playwright/test':
+        specifier: ^1.62.1
+        version: 1.62.1
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.23
         version: 1.1.23(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -108,196 +199,15 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.16
         version: 1.2.16(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@sentry/electron':
-        specifier: ^7.18.0
-        version: 7.18.0(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))(supports-color@7.2.0)
+      '@sentry/cli':
+        specifier: ^3.7.0
+        version: 3.7.0
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
       '@tanstack/react-query':
         specifier: ^5.102.8
         version: 5.102.8(react@19.2.8)
-      '@vscode/ripgrep':
-        specifier: ^1.18.0
-        version: 1.18.0
-      '@wecom/aibot-node-sdk':
-        specifier: ^1.0.7
-        version: 1.0.7(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
-      '@xterm/addon-fit':
-        specifier: ^0.11.0
-        version: 0.11.0
-      '@xterm/xterm':
-        specifier: ^6.0.0
-        version: 6.0.0
-      adm-zip:
-        specifier: ^0.6.0
-        version: 0.6.0
-      ai:
-        specifier: ^7.0.92
-        version: 7.0.92(zod@4.5.4)
-      better-sqlite3:
-        specifier: ^13.0.3
-        version: 13.0.3
-      chardet:
-        specifier: ^2.2.0
-        version: 2.2.0
-      chokidar:
-        specifier: ^5.0.0
-        version: 5.0.0
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      cmdk:
-        specifier: ^1.1.1
-        version: 1.1.1(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      croner:
-        specifier: ^10.0.1
-        version: 10.0.1
-      diff-match-patch:
-        specifier: ^1.0.5
-        version: 1.0.5
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
-      electron-log:
-        specifier: ^5.4.4
-        version: 5.4.4
-      electron-updater:
-        specifier: ^6.8.9
-        version: 6.8.9(supports-color@7.2.0)
-      fuse.js:
-        specifier: ^7.5.0
-        version: 7.5.0
-      gpt-tokenizer:
-        specifier: ^4.0.0
-        version: 4.0.0
-      i18next:
-        specifier: ^26.4.2
-        version: 26.4.2(typescript@7.0.2)
-      i18next-browser-languagedetector:
-        specifier: ^8.2.1
-        version: 8.2.1
-      iconv-lite:
-        specifier: ^0.7.3
-        version: 0.7.3
-      lucide-react:
-        specifier: ^1.40.0
-        version: 1.40.0(react@19.2.8)
-      motion:
-        specifier: ^13.2.0
-        version: 13.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      node-pty:
-        specifier: ^1.1.0
-        version: 1.1.0
-      qrcode:
-        specifier: ^1.5.4
-        version: 1.5.4
-      react:
-        specifier: ^19.2.8
-        version: 19.2.8
-      react-activity-calendar:
-        specifier: ^3.2.1
-        version: 3.2.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      react-diff-viewer-continued:
-        specifier: ^4.4.0
-        version: 4.4.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)
-      react-dom:
-        specifier: ^19.2.8
-        version: 19.2.8(react@19.2.8)
-      react-error-boundary:
-        specifier: ^6.1.4
-        version: 6.1.4(@types/react@19.2.18)(react@19.2.8)
-      react-hotkeys-hook:
-        specifier: ^5.3.3
-        version: 5.3.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      react-i18next:
-        specifier: ^17.0.13
-        version: 17.0.13(i18next@26.4.2(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2)
-      react-markdown:
-        specifier: ^10.1.0
-        version: 10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@7.2.0)
-      react-router:
-        specifier: ^8.3.1
-        version: 8.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      remark-gfm:
-        specifier: ^4.0.1
-        version: 4.0.1(supports-color@7.2.0)
-      shiki:
-        specifier: ^4.4.3
-        version: 4.4.3
-      simple-git:
-        specifier: ^3.36.0
-        version: 3.36.0(supports-color@7.2.0)
-      sonner:
-        specifier: ^2.0.8
-        version: 2.0.8(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      tailwind-merge:
-        specifier: ^3.6.0
-        version: 3.6.0
-      tailwindcss:
-        specifier: ^4.3.3
-        version: 4.3.3
-      tslib:
-        specifier: ^2.8.1
-        version: 2.8.1
-      tw-animate-css:
-        specifier: ^1.4.0
-        version: 1.4.0
-      vite:
-        specifier: ^8.2.2
-        version: 8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0)
-      web-tree-sitter:
-        specifier: ^0.27.0
-        version: 0.27.0
-      xstate:
-        specifier: ^5.32.6
-        version: 5.32.6
-      zod:
-        specifier: ^4.5.4
-        version: 4.5.4
-      zustand:
-        specifier: ^5.0.15
-        version: 5.0.15(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
-    devDependencies:
-      '@axe-core/playwright':
-        specifier: ^4.13.0
-        version: 4.13.0(playwright-core@1.62.1)
-      '@biomejs/biome':
-        specifier: ^2.5.12
-        version: 2.5.12
-      '@changesets/cli':
-        specifier: ^3.0.2
-        version: 3.0.2
-      '@code-agent/shared':
-        specifier: workspace:*
-        version: link:packages/shared
-      '@code-agent/tsconfig':
-        specifier: workspace:*
-        version: link:packages/tsconfig
-      '@commitlint/cli':
-        specifier: ^21.2.2
-        version: 21.2.2(@types/node@26.4.1)(conventional-commits-parser@7.1.2)(typescript@7.0.2)
-      '@commitlint/config-conventional':
-        specifier: ^21.2.2
-        version: 21.2.2
-      '@cyclonedx/cdxgen':
-        specifier: ^12.8.4
-        version: 12.8.4(supports-color@7.2.0)
-      '@electron/rebuild':
-        specifier: ^4.2.0
-        version: 4.2.0(supports-color@7.2.0)
-      '@fast-check/vitest':
-        specifier: ^0.4.1
-        version: 0.4.1(vitest@5.0.0)
-      '@playwright/test':
-        specifier: ^1.62.1
-        version: 1.62.1
-      '@sentry/cli':
-        specifier: ^3.7.0
-        version: 3.7.0
       '@testing-library/jest-dom':
         specifier: ^7.0.1
         version: 7.0.1(@testing-library/dom@10.4.1)(vitest@5.0.0)
@@ -331,12 +241,30 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^5.0.0
         version: 5.0.0(vitest@5.0.0)
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       audit-ci:
         specifier: ^7.1.0
         version: 7.1.0
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      cmdk:
+        specifier: ^1.1.1
+        version: 1.1.1(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
+      diff-match-patch:
+        specifier: ^1.0.5
+        version: 1.0.5
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
@@ -352,9 +280,18 @@ importers:
       electron-vite:
         specifier: 6.0.0-beta.1
         version: 6.0.0-beta.1(@swc/core@1.16.1)(supports-color@7.2.0)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+      fuse.js:
+        specifier: ^7.5.0
+        version: 7.5.0
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      i18next:
+        specifier: ^26.4.2
+        version: 26.4.2(typescript@7.0.2)
+      i18next-browser-languagedetector:
+        specifier: ^8.2.1
+        version: 8.2.1
       i18next-cli:
         specifier: ^1.73.0
         version: 1.73.0(@types/node@26.4.1)(react-dom@19.2.8(react@19.2.8))(typescript@7.0.2)
@@ -367,6 +304,12 @@ importers:
       lint-staged:
         specifier: ^17.4.1
         version: 17.4.1
+      lucide-react:
+        specifier: ^1.40.0
+        version: 1.40.0(react@19.2.8)
+      motion:
+        specifier: ^13.2.0
+        version: 13.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       oxc-transform-react:
         specifier: ^0.148.0
         version: 0.148.0
@@ -376,21 +319,78 @@ importers:
       playwright-core:
         specifier: ^1.62.1
         version: 1.62.1
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-activity-calendar:
+        specifier: ^3.2.1
+        version: 3.2.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react-diff-viewer-continued:
+        specifier: ^4.4.0
+        version: 4.4.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
+      react-error-boundary:
+        specifier: ^6.1.4
+        version: 6.1.4(@types/react@19.2.18)(react@19.2.8)
+      react-hotkeys-hook:
+        specifier: ^5.3.3
+        version: 5.3.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react-i18next:
+        specifier: ^17.0.13
+        version: 17.0.13(i18next@26.4.2(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@7.2.0)
+      react-router:
+        specifier: ^8.3.1
+        version: 8.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1(supports-color@7.2.0)
       rollup-plugin-visualizer:
         specifier: ^7.1.1
         version: 7.1.1(rolldown@1.2.7)
+      shiki:
+        specifier: ^4.4.3
+        version: 4.4.3
+      sonner:
+        specifier: ^2.0.8
+        version: 2.0.8(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       style-dictionary:
         specifier: ^5.5.2
         version: 5.5.2
+      tailwind-merge:
+        specifier: ^3.6.0
+        version: 3.6.0
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
+      tslib:
+        specifier: ^2.8.1
+        version: 2.8.1
       tsx:
         specifier: ^4.23.13
         version: 4.23.13
+      tw-animate-css:
+        specifier: ^1.4.0
+        version: 1.4.0
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      vite:
+        specifier: ^8.2.2
+        version: 8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: ^5.0.0
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(@vitest/coverage-v8@5.0.0)(jsdom@30.0.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@26.4.1)(typescript@7.0.2))(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+      zustand:
+        specifier: ^5.0.15
+        version: 5.0.15(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
 
   packages/shared:
     dependencies:
