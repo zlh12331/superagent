@@ -667,6 +667,7 @@
       "addFile": "Add file",
       "emptyDir": "Empty directory",
       "refresh": "Refresh file tree",
+      "refreshFailed": "Some directories failed to refresh; the tree may be stale",
       "fuzzySearch": {
         "title": "File Search",
         "placeholder": "Search files or conversations…",

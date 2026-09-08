@@ -16,13 +16,13 @@
 
 import { ArrowLeft, Ellipsis, FilePlus, FolderOpen, FolderPlus, RefreshCw } from 'lucide-react';
 import { type ReactElement, useCallback } from 'react';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
 import { useFileTree } from '@/hooks/use-file-tree';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
@@ -75,23 +75,13 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
   // 文件点击回调：打开文件查看器（右侧面板显示内容）
   const openFile = useFileViewerStore((s) => s.openFile);
 
-  // 头部菜单操作（用户要求：三点点按钮 → 添加文件夹 / 添加文件 / 刷新）
-  // 刷新范围：根目录 + 所有已展开目录（此前只重拉根目录一层，展开的子树刷新不到）
+  // 头部菜单操作（三点点按钮 → 添加文件夹 / 添加文件 / 刷新）
   const refreshTree = useCallback(async (): Promise<void> => {
-    if (typeof window === 'undefined' || window.api === undefined || rootPath === null) {
-      return;
+    if (rootPath === null || (await refreshExpandedDirs(rootPath)) > 0) {
+      // 失败反馈（2026-09-06 审计修复）：此前完全静默，目录陈旧时用户无从判断
+      toast.warning(t('fileTree.refreshFailed'));
     }
-    const state = useFileTreeStore.getState();
-    const paths = [...new Set([rootPath, ...state.expandedPaths])];
-    await Promise.allSettled(
-      paths.map(async (path) => {
-        const res = await window.api.file.list({ path, depth: 1, includeHidden: false });
-        // allSettled 吞掉 unwrap 抛出的错误响应（与旧手写分支同语义：失败静默跳过）
-        useFileTreeStore.getState().setEntries(path, unwrap(res).entries);
-      }),
-    );
-    // 失败静默：file:watch 事件流仍在运行，个别目录失败由下次展开自然恢复
-  }, [rootPath]);
+  }, [rootPath, t]);
   const setExpanded = useFileTreeStore((s) => s.setExpanded);
   const startCreate = useFileTreeStore((s) => s.startCreate);
   const handleNewFile = useCallback((): void => {
@@ -204,4 +194,29 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
       </div>
     </div>
   );
+}
+
+/**
+ * 重拉根目录 + 所有已展开目录的条目
+ *
+ * @returns 失败目录数（0 表示全部成功）——调用方据此决定是否提示
+ */
+async function refreshExpandedDirs(rootPath: string): Promise<number> {
+  if (typeof window === 'undefined' || window.api === undefined) {
+    return 0;
+  }
+  const paths = [...new Set([rootPath, ...useFileTreeStore.getState().expandedPaths])];
+  let failed = 0;
+  await Promise.allSettled(
+    paths.map(async (path) => {
+      try {
+        const res = await window.api.file.list({ path, depth: 1, includeHidden: false });
+        useFileTreeStore.getState().setEntries(path, unwrap(res).entries);
+      } catch {
+        // 单个目录失败不中断其余目录（allSettled 语义），最后统一提示一次
+        failed += 1;
+      }
+    }),
+  );
+  return failed;
 }

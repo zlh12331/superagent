@@ -15,7 +15,7 @@
 // - 本组件仅负责渲染内容，welcome-mode class 由 AppShell 根据 useWelcomeStore 切换
 // ──────────────────────────────────────────────────────────────
 
-import type { ApiKeyProvider } from '@code-agent/shared/renderer';
+import type { ApiKeyProvider, ErrorCode } from '@code-agent/shared/renderer';
 import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
 import { motion } from 'motion/react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
@@ -26,10 +26,10 @@ import { ChatInput } from '@/components/chat/ChatInput';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { MotionReveal } from '@/components/common/MotionReveal';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
-import { unwrap } from '@/lib/ipc';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { fadeInVariants, letterContainerVariants, letterUpVariants } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -74,8 +74,9 @@ function basename(path: string): string {
 }
 
 export function HomePage(): ReactElement {
-  // 本地化文案
+  // 本地化文案 + 错误码解析（单一真源）
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const navigate = useNavigate();
   const { mutateAsync: createSession, isPending: isCreating } = useCreateSession();
   const { data: recentDirsData } = useRecentDirs();
@@ -179,7 +180,7 @@ export function HomePage(): ReactElement {
       setPendingWorkingDir(data.path);
       setFolderMenuOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      reportLocalizedError(error, getErrorMessage);
     }
   };
 
@@ -473,4 +474,13 @@ function FooterContent({
       </div>
     </>
   );
+}
+
+/**
+ * 统一错误提示：错误码 → i18n 文案（单一真源 lib/ipc），非 Error 直接字符串化
+ *
+ * 2026-09-06 审计修复：此前首页直接弹 error.message，[CODE] 前缀不会被本地化。
+ */
+function reportLocalizedError(error: unknown, getErrorMessage: (code: ErrorCode) => string): void {
+  toast.error(error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : String(error));
 }

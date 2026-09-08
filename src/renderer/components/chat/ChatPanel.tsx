@@ -213,9 +213,9 @@ export function ChatPanel({
         toast.info(t('chat.compactNothing'));
       }
     },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : String(error));
-    },
+    // 统一走 handleError（错误码 → i18n 单一真源）
+    // 2026-09-06 审计修复：此前直接弹 error.message，[CODE] 前缀不会被本地化
+    onError: handleError,
   });
 
   // 长会话自动压缩（实验性 opt-in，默认关）：消息达阈值且回合空闲时自动 compact
