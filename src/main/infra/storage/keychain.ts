@@ -183,39 +183,66 @@ async function readStore(): Promise<KeychainStore> {
 }
 
 /**
- * 写入 keychain 文件
+ * 写入 keychain 文件（原子写）
  *
  * 安全修复：keychain.dat 含加密的 API Key，限制为仅属主可读写（0o600）。
  * - writeFile mode 仅对新建文件生效，后续覆盖写入需显式 chmod 兜底
+ *
+ * 原子性（2026-09-06 审计修复）：先写同目录 `.tmp` → fsync → rename 覆盖。
+ * 此前直接覆盖主文件，写入过程中断电/强杀会留下半截 JSON——读侧虽有逐条
+ * salvage 抢救，但正在写入的那条 Key 会丢，且抢救结果依赖正则对截断内容的容忍度。
  */
 async function writeStore(store: KeychainStore): Promise<void> {
   const filePath = getKeychainPath();
   const content = JSON.stringify(store, null, 2);
-  await fs.writeFile(filePath, content, { encoding: 'utf8', mode: 0o600 });
+  const tmpPath = `${filePath}.tmp`;
+  try {
+    const handle = await fs.open(tmpPath, 'w', 0o600);
+    try {
+      await handle.writeFile(content, 'utf8');
+      // fsync：确保内容真正落盘后再 rename（rename 本身是原子的）
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(tmpPath, filePath);
+  } catch (error) {
+    // 失败清理临时文件，避免残留（读路径只认 keychain.dat，不受影响）
+    await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  restrictKeychainPermissions(filePath);
+}
+
+/**
+ * 收紧 keychain.dat 权限（POSIX chmod 0600 / Windows icacls 仅当前用户）
+ *
+ * DPAPI/Keychain 加密是主防线，文件权限是纵深防御——失败仅告警不阻断。
+ */
+function restrictKeychainPermissions(filePath: string): void {
   if (process.platform !== 'win32') {
     try {
       chmodSync(filePath, 0o600);
     } catch {
       // 权限设置失败不阻断写入（只读文件系统等场景）
     }
-  } else {
-    // Windows：0o600 在 NTFS 上语义弱，用 icacls 显式收紧 ACL（仅当前用户读写）。
-    // DPAPI 加密是主防线，ACL 是纵深防御——失败仅告警不阻断（系统环境差异兜底）
-    try {
-      const user = process.env['USERNAME'] ?? process.env['USER'] ?? '';
-      if (user.length > 0) {
-        // 解析系统绝对路径（不依赖 PATH）：%SystemRoot%\System32\icacls.exe
-        const icaclsExe =
-          process.env['SystemRoot'] !== undefined
-            ? join(process.env['SystemRoot'], 'System32', 'icacls.exe')
-            : 'icacls';
-        execFileSync(icaclsExe, [filePath, '/inheritance:r', '/grant:r', `${user}:F`], {
-          stdio: 'ignore',
-        });
-      }
-    } catch {
-      logger.warn({ filePath }, 'keychain.dat Windows ACL 收紧失败（DPAPI 仍为主防线）');
+    return;
+  }
+  try {
+    const user = process.env['USERNAME'] ?? process.env['USER'] ?? '';
+    if (user.length === 0) {
+      return;
     }
+    // 解析系统绝对路径（不依赖 PATH）：%SystemRoot%\System32\icacls.exe
+    const icaclsExe =
+      process.env['SystemRoot'] !== undefined
+        ? join(process.env['SystemRoot'], 'System32', 'icacls.exe')
+        : 'icacls';
+    execFileSync(icaclsExe, [filePath, '/inheritance:r', '/grant:r', `${user}:F`], {
+      stdio: 'ignore',
+    });
+  } catch {
+    logger.warn({ filePath }, 'keychain.dat Windows ACL 收紧失败（DPAPI 仍为主防线）');
   }
 }
 

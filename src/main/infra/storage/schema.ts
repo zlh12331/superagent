@@ -221,6 +221,9 @@ export const tokenUsage = sqliteTable(
   (t) => [
     // 查询索引：用量页按时间窗口聚合
     index('idx_token_usage_created_at').on(t.createdAt),
+    // 外键级联删除 sessions 时按 session_id 定位子行；缺此索引则全表扫描
+    // （2026-09-06 审计补充）
+    index('idx_token_usage_session_id').on(t.sessionId),
   ],
 );
 
@@ -272,9 +275,10 @@ export const turns = sqliteTable(
     // 唯一：防同一回合重复落库
     unique('uq_turns_turn_id').on(t.turnId),
     // 会话内回合序号唯一：防 transcript 序号重复
+    // 该 UNIQUE 索引本身即可服务「按会话取回合列表（seq 升序）」的查询
+    // （最左前缀 session_id + seq 有序），无需再建同列普通索引——
+    // 2026-09-06 审计删除冗余的 idx_turns_session_seq（每回合双份索引写）
     unique('uq_turns_session_seq').on(t.sessionId, t.seq),
-    // 查询索引：按会话取回合列表（seq 升序）
-    index('idx_turns_session_seq').on(t.sessionId, t.seq),
   ],
 );
 

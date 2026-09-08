@@ -135,25 +135,24 @@ async function backupDatabase(sqlite: Database.Database, dbPath: string): Promis
 }
 
 /**
- * 启动完整性探测 + 条件热备份（异步发起，不阻塞启动）
+ * 调度启动热备份（异步发起，不阻塞启动）
  *
- * P2 修复：simple:true 返回标量字符串（'ok' 或首个错误描述），此前
- * Array.isArray 判定恒为 false——损坏库也会打出「校验通过」（死代码判定）。
- * 用 quick_check 替代 integrity_check：跳过索引逐项交叉校验，启动开销更低。
- *
- * 损坏库必须跳过备份：备份按时间戳进入轮转环，每次重启都会挤掉一份旧备份，
- * BACKUP_KEEP 次重启后即把唯一健康的恢复点全部覆盖为损坏副本。
+ * 调用时机与条件（2026-09-06 审计修复）：
+ * - **必须在 migrate 成功之后**：迁移前调度会让在途备份与迁移写在同一帧交错，
+ *   快照一致性无保证
+ * - **仅在库健康时**：备份按时间戳进入轮转环，BACKUP_KEEP 次重启后即把唯一
+ *   健康的恢复点全部覆盖为损坏/空副本
+ * - 完整性结论复用 restoreCorruptDatabase 的 quick_check（此前每启跑两遍全库扫描）
  */
-function probeIntegrityAndScheduleBackup(sqlite: Database.Database, dbPath: string): void {
-  const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
-  const integrityOk = !(typeof integrity === 'string' && integrity !== 'ok');
-  if (!integrityOk) {
-    // 不阻断启动（只读场景仍可用），但明确记录供诊断
-    logger.error({ result: integrity }, 'SQLite 完整性校验失败，数据库可能已损坏');
-    logger.warn({}, '数据库完整性校验未通过，跳过启动备份以保留既有健康备份');
+function scheduleStartupBackup(
+  sqlite: Database.Database,
+  dbPath: string,
+  status: RecoveryStatus,
+): void {
+  if (status === 'rebuilt') {
+    logger.warn({}, '本次启动重建了空数据库，跳过启动备份以保留既有健康备份');
     return;
   }
-  logger.info({}, 'SQLite 完整性校验通过');
   // backupDatabase 内部已捕获全部异常，此 Promise 永不 reject，可安全 await
   pendingBackup = backupDatabase(sqlite, dbPath).catch((error: unknown) => {
     logger.error({ error: String(error) }, '数据库备份失败');
@@ -216,12 +215,21 @@ function tryRestoreFromBackup(dbPath: string): boolean {
   return false;
 }
 
+/** 损坏自愈结论：healthy=原库健康；restored=已从备份恢复；rebuilt=已重建空库 */
+type RecoveryStatus = 'healthy' | 'restored' | 'rebuilt';
+
+/** 自愈结论 + 可用连接（调用方据 status 决定是否调度启动备份） */
+interface RecoveryOutcome {
+  readonly sqlite: Database.Database;
+  readonly status: RecoveryStatus;
+}
+
 /**
  * 数据库损坏自愈（quick_check 失败 → 恢复/重建）
  *
  * @param sqlite 当前（已打开但可能损坏的）连接
  * @param dbPath 数据库文件路径
- * @returns 修复后的新连接；数据库健康时返回 null（调用方继续用原连接）
+ * @returns 可用连接 + 结论状态（healthy 时原样返回入参连接）
  *
  * 策略：
  * 1. quick_check 通过 → 返回 null（健康，不动作）
@@ -229,14 +237,12 @@ function tryRestoreFromBackup(dbPath: string): boolean {
  * 3. 无健康备份 → 将损坏文件归档为 *.corrupt-<ts>（保留诊断），重建空库保启动
  *    （对齐 VS Code 设置损坏重建语义：丢数据但应用可继续用）
  */
-function restoreCorruptDatabase(
-  sqlite: Database.Database,
-  dbPath: string,
-): Database.Database | null {
+function restoreCorruptDatabase(sqlite: Database.Database, dbPath: string): RecoveryOutcome {
   const integrity = sqlite.pragma('quick_check', { simple: true }) as unknown;
   const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
   if (healthy) {
-    return null;
+    logger.info({}, 'SQLite 完整性校验通过');
+    return { sqlite, status: 'healthy' };
   }
   logger.error({ result: integrity }, 'SQLite 完整性校验失败，进入损坏自愈流程');
   sqlite.close();
@@ -244,7 +250,7 @@ function restoreCorruptDatabase(
   if (tryRestoreFromBackup(dbPath)) {
     const reopened = new Database(dbPath);
     applyDefaultPragmas(reopened, dbPath);
-    return reopened;
+    return { sqlite: reopened, status: 'restored' };
   }
 
   // 无健康备份：归档损坏文件（保留人工诊断可能性），重建空库保启动
@@ -263,7 +269,7 @@ function restoreCorruptDatabase(
   restrictFilePermissions(dbPath);
   applyDefaultPragmas(fresh, dbPath);
   logger.warn({}, '已重建空数据库（前提数据已归档，后续迁移建表）');
-  return fresh;
+  return { sqlite: fresh, status: 'rebuilt' };
 }
 
 /**
@@ -388,6 +394,12 @@ function resolveMigrationsDir(): string {
  * 4. 创建 drizzle 实例
  * 5. 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生，幂等）
  *
+ * 启动顺序（2026-09-06 审计修复）：
+ * - **先损坏自愈再 VACUUM**：损坏库上任何写操作（含 VACUUM）都会先抛
+ *   SQLITE_CORRUPT，把 auto_vacuum 转换放在前面会让自愈永远走不到
+ *   （auto_vacuum=NONE 的老库一旦损坏 = 每次启动即死，健康备份形同虚设）
+ * - **迁移成功后才调度备份**：空库被备份会按时间戳挤掉轮转环里唯一健康的恢复点
+ *
  * @returns drizzle 实例（后续 SessionService 使用）
  */
 export function initDb(): DrizzleDB {
@@ -410,16 +422,11 @@ export function initDb(): DrizzleDB {
   // 统一默认 pragma（WAL / 外键 / busy_timeout / synchronous）
   applyDefaultPragmas(sqlite, dbPath);
 
-  // 空间回收前提：把库切到 auto_vacuum=INCREMENTAL（老库需一次性 VACUUM，见函数注释）
-  // 必须在启动备份之前：一次性 VACUUM 会截断文件，与在途热备份抢同一份页
+  // 启动顺序见函数头注释：自愈 → auto_vacuum → 迁移 → 备份
+  const recovery = restoreCorruptDatabase(sqlite, dbPath);
+  sqlite = recovery.sqlite;
+  // 空间回收前提：一次性 VACUUM 必须在启动备份之前（否则与在途热备份抢同一份页）
   ensureIncrementalAutoVacuum(sqlite);
-
-  // ── 损坏自愈（2026-09-04）：quick_check 失败 → 从最近健康备份恢复 / 重建空库 ──
-  // 返回新连接则说明已恢复/重建（迁移在下方统一执行）；返回 null 说明库健康，沿用原连接。
-  // 注意：恢复分支重开连接后需重新应用 pragma（applyDefaultPragmas 已覆盖）。
-  sqlite = restoreCorruptDatabase(sqlite, dbPath) ?? sqlite;
-
-  probeIntegrityAndScheduleBackup(sqlite, dbPath);
 
   // 创建 drizzle 实例
   const db = drizzle(sqlite, { schema });
@@ -449,6 +456,9 @@ export function initDb(): DrizzleDB {
     }
     throw error;
   }
+
+  // 备份调度：迁移成功后 + 非空库重建（结论复用自愈阶段的 quick_check）
+  scheduleStartupBackup(sqlite, dbPath, recovery.status);
 
   dbInstance = db;
   sqliteInstance = sqlite;

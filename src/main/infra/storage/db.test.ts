@@ -223,7 +223,7 @@ describe('db', () => {
         'idx_messages_turn',
         'idx_prompts_role',
         'idx_token_usage_created_at',
-        'idx_turns_session_seq',
+        'idx_token_usage_session_id',
         'idx_goals_session',
         'uq_turns_turn_id',
         'uq_messages_session_seq',
@@ -542,7 +542,7 @@ describe('老库升级（增量迁移）', () => {
     return (db as unknown as { $client: Database.Database }).$client;
   }
 
-  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 五条，重复 initDb 幂等', async () => {
+  it('旧 schema 库 → 数据保真 + 约束补齐 + journal 六条，重复 initDb 幂等', async () => {
     resetDb();
     await closeDb();
     const legacyDir = mkdtempSync(join(tmpdir(), 'code-agent-db-legacy-v2-'));
@@ -607,9 +607,9 @@ describe('老库升级（增量迁移）', () => {
           .run(),
       ).toThrow(/UNIQUE constraint failed/i);
 
-      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0004）
+      // 4) journal 记录全部迁移（进入 drizzle 版本体系：0000 ~ 0005）
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(5);
+      expect(migs).toHaveLength(6);
 
       // 5) 幂等：重复 initDb 不重跑迁移、不崩
       await closeDb();
@@ -626,7 +626,7 @@ describe('老库升级（增量迁移）', () => {
     }
   });
 
-  it('新库：0000 ~ 0004 全执行（journal 五条），约束齐全', async () => {
+  it('新库：0000 ~ 0005 全执行（journal 六条），约束齐全', async () => {
     resetDb();
     await closeDb();
     const freshDir = mkdtempSync(join(tmpdir(), 'code-agent-db-fresh-v2-'));
@@ -634,7 +634,7 @@ describe('老库升级（增量迁移）', () => {
     try {
       const db = initDb();
       const migs = raw(db).prepare('SELECT hash FROM __drizzle_migrations').all();
-      expect(migs).toHaveLength(5);
+      expect(migs).toHaveLength(6);
       // 约束仍生效（0001 重建未破坏 0000 语义）
       expect(() =>
         raw(db)
