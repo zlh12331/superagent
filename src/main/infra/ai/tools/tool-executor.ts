@@ -108,6 +108,33 @@ export function clampToolOutput(output: string): string {
 }
 
 /**
+ * 对 SDK 流式 part 中的工具输出做统一截断（2026-09-08 输出闸门盲区修复）
+ *
+ * SDK 的 `tool-output-available` / `tool-output-error` part 携带完整
+ * input/output（`ai` 包定义），该通道与 ToolExecutor 的 tool-result 通道
+ * 是两条独立路径。此前闸门只加在后者，导致 read_file 等大输出仍可原样
+ * 经流式通道进入渲染层与后续上下文。
+ *
+ * 仅处理工具类 part 的字符串字段，其余 part 原样返回（不引入额外分配）。
+ * 放在本模块与 clampToolOutput 同源，避免 agent-service 文件净行超限。
+ */
+export function clampToolPartOutput(part: unknown): unknown {
+  if (typeof part !== 'object' || part === null) {
+    return part;
+  }
+  const record = part as Record<string, unknown>;
+  const type = record['type'];
+  if (type !== 'tool-output-available' && type !== 'tool-output-error') {
+    return part;
+  }
+  const output = record['output'];
+  if (typeof output !== 'string') {
+    return part;
+  }
+  return { ...record, output: clampToolOutput(output) };
+}
+
+/**
  * ToolExecutor 默认实现
  *
  * 依赖：

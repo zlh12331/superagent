@@ -24,6 +24,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import net from 'node:net';
 import { join } from 'node:path';
 
@@ -138,15 +139,27 @@ export class MemoryHubService {
     if (!existsSync(dir)) {
       return [];
     }
+    // 2026-09-08 性能修复：此前 readdirSync + readFileSync 全目录全文件同步读，
+    // 期间事件循环完全停摆（10MB JSONL ≈ 30–60ms 阻塞）。改为 fs.promises
+    // 并发读取，只让 IO 等待、不阻塞主线程。
+    let files: string[];
+    try {
+      files = (await readdir(dir)).filter((f) => f.endsWith('.jsonl'));
+    } catch {
+      return [];
+    }
+    const texts = await Promise.all(
+      files.map(async (file) => {
+        try {
+          return await readFile(join(dir, file), 'utf8');
+        } catch {
+          return null;
+        }
+      }),
+    );
     const records: L0Record[] = [];
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith('.jsonl')) continue;
-      let text: string;
-      try {
-        text = readFileSync(join(dir, file), 'utf8');
-      } catch {
-        continue;
-      }
+    for (const text of texts) {
+      if (text === null) continue;
       for (const line of text.split(/\r?\n/)) {
         if (line.trim().length === 0) continue;
         try {

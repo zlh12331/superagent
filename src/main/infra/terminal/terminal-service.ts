@@ -137,11 +137,41 @@ export class TerminalService implements ITerminalService {
    */
   private readonly outputBuffers = new Map<string, string>();
 
+  /**
+   * 各终端缓冲的累计字节数（2026-09-08 性能修复）
+   *
+   * 与 outputBuffers 同步维护，使「是否超限」判断从 O(buffer) 的
+   * `Buffer.byteLength(全量)` 降为 O(1) 计数累加。
+   */
+  private readonly outputBufferBytes = new Map<string, number>();
+
   /** 已退出终端的缓冲保留队列（FIFO，超上限淘汰最旧） */
   private readonly exitedBufferOrder: string[] = [];
 
   /** 已退出终端保留的输出缓冲数量上限 */
   private static readonly MAX_RETAINED_EXITED_BUFFERS = 20;
+
+  /**
+   * 追加 PTY 输出到环形缓冲（2026-09-08 性能修复）
+   *
+   * 从 create 的 onData 回调提取（保持 create 在棘轮基线内）。
+   * 维护累计字节计数使超限判断为 O(1)，仅在超限时做一次截断。
+   */
+  private appendToOutputBuffer(terminalId: string, data: string): void {
+    const current = this.outputBuffers.get(terminalId) ?? '';
+    const dataBytes = Buffer.byteLength(data, 'utf8');
+    const currentBytes = this.outputBufferBytes.get(terminalId) ?? 0;
+    if (currentBytes + dataBytes <= MAX_BUFFER_BYTES) {
+      this.outputBuffers.set(terminalId, current + data);
+      this.outputBufferBytes.set(terminalId, currentBytes + dataBytes);
+      return;
+    }
+    // 环形截断：保留尾部 MAX_BUFFER_BYTES 字节
+    const buf = Buffer.from(current + data, 'utf8');
+    const truncated = buf.subarray(buf.length - MAX_BUFFER_BYTES).toString('utf8');
+    this.outputBuffers.set(terminalId, truncated);
+    this.outputBufferBytes.set(terminalId, Buffer.byteLength(truncated, 'utf8'));
+  }
 
   /**
    * 创建终端会话
@@ -217,6 +247,7 @@ export class TerminalService implements ITerminalService {
 
     // 初始化输出缓冲
     this.outputBuffers.set(terminalId, '');
+    this.outputBufferBytes.set(terminalId, 0);
 
     // 绑定输出事件：推送 terminal:event:output + 追加到 outputBuffer
     pty.onData((data: string) => {
@@ -224,17 +255,7 @@ export class TerminalService implements ITerminalService {
       if (!this.terminals.has(terminalId)) {
         return;
       }
-      // 追加到输出缓冲（环形截断）
-      const current = this.outputBuffers.get(terminalId) ?? '';
-      const combined = current + data;
-      if (Buffer.byteLength(combined, 'utf8') > MAX_BUFFER_BYTES) {
-        // 环形截断：保留尾部 MAX_BUFFER_BYTES 字节
-        const buf = Buffer.from(combined, 'utf8');
-        const truncated = buf.subarray(buf.length - MAX_BUFFER_BYTES).toString('utf8');
-        this.outputBuffers.set(terminalId, truncated);
-      } else {
-        this.outputBuffers.set(terminalId, combined);
-      }
+      this.appendToOutputBuffer(terminalId, data);
       // 推送到渲染层（R2：统一出口 emitEvent）
       if (webContents.isDestroyed()) {
         return;
@@ -364,6 +385,7 @@ export class TerminalService implements ITerminalService {
    */
   clearOutput(terminalId: string): void {
     this.outputBuffers.delete(terminalId);
+    this.outputBufferBytes.delete(terminalId);
     const idx = this.exitedBufferOrder.indexOf(terminalId);
     if (idx !== -1) {
       this.exitedBufferOrder.splice(idx, 1);
@@ -385,6 +407,7 @@ export class TerminalService implements ITerminalService {
       const oldest = this.exitedBufferOrder.shift();
       if (oldest !== undefined && !this.terminals.has(oldest)) {
         this.outputBuffers.delete(oldest);
+        this.outputBufferBytes.delete(oldest);
       }
     }
   }
@@ -409,6 +432,7 @@ export class TerminalService implements ITerminalService {
     }
     // 清理所有输出缓冲（包括已退出终端的残留缓冲）
     this.outputBuffers.clear();
+    this.outputBufferBytes.clear();
     this.exitedBufferOrder.length = 0;
     logger.info({}, 'TerminalService 所有 PTY 已清理');
   }

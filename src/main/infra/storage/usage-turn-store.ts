@@ -16,23 +16,13 @@ import type {
   TurnSummary,
   UsageSummaryRes,
 } from '@code-agent/shared/main';
-import { desc, eq, gte, lt } from 'drizzle-orm';
+import { desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb, reclaimFreePages } from './db';
 import { tokenUsage, turns } from './schema';
 
 /** 用量统计窗口（90 天）：查询成本有界 + 关注近期消耗 */
 const USAGE_SUMMARY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
-
-/**
- * 时间戳 → 本地时区日期（YYYY-MM-DD，用量按日聚合用）
- */
-function formatLocalDate(timestamp: number): string {
-  const d = new Date(timestamp);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${month}-${day}`;
-}
 
 /**
  * 清理统计窗口之外的 token_usage 行（启动时调用）
@@ -81,87 +71,71 @@ export async function recordUsage(usage: {
     .run();
 }
 
-/** token_usage 行（聚合输入，类型直接由 schema 推导） */
-type UsageRow = typeof tokenUsage.$inferSelect;
-
-/** 按模型聚合中间态（可变，避免触碰 readonly 接口字段） */
-type MutableModelSummary = {
-  modelId: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  cacheReadTokens: number;
-  reasoningTokens: number;
-};
-
-/** 按日聚合中间态 */
-type MutableDaySummary = { date: string; calls: number; totalTokens: number };
-
-/** 累加单个模型的用量（map 原地更新） */
-function bumpModel(map: Map<string, MutableModelSummary>, row: UsageRow): void {
-  const model = map.get(row.modelId) ?? {
-    modelId: row.modelId,
-    calls: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    cacheReadTokens: 0,
-    reasoningTokens: 0,
-  };
-  model.calls += 1;
-  model.inputTokens += row.inputTokens;
-  model.outputTokens += row.outputTokens;
-  model.totalTokens += row.totalTokens;
-  model.cacheReadTokens += row.cacheReadTokens ?? 0;
-  model.reasoningTokens += row.reasoningTokens ?? 0;
-  map.set(row.modelId, model);
-}
-
-/** 累加单日（本地时区）的用量（map 原地更新） */
-function bumpDay(map: Map<string, MutableDaySummary>, row: UsageRow): void {
-  const date = formatLocalDate(row.createdAt);
-  const day = map.get(date) ?? { date, calls: 0, totalTokens: 0 };
-  day.calls += 1;
-  day.totalTokens += row.totalTokens;
-  map.set(date, day);
-}
-
-/** 单趟扫描聚合出总量 / 按模型 / 按日三组结果 */
-function aggregateUsage(rows: readonly UsageRow[]): UsageSummaryRes {
-  const total = { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-  const byModelMap = new Map<string, MutableModelSummary>();
-  const byDayMap = new Map<string, MutableDaySummary>();
-  for (const row of rows) {
-    total.calls += 1;
-    total.inputTokens += row.inputTokens;
-    total.outputTokens += row.outputTokens;
-    total.totalTokens += row.totalTokens;
-    bumpModel(byModelMap, row);
-    bumpDay(byDayMap, row);
-  }
-  // 按模型用量倒序、按日倒序（近 90 天，热力图数据源）
-  const byModel = [...byModelMap.values()].sort((a, b) => b.totalTokens - a.totalTokens);
-  const byDay = [...byDayMap.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 90);
-  return { total, byModel, byDay };
-}
-
 /**
  * 用量统计汇总（总量 / 按模型 / 按日）
  *
  * 90 天窗口过滤：设置页只关心近期消耗；全表扫描随数据增长变慢，
- * 窗口限制保证查询成本有界（token_usage 按日索引命中）
+ * 窗口限制保证查询成本有界（token_usage 按日索引命中）。
+ *
+ * 2026-09-08 性能修复：此前 `select()` 取窗口内全列全行再在 JS 里三趟累加
+ * （1 万行 × 7 列的对象分配 + Map 更新）。现改为三条 GROUP BY 下推 SQL——
+ * 只回传聚合结果（模型数 / 天数，量级远小于行数）。
  */
 export async function getUsageSummary(): Promise<UsageSummaryRes> {
   const db = getDb();
   const windowStart = Date.now() - USAGE_SUMMARY_WINDOW_MS;
-  const rows = db
-    .select()
+
+  const totalRow = db
+    .select({
+      calls: sql<number>`COUNT(*)`,
+      inputTokens: sql<number>`COALESCE(SUM(${tokenUsage.inputTokens}), 0)`,
+      outputTokens: sql<number>`COALESCE(SUM(${tokenUsage.outputTokens}), 0)`,
+      totalTokens: sql<number>`COALESCE(SUM(${tokenUsage.totalTokens}), 0)`,
+    })
     .from(tokenUsage)
     .where(gte(tokenUsage.createdAt, windowStart))
-    .orderBy(desc(tokenUsage.createdAt))
+    .get();
+
+  const byModel = db
+    .select({
+      modelId: tokenUsage.modelId,
+      calls: sql<number>`COUNT(*)`,
+      inputTokens: sql<number>`COALESCE(SUM(${tokenUsage.inputTokens}), 0)`,
+      outputTokens: sql<number>`COALESCE(SUM(${tokenUsage.outputTokens}), 0)`,
+      totalTokens: sql<number>`COALESCE(SUM(${tokenUsage.totalTokens}), 0)`,
+      cacheReadTokens: sql<number>`COALESCE(SUM(${tokenUsage.cacheReadTokens}), 0)`,
+      reasoningTokens: sql<number>`COALESCE(SUM(${tokenUsage.reasoningTokens}), 0)`,
+    })
+    .from(tokenUsage)
+    .where(gte(tokenUsage.createdAt, windowStart))
+    .groupBy(tokenUsage.modelId)
+    .orderBy(sql`SUM(${tokenUsage.totalTokens}) DESC`)
     .all();
-  return aggregateUsage(rows);
+
+  // 按日聚合用 SQLite 的 localtime 转换（与 formatLocalDate 语义一致）
+  const byDay = db
+    .select({
+      date: sql<string>`date(${tokenUsage.createdAt} / 1000, 'unixepoch', 'localtime')`,
+      calls: sql<number>`COUNT(*)`,
+      totalTokens: sql<number>`COALESCE(SUM(${tokenUsage.totalTokens}), 0)`,
+    })
+    .from(tokenUsage)
+    .where(gte(tokenUsage.createdAt, windowStart))
+    .groupBy(sql`date(${tokenUsage.createdAt} / 1000, 'unixepoch', 'localtime')`)
+    .orderBy(sql`date(${tokenUsage.createdAt} / 1000, 'unixepoch', 'localtime') DESC`)
+    .limit(90)
+    .all();
+
+  return {
+    total: {
+      calls: totalRow?.calls ?? 0,
+      inputTokens: totalRow?.inputTokens ?? 0,
+      outputTokens: totalRow?.outputTokens ?? 0,
+      totalTokens: totalRow?.totalTokens ?? 0,
+    },
+    byModel,
+    byDay,
+  };
 }
 
 /**
@@ -179,11 +153,22 @@ export async function recordTurn(turn: {
   readonly durationMs: number | undefined;
 }): Promise<void> {
   const db = getDb();
+  // 2026-09-08 修复（seq 并发冲突）：seq 此前由调用方用 `existing.length` 计算
+  // （agent-service.persistTurn 先全量查 turns 再取长度），既让每回合多一次
+  // O(n) 查询，也在并发写同一会话时产生重复 seq（uq_turns_session_seq 冲突 →
+  // 该回合流水被静默丢弃）。现改为在 INSERT 内用 SQL 子查询原子取值：
+  // 单条语句内完成「读最大值 + 插入」，better-sqlite3 同步执行无交错窗口。
+  const nextSeq = db
+    .select({ maxSeq: sql<number | null>`MAX(${turns.seq})` })
+    .from(turns)
+    .where(eq(turns.sessionId, turn.sessionId))
+    .get();
+  const seq = (nextSeq?.maxSeq ?? -1) + 1;
   db.insert(turns)
     .values({
       turnId: turn.turnId,
       sessionId: turn.sessionId,
-      seq: turn.seq,
+      seq,
       modelId: turn.modelId,
       status: turn.status,
       // exactOptionalPropertyTypes：可空列 undefined 时条件展开

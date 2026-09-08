@@ -31,6 +31,11 @@ function handleSessionEnd(sessionId: string): void {
   // 1. L3 模式 B：失效会话列表 + 详情缓存（回合结束后重新拉取）
   void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
   if (sessionId.length > 0) {
+    // 详情缓存必须失效（2026-09-08 评估后保留）：ChatPanel 用 useSessionDetail
+    // 的 initialMessages 初始化 useChat（reconstructHistory），若此处不失效，
+    // 用户切走再切回该会话会看到回合前的旧消息。一次全量重拉换来的是
+    // 「重开会话数据正确」，该代价可接受（数据层全量传输债见技术债清单，
+    // 应由 session:get 分页/增量解决，而非在失效点绕过）。
     void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
     // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
     void queryClient.invalidateQueries({ queryKey: ['goal', 'list', sessionId] });
