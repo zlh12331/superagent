@@ -13,6 +13,7 @@
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import { splitShellWords } from '../../terminal/terminal-service';
+import { resolveRealTarget } from './path-guard';
 
 /**
  * 「等同放行该工具全部调用」的白名单模式（P0 安全修复）
@@ -92,6 +93,11 @@ const WIN_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
  * 判定保守：任何绝对路径 token（盘符 / POSIX 根 / ~ 展开）或解析后逃逸边界的
  * 相对路径（../ 链）都视为越界。命令分词复用 splitShellWords（跨平台引号/转义语义），
  * 仅对「像路径」的 token 判定——选项开关（如 --force）、URL 等不误伤。
+ *
+ * symlink 解析（2026-09-06 安全审计修复）：仅字符串级 relative 会被工作区内
+ * `link -> ~/.ssh` 这类符号链接绕过（文件工具已由 path-guard 的 realpath 拦下，
+ * 命令通道此前没有）。现在每个路径 token 先取真实落点（resolveRealTarget，
+ * 不存在时回退最近存在祖先的 realpath）再比边界。
  */
 export function commandTargetsOutsideBoundary(command: string, boundary: string): boolean {
   let tokens: string[];
@@ -101,7 +107,7 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
     // 分词失败按越界处理（保守：交给 ask 分支人工确认）
     return true;
   }
-  const normBoundary = normalize(boundary).toLowerCase();
+  const normBoundary = resolveRealTarget(normalize(boundary)).toLowerCase();
   for (const raw of tokens) {
     if (!isPathLikeToken(raw)) continue;
     let resolved: string;
@@ -110,7 +116,9 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
     } catch {
       return true;
     }
-    const rel = relative(normBoundary, resolved.toLowerCase());
+    // 真实落点：工作区内 symlink 指向边界外时，字符串级 relative 会误判为界内
+    const realTarget = resolveRealTarget(resolved).toLowerCase();
+    const rel = relative(normBoundary, realTarget);
     if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
       return true;
     }
@@ -118,12 +126,27 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
   return false;
 }
 
-/** token 是否可能指向文件系统目标：绝对路径 / ~ 前缀 / 含 .. 段的相对路径 */
+/** URL 形状 token（跳过路径判定，避免把 curl 的网址误判为越界路径） */
+const URL_LIKE_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/**
+ * token 是否可能指向文件系统目标
+ *
+ * 绝对路径 / ~ 前缀 / 含 .. 段 / **含分隔符的相对路径**。
+ * 最后一条是 2026-09-06 安全审计修复：此前普通相对路径（如 `cat link/secret.txt`）
+ * 不被判定为路径 token，于是工作区内指向外部的 symlink 完全绕过了边界检查。
+ */
 function isPathLikeToken(token: string): boolean {
   if (WIN_ABSOLUTE_PATTERN.test(token) || token.startsWith('/') || token.startsWith('~')) {
     return true;
   }
-  return token === '..' || token.startsWith('../') || token.startsWith('..\\');
+  if (token === '..' || token.startsWith('../') || token.startsWith('..\\')) {
+    return true;
+  }
+  if (URL_LIKE_PATTERN.test(token)) {
+    return false;
+  }
+  return token.includes('/') || token.includes('\\');
 }
 
 /** 把路径 token 解析为绝对路径（~ → home；相对 → 相对边界） */
@@ -135,6 +158,19 @@ function resolvePathToken(token: string, boundary: string): string {
     return normalize(token);
   }
   return resolve(boundary, token);
+}
+
+/**
+ * plan 模式是否应拒绝该工具（2026-09-06 审计修复）
+ *
+ * 只读工具与控制面逃生舱放行，其余一律拒绝。**必须在记忆缓存 / 用户白名单之前判定**，
+ * 否则 plan 模式下"曾被批准的同入参调用"或白名单工具仍会真实写文件 / 执行命令。
+ */
+export function isDeniedByPlanMode(
+  mode: string,
+  tool: { readonly name: string; readonly category: string },
+): boolean {
+  return mode === 'plan' && tool.category !== 'read' && !PLAN_MODE_CONTROL_TOOLS.has(tool.name);
 }
 
 /**

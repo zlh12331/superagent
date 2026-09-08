@@ -1,6 +1,9 @@
 // src/main/infra/ai/tools/command-guards.test.ts
 // 权限决策确定性原语单测：白名单模式 / 前缀匹配 / 复合命令 / 路径越界 / 命令提取
 
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   commandTargetsOutsideBoundary,
@@ -9,6 +12,9 @@ import {
   isUniversalWhitelistPattern,
   matchesWhitelistPattern,
 } from './command-guards';
+
+/** Windows 下 junction 无需管理员权限；POSIX 用 dir 链接 */
+const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
 
 describe('isUniversalWhitelistPattern（等同放行全部调用的模式：fail closed）', () => {
   it('空串 / 纯通配符 / 仅空白均视为通用模式', () => {
@@ -74,6 +80,48 @@ describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
     expect(commandTargetsOutsideBoundary('ls', boundary)).toBe(false);
     expect(commandTargetsOutsideBoundary('cat src/main.ts', boundary)).toBe(false);
     expect(commandTargetsOutsideBoundary('npm run test', boundary)).toBe(false);
+  });
+
+  it('URL token 不误判为路径', () => {
+    expect(commandTargetsOutsideBoundary('curl https://example.com/a/b', boundary)).toBe(false);
+  });
+
+  // 2026-09-06 安全审计修复：symlink 逃逸（此前相对路径 token 不参与边界判定）
+  it('工作区内 symlink 指向边界外（相对路径 token）→ 越界', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'cmd-guard-outside-'));
+    const workspace = mkdtempSync(join(tmpdir(), 'cmd-guard-ws-'));
+    try {
+      symlinkSync(outside, join(workspace, 'link'), SYMLINK_TYPE);
+      // 字符串级 relative 判定为界内；realpath 后落点在界外
+      expect(commandTargetsOutsideBoundary('cat link/secret.txt', workspace)).toBe(true);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('工作区内 symlink 指向边界外（绝对路径 token）→ 越界', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'cmd-guard-outside2-'));
+    const workspace = mkdtempSync(join(tmpdir(), 'cmd-guard-ws2-'));
+    try {
+      symlinkSync(outside, join(workspace, 'link'), SYMLINK_TYPE);
+      expect(
+        commandTargetsOutsideBoundary(`cat ${join(workspace, 'link', 'secret.txt')}`, workspace),
+      ).toBe(true);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('工作区内 symlink 指向边界内 → 不越界（不误伤 pnpm 结构）', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'cmd-guard-ws3-'));
+    try {
+      symlinkSync(workspace, join(workspace, 'self'), SYMLINK_TYPE);
+      expect(commandTargetsOutsideBoundary('cat self/src/a.ts', workspace)).toBe(false);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 });
 

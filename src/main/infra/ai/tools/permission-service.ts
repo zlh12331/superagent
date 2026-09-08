@@ -44,9 +44,9 @@ import {
   commandTargetsOutsideBoundary,
   extractCommandFromInput,
   isCompositeCommand,
+  isDeniedByPlanMode,
   isUniversalWhitelistPattern,
   matchesWhitelistPattern,
-  PLAN_MODE_CONTROL_TOOLS,
 } from './command-guards';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
 import type { DenialState } from './denial-tracking';
@@ -305,6 +305,14 @@ export class PermissionService implements IPermissionService {
     userPrompt?: string,
     options?: { readonly pathBoundary?: string },
   ): Promise<PermissionDecision> {
+    // 0. plan 模式硬拦截（2026-09-06 审计修复：必须早于记忆缓存与白名单）
+    if (isDeniedByPlanMode(this.approvalMode, tool)) {
+      return {
+        permission: 'deny',
+        description: `${tool.description}（计划模式只读，非只读工具需先退出计划模式）`,
+      };
+    }
+
     // 1. 检查记忆决策
     const key = this.buildRememberKey(tool.name, input);
     const remembered = this.remembered.get(key);
@@ -372,13 +380,7 @@ export class PermissionService implements IPermissionService {
           };
         }
       }
-      // 2c. plan 模式：非只读且不在控制面逃生舱内的 auto 工具一律 deny
-      if (this.approvalMode === 'plan' && !PLAN_MODE_CONTROL_TOOLS.has(tool.name)) {
-        return {
-          permission: 'deny',
-          description: `${tool.description}（计划模式只读，非只读工具需先退出计划模式）`,
-        };
-      }
+      // 2c. plan 模式下非只读工具已在步骤 0 统一 deny，这里只剩控制面与只读工具
       // 2d. 其余（控制面工具 / 非 plan 模式的无命令 auto 工具）维持免审批
       return {
         permission: 'auto',

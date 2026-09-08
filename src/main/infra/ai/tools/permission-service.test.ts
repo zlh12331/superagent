@@ -595,6 +595,41 @@ describe('PermissionService', () => {
     });
   });
 
+  // ── plan 模式硬拦截（2026-09-06 安全审计修复）──────────────
+  // 修复前：记忆缓存（步骤 1）与白名单（步骤 2.5）先于 plan 判定返回 'auto'，
+  // 导致 plan 模式下"曾被批准的同入参调用"或"白名单命令"仍会真实写文件/执行。
+  describe('plan 模式：记忆 / 白名单不得绕过只读约束', () => {
+    it('记忆命中 approved（写类工具）→ 仍 deny', async () => {
+      const tool = createMockTool('ask', 'edit');
+      service.rememberDecision(tool, { path: '/tmp/a.ts' }, true);
+      service.setApprovalMode('plan');
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
+      expect(decision.permission).toBe('deny');
+    });
+
+    it('白名单命中（exec 命令）→ 仍 deny', async () => {
+      await service.addWhitelistEntry({ toolName: 'mock_tool', pattern: 'npm test' });
+      service.setApprovalMode('plan');
+      const tool = createMockTool('ask', 'exec');
+      const decision = await service.decide(tool, { command: 'npm test -- --watch' });
+      expect(decision.permission).toBe('deny');
+    });
+
+    it('只读工具在 plan 模式仍放行（不误伤）', async () => {
+      service.setApprovalMode('plan');
+      const tool = createMockTool('ask', 'read');
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
+      expect(decision.permission).toBe('auto');
+    });
+
+    it('非 plan 模式下记忆命中仍返回 auto（回归保护）', async () => {
+      const tool = createMockTool('ask', 'edit');
+      service.rememberDecision(tool, { path: '/tmp/a.ts' }, true);
+      const decision = await service.decide(tool, { path: '/tmp/a.ts' });
+      expect(decision.permission).toBe('auto');
+    });
+  });
+
   describe('generateApprovalId', () => {
     it('生成 UUID v4 格式 id', async () => {
       const id = generateApprovalId();
