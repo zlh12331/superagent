@@ -108,13 +108,33 @@ export function initI18n(): typeof i18next {
   // use() 返回 i18next 实例，链式调用
   // init() 同步完成（资源已内联，无网络请求）
   void i18next.use(initReactI18next).use(LanguageDetector).init(i18nOptions);
+
+  // 2026-09-08 修复（a11y / WCAG 3.1.1）：<html lang> 此前硬编码为 zh-CN，
+  // 切到英文后屏幕阅读器仍按中文发音、搜索引擎/翻译工具也识别错误。
+  // 这里在语言变更（含首次初始化）时同步文档根节点的 lang 属性。
+  const syncHtmlLang = (lng: string): void => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lng;
+    }
+  };
+  i18next.on('languageChanged', syncHtmlLang);
+  // 初始化可能已完成（资源内联），主动同步一次当前值
+  if (i18next.language !== undefined) {
+    syncHtmlLang(i18next.language);
+  }
+
   return i18next;
 }
 
 /** i18next 实例（供非 React 代码使用，如工具函数直接调用 t()） */
 export const i18n = i18next;
 
-/** 当前语言（供非 React 代码读取） */
+/**
+ * 当前语言（供非 React 代码读取）
+ *
+ * 注（2026-09-08 死代码核实）：当前无生产消费方，但 i18n-gaps.test.ts 有覆盖
+ * ——按「测试专用导出」保留。
+ */
 export function getCurrentLanguage(): SupportedLanguage {
   const current = i18next.language ?? DEFAULT_LANGUAGE;
   return current as SupportedLanguage;

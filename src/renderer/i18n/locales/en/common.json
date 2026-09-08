@@ -80,8 +80,6 @@
       "loadMore": "Load more sessions",
       "newSession": "New session",
       "tabsRecent": "Recent",
-      "tabsArchived": "Archived",
-      "tabsLabel": "Session tabs",
       "notLoggedIn": "Not signed in",
       "unlabeled": "Ungrouped",
       "noSessions": "No sessions yet",
@@ -101,8 +99,6 @@
       "language": "Language",
       "theme": "Theme",
       "reportIssue": "Report issue",
-      "noArchived": "No archived sessions",
-      "noArchivedHint": "Archiving is a placeholder; archived sessions will appear here",
       "rename": "Rename",
       "renameTitle": "Rename session",
       "doubleClickRename": "Double-click to rename",
@@ -196,7 +192,9 @@
       "noActiveSession": "No active session",
       "goalEdit": "Edit goal",
       "goalClear": "Delete goal",
-      "goalCompleted": "Completed"
+      "goalCompleted": "Completed",
+      "loadedMessages_one": "Loaded {{count}} / {{total}} message · scroll up for earlier",
+      "loadedMessages_other": "Loaded {{count}} / {{total}} messages · scroll up for earlier"
     },
     "update": {
       "noticeAvailable": "Update available",
@@ -274,7 +272,9 @@
       "editResubmit": "Edit & resubmit",
       "skip": "Skip",
       "skipped": "Skipped",
-      "responseFailed": "Failed to send approval response. Please retry."
+      "responseFailed": "Failed to send approval response. Please retry.",
+      "stagePaths_one": "git add (stage {{count}} path)",
+      "stagePaths_other": "git add (stage {{count}} paths)"
     },
     "settings": {
       "hideApiKey": "Hide API Key",
@@ -363,7 +363,9 @@
         "tokenCopied": "Pairing token copied",
         "tokenCopyFailed": "Failed to copy token",
         "qrAlt": "Remote control pairing QR code",
-        "qrHint": "Scan with your phone camera to open the pairing page"
+        "qrHint": "Scan with your phone camera to open the pairing page",
+        "activeCommands_one": "{{count}} running",
+        "activeCommands_other": "{{count}} running"
       },
       "group": {
         "general": "General",
@@ -581,7 +583,9 @@
       "imAllowedGroupsPlaceholder": "telegram:123456789",
       "imAllowedGroupsSave": "Save",
       "imAllowedGroupsSaved": "Allowlist saved",
-      "imAllowedGroupsFailed": "Failed to save allowlist"
+      "imAllowedGroupsFailed": "Failed to save allowlist",
+      "memoryClearConfirmDesc_one": "The only memory in this session will be cleared. This cannot be undone.",
+      "memoryClearConfirmDesc_other": "All {{count}} memories in this session will be cleared. This cannot be undone."
     },
     "home": {
       "justNow": "Just now",
@@ -602,7 +606,9 @@
       "projectUnderstanding": "Project understanding",
       "projectUnderstandingPrompt": "Help me understand this project's structure and code",
       "toolKnowledge": "Tool knowledge",
-      "toolKnowledgePrompt": "Introduce some practical dev tools"
+      "toolKnowledgePrompt": "Introduce some practical dev tools",
+      "minutesAgo_one": "{{count}} min ago",
+      "minutesAgo_other": "{{count}} min ago"
     },
     "dev": {
       "runtimeMetrics": "Runtime metrics",
@@ -662,7 +668,9 @@
       "confirmDiscardChanges": "Switching files will discard unsaved changes. Continue?",
       "view": "View",
       "saving": "Saving…",
-      "copyContent": "Copy content"
+      "copyContent": "Copy content",
+      "lines_one": "{{count}} line",
+      "lines_other": "{{count}} lines"
     },
     "fileTree": {
       "emptyDesc": "Select or create a session first",

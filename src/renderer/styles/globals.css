@@ -1926,6 +1926,13 @@ body.resizing iframe {
   opacity: 1;
 }
 
+/* 键盘可达性（2026-09-08 修复 WCAG 2.4.7）：仅 :hover 时 Tab 聚焦到内部
+   按钮会让父容器仍保持 opacity:0——按钮可聚焦但视觉不可见。
+   补 :focus-within 让键盘用户看到焦点落点（与 .ti-actions 的既有写法一致）。 */
+.msg:focus-within .msg-actions {
+  opacity: 1;
+}
+
 .msg-action-btn {
   appearance: none;
   background: none;

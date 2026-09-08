@@ -30,9 +30,6 @@ export interface UseVimModeResult {
   readonly clearPendingCursor: () => void;
 }
 
-/** 初始 vim 状态（供引用） */
-export const VIM_INITIAL_STATE = INITIAL_VIM_STATE;
-
 /**
  * vim 编辑模式状态 hook
  *

@@ -64,7 +64,6 @@ import {
   SEARCH_HIGHLIGHT_MIN_CHARS,
 } from '@/lib/constants';
 import { springTransition } from '@/lib/motion';
-import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
@@ -182,8 +181,6 @@ export function Sidebar(): ReactElement {
       }
     };
   }, []);
-  // 当前激活的 tab（recent / archived；文件树是独立视图 sidebarView，不进 tablist）
-  const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent');
   // 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换）
   const sidebarView = useUiStore((state) => state.sidebarView);
   const setSidebarView = useUiStore((state) => state.setSidebarView);
@@ -351,83 +348,26 @@ export function Sidebar(): ReactElement {
             onChange={(e) => setSearchKeyword(e.target.value)}
           />
         </div>
-        {/* ARIA tabs 键盘语义：←/→/Home/End 移动焦点并激活（自动激活模式）；
-            roving tabindex：仅激活 tab 参与 Tab 序列（WAI-ARIA tabs 模式） */}
-        <div
-          className="sidebar-tabs"
-          role="tablist"
-          aria-label={t('sidebar.tabsLabel')}
-          onKeyDown={(event) => {
-            const tabs: Array<'recent' | 'archived'> = ['recent', 'archived'];
-            const currentIndex = tabs.indexOf(activeTab);
-            let nextIndex: number | null = null;
-            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-              nextIndex = (currentIndex + 1) % tabs.length;
-            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-              nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-            } else if (event.key === 'Home') {
-              nextIndex = 0;
-            } else if (event.key === 'End') {
-              nextIndex = tabs.length - 1;
-            }
-            if (nextIndex === null) return;
-            const nextTab = tabs[nextIndex];
-            if (nextTab === undefined) return;
-            event.preventDefault();
-            setActiveTab(nextTab);
-            event.currentTarget
-              .querySelectorAll<HTMLButtonElement>('[role="tab"]')
-              [nextIndex]?.focus();
-          }}
-        >
-          <button
-            type="button"
-            className={cn('sidebar-tab', activeTab === 'recent' && 'active')}
-            role="tab"
-            aria-selected={activeTab === 'recent'}
-            tabIndex={activeTab === 'recent' ? 0 : -1}
-            onClick={() => setActiveTab('recent')}
-          >
+        {/* 会话列表标题（2026-09-08：移除「归档」tab——它只渲染永久空态，
+            与项目「未实现功能不暴露入口」原则冲突；单 tab 不再需要
+            tablist/roving-tabindex 键盘导航语义） */}
+        <div className="sidebar-tabs">
+          <span className="sidebar-tab active">
             {t('sidebar.tabsRecent')} <span className="count">{sessions.length}</span>
-            {activeTab === 'recent' && (
-              <motion.span
-                layoutId="sidebar-tab-active-bar"
-                className="bg-[var(--accent)] absolute inset-x-2 bottom-0 h-[2px] rounded-full"
-                transition={springTransition}
-              />
-            )}
-          </button>
-          <button
-            type="button"
-            className={cn('sidebar-tab', activeTab === 'archived' && 'active')}
-            role="tab"
-            aria-selected={activeTab === 'archived'}
-            tabIndex={activeTab === 'archived' ? 0 : -1}
-            onClick={() => setActiveTab('archived')}
-          >
-            {t('sidebar.tabsArchived')} <span className="count">0</span>
-            {activeTab === 'archived' && (
-              <motion.span
-                layoutId="sidebar-tab-active-bar"
-                className="bg-[var(--accent)] absolute inset-x-2 bottom-0 h-[2px] rounded-full"
-                transition={springTransition}
-              />
-            )}
-          </button>
+            <motion.span
+              layoutId="sidebar-tab-active-bar"
+              className="bg-[var(--accent)] absolute inset-x-2 bottom-0 h-[2px] rounded-full"
+              transition={springTransition}
+            />
+          </span>
         </div>
       </div>
 
-      {/* 中间：会话列表 / 归档 / 文件树（文件树为独立视图 sidebarView，对齐参考项目） */}
+      {/* 中间：会话列表 / 文件树（文件树为独立视图 sidebarView，对齐参考项目） */}
       <div className="sidebar-list">
         {sidebarView === 'fileTree' ? (
           // 文件树视图（头部返回/刷新由 FileTreePanel 内部提供——对齐参考项目 FileTree）
           <FileTreePanel workingDir={workingDir} />
-        ) : activeTab === 'archived' ? (
-          <EmptyState
-            title={t('sidebar.noArchived')}
-            description={t('sidebar.noArchivedHint')}
-            className="h-full"
-          />
         ) : (
           <AsyncBoundary
             view={view}

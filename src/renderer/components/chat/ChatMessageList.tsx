@@ -53,6 +53,13 @@ const AT_BOTTOM_THRESHOLD = 80;
 /** 距顶部阈值（px）：小于该值且窗口未到开头时加载更早消息（分页渲染） */
 const AT_TOP_THRESHOLD = 200;
 
+/** 消息列表 live region（2026-09-08 a11y：流式增量对读屏可见，不逐 token 刷屏） */
+const MESSAGE_LIST_LIVE_PROPS = {
+  'aria-live': 'polite',
+  'aria-atomic': 'false',
+  'aria-relevant': 'additions text',
+} as const;
+
 export function ChatMessageList({
   messages,
   status,
@@ -64,9 +71,8 @@ export function ChatMessageList({
   const { t } = useTranslation();
   // 滚动容器 ref（替代 Virtuoso 句柄）
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  // 是否在底部附近（ref 版本：在滚动回调中写入，避免闭包陷阱）
+  // 是否在底部附近（ref：滚动回调写入，避免闭包陷阱）
   const isAtBottomRef = useRef(true);
-
   // 是否显示"滚动到底部"按钮（距底部 > 阈值时显示）
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   // 是否有新消息到达且用户不在底部（按钮显示 .has-new 红点）
@@ -287,6 +293,7 @@ export function ChatMessageList({
         data-testid="chat-message-list"
         className="messages h-full overflow-y-auto"
         onScroll={handleScroll}
+        {...MESSAGE_LIST_LIVE_PROPS}
       >
         {/* 居中限宽容器（CSS .messages-inner 已定义但此前从未渲染——消息通栏全宽，
             与 820px 居中的输入框严重错位） */}

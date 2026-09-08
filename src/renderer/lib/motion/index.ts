@@ -33,35 +33,30 @@
 // 类型再导出（业务方可能需要 Variants / Transition 类型）
 export type { Transition, Variants } from 'motion/react';
 // 过渡预设
+// 2026-09-08：移除 10 个零消费方导出（panelTransition / slowTransition /
+// bouncySpringTransition / heavySpringTransition / slideRightVariants /
+// scaleVariants / popVariants / blurUpVariants / staggerContainerFast /
+// staggerContainerSlow）——仅 barrel 再导出、无任何业务引用（knip 只查
+// files/deps 级故未报）。定义仍在 transitions.ts / variants.ts 中，
+// 需要时按名导入即可。
 export {
-  bouncySpringTransition,
   easeIn,
   // 缓动曲线
   easeOut,
   easePaper,
-  heavySpringTransition,
   // 过渡预设
   microTransition,
-  panelTransition,
-  slowTransition,
   smoothEaseOut,
   // 弹簧预设
   springTransition,
 } from './transitions';
 // 动画变体
 export {
-  // 单元素
-  blurUpVariants,
   fadeInVariants,
   // 字母级
   letterContainerVariants,
   letterUpVariants,
-  popVariants,
-  scaleVariants,
-  slideRightVariants,
   slideUpVariants,
   // stagger 容器
   staggerContainer,
-  staggerContainerFast,
-  staggerContainerSlow,
 } from './variants';

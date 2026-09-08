@@ -80,8 +80,6 @@
       "loadMore": "加载更多会话",
       "newSession": "新建会话",
       "tabsRecent": "最近",
-      "tabsArchived": "归档",
-      "tabsLabel": "会话标签",
       "notLoggedIn": "未登录",
       "unlabeled": "未分组",
       "noSessions": "尚无会话",
@@ -101,8 +99,6 @@
       "language": "语言",
       "theme": "主题",
       "reportIssue": "报告问题",
-      "noArchived": "暂无归档会话",
-      "noArchivedHint": "归档功能预留，会话归档后显示在这里",
       "rename": "重命名",
       "renameTitle": "重命名会话",
       "doubleClickRename": "双击重命名",
@@ -196,7 +192,9 @@
       "noActiveSession": "无活跃会话",
       "goalEdit": "编辑目标",
       "goalClear": "删除目标",
-      "goalCompleted": "已完成"
+      "goalCompleted": "已完成",
+      "loadedMessages_other": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息",
+      "loadedMessages_one": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息"
     },
     "update": {
       "noticeAvailable": "发现新版本",
@@ -274,7 +272,9 @@
       "editResubmit": "编辑后重提",
       "skip": "跳过",
       "skipped": "已跳过",
-      "responseFailed": "审批响应发送失败，请重试"
+      "responseFailed": "审批响应发送失败，请重试",
+      "stagePaths_other": "git add（暂存 {{count}} 个路径）",
+      "stagePaths_one": "git add（暂存 {{count}} 个路径）"
     },
     "settings": {
       "hideApiKey": "隐藏 API Key",
@@ -363,7 +363,9 @@
         "tokenCopied": "配对令牌已复制",
         "tokenCopyFailed": "令牌复制失败",
         "qrAlt": "远程控制配对二维码",
-        "qrHint": "手机相机扫码直接打开配对页"
+        "qrHint": "手机相机扫码直接打开配对页",
+        "activeCommands_other": "执行中 {{count}} 条",
+        "activeCommands_one": "执行中 {{count}} 条"
       },
       "group": {
         "general": "通用",
@@ -581,7 +583,9 @@
       "imAllowedGroupsPlaceholder": "telegram:123456789",
       "imAllowedGroupsSave": "保存",
       "imAllowedGroupsSaved": "允许列表已保存",
-      "imAllowedGroupsFailed": "允许列表保存失败"
+      "imAllowedGroupsFailed": "允许列表保存失败",
+      "memoryClearConfirmDesc_other": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。",
+      "memoryClearConfirmDesc_one": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。"
     },
     "home": {
       "justNow": "刚刚",
@@ -602,7 +606,9 @@
       "projectUnderstanding": "项目理解",
       "projectUnderstandingPrompt": "帮我理解这个项目的结构和代码",
       "toolKnowledge": "工具知识",
-      "toolKnowledgePrompt": "介绍一些实用的开发工具"
+      "toolKnowledgePrompt": "介绍一些实用的开发工具",
+      "minutesAgo_other": "{{count}} 分钟前",
+      "minutesAgo_one": "{{count}} 分钟前"
     },
     "dev": {
       "runtimeMetrics": "运行时指标",
@@ -662,7 +668,9 @@
       "confirmDiscardChanges": "切换文件将丢失未保存的修改，确定继续？",
       "view": "查看",
       "saving": "保存中…",
-      "copyContent": "复制内容"
+      "copyContent": "复制内容",
+      "lines_other": "{{count}} 行",
+      "lines_one": "{{count}} 行"
     },
     "fileTree": {
       "emptyDesc": "请先选择或创建一个会话",

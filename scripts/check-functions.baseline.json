@@ -23,8 +23,12 @@
     "body": 1,
     "params": 8
   },
+  "src/main/infra/ai/agent/agent-service.ts#startAgent": {
+    "body": 51,
+    "params": 1
+  },
   "src/main/infra/ai/agent/agent-service.ts#streamToWebContents": {
-    "body": 507,
+    "body": 503,
     "params": 3
   },
   "src/main/infra/ai/agent/context-compression.ts#compressByTokenBudget": {
@@ -103,6 +107,10 @@
     "body": 48,
     "params": 10
   },
+  "src/main/infra/ai/tools/path-guard.ts#resolveWithinWorkspace": {
+    "body": 51,
+    "params": 2
+  },
   "src/main/infra/ai/tools/permission-service.ts#decide": {
     "body": 100,
     "params": 4
@@ -140,7 +148,7 @@
     "params": 1
   },
   "src/main/infra/code-analysis/code-analyzer.ts#extractSymbols": {
-    "body": 106,
+    "body": 46,
     "params": 1
   },
   "src/main/infra/file/file-service.ts#listRecursive": {
@@ -195,6 +203,10 @@
     "body": 76,
     "params": 0
   },
+  "src/main/infra/memory-hub/memory-hub-service.ts#listL0BySession": {
+    "body": 50,
+    "params": 2
+  },
   "src/main/infra/memory-hub/memory-hub-service.ts#removeL0JsonlBySession": {
     "body": 53,
     "params": 1
@@ -202,6 +214,10 @@
   "src/main/infra/remote/remote-control.ts#handleCommandRequest": {
     "body": 56,
     "params": 3
+  },
+  "src/main/infra/remote/remote-control.ts#validateAndRoute": {
+    "body": 46,
+    "params": 2
   },
   "src/main/infra/remote/remote-web-client.ts#send": {
     "body": 86,
@@ -232,7 +248,7 @@
     "params": 1
   },
   "src/main/infra/storage/keychain.ts#readStore": {
-    "body": 47,
+    "body": 44,
     "params": 0
   },
   "src/main/infra/storage/session-service.ts#appendMessage": {
@@ -243,6 +259,10 @@
     "body": 49,
     "params": 1
   },
+  "src/main/infra/storage/usage-turn-store.ts#getUsageSummary": {
+    "body": 56,
+    "params": 0
+  },
   "src/main/infra/telemetry/memory-monitor.ts#detectGrowth": {
     "body": 42,
     "params": 3
@@ -252,7 +272,7 @@
     "params": 0
   },
   "src/main/infra/terminal/terminal-service.ts#create": {
-    "body": 128,
+    "body": 119,
     "params": 1
   },
   "src/main/infra/terminal/terminal-service.ts#splitShellWords": {
@@ -274,6 +294,10 @@
   "src/main/ipc/mcp.handler.ts#createMcpHandlers": {
     "body": 43,
     "params": 2
+  },
+  "src/main/ipc/search.handler.ts#createSearchHandlers": {
+    "body": 41,
+    "params": 1
   },
   "src/main/ipc/session.handler.ts#createSessionHandlers": {
     "body": 88,
@@ -306,6 +330,10 @@
   "src/main/tray.ts#createTray": {
     "body": 44,
     "params": 0
+  },
+  "src/main/utils/terminate-child.ts#terminateChild": {
+    "body": 41,
+    "params": 3
   },
   "src/main/utils/window-state.ts#trackWindowState": {
     "body": 66,
@@ -492,7 +520,7 @@
     "params": 1
   },
   "src/renderer/components/layout/Sidebar.tsx#Sidebar": {
-    "body": 499,
+    "body": 440,
     "params": 0
   },
   "src/renderer/components/layout/Topbar.tsx#Topbar": {
@@ -637,6 +665,10 @@
   },
   "src/renderer/dev/mock-api.ts#simulateAllPartsDemo": {
     "body": 161,
+    "params": 1
+  },
+  "src/renderer/hooks/use-agent-bridge.ts#handleSessionEnd": {
+    "body": 45,
     "params": 1
   },
   "src/renderer/hooks/use-app-info.ts#useAppInfo": {

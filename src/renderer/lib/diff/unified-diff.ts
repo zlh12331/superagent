@@ -96,6 +96,9 @@ export function parseUnifiedDiff(diff: string): readonly UnifiedDiffHunk[] {
 
 /**
  * hunk 总数（用于 UI 提示多 hunk 文件）
+ *
+ * 注（2026-09-08 死代码核实）：当前无生产消费方，但 unified-diff.test.ts
+ * 有覆盖——按「测试专用导出」保留（删除会破坏测试且无收益）。
  */
 export function countHunks(diff: string): number {
   return parseUnifiedDiff(diff).length;

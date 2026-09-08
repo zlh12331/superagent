@@ -37,7 +37,8 @@ test.describe('可访问性审计（WCAG 2.2 AA · 亮/暗双主题矩阵）', (
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .exclude('[data-testid="terminal-output"]') // 终端动态内容
+        // 2026-09-08：移除无效 exclude——`data-testid="terminal-output"` 全库不存在
+        // （空匹配，属死规则）；聊天列表的 exclude 有效（该 testid 在 ChatMessageList 上）
         .exclude('[data-testid="chat-message-list"]') // 聊天动态内容
         // Radix Tabs 在 DevPanel 折叠态下 aria-controls 指向未渲染的 content，
         // 这是 Radix 的标准行为（content 懒渲染），非真实 a11y 问题

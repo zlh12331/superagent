@@ -163,6 +163,43 @@ export function measureBodyLines(source: string, bodyOpenIdx: number): number {
       i = stop;
       continue;
     }
+    // 正则字面量（2026-09-08 修复误判）：`/['"`]/g` 这类正则内含引号/反引号时，
+    // 会被下方字符串分支当作字符串起始，跳到下一个引号——曾把整个函数体
+    // 误算成 296 行。正则的识别条件：前一非空白字符不是标识符/右括号
+    // （即不可能是除法运算符），且后续在同一行内能闭合。
+    if (ch === '/' && next !== '/' && next !== '*') {
+      let prev = i - 1;
+      while (prev >= 0 && /\s/.test(source[prev] as string)) prev -= 1;
+      const prevCh = prev >= 0 ? (source[prev] as string) : '';
+      const prevIsOperand = /[\w$)\]]/.test(prevCh);
+      if (!prevIsOperand) {
+        let j = i + 1;
+        let closed = false;
+        let inClass = false;
+        while (j < source.length) {
+          const c = source[j] as string;
+          if (c === '\\') {
+            j += 2;
+            continue;
+          }
+          if (c === '\n') break;
+          if (c === '[') inClass = true;
+          else if (c === ']') inClass = false;
+          else if (c === '/' && !inClass) {
+            closed = true;
+            break;
+          }
+          j += 1;
+        }
+        if (closed) {
+          // 跳到正则结束后的 flags（字母）
+          let k = j + 1;
+          while (k < source.length && /[a-z]/.test(source[k] as string)) k += 1;
+          i = k;
+          continue;
+        }
+      }
+    }
     // 字符串 / 模板串：跳到闭合引号（模板串内换行合法，需计入行数）
     if (ch === '"' || ch === "'" || ch === '`') {
       let j = i + 1;

@@ -170,7 +170,12 @@ function main(): number {
   const unused: string[] = [];
   for (const k of en.common) {
     const dynamic = [...dynamicPrefixes].some((p) => k.startsWith(p));
-    if (!used.has(k) && !dynamic) unused.push(`en common.${k} 未被引用`);
+    // 2026-09-08：i18next 复数形态（key_one / key_other / key_zero / key_two / key_few /
+    // key_many）在代码里以基础 key + { count } 调用，静态看不到后缀 key——
+    // 按基础 key 的引用情况判定，避免误报冗余。
+    const baseKey = k.replace(/_(zero|one|two|few|many|other)$/, '');
+    const pluralBase = baseKey !== k && used.has(baseKey);
+    if (!used.has(k) && !pluralBase && !dynamic) unused.push(`en common.${k} 未被引用`);
   }
 
   // 4. JSX 中文文案未走 t()（盲区：原只校验已写的 t() key，查不出「直接写死中文」）
