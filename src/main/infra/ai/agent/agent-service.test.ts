@@ -193,6 +193,8 @@ function createMockToolRegistry() {
     register: vi.fn(),
     unregister: vi.fn(() => false),
     get: vi.fn(() => undefined),
+    // 固定开销估算（estimateFixedOverheadTokens）会遍历工具名 → 空集即可
+    getAllNames: vi.fn(() => new Set<string>()),
     list: vi.fn(() => []),
     toAISDKTools: vi.fn((_ctx, executeHook) => {
       // 返回一个简单的 tools 对象，AI SDK 会接受
@@ -816,7 +818,10 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
 
   beforeEach(() => {
     service = new AgentService(
-      { toAISDKTools: vi.fn(() => ({})) } as unknown as IToolRegistry,
+      {
+        toAISDKTools: vi.fn(() => ({})),
+        getAllNames: vi.fn(() => new Set<string>()),
+      } as unknown as IToolRegistry,
       {} as unknown as IToolExecutor,
       { resolvePrompt: vi.fn(async () => '系统提示') } as unknown as IPromptService,
       {
@@ -917,6 +922,8 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
       | undefined;
     const reg = {
+      // 固定开销估算会遍历工具名（estimateFixedOverheadTokens）
+      getAllNames: vi.fn(() => new Set<string>()),
       toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
         capturedHook = hook;
         return {};
@@ -954,6 +961,8 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
       | undefined;
     const reg = {
+      // 固定开销估算会遍历工具名（estimateFixedOverheadTokens）
+      getAllNames: vi.fn(() => new Set<string>()),
       toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
         capturedHook = hook;
         return {};
@@ -985,6 +994,8 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       | ((tool: { name: string }, input: unknown, ctx: { callId: string }) => Promise<unknown>)
       | undefined;
     const reg = {
+      // 固定开销估算会遍历工具名（estimateFixedOverheadTokens）
+      getAllNames: vi.fn(() => new Set<string>()),
       toAISDKTools: vi.fn((_ctx: unknown, hook: typeof capturedHook) => {
         capturedHook = hook;
         return {};
@@ -1012,7 +1023,10 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       onApprovalLifecycle: vi.fn(() => () => {}),
     } as unknown as IPermissionService;
     const svc = new AgentService(
-      { toAISDKTools: vi.fn(() => ({})) } as unknown as IToolRegistry,
+      {
+        toAISDKTools: vi.fn(() => ({})),
+        getAllNames: vi.fn(() => new Set<string>()),
+      } as unknown as IToolRegistry,
       {} as unknown as IToolExecutor,
       { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
       {
@@ -1037,7 +1051,10 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       ]),
     );
     const svc = new AgentService(
-      { toAISDKTools: vi.fn(() => ({})) } as unknown as IToolRegistry,
+      {
+        toAISDKTools: vi.fn(() => ({})),
+        getAllNames: vi.fn(() => new Set<string>()),
+      } as unknown as IToolRegistry,
       {} as unknown as IToolExecutor,
       { resolvePrompt: vi.fn(async () => 'p') } as unknown as IPromptService,
       {
@@ -1261,6 +1278,29 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     await vi.waitFor(() => expect(gen.generateText).toHaveBeenCalledTimes(1), { timeout: 2000 });
   });
 
+  it('固定开销计入预算：长 system prompt 使有效窗口缩小 → 提前 over-limit（2026-09-06 修复）', async () => {
+    mocks.mockResolveModel.mockImplementation(() => ({
+      modelId: 'test-model',
+      generationConfig: {},
+      capabilities: { contextWindowSize: 2000 },
+    }));
+    const wc = createMockWebContents();
+    // 窗口 2000：不计固定开销时 hardLimit = 1900（1600 tokens 不超限）；
+    // 计入 system prompt 400 tokens 后有效窗口 1600 → hardLimit 1500 → 1600 tokens 超限
+    await service.startAgent(
+      baseOptions({
+        messages: [{ role: 'user' as const, content: '字'.repeat(1600) }],
+        systemPrompt: '字'.repeat(400),
+        sessionId: 's-overhead',
+        webContents: wc,
+      }),
+    );
+    await flushAsync();
+    expect(mocks.mockStreamText).not.toHaveBeenCalled();
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_CONTEXT_TOO_LARGE');
+  });
+
   it('上下文 over-limit：抛 AI_CONTEXT_TOO_LARGE 且不调用 streamText', async () => {
     mocks.mockResolveModel.mockImplementation(() => ({
       modelId: 'test-model',
@@ -1292,7 +1332,8 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
       capabilities: { contextWindowSize: 12000 },
     }));
     const wc = createMockWebContents();
-    // 窗口 12000：compact 线 = 0.75×12000−600 = 8400，warn 线 = 7800，hardLimit = 11400；
+    // 窗口 12000：compact 线 = 0.75×有效窗口−600，有效窗口 = 12000 − 固定开销
+    // （system prompt + 工具定义，mock registry 无工具）⇒ compact 线 = 8397；
     // 8000 tokens 落在 warn 区（且不触发 over-limit）
     const mid = '字'.repeat(8000);
     await service.startAgent(
@@ -1304,7 +1345,9 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     );
     await flushAsync();
     expect(mocks.mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ contextTokens: 8000, compactAt: 8400 }),
+      // 有效窗口 = 12000 − 固定开销（resolvePrompt 返回的 system prompt 实测 4 tokens）
+      // ⇒ compact 线 = round(0.75×11996) − 600 = 8397
+      expect.objectContaining({ contextTokens: 8000, compactAt: 8397 }),
       expect.stringContaining('接近压缩线'),
       // 全量并发 + coverage 插桩下 gpt-tokenizer 编码 8K 字符可达 5s+，放宽超时
     );

@@ -74,6 +74,7 @@ import {
   getTokenBudgetDecision,
 } from './context-compression';
 import { createRepairToolCall } from './repair-tool-call';
+import { resolveTokenBudgetBasis } from './token-overhead';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
 /**
@@ -505,15 +506,20 @@ export class AgentService implements IAgentService {
           //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
           //    条件展开：systemPrompt 为 undefined 时不传 system 字段
           //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
-          // 上下文压缩：窗口感知预算（对齐 qwen compaction 阈值体系）
-          // 预算 = 模型窗口 75% − 输出预留；默认窗口 128K（无能力元数据时兜底）
+          // 上下文压缩：窗口感知预算（对齐 qwen compaction 阈值体系），默认窗口 128K
           const contextWindowSize = resolvedModel.capabilities.contextWindowSize ?? 128_000;
+          // 固定开销（system + 工具定义）计入窗口（2026-09-06 审计修复，见 token-overhead.ts）
+          const budget = resolveTokenBudgetBasis(
+            contextWindowSize,
+            systemPrompt,
+            this.toolRegistry,
+          );
           // TokenBudget 回合级调度（对齐 qwen token-budget）：
           // - over-limit：上下文超硬上限 → 拒绝调用（防供应商 400）
           // - warn：接近压缩线 → 日志/遥测提醒（提前几轮缓冲）
           // - compact：达到压缩线 → 压缩消息历史（下方现有逻辑）
           const contextTokens = estimateMessagesTokens(options.messages);
-          const budgetDecision = getTokenBudgetDecision(contextTokens, contextWindowSize);
+          const budgetDecision = getTokenBudgetDecision(contextTokens, budget.effectiveWindow);
           if (budgetDecision.level === 'over-limit') {
             logger.warn(
               {
@@ -539,7 +545,7 @@ export class AgentService implements IAgentService {
             );
             span?.setAttribute('token.contextLevel', 'warn');
           }
-          const compactionBudget = getCompactionBudget(contextWindowSize);
+          const compactionBudget = getCompactionBudget(budget.effectiveWindow);
           const compressedMessages = compressByTokenBudget(options.messages, compactionBudget);
           if (compressedMessages.length < options.messages.length) {
             logger.info(
@@ -552,12 +558,10 @@ export class AgentService implements IAgentService {
             );
           }
 
-          // 生成选项：思考强度 / 采样参数 / 输出上限（gpt-tokenizer 精确估算压缩后 prompt）
-          // 用户思考强度档位覆盖模型级默认（'off' = 不注入 providerOptions）；
-          // 用户温度覆盖模型级 generationConfig.temperature（思考模型忽略采样参数）
+          // 生成选项：思考强度 / 采样参数 / 输出上限（prompt 口径含固定开销，防高估输出）
           const genOptions = buildGenerationOptions(
             resolvedModel,
-            estimateMessagesTokens(compressedMessages),
+            estimateMessagesTokens(compressedMessages) + budget.overheadTokens,
             options.thinking,
             options.temperature,
           );

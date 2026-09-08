@@ -140,12 +140,32 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
  * baseURL 单一入口：从 config.providers 读取（config 内部已处理 .env 覆盖），
  * 支持自托管网关 / 代理场景；新增供应商时同步扩展 config 的 ProviderBaseUrlSchema。
  */
+/**
+ * 归一化端点：去尾部斜杠（避免拼出 `//chat/completions`）
+ *
+ * 2026-09-06 审计修复：自定义端点末尾带 / 会拼出双斜杠，部分网关直接 404。
+ */
+function trimTrailingSlash(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
+/**
+ * 补齐 OpenAI 风格端点的 /v1 后缀（幂等）
+ *
+ * 2026-09-06 审计修复：此前 deepseek/openai/ollama 无条件拼 `/v1`，
+ * 用户按其他供应商习惯填 `https://host/v1` 时会变成 `/v1/v1` → 404。
+ */
+function withOpenAiV1(baseUrl: string): string {
+  const trimmed = trimTrailingSlash(baseUrl);
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
+}
+
 const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   deepseek: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
     return createOpenAICompatible({
       name: 'deepseek',
-      baseURL: `${resolvedBaseUrl}/v1`,
+      baseURL: withOpenAiV1(resolvedBaseUrl),
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段（ollama 等本地场景）
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
@@ -198,7 +218,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
     return createOpenAI({
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
-      baseURL: `${resolvedBaseUrl}/v1`,
+      baseURL: withOpenAiV1(resolvedBaseUrl),
     }) as unknown as (modelId: string) => LanguageModel;
   },
   anthropic: ({ apiKey, baseUrl }) => {
@@ -209,60 +229,71 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: resolvedBaseUrl,
     }) as unknown as (modelId: string) => LanguageModel;
   },
+  // 以下 6 家 OpenAI-compatible 供应商补 includeUsage:true（2026-09-06 审计修复）：
+  // OpenAI 兼容协议流式响应默认不回传 usage，必须带 stream_options.include_usage
+  // 才能拿到 token 用量；此前只有 deepseek 开了，导致这 6 家的用量/费用统计
+  // 落 0 或缺失（渲染层 usage 面板无法对账）。
   moonshot: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.moonshot;
     return createOpenAICompatible({
       name: 'moonshot',
-      baseURL: resolvedBaseUrl,
+      baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
     });
   },
   zhipu: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.zhipu;
     return createOpenAICompatible({
       name: 'zhipu',
-      baseURL: resolvedBaseUrl,
+      baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
     });
   },
   qwen: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.qwen;
     return createOpenAICompatible({
       name: 'qwen',
-      baseURL: resolvedBaseUrl,
+      baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
     });
   },
   doubao: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.doubao;
     return createOpenAICompatible({
       name: 'doubao',
-      baseURL: resolvedBaseUrl,
+      baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
     });
   },
   siliconflow: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.siliconflow;
     return createOpenAICompatible({
       name: 'siliconflow',
-      baseURL: resolvedBaseUrl,
+      baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
     });
   },
   openrouter: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.openrouter;
     return createOpenAICompatible({
       name: 'openrouter',
-      baseURL: resolvedBaseUrl,
+      baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
+      includeUsage: true,
     });
   },
   ollama: ({ baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.ollama;
     return createOpenAICompatible({
       name: 'ollama',
-      baseURL: `${resolvedBaseUrl}/v1`,
+      baseURL: withOpenAiV1(resolvedBaseUrl),
       apiKey: 'ollama',
+      // 本地模型不按 token 计费，且 Ollama 的 OpenAI 兼容端点不保证回传 usage
       includeUsage: false,
     }) as unknown as (modelId: string) => LanguageModel;
   },
