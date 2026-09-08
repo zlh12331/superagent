@@ -1,11 +1,17 @@
 {
   "$comment": "fileSize.net = 净行硬门槛（唯一卡关口径，对齐 typescript-dev-standards-ai.md 规则 9.2）；fileSize.raw = 原始行告警线（不卡关，仅提示注释密度）。见 scripts/check-file-size.ts 头注释。",
+  "$comment2": "functionSize.bodyTiers = 函数体净行分档（2026-09-08 用户拍板 100/200/400）：≤100 轻度、101–200 中度、201–400 重债、>400 必须登记理由（scripts/function-size-exempt.json）。分档仅影响输出分级与 >400 档的登记校验，不改变 40 行硬门槛与棘轮判定。",
   "fileSize": {
     "raw": 600,
     "net": 600
   },
   "functionSize": {
     "params": 4,
-    "body": 40
+    "body": 40,
+    "bodyTiers": {
+      "mild": 100,
+      "moderate": 200,
+      "heavy": 400
+    }
   }
 }

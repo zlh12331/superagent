@@ -1,0 +1,11 @@
+{
+  "$comment": "函数体 >400 净行登记表（scripts/check-functions.ts 分档门禁）。分档阈值见 scripts/limits.json 的 functionSize.bodyTiers。规则：函数体净行 >400 必须在此登记并写明理由，否则门禁卡关；已登记的条目若净行降回 ≤400 会被判 stale（提示删除登记）。",
+  "$comment2": "为什么需要这个档：函数体 40 行是规范目标，但存量里存在「结构性长」的函数（如 IPC mock 声明表、React 组件 JSX 树）——它们的长度来自声明平铺而非控制流嵌套，拆分收益低。该档要求显式登记理由，避免「暂时容忍」静默变成「永久合法」。",
+  "entries": [
+    {
+      "key": "src/renderer/dev/mock-api.ts#createMockApi",
+      "body": 488,
+      "reason": "IPC mock 声明表：23 个域的假实现平铺在一个对象字面量里，每项独立无控制流嵌套。拆分只会把同一份假数据分散到多个文件，不降低理解成本；且该文件仅 dev:web 模式加载，不进生产包。"
+    }
+  ]
+}

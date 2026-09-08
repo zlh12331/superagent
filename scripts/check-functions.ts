@@ -1,5 +1,5 @@
 // scripts/check-functions.ts
-// 函数门禁（工程化强制）：形参数 ≤4 + 函数体 ≤40 行，双指标棘轮
+// 函数门禁（工程化强制）：形参数 ≤4 + 函数体 ≤40 净行，双指标棘轮 + 体长分档
 // ──────────────────────────────────────────────────────────────
 // 依据 typescript-dev-standards-ai.md §函数（参数≤4 对象封装 / 函数体≤40 行）
 // 与业界实践（eslint max-params 3-4、max-lines-per-function 常见 50）。
@@ -12,8 +12,16 @@
 //   3. 原 `const f = x => {}` 裸标识符单参箭头完全不匹配 → 现按 1 参 + 度量体长。
 //   4. 原豁免只有一处手写 Set；现存量违规外置棘轮基线（只能收紧）。
 //
-// 已知边界（漏报方向，不误报）：对象字面量方法 / class 方法签名不被正则覆盖；
-// 返回类型含对象字面量类型的函数可能漏配。故基线数字是**下界**，不可当上限解读。
+// 2026-09-08 体长分档（用户拍板 100/200/400，阈值真源 scripts/limits.json）：
+//   轻度 41–100 / 中度 101–200 / 重债 201–400 / >400 必须登记理由。
+//   分档**只影响输出分级与 >400 档的登记校验**，不改变 40 行硬门槛与棘轮判定。
+//   为什么分档：139 条超限里 96 条是 41–100 行的轻度超标、仅 1 条 >400，
+//   混在一个数字里看不出重构优先级；且 40 行是规范目标，而部分函数的「长」
+//   来自声明平铺（IPC mock 表 / React JSX 树）而非控制流嵌套，拆分收益低，
+//   需要显式登记理由而非静默容忍。
+//
+// 已知边界（漏报方向，不误报）：返回类型含对象字面量类型的函数可能漏配。
+// 故基线数字是**下界**，不可当上限解读。
 //
 // 运行：pnpm check:functions
 //       pnpm check:functions --update-baseline   # 重构后收紧基线
@@ -23,6 +31,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectSourceFiles, toPosixRelative } from './lib/file-metrics';
 import { type FnMetric, scanFunctions } from './lib/function-metrics';
+import { type BodyTiers, countTiers, tierOf, validateHeavyExempt } from './lib/function-tiers';
 import {
   evaluateRatchet,
   type Metrics,
@@ -36,20 +45,50 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 const BASELINE_PATH = join(import.meta.dirname, 'check-functions.baseline.json');
+const EXEMPT_PATH = join(import.meta.dirname, 'function-size-exempt.json');
 const LIMITS_PATH = join(import.meta.dirname, 'limits.json');
 const SCAN_DIRS = [join(ROOT, 'src', 'main'), join(ROOT, 'src', 'renderer')];
-/** 函数门槛（单一真源：scripts/limits.json；与 check-file-size 共用） */
-function loadLimits(): { params: number; body: number } {
+
+/** 函数门槛 + 分档（单一真源：scripts/limits.json） */
+function loadLimits(): { params: number; body: number; tiers: BodyTiers } {
   const parsed = JSON.parse(readFileSync(LIMITS_PATH, 'utf8')) as {
-    functionSize?: { params?: number; body?: number };
+    functionSize?: {
+      params?: number;
+      body?: number;
+      bodyTiers?: { mild?: number; moderate?: number; heavy?: number };
+    };
   };
   return {
     params: parsed.functionSize?.params ?? 4,
     body: parsed.functionSize?.body ?? 40,
+    tiers: {
+      mild: parsed.functionSize?.bodyTiers?.mild ?? 100,
+      moderate: parsed.functionSize?.bodyTiers?.moderate ?? 200,
+      heavy: parsed.functionSize?.bodyTiers?.heavy ?? 400,
+    },
   };
 }
-const { params: PARAM_LIMIT, body: BODY_LIMIT } = loadLimits();
+const { params: PARAM_LIMIT, body: BODY_LIMIT, tiers: BODY_TIERS } = loadLimits();
 const METRICS = ['params', 'body'] as const;
+
+/**
+ * 读取 >400 档登记表（文件缺失视为空表）
+ *
+ * @returns key → 登记理由
+ */
+function loadExempt(): Map<string, string> {
+  if (!existsSync(EXEMPT_PATH)) return new Map();
+  const parsed = JSON.parse(readFileSync(EXEMPT_PATH, 'utf8')) as {
+    entries?: Array<{ key?: unknown; reason?: unknown }>;
+  };
+  const map = new Map<string, string>();
+  for (const e of parsed.entries ?? []) {
+    if (typeof e.key === 'string' && typeof e.reason === 'string') {
+      map.set(e.key, e.reason);
+    }
+  }
+  return map;
+}
 
 /**
  * 一处超限（key = `相对路径#函数名`，行号不入 key 以免代码上方插入注释即漂移）
@@ -151,7 +190,31 @@ function main(): number {
   const paramHits = violations.filter((v) => v.params > PARAM_LIMIT).length;
   const bodyHits = violations.filter((v) => v.bodyLines > BODY_LIMIT).length;
 
-  if (problems.length === 0) {
+  // 体长分档统计（2026-09-08：让重构优先级可见）
+  const overBody = violations.filter((v) => v.bodyLines > BODY_LIMIT);
+  const tiers = countTiers(
+    overBody.map((v) => v.bodyLines),
+    BODY_LIMIT,
+    BODY_TIERS,
+  );
+  // >400 档必须登记理由（登记表 scripts/function-size-exempt.json）
+  const exempt = loadExempt();
+  const overEntries = overBody
+    .filter((v) => tierOf(v.bodyLines, BODY_LIMIT, BODY_TIERS) === 'over')
+    .map((v) => ({ key: v.key, bodyLines: v.bodyLines, file: v.file, line: v.line, name: v.name }));
+  const { unregistered, stale: staleExempt } = validateHeavyExempt(
+    overEntries,
+    new Set(exempt.keys()),
+  );
+
+  const tierLines = [
+    `  体长分档：轻度 ${BODY_LIMIT + 1}–${BODY_TIERS.mild} 行 ${tiers.mild} 处 | ` +
+      `中度 ${BODY_TIERS.mild + 1}–${BODY_TIERS.moderate} 行 ${tiers.moderate} 处 | ` +
+      `重债 ${BODY_TIERS.moderate + 1}–${BODY_TIERS.heavy} 行 ${tiers.heavy} 处 | ` +
+      `>${BODY_TIERS.heavy} 行 ${tiers.over} 处（需登记理由）`,
+  ];
+
+  if (problems.length === 0 && unregistered.length === 0 && staleExempt.length === 0) {
     console.log(
       `[check-functions] ✅ 通过：${all.length} 个函数签名（体长可测 ${longest.length} 个），` +
         `${violations.length} 处超限（形参 ${paramHits} / 体长 ${bodyHits}）全部在棘轮基线内` +
@@ -160,10 +223,10 @@ function main(): number {
     console.log(
       `  门槛：形参 ≤${PARAM_LIMIT} / 函数体 ≤${BODY_LIMIT} 净行（净行 = 排除空行与纯注释，与 check-file-size 同口径）`,
     );
-    // 2026-09-08：像 check-coverage-floors 一样打印「距规范目标的差距」，
-    // 避免棘轮把「暂时容忍」静默变成「永久合法」——基线里的条目是债，不是成就
-    const overBody = violations.filter((v) => v.bodyLines > BODY_LIMIT);
-    const worst = overBody.sort((a, b) => b.bodyLines - a.bodyLines)[0];
+    for (const line of tierLines) console.log(line);
+    // 像 check-coverage-floors 一样打印「距规范目标的差距」，避免棘轮把
+    // 「暂时容忍」静默变成「永久合法」——基线里的条目是债，不是成就
+    const worst = [...overBody].sort((a, b) => b.bodyLines - a.bodyLines)[0];
     if (worst !== undefined) {
       const over = worst.bodyLines - BODY_LIMIT;
       console.log(
@@ -176,6 +239,25 @@ function main(): number {
       console.log(`    ${r.bodyLines} 行  ${r.file}:${r.line} ${r.name}()`);
     }
     return 0;
+  }
+
+  if (problems.length === 0) {
+    // 棘轮通过但分档校验未过
+    console.error('[check-functions] ❌ 体长分档校验失败：');
+    for (const line of tierLines) console.error(line);
+    for (const v of unregistered) {
+      console.error(
+        `  [未登记] ${v.file}:${v.line} ${v.name}() body=${v.bodyLines} 净行` +
+          `（>${BODY_TIERS.heavy}，请在 scripts/function-size-exempt.json 登记理由）`,
+      );
+    }
+    for (const key of staleExempt) {
+      console.error(`  [陈旧登记] ${key} 已不再 >${BODY_TIERS.heavy} 行——请从登记表删除`);
+    }
+    console.error(
+      '[check-functions] 修复指引：拆分函数，或在 scripts/function-size-exempt.json 写明为何不可拆（结构性长：声明平铺/JSX 树等）',
+    );
+    return 1;
   }
 
   console.error(
