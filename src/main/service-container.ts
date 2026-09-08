@@ -494,9 +494,7 @@ class ServiceContainer {
     cronService.start();
   }
 
-  /**
-   * cron 触发 → 无头 agent 回合（会话已删除时仅告警，由用户手动清理任务）
-   */
+  /** cron 触发 → 无头 agent 回合（会话已删除时仅告警，由用户手动清理任务） */
   private async runCronTurn(task: {
     readonly id: string;
     readonly sessionId: string;
@@ -504,10 +502,14 @@ class ServiceContainer {
   }): Promise<void> {
     try {
       const session = await this.getSessionService().get(task.sessionId);
+      // 抢占保护（2026-09-06 审计修复）：会话执行中跳过，否则 preemptExisting 会 abort 用户对话
+      if (session.session.lastRunStatus === 'running') {
+        logger.warn({ taskId: task.id }, '定时任务跳过：会话正在执行中');
+        return;
+      }
       const { workingDir } = session.session;
       const prompt = `【定时任务触发】${task.description}`;
-      // 先落触发 prompt 为用户消息（与桌面端渲染层先 append 再 run 的时序一致），
-      // 保证 transcript 完整
+      // 先落触发 prompt 为用户消息（与渲染层先 append 再 run 的时序一致，保证 transcript 完整）
       await this.getSessionService().appendMessage({
         sessionId: task.sessionId,
         messages: [{ role: 'user', content: prompt }],

@@ -30,6 +30,7 @@ import { initDb } from './infra/storage/db';
 import { readAllSettings } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
+import { reportEventLoopLag } from './infra/telemetry/lag-alert';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
 import { initTelemetry, shutdownTelemetry } from './infra/telemetry/otel';
 import { createAgentHandlers } from './ipc/agent.handler';
@@ -455,15 +456,15 @@ app
       },
     });
 
-    // 事件循环延迟监控（W5 接线：遥测子系统建成未接线的模块）
-    // 阻塞告警走 Sentry + logger，与内存监控同一通道；应用退出时 stop
+    // 事件循环延迟监控（阻塞告警现场见 lag-alert.ts）
     lagMonitor = new EventLoopLagMonitor({
-      onLag: (sample) => {
-        Sentry.captureMessage(`主进程事件循环阻塞：${sample.lagMs.toFixed(0)}ms`, 'warning');
-        logger.warn({ lagMs: sample.lagMs, intervalMs: sample.intervalMs }, '主进程事件循环阻塞');
-      },
+      onLag: (sample) =>
+        reportEventLoopLag(sample, () => serviceContainer.getAgentService().hasActiveSessions()),
     });
     lagMonitor.start();
+
+    // Windows/Linux 冷启动 deep-link：进程未运行时 second-instance 不触发，URL 在 argv
+    coldLaunchDeepLink ??= process.argv.find((a) => a.startsWith('code-agent://')) ?? null;
 
     createWindow();
 

@@ -150,12 +150,33 @@ function serializeError(error: unknown): Record<string, unknown> {
  * - Sentry 上报（logger 只落本地日志，崩溃现场需要云端可见）
  * - 崩溃标记：uncaughtException 时写入 userData/.crash-marker，
  *   下次启动由崩溃恢复逻辑消费（标记中断的会话状态）
+ *
+ * 致命退出（2026-09-06 审计修复）：uncaughtException 后**不再继续运行**。
+ * 此前只记日志 + 写 marker 就返回，进程带着可能已损坏的状态（悬挂事务、
+ * 半写文件、断开的 stream）继续服务，同类异常可复发且污染崩溃恢复语义。
+ * 现在：落盘 → 上报 Sentry → 退出（3s 兜底，防 flush 卡死）。不 relaunch，
+ * 避免崩溃循环（用户手动重启即可）。
  */
+let fatalErrorHandled = false;
+
 export function registerGlobalErrorHandlers(): void {
   process.on('uncaughtException', (error: Error) => {
+    // 重入保护：flush/退出过程中再次抛错时不再递归
+    if (fatalErrorHandled) {
+      return;
+    }
+    fatalErrorHandled = true;
     logger.error({}, '全局未捕获异常 uncaughtException', error);
     writeCrashMarker(error);
-    void captureToSentry(error);
+    // 兜底：flush 未在 3s 内完成也强制退出（避免挂死在半崩溃状态）
+    const forceExit = setTimeout(() => {
+      app.exit(1);
+    }, 3_000);
+    forceExit.unref();
+    void captureToSentry(error).finally(() => {
+      clearTimeout(forceExit);
+      app.exit(1);
+    });
   });
 
   process.on('unhandledRejection', (reason: unknown) => {
