@@ -117,9 +117,25 @@ describe('工具域 7b 缺口补全', () => {
       } as unknown as LspServerManager;
       const tool = createLspDefinitionTool(manager);
 
-      const result = await tool.execute({ filePath: '/a.ts', line: 0, character: 0 }, createCtx());
+      // 路径经 resolveWithinWorkspace 收口（2026-09-08）：须用工作区内路径
+      const result = await tool.execute({ filePath: 'a.ts', line: 0, character: 0 }, createCtx());
 
       expect(result.output).toContain('未找到声明位置');
+    });
+
+    it('越界路径被守卫拒绝（2026-09-08 安全修复）', async () => {
+      const manager = {
+        getClient: vi.fn(async () => ({ definition: async () => [] })),
+      } as unknown as LspServerManager;
+      const tool = createLspDefinitionTool(manager);
+
+      const result = await tool.execute(
+        { filePath: '../../outside.ts', line: 0, character: 0 },
+        createCtx(),
+      );
+
+      expect(result.output).toContain('路径越权访问');
+      expect(manager.getClient).not.toHaveBeenCalled();
     });
 
     it('语言服务器抛非 Error 值：String() 兜底不抛', async () => {
@@ -130,7 +146,7 @@ describe('工具域 7b 缺口补全', () => {
       } as unknown as LspServerManager;
       const tool = createLspDefinitionTool(manager);
 
-      const result = await tool.execute({ filePath: '/a.ts', line: 0, character: 0 }, createCtx());
+      const result = await tool.execute({ filePath: 'a.ts', line: 0, character: 0 }, createCtx());
 
       expect(result.output).toContain('[object Object]');
     });

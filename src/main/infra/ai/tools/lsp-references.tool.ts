@@ -5,11 +5,14 @@
 // - 通过 LspServerManager 懒启动语言服务器（按工作区根目录复用）
 // - 包含声明位置（includeDeclaration: true）；行/列 0 基
 // - permission='auto' / category='read'：只读查询
+// - 路径经 resolveWithinWorkspace 收口：语言服务器会按 URI 读取文件内容，
+//   缺少守卫时 auto/read 通道可越界读取工作区外任意源码文件（2026-09-08 修复）
 // ──────────────────────────────────────────────────────────────
 
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
+import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** lsp_references 入参 */
@@ -37,9 +40,10 @@ export function createLspReferencesTool(manager: LspServerManager): Tool<LspRefe
     category: 'read',
     execute: async (input: LspReferencesInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
+        const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir);
         const rootUri = pathToFileURL(ctx.workingDir).href;
-        const client = await manager.getClient(rootUri, input.filePath);
-        const locations = await client.references(pathToFileURL(input.filePath).href, {
+        const client = await manager.getClient(rootUri, absPath);
+        const locations = await client.references(pathToFileURL(absPath).href, {
           line: input.line,
           character: input.character,
         });

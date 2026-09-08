@@ -98,12 +98,15 @@ describe('IM → Agent 回合闭环（真实 SessionService 落库）', () => {
     bridge.mount();
   });
 
-  it('auto 模式：回合结束把 user + assistant 消息真实落库到会话', async () => {
+  it('auto 模式：桥接触发无头回合，落库归 AgentService（2026-09-08 契约变更）', async () => {
     im.messageHandlers[0]?.(incoming({ text: '帮我看看代码' }));
     await vi.waitFor(() => expect(agent.startAgent).toHaveBeenCalledTimes(1));
 
     // 模拟回合事件流（startAgent 返回的 sessionId）
-    const runArgs = agent.startAgent.mock.calls[0]?.[0] as { sessionId: string };
+    const runArgs = agent.startAgent.mock.calls[0]?.[0] as {
+      sessionId: string;
+      messages: readonly { role: string; content: string }[];
+    };
     agent.turnListeners[0]?.({
       type: TurnEventType.TURN_START,
       sessionId: runArgs.sessionId,
@@ -127,14 +130,14 @@ describe('IM → Agent 回合闭环（真实 SessionService 落库）', () => {
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
     });
 
-    // 落库完成：会话消息能查回（真实 SessionService + 内存库）
+    // 2026-09-08 修复 S1（重复落库）后的契约：桥接不再自行落库，
+    // AgentService 是唯一写入方（回合开始落 user、结束落 assistant 富 parts）。
+    // 本用例的 agentService 是 stub（不落库），因此断言：
+    // ① 桥接把用户消息原样交给 startAgent ② 桥接不再重复写库（消息数为 0）。
+    expect(runArgs.messages).toEqual([{ role: 'user', content: '帮我看看代码' }]);
     await vi.waitFor(async () => {
       const { messages } = await sessionService.get(runArgs.sessionId);
-      // 落库消息为 ModelMessage（含 role/content），验证 user 与 assistant 都在
-      const userMsg = messages.find((m) => (m as { role?: string }).role === 'user');
-      const assistantMsg = messages.find((m) => (m as { role?: string }).role === 'assistant');
-      expect(String((userMsg as { content?: unknown })?.content)).toContain('帮我看看代码');
-      expect(String((assistantMsg as { content?: unknown })?.content)).toContain('分析中');
+      expect(messages).toHaveLength(0);
     });
   });
 

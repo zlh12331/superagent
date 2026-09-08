@@ -23,6 +23,7 @@ import { app } from 'electron';
 import { logger } from '../../utils/logger';
 import type { IAgentService } from '../ai/agent/agent-service';
 import type { IPermissionService } from '../ai/tools/permission-service';
+import { isImGroupAllowed } from '../storage/im-allowlist-pref';
 import type { ISessionService } from '../storage/session-service';
 import type { ChannelIncomingMessage } from './channel/types';
 import type { ImService } from './im-service';
@@ -130,6 +131,12 @@ export class ImAgentBridge {
       return;
     }
 
+    // 2.5 发送者鉴权（2026-09-08 安全审计修复）：群聊未登记白名单即拒绝
+    if (message.channelType === 'group' && !isImGroupAllowed(message.channel, message.chatId)) {
+      await this.rejectUnauthorizedGroup(message);
+      return;
+    }
+
     // 3. 建立/复用会话（首次消息：落库创建，标题标记 IM 渠道来源）
     let sessionId = this.sessionMap.get(key);
     if (sessionId === undefined) {
@@ -163,6 +170,26 @@ export class ImAgentBridge {
   }
 
   /**
+   * 拒绝未授权的群聊（2026-09-08 安全审计修复）
+   *
+   * 背景：此前只检查审批模式、从不校验 senderId，任何能给机器人发消息的人
+   * （群聊任意成员）都能驱动 agent 执行工具；yolo 模式下 decideByMode 无条件
+   * 放行且边界检查只存在于 auto 分支 → 可读本机文件并回发群聊。
+   * 策略（fail closed）：仅私聊放行，群聊必须显式登记 `${channel}:${chatId}`。
+   */
+  private async rejectUnauthorizedGroup(message: ChannelIncomingMessage): Promise<void> {
+    logger.warn(
+      { channel: message.channel, chatId: message.chatId, senderId: message.senderId },
+      'IM 群聊未授权，拒绝执行',
+    );
+    await this.imService.send(
+      message.channel,
+      message.chatId,
+      '⛔ 该群聊未授权执行任务。请在桌面端「设置 → IM 渠道」中把本会话加入允许列表。',
+    );
+  }
+
+  /**
    * 执行单回合：startAgent（无 webContents）→ 回合事件 → 渠道回发
    */
   private async runTurn(message: ChannelIncomingMessage, sessionId: string): Promise<void> {
@@ -170,8 +197,6 @@ export class ImAgentBridge {
 
     // 回发缓冲：TEXT_DELTA 累积后按句回发（减少消息频率）
     let pendingText = '';
-    // 回合完整文本（与回发缓冲分离：flush 清空 pendingText 不影响落库）
-    let assistantText = '';
     let lastFlushAt = 0;
     const FLUSH_INTERVAL_MS = 800;
     const flush = async (): Promise<void> => {
@@ -183,29 +208,18 @@ export class ImAgentBridge {
       await this.imService.send(channel, chatId, text);
     };
 
-    // 回合事件订阅：增量文本 / 工具摘要 / 结束汇总 / 落库
+    // 回合事件订阅：增量文本 / 工具摘要 / 结束汇总（落库由 AgentService 负责）
     const turnEvents: string[] = [];
-    let currentTurnId: string | undefined;
     let completionResolve: (() => void) | undefined;
     const unsubscribe = this.agentService.onTurnEvent((event) => {
-      // P1 修复：onTurnEvent 是类级全局监听，事件流包含桌面端所有并发会话。
-      // 不按 sessionId 过滤时，其他会话的增量文本会被 flush 回发到本群聊、
-      // 工具名混入结束摘要、transcript 落库串入他人会话内容。
-      // 仅在事件携带 sessionId 且不同时丢弃——真实翻译器产出的事件恒带
-      // sessionId；容忍缺省字段的历史事件（防御性，不改变主流程）。
+      // P1：onTurnEvent 是类级全局监听，含所有并发会话——仅处理本会话事件
       if (event.sessionId !== undefined && event.sessionId !== sessionId) {
         return;
       }
       try {
         switch (event.type) {
-          case TurnEventType.TURN_START: {
-            // 捕获回合 id（Transcript 落库关联）
-            currentTurnId = event.turnId;
-            break;
-          }
           case TurnEventType.TEXT_DELTA: {
             pendingText += event.text;
-            assistantText += event.text;
             const now = Date.now();
             if (now - lastFlushAt >= FLUSH_INTERVAL_MS) {
               lastFlushAt = now;
@@ -222,9 +236,9 @@ export class ImAgentBridge {
             break;
           }
           case TurnEventType.TURN_END: {
-            // Transcript 落库：user + assistant 消息（带 turnId 关联）
-            // 用独立累积的 assistantText（回发缓冲可能已被 flush 清空）
-            void this.persistTurnMessages(sessionId, currentTurnId, message.text, assistantText);
+            // 2026-09-08（S1 重复落库修复）：不再自行落库——AgentService 是唯一
+            // 写入方。桥接再写一遍会让同条消息带不同 seq 落库两次（静默重复），
+            // 历史翻倍 + token 虚高。桥接只负责回发文本。
             if (pendingText.length > 0) {
               void flush();
             }
@@ -255,18 +269,22 @@ export class ImAgentBridge {
       }
     });
 
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       // 开始执行（无头）：startAgent 立即返回，回合完成由 TURN_END 事件驱动
       const completion = new Promise<void>((resolve) => {
         completionResolve = resolve;
         // 安全兜底：30 分钟超时（流空闲超时已 10 分钟，兜底更长）
-        setTimeout(
+        // 2026-09-08 修复：句柄保存并在 finally 清理——此前回合正常结束后
+        // 定时器仍存活 30 分钟（持有闭包），且不 unref 会拖慢进程退出。
+        fallbackTimer = setTimeout(
           () => {
             completionResolve = undefined;
             resolve();
           },
           30 * 60 * 1000,
         );
+        fallbackTimer.unref?.();
       });
 
       await this.agentService.startAgent({
@@ -281,36 +299,10 @@ export class ImAgentBridge {
       // 等待回合结束事件（或超时兜底）
       await completion;
     } finally {
-      unsubscribe();
-    }
-  }
-
-  /**
-   * 回合消息落库（Transcript）：user + assistant 写入会话历史
-   *
-   * 失败静默（不影响主流程）；assistant 文本为空（纯工具回合）时仅落 user 消息。
-   */
-  private async persistTurnMessages(
-    sessionId: string,
-    turnId: string | undefined,
-    userText: string,
-    assistantText: string,
-  ): Promise<void> {
-    try {
-      const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-        { role: 'user', content: userText },
-      ];
-      if (assistantText.trim().length > 0) {
-        messages.push({ role: 'assistant', content: assistantText });
+      if (fallbackTimer !== undefined) {
+        clearTimeout(fallbackTimer);
       }
-      await this.sessionService.appendMessage({
-        sessionId,
-        // exactOptionalPropertyTypes：turnId 未捕获时条件展开
-        ...(turnId !== undefined ? { turnId } : {}),
-        messages,
-      });
-    } catch (err: unknown) {
-      logger.warn({ sessionId, error: err }, 'IM 回合消息落库失败');
+      unsubscribe();
     }
   }
 }

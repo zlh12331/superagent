@@ -6,11 +6,14 @@
 // - 文件路径 → file:// URI（pathToFileURL）；行/列 0 基
 // - permission='auto' / category='read'：只读查询
 // - 服务器不可用/启动失败 → 明确错误（不阻断回合）
+// - 路径经 resolveWithinWorkspace 收口：语言服务器会按 URI 读取文件内容，
+//   缺少守卫时 auto/read 通道可越界读取工作区外任意源码文件（2026-09-08 修复）
 // ──────────────────────────────────────────────────────────────
 
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
+import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** lsp_definition 入参 */
@@ -38,9 +41,10 @@ export function createLspDefinitionTool(manager: LspServerManager): Tool<LspDefi
     category: 'read',
     execute: async (input: LspDefinitionInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
+        const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir);
         const rootUri = pathToFileURL(ctx.workingDir).href;
-        const client = await manager.getClient(rootUri, input.filePath);
-        const locations = await client.definition(pathToFileURL(input.filePath).href, {
+        const client = await manager.getClient(rootUri, absPath);
+        const locations = await client.definition(pathToFileURL(absPath).href, {
           line: input.line,
           character: input.character,
         });

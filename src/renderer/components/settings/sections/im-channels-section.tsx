@@ -1,7 +1,5 @@
 // im-channels-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · ImChannelsSection 独立面板
-// ──────────────────────────────────────────────
-// 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
+// 设置对话框 · ImChannelsSection 独立面板（高内聚）
 // ──────────────────────────────────────────────
 
 import type { ChannelListRes } from '@code-agent/shared/renderer';
@@ -16,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
+import { ImAllowlistField } from './im-allowlist-field';
 
 /** IM 渠道列表查询 key */
 const IM_CHANNELS_QUERY_KEY = ['im', 'channels'] as const;
@@ -120,72 +119,81 @@ export function ImChannelsSection(): ReactElement {
 
       <ul className="flex flex-col gap-2 text-xs font-sans">
         {channels.map((channel) => (
-          <li key={channel.kind} className="rounded border border-border px-2.5 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <span className="block font-medium text-foreground">{channel.displayName}</span>
-                <span className="block truncate text-muted-foreground">{channel.description}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={cn(
-                    'rounded-full px-1.5 py-0.5 text-2xs',
-                    channel.running
-                      ? 'bg-success/10 text-success-text'
-                      : 'bg-muted text-muted-foreground',
-                  )}
-                >
-                  {channel.running
-                    ? t('settings.imChannelRunning')
-                    : t('settings.imChannelStopped')}
-                </span>
-                {channel.running ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleStop(channel.kind)}
-                    disabled={busy === channel.kind}
-                  >
-                    {t('settings.imChannelStop')}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleStart(channel.kind)}
-                    disabled={busy === channel.kind || !channel.implemented}
-                  >
-                    {t('settings.imChannelStart')}
-                  </Button>
-                )}
-              </div>
-            </div>
-            {/* 未配置 token 的已实现渠道：显示 token 输入（首次启动） */}
-            {channel.implemented && !channel.configured && (
-              <div className="mt-1.5 flex gap-1.5">
-                <Input
-                  type="password"
-                  value={tokenInputs[channel.kind] ?? ''}
-                  onChange={(e) =>
-                    setTokenInputs((prev) => ({ ...prev, [channel.kind]: e.target.value }))
-                  }
-                  placeholder={t('settings.imChannelTokenPlaceholder')}
-                  className="h-7 font-mono text-xs"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7"
-                  onClick={() => void handleStart(channel.kind)}
-                  disabled={busy === channel.kind}
-                >
-                  {t('settings.imChannelSave')}
-                </Button>
-              </div>
-            )}
-          </li>
+          <ImChannelRow
+            key={channel.kind}
+            channel={channel}
+            busy={busy === channel.kind}
+            token={tokenInputs[channel.kind] ?? ''}
+            onTokenChange={(value) =>
+              setTokenInputs((prev) => ({ ...prev, [channel.kind]: value }))
+            }
+            onStart={() => void handleStart(channel.kind)}
+            onStop={() => void handleStop(channel.kind)}
+          />
         ))}
       </ul>
+      <div className="mt-2">
+        {/* 群聊白名单：私聊默认放行，群聊需登记 */}
+        <ImAllowlistField />
+      </div>
     </div>
+  );
+}
+
+/** 单个渠道行（提取自 ImChannelsSection，保持其函数体在棘轮基线内） */
+function ImChannelRow(props: {
+  readonly channel: ChannelListRes['channels'][number];
+  readonly busy: boolean;
+  readonly token: string;
+  readonly onTokenChange: (value: string) => void;
+  readonly onStart: () => void;
+  readonly onStop: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const { channel, busy, token, onTokenChange, onStart, onStop } = props;
+  return (
+    <li className="rounded border border-border px-2.5 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <span className="block font-medium text-foreground">{channel.displayName}</span>
+          <span className="block truncate text-muted-foreground">{channel.description}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={cn(
+              'rounded-full px-1.5 py-0.5 text-2xs',
+              channel.running
+                ? 'bg-success/10 text-success-text'
+                : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {channel.running ? t('settings.imChannelRunning') : t('settings.imChannelStopped')}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={channel.running ? onStop : onStart}
+            disabled={busy || (!channel.running && !channel.implemented)}
+          >
+            {channel.running ? t('settings.imChannelStop') : t('settings.imChannelStart')}
+          </Button>
+        </div>
+      </div>
+      {/* 未配置 token 的已实现渠道：显示 token 输入（首次启动） */}
+      {channel.implemented && !channel.configured && (
+        <div className="mt-1.5 flex gap-1.5">
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => onTokenChange(e.target.value)}
+            placeholder={t('settings.imChannelTokenPlaceholder')}
+            className="h-7 font-mono text-xs"
+          />
+          <Button variant="outline" size="sm" className="h-7" onClick={onStart} disabled={busy}>
+            {t('settings.imChannelSave')}
+          </Button>
+        </div>
+      )}
+    </li>
   );
 }

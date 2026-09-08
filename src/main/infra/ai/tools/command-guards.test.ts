@@ -58,6 +58,15 @@ describe('isCompositeCommand（复合命令识别）', () => {
     expect(isCompositeCommand('npm test')).toBe(false);
     expect(isCompositeCommand('git push -u origin main')).toBe(false);
   });
+
+  // 2026-09-08 安全修复：重定向此前不被视为复合命令，导致
+  // `npm test > ~/.ssh/authorized_keys` 命中白名单前缀后在边界外写文件
+  it.each(['npm test > out.txt', 'npm test >> out.txt', 'cat < secret.txt'])(
+    '重定向识别为复合：%s',
+    (cmd) => {
+      expect(isCompositeCommand(cmd)).toBe(true);
+    },
+  );
 });
 
 describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
@@ -80,6 +89,22 @@ describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
     expect(commandTargetsOutsideBoundary('ls', boundary)).toBe(false);
     expect(commandTargetsOutsideBoundary('cat src/main.ts', boundary)).toBe(false);
     expect(commandTargetsOutsideBoundary('npm run test', boundary)).toBe(false);
+  });
+
+  // 2026-09-08 安全修复：变量展开此前被 resolvePathToken 当普通相对段
+  // 拼到边界目录下，于是 `cat $HOME/.ssh/id_rsa` 被判为界内只读命令而免审批
+  it.each([
+    'cat $HOME/.ssh/id_rsa',
+    'cat ${HOME}/.ssh/id_rsa',
+    'type %USERPROFILE%\\.aws\\credentials',
+    'ls $HOME',
+  ])('变量展开路径 → 越界（fail closed）：%s', (cmd) => {
+    expect(commandTargetsOutsideBoundary(cmd, boundary)).toBe(true);
+  });
+
+  it('正则/普通参数含 $ 但不含路径分隔符 → 不误判', () => {
+    expect(commandTargetsOutsideBoundary("grep -E '^[a-z]+$' src/main.ts", boundary)).toBe(false);
+    expect(commandTargetsOutsideBoundary('echo $1', boundary)).toBe(false);
   });
 
   it('URL token 不误判为路径', () => {
