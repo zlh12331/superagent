@@ -19,7 +19,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { realpathSync } from 'node:fs';
-import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 /**
@@ -32,23 +32,28 @@ import { AppError, ErrorCode } from '@code-agent/shared/main';
  *   basename 段（新建文件的落点 = 父目录真实位置 + 文件名；父目录链中若含
  *   symlink 同样被解析）
  *
- * @returns 最终落点绝对路径（解析失败等极端情况回退原路径，由上层 IO 报错兜底）
+ * @returns 最终落点绝对路径；到根仍无法解析时返回 null（调用方 fail closed）
  */
-export function resolveRealTarget(p: string): string {
+export function resolveRealTarget(p: string): string | null {
   const tail: string[] = [];
   let current = p;
   // 上限防深路径死循环（正常路径解析次数远小于此）
   for (let i = 0; i < 64; i += 1) {
     try {
-      return resolve(realpathSync(current), ...tail);
+      // 2026-09-08 修复：此前用 resolve(realpathSync(current), ...tail)——当
+      // realpathSync 返回绝对路径且 tail 非空时，resolve 会把 tail 当作新的
+      // 绝对路径段重新解析，产出畸形路径（实测 Windows：
+      // `<tmp>\src\C:\Users\...\alias\main.ts`）。改用 join 做纯字符串拼接。
+      return join(realpathSync(current), ...tail);
     } catch {
       const parent = dirname(current);
-      if (parent === current) return p; // 到根仍失败，回退原路径
+      // 2026-09-08：到根仍失败 → 返回 null（此前回退原路径，使边界检查退化）
+      if (parent === current) return null;
       tail.unshift(basename(current));
       current = parent;
     }
   }
-  return p;
+  return null;
 }
 
 /**
@@ -91,7 +96,17 @@ export function resolveWithinWorkspace(inputPath: string, workingDir: string): s
   // workingDir 内 symlink 指向外部时，实际 IO 发生在外部。
   // 解析最终落点（realpath）后重新校验边界；仅校验落点，
   // 不拒绝工作目录内的合法 symlink（如 pnpm node_modules 结构）。
+  //
+  // 2026-09-08 修复（fail closed）：resolveRealTarget 解析失败时此前回退原路径，
+  // 使边界检查退化为纯字符串比较（symlink 可绕过）。现在解析失败直接拒绝——
+  // 拿不到真实落点就无法证明路径在边界内，按拒绝处理。
   const realTarget = resolveRealTarget(resolved);
+  if (realTarget === null) {
+    throw new AppError(
+      ErrorCode.UNAUTHORIZED,
+      `无法解析路径的真实落点（可能含损坏/循环符号链接）：${resolved}`,
+    );
+  }
   const relReal = relative(workingDir, realTarget);
   if (relReal.startsWith('..') || isAbsolute(relReal)) {
     throw new AppError(
@@ -100,5 +115,11 @@ export function resolveWithinWorkspace(inputPath: string, workingDir: string): s
     );
   }
 
+  // 说明（2026-09-08 评估后保留现状）：返回 resolved 而非 realTarget。
+  // 返回 realTarget 能彻底消除「校验与 IO 之间换链」的 TOCTOU 窗口，
+  // 但会改变所有工具返回给模型/UI 的路径形态（symlink 路径被解析成真实路径），
+  // 影响面覆盖 read/write/edit/grep/glob/terminal 等全部文件工具，
+  // 且与本条债的收益不成比例。此处保留返回 resolved，
+  // TOCTOU 残余风险记录在技术债清单（需要时按"返回 realTarget + 全量回归"专项处理）。
   return resolved;
 }

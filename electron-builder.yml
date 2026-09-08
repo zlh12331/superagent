@@ -59,6 +59,12 @@ files:
   # .map 文件本身连同原始 TS 源码仍会被打成产物（实测 98.4MB / asar 总量 24.3%）。
   # 运行时不读 asar 内的 map；Sentry 符号化在 release.yml 从构建机 ./out 上传，与安装包无关。
   - "!**/*.map"
+  # codegraph 平台包不入 asar（2026-09-08 体积修复）：它是生产依赖，
+  # 被 electron-builder 自动打入 asar 并对原生二进制 unpack（实测 191MB），
+  # 而同一份内容又经下方 extraResources 复制到 resources/codegraph（252MB）
+  # → 安装包重复约 443MB。运行时只读 process.resourcesPath/codegraph
+  # （CodebaseService 打包分支），asar 内那份从不加载，故整体排除。
+  - "!**/node_modules/@colbymchenry/**"
 
 # 额外资源（不打入 asar，部署到 process.resourcesPath）
 extraResources:

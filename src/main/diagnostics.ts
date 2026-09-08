@@ -30,6 +30,35 @@ const MAX_LOG_BYTES = 8 * 1024 * 1024;
 const SENSITIVE_KEY_PATTERN =
   /(api[_-]?key|token|secret|password|passwd|credential|private[_-]?key|access[_-]?key)/i;
 
+/**
+ * 值级脱敏模式（2026-09-08 修复：此前只按键名脱敏）
+ *
+ * 键名匹配覆盖不到「键名无害但值含密钥」的场景（日志行、URL query、
+ * Authorization 头文本等）。这里对字符串值再做一次模式替换：
+ * - `sk-` / `sk_` 前缀的 OpenAI 系密钥
+ * - `Bearer <token>` 形式的授权头
+ * - PEM 私钥块起始行
+ * - 常见长随机串（32+ 位十六进制/base64，多为 token/密钥）
+ */
+const VALUE_PATTERNS: readonly { readonly pattern: RegExp; readonly replacement: string }[] = [
+  { pattern: /\bsk-[A-Za-z0-9_-]{8,}/g, replacement: 'sk-[REDACTED]' },
+  { pattern: /(Bearer\s+)[A-Za-z0-9._~+/-]{8,}=*/gi, replacement: '$1[REDACTED]' },
+  { pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g, replacement: '[REDACTED PRIVATE KEY]' },
+  {
+    pattern: /\b[A-Fa-f0-9]{32,}\b/g,
+    replacement: '[REDACTED]',
+  },
+];
+
+/** 对字符串做值级脱敏（键名脱敏的补充；纯函数，导出供测试） */
+export function redactText(text: string): string {
+  let out = text;
+  for (const { pattern, replacement } of VALUE_PATTERNS) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
 /** 诊断包导出入参（handler 组装，测试可注入临时目录） */
 export interface ExportDiagnosticsOptions {
   /** 目标 zip 路径（用户经保存对话框选定） */
@@ -56,8 +85,11 @@ export function redactSensitive(value: unknown, key = ''): unknown {
     }
     return result;
   }
-  // 标量叶子：键命中敏感模式 → 替换
-  return SENSITIVE_KEY_PATTERN.test(key) ? '[REDACTED]' : value;
+  // 标量叶子：键命中敏感模式 → 替换；否则做值级脱敏（2026-09-08）
+  if (SENSITIVE_KEY_PATTERN.test(key)) {
+    return '[REDACTED]';
+  }
+  return typeof value === 'string' ? redactText(value) : value;
 }
 
 /** 版本与环境清单（对齐 app:getInfo 字段，补充导出时间戳） */
@@ -136,9 +168,11 @@ export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions
   );
 
   // 3. 主进程日志（含轮转 old 文件）
+  // 2026-09-08 修复：日志内容此前原样入包（只按键名脱敏覆盖不到日志行），
+  // 现对文本做值级脱敏后再打包。
   const logs = await collectLogFiles(join(userDataPath, 'logs'));
   for (const log of logs) {
-    zip.addFile(`logs/${log.name}`, log.content);
+    zip.addFile(`logs/${log.name}`, Buffer.from(redactText(log.content.toString('utf8'))));
   }
 
   // 4. 写盘（用户选定路径；writeZipPromise 异步压缩，避免阻塞主进程）

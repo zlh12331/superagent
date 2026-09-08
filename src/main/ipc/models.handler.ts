@@ -16,12 +16,14 @@ import type {
   ModelsListRes,
   TestModelRes,
 } from '@code-agent/shared/main';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 
 import { getAppConfig } from '../config';
 import { runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { modelRegistry } from '../infra/ai/models';
 import { runtimeModelKeychainKey } from '../infra/ai/models/runtime-model-store';
 import type { ProviderKind } from '../infra/ai/providers/types';
+import { isBlockedAddress, isBlockedHostname } from '../infra/ai/tools/url-guard';
 import { getSecret } from '../infra/storage/keychain';
 
 /** 连通性测试超时（毫秒） */
@@ -115,6 +117,33 @@ export const modelsHandlers = {
   }): Promise<TestModelRes> => {
     const { providerKind } = input;
     const baseUrl = input.baseUrl ?? getAppConfig().providers[providerKind];
+
+    // 2026-09-08 安全修复（密钥外泄原语）：渲染层此前可传任意 baseUrl 并省略
+    // apiKey，主进程会回退 keychain 里的真实密钥并发往该 URL（无白名单）。
+    // 现在：显式 baseUrl 必须同时显式提供 apiKey——不允许用真实密钥探测
+    // 任意端点；同时拒绝私网/链路本地/云元数据地址（SSRF）。
+    // 注意：loopback（localhost/127.0.0.1）**放行**——本地 Ollama / 自建推理
+    // 服务是合法用法（providerKind='ollama' 的默认端点就是 localhost:11434）。
+    if (input.baseUrl !== undefined) {
+      if (input.apiKey === undefined) {
+        throw new AppError(
+          ErrorCode.INVALID_INPUT,
+          '自定义 baseUrl 时必须同时提供 apiKey（不允许用已保存的密钥探测任意端点）',
+        );
+      }
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(input.baseUrl);
+      } catch {
+        throw new AppError(ErrorCode.INVALID_INPUT, `非法的 baseUrl：${input.baseUrl}`);
+      }
+      if (isBlockedHostname(parsedUrl.hostname) || isBlockedAddress(parsedUrl.hostname)) {
+        throw new AppError(
+          ErrorCode.INVALID_INPUT,
+          `baseUrl 指向受限地址（内网/元数据）：${parsedUrl.hostname}`,
+        );
+      }
+    }
 
     // API Key 回退链（显式优先）
     let apiKey = input.apiKey;

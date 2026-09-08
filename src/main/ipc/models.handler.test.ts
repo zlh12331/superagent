@@ -10,6 +10,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { modelsHandlers } from './models.handler';
 
+/** 测试用占位凭据（非真实密钥，仅用于触发「显式 baseUrl 需同时传 key」分支） */
+const PLACEHOLDER_CREDENTIAL = 'placeholder-not-real';
+
 const mocks = vi.hoisted(() => ({
   // 返回类型显式标注：避免 vi.fn(() => []) 推导 never[] 导致 mockReturnValue 赋值报错
   listModels: vi.fn((): Array<Record<string, unknown>> => []),
@@ -266,14 +269,26 @@ describe('models.handler test（连通性探测）', () => {
 
   it('显式 baseUrl：覆盖默认端点', async () => {
     mocks.fetch.mockResolvedValueOnce(respond(200));
+    // 2026-09-08：显式 baseUrl 必须同时提供 apiKey（防用真实密钥探测任意端点）
     await modelsHandlers.test({
       providerKind: 'deepseek',
       modelId: undefined,
       baseUrl: 'https://self-hosted.example.com',
-      apiKey: undefined,
+      apiKey: PLACEHOLDER_CREDENTIAL,
     });
     const [url] = mocks.fetch.mock.calls[0] as unknown as [string];
     expect(url).toBe('https://self-hosted.example.com/v1/chat/completions');
+  });
+
+  it('显式 baseUrl 缺 apiKey：拒绝（防密钥外泄）', async () => {
+    await expect(
+      modelsHandlers.test({
+        providerKind: 'deepseek',
+        modelId: undefined,
+        baseUrl: 'https://attacker.example.com',
+        apiKey: undefined,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
 
   it('fetch 异常：ok=false + 异常信息', async () => {

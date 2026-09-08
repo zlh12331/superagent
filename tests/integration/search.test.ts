@@ -15,6 +15,18 @@ import { describe, expect, it } from 'vitest';
 import { SearchService } from '../../src/main/infra/search/search-service';
 import { createSearchHandlers } from '../../src/main/ipc/search.handler';
 
+/**
+ * 创建 handler（2026-09-08：handler 现做工作区收口，需注入根集合）
+ *
+ * @param dir 当前用例的临时目录（作为唯一工作区根）
+ */
+function makeHandlers(dir: string): ReturnType<typeof createSearchHandlers> {
+  return createSearchHandlers({
+    searchService: new SearchService(),
+    workspaceRoots: async () => [dir],
+  });
+}
+
 /** 每用例独立临时目录（含样本文件） */
 async function withSearchDir<T>(fn: (dir: string) => Promise<T> | T): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), 'code-agent-search-'));
@@ -32,7 +44,7 @@ async function withSearchDir<T>(fn: (dir: string) => Promise<T> | T): Promise<T>
 describe('search 域集成链路（batch 7）', () => {
   it('正向：grep 命中（真实 ripgrep）', async () => {
     await withSearchDir(async (dir) => {
-      const handlers = createSearchHandlers({ searchService: new SearchService() });
+      const handlers = makeHandlers(dir);
       const res = await handlers.grep({ pattern: 'target', paths: [dir] });
       expect(res.matches.length).toBeGreaterThan(0);
       expect(res.matches.some((m) => m.file.endsWith('a.ts'))).toBe(true);
@@ -41,7 +53,7 @@ describe('search 域集成链路（batch 7）', () => {
 
   it('正向：glob 匹配文件', async () => {
     await withSearchDir(async (dir) => {
-      const handlers = createSearchHandlers({ searchService: new SearchService() });
+      const handlers = makeHandlers(dir);
       const res = await handlers.glob({ pattern: '*.ts', path: dir });
       expect(res.files).toHaveLength(1);
       expect(res.files[0]?.endsWith('a.ts')).toBe(true);
@@ -50,7 +62,7 @@ describe('search 域集成链路（batch 7）', () => {
 
   it('边界：grep 无命中（空结果）', async () => {
     await withSearchDir(async (dir) => {
-      const handlers = createSearchHandlers({ searchService: new SearchService() });
+      const handlers = makeHandlers(dir);
       const res = await handlers.grep({ pattern: '不存在的词xyz', paths: [dir] });
       expect(res.matches).toEqual([]);
     });
@@ -58,7 +70,7 @@ describe('search 域集成链路（batch 7）', () => {
 
   it('边界：大小写敏感/不敏感', async () => {
     await withSearchDir(async (dir) => {
-      const handlers = createSearchHandlers({ searchService: new SearchService() });
+      const handlers = makeHandlers(dir);
       const sensitive = await handlers.grep({
         pattern: 'TARGET',
         paths: [dir],
@@ -75,7 +87,11 @@ describe('search 域集成链路（batch 7）', () => {
   });
 
   it('异常：目录不存在 → 错误传播', async () => {
-    const handlers = createSearchHandlers({ searchService: new SearchService() });
+    // 2026-09-08：注入该路径为工作区根，使收口放行、由 ripgrep 报「目录不存在」
+    const handlers = createSearchHandlers({
+      searchService: new SearchService(),
+      workspaceRoots: async () => ['/'],
+    });
     await expect(
       handlers.grep({ pattern: 'x', paths: ['/nonexistent-search-dir'] }),
     ).rejects.toBeDefined();
@@ -83,7 +99,7 @@ describe('search 域集成链路（batch 7）', () => {
 
   it('并发：并行 grep 互不干扰', async () => {
     await withSearchDir(async (dir) => {
-      const handlers = createSearchHandlers({ searchService: new SearchService() });
+      const handlers = makeHandlers(dir);
       const results = await Promise.all(
         Array.from({ length: 5 }, () => handlers.grep({ pattern: 'target', paths: [dir] })),
       );

@@ -11,6 +11,16 @@ const MAX_OUTPUT_BYTES = 100 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 300_000;
 
+/**
+ * 危险命令扫描前的保守归一化（2026-09-08 安全修复）
+ *
+ * 让「引号包裹」与「-- 分隔」变体与原形落在同一文本：删引号（shell 展开等价）
+ * + 独立 `--` 替换为空格。仅用于拦截判定，执行仍用原始命令。
+ */
+function normalizeForDangerScan(command: string): string {
+  return command.replace(/['"`]/g, '').replace(/(^|\s)--(?=\s|$)/g, '$1');
+}
+
 const DANGEROUS_PATTERNS: readonly { pattern: RegExp; reason: string }[] = [
   {
     pattern: /\brm\s+(-[a-z]*r[a-z]*f?|-[a-z]*f[a-z]*r?)\s+[/~]/i,
@@ -36,8 +46,11 @@ const DANGEROUS_PATTERNS: readonly { pattern: RegExp; reason: string }[] = [
     pattern: /\bcd\s+[/~]\s*(&&|;)\s*rm\s+(-[a-z]*r[a-z]*f?)\b/i,
     reason: '禁止切换到根/用户目录后递归删除（组合攻击）',
   },
+  {
+    pattern: /\brm\b[^\n]*--no-preserve-root/i,
+    reason: '禁止使用 --no-preserve-root 删除根目录',
+  },
 ];
-
 const RunCommandInputSchema = z.object({
   command: z.string().min(1).describe('要执行的 shell 命令（支持管道、重定向、环境变量展开）'),
   cwd: z
@@ -109,7 +122,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
     category: 'exec',
     execute: async (input: RunCommandInput, ctx: ToolContext): Promise<ToolResult> => {
       for (const { pattern, reason } of DANGEROUS_PATTERNS) {
-        if (pattern.test(input.command)) {
+        if (pattern.test(input.command) || pattern.test(normalizeForDangerScan(input.command))) {
           return {
             title: `执行命令: ${input.command}`,
             output: `[安全拦截] ${reason}：${input.command}`,

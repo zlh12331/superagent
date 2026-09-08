@@ -151,6 +151,8 @@ describe('SearchService.grep 参数构建（三件套）', () => {
       '-e',
       'foo',
       '-i',
+      // 2026-09-08 安全修复：路径前加 `--` 终止选项解析（防 --pre= 注入）
+      '--',
       'C:\\a',
       'C:\\b',
     ]);
@@ -215,6 +217,7 @@ describe('SearchService.grep 参数构建（三件套）', () => {
       '!node_modules',
       '-g',
       '!dist',
+      '--',
       'C:\\work',
     ]);
     // undefined 兜底（工具层 optional 字段未传）
@@ -476,7 +479,8 @@ describe('SearchService.glob（三件套）', () => {
     const child = children[0] ?? new FakeChild();
     await emitLines(child, ['a.ts', 'b/c.ts']);
     const [, args] = spawnFn.mock.calls[0] ?? [];
-    expect(args).toEqual(['--files', '-g', '**/*.ts', 'C:\\work']);
+    // 2026-09-08 安全修复：path 前加 `--` 终止选项解析
+    expect(args).toEqual(['--files', '-g', '**/*.ts', '--', 'C:\\work']);
     const res = await p;
     expect(res.files).toEqual(['a.ts', 'b/c.ts']);
     expect(res.truncated).toBe(false);
@@ -536,7 +540,9 @@ describe('SearchService.dispose（生命周期）', () => {
     // 挂起进程：dispose 时 kill 它，再模拟 kill 后退出
     const p3 = svc.grep(grepOptions());
     await svc.dispose();
-    expect(children[2]?.kill).toHaveBeenCalledWith('SIGTERM');
+    // 2026-09-08：dispose 改为 terminateChild（child.kill() 默认 SIGTERM +
+    // 3s 未退出则 SIGKILL 升级），故断言无参 kill 被调用
+    expect(children[2]?.kill).toHaveBeenCalledWith();
     children[2]?.close(null, 'SIGTERM'); // 模拟 kill 生效后的 close
     await p3;
     const proc = svc as unknown as { activeProcesses: Set<unknown> };

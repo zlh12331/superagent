@@ -21,6 +21,7 @@ import type { GlobRes, GrepMatch, GrepRes } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../../utils/logger';
+import { terminateChild } from '../../utils/terminate-child';
 
 /**
  * grep 方法入参
@@ -121,6 +122,29 @@ type RipgrepJsonLine =
  * - 子进程启动失败：INTERNAL_ERROR
  * - stdout 解析失败：INTERNAL_ERROR
  */
+/**
+ * 校验搜索路径不含「以 - 开头」的 token（2026-09-08 参数注入修复）
+ *
+ * ripgrep 会把位置参数中形如 `--pre=<exe>` 的 token 当选项解析并 spawn 该
+ * 程序（已实测）。合法路径不会以 `-` 开头，故直接拒绝；调用方随后用 `--`
+ * 终止选项解析做第二道防线。
+ */
+function assertSafeSearchPaths(paths: readonly string[]): void {
+  const unsafe = paths.find((p) => p.startsWith('-'));
+  if (unsafe !== undefined) {
+    throw new AppError(ErrorCode.INVALID_INPUT, `非法搜索路径（不得以 - 开头）：${unsafe}`);
+  }
+}
+
+/** 追加搜索路径参数（空数组时 ripgrep 默认搜索当前目录；含注入防护） */
+function appendSearchPaths(args: string[], paths: readonly string[]): void {
+  if (paths.length === 0) {
+    return;
+  }
+  assertSafeSearchPaths(paths);
+  args.push('--', ...paths);
+}
+
 export class SearchService implements ISearchService {
   /**
    * 子进程启动函数（DI 注入点：测试传 fake，生产默认 node:child_process spawn）
@@ -201,9 +225,7 @@ export class SearchService implements ISearchService {
     }
 
     // 搜索路径（空数组时 ripgrep 默认搜索当前目录）
-    if (paths.length > 0) {
-      args.push(...paths);
-    }
+    appendSearchPaths(args, paths);
 
     // 临时收集所有行：match 行与 context 行混合
     // ripgrep 输出顺序为 context(B) → match → context(A)，无法在 onLine 时即时组装
@@ -312,7 +334,11 @@ export class SearchService implements ISearchService {
   async glob(options: GlobOptions): Promise<GlobRes> {
     const { pattern, path, includeHidden, maxResults } = options;
 
-    const args: string[] = ['--files', '-g', pattern, path];
+    // 2026-09-08 安全修复（参数注入）：path 以 `-` 开头会被 ripgrep 当选项解析
+    if (path.startsWith('-')) {
+      throw new AppError(ErrorCode.INVALID_INPUT, `非法搜索路径（不得以 - 开头）：${path}`);
+    }
+    const args: string[] = ['--files', '-g', pattern, '--', path];
     // --hidden：包含隐藏文件（默认 ripgrep 跳过隐藏文件）
     if (includeHidden) {
       args.push('--hidden');
@@ -351,15 +377,10 @@ export class SearchService implements ISearchService {
     }
 
     const processes = Array.from(this.activeProcesses);
-    for (const proc of processes) {
-      try {
-        // SIGTERM 优雅终止，不强制 SIGKILL（避免子进程输出缓冲区损坏）
-        proc.kill('SIGTERM');
-      } catch (error) {
-        // kill 失败不阻塞 dispose 流程，仅记录日志
-        logger.warn({ error }, 'SearchService 子进程 kill 失败');
-      }
-    }
+    // 2026-09-08 可靠性修复：SIGTERM → 3s SIGKILL 升级（此前注释称「不强制
+    // SIGKILL 避免输出缓冲损坏」，但 ripgrep 忽略 SIGTERM 时会残留句柄；
+    // 升级仅在 3s 后触发，正常退出路径不受影响）
+    await Promise.all(processes.map((proc) => terminateChild(proc, 'search-ripgrep')));
     this.activeProcesses.clear();
     logger.info({}, 'SearchService 所有子进程已清理');
   }

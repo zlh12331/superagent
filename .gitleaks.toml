@@ -8,17 +8,33 @@ title = "code-agent-desktop"
 
 [allowlist]
 description = "构建产物与依赖目录（非源码，无需扫描）"
+# 2026-09-08 修复：paths 是正则且未锚定，裸词 `out` / `.git` 会匹配任意含该
+# 子串的路径——实测 668 个受跟踪 src 文件中 21 个被静默跳过密钥扫描
+# （components/layout/*.tsx 被 `out` 命中、git-service.ts 被 `.git` 命中）。
+# 现全部锚定为「路径段」形态（^ 开头或 / 分隔），只排除真正的目录。
 paths = [
-  '''node_modules''',
-  '''out''',
-  '''release''',
-  '''dist''',
-  '''playwright-report''',
-  '''playwright-report-electron''',
-  '''playwright-report-smoke''',
-  '''test-results''',
-  '''.tmp''',
-  '''stats''',
-  '''docs/api''',
-  '''.git''',
+  '''^node_modules/''',
+  '''/node_modules/''',
+  '''^out/''',
+  '''/out/''',
+  '''^release/''',
+  '''/release/''',
+  '''^dist/''',
+  '''/dist/''',
+  '''^playwright-report/''',
+  '''/playwright-report/''',
+  '''^playwright-report-electron/''',
+  '''/playwright-report-electron/''',
+  '''^playwright-report-smoke/''',
+  '''/playwright-report-smoke/''',
+  '''^test-results/''',
+  '''/test-results/''',
+  '''^\.tmp/''',
+  '''/\.tmp/''',
+  '''^stats/''',
+  '''/stats/''',
+  '''^docs/api/''',
+  '''/docs/api/''',
+  '''^\.git/''',
+  '''/\.git/''',
 ]

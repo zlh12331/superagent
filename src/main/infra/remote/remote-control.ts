@@ -60,6 +60,10 @@ const DEFAULT_DISCOVERY_PORT = 45918;
 const DEFAULT_BROADCAST_INTERVAL_MS = 3000;
 const DEFAULT_BROADCAST_ADDRESS = '255.255.255.255';
 
+/** 令牌认证失败限流窗口（毫秒）与窗口内允许的最大失败次数（2026-09-08 加固） */
+const AUTH_WINDOW_MS = 60_000;
+const AUTH_FAIL_LIMIT = 10;
+
 /**
  * 远程控制命令（移动端 → 桌面端）
  */
@@ -181,6 +185,9 @@ export interface IRemoteControlService {
 export class RemoteControlService implements IRemoteControlService {
   private running = false;
   private sessionToken: string | null = null;
+  /** 认证失败限流：当前窗口起点与累计失败次数（2026-09-08 加固） */
+  private authWindowStartAt = 0;
+  private authFailCount = 0;
   private httpPort: number | null = null;
   /** 执行中命令数（监听器 in-flight 计数；面板状态展示） */
   private activeCommands = 0;
@@ -298,10 +305,29 @@ export class RemoteControlService implements IRemoteControlService {
     if (!this.running || this.sessionToken === null) {
       return { accepted: false };
     }
-    if (command.sessionToken !== this.sessionToken) {
-      logger.warn({ clientId: command.clientId }, '远程命令令牌不匹配，已拒绝');
+    // 2026-09-08 加固（令牌暴力探测）：服务绑定 0.0.0.0 是 LAN 远程控制的功能
+    // 前提，但同网段任何设备都可无限次尝试令牌。这里做滑动窗口限流：
+    // 60s 内令牌不匹配超过 AUTH_FAIL_LIMIT 次 → 该窗口内直接拒绝，
+    // 使 122-bit UUID 令牌的在线爆破在算力上不可行。
+    const now = Date.now();
+    if (now - this.authWindowStartAt > AUTH_WINDOW_MS) {
+      this.authWindowStartAt = now;
+      this.authFailCount = 0;
+    }
+    if (this.authFailCount >= AUTH_FAIL_LIMIT) {
+      logger.warn({ clientId: command.clientId }, '远程命令认证失败次数超限，本窗口内拒绝');
       return { accepted: false };
     }
+    if (command.sessionToken !== this.sessionToken) {
+      this.authFailCount += 1;
+      logger.warn(
+        { clientId: command.clientId, failCount: this.authFailCount },
+        '远程命令令牌不匹配，已拒绝',
+      );
+      return { accepted: false };
+    }
+    // 认证成功：重置失败计数（合法客户端不受其他来源的失败影响）
+    this.authFailCount = 0;
     const emitEvent = emit ?? NOOP_EMITTER;
     this.activeCommands += 1;
     this.lastCommandAt = Date.now();

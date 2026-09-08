@@ -112,7 +112,12 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
     // 分词失败按越界处理（保守：交给 ask 分支人工确认）
     return true;
   }
-  const normBoundary = resolveRealTarget(normalize(boundary)).toLowerCase();
+  // 边界本身解析失败 → 无法判定，按越界处理（fail closed）
+  const realBoundary = resolveRealTarget(normalize(boundary));
+  if (realBoundary === null) {
+    return true;
+  }
+  const normBoundary = realBoundary.toLowerCase();
   for (const raw of tokens) {
     if (!isPathLikeToken(raw)) continue;
     // 路径形状 token 含变量/参数展开 → 无法静态解析落点，fail closed
@@ -126,9 +131,13 @@ export function commandTargetsOutsideBoundary(command: string, boundary: string)
     } catch {
       return true;
     }
-    // 真实落点：工作区内 symlink 指向边界外时，字符串级 relative 会误判为界内
-    const realTarget = resolveRealTarget(resolved).toLowerCase();
-    const rel = relative(normBoundary, realTarget);
+    // 真实落点：工作区内 symlink 指向边界外时，字符串级 relative 会误判为界内。
+    // 解析失败（损坏/循环链接）同样按越界处理（fail closed）。
+    const realTarget = resolveRealTarget(resolved);
+    if (realTarget === null) {
+      return true;
+    }
+    const rel = relative(normBoundary, realTarget.toLowerCase());
     if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
       return true;
     }
