@@ -1896,6 +1896,7 @@ body.resizing iframe {
   padding: 10px 14px;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: 与 .thread-item.active .ti-dot 命中不同组件（typing 指示器 vs 会话项），无覆盖 */
 .typing-indicator .ti-dot {
   width: 7px;
   height: 7px;
@@ -2861,6 +2862,7 @@ button.card-head {
   width: 100%;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: 与 .msg-content tr 命中不同组件容器 td（审批 diff vs 消息表格），无覆盖 */
 .approval-diff-wrapper td {
   padding: 0;
   vertical-align: top;
@@ -3374,6 +3376,7 @@ button.card-head {
 }
 
 /* 高亮层 shiki pre 样式：与查看态一致 */
+/* biome-ignore lint/style/noDescendingSpecificity: 与 .file-viewer-dialog 内 pre.shiki 命中不同查看容器，无覆盖 */
 .file-viewer-editor-highlight pre.shiki {
   margin: 0;
   padding: 14px 16px;
@@ -3567,6 +3570,7 @@ button.card-head {
   margin-top: 4px;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（空状态 vs 工具卡片），无覆盖 */
 .empty-state svg {
   margin-bottom: 14px;
   opacity: 0.45;
@@ -3769,6 +3773,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
    样式已 token 化：文字用 --text、阴影用 --shadow-pop、字号用 --font-size-sm；
    mask 的 #000 为功能性（mask 亮度语义，非视觉色）；z-index 5 与滚动到底部按钮同层
    ────────────────────────────────────────────────────────────── */
+/* biome-ignore lint/style/noDescendingSpecificity: body:has(dialog) 变体仅设 visibility，与基础布局属性无声明冲突 */
 .jump-bar {
   position: absolute;
   top: 50%;
@@ -3786,6 +3791,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   animation: jump-bar-in 0.18s ease-out 0.08s forwards;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: body:has(dialog) 变体仅设 visibility，与基础布局属性无声明冲突 */
 .jump-scroll {
   display: flex;
   flex-direction: column;
@@ -4096,6 +4102,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   border-bottom: 1px solid var(--border);
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（命令面板输入 vs 工具卡片），无覆盖 */
 .palette-input-wrap svg {
   color: var(--text-faint);
   flex-shrink: 0;
@@ -4168,6 +4175,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   flex-shrink: 0;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（命令面板项 vs 工具卡片），无覆盖 */
 .palette-item .pi-icon svg {
   width: 12px;
   height: 12px;

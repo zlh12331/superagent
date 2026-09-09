@@ -95,7 +95,7 @@ describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
   // 拼到边界目录下，于是 `cat $HOME/.ssh/id_rsa` 被判为界内只读命令而免审批
   it.each([
     'cat $HOME/.ssh/id_rsa',
-    'cat ${HOME}/.ssh/id_rsa',
+    `cat \${HOME}/.ssh/id_rsa`,
     'type %USERPROFILE%\\.aws\\credentials',
     'ls $HOME',
   ])('变量展开路径 → 越界（fail closed）：%s', (cmd) => {
