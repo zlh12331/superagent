@@ -162,6 +162,7 @@ jobs:
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
         with:
           name: playwright-report-browser-${{ github.run_id }}
           path: playwright-report/
@@ -315,6 +316,7 @@ jobs:
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true # 制品配额耗尽时安装包留档上传失败不阻断 CI 结论（发布走 release.yml 独立链路）
         with:
           name: release-${{ matrix.os }}-${{ github.run_id }}
           path: |
