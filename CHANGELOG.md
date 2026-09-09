@@ -4,6 +4,13 @@
 
 > 版本段由 release-please 基于 Conventional Commits 自动生成；发版前请在 Release PR 中将机器文案润色为面向用户的描述（历史版本段 release-please 会保留，不会被覆盖）。
 
+## [1.0.1](https://github.com/zlh12331/superagent/compare/v1.0.0...v1.0.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **main:** 修复路径守卫 realpath 比较不对称致 CI 三平台单测失败 ([8002437](https://github.com/zlh12331/superagent/commit/800243766330972bb1238894120240165058a5c3))
+
 ## [1.0.0] - 2026-09-09
 
 ### 首发亮点
