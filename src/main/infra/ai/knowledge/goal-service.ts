@@ -106,9 +106,9 @@ export class GoalService {
             .select()
             .from(goals)
             .where(eq(goals.sessionId, sessionId))
-            .orderBy(desc(goals.createdAt))
+            .orderBy(desc(goals.createdAt), desc(goals.id))
             .all()
-        : db.select().from(goals).orderBy(desc(goals.createdAt)).all();
+        : db.select().from(goals).orderBy(desc(goals.createdAt), desc(goals.id)).all();
     return rows.map(rowToInfo);
   }
 
