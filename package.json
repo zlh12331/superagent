@@ -1,6 +1,6 @@
 {
   "name": "code-agent-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端）",
   "author": "code-agent",
   "private": true,

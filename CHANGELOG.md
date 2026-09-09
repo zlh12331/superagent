@@ -4,6 +4,13 @@
 
 > 版本段由 release-please 基于 Conventional Commits 自动生成；发版前请在 Release PR 中将机器文案润色为面向用户的描述（历史版本段 release-please 会保留，不会被覆盖）。
 
+## [1.0.3](https://github.com/zlh12331/superagent/compare/v1.0.2...v1.0.3) (2026-09-09)
+
+
+### Bug Fixes
+
+* **release:** draft 发布保护+mac 签名自发现修复+beta 分支+watcher 关闭治本 ([6c45eea](https://github.com/zlh12331/superagent/commit/6c45eea091adec5114abf0277469d0080c2f1772))
+
 ## [1.0.2](https://github.com/zlh12331/superagent/compare/v1.0.1...v1.0.2) (2026-09-09)
 
 
