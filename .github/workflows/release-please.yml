@@ -1,0 +1,38 @@
+# .github/workflows/release-please.yml
+# 版本管理自动化（release-please）：接管「版本号推导 + CHANGELOG 生成 + 打 tag」。
+#
+# 流程：
+#   1. main 分支每次 push 触发；release-please 基于 Conventional Commits 计算下一个版本，
+#      自动创建/更新「release-please-releases」Release PR（内含 package.json 版本号 + CHANGELOG）
+#   2. 人工审阅后合并 Release PR → release-please 打 vX.Y.Z tag → 现有 release.yml（v*.*.* tag 触发）自动构建发布
+#
+# 关键约束：
+# - GitHub 自 2024-02 起禁止 GITHUB_TOKEN 创建的 tag 触发其他 workflow，
+#   因此打 tag 必须用 PAT（secrets.RELEASE_PLEASE_TOKEN，fine-grained：
+#   Contents: Read and write）。未配置时 Release PR/tag 仍会创建，但 release.yml 不会被触发，
+#   需手动 `git push --tags` 补触发。
+# - 与 ci.yml 并发冲突：Release PR 合并触发的 push 会同时跑 ci.yml 与 tag 推流，互不影响。
+
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          release-type: node
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

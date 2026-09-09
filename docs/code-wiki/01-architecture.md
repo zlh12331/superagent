@@ -77,7 +77,7 @@ src/renderer/      React 层（routes / components / hooks / stores / lib / prov
 packages/shared/   IPC 契约 + zod schema（单一真源）
 packages/tsconfig/ base / node / web 三档 tsconfig
 e2e/               Playwright 三套配置（E2E / Electron / Smoke）+ 视觉/性能/可访问性
-scripts/           工程脚本（changelog / scaffold / check-* / build-tokens / sentry）
+scripts/           工程脚本（scaffold / check-* / build-tokens / sentry）
 docs/design/       设计规格文档（architecture / ipc / ai-tool / data-layer 等）
 ```
 

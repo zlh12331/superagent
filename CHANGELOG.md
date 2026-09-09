@@ -2,7 +2,7 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-> 注：根应用为 pnpm workspace 根包，changesets 不支持将其作为版本管理目标（known limitation），CHANGELOG 手动维护。
+> 注：CHANGELOG 与版本号由 release-please 自动管理（`release-please-config.json`，keep-a-changelog 风格），合并 Release PR 即生成版本段并打 tag。
 
 ## [Unreleased]
 

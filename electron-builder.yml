@@ -215,19 +215,13 @@ deb:
 # - Git tag v0.1.0 → 版本 0.1.0
 # - 通过 package.json version 字段自动同步，无需在此重复声明
 
-# 发布配置（设计文档 §3.5 electron-updater 私服静态托管）
-# 发布到自托管静态服务器，electron-updater 会按平台拉取元数据：
+# 发布配置（设计文档 §3.5 electron-updater）
+# 发布到 GitHub Releases，electron-updater 会按平台拉取元数据：
 # - Windows: latest.yml（nsis）
 # - macOS: latest-mac.yml（zip）
 # - Linux: latest-linux.yml（AppImage）
-# provider: generic 通用 HTTP 静态文件服务
-# URL 末尾必须以 / 结尾，electron-updater 会拼接 latest*.yml
-#
-# R3 说明：example.com 为占位域名——自动更新后端未就绪时保持此占位，
-# 使打包产物携带 latest*.yml 生成逻辑但明确指向无效地址（比静默指向
-# 错误生产域名更诚实）；上线前必须替换为真实静态托管地址，
-# 或改用 electron-builder 的环境变量宏由 CI 注入。
+# provider: github 直接消费 GitHub Releases 资产（与 release.yml softprops 上传的 latest*.yml 配套）。
+# 注意：自动更新面向用户时仓库需为公开（私有仓库资产下载需认证 token，运行时注入不安全）。
 publish:
-  provider: generic
-  url: https://code-agent.example.com/releases/
+  provider: github
   channel: latest

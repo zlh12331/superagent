@@ -42,7 +42,7 @@
 **远程控制** `remote/remote-control.ts`：远程控制能力。
 **代码分析** `code-analysis/code-analyzer.ts`：静态代码分析辅助。
 **IM 渠道** `im/`：适配 Telegram / 钉钉 / 微信 / 企业微信 / 飞书 / QQ（各 `*-adapter` + `*-stream` / `webhook-channel`），`im-service` 管理渠道、`im-agent-bridge` 把 IM 消息路由进 Agent（无头），`im.handler` 暴露 IPC。
-**自动更新** `update/update-service.ts`：electron-updater（generic provider）+ `app-update.yml`；IPC 域 `update`（check/install/subscribeStatus）。
+**自动更新** `update/update-service.ts`：electron-updater（github provider，GitHub Releases）+ `app-update.yml`；IPC 域 `update`（check/install/subscribeStatus）。
 
 ## 8. MemoryHub 记忆引擎（`memory-hub/`，sidecar）
 

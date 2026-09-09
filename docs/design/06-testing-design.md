@@ -232,12 +232,11 @@ E2E 兑底是正式策略而非欠账：
 | [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
 | [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
 
-#### scripts 工具链（5 个）
+#### scripts 工具链（4 个）
 
 | 文件 | 说明 |
 |------|------|
 | [scripts/i18n/locales-consistency.test.ts](file:///scripts/i18n/locales-consistency.test.ts) | i18n 语言包一致性校验 |
-| [scripts/changelog/lib/parse.test.ts](file:///scripts/changelog/lib/parse.test.ts) | changelog 解析 |
 | [scripts/scaffold/lib/text.test.ts](file:///scripts/scaffold/lib/text.test.ts) | scaffold 文本工具 |
 | [scripts/scaffold/lib/naming.test.ts](file:///scripts/scaffold/lib/naming.test.ts) | scaffold 命名工具 |
 | [scripts/scaffold/lib/args.test.ts](file:///scripts/scaffold/lib/args.test.ts) | scaffold 参数工具 |

@@ -76,12 +76,9 @@
 |------|------|------|
 | `knip` | `knip --include files,dependencies,devDependencies,binaries` | 死代码检测 |
 | `depcruise` | `pnpm --filter @code-agent/depcruise run check` | 依赖循环检测 |
-| `changelog` | `tsx scripts/changelog/changelog-gen.ts` | changelog 生成 |
 | `codegraph:sync` | `codegraph sync` | 同步 CodeGraph 索引 |
 | `scaffold:ipc` | `tsx scripts/scaffold/scaffold-ipc.ts` | IPC 脚手架 |
 | `scaffold:tool` | `tsx scripts/scaffold/scaffold-tool.ts` | 工具脚手架 |
-| `changeset` | `changeset` | 创建 changeset |
-| `version:packages` | `changeset version` | 应用 changeset 版本 |
 | `analyze:bundle` | `cross-env ANALYZE_BUNDLE=1 pnpm build` | bundle 体积分析 |
 | `docs:types` | `pnpm --filter @code-agent/typedoc-docs run gen` | 类型文档生成 |
 | `postinstall` | `node scripts/postinstall-rebuild.mjs` | 安装后 native 模块重编译 |
@@ -235,7 +232,7 @@ on:
 
 - Windows NSIS 安装器
 - 允许自定义安装目录
-- electron-updater 配置：私有服务器 `https://code-agent.example.com/releases/`
+- electron-updater 配置：GitHub Releases（`provider: github`，electron-builder.yml publish）+ release.yml 上传 `latest*.yml` 元数据
 
 ## 6. 代码质量门禁
 

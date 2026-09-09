@@ -160,12 +160,5 @@
       "command": "pnpm knip",
       "problemMatcher": []
     },
-    {
-      "label": "changelog",
-      "detail": "从 git log 生成 CHANGELOG [Unreleased] 段",
-      "type": "shell",
-      "command": "pnpm changelog",
-      "problemMatcher": []
-    }
   ]
 }

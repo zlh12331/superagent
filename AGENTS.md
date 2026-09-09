@@ -16,7 +16,6 @@ pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
-pnpm changelog              # 从 git log 自动生成 CHANGELOG [Unreleased] 段
 
 # 单包/层测试
 pnpm --filter @code-agent/shared run test
@@ -38,8 +37,6 @@ pnpm scaffold:tool --name <snake_case> [--permission auto|ask]
 # 工程化工具
 pnpm analyze:bundle         # 包体积分析（ANALYZE_BUNDLE=1）
 pnpm docs:types             # TypeDoc 契约文档（tools/typedoc 子包，TS6 隔离）
-pnpm changeset              # 子包 changeset 记录（仅子包；根应用不走 changesets）
-pnpm version:packages       # changesets 结算（仅子包）
 ```
 
 质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`。
@@ -53,7 +50,7 @@ src/preload/     → 桥接（CJS 格式 .cjs, contextBridge）
 src/renderer/    → React 渲染层
 packages/shared/ → 跨进程共享: 类型/IPC schema/常量（按进程拆分出口）
 packages/tsconfig/→ base.json / node.json / web.json 三档
-scripts/         → 脚手架与工具（scaffold / changelog）
+scripts/         → 脚手架与工具（scaffold / check-* / build-tokens / sentry）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
@@ -165,8 +162,8 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 工程化工具链
 
 - **knip**（`pnpm knip`）：死代码/死依赖检测，CI 卡关（files/deps/binaries 级）；exports 级报告人工审阅
-- **changelog 自动生成**（`pnpm changelog`）：从 git log（Conventional Commits）生成 CHANGELOG [Unreleased] 段；tag 锚点幂等（自最近 v*.*.* 起）；排除 docs/chore/test 等类型
-- **CHANGELOG 手动维护**：根应用是 pnpm workspace 根包，changesets 不支持（known limitation）；发版时手动把 [Unreleased] 改为版本段 + 升 package.json version + 打 tag
+- **版本管理 release-please**（`.github/workflows/release-please.yml`）：push main 时基于 Conventional Commits 自动创建/更新 Release PR（bump package.json version + 生成 CHANGELOG）；合并 Release PR 即打 vX.Y.Z tag → 触发 release.yml 构建发布。打 tag 需 PAT（RELEASE_PLEASE_TOKEN，GitHub 禁止 GITHUB_TOKEN 的 tag 触发 workflow）
+- **CHANGELOG 由 release-please 全量接管**（`release-please-config.json`，keep-a-changelog 风格 + 中文分组）；不再有任何自研 changelog 脚本
 - **Renovate**：依赖自动更新（周末批次，electron major 人工评审）
 - **供应链加固**（2026-09 落地）：asar 完整性校验 + SBOM 生成 + `check:csp-hash`（CSP 内联脚本哈希锚定，防注释旧脚本静默放行）；`pnpm audit` 走 audit-ci（--moderate 起卡关）
 - **主进程遥测**：EventLoopLagMonitor 事件循环延迟监控（基准按期望间隔推进，空闲不误报）
@@ -178,9 +175,9 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 - `out/` = electron-vite build 产物，`release/` = electron-builder 打包产物，`stats/` = 体积分析产物
 - 预提交钩子：lint-staged（Biome 自动修复）+ codegraph sync（60s 超时，`SKIP_CODEGRAPH_SYNC=1` 跳过）
-- 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 进 CHANGELOG，其余不进）
-- 发版流程：`pnpm changelog` 生成 → 手动改版本号 + [Unreleased]→[vX.Y.Z] → `git tag vX.Y.Z` → release.yml 自动构建发布
-- 自动更新：electron-updater（generic provider，electron-builder.yml publish 配置）；开发模式 check 返回明确错误
+- 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 才会被 release-please 计入升版）
+- 发版流程：push main → release-please 开 Release PR（版本号 + CHANGELOG）→ 合并 PR → 自动打 tag → release.yml 自动构建发布
+- 自动更新：electron-updater（github provider，electron-builder.yml publish 配置）；开发模式 check 返回明确错误
 
 ## 架构决策记录（用户已拍板，勿重复讨论）
 

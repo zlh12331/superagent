@@ -280,7 +280,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 1. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
 2. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
 3. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
-4. **更新服务器地址为占位符**：[electron-builder.yml#L97](file:///electron-builder.yml#L97) `publish.url: https://code-agent.example.com/releases/` 是 example.com 占位域名，`electron-updater` 实际无法工作
+4. **自动更新依赖仓库可见性**：`electron-builder.yml` `publish` 为 `provider: github`，自动更新源为 GitHub Releases；私有仓库的资产下载需认证 token，面向用户分发需将仓库转为公开
 
 ## 10. 关键亮点
 

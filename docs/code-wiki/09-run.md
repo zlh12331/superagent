@@ -77,7 +77,7 @@ pnpm build:win:full        # build + Sentry 创建 release + 上传符号
 pnpm analyze:bundle        # 包体积分析（rollup-plugin-visualizer → stats/renderer-bundle.html）
 ```
 
-发布配置：`electron-builder.yml`（generic provider，publish.url = `https://code-agent.example.com/releases/`）；CI：`.github/workflows/ci.yml`（quality + integration-tests）+ `release.yml`（三平台矩阵）。
+发布配置：`electron-builder.yml`（github provider，GitHub Releases 为更新源）；CI：`.github/workflows/ci.yml`（quality + integration-tests）+ `release.yml`（三平台矩阵）。
 
 Sentry 符号：
 ```bash
@@ -92,7 +92,7 @@ pnpm sentry:release:new / pnpm sentry:upload:symbols
 - **原生模块双环境**：Node 测试环境与 Electron 运行时同 ABI（Electron 44 = Node 24，modules 137），无需重编译（rebuild-native.mjs 已删）。
 - **CSS 令牌**：改令牌改 `tokens/aurora.json`（`pnpm tokens:build` 生成），禁止手改 `tokens.css`（`check:tokens` 卡关）。
 - **i18n**：新增 key 需补全 en/zh-CN 两组（`check:i18n` 严格卡关）。
-- **changelog**：`pnpm changeset` 记录变更，`pnpm changelog` 生成（scripts/changelog）。
+- **版本/CHANGELOG**：由 release-please 自动化（`.github/workflows/release-please.yml`），push main 开 Release PR，合并即打 tag 发版；无自研 changelog 脚本。
 
 ## 7. 快速定位命令
 
