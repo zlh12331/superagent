@@ -3,7 +3,6 @@
   "release-type": "node",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
-  "changelog-type": "keep-a-changelog",
   "changelog-sections": [
     { "type": "feat", "section": "新增", "hidden": false },
     { "type": "fix", "section": "修复", "hidden": false },
