@@ -5,7 +5,7 @@
 // Windows CI 下 chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发
 // libuv 断言崩溃（fail-fast 0xC0000409，src\win\fs-event.c）。轮询模式绕开
 // 原生监视器，保持 watch 语义（watch 用例只校验 watcherId/unwatch 回调）。
-process.env.CHOKIDAR_USEPOLLING = 'true';
+process.env['CHOKIDAR_USEPOLLING'] = 'true';
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
