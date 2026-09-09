@@ -159,6 +159,6 @@
       "type": "shell",
       "command": "pnpm knip",
       "problemMatcher": []
-    },
+    }
   ]
 }
