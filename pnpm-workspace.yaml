@@ -38,7 +38,8 @@ packageExtensions:
 # ── 依赖覆盖（pnpm 11: overrides）─────────────────────────────────────────────
 overrides:
   ip-address: 10.3.1
-  hono: 4.12.34
+  # 2026-09-09 升级：4.12.34 → 4.13.7（CVE-2026-84363/84364/84365 系列 query/parseBody DoS，patched 4.13.5）
+  'hono@>=4.0.0': 4.13.7
   '@hono/node-server': 1.19.15
   postcss: 8.5.23
   # 2026-09-04 升级：3.1.5 → 3.1.6（CVE-2026-75899/75931/75975 系列 SSRF 修复版）
@@ -48,7 +49,8 @@ overrides:
   tar: 7.5.21
   'undici@>=7.0.0': 7.29.0
   'undici@<7': 6.28.0
-  'js-yaml@>=4.0.0': 4.3.1
+  # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
+  'js-yaml@>=4.0.0': 4.3.2
   # Dependabot GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895：DoS，仅命中 typedoc 工具链的 4.x 线；1.x/2.x 合法共存不动
   'brace-expansion@>=4.0.0': ^5.0.9
   # Dependabot GHSA-67mh-4wv8-2f99：dev server 请求伪造，命中 drizzle-kit→@esbuild-kit 的 0.18.x
