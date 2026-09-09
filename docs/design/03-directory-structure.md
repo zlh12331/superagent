@@ -261,7 +261,7 @@ e2e/
 | electron-builder | [electron-builder.yml](file:///electron-builder.yml) |
 | vitest（3 套） | [src/main/vitest.config.ts](file:///src/main/vitest.config.ts) / [src/renderer/vitest.config.ts](file:///src/renderer/vitest.config.ts) / [packages/shared/vitest.config.ts](file:///packages/shared/vitest.config.ts) |
 | playwright（3 套） | [e2e/playwright.config.ts](file:///e2e/playwright.config.ts) / [e2e/playwright.electron.config.ts](file:///e2e/playwright.electron.config.ts) / [e2e/playwright.smoke.config.ts](file:///e2e/playwright.smoke.config.ts) |
-| sentry | [sentry.properties](file:///sentry.properties) + [.env](file:///.env) |
+| sentry | [sentry.properties](file:///sentry.properties) + [.env.example](file:///.env.example) |
 | audit 白名单 | [.nsprc](file:///.nsprc) |
 
 ## 9. 测试目录布局

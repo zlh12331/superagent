@@ -253,7 +253,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 ### .env / .env.example（项目根目录）
 
-[.env.example](file:///.env.example) 提供环境变量模板，[.env](file:///.env) 为实际值：
+[.env.example](file:///.env.example) 提供环境变量模板，实际值写入本地 `.env`（gitignore，不入仓）：
 
 - `SENTRY_DSN="http://b24f47b022820d979452bf4ef3d43473@127.0.0.1:9000/3"`
 
