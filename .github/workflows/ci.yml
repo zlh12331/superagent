@@ -58,6 +58,9 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 制品存储配额耗尽时 SARIF 报告上传失败会让本步红（扫描本身已通过）。
+          # 仓库转公开后此限制消失，届时可重新开启上传存档。
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
 
       - name: Static checks (tokens + i18n)
         run: pnpm check:static
@@ -100,6 +103,7 @@ jobs:
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
         with:
           name: coverage-${{ github.run_id }}
           path: |
@@ -222,6 +226,7 @@ jobs:
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
         with:
           name: playwright-report-electron-${{ matrix.os }}-${{ github.run_id }}
           path: playwright-report-electron/
@@ -271,6 +276,7 @@ jobs:
       - name: Upload smoke test report
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
         with:
           name: playwright-report-smoke-${{ matrix.os }}-${{ github.run_id }}
           path: playwright-report-smoke/
