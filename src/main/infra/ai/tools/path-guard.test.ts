@@ -16,7 +16,7 @@
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -24,6 +24,8 @@ import { resolveWithinWorkspace } from './path-guard';
 
 // Windows 用 junction（目录链接，无需管理员权限）；其他平台用目录 symlink
 const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
+/** 跨平台用例用平台分隔符 `sep` 构造路径；Windows 专属语义用例按平台门控 */
+const IS_WIN = process.platform === 'win32';
 
 describe('resolveWithinWorkspace', () => {
   let workspace: string;
@@ -77,7 +79,7 @@ describe('resolveWithinWorkspace', () => {
     );
   });
 
-  it('Windows 跨盘符绝对路径（D:\\）：越界 → UNAUTHORIZED', () => {
+  it.skipIf(!IS_WIN)('Windows 跨盘符绝对路径（D:\\）：越界 → UNAUTHORIZED', () => {
     expect(() => resolveWithinWorkspace('D:\\secret\\key.txt', workspace)).toThrowError(
       expect.objectContaining({ code: ErrorCode.UNAUTHORIZED }),
     );
@@ -88,8 +90,9 @@ describe('resolveWithinWorkspace', () => {
     expect(result).toBe(workspace);
   });
 
-  it('工作区内部回溯（src\\..\\package.json）：解析后仍在区内 → 通过', () => {
-    const result = resolveWithinWorkspace('src\\..\\package.json', workspace);
+  it('工作区内部回溯（父目录回溯）：解析后仍在区内 → 通过', () => {
+    const trackback = `src${sep}..${sep}package.json`;
+    const result = resolveWithinWorkspace(trackback, workspace);
     expect(result).toBe(join(workspace, 'package.json'));
   });
 

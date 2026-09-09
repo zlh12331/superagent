@@ -93,10 +93,12 @@ describe('commandTargetsOutsideBoundary（路径越界识别）', () => {
 
   // 2026-09-08 安全修复：变量展开此前被 resolvePathToken 当普通相对段
   // 拼到边界目录下，于是 `cat $HOME/.ssh/id_rsa` 被判为界内只读命令而免审批
+  // `%VAR%` 是 Windows cmd 语法，POSIX 分词下反斜杠形式不算路径 token，仅 win32 语义
+  const isWin = process.platform === 'win32';
   it.each([
     'cat $HOME/.ssh/id_rsa',
     `cat \${HOME}/.ssh/id_rsa`,
-    'type %USERPROFILE%\\.aws\\credentials',
+    ...(isWin ? ['type %USERPROFILE%\\.aws\\credentials'] : ['cat $USERPROFILE/.aws/credentials']),
     'ls $HOME',
   ])('变量展开路径 → 越界（fail closed）：%s', (cmd) => {
     expect(commandTargetsOutsideBoundary(cmd, boundary)).toBe(true);

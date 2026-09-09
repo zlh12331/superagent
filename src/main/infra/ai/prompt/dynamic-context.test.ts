@@ -153,18 +153,22 @@ describe('injectDynamicContext', () => {
 });
 
 describe('dynamic-context 批次13 缺口补全', () => {
-  it('COMSPEC 缺失：shell 占位符回退 powershell.exe（win32）', async () => {
-    const original = process.env['COMSPEC'];
-    delete process.env['COMSPEC'];
-    try {
-      const result = await injectDynamicContext('{{shell}}', { workingDir: '/tmp' });
-      expect(result).toContain('powershell.exe');
-    } finally {
-      if (original !== undefined) {
-        process.env['COMSPEC'] = original;
+  // PowerShell 回退仅 win32 语义：非 Windows 返回原生 shell，断言 powershell.exe 无意义
+  it.skipIf(process.platform !== 'win32')(
+    'COMSPEC 缺失：shell 占位符回退 powershell.exe（win32）',
+    async () => {
+      const original = process.env['COMSPEC'];
+      delete process.env['COMSPEC'];
+      try {
+        const result = await injectDynamicContext('{{shell}}', { workingDir: '/tmp' });
+        expect(result).toContain('powershell.exe');
+      } finally {
+        if (original !== undefined) {
+          process.env['COMSPEC'] = original;
+        }
       }
-    }
-  });
+    },
+  );
 });
 
 describe('gitSummaryProviderFrom（GitService → GitSummary 适配）', () => {

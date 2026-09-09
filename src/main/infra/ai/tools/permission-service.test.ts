@@ -264,11 +264,14 @@ describe('PermissionService', () => {
     it('P2 路径边界：边界内相对路径保持 auto；盘符越界同样降级', async () => {
       service = new PermissionService();
       service.setApprovalMode('auto');
+      // boundary 用真实运行目录：硬编码本地路径（如 F:\TraeProjects\1）在 CI checkout
+      // 到任意目录时 realpath 失败 → fail closed 全量降级，导致界内用例误判
+      const boundaryDir = process.cwd();
       const inside = await service.decide(
         createMockTool('ask', 'exec'),
         { command: 'cat docs/README.md' },
         undefined,
-        { pathBoundary: 'F:\\TraeProjects\\1' },
+        { pathBoundary: boundaryDir },
       );
       expect(inside.permission).toBe('auto');
 
@@ -276,7 +279,7 @@ describe('PermissionService', () => {
         createMockTool('ask', 'exec'),
         { command: 'type C:\\Windows\\win.ini' },
         undefined,
-        { pathBoundary: 'F:\\TraeProjects\\1' },
+        { pathBoundary: boundaryDir },
       );
       expect(outside.permission).toBe('ask');
     });

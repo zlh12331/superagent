@@ -107,7 +107,15 @@ export function resolveWithinWorkspace(inputPath: string, workingDir: string): s
       `无法解析路径的真实落点（可能含损坏/循环符号链接）：${resolved}`,
     );
   }
-  const relReal = relative(workingDir, realTarget);
+  // 2026-09-09 修复：工作目录同样做 realpath 规范化后与 realTarget 对称比较。
+  // 此前用 workingDir 原始字符串比较——macOS/Linux 的临时目录常是符号链接
+  // （macOS /tmp → /private/tmp、/var → /private/var），realTarget 已是真实路径，
+  // 两者前缀不一致导致 relative() 误判越界，整批解析型用例在 CI 失败。
+  const realWorkingDir = resolveRealTarget(workingDir);
+  if (realWorkingDir === null) {
+    throw new AppError(ErrorCode.UNAUTHORIZED, `无法解析工作目录的真实落点：${workingDir}`);
+  }
+  const relReal = relative(realWorkingDir, realTarget);
   if (relReal.startsWith('..') || isAbsolute(relReal)) {
     throw new AppError(
       ErrorCode.UNAUTHORIZED,
