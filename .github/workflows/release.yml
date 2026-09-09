@@ -107,6 +107,9 @@ jobs:
           # 代码签名证书（可选）：Windows Authenticode / macOS Developer ID
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # 2026-09-09 修复：无证书时禁止 mac 签名身份自发现——electron-builder 在
+          # CSC_LINK 为空时会去发现本地证书并把仓库根目录当文件读（"not a file"）。
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' && 'true' || 'false' }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # C1 修复：与 ci.yml 对齐——CI checkout 无记忆引擎上游（resources/memory-hub
@@ -203,12 +206,52 @@ jobs:
             echo "## Release $VERSION" > release-body.md
           fi
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v2
         with:
           body-path: release-body.md # 使用润色后的 CHANGELOG 版本段，而非机器生成的 release notes
           files: release/**
-          draft: false
+          draft: true # 电源包与元数据齐备前对外不可见；由下方 publish job 校验后转正式
           prerelease: ${{ contains(github.ref_name, '-') }} # v0.1.0-beta1 等标记为 prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 发布转正式（2026-09-09 流程加固）────────────────────────────
+  # 「打 tag」只代表代码快照；对用户可见的发布必须连安装包一起。
+  # 本 job 校验三平台安装包 + latest*.yml 元数据齐全后才把草稿转正式（draft=false），
+  # 缺任一项即失败保持草稿 → 用户永远看不到"空版本"。失败后 rerun build job 即可。
+  publish:
+    name: Publish Release (assets verified)
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Verify all platform assets & promote draft to public
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          if ! ASSETS=$(gh api "/repos/$REPO/releases/tags/$TAG" --jq '.assets[].name' 2>/dev/null); then
+            echo "::error::找不到 tag=$TAG 的 draft release（release job 是否跳过？）"
+            exit 1
+          fi
+          echo "release assets:"; echo "$ASSETS"
+          MISSING=0
+          for req in "latest.yml" "latest-mac.yml" "latest-linux.yml"; do
+            if ! grep -qx "$req" <<<"$ASSETS"; then echo "::error::缺少更新元数据: $req"; MISSING=1; fi
+          done
+          for glob in "Code Agent Desktop-*.exe" "Code Agent Desktop-*.dmg" "Code Agent Desktop-*.AppImage"; do
+            re=$(printf '%s' "$glob" | sed 's/[.+^$(){}\[\]\\-]/\\&/g; s/\*/.*/g')
+            if ! grep -Eq "$re" <<<"$ASSETS"; then echo "::error::缺少安装包: $glob"; MISSING=1; fi
+          done
+          if [ "$MISSING" = "1" ]; then
+            echo "::error::安装包未齐，保持草稿不发布。修复后 rerun 对应 build job 再重跑本 job。"
+            exit 1
+          fi
+          gh release edit "$TAG" --repo "$REPO" --draft=false
+          gh release view "$TAG" --repo "$REPO" --json url --jq '"✅ 已正式发布: " + .url'
