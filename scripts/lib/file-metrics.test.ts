@@ -80,7 +80,10 @@ describe('isViolating', () => {
 
 describe('toPosixRelative', () => {
   it('反斜杠归一为正斜杠（基线跨平台一致）', () => {
-    expect(toPosixRelative('/root', '/root\\src\\main\\a.ts')).toBe('src/main/a.ts');
+    // relative() 按平台分隔符解析：Windows 用反斜杠输入、POSIX 用正斜杠输入，
+    // 两者都应归一到 'src/main/a.ts'（硬编码反斜杠输入在 POSIX 会被当作字面段位）
+    const input = process.platform === 'win32' ? '/root\\src\\main\\a.ts' : '/root/src/main/a.ts';
+    expect(toPosixRelative('/root', input)).toBe('src/main/a.ts');
   });
 });
 
