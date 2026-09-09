@@ -167,6 +167,10 @@ jobs:
       contents: write
 
     steps:
+      # 提取发布描述需要 CHANGELOG.md（release job 此前无 checkout）
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -180,10 +184,28 @@ jobs:
           find artifacts -type f \( -name "*.exe" -o -name "*.yml" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.blockmap" -o -name "sbom-*.cdx.json" \) -exec cp -n {} release/ \;
           ls -la release/
 
+      # 发布描述取自 CHANGELOG.md 中对应版本的段落（发版前在 Release PR 中润色好的文案）
+      - name: Extract release body from CHANGELOG
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION_ESCAPED=$(printf '%s' "$VERSION" | sed 's/\./\\./g')
+          awk -v v="$VERSION_ESCAPED" '
+            /^## / {
+              if ($0 ~ ("^## \\[" v "\\]") || $0 ~ ("^## " v " \\(")) { inbody = 1; next }
+              if (inbody) exit
+            }
+            inbody { print }
+          ' CHANGELOG.md > release-body.md
+          # 匹配失败时兜底：仍创建一个非空描述，避免 Release 文案为空
+          if [ ! -s release-body.md ]; then
+            echo "## Release $VERSION" > release-body.md
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true # 自动由 commits 生成 changelog
+          body-path: release-body.md # 使用润色后的 CHANGELOG 版本段，而非机器生成的 release notes
           files: release/**
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }} # v0.1.0-beta1 等标记为 prerelease
