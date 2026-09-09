@@ -2,6 +2,7 @@
 // 工具域 7b 缺口补全：list_directory 类型分支、lsp_definition 空/非 Error、
 // run_command 输出组合/退出码/截断/abort、grep 多路径/上下文、command-classifier 参数透传/缓存上限
 
+import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import type { ISearchService } from '../../search/search-service';
@@ -173,7 +174,10 @@ describe('工具域 7b 缺口补全', () => {
       await tool.execute({ ...baseInput, paths: ['src', 'test'] }, createCtx());
 
       const args = grepMock.grep.mock.calls[0]?.[0] as { paths: string[] } | undefined;
-      expect(args?.paths).toEqual(['C:\\projects\\my-app\\src', 'C:\\projects\\my-app\\test']);
+      // createCtx workingDir 固定为 Windows 盘符路径：POSIX 上 resolve 会把它当作相对段
+      // 拼到 cwd 下，win32 上则按绝对路径使用——按平台计算期望值使断言跨平台成立
+      const base = resolve(process.cwd(), 'C:\\projects\\my-app');
+      expect(args?.paths).toEqual([join(base, 'src'), join(base, 'test')]);
     });
 
     it('匹配带上下文：输出标记（含上下文）', async () => {
