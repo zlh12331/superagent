@@ -4,6 +4,14 @@
 
 > 版本段由 release-please 基于 Conventional Commits 自动生成；发版前请在 Release PR 中将机器文案润色为面向用户的描述（历史版本段 release-please 会保留，不会被覆盖）。
 
+## [1.0.2](https://github.com/zlh12331/superagent/compare/v1.0.1...v1.0.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* **ci:** release smoke 补 xvfb + file-service 测试禁用 chokidar 原生监视规避 Windows 崩溃 ([2a1ee91](https://github.com/zlh12331/superagent/commit/2a1ee91ce26250c273e9e2b5ccc23c399027b3ce))
+* **main:** 修正 env 索引访问类型，通过 typecheck ([4bb7af1](https://github.com/zlh12331/superagent/commit/4bb7af1463654761576eb1d2f58be8d80eb8786b))
+
 ## [1.0.1](https://github.com/zlh12331/superagent/compare/v1.0.0...v1.0.1) (2026-09-09)
 
 
