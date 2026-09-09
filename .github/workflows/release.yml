@@ -147,7 +147,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run production smoke tests
-        run: pnpm test:smoke
+        # Linux 无头环境走 xvfb（Electron 启动需要 Display）
+        run: ${{ matrix.platform == 'Linux' && 'xvfb-run -a pnpm test:smoke' || 'pnpm test:smoke' }}
 
       # ── 上传构建产物（release job 合并）──────────────────────────────
       - name: Upload build artifacts

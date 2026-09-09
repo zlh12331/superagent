@@ -2,6 +2,11 @@
 // FileService 单测 · 真实文件系统（重点：编码检测与转码）
 // 无业务 mock：临时目录 + 真实文件驱动；GBK 文件用 iconv-lite 编码生成。
 
+// Windows CI 下 chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发
+// libuv 断言崩溃（fail-fast 0xC0000409，src\win\fs-event.c）。轮询模式绕开
+// 原生监视器，保持 watch 语义（watch 用例只校验 watcherId/unwatch 回调）。
+process.env.CHOKIDAR_USEPOLLING = 'true';
+
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
