@@ -1,0 +1,75 @@
+name: Bug 报告
+description: 报告一个可复现的缺陷
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请先搜索已有 Issue，避免重复。
+        ⚠️ **安全漏洞请勿在此公开提交**——公开 Issue 会立刻暴露问题。
+        请直接通过仓库的 Security 页面私密上报，或邮件联系维护者。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？期望发生什么？
+      placeholder: 描述现象与预期行为的差异
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 尽可能提供最小可复现步骤
+      placeholder: |
+        1. 打开 …
+        2. 点击 …
+        3. 观察到 …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 见「设置 → 关于」页，或安装包文件名（如 1.0.0）
+      placeholder: 1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (AppImage)
+        - Linux (deb)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: |
+        可在「设置 → 关于」页使用诊断复制功能导出日志。
+        ⚠️ 粘贴前请**务必移除 API Key、令牌、私有代码内容**。
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认
+      options:
+        - label: 我已搜索过现有 Issue，未发现重复
+          required: true
+        - label: 我使用的不是自行从源码构建的开发版（开发版问题请改用「功能建议」或讨论区）
+          required: false

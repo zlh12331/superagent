@@ -45,6 +45,12 @@ permissions:
   contents: write
   pull-requests: write
 
+# release-please 每次运行都是基于当前仓库状态重新计算（幂等），
+# 故快速连推时取消旧运行是安全的。
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release-please:
     runs-on: ubuntu-latest

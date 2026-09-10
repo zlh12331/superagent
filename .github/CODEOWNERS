@@ -1,0 +1,24 @@
+# GitHub 代码所有者（CODEOWNERS）
+#
+# 用途：PR 打开/更新时自动请求对应文件的 owner 审阅。
+# 语法：<pattern> <owner>  （owner 为 @用户名 或 @组织/团队）
+# 文档：https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# 说明：本仓库当前为个人维护，全部文件归 @zlh12331。
+# 注意：仓库 ruleset「protect-release-branches」中 require_code_owner_review = false，
+# 因此 CODEOWNERS 只用于**自动指派审阅者**，不会阻塞自己开的 PR（避免自审死锁）。
+
+# 默认：全部文件
+* @zlh12331
+
+# 发布与流水线（改错会导致发版失败/误发，需格外仔细）
+/.github/ @zlh12331
+/release-please-config.json @zlh12331
+/.release-please-manifest.json @zlh12331
+/electron-builder.yml @zlh12331
+/RELEASING.md @zlh12331
+
+# 供应链与安全基线
+/.gitleaks.toml @zlh12331
+/.nsprc @zlh12331
+/renovate.json @zlh12331

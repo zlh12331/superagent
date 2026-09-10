@@ -8,7 +8,7 @@
 |---|---|---|
 | 版本号推导 | release-please | 读 Conventional Commits 算下一个版本，写入 `.release-please-manifest.json` + `package.json` |
 | CHANGELOG | release-please | 自动生成；**发版前在 Release PR 中人工润色为面向用户的文案** |
-| 打 tag | release.yml | 三平台构建成功 **且** 独立 CI 全绿后才打 tag（防空版本占号） |
+| 打 tag | release.yml | 三平台构建全部成功后才打 tag（防空版本占号） |
 | 对外可见 | release.yml `publish` job | 校验三平台安装包 + `latest*.yml` 齐全后，draft 才转正式 |
 
 **只有 main 一条发布分支。** 预发布（beta）不靠分支实现，靠版本号后缀 + `Release-As`。
@@ -28,13 +28,56 @@
 > `versioning: "prerelease"` 且未开 `prerelease` 时：稳定版推导与默认策略**完全一致**，
 > 唯一区别是会把 `X.Y.Z-beta.N` 收敛为干净的 `X.Y.Z`（这是"毕业"机制）。
 
+### 破坏性变更怎么写（2026-09-11 核实修正）
+
+`release-please-config.json` 的 `changelog-sections` 曾有一行
+`{ "type": "breaking", "section": "破坏性变更" }`——**这行是无效配置，已删除**。
+原因：Conventional Commits 里 **没有名为 `breaking` 的 type**，破坏性变更的表达方式是
+type 后缀 `!` 或 footer `BREAKING CHANGE:`，因此该 section 永远不会匹配到任何提交。
+
+正确写法（两种，任选）：
+
+```
+feat(api)!: 移除旧的模型配置字段
+```
+```
+feat(api): 移除旧的模型配置字段
+
+BREAKING CHANGE: 旧字段 `modelConfig` 不再被读取，需迁移到 `models`。
+```
+
+**它们在 CHANGELOG 里的实际呈现**（由 release-please 底层 conventional-changelog 生成）：
+
+- 该提交按**其主 type** 归入对应段落（`feat` → 「新增」）
+- **额外**生成一个独立的 `### ⚠ BREAKING CHANGES` 段落列出破坏性说明（标题由工具固定，不可配置）
+- 版本号：major 升版（0.x 期间按 `bump-minor-pre-major` 规则处理，本项目未启用该选项）
+
+也就是说：**破坏性变更不需要、也无法在 `changelog-sections` 里配置**，它由工具内置处理。
+
+### version-file / extra-files 是干什么的
+
+这两个是 release-please 的「多文件版本同步」能力，**本项目不需要**：
+
+| 选项 | 用途 | 本项目的判断 |
+|---|---|---|
+| `version-file` | 指定「版本号真源」文件（默认 `package.json`）。用于 Java/Gradle 等版本写在别处的生态 | 不需要，版本真源就是 `package.json` |
+| `extra-files` | 除真源外，**额外**同步改写的文件列表。适合版本号在多个文件重复出现的场景（如 `Cargo.toml` + `package.json`、README 徽章里的版本） | 不需要，实测仓库内无第二处需同步的版本号（见下） |
+
+**为什么本项目不需要 `extra-files`**：我核查了所有被跟踪文件中的版本号出现位置，只有
+`package.json` 承载发布版本；`drizzle/meta/*.json` 的 `"version"` 是 Drizzle 的**格式版本**、
+`.vscode/launch.json` 的 `0.2.0` 是 schema 版本、`packages/shared/package.json` 是
+`0.0.0`（私有子包，不独立发版）——都不是发布版本，不应被 release-please 改写。
+
+> 若日后新增「需要跟随产品版本号的文件」（例如 README 徽章、`app-update.yml` 模板），
+> 再往 `extra-files` 里加对应路径，并在该文件中用 `x-release-please-version` 注释锚定。
+
 ## 二、发正式版（常规流程）
 
-1. 功能开发走 PR 合入 main（Conventional Commits；main 受 ruleset 保护，需 PR + 11 项检查 + 线性历史）
+1. 功能开发走 PR 合入 main（Conventional Commits；main 受 ruleset 保护，需 PR + 必需检查 + 线性历史）
 2. release-please 自动开/更新 Release PR，标题形如 `chore(main): release 1.1.0`
 3. 审阅该 PR：版本号是否符合预期、在 PR 里润色 CHANGELOG
 4. 合并 Release PR → 触发 `release.yml`
-5. `release.yml` 依次：gate 识别发布提交 → 三平台构建（与 ci-check 并行）→ 打 tag + 建 draft → 校验资产 → 转正式
+5. `release.yml` 依次：gate 识别发布提交 → 三平台构建（各平台原生打包 + 产物 smoke）→ 打 tag + 建 draft → 校验资产 → 转正式
 6. 自动更新源（`latest*.yml`）随资产一起发布
 
 > 想控制发版节奏，就**先不合并 Release PR**——提交会一直累积进下一个版本。这是天然的发版节流阀。

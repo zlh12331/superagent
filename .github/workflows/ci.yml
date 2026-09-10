@@ -1,19 +1,30 @@
 # .github/workflows/ci.yml
-# CI 流水线：push / PR 触发，跑全部质量门禁 + 测试矩阵（三平台）
+# CI 流水线：PR 触发，跑质量门禁 + 测试矩阵（三平台）
 #
 # 设计：
 # - quality job：跑在 ubuntu-latest，快速反馈 typecheck/lint/unit test/audit
+# - integration-tests job：集成测试（tests/integration）
+# - e2e-browser job：浏览器模式 E2E（唯一需要 Chromium 的 job）
 # - e2e-electron job：三平台矩阵（windows/ubuntu/macos），跑真实 Electron E2E
-# - e2e-smoke-prod job：windows + ubuntu 矩阵，跑生产构建 smoke 测试
-# - package job：三平台 electron-builder 打包验证（当前平台原生构建）
+# - smoke-prod job：windows + ubuntu 矩阵，跑生产构建 smoke 测试
+# - （原 package job 已移除：打包验证交给 CD，见文件末尾说明）
+#
+# 触发策略（2026-09-10 方案二：CI on PR, CD on main）：
+# - **只 pull_request 触发，不再 push: main**。仓库 ruleset 强制「main 所有提交必须走 PR」
+#   且 bypass_actors 为空（管理员亦不可绕过）、strict_required_status_checks_policy=true
+#   （PR 必须含 main 最新提交）、required_linear_history（只允许 squash/rebase，树不变）
+#   ⇒ 必需检查在合并前已对**完全相同的内容**跑过，push 阶段重复验证无信息增益。
+#   release 发布路径的构建/校验由 release.yml 独立负责（已不再轮询本 workflow）。
+# - 合并后 main 仍有安全侧检查：CodeQL（GitHub default setup）与 secret scanning 照常在 push 时运行。
+# - ⚠️ 不要给本 workflow 加 workflow 级 paths/paths-ignore 过滤：必需状态检查一旦因路径被
+#   跳过就永不 report，PR 会卡在 pending 无法合并。要省纯文档 PR 的开销请用 job 级 if。
+# - workflow_dispatch 保留（便于手动调试全矩阵）。
 #
 # 参考项目 electron-shadcn-main/.github/workflows/testing.yaml 的 job 分层模式
 
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch: # 允许手动触发（便于调试）
@@ -157,6 +168,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 本 job 是唯一真正需要 Chromium 的（journey/visual/a11y 走浏览器模式）。
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
@@ -203,8 +215,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # 不下载 Chromium（2026-09-10 优化）：本 job 走 _electron.launch 驱动仓库自身的
+      # Electron 二进制，Playwright 无需自带 Chromium——实测该步从 207s 降到数秒。
+      # 仍需 ffmpeg：配置里 video:'retain-on-failure' 靠它录像。
+      # Linux 另需系统依赖（Electron 的 GTK/NSS 等），install-deps 只装 apt 包、不下载浏览器。
+      - name: Install Playwright deps (ffmpeg only, no Chromium)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
+          pnpm exec playwright install ffmpeg
 
       - name: Build dev artifacts
         run: pnpm build
@@ -261,8 +280,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
+      # 打包后的可执行文件，不需要 Playwright 自带浏览器。仅需 ffmpeg（录像）。
+      - name: Install Playwright deps (ffmpeg only, no Chromium)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
+          pnpm exec playwright install ffmpeg
 
       - name: Build production artifacts
         # CI 无上游 MemoryCore 源码（不入仓，registry 只有 1.0.0-beta.1）：
@@ -286,55 +310,15 @@ jobs:
           path: playwright-report-smoke/
           retention-days: 7
 
-  # ── Job 5: 三平台打包验证（当前平台原生构建）───────────────
-  package:
-    name: Package (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # ── Job 5「三平台打包验证」已移除（2026-09-10 方案二）───────────────
+  # 原 package job（三平台 electron-builder 打包验证，各约 5 分钟）与 release.yml 的
+  # build job **执行完全相同的命令**（pnpm build:win/mac/linux + MEMORY_HUB_OPTIONAL=1），
+  # 只是在 PR 阶段提前跑一遍。按用户决定「打包验证交给 CD」删除，以消除：
+  #   - 每个 PR 多耗约 15 分钟 runner 时间（三平台各约 5 分钟）
+  #   - 同一次发版的安装包被构建 2 遍（Release PR 一次 + CD 一次）
+  # 打包正确性由 release.yml 的 build job 保证——它是发版必经关卡，且失败不占号
+  # （无 tag 无 Release，可直接重试）。
+  # ⚠️ 必需同步：ruleset「protect-release-branches」的 required_status_checks 已移除
+  # Package (windows/ubuntu/macos-latest) 三项。若只删本 job 而不改 ruleset，这三项
+  # 检查永不 report，所有 PR 会卡在 pending 无法合并（strict policy 下）。
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Electron binary
-        run: node node_modules/electron/install.js
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build + package
-        # macos runner 需签名工具（跳过：未提供证书时 electron-builder 自动跳过）
-        # CI 无上游 MemoryCore 源码（不入仓，registry 只有 1.0.0-beta.1）：
-        # 显式打包无记忆引擎产物，运行时自动降级空实现（release.yml 已同步设置此变量）
-        run: pnpm build:${{ runner.os == 'Windows' && 'win' || runner.os == 'macOS' && 'mac' || 'linux' }}
-        env:
-          MEMORY_HUB_OPTIONAL: '1'
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        continue-on-error: true # 制品配额耗尽时安装包留档上传失败不阻断 CI 结论（发布走 release.yml 独立链路）
-        with:
-          name: release-${{ matrix.os }}-${{ github.run_id }}
-          path: |
-            release/*.exe
-            release/*.dmg
-            release/*.zip
-            release/*.AppImage
-            release/*.deb
-            release/latest*.yml
-          retention-days: 7
-          if-no-files-found: warn

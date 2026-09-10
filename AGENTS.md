@@ -162,7 +162,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 工程化工具链
 
 - **knip**（`pnpm knip`）：死代码/死依赖检测，CI 卡关（files/deps/binaries 级）；exports 级报告人工审阅
-- **版本管理 release-please**（`.github/workflows/release-please.yml`）：push main 时基于 Conventional Commits 自动创建/更新 Release PR（bump package.json version + 生成 CHANGELOG）；合并 Release PR **不打 tag、不建 Release**（`skip-github-release: true`）——tag 与 Release 移交 release.yml，在**三平台构建全部成功且独立 CI 全绿后**才创建（防空版本占号）。⚠️ 输入必须是 `skip-github-release`，此前误写的 `skip-tag` 非法且被 Actions 静默忽略，曾在合并时自行打 tag + 建空 Release，使 release.yml 落入 403 更新路径（2026-09-10 修复）。打 tag 由 release.yml 用 GITHUB_TOKEN 完成（本 workflow 不创建 tag）
+- **版本管理 release-please**（`.github/workflows/release-please.yml`）：push main 时基于 Conventional Commits 自动创建/更新 Release PR（bump package.json version + 生成 CHANGELOG）；合并 Release PR **不打 tag、不建 Release**（`skip-github-release: true`）——tag 与 Release 移交 release.yml，在**三平台构建全部成功后**才创建（防空版本占号）。⚠️ 输入必须是 `skip-github-release`，此前误写的 `skip-tag` 非法且被 Actions 静默忽略，曾在合并时自行打 tag + 建空 Release，使 release.yml 落入 403 更新路径（2026-09-10 修复）。打 tag 由 release.yml 用 GITHUB_TOKEN 完成（本 workflow 不创建 tag）
 - **发布策略：单分支（只 main）**。不发长期 beta 分支——`release-please-config.json` 的 `versioning: "prerelease"` + `prerelease-type: "beta"` 驱动预发布，beta 由提交 footer `Release-As: X.Y.Z-beta.N` 指定；毕业为正式版只需普通提交（prerelease 未开启时会把 `X.Y.Z-beta.N` 收敛为干净的 `X.Y.Z`）。⚠️ release-please **不按分支名识别 prerelease**，配置从被发布分支的 tip 读取。完整 runbook 见 `RELEASING.md`
 - **CHANGELOG 由 release-please 全量接管**（`release-please-config.json`，keep-a-changelog 风格 + 中文分组）；不再有任何自研 changelog 脚本
 - **Renovate**：依赖自动更新（周末批次，electron major 人工评审）
@@ -176,8 +176,9 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 - `out/` = electron-vite build 产物，`release/` = electron-builder 打包产物，`stats/` = 体积分析产物
 - 预提交钩子：lint-staged（Biome 自动修复）+ codegraph sync（60s 超时，`SKIP_CODEGRAPH_SYNC=1` 跳过）
-- 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 才会被 release-please 计入升版）
-- 发版流程：push main → release-please 开 Release PR（版本号 + CHANGELOG）→ 人工审阅（可在 PR 中润色 CHANGELOG）→ 合并 PR → release.yml 三平台构建成功 + 独立 CI 全绿 → 打 tag vX.Y.Z → 校验三平台安装包/latest*.yml 齐全 → draft 转正式发布；任一环节失败则无 tag 无 release，版本号不占号、可重试（`workflow_dispatch` 需输入与 package.json 一致的版本号）。发 beta / 热修复等完整操作见 `RELEASING.md`
+- 提交信息：commitlint 校验 Conventional Commits，type 需准确（feat/fix/perf 才会被 release-please 计入升版）。规则（`commitlint.config.js`，2026-09-11 调整）：`header-max-length` 保持 100（Git 官方建议 50、Angular/commitlint 默认 100；实测本项目最长 subject 76 字符，无摩擦）；**`body-max-line-length` / `footer-max-line-length` 已关闭**（`0`，原 100）——排版约束会误伤 URL/日志/代码片段，且现代工具自动折行；`scope-enum` 为 **warning 级**（1）——即"提示但不阻断提交"，符合 Conventional Commits 中 scope 可选的定位，枚举已按真实用量补齐（新增 release/ci/about/chat/models/design/quality/tsconfig）。⚠️ 调整行宽规则必须显式写 `0`，直接删除规则会**继承**官方默认的 100。破坏性变更用 `feat!` 或 `BREAKING CHANGE:` footer——**没有 `breaking` 这个 type**，`changelog-sections` 里配它无效（已从 `release-please-config.json` 移除）
+- 发版流程：push main → release-please 开 Release PR（版本号 + CHANGELOG）→ 人工审阅（可在 PR 中润色 CHANGELOG）→ 合并 PR → release.yml 三平台构建成功 → 打 tag vX.Y.Z → 校验三平台安装包/latest*.yml 齐全 → draft 转正式发布；任一环节失败则无 tag 无 release，版本号不占号、可重试（`workflow_dispatch` 需输入与 package.json 一致的版本号）。发 beta / 热修复等完整操作见 `RELEASING.md`
+- **CI 触发策略：CI on PR, CD on main**（2026-09-10 方案二）——`ci.yml` **只由 pull_request 触发**（不再 push: main），因为 ruleset 强制 main 所有提交必须走 PR、禁用管理员绕过、`strict_required_status_checks_policy=true`（PR 必含 main 最新提交）、`required_linear_history`（只允许 squash/rebase ⇒ 合入树与 PR head 一致）⇒ 必需检查在合并前已对相同内容跑过，push 阶段重复无增益。`release.yml` 因此**不再轮询/等待 ci.yml**（旧 `ci-check` job 已删）。**打包验证只在 CD**：原 `ci.yml` 的 package job（三平台 electron-builder 打包，各约 5 分钟）已删除——它与 `release.yml` build job 执行完全相同的命令，属重复；打包正确性由 CD 保证（发版必经关卡，失败不占号可重试）。⚠️ 因此 ruleset 必需检查已移除 3 项 `Package (...)`（现 8 项）；若日后恢复该 job 需同步加回，反之只删 job 不改 ruleset 会让 PR 永远卡 pending。合并后 main 仍有 CodeQL + secret scanning（GitHub 托管，push 时运行）。⚠️ 不要给 `ci.yml` 加 workflow 级 `paths`/`paths-ignore`：必需状态检查一旦因路径被跳过就永不 report，PR 会卡 pending 无法合并（要省纯文档 PR 开销请用 job 级 `if`）
 - 自动更新：electron-updater（github provider，electron-builder.yml publish 配置）；开发模式 check 返回明确错误
 
 ## 架构决策记录（用户已拍板，勿重复讨论）
