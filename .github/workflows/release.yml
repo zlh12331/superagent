@@ -166,7 +166,18 @@ jobs:
         run: pnpm lint
 
       - name: Unit tests
-        run: pnpm test
+        # 平台差异（2026-09-10 实测）：Windows CI 上 node-pty/ConPTY 与 vitest fork worker
+        # 并发会崩溃（0xC0000005 ACCESS_VIOLATION，terminal.test.ts）——该集成层本就不在
+        # Windows CI 覆盖范围（集成测试只在 ubuntu 的 CI job 跑）。且 ci-check 已要求独立
+        # CI 全绿（ubuntu 全量单测+集成+E2E）后才放行构建，Windows 端重跑集成属冗余。
+        # macOS 跑全量（node-pty 稳定，历次全绿）；Linux 跑全量。
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "Windows" ]; then
+            pnpm test:main && pnpm test:renderer && pnpm test:scripts
+          else
+            pnpm test
+          fi
 
       # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
@@ -339,11 +350,13 @@ jobs:
           draft: true # 电源包与元数据齐备前对外不可见；由下方 publish job 校验后转正式
           prerelease: ${{ needs.gate.outputs.prerelease }} # beta 等含 '-' 版本标记为 prerelease
         env:
-          # 2026-09-10 实测：更新**既有** release 时 GITHUB_TOKEN（github-actions bot）
-          # 被 GitHub 拒（403 "Resource not accessible by integration"，update-a-release）。
-          # 补发/重放场景常落在已存在的 tag 上（如历史空壳 v1.0.5），改用 release-please
-          # 一直使用的 PAT——内容写权限，兼容创建与更新，能覆盖资产（overwrite 默认 true）。
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          # token 选择（2026-09-10 实测定位）：normal 发布路径下 softprops 走 **create**，
+          # 用 GITHUB_TOKEN 即可（内置 bot 创建 release，后续资产上传同身份，全链路无 403）。
+          # 不要改回 RELEASE_PLEASE_TOKEN：对**已存在**的 release（由用户 PAT 创建）做 update
+          # 时，GITHUB_TOKEN 与 fine-grained PAT 均会 403 "Resource not accessible by
+          # integration"（User PAT 创建的 release，Actions 身份无权修改）。
+          # 补发/重放已存在 tag 的场景（如历史空壳 v1.0.5）使用 gh CLI 手动处理。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── 发布转正式（2026-09-09 流程加固）────────────────────────────
   # 「打 tag」只代表代码快照 + 构建成功；对用户可见的发布必须连安装包一起。
