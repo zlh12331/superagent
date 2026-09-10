@@ -4,6 +4,14 @@
 
 > 版本段由 release-please 基于 Conventional Commits 自动生成；发版前请在 Release PR 中将机器文案润色为面向用户的描述（历史版本段 release-please 会保留，不会被覆盖）。
 
+## [1.0.4](https://github.com/zlh12331/superagent/compare/v1.0.3...v1.0.4) (2026-09-10)
+
+
+### Bug Fixes
+
+* **main:** watcher usePolling 条件展开，适配 exactOptionalPropertyTypes ([43e53c8](https://github.com/zlh12331/superagent/commit/43e53c8029e587bd8a98639c3c20663b050d2b55))
+* **release:** mac 空证书不导出 CSC_LINK + Windows 测试 watcher 走轮询模式 ([5b5b3f6](https://github.com/zlh12331/superagent/commit/5b5b3f64e7dd6933b767339298dc3b0f8e5a8526))
+
 ## [1.0.3](https://github.com/zlh12331/superagent/compare/v1.0.2...v1.0.3) (2026-09-09)
 
 
