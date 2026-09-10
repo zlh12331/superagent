@@ -379,11 +379,17 @@ jobs:
         run: |
           TAG="v${{ needs.gate.outputs.version }}"
           REPO="${{ github.repository }}"
-          if ! ASSETS=$(gh api "/repos/$REPO/releases/tags/$TAG" --jq '.assets[].name' 2>/dev/null); then
-            echo "::error::找不到 tag=$TAG 的 draft release（release job 是否跳过？）"
+          # draft release 不响应 /releases/tags/{tag}（GitHub 对 draft 返回 404，2026-09-10
+          # 实测：create 成功后 publish 因此误报"找不到 draft release"）。改用 releases
+          # 列表按 tag 匹配拿 release_id，后续查资产/转正式全部走 id。
+          RELEASE_ID=$(gh api "/repos/$REPO/releases?per_page=100" --jq --arg t "$TAG" \
+            '[.[] | select(.tag_name == $t) | .id][0]' 2>/dev/null)
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "::error::找不到 tag=$TAG 的 draft release（release job 是否成功创建？）"
             exit 1
           fi
-          echo "release assets:"; echo "$ASSETS"
+          ASSETS=$(gh api "/repos/$REPO/releases/$RELEASE_ID" --jq '.assets[].name')
+          echo "release #$RELEASE_ID assets:"; echo "$ASSETS"
           MISSING=0
           for req in "latest.yml" "latest-mac.yml" "latest-linux.yml"; do
             if ! grep -qx "$req" <<<"$ASSETS"; then echo "::error::缺少更新元数据: $req"; MISSING=1; fi
@@ -396,5 +402,6 @@ jobs:
             echo "::error::安装包未齐，保持草稿不发布。修复后 rerun 对应 build job 再重跑本 job。"
             exit 1
           fi
-          gh release edit "$TAG" --repo "$REPO" --draft=false
-          gh release view "$TAG" --repo "$REPO" --json url --jq '"✅ 已正式发布: " + .url'
+          gh api -X PATCH "/repos/$REPO/releases/$RELEASE_ID" -f draft=false >/dev/null
+          gh api "/repos/$REPO/releases/$RELEASE_ID" \
+            --jq '"✅ 已正式发布: " + .html_url'
