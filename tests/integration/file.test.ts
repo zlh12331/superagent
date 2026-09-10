@@ -18,6 +18,11 @@ import { getFileService } from '../../src/main/infra/file/file-service';
 import { createFileHandlers } from '../../src/main/ipc/file.handler';
 import { createFakeWebContents } from './helpers/fake-webcontents';
 
+// Windows CI：chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发 libuv
+// 断言崩溃（fail-fast 0xC0000409，src\win\fs-event.c）——与 file-service.test.ts
+// 一致，统一走轮询模式绕开原生监视器。
+process.env['FILE_WATCH_USE_POLLING'] = '1';
+
 // 单例隔离：每用例后 dispose 清理 watcher（FileService 单例无 reset 导出）
 afterEach(async () => {
   await getFileService().dispose();

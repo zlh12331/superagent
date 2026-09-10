@@ -157,21 +157,26 @@ jobs:
 
       # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
-        # 证书为空时不要设置 CSC_LINK/CSC_KEY_PASSWORD：electron-builder 会把空 CSC_LINK
-        # 当作证书文件路径解析（落到项目根 → "not a file"）。条件导出 + 关闭身份自发现。
+        # macOS 签名令牌的"空值注入"坑（2026-09-10 实测定位）：
+        # 把 secrets.CSC_LINK 直接放进 env:，secret 未配置时会以**空字符串**注入进程环境；
+        # electron-builder 按 `env.CSC_LINK != null` 判定"配置了证书"→ 用空密码去 stat
+        # 空路径（≈项目根）→ "not a file" 失败（macOS 主发端必踩）。
+        # 修法：secret 先进中间变量 ORIG_CSC_*（空串无意义），bash 中仅当非空才
+        # 导出真实的 CSC_LINK/CSC_KEY_PASSWORD——没有证书时 electron-builder 进程
+        # 环境里 CSC_LINK **彻底不存在**（而非空串），配合关闭身份自发现 → 干净跳过签名。
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          ORIG_CSC_LINK: ${{ secrets.CSC_LINK }}
+          ORIG_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # C1 修复：与 ci.yml 对齐——CI checkout 无记忆引擎上游（resources/memory-hub
           # 不入仓），不设此变量 prepare-memory-hub 会 exit(1) 中断 && 链，三平台全部失败
           MEMORY_HUB_OPTIONAL: '1'
         run: |
-          if [ -n "${CSC_LINK:-}" ]; then
-            export CSC_LINK
-            export CSC_KEY_PASSWORD
+          if [ -n "${ORIG_CSC_LINK:-}" ]; then
+            export CSC_LINK="$ORIG_CSC_LINK"
+            export CSC_KEY_PASSWORD="$ORIG_CSC_KEY_PASSWORD"
           fi
           export CSC_IDENTITY_AUTO_DISCOVERY=false
           ${{ matrix.build-cmd }}
