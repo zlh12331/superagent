@@ -102,19 +102,24 @@ jobs:
 
       # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
-        run: ${{ matrix.build-cmd }}
+        # 证书为空时不要设置 CSC_LINK/CSC_KEY_PASSWORD：electron-builder 会把空 CSC_LINK
+        # 当作证书文件路径解析（落到项目根 → "not a file"）。条件导出 + 关闭身份自发现。
+        shell: bash
         env:
-          # 代码签名证书（可选）：Windows Authenticode / macOS Developer ID
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # 2026-09-09 修复：无证书时禁止 mac 签名身份自发现——electron-builder 在
-          # CSC_LINK 为空时会去发现本地证书并把仓库根目录当文件读（"not a file"）。
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' && 'true' || 'false' }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # C1 修复：与 ci.yml 对齐——CI checkout 无记忆引擎上游（resources/memory-hub
           # 不入仓），不设此变量 prepare-memory-hub 会 exit(1) 中断 && 链，三平台全部失败
           MEMORY_HUB_OPTIONAL: '1'
+        run: |
+          if [ -n "${CSC_LINK:-}" ]; then
+            export CSC_LINK
+            export CSC_KEY_PASSWORD
+          fi
+          export CSC_IDENTITY_AUTO_DISCOVERY=false
+          ${{ matrix.build-cmd }}
 
       # 更新源已切 provider: github（electron-builder.yml publish），
       # 占位 feed guard 随之移除；GitHub Release 资产即更新源。

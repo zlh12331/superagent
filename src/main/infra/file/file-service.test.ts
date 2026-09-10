@@ -11,6 +11,10 @@ import iconv from 'iconv-lite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getFileService, type IFileService } from './file-service';
 
+// Windows CI：chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发 libuv
+// 断言崩溃（fail-fast 0xC0000409，src\win\fs-event.c）。测试统一走轮询模式绕开。
+process.env['FILE_WATCH_USE_POLLING'] = '1';
+
 describe('FileService（真实文件系统）', () => {
   let dir: string;
   let svc: IFileService;
