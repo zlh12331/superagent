@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-# CI 流水线：push / PR 触发，跑全部质量门禁 + 测试矩阵（三平台）
+# CI 流水线：PR 触发，跑全部质量门禁 + 测试矩阵（三平台）
 #
 # 设计：
 # - quality job：跑在 ubuntu-latest，快速反馈 typecheck/lint/unit test/audit
@@ -7,13 +7,22 @@
 # - e2e-smoke-prod job：windows + ubuntu 矩阵，跑生产构建 smoke 测试
 # - package job：三平台 electron-builder 打包验证（当前平台原生构建）
 #
+# 触发策略（2026-09-10 方案二：CI on PR, CD on main）：
+# - **只 pull_request 触发，不再 push: main**。仓库 ruleset 强制「main 所有提交必须走 PR」
+#   且 bypass_actors 为空（管理员亦不可绕过）、strict_required_status_checks_policy=true
+#   （PR 必须含 main 最新提交）、required_linear_history（只允许 squash/rebase，树不变）
+#   ⇒ 11 项必需检查在合并前已对**完全相同的内容**跑过，push 阶段重复验证无信息增益。
+#   release 发布路径的构建/校验由 release.yml 独立负责（已不再轮询本 workflow）。
+# - 合并后 main 仍有安全侧检查：CodeQL（GitHub default setup）与 secret scanning 照常在 push 时运行。
+# - ⚠️ 不要给本 workflow 加 workflow 级 paths/paths-ignore 过滤：必需状态检查一旦因路径被
+#   跳过就永不 report，PR 会卡在 pending 无法合并。要省纯文档 PR 的开销请用 job 级 if。
+# - workflow_dispatch 保留（便于手动调试全矩阵）。
+#
 # 参考项目 electron-shadcn-main/.github/workflows/testing.yaml 的 job 分层模式
 
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch: # 允许手动触发（便于调试）

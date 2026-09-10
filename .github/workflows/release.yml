@@ -1,18 +1,20 @@
 # .github/workflows/release.yml
-# CD 流水线：Release PR 合并后 → 三平台构建 → **CI + CD 全绿后才打 tag + 发布**
+# CD 流水线：Release PR 合并后 → 三平台构建 → **构建全部成功才打 tag + 发布**
 #
-# 触发（2026-09-10 重构）：Release PR（release-please 生成）合并产生的 push（main）。
+# 触发：Release PR（release-please 生成）合并产生的 push（main），或 workflow_dispatch 手动重放。
 # 流程：
 #   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
-#   1. CD 三平台矩阵构建（windows/macos/linux，各自跑 release gate + 平台打包）与
-#      ci-check job（等待独立 ci.yml 在同一 commit 上跑完）**并行**
-#   2. release job（needs: gate+build+ci-check）：**CI 通过 且** 三平台构建全部成功后
-#      才打 tag → 创建 draft Release
+#   1. CD 三平台矩阵构建（windows/macos/linux，各自原生打包 + 生产 smoke）
+#   2. release job（needs: gate+build）：三平台构建全部成功后才打 tag → 创建 draft Release
 #   3. publish job（needs: release）：校验三平台安装包 + latest*.yml 齐全 → draft 转正式
 #
-# 关键语义（与用户确认）：CI 与 CD 同时跑，两者都没问题（CI 绿 + 三平台构建成功）
-# 才发版——任一方失败则无 tag 无 release，版本号（由 Release PR 写入
-# package.json/CHANGELOG）不占号、可重试。
+# 关键语义（2026-09-10 方案二：CI on PR, CD on main）：
+#   本工作流**不再等待/轮询独立 ci.yml 的 push 运行**（旧 `ci-check` job 已删除）。
+#   依据：仓库 ruleset 强制 main 所有提交必须走 PR、禁用管理员绕过、
+#   strict_required_status_checks_policy=true（PR 必须含 main 最新提交）、
+#   required_linear_history（只允许 squash/rebase ⇒ 合入树与 PR head 一致）
+#   ⇒ release 提交在合并前必然已通过 CI 全量门禁，此处再轮询一遍属重复劳动。
+#   任一方构建失败则无 tag 无 release，版本号不占号、可重试。
 #
 # 所需 Secrets：
 # - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
@@ -34,6 +36,13 @@ on:
 
 permissions:
   contents: write
+
+# 防快速连推时叠加：同一分支的 release 运行串行化。
+# cancel-in-progress 必须为 false——正在构建/发布的运行被取消会留下半成品
+# （tag 已打、资产未齐的中间态），宁可排队等前一个跑完。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ── gate：仅 release-please 的发布提交（或手动 dispatch）才继续 ──
@@ -158,26 +167,14 @@ jobs:
         if: matrix.platform == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2
 
-      # ── Release Gate：全部门禁通过才打包 ────────────────────────────
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Unit tests
-        # 平台差异（2026-09-10 实测）：Windows CI 上 node-pty/ConPTY 与 vitest fork worker
-        # 并发会崩溃（0xC0000005 ACCESS_VIOLATION，terminal.test.ts）——该集成层本就不在
-        # Windows CI 覆盖范围（集成测试只在 ubuntu 的 CI job 跑）。且 ci-check 已要求独立
-        # CI 全绿（ubuntu 全量单测+集成+E2E）后才放行构建，Windows 端重跑集成属冗余。
-        # macOS 跑全量（node-pty 稳定，历次全绿）；Linux 跑全量。
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "Windows" ]; then
-            pnpm test:main && pnpm test:renderer && pnpm test:scripts
-          else
-            pnpm test
-          fi
+      # ── 门禁（已移除，2026-09-10 方案二）─────────────────────────────
+      # 此前此处重跑 typecheck / lint / 单测作为"Release Gate"。方案二落地后删除：
+      # release 提交来自 Release PR，合并前已通过 CI 的完整质量门禁（ubuntu 全量
+      # 单测+集成+E2E，及三平台 Electron E2E/smoke/package），同一 commit 再跑一遍
+      # 属第 3 次重复。本 job 现在只负责「构建 + 打包 + 产物 smoke」——
+      # 即发布路径独有、CI 无法替代的那部分。
+      # 附注：PR CI 的 quality job 仅跑在 ubuntu，故 mac/win 的原生单测不再执行；
+      # 平台相关行为由 CI 的三平台 Electron E2E 覆盖（更高层、更贴近真实运行）。
 
       # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
@@ -260,54 +257,9 @@ jobs:
             release/sbom-*.cdx.json
           retention-days: 30
 
-  # ── ci-check：等待独立 CI 工作流（ci.yml）在同一 commit 上通过 ──────
-  # 用户确认（2026-09-10）：CI 与 CD（三平台构建）**并行**跑，但打 tag/建 Release
-  # 之前必须两者都绿。本 job 与 build 同时启动（都只依赖 gate），轮询 GitHub API
-  # 直到本 commit 的 CI workflow 出结论；CI 非 success → 本 job 失败 → release 被跳过。
-  ci-check:
-    name: Wait for CI workflow green
-    needs: gate
-    if: needs.gate.outputs.is_release == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    outputs:
-      conclusion: ${{ steps.wait.outputs.conclusion }}
-    steps:
-      # CI 可能刚被 push 触发、瞬间尚无 workflow run：轮询直到出现并完成。
-      - name: Wait for CI (ci.yml) on this commit
-        id: wait
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHA: ${{ github.sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          for i in $(seq 1 85); do
-            RUN=$(gh api "/repos/$REPO/actions/runs?head_sha=$SHA&per_page=30" \
-              --jq '[.workflow_runs[] | select(.name == "CI" and .event == "push")][0]' 2>/dev/null \
-              || true)
-            if [ -n "$RUN" ] && [ "$RUN" != "null" ]; then
-              STATUS=$(printf '%s' "$RUN" | jq -r .status)
-              CONCLUSION=$(printf '%s' "$RUN" | jq -r .conclusion)
-              if [ "$STATUS" = "completed" ]; then
-                echo "conclusion=$CONCLUSION" >> "$GITHUB_OUTPUT"
-                if [ "$CONCLUSION" = "success" ]; then
-                  echo "CI workflow green on $SHA"
-                  exit 0
-                fi
-                echo "::error::CI workflow 未通过（conclusion=$CONCLUSION），不发版"
-                exit 1
-              fi
-            fi
-            echo "CI not completed yet (attempt $i/85), waiting 20s..."
-            sleep 20
-          done
-          echo "::error::等待 CI workflow 超时（85 次 * 20s ≈ 28min）"
-          exit 1
-
   release:
     name: Create GitHub Release (tag + draft)
-    needs: [gate, build, ci-check]
+    needs: [gate, build]
     if: needs.gate.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15

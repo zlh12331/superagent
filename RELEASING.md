@@ -8,7 +8,7 @@
 |---|---|---|
 | 版本号推导 | release-please | 读 Conventional Commits 算下一个版本，写入 `.release-please-manifest.json` + `package.json` |
 | CHANGELOG | release-please | 自动生成；**发版前在 Release PR 中人工润色为面向用户的文案** |
-| 打 tag | release.yml | 三平台构建成功 **且** 独立 CI 全绿后才打 tag（防空版本占号） |
+| 打 tag | release.yml | 三平台构建全部成功后才打 tag（防空版本占号） |
 | 对外可见 | release.yml `publish` job | 校验三平台安装包 + `latest*.yml` 齐全后，draft 才转正式 |
 
 **只有 main 一条发布分支。** 预发布（beta）不靠分支实现，靠版本号后缀 + `Release-As`。
@@ -34,7 +34,7 @@
 2. release-please 自动开/更新 Release PR，标题形如 `chore(main): release 1.1.0`
 3. 审阅该 PR：版本号是否符合预期、在 PR 里润色 CHANGELOG
 4. 合并 Release PR → 触发 `release.yml`
-5. `release.yml` 依次：gate 识别发布提交 → 三平台构建（与 ci-check 并行）→ 打 tag + 建 draft → 校验资产 → 转正式
+5. `release.yml` 依次：gate 识别发布提交 → 三平台构建（各平台原生打包 + 产物 smoke）→ 打 tag + 建 draft → 校验资产 → 转正式
 6. 自动更新源（`latest*.yml`）随资产一起发布
 
 > 想控制发版节奏，就**先不合并 Release PR**——提交会一直累积进下一个版本。这是天然的发版节流阀。
