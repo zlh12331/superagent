@@ -153,6 +153,9 @@ nsis:
 mac:
   # 图标：1024x1024 PNG 源（electron-builder 在 macOS 上自动派生 .icns）
   icon: resources/icons/icon.png
+  # mac 平台通用 artifactName：dmg 有自己的 dmg.artifactName 覆盖；zip（自动更新
+  # 制品）沿用 mac.artifactName（顶层独立 zip: 键在 electron-builder schema 中非法）
+  artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
   # 目标：dmg（分发安装包）+ zip（electron-updater 自动更新必须，latest-mac.yml）
   target:
     - target: dmg
@@ -178,12 +181,8 @@ mac:
   notarize: false
 
 # DMG 安装包配置
-# 自动更新用 zip artifact（latest-mac.yml），DMG 仅作首次安装分发
+# 自动更新用 zip artifact（latest-mac.yml，zip 命名沿用 mac.artifactName），DMG 仅作首次安装分发
 dmg:
-  artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
-
-# mac zip（electron-updater 自动更新制品；命名与 dmg 同规则，避免平台混用）
-zip:
   artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
 
 # ── Linux 平台配置 ────────────────────────────────────────────
