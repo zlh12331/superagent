@@ -382,8 +382,9 @@ jobs:
           # draft release 不响应 /releases/tags/{tag}（GitHub 对 draft 返回 404，2026-09-10
           # 实测：create 成功后 publish 因此误报"找不到 draft release"）。改用 releases
           # 列表按 tag 匹配拿 release_id，后续查资产/转正式全部走 id。
-          RELEASE_ID=$(gh api "/repos/$REPO/releases?per_page=100" --jq --arg t "$TAG" \
-            '[.[] | select(.tag_name == $t) | .id][0]' 2>/dev/null)
+          # 注：gh api 的 --jq 不接受 --arg（纯 jq CLI 参数），直接用字符串内插表达式。
+          RELEASE_ID=$(gh api "/repos/$REPO/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id" 2>/dev/null | head -n 1)
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
             echo "::error::找不到 tag=$TAG 的 draft release（release job 是否成功创建？）"
             exit 1
