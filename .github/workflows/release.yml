@@ -1,10 +1,15 @@
 # .github/workflows/release.yml
-# CD 流水线：tag 触发自动构建三端安装包（Windows/macOS/Linux）+ 上传 Sentry 符号 + 创建 GitHub Release
+# CD 流水线：Release PR 合并后 → 三平台构建 → **构建全部成功后才打 tag + 发布**
 #
-# 触发：推送 v*.*.* 格式 git tag（如 v0.1.0）
+# 触发（2026-09-10 重构）：Release PR（release-please 生成）合并产生的 push（main/beta）。
 # 流程：
+#   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
 #   1. 三平台矩阵构建（windows/macos/linux，各自跑 release gate + 平台打包）
-#   2. release job（needs: build）：合并三平台产物 → GitHub Release
+#   2. release job（needs: gate+build）：合并三平台产物 → 打 tag（此时构建已全部成功）→ 创建 draft Release
+#   3. publish job（needs: release）：校验三平台安装包 + latest*.yml 齐全 → draft 转正式
+#
+# 关键语义：tag 与"发布"都只在三平台构建全部成功后发生——构建失败则无 tag 无 release，
+# 版本号（由 Release PR 写入 package.json/CHANGELOG）不占号、可重试。
 #
 # 所需 Secrets：
 # - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
@@ -14,13 +19,47 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
-  workflow_dispatch: # 支持手动触发
+    branches: [main, beta]
+
+permissions:
+  contents: write
 
 jobs:
+  # ── gate：仅 release-please 的发布提交才继续 ───────────────────
+  gate:
+    name: Gate (release-please commit?)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      is_release: ${{ steps.detect.outputs.is_release }}
+      version: ${{ steps.detect.outputs.version }}
+      prerelease: ${{ steps.detect.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect release-please commit
+        id: detect
+        run: |
+          MSG=$(git log -1 --format=%s)
+          echo "HEAD commit: $MSG"
+          if [[ "$MSG" =~ ^chore\((main|beta)\):\ release[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?) ]]; then
+            VERSION="${BASH_REMATCH[2]}"
+            echo "is_release=true"
+            echo "version=${VERSION}"
+            if [[ "$VERSION" == *-* ]]; then
+              echo "prerelease=true"
+            else
+              echo "prerelease=false"
+            fi
+          else
+            echo "is_release=false"
+          fi
+
   build:
     name: Build & Release ${{ matrix.platform }}
+    needs: gate
+    if: needs.gate.outputs.is_release == 'true'
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 60
     permissions:
@@ -134,9 +173,7 @@ jobs:
       - name: Compute Sentry release name
         if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
         shell: bash
-        run: echo "SENTRY_RELEASE=code-agent@${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-        env:
-          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: echo "SENTRY_RELEASE=code-agent@${{ needs.gate.outputs.version }}" >> "$GITHUB_ENV"
 
       - name: Create Sentry release
         if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
@@ -168,8 +205,9 @@ jobs:
           retention-days: 30
 
   release:
-    name: Create GitHub Release
-    needs: build
+    name: Create GitHub Release (tag + draft)
+    needs: [gate, build]
+    if: needs.gate.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -197,7 +235,7 @@ jobs:
       - name: Extract release body from CHANGELOG
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.gate.outputs.version }}"
           VERSION_ESCAPED=$(printf '%s' "$VERSION" | sed 's/\./\\./g')
           awk -v v="$VERSION_ESCAPED" '
             /^## / {
@@ -211,23 +249,27 @@ jobs:
             echo "## Release $VERSION" > release-body.md
           fi
 
-      - name: Create GitHub Release (draft)
+      # 此处已处于「三平台构建全部成功」之后：tag 在这里创建（softprops 在 tag 不存在时
+      # 自动打 tag），即"构建成功才打 tag/占号"。draft 对用户不可见，由 publish 校验后转正。
+      - name: Create GitHub Release (tag + draft)
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.gate.outputs.version }}
           body-path: release-body.md # 使用润色后的 CHANGELOG 版本段，而非机器生成的 release notes
           files: release/**
           draft: true # 电源包与元数据齐备前对外不可见；由下方 publish job 校验后转正式
-          prerelease: ${{ contains(github.ref_name, '-') }} # v0.1.0-beta1 等标记为 prerelease
+          prerelease: ${{ needs.gate.outputs.prerelease }} # beta 等含 '-' 版本标记为 prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── 发布转正式（2026-09-09 流程加固）────────────────────────────
-  # 「打 tag」只代表代码快照；对用户可见的发布必须连安装包一起。
+  # 「打 tag」只代表代码快照 + 构建成功；对用户可见的发布必须连安装包一起。
   # 本 job 校验三平台安装包 + latest*.yml 元数据齐全后才把草稿转正式（draft=false），
   # 缺任一项即失败保持草稿 → 用户永远看不到"空版本"。失败后 rerun build job 即可。
   publish:
     name: Publish Release (assets verified)
-    needs: release
+    needs: [gate, release]
+    if: needs.gate.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -239,7 +281,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="v${{ needs.gate.outputs.version }}"
           REPO="${{ github.repository }}"
           if ! ASSETS=$(gh api "/repos/$REPO/releases/tags/$TAG" --jq '.assets[].name' 2>/dev/null); then
             echo "::error::找不到 tag=$TAG 的 draft release（release job 是否跳过？）"
