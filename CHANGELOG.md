@@ -4,6 +4,19 @@
 
 > 版本段由 release-please 基于 Conventional Commits 自动生成；发版前请在 Release PR 中将机器文案润色为面向用户的描述（历史版本段 release-please 会保留，不会被覆盖）。
 
+## [1.0.6](https://github.com/zlh12331/superagent/compare/v1.0.5...v1.0.6) (2026-09-10)
+
+
+### Bug Fixes
+
+* **build:** 修 Windows chokidar 崩溃与 macOS 空 CSC_LINK 'not a file' ([c7b6773](https://github.com/zlh12331/superagent/commit/c7b6773c1bfa11651955d4f6b1369664eb993a1d))
+* **ci:** electron E2E 加 retries=2 吸收共享 runner 性能抖动 ([#25](https://github.com/zlh12331/superagent/issues/25)) ([e5ae067](https://github.com/zlh12331/superagent/commit/e5ae0674d72f0d047e70ee7cd5a54ae234fc4585))
+* **release:** create 路径用回 GITHUB_TOKEN 避免 update 403 ([#24](https://github.com/zlh12331/superagent/issues/24)) ([79fd051](https://github.com/zlh12331/superagent/commit/79fd0515504e704c41ab632ceb6c03d4ba48c4c8))
+* **release:** publish 改用 release id 查询 draft ([#26](https://github.com/zlh12331/superagent/issues/26)) ([aaa87b9](https://github.com/zlh12331/superagent/commit/aaa87b9e9aed80d7fe8b1fe479171b3761b4a54a))
+* **release:** windows 平台裁剪集成测试避免 node-pty/ConPTY worker 崩溃 ([#23](https://github.com/zlh12331/superagent/issues/23)) ([0f81980](https://github.com/zlh12331/superagent/commit/0f81980f699eeee0ac3f86d5c1b90d053d87457a))
+* **release:** 修正 draft 查询 jq 表达式，gh api 不支持 --arg ([#27](https://github.com/zlh12331/superagent/issues/27)) ([4affcb7](https://github.com/zlh12331/superagent/commit/4affcb7c1c5b34a8831c5646b7625c3e80c1fcf4))
+* **release:** 更新既有 release 改用 RELEASE_PLEASE_TOKEN + 修正 body_path 参数名 ([#22](https://github.com/zlh12331/superagent/issues/22)) ([248b127](https://github.com/zlh12331/superagent/commit/248b1270f908f2e7fec91a504ae2a3137ad8f859))
+
 ## [1.0.5](https://github.com/zlh12331/superagent/compare/v1.0.4...v1.0.5) (2026-09-10)
 
 
