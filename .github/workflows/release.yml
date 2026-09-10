@@ -23,7 +23,14 @@ name: Release
 on:
   push:
     branches: [main, beta]
-  workflow_dispatch: # 手动重放/重试：gate 直接取 package.json 版本视为发布
+  workflow_dispatch:
+    inputs:
+      # 防误触发（2026-09-10 收口）：手动重放必须显式确认版本，
+      # 且须与 package.json 当前版本一致，gate 校验不符即拒绝。
+      confirm_version:
+        description: 待构建/补发验证的版本号（必须与 package.json 版本一致）
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -46,8 +53,14 @@ jobs:
         id: detect
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # 手动重试：以当前 package.json 版本为准（发布流程刚失败时可重新放行）
+            # 手动重试（2026-09-10 收口）：必须显式输入与 package.json 一致的版本号，
+            # 防止误点 dispatch 直接发版。输入不符 → gate 失败 → 全部 job 跳过。
             VERSION=$(node -p "require('./package.json').version")
+            CONFIRM="${{ github.event.inputs.confirm_version }}"
+            if [[ -z "$CONFIRM" || "$CONFIRM" != "$VERSION" ]]; then
+              echo "::error::confirm_version='$CONFIRM' 与 package.json 版本 '$VERSION' 不一致，拒绝放行"
+              exit 1
+            fi
             echo "is_release=true" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
             if [[ "$VERSION" == *-* ]]; then
