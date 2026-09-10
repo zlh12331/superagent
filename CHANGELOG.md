@@ -4,6 +4,13 @@
 
 > 版本段由 release-please 基于 Conventional Commits 自动生成；发版前请在 Release PR 中将机器文案润色为面向用户的描述（历史版本段 release-please 会保留，不会被覆盖）。
 
+## [1.0.5](https://github.com/zlh12331/superagent/compare/v1.0.4...v1.0.5) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ci:** 发布重构——三平台构建成功后才打 tag/发布，空版本不再占号 ([a49a7b5](https://github.com/zlh12331/superagent/commit/a49a7b5daa481b2ec31465106ca5eddc4d61d654))
+
 ## [1.0.4](https://github.com/zlh12331/superagent/compare/v1.0.3...v1.0.4) (2026-09-10)
 
 
