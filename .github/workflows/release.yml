@@ -4,7 +4,7 @@
 # 触发：Release PR（release-please 生成）合并产生的 push（main），或 workflow_dispatch 手动重放。
 # 流程：
 #   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
-#   1. CD 三平台矩阵构建（windows/macos/linux，各自原生打包 + 生产 smoke）
+#   1. CD 三平台矩阵构建（windows/macos/linux，各自原生单测 + 打包 + 产物 smoke）
 #   2. release job（needs: gate+build）：三平台构建全部成功后才打 tag → 创建 draft Release
 #   3. publish job（needs: release）：校验三平台安装包 + latest*.yml 齐全 → draft 转正式
 #
@@ -167,14 +167,24 @@ jobs:
         if: matrix.platform == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2
 
-      # ── 门禁（已移除，2026-09-10 方案二）─────────────────────────────
-      # 此前此处重跑 typecheck / lint / 单测作为"Release Gate"。方案二落地后删除：
-      # release 提交来自 Release PR，合并前已通过 CI 的完整质量门禁（ubuntu 全量
-      # 单测+集成+E2E，及三平台 Electron E2E/smoke/package），同一 commit 再跑一遍
-      # 属第 3 次重复。本 job 现在只负责「构建 + 打包 + 产物 smoke」——
-      # 即发布路径独有、CI 无法替代的那部分。
-      # 附注：PR CI 的 quality job 仅跑在 ubuntu，故 mac/win 的原生单测不再执行；
-      # 平台相关行为由 CI 的三平台 Electron E2E 覆盖（更高层、更贴近真实运行）。
+      # ── 原生单测（保留；2026-09-10 方案二复核）────────────────────────
+      # 为什么保留：PR CI 的 quality job 只跑在 ubuntu，**mac/win 的原生单测没有其它
+      # 环节覆盖**——而单测恰是最易暴露平台差异的一层（路径分隔符、原生模块
+      # better-sqlite3/node-pty、safeStorage 的 DPAPI/Keychain/libsecret 分支）。
+      # 发布是最后一道闸，故各平台打包前先跑自己的原生单测。
+      # 为什么 typecheck / lint 不在此重跑：二者与平台无关（同一份源码在三个平台结论
+      # 相同），PR CI 的 ubuntu quality job 已覆盖；释放出 2 步 × 3 平台 = 6 次重复执行。
+      # Windows 只跑 main/renderer/scripts：node-pty/ConPTY 与 vitest fork worker 并发会
+      # 崩（0xC0000005 ACCESS_VIOLATION），该集成层本就不在 Windows 覆盖范围
+      # （集成测试只在 ubuntu 的 CI job 跑）。
+      - name: Unit tests (${{ matrix.platform }})
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "Windows" ]; then
+            pnpm test:main && pnpm test:renderer && pnpm test:scripts
+          else
+            pnpm test
+          fi
 
       # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
@@ -230,8 +240,14 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
       # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
+      # 打包产物，无需 Playwright 自带浏览器；ffmpeg 供 video:'retain-on-failure' 录像。
+      # 本步此前占 207s（三平台各一次），是 build job 的单项大头。
+      - name: Install Playwright deps (ffmpeg only, no Chromium)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
+          pnpm exec playwright install ffmpeg
 
       - name: Run production smoke tests
         # Linux 无头环境走 xvfb（Electron 启动需要 Display）

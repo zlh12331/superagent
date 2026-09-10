@@ -166,6 +166,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 本 job 是唯一真正需要 Chromium 的（journey/visual/a11y 走浏览器模式）。
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
@@ -212,8 +213,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # 不下载 Chromium（2026-09-10 优化）：本 job 走 _electron.launch 驱动仓库自身的
+      # Electron 二进制，Playwright 无需自带 Chromium——实测该步从 207s 降到数秒。
+      # 仍需 ffmpeg：配置里 video:'retain-on-failure' 靠它录像。
+      # Linux 另需系统依赖（Electron 的 GTK/NSS 等），install-deps 只装 apt 包、不下载浏览器。
+      - name: Install Playwright deps (ffmpeg only, no Chromium)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
+          pnpm exec playwright install ffmpeg
 
       - name: Build dev artifacts
         run: pnpm build
@@ -270,8 +278,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
+      # 打包后的可执行文件，不需要 Playwright 自带浏览器。仅需 ffmpeg（录像）。
+      - name: Install Playwright deps (ffmpeg only, no Chromium)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
+          pnpm exec playwright install ffmpeg
 
       - name: Build production artifacts
         # CI 无上游 MemoryCore 源码（不入仓，registry 只有 1.0.0-beta.1）：
