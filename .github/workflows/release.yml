@@ -20,12 +20,13 @@ name: Release
 on:
   push:
     branches: [main, beta]
+  workflow_dispatch: # 手动重放/重试：gate 直接取 package.json 版本视为发布
 
 permissions:
   contents: write
 
 jobs:
-  # ── gate：仅 release-please 的发布提交才继续 ───────────────────
+  # ── gate：仅 release-please 的发布提交（或手动 dispatch）才继续 ──
   gate:
     name: Gate (release-please commit?)
     runs-on: ubuntu-latest
@@ -41,19 +42,31 @@ jobs:
       - name: Detect release-please commit
         id: detect
         run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # 手动重试：以当前 package.json 版本为准（发布流程刚失败时可重新放行）
+            VERSION=$(node -p "require('./package.json').version")
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            if [[ "$VERSION" == *-* ]]; then
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
           MSG=$(git log -1 --format=%s)
           echo "HEAD commit: $MSG"
           if [[ "$MSG" =~ ^chore\((main|beta)\):\ release[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?) ]]; then
             VERSION="${BASH_REMATCH[2]}"
-            echo "is_release=true"
-            echo "version=${VERSION}"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
             if [[ "$VERSION" == *-* ]]; then
-              echo "prerelease=true"
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
             else
-              echo "prerelease=false"
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "is_release=false"
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
 
   build:
