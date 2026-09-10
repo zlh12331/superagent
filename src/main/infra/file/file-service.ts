@@ -484,7 +484,7 @@ class FileService implements IFileService {
       ignored: shouldIgnoreWatchPath,
       depth: 10,
       // Windows CI：libuv 原生 fs-event 在监视目录被移除时断言崩溃（fail-fast 0xC0000409，
-      // src\win\fs-event.c）→ 测试环境用轮询模式绕开原生监视器。生产不开。
+      // src\win\fs-event.c）→ 测试环境（FILE_WATCH_USE_POLLING=1）用轮询模式绕开原生监视器。
       // 条件展开避免 exactOptionalPropertyTypes 下显式 undefined 报错。
       ...(process.env['FILE_WATCH_USE_POLLING'] === '1' ? { usePolling: true } : {}),
     });
