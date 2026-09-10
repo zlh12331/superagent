@@ -1,15 +1,18 @@
 # .github/workflows/release.yml
-# CD 流水线：Release PR 合并后 → 三平台构建 → **构建全部成功后才打 tag + 发布**
+# CD 流水线：Release PR 合并后 → 三平台构建 → **CI + CD 全绿后才打 tag + 发布**
 #
 # 触发（2026-09-10 重构）：Release PR（release-please 生成）合并产生的 push（main/beta）。
 # 流程：
 #   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
-#   1. 三平台矩阵构建（windows/macos/linux，各自跑 release gate + 平台打包）
-#   2. release job（needs: gate+build）：合并三平台产物 → 打 tag（此时构建已全部成功）→ 创建 draft Release
+#   1. CD 三平台矩阵构建（windows/macos/linux，各自跑 release gate + 平台打包）与
+#      ci-check job（等待独立 ci.yml 在同一 commit 上跑完）**并行**
+#   2. release job（needs: gate+build+ci-check）：**CI 通过 且** 三平台构建全部成功后
+#      才打 tag → 创建 draft Release
 #   3. publish job（needs: release）：校验三平台安装包 + latest*.yml 齐全 → draft 转正式
 #
-# 关键语义：tag 与"发布"都只在三平台构建全部成功后发生——构建失败则无 tag 无 release，
-# 版本号（由 Release PR 写入 package.json/CHANGELOG）不占号、可重试。
+# 关键语义（与用户确认）：CI 与 CD 同时跑，两者都没问题（CI 绿 + 三平台构建成功）
+# 才发版——任一方失败则无 tag 无 release，版本号（由 Release PR 写入
+# package.json/CHANGELOG）不占号、可重试。
 #
 # 所需 Secrets：
 # - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
@@ -217,9 +220,54 @@ jobs:
           path: release/
           retention-days: 30
 
+  # ── ci-check：等待独立 CI 工作流（ci.yml）在同一 commit 上通过 ──────
+  # 用户确认（2026-09-10）：CI 与 CD（三平台构建）**并行**跑，但打 tag/建 Release
+  # 之前必须两者都绿。本 job 与 build 同时启动（都只依赖 gate），轮询 GitHub API
+  # 直到本 commit 的 CI workflow 出结论；CI 非 success → 本 job 失败 → release 被跳过。
+  ci-check:
+    name: Wait for CI workflow green
+    needs: gate
+    if: needs.gate.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      conclusion: ${{ steps.wait.outputs.conclusion }}
+    steps:
+      # CI 可能刚被 push 触发、瞬间尚无 workflow run：轮询直到出现并完成。
+      - name: Wait for CI (ci.yml) on this commit
+        id: wait
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          for i in $(seq 1 85); do
+            RUN=$(gh api "/repos/$REPO/actions/runs?head_sha=$SHA&per_page=30" \
+              --jq '[.workflow_runs[] | select(.name == "CI" and .event == "push")][0]' 2>/dev/null \
+              || true)
+            if [ -n "$RUN" ] && [ "$RUN" != "null" ]; then
+              STATUS=$(printf '%s' "$RUN" | jq -r .status)
+              CONCLUSION=$(printf '%s' "$RUN" | jq -r .conclusion)
+              if [ "$STATUS" = "completed" ]; then
+                echo "conclusion=$CONCLUSION" >> "$GITHUB_OUTPUT"
+                if [ "$CONCLUSION" = "success" ]; then
+                  echo "CI workflow green on $SHA"
+                  exit 0
+                fi
+                echo "::error::CI workflow 未通过（conclusion=$CONCLUSION），不发版"
+                exit 1
+              fi
+            fi
+            echo "CI not completed yet (attempt $i/85), waiting 20s..."
+            sleep 20
+          done
+          echo "::error::等待 CI workflow 超时（85 次 * 20s ≈ 28min）"
+          exit 1
+
   release:
     name: Create GitHub Release (tag + draft)
-    needs: [gate, build]
+    needs: [gate, build, ci-check]
     if: needs.gate.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15

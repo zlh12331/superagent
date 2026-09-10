@@ -13,9 +13,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
   pull_request:
-    branches: [main]
+    branches: [main, beta]
   workflow_dispatch: # 允许手动触发（便于调试）
 
 # 同分支并行时取消旧 run（节省 CI 时间）
