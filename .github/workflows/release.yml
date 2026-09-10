@@ -334,12 +334,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.gate.outputs.version }}
-          body-path: release-body.md # 使用润色后的 CHANGELOG 版本段，而非机器生成的 release notes
+          body_path: release-body.md # 使用润色后的 CHANGELOG 版本段，而非机器生成的 release notes（v2 参数名是 body_path）
           files: release/**
           draft: true # 电源包与元数据齐备前对外不可见；由下方 publish job 校验后转正式
           prerelease: ${{ needs.gate.outputs.prerelease }} # beta 等含 '-' 版本标记为 prerelease
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 2026-09-10 实测：更新**既有** release 时 GITHUB_TOKEN（github-actions bot）
+          # 被 GitHub 拒（403 "Resource not accessible by integration"，update-a-release）。
+          # 补发/重放场景常落在已存在的 tag 上（如历史空壳 v1.0.5），改用 release-please
+          # 一直使用的 PAT——内容写权限，兼容创建与更新，能覆盖资产（overwrite 默认 true）。
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
   # ── 发布转正式（2026-09-09 流程加固）────────────────────────────
   # 「打 tag」只代表代码快照 + 构建成功；对用户可见的发布必须连安装包一起。
