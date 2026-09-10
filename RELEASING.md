@@ -30,7 +30,7 @@
 
 ## 二、发正式版（常规流程）
 
-1. 功能开发走 PR 合入 main（Conventional Commits；main 受 ruleset 保护，需 PR + 11 项检查 + 线性历史）
+1. 功能开发走 PR 合入 main（Conventional Commits；main 受 ruleset 保护，需 PR + 必需检查 + 线性历史）
 2. release-please 自动开/更新 Release PR，标题形如 `chore(main): release 1.1.0`
 3. 审阅该 PR：版本号是否符合预期、在 PR 里润色 CHANGELOG
 4. 合并 Release PR → 触发 `release.yml`
