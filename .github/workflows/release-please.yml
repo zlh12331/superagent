@@ -2,7 +2,7 @@
 # 版本管理自动化（release-please）：接管「版本号推导 + CHANGELOG 生成」。
 #
 # 流程（2026-09-10 重构，tag 后置）：
-#   1. main / beta 分支每次 push 触发；release-please 基于 Conventional Commits 计算下一个版本，
+#   1. main 分支每次 push 触发；release-please 基于 Conventional Commits 计算下一个版本，
 #      自动创建/更新「release-please-releases」Release PR（内含 package.json 版本号 + CHANGELOG）
 #   2. 人工审阅后合并 Release PR → **release-please 不打 tag、不建 Release**
 #      （skip-github-release: true，见下）。
@@ -17,10 +17,16 @@
 #   release」路径，被 GitHub 以 403（update-a-release / Resource not accessible
 #   by integration）拒绝——这正是历次发版 CD 全红、且「空壳 tag 占号」的真正根因。
 #
-# 预览版（beta）：
-#   - beta 分支是 release-please 默认识别的 prerelease 分支：合并其 Release PR 会把
-#     版本号定为 vX.Y.Z-beta.N，release.yml 按版本含 '-' 自动标记 GitHub Prerelease。
-#   - beta 分支从 main 拉出并持续向前合并 main；正式版回流（beta→main）走普通 PR 审阅。
+# 预发布版（beta）——单分支 + Release-As 指定版本（2026-09-10 定案）：
+#   - 本仓库**只用 main 一条发布分支**，不发长期 beta 分支。prerelease 由
+#     release-please-config.json 的 `versioning: "prerelease"` + `prerelease-type: "beta"`
+#     驱动（注意：release-please **不会**按分支名自动识别 prerelease，此前注释的说法是错的）。
+#   - 发 beta：在推给 main 的提交里加 footer `Release-As: 1.1.0-beta.1`
+#     → release-please 开 `chore(main): release 1.1.0-beta.1` PR → 合并 → release.yml
+#       按版本含 '-' 自动标 GitHub Prerelease。
+#   - 继续 beta：下一个提交再写 `Release-As: 1.1.0-beta.2`。
+#   - 毕业为正式版：普通提交即可（prerelease 策略在 prerelease 未开启时会把当前
+#     `1.1.0-beta.N` 收敛为干净的 `1.1.0`）；也可显式 `Release-As: 1.1.0`。
 #
 # 关键约束：
 # - 打 tag 移交给 release.yml，故本 workflow 不再需要触发其他 workflow 的权限要求；
@@ -32,7 +38,7 @@ name: Release Please
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
