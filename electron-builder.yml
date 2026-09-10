@@ -133,8 +133,9 @@ nsis:
   oneClick: false
   # 允许修改安装目录
   allowToChangeInstallationDirectory: true
-  # 安装包文件名（包含版本号，便于归档）
-  artifactName: ${productName}-${version}-setup.${ext}
+  # 安装包文件名：产品名-平台-架构（2026-09-10 发布资产规范化）——
+  # 连字符命名 + 平台/架构标识，避免 GitHub asset 名空格转点点、无法区分平台。
+  artifactName: Code-Agent-Desktop-Windows-${arch}.${ext}
   # 创建桌面快捷方式
   createDesktopShortcut: true
   # 创建开始菜单快捷方式
@@ -179,7 +180,11 @@ mac:
 # DMG 安装包配置
 # 自动更新用 zip artifact（latest-mac.yml），DMG 仅作首次安装分发
 dmg:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
+
+# mac zip（electron-updater 自动更新制品；命名与 dmg 同规则，避免平台混用）
+zip:
+  artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
 
 # ── Linux 平台配置 ────────────────────────────────────────────
 linux:
@@ -205,11 +210,11 @@ linux:
 
 # AppImage 配置
 appImage:
-  artifactName: ${productName}-${version}.${ext}
+  artifactName: Code-Agent-Desktop-Linux-${arch}.AppImage
 
 # deb 配置
 deb:
-  artifactName: ${productName}-${version}.${ext}
+  artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
 
 # 版本元数据（设计文档 §1.1 版本管理）
 # - Git tag v0.1.0 → 版本 0.1.0

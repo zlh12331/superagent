@@ -241,12 +241,23 @@ jobs:
         run: ${{ matrix.platform == 'Linux' && 'xvfb-run -a pnpm test:smoke' || 'pnpm test:smoke' }}
 
       # ── 上传构建产物（release job 合并）──────────────────────────────
+      # 2026-09-10 资产规范化：只上传 release/ 根目录的安装包 + 更新元数据 + SBOM，
+      # 不再整个 release/（否则 win-unpacked/linux-unpacked 内 node.exe/rg.exe/
+      # OpenConsole/winpty-agent 等杂项与 app-update.yml 一并混入 GitHub Release）。
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.platform }}-${{ github.ref_name }}
-          path: release/
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/latest*.yml
+            release/*.blockmap
+            release/sbom-*.cdx.json
           retention-days: 30
 
   # ── ci-check：等待独立 CI 工作流（ci.yml）在同一 commit 上通过 ──────
@@ -314,11 +325,23 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      # 合并三平台产物到统一目录（避免文件名冲突覆盖）
+      # 合并三平台产物到统一目录（避免文件名冲突覆盖）。
+      # 2026-09-10 资产规范化：安装包用 命名白名单 收集（产品名-平台-架构连字符名），
+      # 与 electron-builder.yml artifactName 一致；CBOM/更新元数据/blockmap 一并收集。
+      # 不再用 *.exe/*.yml 通配——那会把 win-unpacked 杂项（node.exe 等）混入。
       - name: Collect release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.exe" -o -name "*.yml" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.blockmap" -o -name "sbom-*.cdx.json" \) -exec cp -n {} release/ \;
+          find artifacts \( -type f \) \( \
+            -name "Code-Agent-Desktop-Windows-*.exe" -o \
+            -name "Code-Agent-Desktop-macOS-*.dmg" -o \
+            -name "Code-Agent-Desktop-macOS-*.zip" -o \
+            -name "Code-Agent-Desktop-Linux-*.AppImage" -o \
+            -name "Code-Agent-Desktop-Linux-*.deb" -o \
+            -name "latest*.yml" -o \
+            -name "*.blockmap" -o \
+            -name "sbom-*.cdx.json" \
+          \) -exec cp -n {} release/ \;
           ls -la release/
 
       # 发布描述取自 CHANGELOG.md 中对应版本的段落（发版前在 Release PR 中润色好的文案）
@@ -395,13 +418,12 @@ jobs:
           for req in "latest.yml" "latest-mac.yml" "latest-linux.yml"; do
             if ! grep -qx "$req" <<<"$ASSETS"; then echo "::error::缺少更新元数据: $req"; MISSING=1; fi
           done
-          # 主安装包按扩展名判定（2026-09-10 实测）：本地文件名为
-          # "Code Agent Desktop-1.0.6-setup.exe"（空格），但上传后 GitHub asset 名将
-          # 空格规范化为点 "Code.Agent.Desktop-1.0.6-setup.exe"——精确 glob 永远失配，
-          # 导致安装包已就位仍误报"缺少"。改按扩展名（含 blockmap 容忍）校验。
-          if ! grep -Eq '\.setup\.exe' <<<"$ASSETS"; then echo "::error::缺少 Windows 安装包 (*-setup.exe)"; MISSING=1; fi
-          if ! grep -Eq '\.dmg(\.blockmap)?$' <<<"$ASSETS"; then echo "::error::缺少 macOS 安装包 (*.dmg)"; MISSING=1; fi
-          if ! grep -Eq '\.AppImage(\.blockmap)?$' <<<"$ASSETS"; then echo "::error::缺少 Linux 安装包 (*.AppImage)"; MISSING=1; fi
+          # 主安装包按 产品名-平台-架构 命名前缀校验（与 electron-builder.yml artifactName、
+          # Collect 白名单对齐）。2026-09-10 资产规范化后全为连字符命名，
+          # 不再依赖空格名（GitHub asset 名曾把空格转点导致精确 glob 失配）。
+          if ! grep -Eq 'Code-Agent-Desktop-Windows-.*\.exe($|\.blockmap$)' <<<"$ASSETS"; then echo "::error::缺少 Windows 安装包 (*Windows-*.exe)"; MISSING=1; fi
+          if ! grep -Eq 'Code-Agent-Desktop-macOS-.*\.dmg($|\.blockmap$)' <<<"$ASSETS"; then echo "::error::缺少 macOS 安装包 (*macOS-*.dmg)"; MISSING=1; fi
+          if ! grep -Eq 'Code-Agent-Desktop-Linux-.*\.AppImage($|\.blockmap$)' <<<"$ASSETS"; then echo "::error::缺少 Linux 安装包 (*Linux-*.AppImage)"; MISSING=1; fi
           if [ "$MISSING" = "1" ]; then
             echo "::error::安装包未齐，保持草稿不发布。修复后 rerun 对应 build job 再重跑本 job。"
             exit 1
