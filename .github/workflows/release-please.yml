@@ -4,9 +4,18 @@
 # 流程（2026-09-10 重构，tag 后置）：
 #   1. main / beta 分支每次 push 触发；release-please 基于 Conventional Commits 计算下一个版本，
 #      自动创建/更新「release-please-releases」Release PR（内含 package.json 版本号 + CHANGELOG）
-#   2. 人工审阅后合并 Release PR → **不打 tag**（skip-tag: true）。
+#   2. 人工审阅后合并 Release PR → **release-please 不打 tag、不建 Release**
+#      （skip-github-release: true，见下）。
 #      tag 由 release.yml 在**三平台构建全部成功之后**才打（见 release.yml 头注释）——
 #      保证「安装包没生成好绝不发版/占号」。
+#
+#   ⚠️ 2026-09-10 修正：此前写的是 `skip-tag: true`，**该输入在
+#   googleapis/release-please-action@v4 中并不存在**（合法输入是
+#   skip-github-release / skip-github-pull-request / skip-labeling）。
+#   Actions 对未知输入静默忽略 ⇒ release-please 一直在合并 Release PR 时
+#   自行打 tag + 建空 Release，于是 release.yml 的 release 步骤落入「更新既有
+#   release」路径，被 GitHub 以 403（update-a-release / Resource not accessible
+#   by integration）拒绝——这正是历次发版 CD 全红、且「空壳 tag 占号」的真正根因。
 #
 # 预览版（beta）：
 #   - beta 分支是 release-please 默认识别的 prerelease 分支：合并其 Release PR 会把
@@ -42,4 +51,6 @@ jobs:
           release-type: node
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          skip-tag: true # 合并后不打 tag——由 release.yml 构建成功后打（防空版本占号）
+          # 合并后不打 tag、不建 Release——由 release.yml 三平台构建成功后打（防空版本占号）。
+          # 注意：必须是 skip-github-release，不是 skip-tag（后者非法、会被静默忽略）。
+          skip-github-release: true
