@@ -1,7 +1,7 @@
 # .github/workflows/release.yml
 # CD 流水线：Release PR 合并后 → 三平台构建 → **CI + CD 全绿后才打 tag + 发布**
 #
-# 触发（2026-09-10 重构）：Release PR（release-please 生成）合并产生的 push（main/beta）。
+# 触发（2026-09-10 重构）：Release PR（release-please 生成）合并产生的 push（main）。
 # 流程：
 #   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
 #   1. CD 三平台矩阵构建（windows/macos/linux，各自跑 release gate + 平台打包）与
@@ -22,7 +22,7 @@ name: Release
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main]
   workflow_dispatch:
     inputs:
       # 防误触发（2026-09-10 收口）：手动重放必须显式确认版本，
