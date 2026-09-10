@@ -1,0 +1,11 @@
+# Issue 模板配置
+# 文档：https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
+#
+# blank_issues_enabled: false —— 关闭「空白 Issue」，强制走下面两个模板
+# （保证 bug 报告带上版本/系统/复现步骤等分诊必需字段）。
+#
+# 若日后需要补充联系入口，需先满足对应前提，否则 contact_links 会指向 404：
+#   - 安全私密披露：仓库 Settings → Code security 开启 Private vulnerability reporting，
+#     并在仓库根添加 SECURITY.md（当前两者均未配置）
+#   - 使用讨论：Settings → Features 开启 Discussions（当前未开启）
+blank_issues_enabled: false

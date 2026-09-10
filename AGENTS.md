@@ -176,7 +176,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 
 - `out/` = electron-vite build 产物，`release/` = electron-builder 打包产物，`stats/` = 体积分析产物
 - 预提交钩子：lint-staged（Biome 自动修复）+ codegraph sync（60s 超时，`SKIP_CODEGRAPH_SYNC=1` 跳过）
-- 提交信息：commitlint 校验 Conventional Commits，scope 可选；type 需准确（feat/fix/perf 才会被 release-please 计入升版）
+- 提交信息：commitlint 校验 Conventional Commits，type 需准确（feat/fix/perf 才会被 release-please 计入升版）。规则（`commitlint.config.js`，2026-09-11 调整）：`header-max-length` 保持 100（Git 官方建议 50、Angular/commitlint 默认 100；实测本项目最长 subject 76 字符，无摩擦）；**`body-max-line-length` / `footer-max-line-length` 已关闭**（`0`，原 100）——排版约束会误伤 URL/日志/代码片段，且现代工具自动折行；`scope-enum` 为 **warning 级**（1）——即"提示但不阻断提交"，符合 Conventional Commits 中 scope 可选的定位，枚举已按真实用量补齐（新增 release/ci/about/chat/models/design/quality/tsconfig）。⚠️ 调整行宽规则必须显式写 `0`，直接删除规则会**继承**官方默认的 100。破坏性变更用 `feat!` 或 `BREAKING CHANGE:` footer——**没有 `breaking` 这个 type**，`changelog-sections` 里配它无效（已从 `release-please-config.json` 移除）
 - 发版流程：push main → release-please 开 Release PR（版本号 + CHANGELOG）→ 人工审阅（可在 PR 中润色 CHANGELOG）→ 合并 PR → release.yml 三平台构建成功 + 独立 CI 全绿 → 打 tag vX.Y.Z → 校验三平台安装包/latest*.yml 齐全 → draft 转正式发布；任一环节失败则无 tag 无 release，版本号不占号、可重试（`workflow_dispatch` 需输入与 package.json 一致的版本号）。发 beta / 热修复等完整操作见 `RELEASING.md`
 - 自动更新：electron-updater（github provider，electron-builder.yml publish 配置）；开发模式 check 返回明确错误
 
