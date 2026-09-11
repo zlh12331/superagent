@@ -333,14 +333,12 @@ export function ChatInput({
     setSending(true);
     // 快照本次发送的输入（供超长校验使用）
     const sentValue = value;
-    try {
-      // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
-      const base = sentValue.trim();
-      // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
-      if (base.length > MAX_MESSAGE_LENGTH) {
-        toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
-        return;
-      }
+    // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
+    const base = sentValue.trim();
+    // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
+    if (base.length > MAX_MESSAGE_LENGTH) {
+      toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
+    } else {
       const text = await buildTextWithAttachments(base, attachments, {
         attached: (name) => t('chat.attachmentLabel', { name }),
         readFailed: (name) => t('chat.attachmentReadFailed', { name }),
@@ -352,10 +350,12 @@ export function ChatInput({
       }
       // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
       clearInput();
-    } finally {
-      sendingRef.current = false;
-      setSending(false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：超长拦截与正常发送
+    // 两条路径统一在此复位 in-flight 守卫。buildTextWithAttachments 内部已
+    // 自行吞掉读取异常（失败仅追加标注），故此处无需 catch。
+    sendingRef.current = false;
+    setSending(false);
   };
 
   /**
