@@ -9,6 +9,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { IPC_PROTOCOL_VERSION } from '@code-agent/shared/renderer';
+import * as Sentry from '@sentry/electron/renderer';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
@@ -41,8 +42,10 @@ export function useProtocolCheck(): void {
           });
         }
       })
-      .catch(() => {
-        // 健康检查失败/错误响应静默：非关键路径，不打扰用户
+      .catch((error: unknown) => {
+        // 不打扰用户（非关键路径），但上报 Sentry——协议版本读不到本身
+        // 就是"主/渲染层不匹配"的强信号，静默会丢掉最有价值的现场。
+        Sentry.captureException(error, { tags: { scope: 'use-protocol-check' } });
       });
     return () => {
       cancelled = true;

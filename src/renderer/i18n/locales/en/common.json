@@ -20,6 +20,7 @@
       "crashReportSent": "Crash report sent. Thank you for your feedback",
       "pageError": "{{status}} error",
       "pageLoadFailed": "Failed to load page",
+      "openInExplorerFailed": "Could not open in file manager",
       "chatLoadFailed": "Failed to load session. Delete and recreate it",
       "selectModel": "Select model",
       "modelSelector": "Model selector",

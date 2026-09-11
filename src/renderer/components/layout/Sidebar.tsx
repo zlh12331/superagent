@@ -43,6 +43,7 @@ import { Plus, Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FileTreePanel } from '@/components/file-tree/FileTreePanel';
@@ -74,6 +75,18 @@ import { FolderLabel } from './folder-label';
 import { LoadingList } from './loading-list';
 import { getFolderName } from './sidebar-utils';
 import { SortableThreadItem } from './thread-item';
+
+/**
+ * 在系统文件管理器中打开目录（模块级提取：保持 Sidebar 函数体精简，棘轮只允许下降）。
+ *
+ * 失败时 toast 提示：此前 `.catch(() => {})` 完全静默，用户点了「在资源管理器中打开」
+ * 却毫无反应、也无任何线索。
+ */
+function openInFileManager(dir: string, message: string): void {
+  void window.api.app.openExternal({ url: `file:///${dir.replace(/\\/g, '/')}` }).catch(() => {
+    toast.error(message);
+  });
+}
 
 export function Sidebar(): ReactElement {
   const navigate = useNavigate();
@@ -433,9 +446,7 @@ export function Sidebar(): ReactElement {
                                   (s) => getFolderName(s.workingDir) === folderName,
                                 )?.workingDir;
                                 if (dir !== undefined) {
-                                  void window.api.app
-                                    .openExternal({ url: `file:///${dir.replace(/\\/g, '/')}` })
-                                    .catch(() => {});
+                                  openInFileManager(dir, t('common.openInExplorerFailed'));
                                 }
                               }}
                               onDeleteFolder={(folderName) => {
@@ -481,11 +492,10 @@ export function Sidebar(): ReactElement {
                               }}
                               onOpenInExplorer={() => {
                                 // 在资源管理器中打开会话工作目录（对齐同类桌面应用惯例）
-                                void window.api.app
-                                  .openExternal({
-                                    url: `file:///${entry.session.workingDir.replace(/\\/g, '/')}`,
-                                  })
-                                  .catch(() => {});
+                                openInFileManager(
+                                  entry.session.workingDir,
+                                  t('common.openInExplorerFailed'),
+                                );
                               }}
                             />
                           ),

@@ -161,12 +161,13 @@ export function useFileTree(workingDir: string | null): void {
       try {
         const response = await window.api.file.watchStart({ path: workingDir });
         if (cancelled) {
-          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏；
-          // error 响应无 watcherId 可停，unwrap 抛错由 catch 吞掉（与旧行为等价）
+          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏。
+          // 此处 catch 是**有意忽略**：watchStart 返回 error 响应时无 watcherId，
+          // unwrap 抛错即"本就无可停"，属预期分支而非故障（故不上报 Sentry）。
           try {
             await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
           } catch {
-            // 无 watcherId 可停
+            // 预期分支：无 watcherId 可停（见上方说明）
           }
           return;
         }

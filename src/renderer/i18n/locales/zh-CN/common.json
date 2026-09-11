@@ -20,6 +20,7 @@
       "crashReportSent": "崩溃报告已发送，感谢反馈",
       "pageError": "{{status}} 错误",
       "pageLoadFailed": "页面加载失败",
+      "openInExplorerFailed": "无法在文件管理器中打开",
       "chatLoadFailed": "会话加载异常,请删除后重建",
       "selectModel": "选择模型",
       "modelSelector": "模型选择",
