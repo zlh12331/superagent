@@ -13,6 +13,7 @@ import { AsyncSection } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { MEMORY_LIST_QUERY_KEY } from '@/lib/query/keys';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 
@@ -20,9 +21,6 @@ interface MemoryEntry {
   readonly id: string;
   readonly content: string;
 }
-
-/** 记忆查询 key 工厂（按会话隔离） */
-const MEMORY_QUERY_KEY = (sessionId: string) => ['memory', 'list', sessionId] as const;
 
 /**
  * 清空会话记忆（模块级：从组件提取以保持函数体精简）
@@ -53,7 +51,7 @@ export function RulesMemorySection(): ReactElement {
     error: memoriesError,
     refetch: refetchMemories,
   } = useQuery({
-    queryKey: MEMORY_QUERY_KEY(activeSessionId ?? 'none'),
+    queryKey: MEMORY_LIST_QUERY_KEY(activeSessionId ?? 'none'),
     enabled: activeSessionId !== null,
     queryFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
@@ -82,7 +80,7 @@ export function RulesMemorySection(): ReactElement {
     onSuccess: () => {
       toast.success(t('settings.memoryCleared'));
       if (activeSessionId !== null) {
-        void queryClient.invalidateQueries({ queryKey: MEMORY_QUERY_KEY(activeSessionId) });
+        void queryClient.invalidateQueries({ queryKey: MEMORY_LIST_QUERY_KEY(activeSessionId) });
       }
     },
     onError: () => {

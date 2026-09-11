@@ -17,11 +17,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { IM_ALLOWED_GROUPS_QUERY_KEY } from '@/lib/query/keys';
 
 /** 群聊执行白名单的 settings key（与主进程 im-allowlist-pref 约定一致） */
 export const IM_ALLOWED_GROUPS_SETTING_KEY = 'im.allowedGroups';
-
-const IM_ALLOWED_GROUPS_QUERY_KEY = ['settings', IM_ALLOWED_GROUPS_SETTING_KEY] as const;
 
 /** 读取白名单（浏览器模式无 window.api 时返回空） */
 async function fetchAllowedGroups(): Promise<readonly string[]> {
@@ -59,7 +58,7 @@ export function ImAllowlistField(): ReactElement {
   // null 表示「跟随服务端值」（用户尚未编辑）；编辑后为本地草稿
   const [draft, setDraft] = useState<string | null>(null);
   const { data: allowed } = useQuery({
-    queryKey: IM_ALLOWED_GROUPS_QUERY_KEY,
+    queryKey: IM_ALLOWED_GROUPS_QUERY_KEY(IM_ALLOWED_GROUPS_SETTING_KEY),
     queryFn: fetchAllowedGroups,
   });
   const saveMutation = useMutation({
@@ -67,7 +66,9 @@ export function ImAllowlistField(): ReactElement {
     onSuccess: () => {
       toast.success(t('settings.imAllowedGroupsSaved'));
       setDraft(null);
-      void queryClient.invalidateQueries({ queryKey: IM_ALLOWED_GROUPS_QUERY_KEY });
+      void queryClient.invalidateQueries({
+        queryKey: IM_ALLOWED_GROUPS_QUERY_KEY(IM_ALLOWED_GROUPS_SETTING_KEY),
+      });
     },
     onError: () => {
       toast.error(t('settings.imAllowedGroupsFailed'));

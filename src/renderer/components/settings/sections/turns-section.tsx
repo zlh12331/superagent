@@ -12,6 +12,7 @@ import { AsyncSection } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { RECENT_TURNS_QUERY_KEY } from '@/lib/query/keys';
 
 export function TurnsSection(): ReactElement {
   const { t } = useTranslation();
@@ -25,7 +26,7 @@ export function TurnsSection(): ReactElement {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['turns', 'recent'],
+    queryKey: RECENT_TURNS_QUERY_KEY,
     queryFn: async (): Promise<SessionRecentTurnsRes['turns']> => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return [];

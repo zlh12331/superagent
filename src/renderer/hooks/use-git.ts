@@ -31,6 +31,27 @@ import { unwrap } from '@/lib/ipc';
  */
 export const GIT_STATUS_QUERY_KEY = (path: string) => ['git', 'status', path] as const;
 
+/**
+ * ['git', 'diff', path, ref, staged, filePath] - 工作区 diff
+ *
+ * diff 不缓存（每次重新请求），此 key 仅用于 TanStack 内部状态管理；
+ * 仍以常量形式集中定义，避免与 QUERY_KEY_ROOTS.git 的前缀失效语义脱节。
+ */
+export const GIT_DIFF_QUERY_KEY = (params: {
+  readonly path: string;
+  readonly ref?: string;
+  readonly staged?: boolean;
+  readonly filePath: string | undefined;
+}) =>
+  [
+    'git',
+    'diff',
+    params.path,
+    params.ref ?? 'HEAD',
+    params.staged ?? false,
+    params.filePath ?? '',
+  ] as const;
+
 /** Git 状态默认 staleTime：10 秒（状态变化较快，避免过期数据） */
 const GIT_STATUS_STALE_TIME = 10_000;
 
@@ -98,14 +119,7 @@ export function useGitDiffQuery(
 ) {
   return useQuery({
     // diff 不缓存：每次都重新请求，queryKey 仅用于 TanStack 内部状态管理
-    queryKey: [
-      'git',
-      'diff',
-      params.path,
-      params.ref ?? 'HEAD',
-      params.staged ?? false,
-      params.filePath ?? '',
-    ] as const,
+    queryKey: GIT_DIFF_QUERY_KEY(params),
     queryFn: async (): Promise<GitDiffRes> => {
       const response = await window.api.git.diff({
         path: params.path,

@@ -17,11 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { ALL_SKILLS_QUERY_KEY, LEARNED_SKILLS_QUERY_KEY } from '@/lib/query/keys';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { SectionTitle, SettingRow } from '../settings-controls';
-
-/** skill:listLearned 查询 key */
-const SKILLS_QUERY_KEY = ['skill', 'learned'] as const;
 
 /** 已学技能形状 */
 interface LearnedSkill {
@@ -40,7 +38,7 @@ export function SkillsSection(): ReactElement {
 
   // L3：已学技能列表
   const learnedQuery = useQuery({
-    queryKey: SKILLS_QUERY_KEY,
+    queryKey: LEARNED_SKILLS_QUERY_KEY,
     queryFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { learned: [] as LearnedSkill[] };
@@ -51,7 +49,7 @@ export function SkillsSection(): ReactElement {
 
   // L3：全部可用技能（内置 + 已学）
   const allSkillsQuery = useQuery({
-    queryKey: ['skill', 'all'],
+    queryKey: ALL_SKILLS_QUERY_KEY,
     queryFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { skills: [] as LearnedSkill[] };
@@ -61,8 +59,8 @@ export function SkillsSection(): ReactElement {
   });
 
   const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: SKILLS_QUERY_KEY });
-    void queryClient.invalidateQueries({ queryKey: ['skill', 'all'] });
+    void queryClient.invalidateQueries({ queryKey: LEARNED_SKILLS_QUERY_KEY });
+    void queryClient.invalidateQueries({ queryKey: ALL_SKILLS_QUERY_KEY });
   };
 
   // 学习技能 mutation（LLM 生成）

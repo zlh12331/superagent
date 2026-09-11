@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { TASK_LIST_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -25,9 +26,6 @@ export interface InfoPaneProps {
   /** 当前会话 id（task 查询按会话过滤） */
   readonly sessionId: string;
 }
-
-/** task:list 查询 key */
-const TASK_LIST_QUERY_KEY = ['task', 'list'] as const;
 
 /** 待办项形状（与 shared TaskInfo 对齐；status 驱动状态视觉，对齐参考项目 PlanNode 完成/活跃态） */
 interface LocalTask {
@@ -45,7 +43,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
 
   // L3：待办列表（按会话过滤）
   const tasksQuery = useQuery({
-    queryKey: [...TASK_LIST_QUERY_KEY, sessionId],
+    queryKey: TASK_LIST_QUERY_KEY(sessionId),
     queryFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { tasks: [] as unknown[] };

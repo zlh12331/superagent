@@ -15,6 +15,10 @@ import { unwrap } from '@/lib/ipc';
 /** 模型清单查询 key（全局共享：ModelSelector / ModelsSection 等） */
 export const MODELS_QUERY_KEY = ['models', 'list'] as const;
 
+/** 厂商内置模型清单 key（按厂商区分；未指定厂商为 'all'） */
+export const BUILTIN_MODELS_QUERY_KEY = (providerKind: string | undefined) =>
+  ['models', 'listBuiltin', providerKind ?? 'all'] as const;
+
 /**
  * 模型清单查询（models:list IPC）
  *
@@ -42,7 +46,7 @@ export function useModelsQuery() {
  */
 export function useBuiltinModelsQuery(providerKind: string | undefined) {
   return useQuery({
-    queryKey: ['models', 'listBuiltin', providerKind ?? 'all'],
+    queryKey: BUILTIN_MODELS_QUERY_KEY(providerKind),
     queryFn: async (): Promise<ModelsListRes> => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { models: [] };
