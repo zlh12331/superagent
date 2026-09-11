@@ -3,9 +3,15 @@
 #
 # blank_issues_enabled: false —— 关闭「空白 Issue」，强制走下面两个模板
 # （保证 bug 报告带上版本/系统/复现步骤等分诊必需字段）。
-#
-# 若日后需要补充联系入口，需先满足对应前提，否则 contact_links 会指向 404：
-#   - 安全私密披露：仓库 Settings → Code security 开启 Private vulnerability reporting，
-#     并在仓库根添加 SECURITY.md（当前两者均未配置）
-#   - 使用讨论：Settings → Features 开启 Discussions（当前未开启）
 blank_issues_enabled: false
+
+# 联系入口（2026-09-11 补充）：两项前提已满足 ——
+#   - 私密漏洞报告：已开启（POST .../security/advisories/new 可用）
+#   - Discussions：已开启
+contact_links:
+  - name: 🔒 安全漏洞（请勿公开提交）
+    url: https://github.com/zlh12331/superagent/security/advisories/new
+    about: 安全漏洞请走私密披露渠道，公开 Issue 会立刻暴露问题
+  - name: 💬 使用问题 / 讨论
+    url: https://github.com/zlh12331/superagent/discussions
+    about: 非缺陷、非功能建议的提问，请到 Discussions
