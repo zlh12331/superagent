@@ -9,7 +9,6 @@
 // - 进入时退出欢迎页模式（确保从 HomePage navigate 过来后 welcome-mode class 移除）
 // ──────────────────────────────────────────────────────────────
 
-import type { ChatMessage } from '@code-agent/shared/renderer';
 import { type ReactElement, useEffect } from 'react';
 import { Navigate, useParams } from 'react-router';
 
@@ -92,7 +91,7 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
       workingDir={workingDir}
       interrupted={session.session.lastRunStatus === 'interrupted'}
       // 历史消息注入 useChat（ChatMessage = ModelMessage，useChat 直接消费）
-      initialMessages={session.messages as unknown as ChatMessage[]}
+      initialMessages={session.messages}
     />
   );
 }

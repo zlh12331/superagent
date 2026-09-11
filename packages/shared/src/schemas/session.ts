@@ -13,6 +13,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import type { ChatMessage } from './chat';
 
 /**
  * session:list 入参 zod schema
@@ -80,13 +81,15 @@ export const SessionGetReqSchema = z.object({
  * session:get 响应 payload
  *
  * 返回完整会话元数据 + 完整消息历史（ModelMessage 数组）。
- * messages 字段类型为 unknown[]：主进程从 SQLite 读出 JSON 字符串后解析，
+ * messages 的**类型**为 ChatMessage[]（= AI SDK ModelMessage），使渲染层可直接消费、
+ * 无需类型断言；**运行时校验**仍为宽松的 z.array(z.unknown())——二者有意分离：
+ * 类型声明给消费方准确契约，运行时校验不引入 AI SDK 的 zod 依赖与复杂 union 成本。
  * 具体结构由 AgentService 在写入时保证（ModelMessage[] 序列化）。
  */
 export interface SessionGetRes {
   readonly session: SessionMeta;
   /** 完整消息历史（ModelMessage 数组） */
-  readonly messages: readonly unknown[];
+  readonly messages: readonly ChatMessage[];
 }
 
 /** session:delete 入参 zod schema */
@@ -259,7 +262,7 @@ export const SessionGetTurnMessagesReqSchema = z.object({
 
 /** session:getTurnMessages 响应 payload（该回合消息明细，按 seq 升序） */
 export interface SessionGetTurnMessagesRes {
-  readonly messages: readonly unknown[];
+  readonly messages: readonly ChatMessage[];
 }
 
 // ── 响应契约 zod schema（R3：补齐全域 resSchema，防 handler 返回结构漂移） ──
@@ -393,7 +396,7 @@ export interface SessionCompactRes {
   /** 回收的 token 数（含就地裁剪；0 = 已在预算内） */
   readonly reclaimedTokens: number;
   /** 压缩后的全量消息历史（渲染层 setMessages 同步） */
-  readonly messages: readonly unknown[];
+  readonly messages: readonly ChatMessage[];
 }
 
 /** session:compact 响应 schema（reclaimedTokens=0 表示已无需压缩；messages 为压缩后全量历史） */

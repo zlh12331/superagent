@@ -205,7 +205,8 @@ export function ChatPanel({
       return unwrap(await window.api.session.compact({ sessionId: chatId }));
     },
     onSuccess: (data) => {
-      setMessages(toInitialMessages(data.messages as unknown as ChatMessage[]));
+      // data.messages 已是 ChatMessage[]（session:compact 契约），无需断言
+      setMessages(toInitialMessages(data.messages));
       void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(chatId) });
       if (data.reclaimedTokens > 0) {
         toast.success(t('chat.compactDone', { tokens: data.reclaimedTokens }));
