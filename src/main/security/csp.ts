@@ -24,10 +24,11 @@
  *   但放开 WebAssembly 编译（shiki 语法高亮的 WASM 引擎必需；'wasm-unsafe-eval'
  *   是 CSP3 专用关键字，不放开 JS eval，比 'unsafe-eval' 面窄——实测缺它所有
  *   代码高亮静默失效）。
- *   'sha256-SWwGbRdwOGlzLCk7/+yml9dDJiUCGnom9HNy/jgWck8='：index.html head 的
+ *   'sha256-8jqBLHilVf+0piQNUM57HQvi2M+INQgFJXoQsMx2EzE='：index.html head 的
  *   首帧防闪内联脚本（读 localStorage 主题镜像切 .dark，见 index.html 头部注释）。
  *   ⚠️ 修改该脚本任何字符必须重算 sha256 并同步此处，否则脚本被 CSP 拦截、
- *   防闪失效（表现为暗色用户首帧亮→暗闪）
+ *   防闪失效（表现为暗色用户首帧亮→暗闪）。2026-09-11 因 catch 绑定去冗余
+ *   （`catch(_e)` → `catch`，noUselessCatchBinding 规则）重算过一次。
  * - style-src 'unsafe-inline'：React 19 + Tailwind v4 运行时注入内联样式，必须放开
  * - connect-src：仅允许 AI API（DeepSeek / OpenAI / Anthropic）+ 本地 Ollama，
  *   与 ProviderRegistry 内置供应商对齐（新增供应商时需同步此列表）
@@ -36,7 +37,7 @@
  */
 const PRODUCTION_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' 'sha256-SWwGbRdwOGlzLCk7/+yml9dDJiUCGnom9HNy/jgWck8='",
+  "script-src 'self' 'wasm-unsafe-eval' 'sha256-8jqBLHilVf+0piQNUM57HQvi2M+INQgFJXoQsMx2EzE='",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' https://api.deepseek.com https://api.openai.com https://api.anthropic.com http://localhost:*",

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import iconv from 'iconv-lite';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFileService, type IFileService } from './file-service';
 
 // Windows CI：chokidar 原生 fs-event 在「watch 目录随即被删除」的时序触发 libuv

@@ -310,7 +310,8 @@ export function ChatInput({
       if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
       pickAttachments(data.paths);
     } catch {
-      return;
+      // 选择器错误/取消：静默失败（非关键路径，用户可重试）
+      // 注：此处不写 `return`——函数已到末尾，bare return 是死语句（noUselessReturn）
     }
   };
 
