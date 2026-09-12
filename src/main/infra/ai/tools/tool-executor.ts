@@ -328,7 +328,9 @@ export class ToolExecutor implements IToolExecutor {
 
   /**
    * 权限闸（2026-09-12 从 execute 提取）：阶段 4（deny / plan 双保险）与
-   * 阶段 4.1（用户审批状态机）的独立状态机。
+   * 阶段 4.1（用户审批状态机）的独立状态机。2026-09-12 二次拆分：
+   * 'ask' 审批分支独立为 resolveAskGate、失败分类独立为 classifyApprovalFailure，
+   * 使每个函数的认知复杂度回到门槛内（此前整体 20）。
    *
    * 出口（五种终止 + 一种放行）：
    * - 'deny'：审批模式拒绝（plan 模式只读约束 / 模式分级决策）
@@ -351,7 +353,20 @@ export class ToolExecutor implements IToolExecutor {
     readonly ctx: ToolContext;
     readonly webContents: WebContents | undefined;
   }): Promise<AgentToolResultPayload | null> {
-    const { decision, tool, toolName, toolCallId, input, ctx, webContents } = args;
+    const { decision, toolName, toolCallId, ctx, webContents } = args;
+    /** 构建 + 推送 + 返回终止结果（本闸各失败出口共用的出口协议） */
+    const fail = (title: string, code: string, message: string): AgentToolResultPayload => {
+      const result = this.buildErrorResult(
+        ctx.sessionId,
+        toolCallId,
+        toolName,
+        title,
+        code,
+        message,
+      );
+      this.sendToolResult(webContents, result);
+      return result;
+    };
 
     // ── 4. deny（或 plan 模式下的 ask）：直接拒绝 ──
     if (decision.permission === 'deny' || (decision.permission === 'ask' && ctx.mode === 'plan')) {
@@ -359,87 +374,118 @@ export class ToolExecutor implements IToolExecutor {
         { toolName, toolCallId, sessionId: ctx.sessionId, permission: decision.permission },
         '工具调用被拒绝（只读/模式约束）',
       );
-      const result = this.buildErrorResult(
-        ctx.sessionId,
-        toolCallId,
-        toolName,
+      return fail(
         '权限拒绝',
         ErrorCode.TOOL_PERMISSION_DENIED,
         `工具调用被拒绝：${toolName}（审批模式 ${decision.permission}；plan 模式只读，如需执行请切换到 build 模式）`,
       );
-      this.sendToolResult(webContents, result);
-      return result;
     }
 
-    // ── 4.1 ask：推送审批请求并等待用户响应 ──
+    // ── 4.1 ask：推送审批请求并等待用户响应（审批状态机见 resolveAskGate）──
     if (decision.permission === 'ask') {
-      const approvalId = generateApprovalId();
-      const approvalPayload = {
-        sessionId: ctx.sessionId,
-        approvalId,
+      const outcome = await this.resolveAskGate(args);
+      if (outcome !== null) {
+        return outcome;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 审批失败原因分类（resolveAskGate 的 catch 出口）
+   *
+   * 三类出口：用户中断（abort 信号或 TOOL_ABORTED 错误）→ TOOL_ABORTED；
+   * 其余（审批超时 / webContents 销毁 / IPC 异常）→ TOOL_PERMISSION_DENIED。
+   *
+   * @returns 终止结果应使用的错误码与用户可见消息
+   */
+  private classifyApprovalFailure(
+    error: unknown,
+    abortSignal: AbortSignal,
+  ): { code: string; message: string } {
+    const isAborted =
+      abortSignal.aborted || (error instanceof AppError && error.code === ErrorCode.TOOL_ABORTED);
+    if (isAborted) {
+      return { code: ErrorCode.TOOL_ABORTED, message: '工具执行已被中断' };
+    }
+    const message = error instanceof Error ? error.message : '审批请求失败';
+    return { code: ErrorCode.TOOL_PERMISSION_DENIED, message };
+  }
+
+  /**
+   * 权限闸 4.1：'ask' 分支——推送审批请求并等待用户响应
+   *
+   * 出口：
+   * - 用户批准 → recordUserAllowance + 返回 null（放行）
+   * - 用户拒绝 → recordUserDenial + 终止结果
+   * - 审批超时 / webContents 销毁 / 用户中断 → 终止结果（经 classifyApprovalFailure 分类）
+   *
+   * @returns null = 放行；否则返回终止结果
+   */
+  private async resolveAskGate(args: {
+    readonly decision: PermissionDecision;
+    readonly tool: Tool;
+    readonly toolName: string;
+    readonly toolCallId: string;
+    readonly input: unknown;
+    readonly ctx: ToolContext;
+    readonly webContents: WebContents | undefined;
+  }): Promise<AgentToolResultPayload | null> {
+    const { decision, tool, toolName, toolCallId, input, ctx, webContents } = args;
+    /** 构建 + 推送 + 返回终止结果（本闸各失败出口共用的出口协议） */
+    const fail = (title: string, code: string, message: string): AgentToolResultPayload => {
+      const result = this.buildErrorResult(
+        ctx.sessionId,
         toolCallId,
         toolName,
+        title,
+        code,
+        message,
+      );
+      this.sendToolResult(webContents, result);
+      return result;
+    };
+
+    const approvalId = generateApprovalId();
+    const approvalPayload = {
+      sessionId: ctx.sessionId,
+      approvalId,
+      toolCallId,
+      toolName,
+      input,
+      description: decision.description,
+    };
+
+    let approved: boolean;
+    try {
+      // 传入 ctx.abortSignal：用户在审批等待期间点"停止"时立即 reject（H4 修复）
+      approved = await this.permissionService.requestApproval(
+        approvalPayload,
+        tool,
         input,
-        description: decision.description,
-      };
-
-      let approved: boolean;
-      try {
-        // 传入 ctx.abortSignal：用户在审批等待期间点"停止"时立即 reject（H4 修复）
-        approved = await this.permissionService.requestApproval(
-          approvalPayload,
-          tool,
-          input,
-          webContents,
-          ctx.abortSignal,
-        );
-      } catch (error: unknown) {
-        // 审批超时 / webContents 销毁 / 用户中断
-        const isAborted =
-          ctx.abortSignal.aborted ||
-          (error instanceof AppError && error.code === ErrorCode.TOOL_ABORTED);
-        const errorCode = isAborted ? ErrorCode.TOOL_ABORTED : ErrorCode.TOOL_PERMISSION_DENIED;
-        const errorMessage = isAborted
-          ? '工具执行已被中断'
-          : error instanceof Error
-            ? error.message
-            : '审批请求失败';
-        logger.warn({ toolName, toolCallId, approvalId, errorCode, error }, '审批请求失败');
-        const result = this.buildErrorResult(
-          ctx.sessionId,
-          toolCallId,
-          toolName,
-          '审批失败',
-          errorCode,
-          errorMessage,
-        );
-        this.sendToolResult(webContents, result);
-        return result;
-      }
-
-      if (!approved) {
-        // 用户拒绝
-        logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
-        // A4 接线：拒绝计入 PermissionService 拒绝统计（auto 模式连续拒绝
-        // 降级手动确认的数据源——此前记录方法存在但无人调用，机制死亡）
-        this.permissionService.recordUserDenial();
-        const result = this.buildErrorResult(
-          ctx.sessionId,
-          toolCallId,
-          toolName,
-          '用户拒绝',
-          ErrorCode.TOOL_PERMISSION_DENIED,
-          `用户拒绝执行：${toolName}`,
-        );
-        this.sendToolResult(webContents, result);
-        return result;
-      }
-
-      logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
-      // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
-      this.permissionService.recordUserAllowance();
+        webContents,
+        ctx.abortSignal,
+      );
+    } catch (error: unknown) {
+      // 审批超时 / webContents 销毁 / 用户中断
+      const { code, message } = this.classifyApprovalFailure(error, ctx.abortSignal);
+      logger.warn({ toolName, toolCallId, approvalId, errorCode: code, error }, '审批请求失败');
+      return fail('审批失败', code, message);
     }
 
+    if (!approved) {
+      // 用户拒绝
+      logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
+      // A4 接线：拒绝计入 PermissionService 拒绝统计（auto 模式连续拒绝
+      // 降级手动确认的数据源——此前记录方法存在但无人调用，机制死亡）
+      this.permissionService.recordUserDenial();
+      return fail('用户拒绝', ErrorCode.TOOL_PERMISSION_DENIED, `用户拒绝执行：${toolName}`);
+    }
+
+    logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
+    // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
+    this.permissionService.recordUserAllowance();
     return null;
   }
 
