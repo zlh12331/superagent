@@ -29,6 +29,7 @@ import {
 import { detectSuggestTrigger } from './suggest-trigger';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 import { useComposerInput } from './use-composer-input';
+import { useMentionFiles } from './use-mention-files';
 import { useVimMode } from './use-vim-mode';
 
 /** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
@@ -186,49 +187,8 @@ export function ChatInput({
   const filteredSuggestions: readonly SlashSuggestion[] =
     activeTrigger === 'slash' && activeQuery !== null ? filterSlashSuggestions(activeQuery) : [];
 
-  // mention 建议：search.glob 按查询过滤（200ms 防抖，对齐参考项目防抖约定）
-  const [mentionFiles, setMentionFiles] = useState<string[]>([]);
-  const mentionSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (mentionSearchTimerRef.current !== null) {
-      clearTimeout(mentionSearchTimerRef.current);
-      mentionSearchTimerRef.current = null;
-    }
-    if (activeTrigger !== 'mention' || workingDir === undefined) {
-      setMentionFiles([]);
-      return;
-    }
-    // 防抖后调 glob（浏览器模式无 window.api 时静默清空）
-    mentionSearchTimerRef.current = setTimeout(() => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        setMentionFiles([]);
-        return;
-      }
-      void window.api.search
-        .glob({
-          pattern: `**/*${activeQuery ?? ''}*`,
-          path: workingDir,
-          includeHidden: false,
-          maxResults: 10,
-        })
-        .then((res) => {
-          try {
-            setMentionFiles([...unwrap(res).files]);
-          } catch {
-            // error 响应：清空候选（与下方网络异常同策略）
-            setMentionFiles([]);
-          }
-        })
-        .catch(() => {
-          setMentionFiles([]);
-        });
-    }, 200);
-    return () => {
-      if (mentionSearchTimerRef.current !== null) {
-        clearTimeout(mentionSearchTimerRef.current);
-      }
-    };
-  }, [activeTrigger, activeQuery, workingDir]);
+  // mention 建议：search.glob 按查询过滤（200ms 防抖与生命周期见 use-mention-files.ts）
+  const mentionFiles = useMentionFiles(activeTrigger, activeQuery, workingDir);
 
   const mentionOpen = activeTrigger === 'mention' && mentionFiles.length > 0;
   const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
