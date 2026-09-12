@@ -33,7 +33,7 @@ import { withSpan } from '../../telemetry/otel';
 import { HookEventName, hookRegistry } from '../agent/hook-registry';
 import type { IPermissionService, PermissionDecision } from './permission-service';
 import { generateApprovalId } from './permission-service';
-import type { ToolContext, ToolResult } from './tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 import type { IToolRegistry } from './tool-registry';
 
 /**
@@ -244,97 +244,19 @@ export class ToolExecutor implements IToolExecutor {
           return result;
         }
 
-        // 4. 权限决策处理
-        //    - 'deny'：审批模式拒绝（plan 模式只读约束 / 模式分级决策）
-        //    - 'ask'：请求用户审批（plan 模式会话级双保险：直接拒绝写操作，不弹审批框——
-        //      保证 plan 阶段零副作用，这是 OpenCode 风格 plan/apply 分离的核心约束）
-        if (
-          decision.permission === 'deny' ||
-          (decision.permission === 'ask' && ctx.mode === 'plan')
-        ) {
-          logger.info(
-            { toolName, toolCallId, sessionId: ctx.sessionId, permission: decision.permission },
-            '工具调用被拒绝（只读/模式约束）',
-          );
-          const result = this.buildErrorResult(
-            ctx.sessionId,
-            toolCallId,
-            toolName,
-            '权限拒绝',
-            ErrorCode.TOOL_PERMISSION_DENIED,
-            `工具调用被拒绝：${toolName}（审批模式 ${decision.permission}；plan 模式只读，如需执行请切换到 build 模式）`,
-          );
-          this.sendToolResult(webContents, result);
-          return result;
-        }
-
-        // 4.1 需审批的工具：推送审批请求并等待用户响应
-        if (decision.permission === 'ask') {
-          const approvalId = generateApprovalId();
-          const approvalPayload = {
-            sessionId: ctx.sessionId,
-            approvalId,
-            toolCallId,
-            toolName,
-            input,
-            description: decision.description,
-          };
-
-          let approved: boolean;
-          try {
-            // 传入 ctx.abortSignal：用户在审批等待期间点"停止"时立即 reject（H4 修复）
-            approved = await this.permissionService.requestApproval(
-              approvalPayload,
-              tool,
-              input,
-              webContents,
-              ctx.abortSignal,
-            );
-          } catch (error: unknown) {
-            // 审批超时 / webContents 销毁 / 用户中断
-            const isAborted =
-              ctx.abortSignal.aborted ||
-              (error instanceof AppError && error.code === ErrorCode.TOOL_ABORTED);
-            const errorCode = isAborted ? ErrorCode.TOOL_ABORTED : ErrorCode.TOOL_PERMISSION_DENIED;
-            const errorMessage = isAborted
-              ? '工具执行已被中断'
-              : error instanceof Error
-                ? error.message
-                : '审批请求失败';
-            logger.warn({ toolName, toolCallId, approvalId, errorCode, error }, '审批请求失败');
-            const result = this.buildErrorResult(
-              ctx.sessionId,
-              toolCallId,
-              toolName,
-              '审批失败',
-              errorCode,
-              errorMessage,
-            );
-            this.sendToolResult(webContents, result);
-            return result;
-          }
-
-          if (!approved) {
-            // 用户拒绝
-            logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
-            // A4 接线：拒绝计入 PermissionService 拒绝统计（auto 模式连续拒绝
-            // 降级手动确认的数据源——此前记录方法存在但无人调用，机制死亡）
-            this.permissionService.recordUserDenial();
-            const result = this.buildErrorResult(
-              ctx.sessionId,
-              toolCallId,
-              toolName,
-              '用户拒绝',
-              ErrorCode.TOOL_PERMISSION_DENIED,
-              `用户拒绝执行：${toolName}`,
-            );
-            this.sendToolResult(webContents, result);
-            return result;
-          }
-
-          logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
-          // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
-          this.permissionService.recordUserAllowance();
+        // 4. 权限闸：deny 直接拒绝 / ask 推审批等用户响应（批准/拒绝/超时/中断/销毁五种出口）。
+        //    状态机细节与不变量注释见 resolvePermissionGate；返回非 null 即终止本次执行。
+        const gate = await this.resolvePermissionGate({
+          decision,
+          tool,
+          toolName,
+          toolCallId,
+          input,
+          ctx,
+          webContents,
+        });
+        if (gate !== null) {
+          return gate;
         }
 
         // 5. 检查中断信号（审批等待期间用户可能中断了对话）
@@ -402,6 +324,123 @@ export class ToolExecutor implements IToolExecutor {
         }
       },
     );
+  }
+
+  /**
+   * 权限闸（2026-09-12 从 execute 提取）：阶段 4（deny / plan 双保险）与
+   * 阶段 4.1（用户审批状态机）的独立状态机。
+   *
+   * 出口（五种终止 + 一种放行）：
+   * - 'deny'：审批模式拒绝（plan 模式只读约束 / 模式分级决策）
+   * - plan 模式下的 'ask'：会话级双保险——直接拒绝写操作，不弹审批框，
+   *   保证 plan 阶段零副作用（OpenCode 风格 plan/apply 分离的核心约束）
+   * - 'ask' + 审批异常：超时 / webContents 销毁 / 用户中断（H4：传入
+   *   ctx.abortSignal，用户在等待期间点"停止"时立即 reject）
+   * - 'ask' + 用户拒绝：计拒绝统计（A4：auto 模式连续拒绝降级手动确认的数据源）
+   * - 'ask' + 用户批准：计允许一次，放行
+   * - 'auto'：不进入审批分支，直接放行
+   *
+   * @returns null = 放行（调用方继续执行工具）；否则返回终止结果（调用方直接返回它）
+   */
+  private async resolvePermissionGate(args: {
+    readonly decision: PermissionDecision;
+    readonly tool: Tool;
+    readonly toolName: string;
+    readonly toolCallId: string;
+    readonly input: unknown;
+    readonly ctx: ToolContext;
+    readonly webContents: WebContents | undefined;
+  }): Promise<AgentToolResultPayload | null> {
+    const { decision, tool, toolName, toolCallId, input, ctx, webContents } = args;
+
+    // ── 4. deny（或 plan 模式下的 ask）：直接拒绝 ──
+    if (decision.permission === 'deny' || (decision.permission === 'ask' && ctx.mode === 'plan')) {
+      logger.info(
+        { toolName, toolCallId, sessionId: ctx.sessionId, permission: decision.permission },
+        '工具调用被拒绝（只读/模式约束）',
+      );
+      const result = this.buildErrorResult(
+        ctx.sessionId,
+        toolCallId,
+        toolName,
+        '权限拒绝',
+        ErrorCode.TOOL_PERMISSION_DENIED,
+        `工具调用被拒绝：${toolName}（审批模式 ${decision.permission}；plan 模式只读，如需执行请切换到 build 模式）`,
+      );
+      this.sendToolResult(webContents, result);
+      return result;
+    }
+
+    // ── 4.1 ask：推送审批请求并等待用户响应 ──
+    if (decision.permission === 'ask') {
+      const approvalId = generateApprovalId();
+      const approvalPayload = {
+        sessionId: ctx.sessionId,
+        approvalId,
+        toolCallId,
+        toolName,
+        input,
+        description: decision.description,
+      };
+
+      let approved: boolean;
+      try {
+        // 传入 ctx.abortSignal：用户在审批等待期间点"停止"时立即 reject（H4 修复）
+        approved = await this.permissionService.requestApproval(
+          approvalPayload,
+          tool,
+          input,
+          webContents,
+          ctx.abortSignal,
+        );
+      } catch (error: unknown) {
+        // 审批超时 / webContents 销毁 / 用户中断
+        const isAborted =
+          ctx.abortSignal.aborted ||
+          (error instanceof AppError && error.code === ErrorCode.TOOL_ABORTED);
+        const errorCode = isAborted ? ErrorCode.TOOL_ABORTED : ErrorCode.TOOL_PERMISSION_DENIED;
+        const errorMessage = isAborted
+          ? '工具执行已被中断'
+          : error instanceof Error
+            ? error.message
+            : '审批请求失败';
+        logger.warn({ toolName, toolCallId, approvalId, errorCode, error }, '审批请求失败');
+        const result = this.buildErrorResult(
+          ctx.sessionId,
+          toolCallId,
+          toolName,
+          '审批失败',
+          errorCode,
+          errorMessage,
+        );
+        this.sendToolResult(webContents, result);
+        return result;
+      }
+
+      if (!approved) {
+        // 用户拒绝
+        logger.info({ toolName, toolCallId, approvalId }, '用户拒绝工具调用');
+        // A4 接线：拒绝计入 PermissionService 拒绝统计（auto 模式连续拒绝
+        // 降级手动确认的数据源——此前记录方法存在但无人调用，机制死亡）
+        this.permissionService.recordUserDenial();
+        const result = this.buildErrorResult(
+          ctx.sessionId,
+          toolCallId,
+          toolName,
+          '用户拒绝',
+          ErrorCode.TOOL_PERMISSION_DENIED,
+          `用户拒绝执行：${toolName}`,
+        );
+        this.sendToolResult(webContents, result);
+        return result;
+      }
+
+      logger.info({ toolName, toolCallId, approvalId }, '用户批准工具调用');
+      // A4 接线：批准计允许一次，抵消此前累计的拒绝计数
+      this.permissionService.recordUserAllowance();
+    }
+
+    return null;
   }
 
   /**
