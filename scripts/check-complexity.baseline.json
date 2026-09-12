@@ -5,7 +5,7 @@
   },
   "src/main/infra/ai/agent/agent-service.ts": {
     "count": 2,
-    "max": 63
+    "max": 37
   },
   "src/main/infra/ai/agent/context-compression.ts": {
     "count": 1,
@@ -49,7 +49,7 @@
   },
   "src/main/infra/ai/tools/tool-executor.ts": {
     "count": 1,
-    "max": 42
+    "max": 17
   },
   "src/main/infra/ai/tools/url-guard.ts": {
     "count": 1,
@@ -160,8 +160,8 @@
     "max": 25
   },
   "src/renderer/components/layout/Sidebar.tsx": {
-    "count": 2,
-    "max": 19
+    "count": 1,
+    "max": 16
   },
   "src/renderer/components/settings/sections/about-section.tsx": {
     "count": 1,

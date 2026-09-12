@@ -3,7 +3,7 @@
     "params": 8
   },
   "src/main/infra/ai/agent/agent-service.ts#streamToWebContents": {
-    "body": 372
+    "body": 285
   },
   "src/main/infra/ai/tools/index.ts#registerBuiltinTools": {
     "params": 10
@@ -21,7 +21,7 @@
     "params": 6
   },
   "src/main/infra/ai/tools/tool-executor.ts#execute": {
-    "body": 205,
+    "body": 140,
     "params": 5
   },
   "src/main/infra/file/file-service.ts#listRecursive": {
@@ -40,7 +40,7 @@
     "body": 180
   },
   "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
-    "body": 376
+    "body": 336
   },
   "src/renderer/components/chat/ChatMessageList.tsx#ChatMessageList": {
     "body": 213
@@ -85,7 +85,7 @@
     "body": 242
   },
   "src/renderer/components/layout/Sidebar.tsx#Sidebar": {
-    "body": 341
+    "body": 307
   },
   "src/renderer/components/layout/right-panel-panes.tsx#DiffPane": {
     "body": 104
