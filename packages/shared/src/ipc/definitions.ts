@@ -43,6 +43,15 @@ import {
   ExportDiagnosticsResSchema,
 } from '../schemas/app';
 import {
+  BrowserConfigureReqSchema,
+  type BrowserLoadFailedPayload,
+  BrowserLoadFailedPayloadSchema,
+  BrowserNavigateReqSchema,
+  BrowserSetViewportReqSchema,
+  type BrowserState,
+  BrowserStateSchema,
+} from '../schemas/browser';
+import {
   OpenDevToolsReqSchema,
   type OpenDevToolsRes,
   OpenDevToolsResSchema,
@@ -612,6 +621,43 @@ export const IPC_DEFINITIONS = {
   search: {
     grep: withSchema(IPC_META.search.grep, GrepReqSchema, {} as GrepRes, GrepResSchema),
     glob: withSchema(IPC_META.search.glob, GlobReqSchema, {} as GlobRes, GlobResSchema),
+  },
+
+  browser: {
+    navigate: withSchema(
+      IPC_META.browser.navigate,
+      BrowserNavigateReqSchema,
+      {} as { ok: boolean },
+      OkResSchema,
+    ),
+    back: withSchema(IPC_META.browser.back, null, {} as { ok: boolean }, OkResSchema),
+    forward: withSchema(IPC_META.browser.forward, null, {} as { ok: boolean }, OkResSchema),
+    reload: withSchema(IPC_META.browser.reload, null, {} as { ok: boolean }, OkResSchema),
+    setViewport: withSchema(
+      IPC_META.browser.setViewport,
+      BrowserSetViewportReqSchema,
+      {} as { ok: boolean },
+      OkResSchema,
+    ),
+    configure: withSchema(
+      IPC_META.browser.configure,
+      BrowserConfigureReqSchema,
+      {} as { ok: boolean },
+      OkResSchema,
+    ),
+    getState: withSchema(IPC_META.browser.getState, null, {} as BrowserState, BrowserStateSchema),
+    // 状态推送（URL/标题/加载中/历史能力）：主进程 webContents 事件统一收敛后广播
+    subscribeState: withPayload(
+      IPC_META.browser.subscribeState,
+      {} as BrowserState,
+      BrowserStateSchema,
+    ),
+    // 主框架加载失败推送（Chromium 原始错误码，渲染层显示内联错误态）
+    subscribeLoadFailed: withPayload(
+      IPC_META.browser.subscribeLoadFailed,
+      {} as BrowserLoadFailedPayload,
+      BrowserLoadFailedPayloadSchema,
+    ),
   },
 
   terminal: {

@@ -54,7 +54,7 @@ scripts/         → 脚手架与工具（scaffold / check-* / build-tokens / se
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
-- 主进程是 Service Container 模式（`service-container.ts`），集中管理 19 个 lazy accessor（File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent，2026-09-05 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖。ConcurrencyGate 不是 accessor，是容器上直接初始化的 `readonly` 字段
+- 主进程是 Service Container 模式（`service-container.ts`），集中管理 20 个 lazy accessor（File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent/Browser，2026-09-12 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖。ConcurrencyGate 不是 accessor，是容器上直接初始化的 `readonly` 字段
 - **agentAskService 与 cronService 都不是容器 accessor**，以模块级单例 import 引入（`service-container.ts:55,63`）；cronService 由 AgentService accessor 内部 `start()` + `onFire` 订阅（fire 触发 agent 回合），dispose 链中 `cronService.stop()` 排第一位（先于 AgentService 收尾）
 - 桌面系统集成在 main 根目录：`tray.ts`（托盘）/ `deep-link.ts`（`code-agent://` 协议，scheme 常量与 electron-builder.yml 的 protocol 配置必须保持一致）/ `notification.ts`（回合通知）/ `theme-linkage`（系统主题联动，独立模块）
 - IPC 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，渲染层用 `window.api.*` 调用
@@ -114,6 +114,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。存量编译器 bail-out（try/finally 违规）已于 455c476 清零，新代码禁止引入。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
 - **根级 `*.config.ts` 已纳入 typecheck 但 include 是枚举式**（根 `tsconfig.json` = `files: []` + 6 个 project references，其中 `tsconfig.configs.json` 显式枚举 electron.vite.config.ts / vite.web.config.ts / drizzle.config.ts / i18next.config.ts / vitest.workspace.ts / commitlint.config.js）⇒ **新增根级配置文件必须手动加进 `tsconfig.configs.json` 的 include**，否则 typecheck 查不出它的类型错误/excess property；改配置仍需 `pnpm exec vite build` 实测行为
 - **渲染层动效统一走 MotionVault**（`src/renderer/lib/motion/`：transitions/variants 集中定义），不要散写 CSS transition/手搓动画；shiki 语言按需加载（`loadLanguage`），受首载体积门槛约束
+- **网页预览绝不能回渲染层 iframe**：主进程对 defaultSession 统一注入 CSP/X-Frame-Options（`security/csp.ts` + `index.ts`），iframe 加载外站会被三层拦截（frame-src 回退 'self' / XFO 注入远端响应 / CSP 污染远端文档）。右面板浏览器走 `WebContentsView` + 独立内存分区 `browser-preview`（`infra/browser/preview-service.ts`，容器第 20 个 accessor）——新增网页承载能力必须用进程外视图 + 独立 session 分区
 
 ## 渲染层写法标准（2026-09 一致性收敛）
 

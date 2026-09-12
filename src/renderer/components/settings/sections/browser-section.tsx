@@ -1,10 +1,10 @@
 // src/renderer/components/settings/sections/browser-section.tsx
-// 浏览器 pane（右面板「浏览器」tab 的 iframe 预览工具设置）
+// 浏览器 pane（右面板「浏览器」tab 的进程外预览设置）
 // ──────────────────────────────────────────────────────────────
-// 三项配置写穿透 SQLite app_settings 的 browser 分组（settings-store），
-// 由 components/dev/browser-pane.tsx 真实消费：
+// 三项配置写穿透 SQLite app_settings 的 browser 分组（settings-store）：
 // - defaultDevicePreset / defaultZoom：pane 挂载初值（工具栏内临时改动不写回）
-// - strictSandbox：安全策略，每次渲染生效（切换即重新挂载预览以立刻生效）
+// - strictSandbox：安全策略，切换即经 browser:configure 通知主进程
+//   重建 WebContentsView（禁用预览页 JS），服务侧值一致时幂等 no-op
 // 预设/缩放文案复用 panel.browserDevice* 既有键，避免同一概念两套译名。
 // ──────────────────────────────────────────────────────────────
 
@@ -47,6 +47,12 @@ export function BrowserSection(): ReactElement {
     }
   };
 
+  /** 严格模式切换：写穿透设置 + 通知主进程重建预览视图（即时生效） */
+  const handleStrictChange = (checked: boolean): void => {
+    updateBrowser({ strictSandbox: checked });
+    void window.api.browser.configure({ strictSandbox: checked }).catch(() => {});
+  };
+
   return (
     <div className="flex flex-col gap-3 pt-2">
       <div className="flex items-center gap-2">
@@ -86,7 +92,7 @@ export function BrowserSection(): ReactElement {
         name={t('settings.browser.strictSandbox')}
         description={t('settings.browser.strictSandboxHint')}
         checked={browser.strictSandbox}
-        onChange={(checked) => updateBrowser({ strictSandbox: checked })}
+        onChange={handleStrictChange}
       />
     </div>
   );

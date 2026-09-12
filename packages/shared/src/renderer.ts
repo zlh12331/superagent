@@ -42,6 +42,7 @@ export type * from './schemas/agent';
 export type * from './schemas/agent-ask';
 export type * from './schemas/agent-events';
 export type * from './schemas/app';
+export type * from './schemas/browser';
 export type * from './schemas/chat';
 export type * from './schemas/codebase';
 export type * from './schemas/devtools';

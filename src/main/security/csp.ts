@@ -10,6 +10,13 @@
 // - 通过 session.defaultSession.webRequest.onHeadersReceived 注入响应头
 // - 渲染层 HTML 保留 CSP meta 作为纵深防御兜底（onHeadersReceived 未拦截时生效）
 //
+// ⚠️ 作用域边界：本策略只覆盖 defaultSession。右面板「浏览器」预览走
+// WebContentsView + 独立内存分区 'browser-preview'（src/main/infra/browser/
+// preview-service.ts），刻意不在本注入作用域内——若把预览页放进 defaultSession
+// （如改回 iframe），会被下方策略三层拦截（无 frame-src 回退 default-src 'self'
+// + onHeadersReceived 给远端响应注入 X-Frame-Options/CSP），生产环境无法加载
+// 任何真实网页（2026-09-12 已实测并以此重构）。
+//
 // 参考：
 // - Electron Security Checklist: https://www.electronjs.org/docs/latest/tutorial/security
 // - CSP Level 3: https://www.w3.org/TR/CSP3/

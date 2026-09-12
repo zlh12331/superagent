@@ -81,6 +81,20 @@ export const IPC_META = {
     glob: request('search:glob'),
   },
 
+  browser: {
+    navigate: request('browser:navigate'),
+    back: request('browser:back'),
+    forward: request('browser:forward'),
+    reload: request('browser:reload'),
+    // 视口同步：渲染层测量占位区后推送矩形/缩放/可见性（高频 invoke，页面保活）
+    setViewport: request('browser:setViewport'),
+    // 严格模式（禁用预览页 JS）切换：与当前值不同时重建视图
+    configure: request('browser:configure'),
+    getState: request('browser:getState'),
+    subscribeState: event('browser:event:state'),
+    subscribeLoadFailed: event('browser:event:loadFailed'),
+  },
+
   terminal: {
     create: request('terminal:create'),
     input: request('terminal:input'),

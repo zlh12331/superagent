@@ -2,11 +2,14 @@
 // dev/common 域批次6 缺口补全：browser-pane 导航与设备预设 + UnifiedDiffView hunk 渲染
 //
 // 测试要点：
-// 1. browser-pane：空状态/URL 规范化/Enter 导航/历史后退前进/刷新/设备预设切换/
-//    宽高输入禁用/onLoad 结束加载
+// 1. browser-pane（WebContentsView 重写版）：空状态/URL 规范化/Enter 导航/
+//    状态事件驱动 UI（地址栏/导航按钮/加载条）/视口推送/严格沙箱 configure/
+//    设备预设切换/宽高输入禁用
+//    （jsdom 无原生视图：主进程侧交互全部经 window.api.browser fake 断言）
 // 2. UnifiedDiffView：空 diff 提示/单 hunk 渲染/多 hunk/主题包装
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { BrowserState } from '@code-agent/shared/renderer';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { applySettingsSnapshot } from '@/stores/persistent/settings-store';
@@ -25,87 +28,161 @@ const DIFF_TWO_HUNKS = `${DIFF_SAMPLE}
  old
 +new`;
 
+const EMPTY_STATE: BrowserState = {
+  url: null,
+  title: null,
+  isLoading: false,
+  canGoBack: false,
+  canGoForward: false,
+};
+
 describe('dev/common 批次6 缺口补全', () => {
   beforeEach(() => {
     localStorage.clear();
     // 设置全量重置为默认（browser 分组由各用例注入初值，避免用例间串味）
     applySettingsSnapshot({});
+    // fake window.api.browser：jsdom 无主进程原生视图，主进程交互全部经 fake 断言
+    stateSubs = new Set();
+    failSubs = new Set();
+    currentState = { ...EMPTY_STATE };
+    navigateMock = vi.fn(async () => ({ data: { ok: true } }));
+    setViewportMock = vi.fn(async () => ({ data: { ok: true } }));
+    configureMock = vi.fn(async () => ({ data: { ok: true } }));
+    window.api.browser = {
+      navigate: navigateMock,
+      back: vi.fn(async () => ({ data: { ok: true } })),
+      forward: vi.fn(async () => ({ data: { ok: true } })),
+      reload: vi.fn(async () => ({ data: { ok: true } })),
+      setViewport: setViewportMock,
+      configure: configureMock,
+      getState: vi.fn(async () => ({ data: currentState })),
+      subscribeState: vi.fn((cb: (p: BrowserState) => void) => {
+        stateSubs.add(cb);
+        return () => {
+          stateSubs.delete(cb);
+        };
+      }),
+      subscribeLoadFailed: vi.fn(
+        (cb: (p: { errorCode: number; errorDescription: string; url: string }) => void) => {
+          failSubs.add(cb);
+          return () => {
+            failSubs.delete(cb);
+          };
+        },
+      ),
+    } as never;
   });
 
   describe('browser-pane', () => {
     it('空状态：未加载 URL 显示提示', () => {
       render(<BrowserPane />);
       expect(screen.getByText(/输入地址开始浏览/)).toBeDefined();
-      expect(screen.queryByTitle('浏览器预览')).toBeNull();
     });
 
-    it('地址栏 Enter：规范化 URL（自动补 https://）并加载 iframe', () => {
+    it('地址栏 Enter：规范化 URL（自动补 https://）后交给主进程', async () => {
       render(<BrowserPane />);
       fireEvent.change(screen.getByLabelText('输入网址，回车打开…'), {
         target: { value: 'example.com' },
       });
       fireEvent.keyDown(screen.getByLabelText('输入网址，回车打开…'), { key: 'Enter' });
-      const iframe = screen.getByTitle('浏览器预览') as HTMLIFrameElement;
-      expect(iframe.src).toContain('https://example.com/');
+      await waitFor(() =>
+        expect(navigateMock).toHaveBeenCalledWith({ url: 'https://example.com' }),
+      );
     });
 
-    it('已带协议 URL：保持原样', () => {
+    it('已带协议 URL：原样传递', async () => {
       render(<BrowserPane />);
       const input = screen.getByLabelText('输入网址，回车打开…');
       fireEvent.change(input, { target: { value: 'http://localhost:3000' } });
       fireEvent.keyDown(input, { key: 'Enter' });
-      const iframe = screen.getByTitle('浏览器预览') as HTMLIFrameElement;
-      expect(iframe.src).toContain('http://localhost:3000/');
+      await waitFor(() =>
+        expect(navigateMock).toHaveBeenCalledWith({ url: 'http://localhost:3000' }),
+      );
     });
 
     it('空输入 Enter：不导航', () => {
       render(<BrowserPane />);
       fireEvent.keyDown(screen.getByLabelText('输入网址，回车打开…'), { key: 'Enter' });
-      expect(screen.queryByTitle('浏览器预览')).toBeNull();
+      expect(navigateMock).not.toHaveBeenCalled();
     });
 
-    it('初始状态：后退/前进按钮禁用', () => {
+    it('初始状态：后退/前进按钮禁用（canGoBack/canGoForward 来自状态推送）', () => {
       render(<BrowserPane />);
       expect(screen.getByLabelText('后退')).toBeDisabled();
       expect(screen.getByLabelText('前进')).toBeDisabled();
     });
 
-    it('历史导航：导航两次后后退恢复前一页、前进恢复下一页', () => {
+    it('状态推送：地址栏跟随导航 + 启用后退 + 显示加载条', async () => {
       render(<BrowserPane />);
-      const input = screen.getByLabelText('输入网址，回车打开…');
-      fireEvent.change(input, { target: { value: 'a.com' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      fireEvent.change(input, { target: { value: 'b.com' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-
-      // 后退：恢复 a.com
-      fireEvent.click(screen.getByLabelText('后退'));
-      expect((screen.getByTitle('浏览器预览') as HTMLIFrameElement).src).toContain('a.com');
-      // 后退到边界：按钮禁用
-      fireEvent.click(screen.getByLabelText('后退'));
-      expect(screen.getByLabelText('后退')).toBeDisabled();
-      // 前进：恢复 b.com
-      fireEvent.click(screen.getByLabelText('前进'));
-      expect((screen.getByTitle('浏览器预览') as HTMLIFrameElement).src).toContain('b.com');
+      await act(async () => {
+        for (const cb of stateSubs) {
+          cb({
+            url: 'https://a.com/',
+            title: 'A',
+            isLoading: true,
+            canGoBack: true,
+            canGoForward: false,
+          });
+        }
+      });
+      expect((screen.getByLabelText('输入网址，回车打开…') as HTMLInputElement).value).toBe(
+        'https://a.com/',
+      );
+      expect(screen.getByLabelText('后退')).toBeEnabled();
+      expect(screen.getByLabelText('前进')).toBeDisabled();
+      // 加载条位于占位区之外（原生视图会盖住占位区内的渲染层 UI）
+      expect(document.querySelector('[class*="br-loading-bar"]')).not.toBeNull();
     });
 
-    it('刷新：重新加载（100ms 后恢复 URL）', () => {
-      vi.useFakeTimers();
-      try {
-        render(<BrowserPane />);
-        const input = screen.getByLabelText('输入网址，回车打开…');
-        fireEvent.change(input, { target: { value: 'a.com' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
-        expect(screen.getByTitle('浏览器预览')).toBeDefined();
-        fireEvent.click(screen.getByLabelText('刷新'));
-        // 刷新中：iframe 卸载（loadedUrl=null）
-        expect(screen.queryByTitle('浏览器预览')).toBeNull();
-        act(() => {
-          vi.advanceTimersByTime(100);
-        });
-        expect(screen.getByTitle('浏览器预览')).toBeDefined();
-      } finally {
-        vi.useRealTimers();
+    it('状态推送：isLoading=false 清除加载条', async () => {
+      render(<BrowserPane />);
+      await act(async () => {
+        for (const cb of stateSubs) {
+          cb({ ...EMPTY_STATE, url: 'https://a.com/', isLoading: true, canGoBack: true });
+        }
+      });
+      expect(document.querySelector('[class*="br-loading-bar"]')).not.toBeNull();
+      await act(async () => {
+        for (const cb of stateSubs) {
+          cb({ ...EMPTY_STATE, url: 'https://a.com/', isLoading: false, canGoBack: true });
+        }
+      });
+      expect(document.querySelector('[class*="br-loading-bar"]')).toBeNull();
+    });
+
+    it('加载失败推送：订阅链路畅通（新一次加载清除失败状态，不阻塞后续渲染）', async () => {
+      render(<BrowserPane />);
+      await act(async () => {
+        for (const cb of failSubs) {
+          cb({ errorCode: -105, errorDescription: 'ERR_NAME_NOT_RESOLVED', url: 'https://x.com' });
+        }
+      });
+      await act(async () => {
+        for (const cb of stateSubs) {
+          cb({ ...EMPTY_STATE, url: 'https://x.com/', isLoading: true });
+        }
+      });
+      // 不抛错 + 加载条已出现（错误经 toast 反馈，UI 可继续交互）
+      expect(document.querySelector('[class*="br-loading-bar"]')).not.toBeNull();
+    });
+
+    it('视口同步：挂载即推送占位区（jsdom 无布局 → rect null 隐藏）', async () => {
+      const { unmount } = render(<BrowserPane />);
+      await waitFor(() => expect(setViewportMock).toHaveBeenCalled());
+      const first = setViewportMock.mock.calls[0]?.[0] as { rect: unknown; visible: boolean };
+      expect(first.rect).toBeNull();
+      expect(first.visible).toBe(false);
+      // 卸载（关闭浏览器 tab）→ 再推送一次隐藏（主进程侧页面保活）
+      const calls = setViewportMock.mock.calls.length;
+      unmount();
+      expect(setViewportMock.mock.calls.length).toBeGreaterThan(calls);
+    });
+
+    it('视口同步：未加载 URL 时 active=false（不创建/显示视图）', async () => {
+      render(<BrowserPane />);
+      await waitFor(() => expect(setViewportMock).toHaveBeenCalled());
+      for (const call of setViewportMock.mock.calls) {
+        expect((call[0] as { visible: boolean }).visible).toBe(false);
       }
     });
 
@@ -133,18 +210,6 @@ describe('dev/common 批次6 缺口补全', () => {
       expect(screen.getByLabelText('高度')).toBeDisabled();
     });
 
-    it('iframe onLoad：结束加载状态（loading 条消失）', () => {
-      render(<BrowserPane />);
-      const input = screen.getByLabelText('输入网址，回车打开…');
-      fireEvent.change(input, { target: { value: 'a.com' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      // 导航后 loading=true（加载条存在——用查询进度条元素验证 loading 状态切换）
-      const iframe = screen.getByTitle('浏览器预览') as HTMLIFrameElement;
-      fireEvent.load(iframe);
-      // onLoad 后不再抛错即可（loading 状态已结束）
-      expect(screen.getByTitle('浏览器预览')).toBeDefined();
-    });
-
     it('设置消费：默认预设与缩放作为 pane 初值', () => {
       applySettingsSnapshot({
         browser: { defaultDevicePreset: 'mobile', defaultZoom: 75 },
@@ -157,26 +222,15 @@ describe('dev/common 批次6 缺口补全', () => {
       expect((screen.getByLabelText('缩放') as HTMLSelectElement).value).toBe('75');
     });
 
-    it('设置消费：严格沙箱下 iframe 不放行 allow-scripts', () => {
+    it('设置消费：严格沙箱开启 → 挂载即通知主进程 configure', async () => {
       applySettingsSnapshot({ browser: { strictSandbox: true } });
       render(<BrowserPane />);
-      const input = screen.getByLabelText('输入网址，回车打开…');
-      fireEvent.change(input, { target: { value: 'a.com' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      const sandbox = (screen.getByTitle('浏览器预览') as HTMLIFrameElement).getAttribute(
-        'sandbox',
-      );
-      expect(sandbox).toBe('allow-same-origin allow-forms allow-popups');
+      await waitFor(() => expect(configureMock).toHaveBeenCalledWith({ strictSandbox: true }));
     });
 
-    it('默认策略：不改变既有行为（脚本仍放行）', () => {
+    it('默认策略：严格沙箱关闭 → configure(false) 幂等通知', async () => {
       render(<BrowserPane />);
-      const input = screen.getByLabelText('输入网址，回车打开…');
-      fireEvent.change(input, { target: { value: 'a.com' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-      expect(
-        (screen.getByTitle('浏览器预览') as HTMLIFrameElement).getAttribute('sandbox'),
-      ).toContain('allow-scripts');
+      await waitFor(() => expect(configureMock).toHaveBeenCalledWith({ strictSandbox: false }));
     });
   });
 
@@ -233,3 +287,12 @@ describe('dev/common 批次6 缺口补全', () => {
     });
   });
 });
+
+// ── browser-pane fake 基础设施（模块级变量，beforeEach 重置） ──
+
+let stateSubs = new Set<(p: BrowserState) => void>();
+let failSubs = new Set<(p: { errorCode: number; errorDescription: string; url: string }) => void>();
+let currentState: BrowserState = { ...EMPTY_STATE };
+let navigateMock: ReturnType<typeof vi.fn>;
+let setViewportMock: ReturnType<typeof vi.fn>;
+let configureMock: ReturnType<typeof vi.fn>;

@@ -37,6 +37,7 @@ import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { createAgentAskHandlers } from './ipc/agent-ask.handler';
 import { appHandlers } from './ipc/app.handler';
+import { createBrowserHandlers } from './ipc/browser.handler';
 import { devtoolsHandlers } from './ipc/devtools.handler';
 import { dialogHandlers } from './ipc/dialog.handler';
 import { createFileHandlers } from './ipc/file.handler';
@@ -380,6 +381,9 @@ app
       logs: logsHandlers,
       devtools: devtoolsHandlers,
       dialog: dialogHandlers,
+      browser: createBrowserHandlers({
+        browserPreviewService: serviceContainer.getBrowserPreviewService(),
+      }),
       update: createUpdateHandlers({ updateService: serviceContainer.getUpdateService() }),
     });
 
