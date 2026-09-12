@@ -1,0 +1,194 @@
+{
+  "src/main/infra/ai/agent-runtime/turn-runner.ts": {
+    "count": 1,
+    "max": 24
+  },
+  "src/main/infra/ai/agent/agent-service.ts": {
+    "count": 2,
+    "max": 63
+  },
+  "src/main/infra/ai/agent/context-compression.ts": {
+    "count": 1,
+    "max": 17
+  },
+  "src/main/infra/ai/agent/subagent-manager.ts": {
+    "count": 1,
+    "max": 23
+  },
+  "src/main/infra/ai/agent/workflow-service.ts": {
+    "count": 2,
+    "max": 28
+  },
+  "src/main/infra/ai/llm-client/llm-client.ts": {
+    "count": 1,
+    "max": 20
+  },
+  "src/main/infra/ai/mcp/mcp-service.ts": {
+    "count": 1,
+    "max": 20
+  },
+  "src/main/infra/ai/tools/codebase.tool.ts": {
+    "count": 1,
+    "max": 32
+  },
+  "src/main/infra/ai/tools/edit-file.tool.ts": {
+    "count": 1,
+    "max": 23
+  },
+  "src/main/infra/ai/tools/permission-service.ts": {
+    "count": 2,
+    "max": 34
+  },
+  "src/main/infra/ai/tools/run-command.tool.ts": {
+    "count": 2,
+    "max": 26
+  },
+  "src/main/infra/ai/tools/terminal.tool.ts": {
+    "count": 1,
+    "max": 37
+  },
+  "src/main/infra/ai/tools/tool-executor.ts": {
+    "count": 1,
+    "max": 42
+  },
+  "src/main/infra/ai/tools/url-guard.ts": {
+    "count": 1,
+    "max": 21
+  },
+  "src/main/infra/code-analysis/code-analyzer.ts": {
+    "count": 1,
+    "max": 29
+  },
+  "src/main/infra/im/adapters/qq-stream.ts": {
+    "count": 1,
+    "max": 29
+  },
+  "src/main/infra/im/im-agent-bridge.ts": {
+    "count": 1,
+    "max": 18
+  },
+  "src/main/infra/memory-hub/llm-config.ts": {
+    "count": 1,
+    "max": 16
+  },
+  "src/main/infra/memory-hub/memory-hub-service.ts": {
+    "count": 2,
+    "max": 29
+  },
+  "src/main/infra/search/search-service.ts": {
+    "count": 1,
+    "max": 19
+  },
+  "src/main/infra/storage/db.ts": {
+    "count": 2,
+    "max": 19
+  },
+  "src/main/infra/telemetry/memory-monitor.ts": {
+    "count": 1,
+    "max": 16
+  },
+  "src/main/infra/terminal/terminal-service.ts": {
+    "count": 1,
+    "max": 30
+  },
+  "src/main/ipc/agent.handler.ts": {
+    "count": 1,
+    "max": 16
+  },
+  "src/main/ipc/mcp.handler.ts": {
+    "count": 1,
+    "max": 16
+  },
+  "src/main/ipc/models.handler.ts": {
+    "count": 1,
+    "max": 25
+  },
+  "src/main/utils/wrap.ts": {
+    "count": 1,
+    "max": 19
+  },
+  "src/renderer/components/agent/approval-preview.tsx": {
+    "count": 2,
+    "max": 25
+  },
+  "src/renderer/components/agent/inline-approval-card.tsx": {
+    "count": 1,
+    "max": 18
+  },
+  "src/renderer/components/chat/ChatInput.tsx": {
+    "count": 2,
+    "max": 30
+  },
+  "src/renderer/components/chat/ChatMessageList.tsx": {
+    "count": 1,
+    "max": 28
+  },
+  "src/renderer/components/chat/history-parts.ts": {
+    "count": 2,
+    "max": 39
+  },
+  "src/renderer/components/common/CommandPalette.tsx": {
+    "count": 1,
+    "max": 33
+  },
+  "src/renderer/components/common/DialogHost.tsx": {
+    "count": 1,
+    "max": 17
+  },
+  "src/renderer/components/common/ModelSelector.tsx": {
+    "count": 1,
+    "max": 18
+  },
+  "src/renderer/components/dev/LogsPanel.tsx": {
+    "count": 1,
+    "max": 18
+  },
+  "src/renderer/components/file-tree/FileTreeNode.tsx": {
+    "count": 1,
+    "max": 16
+  },
+  "src/renderer/components/file-tree/FileViewerPanel.tsx": {
+    "count": 1,
+    "max": 46
+  },
+  "src/renderer/components/git/GitPanel.tsx": {
+    "count": 1,
+    "max": 16
+  },
+  "src/renderer/components/layout/AppShell.tsx": {
+    "count": 1,
+    "max": 25
+  },
+  "src/renderer/components/layout/Sidebar.tsx": {
+    "count": 2,
+    "max": 19
+  },
+  "src/renderer/components/settings/sections/about-section.tsx": {
+    "count": 1,
+    "max": 44
+  },
+  "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx": {
+    "count": 1,
+    "max": 40
+  },
+  "src/renderer/components/settings/sections/dialogs/model-config-fields.tsx": {
+    "count": 1,
+    "max": 16
+  },
+  "src/renderer/dev/mock-api.ts": {
+    "count": 1,
+    "max": 17
+  },
+  "src/renderer/hooks/use-file-tree.ts": {
+    "count": 2,
+    "max": 26
+  },
+  "src/renderer/hooks/use-tool-bridge.ts": {
+    "count": 1,
+    "max": 27
+  },
+  "src/renderer/lib/diff/line-diff.ts": {
+    "count": 1,
+    "max": 18
+  }
+}
