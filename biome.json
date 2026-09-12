@@ -67,7 +67,11 @@
         "useImportType": "error",
         "useNamingConvention": "error",
         "useConst": "error",
-        "noDefaultExport": "error"
+        "noDefaultExport": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": { "filenameCases": ["kebab-case", "export"] }
+        }
       },
       "complexity": {
         "useLiteralKeys": "off",
@@ -90,6 +94,19 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": { "filenameCases": ["kebab-case", "PascalCase", "export"] }
+            }
+          }
+        }
+      }
+    },
     {
       "includes": ["**/src/renderer/**/*.tsx"],
       "linter": {
