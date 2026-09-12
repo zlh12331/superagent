@@ -184,7 +184,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 架构决策记录（用户已拍板，勿重复讨论）
 
 - **IM 子系统不独立化**：7 渠道适配器（QQ/微信/钉钉/Telegram/飞书/企微/webhook）继续留在主进程包内，不拆子包。
-- **TS7 工具链不收敛**：自研正则解析检查脚本（check-*）为 TS7 原生版无编译器 API 期间的临时方案，等待生态成熟稳定后再评估收敛，当前不投入。
+- **技术选型：优先用成熟依赖，找不到合适的才自研兜底**（2026-09-11 转向）：需要解析/度量/校验等能力时，先查现成库（如 Biome 内置规则、`oxc-parser`、`@babel/parser` —— 后两者已在依赖图中），**能复用就复用**；只在无合适依赖时才写脚本兜底。实证：`check:complexity` 首版自研正则度量在一个函数内暴露 3 个 bug 且语义与 Biome 实测不符（Biome：if-else-if 得 2、try-catch 得 2），改用 Biome 内置规则后问题整体消失。**注意区分硬约束**：preload 零运行时依赖（CJS + 纯字符串 meta，Electron 沙箱要求，zod 进 preload 会静默失败）是**平台逼的**，不属本原则范围。`function-metrics.ts` 当前仍是正则实现，属**待评估迁移**（可换 oxc-parser），非禁改。
 - **设置持久化合并到 SQLite**：已完成（见「数据库」节 app_settings 说明）。
 
 ## 外部服务 / 凭据
