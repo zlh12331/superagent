@@ -16,9 +16,9 @@
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import {
   APICallError,
-  generateObject as generateObjectAi,
   generateText as generateTextAi,
   type LanguageModel,
+  Output,
   wrapLanguageModel,
 } from 'ai';
 import type { ZodType } from 'zod';
@@ -315,18 +315,25 @@ export class LlmClient {
    *
    * 对标 qwen BaseLlmClient.generateJson：模型按 schema 输出（respond_in_schema），
    * 避免自由文本解析的脆弱性。自带重试与中断贯穿。
+   *
+   * 2026-09-11 迁移：由 `generateObject` 改为 `generateText` + `Output.object`
+   * —— AI SDK v7 已废弃独立的结构化输出入口（`noDeprecatedImports` 报出），
+   * 官方指引即「用 generateText 配 output 设置」。结果读取位置随之由
+   * `result.object` 变为 `result.output`。
+   * 注：`Output.object` 的 schema 描述会作为附加提示给模型（比 generateObject
+   * 更贴底层），行为等价；返回类型仍受同一 ZodType 约束。
    */
   async generateJson<T>(options: LlmGenerateJsonOptions<T>): Promise<T> {
     return this.runSideQuery(options.model, options, async (model, signal) => {
-      const result = await generateObjectAi({
+      const result = await generateTextAi({
         model,
-        schema: options.schema,
+        output: Output.object({ schema: options.schema }),
         prompt: options.prompt,
         ...SDK_MODEL_CALL_RETRY_DISABLED,
         ...(options.system !== undefined ? { system: options.system } : {}),
         ...(signal !== undefined ? { abortSignal: signal } : {}),
       });
-      return result.object;
+      return result.output;
     });
   }
 
