@@ -6,13 +6,16 @@
   "labels": ["dependencies"],
   "prConcurrentLimit": 3,
   "semanticCommits": "enabled",
+  "minimumReleaseAge": "1 day",
   "packageRules": [
     {
+      "description": "非 major 更新归一组，减少 PR 数量",
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch"
     },
     {
+      "description": "electron major 需人工评审（主框架升级影响面大）",
       "matchPackageNames": ["electron"],
       "matchUpdateTypes": ["major"],
       "enabled": false
