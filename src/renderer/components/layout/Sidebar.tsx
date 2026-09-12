@@ -73,7 +73,12 @@ import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 import { FolderLabel } from './folder-label';
 import { LoadingList } from './loading-list';
-import { getFolderName } from './sidebar-utils';
+import {
+  buildSidebarEntries,
+  filterSessions,
+  getFolderName,
+  groupSessionsByFolder,
+} from './sidebar-utils';
 import { SortableThreadItem } from './thread-item';
 
 /**
@@ -128,14 +133,8 @@ export function Sidebar(): ReactElement {
   // 搜索过滤（对齐参考项目 filteredThreads：即时过滤，保持输入响应性）
   const [searchKeyword, setSearchKeyword] = useState('');
   const isSearching = searchKeyword.trim().length > 0;
-  // 过滤会话：标题或工作目录匹配（大小写不敏感，即时生效）
-  const filteredSessions = useMemo(() => {
-    const q = searchKeyword.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter(
-      (s) => s.title.toLowerCase().includes(q) || s.workingDir.toLowerCase().includes(q),
-    );
-  }, [sessions, searchKeyword]);
+  // 过滤会话：标题或工作目录匹配（大小写不敏感，即时生效）——纯函数见 sidebar-utils
+  const filteredSessions = filterSessions(sessions, searchKeyword);
 
   // 搜索高亮（照搬参考项目 I-S-001/P1-10/11）：
   // - 300ms 防抖后计算匹配项并高亮（非即时，对齐原型 debounce 300ms）
@@ -204,16 +203,9 @@ export function Sidebar(): ReactElement {
   const workingDir = useWorkingDir(activeSessionId);
 
   // 派生：按 workingDir basename 分组（搜索时基于过滤后的会话）
-  // 结构：Map<folderName, Session[]>
-  // 注意：sessions 为 readonly 数组，使用 spread 创建新数组避免 push 副作用
   // （不再手写 useMemo：React Compiler 2026-08-30 起真实生效，自动记忆化接管；
   //   原注释"Compiler 缓存滞后"基于编译器当时从未生效的误判，理由已不成立）
-  const groupedSessions = new Map<string, typeof sessions>();
-  for (const session of filteredSessions) {
-    const folderName = getFolderName(session.workingDir);
-    const existing = groupedSessions.get(folderName) ?? [];
-    groupedSessions.set(folderName, [...existing, session]);
-  }
+  const groupedSessions = groupSessionsByFolder(filteredSessions);
 
   // 拖拽排序覆盖 + 折叠文件夹：持久化到 localStorage（sidebar-pref-store）——
   // 用户显式操作跨重启保留（此前本地 useState 刷新即丢）
@@ -243,43 +235,16 @@ export function Sidebar(): ReactElement {
     setOrderOverride(folderName, next);
   };
 
-  // 扁平化列表条目：文件夹标签 + 会话项（普通滚动渲染，原 Virtuoso 已移除）
+  // 扁平化列表条目：文件夹标签 + 会话项（普通滚动渲染，原 Virtuoso 已移除）。
+  // 规则（置顶置前 / 覆盖排序 / 折叠语义）与测试见 sidebar-utils.buildSidebarEntries。
   // （不再手写 useMemo，理由同 groupedSessions：编译器自动记忆化接管）
-  const entries: SidebarEntry[] = [];
-  // 置顶会话直接排列表最前（用户选择：ChatGPT 式，无独立分组标签；带图钉图标标识）
-  // 置顶内部按 updatedAt 倒序：后置顶的排更前（pin 操作会刷新 updatedAt，对齐主进程排序）
-  const pinnedSessions = sessions
-    .filter((s) => s.pinned === true)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
-  for (const session of pinnedSessions) {
-    entries.push({ type: 'item', session });
-  }
-  for (const [folderName, folderSessions] of groupedSessions) {
-    entries.push({ type: 'label', name: folderName });
-    // 搜索时忽略折叠态（自动展开匹配组，对齐参考项目 clearCollapsedFolders 语义）
-    if (collapsedFolders.includes(folderName) && !isSearching) {
-      continue;
-    }
-    // 按拖拽覆盖顺序排列（未覆盖时保持服务端顺序）；置顶会话已提前到列表最前，此处跳过
-    const byId = new Map(folderSessions.map((s) => [s.id, s]));
-    const ordered = orderOverrides[folderName] ?? folderSessions.map((s) => s.id);
-    for (const id of ordered) {
-      const session = byId.get(id);
-      if (session !== undefined && session.pinned !== true) {
-        entries.push({ type: 'item', session });
-      }
-    }
-  }
-  // dnd-kit SortableContext 所需的可见会话 id（仅未折叠文件夹）
-  const sortableIds = ((): string[] => {
-    const ids: string[] = [];
-    for (const entry of entries) {
-      if (entry.type === 'item') {
-        ids.push(entry.session.id);
-      }
-    }
-    return ids;
-  })();
+  const { entries, sortableIds } = buildSidebarEntries({
+    sessions,
+    groupedSessions,
+    collapsedFolders,
+    isSearching,
+    orderOverrides,
+  });
 
   // 点击「新建会话」：清空激活会话 + 进入欢迎页模式 + 跳转首页
   // 对齐原型 prototype-v2.html:13306-13336：
@@ -527,21 +492,5 @@ export function Sidebar(): ReactElement {
 }
 
 // ── 子组件：文件夹标签（Virtuoso 扁平化列表的 label 条目） ────
-
-/** 虚拟化列表条目：文件夹标签 | 会话项 */
-type SidebarEntry =
-  | { readonly type: 'label'; readonly name: string }
-  | {
-      readonly type: 'item';
-      readonly session: {
-        readonly id: string;
-        readonly title: string;
-        readonly lastMessage: string | undefined;
-        readonly updatedAt: number;
-        readonly workingDir: string;
-        /** 置顶（对齐参考项目 pinned-header 分组） */
-        readonly pinned: boolean;
-      };
-    };
 
 /** 文件夹标签：折叠箭头 + 图标 + 名称 + hover 新建按钮 */
