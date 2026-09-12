@@ -1,17 +1,23 @@
 {
   "$comment": "fileSize.net = 净行硬门槛（唯一卡关口径，对齐 typescript-dev-standards-ai.md 规则 9.2）；fileSize.raw = 原始行告警线（不卡关，仅提示注释密度）。见 scripts/check-file-size.ts 头注释。",
-  "$comment2": "functionSize = 函数门禁阈值（2026-09-10 调整）：body=50 为棘轮超限门槛（≤50 行不进棘轮、不入基线、不判违规；>50 行视为应重构/拆分）；bodyTiers 为体长分档（50 起分，>400 必须登记理由 scripts/function-size-exempt.json）。params=4 为形参门槛不变。",
+  "$comment2": "functionSize = 函数门禁阈值（2026-09-11 调整）：body=100 为棘轮超限门槛（≤100 行不进棘轮、不入基线、不判违规）；bodyNotice=50 为**提示线**（51–100 行仅打印提示、不卡关、不入基线）——防止「门槛抬到 100」后这一区间完全失明；bodyTiers 为卡关区（>100）的体长分档，>heavy 必须登记理由 scripts/function-size-exempt.json。params=4 为形参门槛不变。",
+  "$comment3": "为什么 body 从 50 调到 100（2026-09-11）：① 50 来自 eslint max-lines-per-function 的默认值，是通用 JS 工具口径，未考虑 JSX——本项目 106 条基线里 59 条（56%）落在 51–100，且逐条核查后几乎全为「结构性长」（React 组件 JSX 平铺、IPC handler 工厂逐条注册），拆开反而更差；② 误报率过半会让告警失去区分度，实际后果是「整条门禁被习惯性忽略」，比门槛偏松更糟。bodyTiers 相应上移一档（mild 200 / moderate 400），over 仍为 >400——登记阈值保持不变（400 是「确实巨大」的绝对判断，不随超限门槛移动，避免本次调整变成对重债的连带放松）。",
+  "$comment4": "complexity.max = 认知复杂度门槛（2026-09-11 新增，check-complexity.ts）：见 SonarQube 与 Biome 的一致默认值 15。为什么需要它：行数是复杂度的弱代理——92 行 JSX 平铺与 62 行控制流纠缠同样「超行数」，但前者健康、后者危险。认知复杂度能量出这个区别（本项目实测：Topbar 92 行 JSX 复杂度远低于 vim-mode 62 行分支密集函数）。故行数门槛放宽到 100 的同时，用本指标补上「真正的纠缠」这条红线。",
   "fileSize": {
     "raw": 600,
     "net": 600
   },
   "functionSize": {
     "params": 4,
-    "body": 50,
+    "body": 100,
+    "bodyNotice": 50,
     "bodyTiers": {
-      "mild": 100,
-      "moderate": 200,
+      "mild": 200,
+      "moderate": 400,
       "heavy": 400
     }
+  },
+  "complexity": {
+    "max": 15
   }
 }

@@ -1,42 +1,14 @@
 {
-  "src/main/infra/ai/agent-runtime/turn-runner.ts#run": {
-    "body": 62
-  },
   "src/main/infra/ai/agent/agent-service.ts#constructor": {
     "params": 8
   },
   "src/main/infra/ai/agent/agent-service.ts#streamToWebContents": {
     "body": 372
   },
-  "src/main/infra/ai/agent/subagent-manager.ts#run": {
-    "body": 83
-  },
-  "src/main/infra/ai/agent/workflow-service.ts#runWorkflow": {
-    "body": 71
-  },
-  "src/main/infra/ai/llm-client/llm-client.ts#getModel": {
-    "body": 54
-  },
-  "src/main/infra/ai/mcp/mcp-client.ts#connect": {
-    "body": 72
-  },
-  "src/main/infra/ai/tools/codebase.tool.ts#createCodebaseTool": {
-    "body": 97
-  },
-  "src/main/infra/ai/tools/edit-file.tool.ts#createEditFileTool": {
-    "body": 72
-  },
-  "src/main/infra/ai/tools/git-push.tool.ts#createGitPushTool": {
-    "body": 57
-  },
   "src/main/infra/ai/tools/index.ts#registerBuiltinTools": {
     "params": 10
   },
-  "src/main/infra/ai/tools/permission-service.ts#decide": {
-    "body": 70
-  },
   "src/main/infra/ai/tools/permission-service.ts#requestApproval": {
-    "body": 74,
     "params": 5
   },
   "src/main/infra/ai/tools/run-command.tool.ts#createRunCommandTool": {
@@ -55,62 +27,11 @@
   "src/main/infra/file/file-service.ts#listRecursive": {
     "params": 5
   },
-  "src/main/infra/im/adapters/qq-stream.ts#handshake": {
-    "body": 85
-  },
-  "src/main/infra/im/im-agent-bridge.ts#runTurn": {
-    "body": 96
-  },
-  "src/main/infra/memory-hub/llm-config.ts#resolveDistillLlmConfig": {
-    "body": 52
-  },
-  "src/main/infra/memory-hub/memory-hub-service.ts#doStart": {
-    "body": 63
-  },
-  "src/main/infra/remote/remote-control.ts#handleCommandRequest": {
-    "body": 53
-  },
-  "src/main/infra/remote/remote-web-client.ts#send": {
-    "body": 84
-  },
-  "src/main/infra/search/search-service.ts#grep": {
-    "body": 94
-  },
-  "src/main/infra/search/search-service.ts#runRipgrep": {
-    "body": 67
-  },
-  "src/main/infra/storage/usage-turn-store.ts#getUsageSummary": {
-    "body": 51
-  },
-  "src/main/infra/terminal/terminal-service.ts#create": {
-    "body": 84
-  },
-  "src/main/infra/terminal/terminal-service.ts#splitShellWords": {
-    "body": 61
-  },
-  "src/main/ipc/file.handler.ts#createFileHandlers": {
-    "body": 70
-  },
-  "src/main/ipc/session.handler.ts#createSessionHandlers": {
-    "body": 61
-  },
-  "src/main/ipc/settings.handler.ts#createSettingsHandlers": {
-    "body": 89
-  },
   "src/main/service-container.ts#dispose": {
     "body": 141
   },
-  "src/main/utils/window-state.ts#trackWindowState": {
-    "body": 53
-  },
   "src/main/window.ts#createWindow": {
     "body": 132
-  },
-  "src/renderer/components/agent/approval-preview.tsx#renderGitPreview": {
-    "body": 82
-  },
-  "src/renderer/components/agent/approval-preview.tsx#renderStructuredPreview": {
-    "body": 96
   },
   "src/renderer/components/agent/ask-dialog.tsx#AskDialog": {
     "body": 187
@@ -119,7 +40,7 @@
     "body": 180
   },
   "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
-    "body": 379
+    "body": 376
   },
   "src/renderer/components/chat/ChatMessageList.tsx#ChatMessageList": {
     "body": 213
@@ -129,36 +50,6 @@
   },
   "src/renderer/components/chat/ChatPanel.tsx#ChatPanel": {
     "body": 247
-  },
-  "src/renderer/components/chat/Markdown.tsx#CodeBlock": {
-    "body": 65
-  },
-  "src/renderer/components/chat/conversation-search-bar.tsx#ConversationSearchBar": {
-    "body": 84
-  },
-  "src/renderer/components/chat/file-change-card.tsx#FileChangeCard": {
-    "body": 74
-  },
-  "src/renderer/components/chat/history-parts.ts#reconstructHistory": {
-    "body": 73
-  },
-  "src/renderer/components/chat/message-item.tsx#MessageItem": {
-    "body": 85
-  },
-  "src/renderer/components/chat/message-item.tsx#PartView": {
-    "body": 68
-  },
-  "src/renderer/components/chat/message-item.tsx#ToolCallView": {
-    "body": 73
-  },
-  "src/renderer/components/chat/slash-suggest-panel.tsx#SlashSuggestPanel": {
-    "body": 57
-  },
-  "src/renderer/components/chat/use-composer-drag.ts#useComposerDrag": {
-    "body": 79
-  },
-  "src/renderer/components/chat/use-composer-input.ts#useComposerInput": {
-    "body": 80
   },
   "src/renderer/components/common/CommandPalette.tsx#CommandPalette": {
     "body": 226
@@ -171,9 +62,6 @@
   },
   "src/renderer/components/dev/InspectorPanel.tsx#InspectorPanel": {
     "body": 115
-  },
-  "src/renderer/components/dev/LogsPanel.tsx#LogsPanel": {
-    "body": 98
   },
   "src/renderer/components/dev/browser-pane.tsx#BrowserPane": {
     "body": 252
@@ -190,15 +78,6 @@
   "src/renderer/components/file-tree/fuzzy-search-dialog.tsx#FuzzySearchDialog": {
     "body": 250
   },
-  "src/renderer/components/file-tree/inline-create-input.tsx#InlineCreateInput": {
-    "body": 61
-  },
-  "src/renderer/components/git/GitPanel.tsx#GitPanel": {
-    "body": 68
-  },
-  "src/renderer/components/git/file-diff-view.tsx#FileDiffView": {
-    "body": 55
-  },
   "src/renderer/components/layout/AppShell.tsx#AppShell": {
     "body": 277
   },
@@ -206,22 +85,10 @@
     "body": 242
   },
   "src/renderer/components/layout/Sidebar.tsx#Sidebar": {
-    "body": 344
-  },
-  "src/renderer/components/layout/Topbar.tsx#Topbar": {
-    "body": 92
-  },
-  "src/renderer/components/layout/folder-label.tsx#FolderLabel": {
-    "body": 76
+    "body": 341
   },
   "src/renderer/components/layout/right-panel-panes.tsx#DiffPane": {
     "body": 104
-  },
-  "src/renderer/components/layout/right-panel-panes.tsx#InfoPane": {
-    "body": 91
-  },
-  "src/renderer/components/layout/sidebar-account.tsx#SidebarAccount": {
-    "body": 99
   },
   "src/renderer/components/layout/thread-item.tsx#ThreadItem": {
     "body": 185
@@ -234,9 +101,6 @@
   },
   "src/renderer/components/settings/sections/approval-mode-section.tsx#ApprovalModeSection": {
     "body": 246
-  },
-  "src/renderer/components/settings/sections/browser-section.tsx#BrowserSection": {
-    "body": 57
   },
   "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx#ModelConfigDialog": {
     "body": 204
@@ -256,32 +120,14 @@
   "src/renderer/components/settings/sections/prompt-section.tsx#PromptSection": {
     "body": 102
   },
-  "src/renderer/components/settings/sections/remote-control-section.tsx#RemoteControlSection": {
-    "body": 94
-  },
   "src/renderer/components/settings/sections/rules-memory-section.tsx#RulesMemorySection": {
     "body": 117
   },
   "src/renderer/components/settings/sections/skills-section.tsx#SkillsSection": {
     "body": 136
   },
-  "src/renderer/components/settings/sections/turns-section.tsx#TurnsSection": {
-    "body": 62
-  },
   "src/renderer/components/settings/sections/usage-section.tsx#UsageSection": {
     "body": 158
-  },
-  "src/renderer/components/settings/sections/workspace-section.tsx#WorkspaceSection": {
-    "body": 90
-  },
-  "src/renderer/components/terminal/TerminalPanel.tsx#TerminalPanel": {
-    "body": 95
-  },
-  "src/renderer/components/terminal/TerminalTabs.tsx#TerminalTabs": {
-    "body": 60
-  },
-  "src/renderer/components/terminal/TerminalView.tsx#TerminalView": {
-    "body": 87
   },
   "src/renderer/dev/mock-api.ts#createMockApi": {
     "body": 488
@@ -295,28 +141,7 @@
   "src/renderer/hooks/use-file-tree.ts#useFileTree": {
     "body": 145
   },
-  "src/renderer/hooks/use-keyboard-shortcuts.ts#useKeyboardShortcuts": {
-    "body": 58
-  },
-  "src/renderer/hooks/use-tool-bridge.ts#useToolBridge": {
-    "body": 51
-  },
-  "src/renderer/lib/agent/ipc-agent-transport.ts#sendMessages": {
-    "body": 96
-  },
-  "src/renderer/lib/agent/ipc-agent-transport.ts#start": {
-    "body": 70
-  },
-  "src/renderer/lib/vim-mode.ts#vimHandleKey": {
-    "body": 62
-  },
-  "src/renderer/routes/home.tsx#FooterContent": {
-    "body": 83
-  },
   "src/renderer/routes/home.tsx#HomePage": {
     "body": 196
-  },
-  "src/renderer/test/msw-handlers.ts#createMockApi": {
-    "body": 83
   }
 }

@@ -1,12 +1,14 @@
 // scripts/check-functions.ts
-// 函数门禁（工程化强制）：形参数 ≤4 + 函数体 ≤50 净行，双指标棘轮 + 体长分档
+// 函数门禁（工程化强制）：形参数 ≤4 + 函数体 ≤100 净行，双指标棘轮 + 体长分档 + 提示档
 // ──────────────────────────────────────────────────────────────
 // 依据 typescript-dev-standards-ai.md §函数（参数≤4 对象封装 / 函数体≤40 行）
 // 与业界实践（eslint max-params 3-4、max-lines-per-function 常见 50）。
 //
-// 2026-09-10 门槛调整（用户拍板）：棘轮超限门槛定为 50——
-// 「≤50 行不进棘轮、不入基线、不判违规；>50 行视为应重构/拆分」。
-// 阈值真源 scripts/limits.json functionSize.body（禁止在此硬编码）。
+// 2026-09-11 门槛调整（用户拍板）：body 50 → 100，并新增 bodyNotice=50 提示线。
+// 「≤50 不进提示、51–100 仅提示不卡关、>100 进棘轮基线」。理由见 scripts/limits.json
+// 的 $comment3（50 是 eslint 默认值、不适用 JSX；106 条基线里 59 条落 51–100 且
+// 多为结构性长，误报过半导致整条门禁被习惯性忽略）。
+// 阈值真源 scripts/limits.json functionSize（禁止在此硬编码）。
 //
 // 2026-08-30 审计修复（原实现三处静默失效）：
 //   1. 原「函数体 ≤40 行依赖 AST，由 TypeDoc/代码评审兜底」= 从未度量。
@@ -16,12 +18,10 @@
 //   3. 原 `const f = x => {}` 裸标识符单参箭头完全不匹配 → 现按 1 参 + 度量体长。
 //   4. 原豁免只有一处手写 Set；现存量违规外置棘轮基线（只能收紧）。
 //
-// 2026-09-08 体长分档（用户拍板 100/200/400，阈值真源 scripts/limits.json）：
-//   轻度 50–100 / 中度 101–200 / 重债 201–400 / >400 必须登记理由。
-//   分档只影响输出分级与 >400 档的登记校验，不改变棘轮判定。
-//   为什么分档：超限里大量集中在 50–200 行的中度欠债，混在一个数字里看不出
-//   重构优先级；且「长」常来自声明平铺（IPC mock 表 / React JSX 树）而非控制流
-//   嵌套，拆分收益低，需显式登记理由而非静默容忍。
+// 2026-09-08 体长分档（用户拍板 100/200/400；2026-09-11 随门槛上移为 200/400/400）：
+//   轻度 / 中度 / 极重（>400 必须登记理由）。分档只影响输出分级与 >400 档的登记校验，
+//   不改变棘轮判定。为什么分档：超限里大量是「结构性长」而非控制流嵌套（IPC handler
+//   工厂、React JSX 树），混在一个数字里看不出重构优先级。
 //
 // 已知边界（漏报方向，不误报）：返回类型含对象字面量类型的函数可能漏配。
 // 故基线数字是**下界**，不可当上限解读。
@@ -34,7 +34,13 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectSourceFiles, toPosixRelative } from './lib/file-metrics';
 import { type FnMetric, scanFunctions } from './lib/function-metrics';
-import { type BodyTiers, countTiers, tierOf, validateHeavyExempt } from './lib/function-tiers';
+import {
+  type BodyTier,
+  type BodyTiers,
+  countTiers,
+  tierOf,
+  validateHeavyExempt,
+} from './lib/function-tiers';
 import {
   evaluateRatchet,
   type Metrics,
@@ -53,17 +59,19 @@ const LIMITS_PATH = join(import.meta.dirname, 'limits.json');
 const SCAN_DIRS = [join(ROOT, 'src', 'main'), join(ROOT, 'src', 'renderer')];
 
 /** 函数门槛 + 分档（单一真源：scripts/limits.json） */
-function loadLimits(): { params: number; body: number; tiers: BodyTiers } {
+function loadLimits(): { params: number; body: number; notice: number; tiers: BodyTiers } {
   const parsed = JSON.parse(readFileSync(LIMITS_PATH, 'utf8')) as {
     functionSize?: {
       params?: number;
       body?: number;
+      bodyNotice?: number;
       bodyTiers?: { mild?: number; moderate?: number; heavy?: number };
     };
   };
   return {
     params: parsed.functionSize?.params ?? 4,
     body: parsed.functionSize?.body ?? 40,
+    notice: parsed.functionSize?.bodyNotice ?? 40,
     tiers: {
       mild: parsed.functionSize?.bodyTiers?.mild ?? 100,
       moderate: parsed.functionSize?.bodyTiers?.moderate ?? 200,
@@ -71,7 +79,12 @@ function loadLimits(): { params: number; body: number; tiers: BodyTiers } {
     },
   };
 }
-const { params: PARAM_LIMIT, body: BODY_LIMIT, tiers: BODY_TIERS } = loadLimits();
+const {
+  params: PARAM_LIMIT,
+  body: BODY_LIMIT,
+  notice: BODY_NOTICE,
+  tiers: BODY_TIERS,
+} = loadLimits();
 const METRICS = ['params', 'body'] as const;
 
 /**
@@ -174,6 +187,31 @@ function loadBaseline(): Record<string, Metrics> {
   }
 }
 
+/**
+ * 构造卡关区的体长分档标签（跳过退化区间）
+ *
+ * 为什么动态构造：门槛抬到 100 后 tiers 上移一档（mild 200 / moderate 400），而登记
+ * 阈值刻意保持 >400（heavy 与 moderate 同值）——此时「重债 moderate+1–heavy」是
+ * 401–400 的退化区间，静态字符串拼接会打印出毫无意义的「重债 401–400 行 0 处」。
+ * 故按边界动态构造，并跳过 lo > hi 的空档。
+ *
+ * @param counts countTiers 的统计结果（各档条目数）
+ * @returns 各档标签（跳过退化区间）
+ */
+function buildTierBands(counts: Record<BodyTier, number>): Array<{ label: string }> {
+  const bands: Array<{ label: string }> = [];
+  const push = (lo: number, hi: number, name: string, count: number, register = false): void => {
+    if (lo > hi) return;
+    const range = Number.isFinite(hi) ? `${lo}–${hi}` : `>${lo - 1}`;
+    bands.push({ label: `${name} ${range} 行 ${count} 处${register ? '（需登记理由）' : ''}` });
+  };
+  push(BODY_LIMIT + 1, BODY_TIERS.mild, '轻度', counts.mild);
+  push(BODY_TIERS.mild + 1, BODY_TIERS.moderate, '中度', counts.moderate);
+  push(BODY_TIERS.moderate + 1, BODY_TIERS.heavy, '重债', counts.heavy);
+  push(BODY_TIERS.heavy + 1, Number.POSITIVE_INFINITY, '极重', counts.over, true);
+  return bands;
+}
+
 function main(): number {
   const { all, violations } = scanAll();
   const current = toMetricMap(violations);
@@ -211,11 +249,22 @@ function main(): number {
   );
 
   const tierLines = [
-    `  体长分档：轻度 ${BODY_LIMIT + 1}–${BODY_TIERS.mild} 行 ${tiers.mild} 处 | ` +
-      `中度 ${BODY_TIERS.mild + 1}–${BODY_TIERS.moderate} 行 ${tiers.moderate} 处 | ` +
-      `重债 ${BODY_TIERS.moderate + 1}–${BODY_TIERS.heavy} 行 ${tiers.heavy} 处 | ` +
-      `>${BODY_TIERS.heavy} 行 ${tiers.over} 处（需登记理由）`,
+    `  卡关区分档：${buildTierBands(tiers)
+      .map((b) => b.label)
+      .join(' | ')}`,
   ];
+
+  // 提示档（2026-09-11）：bodyNotice+1 – body 净行——**仅提示，不卡关、不入基线**。
+  // 为什么需要它：门槛从 50 抬到 100 后，若不单列这一区间，「51–100 完全失明」——
+  // 其中确有真逻辑密集的函数（如 ipc-agent-transport#sendMessages 96 行、
+  // search-service#grep 94 行），它们不是「声明平铺」而是控制流密集，值得继续被看见。
+  // 样本见下方「最长函数体 Top 10」（该输出含未超限项，天然覆盖本区间）。
+  const noticeBody = all.filter((f) => f.bodyLines > BODY_NOTICE && f.bodyLines <= BODY_LIMIT);
+  if (noticeBody.length > 0) {
+    tierLines.push(
+      `  提示档（${BODY_NOTICE + 1}–${BODY_LIMIT} 净行，仅提示不卡关）：${noticeBody.length} 处`,
+    );
+  }
 
   if (problems.length === 0 && unregistered.length === 0 && staleExempt.length === 0) {
     console.log(
