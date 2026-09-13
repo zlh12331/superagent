@@ -26,7 +26,6 @@ import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/networ
 import { initDb } from './infra/storage/db';
 import { readAllSettings } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
-import { reportMessage } from './infra/telemetry/error-report';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { reportEventLoopLag } from './infra/telemetry/lag-alert';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
@@ -67,6 +66,7 @@ import {
   serviceContainer,
 } from './service-container';
 import { createTray } from './tray';
+import { reportMessage } from './utils/error-report';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 import {
   confirmInterruptRunningTurns,

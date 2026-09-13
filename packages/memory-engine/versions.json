@@ -1,0 +1,17 @@
+{
+  "$comment": "记忆引擎版本锚点（唯一真源）。改这里 = 改引擎版本，须配合 memory-engine:sync 重新同步源码。",
+  "repository": "https://github.com/TencentCloud/TencentDB-Agent-Memory",
+  "repoTag": "v2.0.1",
+  "commit": "a5dcbe6e9fee0d1d1e32d935326f1d3bcf927fdb",
+  "corePackageName": "@tencentdb-agent-memory/memory-tencentdb-v2",
+  "corePackageVersion": "2.0.0-beta.1",
+  "license": "MIT",
+  "copyright": "Copyright (C) 2026 Tencent",
+  "vendoredPath": "MemoryCore",
+  "provenance": {
+    "archiveName": "TencentDB-Agent-Memory-2.0.1.zip",
+    "archiveSha256": "57c3dd89f450cd2f69d32dbae6dcc3951975da2a72423d0a8faf802b56b0e40a",
+    "note": "归档内容已与 GitHub tag v2.0.1 逐字节比对（package.json 与 src/gateway/server.ts 的 sha256 均一致）"
+  },
+  "syncedAt": "2026-09-13"
+}

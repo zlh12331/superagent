@@ -5,8 +5,8 @@
 // 便于把阻塞关联到具体操作（长会话分词 / 大库查询 / 备份 / 迁移）。
 // ──────────────────────────────────────────────────────────────
 
+import { reportMessage } from '../../utils/error-report';
 import { logger } from '../../utils/logger';
-import { reportMessage } from './error-report';
 import type { EventLoopLagSample } from './event-loop-lag';
 
 /**

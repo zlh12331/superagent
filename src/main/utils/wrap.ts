@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@code-agent/shared/main';
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import type { ZodType } from 'zod';
-import { reportError } from '../infra/telemetry/error-report';
+import { reportError } from './error-report';
 import { logger } from './logger';
 
 /** 外部传入 traceId 的合法形状：8-64 位字母数字/连字符/下划线（UUID 与测试 id 均命中；拒绝换行/引号/空白） */

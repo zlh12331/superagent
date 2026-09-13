@@ -195,9 +195,6 @@ jobs:
           ORIG_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # C1 修复：与 ci.yml 对齐——CI checkout 无记忆引擎上游（resources/memory-hub
-          # 不入仓），不设此变量 prepare-memory-hub 会 exit(1) 中断 && 链，三平台全部失败
-          MEMORY_HUB_OPTIONAL: '1'
         run: |
           if [ -n "${ORIG_CSC_LINK:-}" ]; then
             export CSC_LINK="$ORIG_CSC_LINK"

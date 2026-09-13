@@ -13,7 +13,7 @@ const { mockFromWebContents, mockIpcMainHandle, mockReportError } = vi.hoisted((
 }));
 
 // mock 错误上报统一出口（避免真实落盘；断言上报被调用）
-vi.mock('../infra/telemetry/error-report', () => ({
+vi.mock('./error-report', () => ({
   reportError: mockReportError,
 }));
 

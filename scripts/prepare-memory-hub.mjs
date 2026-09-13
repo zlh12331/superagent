@@ -1,25 +1,25 @@
 // scripts/prepare-memory-hub.mjs
 // 生成 resources/memory-hub/（上游 TencentDB-Agent-Memory · MemoryCore 运行目录）
 // ──────────────────────────────────────────────────────────────
-// 背景：记忆引擎由 MemoryHubService 以 sidecar 子进程方式拉起（ELECTRON_RUN_AS_NODE=1）。
-//   dev 环境通过 MEMORY_HUB_ROOT 指向上游解压源码目录；打包环境需要自包含运行目录，
-//   经 electron-builder extraResources 部署到 process.resourcesPath/memory-hub。
+// 背景：记忆引擎由 MemoryHubService 以 sidecar 子进程方式拉起。
+//   源代码 = packages/memory-engine/MemoryCore（vendored 进仓，见该目录 UPSTREAM.md）；
+//   打包环境需要自包含运行目录，经 electron-builder extraResources 部署到
+//   process.resourcesPath/memory-hub。
 //
-// 策略（与 dev 路径一致）：prod 也走 `src/gateway/server.ts + tsx`。
+// 策略：走 `src/gateway/server.ts + tsx`。
 //   上游官方 tsdown 入口是 index.ts，产物 dist 里没有 gateway/server.js，
 //   因此不构建 dist，直接拷贝 src + package.json，并在目标目录用 pnpm 重建
 //   node_modules（在目标原地 install 而非拷贝，保证 pnpm 符号链接正确）。
 //
 // 用法：
-//   TAM_SRC=<上游解压根目录> node scripts/prepare-memory-hub.mjs [--skip-if-exists]
+//   node scripts/prepare-memory-hub.mjs [--skip-if-exists]
 // 环境变量：
-//   TAM_SRC             上游 TencentDB-Agent-Memory 根目录（必填）
-//   MEMORY_HUB_OPTIONAL 置为 '1' 时，上游不可用则生成占位目录并告警退出 0
-//                       （CI 打包用：产物不含记忆引擎，运行时自动降级为空实现）
+//   MEMORY_ENGINE_ROOT  覆盖源码根目录（默认 packages/memory-engine/MemoryCore）——
+//                       仅用于测试/临时验证；正常构建与 CI 一律用仓内源码。
 //
-// 为什么没有默认路径：上游源码不入仓（见 .gitignore），npm registry 上
-//   @tencentdb-agent-memory/memory-tencentdb-v2 只有 1.0.0-beta.1，供不起本项目
-//   需要的 2.0.x，因此唯一来源是维护者本地持有的压缩包，必须显式指路。
+// 源码来源已 vendoring 进仓（2026-09-13）：此前依赖维护者本地解压目录 +
+//   TAM_SRC 环境变量，导致 CI 构建拿不到引擎、正式产物缺失记忆功能。
+//   现不再支持"缺引擎则生成占位产物"（该静默降级曾让残缺包正常发布）。
 // ──────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';
@@ -39,9 +39,9 @@ import { join } from 'node:path';
 
 const ROOT = process.cwd();
 const TARGET = join(ROOT, 'resources', 'memory-hub');
-const SRC = process.env['TAM_SRC'];
-const CORE = join(SRC ?? '', 'MemoryCore');
-const MARKER = '.memory-hub-placeholder';
+// 源码真源：仓内 vendored 上游（可用 MEMORY_ENGINE_ROOT 覆盖，仅限测试）
+const CORE =
+  process.env['MEMORY_ENGINE_ROOT'] ?? join(ROOT, 'packages', 'memory-engine', 'MemoryCore');
 
 const skipIfExists = process.argv.includes('--skip-if-exists');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -74,53 +74,17 @@ function countFiles(dir) {
   return n;
 }
 
-// 1. 校验上游
+// 1. 校验源码（vendored 进仓，缺失即失败——不再有"生成占位产物"的静默降级）
 const upstreamEntry = join(CORE, 'src', 'gateway', 'server.ts');
 const targetReady =
   existsSync(join(TARGET, 'src', 'gateway', 'server.ts')) &&
   existsSync(join(TARGET, 'node_modules'));
 
 if (!existsSync(upstreamEntry)) {
-  if (targetReady) {
-    console.log(`[prepare-memory-hub] 上游不可用，沿用已有产物（${TARGET}）`);
-    process.exit(0);
-  }
-  if (process.env['MEMORY_HUB_OPTIONAL'] === '1') {
-    writePlaceholder();
-    process.exit(0);
-  }
-  console.error(
-    SRC === undefined
-      ? '[prepare-memory-hub] 环境变量 TAM_SRC 未设置（上游 TencentDB-Agent-Memory 根目录）'
-      : `[prepare-memory-hub] 未找到上游入口：${upstreamEntry}（TAM_SRC=${SRC}）`,
-  );
-  console.error('  请设置 TAM_SRC 后重试，记忆引擎随包分发。');
-  console.error('  CI 暂不集成记忆引擎时，设置 MEMORY_HUB_OPTIONAL=1 打包无引擎产物。');
+  console.error(`[prepare-memory-hub] 未找到记忆引擎源码入口：${upstreamEntry}`);
+  console.error('  源码应位于 packages/memory-engine/MemoryCore（vendored 上游，随仓库分发）。');
+  console.error('  若该目录缺失，说明 checkout 不完整——请检查 git 状态，勿用占位产物打包。');
   process.exit(1);
-}
-
-/**
- * 生成占位运行目录：让 electron-builder 的两个 extraResources `from` 路径都存在，
- * 产物可正常打包安装；记忆引擎在运行时（MemoryHubService）降级为空实现。
- */
-function writePlaceholder() {
-  rmSync(TARGET, { recursive: true, force: true });
-  mkdirSync(join(TARGET, 'node_modules'), { recursive: true });
-  const note = [
-    'Placeholder for resources/memory-hub (upstream TencentDB-Agent-Memory / MemoryCore).',
-    '',
-    'This build intentionally ships WITHOUT the memory engine: TAM_SRC was not provided',
-    'and MEMORY_HUB_OPTIONAL=1 was set. MemoryHubService detects the missing entry and',
-    'falls back to the no-op MemoryPort, so every memory call degrades instead of failing.',
-    '',
-    'To bundle the real engine: TAM_SRC=<upstream root> node scripts/prepare-memory-hub.mjs',
-    '',
-  ].join('\n');
-  writeFileSync(join(TARGET, MARKER), note, 'utf8');
-  writeFileSync(join(TARGET, 'node_modules', MARKER), note, 'utf8');
-  console.warn(
-    '[prepare-memory-hub] ⚠ 上游缺失，已生成占位目录 —— 本产物不含记忆引擎（运行时降级空实现）',
-  );
 }
 
 // 2. 已存在且跳过

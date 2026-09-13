@@ -44,6 +44,7 @@
 // - 各模块内部已处理 null 检查，本模块无需重复判空
 // - 幂等：多次调用 disposeServices 安全
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 // electron-updater 是 CJS 包：ESM 下 named import 运行时失败（cjs-module-lexer 无法静态分析），
@@ -110,15 +111,22 @@ import { type IUpdateService, UpdateService } from './infra/update/update-servic
 import { clearCrashMarker, hasCrashMarker, logger } from './utils/logger';
 
 /**
- * 解析 MemoryCore（上游 TencentDB-Agent-Memory）根目录：
+ * 解析记忆引擎（上游 TencentDB-Agent-Memory · MemoryCore）根目录：
  * - 打包环境：process.resourcesPath/memory-hub（prepare-memory-hub.mjs 生成的运行目录）
- * - dev 环境：环境变量 MEMORY_HUB_ROOT（指向解压的上游源码目录）
- * 未配置时返回 undefined，由 MemoryHubService 内部降级为空实现。
+ * - dev 环境：项目内的 resources/memory-hub（`pnpm prepare:memory-hub` 产出，与生产同源）；
+ *   未生成时回退到环境变量 MEMORY_HUB_ROOT
+ * 均不可用时返回 undefined，由 MemoryHubService 内部降级为空实现。
  */
 function resolveMemoryHubRoot(): string | undefined {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'memory-hub');
   }
+  // dev：优先用项目内构建产物（与打包产物同构，避免"dev 可用 prod 不可用"的偏差）
+  const localArtifact = join(app.getAppPath(), 'resources', 'memory-hub');
+  if (existsSync(join(localArtifact, 'src', 'gateway', 'server.ts'))) {
+    return localArtifact;
+  }
+  // 逃生口：显式指定其他上游目录（测试 / 临时验证）
   return process.env['MEMORY_HUB_ROOT'];
 }
 

@@ -1,0 +1,7 @@
+{
+  "name": "@code-agent/memory-engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "记忆引擎（vendored 上游 TencentDB-Agent-Memory / MemoryCore，MIT）；仅提供源码，运行产物由 scripts/prepare-memory-hub.mjs 生成",
+  "type": "module"
+}

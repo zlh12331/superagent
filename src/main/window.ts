@@ -11,8 +11,8 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
-import { reportMessage } from './infra/telemetry/error-report';
 import { hasRunningAgentTurns } from './service-container';
+import { reportMessage } from './utils/error-report';
 import { logger } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
 import { TITLE_BAR_SYMBOL } from './window-theme';

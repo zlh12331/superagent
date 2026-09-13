@@ -383,6 +383,8 @@ importers:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
 
+  packages/memory-engine: {}
+
   packages/shared:
     dependencies:
       zod:

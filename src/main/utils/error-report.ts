@@ -1,4 +1,4 @@
-// src/main/infra/telemetry/error-report.ts
+// src/main/utils/error-report.ts
 // 错误上报单一出口缝（2026-09-13 引入）
 // ──────────────────────────────────────────────────────────────
 // 背景：Sentry 移除（路线 4 本地优先，见 docs/design/23-otel-spec.md 调整记录）。
@@ -9,10 +9,14 @@
 // 将来接任何后端（Sentry / GlitchTip / OTel exception events）只改本文件，
 // 调用方不动——这是"可回插"的设计承诺。
 //
+// 为什么在 utils 层（而非 infra/telemetry）：本模块只依赖 logger，是"错误汇聚"
+// 这类通用设施；wrap（utils 层）需要调用它，而 depcruise 的 utils-pure 规则
+// 禁止 utils 依赖 infra。放此层可同时服务 utils 与 infra 的调用方。
+//
 // 注意：不再区分"上报失败静默降级"——本实现只写本地日志，不会抛错。
 // ──────────────────────────────────────────────────────────────
 
-import { logger } from '../../utils/logger';
+import { logger } from './logger';
 
 /** 错误上报上下文（结构化字段，随日志落盘） */
 export interface ErrorReportContext {

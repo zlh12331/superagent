@@ -289,11 +289,9 @@ jobs:
           pnpm exec playwright install ffmpeg
 
       - name: Build production artifacts
-        # CI 无上游 MemoryCore 源码（不入仓，registry 只有 1.0.0-beta.1）：
-        # 显式打包无记忆引擎产物，运行时自动降级空实现（release.yml 已同步设置此变量）
+        # 记忆引擎源码已 vendored 进仓（packages/memory-engine/MemoryCore），
+        # 构建必然带上引擎；缺失会直接失败而非降级（2026-09-13 起）。
         run: pnpm build:${{ runner.os == 'Windows' && 'win' || 'linux' }}
-        env:
-          MEMORY_HUB_OPTIONAL: '1'
 
       - name: Run production smoke tests
         # Linux 无头环境走 xvfb（Electron 启动需要 Display）；Windows runner DISPLAY 无需
@@ -312,7 +310,7 @@ jobs:
 
   # ── Job 5「三平台打包验证」已移除（2026-09-10 方案二）───────────────
   # 原 package job（三平台 electron-builder 打包验证，各约 5 分钟）与 release.yml 的
-  # build job **执行完全相同的命令**（pnpm build:win/mac/linux + MEMORY_HUB_OPTIONAL=1），
+  # build job **执行完全相同的命令**（pnpm build:win/mac/linux），
   # 只是在 PR 阶段提前跑一遍。按用户决定「打包验证交给 CD」删除，以消除：
   #   - 每个 PR 多耗约 15 分钟 runner 时间（三平台各约 5 分钟）
   #   - 同一次发版的安装包被构建 2 遍（Release PR 一次 + CD 一次）
