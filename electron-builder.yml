@@ -41,6 +41,40 @@ asar: true
 # 显式声明 disableAsarIntegrity: false 防止未来版本翻转默认值后静默失效。
 disableAsarIntegrity: false
 
+# ── Electron fuses（烧入二进制的构建期安全开关，2026-09-13 启用）───────────────
+# 这些开关默认是"开发友好"的取值，打包发给用户后即成攻击面；fuses 在构建期
+# 把它们永久关闭（无法运行时改回）。全部取值与理由：
+#
+# - runAsNode: false
+#   关闭后 ELECTRON_RUN_AS_NODE 不再被尊重。不关的后果：签名过的应用二进制可被
+#   同机任意同权限进程当作**通用 Node 运行时**复用（LOLBin），且完全绕过 asar
+#   完整性校验（该路径根本不加载我们的应用）。攻击者无需篡改我们的包，借用即可。
+#   ⚠️ 前置条件：Electron 官方文档明确说明关闭该 fuse 会使 `process.fork` 失效，
+#   并推荐改用 utilityProcess（官方后台 Node 子进程 API）。本项目的记忆引擎
+#   sidecar 已于同批次由 `spawn(execPath)+ELECTRON_RUN_AS_NODE` 迁移到
+#   utilityProcess（src/main/infra/memory-hub/engine-process.ts），故可安全关闭。
+#
+# - onlyLoadAppFromAsar: true
+#   把 Electron 的代码查找顺序从 `app.asar → app → default_app.asar` 收敛为
+#   仅 `app.asar`，与 embeddedAsarIntegrityValidation 配合后，**无法加载未经
+#   校验的代码**（原顺序下安装目录可写者放一个 app/ 目录即可注入持久化代码）。
+#   disableAsarIntegrity: false 已在上方启用完整性校验，两者配套。
+#
+# - enableEmbeddedAsarIntegrityValidation: true
+#   显式开启 asar 内容完整性校验（Windows electron>=30 / macOS >=16 支持）。
+#
+# 其余 fuse 保持默认；如 evaluate（以下）逐项评估：
+#   - enableCookieEncryption：需评估现有 cookie 存储（单向迁移，开启后旧明文
+#     cookie 会在写入时加密；我们主要持久化在 SQLite，暂不启用以免影响既有用户）
+#   - enableNodeCliInspectArguments：主进程调试依赖 --inspect（dev 用 remote-debugging-port
+#     而非该开关），但为保留排障能力暂不关闭
+#   - enableNodeOptionsEnvironmentVariable：引擎子进程曾依赖 NODE_OPTIONS 置空，
+#     保持默认以兼容
+electronFuses:
+  runAsNode: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+
 # 需要打入 asar 的文件白名单（out/ 是 electron-vite 构建产物）
 # 排除：测试文件、配置文件、源码、文档、缓存
 files:

@@ -5,15 +5,22 @@
 // - ensureStarted()：懒启动 sidecar 子进程并等待 /health 就绪，返回 MemoryPort
 //   · 动态选空闲端口 + 随机 apiKey（每次启动轮换，不落盘）
 //   · 生成 gateway.yaml 写入数据目录（端口 / 数据目录 / 蒸馏 LLM / recall 策略）
-//   · 以 ELECTRON_RUN_AS_NODE=1 复用 Electron 二进制当 Node 跑（安装包免带 Node）
+//   · 经 Electron utilityProcess 启动（**不再依赖 ELECTRON_RUN_AS_NODE**，见下）
 // - stop()：应用退出时终止子进程（dispose 链中调用）
 //
 // 边界纪律：
 // - 上游入口路径只经环境变量 MEMORY_HUB_ENTRY 传给 launcher；本模块不 import 上游代码
 // - dev：hubRoot 指向上游源码目录（tsx 直跑 src）；prod：指向打包的构建产物目录
+//
+// 进程启动方式（2026-09-13 变更）：
+//   旧实现 spawn(process.execPath) + ELECTRON_RUN_AS_NODE=1：借 Electron 二进制
+//   当 Node 用，要求 RunAsNode 熔断保持开启——而该熔断开启时签名二进制可被同机
+//   任意进程复用为通用 Node 运行时（绕过 asar 完整性校验）。现改用 Electron 官方
+//   的 utilityProcess（后台 Node 子进程 API），不再需要该环境变量，从而可在
+//   electron-builder.yml 关闭 RunAsNode 并开启 OnlyLoadAppFromAsar。
+//   ⚠️ 启动路径无 shell 参与（模块路径 + 参数数组），不构成命令注入面。
 // ──────────────────────────────────────────────────────────────
 
-import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   cpSync,
@@ -31,6 +38,12 @@ import { join } from 'node:path';
 
 import { logger } from '../../utils/logger';
 import { HttpMemoryPort } from './adapter';
+import {
+  type EngineLauncher,
+  type EngineProcessHandle,
+  type LaunchEngineOptions,
+  launchEngineProcess,
+} from './engine-process';
 import { countL0Records, listL0SessionKeys, readSessionRecords } from './l0-inspect';
 import type { MemoryPort } from './types';
 
@@ -72,6 +85,10 @@ export interface MemoryHubServiceOptions {
    * 仅影响 L1/L2 提取质量，L0 记录不受影响）
    */
   readonly llm?: MemoryHubLlmConfig | (() => Promise<MemoryHubLlmConfig | undefined>) | undefined;
+  /**
+   * 子进程启动器（默认 utilityProcess 实现；测试注入 fake 以免真拉进程）
+   */
+  readonly launcher?: EngineLauncher | undefined;
 }
 
 /** 未配置 hubRoot 时返回的空实现（保证上层零分支：调用即安全降级） */
@@ -114,7 +131,7 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
 }
 
 export class MemoryHubService {
-  private child: ChildProcess | null = null;
+  private child: EngineProcessHandle | null = null;
   private port: MemoryPort | null = null;
   private starting: Promise<MemoryPort> | null = null;
   private readonly llmPlaceholder: MemoryHubLlmConfig = {
@@ -130,9 +147,9 @@ export class MemoryHubService {
     return this.options.hubRoot !== undefined && this.options.hubRoot.length > 0;
   }
 
-  /** sidecar 是否正在运行（不触发启动） */
+  /** sidecar 是否正在运行（不触发启动；pid 由 Electron 在退出后置 undefined） */
   isRunning(): boolean {
-    return this.child !== null && this.child.exitCode === null;
+    return this.child !== null && this.child.pid !== undefined;
   }
 
   /**
@@ -273,20 +290,23 @@ export class MemoryHubService {
     const child = this.child;
     this.child = null;
     this.port = null;
-    if (child !== null && child.exitCode === null) {
-      await new Promise<void>((resolve) => {
-        child.once('exit', () => resolve());
-        child.kill();
-        // 兜底：3s 未退出强杀
-        setTimeout(() => {
-          if (child.exitCode === null) {
-            child.kill('SIGKILL');
-          }
-          resolve();
-        }, 3000);
-      });
-      logger.info({}, `${TAG} sidecar 已停止`);
+    if (child === null || child.pid === undefined) {
+      return;
     }
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const finish = (): void => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      child.onExit(finish);
+      child.kill();
+      // 兜底：3s 未退出也放行（utilityProcess.kill 为 SIGTERM 语义；
+      // 进程已被 Electron 托管，异常残留由应用退出时的子进程收尾兜底）
+      setTimeout(finish, 3000);
+    });
+    logger.info({}, `${TAG} sidecar 已停止`);
   }
 
   // ─── 内部实现 ───
@@ -321,46 +341,32 @@ export class MemoryHubService {
     const launcherPath = this.writeLauncher(dataDir);
 
     const useTsx = !entry.isDist;
-    const args: string[] = [];
-    if (useTsx) {
-      args.push('--import', 'tsx');
-    }
-    args.push(launcherPath);
 
     logger.info({ hubRoot, entry: entry.path, port, useTsx }, `${TAG} 启动 sidecar`);
-    const child = spawn(process.execPath, args, {
-      cwd: hubRoot, // 让 --import tsx 从上游 node_modules 解析 loader
-      env: {
-        ...process.env,
-        // biome-ignore lint/style/useNamingConvention: 标准环境变量名
-        ELECTRON_RUN_AS_NODE: '1',
-        // biome-ignore lint/style/useNamingConvention: 标准环境变量名
-        NODE_OPTIONS: '',
-        // biome-ignore lint/style/useNamingConvention: 标准环境变量名
-        MEMORY_HUB_ENTRY: entry.path,
-        // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
-        TDAI_GATEWAY_CONFIG: configPath,
-        // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
-        TDAI_METADATA_SQLITE_BASE_DIR: join(dataDir, 'metadata'),
-        // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
-        TDAI_DEPLOY_MODE: 'standalone',
-        // 数据根目录显式收进 userData（P1 修复）：上游默认落到 ~/.memory-tencentdb
-        // （见上游 config.ts 的 MEMORY_TENCENTDB_ROOT 解析），导致引擎数据散落在
-        // 用户主目录——备份不覆盖、卸载不清理、多用户环境可能串数据。实测本机
-        // 已存在 ~/.memory-tencentdb/memory-tdai/vectors.db（引擎记忆库）。
-        // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
-        MEMORY_TENCENTDB_ROOT: dataDir,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    this.child = child;
+    // 环境变量：不含 ELECTRON_RUN_AS_NODE（改用 utilityProcess 后不再需要）
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      // biome-ignore lint/style/useNamingConvention: 标准环境变量名
+      NODE_OPTIONS: '',
+      // biome-ignore lint/style/useNamingConvention: 标准环境变量名
+      MEMORY_HUB_ENTRY: entry.path,
+      // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
+      TDAI_GATEWAY_CONFIG: configPath,
+      // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
+      TDAI_METADATA_SQLITE_BASE_DIR: join(dataDir, 'metadata'),
+      // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
+      TDAI_DEPLOY_MODE: 'standalone',
+      // 数据根目录显式收进 userData（P1 修复）：上游默认落到 ~/.memory-tencentdb
+      // （见上游 config.ts 的 MEMORY_TENCENTDB_ROOT 解析），导致引擎数据散落在
+      // 用户主目录——备份不覆盖、卸载不清理、多用户环境可能串数据。实测本机
+      // 已存在 ~/.memory-tencentdb/memory-tdai/vectors.db（引擎记忆库）。
+      // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
+      MEMORY_TENCENTDB_ROOT: dataDir,
+    };
 
-    let stderrTail = '';
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderrTail = (stderrTail + chunk.toString()).slice(-2000);
-    });
-    child.on('exit', (code) => {
+    const child = this.launchEngine({ launcherPath, cwd: hubRoot, env: childEnv, useTsx });
+    this.child = child;
+    child.onExit((code) => {
       if (this.child === child) {
         logger.warn({ code }, `${TAG} sidecar 进程退出`);
         this.child = null;
@@ -369,14 +375,20 @@ export class MemoryHubService {
     });
 
     const baseUrl = `http://127.0.0.1:${port}`;
-    await this.waitUntilHealthy(
-      baseUrl,
-      apiKey,
-      stderrTailGetter(() => stderrTail),
-    );
+    await this.waitUntilHealthy(baseUrl, apiKey, () => child.stderrTail());
 
     logger.info({ baseUrl }, `${TAG} sidecar 就绪`);
     return new HttpMemoryPort({ baseUrl, apiKey });
+  }
+
+  /**
+   * 拉起引擎子进程（默认为 utilityProcess 实现；见 engine-process.ts 契约）
+   *
+   * 独立方法便于测试替换（`options.launcher` 注入 fake，无需真启动子进程）。
+   */
+  private launchEngine(options: LaunchEngineOptions): EngineProcessHandle {
+    const launcher = this.options.launcher ?? launchEngineProcess;
+    return launcher(options);
   }
 
   /** 解析上游入口：优先 dist 构建产物，回退 TS 源码（需 tsx） */
@@ -445,10 +457,9 @@ export class MemoryHubService {
   ): Promise<void> {
     const deadline = Date.now() + START_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (this.child !== null && this.child.exitCode !== null) {
-        throw new Error(
-          `${TAG} sidecar 启动即退出（code=${this.child.exitCode}）\n${stderrTail()}`,
-        );
+      // 子进程早退（pid 被 Electron 置 undefined）→ 立即失败并带出 stderr 尾巴
+      if (this.child !== null && this.child.pid === undefined) {
+        throw new Error(`${TAG} sidecar 启动即退出\n${stderrTail()}`);
       }
       try {
         const res = await fetch(`${baseUrl}/health`, {
@@ -491,10 +502,6 @@ export class MemoryHubService {
       });
     });
   }
-}
-
-function stderrTailGetter(get: () => string): () => string {
-  return get;
 }
 
 /**

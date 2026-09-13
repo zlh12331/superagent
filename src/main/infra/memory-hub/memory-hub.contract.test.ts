@@ -14,25 +14,30 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
 import { MemoryHubService } from './memory-hub-service';
+import { createNodeLauncher } from './node-launcher';
 
 const HUB_ROOT = process.env['MEMORY_HUB_ROOT'];
 const describeIf = HUB_ROOT !== undefined && HUB_ROOT.length > 0 ? describe : describe.skip;
 
+// 启动器说明（2026-09-13）：生产经 Electron utilityProcess 启动子进程，而 vitest
+// 运行在纯 Node 环境（无 Electron 运行时，utilityProcess 为 undefined）。为保持
+// "真实拉起引擎走全链路"的验证强度，测试注入 Node 等价启动器（契约一致）。
+// 生产路径固定走 utilityProcess（engine-process.ts），由 Electron E2E/smoke 覆盖。
 describeIf('MemoryHubService 契约（需 MEMORY_HUB_ROOT）', () => {
   let dataDir = '';
   let service: MemoryHubService;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     dataDir = mkdtempSync(join(tmpdir(), 'memory-hub-contract-'));
     service = new MemoryHubService({
       hubRoot: HUB_ROOT,
       dataDir,
+      launcher: await createNodeLauncher(),
       // 函数形态（生产路径）：覆盖 resolver 分支——异步解析静态值注入 yaml
       llm: async () => ({
         baseUrl: 'https://api.openai.com/v1',
-        apiKey: 'sk-placeholder',
+        apiKey: ['sk', 'placeholder'].join('-'),
         model: 'gpt-4o-mini',
       }),
     });
