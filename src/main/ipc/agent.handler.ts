@@ -29,6 +29,7 @@ import type { IAgentService } from '../infra/ai/agent/agent-service';
 import type { IPromptService } from '../infra/ai/prompt/prompt-service';
 import type { MemoryCaptureWire } from '../infra/memory-hub/capture-wire';
 import { extractLastUserText } from '../infra/memory-hub/capture-wire';
+import { isMemoryEnabled } from '../infra/memory-hub/memory-pref';
 import type { MemoryPort } from '../infra/memory-hub/types';
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -98,7 +99,9 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
         promptService !== undefined &&
         lastUser.length > 0 &&
         recallSessionKey !== undefined &&
-        recallSessionKey.length > 0
+        recallSessionKey.length > 0 &&
+        // 用户关闭记忆功能时不注入召回（关闭语义 = 不捕获也不使用）
+        isMemoryEnabled()
       ) {
         try {
           const [base, mem] = await Promise.all([

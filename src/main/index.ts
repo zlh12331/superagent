@@ -22,6 +22,7 @@ import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
+import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
@@ -257,6 +258,7 @@ app
       memory: createMemoryHandlers({
         listL0BySession: (sessionKey, limit) =>
           serviceContainer.getMemoryHubService().listL0BySession(sessionKey, limit),
+        listKnownSessionKeys: () => serviceContainer.getMemoryHubService().listKnownSessionKeys(),
         clearBySession: async (sessionKey) => {
           try {
             const service = serviceContainer.getMemoryHubService();
@@ -280,6 +282,13 @@ app
               message: error instanceof Error ? error.message : String(error),
             };
           }
+        },
+        status: {
+          isEnabled: () => isMemoryEnabled(),
+          isAvailable: () => serviceContainer.getMemoryHubService().isConfigured(),
+          isRunning: () => serviceContainer.getMemoryHubService().isRunning(),
+          isHealthy: () => serviceContainer.getMemoryHubService().probeHealth(),
+          countRecords: () => serviceContainer.getMemoryHubService().countRecords(),
         },
       }),
       models: modelsHandlers,

@@ -10,6 +10,7 @@
 
 import type { TurnEvent } from '@code-agent/shared/main';
 import type { IAgentService } from '../ai/agent/agent-service';
+import { isMemoryEnabled } from './memory-pref';
 import type { MemoryPort } from './types';
 
 /** 从渲染层消息线程中提取最后一条用户文本（容错解析，兼容 UIMessage parts 形状） */
@@ -67,7 +68,8 @@ export function createMemoryCaptureWire(deps: {
         );
         break;
       case 'turn-end':
-        if (event.reason === 'completed') {
+        // 用户开关关闭时不捕获新记忆（已记录的数据保留，可在设置页清除）
+        if (event.reason === 'completed' && isMemoryEnabled()) {
           void port
             .capture({
               sessionKey: event.sessionId,

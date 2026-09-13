@@ -162,6 +162,17 @@ export type BrowserDevicePreset = 'responsive' | 'desktop' | 'laptop' | 'tablet'
 export type BrowserZoom = 50 | 75 | 100 | 125 | 150 | 200;
 
 /**
+ * 记忆功能设置
+ *
+ * enabled 是隐私开关：关闭后主进程不捕获新记忆、不注入召回（已有记忆保留，
+ * 用户可在设置页清除）。默认开启——记忆是产品核心能力之一，但必须可见可关。
+ */
+export interface MemorySettings {
+  /** 是否启用记忆（默认 true） */
+  readonly enabled: boolean;
+}
+
+/**
  * 浏览器 pane 设置（右面板进程外预览工具，页面在主进程 WebContentsView 加载）
  *
  * 前两项是 pane 挂载时的初值（工具栏内可临时改，不写回）；
@@ -213,6 +224,8 @@ interface SettingsData {
   readonly workspace: WorkspaceSettings;
   /** 浏览器 pane（iframe 预览） */
   readonly browser: BrowserSettings;
+  /** 记忆功能（隐私开关） */
+  readonly memory: MemorySettings;
 }
 
 /**
@@ -238,6 +251,8 @@ interface SettingsState extends SettingsData {
   readonly updateWorkspace: (patch: Partial<WorkspaceSettings>) => void;
   /** 更新浏览器 pane 设置（部分字段） */
   readonly updateBrowser: (patch: Partial<BrowserSettings>) => void;
+  /** 更新记忆设置（写穿透 SQLite） */
+  readonly updateMemory: (patch: Partial<MemorySettings>) => void;
 }
 
 /**
@@ -347,6 +362,9 @@ const DEFAULT_SETTINGS: SettingsData = {
     defaultZoom: 100,
     strictSandbox: false,
   },
+  memory: {
+    enabled: true,
+  },
 };
 
 /**
@@ -418,6 +436,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     set({ browser });
     persistSetting('browser', browser);
   },
+  updateMemory: (patch) => {
+    const memory = { ...useSettingsStore.getState().memory, ...patch };
+    set({ memory });
+    persistSetting('memory', memory);
+  },
 }));
 
 /**
@@ -457,6 +480,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     browser: {
       ...DEFAULT_SETTINGS.browser,
       ...((snapshot['browser'] as Partial<BrowserSettings> | undefined) ?? {}),
+    },
+    memory: {
+      ...DEFAULT_SETTINGS.memory,
+      ...((snapshot['memory'] as Partial<MemorySettings> | undefined) ?? {}),
     },
   });
 }

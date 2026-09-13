@@ -873,6 +873,16 @@ function createMockApi(): IpcApi {
     memory: {
       list: async () => ipcOk({ memories: [] }),
       clear: async () => ipcOk({ ok: true }),
+      clearAll: async () => ipcOk({ ok: true, clearedSessions: 0, deletedCount: 0 }),
+      status: async () =>
+        ipcOk({
+          enabled: true,
+          available: false,
+          running: false,
+          healthy: false,
+          sessionCount: 0,
+          recordCount: 0,
+        }),
     },
     goal: {
       list: async ({ sessionId }: Req<IpcApi['goal']['list']>) => {

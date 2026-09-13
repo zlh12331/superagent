@@ -28,10 +28,10 @@
     "params": 5
   },
   "src/main/service-container.ts#dispose": {
-    "body": 141
+    "body": 132
   },
   "src/main/window.ts#createWindow": {
-    "body": 132
+    "body": 130
   },
   "src/renderer/components/agent/ask-dialog.tsx#AskDialog": {
     "body": 187
@@ -64,7 +64,7 @@
     "body": 115
   },
   "src/renderer/components/dev/browser-pane.tsx#BrowserPane": {
-    "body": 252
+    "body": 202
   },
   "src/renderer/components/file-tree/FileTreeNode.tsx#FileTreeNode": {
     "body": 135
@@ -119,9 +119,6 @@
   },
   "src/renderer/components/settings/sections/prompt-section.tsx#PromptSection": {
     "body": 102
-  },
-  "src/renderer/components/settings/sections/rules-memory-section.tsx#RulesMemorySection": {
-    "body": 117
   },
   "src/renderer/components/settings/sections/skills-section.tsx#SkillsSection": {
     "body": 136

@@ -26,6 +26,7 @@ export const QUERY_KEY_ROOTS = {
   git: ['git'],
   file: ['file'],
   turns: ['turns'],
+  memory: ['memory'],
 } as const;
 
 // ── 目标（goal）─────────────────────────────────────────────
@@ -70,3 +71,5 @@ export const TOOLS_LIST_QUERY_KEY = ['tool', 'list'] as const;
 // ── 记忆（memory）────────────────────────────────────────────
 /** 会话记忆列表（按会话隔离） */
 export const MEMORY_LIST_QUERY_KEY = (sessionId: string) => ['memory', 'list', sessionId] as const;
+/** 引擎状态（配置/运行/健康/数据量 + 用户开关） */
+export const MEMORY_STATUS_QUERY_KEY = ['memory', 'status'] as const;

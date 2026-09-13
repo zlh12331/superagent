@@ -134,12 +134,18 @@ import {
   type McpStopRes,
 } from '../schemas/mcp';
 import {
+  MemoryClearAllReqSchema,
+  type MemoryClearAllRes,
+  MemoryClearAllResSchema,
   MemoryClearReqSchema,
   type MemoryClearRes,
   MemoryClearResSchema,
   MemoryListReqSchema,
   type MemoryListRes,
   MemoryListResSchema,
+  MemoryStatusReqSchema,
+  type MemoryStatusRes,
+  MemoryStatusResSchema,
 } from '../schemas/memory';
 import {
   ModelsListBuiltinReqSchema,
@@ -842,6 +848,18 @@ export const IPC_DEFINITIONS = {
       MemoryClearReqSchema,
       {} as MemoryClearRes,
       MemoryClearResSchema,
+    ),
+    clearAll: withSchema(
+      IPC_META.memory.clearAll,
+      MemoryClearAllReqSchema,
+      {} as MemoryClearAllRes,
+      MemoryClearAllResSchema,
+    ),
+    status: withSchema(
+      IPC_META.memory.status,
+      MemoryStatusReqSchema,
+      {} as MemoryStatusRes,
+      MemoryStatusResSchema,
     ),
   },
 

@@ -25,13 +25,13 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { logger } from '../../utils/logger';
 import { HttpMemoryPort } from './adapter';
+import { countL0Records, listL0SessionKeys, readSessionRecords } from './l0-inspect';
 import type { MemoryPort } from './types';
 
 const TAG = '[memory-hub]';
@@ -130,6 +130,46 @@ export class MemoryHubService {
     return this.options.hubRoot !== undefined && this.options.hubRoot.length > 0;
   }
 
+  /** sidecar 是否正在运行（不触发启动） */
+  isRunning(): boolean {
+    return this.child !== null && this.child.exitCode === null;
+  }
+
+  /**
+   * 探测已启动 sidecar 的健康状态（不触发启动）
+   *
+   * 未运行时返回 false（调用方应先查 isRunning 以区分"未运行"与"运行不健康"）。
+   */
+  async probeHealth(): Promise<boolean> {
+    if (!this.isRunning()) {
+      return false;
+    }
+    try {
+      return (await this.port?.health()) ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 统计既有记忆数据（读审计镜像，不触发引擎启动）
+   *
+   * 用于设置页展示"已记录多少"——打开设置页不应有启动引擎的副作用。
+   * 实现见 l0-inspect（纯数据检查，与 sidecar 生命周期无关）。
+   */
+  async countRecords(): Promise<{ sessionCount: number; recordCount: number }> {
+    return countL0Records(this.options.dataDir);
+  }
+
+  /**
+   * 列出审计镜像中出现的全部会话 key（用于"清空全部记忆"枚举）
+   *
+   * 上游 /v2/conversation/delete 需要显式 session_ids（单次上限 100），无全清接口。
+   */
+  async listKnownSessionKeys(): Promise<string[]> {
+    return listL0SessionKeys(this.options.dataDir);
+  }
+
   /**
    * 按会话读取 L0 对话记录（读上游落盘的 conversations JSONL，只读展示）。
    *
@@ -137,54 +177,7 @@ export class MemoryHubService {
    * 既有记录（此前走 gateway /search/conversations 需语义 query，无法"列出"某会话）。
    */
   async listL0BySession(sessionKey: string, limit = 20): Promise<L0Record[]> {
-    const dir = join(this.options.dataDir, 'data', 'conversations');
-    if (!existsSync(dir)) {
-      return [];
-    }
-    // 2026-09-08 性能修复：此前 readdirSync + readFileSync 全目录全文件同步读，
-    // 期间事件循环完全停摆（10MB JSONL ≈ 30–60ms 阻塞）。改为 fs.promises
-    // 并发读取，只让 IO 等待、不阻塞主线程。
-    let files: string[];
-    try {
-      files = (await readdir(dir)).filter((f) => f.endsWith('.jsonl'));
-    } catch {
-      return [];
-    }
-    const texts = await Promise.all(
-      files.map(async (file) => {
-        try {
-          return await readFile(join(dir, file), 'utf8');
-        } catch {
-          return null;
-        }
-      }),
-    );
-    const records: L0Record[] = [];
-    for (const text of texts) {
-      if (text === null) continue;
-      for (const line of text.split(/\r?\n/)) {
-        if (line.trim().length === 0) continue;
-        try {
-          const rec = JSON.parse(line) as {
-            sessionKey?: unknown;
-            role?: unknown;
-            content?: unknown;
-            timestamp?: unknown;
-          };
-          if (rec.sessionKey === sessionKey) {
-            records.push({
-              role: typeof rec.role === 'string' ? rec.role : 'unknown',
-              content: typeof rec.content === 'string' ? rec.content : '',
-              timestamp: typeof rec.timestamp === 'number' ? rec.timestamp : 0,
-            });
-          }
-        } catch {
-          // 跳过损坏行（上游日志文件，容忍脏数据）
-        }
-      }
-    }
-    records.sort((a, b) => a.timestamp - b.timestamp);
-    return records.slice(-limit);
+    return readSessionRecords(this.options.dataDir, sessionKey, limit);
   }
 
   /**

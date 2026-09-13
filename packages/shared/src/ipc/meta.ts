@@ -146,6 +146,10 @@ export const IPC_META = {
   memory: {
     list: request('memory:list'),
     clear: request('memory:clear'),
+    // 清空全部会话记忆（上游无全清接口，主进程枚举会话后批量删）
+    clearAll: request('memory:clearAll'),
+    // 引擎状态（配置/运行/健康/数据量）与用户开关状态
+    status: request('memory:status'),
   },
 
   task: {

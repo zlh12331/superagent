@@ -16,6 +16,7 @@
 
 import { logger } from '../../utils/logger';
 import type { MemoryHubService } from './memory-hub-service';
+import { isMemoryEnabled } from './memory-pref';
 
 /** 预热延迟：先让窗口完成首帧，避免与渲染层启动争抢 CPU */
 export const PREWARM_DELAY_MS = 3_000;
@@ -24,6 +25,8 @@ export const PREWARM_DELAY_MS = 3_000;
 export interface PrewarmDecision {
   /** 引擎是否已配置（hubRoot 可解析到上游入口） */
   readonly configured: boolean;
+  /** 用户开关是否启用（关闭则无需预热） */
+  readonly enabled: boolean;
   /** 是否测试环境（NODE_ENV=test：不拉起子进程，避免测试期副作用） */
   readonly isTest: boolean;
   /** 是否显式豁免（E2E/基准等场景用 CODE_AGENT_SKIP_MEMORY_PREWARM=1） */
@@ -35,11 +38,13 @@ export interface PrewarmDecision {
  *
  * 跳过条件（任一）：
  * - 引擎未配置（未捆绑/路径不可解析）→ 预热只会重复失败
+ * - 用户已关闭记忆功能 → 预热无意义（且关闭语义应包含"不启动引擎耗资源"）
  * - 测试环境 → 避免在单测/集成测试里拉起子进程
  * - 显式豁免 → E2E 需要稳定的启动耗时与 CPU 占用
  */
 export function shouldPrewarm(decision: PrewarmDecision): boolean {
   if (!decision.configured) return false;
+  if (!decision.enabled) return false;
   if (decision.isTest) return false;
   if (decision.skipFlag) return false;
   return true;
@@ -69,6 +74,7 @@ export function scheduleMemoryPrewarm(params: SchedulePrewarmParams): void {
 
   const run = shouldPrewarm({
     configured: params.service.isConfigured(),
+    enabled: isMemoryEnabled(),
     isTest: process.env['NODE_ENV'] === 'test',
     skipFlag: process.env['CODE_AGENT_SKIP_MEMORY_PREWARM'] === '1',
   });

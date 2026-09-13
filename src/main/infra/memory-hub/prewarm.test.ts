@@ -19,24 +19,32 @@ async function loadModule() {
 }
 
 describe('shouldPrewarm（纯决策）', () => {
-  it('引擎已配置且非测试、无豁免 → 预热', async () => {
+  /** 基线决策：已配置 + 已启用 + 非测试 + 无豁免 */
+  const base = { configured: true, enabled: true, isTest: false, skipFlag: false } as const;
+
+  it('引擎已配置且启用、非测试、无豁免 → 预热', async () => {
     const { shouldPrewarm } = await loadModule();
-    expect(shouldPrewarm({ configured: true, isTest: false, skipFlag: false })).toBe(true);
+    expect(shouldPrewarm(base)).toBe(true);
   });
 
   it('引擎未配置 → 不预热（重复失败无意义）', async () => {
     const { shouldPrewarm } = await loadModule();
-    expect(shouldPrewarm({ configured: false, isTest: false, skipFlag: false })).toBe(false);
+    expect(shouldPrewarm({ ...base, configured: false })).toBe(false);
+  });
+
+  it('用户关闭记忆功能 → 不预热（关闭语义含不启动引擎耗资源）', async () => {
+    const { shouldPrewarm } = await loadModule();
+    expect(shouldPrewarm({ ...base, enabled: false })).toBe(false);
   });
 
   it('测试环境 → 不预热（避免测试期拉起子进程）', async () => {
     const { shouldPrewarm } = await loadModule();
-    expect(shouldPrewarm({ configured: true, isTest: true, skipFlag: false })).toBe(false);
+    expect(shouldPrewarm({ ...base, isTest: true })).toBe(false);
   });
 
   it('显式豁免 → 不预热（E2E 需稳定启动耗时）', async () => {
     const { shouldPrewarm } = await loadModule();
-    expect(shouldPrewarm({ configured: true, isTest: false, skipFlag: true })).toBe(false);
+    expect(shouldPrewarm({ ...base, skipFlag: true })).toBe(false);
   });
 });
 
