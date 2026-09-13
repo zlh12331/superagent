@@ -195,7 +195,7 @@
     "@sentry/electron": "^7.18.0",
     "@vscode/ripgrep": "^1.18.0",
     "@wecom/aibot-node-sdk": "^1.0.7",
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "ai": "^7.0.92",
     "better-sqlite3": "^13.0.3",
     "chardet": "^2.2.0",
