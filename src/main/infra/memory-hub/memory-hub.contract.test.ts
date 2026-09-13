@@ -46,7 +46,10 @@ describeIf('MemoryHubService 契约（需 MEMORY_HUB_ROOT）', () => {
   it('sidecar 启动且健康检查通过', async () => {
     const port = await service.ensureStarted();
     await expect(port.health()).resolves.toBe(true);
-  }, 15_000); // 首次用例承担 sidecar 冷启动（本机实测 ~4.8s），默认 5s 贴边故放宽
+    // 首次用例承担 sidecar 冷启动。注：生产走 tsx 直跑 TS 源码，冷启动需即时编译
+    // （本机实测 v2.0.2 约 13–15s，v2.0.1 约 5–11s）；上游 20s 就绪超时内。
+    // 该成本是 tsx 运行时的固有开销，根治手段是预处理为 JS（见 README 的后续优化）。
+  }, 40_000);
 
   it('ensureStarted 幂等（并发合并为同一端口实例）', async () => {
     const [a, b] = await Promise.all([service.ensureStarted(), service.ensureStarted()]);
