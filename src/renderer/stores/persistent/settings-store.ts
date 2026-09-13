@@ -18,6 +18,7 @@ import {
   type ApiKeyProvider,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
+  type SettingKey,
   type ThinkingLevel,
 } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
@@ -267,7 +268,7 @@ export async function flushPendingSettings(): Promise<void> {
   await Promise.allSettled([...pendingWrites]);
 }
 
-function persistSetting(key: string, value: unknown): void {
+function persistSetting(key: SettingKey, value: unknown): void {
   const api = window.api;
   const setter = api?.settings?.set;
   if (typeof setter !== 'function') {

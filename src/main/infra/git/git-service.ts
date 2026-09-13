@@ -19,15 +19,18 @@
 // - 单例模式：与 FileService / SearchService 一致，便于统一生命周期管理
 // ──────────────────────────────────────────────────────────────
 
-import type {
-  GitAddRes,
-  GitCommitRes,
-  GitDiffRes,
-  GitFileStatus,
-  GitPushRes,
-  GitStatusRes,
+import {
+  AppError,
+  ErrorCode,
+  type GitAddRes,
+  type GitCommitRes,
+  type GitDiffRes,
+  type GitFileStatus,
+  type GitPushRes,
+  type GitStatusRes,
+  isSafeGitRefValue,
+  isSafeGitRemote,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { type SimpleGit, simpleGit } from 'simple-git';
 import { logger } from '../../utils/logger';
 
@@ -214,6 +217,11 @@ class GitService implements IGitService {
    */
   async diff(options: GitDiffOptions): Promise<GitDiffRes> {
     const { path, ref, staged, filePath } = options;
+    // P0 收口（服务层 choke point）：agent git 工具直连本服务不经过 IPC
+    // schema——ref 在此处兜底校验，选项形参数（-- 开头）直接拒绝
+    if (ref !== undefined && ref.length > 0 && !isSafeGitRefValue(ref)) {
+      throw new AppError(ErrorCode.INVALID_INPUT, `git diff ref 含非法字符：${ref}`);
+    }
     await this.assertGitRepo(path);
 
     // simple-git 的 diff 方法内部已拼 'diff' 前缀，此处只传差异化参数
@@ -341,6 +349,15 @@ class GitService implements IGitService {
    */
   async push(options: GitPushOptions): Promise<GitPushRes> {
     const { path, remote, refspec, setUpstream, force } = options;
+    // P0 收口（服务层 choke point）：agent git_push 工具直连本服务不经过
+    // IPC schema——remote（ext:: 传输会运行本地命令）与 refspec（选项形
+    // 参数）在此处兜底校验
+    if (!isSafeGitRemote(remote)) {
+      throw new AppError(ErrorCode.INVALID_INPUT, `git push remote 含非法字符：${remote}`);
+    }
+    if (!isSafeGitRefValue(refspec)) {
+      throw new AppError(ErrorCode.INVALID_INPUT, `git push refspec 含非法字符：${refspec}`);
+    }
     await this.assertGitRepo(path);
 
     // 记录推送前的远程 SHA（用于计算推送的 commit 数）

@@ -14,6 +14,59 @@
 
 import { z } from 'zod';
 
+// ── Git 引用/远程安全校验（P0 收口共享工具） ──────────────────
+//
+// 背景：git remote/refspec/ref 曾为自由字符串透传。git 对位置参数处的
+// `--flag` 按选项解析（option implantation），且 `ext::<cmd>` 远程传输会
+// 由 git 直接运行本地命令——IPC 边界与 agent 工具层都必须拦截。
+// 本组校验器同时被 zod schema（IPC 边界）与 GitService（服务层 choke
+// point，覆盖 agent git 工具的直连调用）消费。
+
+/** Git 引用段合法字符集（分支/tag/sha 通用）：字母数字与 . _ / - ~ ^ * @ { } */
+const GIT_REF_SEGMENT = /^[A-Za-z0-9._~^*@{}/-]+$/;
+
+/**
+ * 校验 Git 引用值（ref / refspec 通用）
+ *
+ * 规则：
+ * - 空串合法（push refspec 的省略语义 = 推送当前分支）
+ * - 可选 `+` 前缀（引用规格的强制推送语义）
+ * - 至多一个 `:`（src[:dst]）；空段合法（git 的删除语义，由调用方业务把关）
+ * - 每段不得以 `-` 开头（防 option implantation）、不含空白/控制字符
+ */
+export function isSafeGitRefValue(value: string): boolean {
+  if (value === '') {
+    return true;
+  }
+  const spec = value.startsWith('+') ? value.slice(1) : value;
+  const parts = spec.split(':');
+  if (parts.length > 2) {
+    return false;
+  }
+  return parts.every(
+    (part) =>
+      part === '' || (!part.startsWith('-') && !/\s/.test(part) && GIT_REF_SEGMENT.test(part)),
+  );
+}
+
+/**
+ * 校验 Git 远程标识
+ *
+ * git 远程的「命令运行」原语只有两个，按 denylist 精确拦截：
+ * - `<transport>::<addr>` 语法：git 会运行 `git-remote-<transport>` helper，
+ *   其中 `ext::<cmd>` 直接运行任意本地命令——拒绝一切含 `::` 的值
+ * - `-` 开头：选项形参数（argv 位置上的 --flag 会被 git 当选项解析）——拒绝
+ * 其余形态均安全：远程名、https/ssh URL、本地路径（含空格，spawn 走 argv
+ * 数组不经 shell）、scp 形态。空串与换行/控制字符同样拒绝（畸形参数）。
+ */
+export function isSafeGitRemote(value: string): boolean {
+  if (value === '' || value.startsWith('-') || value.includes('::')) {
+    return false;
+  }
+  // 控制字符检测不用 \s（空格是合法路径成分），仅拒换行/NUL
+  return !/[\n\r\0]/.test(value);
+}
+
 /** git:status 入参 zod schema */
 export const GitStatusReqSchema = z.object({
   // Git 仓库路径（绝对路径，可为仓库根或子目录，GitService 内部解析根目录）
@@ -80,7 +133,11 @@ export const GitStatusResSchema = z.object({
 export const GitDiffReqSchema = z.object({
   path: z.string().min(1),
   // 对比的 ref（默认 'HEAD'，可为分支名、commit hash、'HEAD~1' 等）
-  ref: z.string().default('HEAD'),
+  // 安全：拒绝 `--` 开头的选项形参数（git diff --output=<file> 可任意写文件）
+  ref: z
+    .string()
+    .default('HEAD')
+    .refine(isSafeGitRefValue, 'ref 含非法字符或选项形参数（- 开头 / 空白）'),
   // 是否只看暂存区（git diff --cached）
   staged: z.boolean().default(false),
   // 指定文件路径（可选，省略时查看整个仓库 diff）
@@ -210,9 +267,20 @@ export const GitCommitResSchema = z.object({
 export const GitPushReqSchema = z.object({
   path: z.string().min(1),
   // 远程名（默认 'origin'）
-  remote: z.string().default('origin').describe('远程名，默认 origin'),
+  // 安全：拒绝 `::` 传输语法（ext::<cmd> 会让 git 直接运行本地命令）
+  // 与 `-` 开头的选项形参数；远程名/URL/本地路径均合法
+  remote: z
+    .string()
+    .default('origin')
+    .refine(isSafeGitRemote, 'remote 含非法形态（:: 传输语法 / - 开头选项 / 空串 / 换行）')
+    .describe('远程名，默认 origin'),
   // 引用规格（默认当前分支，可为 'master'、'feature/x' 等）
-  refspec: z.string().default('').describe('引用规格（省略时推送当前分支到同名远程分支）'),
+  // 安全：拒绝选项形参数与空白（位置参数处的 --flag 会被 git 按选项解析）
+  refspec: z
+    .string()
+    .default('')
+    .refine(isSafeGitRefValue, 'refspec 含非法字符或选项形参数（- 开头 / 空白 / 多个冒号）')
+    .describe('引用规格（省略时推送当前分支到同名远程分支）'),
   // 是否设置上游（首次推送时使用），默认 false
   setUpstream: z.boolean().default(false).describe('是否设置上游（git push -u）'),
   // 是否使用 --force-with-lease（更安全的强制推送），默认 false
