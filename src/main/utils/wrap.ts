@@ -122,7 +122,7 @@ export function wrap<TInput, TOutput>(
     const startTime = performance.now();
     try {
       logger.info({ traceId, channel }, 'IPC 请求开始');
-      const data = await handler(parsedInput, ctx);
+      let data = await handler(parsedInput, ctx);
       // 4.5 响应契约校验（resSchema 存在时）：防手写 Res 接口与 handler 实际返回漂移
       if (resSchema !== undefined) {
         const parsedRes = resSchema.safeParse(data);
@@ -136,6 +136,11 @@ export function wrap<TInput, TOutput>(
           }).toIpcError();
           return { error } satisfies IpcResponse<TOutput>;
         }
+        // P0 收口：zod 默认 strip 未声明字段——必须回写 parsedRes.data 才算
+        // 边界生效，否则校验只是"检查"：handler 返回的多余字段（实证：
+        // mcp:list config 的 headers/env，schema 未声明）原样越过契约到渲染层。
+        // typeof data 断言：handler 返回值实际不会是 Promise（TOutput 非嵌套）。
+        data = parsedRes.data as typeof data;
       }
       const durationMs = Math.round(performance.now() - startTime);
       logger.info({ traceId, channel, durationMs }, 'IPC 请求成功');
