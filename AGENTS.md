@@ -50,7 +50,7 @@ src/preload/     → 桥接（CJS 格式 .cjs, contextBridge）
 src/renderer/    → React 渲染层
 packages/shared/ → 跨进程共享: 类型/IPC schema/常量（按进程拆分出口）
 packages/tsconfig/→ base.json / node.json / web.json 三档
-scripts/         → 脚手架与工具（scaffold / check-* / build-tokens / sentry）
+scripts/         → 脚手架与工具（scaffold / check-* / build-tokens）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
@@ -105,7 +105,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 关键约束（易踩坑）
 
 - **preload 必须输出 CJS**（sandbox: true 限制，`electron.vite.config.ts` 中 format: 'cjs'），纯 ESM 包（如 zod）引入 preload 会静默失败导致 `window.api` 为 undefined。preload 必须通过 `@code-agent/shared/ipc/channels` / `@code-agent/shared/preload` 子路径导入（避开 shared 主入口中的 zod）
-- **Sentry 初始化必须在 `app.whenReady()` 之前**（@sentry/electron 要求）
+- **错误处理本地优先**（2026-09-13 移除 Sentry）：所有异常经 `infra/telemetry/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。⚠️ renderer 上报模块内 `electron-log/renderer` 必须**惰性加载**（CJS 首次 import >5s，静态导入会让 renderer 测试套件从 30s 劣化到 300s）。将来接任何后端只改这两个出口文件
 - **dev 环境 userData 重定向到 `.electron-user-data/`**（避免沙箱拦截 %APPDATA%）
 - **dev 环境开启远程调试端口 9222**（CDP over WebSocket）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
@@ -191,5 +191,5 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 外部服务 / 凭据
 
 - AI Provider API Key 用 Electron `safeStorage` 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
-- Sentry 自托管（http://127.0.0.1:9000），DSN 从 `.env` 读取；遥测为 Sentry + OpenTelemetry 双通道（设计见 docs/design/23-otel-spec.md）
-- CI Sentry 符号上传需要 `SENTRY_AUTH_TOKEN` 环境变量
+- 遥测为 **OpenTelemetry 单通道**（`OTEL_EXPORTER_OTLP_ENDPOINT` 配置，未配置即不外发；Sentry 已于 2026-09-13 移除，见 docs/design/23-otel-spec.md）
+- 错误报障走 GitHub Issue + 诊断包导出（本地优先，无云端上报依赖）
