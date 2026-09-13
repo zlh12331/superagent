@@ -36,7 +36,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const TARGET = join(ROOT, 'resources', 'memory-hub');
@@ -334,7 +334,159 @@ if (existsSync(PNPM_DIR)) {
   }
 }
 
-// 6. 摘要
+// 5.2 删除运行期无用文件（sourcemap / 类型声明）——同时修复 Windows MAX_PATH
+//
+// 背景：electron-builder 把本目录部署到 process.resourcesPath/memory-hub，
+//   路径前缀约 75 字符（Windows 典型安装位置）。实测产物内最长相对路径 215 字符，
+//   合计约 290 > Windows 260 限制（MAX_PATH）——会导致解压/安装失败或运行时读取异常。
+//   超限文件集中在 .map（1346 个）与 .d.ts（类型声明），两者运行期均不需要：
+//   - .map：sourcemap，仅调试源码映射用（引擎以 tsx 直跑源码，不消费它）
+//   - .d.ts：TypeScript 类型声明，纯编译期产物
+//   删除后最长路径显著下降，且顺带回收体积。
+const USELESS_EXTENSIONS = ['.map', '.d.ts', '.d.ts.map'];
+let removedUseless = 0;
+let removedBytes = 0;
+const stripUselessFiles = (dir) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isSymbolicLink()) continue;
+    if (ent.isDirectory()) {
+      stripUselessFiles(p);
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    if (!USELESS_EXTENSIONS.some((ext) => ent.name.endsWith(ext))) continue;
+    try {
+      removedBytes += statSync(p).size;
+      rmSync(p, { force: true });
+      removedUseless += 1;
+    } catch {
+      // 占用时跳过
+    }
+  }
+};
+stripUselessFiles(TARGET);
+if (removedUseless > 0) {
+  console.log(
+    `[prepare-memory-hub] 已清理运行期无用文件 ${removedUseless} 个（sourcemap/类型声明）` +
+      ` ~${(removedBytes / 1048576).toFixed(1)} MB——同时缓解 Windows 路径长度限制`,
+  );
+}
+
+// 6. Windows 路径长度检查（MAX_PATH=260）
+//
+// 背景：electron-builder 把本目录部署到 <安装目录>/resources/memory-hub。
+//   产品名较长（Code Agent Desktop），默认安装路径
+//   %LOCALAPPDATA%\Programs\Code Agent Desktop\resources\memory-hub ≈ 59 字符前缀；
+//   而 Electron 的 exe manifest **未声明 longPathAware**（实测二进制内无该声明），
+//   故 Windows 260 限制真实生效。
+//
+// 已做的缓解（顺序在检查之前）：
+//   - 删除 sourcemap / 类型声明（5.2 节）：去掉最深的一批文件
+//   - 依赖可达性裁剪（5.1 节）：移除整棵孤儿子树
+//   - 下面额外删除**非当前平台的实现文件**（@opentelemetry 的
+//     getMachineId-<platform>.js 等按平台分支的独立实现，运行期由同名选择器
+//     按 process.platform 加载，非本平台文件不会被引用）
+//
+// 实测：裁剪后最长相对路径约 212 字符；在 59 字符前缀下仍有约 34 个文件超限，
+//   集中在 @opentelemetry/resources 的 platform 目录。故再按平台裁剪一次。
+const PLATFORM_SUFFIX_PATTERNS = [
+  // 非当前平台的实现文件（形如 getMachineId-darwin.js / -linux / -win / -bsd / -unsupported）
+  /-(darwin|linux|win|bsd|unsupported)\.(js|mjs|cjs)$/,
+];
+const CURRENT_PLATFORM_TAGS = new Set(
+  process.platform === 'win32'
+    ? ['win', 'unsupported']
+    : process.platform === 'darwin'
+      ? ['darwin', 'unsupported']
+      : ['linux', 'unsupported'],
+);
+let removedCrossPlatform = 0;
+const stripForeignPlatformFiles = (dir) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isSymbolicLink()) continue;
+    if (ent.isDirectory()) {
+      stripForeignPlatformFiles(p);
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    // 仅处理 @opentelemetry 包内（避免误伤其他约定的同名文件）
+    if (!p.includes(`${sep}@opentelemetry${sep}`)) continue;
+    for (const pattern of PLATFORM_SUFFIX_PATTERNS) {
+      const m = pattern.exec(ent.name);
+      if (m === null) continue;
+      const tag = m[1];
+      if (tag !== undefined && !CURRENT_PLATFORM_TAGS.has(tag)) {
+        try {
+          rmSync(p, { force: true });
+          removedCrossPlatform += 1;
+        } catch {
+          // 占用时跳过
+        }
+      }
+      break;
+    }
+  }
+};
+stripForeignPlatformFiles(TARGET);
+if (removedCrossPlatform > 0) {
+  console.log(
+    `[prepare-memory-hub] 已删除非本平台实现文件 ${removedCrossPlatform} 个` +
+      `（当前平台 ${process.platform}，缓解 Windows 路径长度限制）`,
+  );
+}
+
+const MAX_PATH = 260;
+const ASSUMED_INSTALL_PREFIX = 59; // 默认安装路径实测估算（见上）
+let overLimit = 0;
+let maxRelative = 0;
+const checkPathLength = (dir) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isSymbolicLink()) continue;
+    if (ent.isDirectory()) {
+      checkPathLength(p);
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    const relLen = p.length - ROOT.length; // 相对项目根（含 resources/memory-hub）
+    if (relLen > maxRelative) maxRelative = relLen;
+    if (relLen + ASSUMED_INSTALL_PREFIX > MAX_PATH) overLimit += 1;
+  }
+};
+checkPathLength(TARGET);
+if (overLimit > 0) {
+  console.warn(
+    `[prepare-memory-hub] ⚠ Windows 路径长度：${overLimit} 个文件在默认安装路径下` +
+      `可能超过 ${MAX_PATH} 字符（最长相对 ${maxRelative}）。若安装失败请装到更浅的目录。`,
+  );
+} else {
+  console.log(
+    `[prepare-memory-hub] 路径长度检查通过（最长相对 ${maxRelative} 字符 + 安装前缀 ` +
+      `${ASSUMED_INSTALL_PREFIX} = ${maxRelative + ASSUMED_INSTALL_PREFIX} ≤ ${MAX_PATH}）`,
+  );
+}
+
+// 7. 摘要
 const sizeMb = dirSizeMb(TARGET);
 const files = countFiles(TARGET);
 console.log(`[prepare-memory-hub] 完成 → ${TARGET}（${sizeMb} MB，${files} 个文件）`);

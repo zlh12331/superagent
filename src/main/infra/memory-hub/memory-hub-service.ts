@@ -16,6 +16,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -26,6 +27,7 @@ import {
 } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import net from 'node:net';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { logger } from '../../utils/logger';
@@ -317,6 +319,11 @@ export class MemoryHubService {
     const dataDir = this.options.dataDir;
     mkdirSync(dataDir, { recursive: true });
 
+    // 数据归属修复的一次性迁移：早期版本未设 MEMORY_TENCENTDB_ROOT，引擎把主库
+    // 落在 ~/.memory-tencentdb/memory-tdai/（实测本机确有）。现在显式指向 userData，
+    // 若不迁移则用户既有记忆在升级后"消失"（引擎在新位置建空库）。
+    migrateLegacyDataDir(dataDir);
+
     const configPath = await this.writeGatewayConfig(dataDir, port, apiKey);
     const launcherPath = this.writeLauncher(dataDir);
 
@@ -344,6 +351,12 @@ export class MemoryHubService {
         TDAI_METADATA_SQLITE_BASE_DIR: join(dataDir, 'metadata'),
         // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
         TDAI_DEPLOY_MODE: 'standalone',
+        // 数据根目录显式收进 userData（P1 修复）：上游默认落到 ~/.memory-tencentdb
+        // （见上游 config.ts 的 MEMORY_TENCENTDB_ROOT 解析），导致引擎数据散落在
+        // 用户主目录——备份不覆盖、卸载不清理、多用户环境可能串数据。实测本机
+        // 已存在 ~/.memory-tencentdb/memory-tdai/vectors.db（引擎记忆库）。
+        // biome-ignore lint/style/useNamingConvention: 上游约定的配置环境变量名
+        MEMORY_TENCENTDB_ROOT: dataDir,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
@@ -489,4 +502,55 @@ export class MemoryHubService {
 
 function stderrTailGetter(get: () => string): () => string {
   return get;
+}
+
+/**
+ * 迁移早期版本遗留在用户主目录的引擎数据（→ userData）
+ *
+ * 背景：早期未设 `MEMORY_TENCENTDB_ROOT`，上游默认把主库放在
+ *   `~/.memory-tencentdb/memory-tdai/`。现在显式指向 userData（备份/卸载/
+ *   多用户隔离都更正确），但需把既有数据搬过来，否则用户记忆"消失"。
+ *
+ * 策略（保守、幂等、可重入）：
+ * - 仅当旧目录有数据、且新目录尚无对应文件时，逐项复制（不覆盖已有数据）
+ * - 复制成功后**不删除**旧目录（保留一份以防迁移出错；用户可自行清理）
+ * - 任何异常都静默（迁移失败不应阻断引擎启动）
+ *
+ * @returns 迁移的文件项数（0 = 无需迁移）
+ */
+export function migrateLegacyDataDir(newRoot: string, homeDir?: string): number {
+  try {
+    const home = homeDir ?? homedir();
+    const legacyRoot = join(home, '.memory-tencentdb', 'memory-tdai');
+    if (!existsSync(legacyRoot)) {
+      return 0;
+    }
+    let migrated = 0;
+    for (const entry of readdirSync(legacyRoot, { withFileTypes: true })) {
+      const src = join(legacyRoot, entry.name);
+      const dest = join(newRoot, entry.name);
+      if (existsSync(dest)) {
+        continue; // 新位置已有该条目，不覆盖
+      }
+      try {
+        cpSync(src, dest, { recursive: true, force: true });
+        migrated += 1;
+      } catch {
+        // 单项失败跳过（不阻断其余项与引擎启动）
+      }
+    }
+    if (migrated > 0) {
+      logger.info(
+        { legacyRoot, newRoot, migrated },
+        `${TAG} 已迁移主目录遗留数据至 userData（旧目录保留未删，可手动清理）`,
+      );
+    }
+    return migrated;
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      `${TAG} 遗留数据迁移失败（忽略，引擎照常启动）`,
+    );
+    return 0;
+  }
 }
