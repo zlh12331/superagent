@@ -16,6 +16,10 @@ pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
+pnpm check:packaged-engine  # 打包后断言产物含可运行记忆引擎（入口+node_modules+无占位标记+关键依赖），release.yml 卡关
+pnpm memory-engine:check    # 查上游记忆引擎新版本（网络不可用时提示，不算失败）
+pnpm memory-engine:sync --from <解压目录> --tag <tag>  # 同步上游（事务性替换+补丁重放+完整性重生成）
+pnpm memory-engine:integrity # 校验 vendored 引擎源码未被手改（接 check:static 卡关）
 
 # 单包/层测试
 pnpm --filter @code-agent/shared run test
@@ -70,7 +74,7 @@ tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 | 渲染进程崩溃 | 整窗消失（单窗口设计，无独立重开） | Electron 自动重建 webContents；数据真源在 SQLite 无损 |
 | 主进程崩溃 | 应用退出 | `.crash-marker` + 启动 `recoverFromCrash()` 把 running 回合标 interrupted |
 | MCP server / LSP / pty / ripgrep 子进程崩溃 | 对应功能降级，主进程存活 | 各 service 自管重启/报错（run-command killTree 防孤儿） |
-| MemoryHub sidecar 崩溃 | 记忆功能降级 | service 层报错，主流程不依赖 |
+| 记忆引擎子进程崩溃（utilityProcess，serviceName=memory-engine） | 记忆功能降级（MemoryPort 空实现） | service 层报错，主流程不依赖；可在 app.getAppMetrics() 归因 |
 | 断电/强杀 | running 会话残留 | 下次启动 `markAllInterrupted()`（启动期无条件执行，不依赖崩溃标记） |
 
 退出路径双层保障：**关窗协商**（`window.ts` close 拦截：运行中回合弹确认，`CODE_AGENT_SKIP_CLOSE_GUARD=1` 豁免）+ **退出善后**（dispose 链 `markInterruptedOnShutdown`：agentService drain 后把残留 running 标 interrupted，消除"干净退出留 stale running"窗口）。取舍说明：单窗口 Agent 应用暂不做进程拆分（重活隔离的收益 < utilityProcess 拆分的复杂度），若未来多窗口/插件化再评估。
@@ -115,6 +119,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **根级 `*.config.ts` 已纳入 typecheck 但 include 是枚举式**（根 `tsconfig.json` = `files: []` + 6 个 project references，其中 `tsconfig.configs.json` 显式枚举 electron.vite.config.ts / vite.web.config.ts / drizzle.config.ts / i18next.config.ts / vitest.workspace.ts / commitlint.config.js）⇒ **新增根级配置文件必须手动加进 `tsconfig.configs.json` 的 include**，否则 typecheck 查不出它的类型错误/excess property；改配置仍需 `pnpm exec vite build` 实测行为
 - **渲染层动效统一走 MotionVault**（`src/renderer/lib/motion/`：transitions/variants 集中定义），不要散写 CSS transition/手搓动画；shiki 语言按需加载（`loadLanguage`），受首载体积门槛约束
 - **网页预览绝不能回渲染层 iframe**：主进程对 defaultSession 统一注入 CSP/X-Frame-Options（`security/csp.ts` + `index.ts`），iframe 加载外站会被三层拦截（frame-src 回退 'self' / XFO 注入远端响应 / CSP 污染远端文档）。右面板浏览器走 `WebContentsView` + 独立内存分区 `browser-preview`（`infra/browser/preview-service.ts`，容器第 20 个 accessor）——新增网页承载能力必须用进程外视图 + 独立 session 分区
+- **记忆引擎是 vendored 上游 + 独立进程**（`packages/memory-engine/`，见 `docs/design/26-memory-engine-spec.md`）：源码 MIT 进仓（CI 才能构建出带引擎的包），运行时经 **utilityProcess**（非 `ELECTRON_RUN_AS_NODE`——该变量与 fuses 的 `runAsNode: false` 互斥）；数据落 `userData/memory-hub`（显式设 `MEMORY_TENCENTDB_ROOT`，否则默认散落 `~/.memory-tencentdb`）；`adapter.ts` 是唯一知晓上游 HTTP 协议的文件；改上游代码必须走 `patches/`（`memory-engine:integrity` 拦手改）；引擎构建失败即打包失败（无占位降级），`check:packaged-engine` 在 CD 断言产物真含引擎
 
 ## 渲染层写法标准（2026-09 一致性收敛）
 

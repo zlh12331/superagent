@@ -51,7 +51,9 @@
   `run_workflow`（串行多步编排）
 - **多轮工具调用循环**：基于 Vercel AI SDK v7（`streamText` + `tools` + `stopWhen`）
 - **技能系统**：可按需加载的技能包（`load_skill`）
-- **持久记忆**：跨会话记忆捕获与检索（`save_memory` / `recall_memory`）
+- **持久记忆**：跨会话记忆捕获与检索（`save_memory` / `recall_memory`），
+  中英文均可检索；默认开启且**可在「设置 → 规则与记忆」随时关闭**（关闭后不捕获
+  也不召回），支持按会话或一次性清除全部记忆
 
 ### 🛡️ 安全与可控
 

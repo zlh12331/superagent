@@ -208,6 +208,14 @@ jobs:
       # 注：Sentry 符号上传步骤已于 2026-09-13 随 Sentry 移除整体删除
       # （本地优先错误处理，报障走 GitHub issue + 诊断包，见 error-report.ts）。
 
+      # ── 安装包引擎断言（防"发布缺引擎的包"事故复发）──────────────
+      # 2026-09-12 事故：引擎源码未入仓 → CI 生成占位目录并 exit 0 → 打包"成功"
+      # 但产物不含引擎（运行时静默降级），而 README 承诺了该功能。
+      # 本步在打包后校验最终产物内的 resources/memory-hub 真有可运行引擎
+      # （入口 + node_modules + 无占位标记 + 关键依赖），缺任一即失败。
+      - name: Verify packaged memory engine
+        run: pnpm check:packaged-engine
+
       # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
       # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
       # 打包产物，无需 Playwright 自带浏览器；ffmpeg 供 video:'retain-on-failure' 录像。
