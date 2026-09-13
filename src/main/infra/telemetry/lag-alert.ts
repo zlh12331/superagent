@@ -5,8 +5,8 @@
 // 便于把阻塞关联到具体操作（长会话分词 / 大库查询 / 备份 / 迁移）。
 // ──────────────────────────────────────────────────────────────
 
-import * as Sentry from '@sentry/electron/main';
 import { logger } from '../../utils/logger';
+import { reportMessage } from './error-report';
 import type { EventLoopLagSample } from './event-loop-lag';
 
 /**
@@ -22,7 +22,7 @@ export function reportEventLoopLag(sample: EventLoopLagSample, hasActiveTurn: ()
     activeTurn: hasActiveTurn(),
     heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1_048_576),
   };
-  Sentry.captureMessage(
+  reportMessage(
     `主进程事件循环阻塞：${sample.lagMs.toFixed(0)}ms（活跃回合=${context.activeTurn}，堆=${context.heapUsedMb}MB）`,
     'warning',
   );

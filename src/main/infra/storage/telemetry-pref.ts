@@ -2,14 +2,14 @@
 // 遥测级别用户偏好存储（非加密，明文 JSON）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 同步读写 userData/telemetry-pref.json（initSentry 在 whenReady 之前调用，需同步）
+// - 同步读写 userData/telemetry-pref.json（initTelemetry 在 whenReady 之前读取，需同步）
 // - 三档：off / error-only / full
-// - 默认 full（与项目初始行为一致）
+// - 默认 full（Sentry 已于 2026-09-13 移除；OTel 未配置 OTLP 端点时本身不外发）
 //
 // 与 keychain.ts 的区别：
 // - keychain.ts：加密存储敏感数据（API Key），异步 API
 // - telemetry-pref.ts：明文存储用户偏好，同步 API
-//   因为 initSentry 在 app.whenReady() 之前调用，且 Sentry.init 必须同步
+//   因为 OTel 初始化（读偏好）在 app.whenReady() 之前，需同步读取
 // ──────────────────────────────────────────────────────────────
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -36,7 +36,7 @@ interface TelemetryPref {
 /**
  * 同步读取遥测级别
  *
- * 在 initSentry 中调用（whenReady 之前），必须同步。
+ * 在 OTel 初始化前调用（whenReady 路径），必须同步。
  * 文件不存在或解析失败时返回默认值 'full'，不阻塞应用启动。
  */
 export function readTelemetryLevelSync(): TelemetryLevel {
@@ -62,7 +62,7 @@ export function readTelemetryLevelSync(): TelemetryLevel {
  * 异步写入遥测级别
  *
  * 在 IPC handler 中调用（whenReady 之后），用 async API。
- * 写入后需要重启应用才能生效（Sentry 已初始化无法动态修改）。
+ * 写入后需要重启应用才能生效（OTel provider 已初始化无法动态改）。
  */
 export async function writeTelemetryLevel(level: TelemetryLevel): Promise<void> {
   const path = getPrefPath();

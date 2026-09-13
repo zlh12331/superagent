@@ -1,18 +1,15 @@
 // src/main/index.ts
 // Electron 主进程入口
 // 职责：创建 BrowserWindow、加载渲染层、配置安全基线
-// 设计文档 §1.1 进程拓扑 / §4.5 安全配置 / §7.6 日志 / §7.7 Sentry
+// 设计文档 §1.1 进程拓扑 / §4.5 安全配置 / §7.6 日志
 //
 // 说明：P7 新增 SQLite + Drizzle 持久化层（SessionService），
 // 替代早期已删除的 PG/Prisma/AGE 数据库层。
-// 当前主进程负责：Sentry 初始化、Logger 初始化、SQLite 初始化、
+// 当前主进程负责：Logger 初始化、SQLite 初始化、
 // 窗口创建、退出清理（含 closeDb）。
 
 import { join } from 'node:path';
-import * as Sentry from '@sentry/electron/main';
-import { startupTracingIntegration } from '@sentry/electron/main';
 import { app, BrowserWindow, nativeTheme, session } from 'electron';
-import { getAppConfig } from './config';
 import { broadcastDeepLink, parseDeepLink, registerDeepLinkProtocol } from './deep-link';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
 import {
@@ -29,6 +26,7 @@ import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/networ
 import { initDb } from './infra/storage/db';
 import { readAllSettings } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
+import { reportMessage } from './infra/telemetry/error-report';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { reportEventLoopLag } from './infra/telemetry/lag-alert';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
@@ -102,86 +100,11 @@ if (!app.isPackaged) {
   app.commandLine.appendSwitch('remote-debugging-port', debugPort);
 }
 
-/**
- * 初始化 Sentry
- *
- * 设计文档 §7.7：
- * - 自托管 Sentry v26.6.0
- * - DSN 从 config 读取（环境变量 SENTRY_DSN）
- * - 生产环境采样 10% 事务，dev 不采样
- * - beforeSend 脱敏：移除 Authorization header
- *
- * P2 遥测用户开关（对标 VS Code telemetryLevel / Cursor 双开关）：
- * - off：不初始化 Sentry
- * - error-only：初始化但 tracesSampleRate = 0（仅错误，无性能事务）
- * - full：正常初始化
- * - 级别从 telemetry-pref.json 同步读取（必须在 whenReady 之前）
- *
- * 必须在 app.whenReady() 之前调用
- */
-function initSentry(): void {
-  // P2:读取用户遥测偏好（同步，因为 Sentry.init 要求同步）
-  const telemetryLevel = readTelemetryLevelSync();
-  if (telemetryLevel === 'off') {
-    logger.warn({}, '遥测已关闭（telemetry-pref.json: off），跳过 Sentry 初始化');
-    return;
-  }
-
-  const config = getAppConfig();
-  if (config.sentry.dsn === '') {
-    // DSN 未配置时跳过初始化（dev 环境常见）
-    logger.warn({}, 'Sentry DSN 未配置，跳过初始化');
-    return;
-  }
-
-  // error-only 模式：强制 tracesSampleRate = 0（不上报性能事务）
-  // dev 环境强制 1.0（开发期需要完整性能数据，便于调试）
-  // production 环境用 .env 配置的值（当前 1.0，小规模可全量；高负载可降为 0.1~0.3）
-  const baseSampleRate = config.isPackaged ? config.sentry.tracesSampleRate : 1.0;
-  const effectiveSampleRate = telemetryLevel === 'error-only' ? 0 : baseSampleRate;
-
-  Sentry.init({
-    dsn: config.sentry.dsn,
-    release: `code-agent@${app.getVersion()}`,
-    environment: config.isPackaged ? 'production' : 'development',
-    tracesSampleRate: effectiveSampleRate,
-    sendDefaultPii: false,
-    // Electron 启动追踪集成：
-    // - 在 main 进程创建 'Startup' root transaction（op: app.start）
-    // - 自动 instrument app 生命周期事件（will-finish-launching / ready / web-contents-created / dom-ready）
-    // - 等待 renderer 的 pageload transaction 并合并其 spans
-    // - 10 秒超时兜底（若 renderer 未发送 pageload，Startup transaction 以 Timeout 状态结束）
-    integrations: [startupTracingIntegration()],
-    // Session Replay 采样配置在 renderer 端的 SentryRenderer.init 中设置
-    // （ElectronMainOptions 继承 NodeOptions，不支持 browser replay 参数）
-    // main 进程负责接收 renderer 通过 IPC 转发的 replay envelope 并上传
-    beforeSend(event) {
-      // 脱敏：移除可能的 API Key / Authorization header
-      // 注意：@sentry/electron 7 的 beforeSend 入参为 Event（携带 type 字段），
-      // 返回类型必须为 Event | null，因此采用不可变更新保持 type 兼容
-      // noPropertyAccessFromIndexSignature: headers 是索引签名，必须用方括号访问
-      if (event.request?.headers?.['authorization']) {
-        const { ['authorization']: _auth, ...restHeaders } = event.request.headers;
-        return { ...event, request: { ...event.request, headers: restHeaders } };
-      }
-      return event;
-    },
-  });
-
-  logger.info(
-    {
-      telemetryLevel,
-      sampleRate: effectiveSampleRate,
-    },
-    'Sentry 已初始化（main 进程，renderer 端的 Replay 配置见 instrumentation.ts）',
-  );
-}
-
 // 加载 .env 到 process.env（dev 模式）
 // 项目从 Prisma 迁移到 SQLite 后，不再有自动 .env 加载机制。
 // 使用 Node.js v20.12+ 内置 process.loadEnvFile()，无需安装 dotenv。
 // - dev 模式：从项目根目录加载 .env
-// - test 模式：跳过（避免测试错误上报到 Sentry）
+// - test 模式：跳过（避免测试读取到开发期变量）
 // - production：.env 不存在（不打包），catch 静默跳过
 // 注意：process.loadEnvFile() 不会覆盖已存在的 env 变量
 if (process.env['NODE_ENV'] !== 'test') {
@@ -191,9 +114,6 @@ if (process.env['NODE_ENV'] !== 'test') {
     // .env 不存在（production 或 CI），跳过
   }
 }
-
-// Sentry 必须在 app.whenReady() 之前初始化（@sentry/electron 要求）
-initSentry();
 
 // 单实例锁：防止多开（多实例会争抢 SQLite 数据库锁 / IM 长轮询 / 端口监听）
 // - 主实例：正常启动，监听 second-instance 聚焦已有窗口
@@ -242,12 +162,10 @@ app
     }
     // 初始化 logger（需要 app.getPath，必须在 whenReady 之后）
     initLogger();
-    // 初始化 OpenTelemetry（需要在 app.getVersion 之后，与 Sentry 互补：
-    // - Sentry 采集错误 + 性能事务（自动 instrumentation）
+    // 初始化 OpenTelemetry（需要在 app.getVersion 之后）：
     // - OTel 采集自定义业务 trace span（agent.streamText / tool.execute / IPC）
     // - 失败容忍：未配置 OTEL_EXPORTER_OTLP_ENDPOINT 时退化为 Console exporter
-    // 安全修复：遥测开关对齐（Sentry 已接入，OTel 同样需检查用户偏好——
-    // telemetry-pref 为 off 时跳过初始化，避免用户关闭遥测后 span 仍外发）
+    // - 遥测开关：telemetry-pref 为 off 时跳过初始化，避免用户关闭遥测后 span 仍外发
     const otelTelemetryLevel = readTelemetryLevelSync();
     if (otelTelemetryLevel !== 'off') {
       initTelemetry();
@@ -288,7 +206,7 @@ app
     serviceContainer.initCronScheduler();
     // 注册全部 IPC handler（定义表驱动，registerIpcHandlers 统一执行）
     // - handler 对象形状受 InferHandlers 约束：定义表新增方法而 handler 缺失 → 编译期报错
-    // - channel / schema / traceId / sender 校验 / Sentry 由 wrap 统一处理
+    // - channel / schema / traceId / sender 校验 / 错误上报由 wrap 统一处理
     registerIpcHandlers({
       app: appHandlers,
       agent: {
@@ -446,10 +364,10 @@ app
 
     // 主进程内存监控（生产长期趋势 + 泄漏哨兵）
     // - 60s 采样 + 连续 3 次单调增长且累计 > 150MB 才告警（防 GC 抖动误报）
-    // - unref 定时器不阻塞应用退出；Sentry 未初始化时 captureMessage 为 no-op（安全）
+    // - unref 定时器不阻塞应用退出
     startMemoryMonitor({
       onAlert: (report) => {
-        Sentry.captureMessage(
+        reportMessage(
           `主进程内存疑似持续增长：${report.growthMb.toFixed(0)}MB / ${report.durationSec.toFixed(0)}s`,
           'warning',
         );
@@ -587,11 +505,6 @@ app.on('before-quit', async (event) => {
     // 关闭 OpenTelemetry：flush 所有 pending span 到 exporter，避免丢失 trace 数据
     // 必须在 disposeServices 之后（业务 span 已全部 end）
     await shutdownTelemetry();
-    // L4 配套修复：关闭 Sentry，flush 所有 pending 错误事件到 DSN
-    // - wrap.ts 的 IPC 错误仅 fire-and-forget flush（不阻塞响应）
-    // - 应用退出前必须显式 close，否则 captureException 入队的事件可能丢失
-    // - 2s 超时：与 Sentry SDK 默认 shutdownTimeout 对齐，足够发送队列中的事件
-    await Sentry.close(2000);
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }

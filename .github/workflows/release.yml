@@ -17,7 +17,6 @@
 #   任一方构建失败则无 tag 无 release，版本号不占号、可重试。
 #
 # 所需 Secrets：
-# - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
 # - 代码签名（可选）：CSC_LINK + CSC_KEY_PASSWORD（Windows/macOS 签名；无证书时自动跳过签名）
 
 name: Release
@@ -102,11 +101,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
-    env:
-      # P5 修复：Sentry token 提升到 job 级 env——步骤级 env 对自身 if 不可见
-      # （GitHub Actions 在 if 求值时尚未注入步骤 env），此前 if 恒为 false、
-      # 符号上传从未执行。job 级 env 可被后续步骤的 if 正常读取。
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
     strategy:
       fail-fast: false
@@ -214,30 +208,8 @@ jobs:
 
       # 更新源已切 provider: github（electron-builder.yml publish），
       # 占位 feed guard 随之移除；GitHub Release 资产即更新源。
-      # ── 上传 Sentry 符号（仅 Windows 主发布端；其余平台产物不含符号需求）─
-      # P5 修复：
-      # - 步骤 if 改用 job 级 env（此前步骤级 env 对自身 if 不可见，恒跳过）
-      # - 明确只放行 Windows leg（此前注释如此宣称但条件未限制平台）
-      # - 上传前先创建 release（此前 CI 从未调用 release:new，上传会 404）
-      # C3 修复：release 名剥 tag 的 v 前缀（code-agent@1.0.0），与运行时
-      # app.getVersion() 及本地 sentry-release.mjs 对齐——Sentry release 是精确
-      # 字符串匹配，此前 tag 带 v 而运行时无 v，符号化永远不命中
-      - name: Compute Sentry release name
-        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        shell: bash
-        run: echo "SENTRY_RELEASE=code-agent@${{ needs.gate.outputs.version }}" >> "$GITHUB_ENV"
-
-      - name: Create Sentry release
-        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        run: pnpm sentry-cli releases new "$SENTRY_RELEASE"
-
-      - name: Upload Sentry symbols
-        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        run: |
-          pnpm sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" --org sentry --project electron --url-prefix "app:///out/" ./out
-          pnpm sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" --org sentry --project electron --url-prefix "app:///renderer/" ./out/renderer
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      # 注：Sentry 符号上传步骤已于 2026-09-13 随 Sentry 移除整体删除
+      # （本地优先错误处理，报障走 GitHub issue + 诊断包，见 error-report.ts）。
 
       # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
       # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动

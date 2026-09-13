@@ -16,7 +16,7 @@ import log from 'electron-log';
 /**
  * 日志上下文（结构化字段）
  *
- * traceId 贯穿渲染层 → IPC → 主进程日志 → Sentry
+ * traceId 贯穿渲染层 → IPC → 主进程日志（云端上报已于 2026-09-13 移除，见 error-report.ts）
  * 设计文档 §4.7 traceId 贯穿 IPC
  */
 export interface LogContext {
@@ -57,7 +57,7 @@ export function initLogger(): void {
   // Windows + Defender 实时扫描下可放大到 1–5 ms，高频 channel
   // （session:list / system:getStatus）累计延迟可观。
   // 改异步后由 electron-log 内部队列合并写入，崩溃时最多丢失队列尾部若干行
-  // （应用退出路径有 Sentry.close + 显式 flush，日志丢失窗口可接受）。
+  // （致命退出路径留有 300ms 写盘窗口后才 app.exit，日志丢失窗口可接受）。
   log.transports.file.sync = false;
 
   // 日志格式：[ISO时间] [级别] [traceId] 消息
@@ -157,14 +157,14 @@ function serializeError(error: unknown): Record<string, unknown> {
  * 必须在 app.whenReady() 之后、业务逻辑之前调用
  *
  * 增强（可靠性极致）：
- * - Sentry 上报（logger 只落本地日志，崩溃现场需要云端可见）
+ * - 本地结构化日志落盘（云端上报已移除；报障走诊断包导出 + GitHub issue）
  * - 崩溃标记：uncaughtException 时写入 userData/.crash-marker，
  *   下次启动由崩溃恢复逻辑消费（标记中断的会话状态）
  *
  * 致命退出（2026-09-06 审计修复）：uncaughtException 后**不再继续运行**。
  * 此前只记日志 + 写 marker 就返回，进程带着可能已损坏的状态（悬挂事务、
  * 半写文件、断开的 stream）继续服务，同类异常可复发且污染崩溃恢复语义。
- * 现在：落盘 → 上报 Sentry → 退出（3s 兜底，防 flush 卡死）。不 relaunch，
+ * 现在：落盘 → 留 300ms 日志写盘窗口 → 退出（3s 强杀兜底）。不 relaunch，
  * 避免崩溃循环（用户手动重启即可）。
  */
 let fatalErrorHandled = false;
@@ -178,22 +178,20 @@ export function registerGlobalErrorHandlers(): void {
     fatalErrorHandled = true;
     logger.error({}, '全局未捕获异常 uncaughtException', error);
     writeCrashMarker(error);
-    // 兜底：flush 未在 3s 内完成也强制退出（避免挂死在半崩溃状态）
+    // 日志为异步队列：留 300ms 写盘窗口再退出（此前借 Sentry 动态 import 的
+    // 耗时顺带落地，移除 Sentry 后显式给窗口）
+    setTimeout(() => {
+      app.exit(1);
+    }, 300).unref();
+    // 兜底：300ms 窗口未退出（事件循环被半崩溃状态挂死）也强制退出
     const forceExit = setTimeout(() => {
       app.exit(1);
     }, 3_000);
     forceExit.unref();
-    void captureToSentry(error).finally(() => {
-      clearTimeout(forceExit);
-      app.exit(1);
-    });
   });
 
   process.on('unhandledRejection', (reason: unknown) => {
     logger.error({}, '全局未处理的 Promise 拒绝 unhandledRejection', reason);
-    if (reason instanceof Error) {
-      void captureToSentry(reason);
-    }
   });
 }
 
@@ -235,32 +233,4 @@ export function clearCrashMarker(): void {
 /** 是否存在崩溃标记（上次进程异常退出的证据） */
 export function hasCrashMarker(): boolean {
   return existsSync(getCrashMarkerPath());
-}
-
-/** Sentry 上报（Sentry 可能未初始化，try 包裹保证不抛） */
-async function captureToSentry(error: Error): Promise<void> {
-  try {
-    const Sentry = await import('@sentry/electron/main');
-    Sentry.captureException(error);
-  } catch {
-    // Sentry 未初始化或不可用时静默降级（logger 已记录）
-  }
-}
-
-/**
- * 上报消息级事件到 Sentry（供非 Error 的系统事件：进程崩溃/内存告警等）
- *
- * Sentry 可能未初始化（遥测 off / DSN 未配置），try 包裹保证不抛。
- * 供 window.ts 渲染崩溃自愈等模块复用，避免各自动态 import。
- */
-export async function captureSentryMessage(
-  message: string,
-  level: 'warning' | 'error' = 'error',
-): Promise<void> {
-  try {
-    const Sentry = await import('@sentry/electron/main');
-    Sentry.captureMessage(message, level);
-  } catch {
-    // Sentry 未初始化或不可用时静默降级（调用方应已 logger 记录）
-  }
 }

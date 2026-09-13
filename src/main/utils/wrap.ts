@@ -11,9 +11,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { AppError, ErrorCode, type IpcError, type IpcResponse } from '@code-agent/shared/main';
-import * as Sentry from '@sentry/electron/main';
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import type { ZodType } from 'zod';
+import { reportError } from '../infra/telemetry/error-report';
 import { logger } from './logger';
 
 /** 外部传入 traceId 的合法形状：8-64 位字母数字/连字符/下划线（UUID 与测试 id 均命中；拒绝换行/引号/空白） */
@@ -146,7 +146,7 @@ export function wrap<TInput, TOutput>(
       logger.info({ traceId, channel, durationMs }, 'IPC 请求成功');
       return { data } satisfies IpcResponse<TOutput>;
     } catch (error: unknown) {
-      // 错误分类 + Sentry 上报
+      // 错误分类 + 统一上报出口（本地结构化日志；后端可回插，见 error-report.ts）
       const ipcError = toIpcError(error);
       const durationMs = Math.round(performance.now() - startTime);
       logger.error(
@@ -154,13 +154,7 @@ export function wrap<TInput, TOutput>(
         'IPC 请求失败',
         error,
       );
-      Sentry.captureException(error, { tags: { channel, traceId, errorCode: ipcError.code } });
-      // L4 修复：触发 Sentry flush，确保错误事件入发送队列
-      // - 不 await：IPC 响应不阻塞在 Sentry 上传上（高频错误时避免累积延迟）
-      // - fire-and-forget：Sentry 内部 worker 会处理发送，应用退出时由 before-quit 中的
-      //   Sentry.close(2000) 兜底等待所有 pending 事件上传完成
-      // - 显式 2s 超时：避免 worker 在网络异常时无限重试
-      void Sentry.flush(2000);
+      reportError(error, { tags: { channel, traceId, errorCode: ipcError.code } });
       return { error: ipcError } satisfies IpcResponse<TOutput>;
     }
   });

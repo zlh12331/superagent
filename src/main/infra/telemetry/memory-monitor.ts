@@ -4,11 +4,11 @@
 // 职责：
 // - 周期性采样 process.memoryUsage（rss/heapUsed）+ app.getAppMetrics（各进程 CPU/内存）
 // - 泄漏嫌疑检测：RSS 连续 N 次采样单调增长且累计增长超阈值 → onAlert 回调
-//   （Sentry/日志挂载点；检测逻辑为纯函数，可单测）
+//   （日志挂载点；检测逻辑为纯函数，可单测）
 // - 返回 stop（生命周期管理；定时器 unref，不阻塞进程退出）
 //
 // 设计（对齐 event-loop-lag.ts 语义收敛）：
-// - 回调挂载点模式：监控器不感知上报通道（Sentry/electron-log 由调用方注入）
+// - 回调挂载点模式：监控器不感知上报通道（错误上报/electron-log 由调用方注入）
 // - 保守阈值：连续 3 次（5 分钟窗口）单调增长 + 累计 > 150MB 才告警，防 GC 抖动误报
 // ──────────────────────────────────────────────
 
@@ -210,7 +210,7 @@ export class MemoryMonitor {
   }
 }
 
-/** 便捷启动：采样 + 告警日志（Sentry 由调用方挂 onAlert） */
+/** 便捷启动：采样 + 告警日志（上报由调用方挂 onAlert） */
 export function startMemoryMonitor(options: MemoryMonitorOptions = {}): () => void {
   const monitor = new MemoryMonitor(options);
   monitor.start();

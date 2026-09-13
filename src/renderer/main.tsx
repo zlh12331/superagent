@@ -6,12 +6,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
-// 渲染层 Sentry 初始化（必须在 React render 之前；production 生效，dev/test/web 跳过）
-// 边界组件（AppErrorBoundary/SectionErrorBoundary）的 captureException 依赖它建立 IPC
-// 通道，否则事件被 @sentry/electron 空实现静默丢弃（2026-09-04 修复）
-import { initRendererInstrumentation } from '@/lib/instrumentation';
+// 渲染层错误上报 + 全局兜底（必须在 React render 之前安装，尽早捕获初始化期异常）
+// 错误经 electron-log renderer 转发主进程落盘，诊断包从此包含渲染层现场
+import { initRendererErrorHandlers } from '@/lib/error-report';
 
-initRendererInstrumentation();
+initRendererErrorHandlers();
 
 // 前端独立开发模式（pnpm dev:web）：无 Electron preload 时注入完整 mock window.api
 // - 仅当 vite 以 --mode web 运行时生效（import.meta.env.MODE === 'web'）
@@ -22,29 +21,14 @@ if (import.meta.env.MODE === 'web') {
   installMockApi();
 }
 
-// 在 React 渲染前同步应用初始主题，消除首屏闪烁（FOUC 防护）
-// 必须在 createRoot(...).render() 之前调用
-import { applyInitialTheme } from '@/lib/theme-init';
-
-// 全局未捕获 Promise 拒绝处理：未捕获的 async 错误不再静默丢失
-// （Sentry 会经 error 事件自动上报；此处避免 unhandledrejection 静默吞错）
-window.addEventListener('unhandledrejection', (event) => {
-  const reason = event.reason;
-  // 已由调用方 catch 的错误（AbortError 等预期中断）不重复记录
-  if (reason instanceof DOMException && reason.name === 'AbortError') {
-    event.preventDefault();
-    return;
-  }
-  // 记录未捕获拒绝（Sentry 已自动捕获 error 事件；此处保留可见日志）
-  // biome-ignore lint/suspicious/noConsole: 全局错误处理是唯一允许的日志出口
-  console.error('[unhandledrejection]', reason);
-});
-
 import { LANGUAGE_STORAGE_KEY } from '@/i18n/config';
 // S1（settings 下沉 SQLite）：render 前拉取设置快照（顶层 await）
 // - Electron：settings:getAll 读 SQLite；空库时一次性迁移 legacy localStorage
 // - 浏览器模式：回退 localStorage（mock window.api 由上一分支注入）
 import { bootstrapSettings } from '@/lib/settings-bootstrap';
+// 在 React 渲染前同步应用初始主题，消除首屏闪烁（FOUC 防护）
+// 必须在 createRoot(...).render() 之前调用
+import { applyInitialTheme } from '@/lib/theme-init';
 import { applySettingsSnapshot, flushPendingSettings } from '@/stores/persistent/settings-store';
 
 // 2026-09-08 可靠性修复：退出前等待在途设置写入落库

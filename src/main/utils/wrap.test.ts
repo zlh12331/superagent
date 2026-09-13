@@ -6,16 +6,15 @@ import { z } from 'zod';
 
 // Vitest 4 的 vi.mock 会被 hoist，工厂函数内不能引用外部 const
 // 必须用 vi.hoisted 导出 mock 对象
-const { mockFromWebContents, mockIpcMainHandle } = vi.hoisted(() => ({
+const { mockFromWebContents, mockIpcMainHandle, mockReportError } = vi.hoisted(() => ({
   mockFromWebContents: vi.fn(),
   mockIpcMainHandle: vi.fn(),
+  mockReportError: vi.fn(),
 }));
 
-// mock @sentry/electron/main（避免真实上报）
-vi.mock('@sentry/electron/main', () => ({
-  captureException: vi.fn(),
-  // L4 修复后 wrap.ts 调用 Sentry.flush(2000)，mock 需提供该方法
-  flush: vi.fn().mockResolvedValue(true),
+// mock 错误上报统一出口（避免真实落盘；断言上报被调用）
+vi.mock('../infra/telemetry/error-report', () => ({
+  reportError: mockReportError,
 }));
 
 // mock electron：仅暴露 wrap 依赖的 ipcMain.handle 与 BrowserWindow.fromWebContents
@@ -40,7 +39,6 @@ vi.mock('./logger', () => ({
 }));
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import * as Sentry from '@sentry/electron/main';
 import { ipcMain } from 'electron';
 import { wrap } from './wrap';
 
@@ -158,7 +156,7 @@ describe('wrap', () => {
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
     expect(error.code).toBe(ErrorCode.NOT_FOUND);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(mockReportError).toHaveBeenCalled();
   });
 
   it('handler 抛出普通 Error 包装为 INTERNAL_ERROR', async () => {
@@ -177,7 +175,7 @@ describe('wrap', () => {
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
     expect(error.code).toBe(ErrorCode.INTERNAL_ERROR);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(mockReportError).toHaveBeenCalled();
   });
 
   it('无 traceId 时自动生成', async () => {

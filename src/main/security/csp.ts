@@ -40,7 +40,8 @@
  * - connect-src：仅允许 AI API（DeepSeek / OpenAI / Anthropic）+ 本地 Ollama 默认
  *   端口，与 ProviderRegistry 内置供应商对齐（新增供应商时需同步此列表）。
  *   2026-09-13 收口：localhost:* → localhost:11434——渲染层实测零直连网络
- *   请求（AI 调用全部在主进程，Sentry 渲染层 SDK 经 IPC 中继），放行任意
+ *   请求（AI 调用全部在主进程，错误上报已于同日移除 Sentry 改为本地日志），
+ *   放行任意
  *   本机端口等于给被 XSS 的渲染层开放内网探测面；Ollama 自定义端口走
  *   OLLAMA_API_BASE（主进程消费，不经渲染层，不受此约束）。
  *   注：AI API 域名与 11434 同为死重，收敛到 connect-src 'self' 需 prod

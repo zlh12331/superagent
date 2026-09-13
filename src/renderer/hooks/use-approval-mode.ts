@@ -7,10 +7,10 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ApprovalMode } from '@code-agent/shared/renderer';
-import * as Sentry from '@sentry/electron/renderer';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { reportError } from '@/lib/error-report';
 import { unwrap } from '@/lib/ipc';
 
 const DEFAULT_MODE: ApprovalMode = 'ask';
@@ -40,9 +40,8 @@ export function useApprovalMode(): {
       })
       .catch((error: unknown) => {
         // 读取失败：保持默认 ask（fail-safe 降级，不打扰用户）。
-        // 但仍上报 Sentry——否则"读不到审批模式"这类故障在线上零线索
-        // （dev/test/web 下 Sentry 未 init，captureException 是空操作）。
-        Sentry.captureException(error, { tags: { scope: 'use-approval-mode.read' } });
+        // 但仍落盘主日志——否则"读不到审批模式"这类故障在报障时零线索。
+        reportError(error, { tags: { scope: 'use-approval-mode.read' } });
       });
     return () => {
       cancelled = true;
