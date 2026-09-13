@@ -189,16 +189,42 @@ jobs:
         # 修法：secret 先进中间变量 ORIG_CSC_*（空串无意义），bash 中仅当非空才
         # 导出真实的 CSC_LINK/CSC_KEY_PASSWORD——没有证书时 electron-builder 进程
         # 环境里 CSC_LINK **彻底不存在**（而非空串），配合关闭身份自发现 → 干净跳过签名。
+        #
+        # 公证（notarize）凭据同理：electron-builder 的 getNotarizeOptions 按
+        # APPLE_* 环境变量判定，未配置则 warn 跳过（不会失败）。这里只在整套凭据
+        # 齐备时导出，避免"配了一半"触发 InvalidConfigurationError。
+        # 优先 App Store Connect API Key（APPLE_API_* 三件套）；未配置则回退
+        # Apple ID 模式（APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID）。
         shell: bash
         env:
           ORIG_CSC_LINK: ${{ secrets.CSC_LINK }}
           ORIG_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          ORIG_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          ORIG_APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ORIG_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          ORIG_APPLE_ID: ${{ secrets.APPLE_ID }}
+          ORIG_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          ORIG_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -n "${ORIG_CSC_LINK:-}" ]; then
             export CSC_LINK="$ORIG_CSC_LINK"
             export CSC_KEY_PASSWORD="$ORIG_CSC_KEY_PASSWORD"
+          fi
+          # 公证凭据：三件套齐备才导出（缺一则整套不导出 → 干净跳过公证）
+          if [ -n "${ORIG_APPLE_API_KEY:-}" ] && [ -n "${ORIG_APPLE_API_KEY_ID:-}" ] && [ -n "${ORIG_APPLE_API_ISSUER:-}" ]; then
+            export APPLE_API_KEY="$ORIG_APPLE_API_KEY"
+            export APPLE_API_KEY_ID="$ORIG_APPLE_API_KEY_ID"
+            export APPLE_API_ISSUER="$ORIG_APPLE_API_ISSUER"
+            echo "公证：使用 App Store Connect API Key"
+          elif [ -n "${ORIG_APPLE_ID:-}" ] && [ -n "${ORIG_APPLE_APP_SPECIFIC_PASSWORD:-}" ] && [ -n "${ORIG_APPLE_TEAM_ID:-}" ]; then
+            export APPLE_ID="$ORIG_APPLE_ID"
+            export APPLE_APP_SPECIFIC_PASSWORD="$ORIG_APPLE_APP_SPECIFIC_PASSWORD"
+            export APPLE_TEAM_ID="$ORIG_APPLE_TEAM_ID"
+            echo "公证：使用 Apple ID 模式"
+          else
+            echo "公证：未配置凭据，跳过（electron-builder 会 warn）"
           fi
           export CSC_IDENTITY_AUTO_DISCOVERY=false
           ${{ matrix.build-cmd }}

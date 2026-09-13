@@ -17,7 +17,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const RELEASE_DIR = join(ROOT, 'release');
@@ -39,22 +39,68 @@ function findUnpackedDirs(): string[] {
   return candidates.map((name) => join(RELEASE_DIR, name));
 }
 
-/** 在 unpacked 目录下解析 resources/memory-hub 的实际路径（macOS 在 .app 内） */
+/**
+ * 在 unpacked 目录下解析 resources/memory-hub 的实际路径
+ *
+ * 布局差异（故不能只认一种）：
+ * - Windows/Linux：`<dir>/resources/memory-hub`
+ * - macOS：`<dir>/<Product>.app/Contents/Resources/memory-hub`
+ * 兜底：浅层递归搜索 `memory-hub` 目录名（限深度 4，覆盖 mac universal 等变体），
+ *   避免因 electron-builder 布局微调而误判"缺引擎"阻塞发版。
+ */
 function resolveEngineDirs(unpackedDir: string): string[] {
-  const direct = join(unpackedDir, 'resources', 'memory-hub');
   const found: string[] = [];
+  const direct = join(unpackedDir, 'resources', 'memory-hub');
   if (existsSync(direct)) found.push(direct);
-  // macOS：<dir>/<Product>.app/Contents/Resources/memory-hub
+
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 4 || found.length > 0) return;
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = join(dir, entry.name);
+      if (entry.name === 'memory-hub') {
+        found.push(full);
+        return;
+      }
+      // 只深入有意义的层级：.app / Contents / Resources 与平台容器目录
+      if (
+        entry.name.endsWith('.app') ||
+        entry.name === 'Contents' ||
+        entry.name === 'Resources' ||
+        entry.name.endsWith('-unpacked') ||
+        entry.name.startsWith('mac')
+      ) {
+        walk(full, depth + 1);
+      }
+    }
+  };
+  walk(unpackedDir, 0);
+  return found;
+}
+
+/** 列出 unpacked 目录下的 resources 候选路径（失败诊断用，尤其 macOS 未实测路径） */
+function listResourcesCandidates(unpackedDir: string): string[] {
+  const out: string[] = [];
   try {
     for (const entry of readdirSync(unpackedDir, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !entry.name.endsWith('.app')) continue;
-      const macPath = join(unpackedDir, entry.name, 'Contents', 'Resources', 'memory-hub');
-      if (existsSync(macPath)) found.push(macPath);
+      if (entry.isDirectory() && entry.name === 'resources') {
+        out.push(`${unpackedDir.replace(ROOT, '.')}/resources`);
+      }
+      // macOS：<Product>.app/Contents/Resources
+      if (entry.isDirectory() && entry.name.endsWith('.app')) {
+        out.push(`${unpackedDir.replace(ROOT, '.')}/${entry.name}/Contents/Resources`);
+      }
     }
   } catch {
-    // 忽略读取失败（无 .app 属正常）
+    // 读取失败时返回已收集部分
   }
-  return found;
+  return out;
 }
 
 interface CheckResult {
@@ -101,6 +147,13 @@ function checkEngineDir(dir: string): CheckResult[] {
   return results;
 }
 
+/** 当前平台对应的 unpacked 目录名前缀（判定"缺失是否算失败"） */
+function currentPlatformDirPrefix(): string {
+  if (process.platform === 'win32') return 'win-';
+  if (process.platform === 'darwin') return 'mac';
+  return 'linux-';
+}
+
 function main(): void {
   const unpackedDirs = findUnpackedDirs();
   if (unpackedDirs.length === 0) {
@@ -113,11 +166,33 @@ function main(): void {
 
   let failed = false;
   let checked = 0;
+  const prefix = currentPlatformDirPrefix();
+  // 跨平台产物（如本机只打了 Windows 而 release/ 残留 mac 目录）不参与判定：
+  // 每个平台各自在 CI 上检查自己的产物，本地单平台检查不应因他平台缺失而失败。
+  const platformDirs = unpackedDirs.filter((p) => basename(p).startsWith(prefix));
+  const skipped = unpackedDirs.filter((p) => !basename(p).startsWith(prefix));
+  for (const p of skipped) {
+    console.log(
+      `[check-packaged-engine] ⏭ 跳过他平台产物 ${p.replace(ROOT, '.')}（当前平台前缀 ${prefix}）`,
+    );
+  }
+  if (platformDirs.length === 0) {
+    console.error(
+      `[check-packaged-engine] ❌ 未找到当前平台（${process.platform}，前缀 ${prefix}）的 unpacked 目录`,
+    );
+    console.error(
+      `  已发现：${unpackedDirs.map((p) => p.replace(ROOT, '.')).join(', ') || '(无)'}`,
+    );
+    process.exit(1);
+  }
 
-  for (const unpacked of unpackedDirs) {
+  for (const unpacked of platformDirs) {
     const engineDirs = resolveEngineDirs(unpacked);
     if (engineDirs.length === 0) {
+      // macOS 的 .app 内路径未在本机实测过：给出可诊断信息而非静默失败
+      const resourcesPath = listResourcesCandidates(unpacked);
       console.error(`[check-packaged-engine] ❌ ${unpacked} 下未找到 resources/memory-hub`);
+      console.error(`  候选路径探测：${resourcesPath.join(' | ') || '(未发现 resources 目录)'}`);
       failed = true;
       continue;
     }

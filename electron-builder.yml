@@ -212,7 +212,25 @@ mac:
       schemes:
         - code-agent
   # 应用商店分发：false = 直接分发（非 App Store）
-  notarize: false
+  #
+  # ── 签名与公证（2026-09-14 启用）──────────────────────────────
+  # notarize: true 表示"只要提供了公证凭据就执行公证"——**无凭据时 electron-builder
+  #   会 warn 并跳过**（实测 app-builder-lib 的 notarizeIfProvided：getNotarizeOptions
+  #   在无 APPLE_* 环境变量时返回 undefined → 仅记录 warn，不失败）。
+  #   因此本地/无证书 CI 构建照常通过，配好 Secrets 后自动生效，无需改配置。
+  # 公证凭据（三选一，CI 走 Secrets 注入，见 release.yml）：
+  #   1. APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER（推荐，App Store Connect API Key）
+  #   2. APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
+  #   3. APPLE_KEYCHAIN + APPLE_KEYCHAIN_PROFILE
+  # hardenedRuntime：公证的前置条件（Apple 要求），开启后需要 entitlements 放行
+  #   Electron 运行时必需的几项能力（JIT / 未签名可执行内存 / 库校验豁免）。
+  #   未提供 entitlements 文件时 electron-builder 会用内置默认集（对 Electron 应用足够），
+  #   此处显式给出以便审阅与后续扩展。
+  notarize: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
 
 # DMG 安装包配置
 # 自动更新用 zip artifact（latest-mac.yml，zip 命名沿用 mac.artifactName），DMG 仅作首次安装分发
@@ -238,8 +256,12 @@ linux:
   # 桌面条目描述
   synopsis: AI Code Agent Desktop
   description: AI-powered coding assistant for desktop
-  # 维护者（deb 必需）
-  maintainer: code-agent <dev@code-agent.example.com>
+  # 维护者（deb 必需字段）
+  # 此前是占位 `dev@code-agent.example.com`（example.com 是保留域，永远收不到信，
+  # 却会被写进 deb/rpm 包元数据与卸载信息，用户报障时得到死地址）。
+  # 本项目无公开邮箱，改用可用的报障入口：GitHub Issues 与安全公告页
+  # （deb 的 Maintainer 惯用邮箱格式，此处以 <URL> 形式给出有效联系方式）。
+  maintainer: zlh12331 <https://github.com/zlh12331/superagent/issues>
 
 # AppImage 配置
 appImage:
