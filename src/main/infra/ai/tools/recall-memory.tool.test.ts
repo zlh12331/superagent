@@ -34,7 +34,8 @@ describe('createRecallMemoryTool', () => {
     const result = await tool.execute({ query: '项目约定' }, createCtx());
     expect(result.title).toBe('记忆检索（3 条）');
     expect(result.output).toBe('召回上下文');
-    expect(recall).toHaveBeenCalledWith({ query: '项目约定' });
+    // 上游 RecallRequest 要求 session_key 非空，必须带当前会话 id
+    expect(recall).toHaveBeenCalledWith({ query: '项目约定', sessionKey: 'sess-1' });
   });
 
   it('ok=true 但上下文为空 → "未找到相关记忆"', async () => {
@@ -45,12 +46,17 @@ describe('createRecallMemoryTool', () => {
     expect(result.output).toBe('未找到相关记忆。');
   });
 
-  it('ok=false → "未找到相关记忆"', async () => {
+  it('ok=false → 显式失败提示（不再伪装成"未找到"）', async () => {
     const { tool, recall } = createTool();
-    recall.mockResolvedValueOnce({ ok: false, context: '', memoryCount: 0, message: 'x' });
+    recall.mockResolvedValueOnce({
+      ok: false,
+      context: '',
+      memoryCount: 0,
+      message: 'gateway POST /recall -> 400',
+    });
     const result = await tool.execute({ query: 'q' }, createCtx());
-    expect(result.title).toBe('记忆检索');
-    expect(result.output).toBe('未找到相关记忆。');
+    expect(result.title).toBe('记忆检索失败');
+    expect(result.output).toContain('gateway POST /recall -> 400');
   });
 
   it('schema 校验：空 query 拒绝', () => {

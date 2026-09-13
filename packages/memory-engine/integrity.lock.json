@@ -1,7 +1,7 @@
 {
   "$comment": "记忆引擎源码树完整性记录（由 memory-engine:integrity --update 生成）。手改 MemoryCore/ 下任何文件都会使校验失败——要改请走 patches/ 补丁通道。",
-  "repoTag": "v2.0.1",
-  "commit": "a5dcbe6e9fee0d1d1e32d935326f1d3bcf927fdb",
-  "treeHash": "63236abe5b607eed78f106d2354357aa86c697d808bcb5dc7606561a9cfd564d",
-  "fileCount": 275
+  "repoTag": "v2.0.2-beta.1",
+  "commit": "220af62226",
+  "treeHash": "4456fcb915ebdd8e2b3f508a66d5e42a3f6134971c369fc7ec0b6045e2301c94",
+  "fileCount": 304
 }

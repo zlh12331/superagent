@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 import type { MemoryPort } from '../../memory-hub/types';
-import type { Tool, ToolResult } from './tool';
+import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** recall_memory 入参 */
 const RecallMemoryInputSchema = z.object({
@@ -37,7 +37,7 @@ export function createRecallMemoryTool(memoryPort: MemoryPort): Tool<RecallMemor
     inputSchema: RecallMemoryInputSchema,
     permission: 'auto',
     category: 'read',
-    execute: async (input: RecallMemoryInput): Promise<ToolResult> => {
+    execute: async (input: RecallMemoryInput, ctx: ToolContext): Promise<ToolResult> => {
       // L1 结构化记忆检索
       if (input.mode === 'memories') {
         const result = await memoryPort.searchMemories(input.query, 10);
@@ -55,8 +55,16 @@ export function createRecallMemoryTool(memoryPort: MemoryPort): Tool<RecallMemor
         return { title: `会话检索（L0，${result.total} 条）`, output: result.content };
       }
       // 默认：预取召回
-      const result = await memoryPort.recall({ query: input.query });
-      if (!result.ok || result.context.trim().length === 0) {
+      // 上游 RecallRequest 要求 session_key 必填（缺失 → HTTP 400），故必须传当前
+      // 会话 id。此前未传，导致该工具自上线起恒失败并被静默降级为"未找到相关记忆"。
+      const result = await memoryPort.recall({ query: input.query, sessionKey: ctx.sessionId });
+      if (!result.ok) {
+        return {
+          title: '记忆检索失败',
+          output: `记忆引擎返回失败：${result.message ?? '未知原因'}`,
+        };
+      }
+      if (result.context.trim().length === 0) {
         return { title: '记忆检索', output: '未找到相关记忆。' };
       }
       return {

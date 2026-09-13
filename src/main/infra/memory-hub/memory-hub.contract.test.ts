@@ -64,14 +64,23 @@ describeIf('MemoryHubService 契约（需 MEMORY_HUB_ROOT）', () => {
     expect(result.schedulerNotified).toBe(true);
   });
 
-  it('recall 在 keyword 策略下返回结构化结果（不报缺 embedding 的 10001）', async () => {
+  it('recall 带 session_key 返回 200（上游要求该字段非空）', async () => {
+    const port = await service.ensureStarted();
+    const result = await port.recall({
+      query: '项目约定是什么',
+      sessionKey: 'contract-test-session',
+    });
+    // 上游 RecallRequest 要求 session_key 非空（缺失/空串 → HTTP 400）。
+    // 必须 ok=true——失败即说明请求契约不满足（无真实蒸馏 LLM 时 L1 为空属预期）。
+    expect(result.ok).toBe(true);
+  }, 20_000);
+
+  it('recall 缺 session_key 被上游拒绝（回归守卫：防调用方再次漏传）', async () => {
     const port = await service.ensureStarted();
     const result = await port.recall({ query: '项目约定是什么' });
-    // 无真实蒸馏 LLM 时 L1 为空属预期；关键是 ok=true（策略可执行）而非命中条数
-    if (!result.ok) {
-      expect(result.message).not.toContain('EmbeddingService');
-      expect(result.message).not.toContain('10001');
-    }
+    // 不带 session_key 必然 400——锁住上游契约，防止调用方再次漏传（曾有实际 bug）
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('400');
   }, 20_000);
 
   it('写入→检索回环：capture 的对话可被 searchConversations 检索到（引擎级记忆闭环）', async () => {
