@@ -22,6 +22,7 @@ import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
+import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
 import { readAllSettings } from './infra/storage/settings-pref';
@@ -392,6 +393,11 @@ app
 
     // 系统托盘：后台驻留 + 窗口唤回（图标/菜单，含"显示窗口/退出"）
     createTray();
+
+    // 记忆引擎启动预热：后台拉起 sidecar（生产走 tsx 直跑 TS，冷启动约 14s），
+    // 消除应用刚启动后首次记忆操作的等待。延迟启动避免与渲染层争抢 CPU；
+    // 失败静默降级，不阻塞启动（见 infra/memory-hub/prewarm.ts）。
+    scheduleMemoryPrewarm({ service: serviceContainer.getMemoryHubService() });
 
     // 冷启动深度链接补发（macOS open-url 早于窗口创建；Windows/Linux 冷启动
     // 的黑参数已在 process.argv 中，由渲染层启动时主动拉取一次）
