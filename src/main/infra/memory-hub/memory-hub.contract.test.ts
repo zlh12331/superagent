@@ -109,6 +109,36 @@ describeIf('MemoryHubService 契约（需 MEMORY_HUB_ROOT）', () => {
     expect(found).toBe(true);
   }, 20_000);
 
+  it('中英文均可检索（sqlite 后端走 FTS5 + jieba，无需语言切换）', async () => {
+    const port = await service.ensureStarted();
+    const marker = `bil-${Date.now().toString(36)}`;
+    // 同一条记忆同时含中英文特征词，验证两种语言的查询都能命中
+    await port.capture({
+      sessionKey: 'contract-bilingual',
+      userContent: `项目约定 ${marker}：包管理器使用 pnpm`,
+      assistantContent: 'Noted: package manager is pnpm.',
+    });
+
+    /** 短轮询等待 FTS 索引可见 */
+    const searchHit = async (query: string): Promise<boolean> => {
+      const deadline = Date.now() + 12_000;
+      while (Date.now() < deadline) {
+        const res = await port.searchConversations(query, 5);
+        if (res.content.includes(marker) && res.total > 0) return true;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      return false;
+    };
+
+    // 中文分词（jieba）与英文词元（FTS5）都能命中同一条记录。
+    // 说明：我们使用默认 sqlite 后端（getCapabilities().sparseVectors === false，
+    // 不走 BM25 稀疏向量），故配置项 bm25.language 对本集成不生效——中英文
+    // 由 jieba + FTS5 统一处理，无需语言切换（曾经的"两份词典+切换"方案基于
+    // tcvdb 后端，与我们的实际配置不符）。
+    expect(await searchHit(`${marker} 包管理器`)).toBe(true);
+    expect(await searchHit(`${marker} package manager`)).toBe(true);
+  }, 45_000);
+
   it('stop 后再次 ensureStarted 可重新拉起（生命周期可重复）', async () => {
     await service.stop();
     const port = await service.ensureStarted();
