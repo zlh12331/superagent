@@ -15,7 +15,8 @@
 #   （PR 必须含 main 最新提交）、required_linear_history（只允许 squash/rebase，树不变）
 #   ⇒ 必需检查在合并前已对**完全相同的内容**跑过，push 阶段重复验证无信息增益。
 #   release 发布路径的构建/校验由 release.yml 独立负责（已不再轮询本 workflow）。
-# - 合并后 main 仍有安全侧检查：CodeQL（GitHub default setup）与 secret scanning 照常在 push 时运行。
+# - 合并后 main 仍有安全侧检查：CodeQL（2026-09-14 起为 advanced setup，见 codeql.yml——
+#   从 default setup 切换，以支持排除 vendored 第三方源码路径）与 secret scanning 照常在 push 时运行。
 # - ⚠️ 不要给本 workflow 加 workflow 级 paths/paths-ignore 过滤：必需状态检查一旦因路径被
 #   跳过就永不 report，PR 会卡在 pending 无法合并。要省纯文档 PR 的开销请用 job 级 if。
 # - workflow_dispatch 保留（便于手动调试全矩阵）。
@@ -28,6 +29,21 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch: # 允许手动触发（便于调试）
+
+# 显式收窄 GITHUB_TOKEN 权限（CodeQL actions/missing-workflow-permissions 修复，2026-09-14）。
+# 此前全 workflow 无 permissions 块 → 每个 job 继承仓库默认的 read-all（写权限虽未开，
+# 但「显式声明」才是最小权限实践；该规则只检查 permissions 块是否存在）。
+#
+# 取值依据（按各 job 真实用到的能力，逐项核对）：
+# - contents: read      —— actions/checkout 取代码；gitleaks 读 PR 的 commit 列表
+# - pull-requests: read —— gitleaks-action 调 GET /pulls/{n}/commits（实证：同类项目
+#                          生成器对 gitleaks@v2 用的正是 contents+pull-requests 均为 read）
+# 不放 write：本项目 5 个 job 都不需要写（gitleaks 的「泄漏时发评论」需要写权限，
+# 但那本来在 read-all 下也不可用；泄漏时该 action 以非零退出让检查红，信号已足够）。
+# upload-artifact 走 ACTIONS_RUNTIME_TOKEN，不受此块影响。
+permissions:
+  contents: read
+  pull-requests: read
 
 # 同分支并行时取消旧 run（节省 CI 时间）
 concurrency:

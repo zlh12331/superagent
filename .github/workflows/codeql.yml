@@ -1,0 +1,82 @@
+# .github/workflows/codeql.yml
+# 静态安全分析（CodeQL）——advanced setup
+# ─────────────────────────────────────────────────────────────
+# 为什么从 default setup 改为 advanced setup（2026-09-14）：
+#   default setup 无法排除指定路径（其设置界面只有语言/查询套件/runner/threat model），
+#   唯一途径是组织级自定义属性 `github-codeql-config-file`；本仓库属个人账户，该属性不可用
+#   （实测 API 404）。故改为 advanced setup，用 config-file 引用 .github/codeql/codeql-config.yml
+#   排除两块 vendored 第三方源码。详见该配置文件头注释。
+#
+# 与 default setup 的差异（切换时按此对齐，避免覆盖率回退）：
+#   - 语言：原 default setup 分析 actions / javascript / javascript-typescript / python / typescript。
+#     javascript|typescript 实为同一分析器的别名；python 的唯一来源是 MemoryCore（已排除）⇒ 不再单列。
+#     保留 javascript-typescript 与 actions（后者产出 ci.yml 的真实告警，不可丢）。
+#   - 触发：push main + PR + 每周定时，与 default setup 一致。
+#   - 查询套件：security（default setup 亦为 default suite，此处不额外加 security-extended，
+#     保持告警基数与切换前可比；需要扩展时再单独评估）。
+#
+# ⚠️ 切换动作是两段式的：本 workflow 提交后，还需在仓库 Security 页把 default setup 关掉
+#    （Settings → Code security → CodeQL analysis → Switch to advanced / Disable CodeQL），
+#    否则同一份代码会有两个分析来源，GitHub 会报重复告警且陈旧告警永久挂着。
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每周一 03:17 UTC（避开整点，与 default setup 的周扫节奏一致）
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+# 分析本身只读代码；上传 SARIF 需要 security-events: write
+permissions:
+  contents: read
+  security-events: write
+  packages: read
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 本项目主体：TS/TSX（Electron main/preload/renderer + shared）
+          - language: javascript-typescript
+            build-mode: none
+          # GitHub Actions workflow 分析：ci/release/release-please 的权限与表达式问题
+          - language: actions
+            build-mode: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 初始化 CodeQL 数据库；config-file 指向排除 vendored 路径的配置
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      # javascript-typescript 与 actions 均为解释型/无构建语言，build-mode: none 即无需构建步骤
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'

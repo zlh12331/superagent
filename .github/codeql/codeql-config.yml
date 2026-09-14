@@ -1,0 +1,28 @@
+# .github/codeql/codeql-config.yml
+# CodeQL 分析范围配置（advanced setup 专用，见 .github/workflows/codeql.yml）
+#
+# ── 为什么需要这个文件 ─────────────────────────────────────────────
+# 仓库里有两块 vendored 第三方源码，都是「原样引入、永不修改」的只读参考源：
+#   - packages/memory-engine/MemoryCore  （上游 MIT，integrity.lock.json 哈希校验）
+#   - third_party/motionvault            （上游 MIT，仅作动效灵感参考）
+# 它们不属于本项目的代码质量责任范围，却贡献了绝大多数告警（实测 24 条里 15 条）。
+# 本文件在**分析前**把它们排除，比事后逐条 dismiss 更彻底——上游升级带来新位置的
+# 同类问题也不会再冒出来（dismiss 只管已存在的那一条）。
+#
+# ── 为什么用 advanced setup 而不是 default setup 的属性 ───────────
+# default setup 不带 workflow 文件，给它加路径排除只有一条官方途径：给仓库设置
+# `github-codeql-config-file` 自定义属性。但**该属性是组织级功能**（官方文档：
+# "Organization owners ... at the organization level"），本仓库属个人账户
+# （owner.type = User），实测 API 返回 404 ⇒ 不可用。故改为 advanced setup，
+# 用 workflow 的 config-file 直接引用本文件。
+#
+# 排除列表与排除理由见下方 paths-ignore；这两块目录不参与本项目任何构建/门禁，
+# 判断依据同 AGENTS.md「记忆引擎」与 third_party 说明。
+name: 'Code Agent Desktop CodeQL config'
+
+paths-ignore:
+  # 记忆引擎：vendored 上游源码（MIT，TencentCloud/TencentDB-Agent-Memory）
+  # 改这些文件会破坏 memory-engine:integrity 哈希校验，因此不存在"修它"的路径。
+  - packages/memory-engine/MemoryCore
+  # MotionVault：vendored 网页动效参考源（MIT），明确不参与本项目构建
+  - third_party/motionvault
