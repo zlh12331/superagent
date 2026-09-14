@@ -6,6 +6,8 @@
 #   0. gate job：识别本次 push 是否 release-please 的发布提交，提取版本号（非发布 push → 全部跳过）
 #   1. CD 三平台矩阵构建（windows/macos/linux，各自原生单测 + 打包 + 产物 smoke）
 #   2. release job（needs: gate+build）：三平台构建全部成功后才打 tag → 创建 draft Release
+#      └ 打 tag 后把对应 release PR 标记为 autorelease: tagged（代 release-please 收尾；
+#        见该步骤注释：skip-github-release 使 release-please 不再自行更新此 label）
 #   3. publish job（needs: release）：校验三平台安装包 + latest*.yml 齐全 → draft 转正式
 #
 # 关键语义（2026-09-10 方案二：CI on PR, CD on main）：
@@ -284,6 +286,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      # label 回写需要 issue/PR 写权限（gh pr edit --remove-label/--add-label）
+      pull-requests: write
 
     steps:
       # 提取发布描述需要 CHANGELOG.md（release job 此前无 checkout）
@@ -351,6 +355,47 @@ jobs:
           # integration"（User PAT 创建的 release，Actions 身份无权修改）。
           # 补发/重放已存在 tag 的场景（如历史空壳 v1.0.5）使用 gh CLI 手动处理。
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── label 回写（2026-09-14 加固，防「untagged release PR → abort」死锁）──
+      # release-please 用 PR label 判定发布是否已收尾，**不看 tag 实际是否存在**
+      # （源码 src/manifest.ts：DEFAULT_LABELS=['autorelease: pending']；扫到
+      # 「已合并 + 仍带 pending」的 release PR 即 abort："There are untagged, merged
+      # release PRs outstanding - aborting"）。该 label 正常由 release-please 自己
+      # 在 createReleasesForPullRequest 里改成 autorelease: tagged，但本仓库用
+      # skip-github-release 把打 tag 移交本工作流 ⇒ 那条路径被跳过 ⇒ label 永远停在
+      # pending ⇒ **下一次发版无法生成 Release PR**。实测事故：PR #30（v1.0.0，
+      # 2026-09-10 改流程后的首个 release）label 一直未更新，2026-09-14 带 feat 的
+      # 提交因此被 abort。故在此代 release-please 收尾：tag + draft Release 创建成功
+      # 后，把对应 release PR 标记为 tagged。此步失败即失败（fail-closed）——label
+      # 未同步会让下次发版静默死锁，必须当下暴露而非留到下一次。
+      - name: Mark release PR as tagged (release-please label handoff)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.gate.outputs.version }}"
+          # 优先按版本号精确匹配（release PR 标题形如 chore(main): release X.Y.Z）
+          PRS=$(gh pr list --state merged --label "autorelease: pending" \
+                  --search "release ${VERSION} in:title" \
+                  --json number --jq '.[].number' || true)
+          if [ -z "$PRS" ]; then
+            # 回退：同步全部 pending（含标题不匹配/历史遗留），避免误判失败
+            PRS=$(gh pr list --state merged --label "autorelease: pending" \
+                    --json number --jq '.[].number' || true)
+            if [ -n "$PRS" ]; then
+              echo "::warning::未按标题匹配到 version=${VERSION} 的 pending release PR，回退同步全部 pending"
+            fi
+          fi
+          if [ -z "$PRS" ]; then
+            echo "无 autorelease: pending 的已合并 release PR，label 已一致，无需回写"
+            exit 0
+          fi
+          for pr in $PRS; do
+            gh pr edit "$pr" \
+              --remove-label "autorelease: pending" \
+              --add-label "autorelease: tagged"
+            echo "release PR #${pr} -> autorelease: tagged"
+          done
 
   # ── 发布转正式（2026-09-09 流程加固）────────────────────────────
   # 「打 tag」只代表代码快照 + 构建成功；对用户可见的发布必须连安装包一起。

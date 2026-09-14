@@ -9,6 +9,7 @@
 | 版本号推导 | release-please | 读 Conventional Commits 算下一个版本，写入 `.release-please-manifest.json` + `package.json` |
 | CHANGELOG | release-please | 自动生成；**发版前在 Release PR 中人工润色为面向用户的文案** |
 | 打 tag | release.yml | 三平台构建全部成功后才打 tag（防空版本占号） |
+| label 收尾 | release.yml `release` job | 打 tag 后把 Release PR 标记为 `autorelease: tagged`。这是 release-please 的**进度游标**：`skip-github-release: true` 跳过了它自身的 label 更新路径，若不代收尾，label 会永久停在 `autorelease: pending`，导致**下一次发版被 abort**（详见第七节） |
 | 对外可见 | release.yml `publish` job | 校验三平台安装包 + `latest*.yml` 齐全后，draft 才转正式 |
 
 **只有 main 一条发布分支。** 预发布（beta）不靠分支实现，靠版本号后缀 + `Release-As`。
@@ -129,5 +130,6 @@ beta 与正式版共用 `latest*.yml` 更新源；已装 beta 版的应用（版
 | 现象 | 原因 |
 |---|---|
 | 合并 Release PR 后没打 tag | 旧版曾用非法的 `skip-tag` 输入（被 Actions 静默忽略）；现用 `skip-github-release: true`，tag 一律由 `release.yml` 创建 |
+| push 后 release-please 不再开 Release PR | 仓库里存在「已合并、但 label 仍是 `autorelease: pending`」的 Release PR，release-please 据此判定上一个发布未收尾，直接放弃本次 PR 创建（日志：`There are untagged, merged release PRs outstanding - aborting`）。⚠️ **该判定只读 PR label，不检查 tag 是否真实存在**（源码 `src/manifest.ts`：`DEFAULT_LABELS=['autorelease: pending']`）。根因：`skip-github-release: true` 跳过了 release-please 内部 `createReleasesForPullRequest` 的 label 更新，而打 tag 又移交给了 `release.yml`，两边都没更新它就永久停在 pending。2026-09-14 已由 release job 的「Mark release PR as tagged」步骤代收尾；**历史遗留**（如 PR #30）需手工修复：`gh pr edit <n> --remove-label "autorelease: pending" --add-label "autorelease: tagged"`，再手动重跑 Release Please workflow（改 label 不触发 push，不会自动重跑） |
 | 更新 Release 报 403 | softprops 对**已存在**的 release 做 update 会被拒；正常路径是 create（用 `GITHUB_TOKEN`）。重放已存在 tag 的场景改用 `gh` CLI 手动处理 |
 | 三平台构建成功但未发布 | `publish` job 校验资产未通过（缺安装包或 `latest*.yml`），Release 保持 draft |
