@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0](https://github.com/zlh12331/superagent/compare/v1.0.0...v1.1.0) (2026-09-14)
+
+
+### Features
+
+* 记忆引擎 vendoring 集成（9 批次）+ 发版链路加固 ([d70c938](https://github.com/zlh12331/superagent/commit/d70c9389e497555bba0fdab04b732d5e2a8ba012))
+
+
+### Bug Fixes
+
+* **ci:** 发布链路补 label 收尾，修复「开不出 Release PR」静默死锁 ([e10a98b](https://github.com/zlh12331/superagent/commit/e10a98b6ef938b8fee42c2c78ffc71595c7ff3ac))
+
 ## [1.0.0] - 2026-09-10
 
 首个正式版本。
