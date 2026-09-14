@@ -17,9 +17,20 @@ import { describe, expect, it } from 'vitest';
 import { getGitService, resetGitService } from '../../src/main/infra/git/git-service';
 import { createGitHandlers } from '../../src/main/ipc/git.handler';
 
-/** 在临时目录初始化 git 仓库（含 user 配置） */
+/**
+ * 测试仓库的固定初始分支名
+ *
+ * ⚠️ 必须显式指定：`git init` 的默认分支名取决于本机 `init.defaultBranch`
+ * （现代配置常为 main，CI 多为 master）。此前 init 未指定分支 + 用例硬编码
+ * `refspec: 'master'`，在 `init.defaultBranch=main` 的机器上 push 必然失败
+ * （找不到 master 分支 → ok:false），属环境相关的脆弱测试。
+ * 统一用 -b 固定，使测试自包含、不随本机 git 配置漂移。
+ */
+const TEST_BRANCH = 'master';
+
+/** 在临时目录初始化 git 仓库（含 user 配置；分支名显式固定，见 TEST_BRANCH） */
 function initGitRepo(dir: string): void {
-  execFileSync('git', ['init', '-q'], { cwd: dir });
+  execFileSync('git', ['init', '-q', '-b', TEST_BRANCH], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'it@test.local'], { cwd: dir });
   execFileSync('git', ['config', 'user.name', 'Integration Test'], { cwd: dir });
 }
@@ -35,10 +46,17 @@ async function withGitRepo<T>(fn: (dir: string) => Promise<T> | T): Promise<T> {
   }
 }
 
-/** 初始化本地 bare 远程（bare 仓库路径） */
+/**
+ * 初始化本地 bare 远程（bare 仓库路径）
+ *
+ * 同样显式指定初始分支：bare 仓库的 HEAD symbolic-ref 决定 `git log` 默认查哪个
+ * 分支。此前未指定时 HEAD 指向本机 init.defaultBranch（常为 main），而推送的是
+ * master → 收尾的 `git log` 报 "your current branch 'main' does not have any
+ * commits yet"（推送本身成功，失败的是验证步骤），属环境相关脆弱测试。
+ */
 function initBareRemote(parentDir: string, name = 'origin.git'): string {
   const bare = join(parentDir, name);
-  execFileSync('git', ['init', '--bare', '-q', bare]);
+  execFileSync('git', ['init', '--bare', '-q', '-b', TEST_BRANCH, bare]);
   return bare;
 }
 
@@ -138,7 +156,7 @@ describe('git 域集成链路（batch 4）', () => {
         const pushRes = await handlers.push({
           path: dir,
           remote: bare,
-          refspec: 'master',
+          refspec: TEST_BRANCH,
           setUpstream: true,
         });
         expect(pushRes.ok).toBe(true);
@@ -204,7 +222,7 @@ describe('git 域集成链路（batch 4）', () => {
       const pushRes = await handlers.push({
         path: dir,
         remote: '/nonexistent-remote',
-        refspec: 'master',
+        refspec: TEST_BRANCH,
       });
       expect(pushRes.ok).toBe(false);
     });

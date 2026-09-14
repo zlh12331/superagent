@@ -7,17 +7,22 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { AppInfoRes } from '@code-agent/shared/renderer';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { unwrap } from '@/lib/ipc';
 
 /**
  * 拉取应用信息（挂载后一次性；浏览器模式 / IPC 失败时返回 null，调用方自兜底）
  *
+ * @param onError 可选失败回调（about-section 需要 toast 告知用户；不传则静默返回 null）。
+ *   经 ref 持有，不参与 effect 依赖——调用方无需为其加 useCallback 稳定引用。
  * @returns AppInfoRes | null（null = 尚未返回或失败，展示占位）
  */
-export function useAppInfo(): AppInfoRes | null {
+export function useAppInfo(onError?: (error: unknown) => void): AppInfoRes | null {
   const [info, setInfo] = useState<AppInfoRes | null>(null);
+  // 最新回调经 ref 读取：避免把 onError 放进依赖导致调用方改动即重新请求
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     let cancelled = false;
@@ -42,13 +47,17 @@ export function useAppInfo(): AppInfoRes | null {
         if (cancelled) return;
         try {
           setInfo(unwrap(res));
-        } catch {
+        } catch (error: unknown) {
           // error 响应 / 协议异常：与 IPC 失败同策略（调用方自兜底占位）
           setInfo(null);
+          onErrorRef.current?.(error);
         }
       })
-      .catch(() => {
-        if (!cancelled) setInfo(null);
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setInfo(null);
+          onErrorRef.current?.(error);
+        }
       });
     return () => {
       cancelled = true;

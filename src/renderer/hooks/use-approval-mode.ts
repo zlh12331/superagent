@@ -51,13 +51,22 @@ export function useApprovalMode(): {
   const setMode = useCallback(
     async (next: ApprovalMode): Promise<void> => {
       const previous = mode;
+      if (typeof window === 'undefined' || window.api === undefined) {
+        // 浏览器模式无语义可写：仅本地回显（与上方读取分支同构）
+        setModeState(next);
+        return;
+      }
       // 乐观更新：立即回显，失败回滚
       setModeState(next);
       try {
-        await window.api.settings.setApprovalMode({ mode: next });
-      } catch {
+        // ⚠️ 必须 unwrap：主进程失败时 wrap 返回 `{ error }` 响应而**不是** reject
+        // （src/main/utils/wrap.ts 的 catch 分支），只用 try/catch 接不住失败 →
+        // 回滚永不执行、UI 停留在"已切换"的假成功态。
+        unwrap(await window.api.settings.setApprovalMode({ mode: next }));
+      } catch (error: unknown) {
         setModeState(previous);
         toast.error(t('settings.approvalModeSaveFailed'));
+        reportError(error, { tags: { scope: 'use-approval-mode.write' } });
       }
     },
     [mode, t],

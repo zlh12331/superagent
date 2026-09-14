@@ -306,6 +306,23 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     expect(chunks).toEqual([{ type: 'text-delta', id: 't1', delta: 'ok' }]);
   });
 
+  // ── 回归：configureFor 的按会话配置缓存有上限（P3-57）──────────────────
+  // transport 是模块级单例，configureFor 以会话 id 为键；不加限制则随「打开过的
+  // 会话数」无界累积。
+  it('configureFor 超上限时淘汰最旧，且最近配置的会话仍可命中', () => {
+    const transport = new IpcAgentTransport();
+    // 写入 25 个会话（上限 20）
+    for (let i = 0; i < 25; i += 1) {
+      transport.configureFor(`sess-${i}`, { workingDir: `/w${i}` });
+    }
+    // 最近写入的仍命中自己的配置（未被淘汰）
+    expect(transport['configs'].get('sess-24')).toMatchObject({ workingDir: '/w24' });
+    // 最旧的已被淘汰
+    expect(transport['configs'].has('sess-0')).toBe(false);
+    // 总数不超上限
+    expect(transport['configs'].size).toBeLessThanOrEqual(20);
+  });
+
   it('reconnectToStream 恒返回 null（主进程不持久化流状态）', async () => {
     const transport = new IpcAgentTransport();
     await expect(transport.reconnectToStream()).resolves.toBeNull();
