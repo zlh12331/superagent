@@ -62,6 +62,7 @@ export async function createNodeLauncher(): Promise<EngineLauncher> {
       get pid() {
         return exited ? undefined : child.pid;
       },
+      hasExited: () => exited,
       stderrTail: () => stderrTail,
       onExit: (listener) => {
         child.on('exit', (code) => listener(code ?? -1));

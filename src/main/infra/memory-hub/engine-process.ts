@@ -14,19 +14,26 @@
 
 import { utilityProcess } from 'electron';
 import { logger } from '../../utils/logger';
+import { buildEngineEnv } from './engine-env';
 
 const TAG = '[memory-hub]';
 
 /** stderr 保留末尾长度（诊断启动失败用） */
 const STDERR_TAIL_LIMIT = 2000;
 
-/** tsx loader 的预加载参数（模块级冻结常量） */
-const TSX_LOADER_ARGS: readonly string[] = Object.freeze(['--import', 'tsx']);
-
 /** 引擎子进程句柄（最小面） */
 export interface EngineProcessHandle {
-  /** 进程 id（undefined = 尚未启动或已退出；据此判定运行中） */
+  /** 进程 id（undefined = 尚未 spawn 或已退出；**不可据此判存活**，见 hasExited） */
   readonly pid: number | undefined;
+  /**
+   * 是否已收到 exit 事件
+   *
+   * ⚠️ 存活判定必须用本方法，**不能用 `pid === undefined`**：实测 Electron
+   * utilityProcess 在 fork 返回后 pid 仍为 undefined（约 29ms 后 'spawn' 才赋值、
+   * 63ms 才稳定可读），启动期轮询会把「尚未 spawn」误判成「已退出」而立刻失败
+   * （2026-09-14 探针：PID_SYNC=undefined@1ms → spawn@29ms → pid=8832@63ms）。
+   */
+  hasExited(): boolean;
   /** stderr 末尾（启动失败时报出，便于定位） */
   stderrTail(): string;
   /** 注册退出回调（code 为退出码） */
@@ -56,13 +63,17 @@ export type EngineLauncher = (options: LaunchEngineOptions) => EngineProcessHand
 export const launchEngineProcess: EngineLauncher = (options) => {
   const child = utilityProcess.fork(options.launcherPath, [], {
     cwd: options.cwd,
-    env: options.env,
-    execArgv: options.useTsx ? [...TSX_LOADER_ARGS] : [],
+    env: buildEngineEnv(options.env, options.useTsx),
+    execArgv: [],
     serviceName: 'memory-engine',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   let stderrTail = '';
+  let exited = false;
+  child.on('exit', () => {
+    exited = true;
+  });
   child.stderr?.on('data', (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT);
   });
@@ -76,6 +87,7 @@ export const launchEngineProcess: EngineLauncher = (options) => {
     get pid() {
       return child.pid;
     },
+    hasExited: () => exited,
     stderrTail: () => stderrTail,
     onExit: (listener) => {
       child.on('exit', listener);

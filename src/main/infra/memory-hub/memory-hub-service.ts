@@ -147,9 +147,9 @@ export class MemoryHubService {
     return this.options.hubRoot !== undefined && this.options.hubRoot.length > 0;
   }
 
-  /** sidecar 是否正在运行（不触发启动；pid 由 Electron 在退出后置 undefined） */
+  /** sidecar 是否正在运行（不触发启动；依 exit 事件而非 pid，pid 在 spawn 前为空） */
   isRunning(): boolean {
-    return this.child !== null && this.child.pid !== undefined;
+    return this.child !== null && !this.child.hasExited();
   }
 
   /**
@@ -290,7 +290,7 @@ export class MemoryHubService {
     const child = this.child;
     this.child = null;
     this.port = null;
-    if (child === null || child.pid === undefined) {
+    if (child === null || child.hasExited()) {
       return;
     }
     await new Promise<void>((resolve) => {
@@ -457,8 +457,10 @@ export class MemoryHubService {
   ): Promise<void> {
     const deadline = Date.now() + START_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      // 子进程早退（pid 被 Electron 置 undefined）→ 立即失败并带出 stderr 尾巴
-      if (this.child !== null && this.child.pid === undefined) {
+      // 子进程真退出（收到 exit 事件）→ 立即失败并带出 stderr 尾巴
+      // ⚠️ 不能用 `pid === undefined` 判定：utilityProcess 在 spawn 前 pid 就是
+      // undefined（实测约 29ms 后才赋值、63ms 才稳定），会把「启动中」误判成「已退出」
+      if (this.child?.hasExited()) {
         throw new Error(`${TAG} sidecar 启动即退出\n${stderrTail()}`);
       }
       try {
