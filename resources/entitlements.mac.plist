@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    macOS hardened runtime entitlements（公证前置配置）
+
+    hardened runtime 会收紧以下能力，而 Electron（Chromium/V8/Node）运行时依赖它们，
+    故必须显式放行；这几项是 Electron 官方文档与 electron-builder 默认集的标准内容。
+    参考：https://github.com/electron/electron/blob/main/docs/tutorial/code-signing.md
+  -->
+
+  <!-- V8 JIT：Chromium 需要即时编译（JS 执行）；不开则渲染层直接崩 -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- 未签名可执行内存：V8 的 WebAssembly / shiki 高亮 WASM 需要 -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!--
+    库校验豁免：Electron 会加载随包的原生模块（better-sqlite3 / node-pty /
+    memory-hub 的 sqlite-vec 等），这些由不同团队签名或未签名，
+    严格库校验会导致加载失败
+  -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- 允许 DYLD 环境变量：Electron 内部在某些路径下需要（与上条配套） -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+
+  <!-- 网络客户端：AI Provider 调用 / 更新检查 / 记忆引擎回环 HTTP -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- 用户选择的文件读写（沙箱外应用不需要，保留以兼容未来 App Store 分发路径） -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>

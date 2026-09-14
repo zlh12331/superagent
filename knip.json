@@ -26,7 +26,8 @@
       ]
     }
   },
-  "ignoreBinaries": ["gitleaks"],
+  "ignoreBinaries": ["gitleaks", "robocopy"],
+  "ignoreWorkspaces": ["packages/memory-engine"],
   "ignoreDependencies": [
     "@code-agent/tsconfig",
     "@electron/rebuild",

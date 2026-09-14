@@ -87,20 +87,18 @@ describe('utils 域批次10 缺口补全', () => {
       expect(mocks.mockLog.error).toHaveBeenCalled();
     });
 
-    it('unhandledRejection 非 Error reason：不抛且不调用 Sentry', () => {
-      const sentrySpy = vi.fn();
-      const originalCapture = (globalThis as Record<string, unknown>)['__sentrySpy'];
-      void originalCapture;
+    it('unhandledRejection 非 Error reason：记日志且不抛（不上报路径已移除）', () => {
+      mocks.mockLog.error.mockClear();
       registerGlobalErrorHandlers();
       // 触发非 Error 的 unhandledRejection（reason 为字符串）
       const listeners = process.listeners('unhandledRejection');
       const last = listeners[listeners.length - 1];
       expect(last).toBeDefined();
-      // 直接调用监听器（避免真实 unhandledRejection 干扰）
+      // 直接调用监听器（避免真实 unhandledRejection 干扰）：不抛错且落日志
       if (last !== undefined) {
-        last('string-reason', Promise.resolve());
+        expect(() => last('string-reason', Promise.resolve())).not.toThrow();
       }
-      expect(sentrySpy).not.toHaveBeenCalled();
+      expect(mocks.mockLog.error).toHaveBeenCalled();
     });
 
     it('clearCrashMarker：标记存在时删除 + 日志；不存在时跳过', () => {

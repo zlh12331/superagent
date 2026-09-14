@@ -87,3 +87,22 @@ describe('TerminalCreateReqSchema · env 关键变量拒绝（P0）', () => {
     expect(withCols.env).toBeUndefined();
   });
 });
+
+describe('TerminalCreateReqSchema · 自定义启动命令拒绝（P0）', () => {
+  it('省略 / 空串通过（默认 shell 语义；TerminalPanel 固定传 undefined）', () => {
+    expect(TerminalCreateReqSchema.safeParse({}).success).toBe(true);
+    expect(TerminalCreateReqSchema.safeParse({ command: '' }).success).toBe(true);
+    expect(TerminalCreateReqSchema.safeParse({ command: '   ' }).success).toBe(true);
+  });
+
+  it('非空 command 一律拒绝（任意进程原语收口，agent 侧走 ask 审批工具不受影响）', () => {
+    for (const command of ['sh', 'powershell.exe', 'bash -c x', 'evil binary']) {
+      const result = TerminalCreateReqSchema.safeParse({ command });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.join('.') === 'command');
+        expect(issue).toBeDefined();
+      }
+    }
+  });
+});

@@ -18,6 +18,7 @@ import {
   type ApiKeyProvider,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
+  type SettingKey,
   type ThinkingLevel,
 } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
@@ -161,10 +162,21 @@ export type BrowserDevicePreset = 'responsive' | 'desktop' | 'laptop' | 'tablet'
 export type BrowserZoom = 50 | 75 | 100 | 125 | 150 | 200;
 
 /**
- * 浏览器 pane 设置（右面板 iframe 预览工具）
+ * 记忆功能设置
+ *
+ * enabled 是隐私开关：关闭后主进程不捕获新记忆、不注入召回（已有记忆保留，
+ * 用户可在设置页清除）。默认开启——记忆是产品核心能力之一，但必须可见可关。
+ */
+export interface MemorySettings {
+  /** 是否启用记忆（默认 true） */
+  readonly enabled: boolean;
+}
+
+/**
+ * 浏览器 pane 设置（右面板进程外预览工具，页面在主进程 WebContentsView 加载）
  *
  * 前两项是 pane 挂载时的初值（工具栏内可临时改，不写回）；
- * strictSandbox 是安全策略，每次渲染都生效。
+ * strictSandbox 是安全策略，切换经 browser:configure 即时生效。
  */
 export interface BrowserSettings {
   /** 默认设备预设 */
@@ -172,10 +184,11 @@ export interface BrowserSettings {
   /** 默认缩放百分比 */
   readonly defaultZoom: BrowserZoom;
   /**
-   * 严格沙箱：iframe 不放行 allow-scripts
+   * 严格沙箱：禁用预览页 JavaScript（webPreferences.javascript: false）
    *
-   * 预览页多为外站，放行脚本意味着远端代码可在应用内执行（重定向、指纹采集、
-   * 表单劫持）。代价：依赖 JS 的站点渲染为静态骨架，故默认关闭（保持既有行为）。
+   * 预览页多为外站，放行脚本意味着远端代码可在应用内运行（重定向、指纹采集、
+   * 表单劫持）。预览本身已在独立 session 分区 + 沙箱进程中，严格模式是额外
+   * 收紧。代价：依赖 JS 的站点渲染为静态骨架，故默认关闭（保持既有行为）。
    */
   readonly strictSandbox: boolean;
 }
@@ -211,6 +224,8 @@ interface SettingsData {
   readonly workspace: WorkspaceSettings;
   /** 浏览器 pane（iframe 预览） */
   readonly browser: BrowserSettings;
+  /** 记忆功能（隐私开关） */
+  readonly memory: MemorySettings;
 }
 
 /**
@@ -236,6 +251,8 @@ interface SettingsState extends SettingsData {
   readonly updateWorkspace: (patch: Partial<WorkspaceSettings>) => void;
   /** 更新浏览器 pane 设置（部分字段） */
   readonly updateBrowser: (patch: Partial<BrowserSettings>) => void;
+  /** 更新记忆设置（写穿透 SQLite） */
+  readonly updateMemory: (patch: Partial<MemorySettings>) => void;
 }
 
 /**
@@ -266,7 +283,7 @@ export async function flushPendingSettings(): Promise<void> {
   await Promise.allSettled([...pendingWrites]);
 }
 
-function persistSetting(key: string, value: unknown): void {
+function persistSetting(key: SettingKey, value: unknown): void {
   const api = window.api;
   const setter = api?.settings?.set;
   if (typeof setter !== 'function') {
@@ -345,6 +362,9 @@ const DEFAULT_SETTINGS: SettingsData = {
     defaultZoom: 100,
     strictSandbox: false,
   },
+  memory: {
+    enabled: true,
+  },
 };
 
 /**
@@ -416,6 +436,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     set({ browser });
     persistSetting('browser', browser);
   },
+  updateMemory: (patch) => {
+    const memory = { ...useSettingsStore.getState().memory, ...patch };
+    set({ memory });
+    persistSetting('memory', memory);
+  },
 }));
 
 /**
@@ -455,6 +480,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     browser: {
       ...DEFAULT_SETTINGS.browser,
       ...((snapshot['browser'] as Partial<BrowserSettings> | undefined) ?? {}),
+    },
+    memory: {
+      ...DEFAULT_SETTINGS.memory,
+      ...((snapshot['memory'] as Partial<MemorySettings> | undefined) ?? {}),
     },
   });
 }

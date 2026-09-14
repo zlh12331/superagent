@@ -21,8 +21,10 @@ describe('buildCsp', () => {
     expect(csp).toContain('https://api.deepseek.com');
     expect(csp).toContain('https://api.openai.com');
     expect(csp).toContain('https://api.anthropic.com');
-    // 本地 Ollama
-    expect(csp).toContain('http://localhost:*');
+    // 本地 Ollama 精确端口（2026-09-13 收口：localhost:* → 11434，
+    // 消除被 XSS 的渲染层访问本机任意端口的内网探测面）
+    expect(csp).toContain('http://localhost:11434');
+    expect(csp).not.toContain('http://localhost:*');
   });
 
   it('开发环境：允许 HMR（unsafe-inline script + localhost ws/http）', () => {

@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatCompactNumber } from '@/lib/format-intl';
 import { unwrap } from '@/lib/ipc';
+import { USAGE_SUMMARY_QUERY_KEY } from '@/lib/query/keys';
 import { TurnsSection } from './turns-section';
 
 /** 生成近 N 天日期列表（倒序，today 在前；与 byDay 数据格式一致） */
@@ -120,7 +121,7 @@ export function UsageSection(): ReactElement {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['usage', 'summary'],
+    queryKey: USAGE_SUMMARY_QUERY_KEY,
     queryFn: async (): Promise<UsageSummaryRes> => {
       // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
       // （0 值三卡 + 近 90 天 0 值热力图格子，形态完整可见）

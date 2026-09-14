@@ -11,11 +11,15 @@ pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计 10 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4/体≤40 行棘轮）+ coverage-floors + docs + test-boundary + csp-hash + ui-consistency（写法一致性棘轮），pre-push/CI 卡关
+pnpm check:static           # 静态审计 11 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 / 体≤100 棘轮；51–100 仅提示）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + test-boundary + csp-hash + ui-consistency（写法一致性棘轮），pre-push/CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
+pnpm check:packaged-engine  # 打包后断言产物含可运行记忆引擎（入口+node_modules+无占位标记+关键依赖），release.yml 卡关
+pnpm memory-engine:check    # 查上游记忆引擎新版本（网络不可用时提示，不算失败）
+pnpm memory-engine:sync --from <解压目录> --tag <tag>  # 同步上游（事务性替换+补丁重放+完整性重生成）
+pnpm memory-engine:integrity # 校验 vendored 引擎源码未被手改（接 check:static 卡关）
 
 # 单包/层测试
 pnpm --filter @code-agent/shared run test
@@ -50,11 +54,11 @@ src/preload/     → 桥接（CJS 格式 .cjs, contextBridge）
 src/renderer/    → React 渲染层
 packages/shared/ → 跨进程共享: 类型/IPC schema/常量（按进程拆分出口）
 packages/tsconfig/→ base.json / node.json / web.json 三档
-scripts/         → 脚手架与工具（scaffold / check-* / build-tokens / sentry）
+scripts/         → 脚手架与工具（scaffold / check-* / build-tokens）
 tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 ```
 
-- 主进程是 Service Container 模式（`service-container.ts`），集中管理 19 个 lazy accessor（File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent，2026-09-05 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖。ConcurrencyGate 不是 accessor，是容器上直接初始化的 `readonly` 字段
+- 主进程是 Service Container 模式（`service-container.ts`），集中管理 20 个 lazy accessor（File/Search/ToolRegistry/Permission/ToolExecutor/MCP/Prompt/MemoryPort/MemoryHub/LSP/Goal/IM/RemoteControl/Terminal/Git/Codebase/Session/Update/Agent/Browser，2026-09-12 实测；Memory 已更名为 MemoryHub，dispose 顺序见文件头注释）按反向依赖。ConcurrencyGate 不是 accessor，是容器上直接初始化的 `readonly` 字段
 - **agentAskService 与 cronService 都不是容器 accessor**，以模块级单例 import 引入（`service-container.ts:55,63`）；cronService 由 AgentService accessor 内部 `start()` + `onFire` 订阅（fire 触发 agent 回合），dispose 链中 `cronService.stop()` 排第一位（先于 AgentService 收尾）
 - 桌面系统集成在 main 根目录：`tray.ts`（托盘）/ `deep-link.ts`（`code-agent://` 协议，scheme 常量与 electron-builder.yml 的 protocol 配置必须保持一致）/ `notification.ts`（回合通知）/ `theme-linkage`（系统主题联动，独立模块）
 - IPC 通过 `contextBridge.exposeInMainWorld('api', api)` 暴露，渲染层用 `window.api.*` 调用
@@ -70,7 +74,7 @@ tools/typedoc/   → TypeDoc 独立子包（TS6 隔离，规避 TS7 不兼容）
 | 渲染进程崩溃 | 整窗消失（单窗口设计，无独立重开） | Electron 自动重建 webContents；数据真源在 SQLite 无损 |
 | 主进程崩溃 | 应用退出 | `.crash-marker` + 启动 `recoverFromCrash()` 把 running 回合标 interrupted |
 | MCP server / LSP / pty / ripgrep 子进程崩溃 | 对应功能降级，主进程存活 | 各 service 自管重启/报错（run-command killTree 防孤儿） |
-| MemoryHub sidecar 崩溃 | 记忆功能降级 | service 层报错，主流程不依赖 |
+| 记忆引擎子进程崩溃（utilityProcess，serviceName=memory-engine） | 记忆功能降级（MemoryPort 空实现） | service 层报错，主流程不依赖；可在 app.getAppMetrics() 归因 |
 | 断电/强杀 | running 会话残留 | 下次启动 `markAllInterrupted()`（启动期无条件执行，不依赖崩溃标记） |
 
 退出路径双层保障：**关窗协商**（`window.ts` close 拦截：运行中回合弹确认，`CODE_AGENT_SKIP_CLOSE_GUARD=1` 豁免）+ **退出善后**（dispose 链 `markInterruptedOnShutdown`：agentService drain 后把残留 running 标 interrupted，消除"干净退出留 stale running"窗口）。取舍说明：单窗口 Agent 应用暂不做进程拆分（重活隔离的收益 < utilityProcess 拆分的复杂度），若未来多窗口/插件化再评估。
@@ -105,7 +109,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 关键约束（易踩坑）
 
 - **preload 必须输出 CJS**（sandbox: true 限制，`electron.vite.config.ts` 中 format: 'cjs'），纯 ESM 包（如 zod）引入 preload 会静默失败导致 `window.api` 为 undefined。preload 必须通过 `@code-agent/shared/ipc/channels` / `@code-agent/shared/preload` 子路径导入（避开 shared 主入口中的 zod）
-- **Sentry 初始化必须在 `app.whenReady()` 之前**（@sentry/electron 要求）
+- **错误处理本地优先**（2026-09-13 移除 Sentry）：所有异常经 `infra/telemetry/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。⚠️ renderer 上报模块内 `electron-log/renderer` 必须**惰性加载**（CJS 首次 import >5s，静态导入会让 renderer 测试套件从 30s 劣化到 300s）。将来接任何后端只改这两个出口文件
 - **dev 环境 userData 重定向到 `.electron-user-data/`**（避免沙箱拦截 %APPDATA%）
 - **dev 环境开启远程调试端口 9222**（CDP over WebSocket）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
@@ -114,6 +118,8 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。存量编译器 bail-out（try/finally 违规）已于 455c476 清零，新代码禁止引入。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
 - **根级 `*.config.ts` 已纳入 typecheck 但 include 是枚举式**（根 `tsconfig.json` = `files: []` + 6 个 project references，其中 `tsconfig.configs.json` 显式枚举 electron.vite.config.ts / vite.web.config.ts / drizzle.config.ts / i18next.config.ts / vitest.workspace.ts / commitlint.config.js）⇒ **新增根级配置文件必须手动加进 `tsconfig.configs.json` 的 include**，否则 typecheck 查不出它的类型错误/excess property；改配置仍需 `pnpm exec vite build` 实测行为
 - **渲染层动效统一走 MotionVault**（`src/renderer/lib/motion/`：transitions/variants 集中定义），不要散写 CSS transition/手搓动画；shiki 语言按需加载（`loadLanguage`），受首载体积门槛约束
+- **网页预览绝不能回渲染层 iframe**：主进程对 defaultSession 统一注入 CSP/X-Frame-Options（`security/csp.ts` + `index.ts`），iframe 加载外站会被三层拦截（frame-src 回退 'self' / XFO 注入远端响应 / CSP 污染远端文档）。右面板浏览器走 `WebContentsView` + 独立内存分区 `browser-preview`（`infra/browser/preview-service.ts`，容器第 20 个 accessor）——新增网页承载能力必须用进程外视图 + 独立 session 分区
+- **记忆引擎是 vendored 上游 + 独立进程**（`packages/memory-engine/`，见 `docs/design/26-memory-engine-spec.md`）：源码 MIT 进仓（CI 才能构建出带引擎的包），运行时经 **utilityProcess**（非 `ELECTRON_RUN_AS_NODE`——该变量与 fuses 的 `runAsNode: false` 互斥）；数据落 `userData/memory-hub`（显式设 `MEMORY_TENCENTDB_ROOT`，否则默认散落 `~/.memory-tencentdb`）；`adapter.ts` 是唯一知晓上游 HTTP 协议的文件；改上游代码必须走 `patches/`（`memory-engine:integrity` 拦手改）；引擎构建失败即打包失败（无占位降级），`check:packaged-engine` 在 CD 断言产物真含引擎
 
 ## 渲染层写法标准（2026-09 一致性收敛）
 
@@ -184,11 +190,11 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 架构决策记录（用户已拍板，勿重复讨论）
 
 - **IM 子系统不独立化**：7 渠道适配器（QQ/微信/钉钉/Telegram/飞书/企微/webhook）继续留在主进程包内，不拆子包。
-- **TS7 工具链不收敛**：自研正则解析检查脚本（check-*）为 TS7 原生版无编译器 API 期间的临时方案，等待生态成熟稳定后再评估收敛，当前不投入。
+- **技术选型：优先用成熟依赖，找不到合适的才自研兜底**（2026-09-11 转向）：需要解析/度量/校验等能力时，先查现成库（如 Biome 内置规则、`oxc-parser`、`@babel/parser` —— 后两者已在依赖图中），**能复用就复用**；只在无合适依赖时才写脚本兜底。实证：`check:complexity` 首版自研正则度量在一个函数内暴露 3 个 bug 且语义与 Biome 实测不符（Biome：if-else-if 得 2、try-catch 得 2），改用 Biome 内置规则后问题整体消失。**注意区分硬约束**：preload 零运行时依赖（CJS + 纯字符串 meta，Electron 沙箱要求，zod 进 preload 会静默失败）是**平台逼的**，不属本原则范围。`function-metrics.ts` 当前仍是正则实现，属**待评估迁移**（可换 oxc-parser），非禁改。
 - **设置持久化合并到 SQLite**：已完成（见「数据库」节 app_settings 说明）。
 
 ## 外部服务 / 凭据
 
 - AI Provider API Key 用 Electron `safeStorage` 加密存储（Windows DPAPI / macOS Keychain / Linux libsecret）
-- Sentry 自托管（http://127.0.0.1:9000），DSN 从 `.env` 读取；遥测为 Sentry + OpenTelemetry 双通道（设计见 docs/design/23-otel-spec.md）
-- CI Sentry 符号上传需要 `SENTRY_AUTH_TOKEN` 环境变量
+- 遥测为 **OpenTelemetry 单通道**（`OTEL_EXPORTER_OTLP_ENDPOINT` 配置，未配置即不外发；Sentry 已于 2026-09-13 移除，见 docs/design/23-otel-spec.md）
+- 错误报障走 GitHub Issue + 诊断包导出（本地优先，无云端上报依赖）

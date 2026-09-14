@@ -51,7 +51,9 @@
   `run_workflow`（串行多步编排）
 - **多轮工具调用循环**：基于 Vercel AI SDK v7（`streamText` + `tools` + `stopWhen`）
 - **技能系统**：可按需加载的技能包（`load_skill`）
-- **持久记忆**：跨会话记忆捕获与检索（`save_memory` / `recall_memory`）
+- **持久记忆**：跨会话记忆捕获与检索（`save_memory` / `recall_memory`），
+  中英文均可检索；默认开启且**可在「设置 → 规则与记忆」随时关闭**（关闭后不捕获
+  也不召回），支持按会话或一次性清除全部记忆
 
 ### 🛡️ 安全与可控
 
@@ -87,7 +89,8 @@
 
 ### 📊 可观测性
 
-- **Sentry**（自托管）+ **OpenTelemetry** 双通道遥测，可关闭
+- **OpenTelemetry** 遥测（可选，自配 OTLP 端点；默认不上报）+ 本地结构化日志
+- 错误本地优先：崩溃/异常写入本地日志（随诊断包导出），报障走 GitHub Issue
 - 模型调用统一观测（`wrapLanguageModel` 中间件 + 模型级 span）
 - 用量统计、诊断导出
 
@@ -106,7 +109,7 @@
 git clone https://github.com/zlh12331/superagent.git
 cd superagent
 pnpm install
-cp .env.example .env   # 可选：配置 Sentry / 供应商 baseURL
+cp .env.example .env   # 可选：配置供应商 baseURL / OTLP 端点
 pnpm dev               # 启动 dev server + Electron 窗口
 ```
 
@@ -221,7 +224,7 @@ sequenceDiagram
 | 搜索 | @vscode/ripgrep |
 | 代码智能 | tree-sitter + codegraph + LSP |
 | 测试 | Vitest + Playwright（E2E / Electron / Smoke 三套配置） |
-| 遥测 | Sentry + OpenTelemetry |
+| 遥测 | OpenTelemetry（可选，自配 OTLP） |
 
 ## 目录结构
 

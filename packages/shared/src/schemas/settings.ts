@@ -77,11 +77,76 @@ export const SettingsGetAllResSchema = z.object({
   settings: z.record(z.string(), z.unknown()),
 });
 
+/**
+ * settings:set 可写键白名单（P0 收口）
+ *
+ * 渲染层 settings-store 的全部持久化分组（persistSetting 的 key 实参集合）。
+ * 白名单外的一律拒绝——此前 key 为自由字符串，渲染层可覆写主进程消费的
+ * 任意 app_settings 键（如未来新增的 trusted 配置组），且持久化后重启仍生效。
+ *
+ * 注意：'lsp' 是合法 UI 功能（用户按语言覆盖语言服务器命令），值级约束
+ * 见 SettingsSetReqSchema 的 superRefine。
+ */
+export const SETTING_KEYS = [
+  'theme',
+  'language',
+  'ai',
+  'editor',
+  'shortcuts',
+  'experimental',
+  'lsp',
+  'workspace',
+  'browser',
+  // 记忆功能开关（settings.memory.enabled；关闭后不捕获新记忆、不注入召回）
+  'memory',
+  // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
+  'im.allowedGroups',
+] as const;
+
+/** settings:set 可写键白名单 TypeScript 类型 */
+export type SettingKey = (typeof SETTING_KEYS)[number];
+
+/**
+ * LSP 服务器命令行门禁（lsp.serverCommands 值级约束）
+ *
+ * UI 契约（设置页文案）是"需对应服务器已在 PATH 中安装"——首 token 必须是
+ * 裸可执行名（无路径分隔符/空白），拒绝 `/usr/bin/xxx`、`C:\...\xxx.exe`
+ * 等任意路径形态与 `ext::` 类传输串。剩余 token 是语言服务器参数
+ *（spawn 数组语义，不经 shell），属功能本身。
+ */
+export function isSafeLsServerCommand(commandLine: string): boolean {
+  const firstToken = commandLine.trim().split(/\s+/)[0];
+  if (firstToken === undefined || firstToken === '') {
+    return false;
+  }
+  return /^[A-Za-z0-9._-]+$/.test(firstToken);
+}
+
 /** settings:set 入参（写穿透：渲染层内存态变更后同步落库） */
-export const SettingsSetReqSchema = z.object({
-  key: z.string().min(1).max(64),
-  value: z.unknown(),
-});
+export const SettingsSetReqSchema = z
+  .object({
+    key: z.enum(SETTING_KEYS),
+    value: z.unknown(),
+  })
+  .superRefine((cfg, ctx) => {
+    if (cfg.key !== 'lsp') {
+      return;
+    }
+    const commands = (cfg.value as { serverCommands?: unknown } | null | undefined)?.serverCommands;
+    if (commands === undefined || commands === null || typeof commands !== 'object') {
+      return;
+    }
+    const invalid = Object.entries(commands as Record<string, unknown>)
+      .filter(([, cmd]) => typeof cmd !== 'string' || !isSafeLsServerCommand(cmd))
+      .map(([lang]) => lang);
+    if (invalid.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `lsp.serverCommands 仅支持 PATH 中的裸可执行名，非法语言键：${invalid.join(', ')}`,
+      });
+    }
+  });
 
 /** settings:set 响应 */
 export const SettingsSetResSchema = z.object({

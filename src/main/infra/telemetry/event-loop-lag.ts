@@ -83,7 +83,7 @@ export class EventLoopLagMonitor {
    * 基准语义：lastExpectedAt 存"下一个 tick 的期望时刻"。
    * 首个 tick 期望在 `启动时刻 + interval`，故起始基准提前一个 interval——
    * 否则空闲首个 tick 会被误判为滞后一个周期（2026-09-04 实测修复：
-   * 旧实现 start 后恒报 lag≈interval，空闲环境 5s/条误告警并污染 Sentry）。
+   * 旧实现 start 后恒报 lag≈interval，空闲环境 5s/条误告警并污染告警日志）。
    */
   start(): void {
     if (this.timer !== null) {

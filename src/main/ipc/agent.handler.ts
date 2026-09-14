@@ -29,6 +29,7 @@ import type { IAgentService } from '../infra/ai/agent/agent-service';
 import type { IPromptService } from '../infra/ai/prompt/prompt-service';
 import type { MemoryCaptureWire } from '../infra/memory-hub/capture-wire';
 import { extractLastUserText } from '../infra/memory-hub/capture-wire';
+import { isMemoryEnabled } from '../infra/memory-hub/memory-pref';
 import type { MemoryPort } from '../infra/memory-hub/types';
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -87,17 +88,25 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
     run: async (input, ctx) => {
       const lastUser = assertUserInputWithinCap(input.messages);
       // 记忆预取召回：仅在渲染层未显式指定 systemPrompt 时注入一次性上下文块
+      // 上游 RecallRequest 要求 session_key 非空（缺失/空串 → HTTP 400），
+      // 故新会话（尚无 sessionId）跳过召回——首次对话也无历史可召回。
+      // 此前未传 session_key，导致预取召回恒失败并被下方 catch 静默降级。
       let systemPrompt = input.systemPrompt;
+      const recallSessionKey = input.sessionId;
       if (
         systemPrompt === undefined &&
         memoryPort !== undefined &&
         promptService !== undefined &&
-        lastUser.length > 0
+        lastUser.length > 0 &&
+        recallSessionKey !== undefined &&
+        recallSessionKey.length > 0 &&
+        // 用户关闭记忆功能时不注入召回（关闭语义 = 不捕获也不使用）
+        isMemoryEnabled()
       ) {
         try {
           const [base, mem] = await Promise.all([
             promptService.resolvePrompt(undefined, input.workingDir),
-            memoryPort.recall({ query: lastUser }),
+            memoryPort.recall({ query: lastUser, sessionKey: recallSessionKey }),
           ]);
           if (mem.ok && mem.context.trim().length > 0) {
             systemPrompt = `${base}\n\n<memory_context>\n${mem.context.trim()}\n</memory_context>`;

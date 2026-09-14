@@ -50,7 +50,7 @@ import { createAgentTurnActor } from '../agent-runtime/agent-turn-machine';
 import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
 import { createStreamWithRetry } from '../agent-runtime/create-stream';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../agent-runtime/stream-reader';
-import { TurnRunner } from '../agent-runtime/turn-runner';
+import { TurnRunner, type TurnRunResult } from '../agent-runtime/turn-runner';
 import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
 import { buildAssistantTurnMessages } from '../agent-runtime/turn-transcript';
 import type { ITitleGenerator } from '../knowledge/session-title';
@@ -62,6 +62,8 @@ import {
 import { getModel } from '../llm-client/ai-provider';
 import type { LlmClient } from '../llm-client/llm-client';
 import { buildGenerationOptions, modelRegistry } from '../models';
+import type { GenerationOptions } from '../models/generation-options';
+import type { ResolvedModel } from '../models/types';
 import type { IPromptService } from '../prompt/prompt-service';
 import { classifyError, isAbortError } from '../tools/error-classifier';
 import type { IPermissionService } from '../tools/permission-service';
@@ -75,6 +77,7 @@ import {
 } from './context-compression';
 import { createRepairToolCall } from './repair-tool-call';
 import { resolveTokenBudgetBasis } from './token-overhead';
+import type { SdkTotalUsageLike } from './turn-usage-report';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
 /**
@@ -554,65 +557,16 @@ export class AgentService implements IAgentService {
           //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
           //    条件展开：systemPrompt 为 undefined 时不传 system 字段
           //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
-          // 上下文压缩：窗口感知预算（对齐 qwen compaction 阈值体系），默认窗口 128K
-          const contextWindowSize = resolvedModel.capabilities.contextWindowSize ?? 128_000;
-          // 固定开销（system + 工具定义）计入窗口（2026-09-06 审计修复，见 token-overhead.ts）
-          const budget = resolveTokenBudgetBasis(
-            contextWindowSize,
-            systemPrompt,
-            this.toolRegistry,
-          );
-          // TokenBudget 回合级调度（对齐 qwen token-budget）：
-          // - over-limit：上下文超硬上限 → 拒绝调用（防供应商 400）
-          // - warn：接近压缩线 → 日志/遥测提醒（提前几轮缓冲）
-          // - compact：达到压缩线 → 压缩消息历史（下方现有逻辑）
-          const contextTokens = estimateMessagesTokens(options.messages);
-          const budgetDecision = getTokenBudgetDecision(contextTokens, budget.effectiveWindow);
-          if (budgetDecision.level === 'over-limit') {
-            logger.warn(
-              {
-                sessionId,
-                contextTokens: budgetDecision.contextTokens,
-                hardLimit: budgetDecision.hardLimit,
-              },
-              '上下文超出窗口硬上限，回合被拒绝',
-            );
-            throw new AppError(
-              ErrorCode.AI_CONTEXT_TOO_LARGE,
-              `上下文超出窗口上限（${budgetDecision.contextTokens} / ${budgetDecision.hardLimit} tokens），请新建会话或精简上下文`,
-            );
-          }
-          if (budgetDecision.level === 'warn') {
-            logger.warn(
-              {
-                sessionId,
-                contextTokens: budgetDecision.contextTokens,
-                compactAt: budgetDecision.compactAt,
-              },
-              '上下文接近压缩线（warn）',
-            );
-            span?.setAttribute('token.contextLevel', 'warn');
-          }
-          const compactionBudget = getCompactionBudget(budget.effectiveWindow);
-          const compressedMessages = compressByTokenBudget(options.messages, compactionBudget);
-          if (compressedMessages.length < options.messages.length) {
-            logger.info(
-              {
-                sessionId,
-                originalCount: options.messages.length,
-                compressedCount: compressedMessages.length,
-              },
-              '上下文已压缩',
-            );
-          }
-
-          // 生成选项：思考强度 / 采样参数 / 输出上限（prompt 口径含固定开销，防高估输出）
-          const genOptions = buildGenerationOptions(
+          // 4. 生成参数与上下文预算（预算决策/压缩/采样参数解析见 resolveTurnGeneration）
+          const { compressedMessages, genOptions } = this.resolveTurnGeneration({
+            sessionId,
+            messages: options.messages,
+            thinking: options.thinking,
+            temperature: options.temperature,
             resolvedModel,
-            estimateMessagesTokens(compressedMessages) + budget.overheadTokens,
-            options.thinking,
-            options.temperature,
-          );
+            systemPrompt,
+            span,
+          });
 
           // 5+6. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；
           //    首 part 成功后不重试——流中错误重试会重复工具副作用）
@@ -729,40 +683,20 @@ export class AgentService implements IAgentService {
             });
           } else {
             // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默；
-            // 投影/遥测/持久化细节见 turn-usage-report（自本方法提取）
+            // 投影/遥测/持久化细节见 finalizeCompletedTurn 与 turn-usage-report
             const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
-            const turnUsage = projectTurnUsage(usage);
-            reportTurnUsage(
-              {
-                recordUsage: (input) => this.sessionService.recordUsage(input),
-                ...(span !== undefined ? { span } : {}),
-              },
-              { sessionId, modelId: resolvedModel.modelId, usage },
-            );
-
-            this.completeTurn({
+            this.finalizeCompletedTurn({
               sessionId,
               turnId,
-              modelId: resolvedModel.modelId,
-              reason: 'completed',
-              durationMs: runResult.durationMs,
-              // exactOptionalPropertyTypes：undefined 需条件展开
-              ...(turnUsage !== undefined ? { usage: turnUsage } : {}),
-              emitter: turnEmitter,
-              ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+              resolvedModel,
+              runResult,
+              usage,
+              turnEmitter,
+              options,
               assistantText,
               transcriptEntries,
+              span,
             });
-            // 标题生成（回合结束后异步，失败静默）：
-            // 会话仍为默认标题时用首条用户消息生成简洁标题
-            if (this.titleGenerator !== undefined) {
-              void ensureSessionTitle({
-                sessionService: this.sessionService,
-                titleGenerator: this.titleGenerator,
-                sessionId,
-                firstUserText: firstUserMessageText(options.messages),
-              });
-            }
           }
         } catch (error: unknown) {
           // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
@@ -783,50 +717,19 @@ export class AgentService implements IAgentService {
               transcriptEntries,
             });
           } else {
-            // 其他错误：分类并推送 AGENT_STREAM_ERROR
-            const appError = classifyError(error);
-            // 回合状态机：异常 → error（带错误码上下文）
-            turnMachine.send({
-              type: 'stream.error',
-              code: appError.code,
-              message: appError.message,
-            });
-            if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
-              const errorPayload: AgentStreamErrorPayload = {
-                sessionId,
-                code: appError.code,
-                message: appError.message,
-              };
-              emitEvent(
-                options.webContents,
-                IPC_DEFINITIONS.agent.subscribeStreamError,
-                errorPayload,
-              );
-            }
-            // 回合事件：error + turn-end（error）+ Transcript 落库
-            turnEmitter.emit({
-              type: TurnEventType.ERROR,
+            // 其他错误：分类、状态机 error、推送 AGENT_STREAM_ERROR、落库（见 finalizeErrorTurn）
+            this.finalizeErrorTurn({
               sessionId,
               turnId,
-              timestamp: Date.now(),
-              code: appError.code,
-              message: appError.message,
-            } satisfies TurnEvent);
-            this.completeTurn({
-              sessionId,
-              turnId,
-              modelId: resolvedModel.modelId,
-              reason: 'error',
-              durationMs: Date.now() - turnStartTime,
-              emitter: turnEmitter,
-              ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+              resolvedModel,
+              error,
+              turnStartTime,
+              turnMachine,
+              turnEmitter,
+              options,
               assistantText,
               transcriptEntries,
             });
-            logger.error(
-              { sessionId, errorCode: appError.code, error: appError },
-              'Agent 对话流异常结束',
-            );
           }
         } finally {
           // 并发槽位释放（幂等；必须在超时定时器清理前完成，让排队的下个回合尽早启动）
@@ -859,6 +762,217 @@ export class AgentService implements IAgentService {
    *
    * seq 取会话已有回合数（单会话串行执行，无并发冲突）。
    */
+  /**
+   * 阶段 4：生成参数与上下文预算解析（2026-09-12 自 streamToWebContents 提取）
+   *
+   * TokenBudget 回合级调度（对齐 qwen token-budget）：
+   * - over-limit：上下文超硬上限 → 抛 AI_CONTEXT_TOO_LARGE（防供应商 400）
+   * - warn：接近压缩线 → 日志/遥测提醒（提前几轮缓冲）
+   * - compact 及以下：压缩消息历史（截断不计条数）
+   *
+   * 固定开销（system + 工具定义）计入窗口（2026-09-06 审计修复，见 token-overhead.ts）。
+   *
+   * @returns 压缩后的消息历史 + 生成选项（思考强度/采样参数/输出上限；
+   *          prompt 口径含固定开销，防高估输出）
+   * @throws AppError(AI_CONTEXT_TOO_LARGE) 上下文超硬上限
+   */
+  private resolveTurnGeneration(args: {
+    readonly sessionId: string;
+    readonly messages: ChatMessage[];
+    readonly thinking: StartAgentOptions['thinking'];
+    readonly temperature: StartAgentOptions['temperature'];
+    readonly resolvedModel: ResolvedModel;
+    readonly systemPrompt: string;
+    readonly span: import('@opentelemetry/api').Span | undefined;
+  }): { readonly compressedMessages: ChatMessage[]; readonly genOptions: GenerationOptions } {
+    const { sessionId, messages, thinking, temperature, resolvedModel, systemPrompt, span } = args;
+    // 上下文压缩：窗口感知预算（对齐 qwen compaction 阈值体系），默认窗口 128K
+    const contextWindowSize = resolvedModel.capabilities.contextWindowSize ?? 128_000;
+    const budget = resolveTokenBudgetBasis(contextWindowSize, systemPrompt, this.toolRegistry);
+    const contextTokens = estimateMessagesTokens(messages);
+    const budgetDecision = getTokenBudgetDecision(contextTokens, budget.effectiveWindow);
+    if (budgetDecision.level === 'over-limit') {
+      logger.warn(
+        {
+          sessionId,
+          contextTokens: budgetDecision.contextTokens,
+          hardLimit: budgetDecision.hardLimit,
+        },
+        '上下文超出窗口硬上限，回合被拒绝',
+      );
+      throw new AppError(
+        ErrorCode.AI_CONTEXT_TOO_LARGE,
+        `上下文超出窗口上限（${budgetDecision.contextTokens} / ${budgetDecision.hardLimit} tokens），请新建会话或精简上下文`,
+      );
+    }
+    if (budgetDecision.level === 'warn') {
+      logger.warn(
+        {
+          sessionId,
+          contextTokens: budgetDecision.contextTokens,
+          compactAt: budgetDecision.compactAt,
+        },
+        '上下文接近压缩线（warn）',
+      );
+      span?.setAttribute('token.contextLevel', 'warn');
+    }
+    const compactionBudget = getCompactionBudget(budget.effectiveWindow);
+    const compressedMessages = compressByTokenBudget(messages, compactionBudget);
+    if (compressedMessages.length < messages.length) {
+      logger.info(
+        {
+          originalCount: messages.length,
+          compressedCount: compressedMessages.length,
+        },
+        '上下文已压缩',
+      );
+    }
+    // 生成选项：思考强度 / 采样参数 / 输出上限（prompt 口径含固定开销，防高估输出）
+    const genOptions = buildGenerationOptions(
+      resolvedModel,
+      estimateMessagesTokens(compressedMessages) + budget.overheadTokens,
+      thinking,
+      temperature,
+    );
+    return { compressedMessages, genOptions };
+  }
+
+  /**
+   * 阶段 7+8：completed 收尾（2026-09-12 自 streamToWebContents 提取）
+   *
+   * usage 投影与上报（reportTurnUsage）→ completeTurn(completed) 落库 →
+   * 标题生成（回合结束后异步，失败静默；会话仍为默认标题时用首条用户消息
+   * 生成简洁标题）。
+   *
+   * @param usage SDK totalUsage（调用方已 await；失败时为 null）
+   */
+  private finalizeCompletedTurn(args: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly resolvedModel: ResolvedModel;
+    readonly runResult: TurnRunResult;
+    readonly usage: SdkTotalUsageLike | null | undefined;
+    readonly turnEmitter: TurnEventEmitter;
+    readonly options: StartAgentOptions;
+    readonly assistantText: string;
+    readonly transcriptEntries: readonly TurnTranscriptEntry[];
+    readonly span: import('@opentelemetry/api').Span | undefined;
+  }): void {
+    const {
+      sessionId,
+      turnId,
+      resolvedModel,
+      runResult,
+      usage,
+      turnEmitter,
+      options,
+      assistantText,
+      transcriptEntries,
+      span,
+    } = args;
+    const turnUsage = projectTurnUsage(usage);
+    reportTurnUsage(
+      {
+        recordUsage: (input) => this.sessionService.recordUsage(input),
+        ...(span !== undefined ? { span } : {}),
+      },
+      { sessionId, modelId: resolvedModel.modelId, usage },
+    );
+
+    this.completeTurn({
+      sessionId,
+      turnId,
+      modelId: resolvedModel.modelId,
+      reason: 'completed',
+      durationMs: runResult.durationMs,
+      // exactOptionalPropertyTypes：undefined 需条件展开
+      ...(turnUsage !== undefined ? { usage: turnUsage } : {}),
+      emitter: turnEmitter,
+      ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+      assistantText,
+      transcriptEntries,
+    });
+    // 标题生成（回合结束后异步，失败静默）：
+    // 会话仍为默认标题时用首条用户消息生成简洁标题
+    if (this.titleGenerator !== undefined) {
+      void ensureSessionTitle({
+        sessionService: this.sessionService,
+        titleGenerator: this.titleGenerator,
+        sessionId,
+        firstUserText: firstUserMessageText(options.messages),
+      });
+    }
+  }
+
+  /**
+   * 阶段 catch：error 收尾（2026-09-12 自 streamToWebContents 提取）
+   *
+   * 非 AbortError 的异常出口：分类错误 → 回合状态机 error → 推送
+   * AGENT_STREAM_ERROR（webContents 存活时）→ 回合事件 ERROR → completeTurn(error)
+   * 落库 → 日志。AbortError 分支不经过此方法（用户中断不是错误）。
+   */
+  private finalizeErrorTurn(args: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly resolvedModel: ResolvedModel;
+    readonly error: unknown;
+    readonly turnStartTime: number;
+    readonly turnMachine: ReturnType<typeof createAgentTurnActor>;
+    readonly turnEmitter: TurnEventEmitter;
+    readonly options: StartAgentOptions;
+    readonly assistantText: string;
+    readonly transcriptEntries: readonly TurnTranscriptEntry[];
+  }): void {
+    const {
+      sessionId,
+      turnId,
+      resolvedModel,
+      error,
+      turnStartTime,
+      turnMachine,
+      turnEmitter,
+      options,
+      assistantText,
+      transcriptEntries,
+    } = args;
+    const appError = classifyError(error);
+    // 回合状态机：异常 → error（带错误码上下文）
+    turnMachine.send({
+      type: 'stream.error',
+      code: appError.code,
+      message: appError.message,
+    });
+    if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
+      const errorPayload: AgentStreamErrorPayload = {
+        sessionId,
+        code: appError.code,
+        message: appError.message,
+      };
+      emitEvent(options.webContents, IPC_DEFINITIONS.agent.subscribeStreamError, errorPayload);
+    }
+    // 回合事件：error + turn-end（error）+ Transcript 落库
+    turnEmitter.emit({
+      type: TurnEventType.ERROR,
+      sessionId,
+      turnId,
+      timestamp: Date.now(),
+      code: appError.code,
+      message: appError.message,
+    } satisfies TurnEvent);
+    this.completeTurn({
+      sessionId,
+      turnId,
+      modelId: resolvedModel.modelId,
+      reason: 'error',
+      durationMs: Date.now() - turnStartTime,
+      emitter: turnEmitter,
+      ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
+      assistantText,
+      transcriptEntries,
+    });
+    logger.error({ sessionId, errorCode: appError.code, error: appError }, 'Agent 对话流异常结束');
+  }
+
   /**
    * 持久化回合流水（失败不阻断主流程）
    *

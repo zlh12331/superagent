@@ -29,6 +29,7 @@ import {
 import { detectSuggestTrigger } from './suggest-trigger';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 import { useComposerInput } from './use-composer-input';
+import { useMentionFiles } from './use-mention-files';
 import { useVimMode } from './use-vim-mode';
 
 /** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
@@ -186,49 +187,8 @@ export function ChatInput({
   const filteredSuggestions: readonly SlashSuggestion[] =
     activeTrigger === 'slash' && activeQuery !== null ? filterSlashSuggestions(activeQuery) : [];
 
-  // mention 建议：search.glob 按查询过滤（200ms 防抖，对齐参考项目防抖约定）
-  const [mentionFiles, setMentionFiles] = useState<string[]>([]);
-  const mentionSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (mentionSearchTimerRef.current !== null) {
-      clearTimeout(mentionSearchTimerRef.current);
-      mentionSearchTimerRef.current = null;
-    }
-    if (activeTrigger !== 'mention' || workingDir === undefined) {
-      setMentionFiles([]);
-      return;
-    }
-    // 防抖后调 glob（浏览器模式无 window.api 时静默清空）
-    mentionSearchTimerRef.current = setTimeout(() => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        setMentionFiles([]);
-        return;
-      }
-      void window.api.search
-        .glob({
-          pattern: `**/*${activeQuery ?? ''}*`,
-          path: workingDir,
-          includeHidden: false,
-          maxResults: 10,
-        })
-        .then((res) => {
-          try {
-            setMentionFiles([...unwrap(res).files]);
-          } catch {
-            // error 响应：清空候选（与下方网络异常同策略）
-            setMentionFiles([]);
-          }
-        })
-        .catch(() => {
-          setMentionFiles([]);
-        });
-    }, 200);
-    return () => {
-      if (mentionSearchTimerRef.current !== null) {
-        clearTimeout(mentionSearchTimerRef.current);
-      }
-    };
-  }, [activeTrigger, activeQuery, workingDir]);
+  // mention 建议：search.glob 按查询过滤（200ms 防抖与生命周期见 use-mention-files.ts）
+  const mentionFiles = useMentionFiles(activeTrigger, activeQuery, workingDir);
 
   const mentionOpen = activeTrigger === 'mention' && mentionFiles.length > 0;
   const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
@@ -310,7 +270,8 @@ export function ChatInput({
       if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
       pickAttachments(data.paths);
     } catch {
-      return;
+      // 选择器错误/取消：静默失败（非关键路径，用户可重试）
+      // 注：此处不写 `return`——函数已到末尾，bare return 是死语句（noUselessReturn）
     }
   };
 
@@ -333,14 +294,12 @@ export function ChatInput({
     setSending(true);
     // 快照本次发送的输入（供超长校验使用）
     const sentValue = value;
-    try {
-      // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
-      const base = sentValue.trim();
-      // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
-      if (base.length > MAX_MESSAGE_LENGTH) {
-        toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
-        return;
-      }
+    // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
+    const base = sentValue.trim();
+    // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
+    if (base.length > MAX_MESSAGE_LENGTH) {
+      toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
+    } else {
       const text = await buildTextWithAttachments(base, attachments, {
         attached: (name) => t('chat.attachmentLabel', { name }),
         readFailed: (name) => t('chat.attachmentReadFailed', { name }),
@@ -352,10 +311,12 @@ export function ChatInput({
       }
       // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
       clearInput();
-    } finally {
-      sendingRef.current = false;
-      setSending(false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：超长拦截与正常发送
+    // 两条路径统一在此复位 in-flight 守卫。buildTextWithAttachments 内部已
+    // 自行吞掉读取异常（失败仅追加标注），故此处无需 catch。
+    sendingRef.current = false;
+    setSending(false);
   };
 
   /**

@@ -873,6 +873,16 @@ function createMockApi(): IpcApi {
     memory: {
       list: async () => ipcOk({ memories: [] }),
       clear: async () => ipcOk({ ok: true }),
+      clearAll: async () => ipcOk({ ok: true, clearedSessions: 0, deletedCount: 0 }),
+      status: async () =>
+        ipcOk({
+          enabled: true,
+          available: false,
+          running: false,
+          healthy: false,
+          sessionCount: 0,
+          recordCount: 0,
+        }),
     },
     goal: {
       list: async ({ sessionId }: Req<IpcApi['goal']['list']>) => {
@@ -992,23 +1002,43 @@ function createMockApi(): IpcApi {
           .replace(/\*$/, '')
           .replace(/\[(.)(.)\]/g, '$1')
           .toLowerCase();
-        const files = [
-          'src/renderer/App.tsx',
-          'src/renderer/main.tsx',
-          'src/renderer/index.css',
-          'src/renderer/router.tsx',
-          'src/renderer/components/chat/ChatInput.tsx',
-          'src/renderer/components/chat/ChatPanel.tsx',
-          'src/renderer/components/layout/AppShell.tsx',
-          'package.json',
-          'README.md',
-          'electron.vite.config.ts',
-        ].filter((f) => f.toLowerCase().includes(query));
+        const files = DEMO_FILES.filter((f) => f.toLowerCase().includes(query));
         return ipcOk({ files, truncated: false });
       },
     },
+    browser: createBrowserMock(),
   } satisfies IpcApi;
 }
+
+/** browser 域 mock：浏览器模式无主进程 WebContentsView，导航 no-op，状态恒空 */
+function createBrowserMock(): IpcApi['browser'] {
+  return {
+    navigate: async () => ipcOk({ ok: true }),
+    back: async () => ipcOk({ ok: true }),
+    forward: async () => ipcOk({ ok: true }),
+    reload: async () => ipcOk({ ok: true }),
+    setViewport: async () => ipcOk({ ok: true }),
+    configure: async () => ipcOk({ ok: true }),
+    getState: async () =>
+      ipcOk({ url: null, title: null, isLoading: false, canGoBack: false, canGoForward: false }),
+    subscribeState: () => () => {},
+    subscribeLoadFailed: () => () => {},
+  };
+}
+
+/** search:glob 模拟文件清单（模糊搜索用） */
+const DEMO_FILES: readonly string[] = [
+  'src/renderer/App.tsx',
+  'src/renderer/main.tsx',
+  'src/renderer/index.css',
+  'src/renderer/router.tsx',
+  'src/renderer/components/chat/ChatInput.tsx',
+  'src/renderer/components/chat/ChatPanel.tsx',
+  'src/renderer/components/layout/AppShell.tsx',
+  'package.json',
+  'README.md',
+  'electron.vite.config.ts',
+];
 
 /** 注入 mock window.api（仅前端独立开发模式调用） */
 export function installMockApi(): void {

@@ -3,7 +3,7 @@
 // 设计文档 §4.9 Preload unsubscribe 模式 / §4.7 traceId 注入
 //
 // 职责：
-// 1. invoke：封装 ipcRenderer.invoke，自动注入 traceId（贯穿渲染层 → IPC → 主进程日志 → Sentry）
+// 1. invoke：封装 ipcRenderer.invoke，自动注入 traceId（贯穿渲染层 → IPC → 主进程日志）
 // 2. subscribe：封装 ipcRenderer.on，返回 unsubscribe 函数，防止内存泄漏
 //
 // 注意：
@@ -22,7 +22,7 @@ import { type IpcRendererEvent, ipcRenderer } from 'electron';
  * 主进程 wrap() 会优先使用渲染层传入的 traceId，否则自动生成
  * （见 src/main/utils/wrap.ts §4.7 traceId 贯穿）。
  *
- * traceId 贯穿链路：渲染层 → IPC → 主进程日志 → Sentry，
+ * traceId 贯穿链路：渲染层 → IPC → 主进程日志，
  * 用于关联一次完整请求的所有日志和错误堆栈，便于排查问题。
  *
  * @typeParam T 响应数据类型（由调用方根据 IpcRequestMap 推断）

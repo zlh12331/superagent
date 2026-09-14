@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 
 import { useErrorMessage } from '@/i18n/use-translation';
 import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { GOAL_LIST_QUERY_KEY } from '@/lib/query/keys';
 
 /** 目标栏展示形态（供 GoalBar 组件消费） */
 export interface ChatGoalView {
@@ -38,7 +39,7 @@ export function useChatGoals(chatId: string): ChatGoals {
   const queryClient = useQueryClient();
 
   const goalsQuery = useQuery({
-    queryKey: ['goal', 'list', chatId],
+    queryKey: GOAL_LIST_QUERY_KEY(chatId),
     enabled: chatId !== undefined,
     queryFn: async () => {
       if (chatId === undefined) return { goals: [] as unknown[] };
@@ -64,7 +65,7 @@ export function useChatGoals(chatId: string): ChatGoals {
       unwrap(await window.api.goal.create({ sessionId: chatId, condition }));
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
+      void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(chatId) });
     },
     onError,
   });
@@ -75,7 +76,7 @@ export function useChatGoals(chatId: string): ChatGoals {
       unwrap(await window.api.goal.clear({ sessionId: chatId }));
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goal', 'list', chatId] });
+      void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(chatId) });
     },
     onError,
   });

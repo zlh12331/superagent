@@ -9,7 +9,7 @@
 // 职责：
 // - 包裹独立业务区块（设置 pane / 右面板 tab / 侧栏分区等）
 // - 区块内组件抛错时局部降级（内联错误提示 + 重试），不拖垮整个 App
-// - 错误上报 Sentry（与 AppErrorBoundary 同机制，tag 区分层级）
+// - 错误上报统一出口（与 AppErrorBoundary 同机制，tag 区分层级）
 //
 // 使用方式：
 //   <SectionErrorBoundary>
@@ -17,13 +17,13 @@
 //   </SectionErrorBoundary>
 // ──────────────────────────────────────────────────────────────
 
-import * as Sentry from '@sentry/electron/renderer';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { Button } from '@/components/ui/button';
 import { i18n } from '@/i18n';
+import { reportError } from '@/lib/error-report';
 
 /**
  * 区块级 fallback：内联小卡片（不占全屏），保留重试入口
@@ -68,7 +68,7 @@ function SectionFallback({
 export interface SectionErrorBoundaryProps {
   /** 需要隔离的区块内容 */
   readonly children: ReactNode;
-  /** 错误标识前缀（Sentry tag 区分区块） */
+  /** 错误标识前缀（上报 tag 区分区块） */
   readonly name?: string;
   /**
    * 重置键：任一元素变化时自动清除错误状态并重渲染 children
@@ -92,9 +92,9 @@ export function SectionErrorBoundary({
       // （react-error-boundary 的 resetKeys 类型为非 readonly unknown[]）
       {...(resetKeys !== undefined ? { resetKeys: resetKeys as unknown[] } : {})}
       onError={(error: unknown, info: { componentStack?: string | null }) => {
-        Sentry.captureException(error, {
-          contexts: { react: { componentStack: info.componentStack ?? undefined } },
+        reportError(error, {
           tags: { boundary: 'SectionErrorBoundary', section: name ?? 'unknown' },
+          ...(info.componentStack != null ? { componentStack: info.componentStack } : {}),
         });
       }}
     >

@@ -117,9 +117,12 @@ export function AboutSection(): ReactElement {
     try {
       await navigator.clipboard.writeText(text);
       toast.success(t('settings.aboutCopied'));
-    } finally {
-      setCopying(false);
+    } catch {
+      // 写入失败（无焦点/权限拒绝）：给反馈而非静默，避免"点了没反应"
+      toast.error(t('common.copyFailed'));
     }
+    // finally 语义（React Compiler 不优化 try/finally）：成功/失败统一在此复位
+    setCopying(false);
   };
 
   /** 导出诊断包（构建/日志/系统信息，上传给支持定位问题的标准途径） */
@@ -137,9 +140,9 @@ export function AboutSection(): ReactElement {
       }
     } catch {
       toast.error(t('settings.aboutExportFailed'));
-    } finally {
-      setExporting(false);
     }
+    // finally 语义（React Compiler 不优化 try/finally）：成功/失败统一在此复位
+    setExporting(false);
   };
 
   const handleOpenDataDir = (): void => {

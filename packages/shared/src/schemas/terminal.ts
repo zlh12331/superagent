@@ -102,6 +102,18 @@ export const TerminalCreateReqSchema = z
     rows: z.number().int().positive().max(200).default(24),
   })
   .superRefine((cfg, ctx) => {
+    // P0 收口：渲染层永不传自定义启动命令（终端面板只用默认 shell，实测
+    // TerminalPanel 固定传 undefined）。IPC 边界直接拒绝非空 command——
+    // 此前 command 按 shell 语义拆词后首 token 即 spawn 的二进制，等于
+    // 给渲染层开了「任意进程原语」（且无审批，区别于 agent 侧 ask 工具）。
+    // 未来若需"以指定解释器打开终端"，必须走审批链，不允许恢复透传。
+    if (cfg.command !== undefined && cfg.command.trim().length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['command'],
+        message: 'terminal:create 仅允许默认 shell，不接受自定义启动命令',
+      });
+    }
     // P0 安全：IPC 边界直接拒绝覆盖系统关键变量（类型化校验错误，
     // 而不是静默丢弃——静默丢弃会让调用方误以为注入生效）
     if (cfg.env === undefined) {

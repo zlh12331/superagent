@@ -157,8 +157,8 @@ export function createSessionHandlers(
     // 落库门槛用回收的 token 数：纯条数差会漏掉就地裁剪（条数不变但内容变少）
     compact: async (input) => {
       const session = await sessionService.get(input.sessionId);
-      const messages = session.messages as unknown as ChatMessage[];
-      const { trimmed, removed, reclaimedTokens } = compactMessages(messages);
+      // 契约修正后 session.messages 已是 ChatMessage[]（packages/shared/src/schemas/session.ts），无需断言
+      const { trimmed, removed, reclaimedTokens } = compactMessages(session.messages);
       if (reclaimedTokens > 0) {
         await sessionService.replaceMessages(input.sessionId, trimmed);
       }
@@ -166,7 +166,7 @@ export function createSessionHandlers(
         removed,
         remaining: trimmed.length,
         reclaimedTokens,
-        messages: trimmed as unknown[],
+        messages: trimmed,
       };
     },
   };

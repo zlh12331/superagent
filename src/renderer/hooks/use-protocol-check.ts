@@ -12,6 +12,7 @@ import { IPC_PROTOCOL_VERSION } from '@code-agent/shared/renderer';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { reportError } from '@/lib/error-report';
 import { unwrap } from '@/lib/ipc';
 
 /**
@@ -41,8 +42,10 @@ export function useProtocolCheck(): void {
           });
         }
       })
-      .catch(() => {
-        // 健康检查失败/错误响应静默：非关键路径，不打扰用户
+      .catch((error: unknown) => {
+        // 不打扰用户（非关键路径），但落盘主日志——协议版本读不到本身
+        // 就是"主/渲染层不匹配"的强信号，静默会丢掉最有价值的现场。
+        reportError(error, { tags: { scope: 'use-protocol-check' } });
       });
     return () => {
       cancelled = true;

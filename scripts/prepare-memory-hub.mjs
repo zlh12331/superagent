@@ -1,31 +1,32 @@
 // scripts/prepare-memory-hub.mjs
 // 生成 resources/memory-hub/（上游 TencentDB-Agent-Memory · MemoryCore 运行目录）
 // ──────────────────────────────────────────────────────────────
-// 背景：记忆引擎由 MemoryHubService 以 sidecar 子进程方式拉起（ELECTRON_RUN_AS_NODE=1）。
-//   dev 环境通过 MEMORY_HUB_ROOT 指向上游解压源码目录；打包环境需要自包含运行目录，
-//   经 electron-builder extraResources 部署到 process.resourcesPath/memory-hub。
+// 背景：记忆引擎由 MemoryHubService 以 sidecar 子进程方式拉起。
+//   源代码 = packages/memory-engine/MemoryCore（vendored 进仓，见该目录 UPSTREAM.md）；
+//   打包环境需要自包含运行目录，经 electron-builder extraResources 部署到
+//   process.resourcesPath/memory-hub。
 //
-// 策略（与 dev 路径一致）：prod 也走 `src/gateway/server.ts + tsx`。
+// 策略：走 `src/gateway/server.ts + tsx`。
 //   上游官方 tsdown 入口是 index.ts，产物 dist 里没有 gateway/server.js，
 //   因此不构建 dist，直接拷贝 src + package.json，并在目标目录用 pnpm 重建
 //   node_modules（在目标原地 install 而非拷贝，保证 pnpm 符号链接正确）。
 //
 // 用法：
-//   TAM_SRC=<上游解压根目录> node scripts/prepare-memory-hub.mjs [--skip-if-exists]
+//   node scripts/prepare-memory-hub.mjs [--skip-if-exists]
 // 环境变量：
-//   TAM_SRC             上游 TencentDB-Agent-Memory 根目录（必填）
-//   MEMORY_HUB_OPTIONAL 置为 '1' 时，上游不可用则生成占位目录并告警退出 0
-//                       （CI 打包用：产物不含记忆引擎，运行时自动降级为空实现）
+//   MEMORY_ENGINE_ROOT  覆盖源码根目录（默认 packages/memory-engine/MemoryCore）——
+//                       仅用于测试/临时验证；正常构建与 CI 一律用仓内源码。
 //
-// 为什么没有默认路径：上游源码不入仓（见 .gitignore），npm registry 上
-//   @tencentdb-agent-memory/memory-tencentdb-v2 只有 1.0.0-beta.1，供不起本项目
-//   需要的 2.0.x，因此唯一来源是维护者本地持有的压缩包，必须显式指路。
+// 源码来源已 vendoring 进仓（2026-09-13）：此前依赖维护者本地解压目录 +
+//   TAM_SRC 环境变量，导致 CI 构建拿不到引擎、正式产物缺失记忆功能。
+//   现不再支持"缺引擎则生成占位产物"（该静默降级曾让残缺包正常发布）。
 // ──────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -35,13 +36,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const TARGET = join(ROOT, 'resources', 'memory-hub');
-const SRC = process.env['TAM_SRC'];
-const CORE = join(SRC ?? '', 'MemoryCore');
-const MARKER = '.memory-hub-placeholder';
+// 源码真源：仓内 vendored 上游（可用 MEMORY_ENGINE_ROOT 覆盖，仅限测试）
+const CORE =
+  process.env['MEMORY_ENGINE_ROOT'] ?? join(ROOT, 'packages', 'memory-engine', 'MemoryCore');
 
 const skipIfExists = process.argv.includes('--skip-if-exists');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -74,53 +75,17 @@ function countFiles(dir) {
   return n;
 }
 
-// 1. 校验上游
+// 1. 校验源码（vendored 进仓，缺失即失败——不再有"生成占位产物"的静默降级）
 const upstreamEntry = join(CORE, 'src', 'gateway', 'server.ts');
 const targetReady =
   existsSync(join(TARGET, 'src', 'gateway', 'server.ts')) &&
   existsSync(join(TARGET, 'node_modules'));
 
 if (!existsSync(upstreamEntry)) {
-  if (targetReady) {
-    console.log(`[prepare-memory-hub] 上游不可用，沿用已有产物（${TARGET}）`);
-    process.exit(0);
-  }
-  if (process.env['MEMORY_HUB_OPTIONAL'] === '1') {
-    writePlaceholder();
-    process.exit(0);
-  }
-  console.error(
-    SRC === undefined
-      ? '[prepare-memory-hub] 环境变量 TAM_SRC 未设置（上游 TencentDB-Agent-Memory 根目录）'
-      : `[prepare-memory-hub] 未找到上游入口：${upstreamEntry}（TAM_SRC=${SRC}）`,
-  );
-  console.error('  请设置 TAM_SRC 后重试，记忆引擎随包分发。');
-  console.error('  CI 暂不集成记忆引擎时，设置 MEMORY_HUB_OPTIONAL=1 打包无引擎产物。');
+  console.error(`[prepare-memory-hub] 未找到记忆引擎源码入口：${upstreamEntry}`);
+  console.error('  源码应位于 packages/memory-engine/MemoryCore（vendored 上游，随仓库分发）。');
+  console.error('  若该目录缺失，说明 checkout 不完整——请检查 git 状态，勿用占位产物打包。');
   process.exit(1);
-}
-
-/**
- * 生成占位运行目录：让 electron-builder 的两个 extraResources `from` 路径都存在，
- * 产物可正常打包安装；记忆引擎在运行时（MemoryHubService）降级为空实现。
- */
-function writePlaceholder() {
-  rmSync(TARGET, { recursive: true, force: true });
-  mkdirSync(join(TARGET, 'node_modules'), { recursive: true });
-  const note = [
-    'Placeholder for resources/memory-hub (upstream TencentDB-Agent-Memory / MemoryCore).',
-    '',
-    'This build intentionally ships WITHOUT the memory engine: TAM_SRC was not provided',
-    'and MEMORY_HUB_OPTIONAL=1 was set. MemoryHubService detects the missing entry and',
-    'falls back to the no-op MemoryPort, so every memory call degrades instead of failing.',
-    '',
-    'To bundle the real engine: TAM_SRC=<upstream root> node scripts/prepare-memory-hub.mjs',
-    '',
-  ].join('\n');
-  writeFileSync(join(TARGET, MARKER), note, 'utf8');
-  writeFileSync(join(TARGET, 'node_modules', MARKER), note, 'utf8');
-  console.warn(
-    '[prepare-memory-hub] ⚠ 上游缺失，已生成占位目录 —— 本产物不含记忆引擎（运行时降级空实现）',
-  );
 }
 
 // 2. 已存在且跳过
@@ -179,72 +144,349 @@ run(
   TARGET,
 );
 
-// 5.1 清理运行时不需要的重型 peer/optional 平台二进制（体积优化）
-//    - node-llama-cpp：本地 LLM 推理引擎（peerDependency，多平台二进制共 ~670MB，
-//      含 @node-llama-cpp/<platform> 各平台包）。我们的蒸馏走 OpenAI 兼容 HTTP
-//      （MemoryHubLlmConfig），不落地推理，可安全移除。
-//    - openclaw：上游插件宿主（peerDependency），sidecar 以独立 gateway 启动，不经过宿主。
-// 注意：pnpm 用 junction（目录符号链接）链接 .pnpm/<pkg>@<ver> 到 node_modules/<pkg> 与
-//    .pnpm/node_modules/<pkg>。仅删 .pnpm 目录会留下指向已删目标的断链 junction——electron-builder
-//    的 7zip 压缩遇到断链会报"系统找不到指定的路径"并失败。因此必须先删除所有指向这些包的
-//    junction/symlink（unlinkSync 只删链接不删目标），再删实体目录。
-/** 递归删除 node_modules 下所有 name 命中 PRUNE_PREFIXES 的符号链接/目录 */
-function pruneSymlinks(root) {
-  const entries = readdirSync(root, { withFileTypes: true });
-  for (const ent of entries) {
-    const p = join(root, ent.name);
-    if (ent.isSymbolicLink() && PRUNE_PREFIXES.some((prefix) => ent.name.startsWith(prefix))) {
-      // junction/symlink：只摘除链接本身，不跟随删除目标
-      unlinkSync(p);
-      continue;
-    }
-    if (ent.isDirectory()) {
-      // 跳过 .pnpm 实体缓存目录（它们在下一段单独按需删除）
-      if (ent.name === '.pnpm') continue;
-      pruneSymlinks(p);
-    }
-  }
-}
-const PRUNE_PREFIXES = ['node-llama-cpp', '@node-llama-cpp', 'openclaw'];
-const pruneDir = join(TARGET, 'node_modules', '.pnpm');
-if (existsSync(pruneDir)) {
-  // 1) 递归摘除 node_modules 树中指向目标包的 junction（防断链）
-  pruneSymlinks(join(TARGET, 'node_modules'));
-  // 2) 删除 .pnpm 中的实体目录（体积回收）
-  let prunedMb = 0;
-  for (const dir of readdirSync(pruneDir, { withFileTypes: true })) {
-    if (!dir.isDirectory()) continue;
-    // .pnpm 目录名形如 node-llama-cpp@… / @node-llama-cpp+win-x64-cuda3.20.0 / openclaw…_…
-    if (!PRUNE_PREFIXES.some((prefix) => dir.name.startsWith(prefix))) continue;
-    try {
-      const size = dirSizeMb(join(pruneDir, dir.name));
-      rmSync(join(pruneDir, dir.name), { recursive: true, force: true });
-      prunedMb += Number(size);
-    } catch {
-      // 个别目录被占用时跳过（不阻断整体流程）
-    }
-  }
-  // 3) 摘除 .pnpm/node_modules 下的相关 junction（含 @node-llama-cpp/win-* 子项）
-  const pnpmNodeModules = join(pruneDir, 'node_modules');
-  if (existsSync(pnpmNodeModules)) {
-    for (const ent of readdirSync(pnpmNodeModules, { withFileTypes: true })) {
-      const p = join(pnpmNodeModules, ent.name);
-      if (PRUNE_PREFIXES.some((prefix) => ent.name.startsWith(prefix))) {
-        if (ent.isSymbolicLink()) {
-          unlinkSync(p);
-        } else {
-          // @node-llama-cpp 等是普通目录，内含 win-* junction → 整目录删除（递归删链接+空壳）
-          rmSync(p, { recursive: true, force: true });
-        }
-      }
-    }
-  }
-  if (prunedMb > 0) {
-    console.log(`[prepare-memory-hub] 已清理重型插件二进制 ~${prunedMb.toFixed(0)} MB`);
+// 5.1 裁剪孤儿依赖（体积优化）
+//
+// 策略（2026-09-13 改为可达性分析，替代此前的包名前缀匹配）：
+//   1. 从顶层 package.json 的 dependencies 出发，沿 dependencies / peerDependencies /
+//      optionalDependencies 求可达闭包 → 这些必须保留
+//   2. 不在闭包内的 .pnpm 实体目录 = 孤儿（其声明者已被裁掉或从未被引用）→ 删除
+//   3. 先摘除所有指向待删包的 junction/symlink，再删实体目录
+//      （pnpm 用 junction 链接；留下断链会让 electron-builder 的 7zip 报错）
+//
+// 为什么改成可达性分析：此前用固定前缀匹配（['node-llama-cpp', '@node-llama-cpp',
+//   'openclaw']），存在两个问题：
+//   a. 上游包名变化即漏裁（实测：包名是 @openclaw/ai 等带 scope 形式，前缀 'openclaw'
+//      匹配不到 → 其整棵依赖子树成为孤儿却留在产物里）
+//   b. 裁掉声明者后，其独占依赖不会连带清理（实测孤儿合计 135MB，含 typescript 23MB /
+//      tree-sitter-bash 19MB / playwright-core 13MB 等）
+//   可达性分析天然覆盖这两类，且不依赖具体包名。
+//
+// 保留项说明：node-llama-cpp 与 openclaw 作为 peerDependencies 出现在闭包中——
+//   但它们的**实体若未被任何保留包依赖**则仍会被裁（这正是我们要的效果）；
+//   本集成不使用本地推理（蒸馏走 OpenAI 兼容 HTTP）与插件宿主（sidecar 独立启动）。
+
+const PNPM_DIR = join(TARGET, 'node_modules', '.pnpm');
+
+/** 读取一个包目录的依赖名集合 */
+function readDeps(dir) {
+  try {
+    const pj = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+    return [
+      ...Object.keys(pj.dependencies ?? {}),
+      ...Object.keys(pj.peerDependencies ?? {}),
+      ...Object.keys(pj.optionalDependencies ?? {}),
+    ];
+  } catch {
+    return [];
   }
 }
 
-// 6. 摘要
+/**
+ * 从 .pnpm 实体目录名解析该实体**自身的包名**
+ *
+ * 目录名格式：`<包名>@<版本>[_<peer 解析后缀>]`，作用域包的分隔符 `/` 被编码为 `+`。
+ * 例：
+ *   openclaw@2026.9.4_@opentele_93aeb3cb…  → openclaw
+ *   @openclaw+fs-safe@0.8.5                → @openclaw/fs-safe
+ *   zod@4.6.2                              → zod
+ *
+ * ⚠️ 必须解析自身包名而不是遍历其 node_modules：`.pnpm/<实体>/node_modules/` 里
+ *   同时装着该实体的**全部依赖**（pnpm 隔离式布局）。若把其中的包名都登记到本实体，
+ *   会出现"某实体的依赖被当成该实体自身"的错配——实测因此把 zod 的依赖 openclaw
+ *   误判为"zod 自身"，导致 214MB 的 openclaw 被错误保留。
+ */
+function parseOwnPackageName(entryName) {
+  const withoutPeers = entryName.split('_')[0] ?? entryName;
+  const at = withoutPeers.lastIndexOf('@');
+  const raw = at <= 0 ? withoutPeers : withoutPeers.slice(0, at);
+  return raw.replace('+', '/');
+}
+
+/**
+ * 建立「包名 → .pnpm 实体目录名」索引（同一包可能有多版本/多 peer 变体）
+ */
+function buildPnpmIndex() {
+  const index = new Map(); // 包名 → Set<实体目录名>
+  for (const entry of readdirSync(PNPM_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'node_modules') continue;
+    const ownName = parseOwnPackageName(entry.name);
+    // 仅当实体内确实存在该包（避免解析失配时登记错误映射）
+    if (!existsSync(join(PNPM_DIR, entry.name, 'node_modules', ownName, 'package.json'))) {
+      continue;
+    }
+    if (!index.has(ownName)) index.set(ownName, new Set());
+    index.get(ownName).add(entry.name);
+  }
+  return index;
+}
+
+/** 从顶层依赖出发求可达包名集合 */
+function reachablePackages() {
+  const rootPkg = JSON.parse(readFileSync(join(TARGET, 'package.json'), 'utf8'));
+  const index = buildPnpmIndex();
+  const keepNames = new Set();
+  const keepEntries = new Set();
+  // 起点必须包含 optionalDependencies：上游对可选后端（如 @clickhouse/client）有
+  // **静态 import**，缺失会导致模块解析失败（实测：漏掉它直接让引擎启动崩溃）。
+  // peerDependencies 不纳入起点——但作为传递依赖时会经 readDeps 进入（见下），
+  // 若未被任何保留实体引用则自然被裁。
+  const queue = [
+    ...Object.keys(rootPkg.dependencies ?? {}),
+    ...Object.keys(rootPkg.optionalDependencies ?? {}),
+  ];
+
+  while (queue.length > 0) {
+    const name = queue.pop();
+    if (name === undefined || keepNames.has(name)) continue;
+    keepNames.add(name);
+    const entries = index.get(name);
+    if (entries === undefined) continue; // 平台可选包等未安装的情况
+    for (const entryName of entries) {
+      if (keepEntries.has(entryName)) continue;
+      keepEntries.add(entryName);
+      // 该实体内部的依赖继续入队
+      const entryNm = join(PNPM_DIR, entryName, 'node_modules');
+      const pkgDir = join(entryNm, name);
+      for (const dep of readDeps(pkgDir)) {
+        if (!keepNames.has(dep)) queue.push(dep);
+      }
+    }
+  }
+  return { keepNames, keepEntries, index };
+}
+
+if (existsSync(PNPM_DIR)) {
+  const { keepEntries } = reachablePackages();
+
+  // 待删实体 = .pnpm 下所有实体目录 − 可达实体
+  const allEntries = readdirSync(PNPM_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== 'node_modules')
+    .map((e) => e.name);
+  const doomed = allEntries.filter((name) => !keepEntries.has(name));
+
+  console.log(
+    `[prepare-memory-hub] 依赖可达性分析：保留 ${keepEntries.size} 个实体，孤儿 ${doomed.length} 个`,
+  );
+
+  // 1) 删除孤儿实体目录
+  let prunedMb = 0;
+  for (const name of doomed) {
+    try {
+      const size = dirSizeMb(join(PNPM_DIR, name));
+      rmSync(join(PNPM_DIR, name), { recursive: true, force: true });
+      prunedMb += Number(size);
+    } catch {
+      // 被占用时跳过（Windows 偶发），不阻断构建
+    }
+  }
+
+  // 2) 清理所有指向已删目标的断链（junction/symlink）
+  //
+  // 为什么用"扫断链"而不是"按包名摘除"：pnpm 在 node_modules/ 与
+  //   .pnpm/node_modules/ 下用 junction 链接到 .pnpm/<实体>，删实体后这些链接即断。
+  //   按包名推断易错（实测：把某实体 node_modules 里的依赖误判为实体自身，
+  //   导致 214MB 的 openclaw 被错误保留）；扫断链直接可靠——
+  //   且断链必须清除，否则 electron-builder 的 7zip 压缩会报"系统找不到指定的路径"。
+  let brokenLinks = 0;
+  const sweepBrokenLinks = (root, depth) => {
+    if (depth > 6 || !existsSync(root)) return;
+    let entries;
+    try {
+      entries = readdirSync(root, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      const p = join(root, ent.name);
+      if (ent.name === '.pnpm' && depth > 0) continue;
+      let st;
+      try {
+        st = lstatSync(p);
+      } catch {
+        continue;
+      }
+      if (st.isSymbolicLink()) {
+        // 目标不存在 = 断链 → 摘除链接本身（不跟随删除）
+        if (!existsSync(p)) {
+          try {
+            unlinkSync(p);
+            brokenLinks += 1;
+          } catch {
+            // 占用时跳过
+          }
+        }
+        continue;
+      }
+      if (st.isDirectory()) {
+        sweepBrokenLinks(p, depth + 1);
+      }
+    }
+  };
+  sweepBrokenLinks(join(TARGET, 'node_modules'), 0);
+  // .pnpm/node_modules 是扁平 junction 池，单独扫
+  sweepBrokenLinks(join(PNPM_DIR, 'node_modules'), 1);
+
+  if (prunedMb > 0) {
+    console.log(
+      `[prepare-memory-hub] 已清理孤儿依赖 ~${prunedMb.toFixed(0)} MB` +
+        `${brokenLinks > 0 ? ` + ${brokenLinks} 个断链` : ''}`,
+    );
+  }
+}
+
+// 5.2 删除运行期无用文件（sourcemap / 类型声明）——同时修复 Windows MAX_PATH
+//
+// 背景：electron-builder 把本目录部署到 process.resourcesPath/memory-hub，
+//   路径前缀约 75 字符（Windows 典型安装位置）。实测产物内最长相对路径 215 字符，
+//   合计约 290 > Windows 260 限制（MAX_PATH）——会导致解压/安装失败或运行时读取异常。
+//   超限文件集中在 .map（1346 个）与 .d.ts（类型声明），两者运行期均不需要：
+//   - .map：sourcemap，仅调试源码映射用（引擎以 tsx 直跑源码，不消费它）
+//   - .d.ts：TypeScript 类型声明，纯编译期产物
+//   删除后最长路径显著下降，且顺带回收体积。
+const USELESS_EXTENSIONS = ['.map', '.d.ts', '.d.ts.map'];
+let removedUseless = 0;
+let removedBytes = 0;
+const stripUselessFiles = (dir) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isSymbolicLink()) continue;
+    if (ent.isDirectory()) {
+      stripUselessFiles(p);
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    if (!USELESS_EXTENSIONS.some((ext) => ent.name.endsWith(ext))) continue;
+    try {
+      removedBytes += statSync(p).size;
+      rmSync(p, { force: true });
+      removedUseless += 1;
+    } catch {
+      // 占用时跳过
+    }
+  }
+};
+stripUselessFiles(TARGET);
+if (removedUseless > 0) {
+  console.log(
+    `[prepare-memory-hub] 已清理运行期无用文件 ${removedUseless} 个（sourcemap/类型声明）` +
+      ` ~${(removedBytes / 1048576).toFixed(1)} MB——同时缓解 Windows 路径长度限制`,
+  );
+}
+
+// 6. Windows 路径长度检查（MAX_PATH=260）
+//
+// 背景：electron-builder 把本目录部署到 <安装目录>/resources/memory-hub。
+//   产品名较长（Code Agent Desktop），默认安装路径
+//   %LOCALAPPDATA%\Programs\Code Agent Desktop\resources\memory-hub ≈ 59 字符前缀；
+//   而 Electron 的 exe manifest **未声明 longPathAware**（实测二进制内无该声明），
+//   故 Windows 260 限制真实生效。
+//
+// 已做的缓解（顺序在检查之前）：
+//   - 删除 sourcemap / 类型声明（5.2 节）：去掉最深的一批文件
+//   - 依赖可达性裁剪（5.1 节）：移除整棵孤儿子树
+//   - 下面额外删除**非当前平台的实现文件**（@opentelemetry 的
+//     getMachineId-<platform>.js 等按平台分支的独立实现，运行期由同名选择器
+//     按 process.platform 加载，非本平台文件不会被引用）
+//
+// 实测：裁剪后最长相对路径约 212 字符；在 59 字符前缀下仍有约 34 个文件超限，
+//   集中在 @opentelemetry/resources 的 platform 目录。故再按平台裁剪一次。
+const PLATFORM_SUFFIX_PATTERNS = [
+  // 非当前平台的实现文件（形如 getMachineId-darwin.js / -linux / -win / -bsd / -unsupported）
+  /-(darwin|linux|win|bsd|unsupported)\.(js|mjs|cjs)$/,
+];
+const CURRENT_PLATFORM_TAGS = new Set(
+  process.platform === 'win32'
+    ? ['win', 'unsupported']
+    : process.platform === 'darwin'
+      ? ['darwin', 'unsupported']
+      : ['linux', 'unsupported'],
+);
+let removedCrossPlatform = 0;
+const stripForeignPlatformFiles = (dir) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isSymbolicLink()) continue;
+    if (ent.isDirectory()) {
+      stripForeignPlatformFiles(p);
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    // 仅处理 @opentelemetry 包内（避免误伤其他约定的同名文件）
+    if (!p.includes(`${sep}@opentelemetry${sep}`)) continue;
+    for (const pattern of PLATFORM_SUFFIX_PATTERNS) {
+      const m = pattern.exec(ent.name);
+      if (m === null) continue;
+      const tag = m[1];
+      if (tag !== undefined && !CURRENT_PLATFORM_TAGS.has(tag)) {
+        try {
+          rmSync(p, { force: true });
+          removedCrossPlatform += 1;
+        } catch {
+          // 占用时跳过
+        }
+      }
+      break;
+    }
+  }
+};
+stripForeignPlatformFiles(TARGET);
+if (removedCrossPlatform > 0) {
+  console.log(
+    `[prepare-memory-hub] 已删除非本平台实现文件 ${removedCrossPlatform} 个` +
+      `（当前平台 ${process.platform}，缓解 Windows 路径长度限制）`,
+  );
+}
+
+const MAX_PATH = 260;
+const ASSUMED_INSTALL_PREFIX = 59; // 默认安装路径实测估算（见上）
+let overLimit = 0;
+let maxRelative = 0;
+const checkPathLength = (dir) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isSymbolicLink()) continue;
+    if (ent.isDirectory()) {
+      checkPathLength(p);
+      continue;
+    }
+    if (!ent.isFile()) continue;
+    const relLen = p.length - ROOT.length; // 相对项目根（含 resources/memory-hub）
+    if (relLen > maxRelative) maxRelative = relLen;
+    if (relLen + ASSUMED_INSTALL_PREFIX > MAX_PATH) overLimit += 1;
+  }
+};
+checkPathLength(TARGET);
+if (overLimit > 0) {
+  console.warn(
+    `[prepare-memory-hub] ⚠ Windows 路径长度：${overLimit} 个文件在默认安装路径下` +
+      `可能超过 ${MAX_PATH} 字符（最长相对 ${maxRelative}）。若安装失败请装到更浅的目录。`,
+  );
+} else {
+  console.log(
+    `[prepare-memory-hub] 路径长度检查通过（最长相对 ${maxRelative} 字符 + 安装前缀 ` +
+      `${ASSUMED_INSTALL_PREFIX} = ${maxRelative + ASSUMED_INSTALL_PREFIX} ≤ ${MAX_PATH}）`,
+  );
+}
+
+// 7. 摘要
 const sizeMb = dirSizeMb(TARGET);
 const files = countFiles(TARGET);
 console.log(`[prepare-memory-hub] 完成 → ${TARGET}（${sizeMb} MB，${files} 个文件）`);

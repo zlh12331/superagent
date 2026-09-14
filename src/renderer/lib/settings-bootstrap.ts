@@ -8,6 +8,7 @@
 // 4. 快照经 migrateShortcuts 应用 v3 快捷键归一化迁移
 // ──────────────────────────────────────────────────────────────
 
+import { SETTING_KEYS, type SettingKey } from '@code-agent/shared/renderer';
 import { unwrap } from '@/lib/ipc';
 import { SETTINGS_STORAGE_KEY } from '@/lib/theme-init';
 import { migrateShortcuts, type Theme } from '@/stores/persistent/settings-store';
@@ -38,8 +39,14 @@ async function migrateToMain(settings: Readonly<Record<string, unknown>>): Promi
   if (api === undefined || api.settings === undefined) {
     return false;
   }
+  // settings:set 已收紧为白名单键——legacy 里的未知键（旧版残留/元数据）
+  // 过滤掉再写，否则迁移永不完成（allWritten=false → localStorage 永不清）
+  const whitelist = new Set<string>(SETTING_KEYS);
+  const entries = Object.entries(settings).filter((entry): entry is [SettingKey, unknown] =>
+    whitelist.has(entry[0]),
+  );
   const results = await Promise.allSettled(
-    Object.entries(settings).map(([key, value]) => api.settings.set({ key, value })),
+    entries.map(([key, value]) => api.settings.set({ key, value })),
   );
   return results.every((r) => r.status === 'fulfilled');
 }

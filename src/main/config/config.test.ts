@@ -63,8 +63,6 @@ describe('appConfig', () => {
     expect(config.isPackaged).toBe(false);
     // test 环境默认值
     expect(config.logLevel).toBe('error');
-    expect(config.sentry.dsn).toBe('');
-    expect(config.sentry.tracesSampleRate).toBe(0);
     // 默认 provider 根地址（无 /v1 后缀，由 ProviderRegistry 拼接）
     expect(config.providers.deepseek).toBe('https://api.deepseek.com');
     expect(config.providers.openai).toBe('https://api.openai.com');
@@ -73,7 +71,6 @@ describe('appConfig', () => {
   });
 
   it('从 process.env 读取配置覆盖默认值', async () => {
-    process.env['SENTRY_DSN'] = 'http://test@example.com/1';
     process.env['DEEPSEEK_API_BASE'] = 'https://custom.api.com';
     process.env['ANTHROPIC_API_BASE'] = 'https://custom-anthropic.api.com';
     process.env['LOG_LEVEL'] = 'debug';
@@ -81,7 +78,6 @@ describe('appConfig', () => {
     const { loadConfig } = await import('../config/index');
     const config = loadConfig();
 
-    expect(config.sentry.dsn).toBe('http://test@example.com/1');
     expect(config.providers.deepseek).toBe('https://custom.api.com');
     expect(config.providers.anthropic).toBe('https://custom-anthropic.api.com');
     expect(config.logLevel).toBe('debug');
@@ -101,8 +97,6 @@ describe('appConfig', () => {
     expect(config.isPackaged).toBe(false);
     // production 默认 logLevel=info（非 test 环境）
     expect(config.logLevel).toBe('info');
-    // production 默认 Sentry 采样率 0.1
-    expect(config.sentry.tracesSampleRate).toBe(0.1);
     // production 默认 provider 根地址保持不变
     expect(config.providers.deepseek).toBe('https://api.deepseek.com');
   });
@@ -119,8 +113,6 @@ describe('appConfig', () => {
     expect(config.isTest).toBe(false);
     // development 默认 logLevel=debug
     expect(config.logLevel).toBe('debug');
-    // development 默认 Sentry 采样率 0.1
-    expect(config.sentry.tracesSampleRate).toBe(0.1);
   });
 
   it('app.isPackaged=true 且无 APP_ENV/NODE_ENV：appEnv=production', async () => {

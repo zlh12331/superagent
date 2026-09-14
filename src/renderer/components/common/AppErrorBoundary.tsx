@@ -18,7 +18,6 @@
 // - 不依赖任何 Provider（避免边界本身被错误 Provider 拖垮）
 // ──────────────────────────────────────────────────────────────
 
-import * as Sentry from '@sentry/electron/renderer';
 import { AlertTriangle, RefreshCw, Send } from 'lucide-react';
 import type { ErrorInfo, ReactElement } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -26,6 +25,42 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
+import { reportError } from '@/lib/error-report';
+import { unwrap } from '@/lib/ipc';
+
+/** 项目 GitHub 新建 issue 入口（开源报障后端；本地优先路线的错误出口） */
+const REPO_NEW_ISSUE_URL = 'https://github.com/zlh12331/superagent/issues/new';
+
+/** issue 正文引用的堆栈行数上限（避免 URL 超长被 GitHub 截断） */
+const MAX_STACK_LINES = 6;
+
+/**
+ * 组装预填 issue 深链：标题 = 错误消息首行，正文 = 堆栈摘要 + 版本环境 + 诊断包引导
+ */
+async function buildIssueUrl(message: string, error: unknown): Promise<string> {
+  const stack = error instanceof Error ? (error.stack ?? '') : '';
+  let envLine = '';
+  try {
+    const info = unwrap(await window.api.app.getInfo());
+    envLine = `- 版本：${info.version}（${info.platform}/${info.arch}，Electron ${info.electron}）`;
+  } catch {
+    // getInfo 失败不阻塞报障，仅缺版本行
+  }
+  const body = [
+    '### 崩溃信息',
+    '',
+    '```',
+    message,
+    ...stack.split('\n').slice(0, MAX_STACK_LINES),
+    '```',
+    '',
+    envLine,
+    '- 复现步骤：（请补充）',
+    '- 现场：可在「设置 → 关于 → 导出诊断包」后作为附件上传到本 issue',
+  ].join('\n');
+  const title = `[crash] ${message.slice(0, 80)}`;
+  return `${REPO_NEW_ISSUE_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+}
 
 /**
  * App 级错误边界的 fallback 渲染函数
@@ -43,11 +78,16 @@ function AppFallback({
   const { t } = useTranslation();
   const message = error instanceof Error ? error.message : String(error);
 
-  // 崩溃报告：主动上报到 Sentry（对齐参考项目 CrashReportDialog 的"发送报告"动作；
-  // 本项目 Sentry 已在 AppErrorBoundary onError 自动上报，按钮为显式补报 + 用户反馈）
+  // 报障：深链 GitHub 新建 issue（预填崩溃信息与版本环境；诊断包由用户手动附上）
   const handleSendReport = (): void => {
-    Sentry.captureMessage(`[user-reported] ${message}`, 'error');
-    toast.success(t('common.crashReportSent'));
+    void buildIssueUrl(message, error)
+      .then(async (url) => unwrap(await window.api.app.openExternal({ url })))
+      .then(() => {
+        toast.success(t('common.crashReportOpened'));
+      })
+      .catch(() => {
+        toast.error(t('common.crashReportOpenFailed'));
+      });
   };
 
   return (
@@ -90,7 +130,7 @@ interface AppErrorBoundaryProps {
 /**
  * App 级错误边界
  *
- * 在 App.tsx 中包裹 <AppProviders><RouterProvider /></AppProviders>。
+ * 在 App.tsx 中包裹 <AppErrorBoundary><AppProviders><RouterProvider /></AppProviders></AppErrorBoundary>。
  *
  * 错误恢复策略：
  * - onReset 调用 window.location.reload()，浏览器/Electron 重新加载页面
@@ -110,11 +150,11 @@ export function AppErrorBoundary({ children }: AppErrorBoundaryProps): ReactElem
     <ErrorBoundary
       fallbackRender={AppFallback}
       onError={(error: unknown, info: ErrorInfo) => {
-        // 上报到 Sentry（renderer → main → OTLP）
+        // 统一错误出口：electron-log renderer → 主进程落盘（随诊断包导出）
         // info.componentStack 帮助定位错误来源组件
-        Sentry.captureException(error, {
-          contexts: { react: { componentStack: info.componentStack } },
+        reportError(error, {
           tags: { boundary: 'AppErrorBoundary' },
+          ...(info.componentStack !== null ? { componentStack: info.componentStack } : {}),
         });
       }}
       onReset={() => {

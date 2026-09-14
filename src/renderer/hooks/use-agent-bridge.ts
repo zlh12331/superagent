@@ -19,6 +19,7 @@ import type { AgentStreamEndPayload, AgentStreamErrorPayload } from '@code-agent
 import { useEffect } from 'react';
 
 import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
+import { GOAL_LIST_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
 import { queryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
@@ -38,23 +39,23 @@ function handleSessionEnd(sessionId: string): void {
     // 应由 session:get 分页/增量解决，而非在失效点绕过）。
     void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
     // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
-    void queryClient.invalidateQueries({ queryKey: ['goal', 'list', sessionId] });
+    void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(sessionId) });
     // P3 修复：task 列表此前遗漏失效——回合内新增/更新的 task 在回合结束后
     // 30s（staleTime）内右面板 InfoPane 仍显示旧状态，而回合结束恰是
     // 最需要看任务收敛的时刻。前缀匹配覆盖 ['task', 'list', sessionId] 等子 key。
-    void queryClient.invalidateQueries({ queryKey: ['task'] });
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.task });
     // P2 修复：用量汇总此前无人失效——设置页 usage-section 读 SQLite
-    // session:getUsageSummary（queryKey ['usage','summary']），回合结束
+    // session:getUsageSummary（key 见 lib/query/keys.ts），回合结束
     // 不失效则展示过期数据。前缀匹配覆盖 summary 及其派生 key。
-    void queryClient.invalidateQueries({ queryKey: ['usage'] });
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.usage });
     // 2026-09-08 修复：回合内 git/file/turns 的写入此前无人失效——
     // Agent 通过 git_add/git_commit 改动工作区后 GitPanel（staleTime 10s）不刷新；
     // write_file/edit_file 落盘后已打开的文件面板（staleTime 30s）显示旧内容；
     // 设置页回合记录（['turns','recent']）从定义起无任何失效点，永远等 gc。
-    // 前缀匹配：['git',...] / ['file',...] / ['turns',...]。
-    void queryClient.invalidateQueries({ queryKey: ['git'] });
-    void queryClient.invalidateQueries({ queryKey: ['file'] });
-    void queryClient.invalidateQueries({ queryKey: ['turns'] });
+    // 前缀匹配：各域 key 根见 lib/query/keys.ts 的 QUERY_KEY_ROOTS。
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.git });
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.file });
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.turns });
   }
 
   // 2. L2 清理：审批缓冲 + 提问弹窗（对齐 turn_done 清空原则）

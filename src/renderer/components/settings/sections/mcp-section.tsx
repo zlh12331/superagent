@@ -18,11 +18,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { MCP_SERVERS_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { SectionTitle, SettingRow } from '../settings-controls';
-
-/** mcp:list 查询 key */
-const MCP_LIST_QUERY_KEY = ['mcp', 'servers'] as const;
 
 /** 传输类型三态（与 shared MCP_TRANSPORTS 对齐） */
 type McpTransport = 'stdio' | 'sse' | 'streamable-http';
@@ -88,7 +86,7 @@ export function McpSection(): ReactElement {
 
   // L3 查询：服务器列表
   const { data, isLoading } = useQuery({
-    queryKey: MCP_LIST_QUERY_KEY,
+    queryKey: MCP_SERVERS_QUERY_KEY,
     queryFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
         return { servers: [] };
@@ -99,7 +97,7 @@ export function McpSection(): ReactElement {
 
   /** 操作后失效列表缓存（重新拉取） */
   const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: MCP_LIST_QUERY_KEY });
+    void queryClient.invalidateQueries({ queryKey: MCP_SERVERS_QUERY_KEY });
   };
 
   // 启动 mutation

@@ -24,7 +24,6 @@ export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';
 export { IPC_PROTOCOL_VERSION } from './constants/protocol';
-
 // IPC 类型契约（纯类型，自动推导）
 export type { IpcApi } from './ipc/api';
 export type { IpcChannel } from './ipc/channels';
@@ -36,12 +35,12 @@ export type { IpcDefinitions } from './ipc/definitions';
 export type * from './ipc/payloads';
 export type { IpcEventMap, IpcRequestMap } from './ipc/payloads';
 export type { IpcResponse } from './ipc/response';
-
 // zod schema 的类型部分（仅类型重导出，不携带 schema 运行时）
 export type * from './schemas/agent';
 export type * from './schemas/agent-ask';
 export type * from './schemas/agent-events';
 export type * from './schemas/app';
+export type * from './schemas/browser';
 export type * from './schemas/chat';
 export type * from './schemas/codebase';
 export type * from './schemas/devtools';
@@ -56,6 +55,9 @@ export type * from './schemas/remote';
 export type * from './schemas/search';
 export type * from './schemas/session';
 export type * from './schemas/settings';
+export type { SettingKey } from './schemas/settings';
+// settings:set 可写键白名单（值：遗留 localStorage 迁移过滤用；schema 内含 lsp 值级门禁）
+export { SETTING_KEYS } from './schemas/settings';
 export type * from './schemas/skill';
 export type * from './schemas/system';
 export type * from './schemas/task';

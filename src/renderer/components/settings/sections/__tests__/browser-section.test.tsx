@@ -1,9 +1,10 @@
 // src/renderer/components/settings/sections/__tests__/browser-section.test.tsx
 // BrowserSection 单测：三项配置渲染 + 交互写穿透到 settings-store.browser
 // ──────────────────────────────────────────────────────────────
-// 这里锁的是「设置面板改了store、store 落了库」这一段：
-// 初值/沙箱是否真被 iframe 消费由 dev/browser-pane 用例覆盖
+// 这里锁的是「设置面板改了 store、store 落了库」这一段：
+// 初值/沙箱是否真被预览消费由 dev/browser-pane 用例覆盖
 // （components/dev/__tests__/dev-common-gaps.test.tsx）。
+// 切换严格沙箱额外断言 browser:configure 通知主进程（即时生效语义）。
 // ──────────────────────────────────────────────────────────────
 
 import { render, screen } from '@testing-library/react';
@@ -19,10 +20,16 @@ function renderSection(): void {
 }
 
 describe('BrowserSection 浏览器设置面板', () => {
+  let configureMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    configureMock = vi.fn(async () => ({ data: { ok: true } }));
     applySettingsSnapshot({});
-    window.api = { settings: { set: vi.fn(async () => ({ data: { ok: true } })) } } as never;
+    window.api = {
+      settings: { set: vi.fn(async () => ({ data: { ok: true } })) },
+      browser: { configure: configureMock },
+    } as never;
   });
 
   it('默认值渲染：自适应预设 / 100% 缩放 / 严格沙箱关闭', () => {
@@ -49,10 +56,11 @@ describe('BrowserSection 浏览器设置面板', () => {
     expect(useSettingsStore.getState().browser.defaultZoom).toBe(75);
   });
 
-  it('切换严格沙箱：写入 strictSandbox', async () => {
+  it('切换严格沙箱：写入 strictSandbox 并通知主进程 configure', async () => {
     renderSection();
     await userEvent.click(screen.getByRole('switch'));
     expect(useSettingsStore.getState().browser.strictSandbox).toBe(true);
+    expect(configureMock).toHaveBeenCalledWith({ strictSandbox: true });
   });
 
   it('回填已有设置：快照值驱动控件初态', () => {

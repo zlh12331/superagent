@@ -6,7 +6,7 @@
 // 拖拽下限 = 内容自然高度与 160 的较小者（拖小不能小于内容所需高度，避免裁剪）。
 // ──────────────────────────────────────────────
 
-import { type KeyboardEvent, type PointerEvent, type RefObject, useRef } from 'react';
+import { type KeyboardEvent, type PointerEvent, type RefObject, useEffect, useRef } from 'react';
 
 /** 输入框拖拽高度下限（单行，约 40px） */
 export const COMPOSER_MIN_H = 40;
@@ -24,6 +24,50 @@ interface DragState {
   readonly startY: number;
   readonly startH: number;
   readonly dragMinH: number;
+}
+
+/** 全局拖拽监听所需的上下文（收敛为单参数，同时满足「形参 ≤4」门槛） */
+interface GlobalDragContext {
+  readonly el: HTMLTextAreaElement;
+  readonly state: DragState;
+  readonly dragRef: RefObject<DragState | null>;
+}
+
+/**
+ * 注册拖拽期的全局 pointer 监听，返回「结束拖拽」函数。
+ *
+ * 模块级提取的两个目的：
+ * 1. 让 useComposerDrag 体量不因新增卸载兜底而增长（check-functions 棘轮只允许下降）；
+ * 2. 「注册 → 返回清理」成对，使**正常结束**（pointerup / pointercancel）与
+ *    **异常结束**（组件在拖拽中被卸载，见 hook 内的 useEffect）共用同一清理入口，
+ *    不会出现某条路径漏移除。
+ */
+function startGlobalDrag(ctx: GlobalDragContext): () => void {
+  const { el, state, dragRef } = ctx;
+  const handleMove = (ev: globalThis.PointerEvent): void => {
+    // 方向对齐原型：向上拖（clientY 减小）→ dy 增大 → 高度增大（手柄在输入框上方，向上拉高）
+    const dy = state.startY - ev.clientY;
+    const clamped = Math.max(state.dragMinH, Math.min(COMPOSER_MAX_H, state.startH + dy));
+    if (clamped <= state.dragMinH) {
+      el.style.maxHeight = `${DRAG_BASE_MAX}px`;
+      el.style.height = `${state.dragMinH}px`;
+    } else {
+      el.style.maxHeight = `${clamped}px`;
+      el.style.height = `${clamped}px`;
+    }
+  };
+  const stop = (): void => {
+    dragRef.current = null;
+    document.removeEventListener('pointermove', handleMove);
+    document.removeEventListener('pointerup', stop);
+    document.removeEventListener('pointercancel', stop);
+  };
+  document.addEventListener('pointermove', handleMove);
+  document.addEventListener('pointerup', stop);
+  // pointercancel（触摸板手势接管/窗口拖动等系统取消）不走 pointerup——
+  // 缺失会导致 dragRef 滞留，之后任意移动持续改写高度
+  document.addEventListener('pointercancel', stop);
+  return stop;
 }
 
 /** 手柄元素 props（展开到 <hr className="composer-drag-handle"> 上） */
@@ -45,6 +89,20 @@ export interface ComposerDrag {
  */
 export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | null>): ComposerDrag {
   const dragRef = useRef<DragState | null>(null);
+  /** 当前拖拽的「结束」函数（正常结束时自清；组件卸载时由下方 useEffect 兜底调用） */
+  const endDragRef = useRef<(() => void) | null>(null);
+
+  // 卸载兜底（2026-09-11 补）：拖拽进行中组件被卸载（切会话/关闭面板）时 pointerup
+  // 不会再派发，document 上的 pointermove/pointerup/pointercancel 监听与 dragRef 会滞留
+  // ——监听闭包同时持有 dragRef 与已分离的 textarea 引用，构成句柄泄漏。
+  // 回归守卫见 __tests__/use-composer-drag.test.tsx 的「拖拽进行中卸载组件」用例。
+  useEffect(
+    () => () => {
+      endDragRef.current?.();
+      endDragRef.current = null;
+    },
+    [],
+  );
 
   /** 测量 textarea 自然高度（临时解除高度/上限限制，对齐原型 measureNaturalH） */
   const measureNaturalHeight = (el: HTMLTextAreaElement): number => {
@@ -67,39 +125,13 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
     event.preventDefault();
     // 指针捕获：拖拽过程中 pointer 移出手柄元素不丢失事件
     event.currentTarget.setPointerCapture(event.pointerId);
-    const naturalHeight = measureNaturalHeight(el);
-    dragRef.current = {
+    const state: DragState = {
       startY: event.clientY,
       startH: el.offsetHeight,
-      dragMinH: Math.min(naturalHeight, DRAG_BASE_MAX),
+      dragMinH: Math.min(measureNaturalHeight(el), DRAG_BASE_MAX),
     };
-    const handleMove = (ev: globalThis.PointerEvent): void => {
-      const state = dragRef.current;
-      if (state === null) {
-        return;
-      }
-      // 方向对齐原型：向上拖（clientY 减小）→ dy 增大 → 高度增大（手柄在输入框上方，向上拉高）
-      const dy = state.startY - ev.clientY;
-      const clamped = Math.max(state.dragMinH, Math.min(COMPOSER_MAX_H, state.startH + dy));
-      if (clamped <= state.dragMinH) {
-        el.style.maxHeight = `${DRAG_BASE_MAX}px`;
-        el.style.height = `${state.dragMinH}px`;
-      } else {
-        el.style.maxHeight = `${clamped}px`;
-        el.style.height = `${clamped}px`;
-      }
-    };
-    const handleUp = (): void => {
-      dragRef.current = null;
-      document.removeEventListener('pointermove', handleMove);
-      document.removeEventListener('pointerup', handleUp);
-      document.removeEventListener('pointercancel', handleUp);
-    };
-    document.addEventListener('pointermove', handleMove);
-    document.addEventListener('pointerup', handleUp);
-    // pointercancel（触摸板手势接管/窗口拖动等系统取消）不走 pointerup——
-    // 缺失会导致 dragRef 滞留，之后任意移动持续改写高度
-    document.addEventListener('pointercancel', handleUp);
+    dragRef.current = state;
+    endDragRef.current = startGlobalDrag({ el, state, dragRef });
   };
 
   /** 双击手柄重置：恢复自动高度（对齐原型 resetResize：maxHeight 清空 + 自动增长） */

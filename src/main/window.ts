@@ -12,7 +12,8 @@ import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { hasRunningAgentTurns } from './service-container';
-import { captureSentryMessage, logger } from './utils/logger';
+import { reportMessage } from './utils/error-report';
+import { logger } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
 import { TITLE_BAR_SYMBOL } from './window-theme';
 
@@ -201,9 +202,7 @@ export function createWindow(): BrowserWindow {
       { reason: details.reason, exitCode: details.exitCode },
       '渲染进程异常退出，尝试自动恢复',
     );
-    void captureSentryMessage(
-      `渲染进程崩溃：reason=${details.reason} exitCode=${details.exitCode}`,
-    );
+    void reportMessage(`渲染进程崩溃：reason=${details.reason} exitCode=${details.exitCode}`);
     const now = Date.now();
     if (now - crashWindowStart > 60_000) {
       crashWindowStart = now;
@@ -215,7 +214,7 @@ export function createWindow(): BrowserWindow {
         { reason: details.reason, crashRecoveryCount },
         '渲染进程短时间反复崩溃，停止自动恢复（请手动重启应用）',
       );
-      void captureSentryMessage('渲染进程反复崩溃，已停止自动恢复', 'warning');
+      void reportMessage('渲染进程反复崩溃，已停止自动恢复', 'warning');
       return;
     }
     win.webContents.reload();

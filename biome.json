@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -10,6 +10,7 @@
       "**",
       "!**/resources/pg",
       "!**/third_party",
+      "!**/packages/memory-engine/MemoryCore",
       "!**/release",
       "!**/coverage*",
       "!**/node_modules",
@@ -55,20 +56,28 @@
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
-        "useExhaustiveDependencies": "warn"
+        "useExhaustiveDependencies": "warn",
+        "noUndeclaredVariables": "error"
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsole": "error"
+        "noConsole": "error",
+        "noDeprecatedImports": "error"
       },
       "style": {
         "useImportType": "error",
         "useNamingConvention": "error",
         "useConst": "error",
-        "noDefaultExport": "error"
+        "noDefaultExport": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": { "filenameCases": ["kebab-case", "export"] }
+        }
       },
       "complexity": {
-        "useLiteralKeys": "off"
+        "useLiteralKeys": "off",
+        "noUselessReturn": "error",
+        "noUselessCatchBinding": "error"
       }
     }
   },
@@ -86,6 +95,19 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": { "filenameCases": ["kebab-case", "PascalCase", "export"] }
+            }
+          }
+        }
+      }
+    },
     {
       "includes": ["**/src/renderer/**/*.tsx"],
       "linter": {

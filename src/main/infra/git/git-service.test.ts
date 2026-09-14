@@ -177,4 +177,24 @@ describe('GitService（真实 git 仓库）', () => {
     });
     expect(res.ok).toBe(false);
   });
+
+  gitIt('push：ext:: 传输串远程 → INVALID_INPUT（服务层守卫，覆盖 agent 工具直连）', async () => {
+    await initRepo();
+    await expect(
+      svc.push({
+        path: dir,
+        remote: 'ext::evil',
+        refspec: '',
+        setUpstream: false,
+        force: false,
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.INVALID_INPUT });
+  });
+
+  gitIt('diff：选项形参数 ref（--output）→ INVALID_INPUT', async () => {
+    await initRepo();
+    await expect(
+      svc.diff({ path: dir, ref: '--output=pwned.txt', staged: false, filePath: undefined }),
+    ).rejects.toMatchObject({ code: ErrorCode.INVALID_INPUT });
+  });
 });

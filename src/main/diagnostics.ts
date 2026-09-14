@@ -145,7 +145,7 @@ async function collectLogFiles(logsDir: string): Promise<Array<{ name: string; c
  * 组装并写入诊断包 zip
  *
  * @param options filePath / userDataPath
- * @throws 读取或写盘失败时抛出（由 IPC wrap 统一错误分类 + Sentry）
+ * @throws 读取或写盘失败时抛出（由 IPC wrap 统一错误分类 + 本地日志）
  */
 export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions): Promise<void> {
   const { filePath, userDataPath } = options;

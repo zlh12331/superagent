@@ -43,6 +43,15 @@ import {
   ExportDiagnosticsResSchema,
 } from '../schemas/app';
 import {
+  BrowserConfigureReqSchema,
+  type BrowserLoadFailedPayload,
+  BrowserLoadFailedPayloadSchema,
+  BrowserNavigateReqSchema,
+  BrowserSetViewportReqSchema,
+  type BrowserState,
+  BrowserStateSchema,
+} from '../schemas/browser';
+import {
   OpenDevToolsReqSchema,
   type OpenDevToolsRes,
   OpenDevToolsResSchema,
@@ -125,12 +134,18 @@ import {
   type McpStopRes,
 } from '../schemas/mcp';
 import {
+  MemoryClearAllReqSchema,
+  type MemoryClearAllRes,
+  MemoryClearAllResSchema,
   MemoryClearReqSchema,
   type MemoryClearRes,
   MemoryClearResSchema,
   MemoryListReqSchema,
   type MemoryListRes,
   MemoryListResSchema,
+  MemoryStatusReqSchema,
+  type MemoryStatusRes,
+  MemoryStatusResSchema,
 } from '../schemas/memory';
 import {
   ModelsListBuiltinReqSchema,
@@ -614,6 +629,43 @@ export const IPC_DEFINITIONS = {
     glob: withSchema(IPC_META.search.glob, GlobReqSchema, {} as GlobRes, GlobResSchema),
   },
 
+  browser: {
+    navigate: withSchema(
+      IPC_META.browser.navigate,
+      BrowserNavigateReqSchema,
+      {} as { ok: boolean },
+      OkResSchema,
+    ),
+    back: withSchema(IPC_META.browser.back, null, {} as { ok: boolean }, OkResSchema),
+    forward: withSchema(IPC_META.browser.forward, null, {} as { ok: boolean }, OkResSchema),
+    reload: withSchema(IPC_META.browser.reload, null, {} as { ok: boolean }, OkResSchema),
+    setViewport: withSchema(
+      IPC_META.browser.setViewport,
+      BrowserSetViewportReqSchema,
+      {} as { ok: boolean },
+      OkResSchema,
+    ),
+    configure: withSchema(
+      IPC_META.browser.configure,
+      BrowserConfigureReqSchema,
+      {} as { ok: boolean },
+      OkResSchema,
+    ),
+    getState: withSchema(IPC_META.browser.getState, null, {} as BrowserState, BrowserStateSchema),
+    // 状态推送（URL/标题/加载中/历史能力）：主进程 webContents 事件统一收敛后广播
+    subscribeState: withPayload(
+      IPC_META.browser.subscribeState,
+      {} as BrowserState,
+      BrowserStateSchema,
+    ),
+    // 主框架加载失败推送（Chromium 原始错误码，渲染层显示内联错误态）
+    subscribeLoadFailed: withPayload(
+      IPC_META.browser.subscribeLoadFailed,
+      {} as BrowserLoadFailedPayload,
+      BrowserLoadFailedPayloadSchema,
+    ),
+  },
+
   terminal: {
     create: withSchema(
       IPC_META.terminal.create,
@@ -796,6 +848,18 @@ export const IPC_DEFINITIONS = {
       MemoryClearReqSchema,
       {} as MemoryClearRes,
       MemoryClearResSchema,
+    ),
+    clearAll: withSchema(
+      IPC_META.memory.clearAll,
+      MemoryClearAllReqSchema,
+      {} as MemoryClearAllRes,
+      MemoryClearAllResSchema,
+    ),
+    status: withSchema(
+      IPC_META.memory.status,
+      MemoryStatusReqSchema,
+      {} as MemoryStatusRes,
+      MemoryStatusResSchema,
     ),
   },
 

@@ -25,23 +25,22 @@ import { LlmClient } from './llm-client';
 
 const mocks = vi.hoisted(() => {
   const mockGenerateText = vi.fn();
-  const mockGenerateObject = vi.fn();
   const mockLogger = {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
   };
-  return { mockGenerateText, mockGenerateObject, mockLogger };
+  return { mockGenerateText, mockLogger };
 });
 
-// mock 'ai'：保留 APICallError 等真实导出，仅替换 generateText / generateObject
+// mock 'ai'：保留 APICallError 等真实导出，仅替换 generateText
+// （2026-09-11：结构性输出已并入 generateText + Output.object，不再 mock generateObject）
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>();
   return {
     ...actual,
     generateText: mocks.mockGenerateText,
-    generateObject: mocks.mockGenerateObject,
   };
 });
 
@@ -293,16 +292,23 @@ describe('LlmClient', () => {
   describe('generateJson（结构化输出）', () => {
     it('成功路径：返回 schema 约束的对象', async () => {
       const { client } = createClient();
-      mocks.mockGenerateObject.mockResolvedValue({ object: { title: '测试' } });
+      // 2026-09-11 迁移：结构化输出改走 generateText + Output.object，
+      // 结果位于 result.output（原 generateObject 的 result.object）
+      mocks.mockGenerateText.mockResolvedValue({ output: { title: '测试' } });
 
       const schema = z.object({ title: z.string() });
       const result = await client.generateJson({ schema, prompt: '提取标题' });
 
       expect(result).toEqual({ title: '测试' });
-      expect(mocks.mockGenerateObject).toHaveBeenCalledTimes(1);
-      // schema 透传给 generateObject
-      const args = mocks.mockGenerateObject.mock.calls[0]?.[0] as { schema: unknown } | undefined;
-      expect(args?.schema).toBe(schema);
+      expect(mocks.mockGenerateText).toHaveBeenCalledTimes(1);
+      // schema 经 Output.object 包装后传入 output 参数。
+      // 断言 output.name 而非内部 schema 字段：Output.object 是不透明的描述符
+      // （Object.keys = name/responseFormat/parseCompleteOutput/…），schema 封装在
+      // parse 闭包内，属实现细节；name 才是稳定契约。
+      const args = mocks.mockGenerateText.mock.calls[0]?.[0] as
+        | { output?: { readonly name?: string } }
+        | undefined;
+      expect(args?.output?.name).toBe('object');
       // SDK 内置重试关闭：side query 重试由本层 retryWithBackoff 独占
       expect(args).toEqual(expect.objectContaining({ maxRetries: 0 }));
     });
@@ -311,7 +317,7 @@ describe('LlmClient', () => {
       vi.useFakeTimers();
       try {
         const { client } = createClient();
-        mocks.mockGenerateObject
+        mocks.mockGenerateText
           .mockRejectedValueOnce(
             new APICallError({
               message: 'HTTP 429',
@@ -320,7 +326,7 @@ describe('LlmClient', () => {
               statusCode: 429,
             }),
           )
-          .mockResolvedValueOnce({ object: { ok: true } });
+          .mockResolvedValueOnce({ output: { ok: true } });
 
         const promise = client.generateJson({
           schema: z.object({ ok: z.boolean() }),
@@ -329,7 +335,7 @@ describe('LlmClient', () => {
         await vi.advanceTimersByTimeAsync(5000);
 
         await expect(promise).resolves.toEqual({ ok: true });
-        expect(mocks.mockGenerateObject).toHaveBeenCalledTimes(2);
+        expect(mocks.mockGenerateText).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
       }
@@ -658,9 +664,9 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
       expect(args?.abortSignal).toBeInstanceOf(AbortSignal);
     });
 
-    it('generateJson system 传入：generateObject 收到 system', async () => {
+    it('generateJson system 传入：generateText 收到 system', async () => {
       const { client } = createClient();
-      mocks.mockGenerateObject.mockResolvedValue({ object: { ok: true } });
+      mocks.mockGenerateText.mockResolvedValue({ output: { ok: true } });
 
       await client.generateJson({
         schema: z.object({ ok: z.boolean() }),
@@ -668,13 +674,13 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         system: 'sys',
       });
 
-      const args = mocks.mockGenerateObject.mock.calls[0]?.[0] as { system?: string } | undefined;
+      const args = mocks.mockGenerateText.mock.calls[0]?.[0] as { system?: string } | undefined;
       expect(args?.system).toBe('sys');
     });
 
-    it('generateJson signal 传入：generateObject 收到 abortSignal', async () => {
+    it('generateJson signal 传入：generateText 收到 abortSignal', async () => {
       const { client } = createClient();
-      mocks.mockGenerateObject.mockResolvedValue({ object: { ok: true } });
+      mocks.mockGenerateText.mockResolvedValue({ output: { ok: true } });
       const ac = new AbortController();
 
       await client.generateJson({
@@ -683,7 +689,7 @@ describe('LlmClient 批次2 缺口补全（降级链/覆盖透传/参数展开/�
         signal: ac.signal,
       });
 
-      const args = mocks.mockGenerateObject.mock.calls[0]?.[0] as
+      const args = mocks.mockGenerateText.mock.calls[0]?.[0] as
         | { abortSignal?: AbortSignal }
         | undefined;
       expect(args?.abortSignal).toBeInstanceOf(AbortSignal);

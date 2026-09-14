@@ -7,6 +7,7 @@
 // - 浏览器模式守卫：无 window.api 时直接关闭
 // ──────────────────────────────────────────────────────────────
 
+import type { AgentQuestion } from '@code-agent/shared/renderer';
 import { X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -23,6 +24,32 @@ import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 interface AnswerState {
   readonly selectedIndexes: number[];
   readonly text: string;
+}
+
+/** 提问状态（逐字段 selector 的聚合形态） */
+interface AskState {
+  readonly sessionId: string | null;
+  readonly askId: string | null;
+  readonly questions: readonly AgentQuestion[];
+  readonly clearAsk: (sessionId?: string) => void;
+}
+
+/**
+ * 提问状态选择器（模块级提取，2026-09-11）
+ *
+ * - **逐字段 selector**：此前是「全项目唯一的整体订阅」`useAgentAskStore()`，
+ *   任何 state 变化（含未来新增字段）都会触发整个对话框重渲染。现按仓库既有模式
+ *   （如 rate-limit-banner）逐字段订阅，各字段独立比较。
+ * - 提取为模块级 hook 而非内联四条 selector：避免 AskDialog 函数体因此增长
+ *   （check-functions 棘轮只允许下降）。
+ */
+function useAskState(): AskState {
+  return {
+    sessionId: useAgentAskStore((s) => s.sessionId),
+    askId: useAgentAskStore((s) => s.askId),
+    questions: useAgentAskStore((s) => s.questions),
+    clearAsk: useAgentAskStore((s) => s.clearAsk),
+  };
 }
 
 /** 回答载荷：仅带非空字段（单选索引/自由文本二选一或并存） */
@@ -75,7 +102,8 @@ function QuestionProgressBar({
 /** Agent 提问对话框 */
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
-  const { sessionId: askSessionId, askId, questions, clearAsk } = useAgentAskStore();
+  // 逐字段 selector（见 useAskState 说明；此前为整体订阅）
+  const { sessionId: askSessionId, askId, questions, clearAsk } = useAskState();
   const [answers, setAnswers] = useState<AnswerState[]>([]);
   const [submitting, setSubmitting] = useState(false);
   // 会话归属校验：多会话并发回合时，仅渲染当前激活会话的提问（防后台回合串扰前台弹窗）

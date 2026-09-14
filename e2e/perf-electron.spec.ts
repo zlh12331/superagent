@@ -47,6 +47,8 @@ function testEnv(): Record<string, string | undefined> {
     CODE_AGENT_DEBUG_PORT: DEBUG_PORT,
     // 关窗协商豁免：E2E 无头场景跳过"运行中回合确认"模态框（防测试卡死）
     CODE_AGENT_SKIP_CLOSE_GUARD: '1',
+    // 记忆引擎预热豁免：tsx 冷启动约 14s 且 CPU 密集，会污染性能基准时序
+    CODE_AGENT_SKIP_MEMORY_PREWARM: '1',
   };
 }
 

@@ -10,6 +10,7 @@ import type { ApprovalMode } from '@code-agent/shared/renderer';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
+import { reportError } from '@/lib/error-report';
 import { unwrap } from '@/lib/ipc';
 
 const DEFAULT_MODE: ApprovalMode = 'ask';
@@ -37,8 +38,10 @@ export function useApprovalMode(): {
           setModeState(unwrap<{ mode: ApprovalMode }>(res).mode);
         }
       })
-      .catch(() => {
-        // 读取失败：保持默认（ask）
+      .catch((error: unknown) => {
+        // 读取失败：保持默认 ask（fail-safe 降级，不打扰用户）。
+        // 但仍落盘主日志——否则"读不到审批模式"这类故障在报障时零线索。
+        reportError(error, { tags: { scope: 'use-approval-mode.read' } });
       });
     return () => {
       cancelled = true;

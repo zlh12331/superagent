@@ -9,6 +9,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { isMemoryEnabled } from '../../memory-hub/memory-pref';
 import type { MemoryPort } from '../../memory-hub/types';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -34,6 +35,10 @@ export function createSaveMemoryTool(memoryPort: MemoryPort): Tool<SaveMemoryInp
     permission: 'auto',
     category: 'exec',
     execute: async (input: SaveMemoryInput, ctx: ToolContext): Promise<ToolResult> => {
+      // 用户关闭记忆功能时不接受写入（关闭语义 = 不捕获）
+      if (!isMemoryEnabled()) {
+        return { title: '记忆功能已关闭', output: '用户已在设置中关闭记忆功能，未保存该条目。' };
+      }
       const result = await memoryPort.capture({
         sessionKey: ctx.sessionId,
         userContent: `请记住（${input.kind ?? 'fact'}）：${input.content}`,

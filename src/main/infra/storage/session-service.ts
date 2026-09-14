@@ -153,9 +153,11 @@ export class SessionService {
       .all();
 
     // 3. 反序列化 content JSON（content 存储完整 ModelMessage 的 JSON 字符串）
-    const messageList: unknown[] = messageRows.map((row) => {
+    // 类型标注 ChatMessage：写入侧（appendMessage/replaceMessages）即按此序列化，
+    // 读出侧与之对称——此前标 unknown[] 会把类型洞扩散到 IPC 消费方（需断言）。
+    const messageList: ChatMessage[] = messageRows.map((row) => {
       try {
-        return JSON.parse(row.content) as unknown;
+        return JSON.parse(row.content) as ChatMessage;
       } catch (error) {
         throw new AppError(
           ErrorCode.INTERNAL_ERROR,

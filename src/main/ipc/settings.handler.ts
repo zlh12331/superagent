@@ -80,7 +80,7 @@ export function createSettingsHandlers(params: {
       return { ok: true };
     },
 
-    // 查询遥测级别：同步读取（initSentry 也用同一个函数）
+    // 查询遥测级别：同步读取（OTel 初始化也用同一个函数）
     getTelemetryLevel: async () => {
       const level = readTelemetryLevelSync();
       return { level };
@@ -88,7 +88,7 @@ export function createSettingsHandlers(params: {
 
     // 设置遥测级别：写入 JSON 文件，需重启应用生效
     setTelemetryLevel: async (input) => {
-      await writeTelemetryLevel(input.level); // 生效时机：Sentry 级别需重启；OTel 于下次启动按此级别决定是否初始化
+      await writeTelemetryLevel(input.level); // 生效时机：OTel 于下次启动按此级别决定是否初始化
       return { ok: true, level: input.level };
     },
 

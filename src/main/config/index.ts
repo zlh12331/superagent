@@ -9,10 +9,9 @@
 // - isDev / isTest / isPackaged 三个布尔派生字段（向后兼容）
 //
 // 环境特定默认值：
-// - development：logLevel=debug、Sentry tracesSampleRate=0.1、DeepSeek timeout=60s
-// - production：logLevel=info、Sentry tracesSampleRate=0.1、DeepSeek timeout=60s
-// - test：logLevel=error（减少测试噪音）、Sentry dsn='' + tracesSampleRate=0（不上报）、
-//         DeepSeek timeout=5s（测试不应等 60s 超时）
+// - development：logLevel=debug、DeepSeek timeout=60s
+// - production：logLevel=info、DeepSeek timeout=60s
+// - test：logLevel=error（减少测试噪音）、DeepSeek timeout=5s（测试不应等 60s 超时）
 //
 // 敏感数据（API Key）不存此处，由 keychain.ts 管理。
 
@@ -27,16 +26,6 @@ import { z } from 'zod';
  * - test：自动化测试（Vitest 自动设置 NODE_ENV=test）
  */
 const AppEnvSchema = z.enum(['development', 'production', 'test']);
-
-/**
- * Sentry 配置
- */
-const SentryConfigSchema = z.object({
-  /** Sentry DSN（自托管 v26.6.0，test 环境强制为空字符串不上报） */
-  dsn: z.string().default(''),
-  /** 事务采样率（0-1，test 环境强制为 0 不采样） */
-  tracesSampleRate: z.number().min(0).max(1).default(0.1),
-});
 
 /**
  * 模型供应商根地址配置（不含 /v1 后缀）
@@ -117,7 +106,7 @@ const ModelTimeoutMsSchema = z.preprocess((v) => {
  * P2-8 改造：新增 appEnv 字段作为环境真源，isDev/isTest/isPackaged 为派生字段
  *
  * isDev 包含 development 和 test 两种环境：
- * - test 环境本质是开发环境的特化（关闭 Sentry、缩短 timeout），
+ * - test 环境本质是开发环境的特化（缩短 timeout），
  *   但保留开发模式行为（devtools 可用、CSP 宽松等）
  * - 因此 isDev = (appEnv !== 'production')
  */
@@ -132,8 +121,6 @@ const AppConfigSchema = z.object({
   isPackaged: z.boolean(),
   /** 日志级别 */
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  /** Sentry 配置 */
-  sentry: SentryConfigSchema,
   /** 模型供应商根地址（ProviderRegistry 消费） */
   providers: ProviderBaseUrlSchema,
   /** 模型级总时长超时（毫秒；llm-client 兜底，test 环境 5s） */
@@ -187,10 +174,6 @@ export function loadConfig(): AppConfig {
   // - development：logLevel=debug（开发调试）
   // - production：logLevel=info（默认）
   const defaultLogLevel: 'debug' | 'info' | 'error' = isTest ? 'error' : isDev ? 'debug' : 'info';
-  // test 环境强制不上报 Sentry（避免测试错误污染线上 Sentry）
-  const defaultSentryDsn = isTest ? '' : '';
-  // test 环境强制采样率为 0
-  const defaultSentryTracesSampleRate = isTest ? 0 : 0.1;
 
   const env = process.env;
   return AppConfigSchema.parse({
@@ -199,10 +182,6 @@ export function loadConfig(): AppConfig {
     isTest,
     isPackaged,
     logLevel: env['LOG_LEVEL'] ?? defaultLogLevel,
-    sentry: {
-      dsn: env['SENTRY_DSN'] ?? defaultSentryDsn,
-      tracesSampleRate: Number(env['SENTRY_TRACES_SAMPLE_RATE'] ?? defaultSentryTracesSampleRate),
-    },
     // providers 由 schema preprocess 读取 env（DEEPSEEK_API_BASE 等），此处不重复
     providers: {},
     // test 环境缩短超时（5s），避免测试等待生产级 60s 超时

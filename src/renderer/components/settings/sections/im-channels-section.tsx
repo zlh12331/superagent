@@ -13,11 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { IM_CHANNELS_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { ImAllowlistField } from './im-allowlist-field';
-
-/** IM 渠道列表查询 key */
-const IM_CHANNELS_QUERY_KEY = ['im', 'channels'] as const;
 
 export function ImChannelsSection(): ReactElement {
   const { t } = useTranslation();

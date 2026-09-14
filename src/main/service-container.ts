@@ -29,6 +29,7 @@
 //  15.  SessionService（resetSessionService，不关 db，由 resetDb 单独处理）
 //  16.  MemoryHub.stop()            sidecar 异步收尾（fire-and-forget）
 //  17.  UpdateService.dispose()     更新事件收尾
+//  17.5 BrowserPreview.dispose()    销毁预览 WebContentsView（窗口先关则安全跳过）
 //  18.  resetAIProvider()           清理 AI Provider 缓存
 //  19.  closeDb()                   关闭 SQLite 连接（必须最后）
 //
@@ -43,8 +44,9 @@
 // - 各模块内部已处理 null 检查，本模块无需重复判空
 // - 幂等：多次调用 disposeServices 安全
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 // electron-updater 是 CJS 包：ESM 下 named import 运行时失败（cjs-module-lexer 无法静态分析），
 // 必须默认导入后解构（Node ESM 对 CJS 的 default = module.exports，可靠）
 import electronUpdater from 'electron-updater';
@@ -78,6 +80,10 @@ import type { IToolExecutor } from './infra/ai/tools/tool-executor';
 import { ToolExecutor } from './infra/ai/tools/tool-executor';
 import type { IToolRegistry } from './infra/ai/tools/tool-registry';
 import { ToolRegistry } from './infra/ai/tools/tool-registry';
+import {
+  BrowserPreviewService,
+  type IBrowserPreviewService,
+} from './infra/browser/preview-service';
 import type { ICodebaseService } from './infra/codebase/codebase-service';
 import { getCodebaseService, resetCodebaseService } from './infra/codebase/codebase-service';
 import type { IFileService } from './infra/file/file-service';
@@ -105,15 +111,22 @@ import { type IUpdateService, UpdateService } from './infra/update/update-servic
 import { clearCrashMarker, hasCrashMarker, logger } from './utils/logger';
 
 /**
- * 解析 MemoryCore（上游 TencentDB-Agent-Memory）根目录：
+ * 解析记忆引擎（上游 TencentDB-Agent-Memory · MemoryCore）根目录：
  * - 打包环境：process.resourcesPath/memory-hub（prepare-memory-hub.mjs 生成的运行目录）
- * - dev 环境：环境变量 MEMORY_HUB_ROOT（指向解压的上游源码目录）
- * 未配置时返回 undefined，由 MemoryHubService 内部降级为空实现。
+ * - dev 环境：项目内的 resources/memory-hub（`pnpm prepare:memory-hub` 产出，与生产同源）；
+ *   未生成时回退到环境变量 MEMORY_HUB_ROOT
+ * 均不可用时返回 undefined，由 MemoryHubService 内部降级为空实现。
  */
 function resolveMemoryHubRoot(): string | undefined {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'memory-hub');
   }
+  // dev：优先用项目内构建产物（与打包产物同构，避免"dev 可用 prod 不可用"的偏差）
+  const localArtifact = join(app.getAppPath(), 'resources', 'memory-hub');
+  if (existsSync(join(localArtifact, 'src', 'gateway', 'server.ts'))) {
+    return localArtifact;
+  }
+  // 逃生口：显式指定其他上游目录（测试 / 临时验证）
   return process.env['MEMORY_HUB_ROOT'];
 }
 
@@ -183,6 +196,8 @@ class ServiceContainer {
   /** 子代理管理器已初始化标记（initSubagents 幂等） */
   private subagentsInitialized = false;
   private updateService: IUpdateService | null = null;
+  /** 浏览器预览（WebContentsView 进程外预览，独立 session 分区） */
+  private browserPreviewService: IBrowserPreviewService | null = null;
 
   /**
    * 获取 FileService 实例
@@ -743,20 +758,7 @@ class ServiceContainer {
     // P1 修复：每步独立异常隔离——单个服务 dispose 抛错不再跳过后续清理，
     // 否则 PTY/ripgrep/chokidar 句柄会残留为孤儿进程（退出路径必须可靠）。
     const failures: string[] = [];
-    const runStep = async (name: string, fn: () => Promise<void> | void): Promise<void> => {
-      try {
-        await fn();
-      } catch (error) {
-        failures.push(name);
-        logger.error(
-          {
-            step: name,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          '服务清理失败（继续后续清理）',
-        );
-      }
-    };
+    const runStep = createDisposeStep(failures);
 
     // 1.8 停止定时任务调度（fire 会触发 agent 回合，必须最先停——
     //     先于桥接卸载与 AgentService drain，防半拆解容器再起新回合）
@@ -920,6 +922,13 @@ class ServiceContainer {
       this.updateService = null;
     });
 
+    // 10.6 销毁浏览器预览 WebContentsView（独立 session 分区随对象回收；
+    //      窗口先于容器 dispose 关闭时，内部按 isDestroyed 安全跳过）
+    await runStep('browserPreview.dispose', () => {
+      this.browserPreviewService?.dispose();
+      this.browserPreviewService = null;
+    });
+
     // 11. 清理 AI Provider 缓存（DeepSeek provider 无连接池，仅清空引用让 GC 回收）
     await runStep('resetAIProvider', () => {
       resetAIProvider();
@@ -948,6 +957,22 @@ class ServiceContainer {
       this.updateService = new UpdateService(autoUpdater, () => app.isPackaged);
     }
     return this.updateService;
+  }
+
+  /**
+   * 获取浏览器预览服务实例
+   *
+   * 首次调用延迟初始化：视图在渲染层推送视口/导航时才真正创建（懒加载）。
+   * 窗口来源走 BrowserWindow.getAllWindows（单窗口应用取首个存活窗口），
+   * 与 UpdateService 的事件广播模式一致，避免容器持有窗口引用。
+   */
+  getBrowserPreviewService(): IBrowserPreviewService {
+    if (this.browserPreviewService === null) {
+      this.browserPreviewService = new BrowserPreviewService({
+        getWindow: () => BrowserWindow.getAllWindows().find((win) => !win.isDestroyed()) ?? null,
+      });
+    }
+    return this.browserPreviewService;
   }
 
   /**
@@ -1013,6 +1038,8 @@ class ServiceContainer {
     this.sessionService = null;
     this.promptService = null;
     this.updateService = null;
+    this.browserPreviewService?.dispose();
+    this.browserPreviewService = null;
     resetAIProvider();
     // 关闭并重置 SQLite 连接（必须最后调用，避免 SessionService 后续访问已关闭的 db）
     resetDb();
@@ -1022,6 +1049,30 @@ class ServiceContainer {
 
 /** 应用级单例 ServiceContainer */
 export const serviceContainer = new ServiceContainer();
+
+/**
+ * 构造 dispose 步骤执行器（独立异常隔离：单服务清理失败不阻断后续清理）
+ *
+ * 失败步骤名记录进 failures（dispose 末尾统一汇报），错误经 logger 落盘。
+ */
+function createDisposeStep(
+  failures: string[],
+): (name: string, fn: () => Promise<void> | void) => Promise<void> {
+  return async (name, fn) => {
+    try {
+      await fn();
+    } catch (error) {
+      failures.push(name);
+      logger.error(
+        {
+          step: name,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        '服务清理失败（继续后续清理）',
+      );
+    }
+  };
+}
 
 /**
  * 启动时加载运行时模型（自定义模型注册到 ModelRegistry）

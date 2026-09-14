@@ -3,11 +3,13 @@
 // ──────────────────────────────────────────────────────────────
 // 背景：渲染层标准设施（unwrap/confirm() store/useCopy/AsyncSection）已建成，
 // 但存量采用率停在中位——本门禁用静态信号阻止「离群写法回潮」。
-// 可程序化检测的结构信号（规则 1-4）：
+// 可程序化检测的结构信号（规则 1-5）：
 //   1. 数组索引直接作 React key（key={index}/key={i}/key={idx}）
 //   2. join(' ') 手工拼接 className（条件类应统一走 cn()）
 //   3. 手写 'data' in 判别解包 IPC 响应（应统一 unwrap()）
 //   4. components/** 内裸 <button>（应用 ui/button 的 Button，icon 钮用 size="icon"）
+//   5. 渲染层 try/finally 语句（React Compiler 不优化，触发组件级 bail-out）
+//   6. 内联 queryKey 字面量（应引用命名常量：域 hook 内 export 或 lib/query/keys.ts）
 // 级别：全部 error（卡关），存量计数走棘轮基线（只允许下降）。
 // 基线：scripts/ui-consistency-baseline.json（--update-baseline 重写）
 //
@@ -73,6 +75,29 @@ const RULES: readonly Rule[] = [
     pattern: /<button\b/,
     fileFilter: (relFile) =>
       relFile.startsWith(join('components')) && !relFile.startsWith(join('components', 'ui')),
+  },
+  {
+    id: 'try-finally',
+    // React Compiler 对含 try/finally 的函数**静默跳过**（bail-out），该组件失去自动
+    // 记忆化——而 pnpm check:compiler 只断言产物含 compiler-runtime（整体生效），
+    // 抓不到单个组件的 bail-out。故在此以静态信号兜住回归（2026-09-11）：
+    // 曾有 3 处漏网（ChatInput/about-section×2），此前的「已清零」无机制守护。
+    // 修法：去掉 finally，改为 catch 之后统一复位（见 hooks/use-file-tree-ops.ts 既有模式）。
+    desc: 'try/finally 语句（React Compiler 不优化，触发组件级 bail-out）——改为 catch 过后统一复位',
+    // 只匹配语句形式 `} finally {`（Biome 固定此格式）；不匹配 Promise 的
+    // `.finally(() => {`（那是合法用法，如 settings-store 的落库静默处理）
+    pattern: /\}\s*finally\s*\{/,
+  },
+  {
+    id: 'inline-query-key',
+    // 规范：queryKey 必须是命名常量——域 hook（hooks/use-*.ts）内 export，或集中在
+    // lib/query/keys.ts。禁止 `queryKey: ['a','b']` 这类内联字面量：
+    // 内联使**失效点与查询点失去共享引用**，key 形状一变就静默失配（缓存不刷新且无报错）。
+    // 2026-09-11 收敛：此前 8 处内联 + 若干文件私有常量。
+    // 豁免：lib/query/keys.ts 自身（它就是常量的定义处）。
+    desc: '内联 queryKey 字面量（应引用命名常量：域 hook 内 export 或 lib/query/keys.ts）',
+    pattern: /queryKey:\s*\[/,
+    fileFilter: (relFile) => relFile !== join('lib', 'query', 'keys.ts'),
   },
 ];
 
@@ -143,6 +168,12 @@ for (const full of files) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (line === undefined || !rule.pattern.test(line)) {
+        continue;
+      }
+      // 跳过纯注释行：注释里的用法示例/反例说明不构成实际代码信号
+      // （如 use-git.ts 顶部 `// - queryKey: ['git','status',path] - …` 的文档注释）
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
         continue;
       }
       // 上一行含 noArrayIndexKey biome-ignore 的豁免（与 Biome 同步：

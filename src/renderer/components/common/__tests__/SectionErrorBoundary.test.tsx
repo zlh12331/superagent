@@ -5,7 +5,7 @@
 // 1. 子组件正常渲染
 // 2. 子组件抛错 → 显示内联 fallback（不拖垮外层）
 // 3. 点击重试 → 恢复渲染
-// 4. 错误上报 Sentry（captureException 被调用）
+// 4. 错误上报统一出口（reportError 被调用）
 // ──────────────────────────────────────────────────────────────
 
 import { render, screen } from '@testing-library/react';
@@ -13,13 +13,12 @@ import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-// mock Sentry（避免真实上报）
-const mockCapture = vi.hoisted(() => vi.fn());
-vi.mock('@sentry/electron/renderer', () => ({
-  captureException: mockCapture,
+// mock 错误上报出口（避免真实落盘；断言上报被调用）
+const { mockReportError } = vi.hoisted(() => ({ mockReportError: vi.fn() }));
+vi.mock('@/lib/error-report', () => ({
+  reportError: mockReportError,
 }));
 
-import * as Sentry from '@sentry/electron/renderer';
 import { SectionErrorBoundary } from '../SectionErrorBoundary';
 
 /** 抛错子组件：首次渲染抛错，重试后（props.attempt > 0）正常渲染 */
@@ -49,9 +48,16 @@ describe('SectionErrorBoundary', () => {
     expect(screen.getByTestId('section-error-boundary')).toBeTruthy();
     expect(screen.getByText('区块加载失败，请重试')).toBeTruthy();
     expect(screen.getByText('boom')).toBeTruthy();
-    // 错误上报 Sentry（带 section tag）
-    expect(mockCapture).toHaveBeenCalled();
-    expect(Sentry.captureException).toHaveBeenCalled();
+    // 错误上报统一出口（带 section tag）
+    expect(mockReportError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({
+          boundary: 'SectionErrorBoundary',
+          section: 'test-section',
+        }),
+      }),
+    );
   });
 
   it('点击重试：resetErrorBoundary 重新渲染子树并恢复', async () => {

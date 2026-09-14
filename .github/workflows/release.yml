@@ -17,7 +17,6 @@
 #   任一方构建失败则无 tag 无 release，版本号不占号、可重试。
 #
 # 所需 Secrets：
-# - SENTRY_AUTH_TOKEN：Sentry CLI 认证 token
 # - 代码签名（可选）：CSC_LINK + CSC_KEY_PASSWORD（Windows/macOS 签名；无证书时自动跳过签名）
 
 name: Release
@@ -102,11 +101,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
-    env:
-      # P5 修复：Sentry token 提升到 job 级 env——步骤级 env 对自身 if 不可见
-      # （GitHub Actions 在 if 求值时尚未注入步骤 env），此前 if 恒为 false、
-      # 符号上传从未执行。job 级 env 可被后续步骤的 if 正常读取。
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
     strategy:
       fail-fast: false
@@ -195,49 +189,58 @@ jobs:
         # 修法：secret 先进中间变量 ORIG_CSC_*（空串无意义），bash 中仅当非空才
         # 导出真实的 CSC_LINK/CSC_KEY_PASSWORD——没有证书时 electron-builder 进程
         # 环境里 CSC_LINK **彻底不存在**（而非空串），配合关闭身份自发现 → 干净跳过签名。
+        #
+        # 公证（notarize）凭据同理：electron-builder 的 getNotarizeOptions 按
+        # APPLE_* 环境变量判定，未配置则 warn 跳过（不会失败）。这里只在整套凭据
+        # 齐备时导出，避免"配了一半"触发 InvalidConfigurationError。
+        # 优先 App Store Connect API Key（APPLE_API_* 三件套）；未配置则回退
+        # Apple ID 模式（APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID）。
         shell: bash
         env:
           ORIG_CSC_LINK: ${{ secrets.CSC_LINK }}
           ORIG_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          ORIG_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          ORIG_APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ORIG_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          ORIG_APPLE_ID: ${{ secrets.APPLE_ID }}
+          ORIG_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          ORIG_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # electron-builder 自动发布控制（手动上传，故不自动 publish）
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # C1 修复：与 ci.yml 对齐——CI checkout 无记忆引擎上游（resources/memory-hub
-          # 不入仓），不设此变量 prepare-memory-hub 会 exit(1) 中断 && 链，三平台全部失败
-          MEMORY_HUB_OPTIONAL: '1'
         run: |
           if [ -n "${ORIG_CSC_LINK:-}" ]; then
             export CSC_LINK="$ORIG_CSC_LINK"
             export CSC_KEY_PASSWORD="$ORIG_CSC_KEY_PASSWORD"
+          fi
+          # 公证凭据：三件套齐备才导出（缺一则整套不导出 → 干净跳过公证）
+          if [ -n "${ORIG_APPLE_API_KEY:-}" ] && [ -n "${ORIG_APPLE_API_KEY_ID:-}" ] && [ -n "${ORIG_APPLE_API_ISSUER:-}" ]; then
+            export APPLE_API_KEY="$ORIG_APPLE_API_KEY"
+            export APPLE_API_KEY_ID="$ORIG_APPLE_API_KEY_ID"
+            export APPLE_API_ISSUER="$ORIG_APPLE_API_ISSUER"
+            echo "公证：使用 App Store Connect API Key"
+          elif [ -n "${ORIG_APPLE_ID:-}" ] && [ -n "${ORIG_APPLE_APP_SPECIFIC_PASSWORD:-}" ] && [ -n "${ORIG_APPLE_TEAM_ID:-}" ]; then
+            export APPLE_ID="$ORIG_APPLE_ID"
+            export APPLE_APP_SPECIFIC_PASSWORD="$ORIG_APPLE_APP_SPECIFIC_PASSWORD"
+            export APPLE_TEAM_ID="$ORIG_APPLE_TEAM_ID"
+            echo "公证：使用 Apple ID 模式"
+          else
+            echo "公证：未配置凭据，跳过（electron-builder 会 warn）"
           fi
           export CSC_IDENTITY_AUTO_DISCOVERY=false
           ${{ matrix.build-cmd }}
 
       # 更新源已切 provider: github（electron-builder.yml publish），
       # 占位 feed guard 随之移除；GitHub Release 资产即更新源。
-      # ── 上传 Sentry 符号（仅 Windows 主发布端；其余平台产物不含符号需求）─
-      # P5 修复：
-      # - 步骤 if 改用 job 级 env（此前步骤级 env 对自身 if 不可见，恒跳过）
-      # - 明确只放行 Windows leg（此前注释如此宣称但条件未限制平台）
-      # - 上传前先创建 release（此前 CI 从未调用 release:new，上传会 404）
-      # C3 修复：release 名剥 tag 的 v 前缀（code-agent@1.0.0），与运行时
-      # app.getVersion() 及本地 sentry-release.mjs 对齐——Sentry release 是精确
-      # 字符串匹配，此前 tag 带 v 而运行时无 v，符号化永远不命中
-      - name: Compute Sentry release name
-        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        shell: bash
-        run: echo "SENTRY_RELEASE=code-agent@${{ needs.gate.outputs.version }}" >> "$GITHUB_ENV"
+      # 注：Sentry 符号上传步骤已于 2026-09-13 随 Sentry 移除整体删除
+      # （本地优先错误处理，报障走 GitHub issue + 诊断包，见 error-report.ts）。
 
-      - name: Create Sentry release
-        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        run: pnpm sentry-cli releases new "$SENTRY_RELEASE"
-
-      - name: Upload Sentry symbols
-        if: env.SENTRY_AUTH_TOKEN != '' && matrix.platform == 'Windows'
-        run: |
-          pnpm sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" --org sentry --project electron --url-prefix "app:///out/" ./out
-          pnpm sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" --org sentry --project electron --url-prefix "app:///renderer/" ./out/renderer
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      # ── 安装包引擎断言（防"发布缺引擎的包"事故复发）──────────────
+      # 2026-09-12 事故：引擎源码未入仓 → CI 生成占位目录并 exit 0 → 打包"成功"
+      # 但产物不含引擎（运行时静默降级），而 README 承诺了该功能。
+      # 本步在打包后校验最终产物内的 resources/memory-hub 真有可运行引擎
+      # （入口 + node_modules + 无占位标记 + 关键依赖），缺任一即失败。
+      - name: Verify packaged memory engine
+        run: pnpm check:packaged-engine
 
       # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
       # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动

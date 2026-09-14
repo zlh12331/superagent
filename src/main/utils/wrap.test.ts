@@ -6,16 +6,15 @@ import { z } from 'zod';
 
 // Vitest 4 的 vi.mock 会被 hoist，工厂函数内不能引用外部 const
 // 必须用 vi.hoisted 导出 mock 对象
-const { mockFromWebContents, mockIpcMainHandle } = vi.hoisted(() => ({
+const { mockFromWebContents, mockIpcMainHandle, mockReportError } = vi.hoisted(() => ({
   mockFromWebContents: vi.fn(),
   mockIpcMainHandle: vi.fn(),
+  mockReportError: vi.fn(),
 }));
 
-// mock @sentry/electron/main（避免真实上报）
-vi.mock('@sentry/electron/main', () => ({
-  captureException: vi.fn(),
-  // L4 修复后 wrap.ts 调用 Sentry.flush(2000)，mock 需提供该方法
-  flush: vi.fn().mockResolvedValue(true),
+// mock 错误上报统一出口（避免真实落盘；断言上报被调用）
+vi.mock('./error-report', () => ({
+  reportError: mockReportError,
 }));
 
 // mock electron：仅暴露 wrap 依赖的 ipcMain.handle 与 BrowserWindow.fromWebContents
@@ -40,7 +39,6 @@ vi.mock('./logger', () => ({
 }));
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import * as Sentry from '@sentry/electron/main';
 import { ipcMain } from 'electron';
 import { wrap } from './wrap';
 
@@ -158,7 +156,7 @@ describe('wrap', () => {
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
     expect(error.code).toBe(ErrorCode.NOT_FOUND);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(mockReportError).toHaveBeenCalled();
   });
 
   it('handler 抛出普通 Error 包装为 INTERNAL_ERROR', async () => {
@@ -177,7 +175,7 @@ describe('wrap', () => {
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
     expect(error.code).toBe(ErrorCode.INTERNAL_ERROR);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(mockReportError).toHaveBeenCalled();
   });
 
   it('无 traceId 时自动生成', async () => {
@@ -234,6 +232,53 @@ describe('wrap', () => {
     expect(result).toHaveProperty('error');
     const error = (result as { error: { code: string } }).error;
     expect(error.code).toBe(ErrorCode.INVALID_RESPONSE);
+  });
+
+  it('P0 收口：schema 未声明字段被 strip（边界生效，不只检查）', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    // 模拟 mcp:list 场景：handler 返回含 headers/env 的 config，
+    // resSchema 只声明 name——未声明字段必须被裁剪，不得原样过界。
+    // 头部键经 Object.fromEntries 构造（真实 HTTP 头是 Pascal 形态，
+    // 字面量会被 useNamingConvention 拦截，语义不变）
+    const resSchema = z.object({
+      config: z.object({ name: z.string() }),
+    });
+    const handler = vi.fn().mockResolvedValue({
+      config: {
+        name: 'fs',
+        headers: Object.fromEntries([['Authorization', 'Bearer secret']]),
+        env: Object.fromEntries([['KEY', 'v']]),
+      },
+    });
+
+    wrap('test:channel', null, handler, resSchema);
+
+    const registeredHandler = getRegisteredHandler();
+    const result = (await registeredHandler({ sender: allowedSender }, undefined, undefined)) as {
+      data: { config: Record<string, unknown> };
+    };
+
+    expect(result.data.config).toEqual({ name: 'fs' });
+    expect(result.data.config).not.toHaveProperty('headers');
+    expect(result.data.config).not.toHaveProperty('env');
+  });
+
+  it('无 resSchema 时 handler 返回原样透传（不引入裁剪行为）', async () => {
+    const mockWin = { id: 1 };
+    mockFromWebContents.mockReturnValue(mockWin);
+
+    const handler = vi.fn().mockResolvedValue({ anything: true, extra: [1, 2] });
+
+    wrap('test:channel', null, handler);
+
+    const registeredHandler = getRegisteredHandler();
+    const result = (await registeredHandler({ sender: allowedSender }, undefined, undefined)) as {
+      data: unknown;
+    };
+
+    expect(result.data).toEqual({ anything: true, extra: [1, 2] });
   });
 
   // ── P2 加固回归：traceId 形状 / sender 白名单 / null-schema 严格分支 ──

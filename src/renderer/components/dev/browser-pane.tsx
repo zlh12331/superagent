@@ -1,26 +1,33 @@
 // src/renderer/components/dev/browser-pane.tsx
-// 浏览器预览 pane（对齐原型 crpPaneBrowser + 参考项目 BrowserPane）
+// 浏览器预览 pane（右面板「浏览器」tab，WebContentsView 进程外预览）
 // ──────────────────────────────────────────────────────────────
-// 职责：
-// - 地址栏 + 后退/前进/刷新导航（iframe 真实加载）
-// - 设备预设切换（responsive/desktop/laptop/tablet/mobile，缩放预览）
-// - 空状态：未加载 URL 时提示输入地址
-//
-// 数据来源：纯前端 iframe（无后端依赖）；跨域页面仅展示页面本身，
-// 无法注入内容（诚实边界：不做远程调试/CDP 注入）。
-// 设置消费（设置 → 浏览器）：默认设备预设/默认缩放为挂载初值（工具栏内临时
-// 改动不写回设置），严格沙箱开关实时决定 iframe 是否放行 allow-scripts。
+// v1 用渲染层 iframe 加载外站，被主进程 defaultSession 统一注入的安全头三层
+// 拦截（CSP 无 frame-src 回退 default-src 'self' + X-Frame-Options 注入到远端
+// 响应本身 + 注入的 CSP 污染远端文档），生产环境加载不了任何真实网页。
+// v2 重写（2026-09-12）：页面在主进程 WebContentsView（独立内存 session 分区）
+// 加载（src/main/infra/browser/preview-service.ts），本组件只保留工具栏：
+// - 占位区 div 由 use-browser-viewport 测量后推送主进程对齐视图位置
+// - 地址/加载中/历史能力来自 browser:getState 初值 + browser:event:state 推送
+// - 主框架加载失败走 browser:event:loadFailed → toast（占位区内的渲染层
+//   UI 会被原生视图盖住，错误反馈必须放在占位区之外）
+// 设置消费（设置 → 浏览器）：预设/缩放为挂载初值（工具栏内临时改动不写回），
+// 严格沙箱经 browser:configure 生效（禁用预览页 JS，切换时重建视图）。
 // ──────────────────────────────────────────────────────────────
 
-import { ArrowLeft, ArrowRight, Link2, MonitorSmartphone, RotateCw, X } from 'lucide-react';
-import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from 'react';
+import type { BrowserLoadFailedPayload, BrowserState } from '@code-agent/shared/renderer';
+import { ArrowLeft, ArrowRight, Link2, MonitorSmartphone, RotateCw } from 'lucide-react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
-import { type BrowserDevicePreset, useSettingsStore } from '@/stores/persistent/settings-store';
+import type { BrowserDevicePreset, BrowserZoom } from '@/stores/persistent/settings-store';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { DeviceBar } from './browser-device-bar';
+import { useBrowserViewport } from './use-browser-viewport';
 
-// 色彩架构：text-primary 仅限按钮实底前景（白字场景）；彩色文本一律 text-accent-text（AA 安全层）
 /** 设备预设类型（真源在 settings-store，浏览器 pane 与设置面板共用） */
 type DevicePreset = BrowserDevicePreset;
 
@@ -32,15 +39,6 @@ const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number }>
   tablet: { width: 768, height: 1024 },
   mobile: { width: 375, height: 667 },
 };
-
-/**
- * iframe 沙箱策略（设置项「严格沙箱」切换）
- *
- * 不放行 allow-scripts 时，外站预览页的脚本一律不执行：静态骨架仍能渲染，
- * 但远端代码无法在应用内跳转、采集指纹或改写表单。
- */
-const IFRAME_SANDBOX_PERMISSIVE = 'allow-scripts allow-same-origin allow-forms allow-popups';
-const IFRAME_SANDBOX_STRICT = 'allow-same-origin allow-forms allow-popups';
 
 /** 工具栏按钮基础样式 */
 const TOOLBAR_BTN_CLASS =
@@ -54,22 +52,29 @@ function normalizeUrl(raw: string): string {
   return `https://${trimmed}`;
 }
 
+/** 预览状态初值（主进程 getState 在视图创建前的返回与此一致） */
+const INITIAL_STATE: BrowserState = {
+  url: null,
+  title: null,
+  isLoading: false,
+  canGoBack: false,
+  canGoForward: false,
+};
+
 /**
  * 浏览器预览 pane
  */
 export function BrowserPane(): ReactElement {
   const { t } = useTranslation();
-  // 设置分组：预设/缩放是挂载初值（工具栏内临时改不写回），沙箱策略实时生效
+  const { getErrorMessage } = useErrorMessage();
+  // 设置分组：预设/缩放是挂载初值（工具栏内临时改不写回），严格沙箱实时生效
   const browserSettings = useSettingsStore((s) => s.browser);
-  // URL 输入框当前值
+  // 预览状态（组件独享：getState 初值 + browser:event:state 推送，不入全局 store）
+  const [state, setState] = useState<BrowserState>(INITIAL_STATE);
+  // 主框架加载失败（经 browser:event:loadFailed 推送，toast 反馈）
+  const [loadError, setLoadError] = useState<BrowserLoadFailedPayload | null>(null);
+  // URL 输入框当前值（跟随页面导航更新）
   const [urlInput, setUrlInput] = useState('');
-  // 已加载的 URL（null = 未加载，显示空状态）
-  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
-  // 浏览历史栈与指针
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  // 加载状态（iframe onLoad 结束）
-  const [loading, setLoading] = useState(false);
   // 设备工具栏可见性
   const [showDeviceBar, setShowDeviceBar] = useState(false);
   // 设备预设与宽高
@@ -82,71 +87,100 @@ export function BrowserPane(): ReactElement {
   const [deviceHeight, setDeviceHeight] = useState(
     DEVICE_DIMENSIONS[browserSettings.defaultDevicePreset].height,
   );
-  const [deviceZoom, setDeviceZoom] = useState<number>(browserSettings.defaultZoom);
-  // 刷新用的 timer 句柄（卸载时清理）
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deviceZoom, setDeviceZoom] = useState<BrowserZoom>(browserSettings.defaultZoom);
+  // 占位区 ref（use-browser-viewport 测量后推送主进程）
+  const hostRef = useRef<HTMLDivElement>(null);
 
+  useBrowserViewport({
+    hostRef,
+    preset: devicePreset,
+    deviceWidth,
+    deviceHeight,
+    zoom: deviceZoom,
+    active: state.url !== null,
+    strictSandbox: browserSettings.strictSandbox,
+  });
+
+  // 挂载：拉状态初值 + 订阅推送（组件独享状态，卸载即弃）
+  // 竞态守卫：getState IPC 在途时事件可能先到——事件一旦到达，迟到的
+  // getState 快照视为陈旧值丢弃（否则 UI 会被旧状态回退）
+  const receivedEventRef = useRef(false);
   useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current !== null) {
-        clearTimeout(refreshTimerRef.current);
+    let active = true;
+    void window.api.browser
+      .getState()
+      .then((res) => {
+        if (active && !receivedEventRef.current) setState(unwrap(res));
+      })
+      .catch(() => {});
+    const unsubscribeState = window.api.browser.subscribeState((payload) => {
+      receivedEventRef.current = true;
+      setState(payload);
+      // 新一次加载开始时清除上一次的失败状态
+      if (payload.isLoading) {
+        setLoadError(null);
       }
+    });
+    const unsubscribeLoadFailed = window.api.browser.subscribeLoadFailed((payload) => {
+      setLoadError(payload);
+    });
+    return () => {
+      active = false;
+      unsubscribeState();
+      unsubscribeLoadFailed();
     };
   }, []);
 
-  /** 加载指定 URL，更新历史栈 */
+  // 主框架加载失败 → toast（错误 UI 必须在占位区之外，否则被原生视图盖住）
+  useEffect(() => {
+    if (loadError === null) return;
+    toast.error(t('panel.browserLoadFailed'), {
+      description: `${loadError.errorCode}: ${loadError.errorDescription}`,
+    });
+  }, [loadError, t]);
+
+  // 地址栏跟随页面导航（用户输入中仅在导航事件时被覆盖，与真实浏览器一致）
+  useEffect(() => {
+    if (state.url !== null) {
+      setUrlInput(state.url);
+    }
+  }, [state.url]);
+
+  /** 加载指定 URL（规范化补协议；结果状态经事件推送回流） */
   const navigateTo = (raw: string): void => {
     const normalized = normalizeUrl(raw);
     if (normalized === '') return;
     setUrlInput(normalized);
-    setLoadedUrl(normalized);
-    setLoading(true);
-    const newHistory = [...history.slice(0, historyIndex + 1), normalized];
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  };
-
-  /** iframe 加载完成：结束加载状态 */
-  const handleIframeLoad = (): void => {
-    setLoading(false);
+    void window.api.browser
+      .navigate({ url: normalized })
+      .then(unwrap)
+      .catch((error: Error) => {
+        toast.error(unwrapErrorMessage(error, getErrorMessage));
+      });
   };
 
   /** 后退 */
   const goBack = (): void => {
-    if (historyIndex <= 0) return;
-    const target = history[historyIndex - 1];
-    if (target !== undefined) {
-      setHistoryIndex(historyIndex - 1);
-      setUrlInput(target);
-      setLoadedUrl(target);
-      setLoading(true);
-    }
+    void window.api.browser
+      .back()
+      .then(unwrap)
+      .catch(() => {});
   };
 
   /** 前进 */
   const goForward = (): void => {
-    if (historyIndex >= history.length - 1) return;
-    const target = history[historyIndex + 1];
-    if (target !== undefined) {
-      setHistoryIndex(historyIndex + 1);
-      setUrlInput(target);
-      setLoadedUrl(target);
-      setLoading(true);
-    }
+    void window.api.browser
+      .forward()
+      .then(unwrap)
+      .catch(() => {});
   };
 
-  /** 刷新：重新挂载 iframe（key 变化强制重载） */
-  const refresh = (): void => {
-    if (loadedUrl === null) return;
-    setLoading(true);
-    setLoadedUrl(null);
-    if (refreshTimerRef.current !== null) {
-      clearTimeout(refreshTimerRef.current);
-    }
-    refreshTimerRef.current = setTimeout(() => {
-      setLoadedUrl(urlInput);
-      refreshTimerRef.current = null;
-    }, 100);
+  /** 刷新 */
+  const reload = (): void => {
+    void window.api.browser
+      .reload()
+      .then(unwrap)
+      .catch(() => {});
   };
 
   /** 切换设备预设 */
@@ -159,17 +193,6 @@ export function BrowserPane(): ReactElement {
     }
   };
 
-  // iframe 容器样式：非 responsive 预设时应用固定宽高与缩放
-  const iframeWrapperStyle: CSSProperties =
-    devicePreset === 'responsive'
-      ? {}
-      : {
-          width: deviceWidth,
-          height: deviceHeight,
-          transform: `scale(${deviceZoom / 100})`,
-          transformOrigin: 'top left',
-        };
-
   return (
     <div className="flex h-full flex-col">
       {/* 工具栏：导航 + 地址栏 + 设备按钮 */}
@@ -180,7 +203,7 @@ export function BrowserPane(): ReactElement {
           title={t('panel.browserBack')}
           aria-label={t('panel.browserBack')}
           onClick={goBack}
-          disabled={historyIndex <= 0}
+          disabled={!state.canGoBack}
           className={TOOLBAR_BTN_CLASS}
         >
           <ArrowLeft className="size-3.5" strokeWidth={1.5} />
@@ -191,7 +214,7 @@ export function BrowserPane(): ReactElement {
           title={t('panel.browserForward')}
           aria-label={t('panel.browserForward')}
           onClick={goForward}
-          disabled={historyIndex >= history.length - 1}
+          disabled={!state.canGoForward}
           className={TOOLBAR_BTN_CLASS}
         >
           <ArrowRight className="size-3.5" strokeWidth={1.5} />
@@ -201,8 +224,8 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserRefresh')}
           aria-label={t('panel.browserRefresh')}
-          onClick={refresh}
-          disabled={loadedUrl === null}
+          onClick={reload}
+          disabled={state.url === null}
           className={TOOLBAR_BTN_CLASS}
         >
           <RotateCw className="size-3.5" strokeWidth={1.5} />
@@ -238,101 +261,40 @@ export function BrowserPane(): ReactElement {
         </Button>
       </div>
 
-      {/* 设备工具栏（可切换显示） */}
+      {/* 设备工具栏（可切换显示；受控组件，状态在本 pane） */}
       {showDeviceBar && (
-        <div className="border-border bg-muted/30 flex h-7 shrink-0 items-center gap-1.5 border-b px-2">
-          <select
-            value={devicePreset}
-            onChange={(e) => handlePresetChange(e.target.value as DevicePreset)}
-            aria-label={t('panel.browserDevicePreset')}
-            className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1.5 text-xs focus:border-primary"
-          >
-            <option value="responsive">{t('panel.browserDeviceResponsive')}</option>
-            <option value="desktop">{t('panel.browserDeviceDesktop')}</option>
-            <option value="laptop">{t('panel.browserDeviceLaptop')}</option>
-            <option value="tablet">{t('panel.browserDeviceTablet')}</option>
-            <option value="mobile">{t('panel.browserDeviceMobile')}</option>
-          </select>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <input
-              type="number"
-              value={deviceWidth}
-              onChange={(e) => setDeviceWidth(Number(e.target.value))}
-              min={200}
-              max={3000}
-              disabled={devicePreset === 'responsive'}
-              aria-label={t('panel.browserDeviceWidth')}
-              className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-xs disabled:opacity-40"
-            />
-            <span className="text-muted-foreground px-0.5 font-mono text-xs">×</span>
-            <input
-              type="number"
-              value={deviceHeight}
-              onChange={(e) => setDeviceHeight(Number(e.target.value))}
-              min={200}
-              max={3000}
-              disabled={devicePreset === 'responsive'}
-              aria-label={t('panel.browserDeviceHeight')}
-              className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-xs disabled:opacity-40"
-            />
-          </div>
-          <select
-            value={deviceZoom}
-            onChange={(e) => setDeviceZoom(Number(e.target.value))}
-            aria-label={t('panel.browserZoom')}
-            className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1 text-xs"
-          >
-            <option value={50}>50%</option>
-            <option value={75}>75%</option>
-            <option value={100}>100%</option>
-            <option value={125}>125%</option>
-            <option value={150}>150%</option>
-            <option value={200}>200%</option>
-          </select>
-          <Button
-            variant="ghost"
-            size="icon"
-            title={t('panel.browserCloseDeviceBar')}
-            aria-label={t('panel.browserCloseDeviceBar')}
-            onClick={() => setShowDeviceBar(false)}
-            className={cn(TOOLBAR_BTN_CLASS, 'ml-auto shrink-0')}
-          >
-            <X className="size-3" strokeWidth={1.5} />
-          </Button>
-        </div>
+        <DeviceBar
+          devicePreset={devicePreset}
+          deviceWidth={deviceWidth}
+          deviceHeight={deviceHeight}
+          deviceZoom={deviceZoom}
+          onPresetChange={handlePresetChange}
+          onWidthChange={setDeviceWidth}
+          onHeightChange={setDeviceHeight}
+          onZoomChange={setDeviceZoom}
+          onClose={() => setShowDeviceBar(false)}
+        />
       )}
 
-      {/* 内容区：加载进度条 + 空状态 / iframe 预览 */}
+      {/* 加载进度条：位于占位区之外（占位区内的渲染层 UI 会被原生视图盖住） */}
+      {state.isLoading && (
+        <div className="bg-primary h-0.5 shrink-0 origin-left animate-[br-loading-bar_1.5s_ease-in-out_infinite]" />
+      )}
+
+      {/* 内容区：原生视图占位区 + 空状态（无 URL 时视图隐藏，渲染层可见） */}
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
-        {loading && (
-          <div className="bg-primary absolute right-0 top-0 left-0 z-surface h-0.5 origin-left animate-[br-loading-bar_1.5s_ease-in-out_infinite]" />
-        )}
-        {loadedUrl === null && (
+        {state.url === null && !state.isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <Link2 className="text-muted-foreground/30 size-10" strokeWidth={1.5} />
             <p className="text-muted-foreground text-xs">{t('panel.browserEmpty')}</p>
           </div>
         )}
-        {loadedUrl !== null && (
-          <div className="absolute inset-0 overflow-auto" style={iframeWrapperStyle}>
-            {/* iframe 导航中遮罩：暗色主题下避免白底内容首帧闪屏 */}
-            {loading && loadedUrl !== null && (
-              <div className="bg-bg-elev absolute inset-0 z-surface flex items-center justify-center">
-                <Spinner className="text-muted-foreground size-5" />
-              </div>
-            )}
-            <iframe
-              key={`${loadedUrl}:${browserSettings.strictSandbox ? 'strict' : 'permissive'}`}
-              src={loadedUrl}
-              title={t('panel.browserPreview')}
-              onLoad={handleIframeLoad}
-              className="h-full w-full border-none bg-white"
-              sandbox={
-                browserSettings.strictSandbox ? IFRAME_SANDBOX_STRICT : IFRAME_SANDBOX_PERMISSIVE
-              }
-            />
+        {state.isLoading && state.url === null && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Spinner className="text-muted-foreground size-5" />
           </div>
         )}
+        <div ref={hostRef} className="absolute inset-0" />
       </div>
     </div>
   );
