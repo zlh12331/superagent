@@ -20,6 +20,36 @@ import { join } from 'node:path';
 
 import { THEME_FIRST_PAINT_KEY } from '../src/renderer/lib/theme-init';
 
+/**
+ * 剥离 HTML 注释（按 `<!--` / `-->` 分段取非注释部分）
+ *
+ * 不用正则 replace 删除：那属于「多字符序列净化」——删掉一段后两侧残余字符可能
+ * 重新拼出 `<!--`，静态分析据此报不完整净化（CodeQL
+ * js/incomplete-multi-character-sanitization，实测循环收敛的写法仍被报，属该规则的
+ * 模式匹配局限）。改用 indexOf 游标单遍扫描，语义是「跳过注释区间」，不存在重组，
+ * 且无正则回溯。
+ *
+ * 未闭合的 `<!--` 按 HTML 语义吞掉其后全部内容——此时首帧脚本提取会失败并卡关，
+ * 正是期望行为（注释里的假 script 不该被当成真脚本）。
+ */
+function stripHtmlComments(input: string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  for (;;) {
+    const open = input.indexOf('<!--', cursor);
+    if (open === -1) {
+      parts.push(input.slice(cursor));
+      return parts.join('');
+    }
+    parts.push(input.slice(cursor, open));
+    const close = input.indexOf('-->', open + 4);
+    if (close === -1) {
+      return parts.join('');
+    }
+    cursor = close + 3;
+  }
+}
+
 function main(): void {
   const root = process.cwd();
   let html: string;
@@ -36,9 +66,7 @@ function main(): void {
   //    锚定 <head> 并先剥离 HTML 注释：裸 <script> 的正则是惰性匹配（第一个开标签到最近的
   //    闭标签），但不锚定位置——若注释里出现裸 <script>（如注释掉旧版主题脚本），会误提旧
   //    脚本算出旧 hash，旧 hash 仍在 csp.ts 中 → 闸静默放行真实失效，故必须先剥离注释
-  const inline = /<head>[\s\S]*?<script>([\s\S]*?)<\/script>/.exec(
-    html.replace(/<!--[\s\S]*?-->/g, ''),
-  );
+  const inline = stripHtmlComments(html).match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/);
   if (inline === null || inline[1] === undefined || inline[1].trim() === '') {
     console.error(
       '[check-csp-hash] ❌ index.html 缺失首帧主题内联脚本（裸 <script> 块）——防闪失效',
