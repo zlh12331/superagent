@@ -21,23 +21,33 @@ import { join } from 'node:path';
 import { THEME_FIRST_PAINT_KEY } from '../src/renderer/lib/theme-init';
 
 /**
- * 剥离 HTML 注释（循环至收敛）
+ * 剥离 HTML 注释（按 `<!--` / `-->` 分段取非注释部分）
  *
- * 单遍 replace 不够：删除一个注释后，两侧残余字符可能重新拼出 `<!--`
- * （CodeQL js/incomplete-multi-character-sanitization 指出的不完整净化），
- * 于是注释内容仍会被后续正则当作真实标签匹配到。循环到不再变化为止，
- * 最后再删掉任何未闭合的 `<!--` 残片。
+ * 不用正则 replace 删除：那属于「多字符序列净化」——删掉一段后两侧残余字符可能
+ * 重新拼出 `<!--`，静态分析据此报不完整净化（CodeQL
+ * js/incomplete-multi-character-sanitization，实测循环收敛的写法仍被报，属该规则的
+ * 模式匹配局限）。改用 indexOf 游标单遍扫描，语义是「跳过注释区间」，不存在重组，
+ * 且无正则回溯。
+ *
+ * 未闭合的 `<!--` 按 HTML 语义吞掉其后全部内容——此时首帧脚本提取会失败并卡关，
+ * 正是期望行为（注释里的假 script 不该被当成真脚本）。
  */
 function stripHtmlComments(input: string): string {
-  let current = input;
+  const parts: string[] = [];
+  let cursor = 0;
   for (;;) {
-    const next = current.replace(/<!--[\s\S]*?-->/g, '');
-    if (next === current) {
-      break;
+    const open = input.indexOf('<!--', cursor);
+    if (open === -1) {
+      parts.push(input.slice(cursor));
+      return parts.join('');
     }
-    current = next;
+    parts.push(input.slice(cursor, open));
+    const close = input.indexOf('-->', open + 4);
+    if (close === -1) {
+      return parts.join('');
+    }
+    cursor = close + 3;
   }
-  return current.replace(/<!--/g, '');
 }
 
 function main(): void {
