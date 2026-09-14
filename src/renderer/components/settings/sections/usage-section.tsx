@@ -21,7 +21,7 @@ import 'react-activity-calendar/tooltips.css';
 import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
-import { formatCompactNumber } from '@/lib/format-intl';
+import { formatCompactNumber, formatPercent } from '@/lib/format-intl';
 import { unwrap } from '@/lib/ipc';
 import { USAGE_SUMMARY_QUERY_KEY } from '@/lib/query/keys';
 import { TurnsSection } from './turns-section';
@@ -108,6 +108,55 @@ const HEAT_THEME = [
   'color-mix(in srgb, var(--accent) 75%, transparent)',
   'var(--accent)',
 ];
+
+/** 按模型用量行（与 UsageSection 内 useMemo 的产出形状一致） */
+interface ModelUsageRow {
+  readonly modelId: string;
+  readonly calls: number;
+  readonly tokens: number;
+  readonly share: number;
+  readonly reasoningTokens: number;
+}
+
+/**
+ * 按模型用量列表（模型名 + token 数 + 占比 + 占比条）
+ *
+ * 从 UsageSection 主体提取（压缩函数体 + 隔离列表渲染）。
+ */
+function ModelUsageList({
+  rows,
+  locale,
+}: {
+  readonly rows: readonly ModelUsageRow[];
+  readonly locale: string;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <ul className="mt-2 flex flex-col gap-2 text-xs">
+      {rows.length === 0 ? (
+        <li className="text-muted-foreground/60">{t('settings.usageEmpty')}</li>
+      ) : (
+        rows.map((m) => (
+          <li key={m.modelId}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-foreground">{m.modelId}</span>
+              <span className="text-muted-foreground shrink-0">
+                {formatCompactNumber(m.tokens, locale)} · {formatPercent(m.share, locale)}
+              </span>
+            </div>
+            {/* 占比条（accent 宽度 = 占比） */}
+            <div className="bg-muted/30 mt-1 h-[5px] w-full overflow-hidden rounded-full">
+              <div
+                className="bg-accent h-full rounded-full"
+                style={{ width: `${Math.max(2, m.share)}%` }}
+              />
+            </div>
+          </li>
+        ))
+      )}
+    </ul>
+  );
+}
 
 export function UsageSection(): ReactElement {
   const { t, i18n } = useTranslation();
@@ -200,21 +249,21 @@ export function UsageSection(): ReactElement {
               <p className="text-muted-foreground">{t('settings.usageToday')}</p>
               <p className="mt-0.5 font-medium text-foreground">
                 {formatCompactNumber(todayTokens, i18n.language)}{' '}
-                <span className="text-muted-foreground font-normal">tokens</span>
+                <span className="text-muted-foreground font-normal">{t('chat.statsTokens')}</span>
               </p>
             </div>
             <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageMonth')}</p>
               <p className="mt-0.5 font-medium text-foreground">
                 {formatCompactNumber(monthTokens, i18n.language)}{' '}
-                <span className="text-muted-foreground font-normal">tokens</span>
+                <span className="text-muted-foreground font-normal">{t('chat.statsTokens')}</span>
               </p>
             </div>
             <div className="rounded-md border border-border p-2.5">
               <p className="text-muted-foreground">{t('settings.usageTotal')}</p>
               <p className="mt-0.5 font-medium text-foreground">
                 {formatCompactNumber(summary?.total.totalTokens ?? 0, i18n.language)}{' '}
-                <span className="text-muted-foreground font-normal">tokens</span>
+                <span className="text-muted-foreground font-normal">{t('chat.statsTokens')}</span>
               </p>
             </div>
             <div className="rounded-md border border-border p-2.5">
@@ -255,29 +304,7 @@ export function UsageSection(): ReactElement {
               <p className="text-xs font-medium text-muted-foreground">
                 {t('settings.usageByModel')}
               </p>
-              <ul className="mt-2 flex flex-col gap-2 text-xs">
-                {modelRows.length === 0 ? (
-                  <li className="text-muted-foreground/60">{t('settings.usageEmpty')}</li>
-                ) : (
-                  modelRows.map((m) => (
-                    <li key={m.modelId}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-foreground">{m.modelId}</span>
-                        <span className="text-muted-foreground shrink-0">
-                          {formatCompactNumber(m.tokens, i18n.language)} · {m.share.toFixed(0)}%
-                        </span>
-                      </div>
-                      {/* 占比条（accent 宽度 = 占比） */}
-                      <div className="bg-muted/30 mt-1 h-[5px] w-full overflow-hidden rounded-full">
-                        <div
-                          className="bg-accent h-full rounded-full"
-                          style={{ width: `${Math.max(2, m.share)}%` }}
-                        />
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
+              <ModelUsageList rows={modelRows} locale={i18n.language} />
             </div>
           </div>
         </div>

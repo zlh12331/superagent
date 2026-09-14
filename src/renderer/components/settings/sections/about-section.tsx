@@ -15,13 +15,16 @@
 
 import type { AppInfoRes, ExportDiagnosticsRes, UpdatePhase } from '@code-agent/shared/renderer';
 import { Clipboard, FolderOpen, Loader2, PackageCheck, RefreshCw, Rocket } from 'lucide-react';
-import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
+import { type ReactElement, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useAppInfo } from '@/hooks/use-app-info';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
+import { reportError } from '@/lib/error-report';
+import { formatDateTime } from '@/lib/format-intl';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { SectionTitle } from '../settings-controls';
@@ -42,17 +45,16 @@ function InfoRow({
   );
 }
 
-/** 格式化构建时间为本地可读时间（解析失败返回原文） */
-function formatBuildTime(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+/** 格式化构建时间为本地可读时间（跟随 locale；解析失败返回原文） */
+function formatBuildTime(iso: string, locale: string): string {
+  return formatDateTime(iso, locale, iso);
 }
 
 /**
  * 拼接诊断信息为纯文本（VS Code About「复制」同款，报 bug/提 issue 时整段粘贴）
  * 只包含 app:getInfo 已提供的真实字段，不虚构任何数据
  */
-function formatDiagnostics(info: AppInfoRes): string {
+function formatDiagnostics(info: AppInfoRes, locale: string): string {
   return [
     `Code Agent Desktop ${info.version}`,
     `Channel   : ${info.channel ?? '-'}`,
@@ -60,7 +62,7 @@ function formatDiagnostics(info: AppInfoRes): string {
     `Node.js   : ${info.node}`,
     `Chromium  : ${info.chrome}`,
     `Platform  : ${info.platform} ${info.arch}`,
-    `Build time: ${info.buildTime === undefined ? '-' : formatBuildTime(info.buildTime)}`,
+    `Build time: ${info.buildTime === undefined ? '-' : formatBuildTime(info.buildTime, locale)}`,
     `Commit    : ${info.commitSha ?? '-'}`,
     `User data : ${info.userDataPath}`,
   ].join('\n');
@@ -70,43 +72,19 @@ function formatDiagnostics(info: AppInfoRes): string {
  * 关于 pane（品牌 Hero + 分组卡片）
  */
 export function AboutSection(): ReactElement {
-  const { t } = useTranslation();
-  const [info, setInfo] = useState<AppInfoRes | null>(null);
+  const { t, i18n } = useTranslation();
+  // app:getInfo 统一入口（与 Topbar / 侧栏账户菜单共享同一 hook，单一真源）。
+  // 失败经 onError 提示：hook 内返回 null 由下方渲染占位，错误细节由此 toast 告知。
+  const info = useAppInfo((error: unknown) => {
+    reportError(error, { tags: { scope: 'about-section.getInfo' } });
+    toast.error(t('settings.aboutLoadFailed'));
+  });
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
   // 更新状态（订阅主进程 update:event:status；全局 UpdateNotice 与这里共享事件流）
   const { state: updateState, check, install } = useUpdate();
 
-  // app:getInfo：应用版本/环境/构建信息（浏览器模式兜底占位）
-  useEffect(() => {
-    let cancelled = false;
-    if (typeof window === 'undefined' || window.api === undefined) {
-      setInfo({
-        version: 'dev',
-        electron: '-',
-        node: '-',
-        chrome: '-',
-        platform: 'browser',
-        arch: '-',
-        userDataPath: '-',
-        channel: 'dev',
-      });
-      return;
-    }
-    window.api.app
-      .getInfo()
-      .then((res) => {
-        if (!cancelled) {
-          setInfo(unwrap<AppInfoRes>(res));
-        }
-      })
-      .catch(() => {
-        toast.error(t('settings.aboutLoadFailed'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
+  // app:getInfo 已由上方 useAppInfo 统一处理（含浏览器模式占位与失败提示）
 
   /** 复制文本到剪贴板（构建信息/提交哈希） */
   const copyText = async (text: string): Promise<void> => {
@@ -262,7 +240,7 @@ export function AboutSection(): ReactElement {
         </InfoRow>
         <InfoRow label={t('settings.aboutBuildTime')}>
           <span className="text-muted-foreground font-mono">
-            {info?.buildTime === undefined ? '-' : formatBuildTime(info.buildTime)}
+            {info?.buildTime === undefined ? '-' : formatBuildTime(info.buildTime, i18n.language)}
           </span>
         </InfoRow>
         <InfoRow label={t('settings.aboutBuildCommit')}>
@@ -324,7 +302,7 @@ export function AboutSection(): ReactElement {
             size="sm"
             onClick={() => {
               if (info !== null) {
-                void copyText(formatDiagnostics(info));
+                void copyText(formatDiagnostics(info, i18n.language));
               }
             }}
             disabled={copying || info === null}

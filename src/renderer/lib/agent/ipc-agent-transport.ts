@@ -41,6 +41,15 @@ import { unwrap } from '@/lib/ipc';
 import { createStreamChunkBatcher } from './stream-chunk-batcher';
 
 /**
+ * 按会话配置的缓存上限
+ *
+ * transport 为模块级单例，configureFor 以会话 id 为键——无上限则随「打开过的
+ * 会话数」永久累积。取 20：远超单窗口并发回合数（同屏 ChatPanel 至多 1 个活跃），
+ * 又不至成为内存负担。
+ */
+const CONFIG_CACHE_LIMIT = 20;
+
+/**
  * Agent 配置（通过 configure 注入到 transport 实例）
  */
 interface AgentConfig {
@@ -91,6 +100,11 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
    * options.chatId 精确匹配（调用方透传 id 时 chatId === 会话 id），
    * 未命中则回落 lastConfig（调用方未传 id 时 useChat 自生成随机 chatId，
    * 兜底保证单会话架构稳定）。
+   *
+   * 上限 CONFIG_CACHE_LIMIT：transport 是模块级单例（见 getIpcAgentTransport），
+   * 而 configureFor 以会话 id 为键——不加限制则「打开过的会话数」会永久累积
+   * （每个条目仅 workingDir 等小字段，但属无界增长）。超限时按插入序淘汰最旧
+   * （Map 迭代序即插入序），当前活跃会话因刚写入总在末尾而不会被淘汰。
    */
   private readonly configs = new Map<string, AgentConfig>();
   /** 最近一次配置（任意 configure/configureFor 均更新；sendMessages 兜底） */
@@ -117,11 +131,22 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
    */
   configureFor(chatId: string, config: AgentConfig): void {
     const prev = this.configs.get(chatId);
+    // 已存在时先删再写：保证 Map 迭代序 = 最近使用序（LRU 语义）
+    if (prev !== undefined) {
+      this.configs.delete(chatId);
+    }
     this.configs.set(chatId, {
       ...prev,
       ...config,
       workingDir: config.workingDir ?? prev?.workingDir,
     });
+    // 超限淘汰最旧（Map 首个键即最久未写入者）
+    if (this.configs.size > CONFIG_CACHE_LIMIT) {
+      const oldest = this.configs.keys().next();
+      if (!oldest.done) {
+        this.configs.delete(oldest.value);
+      }
+    }
     // 同步兜底配置：调用方未传 id 时 useChat 自生成随机 chatId，sendMessages
     // 无法命中 Map 时回落最近配置（单会话架构等价于原单例行为）
     this.lastConfig = {

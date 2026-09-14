@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Plus, Square, Wrench } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
-
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
@@ -21,6 +21,19 @@ import { unwrap } from '@/lib/ipc';
 import { MCP_SERVERS_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { SectionTitle, SettingRow } from '../settings-controls';
+
+/**
+ * MCP 服务器行类型（从 IPC 契约推导：mcp:list 响应的 servers 元素）
+ *
+ * 不引 shared 出口——renderer 出口不含 mcp schema（避免 zod 运行时进渲染层），
+ * 与组件内其他类型获取方式一致。
+ */
+type McpServerInfo = Extract<
+  Awaited<ReturnType<typeof window.api.mcp.list>>,
+  { data: unknown }
+>['data'] extends { servers: readonly (infer S)[] }
+  ? S
+  : never;
 
 /** 传输类型三态（与 shared MCP_TRANSPORTS 对齐） */
 type McpTransport = 'stdio' | 'sse' | 'streamable-http';
@@ -67,6 +80,141 @@ export function parseHeadersText(text: string): {
 }
 
 /**
+ * MCP 服务器列表单行（名称/传输/状态徽章/工具展开/停止/错误行/工具详情）
+ *
+ * 从 McpSection 主体提取（压缩函数体 + 隔离单行渲染逻辑）。
+ */
+function McpServerRow({
+  server,
+  expanded,
+  onToggleExpand,
+  stopPending,
+  onStop,
+}: {
+  readonly server: McpServerInfo;
+  readonly expanded: boolean;
+  readonly onToggleExpand: () => void;
+  readonly stopPending: boolean;
+  readonly onStop: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-1">
+      <SettingRow
+        label={server.config.name}
+        description={
+          server.config.transport !== undefined && server.config.transport !== 'stdio'
+            ? (server.config.url ?? '')
+            : `${server.config.command ?? ''} ${(server.config.args ?? []).join(' ')}`.trim()
+        }
+      >
+        <span className="text-muted-foreground rounded bg-muted px-1 py-0.5 font-mono text-2xs">
+          {server.config.transport ?? 'stdio'}
+        </span>
+        <span
+          className={cn(
+            'rounded-full px-1.5 py-0.5 font-mono text-2xs',
+            STATUS_BADGE[server.status] ?? 'bg-muted text-muted-foreground',
+          )}
+        >
+          {server.status}
+        </span>
+        {server.toolNames.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground h-auto gap-0.5 px-0 font-mono text-2xs"
+            title={server.toolNames.join('\n')}
+            onClick={onToggleExpand}
+            aria-expanded={expanded}
+          >
+            {expanded ? (
+              <ChevronDown className="size-3" strokeWidth={1.5} />
+            ) : (
+              <ChevronRight className="size-3" strokeWidth={1.5} />
+            )}
+            {t('settings.mcpToolCount', { count: server.toolNames.length })}
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="size-7 p-0"
+          disabled={stopPending}
+          onClick={onStop}
+          aria-label={t('settings.mcpStop')}
+          title={t('settings.mcpStop')}
+        >
+          <Square className="size-3" />
+        </Button>
+      </SettingRow>
+      {/* 最后一次错误（主进程 lastError 字段，此前仅展示状态徽章、错误信息丢失） */}
+      {server.lastError !== undefined && server.lastError !== '' && (
+        <p className="text-error-text px-1 font-mono text-2xs break-all" role="status">
+          {server.lastError}
+        </p>
+      )}
+      {/* 工具列表详情（展开态，对齐参考项目 McpServerDetailDialog） */}
+      {expanded && (
+        <div className="bg-card rounded-lg border px-3 py-2">
+          {server.toolNames.length === 0 ? (
+            <span className="text-muted-foreground text-xs">{t('settings.mcpNoTools')}</span>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {server.toolNames.map((toolName) => (
+                <li
+                  key={toolName}
+                  className="text-muted-foreground flex items-center gap-1.5 font-mono text-xs"
+                >
+                  <Wrench className="size-2.5 shrink-0" strokeWidth={1.5} />
+                  <span className="truncate">{toolName}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * MCP 列表加载状态区（error 优先 / loading / 空态）
+ *
+ * error 优先是关键：查询失败时 isLoading=false 且 servers=[]，
+ * 若不先判 error 会落入空态分支 → 把「加载失败」误导成「没有服务器」。
+ */
+function McpListStatus({
+  isError,
+  errorMessage,
+  onRetry,
+  isLoading,
+  isEmpty,
+}: {
+  readonly isError: boolean;
+  readonly errorMessage: string | null;
+  readonly onRetry: () => void;
+  readonly isLoading: boolean;
+  readonly isEmpty: boolean;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  if (isError) {
+    return <QueryErrorRow isError errorMessage={errorMessage} onRetry={onRetry} />;
+  }
+  if (isLoading) {
+    return <div className="text-muted-foreground text-xs">{t('common.loading')}</div>;
+  }
+  if (isEmpty) {
+    return (
+      <div className="text-muted-foreground rounded-md border border-dashed px-3 py-4 text-center text-xs">
+        {t('settings.mcpEmpty')}
+      </div>
+    );
+  }
+  return null;
+}
+
+/**
  * MCP 服务器管理 pane
  */
 export function McpSection(): ReactElement {
@@ -85,7 +233,7 @@ export function McpSection(): ReactElement {
   const headersInvalid = parsedHeaders.headers === null;
 
   // L3 查询：服务器列表
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: MCP_SERVERS_QUERY_KEY,
     queryFn: async () => {
       if (typeof window === 'undefined' || window.api === undefined) {
@@ -161,94 +309,25 @@ export function McpSection(): ReactElement {
       <p className="text-muted-foreground text-xs leading-[1.5]">{t('settings.mcpHint')}</p>
 
       {/* 服务器列表 */}
-      {isLoading && <div className="text-muted-foreground text-xs">{t('common.loading')}</div>}
-      {!isLoading && servers.length === 0 && (
-        <div className="text-muted-foreground rounded-md border border-dashed px-3 py-4 text-center text-xs">
-          {t('settings.mcpEmpty')}
-        </div>
-      )}
+      {/* 加载状态区（error 优先 / loading / 空态）—— 提取为子组件，避免 McpSection 主体过长 */}
+      <McpListStatus
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : null}
+        onRetry={() => void refetch()}
+        isLoading={isLoading}
+        isEmpty={servers.length === 0}
+      />
       {servers.map((server) => (
-        <div key={server.config.name} className="flex flex-col gap-1">
-          <SettingRow
-            key={server.config.name}
-            label={server.config.name}
-            description={
-              server.config.transport !== undefined && server.config.transport !== 'stdio'
-                ? (server.config.url ?? '')
-                : `${server.config.command ?? ''} ${(server.config.args ?? []).join(' ')}`.trim()
-            }
-          >
-            <span className="text-muted-foreground rounded bg-muted px-1 py-0.5 font-mono text-2xs">
-              {server.config.transport ?? 'stdio'}
-            </span>
-            <span
-              className={cn(
-                'rounded-full px-1.5 py-0.5 font-mono text-2xs',
-                STATUS_BADGE[server.status] ?? 'bg-muted text-muted-foreground',
-              )}
-            >
-              {server.status}
-            </span>
-            {server.toolNames.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground h-auto gap-0.5 px-0 font-mono text-2xs"
-                title={server.toolNames.join('\n')}
-                onClick={() =>
-                  setExpandedServer((prev) =>
-                    prev === server.config.name ? null : server.config.name,
-                  )
-                }
-                aria-expanded={expandedServer === server.config.name}
-              >
-                {expandedServer === server.config.name ? (
-                  <ChevronDown className="size-3" strokeWidth={1.5} />
-                ) : (
-                  <ChevronRight className="size-3" strokeWidth={1.5} />
-                )}
-                {server.toolNames.length} tools
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="size-7 p-0"
-              disabled={stopMutation.isPending}
-              onClick={() => stopMutation.mutate(server.config.name)}
-              aria-label={t('settings.mcpStop')}
-              title={t('settings.mcpStop')}
-            >
-              <Square className="size-3" />
-            </Button>
-          </SettingRow>
-          {/* 最后一次错误（主进程 lastError 字段，此前仅展示状态徽章、错误信息丢失） */}
-          {server.lastError !== undefined && server.lastError !== '' && (
-            <p className="text-error-text px-1 font-mono text-2xs break-all" role="status">
-              {server.lastError}
-            </p>
-          )}
-          {/* 工具列表详情（展开态，对齐参考项目 McpServerDetailDialog） */}
-          {expandedServer === server.config.name && (
-            <div className="bg-card rounded-lg border px-3 py-2">
-              {server.toolNames.length === 0 ? (
-                <span className="text-muted-foreground text-xs">{t('settings.mcpNoTools')}</span>
-              ) : (
-                <ul className="flex flex-col gap-0.5">
-                  {server.toolNames.map((toolName) => (
-                    <li
-                      key={toolName}
-                      className="text-muted-foreground flex items-center gap-1.5 font-mono text-xs"
-                    >
-                      <Wrench className="size-2.5 shrink-0" strokeWidth={1.5} />
-                      <span className="truncate">{toolName}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
+        <McpServerRow
+          key={server.config.name}
+          server={server}
+          expanded={expandedServer === server.config.name}
+          onToggleExpand={() =>
+            setExpandedServer((prev) => (prev === server.config.name ? null : server.config.name))
+          }
+          stopPending={stopMutation.isPending}
+          onStop={() => stopMutation.mutate(server.config.name)}
+        />
       ))}
 
       {/* 添加服务器表单 */}

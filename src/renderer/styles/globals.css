@@ -111,7 +111,6 @@
   --color-text-dim: var(--text-dim);
   --color-text-faint: var(--text-faint);
   --color-accent-2: var(--accent-2);
-  --color-accent-2-dim: var(--accent-2-dim);
   --color-accent-glow: var(--accent-glow);
   --color-accent-soft: var(--accent-soft);
   /*
@@ -1377,7 +1376,7 @@ body.resizing iframe {
   min-width: 240px;
   max-width: 320px;
   box-shadow: var(--shadow-dropdown);
-  z-index: var(--z-dropdown);
+  z-index: var(--z-popover);
   display: none;
   flex-direction: column;
 }
@@ -1809,7 +1808,7 @@ body.resizing iframe {
   margin: 8px 0;
   padding: 4px 12px;
   border-left: 3px solid var(--accent-glow);
-  color: var(--text-muted);
+  color: var(--text-dim);
   background: var(--accent-soft);
   border-radius: 0 4px 4px 0;
 }
@@ -1846,7 +1845,7 @@ body.resizing iframe {
   font-weight: 600;
 }
 .msg-content tr:nth-child(even) td {
-  background: var(--bg-elev-1);
+  background: var(--bg-elev);
 }
 
 /* 分隔线 */
@@ -2792,7 +2791,7 @@ button.card-head {
 }
 
 .approval-diff-wrapper .diff-gutter {
-  background: var(--bg-elev-1);
+  background: var(--bg-elev);
   color: var(--text-faint);
   font-size: 11px;
   min-width: 40px;
@@ -3971,7 +3970,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   height: 2px;
   overflow: hidden;
   pointer-events: none;
-  z-index: var(--z-raised);
+  z-index: var(--z-surface);
 }
 
 .async-refreshing-bar::before {

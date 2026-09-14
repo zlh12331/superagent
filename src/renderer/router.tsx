@@ -3,7 +3,7 @@
 // 设计文档 §3 路由结构 + §5.3 React Router 8 Data Mode（非 Framework Mode）
 //
 // 职责：
-// - 使用 createBrowserRouter（Data Mode）声明全应用路由
+// - 使用 createHashRouter（Data Mode）声明全应用路由（hash 而非 history 的原因见下方路由配置注释）
 // - 根布局 root.tsx 挂载 AppShell（Topbar + Sidebar + 内容区）
 // - index 路由渲染 HomePage（欢迎页：品牌区 + 输入框 + 快捷动作 + 项目选择）
 // - /chat/:sessionId 路由渲染 ChatPage（历史会话续传，内部渲染 ChatPanel）

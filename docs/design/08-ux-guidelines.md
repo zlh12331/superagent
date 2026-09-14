@@ -64,11 +64,13 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ### 2.3 全局浮层优先级（z-index 体系，`--z-base` → `--z-boundary`）
 
-`z-dropdown(50) < z-context-menu(100) < z-modal-backdrop(1000) < z-drawer(1500) < z-modal(2000) < z-toast(10000) < z-overlay(15000) < z-boundary(30000)`。命令面板与设置 Sheet 使用 `z-overlay` 级；Toast 堆栈最高优先级通知（`z-toast-stack 20000`）。新增浮层必须复用既有档位，禁止自定义数字。
+`z-base(1) < z-surface(2) < z-popover(50) < z-modal(100) < z-toast(110) < z-boundary(999)`。其中 `z-surface` 供面板内容之上的行内浮层（进度条、斜杠建议面板等在同一 stacking context 内竞争）；`z-popover` 是 Radix 浮层统一档（dialog / sheet / dropdown / select / context-menu / tooltip）；`z-modal` 供需压过一切浮层的强制模态（如 AskDialog）；`z-toast` 为通知层（sonner）；`z-boundary` 为层级边界值（skip-link 聚焦等不遮挡内容的最高层）。新增浮层必须复用既有档位，禁止自定义数字（`check:tokens` 卡关裸 `z-*` 数字）。
+
+> ⚠️ **数值真源 = `src/renderer/styles/tokens.css` 的 `--z-*`**（由 `tokens/aurora.json` 经 Style Dictionary 生成）。本节数值须与之一致；改令牌后同步本节。**引用令牌时也只能用真源里存在的名字**——`check:css-vars` 卡关「引用未定义令牌」（2026-09-14 新增门禁，此前 `var(--z-dropdown)` 等 5 处引用不存在的令牌导致声明被静默丢弃）。
 
 ## 3. Aurora 2.0 视觉规范
 
-实现：[globals.css](../src/renderer/styles/globals.css)（4496 行，设计令牌唯一真源）+ [index.css](../src/renderer/index.css)
+实现：[globals.css](../src/renderer/styles/globals.css)（`@import` 引入 tokens.css 并补充组件级样式）+ [tokens.css](../src/renderer/styles/tokens.css)（**设计令牌真源生成物**，勿手改）+ [index.css](../src/renderer/index.css)
 
 ### 3.1 令牌体系（禁止硬编码）
 

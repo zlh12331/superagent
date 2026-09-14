@@ -9,22 +9,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { McpSection } from './mcp-section';
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(async () => ({
-    data: {
-      servers: [
-        {
-          config: {
-            name: 'filesystem',
-            transport: 'stdio',
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-filesystem'],
+  // 类型从 IPC 契约推导（与 mcp-section 组件同源）；IpcResponse 本身即
+  // { data } | { error } 联合，故成功/失败两种赋值都合法
+  list: vi.fn(
+    async (): Promise<Awaited<ReturnType<typeof window.api.mcp.list>>> => ({
+      data: {
+        servers: [
+          {
+            config: {
+              name: 'filesystem',
+              transport: 'stdio',
+              command: 'npx',
+              args: ['-y', '@modelcontextprotocol/server-filesystem'],
+            },
+            status: 'running',
+            toolNames: ['read_file', 'write_file'],
           },
-          status: 'running',
-          toolNames: ['read_file', 'write_file'],
-        },
-      ],
-    },
-  })),
+        ],
+      },
+    }),
+  ),
   start: vi.fn(async () => ({ data: { ok: true } })),
   stop: vi.fn(async () => ({ data: { ok: true } })),
 }));
@@ -77,7 +81,7 @@ describe('McpSection DOM', () => {
 
   it('工具数量按钮：点击展开工具列表', async () => {
     renderSection();
-    const toolsBtn = await screen.findByText('2 tools');
+    const toolsBtn = await screen.findByText('2 个工具');
     await userEvent.click(toolsBtn);
     expect(await screen.findByText('read_file')).toBeInTheDocument();
     expect(screen.getByText('write_file')).toBeInTheDocument();
@@ -95,5 +99,20 @@ describe('McpSection DOM', () => {
     mocks.list.mockResolvedValue({ data: { servers: [] } });
     renderSection();
     await waitFor(() => expect(screen.getByText('暂无已启动的 MCP 服务器')).toBeInTheDocument());
+  });
+
+  // 回归：查询失败必须显示 error 态而非空态
+  // （此前 isLoading=false 且 servers=[] 会落入空态分支 → 把加载失败误导为「没有服务器」）
+  it('查询失败 → 显示错误提示与重试，不显示空态', async () => {
+    mocks.list.mockResolvedValue({
+      error: { code: 'INTERNAL_ERROR', message: 'mcp list failed' },
+    });
+    renderSection();
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    // 文案真源见 i18n locales 的 common.sectionLoadFailed / common.retry
+    expect(screen.getByText('区块加载失败，请重试')).toBeInTheDocument();
+    expect(screen.getByText('重试')).toBeInTheDocument();
+    // 关键：不得把失败渲染成「空列表」
+    expect(screen.queryByText('暂无已启动的 MCP 服务器')).not.toBeInTheDocument();
   });
 });

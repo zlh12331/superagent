@@ -11,6 +11,7 @@ import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/render
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -33,6 +34,96 @@ interface ConfigDialogState {
 }
 
 /**
+ * 运行时模型表格（模型/提供商/操作三列）
+ *
+ * 从 ModelsSection 主体提取（压缩函数体 + 隔离表格渲染）。删除按钮的确认由
+ * 调用方 onRemove 处理（命令式 confirm() store，破坏性操作统一入口）。
+ */
+function RuntimeModelTable({
+  models,
+  removePending,
+  onToggle,
+  onEdit,
+  onRemove,
+}: {
+  readonly models: readonly RuntimeModelInfo[];
+  readonly removePending: boolean;
+  readonly onToggle: (model: RuntimeModelInfo, enabled: boolean) => void;
+  readonly onEdit: (model: RuntimeModelInfo) => void;
+  readonly onRemove: (model: RuntimeModelInfo) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr className="text-muted-foreground border-border border-b text-left text-2xs">
+          <th className="px-2 py-1.5 font-medium">{t('settings.modelMgmt.modelHeader')}</th>
+          <th className="px-2 py-1.5 font-medium">{t('settings.modelMgmt.providerHeader')}</th>
+          <th className="px-2 py-1.5 text-right font-medium">
+            {t('settings.modelMgmt.actionsHeader')}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {models.map((model) => (
+          <tr key={model.modelId} className="border-border border-b">
+            <td className="px-2 py-1.5">
+              <div className="flex items-center gap-2">
+                {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
+                <span className="bg-accent/10 text-accent-text flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
+                  {providerLabel(model.providerKind)[0]}
+                </span>
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-foreground truncate">
+                    {model.displayName ?? model.modelId}
+                  </span>
+                  <span className="text-muted-foreground truncate font-mono text-2xs">
+                    {model.modelId}
+                  </span>
+                </div>
+              </div>
+            </td>
+            <td className="text-foreground px-2 py-1.5">{providerLabel(model.providerKind)}</td>
+            <td className="px-2 py-1.5">
+              <div className="flex items-center justify-end gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-foreground size-6 hover:bg-transparent"
+                  aria-label={t('settings.modelMgmt.editModel')}
+                  onClick={() => onEdit(model)}
+                >
+                  <Pencil className="size-3.5" strokeWidth={1.5} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-error-text size-6 hover:bg-transparent"
+                  aria-label={t('settings.modelMgmt.deleteModel')}
+                  disabled={removePending}
+                  onClick={() => onRemove(model)}
+                >
+                  {removePending ? (
+                    <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <Trash2 className="size-3.5" strokeWidth={1.5} />
+                  )}
+                </Button>
+                <Switch
+                  checked={model.isEnabled}
+                  aria-label={t('settings.modelMgmt.toggleModel')}
+                  onCheckedChange={(checked) => onToggle(model, checked)}
+                />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
  * 模型管理 pane（文档蓝图形态：标题区 + 表格 + 3 弹窗）
  */
 export function ModelsSection(): ReactElement {
@@ -41,7 +132,7 @@ export function ModelsSection(): ReactElement {
   // 模型管理列表（L3：settings:listRuntimeModels，用户配置的模型记录）
   // 说明：服务商模式保存的模型也落 runtimeModelStore（providerKind + 具体 modelId，
   // API Key 走厂商级 keychain）——"配置一个模型显示一条记录"，不并入未配置的内置模型。
-  const { data: runtimeData } = useRuntimeModelsQuery();
+  const { data: runtimeData, isError, error, refetch } = useRuntimeModelsQuery();
   const runtimeModels = runtimeData?.models ?? [];
   const updateMutation = useUpdateRuntimeModel();
   const removeMutation = useRemoveRuntimeModel();
@@ -73,6 +164,21 @@ export function ModelsSection(): ReactElement {
     updateMutation.mutate({ modelId: model.modelId, isEnabled: enabled });
   };
 
+  /** 删除模型：命令式 confirm()（破坏性操作统一入口）→ 成功 toast */
+  const handleRemove = (model: RuntimeModelInfo): void => {
+    void confirm({
+      title: t('settings.modelMgmt.deleteModelTitle'),
+      message: t('common.deleteConfirmDesc'),
+      danger: true,
+    }).then((ok) => {
+      if (ok) {
+        removeMutation.mutate(model.modelId, {
+          onSuccess: () => toast.success(t('settings.modelMgmt.modelDeleted')),
+        });
+      }
+    });
+  };
+
   return (
     <div className="flex flex-col gap-4 pt-2">
       {/* 模型管理列表页（文档 3.1.2：标题区 + 表格） */}
@@ -99,94 +205,26 @@ export function ModelsSection(): ReactElement {
           </Button>
         </div>
 
-        {runtimeModels.length === 0 ? (
+        {/* error 态优先：查询失败时 runtimeData 为 undefined → runtimeModels 为空数组，
+            若不判 error 会被下方空态分支渲染成「还没有配置模型」，把加载失败误导为空 */}
+        <QueryErrorRow
+          isError={isError}
+          errorMessage={error instanceof Error ? error.message : null}
+          onRetry={() => void refetch()}
+        />
+        {!isError && runtimeModels.length === 0 && (
           <p className="text-muted-foreground border-border rounded-md border border-dashed px-3 py-6 text-center text-xs">
             {t('settings.modelMgmt.emptyHint')}
           </p>
-        ) : (
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="text-muted-foreground border-border border-b text-left text-2xs">
-                <th className="px-2 py-1.5 font-medium">{t('settings.modelMgmt.modelHeader')}</th>
-                <th className="px-2 py-1.5 font-medium">
-                  {t('settings.modelMgmt.providerHeader')}
-                </th>
-                <th className="px-2 py-1.5 text-right font-medium">
-                  {t('settings.modelMgmt.actionsHeader')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {runtimeModels.map((model) => (
-                <tr key={model.modelId} className="border-border border-b">
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-2">
-                      {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
-                      <span className="bg-accent/10 text-accent-text flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
-                        {providerLabel(model.providerKind)[0]}
-                      </span>
-                      <div className="flex min-w-0 flex-col">
-                        <span className="text-foreground truncate">
-                          {model.displayName ?? model.modelId}
-                        </span>
-                        <span className="text-muted-foreground truncate font-mono text-2xs">
-                          {model.modelId}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="text-foreground px-2 py-1.5">
-                    {providerLabel(model.providerKind)}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:text-foreground size-6 hover:bg-transparent"
-                        aria-label={t('settings.modelMgmt.editModel')}
-                        onClick={() => handleEdit(model)}
-                      >
-                        <Pencil className="size-3.5" strokeWidth={1.5} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:text-error-text size-6 hover:bg-transparent"
-                        aria-label={t('settings.modelMgmt.deleteModel')}
-                        disabled={removeMutation.isPending}
-                        onClick={() => {
-                          // 破坏性操作统一 confirm() store（收敛此前内联 AlertDialog 双轨）
-                          void confirm({
-                            title: t('settings.modelMgmt.deleteModelTitle'),
-                            message: t('common.deleteConfirmDesc'),
-                            danger: true,
-                          }).then((ok) => {
-                            if (ok)
-                              removeMutation.mutate(model.modelId, {
-                                onSuccess: () =>
-                                  toast.success(t('settings.modelMgmt.modelDeleted')),
-                              });
-                          });
-                        }}
-                      >
-                        {removeMutation.isPending ? (
-                          <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
-                        ) : (
-                          <Trash2 className="size-3.5" strokeWidth={1.5} />
-                        )}
-                      </Button>
-                      <Switch
-                        checked={model.isEnabled}
-                        aria-label={t('settings.modelMgmt.toggleModel')}
-                        onCheckedChange={(checked) => handleToggle(model, checked)}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        )}
+        {!isError && runtimeModels.length > 0 && (
+          <RuntimeModelTable
+            models={runtimeModels}
+            removePending={removeMutation.isPending}
+            onToggle={handleToggle}
+            onEdit={handleEdit}
+            onRemove={handleRemove}
+          />
         )}
       </div>
 
