@@ -310,4 +310,27 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     const transport = new IpcAgentTransport();
     await expect(transport.reconnectToStream()).resolves.toBeNull();
   });
+
+  // ── 回归：convertToModelMessages 抛错时不得泄漏订阅（P3-41）──────────────
+  // 此前该 await 在 try 之外，抛错时 cleanup 永不执行 → 三个 IPC 订阅 + batcher
+  // 定时器残留，后续推送会 enqueue 到已 error 的 controller 再抛。
+  it('消息转换抛错 → 流错误且三订阅全部退订（不泄漏）', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w' });
+    const stream = await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      // role 非法：convertToModelMessages 抛 AI_MessageConversionError
+      messages: [{ id: 'u1', role: 'bogus', parts: [] }] as unknown as UIMessage[],
+      abortSignal: undefined,
+    });
+
+    await expect(drain(stream)).rejects.toThrow();
+    // 关键断言：订阅已退订 + run 未被调用（转换失败发生在发起之前）
+    expect(ipc.part).toBeNull();
+    expect(ipc.end).toBeNull();
+    expect(ipc.error).toBeNull();
+    expect(window.api.agent.run).not.toHaveBeenCalled();
+  });
 });
