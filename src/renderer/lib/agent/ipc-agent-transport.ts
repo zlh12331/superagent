@@ -226,13 +226,14 @@ export class IpcAgentTransport<Message extends UIMessage = UIMessage>
           );
         }
 
-        // 转换消息：UIMessage[] → ChatMessage[]（= ModelMessage[]）
-        const chatMessages: ChatMessage[] = await convertToModelMessages(options.messages);
-
-        // 处理响应：失败则 error stream；成功则校验 sessionId 回显（契约显式化）
-        // 错误响应由 unwrap 抛 [CODE] message
+        // 转换消息 + 发起运行
+        // 2026-09-14 修复（流式订阅泄漏）：convertToModelMessages 此前在 try 之外，
+        // 抛错时 cleanup 永不执行 → 三个 IPC 订阅 + batcher 定时器残留（且流已 error，
+        // 后续到达的 part 会 enqueue 到已 error 的 controller 再抛）。移入 try 由同一
+        // catch 统一清理。注意转换失败不调 agent.stop——run 尚未发起。
         let data: AgentRunRes;
         try {
+          const chatMessages: ChatMessage[] = await convertToModelMessages(options.messages);
           data = unwrap(
             await window.api.agent.run({
               messages: chatMessages,
