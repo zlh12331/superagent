@@ -20,6 +20,26 @@ import { join } from 'node:path';
 
 import { THEME_FIRST_PAINT_KEY } from '../src/renderer/lib/theme-init';
 
+/**
+ * 剥离 HTML 注释（循环至收敛）
+ *
+ * 单遍 replace 不够：删除一个注释后，两侧残余字符可能重新拼出 `<!--`
+ * （CodeQL js/incomplete-multi-character-sanitization 指出的不完整净化），
+ * 于是注释内容仍会被后续正则当作真实标签匹配到。循环到不再变化为止，
+ * 最后再删掉任何未闭合的 `<!--` 残片。
+ */
+function stripHtmlComments(input: string): string {
+  let current = input;
+  for (;;) {
+    const next = current.replace(/<!--[\s\S]*?-->/g, '');
+    if (next === current) {
+      break;
+    }
+    current = next;
+  }
+  return current.replace(/<!--/g, '');
+}
+
 function main(): void {
   const root = process.cwd();
   let html: string;
@@ -36,9 +56,7 @@ function main(): void {
   //    锚定 <head> 并先剥离 HTML 注释：裸 <script> 的正则是惰性匹配（第一个开标签到最近的
   //    闭标签），但不锚定位置——若注释里出现裸 <script>（如注释掉旧版主题脚本），会误提旧
   //    脚本算出旧 hash，旧 hash 仍在 csp.ts 中 → 闸静默放行真实失效，故必须先剥离注释
-  const inline = /<head>[\s\S]*?<script>([\s\S]*?)<\/script>/.exec(
-    html.replace(/<!--[\s\S]*?-->/g, ''),
-  );
+  const inline = stripHtmlComments(html).match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/);
   if (inline === null || inline[1] === undefined || inline[1].trim() === '') {
     console.error(
       '[check-csp-hash] ❌ index.html 缺失首帧主题内联脚本（裸 <script> 块）——防闪失效',

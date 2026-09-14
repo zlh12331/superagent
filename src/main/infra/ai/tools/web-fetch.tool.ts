@@ -148,17 +148,47 @@ async function fetchWithTimeout(url: URL, timeoutMs: number): Promise<Response> 
   }
 }
 
-/** HTML → 正文文本：去 script/style/标签/实体（弱耦合纯函数，借鉴自 qwen web 工具收敛） */
+/**
+ * HTML → 正文文本：去 script/style/标签/实体（弱耦合纯函数）
+ *
+ * 实体解码是**单遍**替换（正则 + 查表一次扫过），不是链式 .replace——
+ * 链式写法会让 `&amp;lt;` 先被 `&amp;` 规则解成 `&lt;`，再被 `&lt;` 规则解成 `<`，
+ * 于是「本应展示为文本的转义标签」变成真标签形态（CodeQL js/double-escaping 指出的
+ * 双重解码）。单遍扫描保证每个实体只解码一次。
+ */
 function stripHtml(html: string): string {
   return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script\s*[^>]*>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style\s*[^>]*>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+    .replace(/&(#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/gi, decodeEntity)
     .replace(/\s+/g, ' ');
 }
+
+/**
+ * 解码单个 HTML 实体（未收录的具名实体原样返回）
+ *
+ * 数字实体（`&#39;` / `&#x27;`）按码点解码；超范围码点（如 `&#1114112;`）会让
+ * String.fromCodePoint 抛 RangeError，故先校验范围——页面内容不可信，不能让一个
+ * 畸形实体把整次抓取变成失败。
+ */
+function decodeEntity(entity: string): string {
+  const lower = entity.slice(1, -1).toLowerCase();
+  if (lower.startsWith('#')) {
+    const isHex = lower.startsWith('#x');
+    const code = Number.parseInt(isHex ? lower.slice(2) : lower.slice(1), isHex ? 16 : 10);
+    const valid = !Number.isNaN(code) && code >= 0 && code <= 0x10ffff;
+    return valid ? String.fromCodePoint(code) : entity;
+  }
+  return HTML_ENTITIES[lower] ?? entity;
+}
+
+/** HTML 常用具名实体 → 字符（单遍解码用；未收录原样保留） */
+const HTML_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+};

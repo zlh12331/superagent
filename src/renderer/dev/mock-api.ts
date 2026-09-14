@@ -824,17 +824,18 @@ function createMockApi(): IpcApi {
         localStorage.setItem('mock-settings', JSON.stringify(cur));
         return ipcOk({ ok: true });
       },
-      getApiKey: async () => {
-        // localStorage 持久化（模拟真实 keychain 跨重启保留——E2E 前置配置后 reload 仍生效）
-        // P0 安全对齐：与真实 handler 一致只返回配置状态布尔，不回传明文
-        const key = localStorage.getItem('mock-api-key');
-        return ipcOk({ configured: key !== null && key !== '' });
-      },
-      setApiKey: async (input: Req<IpcApi['settings']['setApiKey']>) => {
-        localStorage.setItem('mock-api-key', input.apiKey);
+      getApiKey: async () => ipcOk({ configured: localStorage.getItem('mock-key-flag') === '1' }),
+      // 只落「已配置」标志、不落明文：真实 handler 的明文加密后仅主进程内消费，渲染层
+      // 拿不到也不需要；浏览器 mock 无加密存储，落明文等于把 Key 平文留在本地。
+      // 省略入参不违背 IpcApi 契约（TS 允许少参函数赋给多参签名）
+      setApiKey: async () => {
+        localStorage.setItem('mock-key-flag', '1');
         return ipcOk({ ok: true });
       },
-      deleteApiKey: async () => ipcOk({ ok: true }),
+      deleteApiKey: async () => {
+        localStorage.removeItem('mock-key-flag');
+        return ipcOk({ ok: true });
+      },
       getTelemetryLevel: async () => ipcOk({ level: 'off' }),
       setTelemetryLevel: async () => ipcOk({ ok: true, level: 'off' }),
       getApprovalMode: async () => ipcOk({ mode: 'ask' }),
