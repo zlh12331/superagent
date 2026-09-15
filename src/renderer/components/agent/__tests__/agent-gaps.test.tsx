@@ -107,10 +107,11 @@ describe('agent 批次4 缺口补全', () => {
   });
 
   describe('approval i18n 键契约', () => {
-    // check:i18n 对动态模板前缀域（approval./chat./git. 等）豁免冗余与缺失检查，
+    // check:i18n 对动态模板前缀域（approval.types./chat./git. 等）豁免冗余与缺失检查，
     // 新增 ApprovalType 而漏加 i18n 键不会被静态审计发现——此处做运行时兜底：
     // i18next 缺键时返回键本身，故「翻译 ≠ 键」即键存在。
-    it('10 类型均有 approval.<type> 键', () => {
+    // 协议键收进 approval.types 子段：协议域（snake_case）与 UI 键域（camelCase）分区。
+    it('10 类型均有 approval.types.<type> 键', () => {
       const types = [
         'run_command',
         'write_file',
@@ -124,7 +125,7 @@ describe('agent 批次4 缺口补全', () => {
         'git_push',
       ] as const;
       for (const type of types) {
-        const key = `approval.${type}`;
+        const key = `approval.types.${type}`;
         expect(t(key), `${key} 缺失`).not.toBe(key);
       }
     });

@@ -5,8 +5,8 @@
 // 表驱动重构（2026-09-15）：原 getIconForType / getVariantForType / isDangerousType /
 // canRememberDecision 四个平行函数合并为 APPROVAL_META 单表——新增类型从改 4 处
 // 降为 1 行，satisfies Record 提供编译期穷尽性（漏登记即编译失败，无需 default 兜底）；
-// getLabelKeyForType 随 i18n 键对齐协议值（approval.<type>）删除，文案消费
-// t(`approval.${type}`) 零映射层
+// getLabelKeyForType 随 i18n 键对齐协议值（approval.types.<type> 子段）删除，文案消费
+// t(`approval.types.${type}`) 零映射层
 // ──────────────────────────────
 
 import type { LucideIcon } from 'lucide-react';

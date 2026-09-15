@@ -140,8 +140,9 @@ export function InlineApprovalCard({
             meta.className,
           )}
         >
-          {/* 类型标签：i18n 键与 ApprovalType 协议值一致，零映射层 */}
-          {t(`approval.${item.type}`)}
+          {/* 类型标签：i18n 协议键收进 approval.types 子段（与 UI 键的 camelCase 分区），
+              键 = ApprovalType 字面量，零映射层 */}
+          {t(`approval.types.${item.type}`)}
         </span>
         {!isPending && (
           <span
