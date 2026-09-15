@@ -60,56 +60,35 @@ function toAnswerPayload(a: AnswerState): { selectedIndexes?: number[]; text?: s
   };
 }
 
-/**
- * 分节进度条（借鉴 tool-ui Question Flow ProgressBar）
- *
- * 多问题引导时展示：每节一段，已完成段 accent 填充 + 动画过渡。
- */
-function QuestionProgressBar({
-  current,
-  total,
-}: {
-  readonly current: number;
-  readonly total: number;
-}): ReactElement | null {
-  const { t } = useTranslation();
-  if (total <= 1) return null;
-  return (
-    <div
-      className="flex h-1.5 gap-1"
-      role="progressbar"
-      aria-valuenow={current}
-      aria-valuemin={1}
-      aria-valuemax={total}
-      aria-label={t('agent.askProgress')}
-    >
-      {Array.from({ length: total }).map((_, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: 分节纯静态视觉，无重排/状态场景
-        <div key={i} className="bg-muted relative flex-1 overflow-hidden rounded-full">
-          <div
-            className={cn(
-              // accent 填充（与导航圆点/热力图/骨架屏等进度类视觉一致；此前 bg-primary 与注释「accent 填充」不符）
-              'bg-accent absolute inset-0 origin-left rounded-full transition-transform duration-300',
-              i < current ? 'scale-x-100' : 'scale-x-0',
-            )}
-          />
-        </div>
-      ))}
-    </div>
-  );
+/** useAskAnswers 依赖 */
+interface UseAskAnswersDeps {
+  /** 当前提问 id（null = 无提问；变化时重置回答状态） */
+  readonly askId: string | null;
+  /** 问题列表（初始化 AnswerState 的长度基准） */
+  readonly questions: readonly AgentQuestion[];
+  /** 清除提问（提交成功/失败后统一收尾） */
+  readonly clearAsk: (sessionId?: string) => void;
 }
 
-/** Agent 提问对话框 */
-export function AskDialog(): ReactElement | null {
+/**
+ * 回答状态机（模块级提取）
+ *
+ * - 职责：answers/submitting 状态 + 新提问初始化 + 选项切换/文本输入/提交回传
+ * - 提取动机：AskDialog 函数体受 check-functions 棘轮约束（只允许下降），
+ *   状态机与渲染职责本就可分（对齐文件内 useAskState 先例）
+ */
+function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
+  readonly answers: AnswerState[];
+  readonly submitting: boolean;
+  readonly toggleOption: (qIndex: number, optionIndex: number) => void;
+  readonly setText: (qIndex: number, text: string) => void;
+  readonly handleSubmit: () => Promise<void>;
+} {
   const { t } = useTranslation();
   // 错误码 → 本地化文案（对齐全仓 unwrapErrorMessage 统一模式，见 catch 分支）
   const { getErrorMessage } = useErrorMessage();
-  // 逐字段 selector（见 useAskState 说明；此前为整体订阅）
-  const { sessionId: askSessionId, askId, questions, clearAsk } = useAskState();
   const [answers, setAnswers] = useState<AnswerState[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  // 会话归属校验：多会话并发回合时，仅渲染当前激活会话的提问（防后台回合串扰前台弹窗）
-  const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
 
   // 新提问到达时初始化回答状态
   useEffect(() => {
@@ -118,12 +97,6 @@ export function AskDialog(): ReactElement | null {
       setSubmitting(false);
     }
   }, [askId, questions]);
-
-  // 非当前会话的提问不渲染（askSessionId 为 null 的旧数据照常显示，向后兼容）
-  const open = askId !== null && (askSessionId === null || askSessionId === activeSessionId);
-  if (!open) {
-    return null;
-  }
 
   const toggleOption = (qIndex: number, optionIndex: number): void => {
     setAnswers((prev) =>
@@ -167,6 +140,68 @@ export function AskDialog(): ReactElement | null {
     clearAsk();
     setSubmitting(false);
   };
+
+  return { answers, submitting, toggleOption, setText, handleSubmit };
+}
+
+/**
+ * 分节进度条（借鉴 tool-ui Question Flow ProgressBar）
+ *
+ * 多问题引导时展示：每节一段，已完成段 accent 填充 + 动画过渡。
+ */
+function QuestionProgressBar({
+  current,
+  total,
+}: {
+  readonly current: number;
+  readonly total: number;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  if (total <= 1) return null;
+  return (
+    <div
+      className="flex h-1.5 gap-1"
+      role="progressbar"
+      aria-valuenow={current}
+      aria-valuemin={1}
+      aria-valuemax={total}
+      aria-label={t('agent.askProgress')}
+    >
+      {Array.from({ length: total }).map((_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 分节纯静态视觉，无重排/状态场景
+        <div key={i} className="bg-muted relative flex-1 overflow-hidden rounded-full">
+          <div
+            className={cn(
+              // accent 填充（与导航圆点/热力图/骨架屏等进度类视觉一致；此前 bg-primary 与注释「accent 填充」不符）
+              'bg-accent absolute inset-0 origin-left rounded-full transition-transform duration-300',
+              i < current ? 'scale-x-100' : 'scale-x-0',
+            )}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Agent 提问对话框 */
+export function AskDialog(): ReactElement | null {
+  const { t } = useTranslation();
+  // 逐字段 selector（见 useAskState 说明；此前为整体订阅）
+  const { sessionId: askSessionId, askId, questions, clearAsk } = useAskState();
+  // 回答状态机（模块级 useAskAnswers：answers/submitting + 初始化 + 交互与提交）
+  const { answers, submitting, toggleOption, setText, handleSubmit } = useAskAnswers({
+    askId,
+    questions,
+    clearAsk,
+  });
+  // 会话归属校验：多会话并发回合时，仅渲染当前激活会话的提问（防后台回合串扰前台弹窗）
+  const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
+
+  // 非当前会话的提问不渲染（askSessionId 为 null 的旧数据照常显示，向后兼容）
+  const open = askId !== null && (askSessionId === null || askSessionId === activeSessionId);
+  if (!open) {
+    return null;
+  }
 
   const handleCancel = (): void => {
     // 取消 = 回传空回答（LLM 按「用户未选择」继续执行）

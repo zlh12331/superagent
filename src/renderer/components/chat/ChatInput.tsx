@@ -20,16 +20,10 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { buildTextWithAttachments } from './attachments';
 import { AttachmentsChips } from './attachments-chips';
 import { SlashSuggestPanel } from './slash-suggest-panel';
-import {
-  filterSlashSuggestions,
-  findSlashSuggestion,
-  type SlashAction,
-  type SlashSuggestion,
-} from './slash-suggestions';
-import { detectSuggestTrigger } from './suggest-trigger';
+import type { SlashAction } from './slash-suggestions';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 import { useComposerInput } from './use-composer-input';
-import { useMentionFiles } from './use-mention-files';
+import { useComposerSuggest } from './use-composer-suggest';
 import { useVimMode } from './use-vim-mode';
 
 /** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
@@ -179,64 +173,27 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   };
 
-  // ── 斜杠/提及建议状态（照搬参考项目 useSlashSuggest：支持任意位置触发，取位置靠后者）──
-  // 触发检测为纯函数（suggest-trigger.ts）：slash 1-20 字符、mention ≤30 字符（允许空串）
-  const { atIndex, activeTrigger, activeQuery } = detectSuggestTrigger(value);
-
-  // slash 建议：内置命令过滤（command 带 '/' 前缀，查询词不含 '/'——对齐参考项目 useSlashSuggest 语义）
-  const filteredSuggestions: readonly SlashSuggestion[] =
-    activeTrigger === 'slash' && activeQuery !== null ? filterSlashSuggestions(activeQuery) : [];
-
-  // mention 建议：search.glob 按查询过滤（200ms 防抖与生命周期见 use-mention-files.ts）
-  const mentionFiles = useMentionFiles(activeTrigger, activeQuery, workingDir);
-
-  const mentionOpen = activeTrigger === 'mention' && mentionFiles.length > 0;
-  const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
-  // 统一建议面板开关（两者互斥，取靠后者触发）
-  const suggestOpen = slashOpen || mentionOpen;
-  // 键盘高亮索引：ArrowUp/Down 循环选择，Enter/Tab 应用选中项（此前固定第 0 项，
-  // 键盘用户无法选择第 2+ 条建议）；输入内容变化时重置回第一项
-  const [suggestIndex, setSuggestIndex] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 value/activeTrigger 变化重置高亮，不读取其值
-  useEffect(() => {
-    setSuggestIndex(0);
-  }, [value, activeTrigger]);
-
-  // 当前高亮建议的可读文本与总数（sr-only live region 播报用；textarea 不允许
-  // combobox 角色，故不依赖 aria-activedescendant）
-  const activeSuggestion = slashOpen ? filteredSuggestions[suggestIndex] : undefined;
-  const activeSuggestionLabel =
-    activeSuggestion !== undefined
-      ? `${activeSuggestion.command} ${t(activeSuggestion.labelKey)}`
-      : slashOpen
-        ? ''
-        : (mentionFiles[suggestIndex] ?? '');
-  const suggestionTotal = slashOpen ? filteredSuggestions.length : mentionFiles.length;
-
-  /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
-  const applySuggestion = (command: string): void => {
-    // 带 action 的命令：执行动作（对齐参考项目），不填充文本
-    const suggestion = findSlashSuggestion(command);
-    if (suggestion?.action !== undefined) {
-      // 清空输入（suggestOpen 派生自输入值，自动关闭建议面板）
-      setValue('');
-      autoResize();
-      onSlashCommand?.(suggestion.action);
-      return;
-    }
-    setValue(command);
-    autoResize();
-    textareaRef.current?.focus();
-  };
-
-  /** 应用提及建议：替换当前 @查询 为 @完整路径 */
-  const applyMention = (filePath: string): void => {
-    if (atIndex < 0) return;
-    const next = `${value.slice(0, atIndex)}@${filePath} `;
-    setValue(next);
-    autoResize();
-    textareaRef.current?.focus();
-  };
+  // ── 斜杠/提及建议状态机（自 ChatInput 拆出：use-composer-suggest.ts）──
+  // 职责：触发检测 / 候选过滤 / 键盘高亮 / 应用建议（Esc 只清触发段保留其余输入）
+  const {
+    activeTrigger,
+    suggestOpen,
+    filteredSuggestions,
+    mentionFiles,
+    suggestIndex,
+    activeSuggestionLabel,
+    suggestionTotal,
+    applySuggestion,
+    applyMention,
+    handleSuggestKeyDown,
+  } = useComposerSuggest({
+    value,
+    setValue,
+    workingDir,
+    onSlashCommand,
+    textareaRef,
+    onAfterChange: autoResize,
+  });
 
   // 值变化后 auto-resize
   // biome-ignore lint/correctness/useExhaustiveDependencies: 仅在 value 变化时 resize
@@ -342,49 +299,6 @@ export function ChatInput({
    * - Shift+Enter：换行（默认行为，不阻止）
    * - Esc（流式状态）：中断生成，对齐原型 composer-hint "Esc 中断"
    */
-  /** 建议面板键盘处理：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭仅清除触发段 */
-  const handleSuggestKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    if (!suggestOpen) {
-      return false;
-    }
-    const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
-    const selected = Math.min(suggestIndex, Math.max(0, count - 1));
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (count > 0) {
-        setSuggestIndex((i) =>
-          event.key === 'ArrowDown' ? (i + 1) % count : (i - 1 + count) % count,
-        );
-      }
-      return true;
-    }
-    if (event.key === 'Tab' || event.key === 'Enter') {
-      const selectedSuggestion = filteredSuggestions[selected];
-      const selectedMention = mentionFiles[selected];
-      if (slashOpen && selectedSuggestion !== undefined) {
-        event.preventDefault();
-        applySuggestion(selectedSuggestion.command);
-      } else if (mentionOpen && selectedMention !== undefined) {
-        event.preventDefault();
-        applyMention(selectedMention);
-      }
-      return true;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      // 关闭建议：只清除触发段（"/xxx" 或 "@xxx"），保留用户其余输入——
-      // 此前 setValue('') 会清空整个输入框且同步覆盖草稿（数据丢失）
-      const caret = event.currentTarget.selectionStart ?? value.length;
-      const triggerChar = slashOpen ? '/' : '@';
-      const at = value.lastIndexOf(triggerChar, Math.max(0, caret - 1));
-      if (at >= 0) {
-        setValue(value.slice(0, at) + value.slice(caret));
-      }
-      return true;
-    }
-    return false;
-  };
-
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // ── vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）──
     if (vimEnabled) {

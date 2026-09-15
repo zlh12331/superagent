@@ -38,6 +38,50 @@ const DMP = new diff_match_patch();
  */
 const MAX_DIFF_LINES = 5000;
 
+/** 行编码上下文（lineMap 正向 / charToLine 反向，行内容 ↔ 编码字符 1:1） */
+interface EncodeContext {
+  readonly lineMap: Map<string, string>;
+  readonly charToLine: Map<string, string>;
+  /** 下一个可用编码（起始 32，空间足够 65535 行） */
+  code: number;
+}
+
+/** 行 → 唯一字符编码（新行按需分配编码；双向登记保证 decode 1:1 还原） */
+function encodeLines(lines: readonly string[], ctx: EncodeContext): string {
+  let out = '';
+  for (const line of lines) {
+    let c = ctx.lineMap.get(line);
+    if (c === undefined) {
+      c = String.fromCharCode(ctx.code);
+      ctx.code += 1;
+      ctx.lineMap.set(line, c);
+      ctx.charToLine.set(c, line);
+    }
+    out += c;
+  }
+  return out;
+}
+
+/** dmp op → 行类型（未知 op 返回 null 跳过，防御未来增量 op） */
+function opToType(op: number): DiffLineType | null {
+  if (op === DIFF_EQUAL) return 'context';
+  if (op === DIFF_INSERT) return 'add';
+  return op === DIFF_DELETE ? 'del' : null;
+}
+
+/** 编码 diff 序列 → 原始行列表（反向映射还原行文本，保持 diff 顺序） */
+function decodeDiffs(diffs: readonly Diff[], charToLine: ReadonlyMap<string, string>): DiffLine[] {
+  const result: DiffLine[] = [];
+  for (const [op, chars] of diffs) {
+    const type = opToType(op);
+    if (type === null) continue;
+    for (const char of chars) {
+      result.push({ type, text: charToLine.get(char) ?? '' });
+    }
+  }
+  return result;
+}
+
 /**
  * 计算两段文本的行级 diff（LCS 语义对齐）
  *
@@ -72,47 +116,13 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   }
 
   // 行 → 唯一字符编码（空间足够 65535 行）
-  // lineMap：行内容 → 编码字符；charToLine：编码字符 → 行内容（decode 用反向映射）
-  const lineMap = new Map<string, string>();
-  const charToLine = new Map<string, string>();
-  let code = 32;
-  const encode = (lines: readonly string[]): string => {
-    let out = '';
-    for (const line of lines) {
-      let c = lineMap.get(line);
-      if (c === undefined) {
-        c = String.fromCharCode(code);
-        code += 1;
-        lineMap.set(line, c);
-        charToLine.set(c, line);
-      }
-      out += c;
-    }
-    return out;
-  };
-
-  const diffs: Diff[] = DMP.diff_main(encode(oldLines), encode(newLines), false);
-
-  // 编码字符 → 原始行（反向映射保证 1:1）
-  const decode = (chars: string): string[] => chars.split('').map((c) => charToLine.get(c) ?? '');
-
-  const result: DiffLine[] = [];
-  for (const [op, chars] of diffs) {
-    if (op === DIFF_EQUAL) {
-      for (const line of decode(chars)) {
-        result.push({ type: 'context', text: line });
-      }
-    } else if (op === DIFF_INSERT) {
-      for (const line of decode(chars)) {
-        result.push({ type: 'add', text: line });
-      }
-    } else if (op === DIFF_DELETE) {
-      for (const line of decode(chars)) {
-        result.push({ type: 'del', text: line });
-      }
-    }
-  }
-  return result;
+  const ctx: EncodeContext = { lineMap: new Map(), charToLine: new Map(), code: 32 };
+  const diffs: Diff[] = DMP.diff_main(
+    encodeLines(oldLines, ctx),
+    encodeLines(newLines, ctx),
+    false,
+  );
+  return decodeDiffs(diffs, ctx.charToLine);
 }
 
 /** 统计 diff 行数（卡片头部徽标用） */

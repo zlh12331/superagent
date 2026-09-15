@@ -306,6 +306,9 @@ describe('chat 批次3 缺口补全', () => {
       expect(handle).not.toBeNull();
       const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
       Object.defineProperty(textarea, 'offsetHeight', { value: 40, configurable: true });
+      // 键盘下限 = min(scrollHeight 自然高度, 160)（与拖拽路径对齐）；jsdom 无布局引擎
+      // scrollHeight 恒 0，mock 内容自然高度 40 —— ArrowDown 不得缩破内容高度
+      Object.defineProperty(textarea, 'scrollHeight', { value: 40, configurable: true });
       textarea.style.height = '40px';
       if (handle !== null) {
         fireEvent.keyDown(handle, { key: 'ArrowUp' });

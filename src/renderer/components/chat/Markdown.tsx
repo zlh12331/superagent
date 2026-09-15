@@ -142,10 +142,41 @@ function AnchorComponent({ href, children }: ComponentPropsWithoutRef<'a'>): Rea
  * - 主题跟随：resolvedTheme 变化时重新高亮
  * - 复制按钮：对齐原型 .code-block-wrapper + .code-copy-btn
  */
+/** 高亮结果（与生成它的 code + theme 绑定，防旧 HTML 回显） */
+interface HighlightResult {
+  readonly html: string;
+  readonly code: string;
+  readonly theme: string;
+}
+
+/**
+ * 高亮单段代码（模块级提取：shiki 异步管线）
+ *
+ * 高亮前先 ensureLangLoaded——首次遇到 go/rust 等延迟语言时按需 loadLanguage
+ * （await 到就绪再 codeToHtml），未收录语言走 fail-safe 降级（返回 null → 纯文本 pre）。
+ */
+async function highlightCode(
+  code: string,
+  lang: string,
+  theme: 'github-dark' | 'github-light',
+  isCancelled: () => boolean,
+): Promise<HighlightResult | null> {
+  try {
+    const h = await getHighlighter();
+    if (isCancelled()) return null;
+    await ensureLangLoaded(h, lang);
+    if (isCancelled()) return null;
+    return { html: h.codeToHtml(code, { lang, theme }), code, theme };
+  } catch {
+    // lang 不支持 / loadLanguage 失败等异常：降级为纯文本 pre
+    return null;
+  }
+}
+
 function CodeBlock({
   code,
   lang,
-  highlight = true,
+  highlight,
 }: {
   code: string;
   lang: string;
@@ -155,11 +186,7 @@ function CodeBlock({
   // 本地化文案
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const [highlighted, setHighlighted] = useState<{
-    readonly html: string;
-    readonly code: string;
-    readonly theme: string;
-  } | null>(null);
+  const [highlighted, setHighlighted] = useState<HighlightResult | null>(null);
   // 复制反馈统一走 useCopy（copied 2s 复位 + 失败 toast）
   const { copied, copy } = useCopy();
 
@@ -169,26 +196,14 @@ function CodeBlock({
 
   // 异步高亮：code / lang / theme 变化时重新生成
   // highlight=false（流式期间）跳过高亮——仅渲染纯文本，避免每 token 反复高亮（对齐参考项目）
-  // 2026-09 优化：高亮前先 ensureLangLoaded——首次遇到 go/rust 等延迟语言时
-  // 按需 loadLanguage（await 到就绪再 codeToHtml），未收录语言走 fail-safe 降级
   // 结果与「生成它的 code + theme」绑定：code 变化到新结果 resolve 之间不回显旧 HTML
   // （此前只存 html，长代码块在流式/编辑时会出现旧内容闪现）
   useEffect(() => {
     if (!highlight) return;
     let cancelled = false;
-    void (async () => {
-      try {
-        const h = await getHighlighter();
-        if (cancelled) return;
-        await ensureLangLoaded(h, normalizedLang);
-        if (cancelled) return;
-        const result = h.codeToHtml(code, { lang: normalizedLang, theme });
-        if (!cancelled) setHighlighted({ html: result, code, theme });
-      } catch {
-        // lang 不支持 / loadLanguage 失败等异常：降级为纯文本 pre
-        if (!cancelled) setHighlighted(null);
-      }
-    })();
+    void highlightCode(code, normalizedLang, theme, () => cancelled).then((result) => {
+      if (!cancelled) setHighlighted(result);
+    });
     return () => {
       cancelled = true;
     };

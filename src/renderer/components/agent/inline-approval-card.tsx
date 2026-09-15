@@ -48,6 +48,110 @@ async function sendApprovalResponse(
   }
 }
 
+/** 已决状态徽章（approved/rejected 双态） */
+function StatusBadge({ approved }: { readonly approved: boolean }): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
+        approved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
+      )}
+    >
+      {approved ? t('approval.approved') : t('approval.rejected')}
+    </span>
+  );
+}
+
+/** pending 操作按钮行：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */
+function PendingActions({
+  meta,
+  dangerous,
+  onRespond,
+}: {
+  readonly meta: ReturnType<typeof getApprovalMeta>;
+  readonly dangerous: boolean;
+  readonly onRespond: (approved: boolean, rememberDecision: boolean) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1 border px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => onRespond(false, false)}
+      >
+        <X className="size-3" />
+        {t('approval.reject')}
+      </Button>
+      {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file） */}
+      {meta.canRemember && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1 px-2 py-1"
+          title={t('approval.whitelistHint')}
+          onClick={() => onRespond(true, true)}
+        >
+          <ShieldCheck className="size-3" />
+          {t('approval.whitelist', { minutes: REMEMBER_TTL_MINUTES })}
+        </Button>
+      )}
+      <Button
+        size="sm"
+        className={cn(
+          // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
+          'ml-auto gap-1 px-2 py-1',
+          dangerous
+            ? 'bg-error-emphasis hover:bg-error-emphasis/90'
+            : 'bg-success-emphasis hover:bg-success-emphasis/90',
+        )}
+        onClick={() => onRespond(true, false)}
+      >
+        <Check className="size-3" />
+        {t('approval.approve')}
+      </Button>
+    </div>
+  );
+}
+
+/** 拒绝后操作行：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */
+function RejectedActions({
+  resubmitCommand,
+  onEditResubmit,
+  onSkip,
+}: {
+  readonly resubmitCommand: string | null;
+  readonly onEditResubmit: ((command: string) => void) | undefined;
+  readonly onSkip: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      {resubmitCommand !== null && onEditResubmit !== undefined && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1 px-2 py-1"
+          onClick={() => onEditResubmit(resubmitCommand)}
+        >
+          <Pencil className="size-3" />
+          {t('approval.editResubmit')}
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={onSkip}
+      >
+        {t('approval.skip')}
+      </Button>
+    </div>
+  );
+}
+
 /**
  * 内联审批卡片
  *
@@ -144,16 +248,7 @@ export function InlineApprovalCard({
               键 = ApprovalType 字面量，零映射层 */}
           {t(`approval.types.${item.type}`)}
         </span>
-        {!isPending && (
-          <span
-            className={cn(
-              'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
-              isApproved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
-            )}
-          >
-            {isApproved ? t('approval.approved') : t('approval.rejected')}
-          </span>
-        )}
+        {!isPending && <StatusBadge approved={isApproved} />}
         {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
         {!isPending && (
           <Button
@@ -183,71 +278,22 @@ export function InlineApprovalCard({
 
       {/* pending 操作按钮：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */}
       {isPending && (
-        <div className="mt-2 flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1 border px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => void respond(false, false)}
-          >
-            <X className="size-3" />
-            {t('approval.reject')}
-          </Button>
-          {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file） */}
-          {meta.canRemember && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1 px-2 py-1"
-              title={t('approval.whitelistHint')}
-              onClick={() => void respond(true, true)}
-            >
-              <ShieldCheck className="size-3" />
-              {t('approval.whitelist', { minutes: REMEMBER_TTL_MINUTES })}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            className={cn(
-              // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
-              'ml-auto gap-1 px-2 py-1',
-              dangerous
-                ? 'bg-error-emphasis hover:bg-error-emphasis/90'
-                : 'bg-success-emphasis hover:bg-success-emphasis/90',
-            )}
-            onClick={() => void respond(true, false)}
-          >
-            <Check className="size-3" />
-            {t('approval.approve')}
-          </Button>
-        </div>
+        <PendingActions
+          meta={meta}
+          dangerous={dangerous}
+          onRespond={(approved, rememberDecision) => void respond(approved, rememberDecision)}
+        />
       )}
       {/* 拒绝后操作：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */}
       {item.status === 'rejected' && !skipped && (
-        <div className="mt-2 flex items-center gap-2">
-          {resubmitCommand !== null && onEditResubmit !== undefined && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1 px-2 py-1"
-              onClick={() => onEditResubmit(resubmitCommand)}
-            >
-              <Pencil className="size-3" />
-              {t('approval.editResubmit')}
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => {
-              setSkipped(true);
-              toast.info(t('approval.skipped'));
-            }}
-          >
-            {t('approval.skip')}
-          </Button>
-        </div>
+        <RejectedActions
+          resubmitCommand={resubmitCommand}
+          onEditResubmit={onEditResubmit}
+          onSkip={() => {
+            setSkipped(true);
+            toast.info(t('approval.skipped'));
+          }}
+        />
       )}
     </div>
   );

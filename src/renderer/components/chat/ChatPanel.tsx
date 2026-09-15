@@ -14,7 +14,6 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Search, X } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -25,9 +24,8 @@ import { ModelSelector } from '@/components/common/ModelSelector';
 import { Button } from '@/components/ui/button';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
-import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
@@ -37,11 +35,12 @@ import { ChatMessageList } from './ChatMessageList';
 import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
 import { ConversationSearchBar } from './conversation-search-bar';
 import { GoalBar } from './GoalBar';
-import { reconstructHistory, toInitialMessages } from './history-parts';
+import { reconstructHistory } from './history-parts';
 import { RateLimitBanner } from './rate-limit-banner';
 import { executeSlashCommand } from './slash-commands';
 import { useAutoCompact } from './use-auto-compact';
 import { useChatGoals } from './use-chat-goals';
+import { useSessionCompact } from './use-session-compact';
 
 /** 稳定空数组：initialMessages 未传时复用同一引用，避免每轮渲染重算历史 */
 const NO_STORED_MESSAGES: readonly ChatMessage[] = [];
@@ -193,10 +192,6 @@ export function ChatPanel({
 
   // 会话目标（use-chat-goals.ts：goal:list/create/clear + active→completed 展示策略）
   const { currentGoal, isGoalCompleted, createGoal, clearGoal } = useChatGoals(chatId);
-  // 目标预填：把文本填入输入框并聚焦（用户补需求后发送；注入后下一轮重置，允许重复触发）
-  const prefillGoalInput = (text: string): void => {
-    injectComposerValue(text);
-  };
 
   // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
   const search = useConversationSearch(messages);
@@ -220,31 +215,8 @@ export function ChatPanel({
   // 编辑器设置：字体大小真实消费（消息区字号）
   const editorFontSize = useSettingsStore((s) => s.editor.fontSize);
 
-  // /compact 上下文压缩：主进程按模型窗口预算裁剪（compressByTokenBudget）后整体落库，
-  // 渲染层同步替换本地消息态（AI SDK v7 setMessages），回合 transcript 旧消息随之清空（固有语义）
-  // P2 修复：改走 useMutation 并失效会话详情缓存——此前直连 IPC 不失效，
-  // staleTime 内重进会话会以压缩前旧消息重新初始化 useChat（压缩看似白做）
-  const queryClient = useQueryClient();
-  const compactMutation = useMutation({
-    mutationFn: async () => {
-      // chatId 为必填 string（ChatPanelProps），无需空值守卫（此前 === undefined 分支
-      // 恒 false，属类型收紧后的历史残留）
-      return unwrap(await window.api.session.compact({ sessionId: chatId }));
-    },
-    onSuccess: (data) => {
-      // data.messages 已是 ChatMessage[]（session:compact 契约），无需断言
-      setMessages(toInitialMessages(data.messages));
-      void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(chatId) });
-      if (data.reclaimedTokens > 0) {
-        toast.success(t('chat.compactDone', { tokens: data.reclaimedTokens }));
-      } else {
-        toast.info(t('chat.compactNothing'));
-      }
-    },
-    // 统一走 handleError（错误码 → i18n 单一真源）
-    // 2026-09-06 审计修复：此前直接弹 error.message，[CODE] 前缀不会被本地化
-    onError: handleError,
-  });
+  // /compact 上下文压缩（use-session-compact.ts：mutation + 缓存失效 + 本地消息态替换 + toast）
+  const { compact } = useSessionCompact({ chatId, setMessages });
 
   // 长会话自动压缩（实验性 opt-in，默认关）：消息达阈值且回合空闲时自动 compact
   // （压缩会替换本地消息态，消息数骤降后不再触发；失败也不风暴——水位线机制见 hook）
@@ -252,7 +224,7 @@ export function ChatPanel({
     chatId,
     messages,
     status,
-    compact: () => compactMutation.mutate(),
+    compact,
   });
 
   // 重新生成回调：透传给 ChatMessageList → MsgActions
@@ -382,7 +354,7 @@ export function ChatPanel({
         <GoalBar
           goal={currentGoal}
           isCompleted={isGoalCompleted}
-          onEdit={() => prefillGoalInput(`/goal ${currentGoal.condition}`)}
+          onEdit={() => injectComposerValue(`/goal ${currentGoal.condition}`)}
           onClear={clearGoal}
         />
       )}
@@ -400,14 +372,14 @@ export function ChatPanel({
               clearMessages: () => setMessages([]),
               openShortcutHelp,
               openModelMenu: () => setModelMenuOpen(true),
-              compact: () => compactMutation.mutate(),
+              compact,
               interrupt: () => {
                 void stop();
               },
               sendMessage: (text) => {
                 void sendMessage({ text });
               },
-              prefillGoal: () => prefillGoalInput('/goal '),
+              prefillGoal: () => injectComposerValue('/goal '),
             });
           }}
           onSend={(text) => {
@@ -421,7 +393,7 @@ export function ChatPanel({
                 createGoal(condition);
               } else {
                 // /goal 无需求：重新填入输入框让用户补充需求（与斜杠建议项行为一致）
-                prefillGoalInput('/goal ');
+                injectComposerValue('/goal ');
               }
               return;
             }
