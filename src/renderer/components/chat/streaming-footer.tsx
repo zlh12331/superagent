@@ -8,12 +8,8 @@ import type { ReactElement } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 
-/** 流式响应尾部：当前仅渲染 typing-indicator 占位（三 accent 点弹跳） */
+/** 流式响应尾部：assistant 尚未产出首条消息时的打字占位（三 accent 点弹跳） */
 export function StreamingFooter(): ReactElement {
-  return <StreamingPlaceholder />;
-}
-
-function StreamingPlaceholder(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   return (

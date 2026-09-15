@@ -25,45 +25,63 @@ export type ToolStatusLabelKey =
 /** 工具状态对应的卡片状态类（CSS .card-status.<x>） */
 export type ToolStatusClass = 'error' | 'success' | 'running' | 'pending';
 
-export function mapToolStateToStatusLabelKey(state: string): ToolStatusLabelKey {
+/**
+ * 工具调用状态联合（对齐 ai 包 ToolUIPart / DynamicToolUIPart 的 state：
+ * input-streaming / input-available / approval-requested / approval-responded /
+ * output-available / output-error / output-denied）
+ *
+ * 注意：不存在 'input-accepted'（2026-09-15 核实 ai 包类型后删除该死分支——
+ * 此前 input-available 落入 waiting 兜底，工具执行中 spinner 不转）
+ */
+export type ToolCallState =
+  | 'input-streaming'
+  | 'input-available'
+  | 'approval-requested'
+  | 'approval-responded'
+  | 'output-available'
+  | 'output-error'
+  | 'output-denied';
+
+export function mapToolStateToStatusLabelKey(state: ToolCallState): ToolStatusLabelKey {
   if (state === 'output-error') {
     return 'statusError';
   }
   if (state === 'output-available') {
     return 'statusSuccess';
   }
-  if (state === 'input-streaming' || state === 'input-accepted') {
+  // running：参数流式传输中 / 已就绪执行中 / 审批已通过待产出
+  if (
+    state === 'input-streaming' ||
+    state === 'input-available' ||
+    state === 'approval-responded'
+  ) {
     return 'statusRunning';
   }
+  // approval-requested（等用户审批）/ output-denied（用户拒绝，未产出）→ waiting
   return 'statusWaiting';
 }
 
 /**
  * 工具状态映射 → .card-status 类名
  *
- * AI SDK 的 tool.state 可能值：
- * - 'input-streaming' / 'input-accepted'：输入阶段（pending）
- * - 'output-available'：完成（success）
- * - 'output-error'：错误（error）
+ * AI SDK 的 tool.state 可能值见 {@link ToolCallState}。
  */
-export function mapToolStateToStatusClass(state: string): ToolStatusClass {
+export function mapToolStateToStatusClass(state: ToolCallState): ToolStatusClass {
   if (state === 'output-error') {
     return 'error';
   }
   if (state === 'output-available') {
     return 'success';
   }
-  if (state === 'input-streaming' || state === 'input-accepted') {
+  if (
+    state === 'input-streaming' ||
+    state === 'input-available' ||
+    state === 'approval-responded'
+  ) {
     return 'running';
   }
   return 'pending';
 }
-
-/**
- * 代码块（带标签 + 内容）
- *
- * 用于展示工具调用的 input / output / error。
- */
 
 export function extractText(parts: readonly UiMessagePart[]): string {
   return parts

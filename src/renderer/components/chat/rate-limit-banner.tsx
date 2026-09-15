@@ -15,6 +15,9 @@ import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { isRateLimitExpired, useRateLimitStore } from '@/stores/transient/rate-limit-store';
 
+/** 自动隐藏检查间隔（isRateLimitExpired 判定 5 分钟过期，本定时器每分钟兜底复查） */
+const DISMISS_CHECK_INTERVAL_MS = 60_000;
+
 /**
  * 限流提示横幅
  *
@@ -34,7 +37,7 @@ export function RateLimitBanner(): ReactElement | null {
       if (isRateLimitExpired(useRateLimitStore.getState().triggeredAt)) {
         useRateLimitStore.getState().dismiss();
       }
-    }, 60_000);
+    }, DISMISS_CHECK_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [visible, triggeredAt]);
 

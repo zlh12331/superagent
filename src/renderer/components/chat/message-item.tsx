@@ -33,6 +33,7 @@ import {
   formatJson,
   mapToolStateToStatusClass,
   mapToolStateToStatusLabelKey,
+  type ToolCallState,
 } from './message-utils';
 import { StreamingCursor } from './streaming-cursor';
 
@@ -61,22 +62,16 @@ export const MessageItem = memo(function MessageItem({
   // 当前模型（对齐原型 .msg-role 展示模型名）
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
 
-  // parts 预映射（assistant 分支用）：生成稳定 key（含 index 但不暴露给 JSX key，规避 noArrayIndexKey）
-  // 并标记最后一条 text part 的流式光标（照搬参考项目 StreamingCursor）。
-  // 必须在组件顶层调用（Hook 规则），非 assistant 消息返回空。
+  // parts 预映射：生成稳定 key（含 index 但不暴露给 JSX key，规避 noArrayIndexKey）
+  // 并标记最后一条 text part 的流式光标（仅流式 assistant 消息；user/历史恒 false）
   const partsWithCursor = useMemo(
     () =>
-      message.role === 'assistant'
-        ? message.parts.map((part, index) => ({
-            part,
-            key: `${message.id}-${index}`,
-            showCursor: isStreaming && index === message.parts.length - 1,
-          }))
-        : message.parts.map((part, index) => ({
-            part,
-            key: `${message.id}-${index}`,
-            showCursor: false,
-          })),
+      message.parts.map((part, index) => ({
+        part,
+        key: `${message.id}-${index}`,
+        showCursor:
+          message.role === 'assistant' && isStreaming && index === message.parts.length - 1,
+      })),
     [message.parts, message.id, isStreaming, message.role],
   );
 
@@ -283,7 +278,7 @@ function PartView({
 interface ToolCallViewProps {
   type: string;
   toolCallId: string;
-  state: string;
+  state: ToolCallState;
   input: unknown | undefined;
   output: unknown | undefined;
   errorText: string | undefined;

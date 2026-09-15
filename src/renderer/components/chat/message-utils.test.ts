@@ -21,12 +21,14 @@ describe('mapToolStateToStatusLabelKey', () => {
   it('output-available → statusSuccess', () => {
     expect(mapToolStateToStatusLabelKey('output-available')).toBe('statusSuccess');
   });
-  it('input-streaming / input-accepted → statusRunning', () => {
+  it('input-streaming / input-available / approval-responded → statusRunning', () => {
     expect(mapToolStateToStatusLabelKey('input-streaming')).toBe('statusRunning');
-    expect(mapToolStateToStatusLabelKey('input-accepted')).toBe('statusRunning');
+    expect(mapToolStateToStatusLabelKey('input-available')).toBe('statusRunning');
+    expect(mapToolStateToStatusLabelKey('approval-responded')).toBe('statusRunning');
   });
-  it('其他（含 undefined 派生）→ statusWaiting', () => {
-    expect(mapToolStateToStatusLabelKey('whatever')).toBe('statusWaiting');
+  it('approval-requested / output-denied → statusWaiting（未产出）', () => {
+    expect(mapToolStateToStatusLabelKey('approval-requested')).toBe('statusWaiting');
+    expect(mapToolStateToStatusLabelKey('output-denied')).toBe('statusWaiting');
   });
 });
 
@@ -35,12 +37,14 @@ describe('mapToolStateToStatusClass', () => {
     expect(mapToolStateToStatusClass('output-error')).toBe('error');
     expect(mapToolStateToStatusClass('output-available')).toBe('success');
   });
-  it('input-streaming / input-accepted → running', () => {
+  it('input-streaming / input-available / approval-responded → running', () => {
     expect(mapToolStateToStatusClass('input-streaming')).toBe('running');
-    expect(mapToolStateToStatusClass('input-accepted')).toBe('running');
+    expect(mapToolStateToStatusClass('input-available')).toBe('running');
+    expect(mapToolStateToStatusClass('approval-responded')).toBe('running');
   });
-  it('其他 → pending', () => {
-    expect(mapToolStateToStatusClass('idle')).toBe('pending');
+  it('approval-requested / output-denied → pending', () => {
+    expect(mapToolStateToStatusClass('approval-requested')).toBe('pending');
+    expect(mapToolStateToStatusClass('output-denied')).toBe('pending');
   });
 });
 

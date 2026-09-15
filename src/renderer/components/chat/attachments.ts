@@ -19,6 +19,8 @@ export interface ChatAttachment {
 
 /** 附件内容读取上限（字符；对齐 shared 单一真源 ATTACHMENT_MAX_CHARS=4000） */
 export const ATTACHMENT_MAX_CHARS = SHARED_ATTACHMENT_MAX_CHARS;
+/** 附件读取行数上限（file.read 的 limit 语义为行数：先限行读取，再按字符截断） */
+const ATTACHMENT_READ_LINES = 200;
 
 /** 由路径派生展示名（basename，兼容 win32/posix 分隔符） */
 export function attachmentName(path: string): string {
@@ -50,7 +52,7 @@ export async function buildTextWithAttachments(
         await window.api.file.read({
           path: att.path,
           offset: undefined,
-          limit: 200,
+          limit: ATTACHMENT_READ_LINES,
         }),
       );
       const content = data.content.slice(0, ATTACHMENT_MAX_CHARS);
