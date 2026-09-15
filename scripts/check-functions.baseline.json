@@ -1,68 +1,31 @@
 {
-  "src/main/infra/ai/agent/agent-service.ts#constructor": {
+  "src/main/infra/ai/agent/agent-service.ts": {
+    "count": 2,
+    "max": 235,
     "params": 8
   },
-  "src/main/infra/ai/agent/agent-service.ts#streamToWebContents": {
-    "body": 285
-  },
-  "src/main/infra/ai/tools/index.ts#registerBuiltinTools": {
+  "src/main/infra/ai/tools/index.ts": {
     "params": 10
   },
-  "src/main/infra/ai/tools/permission-service.ts#requestApproval": {
+  "src/main/infra/ai/tools/permission-service.ts": {
     "params": 5
   },
-  "src/main/infra/ai/tools/tool-executor.ts#buildErrorResult": {
+  "src/main/infra/ai/tools/tool-executor.ts": {
     "params": 6
   },
-  "src/main/infra/ai/tools/tool-executor.ts#execute": {
+  "src/main/infra/file/file-service.ts": {
     "params": 5
   },
-  "src/main/infra/file/file-service.ts#listRecursive": {
-    "params": 5
+  "src/renderer/components/chat/ChatInput.tsx": {
+    "count": 1,
+    "max": 207
   },
-  "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
-    "body": 303
+  "src/renderer/components/layout/Sidebar.tsx": {
+    "count": 1,
+    "max": 219
   },
-  "src/renderer/components/chat/ChatMessageList.tsx#ChatMessageList": {
-    "body": 213
-  },
-  "src/renderer/components/chat/ChatPanel.tsx#ChatPanel": {
-    "body": 245
-  },
-  "src/renderer/components/common/CommandPalette.tsx#CommandPalette": {
-    "body": 226
-  },
-  "src/renderer/components/dev/browser-pane.tsx#BrowserPane": {
-    "body": 202
-  },
-  "src/renderer/components/file-tree/FileViewerPanel.tsx#FileViewerPanel": {
-    "body": 243
-  },
-  "src/renderer/components/file-tree/fuzzy-search-dialog.tsx#FuzzySearchDialog": {
-    "body": 241
-  },
-  "src/renderer/components/layout/AppShell.tsx#AppShell": {
-    "body": 277
-  },
-  "src/renderer/components/layout/DevPanel.tsx#DevPanel": {
-    "body": 242
-  },
-  "src/renderer/components/layout/Sidebar.tsx#Sidebar": {
-    "body": 307
-  },
-  "src/renderer/components/settings/sections/about-section.tsx#AboutSection": {
-    "body": 256
-  },
-  "src/renderer/components/settings/sections/approval-mode-section.tsx#ApprovalModeSection": {
-    "body": 246
-  },
-  "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx#ModelConfigDialog": {
-    "body": 204
-  },
-  "src/renderer/components/settings/sections/dialogs/model-config-fields.tsx#ModelConfigFields": {
-    "body": 320
-  },
-  "src/renderer/dev/mock-api.ts#createMockApi": {
-    "body": 488
+  "src/renderer/dev/mock-api.ts": {
+    "count": 1,
+    "max": 380
   }
 }

@@ -41,7 +41,7 @@
     "i18n:lint": "i18next-cli lint",
     "check:docs": "pnpm --filter @code-agent/typedoc-docs run check",
     "check:file-size": "tsx scripts/check-file-size.ts",
-    "check:functions": "tsx scripts/check-functions.ts",
+    "check:functions": "biome lint --only=complexity/noExcessiveLinesPerFunction --reporter=json src | tsx scripts/check-functions.ts",
     "check:complexity": "biome lint --only=complexity/noExcessiveCognitiveComplexity --reporter=json src | tsx scripts/check-complexity.ts",
     "check:comments": "tsx scripts/check-comments.ts",
     "depcruise": "pnpm --filter @code-agent/depcruise run check",

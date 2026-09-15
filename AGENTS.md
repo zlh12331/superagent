@@ -11,7 +11,7 @@ pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计 11 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 / 体≤200 棘轮；101–200 仅提示）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + test-boundary + csp-hash + ui-consistency（写法一致性棘轮），pre-push/CI 卡关
+pnpm check:static           # 静态审计 11 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + test-boundary + csp-hash + ui-consistency（写法一致性棘轮），pre-push/CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
