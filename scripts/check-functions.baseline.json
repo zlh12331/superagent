@@ -11,33 +11,14 @@
   "src/main/infra/ai/tools/permission-service.ts#requestApproval": {
     "params": 5
   },
-  "src/main/infra/ai/tools/run-command.tool.ts#createRunCommandTool": {
-    "body": 171
-  },
-  "src/main/infra/ai/tools/terminal.tool.ts#createTerminalTool": {
-    "body": 132
-  },
   "src/main/infra/ai/tools/tool-executor.ts#buildErrorResult": {
     "params": 6
   },
   "src/main/infra/ai/tools/tool-executor.ts#execute": {
-    "body": 140,
     "params": 5
   },
   "src/main/infra/file/file-service.ts#listRecursive": {
     "params": 5
-  },
-  "src/main/service-container.ts#dispose": {
-    "body": 132
-  },
-  "src/main/window.ts#createWindow": {
-    "body": 130
-  },
-  "src/renderer/components/agent/ask-dialog.tsx#AskDialog": {
-    "body": 152
-  },
-  "src/renderer/components/agent/inline-approval-card.tsx#InlineApprovalCard": {
-    "body": 169
   },
   "src/renderer/components/chat/ChatInput.tsx#ChatInput": {
     "body": 303
@@ -46,28 +27,13 @@
     "body": 213
   },
   "src/renderer/components/chat/ChatPanel.tsx#ChatPanel": {
-    "body": 247
+    "body": 245
   },
   "src/renderer/components/common/CommandPalette.tsx#CommandPalette": {
     "body": 226
   },
-  "src/renderer/components/common/DialogHost.tsx#DialogHost": {
-    "body": 127
-  },
-  "src/renderer/components/common/ModelSelector.tsx#ModelSelector": {
-    "body": 158
-  },
-  "src/renderer/components/dev/InspectorPanel.tsx#InspectorPanel": {
-    "body": 115
-  },
   "src/renderer/components/dev/browser-pane.tsx#BrowserPane": {
     "body": 202
-  },
-  "src/renderer/components/file-tree/FileTreeNode.tsx#FileTreeNode": {
-    "body": 135
-  },
-  "src/renderer/components/file-tree/FileTreePanel.tsx#FileTreePanel": {
-    "body": 114
   },
   "src/renderer/components/file-tree/FileViewerPanel.tsx#FileViewerPanel": {
     "body": 243
@@ -84,15 +50,6 @@
   "src/renderer/components/layout/Sidebar.tsx#Sidebar": {
     "body": 307
   },
-  "src/renderer/components/layout/right-panel-panes.tsx#DiffPane": {
-    "body": 104
-  },
-  "src/renderer/components/layout/thread-item.tsx#ThreadItem": {
-    "body": 185
-  },
-  "src/renderer/components/settings/SettingsDialog.tsx#SettingsDialog": {
-    "body": 101
-  },
   "src/renderer/components/settings/sections/about-section.tsx#AboutSection": {
     "body": 256
   },
@@ -105,37 +62,7 @@
   "src/renderer/components/settings/sections/dialogs/model-config-fields.tsx#ModelConfigFields": {
     "body": 320
   },
-  "src/renderer/components/settings/sections/im-channels-section.tsx#ImChannelsSection": {
-    "body": 104
-  },
-  "src/renderer/components/settings/sections/mcp-section.tsx#McpSection": {
-    "body": 196
-  },
-  "src/renderer/components/settings/sections/models-section.tsx#ModelsSection": {
-    "body": 101
-  },
-  "src/renderer/components/settings/sections/prompt-section.tsx#PromptSection": {
-    "body": 102
-  },
-  "src/renderer/components/settings/sections/skills-section.tsx#SkillsSection": {
-    "body": 136
-  },
-  "src/renderer/components/settings/sections/usage-section.tsx#UsageSection": {
-    "body": 136
-  },
   "src/renderer/dev/mock-api.ts#createMockApi": {
     "body": 488
-  },
-  "src/renderer/dev/mock-api.ts#simulateAgentStream": {
-    "body": 109
-  },
-  "src/renderer/dev/mock-api.ts#simulateAllPartsDemo": {
-    "body": 152
-  },
-  "src/renderer/hooks/use-file-tree.ts#useFileTree": {
-    "body": 145
-  },
-  "src/renderer/routes/home.tsx#HomePage": {
-    "body": 196
   }
 }

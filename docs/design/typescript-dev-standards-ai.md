@@ -1478,7 +1478,7 @@ AI 生成任何 TypeScript 项目时，必须使用以下完整 tsconfig.json �
   □ 业务逻辑不直接依赖基础设施
   □ 依赖方向单向无循环
   - 文件净行数不超过 600 行（工具：pnpm check:file-size，豁免清单渐进清理）
-  - 函数体不超过 100 净行（工具：pnpm check:functions，51–100 仅提示不卡关；棘轮只锁 >100）
+  - 函数体不超过 200 净行（工具：pnpm check:functions，101–200 仅提示不卡关；棘轮只锁 >200；行数管「巨大」，「纠缠」由下条复杂度门禁承担）
   - 函数认知复杂度不超过 15（工具：pnpm check:complexity，复用 Biome 内置规则；棘轮按文件锁定）
   - 函数参数不超过 4 个，超出对象封装（工具：pnpm check:functions，error 卡关；DI 装配函数豁免）
 
