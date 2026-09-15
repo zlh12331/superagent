@@ -663,12 +663,12 @@
       "metricsFailed": "指标获取失败"
     },
     "git": {
-      "statusModified": "修改",
-      "statusAdded": "新增",
-      "statusDeleted": "删除",
-      "statusRenamed": "重命名",
-      "statusUntracked": "未跟踪",
-      "statusConflict": "冲突",
+      "modified": "修改",
+      "added": "新增",
+      "deleted": "删除",
+      "renamed": "重命名",
+      "untracked": "未跟踪",
+      "conflicted": "冲突",
       "refreshStatus": "刷新 Git 状态",
       "statusEmpty": "Git 状态为空",
       "loadFailed": "无法获取"

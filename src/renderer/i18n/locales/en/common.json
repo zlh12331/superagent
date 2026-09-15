@@ -663,12 +663,12 @@
       "metricsFailed": "Failed to fetch metrics"
     },
     "git": {
-      "statusModified": "Modified",
-      "statusAdded": "Added",
-      "statusDeleted": "Deleted",
-      "statusRenamed": "Renamed",
-      "statusUntracked": "Untracked",
-      "statusConflict": "Conflict",
+      "modified": "Modified",
+      "added": "Added",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "untracked": "Untracked",
+      "conflicted": "Conflict",
       "refreshStatus": "Refresh Git status",
       "statusEmpty": "Git status is empty",
       "loadFailed": "Failed to load"

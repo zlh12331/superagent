@@ -34,11 +34,7 @@ interface FileListProps {
   readonly onSelect: (path: string) => void;
 }
 
-import {
-  getColorForFileStatus,
-  getIconForFileStatus,
-  getLabelKeyForFileStatus,
-} from './git-status-utils';
+import { getGitStatusMeta } from './git-status-utils';
 
 export function FileList({ files, selectedFilePath, onSelect }: FileListProps): ReactElement {
   // 本地化文案
@@ -46,9 +42,10 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
   return (
     <ul className="flex flex-col gap-0.5 p-1">
       {files.map((file) => {
-        const Icon = getIconForFileStatus(file.status);
-        const colorClass = getColorForFileStatus(file.status);
-        const label = t(`git.${getLabelKeyForFileStatus(file.status)}`);
+        // 状态元数据单一入口（图标/颜色类）；文案键 = 协议值（git.<status>）
+        const meta = getGitStatusMeta(file.status);
+        const Icon = meta.icon;
+        const label = t(`git.${file.status}`);
         const isSelected = file.path === selectedFilePath;
 
         return (
@@ -64,7 +61,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
                 onSelect(file.path);
               }}
             >
-              <Icon className={cn('size-3 shrink-0', colorClass)} strokeWidth={1.5} />
+              <Icon className={cn('size-3 shrink-0', meta.className)} strokeWidth={1.5} />
               <span
                 className={cn(
                   'min-w-0 flex-1 truncate text-2xs font-mono',
@@ -74,7 +71,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
               >
                 {file.path}
               </span>
-              <span className={cn('text-[9px] shrink-0', colorClass)}>{label}</span>
+              <span className={cn('text-[9px] shrink-0', meta.className)}>{label}</span>
             </Button>
           </li>
         );
