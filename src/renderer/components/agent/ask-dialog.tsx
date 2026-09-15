@@ -14,8 +14,8 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
@@ -102,6 +102,8 @@ function QuestionProgressBar({
 /** Agent 提问对话框 */
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
+  // 错误码 → 本地化文案（对齐全仓 unwrapErrorMessage 统一模式，见 catch 分支）
+  const { getErrorMessage } = useErrorMessage();
   // 逐字段 selector（见 useAskState 说明；此前为整体订阅）
   const { sessionId: askSessionId, askId, questions, clearAsk } = useAskState();
   const [answers, setAnswers] = useState<AnswerState[]>([]);
@@ -151,10 +153,14 @@ export function AskDialog(): ReactElement | null {
     try {
       // 错误响应由 unwrap 抛 [CODE] message；异常走下方 catch 统一提示
       unwrap(await window.api.agent.respondAsk({ askId, answers: answers.map(toAnswerPayload) }));
-    } catch (err) {
-      // 区分 IPC 错误响应（已含具体原因）与异常（回退通用提交失败文案）
-      const isIpcError = err instanceof Error && /^\[[A-Z_]+\]/.test(err.message);
-      toast.error(isIpcError ? err.message : t('agent.askSubmitFailed'));
+    } catch (error) {
+      // 对齐全仓 11 处统一模式：[CODE] 前缀错误 → 错误码本地化（errors namespace →
+      // ERROR_META 兜底）；非 IPC 异常回退通用提交失败文案
+      toast.error(
+        error instanceof Error
+          ? unwrapErrorMessage(error, getErrorMessage)
+          : t('agent.askSubmitFailed'),
+      );
     }
     // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
     // 成功/失败路径统一在这里关闭弹窗并复位提交态

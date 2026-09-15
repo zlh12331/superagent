@@ -137,21 +137,22 @@ describe('AskDialog', () => {
     expect(bar.getAttribute('aria-valuemax')).toBe('2');
   });
 
-  it('respondAsk 返回 error：toast 错误 + 仍清空 store', async () => {
+  it('respondAsk 返回 error：错误码本地化 toast（对齐 unwrapErrorMessage 统一模式）+ 仍清空 store', async () => {
     const user = userEvent.setup();
     const respondAsk = vi.fn(async (_p: unknown) => ({
-      error: { code: 'ASK_TIMEOUT', message: '超时' },
+      error: { code: 'INVALID_INPUT', message: '答案格式不合法' },
     }));
     (window.api as unknown as Record<string, Record<string, unknown>>)['agent'] = { respondAsk };
     setAsk('ask-9', [mkQuestion()]);
     render(<AskDialog />);
     await user.click(screen.getByRole('button', { name: '提交' }));
     const { toast } = await import('sonner');
-    expect(toast.error).toHaveBeenCalledWith('[ASK_TIMEOUT] 超时');
+    // [CODE] 前缀错误 → 错误码经 errors namespace 本地化（zh-CN：输入参数有误）
+    expect(toast.error).toHaveBeenCalledWith('输入参数有误');
     expect(useAgentAskStore.getState().askId).toBeNull();
   });
 
-  it('respondAsk 拒绝：toast 提交失败 + 仍清空 store', async () => {
+  it('respondAsk 拒绝：无 [CODE] 前缀原始消息透传 toast + 仍清空 store', async () => {
     const user = userEvent.setup();
     const respondAsk = vi.fn(async (_p: unknown) => {
       throw new Error('ipc down');
@@ -161,7 +162,8 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     await user.click(screen.getByRole('button', { name: '提交' }));
     const { toast } = await import('sonner');
-    expect(toast.error).toHaveBeenCalledWith('提交回答失败');
+    // 非 IPC 错误响应（无 [CODE] 前缀）→ unwrapErrorMessage 原样透传（全仓统一行为）
+    expect(toast.error).toHaveBeenCalledWith('ipc down');
     expect(useAgentAskStore.getState().askId).toBeNull();
   });
 });
