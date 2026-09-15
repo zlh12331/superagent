@@ -22,11 +22,11 @@
 以下规则**强制**，违反即视为设计债：
 
 1. **语义令牌优先，禁止裸色值**
-   - ✅ `bg-background` / `text-muted-foreground` / `bg-[var(--accent)]`
+   - ✅ `bg-background` / `text-muted-foreground` / `bg-accent`（令牌已在 `@theme` 注册 `--color-*` 时，优先一等公民语义类；仅未注册令牌（如 `--glass-bg` 表面特效）才用 `bg-[var(--x)]` arbitrary 写法）
    - ❌ `bg-blue-500` / `text-red-600` / `#ff0000`
 2. **禁止手动 `dark:` 覆盖**
    - 双主题差异必须用语义令牌表达（`bg-muted` 等令牌两主题自适应）
-   - ❌ `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400` → ✅ `bg-[var(--accent)]/10 text-[var(--accent)]`
+   - ❌ `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400` → ✅ `bg-accent/10 text-accent`
    - 例外：Aurora 令牌未覆盖的琥珀/警告语义可暂用，但须先检查 `--amber`/`--warn`/`--error` 令牌
 3. **`className` 只管布局，不管样式**
    - 不改组件颜色/字体；组件内部视觉由组件类与令牌负责

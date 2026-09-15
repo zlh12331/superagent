@@ -104,6 +104,14 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-amber: var(--amber);
+  /* 补注册（2026-09）：跨域消费的类别/语义色接入工具类命名空间，与 success/error/amber
+     对称（仅暴露既有令牌，未新增颜色值）；--glass-bg 为表面特效令牌不注册（避免
+     bg-glass-bg 语义类被滥用，其消费处保持 arbitrary 写法） */
+  --color-warn: var(--warn);
+  --color-info-blue: var(--info-blue);
+  --color-magenta: var(--magenta);
+  --color-error-bg: var(--error-bg);
+  --color-accent-2-soft: var(--accent-2-soft);
   --color-bg-elev: var(--bg-elev);
   --color-bg-elev-2: var(--bg-elev-2);
   --color-bg-elev-3: var(--bg-elev-3);

@@ -131,9 +131,9 @@ export function InlineApprovalCard({
     <div
       className={cn(
         'mx-3 mt-2 rounded-lg border bg-card px-3 py-2 text-xs',
-        isPending && 'border-l-4 border-l-[var(--warn)]',
-        isApproved && 'border-l-4 border-l-[var(--success)]',
-        item.status === 'rejected' && 'border-l-4 border-l-[var(--error)]',
+        isPending && 'border-l-4 border-l-warn',
+        isApproved && 'border-l-4 border-l-success',
+        item.status === 'rejected' && 'border-l-4 border-l-error',
         skipped && 'opacity-40',
       )}
       role="alert"
@@ -141,10 +141,7 @@ export function InlineApprovalCard({
     >
       {/* 头部：图标 + 类型 + 状态 */}
       <div className="flex items-center gap-2">
-        <Icon
-          className={cn('size-3.5 shrink-0', dangerous && 'text-[var(--error)]')}
-          strokeWidth={1.5}
-        />
+        <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-error')} strokeWidth={1.5} />
         <span
           className={cn(
             'min-w-0 flex-1 truncate font-medium',

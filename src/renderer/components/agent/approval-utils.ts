@@ -142,22 +142,22 @@ export function getVariantForType(type: ApprovalType): {
 } {
   switch (type) {
     case 'run_command':
-      return { className: 'bg-[var(--amber)]/15 text-[var(--warn)]' };
+      return { className: 'bg-amber/15 text-warn' };
     case 'write_file':
     case 'edit_file':
     case 'apply_patch':
-      return { className: 'bg-[var(--info-blue)] text-[var(--accent-2)]' };
+      return { className: 'bg-info-blue text-accent-2' };
     case 'delete_file':
-      return { className: 'bg-[var(--error-bg)] text-[var(--error)]' };
+      return { className: 'bg-error-bg text-error' };
     case 'install_package':
-      return { className: 'bg-[var(--magenta)]/15 text-[var(--magenta)]' };
+      return { className: 'bg-magenta/15 text-magenta' };
     case 'external_call':
-      return { className: 'bg-[var(--accent-2-soft)] text-[var(--accent-2)]' };
+      return { className: 'bg-accent-2-soft text-accent-2' };
     case 'git_add':
     case 'git_commit':
     case 'git_push':
       // violet/purple 视觉相近，归并 magenta 系（令牌表克制，不新增派生色）
-      return { className: 'bg-[var(--magenta)]/15 text-[var(--magenta)]' };
+      return { className: 'bg-magenta/15 text-magenta' };
     default:
       // 未知类型兜底（防御：入队数据异常时不崩溃）
       return { className: 'bg-muted text-muted-foreground' };

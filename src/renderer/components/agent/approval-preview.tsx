@@ -31,7 +31,7 @@ export function renderStructuredPreview(
     const cmd = getField(input, 'command') ?? '';
     const cwd = getField(input, 'cwd');
     return (
-      <div className="mt-3 rounded-md border border-[var(--amber)]/30 bg-muted p-3 font-mono text-sm">
+      <div className="mt-3 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
         {cwd !== undefined && (
           <div className="mb-2 text-xs text-muted-foreground">
             <span className="font-sans">{t('approval.workingDir')}</span>
@@ -53,12 +53,12 @@ export function renderStructuredPreview(
           <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {append && (
-            <span className="ml-2 rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-warn-text">
+            <span className="ml-2 rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
               {t('approval.appendMode')}
             </span>
           )}
         </div>
-        <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-[var(--amber)]/30">
+        <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-amber/30">
           <ReactDiffViewer
             oldValue={append ? t('approval.appendToEnd') : t('approval.newFile')}
             newValue={content}
@@ -86,12 +86,12 @@ export function renderStructuredPreview(
           <span className="font-sans">{t('approval.filePath')}</span>
           <span className="break-all font-mono">{path}</span>
           {replaceAll && (
-            <span className="ml-2 rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-warn-text">
+            <span className="ml-2 rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
               {t('approval.replaceAll')}
             </span>
           )}
         </div>
-        <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-[var(--amber)]/30">
+        <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-amber/30">
           <ReactDiffViewer
             oldValue={oldStr || t('approval.empty')}
             newValue={newStr || t('approval.emptyMeansDelete')}
@@ -131,7 +131,7 @@ export function renderGitPreview(
     const paths = getStringArrayField(input, 'paths') ?? [];
     const isAddAll = paths.length === 0;
     return (
-      <div className="mt-3 flex flex-col gap-2 rounded-md border border-[var(--amber)]/30 bg-muted p-3 font-mono text-sm">
+      <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
         <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.operation')}</span>
           <span>
@@ -155,12 +155,12 @@ export function renderGitPreview(
     const message = getField(input, 'message') ?? '';
     const amend = getBooleanField(input, 'amend') ?? false;
     return (
-      <div className="mt-3 flex flex-col gap-2 rounded-md border border-[var(--amber)]/30 bg-muted p-3 font-mono text-sm">
+      <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.operation')}</span>
           <span>{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
           {amend && (
-            <span className="rounded bg-[var(--amber)]/15 px-1.5 py-0.5 text-2xs text-warn-text">
+            <span className="rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
               {t('approval.unavailable')}
             </span>
           )}
@@ -182,19 +182,19 @@ export function renderGitPreview(
     const force = getBooleanField(input, 'force') ?? false;
     const target = refspec.length > 0 ? `${remote}/${refspec}` : `${remote}/<current-branch>`;
     return (
-      <div className="mt-3 flex flex-col gap-2 rounded-md border border-[var(--amber)]/30 bg-muted p-3 font-mono text-sm">
+      <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
         <div className="text-xs text-muted-foreground">
           <span className="font-sans">{t('approval.operation')}</span>
           <span>{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {setUpstream && (
-            <span className="rounded bg-[var(--info-blue)] px-1.5 py-0.5 text-2xs text-[var(--accent-2)]">
+            <span className="rounded bg-info-blue px-1.5 py-0.5 text-2xs text-accent-2">
               {t('approval.setUpstream')}
             </span>
           )}
           {force && (
-            <span className="rounded bg-[var(--error-bg)] px-1.5 py-0.5 text-2xs text-error-text">
+            <span className="rounded bg-error-bg px-1.5 py-0.5 text-2xs text-error-text">
               {t('approval.forcePush')}
             </span>
           )}
