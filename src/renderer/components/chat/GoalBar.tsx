@@ -55,14 +55,14 @@ export function GoalBar({ goal, isCompleted, onEdit, onClear }: GoalBarProps): R
     <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
       <Badge
         variant="outline"
-        className="bg-accent/20 text-accent-text border-transparent px-1.5 py-0.5 font-mono text-[10px] font-bold"
+        className="bg-accent/20 text-accent-text border-transparent px-1.5 py-0.5 font-mono text-2xs font-bold"
       >
-        GOAL
+        {t('chat.goalBadge')}
       </Badge>
       {isCompleted && (
         <Badge
           variant="outline"
-          className="bg-success/10 text-success-text border-transparent gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+          className="bg-success/10 text-success-text border-transparent gap-1 px-1.5 py-0.5 text-2xs font-semibold"
         >
           <Check className="size-3" strokeWidth={2.5} />
           {t('chat.goalCompleted')}

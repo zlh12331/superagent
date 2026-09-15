@@ -300,7 +300,7 @@ export function ChatMessageList({
         <div className="messages-inner">
           {/* 分页提示：窗口未到开头（滚动到顶可加载更早消息） */}
           {clampedStart > 0 && (
-            <div className="text-muted-foreground/60 py-1 text-center text-[10px]">
+            <div className="text-muted-foreground/60 py-1 text-center text-2xs">
               {t('chat.loadedMessages', {
                 count: messages.length - clampedStart,
                 total: messages.length,

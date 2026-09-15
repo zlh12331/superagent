@@ -16,7 +16,7 @@
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Search, X } from 'lucide-react';
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
@@ -111,8 +111,35 @@ export function ChatPanel({
   const [historyNoticeDismissedFor, setHistoryNoticeDismissedFor] = useState<string | null>(null);
   // 编辑重提注入（P2-10）：审批拒绝后把命令填入 composer（对齐参考项目）
   const [injectedComposerValue, setInjectedComposerValue] = useState<string | undefined>(undefined);
+  // 注入复位定时器（卸载/会话切换时清理，避免对已卸载组件 setState）
+  const injectResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (injectResetTimerRef.current !== null) {
+        clearTimeout(injectResetTimerRef.current);
+      }
+    },
+    [],
+  );
   // /models 斜杠命令：受控打开 composer 项目栏的模型选择下拉
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+
+  /**
+   * 注入 composer 值并安排下一轮复位
+   *
+   * 定时器统一收在 injectResetTimerRef：多次注入不堆积定时器，且卸载时清理
+   * （此前两处 window.setTimeout(…, 0) 无 ref 句柄、无清理）
+   */
+  const injectComposerValue = (value: string): void => {
+    if (injectResetTimerRef.current !== null) {
+      clearTimeout(injectResetTimerRef.current);
+    }
+    setInjectedComposerValue(value);
+    injectResetTimerRef.current = setTimeout(() => {
+      injectResetTimerRef.current = null;
+      setInjectedComposerValue(undefined);
+    }, 0);
+  };
   // 错误码 → 本地化文案 hook
   const { getErrorMessage } = useErrorMessage();
   // 本地化文案（声明置于组件前部：派生文案在渲染前即需使用）
@@ -168,8 +195,7 @@ export function ChatPanel({
   const { currentGoal, isGoalCompleted, createGoal, clearGoal } = useChatGoals(chatId);
   // 目标预填：把文本填入输入框并聚焦（用户补需求后发送；注入后下一轮重置，允许重复触发）
   const prefillGoalInput = (text: string): void => {
-    setInjectedComposerValue(text);
-    window.setTimeout(() => setInjectedComposerValue(undefined), 0);
+    injectComposerValue(text);
   };
 
   // 会话内搜索状态（对齐参考项目 useConversationSearch：受控模式）
@@ -201,7 +227,8 @@ export function ChatPanel({
   const queryClient = useQueryClient();
   const compactMutation = useMutation({
     mutationFn: async () => {
-      if (chatId === undefined) throw new Error(t('chat.noActiveSession'));
+      // chatId 为必填 string（ChatPanelProps），无需空值守卫（此前 === undefined 分支
+      // 恒 false，属类型收紧后的历史残留）
       return unwrap(await window.api.session.compact({ sessionId: chatId }));
     },
     onSuccess: (data) => {
@@ -281,8 +308,7 @@ export function ChatPanel({
         sessionId={chatId}
         onEditResubmit={(command) => {
           // 注入后下一轮复位：相同命令二次「编辑重提」时 state 能再次变化触发注入 effect
-          setInjectedComposerValue(command);
-          window.setTimeout(() => setInjectedComposerValue(undefined), 0);
+          injectComposerValue(command);
         }}
       />
       {/* 会话内搜索栏（受控：状态由 useConversationSearch 持有） */}
@@ -305,7 +331,7 @@ export function ChatPanel({
             size="icon"
             className="text-warn-text hover:text-foreground hover:bg-transparent size-auto"
             aria-label={t('common.close')}
-            onClick={() => setInterruptedDismissedFor(chatId ?? null)}
+            onClick={() => setInterruptedDismissedFor(chatId)}
           >
             <X className="size-3.5" strokeWidth={2} />
           </Button>

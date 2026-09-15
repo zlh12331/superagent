@@ -82,20 +82,20 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   it('无目标：不显示目标栏', () => {
     renderPanel();
-    expect(screen.queryByText('GOAL')).toBeNull();
+    expect(screen.queryByText('目标')).toBeNull();
   });
 
   it('仅 aborted 目标（已清除/被覆盖）：不显示目标栏', async () => {
     renderPanel([{ condition: '旧目标', status: 'aborted' }]);
     // query 异步：等待后确认不显示
     await waitFor(() => {
-      expect(screen.queryByText('GOAL')).toBeNull();
+      expect(screen.queryByText('目标')).toBeNull();
     });
   });
 
   it('completed 目标：显示目标栏 + 已完成徽标，无暂停按钮', async () => {
     renderPanel([{ condition: '已完成的目标', status: 'completed' }]);
-    expect(await screen.findByText('GOAL')).toBeInTheDocument();
+    expect(await screen.findByText('目标')).toBeInTheDocument();
     expect(screen.getByText('已完成')).toBeInTheDocument();
     expect(screen.queryByLabelText('暂停目标')).toBeNull();
     expect(screen.getByLabelText('编辑目标')).toBeInTheDocument();
@@ -107,14 +107,14 @@ describe('会话目标栏（ChatPanel 内联）', () => {
       { condition: '旧目标', status: 'aborted' },
       { condition: '当前目标', status: 'active' },
     ]);
-    expect(await screen.findByText('GOAL')).toBeInTheDocument();
+    expect(await screen.findByText('目标')).toBeInTheDocument();
     expect(screen.getByText('当前目标')).toBeInTheDocument();
     expect(screen.queryByText('旧目标')).toBeNull();
   });
 
   it('有目标：显示 GOAL 标签 + 条件 + 编辑/删除两按钮（暂停已移除）', async () => {
     renderPanel([{ condition: '修复登录页 500 错误', status: 'active' }]);
-    expect(await screen.findByText('GOAL')).toBeInTheDocument();
+    expect(await screen.findByText('目标')).toBeInTheDocument();
     expect(screen.getByText('修复登录页 500 错误')).toBeInTheDocument();
     // P2 修复：假「暂停」按钮已移除——goal:pause IPC 未实现，本地翻转纯欺骗
     expect(screen.queryByLabelText('暂停目标')).toBeNull();
@@ -124,7 +124,7 @@ describe('会话目标栏（ChatPanel 内联）', () => {
 
   it('active 目标也不渲染暂停按钮（待真实 goal:pause IPC 后恢复入口）', async () => {
     renderPanel([{ condition: '目标A', status: 'active' }]);
-    expect(await screen.findByText('GOAL')).toBeInTheDocument();
+    expect(await screen.findByText('目标')).toBeInTheDocument();
     expect(screen.queryByLabelText('暂停目标')).toBeNull();
     expect(screen.queryByLabelText('恢复目标')).toBeNull();
   });
@@ -171,7 +171,7 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     await user.click(await screen.findByLabelText('删除目标'));
     await user.click(await screen.findByRole('button', { name: '确认' }));
     await waitFor(() => {
-      expect(screen.queryByText('GOAL')).toBeNull();
+      expect(screen.queryByText('目标')).toBeNull();
     });
   });
 

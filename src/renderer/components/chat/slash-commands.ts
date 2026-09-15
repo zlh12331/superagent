@@ -63,5 +63,12 @@ export function executeSlashCommand(action: SlashAction, deps: SlashCommandDeps)
       // mock 演示命令（前端开发专用）：直接发送触发 mock 流
       deps.sendMessage(action === 'demo' ? '/demo' : '/limit');
       break;
+    default: {
+      // 穷尽性守卫（编译期）：新增 SlashAction 成员而未在此分发时，action 在本分支
+      // 不再收窄为 never，下一行即报类型错误——此前是静默 no-op（新增命令点建议后
+      // 无任何反应且无提示）。运行期不可达，故不抛错以维持既有行为
+      const exhaustive: never = action;
+      void exhaustive;
+    }
   }
 }

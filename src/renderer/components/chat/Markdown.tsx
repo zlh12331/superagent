@@ -209,7 +209,7 @@ function CodeBlock({
     <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
       {/* 头栏：语言标签（font-mono uppercase 小字） + 悬浮复制按钮 */}
       <div className="border-border bg-muted/30 flex items-center justify-between border-b px-3 py-1.5">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-wider uppercase">
+        <span className="text-muted-foreground font-mono text-2xs tracking-wider uppercase">
           {normalizedLang}
         </span>
         <Button

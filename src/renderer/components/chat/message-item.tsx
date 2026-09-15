@@ -244,7 +244,9 @@ function PartView({
     return (
       <div className="card">
         <div className="card-head">
-          <span className="card-icon">📎</span>
+          <span className="card-icon" aria-hidden="true">
+            📎
+          </span>
           <span className="card-title">{t('chat.attachment')}</span>
           <span className="card-status pending">{part.mediaType}</span>
         </div>
@@ -342,7 +344,9 @@ function ToolCallView({
             </span>
             <span className="card-title">{title ?? toolName}</span>
             <span className={cn('card-status', statusClass)}>{localizedStatusLabel}</span>
-            <span className="tool-chev">▸</span>
+            <span className="tool-chev" aria-hidden="true">
+              ▸
+            </span>
           </button>
           {/* 展开动画（照搬参考项目 grid-rows 方案：始终挂载切换 class，非条件渲染） */}
           <div
@@ -449,7 +453,9 @@ function ReasoningBlock({
         aria-expanded={open}
       >
         <span className="reasoning-title">{t('chat.thinking')}</span>
-        <span className="rh-chevron ml-auto">▸</span>
+        <span className="rh-chevron ml-auto" aria-hidden="true">
+          ▸
+        </span>
       </button>
       <div className="reasoning-body">
         <div className="text-muted-foreground font-mono text-xs leading-relaxed whitespace-pre-wrap italic">
@@ -459,10 +465,3 @@ function ReasoningBlock({
     </div>
   );
 }
-
-/**
- * 流式占位
- *
- * streaming 状态时显示在消息列表末尾的 typing-indicator（三个 accent 点弹跳），
- * 表示助手正在生成回复。对齐原型 .msg.assistant + .typing-indicator 结构。
- */

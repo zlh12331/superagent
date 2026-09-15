@@ -11,7 +11,21 @@ import type { TFunction } from 'i18next';
 /** part 类型（UIMessage['parts'][number] 派生） */
 type UiMessagePart = UIMessage['parts'][number];
 
-export function mapToolStateToStatusLabelKey(state: string): string {
+/**
+ * 工具状态对应的本地化键（chat.* 域）
+ *
+ * 收窄为字面量联合：键名与 i18n 资源一一对应，拼错即编译失败（此前返回裸 string）
+ */
+export type ToolStatusLabelKey =
+  | 'statusError'
+  | 'statusSuccess'
+  | 'statusRunning'
+  | 'statusWaiting';
+
+/** 工具状态对应的卡片状态类（CSS .card-status.<x>） */
+export type ToolStatusClass = 'error' | 'success' | 'running' | 'pending';
+
+export function mapToolStateToStatusLabelKey(state: string): ToolStatusLabelKey {
   if (state === 'output-error') {
     return 'statusError';
   }
@@ -32,7 +46,7 @@ export function mapToolStateToStatusLabelKey(state: string): string {
  * - 'output-available'：完成（success）
  * - 'output-error'：错误（error）
  */
-export function mapToolStateToStatusClass(state: string): string {
+export function mapToolStateToStatusClass(state: string): ToolStatusClass {
   if (state === 'output-error') {
     return 'error';
   }
