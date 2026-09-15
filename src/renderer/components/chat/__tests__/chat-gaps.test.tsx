@@ -31,20 +31,22 @@ describe('chat 批次3 缺口补全', () => {
   });
 
   describe('message-utils 纯函数', () => {
-    it('mapToolStateToStatusLabelKey：四态映射', () => {
+    it('mapToolStateToStatusLabelKey：状态映射（input-available=running，无 input-accepted）', () => {
       expect(mapToolStateToStatusLabelKey('output-error')).toBe('statusError');
       expect(mapToolStateToStatusLabelKey('output-available')).toBe('statusSuccess');
       expect(mapToolStateToStatusLabelKey('input-streaming')).toBe('statusRunning');
-      expect(mapToolStateToStatusLabelKey('input-accepted')).toBe('statusRunning');
-      expect(mapToolStateToStatusLabelKey('unknown-state')).toBe('statusWaiting');
+      expect(mapToolStateToStatusLabelKey('input-available')).toBe('statusRunning');
+      expect(mapToolStateToStatusLabelKey('approval-responded')).toBe('statusRunning');
+      expect(mapToolStateToStatusLabelKey('approval-requested')).toBe('statusWaiting');
+      expect(mapToolStateToStatusLabelKey('output-denied')).toBe('statusWaiting');
     });
 
-    it('mapToolStateToStatusClass：四态映射', () => {
+    it('mapToolStateToStatusClass：状态映射（与 LabelKey 同源）', () => {
       expect(mapToolStateToStatusClass('output-error')).toBe('error');
       expect(mapToolStateToStatusClass('output-available')).toBe('success');
       expect(mapToolStateToStatusClass('input-streaming')).toBe('running');
-      expect(mapToolStateToStatusClass('input-accepted')).toBe('running');
-      expect(mapToolStateToStatusClass('unknown-state')).toBe('pending');
+      expect(mapToolStateToStatusClass('input-available')).toBe('running');
+      expect(mapToolStateToStatusClass('output-denied')).toBe('pending');
     });
 
     it('extractText：提取 text part 并按行拼接，过滤非文本 part', () => {
