@@ -59,7 +59,10 @@
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "warn",
         "noUndeclaredVariables": "error",
-        "noUnusedPrivateClassMembers": "error"
+        "noUnusedPrivateClassMembers": "error",
+        "noChildrenProp": "error",
+        "noRenderReturnValue": "error",
+        "noNestedComponentDefinitions": "error"
       },
       "security": {
         "noBlankTarget": "error",
