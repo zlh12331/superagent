@@ -1,132 +1,143 @@
-// approval-preview.tsx（自原 ApprovalDialog 拆分，弹窗已删除仅存渲染函数）
+// approval-preview.tsx（自原 ApprovalDialog 拆分，弹窗已删除）
 // 审批载荷结构化预览（命令 / 文件 diff / Git 变更），由 InlineApprovalCard 消费
-// ──────────────────────────────
+// ──────────────────────────────────────────────────────────────
 // 职责：
-// - renderStructuredPreview：按 ApprovalType 结构化展示工具入参
+// - StructuredPreview：按 ApprovalType 分发的入口组件
 //   （run_command 命令预览 / write_file、edit_file diff 预览 / git_* 变更摘要）
 // - 结构化展示区使用 monospace 字体 + 边框容器，便于查看代码 / 命令
-// ──────────────────────────────
+// 组件化背景（2026-09-15）：原 renderXxx 纯函数形态需调用方穿透 t/useDarkTheme，
+// 且在 DevTools 中无组件边界；组件化后依赖自取（useTranslation/useTheme）
+// ──────────────────────────────────────────────────────────────
 
-import type { TFunction } from 'i18next';
 import type { ReactElement } from 'react';
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
-
+import { useTranslation } from '@/i18n/use-translation';
+import { useTheme } from '@/providers/ThemeProvider';
 import type { ApprovalType } from '@/stores/transient/approvals-store';
 
 import { getBooleanField, getField, getStringArrayField } from './approval-utils';
 
-export function renderStructuredPreview(
-  type: ApprovalType,
-  input: unknown,
-  t: TFunction,
-  /** 是否深色主题（ReactDiffViewer 的 useDarkTheme 跟随全局主题） */
-  useDarkTheme: boolean,
-): ReactElement | null {
-  // Git 审批类型委托给专用渲染函数
+/** 深色主题读取（ReactDiffViewer 双栏配色跟随全局主题） */
+function useIsDarkTheme(): boolean {
+  const { resolvedTheme } = useTheme();
+  return resolvedTheme === 'dark';
+}
+
+/** 审批载荷结构化预览入口（按类型分发；无专属预览的类型返回 null，仅卡片 description） */
+export function StructuredPreview({
+  type,
+  input,
+}: {
+  readonly type: ApprovalType;
+  readonly input: unknown;
+}): ReactElement | null {
   if (type === 'git_add' || type === 'git_commit' || type === 'git_push') {
-    return renderGitPreview(type, input, t);
+    return <GitPreview type={type} input={input} />;
   }
-
-  if (type === 'run_command') {
-    const cmd = getField(input, 'command') ?? '';
-    const cwd = getField(input, 'cwd');
-    return (
-      <div className="mt-3 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
-        {cwd !== undefined && (
-          <div className="mb-2 text-xs text-muted-foreground">
-            <span className="font-sans">{t('approval.workingDir')}</span>
-            <span className="break-all">{cwd}</span>
-          </div>
-        )}
-        <pre className="whitespace-pre-wrap break-all text-foreground">{cmd}</pre>
-      </div>
-    );
-  }
-
-  if (type === 'write_file') {
-    const path = getField(input, 'path') ?? '';
-    const content = getField(input, 'content') ?? '';
-    const append = getBooleanField(input, 'append') ?? false;
-    return (
-      <div className="mt-3 flex flex-col gap-2">
-        <div className="text-xs text-muted-foreground">
-          <span className="font-sans">{t('approval.filePath')}</span>
-          <span className="break-all font-mono">{path}</span>
-          {append && (
-            <span className="ml-2 rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
-              {t('approval.appendMode')}
-            </span>
-          )}
-        </div>
-        <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-amber/30">
-          <ReactDiffViewer
-            oldValue={append ? t('approval.appendToEnd') : t('approval.newFile')}
-            newValue={content}
-            splitView={true}
-            compareMethod={DiffMethod.LINES}
-            hideLineNumbers={false}
-            showDiffOnly={false}
-            leftTitle={t('approval.original')}
-            rightTitle={t('approval.newContent')}
-            useDarkTheme={useDarkTheme}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (type === 'edit_file') {
-    const path = getField(input, 'path') ?? '';
-    const oldStr = getField(input, 'oldString') ?? '';
-    const newStr = getField(input, 'newString') ?? '';
-    const replaceAll = getBooleanField(input, 'replaceAll') ?? false;
-    return (
-      <div className="mt-3 flex flex-col gap-2">
-        <div className="text-xs text-muted-foreground">
-          <span className="font-sans">{t('approval.filePath')}</span>
-          <span className="break-all font-mono">{path}</span>
-          {replaceAll && (
-            <span className="ml-2 rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
-              {t('approval.replaceAll')}
-            </span>
-          )}
-        </div>
-        <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-amber/30">
-          <ReactDiffViewer
-            oldValue={oldStr || t('approval.empty')}
-            newValue={newStr || t('approval.emptyMeansDelete')}
-            splitView={true}
-            compareMethod={DiffMethod.WORDS}
-            hideLineNumbers={false}
-            showDiffOnly={false}
-            leftTitle={t('approval.oldContent')}
-            rightTitle={t('approval.newContent')}
-            useDarkTheme={useDarkTheme}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // apply_patch / delete_file / install_package / external_call：不渲染额外预览
-  // description 已在 DialogDescription 中展示
+  if (type === 'run_command') return <CommandPreview input={input} />;
+  if (type === 'write_file') return <WriteFilePreview input={input} />;
+  if (type === 'edit_file') return <EditFilePreview input={input} />;
   return null;
 }
 
-/**
- * 渲染 Git 审批类型的结构化预览
- *
- * - git_add: 显示待暂存的路径列表（paths 为空时显示「全部改动」）
- * - git_commit: 显示提交信息 + amend 标记
- * - git_push: 显示 remote + refspec + 强制推送 / 设置上游标记
- *
- * 抽离为独立函数避免 renderStructuredPreview 过长，且 Git 类型共享视觉风格（琥珀色边框）。
- */
-export function renderGitPreview(
-  type: ApprovalType,
-  input: unknown,
-  t: TFunction,
-): ReactElement | null {
+/** run_command：命令文本 + 工作目录 */
+function CommandPreview({ input }: { readonly input: unknown }): ReactElement {
+  const { t } = useTranslation();
+  const cmd = getField(input, 'command') ?? '';
+  const cwd = getField(input, 'cwd');
+  return (
+    <div className="mt-3 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
+      {cwd !== undefined && (
+        <div className="mb-2 text-xs text-muted-foreground">
+          <span className="font-sans">{t('approval.workingDir')}</span>
+          <span className="break-all">{cwd}</span>
+        </div>
+      )}
+      <pre className="whitespace-pre-wrap break-all text-foreground">{cmd}</pre>
+    </div>
+  );
+}
+
+/** write_file：路径 + 内容 diff（append 模式标记） */
+function WriteFilePreview({ input }: { readonly input: unknown }): ReactElement {
+  const { t } = useTranslation();
+  const isDarkTheme = useIsDarkTheme();
+  const path = getField(input, 'path') ?? '';
+  const content = getField(input, 'content') ?? '';
+  const append = getBooleanField(input, 'append') ?? false;
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <div className="text-xs text-muted-foreground">
+        <span className="font-sans">{t('approval.filePath')}</span>
+        <span className="break-all font-mono">{path}</span>
+        {append && (
+          <span className="ml-2 rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
+            {t('approval.appendMode')}
+          </span>
+        )}
+      </div>
+      <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-amber/30">
+        <ReactDiffViewer
+          oldValue={append ? t('approval.appendToEnd') : t('approval.newFile')}
+          newValue={content}
+          splitView={true}
+          compareMethod={DiffMethod.LINES}
+          hideLineNumbers={false}
+          showDiffOnly={false}
+          leftTitle={t('approval.original')}
+          rightTitle={t('approval.newContent')}
+          useDarkTheme={isDarkTheme}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** edit_file：路径 + oldString/newString diff（replaceAll 标记） */
+function EditFilePreview({ input }: { readonly input: unknown }): ReactElement {
+  const { t } = useTranslation();
+  const isDarkTheme = useIsDarkTheme();
+  const path = getField(input, 'path') ?? '';
+  const oldStr = getField(input, 'oldString') ?? '';
+  const newStr = getField(input, 'newString') ?? '';
+  const replaceAll = getBooleanField(input, 'replaceAll') ?? false;
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <div className="text-xs text-muted-foreground">
+        <span className="font-sans">{t('approval.filePath')}</span>
+        <span className="break-all font-mono">{path}</span>
+        {replaceAll && (
+          <span className="ml-2 rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
+            {t('approval.replaceAll')}
+          </span>
+        )}
+      </div>
+      <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-amber/30">
+        <ReactDiffViewer
+          oldValue={oldStr || t('approval.empty')}
+          newValue={newStr || t('approval.emptyMeansDelete')}
+          splitView={true}
+          compareMethod={DiffMethod.WORDS}
+          hideLineNumbers={false}
+          showDiffOnly={false}
+          leftTitle={t('approval.oldContent')}
+          rightTitle={t('approval.newContent')}
+          useDarkTheme={isDarkTheme}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** git_add/git_commit/git_push：变更摘要（共享琥珀色边框 + monospace 风格） */
+function GitPreview({
+  type,
+  input,
+}: {
+  readonly type: ApprovalType;
+  readonly input: unknown;
+}): ReactElement | null {
+  const { t } = useTranslation();
   if (type === 'git_add') {
     const paths = getStringArrayField(input, 'paths') ?? [];
     const isAddAll = paths.length === 0;

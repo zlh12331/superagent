@@ -1,9 +1,9 @@
 // src/renderer/components/agent/__tests__/approval-utils.test.ts
-// approval-utils 纯函数单元测试
+// approval-utils 单元测试（2026-09-15 表驱动重构后）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：
-// 1. getIconForType / getLabelKeyForType / getVariantForType：全部类型映射 + 未知类型兜底
-// 2. isDangerousType / canRememberDecision
+// 1. getApprovalMeta：10 类型全量映射（icon/className/dangerous/canRemember）
+// 2. 协议外类型的编译期拒绝（satisfies Record 穷尽性，运行时不可达）
 // 3. getField / getBooleanField / getStringArrayField 类型守卫
 // ──────────────────────────────────────────────────────────────
 
@@ -21,73 +21,58 @@ import {
 } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
-import {
-  canRememberDecision,
-  getBooleanField,
-  getField,
-  getIconForType,
-  getLabelKeyForType,
-  getStringArrayField,
-  getVariantForType,
-  isDangerousType,
-} from '../approval-utils';
+import { getApprovalMeta, getBooleanField, getField, getStringArrayField } from '../approval-utils';
 
 describe('approval-utils', () => {
-  describe('getIconForType', () => {
-    it('全部类型映射到对应图标', () => {
-      expect(getIconForType('run_command')).toBe(Terminal);
-      expect(getIconForType('write_file')).toBe(FilePlus);
-      expect(getIconForType('edit_file')).toBe(FileEdit);
-      expect(getIconForType('delete_file')).toBe(FileX);
-      expect(getIconForType('apply_patch')).toBe(FileDiff);
-      expect(getIconForType('install_package')).toBe(Package);
-      expect(getIconForType('external_call')).toBe(Globe);
-      expect(getIconForType('git_add')).toBe(GitBranch);
-      expect(getIconForType('git_commit')).toBe(GitCommitHorizontal);
-      expect(getIconForType('git_push')).toBe(CloudUpload);
+  describe('getApprovalMeta', () => {
+    it('10 类型图标映射', () => {
+      expect(getApprovalMeta('run_command').icon).toBe(Terminal);
+      expect(getApprovalMeta('write_file').icon).toBe(FilePlus);
+      expect(getApprovalMeta('edit_file').icon).toBe(FileEdit);
+      expect(getApprovalMeta('delete_file').icon).toBe(FileX);
+      expect(getApprovalMeta('apply_patch').icon).toBe(FileDiff);
+      expect(getApprovalMeta('install_package').icon).toBe(Package);
+      expect(getApprovalMeta('external_call').icon).toBe(Globe);
+      expect(getApprovalMeta('git_add').icon).toBe(GitBranch);
+      expect(getApprovalMeta('git_commit').icon).toBe(GitCommitHorizontal);
+      expect(getApprovalMeta('git_push').icon).toBe(CloudUpload);
     });
 
-    it('未知类型兜底为 Globe（入队数据异常不崩溃）', () => {
-      expect(getIconForType('unknown_type' as never)).toBe(Globe);
-    });
-  });
-
-  describe('getLabelKeyForType', () => {
-    it('未知类型兜底为 externalCall', () => {
-      expect(getLabelKeyForType('unknown_type' as never)).toBe('externalCall');
-    });
-  });
-
-  describe('getVariantForType', () => {
-    it('未知类型兑底为通用 muted', () => {
-      expect(getVariantForType('unknown_type' as never)).toEqual({
-        className: 'bg-muted text-muted-foreground',
-      });
-    });
-  });
-
-  describe('isDangerousType', () => {
-    it('危险类型：delete_file / run_command / install_package / git_push', () => {
-      expect(isDangerousType('delete_file')).toBe(true);
-      expect(isDangerousType('run_command')).toBe(true);
-      expect(isDangerousType('install_package')).toBe(true);
-      expect(isDangerousType('git_push')).toBe(true);
+    it('5 类别徽章语义类', () => {
+      expect(getApprovalMeta('run_command').className).toContain('warn');
+      expect(getApprovalMeta('write_file').className).toContain('info-blue');
+      expect(getApprovalMeta('edit_file').className).toContain('info-blue');
+      expect(getApprovalMeta('apply_patch').className).toContain('info-blue');
+      expect(getApprovalMeta('delete_file').className).toContain('error');
+      expect(getApprovalMeta('install_package').className).toContain('magenta');
+      expect(getApprovalMeta('external_call').className).toContain('accent-2');
+      expect(getApprovalMeta('git_add').className).toContain('magenta');
+      expect(getApprovalMeta('git_commit').className).toContain('magenta');
+      expect(getApprovalMeta('git_push').className).toContain('magenta');
     });
 
-    it('非危险类型', () => {
-      expect(isDangerousType('write_file')).toBe(false);
-      expect(isDangerousType('edit_file')).toBe(false);
-      expect(isDangerousType('git_commit')).toBe(false);
+    it('isDangerous：4 种危险 + 其余安全', () => {
+      expect(getApprovalMeta('delete_file').dangerous).toBe(true);
+      expect(getApprovalMeta('run_command').dangerous).toBe(true);
+      expect(getApprovalMeta('install_package').dangerous).toBe(true);
+      expect(getApprovalMeta('git_push').dangerous).toBe(true);
+      expect(getApprovalMeta('write_file').dangerous).toBe(false);
+      expect(getApprovalMeta('git_commit').dangerous).toBe(false);
+      expect(getApprovalMeta('external_call').dangerous).toBe(false);
     });
-  });
 
-  describe('canRememberDecision', () => {
-    it('仅 run_command / write_file / edit_file 支持记住决策', () => {
-      expect(canRememberDecision('run_command')).toBe(true);
-      expect(canRememberDecision('write_file')).toBe(true);
-      expect(canRememberDecision('edit_file')).toBe(true);
-      expect(canRememberDecision('delete_file')).toBe(false);
-      expect(canRememberDecision('git_push')).toBe(false);
+    it('canRemember：仅 run_command/write_file/edit_file', () => {
+      expect(getApprovalMeta('run_command').canRemember).toBe(true);
+      expect(getApprovalMeta('write_file').canRemember).toBe(true);
+      expect(getApprovalMeta('edit_file').canRemember).toBe(true);
+      expect(getApprovalMeta('delete_file').canRemember).toBe(false);
+      expect(getApprovalMeta('git_push').canRemember).toBe(false);
+      expect(getApprovalMeta('external_call').canRemember).toBe(false);
+    });
+
+    it('协议外类型编译期拒绝（satisfies 穷尽性，运行时不可达）', () => {
+      // @ts-expect-error 'unknown_type' 不在 ApprovalType union，元数据表已在编译期穷尽
+      expect(getApprovalMeta('unknown_type')).toBeUndefined();
     });
   });
 

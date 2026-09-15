@@ -15,17 +15,9 @@ import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
-import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
-import { renderStructuredPreview } from './approval-preview';
-import {
-  canRememberDecision,
-  getField,
-  getIconForType,
-  getLabelKeyForType,
-  getVariantForType,
-  isDangerousType,
-} from './approval-utils';
+import { StructuredPreview } from './approval-preview';
+import { getApprovalMeta, getField } from './approval-utils';
 
 /** 内联审批卡 props */
 export interface InlineApprovalCardProps {
@@ -67,9 +59,6 @@ export function InlineApprovalCard({
   onEditResubmit,
 }: InlineApprovalCardProps): ReactElement | null {
   const { t } = useTranslation();
-  // 深色主题（结构化预览的 ReactDiffViewer 双栏适配）
-  const { resolvedTheme } = useTheme();
-  const isDarkTheme = resolvedTheme === 'dark';
 
   // 当前会话的审批项（pending 优先展示最新；已决的回显最近一条）
   const item = useApprovalsStore((state) => {
@@ -118,10 +107,12 @@ export function InlineApprovalCard({
     }
   };
 
-  const Icon = getIconForType(item.type);
+  // 类型元数据单一入口（图标/徽章类/危险标记/白名单支持）
+  const meta = getApprovalMeta(item.type);
+  const Icon = meta.icon;
   const isPending = item.status === 'pending';
   const isApproved = item.status === 'approved';
-  const dangerous = isDangerousType(item.type);
+  const dangerous = meta.dangerous;
   // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示；
   // 复用 getField 安全读取，与 approval-preview 的载荷解析风格一致）
   const resubmitCommand =
@@ -145,12 +136,12 @@ export function InlineApprovalCard({
         <span
           className={cn(
             'min-w-0 flex-1 truncate font-medium',
-            // 类型徽章 7 色（对齐原型 modal-variant，语义令牌）
-            getVariantForType(item.type).className,
+            // 类型徽章（语义令牌类，来自 APPROVAL_META 单表）
+            meta.className,
           )}
         >
-          {/* 类型标签（i18n key 带 approval. 前缀：t('approval.runCommand') 等） */}
-          {t(`approval.${getLabelKeyForType(item.type)}`)}
+          {/* 类型标签：i18n 键与 ApprovalType 协议值一致，零映射层 */}
+          {t(`approval.${item.type}`)}
         </span>
         {!isPending && (
           <span
@@ -185,7 +176,7 @@ export function InlineApprovalCard({
       )}
       {item.input !== undefined && (
         <div className="mt-1.5">
-          {renderStructuredPreview(item.type, item.input, t, isDarkTheme)}
+          <StructuredPreview type={item.type} input={item.input} />
         </div>
       )}
 
@@ -201,9 +192,8 @@ export function InlineApprovalCard({
             <X className="size-3" />
             {t('approval.reject')}
           </Button>
-          {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file；
-              此前无条件渲染，canRememberDecision 为死代码） */}
-          {canRememberDecision(item.type) && (
+          {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file） */}
+          {meta.canRemember && (
             <Button
               variant="outline"
               size="sm"
