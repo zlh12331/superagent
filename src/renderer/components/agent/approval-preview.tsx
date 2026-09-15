@@ -46,13 +46,7 @@ export function renderStructuredPreview(
   if (type === 'write_file') {
     const path = getField(input, 'path') ?? '';
     const content = getField(input, 'content') ?? '';
-    const append = (() => {
-      if (typeof input === 'object' && input !== null) {
-        const v = (input as Record<string, unknown>)['append'];
-        return typeof v === 'boolean' ? v : false;
-      }
-      return false;
-    })();
+    const append = getBooleanField(input, 'append') ?? false;
     return (
       <div className="mt-3 flex flex-col gap-2">
         <div className="text-xs text-muted-foreground">
@@ -85,13 +79,7 @@ export function renderStructuredPreview(
     const path = getField(input, 'path') ?? '';
     const oldStr = getField(input, 'oldString') ?? '';
     const newStr = getField(input, 'newString') ?? '';
-    const replaceAll = (() => {
-      if (typeof input === 'object' && input !== null) {
-        const v = (input as Record<string, unknown>)['replaceAll'];
-        return typeof v === 'boolean' ? v : false;
-      }
-      return false;
-    })();
+    const replaceAll = getBooleanField(input, 'replaceAll') ?? false;
     return (
       <div className="mt-3 flex flex-col gap-2">
         <div className="text-xs text-muted-foreground">

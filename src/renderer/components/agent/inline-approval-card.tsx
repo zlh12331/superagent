@@ -20,6 +20,7 @@ import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { renderStructuredPreview } from './approval-preview';
 import {
   canRememberDecision,
+  getField,
   getIconForType,
   getLabelKeyForType,
   getVariantForType,
@@ -121,16 +122,10 @@ export function InlineApprovalCard({
   const isPending = item.status === 'pending';
   const isApproved = item.status === 'approved';
   const dangerous = isDangerousType(item.type);
-  // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示）
-  const resubmitCommand = ((): string | null => {
-    if (item.type !== 'run_command') return null;
-    const input = item.input;
-    if (typeof input === 'object' && input !== null) {
-      const c = (input as Record<string, unknown>)['command'];
-      return typeof c === 'string' ? c : null;
-    }
-    return null;
-  })();
+  // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示；
+  // 复用 getField 安全读取，与 approval-preview 的载荷解析风格一致）
+  const resubmitCommand =
+    item.type === 'run_command' ? (getField(item.input, 'command') ?? null) : null;
 
   return (
     <div
