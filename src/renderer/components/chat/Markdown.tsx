@@ -218,7 +218,7 @@ function CodeBlock({
       {/* 高亮区（overflow-x-auto 防长行溢出） */}
       <div className="overflow-x-auto">
         {html !== null ? (
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki 输出为可信的语法高亮 HTML（不来自用户输入）
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki codeToHtml 对代码内容做 HTML 转义，输出为可信的语法高亮标记
           <div dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
           <pre>

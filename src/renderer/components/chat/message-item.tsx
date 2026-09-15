@@ -4,31 +4,6 @@
 // 拆分背景：ChatMessageList 685 行，消息渲染逻辑提取为独立文件
 // ──────────────────────────────
 
-// src/renderer/components/chat/ChatMessageList.tsx
-// 聊天消息列表 · Aurora 设计系统
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渲染 UIMessage 数组（user / assistant / system 三种角色）
-// - assistant 消息按 parts 分发渲染（text / reasoning / tool / file / step-start 等）
-// - 智能自动滚动：仅当用户在底部附近时跟随，否则显示 scroll-to-bottom 按钮
-// - 空状态展示 EmptyState 组件
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - user 消息：.msg.user > .msg-body > .msg-content（玻璃渐变气泡，靠右由 .msg-content 自身样式实现）
-// - assistant 消息：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + .msg-content（无气泡开放排版）
-// - tool 调用：.msg.msg-tool > .msg-body > .card.tool-card（可折叠卡片）
-// - reasoning：.reasoning-block（折叠式推理块，accent 左光条）
-// - system 消息：居中小字
-// - streaming 占位：typing-indicator（三个 accent 点弹跳）
-// - 滚动到底部按钮：.scroll-to-bottom（距底部 > 80px 时显示，有新消息加 .has-new）
-// ──────────────────────────────────────────────────────────────
-//
-// 说明：
-// - 不在此组件内调用 useChat，messages / status 由父组件传入
-// - 仅做展示，不做任何业务逻辑
-// - 使用 AI SDK 官方类型守卫（isTextUIPart / isReasoningUIPart 等）
-// - part 类型用 UIMessage['parts'][number] 派生，避免手写泛型参数
-
 // type-only import：仅引入类型，不引入运行时依赖
 import type { UIMessage } from 'ai';
 // AI SDK 官方类型守卫：在运行时判断 part 类型并收窄 TypeScript 类型
@@ -46,6 +21,7 @@ import { memo, type ReactElement, useMemo, useState } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useReasoningCollapseStore } from '@/stores/transient/reasoning-collapse-store';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -325,13 +301,14 @@ function ToolCallView({
   const { t } = useTranslation();
 
   // 从 tool-store 查找 title（主进程通过 AgentToolResultPayload 推送的人类可读标题）
-  // 没有找到时回退到工具名（type）
+  // 没有找到时回退到工具名（type）。
+  // 会话作用域：消息列表只渲染活跃会话的消息（ChatPanel 按 chatId 装配），故按活跃
+  // 会话索引查找（对齐 right-panel-panes.tsx 的 callsBySession.get(sessionId) 模式），
+  // 避免流式期 store 高频推送 × 每张卡片对全部会话全表扫描的 O(卡片×调用) 放大
+  const activeSessionId = useActiveSessionStore((s) => s.activeSessionId);
   const title = useToolStore((s) => {
-    for (const calls of s.callsBySession.values()) {
-      const found = calls.find((c) => c.id === toolCallId);
-      if (found !== undefined) return found.title;
-    }
-    return null;
+    const calls = activeSessionId === null ? undefined : s.callsBySession.get(activeSessionId);
+    return calls?.find((c) => c.id === toolCallId)?.title ?? null;
   });
 
   // 状态映射：AI SDK state → .card-status 类 + 本地化文案
