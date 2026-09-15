@@ -130,7 +130,7 @@ function highlightMatch(title: string, query: string): React.ReactNode {
   return (
     <>
       {title.slice(0, idx)}
-      <mark className="rounded bg-[color-mix(in_srgb,var(--success)_20%,transparent)] px-0.5 text-[var(--accent)]">
+      <mark className="rounded bg-[color-mix(in_srgb,var(--success)_20%,transparent)] px-0.5 text-accent">
         {title.slice(idx, idx + q.length)}
       </mark>
       {title.slice(idx + q.length)}
@@ -310,13 +310,8 @@ export function FuzzySearchDialog({
         </DialogHeader>
 
         {/* 输入框 */}
-        <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
-          <Search
-            width={14}
-            height={14}
-            className="shrink-0 text-[var(--text-faint)]"
-            aria-hidden
-          />
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <Search width={14} height={14} className="shrink-0 text-text-faint" aria-hidden />
           <input
             ref={inputRef}
             type="text"
@@ -330,7 +325,7 @@ export function FuzzySearchDialog({
             aria-activedescendant={
               combinedResults.length > 0 ? `fuzzy-result-${safeSelectedIndex}` : undefined
             }
-            className="flex-1 border-none bg-transparent text-[14px] text-[var(--text)] outline-none placeholder:text-[var(--text-faint)]"
+            className="flex-1 border-none bg-transparent text-[14px] text-foreground outline-none placeholder:text-text-faint"
           />
         </div>
 
@@ -342,11 +337,11 @@ export function FuzzySearchDialog({
           className="max-h-[400px] overflow-y-auto p-1.5"
         >
           {query.trim().length === 0 ? (
-            <div className="px-3 py-8 text-center text-[12px] text-[var(--text-faint)]">
+            <div className="px-3 py-8 text-center text-[12px] text-text-faint">
               {t('fileTree.fuzzySearch.hint')}
             </div>
           ) : combinedResults.length === 0 ? (
-            <div className="px-3 py-8 text-center text-[12px] text-[var(--text-faint)]">
+            <div className="px-3 py-8 text-center text-[12px] text-text-faint">
               {t('fileTree.fuzzySearch.noResults')}
             </div>
           ) : (
@@ -355,7 +350,7 @@ export function FuzzySearchDialog({
               // 选中态样式：左侧 accent 竖线 + 浅色背景
               const selectedCls =
                 i === safeSelectedIndex
-                  ? 'border-l-2 border-[var(--accent)] bg-[var(--bg-elev-2)]'
+                  ? 'border-l-2 border-accent bg-bg-elev-2'
                   : 'border-l-2 border-transparent';
               // 公共 className — 所有结果项共用
               const baseCls =
@@ -378,15 +373,13 @@ export function FuzzySearchDialog({
                     onMouseEnter={() => setSelectedIndex(i)}
                     className={cn(baseCls, selectedCls)}
                   >
-                    <Hash className="size-3.5 shrink-0 text-[var(--text-faint)]" aria-hidden />
+                    <Hash className="size-3.5 shrink-0 text-text-faint" aria-hidden />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] text-[var(--text)]">
+                      <div className="truncate text-[12px] text-foreground">
                         {highlightMatch(item.title, query)}
                       </div>
                       {item.cwd !== null && (
-                        <div className="truncate text-[var(--font-size-2xs)] text-[var(--text-faint)]">
-                          {item.cwd}
-                        </div>
+                        <div className="truncate text-2xs text-text-faint">{item.cwd}</div>
                       )}
                     </div>
                   </button>
@@ -411,13 +404,11 @@ export function FuzzySearchDialog({
                 >
                   <FileIcon name={item.title} isFolder={false} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-mono text-[12px] text-[var(--text)]">
+                    <div className="truncate font-mono text-[12px] text-foreground">
                       {highlightMatch(item.title, query)}
                     </div>
                     {dir.length > 0 && (
-                      <div className="truncate text-[var(--font-size-2xs)] text-[var(--text-faint)]">
-                        {dir}
-                      </div>
+                      <div className="truncate text-2xs text-text-faint">{dir}</div>
                     )}
                   </div>
                 </button>

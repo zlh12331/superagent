@@ -112,6 +112,9 @@
   --color-magenta: var(--magenta);
   --color-error-bg: var(--error-bg);
   --color-accent-2-soft: var(--accent-2-soft);
+  --color-overlay-bg: var(--overlay-bg);
+  --color-accent-dim: var(--accent-dim);
+  --color-code-block-bg: var(--code-block-bg);
   --color-bg-elev: var(--bg-elev);
   --color-bg-elev-2: var(--bg-elev-2);
   --color-bg-elev-3: var(--bg-elev-3);

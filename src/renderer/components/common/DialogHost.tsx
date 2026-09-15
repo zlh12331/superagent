@@ -133,7 +133,7 @@ export function DialogHost(): React.ReactElement | null {
   // 确认按钮样式：danger → 实底强调红（--error-emphasis 双主题锁定白字 CR≥4.5）；否则 accent 色
   const confirmButtonClass = danger
     ? 'bg-error-emphasis text-destructive-foreground hover:bg-error-emphasis/90'
-    : 'bg-[var(--accent)] text-on-accent hover:bg-[var(--accent-dim)]';
+    : 'bg-accent text-on-accent hover:bg-accent-dim';
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>

@@ -361,9 +361,7 @@ function ToolCallView({
             aria-expanded={open}
           >
             <span className="card-icon">
-              <ToolIcon
-                className={cn('size-3.5 text-[var(--accent)]', isRunning && 'animate-spin')}
-              />
+              <ToolIcon className={cn('size-3.5 text-accent', isRunning && 'animate-spin')} />
             </span>
             <span className="card-title">{title ?? toolName}</span>
             <span className={cn('card-status', statusClass)}>{localizedStatusLabel}</span>
@@ -435,9 +433,7 @@ function CodeBlock({
       <pre
         className={cn(
           'text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-xs leading-snug',
-          commandStyle
-            ? 'border-l-[var(--accent-dim)] bg-[var(--code-block-bg)] border-l-2'
-            : 'bg-background/50',
+          commandStyle ? 'border-l-accent-dim bg-code-block-bg border-l-2' : 'bg-background/50',
         )}
       >
         {content}

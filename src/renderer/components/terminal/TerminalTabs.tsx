@@ -72,7 +72,7 @@ export function TerminalTabs({
               }
             }}
           >
-            <TerminalIcon className="text-[var(--accent)] size-3 shrink-0" />
+            <TerminalIcon className="text-accent size-3 shrink-0" />
             <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-[11px]">
               {terminal.title}
             </span>

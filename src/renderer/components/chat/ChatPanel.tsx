@@ -297,7 +297,7 @@ export function ChatPanel({
       />
       {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
       {interrupted && interruptedDismissedFor !== chatId && (
-        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-warn-text">
+        <div className="border-amber/40 bg-amber/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-warn-text">
           <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
           <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
           <Button
@@ -317,7 +317,7 @@ export function ChatPanel({
 
       {/* 历史回显缺口提示：重开会话时明确告知「哪些内容没落库/没回显」，避免用户误以为工具调用消失是渲染 bug */}
       {showHistoryNotice && (
-        <div className="border-[var(--amber)]/40 bg-[var(--amber)]/10 flex items-start gap-2 border-b px-3 py-1 text-xs text-warn-text">
+        <div className="border-amber/40 bg-amber/10 flex items-start gap-2 border-b px-3 py-1 text-xs text-warn-text">
           <AlertTriangle className="mt-0.5 size-3 shrink-0" strokeWidth={2} />
           <span className="min-w-0 flex flex-1 flex-col gap-0.5">
             {historyNotices.map((notice) => (

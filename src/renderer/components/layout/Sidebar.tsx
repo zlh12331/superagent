@@ -334,7 +334,7 @@ export function Sidebar(): ReactElement {
             {t('sidebar.tabsRecent')} <span className="count">{sessions.length}</span>
             <motion.span
               layoutId="sidebar-tab-active-bar"
-              className="bg-[var(--accent)] absolute inset-x-2 bottom-0 h-[2px] rounded-full"
+              className="bg-accent absolute inset-x-2 bottom-0 h-[2px] rounded-full"
               transition={springTransition}
             />
           </span>

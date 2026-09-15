@@ -187,7 +187,7 @@ function ThreadItem({
             'thread-item',
             isActive && 'active',
             // I-S-001: 搜索防抖后匹配项添加临时高亮环（2 秒后由 Sidebar 清除）
-            highlighted && 'ring-1 ring-[var(--accent)]/40',
+            highlighted && 'ring-1 ring-accent/40',
           )}
           aria-current={isActive ? 'page' : undefined}
         >
@@ -239,7 +239,7 @@ function ThreadItem({
                   {/* 置顶标识（用户要求：置顶/未置顶有明显区别） */}
                   {isPinned && (
                     <Pin
-                      className="text-[var(--accent)] mr-1 inline size-2.5 shrink-0 -translate-y-px"
+                      className="text-accent mr-1 inline size-2.5 shrink-0 -translate-y-px"
                       strokeWidth={2.5}
                       fill="currentColor"
                     />

@@ -271,7 +271,7 @@ export function ApprovalModeSection(): ReactElement {
               <span className="text-foreground text-xs font-medium font-sans">
                 {t('settings.permAsk')}
               </span>
-              <span className="bg-[var(--amber)]/10 text-warn-text rounded-full px-2 py-0.5 font-mono text-xs">
+              <span className="bg-amber/10 text-warn-text rounded-full px-2 py-0.5 font-mono text-xs">
                 ask · {askTools.length}
               </span>
             </div>
