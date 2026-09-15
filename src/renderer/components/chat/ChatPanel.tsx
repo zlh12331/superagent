@@ -14,7 +14,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { AlertTriangle, Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -36,6 +36,7 @@ import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
 import { ConversationSearchBar } from './conversation-search-bar';
 import { GoalBar } from './GoalBar';
 import { reconstructHistory } from './history-parts';
+import { PanelNotice } from './panel-notice';
 import { RateLimitBanner } from './rate-limit-banner';
 import { executeSlashCommand } from './slash-commands';
 import { useAutoCompact } from './use-auto-compact';
@@ -293,47 +294,23 @@ export function ChatPanel({
         onNavigate={search.actions.navigate}
         onClose={search.actions.close}
       />
-      {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭 */}
+      {/* 中断提示条：上次回合异常中断（崩溃恢复），用户可关闭（panel-notice.tsx） */}
       {interrupted && interruptedDismissedFor !== chatId && (
-        <div className="border-amber/40 bg-amber/10 flex items-center gap-2 border-b px-3 py-1 text-xs text-warn-text">
-          <AlertTriangle className="size-3 shrink-0" strokeWidth={2} />
-          <span className="min-w-0 flex-1 truncate">{t('chat.runInterrupted')}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-warn-text hover:text-foreground hover:bg-transparent size-auto"
-            aria-label={t('common.close')}
-            onClick={() => setInterruptedDismissedFor(chatId)}
-          >
-            <X className="size-3.5" strokeWidth={2} />
-          </Button>
-        </div>
+        <PanelNotice
+          lines={[t('chat.runInterrupted')]}
+          onDismiss={() => setInterruptedDismissedFor(chatId)}
+        />
       )}
       {/* 限流提示横幅：429 限流时显示（RateLimitBanner 订阅 rate-limit-store）
           位于状态条原位置（用户要求：与顶部状态条互换） */}
       <RateLimitBanner />
 
-      {/* 历史回显缺口提示：重开会话时明确告知「哪些内容没落库/没回显」，避免用户误以为工具调用消失是渲染 bug */}
+      {/* 历史回显缺口提示：重开会话时明确告知「哪些内容没落库/没回显」，避免用户误以为工具调用消失是渲染 bug（panel-notice.tsx） */}
       {showHistoryNotice && (
-        <div className="border-amber/40 bg-amber/10 flex items-start gap-2 border-b px-3 py-1 text-xs text-warn-text">
-          <AlertTriangle className="mt-0.5 size-3 shrink-0" strokeWidth={2} />
-          <span className="min-w-0 flex flex-1 flex-col gap-0.5">
-            {historyNotices.map((notice) => (
-              <span key={notice} className="block">
-                {notice}
-              </span>
-            ))}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-warn-text hover:text-foreground hover:bg-transparent size-auto shrink-0"
-            aria-label={t('common.close')}
-            onClick={() => setHistoryNoticeDismissedFor(chatId)}
-          >
-            <X className="size-3.5" strokeWidth={2} />
-          </Button>
-        </div>
+        <PanelNotice
+          lines={historyNotices}
+          onDismiss={() => setHistoryNoticeDismissedFor(chatId)}
+        />
       )}
 
       {/* 中间消息列表 */}

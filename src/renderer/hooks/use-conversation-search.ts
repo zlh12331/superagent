@@ -9,7 +9,7 @@
 
 import type { UIMessage } from 'ai';
 import { useCallback, useMemo, useState } from 'react';
-import { extractText } from '@/components/chat/message-utils';
+import { extractText } from '@/lib/chat/message-text';
 
 /** 搜索状态 */
 export interface ConversationSearchState {

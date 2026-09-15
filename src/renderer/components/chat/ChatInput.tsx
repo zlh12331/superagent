@@ -1,33 +1,29 @@
 // src/renderer/components/chat/ChatInput.tsx
 // 聊天输入框 + 发送/停止按钮 · Aurora 设计系统
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────────
 // 约束（调用方须知）：
 // - 不在此组件内调用 useChat，所有状态由父组件（ChatPanel）传入
 // - 纯展示+交互，可在测试中独立 mock；sendMessage/stop 签名与 useChat 返回值对齐
+// - 本组件只做「编排 composer 各 hook + JSX」：input（值/附件/草稿）、
+//   drag（高度）、suggest（斜杠/提及）、vim（编辑模式）、send（发送管线）
 // ──────────────────────────────────────────────
 
-import { MAX_MESSAGE_LENGTH_CHARS } from '@code-agent/shared/renderer';
 import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { useDraftStore } from '@/stores/persistent/draft-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-import { buildTextWithAttachments } from './attachments';
 import { AttachmentsChips } from './attachments-chips';
 import { SlashSuggestPanel } from './slash-suggest-panel';
 import type { SlashAction } from './slash-suggestions';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 import { useComposerInput } from './use-composer-input';
+import { useComposerSend } from './use-composer-send';
 import { useComposerSuggest } from './use-composer-suggest';
 import { useVimMode } from './use-vim-mode';
-
-/** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
-const MAX_MESSAGE_LENGTH = MAX_MESSAGE_LENGTH_CHARS;
 
 interface ChatInputProps {
   /**
@@ -222,12 +218,17 @@ export function ChatInput({
     };
   }, [isStreaming, onStop]);
 
-  // 是否可以发送（非空文本 + 非流式 + 未禁用）
-  // 是否可以发送（非空文本 + 非流式 + 未禁用 + 不在发送中）
-  const [sending, setSending] = useState(false);
-  /** in-flight 发送守卫（ref 同步拦截同帧重复触发；state 驱动按钮禁用渲染） */
-  const sendingRef = useRef(false);
-  const canSend = value.trim().length > 0 && !isStreaming && !disabled && !sending;
+  // 发送管线（自 ChatInput 拆出：use-composer-send.ts）
+  // 职责：in-flight 守卫 / 超长拦截 / 附件拼接 / 清草稿与输入（三路径统一复位）
+  const { canSend, handleSend } = useComposerSend({
+    value,
+    attachments,
+    chatId,
+    clearInput,
+    onSend,
+    isStreaming,
+    disabled,
+  });
 
   /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
   const handlePickFiles = async (): Promise<void> => {
@@ -243,54 +244,8 @@ export function ChatInput({
     }
   };
 
-  /**
-   * 附件内容拼接已提取至 attachments.ts（buildTextWithAttachments）：
-   * file:read 读取 + GBK 转码 + 失败降级标注，本组件只负责调用。
-   */
-
   /** 输入框高度拖拽（use-composer-drag.ts：手柄事件 props） */
   const { handleProps: dragHandleProps } = useComposerDrag(textareaRef);
-
-  /** 发送当前文本：超长拦截 → 附件拼接 → 清空草稿与输入 */
-  const handleSend = async (): Promise<void> => {
-    // in-flight 守卫：附件拼接含真实 IPC 往返，await 窗口内 status 仍为
-    // ready，二次 Enter/点击会重复发送；此处硬拦截（不依赖渲染期的 canSend）
-    if (!canSend || sendingRef.current) {
-      return;
-    }
-    sendingRef.current = true;
-    setSending(true);
-    try {
-      // 快照本次发送的输入（供超长校验使用）
-      const sentValue = value;
-      // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
-      const base = sentValue.trim();
-      // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
-      if (base.length > MAX_MESSAGE_LENGTH) {
-        toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
-      } else {
-        const text = await buildTextWithAttachments(base, attachments, {
-          attached: (name) => t('chat.attachmentLabel', { name }),
-          readFailed: (name) => t('chat.attachmentReadFailed', { name }),
-        });
-        onSend(text);
-        // 发送成功：清除本会话草稿（草稿只保留未发送内容）
-        if (chatId !== undefined) {
-          useDraftStore.getState().clearDraft(chatId);
-        }
-        // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
-        clearInput();
-      }
-    } catch {
-      // 回调异常兜底（buildTextWithAttachments 内部已自行吞掉读取异常，失败仅追加标注）
-      toast.error(t('chat.sendFailed'));
-    }
-    // finally 语义（React Compiler 不优化 try/finally）：超长拦截、正常发送、回调异常
-    // 三条路径统一在此复位 in-flight 守卫——此前复位在 try 之外且无 catch，回调抛错
-    // 会让守卫卡死、发送按钮在本会话内永久禁用
-    sendingRef.current = false;
-    setSending(false);
-  };
 
   /**
    * 键盘事件处理

@@ -16,10 +16,6 @@
   "src/main/infra/file/file-service.ts": {
     "params": 5
   },
-  "src/renderer/components/chat/ChatInput.tsx": {
-    "count": 1,
-    "max": 207
-  },
   "src/renderer/components/layout/Sidebar.tsx": {
     "count": 1,
     "max": 219

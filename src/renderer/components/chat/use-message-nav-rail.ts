@@ -12,6 +12,8 @@
 import type { UIMessage } from 'ai';
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { extractText } from '@/lib/chat/message-text';
+
 import {
   findActiveMessageIndex,
   findUserOrder,
@@ -20,7 +22,6 @@ import {
   type MeasuredMessage,
   measureMessages,
 } from './message-offsets';
-import { extractText } from './message-utils';
 
 /** 消息导航轨元素的数据属性（滚动定位 / 偏移测量用） */
 export const MSG_INDEX_ATTR = 'data-msg-index';

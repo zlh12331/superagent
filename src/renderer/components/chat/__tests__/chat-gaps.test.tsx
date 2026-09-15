@@ -1,8 +1,10 @@
 // src/renderer/components/chat/__tests__/chat-gaps.test.tsx
-// chat 域批次3 缺口补全：message-utils 纯函数 + ChatInput 组件交互
+// chat 域批次3 缺口补全：formatJson 真实文案 + ChatInput 组件交互
 //
 // 测试要点：
-// 1. message-utils：状态映射四态 / extractText / formatJson（截断/undefined/循环引用）
+// 1. formatJson：截断标记使用真实 i18n 文案（message-utils.test 用 mockT 断言逻辑；
+//    状态映射与 extractText 的完整矩阵见 message-utils.test / lib/chat/message-text.test，
+//    2026-09-15 去重）
 // 2. ChatInput：发送/停止按钮切换 / Enter·Shift+Enter / Esc 中断 / 禁用 /
 //    字符计数 / 草稿恢复·保存·清除 / 斜杠建议 / @提及 / 附件 / 受控 / 注入 / 超长拦截
 
@@ -13,12 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n/config';
 import { useDraftStore } from '@/stores/persistent/draft-store';
 import { ChatInput } from '../ChatInput';
-import {
-  extractText,
-  formatJson,
-  mapToolStateToStatusClass,
-  mapToolStateToStatusLabelKey,
-} from '../message-utils';
+import { formatJson } from '../message-utils';
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -30,38 +27,7 @@ describe('chat 批次3 缺口补全', () => {
     useDraftStore.setState({ drafts: {} });
   });
 
-  describe('message-utils 纯函数', () => {
-    it('mapToolStateToStatusLabelKey：状态映射（input-available=running，无 input-accepted）', () => {
-      expect(mapToolStateToStatusLabelKey('output-error')).toBe('statusError');
-      expect(mapToolStateToStatusLabelKey('output-available')).toBe('statusSuccess');
-      expect(mapToolStateToStatusLabelKey('input-streaming')).toBe('statusRunning');
-      expect(mapToolStateToStatusLabelKey('input-available')).toBe('statusRunning');
-      expect(mapToolStateToStatusLabelKey('approval-responded')).toBe('statusRunning');
-      expect(mapToolStateToStatusLabelKey('approval-requested')).toBe('statusWaiting');
-      expect(mapToolStateToStatusLabelKey('output-denied')).toBe('statusWaiting');
-    });
-
-    it('mapToolStateToStatusClass：状态映射（与 LabelKey 同源）', () => {
-      expect(mapToolStateToStatusClass('output-error')).toBe('error');
-      expect(mapToolStateToStatusClass('output-available')).toBe('success');
-      expect(mapToolStateToStatusClass('input-streaming')).toBe('running');
-      expect(mapToolStateToStatusClass('input-available')).toBe('running');
-      expect(mapToolStateToStatusClass('output-denied')).toBe('pending');
-    });
-
-    it('extractText：提取 text part 并按行拼接，过滤非文本 part', () => {
-      const parts = [
-        { type: 'text', text: '第一行' },
-        { type: 'tool-invocation', toolInvocation: {} },
-        { type: 'text', text: '第二行' },
-      ] as never;
-      expect(extractText(parts)).toBe('第一行\n第二行');
-    });
-
-    it('extractText：空数组返回空串', () => {
-      expect(extractText([])).toBe('');
-    });
-
+  describe('formatJson 真实文案', () => {
     it('formatJson：正常格式化（缩进 + 截断 200 字符）', () => {
       const t = i18n.t.bind(i18n);
       const short = formatJson({ a: 1 }, t);

@@ -1,15 +1,11 @@
-// message-utils.ts（自 ChatMessageList 拆分）
-// 聊天消息纯函数：状态映射 / 文本提取 / JSON 格式化
+// message-utils.ts
+// 工具卡展示纯函数：状态映射（ToolCallState → 类名/文案键）+ JSON 预览格式化
 // ──────────────────────────────
-// 拆分背景：ChatMessageList 685 行，纯函数与组件混合，按职责提取
+// 自 ChatMessageList 拆分；extractText 已于 2026-09-15 迁至 lib/chat/message-text.ts
+// （跨特性共享，留在本文件会形成 hooks → 特性内部实现的目录级循环）
 // ──────────────────────────────
 
-import type { UIMessage } from 'ai';
-import { isTextUIPart } from 'ai';
 import type { TFunction } from 'i18next';
-
-/** part 类型（UIMessage['parts'][number] 派生） */
-type UiMessagePart = UIMessage['parts'][number];
 
 /**
  * 工具状态对应的本地化键（chat.* 域）
@@ -81,13 +77,6 @@ export function mapToolStateToStatusClass(state: ToolCallState): ToolStatusClass
     return 'running';
   }
   return 'pending';
-}
-
-export function extractText(parts: readonly UiMessagePart[]): string {
-  return parts
-    .filter(isTextUIPart)
-    .map((part) => part.text)
-    .join('\n');
 }
 
 /**

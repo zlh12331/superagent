@@ -1,11 +1,11 @@
 // src/renderer/components/chat/message-utils.test.ts
-// 聊天消息纯函数测试（状态映射 / 文本提取 / JSON 格式化）——无 DOM 依赖高杠杆
+// 工具卡展示纯函数测试（状态映射 / JSON 格式化）——无 DOM 依赖高杠杆
+// extractText 的测试已随实现迁至 lib/chat/message-text.test.ts（2026-09-15）
 import type { TFunction } from 'i18next';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  extractText,
   formatJson,
   mapToolStateToStatusClass,
   mapToolStateToStatusLabelKey,
@@ -45,23 +45,6 @@ describe('mapToolStateToStatusClass', () => {
   it('approval-requested / output-denied → pending', () => {
     expect(mapToolStateToStatusClass('approval-requested')).toBe('pending');
     expect(mapToolStateToStatusClass('output-denied')).toBe('pending');
-  });
-});
-
-describe('extractText', () => {
-  it('只取 text parts，按 \\n 拼接', () => {
-    const parts = [
-      { type: 'text', text: '第一行' },
-      { type: 'reasoning', text: '思考' },
-      { type: 'text', text: '第二行' },
-    ] as never;
-    expect(extractText(parts)).toBe('第一行\n第二行');
-  });
-  it('无 text part → 空字符串', () => {
-    expect(extractText([{ type: 'tool-call' } as never])).toBe('');
-  });
-  it('空数组 → 空字符串', () => {
-    expect(extractText([])).toBe('');
   });
 });
 
