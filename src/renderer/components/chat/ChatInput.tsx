@@ -202,6 +202,17 @@ export function ChatInput({
     setSuggestIndex(0);
   }, [value, activeTrigger]);
 
+  // 当前高亮建议的可读文本与总数（sr-only live region 播报用；textarea 不允许
+  // combobox 角色，故不依赖 aria-activedescendant）
+  const activeSuggestion = slashOpen ? filteredSuggestions[suggestIndex] : undefined;
+  const activeSuggestionLabel =
+    activeSuggestion !== undefined
+      ? `${activeSuggestion.command} ${t(activeSuggestion.labelKey)}`
+      : slashOpen
+        ? ''
+        : (mentionFiles[suggestIndex] ?? '');
+  const suggestionTotal = slashOpen ? filteredSuggestions.length : mentionFiles.length;
+
   /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
   const applySuggestion = (command: string): void => {
     // 带 action 的命令：执行动作（对齐参考项目），不填充文本
@@ -292,29 +303,34 @@ export function ChatInput({
     }
     sendingRef.current = true;
     setSending(true);
-    // 快照本次发送的输入（供超长校验使用）
-    const sentValue = value;
-    // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
-    const base = sentValue.trim();
-    // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
-    if (base.length > MAX_MESSAGE_LENGTH) {
-      toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
-    } else {
-      const text = await buildTextWithAttachments(base, attachments, {
-        attached: (name) => t('chat.attachmentLabel', { name }),
-        readFailed: (name) => t('chat.attachmentReadFailed', { name }),
-      });
-      onSend(text);
-      // 发送成功：清除本会话草稿（草稿只保留未发送内容）
-      if (chatId !== undefined) {
-        useDraftStore.getState().clearDraft(chatId);
+    try {
+      // 快照本次发送的输入（供超长校验使用）
+      const sentValue = value;
+      // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
+      const base = sentValue.trim();
+      // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
+      if (base.length > MAX_MESSAGE_LENGTH) {
+        toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
+      } else {
+        const text = await buildTextWithAttachments(base, attachments, {
+          attached: (name) => t('chat.attachmentLabel', { name }),
+          readFailed: (name) => t('chat.attachmentReadFailed', { name }),
+        });
+        onSend(text);
+        // 发送成功：清除本会话草稿（草稿只保留未发送内容）
+        if (chatId !== undefined) {
+          useDraftStore.getState().clearDraft(chatId);
+        }
+        // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
+        clearInput();
       }
-      // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
-      clearInput();
+    } catch {
+      // 回调异常兜底（buildTextWithAttachments 内部已自行吞掉读取异常，失败仅追加标注）
+      toast.error(t('chat.sendFailed'));
     }
-    // finally 语义（React Compiler 不优化 try/finally）：超长拦截与正常发送
-    // 两条路径统一在此复位 in-flight 守卫。buildTextWithAttachments 内部已
-    // 自行吞掉读取异常（失败仅追加标注），故此处无需 catch。
+    // finally 语义（React Compiler 不优化 try/finally）：超长拦截、正常发送、回调异常
+    // 三条路径统一在此复位 in-flight 守卫——此前复位在 try 之外且无 catch，回调抛错
+    // 会让守卫卡死、发送按钮在本会话内永久禁用
     sendingRef.current = false;
     setSending(false);
   };
@@ -425,6 +441,18 @@ export function ChatInput({
         onSelectCommand={applySuggestion}
         onSelectFile={applyMention}
       />
+      {/* 建议面板当前高亮项的播报：combobox 焦点模型在 textarea 上不合法
+          （ARIA in HTML 不允许覆盖 textbox 角色），故用 sr-only live region
+          满足 4.1.3 Status Messages——键盘上下移动高亮时读屏可听到当前项 */}
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {suggestOpen && activeSuggestionLabel !== ''
+          ? t('chat.suggestAnnounce', {
+              current: suggestIndex + 1,
+              total: suggestionTotal,
+              label: activeSuggestionLabel,
+            })
+          : ''}
+      </span>
       {/* 附件 chip 列表（自 ChatInput 拆出：attachments-chips.tsx） */}
       <AttachmentsChips attachments={attachments} onRemove={removeAttachment} />
       {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光）
@@ -434,6 +462,10 @@ export function ChatInput({
         className="composer-input"
         rows={1}
         aria-label={t('chat.inputLabel')}
+        // 输入框 ↔ 建议面板的程序化关联（aria-controls 是 ARIA 全局属性，合法）；
+        // 不用 combobox 角色：ARIA in HTML 规定 textarea 不允许覆盖 textbox 角色，
+        // 故当前高亮项改由下方 sr-only live region 播报（见 suggestAnnounce）
+        aria-controls={suggestOpen ? 'chat-input-suggest' : undefined}
         id="chat-input"
         spellCheck={false}
         autoComplete="off"

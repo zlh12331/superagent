@@ -234,10 +234,12 @@ export function reconstructHistory(rawMessages: readonly ChatMessage[]): Reconst
           parts.push(
             toOrphanResultPart(
               part,
-              outcome ?? {
-                state: 'output-available',
-                output: unwrapOutput(part['output']),
-              },
+              // 兜底必须按 part 自身类型判定：tool-error 的孤儿结果此前被硬编码成
+              // output-available，错误卡会渲染成成功态并丢掉 errorText
+              outcome ??
+                (type === 'tool-error'
+                  ? { state: 'output-error', errorText: asString(part['errorText']) || 'error' }
+                  : { state: 'output-available', output: unwrapOutput(part['output']) }),
             ),
           );
           break;

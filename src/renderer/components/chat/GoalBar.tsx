@@ -13,6 +13,7 @@ import type { ReactElement } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 
 import type { ChatGoalView } from './use-chat-goals';
 
@@ -39,6 +40,16 @@ interface GoalBarProps {
  */
 export function GoalBar({ goal, isCompleted, onEdit, onClear }: GoalBarProps): ReactElement {
   const { t } = useTranslation();
+
+  /** 删除目标：破坏性操作走命令式确认（confirm-dialog-store，对齐 file-tree 删除做法） */
+  const handleClear = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: t('chat.goalClearConfirmTitle'),
+      message: t('chat.goalClearConfirmMessage'),
+      danger: true,
+    });
+    if (confirmed) onClear();
+  };
 
   return (
     <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
@@ -77,7 +88,7 @@ export function GoalBar({ goal, isCompleted, onEdit, onClear }: GoalBarProps): R
           className="text-muted-foreground hover:bg-destructive/15 hover:text-error-text size-6"
           title={t('chat.goalClear')}
           aria-label={t('chat.goalClear')}
-          onClick={onClear}
+          onClick={() => void handleClear()}
         >
           <Trash2 className="size-3" />
         </Button>

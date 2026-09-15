@@ -183,7 +183,10 @@
       "statsMessages": "Messages",
       "statsTokens": "Tokens",
       "messageTooLong": "Message too long (max {{max}} characters)",
+      "sendFailed": "Failed to send, please retry",
       "attachmentLabel": "[Attachment: {{name}}]",
+      "removeAttachment": "Remove attachment {{name}}",
+      "suggestAnnounce": "{{current}}/{{total}}: {{label}}",
       "attachmentReadFailed": "[Attachment: {{name}}] (failed to read content)",
       "slashAction": {
         "help": "Commands: /new new session · /clear clear chat · /models pick model · /compact compact context",
@@ -194,6 +197,8 @@
       "noActiveSession": "No active session",
       "goalEdit": "Edit goal",
       "goalClear": "Delete goal",
+      "goalClearConfirmTitle": "Delete session goal",
+      "goalClearConfirmMessage": "This session will stop tracking the goal. This action cannot be undone.",
       "goalCompleted": "Completed",
       "loadedMessages_one": "Loaded {{count}} / {{total}} message · scroll up for earlier",
       "loadedMessages_other": "Loaded {{count}} / {{total}} messages · scroll up for earlier"

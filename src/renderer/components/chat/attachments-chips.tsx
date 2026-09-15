@@ -45,7 +45,9 @@ export function AttachmentsChips({
             variant="ghost"
             size="icon"
             onClick={() => onRemove(att.path)}
-            aria-label={t('common.close')}
+            // 带附件名：多个 chip 时 SR 才不会听到一串同名的「关闭」按钮
+            aria-label={t('chat.removeAttachment', { name: att.name })}
+            title={t('chat.removeAttachment', { name: att.name })}
             className="hover:text-foreground size-auto rounded-full"
           >
             <X className="size-3" />

@@ -11,10 +11,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { DialogHost } from '@/components/common/DialogHost';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { useDraftStore } from '@/stores/persistent/draft-store';
-
 import { ChatPanel } from '../ChatPanel';
 
 // useAgentWithIpc 外壳：目标栏测试只关心目标状态，不关心 agent 流式链路
@@ -73,6 +72,8 @@ describe('会话目标栏（ChatPanel 内联）', () => {
         <MemoryRouter>
           <ThemeProvider>
             <ChatPanel chatId="chat-1" workingDir="D:\\proj" />
+            {/* 确认对话框宿主：删除目标走 confirm-dialog-store 命令式确认，需真实渲染 */}
+            <DialogHost />
           </ThemeProvider>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -139,13 +140,25 @@ describe('会话目标栏（ChatPanel 内联）', () => {
     expect(goalCreateMock).not.toHaveBeenCalled();
   });
 
-  it('删除按钮：调 goal:clear', async () => {
+  it('删除按钮：确认后调 goal:clear', async () => {
     const user = userEvent.setup();
     renderPanel([{ condition: '目标A', status: 'active' }]);
     await user.click(await screen.findByLabelText('删除目标'));
+    // 破坏性操作走命令式确认（confirm-dialog-store → DialogHost）
+    expect(await screen.findByText('删除会话目标')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() => {
       expect(goalClearMock).toHaveBeenCalledWith({ sessionId: 'chat-1' });
     });
+  });
+
+  it('删除按钮：取消确认 → 不调 goal:clear（目标栏保留）', async () => {
+    const user = userEvent.setup();
+    renderPanel([{ condition: '目标A', status: 'active' }]);
+    await user.click(await screen.findByLabelText('删除目标'));
+    await user.click(await screen.findByRole('button', { name: '取消' }));
+    expect(goalClearMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('删除目标')).toBeInTheDocument();
   });
 
   it('删除后：目标栏消失（clear 后 list 返回 aborted 不再展示）', async () => {
@@ -156,6 +169,7 @@ describe('会话目标栏（ChatPanel 内联）', () => {
       data: { goals: [{ condition: '目标A', status: 'aborted' }] },
     });
     await user.click(await screen.findByLabelText('删除目标'));
+    await user.click(await screen.findByRole('button', { name: '确认' }));
     await waitFor(() => {
       expect(screen.queryByText('GOAL')).toBeNull();
     });

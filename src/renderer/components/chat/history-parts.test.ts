@@ -86,6 +86,37 @@ describe('reconstructHistory', () => {
     });
   });
 
+  it('孤儿 tool-error（无对应 tool-call）→ output-error 卡且保留 errorText', () => {
+    // 回归：兜底此前硬编码 output-available，孤儿错误卡会渲染成成功态并丢 errorText
+    const r = reconstructHistory([
+      msg('tool', [
+        {
+          type: 'tool-error',
+          toolCallId: 'orphan-err',
+          toolName: 'edit_file',
+          errorText: '权限不足',
+        },
+      ]),
+    ]);
+    expect(r.messages[0]?.parts[0]).toMatchObject({
+      type: 'dynamic-tool',
+      toolName: 'edit_file',
+      state: 'output-error',
+      errorText: '权限不足',
+    });
+  });
+
+  it('孤儿 tool-error 无 toolCallId → 同样按错误态呈现（不误标成功）', () => {
+    const r = reconstructHistory([
+      msg('tool', [{ type: 'tool-error', toolName: 'run_command', errorText: 'boom' }]),
+    ]);
+    expect(r.messages[0]?.parts[0]).toMatchObject({
+      type: 'dynamic-tool',
+      state: 'output-error',
+      errorText: 'boom',
+    });
+  });
+
   it('file part → UI file part（url 或 base64 data）', () => {
     const r = reconstructHistory([
       msg('user', [

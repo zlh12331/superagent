@@ -183,7 +183,10 @@
       "statsMessages": "消息数",
       "statsTokens": "Token",
       "messageTooLong": "消息过长（最多 {{max}} 字符）",
+      "sendFailed": "发送失败，请重试",
       "attachmentLabel": "[附件: {{name}}]",
+      "removeAttachment": "移除附件 {{name}}",
+      "suggestAnnounce": "第 {{current}}/{{total}} 项：{{label}}",
       "attachmentReadFailed": "[附件: {{name}}]（内容读取失败）",
       "slashAction": {
         "help": "可用命令：/new 新建会话 · /clear 清空对话 · /models 选择模型 · /compact 压缩上下文",
@@ -194,6 +197,8 @@
       "noActiveSession": "无活跃会话",
       "goalEdit": "编辑目标",
       "goalClear": "删除目标",
+      "goalClearConfirmTitle": "删除会话目标",
+      "goalClearConfirmMessage": "删除后本会话将不再追踪该目标，此操作不可撤销。",
       "goalCompleted": "已完成",
       "loadedMessages_other": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息",
       "loadedMessages_one": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息"

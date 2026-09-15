@@ -29,11 +29,21 @@ export interface DiffLine {
 const DMP = new diff_match_patch();
 
 /**
+ * 行级 diff 规模上限
+ *
+ * 超过则退化为「整块替换」粗粒度结果，理由：
+ * - dmp 的行编码用 String.fromCharCode 递增（起始 32），编码空间上限 65535 → 超限会静默串码
+ * - 大文件 LCS 为 O(n·d)，首屏同步计算会阻塞主线程（工具卡在消息流中随渲染触发）
+ * 退化结果仍保留全部行文本（全 del + 全 add），不截断、不静默丢弃内容
+ */
+const MAX_DIFF_LINES = 5000;
+
+/**
  * 计算两段文本的行级 diff（LCS 语义对齐）
  *
  * @param oldText 变更前文本（空串 = 新建文件）
  * @param newText 变更后文本（空串 = 删除文件）
- * @returns 按顺序排列的行列表（context 在中间，add/del 围绕）
+ * @returns 按顺序排列的行列表（context 在中间，add/del 围绕；超规模上限退化为整块替换）
  *
  * @example
  * ```ts
@@ -52,6 +62,14 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
+
+  // 规模守卫：超限退化为整块替换（见 MAX_DIFF_LINES 说明）
+  if (oldLines.length > MAX_DIFF_LINES || newLines.length > MAX_DIFF_LINES) {
+    return [
+      ...oldLines.map((text) => ({ type: 'del' as const, text })),
+      ...newLines.map((text) => ({ type: 'add' as const, text })),
+    ];
+  }
 
   // 行 → 唯一字符编码（空间足够 65535 行）
   // lineMap：行内容 → 编码字符；charToLine：编码字符 → 行内容（decode 用反向映射）

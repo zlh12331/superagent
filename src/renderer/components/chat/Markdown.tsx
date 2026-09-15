@@ -155,7 +155,11 @@ function CodeBlock({
   // 本地化文案
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const [html, setHtml] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState<{
+    readonly html: string;
+    readonly code: string;
+    readonly theme: string;
+  } | null>(null);
   // 复制反馈统一走 useCopy（copied 2s 复位 + 失败 toast）
   const { copied, copy } = useCopy();
 
@@ -167,6 +171,8 @@ function CodeBlock({
   // highlight=false（流式期间）跳过高亮——仅渲染纯文本，避免每 token 反复高亮（对齐参考项目）
   // 2026-09 优化：高亮前先 ensureLangLoaded——首次遇到 go/rust 等延迟语言时
   // 按需 loadLanguage（await 到就绪再 codeToHtml），未收录语言走 fail-safe 降级
+  // 结果与「生成它的 code + theme」绑定：code 变化到新结果 resolve 之间不回显旧 HTML
+  // （此前只存 html，长代码块在流式/编辑时会出现旧内容闪现）
   useEffect(() => {
     if (!highlight) return;
     let cancelled = false;
@@ -177,16 +183,22 @@ function CodeBlock({
         await ensureLangLoaded(h, normalizedLang);
         if (cancelled) return;
         const result = h.codeToHtml(code, { lang: normalizedLang, theme });
-        setHtml(result);
+        if (!cancelled) setHighlighted({ html: result, code, theme });
       } catch {
         // lang 不支持 / loadLanguage 失败等异常：降级为纯文本 pre
-        if (!cancelled) setHtml(null);
+        if (!cancelled) setHighlighted(null);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [code, normalizedLang, theme, highlight]);
+
+  // 仅当结果对应当前 code/theme 且启用高亮时使用；否则走纯文本 fallback
+  const html =
+    highlight && highlighted !== null && highlighted.code === code && highlighted.theme === theme
+      ? highlighted.html
+      : null;
 
   const handleCopy = async (): Promise<void> => {
     await copy(code);

@@ -33,8 +33,12 @@ export function useMentionFiles(
 ): readonly string[] {
   const [mentionFiles, setMentionFiles] = useState<string[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 在途请求令牌：查询/依赖变化或卸载后，旧请求的晚到结果不得覆盖新查询结果
+  const requestRef = useRef(0);
 
   useEffect(() => {
+    // 本次请求令牌（自增即作废此前在途请求）
+    const requestId = ++requestRef.current;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -57,6 +61,8 @@ export function useMentionFiles(
           maxResults: MENTION_MAX_RESULTS,
         })
         .then((res) => {
+          // 过期响应丢弃（当前令牌已前进）
+          if (requestRef.current !== requestId) return;
           try {
             setMentionFiles([...unwrap(res).files]);
           } catch {
@@ -65,6 +71,7 @@ export function useMentionFiles(
           }
         })
         .catch(() => {
+          if (requestRef.current !== requestId) return;
           setMentionFiles([]);
         });
     }, MENTION_DEBOUNCE_MS);
@@ -72,6 +79,8 @@ export function useMentionFiles(
       if (timerRef.current !== null) {
         clearTimeout(timerRef.current);
       }
+      // 依赖变化/卸载：作废在途响应，避免卸载后 setState
+      requestRef.current += 1;
     };
   }, [activeTrigger, activeQuery, workingDir]);
 
