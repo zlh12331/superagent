@@ -1,29 +1,14 @@
-// thread-item.tsx（自 Sidebar 拆分）
-// 侧边栏 · 会话线程项（含拖拽排序）
+// src/renderer/components/layout/thread-item.tsx
+// 侧边栏 · 会话线程项（可拖拽 + 内联重命名 + 操作菜单）
 // ──────────────────────────────
-// 拆分背景：Sidebar 641 行，按职责提取
+// 拆分背景（2026-08 重构）：自 Sidebar 641 行按职责提取。
+// 结构：
+// - SortableThreadItem：@dnd-kit useSortable 包装（拖拽句柄属性 + 位移样式）
+// - ThreadItem：纯展示行（标题/相对时间/操作菜单/上下文菜单/内联重命名）
+//
+// 说明：元信息只显示相对时间，**不显示消息预览**（用户要求）——
+// 故本组件不接收 lastMessage，勿再加回。
 // ──────────────────────────────
-
-// src/renderer/components/layout/Sidebar.tsx
-// 侧边栏 · 会话列表 · 对齐原型布局
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - sidebar-head：新建会话按钮 + 搜索框 + tabs（最近/归档）
-// - sidebar-list：会话列表（thread-item 结构，按 folder 分组）
-// - sidebar-foot：用户信息区域（SidebarAccount 账户触发器 + 下拉菜单）
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - class 命名：sidebar / sidebar-head / sidebar-search / sidebar-tabs /
-//   sidebar-tab / sidebar-list / thread-group-label / folder-label /
-//   folder-items / thread-item / ti-row / ti-dot / ti-content / ti-title /
-//   ti-meta / ti-actions / sidebar-foot
-// - 文学风视觉令牌：深棕主色 + 衬线标题 + 等宽元信息
-//
-// 状态分层（符合项目规范）：
-// - L2 Zustand：useActiveSessionStore 维护激活会话 id
-// - L3 TanStack Query：useSessionsQuery 拉取列表
-// - L3 TanStack Mutation：useDeleteSession
-// ──────────────────────────────────────────────────────────────
 
 import { useSortable } from '@dnd-kit/sortable';
 import { FolderOpen, FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
@@ -52,7 +37,6 @@ interface SortableThreadItemProps {
   readonly sessionId: string;
   readonly folderName: string;
   readonly title: string;
-  readonly lastMessage: string | undefined;
   readonly updatedAt: number;
   readonly isActive: boolean;
   readonly isDeleting: boolean;
@@ -352,7 +336,3 @@ function ThreadItem({
     </ContextMenu>
   );
 }
-
-// ── 子组件：加载中 / 空状态 ───────────────────────────────────
-
-/** 加载中骨架屏（5 行占位） */

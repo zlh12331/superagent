@@ -111,6 +111,69 @@ type PanelTab = 'info' | 'diff' | 'file' | 'browser' | 'terminal' | 'dev';
 type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
 
 /**
+ * 开发者子视图切换按钮（segmented 形态）
+ *
+ * 独立为组件而非 map 内联：一是让「选中态 → 类名」的映射只有一处，
+ * 二是类名归属（.dev-sub-tab，globals.css 按钮类体系）与 <button> 相邻，
+ * 符合 ui-consistency 的 raw-button 豁免识别。
+ */
+function DevSubTabButton({
+  icon,
+  label,
+  active,
+  onSelect,
+}: {
+  readonly icon: ReactElement;
+  readonly label: string;
+  readonly active: boolean;
+  readonly onSelect: () => void;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
+        active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+      )}
+      onClick={onSelect}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/**
+ * 开发者子视图定义（表驱动）
+ *
+ * 此前是 4 段逐字复制的 `<button>`：仅 icon / 标签 / 目标子视图不同，
+ * className 三元与 onClick 完全相同（约 52 行里 4 份重复）。
+ * 收敛为数据 + DevSubTabButton 单一渲染路径后，新增子视图只需加一行。
+ */
+const DEV_SUBTABS: ReadonlyArray<{
+  id: DevSubTab;
+  icon: ReactElement;
+  labelKey: string;
+}> = [
+  { id: 'git', icon: <GitBranch className="size-2.5" strokeWidth={1.5} />, labelKey: 'dev.tabGit' },
+  {
+    id: 'logs',
+    icon: <ScrollText className="size-2.5" strokeWidth={1.5} />,
+    labelKey: 'dev.tabLogs',
+  },
+  {
+    id: 'metrics',
+    icon: <Activity className="size-2.5" strokeWidth={1.5} />,
+    labelKey: 'dev.tabMetrics',
+  },
+  {
+    id: 'inspector',
+    icon: <Wrench className="size-2.5" strokeWidth={1.5} />,
+    labelKey: 'dev.tabInspector',
+  },
+];
+
+/**
  * 右面板（会话上下文面板）
  */
 export const DevPanel = memo(function DevPanel({
@@ -294,58 +357,15 @@ export const DevPanel = memo(function DevPanel({
             <div className="flex h-full flex-col">
               {/* 开发者子视图切换（调试工具收纳）——segmented 形态，纳入 ui-consistency 豁免 */}
               <div className="border-border bg-muted/20 flex items-center gap-0.5 border-b px-1.5 py-0.5">
-                <button
-                  type="button"
-                  className={cn(
-                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'git'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('git')}
-                >
-                  <GitBranch className="size-2.5" strokeWidth={1.5} />
-                  Git
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'logs'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('logs')}
-                >
-                  <ScrollText className="size-2.5" strokeWidth={1.5} />
-                  {t('dev.tabLogs')}
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'metrics'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('metrics')}
-                >
-                  <Activity className="size-2.5" strokeWidth={1.5} />
-                  {t('dev.tabMetrics')}
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'dev-sub-tab flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-2xs transition-colors',
-                    devSubTab === 'inspector'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => setDevSubTab('inspector')}
-                >
-                  <Wrench className="size-2.5" strokeWidth={1.5} />
-                  {t('dev.tabInspector')}
-                </button>
+                {DEV_SUBTABS.map((sub) => (
+                  <DevSubTabButton
+                    key={sub.id}
+                    icon={sub.icon}
+                    label={t(sub.labelKey)}
+                    active={devSubTab === sub.id}
+                    onSelect={() => setDevSubTab(sub.id)}
+                  />
+                ))}
               </div>
               <div className="min-h-0 flex-1">
                 <div className={paneCls(devSubTab === 'git')}>

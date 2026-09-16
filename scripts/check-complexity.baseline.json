@@ -131,14 +131,6 @@
     "count": 1,
     "max": 16
   },
-  "src/renderer/components/layout/AppShell.tsx": {
-    "count": 1,
-    "max": 25
-  },
-  "src/renderer/components/layout/Sidebar.tsx": {
-    "count": 1,
-    "max": 16
-  },
   "src/renderer/components/settings/sections/about-section.tsx": {
     "count": 1,
     "max": 44

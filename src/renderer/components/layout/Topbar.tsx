@@ -58,7 +58,6 @@ export function Topbar({
   hideRightPanelToggle = false,
 }: TopbarProps): ReactElement {
   const { theme, resolvedTheme, setTheme } = useTheme();
-  // 设置按钮已删除（用户要求）：入口保留在命令面板与账户菜单
   // 快捷键展示平台化：macOS ⌘ / Windows-Linux Ctrl（与 settings-store 默认一致）
   const isMac =
     typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') === true;

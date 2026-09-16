@@ -1,20 +1,10 @@
 // src/renderer/components/layout/Sidebar.tsx
-// 侧边栏 · 组装层（会话列表/文件夹标签/线程项/加载态提取至独立文件）
+// 侧边栏 · 会话列表 · 对齐原型布局 · 组装层
 // ──────────────────────────────────────────────
-// 拆分背景（2026-08 重构）：原文件 641 行，按职责拆分：
-// - folder-label.tsx：文件夹标签
-// - thread-item.tsx：会话线程项（含拖拽排序）
-// - loading-list.tsx：加载占位
-// - sidebar-utils.ts：纯函数
-// ──────────────────────────────────────────────
-
-// src/renderer/components/layout/Sidebar.tsx
-// 侧边栏 · 会话列表 · 对齐原型布局
-// ──────────────────────────────────────────────────────────────
 // 职责：
-// - sidebar-head：新建会话按钮 + 搜索框 + tabs（最近/归档）
-// - sidebar-list：会话列表（thread-item 结构，按 folder 分组）
-// - sidebar-foot：用户信息区域（SidebarAccount 账户触发器 + 下拉菜单）
+// - sidebar-head：新建会话按钮 + 搜索框 + 计数 tab
+// - sidebar-list：会话列表（按 folder 分组，thread-item 结构）或文件树视图
+// - sidebar-foot：SidebarAccount 账户触发器 + 下拉菜单
 //
 // 设计（对齐原型 docs/prototype/prototype-v2.html）：
 // - class 命名：sidebar / sidebar-head / sidebar-search / sidebar-tabs /
@@ -24,10 +14,15 @@
 // - 文学风视觉令牌：深棕主色 + 衬线标题 + 等宽元信息
 //
 // 状态分层（符合项目规范）：
-// - L2 Zustand：useActiveSessionStore 维护激活会话 id
+// - L2 Zustand：useActiveSessionStore（激活会话）/ useSidebarPrefStore（拖拽覆盖 + 折叠）
 // - L3 TanStack Query：useSessionsQuery 拉取列表
-// - L3 TanStack Mutation：useDeleteSession
-// ──────────────────────────────────────────────────────────────
+// - L3 TanStack Mutation：useDeleteSession / usePinSession / useRenameSession
+//
+// 拆分记录（2026-08 重构）：原文件 641 行，按职责拆分为本组装层 +
+// folder-label.tsx（文件夹标签）、thread-item.tsx（会话项 + 拖拽）、
+// loading-list.tsx（加载占位）、sidebar-utils.ts（纯函数）、
+// sidebar-account.tsx（底部账户区），搜索高亮副作用另见 hooks/use-sidebar-highlight
+// ──────────────────────────────────────────────
 
 import {
   closestCenter,
@@ -41,7 +36,7 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-ki
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { motion } from 'motion/react';
-import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
@@ -56,14 +51,10 @@ import {
   usePinSession,
   useSessionsQuery,
 } from '@/hooks/use-sessions';
+import { useSidebarHighlight } from '@/hooks/use-sidebar-highlight';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
-import {
-  ROUTES,
-  SEARCH_HIGHLIGHT_DEBOUNCE_MS,
-  SEARCH_HIGHLIGHT_EXPIRE_MS,
-  SEARCH_HIGHLIGHT_MIN_CHARS,
-} from '@/lib/constants';
+import { ROUTES } from '@/lib/constants';
 import { springTransition } from '@/lib/motion';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
@@ -136,63 +127,11 @@ export function Sidebar(): ReactElement {
   // 过滤会话：标题或工作目录匹配（大小写不敏感，即时生效）——纯函数见 sidebar-utils
   const filteredSessions = filterSessions(sessions, searchKeyword);
 
-  // 搜索高亮（照搬参考项目 I-S-001/P1-10/11）：
-  // - 300ms 防抖后计算匹配项并高亮（非即时，对齐原型 debounce 300ms）
-  // - 高亮 2 秒后自动清除（闪烁效果，对齐原型 setTimeout(() => outline='', 2000)）
-  // - 少于 2 字符不高亮（对齐原型 if (q.length < 2) return）
-  // 即时过滤（filteredSessions）不受影响，保持输入响应性
-  const [highlightedThreadIds, setHighlightedThreadIds] = useState<Set<string>>(() => new Set());
-  // 高亮过期定时器引用 — 新的防抖触发时清除之前的过期定时器，避免叠加
-  const highlightExpireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 通过 ref 读取最新 sessions，避免将 sessions 放入 effect 依赖：
-  // sessions 变化（缓存刷新、乐观更新回写）会重置防抖计时器，导致输入过程中
-  // 的高亮计算被反复打断。计时器触发时仍能读到最新的 sessions。
-  const sessionsRef = useRef(sessions);
-  // 在 effect 中同步 ref —— react-hooks/refs 规则禁止在渲染阶段写入 ref.current
-  useEffect(() => {
-    sessionsRef.current = sessions;
-  }, [sessions]);
-  useEffect(() => {
-    const q = searchKeyword.trim().toLowerCase();
-
-    // 300ms 防抖后计算匹配项（对齐原型 setTimeout(..., 300)）
-    const debounceTimer = setTimeout(() => {
-      // 少于 SEARCH_HIGHLIGHT_MIN_CHARS 字符不高亮（对齐原型 q.length < 2 检查）
-      // 不主动清除——让之前的高亮自然过期（对齐原型行为）
-      if (q.length < SEARCH_HIGHLIGHT_MIN_CHARS) return;
-
-      const matched = new Set<string>();
-      // 用 sessionsRef.current 读取最新会话列表，避免将其加入依赖而打断防抖
-      for (const s of sessionsRef.current) {
-        if (s.title.toLowerCase().includes(q) || s.workingDir.toLowerCase().includes(q)) {
-          matched.add(s.id);
-        }
-      }
-      setHighlightedThreadIds(matched);
-
-      // 清除之前的过期定时器（避免多次搜索叠加）
-      if (highlightExpireTimerRef.current !== null) {
-        clearTimeout(highlightExpireTimerRef.current);
-      }
-      // 2 秒后自动清除高亮（对齐原型 setTimeout(() => { item.style.outline = ''; }, 2000)）
-      highlightExpireTimerRef.current = setTimeout(() => {
-        setHighlightedThreadIds(new Set());
-        highlightExpireTimerRef.current = null;
-      }, SEARCH_HIGHLIGHT_EXPIRE_MS);
-    }, SEARCH_HIGHLIGHT_DEBOUNCE_MS);
-
-    return () => clearTimeout(debounceTimer);
-    // 仅依赖 searchKeyword；sessions 通过 ref 读取，避免防抖被打断
-  }, [searchKeyword]);
-  // 组件卸载时清除过期定时器，防止内存泄漏
-  useEffect(() => {
-    return () => {
-      if (highlightExpireTimerRef.current !== null) {
-        clearTimeout(highlightExpireTimerRef.current);
-        highlightExpireTimerRef.current = null;
-      }
-    };
-  }, []);
+  // 搜索高亮（照搬参考项目 I-S-001/P1-10/11）：300ms 防抖后计算匹配项并高亮，
+  // 2 秒后自动清除、少于 2 字符不计算。副作用整体由 use-sidebar-highlight 承载
+  // （原内联在此处的 3 个 effect/ref 是 Sidebar 复杂度与函数体的双超限主因）。
+  // 即时过滤（filteredSessions）不受影响，保持输入响应性。
+  const { highlightedIds: highlightedThreadIds } = useSidebarHighlight(searchKeyword, sessions);
   // 侧栏视图（文件树为独立视图：对齐参考项目 codex.openFileTree 命令切换）
   const sidebarView = useUiStore((state) => state.sidebarView);
   const setSidebarView = useUiStore((state) => state.setSidebarView);
@@ -300,6 +239,32 @@ export function Sidebar(): ReactElement {
     });
   };
 
+  /** 取某文件夹下任一会话的 workingDir（同文件夹共享目录） */
+  const findFolderWorkingDir = (folderName: string): string | undefined =>
+    sessions.find((s) => getFolderName(s.workingDir) === folderName)?.workingDir;
+
+  /** 右键菜单「在资源管理器中打开」：取该组目录交给系统文件管理器 */
+  const handleOpenFolderInExplorer = (folderName: string): void => {
+    const dir = findFolderWorkingDir(folderName);
+    if (dir !== undefined) {
+      openInFileManager(dir, t('common.openInExplorerFailed'));
+    }
+  };
+
+  /** 右键菜单「删除文件夹」：确认后批量删除该组会话 */
+  const handleDeleteFolder = async (folderName: string): Promise<void> => {
+    const folderSessions = sessions.filter((s) => getFolderName(s.workingDir) === folderName);
+    const ok = await confirm({
+      title: t('sidebar.deleteFolderConfirmTitle', { name: folderName }),
+      message: t('sidebar.deleteFolderConfirmDesc'),
+      danger: true,
+    });
+    if (!ok) return;
+    for (const s of folderSessions) {
+      deleteSession(s.id);
+    }
+  };
+
   return (
     <aside className="sidebar" aria-label={t('sidebar.sessionList')}>
       {/* 顶部：新建会话按钮 + 搜索框 + tabs */}
@@ -405,32 +370,9 @@ export function Sidebar(): ReactElement {
                               collapsed={collapsedFolders.includes(entry.name)}
                               onToggle={() => toggleFolder(entry.name)}
                               onCreateInFolder={handleCreateInFolder}
-                              onOpenInExplorer={(folderName) => {
-                                // 在资源管理器中打开文件夹（取该组第一个会话的 workingDir）
-                                const dir = sessions.find(
-                                  (s) => getFolderName(s.workingDir) === folderName,
-                                )?.workingDir;
-                                if (dir !== undefined) {
-                                  openInFileManager(dir, t('common.openInExplorerFailed'));
-                                }
-                              }}
+                              onOpenInExplorer={handleOpenFolderInExplorer}
                               onDeleteFolder={(folderName) => {
-                                // 删除文件夹：确认弹窗后批量删除该组会话
-                                const folderSessions = sessions.filter(
-                                  (s) => getFolderName(s.workingDir) === folderName,
-                                );
-                                void confirm({
-                                  title: t('sidebar.deleteFolderConfirmTitle', {
-                                    name: folderName,
-                                  }),
-                                  message: t('sidebar.deleteFolderConfirmDesc'),
-                                  danger: true,
-                                }).then((ok) => {
-                                  if (!ok) return;
-                                  for (const s of folderSessions) {
-                                    deleteSession(s.id);
-                                  }
-                                });
+                                void handleDeleteFolder(folderName);
                               }}
                             />
                           ) : (
@@ -439,7 +381,6 @@ export function Sidebar(): ReactElement {
                               sessionId={entry.session.id}
                               folderName={getFolderName(entry.session.workingDir)}
                               title={entry.session.title}
-                              lastMessage={entry.session.lastMessage}
                               updatedAt={entry.session.updatedAt}
                               isActive={entry.session.id === activeSessionId}
                               isDeleting={isDeleting}
@@ -490,7 +431,3 @@ export function Sidebar(): ReactElement {
     </aside>
   );
 }
-
-// ── 子组件：文件夹标签（Virtuoso 扁平化列表的 label 条目） ────
-
-/** 文件夹标签：折叠箭头 + 图标 + 名称 + hover 新建按钮 */

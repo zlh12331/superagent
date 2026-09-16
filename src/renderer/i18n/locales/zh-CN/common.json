@@ -651,6 +651,7 @@
       "collapsePanel": "收起开发面板",
       "expandPanel": "展开开发面板",
       "tabTerminal": "终端",
+      "tabGit": "Git",
       "tabLogs": "日志",
       "tabMetrics": "指标",
       "tabInspector": "检查器",

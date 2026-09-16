@@ -651,6 +651,7 @@
       "collapsePanel": "Collapse dev panel",
       "expandPanel": "Expand dev panel",
       "tabTerminal": "Terminal",
+      "tabGit": "Git",
       "tabLogs": "Logs",
       "tabMetrics": "Metrics",
       "tabInspector": "Inspector",

@@ -42,6 +42,20 @@ describe('getFolderName', () => {
   it('空串返回空串', () => {
     expect(getFolderName('')).toBe('');
   });
+
+  it('回归：尾部分隔符不产生空串（此前 split().pop() 返回 ""，与无尾斜杠路径分裂成两组）', () => {
+    // 修复前 'C:\\proj\\src\\' → ''（被当成「未分组」），与 'C:\\proj\\src' 分组不一致
+    expect(getFolderName('C:\\proj\\src\\')).toBe('src');
+    expect(getFolderName('/proj/src/')).toBe('src');
+    // 同一目录的两种写法必须归入同一组
+    expect(getFolderName('C:\\proj\\src\\')).toBe(getFolderName('C:\\proj\\src'));
+  });
+
+  it('边界：文件系统根给出真实标签（而非空串归入「未分组」）', () => {
+    // 复用 lib/utils.basename 后，根的语义是「就在根目录」而非「无分组」
+    expect(getFolderName('/')).toBe('/');
+    expect(getFolderName('C:\\')).toBe('C:');
+  });
 });
 
 describe('filterSessions', () => {

@@ -7,6 +7,8 @@
 // 提取为纯函数后可无 React 环境单测（此前 0 测试）。
 // ──────────────────────────────
 
+import { basename } from '@/lib/utils';
+
 /** 侧边栏条目所需的会话字段子集（结构化兼容 SessionMeta 等更富类型） */
 export interface SidebarSession {
   readonly id: string;
@@ -22,9 +24,20 @@ export type SidebarEntry =
   | { readonly type: 'label'; readonly name: string }
   | { readonly type: 'item'; readonly session: SidebarSession };
 
+/**
+ * 取 workingDir 的 basename 作为文件夹名
+ *
+ * 复用 lib/utils.basename（渲染层路径处理的单一真源）。此前是自写
+ * `workingDir.split(/[\\/]/).pop()`，对**尾部分隔符**路径返回空串——
+ * `'C:\proj\src\'` 会被当成「未分组」，与 `'C:\proj\src'` 分裂成两个组
+ * （同一目录下建立的会话散落两处，实测语义错误）。
+ * basename 版本先剥尾分隔符再取末段，两者归入同一组。
+ *
+ * 注意：文件系统根（`'/'`、`'C:\'`）现在返回 `'/'`、`'C:'` 而非空串——
+ * 这些确实是「位于根目录」的会话，给出真实标签比归入「未分组」更准确。
+ */
 export function getFolderName(workingDir: string): string {
-  const basename = workingDir.split(/[\\/]/).pop();
-  return basename && basename.length > 0 ? basename : '';
+  return basename(workingDir);
 }
 
 /**
