@@ -135,4 +135,58 @@ describe('DialogHost', () => {
       expect((within(dialog2).getByRole('textbox') as HTMLInputElement).value).toBe('B');
     });
   });
+
+  // ── 排队请求不被误取消（2026-09 审计修复的回归锚） ──────────────
+  //
+  // 背景：AlertDialogAction/Cancel 实为 Radix DialogPrimitive.Close，其内部把
+  // onClick 与 onOpenChange(false) 用 composeEventHandlers 串联 → 点击一次会
+  // **连续两次**调 store 的 _resolve：先 handleConfirm/Cancel，再经
+  // handleOpenChange 走取消分支。第二次 _resolve 会把队列中的下一个请求
+  // 当「已取消」解决并出队。实测现象：确认第一个后，第二个
+  // **未经展示即 resolved=false**（用户根本没看到那个弹窗）。
+  // 此前测试都只有单个请求，_resolve 开头的 null 守卫使其侥幸安全，故未暴露。
+
+  /** 判断 promise 在 50ms 内是否已解决（用于断言「保持待决」） */
+  async function settledWithin50ms(p: Promise<unknown>): Promise<'settled' | 'pending'> {
+    return Promise.race([
+      p.then(() => 'settled' as const),
+      new Promise<'pending'>((r) => setTimeout(() => r('pending'), 50)),
+    ]);
+  }
+
+  it('排队：确认第一个后，第二个应保持待决而非被自动取消', async () => {
+    render(<DialogHost />);
+    const first = confirm({ title: '第一个', message: 'm1' });
+    const second = confirm({ title: '第二个', message: 'm2' });
+
+    await findDialog();
+    clickInDialog(t('common.confirm'));
+    await expect(first).resolves.toBe(true);
+
+    // 第二个不得被自动解决
+    expect(await settledWithin50ms(second)).toBe('pending');
+
+    // 且第二个弹窗可见可交互（用户能真正做选择）
+    const dialog2 = await findDialog();
+    expect(within(dialog2).getByText('第二个')).toBeDefined();
+    clickInDialog(t('common.confirm'));
+    await expect(second).resolves.toBe(true);
+  });
+
+  it('排队：取消第一个后，第二个同样保持待决且可交互', async () => {
+    render(<DialogHost />);
+    const first = confirm({ title: '第一个', message: 'm1' });
+    const second = confirm({ title: '第二个', message: 'm2' });
+
+    await findDialog();
+    clickInDialog(t('common.cancel'));
+    await expect(first).resolves.toBe(false);
+
+    expect(await settledWithin50ms(second)).toBe('pending');
+
+    const dialog2 = await findDialog();
+    expect(within(dialog2).getByText('第二个')).toBeDefined();
+    clickInDialog(t('common.cancel'));
+    await expect(second).resolves.toBe(false);
+  });
 });

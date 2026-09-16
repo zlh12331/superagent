@@ -92,7 +92,10 @@ describe('agent 批次4 缺口补全', () => {
 
     it('git_push 默认值：origin + 当前分支 + normalPush', () => {
       renderPreview('git_push', {});
-      expect(screen.getByText(/git push origin\/<current-branch>/)).toBeDefined();
+      // 占位文案走 i18n（此前硬编码英文 `<current-branch>`，中文界面下也显示英文）
+      expect(
+        screen.getByText(new RegExp(`git push origin/${t('approval.currentBranch')}`)),
+      ).toBeDefined();
       expect(screen.getByText(t('approval.normalPush'))).toBeDefined();
       expect(screen.getByText(t('approval.pushWarning'))).toBeDefined();
     });

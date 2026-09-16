@@ -107,30 +107,6 @@
     "count": 1,
     "max": 19
   },
-  "src/renderer/components/agent/approval-preview.tsx": {
-    "count": 1,
-    "max": 25
-  },
-  "src/renderer/components/chat/ChatInput.tsx": {
-    "count": 1,
-    "max": 19
-  },
-  "src/renderer/components/common/CommandPalette.tsx": {
-    "count": 1,
-    "max": 33
-  },
-  "src/renderer/components/common/DialogHost.tsx": {
-    "count": 1,
-    "max": 17
-  },
-  "src/renderer/components/common/ModelSelector.tsx": {
-    "count": 1,
-    "max": 18
-  },
-  "src/renderer/components/git/GitPanel.tsx": {
-    "count": 1,
-    "max": 16
-  },
   "src/renderer/dev/mock-api.ts": {
     "count": 1,
     "max": 17

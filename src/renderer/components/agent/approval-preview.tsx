@@ -9,7 +9,7 @@
 // 且在 DevTools 中无组件边界；组件化后依赖自取（useTranslation/useTheme）
 // ──────────────────────────────────────────────────────────────
 
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
 import { useTranslation } from '@/i18n/use-translation';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -129,7 +129,107 @@ function EditFilePreview({ input }: { readonly input: unknown }): ReactElement {
   );
 }
 
-/** git_add/git_commit/git_push：变更摘要（共享琥珀色边框 + monospace 风格） */
+/**
+ * git 预览的共用外壳（琥珀色边框 + monospace 风格）
+ *
+ * 抽离动机（2026-09 审计）：三个 git_* 分支此前各自逐字重复这层容器与
+ * 「操作」标签行，且整个 GitPreview 因 3 分支 × 多层条件嵌套使认知复杂度达 25
+ * （阈值 15）。现拆为单位组件 + 共用外壳，各分支只描述自己的差异。
+ */
+function GitPreviewShell({ children }: { readonly children: ReactNode }): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
+      <div className="text-xs text-muted-foreground">
+        <span className="font-sans">{t('approval.operation')}</span>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** git_add：暂存全部或指定路径 */
+function GitAddPreview({ input }: { readonly input: unknown }): ReactElement {
+  const { t } = useTranslation();
+  const paths = getStringArrayField(input, 'paths') ?? [];
+  const isAddAll = paths.length === 0;
+  return (
+    <GitPreviewShell>
+      <span>
+        {isAddAll ? t('approval.stageAll') : t('approval.stagePaths', { count: paths.length })}
+      </span>
+      {!isAddAll && (
+        <ul className="mt-1.5 flex flex-col gap-0.5 text-foreground">
+          {paths.map((p) => (
+            <li key={p} className="break-all">
+              <span className="text-muted-foreground">+</span> {p}
+            </li>
+          ))}
+        </ul>
+      )}
+    </GitPreviewShell>
+  );
+}
+
+/** git_commit：提交信息 + amend 标注 */
+function GitCommitPreview({ input }: { readonly input: unknown }): ReactElement {
+  const { t } = useTranslation();
+  const message = getField(input, 'message') ?? '';
+  const amend = getBooleanField(input, 'amend') ?? false;
+  return (
+    <GitPreviewShell>
+      <span className="ml-1">{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
+      {amend && (
+        <span className="rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
+          {t('approval.unavailable')}
+        </span>
+      )}
+      <div className="mt-1.5 text-xs text-muted-foreground">
+        <span className="font-sans">{t('approval.commitMessage')}</span>
+      </div>
+      <pre className="bg-[var(--glass-bg)] text-foreground mt-1 whitespace-pre-wrap break-all rounded p-2">
+        {message}
+      </pre>
+    </GitPreviewShell>
+  );
+}
+
+/** git_push：目标 + 上游/强推标记 + 风险提示 */
+function GitPushPreview({ input }: { readonly input: unknown }): ReactElement {
+  const { t } = useTranslation();
+  const remote = getField(input, 'remote') ?? 'origin';
+  const refspec = getField(input, 'refspec') ?? '';
+  const setUpstream = getBooleanField(input, 'setUpstream') ?? false;
+  const force = getBooleanField(input, 'force') ?? false;
+  // 未指定 refspec 时展示占位（人类可读，非真实命令 token）
+  const target =
+    refspec.length > 0 ? `${remote}/${refspec}` : `${remote}/${t('approval.currentBranch')}`;
+  return (
+    <GitPreviewShell>
+      <span className="ml-1">{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+        {setUpstream && (
+          <span className="rounded bg-info-blue px-1.5 py-0.5 text-2xs text-accent-2">
+            {t('approval.setUpstream')}
+          </span>
+        )}
+        {force && (
+          <span className="rounded bg-error-bg px-1.5 py-0.5 text-2xs text-error-text">
+            {t('approval.forcePush')}
+          </span>
+        )}
+        {!force && !setUpstream && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+            {t('approval.normalPush')}
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 text-xs text-warn-text">{t('approval.pushWarning')}</div>
+    </GitPreviewShell>
+  );
+}
+
+/** git_* 三命令的分派（早返回，避免长嵌套） */
 function GitPreview({
   type,
   input,
@@ -137,88 +237,8 @@ function GitPreview({
   readonly type: ApprovalType;
   readonly input: unknown;
 }): ReactElement | null {
-  const { t } = useTranslation();
-  if (type === 'git_add') {
-    const paths = getStringArrayField(input, 'paths') ?? [];
-    const isAddAll = paths.length === 0;
-    return (
-      <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
-        <div className="text-xs text-muted-foreground">
-          <span className="font-sans">{t('approval.operation')}</span>
-          <span>
-            {isAddAll ? t('approval.stageAll') : t('approval.stagePaths', { count: paths.length })}
-          </span>
-        </div>
-        {!isAddAll && (
-          <ul className="flex flex-col gap-0.5 text-foreground">
-            {paths.map((p) => (
-              <li key={p} className="break-all">
-                <span className="text-muted-foreground">+</span> {p}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  }
-
-  if (type === 'git_commit') {
-    const message = getField(input, 'message') ?? '';
-    const amend = getBooleanField(input, 'amend') ?? false;
-    return (
-      <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-sans">{t('approval.operation')}</span>
-          <span>{amend ? t('approval.commitAmend') : t('approval.commitNew')}</span>
-          {amend && (
-            <span className="rounded bg-amber/15 px-1.5 py-0.5 text-2xs text-warn-text">
-              {t('approval.unavailable')}
-            </span>
-          )}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          <span className="font-sans">{t('approval.commitMessage')}</span>
-        </div>
-        <pre className="bg-[var(--glass-bg)] text-foreground whitespace-pre-wrap break-all rounded p-2">
-          {message}
-        </pre>
-      </div>
-    );
-  }
-
-  if (type === 'git_push') {
-    const remote = getField(input, 'remote') ?? 'origin';
-    const refspec = getField(input, 'refspec') ?? '';
-    const setUpstream = getBooleanField(input, 'setUpstream') ?? false;
-    const force = getBooleanField(input, 'force') ?? false;
-    const target = refspec.length > 0 ? `${remote}/${refspec}` : `${remote}/<current-branch>`;
-    return (
-      <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber/30 bg-muted p-3 font-mono text-sm">
-        <div className="text-xs text-muted-foreground">
-          <span className="font-sans">{t('approval.operation')}</span>
-          <span>{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {setUpstream && (
-            <span className="rounded bg-info-blue px-1.5 py-0.5 text-2xs text-accent-2">
-              {t('approval.setUpstream')}
-            </span>
-          )}
-          {force && (
-            <span className="rounded bg-error-bg px-1.5 py-0.5 text-2xs text-error-text">
-              {t('approval.forcePush')}
-            </span>
-          )}
-          {!force && !setUpstream && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-              {t('approval.normalPush')}
-            </span>
-          )}
-        </div>
-        <div className="text-xs text-warn-text">{t('approval.pushWarning')}</div>
-      </div>
-    );
-  }
-
+  if (type === 'git_add') return <GitAddPreview input={input} />;
+  if (type === 'git_commit') return <GitCommitPreview input={input} />;
+  if (type === 'git_push') return <GitPushPreview input={input} />;
   return null;
 }

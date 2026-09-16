@@ -20,7 +20,7 @@ import { RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useGitDiffQuery, useGitStatusQuery } from '@/hooks/use-git';
+import { type GitStatusRes, useGitDiffQuery, useGitStatusQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +34,36 @@ interface GitPanelProps {
   readonly path: string;
   /** 自定义容器类名 */
   readonly className?: string;
+}
+
+/**
+ * 变更区状态分派（加载中 / 错误 / 状态缺失 / 干净 / 有变更）
+ *
+ * 抽离动机（2026-09 审计）：此前是内联在 GitPanel 里的 4 层嵌套三元，
+ * 使该组件认知复杂度达 16（阈值 15，长期挂在棘轮基线里）。改为早返回的
+ * 分派组件后，每个状态是独立直线分支，主组件只负责组装。
+ */
+function StatusArea({
+  isLoading,
+  error,
+  status,
+  selectedFilePath,
+  onSelect,
+}: {
+  readonly isLoading: boolean;
+  readonly error: unknown;
+  readonly status: GitStatusRes | undefined;
+  readonly selectedFilePath: string | null;
+  readonly onSelect: (path: string) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  if (isLoading) return <FileListSkeleton />;
+  if (error !== null) {
+    return <ErrorHint message={error instanceof Error ? error.message : String(error)} />;
+  }
+  if (status === undefined) return <ErrorHint message={t('git.statusEmpty')} />;
+  if (status.clean) return <CleanHint />;
+  return <FileList files={status.files} selectedFilePath={selectedFilePath} onSelect={onSelect} />;
 }
 
 export function GitPanel({ path, className }: GitPanelProps): ReactElement {
@@ -85,21 +115,13 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
 
       {/* 中间：变更文件列表 */}
       <ScrollArea className="min-h-0 flex-1">
-        {isLoading ? (
-          <FileListSkeleton />
-        ) : error !== null ? (
-          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-        ) : status === undefined ? (
-          <ErrorHint message={t('git.statusEmpty')} />
-        ) : status.clean ? (
-          <CleanHint />
-        ) : (
-          <FileList
-            files={status.files}
-            selectedFilePath={selectedFilePath}
-            onSelect={setSelectedFilePath}
-          />
-        )}
+        <StatusArea
+          isLoading={isLoading}
+          error={error}
+          status={status}
+          selectedFilePath={selectedFilePath}
+          onSelect={setSelectedFilePath}
+        />
       </ScrollArea>
 
       {/* 底部：选中文件的 diff（可折叠） */}

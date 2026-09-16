@@ -55,6 +55,7 @@ import { useSidebarHighlight } from '@/hooks/use-sidebar-highlight';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { hasIpcBridge } from '@/lib/ipc';
 import { springTransition } from '@/lib/motion';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
@@ -79,6 +80,8 @@ import { SortableThreadItem } from './thread-item';
  * 却毫无反应、也无任何线索。
  */
 function openInFileManager(dir: string, message: string): void {
+  // 浏览器模式无桥：直接返回（否则成员访问阶段同步抛 TypeError，.catch 兜不住）
+  if (!hasIpcBridge()) return;
   void window.api.app.openExternal({ url: `file:///${dir.replace(/\\/g, '/')}` }).catch(() => {
     toast.error(message);
   });

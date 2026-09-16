@@ -8,7 +8,7 @@
 // 4. streaming 状态：显示停止按钮
 // ──────────────────────────────────────────────────────────────
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -109,5 +109,42 @@ describe('ChatInput', () => {
     render(<ChatInput status="streaming" onSend={onSend} onStop={onStop} />);
     expect(screen.getByRole('button', { name: /停止/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /发送消息/ })).toBeNull();
+  });
+
+  // ── IME 组合态（2026-09 审计修复的回归锚） ─────────────────────
+  //
+  // 背景：中文/日文输入法候选窗内的 Enter（选用候选词）与 Esc（取消候选）都会
+  // 派发 keydown，key 正是 'Enter'/'Escape' 且无修饰键。此前未判 isComposing，
+  // 用户「打拼音按 Enter 上字」会直接把半截文本发送出去（本项目带 zh-CN 语言包，
+  // 属主干路径）。修复用 event.nativeEvent.isComposing 拦截。
+
+  it('IME 组合态：Enter 不发送（候选词上字不应触发发送）', () => {
+    render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
+    const input = screen.getByRole('textbox');
+
+    fireEvent.change(input, { target: { value: 'nihao' } });
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('IME 组合态：Esc 不中断生成', () => {
+    render(<ChatInput status="streaming" onSend={onSend} onStop={onStop} />);
+    const input = screen.getByRole('textbox');
+
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+
+    expect(onStop).not.toHaveBeenCalled();
+  });
+
+  it('组合结束后 Enter 恢复发送（修复未误伤正常路径）', async () => {
+    render(<ChatInput status="ready" onSend={onSend} onStop={onStop} />);
+    const input = screen.getByRole('textbox');
+
+    fireEvent.change(input, { target: { value: '你好' } });
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: false });
+
+    // 发送管线含异步（附件拼接/超长校验），等待其落地
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('你好'));
   });
 });

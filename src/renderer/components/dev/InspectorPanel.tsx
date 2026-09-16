@@ -18,7 +18,7 @@ import { type ReactElement, useCallback, useEffect, useRef, useState } from 'rea
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** DevTools 停靠模式 */
@@ -81,6 +81,8 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       setLoadingMode(mode);
 
       try {
+        // 浏览器模式无桥：给一致错误态（而非成员访问抛 TypeError）
+        if (!hasIpcBridge()) throw new Error('window.api unavailable');
         const data = unwrap(await window.api.devtools.open({ mode }));
         if (data.ok) {
           setStatus('success');

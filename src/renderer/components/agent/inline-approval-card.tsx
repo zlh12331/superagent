@@ -166,10 +166,13 @@ export function InlineApprovalCard({
 
   // 当前会话的审批项（pending 优先展示最新；已决的回显最近一条）
   const item = useApprovalsStore((state) => {
+    // pending 按 createdAt 升序入队（旧→新），故 reverse 后 find 取到最新一条
     const pending = [...state.pending].reverse().find((p) => p.sessionId === sessionId);
     if (pending !== undefined) return pending;
-    const resolved = [...state.resolved].reverse().find((r) => r.sessionId === sessionId);
-    return resolved;
+    // resolved 已是「最新在前」（store 用 [resolved, ...state.resolved] 前插）——
+    // 此前这里也 reverse 了一次，导致 find 命中**最旧**一条：刚批准/拒绝的卡片
+    // 不显示，界面回显一条陈旧审批（2026-09 审计修复）
+    return state.resolved.find((r) => r.sessionId === sessionId);
   });
 
   const approve = useApprovalsStore((state) => state.approve);

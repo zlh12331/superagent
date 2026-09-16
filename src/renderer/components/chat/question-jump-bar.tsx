@@ -146,7 +146,12 @@ export function QuestionJumpBar({
     e: ReactMouseEvent<HTMLButtonElement>,
     question: QuestionAnchor,
   ): void => {
-    e.preventDefault();
+    // 阻止冒泡到轨道 onMouseDown（2026-09 审计修复）：此前条目 mousedown 会同时
+    // 命中「条目处理器 + 轨道处理器」，onJump 被调两次 → 第二次打断前一次的
+    // 平滑滚动（落点抖动）；且轨道 onClick 也会再补一次，实际最多三次。
+    e.stopPropagation();
+    // 不再 preventDefault：保留 mousedown 的默认聚焦，鼠标点过的条目获得焦点，
+    // 之后按 Enter 可重跳（此前 preventDefault 让圆点永不聚焦，键盘续操失效）
     onJump(question);
   };
 
@@ -162,15 +167,12 @@ export function QuestionJumpBar({
       }}
     >
       {/* 轨道：整轨热区（吸附最近锚点点击跳转）；键盘路径由内部 jump-item button 提供，
-          轨道点击为鼠标增强（对齐参考项目同款交互） */}
+          轨道点击为鼠标增强（对齐参考项目同款交互）。
+          只绑 onMouseDown（2026-09 审计修复）：此前 mousedown 与 click 同绑一个处理器，
+          单击空白区会跳两次（第二次打断前一次的平滑滚动）。mousedown 已覆盖激活时机，
+          click 属重复绑定——去掉后原 useKeyWithClickEvents 抑制注释也随之失效，已删。 */}
       {/* biome-ignore lint/a11y/useSemanticElements: role=group 滚动热区容器（非表单分组），fieldset 语义不符 */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: 键盘用户通过内部 jump-item 的 Enter/Space 跳转，轨道点击是鼠标增强路径 */}
-      <div
-        role="group"
-        className="jump-scroll"
-        onMouseDown={onRailMouseDown}
-        onClick={onRailMouseDown}
-      >
+      <div role="group" className="jump-scroll" onMouseDown={onRailMouseDown}>
         {questions.map((question, index) => (
           <button
             className="jump-item"

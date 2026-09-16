@@ -187,4 +187,35 @@ describe('ChatMessageList', () => {
     fireEvent.mouseLeave(rail);
     expect(container.querySelector('.jump-preview')).toBeNull();
   });
+
+  // ── 单击只跳一次（2026-09 审计修复的回归锚） ──────────────────
+  //
+  // 背景：条目 button 的 mousedown 未 stopPropagation，会继续冒泡到轨道的
+  // onMouseDown；且轨道同时绑了 mousedown 与 click 到同一处理器。于是单击一个
+  // 圆点最多触发 3 次 onJump，后续调用打断前一次的 smooth 滚动（落点抖动）。
+  // 修复：条目 mousedown 加 stopPropagation，轨道去掉重复的 onClick。
+
+  it('点击锚点：onJump 只触发一次（不因冒泡重复跳转）', () => {
+    const spy = vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView');
+    const { container } = renderList(makeMsgs(5));
+
+    const items = container.querySelectorAll('.jump-item');
+    spy.mockClear();
+    fireEvent.mouseDown(items[1] as HTMLElement);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('轨道空白区点击：也只听一次（mousedown 与 click 不再重复绑定）', () => {
+    const spy = vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView');
+    const { container } = renderList(makeMsgs(5));
+    const rail = container.querySelector('.jump-scroll') as HTMLElement;
+
+    spy.mockClear();
+    fireEvent.mouseDown(rail, { clientY: 10 });
+    fireEvent.click(rail, { clientY: 10 });
+
+    // 只由 mousedown 触发一次（click 已解除绑定）
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 });

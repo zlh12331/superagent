@@ -272,6 +272,7 @@
       "setUpstream": "设置上游",
       "forcePush": "强制推送",
       "normalPush": "普通推送",
+      "currentBranch": "当前分支",
       "pushWarning": "推送将影响远程仓库与他人协作，请确认目标分支与协作者",
       "reject": "拒绝",
       "approve": "批准",

@@ -25,6 +25,22 @@ import { useComposerSend } from './use-composer-send';
 import { useComposerSuggest } from './use-composer-suggest';
 import { useVimMode } from './use-vim-mode';
 
+/**
+ * 是否正在 IME 组合中（中文/日文输入法候选窗）
+ *
+ * React 合成事件不暴露 isComposing，须读原生事件。组合态内按 Enter（选词）/
+ * Esc（取消候选）不应被当作「发送」/「中断生成」处理，否则中文用户
+ * 「打拼音按 Enter 上字」会把半截文本发出去。
+ */
+function isImeComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return event.nativeEvent.isComposing;
+}
+
+/** 是否为「发送」快捷键（Enter，且不带 Shift/Ctrl/Cmd） */
+function isSendShortcut(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey;
+}
+
 interface ChatInputProps {
   /**
    * 当前流式状态
@@ -207,6 +223,9 @@ export function ChatInput({
       return;
     }
     const onWindowKeyDown = (event: globalThis.KeyboardEvent): void => {
+      // IME 组合态内的 Esc 是「取消候选词」，不得中断生成
+      // （window 监听是 textarea 未聚焦时的补充通道，同样需要该判定）
+      if (event.isComposing) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
         onStop();
@@ -248,6 +267,27 @@ export function ChatInput({
   const { handleProps: dragHandleProps } = useComposerDrag(textareaRef);
 
   /**
+   * vim 模式按键处理
+   *
+   * @returns 是否已消费该按键（true = 调用方直接 return，不再走后续分支）
+   */
+  const handleVimKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
+    const isStreamEsc = event.key === 'Escape' && isStreaming;
+    // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
+    // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
+    if (isStreamEsc || event.ctrlKey || event.metaKey || event.altKey) return false;
+    const consumed = processKey(
+      { key: event.key, selectionStart: event.currentTarget.selectionStart },
+      value,
+    );
+    if (!consumed) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  };
+
+  /**
    * 键盘事件处理
    *
    * - Enter（无 Shift）：发送消息，阻止默认换行
@@ -255,24 +295,16 @@ export function ChatInput({
    * - Esc（流式状态）：中断生成，对齐原型 composer-hint "Esc 中断"
    */
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // ── vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）──
-    if (vimEnabled) {
-      // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
-      const isStreamEsc = event.key === 'Escape' && isStreaming;
-      // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
-      // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
-      if (!isStreamEsc && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        const consumed = processKey(
-          { key: event.key, selectionStart: event.currentTarget.selectionStart },
-          value,
-        );
-        if (consumed) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-      }
-    }
+    // ── IME 组合态优先（2026-09 审计修复）──
+    // 中文/日文输入法候选窗内的 Enter（选用候选词）与 Esc（取消候选）都会派发
+    // keydown，且 key 就是 'Enter'/'Escape'、无修饰键——若不拦，用户「打中文按
+    // Enter 选词」会直接把半截文本发出去。本项目自带 zh-CN 语言包，属主干路径。
+    // 判定用 nativeEvent.isComposing（React 合成事件不暴露该字段）。
+    if (isImeComposing(event)) return;
+
+    // vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）
+    if (vimEnabled && handleVimKey(event)) return;
+
     // 流式状态按 Esc：中断生成
     if (event.key === 'Escape' && isStreaming) {
       event.preventDefault();
@@ -284,7 +316,7 @@ export function ChatInput({
       return;
     }
     // Enter 且无 Shift / Ctrl / Cmd 同时按：发送
-    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+    if (isSendShortcut(event)) {
       event.preventDefault();
       handleSend();
     }

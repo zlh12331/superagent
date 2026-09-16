@@ -38,7 +38,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
-import { nextTheme } from '@/stores/persistent/settings-store';
+import { nextTheme, type Theme } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -62,6 +62,195 @@ interface CommandItemData {
 
 /** fuse.js 搜索阈值（0 = 完全匹配，0.4 = 容忍拼写/顺序差异） */
 const FUSE_THRESHOLD = 0.4;
+
+/**
+ * 主题三态循环的展示元数据（表驱动）
+ *
+ * 「下一个主题」→ 文案/图标 此前写成一串嵌套三元（`nextTheme(theme) === 'light' ? … :
+ * nextTheme(theme) === 'dark' ? … : …`），同一表达式重复求值 4 次、且是
+ * CommandPalette 认知复杂度 33 的主要来源（2026-09 审计）。
+ * 改为映射表后「下一主题 → 展示」成为数据，也是唯一真源。
+ */
+const THEME_META: Record<Theme, { readonly titleKey: string; readonly icon: typeof Sun }> = {
+  light: { titleKey: 'palette.toggleThemeLight', icon: Sun },
+  dark: { titleKey: 'palette.toggleThemeDark', icon: Moon },
+  system: { titleKey: 'palette.toggleThemeSystem', icon: Monitor },
+};
+
+/**
+ * 相对路径派生的两种分隔符处理
+ *
+ * 分离为纯函数（也是 Windows 反斜杠 / POSIX 正斜杠两个分支的唯一所在）：
+ * 提取后 buildCommands 的分支数下降，本函数可独立推理。
+ */
+function toRelativePath(filePath: string, rootPath: string): string {
+  const withSlash = `${rootPath}/`;
+  const withBackslash = `${rootPath}\\`;
+  if (filePath.startsWith(withSlash) || filePath.startsWith(withBackslash)) {
+    return filePath.slice(rootPath.length + 1);
+  }
+  return filePath;
+}
+
+/** 构建命令列表所需的运行时依赖（全部由组件从 hooks 取出后注入） */
+interface BuildCommandsContext {
+  readonly t: ReturnType<typeof useTranslation>['t'];
+  readonly modKey: string;
+  readonly theme: Theme;
+  readonly setTheme: (theme: Theme) => void;
+  readonly sidebarView: 'threads' | 'fileTree';
+  readonly setSidebarView: (view: 'threads' | 'fileTree') => void;
+  readonly sidebarCollapsed: boolean;
+  readonly setSidebarCollapsed: (collapsed: boolean) => void;
+  readonly rightPanelCollapsed: boolean;
+  readonly setRightPanelCollapsed: (collapsed: boolean) => void;
+  readonly rootPath: string | null;
+  readonly getAllFilePaths: () => readonly string[];
+  readonly openFile: (path: string) => void;
+  readonly sessions: readonly { readonly id: string; readonly title: string }[];
+  readonly setActiveSession: (id: string) => void;
+  readonly navigate: (to: string) => void;
+  readonly clearActiveSession: () => void;
+  readonly enterWelcomeMode: (dir: string | null) => void;
+  readonly openSettings: () => void;
+  readonly closePalette: () => void;
+}
+
+/**
+ * 构建命令面板的完整命令列表（操作组 + 文件组 + 会话组）
+ *
+ * 抽离动机（2026-09 审计）：此前是内联在组件里的 130 行 IIFE，含 10+ 处条件分支
+ * （侧栏视图/折叠态三元、路径前缀双分支、分页平铺、空标题兜底、上限切片），
+ * 使 CommandPalette 认知复杂度达 33（阈值 15）。移出组件后各分支集中在纯函数里，
+ * 组件只剩「取状态 → 调用 → 渲染」。
+ */
+function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
+  const { t, closePalette } = ctx;
+  const isFileTree = ctx.sidebarView === 'fileTree';
+  // 「下一个主题」的展示元数据。
+  // 先取到局部变量再传给 t：check-i18n 的「间接引用」识别只匹配
+  // t(标识符 / 成员访问)，写成 t(THEME_META[x].titleKey)（含方括号）不会被识别，
+  // 会把三个主题 key 误报为「冗余」。
+  const themeMeta = THEME_META[nextTheme(ctx.theme)];
+
+  const baseCommands: readonly CommandItemData[] = [
+    {
+      id: 'new-chat',
+      section: t('palette.sectionActions'),
+      title: t('palette.newChat'),
+      icon: Plus,
+      // 与 settings 默认快捷键一致，按平台显示修饰键（此前硬编码 Ctrl+N）
+      shortcut: `${ctx.modKey}+N`,
+      action: () => {
+        ctx.clearActiveSession();
+        ctx.enterWelcomeMode(null);
+        ctx.navigate(ROUTES.home);
+        closePalette();
+      },
+    },
+    {
+      id: 'toggle-theme',
+      section: t('palette.sectionActions'),
+      // 三态循环（dark→light→system）：标题与图标指向「下一个」主题（表驱动）
+      title: t(themeMeta.titleKey),
+      icon: themeMeta.icon,
+      action: () => {
+        ctx.setTheme(nextTheme(ctx.theme));
+        closePalette();
+      },
+    },
+    {
+      id: 'open-settings',
+      section: t('palette.sectionActions'),
+      title: t('palette.openSettings'),
+      icon: Settings,
+      action: () => {
+        ctx.openSettings();
+        closePalette();
+      },
+    },
+    {
+      id: 'toggle-sidebar-view',
+      section: t('palette.sectionActions'),
+      title: isFileTree ? t('palette.backToSessions') : t('palette.openFileTree'),
+      icon: isFileTree ? MessagesSquare : FolderOpen,
+      action: () => {
+        ctx.setSidebarView(isFileTree ? 'threads' : 'fileTree');
+        closePalette();
+      },
+    },
+    {
+      // 对齐参考项目 show/hide-left-sidebar 命令（标题随折叠状态切换，快捷键 ⌘B/⌘1 另有绑定）
+      id: 'toggle-sidebar',
+      section: t('palette.sectionActions'),
+      title: ctx.sidebarCollapsed ? t('palette.showSidebar') : t('palette.hideSidebar'),
+      icon: PanelLeft,
+      action: () => {
+        ctx.setSidebarCollapsed(!ctx.sidebarCollapsed);
+        closePalette();
+      },
+    },
+    {
+      // 对齐参考项目 show/hide-right-sidebar 命令（标题随折叠状态切换，快捷键 ⌘J/⌘2 另有绑定）
+      id: 'toggle-right-panel',
+      section: t('palette.sectionActions'),
+      title: ctx.rightPanelCollapsed ? t('palette.showRightPanel') : t('palette.hideRightPanel'),
+      icon: PanelRight,
+      action: () => {
+        ctx.setRightPanelCollapsed(!ctx.rightPanelCollapsed);
+        closePalette();
+      },
+    },
+    {
+      // 对齐参考项目 codex.openTerminal 命令（Ctrl+` 快捷键另有绑定）
+      id: 'open-terminal',
+      section: t('palette.sectionActions'),
+      title: t('palette.openTerminal'),
+      icon: TerminalSquare,
+      action: () => {
+        // 展开右面板 + 切换到终端 tab
+        useUiStore.getState().setRightPanelCollapsed(false);
+        useUiStore.getState().setDevPanelTab('terminal');
+        closePalette();
+      },
+    },
+  ];
+
+  return [...baseCommands, ...buildFileCommands(ctx), ...buildSessionCommands(ctx)];
+}
+
+/** 文件打开命令：从文件树派生（最多 50 条避免列表过长） */
+function buildFileCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
+  if (ctx.rootPath === null) return [];
+  return ctx
+    .getAllFilePaths()
+    .slice(0, 50)
+    .map((filePath) => ({
+      id: `file:${filePath}`,
+      section: ctx.t('palette.sectionFiles'),
+      title: toRelativePath(filePath, ctx.rootPath ?? ''),
+      icon: FileText,
+      action: () => {
+        ctx.openFile(filePath);
+        ctx.closePalette();
+      },
+    }));
+}
+
+/** 会话切换命令：从会话列表派生（最多 20 条避免列表过长） */
+function buildSessionCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
+  return ctx.sessions.slice(0, 20).map((session) => ({
+    id: `session:${session.id}`,
+    section: ctx.t('palette.sectionSessions'),
+    title: session.title.length > 0 ? session.title : ctx.t('palette.unnamedSession'),
+    icon: MessageSquare,
+    action: () => {
+      ctx.setActiveSession(session.id);
+      ctx.navigate(ROUTES.chatPath(session.id));
+      ctx.closePalette();
+    },
+  }));
+}
 
 /**
  * 命令面板组件（cmdk + fuse.js）
@@ -100,140 +289,35 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed);
   const setRightPanelCollapsed = useUiStore((state) => state.setRightPanelCollapsed);
 
-  // 命令列表（依赖外部状态派生；React Compiler 自动缓存）
-  // - 操作组：新建会话 / 切换主题 / 打开设置
-  // - 文件组：动态派生自文件树，点击打开文件
-  // - 会话组：动态派生自 useSessionsQuery 的会话列表，点击切换激活会话并跳转
-  const commands = ((): readonly CommandItemData[] => {
-    const closePalette = (): void => onOpenChange(false);
-    const baseCommands: readonly CommandItemData[] = [
-      {
-        id: 'new-chat',
-        section: t('palette.sectionActions'),
-        title: t('palette.newChat'),
-        icon: Plus,
-        // 与 settings 默认快捷键一致，按平台显示修饰键（此前硬编码 Ctrl+N）
-        shortcut: `${modKey}+N`,
-        action: () => {
-          clearActiveSession();
-          enterWelcomeMode(null);
-          navigate(ROUTES.home);
-          closePalette();
-        },
-      },
-      {
-        id: 'toggle-theme',
-        section: t('palette.sectionActions'),
-        // 三态循环（dark→light→system）：标题与图标指向「下一个」主题
-        title:
-          nextTheme(theme) === 'light'
-            ? t('palette.toggleThemeLight')
-            : nextTheme(theme) === 'dark'
-              ? t('palette.toggleThemeDark')
-              : t('palette.toggleThemeSystem'),
-        icon: nextTheme(theme) === 'light' ? Sun : nextTheme(theme) === 'dark' ? Moon : Monitor,
-        action: () => {
-          setTheme(nextTheme(theme));
-          closePalette();
-        },
-      },
-      {
-        id: 'open-settings',
-        section: t('palette.sectionActions'),
-        title: t('palette.openSettings'),
-        icon: Settings,
-        action: () => {
-          openSettings();
-          closePalette();
-        },
-      },
-      {
-        id: 'toggle-sidebar-view',
-        section: t('palette.sectionActions'),
-        title: sidebarView === 'fileTree' ? t('palette.backToSessions') : t('palette.openFileTree'),
-        icon: sidebarView === 'fileTree' ? MessagesSquare : FolderOpen,
-        action: () => {
-          setSidebarView(sidebarView === 'fileTree' ? 'threads' : 'fileTree');
-          closePalette();
-        },
-      },
-      {
-        // 对齐参考项目 show/hide-left-sidebar 命令（标题随折叠状态切换，快捷键 ⌘B/⌘1 另有绑定）
-        id: 'toggle-sidebar',
-        section: t('palette.sectionActions'),
-        title: sidebarCollapsed ? t('palette.showSidebar') : t('palette.hideSidebar'),
-        icon: PanelLeft,
-        action: () => {
-          setSidebarCollapsed(!sidebarCollapsed);
-          closePalette();
-        },
-      },
-      {
-        // 对齐参考项目 show/hide-right-sidebar 命令（标题随折叠状态切换，快捷键 ⌘J/⌘2 另有绑定）
-        id: 'toggle-right-panel',
-        section: t('palette.sectionActions'),
-        title: rightPanelCollapsed ? t('palette.showRightPanel') : t('palette.hideRightPanel'),
-        icon: PanelRight,
-        action: () => {
-          setRightPanelCollapsed(!rightPanelCollapsed);
-          closePalette();
-        },
-      },
-      {
-        // 对齐参考项目 codex.openTerminal 命令（Ctrl+` 快捷键另有绑定）
-        id: 'open-terminal',
-        section: t('palette.sectionActions'),
-        title: t('palette.openTerminal'),
-        icon: TerminalSquare,
-        action: () => {
-          // 展开右面板 + 切换到终端 tab
-          useUiStore.getState().setRightPanelCollapsed(false);
-          useUiStore.getState().setDevPanelTab('terminal');
-          closePalette();
-        },
-      },
-    ];
-
-    // 文件打开命令：从文件树派生（最多 50 条避免列表过长）
-    const fileCommands: CommandItemData[] = [];
-    if (rootPath !== null) {
-      const filePaths = getAllFilePaths();
-      for (const filePath of filePaths.slice(0, 50)) {
-        const relativePath = filePath.startsWith(`${rootPath}/`)
-          ? filePath.slice(rootPath.length + 1)
-          : filePath.startsWith(`${rootPath}\\`)
-            ? filePath.slice(rootPath.length + 1)
-            : filePath;
-        fileCommands.push({
-          id: `file:${filePath}`,
-          section: t('palette.sectionFiles'),
-          title: relativePath,
-          icon: FileText,
-          action: () => {
-            openFile(filePath);
-            closePalette();
-          },
-        });
-      }
-    }
-
-    // 会话切换命令：从 useSessionsQuery 派生（按 updatedAt 倒序，最多 20 条避免列表过长）
-    // P3：无限分页——平铺 pages
-    const sessions = sessionsData?.pages.flatMap((page) => page.sessions) ?? [];
-    const sessionCommands: readonly CommandItemData[] = sessions.slice(0, 20).map((session) => ({
-      id: `session:${session.id}`,
-      section: t('palette.sectionSessions'),
-      title: session.title.length > 0 ? session.title : t('palette.unnamedSession'),
-      icon: MessageSquare,
-      action: () => {
-        setActiveSession(session.id);
-        navigate(ROUTES.chatPath(session.id));
-        closePalette();
-      },
-    }));
-
-    return [...baseCommands, ...fileCommands, ...sessionCommands];
-  })();
+  // 命令列表（操作组 + 文件组 + 会话组）（依赖外部状态派生；React Compiler 自动缓存）
+  // 构建逻辑已外提为 buildCommands（见文件头「抽离动机」），组件只负责注入依赖
+  const sessions = sessionsData?.pages.flatMap((page) => page.sessions) ?? [];
+  const commands = buildCommands({
+    t,
+    modKey,
+    theme,
+    setTheme,
+    sidebarView,
+    setSidebarView,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    rightPanelCollapsed,
+    setRightPanelCollapsed,
+    rootPath,
+    getAllFilePaths,
+    openFile,
+    sessions,
+    setActiveSession,
+    navigate: (to) => {
+      navigate(to);
+    },
+    clearActiveSession,
+    enterWelcomeMode: (dir) => {
+      enterWelcomeMode(dir);
+    },
+    openSettings,
+    closePalette: () => onOpenChange(false),
+  });
 
   // fuse.js 模糊搜索（标题 + 分组字段；空查询时返回全部；React Compiler 自动缓存）
   const fuse = new Fuse([...commands], {

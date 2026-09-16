@@ -272,6 +272,7 @@
       "setUpstream": "Set upstream",
       "forcePush": "Force push",
       "normalPush": "Normal push",
+      "currentBranch": "current branch",
       "pushWarning": "Pushing affects the remote repository and collaborators. Confirm the target branch and collaborators",
       "reject": "Reject",
       "approve": "Approve",

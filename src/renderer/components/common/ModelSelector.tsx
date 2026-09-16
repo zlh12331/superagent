@@ -28,6 +28,33 @@ interface ModelSelectorProps {
   readonly onOpenChange?: (open: boolean) => void;
 }
 
+/**
+ * 解析菜单内的 roving 焦点目标下标（纯函数）
+ *
+ * 收敛动机（2026-09 审计）：ArrowUp/Down/Home/End 四个平行分支此前内联在
+ * onKeyDown 里，把 ModelSelector 的认知复杂度推到 18（阈值 15）。改为
+ * 「按键 + 当前下标 + 总数 → 目标下标」的纯映射后，组件侧只剩一次调用。
+ *
+ * 边界语义：
+ * - 当前无焦点项（currentIndex < 0）：↓ 落首项、↑ 落末项
+ * - 循环：↓ 在末项回绕到首项，↑ 在首项回绕到末项
+ * - Home/End 去首/末项
+ *
+ * @returns 目标下标；null 表示该键与菜单导航无关（调用方不得拦截事件）
+ */
+function resolveMenuNavIndex(key: string, currentIndex: number, count: number): number | null {
+  if (count === 0) return null;
+  if (key === 'Home') return 0;
+  if (key === 'End') return count - 1;
+  if (key === 'ArrowDown') {
+    return currentIndex < 0 ? 0 : (currentIndex + 1) % count;
+  }
+  if (key === 'ArrowUp') {
+    return currentIndex < 0 ? count - 1 : (currentIndex - 1 + count) % count;
+  }
+  return null;
+}
+
 export function ModelSelector({
   provider,
   model,
@@ -53,7 +80,8 @@ export function ModelSelector({
     [isControlled, controlledOnOpenChange],
   );
   const containerRef = useRef<HTMLDivElement>(null);
-
+  // 触发按钮 ref：菜单关闭后把焦点还给它（roving focus 的收尾契约）
+  const triggerRef = useRef<HTMLButtonElement>(null);
   // 模型清单：共享 useModelsQuery（P3 修复：与 ModelsSection 同源同 key，
   // 新增运行时模型后 composer 下拉即时刷新）
   const { data: modelsData } = useModelsQuery();
@@ -109,7 +137,12 @@ export function ModelSelector({
       const selected = items.find((el) => el.classList.contains('active')) ?? items[0];
       selected?.focus();
     }
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      // 关闭时把焦点还给触发按钮（2026-09 审计修复）：此前焦点留在被卸载的
+      // 菜单项上 → 落到 body，键盘用户丢失位置、需从头 Tab 回来
+      triggerRef.current?.focus();
+    };
   }, [open, setOpen]);
 
   const handleModelSelect = useCallback(
@@ -124,6 +157,7 @@ export function ModelSelector({
   return (
     <div ref={containerRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         className={cn('cpb-select', disabled && 'opacity-50 cursor-not-allowed')}
         onClick={() => !disabled && setOpen(!open)}
@@ -154,21 +188,8 @@ export function ModelSelector({
             const items = [
               ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
             ];
-            if (items.length === 0) return;
             const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-            let nextIndex: number | null = null;
-            if (event.key === 'ArrowDown') {
-              nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
-            } else if (event.key === 'ArrowUp') {
-              nextIndex =
-                currentIndex < 0
-                  ? items.length - 1
-                  : (currentIndex - 1 + items.length) % items.length;
-            } else if (event.key === 'Home') {
-              nextIndex = 0;
-            } else if (event.key === 'End') {
-              nextIndex = items.length - 1;
-            }
+            const nextIndex = resolveMenuNavIndex(event.key, currentIndex, items.length);
             if (nextIndex === null) return;
             event.preventDefault();
             event.stopPropagation();

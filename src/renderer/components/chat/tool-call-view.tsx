@@ -68,9 +68,14 @@ export function ToolCallView({
   const statusLabel = mapToolStateToStatusLabelKey(state);
   const localizedStatusLabel = t(`chat.${statusLabel}`);
 
-  // AI SDK part 的 toolName 带 'tool-' 前缀（如 'tool-exec_command'），
-  // 去前缀后与 COMMAND_TOOLS 匹配（对齐参考项目 toolCall.toolName 语义）
-  const toolName = type.replace(/^tool-/, '');
+  // 归一化工具名（2026-09 审计修复）
+  //
+  // 调用方传两种形态：
+  // - 静态工具：part.type = 'tool-exec_command'（带 'tool-' 前缀）
+  // - 动态工具：message-item 传 `dynamic-tool: ${part.toolName}`（见其调用处）
+  // 此前只剥 'tool-' 前缀，动态工具得到 'dynamic-tool: exec_command' →
+  // COMMAND_TOOLS 永不命中（命令工具不高亮）、无 title 时还把该字符串当标题显示。
+  const toolName = type.replace(/^dynamic-tool:\s*/, '').replace(/^tool-/, '');
   // 命令工具高亮（照搬参考项目 COMMAND_TOOLS：命令行块 accent 左边条 + 深色背景）
   const isCommandTool = COMMAND_TOOLS.has(toolName);
   // 工具图标（照搬参考项目 getToolIcon：命令工具 Terminal / 其他 FileCode，运行中换 spinner）

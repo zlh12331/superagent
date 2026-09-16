@@ -3,7 +3,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
+import { AUTO_HIDE_MS, useRateLimitStore } from '@/stores/transient/rate-limit-store';
 
 import { RateLimitBanner } from '../rate-limit-banner';
 
@@ -43,7 +43,7 @@ describe('RateLimitBanner', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('异常路径：未过期时到点复查不清除（定时器兜底不误关）', () => {
+  it('异常路径：未到过期时刻不清除（定时器不误关）', () => {
     useRateLimitStore.setState({ visible: true, triggeredAt: Date.now() });
     render(<RateLimitBanner />);
     act(() => {
@@ -53,13 +53,51 @@ describe('RateLimitBanner', () => {
     expect(useRateLimitStore.getState().visible).toBe(true);
   });
 
-  it('自动隐藏：时间推进至过期后，下一次到点复查触发 dismiss', () => {
+  // ── 到期自动隐藏（2026-09 审计修复的回归锚） ───────────────────
+  //
+  // 背景：此前只挂一个固定 60s 的一次性定时器，60s 到点未过期即静默结束、
+  // 定时器不再重排 → 之后永远不会 dismiss，横幅需等无关重渲染才可能消失。
+  // 旧测试用 `setSystemTime(+6min)` + `advanceTimersByTime(60s)` 恰好把这个
+  // 缺陷绕过（跳墙钟后那唯一一次定时器复查刚好看到「已过期」）。
+  // 现按剩余时间精确调度到过期时刻，测试直接推进到过期点。
+
+  it('自动隐藏：推进到过期时刻（5 分钟）→ dismiss', () => {
     useRateLimitStore.setState({ visible: true, triggeredAt: Date.now() });
     render(<RateLimitBanner />);
+
     act(() => {
-      // 系统时间推到过期之后（6 分钟），再走到下一次 60s 检查点
-      vi.setSystemTime(Date.now() + 6 * 60_000);
+      // 距过期还差 1ms：仍在
+      vi.advanceTimersByTime(AUTO_HIDE_MS - 1);
+    });
+    expect(useRateLimitStore.getState().visible).toBe(true);
+
+    act(() => {
+      // 到点：应自动隐藏
+      vi.advanceTimersByTime(1);
+    });
+    expect(useRateLimitStore.getState().visible).toBe(false);
+  });
+
+  it('重复限流：刷新 triggeredAt 后按新时刻重新计时', () => {
+    useRateLimitStore.setState({ visible: true, triggeredAt: Date.now() });
+    render(<RateLimitBanner />);
+
+    act(() => {
+      vi.advanceTimersByTime(4 * 60_000);
+    });
+    // 再触发一次限流（刷新触发时刻）
+    act(() => {
+      useRateLimitStore.getState().trigger();
+    });
+    // 距首次触发已 5 分钟，但距新触发仅 1 分钟 → 不应被清掉
+    act(() => {
       vi.advanceTimersByTime(60_000);
+    });
+    expect(useRateLimitStore.getState().visible).toBe(true);
+
+    // 走到新触发后的 5 分钟 → 隐藏
+    act(() => {
+      vi.advanceTimersByTime(4 * 60_000);
     });
     expect(useRateLimitStore.getState().visible).toBe(false);
   });
