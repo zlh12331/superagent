@@ -1,4 +1,4 @@
-// src/renderer/components/dev/browser-pane.tsx
+// src/renderer/components/browser/browser-pane.tsx
 // 浏览器预览 pane（右面板「浏览器」tab，WebContentsView 进程外预览）
 // ──────────────────────────────────────────────────────────────
 // v1 用渲染层 iframe 加载外站，被主进程 defaultSession 统一注入的安全头三层
@@ -12,6 +12,8 @@
 //   UI 会被原生视图盖住，错误反馈必须放在占位区之外）
 // 设置消费（设置 → 浏览器）：预设/缩放为挂载初值（工具栏内临时改动不写回），
 // 严格沙箱经 browser:configure 生效（禁用预览页 JS，切换时重建视图）。
+// 抽离（2026-09）：设备预设/尺寸/缩放档位 → lib/browser/presets（与设置页同源）；
+// 地址规范化 → ./browser-url；工具栏按钮样式 → ./browser-toolbar。
 // ──────────────────────────────────────────────────────────────
 
 import type { BrowserLoadFailedPayload, BrowserState } from '@code-agent/shared/renderer';
@@ -21,36 +23,15 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { DEVICE_DIMENSIONS } from '@/lib/browser/presets';
 import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import type { BrowserDevicePreset, BrowserZoom } from '@/stores/persistent/settings-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { DeviceBar } from './browser-device-bar';
+import { TOOLBAR_BTN_CLASS } from './browser-toolbar';
+import { normalizeUrl } from './browser-url';
 import { useBrowserViewport } from './use-browser-viewport';
-
-/** 设备预设类型（真源在 settings-store，浏览器 pane 与设置面板共用） */
-type DevicePreset = BrowserDevicePreset;
-
-/** 设备预设 → 默认宽高映射（对齐参考项目 DEVICE_DIMENSIONS） */
-const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number }> = {
-  responsive: { width: 0, height: 0 },
-  desktop: { width: 1920, height: 1080 },
-  laptop: { width: 1366, height: 768 },
-  tablet: { width: 768, height: 1024 },
-  mobile: { width: 375, height: 667 },
-};
-
-/** 工具栏按钮基础样式 */
-const TOOLBAR_BTN_CLASS =
-  'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
-
-/** 规范化 URL：缺少协议时自动补 https:// */
-function normalizeUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed === '') return '';
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
-}
 
 /** 预览状态初值（主进程 getState 在视图创建前的返回与此一致） */
 const INITIAL_STATE: BrowserState = {
@@ -78,7 +59,7 @@ export function BrowserPane(): ReactElement {
   // 设备工具栏可见性
   const [showDeviceBar, setShowDeviceBar] = useState(false);
   // 设备预设与宽高
-  const [devicePreset, setDevicePreset] = useState<DevicePreset>(
+  const [devicePreset, setDevicePreset] = useState<BrowserDevicePreset>(
     browserSettings.defaultDevicePreset,
   );
   const [deviceWidth, setDeviceWidth] = useState(
@@ -146,6 +127,19 @@ export function BrowserPane(): ReactElement {
     }
   }, [state.url]);
 
+  /**
+   * 导航类动作的统一收口（后退/前进/刷新）
+   *
+   * 此前三处各写一份 `.then(unwrap).catch(() => {})`：既重复，又把失败完全
+   * 静默——与 navigateTo 的「失败必提示」不一致。主进程这三个动作是幂等
+   * no-op（无视图也返回 ok:true），故不会产生提示噪音。
+   */
+  const runNavigation = (pending: ReturnType<typeof window.api.browser.back>): void => {
+    void pending.then(unwrap).catch((error: Error) => {
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
+    });
+  };
+
   /** 加载指定 URL（规范化补协议；结果状态经事件推送回流） */
   const navigateTo = (raw: string): void => {
     const normalized = normalizeUrl(raw);
@@ -159,32 +153,8 @@ export function BrowserPane(): ReactElement {
       });
   };
 
-  /** 后退 */
-  const goBack = (): void => {
-    void window.api.browser
-      .back()
-      .then(unwrap)
-      .catch(() => {});
-  };
-
-  /** 前进 */
-  const goForward = (): void => {
-    void window.api.browser
-      .forward()
-      .then(unwrap)
-      .catch(() => {});
-  };
-
-  /** 刷新 */
-  const reload = (): void => {
-    void window.api.browser
-      .reload()
-      .then(unwrap)
-      .catch(() => {});
-  };
-
-  /** 切换设备预设 */
-  const handlePresetChange = (preset: DevicePreset): void => {
+  /** 切换设备预设（responsive 用 0 表示跟随宿主，不覆盖宽高输入） */
+  const handlePresetChange = (preset: BrowserDevicePreset): void => {
     setDevicePreset(preset);
     const dims = DEVICE_DIMENSIONS[preset];
     if (dims.width > 0) {
@@ -202,7 +172,7 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserBack')}
           aria-label={t('panel.browserBack')}
-          onClick={goBack}
+          onClick={() => runNavigation(window.api.browser.back())}
           disabled={!state.canGoBack}
           className={TOOLBAR_BTN_CLASS}
         >
@@ -213,7 +183,7 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserForward')}
           aria-label={t('panel.browserForward')}
-          onClick={goForward}
+          onClick={() => runNavigation(window.api.browser.forward())}
           disabled={!state.canGoForward}
           className={TOOLBAR_BTN_CLASS}
         >
@@ -224,7 +194,7 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserRefresh')}
           aria-label={t('panel.browserRefresh')}
-          onClick={reload}
+          onClick={() => runNavigation(window.api.browser.reload())}
           disabled={state.url === null}
           className={TOOLBAR_BTN_CLASS}
         >

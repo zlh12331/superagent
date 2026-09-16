@@ -51,7 +51,7 @@ const TerminalPanel = lazy(() =>
   import('@/components/terminal/TerminalPanel').then((m) => ({ default: m.TerminalPanel })),
 );
 const BrowserPane = lazy(() =>
-  import('@/components/dev/browser-pane').then((m) => ({ default: m.BrowserPane })),
+  import('@/components/browser/browser-pane').then((m) => ({ default: m.BrowserPane })),
 );
 const FileViewerPanel = lazy(() =>
   import('@/components/file-tree/FileViewerPanel').then((m) => ({ default: m.FileViewerPanel })),

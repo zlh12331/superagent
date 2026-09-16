@@ -127,10 +127,6 @@
     "count": 1,
     "max": 18
   },
-  "src/renderer/components/dev/LogsPanel.tsx": {
-    "count": 1,
-    "max": 18
-  },
   "src/renderer/components/file-tree/FileTreeNode.tsx": {
     "count": 1,
     "max": 16

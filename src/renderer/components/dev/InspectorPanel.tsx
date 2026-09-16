@@ -5,7 +5,7 @@
 // - 提供按钮一键唤起 Chromium DevTools（通过 IPC 调用 webContents.openDevTools）
 // - 支持三种停靠模式：detach（独立窗口）/ right（右侧）/ bottom（底部）
 // - 展示 React DevTools 扩展安装说明（dev 模式自动注入）
-// - 调用结果反馈（成功/失败 toast 文本）
+// - 调用结果反馈（内联状态条：成功/失败文案 + 图标，非 toast）
 //
 // 设计：
 // - 纯交互面板，无数据查询（不使用 TanStack Query）
@@ -13,7 +13,6 @@
 // - 成功/失败状态通过本地 useState 管理，3s 后自动清除
 // ──────────────────────────────────────────────────────────────
 
-import type { OpenDevToolsRes } from '@code-agent/shared/renderer';
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -25,17 +24,16 @@ import { cn } from '@/lib/utils';
 /** DevTools 停靠模式 */
 type DevToolsMode = 'detach' | 'right' | 'bottom';
 
-/** 模式按钮配置 */
+/** 模式按钮配置（labelKey 为 dev.* 下的 i18n 键名） */
 const MODE_BUTTONS: readonly {
   readonly mode: DevToolsMode;
   readonly labelKey: string;
   readonly icon: typeof ExternalLink;
-  readonly hint: string;
 }[] = [
-  { mode: 'detach', labelKey: 'detachWindow', icon: ExternalLink, hint: 'detach' },
-  { mode: 'right', labelKey: 'panelRight', icon: PanelRight, hint: 'right' },
-  { mode: 'bottom', labelKey: 'panelBottom', icon: PanelBottom, hint: 'bottom' },
-] as const;
+  { mode: 'detach', labelKey: 'detachWindow', icon: ExternalLink },
+  { mode: 'right', labelKey: 'panelRight', icon: PanelRight },
+  { mode: 'bottom', labelKey: 'panelBottom', icon: PanelBottom },
+];
 
 /** 成功消息自动清除延迟 */
 const STATUS_CLEAR_DELAY = 3_000;
@@ -83,7 +81,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       setLoadingMode(mode);
 
       try {
-        const data = unwrap(await window.api.devtools.open({ mode })) as OpenDevToolsRes;
+        const data = unwrap(await window.api.devtools.open({ mode }));
         if (data.ok) {
           setStatus('success');
           setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
@@ -157,8 +155,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           <div className="flex items-start gap-1.5">
             <Info className="text-muted-foreground mt-0.5 size-3 shrink-0" strokeWidth={1.5} />
             <p className="text-muted-foreground text-2xs leading-relaxed">
-              dev 模式启动时由主进程自动安装（electron-devtools-installer）。 打开 Chromium DevTools
-              后切换到「Components」/「Profiler」Tab 使用。 首次安装可能需要刷新页面才能生效。
+              {t('dev.reactDevtoolsDesc')}
             </p>
           </div>
         </Section>

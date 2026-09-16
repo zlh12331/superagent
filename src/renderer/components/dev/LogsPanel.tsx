@@ -12,9 +12,11 @@
 // - 日志行按级别着色（error 红 / warn 琥珀 / info 默认 / debug 灰）
 // - 等宽字体展示日志文本，行级着色而非整行背景（降低视觉噪音）
 // - 折叠态由 DevPanel 控制是否启用查询（enabled 参数）
-// - 使用小按钮组而非 Select 组件（项目未引入 shadcn Select，避免新增依赖）
+// - 级别/行数用分段控件（ToggleGroup）而非下拉：与面板内其他分段控件同款，
+//   窄面板下选项直接可见
 // ──────────────────────────────────────────────────────────────
 
+import type { ReadLogsRes } from '@code-agent/shared/renderer';
 import { AlertCircle, FileText, RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -31,18 +33,16 @@ type LogLevelFilter = 'all' | 'info' | 'warn' | 'error' | 'debug';
 const LINE_OPTIONS = [100, 200, 500] as const;
 type LineOption = (typeof LINE_OPTIONS)[number];
 
-/** 级别过滤按钮配置（'all' 走 i18n，级别术语 Info/Warn/Error/Debug 保持英文） */
-const LEVEL_FILTERS: readonly {
-  readonly value: LogLevelFilter;
-  readonly labelKey: string | null;
-  readonly label: string;
-}[] = [
-  { value: 'all', labelKey: 'dev.all', label: '' },
-  { value: 'info', labelKey: null, label: 'Info' },
-  { value: 'warn', labelKey: null, label: 'Warn' },
-  { value: 'error', labelKey: null, label: 'Error' },
-  { value: 'debug', labelKey: null, label: 'Debug' },
-] as const;
+/** 级别过滤顺序（'all' 走 i18n；级别术语 Info/Warn/Error/Debug 保持英文） */
+const LEVEL_FILTERS: readonly LogLevelFilter[] = ['all', 'info', 'warn', 'error', 'debug'];
+
+/** 级别术语显示名（'all' 走 i18n，故不在此表） */
+const LEVEL_LABELS: Record<Exclude<LogLevelFilter, 'all'>, string> = {
+  info: 'Info',
+  warn: 'Warn',
+  error: 'Error',
+  debug: 'Debug',
+};
 
 interface LogsPanelProps {
   /** 是否启用查询（DevPanel 折叠时传 false 节省 IPC） */
@@ -89,14 +89,14 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           }}
           className="gap-0.5"
         >
-          {LEVEL_FILTERS.map((filter) => (
+          {LEVEL_FILTERS.map((level) => (
             <ToggleGroupItem
-              key={filter.value}
-              value={filter.value}
+              key={level}
+              value={level}
               disabled={!enabled}
               className="rounded px-1.5 py-0.5 text-[9px] font-mono"
             >
-              {filter.labelKey !== null ? t(filter.labelKey) : filter.label}
+              {level === 'all' ? t('dev.all') : LEVEL_LABELS[level]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -108,9 +108,12 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           type="single"
           value={String(lines)}
           onValueChange={(v) => {
-            const parsed = Number(v);
-            if (!Number.isNaN(parsed)) {
-              setLines(parsed as 100 | 200 | 500);
+            // 只接受真实档位：Radix 单选点击已选项会回传空串取消，
+            // 而 `Number('')` 为 0（非 NaN）——此前仅判 NaN 会把行数置 0，
+            // 查询随之变成「读 0 行」，面板空白。
+            const next = LINE_OPTIONS.find((option) => String(option) === v);
+            if (next !== undefined) {
+              setLines(next);
             }
           }}
           className="gap-0.5"
@@ -153,20 +156,40 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
       {/* 日志列表：普通滚动容器（Radix ScrollArea 内层 display:table 会随最长日志行撑宽
           到 391px，超出 283px 面板被裁剪且横向滚动条不可达——长行尾部永远看不到） */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {isLoading ? (
-          <LogsSkeleton />
-        ) : error !== null ? (
-          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-        ) : data === undefined ? (
-          <ErrorHint message={t('common.logsEmpty')} />
-        ) : data.lines.length === 0 ? (
-          <EmptyLogs filePath={data.filePath} />
-        ) : (
-          <LogLines lines={data.lines} filePath={data.filePath} />
-        )}
+        <LogsBody isLoading={isLoading} error={error} data={data} />
       </div>
     </div>
   );
+}
+
+// ── 子组件：内容区四态 ──────────────────────────────────────
+
+interface LogsBodyProps {
+  readonly isLoading: boolean;
+  readonly error: unknown;
+  readonly data: ReadLogsRes | undefined;
+}
+
+/**
+ * 内容区四态分派（加载中 / 错误 / 无数据 / 空 / 有数据）
+ *
+ * 拆出动机：此前是四层嵌套三元表达式直接内联在主组件 JSX 里，
+ * 使 LogsPanel 认知复杂度达 18（门禁阈值 15）。改用早返回后主组件回到阈值内，
+ * 且四种态的分派一眼可读。
+ */
+function LogsBody({ isLoading, error, data }: LogsBodyProps): ReactElement {
+  const { t } = useTranslation();
+  if (isLoading) return <LogsSkeleton />;
+  if (error !== null) {
+    return <ErrorHint message={error instanceof Error ? error.message : String(error)} />;
+  }
+  if (data === undefined) {
+    return <ErrorHint message={t('common.logsEmpty')} />;
+  }
+  if (data.lines.length === 0) {
+    return <EmptyLogs filePath={data.filePath} />;
+  }
+  return <LogLines lines={data.lines} filePath={data.filePath} />;
 }
 
 // ── 子组件：日志行列表 ──────────────────────────────────────

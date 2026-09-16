@@ -1,20 +1,19 @@
-// src/renderer/components/dev/browser-device-bar.tsx
+// src/renderer/components/browser/browser-device-bar.tsx
 // 浏览器预览设备工具栏（从 browser-pane 提取：预设/宽高/缩放控件）
 // ──────────────────────────────────────────────────────────────
 // 纯受控组件：全部状态与回调由 browser-pane 持有（工具栏内临时改动不写回
 // 设置，真源管理见 use-browser-viewport 与 settings-store）。
+// 预设/缩放档位取自 lib/browser/presets（与设置页同一真源）。
 // ──────────────────────────────────────────────────────────────
 
 import { X } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
+import { DEVICE_PRESETS, ZOOM_STEPS } from '@/lib/browser/presets';
 import { cn } from '@/lib/utils';
 import type { BrowserDevicePreset, BrowserZoom } from '@/stores/persistent/settings-store';
-
-/** 与 browser-pane 工具栏一致的图标按钮基础样式 */
-const TOOLBAR_BTN_CLASS =
-  'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30';
+import { TOOLBAR_BTN_CLASS } from './browser-toolbar';
 
 /** DeviceBar props（受控） */
 export interface DeviceBarProps {
@@ -29,8 +28,31 @@ export interface DeviceBarProps {
   readonly onClose: () => void;
 }
 
-/** 缩放档位（与设置页 ZOOM_STEPS 同源：50–200%） */
-const ZOOM_OPTIONS: readonly BrowserZoom[] = [50, 75, 100, 125, 150, 200];
+/**
+ * 预设文案键（key 字面量必须留在本文件：check-i18n 的「间接引用」规则
+ * 要求 key 与 t(变量) 同文件，见 lib/browser/presets 头部说明）
+ */
+const PRESET_LABEL_KEYS: Record<BrowserDevicePreset, string> = {
+  responsive: 'panel.browserDeviceResponsive',
+  desktop: 'panel.browserDeviceDesktop',
+  laptop: 'panel.browserDeviceLaptop',
+  tablet: 'panel.browserDeviceTablet',
+  mobile: 'panel.browserDeviceMobile',
+};
+
+/**
+ * 解析宽高输入：空串 / 非有限数 / 非正值一律返回 null（调用方保持上一个有效值）
+ *
+ * 必要性：`Number('')` 为 0（不是 NaN），此前仅判 NaN 会让「清空输入框」
+ * 把宽高置 0 → 视口矩形宽度 0 违反 BrowserRectSchema.positive() → IPC 校验
+ * 失败被静默吞掉，视口同步无声失效。
+ */
+function parseDimension(raw: string): number | null {
+  if (raw.trim() === '') return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
 
 /**
  * 设备工具栏（预设下拉 + 宽高输入 + 缩放下拉 + 关闭）
@@ -57,19 +79,23 @@ export function DeviceBar(props: DeviceBarProps): ReactElement {
         aria-label={t('panel.browserDevicePreset')}
         className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1.5 text-xs focus:border-primary"
       >
-        <option value="responsive">{t('panel.browserDeviceResponsive')}</option>
-        <option value="desktop">{t('panel.browserDeviceDesktop')}</option>
-        <option value="laptop">{t('panel.browserDeviceLaptop')}</option>
-        <option value="tablet">{t('panel.browserDeviceTablet')}</option>
-        <option value="mobile">{t('panel.browserDeviceMobile')}</option>
+        {DEVICE_PRESETS.map((preset) => {
+          // 局部常量再传给 t：check-i18n 的间接引用识别只覆盖 t(标识符) 形态
+          const labelKey = PRESET_LABEL_KEYS[preset];
+          return (
+            <option key={preset} value={preset}>
+              {t(labelKey)}
+            </option>
+          );
+        })}
       </select>
       <div className="flex shrink-0 items-center gap-0.5">
         <input
           type="number"
           value={deviceWidth}
           onChange={(e) => {
-            const value = Number(e.target.value);
-            if (!Number.isNaN(value)) onWidthChange(value);
+            const value = parseDimension(e.target.value);
+            if (value !== null) onWidthChange(value);
           }}
           min={200}
           max={3000}
@@ -82,8 +108,8 @@ export function DeviceBar(props: DeviceBarProps): ReactElement {
           type="number"
           value={deviceHeight}
           onChange={(e) => {
-            const value = Number(e.target.value);
-            if (!Number.isNaN(value)) onHeightChange(value);
+            const value = parseDimension(e.target.value);
+            if (value !== null) onHeightChange(value);
           }}
           min={200}
           max={3000}
@@ -98,7 +124,7 @@ export function DeviceBar(props: DeviceBarProps): ReactElement {
         aria-label={t('panel.browserZoom')}
         className="border-border bg-background text-muted-foreground h-[22px] shrink-0 cursor-pointer rounded border px-1 text-xs"
       >
-        {ZOOM_OPTIONS.map((zoom) => (
+        {ZOOM_STEPS.map((zoom) => (
           <option key={zoom} value={zoom}>
             {zoom}%
           </option>

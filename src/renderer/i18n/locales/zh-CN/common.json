@@ -656,6 +656,7 @@
       "tabInspector": "检查器",
       "developerTools": "开发者工具",
       "developerToolsDesc": "打开 Electron 内置的浏览器开发者工具（Elements / Console / Sources / Network / Performance）",
+      "reactDevtoolsDesc": "dev 模式启动时由主进程自动安装（electron-devtools-installer）。打开 Chromium DevTools 后切换到「Components」/「Profiler」Tab 使用。首次安装可能需要刷新页面才能生效。",
       "openDevtoolsMode": "以{{mode}} 模式打开 DevTools",
       "heapUsed": "堆已用",
       "heapTotalHint": "总量 {{value}}",

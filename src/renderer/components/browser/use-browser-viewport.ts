@@ -1,4 +1,4 @@
-// src/renderer/components/dev/use-browser-viewport.ts
+// src/renderer/components/browser/use-browser-viewport.ts
 // 浏览器预览视口 hook：占位区测量 + 遮挡避让 + 严格模式同步
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -78,12 +78,20 @@ export function useBrowserViewport(params: UseBrowserViewportParams): void {
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', push);
-      // 卸载（关闭浏览器 tab）→ 隐藏视图，页面保活（切回 tab 时重新推送恢复显示）
+    };
+  }, [hostRef, preset, deviceWidth, deviceHeight, zoom, occluded, active]);
+
+  // 卸载（关闭浏览器 tab）→ 隐藏视图，页面保活（切回 tab 时重新推送恢复显示）
+  // 独立 effect 且空依赖：此前这段挂在同步 effect 的 cleanup 上，每次 deps
+  // 变化（缩放/预设/尺寸/遮挡）都会先推一次 hide 再推新状态——原生视图层
+  // 会收到多余的「先隐后显」对，与「仅卸载时隐藏」的语义不符。
+  useEffect(() => {
+    return () => {
       void window.api.browser
         .setViewport({ rect: null, visible: false, zoomFactor: 1 })
         .catch(() => {});
     };
-  }, [hostRef, preset, deviceWidth, deviceHeight, zoom, occluded, active]);
+  }, []);
 
   // 严格模式同步（服务侧与当前值一致时幂等 no-op，不重建视图）
   useEffect(() => {

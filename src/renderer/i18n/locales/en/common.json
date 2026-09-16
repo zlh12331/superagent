@@ -656,6 +656,7 @@
       "tabInspector": "Inspector",
       "developerTools": "Developer tools",
       "developerToolsDesc": "Open the built-in browser devtools (Elements / Console / Sources / Network / Performance)",
+      "reactDevtoolsDesc": "Installed automatically by the main process in dev mode (electron-devtools-installer). After opening Chromium DevTools, switch to the Components / Profiler tab. The first install may require a page reload to take effect.",
       "openDevtoolsMode": "Open DevTools in {{mode}} mode",
       "heapUsed": "Heap used",
       "heapTotalHint": "Total {{value}}",

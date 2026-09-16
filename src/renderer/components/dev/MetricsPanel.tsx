@@ -8,7 +8,7 @@
 //
 // 设计：
 // - 纯只读面板，无交互逻辑
-// - 内存/CPU 数值格式化为人类可读单位（MB / ms）
+// - 内存/CPU/uptime 数值格式化为人类可读单位（字节 B/KB/MB/GB、微秒 ms/s、秒 h/m/s）
 // - 指标卡片用 2 列网格，紧凑布局适配 DevPanel 200px 高度
 // - 等宽字体展示数值，衬线字体展示标签
 // ──────────────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ import { useSystemStatusQuery } from '@/hooks/use-system';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatClockTime } from '@/lib/format-intl';
 import { cn } from '@/lib/utils';
+import { formatBytes, formatMs, formatUptime } from './metrics-format';
 
 interface MetricsPanelProps {
   /** 是否启用查询（DevPanel 折叠时传 false 节省 IPC） */
@@ -231,29 +232,4 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
   );
 }
 
-// ── 格式化工具 ──────────────────────────────────────────────
-
-/** 字节 → 人类可读（MB / GB） */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const mb = bytes / 1024 / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  return `${(mb / 1024).toFixed(2)} GB`;
-}
-
-/** 微秒 → 毫秒/秒 */
-function formatMs(microseconds: number): string {
-  const ms = microseconds / 1000;
-  if (ms < 1000) return `${ms.toFixed(0)} ms`;
-  return `${(ms / 1000).toFixed(2)} s`;
-}
-
-/** 秒 → 人类可读 uptime（如 1h 23m 45s） */
-function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
+// ── 格式化工具已外提至 ./metrics-format（纯函数，独立单测边界） ──

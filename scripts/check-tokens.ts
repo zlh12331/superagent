@@ -61,7 +61,7 @@ const BARE_MONO_RE = /(?:^|\s|")(bg|text|border|ring|shadow)-(white|black)(?=[\s
 //   inline-approval-card / DialogHost = 语义色背景上的白字（对比度需求）
 const MONO_EXEMPT_FILES = new Set([
   'src/renderer/components/ui/badge.tsx',
-  'src/renderer/components/dev/browser-pane.tsx',
+  'src/renderer/components/browser/browser-pane.tsx',
   'src/renderer/components/agent/inline-approval-card.tsx',
   'src/renderer/components/common/DialogHost.tsx',
 ]);
