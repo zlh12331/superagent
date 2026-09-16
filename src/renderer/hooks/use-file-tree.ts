@@ -28,6 +28,14 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
 /**
+ * i18n 文案函数类型
+ *
+ * 由 useTranslation 推导：本项目所用 react-i18next 版本未导出 TFunction 类型，
+ * 且推导能自动跟随 hook 的命名空间推导，比手写泛型更不易漂移。
+ */
+type TranslateFn = ReturnType<typeof useTranslation>['t'];
+
+/**
  * useFileTree：文件树数据生命周期管理 hook
  *
  * 必须传入 workingDir。workingDir 为 null 时（无激活会话）不加载任何数据。
@@ -127,24 +135,12 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
 
     let cancelled = false;
     void Promise.all(toLoad.map((path) => loadDir(path))).then(() => {
-      if (cancelled) return;
+      if (cancelled || autoExpandLeftRef.current <= 0) return;
       // 默认展开层级链：把本波新加载目录中的子目录注入展开集，
       // 触发本 effect 下一轮加载，直到剩余深度归零
-      if (autoExpandLeftRef.current > 0) {
-        autoExpandLeftRef.current -= 1;
-        const childDirs: string[] = [];
-        for (const dir of toLoad) {
-          const entries = useFileTreeStore.getState().entries.get(dir) ?? [];
-          for (const entry of entries) {
-            if (entry.type === 'directory') {
-              childDirs.push(entry.path);
-            }
-          }
-        }
-        if (childDirs.length > 0) {
-          expandPaths(childDirs);
-        }
-      }
+      // （空数组直接交给 expandPaths 自身的空转守卫，无需在此预先判长度）
+      autoExpandLeftRef.current -= 1;
+      expandPaths(collectChildDirs(toLoad));
     });
     return () => {
       cancelled = true;
@@ -163,31 +159,14 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
       try {
         const response = await window.api.file.watchStart({ path: workingDir });
         if (cancelled) {
-          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏。
-          // 此处 catch 是**有意忽略**：watchStart 返回 error 响应时无 watcherId，
-          // unwrap 抛错即"本就无可停"，属预期分支而非故障（无需上报）。
-          try {
-            await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
-          } catch {
-            // 预期分支：无 watcherId 可停（见上方说明）
-          }
+          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏
+          await stopWatcherBestEffort(response);
           return;
         }
         // 成功取 watcherId；error 响应（IPC）或异常统一走 catch 提示
         watcherId = unwrap(response).watcherId;
       } catch (err) {
-        // 区分 IPC 错误响应（watchFailed，提示可刷新目录重试）与异常（watchAbnormal）
-        if (err instanceof Error && /^\[[A-Z_]+\]/.test(err.message)) {
-          toast.warning(t('common.watchFailed'), {
-            description: t('common.watchFailedDesc'),
-            duration: 4000,
-          });
-        } else {
-          toast.warning(t('common.watchAbnormal'), {
-            description: t('common.watchAbnormalDesc'),
-            duration: 4000,
-          });
-        }
+        notifyWatchStartFailure(err, t);
       }
     })();
 
@@ -262,6 +241,73 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
   };
 
   return { refresh };
+}
+
+/**
+ * 收集给定目录下「已加载子条目中的目录」路径
+ *
+ * 抽离动机（2026-09 file-tree 审计）：原为 effect 回调内的双重嵌套循环
+ * （遍历待加载目录 × 遍历其条目），使该回调认知复杂度达 26（阈值 15）。
+ * 移出后回调只表达「加载完成后按剩余深度注入下一层」这一件事。
+ *
+ * 读的是 store 当前值（而非入参快照）：本函数在 await 之后调用，
+ * 条目由 loadDir 经 setEntries 异步写入，故必须现读。
+ *
+ * @param dirs 待检查的目录路径（本波刚加载完成的目录）
+ * @returns 展开集中应新增的子目录路径（可能为空）
+ */
+function collectChildDirs(dirs: readonly string[]): string[] {
+  const entriesByDir = useFileTreeStore.getState().entries;
+  const childDirs: string[] = [];
+  for (const dir of dirs) {
+    for (const entry of entriesByDir.get(dir) ?? []) {
+      if (entry.type === 'directory') childDirs.push(entry.path);
+    }
+  }
+  return childDirs;
+}
+
+/**
+ * 启动在途期间被取消：尽力回收已创建的 watcher
+ *
+ * 抽离动机（同上）：原为 effect 内联的嵌套 try/catch。此处 catch 是**有意忽略**——
+ * watchStart 返回错误信封时无 watcherId，unwrap 抛错即"本就无可停"，
+ * 属预期分支而非故障（无需上报）。
+ *
+ * @param response watchStart 的原始响应信封
+ */
+async function stopWatcherBestEffort(
+  response: Awaited<ReturnType<typeof window.api.file.watchStart>>,
+): Promise<void> {
+  try {
+    await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
+  } catch {
+    // 预期分支：无 watcherId 可停（见函数注释）
+  }
+}
+
+/**
+ * watch 启动失败提示
+ *
+ * 区分两类：IPC 错误响应（形如 `[CODE] message`，可刷新目录重试）与
+ * 其它异常（监听能力异常）。抽离后启动分支只剩正常路径。
+ *
+ * @param err 启动失败原因（错误信封抛出的 Error，或任意异常）
+ * @param t i18n 文案函数
+ */
+function notifyWatchStartFailure(err: unknown, t: TranslateFn): void {
+  const isIpcError = err instanceof Error && /^\[[A-Z_]+\]/.test(err.message);
+  if (isIpcError) {
+    toast.warning(t('common.watchFailed'), {
+      description: t('common.watchFailedDesc'),
+      duration: 4000,
+    });
+    return;
+  }
+  toast.warning(t('common.watchAbnormal'), {
+    description: t('common.watchAbnormalDesc'),
+    duration: 4000,
+  });
 }
 
 /**
