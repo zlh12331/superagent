@@ -1,4 +1,4 @@
-﻿// src/renderer/components/common/AsyncSection.tsx
+// src/renderer/components/common/AsyncSection.tsx
 // 设置分区/面板级数据四态包装器（loading / error / empty / ready）
 // ──────────────────────────────
 // 背景：铁律 6.2/6.7 要求含异步数据的组件具备 loading 与 error 态并有重试；
@@ -48,19 +48,27 @@ export interface QueryErrorRowProps {
   readonly onRetry?: () => void;
 }
 
-/** 非 error 时渲染 null，可直接嵌在 JSX 任意位置 */
-export function QueryErrorRow({
-  isError,
+/**
+ * 错误行内容（QueryErrorRow 与 AsyncSection 的 error 分支共用）
+ *
+ * 提取动机：两处此前是逐行重复的 DOM（文案 + 截断详情 + 重试按钮），
+ * 靠人工同步——改一处忘另一处会让两种用法视觉不一致。
+ * 仅含内容，外层容器（class 与 role）由调用方各自提供：
+ * QueryErrorRow 带 mt-2 行内形态，AsyncSection 用 WRAPPER_CLASS 统一间距。
+ *
+ * 注：字段用 `T | undefined` 而非 `T?`——调用方传的是既有可选值，
+ * exactOptionalPropertyTypes 下 `T?` 不接受显式 undefined。
+ */
+function ErrorRowBody({
   errorMessage,
   onRetry,
-}: QueryErrorRowProps): React.ReactElement | null {
+}: {
+  readonly errorMessage: string | null | undefined;
+  readonly onRetry: (() => void) | undefined;
+}): React.ReactElement {
   const { t } = useTranslation();
-  if (!isError) return null;
   return (
-    <div
-      className="text-error-text mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
-      role="alert"
-    >
+    <>
       <span>{t('common.sectionLoadFailed')}</span>
       {errorMessage !== undefined && errorMessage !== null && errorMessage !== '' && (
         <span
@@ -75,6 +83,23 @@ export function QueryErrorRow({
           {t('common.retry')}
         </Button>
       )}
+    </>
+  );
+}
+
+/** 非 error 时渲染 null，可直接嵌在 JSX 任意位置 */
+export function QueryErrorRow({
+  isError,
+  errorMessage,
+  onRetry,
+}: QueryErrorRowProps): React.ReactElement | null {
+  if (!isError) return null;
+  return (
+    <div
+      className="text-error-text mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+      role="alert"
+    >
+      <ErrorRowBody errorMessage={errorMessage} onRetry={onRetry} />
     </div>
   );
 }
@@ -120,25 +145,7 @@ export function AsyncSection({
         className={cn(WRAPPER_CLASS, 'text-error-text flex flex-wrap items-center gap-x-2 gap-y-1')}
         role="alert"
       >
-        <span>{t('common.sectionLoadFailed')}</span>
-        {errorMessage !== undefined && errorMessage !== null && errorMessage !== '' && (
-          <span
-            className="text-muted-foreground max-w-full truncate font-mono text-2xs"
-            title={errorMessage}
-          >
-            {errorMessage}
-          </span>
-        )}
-        {onRetry !== undefined && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto h-6 px-2 text-2xs"
-            onClick={onRetry}
-          >
-            {t('common.retry')}
-          </Button>
-        )}
+        <ErrorRowBody errorMessage={errorMessage} onRetry={onRetry} />
       </div>
     );
   }
