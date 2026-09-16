@@ -291,4 +291,103 @@ describe('useFileTree 数据生命周期', () => {
 
     expect(watchStop).toHaveBeenCalledWith({ watcherId: 'w1' });
   });
+
+  describe('refresh（手动重拉根目录 + 已展开目录）', () => {
+    it('正向：重拉根目录与已展开目录的条目（写入 store，去重后每目录一次）', async () => {
+      const { list, watchStart } = setupApi();
+      list.mockResolvedValue({ data: { entries: [entry('a.ts')] } });
+      watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
+      const { result } = renderHook(() => useFileTree(ROOT));
+      await flushAsync();
+
+      // 展开一个子目录 → 触发一次 list；再手动刷新应覆盖「根 + 子目录」
+      list.mockClear();
+      useFileTreeStore.getState().setExpanded(`${ROOT}/sub`, true);
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+
+      list.mockResolvedValue({
+        data: { entries: [entry('fresh.ts')] },
+      });
+      list.mockClear();
+      result.current.refresh();
+
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+      const calledPaths = list.mock.calls.map((c) => (c[0] as { path: string }).path).sort();
+      expect(calledPaths).toEqual([ROOT, `${ROOT}/sub`]);
+      await waitFor(() =>
+        expect(
+          useFileTreeStore
+            .getState()
+            .entries.get(ROOT)
+            ?.map((e) => e.name),
+        ).toEqual(['fresh.ts']),
+      );
+    });
+
+    it('正向：全部成功不弹提示', async () => {
+      const { list, watchStart } = setupApi();
+      list.mockResolvedValue({ data: { entries: [] } });
+      watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
+      const { result } = renderHook(() => useFileTree(ROOT));
+      await flushAsync();
+      mockToastWarning.mockClear();
+
+      result.current.refresh();
+      await waitFor(() => expect(mockToastWarning).not.toHaveBeenCalled());
+    });
+
+    it('异常：任一目录失败 → 集中提示一次 refreshFailed（不中断其余目录）', async () => {
+      const { list, watchStart } = setupApi();
+      list.mockImplementation(({ path }: { path: string }) =>
+        path === ROOT
+          ? Promise.resolve({ data: { entries: [] } })
+          : Promise.reject(new Error('denied')),
+      );
+      watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
+      const { result } = renderHook(() => useFileTree(ROOT));
+      await flushAsync();
+      useFileTreeStore.getState().setExpanded(`${ROOT}/bad`, true);
+      await waitFor(() =>
+        expect(list).toHaveBeenCalledWith(expect.objectContaining({ path: `${ROOT}/bad` })),
+      );
+      mockToastWarning.mockClear();
+
+      result.current.refresh();
+
+      await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
+      expect(mockToastWarning).toHaveBeenCalledWith(i18n.t('fileTree.refreshFailed'));
+    });
+
+    it('边界：workingDir=null 时 refresh no-op（不调 IPC）', () => {
+      const { list } = setupApi();
+      const { result } = renderHook(() => useFileTree(null));
+
+      result.current.refresh();
+
+      expect(list).not.toHaveBeenCalled();
+    });
+
+    it('边界：调用瞬间桥缺失（无 window.api）→ 视为全部成功，不误报失败', async () => {
+      const { list, watchStart } = setupApi();
+      list.mockResolvedValue({ data: { entries: [] } });
+      watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
+      const { result } = renderHook(() => useFileTree(ROOT));
+      await flushAsync();
+
+      // 仅在 refresh 调用期间移除桥（模拟桥不可用），随后立即恢复——
+      // 否则卸载时的 watchStop 清理会命中 undefined（与本用例无关的路径）
+      const savedApi = window.api;
+      (window as unknown as { api: undefined }).api = undefined;
+      // 清掉挂载期的根目录加载，使断言只反映本次 refresh 的调用
+      list.mockClear();
+      mockToastWarning.mockClear();
+      result.current.refresh();
+      await flushAsync();
+      (window as unknown as { api: typeof savedApi }).api = savedApi;
+
+      // 守卫直接返回 0（全部成功语义）→ 不调 IPC、不弹提示
+      expect(list).not.toHaveBeenCalled();
+      expect(mockToastWarning).not.toHaveBeenCalled();
+    });
+  });
 });

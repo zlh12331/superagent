@@ -375,4 +375,30 @@ describe('FuzzySearchDialog', () => {
 
     expect(document.querySelector('#fuzzy-search-results')?.textContent).not.toContain('stale.ts');
   });
+
+  it('边界：查询收窄后选中回到首行，Enter 确认唯一结果（旧下标不复用）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    const props = renderDialog();
+    await flushOpenReset();
+    // 先取较大结果集并把选中下标推到第二行
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+    await waitFor(() =>
+      expect(document.querySelectorAll('#fuzzy-search-results [role="option"]')).toHaveLength(2),
+    );
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' });
+    expect(document.querySelectorAll('#fuzzy-search-results [aria-selected="true"]')).toHaveLength(
+      1,
+    );
+
+    // 收窄查询：结果只剩 1 条，原下标 1 越界——必须回到首行而非沿用
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'AppSh' } });
+    await waitFor(() =>
+      expect(document.querySelectorAll('#fuzzy-search-results [role="option"]')).toHaveLength(1),
+    );
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+
+    // 唯一结果即高亮行：Enter 必须确认它（读原始越界下标会静默失败）
+    expect(props.onSelect).toHaveBeenCalledWith('src/AppShell.tsx');
+  });
 });

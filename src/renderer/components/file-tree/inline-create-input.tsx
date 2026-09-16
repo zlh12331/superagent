@@ -8,7 +8,11 @@
 // - 空名提交等同取消（不创建空名条目）
 //
 // 设计：
-// - handledRef 防止 Enter/Esc 后 onBlur 重复提交（keydown 先标记，blur 检查后重置）
+// - handledRef 只在**键盘事件**处置位（Enter 提交 / Esc 取消），供随后的
+//   失焦「读一次即复位」——这就是 Enter 提交后紧跟的 blur 不会二次落盘的机制。
+//   失焦本身不置位：失焦是焦点会话的终点事件，置位会让闩永久卡住，之后
+//   用户改名重试时按键被静默吞掉（实测复现：从下拉菜单进入新建时，菜单关闭
+//   会先派发一次 ref 尚未接上的 blur，闩一旦置位则 Enter 完全失效）。
 // - 非交互行容器用 div 而非 disabled button（禁用按钮的后代表单控件不可交互，
 //   且屏幕阅读器会先读到无意义的禁用态）
 // ──────────────────────────────
@@ -16,12 +20,15 @@
 import { File, Folder } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useRef } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
+import type { CreateEntryType } from '@/stores/transient/file-tree-store';
 import { indentStyle } from './indent';
 
 interface InlineCreateInputProps {
-  readonly type: 'file' | 'directory';
+  readonly type: CreateEntryType;
   readonly depth: number;
+  /** 确认新建（已 trim 的非空名称） */
   readonly onConfirm: (name: string) => void;
+  /** 取消新建（空名 / Esc / 放弃） */
   readonly onCancel: () => void;
 }
 export function InlineCreateInput({
@@ -33,13 +40,14 @@ export function InlineCreateInput({
   // 本地化文案
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
-  // 防止 Enter/Esc 触发后 onBlur 重复调用：keydown 先标记，blur 检查后重置
+  // 键盘事件是否已处置（Enter 提交 / Esc 取消）；供紧随的失焦去重
   const handledRef = useRef(false);
   // 缩进与 FileTreeNode 共用同一公式（单一真源在 ./indent）
   const indent = indentStyle(depth);
 
   const commit = (): void => {
     const input = inputRef.current;
+    // ref 未接上（如菜单关闭瞬间的失焦）：本轮无输入可提交，直接放弃
     if (input === null) return;
     const value = input.value.trim();
     if (value === '') {
@@ -54,6 +62,9 @@ export function InlineCreateInput({
     // Enter/Space 调 toggleExpand + preventDefault——冒泡会把「提交新建」变成
     // 「折叠目录」，空格则被吞掉（文件名合法字符无法输入）。实测复现后修复。
     e.stopPropagation();
+    // 已处置（Esc 取消或上次 Enter 已提交）后不再响应按键：
+    // 既避免连按 Enter 重复落盘，也避免「Esc 取消后按 Enter 又把文件建出来」
+    if (handledRef.current) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       handledRef.current = true;
@@ -66,6 +77,7 @@ export function InlineCreateInput({
   };
 
   const handleBlur = (): void => {
+    // 键盘已处置：消费掉闩（复位而非继续置位），使后续失焦提交仍可用
     if (handledRef.current) {
       handledRef.current = false;
       return;

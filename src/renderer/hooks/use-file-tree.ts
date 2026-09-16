@@ -5,6 +5,7 @@
 // - 监听 rootPath 变化 → 同步到 store + 启动 file:watch
 // - 监听 expandedPaths 变化 → 对新增展开的目录触发 file:list
 // - 订阅 file:watch:event → 增量更新 store（create/delete/rename）
+// - 暴露 refresh()：手动重拉根目录 + 所有已展开目录（工具栏刷新）
 //
 // 设计依据（项目规范）：
 // - "IPC `on` push events must be managed with Zustand stores instead of TanStack Query"
@@ -32,18 +33,19 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
  * 必须传入 workingDir。workingDir 为 null 时（无激活会话）不加载任何数据。
  *
  * @param workingDir 当前激活会话的工作目录绝对路径
+ * @returns 控制面（当前仅 refresh：手动重拉根目录 + 所有已展开目录）
  *
  * @example
  * ```tsx
  * function FileTreePanel({ workingDir }: { workingDir: string | null }) {
- *   useFileTree(workingDir);
+ *   const { refresh } = useFileTree(workingDir);
  *   const rootPath = useFileTreeStore((s) => s.rootPath);
  *   if (rootPath === null) return <EmptyHint />;
- *   return <FileTreeNode path={rootPath} depth={0} />;
+ *   return <button onClick={refresh}>刷新</button>;
  * }
  * ```
  */
-export function useFileTree(workingDir: string | null): void {
+export function useFileTree(workingDir: string | null): { refresh: () => void } {
   // 本地化文案
   const { t } = useTranslation();
   // store actions（订阅 action 引用稳定，不触发额外渲染）
@@ -163,7 +165,7 @@ export function useFileTree(workingDir: string | null): void {
         if (cancelled) {
           // 已取消（workingDir 变化），立即停止 watcher 避免泄漏。
           // 此处 catch 是**有意忽略**：watchStart 返回 error 响应时无 watcherId，
-          // unwrap 抛错即"本就无可停"，属预期分支而非故障（故不上报 Sentry）。
+          // unwrap 抛错即"本就无可停"，属预期分支而非故障（无需上报）。
           try {
             await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
           } catch {
@@ -245,6 +247,49 @@ export function useFileTree(workingDir: string | null): void {
       reset();
     };
   }, [reset]);
+
+  // 手动刷新：重拉根目录 + 所有已展开目录（工具栏「刷新」菜单项）
+  // 数据面留在 hook 内（与 watch 生命周期同层），组件只触发；失败集中提示一次。
+  // 不手写 useCallback：返回值是每次渲染新建的 { refresh } 对象，记忆化本函数
+  // 改变不了调用方拿到的引用（且本函数不进任何依赖数组），记忆化交给 React Compiler。
+  const refresh = (): void => {
+    if (workingDir === null) return;
+    void refreshExpandedDirs(workingDir).then((failed) => {
+      if (failed > 0) {
+        toast.warning(t('fileTree.refreshFailed'));
+      }
+    });
+  };
+
+  return { refresh };
+}
+
+/**
+ * 重拉根目录 + 所有已展开目录的条目
+ *
+ * 单目录失败不中断其余目录（allSettled 语义），最后统一提示一次。
+ * 浏览器模式（无 window.api）视为全部成功——不误报失败。
+ *
+ * @param rootPath 根目录绝对路径
+ * @returns 失败目录数（0 表示全部成功）——调用方据此决定是否提示
+ */
+async function refreshExpandedDirs(rootPath: string): Promise<number> {
+  if (typeof window === 'undefined' || window.api === undefined) {
+    return 0;
+  }
+  const paths = [...new Set([rootPath, ...useFileTreeStore.getState().expandedPaths])];
+  let failed = 0;
+  await Promise.allSettled(
+    paths.map(async (path) => {
+      try {
+        const res = await window.api.file.list({ path, depth: 1, includeHidden: false });
+        useFileTreeStore.getState().setEntries(path, unwrap(res).entries);
+      } catch {
+        failed += 1;
+      }
+    }),
+  );
+  return failed;
 }
 
 /**

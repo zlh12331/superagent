@@ -12,6 +12,13 @@
 // store 切片也不同（文件节点不需要 entries/loadingPaths/creatingEntry）——
 // 拆开后各组件只订阅自己需要的部分，复杂度与订阅面双双收窄。
 //
+// 依赖收敛（2026-09 file-tree 审计）：新建动作此前由 DirChildren 直接
+// 调用 useFileTreeOps（每个目录节点各实例化一个 mutation hook），
+// 组件测试不得不 mock 整个 hook 模块。现改为回调注入（onCreate 与既有的
+// onOpenFile 同构），节点只负责「用户做了什么」，落盘与错误提示留在容器
+// （FileTreePanel）——树节点自此不依赖 IPC 层。取消新建仍走 store 自身
+// 动作（cancelCreate 无副作用，无需上抛给容器）。
+//
 // 设计：
 // - 缩进按 depth 计算（每层 12px，对齐 VS Code 风格），公式单一真源在 ./indent
 // - 记忆化：组件为裸函数，依赖 React Compiler 自动记忆化（未手写 memo）；
@@ -22,10 +29,9 @@
 import type { FileEntry } from '@code-agent/shared/renderer';
 import { ChevronRight, File, Folder, FolderOpen } from 'lucide-react';
 import type { KeyboardEvent, ReactElement } from 'react';
-import { useFileTreeOps } from '@/hooks/use-file-tree-ops';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
-import { useFileTreeStore } from '@/stores/transient/file-tree-store';
+import { type CreateEntryType, useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { indentStyle } from './indent';
 import { InlineCreateInput } from './inline-create-input';
 
@@ -51,7 +57,12 @@ interface NodeProps {
   readonly onOpenFile: (path: string) => void;
 }
 
-interface FileTreeNodeProps extends NodeProps {
+interface DirProps extends NodeProps {
+  /** 内联新建确认回调（父目录 + 类型 + 名称）；仅目录需要（子区才有输入框） */
+  readonly onCreate: (parentDir: string, type: CreateEntryType, name: string) => void;
+}
+
+interface FileTreeNodeProps extends DirProps {
   /** 节点类型 */
   readonly type: NodeType;
 }
@@ -63,9 +74,12 @@ export function FileTreeNode({
   type,
   depth,
   onOpenFile,
+  onCreate,
 }: FileTreeNodeProps): ReactElement {
   if (type === 'directory') {
-    return <DirNode path={path} name={name} depth={depth} onOpenFile={onOpenFile} />;
+    return (
+      <DirNode path={path} name={name} depth={depth} onOpenFile={onOpenFile} onCreate={onCreate} />
+    );
   }
   return <FileNode path={path} name={name} depth={depth} onOpenFile={onOpenFile} />;
 }
@@ -73,9 +87,10 @@ export function FileTreeNode({
 // ── 目录节点 ────────────────────────────────────────────────
 
 /** 目录节点：展开/折叠 + 子区 */
-function DirNode({ path, name, depth, onOpenFile }: NodeProps): ReactElement {
+function DirNode({ path, name, depth, onOpenFile, onCreate }: DirProps): ReactElement {
   const expanded = useFileTreeStore((s) => s.expandedPaths.has(path));
-  const isPending = useFileTreeStore((s) => s.pendingOps.has(path));
+  // 新建在途（本目录下有 create IPC 未完成）→ 行内降透明度 + 拦截点击
+  const isPendingCreate = useFileTreeStore((s) => s.pendingDirs.has(path));
   const toggleExpand = useFileTreeStore((s) => s.toggleExpand);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -98,7 +113,7 @@ function DirNode({ path, name, depth, onOpenFile }: NodeProps): ReactElement {
       <div className="ft-row-wrap" style={indentStyle(depth)}>
         <button
           type="button"
-          className={cn('ft-row', 'ft-dir', isPending && 'pending')}
+          className={cn('ft-row', 'ft-dir', isPendingCreate && 'pending')}
           onClick={() => {
             toggleExpand(path);
           }}
@@ -120,7 +135,9 @@ function DirNode({ path, name, depth, onOpenFile }: NodeProps): ReactElement {
           </span>
         </button>
       </div>
-      {expanded && <DirChildren path={path} depth={depth} onOpenFile={onOpenFile} />}
+      {expanded && (
+        <DirChildren path={path} depth={depth} onOpenFile={onOpenFile} onCreate={onCreate} />
+      )}
     </div>
   );
 }
@@ -129,6 +146,7 @@ interface DirChildrenProps {
   readonly path: string;
   readonly depth: number;
   readonly onOpenFile: (path: string) => void;
+  readonly onCreate: (parentDir: string, type: CreateEntryType, name: string) => void;
 }
 
 /**
@@ -137,19 +155,20 @@ interface DirChildrenProps {
  * 优先级（与原实现一致）：新建输入始终渲染在子条目顶部；无子条目且正在新建时
  * 不显示占位（让位给输入框），否则按 isLoading 区分「加载中」与「空目录」。
  */
-function DirChildren({ path, depth, onOpenFile }: DirChildrenProps): ReactElement {
+function DirChildren({ path, depth, onOpenFile, onCreate }: DirChildrenProps): ReactElement {
   const { t } = useTranslation();
   const entries = useFileTreeStore((s) => s.entries.get(path) ?? EMPTY_ENTRIES);
   const isLoading = useFileTreeStore((s) => s.loadingPaths.has(path));
   const creatingEntry = useFileTreeStore((s) => s.creatingEntry);
-  // IPC 操作 hook（新建文件 / 目录）
-  const ops = useFileTreeOps();
+  const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
 
   // 收窄为本目录的新建状态（null = 新建流程不在本目录，无需二次判空）
   const creatingHere = creatingEntry?.parentDir === path ? creatingEntry : null;
-  const childIndent = indentStyle(depth + 1);
 
   return (
+    // fieldset 是 role="group" 的原生元素（Biome useSemanticElements 亦要求用它
+    // 而非 div+role）：可展开 treeitem 的子节点容器恰是 group 语义，非"借表单元素
+    // 做样式"。其默认 border/padding/margin 由 .ft-children 重置。
     <fieldset className="ft-children">
       {/* 内联新建临时节点：渲染在子条目顶部 */}
       {creatingHere !== null && (
@@ -157,15 +176,13 @@ function DirChildren({ path, depth, onOpenFile }: DirChildrenProps): ReactElemen
           type={creatingHere.type}
           depth={depth + 1}
           onConfirm={(newName) => {
-            void (creatingHere.type === 'file'
-              ? ops.createFile(path, newName)
-              : ops.createDir(path, newName));
+            onCreate(path, creatingHere.type, newName);
           }}
-          onCancel={() => useFileTreeStore.getState().cancelCreate()}
+          onCancel={cancelCreate}
         />
       )}
       {entries.length === 0 && creatingHere === null ? (
-        <div className={isLoading ? 'ft-loading' : 'ft-empty'} style={childIndent}>
+        <div className={isLoading ? 'ft-loading' : 'ft-empty'} style={indentStyle(depth + 1)}>
           {isLoading ? t('common.loading') : t('fileTree.emptyDir')}
         </div>
       ) : (
@@ -177,6 +194,7 @@ function DirChildren({ path, depth, onOpenFile }: DirChildrenProps): ReactElemen
             type={entry.type === 'directory' ? 'directory' : 'file'}
             depth={depth + 1}
             onOpenFile={onOpenFile}
+            onCreate={onCreate}
           />
         ))
       )}
@@ -189,7 +207,6 @@ function DirChildren({ path, depth, onOpenFile }: DirChildrenProps): ReactElemen
 /** 文件节点：点击或 Enter/Space 打开 */
 function FileNode({ path, name, depth, onOpenFile }: NodeProps): ReactElement {
   const isActive = useFileTreeStore((s) => s.activeFilePath === path);
-  const isPending = useFileTreeStore((s) => s.pendingOps.has(path));
   const setActiveFile = useFileTreeStore((s) => s.setActiveFile);
 
   const handleOpen = (): void => {
@@ -217,7 +234,7 @@ function FileNode({ path, name, depth, onOpenFile }: NodeProps): ReactElement {
       <div className="ft-row-wrap" style={indentStyle(depth)}>
         <button
           type="button"
-          className={cn('ft-row', 'ft-file', isActive && 'active', isPending && 'pending')}
+          className={cn('ft-row', 'ft-file', isActive && 'active')}
           onClick={handleOpen}
           title={name}
           tabIndex={-1}

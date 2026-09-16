@@ -2,15 +2,15 @@
 // 文件查看器状态管理（L2 客户端共享状态层 - transient）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 维护当前打开的文件路径（FileTreePanel 点击文件时设置）
-// - 提供 openFile / close 原子操作
+// - 维护当前打开的文件路径（FileTreePanel / 命令面板点击文件时设置）
+// - 提供 openFile（唯一入口；常驻右面板无关闭动作，故不提供 close）
 // - 维护编辑模式状态：editMode / isDirty / originalContent / editedContent
 // - 不持久化：查看文件是即时操作，跨重启保留无意义
 //
 // 设计：
 // - 纯状态容器，不调用 IPC（FileViewerPanel 组件订阅状态后自行 useQuery 拉取内容）
 // - 与 file-tree-store 解耦：文件树只负责导航，查看器只负责展示
-// - open 为 false 时 filePath 仍保留（用于 Dialog 退出动画期间避免内容闪烁）
+// - open 为 false 时 filePath 仍保留（重新打开前渲染上次内容，避免空态闪烁）
 // - 编辑态内容缓存在 store，避免组件卸载丢失未保存内容
 // ──────────────────────────────────────────────────────────────
 
@@ -24,9 +24,9 @@ import { useUiStore } from '@/stores/transient/ui-store';
  * 文件查看器状态形状
  */
 interface FileViewerState {
-  /** Dialog 是否打开 */
+  /** 是否已选择文件（false = 右面板显示引导空态） */
   readonly open: boolean;
-  /** 当前查看的文件绝对路径（Dialog 关闭后仍保留，用于退出动画期间渲染上次内容） */
+  /** 当前查看的文件绝对路径（重开前仍保留，用于渲染上次内容避免空态闪烁） */
   readonly filePath: string | null;
 
   // ── 编辑模式状态 ────────────────────────────────────
@@ -45,8 +45,6 @@ interface FileViewerState {
    * 脏数据保护：当前文件有未保存修改时先确认，取消则保持当前文件。
    */
   readonly openFile: (filePath: string) => Promise<void>;
-  /** 关闭查看器（Esc / 关闭按钮时调用） */
-  readonly close: () => void;
 
   // ── 全局保存桥接（AppShell Ctrl+S 快捷键 → 查看器实例） ──
   /** 注册当前查看器实例的保存处理器（编辑态打开时注册，关闭/卸载时注销） */
@@ -146,8 +144,6 @@ export const useFileViewerStore = create<FileViewerState>()((set) => ({
     useUiStore.getState().setRightPanelCollapsed(false);
     useUiStore.getState().setDevPanelTab('file');
   },
-
-  close: () => set({ open: false, editMode: false }),
 
   registerSaveHandler: (handler) => {
     saveHandler = handler;

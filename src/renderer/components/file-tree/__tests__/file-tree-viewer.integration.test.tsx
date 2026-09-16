@@ -25,7 +25,9 @@ import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { FileTreePanel } from '../FileTreePanel';
 import { FileViewerPanel } from '../FileViewerPanel';
 
-vi.mock('@/hooks/use-file-tree', () => ({ useFileTree: vi.fn() }));
+// useFileTree（IPC + watch 数据生命周期）由 hooks 层测试覆盖：此处注入空实现，
+// 但需保留 refresh 控制面（FileTreePanel 依赖其返回值解构）
+vi.mock('@/hooks/use-file-tree', () => ({ useFileTree: () => ({ refresh: vi.fn() }) }));
 
 const { getHighlighterMock, ensureLangLoadedMock } = vi.hoisted(() => ({
   getHighlighterMock: vi.fn(),

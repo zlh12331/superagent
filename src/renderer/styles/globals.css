@@ -2952,12 +2952,35 @@ button.card-head {
   color: var(--sidebar-foreground);
 }
 
+/* 头部「更多操作」菜单触发器：靠右，尺寸与 .sft-back 对齐 */
+.sft-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: auto;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sft-more-btn:hover,
+.sft-more-btn[data-state="open"] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
 /* 单个节点容器 */
 .ft-node {
   user-select: none;
 }
 
-/* 子节点容器：使用 fieldset 重置默认样式（border/padding/margin/min-size） */
+/* 子节点容器（fieldset 原生即 role="group"；此处重置其默认 border/padding/margin） */
 .ft-children {
   border: none;
   padding: 0;
@@ -2966,109 +2989,21 @@ button.card-head {
   min-width: 0;
 }
 
-/* ── 文件树顶部工具栏（新建文件 / 新建目录）────────────────── */
-.ft-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 8px 6px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-
-.ft-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-
-.ft-toolbar-btn:hover:not(:disabled) {
-  background: var(--sidebar-accent);
-  color: var(--aurora-accent);
-}
-
-.ft-toolbar-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ── 节点行容器（包裹 row button + more menu）────────────── */
+/* ── 节点行容器（包裹 row button）─────────────────────────── */
 .ft-row-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-/* 操作中状态：降低不透明度 + 等待光标 */
+/* 操作中状态：降低不透明度 + 等待光标（防重复操作的可视反馈） */
 .ft-row.pending {
   opacity: 0.5;
   cursor: wait;
   pointer-events: none;
 }
 
-/* ── 节点「更多操作」按钮（hover 显示）────────────────────── */
-.ft-more-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-right: 4px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity 0.12s ease,
-    background 0.12s ease,
-    color 0.12s ease;
-  flex-shrink: 0;
-}
-
-/* hover 节点时显示「更多」按钮 */
-.ft-node:hover .ft-more-btn,
-.ft-more-btn:focus-visible {
-  opacity: 1;
-}
-
-.ft-more-btn:hover:not(:disabled) {
-  background: var(--sidebar-accent);
-  color: var(--text);
-}
-
-.ft-more-btn:disabled {
-  opacity: 0;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-/* 危险菜单项（删除）：红色文字 */
-.ft-menu-danger {
-  color: var(--error);
-}
-
-.ft-menu-danger:hover,
-.ft-menu-danger:focus {
-  background: var(--error-bg);
-  color: var(--error);
-}
-
-/* ── 内联重命名 / 新建输入框 ──────────────────────────────── */
-/* 替换节点名称为 input，视觉与节点名称对齐 */
+/* ── 内联新建输入框 ──────────────────────────────────────── */
 .ft-rename-input {
   flex: 1;
   min-width: 0;
@@ -3105,15 +3040,8 @@ button.card-head {
   border-radius: 6px;
 }
 
-/* ── 文件查看器对话框（点击文件树文件后弹出）────────────────── */
+/* ── 文件查看器（右面板「文件」tab；原为对话框，现为常驻面板）────── */
 /* 视觉对齐 .code-block-wrapper + .msg-content pre.shiki 风格 */
-
-.file-viewer-dialog {
-  max-height: calc(100vh - 4rem);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 
 /* 工具栏：行数 + 复制按钮 */
 .file-viewer-toolbar {
@@ -3191,7 +3119,7 @@ button.card-head {
 }
 
 /* shiki 高亮输出（pre.shiki 自带内联 style，background 需覆盖 shiki 输出的内联 background-color） */
-.file-viewer-dialog .file-viewer-code pre.shiki {
+.file-viewer-code pre.shiki {
   margin: 0;
   padding: 14px 16px;
   border-radius: 0;
@@ -3385,8 +3313,7 @@ button.card-head {
   display: none;
 }
 
-/* 高亮层 shiki pre 样式：与查看态一致 */
-/* biome-ignore lint/style/noDescendingSpecificity: 与 .file-viewer-dialog 内 pre.shiki 命中不同查看容器，无覆盖 */
+/* 高亮层 shiki pre 样式：与查看态一致（选择器特异度与 .file-viewer-code pre.shiki 相等，无降序告警） */
 .file-viewer-editor-highlight pre.shiki {
   margin: 0;
   padding: 14px 16px;
@@ -4071,6 +3998,51 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   .async-refreshing-bar::before {
     animation: none;
   }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   文件模糊搜索结果行（fuzzy-search-dialog）· 会话与文件两类结果共用
+   行样式归类体系，选中态由 [aria-selected="true"] 单一来源驱动
+   ────────────────────────────────────────────────────────────── */
+.fuzzy-result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.fuzzy-result[aria-selected="true"] {
+  border-left-color: var(--accent);
+  background: var(--bg-elev-2);
+}
+
+.fuzzy-result-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.fuzzy-result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.fuzzy-result-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-2xs);
+  color: var(--text-faint);
 }
 
 /* ──────────────────────────────────────────────────────────────

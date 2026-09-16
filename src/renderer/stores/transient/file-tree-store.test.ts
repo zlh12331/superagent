@@ -118,12 +118,18 @@ describe('useFileTreeStore', () => {
     });
   });
 
-  describe('操作中状态与搜索', () => {
-    it('setPendingOp：标记与清除', () => {
-      useFileTreeStore.getState().setPendingOp('/proj/a.txt', true);
-      expect(useFileTreeStore.getState().pendingOps.has('/proj/a.txt')).toBe(true);
-      useFileTreeStore.getState().setPendingOp('/proj/a.txt', false);
-      expect(useFileTreeStore.getState().pendingOps.has('/proj/a.txt')).toBe(false);
+  describe('新建在途状态与搜索', () => {
+    it('setPendingDir：标记与清除（键为父目录）', () => {
+      useFileTreeStore.getState().setPendingDir('/proj', true);
+      expect(useFileTreeStore.getState().pendingDirs.has('/proj')).toBe(true);
+      useFileTreeStore.getState().setPendingDir('/proj', false);
+      expect(useFileTreeStore.getState().pendingDirs.has('/proj')).toBe(false);
+    });
+
+    it('setPendingDir：重复标记幂等（不产生重复条目）', () => {
+      useFileTreeStore.getState().setPendingDir('/proj', true);
+      useFileTreeStore.getState().setPendingDir('/proj', true);
+      expect(useFileTreeStore.getState().pendingDirs.size).toBe(1);
     });
 
     it('getAllFilePaths：仅文件（排除目录），按名称不区分大小写升序', () => {
@@ -134,6 +140,54 @@ describe('useFileTreeStore', () => {
       useFileTreeStore.getState().setEntries('/proj/sub', [entry('c.ts', 'file', '/proj/sub')]);
       const paths = useFileTreeStore.getState().getAllFilePaths();
       expect(paths).toEqual(['/proj/A.md', '/proj/b.txt', '/proj/sub/c.ts']);
+    });
+
+    it('边界：无任何条目缓存时 getAllFilePaths 返回空数组', () => {
+      expect(useFileTreeStore.getState().getAllFilePaths()).toEqual([]);
+    });
+  });
+
+  describe('展开集合的引用稳定（防 effect 空转）', () => {
+    it('expandPaths：无新增时返回原集合引用（下游 effect 不重跑）', () => {
+      useFileTreeStore.getState().setExpanded('/proj/a', true);
+      const before = useFileTreeStore.getState().expandedPaths;
+      useFileTreeStore.getState().expandPaths(['/proj/a']);
+      expect(useFileTreeStore.getState().expandedPaths).toBe(before);
+    });
+
+    it('expandPaths：有新增时返回新集合（含去重）', () => {
+      useFileTreeStore.getState().expandPaths(['/proj/a', '/proj/a']);
+      expect([...useFileTreeStore.getState().expandedPaths]).toEqual(['/proj/a']);
+    });
+
+    it('边界：expandPaths 空数组不改变引用', () => {
+      const before = useFileTreeStore.getState().expandedPaths;
+      useFileTreeStore.getState().expandPaths([]);
+      expect(useFileTreeStore.getState().expandedPaths).toBe(before);
+    });
+  });
+
+  describe('reset', () => {
+    it('全量清空（会话切换 / 卸载）', () => {
+      const store = useFileTreeStore.getState();
+      store.setRootPath('/proj');
+      store.setEntries('/proj', [entry('a.txt')]);
+      store.setActiveFile('/proj/a.txt');
+      store.setLoading('/proj', true);
+      store.setPendingDir('/proj', true);
+      store.startCreate('/proj', 'file');
+      store.toggleExpand('/proj/src');
+
+      store.reset();
+
+      const s = useFileTreeStore.getState();
+      expect(s.rootPath).toBeNull();
+      expect(s.expandedPaths.size).toBe(0);
+      expect(s.activeFilePath).toBeNull();
+      expect(s.entries.size).toBe(0);
+      expect(s.loadingPaths.size).toBe(0);
+      expect(s.pendingDirs.size).toBe(0);
+      expect(s.creatingEntry).toBeNull();
     });
   });
 });

@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 封装 file:create / file:createDir IPC 调用
-// - 自动管理 pendingOps 状态（IPC 前后置位/清除，防止重复操作）
+// - 自动管理父目录的 pendingDirs 状态（IPC 前后置位/清除，给出在途视觉反馈）
 // - 成功后取消内联编辑状态（cancelCreate）
 // - 依赖 file:watch 事件自动同步文件树状态（useFileTree 已订阅）
 // - 错误时 toast 提示
@@ -15,8 +15,8 @@
 // - 不重复 watch 文件树（useFileTree 已订阅），仅触发变更
 //
 // 调用关系：
-// - 调用方：FileTreeNode 组件（菜单项点击、内联输入框确认）
-// - 被调方：preload file API（IPC 调用）、file-tree-store（pendingOps + 内联状态）
+// - 调用方：FileTreePanel 容器（工具栏菜单新建 / 树节点内联输入确认经回调上抛）
+// - 被调方：preload file API（IPC 调用）、file-tree-store（pendingDirs + 内联状态）
 // ──────────────────────────────────────────────────────────────
 
 import { toast } from 'sonner';
@@ -29,7 +29,7 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
  * useFileTreeOps：文件树编辑操作 hook
  *
  * 提供 createFile / createDir 两个方法，
- * 自动管理 pendingOps 状态和内联编辑状态。
+ * 自动管理父目录的 pendingDirs 状态和内联编辑状态。
  *
  * @example
  * ```tsx
@@ -41,7 +41,7 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 export function useFileTreeOps() {
   // 本地化文案
   const { t } = useTranslation();
-  const setPendingOp = useFileTreeStore((s) => s.setPendingOp);
+  const setPendingDir = useFileTreeStore((s) => s.setPendingDir);
   const cancelCreate = useFileTreeStore((s) => s.cancelCreate);
 
   /**
@@ -49,16 +49,19 @@ export function useFileTreeOps() {
    *
    * 成功后取消内联编辑状态，依赖 file:watch 的 create 事件自动刷新父目录。
    *
+   * pending 标记挂在**父目录**路径上：新建条目此刻尚不存在于 entries，
+   * 若按 fullPath 标记，`.ft-row.pending` 永远命中不到任何已渲染行（状态
+   * 无法抵达 UI）。挂父目录才能在 IPC 在途期间给出真实的「进行中」反馈。
+   *
    * @param parentDir 父目录绝对路径
    * @param name 新文件名（不含路径分隔符）
    * @returns 是否成功（失败时已 toast 提示，调用方无需额外处理）
    */
   async function createFile(parentDir: string, name: string): Promise<boolean> {
-    const fullPath = joinPath(parentDir, name);
-    setPendingOp(fullPath, true);
+    setPendingDir(parentDir, true);
     let ok = false;
     try {
-      unwrap(await window.api.file.create({ path: fullPath, createDirs: false }));
+      unwrap(await window.api.file.create({ path: joinPath(parentDir, name), createDirs: false }));
       cancelCreate();
       ok = true;
     } catch (err) {
@@ -68,7 +71,7 @@ export function useFileTreeOps() {
     }
     // finally 语义（React Compiler 不优化 try/finally）：成功后不提前 return，
     // 统一在这里复位 pending 后再返回结果
-    setPendingOp(fullPath, false);
+    setPendingDir(parentDir, false);
     return ok;
   }
 
@@ -77,13 +80,13 @@ export function useFileTreeOps() {
    *
    * @param parentDir 父目录绝对路径
    * @param name 新目录名
+   * @returns 是否成功（失败时已 toast 提示，调用方无需额外处理）
    */
   async function createDir(parentDir: string, name: string): Promise<boolean> {
-    const fullPath = joinPath(parentDir, name);
-    setPendingOp(fullPath, true);
+    setPendingDir(parentDir, true);
     let ok = false;
     try {
-      unwrap(await window.api.file.createDir({ path: fullPath }));
+      unwrap(await window.api.file.createDir({ path: joinPath(parentDir, name) }));
       cancelCreate();
       ok = true;
     } catch (err) {
@@ -93,7 +96,7 @@ export function useFileTreeOps() {
     }
     // finally 语义（React Compiler 不优化 try/finally）：成功后不提前 return，
     // 统一在这里复位 pending 后再返回结果
-    setPendingOp(fullPath, false);
+    setPendingDir(parentDir, false);
     return ok;
   }
 

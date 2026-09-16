@@ -256,7 +256,7 @@ describe('FileViewerPanel', () => {
       expect(screen.getByLabelText(i18n.t('fileViewer.copyContent'))).toBeDisabled();
     });
 
-    it('编辑态 + 空内容：显示编辑态空文案（空内容分支优先于编辑态分支）', async () => {
+    it('编辑态 + 空内容：渲染可编辑 textarea（空文件必须能写入，不再卡在占位文案）', async () => {
       diskContent = '';
       useFileViewerStore.setState({
         open: true,
@@ -268,9 +268,30 @@ describe('FileViewerPanel', () => {
       });
       const { container } = render(createWrapper());
 
-      expect(await screen.findByText(i18n.t('common.emptyFileEdit'))).toBeDefined();
-      // 分派优先级固定：空内容走占位文案，不渲染编辑器
-      expect(container.querySelector('textarea')).toBeNull();
+      // 新建空文件后进入编辑态：必须有输入面（此前只显示"空文件"占位 → 端到端死路）
+      const textarea = await screen.findByLabelText(
+        i18n.t('chat.editFileLabel', { name: 'empty.txt' }),
+      );
+      expect(textarea).toBeDefined();
+      // 空内容时给出引导占位（否则 textarea 全空，用户不知可输入）
+      expect((textarea as HTMLTextAreaElement).placeholder).toBe(i18n.t('common.emptyFileEdit'));
+      expect(container.querySelector('.file-viewer-empty')).toBeNull();
+    });
+
+    it('编辑态 + 非空内容：不显示空文件引导占位', async () => {
+      diskContent = 'hello';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'hello',
+        editedContent: 'hello',
+        isDirty: false,
+      });
+      render(createWrapper());
+
+      const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
+      expect((textarea as HTMLTextAreaElement).placeholder).toBe('');
     });
 
     it('编辑态 + 有内容：渲染 textarea，且非 dirty 时保存禁用、复制可用', async () => {

@@ -277,6 +277,8 @@ function EditorView({
         autoCapitalize="off"
         autoCorrect="off"
         wrap="off"
+        // 空文件在编辑态给一句引导（textarea 自身无内容时全空，用户不知可输入）
+        {...(value === '' ? { placeholder: t('common.emptyFileEdit') } : {})}
         aria-label={t('chat.editFileLabel', { name: fileName })}
       />
     </div>
@@ -295,7 +297,13 @@ interface ViewerBodyProps {
 }
 
 /**
- * 内容区五态分派（加载 / 错误 / 空内容 / 编辑态 / 只读高亮 / 纯文本）
+ * 内容区五态分派（加载 / 错误 / 编辑态 / 空内容 / 只读高亮 / 纯文本）
+ *
+ * 分派优先级（2026-09 file-tree 审计修正）：**编辑态优先于空内容**。
+ * 此前空内容分支排在编辑态之前，导致「新建空文件 → 点编辑」后既拿不到
+ * textarea、也没有别的输入面（只显示"空文件"占位），空文件永远无法写入内容——
+ * 文件树能新建空文件而查看器无法编辑它，是端到端死路。
+ * 查看态的空内容占位（emptyFile）保持不变。
  *
  * 抽离动机：此前是五层嵌套三元直接内联在 FileViewerPanel 的 JSX 中，
  * 使该组件认知复杂度达 46（门禁阈值 15）。改用早返回后主组件与子组件双双回落到阈值内。
@@ -321,15 +329,12 @@ function ViewerBody({
       </div>
     );
   }
-  if (content === '') {
-    return (
-      <div className="file-viewer-empty">
-        {editMode ? t('common.emptyFileEdit') : t('common.emptyFile')}
-      </div>
-    );
-  }
+  // 编辑态优先：空文件也必须可编辑（textarea 为空串即可正常输入）
   if (editMode) {
     return <EditorView {...editor} html={html} fileName={fileName} />;
+  }
+  if (content === '') {
+    return <div className="file-viewer-empty">{t('common.emptyFile')}</div>;
   }
   if (html !== null) {
     return (

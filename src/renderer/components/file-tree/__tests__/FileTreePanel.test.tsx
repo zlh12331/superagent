@@ -1,14 +1,18 @@
 // src/renderer/components/file-tree/__tests__/FileTreePanel.test.tsx
 // 文件树面板单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
-// 该组件此前零直接覆盖。覆盖：无工作目录空态、rootPath 未就绪占位、
-// 就绪态的树语义与根节点名、返回按钮、菜单三项动作（新建目录/文件/刷新）
-// 以及刷新失败的集中提示。
-// 数据生命周期（IPC + watch）不属于本文件范围 → mock useFileTree 为空实现，
-// 状态直接由 store 注入。
+// 覆盖：无工作目录空态、rootPath 未就绪占位、就绪态的树语义与根节点名、
+// 返回按钮、菜单三项动作（新建目录/文件/刷新）以及新建确认向 ops 的分流。
+//
+// 分层（2026-09 file-tree 审计后）：
+// - 数据生命周期（IPC + watch + refresh 失败提示）由 use-file-tree 的 hook 测试覆盖
+//   → 本文件 mock useFileTree 返回可控的 refresh spy
+// - 落盘动作（createFile / createDir）由 use-file-tree-ops 测试覆盖
+//   → 本文件 mock useFileTreeOps，只断言「组件把意图转发给了正确的方法」
+// - 状态直接由 store 注入（rootPath / expandedPaths / creatingEntry）
 // ──────────────────────────────────────────────────────────────
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,23 +22,31 @@ import { useUiStore } from '@/stores/transient/ui-store';
 
 import { FileTreePanel } from '../FileTreePanel';
 
-const { mockToastWarning, mockList } = vi.hoisted(() => ({
-  mockToastWarning: vi.fn(),
-  mockList: vi.fn(),
+const { mockRefresh, mockCreateFile, mockCreateDir } = vi.hoisted(() => ({
+  mockRefresh: vi.fn(),
+  mockCreateFile: vi.fn(),
+  mockCreateDir: vi.fn(),
 }));
 
-vi.mock('sonner', () => ({
-  toast: { warning: mockToastWarning, error: vi.fn(), success: vi.fn() },
+// 数据生命周期（IPC + watch + refresh 实现）单独由 hooks 测试覆盖
+vi.mock('@/hooks/use-file-tree', () => ({ useFileTree: () => ({ refresh: mockRefresh }) }));
+// 落盘动作单独由 hooks 测试覆盖：此处只验证意图转发
+vi.mock('@/hooks/use-file-tree-ops', () => ({
+  useFileTreeOps: () => ({ createFile: mockCreateFile, createDir: mockCreateDir }),
 }));
-
-// 数据生命周期（IPC + watch + 状态同步）单独由 hooks 测试覆盖
-vi.mock('@/hooks/use-file-tree', () => ({ useFileTree: vi.fn() }));
 
 const ROOT = 'C:\\proj';
 
 /** 渲染面板并等待就绪（rootPath 已同步） */
 function renderReady(): void {
   useFileTreeStore.getState().setRootPath(ROOT);
+  render(<FileTreePanel workingDir={ROOT} />);
+}
+
+/** 就绪 + 进入根目录内联新建态（状态先于渲染注入，避免渲染后再改 store） */
+function renderCreating(type: 'file' | 'directory'): void {
+  useFileTreeStore.getState().setRootPath(ROOT);
+  useFileTreeStore.getState().startCreate(ROOT, type);
   render(<FileTreePanel workingDir={ROOT} />);
 }
 
@@ -47,8 +59,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   useFileTreeStore.getState().reset();
   useUiStore.setState({ sidebarView: 'threads' });
-  mockList.mockResolvedValue({ data: { entries: [] } });
-  window.api.file = { list: mockList } as never;
 });
 
 describe('FileTreePanel', () => {
@@ -107,42 +117,33 @@ describe('FileTreePanel', () => {
     });
   });
 
-  it('菜单「刷新」：重拉目录条目写入 store（全部成功时不提示）', async () => {
+  it('菜单「刷新」：转发到 useFileTree.refresh（数据面留在 hook）', async () => {
     renderReady();
-    mockList.mockResolvedValue({
-      data: {
-        entries: [{ name: 'a.ts', path: `${ROOT}\\a.ts`, type: 'file', size: 0, modifiedAt: 0 }],
-      },
-    });
-
     await openMoreMenu();
     await userEvent.click(await screen.findByText(i18n.t('fileTree.refresh')));
 
-    await waitFor(() => expect(useFileTreeStore.getState().entries.get(ROOT)).toHaveLength(1));
-    expect(mockToastWarning).not.toHaveBeenCalled();
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it('菜单「刷新」异常：目录拉取失败时集中提示一次', async () => {
-    renderReady();
-    mockList.mockRejectedValue(new Error('ipc down'));
+  it('新建确认（目录）：转发 createDir(parentDir, name)', () => {
+    renderCreating('directory');
 
-    await openMoreMenu();
-    await userEvent.click(await screen.findByText(i18n.t('fileTree.refresh')));
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'newdir' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
 
-    await waitFor(() =>
-      expect(mockToastWarning).toHaveBeenCalledWith(i18n.t('fileTree.refreshFailed')),
-    );
+    expect(mockCreateDir).toHaveBeenCalledWith(ROOT, 'newdir');
+    expect(mockCreateFile).not.toHaveBeenCalled();
   });
 
-  it('边界：浏览器模式（window.api 缺失）：刷新静默成功，不误报失败', async () => {
-    (window as unknown as { api: undefined }).api = undefined;
-    renderReady();
+  it('新建确认（文件）：转发 createFile(parentDir, name)', () => {
+    renderCreating('file');
 
-    await openMoreMenu();
-    await userEvent.click(await screen.findByText(i18n.t('fileTree.refresh')));
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'new.ts' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
 
-    // refreshExpandedDirs 守卫直接返回 0（全部成功语义）→ 不调 IPC、不弹提示
-    expect(mockList).not.toHaveBeenCalled();
-    expect(mockToastWarning).not.toHaveBeenCalled();
+    expect(mockCreateFile).toHaveBeenCalledWith(ROOT, 'new.ts');
+    expect(mockCreateDir).not.toHaveBeenCalled();
   });
 });
