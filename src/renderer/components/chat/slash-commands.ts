@@ -65,8 +65,10 @@ export function executeSlashCommand(action: SlashAction, deps: SlashCommandDeps)
       break;
     default: {
       // 穷尽性守卫（编译期）：新增 SlashAction 成员而未在此分发时，action 在本分支
-      // 不再收窄为 never，下一行即报类型错误——此前是静默 no-op（新增命令点建议后
-      // 无任何反应且无提示）。运行期不可达，故不抛错以维持既有行为
+      // 不再收窄为 never，赋值即报类型错误——此前是静默 no-op（新增命令点建议后
+      // 无任何反应且无提示）。运行期不可达，故不抛错以维持既有行为。
+      // 注：函数返回 void，不能用 `return exhaustive`（触发 noVoidTypeReturn）；
+      // 赋值本身即完成校验，`void` 运算符显式表态「此值刻意不参与运行期逻辑」
       const exhaustive: never = action;
       void exhaustive;
     }

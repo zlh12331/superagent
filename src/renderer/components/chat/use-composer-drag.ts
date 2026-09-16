@@ -47,6 +47,9 @@ function startGlobalDrag(ctx: GlobalDragContext): () => void {
     const dy = state.startY - ev.clientY;
     const clamped = Math.max(state.dragMinH, Math.min(COMPOSER_MAX_H, state.startH + dy));
     if (clamped <= state.dragMinH) {
+      // 触底档刻意让两值不等：height 贴合内容自然高度（不裁剪），maxHeight 回到基准档，
+      // 使后续自动增高仍走 COMPOSER_AUTO_MAX 档（见 ChatInput.autoResize 的 manualCap 判定）。
+      // 若此处把 maxHeight 也设为 dragMinH，拖到底后会永久压低自动增高上限
       el.style.maxHeight = `${DRAG_BASE_MAX}px`;
       el.style.height = `${state.dragMinH}px`;
     } else {

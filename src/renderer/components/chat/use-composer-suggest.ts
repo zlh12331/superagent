@@ -230,11 +230,20 @@ export function useComposerSuggest({
     textareaRef.current?.focus();
   };
 
-  /** 建议面板键盘处理：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭仅清除触发段 */
+  /**
+   * 建议面板键盘处理：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭仅清除触发段
+   *
+   * 分发顺序即优先级，**不可调整**：
+   * 1. ArrowDown/Up — 仅改高亮，必须最先（否则会被下方 Enter 分支抢先判定）；
+   * 2. Tab/Enter — 应用高亮项，须早于 Esc（三键互斥，此序只为可读）；
+   * 3. Esc — 兜底清段，返回其 consumed 结果（前两者未消费即交给调用方）。
+   * 三个分支各自「消费即 return true」，调用方据此决定是否 preventDefault。
+   */
   const handleSuggestKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (!suggestOpen) {
       return false;
     }
+    // 当前高亮项在候选集内的安全下标（候选集为空时 selected=0，由下游 undefined 判定兜底）
     const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
     const selected = Math.min(suggestIndex, Math.max(0, count - 1));
     if (handleArrowNav(event, { count, setSuggestIndex })) {
