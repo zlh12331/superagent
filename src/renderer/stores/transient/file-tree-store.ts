@@ -7,7 +7,7 @@
 // - 维护激活的文件路径（高亮当前选中文件）
 // - 缓存已加载的目录条目（path -> FileEntry[]）
 // - 维护加载中目录集合（避免重复请求 + UI 骨架屏）
-// - 提供文件变更事件的增量更新（upsert/remove/rename）
+// - 提供文件变更事件的增量更新（watch delete 事件 → removeEntry；create/rename 走重载）
 // - 维护新建流程的内联编辑状态（creatingEntry；重命名已随 NodeMenu 移除）
 // - 维护操作中路径集合（pendingOps，用于禁用相关 UI 防止重复操作）
 //
@@ -68,12 +68,8 @@ interface FileTreeState {
   readonly setActiveFile: (path: string | null) => void;
   /** 设置指定目录的子条目（list IPC 返回后调用） */
   readonly setEntries: (path: string, entries: readonly FileEntry[]) => void;
-  /** 增量更新：新增或替换条目（file:watch create 事件） */
-  readonly upsertEntry: (parentDir: string, entry: FileEntry) => void;
   /** 增量更新：移除条目（file:watch delete 事件） */
   readonly removeEntry: (parentDir: string, entryPath: string) => void;
-  /** 增量更新：重命名条目（file:watch rename 事件） */
-  readonly renameEntry: (parentDir: string, oldPath: string, newEntry: FileEntry) => void;
   /** 设置目录加载状态（list IPC 请求前后调用） */
   readonly setLoading: (path: string, loading: boolean) => void;
 
@@ -186,33 +182,11 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
       return { entries: next };
     }),
 
-  upsertEntry: (parentDir, entry) =>
-    set((state) => {
-      const existing = state.entries.get(parentDir) ?? [];
-      // 移除同名旧条目（若存在），追加新条目并重新排序
-      const filtered = existing.filter((e) => e.name !== entry.name);
-      const next = [...filtered, entry].sort(compareEntries);
-      const entries = new Map(state.entries);
-      entries.set(parentDir, next);
-      return { entries };
-    }),
-
   removeEntry: (parentDir, entryPath) =>
     set((state) => {
       const existing = state.entries.get(parentDir);
       if (existing === undefined) return state;
       const next = existing.filter((e) => e.path !== entryPath);
-      const entries = new Map(state.entries);
-      entries.set(parentDir, next);
-      return { entries };
-    }),
-
-  renameEntry: (parentDir, oldPath, newEntry) =>
-    set((state) => {
-      const existing = state.entries.get(parentDir) ?? [];
-      // 移除旧路径条目，追加新条目并重新排序
-      const filtered = existing.filter((e) => e.path !== oldPath);
-      const next = [...filtered, newEntry].sort(compareEntries);
       const entries = new Map(state.entries);
       entries.set(parentDir, next);
       return { entries };
@@ -277,7 +251,7 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
 /**
  * 条目排序：目录在前、文件在后；同类按名称升序（不区分大小写）
  *
- * 用于 setEntries / upsertEntry / renameEntry 时保证 UI 渲染稳定。
+ * 用于 setEntries 时保证 UI 渲染稳定。
  */
 function compareEntries(a: FileEntry, b: FileEntry): number {
   // 目录在前

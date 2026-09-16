@@ -68,31 +68,6 @@ describe('useFileTreeStore', () => {
       expect(names).toEqual(['beta', 'Alpha.txt', 'zeta.txt']);
     });
 
-    it('upsertEntry：新增条目并保持排序', () => {
-      useFileTreeStore.getState().setRootPath('/proj');
-      useFileTreeStore.getState().setEntries('/proj', [entry('b.txt')]);
-      useFileTreeStore.getState().upsertEntry('/proj', entry('a.txt'));
-      const names = useFileTreeStore
-        .getState()
-        .entries.get('/proj')
-        ?.map((e) => e.name);
-      expect(names).toEqual(['a.txt', 'b.txt']);
-    });
-
-    it('upsertEntry：同名条目替换（不重复）', () => {
-      useFileTreeStore.getState().setRootPath('/proj');
-      useFileTreeStore.getState().setEntries('/proj', [entry('a.txt')]);
-      useFileTreeStore.getState().upsertEntry('/proj', { ...entry('a.txt'), size: 999 });
-      const list = useFileTreeStore.getState().entries.get('/proj') ?? [];
-      expect(list).toHaveLength(1);
-      expect(list[0]?.size).toBe(999);
-    });
-
-    it('upsertEntry：父目录无缓存时直接创建', () => {
-      useFileTreeStore.getState().upsertEntry('/fresh', entry('x.txt'));
-      expect(useFileTreeStore.getState().entries.get('/fresh')).toHaveLength(1);
-    });
-
     it('removeEntry：按路径移除', () => {
       useFileTreeStore.getState().setRootPath('/proj');
       useFileTreeStore.getState().setEntries('/proj', [entry('a.txt'), entry('b.txt')]);
@@ -108,17 +83,6 @@ describe('useFileTreeStore', () => {
       const before = useFileTreeStore.getState().entries;
       useFileTreeStore.getState().removeEntry('/ghost', '/ghost/x');
       expect(useFileTreeStore.getState().entries).toBe(before);
-    });
-
-    it('renameEntry：移除旧路径条目并追加新条目', () => {
-      useFileTreeStore.getState().setRootPath('/proj');
-      useFileTreeStore.getState().setEntries('/proj', [entry('old.txt')]);
-      useFileTreeStore.getState().renameEntry('/proj', '/proj/old.txt', entry('new.txt'));
-      const names = useFileTreeStore
-        .getState()
-        .entries.get('/proj')
-        ?.map((e) => e.name);
-      expect(names).toEqual(['new.txt']);
     });
   });
 

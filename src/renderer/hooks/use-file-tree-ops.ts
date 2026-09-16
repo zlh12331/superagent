@@ -2,7 +2,7 @@
 // 文件树编辑操作 hook（L3 服务端请求状态层）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 封装 file:create / file:createDir / file:delete / file:rename IPC 调用
+// - 封装 file:create / file:createDir IPC 调用
 // - 自动管理 pendingOps 状态（IPC 前后置位/清除，防止重复操作）
 // - 成功后取消内联编辑状态（cancelCreate）
 // - 依赖 file:watch 事件自动同步文件树状态（useFileTree 已订阅）
@@ -28,7 +28,7 @@ import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 /**
  * useFileTreeOps：文件树编辑操作 hook
  *
- * 提供 createFile / createDir / deleteEntry / renameEntry 四个方法，
+ * 提供 createFile / createDir 两个方法，
  * 自动管理 pendingOps 状态和内联编辑状态。
  *
  * @example
