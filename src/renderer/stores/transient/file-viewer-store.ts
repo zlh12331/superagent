@@ -8,7 +8,7 @@
 // - 不持久化：查看文件是即时操作，跨重启保留无意义
 //
 // 设计：
-// - 纯状态容器，不调用 IPC（FileViewerDialog 组件订阅状态后自行 useQuery 拉取内容）
+// - 纯状态容器，不调用 IPC（FileViewerPanel 组件订阅状态后自行 useQuery 拉取内容）
 // - 与 file-tree-store 解耦：文件树只负责导航，查看器只负责展示
 // - open 为 false 时 filePath 仍保留（用于 Dialog 退出动画期间避免内容闪烁）
 // - 编辑态内容缓存在 store，避免组件卸载丢失未保存内容
@@ -101,8 +101,7 @@ let saveHandler: (() => void) | null = null;
  * // FileTreePanel 点击文件
  * openFile('D:\\proj\\src\\index.ts');
  *
- * // FileViewerDialog 受控
- * <Dialog open={open} onOpenChange={(v) => { if (!v) close(); }}>
+ * // FileViewerPanel 受控渲染（open=false 时显示引导空态）
  * ```
  */
 export const useFileViewerStore = create<FileViewerState>()((set) => ({

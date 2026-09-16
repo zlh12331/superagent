@@ -82,6 +82,8 @@ function toCaseInsensitiveGlob(value: string): string {
 /**
  * 文件搜索（search:glob IPC）：递归通配符 + 关键词子串匹配文件名。
  * 返回绝对路径数组；浏览器模式（window.api 缺失）返回空数组。
+ * 错误信封（unwrap 抛出）不在此吞掉——交由调用方统一 toast「搜索失败」，
+ * 否则用户会把失败误读为「无结果」。
  */
 async function searchFiles(query: string, rootDir: string): Promise<string[]> {
   if (typeof window === 'undefined' || window.api === undefined) {
@@ -94,11 +96,7 @@ async function searchFiles(query: string, rootDir: string): Promise<string[]> {
     includeHidden: false,
     maxResults: FILE_RESULTS_LIMIT,
   });
-  try {
-    return [...unwrap(response).files];
-  } catch {
-    return [];
-  }
+  return [...unwrap(response).files];
 }
 
 /** 从完整路径中提取目录部分（不含文件名） */
@@ -250,19 +248,27 @@ export function FuzzySearchDialog({
     }
   }, [selectedIndex, combinedResults.length, open]);
 
-  // 确认选择：会话切换 / 文件 onSelect（参考项目 handleConfirm 语义）
+  // 确认单个结果：会话切换 / 文件 onSelect（键盘 Enter 与鼠标点击共用一份逻辑，
+  // 此前 onClick 与 handleConfirm 各写一份跳转代码，存在漂移风险）
+  const confirmResult = useCallback(
+    (item: UnifiedResult) => {
+      if (item.type === 'session') {
+        // 切换会话：设置激活 + 跳转聊天页（对齐参考项目 useSelectThread 语义）
+        useActiveSessionStore.getState().setActiveSession(item.sessionId);
+        navigate(ROUTES.chatPath(item.sessionId));
+      } else {
+        onSelect(item.path);
+      }
+      onClose();
+    },
+    [onSelect, navigate, onClose],
+  );
+
+  // 键盘 Enter：确认当前选中项（结果可能已变化，越界由 undefined 守卫兜底）
   const handleConfirm = useCallback(() => {
     const item = combinedResults[selectedIndex];
-    if (item === undefined) return;
-    if (item.type === 'session') {
-      // 切换会话：设置激活 + 跳转聊天页（对齐参考项目 useSelectThread 语义）
-      useActiveSessionStore.getState().setActiveSession(item.sessionId);
-      navigate(ROUTES.chatPath(item.sessionId));
-    } else {
-      onSelect(item.path);
-    }
-    onClose();
-  }, [combinedResults, selectedIndex, onSelect, navigate, onClose]);
+    if (item !== undefined) confirmResult(item);
+  }, [combinedResults, selectedIndex, confirmResult]);
 
   // 键盘导航：ArrowUp/Down 切换、Enter 确认（边界使用统一列表长度）
   const handleKeyDown = useCallback(
@@ -358,11 +364,7 @@ export function FuzzySearchDialog({
                     type="button"
                     role="option"
                     aria-selected={i === safeSelectedIndex}
-                    onClick={() => {
-                      useActiveSessionStore.getState().setActiveSession(item.sessionId);
-                      navigate(ROUTES.chatPath(item.sessionId));
-                      onClose();
-                    }}
+                    onClick={() => confirmResult(item)}
                     onMouseEnter={() => setSelectedIndex(i)}
                     className={cn(baseCls, selectedCls)}
                   >
@@ -388,10 +390,7 @@ export function FuzzySearchDialog({
                   type="button"
                   role="option"
                   aria-selected={i === safeSelectedIndex}
-                  onClick={() => {
-                    onSelect(item.path);
-                    onClose();
-                  }}
+                  onClick={() => confirmResult(item)}
                   onMouseEnter={() => setSelectedIndex(i)}
                   className={cn(baseCls, selectedCls)}
                 >

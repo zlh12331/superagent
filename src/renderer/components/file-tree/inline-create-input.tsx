@@ -16,6 +16,7 @@
 import { File, Folder } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useRef } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
+import { indentStyle } from './indent';
 
 interface InlineCreateInputProps {
   readonly type: 'file' | 'directory';
@@ -34,7 +35,8 @@ export function InlineCreateInput({
   const inputRef = useRef<HTMLInputElement>(null);
   // 防止 Enter/Esc 触发后 onBlur 重复调用：keydown 先标记，blur 检查后重置
   const handledRef = useRef(false);
-  const indentStyle = { paddingLeft: `${depth * 12 + 8}px` };
+  // 缩进与 FileTreeNode 共用同一公式（单一真源在 ./indent）
+  const indent = indentStyle(depth);
 
   const commit = (): void => {
     const input = inputRef.current;
@@ -68,7 +70,7 @@ export function InlineCreateInput({
   };
 
   return (
-    <div className="ft-row-wrap" style={indentStyle}>
+    <div className="ft-row-wrap" style={indent}>
       {/* 非交互行容器：用 div 而非 disabled button（HTML 规范上禁用按钮的后代表单控件不可交互，且屏幕阅读器会先读到无意义禁用态） */}
       <div className="ft-row ft-creating">
         <span className="ft-chevron" aria-hidden>

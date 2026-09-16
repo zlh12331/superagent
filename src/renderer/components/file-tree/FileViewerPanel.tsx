@@ -31,7 +31,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
-import { detectLangFromPath } from './file-viewer-utils';
+import { detectLangFromPath, lineCount } from './file-viewer-utils';
 
 /** 大文件高亮降级阈值（行）：shiki 整文件 tokenize 超过则跳过高亮渲染纯文本 */
 const MAX_HIGHLIGHT_LINES = 5000;
@@ -165,7 +165,11 @@ export function FileViewerPanel(): ReactElement {
 
   // 渲染
   const fileName = filePath !== null ? basename(filePath) : '';
-  const totalLines = data?.totalLines ?? displayContent.split('\n').length;
+  // 行数：查看态优先用 IPC 返回的 totalLines（磁盘权威值，空文件为 0）；
+  // 编辑态必须随编辑缓冲实时变化——此前固定显示磁盘行数，增删行后工具栏数字陈旧
+  const totalLines = editMode
+    ? lineCount(editedContent)
+    : (data?.totalLines ?? lineCount(displayContent));
 
   // 未选择文件时显示引导（右面板"文件"tab 空态）
   if (!open) {

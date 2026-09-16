@@ -13,7 +13,7 @@
 // 拆开后各组件只订阅自己需要的部分，复杂度与订阅面双双收窄。
 //
 // 设计：
-// - 缩进按 depth 计算（每层 12px，对齐 VS Code 风格）
+// - 缩进按 depth 计算（每层 12px，对齐 VS Code 风格），公式单一真源在 ./indent
 // - 记忆化：组件为裸函数，依赖 React Compiler 自动记忆化（未手写 memo）；
 //   注意 store 订阅是外部状态，JSX 缓存前提在 store 更新时仍会失效
 // - 文学风视觉：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
@@ -26,6 +26,7 @@ import { useFileTreeOps } from '@/hooks/use-file-tree-ops';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
+import { indentStyle } from './indent';
 import { InlineCreateInput } from './inline-create-input';
 
 /** 文件类型简化为「目录」或「文件」（symlink 暂按文件渲染） */
@@ -34,17 +35,9 @@ type NodeType = 'directory' | 'file';
 /** 空条目常量：避免每次渲染创建新数组引用 */
 const EMPTY_ENTRIES: readonly FileEntry[] = [];
 
-/** 每层缩进（px） */
-const INDENT_PER_DEPTH = 12;
-
 /** 激活键（Enter / Space）：与原生 button 的键盘行为对齐 */
 function isActivateKey(key: string): boolean {
-  return key === 'Enter' || key === ' ' || key === 'Spacebar';
-}
-
-/** 按深度生成缩进内联样式（depth 从 0 起） */
-function indentStyle(depth: number): { paddingLeft: string } {
-  return { paddingLeft: `${depth * INDENT_PER_DEPTH + 8}px` };
+  return key === 'Enter' || key === ' ';
 }
 
 interface NodeProps {
@@ -152,27 +145,26 @@ function DirChildren({ path, depth, onOpenFile }: DirChildrenProps): ReactElemen
   // IPC 操作 hook（新建文件 / 目录）
   const ops = useFileTreeOps();
 
-  const isCreatingHere = creatingEntry !== null && creatingEntry.parentDir === path;
+  // 收窄为本目录的新建状态（null = 新建流程不在本目录，无需二次判空）
+  const creatingHere = creatingEntry?.parentDir === path ? creatingEntry : null;
   const childIndent = indentStyle(depth + 1);
 
   return (
     <fieldset className="ft-children">
       {/* 内联新建临时节点：渲染在子条目顶部 */}
-      {isCreatingHere && creatingEntry !== null && (
+      {creatingHere !== null && (
         <InlineCreateInput
-          type={creatingEntry.type}
+          type={creatingHere.type}
           depth={depth + 1}
           onConfirm={(newName) => {
-            if (creatingEntry.type === 'file') {
-              void ops.createFile(path, newName);
-            } else {
-              void ops.createDir(path, newName);
-            }
+            void (creatingHere.type === 'file'
+              ? ops.createFile(path, newName)
+              : ops.createDir(path, newName));
           }}
           onCancel={() => useFileTreeStore.getState().cancelCreate()}
         />
       )}
-      {entries.length === 0 && !isCreatingHere ? (
+      {entries.length === 0 && creatingHere === null ? (
         <div className={isLoading ? 'ft-loading' : 'ft-empty'} style={childIndent}>
           {isLoading ? t('common.loading') : t('fileTree.emptyDir')}
         </div>

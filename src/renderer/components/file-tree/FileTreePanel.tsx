@@ -6,7 +6,7 @@
 // - 渲染顶部工具栏（新建文件 / 新建目录按钮）
 // - 渲染根节点（FileTreeNode 递归）
 // - 处理无激活会话 / workingDir 为空的状态
-// - 文件点击回调（打开 FileViewerDialog）
+// - 文件点击回调（打开右侧 FileViewerPanel）
 //
 // 设计：
 // - 容器组件：仅负责生命周期 + 状态分支，不参与节点渲染逻辑
@@ -82,14 +82,6 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
     setExpanded(rootPath, true);
     startCreate(rootPath, 'directory');
   }, [rootPath, setExpanded, startCreate]);
-
-  // 文件点击回调：打开文件查看器（右侧面板显示内容）
-  const handleOpenFile = useCallback(
-    (filePath: string) => {
-      openFile(filePath);
-    },
-    [openFile],
-  );
 
   // 无激活会话或 workingDir 为空
   if (workingDir === null) {
@@ -177,7 +169,7 @@ export function FileTreePanel({ workingDir }: FileTreePanelProps): ReactElement 
           name={basename(rootPath)}
           type="directory"
           depth={0}
-          onOpenFile={handleOpenFile}
+          onOpenFile={openFile}
         />
       </div>
     </div>
