@@ -7,8 +7,10 @@
 // - 提供查询 / 设置 mutation，自动失效缓存
 //
 // 注意：
-// - 修改遥测级别后需重启应用生效（Sentry 在启动时初始化，无法动态修改）
-// - UI 应在设置成功后提示用户重启
+// - 修改遥测级别后需重启应用生效（OpenTelemetry 在主进程启动时初始化，
+//   见 src/main/index.ts 的 initTelemetry 调用——off 时直接跳过初始化）
+// - UI 应在设置成功后提示用户重启（文案 common.telemetryUpdated 已含该提示）
+// - 浏览器模式（dev 预览）无 window.api：两个 hook 都需守卫，否则 render 期取属性抛错
 // ──────────────────────────────────────────────────────────────
 
 import type { TelemetryLevel } from '@code-agent/shared/renderer';
@@ -20,15 +22,25 @@ import { unwrap } from '@/lib/ipc';
 /** Query key */
 export const TELEMETRY_LEVEL_QUERY_KEY = ['telemetry-level'] as const;
 
+/** 浏览器模式（dev 预览）默认级别：不外发任何数据，与 off 语义一致 */
+const FALLBACK_LEVEL: TelemetryLevel = 'off';
+
+/** window.api 是否可用（浏览器模式 / preload 缺失时为 false） */
+function hasBridge(): boolean {
+  return typeof window !== 'undefined' && window.api !== undefined;
+}
+
 /**
  * 遥测级别查询 hook
  *
  * 调用 settings:getTelemetryLevel IPC 获取当前遥测级别。
+ * 浏览器模式返回 off（本项目的既定降级语义：无桥即不外发遥测）。
  */
 export function useTelemetryLevelQuery() {
   return useQuery({
     queryKey: TELEMETRY_LEVEL_QUERY_KEY,
     queryFn: async () => {
+      if (!hasBridge()) return FALLBACK_LEVEL;
       const response = await window.api.settings.getTelemetryLevel();
       return unwrap<{ level: TelemetryLevel }>(response).level;
     },
@@ -50,6 +62,9 @@ export function useSetTelemetryLevel() {
 
   return useMutation({
     mutationFn: async (level: TelemetryLevel) => {
+      // 无桥时直接抛：设置页的按钮应已禁用（由消费方按 hasBridge 判断），
+      // 这里兜住意外调用，给 onError 一个可读错误而非 TypeError
+      if (!hasBridge()) throw new Error('window.api unavailable');
       const response = await window.api.settings.setTelemetryLevel({ level });
       return unwrap<{ ok: boolean; level: TelemetryLevel }>(response);
     },

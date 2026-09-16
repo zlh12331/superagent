@@ -100,9 +100,9 @@ function PairingCard({
           <span className="text-muted-foreground text-2xs">{t('settings.remote.noEndpoint')}</span>
         ) : (
           <ul className="flex flex-col gap-0.5">
-            {status.addresses.map((endpoint) => (
-              <li key={endpoint} className="text-foreground font-mono text-2xs break-all">
-                {endpoint}
+            {status.addresses.map((address) => (
+              <li key={address} className="text-foreground font-mono text-2xs break-all">
+                {address}
               </li>
             ))}
           </ul>

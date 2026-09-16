@@ -182,6 +182,8 @@
       "resizeComposer": "拖拽调整输入框高度",
       "statsMessages": "消息数",
       "statsTokens": "Token",
+      "turnMetaTokens": " · {{count}} tokens",
+      "turnMetaDuration": " · {{seconds}}s",
       "messageTooLong": "消息过长（最多 {{max}} 字符）",
       "sendFailed": "发送失败，请重试",
       "attachmentLabel": "[附件: {{name}}]",
@@ -410,6 +412,7 @@
       "permAuto": "自动执行（auto）",
       "permAsk": "需审批（ask）",
       "shortcutUnbound": "未绑定",
+      "shortcutPressKeys": "请按下快捷键…",
       "aboutTagline": "你的桌面端 AI 编程助手",
       "aboutRuntime": "运行时版本",
       "aboutPlatform": "平台",
@@ -570,7 +573,8 @@
         "defaultZoom": "默认缩放",
         "defaultZoomHint": "固定视口下的预览缩放比例；自适应预设同样生效（真实页面缩放）",
         "strictSandbox": "严格沙箱（禁用预览页脚本）",
-        "strictSandboxHint": "阻止预览页执行 JavaScript：静态内容仍可看，依赖脚本的站点会显示不完整。预览已在独立沙箱会话中加载，严格模式是额外收紧。切换后立即重建预览"
+        "strictSandboxHint": "阻止预览页执行 JavaScript：静态内容仍可看，依赖脚本的站点会显示不完整。预览已在独立沙箱会话中加载，严格模式是额外收紧。切换后立即重建预览",
+        "strictApplyFailed": "严格沙箱未能即时生效，请重启应用后确认"
       },
       "rulesTitle": "规则（AGENTS.md）",
       "rulesHint": "项目根 AGENTS.md 为 Agent 行为准则（工程规范/命令/架构），Agent 回合加载",
@@ -607,6 +611,7 @@
       "imAllowedGroupsSave": "保存",
       "imAllowedGroupsSaved": "允许列表已保存",
       "imAllowedGroupsFailed": "允许列表保存失败",
+      "imAllowedGroupsLoadFailed": "允许列表读取失败，请重试后再编辑（避免覆盖已有配置）",
       "memoryClearConfirmDesc_other": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。",
       "memoryClearConfirmDesc_one": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。"
     },

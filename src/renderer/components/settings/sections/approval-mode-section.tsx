@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { TOOLS_LIST_QUERY_KEY, WHITELIST_ENTRIES_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
@@ -55,7 +55,7 @@ export function ApprovalModeSection(): ReactElement {
   const whitelistQuery = useQuery({
     queryKey: WHITELIST_ENTRIES_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { entries: [] as Array<{ toolName: string; pattern: string }> };
       }
       return unwrap(await window.api.whitelist.list());
@@ -66,7 +66,7 @@ export function ApprovalModeSection(): ReactElement {
   const toolsQuery = useQuery({
     queryKey: TOOLS_LIST_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { tools: [] as Array<{ name: string; permission: 'auto' | 'ask' }> };
       }
       return unwrap(await window.api.tool.list({ permission: undefined }));
@@ -81,12 +81,14 @@ export function ApprovalModeSection(): ReactElement {
   const addMutation = useMutation({
     mutationFn: async (entry: { toolName: string; pattern: string }) => {
       // 浏览器模式（dev 预览）无 window.api：本地空操作
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { ok: true };
       }
       return unwrap(await window.api.whitelist.add(entry));
     },
     onSuccess: () => {
+      // 只清空 pattern、保留 toolName：常见流程是「同一工具加多条 pattern」，
+      // 保留工具名可连续添加（清空会让「添加」按钮因 wlTool 为空而禁用，被迫重输）
       setWlPattern('');
       invalidateWhitelist();
     },
@@ -99,7 +101,7 @@ export function ApprovalModeSection(): ReactElement {
   const removeMutation = useMutation({
     mutationFn: async (entry: { toolName: string; pattern: string }) => {
       // 浏览器模式（dev 预览）无 window.api：本地空操作
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { ok: true };
       }
       return unwrap(await window.api.whitelist.remove(entry));
@@ -231,7 +233,9 @@ export function ApprovalModeSection(): ReactElement {
               variant="outline"
               size="sm"
               className="h-9 shrink-0 self-stretch"
-              disabled={addMutation.isPending || wlTool.trim() === '' || removeMutation.isPending}
+              // 只受「添加」自身的在途状态约束：此前误加 removeMutation.isPending，
+              // 导致删除任一条白名单时整行添加表单被锁死（复制粘贴残留）
+              disabled={addMutation.isPending || wlTool.trim() === ''}
               onClick={() =>
                 addMutation.mutate({ toolName: wlTool.trim(), pattern: wlPattern.trim() })
               }
@@ -284,9 +288,3 @@ export function ApprovalModeSection(): ReactElement {
     </div>
   );
 }
-
-/**
- * 用量统计区块：展示全部会话的 token 消耗汇总（总量 / 按模型 / 按日）
- *
- * 数据来源：session:getUsageSummary（token_usage 表聚合）。
- */

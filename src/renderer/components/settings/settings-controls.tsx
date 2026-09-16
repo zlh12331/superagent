@@ -1,12 +1,16 @@
 // src/renderer/components/settings/settings-controls.tsx
 // 设置分区通用控件集（对齐参考项目 superagent SettingsControls + 原型 .setting-row）
 // ──────────────────────────────────────────────────────────────
-// 提供 5 个布局控件：
+// 提供 4 个布局控件：
 // - SectionTitle  — 分区小标题（uppercase + letter-spacing）
 // - SettingRow    — 水平设置行（label 在左，控件在右，卡片底）
 // - ToggleRow     — 开关行（右侧 Switch）
 // - SegControl    — 分段控件（互斥选项切换，原型 .seg-control）
-// - SettingField  — 垂直堆叠设置字段（label 在上，控件在下）
+//
+// 注：此前头注释声称还有第 5 个 SettingField（垂直堆叠字段），但该控件从未实现
+// ——多处分区因此各自手写「Label + 控件」的垂直堆叠（见 approval-mode-section /
+// im-allowlist-field / prompt-section）。已删除该虚假条目；若后续需要统一该形态，
+// 应按需新增而不是照注释去找。
 // ──────────────────────────────────────────────────────────────
 
 import type { ReactElement, ReactNode } from 'react';
@@ -136,13 +140,25 @@ export interface SegControlProps {
  * 选中项 accent 底 + 深色文字，未选中浅底 + 次级文字。
  * 2026-09 迁移到 Radix ToggleGroup：获得方向键切换/roving tabindex/
  * ARIA toggle 语义（此前手写 aria-pressed 无 roving 导航）。
+ *
+ * **空串过滤（2026-09 审计修复）**：Radix `type="single"` 在点击**已选中**项时
+ * 会触发 `onItemDeactivate → setValue("")`，把空串透传给 onChange。各调用点收到
+ * "" 后普遍做 `Number(value)`，得到 `0` 并写库——曾导致
+ * - 文件树「默认展开层级」被写成 0 → 默认展开链彻底失效（无报错）
+ * - 编辑器「字号」被写成 0
+ * 且受控 value 变成 "0" 后无选项匹配，控件显示为「什么都没选」。
+ * 互斥语义下「取消选中」本就无意义（必须有且仅有一个值），故在此统一吞掉空串，
+ * 调用方无需各自防御。
  */
 export function SegControl({ value, options, onChange, className }: SegControlProps): ReactElement {
   return (
     <ToggleGroup
       type="single"
       value={value}
-      onValueChange={onChange}
+      onValueChange={(next) => {
+        // 空串 = 用户点了已选中项（Radix 反选语义）：保持原值不回调
+        if (next !== '') onChange(next);
+      }}
       className={cn(
         'flex min-w-0 flex-wrap gap-0 overflow-hidden rounded-md border border-border',
         className,

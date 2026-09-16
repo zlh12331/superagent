@@ -11,7 +11,7 @@ import type { ReactElement } from 'react';
 import { AsyncSection } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { RECENT_TURNS_QUERY_KEY } from '@/lib/query/keys';
 
 export function TurnsSection(): ReactElement {
@@ -28,7 +28,7 @@ export function TurnsSection(): ReactElement {
   } = useQuery({
     queryKey: RECENT_TURNS_QUERY_KEY,
     queryFn: async (): Promise<SessionRecentTurnsRes['turns']> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return [];
       }
       return unwrap<SessionRecentTurnsRes>(await window.api.session.getRecentTurns({ limit: 10 }))
@@ -72,8 +72,13 @@ export function TurnsSection(): ReactElement {
               </span>
               <span className="ml-2 shrink-0 text-muted-foreground">
                 {statusKey[turn.status] ?? turn.status}
-                {turn.totalTokens !== undefined ? ` · ${turn.totalTokens} tokens` : ''}
-                {turn.durationMs !== undefined ? ` · ${Math.round(turn.durationMs / 1000)}s` : ''}
+                {/* 单位走 i18n（此前用模板字面量拼 " tokens" / "s"，绕过 t()） */}
+                {turn.totalTokens !== undefined
+                  ? t('chat.turnMetaTokens', { count: turn.totalTokens })
+                  : ''}
+                {turn.durationMs !== undefined
+                  ? t('chat.turnMetaDuration', { seconds: Math.round(turn.durationMs / 1000) })
+                  : ''}
               </span>
             </li>
           ))}
@@ -82,9 +87,3 @@ export function TurnsSection(): ReactElement {
     </div>
   );
 }
-
-/**
- * 自定义模型区块：添加/删除运行时模型（持久化 + 注册 + 缓存失效）
- *
- * 数据来源：settings:listRuntimeModels / addRuntimeModel / removeRuntimeModel。
- */

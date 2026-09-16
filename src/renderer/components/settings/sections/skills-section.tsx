@@ -16,7 +16,7 @@ import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { ALL_SKILLS_QUERY_KEY, LEARNED_SKILLS_QUERY_KEY } from '@/lib/query/keys';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { SectionTitle, SettingRow } from '../settings-controls';
@@ -40,7 +40,7 @@ export function SkillsSection(): ReactElement {
   const learnedQuery = useQuery({
     queryKey: LEARNED_SKILLS_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { learned: [] as LearnedSkill[] };
       }
       return { learned: unwrap(await window.api.skill.listLearned()) };
@@ -51,7 +51,7 @@ export function SkillsSection(): ReactElement {
   const allSkillsQuery = useQuery({
     queryKey: ALL_SKILLS_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { skills: [] as LearnedSkill[] };
       }
       return unwrap(await window.api.skill.list());
@@ -66,7 +66,7 @@ export function SkillsSection(): ReactElement {
   // 学习技能 mutation（LLM 生成）
   const learnMutation = useMutation({
     mutationFn: async (rawInput: string) => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { name: '', description: '', prompt: '', replaced: false };
       }
       return unwrap(await window.api.skill.learn({ rawInput }));
@@ -84,7 +84,7 @@ export function SkillsSection(): ReactElement {
   // 移除技能 mutation
   const removeMutation = useMutation({
     mutationFn: async (name: string) => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { removed: true };
       }
       return unwrap(await window.api.skill.removeLearned({ name }));

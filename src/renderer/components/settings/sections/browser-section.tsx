@@ -11,8 +11,10 @@
 
 import { Globe } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { DEVICE_PRESETS, ZOOM_STEPS } from '@/lib/browser/presets';
+import { hasIpcBridge } from '@/lib/ipc';
 import type { BrowserDevicePreset } from '@/stores/persistent/settings-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
@@ -52,7 +54,14 @@ export function BrowserSection(): ReactElement {
   /** 严格模式切换：写穿透设置 + 通知主进程重建预览视图（即时生效） */
   const handleStrictChange = (checked: boolean): void => {
     updateBrowser({ strictSandbox: checked });
-    void window.api.browser.configure({ strictSandbox: checked }).catch(() => {});
+    // 浏览器模式（dev 预览）无 window.api：此前直接取 window.api.browser 会在
+    // 成员访问阶段同步抛 TypeError——`.catch()` 挂在尚未求值的表达式之后，兜不住
+    if (!hasIpcBridge()) return;
+    void window.api.browser.configure({ strictSandbox: checked }).catch(() => {
+      // 主进程应用失败：设置已先写入 SQLite（settings-store 写穿透），二者分叉。
+      // 不静默（此前 `.catch(() => {})` 完全吞掉），提示用户该开关可能未即时生效
+      toast.error(t('settings.browser.strictApplyFailed'));
+    });
   };
 
   return (

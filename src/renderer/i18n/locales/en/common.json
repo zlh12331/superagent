@@ -182,6 +182,8 @@
       "resizeComposer": "Drag to resize composer",
       "statsMessages": "Messages",
       "statsTokens": "Tokens",
+      "turnMetaTokens": " · {{count}} tokens",
+      "turnMetaDuration": " · {{seconds}}s",
       "messageTooLong": "Message too long (max {{max}} characters)",
       "sendFailed": "Failed to send, please retry",
       "attachmentLabel": "[Attachment: {{name}}]",
@@ -410,6 +412,7 @@
       "permAuto": "Auto (auto)",
       "permAsk": "Requires approval (ask)",
       "shortcutUnbound": "Unbound",
+      "shortcutPressKeys": "Press keys…",
       "aboutTagline": "Your AI coding agent on the desktop",
       "aboutRuntime": "Runtime versions",
       "aboutPlatform": "Platform",
@@ -570,7 +573,8 @@
         "defaultZoom": "Default zoom",
         "defaultZoomHint": "Real page zoom; applies to fixed presets and the responsive preset alike",
         "strictSandbox": "Strict sandbox (block preview scripts)",
-        "strictSandboxHint": "Stop previewed sites from running JavaScript: static content still renders, script-driven pages look incomplete. Previews already load in an isolated sandboxed session; strict mode tightens this further. The preview rebuilds immediately after toggling"
+        "strictSandboxHint": "Stop previewed sites from running JavaScript: static content still renders, script-driven pages look incomplete. Previews already load in an isolated sandboxed session; strict mode tightens this further. The preview rebuilds immediately after toggling",
+        "strictApplyFailed": "Strict sandbox did not take effect. Restart the app to confirm"
       },
       "rulesTitle": "Rules (AGENTS.md)",
       "rulesHint": "Project AGENTS.md defines agent behavior (engineering standards/commands/architecture)",
@@ -607,6 +611,7 @@
       "imAllowedGroupsSave": "Save",
       "imAllowedGroupsSaved": "Allowlist saved",
       "imAllowedGroupsFailed": "Failed to save allowlist",
+      "imAllowedGroupsLoadFailed": "Failed to load allowlist. Retry before editing to avoid overwriting existing entries.",
       "memoryClearConfirmDesc_one": "The only memory in this session will be cleared. This cannot be undone.",
       "memoryClearConfirmDesc_other": "All {{count}} memories in this session will be cleared. This cannot be undone."
     },

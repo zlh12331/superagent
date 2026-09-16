@@ -131,18 +131,6 @@
     "count": 1,
     "max": 16
   },
-  "src/renderer/components/settings/sections/about-section.tsx": {
-    "count": 1,
-    "max": 44
-  },
-  "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx": {
-    "count": 1,
-    "max": 40
-  },
-  "src/renderer/components/settings/sections/dialogs/model-config-fields.tsx": {
-    "count": 1,
-    "max": 16
-  },
   "src/renderer/dev/mock-api.ts": {
     "count": 1,
     "max": 17

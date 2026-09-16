@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { IM_CHANNELS_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { ImAllowlistField } from './im-allowlist-field';
@@ -34,7 +34,7 @@ export function ImChannelsSection(): ReactElement {
     queryKey: IM_CHANNELS_QUERY_KEY,
     queryFn: async () => {
       // 浏览器模式（dev 预览）无 window.api：静默空列表
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { channels: [] as ChannelListRes['channels'] };
       }
       try {
@@ -46,9 +46,14 @@ export function ImChannelsSection(): ReactElement {
     },
   });
   const channels = channelsData?.channels ?? [];
-  // 启动 mutation：成功后失效渠道列表
+
+  // 启动/停止渠道的状态类型别名（此前内联写法在本文件重复 8 次）
+  type ImChannelKind = ChannelListRes['channels'][number]['kind'];
+  /** 启动 mutation：成功后失效渠道列表 */
   const startMutation = useMutation({
-    mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
+    mutationFn: async (kind: ImChannelKind) => {
+      // 浏览器模式（dev 预览）无桥：抛可读错误交给 onError 提示
+      if (!hasIpcBridge()) throw new Error('window.api unavailable');
       const token = (tokenInputs[kind] ?? '').trim();
       unwrap(await window.api.im.start({ kind, token: token !== '' ? token : undefined }));
     },
@@ -64,7 +69,8 @@ export function ImChannelsSection(): ReactElement {
 
   // 停止 mutation：成功后失效渠道列表
   const stopMutation = useMutation({
-    mutationFn: async (kind: ChannelListRes['channels'][number]['kind']) => {
+    mutationFn: async (kind: ImChannelKind) => {
+      if (!hasIpcBridge()) throw new Error('window.api unavailable');
       unwrap(await window.api.im.stop({ kind }));
     },
     onSuccess: () => {
