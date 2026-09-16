@@ -93,7 +93,6 @@ describe('FileTreePanel', () => {
     expect(useFileTreeStore.getState().creatingEntry).toEqual({
       parentDir: ROOT,
       type: 'directory',
-      tempName: '',
     });
   });
 
@@ -105,7 +104,6 @@ describe('FileTreePanel', () => {
     expect(useFileTreeStore.getState().creatingEntry).toEqual({
       parentDir: ROOT,
       type: 'file',
-      tempName: '',
     });
   });
 

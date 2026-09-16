@@ -139,26 +139,12 @@ describe('useFileTreeStore', () => {
   });
 
   describe('内联新建', () => {
-    it('startCreate：创建临时节点（tempName 初始为空）', () => {
+    it('startCreate：创建临时节点（parentDir + type）', () => {
       useFileTreeStore.getState().startCreate('/proj/src', 'directory');
       expect(useFileTreeStore.getState().creatingEntry).toEqual({
         parentDir: '/proj/src',
         type: 'directory',
-        tempName: '',
       });
-    });
-
-    it('setCreatingName：更新临时名称', () => {
-      useFileTreeStore.getState().startCreate('/proj', 'file');
-      useFileTreeStore.getState().setCreatingName('new-file.ts');
-      expect(useFileTreeStore.getState().creatingEntry?.tempName).toBe('new-file.ts');
-    });
-
-    it('setCreatingName 无新建流程：不抛且状态不变', () => {
-      const before = useFileTreeStore.getState();
-      expect(() => useFileTreeStore.getState().setCreatingName('x')).not.toThrow();
-      expect(useFileTreeStore.getState().creatingEntry).toBeNull();
-      expect(useFileTreeStore.getState().creatingEntry).toBe(before.creatingEntry);
     });
 
     it('cancelCreate：清空新建状态', () => {

@@ -8,14 +8,15 @@
 // - 缓存已加载的目录条目（path -> FileEntry[]）
 // - 维护加载中目录集合（避免重复请求 + UI 骨架屏）
 // - 提供文件变更事件的增量更新（upsert/remove/rename）
-// - 维护新建/重命名的内联编辑状态（creatingEntry / renamingPath）
+// - 维护新建流程的内联编辑状态（creatingEntry；重命名已随 NodeMenu 移除）
 // - 维护操作中路径集合（pendingOps，用于禁用相关 UI 防止重复操作）
 //
 // 设计：
 // - 纯状态容器：不持有 IPC 订阅与请求逻辑（由 useFileTree / useFileTreeOps hook 负责）
 // - 扁平化缓存：entries Map 按「父目录路径 -> 子条目数组」组织，避免递归树结构序列化
 // - 排序约定：目录在前、文件在后；同类按名称升序（不区分大小写）
-// - 内联编辑：新建/重命名时先在 UI 显示临时节点（tempName），用户确认后再调 IPC 落盘
+// - 内联新建：在 UI 显示临时输入节点，用户确认后由 useFileTreeOps 调 IPC 落盘
+//   （输入值由 DOM input 直接持有，不进 store——tempName 曾为此设计但无消费者，已删）
 // - 不持久化：文件树状态随会话切换重置，重启后为空
 // ──────────────────────────────────────────────────────────────
 
@@ -33,8 +34,6 @@ export interface CreatingEntry {
   readonly parentDir: string;
   /** 新建类型：文件或目录 */
   readonly type: 'file' | 'directory';
-  /** 临时显示的名称（用户输入实时更新，初始为空字符串） */
-  readonly tempName: string;
 }
 
 /**
@@ -79,10 +78,8 @@ interface FileTreeState {
   readonly setLoading: (path: string, loading: boolean) => void;
 
   // ── 新建内联编辑方法 ────────────────────────────
-  /** 开始新建流程：在指定父目录下显示临时节点，tempName 初始为空 */
+  /** 开始新建流程：在指定父目录下显示临时节点 */
   readonly startCreate: (parentDir: string, type: 'file' | 'directory') => void;
-  /** 更新临时节点名称（用户输入时实时调用） */
-  readonly setCreatingName: (name: string) => void;
   /** 取消新建流程（用户按 Esc 或失焦时调用） */
   readonly cancelCreate: () => void;
 
@@ -235,14 +232,8 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
   // ── 新建内联编辑 ─────────────────────────────────
   startCreate: (parentDir, type) =>
     set(() => ({
-      creatingEntry: { parentDir, type, tempName: '' },
+      creatingEntry: { parentDir, type },
     })),
-
-  setCreatingName: (name) =>
-    set((state) => {
-      if (state.creatingEntry === null) return state;
-      return { creatingEntry: { ...state.creatingEntry, tempName: name } };
-    }),
 
   cancelCreate: () => set(() => ({ creatingEntry: null })),
 

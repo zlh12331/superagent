@@ -50,6 +50,10 @@ export function InlineCreateInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
+    // 输入框持有自己的按键语义，禁止冒泡到外层 treeitem：DirNode 对
+    // Enter/Space 调 toggleExpand + preventDefault——冒泡会把「提交新建」变成
+    // 「折叠目录」，空格则被吞掉（文件名合法字符无法输入）。实测复现后修复。
+    e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
       handledRef.current = true;

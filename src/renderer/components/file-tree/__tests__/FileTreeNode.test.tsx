@@ -88,6 +88,13 @@ describe('FileTreeNode · 目录节点', () => {
     expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
   });
 
+  it('键盘非激活键（字母）：不触发展开/折叠', () => {
+    useFileTreeStore.getState().setExpanded('/root', true);
+    renderDir();
+    fireEvent.keyDown(screen.getByRole('treeitem'), { key: 'a' });
+    expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
+  });
+
   it('已展开且无子条目：显示「空目录」占位', () => {
     useFileTreeStore.getState().setExpanded('/root', true);
     renderDir();
@@ -154,6 +161,39 @@ describe('FileTreeNode · 目录节点', () => {
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
     expect(useFileTreeStore.getState().creatingEntry).toBeNull();
     expect(mockCreateFile).not.toHaveBeenCalled();
+  });
+
+  it('异常：新建输入 Enter 提交不冒泡到 treeitem（目录展开状态不变）', async () => {
+    const store = useFileTreeStore.getState();
+    store.setExpanded('/root', true);
+    store.startCreate('/root', 'file');
+    renderDir();
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'new.ts' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(mockCreateFile).toHaveBeenCalledWith('/root', 'new.ts'));
+    // 输入框嵌套在 DirNode 的 treeitem 内：Enter 冒泡会命中 isActivateKey → toggleExpand
+    expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
+  });
+
+  it('异常：新建输入空格不冒泡到 treeitem（空格是文件名合法字符）', () => {
+    const store = useFileTreeStore.getState();
+    store.setExpanded('/root', true);
+    store.startCreate('/root', 'file');
+    renderDir();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ' ' });
+    // treeitem 对 Space 调 preventDefault + toggleExpand：冒泡会折叠目录并阻断空格输入
+    expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
+  });
+
+  it('异常：新建输入 Esc 取消不冒泡到 treeitem（不折叠目录）', () => {
+    const store = useFileTreeStore.getState();
+    store.setExpanded('/root', true);
+    store.startCreate('/root', 'file');
+    renderDir();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+    expect(useFileTreeStore.getState().creatingEntry).toBeNull();
+    expect(useFileTreeStore.getState().expandedPaths.has('/root')).toBe(true);
   });
 
   it('缩进：depth 决定 paddingLeft（depth*12+8）', () => {
