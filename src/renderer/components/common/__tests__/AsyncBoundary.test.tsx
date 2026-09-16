@@ -2,8 +2,8 @@
 // AsyncBoundary 渲染层单测：五态渲染 + 防闪烁 + 可操作错误 + a11y
 // 直接构造 AsyncView（discriminated union）驱动各状态，无需真实 query。
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AsyncView } from '@/hooks/use-async-view';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { AsyncBoundary } from '../AsyncBoundary';
@@ -99,5 +99,55 @@ describe('AsyncBoundary', () => {
     });
     expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /去配置/ })).toBeNull();
+  });
+
+  it('loading（默认延迟）：200ms 内不闪骨架屏，超时才显示', async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <AsyncBoundary
+          view={{ state: 'loading' } as AsyncView<string[]>}
+          skeleton={skeleton}
+          empty={empty}
+        >
+          {(data) => <div>{data.join(',')}</div>}
+        </AsyncBoundary>,
+      );
+      // 加载态容器已在（aria-busy/role=status），但延迟未到不出骨架屏
+      expect(screen.getByRole('status')).toBeTruthy();
+      expect(screen.queryByTestId('skeleton')).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(screen.getByTestId('skeleton')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('loading（延迟未到即卸载）：清理定时器，不产生卸载后 setState', async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, 'error');
+    try {
+      const { unmount } = render(
+        <AsyncBoundary
+          view={{ state: 'loading' } as AsyncView<string[]>}
+          skeleton={skeleton}
+          empty={empty}
+        >
+          {(data) => <div>{data.join(',')}</div>}
+        </AsyncBoundary>,
+      );
+      unmount();
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      // 定时器已清理 ⇒ 不再 setState，React 不会报卸载后更新警告
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

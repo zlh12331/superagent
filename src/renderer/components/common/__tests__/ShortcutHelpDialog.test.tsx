@@ -6,8 +6,8 @@
 // 故本测试的核心回归锚是：自定义键改动后，帮助表随之变化。
 // ──────────────────────────────────────────────
 
-import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -65,5 +65,17 @@ describe('ShortcutHelpDialog', () => {
     render(<ShortcutHelpDialog open onClose={() => {}} />);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeDefined();
+  });
+
+  it('关闭交互：Esc 触发 Radix onOpenChange(false) → 调 onClose（此前分支未覆盖）', async () => {
+    const onClose = vi.fn();
+    render(<ShortcutHelpDialog open onClose={onClose} />);
+    const dialog = screen.getByRole('dialog');
+
+    // Radix Dialog 监听容器上的 Escape 并回调 onOpenChange(false)
+    await act(async () => {
+      fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
