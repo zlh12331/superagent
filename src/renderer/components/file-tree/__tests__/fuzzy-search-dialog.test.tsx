@@ -17,6 +17,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { FuzzySearchDialog } from '../fuzzy-search-dialog';
 
+const { mockToastError } = vi.hoisted(() => ({ mockToastError: vi.fn() }));
+
+vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }));
+
 function renderDialog(overrides: Partial<Parameters<typeof FuzzySearchDialog>[0]> = {}) {
   const props = {
     open: true,
@@ -203,5 +207,54 @@ describe('FuzzySearchDialog', () => {
   it('关闭对话框（open=false）不渲染内容', () => {
     renderDialog({ open: false });
     expect(screen.queryByText('输入关键词搜索文件或会话')).not.toBeInTheDocument();
+  });
+
+  it('点击会话结果 → 切换激活会话 + onClose', async () => {
+    const props = renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '登录' } });
+
+    await waitFor(() => {
+      expect(document.querySelector('#fuzzy-search-results')?.textContent).toContain('修复登录页');
+    });
+    // 会话结果按钮（mark 拆分文本节点，getByText 不可用）
+    const sessionButton = [...document.querySelectorAll('#fuzzy-search-results button')].find((b) =>
+      b.textContent?.includes('登录'),
+    );
+    expect(sessionButton).toBeDefined();
+    fireEvent.click(sessionButton as HTMLElement);
+
+    expect(useActiveSessionStore.getState().activeSessionId).toBe('s2');
+    expect(props.onClose).toHaveBeenCalled();
+    expect(props.onSelect).not.toHaveBeenCalled();
+  });
+
+  it('键盘 ArrowUp：已在首项时不越界（仍选中第一个）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    const props = renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+
+    await waitFor(() => {
+      expect(document.querySelector('#fuzzy-search-results')?.textContent).toContain('App.tsx');
+    });
+    const input = screen.getByRole('textbox');
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(props.onSelect).toHaveBeenCalledWith('src/App.tsx');
+  });
+
+  it('文件搜索异常：提示失败且不崩溃', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    window.api.search = {
+      glob: vi.fn().mockRejectedValue(new Error('ipc down')),
+      grep: vi.fn(),
+    } as never;
+    renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+
+    await waitFor(() => expect(mockToastError).toHaveBeenCalled());
   });
 });

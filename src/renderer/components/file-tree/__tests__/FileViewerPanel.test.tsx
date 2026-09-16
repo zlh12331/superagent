@@ -13,10 +13,11 @@
 // 完整链路进入测试（此前若 mock 掉 use-file-write 会连失效行为一起 mock 掉）。
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { i18n } from '@/i18n';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
@@ -26,6 +27,12 @@ const { getHighlighterMock, ensureLangLoadedMock, writeMock } = vi.hoisted(() =>
   getHighlighterMock: vi.fn(),
   ensureLangLoadedMock: vi.fn(),
   writeMock: vi.fn(),
+}));
+// 命令式确认（退出编辑的脏数据保护）用 mock 驱动：DialogHost 不在本测试的渲染树内
+const { mockConfirm } = vi.hoisted(() => ({ mockConfirm: vi.fn(async () => true) }));
+vi.mock('@/stores/transient/confirm-dialog-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/stores/transient/confirm-dialog-store')>()),
+  confirm: mockConfirm,
 }));
 // shiki 高亮是重依赖（wasm/语言包），单测替换 getHighlighter/ensureLangLoaded；
 // 其余导出（normalizeLang 等纯函数）保留真实实现——file-viewer-utils 也依赖本模块
@@ -220,6 +227,119 @@ describe('FileViewerPanel', () => {
       });
 
       expect(writeMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('内容区状态与编辑态（覆盖此前未测分支）', () => {
+    it('加载失败：渲染失败提示 + 原始错误消息', async () => {
+      window.api.file = {
+        ...(window.api.file ?? {}),
+        read: vi.fn().mockResolvedValue({
+          error: { code: 'FS_READ_FAILED', message: 'EACCES: permission denied' },
+        }),
+      } as never;
+      openViewer('C:\\proj\\src\\a.ts');
+      render(createWrapper());
+
+      expect(await screen.findByText(i18n.t('common.fileLoadFailed'))).toBeDefined();
+      expect(screen.getByText(/EACCES/)).toBeDefined();
+    });
+
+    it('空文件：查看态显示空内容提示', async () => {
+      diskContent = '';
+      openViewer('C:\\proj\\empty.txt');
+      render(createWrapper());
+
+      expect(await screen.findByText(i18n.t('common.emptyFile'))).toBeDefined();
+      // 空内容 → 复制按钮禁用
+      expect(screen.getByLabelText(i18n.t('fileViewer.copyContent'))).toBeDisabled();
+    });
+
+    it('编辑态 + 空内容：显示编辑态空文案（空内容分支优先于编辑态分支）', async () => {
+      diskContent = '';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\empty.txt',
+        editMode: true,
+        originalContent: '',
+        editedContent: '',
+        isDirty: false,
+      });
+      const { container } = render(createWrapper());
+
+      expect(await screen.findByText(i18n.t('common.emptyFileEdit'))).toBeDefined();
+      // 分派优先级固定：空内容走占位文案，不渲染编辑器
+      expect(container.querySelector('textarea')).toBeNull();
+    });
+
+    it('编辑态 + 有内容：渲染 textarea，且非 dirty 时保存禁用、复制可用', async () => {
+      diskContent = 'hello';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'hello',
+        editedContent: 'hello',
+        isDirty: false,
+      });
+      const { container } = render(createWrapper());
+
+      expect(await screen.findByText('hello')).toBeDefined();
+      expect(container.querySelector('textarea')).not.toBeNull();
+      // 非 dirty → 保存按钮禁用（无可保存修改）
+      expect(screen.getByLabelText(i18n.t('common.save'))).toBeDisabled();
+      // 有内容 → 复制可用
+      expect(screen.getByLabelText(i18n.t('fileViewer.copyContent'))).toBeEnabled();
+    });
+
+    it('退出编辑（非 dirty）：直接退出，不弹确认', () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        isDirty: false,
+      });
+      render(createWrapper());
+
+      fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.switchToPreview')));
+
+      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(useFileViewerStore.getState().editMode).toBe(false);
+    });
+
+    it('退出编辑（脏 + 取消确认）：留在编辑态（不丢弃未保存修改）', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        isDirty: true,
+        originalContent: 'x',
+        editedContent: 'y',
+      });
+      mockConfirm.mockResolvedValueOnce(false);
+      render(createWrapper());
+
+      fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.switchToPreview')));
+
+      await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+      expect(useFileViewerStore.getState().editMode).toBe(true);
+    });
+
+    it('退出编辑（脏 + 确认）：退出编辑态', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        isDirty: true,
+        originalContent: 'x',
+        editedContent: 'y',
+      });
+      mockConfirm.mockResolvedValueOnce(true);
+      render(createWrapper());
+
+      fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.switchToPreview')));
+
+      await waitFor(() => expect(useFileViewerStore.getState().editMode).toBe(false));
     });
   });
 });
