@@ -1,4 +1,4 @@
-// src/renderer/components/dev/__tests__/browser-geometry.test.ts
+// src/renderer/components/browser/__tests__/browser-geometry.test.ts
 // 浏览器预览几何纯函数单测：宿主占位区 + 设备预设 + 缩放 → 视图边界
 //
 // 关键语义：
@@ -93,5 +93,57 @@ describe('computeViewportLayout', () => {
     });
     expect(layout.rect).toEqual(HOST);
     expect(layout.zoomFactor).toBe(2);
+  });
+
+  // ── 契约守卫：输出必须满足 BrowserRectSchema（宽高 positive） ──
+  // 签名收的是裸 number，设备宽高为 0/负数（如宽高输入框被清空）时，
+  // 直接下发会被 IPC 侧 zod 拒绝且失败被静默吞掉，故按「无有效视口」隐藏。
+
+  it('设备宽为 0（输入框被清空）：rect null，zoomFactor 仍回传', () => {
+    expect(
+      computeViewportLayout({
+        hostRect: HOST,
+        preset: 'mobile',
+        deviceWidth: 0,
+        deviceHeight: 667,
+        zoom: 100,
+      }),
+    ).toEqual({ rect: null, zoomFactor: 1 });
+  });
+
+  it('设备高为 0：rect null', () => {
+    expect(
+      computeViewportLayout({
+        hostRect: HOST,
+        preset: 'mobile',
+        deviceWidth: 375,
+        deviceHeight: 0,
+        zoom: 100,
+      }),
+    ).toEqual({ rect: null, zoomFactor: 1 });
+  });
+
+  it('设备宽为负数：rect null（不产出违反 schema 的负宽度）', () => {
+    expect(
+      computeViewportLayout({
+        hostRect: HOST,
+        preset: 'desktop',
+        deviceWidth: -1920,
+        deviceHeight: 1080,
+        zoom: 100,
+      }),
+    ).toEqual({ rect: null, zoomFactor: 1 });
+  });
+
+  it('缩放后不足 1px：取整为 0 → rect null', () => {
+    expect(
+      computeViewportLayout({
+        hostRect: HOST,
+        preset: 'mobile',
+        deviceWidth: 0.4,
+        deviceHeight: 667,
+        zoom: 50,
+      }),
+    ).toEqual({ rect: null, zoomFactor: 0.5 });
   });
 });
