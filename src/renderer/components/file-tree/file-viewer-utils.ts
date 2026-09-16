@@ -3,6 +3,7 @@
 // ──────────────────────────────
 // 拆分背景：源组件 427 行（拆分时名 FileViewerDialog），纯函数与组件混合，按职责提取
 import { normalizeLang } from '@/lib/highlight';
+import { fileExtension } from '@/lib/utils';
 
 const EXT_TO_LANG: Readonly<Record<string, string>> = {
   ts: 'typescript',
@@ -37,16 +38,15 @@ const EXT_TO_LANG: Readonly<Record<string, string>> = {
 /**
  * 从文件路径推断 shiki 语言 ID
  *
- * 取最后一个 . 后的扩展名，转小写后查表；未命中时返回 'text'。
- * 无扩展名或未知扩展名 → 'text'（不高亮，但保留 pre 格式）。
+ * 取扩展名（单一真源 lib/utils.fileExtension），查表后交 normalizeLang 规范化；
+ * 未命中时把扩展名原样交给 normalizeLang（受支持语言可直通，如 toml），
+ * 最终未知一律回落 'text'（不高亮，但保留 pre 格式）。
  */
 
 export function detectLangFromPath(filePath: string): string {
-  const lastDot = filePath.lastIndexOf('.');
-  if (lastDot === -1) return 'text';
-  const ext = filePath.slice(lastDot + 1).toLowerCase();
-  const raw = EXT_TO_LANG[ext] ?? ext;
-  return normalizeLang(raw);
+  const ext = fileExtension(filePath);
+  if (ext === '') return 'text';
+  return normalizeLang(EXT_TO_LANG[ext] ?? ext);
 }
 
 /**

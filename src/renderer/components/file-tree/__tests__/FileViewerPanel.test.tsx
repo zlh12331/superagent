@@ -192,6 +192,37 @@ describe('FileViewerPanel', () => {
       expect(toastMocks.toast.success).toHaveBeenCalled();
     });
 
+    it('边界：编辑缓冲多次变化后 requestSave → 写入**最后一次**内容（桥接不捕获过期闭包）', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'v0',
+        editedContent: 'v0',
+        isDirty: false,
+      });
+      render(createWrapper());
+
+      // 模拟连续编辑：注册生命周期不应随内容变化而抖动，
+      // 且快捷键触发时必须用最新缓冲（保存处理器经 ref 读最新闭包）
+      await act(async () => {
+        useFileViewerStore.getState().setEditedContent('v1');
+      });
+      await act(async () => {
+        useFileViewerStore.getState().setEditedContent('v2');
+      });
+      await act(async () => {
+        useFileViewerStore.getState().setEditedContent('v3-final');
+      });
+
+      await act(async () => {
+        useFileViewerStore.getState().requestSave();
+      });
+
+      await waitFor(() => expect(writeMock).toHaveBeenCalledTimes(1));
+      expect(writeMock).toHaveBeenCalledWith(expect.objectContaining({ content: 'v3-final' }));
+    });
+
     it('保存后缓存失效：回读磁盘新内容（真实失效链）', async () => {
       useFileViewerStore.setState({
         open: true,
@@ -312,6 +343,30 @@ describe('FileViewerPanel', () => {
       expect(screen.getByLabelText(i18n.t('common.save'))).toBeDisabled();
       // 有内容 → 复制可用
       expect(screen.getByLabelText(i18n.t('fileViewer.copyContent'))).toBeEnabled();
+    });
+
+    it('标题栏未保存标记：dirty 时显示，非 dirty 时不显示', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'old',
+        editedContent: 'old',
+        isDirty: false,
+      });
+      const { container } = render(createWrapper());
+
+      // 非 dirty：无未保存点
+      await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
+      expect(container.querySelector('.file-viewer-dirty-dot')).toBeNull();
+
+      // 编辑后 dirty → 出现未保存点（并带 title 提示）
+      await act(async () => {
+        useFileViewerStore.getState().setEditedContent('changed');
+      });
+      const dot = container.querySelector('.file-viewer-dirty-dot');
+      expect(dot).not.toBeNull();
+      expect(dot?.getAttribute('title')).toBe(i18n.t('fileViewer.unsaved'));
     });
 
     it('退出编辑（非 dirty）：直接退出，不弹确认', () => {

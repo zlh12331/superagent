@@ -62,8 +62,8 @@ export function InlineCreateInput({
     // Enter/Space 调 toggleExpand + preventDefault——冒泡会把「提交新建」变成
     // 「折叠目录」，空格则被吞掉（文件名合法字符无法输入）。实测复现后修复。
     e.stopPropagation();
-    // 已处置（Esc 取消或上次 Enter 已提交）后不再响应按键：
-    // 既避免连按 Enter 重复落盘，也避免「Esc 取消后按 Enter 又把文件建出来」
+    // 本次输入已结清则忽略后续按键：主风险是**连按 Enter 重复落盘**
+    // （第二次会以 EEXIST 失败并弹错），Esc 后同理不再响应。
     if (handledRef.current) return;
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -77,7 +77,10 @@ export function InlineCreateInput({
   };
 
   const handleBlur = (): void => {
-    // 键盘已处置：消费掉闩（复位而非继续置位），使后续失焦提交仍可用
+    // 键盘已结清：消费掉闩并复位（Enter/Esc 后紧跟的失焦不得二次提交），
+    // 复位而非保持置位——否则本组件若未被父级卸载，后续按键会被永久吞掉。
+    // 反例（实测复现）：下拉菜单关闭会先派发一次 ref 尚未接上的失焦，
+    // 若在失焦处置位，闩会卡死致 Enter 完全失效。
     if (handledRef.current) {
       handledRef.current = false;
       return;

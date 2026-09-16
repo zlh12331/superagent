@@ -118,7 +118,7 @@ describe('useFileGlobSearch', () => {
       expect(result.current).toEqual(['/proj/src/new.ts']);
     });
 
-    it('卸载后响应晚到：丢弃（不产生卸载后 setState）', async () => {
+    it('卸载后成功响应晚到：丢弃（不再发起请求、不产生卸载后 setState）', async () => {
       let resolveGlob!: (value: unknown) => void;
       const glob = vi.fn(
         () =>
@@ -127,6 +127,10 @@ describe('useFileGlobSearch', () => {
           }),
       );
       window.api.search = { glob } as never;
+      // 卸载后 setState 在 React 19 已无警告，故此路径的**可观测**回归信号是
+      // 「cancelled 守卫是否生效」——用错误分支验证（见下一个用例）；
+      // 本用例锁定成功分支不再触发任何新请求。
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       const { unmount } = renderHook(() => useFileGlobSearch(makeOptions()));
       await flushDebounce();
@@ -137,8 +141,35 @@ describe('useFileGlobSearch', () => {
       await act(async () => {
         await Promise.resolve();
       });
-      // 无断言目标（结果已随卸载丢弃）；此处断言无异常抛出/无 React 警告即达成
+
       expect(glob).toHaveBeenCalledTimes(1);
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('卸载后失败响应晚到：onError 不被触发（cancelled 守卫覆盖错误分支）', async () => {
+      let rejectGlob!: (reason: unknown) => void;
+      const onError = vi.fn<() => void>();
+      window.api.search = {
+        glob: vi.fn(
+          () =>
+            new Promise((_resolve, reject) => {
+              rejectGlob = reject;
+            }),
+        ),
+      } as never;
+
+      const { unmount } = renderHook(() => useFileGlobSearch(makeOptions({ onError })));
+      await flushDebounce();
+
+      unmount();
+      rejectGlob(new Error('late failure'));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // 关键断言：卸载后的失败不得回调 onError（否则会弹一个已消失界面的 toast）
+      expect(onError).not.toHaveBeenCalled();
     });
 
     it('提交后搜索被禁用（对话框关闭）：在途响应丢弃且结果清空', async () => {

@@ -401,4 +401,47 @@ describe('FuzzySearchDialog', () => {
     // 唯一结果即高亮行：Enter 必须确认它（读原始越界下标会静默失败）
     expect(props.onSelect).toHaveBeenCalledWith('src/AppShell.tsx');
   });
+
+  it('键盘导航：选中项变化后自动滚动到可见区域（长列表不依赖用户手滚）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    const scrollSpy = vi.mocked(window.HTMLElement.prototype.scrollIntoView);
+    scrollSpy.mockClear();
+    renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll('#fuzzy-search-results [role="option"]').length,
+      ).toBeGreaterThan(0),
+    );
+    scrollSpy.mockClear();
+
+    // 下移选中 → 目标行滚动到可见（scrollIntoView block:'nearest'）
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' });
+
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('边界：无结果时不触发滚动（空列表守卫，不抛错）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    const scrollSpy = vi.mocked(window.HTMLElement.prototype.scrollIntoView);
+    renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'zzz-无匹配' } });
+
+    await waitFor(() =>
+      expect(document.querySelector('#fuzzy-search-results')?.textContent).toContain(
+        i18n.t('fileTree.fuzzySearch.noResults'),
+      ),
+    );
+    scrollSpy.mockClear();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
 });

@@ -45,3 +45,28 @@ export function basename(path: string): string {
   const idx = Math.max(stripped.lastIndexOf('/'), stripped.lastIndexOf('\\'));
   return idx === -1 ? stripped : stripped.slice(idx + 1);
 }
+
+/**
+ * 取扩展名（不含点，已转小写），无点返回空串
+ *
+ * 收敛动机：渲染层有 2 份相同实现——`file-viewer-utils.detectLangFromPath`
+ * （决定拿什么语言高亮）与 `file-icon`（决定用什么图标配色），两处各自的
+ * 「取最后一个点之后、转小写」口径必须一致，否则同一个文件会出现
+ * 「高亮按 typescript、图标按 text」这类不对称。
+ *
+ * 入参可以是文件名或完整路径：本函数**只按最后一个点切分，不剥目录**
+ * （与两处原实现逐位一致）。目录名含点时返回的片段会横跨目录与文件两部分，
+ * 后果可控——该片段必然不是受支持语言/图标扩展名，下游回落默认值。
+ *
+ * 语义示例：
+ * - `'a.ts'` → `'ts'`；`'A.TS'` → `'ts'`（大小写不敏感）
+ * - `'Makefile'` → `''`（无点）
+ * - `'.env'` → `'env'`（点文件按「点在位置 0」切分）
+ * - `'a.'` → `''`（尾点后为空）
+ * - `''` → `''`
+ */
+export function fileExtension(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  const dotIndex = lower.lastIndexOf('.');
+  return dotIndex >= 0 ? lower.slice(dotIndex + 1) : '';
+}

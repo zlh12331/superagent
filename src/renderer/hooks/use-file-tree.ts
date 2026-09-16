@@ -296,13 +296,26 @@ async function refreshExpandedDirs(rootPath: string): Promise<number> {
  * 计算父目录路径（兼容 Windows 反斜杠与 POSIX 正斜杠）
  *
  * 不依赖 node:path（渲染层无 Node API），手写实现。
- * 用于从 file:watch:event 的 path 字段反推父目录。
+ * 用于从 file:watch:event 的 path 字段反推父目录（作为 store 的 entries 键）。
+ *
+ * 与 lib/file-search.extractDir 的区别（勿合并）：
+ * - extractDir 面向**展示**（副标题），会把反斜杠统一成正斜杠、根级返回空串；
+ * - 本函数面向**store 键匹配**，必须保留原分隔符与根形态，否则与 file:list
+ *   用 workingDir 建立的键不一致，增量更新会静默落空。
+ *
+ * 边界（均为 store 键匹配正确性所需）：
+ * - `/a.ts` → `/`：根级文件的父目录是根分隔符本身
+ * - `C:\a.ts` → `C:\`：盘符根保留尾分隔符（返回 `C:` 会与 workingDir 键 `C:\` 失配）
+ * - `C:` → `C:`、`a.ts` → `a.ts`：无分隔符时原样返回（调用方保证传入绝对路径）
+ * - 尾部分隔符未做去重归一（watcher 事件路径不带尾分隔符），不属本函数职责
  */
 function dirname(path: string): string {
-  // 同时查找最后出现的 \ 和 /，取较大者作为分隔符位置
-  const lastSlash = path.lastIndexOf('/');
-  const lastBackslash = path.lastIndexOf('\\');
-  const idx = Math.max(lastSlash, lastBackslash);
-  if (idx <= 0) return path; // 无分隔符或根路径（如 'C:'）
-  return path.slice(0, idx);
+  const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  // 无分隔符（如 'C:'）：原样返回
+  if (idx < 0) return path;
+  const parent = path.slice(0, idx);
+  // 分隔符在位置 0（根级文件）或 parent 仅剩盘符（Windows 盘根）：
+  // 父目录就是「分隔符前的部分 + 该分隔符」，保留根形态
+  if (parent === '' || /^[A-Za-z]:$/.test(parent)) return path.slice(0, idx + 1);
+  return parent;
 }

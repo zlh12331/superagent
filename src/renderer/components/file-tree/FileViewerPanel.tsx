@@ -71,8 +71,8 @@ export function FileViewerPanel(): ReactElement {
   // IPC 数据到达后同步到 store
   useEffect(() => {
     if (data !== undefined) {
-      // 仅在 originalContent 为空或与当前 data.content 不同时同步，
-      // 避免编辑态时 useQuery 后台刷新覆盖用户未保存的修改
+      // 有未保存修改（isDirty）时不同步：useQuery 后台刷新（缓存失效/重取）
+      // 不得覆盖用户正在编辑的内容。非编辑态下 isDirty 恒为 false，故照常同步。
       if (!isDirty) {
         setLoadedContent(data.content);
       }
@@ -89,7 +89,8 @@ export function FileViewerPanel(): ReactElement {
     }
     // 大文件降级（2026-08 性能审计）：shiki 整文件 tokenize 在大文件上主线程卡顿
     // （2MB 上限内仍可近 2 万行）；超过阈值跳过高亮渲染纯文本，保 UI 流畅
-    if (displayContent.split('\n').length > MAX_HIGHLIGHT_LINES) {
+    // （行数口径走 lineCount 单一真源，勿在此内联 split）
+    if (lineCount(displayContent) > MAX_HIGHLIGHT_LINES) {
       setHtml(null);
       return;
     }
@@ -136,20 +137,31 @@ export function FileViewerPanel(): ReactElement {
     }
   };
 
-  // 全局 Ctrl+S 桥接：编辑态打开时把 handleSave 注册到 file-viewer-store，
+  // 保存逻辑经 ref 暴露给全局快捷键，使「注册生命周期」与「回调身份」解耦：
+  // - 注册只在编辑态开关变化时发生（此前依赖 handleSave 身份，而它随每次
+  //   编辑缓冲变化 → 每敲一个字都要注销+重注册一次，纯属无效抖动）
+  // - 回调内读 ref，故始终调用最新闭包（不会捕获过期状态）
+  // 这样也无需依赖「React Compiler 是否缓存了 handleSave」这一隐式前提。
+  const saveHandlerRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    saveHandlerRef.current = () => {
+      void handleSave();
+    };
+  });
+
+  // 全局 Ctrl+S 桥接：编辑态打开时把保存处理器注册到 file-viewer-store，
   // AppShell 的全局快捷键（settings.shortcuts.saveFile，可自定义）→ requestSave() 触发；
-  // 关闭/退出编辑态/卸载时注销，避免无查看器时快捷键误触。
+  // 退出编辑态/关闭/卸载时注销，避免无查看器时快捷键误触。
   useEffect(() => {
     if (!editMode || !open) {
       useFileViewerStore.getState().registerSaveHandler(null);
       return undefined;
     }
     useFileViewerStore.getState().registerSaveHandler(() => {
-      void handleSave();
+      saveHandlerRef.current();
     });
     return () => useFileViewerStore.getState().registerSaveHandler(null);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler 自动缓存 handleSave（依赖不变时引用稳定），无需 useCallback；未缓存时重复注册仅低效不错误
-  }, [editMode, open, handleSave]);
+  }, [editMode, open]);
 
   // textarea ref（用于滚动同步）
   const textareaRef = useRef<HTMLTextAreaElement>(null);

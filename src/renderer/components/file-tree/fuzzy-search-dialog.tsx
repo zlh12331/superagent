@@ -352,7 +352,7 @@ export function FuzzySearchDialog({
                 <ResultRow
                   {...shared}
                   key={`file-${item.path}`}
-                  icon={<FileIcon name={item.title} isFolder={false} />}
+                  icon={<FileIcon name={item.title} />}
                   title={highlightMatch(item.title, query)}
                   subtitle={extractDir(item.path) || null}
                   monospace

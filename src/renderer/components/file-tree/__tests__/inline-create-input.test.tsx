@@ -81,6 +81,26 @@ describe('InlineCreateInput', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('异常：连按两次 Enter 只提交一次（防止重复落盘 EEXIST）', () => {
+    const { input, onConfirm } = setup();
+    fireEvent.change(input, { target: { value: 'a.ts' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith('a.ts');
+  });
+
+  it('异常：Esc 取消后（未失焦）再按 Enter 不提交', () => {
+    const { input, onConfirm, onCancel } = setup();
+    fireEvent.change(input, { target: { value: 'a.ts' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    // 取消后不得因后续 Enter 又把条目建出来
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it('异常：Esc + 失焦 + 再次 Enter 后失焦，仍只提交一次', () => {
     const { input, onConfirm, onCancel } = setup();
     fireEvent.change(input, { target: { value: 'c.ts' } });

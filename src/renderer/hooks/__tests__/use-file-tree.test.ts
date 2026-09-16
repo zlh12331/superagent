@@ -149,6 +149,47 @@ describe('useFileTree 数据生命周期', () => {
     expect(list).toHaveBeenLastCalledWith({ path: ROOT, depth: 1, includeHidden: false });
   });
 
+  it('异常：根目录下的文件（父目录即根）→ 重载根而非把文件路径当目录', async () => {
+    // 工作目录为文件系统根：根级文件的父目录应解析为 '/'，
+    // 此前 dirname 的 idx<=0 分支把 '/a.ts' 原样返回 → 会对「文件」调 list
+    // 并按文件路径查 entries（键不存在，增量更新静默失效）。
+    const { watchHandlers, list, watchStart } = setupApi();
+    list.mockResolvedValue({ data: { entries: [] } });
+    watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
+    renderHook(() => useFileTree('/'));
+    await flushAsync();
+    list.mockClear();
+
+    await act(async () => {
+      watchHandlers.forEach((h) => {
+        h({ type: 'create', path: '/newfile.ts', watcherId: 'w1' });
+      });
+    });
+
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    expect(list).toHaveBeenCalledWith({ path: '/', depth: 1, includeHidden: false });
+  });
+
+  it('异常：Windows 盘根下的文件 → 父目录保留尾分隔符（C:\\ 而非 C:）', async () => {
+    // workingDir='C:\' 时 store 键是 'C:\'；若 dirname 返回 'C:' 则键失配，
+    // 重载写不进 entries、删除也不会命中
+    const { watchHandlers, list, watchStart } = setupApi();
+    list.mockResolvedValue({ data: { entries: [] } });
+    watchStart.mockResolvedValue({ data: { watcherId: 'w1' } });
+    renderHook(() => useFileTree('C:\\'));
+    await flushAsync();
+    list.mockClear();
+
+    await act(async () => {
+      watchHandlers.forEach((h) => {
+        h({ type: 'create', path: 'C:\\newfile.ts', watcherId: 'w1' });
+      });
+    });
+
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    expect(list).toHaveBeenCalledWith({ path: 'C:\\', depth: 1, includeHidden: false });
+  });
+
   it('watch delete：removeEntry 增量移除（不触发重载）', async () => {
     const { watchHandlers, list, watchStart } = setupApi();
     list.mockResolvedValue({ data: { entries: [entry('a.ts'), entry('b.txt')] } });
