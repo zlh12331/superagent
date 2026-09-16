@@ -11,6 +11,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { type RefObject, useEffect } from 'react';
+import { hasIpcBridge } from '@/lib/ipc';
 import type { BrowserDevicePreset } from '@/stores/persistent/settings-store';
 import { useConfirmDialogStore } from '@/stores/transient/confirm-dialog-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -53,6 +54,9 @@ export function useBrowserViewport(params: UseBrowserViewportParams): void {
   const occluded = overlayOpen || confirmOpen;
 
   useEffect(() => {
+    // 无桥（浏览器模式 / preload 缺失）时 window.api 成员访问即抛 TypeError，
+    // 后续 .catch 兜不住（lib/ipc.ts hasIpcBridge 说明），故整段跳过。
+    if (!hasIpcBridge()) return;
     const push = (): void => {
       const layout = computeViewportLayout({
         hostRect: measureHost(hostRef),
@@ -86,15 +90,17 @@ export function useBrowserViewport(params: UseBrowserViewportParams): void {
   // 变化（缩放/预设/尺寸/遮挡）都会先推一次 hide 再推新状态——原生视图层
   // 会收到多余的「先隐后显」对，与「仅卸载时隐藏」的语义不符。
   useEffect(() => {
+    // cleanup 内同样不能裸访问 window.api：React 卸载流程中抛错会中断清理
+    if (!hasIpcBridge()) return;
+    const api = window.api.browser;
     return () => {
-      void window.api.browser
-        .setViewport({ rect: null, visible: false, zoomFactor: 1 })
-        .catch(() => {});
+      void api.setViewport({ rect: null, visible: false, zoomFactor: 1 }).catch(() => {});
     };
   }, []);
 
   // 严格模式同步（服务侧与当前值一致时幂等 no-op，不重建视图）
   useEffect(() => {
+    if (!hasIpcBridge()) return;
     void window.api.browser.configure({ strictSandbox }).catch(() => {});
   }, [strictSandbox]);
 }

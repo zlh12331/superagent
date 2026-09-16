@@ -11,7 +11,8 @@
 // - 纯只读面板，无写操作（日志由 electron-log 写入文件）
 // - 日志行按级别着色（error 红 / warn 琥珀 / info 默认 / debug 灰）
 // - 等宽字体展示日志文本，行级着色而非整行背景（降低视觉噪音）
-// - 折叠态由 DevPanel 控制是否启用查询（enabled 参数）
+// - enabled 由 DevPanel 按**当前可见 tab** 传入（仅 dev/logs 子页启用查询，切走
+//   即停，省下无谓 IPC）——不是「折叠态」控制
 // - 级别/行数用分段控件（ToggleGroup）而非下拉：与面板内其他分段控件同款，
 //   窄面板下选项直接可见
 // ──────────────────────────────────────────────────────────────
@@ -23,7 +24,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useLogsReadQuery } from '@/hooks/use-system';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** 日志级别过滤选项 */
@@ -45,7 +47,7 @@ const LEVEL_LABELS: Record<Exclude<LogLevelFilter, 'all'>, string> = {
 };
 
 interface LogsPanelProps {
-  /** 是否启用查询（DevPanel 折叠时传 false 节省 IPC） */
+  /** 是否启用查询（DevPanel 在当前 tab 非 logs 时传 false 节省 IPC） */
   readonly enabled?: boolean;
   /** 自定义容器类名 */
   readonly className?: string;
@@ -58,7 +60,7 @@ interface LogsPanelProps {
  *
  * @example
  * ```tsx
- * <LogsPanel enabled={isDevPanelExpanded} />
+ * <LogsPanel enabled={activeTab === 'dev' && devSubTab === 'logs'} />
  * ```
  */
 export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactElement {
@@ -185,9 +187,11 @@ interface LogsBodyProps {
  */
 function LogsBody({ isLoading, error, data }: LogsBodyProps): ReactElement {
   const { t } = useTranslation();
+  // 错误文案统一经 unwrapErrorMessage 解析错误码（与其余面板一致）
+  const { getErrorMessage } = useErrorMessage();
   if (isLoading) return <LogsSkeleton />;
   if (error !== null) {
-    return <ErrorHint message={error instanceof Error ? error.message : String(error)} />;
+    return <ErrorHint message={unwrapErrorMessage(error as Error, getErrorMessage)} />;
   }
   if (data === undefined) {
     return <ErrorHint message={t('common.logsEmpty')} />;
@@ -243,13 +247,15 @@ function getColorForLogLevel(line: string): string {
 
 // ── 子组件：加载中 / 空状态 / 错误状态 ─────────────────────────
 
-/** 加载中骨架屏 */
+/** 加载中骨架屏（role=status 让读屏知道正在加载，而非一片静默的占位块） */
 function LogsSkeleton(): ReactElement {
+  const { t } = useTranslation();
   return (
-    <div className="flex flex-col gap-0.5 p-2">
+    <div className="flex flex-col gap-0.5 p-2" role="status" aria-busy="true">
+      <span className="sr-only">{t('common.loading')}</span>
       {Array.from({ length: 8 }).map((_, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: 静态骨架屏占位，index 稳定且无重排
-        <Skeleton key={index} className="h-3 w-full" />
+        <Skeleton key={index} aria-hidden="true" className="h-3 w-full" />
       ))}
     </div>
   );

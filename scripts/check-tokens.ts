@@ -57,11 +57,12 @@ const BARE_COLOR_RE = new RegExp(
 const BARE_MONO_RE = /(?:^|\s|")(bg|text|border|ring|shadow)-(white|black)(?=[\s"'/:\][]|$)/g;
 
 // 存量豁免基线（白/黑裸色历史用法，新增违规仍卡关；重构为语义令牌后移除）：
-//   badge.tsx = shadcn 官方 destructive 变体；browser-pane = iframe 白底；
+//   badge.tsx = shadcn 官方 destructive 变体；
 //   inline-approval-card / DialogHost = 语义色背景上的白字（对比度需求）
+// 已移除 browser-pane：原豁免理由是「iframe 白底」，但 v1 iframe 方案已被
+// WebContentsView 取代，该容器已改用语义令牌 bg-background（深色主题不再白底）。
 const MONO_EXEMPT_FILES = new Set([
   'src/renderer/components/ui/badge.tsx',
-  'src/renderer/components/browser/browser-pane.tsx',
   'src/renderer/components/agent/inline-approval-card.tsx',
   'src/renderer/components/common/DialogHost.tsx',
 ]);

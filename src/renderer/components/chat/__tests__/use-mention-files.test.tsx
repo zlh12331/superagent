@@ -48,8 +48,10 @@ describe('useMentionFiles', () => {
       await vi.advanceTimersByTimeAsync(150);
     });
     expect(globMock).toHaveBeenCalledTimes(1);
+    // 模式经 lib/file-search.buildFileSearchPattern 构造（单一真源）：
+    // 递归通配 + 大小写展开（[aA]）+ 尾通配——与 fuzzy-search-dialog 一致
     expect(globMock).toHaveBeenCalledWith(
-      expect.objectContaining({ pattern: '**/*a*', path: 'C:\\proj', maxResults: 10 }),
+      expect.objectContaining({ pattern: '**/*[aA]*', path: 'C:\\proj', maxResults: 10 }),
     );
     // act 已提交状态更新，直接断言（waitFor 依赖真实定时器，与 fake timers 冲突会挂死）
     expect(result.current).toEqual(['src/a.ts', 'src/b.ts']);
@@ -66,7 +68,18 @@ describe('useMentionFiles', () => {
     vi.advanceTimersByTime(500);
 
     expect(globMock).toHaveBeenCalledTimes(1);
-    expect(globMock).toHaveBeenCalledWith(expect.objectContaining({ pattern: '**/*abc*' }));
+    expect(globMock).toHaveBeenCalledWith(
+      expect.objectContaining({ pattern: '**/*[aA][bB][cC]*' }),
+    );
+  });
+
+  it('回归：查询词含 glob 元字符时被转义为字面量（不改变匹配语义）', () => {
+    globMock.mockResolvedValue({ data: { files: [] } });
+    renderHook(() => useMentionFiles('mention', 'a*b', 'C:\\proj'));
+    vi.advanceTimersByTime(500);
+
+    // 未转义时 `a*b` 会退化为「a 任意 b 前缀」；转义后按字面量搜索
+    expect(globMock).toHaveBeenCalledWith(expect.objectContaining({ pattern: '**/*[aA]\\*[bB]*' }));
   });
 
   it('error 响应：候选清空（unwrap 抛错被吞）', async () => {

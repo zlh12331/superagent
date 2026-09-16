@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { DEVICE_DIMENSIONS } from '@/lib/browser/presets';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import type { BrowserDevicePreset, BrowserZoom } from '@/stores/persistent/settings-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -87,14 +87,19 @@ export function BrowserPane(): ReactElement {
   // getState 快照视为陈旧值丢弃（否则 UI 会被旧状态回退）
   const receivedEventRef = useRef(false);
   useEffect(() => {
+    // 浏览器模式 / preload 缺失：window.api 为 undefined，成员访问阶段即抛
+    // TypeError（后续 .catch 兜不住），故必须先判桥（lib/ipc.ts hasIpcBridge）。
+    // 无桥时保持 INITIAL_STATE，渲染空状态即可。
+    if (!hasIpcBridge()) return;
+    const api = window.api.browser;
     let active = true;
-    void window.api.browser
+    void api
       .getState()
       .then((res) => {
         if (active && !receivedEventRef.current) setState(unwrap(res));
       })
       .catch(() => {});
-    const unsubscribeState = window.api.browser.subscribeState((payload) => {
+    const unsubscribeState = api.subscribeState((payload) => {
       receivedEventRef.current = true;
       setState(payload);
       // 新一次加载开始时清除上一次的失败状态
@@ -102,7 +107,7 @@ export function BrowserPane(): ReactElement {
         setLoadError(null);
       }
     });
-    const unsubscribeLoadFailed = window.api.browser.subscribeLoadFailed((payload) => {
+    const unsubscribeLoadFailed = api.subscribeLoadFailed((payload) => {
       setLoadError(payload);
     });
     return () => {
@@ -145,6 +150,7 @@ export function BrowserPane(): ReactElement {
     const normalized = normalizeUrl(raw);
     if (normalized === '') return;
     setUrlInput(normalized);
+    if (!hasIpcBridge()) return;
     void window.api.browser
       .navigate({ url: normalized })
       .then(unwrap)
@@ -172,7 +178,9 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserBack')}
           aria-label={t('panel.browserBack')}
-          onClick={() => runNavigation(window.api.browser.back())}
+          onClick={() => {
+            if (hasIpcBridge()) runNavigation(window.api.browser.back());
+          }}
           disabled={!state.canGoBack}
           className={TOOLBAR_BTN_CLASS}
         >
@@ -183,7 +191,9 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserForward')}
           aria-label={t('panel.browserForward')}
-          onClick={() => runNavigation(window.api.browser.forward())}
+          onClick={() => {
+            if (hasIpcBridge()) runNavigation(window.api.browser.forward());
+          }}
           disabled={!state.canGoForward}
           className={TOOLBAR_BTN_CLASS}
         >
@@ -194,7 +204,9 @@ export function BrowserPane(): ReactElement {
           size="icon"
           title={t('panel.browserRefresh')}
           aria-label={t('panel.browserRefresh')}
-          onClick={() => runNavigation(window.api.browser.reload())}
+          onClick={() => {
+            if (hasIpcBridge()) runNavigation(window.api.browser.reload());
+          }}
           disabled={state.url === null}
           className={TOOLBAR_BTN_CLASS}
         >
@@ -246,16 +258,27 @@ export function BrowserPane(): ReactElement {
         />
       )}
 
-      {/* 加载进度条：位于占位区之外（占位区内的渲染层 UI 会被原生视图盖住） */}
+      {/* 加载进度条：位于占位区之外（占位区内的渲染层 UI 会被原生视图盖住）。
+          不定式动画（keyframes 见 globals.css 的 browser-loading-bar）：无进度
+          百分比可报，故 role="progressbar" 不设 aria-valuenow（ARIA 允许「不确定」
+          形态，只需 aria-label 说明在做什么）。 */}
       {state.isLoading && (
-        <div className="bg-primary h-0.5 shrink-0 origin-left animate-[br-loading-bar_1.5s_ease-in-out_infinite]" />
+        <div className="bg-primary h-0.5 shrink-0 animate-[browser-loading-bar_1.5s_ease-in-out_infinite]">
+          <span className="sr-only" role="progressbar" aria-label={t('panel.browserLoading')} />
+        </div>
       )}
 
-      {/* 内容区：原生视图占位区 + 空状态（无 URL 时视图隐藏，渲染层可见） */}
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
+      {/* 内容区：原生视图占位区 + 空状态（无 URL 时视图隐藏，渲染层可见）。
+          底色用语义令牌 bg-background（跟随主题）：此前是裸 bg-white（旧 iframe
+          方案的白底遗留），深色主题下空状态是「白底 + 低对比度灰图标」。 */}
+      <div className="bg-background relative min-h-0 min-w-0 flex-1 overflow-hidden">
         {state.url === null && !state.isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <Link2 className="text-muted-foreground/30 size-10" strokeWidth={1.5} />
+            <Link2
+              className="text-muted-foreground/30 size-10"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
             <p className="text-muted-foreground text-xs">{t('panel.browserEmpty')}</p>
           </div>
         )}

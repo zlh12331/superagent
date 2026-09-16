@@ -50,15 +50,13 @@ function SectionFallback({
       className="bg-error/5 border-error/20 text-error flex flex-col items-center gap-2 rounded-md border px-4 py-6"
     >
       <AlertTriangle className="size-5" strokeWidth={1.5} />
-      <p className="text-xs leading-relaxed">
-        {i18n.t('common.sectionLoadFailed', { defaultValue: '区块加载失败，请重试' })}
-      </p>
+      <p className="text-xs leading-relaxed">{i18n.t('common.sectionLoadFailed')}</p>
       <p className="text-muted-foreground max-w-full truncate font-mono text-2xs" title={message}>
         {message}
       </p>
       <Button variant="outline" size="sm" onClick={resetErrorBoundary}>
         <RefreshCw className="size-3" strokeWidth={1.5} />
-        {i18n.t('common.retry', { defaultValue: '重试' })}
+        {i18n.t('common.retry')}
       </Button>
     </div>
   );

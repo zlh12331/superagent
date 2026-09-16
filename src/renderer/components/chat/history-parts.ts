@@ -201,8 +201,20 @@ function fallbackOutcome(type: string, part: StoredPart): ToolOutcome {
   return { state: 'output-available', output: unwrapOutput(part['output']) };
 }
 
-/** 存储角色 → UIMessage 角色（未知角色兜底 user，语义对齐 normalizeMessage） */
+/**
+ * 存储角色 → UIMessage 角色
+ *
+ * 主进程会把一回合的工具结果落成独立的 `role: 'tool'` 消息
+ * （turn-transcript.ts 的 buildAssistantTurnMessages）。这类消息**不是用户发言**：
+ * 其中与 tool-call 配对的条目会被合并掉，只有**孤儿** tool-result/error 会剩下
+ * （无对应 tool-call，如中断后重开会话），此前 `'tool'` 落入兜底变 'user'，孤儿
+ * 工具卡被渲染进用户气泡——语义错位。
+ *
+ * 归到 'assistant'：工具产出本就是模型侧产物，且 assistant 分支会按 part 分发渲染
+ * 富组件（system 分支只取文本，会丢卡片）。未知角色仍兜底 user（对齐 normalizeMessage）。
+ */
 function toUiRole(role: string): UIMessage['role'] {
+  if (role === 'tool') return 'assistant';
   return role === 'assistant' || role === 'system' ? role : 'user';
 }
 

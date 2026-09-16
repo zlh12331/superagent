@@ -158,11 +158,16 @@ function QuestionProgressBar({
 }): ReactElement | null {
   const { t } = useTranslation();
   if (total <= 1) return null;
+  // 钳制到 [1, total]：调用方语义是「已答题数 + 1」（把当前题也点亮），全部答完时
+  // 会算到 total + 1——作为填充进度无碍，但写进 aria-valuenow 会**超过
+  // aria-valuemax**（违反 ARIA 要求 valuenow ≤ valuemax）。钳制后视觉不变
+  // （全亮即全亮），且 ARIA 合法。
+  const value = Math.min(Math.max(current, 1), total);
   return (
     <div
       className="flex h-1.5 gap-1"
       role="progressbar"
-      aria-valuenow={current}
+      aria-valuenow={value}
       aria-valuemin={1}
       aria-valuemax={total}
       aria-label={t('agent.askProgress')}
@@ -174,7 +179,7 @@ function QuestionProgressBar({
             className={cn(
               // accent 填充（与导航圆点/热力图/骨架屏等进度类视觉一致；此前 bg-primary 与注释「accent 填充」不符）
               'bg-accent absolute inset-0 origin-left rounded-full transition-transform duration-300',
-              i < current ? 'scale-x-100' : 'scale-x-0',
+              i < value ? 'scale-x-100' : 'scale-x-0',
             )}
           />
         </div>
@@ -317,12 +322,14 @@ export function AskDialog(): ReactElement | null {
                 </div>
               )}
 
-              {/* 自由输入 */}
+              {/* 自由输入：placeholder 带上题号作可访问名——多问时所有输入框若共用
+                  「自由回答」，读屏用户无法分辨当前焦点属于哪一问 */}
               <Input
                 type="text"
                 value={answers[qIndex]?.text ?? ''}
                 onChange={(e) => setText(qIndex, e.target.value)}
-                placeholder={t('agent.askFreeInput')}
+                placeholder={t('agent.askFreeInputFor', { n: qIndex + 1 })}
+                aria-label={t('agent.askFreeInputFor', { n: qIndex + 1 })}
                 className="mt-2 h-8 text-xs"
               />
             </div>

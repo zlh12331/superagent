@@ -33,7 +33,10 @@ export function MsgActions({
   };
 
   return (
-    <div className="msg-actions show">
+    // 类名收敛为 .msg-actions（2026-09 审计）：此前写作 `msg-actions show`，
+    // globals.css 中并无 `.show` 复合规则（.show 只存在于 folder-dropdown-menu
+    // / palette-overlay），属原型残留的死类名。
+    <div className="msg-actions">
       <button
         type="button"
         className={cn('msg-action-btn', copied && 'copied')}
@@ -47,6 +50,9 @@ export function MsgActions({
       <button
         type="button"
         className="msg-action-btn"
+        // aria-label 恒为「重新生成」以匹配可见文案（WCAG 2.5.3 Label in Name：
+        // 可访问名须包含可见标签文本，语音控制喊「重新生成」才命中）；禁用原因
+        // 由 title 承载（提示气泡，不参与可访问名计算）
         aria-label={t('chat.regenerate')}
         title={disabled ? t('chat.generating') : t('chat.regenerate')}
         onClick={handleRegenerate}

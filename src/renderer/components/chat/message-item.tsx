@@ -56,7 +56,9 @@ export const MessageItem = memo(function MessageItem({
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
 
   // parts 预映射：生成稳定 key（含 index 但不暴露给 JSX key，规避 noArrayIndexKey）
-  // 并标记最后一条 text part 的流式光标（仅流式 assistant 消息；user/历史恒 false）
+  // 并标记**最后一个 part** 的流式光标（仅流式 assistant 消息；user/历史恒 false）。
+  // 注意：光标只在走 text 分支的 part 上渲染，故末位 part 是 reasoning/tool 时
+  // 不会出现光标（也不再回落到更早的 text part 上）——这是期望行为。
   const partsWithCursor = useMemo(
     () =>
       message.parts.map((part, index) => ({

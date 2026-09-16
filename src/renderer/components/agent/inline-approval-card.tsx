@@ -13,11 +13,11 @@ import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { StructuredPreview } from './approval-preview';
-import { getApprovalMeta, getField } from './approval-utils';
+import { getApprovalMeta, getNonEmptyField } from './approval-utils';
 
 /** 内联审批卡 props */
 export interface InlineApprovalCardProps {
@@ -204,8 +204,9 @@ export function InlineApprovalCard({
     } else {
       reject(item.id);
     }
-    // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）
-    if (typeof window === 'undefined' || window.api === undefined) {
+    // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）。
+    // 统一走 lib/ipc.ts 的 hasIpcBridge（单一真源），不再手抄字面量判断。
+    if (!hasIpcBridge()) {
       return;
     }
     const ok = await sendApprovalResponse(item.id, approved, rememberDecision);
@@ -221,9 +222,10 @@ export function InlineApprovalCard({
   const isApproved = item.status === 'approved';
   const dangerous = meta.dangerous;
   // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示；
-  // 复用 getField 安全读取，与 approval-preview 的载荷解析风格一致）
+  // 复用 getNonEmptyField 读取，空命令按「无命令」处理——getField 对 `''` 返回空串，
+  // 此前 `?? null` 兜不住 → 渲染出「编辑后重提」按钮却回传空命令（点了没意义））
   const resubmitCommand =
-    item.type === 'run_command' ? (getField(item.input, 'command') ?? null) : null;
+    item.type === 'run_command' ? (getNonEmptyField(item.input, 'command') ?? null) : null;
 
   return (
     <div
@@ -234,8 +236,12 @@ export function InlineApprovalCard({
         item.status === 'rejected' && 'border-l-4 border-l-error',
         skipped && 'opacity-40',
       )}
+      // role="alert"：审批请求是「需要用户立刻处理的插队信息」，出现即应被朗读。
+      // 此前同时写了 aria-live="polite"，与 alert 隐含的 assertive 冲突（两个
+      // 播报优先级自相矛盾）；改为只留 role，并设 aria-atomic="false"——否则
+      // 卡片状态变化（pending → approved）会按 atomic 语义重播整张卡片。
       role="alert"
-      aria-live="polite"
+      aria-atomic="false"
     >
       {/* 头部：图标 + 类型 + 状态 */}
       <div className="flex items-center gap-2">

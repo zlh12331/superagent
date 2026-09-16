@@ -103,7 +103,11 @@ export function DeviceBar(props: DeviceBarProps): ReactElement {
           aria-label={t('panel.browserDeviceWidth')}
           className="border-border bg-background text-muted-foreground h-[22px] w-[42px] rounded border text-center font-mono text-xs disabled:opacity-40"
         />
-        <span className="text-muted-foreground px-0.5 font-mono text-xs">×</span>
+        {/* 宽×高分隔符：纯视觉，aria-hidden 防止读屏念出「乘号」
+            （两侧输入框各有自己的 aria-label） */}
+        <span className="text-muted-foreground px-0.5 font-mono text-xs" aria-hidden="true">
+          ×
+        </span>
         <input
           type="number"
           value={deviceHeight}

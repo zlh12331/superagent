@@ -173,13 +173,31 @@ describe('reconstructHistory', () => {
     expect(toolPart.output).toBe('匹配'); // unwrapOutput 还原
   });
 
-  it('assistant/system 角色保映射；非法角色 → user', () => {
+  it('assistant/system 角色保映射；tool → assistant；非法角色 → user', () => {
     const r = reconstructHistory([
       msg('assistant', [{ type: 'text', text: 'a' }]),
       msg('system', [{ type: 'text', text: 's' }]),
       msg('other', [{ type: 'text', text: 'x' }]),
     ]);
     expect(r.messages.map((m) => m.role)).toEqual(['assistant', 'system', 'user']);
+  });
+
+  it('孤儿工具结果的落库消息（role=tool）→ 归 assistant，不渲染成用户气泡', () => {
+    // 主进程把工具结果落成独立的 role='tool' 消息（turn-transcript
+    // buildAssistantTurnMessages）。配对的条目会被合并掉，只有孤儿结果留下——
+    // 此前 'tool' 落入兜底变 'user'，孤儿工具卡被塞进用户气泡（语义错位）。
+    const r = reconstructHistory([
+      msg('tool', [
+        { type: 'tool-result', toolCallId: 'orphan', toolName: 'run_command', output: 'ok' },
+      ]),
+    ]);
+    expect(r.messages).toHaveLength(1);
+    expect(r.messages[0]?.role).toBe('assistant');
+    // 仍是工具卡（assistant 分支按 part 分发渲染富组件；system 分支只取文本会丢卡片）
+    expect(r.messages[0]?.parts[0]).toMatchObject({
+      type: 'dynamic-tool',
+      toolName: 'run_command',
+    });
   });
 
   it('落库的富回合（turn-transcript 形态）→ reasoning + 工具卡 + 文本完整重建', () => {

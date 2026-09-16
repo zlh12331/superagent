@@ -14,10 +14,10 @@ import { cn } from '@/lib/utils';
  * 包装 Radix Select Primitive，负责管理展开/值状态。
  * 通过 value / onValueChange 受控或 defaultValue 非受控。
  * ──────────────────────────────
- * 变体：Trigger 支持 size（default/sm）；Item 支持 inset
+ * 变体：Trigger 支持 size（default/sm）；Item 无缩进变体
  * 状态：受控（value + onValueChange）| 非受控（defaultValue）
  * 依赖：@radix-ui/react-select
- * 可访问性：Radix 内置全键盘导航/方向键/ARIA listbox 角色；9 个导出覆盖完整下拉形态
+ * 可访问性：Radix 内置全键盘导航/方向键/ARIA listbox 角色；7 个导出覆盖完整下拉形态
  * ──────────────────────────────
  */
 export function Select(

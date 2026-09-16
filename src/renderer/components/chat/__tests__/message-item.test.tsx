@@ -129,7 +129,8 @@ describe('MessageItem（直测）', () => {
         disableActions={false}
       />,
     );
-    expect(screen.getByText(t('chat.statusError'))).toBeDefined();
+    // 状态徽章文本可能与 error 代码块的标签同文案（'错误'），故按类名精确定位徽章
+    expect(document.querySelector('.card-status.error')?.textContent).toBe(t('chat.statusError'));
   });
 
   it('user 消息：文本气泡渲染', () => {

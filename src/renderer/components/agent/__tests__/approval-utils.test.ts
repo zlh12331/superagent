@@ -21,7 +21,13 @@ import {
 } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
-import { getApprovalMeta, getBooleanField, getField, getStringArrayField } from '../approval-utils';
+import {
+  getApprovalMeta,
+  getBooleanField,
+  getField,
+  getNonEmptyField,
+  getStringArrayField,
+} from '../approval-utils';
 
 describe('approval-utils', () => {
   describe('getApprovalMeta', () => {
@@ -87,6 +93,17 @@ describe('approval-utils', () => {
     it('getBooleanField：读取布尔字段', () => {
       expect(getBooleanField({ amend: true }, 'amend')).toBe(true);
       expect(getBooleanField({ amend: 'yes' }, 'amend')).toBeUndefined();
+    });
+
+    it('getNonEmptyField：空串按「无值」处理（getField 会返回空串）', () => {
+      expect(getNonEmptyField({ command: 'ls' }, 'command')).toBe('ls');
+      // 关键差异：空命令视为无值（run_command 审批卡据此隐藏「编辑后重提」）
+      expect(getNonEmptyField({ command: '' }, 'command')).toBeUndefined();
+      expect(getField({ command: '' }, 'command')).toBe('');
+      // 与 getField 同源的守卫语义
+      expect(getNonEmptyField({ command: 42 }, 'command')).toBeUndefined();
+      expect(getNonEmptyField(null, 'command')).toBeUndefined();
+      expect(getNonEmptyField({}, 'command')).toBeUndefined();
     });
 
     it('getStringArrayField：读取字符串数组字段', () => {

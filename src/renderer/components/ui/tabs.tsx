@@ -19,8 +19,7 @@ import { cn } from '@/lib/utils';
  *     <TabsTrigger value="account">账号</TabsTrigger>
  *     <TabsTrigger value="profile">资料</TabsTrigger>
  *   </TabsList>
- *   <TabsContent value="account">...</TabsContent>
- *   <TabsContent value="profile">...</TabsContent>
+ *   （面板由调用方自行渲染：本文件不导出 TabsContent）
  * </Tabs>
  * ──────────────────────────────
  * 变体：无（激活态样式内置于 TabsTrigger，纯语义令牌）

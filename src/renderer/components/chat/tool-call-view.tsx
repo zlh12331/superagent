@@ -115,7 +115,7 @@ export function ToolCallView({
                 {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
                 {input !== undefined && (
                   <CodeBlock
-                    label="input"
+                    label={t('chat.toolInput')}
                     content={formatJson(input, t)}
                     commandStyle={isCommandTool}
                   />
@@ -123,13 +123,13 @@ export function ToolCallView({
                 {/* 输出（output 优先于 errorText） */}
                 {output !== undefined && (
                   <CodeBlock
-                    label="output"
+                    label={t('chat.toolOutput')}
                     content={formatJson(output, t)}
                     commandStyle={isCommandTool}
                   />
                 )}
                 {errorText !== undefined && errorText !== '' && (
-                  <CodeBlock label="error" content={errorText} />
+                  <CodeBlock label={t('chat.toolError')} content={errorText} />
                 )}
               </div>
             </div>

@@ -71,6 +71,34 @@ describe('ConversationSearchBar', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // ── IME 组合态（2026-09 审计修复的回归锚） ──────────────────────
+  //
+  // 背景：组合态内按 Enter 是「确认候选词」、Esc 是「取消候选」，都不是导航/关闭
+  // 意图。此前未判 isComposing，中文/日文输入法在搜索框上字即跳转匹配、取消候选
+  // 即关闭搜索栏（与 ChatInput 已修的同类缺陷同源）。
+  // React 合成事件不暴露 isComposing，须经 nativeEvent 判定。
+
+  it('IME 组合态：Enter 不触发导航（选词而非跳转）', () => {
+    const { onNavigate } = mount({ query: 'zhongwen', totalMatches: 3, currentMatch: 1 });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', isComposing: true });
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it('IME 组合态：Escape 不关闭搜索栏（取消候选）', () => {
+    const { onClose } = mount({ query: 'zhongwen', totalMatches: 3, currentMatch: 1 });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape', isComposing: true });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('IME 组合结束后：Enter 恢复导航（组合态不是永久屏蔽）', () => {
+    const { onNavigate } = mount({ query: '中文', totalMatches: 3, currentMatch: 1 });
+    const input = screen.getByRole('textbox');
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: false });
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith(1);
+  });
+
   it('输入：受控转发 onSearch', () => {
     const { onSearch } = mount({ query: '' });
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '新词' } });

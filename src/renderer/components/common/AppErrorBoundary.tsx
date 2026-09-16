@@ -36,18 +36,26 @@ const MAX_STACK_LINES = 6;
 
 /**
  * 组装预填 issue 深链：标题 = 错误消息首行，正文 = 堆栈摘要 + 版本环境 + 诊断包引导
+ *
+ * 正文文案同样走 i18n：此前是硬编码中文常量，英文界面下用户点开的是一个
+ * 中文预填的 issue（本文件其余文案早已全部 i18n，此处是唯一漏网）。
  */
 async function buildIssueUrl(message: string, error: unknown): Promise<string> {
   const stack = error instanceof Error ? (error.stack ?? '') : '';
   let envLine = '';
   try {
     const info = unwrap(await window.api.app.getInfo());
-    envLine = `- 版本：${info.version}（${info.platform}/${info.arch}，Electron ${info.electron}）`;
+    envLine = i18n.t('common.crashIssueVersion', {
+      version: info.version,
+      platform: info.platform,
+      arch: info.arch,
+      electron: info.electron,
+    });
   } catch {
     // getInfo 失败不阻塞报障，仅缺版本行
   }
   const body = [
-    '### 崩溃信息',
+    i18n.t('common.crashIssueHeading'),
     '',
     '```',
     message,
@@ -55,8 +63,8 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
     '```',
     '',
     envLine,
-    '- 复现步骤：（请补充）',
-    '- 现场：可在「设置 → 关于 → 导出诊断包」后作为附件上传到本 issue',
+    i18n.t('common.crashIssueSteps'),
+    i18n.t('common.crashIssueAttach'),
   ].join('\n');
   const title = `[crash] ${message.slice(0, 80)}`;
   return `${REPO_NEW_ISSUE_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;

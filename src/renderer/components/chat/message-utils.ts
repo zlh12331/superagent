@@ -38,23 +38,33 @@ export type ToolCallState =
   | 'output-error'
   | 'output-denied';
 
+/**
+ * 状态 → 展示元数据单一真源
+ *
+ * 此前 label 与 class 是两条结构完全平行、分组完全相同的 if 阶梯（各写一遍
+ * 同一组 state），新增/调整 state 时容易只改一处。收敛为一张全量 Record：
+ * `Record<ToolCallState, ...>` 在编译期强制覆盖全部状态，漏一个即类型错误。
+ *
+ * - error：产出错误
+ * - success：已产出结果
+ * - running：参数流式中 / 已就绪执行中 / 审批已通过待产出
+ * - pending：等用户审批（approval-requested）/ 用户已拒绝未产出（output-denied）
+ */
+const STATUS_BY_STATE: Readonly<
+  Record<ToolCallState, { readonly label: ToolStatusLabelKey; readonly cls: ToolStatusClass }>
+> = {
+  'output-error': { label: 'statusError', cls: 'error' },
+  'output-available': { label: 'statusSuccess', cls: 'success' },
+  'input-streaming': { label: 'statusRunning', cls: 'running' },
+  'input-available': { label: 'statusRunning', cls: 'running' },
+  'approval-responded': { label: 'statusRunning', cls: 'running' },
+  'approval-requested': { label: 'statusWaiting', cls: 'pending' },
+  'output-denied': { label: 'statusWaiting', cls: 'pending' },
+};
+
+/** 工具状态 → 文案键（chat.* 域） */
 export function mapToolStateToStatusLabelKey(state: ToolCallState): ToolStatusLabelKey {
-  if (state === 'output-error') {
-    return 'statusError';
-  }
-  if (state === 'output-available') {
-    return 'statusSuccess';
-  }
-  // running：参数流式传输中 / 已就绪执行中 / 审批已通过待产出
-  if (
-    state === 'input-streaming' ||
-    state === 'input-available' ||
-    state === 'approval-responded'
-  ) {
-    return 'statusRunning';
-  }
-  // approval-requested（等用户审批）/ output-denied（用户拒绝，未产出）→ waiting
-  return 'statusWaiting';
+  return STATUS_BY_STATE[state].label;
 }
 
 /**
@@ -63,20 +73,7 @@ export function mapToolStateToStatusLabelKey(state: ToolCallState): ToolStatusLa
  * AI SDK 的 tool.state 可能值见 {@link ToolCallState}。
  */
 export function mapToolStateToStatusClass(state: ToolCallState): ToolStatusClass {
-  if (state === 'output-error') {
-    return 'error';
-  }
-  if (state === 'output-available') {
-    return 'success';
-  }
-  if (
-    state === 'input-streaming' ||
-    state === 'input-available' ||
-    state === 'approval-responded'
-  ) {
-    return 'running';
-  }
-  return 'pending';
+  return STATUS_BY_STATE[state].cls;
 }
 
 /**

@@ -19,7 +19,9 @@ import { cn } from '@/lib/utils';
  * 变体：无（尺寸/形状完全由 className 决定）
  * 状态：无状态（纯展示）
  * 依赖：无
- * 可访问性：装饰性元素（aria-hidden 由调用方按需设置）
+ * 可访问性：装饰性元素。视具体用法二选一——内容区整体加载时在外层容器给
+ *   role="status"/aria-busy（骨架块本身不播报）；或给本组件传 aria-hidden
+ *   （props 直接透传到根 div，可用）
  * ──────────────────────────────
  */
 export function Skeleton({ className, ...props }: React.ComponentProps<'div'>): React.ReactElement {

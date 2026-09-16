@@ -91,6 +91,7 @@ export function useComposerSend({
         const text = await buildTextWithAttachments(base, attachments, {
           attached: (name) => t('chat.attachmentLabel', { name }),
           readFailed: (name) => t('chat.attachmentReadFailed', { name }),
+          truncated: (chars) => t('chat.attachmentTruncated', { chars }),
         });
         onSend(text);
         // 发送成功：清除本会话草稿（草稿只保留未发送内容）

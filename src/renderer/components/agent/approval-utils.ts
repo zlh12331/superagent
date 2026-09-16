@@ -31,6 +31,18 @@ export function getField(obj: unknown, key: string): string | undefined {
 }
 
 /**
+ * 安全读取对象字符串字段，空串视为「无值」（类型守卫）
+ *
+ * 与 getField 的差别：getField 对 `{ command: '' }` 返回 `''`（合法的字符串），
+ * 调用方用 `?? null` 兜不住空串。需要区分「字段不存在」与「字段是空串」时用本函数，
+ * 例如 run_command 审批卡的空命令不应提供「编辑后重提」入口。
+ */
+export function getNonEmptyField(obj: unknown, key: string): string | undefined {
+  const value = getField(obj, key);
+  return value !== undefined && value !== '' ? value : undefined;
+}
+
+/**
  * 安全读取对象布尔字段（类型守卫）
  *
  * 与 getField 类似，但缩窄为 boolean | undefined。

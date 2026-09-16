@@ -31,19 +31,30 @@ export function PanelNotice({ lines, onDismiss }: PanelNoticeProps): ReactElemen
   if (lines.length === 0) return null;
   const single = lines.length === 1;
   return (
+    // role="status"（隐含 aria-live="polite"）：本提示的两条消费路径都是「会话
+    // 加载后异步判定才出现」，此前无 live 语义，读屏不会主动播报。用 alert 过重
+    // （打断当前朗读），status 与「非紧急提示」语义相称。
     <div
+      role="status"
       className={cn(
         'border-amber/40 bg-amber/10 flex gap-2 border-b px-3 py-1 text-xs text-warn-text',
         single ? 'items-center' : 'items-start',
       )}
     >
-      <AlertTriangle className={cn('size-3 shrink-0', !single && 'mt-0.5')} strokeWidth={2} />
+      <AlertTriangle
+        className={cn('size-3 shrink-0', !single && 'mt-0.5')}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
       {single ? (
         <span className="min-w-0 flex-1 truncate">{lines[0] ?? ''}</span>
       ) : (
         <span className="min-w-0 flex flex-1 flex-col gap-0.5">
-          {lines.map((line) => (
-            <span key={line} className="block">
+          {/* key 用行下标：文案行本身可能重复（collectHistoryNotices 不保证唯一），
+              以文本作 key 会在重复行时产生重复 key 警告 */}
+          {lines.map((line, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: 行序固定、无语重排，仅作稳定 key
+            <span key={index} className="block">
               {line}
             </span>
           ))}

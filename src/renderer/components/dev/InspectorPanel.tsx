@@ -17,8 +17,8 @@ import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } fr
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** DevTools 停靠模式 */
@@ -57,6 +57,7 @@ interface InspectorPanelProps {
 export function InspectorPanel({ className }: InspectorPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   // 调用状态：idle / loading / success / error
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -92,9 +93,12 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           setStatusMessage(t('dev.openFailedSender'));
         }
       } catch (err) {
-        // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示
+        // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示。
+        // 经 unwrapErrorMessage 解析错误码：此前直出 err.message，IPC 失败会
+        // 把英文码原样展示（其余面板已统一走该出口）。
         setStatus('error');
-        setStatusMessage(err instanceof Error ? err.message : String(err));
+        const error = err instanceof Error ? err : new Error(String(err));
+        setStatusMessage(unwrapErrorMessage(error, getErrorMessage));
       }
       // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
       // 成功/失败路径统一走到这里复位 + 3s 后自动清除状态
@@ -108,7 +112,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         setStatusMessage('');
       }, STATUS_CLEAR_DELAY);
     },
-    [t],
+    [t, getErrorMessage],
   );
 
   return (
@@ -123,7 +127,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
 
       <ScrollArea className="min-h-0 flex-1">
         {/* Chromium DevTools 按钮组 */}
-        <Section title="Chromium DevTools" description={t('dev.developerToolsDesc')}>
+        <Section title={t('dev.chromiumDevtools')} description={t('dev.developerToolsDesc')}>
           <div className="flex items-center gap-0.5">
             {MODE_BUTTONS.map((btn) => {
               const Icon = btn.icon;
@@ -153,7 +157,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         </Section>
 
         {/* React DevTools 说明 */}
-        <Section title="React DevTools" description={t('common.reactTreeDesc')}>
+        <Section title={t('dev.reactDevtools')} description={t('common.reactTreeDesc')}>
           <div className="flex items-start gap-1.5">
             <Info className="text-muted-foreground mt-0.5 size-3 shrink-0" strokeWidth={1.5} />
             <p className="text-muted-foreground text-2xs leading-relaxed">

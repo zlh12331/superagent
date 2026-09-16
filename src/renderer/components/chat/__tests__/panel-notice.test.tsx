@@ -41,4 +41,15 @@ describe('PanelNotice', () => {
     expect(container.querySelector('.flex-col')).toBeNull();
     expect(container.querySelector('.truncate')?.textContent).toBe('单条');
   });
+
+  it('无障碍：动态出现的提示带 role=status（读屏可播报）', () => {
+    render(<PanelNotice lines={['会话加载后才判定出的缺口']} onDismiss={vi.fn()} />);
+    // 提示是会话加载后异步出现，无 live 语义时读屏不会主动播报
+    expect(screen.getByRole('status')).toBeDefined();
+  });
+
+  it('边界：重复文案行仍渲染（以行序为 key，不因内容重复告警/丢行）', () => {
+    const { container } = render(<PanelNotice lines={['同一条', '同一条']} onDismiss={vi.fn()} />);
+    expect(container.querySelectorAll('.flex-col > span')).toHaveLength(2);
+  });
 });

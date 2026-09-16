@@ -75,7 +75,8 @@ describe('agent 批次4 缺口补全', () => {
       renderPreview('git_commit', { message: 'feat: x', amend: true });
       expect(screen.getByText('feat: x')).toBeDefined();
       expect(screen.getByText(t('approval.commitAmend'))).toBeDefined();
-      expect(screen.getByText(t('approval.unavailable'))).toBeDefined();
+      // 徽标语义是「不可逆」（amend 覆盖原提交），不是「不可用」——工具支持 amend
+      expect(screen.getByText(t('approval.irreversible'))).toBeDefined();
     });
 
     it('git_push：组合标记（setUpstream + force + 默认 remote）', () => {

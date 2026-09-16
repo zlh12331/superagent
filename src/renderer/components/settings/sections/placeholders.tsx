@@ -7,22 +7,18 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ReactElement } from 'react';
-import { useTranslation } from '@/i18n/use-translation';
 import { ImChannelsSection } from './im-channels-section';
 import { RemoteControlSection } from './remote-control-section';
 
 /** 移动端：局域网远程控制配对 + IM 渠道配置 */
 export function MobileSection(): ReactElement {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4 pt-2">
+      {/* 两块子面板各自带标题（RemoteControlSection / ImChannelsSection 均渲染自身
+          的分区头）。此前组合层额外套了一个 "IM 渠道" h3，与子面板标题**重复**，
+          且与远程控制侧（裸渲染）不一致——已去除。 */}
       <RemoteControlSection />
-      <div>
-        <h3 className="text-foreground text-sm font-semibold">{t('settings.nav.imChannels')}</h3>
-        <div className="mt-2">
-          <ImChannelsSection />
-        </div>
-      </div>
+      <ImChannelsSection />
     </div>
   );
 }

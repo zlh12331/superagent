@@ -5,6 +5,11 @@
 // 与已外移的 message-item/streaming-footer 做法不一致），按职责提取
 // 设计（对齐参考项目 DeepSeek-Reasonix QuestionJumpBar）：磁性吸附（hover 按距离
 // 涟漪放大）+ 整轨热区（吸附最近锚点）+ 预览跟随鼠标
+//
+// 指针命中模型（2026-09 审计核实）：CSS 给 .jump-bar / .jump-item / .jump-dot 都是
+// pointer-events:none，只有 .jump-scroll 是 auto ⇒ 真实鼠标事件**只**落在轨道上，
+// 条目 button 从不接收指针事件。因此鼠标路径只有轨道一个处理器（天然单次跳转），
+// 条目 button 仅服务键盘（Tab 聚焦 + Enter/Space → click 且 e.detail === 0）。
 // ──────────────────────────────
 
 import type { CSSProperties, ReactElement, MouseEvent as ReactMouseEvent } from 'react';
@@ -120,39 +125,31 @@ export function QuestionJumpBar({
   const hoverIdx = hovered !== null ? questions.findIndex((q) => q.turn === hovered) : -1;
   const hoveredQuestion = hovered !== null ? questions.find((q) => q.turn === hovered) : undefined;
 
-  const onMove = (e: ReactMouseEvent<HTMLDivElement>): void => {
+  /** 按指针 y 更新预览/高亮，返回命中的锚点（无命中返回 null） */
+  const applyHoverAt = (clientY: number): QuestionAnchor | null => {
     const el = barRef.current;
-    if (el === null) return;
-    const closest = closestQuestionFromY(el, questions, e.clientY);
-    if (closest === null) return;
+    if (el === null) return null;
+    const closest = closestQuestionFromY(el, questions, clientY);
+    if (closest === null) return null;
     setPreviewTop(closest.previewY);
     setHovered(closest.question.turn);
     setShowPreview(true);
+    return closest.question;
+  };
+
+  // 三个 setState 由 React 18+ 自动批处理为单次渲染，无需额外 rAF 合帧
+  // （对比 use-message-nav-rail：那里 rAF 是必需的——scroll 事件高频且要读
+  // 布局，属于不同问题）
+  const onMove = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    applyHoverAt(e.clientY);
   };
 
   const onRailMouseDown = (e: ReactMouseEvent<HTMLDivElement>): void => {
-    const el = barRef.current;
-    if (el === null) return;
-    const closest = closestQuestionFromY(el, questions, e.clientY);
-    if (closest === null) return;
+    // preventDefault 抑制 mousedown 的默认选中/拖拽行为；条目按钮是
+    // pointer-events:none（见文件头），鼠标路径不会期望「聚焦某个圆点」
     e.preventDefault();
-    setPreviewTop(closest.previewY);
-    setHovered(closest.question.turn);
-    setShowPreview(true);
-    onJump(closest.question);
-  };
-
-  const onItemMouseDown = (
-    e: ReactMouseEvent<HTMLButtonElement>,
-    question: QuestionAnchor,
-  ): void => {
-    // 阻止冒泡到轨道 onMouseDown（2026-09 审计修复）：此前条目 mousedown 会同时
-    // 命中「条目处理器 + 轨道处理器」，onJump 被调两次 → 第二次打断前一次的
-    // 平滑滚动（落点抖动）；且轨道 onClick 也会再补一次，实际最多三次。
-    e.stopPropagation();
-    // 不再 preventDefault：保留 mousedown 的默认聚焦，鼠标点过的条目获得焦点，
-    // 之后按 Enter 可重跳（此前 preventDefault 让圆点永不聚焦，键盘续操失效）
-    onJump(question);
+    const question = applyHoverAt(e.clientY);
+    if (question !== null) onJump(question);
   };
 
   return (
@@ -166,11 +163,9 @@ export function QuestionJumpBar({
         setShowPreview(false);
       }}
     >
-      {/* 轨道：整轨热区（吸附最近锚点点击跳转）；键盘路径由内部 jump-item button 提供，
-          轨道点击为鼠标增强（对齐参考项目同款交互）。
-          只绑 onMouseDown（2026-09 审计修复）：此前 mousedown 与 click 同绑一个处理器，
-          单击空白区会跳两次（第二次打断前一次的平滑滚动）。mousedown 已覆盖激活时机，
-          click 属重复绑定——去掉后原 useKeyWithClickEvents 抑制注释也随之失效，已删。 */}
+      {/* 轨道：整轨热区（吸附最近锚点跳转）。鼠标与键盘因此各只有一条路径：
+          鼠标 → 本容器 onMouseDown；键盘 → 内部 jump-item button 的 click
+          （e.detail === 0，浏览器对键盘激活的 click 设为 0）。 */}
       {/* biome-ignore lint/a11y/useSemanticElements: role=group 滚动热区容器（非表单分组），fieldset 语义不符 */}
       <div role="group" className="jump-scroll" onMouseDown={onRailMouseDown}>
         {questions.map((question, index) => (
@@ -178,17 +173,15 @@ export function QuestionJumpBar({
             className="jump-item"
             key={question.id}
             type="button"
-            data-turn={question.turn}
-            aria-label={`${t('chat.msgNavGoTo')} ${question.turn + 1}`}
-            onMouseDown={(e) => onItemMouseDown(e, question)}
+            aria-label={t('chat.msgNavGoTo', { n: question.turn + 1 })}
             onClick={(e) => {
-              e.stopPropagation();
-              // 键盘 Enter/Space 触发（e.detail === 0）；鼠标路径走 onMouseDown 避免与轨道点击冲突
+              // 键盘 Enter/Space 触发（e.detail === 0）；鼠标路径由轨道 onMouseDown 承担
               if (e.detail === 0) onJump(question);
             }}
           >
             <span
               className="jump-dot"
+              aria-hidden="true"
               {...dotMetrics(index, question.turn, hoverIdx, activeTurn)}
             />
           </button>

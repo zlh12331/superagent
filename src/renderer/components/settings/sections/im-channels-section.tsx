@@ -33,16 +33,15 @@ export function ImChannelsSection(): ReactElement {
   } = useQuery({
     queryKey: IM_CHANNELS_QUERY_KEY,
     queryFn: async () => {
-      // 浏览器模式（dev 预览）无 window.api：静默空列表
+      // 浏览器模式（dev 预览）无 window.api：空列表（面板可渲染，只是无渠道）
       if (!hasIpcBridge()) {
         return { channels: [] as ChannelListRes['channels'] };
       }
-      try {
-        return unwrap<ChannelListRes>(await window.api.im.list());
-      } catch {
-        // 列表加载失败：静默（渠道功能不可用时降级）
-        return { channels: [] as ChannelListRes['channels'] };
-      }
+      // 不在此吞异常（2026-09 审计修复）：此前 catch 后 return []，使
+      // `channelsFailed` 恒为 false → 下方 QueryErrorRow + onRetry 是**不可达死代码**，
+      // 且真实的 IPC 故障与「一个渠道都没配」在 UI 上完全一样（用户无从判断）。
+      // 抛给 TanStack 后由 QueryErrorRow 统一呈现错误与重试（与 mcp/skills/turns 一致）。
+      return unwrap<ChannelListRes>(await window.api.im.list());
     },
   });
   const channels = channelsData?.channels ?? [];

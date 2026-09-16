@@ -97,6 +97,60 @@ describe('BrowserPane', () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
+  // ── 无桥路径（2026-09 审计修复的回归锚） ──────────────────────
+  //
+  // 背景：整个文件此前无 hasIpcBridge 判定，window.api 缺失（浏览器模式 /
+  // preload 打包异常）时 `window.api.browser.getState()` 在**成员访问阶段**同步抛
+  // TypeError，其后的 .catch 兜不住（求值顺序：先取属性才轮到 .catch）。
+  // 仓库共 35 处 hasIpcBridge 调用，本目录此前为 0。
+
+  it('无桥：挂载不抛错且渲染空状态（不访问 window.api）', () => {
+    const saved = window.api;
+    (window as unknown as { api: undefined }).api = undefined;
+    try {
+      expect(() => render(<BrowserPane />)).not.toThrow();
+      expect(screen.getByText(/输入地址开始浏览/)).toBeDefined();
+    } finally {
+      (window as unknown as { api: unknown }).api = saved;
+    }
+  });
+
+  it('无桥：地址栏 Enter 不抛错（导航被守卫拦下）', () => {
+    const saved = window.api;
+    (window as unknown as { api: undefined }).api = undefined;
+    try {
+      render(<BrowserPane />);
+      const input = screen.getByLabelText('输入网址，回车打开…');
+      fireEvent.change(input, { target: { value: 'example.com' } });
+      expect(() => fireEvent.keyDown(input, { key: 'Enter' })).not.toThrow();
+    } finally {
+      (window as unknown as { api: unknown }).api = saved;
+    }
+  });
+
+  it('无桥：点击后退/刷新不抛错（动作被守卫拦下）', () => {
+    const saved = window.api;
+    (window as unknown as { api: undefined }).api = undefined;
+    try {
+      render(<BrowserPane />);
+      expect(() => fireEvent.click(screen.getByLabelText('后退'))).not.toThrow();
+      expect(() => fireEvent.click(screen.getByLabelText('刷新'))).not.toThrow();
+    } finally {
+      (window as unknown as { api: unknown }).api = saved;
+    }
+  });
+
+  it('无桥：卸载不抛错（视口清理也受守卫保护）', () => {
+    const saved = window.api;
+    (window as unknown as { api: undefined }).api = undefined;
+    try {
+      const { unmount } = render(<BrowserPane />);
+      expect(() => unmount()).not.toThrow();
+    } finally {
+      (window as unknown as { api: unknown }).api = saved;
+    }
+  });
+
   it('地址栏：非 Enter 按键不导航', () => {
     render(<BrowserPane />);
     const input = screen.getByLabelText('输入网址，回车打开…');
@@ -142,7 +196,7 @@ describe('BrowserPane', () => {
     expect(screen.getByLabelText('后退')).toBeEnabled();
     expect(screen.getByLabelText('前进')).toBeDisabled();
     // 加载条位于占位区之外（原生视图会盖住占位区内的渲染层 UI）
-    expect(document.querySelector('[class*="br-loading-bar"]')).not.toBeNull();
+    expect(document.querySelector('[class*="browser-loading-bar"]')).not.toBeNull();
   });
 
   it('状态推送：isLoading=false 清除加载条', async () => {
@@ -152,13 +206,24 @@ describe('BrowserPane', () => {
         cb({ ...EMPTY_STATE, url: 'https://a.com/', isLoading: true, canGoBack: true });
       }
     });
-    expect(document.querySelector('[class*="br-loading-bar"]')).not.toBeNull();
+    expect(document.querySelector('[class*="browser-loading-bar"]')).not.toBeNull();
     await act(async () => {
       for (const cb of stateSubs) {
         cb({ ...EMPTY_STATE, url: 'https://a.com/', isLoading: false, canGoBack: true });
       }
     });
-    expect(document.querySelector('[class*="br-loading-bar"]')).toBeNull();
+    expect(document.querySelector('[class*="browser-loading-bar"]')).toBeNull();
+  });
+
+  it('加载中：进度条有无障碍语义（role=progressbar + aria-label）', async () => {
+    render(<BrowserPane />);
+    await act(async () => {
+      for (const cb of stateSubs) {
+        cb({ ...EMPTY_STATE, url: 'https://a.com/', isLoading: true, canGoBack: true });
+      }
+    });
+    // 不定式进度条：不设 aria-valuenow，靠 aria-label 说明正在加载
+    expect(screen.getByRole('progressbar', { name: '页面加载中' })).toBeDefined();
   });
 
   it('加载失败推送：订阅链路畅通（新一次加载清除失败状态，不阻塞后续渲染）', async () => {
@@ -174,7 +239,7 @@ describe('BrowserPane', () => {
       }
     });
     // 不抛错 + 加载条已出现（错误经 toast 反馈，UI 可继续交互）
-    expect(document.querySelector('[class*="br-loading-bar"]')).not.toBeNull();
+    expect(document.querySelector('[class*="browser-loading-bar"]')).not.toBeNull();
   });
 
   it('视口同步：挂载即推送占位区（jsdom 无布局 → rect null 隐藏）', async () => {

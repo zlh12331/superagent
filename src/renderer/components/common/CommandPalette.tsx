@@ -30,7 +30,7 @@ import {
   Sun,
   TerminalSquare,
 } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useSessionsQuery } from '@/hooks/use-sessions';
@@ -278,6 +278,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const openFile = useFileViewerStore((state) => state.openFile);
 
   const [query, setQuery] = useState('');
+  // 关闭时清空搜索词：本组件由 AppShell 常驻挂载（关闭只 `return null`，状态保留），
+  // 此前重新打开会带着上一次的搜索词与 cmdk 内部选中态。放在关闭分支里清，
+  // 而不是打开时清——避免打开首帧先渲染旧词再被重置的闪烁。
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
   // 全局 UI store：设置对话框入口（命令面板 / Topbar / 错误动作共享）
   const openSettings = useUiStore((state) => state.openSettings);
   // 侧栏视图切换（文件树为独立视图：对齐参考项目 codex.openFileTree 命令）
@@ -346,7 +352,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
         if (e.target === e.currentTarget) onOpenChange(false);
       }}
       onKeyDown={(e) => {
-        // 键盘可达性：Esc 关闭（cmdk 内部处理 Esc 时也会调 onOpenChange）
+        // 键盘可达性：Esc 关闭。cmdk 1.1.1 自身**不**处理 Escape（其 root
+        // onKeyDown 只覆盖 n/j/p/k/Arrow/Enter/Home/End，也不持有 onOpenChange），
+        // 故此处的显式处理是唯一路径，不是兜底重复。
         if (e.key === 'Escape') {
           e.preventDefault();
           onOpenChange(false);

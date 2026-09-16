@@ -124,11 +124,12 @@ describe('LogsPanel', () => {
     expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(8);
   });
 
-  it('查询失败：渲染错误提示 + 原始错误消息', () => {
+  it('查询失败：渲染错误提示 + 已本地化的错误文案', () => {
+    // 错误码经 unwrapErrorMessage 解析为 errors.* 文案（此前直出 `[CODE] message`）
     setLogsState({ error: new Error('[FS_READ_FAILED] 读取失败') });
     render(<LogsPanel />);
     expect(screen.getByText('日志获取失败')).toBeTruthy();
-    expect(screen.getByText('[FS_READ_FAILED] 读取失败')).toBeTruthy();
+    expect(screen.getByText('文件读取失败')).toBeTruthy();
   });
 
   it('无数据（非加载非错误）：提示日志面板为空', () => {
@@ -247,11 +248,12 @@ describe('MetricsPanel', () => {
     expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(12);
   });
 
-  it('查询失败：渲染错误提示 + 原始错误消息', () => {
-    setStatusState({ error: new Error('[SYSTEM_STATUS_FAILED] 获取失败') });
+  it('查询失败：渲染错误提示 + 已本地化的错误文案', () => {
+    // 错误码经 unwrapErrorMessage 解析为 errors.* 文案（此前直出 `[CODE] message`）
+    setStatusState({ error: new Error('[INTERNAL_ERROR] 获取失败') });
     render(<MetricsPanel />);
     expect(screen.getByText('指标获取失败')).toBeTruthy();
-    expect(screen.getByText('[SYSTEM_STATUS_FAILED] 获取失败')).toBeTruthy();
+    expect(screen.getByText('内部错误')).toBeTruthy();
   });
 
   it('无数据（非加载非错误）：提示指标数据为空', () => {
@@ -278,10 +280,11 @@ describe('MetricsPanel', () => {
     expect(screen.getByText('PID 4242')).toBeTruthy();
   });
 
-  it('有数据：打包态标记（isPackaged=true → packaged）', () => {
+  it('有数据：打包态标记（isPackaged=true → 打包版）', () => {
     setStatusState({ data: { ...STATUS_SAMPLE, isPackaged: true } });
     render(<MetricsPanel />);
-    expect(screen.getByText(/· packaged/)).toBeTruthy();
+    // 该标记已走 i18n（此前硬编码英文 'packaged'/'dev'）
+    expect(screen.getByText(/· 打包版/)).toBeTruthy();
   });
 
   it('刷新：点击刷新按钮触发 refetch', () => {

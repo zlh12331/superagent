@@ -63,7 +63,7 @@ describe('AskDialog', () => {
     expect(screen.getByText('选择后续方向？')).toBeInTheDocument();
     expect(screen.getByText('方案 A')).toBeInTheDocument();
     expect(screen.getByText('方案 B')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('自由回答（可选）…')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('第 1 问的自由回答（可选）…')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '提交' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument();
   });
@@ -96,7 +96,7 @@ describe('AskDialog', () => {
     setAsk('ask-9', [mkQuestion()]);
     render(<AskDialog />);
     await user.click(screen.getByText('方案 B'));
-    await user.type(screen.getByPlaceholderText('自由回答（可选）…'), '补充说明');
+    await user.type(screen.getByPlaceholderText('第 1 问的自由回答（可选）…'), '补充说明');
     await user.click(screen.getByRole('button', { name: '提交' }));
     expect(respondAsk).toHaveBeenCalledTimes(1);
     expect(respondAsk.mock.calls[0]?.[0]).toEqual({
@@ -135,6 +135,23 @@ describe('AskDialog', () => {
     render(<AskDialog />);
     const bar = screen.getByRole('progressbar');
     expect(bar.getAttribute('aria-valuemax')).toBe('2');
+  });
+
+  it('进度条边界：全部答完时 aria-valuenow 不越界（≤ valuemax）', async () => {
+    // 回归锚：调用方按「已答题数 + 1」算进度，两问全答会算到 3 > max=2。
+    // ARIA 要求 valuenow ≤ valuemax，组件内钳制后不再越界。
+    const user = userEvent.setup();
+    setAsk('ask-2', [mkQuestion(), mkQuestion({ question: '第二问？' })]);
+    render(<AskDialog />);
+    // 两问各选一个选项 → 全部作答
+    await user.click(screen.getAllByText('方案 A')[0] as HTMLElement);
+    await user.click(screen.getAllByText('方案 A')[1] as HTMLElement);
+
+    const bar = screen.getByRole('progressbar');
+    const now = Number(bar.getAttribute('aria-valuenow'));
+    const max = Number(bar.getAttribute('aria-valuemax'));
+    expect(now).toBeLessThanOrEqual(max);
+    expect(now).toBe(2);
   });
 
   it('respondAsk 返回 error：错误码本地化 toast（对齐 unwrapErrorMessage 统一模式）+ 仍清空 store', async () => {

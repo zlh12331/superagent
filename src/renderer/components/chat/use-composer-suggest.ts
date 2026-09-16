@@ -172,7 +172,7 @@ export function useComposerSuggest({
 
   // ── 触发检测（照搬参考项目 useSlashSuggest：支持任意位置触发，取位置靠后者）──
   // 触发检测为纯函数（suggest-trigger.ts）：slash 1-20 字符、mention ≤30 字符（允许空串）
-  const { atIndex, activeTrigger, activeQuery } = detectSuggestTrigger(value);
+  const { atIndex, slashIndex, activeTrigger, activeQuery } = detectSuggestTrigger(value);
 
   // slash 建议：内置命令过滤（command 带 '/' 前缀，查询词不含 '/'——对齐参考项目 useSlashSuggest 语义）
   const filteredSuggestions: readonly SlashSuggestion[] =
@@ -205,18 +205,28 @@ export function useComposerSuggest({
   });
   const suggestionTotal = slashOpen ? filteredSuggestions.length : mentionFiles.length;
 
-  /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
+  /**
+   * 应用斜杠建议：替换当前 / 触发段为完整命令
+   *
+   * 清除范围只限「触发段」而非整框（2026-09 审计修复）：触发检测支持任意位置
+   * （suggest-trigger 用 lastIndexOf），用户输入「帮我 /he」后点 /help 时，
+   * 此前 `setValue('')` 会把「帮我」一并抹掉——与 Esc 路径（已按 lastIndexOf 裁剪）
+   * 策略相反，属同类数据丢失在新位置的残留。
+   */
   const applySuggestion = (command: string): void => {
+    // slashIndex < 0 说明触发段已消失（如外部改值），保守起见不动输入
+    const before = slashIndex < 0 ? value : value.slice(0, slashIndex);
     // 带 action 的命令：执行动作（对齐参考项目），不填充文本
     const suggestion = findSlashSuggestion(command);
     if (suggestion?.action !== undefined) {
-      // 清空输入（suggestOpen 派生自输入值，自动关闭建议面板）
-      setValue('');
+      // 移除触发段（保留其前的用户输入），suggestOpen 派生自输入值 → 面板自动关闭
+      setValue(before);
       onAfterChange?.();
       onSlashCommand?.(suggestion.action);
       return;
     }
-    setValue(command);
+    // 替换触发段为完整命令（保留之前的文本，避免抹掉用户已输入的内容）
+    setValue(`${before}${command} `);
     onAfterChange?.();
     textareaRef.current?.focus();
   };

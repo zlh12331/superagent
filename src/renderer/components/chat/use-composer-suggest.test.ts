@@ -107,12 +107,38 @@ describe('useComposerSuggest', () => {
     expect(onAfterChange).toHaveBeenCalled();
   });
 
-  it('applySuggestion 无 action 的命令走填充路径（不存在命令 → 原样填入）', () => {
+  it('applySuggestion 无 action 的命令走填充路径（不存在命令 → 原样填入 + 尾随空格）', () => {
     const { result, setValue } = mountSuggest({ value: '/c' });
     act(() => {
       result.current.applySuggestion('/no-such-cmd');
     });
-    expect(setValue).toHaveBeenCalledWith('/no-such-cmd');
+    expect(setValue).toHaveBeenCalledWith('/no-such-cmd ');
+  });
+
+  // ── 前缀文本保留（2026-09 审计修复的回归锚） ──────────────────
+  //
+  // 触发检测支持任意位置（suggest-trigger 用 lastIndexOf），故「帮我 /he」这类
+  // 「前缀 + 触发段」是合法输入。此前 action 路径 setValue('')、填充路径
+  // setValue(command) 都会把前缀一并抹掉（数据丢失），与 Esc 路径
+  // （已按 lastIndexOf 裁剪）策略相反。下面两条锁定前缀必须保留。
+
+  it('回归：应用带 action 的命令时保留触发段之前的输入（帮我 /he → 帮我 ）', () => {
+    const { result, setValue, onSlashCommand } = mountSuggest({ value: '帮我 /he' });
+    act(() => {
+      result.current.handleSuggestKeyDown(keyEvent('Enter'));
+    });
+    // 高亮第 0 条 = /help（带 action）：只移除触发段，保留 '帮我 '
+    expect(onSlashCommand).toHaveBeenCalledWith('help');
+    expect(setValue).toHaveBeenCalledWith('帮我 ');
+  });
+
+  it('回归：填充路径同样保留前缀（帮我 /zz → 帮我 /no-such-cmd ）', () => {
+    // 内置命令全部带 action，故「填充路径」只对未收录命令生效
+    const { result, setValue } = mountSuggest({ value: '帮我 /zz' });
+    act(() => {
+      result.current.applySuggestion('/no-such-cmd');
+    });
+    expect(setValue).toHaveBeenCalledWith('帮我 /no-such-cmd ');
   });
 
   it('applyMention：替换 @查询 为 @完整路径', () => {

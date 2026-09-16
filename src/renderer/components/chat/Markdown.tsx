@@ -10,12 +10,15 @@
 // 设计：
 // - inline code：渲染为 <code class="inline">，样式由 CSS .msg-content code.inline 提供
 // - block code：shiki codeToHtml 异步高亮，生成带内联样式的 <pre>
-// - 代码块包裹 .code-block-wrapper，右上角 .code-copy-btn 复制按钮（hover 显示）
+// - 代码块包裹 .code-block-wrapper，右上角 .code-copy-btn 复制按钮（hover/聚焦显示）
 // - shiki highlighter 单例：首次调用异步初始化，后续同步访问
 //
 // 性能：
-// - 流式场景下 code 频繁变化，每次变化触发 codeToHtml（同步调用，通常 <5ms）
-// - 首次加载时 shiki 需从 CDN 拉取语言数据，有短暂延迟（显示纯文本 fallback）
+// - 流式期间由调用方传 highlight={false}（message-item 传 !isStreaming）跳过
+//   shiki，避免每个 token 到达都重跑长代码块高亮；回合结束后自动恢复
+// - shiki 语言数据是**本地打包 + 按需 code-split**（@/lib/highlight 走
+//   'shiki/bundle/web' 与 import('shiki/langs/*.mjs')），不发 CDN 请求；
+//   首次遇到延迟语言时按需加载，加载期间显示纯文本 fallback
 // ──────────────────────────────────────────────────────────────
 
 import { Check, Copy } from 'lucide-react';
@@ -67,11 +70,7 @@ export function Markdown({ content, className, highlight = true }: MarkdownProps
     <div className={cn('markdown-body', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        components={{
-          code: (props) => <CodeComponent {...props} highlight={highlight} />,
-          pre: PreComponent,
-          a: AnchorComponent,
-        }}
+        components={highlight ? COMPONENTS_HIGHLIGHTED : COMPONENTS_PLAIN}
       >
         {content}
       </ReactMarkdown>
@@ -84,12 +83,29 @@ export function Markdown({ content, className, highlight = true }: MarkdownProps
 // ──────────────────────────────────────────────────────────────
 
 /**
- * code 组件覆盖
+ * code 组件覆盖（高亮 / 纯文本两档）
  *
  * react-markdown 同时处理 inline code 和 block code：
  * - inline code（`` `text` ``）：无 language-* className → 渲染 <code class="inline">
  * - block code（```lang\n...\n```）：有 language-* className → 渲染 CodeBlock
+ * - 无语言标注的围栏（```\n...\n```）不带 info string ⇒ className 为空 ⇒ 走 inline 分支
+ *   （现状行为，见 __tests__/markdown.test.tsx）
+ *
+ * 两档写死为模块级常量而非在渲染内联定义：react-markdown 把 components[name] 直接
+ * 当作元素 type，内联箭头每次渲染都是新 identity ⇒ React 视为不同类型而卸载重挂该
+ * 子树，CodeBlock 的 useState（highlighted）/useCopy（copied）随之被重置（高亮结果
+ * 闪回纯文本、复制反馈归零）。模块级常量 identity 恒定，杜绝重挂。
  */
+const CodeHighlighted = (props: ComponentPropsWithoutRef<'code'>): ReactElement => (
+  <CodeComponent {...props} highlight />
+);
+
+const CodePlain = (props: ComponentPropsWithoutRef<'code'>): ReactElement => (
+  <CodeComponent {...props} highlight={false} />
+);
+
+const COMPONENTS_HIGHLIGHTED = { code: CodeHighlighted, pre: PreComponent, a: AnchorComponent };
+const COMPONENTS_PLAIN = { code: CodePlain, pre: PreComponent, a: AnchorComponent };
 function CodeComponent({
   className,
   children,
@@ -233,7 +249,10 @@ function CodeBlock({
           className={cn(
             'text-muted-foreground hover:text-foreground absolute top-2 right-2 size-6 hover:bg-transparent',
             copied && 'text-accent',
-            'opacity-0 group-hover:opacity-100',
+            // 键盘可达性（WCAG 2.4.7）：此前仅 group-hover 显形，Tab 聚焦到按钮时
+            // 父容器仍 opacity-0——可聚焦但视觉不可见。补 group-focus-within（与
+            // globals.css 中 .msg:focus-within .msg-actions 的既有修复同源）。
+            'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           )}
           onClick={handleCopy}
           aria-label={copied ? t('common.copied') : t('common.copyCode')}

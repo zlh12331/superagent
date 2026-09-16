@@ -181,7 +181,14 @@ function useMemoryClear(params: {
         message: t('settings.memoryClearConfirmDesc', { count: memoryCount }),
         danger: true,
       });
-      if (ok) await clearOneMutation.mutateAsync();
+      if (!ok) return;
+      try {
+        await clearOneMutation.mutateAsync();
+      } catch {
+        // 失败已由 onError toast；此处吞掉 rejection——unhandled rejection 会冒泡到
+        // 全局（渲染层错误出口/日志噪音）。调用方写的是 `void clearOne()`，
+        // 只丢弃返回值、并不捕获拒绝。
+      }
     },
     clearAll: async () => {
       const ok = await confirm({
@@ -189,7 +196,12 @@ function useMemoryClear(params: {
         message: t('settings.memoryClearAllConfirmDesc', { count: sessionCount }),
         danger: true,
       });
-      if (ok) await clearAllMutation.mutateAsync();
+      if (!ok) return;
+      try {
+        await clearAllMutation.mutateAsync();
+      } catch {
+        // 同上：onError 已提示，吞掉 rejection 防未处理拒绝冒泡
+      }
     },
   };
 }

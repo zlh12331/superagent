@@ -36,9 +36,16 @@ function isImeComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
   return event.nativeEvent.isComposing;
 }
 
-/** 是否为「发送」快捷键（Enter，且不带 Shift/Ctrl/Cmd） */
+/**
+ * 是否为「发送」快捷键（Enter，且不带 Shift/Ctrl/Cmd/Alt）
+ *
+ * 排除 Alt 与 handleVimKey 的判定保持一致（那里显式排除 altKey）：Alt+Enter
+ * 在 Windows 上是系统级组合键语义，不应被本应用当发送处理。
+ */
 function isSendShortcut(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
-  return event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey;
+  return (
+    event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+  );
 }
 
 interface ChatInputProps {
@@ -421,7 +428,9 @@ export function ChatInput({
               {vimState.mode === 'normal' ? t('chat.vimNormal') : t('chat.vimInsert')}
             </span>
           )}
-          <kbd>⏎</kbd> {t('chat.send')} · <kbd>⇧⏎</kbd> {t('chat.newline')}
+          {/* 快捷键提示：键名对读屏有意义（「Enter 发送 · Shift+Enter 换行」），
+              故不用 aria-hidden 抹掉字形，而是让 kbd 承载可读键名 */}
+          <kbd>Enter</kbd> {t('chat.send')} · <kbd>Shift+Enter</kbd> {t('chat.newline')}
           {isStreaming ? (
             <>
               {' · '}

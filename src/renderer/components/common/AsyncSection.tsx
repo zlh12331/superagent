@@ -110,13 +110,16 @@ export function QueryPendingRow({ isPending }: { isPending: boolean }): React.Re
   if (!isPending) return null;
   return (
     <div className="text-muted-foreground mt-2 flex items-center gap-2 text-xs" role="status">
-      <Spinner className="size-3.5" />
+      {/* Spinner 降级为装饰：外层已是 role="status"，且本行另有可见的加载文案
+          ——此前内层 Spinner 自带 role="status" + sr-only「加载中」，与外层嵌套
+          成两个 live region，同一状态被播报两次 */}
+      <Spinner className="size-3.5" aria-hidden />
       {t('common.loading')}
     </div>
   );
 }
-/** 外层统一间距与字号的四态容器 */
 
+/** 外层统一间距与字号的四态容器 */
 const WRAPPER_CLASS = 'mt-2 text-xs leading-relaxed';
 
 export function AsyncSection({

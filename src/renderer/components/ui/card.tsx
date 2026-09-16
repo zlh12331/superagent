@@ -9,28 +9,19 @@
 // 用法：
 //   <Card>…</Card>
 //   <Card className="px-4 py-8">…</Card>          // 覆盖内边距
-//   <Card interactive onClick={…}>…</Card>         // 可点击卡（hover 反馈）
+//
+// 可点击整卡请用 <button>（或 ui/button），不要把 onClick 挂在 Card 上：
+// 此前有一个 interactive prop（hover 反馈 + 手型光标）且文档示例正是
+// `<Card interactive onClick>`，但 div + onClick 无键盘可达性/无按钮语义
+// （WCAG 2.1.1），该 prop 全仓零调用，已于 2026-09 审计移除。
 // ──────────────────────────────────────────────
 
 import type { ComponentPropsWithoutRef, ReactElement } from 'react';
 
 import { cn } from '@/lib/utils';
 
-export interface CardProps extends ComponentPropsWithoutRef<'div'> {
-  /** 可点击卡：hover 底色反馈 + 手型光标（交互语义仍由调用方的 onClick 提供） */
-  readonly interactive?: boolean;
-}
-
-export function Card({ className, interactive = false, ...props }: CardProps): ReactElement {
+export function Card({ className, ...props }: ComponentPropsWithoutRef<'div'>): ReactElement {
   return (
-    <div
-      data-slot="card"
-      className={cn(
-        'bg-card rounded-lg px-3 py-2',
-        interactive && 'hover:bg-muted/60 cursor-pointer transition-colors',
-        className,
-      )}
-      {...props}
-    />
+    <div data-slot="card" className={cn('bg-card rounded-lg px-3 py-2', className)} {...props} />
   );
 }

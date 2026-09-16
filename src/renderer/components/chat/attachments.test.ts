@@ -27,6 +27,7 @@ describe('buildTextWithAttachments', () => {
   const label = {
     attached: (name: string) => `[附件: ${name}]`,
     readFailed: (name: string) => `[附件: ${name}]（内容读取失败）`,
+    truncated: (chars: number) => `\n…[截断，原始 ${chars} 字符]`,
   };
 
   beforeEach(() => {
@@ -51,11 +52,20 @@ describe('buildTextWithAttachments', () => {
     expect(text).toContain('const x = 1;');
   });
 
-  it('附件内容超上限截断（4000 字符）', async () => {
+  it('附件内容超上限截断（4000 字符）+ 显式截断标注', async () => {
     stubFileRead(() => ({ data: { content: 'x'.repeat(5000) } }));
     const text = await buildTextWithAttachments('m', [{ path: '/r/big', name: 'big' }], label);
     const body = (text.split('```')[1] ?? '').trim();
-    expect(body.length).toBe(4000);
+    // 正文 4000 字符 + 截断标注行（此前静默截断，模型/用户会误以为拿到完整文件）
+    expect(body).toContain('x'.repeat(4000));
+    expect(body).toContain('原始 5000 字符');
+  });
+
+  it('边界：内容恰好等于上限 → 不标截断', async () => {
+    stubFileRead(() => ({ data: { content: 'y'.repeat(4000) } }));
+    const text = await buildTextWithAttachments('m', [{ path: '/r/exact', name: 'exact' }], label);
+    expect(text).not.toContain('截断');
+    expect(text).toContain('y'.repeat(4000));
   });
 
   it('IPC error 响应 → 降级为文件名标注，不阻断', async () => {

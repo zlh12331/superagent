@@ -10,6 +10,8 @@
 // ──────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
+
+import { buildFileSearchPattern } from '@/lib/file-search';
 import { unwrap } from '@/lib/ipc';
 import type { SuggestTrigger } from './suggest-trigger';
 
@@ -55,7 +57,11 @@ export function useMentionFiles(
       }
       void window.api.search
         .glob({
-          pattern: `**/*${activeQuery ?? ''}*`,
+          // 复用 lib/file-search 的模式构造（2026-09 审计修复）：
+          // 此前直接拼 `**/*${query}*`，用户输入的 glob 元字符（* ? [ ] { } ( ) !）
+          // 会被当作模式语法而非字面量——输入 `@a*` 会匹配任意 a 前缀文件，
+          // 且带元字符时下游大小写展开也会错位。与 fuzzy-search-dialog 同一真源。
+          pattern: buildFileSearchPattern(activeQuery ?? ''),
           path: workingDir,
           includeHidden: false,
           maxResults: MENTION_MAX_RESULTS,

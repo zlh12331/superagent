@@ -6,9 +6,9 @@
 //   type="multiple"（value: string[] + onValueChange: string[]）
 // - 项 ToggleGroupItem：value 必填，激活态由 Radix data-state=on 驱动
 //
-// 背景（2026-09 一致性收敛）：此前 SegControl / LogsPanel 过滤钮 /
-// InspectorPanel 触发钮是手写 aria-pressed 切换组，无方向键/roving
-// tabindex/唯一容器语义；经用户拍板引入 Radix ToggleGroup 统一。
+// 背景（2026-09 一致性收敛）：此前 SegControl / LogsPanel 过滤钮是手写
+// aria-pressed 切换组，无方向键/roving tabindex/唯一容器语义；经用户拍板
+// 引入 Radix ToggleGroup 统一（InspectorPanel 的触发钮最终未迁移，仍是 Button）
 //
 // 变体：默认（紧凑行内）
 // 状态：容器受控（single: value+onValueChange | multiple: value[]+onValueChange）
@@ -21,7 +21,7 @@ import type * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-/** 切换组根容器（type 由 Radix 按 value/onValueChange 推；single 用受控） */
+/** 切换组根容器（type 必填——Radix 不会从 value/onValueChange 推导；single 用受控 value） */
 export function ToggleGroup({
   className,
   ...props

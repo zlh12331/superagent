@@ -48,6 +48,39 @@ describe('mapToolStateToStatusClass', () => {
   });
 });
 
+describe('状态映射表完整性（单一真源不变量）', () => {
+  // label 与 class 收敛到同一张 Record 后，两条映射必须对**每个** ToolCallState
+  // 都给出一致的分组（此前是两条平行 if 阶梯，新增状态只改一处会静默漂移）。
+  const AllStates = [
+    'input-streaming',
+    'input-available',
+    'approval-requested',
+    'approval-responded',
+    'output-available',
+    'output-error',
+    'output-denied',
+  ] as const;
+
+  it('每个状态都有定义（无 undefined 漏网）', () => {
+    for (const state of AllStates) {
+      expect(mapToolStateToStatusLabelKey(state)).toBeTypeOf('string');
+      expect(mapToolStateToStatusClass(state)).toBeTypeOf('string');
+    }
+  });
+
+  it('label 分组与 class 分组一一对应', () => {
+    const expected: Record<string, string> = {
+      statusError: 'error',
+      statusSuccess: 'success',
+      statusRunning: 'running',
+      statusWaiting: 'pending',
+    };
+    for (const state of AllStates) {
+      expect(expected[mapToolStateToStatusLabelKey(state)]).toBe(mapToolStateToStatusClass(state));
+    }
+  });
+});
+
 describe('formatJson', () => {
   it('正常对象 → 缩进 JSON', () => {
     expect(formatJson({ a: 1 }, mockT)).toBe('{\n  "a": 1\n}');
