@@ -1898,6 +1898,19 @@ body.resizing iframe {
   border-radius: 1px;
 }
 
+/* loading-ui 终端光标：块状光标闪烁
+   复用既有 blink 关键帧（前 50% 亮 / 后 50% 灭的硬闪烁，与 .cursor 同源）——
+   此前该动画在组件内联 <style> 里私有复制了一份等价 keyframe，
+   是渲染层唯一的内联 <style>，且与「关键帧统一在 globals.css」的约定不符。
+   尺寸用 em 跟随字号，颜色走 currentColor 以便调用方用 className 控色。 */
+.loading-ui-terminal-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  background: currentColor;
+  animation: blink 1s step-end infinite;
+}
+
 /* 打字指示器：三个 accent 点依次弹跳 */
 .typing-indicator {
   display: flex;
