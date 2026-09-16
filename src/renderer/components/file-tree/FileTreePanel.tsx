@@ -26,6 +26,7 @@ import {
 import { useFileTree } from '@/hooks/use-file-tree';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
+import { basename } from '@/lib/utils';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -34,19 +35,6 @@ import { FileTreeNode } from './FileTreeNode';
 interface FileTreePanelProps {
   /** 当前激活会话的 workingDir（无激活会话时为 null） */
   readonly workingDir: string | null;
-}
-
-/**
- * 从绝对路径提取 basename（兼容 Windows 反斜杠与 POSIX 正斜杠）
- *
- * 用于根节点显示名称。不依赖 node:path（渲染层无 Node API）。
- */
-function basename(path: string): string {
-  const lastSlash = path.lastIndexOf('/');
-  const lastBackslash = path.lastIndexOf('\\');
-  const idx = Math.max(lastSlash, lastBackslash);
-  if (idx === -1) return path;
-  return path.slice(idx + 1);
 }
 
 /**

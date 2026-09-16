@@ -127,14 +127,6 @@
     "count": 1,
     "max": 18
   },
-  "src/renderer/components/file-tree/FileTreeNode.tsx": {
-    "count": 1,
-    "max": 16
-  },
-  "src/renderer/components/file-tree/FileViewerPanel.tsx": {
-    "count": 1,
-    "max": 46
-  },
   "src/renderer/components/git/GitPanel.tsx": {
     "count": 1,
     "max": 16

@@ -1,27 +1,17 @@
-// inline-create-input.tsx（自 FileTreeNode 拆分）
+// src/renderer/components/file-tree/inline-create-input.tsx
 // 文件树 · 行内新建输入
 // ──────────────────────────────
 // 拆分背景：FileTreeNode 564 行，按职责提取
 // ──────────────────────────────
-
-// src/renderer/components/file-tree/FileTreeNode.tsx
-// 文件树节点（递归渲染）
-// ──────────────────────────────────────────────────────────────
 // 职责：
-// - 渲染单个目录或文件节点
-// - 目录节点：展开/折叠箭头 + 文件夹图标 + 名称 + 递归渲染子节点
-// - 文件节点：文件图标 + 名称（点击触发 onOpenFile 回调）
-// - 通过 depth 控制缩进层级
-// - hover 显示「更多操作」按钮（DropdownMenu 触发）
-// - 内联重命名输入框（renamingPath === path 时替换名称为 input）
-// - 内联新建临时节点（creatingEntry.parentDir === path 时在子条目顶部渲染 input）
+// - 渲染行内新建输入框（文件 / 目录名）：Enter 提交、Esc 取消、失焦提交
+// - 空名提交等同取消（不创建空名条目）
 //
 // 设计：
-// - 自包含：从 store 读取自身展开状态、子条目、加载状态、内联编辑状态
-// - memo 优化：仅当 props（path/name/type/depth/onOpenFile）变化时重渲染
-// - ft-node 作为 position: relative 承载「更多」按钮的绝对定位
-// - 文学风视觉：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
-// ──────────────────────────────────────────────────────────────
+// - handledRef 防止 Enter/Esc 后 onBlur 重复提交（keydown 先标记，blur 检查后重置）
+// - 非交互行容器用 div 而非 disabled button（禁用按钮的后代表单控件不可交互，
+//   且屏幕阅读器会先读到无意义的禁用态）
+// ──────────────────────────────
 
 import { File, Folder } from 'lucide-react';
 import { type KeyboardEvent, type ReactElement, useRef } from 'react';

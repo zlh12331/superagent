@@ -26,7 +26,7 @@ import { useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { unwrap } from '@/lib/ipc';
-import { cn } from '@/lib/utils';
+import { basename, cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
 import { FileIcon } from './file-icon';
@@ -99,13 +99,6 @@ async function searchFiles(query: string, rootDir: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-/** 从完整路径提取文件名 */
-function basename(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
-  const slash = normalized.lastIndexOf('/');
-  return slash >= 0 ? normalized.slice(slash + 1) : normalized;
 }
 
 /** 从完整路径中提取目录部分（不含文件名） */

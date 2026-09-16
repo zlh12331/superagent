@@ -31,7 +31,7 @@ import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
 import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { fadeInVariants, letterContainerVariants, letterUpVariants } from '@/lib/motion';
-import { cn } from '@/lib/utils';
+import { basename, cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
@@ -66,12 +66,6 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
     icon: Wrench,
   },
 ] as const;
-
-/** 路径 basename（跨平台，取最后一段） */
-function basename(path: string): string {
-  const parts = path.split(/[\\/]/);
-  return parts[parts.length - 1] || path;
-}
 
 export function HomePage(): ReactElement {
   // 本地化文案 + 错误码解析（单一真源）
