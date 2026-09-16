@@ -693,7 +693,9 @@ function createMockApi(): IpcApi {
             cb({ terminalId, data: `MOCK PTY：cwd=${cwd}\r\nPS> ` });
           }
         }, 100);
-        return ipcOk({ terminalId, pid: 0 });
+        // pid 用固定正数（契约要求 positive int，0 会被 TerminalCreateResSchema 拒绝）；
+        // title 与真实主进程语义一致：默认 shell 名（此处模拟 PowerShell 提示符）
+        return ipcOk({ terminalId, pid: 1, title: 'powershell.exe' });
       },
       input: async ({ terminalId, data }: Req<IpcApi['terminal']['input']>) => {
         // 回显输入（模拟 shell）

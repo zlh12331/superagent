@@ -135,12 +135,21 @@ export interface TerminalCreateRes {
   readonly terminalId: string;
   /** PTY 进程 pid */
   readonly pid: number;
+  /**
+   * 终端标题（启动命令或默认 shell 名，如 powershell.exe / zsh / bash）
+   *
+   * 由主进程给出真实值：渲染层无法自行推断默认 shell（按平台解析，见
+   * terminal-service.resolveShell）。此前渲染层硬编码 'bash'，Windows 上
+   * 标签与实际运行的 powershell.exe 不符。
+   */
+  readonly title: string;
 }
 
 /** terminal:create 响应 zod schema（响应契约校验用） */
 export const TerminalCreateResSchema = z.object({
   terminalId: z.string().min(1),
   pid: z.number().int().positive(),
+  title: z.string(),
 });
 
 /**

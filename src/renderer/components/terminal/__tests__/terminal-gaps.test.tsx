@@ -130,6 +130,58 @@ describe('terminal 批次5 缺口补全', () => {
       expect(onClose).toHaveBeenCalledWith('t1');
       expect(onSelect).not.toHaveBeenCalled();
     });
+
+    // ── 方向键导航（2026-09 审计补：a11y spec 明确要求 tablist 支持方向键，
+    //    此前仅有 roving tabIndex 而无 Arrow 处理，键盘用户无法在 tab 间移动） ──
+
+    it('ArrowRight：切换到下一个 tab', () => {
+      const onSelect = vi.fn();
+      render(
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={vi.fn()} />,
+      );
+
+      fireEvent.keyDown(screen.getAllByRole('tab')[0] as HTMLElement, { key: 'ArrowRight' });
+
+      expect(onSelect).toHaveBeenCalledWith('t2');
+    });
+
+    it('ArrowLeft：从首项回绕到末项', () => {
+      const onSelect = vi.fn();
+      render(
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={vi.fn()} />,
+      );
+
+      fireEvent.keyDown(screen.getAllByRole('tab')[0] as HTMLElement, { key: 'ArrowLeft' });
+
+      expect(onSelect).toHaveBeenCalledWith('t2');
+    });
+
+    it('Home/End：跳到首/末 tab', () => {
+      const onSelect = vi.fn();
+      render(
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={vi.fn()} />,
+      );
+      const tabs = screen.getAllByRole('tab');
+
+      fireEvent.keyDown(tabs[0] as HTMLElement, { key: 'End' });
+      expect(onSelect).toHaveBeenLastCalledWith('t2');
+      fireEvent.keyDown(tabs[1] as HTMLElement, { key: 'Home' });
+      expect(onSelect).toHaveBeenLastCalledWith('t1');
+    });
+
+    it('方向键切换后焦点跟随激活项（roving tabindex 约定）', () => {
+      render(
+        <TerminalTabs terminals={terminals} activeId="t1" onSelect={vi.fn()} onClose={vi.fn()} />,
+      );
+
+      const first = screen.getAllByRole('tab')[0] as HTMLElement;
+      first.focus();
+      fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+      // 焦点须移到 t2 对应节点：否则焦点留在 tabIndex=-1 的旧节点，
+      // 下次按 Tab 会直接跳过整个 tablist（键盘导航失效）
+      expect(document.activeElement?.getAttribute('data-terminal-tab')).toBe('t2');
+    });
   });
 
   describe('TerminalView', () => {

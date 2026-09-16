@@ -8,7 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Terminal as TerminalIcon } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { type KeyboardEvent, type ReactElement, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
@@ -27,9 +27,58 @@ interface TerminalTabsProps {
 }
 
 /**
+ * 解析 Tab 上的按键意图（纯函数，便于独立推理与单测）
+ *
+ * 收敛动机（2026-09 审计）：方向键/Home/End/Enter/Space/Delete 的分支此前全部
+ * 内联在 JSX 的 onKeyDown 里，外加两处 `target !== undefined` 守卫，把
+ * TerminalTabs 的认知复杂度推到 32（阈值 15）。改为「按键 → 意图」的纯映射后，
+ * 组件侧只剩一次 switch on intent。
+ *
+ * @param key 按键名（KeyboardEvent.key）
+ * @param index 当前 Tab 下标
+ * @param count Tab 总数
+ * @returns 意图；null 表示该键与标签栏无关（调用方不得拦截事件）
+ */
+type TabKeyIntent =
+  | { readonly kind: 'select'; readonly index: number }
+  | { readonly kind: 'close' };
+
+function resolveTabKeyIntent(key: string, index: number, count: number): TabKeyIntent | null {
+  // 列表为空时无目标可算（Home/End/方向键都退化）
+  if (count === 0) {
+    return key === 'Delete' || key === 'Backspace' ? { kind: 'close' } : null;
+  }
+  switch (key) {
+    case 'ArrowRight':
+      return { kind: 'select', index: (index + 1) % count };
+    case 'ArrowLeft':
+      return { kind: 'select', index: (index - 1 + count) % count };
+    case 'Home':
+      return { kind: 'select', index: 0 };
+    case 'End':
+      return { kind: 'select', index: count - 1 };
+    case 'Enter':
+    case ' ':
+      return { kind: 'select', index };
+    case 'Delete':
+    case 'Backspace':
+      return { kind: 'close' };
+    default:
+      return null;
+  }
+}
+
+/**
  * 终端标签栏组件。
  *
- * 键盘导航：Enter/Space 切换 Tab，Delete/Backspace 关闭 Tab。
+ * 键盘导航（对齐 a11y spec §「标签页支持方向键导航」）：
+ * - ArrowLeft/ArrowRight：在 Tab 间移动焦点并切换激活项（横向 roving tabindex，两端回绕）
+ * - Home/End：跳到首/末 Tab
+ * - Enter/Space：切换到当前 Tab
+ * - Delete/Backspace：关闭当前 Tab
+ *
+ * 注：自研 tablist 需自行实现方向键——Radix Tabs 内置该行为，但本组件是终端
+ * 特有的「可关闭标签」，Radix 无对应形态，故手写等价语义。
  */
 export function TerminalTabs({
   terminals,
@@ -39,9 +88,52 @@ export function TerminalTabs({
 }: TerminalTabsProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  // 标签栏容器：方向键切换后把焦点移到新激活项（roving tabindex 约定）
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * 移焦到指定 Tab（roving tabindex 要求「焦点与激活项同行」）。
+   *
+   * 若不移动焦点：激活项换到 tabIndex=0 的新节点，但 DOM 焦点仍停在上一个
+   * （现 tabIndex=-1）节点上——视觉焦点环留在非激活项，且用户下次按 Tab 会
+   * 直接从 tablist 跳走，等于键盘导航失效。
+   */
+  const focusTab = (id: string): void => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-terminal-tab="${id}"]`);
+    el?.focus();
+  };
+
+  /**
+   * Tab 按键处理：把纯函数解析出的意图落到回调。
+   *
+   * @param terminal 当前 Tab 的终端元数据
+   * @param index 当前 Tab 下标
+   * @param event 键盘事件
+   */
+  const handleTabKeyDown = (
+    terminal: TerminalMeta,
+    index: number,
+    event: KeyboardEvent<HTMLDivElement>,
+  ): void => {
+    const intent = resolveTabKeyIntent(event.key, index, terminals.length);
+    // 无关按键不拦截（让事件继续冒泡）
+    if (intent === null) return;
+    event.preventDefault();
+
+    if (intent.kind === 'close') {
+      onClose(terminal.id);
+      return;
+    }
+    const target = terminals[intent.index]?.id;
+    if (target === undefined) return;
+    onSelect(target);
+    // 仅方向键/Home/End 需要移焦（Enter/Space 未移动目标）
+    if (target !== terminal.id) focusTab(target);
+  };
 
   return (
     <div
+      ref={listRef}
       role="tablist"
       aria-label={t('terminal.tabsAriaLabel')}
       className="bg-background flex shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -54,6 +146,7 @@ export function TerminalTabs({
             role="tab"
             aria-selected={isActive}
             tabIndex={isActive ? 0 : -1}
+            data-terminal-tab={terminal.id}
             className={cn(
               'group relative flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 border-r pr-2 pl-2.5 whitespace-nowrap transition-colors',
               index === 0 && 'border-l border-l-border',
@@ -62,15 +155,7 @@ export function TerminalTabs({
                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground bg-transparent',
             )}
             onClick={() => onSelect(terminal.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect(terminal.id);
-              } else if (e.key === 'Delete' || e.key === 'Backspace') {
-                e.preventDefault();
-                onClose(terminal.id);
-              }
-            }}
+            onKeyDown={(e) => handleTabKeyDown(terminal, index, e)}
           >
             <TerminalIcon className="text-accent size-3 shrink-0" />
             <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-[11px]">

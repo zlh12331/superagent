@@ -302,7 +302,9 @@ export class TerminalService implements ITerminalService {
     this.terminals.set(terminalId, { pty, webContents });
     logger.info({ terminalId, file, cwd, pid: pty.pid }, 'TerminalService PTY 已创建');
 
-    return { terminalId, pid: pty.pid };
+    // title 同时给出：与 created 事件同源（`title` 变量在上方构造 payload 时已算出），
+    // 渲染层据此显示真实 shell 名而无需自行推断平台默认 shell
+    return { terminalId, pid: pty.pid, title };
   }
 
   /**

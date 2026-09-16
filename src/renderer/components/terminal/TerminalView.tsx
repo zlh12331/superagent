@@ -22,6 +22,7 @@ import { CircleSlash } from 'lucide-react';
 import { type ReactElement, useEffect, useRef } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { hasIpcBridge } from '@/lib/ipc';
 import type { TerminalMeta } from '@/stores/transient/terminal-store';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
@@ -81,6 +82,8 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
   // 依赖 session.id 变化时重新初始化（切换终端或新建终端时触发）
   useEffect(() => {
     if (containerRef.current === null) return;
+    // 浏览器模式（dev 预览）无桥：不初始化 xterm（订阅/输入/尺寸同步全都依赖 IPC）
+    if (!hasIpcBridge()) return;
 
     const terminalId = session.id;
     const container = containerRef.current;

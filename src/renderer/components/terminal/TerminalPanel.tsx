@@ -20,9 +20,10 @@ import { toast } from 'sonner';
 
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
 import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
+import { Button } from '@/components/ui/button';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
@@ -85,9 +86,20 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
 
   // 「正在创建终端」状态（避免点击按钮后用户重复点击）
   const [isCreating, setIsCreating] = useState(false);
+  // 自动创建失败后的错误文案（null = 无错误）；显示重试入口
+  const [createError, setCreateError] = useState<string | null>(null);
   // ref 防重入：StrictMode 双执行 effect 时 state 未 flush，闭包读到旧值 false → 双调 IPC
   //（实测同毫秒双调 mock create → 同 id 双条目）；ref 同步写入无闭包陷阱
   const creatingRef = useRef(false);
+  // 本轮「无终端」是否已尝试过自动创建（由 handleCreate 自身置位）。
+  //
+  // 修复（2026-09 审计）：自动创建 effect 此前仅以 `terminals.length === 0 && !isCreating`
+  // 为条件，而失败后 isCreating 在同一次异步中翻回 false、terminals 仍为空 →
+  // effect 立刻再次触发，形成 **IPC create 无限风暴**（实测单次失败在 20 个微任务
+  // 周期内触发 12157 次 create 调用，真实环境会打爆主进程）。
+  // 现改为：handleCreate 一进入就置位本标记，effect 仅在标记未置位时自动触发一次；
+  // 失败后由用户点重试（重试路径直接调 handleCreate，不经 effect）。
+  const autoCreateTriedRef = useRef(false);
 
   // 激活终端：store.activeTerminalId 属于当前会话则用之，否则回退第一个
   const activeId = terminals.some((term) => term.id === activeTerminalId)
@@ -100,13 +112,18 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   // 普通函数每渲染重建会触发 effect 反复执行）
   const handleCreate = useCallback(async (): Promise<void> => {
     if (creatingRef.current) return;
+    // 浏览器模式（dev 预览）无桥：不发起创建，也不进入错误态（无终端可显示）
+    if (!hasIpcBridge()) return;
+    // 置位「已尝试」标记：effect 据此不再自动重触发（见 autoCreateTriedRef 注释）
+    autoCreateTriedRef.current = true;
     creatingRef.current = true;
     setIsCreating(true);
+    setCreateError(null);
     try {
       // exactOptionalPropertyTypes：TerminalCreateReqSchema 的 command/env 虽为可选
       // 但 zod 的 .optional().transform() 让类型变为 `string | undefined`（属性必填）
       // 因此必须显式传入 undefined（表示使用默认 shell）
-      const { terminalId } = unwrap(
+      const { terminalId, pid, title } = unwrap(
         await window.api.terminal.create({
           // 无激活会话时 undefined → 主进程回退用户主目录
           cwd: workingDir ?? undefined,
@@ -119,8 +136,10 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       createTerminalInStore({
         id: terminalId,
         sessionId,
-        title: 'bash',
-        pid: null,
+        // 标题/pid 取自主进程真实值（此前硬编码 'bash' + pid:null——
+        // Windows 实际启动 powershell.exe，标签显示 bash 属事实错误）
+        title,
+        pid,
         cwd: workingDir ?? '',
         alive: true,
       });
@@ -128,23 +147,38 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       // 终端创建失败时通过 toast 提示用户（不阻塞 UI）
       const message = error instanceof Error ? error.message : String(error);
       toast.error(t('terminal.createFailed', { message }));
+      // 记录错误以渲染重试入口（不再自动重试，见 autoCreateTriedRef 注释）
+      setCreateError(message);
     }
     // finally 语义（React Compiler 不优化 try/finally）：catch 已吞掉全部异常
     creatingRef.current = false;
     setIsCreating(false);
   }, [workingDir, sessionId, createTerminalInStore, t]);
 
-  // 自动创建：进入终端视图时无终端则直接创建（用户要求：点击终端 tab 直接打开终端）
-  // P3 修复：依赖表补 handleCreate（此前 biome-ignore 已失效——规则在 hook 调用位
-  // 报告，忽略注释错位）；sessionId 不在依赖中（terminals 为空是全局触发条件）
+  // 自动创建：进入终端视图时无终端则创建一次（用户要求：点击终端 tab 直接打开终端）
+  // 每轮空态只尝试一次——handleCreate 置位标记后，effect 不再自动重触发；
+  // 失败由用户点重试（见 createError 分支），避免失败风暴。
   useEffect(() => {
-    if (terminals.length === 0 && !isCreating) {
+    if (terminals.length === 0 && !isCreating && !autoCreateTriedRef.current) {
       void handleCreate();
+    }
+    // 有终端后重置标记：下次清空（全部关闭）时仍能自动创建
+    if (terminals.length > 0) {
+      autoCreateTriedRef.current = false;
     }
   }, [terminals.length, isCreating, handleCreate]);
 
+  /** 失败后重试：直接调 handleCreate（不经 effect，故不会重复触发） */
+  const handleRetry = useCallback((): void => {
+    void handleCreate();
+  }, [handleCreate]);
+
   // 关闭终端：调用 IPC kill → 从 store 移除
   const handleClose = async (terminalId: string): Promise<void> => {
+    if (!hasIpcBridge()) {
+      closeTerminalInStore(terminalId);
+      return;
+    }
     try {
       await window.api.terminal.kill({ terminalId });
     } catch (error) {
@@ -156,8 +190,20 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     closeTerminalInStore(terminalId);
   };
 
-  // 无终端：自动创建中显示 loading（用户要求：不需要"新建终端"按钮）
+  // 无终端：自动创建中显示 loading；创建失败显示错误 + 重试（不再自动重试）
   if (terminals.length === 0) {
+    if (createError !== null) {
+      return (
+        <div className={cn('flex h-full flex-col items-center justify-center gap-2', className)}>
+          <span className="text-error-text text-xs">
+            {t('terminal.createFailed', { message: createError })}
+          </span>
+          <Button variant="outline" size="sm" onClick={handleRetry}>
+            {t('common.retry')}
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className={cn('flex h-full items-center justify-center', className)}>
         {isCreating ? (
