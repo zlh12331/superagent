@@ -163,6 +163,14 @@ describe('FileTreeNode · 目录节点', () => {
     const rowWrap = container.querySelector('.ft-row-wrap') as HTMLElement;
     expect(rowWrap.style.paddingLeft).toBe('32px');
   });
+
+  it('操作中：目录行带 pending 类（防重复操作的可视反馈）', () => {
+    useFileTreeStore.getState().setPendingOp('/root', true);
+    const { container } = render(
+      <FileTreeNode path="/root" name="root" type="directory" depth={0} onOpenFile={vi.fn()} />,
+    );
+    expect(container.querySelector('.ft-dir.pending')).not.toBeNull();
+  });
 });
 
 describe('FileTreeNode · 文件节点', () => {

@@ -5,18 +5,18 @@
 // （此前无覆盖；若回归会导致「回车新建 + 失焦再建一次」重复落盘）。
 // ──────────────────────────────────────────────────────────────
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
 
 import { InlineCreateInput } from '../inline-create-input';
 
-function setup(type: 'file' | 'directory' = 'file') {
+function setup(type: 'file' | 'directory' = 'file', depth = 1) {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
   const view = render(
-    <InlineCreateInput type={type} depth={1} onConfirm={onConfirm} onCancel={onCancel} />,
+    <InlineCreateInput type={type} depth={depth} onConfirm={onConfirm} onCancel={onCancel} />,
   );
   const input = screen.getByRole('textbox') as HTMLInputElement;
   return { onConfirm, onCancel, input, ...view };
@@ -92,5 +92,19 @@ describe('InlineCreateInput', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledWith('d.ts');
+  });
+
+  it('缩进：与 FileTreeNode 共用同一公式（depth*12+8，单一真源 ./indent）', () => {
+    const { container } = setup('file', 2);
+    const rowWrap = container.querySelector('.ft-row-wrap') as HTMLElement;
+    expect(rowWrap.style.paddingLeft).toBe('32px');
+  });
+
+  it('点击输入框：stopPropagation 阻止冒泡（不触发外层行/树节点行为）', () => {
+    const { input } = setup();
+    const clickEvent = createEvent.click(input);
+    const stopSpy = vi.spyOn(clickEvent, 'stopPropagation');
+    fireEvent(input, clickEvent);
+    expect(stopSpy).toHaveBeenCalledTimes(1);
   });
 });

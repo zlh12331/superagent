@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
 import { ThemeProvider } from '@/providers/ThemeProvider';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
 import { FileViewerPanel } from '../FileViewerPanel';
@@ -340,6 +341,207 @@ describe('FileViewerPanel', () => {
       fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.switchToPreview')));
 
       await waitFor(() => expect(useFileViewerStore.getState().editMode).toBe(false));
+    });
+  });
+
+  describe('工具栏行数（lineCount 语义）', () => {
+    it('查看态：优先使用 IPC 返回的 totalLines（磁盘权威值）', async () => {
+      window.api.file = {
+        ...(window.api.file ?? {}),
+        read: vi.fn().mockResolvedValue({ data: { content: 'a\nb', totalLines: 7 } }),
+      } as never;
+      openViewer('C:\\proj\\src\\a.ts');
+      const { container } = render(createWrapper());
+
+      await waitFor(() => expect(useFileViewerStore.getState().originalContent).toBe('a\nb'));
+      // 内容仅 2 行但磁盘 totalLines=7（如截断/权威统计）→ 显示 IPC 值
+      expect(container.querySelector('.file-viewer-meta')?.textContent).toContain('7');
+    });
+
+    it('查看态空文件：行数显示 0（而非 1 行空行）', async () => {
+      diskContent = '';
+      openViewer('C:\\proj\\empty.txt');
+      const { container } = render(createWrapper());
+
+      await screen.findByText(i18n.t('common.emptyFile'));
+      expect(container.querySelector('.file-viewer-meta')?.textContent).toContain('0');
+    });
+
+    it('编辑态：行数随编辑缓冲实时变化（此前陈旧显示磁盘行数）', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'a\nb\nc',
+        editedContent: 'a\nb\nc\nd\ne',
+        isDirty: true,
+      });
+      const { container } = render(createWrapper());
+
+      const metaText = (): string =>
+        container.querySelector('.file-viewer-meta')?.textContent ?? '';
+      // 编辑缓冲 5 行（磁盘只有 3 行）→ 显示 5
+      await waitFor(() => expect(metaText()).toContain('5'));
+      // 继续编辑（删到只剩一行）→ 行数同步为 1
+      await act(async () => {
+        useFileViewerStore.getState().setEditedContent('only');
+      });
+      await waitFor(() => expect(metaText()).toContain('1'));
+    });
+  });
+
+  describe('编辑器交互与工具栏动作（补交互链路）', () => {
+    /** 为 navigator 注入 clipboard stub（jsdom 无实现），返回 writeText mock 供断言 */
+    function stubClipboard(impl: () => Promise<void>): ReturnType<typeof vi.fn> {
+      const writeText = vi.fn(impl);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+      return writeText;
+    }
+
+    it('编辑态输入：textarea onChange → editedContent 与 isDirty 实时更新', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'hello',
+        editedContent: 'hello',
+        isDirty: false,
+      });
+      render(createWrapper());
+
+      // aria-label = chat.editFileLabel { name: 文件名 }
+      const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
+      fireEvent.change(textarea, { target: { value: 'typed by user' } });
+
+      expect(useFileViewerStore.getState().editedContent).toBe('typed by user');
+      expect(useFileViewerStore.getState().isDirty).toBe(true);
+    });
+
+    it('编辑态滚动：textarea 滚动同步到高亮层（scrollTop / scrollLeft）', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'a\nb\nc',
+        editedContent: 'a\nb\nc',
+        isDirty: false,
+      });
+      const { container } = render(createWrapper());
+
+      await waitFor(() =>
+        expect(container.querySelector('.file-viewer-editor-highlight')).not.toBeNull(),
+      );
+      const textarea = container.querySelector(
+        '.file-viewer-editor-textarea',
+      ) as HTMLTextAreaElement;
+      const highlight = container.querySelector('.file-viewer-editor-highlight') as HTMLElement;
+      textarea.scrollTop = 30;
+      textarea.scrollLeft = 5;
+      fireEvent.scroll(textarea);
+
+      expect(highlight.scrollTop).toBe(30);
+      expect(highlight.scrollLeft).toBe(5);
+    });
+
+    it('保存按钮（编辑态 dirty）：点击触发写盘（按钮链路，区别于 Ctrl+S 桥接）', async () => {
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'old',
+        editedContent: 'new content',
+        isDirty: true,
+      });
+      render(createWrapper());
+
+      fireEvent.click(screen.getByLabelText(i18n.t('common.save')));
+
+      await waitFor(() =>
+        expect(writeMock).toHaveBeenCalledWith(expect.objectContaining({ content: 'new content' })),
+      );
+    });
+
+    it('复制按钮：写入剪贴板并进入 copied 反馈态', async () => {
+      const writeText = stubClipboard(() => Promise.resolve());
+      diskContent = 'hello';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        originalContent: 'hello',
+      });
+      render(createWrapper());
+
+      await waitFor(() => expect(useFileViewerStore.getState().originalContent).toBe('hello'));
+      fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.copyContent')));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('hello'));
+      // copied 反馈态：aria-label / 文案切换为「已复制」
+      expect(screen.getByLabelText(i18n.t('common.copied'))).toBeDefined();
+    });
+
+    it('复制按钮异常：剪贴板写入失败 → toast 错误（不再静默）', async () => {
+      stubClipboard(() => Promise.reject(new Error('denied')));
+      diskContent = 'hello';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        originalContent: 'hello',
+      });
+      render(createWrapper());
+
+      await waitFor(() => expect(useFileViewerStore.getState().originalContent).toBe('hello'));
+      fireEvent.click(screen.getByLabelText(i18n.t('fileViewer.copyContent')));
+
+      await waitFor(() =>
+        expect(toastMocks.toast.error).toHaveBeenCalledWith(i18n.t('common.copyFailed')),
+      );
+    });
+
+    it('高亮异常：codeToHtml 抛错 → 降级纯文本渲染（不崩溃）', async () => {
+      getHighlighterMock.mockResolvedValue({
+        codeToHtml: vi.fn(() => {
+          throw new Error('unsupported lang');
+        }),
+      });
+      diskContent = 'plain text';
+      openViewer('C:\\proj\\plain.txt');
+      const { container } = render(createWrapper());
+
+      await waitFor(() =>
+        expect(container.querySelector('.file-viewer-plaintext')?.textContent).toBe('plain text'),
+      );
+    });
+
+    it('异常边界：错误非 Error 实例（如字符串）→ String(error) 兜底显示', async () => {
+      window.api.file = {
+        ...(window.api.file ?? {}),
+        // queryFn 直接透传 rejection → error 为非 Error 值
+        read: vi.fn().mockRejectedValue('boom plain string'),
+      } as never;
+      openViewer('C:\\proj\\src\\a.ts');
+      render(createWrapper());
+
+      expect(await screen.findByText('boom plain string')).toBeDefined();
+      expect(screen.getByText(i18n.t('common.fileLoadFailed'))).toBeDefined();
+    });
+
+    it('主题跟随：settings theme=light → shiki 使用 github-light', async () => {
+      useSettingsStore.setState({ theme: 'light' });
+      const codeToHtml = vi.fn(() => '<pre data-testid="hl">light</pre>');
+      getHighlighterMock.mockResolvedValue({ codeToHtml });
+      diskContent = 'old content';
+      openViewer('C:\\proj\\src\\a.ts');
+      render(createWrapper());
+
+      await waitFor(() => expect(codeToHtml).toHaveBeenCalled());
+      expect(codeToHtml).toHaveBeenCalledWith('old content', {
+        lang: 'typescript',
+        theme: 'github-light',
+      });
+      useSettingsStore.setState({ theme: 'system' });
     });
   });
 });

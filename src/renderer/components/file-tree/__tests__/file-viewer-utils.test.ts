@@ -1,14 +1,15 @@
 // src/renderer/components/file-tree/__tests__/file-viewer-utils.test.ts
-// 文件预览纯函数单测（shiki 语言检测）
+// 文件预览纯函数单测（shiki 语言检测 / 行数计算）
 // ──────────────────────────────────────────────────────────────
 // detectLangFromPath 决定「按什么语言高亮」与工具栏是否显示语言名，
 // 此前零直接覆盖。未命中一律回落到 'text'（normalizeLang 的兜底），
 // 因此「目录名含点」这类异常输入不会产生乱码语言，只会退化为不高亮。
+// lineCount 用于查看态无 IPC totalLines 的回退与编辑态行数实时显示。
 // ──────────────────────────────────────────────────────────────
 
 import { describe, expect, it } from 'vitest';
 
-import { detectLangFromPath } from '../file-viewer-utils';
+import { detectLangFromPath, lineCount } from '../file-viewer-utils';
 
 describe('detectLangFromPath', () => {
   it('映射表命中：常见扩展名 → shiki 语言 ID', () => {
@@ -51,5 +52,21 @@ describe('detectLangFromPath', () => {
 
   it('边界：空路径 → text', () => {
     expect(detectLangFromPath('')).toBe('text');
+  });
+});
+
+describe('lineCount', () => {
+  it('正向：单行与多行按换行计数', () => {
+    expect(lineCount('a')).toBe(1);
+    expect(lineCount('a\nb\nc')).toBe(3);
+  });
+
+  it('边界：空串视为 0 行（而非 1 行空行）', () => {
+    expect(lineCount('')).toBe(0);
+  });
+
+  it('边界：仅换行符 / 尾随换行 → 按段数计（尾随空行算 1 段）', () => {
+    expect(lineCount('\n')).toBe(2);
+    expect(lineCount('a\n')).toBe(2);
   });
 });

@@ -135,4 +135,16 @@ describe('FileTreePanel', () => {
       expect(mockToastWarning).toHaveBeenCalledWith(i18n.t('fileTree.refreshFailed')),
     );
   });
+
+  it('边界：浏览器模式（window.api 缺失）：刷新静默成功，不误报失败', async () => {
+    (window as unknown as { api: undefined }).api = undefined;
+    renderReady();
+
+    await openMoreMenu();
+    await userEvent.click(await screen.findByText(i18n.t('fileTree.refresh')));
+
+    // refreshExpandedDirs 守卫直接返回 0（全部成功语义）→ 不调 IPC、不弹提示
+    expect(mockList).not.toHaveBeenCalled();
+    expect(mockToastWarning).not.toHaveBeenCalled();
+  });
 });

@@ -14,6 +14,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { i18n } from '@/i18n';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { FuzzySearchDialog } from '../fuzzy-search-dialog';
 
@@ -256,5 +257,122 @@ describe('FuzzySearchDialog', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
 
     await waitFor(() => expect(mockToastError).toHaveBeenCalled());
+  });
+
+  it('文件搜索返回错误信封：同样提示失败（unwrap 错误不吞为「无结果」）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    window.api.search = {
+      // IPC 正常返回但响应体是错误信封（{ error } 而非 { data }）：
+      // searchFiles 不再 try/catch 吞掉，统一走调用方 toast
+      glob: vi.fn().mockResolvedValue({
+        error: { code: 'SEARCH_FAILED', message: 'rg spawn failed' },
+      }),
+      grep: vi.fn(),
+    } as never;
+    renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+
+    await waitFor(() => expect(mockToastError).toHaveBeenCalled());
+    // 失败不残留结果（用户看到的是失败提示而非空列表误读）
+    expect(document.querySelector('#fuzzy-search-results')?.textContent).not.toContain('App.tsx');
+  });
+
+  it('鼠标悬停选中：hover 第二个文件后 Enter → 选中该项', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    const props = renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+
+    await waitFor(() => {
+      expect(document.querySelector('#fuzzy-search-results')?.textContent).toContain(
+        'AppShell.tsx',
+      );
+    });
+    // hover 而非 ArrowDown：onMouseEnter 也应驱动 selectedIndex
+    const buttons = [...document.querySelectorAll('#fuzzy-search-results button')];
+    fireEvent.mouseEnter(buttons[1] as HTMLElement);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+
+    expect(props.onSelect).toHaveBeenCalledWith('src/AppShell.tsx');
+  });
+
+  it('鼠标悬停选中：hover 会话结果后 Enter → 切换会话', async () => {
+    renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '登录' } });
+
+    await waitFor(() => {
+      expect(document.querySelector('#fuzzy-search-results')?.textContent).toContain('修复登录页');
+    });
+    const sessionButton = [...document.querySelectorAll('#fuzzy-search-results button')].find((b) =>
+      b.textContent?.includes('登录'),
+    );
+    fireEvent.mouseEnter(sessionButton as HTMLElement);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+
+    expect(useActiveSessionStore.getState().activeSessionId).toBe('s2');
+  });
+
+  it('Esc：关闭对话框（Radix dismiss → onOpenChange(false) → onClose）', () => {
+    const props = renderDialog();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it('边界：无匹配结果时按 Enter → 不回调不崩溃（undefined 守卫）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    const props = renderDialog();
+    await flushOpenReset();
+    // 会话标题与文件名均不匹配
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'zzz-无匹配' } });
+
+    await waitFor(() => {
+      expect(document.querySelector('#fuzzy-search-results')?.textContent).toContain(
+        i18n.t('fileTree.fuzzySearch.noResults'),
+      );
+    });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+
+    expect(props.onSelect).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('竞态：查询变化后旧响应到达 → 丢弃（不渲染陈旧结果）', async () => {
+    useActiveSessionStore.setState({ activeSessionId: 's1' });
+    // 受控 glob：按调用顺序收集 resolve，可单独放行「旧的第一次请求」
+    const resolvers: Array<(value: unknown) => void> = [];
+    window.api.search = {
+      glob: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolvers.push(resolve);
+          }),
+      ),
+      grep: vi.fn(),
+    } as never;
+    renderDialog();
+    await flushOpenReset();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App' } });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(window.api.search.glob).toHaveBeenCalledTimes(1);
+
+    // 用户继续输入 → 上一轮 effect cleanup（cancelled=true）→ 旧响应必须被丢弃
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'App2' } });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(window.api.search.glob).toHaveBeenCalledTimes(2);
+    const resolveFirst = resolvers[0];
+    if (resolveFirst === undefined) throw new Error('第一次 glob 调用未被捕获');
+    resolveFirst({ data: { files: ['src/stale.ts'], truncated: false } });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('#fuzzy-search-results')?.textContent).not.toContain('stale.ts');
   });
 });
