@@ -85,7 +85,13 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           type="single"
           value={level}
           onValueChange={(v) => {
-            if (v) setLevel(v as LogLevelFilter);
+            // 与行数选择同一套「按表校验」而非断言：Radix 单选点击已选项会
+            // 回传空串取消（断言版靠 `if (v)` 兜住），而断言本身不校验取值
+            // 是否在本表内。
+            const next = LEVEL_FILTERS.find((option) => option === v);
+            if (next !== undefined) {
+              setLevel(next);
+            }
           }}
           className="gap-0.5"
         >
