@@ -1,25 +1,10 @@
-// git-panel-parts.tsx（自 GitPanel 拆分）
-// Git 面板辅助组件（分支信息 / 空态 / 错误）
+// src/renderer/components/git/git-panel-parts.tsx
+// Git 面板的小型展示组件（分支信息 / 工作区干净 / 错误提示）
 // ──────────────────────────────
-// 拆分背景：GitPanel 486 行，按职责提取
+// 拆分背景（2026-08 重构）：自 GitPanel 486 行按职责提取。
+// 三者都是无状态纯展示（仅消费 props），故同居一文件而非各占一个——
+// 体量小、无独立演化需求，拆散只会增加跳转成本。
 // ──────────────────────────────
-
-// src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 极简文学风
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表
-// - 文件列表点击选中 → 调用 useGitDiffQuery 获取该文件的 unified diff
-// - 用 <pre> 渲染 diff 文本（绿色 + 绿色 -，等宽字体）
-// - 工作区干净时显示「无变更」提示
-//
-// 设计：
-// - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - 文件状态用颜色区分（modified/added/deleted/untracked/conflicted）
-// - diff 渲染用 react-diff-viewer-continued（UnifiedDiffView，统一方案）
-//   实现：git:diff 返回 unified diff → parseUnifiedDiff 拆 hunk → 双栏渲染
-// - 路径必须为绝对路径（由调用方传入）
-// ──────────────────────────────────────────────────────────────
 
 import type { GitStatusRes } from '@code-agent/shared/renderer';
 import { AlertCircle, CheckCircle2, GitBranch } from 'lucide-react';
@@ -31,6 +16,7 @@ interface BranchInfoProps {
   readonly isLoading: boolean;
   readonly error: Error | null;
 }
+/** 分支信息：加载中 / 失败 / 分支名 + ahead(↑)·behind(↓) 标记 */
 export function BranchInfo({ status, isLoading, error }: BranchInfoProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -62,10 +48,7 @@ export function BranchInfo({ status, isLoading, error }: BranchInfoProps): React
   );
 }
 
-// ── 子组件：变更文件列表 ──────────────────────────────────────
-
-/** 变更文件列表：每项展示图标 + 路径 + 状态标签 */
-
+/** 工作区干净提示（无变更时的空态） */
 export function CleanHint(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -78,8 +61,7 @@ export function CleanHint(): ReactElement {
   );
 }
 
-/** 错误状态提示 */
-
+/** 错误状态提示（错误消息单行截断，完整内容见 title） */
 export function ErrorHint({ message }: { readonly message: string }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -93,7 +75,3 @@ export function ErrorHint({ message }: { readonly message: string }): ReactEleme
     </div>
   );
 }
-
-// ── 兼容导出 ────────────────────────────────────────────────
-
-/** Git 面板默认导出（便于 lazy 加载） */

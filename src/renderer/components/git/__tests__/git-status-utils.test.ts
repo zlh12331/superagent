@@ -25,13 +25,36 @@ describe('git-status-utils', () => {
     expect(getGitStatusMeta('conflicted').icon).toBe(AlertCircle);
   });
 
-  it('6 状态颜色语义类', () => {
-    expect(getGitStatusMeta('modified').className).toContain('text-warn');
-    expect(getGitStatusMeta('added').className).toContain('text-success');
-    expect(getGitStatusMeta('deleted').className).toContain('text-error');
-    expect(getGitStatusMeta('renamed').className).toContain('text-accent-2');
-    expect(getGitStatusMeta('untracked').className).toContain('text-muted-foreground');
-    expect(getGitStatusMeta('conflicted').className).toContain('text-error');
+  it('6 状态图标配色（语义基色）', () => {
+    expect(getGitStatusMeta('modified').iconClassName).toBe('text-warn');
+    expect(getGitStatusMeta('added').iconClassName).toBe('text-success');
+    expect(getGitStatusMeta('deleted').iconClassName).toBe('text-error');
+    expect(getGitStatusMeta('renamed').iconClassName).toBe('text-accent-2');
+    expect(getGitStatusMeta('untracked').iconClassName).toBe('text-muted-foreground');
+    expect(getGitStatusMeta('conflicted').iconClassName).toBe('text-error');
+  });
+
+  it('6 状态标签配色：小字用 -text 对比度变体（accent-2 无该变体则沿用基色）', () => {
+    expect(getGitStatusMeta('modified').labelClassName).toContain('text-warn-text');
+    expect(getGitStatusMeta('added').labelClassName).toContain('text-success-text');
+    expect(getGitStatusMeta('deleted').labelClassName).toContain('text-error-text');
+    expect(getGitStatusMeta('renamed').labelClassName).toBe('text-accent-2');
+    expect(getGitStatusMeta('untracked').labelClassName).toBe('text-muted-foreground');
+    // conflicted 额外加粗（比普通状态更需要被注意到）
+    expect(getGitStatusMeta('conflicted').labelClassName).toBe('text-error-text font-semibold');
+  });
+
+  it('边界：图标配色不含字重类（font-* 对 SVG 无意义，是图标/标签分字段的动因）', () => {
+    for (const status of [
+      'modified',
+      'added',
+      'deleted',
+      'renamed',
+      'untracked',
+      'conflicted',
+    ] as const) {
+      expect(getGitStatusMeta(status).iconClassName).not.toContain('font-');
+    }
   });
 
   it('i18n 键契约：6 状态均有 git.<status> 键', () => {
