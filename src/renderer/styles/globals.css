@@ -2203,7 +2203,9 @@ body.resizing iframe {
 .composer-hint {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--text-faint);
+  /* 不用 --text-faint：它映射 TraeWork --text-disabled（禁用态专用），对本区底
+     --bg-elev-2 仅 3.19:1（暗）/ 2.05:1（亮），低于 AA 小文本 4.5:1 */
+  color: var(--text-dim);
   display: flex;
   align-items: center;
   line-height: 1;
