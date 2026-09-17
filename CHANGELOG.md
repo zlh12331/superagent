@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.1.2](https://github.com/zlh12331/superagent/compare/v1.1.1...v1.1.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* **release:** 发布说明润色门禁 + v1.1.1 文案改写为面向用户 ([#45](https://github.com/zlh12331/superagent/issues/45)) ([2c11604](https://github.com/zlh12331/superagent/commit/2c116041c4d161c1f296ab9dc7a582753428665b))
+
 ## [1.1.1](https://github.com/zlh12331/superagent/compare/v1.1.0...v1.1.1) (2026-09-17)
 
 ### 修复
