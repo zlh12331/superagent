@@ -1,4 +1,4 @@
-// src/renderer/components/browser/__tests__/browser-device-bar.test.tsx
+// src/renderer/components/$1/browser-device-bar.test.tsx
 // DeviceBar 单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 重点守护一个真实缺陷：`Number('')` 为 0 而非 NaN，此前守卫只判 NaN，

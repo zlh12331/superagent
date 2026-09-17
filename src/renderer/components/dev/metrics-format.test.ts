@@ -1,4 +1,4 @@
-// src/renderer/components/dev/__tests__/metrics-format.test.ts
+// src/renderer/components/$1/metrics-format.test.ts
 // 运行时指标格式化单测（正向 / 边界）
 // ──────────────────────────────────────────────────────────────
 // 三个函数的档位阈值是显式约定，用边界值锁住：

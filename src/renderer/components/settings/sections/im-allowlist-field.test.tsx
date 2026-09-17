@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/im-allowlist-field.test.tsx
+// src/renderer/components/$1/im-allowlist-field.test.tsx
 // IM 群聊白名单编辑区测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 背景（2026-09 安全审计修复）：写入是**覆盖式**的（settings:set），而读取

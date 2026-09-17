@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/FileTreeNode.test.tsx
+// src/renderer/components/$1/FileTreeNode.test.tsx
 // 文件树节点单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖：目录展开/折叠（点击 + 键盘）、子区三态（空目录 / 加载中 / 新建输入）、

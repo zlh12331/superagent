@@ -1,4 +1,4 @@
-// src/renderer/components/terminal/__tests__/TerminalPanel.test.tsx
+// src/renderer/components/$1/TerminalPanel.test.tsx
 // TerminalPanel 组件测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：
@@ -17,7 +17,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -60,8 +60,23 @@ vi.mock('sonner', () => ({
   },
 }));
 
+import { i18n } from '@/i18n';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { TerminalPanel } from './TerminalPanel';
+
+/** 装配 window.api.terminal（create 行为由用例决定）——审计回归用例专用 */
+function setupApi(create: ReturnType<typeof vi.fn>) {
+  window.api = {
+    terminal: {
+      create,
+      kill: vi.fn().mockResolvedValue({ data: { ok: true } }),
+      input: vi.fn(),
+      resize: vi.fn(),
+      subscribeOutputEvent: vi.fn(() => () => {}),
+      subscribeExitEvent: vi.fn(() => () => {}),
+    },
+  } as never;
+}
 
 /** 面板 + QueryClientProvider（useWorkingDir 底层是 useInfiniteQuery，无 provider 会直接抛错） */
 function withQueryPanel(sessionId: string) {
@@ -262,5 +277,112 @@ describe('TerminalPanel', () => {
       expect(useTerminalStore.getState().activeTerminalId).toBe('term-2');
       expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
     });
+  });
+});
+
+// ── 审计回归（2026-09，原 terminal-audit.test.tsx 并入） ─────────
+// 1. 创建失败不再无限重试（原为 IPC 风暴：失败后 isCreating 翻回 false、
+//    terminals 仍空 → effect 立刻重触发。实证 20 个微任务周期内 12157 次
+//    create 调用）。现为「每轮空态只自动试一次」，失败给错误 + 重试按钮。
+// 2. 创建成功后用主进程返回的真实 title/pid（此前硬编码 'bash' + pid:null，
+//    Windows 上实际跑 powershell.exe）。
+// 3. 浏览器模式（无 window.api）不发起创建、不进入错误态。
+describe('TerminalPanel · 创建失败不再无限重试（IPC 风暴回归）', () => {
+  // 顶层 describe 拿不到外层的 store 重置——这里必须自带（否则前序用例的
+  // 终端残留会让空态守卫不触发，create 0 次调用）
+  beforeEach(() => {
+    useTerminalStore.setState({ terminals: [], activeTerminalId: null, buffers: new Map() });
+  });
+
+  it('create 持续失败：连续 flush 20 轮后仅调用 1 次（此前 12157 次）', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValue({ error: { code: 'TERMINAL_SPAWN_FAILED', message: 'boom' } });
+    setupApi(create);
+
+    render(withQueryPanel('session-1'));
+
+    for (let i = 0; i < 20; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    // 关键断言：每轮空态只自动尝试一次
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('失败后显示错误文案 + 重试按钮（不再静默自动重试）', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValue({ error: { code: 'TERMINAL_SPAWN_FAILED', message: 'boom' } });
+    setupApi(create);
+
+    render(withQueryPanel('session-1'));
+
+    // toast 仍提示（与既有行为一致）
+    await waitFor(() => expect(mockToastError).toHaveBeenCalled());
+    // 面板内提供重试入口
+    const retry = await screen.findByRole('button', { name: i18n.t('common.retry') });
+    expect(retry).toBeDefined();
+  });
+
+  it('点击重试 → 重新发起创建（仅用户显式触发才重试）', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValue({ error: { code: 'TERMINAL_SPAWN_FAILED', message: 'boom' } });
+    setupApi(create);
+    render(withQueryPanel('session-1'));
+
+    const retry = await screen.findByRole('button', { name: i18n.t('common.retry') });
+    await userEvent.click(retry);
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('TerminalPanel · 使用主进程返回的真实 title/pid', () => {
+  beforeEach(() => {
+    useTerminalStore.setState({ terminals: [], activeTerminalId: null, buffers: new Map() });
+  });
+
+  it('创建成功：store 中的 title/pid 来自 IPC 响应（不再硬编码 bash/null）', async () => {
+    const create = vi.fn().mockResolvedValue({
+      data: { terminalId: 'term-9', pid: 4321, title: 'powershell.exe' },
+    });
+    setupApi(create);
+
+    render(withQueryPanel('session-1'));
+
+    await waitFor(() => expect(useTerminalStore.getState().terminals).toHaveLength(1));
+    const [term] = useTerminalStore.getState().terminals;
+    // 此前硬编码 'bash' / pid: null —— Windows 实际是 powershell.exe
+    expect(term?.title).toBe('powershell.exe');
+    expect(term?.pid).toBe(4321);
+  });
+});
+
+describe('TerminalPanel · 浏览器模式（无桥）', () => {
+  beforeEach(() => {
+    useTerminalStore.setState({ terminals: [], activeTerminalId: null, buffers: new Map() });
+  });
+
+  it('无 window.api：不发起创建、不进入错误态、不弹 toast', async () => {
+    (window as unknown as { api: undefined }).api = undefined;
+
+    render(withQueryPanel('session-1'));
+
+    for (let i = 0; i < 5; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(mockToastError).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: i18n.t('common.retry') })).toBeNull();
+    // 仍显示创建中占位（无终端且无错误）
+    expect(screen.getByText(i18n.t('terminal.creating'))).toBeDefined();
   });
 });

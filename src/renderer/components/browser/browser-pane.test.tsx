@@ -1,4 +1,4 @@
-// src/renderer/components/browser/__tests__/browser-pane.test.tsx
+// src/renderer/components/$1/browser-pane.test.tsx
 // 浏览器预览 pane 测试（WebContentsView 进程外预览的渲染层侧）
 // ──────────────────────────────────────────────────────────────
 // 覆盖：空状态 / URL 规范化 / Enter 导航（非 Enter 不导航）/ 状态事件驱动 UI

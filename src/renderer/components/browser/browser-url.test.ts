@@ -1,4 +1,4 @@
-// src/renderer/components/browser/__tests__/browser-url.test.ts
+// src/renderer/components/$1/browser-url.test.ts
 // 预览地址规范化单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 该函数是「用户输入 → 主进程 loadURL」之间的唯一规范化点，

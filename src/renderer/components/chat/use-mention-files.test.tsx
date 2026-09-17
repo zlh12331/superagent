@@ -1,4 +1,4 @@
-// src/renderer/components/chat/__tests__/use-mention-files.test.tsx
+// src/renderer/components/$1/use-mention-files.test.tsx
 // useMentionFiles：@ 触发的文件搜索 hook（200ms 防抖 + 生命周期清理）
 //
 // 测试要点：

@@ -1,4 +1,4 @@
-// src/renderer/components/browser/__tests__/browser-geometry.test.ts
+// src/renderer/components/$1/browser-geometry.test.ts
 // 浏览器预览几何纯函数单测：宿主占位区 + 设备预设 + 缩放 → 视图边界
 //
 // 关键语义：

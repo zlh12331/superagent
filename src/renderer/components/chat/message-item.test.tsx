@@ -1,4 +1,4 @@
-// src/renderer/components/chat/__tests__/message-item.test.tsx
+// src/renderer/components/$1/message-item.test.tsx
 // MessageItem 直测（列表层测试 mock 了 MessageItem，此处补真实渲染护栏）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

@@ -1,4 +1,4 @@
-// src/renderer/components/settings/__tests__/settings-controls.test.tsx
+// src/renderer/components/$1/settings-controls.test.tsx
 // 设置通用控件集测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 重点守护 SegControl 的**空串过滤**（2026-09 审计修复的真 bug）：

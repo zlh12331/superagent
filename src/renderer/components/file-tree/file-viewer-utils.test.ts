@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/file-viewer-utils.test.ts
+// src/renderer/components/$1/file-viewer-utils.test.ts
 // 文件预览纯函数单测（shiki 语言检测 / 行数计算）
 // ──────────────────────────────────────────────────────────────
 // detectLangFromPath 决定「按什么语言高亮」与工具栏是否显示语言名，

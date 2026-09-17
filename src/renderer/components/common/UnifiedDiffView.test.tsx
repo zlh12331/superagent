@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/UnifiedDiffView.test.tsx
+// src/renderer/components/$1/UnifiedDiffView.test.tsx
 // UnifiedDiffView 单测：hunk 分块渲染 / 空 diff 兜底 / 主题透传 / className
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖。它把 git:diff 原始文本转成 ReactDiffViewer——

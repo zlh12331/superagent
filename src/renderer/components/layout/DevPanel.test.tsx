@@ -1,4 +1,4 @@
-// src/renderer/components/layout/__tests__/DevPanel.test.tsx
+// src/renderer/components/$1/DevPanel.test.tsx
 // DevPanel 组件测试（右面板 · 会话上下文面板）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

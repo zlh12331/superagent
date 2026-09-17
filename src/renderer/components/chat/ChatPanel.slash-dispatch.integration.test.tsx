@@ -1,4 +1,4 @@
-// chat-slash-dispatch.integration.test.tsx
+// src/renderer/components/chat/ChatPanel.slash-dispatch.integration.test.tsx
 // ChatPanel 斜杠命令分发集成测试（全链）：
 // 用户输入 → ChatInput 建议面板 → executeSlashCommand → ChatPanel 动作回调 → IPC / store / AI SDK
 // ──────────────────────────────────────────────────────────────

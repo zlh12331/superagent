@@ -1,4 +1,4 @@
-// src/renderer/components/settings/__tests__/SettingsDialog.test.tsx
+// src/renderer/components/$1/SettingsDialog.test.tsx
 // 设置抽屉冒烟补测：打开渲染 5 组导航 + 默认「模型服务」分区；tab 键盘切换激活分区
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

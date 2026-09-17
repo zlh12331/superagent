@@ -1,4 +1,4 @@
-// src/renderer/components/git/__tests__/GitPanel.test.tsx
+// src/renderer/components/$1/GitPanel.test.tsx
 // GitPanel 组件测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

@@ -1,4 +1,4 @@
-// src/renderer/components/chat/__tests__/use-composer-drag.test.tsx
+// src/renderer/components/$1/use-composer-drag.test.tsx
 // useComposerDrag：拖拽生命周期与清理
 //
 // 测试要点（聚焦 2026-09-11 修复的卸载泄漏路径）：

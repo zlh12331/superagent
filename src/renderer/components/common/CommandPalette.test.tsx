@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/CommandPalette.test.tsx
+// src/renderer/components/$1/CommandPalette.test.tsx
 // 命令面板冒烟补测：操作组命令渲染 + 主题三态循环标题
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

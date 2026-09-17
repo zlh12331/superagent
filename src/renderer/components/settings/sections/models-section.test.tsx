@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/models-section.test.tsx
+// src/renderer/components/$1/models-section.test.tsx
 // ModelsSection 单测：模型管理列表页（表格/开关/增删改入口/空态/删除确认）
 // ──────────────────────────────────────────────────────────────
 // 数据源 mock：window.api.settings.listRuntimeModels 等 IPC 全部 stub；

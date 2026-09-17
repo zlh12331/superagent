@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/ShortcutHelpDialog.test.tsx
+// src/renderer/components/$1/ShortcutHelpDialog.test.tsx
 // ShortcutHelpDialog 单测：固定键 + 可自定义键（读设置真源）+ 键串格式化
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖。它展示的键位必须与真实绑定一致——

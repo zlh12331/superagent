@@ -1,4 +1,4 @@
-// src/renderer/components/layout/__tests__/folder-label-a11y.test.tsx
+// src/renderer/components/$1/folder-label-a11y.test.tsx
 // FolderLabel 结构与交互测试
 // ──────────────────────────────────────────────
 // 背景（结构）：folder-label 重构将"新建"按钮从折叠 `<button>` 内嵌 span 移出为

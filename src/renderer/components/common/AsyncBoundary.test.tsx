@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/AsyncBoundary.test.tsx
+// src/renderer/components/$1/AsyncBoundary.test.tsx
 // AsyncBoundary 渲染层单测：五态渲染 + 防闪烁 + 可操作错误 + a11y
 // 直接构造 AsyncView（discriminated union）驱动各状态，无需真实 query。
 

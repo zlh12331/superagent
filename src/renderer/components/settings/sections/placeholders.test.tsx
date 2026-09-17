@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/placeholders.test.tsx
+// src/renderer/components/$1/placeholders.test.tsx
 // 移动端 pane 组合测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖动机：该文件是本轮覆盖率排查中最后一个 0% 文件（general-section 会渲染它，

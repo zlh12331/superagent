@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/AppErrorBoundary.test.tsx
+// src/renderer/components/$1/AppErrorBoundary.test.tsx
 // AppErrorBoundary 单测（第 1 层错误边界：全屏兜底 + 崩溃报障）
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖。它是应用最外层兜底——全屏降级 UI、

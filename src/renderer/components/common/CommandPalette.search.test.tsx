@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/CommandPalette.search.test.tsx
+// src/renderer/components/$1/CommandPalette.search.test.tsx
 // CommandPalette 深覆盖：命令执行 / 模糊搜索 / 文件与会话派生 / 开关交互
 // ──────────────────────────────────────────────
 // 覆盖动机：原冒烟测试仅覆盖操作组渲染与主题三态标题（组件行覆盖 58%）——

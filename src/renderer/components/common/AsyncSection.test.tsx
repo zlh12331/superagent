@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/AsyncSection.test.tsx
+// src/renderer/components/$1/AsyncSection.test.tsx
 // AsyncSection 四态包装器 + QueryErrorRow/QueryPendingRow 行内形态单测
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖，而它有 9 个 settings section 调用方——

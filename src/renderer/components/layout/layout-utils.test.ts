@@ -1,4 +1,4 @@
-// src/renderer/components/layout/__tests__/layout-utils.test.ts
+// src/renderer/components/$1/layout-utils.test.ts
 // 面板宽度纯函数测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖此前基本无覆盖的 parseClamp（内联在 layout-utils 的 CSS 令牌桥）：

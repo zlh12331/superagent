@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/turns-section.test.tsx
+// src/renderer/components/$1/turns-section.test.tsx
 // 回合记录区块测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖动机：该文件此前 0% 覆盖（本轮覆盖率排查中确认）。它是「设置 → 用量」里

@@ -1,4 +1,4 @@
-// src/renderer/components/git/__tests__/git-status-utils.test.ts
+// src/renderer/components/$1/git-status-utils.test.ts
 // git-status-utils 表驱动单元测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

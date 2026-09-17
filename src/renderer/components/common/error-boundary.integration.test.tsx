@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/error-boundary.integration.test.tsx
+// src/renderer/components/$1/error-boundary.integration.test.tsx
 // 错误边界分层体系集成测试：App 级 → Section 级嵌套降级行为
 // ──────────────────────────────────────────────
 // 覆盖动机：三层错误边界（App / Route / Section）的价值在**嵌套**时才体现——

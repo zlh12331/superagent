@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/inline-create-input.test.tsx
+// src/renderer/components/$1/inline-create-input.test.tsx
 // 行内新建输入单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 重点守护 handledRef 失焦去重：Enter/Esc 已处理时，随后的 blur 不得二次提交

@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/file-tree-viewer.integration.test.tsx
+// src/renderer/components/$1/file-tree-viewer.integration.test.tsx
 // 文件树 → 查看器 跨面板集成测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖此前无测试的真实链路：FileTreePanel 渲染根节点 → 点击文件 →

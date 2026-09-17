@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/SectionErrorBoundary.test.tsx
+// src/renderer/components/$1/SectionErrorBoundary.test.tsx
 // SectionErrorBoundary 组件测试（第 3 层错误边界：局部降级）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

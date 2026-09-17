@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/dialogs/__tests__/model-config-dialog.test.tsx
+// src/renderer/components/$1/model-config-dialog.test.tsx
 // ModelConfigDialog 单测：编辑模式连通性测试用「表单里的请求地址」而非默认端点
 // ──────────────────────────────────────────────────────────────
 // 回归背景：runConnectivityTest 曾以 !isEdit 守卫传 baseUrl，导致编辑模式改了

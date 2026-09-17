@@ -1,5 +1,5 @@
-// src/renderer/components/agent/__tests__/agent-gaps.test.tsx
-// agent 域批次4 缺口补全：approval-preview 结构化预览组件
+// src/renderer/components/agent/approval-preview.test.tsx
+// approval-preview 结构化预览组件测试（正向 / 边界）
 // （approval-utils 断言已收敛至 approval-utils.test.ts，此处不重复）
 //
 // 测试要点：
@@ -24,7 +24,7 @@ function renderPreview(type: Parameters<typeof StructuredPreview>[0]['type'], in
   );
 }
 
-describe('agent 批次4 缺口补全', () => {
+describe('StructuredPreview（approval-preview）', () => {
   describe('approval-preview 结构化预览', () => {
     it('run_command：渲染命令 + 工作目录', () => {
       renderPreview('run_command', { command: 'npm test', cwd: '/proj' });

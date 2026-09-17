@@ -5,6 +5,8 @@ import type { TFunction } from 'i18next';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { i18n } from '@/i18n/config';
+
 import {
   formatJson,
   mapToolStateToStatusClass,
@@ -100,5 +102,29 @@ describe('formatJson', () => {
     circular['self'] = circular;
     // String(circular) 会转 'self' 循环——此处只需验证不抛错且返回字符串
     expect(() => formatJson(circular, mockT)).not.toThrow();
+  });
+});
+
+describe('formatJson 真实文案（i18n，原 chat-gaps.test 并入）', () => {
+  const t = i18n.t.bind(i18n);
+
+  it('正常格式化（缩进 + 截断 200 字符）', () => {
+    const short = formatJson({ a: 1 }, t);
+    expect(short).toBe('{\n  "a": 1\n}');
+    const long = formatJson({ data: 'x'.repeat(300) }, t);
+    expect(long.startsWith('{\n  "data": "')).toBe(true);
+    expect(long.endsWith('(已截断)')).toBe(true);
+  });
+
+  it('undefined → "undefined" 字符串', () => {
+    expect(formatJson(undefined, i18n.t.bind(i18n))).toBe('undefined');
+  });
+
+  it('循环引用抛错 → String 兜底', () => {
+    const circular: Record<string, unknown> = {};
+    circular['self'] = circular;
+    const result = formatJson(circular, i18n.t.bind(i18n));
+    expect(typeof result).toBe('string');
+    expect(result).toContain('[object');
   });
 });

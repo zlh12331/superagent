@@ -1,5 +1,5 @@
-// src/renderer/components/chat/__tests__/history-render.integration.test.tsx
-// 历史重建 → 消息渲染 跨模块集成测试（正向 / 边界 / 异常）
+// src/renderer/components/chat/history-parts.integration.test.tsx
+// 历史重建（history-parts）→ 消息渲染（message-item）跨模块集成测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖此前无测试的真实链路：主进程落库的 ChatMessage[]（含 role='tool' 的工具
 // 结果消息）→ reconstructHistory 重建 UI part → MessageItem 真实渲染

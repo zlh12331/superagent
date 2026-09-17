@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/im-channels-section.test.tsx
+// src/renderer/components/$1/im-channels-section.test.tsx
 // IM 渠道区块测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖动机：该文件此前 0% 覆盖（本轮覆盖率排查确认）。它是 7 渠道（QQ/微信/钉钉/

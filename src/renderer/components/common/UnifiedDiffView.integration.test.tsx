@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/UnifiedDiffView.integration.test.tsx
+// src/renderer/components/$1/UnifiedDiffView.integration.test.tsx
 // UnifiedDiffView 集成测试（真实 react-diff-viewer-continued，不 mock）
 // ──────────────────────────────────────────────────────────────
 // 与同目录 UnifiedDiffView.test.tsx 的分工：
@@ -6,9 +6,9 @@
 // - 本文件走真实渲染，断言「组件 + 第三方库」整体落地（表结构、hunk 分块）——
 //   补的是依赖升级/包裹方式变化这类集成风险，props 断言覆盖不到。
 //
-// 来源：原 components/dev/__tests__/dev-common-gaps.test.tsx 的 UnifiedDiffView 段。
+// 来源：原 components/$1/dev-common-gaps.test.tsx 的 UnifiedDiffView 段。
 // 该文件跨 dev/common 两域且与单元测试重复，故拆解：browser-pane 部分随组件迁至
-// components/browser/__tests__/browser-pane.test.tsx；本段并入此处。
+// components/$1/browser-pane.test.tsx；本段并入此处。
 // 纯解析断言（parseUnifiedDiff）由 lib/diff/unified-diff.test.ts 覆盖，不在此重复。
 // ──────────────────────────────────────────────────────────────
 

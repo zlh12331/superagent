@@ -1,22 +1,13 @@
-// streaming-parts.test.tsx
-// 流式占位件单测：StreamingCursor（aria-hidden 装饰）与 StreamingFooter（status 播报）
+// src/renderer/components/chat/streaming-footer.test.tsx
+// StreamingFooter 单测：status 播报 + typing-indicator 三点占位
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { i18n } from '@/i18n/config';
 
-import { StreamingCursor } from './streaming-cursor';
 import { StreamingFooter } from './streaming-footer';
 
 const t = i18n.t.bind(i18n);
-
-describe('StreamingCursor', () => {
-  it('渲染装饰性光标（aria-hidden，不进入读屏树）', () => {
-    const { container } = render(<StreamingCursor />);
-    const el = container.querySelector('span[aria-hidden="true"]');
-    expect(el).not.toBeNull();
-  });
-});
 
 describe('StreamingFooter', () => {
   it('正向：角色行 + typing-indicator（role=status + aria-label 播报）', () => {

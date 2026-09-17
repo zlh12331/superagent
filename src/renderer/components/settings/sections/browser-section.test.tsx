@@ -1,9 +1,9 @@
-// src/renderer/components/settings/sections/__tests__/browser-section.test.tsx
+// src/renderer/components/$1/browser-section.test.tsx
 // BrowserSection 单测：三项配置渲染 + 交互写穿透到 settings-store.browser
 // ──────────────────────────────────────────────────────────────
 // 这里锁的是「设置面板改了 store、store 落了库」这一段：
 // 初值/沙箱是否真被预览消费由 browser/browser-pane 用例覆盖
-// （components/browser/__tests__/browser-pane.test.tsx）。
+// （components/$1/browser-pane.test.tsx）。
 // 切换严格沙箱额外断言 browser:configure 通知主进程（即时生效语义）。
 // ──────────────────────────────────────────────────────────────
 

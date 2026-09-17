@@ -1,4 +1,4 @@
-// src/renderer/components/layout/__tests__/sidebar-utils.test.ts
+// src/renderer/components/$1/sidebar-utils.test.ts
 // 侧边栏纯函数单测（2026-09-12 提取自 Sidebar 内联逻辑）
 //
 // 测试要点：

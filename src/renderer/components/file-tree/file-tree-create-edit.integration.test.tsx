@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/file-tree-create-edit.integration.test.tsx
+// src/renderer/components/$1/file-tree-create-edit.integration.test.tsx
 // 文件树「新建 → 呈现 → 打开 → 编辑 → 保存」端到端集成测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 与 file-tree-viewer.integration 互补：那份覆盖「点击已有文件 → 查看」，

@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/fuzzy-search-dialog.test.tsx
+// src/renderer/components/$1/fuzzy-search-dialog.test.tsx
 // FuzzySearchDialog 单元测试（对齐参考项目 FuzzySearchDialog.test.tsx 覆盖点）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

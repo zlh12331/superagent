@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/FileTreePanel.test.tsx
+// src/renderer/components/$1/FileTreePanel.test.tsx
 // 文件树面板单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖：无工作目录空态、rootPath 未就绪占位、就绪态的树语义与根节点名、

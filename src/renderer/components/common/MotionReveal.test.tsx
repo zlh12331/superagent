@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/MotionReveal.test.tsx
+// src/renderer/components/$1/MotionReveal.test.tsx
 // MotionReveal 入场动效包装单测：三种变体 / 延迟 / inView 两分支 / className 透传
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖。它对 motion/react 的 initial/animate/whileInView

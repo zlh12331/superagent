@@ -1,5 +1,5 @@
-// src/renderer/components/chat/__tests__/goal-bar.test.tsx
-// 会话目标栏（ChatPanel 内联）：goal 命令创建 → 输入框上方显示 → 三按钮操作
+// src/renderer/components/chat/GoalBar.test.tsx
+// 会话目标栏（GoalBar 组件，经 ChatPanel 挂载驱动）：goal 命令创建 → 输入框上方显示 → 编辑/删除操作
 //
 // 测试要点：
 // 1. 无目标不显示目标栏；有目标显示 GOAL 标签 + 条件 + 暂停/恢复 · 编辑 · 删除

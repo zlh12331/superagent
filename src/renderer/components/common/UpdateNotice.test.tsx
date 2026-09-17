@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/UpdateNotice.test.tsx
+// src/renderer/components/$1/UpdateNotice.test.tsx
 // UpdateNotice 更新提示单测：分阶段 toast + 同阶段防重入 + 静默阶段
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖。它是更新流程的唯一用户可见出口——

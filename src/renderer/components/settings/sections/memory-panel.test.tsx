@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/memory-panel.test.tsx
+// src/renderer/components/$1/memory-panel.test.tsx
 // 记忆管理面板测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖动机：该文件此前 0% 覆盖（本轮覆盖率排查确认），却是设置里交互最重的

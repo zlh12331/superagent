@@ -1,4 +1,4 @@
-// src/renderer/components/file-tree/__tests__/FileViewerPanel.test.tsx
+// src/renderer/components/$1/FileViewerPanel.test.tsx
 // 文件查看面板单测（2026-09-12 补覆盖：此前 0 测试，cx 46 全项目现存第二高）
 //
 // 测试要点（聚焦易回归的行为）：

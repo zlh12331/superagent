@@ -1,11 +1,11 @@
-// src/renderer/components/file-tree/__tests__/file-icon.test.tsx
+// src/renderer/components/$1/file-icon.test.tsx
 // file-icon 单测：扩展名 → 图标 + 配色映射（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 重写背景（2026-09 file-tree 审计）：原测试对文件夹只用 style 颜色断言，
 // 注释自认「两个实例图标不同……通过 style 色验证同一规则」——即**没有**断言
 // 图标本身，Folder/FolderOpen 互换也照样通过，是假绿。
 // 现按 lucide 渲染出的类名（.lucide-*）直接断言图标身份（同类断言先例：
-// components/layout/__tests__/layout-gaps.test.tsx 的 .lucide-sun/.lucide-moon）。
+// components/$1/layout-gaps.test.tsx 的 .lucide-sun/.lucide-moon）。
 //
 // 另：isFolder / expanded 两个 prop 已随死代码清理移除（生产零使用，
 // 唯一调用点固定 isFolder={false}），故不再有文件夹用例。

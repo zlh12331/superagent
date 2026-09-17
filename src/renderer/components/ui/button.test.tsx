@@ -1,5 +1,5 @@
-// src/renderer/components/ui/__tests__/button-gaps.test.tsx
-// ui/button 批次8 缺口补全：变体/尺寸/asChild/禁用/className 合并
+// src/renderer/components/ui/button.test.tsx
+// ui/button 组件测试：变体/尺寸/asChild/禁用/className 合并
 //
 // 测试要点：默认渲染与基础类、6 变体类名、4 尺寸类名、disabled 透传、
 // asChild Slot 渲染子元素、className 合并
@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Button, buttonVariants } from './button';
 
-describe('ui/button 批次8 缺口补全', () => {
+describe('Button', () => {
   it('默认渲染 button 元素 + data-slot + 基础类', () => {
     render(<Button>保存</Button>);
     const btn = screen.getByRole('button', { name: '保存' });

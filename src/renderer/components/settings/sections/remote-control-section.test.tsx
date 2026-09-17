@@ -1,4 +1,4 @@
-// src/renderer/components/settings/sections/__tests__/remote-control-section.test.tsx
+// src/renderer/components/$1/remote-control-section.test.tsx
 // RemoteControlSection 单测：启停开关 / 配对凭据与二维码 / 复制令牌 / 审批模式警告
 // ──────────────────────────────────────────────────────────────
 // 数据源 mock：window.api.remote.*（getStatus/start/stop）+ settings.getApprovalMode

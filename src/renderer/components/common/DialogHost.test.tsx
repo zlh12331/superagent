@@ -1,4 +1,4 @@
-// src/renderer/components/common/__tests__/DialogHost.test.tsx
+// src/renderer/components/$1/DialogHost.test.tsx
 // DialogHost 命令式对话框宿主单测：confirm / prompt 两种形态全路径
 // ──────────────────────────────────────────────
 // 覆盖动机：组件此前 0% 覆盖，而它是全仓 confirm()/prompt() 的唯一渲染出口——

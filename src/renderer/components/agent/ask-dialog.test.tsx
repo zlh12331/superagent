@@ -1,4 +1,4 @@
-// src/renderer/components/agent/__tests__/ask-dialog.test.tsx
+// src/renderer/components/$1/ask-dialog.test.tsx
 // AskDialog（Agent 提问对话框）渲染与交互测试
 //
 // 此前该组件无任何覆盖（codegraph 核查），补齐：

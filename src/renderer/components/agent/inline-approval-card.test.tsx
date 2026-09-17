@@ -1,4 +1,4 @@
-// src/renderer/components/agent/__tests__/inline-approval-card.test.tsx
+// src/renderer/components/$1/inline-approval-card.test.tsx
 // InlineApprovalCard 单元测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

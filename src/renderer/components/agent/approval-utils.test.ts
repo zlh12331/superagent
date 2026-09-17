@@ -1,4 +1,4 @@
-// src/renderer/components/agent/__tests__/approval-utils.test.ts
+// src/renderer/components/$1/approval-utils.test.ts
 // approval-utils 单元测试（2026-09-15 表驱动重构后）
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

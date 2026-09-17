@@ -1,4 +1,4 @@
-// src/renderer/components/loading-ui/__tests__/terminal.test.tsx
+// src/renderer/components/$1/terminal.test.tsx
 // Terminal 加载指示器测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 此前仅经 TerminalPanel 间接覆盖（无独立断言），故这些行为没有被锁定：
