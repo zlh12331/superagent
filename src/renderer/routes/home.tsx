@@ -16,7 +16,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ApiKeyProvider, ErrorCode } from '@code-agent/shared/renderer';
-import { ChevronDown, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
+import { ChevronDown, CodeXml, Folder, LayoutGrid, Plus, Search, Star, Wrench } from 'lucide-react';
 import { motion } from 'motion/react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -292,7 +292,26 @@ export function HomePage(): ReactElement {
           animate="visible"
         >
           <motion.span aria-hidden="true" variants={letterUpVariants} className="wl-icon">
-            ⟨/⟩
+            {/* 品牌渐变定义：图标是 SVG，原文本字形的 background-clip 渐变不适用，
+                改用 SVG linearGradient 供 stroke 引用（保持 accent→accent-2 的品牌观感）。
+                该 svg 是纯资源容器（宽高 0、不渲染内容），故以 presentation 角色 + aria-hidden
+                标记，避免被读屏当作无标题图形（a11y/noSvgWithoutTitle）。 */}
+            <svg
+              width="0"
+              height="0"
+              className="absolute"
+              role="presentation"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <defs>
+                <linearGradient id="wl-brand-gradient" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="var(--accent)" />
+                  <stop offset="100%" stopColor="var(--accent-2)" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <CodeXml className="size-8" strokeWidth={1.5} stroke="url(#wl-brand-gradient)" />
           </motion.span>
           {BRAND_TEXT.split('').map((ch, index) => (
             <motion.span

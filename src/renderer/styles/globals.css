@@ -1128,14 +1128,13 @@ body.resizing iframe {
 }
 
 .welcome-logo .wl-icon {
-  font-size: 32px; /* 对齐原型 wl-icon 32px */
-  font-weight: 400;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* 图标为 lucide SVG（32px 对应原文本字形的 font-size:32px 视觉尺寸）；
+     渐变改由 SVG linearGradient 承担——原 background-clip:text 只对文本生效 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   filter: drop-shadow(0 0 12px var(--accent-glow));
-  font-family: var(--font-mono);
 }
 
 .welcome-quick-actions {
