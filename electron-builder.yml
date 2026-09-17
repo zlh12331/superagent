@@ -84,6 +84,8 @@ files:
   - package.json
   - "!**/.vitest"
   - "!**/*.test.ts"
+  # tsx 测试与源码同目录（colocation），不再有 __tests__ 目录可兜底，必须显式排除
+  - "!**/*.test.tsx"
   - "!**/*.spec.ts"
   - "!**/__tests__/**"
   - "!**/coverage/**"

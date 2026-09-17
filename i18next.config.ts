@@ -12,7 +12,7 @@ import { defineConfig } from 'i18next-cli';
 export default defineConfig({
   locales: ['en', 'zh-CN'],
   extract: {
-    input: ['src/renderer/**/*.{ts,tsx}', '!**/__tests__/**', '!**/test/**'],
+    input: ['src/renderer/**/*.{ts,tsx}', '!**/*.test.*', '!**/test/**'],
     output: 'src/renderer/i18n/locales/{{language}}/{{namespace}}.json',
     // 项目 config.ts defaultNS: 'common'；i18next-cli 默认 'translation'，必须对齐
     // biome-ignore lint/style/useNamingConvention: defaultNS 是 i18next-cli 上游 API 属性名，不可改

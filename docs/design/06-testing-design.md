@@ -230,7 +230,7 @@ E2E 兑底是正式策略而非欠账：
 | [src/renderer/test/__tests__/mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
 | [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
 | [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
-| [src/renderer/components/layout/__tests__/DevPanel.test.tsx](file:///src/renderer/components/layout/__tests__/DevPanel.test.tsx) | DevPanel |
+| [src/renderer/components/layout/DevPanel.test.tsx](file:///src/renderer/components/layout/DevPanel.test.tsx) | DevPanel |
 
 #### scripts 工具链（4 个）
 
@@ -385,7 +385,7 @@ E2E browser mode 下无主进程，Sentry IPC 会失败，需加入 filter allow
 
 DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等待 Git trigger 激活，避免时序问题。
 
-源码：[DevPanel.test.tsx](file:///src/renderer/components/layout/__tests__/DevPanel.test.tsx)。
+源码：[DevPanel.test.tsx](file:///src/renderer/components/layout/DevPanel.test.tsx)。
 
 ## 7. 测试质量评估
 

@@ -9,7 +9,7 @@
 //   硬编码颜色（#hex 出现在 className/内联样式）禁用
 //
 // 运行：pnpm check:tokens
-// 排除：styles/（令牌定义处）、__tests__/、注释行、动态样式（style 内变量表达式）
+// 排除：styles/（令牌定义处）、测试文件（*.test.*）、注释行、动态样式（style 内变量表达式）
 // ──────────────────────────────────────────────────────────────
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ import { join, relative } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const SCAN_DIR = join(ROOT, 'src', 'renderer');
-const EXCLUDE_DIRS = new Set(['styles', '__tests__', 'test']);
+const EXCLUDE_DIRS = new Set(['styles', 'test']);
 
 // 24 色板 + 常用派生色（Tailwind 裸色值检测）
 const COLOR_PALETTE = [
@@ -95,7 +95,11 @@ function collectTsxFiles(dir: string, acc: string[] = []): string[] {
     if (entry.isDirectory()) {
       if (EXCLUDE_DIRS.has(entry.name)) continue;
       collectTsxFiles(join(dir, entry.name), acc);
-    } else if (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) {
+    } else if (
+      (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) &&
+      // 测试文件不参与令牌审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
+      !entry.name.includes('.test.')
+    ) {
       acc.push(join(dir, entry.name));
     }
   }

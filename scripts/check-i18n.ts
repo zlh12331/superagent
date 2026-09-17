@@ -97,7 +97,8 @@ function collectDynamicPrefixes(files: string[]): Set<string> {
 function collectHardcodedZhText(file: string): string[] {
   if (!file.endsWith('.tsx')) return [];
   const rel = relative(ROOT, file).split('\\').join('/');
-  if (rel.includes('/__tests__/') || rel.includes('/test/') || rel.endsWith('.test.tsx')) {
+  // 测试文件不参与硬编码文案审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
+  if (rel.includes('/test/') || rel.includes('.test.')) {
     return [];
   }
   const content = readFileSync(file, 'utf8');

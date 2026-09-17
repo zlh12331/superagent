@@ -127,5 +127,5 @@ active/selected 配 aria-selected 或 data-state；checked 配 aria-checked；ex
 - [ ] 复杂交互有键盘导航与 ARIA（Radix 默认覆盖则确认）
 - [ ] 定时器/订阅卸载清理；`window.api` 调用有浏览器模式守卫
 - [ ] 文档头包含变体/状态/用法示例（见五）
-- [ ] 测试 colocation（`__tests__/`，不使用 mock）
+- [ ] 测试与源码同目录 colocation（`*.test.tsx`，不使用 mock）
 - [ ] 门禁：typecheck → lint → test → knip
