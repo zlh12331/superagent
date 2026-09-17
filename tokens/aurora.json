@@ -138,8 +138,8 @@
     "dark": "#D4D4D4"
   },
   "text-tertiary": {
-    "value": "#737373",
-    "comment": "TraeWork --text-tertiary",
+    "value": "#595959",
+    "comment": "TraeWork --text-tertiary（亮色由 #737373 收紧至 #595959：原值对 --bg-elev/#F5F5F5 仅 4.35:1、对 --bg-elev-2/#E5E5E5 仅 3.76:1，均低于 AA；新值对各亮色底 ≥4.5，含 hover 底 --bg-elev-3/#D4D4D4 的 4.73）",
     "dark": "#A1A1A1"
   },
   "text-dim": {
@@ -153,8 +153,8 @@
     "dark": "#737373"
   },
   "muted-foreground": {
-    "value": "#737373",
-    "comment": "shadcn muted-foreground — TraeWork --text-tertiary",
+    "value": "#595959",
+    "comment": "shadcn muted-foreground — TraeWork --text-tertiary（亮色收紧理由同 text-tertiary：原 #737373 在浮起底色上低于 AA 4.5；暗色 #A1A1A1 实测已达标不动）",
     "dark": "#A1A1A1"
   },
   "on-accent": {
@@ -198,7 +198,9 @@
     "value": "var(--bg-elev-2)"
   },
   "accent-foreground": {
-    "value": "var(--muted-foreground)"
+    "value": "var(--on-accent)",
+    "comment": "accent 底上的前景色 — 对齐 shadcn 语义（配套 focus:bg-accent 使用）。原派生自 --muted-foreground 属误定义：文字色落在深紫底(--accent #4B3FE3)上实测仅 1.42:1（远低于 AA），改指 --on-accent 后 6.73:1",
+    "dark": "var(--on-accent)"
   },
   "accent-glow": {
     "value": "rgba(75, 63, 227, 0.08)",

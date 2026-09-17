@@ -55,14 +55,14 @@
   --text: #171717;
   /* TraeWork --text-secondary */
   --text-secondary: #404040;
-  /* TraeWork --text-tertiary */
-  --text-tertiary: #737373;
+  /* TraeWork --text-tertiary（亮色由 #737373 收紧至 #595959：原值对 --bg-elev/#F5F5F5 仅 4.35:1、对 --bg-elev-2/#E5E5E5 仅 3.76:1，均低于 AA；新值对各亮色底 ≥4.5，含 hover 底 --bg-elev-3/#D4D4D4 的 4.73） */
+  --text-tertiary: #595959;
   /* 兼容别名 — 指向 --text-secondary */
   --text-dim: #404040;
   /* TraeWork --text-disabled */
   --text-faint: #A1A1A1;
-  /* shadcn muted-foreground — TraeWork --text-tertiary */
-  --muted-foreground: #737373;
+  /* shadcn muted-foreground — TraeWork --text-tertiary（亮色收紧理由同 text-tertiary：原 #737373 在浮起底色上低于 AA 4.5；暗色 #A1A1A1 实测已达标不动） */
+  --muted-foreground: #595959;
   /* 品牌色上的前景色 — TraeWork --text-onbrand */
   --on-accent: #FFFFFF;
   /* 品牌主色（图形/边框/选中/图标；作文字色用 --accent-text，作实底按钮走 --primary）；暗色保持 TraeWork 官方亮档以保图形可见性 */
@@ -78,7 +78,8 @@
   --secondary: var(--bg-elev-2);
   --secondary-foreground: var(--text);
   --muted: var(--bg-elev-2);
-  --accent-foreground: var(--muted-foreground);
+  /* accent 底上的前景色 — 对齐 shadcn 语义（配套 focus:bg-accent 使用）。原派生自 --muted-foreground 属误定义：文字色落在深紫底(--accent #4B3FE3)上实测仅 1.42:1（远低于 AA），改指 --on-accent 后 6.73:1 */
+  --accent-foreground: var(--on-accent);
   /* 品牌色氛围色（柔和、无发光 — TraeWork quiet by default） */
   --accent-glow: rgba(75, 63, 227, 0.08);
   --accent-soft: rgba(75, 63, 227, 0.04);
@@ -243,13 +244,13 @@
   --text: #F5F5F5;
   /* TraeWork --text-secondary */
   --text-secondary: #D4D4D4;
-  /* TraeWork --text-tertiary */
+  /* TraeWork --text-tertiary（亮色由 #737373 收紧至 #595959：原值对 --bg-elev/#F5F5F5 仅 4.35:1、对 --bg-elev-2/#E5E5E5 仅 3.76:1，均低于 AA；新值对各亮色底 ≥4.5，含 hover 底 --bg-elev-3/#D4D4D4 的 4.73） */
   --text-tertiary: #A1A1A1;
   /* 兼容别名 — 指向 --text-secondary */
   --text-dim: #D4D4D4;
   /* TraeWork --text-disabled */
   --text-faint: #737373;
-  /* shadcn muted-foreground — TraeWork --text-tertiary */
+  /* shadcn muted-foreground — TraeWork --text-tertiary（亮色收紧理由同 text-tertiary：原 #737373 在浮起底色上低于 AA 4.5；暗色 #A1A1A1 实测已达标不动） */
   --muted-foreground: #A1A1A1;
   /* 品牌主色（图形/边框/选中/图标；作文字色用 --accent-text，作实底按钮走 --primary）；暗色保持 TraeWork 官方亮档以保图形可见性 */
   --accent: #6A6FFF;
