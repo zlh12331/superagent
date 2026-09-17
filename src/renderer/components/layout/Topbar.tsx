@@ -20,6 +20,7 @@ import { Moon, PanelLeft, PanelRight, Search, Sun } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ReactElement } from 'react';
 
+import { BrandMark } from '@/components/common/BrandMark';
 import { Button } from '@/components/ui/button';
 import { useAppInfo } from '@/hooks/use-app-info';
 import { useTranslation } from '@/i18n/use-translation';
@@ -84,7 +85,7 @@ export function Topbar({
 
       {/* 品牌标识（brand-mark + 名称 + 遥测带） */}
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true" />
+        <BrandMark className="brand-mark shrink-0" />
         <span className="brand-name">
           Code Agent<span>desktop</span>
         </span>

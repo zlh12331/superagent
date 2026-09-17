@@ -506,23 +506,12 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* 品牌标识：形态由 components/common/BrandMark.tsx 的 SVG 提供（顶栏/欢迎页共用），
+   此处仅保留顶栏尺寸约束与不收缩 */
 .brand-mark {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: var(--accent);
-  position: relative;
   flex-shrink: 0;
-}
-
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border: 1.5px solid var(--background);
-  border-radius: 2px;
-  border-right: none;
-  border-bottom: none;
 }
 
 .brand-name {
@@ -1128,8 +1117,8 @@ body.resizing iframe {
 }
 
 .welcome-logo .wl-icon {
-  /* 图标为 lucide SVG（32px 对应原文本字形的 font-size:32px 视觉尺寸）；
-     渐变改由 SVG linearGradient 承担——原 background-clip:text 只对文本生效 */
+  /* 品牌标识（components/common/BrandMark，size=40 渐变变体）——
+     与顶栏 .brand-mark 同一实现，品牌语言一致 */
   display: inline-flex;
   align-items: center;
   justify-content: center;
