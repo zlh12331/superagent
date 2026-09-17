@@ -76,12 +76,47 @@ BREAKING CHANGE: 旧字段 `modelConfig` 不再被读取，需迁移到 `models`
 
 1. 功能开发走 PR 合入 main（Conventional Commits；main 受 ruleset 保护，需 PR + 必需检查 + 线性历史）
 2. release-please 自动开/更新 Release PR，标题形如 `chore(main): release 1.1.0`
-3. 审阅该 PR：版本号是否符合预期、在 PR 里润色 CHANGELOG
+3. 审阅该 PR：版本号是否符合预期、**润色 CHANGELOG（见下节，有门禁卡关）**
 4. 合并 Release PR → 触发 `release.yml`
 5. `release.yml` 依次：gate 识别发布提交 → 三平台构建（各平台原生打包 + 产物 smoke）→ 打 tag + 建 draft → 校验资产 → 转正式
 6. 自动更新源（`latest*.yml`）随资产一起发布
 
 > 想控制发版节奏，就**先不合并 Release PR**——提交会一直累积进下一个版本。这是天然的发版节流阀。
+
+### 2.1 润色 CHANGELOG（必需步骤）
+
+**为什么要人工润色**：release-please 以 **commit** 为粒度产出 CHANGELOG——一个 commit 一条记录，文案取该 commit 的标题。而本项目走 squash 合并，于是一个含几十个修复的 PR，合并后在 CHANGELOG 里**只剩一行 PR 标题**；squash 提交正文里保存的子提交明细它不解析（只从正文读破坏性变更 / `Release-As:` 这类 footer 指令）。
+
+后果是用户打开 Release 页面看到的全是开发视角的措辞（如「渲染层全域审计收口」「三平行 switch 合并元数据表」），**看不出这次更新对自己有什么用**。
+
+**操作**：
+
+```bash
+pnpm release:draft            # 生成底稿：展开版本区间内全部提交 + 明细（含 squash 正文里那些）
+# 按底稿把 CHANGELOG.md 最新版本段改写成面向用户的话术，例如：
+#   - **记忆功能恢复可用**：修复记忆引擎子进程从未启动（此前一直静默降级为「无记忆」）
+#   - **亮色主题可读性**：修复首页/会话/设置共 59 处文字对比度不达 WCAG AA 的问题
+#   —— 说清「用户得到什么」；纯内部工程改动（CI/静态分析/重构）可归入「内部改进」或略去
+pnpm check:changelog-polish   # 验证通过后才能合并 Release PR
+```
+
+**门禁（两道，防止漏做）**：
+
+| 位置 | 触发条件 | 作用 |
+|---|---|---|
+| `ci.yml` 的 `Typecheck / Lint / Unit Test / Audit` | PR 分支名以 `release-please--` 开头 | **阻塞合并**。塞进既有必需检查而非新开 job——ruleset 的必需检查清单是固定的 8 项，新 job 不阻塞合并 |
+| `release.yml` 的 `Gate (release-please commit?)` | 发版提交且 gate 判定为发布 | **兜底**。即使 PR 阶段漏过，发版会在**打 tag 之前**失败（不占版本号、可重试）。处置：补一个小 PR 润色 CHANGELOG，合并后重跑 workflow |
+
+判定口径：该版本段的**全部** bullet 都以提交链接结尾（`([abc1234](…/commit/abc1234))`）= 仍是机器原文 = 未润色。只要有一条不带链接即视为人工已介入（不依赖分组标题语言，故对中英文分组都成立）。
+
+**显式放行标记**：在该版本段内加一行 `<!-- changelog:polished -->`（GitHub 渲染不可见）即通过。两种场景需要它：
+
+1. 确实要直接使用机器原文（罕见）；
+2. **润色时逐条保留了提交链接做溯源** —— 此时格式上与机器原文无法区分，会被判为「未润色」（假阳性）。这属于**有意为之的取舍**：宁可假阳性（补一行标记即可，成本极低），也不能假阴性（机器原文直接对外发布，成本高）。
+
+所以推荐做法是：润色完成后顺手加标记，让判定不依赖格式巧合。
+
+> ⚠️ 本门禁只能识别「完全没动」，识别不了「随手敷衍」——它拦的是**忘**，不是**差**。文案质量仍靠审阅。
 
 ## 三、发 beta（预发布）
 

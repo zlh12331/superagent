@@ -127,6 +127,19 @@ jobs:
         # audit-ci + .nsprc 白名单（2026-08-30 收紧为卡关；本地已验证 0 命中）
         run: pnpm run audit
 
+      - name: CHANGELOG polish check (Release PR only)
+        # ── 为什么在这里 ──────────────────────────────────────────────
+        # release-please 以 commit 为粒度产出 CHANGELOG，项目走 squash 合并 ⇒ 一个
+        # 含几十个修复的 PR 在 CHANGELOG 里只剩一行 PR 标题。RELEASING.md 要求合并
+        # Release PR 前人工润色，但该步骤此前无任何机制看守（2026-09-17 实测漏做
+        # v1.1.1，用户可见修复在 Release 页面全部不可见）。
+        # 放进本 job 而非新开 job：ruleset 的必需检查清单是固定的 8 项，新 job 不
+        # 阻塞合并；quality 已是必需检查，挂在此处即自动获得合并阻塞力（无需改云端
+        # ruleset）。条件限定 release-please-- 前缀分支 ⇒ 只对 Release PR 生效，
+        # 其他 PR 零开销。release.yml 的 gate job 另有同一步兜底（打 tag 前）。
+        if: startsWith(github.head_ref, 'release-please--')
+        run: pnpm check:changelog-polish
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4

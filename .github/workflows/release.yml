@@ -95,6 +95,21 @@ jobs:
             echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: CHANGELOG polish check (兜底，打 tag 前)
+        # ── 为什么在这里再查一遍 ─────────────────────────────────────
+        # ci.yml 的 quality job 已在 Release PR 阶段拦（合并被阻塞），本步是第二道
+        # 防线：若 Release PR 走了绕过路径（或未来 ruleset 必需检查清单变动导致 CI
+        # 那步不再阻塞），发版会在**打 tag 之前**失败——不占版本号、可重试，与
+        # 「三平台构建全部成功才打 tag」同一取舍（宁可失败也不产出用户可见的错误文案）。
+        # 失败处置：补一个小 PR 润色 CHANGELOG，合并后重跑本 workflow。
+        #
+        # 用 npx tsx 而非 pnpm：本 job 不装依赖（装依赖会触发 electron 原生模块重建，
+        # 使 gate 从秒级劣化到分钟级，而每次发版重试都要经过它）。本脚本只依赖
+        # node:fs 与同目录 TS 文件，tsx 足以直接执行；checkout 默认深 1 足够
+        # （只读工作区内的 CHANGELOG.md）。
+        if: steps.detect.outputs.is_release == 'true'
+        run: npx --yes tsx@^4.23.0 scripts/check-changelog-polish.ts --version ${{ steps.detect.outputs.version }}
+
   build:
     name: Build & Release ${{ matrix.platform }}
     needs: gate
