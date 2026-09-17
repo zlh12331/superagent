@@ -85,13 +85,26 @@ describe('SidebarAccount', () => {
     expect(screen.getByText(t('sidebar.themeSystem'))).toBeDefined();
   });
 
-  it('异常：浏览器模式（无桥）→ 报告问题静默不抛错', async () => {
+  it('异常：浏览器模式（无桥）→ 报告问题被守卫拦截，不外发 IPC', async () => {
+    // 先留存 spy 引用：删除 api 后 handler 读到 undefined 即提前 return，spy 作"未被触达"见证
+    const openExternal = window.api.app.openExternal;
     (window as unknown as { api: undefined }).api = undefined;
+
+    // 守卫缺失时读取 window.api.app 会抛 TypeError（jsdom 把监听器内抛错派发为 window error 事件）
+    const uncaught: unknown[] = [];
+    const onError = (event: ErrorEvent): void => {
+      uncaught.push(event.error);
+      event.preventDefault(); // 落袋后不再上报进程级，避免 run 整体失败盖过本断言
+    };
+    window.addEventListener('error', onError);
+
     renderAccount();
     await openMenu();
     await userEvent.click(screen.getByText(t('sidebar.reportIssue')));
-    // 无桥守卫：不抛错即通过（无 IPC 可断言）
-    expect(true).toBe(true);
+
+    window.removeEventListener('error', onError);
+    expect(uncaught).toEqual([]);
+    expect(openExternal).not.toHaveBeenCalled();
   });
 
   it('正向：报告问题 → openExternal 打开仓库 issues 页', async () => {
