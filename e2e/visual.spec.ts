@@ -121,4 +121,19 @@ test.describe('视觉回归测试', () => {
 
     await expect(page).toHaveScreenshot('right-panel-collapsed.png', SHOT_OPTIONS);
   });
+
+  /**
+   * 品牌区元素级快照
+   *
+   * 为什么单独加：全页快照的 1% 阈值（≈9200px @1280x720）会漏掉小面积改动——
+   * 2026-09-17 实测把欢迎页品牌图标从细线条换成实心标识（2661px 差异）时全页
+   * 基线**照旧通过**。元素级快照把作用域缩到品牌区（约 700x60），同一改动占比
+   * 放大到数个百分点，从而可被检出。顶栏标识同理（小尺寸，全页尺度下不可见）。
+   */
+  test('品牌区快照（欢迎页大字 + 顶栏标识）', async ({ page }) => {
+    await gotoWelcome(page);
+
+    await expect(page.locator('.welcome-logo')).toHaveScreenshot('brand-welcome.png', SHOT_OPTIONS);
+    await expect(page.locator('.brand').first()).toHaveScreenshot('brand-topbar.png', SHOT_OPTIONS);
+  });
 });
