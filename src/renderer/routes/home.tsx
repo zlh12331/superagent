@@ -37,8 +37,10 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
-/** 品牌文案（欢迎页逐字入场用；读屏以容器 aria-label 暴露，逐字 span 隐藏） */
-const BRAND_TEXT = 'Code with TRAE';
+/** 品牌文案（欢迎页逐字入场用；读屏以容器 aria-label 暴露，逐字 span 隐藏）
+ *  对齐产品名 Code Agent Desktop（顶栏 / electron-builder productName / README），
+ *  不使用第三方商标；保留 "Code with ___" 句式与顶栏呼应而非重复 */
+const BRAND_TEXT = 'Code with Agent';
 
 /** 快捷动作定义（对齐原型 4 个 welcome-pill） */
 interface QuickAction {
