@@ -21,13 +21,17 @@ type Theme = (typeof THEMES)[number];
 async function gotoWithTheme(page: Page, theme: Theme): Promise<void> {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  if (theme === 'dark') {
-    await page.evaluate(() => {
-      document.documentElement.classList.add('dark');
-    });
-  }
+  // 必须显式双向切换：web 模式首帧主题恒为暗色（theme-init.ts 的
+  // DEFAULT_THEME='dark' + FOUC 防护内联脚本），只 add('dark') 会让 light
+  // 分支实际也在测暗色——双主题矩阵名不副实（2026-09-17 实测发现）
+  await page.evaluate((t) => {
+    document.documentElement.classList.toggle('dark', t === 'dark');
+  }, theme);
   // 等待应用渲染稳定（含主题过渡 transition）
   await page.waitForTimeout(1000);
+  // 主题落地断言：防止分支再次静默失效（如首帧脚本时序变化覆盖 class）
+  const applied = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+  expect(applied, `主题未按预期落地（期望 dark=${theme === 'dark'}）`).toBe(theme === 'dark');
 }
 
 test.describe('可访问性审计（WCAG 2.2 AA · 亮/暗双主题矩阵）', () => {
