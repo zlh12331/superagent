@@ -4,15 +4,22 @@
 
 ## [1.1.1](https://github.com/zlh12331/superagent/compare/v1.1.0...v1.1.1) (2026-09-17)
 
+### 修复
 
-### Bug Fixes
+- **记忆功能恢复可用**：修复记忆引擎子进程从未启动——此前每次对话都静默降级为「无记忆」，且已发布的安装包同样受影响（[08942aa](https://github.com/zlh12331/superagent/commit/08942aaedc0229096354b284f52f2fc957dc0102)）
+- **亮色主题可读性**：修复首页、会话、设置三个界面共 59 处文字对比度不达 WCAG AA 的问题（列表时间、分组标题、空态提示、设置项标题等）；部分问题此前被失效的测试分支长期掩盖（[674e32e](https://github.com/zlh12331/superagent/commit/674e32e95e6479df01edaf36a9193ff97d6a97fe)、[#44](https://github.com/zlh12331/superagent/issues/44)）
+- **终端面板**：修复创建失败时的高频重试（实测单次操作 12157 次 IPC 调用）、补齐方向键导航、显示真实标题与进程号（[#44](https://github.com/zlh12331/superagent/issues/44)）
+- **输入框与交互**：修复输入法组合输入期间误发送、快捷键提示文字对比度过低、待办队列在部分场景被误取消、设置项被写坏、文件树 `dirname` 根路径计算、vim `dd` 后状态残留等问题（[#44](https://github.com/zlh12331/superagent/issues/44)）
+- **欢迎页品牌**：文案与图标改为产品自有标识（不再使用第三方商标，与顶栏标识统一）（[#44](https://github.com/zlh12331/superagent/issues/44)）
+- **修复会话切换时的订阅泄漏**：消息转换出错时未释放流式监听与定时器（[ce7267b](https://github.com/zlh12331/superagent/commit/ce7267b1be362128b81e6877df26301897a2a319)）
 
-* **ci:** 静态分析改 advanced setup 排除 vendored 源码 + 补 ci.yml 权限块 ([4f5fa5e](https://github.com/zlh12331/superagent/commit/4f5fa5eb0ea6f6b3ced43e7b2df46a3458f5f907))
-* **memory:** 修复引擎子进程从未启动（tsx 注入失效 + pid 竞态误判） ([08942aa](https://github.com/zlh12331/superagent/commit/08942aaedc0229096354b284f52f2fc957dc0102))
-* **renderer:** 前端问题清单逐项修复 + 新增 CSS 变量引用门禁 ([674e32e](https://github.com/zlh12331/superagent/commit/674e32e95e6479df01edaf36a9193ff97d6a97fe))
-* **renderer:** 消息转换抛错时退订流式监听，修复订阅泄漏 ([ce7267b](https://github.com/zlh12331/superagent/commit/ce7267b1be362128b81e6877df26301897a2a319))
-* **renderer:** 渲染层全域审计收口——17 项缺陷修复 + 3 项新门禁 + 视觉回归门禁修复 ([#44](https://github.com/zlh12331/superagent/issues/44)) ([b7a075c](https://github.com/zlh12331/superagent/commit/b7a075c70a6b599d9b42c96a7d79faa653868dc8))
-* **security:** 修复四条静态扫描告警（实体双重解码/标签变体/注释残留/明文落盘） ([09ce70c](https://github.com/zlh12331/superagent/commit/09ce70c2a595901da0c66e97e8a2f6afea66ecec))
+### 内部改进
+
+- Web 抓取工具修复 HTML 实体二次解码与 `<script>` 变体剥离；API Key 不再有任何明文落盘路径（[09ce70c](https://github.com/zlh12331/superagent/commit/09ce70c2a595901da0c66e97e8a2f6afea66ecec)）
+- 静态分析迁至 advanced setup 并排除 vendored 第三方源码，消除噪声告警（[4f5fa5e](https://github.com/zlh12331/superagent/commit/4f5fa5eb0ea6f6b3ced43e7b2df46a3458f5f907)）
+- 新增 3 项工程门禁（动画 keyframes 引用、CSS 变量引用、写法一致性）并修复视觉回归门禁长期失效问题（[#44](https://github.com/zlh12331/superagent/issues/44)）
+
+<!-- changelog:polished -->
 
 ## [1.1.0](https://github.com/zlh12331/superagent/compare/v1.0.0...v1.1.0) (2026-09-14)
 
