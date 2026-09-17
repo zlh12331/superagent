@@ -32,6 +32,8 @@
     "check:csp-hash": "tsx scripts/check-csp-hash.ts",
     "check:css-vars": "tsx scripts/check-css-vars.ts",
     "check:animations": "tsx scripts/check-animations.ts",
+    "check:changelog-polish": "tsx scripts/check-changelog-polish.ts",
+    "release:draft": "tsx scripts/changelog-draft.ts",
     "check:ui-consistency": "tsx scripts/check-ui-consistency.ts",
     "check:secrets": "gitleaks dir src --redact --no-banner",
     "check:coverage-floors": "tsx scripts/check-coverage-floors.ts",
