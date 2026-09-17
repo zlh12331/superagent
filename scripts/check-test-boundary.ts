@@ -8,7 +8,8 @@
 //   2. 单测目录（src/**/*.test.ts）真实 IO 信号（真实 DB/WebSocket/HTTP server）
 //      = "准集成测试"，必须登记 scripts/test-boundary-exempt.json
 //   3. 恒真断言静态扫描（expect(true).toBe(true) 等字面量恒真 = 空跑）
-// 级别：规则 1/2 为 error（卡关）；规则 3 为 warning（存量清零后升 error）
+// 级别：三条规则均为 error（卡关）。规则 3 于 2026-09-17 由 warning 升 error——
+//      存量（sidebar-account.test.tsx）已改为断言真实副作用后清零，升级防回归。
 //
 // 运行：pnpm check:test-boundary
 // ──────────────────────────────────────────────────────────────
@@ -75,7 +76,6 @@ function isIoBoundaryMock(specifier: string): boolean {
 
 function main(): void {
   const errors: Finding[] = [];
-  const warnings: Finding[] = [];
 
   // 登记表加载
   const exemptRaw = JSON.parse(
@@ -124,7 +124,7 @@ function main(): void {
     }
   }
 
-  // ── 规则 3：恒真断言（warning，存量清零后升 error；覆盖单测 + 集成）────────
+  // ── 规则 3：恒真断言（字面量自比 = 空跑；覆盖单测 + 集成）────────
   for (const dir of [join(ROOT, 'src'), join(ROOT, 'tests', 'integration')]) {
     for (const f of collectFiles(dir, /\.test\.(ts|tsx)$/)) {
       const content = readFileSync(f, 'utf-8');
@@ -132,7 +132,7 @@ function main(): void {
       const lines = content.split('\n');
       for (const [idx, line] of lines.entries()) {
         if (TAUTOLOGY_PATTERNS.some((p) => p.test(line))) {
-          warnings.push({
+          errors.push({
             file: rel,
             line: idx + 1,
             detail: '恒真断言（字面量自比）= 空跑，应断言真实副作用',
@@ -148,17 +148,9 @@ function main(): void {
     for (const e of errors) {
       console.error(`  ${e.file}:${e.line} — ${e.detail}`);
     }
+    process.exit(1);
   }
-  if (warnings.length > 0) {
-    console.warn(`⚠️  测试边界提示 ${warnings.length} 处（warning）：`);
-    for (const w of warnings) {
-      console.warn(`  ${w.file}:${w.line} — ${w.detail}`);
-    }
-  }
-  if (errors.length === 0) {
-    console.log(`✅ 测试边界检查通过（${warnings.length} 条 warning）`);
-  }
-  process.exit(errors.length > 0 ? 1 : 0);
+  console.log('✅ 测试边界检查通过');
 }
 
 main();

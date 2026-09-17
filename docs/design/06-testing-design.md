@@ -135,8 +135,8 @@
    （better-sqlite3 真实实例/WebSocket/node:http server/new Database）= "准集成测试"，
    必须登记 scripts/test-boundary-exempt.json（当前 20 个存量已登记），未登记 = error。
    登记项未来随集成测试体系建设逐步迁移到 tests/integration/。
-4. **恒真断言**（规则 3，warning）：expect(true).toBe(true) 等字面量自比 = 空跑，
-   存量清零后升 error。
+4. **恒真断言**（规则 3，error 卡关）：expect(true).toBe(true) 等字面量自比 = 空跑，
+   应断言真实副作用。2026-09-17 由 warning 升 error（存量清零后按原定计划升级）。
 5. **import 边界**（dependency-cruiser）：tests/integration 禁止依赖 src/renderer、src/preload
    （跨进程边界，integration-not-renderer 规则）。
 6. **速度约束**（vitest 配置）：tests/integration/vitest.config.ts testTimeout 60s
