@@ -70,6 +70,34 @@ function normalizeMessage(raw: unknown): { readonly role: string; readonly parts
   return { role, parts: [] };
 }
 
+/** 单条 part 的结果归类（tool-call 登记待合并 / result-error 写入结果表） */
+function collectPartOutcome(
+  part: StoredPart,
+  callId: string,
+  outcomes: Map<string, ToolOutcome>,
+  callIds: Set<string>,
+): void {
+  switch (part['type']) {
+    case 'tool-call':
+      callIds.add(callId);
+      break;
+    case 'tool-result':
+      outcomes.set(callId, {
+        state: 'output-available',
+        output: unwrapOutput(part['output']),
+      });
+      break;
+    case 'tool-error':
+      outcomes.set(callId, {
+        state: 'output-error',
+        errorText: asString(part['errorText']) || 'error',
+      });
+      break;
+    default:
+      break;
+  }
+}
+
 /** 全局收集 toolCallId → 结果（第二遍重建时合并进工具卡） */
 function collectOutcomes(messages: readonly { parts: StoredPart[] }[]): {
   outcomes: Map<string, ToolOutcome>;
@@ -80,19 +108,8 @@ function collectOutcomes(messages: readonly { parts: StoredPart[] }[]): {
   for (const message of messages) {
     for (const part of message.parts) {
       const callId = asString(part['toolCallId']);
-      if (callId.length === 0) continue;
-      if (part['type'] === 'tool-call') {
-        callIds.add(callId);
-      } else if (part['type'] === 'tool-result') {
-        outcomes.set(callId, {
-          state: 'output-available',
-          output: unwrapOutput(part['output']),
-        });
-      } else if (part['type'] === 'tool-error') {
-        outcomes.set(callId, {
-          state: 'output-error',
-          errorText: asString(part['errorText']) || 'error',
-        });
+      if (callId.length > 0) {
+        collectPartOutcome(part, callId, outcomes, callIds);
       }
     }
   }
@@ -176,6 +193,111 @@ function toOrphanResultPart(part: StoredPart, outcome: ToolOutcome): UiPart {
   } as UiPart;
 }
 
+/** 孤儿结果的兜底 outcome：按 part 自身类型判定（tool-error 不误标成功、不丢 errorText） */
+function fallbackOutcome(type: string, part: StoredPart): ToolOutcome {
+  if (type === 'tool-error') {
+    return { state: 'output-error', errorText: asString(part['errorText']) || 'error' };
+  }
+  return { state: 'output-available', output: unwrapOutput(part['output']) };
+}
+
+/**
+ * 存储角色 → UIMessage 角色
+ *
+ * 主进程会把一回合的工具结果落成独立的 `role: 'tool'` 消息
+ * （turn-transcript.ts 的 buildAssistantTurnMessages）。这类消息**不是用户发言**：
+ * 其中与 tool-call 配对的条目会被合并掉，只有**孤儿** tool-result/error 会剩下
+ * （无对应 tool-call，如中断后重开会话），此前 `'tool'` 落入兜底变 'user'，孤儿
+ * 工具卡被渲染进用户气泡——语义错位。
+ *
+ * 归到 'assistant'：工具产出本就是模型侧产物，且 assistant 分支会按 part 分发渲染
+ * 富组件（system 分支只取文本，会丢卡片）。未知角色仍兜底 user（对齐 normalizeMessage）。
+ */
+function toUiRole(role: string): UIMessage['role'] {
+  if (role === 'tool') return 'assistant';
+  return role === 'assistant' || role === 'system' ? role : 'user';
+}
+
+/** part 分类上下文（收敛形参 ≤4；结果表/登记表由 collectOutcomes 产出） */
+interface PartContext {
+  readonly outcomes: ReadonlyMap<string, ToolOutcome>;
+  readonly callIds: ReadonlySet<string>;
+  /** 无法回显的 part 类型登记（default 分支写入） */
+  readonly dropped: Set<string>;
+}
+
+/** 该 tool-result/error 是否已有对应 tool-call（已合并进卡，无需孤儿呈现） */
+function isMergedOutcome(callId: string, callIds: ReadonlySet<string>): boolean {
+  return callId.length > 0 && callIds.has(callId);
+}
+
+/** 单条 part → UI part（无法回显返回 null；reasoning/工具记富标记） */
+function partToUi(part: StoredPart, ctx: PartContext): { part: UiPart | null; rich: boolean } {
+  const type = asString(part['type']);
+  switch (type) {
+    case 'text': {
+      const text = asString(part['text']);
+      if (text.length > 0) {
+        return { part: { type: 'text', text, state: 'done' } as UiPart, rich: false };
+      }
+      return { part: null, rich: false };
+    }
+    case 'reasoning': {
+      const text = asString(part['text']);
+      if (text.length > 0) {
+        return { part: { type: 'reasoning', text, state: 'done' } as UiPart, rich: true };
+      }
+      return { part: null, rich: false };
+    }
+    case 'file':
+      return { part: toFilePart(part), rich: false };
+    case 'tool-call': {
+      const callId = asString(part['toolCallId']);
+      return {
+        part: toToolPart(
+          asString(part['toolName']) || 'unknown',
+          callId,
+          unwrapOutput(part['input']),
+          callId.length > 0 ? ctx.outcomes.get(callId) : undefined,
+        ),
+        rich: true,
+      };
+    }
+    case 'tool-result':
+    case 'tool-error': {
+      // 有对应 tool-call 的结果已合并进上面的卡；孤儿结果单独呈现
+      const callId = asString(part['toolCallId']);
+      if (isMergedOutcome(callId, ctx.callIds)) {
+        return { part: null, rich: false };
+      }
+      return {
+        part: toOrphanResultPart(part, ctx.outcomes.get(callId) ?? fallbackOutcome(type, part)),
+        rich: true,
+      };
+    }
+    case 'step-start':
+      return { part: { type: 'step-start' } as UiPart, rich: false };
+    default:
+      if (type.length > 0) ctx.dropped.add(type);
+      return { part: null, rich: false };
+  }
+}
+
+/** 单条消息的 part 分类：返回可渲染 parts 与是否含富 part（reasoning/工具） */
+function collectUiParts(
+  message: { parts: StoredPart[] },
+  ctx: PartContext,
+): { parts: UiPart[]; rich: boolean } {
+  const parts: UiPart[] = [];
+  let rich = false;
+  for (const part of message.parts) {
+    const { part: ui, rich: isRich } = partToUi(part, ctx);
+    if (ui !== null) parts.push(ui);
+    if (isRich) rich = true;
+  }
+  return { parts, rich };
+}
+
 /**
  * 重建持久化历史为渲染层 UIMessage[]。
  *
@@ -187,73 +309,14 @@ export function reconstructHistory(rawMessages: readonly ChatMessage[]): Reconst
   const { outcomes, callIds } = collectOutcomes(normalized);
   const dropped = new Set<string>();
   let hasRichParts = false;
+  const ctx: PartContext = { outcomes, callIds, dropped };
 
   const messages: UIMessage[] = [];
   normalized.forEach((message, index) => {
-    const parts: UiPart[] = [];
-    for (const part of message.parts) {
-      const type = asString(part['type']);
-      switch (type) {
-        case 'text': {
-          const text = asString(part['text']);
-          if (text.length > 0) parts.push({ type: 'text', text, state: 'done' } as UiPart);
-          break;
-        }
-        case 'reasoning': {
-          const text = asString(part['text']);
-          if (text.length > 0) {
-            hasRichParts = true;
-            parts.push({ type: 'reasoning', text, state: 'done' } as UiPart);
-          }
-          break;
-        }
-        case 'file':
-          parts.push(toFilePart(part));
-          break;
-        case 'tool-call': {
-          const callId = asString(part['toolCallId']);
-          const toolName = asString(part['toolName']) || 'unknown';
-          hasRichParts = true;
-          parts.push(
-            toToolPart(
-              toolName,
-              callId,
-              unwrapOutput(part['input']),
-              callId.length > 0 ? outcomes.get(callId) : undefined,
-            ),
-          );
-          break;
-        }
-        case 'tool-result':
-        case 'tool-error': {
-          // 有对应 tool-call 的结果已合并进上面的卡；孤儿结果单独呈现
-          const callId = asString(part['toolCallId']);
-          const outcome = callId.length > 0 ? outcomes.get(callId) : undefined;
-          if (callId.length > 0 && callIds.has(callId)) break;
-          hasRichParts = true;
-          parts.push(
-            toOrphanResultPart(
-              part,
-              outcome ?? {
-                state: 'output-available',
-                output: unwrapOutput(part['output']),
-              },
-            ),
-          );
-          break;
-        }
-        case 'step-start':
-          parts.push({ type: 'step-start' } as UiPart);
-          break;
-        default:
-          if (type.length > 0) dropped.add(type);
-          break;
-      }
-    }
+    const { parts, rich } = collectUiParts(message, ctx);
+    if (rich) hasRichParts = true;
     if (parts.length === 0) return;
-    const role: UIMessage['role'] =
-      message.role === 'assistant' ? 'assistant' : message.role === 'system' ? 'system' : 'user';
-    messages.push({ id: `hist-${index}`, role, parts });
+    messages.push({ id: `hist-${index}`, role: toUiRole(message.role), parts });
   });
 
   return { messages, droppedPartTypes: [...dropped], hasRichParts };

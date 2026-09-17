@@ -1,18 +1,18 @@
 {
   "$comment": "fileSize.net = 净行硬门槛（唯一卡关口径，对齐 typescript-dev-standards-ai.md 规则 9.2）；fileSize.raw = 原始行告警线（不卡关，仅提示注释密度）。见 scripts/check-file-size.ts 头注释。",
-  "$comment2": "functionSize = 函数门禁阈值（2026-09-11 调整）：body=100 为棘轮超限门槛（≤100 行不进棘轮、不入基线、不判违规）；bodyNotice=50 为**提示线**（51–100 行仅打印提示、不卡关、不入基线）——防止「门槛抬到 100」后这一区间完全失明；bodyTiers 为卡关区（>100）的体长分档，>heavy 必须登记理由 scripts/function-size-exempt.json。params=4 为形参门槛不变。",
+  "$comment2": "functionSize = 函数门禁阈值（2026-09-15 调整）：body=200 为棘轮超限门槛，度量已迁移 Biome 内置规则 noExcessiveLinesPerFunction（scripts/check-functions.ts 从其 JSON 诊断读取；biome.json 中 level=off 携带 options，由门禁管道 --only 启用）——口径为「独占行数（嵌套函数体单独计量）+ 含注释行 + skipBlankLines（跳过空行）」，测试文件不计；旧自研正则口径（净行、嵌套计入外层）退役。bodyNotice 概念随迁移移除（新口径下 Biome 只报告超阈值函数，101–200 区间的看守职责由 complexity 门禁承担）。bodyTiers 为卡关区（>200）的体长分档，>heavy 必须登记理由 scripts/function-size-exempt.json。params=4 为形参门槛（Biome 无此规则，仍用自研正则 function-metrics.ts）。",
   "$comment3": "为什么 body 从 50 调到 100（2026-09-11）：① 50 来自 eslint max-lines-per-function 的默认值，是通用 JS 工具口径，未考虑 JSX——本项目 106 条基线里 59 条（56%）落在 51–100，且逐条核查后几乎全为「结构性长」（React 组件 JSX 平铺、IPC handler 工厂逐条注册），拆开反而更差；② 误报率过半会让告警失去区分度，实际后果是「整条门禁被习惯性忽略」，比门槛偏松更糟。bodyTiers 相应上移一档（mild 200 / moderate 400），over 仍为 >400——登记阈值保持不变（400 是「确实巨大」的绝对判断，不随超限门槛移动，避免本次调整变成对重债的连带放松）。",
   "$comment4": "complexity.max = 认知复杂度门槛（2026-09-11 新增，check-complexity.ts）：见 SonarQube 与 Biome 的一致默认值 15。为什么需要它：行数是复杂度的弱代理——92 行 JSX 平铺与 62 行控制流纠缠同样「超行数」，但前者健康、后者危险。认知复杂度能量出这个区别（本项目实测：Topbar 92 行 JSX 复杂度远低于 vim-mode 62 行分支密集函数）。故行数门槛放宽到 100 的同时，用本指标补上「真正的纠缠」这条红线。",
+  "$comment5": "为什么 body 从 100 调到 200（2026-09-15）：① 双硬门槛互相拆台——降复杂度的标准手法（提函数、卫语句、early return）天然增行数，行数硬门槛卡在 100 会让合法重构在两个门禁间往返搬运（实测：history-parts 复杂度 44→合规后文件反而变长）；② 分工重构排位——复杂度（≤15，Biome 内置规则、度量可靠）升为唯一细粒度语义门禁，行数退位为「防怪兽」粗网（200），复杂度管「纠缠」、行数管「巨大」、file-size（文件 ≤600）兜底；③ 度量实现不对称——行数是自研正则而复杂度是 Biome，细粒度卡关不应压在最弱的度量上。bodyNotice 相应上移到 100（旧硬门槛，保持新放开区间可见），bodyTiers 上移一档（mild 400），登记线 400 不动（同 $comment3 先例：绝对判断不随超限门槛移动）。（后续 2026-09-15：③ 的不对称已消除——体长度量整体迁移 Biome noExcessiveLinesPerFunction，自研正则体长代码退役，bodyNotice 概念随之移除，见 $comment2；自研度量仅存形参计数，其多层嵌套形参括号漏报是否迁 AST 已在 function-metrics.ts 头注释挂账。）（勘误 2026-09-15：本条初版曾写「已知 247/248 漂移」——经查为误诊。实测值全程稳定 248；「247」是 ratchet.ts proposeBaseline 的 min(旧值,实测值) 只收紧语义保留了旧基线，被误读成一次更小的实测。）",
   "fileSize": {
     "raw": 600,
     "net": 600
   },
   "functionSize": {
     "params": 4,
-    "body": 100,
-    "bodyNotice": 50,
+    "body": 200,
     "bodyTiers": {
-      "mild": 200,
+      "mild": 400,
       "moderate": 400,
       "heavy": 400
     }

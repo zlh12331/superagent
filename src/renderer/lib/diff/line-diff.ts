@@ -29,11 +29,65 @@ export interface DiffLine {
 const DMP = new diff_match_patch();
 
 /**
+ * 行级 diff 规模上限
+ *
+ * 超过则退化为「整块替换」粗粒度结果，理由：
+ * - dmp 的行编码用 String.fromCharCode 递增（起始 32），编码空间上限 65535 → 超限会静默串码
+ * - 大文件 LCS 为 O(n·d)，首屏同步计算会阻塞主线程（工具卡在消息流中随渲染触发）
+ * 退化结果仍保留全部行文本（全 del + 全 add），不截断、不静默丢弃内容
+ */
+const MAX_DIFF_LINES = 5000;
+
+/** 行编码上下文（lineMap 正向 / charToLine 反向，行内容 ↔ 编码字符 1:1） */
+interface EncodeContext {
+  readonly lineMap: Map<string, string>;
+  readonly charToLine: Map<string, string>;
+  /** 下一个可用编码（起始 32，空间足够 65535 行） */
+  code: number;
+}
+
+/** 行 → 唯一字符编码（新行按需分配编码；双向登记保证 decode 1:1 还原） */
+function encodeLines(lines: readonly string[], ctx: EncodeContext): string {
+  let out = '';
+  for (const line of lines) {
+    let c = ctx.lineMap.get(line);
+    if (c === undefined) {
+      c = String.fromCharCode(ctx.code);
+      ctx.code += 1;
+      ctx.lineMap.set(line, c);
+      ctx.charToLine.set(c, line);
+    }
+    out += c;
+  }
+  return out;
+}
+
+/** dmp op → 行类型（未知 op 返回 null 跳过，防御未来增量 op） */
+function opToType(op: number): DiffLineType | null {
+  if (op === DIFF_EQUAL) return 'context';
+  if (op === DIFF_INSERT) return 'add';
+  return op === DIFF_DELETE ? 'del' : null;
+}
+
+/** 编码 diff 序列 → 原始行列表（反向映射还原行文本，保持 diff 顺序） */
+function decodeDiffs(diffs: readonly Diff[], charToLine: ReadonlyMap<string, string>): DiffLine[] {
+  const result: DiffLine[] = [];
+  for (const [op, chars] of diffs) {
+    const type = opToType(op);
+    if (type === null) continue;
+    for (const char of chars) {
+      result.push({ type, text: charToLine.get(char) ?? '' });
+    }
+  }
+  return result;
+}
+
+/**
  * 计算两段文本的行级 diff（LCS 语义对齐）
  *
  * @param oldText 变更前文本（空串 = 新建文件）
  * @param newText 变更后文本（空串 = 删除文件）
- * @returns 按顺序排列的行列表（context 在中间，add/del 围绕）
+ * @returns 按顺序排列的行列表（context 在中间，add/del 围绕；超规模上限退化为整块替换）
  *
  * @example
  * ```ts
@@ -53,48 +107,22 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
 
-  // 行 → 唯一字符编码（空间足够 65535 行）
-  // lineMap：行内容 → 编码字符；charToLine：编码字符 → 行内容（decode 用反向映射）
-  const lineMap = new Map<string, string>();
-  const charToLine = new Map<string, string>();
-  let code = 32;
-  const encode = (lines: readonly string[]): string => {
-    let out = '';
-    for (const line of lines) {
-      let c = lineMap.get(line);
-      if (c === undefined) {
-        c = String.fromCharCode(code);
-        code += 1;
-        lineMap.set(line, c);
-        charToLine.set(c, line);
-      }
-      out += c;
-    }
-    return out;
-  };
-
-  const diffs: Diff[] = DMP.diff_main(encode(oldLines), encode(newLines), false);
-
-  // 编码字符 → 原始行（反向映射保证 1:1）
-  const decode = (chars: string): string[] => chars.split('').map((c) => charToLine.get(c) ?? '');
-
-  const result: DiffLine[] = [];
-  for (const [op, chars] of diffs) {
-    if (op === DIFF_EQUAL) {
-      for (const line of decode(chars)) {
-        result.push({ type: 'context', text: line });
-      }
-    } else if (op === DIFF_INSERT) {
-      for (const line of decode(chars)) {
-        result.push({ type: 'add', text: line });
-      }
-    } else if (op === DIFF_DELETE) {
-      for (const line of decode(chars)) {
-        result.push({ type: 'del', text: line });
-      }
-    }
+  // 规模守卫：超限退化为整块替换（见 MAX_DIFF_LINES 说明）
+  if (oldLines.length > MAX_DIFF_LINES || newLines.length > MAX_DIFF_LINES) {
+    return [
+      ...oldLines.map((text) => ({ type: 'del' as const, text })),
+      ...newLines.map((text) => ({ type: 'add' as const, text })),
+    ];
   }
-  return result;
+
+  // 行 → 唯一字符编码（空间足够 65535 行）
+  const ctx: EncodeContext = { lineMap: new Map(), charToLine: new Map(), code: 32 };
+  const diffs: Diff[] = DMP.diff_main(
+    encodeLines(oldLines, ctx),
+    encodeLines(newLines, ctx),
+    false,
+  );
+  return decodeDiffs(diffs, ctx.charToLine);
 }
 
 /** 统计 diff 行数（卡片头部徽标用） */

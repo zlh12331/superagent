@@ -1,11 +1,13 @@
 // src/renderer/components/chat/message-utils.test.ts
-// 聊天消息纯函数测试（状态映射 / 文本提取 / JSON 格式化）——无 DOM 依赖高杠杆
+// 工具卡展示纯函数测试（状态映射 / JSON 格式化）——无 DOM 依赖高杠杆
+// extractText 的测试已随实现迁至 lib/chat/message-text.test.ts（2026-09-15）
 import type { TFunction } from 'i18next';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { i18n } from '@/i18n/config';
+
 import {
-  extractText,
   formatJson,
   mapToolStateToStatusClass,
   mapToolStateToStatusLabelKey,
@@ -21,12 +23,14 @@ describe('mapToolStateToStatusLabelKey', () => {
   it('output-available → statusSuccess', () => {
     expect(mapToolStateToStatusLabelKey('output-available')).toBe('statusSuccess');
   });
-  it('input-streaming / input-accepted → statusRunning', () => {
+  it('input-streaming / input-available / approval-responded → statusRunning', () => {
     expect(mapToolStateToStatusLabelKey('input-streaming')).toBe('statusRunning');
-    expect(mapToolStateToStatusLabelKey('input-accepted')).toBe('statusRunning');
+    expect(mapToolStateToStatusLabelKey('input-available')).toBe('statusRunning');
+    expect(mapToolStateToStatusLabelKey('approval-responded')).toBe('statusRunning');
   });
-  it('其他（含 undefined 派生）→ statusWaiting', () => {
-    expect(mapToolStateToStatusLabelKey('whatever')).toBe('statusWaiting');
+  it('approval-requested / output-denied → statusWaiting（未产出）', () => {
+    expect(mapToolStateToStatusLabelKey('approval-requested')).toBe('statusWaiting');
+    expect(mapToolStateToStatusLabelKey('output-denied')).toBe('statusWaiting');
   });
 });
 
@@ -35,29 +39,47 @@ describe('mapToolStateToStatusClass', () => {
     expect(mapToolStateToStatusClass('output-error')).toBe('error');
     expect(mapToolStateToStatusClass('output-available')).toBe('success');
   });
-  it('input-streaming / input-accepted → running', () => {
+  it('input-streaming / input-available / approval-responded → running', () => {
     expect(mapToolStateToStatusClass('input-streaming')).toBe('running');
-    expect(mapToolStateToStatusClass('input-accepted')).toBe('running');
+    expect(mapToolStateToStatusClass('input-available')).toBe('running');
+    expect(mapToolStateToStatusClass('approval-responded')).toBe('running');
   });
-  it('其他 → pending', () => {
-    expect(mapToolStateToStatusClass('idle')).toBe('pending');
+  it('approval-requested / output-denied → pending', () => {
+    expect(mapToolStateToStatusClass('approval-requested')).toBe('pending');
+    expect(mapToolStateToStatusClass('output-denied')).toBe('pending');
   });
 });
 
-describe('extractText', () => {
-  it('只取 text parts，按 \\n 拼接', () => {
-    const parts = [
-      { type: 'text', text: '第一行' },
-      { type: 'reasoning', text: '思考' },
-      { type: 'text', text: '第二行' },
-    ] as never;
-    expect(extractText(parts)).toBe('第一行\n第二行');
+describe('状态映射表完整性（单一真源不变量）', () => {
+  // label 与 class 收敛到同一张 Record 后，两条映射必须对**每个** ToolCallState
+  // 都给出一致的分组（此前是两条平行 if 阶梯，新增状态只改一处会静默漂移）。
+  const AllStates = [
+    'input-streaming',
+    'input-available',
+    'approval-requested',
+    'approval-responded',
+    'output-available',
+    'output-error',
+    'output-denied',
+  ] as const;
+
+  it('每个状态都有定义（无 undefined 漏网）', () => {
+    for (const state of AllStates) {
+      expect(mapToolStateToStatusLabelKey(state)).toBeTypeOf('string');
+      expect(mapToolStateToStatusClass(state)).toBeTypeOf('string');
+    }
   });
-  it('无 text part → 空字符串', () => {
-    expect(extractText([{ type: 'tool-call' } as never])).toBe('');
-  });
-  it('空数组 → 空字符串', () => {
-    expect(extractText([])).toBe('');
+
+  it('label 分组与 class 分组一一对应', () => {
+    const expected: Record<string, string> = {
+      statusError: 'error',
+      statusSuccess: 'success',
+      statusRunning: 'running',
+      statusWaiting: 'pending',
+    };
+    for (const state of AllStates) {
+      expect(expected[mapToolStateToStatusLabelKey(state)]).toBe(mapToolStateToStatusClass(state));
+    }
   });
 });
 
@@ -80,5 +102,29 @@ describe('formatJson', () => {
     circular['self'] = circular;
     // String(circular) 会转 'self' 循环——此处只需验证不抛错且返回字符串
     expect(() => formatJson(circular, mockT)).not.toThrow();
+  });
+});
+
+describe('formatJson 真实文案（i18n，原 chat-gaps.test 并入）', () => {
+  const t = i18n.t.bind(i18n);
+
+  it('正常格式化（缩进 + 截断 200 字符）', () => {
+    const short = formatJson({ a: 1 }, t);
+    expect(short).toBe('{\n  "a": 1\n}');
+    const long = formatJson({ data: 'x'.repeat(300) }, t);
+    expect(long.startsWith('{\n  "data": "')).toBe(true);
+    expect(long.endsWith('(已截断)')).toBe(true);
+  });
+
+  it('undefined → "undefined" 字符串', () => {
+    expect(formatJson(undefined, i18n.t.bind(i18n))).toBe('undefined');
+  });
+
+  it('循环引用抛错 → String 兜底', () => {
+    const circular: Record<string, unknown> = {};
+    circular['self'] = circular;
+    const result = formatJson(circular, i18n.t.bind(i18n));
+    expect(typeof result).toBe('string');
+    expect(result).toContain('[object');
   });
 });

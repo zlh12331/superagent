@@ -24,7 +24,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { useTranslation } from '@/i18n/use-translation';
+import { i18n } from '@/i18n';
 import { reportError } from '@/lib/error-report';
 import { unwrap } from '@/lib/ipc';
 
@@ -36,18 +36,26 @@ const MAX_STACK_LINES = 6;
 
 /**
  * 组装预填 issue 深链：标题 = 错误消息首行，正文 = 堆栈摘要 + 版本环境 + 诊断包引导
+ *
+ * 正文文案同样走 i18n：此前是硬编码中文常量，英文界面下用户点开的是一个
+ * 中文预填的 issue（本文件其余文案早已全部 i18n，此处是唯一漏网）。
  */
 async function buildIssueUrl(message: string, error: unknown): Promise<string> {
   const stack = error instanceof Error ? (error.stack ?? '') : '';
   let envLine = '';
   try {
     const info = unwrap(await window.api.app.getInfo());
-    envLine = `- 版本：${info.version}（${info.platform}/${info.arch}，Electron ${info.electron}）`;
+    envLine = i18n.t('common.crashIssueVersion', {
+      version: info.version,
+      platform: info.platform,
+      arch: info.arch,
+      electron: info.electron,
+    });
   } catch {
     // getInfo 失败不阻塞报障，仅缺版本行
   }
   const body = [
-    '### 崩溃信息',
+    i18n.t('common.crashIssueHeading'),
     '',
     '```',
     message,
@@ -55,8 +63,8 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
     '```',
     '',
     envLine,
-    '- 复现步骤：（请补充）',
-    '- 现场：可在「设置 → 关于 → 导出诊断包」后作为附件上传到本 issue',
+    i18n.t('common.crashIssueSteps'),
+    i18n.t('common.crashIssueAttach'),
   ].join('\n');
   const title = `[crash] ${message.slice(0, 80)}`;
   return `${REPO_NEW_ISSUE_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
@@ -74,8 +82,11 @@ function AppFallback({
   error: unknown;
   resetErrorBoundary: () => void;
 }): ReactElement {
-  // 本地化文案（i18next 全局实例已 init，错误边界场景无需 Provider）
-  const { t } = useTranslation();
+  // 文案经 i18next 全局单例 i18n.t() 取，**不用 useTranslation() hook**：
+  // 与 SectionFallback 同一约束（fallback 零 hook/context 依赖）——
+  // 错误边界 fallback 在 React 的错误恢复渲染路径中执行，此时 hooks 宿主不可靠
+  // （实测 react-i18next 的 useTranslation 在此路径抛 Invalid hook call）；
+  // i18n.t() 是纯数据访问，不依赖 hooks 宿主，且随当前语言切换。
   const message = error instanceof Error ? error.message : String(error);
 
   // 报障：深链 GitHub 新建 issue（预填崩溃信息与版本环境；诊断包由用户手动附上）
@@ -83,10 +94,10 @@ function AppFallback({
     void buildIssueUrl(message, error)
       .then(async (url) => unwrap(await window.api.app.openExternal({ url })))
       .then(() => {
-        toast.success(t('common.crashReportOpened'));
+        toast.success(i18n.t('common.crashReportOpened'));
       })
       .catch(() => {
-        toast.error(t('common.crashReportOpenFailed'));
+        toast.error(i18n.t('common.crashReportOpenFailed'));
       });
   };
 
@@ -102,7 +113,9 @@ function AppFallback({
       </div>
 
       <div className="text-center">
-        <h1 className="font-serif text-lg font-semibold tracking-wide">{t('common.appCrashed')}</h1>
+        <h1 className="font-serif text-lg font-semibold tracking-wide">
+          {i18n.t('common.appCrashed')}
+        </h1>
         <p className="text-muted-foreground mt-2 max-w-md font-serif text-xs leading-relaxed">
           {message}
         </p>
@@ -111,11 +124,11 @@ function AppFallback({
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={resetErrorBoundary}>
           <RefreshCw className="size-3" strokeWidth={1.5} />
-          {t('common.reload')}
+          {i18n.t('common.reload')}
         </Button>
         <Button variant="outline" size="sm" onClick={handleSendReport}>
           <Send className="size-3" strokeWidth={1.5} />
-          {t('common.sendCrashReport')}
+          {i18n.t('common.sendCrashReport')}
         </Button>
       </div>
     </div>

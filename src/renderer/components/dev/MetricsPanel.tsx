@@ -4,12 +4,13 @@
 // 职责：
 // - 调用 useSystemStatusQuery 获取主进程运行时状态（内存/CPU/uptime/版本）
 // - 以指标卡片网格展示，10s 自动刷新
-// - 折叠态由 DevPanel 控制是否启用查询（enabled 参数）
+// - enabled 由 DevPanel 按**当前可见 tab** 传入（仅 dev/metrics 子页启用查询，
+//   切走即停，省下无谓 IPC）——不是「折叠态」控制
 //
 // 设计：
 // - 纯只读面板，无交互逻辑
-// - 内存/CPU 数值格式化为人类可读单位（MB / ms）
-// - 指标卡片用 2 列网格，紧凑布局适配 DevPanel 200px 高度
+// - 内存/CPU/uptime 数值格式化为人类可读单位（字节 B/KB/MB/GB、微秒 ms/s、秒 h/m/s）
+// - 指标卡片用 2 列网格（窄面板下紧凑排布；宽度受 --right-panel-w clamp 约束）
 // - 等宽字体展示数值，衬线字体展示标签
 // ──────────────────────────────────────────────────────────────
 
@@ -20,12 +21,14 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSystemStatusQuery } from '@/hooks/use-system';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { formatClockTime } from '@/lib/format-intl';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
+import { formatBytes, formatMs, formatUptime } from './metrics-format';
 
 interface MetricsPanelProps {
-  /** 是否启用查询（DevPanel 折叠时传 false 节省 IPC） */
+  /** 是否启用查询（DevPanel 在当前 tab 非 metrics 时传 false 节省 IPC） */
   readonly enabled?: boolean;
   /** 自定义容器类名 */
   readonly className?: string;
@@ -38,7 +41,7 @@ interface MetricsPanelProps {
  *
  * @example
  * ```tsx
- * <MetricsPanel enabled={isDevPanelExpanded} />
+ * <MetricsPanel enabled={activeTab === 'dev' && devSubTab === 'metrics'} />
  * ```
  */
 export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): ReactElement {
@@ -75,18 +78,38 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
 
       {/* 指标卡片网格 */}
       <ScrollArea className="min-h-0 flex-1">
-        {isLoading ? (
-          <MetricsSkeleton />
-        ) : error !== null ? (
-          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-        ) : data === undefined ? (
-          <ErrorHint message={t('dev.metricsEmpty')} />
-        ) : (
-          <MetricsGrid status={data} />
-        )}
+        <MetricsBody isLoading={isLoading} error={error} status={data} />
       </ScrollArea>
     </div>
   );
+}
+
+// ── 子组件：四态分派 ──────────────────────────────────────────
+
+interface MetricsBodyProps {
+  readonly isLoading: boolean;
+  readonly error: unknown;
+  readonly status: SystemStatusRes | undefined;
+}
+
+/**
+ * 指标体四态分派（早返回替代嵌套三元）
+ *
+ * 此前是 `isLoading ? … : error ? … : data === undefined ? … : …` 的三层嵌套三元
+ * ——LogsPanel 已为此抽出早返回的 LogsBody（其注释明示嵌套三元使复杂度达 18），
+ * 本面板保留同型结构未同步，此处对齐。
+ */
+function MetricsBody({ isLoading, error, status }: MetricsBodyProps): ReactElement {
+  const { t } = useTranslation();
+  // 错误文案统一经 unwrapErrorMessage 解析错误码（与其余面板一致）：
+  // 此前直接显示 error.message，IPC 错误会露出英文码
+  const { getErrorMessage } = useErrorMessage();
+  if (isLoading) return <MetricsSkeleton />;
+  if (error !== null && error !== undefined) {
+    return <ErrorHint message={unwrapErrorMessage(error as Error, getErrorMessage)} />;
+  }
+  if (status === undefined) return <ErrorHint message={t('dev.metricsEmpty')} />;
+  return <MetricsGrid status={status} />;
 }
 
 // ── 子组件：指标卡片网格 ──────────────────────────────────────
@@ -194,7 +217,7 @@ function VersionCard({ status }: VersionCardProps): ReactElement {
         </div>
         <div className="text-muted-foreground">
           {status.platform} / {status.arch}
-          {status.isPackaged ? ' · packaged' : ' · dev'}
+          {status.isPackaged ? ` · ${t('dev.packaged')}` : ` · ${t('dev.devBuild')}`}
         </div>
       </div>
     </div>
@@ -224,36 +247,9 @@ function ErrorHint({ message }: { readonly message: string }): ReactElement {
   const { t } = useTranslation();
   return (
     <div className="text-error-text flex flex-col items-center gap-1 p-3 text-center">
-      <AlertCircle className="size-4" strokeWidth={1.5} />
+      <AlertCircle className="size-4" strokeWidth={1.5} aria-hidden="true" />
       <p className="font-serif text-xs">{t('dev.metricsFailed')}</p>
       <p className="text-muted-foreground truncate text-2xs">{message}</p>
     </div>
   );
-}
-
-// ── 格式化工具 ──────────────────────────────────────────────
-
-/** 字节 → 人类可读（MB / GB） */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const mb = bytes / 1024 / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  return `${(mb / 1024).toFixed(2)} GB`;
-}
-
-/** 微秒 → 毫秒/秒 */
-function formatMs(microseconds: number): string {
-  const ms = microseconds / 1000;
-  if (ms < 1000) return `${ms.toFixed(0)} ms`;
-  return `${(ms / 1000).toFixed(2)} s`;
-}
-
-/** 秒 → 人类可读 uptime（如 1h 23m 45s） */
-function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
 }

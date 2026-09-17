@@ -9,7 +9,7 @@
 //   硬编码颜色（#hex 出现在 className/内联样式）禁用
 //
 // 运行：pnpm check:tokens
-// 排除：styles/（令牌定义处）、__tests__/、注释行、动态样式（style 内变量表达式）
+// 排除：styles/（令牌定义处）、测试文件（*.test.*）、注释行、动态样式（style 内变量表达式）
 // ──────────────────────────────────────────────────────────────
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ import { join, relative } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const SCAN_DIR = join(ROOT, 'src', 'renderer');
-const EXCLUDE_DIRS = new Set(['styles', '__tests__', 'test']);
+const EXCLUDE_DIRS = new Set(['styles', 'test']);
 
 // 24 色板 + 常用派生色（Tailwind 裸色值检测）
 const COLOR_PALETTE = [
@@ -57,11 +57,12 @@ const BARE_COLOR_RE = new RegExp(
 const BARE_MONO_RE = /(?:^|\s|")(bg|text|border|ring|shadow)-(white|black)(?=[\s"'/:\][]|$)/g;
 
 // 存量豁免基线（白/黑裸色历史用法，新增违规仍卡关；重构为语义令牌后移除）：
-//   badge.tsx = shadcn 官方 destructive 变体；browser-pane = iframe 白底；
+//   badge.tsx = shadcn 官方 destructive 变体；
 //   inline-approval-card / DialogHost = 语义色背景上的白字（对比度需求）
+// 已移除 browser-pane：原豁免理由是「iframe 白底」，但 v1 iframe 方案已被
+// WebContentsView 取代，该容器已改用语义令牌 bg-background（深色主题不再白底）。
 const MONO_EXEMPT_FILES = new Set([
   'src/renderer/components/ui/badge.tsx',
-  'src/renderer/components/dev/browser-pane.tsx',
   'src/renderer/components/agent/inline-approval-card.tsx',
   'src/renderer/components/common/DialogHost.tsx',
 ]);
@@ -94,7 +95,11 @@ function collectTsxFiles(dir: string, acc: string[] = []): string[] {
     if (entry.isDirectory()) {
       if (EXCLUDE_DIRS.has(entry.name)) continue;
       collectTsxFiles(join(dir, entry.name), acc);
-    } else if (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) {
+    } else if (
+      (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts')) &&
+      // 测试文件不参与令牌审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
+      !entry.name.includes('.test.')
+    ) {
       acc.push(join(dir, entry.name));
     }
   }

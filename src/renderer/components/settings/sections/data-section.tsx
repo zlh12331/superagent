@@ -9,13 +9,14 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /** 数据区块（会话导出 + 打开数据目录） */
 export function DataSection(): React.ReactElement {
   const { t } = useTranslation();
 
   const handleExportAll = async (): Promise<void> => {
+    if (!hasIpcBridge()) return;
     try {
       const response = await window.api.session.exportAll();
       const res = unwrap<{ saved: boolean; path?: string }>(response);
@@ -29,6 +30,8 @@ export function DataSection(): React.ReactElement {
   };
 
   const handleOpenDataDir = async (): Promise<void> => {
+    // 浏览器模式无桥：直接返回（否则成员访问阶段抛 TypeError，下面的 await 兜不住）
+    if (!hasIpcBridge()) return;
     const response = await window.api.app.openDataDir();
     const res = unwrap<{ ok: boolean }>(response);
     if (res.ok) {

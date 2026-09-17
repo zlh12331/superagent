@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { AsyncSection } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { MEMORY_LIST_QUERY_KEY, MEMORY_STATUS_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -29,8 +29,10 @@ interface MemoryEntry {
  *
  * 主进程在引擎不可用时返回 `{ ok: false }`（不是 `{ error }`），
  * 因此必须显式检查 ok 并抛错，否则清除失败会被当作成功提示。
+ * 浏览器模式无桥：抛可读错误（调用方 onError 提示），不静默成功。
  */
 async function clearMemoryOrThrow(sessionId: string): Promise<void> {
+  if (!hasIpcBridge()) throw new Error('window.api unavailable');
   const res = unwrap(await window.api.memory.clear({ sessionId }));
   if (!res.ok) {
     throw new Error('memory clear failed');
@@ -39,6 +41,7 @@ async function clearMemoryOrThrow(sessionId: string): Promise<void> {
 
 /** 清空全部记忆（同上：ok=false 需显式抛错） */
 async function clearAllMemoryOrThrow(): Promise<{ clearedSessions: number }> {
+  if (!hasIpcBridge()) throw new Error('window.api unavailable');
   const res = unwrap(await window.api.memory.clearAll({}));
   if (!res.ok) {
     throw new Error(res.message ?? 'memory clear all failed');
@@ -178,7 +181,14 @@ function useMemoryClear(params: {
         message: t('settings.memoryClearConfirmDesc', { count: memoryCount }),
         danger: true,
       });
-      if (ok) await clearOneMutation.mutateAsync();
+      if (!ok) return;
+      try {
+        await clearOneMutation.mutateAsync();
+      } catch {
+        // 失败已由 onError toast；此处吞掉 rejection——unhandled rejection 会冒泡到
+        // 全局（渲染层错误出口/日志噪音）。调用方写的是 `void clearOne()`，
+        // 只丢弃返回值、并不捕获拒绝。
+      }
     },
     clearAll: async () => {
       const ok = await confirm({
@@ -186,7 +196,12 @@ function useMemoryClear(params: {
         message: t('settings.memoryClearAllConfirmDesc', { count: sessionCount }),
         danger: true,
       });
-      if (ok) await clearAllMutation.mutateAsync();
+      if (!ok) return;
+      try {
+        await clearAllMutation.mutateAsync();
+      } catch {
+        // 同上：onError 已提示，吞掉 rejection 防未处理拒绝冒泡
+      }
     },
   };
 }
@@ -245,7 +260,7 @@ export function MemoryPanel(): ReactElement {
     queryKey: MEMORY_LIST_QUERY_KEY(activeSessionId ?? 'none'),
     enabled: activeSessionId !== null,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { memories: [] as MemoryEntry[] };
       }
       const sid = activeSessionId as string;
@@ -264,7 +279,7 @@ export function MemoryPanel(): ReactElement {
   const { data: status } = useQuery({
     queryKey: MEMORY_STATUS_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return null;
       }
       return unwrap(await window.api.memory.status({}));

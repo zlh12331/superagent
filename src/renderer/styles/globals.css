@@ -104,6 +104,17 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-amber: var(--amber);
+  /* 补注册（2026-09）：跨域消费的类别/语义色接入工具类命名空间，与 success/error/amber
+     对称（仅暴露既有令牌，未新增颜色值）；--glass-bg 为表面特效令牌不注册（避免
+     bg-glass-bg 语义类被滥用，其消费处保持 arbitrary 写法） */
+  --color-warn: var(--warn);
+  --color-info-blue: var(--info-blue);
+  --color-magenta: var(--magenta);
+  --color-error-bg: var(--error-bg);
+  --color-accent-2-soft: var(--accent-2-soft);
+  --color-overlay-bg: var(--overlay-bg);
+  --color-accent-dim: var(--accent-dim);
+  --color-code-block-bg: var(--code-block-bg);
   --color-bg-elev: var(--bg-elev);
   --color-bg-elev-2: var(--bg-elev-2);
   --color-bg-elev-3: var(--bg-elev-3);
@@ -495,23 +506,12 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* 品牌标识：形态由 components/common/BrandMark.tsx 的 SVG 提供（顶栏/欢迎页共用），
+   此处仅保留顶栏尺寸约束与不收缩 */
 .brand-mark {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: var(--accent);
-  position: relative;
   flex-shrink: 0;
-}
-
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border: 1.5px solid var(--background);
-  border-radius: 2px;
-  border-right: none;
-  border-bottom: none;
 }
 
 .brand-name {
@@ -1117,14 +1117,13 @@ body.resizing iframe {
 }
 
 .welcome-logo .wl-icon {
-  font-size: 32px; /* 对齐原型 wl-icon 32px */
-  font-weight: 400;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* 品牌标识（components/common/BrandMark，size=40 渐变变体）——
+     与顶栏 .brand-mark 同一实现，品牌语言一致 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   filter: drop-shadow(0 0 12px var(--accent-glow));
-  font-family: var(--font-mono);
 }
 
 .welcome-quick-actions {
@@ -1263,7 +1262,7 @@ body.resizing iframe {
   padding: 7px 10px;
   margin-top: 6px;
   font-size: var(--font-size-xs);
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-family: var(--font-sans);
   position: relative;
   flex-shrink: 0;
@@ -1443,7 +1442,7 @@ body.resizing iframe {
 
 .fdm-meta {
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   flex-shrink: 0;
   font-family: var(--font-mono);
 }
@@ -1510,7 +1509,7 @@ body.resizing iframe {
   gap: 6px;
   padding: 4px 8px;
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1566,7 +1565,7 @@ body.resizing iframe {
 .fdm-empty {
   padding: 14px;
   text-align: center;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-size: var(--font-size-sm);
 }
 
@@ -1652,7 +1651,7 @@ body.resizing iframe {
 
 .msg-role {
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-family: var(--font-mono);
   margin-bottom: 5px;
   letter-spacing: 0.08em;
@@ -1680,7 +1679,7 @@ body.resizing iframe {
 }
 
 .msg-role .msg-time {
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-size: 9px;
   margin-left: auto;
   letter-spacing: 0.05em;
@@ -1887,6 +1886,19 @@ body.resizing iframe {
   border-radius: 1px;
 }
 
+/* loading-ui 终端光标：块状光标闪烁
+   复用既有 blink 关键帧（前 50% 亮 / 后 50% 灭的硬闪烁，与 .cursor 同源）——
+   此前该动画在组件内联 <style> 里私有复制了一份等价 keyframe，
+   是渲染层唯一的内联 <style>，且与「关键帧统一在 globals.css」的约定不符。
+   尺寸用 em 跟随字号，颜色走 currentColor 以便调用方用 className 控色。 */
+.loading-ui-terminal-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  background: currentColor;
+  animation: blink 1s step-end infinite;
+}
+
 /* 打字指示器：三个 accent 点依次弹跳 */
 .typing-indicator {
   display: flex;
@@ -1937,7 +1949,7 @@ body.resizing iframe {
   appearance: none;
   background: none;
   border: none;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-size: var(--fs-xs);
   padding: 3px 8px;
   border-radius: 4px;
@@ -2153,7 +2165,7 @@ body.resizing iframe {
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   border-radius: 5px;
   cursor: pointer;
   transition:
@@ -2179,7 +2191,9 @@ body.resizing iframe {
 .composer-hint {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--text-faint);
+  /* 不用 --text-faint：它映射 TraeWork --text-disabled（禁用态专用），对本区底
+     --bg-elev-2 仅 3.19:1（暗）/ 2.05:1（亮），低于 AA 小文本 4.5:1 */
+  color: var(--text-dim);
   display: flex;
   align-items: center;
   line-height: 1;
@@ -2634,7 +2648,7 @@ button.card-head {
 .reasoning-duration {
   margin-left: auto;
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-family: var(--font-mono);
 }
 
@@ -2683,7 +2697,7 @@ button.card-head {
 .plan-progress {
   margin-left: auto;
   font-size: 10.5px;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-family: var(--font-mono);
 }
 
@@ -2733,7 +2747,7 @@ button.card-head {
 }
 
 .plan-item.done .plan-text {
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   text-decoration: line-through;
 }
 
@@ -2885,7 +2899,7 @@ button.card-head {
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   position: relative;
 }
 
@@ -2941,12 +2955,35 @@ button.card-head {
   color: var(--sidebar-foreground);
 }
 
+/* 头部「更多操作」菜单触发器：靠右，尺寸与 .sft-back 对齐 */
+.sft-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: auto;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sft-more-btn:hover,
+.sft-more-btn[data-state="open"] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
 /* 单个节点容器 */
 .ft-node {
   user-select: none;
 }
 
-/* 子节点容器：使用 fieldset 重置默认样式（border/padding/margin/min-size） */
+/* 子节点容器（fieldset 原生即 role="group"；此处重置其默认 border/padding/margin） */
 .ft-children {
   border: none;
   padding: 0;
@@ -2955,109 +2992,21 @@ button.card-head {
   min-width: 0;
 }
 
-/* ── 文件树顶部工具栏（新建文件 / 新建目录）────────────────── */
-.ft-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 8px 6px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-
-.ft-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-
-.ft-toolbar-btn:hover:not(:disabled) {
-  background: var(--sidebar-accent);
-  color: var(--aurora-accent);
-}
-
-.ft-toolbar-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ── 节点行容器（包裹 row button + more menu）────────────── */
+/* ── 节点行容器（包裹 row button）─────────────────────────── */
 .ft-row-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-/* 操作中状态：降低不透明度 + 等待光标 */
+/* 操作中状态：降低不透明度 + 等待光标（防重复操作的可视反馈） */
 .ft-row.pending {
   opacity: 0.5;
   cursor: wait;
   pointer-events: none;
 }
 
-/* ── 节点「更多操作」按钮（hover 显示）────────────────────── */
-.ft-more-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-right: 4px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity 0.12s ease,
-    background 0.12s ease,
-    color 0.12s ease;
-  flex-shrink: 0;
-}
-
-/* hover 节点时显示「更多」按钮 */
-.ft-node:hover .ft-more-btn,
-.ft-more-btn:focus-visible {
-  opacity: 1;
-}
-
-.ft-more-btn:hover:not(:disabled) {
-  background: var(--sidebar-accent);
-  color: var(--text);
-}
-
-.ft-more-btn:disabled {
-  opacity: 0;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-/* 危险菜单项（删除）：红色文字 */
-.ft-menu-danger {
-  color: var(--error);
-}
-
-.ft-menu-danger:hover,
-.ft-menu-danger:focus {
-  background: var(--error-bg);
-  color: var(--error);
-}
-
-/* ── 内联重命名 / 新建输入框 ──────────────────────────────── */
-/* 替换节点名称为 input，视觉与节点名称对齐 */
+/* ── 内联新建输入框 ──────────────────────────────────────── */
 .ft-rename-input {
   flex: 1;
   min-width: 0;
@@ -3094,15 +3043,8 @@ button.card-head {
   border-radius: 6px;
 }
 
-/* ── 文件查看器对话框（点击文件树文件后弹出）────────────────── */
+/* ── 文件查看器（右面板「文件」tab；原为对话框，现为常驻面板）────── */
 /* 视觉对齐 .code-block-wrapper + .msg-content pre.shiki 风格 */
-
-.file-viewer-dialog {
-  max-height: calc(100vh - 4rem);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 
 /* 工具栏：行数 + 复制按钮 */
 .file-viewer-toolbar {
@@ -3180,7 +3122,7 @@ button.card-head {
 }
 
 /* shiki 高亮输出（pre.shiki 自带内联 style，background 需覆盖 shiki 输出的内联 background-color） */
-.file-viewer-dialog .file-viewer-code pre.shiki {
+.file-viewer-code pre.shiki {
   margin: 0;
   padding: 14px 16px;
   border-radius: 0;
@@ -3374,8 +3316,7 @@ button.card-head {
   display: none;
 }
 
-/* 高亮层 shiki pre 样式：与查看态一致 */
-/* biome-ignore lint/style/noDescendingSpecificity: 与 .file-viewer-dialog 内 pre.shiki 命中不同查看容器，无覆盖 */
+/* 高亮层 shiki pre 样式：与查看态一致（选择器特异度与 .file-viewer-code pre.shiki 相等，无降序告警） */
 .file-viewer-editor-highlight pre.shiki {
   margin: 0;
   padding: 14px 16px;
@@ -3624,7 +3565,7 @@ button.card-head {
 
 .empty-state-sub {
   font-size: 11.5px;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   line-height: 1.6;
   max-width: 340px;
   font-family: var(--font-mono);
@@ -3992,6 +3933,52 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
+/* 浏览器预览加载条（不定式）：0→50% 从左端向右伸长，50% 起换成从右端向左收起，
+   形成无进度百分比的往返扫描。browser-pane.tsx 通过 animate-[…] 引用该名字。
+   命名说明：原引用名 br-loading-bar 定义随 prototype-v2.html 在 4980885 删除，
+   类名却在其后的 82bc2d6 才引入，animation 一直未生效（静态 2px 条）。 */
+@keyframes browser-loading-bar {
+  0% {
+    transform: scaleX(0.1);
+    transform-origin: left;
+  }
+  50% {
+    transform: scaleX(0.6);
+    transform-origin: left;
+  }
+  51% {
+    transform: scaleX(0.6);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0.1);
+    transform-origin: right;
+  }
+}
+
+/* 命令面板淡入 + 面板弹入（原定义随 prototype-v2.html 在 4980885 删除，
+   而 .palette-overlay / .palette 的 animation 引用一直留着 → 面板无动画） */
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 模态弹入：上浮 + 轻微放大 */
+@keyframes modalin {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes toolSpin {
   to {
     transform: rotate(360deg);
@@ -4060,6 +4047,51 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   .async-refreshing-bar::before {
     animation: none;
   }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   文件模糊搜索结果行（fuzzy-search-dialog）· 会话与文件两类结果共用
+   行样式归类体系，选中态由 [aria-selected="true"] 单一来源驱动
+   ────────────────────────────────────────────────────────────── */
+.fuzzy-result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.fuzzy-result[aria-selected="true"] {
+  border-left-color: var(--accent);
+  background: var(--bg-elev-2);
+}
+
+.fuzzy-result-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.fuzzy-result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.fuzzy-result-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -4132,7 +4164,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   font-size: var(--font-size-2xs);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   padding: 10px 16px 4px;
   font-weight: 600;
 }
@@ -4197,7 +4229,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 .palette-item .pi-shortcut {
   font-family: var(--font-mono);
   font-size: var(--font-size-2xs);
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   padding: 2px 6px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -4213,7 +4245,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   background: var(--bg-elev-2);
   font-family: var(--font-mono);
   font-size: var(--font-size-2xs);
-  color: var(--text-faint);
+  color: var(--muted-foreground);
 }
 
 .palette-foot kbd {
@@ -4229,7 +4261,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 .palette-empty {
   padding: 32px 16px;
   text-align: center;
-  color: var(--text-faint);
+  color: var(--muted-foreground);
   font-size: var(--font-size-sm);
 }
 

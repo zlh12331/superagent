@@ -74,6 +74,66 @@ export interface ModelConfigFieldsProps {
 const CONTEXT_INPUT_SHORTCUTS = ['128k', '256k', '512k', '1M'] as const;
 const CONTEXT_OUTPUT_SHORTCUTS = ['4k', '16k', '32k', '128k'] as const;
 
+/** 字段级样式常量（多处复用，收敛字面量） */
+const FIELD_INPUT_CLASS = 'text-xs';
+const FIELD_LABEL_CLASS = 'text-2xs text-muted-foreground font-medium';
+
+/**
+ * API 密钥输入（含显隐切换 + 官网申请链接）
+ *
+ * 抽离动机（2026-09 审计）：这是 ModelConfigFields 里唯一需要组件内 state
+ * （showApiKey）的字段，其 3 个三元（input type / aria-label / 图标）此前
+ * 全部计入父函数复杂度（父函数 cx 16，阈值 15）。独立后状态就近，父函数回归直线。
+ */
+function ApiKeyField({
+  value,
+  onChange,
+  onOpenApiKeyUrl,
+}: {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly onOpenApiKeyUrl: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className={FIELD_LABEL_CLASS}>{t('settings.modelMgmt.apiKeyLabel')}</Label>
+      <div className="flex items-center gap-1.5">
+        <Input
+          type={showApiKey ? 'text' : 'password'}
+          value={value}
+          placeholder={t('settings.modelMgmt.apiKeyPlaceholder')}
+          className={cn(FIELD_INPUT_CLASS, 'min-w-0 flex-1')}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground size-7 shrink-0 border"
+          aria-label={showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')}
+          onClick={() => setShowApiKey((prev) => !prev)}
+        >
+          {showApiKey ? (
+            <EyeOff className="size-3.5" strokeWidth={1.5} />
+          ) : (
+            <Eye className="size-3.5" strokeWidth={1.5} />
+          )}
+        </Button>
+      </div>
+      <Button
+        variant="link"
+        size="sm"
+        className="text-accent hover:text-accent/80 h-auto w-fit p-0 text-2xs underline-offset-2"
+        onClick={onOpenApiKeyUrl}
+      >
+        {t('settings.modelMgmt.getApiKey')}
+      </Button>
+    </div>
+  );
+}
+
 /**
  * 模型配置弹窗表单字段区
  */
@@ -90,7 +150,6 @@ export function ModelConfigFields({
   onOpenApiKeyUrl,
 }: ModelConfigFieldsProps): ReactElement {
   const { t } = useTranslation();
-  const [showApiKey, setShowApiKey] = useState(false);
 
   const isProvider = mode === 'provider';
   const isEdit = mode === 'edit';
@@ -235,39 +294,11 @@ export function ModelConfigFields({
         <p className="text-muted-foreground text-right text-2xs">{values.displayName.length}/32</p>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label className={labelClass}>{t('settings.modelMgmt.apiKeyLabel')}</Label>
-        <div className="flex items-center gap-1.5">
-          <Input
-            type={showApiKey ? 'text' : 'password'}
-            value={values.apiKey}
-            placeholder={t('settings.modelMgmt.apiKeyPlaceholder')}
-            className={cn(inputClass, 'min-w-0 flex-1')}
-            onChange={(e) => onFieldChange('apiKey', e.target.value)}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-foreground size-7 shrink-0 border"
-            aria-label={showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')}
-            onClick={() => setShowApiKey((prev) => !prev)}
-          >
-            {showApiKey ? (
-              <EyeOff className="size-3.5" strokeWidth={1.5} />
-            ) : (
-              <Eye className="size-3.5" strokeWidth={1.5} />
-            )}
-          </Button>
-        </div>
-        <Button
-          variant="link"
-          size="sm"
-          className="text-accent hover:text-accent/80 h-auto w-fit p-0 text-2xs underline-offset-2"
-          onClick={onOpenApiKeyUrl}
-        >
-          {t('settings.modelMgmt.getApiKey')}
-        </Button>
-      </div>
+      <ApiKeyField
+        value={values.apiKey}
+        onChange={(v) => onFieldChange('apiKey', v)}
+        onOpenApiKeyUrl={onOpenApiKeyUrl}
+      />
 
       {testError !== undefined && <p className="text-error-text text-2xs">{testError}</p>}
 

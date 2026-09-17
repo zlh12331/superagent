@@ -146,9 +146,13 @@ function collectFiles(dir: string, out: string[]): void {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
       // coverage/ 构建产物不入扫描（其内容是源码的历史快照）
-      if (name === 'coverage' || name === '__tests__') continue;
+      if (name === 'coverage') continue;
       collectFiles(full, out);
-    } else if (name.endsWith('.tsx') || name.endsWith('.ts')) {
+    } else if (
+      (name.endsWith('.tsx') || name.endsWith('.ts')) &&
+      // 测试文件不参与一致性审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
+      !name.includes('.test.')
+    ) {
       out.push(full);
     }
   }

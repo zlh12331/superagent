@@ -5,27 +5,31 @@
 // - defaultDevicePreset / defaultZoom：pane 挂载初值（工具栏内临时改动不写回）
 // - strictSandbox：安全策略，切换即经 browser:configure 通知主进程
 //   重建 WebContentsView（禁用预览页 JS），服务侧值一致时幂等 no-op
-// 预设/缩放文案复用 panel.browserDevice* 既有键，避免同一概念两套译名。
+// 预设/缩放文案复用 panel.browserDevice* 既有键，避免同一概念两套译名；
+// 档位数据取自 lib/browser/presets（与预览工具栏同一真源，此前两处各存一份）。
 // ──────────────────────────────────────────────────────────────
 
 import { Globe } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
-import type { BrowserDevicePreset, BrowserZoom } from '@/stores/persistent/settings-store';
+import { DEVICE_PRESETS, ZOOM_STEPS } from '@/lib/browser/presets';
+import { hasIpcBridge } from '@/lib/ipc';
+import type { BrowserDevicePreset } from '@/stores/persistent/settings-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
 
-/** 设备预设档位（顺序即分段控件展示顺序；与 DEVICE_DIMENSIONS 键一致） */
-const PRESET_STEPS: readonly { value: BrowserDevicePreset; labelKey: string }[] = [
-  { value: 'responsive', labelKey: 'panel.browserDeviceResponsive' },
-  { value: 'desktop', labelKey: 'panel.browserDeviceDesktop' },
-  { value: 'laptop', labelKey: 'panel.browserDeviceLaptop' },
-  { value: 'tablet', labelKey: 'panel.browserDeviceTablet' },
-  { value: 'mobile', labelKey: 'panel.browserDeviceMobile' },
-];
-
-/** 缩放档位（百分比；与 pane 工具栏下拉同源，避免两处漂移） */
-const ZOOM_STEPS: readonly BrowserZoom[] = [50, 75, 100, 125, 150, 200];
+/**
+ * 预设文案键（key 字面量必须留在本文件：check-i18n 的「间接引用」规则
+ * 要求 key 与 t(变量) 同文件，见 lib/browser/presets 头部说明）
+ */
+const PRESET_LABEL_KEYS: Record<BrowserDevicePreset, string> = {
+  responsive: 'panel.browserDeviceResponsive',
+  desktop: 'panel.browserDeviceDesktop',
+  laptop: 'panel.browserDeviceLaptop',
+  tablet: 'panel.browserDeviceTablet',
+  mobile: 'panel.browserDeviceMobile',
+};
 
 /** 浏览器 pane */
 export function BrowserSection(): ReactElement {
@@ -34,9 +38,9 @@ export function BrowserSection(): ReactElement {
   const updateBrowser = useSettingsStore((s) => s.updateBrowser);
 
   const handlePresetChange = (value: string): void => {
-    const next = PRESET_STEPS.find((step) => step.value === value);
+    const next = DEVICE_PRESETS.find((preset) => preset === value);
     if (next !== undefined) {
-      updateBrowser({ defaultDevicePreset: next.value });
+      updateBrowser({ defaultDevicePreset: next });
     }
   };
 
@@ -50,7 +54,14 @@ export function BrowserSection(): ReactElement {
   /** 严格模式切换：写穿透设置 + 通知主进程重建预览视图（即时生效） */
   const handleStrictChange = (checked: boolean): void => {
     updateBrowser({ strictSandbox: checked });
-    void window.api.browser.configure({ strictSandbox: checked }).catch(() => {});
+    // 浏览器模式（dev 预览）无 window.api：此前直接取 window.api.browser 会在
+    // 成员访问阶段同步抛 TypeError——`.catch()` 挂在尚未求值的表达式之后，兜不住
+    if (!hasIpcBridge()) return;
+    void window.api.browser.configure({ strictSandbox: checked }).catch(() => {
+      // 主进程应用失败：设置已先写入 SQLite（settings-store 写穿透），二者分叉。
+      // 不静默（此前 `.catch(() => {})` 完全吞掉），提示用户该开关可能未即时生效
+      toast.error(t('settings.browser.strictApplyFailed'));
+    });
   };
 
   return (
@@ -70,10 +81,11 @@ export function BrowserSection(): ReactElement {
         <SegControl
           value={browser.defaultDevicePreset}
           onChange={handlePresetChange}
-          options={PRESET_STEPS.map((step) => ({
-            value: step.value,
-            label: t(step.labelKey),
-          }))}
+          options={DEVICE_PRESETS.map((preset) => {
+            // 局部常量再传给 t：check-i18n 的间接引用识别只覆盖 t(标识符) 形态
+            const labelKey = PRESET_LABEL_KEYS[preset];
+            return { value: preset, label: t(labelKey) };
+          })}
         />
       </SettingRow>
 

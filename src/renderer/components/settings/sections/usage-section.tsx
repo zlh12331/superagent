@@ -22,7 +22,7 @@ import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatCompactNumber, formatPercent } from '@/lib/format-intl';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { USAGE_SUMMARY_QUERY_KEY } from '@/lib/query/keys';
 import { TurnsSection } from './turns-section';
 
@@ -174,7 +174,7 @@ export function UsageSection(): ReactElement {
     queryFn: async (): Promise<UsageSummaryRes> => {
       // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
       // （0 值三卡 + 近 90 天 0 值热力图格子，形态完整可见）
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return {
           total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
           byModel: [],
@@ -222,7 +222,11 @@ export function UsageSection(): ReactElement {
     }));
   }, [summary]);
 
-  const isEmpty = summary === null;
+  // 空态：查询尚无数据（undefined）。**不是** null——此前写成 `=== null` 恒假，
+  // 导致「空数据」文案（settings.usageEmpty）永不显示、且 loading/error 时
+  // 仍会渲染全 0 看板，与上方 QueryErrorRow 的注释（"此前静默渲染成全零骨架，
+  // 误导用户"）自相矛盾。改判 undefined 后空态分支才真正可达。
+  const isEmpty = summary === undefined;
 
   return (
     <div className="flex flex-col gap-2 pt-2">
@@ -315,9 +319,3 @@ export function UsageSection(): ReactElement {
     </div>
   );
 }
-
-/**
- * 回合记录区块：展示最近 Agent 回合的终止原因与 token 消耗（Transcript）
- *
- * 数据来源：session:getRecentTurns（turns 表跨会话倒序查询）。
- */

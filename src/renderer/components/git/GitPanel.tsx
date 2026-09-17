@@ -1,35 +1,26 @@
 // src/renderer/components/git/GitPanel.tsx
-// Git 面板 · 组装层（状态工具/差异视图/文件列表/辅助组件提取至独立文件）
+// Git 状态展示面板 · 极简文学风 · 组装层
 // ──────────────────────────────
-// 拆分背景（2026-08 重构）：原文件 486 行，按职责拆分：
-// - git-status-utils.ts：文件状态 → 图标/颜色/文案（纯函数）
-// - file-diff-view.tsx：变更查看（FileDiffView/DiffText）
-// - file-list.tsx：文件列表（FileList/FileListSkeleton）
-// - git-panel-parts.tsx：辅助组件（BranchInfo/CleanHint/ErrorHint）
-// ──────────────────────────────
-
-// src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 极简文学风
-// ──────────────────────────────────────────────────────────────
 // 职责：
 // - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表
 // - 文件列表点击选中 → 调用 useGitDiffQuery 获取该文件的 unified diff
-// - 用 <pre> 渲染 diff 文本（绿色 + 绿色 -，等宽字体）
-// - 工作区干净时显示「无变更」提示
+// - 组装三态（加载 / 错误 / 干净 / 有变更）并把结果分发给子组件
 //
 // 设计：
 // - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - 文件状态用颜色区分（modified/added/deleted/untracked/conflicted）
-// - diff 渲染用 react-diff-viewer-continued（UnifiedDiffView，统一方案）
-//   实现：git:diff 返回 unified diff → parseUnifiedDiff 拆 hunk → 双栏渲染
+// - diff 渲染统一走 UnifiedDiffView（react-diff-viewer-continued + parseUnifiedDiff）
 // - 路径必须为绝对路径（由调用方传入）
-// ──────────────────────────────────────────────────────────────
+//
+// 拆分记录（2026-08 重构）：原文件 486 行，按职责拆分为本组装层 +
+// git-status-utils.ts（状态元数据纯函数）、file-diff-view.tsx（差异视图）、
+// file-list.tsx（文件列表）、git-panel-parts.tsx（分支/空态/错误）
+// ──────────────────────────────
 
 import { RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useGitDiffQuery, useGitStatusQuery } from '@/hooks/use-git';
+import { type GitStatusRes, useGitDiffQuery, useGitStatusQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +34,36 @@ interface GitPanelProps {
   readonly path: string;
   /** 自定义容器类名 */
   readonly className?: string;
+}
+
+/**
+ * 变更区状态分派（加载中 / 错误 / 状态缺失 / 干净 / 有变更）
+ *
+ * 抽离动机（2026-09 审计）：此前是内联在 GitPanel 里的 4 层嵌套三元，
+ * 使该组件认知复杂度达 16（阈值 15，长期挂在棘轮基线里）。改为早返回的
+ * 分派组件后，每个状态是独立直线分支，主组件只负责组装。
+ */
+function StatusArea({
+  isLoading,
+  error,
+  status,
+  selectedFilePath,
+  onSelect,
+}: {
+  readonly isLoading: boolean;
+  readonly error: unknown;
+  readonly status: GitStatusRes | undefined;
+  readonly selectedFilePath: string | null;
+  readonly onSelect: (path: string) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  if (isLoading) return <FileListSkeleton />;
+  if (error !== null) {
+    return <ErrorHint message={error instanceof Error ? error.message : String(error)} />;
+  }
+  if (status === undefined) return <ErrorHint message={t('git.statusEmpty')} />;
+  if (status.clean) return <CleanHint />;
+  return <FileList files={status.files} selectedFilePath={selectedFilePath} onSelect={onSelect} />;
 }
 
 export function GitPanel({ path, className }: GitPanelProps): ReactElement {
@@ -94,21 +115,13 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
 
       {/* 中间：变更文件列表 */}
       <ScrollArea className="min-h-0 flex-1">
-        {isLoading ? (
-          <FileListSkeleton />
-        ) : error !== null ? (
-          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-        ) : status === undefined ? (
-          <ErrorHint message={t('git.statusEmpty')} />
-        ) : status.clean ? (
-          <CleanHint />
-        ) : (
-          <FileList
-            files={status.files}
-            selectedFilePath={selectedFilePath}
-            onSelect={setSelectedFilePath}
-          />
-        )}
+        <StatusArea
+          isLoading={isLoading}
+          error={error}
+          status={status}
+          selectedFilePath={selectedFilePath}
+          onSelect={setSelectedFilePath}
+        />
       </ScrollArea>
 
       {/* 底部：选中文件的 diff（可折叠） */}
@@ -124,7 +137,3 @@ export function GitPanel({ path, className }: GitPanelProps): ReactElement {
     </div>
   );
 }
-
-// ── 子组件：分支信息 ──────────────────────────────────────────
-
-/** 分支信息展示：分支名 + ahead/behind 标记 */

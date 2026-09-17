@@ -5,7 +5,7 @@
 // - 提供按钮一键唤起 Chromium DevTools（通过 IPC 调用 webContents.openDevTools）
 // - 支持三种停靠模式：detach（独立窗口）/ right（右侧）/ bottom（底部）
 // - 展示 React DevTools 扩展安装说明（dev 模式自动注入）
-// - 调用结果反馈（成功/失败 toast 文本）
+// - 调用结果反馈（内联状态条：成功/失败文案 + 图标，非 toast）
 //
 // 设计：
 // - 纯交互面板，无数据查询（不使用 TanStack Query）
@@ -13,29 +13,27 @@
 // - 成功/失败状态通过本地 useState 管理，3s 后自动清除
 // ──────────────────────────────────────────────────────────────
 
-import type { OpenDevToolsRes } from '@code-agent/shared/renderer';
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** DevTools 停靠模式 */
 type DevToolsMode = 'detach' | 'right' | 'bottom';
 
-/** 模式按钮配置 */
+/** 模式按钮配置（labelKey 为 dev.* 下的 i18n 键名） */
 const MODE_BUTTONS: readonly {
   readonly mode: DevToolsMode;
   readonly labelKey: string;
   readonly icon: typeof ExternalLink;
-  readonly hint: string;
 }[] = [
-  { mode: 'detach', labelKey: 'detachWindow', icon: ExternalLink, hint: 'detach' },
-  { mode: 'right', labelKey: 'panelRight', icon: PanelRight, hint: 'right' },
-  { mode: 'bottom', labelKey: 'panelBottom', icon: PanelBottom, hint: 'bottom' },
-] as const;
+  { mode: 'detach', labelKey: 'detachWindow', icon: ExternalLink },
+  { mode: 'right', labelKey: 'panelRight', icon: PanelRight },
+  { mode: 'bottom', labelKey: 'panelBottom', icon: PanelBottom },
+];
 
 /** 成功消息自动清除延迟 */
 const STATUS_CLEAR_DELAY = 3_000;
@@ -59,6 +57,7 @@ interface InspectorPanelProps {
 export function InspectorPanel({ className }: InspectorPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   // 调用状态：idle / loading / success / error
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -83,7 +82,9 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
       setLoadingMode(mode);
 
       try {
-        const data = unwrap(await window.api.devtools.open({ mode })) as OpenDevToolsRes;
+        // 浏览器模式无桥：给一致错误态（而非成员访问抛 TypeError）
+        if (!hasIpcBridge()) throw new Error('window.api unavailable');
+        const data = unwrap(await window.api.devtools.open({ mode }));
         if (data.ok) {
           setStatus('success');
           setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
@@ -92,9 +93,12 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           setStatusMessage(t('dev.openFailedSender'));
         }
       } catch (err) {
-        // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示
+        // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示。
+        // 经 unwrapErrorMessage 解析错误码：此前直出 err.message，IPC 失败会
+        // 把英文码原样展示（其余面板已统一走该出口）。
         setStatus('error');
-        setStatusMessage(err instanceof Error ? err.message : String(err));
+        const error = err instanceof Error ? err : new Error(String(err));
+        setStatusMessage(unwrapErrorMessage(error, getErrorMessage));
       }
       // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
       // 成功/失败路径统一走到这里复位 + 3s 后自动清除状态
@@ -108,7 +112,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         setStatusMessage('');
       }, STATUS_CLEAR_DELAY);
     },
-    [t],
+    [t, getErrorMessage],
   );
 
   return (
@@ -123,7 +127,7 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
 
       <ScrollArea className="min-h-0 flex-1">
         {/* Chromium DevTools 按钮组 */}
-        <Section title="Chromium DevTools" description={t('dev.developerToolsDesc')}>
+        <Section title={t('dev.chromiumDevtools')} description={t('dev.developerToolsDesc')}>
           <div className="flex items-center gap-0.5">
             {MODE_BUTTONS.map((btn) => {
               const Icon = btn.icon;
@@ -153,12 +157,11 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
         </Section>
 
         {/* React DevTools 说明 */}
-        <Section title="React DevTools" description={t('common.reactTreeDesc')}>
+        <Section title={t('dev.reactDevtools')} description={t('common.reactTreeDesc')}>
           <div className="flex items-start gap-1.5">
             <Info className="text-muted-foreground mt-0.5 size-3 shrink-0" strokeWidth={1.5} />
             <p className="text-muted-foreground text-2xs leading-relaxed">
-              dev 模式启动时由主进程自动安装（electron-devtools-installer）。 打开 Chromium DevTools
-              后切换到「Components」/「Profiler」Tab 使用。 首次安装可能需要刷新页面才能生效。
+              {t('dev.reactDevtoolsDesc')}
             </p>
           </div>
         </Section>
@@ -168,8 +171,8 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
           <div
             className={cn(
               'flex items-center gap-1.5 border-b px-2 py-1 text-2xs',
-              status === 'success' && 'border-[var(--success)]/30 text-success-text',
-              status === 'error' && 'border-[var(--error)]/30 text-error-text',
+              status === 'success' && 'border-success/30 text-success-text',
+              status === 'error' && 'border-error/30 text-error-text',
               status === 'loading' && 'border-border text-muted-foreground',
             )}
           >

@@ -13,6 +13,7 @@ import type { ReactElement } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 
 import type { ChatGoalView } from './use-chat-goals';
 
@@ -40,18 +41,28 @@ interface GoalBarProps {
 export function GoalBar({ goal, isCompleted, onEdit, onClear }: GoalBarProps): ReactElement {
   const { t } = useTranslation();
 
+  /** 删除目标：破坏性操作走命令式确认（confirm-dialog-store，对齐 file-tree 删除做法） */
+  const handleClear = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: t('chat.goalClearConfirmTitle'),
+      message: t('chat.goalClearConfirmMessage'),
+      danger: true,
+    });
+    if (confirmed) onClear();
+  };
+
   return (
     <div className="border-accent/35 bg-accent/10 mx-auto mb-1 flex w-full max-w-2xl items-center gap-2 rounded-md border px-3 py-1.5">
       <Badge
         variant="outline"
-        className="bg-accent/20 text-accent-text border-transparent px-1.5 py-0.5 font-mono text-[10px] font-bold"
+        className="bg-accent/20 text-accent-text border-transparent px-1.5 py-0.5 font-mono text-2xs font-bold"
       >
-        GOAL
+        {t('chat.goalBadge')}
       </Badge>
       {isCompleted && (
         <Badge
           variant="outline"
-          className="bg-success/10 text-success-text border-transparent gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+          className="bg-success/10 text-success-text border-transparent gap-1 px-1.5 py-0.5 text-2xs font-semibold"
         >
           <Check className="size-3" strokeWidth={2.5} />
           {t('chat.goalCompleted')}
@@ -77,7 +88,7 @@ export function GoalBar({ goal, isCompleted, onEdit, onClear }: GoalBarProps): R
           className="text-muted-foreground hover:bg-destructive/15 hover:text-error-text size-6"
           title={t('chat.goalClear')}
           aria-label={t('chat.goalClear')}
-          onClick={onClear}
+          onClick={() => void handleClear()}
         >
           <Trash2 className="size-3" />
         </Button>

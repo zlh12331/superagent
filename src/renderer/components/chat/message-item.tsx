@@ -1,33 +1,9 @@
 // message-item.tsx（自 ChatMessageList 拆分）
-// 聊天消息行：消息项 / part 渲染 / 工具调用 / 代码块 / 推理块
+// 聊天消息行编排：消息项 / part 分发 / 推理块
 // ──────────────────────────────
-// 拆分背景：ChatMessageList 685 行，消息渲染逻辑提取为独立文件
+// 子域拆分（2026-09-15 结构审计）：工具卡渲染移至 tool-call-view.tsx，
+// 本文件只保留消息/part 编排职责。
 // ──────────────────────────────
-
-// src/renderer/components/chat/ChatMessageList.tsx
-// 聊天消息列表 · Aurora 设计系统
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 渲染 UIMessage 数组（user / assistant / system 三种角色）
-// - assistant 消息按 parts 分发渲染（text / reasoning / tool / file / step-start 等）
-// - 智能自动滚动：仅当用户在底部附近时跟随，否则显示 scroll-to-bottom 按钮
-// - 空状态展示 EmptyState 组件
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - user 消息：.msg.user > .msg-body > .msg-content（玻璃渐变气泡，靠右由 .msg-content 自身样式实现）
-// - assistant 消息：.msg.assistant > .msg-avatar.assistant + .msg-body > .msg-role + .msg-content（无气泡开放排版）
-// - tool 调用：.msg.msg-tool > .msg-body > .card.tool-card（可折叠卡片）
-// - reasoning：.reasoning-block（折叠式推理块，accent 左光条）
-// - system 消息：居中小字
-// - streaming 占位：typing-indicator（三个 accent 点弹跳）
-// - 滚动到底部按钮：.scroll-to-bottom（距底部 > 80px 时显示，有新消息加 .has-new）
-// ──────────────────────────────────────────────────────────────
-//
-// 说明：
-// - 不在此组件内调用 useChat，messages / status 由父组件传入
-// - 仅做展示，不做任何业务逻辑
-// - 使用 AI SDK 官方类型守卫（isTextUIPart / isReasoningUIPart 等）
-// - part 类型用 UIMessage['parts'][number] 派生，避免手写泛型参数
 
 // type-only import：仅引入类型，不引入运行时依赖
 import type { UIMessage } from 'ai';
@@ -39,26 +15,20 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from 'ai';
-import { FileCode, Loader2, Terminal } from 'lucide-react';
 import { motion } from 'motion/react';
-import { memo, type ReactElement, useMemo, useState } from 'react';
+import { memo, type ReactElement, useMemo } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
+import { extractText } from '@/lib/chat/message-text';
 import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useReasoningCollapseStore } from '@/stores/transient/reasoning-collapse-store';
-import { useToolStore } from '@/stores/transient/tool-store';
 import { FileChangeCard } from './file-change-card';
 import { Markdown } from './Markdown';
 import { MsgActions } from './message-actions';
-import {
-  extractText,
-  formatJson,
-  mapToolStateToStatusClass,
-  mapToolStateToStatusLabelKey,
-} from './message-utils';
 import { StreamingCursor } from './streaming-cursor';
+import { ToolCallView } from './tool-call-view';
 
 /** part 类型（UIMessage['parts'][number] 派生） */
 type UIMessagePart = UIMessage['parts'][number];
@@ -85,22 +55,18 @@ export const MessageItem = memo(function MessageItem({
   // 当前模型（对齐原型 .msg-role 展示模型名）
   const defaultModel = useSettingsStore((state) => state.ai.defaultModel);
 
-  // parts 预映射（assistant 分支用）：生成稳定 key（含 index 但不暴露给 JSX key，规避 noArrayIndexKey）
-  // 并标记最后一条 text part 的流式光标（照搬参考项目 StreamingCursor）。
-  // 必须在组件顶层调用（Hook 规则），非 assistant 消息返回空。
+  // parts 预映射：生成稳定 key（含 index 但不暴露给 JSX key，规避 noArrayIndexKey）
+  // 并标记**最后一个 part** 的流式光标（仅流式 assistant 消息；user/历史恒 false）。
+  // 注意：光标只在走 text 分支的 part 上渲染，故末位 part 是 reasoning/tool 时
+  // 不会出现光标（也不再回落到更早的 text part 上）——这是期望行为。
   const partsWithCursor = useMemo(
     () =>
-      message.role === 'assistant'
-        ? message.parts.map((part, index) => ({
-            part,
-            key: `${message.id}-${index}`,
-            showCursor: isStreaming && index === message.parts.length - 1,
-          }))
-        : message.parts.map((part, index) => ({
-            part,
-            key: `${message.id}-${index}`,
-            showCursor: false,
-          })),
+      message.parts.map((part, index) => ({
+        part,
+        key: `${message.id}-${index}`,
+        showCursor:
+          message.role === 'assistant' && isStreaming && index === message.parts.length - 1,
+      })),
     [message.parts, message.id, isStreaming, message.role],
   );
 
@@ -268,7 +234,9 @@ function PartView({
     return (
       <div className="card">
         <div className="card-head">
-          <span className="card-icon">📎</span>
+          <span className="card-icon" aria-hidden="true">
+            📎
+          </span>
           <span className="card-title">{t('chat.attachment')}</span>
           <span className="card-status pending">{part.mediaType}</span>
         </div>
@@ -294,157 +262,8 @@ function PartView({
 }
 
 /**
- * 工具调用卡片（对齐原型 .card.tool-card）
- *
- * 显示工具名称、状态、入参、输出 / 错误。
- * 可折叠：点击 card-head 切换 .open 类。
- *
- * 注意：可选字段使用 `T | undefined` 而非 `T?`，
- * 以兼容 exactOptionalPropertyTypes（exactOptionalPropertyTypes 下 `T?` 不允许显式传入 undefined）。
+ * 工具调用卡片已提取至 tool-call-view.tsx（ToolCallView + CodeBlock + COMMAND_TOOLS）
  */
-interface ToolCallViewProps {
-  type: string;
-  toolCallId: string;
-  state: string;
-  input: unknown | undefined;
-  output: unknown | undefined;
-  errorText: string | undefined;
-}
-
-function ToolCallView({
-  type,
-  toolCallId,
-  state,
-  input,
-  output,
-  errorText,
-}: ToolCallViewProps): ReactElement {
-  // 折叠状态：默认折叠（对齐原型 #toolCard 初始无 .open 类）
-  const [open, setOpen] = useState(false);
-  // 本地化文案
-  const { t } = useTranslation();
-
-  // 从 tool-store 查找 title（主进程通过 AgentToolResultPayload 推送的人类可读标题）
-  // 没有找到时回退到工具名（type）
-  const title = useToolStore((s) => {
-    for (const calls of s.callsBySession.values()) {
-      const found = calls.find((c) => c.id === toolCallId);
-      if (found !== undefined) return found.title;
-    }
-    return null;
-  });
-
-  // 状态映射：AI SDK state → .card-status 类 + 本地化文案
-  const statusClass = mapToolStateToStatusClass(state);
-  const statusLabel = mapToolStateToStatusLabelKey(state);
-  const localizedStatusLabel = t(`chat.${statusLabel}`);
-
-  // AI SDK part 的 toolName 带 'tool-' 前缀（如 'tool-exec_command'），
-  // 去前缀后与 COMMAND_TOOLS 匹配（对齐参考项目 toolCall.toolName 语义）
-  const toolName = type.replace(/^tool-/, '');
-  // 命令工具高亮（照搬参考项目 COMMAND_TOOLS：命令行块 accent 左边条 + 深色背景）
-  const isCommandTool = COMMAND_TOOLS.has(toolName);
-  // 工具图标（照搬参考项目 getToolIcon：命令工具 Terminal / 其他 FileCode，运行中换 spinner）
-  // 运行中判定复用徽章映射（AI SDK v7 状态为 input-streaming/input-accepted，非字面 'running'）
-  const isRunning = statusClass === 'running';
-  const ToolIcon = isRunning ? Loader2 : isCommandTool ? Terminal : FileCode;
-
-  return (
-    <div className="msg msg-tool enter-anim">
-      <div className="msg-body">
-        <div className={cn('card tool-card', open && 'open')}>
-          <button
-            type="button"
-            className="card-head"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={t('chat.toggleToolDetails')}
-            aria-expanded={open}
-          >
-            <span className="card-icon">
-              <ToolIcon
-                className={cn('size-3.5 text-[var(--accent)]', isRunning && 'animate-spin')}
-              />
-            </span>
-            <span className="card-title">{title ?? toolName}</span>
-            <span className={cn('card-status', statusClass)}>{localizedStatusLabel}</span>
-            <span className="tool-chev">▸</span>
-          </button>
-          {/* 展开动画（照搬参考项目 grid-rows 方案：始终挂载切换 class，非条件渲染） */}
-          <div
-            className={cn(
-              'grid transition-all duration-200',
-              open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-            )}
-          >
-            <div className="overflow-hidden">
-              <div className="card-body">
-                {/* 入参（JSON 序列化，最多 200 字符避免膨胀） */}
-                {input !== undefined && (
-                  <CodeBlock
-                    label="input"
-                    content={formatJson(input, t)}
-                    commandStyle={isCommandTool}
-                  />
-                )}
-                {/* 输出（output 优先于 errorText） */}
-                {output !== undefined && (
-                  <CodeBlock
-                    label="output"
-                    content={formatJson(output, t)}
-                    commandStyle={isCommandTool}
-                  />
-                )}
-                {errorText !== undefined && errorText !== '' && (
-                  <CodeBlock label="error" content={errorText} />
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * 命令工具集合（照搬参考项目 COMMAND_TOOLS：命令工具显示命令行块样式）
- */
-const COMMAND_TOOLS = new Set(['exec_command', 'shell', 'run_command']);
-
-/**
- * 代码块（带标签 + 内容）
- *
- * 用于展示工具调用的 input / output / error；
- * 命令工具时加 accent 左边条 + 深色背景（照搬参考项目命令行块）。
- */
-function CodeBlock({
-  label,
-  content,
-  commandStyle = false,
-}: {
-  label: string;
-  content: string;
-  /** 命令工具样式：accent 左边条 + 深色背景 */
-  commandStyle?: boolean;
-}): ReactElement {
-  return (
-    <div className="mt-1">
-      <div className="text-muted-foreground font-mono text-2xs uppercase tracking-wider">
-        {label}
-      </div>
-      <pre
-        className={cn(
-          'text-foreground mt-0.5 overflow-x-auto rounded p-1.5 font-mono text-xs leading-snug',
-          commandStyle
-            ? 'border-l-[var(--accent-dim)] bg-[var(--code-block-bg)] border-l-2'
-            : 'bg-background/50',
-        )}
-      >
-        {content}
-      </pre>
-    </div>
-  );
-}
 
 /**
  * 推理块（对齐原型 .reasoning-block）
@@ -476,7 +295,9 @@ function ReasoningBlock({
         aria-expanded={open}
       >
         <span className="reasoning-title">{t('chat.thinking')}</span>
-        <span className="rh-chevron ml-auto">▸</span>
+        <span className="rh-chevron ml-auto" aria-hidden="true">
+          ▸
+        </span>
       </button>
       <div className="reasoning-body">
         <div className="text-muted-foreground font-mono text-xs leading-relaxed whitespace-pre-wrap italic">
@@ -486,10 +307,3 @@ function ReasoningBlock({
     </div>
   );
 }
-
-/**
- * 流式占位
- *
- * streaming 状态时显示在消息列表末尾的 typing-indicator（三个 accent 点弹跳），
- * 表示助手正在生成回复。对齐原型 .msg.assistant + .typing-indicator 结构。
- */

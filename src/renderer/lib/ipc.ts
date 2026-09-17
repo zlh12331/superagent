@@ -32,6 +32,23 @@ export function unwrap<T>(response: IpcResponse<T>): T {
 const ERROR_CODE_PREFIX = /^\[([A-Z_]+)\]/;
 
 /**
+ * window.api 桥是否可用
+ *
+ * 浏览器模式（dev 预览 / E2E web）与 preload 缺失（打包异常）时 window.api 为
+ * undefined，此时任何 `window.api.x.y()` 都会在**成员访问阶段**同步抛 TypeError
+ * ——挂在后面的 `.catch()` 兜不住（求值顺序：先取属性才轮到 .catch）。
+ *
+ * 单一真源动机（2026-09 settings 审计）：该判断此前以
+ * `typeof window === 'undefined' || window.api === undefined` 的字面形式
+ * 散落 57 处，且**遗漏若干写入路径**（browser:configure、im allowlist 保存、
+ * mcp/im/memory 的 mutation）——每次新增 IPC 调用都要记得手抄一遍，漏一处即
+ * 浏览器预览下报错。提取后调用方只需 `if (!hasIpcBridge()) return/throw`。
+ */
+export function hasIpcBridge(): boolean {
+  return typeof window !== 'undefined' && window.api !== undefined;
+}
+
+/**
  * 错误 → 用户可见文案（unwrap 抛出的 `[CODE] message` 的统一解析口）
  *
  * - 前缀含错误码 → 交给 localize 做 i18n（调用方传 getErrorMessage）

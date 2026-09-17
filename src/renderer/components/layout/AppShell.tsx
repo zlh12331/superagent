@@ -1,19 +1,13 @@
 // src/renderer/components/layout/AppShell.tsx
-// 应用外壳 · 组装层（初始宽度计算纯函数移至 layout-utils）
-// ──────────────────────────────
-// 拆分背景（2026-08 重构）：原文件 352 行，纯函数提取为独立文件
-// ──────────────────────────────
-
-// src/renderer/components/layout/AppShell.tsx
 // 应用主布局容器 · 对齐原型布局（三段式 grid）
-// ──────────────────────────────────────────────────────────────
+// ──────────────────────────────
 // 职责：
-// - 三段式 grid：Topbar（52px）/ 主体（Sidebar + resizer + 内容 + resizer + 右面板）
-// - 可拖拽分隔线：左右两条 resizer，鼠标拖拽调整 sidebar/rightPanel 宽度
+// - 三段式 grid：Topbar / 主体（Sidebar + resizer + 内容 + resizer + 右面板）
+// - 面板宽度与分隔线交互：委托 use-resizable-panels（拖拽/键盘/折叠联动）
 // - 侧栏折叠：sb-collapsed 态，grid 第一列塌缩为 0
 // - 右面板折叠：crp-collapsed 态，grid 第五列塌缩为 0
-// - 右面板渲染 DevPanel（Terminal + Git + Logs + Metrics + Inspector）
-// - 集成 useApprovalBridge（审批推送订阅）+ useToolBridge + useTerminalBridge：订阅工具/终端 IPC 事件
+// - 右面板渲染 DevPanel（Terminal + Git + Files + Logs + Metrics + Inspector）
+// - 挂载 IPC 订阅桥接：approval / agent-ask / tool / terminal / agent 生命周期
 //
 // 布局参考：docs/prototype/prototype-v2.html
 // - .app（grid 两行：topbar + body）
@@ -21,19 +15,12 @@
 // - .resizer（可拖拽分隔线，hover 显示 accent 光带）
 // - .chat-right-panel（右面板，可折叠）
 // - .sb-collapsed / .crp-collapsed（折叠态 class）
-// ──────────────────────────────────────────────────────────────
+//
+// 拆分记录：宽度计算纯函数 → layout-utils；resizer 交互 → hooks/use-resizable-panels
+// ──────────────────────────────
 
 import { MotionConfig } from 'motion/react';
-import {
-  lazy,
-  type ReactElement,
-  type ReactNode,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { lazy, type ReactElement, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { AskDialog } from '@/components/agent/ask-dialog';
@@ -47,6 +34,7 @@ import { useDeepLink } from '@/hooks/use-deep-link';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useProtocolCheck } from '@/hooks/use-protocol-check';
+import { useResizablePanels } from '@/hooks/use-resizable-panels';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useActiveWorkingDir } from '@/hooks/use-working-dir';
@@ -60,8 +48,6 @@ import { useUiStore } from '@/stores/transient/ui-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 import {
-  computeInitialRightPanelWidth,
-  computeInitialSidebarWidth,
   RIGHT_PANEL_WIDTH_MAX,
   RIGHT_PANEL_WIDTH_MIN,
   SIDEBAR_WIDTH_MAX,
@@ -98,7 +84,6 @@ interface AppShellProps {
   /** 主内容区（通常由 RouterProvider 通过 <Outlet /> 传入） */
   children: ReactNode;
 }
-type ResizerSide = 'left' | 'right';
 
 export function AppShell({ children }: AppShellProps): ReactElement {
   // 本地化文案
@@ -133,10 +118,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 欢迎页模式下隐藏右面板 + 右分隔线，主区域改为居中 flex 容器
   const isWelcomeMode = useWelcomeStore((state) => state.isWelcomeMode);
 
-  // 拖拽分隔线状态 — 初始值对齐原型 clamp() 行为，按视口宽度计算
-  const [sidebarWidth, setSidebarWidth] = useState(computeInitialSidebarWidth);
-  const [rightPanelWidth, setRightPanelWidth] = useState(computeInitialRightPanelWidth);
-
   // 折叠态（统一状态源：ui-store——快捷键 / 命令面板 / Topbar / 断点联动共用）
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const rightPanelCollapsed = useUiStore((s) => s.rightPanelCollapsed);
@@ -165,8 +146,6 @@ export function AppShell({ children }: AppShellProps): ReactElement {
       setSidebarCollapsed(isNarrow);
     }
   }, [isNarrow, sidebarManual, setSidebarCollapsed]);
-
-  const [draggingSide, setDraggingSide] = useState<ResizerSide | null>(null);
 
   // 命令面板 open 状态（多入口：⌘P/Ctrl+K 快捷键 / Topbar / 错误动作；集中到 ui-store）
   const paletteOpen = useUiStore((s) => s.paletteOpen);
@@ -238,103 +217,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
     },
   });
 
-  // 拖拽起始信息（ref 避免重渲染）
-  const dragStartRef = useRef<{ side: ResizerSide; startX: number; startWidth: number } | null>(
-    null,
-  );
-
-  // 同步 CSS 变量到根元素（供 .view-chat 的 grid-template-columns 使用）
-  useEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty('--aurora-sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
-    root.style.setProperty(
-      '--aurora-right-panel-w',
-      rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`,
-    );
-  }, [sidebarWidth, rightPanelWidth, sidebarCollapsed, rightPanelCollapsed]);
-
-  // 拖拽 mousemove 处理函数
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    const dragStart = dragStartRef.current;
-    if (dragStart === null) return;
-
-    const delta = event.clientX - dragStart.startX;
-    if (dragStart.side === 'left') {
-      const newWidth = dragStart.startWidth + delta;
-      const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, newWidth));
-      setSidebarWidth(clamped);
-    } else {
-      const newWidth = dragStart.startWidth - delta;
-      const clamped = Math.max(RIGHT_PANEL_WIDTH_MIN, Math.min(RIGHT_PANEL_WIDTH_MAX, newWidth));
-      setRightPanelWidth(clamped);
-    }
-  }, []);
-
-  // 拖拽 mouseup 处理函数
-  const handleMouseUp = useCallback(() => {
-    document.body.classList.remove('resizing');
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-    dragStartRef.current = null;
-    setDraggingSide(null);
-  }, [handleMouseMove]);
-
-  // 拖拽启动：mousedown 注册监听
-  const handleMouseDown = useCallback(
-    (side: ResizerSide) => (event: React.MouseEvent<HTMLHRElement>) => {
-      event.preventDefault();
-      const startWidth = side === 'left' ? sidebarWidth : rightPanelWidth;
-      dragStartRef.current = { side, startX: event.clientX, startWidth };
-      setDraggingSide(side);
-      document.body.classList.add('resizing');
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [sidebarWidth, rightPanelWidth, handleMouseMove, handleMouseUp],
-  );
-
-  // 卸载时清理监听（防御性）
-  useEffect(() => {
-    return () => {
-      document.body.classList.remove('resizing');
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [handleMouseMove, handleMouseUp]);
-
-  // 键盘调整分隔线（此前仅 ARIA 语义 + tabIndex，无方向键行为）：
-  // ←/→ 16px 步进（右侧分隔线右移 = 面板变窄），Home/End 极值
-  const ResizerKeyStep = 16;
-  const handleResizerKeyDown = useCallback(
-    (side: ResizerSide) => (event: React.KeyboardEvent<HTMLHRElement>) => {
-      let handled = true;
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        const delta = event.key === 'ArrowLeft' ? -ResizerKeyStep : ResizerKeyStep;
-        if (side === 'left') {
-          setSidebarWidth((w) =>
-            Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, w + delta)),
-          );
-        } else {
-          setRightPanelWidth((w) =>
-            Math.max(RIGHT_PANEL_WIDTH_MIN, Math.min(RIGHT_PANEL_WIDTH_MAX, w - delta)),
-          );
-        }
-      } else if (event.key === 'Home') {
-        if (side === 'left') setSidebarWidth(SIDEBAR_WIDTH_MIN);
-        else setRightPanelWidth(RIGHT_PANEL_WIDTH_MIN);
-      } else if (event.key === 'End') {
-        if (side === 'left') setSidebarWidth(SIDEBAR_WIDTH_MAX);
-        else setRightPanelWidth(RIGHT_PANEL_WIDTH_MAX);
-      } else {
-        handled = false;
-      }
-      if (handled) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    },
-    [],
-  );
+  // 面板宽度 + 分隔线交互（拖拽 / 键盘 / CSS 变量同步），实现见 use-resizable-panels
+  const { sidebarWidth, rightPanelWidth, draggingSide, onResizerMouseDown, onResizerKeyDown } =
+    useResizablePanels(sidebarCollapsed, rightPanelCollapsed);
 
   return (
     // MotionConfig reducedMotion="user"：系统开启"减弱动态效果"时，
@@ -378,8 +263,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
               aria-valuemax={SIDEBAR_WIDTH_MAX}
               tabIndex={0}
               className={cn('resizer resizer-left', draggingSide === 'left' && 'dragging')}
-              onMouseDown={handleMouseDown('left')}
-              onKeyDown={handleResizerKeyDown('left')}
+              onMouseDown={onResizerMouseDown('left')}
+              onKeyDown={onResizerKeyDown('left')}
             />
           )}
 
@@ -399,8 +284,8 @@ export function AppShell({ children }: AppShellProps): ReactElement {
               aria-valuemax={RIGHT_PANEL_WIDTH_MAX}
               tabIndex={0}
               className={cn('resizer resizer-right', draggingSide === 'right' && 'dragging')}
-              onMouseDown={handleMouseDown('right')}
-              onKeyDown={handleResizerKeyDown('right')}
+              onMouseDown={onResizerMouseDown('right')}
+              onKeyDown={onResizerKeyDown('right')}
             />
           )}
 

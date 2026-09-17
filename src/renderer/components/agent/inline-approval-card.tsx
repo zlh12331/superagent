@@ -13,18 +13,11 @@ import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
-import { useTheme } from '@/providers/ThemeProvider';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
-import { renderStructuredPreview } from './approval-preview';
-import {
-  canRememberDecision,
-  getIconForType,
-  getLabelKeyForType,
-  getVariantForType,
-  isDangerousType,
-} from './approval-utils';
+import { StructuredPreview } from './approval-preview';
+import { getApprovalMeta, getNonEmptyField } from './approval-utils';
 
 /** 内联审批卡 props */
 export interface InlineApprovalCardProps {
@@ -55,6 +48,110 @@ async function sendApprovalResponse(
   }
 }
 
+/** 已决状态徽章（approved/rejected 双态） */
+function StatusBadge({ approved }: { readonly approved: boolean }): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
+        approved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
+      )}
+    >
+      {approved ? t('approval.approved') : t('approval.rejected')}
+    </span>
+  );
+}
+
+/** pending 操作按钮行：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */
+function PendingActions({
+  meta,
+  dangerous,
+  onRespond,
+}: {
+  readonly meta: ReturnType<typeof getApprovalMeta>;
+  readonly dangerous: boolean;
+  readonly onRespond: (approved: boolean, rememberDecision: boolean) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1 border px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => onRespond(false, false)}
+      >
+        <X className="size-3" />
+        {t('approval.reject')}
+      </Button>
+      {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file） */}
+      {meta.canRemember && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1 px-2 py-1"
+          title={t('approval.whitelistHint')}
+          onClick={() => onRespond(true, true)}
+        >
+          <ShieldCheck className="size-3" />
+          {t('approval.whitelist', { minutes: REMEMBER_TTL_MINUTES })}
+        </Button>
+      )}
+      <Button
+        size="sm"
+        className={cn(
+          // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
+          'ml-auto gap-1 px-2 py-1',
+          dangerous
+            ? 'bg-error-emphasis hover:bg-error-emphasis/90'
+            : 'bg-success-emphasis hover:bg-success-emphasis/90',
+        )}
+        onClick={() => onRespond(true, false)}
+      >
+        <Check className="size-3" />
+        {t('approval.approve')}
+      </Button>
+    </div>
+  );
+}
+
+/** 拒绝后操作行：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */
+function RejectedActions({
+  resubmitCommand,
+  onEditResubmit,
+  onSkip,
+}: {
+  readonly resubmitCommand: string | null;
+  readonly onEditResubmit: ((command: string) => void) | undefined;
+  readonly onSkip: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      {resubmitCommand !== null && onEditResubmit !== undefined && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1 px-2 py-1"
+          onClick={() => onEditResubmit(resubmitCommand)}
+        >
+          <Pencil className="size-3" />
+          {t('approval.editResubmit')}
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={onSkip}
+      >
+        {t('approval.skip')}
+      </Button>
+    </div>
+  );
+}
+
 /**
  * 内联审批卡片
  *
@@ -66,16 +163,16 @@ export function InlineApprovalCard({
   onEditResubmit,
 }: InlineApprovalCardProps): ReactElement | null {
   const { t } = useTranslation();
-  // 深色主题（结构化预览的 ReactDiffViewer 双栏适配）
-  const { resolvedTheme } = useTheme();
-  const isDarkTheme = resolvedTheme === 'dark';
 
   // 当前会话的审批项（pending 优先展示最新；已决的回显最近一条）
   const item = useApprovalsStore((state) => {
+    // pending 按 createdAt 升序入队（旧→新），故 reverse 后 find 取到最新一条
     const pending = [...state.pending].reverse().find((p) => p.sessionId === sessionId);
     if (pending !== undefined) return pending;
-    const resolved = [...state.resolved].reverse().find((r) => r.sessionId === sessionId);
-    return resolved;
+    // resolved 已是「最新在前」（store 用 [resolved, ...state.resolved] 前插）——
+    // 此前这里也 reverse 了一次，导致 find 命中**最旧**一条：刚批准/拒绝的卡片
+    // 不显示，界面回显一条陈旧审批（2026-09 审计修复）
+    return state.resolved.find((r) => r.sessionId === sessionId);
   });
 
   const approve = useApprovalsStore((state) => state.approve);
@@ -107,8 +204,9 @@ export function InlineApprovalCard({
     } else {
       reject(item.id);
     }
-    // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）
-    if (typeof window === 'undefined' || window.api === undefined) {
+    // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）。
+    // 统一走 lib/ipc.ts 的 hasIpcBridge（单一真源），不再手抄字面量判断。
+    if (!hasIpcBridge()) {
       return;
     }
     const ok = await sendApprovalResponse(item.id, approved, rememberDecision);
@@ -117,59 +215,49 @@ export function InlineApprovalCard({
     }
   };
 
-  const Icon = getIconForType(item.type);
+  // 类型元数据单一入口（图标/徽章类/危险标记/白名单支持）
+  const meta = getApprovalMeta(item.type);
+  const Icon = meta.icon;
   const isPending = item.status === 'pending';
   const isApproved = item.status === 'approved';
-  const dangerous = isDangerousType(item.type);
-  // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示）
-  const resubmitCommand = ((): string | null => {
-    if (item.type !== 'run_command') return null;
-    const input = item.input;
-    if (typeof input === 'object' && input !== null) {
-      const c = (input as Record<string, unknown>)['command'];
-      return typeof c === 'string' ? c : null;
-    }
-    return null;
-  })();
+  const dangerous = meta.dangerous;
+  // 编辑重提命令：run_command 类型从 input.command 提取（其他类型无命令语义，不显示；
+  // 复用 getNonEmptyField 读取，空命令按「无命令」处理——getField 对 `''` 返回空串，
+  // 此前 `?? null` 兜不住 → 渲染出「编辑后重提」按钮却回传空命令（点了没意义））
+  const resubmitCommand =
+    item.type === 'run_command' ? (getNonEmptyField(item.input, 'command') ?? null) : null;
 
   return (
     <div
       className={cn(
         'mx-3 mt-2 rounded-lg border bg-card px-3 py-2 text-xs',
-        isPending && 'border-l-4 border-l-[var(--warn)]',
-        isApproved && 'border-l-4 border-l-[var(--success)]',
-        item.status === 'rejected' && 'border-l-4 border-l-[var(--error)]',
+        isPending && 'border-l-4 border-l-warn',
+        isApproved && 'border-l-4 border-l-success',
+        item.status === 'rejected' && 'border-l-4 border-l-error',
         skipped && 'opacity-40',
       )}
+      // role="alert"：审批请求是「需要用户立刻处理的插队信息」，出现即应被朗读。
+      // 此前同时写了 aria-live="polite"，与 alert 隐含的 assertive 冲突（两个
+      // 播报优先级自相矛盾）；改为只留 role，并设 aria-atomic="false"——否则
+      // 卡片状态变化（pending → approved）会按 atomic 语义重播整张卡片。
       role="alert"
-      aria-live="polite"
+      aria-atomic="false"
     >
       {/* 头部：图标 + 类型 + 状态 */}
       <div className="flex items-center gap-2">
-        <Icon
-          className={cn('size-3.5 shrink-0', dangerous && 'text-[var(--error)]')}
-          strokeWidth={1.5}
-        />
+        <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-error')} strokeWidth={1.5} />
         <span
           className={cn(
             'min-w-0 flex-1 truncate font-medium',
-            // 类型徽章 7 色（对齐原型 modal-variant，语义令牌）
-            getVariantForType(item.type).className,
+            // 类型徽章（语义令牌类，来自 APPROVAL_META 单表）
+            meta.className,
           )}
         >
-          {/* 类型标签（i18n key 带 approval. 前缀：t('approval.runCommand') 等） */}
-          {t(`approval.${getLabelKeyForType(item.type)}`)}
+          {/* 类型标签：i18n 协议键收进 approval.types 子段（与 UI 键的 camelCase 分区），
+              键 = ApprovalType 字面量，零映射层 */}
+          {t(`approval.types.${item.type}`)}
         </span>
-        {!isPending && (
-          <span
-            className={cn(
-              'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
-              isApproved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
-            )}
-          >
-            {isApproved ? t('approval.approved') : t('approval.rejected')}
-          </span>
-        )}
+        {!isPending && <StatusBadge approved={isApproved} />}
         {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
         {!isPending && (
           <Button
@@ -193,78 +281,28 @@ export function InlineApprovalCard({
       )}
       {item.input !== undefined && (
         <div className="mt-1.5">
-          {renderStructuredPreview(item.type, item.input, t, isDarkTheme)}
+          <StructuredPreview type={item.type} input={item.input} />
         </div>
       )}
 
       {/* pending 操作按钮：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */}
       {isPending && (
-        <div className="mt-2 flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1 border px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => void respond(false, false)}
-          >
-            <X className="size-3" />
-            {t('approval.reject')}
-          </Button>
-          {/* 白名单仅对支持记忆的类型显示（run_command/write_file/edit_file；
-              此前无条件渲染，canRememberDecision 为死代码） */}
-          {canRememberDecision(item.type) && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1 px-2 py-1"
-              title={t('approval.whitelistHint')}
-              onClick={() => void respond(true, true)}
-            >
-              <ShieldCheck className="size-3" />
-              {t('approval.whitelist', { minutes: REMEMBER_TTL_MINUTES })}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            className={cn(
-              // 彩色实底按钮前景用 primary-foreground（双主题恒白）：success/error-emphasis 底均达 AA
-              'ml-auto gap-1 px-2 py-1',
-              dangerous
-                ? 'bg-error-emphasis hover:bg-error-emphasis/90'
-                : 'bg-success-emphasis hover:bg-success-emphasis/90',
-            )}
-            onClick={() => void respond(true, false)}
-          >
-            <Check className="size-3" />
-            {t('approval.approve')}
-          </Button>
-        </div>
+        <PendingActions
+          meta={meta}
+          dangerous={dangerous}
+          onRespond={(approved, rememberDecision) => void respond(approved, rememberDecision)}
+        />
       )}
       {/* 拒绝后操作：编辑重提（run_command）+ 跳过（对齐参考项目 P2-10） */}
       {item.status === 'rejected' && !skipped && (
-        <div className="mt-2 flex items-center gap-2">
-          {resubmitCommand !== null && onEditResubmit !== undefined && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1 px-2 py-1"
-              onClick={() => onEditResubmit(resubmitCommand)}
-            >
-              <Pencil className="size-3" />
-              {t('approval.editResubmit')}
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => {
-              setSkipped(true);
-              toast.info(t('approval.skipped'));
-            }}
-          >
-            {t('approval.skip')}
-          </Button>
-        </div>
+        <RejectedActions
+          resubmitCommand={resubmitCommand}
+          onEditResubmit={onEditResubmit}
+          onSkip={() => {
+            setSkipped(true);
+            toast.info(t('approval.skipped'));
+          }}
+        />
       )}
     </div>
   );

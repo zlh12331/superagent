@@ -1,39 +1,52 @@
 // src/renderer/components/chat/ChatInput.tsx
 // 聊天输入框 + 发送/停止按钮 · Aurora 设计系统
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────────
 // 约束（调用方须知）：
 // - 不在此组件内调用 useChat，所有状态由父组件（ChatPanel）传入
 // - 纯展示+交互，可在测试中独立 mock；sendMessage/stop 签名与 useChat 返回值对齐
+// - 本组件只做「编排 composer 各 hook + JSX」：input（值/附件/草稿）、
+//   drag（高度）、suggest（斜杠/提及）、vim（编辑模式）、send（发送管线）
 // ──────────────────────────────────────────────
 
-import { MAX_MESSAGE_LENGTH_CHARS } from '@code-agent/shared/renderer';
 import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { useDraftStore } from '@/stores/persistent/draft-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-import { buildTextWithAttachments } from './attachments';
 import { AttachmentsChips } from './attachments-chips';
 import { SlashSuggestPanel } from './slash-suggest-panel';
-import {
-  filterSlashSuggestions,
-  findSlashSuggestion,
-  type SlashAction,
-  type SlashSuggestion,
-} from './slash-suggestions';
-import { detectSuggestTrigger } from './suggest-trigger';
+import type { SlashAction } from './slash-suggestions';
 import { COMPOSER_AUTO_MAX, useComposerDrag } from './use-composer-drag';
 import { useComposerInput } from './use-composer-input';
-import { useMentionFiles } from './use-mention-files';
+import { useComposerSend } from './use-composer-send';
+import { useComposerSuggest } from './use-composer-suggest';
 import { useVimMode } from './use-vim-mode';
 
-/** 消息最大长度（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS=8000） */
-const MAX_MESSAGE_LENGTH = MAX_MESSAGE_LENGTH_CHARS;
+/**
+ * 是否正在 IME 组合中（中文/日文输入法候选窗）
+ *
+ * React 合成事件不暴露 isComposing，须读原生事件。组合态内按 Enter（选词）/
+ * Esc（取消候选）不应被当作「发送」/「中断生成」处理，否则中文用户
+ * 「打拼音按 Enter 上字」会把半截文本发出去。
+ */
+function isImeComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return event.nativeEvent.isComposing;
+}
+
+/**
+ * 是否为「发送」快捷键（Enter，且不带 Shift/Ctrl/Cmd/Alt）
+ *
+ * 排除 Alt 与 handleVimKey 的判定保持一致（那里显式排除 altKey）：Alt+Enter
+ * 在 Windows 上是系统级组合键语义，不应被本应用当发送处理。
+ */
+function isSendShortcut(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return (
+    event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+  );
+}
 
 interface ChatInputProps {
   /**
@@ -179,53 +192,27 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   };
 
-  // ── 斜杠/提及建议状态（照搬参考项目 useSlashSuggest：支持任意位置触发，取位置靠后者）──
-  // 触发检测为纯函数（suggest-trigger.ts）：slash 1-20 字符、mention ≤30 字符（允许空串）
-  const { atIndex, activeTrigger, activeQuery } = detectSuggestTrigger(value);
-
-  // slash 建议：内置命令过滤（command 带 '/' 前缀，查询词不含 '/'——对齐参考项目 useSlashSuggest 语义）
-  const filteredSuggestions: readonly SlashSuggestion[] =
-    activeTrigger === 'slash' && activeQuery !== null ? filterSlashSuggestions(activeQuery) : [];
-
-  // mention 建议：search.glob 按查询过滤（200ms 防抖与生命周期见 use-mention-files.ts）
-  const mentionFiles = useMentionFiles(activeTrigger, activeQuery, workingDir);
-
-  const mentionOpen = activeTrigger === 'mention' && mentionFiles.length > 0;
-  const slashOpen = activeTrigger === 'slash' && filteredSuggestions.length > 0;
-  // 统一建议面板开关（两者互斥，取靠后者触发）
-  const suggestOpen = slashOpen || mentionOpen;
-  // 键盘高亮索引：ArrowUp/Down 循环选择，Enter/Tab 应用选中项（此前固定第 0 项，
-  // 键盘用户无法选择第 2+ 条建议）；输入内容变化时重置回第一项
-  const [suggestIndex, setSuggestIndex] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 value/activeTrigger 变化重置高亮，不读取其值
-  useEffect(() => {
-    setSuggestIndex(0);
-  }, [value, activeTrigger]);
-
-  /** 应用斜杠建议：替换当前 / 前缀为完整命令 */
-  const applySuggestion = (command: string): void => {
-    // 带 action 的命令：执行动作（对齐参考项目），不填充文本
-    const suggestion = findSlashSuggestion(command);
-    if (suggestion?.action !== undefined) {
-      // 清空输入（suggestOpen 派生自输入值，自动关闭建议面板）
-      setValue('');
-      autoResize();
-      onSlashCommand?.(suggestion.action);
-      return;
-    }
-    setValue(command);
-    autoResize();
-    textareaRef.current?.focus();
-  };
-
-  /** 应用提及建议：替换当前 @查询 为 @完整路径 */
-  const applyMention = (filePath: string): void => {
-    if (atIndex < 0) return;
-    const next = `${value.slice(0, atIndex)}@${filePath} `;
-    setValue(next);
-    autoResize();
-    textareaRef.current?.focus();
-  };
+  // ── 斜杠/提及建议状态机（自 ChatInput 拆出：use-composer-suggest.ts）──
+  // 职责：触发检测 / 候选过滤 / 键盘高亮 / 应用建议（Esc 只清触发段保留其余输入）
+  const {
+    activeTrigger,
+    suggestOpen,
+    filteredSuggestions,
+    mentionFiles,
+    suggestIndex,
+    activeSuggestionLabel,
+    suggestionTotal,
+    applySuggestion,
+    applyMention,
+    handleSuggestKeyDown,
+  } = useComposerSuggest({
+    value,
+    setValue,
+    workingDir,
+    onSlashCommand,
+    textareaRef,
+    onAfterChange: autoResize,
+  });
 
   // 值变化后 auto-resize
   // biome-ignore lint/correctness/useExhaustiveDependencies: 仅在 value 变化时 resize
@@ -243,6 +230,9 @@ export function ChatInput({
       return;
     }
     const onWindowKeyDown = (event: globalThis.KeyboardEvent): void => {
+      // IME 组合态内的 Esc 是「取消候选词」，不得中断生成
+      // （window 监听是 textarea 未聚焦时的补充通道，同样需要该判定）
+      if (event.isComposing) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
         onStop();
@@ -254,12 +244,17 @@ export function ChatInput({
     };
   }, [isStreaming, onStop]);
 
-  // 是否可以发送（非空文本 + 非流式 + 未禁用）
-  // 是否可以发送（非空文本 + 非流式 + 未禁用 + 不在发送中）
-  const [sending, setSending] = useState(false);
-  /** in-flight 发送守卫（ref 同步拦截同帧重复触发；state 驱动按钮禁用渲染） */
-  const sendingRef = useRef(false);
-  const canSend = value.trim().length > 0 && !isStreaming && !disabled && !sending;
+  // 发送管线（自 ChatInput 拆出：use-composer-send.ts）
+  // 职责：in-flight 守卫 / 超长拦截 / 附件拼接 / 清草稿与输入（三路径统一复位）
+  const { canSend, handleSend } = useComposerSend({
+    value,
+    attachments,
+    chatId,
+    clearInput,
+    onSend,
+    isStreaming,
+    disabled,
+  });
 
   /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
   const handlePickFiles = async (): Promise<void> => {
@@ -275,48 +270,28 @@ export function ChatInput({
     }
   };
 
-  /**
-   * 附件内容拼接已提取至 attachments.ts（buildTextWithAttachments）：
-   * file:read 读取 + GBK 转码 + 失败降级标注，本组件只负责调用。
-   */
-
   /** 输入框高度拖拽（use-composer-drag.ts：手柄事件 props） */
   const { handleProps: dragHandleProps } = useComposerDrag(textareaRef);
 
-  /** 发送当前文本：超长拦截 → 附件拼接 → 清空草稿与输入 */
-  const handleSend = async (): Promise<void> => {
-    // in-flight 守卫：附件拼接含真实 IPC 往返，await 窗口内 status 仍为
-    // ready，二次 Enter/点击会重复发送；此处硬拦截（不依赖渲染期的 canSend）
-    if (!canSend || sendingRef.current) {
-      return;
-    }
-    sendingRef.current = true;
-    setSending(true);
-    // 快照本次发送的输入（供超长校验使用）
-    const sentValue = value;
-    // trim：对齐原型 send() 的 input.value.trim()（避免首尾空格进入消息）
-    const base = sentValue.trim();
-    // 超长拦截（对齐 shared 单一真源 MAX_MESSAGE_LENGTH_CHARS）
-    if (base.length > MAX_MESSAGE_LENGTH) {
-      toast.error(t('chat.messageTooLong', { max: MAX_MESSAGE_LENGTH }));
-    } else {
-      const text = await buildTextWithAttachments(base, attachments, {
-        attached: (name) => t('chat.attachmentLabel', { name }),
-        readFailed: (name) => t('chat.attachmentReadFailed', { name }),
-      });
-      onSend(text);
-      // 发送成功：清除本会话草稿（草稿只保留未发送内容）
-      if (chatId !== undefined) {
-        useDraftStore.getState().clearDraft(chatId);
-      }
-      // 清空输入与附件（in-flight 守卫已挡住 await 期间的重复发送）
-      clearInput();
-    }
-    // finally 语义（React Compiler 不优化 try/finally）：超长拦截与正常发送
-    // 两条路径统一在此复位 in-flight 守卫。buildTextWithAttachments 内部已
-    // 自行吞掉读取异常（失败仅追加标注），故此处无需 catch。
-    sendingRef.current = false;
-    setSending(false);
+  /**
+   * vim 模式按键处理
+   *
+   * @returns 是否已消费该按键（true = 调用方直接 return，不再走后续分支）
+   */
+  const handleVimKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
+    const isStreamEsc = event.key === 'Escape' && isStreaming;
+    // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
+    // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
+    if (isStreamEsc || event.ctrlKey || event.metaKey || event.altKey) return false;
+    const consumed = processKey(
+      { key: event.key, selectionStart: event.currentTarget.selectionStart },
+      value,
+    );
+    if (!consumed) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
   };
 
   /**
@@ -326,68 +301,17 @@ export function ChatInput({
    * - Shift+Enter：换行（默认行为，不阻止）
    * - Esc（流式状态）：中断生成，对齐原型 composer-hint "Esc 中断"
    */
-  /** 建议面板键盘处理：方向键循环选择，Tab/Enter 应用选中项，Esc 关闭仅清除触发段 */
-  const handleSuggestKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    if (!suggestOpen) {
-      return false;
-    }
-    const count = slashOpen ? filteredSuggestions.length : mentionFiles.length;
-    const selected = Math.min(suggestIndex, Math.max(0, count - 1));
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (count > 0) {
-        setSuggestIndex((i) =>
-          event.key === 'ArrowDown' ? (i + 1) % count : (i - 1 + count) % count,
-        );
-      }
-      return true;
-    }
-    if (event.key === 'Tab' || event.key === 'Enter') {
-      const selectedSuggestion = filteredSuggestions[selected];
-      const selectedMention = mentionFiles[selected];
-      if (slashOpen && selectedSuggestion !== undefined) {
-        event.preventDefault();
-        applySuggestion(selectedSuggestion.command);
-      } else if (mentionOpen && selectedMention !== undefined) {
-        event.preventDefault();
-        applyMention(selectedMention);
-      }
-      return true;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      // 关闭建议：只清除触发段（"/xxx" 或 "@xxx"），保留用户其余输入——
-      // 此前 setValue('') 会清空整个输入框且同步覆盖草稿（数据丢失）
-      const caret = event.currentTarget.selectionStart ?? value.length;
-      const triggerChar = slashOpen ? '/' : '@';
-      const at = value.lastIndexOf(triggerChar, Math.max(0, caret - 1));
-      if (at >= 0) {
-        setValue(value.slice(0, at) + value.slice(caret));
-      }
-      return true;
-    }
-    return false;
-  };
-
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // ── vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）──
-    if (vimEnabled) {
-      // 流式中 Esc 仍走原逻辑（中断生成），vim 不吞掉
-      const isStreamEsc = event.key === 'Escape' && isStreaming;
-      // 带修饰键的组合（复制/粘贴/全选/系统快捷键）不进 vim 状态机：
-      // vim 键表无修饰键概念，Ctrl+V 会命中 'v' 被吞，Ctrl+A 会误入 insert
-      if (!isStreamEsc && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        const consumed = processKey(
-          { key: event.key, selectionStart: event.currentTarget.selectionStart },
-          value,
-        );
-        if (consumed) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-      }
-    }
+    // ── IME 组合态优先（2026-09 审计修复）──
+    // 中文/日文输入法候选窗内的 Enter（选用候选词）与 Esc（取消候选）都会派发
+    // keydown，且 key 就是 'Enter'/'Escape'、无修饰键——若不拦，用户「打中文按
+    // Enter 选词」会直接把半截文本发出去。本项目自带 zh-CN 语言包，属主干路径。
+    // 判定用 nativeEvent.isComposing（React 合成事件不暴露该字段）。
+    if (isImeComposing(event)) return;
+
+    // vim 模式分支（normal 态拦截全部按键；insert 态仅 Esc 切回 normal）
+    if (vimEnabled && handleVimKey(event)) return;
+
     // 流式状态按 Esc：中断生成
     if (event.key === 'Escape' && isStreaming) {
       event.preventDefault();
@@ -399,7 +323,7 @@ export function ChatInput({
       return;
     }
     // Enter 且无 Shift / Ctrl / Cmd 同时按：发送
-    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+    if (isSendShortcut(event)) {
       event.preventDefault();
       handleSend();
     }
@@ -425,6 +349,18 @@ export function ChatInput({
         onSelectCommand={applySuggestion}
         onSelectFile={applyMention}
       />
+      {/* 建议面板当前高亮项的播报：combobox 焦点模型在 textarea 上不合法
+          （ARIA in HTML 不允许覆盖 textbox 角色），故用 sr-only live region
+          满足 4.1.3 Status Messages——键盘上下移动高亮时读屏可听到当前项 */}
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {suggestOpen && activeSuggestionLabel !== ''
+          ? t('chat.suggestAnnounce', {
+              current: suggestIndex + 1,
+              total: suggestionTotal,
+              label: activeSuggestionLabel,
+            })
+          : ''}
+      </span>
       {/* 附件 chip 列表（自 ChatInput 拆出：attachments-chips.tsx） */}
       <AttachmentsChips attachments={attachments} onRemove={removeAttachment} />
       {/* 文本域：.composer-input（透明背景，focus 时 box 上浮发光）
@@ -434,6 +370,10 @@ export function ChatInput({
         className="composer-input"
         rows={1}
         aria-label={t('chat.inputLabel')}
+        // 输入框 ↔ 建议面板的程序化关联（aria-controls 是 ARIA 全局属性，合法）；
+        // 不用 combobox 角色：ARIA in HTML 规定 textarea 不允许覆盖 textbox 角色，
+        // 故当前高亮项改由下方 sr-only live region 播报（见 suggestAnnounce）
+        aria-controls={suggestOpen ? 'chat-input-suggest' : undefined}
         id="chat-input"
         spellCheck={false}
         autoComplete="off"
@@ -488,7 +428,9 @@ export function ChatInput({
               {vimState.mode === 'normal' ? t('chat.vimNormal') : t('chat.vimInsert')}
             </span>
           )}
-          <kbd>⏎</kbd> {t('chat.send')} · <kbd>⇧⏎</kbd> {t('chat.newline')}
+          {/* 快捷键提示：键名对读屏有意义（「Enter 发送 · Shift+Enter 换行」），
+              故不用 aria-hidden 抹掉字形，而是让 kbd 承载可读键名 */}
+          <kbd>Enter</kbd> {t('chat.send')} · <kbd>Shift+Enter</kbd> {t('chat.newline')}
           {isStreaming ? (
             <>
               {' · '}

@@ -17,7 +17,7 @@ import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { MCP_SERVERS_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { SectionTitle, SettingRow } from '../settings-controls';
@@ -43,11 +43,11 @@ const TRANSPORT_OPTIONS: readonly McpTransport[] = ['stdio', 'sse', 'streamable-
 /** 状态徽章配色（键名与主进程 McpServerStatus 对齐，含 snake_case） */
 const STATUS_BADGE: Record<string, string> = {
   running: 'bg-success/10 text-success-text',
-  starting: 'bg-[var(--info-blue)] text-[var(--accent-2)]',
+  starting: 'bg-info-blue text-accent-2',
   error: 'bg-error/10 text-error-text',
   stopped: 'bg-muted text-muted-foreground',
   // biome-ignore lint/style/useNamingConvention: 键名与主进程状态枚举对齐（McpServerStatus 含 snake_case）
-  stopped_with_error: 'bg-[var(--amber)]/10 text-warn-text',
+  stopped_with_error: 'bg-amber/10 text-warn-text',
 };
 
 /**
@@ -236,7 +236,7 @@ export function McpSection(): ReactElement {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: MCP_SERVERS_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { servers: [] };
       }
       return unwrap(await window.api.mcp.list({}));
@@ -258,6 +258,9 @@ export function McpSection(): ReactElement {
       url?: string;
       headers?: Record<string, string>;
     }) => {
+      // 浏览器模式（dev 预览）无桥：抛可读错误交给 onError 提示，
+      // 而非在成员访问阶段抛 TypeError（挂在其后的 .catch 兜不住）
+      if (!hasIpcBridge()) throw new Error('window.api unavailable');
       return unwrap(
         await window.api.mcp.start({
           name: config.name,
@@ -287,6 +290,7 @@ export function McpSection(): ReactElement {
   // 停止 mutation
   const stopMutation = useMutation({
     mutationFn: async (serverName: string) => {
+      if (!hasIpcBridge()) throw new Error('window.api unavailable');
       return unwrap(await window.api.mcp.stop({ name: serverName }));
     },
     onSuccess: () => {

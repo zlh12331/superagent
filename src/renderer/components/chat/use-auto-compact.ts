@@ -19,13 +19,16 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 /** 自动压缩触发阈值（消息条数；长会话护栏，实验性默认关闭） */
 export const AUTO_COMPACT_THRESHOLD = 600;
 
+/** 回合状态（ChatMessageListProps.status 同款联合；useChat 四态） */
+type TurnStatus = 'submitted' | 'streaming' | 'ready' | 'error';
+
 export interface AutoCompactOptions {
   /** 会话 id（切换会话时重置水位线） */
   readonly chatId: string;
   /** 当前消息列表（仅读 length） */
   readonly messages: readonly UIMessage[];
   /** 回合状态 */
-  readonly status: string;
+  readonly status: TurnStatus;
   /** 触发压缩的回调（ChatPanel 注入 compactMutation.mutate） */
   readonly compact: () => void;
   /** 阈值覆盖（测试用；生产默认 AUTO_COMPACT_THRESHOLD） */

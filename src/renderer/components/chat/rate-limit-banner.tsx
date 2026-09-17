@@ -13,7 +13,11 @@ import { type ReactElement, useEffect } from 'react';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { isRateLimitExpired, useRateLimitStore } from '@/stores/transient/rate-limit-store';
+import {
+  AUTO_HIDE_MS,
+  isRateLimitExpired,
+  useRateLimitStore,
+} from '@/stores/transient/rate-limit-store';
 
 /**
  * 限流提示横幅
@@ -26,22 +30,30 @@ export function RateLimitBanner(): ReactElement | null {
   const triggeredAt = useRateLimitStore((s) => s.triggeredAt);
   const dismiss = useRateLimitStore((s) => s.dismiss);
 
-  // 自动隐藏：触发超过 5 分钟后消失（定时器兜底，避免 store 残留）。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意监听 triggeredAt 重置调度（重复限流时 60s 检查点重启），体内读 store 最新值
+  // 自动隐藏：到「触发时刻 + 5 分钟」那一刻把横幅收掉。
+  //
+  // 修复（2026-09 审计）：此前只挂**一个固定 60s 的一次性定时器**——60s 到点时
+  // 才过去 60s（< 5min）故不 dismiss，且依赖 [visible, triggeredAt] 未变、组件
+  // 也不重渲染 → 之后再无任何定时器，横幅**永久残留**（除非用户手点 ×）。
+  // 既有测试用 vi.setSystemTime 把系统时间直接推到 6 分钟后，恰好掩盖了该缺陷。
+  //
+  // 现按**剩余时间**直接调度到过期时刻（无需轮询）：到点 dismiss → store 更新
+  // → 重渲染 → 返回 null。重复限流会刷新 triggeredAt，effect 依赖变化即重排。
   useEffect(() => {
     if (!visible) return;
-    const timer = setTimeout(() => {
-      if (isRateLimitExpired(useRateLimitStore.getState().triggeredAt)) {
-        useRateLimitStore.getState().dismiss();
-      }
-    }, 60_000);
+    const remaining = triggeredAt + AUTO_HIDE_MS - Date.now();
+    if (remaining <= 0) {
+      dismiss();
+      return;
+    }
+    const timer = setTimeout(dismiss, remaining);
     return () => clearTimeout(timer);
-  }, [visible, triggeredAt]);
+  }, [visible, triggeredAt, dismiss]);
 
   if (!visible || isRateLimitExpired(triggeredAt)) return null;
 
   return (
-    <Alert className="border-[var(--amber)]/40 bg-[var(--amber)]/10 text-warn-text font-mono text-xs">
+    <Alert className="border-amber/40 bg-amber/10 text-warn-text font-mono text-xs">
       <AlertTriangle className="text-warn-text" strokeWidth={2} />
       {/* 单行形态（用户要求）：标题与关闭按钮同行，× 在行尾 */}
       <AlertTitle className="font-mono text-xs flex items-center gap-2">
@@ -52,7 +64,7 @@ export function RateLimitBanner(): ReactElement | null {
           onClick={dismiss}
           aria-label={t('common.close')}
           title={t('common.close')}
-          className="text-warn-text size-4 shrink-0 hover:bg-[var(--amber)]/15"
+          className="text-warn-text size-4 shrink-0 hover:bg-amber/15"
         >
           <X className="size-3" strokeWidth={2.5} />
         </Button>

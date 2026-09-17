@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
  * 包装 Radix ContextMenu Primitive，管理打开状态。
  * Trigger 包裹目标元素，右键触发；Portal 渲染到 body（不受父级 transform 影响）。
  * ──────────────────────────────
- * 变体：Item 支持 inset；Shortcut 键位提示；CheckboxItem/RadioItem 选中语义
+ * 变体：Item 支持 inset（缩进）与 variant="destructive"（危险操作红字）
  * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
  * 依赖：@radix-ui/react-context-menu
  * 可访问性：Radix 内置 focus trap / 方向键导航 / Esc / aria-haspopup=menu

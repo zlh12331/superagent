@@ -29,12 +29,9 @@ function collectKeys(value: unknown, prefix = '', keys = new Set<string>()): Set
   return keys;
 }
 
-/** 加载语言包的 translation 层（i18n config 解包后的实际命名空间内容） */
+/** 加载语言包内容（语言包与命名空间一一对应、扁平无包装） */
 function loadTranslation(lang: 'en' | 'zh-CN', ns: 'common' | 'errors'): unknown {
-  const raw = JSON.parse(readFileSync(join(LOCALES_DIR, lang, `${ns}.json`), 'utf-8')) as {
-    translation: unknown;
-  };
-  return raw.translation;
+  return JSON.parse(readFileSync(join(LOCALES_DIR, lang, `${ns}.json`), 'utf-8'));
 }
 
 describe('i18n 资源一致性', () => {

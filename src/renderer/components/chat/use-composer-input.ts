@@ -121,13 +121,14 @@ export function useComposerInput({
   }, [isControlled, onValueChange, onAfterChange]);
 
   // 外部注入值（编辑重提 / 目标预填）：非受控模式同步，保持草稿语义
+  // 受控模式跳过：value 由外部持有，setInternalValue 是无效写入（且会破坏受控语义）
   useEffect(() => {
-    if (injectedValue === undefined) {
+    if (injectedValue === undefined || isControlled) {
       return;
     }
     setInternalValue(injectedValue);
     onAfterChange?.();
-  }, [injectedValue, onAfterChange]);
+  }, [injectedValue, isControlled, onAfterChange]);
 
   // 草稿保存：非受控 + 有 chatId 时，文本/附件变化写入 draft-store
   // 切换帧守卫：chatId 变化的那次渲染 internalValue 仍是旧会话内容，跳过防交叉污染

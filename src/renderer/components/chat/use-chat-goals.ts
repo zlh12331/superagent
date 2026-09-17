@@ -6,6 +6,7 @@
 // ——避免「删除后目标栏仍在」。
 // ──────────────────────────────────────────────
 
+import type { GoalInfo } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -40,18 +41,18 @@ export function useChatGoals(chatId: string): ChatGoals {
 
   const goalsQuery = useQuery({
     queryKey: GOAL_LIST_QUERY_KEY(chatId),
-    enabled: chatId !== undefined,
+    // chatId 为必填 string（hook 签名），enabled 恒真但保留：goal:list 协议允许
+    // sessionId 省略（= 全部会话），显式声明防止未来签名放宽时误拉全量
     queryFn: async () => {
-      if (chatId === undefined) return { goals: [] as unknown[] };
       try {
         return unwrap(await window.api.goal.list({ sessionId: chatId }));
       } catch {
         // 拉取失败非关键路径：返回空目标，不抛错中断查询
-        return { goals: [] as unknown[] };
+        return { goals: [] as readonly GoalInfo[] };
       }
     },
   });
-  const goals = (goalsQuery.data?.goals ?? []) as ReadonlyArray<ChatGoalView>;
+  const goals = goalsQuery.data?.goals ?? [];
 
   // 错误反馈（一致性审计：写路径 mutation 必须有 onError——此前创建/清除失败静默）
   const { getErrorMessage } = useErrorMessage();
@@ -61,7 +62,6 @@ export function useChatGoals(chatId: string): ChatGoals {
 
   const createGoalMutation = useMutation({
     mutationFn: async (condition: string) => {
-      if (chatId === undefined) return;
       unwrap(await window.api.goal.create({ sessionId: chatId, condition }));
     },
     onSuccess: () => {
@@ -72,7 +72,6 @@ export function useChatGoals(chatId: string): ChatGoals {
 
   const clearGoalMutation = useMutation({
     mutationFn: async () => {
-      if (chatId === undefined) return;
       unwrap(await window.api.goal.clear({ sessionId: chatId }));
     },
     onSuccess: () => {
@@ -82,9 +81,12 @@ export function useChatGoals(chatId: string): ChatGoals {
   });
 
   // 当前目标：active 优先，其次 completed（可能刚完成待用户确认）；
-  // aborted（已清除/被覆盖的旧目标）不展示——避免“删除后目标栏仍在”
-  const currentGoal: ChatGoalView | undefined =
-    goals.find((g) => g.status === 'active') ?? goals.find((g) => g.status === 'completed');
+  // aborted（已清除/被覆盖的旧目标）不展示——避免“删除后目标栏仍在”。
+  // 无需类型谓词：GoalInfo 结构化超集（condition + status ⊇ ChatGoalView），
+  // find 结果经结构化赋值收敛为 ChatGoalView（谓词反而不合法——子类型方向错误）
+  const currentGoal: ChatGoalView | undefined = goals.find(
+    (g) => g.status === 'active' || g.status === 'completed',
+  );
 
   return {
     currentGoal,

@@ -69,6 +69,31 @@ function createDefaultValues(): ModelConfigFormValues {
 }
 
 /**
+ * 表单可选项 → mutation payload 片段（空串视为「未提供」）
+ *
+ * exactOptionalPropertyTypes 下不能直接传 `undefined`，故统一条件展开。
+ * 集中一处后各保存分支只做 `...fields.displayName` 这类展开，不再重复写三元。
+ * `apiKeyValue` 单独给出原始值（服务商模式需先单独调 setApiKey mutation）。
+ */
+function trimOptionalFields(values: ModelConfigFormValues): {
+  readonly displayName: Record<string, string>;
+  readonly requestUrl: Record<string, string>;
+  readonly apiKey: Record<string, string>;
+  readonly apiKeyValue: string | undefined;
+} {
+  const displayName = values.displayName.trim();
+  const requestUrl = values.requestUrl.trim();
+  const apiKey = values.apiKey.trim();
+  return {
+    displayName: displayName !== '' ? { displayName } : {},
+    // update / add 契约里请求地址字段名是 baseUrl
+    requestUrl: requestUrl !== '' ? { baseUrl: requestUrl } : {},
+    apiKey: apiKey !== '' ? { apiKey } : {},
+    apiKeyValue: apiKey !== '' ? apiKey : undefined,
+  };
+}
+
+/**
  * 模型配置弹窗
  *
  * - 服务商模式：选厂商进入，显示厂商/模型下拉 + 模型 ID + API 密钥
@@ -197,7 +222,13 @@ export function ModelConfigDialog({
     }
   };
 
-  /** 保存（新增或编辑） */
+  /**
+   * 保存（新增或编辑）
+   *
+   * 三个分支的 payload 构造抽到模块级纯函数（buildAddPayload 等）——此前
+   * 每个分支内联 3-4 个 `...(x !== undefined ? { y: x } : {})` 展开，使本函数
+   * 认知复杂度达 40（阈值 15）。现在分支只负责「调哪个 mutation + 提示什么」。
+   */
   const handleSave = async (): Promise<void> => {
     const error = validate();
     if (error !== null) {
@@ -207,32 +238,29 @@ export function ModelConfigDialog({
     const connected = await runConnectivityTest();
     if (!connected) return;
 
-    const apiKey = values.apiKey.trim() !== '' ? values.apiKey.trim() : undefined;
-    const requestUrl = values.requestUrl.trim() !== '' ? values.requestUrl.trim() : undefined;
-    const displayName = values.displayName.trim() !== '' ? values.displayName.trim() : undefined;
-
+    const fields = trimOptionalFields(values);
     try {
       if (isEdit) {
         await updateMutation.mutateAsync({
           modelId: values.modelId.trim(),
-          ...(displayName !== undefined ? { displayName } : {}),
-          ...(requestUrl !== undefined ? { baseUrl: requestUrl } : {}),
-          ...(apiKey !== undefined ? { apiKey } : {}),
+          ...fields.displayName,
+          ...fields.requestUrl,
+          ...fields.apiKey,
         });
         toast.success(t('settings.modelMgmt.modelUpdated'));
       } else if (isProviderMode) {
         // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
         // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）
-        if (apiKey !== undefined) {
+        if (fields.apiKeyValue !== undefined) {
           await setApiKeyMutation.mutateAsync({
             provider: values.providerKind,
-            apiKey,
+            apiKey: fields.apiKeyValue,
           });
         }
         await addMutation.mutateAsync({
           modelId: effectiveModelId,
           providerKind: values.providerKind,
-          ...(displayName !== undefined ? { displayName } : {}),
+          ...fields.displayName,
         });
         toast.success(t('settings.modelMgmt.modelAdded'));
       } else {
@@ -240,9 +268,9 @@ export function ModelConfigDialog({
         await addMutation.mutateAsync({
           modelId: effectiveModelId,
           providerKind: values.providerKind,
-          ...(requestUrl !== undefined ? { baseUrl: requestUrl } : {}),
-          ...(apiKey !== undefined ? { apiKey } : {}),
-          ...(displayName !== undefined ? { displayName } : {}),
+          ...fields.requestUrl,
+          ...fields.apiKey,
+          ...fields.displayName,
         });
         toast.success(t('settings.modelMgmt.modelAdded'));
       }

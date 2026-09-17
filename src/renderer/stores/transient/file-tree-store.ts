@@ -7,15 +7,16 @@
 // - 维护激活的文件路径（高亮当前选中文件）
 // - 缓存已加载的目录条目（path -> FileEntry[]）
 // - 维护加载中目录集合（避免重复请求 + UI 骨架屏）
-// - 提供文件变更事件的增量更新（upsert/remove/rename）
-// - 维护新建/重命名的内联编辑状态（creatingEntry / renamingPath）
-// - 维护操作中路径集合（pendingOps，用于禁用相关 UI 防止重复操作）
+// - 提供文件变更事件的增量更新（watch delete 事件 → removeEntry；create/rename 走重载）
+// - 维护新建流程的内联编辑状态（creatingEntry；节点「更多操作」菜单已按用户要求移除）
+// - 维护新建在途的父目录集合（pendingDirs：IPC 未完成期间给出可视反馈）
 //
 // 设计：
 // - 纯状态容器：不持有 IPC 订阅与请求逻辑（由 useFileTree / useFileTreeOps hook 负责）
 // - 扁平化缓存：entries Map 按「父目录路径 -> 子条目数组」组织，避免递归树结构序列化
 // - 排序约定：目录在前、文件在后；同类按名称升序（不区分大小写）
-// - 内联编辑：新建/重命名时先在 UI 显示临时节点（tempName），用户确认后再调 IPC 落盘
+// - 内联新建：在 UI 显示临时输入节点，用户确认后由 useFileTreeOps 调 IPC 落盘
+//   （输入值由 DOM input 直接持有，不进 store——tempName 曾为此设计但无消费者，已删）
 // - 不持久化：文件树状态随会话切换重置，重启后为空
 // ──────────────────────────────────────────────────────────────
 
@@ -32,10 +33,17 @@ export interface CreatingEntry {
   /** 新建条目所在的父目录（绝对路径） */
   readonly parentDir: string;
   /** 新建类型：文件或目录 */
-  readonly type: 'file' | 'directory';
-  /** 临时显示的名称（用户输入实时更新，初始为空字符串） */
-  readonly tempName: string;
+  readonly type: CreateEntryType;
 }
+
+/**
+ * 可新建的条目类型（唯一真源）
+ *
+ * 排除 FileEntry.type 里的 'symlink'——符号链接不可由用户新建。
+ * 组件与容器的回调签名统一引用本类型，避免各处重复写 'file' | 'directory'
+ * 造成漂移（新增类型时漏改一处即静默失配）。
+ */
+export type CreateEntryType = 'file' | 'directory';
 
 /**
  * 文件树状态形状
@@ -51,10 +59,20 @@ interface FileTreeState {
   readonly entries: ReadonlyMap<string, readonly FileEntry[]>;
   /** 加载中的目录路径集合（用于骨架屏展示） */
   readonly loadingPaths: ReadonlySet<string>;
-  /** 新建条目的内联编辑状态（null 表示未在新建流程） */
+  /**
+   * 新建条目的内联编辑状态（null 表示未在新建流程）
+   *
+   * 无「重命名」态：节点重命名能力已随更多操作菜单一并移除，仅保留新建。
+   */
   readonly creatingEntry: CreatingEntry | null;
-  /** 操作中的路径集合（创建/删除/重命名进行中，用于禁用相关 UI 防止重复操作） */
-  readonly pendingOps: ReadonlySet<string>;
+  /**
+   * 新建操作在途的**父目录**路径集合
+   *
+   * 键必须是被渲染出的目录条目路径，`.ft-row.pending` 才可能命中：待创建的新条目
+   * 此刻尚不在 entries 中，按新条目路径标记则没有任何行会消费该状态（曾为此 bug）。
+   * 因只有目录能作为父目录，文件行不订阅本集合。
+   */
+  readonly pendingDirs: ReadonlySet<string>;
 
   // ── 浏览/加载方法 ──────────────────────────────────
   /** 设置根目录（会切换会话时调用，自动重置状态并展开根目录） */
@@ -69,26 +87,20 @@ interface FileTreeState {
   readonly setActiveFile: (path: string | null) => void;
   /** 设置指定目录的子条目（list IPC 返回后调用） */
   readonly setEntries: (path: string, entries: readonly FileEntry[]) => void;
-  /** 增量更新：新增或替换条目（file:watch create 事件） */
-  readonly upsertEntry: (parentDir: string, entry: FileEntry) => void;
   /** 增量更新：移除条目（file:watch delete 事件） */
   readonly removeEntry: (parentDir: string, entryPath: string) => void;
-  /** 增量更新：重命名条目（file:watch rename 事件） */
-  readonly renameEntry: (parentDir: string, oldPath: string, newEntry: FileEntry) => void;
   /** 设置目录加载状态（list IPC 请求前后调用） */
   readonly setLoading: (path: string, loading: boolean) => void;
 
   // ── 新建内联编辑方法 ────────────────────────────
-  /** 开始新建流程：在指定父目录下显示临时节点，tempName 初始为空 */
-  readonly startCreate: (parentDir: string, type: 'file' | 'directory') => void;
-  /** 更新临时节点名称（用户输入时实时调用） */
-  readonly setCreatingName: (name: string) => void;
+  /** 开始新建流程：在指定父目录下显示临时节点 */
+  readonly startCreate: (parentDir: string, type: CreateEntryType) => void;
   /** 取消新建流程（用户按 Esc 或失焦时调用） */
   readonly cancelCreate: () => void;
 
-  // ── 操作中状态方法 ──────────────────────────────────
-  /** 标记路径为操作中（创建/删除/重命名 IPC 发起前调用，IPC 完成后清除） */
-  readonly setPendingOp: (path: string, pending: boolean) => void;
+  // ── 新建在途状态方法 ────────────────────────────────
+  /** 标记父目录有新建在途（create IPC 发起前调用，完成后清除） */
+  readonly setPendingDir: (path: string, pending: boolean) => void;
 
   /** 重置所有状态（会话切换、组件卸载时调用） */
   readonly reset: () => void;
@@ -110,14 +122,14 @@ interface FileTreeState {
  * const toggle = useFileTreeStore((s) => s.toggleExpand);
  * ```
  */
-export const useFileTreeStore = create<FileTreeState>()((set) => ({
+export const useFileTreeStore = create<FileTreeState>()((set, get) => ({
   rootPath: null,
   expandedPaths: new Set<string>(),
   activeFilePath: null,
   entries: new Map<string, readonly FileEntry[]>(),
   loadingPaths: new Set<string>(),
   creatingEntry: null,
-  pendingOps: new Set<string>(),
+  pendingDirs: new Set<string>(),
 
   setRootPath: (path) =>
     set(() => {
@@ -129,7 +141,7 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
           entries: new Map<string, readonly FileEntry[]>(),
           loadingPaths: new Set<string>(),
           creatingEntry: null,
-          pendingOps: new Set<string>(),
+          pendingDirs: new Set<string>(),
         };
       }
       // 切换根目录时重置状态，并默认展开根目录
@@ -140,7 +152,7 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
         entries: new Map<string, readonly FileEntry[]>(),
         loadingPaths: new Set<string>(),
         creatingEntry: null,
-        pendingOps: new Set<string>(),
+        pendingDirs: new Set<string>(),
       };
     }),
 
@@ -189,33 +201,12 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
       return { entries: next };
     }),
 
-  upsertEntry: (parentDir, entry) =>
-    set((state) => {
-      const existing = state.entries.get(parentDir) ?? [];
-      // 移除同名旧条目（若存在），追加新条目并重新排序
-      const filtered = existing.filter((e) => e.name !== entry.name);
-      const next = [...filtered, entry].sort(compareEntries);
-      const entries = new Map(state.entries);
-      entries.set(parentDir, next);
-      return { entries };
-    }),
-
   removeEntry: (parentDir, entryPath) =>
     set((state) => {
       const existing = state.entries.get(parentDir);
-      if (existing === undefined) return state;
+      // 父目录无缓存：无可移除项，返回空补丁（不产生无谓状态对象）
+      if (existing === undefined) return {};
       const next = existing.filter((e) => e.path !== entryPath);
-      const entries = new Map(state.entries);
-      entries.set(parentDir, next);
-      return { entries };
-    }),
-
-  renameEntry: (parentDir, oldPath, newEntry) =>
-    set((state) => {
-      const existing = state.entries.get(parentDir) ?? [];
-      // 移除旧路径条目，追加新条目并重新排序
-      const filtered = existing.filter((e) => e.path !== oldPath);
-      const next = [...filtered, newEntry].sort(compareEntries);
       const entries = new Map(state.entries);
       entries.set(parentDir, next);
       return { entries };
@@ -235,27 +226,21 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
   // ── 新建内联编辑 ─────────────────────────────────
   startCreate: (parentDir, type) =>
     set(() => ({
-      creatingEntry: { parentDir, type, tempName: '' },
+      creatingEntry: { parentDir, type },
     })),
-
-  setCreatingName: (name) =>
-    set((state) => {
-      if (state.creatingEntry === null) return state;
-      return { creatingEntry: { ...state.creatingEntry, tempName: name } };
-    }),
 
   cancelCreate: () => set(() => ({ creatingEntry: null })),
 
   // ── 操作中状态 ──────────────────────────────────────
-  setPendingOp: (path, pending) =>
+  setPendingDir: (path, pending) =>
     set((state) => {
-      const next = new Set(state.pendingOps);
+      const next = new Set(state.pendingDirs);
       if (pending) {
         next.add(path);
       } else {
         next.delete(path);
       }
-      return { pendingOps: next };
+      return { pendingDirs: next };
     }),
 
   reset: () =>
@@ -266,13 +251,12 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
       entries: new Map<string, readonly FileEntry[]>(),
       loadingPaths: new Set<string>(),
       creatingEntry: null,
-      pendingOps: new Set<string>(),
+      pendingDirs: new Set<string>(),
     })),
 
   getAllFilePaths: () => {
     const result: string[] = [];
-    const state = useFileTreeStore.getState();
-    for (const entries of state.entries.values()) {
+    for (const entries of get().entries.values()) {
       for (const entry of entries) {
         if (entry.type !== 'directory') {
           result.push(entry.path);
@@ -286,7 +270,7 @@ export const useFileTreeStore = create<FileTreeState>()((set) => ({
 /**
  * 条目排序：目录在前、文件在后；同类按名称升序（不区分大小写）
  *
- * 用于 setEntries / upsertEntry / renameEntry 时保证 UI 渲染稳定。
+ * 用于 setEntries 时保证 UI 渲染稳定。
  */
 function compareEntries(a: FileEntry, b: FileEntry): number {
   // 目录在前

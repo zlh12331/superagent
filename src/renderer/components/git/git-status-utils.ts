@@ -1,76 +1,77 @@
-// git-status-utils.ts（自 GitPanel 拆分）
-// Git 文件状态 → 图标/颜色/文案（纯函数）
+// src/renderer/components/git/git-status-utils.ts
+// Git 文件状态 → 图标/配色/文案 元数据表（单一真源）
 // ──────────────────────────────
 // 拆分背景：GitPanel 486 行，纯函数与组件混合，按职责提取
+//
+// 表驱动重构（2026-09-15）：原 getIconForFileStatus / getColorForFileStatus /
+// getLabelKeyForFileStatus 三个平行 switch 合并为单表——新增状态从改 3 处降为 1 行；
+// satisfies Record 保留编译期穷尽性。文案键对齐协议值（t(`git.${status}`)）零映射。
+//
+// 图标色与文本色分离（2026-09 file-tree 审计同批）：原单字段 className 同时喂给
+// 12px 图标和 9px 状态标签，且 conflicted 里混着 font-semibold（对 SVG 无意义）
+// ——一个字段承担两种消费场景，必然在某一侧取错令牌。拆为 iconClassName /
+// labelClassName 后：
+// - 图标用语义基色（accent-2/success/warn/error），表达"这是什么状态"
+// - 标签用 -text 变体（亮色下加深保 4.5:1，见 tokens.css 注释），9px 小字才够清晰
+// 同域的 git-panel-parts.tsx 一直用的是 -text 变体，此前两处各写一套。
 // ──────────────────────────────
 
 import type { GitFileStatus } from '@code-agent/shared/main';
+import type { LucideIcon } from 'lucide-react';
 import { AlertCircle, FileEdit, FilePlus, FileQuestion, FileX } from 'lucide-react';
 
-export function getIconForFileStatus(status: GitFileStatus['status']): typeof FileEdit {
-  switch (status) {
-    case 'modified':
-      return FileEdit;
-    case 'added':
-      return FilePlus;
-    case 'deleted':
-      return FileX;
-    case 'renamed':
-      return FileEdit;
-    case 'untracked':
-      return FileQuestion;
-    case 'conflicted':
-      return AlertCircle;
-  }
+/** 单个 Git 文件状态的全量 UI 元数据 */
+interface GitStatusMeta {
+  /** 状态图标 */
+  readonly icon: LucideIcon;
+  /** 图标配色（语义基色） */
+  readonly iconClassName: string;
+  /** 状态标签配色（-text 对比度变体）与字重 */
+  readonly labelClassName: string;
 }
 
 /**
- * 按文件状态获取颜色 class
- */
-export function getColorForFileStatus(status: GitFileStatus['status']): string {
-  switch (status) {
-    case 'modified':
-      return 'text-[var(--warn)]';
-    case 'added':
-      return 'text-[var(--success)]';
-    case 'deleted':
-      return 'text-[var(--error)]';
-    case 'renamed':
-      return 'text-[var(--accent-2)]';
-    case 'untracked':
-      return 'text-muted-foreground';
-    case 'conflicted':
-      return 'text-[var(--error)] font-semibold';
-  }
-}
-
-/**
- * 按文件状态获取本地化 key（组件内 t(`git.${key}`) 渲染）
- */
-export function getLabelKeyForFileStatus(status: GitFileStatus['status']): string {
-  switch (status) {
-    case 'modified':
-      return 'statusModified';
-    case 'added':
-      return 'statusAdded';
-    case 'deleted':
-      return 'statusDeleted';
-    case 'renamed':
-      return 'statusRenamed';
-    case 'untracked':
-      return 'statusUntracked';
-    case 'conflicted':
-      return 'statusConflict';
-  }
-}
-
-/**
- * Git 状态展示面板
+ * Git 文件状态元数据表（单一真源）
  *
- * 三段式布局：分支信息 / 变更文件列表 / 选中文件 diff。
- *
- * @example
- * ```tsx
- * <GitPanel path={repoPath} />
- * ```
+ * satisfies Record<GitFileStatus['status'], GitStatusMeta>：新增协议状态而未登记
+ * 元数据时编译失败——穷尽性由类型系统保证。
+ * 文案：i18n 键与协议值一致（git.modified / git.added …），消费 t(`git.${status}`)
  */
+const GIT_STATUS_META = {
+  modified: {
+    icon: FileEdit,
+    iconClassName: 'text-warn',
+    labelClassName: 'text-warn-text',
+  },
+  added: {
+    icon: FilePlus,
+    iconClassName: 'text-success',
+    labelClassName: 'text-success-text',
+  },
+  deleted: {
+    icon: FileX,
+    iconClassName: 'text-error',
+    labelClassName: 'text-error-text',
+  },
+  renamed: {
+    icon: FileEdit,
+    iconClassName: 'text-accent-2',
+    // accent-2 无 -text 变体；全仓既有用法即以它作文本色（approval-preview 等）
+    labelClassName: 'text-accent-2',
+  },
+  untracked: {
+    icon: FileQuestion,
+    iconClassName: 'text-muted-foreground',
+    labelClassName: 'text-muted-foreground',
+  },
+  conflicted: {
+    icon: AlertCircle,
+    iconClassName: 'text-error',
+    labelClassName: 'text-error-text font-semibold',
+  },
+} as const satisfies Record<GitFileStatus['status'], GitStatusMeta>;
+
+/** 读取 Git 文件状态全量 UI 元数据（唯一查询入口，替代原 3 个平行查询函数） */
+export function getGitStatusMeta(status: GitFileStatus['status']): GitStatusMeta {
+  return GIT_STATUS_META[status];
+}

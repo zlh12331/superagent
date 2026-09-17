@@ -51,24 +51,36 @@
         "noAriaHiddenOnFocusable": "error",
         "useHeadingContent": "error",
         "useFocusableInteractive": "error",
-        "useSemanticElements": "warn"
+        "useSemanticElements": "warn",
+        "noSvgWithoutTitle": "error"
       },
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "warn",
-        "noUndeclaredVariables": "error"
+        "noUndeclaredVariables": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "noChildrenProp": "error",
+        "noRenderReturnValue": "error",
+        "noNestedComponentDefinitions": "error"
+      },
+      "security": {
+        "noBlankTarget": "error",
+        "noDangerouslySetInnerHtml": "error"
       },
       "suspicious": {
         "noExplicitAny": "error",
         "noConsole": "error",
-        "noDeprecatedImports": "error"
+        "noDeprecatedImports": "error",
+        "noThenProperty": "error"
       },
       "style": {
         "useImportType": "error",
         "useNamingConvention": "error",
         "useConst": "error",
         "noDefaultExport": "error",
+        "noNonNullAssertion": "error",
+        "noParameterAssign": "error",
         "useFilenamingConvention": {
           "level": "error",
           "options": { "filenameCases": ["kebab-case", "export"] }
@@ -77,7 +89,11 @@
       "complexity": {
         "useLiteralKeys": "off",
         "noUselessReturn": "error",
-        "noUselessCatchBinding": "error"
+        "noUselessCatchBinding": "error",
+        "noExcessiveLinesPerFunction": {
+          "level": "off",
+          "options": { "maxLines": 200, "skipBlankLines": true }
+        }
       }
     }
   },
@@ -95,6 +111,16 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["src/renderer/**", "!**/*.config.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    },
     {
       "includes": ["**/*.test.ts", "**/*.test.tsx"],
       "linter": {

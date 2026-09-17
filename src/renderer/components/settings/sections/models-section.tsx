@@ -41,13 +41,14 @@ interface ConfigDialogState {
  */
 function RuntimeModelTable({
   models,
-  removePending,
+  removePendingId,
   onToggle,
   onEdit,
   onRemove,
 }: {
   readonly models: readonly RuntimeModelInfo[];
-  readonly removePending: boolean;
+  /** 正在删除的模型 id（null = 无删除在途）；按行判 pending，避免整表转圈 */
+  readonly removePendingId: string | null;
   readonly onToggle: (model: RuntimeModelInfo, enabled: boolean) => void;
   readonly onEdit: (model: RuntimeModelInfo) => void;
   readonly onRemove: (model: RuntimeModelInfo) => void;
@@ -100,10 +101,10 @@ function RuntimeModelTable({
                   size="icon"
                   className="text-muted-foreground hover:text-error-text size-6 hover:bg-transparent"
                   aria-label={t('settings.modelMgmt.deleteModel')}
-                  disabled={removePending}
+                  disabled={removePendingId === model.modelId}
                   onClick={() => onRemove(model)}
                 >
-                  {removePending ? (
+                  {removePendingId === model.modelId ? (
                     <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
                   ) : (
                     <Trash2 className="size-3.5" strokeWidth={1.5} />
@@ -220,7 +221,7 @@ export function ModelsSection(): ReactElement {
         {!isError && runtimeModels.length > 0 && (
           <RuntimeModelTable
             models={runtimeModels}
-            removePending={removeMutation.isPending}
+            removePendingId={removeMutation.isPending ? (removeMutation.variables ?? null) : null}
             onToggle={handleToggle}
             onEdit={handleEdit}
             onRemove={handleRemove}

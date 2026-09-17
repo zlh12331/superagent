@@ -13,8 +13,9 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: 'bg-card text-card-foreground',
-        destructive:
-          'text-error-text bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-error-text/90',
+        // 此前带 *:data-[slot=alert-description]:text-error-text/90——本文件不导出
+        // AlertDescription，全仓也无该 slot，选择器永远匹配不到（已移除）
+        destructive: 'text-error-text bg-card [&>svg]:text-current',
       },
     },
     defaultVariants: {
@@ -29,7 +30,7 @@ const alertVariants = cva(
  * role="alert" 语义（屏幕阅读器即时播报）。图标作为首个子元素时自动排左列。
  * ──────────────────────────────
  * 变体：default（卡片风）/ destructive（错误风）
- * 状态：无（纯展示；关闭/重试按钮由业务层放入 AlertDescription）
+ * 状态：无（纯展示；需要附加操作时由业务层在 AlertTitle 内自行放置按钮）
  * 依赖：无（div + cva）
  * 可访问性：role="alert" 即时播报
  * ──────────────────────────────

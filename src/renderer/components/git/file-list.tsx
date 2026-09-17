@@ -1,25 +1,10 @@
-// file-list.tsx（自 GitPanel 拆分）
-// Git 文件列表（变更文件 + 骨架屏）
+// src/renderer/components/git/file-list.tsx
+// Git 变更文件列表（变更项 + 骨架屏）
 // ──────────────────────────────
-// 拆分背景：GitPanel 486 行，按职责提取
+// 拆分背景（2026-08 重构）：自 GitPanel 486 行按职责提取。
+// 职责：渲染 status.files（图标 + 状态标签 + 路径）与加载骨架屏；
+// 选中态由父级 selectedFilePath 驱动，点击只上报 onSelect（不自行取数）。
 // ──────────────────────────────
-
-// src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 极简文学风
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表
-// - 文件列表点击选中 → 调用 useGitDiffQuery 获取该文件的 unified diff
-// - 用 <pre> 渲染 diff 文本（绿色 + 绿色 -，等宽字体）
-// - 工作区干净时显示「无变更」提示
-//
-// 设计：
-// - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - 文件状态用颜色区分（modified/added/deleted/untracked/conflicted）
-// - diff 渲染用 react-diff-viewer-continued（UnifiedDiffView，统一方案）
-//   实现：git:diff 返回 unified diff → parseUnifiedDiff 拆 hunk → 双栏渲染
-// - 路径必须为绝对路径（由调用方传入）
-// ──────────────────────────────────────────────────────────────
 
 import type { GitFileStatus } from '@code-agent/shared/renderer';
 import type { ReactElement } from 'react';
@@ -28,17 +13,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+import { getGitStatusMeta } from './git-status-utils';
+
 interface FileListProps {
   readonly files: readonly GitFileStatus[];
   readonly selectedFilePath: string | null;
   readonly onSelect: (path: string) => void;
 }
-
-import {
-  getColorForFileStatus,
-  getIconForFileStatus,
-  getLabelKeyForFileStatus,
-} from './git-status-utils';
 
 export function FileList({ files, selectedFilePath, onSelect }: FileListProps): ReactElement {
   // 本地化文案
@@ -46,9 +27,10 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
   return (
     <ul className="flex flex-col gap-0.5 p-1">
       {files.map((file) => {
-        const Icon = getIconForFileStatus(file.status);
-        const colorClass = getColorForFileStatus(file.status);
-        const label = t(`git.${getLabelKeyForFileStatus(file.status)}`);
+        // 状态元数据单一入口；文案键 = 协议值（git.<status>）
+        const meta = getGitStatusMeta(file.status);
+        const Icon = meta.icon;
+        const label = t(`git.${file.status}`);
         const isSelected = file.path === selectedFilePath;
 
         return (
@@ -64,7 +46,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
                 onSelect(file.path);
               }}
             >
-              <Icon className={cn('size-3 shrink-0', colorClass)} strokeWidth={1.5} />
+              <Icon className={cn('size-3 shrink-0', meta.iconClassName)} strokeWidth={1.5} />
               <span
                 className={cn(
                   'min-w-0 flex-1 truncate text-2xs font-mono',
@@ -74,7 +56,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
               >
                 {file.path}
               </span>
-              <span className={cn('text-[9px] shrink-0', colorClass)}>{label}</span>
+              <span className={cn('text-[9px] shrink-0', meta.labelClassName)}>{label}</span>
             </Button>
           </li>
         );
@@ -83,10 +65,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
   );
 }
 
-// ── 子组件：文件 diff 视图 ─────────────────────────────────────
-
-/** 文件 diff 视图：可折叠，展示 unified diff 文本 */
-
+/** 加载中骨架屏（固定 4 行占位，高度与真实行对齐） */
 export function FileListSkeleton(): ReactElement {
   return (
     <ul className="flex flex-col gap-0.5 p-1">
@@ -99,5 +78,3 @@ export function FileListSkeleton(): ReactElement {
     </ul>
   );
 }
-
-/** 工作区干净提示 */

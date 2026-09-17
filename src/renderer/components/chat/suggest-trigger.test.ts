@@ -27,6 +27,18 @@ describe('detectSuggestTrigger', () => {
     expect(detectSuggestTrigger('/he llo').activeTrigger).toBeNull();
   });
 
+  it('触发词在但查询段非法 → 不触发且 activeQuery 为 null（不泄漏查询段）', () => {
+    // 回归：此前 activeQuery 回落 mentionQuery，'hi @ ' 会返回非 null 的 ' '
+    const s = detectSuggestTrigger('hi @ ');
+    expect(s.activeTrigger).toBeNull();
+    expect(s.activeQuery).toBeNull();
+
+    // slash 非法查询且 @ 在更早位置（activeTrigger 为 null）同样不得泄漏
+    const s2 = detectSuggestTrigger('@x /he llo');
+    expect(s2.activeTrigger).toBeNull();
+    expect(s2.activeQuery).toBeNull();
+  });
+
   it('slash 查询超 20 字符 → 不触发', () => {
     expect(detectSuggestTrigger(`/${'a'.repeat(21)}`).activeTrigger).toBeNull();
     expect(detectSuggestTrigger(`/${'a'.repeat(20)}`).activeTrigger).toBe('slash');

@@ -44,8 +44,8 @@ export function DialogHost(): React.ReactElement | null {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isPrompt = currentRequest?.kind === 'prompt';
-  const isConfirm = currentRequest?.kind === 'confirm';
-
+  // 传给 Radix 的受控 open：走到渲染分支时 currentRequest 必非 null（上方已早返回），
+  // 故此处恒为 true——保留显式传参以表达「受控」语义（而非依赖 defaultValue）
   const open = currentRequest !== null;
 
   // 每次请求变化时重置输入框值（渲染期状态调整，替代 effect 中 setState）
@@ -59,13 +59,15 @@ export function DialogHost(): React.ReactElement | null {
 
   // prompt 弹窗打开时聚焦并选中输入框文本（纯 DOM 操作）
   useEffect(() => {
-    if (currentRequest?.kind === 'prompt') {
-      // 延迟一帧后 focus + select，确保 Input 已渲染
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      });
-    }
+    if (currentRequest?.kind !== 'prompt') return;
+    // 延迟一帧后 focus + select，确保 Input 已渲染。
+    // 保存句柄并在 cleanup 中取消：请求在一帧内变化/组件卸载时，回调不应再操作
+    // 已换值或已卸载的输入框（2026-09 审计修复：此前无 cleanup）
+    const handle = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(handle);
   }, [currentRequest]);
 
   // ===== 事件处理 =====
@@ -111,19 +113,16 @@ export function DialogHost(): React.ReactElement | null {
     [handleConfirm],
   );
 
-  // 无请求时不渲染
+  // 无请求时不渲染（此后 currentRequest 已收窄为非 null）
   if (currentRequest === null) return null;
+  const isPromptRequest = currentRequest.kind === 'prompt';
+  const isConfirmRequest = currentRequest.kind === 'confirm';
 
   // ===== 渲染参数提取 =====
-
-  const confirmOpts =
-    currentRequest !== null && currentRequest.kind === 'confirm'
-      ? currentRequest.confirmOptions
-      : null;
-  const promptOpts =
-    currentRequest !== null && currentRequest.kind === 'prompt'
-      ? currentRequest.promptOptions
-      : null;
+  // 注：此处不再判 `currentRequest !== null`——上方已早返回，该条件恒真
+  // （2026-09 审计：原写法是早返回后的死条件，徒增分支且误导读者）
+  const confirmOpts = isConfirmRequest ? currentRequest.confirmOptions : null;
+  const promptOpts = isPromptRequest ? currentRequest.promptOptions : null;
 
   const title = confirmOpts?.title ?? promptOpts?.title ?? '';
   const confirmText = confirmOpts?.confirmText ?? promptOpts?.confirmText ?? t('common.confirm');
@@ -133,7 +132,7 @@ export function DialogHost(): React.ReactElement | null {
   // 确认按钮样式：danger → 实底强调红（--error-emphasis 双主题锁定白字 CR≥4.5）；否则 accent 色
   const confirmButtonClass = danger
     ? 'bg-error-emphasis text-destructive-foreground hover:bg-error-emphasis/90'
-    : 'bg-[var(--accent)] text-on-accent hover:bg-[var(--accent-dim)]';
+    : 'bg-accent text-on-accent hover:bg-accent-dim';
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
@@ -153,12 +152,12 @@ export function DialogHost(): React.ReactElement | null {
 
         {/* Body — 正文描述或输入框 */}
         <div className="px-4 py-3.5">
-          {isConfirm && confirmOpts != null && (
+          {confirmOpts != null && (
             <AlertDialogDescription className="text-muted-foreground text-[13px] leading-[1.6]">
               {confirmOpts.message}
             </AlertDialogDescription>
           )}
-          {isPrompt && promptOpts != null && (
+          {promptOpts != null && (
             <>
               {/* 输入框标签（htmlFor 关联，辅助技术可正确读出标签内容） */}
               <label
@@ -182,9 +181,34 @@ export function DialogHost(): React.ReactElement | null {
         </div>
 
         {/* Footer — 取消 + 确认按钮 */}
+        {/*
+          onClick 不挂在 AlertDialogAction/Cancel 上（2026-09 审计修复）：
+          Radix 的这两个组件实为 DialogPrimitive.Close，其内部把 onClick 与
+          `onOpenChange(false)` 用 composeEventHandlers 串联——于是点击一次会
+          **连续两次**走 store 的 _resolve：先本组件的 handleConfirm/Cancel，
+          再经 handleOpenChange 的取消分支。第二次 _resolve 会把队列中的下一个
+          请求当作「已取消」解决掉并出队（实测：p1=true 后 p2 未经展示即 false）。
+          改为只由 onOpenChange 统一收口：点击 Close 类按钮 → open=false →
+          handleOpenChange；「确认」需要区分结果，故用普通按钮 + 手动关闭控制。
+        */}
         <AlertDialogFooter className="bg-muted/30 border-border flex-row justify-end gap-2 border-t px-4 py-3">
-          <AlertDialogCancel onClick={handleCancel}>{cancelText}</AlertDialogCancel>
-          <AlertDialogAction className={confirmButtonClass} onClick={handleConfirm}>
+          <AlertDialogCancel
+            onClick={(e) => {
+              // 阻止 Radix Close 的默认 onOpenChange(false) 二次触发
+              e.preventDefault();
+              handleCancel();
+            }}
+          >
+            {cancelText}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className={confirmButtonClass}
+            onClick={(e) => {
+              // 同上：确认结果由 handleConfirm 决定，不让 Close 再走一次取消分支
+              e.preventDefault();
+              handleConfirm();
+            }}
+          >
             {confirmText}
           </AlertDialogAction>
         </AlertDialogFooter>

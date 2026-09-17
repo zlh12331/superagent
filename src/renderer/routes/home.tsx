@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { ChatInput } from '@/components/chat/ChatInput';
+import { BrandMark } from '@/components/common/BrandMark';
 import { ModelSelector } from '@/components/common/ModelSelector';
 import { MotionReveal } from '@/components/common/MotionReveal';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
@@ -31,14 +32,16 @@ import { ROUTES } from '@/lib/constants';
 import { formatRelativeTime } from '@/lib/format-time';
 import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { fadeInVariants, letterContainerVariants, letterUpVariants } from '@/lib/motion';
-import { cn } from '@/lib/utils';
+import { basename, cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
-/** 品牌文案（欢迎页逐字入场用；读屏以容器 aria-label 暴露，逐字 span 隐藏） */
-const BRAND_TEXT = 'Code with TRAE';
+/** 品牌文案（欢迎页逐字入场用；读屏以容器 aria-label 暴露，逐字 span 隐藏）
+ *  对齐产品名 Code Agent Desktop（顶栏 / electron-builder productName / README），
+ *  不使用第三方商标；保留 "Code with ___" 句式与顶栏呼应而非重复 */
+const BRAND_TEXT = 'Code with Agent';
 
 /** 快捷动作定义（对齐原型 4 个 welcome-pill） */
 interface QuickAction {
@@ -66,12 +69,6 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
     icon: Wrench,
   },
 ] as const;
-
-/** 路径 basename（跨平台，取最后一段） */
-function basename(path: string): string {
-  const parts = path.split(/[\\/]/);
-  return parts[parts.length - 1] || path;
-}
 
 export function HomePage(): ReactElement {
   // 本地化文案 + 错误码解析（单一真源）
@@ -296,7 +293,7 @@ export function HomePage(): ReactElement {
           animate="visible"
         >
           <motion.span aria-hidden="true" variants={letterUpVariants} className="wl-icon">
-            ⟨/⟩
+            <BrandMark size={40} variant="gradient" />
           </motion.span>
           {BRAND_TEXT.split('').map((ch, index) => (
             <motion.span

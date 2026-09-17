@@ -8,8 +8,6 @@
 
 import { type KeyboardEvent, type PointerEvent, type RefObject, useEffect, useRef } from 'react';
 
-/** 输入框拖拽高度下限（单行，约 40px） */
-export const COMPOSER_MIN_H = 40;
 /** 输入框拖拽高度上限（对齐原型 maxExtra 300 + 基础 160） */
 export const COMPOSER_MAX_H = 460;
 /** 拖拽下限基准（与 autoResize 默认 240px 封顶对齐的基准上限） */
@@ -49,6 +47,9 @@ function startGlobalDrag(ctx: GlobalDragContext): () => void {
     const dy = state.startY - ev.clientY;
     const clamped = Math.max(state.dragMinH, Math.min(COMPOSER_MAX_H, state.startH + dy));
     if (clamped <= state.dragMinH) {
+      // 触底档刻意让两值不等：height 贴合内容自然高度（不裁剪），maxHeight 回到基准档，
+      // 使后续自动增高仍走 COMPOSER_AUTO_MAX 档（见 ChatInput.autoResize 的 manualCap 判定）。
+      // 若此处把 maxHeight 也设为 dragMinH，拖到底后会永久压低自动增高上限
       el.style.maxHeight = `${DRAG_BASE_MAX}px`;
       el.style.height = `${state.dragMinH}px`;
     } else {
@@ -154,7 +155,10 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
     event.preventDefault();
     const delta = event.key === 'ArrowUp' ? KEYBOARD_STEP : -KEYBOARD_STEP;
     const current = el.offsetHeight;
-    const next = Math.max(COMPOSER_MIN_H, Math.min(COMPOSER_MAX_H, current + delta));
+    // 下限与拖拽路径对齐：不低于内容自然高度（避免键盘把输入框缩到裁剪内容），
+    // 拖拽路径见 handleDragStart 的 dragMinH = min(naturalH, DRAG_BASE_MAX)
+    const minH = Math.min(measureNaturalHeight(el), DRAG_BASE_MAX);
+    const next = Math.max(minH, Math.min(COMPOSER_MAX_H, current + delta));
     el.style.maxHeight = `${next}px`;
     el.style.height = `${next}px`;
   };

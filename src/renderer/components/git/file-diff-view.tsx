@@ -1,33 +1,21 @@
-// file-diff-view.tsx（自 GitPanel 拆分）
-// Git 变更查看（文件差异 / 文本差异）
+// src/renderer/components/git/file-diff-view.tsx
+// Git 选中文件的差异视图（可折叠 + 增删统计 + unified diff 渲染）
 // ──────────────────────────────
-// 拆分背景：GitPanel 486 行，按职责提取
+// 拆分背景（2026-08 重构）：自 GitPanel 486 行按职责提取。
+// 职责：接收父级已取到的 diff 文本与统计，负责折叠交互与三态展示
+// （加载中 / 无 diff / 渲染）；自身不调用任何 query hook。
+// diff 渲染走统一方案 UnifiedDiffView（内部 react-diff-viewer-continued +
+// parseUnifiedDiff 拆 hunk），本文件不感知其实现。
 // ──────────────────────────────
-
-// src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 极简文学风
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表
-// - 文件列表点击选中 → 调用 useGitDiffQuery 获取该文件的 unified diff
-// - 用 <pre> 渲染 diff 文本（绿色 + 绿色 -，等宽字体）
-// - 工作区干净时显示「无变更」提示
-//
-// 设计：
-// - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - 文件状态用颜色区分（modified/added/deleted/untracked/conflicted）
-// - diff 渲染用 react-diff-viewer-continued（UnifiedDiffView，统一方案）
-//   实现：git:diff 返回 unified diff → parseUnifiedDiff 拆 hunk → 双栏渲染
-// - 路径必须为绝对路径（由调用方传入）
-// ──────────────────────────────────────────────────────────────
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/i18n/use-translation';
+import { basename } from '@/lib/utils';
 
 interface FileDiffViewProps {
   readonly filePath: string;
@@ -47,17 +35,14 @@ export function FileDiffView({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
 
-  // R5 修复：统计口径单一化——直接使用主进程 GitDiffRes 的 git numstat 统计
-  // （此前渲染层用 diff-match-patch 从 diff 文本重算一套"语义行数"，
-  // 与 git 统计并存且数字互相矛盾；现统一为 git 口径，与状态徽标/DiffPane 一致）
+  // 统计口径单一化（R5 修复）：直接用主进程 GitDiffRes 的 git numstat 统计。
+  // 此前渲染层另用 diff-match-patch 从 diff 文本重算一套"语义行数"，与 git 口径
+  // 并存且数字互相矛盾；现统一为 git 口径，与状态徽标 / DiffPane 一致。
   const stats =
     additions !== undefined && deletions !== undefined ? { additions, deletions } : null;
 
-  // 派生：diff 文件名（截取 basename）
-  const basename = useMemo(() => {
-    const parts = filePath.split(/[\\/]/);
-    return parts[parts.length - 1] ?? filePath;
-  }, [filePath]);
+  // 文件名：basename 单一真源在 lib/utils（兼容两种分隔符 + 尾部斜杠）
+  const fileName = basename(filePath);
 
   return (
     <div className="border-border bg-muted/20 flex h-40 flex-col border-t">
@@ -77,10 +62,10 @@ export function FileDiffView({
           ) : (
             <ChevronRight className="size-3 shrink-0" strokeWidth={1.5} />
           )}
-          <span className="font-mono truncate">{basename}</span>
+          <span className="font-mono truncate">{fileName}</span>
         </Button>
 
-        {/* 增删统计（diff-match-patch 语义统计优先，回退主进程文本统计） */}
+        {/* 增删统计（git numstat 口径，与状态徽标一致） */}
         {stats !== null && (
           <div className="flex shrink-0 items-center gap-1.5 text-[9px]">
             <span className="text-success-text">+{stats.additions}</span>
@@ -107,7 +92,3 @@ export function FileDiffView({
     </div>
   );
 }
-
-// ── 子组件：加载中 / 空状态 / 错误状态 ─────────────────────────
-
-/** 加载中骨架屏 */

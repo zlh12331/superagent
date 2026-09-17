@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
  * 变体：Content 支持 showCloseButton（默认 true）/ className 控制尺寸
  * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
  * 依赖：@radix-ui/react-dialog
- * 可访问性：Radix 内置焦点陷阱/Escape 关闭/ARIA dialog 角色；需 SheetTitle 提供标题
+ * 可访问性：Radix 内置焦点陷阱/Escape 关闭/ARIA dialog 角色；需 DialogTitle 提供标题（DialogDescription 提供描述）
  * ──────────────────────────────
  */
 export function Dialog(
@@ -50,7 +50,7 @@ export function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-popover bg-[var(--overlay-bg)]',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-popover bg-overlay-bg',
         className,
       )}
       {...props}

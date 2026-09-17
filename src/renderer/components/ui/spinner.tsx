@@ -6,8 +6,11 @@
 // 依赖：lucide-react Loader2（Icon 组件，随字体栈渲染，无独立 CSS 动画依赖）
 // 用法：
 //   <Spinner className="size-6" />
-// 可访问性：role="status" + sr-only "Loading"，屏幕阅读器播报加载语义；
+//   <Spinner aria-hidden />   {/* 父级已有加载语义时降级为纯装饰 */}
+// 可访问性：默认 role="status" + sr-only "Loading"，屏幕阅读器播报加载语义；
 //   容器若已有 role="status"/aria-busy 父级，可传 aria-hidden 降级为装饰
+//   ——aria-hidden 必须作用在**外层 span**（role 与文案都在这一层）才有意义，
+//   故本组件单独取出它，其余 props 才透传给图标。
 // ──────────────────────────────
 
 import { Loader2 } from 'lucide-react';
@@ -22,13 +25,22 @@ export interface SpinnerProps extends React.ComponentProps<typeof Loader2> {
 
 export function Spinner({ className, label, ...props }: SpinnerProps): React.ReactElement {
   const { t } = useTranslation();
+  // 降级开关：此前 {...props} 整体展开到 Loader2，调用方写 aria-hidden 只会给
+  // 图标再叠一次 aria-hidden（图标本就 aria-hidden），外层 role="status" 与
+  // sr-only 文案照旧播报——本文件注释承诺的降级路径实际走不通。
+  const decorative = props['aria-hidden'] === true || props['aria-hidden'] === 'true';
+  const { 'aria-hidden': _ariaHidden, ...iconProps } = props;
   return (
-    <span className="inline-flex" role="status">
-      <span className="sr-only">{label ?? t('common.loading')}</span>
+    <span
+      className="inline-flex"
+      aria-hidden={decorative ? true : undefined}
+      role={decorative ? undefined : 'status'}
+    >
+      {!decorative && <span className="sr-only">{label ?? t('common.loading')}</span>}
       <Loader2
         aria-hidden
         className={cn('size-3.5 animate-spin text-current', className)}
-        {...props}
+        {...iconProps}
       />
     </span>
   );

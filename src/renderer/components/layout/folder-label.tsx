@@ -1,29 +1,11 @@
-// folder-label.tsx（自 Sidebar 拆分）
-// 侧边栏 · 文件夹标签
+// src/renderer/components/layout/folder-label.tsx
+// 侧边栏 · 文件夹标签行（折叠开关 + 新建 + 右键菜单）
 // ──────────────────────────────
-// 拆分背景：Sidebar 641 行，按职责提取
+// 拆分背景（2026-08 重构）：自 Sidebar 641 行按职责提取。
+// 职责：渲染一个文件夹分组标签——折叠/展开、组内新建会话入口、
+// 右键菜单（新建 / 在资源管理器中打开 / 删除整组）。
+// 纯展示：所有动作经 props 回调上报给 Sidebar，自身不触达 store 与 IPC。
 // ──────────────────────────────
-
-// src/renderer/components/layout/Sidebar.tsx
-// 侧边栏 · 会话列表 · 对齐原型布局
-// ──────────────────────────────────────────────────────────────
-// 职责：
-// - sidebar-head：新建会话按钮 + 搜索框 + tabs（最近/归档）
-// - sidebar-list：会话列表（thread-item 结构，按 folder 分组）
-// - sidebar-foot：用户信息区域（SidebarAccount 账户触发器 + 下拉菜单）
-//
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - class 命名：sidebar / sidebar-head / sidebar-search / sidebar-tabs /
-//   sidebar-tab / sidebar-list / thread-group-label / folder-label /
-//   folder-items / thread-item / ti-row / ti-dot / ti-content / ti-title /
-//   ti-meta / ti-actions / sidebar-foot
-// - 文学风视觉令牌：深棕主色 + 衬线标题 + 等宽元信息
-//
-// 状态分层（符合项目规范）：
-// - L2 Zustand：useActiveSessionStore 维护激活会话 id
-// - L3 TanStack Query：useSessionsQuery 拉取列表
-// - L3 TanStack Mutation：useDeleteSession
-// ──────────────────────────────────────────────────────────────
 
 import { FolderOpen, Plus, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -135,7 +117,3 @@ export function FolderLabel({
     </ContextMenu>
   );
 }
-
-// ── 子组件：可拖拽会话项（@dnd-kit/sortable 包装） ────────────
-
-/** 可拖拽会话项：useSortable 提供拖拽句柄属性，ti-dot 作为手柄 */

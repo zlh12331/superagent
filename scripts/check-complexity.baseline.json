@@ -72,7 +72,7 @@
     "max": 16
   },
   "src/main/infra/memory-hub/memory-hub-service.ts": {
-    "count": 2,
+    "count": 1,
     "max": 29
   },
   "src/main/infra/search/search-service.ts": {
@@ -107,88 +107,12 @@
     "count": 1,
     "max": 19
   },
-  "src/renderer/components/agent/approval-preview.tsx": {
-    "count": 2,
-    "max": 25
-  },
-  "src/renderer/components/agent/inline-approval-card.tsx": {
-    "count": 1,
-    "max": 18
-  },
-  "src/renderer/components/chat/ChatInput.tsx": {
-    "count": 2,
-    "max": 30
-  },
-  "src/renderer/components/chat/ChatMessageList.tsx": {
-    "count": 1,
-    "max": 28
-  },
-  "src/renderer/components/chat/history-parts.ts": {
-    "count": 2,
-    "max": 39
-  },
-  "src/renderer/components/common/CommandPalette.tsx": {
-    "count": 1,
-    "max": 33
-  },
-  "src/renderer/components/common/DialogHost.tsx": {
-    "count": 1,
-    "max": 17
-  },
-  "src/renderer/components/common/ModelSelector.tsx": {
-    "count": 1,
-    "max": 18
-  },
-  "src/renderer/components/dev/LogsPanel.tsx": {
-    "count": 1,
-    "max": 18
-  },
-  "src/renderer/components/file-tree/FileTreeNode.tsx": {
-    "count": 1,
-    "max": 16
-  },
-  "src/renderer/components/file-tree/FileViewerPanel.tsx": {
-    "count": 1,
-    "max": 46
-  },
-  "src/renderer/components/git/GitPanel.tsx": {
-    "count": 1,
-    "max": 16
-  },
-  "src/renderer/components/layout/AppShell.tsx": {
-    "count": 1,
-    "max": 25
-  },
-  "src/renderer/components/layout/Sidebar.tsx": {
-    "count": 1,
-    "max": 16
-  },
-  "src/renderer/components/settings/sections/about-section.tsx": {
-    "count": 1,
-    "max": 44
-  },
-  "src/renderer/components/settings/sections/dialogs/model-config-dialog.tsx": {
-    "count": 1,
-    "max": 40
-  },
-  "src/renderer/components/settings/sections/dialogs/model-config-fields.tsx": {
-    "count": 1,
-    "max": 16
-  },
   "src/renderer/dev/mock-api.ts": {
     "count": 1,
     "max": 17
   },
-  "src/renderer/hooks/use-file-tree.ts": {
-    "count": 2,
-    "max": 26
-  },
   "src/renderer/hooks/use-tool-bridge.ts": {
     "count": 1,
     "max": 27
-  },
-  "src/renderer/lib/diff/line-diff.ts": {
-    "count": 1,
-    "max": 18
   }
 }

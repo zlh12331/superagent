@@ -17,7 +17,7 @@ import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
 import { unwrap } from '@/lib/ipc';
 import { TASK_LIST_QUERY_KEY } from '@/lib/query/keys';
-import { cn } from '@/lib/utils';
+import { basename, cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 
@@ -290,7 +290,7 @@ export function DiffPane({
               )}
               <FileText className="text-muted-foreground size-3 shrink-0" strokeWidth={1.5} />
               <span className="text-foreground/90 min-w-0 flex-1 truncate" title={change.path}>
-                {change.path.split(/[\\/]/).pop() ?? change.path}
+                {basename(change.path)}
               </span>
               <Badge
                 variant="outline"

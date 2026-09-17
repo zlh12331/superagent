@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
  * 变体：Item 支持 data-[variant=destructive]；Content 可组合子项/分隔/子菜单
  * 状态：受控（open + onOpenChange）| 非受控（defaultOpen）
  * 依赖：@radix-ui/react-dropdown-menu
- * 可访问性：Radix 内置全键盘导航/方向键/ARIA menu 角色；14 个导出覆盖完整菜单形态
+ * 可访问性：Radix 内置全键盘导航/方向键/ARIA menu 角色；9 个导出覆盖完整菜单形态
  * ──────────────────────────────
  */
 export function DropdownMenu(

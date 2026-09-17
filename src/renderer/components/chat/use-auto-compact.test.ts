@@ -69,7 +69,7 @@ describe('useAutoCompact', () => {
   it('流式/提交中不触发（避免与在途回合竞争）', () => {
     setAutoCompact(true);
     const compact = vi.fn();
-    for (const status of ['streaming', 'submitted']) {
+    for (const status of ['streaming', 'submitted'] as const) {
       const { unmount } = renderHook(() =>
         useAutoCompact({
           chatId: 's1',

@@ -5,6 +5,7 @@
 // - 监听 rootPath 变化 → 同步到 store + 启动 file:watch
 // - 监听 expandedPaths 变化 → 对新增展开的目录触发 file:list
 // - 订阅 file:watch:event → 增量更新 store（create/delete/rename）
+// - 暴露 refresh()：手动重拉根目录 + 所有已展开目录（工具栏刷新）
 //
 // 设计依据（项目规范）：
 // - "IPC `on` push events must be managed with Zustand stores instead of TanStack Query"
@@ -27,23 +28,32 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
 /**
+ * i18n 文案函数类型
+ *
+ * 由 useTranslation 推导：本项目所用 react-i18next 版本未导出 TFunction 类型，
+ * 且推导能自动跟随 hook 的命名空间推导，比手写泛型更不易漂移。
+ */
+type TranslateFn = ReturnType<typeof useTranslation>['t'];
+
+/**
  * useFileTree：文件树数据生命周期管理 hook
  *
  * 必须传入 workingDir。workingDir 为 null 时（无激活会话）不加载任何数据。
  *
  * @param workingDir 当前激活会话的工作目录绝对路径
+ * @returns 控制面（当前仅 refresh：手动重拉根目录 + 所有已展开目录）
  *
  * @example
  * ```tsx
  * function FileTreePanel({ workingDir }: { workingDir: string | null }) {
- *   useFileTree(workingDir);
+ *   const { refresh } = useFileTree(workingDir);
  *   const rootPath = useFileTreeStore((s) => s.rootPath);
  *   if (rootPath === null) return <EmptyHint />;
- *   return <FileTreeNode path={rootPath} depth={0} />;
+ *   return <button onClick={refresh}>刷新</button>;
  * }
  * ```
  */
-export function useFileTree(workingDir: string | null): void {
+export function useFileTree(workingDir: string | null): { refresh: () => void } {
   // 本地化文案
   const { t } = useTranslation();
   // store actions（订阅 action 引用稳定，不触发额外渲染）
@@ -125,24 +135,12 @@ export function useFileTree(workingDir: string | null): void {
 
     let cancelled = false;
     void Promise.all(toLoad.map((path) => loadDir(path))).then(() => {
-      if (cancelled) return;
+      if (cancelled || autoExpandLeftRef.current <= 0) return;
       // 默认展开层级链：把本波新加载目录中的子目录注入展开集，
       // 触发本 effect 下一轮加载，直到剩余深度归零
-      if (autoExpandLeftRef.current > 0) {
-        autoExpandLeftRef.current -= 1;
-        const childDirs: string[] = [];
-        for (const dir of toLoad) {
-          const entries = useFileTreeStore.getState().entries.get(dir) ?? [];
-          for (const entry of entries) {
-            if (entry.type === 'directory') {
-              childDirs.push(entry.path);
-            }
-          }
-        }
-        if (childDirs.length > 0) {
-          expandPaths(childDirs);
-        }
-      }
+      // （空数组直接交给 expandPaths 自身的空转守卫，无需在此预先判长度）
+      autoExpandLeftRef.current -= 1;
+      expandPaths(collectChildDirs(toLoad));
     });
     return () => {
       cancelled = true;
@@ -161,31 +159,14 @@ export function useFileTree(workingDir: string | null): void {
       try {
         const response = await window.api.file.watchStart({ path: workingDir });
         if (cancelled) {
-          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏。
-          // 此处 catch 是**有意忽略**：watchStart 返回 error 响应时无 watcherId，
-          // unwrap 抛错即"本就无可停"，属预期分支而非故障（故不上报 Sentry）。
-          try {
-            await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
-          } catch {
-            // 预期分支：无 watcherId 可停（见上方说明）
-          }
+          // 已取消（workingDir 变化），立即停止 watcher 避免泄漏
+          await stopWatcherBestEffort(response);
           return;
         }
         // 成功取 watcherId；error 响应（IPC）或异常统一走 catch 提示
         watcherId = unwrap(response).watcherId;
       } catch (err) {
-        // 区分 IPC 错误响应（watchFailed，提示可刷新目录重试）与异常（watchAbnormal）
-        if (err instanceof Error && /^\[[A-Z_]+\]/.test(err.message)) {
-          toast.warning(t('common.watchFailed'), {
-            description: t('common.watchFailedDesc'),
-            duration: 4000,
-          });
-        } else {
-          toast.warning(t('common.watchAbnormal'), {
-            description: t('common.watchAbnormalDesc'),
-            duration: 4000,
-          });
-        }
+        notifyWatchStartFailure(err, t);
       }
     })();
 
@@ -245,19 +226,142 @@ export function useFileTree(workingDir: string | null): void {
       reset();
     };
   }, [reset]);
+
+  // 手动刷新：重拉根目录 + 所有已展开目录（工具栏「刷新」菜单项）
+  // 数据面留在 hook 内（与 watch 生命周期同层），组件只触发；失败集中提示一次。
+  // 不手写 useCallback：返回值是每次渲染新建的 { refresh } 对象，记忆化本函数
+  // 改变不了调用方拿到的引用（且本函数不进任何依赖数组），记忆化交给 React Compiler。
+  const refresh = (): void => {
+    if (workingDir === null) return;
+    void refreshExpandedDirs(workingDir).then((failed) => {
+      if (failed > 0) {
+        toast.warning(t('fileTree.refreshFailed'));
+      }
+    });
+  };
+
+  return { refresh };
+}
+
+/**
+ * 收集给定目录下「已加载子条目中的目录」路径
+ *
+ * 抽离动机（2026-09 file-tree 审计）：原为 effect 回调内的双重嵌套循环
+ * （遍历待加载目录 × 遍历其条目），使该回调认知复杂度达 26（阈值 15）。
+ * 移出后回调只表达「加载完成后按剩余深度注入下一层」这一件事。
+ *
+ * 读的是 store 当前值（而非入参快照）：本函数在 await 之后调用，
+ * 条目由 loadDir 经 setEntries 异步写入，故必须现读。
+ *
+ * @param dirs 待检查的目录路径（本波刚加载完成的目录）
+ * @returns 展开集中应新增的子目录路径（可能为空）
+ */
+function collectChildDirs(dirs: readonly string[]): string[] {
+  const entriesByDir = useFileTreeStore.getState().entries;
+  const childDirs: string[] = [];
+  for (const dir of dirs) {
+    for (const entry of entriesByDir.get(dir) ?? []) {
+      if (entry.type === 'directory') childDirs.push(entry.path);
+    }
+  }
+  return childDirs;
+}
+
+/**
+ * 启动在途期间被取消：尽力回收已创建的 watcher
+ *
+ * 抽离动机（同上）：原为 effect 内联的嵌套 try/catch。此处 catch 是**有意忽略**——
+ * watchStart 返回错误信封时无 watcherId，unwrap 抛错即"本就无可停"，
+ * 属预期分支而非故障（无需上报）。
+ *
+ * @param response watchStart 的原始响应信封
+ */
+async function stopWatcherBestEffort(
+  response: Awaited<ReturnType<typeof window.api.file.watchStart>>,
+): Promise<void> {
+  try {
+    await window.api.file.watchStop({ watcherId: unwrap(response).watcherId });
+  } catch {
+    // 预期分支：无 watcherId 可停（见函数注释）
+  }
+}
+
+/**
+ * watch 启动失败提示
+ *
+ * 区分两类：IPC 错误响应（形如 `[CODE] message`，可刷新目录重试）与
+ * 其它异常（监听能力异常）。抽离后启动分支只剩正常路径。
+ *
+ * @param err 启动失败原因（错误信封抛出的 Error，或任意异常）
+ * @param t i18n 文案函数
+ */
+function notifyWatchStartFailure(err: unknown, t: TranslateFn): void {
+  const isIpcError = err instanceof Error && /^\[[A-Z_]+\]/.test(err.message);
+  if (isIpcError) {
+    toast.warning(t('common.watchFailed'), {
+      description: t('common.watchFailedDesc'),
+      duration: 4000,
+    });
+    return;
+  }
+  toast.warning(t('common.watchAbnormal'), {
+    description: t('common.watchAbnormalDesc'),
+    duration: 4000,
+  });
+}
+
+/**
+ * 重拉根目录 + 所有已展开目录的条目
+ *
+ * 单目录失败不中断其余目录（allSettled 语义），最后统一提示一次。
+ * 浏览器模式（无 window.api）视为全部成功——不误报失败。
+ *
+ * @param rootPath 根目录绝对路径
+ * @returns 失败目录数（0 表示全部成功）——调用方据此决定是否提示
+ */
+async function refreshExpandedDirs(rootPath: string): Promise<number> {
+  if (typeof window === 'undefined' || window.api === undefined) {
+    return 0;
+  }
+  const paths = [...new Set([rootPath, ...useFileTreeStore.getState().expandedPaths])];
+  let failed = 0;
+  await Promise.allSettled(
+    paths.map(async (path) => {
+      try {
+        const res = await window.api.file.list({ path, depth: 1, includeHidden: false });
+        useFileTreeStore.getState().setEntries(path, unwrap(res).entries);
+      } catch {
+        failed += 1;
+      }
+    }),
+  );
+  return failed;
 }
 
 /**
  * 计算父目录路径（兼容 Windows 反斜杠与 POSIX 正斜杠）
  *
  * 不依赖 node:path（渲染层无 Node API），手写实现。
- * 用于从 file:watch:event 的 path 字段反推父目录。
+ * 用于从 file:watch:event 的 path 字段反推父目录（作为 store 的 entries 键）。
+ *
+ * 与 lib/file-search.extractDir 的区别（勿合并）：
+ * - extractDir 面向**展示**（副标题），会把反斜杠统一成正斜杠、根级返回空串；
+ * - 本函数面向**store 键匹配**，必须保留原分隔符与根形态，否则与 file:list
+ *   用 workingDir 建立的键不一致，增量更新会静默落空。
+ *
+ * 边界（均为 store 键匹配正确性所需）：
+ * - `/a.ts` → `/`：根级文件的父目录是根分隔符本身
+ * - `C:\a.ts` → `C:\`：盘符根保留尾分隔符（返回 `C:` 会与 workingDir 键 `C:\` 失配）
+ * - `C:` → `C:`、`a.ts` → `a.ts`：无分隔符时原样返回（调用方保证传入绝对路径）
+ * - 尾部分隔符未做去重归一（watcher 事件路径不带尾分隔符），不属本函数职责
  */
 function dirname(path: string): string {
-  // 同时查找最后出现的 \ 和 /，取较大者作为分隔符位置
-  const lastSlash = path.lastIndexOf('/');
-  const lastBackslash = path.lastIndexOf('\\');
-  const idx = Math.max(lastSlash, lastBackslash);
-  if (idx <= 0) return path; // 无分隔符或根路径（如 'C:'）
-  return path.slice(0, idx);
+  const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  // 无分隔符（如 'C:'）：原样返回
+  if (idx < 0) return path;
+  const parent = path.slice(0, idx);
+  // 分隔符在位置 0（根级文件）或 parent 仅剩盘符（Windows 盘根）：
+  // 父目录就是「分隔符前的部分 + 该分隔符」，保留根形态
+  if (parent === '' || /^[A-Za-z]:$/.test(parent)) return path.slice(0, idx + 1);
+  return parent;
 }

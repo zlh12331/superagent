@@ -28,9 +28,11 @@ interface Problem {
 
 function collectFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
+    if (entry.name === 'node_modules') continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) collectFiles(full, acc);
+    // 测试文件不参与注释审计（此前按 __tests__ 目录排除，测试改为与源码同目录后按文件名排除）
+    else if (entry.name.includes('.test.')) continue;
     else if (
       entry.name.endsWith('.ts') ||
       entry.name.endsWith('.tsx') ||

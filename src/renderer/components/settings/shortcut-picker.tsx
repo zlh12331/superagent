@@ -96,7 +96,9 @@ export function ShortcutPicker({ value, onChange, className }: ShortcutPickerPro
         recording && 'border-primary text-primary',
         className,
       )}
-      title={recording ? 'press-keys' : value}
+      // recording 时显示等待提示（此前是硬编码英文 'press-keys'，
+      // check-i18n 的硬编码检测只识别中文字面量，故一直未被拦）
+      title={recording ? t('settings.shortcutPressKeys') : value}
     >
       {recording ? '…' : value === '' ? t('settings.shortcutUnbound') : value}
     </button>

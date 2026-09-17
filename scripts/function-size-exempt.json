@@ -1,11 +1,4 @@
 {
-  "$comment": "函数体 >400 净行登记表（scripts/check-functions.ts 分档门禁）。分档阈值见 scripts/limits.json 的 functionSize.bodyTiers。规则：函数体净行 >400 必须在此登记并写明理由，否则门禁卡关；已登记的条目若净行降回 ≤400 会被判 stale（提示删除登记）。",
-  "$comment2": "为什么需要这个档：函数体 40 行是规范目标，但存量里存在「结构性长」的函数（如 IPC mock 声明表、React 组件 JSX 树）——它们的长度来自声明平铺而非控制流嵌套，拆分收益低。该档要求显式登记理由，避免「暂时容忍」静默变成「永久合法」。",
-  "entries": [
-    {
-      "key": "src/renderer/dev/mock-api.ts#createMockApi",
-      "body": 488,
-      "reason": "IPC mock 声明表：23 个域的假实现平铺在一个对象字面量里，每项独立无控制流嵌套。拆分只会把同一份假数据分散到多个文件，不降低理解成本；且该文件仅 dev:web 模式加载，不进生产包。"
-    }
-  ]
+  "$comment": "函数体超 heavy 档（>400 行）登记表（scripts/check-functions.ts 分档门禁）。2026-09-15 迁移 Biome noExcessiveLinesPerFunction 后口径为「独占行数（嵌套函数体单独计量）+ 含注释 + 跳过空行」，存量最大值 380（mock-api.ts#createMockApi，旧净行口径 488）低于 400，本表暂无登记对象；key 为文件相对路径（Biome 诊断不含函数名）。规则：某文件函数体实测 >400 必须在此登记并写明理由，否则门禁卡关；已登记条目若降回 ≤400 会被判 stale（提示删除登记）。",
+  "entries": []
 }

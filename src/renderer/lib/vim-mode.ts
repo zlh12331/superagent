@@ -104,13 +104,16 @@ export function vimHandleKey(
 ): VimResult {
   const len = text.length;
   const pos = Math.max(0, Math.min(cursor, len));
-  const noop: VimResult = { type: 'noop', state };
+  // 「非 dd 清缓冲」的落点：pending='d' 且第二键非 d/d 未命中时，缓冲清除后
+  // 继续按普通键处理——后续分支一律基于 current（修正：此前 default 分支返回
+  // 重赋值前捕获的旧态，pending='d' 未清除，连续 d 会被误判为 dd 触发行删除）
+  let current = state;
 
   // Esc：insert → normal；normal 下清除命令缓冲
   if (key === 'Escape') {
     return { type: 'state', state: { mode: 'normal', pending: '' } };
   }
-  if (state.mode === 'insert') return noop;
+  if (state.mode === 'insert') return { type: 'noop', state: current };
 
   // 命令缓冲：d 等待第二键
   if (state.pending === 'd') {
@@ -119,31 +122,31 @@ export function vimHandleKey(
       return { type: 'edit', state: { mode: 'normal', pending: '' }, value, cursor: next };
     }
     // 非 dd：清除缓冲，继续按普通按键处理
-    state = { mode: 'normal', pending: '' };
+    current = { mode: 'normal', pending: '' };
   }
 
   switch (key) {
     case 'd':
       return { type: 'state', state: { mode: 'normal', pending: 'd' } };
     case 'h':
-      return { type: 'move', state, cursor: Math.max(0, pos - 1) };
+      return { type: 'move', state: current, cursor: Math.max(0, pos - 1) };
     case 'l':
-      return { type: 'move', state, cursor: Math.min(len, pos + 1) };
+      return { type: 'move', state: current, cursor: Math.min(len, pos + 1) };
     case 'j':
-      return { type: 'move', state, cursor: moveVertical(text, pos, 1) };
+      return { type: 'move', state: current, cursor: moveVertical(text, pos, 1) };
     case 'k':
-      return { type: 'move', state, cursor: moveVertical(text, pos, -1) };
+      return { type: 'move', state: current, cursor: moveVertical(text, pos, -1) };
     case 'w':
-      return { type: 'move', state, cursor: nextWordStart(text, pos) };
+      return { type: 'move', state: current, cursor: nextWordStart(text, pos) };
     case 'b':
-      return { type: 'move', state, cursor: prevWordStart(text, pos) };
+      return { type: 'move', state: current, cursor: prevWordStart(text, pos) };
     case '0':
-      return { type: 'move', state, cursor: lineBounds(text, pos).start };
+      return { type: 'move', state: current, cursor: lineBounds(text, pos).start };
     case '$':
-      return { type: 'move', state, cursor: lineBounds(text, pos).end };
+      return { type: 'move', state: current, cursor: lineBounds(text, pos).end };
     case 'x': {
       const value = text.slice(0, pos) + text.slice(pos + 1);
-      return { type: 'edit', state, value, cursor: Math.min(pos, value.length) };
+      return { type: 'edit', state: current, value, cursor: Math.min(pos, value.length) };
     }
     case 'i':
       return { type: 'move', state: { mode: 'insert', pending: '' }, cursor: pos };
@@ -166,6 +169,6 @@ export function vimHandleKey(
         cursor: lineBounds(text, pos).end,
       };
     default:
-      return { type: 'noop', state };
+      return { type: 'noop', state: current };
   }
 }

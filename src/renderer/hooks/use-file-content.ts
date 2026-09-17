@@ -14,7 +14,7 @@
 // 缓存策略：
 // - queryKey: ['file', path] - 单个文件内容缓存
 // - staleTime: 30s（避免短时间内重复点击同一文件触发重复请求）
-// - gcTime: 5min（关闭 Dialog 后 5 分钟内缓存仍可用，再次打开秒开）
+// - gcTime: 5min（切换文件后 5 分钟内缓存仍可用，切回秒开）
 // ──────────────────────────────────────────────────────────────
 
 import type { FileReadRes } from '@code-agent/shared/renderer';
@@ -68,7 +68,7 @@ export function useFileContent(filePath: string | null) {
     enabled: filePath !== null,
     // 30s 内重复点击同一文件不重新请求
     staleTime: 30_000,
-    // 关闭 Dialog 后 5 分钟内缓存仍可用
+    // 切换文件后 5 分钟内缓存仍可用
     gcTime: 5 * 60_000,
   });
 }

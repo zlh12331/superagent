@@ -4,6 +4,9 @@
 // 受控组件：query / 匹配计数 / 导航由父组件（ChatPanel）持有状态，
 // 本组件仅负责 UI 展示与事件转发。
 // 键盘：Enter=下一个匹配 / Shift+Enter=上一个 / Esc=关闭
+// 组合态（IME）内的 Enter/Esc 属于「上字/取消候选」，不触发导航与关闭
+// （与 ChatInput 的 isComposing 处理同源；React 合成事件不暴露该字段，
+// 须读 nativeEvent）。
 // ──────────────────────────────────────────────────────────────
 
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
@@ -55,8 +58,15 @@ export function ConversationSearchBar({
   const hasQuery = query.trim() !== '';
   const hasMatches = totalMatches > 0;
 
-  /** 键盘导航：Enter=下一个 / Shift+Enter=上一个 / Esc=关闭 */
+  /**
+   * 键盘导航：Enter=下一个 / Shift+Enter=上一个 / Esc=关闭
+   *
+   * IME 组合态内按 Enter 是「确认候选词」、Esc 是「取消候选」，都不是导航/关闭
+   * 意图——此前未判定 isComposing，中文/日文输入法上字即跳转匹配、取消候选即
+   * 关闭搜索栏。React 合成事件不暴露 isComposing（在 nativeEvent 上）。
+   */
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       onNavigate(e.shiftKey ? -1 : 1);

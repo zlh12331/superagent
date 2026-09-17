@@ -11,17 +11,21 @@
 // - 纯只读面板，无写操作（日志由 electron-log 写入文件）
 // - 日志行按级别着色（error 红 / warn 琥珀 / info 默认 / debug 灰）
 // - 等宽字体展示日志文本，行级着色而非整行背景（降低视觉噪音）
-// - 折叠态由 DevPanel 控制是否启用查询（enabled 参数）
-// - 使用小按钮组而非 Select 组件（项目未引入 shadcn Select，避免新增依赖）
+// - enabled 由 DevPanel 按**当前可见 tab** 传入（仅 dev/logs 子页启用查询，切走
+//   即停，省下无谓 IPC）——不是「折叠态」控制
+// - 级别/行数用分段控件（ToggleGroup）而非下拉：与面板内其他分段控件同款，
+//   窄面板下选项直接可见
 // ──────────────────────────────────────────────────────────────
 
+import type { ReadLogsRes } from '@code-agent/shared/renderer';
 import { AlertCircle, FileText, RefreshCw } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useLogsReadQuery } from '@/hooks/use-system';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** 日志级别过滤选项 */
@@ -31,21 +35,19 @@ type LogLevelFilter = 'all' | 'info' | 'warn' | 'error' | 'debug';
 const LINE_OPTIONS = [100, 200, 500] as const;
 type LineOption = (typeof LINE_OPTIONS)[number];
 
-/** 级别过滤按钮配置（'all' 走 i18n，级别术语 Info/Warn/Error/Debug 保持英文） */
-const LEVEL_FILTERS: readonly {
-  readonly value: LogLevelFilter;
-  readonly labelKey: string | null;
-  readonly label: string;
-}[] = [
-  { value: 'all', labelKey: 'dev.all', label: '' },
-  { value: 'info', labelKey: null, label: 'Info' },
-  { value: 'warn', labelKey: null, label: 'Warn' },
-  { value: 'error', labelKey: null, label: 'Error' },
-  { value: 'debug', labelKey: null, label: 'Debug' },
-] as const;
+/** 级别过滤顺序（'all' 走 i18n；级别术语 Info/Warn/Error/Debug 保持英文） */
+const LEVEL_FILTERS: readonly LogLevelFilter[] = ['all', 'info', 'warn', 'error', 'debug'];
+
+/** 级别术语显示名（'all' 走 i18n，故不在此表） */
+const LEVEL_LABELS: Record<Exclude<LogLevelFilter, 'all'>, string> = {
+  info: 'Info',
+  warn: 'Warn',
+  error: 'Error',
+  debug: 'Debug',
+};
 
 interface LogsPanelProps {
-  /** 是否启用查询（DevPanel 折叠时传 false 节省 IPC） */
+  /** 是否启用查询（DevPanel 在当前 tab 非 logs 时传 false 节省 IPC） */
   readonly enabled?: boolean;
   /** 自定义容器类名 */
   readonly className?: string;
@@ -58,7 +60,7 @@ interface LogsPanelProps {
  *
  * @example
  * ```tsx
- * <LogsPanel enabled={isDevPanelExpanded} />
+ * <LogsPanel enabled={activeTab === 'dev' && devSubTab === 'logs'} />
  * ```
  */
 export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactElement {
@@ -85,18 +87,24 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           type="single"
           value={level}
           onValueChange={(v) => {
-            if (v) setLevel(v as LogLevelFilter);
+            // 与行数选择同一套「按表校验」而非断言：Radix 单选点击已选项会
+            // 回传空串取消（断言版靠 `if (v)` 兜住），而断言本身不校验取值
+            // 是否在本表内。
+            const next = LEVEL_FILTERS.find((option) => option === v);
+            if (next !== undefined) {
+              setLevel(next);
+            }
           }}
           className="gap-0.5"
         >
-          {LEVEL_FILTERS.map((filter) => (
+          {LEVEL_FILTERS.map((level) => (
             <ToggleGroupItem
-              key={filter.value}
-              value={filter.value}
+              key={level}
+              value={level}
               disabled={!enabled}
               className="rounded px-1.5 py-0.5 text-[9px] font-mono"
             >
-              {filter.labelKey !== null ? t(filter.labelKey) : filter.label}
+              {level === 'all' ? t('dev.all') : LEVEL_LABELS[level]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -108,9 +116,12 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
           type="single"
           value={String(lines)}
           onValueChange={(v) => {
-            const parsed = Number(v);
-            if (!Number.isNaN(parsed)) {
-              setLines(parsed as 100 | 200 | 500);
+            // 只接受真实档位：Radix 单选点击已选项会回传空串取消，
+            // 而 `Number('')` 为 0（非 NaN）——此前仅判 NaN 会把行数置 0，
+            // 查询随之变成「读 0 行」，面板空白。
+            const next = LINE_OPTIONS.find((option) => String(option) === v);
+            if (next !== undefined) {
+              setLines(next);
             }
           }}
           className="gap-0.5"
@@ -153,20 +164,42 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
       {/* 日志列表：普通滚动容器（Radix ScrollArea 内层 display:table 会随最长日志行撑宽
           到 391px，超出 283px 面板被裁剪且横向滚动条不可达——长行尾部永远看不到） */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {isLoading ? (
-          <LogsSkeleton />
-        ) : error !== null ? (
-          <ErrorHint message={error instanceof Error ? error.message : String(error)} />
-        ) : data === undefined ? (
-          <ErrorHint message={t('common.logsEmpty')} />
-        ) : data.lines.length === 0 ? (
-          <EmptyLogs filePath={data.filePath} />
-        ) : (
-          <LogLines lines={data.lines} filePath={data.filePath} />
-        )}
+        <LogsBody isLoading={isLoading} error={error} data={data} />
       </div>
     </div>
   );
+}
+
+// ── 子组件：内容区四态 ──────────────────────────────────────
+
+interface LogsBodyProps {
+  readonly isLoading: boolean;
+  readonly error: unknown;
+  readonly data: ReadLogsRes | undefined;
+}
+
+/**
+ * 内容区四态分派（加载中 / 错误 / 无数据 / 空 / 有数据）
+ *
+ * 拆出动机：此前是四层嵌套三元表达式直接内联在主组件 JSX 里，
+ * 使 LogsPanel 认知复杂度达 18（门禁阈值 15）。改用早返回后主组件回到阈值内，
+ * 且四种态的分派一眼可读。
+ */
+function LogsBody({ isLoading, error, data }: LogsBodyProps): ReactElement {
+  const { t } = useTranslation();
+  // 错误文案统一经 unwrapErrorMessage 解析错误码（与其余面板一致）
+  const { getErrorMessage } = useErrorMessage();
+  if (isLoading) return <LogsSkeleton />;
+  if (error !== null) {
+    return <ErrorHint message={unwrapErrorMessage(error as Error, getErrorMessage)} />;
+  }
+  if (data === undefined) {
+    return <ErrorHint message={t('common.logsEmpty')} />;
+  }
+  if (data.lines.length === 0) {
+    return <EmptyLogs filePath={data.filePath} />;
+  }
+  return <LogLines lines={data.lines} filePath={data.filePath} />;
 }
 
 // ── 子组件：日志行列表 ──────────────────────────────────────
@@ -214,13 +247,15 @@ function getColorForLogLevel(line: string): string {
 
 // ── 子组件：加载中 / 空状态 / 错误状态 ─────────────────────────
 
-/** 加载中骨架屏 */
+/** 加载中骨架屏（role=status 让读屏知道正在加载，而非一片静默的占位块） */
 function LogsSkeleton(): ReactElement {
+  const { t } = useTranslation();
   return (
-    <div className="flex flex-col gap-0.5 p-2">
+    <div className="flex flex-col gap-0.5 p-2" role="status" aria-busy="true">
+      <span className="sr-only">{t('common.loading')}</span>
       {Array.from({ length: 8 }).map((_, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: 静态骨架屏占位，index 稳定且无重排
-        <Skeleton key={index} className="h-3 w-full" />
+        <Skeleton key={index} aria-hidden="true" className="h-3 w-full" />
       ))}
     </div>
   );
