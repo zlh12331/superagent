@@ -45,17 +45,19 @@ export const LANGUAGE_STORAGE_KEY = 'code-agent:lang';
 /**
  * i18next 资源结构
  *
- * 结构：{ 语言: { namespace: { translation: {...} } } }
- * 资源 JSON 文件内部包了一层 "translation"，符合 i18next 默认命名空间约定
+ * 结构：{ 语言: { namespace: {...} } }
+ * JSON 文件与命名空间一一对应、扁平无包装（2026-09-17 移除旧 "translation"
+ * 顶层包装——扁平结构是 i18next-cli 与 IDE i18n 插件解析语言包的预期形态，
+ * 包装曾导致所有 key 被工具判定为缺失）
  */
 export const resources = {
   'zh-CN': {
-    common: zhCNCommon.translation,
-    errors: zhCNErrors.translation,
+    common: zhCNCommon,
+    errors: zhCNErrors,
   },
   en: {
-    common: enCommon.translation,
-    errors: enErrors.translation,
+    common: enCommon,
+    errors: enErrors,
   },
 } as const;
 

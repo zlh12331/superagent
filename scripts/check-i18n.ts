@@ -26,10 +26,11 @@ function walk(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-/** 扁平化 JSON key（a.b.c） */
+/** 扁平化 JSON key（a.b.c）；顶层 $comment（文件说明）不是语言 key，跳过 */
 function flattenKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   const keys: string[] = [];
   for (const [k, v] of Object.entries(obj)) {
+    if (prefix === '' && k === '$comment') continue;
     const key = prefix === '' ? k : `${prefix}.${k}`;
     if (v !== null && typeof v === 'object')
       keys.push(...flattenKeys(v as Record<string, unknown>, key));
@@ -119,17 +120,16 @@ function collectHardcodedZhText(file: string): string[] {
 
 function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } {
   const dir = join(LOCALES, lang);
-  // 资源文件内部含 "translation" 顶层（i18next 约定），config.ts 挂载 .translation 为命名空间
-  const commonRaw = JSON.parse(readFileSync(join(dir, 'common.json'), 'utf8')) as Record<
+  // 语言包与命名空间一一对应、扁平无包装（2026-09-17 移除旧 translation 包装，
+  // 与 i18next-cli / IDE 插件的扁平解析预期对齐）
+  const common = JSON.parse(readFileSync(join(dir, 'common.json'), 'utf8')) as Record<
     string,
     unknown
   >;
-  const errorsRaw = JSON.parse(readFileSync(join(dir, 'errors.json'), 'utf8')) as Record<
+  const errors = JSON.parse(readFileSync(join(dir, 'errors.json'), 'utf8')) as Record<
     string,
     unknown
   >;
-  const common = commonRaw.translation as Record<string, unknown>;
-  const errors = errorsRaw.translation as Record<string, unknown>;
   return { common: new Set(flattenKeys(common)), errors: new Set(flattenKeys(errors)) };
 }
 
