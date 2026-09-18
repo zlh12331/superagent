@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useInstallUpdate } from '@/hooks/use-install-update';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -35,7 +36,9 @@ import { useUiStore } from '@/stores/transient/ui-store';
  * ```
  */
 export function UpdateIndicator(): ReactElement | null {
-  const { state, install } = useUpdate();
+  const { state } = useUpdate();
+  // 重启并安装（有回合在跑时先确认；与关于面板共用同一语义）
+  const installUpdate = useInstallUpdate();
   const openSettings = useUiStore((s) => s.openSettings);
   const { t } = useTranslation();
   // 持久跳过（settings.update.skippedVersion，跨会话）与本次会话"稍后"
@@ -88,7 +91,9 @@ export function UpdateIndicator(): ReactElement | null {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={install}>{t('update.restartNow')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void installUpdate()}>
+            {t('update.restartNow')}
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setDismissedVersion(version)}>
             {t('update.later')}
           </DropdownMenuItem>

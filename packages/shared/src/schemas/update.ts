@@ -78,6 +78,8 @@ export interface UpdateStatusPayload {
   readonly bytesPerSecond?: number;
   /** 错误分类（error 时提供） */
   readonly errorKind?: UpdateErrorKind;
+  /** 更新说明（available/downloaded 时提供；来源为 GitHub release body = 润色过的 CHANGELOG 段落） */
+  readonly releaseNotes?: string;
   /** 错误信息（error 时提供；unknown 分类下展示给用户，其余仅记日志） */
   readonly message?: string;
 }
@@ -99,6 +101,7 @@ export const UpdateStatusPayloadSchema = z.object({
   total: z.number().min(0).optional(),
   bytesPerSecond: z.number().min(0).optional(),
   errorKind: z.enum(['network', 'rate-limited', 'checksum', 'disk', 'unknown']).optional(),
+  releaseNotes: z.string().optional(),
   message: z.string().optional(),
 });
 

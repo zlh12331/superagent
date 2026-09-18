@@ -155,6 +155,7 @@
 ### 6.6 危险与边界交互
 
 - **重启并安装 + 运行中任务** → 走统一 `confirm()` store：标题「有正在进行的任务」，正文「重启会中断当前任务，是否继续？」，按钮「仍要重启」/「取消」。
+  实现：`use-install-update` hook 提供统一动作（关于面板与顶栏指示共用，禁各入口自行弹窗）；"是否有回合在跑"由 `agent-run-store`（transient）承载，ChatPanel 发布 `status === 'streaming' || 'submitted'`，卸载时复位。
 - **安装方式为静默**：确认通过后静默安装（`quitAndInstall(true, true)`），装完自动启动应用，不弹安装向导、沿用原安装目录。
 - **取消下载**：无需二次确认；取消后回空闲态并显示一行"已取消下载"，不弹 toast。
 - **跳过此版本**：仅在发现新版 / 就绪态出现（关于面板按钮 + 顶栏操作菜单项）；记录跳过的版本号（存 `app_settings` 的 `update.skippedVersion`），出现更高版本时因版本号不等自动失效。
@@ -186,6 +187,7 @@
 ## 7. 内容与容错
 
 - **更新说明**：来源为 GitHub release body（即我们润色过的 CHANGELOG 段落），库会作为 releaseNotes 下发，直接展示。
+  已实现：主进程 `toReleaseNotes` 归一化（字符串原样 / 分段数组用空行连接 / 无法识别 → null，不编造内容），经 payload `releaseNotes` 下发（available 与 downloaded 都带；取消时清空）；关于面板渲染折叠区（纯文本 + 换行保真，默认显示前 3 行，超过可展开）——不为低频场景引入 markdown 管线。
 - **错误分类与本地化**：网络不可达 / 被限流 / 校验失败 / 磁盘不足 / 未知，各配一句可操作文案。现状是把库的英文原始 message 直接展示给用户。
   已实现：主进程 `classifyUpdateError` 按真实错误特征归类（HttpError 的 `statusCode` / `code`、Node 网络码、Electron `net::ERR_*` 文本、sha512 文本、ENOSPC/EDQUOT），经 payload 的 `errorKind` 下发；关于面板映射本地化文案，
   **unknown 分类保留原始 message**（这类问题需要用户把技术细节带到 issue，套"未知错误"反而丢线索，原始信息同时已进 `main.log`）。
@@ -224,8 +226,8 @@
 3. 日志接管：`update-service.ts` 注入 logger 适配。
 4. 发布门禁：`.github/workflows/release.yml` 的 publish job 强制 blockmap。
 
-**P1**（第一批已完成，2026-09-18；见 §14）：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~。
-**P1 剩余**：更新说明折叠区（release notes）、重启确认对话框（有运行中回合时）、缓存占用与清理入口。
+**P1**（第一批与第二批已完成，2026-09-18；见 §14）：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~、~~更新说明折叠区~~、~~重启确认对话框~~。
+**P1 剩余**：缓存占用与清理入口（设置 → 数据）。
 
 **P2**：任务栏进度、`forceDevUpdateConfig` + `dev-app-update.yml` 让更新链路可在 dev 与 e2e 覆盖、签名与公证、自定义更新源的 host 校验。
 
@@ -274,3 +276,17 @@ P0 已落地，与本文档的两处机制偏差如实记录如下（均为实�
 验收实测：`pnpm typecheck` / `pnpm lint` / `pnpm check:static` / `pnpm knip` 通过；
 `pnpm test` = shared 81 + main 1842 + renderer 1502 + integration 152 + scripts 158 全绿。
 新增测试：错误分类 5 组用例、`lastCheckAt` 记录、UpdateNotice 跳过/回放静默、`useUpdate` 快照含时间。
+
+### 14.2 P1 第二批（2026-09-18，已提交）
+
+- **重启确认**：新增 transient `agent-run-store`（ChatPanel 发布 `status`，卸载复位）+
+  `use-install-update` hook（关于面板与顶栏指示共用同一危险操作语义，确认后才安装；
+  弹窗走统一 `confirm()` store，`danger` 样式）。
+- **更新说明**：主进程 `toReleaseNotes` 归一化 + payload `releaseNotes`（available/downloaded
+  均带、取消清空）；关于面板折叠区（默认 3 行，纯文本换行保真）。
+- **文档同步**：`08-ux-guidelines.md` / `09-ux-interaction-spec.md` 的更新提示条目由"仅 toast、
+  无 DOM"改为三处接触点（此前描述与实现不符，属过期文档）。
+
+验收实测：`pnpm typecheck` / `pnpm lint` / `pnpm check:static`（13 项）/ `pnpm knip` 通过；
+`pnpm test` = shared 81 + main 1849 + renderer 1505 + integration 152 + scripts 158 全绿。
+新增测试：`toReleaseNotes` 4 组、更新说明透传与取消清空、`use-install-update` 3 组（无回合直装 / 确认后装 / 取消不装）。

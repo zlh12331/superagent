@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useAppInfo } from '@/hooks/use-app-info';
+import { useInstallUpdate } from '@/hooks/use-install-update';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { reportError } from '@/lib/error-report';
@@ -85,6 +86,32 @@ function ChannelBadge({ channel }: { readonly channel: string }): ReactElement {
     >
       {channel}
     </span>
+  );
+}
+
+/**
+ * 更新说明折叠区
+ *
+ * 内容来自 GitHub release body（即我们润色过的 CHANGELOG 段落），按纯文本 +
+ * 换行保真渲染——不为这个低频场景引入 markdown 管线。默认只显示前 3 行。
+ */
+function ReleaseNotes({ notes }: { readonly notes: string }): ReactElement {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const lines = notes.split('\n').filter((line) => line.trim() !== '');
+  const visible = expanded ? lines : lines.slice(0, 3);
+  return (
+    <div className="flex w-full flex-col items-start gap-1">
+      <span className="text-muted-foreground text-[11px]">{t('update.notesTitle')}</span>
+      <p className="text-muted-foreground text-[11px] leading-[1.6] whitespace-pre-line">
+        {visible.join('\n')}
+      </p>
+      {lines.length > 3 && (
+        <Button variant="ghost" size="sm" onClick={() => setExpanded((prev) => !prev)}>
+          {expanded ? t('update.notesCollapse') : t('update.notesExpand')}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -244,18 +271,22 @@ function UpdateBlock({
   }
 
   if (phase === 'downloaded') {
+    const notes = state?.releaseNotes;
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-accent-text inline-flex items-center gap-1 text-xs">
-          <PackageCheck className="size-3.5" strokeWidth={1.5} />
-          {t('settings.aboutUpdateReady')}
-        </span>
-        <Button size="sm" variant="outline" onClick={onInstall}>
-          {t('settings.aboutInstallRestart')}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onSkip}>
-          {t('update.skipVersion')}
-        </Button>
+      <div className="flex w-full flex-col items-start gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-accent-text inline-flex items-center gap-1 text-xs">
+            <PackageCheck className="size-3.5" strokeWidth={1.5} />
+            {t('settings.aboutUpdateReady')}
+          </span>
+          <Button size="sm" variant="outline" onClick={onInstall}>
+            {t('settings.aboutInstallRestart')}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onSkip}>
+            {t('update.skipVersion')}
+          </Button>
+        </div>
+        {notes !== undefined && notes !== '' && <ReleaseNotes notes={notes} />}
       </div>
     );
   }
@@ -426,7 +457,9 @@ export function AboutSection(): ReactElement {
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
   // 更新状态（订阅主进程 update:event:status + 挂载快照；全局 UpdateNotice 与这里共享事件流）
-  const { state: updateState, check, cancel, install, lastCheckAt } = useUpdate();
+  const { state: updateState, check, cancel, lastCheckAt } = useUpdate();
+  // 重启并安装（有回合在跑时先确认；与顶栏指示共用同一语义，见 use-install-update）
+  const installUpdate = useInstallUpdate();
   // 自动检查开关与跳过版本（写穿透落库；主进程下次启动读取开关）
   const autoCheck = useSettingsStore((s) => s.update.autoCheck);
   const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
@@ -499,7 +532,7 @@ export function AboutSection(): ReactElement {
               state={updateState}
               onCheck={() => void check()}
               onCancel={cancel}
-              onInstall={install}
+              onInstall={() => void installUpdate()}
               onSkip={handleSkipVersion}
               onOpenDataDir={openDataDir}
             />

@@ -16,6 +16,7 @@ import {
   type AutoUpdaterLike,
   type CancellationTokenLike,
   classifyUpdateError,
+  toReleaseNotes,
   UpdateService,
 } from './update-service';
 
@@ -286,6 +287,40 @@ describe('UpdateService', () => {
       expect(win.webContents.send).not.toHaveBeenCalled();
     });
 
+    it('update-available 带 releaseNotes → payload 含更新说明', () => {
+      const win = createFakeWindow();
+      mockGetAllWindows.mockReturnValue([win]);
+      service.start();
+      fire(updater, 'update-available', { version: '1.2.0', releaseNotes: '修复 A\n新增 B' });
+      expect(lastPayload(win)).toEqual({
+        phase: 'available',
+        version: '1.2.0',
+        releaseNotes: '修复 A\n新增 B',
+      });
+    });
+
+    it('update-downloaded 继承发现新版时的更新说明', () => {
+      const win = createFakeWindow();
+      mockGetAllWindows.mockReturnValue([win]);
+      service.start();
+      fire(updater, 'update-available', { version: '1.2.0', releaseNotes: '说明原文' });
+      fire(updater, 'update-downloaded', { version: '1.2.0' });
+      expect(lastPayload(win)).toEqual({
+        phase: 'downloaded',
+        version: '1.2.0',
+        releaseNotes: '说明原文',
+      });
+    });
+
+    it('取消下载后清空更新说明（不在取消态带出）', () => {
+      const win = createFakeWindow();
+      mockGetAllWindows.mockReturnValue([win]);
+      service.start();
+      fire(updater, 'update-available', { version: '1.2.0', releaseNotes: '说明原文' });
+      fire(updater, 'update-cancelled', { version: '1.2.0' });
+      expect(lastPayload(win)).toEqual({ phase: 'cancelled', version: '1.2.0' });
+    });
+
     it('无窗口时仍留快照（getStatus 可读）', () => {
       mockGetAllWindows.mockReturnValue([]);
       service.start();
@@ -418,6 +453,32 @@ describe('UpdateService', () => {
     it('静默安装 + 装完自动启动（isSilent=true, isForceRunAfter=true）', () => {
       service.quitAndInstall();
       expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    });
+  });
+
+  describe('toReleaseNotes', () => {
+    it('字符串原样返回（trim 首尾空白）', () => {
+      expect(toReleaseNotes('  修复 A\n')).toBe('修复 A');
+    });
+
+    it('空白字符串 → null（不产出空说明区块）', () => {
+      expect(toReleaseNotes('   ')).toBeNull();
+      expect(toReleaseNotes('')).toBeNull();
+    });
+
+    it('分段数组 → 各 note 用空行连接', () => {
+      expect(
+        toReleaseNotes([
+          { version: '1.0.0', note: 'a' },
+          { version: '1.0.1', note: 'b' },
+        ]),
+      ).toBe('a\n\nb');
+    });
+
+    it('无法识别的形状 → null（不编造内容）', () => {
+      expect(toReleaseNotes(undefined)).toBeNull();
+      expect(toReleaseNotes(42)).toBeNull();
+      expect(toReleaseNotes([{ foo: 1 }])).toBeNull();
     });
   });
 

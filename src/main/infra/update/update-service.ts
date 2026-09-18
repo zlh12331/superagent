@@ -111,12 +111,20 @@ export interface AutoUpdaterLike {
   /** 日志出口（本服务接管为项目 logger 适配器） */
   logger: UpdaterLoggerLike | null;
   on(event: 'checking-for-update', listener: () => void): void;
-  on(event: 'update-available', listener: (info: { version: string }) => void): void;
+  on(event: 'update-available', listener: (info: UpdateInfoLike) => void): void;
   on(event: 'update-not-available', listener: () => void): void;
   on(event: 'download-progress', listener: (progress: UpdateProgressInfo) => void): void;
-  on(event: 'update-downloaded', listener: (info: { version: string }) => void): void;
-  on(event: 'update-cancelled', listener: (info: { version: string }) => void): void;
+  on(event: 'update-downloaded', listener: (info: UpdateInfoLike) => void): void;
+  on(event: 'update-cancelled', listener: (info: UpdateInfoLike) => void): void;
   on(event: 'error', listener: (error: Error) => void): void;
+}
+
+/** 事件携带的版本信息（releaseNotes 由库按 provider 下发的原文，可能为字符串或分段数组） */
+export interface UpdateInfoLike {
+  /** 版本号 */
+  readonly version: string;
+  /** 更新说明（GitHub provider 下为 release body 原文；可能缺失） */
+  readonly releaseNotes?: unknown;
 }
 
 /** UpdateService 接口（服务容器注入用） */
@@ -154,6 +162,9 @@ export class UpdateService implements IUpdateService {
 
   /** 发现新版的版本号（进度事件不带版本，下载中/取消时补进 payload） */
   private pendingVersion: string | null = null;
+
+  /** 发现新版时带下来的更新说明（就绪态继续展示；取消/清理时置空） */
+  private pendingReleaseNotes: string | null = null;
 
   /** 在途下载的取消令牌（null = 无在途下载） */
   private cancelToken: CancellationTokenLike | null = null;
@@ -266,6 +277,7 @@ export class UpdateService implements IUpdateService {
     this.clearTimer();
     this.cancelToken = null;
     this.pendingVersion = null;
+    this.pendingReleaseNotes = null;
   }
 
   /** 注册 autoUpdater 事件监听（事件 → payload 推送 + 快照） */
@@ -276,7 +288,12 @@ export class UpdateService implements IUpdateService {
     this.updater.on('update-available', (info) => {
       logger.info({ scope: 'auto-updater', version: info.version }, '发现新版本');
       this.pendingVersion = info.version;
-      this.emit({ phase: 'available', version: info.version });
+      this.pendingReleaseNotes = toReleaseNotes(info.releaseNotes);
+      this.emit({
+        phase: 'available',
+        version: info.version,
+        ...(this.pendingReleaseNotes !== null ? { releaseNotes: this.pendingReleaseNotes } : {}),
+      });
       this.beginDownload();
     });
     this.updater.on('update-not-available', () => {
@@ -288,12 +305,19 @@ export class UpdateService implements IUpdateService {
     this.updater.on('update-downloaded', (info) => {
       logger.info({ scope: 'auto-updater', version: info.version }, '新版本下载完成');
       this.cancelToken = null;
-      this.emit({ phase: 'downloaded', version: info.version });
+      // 就绪态继续展示更新说明（部分 provider 只在 downloaded 事件带 notes）
+      const notes = toReleaseNotes(info.releaseNotes) ?? this.pendingReleaseNotes;
+      this.emit({
+        phase: 'downloaded',
+        version: info.version,
+        ...(notes !== null ? { releaseNotes: notes } : {}),
+      });
     });
     this.updater.on('update-cancelled', (info) => {
       logger.info({ scope: 'auto-updater', version: info.version }, '更新下载已取消');
       this.cancelToken = null;
       this.pendingVersion = null;
+      this.pendingReleaseNotes = null;
       this.emit({ phase: 'cancelled', version: info.version });
     });
     this.updater.on('error', (error) => {
@@ -457,6 +481,33 @@ export function classifyUpdateError(error: unknown): UpdateErrorKind {
     return 'network';
   }
   return 'unknown';
+}
+
+/**
+ * 归一化更新说明
+ *
+ * electron-updater 的 releaseNotes 按 provider 可能是字符串（GitHub release
+ * body）或分段数组（`{ version, note }[]`，如 latest.yml 的内嵌 notes）。
+ * 这里统一成纯文本；无法识别的形状返回 null（不编造内容）。
+ */
+export function toReleaseNotes(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => {
+        if (typeof item === 'object' && item !== null) {
+          const note = Reflect.get(item, 'note');
+          return typeof note === 'string' ? note.trim() : '';
+        }
+        return '';
+      })
+      .filter((part) => part !== '');
+    return parts.length === 0 ? null : parts.join('\n\n');
+  }
+  return null;
 }
 
 /** 读取错误对象上的字段（Error 子类运行时携带 code/statusCode，类型上不可见） */
