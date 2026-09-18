@@ -2,16 +2,18 @@
 // 自动更新服务（electron-updater 封装，定义表驱动事件推送）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 启动时注册 autoUpdater 事件监听，转换为 UpdateStatusPayload 推送渲染层
-// - check(manual)：手动/自动触发更新检查（开发模式返回明确错误）
-// - quitAndInstall()：下载完成后安装并重启
+// - 注册 autoUpdater 事件监听，转换为 UpdateStatusPayload 推送渲染层并留快照
+// - 启动检查调度：每次启动一次 + 失败退避重试 + 长会话兜底
+// - 手动检查 / 取消下载 / 安装重启 / 状态快照
 //
-// 设计：
-// - 注入式：AutoUpdaterLike 接口抽象 electron-updater，测试注入 fake 实现
-// - 事件推送：广播到所有窗口（webContents.send UPDATE_EVENT_STATUS）
-// - 更新源：electron-updater 打包后自动读取 electron-builder 生成的
-//   app-update.yml（由 electron-builder.yml 的 publish 配置生成），
-//   无需运行时 setFeedURL
+// 设计（见 docs/design/27-auto-update-spec.md）：
+// - 注入式：AutoUpdaterLike 抽象 electron-updater，测试注入 fake 实现（不 mock 模块）
+// - 开关：autoCheckEnabled 以 () => boolean 注入（index.ts 读 app_settings 的 update 域）
+// - 下载由本服务显式发起（start 置 autoDownload=false）：electron-updater 未暴露
+//   取消 API（cancellationToken 在 doCheckForUpdates 内部新建、外部不可达），只有
+//   自己持有 token 调 downloadUpdate 才能实现"取消下载"；库文档明确支持该用法
+// - 更新源：electron-updater 打包后自动读取 electron-builder 生成的 app-update.yml
+//   （由 electron-builder.yml 的 publish 配置生成），无需运行时 setFeedURL
 // ──────────────────────────────────────────────────────────────
 
 import type { UpdateCheckRes, UpdateStatusPayload } from '@code-agent/shared/main';
@@ -20,6 +22,65 @@ import { BrowserWindow } from 'electron';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
+/** 启动检查延迟（窗口就绪后再发起，避开启动期资源争抢） */
+const LAUNCH_CHECK_DELAY_MS = 5_000;
+
+/** 启动检查失败退避序列（1 / 5 / 15 分钟；用尽即本会话放弃，只记日志） */
+const LAUNCH_CHECK_RETRY_DELAYS_MS: readonly number[] = [60_000, 5 * 60_000, 15 * 60_000];
+
+/** 长会话兜底间隔（窗口长期不关时补一次检查，不替代启动检查） */
+const LONG_SESSION_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * 下载进度（electron-updater ProgressInfo 的子集）
+ *
+ * 差分下载时 total 是本次需下载的字节数（差分包大小），不是完整安装包体积。
+ */
+export interface UpdateProgressInfo {
+  /** 百分比 0-100 */
+  readonly percent: number;
+  /** 已下载字节 */
+  readonly transferred: number;
+  /** 本次下载总字节 */
+  readonly total: number;
+  /** 平均速率（字节/秒） */
+  readonly bytesPerSecond: number;
+}
+
+/** 取消令牌的可注入子集（builder-util-runtime 的 CancellationToken） */
+export interface CancellationTokenLike {
+  /** 取消（触发在途下载中止；幂等） */
+  cancel(): void;
+  /** 是否已取消 */
+  readonly cancelled: boolean;
+}
+
+/** electron-updater 日志出口的可注入子集（接管后更新过程日志进 main.log） */
+export interface UpdaterLoggerLike {
+  /** 普通日志 */
+  info(message?: unknown, ...params: unknown[]): void;
+  /** 警告（差分回退等） */
+  warn(message?: unknown, ...params: unknown[]): void;
+  /** 错误 */
+  error(message?: unknown, ...params: unknown[]): void;
+  /** 调试（库内部细节，仅有实现时调用） */
+  debug?(message?: unknown, ...params: unknown[]): void;
+}
+
+/** 检查调度类型（决定成功/失败后如何续排） */
+type CheckTimerKind = 'launch' | 'retry' | 'long-session';
+
+/** 启动自动检查的选项 */
+export interface UpdateStartOptions {
+  /**
+   * 是否启用启动检查（读用户设置；缺省视为启用）
+   *
+   * 关闭时：不调度任何自动检查，且停用"退出时自动安装"
+   * （否则上一次会话残留的已下载包仍会在退出时装上）。
+   */
+  readonly autoCheckEnabled?: () => boolean;
+}
+
 /**
  * electron-updater autoUpdater 的可注入子集
  *
@@ -27,26 +88,46 @@ import { logger } from '../../utils/logger';
  * （与工具/服务层 DI 注入模式一致，不 mock 模块）。
  */
 export interface AutoUpdaterLike {
+  /** 检查更新（结果经事件下发，返回值不含结果） */
   checkForUpdates(): Promise<unknown>;
-  quitAndInstall(): void;
+  /**
+   * 手动发起下载（autoDownload=false 时由本服务调用，token 用于取消）
+   *
+   * 参数声明为可选：与 electron-updater 的实际签名一致（可选参数使得真实
+   * AppUpdater 在结构上可赋给本接口，同时本服务总是显式传入自持 token）。
+   */
+  downloadUpdate(cancellationToken?: CancellationTokenLike): Promise<unknown>;
+  /** 安装已下载的更新并重启（isSilent=true 为静默安装） */
+  quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
+  /** 发现新版后是否自动下载（本服务置 false，改由 downloadUpdate 显式发起） */
+  autoDownload: boolean;
+  /** 退出时是否自动安装已下载更新（跟随用户开关） */
+  autoInstallOnAppQuit: boolean;
+  /** 日志出口（本服务接管为项目 logger 适配器） */
+  logger: UpdaterLoggerLike | null;
   on(event: 'checking-for-update', listener: () => void): void;
   on(event: 'update-available', listener: (info: { version: string }) => void): void;
   on(event: 'update-not-available', listener: () => void): void;
-  on(event: 'download-progress', listener: (progress: { percent: number }) => void): void;
+  on(event: 'download-progress', listener: (progress: UpdateProgressInfo) => void): void;
   on(event: 'update-downloaded', listener: (info: { version: string }) => void): void;
+  on(event: 'update-cancelled', listener: (info: { version: string }) => void): void;
   on(event: 'error', listener: (error: Error) => void): void;
 }
 
 /** UpdateService 接口（服务容器注入用） */
 // biome-ignore lint/style/useNamingConvention: I 前缀接口遵循项目惯例（IChatService 等）
 export interface IUpdateService {
-  /** 注册 autoUpdater 事件监听（app ready 后调用一次） */
-  start(): void;
-  /** 触发更新检查（自动下载在 available 后开始，electron-updater 默认行为） */
+  /** 注册事件监听并按选项调度启动检查（app ready 后调用一次） */
+  start(options?: UpdateStartOptions): void;
+  /** 触发更新检查（manual=true 时失败会推送 error 事件，自动检查静默） */
   check(manual: boolean): Promise<UpdateCheckRes>;
-  /** 安装已下载的更新并重启 */
+  /** 取消在途下载（无在途下载时为空操作；取消结果经 update-cancelled 推送） */
+  cancelDownload(): void;
+  /** 最近一次状态快照（渲染层重载后恢复界面用；从未产生过为 null） */
+  getStatus(): UpdateStatusPayload | null;
+  /** 安装已下载的更新并重启（静默安装 + 装完自动启动） */
   quitAndInstall(): void;
-  /** 释放资源（electron-updater 无 off API，空实现占位） */
+  /** 释放资源（清挂起定时器；在途下载留给 pending 缓存续传） */
   dispose(): void;
 }
 
@@ -55,40 +136,65 @@ export interface IUpdateService {
  *
  * @example
  * ```ts
- * const updateService = new UpdateService(autoUpdater, () => app.isPackaged);
- * updateService.start();
- * await updateService.check(false);
+ * const updateService = new UpdateService(autoUpdater, () => app.isPackaged, () => new CancellationToken());
+ * updateService.start({ autoCheckEnabled: () => readSetting('update')?.autoCheck !== false });
  * ```
  */
 export class UpdateService implements IUpdateService {
+  /** 最近一次状态快照（emit 时更新，供 getStatus 读取） */
+  private snapshot: UpdateStatusPayload | null = null;
+
+  /** 发现新版的版本号（进度事件不带版本，下载中/取消时补进 payload） */
+  private pendingVersion: string | null = null;
+
+  /** 在途下载的取消令牌（null = 无在途下载） */
+  private cancelToken: CancellationTokenLike | null = null;
+
+  /** 挂起的检查定时器与其类型 */
+  private timer: NodeJS.Timeout | null = null;
+  private timerKind: CheckTimerKind | null = null;
+
+  /** 刚结束的检查来自哪种调度（null = 手动检查，用于决定是否续排） */
+  private firedKind: CheckTimerKind | null = null;
+
+  /** 启动检查失败次数（成功即清零） */
+  private retryIndex = 0;
+
+  /** 是否有检查在途（会话内去重，避免连点/重试叠打） */
+  private checkInFlight = false;
+
+  /** start 是否已调用（dispose 后不再调度） */
+  private started = false;
+
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly isPackaged: () => boolean,
+    private readonly createCancellationToken: () => CancellationTokenLike,
   ) {}
 
   /** @inheritDoc */
-  start(): void {
-    this.updater.on('checking-for-update', () => {
-      this.emit({ phase: 'checking' });
-    });
-    this.updater.on('update-available', (info) => {
-      logger.info({ version: info.version }, '发现新版本');
-      this.emit({ phase: 'available', version: info.version });
-    });
-    this.updater.on('update-not-available', () => {
-      this.emit({ phase: 'not-available' });
-    });
-    this.updater.on('download-progress', (progress) => {
-      this.emit({ phase: 'downloading', progress: Math.round(progress.percent) });
-    });
-    this.updater.on('update-downloaded', (info) => {
-      logger.info({ version: info.version }, '新版本下载完成');
-      this.emit({ phase: 'downloaded', version: info.version });
-    });
-    this.updater.on('error', (error) => {
-      logger.error({ error: error.message }, '自动更新失败');
-      this.emit({ phase: 'error', message: error.message });
-    });
+  start(options: UpdateStartOptions = {}): void {
+    this.started = true;
+    const autoCheckEnabled = options.autoCheckEnabled ?? ((): boolean => true);
+
+    // 日志接管：库默认走主进程 console（打包后无处可看），接进项目 logger
+    this.updater.logger = createUpdaterLogger();
+    // 下载改由本服务显式发起（只有自持 token 才能取消）
+    this.updater.autoDownload = false;
+    this.updater.autoInstallOnAppQuit = autoCheckEnabled();
+
+    this.registerListeners();
+
+    if (!this.isPackaged()) {
+      logger.info({ scope: 'auto-updater' }, '开发模式：跳过启动检查调度（更新仅对打包版生效）');
+      return;
+    }
+    if (!autoCheckEnabled()) {
+      logger.info({ scope: 'auto-updater' }, '用户已关闭自动检查更新：跳过启动检查调度');
+      return;
+    }
+    logger.info({ scope: 'auto-updater' }, '已调度启动检查（延迟 5s）');
+    this.schedule('launch', LAUNCH_CHECK_DELAY_MS);
   }
 
   /** @inheritDoc */
@@ -101,34 +207,226 @@ export class UpdateService implements IUpdateService {
       }
       return { status: 'error', message };
     }
+    // 会话内去重：在途检查不重复发起（连点"检查更新"不叠打远端）
+    if (this.checkInFlight) {
+      return { status: 'checking' };
+    }
+    this.checkInFlight = true;
     try {
       await this.updater.checkForUpdates();
+      this.afterCheck(true);
       return { status: 'checking' };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      logger.warn({ scope: 'auto-updater' }, `更新检查失败：${message}`);
       if (manual) {
         this.emit({ phase: 'error', message });
       }
+      this.afterCheck(false);
       return { status: 'error', message };
+    } finally {
+      this.checkInFlight = false;
     }
   }
 
   /** @inheritDoc */
+  cancelDownload(): void {
+    const token = this.cancelToken;
+    if (token === null || token.cancelled) {
+      return;
+    }
+    logger.info({ scope: 'auto-updater' }, '取消更新下载');
+    token.cancel();
+  }
+
+  /** @inheritDoc */
+  getStatus(): UpdateStatusPayload | null {
+    return this.snapshot;
+  }
+
+  /** @inheritDoc */
   quitAndInstall(): void {
-    this.updater.quitAndInstall();
+    // 静默安装 + 装完自动启动（对齐"重启即装"的按钮文案；per-user 安装不弹 UAC）
+    this.updater.quitAndInstall(true, true);
   }
 
   /** @inheritDoc */
   dispose(): void {
-    // electron-updater 的事件监听随进程退出释放，无显式 off API
+    this.started = false;
+    this.clearTimer();
+    this.cancelToken = null;
+    this.pendingVersion = null;
   }
 
-  /** 推送更新状态到所有渲染窗口（R2：统一出口 emitEvent——dev 契约校验） */
+  /** 注册 autoUpdater 事件监听（事件 → payload 推送 + 快照） */
+  private registerListeners(): void {
+    this.updater.on('checking-for-update', () => {
+      this.emit({ phase: 'checking' });
+    });
+    this.updater.on('update-available', (info) => {
+      logger.info({ scope: 'auto-updater', version: info.version }, '发现新版本');
+      this.pendingVersion = info.version;
+      this.emit({ phase: 'available', version: info.version });
+      this.beginDownload();
+    });
+    this.updater.on('update-not-available', () => {
+      this.emit({ phase: 'not-available' });
+    });
+    this.updater.on('download-progress', (progress) => {
+      this.emitProgress(progress);
+    });
+    this.updater.on('update-downloaded', (info) => {
+      logger.info({ scope: 'auto-updater', version: info.version }, '新版本下载完成');
+      this.cancelToken = null;
+      this.emit({ phase: 'downloaded', version: info.version });
+    });
+    this.updater.on('update-cancelled', (info) => {
+      logger.info({ scope: 'auto-updater', version: info.version }, '更新下载已取消');
+      this.cancelToken = null;
+      this.pendingVersion = null;
+      this.emit({ phase: 'cancelled', version: info.version });
+    });
+    this.updater.on('error', (error) => {
+      logger.error({ scope: 'auto-updater' }, '自动更新失败', error);
+      this.cancelToken = null;
+      this.emit({ phase: 'error', message: error.message });
+    });
+  }
+
+  /** 显式发起下载（自持 token，供 cancelDownload 使用） */
+  private beginDownload(): void {
+    const token = this.createCancellationToken();
+    this.cancelToken = token;
+    void this.updater
+      .downloadUpdate(token)
+      .catch((error: unknown) => {
+        // 用户取消：库会推 update-cancelled，这里不再重复报错
+        if (token.cancelled) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error({ scope: 'auto-updater' }, '更新下载失败', error);
+        this.cancelToken = null;
+        this.emit({ phase: 'error', message });
+      })
+      .finally(() => {
+        if (this.cancelToken === token) {
+          this.cancelToken = null;
+        }
+      });
+  }
+
+  /** 进度事件 → payload（透传字节与速率；差分下载时 total 为差分包大小） */
+  private emitProgress(info: UpdateProgressInfo): void {
+    const version = this.pendingVersion;
+    this.emit({
+      phase: 'downloading',
+      progress: Math.round(info.percent),
+      transferred: info.transferred,
+      total: info.total,
+      bytesPerSecond: info.bytesPerSecond,
+      ...(version !== null ? { version } : {}),
+    });
+  }
+
+  /** 推送状态到所有渲染窗口，并留快照（无窗口时也留，供后续 getStatus） */
   private emit(payload: UpdateStatusPayload): void {
+    this.snapshot = payload;
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
         emitEvent(win.webContents, IPC_DEFINITIONS.update.subscribeStatus, payload);
       }
     }
   }
+
+  /**
+   * 检查结束后的调度决策
+   *
+   * - 成功：清零重试计数，清掉挂起的启动/重试定时器，确保 12h 长会话兜底在排
+   * - 长会话兜底失败：保持 12h 节奏（一次网络抖动不该停掉整个会话的兜底）
+   * - 启动检查链失败：按 1/5/15 分钟退避重试，用尽即本会话放弃（只记日志）
+   * - 手动检查失败：不启动重试链（用户可再点）
+   */
+  private afterCheck(succeeded: boolean): void {
+    const fired = this.firedKind;
+    this.firedKind = null;
+    if (succeeded) {
+      this.retryIndex = 0;
+      if (this.timerKind === 'launch' || this.timerKind === 'retry') {
+        this.clearTimer();
+      }
+      if (this.timerKind === null) {
+        this.schedule('long-session', LONG_SESSION_CHECK_INTERVAL_MS);
+      }
+      return;
+    }
+    if (fired === 'long-session') {
+      this.retryIndex = 0;
+      this.schedule('long-session', LONG_SESSION_CHECK_INTERVAL_MS);
+      return;
+    }
+    if (fired !== 'launch' && fired !== 'retry') {
+      return;
+    }
+    const delay = LAUNCH_CHECK_RETRY_DELAYS_MS[this.retryIndex];
+    if (delay === undefined) {
+      logger.warn({ scope: 'auto-updater' }, '启动检查重试次数用尽，本会话不再自动检查');
+      this.clearTimer();
+      return;
+    }
+    this.retryIndex += 1;
+    this.schedule('retry', delay);
+  }
+
+  /** 调度一次定时检查（同刻只允许一个挂起定时器） */
+  private schedule(kind: CheckTimerKind, delayMs: number): void {
+    this.clearTimer();
+    this.timerKind = kind;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.firedKind = this.timerKind;
+      this.timerKind = null;
+      if (this.started) {
+        void this.check(false);
+      }
+    }, delayMs);
+    this.timer.unref();
+  }
+
+  /** 清除挂起的定时器 */
+  private clearTimer(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.timerKind = null;
+  }
+}
+
+/** 把值转为单行日志文本（保留 Error 的堆栈信息，对象走 JSON） */
+function toLogText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value instanceof Error) {
+    return value.stack ?? value.message;
+  }
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** 构造 electron-updater 的日志适配器（转发到项目 logger，scope=auto-updater） */
+function createUpdaterLogger(): UpdaterLoggerLike {
+  const forward = (level: 'info' | 'warn' | 'error' | 'debug', args: readonly unknown[]): void => {
+    logger[level]({ scope: 'auto-updater' }, args.map((arg) => toLogText(arg)).join(' '));
+  };
+  return {
+    info: (message, ...params) => forward('info', [message, ...params]),
+    warn: (message, ...params) => forward('warn', [message, ...params]),
+    error: (message, ...params) => forward('error', [message, ...params]),
+    debug: (message, ...params) => forward('debug', [message, ...params]),
+  };
 }

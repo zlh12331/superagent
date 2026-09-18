@@ -80,8 +80,8 @@ export function SidebarAccount(): ReactElement {
           <DropdownMenuLabel>{t('sidebar.accountMenu')}</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          {/* 设置：打开全屏设置对话框 */}
-          <DropdownMenuItem onClick={openSettings}>
+          {/* 设置：打开全屏设置对话框（不带分区 = 落地默认分区） */}
+          <DropdownMenuItem onClick={() => openSettings()}>
             <Settings className="size-3.5" />
             {t('topbar.settings')}
           </DropdownMenuItem>

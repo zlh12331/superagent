@@ -26,7 +26,7 @@ import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
-import { readAllSettings } from './infra/storage/settings-pref';
+import { readAllSettings, readSetting } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { reportEventLoopLag } from './infra/telemetry/lag-alert';
@@ -315,8 +315,10 @@ app
       update: createUpdateHandlers({ updateService: serviceContainer.getUpdateService() }),
     });
 
-    // 启动自动更新服务（注册 autoUpdater 事件 → 推送渲染层；打包环境才实际检查）
-    serviceContainer.getUpdateService().start();
+    // 启动自动更新服务（注册 autoUpdater 事件 → 推送渲染层）
+    // 启动检查按用户设置调度（settings.update.autoCheck；缺失/损坏视为开）；
+    // 非打包环境内部直接跳过调度，仅注册监听
+    serviceContainer.getUpdateService().start({ autoCheckEnabled: isAutoCheckEnabled });
 
     // 注入 CSP 响应头（P1-5 安全基线）
     // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）
@@ -526,3 +528,21 @@ app.on('before-quit', async (event) => {
   // 强制退出，不再触发 before-quit（与 app.quit() 不同）
   app.exit(0);
 });
+
+/**
+ * 读取"自动检查更新"开关（app_settings 的 update 域，见设计文档 §4）
+ *
+ * 缺失、结构损坏或读取异常（如 db 未就绪）一律视为开启——与设置默认值一致，
+ * 且不阻断启动流程。
+ */
+function isAutoCheckEnabled(): boolean {
+  try {
+    const value = readSetting('update');
+    if (typeof value !== 'object' || value === null) {
+      return true;
+    }
+    return (value as { autoCheck?: unknown }).autoCheck !== false;
+  } catch {
+    return true;
+  }
+}

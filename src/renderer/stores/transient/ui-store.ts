@@ -9,13 +9,37 @@
 
 import { create } from 'zustand';
 
+/**
+ * 设置抽屉分区 id（与 SettingsDialog 导航表同源；新增分区需同步两处）
+ *
+ * 放在 store 而非组件内：分区状态要多入口共享（顶栏更新指示直达"关于"等），
+ * 项目约定多入口对话框状态收敛 ui-store，禁双份 state。
+ */
+export type SettingsSectionId =
+  | 'usage'
+  | 'general'
+  | 'mobile'
+  | 'browser'
+  | 'workspace'
+  | 'rules-memory'
+  | 'models'
+  | 'approval-mode'
+  | 'mcp'
+  | 'skills'
+  | 'beta'
+  | 'about';
+
 interface UiState {
   /** 设置对话框是否打开 */
   readonly settingsOpen: boolean;
-  /** 打开设置对话框 */
-  readonly openSettings: () => void;
+  /** 打开设置对话框（可指定直达分区；缺省 null = 用默认分区） */
+  readonly openSettings: (section?: SettingsSectionId) => void;
   /** 关闭设置对话框 */
   readonly closeSettings: () => void;
+  /** 设置抽屉当前分区（null = 默认分区；多入口直达用） */
+  readonly settingsSection: SettingsSectionId | null;
+  /** 设置设置抽屉分区（导航点击） */
+  readonly setSettingsSection: (section: SettingsSectionId) => void;
   /** 命令面板是否打开（多入口：顶栏按钮 / Ctrl+P / Ctrl+K / 错误动作；集中到 store 避免双模式） */
   readonly paletteOpen: boolean;
   /** 打开命令面板 */
@@ -62,8 +86,10 @@ interface UiState {
 
 export const useUiStore = create<UiState>()((set) => ({
   settingsOpen: false,
-  openSettings: () => set({ settingsOpen: true }),
+  settingsSection: null,
+  openSettings: (section) => set({ settingsOpen: true, settingsSection: section ?? null }),
   closeSettings: () => set({ settingsOpen: false }),
+  setSettingsSection: (section) => set({ settingsSection: section }),
   paletteOpen: false,
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),

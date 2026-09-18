@@ -1,10 +1,13 @@
 // packages/shared/src/schemas/update.ts
 // 自动更新域 schema（electron-updater 状态桥接）
 // ──────────────────────────────────────────────────────────────
-// 设计：
-// - 请求-响应：update:check（手动/自动触发检查，返回当前状态）
-// - 事件推送：update:event:status（主进程推送检查/下载进度/就绪状态）
-// - payload 用 phase 区分阶段，渲染层据此渲染提示（检查中/可更新/下载中/已就绪/错误）
+// 设计（见 docs/design/27-auto-update-spec.md）：
+// - 请求-响应：update:check（触发检查）/ update:install（安装重启）/
+//   update:cancel（取消下载）/ update:getStatus（取主进程状态快照）
+// - 事件推送：update:event:status（检查/下载进度/就绪/取消/错误）
+// - payload 用 phase 区分阶段，渲染层据此渲染提示
+// - 进度字段对齐 electron-updater 的 ProgressInfo：差分下载时 total 是
+//   本次需下载的字节数（差分包大小），不是完整安装包体积
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
@@ -15,20 +18,24 @@ export const UpdateCheckReqSchema = z.object({
   manual: z.boolean().optional(),
 });
 
-/** update:check 响应 */
+/**
+ * update:check 响应
+ *
+ * 只表示"检查已发起 / 发起失败"：检查结果（有新版 / 已最新）经
+ * update:event:status 事件下发。此前声明过 'up-to-date' / 'available'，但
+ * electron-updater 的 checkForUpdates 不返回结果，那两个值永不出现（死枚举），
+ * 2026-09-18 收敛为实际会返回的集合。
+ */
 export interface UpdateCheckRes {
-  /** 检查结果状态 */
-  readonly status: 'up-to-date' | 'available' | 'checking' | 'error';
-  /** 新版本号（status=available 时提供） */
-  readonly version?: string;
+  /** 检查发起状态 */
+  readonly status: 'checking' | 'error';
   /** 错误信息（status=error 时提供） */
   readonly message?: string;
 }
 
 /** update:check 响应 zod schema（R4：响应契约校验） */
 export const UpdateCheckResSchema = z.object({
-  status: z.enum(['up-to-date', 'available', 'checking', 'error']),
-  version: z.string().optional(),
+  status: z.enum(['checking', 'error']),
   message: z.string().optional(),
 });
 
@@ -39,6 +46,7 @@ export type UpdatePhase =
   | 'downloading' // 正在下载（带进度）
   | 'downloaded' // 下载完成（可安装重启）
   | 'not-available' // 已是最新
+  | 'cancelled' // 用户取消下载
   | 'error'; // 检查/下载失败
 
 /** update:event:status 事件 payload */
@@ -49,14 +57,47 @@ export interface UpdateStatusPayload {
   readonly version?: string;
   /** 下载进度 0-100（downloading 时提供） */
   readonly progress?: number;
+  /** 已下载字节（downloading 时提供） */
+  readonly transferred?: number;
+  /** 本次下载总字节（downloading 时提供；差分下载时为差分包大小） */
+  readonly total?: number;
+  /** 平均下载速率（字节/秒，downloading 时提供） */
+  readonly bytesPerSecond?: number;
   /** 错误信息（error 时提供） */
   readonly message?: string;
 }
 
 /** update:event:status payload schema（R2：主进程发送侧 dev 校验） */
 export const UpdateStatusPayloadSchema = z.object({
-  phase: z.enum(['checking', 'available', 'downloading', 'downloaded', 'not-available', 'error']),
+  phase: z.enum([
+    'checking',
+    'available',
+    'downloading',
+    'downloaded',
+    'not-available',
+    'cancelled',
+    'error',
+  ]),
   version: z.string().optional(),
   progress: z.number().min(0).max(100).optional(),
+  transferred: z.number().min(0).optional(),
+  total: z.number().min(0).optional(),
+  bytesPerSecond: z.number().min(0).optional(),
   message: z.string().optional(),
+});
+
+/**
+ * update:getStatus 响应：主进程最近一次状态快照
+ *
+ * 用于渲染层重载（窗口刷新 / 渲染进程重建）后恢复界面——事件通道只在事件
+ * 发生时推送，新订阅者会错过历史。快照是"读状态"语义，不触发 toast。
+ */
+export interface UpdateGetStatusRes {
+  /** 状态快照（进程内从未产生过更新状态时为 null） */
+  readonly snapshot: UpdateStatusPayload | null;
+}
+
+/** update:getStatus 响应 zod schema（定义顺序：引用上面的 payload schema） */
+export const UpdateGetStatusResSchema = z.object({
+  snapshot: UpdateStatusPayloadSchema.nullable(),
 });

@@ -282,6 +282,8 @@ import {
   UpdateCheckReqSchema,
   type UpdateCheckRes,
   UpdateCheckResSchema,
+  type UpdateGetStatusRes,
+  UpdateGetStatusResSchema,
   type UpdateStatusPayload,
   UpdateStatusPayloadSchema,
 } from '../schemas/update';
@@ -977,6 +979,13 @@ export const IPC_DEFINITIONS = {
       UpdateCheckResSchema,
     ),
     install: withSchema(IPC_META.update.install, null, {} as { ok: boolean }, OkResSchema),
+    cancel: withSchema(IPC_META.update.cancel, null, {} as { ok: boolean }, OkResSchema),
+    getStatus: withSchema(
+      IPC_META.update.getStatus,
+      null,
+      {} as UpdateGetStatusRes,
+      UpdateGetStatusResSchema,
+    ),
     subscribeStatus: withPayload(
       IPC_META.update.subscribeStatus,
       {} as UpdateStatusPayload,

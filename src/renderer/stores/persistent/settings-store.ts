@@ -194,6 +194,18 @@ export interface BrowserSettings {
 }
 
 /**
+ * 自动更新设置
+ *
+ * autoCheck 是"自动发现"总开关（默认开）：开启时每次启动自动检查、发现新版
+ * 后台下载、退出时自动安装；关闭时三者全停，但用户手动点"检查更新"后的
+ * 下载与安装照常（见 docs/design/27-auto-update-spec.md §4）。
+ */
+export interface UpdateSettings {
+  /** 是否启用自动检查更新（默认 true） */
+  readonly autoCheck: boolean;
+}
+
+/**
  * 应用界面语言
  *
  * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
@@ -226,6 +238,8 @@ interface SettingsData {
   readonly browser: BrowserSettings;
   /** 记忆功能（隐私开关） */
   readonly memory: MemorySettings;
+  /** 自动更新（自动检查开关） */
+  readonly update: UpdateSettings;
 }
 
 /**
@@ -253,6 +267,8 @@ interface SettingsState extends SettingsData {
   readonly updateBrowser: (patch: Partial<BrowserSettings>) => void;
   /** 更新记忆设置（写穿透 SQLite） */
   readonly updateMemory: (patch: Partial<MemorySettings>) => void;
+  /** 更新自动更新设置（写穿透 SQLite；主进程下次启动读取生效） */
+  readonly setUpdate: (patch: Partial<UpdateSettings>) => void;
 }
 
 /**
@@ -365,6 +381,9 @@ const DEFAULT_SETTINGS: SettingsData = {
   memory: {
     enabled: true,
   },
+  update: {
+    autoCheck: true,
+  },
 };
 
 /**
@@ -441,6 +460,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     set({ memory });
     persistSetting('memory', memory);
   },
+  setUpdate: (patch) => {
+    const update = { ...useSettingsStore.getState().update, ...patch };
+    set({ update });
+    persistSetting('update', update);
+  },
 }));
 
 /**
@@ -484,6 +508,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     memory: {
       ...DEFAULT_SETTINGS.memory,
       ...((snapshot['memory'] as Partial<MemorySettings> | undefined) ?? {}),
+    },
+    update: {
+      ...DEFAULT_SETTINGS.update,
+      ...((snapshot['update'] as Partial<UpdateSettings> | undefined) ?? {}),
     },
   });
 }

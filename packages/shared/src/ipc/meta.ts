@@ -209,6 +209,8 @@ export const IPC_META = {
   update: {
     check: request('update:check'),
     install: request('update:install'),
+    cancel: request('update:cancel'),
+    getStatus: request('update:getStatus'),
     subscribeStatus: event('update:event:status'),
   },
 } as const;

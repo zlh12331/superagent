@@ -29,14 +29,17 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { useAppInfo } from '@/hooks/use-app-info';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { reportError } from '@/lib/error-report';
+import { formatBytes, formatRemainingClock } from '@/lib/format-bytes';
 import { formatDateTime } from '@/lib/format-intl';
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
-import { SectionTitle } from '../settings-controls';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { SectionTitle, ToggleRow } from '../settings-controls';
 
 /** i18n 文案函数类型（本项目 react-i18next 未导出 TFunction，由 hook 推导） */
 type TranslateFn = ReturnType<typeof useTranslation>['t'];
@@ -89,8 +92,56 @@ function ChannelBadge({ channel }: { readonly channel: string }): ReactElement {
 interface UpdateBlockProps {
   readonly state: UpdateStatusPayload | null;
   readonly onCheck: () => void;
+  readonly onCancel: () => void;
   readonly onInstall: () => void;
   readonly onOpenDataDir: () => void;
+}
+
+/** 下载中区块 props */
+interface DownloadingBlockProps {
+  readonly state: UpdateStatusPayload | null;
+  readonly onCancel: () => void;
+}
+
+/**
+ * 下载中区块（进度条 + 字节/速率/剩余 + 取消）
+ *
+ * 进度每秒推送一次（electron-updater 内建节流）；差分下载时 total 是本次需下载的
+ * 字节数（差分包大小），不是完整安装包体积。ETA 无法估算时用占位符，不编造数字。
+ */
+function DownloadingBlock({ state, onCancel }: DownloadingBlockProps): ReactElement {
+  const { t } = useTranslation();
+  const percent = state?.progress ?? 0;
+  const title = t('update.downloadingTitle', { version: state?.version ?? '' });
+  const transferred = state?.transferred;
+  const total = state?.total;
+  const rate = state?.bytesPerSecond;
+  const detail =
+    transferred !== undefined && total !== undefined && rate !== undefined
+      ? t('update.progressDetail', {
+          done: formatBytes(transferred),
+          total: formatBytes(total),
+          speed: formatBytes(rate),
+          eta: formatRemainingClock(transferred, total, rate) ?? t('update.etaUnknown'),
+        })
+      : `${Math.round(percent)}%`;
+  return (
+    <div className="flex w-full flex-col items-start gap-2">
+      <div className="flex w-full items-center justify-between gap-2">
+        <span className="text-foreground inline-flex items-center gap-1 text-xs">
+          <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+          {title}
+        </span>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          {t('update.cancel')}
+        </Button>
+      </div>
+      <Progress value={percent} label={title} />
+      <span className="text-muted-foreground text-[11px] leading-[1.5]">
+        {percent < 1 ? t('update.preparing') : detail}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -101,7 +152,13 @@ interface UpdateBlockProps {
  * error），使 AboutSection 认知复杂度达 43（阈值 15）。改为早返回的分派组件后，
  * 每个阶段是独立直线分支，主组件只负责组装。
  */
-function UpdateBlock({ state, onCheck, onInstall, onOpenDataDir }: UpdateBlockProps): ReactElement {
+function UpdateBlock({
+  state,
+  onCheck,
+  onCancel,
+  onInstall,
+  onOpenDataDir,
+}: UpdateBlockProps): ReactElement {
   const { t } = useTranslation();
   const phase = state?.phase;
 
@@ -117,8 +174,8 @@ function UpdateBlock({ state, onCheck, onInstall, onOpenDataDir }: UpdateBlockPr
     );
   }
 
-  // 进行中（检查 / 下载共用同一视觉）
-  if (phase === 'checking' || phase === 'downloading') {
+  // 检查中（与下载中拆开：此前共用同一视觉，导致下载进度无处展示）
+  if (phase === 'checking') {
     return (
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" disabled>
@@ -127,6 +184,11 @@ function UpdateBlock({ state, onCheck, onInstall, onOpenDataDir }: UpdateBlockPr
         </Button>
       </div>
     );
+  }
+
+  // 下载中：进度条 + 详情 + 取消
+  if (phase === 'downloading') {
+    return <DownloadingBlock state={state} onCancel={onCancel} />;
   }
 
   if (phase === 'not-available') {
@@ -162,6 +224,21 @@ function UpdateBlock({ state, onCheck, onInstall, onOpenDataDir }: UpdateBlockPr
         </span>
         <Button size="sm" variant="outline" onClick={onInstall}>
           {t('settings.aboutInstallRestart')}
+        </Button>
+      </div>
+    );
+  }
+
+  // 已取消：就地提示一行 + 保留检查入口（不弹 toast，见 UpdateNotice 的阶段过滤）
+  if (phase === 'cancelled') {
+    return (
+      <div className="flex w-full flex-col items-start gap-2">
+        <span className="text-muted-foreground text-xs leading-[1.5]">
+          {t('settings.aboutCancelled')}
+        </span>
+        <Button variant="outline" size="sm" onClick={onCheck}>
+          <RefreshCw className="size-3.5" strokeWidth={1.5} />
+          {t('settings.aboutCheckUpdate')}
         </Button>
       </div>
     );
@@ -321,8 +398,24 @@ export function AboutSection(): ReactElement {
   });
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
-  // 更新状态（订阅主进程 update:event:status；全局 UpdateNotice 与这里共享事件流）
-  const { state: updateState, check, install } = useUpdate();
+  // 更新状态（订阅主进程 update:event:status + 挂载快照；全局 UpdateNotice 与这里共享事件流）
+  const { state: updateState, check, cancel, install } = useUpdate();
+  // 自动检查开关（写穿透落库；主进程下次启动读取生效）
+  const autoCheck = useSettingsStore((s) => s.update.autoCheck);
+  const setUpdate = useSettingsStore((s) => s.setUpdate);
+
+  /**
+   * 切换自动检查开关
+   *
+   * 开启时立刻补检一次（复用 update:check，手动语义 = 失败会提示），
+   * 让用户当场看到效果；关闭只影响后续启动的自动调度（主进程下次启动读取）。
+   */
+  const handleAutoCheckChange = (checked: boolean): void => {
+    setUpdate({ autoCheck: checked });
+    if (checked) {
+      void check();
+    }
+  };
 
   /** 复制文本到剪贴板（含在途态复位） */
   const copyText = async (text: string): Promise<void> => {
@@ -369,12 +462,22 @@ export function AboutSection(): ReactElement {
             <UpdateBlock
               state={updateState}
               onCheck={() => void check()}
+              onCancel={cancel}
               onInstall={install}
               onOpenDataDir={openDataDir}
             />
           </div>
         </div>
       </Card>
+
+      {/* 更新设置：自动检查开关（唯一开关，语义见 docs/design/27-auto-update-spec.md §10） */}
+      <SectionTitle>{t('settings.aboutUpdatesTitle')}</SectionTitle>
+      <ToggleRow
+        name={t('settings.aboutAutoCheck')}
+        description={t('settings.aboutAutoCheckDesc')}
+        checked={autoCheck}
+        onChange={handleAutoCheckChange}
+      />
 
       {/* 构建信息 */}
       <SectionTitle>{t('settings.aboutBuildTitle')}</SectionTitle>

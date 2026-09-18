@@ -24,12 +24,13 @@ import {
   Smartphone,
   Sparkles,
 } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { type SettingsSectionId, useUiStore } from '@/stores/transient/ui-store';
 import { AboutSection } from './sections/about-section';
 import { ApprovalModeSection } from './sections/approval-mode-section';
 import { BrowserSection } from './sections/browser-section';
@@ -51,24 +52,12 @@ export interface SettingsDialogProps {
   readonly onOpenChange: (open: boolean) => void;
 }
 
-/** 设置分区 ID */
-type SectionId =
-  | 'usage'
-  | 'general'
-  | 'mobile'
-  | 'browser'
-  | 'workspace'
-  | 'rules-memory'
-  | 'models'
-  | 'approval-mode'
-  | 'mcp'
-  | 'skills'
-  | 'beta'
-  | 'about';
+/** 默认分区（未指定直达分区时的落地页） */
+const DEFAULT_SECTION: SettingsSectionId = 'models';
 
 /** 导航项 */
 interface NavItem {
-  readonly id: SectionId;
+  readonly id: SettingsSectionId;
   readonly labelKey: string;
   readonly icon: LucideIcon;
 }
@@ -123,7 +112,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
 /**
  * 分区渲染器（集中分发，避免 JSX 堆叠 11 个条件分支）
  */
-function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
+function renderSection(section: SettingsSectionId, drawerOpen: boolean): ReactElement {
   switch (section) {
     case 'usage':
       return <UsageSection />;
@@ -157,14 +146,10 @@ function renderSection(section: SectionId, drawerOpen: boolean): ReactElement {
  */
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): ReactElement {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<SectionId>('models');
-
-  // 打开时重置到默认分区（避免上次停留的深层分区）
-  useEffect(() => {
-    if (open) {
-      setActiveSection('models');
-    }
-  }, [open]);
+  // 分区状态收敛 ui-store：支持"打开并直达指定分区"（顶栏更新指示 → 关于），
+  // 且普通入口（openSettings() 不带分区）落在默认分区，等价于此前的打开即重置。
+  const activeSection = useUiStore((s) => s.settingsSection ?? DEFAULT_SECTION);
+  const setActiveSection = useUiStore((s) => s.setSettingsSection);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

@@ -1,5 +1,5 @@
 // src/main/ipc/update.handler.test.ts
-// update.handler 单测：check/install 转发（fake UpdateService DI 注入）
+// update.handler 单测：check/install/cancel/getStatus 转发（fake UpdateService DI 注入）
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createUpdateHandlers, type UpdateHandlerDeps } from './update.handler';
@@ -9,9 +9,15 @@ function createFakeUpdateService() {
   return {
     start: vi.fn(),
     check: vi.fn(async () => ({ status: 'checking' as const })),
+    cancelDownload: vi.fn(),
+    getStatus: vi.fn(() => null),
     quitAndInstall: vi.fn(),
     dispose: vi.fn(),
-  } as unknown as UpdateHandlerDeps['updateService'] & { check: ReturnType<typeof vi.fn> };
+  } as unknown as UpdateHandlerDeps['updateService'] & {
+    check: ReturnType<typeof vi.fn>;
+    getStatus: ReturnType<typeof vi.fn>;
+    cancelDownload: ReturnType<typeof vi.fn>;
+  };
 }
 
 const EMPTY_CTX = {} as never;
@@ -46,5 +52,22 @@ describe('update.handler', () => {
     const result = await handlers.install(undefined, EMPTY_CTX);
     expect(updateService.quitAndInstall).toHaveBeenCalledOnce();
     expect(result).toEqual({ ok: true });
+  });
+
+  it('cancel：调用 cancelDownload 并返回 ok', async () => {
+    const result = await handlers.cancel(undefined, EMPTY_CTX);
+    expect(updateService.cancelDownload).toHaveBeenCalledOnce();
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('getStatus：包装成 snapshot 返回（无快照时为 null）', async () => {
+    const result = await handlers.getStatus(undefined, EMPTY_CTX);
+    expect(result).toEqual({ snapshot: null });
+  });
+
+  it('getStatus：透传服务快照', async () => {
+    updateService.getStatus.mockReturnValueOnce({ phase: 'downloaded', version: '1.2.0' });
+    const result = await handlers.getStatus(undefined, EMPTY_CTX);
+    expect(result).toEqual({ snapshot: { phase: 'downloaded', version: '1.2.0' } });
   });
 });
