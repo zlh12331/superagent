@@ -2,6 +2,31 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0](https://github.com/zlh12331/superagent/compare/v1.1.2...v1.2.0) (2026-09-18)
+
+> 本版本为应用加入了完整的自动更新能力：打开应用即自动检查新版本，下载进度可见也可随时取消，更新在退出时自动安装。
+
+### 新增
+
+- **自动检查更新**：每次启动应用后自动检查一次；若网络不通会静默按 1/5/15 分钟重试，窗口长期开着也会定期复查。设置 → 关于新增「自动检查更新」开关（默认开启），关闭后仍可手动点「检查更新」（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **下载进度可见、可取消**：设置 → 关于显示当前下载的进度条、已下载/总量、实时速度与预计剩余时间；顶栏出现下载指示，点击直接跳到该界面；不想现在更新可以随时点「取消」（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **更新就绪与安装**：下载完成后顶栏显示提示徽标，可一键「重启并安装」；也可以选「稍后」或「跳过此版本」（跳过的版本不再提醒，出现更高版本会自动恢复提醒）。若当时有正在执行的任务，会先弹出确认框，避免打断正在进行的工作（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **更新说明**：就绪时可直接查看该版本的更新内容（即本 CHANGELOG 的对应段落），不用另外去翻发布页面（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **下载进度同步到任务栏**：Windows/macOS 任务栏图标会显示下载进度，无需留在应用窗口（[#47](https://github.com/zlh12331/superagent/issues/47)）
+
+### 修复
+
+- **更新失败看得懂**：检查/下载失败的提示改为分类文案（网络不可达、请求被限流、安装包校验失败、磁盘空间不足），不再直接抛出英文技术报错；无法归类时才保留原始信息以便排查（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **弱网下不再卡死**：修复检查请求可能永久挂起、导致此后「检查更新」按钮一直转圈且只能重启应用的问题（新增 45 秒超时，超时后自动恢复可重试）（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **窗口刷新后状态不丢**：修复刷新窗口后更新状态（下载中/已就绪）丢失、界面回到「检查更新」的问题（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- **更新缓存可清理**：设置 → 数据新增更新缓存占用展示与清理入口；清理前会提示「下次升级将改为全量下载」；下载进行中不允许清理，避免破坏在途下载（[#47](https://github.com/zlh12331/superagent/issues/47)）
+
+### 内部改进
+
+- 更新过程日志接入应用日志文件（此前走主进程控制台，打包后无从查看），排查更新问题时可随诊断包导出（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- 发布流程新增硬性门禁：安装包必须带差分更新产物（Windows/macOS 的 blockmap、Linux 元数据中的 `blockMapSize`），否则发布失败——防止差分更新静默退化为全量下载（[#47](https://github.com/zlh12331/superagent/issues/47)）
+- 新增开发期调试开关 `CODE_AGENT_DEV_UPDATE=1`，可在未打包环境下走通更新链路以便验证界面（[#47](https://github.com/zlh12331/superagent/issues/47)）
+
 ## [1.1.2](https://github.com/zlh12331/superagent/compare/v1.1.1...v1.1.2) (2026-09-17)
 
 > 本版本无应用功能变更，为发布流程与文档改进。
