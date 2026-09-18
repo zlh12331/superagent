@@ -3,6 +3,8 @@
 //
 // 用真实 confirm store（而非 mock confirm 函数）：验证的是"是否真的弹了确认、
 // 用户选择是否真的决定安装"，这正是该 hook 的语义所在。
+// 安装动作断言打在下游 IPC 上（window.api.update.install）——本 hook 不经过
+// useUpdate，避免同一组件挂两份更新状态订阅（见 hook 头注释）。
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,17 +12,14 @@ import { useAgentRunStore } from '@/stores/transient/agent-run-store';
 import { useConfirmDialogStore } from '@/stores/transient/confirm-dialog-store';
 import { useInstallUpdate } from '../use-install-update';
 
-const installSpy = vi.hoisted(() => vi.fn());
-
-vi.mock('@/hooks/use-update', () => ({
-  useUpdate: (): { install: typeof installSpy } => ({ install: installSpy }),
-}));
+const installSpy = vi.fn(async () => ({ data: { ok: true } }));
 
 describe('use-install-update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAgentRunStore.setState({ running: false });
     useConfirmDialogStore.setState({ currentRequest: null, queue: [] });
+    window.api = { update: { install: installSpy } } as never;
   });
 
   it('无运行中回合：直接安装，不弹确认', async () => {
@@ -48,6 +47,13 @@ describe('use-install-update', () => {
     const pending = result.current();
     useConfirmDialogStore.getState()._resolve(false);
     await pending;
+    expect(installSpy).not.toHaveBeenCalled();
+  });
+
+  it('浏览器模式（无桥）：不抛错、不安装', async () => {
+    (window as unknown as { api: undefined }).api = undefined;
+    const { result } = renderHook(() => useInstallUpdate());
+    await expect(result.current()).resolves.toBeUndefined();
     expect(installSpy).not.toHaveBeenCalled();
   });
 });
