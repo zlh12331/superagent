@@ -1,19 +1,16 @@
 // src/renderer/hooks/use-update.ts
-// 自动更新状态 hook（订阅主进程 update:event:status + 挂载时取状态快照）
+// 自动更新状态读取 hook（薄封装：读 update-store + 暴露动作）
 // ──────────────────────────────────────────────────────────────
-// 职责：
-// - 订阅自动更新状态推送（检查中/发现新版/下载中/就绪/已取消/错误）
-// - 挂载时经 update:getStatus 拉取主进程快照，修复窗口重载后状态丢失
-//   （事件通道只在事件发生时推送，新订阅者会错过历史）
-// - 暴露手动检查 / 取消下载 / 安装重启操作
+// 状态来源：use-update-bridge（AppShell 唯一订阅点，见 update-store 头注释）。
+// 本 hook 不再自行订阅——此前三个消费点各订阅一次同一通道，是启动期重复
+// getStatus 的根因。
 //
-// 快照与事件必须区分：fromSnapshot 为真表示当前状态来自回放，提示类消费方
-// （UpdateNotice）不得据其弹 toast，否则窗口重载会重复弹已提示过的通知。
+// 动作（check / cancel / install）直接走 IPC：它们不需要状态，也不应带来订阅。
 // ──────────────────────────────────────────────────────────────
 
 import type { UpdateStatusPayload } from '@code-agent/shared/renderer';
-import { useEffect, useState } from 'react';
-import { unwrap } from '@/lib/ipc';
+
+import { useUpdateStore } from '@/stores/transient/update-store';
 
 /** useUpdate 返回值 */
 export interface UseUpdateResult {
@@ -32,46 +29,18 @@ export interface UseUpdateResult {
 }
 
 /**
- * 订阅自动更新状态
+ * 读取自动更新状态与动作
  *
  * @example
  * ```tsx
- * const { state, check, cancel, install } = useUpdate();
+ * const { state, check, cancel } = useUpdate();
  * ```
  */
 export function useUpdate(): UseUpdateResult {
-  const [liveState, setLiveState] = useState<UpdateStatusPayload | null>(null);
-  const [snapshotState, setSnapshotState] = useState<UpdateStatusPayload | null>(null);
-  const [lastCheckAt, setLastCheckAt] = useState<number | null>(null);
-
-  // 浏览器模式（window.api 缺失）跳过订阅：与 use-agent-bridge 等守卫模式对齐
-  useEffect(() => {
-    const api = window.api;
-    if (api === undefined) {
-      return;
-    }
-    let active = true;
-    // 先拉快照（重载恢复），再订阅事件；事件到达后以事件态为准
-    void api.update
-      .getStatus()
-      .then((res) => {
-        const status = unwrap(res);
-        if (active && status.snapshot !== null) {
-          setSnapshotState(status.snapshot);
-        }
-        if (active && typeof status.lastCheckAt === 'number') {
-          setLastCheckAt(status.lastCheckAt);
-        }
-      })
-      .catch(() => {
-        // 快照读取失败静默：后续状态仍由事件通道推送
-      });
-    const unsubscribe = api.update.subscribeStatus(setLiveState);
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
+  const state = useUpdateStore((s) => s.status);
+  const fromSnapshot = useUpdateStore((s) => s.fromSnapshot);
+  const lastCheckAt = useUpdateStore((s) => s.lastCheckAt);
+  const markChecked = useUpdateStore((s) => s.markChecked);
 
   const check = async (): Promise<void> => {
     const api = window.api;
@@ -80,23 +49,24 @@ export function useUpdate(): UseUpdateResult {
     }
     await api.update.check({ manual: true });
     // 主进程在检查发起时记录时间，这里同步刷新（无需再发一次 getStatus）
-    setLastCheckAt(Date.now());
+    markChecked(Date.now());
   };
 
   const cancel = (): void => {
-    void window.api?.update.cancel();
+    const api = window.api;
+    if (api === undefined) {
+      return;
+    }
+    void api.update.cancel();
   };
 
   const install = (): void => {
-    void window.api?.update.install();
+    const api = window.api;
+    if (api === undefined) {
+      return;
+    }
+    void api.update.install();
   };
 
-  return {
-    state: liveState ?? snapshotState,
-    fromSnapshot: liveState === null && snapshotState !== null,
-    lastCheckAt,
-    check,
-    cancel,
-    install,
-  };
+  return { state, fromSnapshot, lastCheckAt, check, cancel, install };
 }

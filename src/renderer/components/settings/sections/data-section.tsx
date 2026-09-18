@@ -14,12 +14,15 @@ import { useTranslation } from '@/i18n/use-translation';
 import { formatBytes } from '@/lib/format-bytes';
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
+import { useUpdateStore } from '@/stores/transient/update-store';
 
 /** 数据区块（会话导出 + 打开数据目录 + 更新缓存） */
 export function DataSection(): React.ReactElement {
   const { t } = useTranslation();
   // 更新缓存占用（path 为 null 表示无法解析缓存目录 → 隐藏该行，不展示猜测值）
   const [cache, setCache] = useState<UpdateCacheInfo | null>(null);
+  // 下载中禁止清理：缓存目录含 pending/ 下载中间态，清掉会破坏在途下载
+  const downloading = useUpdateStore((s) => s.status?.phase === 'downloading');
 
   // 挂载时读一次占用（失败静默：不影响本区块其他操作）
   useEffect(() => {
@@ -34,7 +37,7 @@ export function DataSection(): React.ReactElement {
   }, []);
 
   const handleClearUpdateCache = async (): Promise<void> => {
-    if (!hasIpcBridge() || cache?.path == null || cache.fileCount === 0) return;
+    if (!hasIpcBridge() || cache?.path == null || cache.fileCount === 0 || downloading) return;
     // 危险操作：删除的是差分更新基线，先确认并说明后果
     const confirmed = await confirm({
       title: t('settings.clearUpdateCache'),
@@ -102,7 +105,7 @@ export function DataSection(): React.ReactElement {
           <Button
             variant="outline"
             size="sm"
-            disabled={cache.fileCount === 0}
+            disabled={cache.fileCount === 0 || downloading}
             onClick={() => void handleClearUpdateCache()}
           >
             {t('settings.clearUpdateCache')}

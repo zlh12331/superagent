@@ -37,6 +37,18 @@ const LAUNCH_CHECK_RETRY_DELAYS_MS: readonly number[] = [60_000, 5 * 60_000, 15 
 const LONG_SESSION_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 /**
+ * 单次检查的超时上限（看门狗）
+ *
+ * 库层不可依赖：builder-util-runtime 的 60s 超时挂在 Node http 的 `socket` 事件上
+ * （httpExecutor.js 的 addTimeOutHandler），而 electron-updater 走 Electron
+ * net.request()——其 ClientRequest 不暴露 socket 事件，该超时不会触发。
+ * 没有本看门狗时，一次网络黑洞会让 checkForUpdates 永不 settle：
+ * `check()` 的 finally 不执行 → checkInFlight 永久为真 → 此后所有检查（含手动）
+ * 都只返回 checking 而不发请求，界面停在"检查中"且按钮禁用，用户只能重启应用。
+ */
+const CHECK_TIMEOUT_MS = 45_000;
+
+/**
  * 下载进度（electron-updater ProgressInfo 的子集）
  *
  * 差分下载时 total 是本次需下载的字节数（差分包大小），不是完整安装包体积。
@@ -208,14 +220,15 @@ export class UpdateService implements IUpdateService {
   /** @inheritDoc */
   start(options: UpdateStartOptions = {}): void {
     this.started = true;
-    const autoCheckEnabled = options.autoCheckEnabled ?? ((): boolean => true);
+    // 只读一次：注入的是同步读 SQLite 的函数，两次调用之间取值可能不同
+    const autoCheckEnabled = (options.autoCheckEnabled ?? ((): boolean => true))();
     this.devUpdateForced = options.devUpdateEnabled === true;
 
     // 日志接管：库默认走主进程 console（打包后无处可看），接进项目 logger
     this.updater.logger = createUpdaterLogger();
     // 下载改由本服务显式发起（只有自持 token 才能取消）
     this.updater.autoDownload = false;
-    this.updater.autoInstallOnAppQuit = autoCheckEnabled();
+    this.updater.autoInstallOnAppQuit = autoCheckEnabled;
     // 开发模式调试：改读 dev-app-update.yml（默认关闭，dev 不发任何更新请求）
     this.updater.forceDevUpdateConfig = this.devUpdateForced;
 
@@ -225,7 +238,7 @@ export class UpdateService implements IUpdateService {
       logger.info({ scope: 'auto-updater' }, '开发模式：跳过启动检查调度（更新仅对打包版生效）');
       return;
     }
-    if (!autoCheckEnabled()) {
+    if (!autoCheckEnabled) {
       logger.info({ scope: 'auto-updater' }, '用户已关闭自动检查更新：跳过启动检查调度');
       return;
     }
@@ -251,13 +264,15 @@ export class UpdateService implements IUpdateService {
     }
     this.checkInFlight = true;
     this.lastCheckAt = Date.now();
+    let timedOut = false;
     try {
-      await this.updater.checkForUpdates();
+      await this.withCheckTimeout(this.updater.checkForUpdates(), () => {
+        timedOut = true;
+      });
       this.afterCheck(true);
       return { status: 'checking' };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const errorKind = classifyUpdateError(error);
+      const { message, errorKind } = describeCheckFailure(timedOut, error);
       logger.warn({ scope: 'auto-updater', errorKind }, `更新检查失败：${message}`);
       if (manual) {
         this.emit({ phase: 'error', errorKind, message });
@@ -266,6 +281,38 @@ export class UpdateService implements IUpdateService {
       return { status: 'error', message };
     } finally {
       this.checkInFlight = false;
+    }
+  }
+
+  /**
+   * 给检查加超时看门狗（超时判定与失败判定分开：调用方据 timedOut 归类为 network）
+   *
+   * 超时后底层请求仍在跑，故额外挂一个空 catch 防"未处理的 Promise 拒绝"冒到全局
+   * 处理器（迟到的好消息仍会经事件正常推送）。
+   */
+  private async withCheckTimeout(
+    checkPromise: Promise<unknown>,
+    onTimeout: () => void,
+  ): Promise<void> {
+    void checkPromise.catch(() => {
+      // 超时后我们已不再 await 它；正常路径下 race 会照常收到本 rejection
+    });
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        checkPromise,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            onTimeout();
+            reject(new Error('check-timeout'));
+          }, CHECK_TIMEOUT_MS);
+          timer.unref();
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
     }
   }
 
@@ -545,6 +592,27 @@ export function toReleaseNotes(value: unknown): string | null {
     return parts.length === 0 ? null : parts.join('\n\n');
   }
   return null;
+}
+
+/**
+ * 检查失败的文案与分类
+ *
+ * 超时单独归类为 network：用户侧的可操作建议与"网络不可达"一致（检查网络后重试）。
+ */
+function describeCheckFailure(
+  timedOut: boolean,
+  error: unknown,
+): { readonly message: string; readonly errorKind: UpdateErrorKind } {
+  if (timedOut) {
+    return {
+      message: `更新检查超时（${Math.round(CHECK_TIMEOUT_MS / 1000)}s 未响应）`,
+      errorKind: 'network',
+    };
+  }
+  return {
+    message: error instanceof Error ? error.message : String(error),
+    errorKind: classifyUpdateError(error),
+  };
 }
 
 /** 读取错误对象上的字段（Error 子类运行时携带 code/statusCode，类型上不可见） */

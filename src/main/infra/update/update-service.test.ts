@@ -481,6 +481,35 @@ describe('UpdateService', () => {
       await first;
     });
 
+    it('检查超时（网络黑洞）：45s 后判失败并复位在途标记，可再次发起检查', async () => {
+      vi.useFakeTimers();
+      // 永不 settle：模拟 Electron net 路径下无 socket 超时的悬挂请求
+      updater.checkForUpdates.mockImplementation(() => new Promise<void>(() => {}));
+      const win = createFakeWindow();
+      mockGetAllWindows.mockReturnValue([win]);
+
+      const pending = service.check(true);
+      await vi.advanceTimersByTimeAsync(44_999);
+      const notYet = await Promise.race([pending, Promise.resolve('pending' as const)]);
+      expect(notYet).toBe('pending');
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toEqual({
+        status: 'error',
+        message: expect.stringContaining('超时'),
+      });
+      expect(lastPayload(win)).toEqual({
+        phase: 'error',
+        errorKind: 'network',
+        message: expect.stringContaining('超时'),
+      });
+
+      // 关键回归：看门狗复位了 checkInFlight，手动重试必须真的再发一次请求
+      updater.checkForUpdates.mockResolvedValueOnce(undefined);
+      await expect(service.check(true)).resolves.toEqual({ status: 'checking' });
+      expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    });
+
     it('checkForUpdates 抛错：返回 error；手动检查时推送 error 事件', async () => {
       updater.checkForUpdates.mockRejectedValueOnce(new Error('feed unreachable'));
       const win = createFakeWindow();

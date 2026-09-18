@@ -42,6 +42,10 @@ export function useInstallUpdate(): () => Promise<void> {
       }
     }
     // 浏览器模式（window.api 缺失）下为 no-op
-    void window.api?.update.install();
+    const api = window.api;
+    if (api === undefined) {
+      return;
+    }
+    void api.update.install();
   };
 }
