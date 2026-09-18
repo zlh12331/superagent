@@ -49,6 +49,19 @@ export type UpdatePhase =
   | 'cancelled' // 用户取消下载
   | 'error'; // 检查/下载失败
 
+/**
+ * 更新错误分类（主进程按错误特征归类，渲染层映射本地化文案）
+ *
+ * 原始 message 是 electron-updater 的英文技术文本（含 net:: / sha512 / ENOSPC
+ * 等），直接展示对用户不可操作，故由主进程分类后下发。
+ */
+export type UpdateErrorKind =
+  | 'network' // 网络不可达 / DNS / 连接超时
+  | 'rate-limited' // 被限流（HTTP 403/429）
+  | 'checksum' // 包校验失败
+  | 'disk' // 磁盘空间不足
+  | 'unknown'; // 其他（保留原始 message 供排查）
+
 /** update:event:status 事件 payload */
 export interface UpdateStatusPayload {
   /** 当前阶段 */
@@ -63,7 +76,9 @@ export interface UpdateStatusPayload {
   readonly total?: number;
   /** 平均下载速率（字节/秒，downloading 时提供） */
   readonly bytesPerSecond?: number;
-  /** 错误信息（error 时提供） */
+  /** 错误分类（error 时提供） */
+  readonly errorKind?: UpdateErrorKind;
+  /** 错误信息（error 时提供；unknown 分类下展示给用户，其余仅记日志） */
   readonly message?: string;
 }
 
@@ -83,6 +98,7 @@ export const UpdateStatusPayloadSchema = z.object({
   transferred: z.number().min(0).optional(),
   total: z.number().min(0).optional(),
   bytesPerSecond: z.number().min(0).optional(),
+  errorKind: z.enum(['network', 'rate-limited', 'checksum', 'disk', 'unknown']).optional(),
   message: z.string().optional(),
 });
 
@@ -95,9 +111,12 @@ export const UpdateStatusPayloadSchema = z.object({
 export interface UpdateGetStatusRes {
   /** 状态快照（进程内从未产生过更新状态时为 null） */
   readonly snapshot: UpdateStatusPayload | null;
+  /** 上次检查发起时间（毫秒时间戳；从未检查过为 null） */
+  readonly lastCheckAt: number | null;
 }
 
 /** update:getStatus 响应 zod schema（定义顺序：引用上面的 payload schema） */
 export const UpdateGetStatusResSchema = z.object({
   snapshot: UpdateStatusPayloadSchema.nullable(),
+  lastCheckAt: z.number().nullable(),
 });

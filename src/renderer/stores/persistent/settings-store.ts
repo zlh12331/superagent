@@ -203,6 +203,14 @@ export interface BrowserSettings {
 export interface UpdateSettings {
   /** 是否启用自动检查更新（默认 true） */
   readonly autoCheck: boolean;
+  /**
+   * 用户主动跳过的版本号（默认 null）
+   *
+   * 语义是"这个版本不再提醒"（顶栏徽标与 toast 静默），不阻断下载与安装——
+   * 差分下载成本低，用户改主意时可点"取消跳过"或直接安装。出现更高版本时
+   * 因版本号不等而自动失效（无需迁移逻辑）。
+   */
+  readonly skippedVersion: string | null;
 }
 
 /**
@@ -383,6 +391,7 @@ const DEFAULT_SETTINGS: SettingsData = {
   },
   update: {
     autoCheck: true,
+    skippedVersion: null,
   },
 };
 

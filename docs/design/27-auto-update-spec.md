@@ -141,7 +141,8 @@
 - 只在「下载中」「就绪」两态出现；其余隐藏。
 - 点击行为：下载中 → 打开设置并直达关于面板；就绪 → 打开操作浮层（重启并安装 / 稍后），不强制用户进设置页。
 - 分区状态已提升到 ui-store（`openSettings(section?)` + `settingsSection`），符合"多入口对话框状态收敛 ui-store"的既有约定。
-- 「稍后」按版本号记忆（本地瞬态，不入库）：同一版本本会话不再以徽标提醒，出现更高版本自动恢复。跳过此版本归 P1。
+- 「稍后」按版本号记忆（本地瞬态，不入库）：同一版本本会话不再以徽标提醒，出现更高版本自动恢复。
+- 「跳过此版本」持久化到 `settings.update.skippedVersion`（跨会话生效，见 §6.6）；与"稍后"共用同一静默判定。
 - 快照回放（见 5.3）不触发 toast。
 
 ### 6.5 Toast 策略
@@ -156,8 +157,9 @@
 - **重启并安装 + 运行中任务** → 走统一 `confirm()` store：标题「有正在进行的任务」，正文「重启会中断当前任务，是否继续？」，按钮「仍要重启」/「取消」。
 - **安装方式为静默**：确认通过后静默安装（`quitAndInstall(true, true)`），装完自动启动应用，不弹安装向导、沿用原安装目录。
 - **取消下载**：无需二次确认；取消后回空闲态并显示一行"已取消下载"，不弹 toast。
-- **跳过此版本**：仅在发现新版 / 就绪态出现；记录跳过的版本号（存 `app_settings`），出现更高版本时自动失效；关于面板显示"已跳过 v{版本}"并提供取消跳过。
-- **上次检查时间**：关于面板灰字展示。
+- **跳过此版本**：仅在发现新版 / 就绪态出现（关于面板按钮 + 顶栏操作菜单项）；记录跳过的版本号（存 `app_settings` 的 `update.skippedVersion`），出现更高版本时因版本号不等自动失效。
+  **语义是"不再提醒"，不阻断下载与安装**——差分下载成本低，且用户改主意时可点"取消跳过"或直接安装；关于面板显示"已跳过 v{版本}"并提供取消跳过。
+- **上次检查时间**：关于面板灰字展示（主进程经 `update:getStatus` 下发 `lastCheckAt`）。
 
 ### 6.7 进度条呈现细节
 
@@ -185,6 +187,8 @@
 
 - **更新说明**：来源为 GitHub release body（即我们润色过的 CHANGELOG 段落），库会作为 releaseNotes 下发，直接展示。
 - **错误分类与本地化**：网络不可达 / 被限流 / 校验失败 / 磁盘不足 / 未知，各配一句可操作文案。现状是把库的英文原始 message 直接展示给用户。
+  已实现：主进程 `classifyUpdateError` 按真实错误特征归类（HttpError 的 `statusCode` / `code`、Node 网络码、Electron `net::ERR_*` 文本、sha512 文本、ENOSPC/EDQUOT），经 payload 的 `errorKind` 下发；关于面板映射本地化文案，
+  **unknown 分类保留原始 message**（这类问题需要用户把技术细节带到 issue，套"未知错误"反而丢线索，原始信息同时已进 `main.log`）。
 - **磁盘预检**：下载前检查可用空间（阈值取包大小乘系数），避免磁盘满时才失败。
 
 ## 8. 可信、门禁与可观测
@@ -220,7 +224,8 @@
 3. 日志接管：`update-service.ts` 注入 logger 适配。
 4. 发布门禁：`.github/workflows/release.yml` 的 publish job 强制 blockmap。
 
-**P1**：更新说明折叠区、跳过此版本、重启确认对话框、错误分类与本地化、上次检查时间、缓存占用与清理入口。
+**P1**（第一批已完成，2026-09-18；见 §14）：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~。
+**P1 剩余**：更新说明折叠区（release notes）、重启确认对话框（有运行中回合时）、缓存占用与清理入口。
 
 **P2**：任务栏进度、`forceDevUpdateConfig` + `dev-app-update.yml` 让更新链路可在 dev 与 e2e 覆盖、签名与公证、自定义更新源的 host 校验。
 
@@ -256,3 +261,16 @@ P0 已落地，与本文档的两处机制偏差如实记录如下（均为实�
 验收实测（2026-09-18）：`pnpm typecheck` / `pnpm lint` / `pnpm check:static`（13 项）/
 `pnpm test`（shared 81 + main + renderer 1497 + integration 152 + scripts 158）/ `pnpm knip` 全部通过。
 **打包真机的差分验证尚未执行**（需安装旧版触发一次真实升级），仍为待办。
+
+### 14.1 P1 第一批（2026-09-18，已提交）
+
+- **跳过此版本**：`settings.update.skippedVersion`（默认 null，写穿透落库）；判定集中在"顶栏徽标 + toast"
+  两处静默，**不阻断下载与安装**（差分下载成本低、用户可随时取消跳过）；版本号不等即自动失效。
+- **错误分类**：主进程 `classifyUpdateError`（导出可测）+ payload `errorKind`；关于面板映射本地化文案，
+  unknown 保留原始 message。
+- **上次检查时间**：`getStatus` 增加 `lastCheckAt`；关于面板灰字展示（复用 `formatDateTime`）。
+- **顶栏操作菜单**：就绪态菜单补齐「跳过此版本」（原只有重启并安装 / 稍后）。
+
+验收实测：`pnpm typecheck` / `pnpm lint` / `pnpm check:static` / `pnpm knip` 通过；
+`pnpm test` = shared 81 + main 1842 + renderer 1502 + integration 152 + scripts 158 全绿。
+新增测试：错误分类 5 组用例、`lastCheckAt` 记录、UpdateNotice 跳过/回放静默、`useUpdate` 快照含时间。

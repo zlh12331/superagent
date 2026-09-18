@@ -22,6 +22,7 @@ import {
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 
 /**
@@ -37,7 +38,10 @@ export function UpdateIndicator(): ReactElement | null {
   const { state, install } = useUpdate();
   const openSettings = useUiStore((s) => s.openSettings);
   const { t } = useTranslation();
-  // 本次会话已"稍后"的版本（local 瞬态：重启后恢复提醒，换版本自动失效）
+  // 持久跳过（settings.update.skippedVersion，跨会话）与本次会话"稍后"
+  // （local 瞬态，按版本号记忆）两个来源都让徽标静默
+  const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
+  const setUpdate = useSettingsStore((s) => s.setUpdate);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
   const phase = state?.phase;
@@ -63,7 +67,8 @@ export function UpdateIndicator(): ReactElement | null {
     );
   }
 
-  if (phase === 'downloaded' && version !== dismissedVersion) {
+  const silenced = version !== '' && (version === skippedVersion || version === dismissedVersion);
+  if (phase === 'downloaded' && !silenced) {
     const label = t('update.indicatorReady', { version });
     return (
       <DropdownMenu>
@@ -86,6 +91,9 @@ export function UpdateIndicator(): ReactElement | null {
           <DropdownMenuItem onSelect={install}>{t('update.restartNow')}</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setDismissedVersion(version)}>
             {t('update.later')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setUpdate({ skippedVersion: version })}>
+            {t('update.skipVersion')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

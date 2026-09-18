@@ -47,9 +47,9 @@ export function createUpdateHandlers(
       deps.updateService.cancelDownload();
       return { ok: true };
     },
-    // update:getStatus - 状态快照（渲染层挂载时读取，避免重载后界面状态丢失）
+    // update:getStatus - 状态快照与上次检查时间（渲染层挂载时读取，避免重载后界面状态丢失）
     getStatus: async () => {
-      return { snapshot: deps.updateService.getStatus() };
+      return deps.updateService.getStatus();
     },
   };
 }

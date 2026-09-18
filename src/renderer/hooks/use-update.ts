@@ -21,6 +21,8 @@ export interface UseUpdateResult {
   readonly state: UpdateStatusPayload | null;
   /** 当前状态是否仅来自挂载快照（回放，不应触发提示类副作用） */
   readonly fromSnapshot: boolean;
+  /** 上次检查发起时间（毫秒时间戳；本次会话与快照均无记录时为 null） */
+  readonly lastCheckAt: number | null;
   /** 手动触发更新检查 */
   readonly check: () => Promise<void>;
   /** 取消在途下载（无在途下载时为空操作） */
@@ -40,6 +42,7 @@ export interface UseUpdateResult {
 export function useUpdate(): UseUpdateResult {
   const [liveState, setLiveState] = useState<UpdateStatusPayload | null>(null);
   const [snapshotState, setSnapshotState] = useState<UpdateStatusPayload | null>(null);
+  const [lastCheckAt, setLastCheckAt] = useState<number | null>(null);
 
   // 浏览器模式（window.api 缺失）跳过订阅：与 use-agent-bridge 等守卫模式对齐
   useEffect(() => {
@@ -52,9 +55,12 @@ export function useUpdate(): UseUpdateResult {
     void api.update
       .getStatus()
       .then((res) => {
-        const snapshot = unwrap(res).snapshot;
-        if (active && snapshot !== null) {
-          setSnapshotState(snapshot);
+        const status = unwrap(res);
+        if (active && status.snapshot !== null) {
+          setSnapshotState(status.snapshot);
+        }
+        if (active && typeof status.lastCheckAt === 'number') {
+          setLastCheckAt(status.lastCheckAt);
         }
       })
       .catch(() => {
@@ -73,6 +79,8 @@ export function useUpdate(): UseUpdateResult {
       return;
     }
     await api.update.check({ manual: true });
+    // 主进程在检查发起时记录时间，这里同步刷新（无需再发一次 getStatus）
+    setLastCheckAt(Date.now());
   };
 
   const cancel = (): void => {
@@ -86,6 +94,7 @@ export function useUpdate(): UseUpdateResult {
   return {
     state: liveState ?? snapshotState,
     fromSnapshot: liveState === null && snapshotState !== null,
+    lastCheckAt,
     check,
     cancel,
     install,

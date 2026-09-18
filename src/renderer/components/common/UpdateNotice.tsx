@@ -17,6 +17,7 @@ import { type ReactElement, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 /**
  * 自动更新提示组件（挂载在 AppShell 根级，全局只此一个）
  */
@@ -24,6 +25,8 @@ export function UpdateNotice(): ReactElement | null {
   const { state, fromSnapshot, install } = useUpdate();
   // 本地化文案
   const { t } = useTranslation();
+  // 用户跳过的版本（settings.update.skippedVersion）：该版本不弹提示
+  const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
   // 记录上次已提示的阶段（同阶段重复推送不弹，避免干扰）
   const lastNotifiedPhaseRef = useRef<UpdatePhase | null>(null);
 
@@ -41,6 +44,11 @@ export function UpdateNotice(): ReactElement | null {
       return;
     }
     lastNotifiedPhaseRef.current = phase;
+    // 用户已跳过该版本：静默（顶栏徽标同样不显示）
+    const version = state?.version;
+    if (version !== undefined && version === skippedVersion) {
+      return;
+    }
 
     switch (phase) {
       case 'available':
@@ -73,7 +81,7 @@ export function UpdateNotice(): ReactElement | null {
         // 检查中/下载进度/取消不做 toast（进度高频推送；取消由关于面板就地提示）
         break;
     }
-  }, [state, fromSnapshot, install, t]);
+  }, [state, fromSnapshot, install, skippedVersion, t]);
 
   return null;
 }

@@ -12,7 +12,12 @@ vi.mock('electron', () => ({
   ['BrowserWindow']: { getAllWindows: mockGetAllWindows },
 }));
 
-import { type AutoUpdaterLike, type CancellationTokenLike, UpdateService } from './update-service';
+import {
+  type AutoUpdaterLike,
+  type CancellationTokenLike,
+  classifyUpdateError,
+  UpdateService,
+} from './update-service';
 
 /** fake updater 形状（含测试控制字段） */
 type FakeUpdater = AutoUpdaterLike & {
@@ -260,12 +265,16 @@ describe('UpdateService', () => {
       expect(lastPayload(win)).toEqual({ phase: 'cancelled', version: '1.2.0' });
     });
 
-    it('error 事件 → error payload（含 message）', () => {
+    it('error 事件 → error payload（含分类）', () => {
       const win = createFakeWindow();
       mockGetAllWindows.mockReturnValue([win]);
       service.start();
       fire(updater, 'error', new Error('network down'));
-      expect(lastPayload(win)).toEqual({ phase: 'error', message: 'network down' });
+      expect(lastPayload(win)).toEqual({
+        phase: 'error',
+        errorKind: 'unknown',
+        message: 'network down',
+      });
     });
 
     it('已销毁窗口跳过推送', () => {
@@ -280,9 +289,15 @@ describe('UpdateService', () => {
     it('无窗口时仍留快照（getStatus 可读）', () => {
       mockGetAllWindows.mockReturnValue([]);
       service.start();
-      expect(service.getStatus()).toBeNull();
+      expect(service.getStatus()).toEqual({ snapshot: null, lastCheckAt: null });
       fire(updater, 'checking-for-update');
-      expect(service.getStatus()).toEqual({ phase: 'checking' });
+      expect(service.getStatus().snapshot).toEqual({ phase: 'checking' });
+    });
+
+    it('检查后记录上次检查时间', async () => {
+      expect(service.getStatus().lastCheckAt).toBeNull();
+      await service.check(false);
+      expect(service.getStatus().lastCheckAt).toBeTypeOf('number');
     });
   });
 
@@ -384,6 +399,7 @@ describe('UpdateService', () => {
       expect(result).toEqual({ status: 'error', message: 'feed unreachable' });
       expect(win.webContents.send).toHaveBeenCalledWith('update:event:status', {
         phase: 'error',
+        errorKind: 'unknown',
         message: 'feed unreachable',
       });
     });
@@ -402,6 +418,50 @@ describe('UpdateService', () => {
     it('静默安装 + 装完自动启动（isSilent=true, isForceRunAfter=true）', () => {
       service.quitAndInstall();
       expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    });
+  });
+
+  describe('classifyUpdateError', () => {
+    it('HttpError 的 403/429 → rate-limited（statusCode 与 code 两种信号）', () => {
+      expect(classifyUpdateError(Object.assign(new Error('HTTP error'), { statusCode: 429 }))).toBe(
+        'rate-limited',
+      );
+      expect(classifyUpdateError(Object.assign(new Error('HTTP error'), { statusCode: 403 }))).toBe(
+        'rate-limited',
+      );
+      expect(classifyUpdateError(Object.assign(new Error('x'), { code: 'HTTP_ERROR_429' }))).toBe(
+        'rate-limited',
+      );
+    });
+
+    it('sha512/checksum 文本 → checksum', () => {
+      expect(classifyUpdateError(new Error("Sha512 checksum doesn't match"))).toBe('checksum');
+      expect(classifyUpdateError(new Error('Cannot parse checksum'))).toBe('checksum');
+    });
+
+    it('ENOSPC/EDQUOT → disk', () => {
+      expect(
+        classifyUpdateError(Object.assign(new Error('write failed'), { code: 'ENOSPC' })),
+      ).toBe('disk');
+      expect(classifyUpdateError(new Error('ENOSPC: no space left on device'))).toBe('disk');
+      expect(classifyUpdateError(Object.assign(new Error('quota'), { code: 'EDQUOT' }))).toBe(
+        'disk',
+      );
+    });
+
+    it('Electron net 文本与 Node 网络错误码 → network', () => {
+      expect(classifyUpdateError(new Error('net::ERR_INTERNET_DISCONNECTED'))).toBe('network');
+      expect(classifyUpdateError(new Error('net::ERR_NAME_NOT_RESOLVED'))).toBe('network');
+      expect(
+        classifyUpdateError(Object.assign(new Error('getaddrinfo'), { code: 'ENOTFOUND' })),
+      ).toBe('network');
+      expect(classifyUpdateError(new Error('connect ECONNREFUSED 127.0.0.1:443'))).toBe('network');
+    });
+
+    it('无法归类（含非 Error 值）→ unknown', () => {
+      expect(classifyUpdateError(new Error('ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'))).toBe('unknown');
+      expect(classifyUpdateError('weird')).toBe('unknown');
+      expect(classifyUpdateError(null)).toBe('unknown');
     });
   });
 });

@@ -94,7 +94,31 @@ interface UpdateBlockProps {
   readonly onCheck: () => void;
   readonly onCancel: () => void;
   readonly onInstall: () => void;
+  readonly onSkip: () => void;
   readonly onOpenDataDir: () => void;
+}
+
+/**
+ * 更新错误文案（主进程已分类 → 本地化文案）
+ *
+ * unknown / 未分类时保留原始英文 message：这类错误需要用户把技术细节带到
+ * issue，统一套一句"未知错误"反而丢掉排查线索（原始信息同时已进 main.log）。
+ */
+function describeUpdateError(t: TranslateFn, state: UpdateStatusPayload | null): string {
+  switch (state?.errorKind) {
+    case 'network':
+      return t('update.errNetwork');
+    case 'rate-limited':
+      return t('update.errRateLimited');
+    case 'checksum':
+      return t('update.errChecksum');
+    case 'disk':
+      return t('update.errDisk');
+    default:
+      return state?.message !== undefined && state.message !== ''
+        ? state.message
+        : t('settings.aboutUpdateNotAvailable');
+  }
 }
 
 /** 下载中区块 props */
@@ -157,6 +181,7 @@ function UpdateBlock({
   onCheck,
   onCancel,
   onInstall,
+  onSkip,
   onOpenDataDir,
 }: UpdateBlockProps): ReactElement {
   const { t } = useTranslation();
@@ -204,26 +229,32 @@ function UpdateBlock({
 
   if (phase === 'available') {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-accent-text inline-flex items-center gap-1 text-xs">
           <RefreshCw className="size-3.5" strokeWidth={1.5} />
           {t('settings.aboutUpdateAvailable')}
           {' · '}
           {t('settings.aboutUpdateVersion', { version: state?.version ?? '' })}
         </span>
+        <Button variant="ghost" size="sm" onClick={onSkip}>
+          {t('update.skipVersion')}
+        </Button>
       </div>
     );
   }
 
   if (phase === 'downloaded') {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-accent-text inline-flex items-center gap-1 text-xs">
           <PackageCheck className="size-3.5" strokeWidth={1.5} />
           {t('settings.aboutUpdateReady')}
         </span>
         <Button size="sm" variant="outline" onClick={onInstall}>
           {t('settings.aboutInstallRestart')}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onSkip}>
+          {t('update.skipVersion')}
         </Button>
       </div>
     );
@@ -244,15 +275,11 @@ function UpdateBlock({
     );
   }
 
-  // 其余（error）：完整错误信息（主进程 UpdateStatusPayload.message）+ 重试 +
-  // 打开数据目录（更新日志/缓存位于 userData 下，供排查）
-  const detail =
-    state?.message !== undefined && state.message !== ''
-      ? state.message
-      : t('settings.aboutUpdateNotAvailable');
+  // 其余（error）：分类文案（主进程归类，见 update-service 的 classifyUpdateError）+
+  // 重试 + 打开数据目录（更新日志/缓存位于 userData 下，供排查）
   return (
     <div className="flex w-full flex-col items-start gap-2">
-      <span className="text-error-text text-xs leading-[1.5]">{detail}</span>
+      <span className="text-error-text text-xs leading-[1.5]">{describeUpdateError(t, state)}</span>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={onCheck}>
           <RefreshCw className="size-3.5" strokeWidth={1.5} />
@@ -399,9 +426,10 @@ export function AboutSection(): ReactElement {
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
   // 更新状态（订阅主进程 update:event:status + 挂载快照；全局 UpdateNotice 与这里共享事件流）
-  const { state: updateState, check, cancel, install } = useUpdate();
-  // 自动检查开关（写穿透落库；主进程下次启动读取生效）
+  const { state: updateState, check, cancel, install, lastCheckAt } = useUpdate();
+  // 自动检查开关与跳过版本（写穿透落库；主进程下次启动读取开关）
   const autoCheck = useSettingsStore((s) => s.update.autoCheck);
+  const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
   const setUpdate = useSettingsStore((s) => s.setUpdate);
 
   /**
@@ -414,6 +442,14 @@ export function AboutSection(): ReactElement {
     setUpdate({ autoCheck: checked });
     if (checked) {
       void check();
+    }
+  };
+
+  /** 跳过当前版本：记录版本号，顶栏徽标与 toast 对该版本静默（不阻断下载/安装） */
+  const handleSkipVersion = (): void => {
+    const version = updateState?.version;
+    if (version !== undefined && version !== '') {
+      setUpdate({ skippedVersion: version });
     }
   };
 
@@ -457,15 +493,37 @@ export function AboutSection(): ReactElement {
             </span>
             {channel !== undefined && <ChannelBadge channel={channel} />}
           </div>
-          {/* 更新区（按阶段分派，实现见 UpdateBlock） */}
-          <div className="mt-4 flex w-full justify-center">
+          {/* 更新区（按阶段分派，实现见 UpdateBlock）+ 跳过态与上次检查时间 */}
+          <div className="mt-4 flex w-full flex-col items-center gap-2">
             <UpdateBlock
               state={updateState}
               onCheck={() => void check()}
               onCancel={cancel}
               onInstall={install}
+              onSkip={handleSkipVersion}
               onOpenDataDir={openDataDir}
             />
+            {skippedVersion !== null && skippedVersion === updateState?.version && (
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground text-[11px]">
+                  {t('settings.aboutSkipped', { version: skippedVersion })}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setUpdate({ skippedVersion: null })}
+                >
+                  {t('settings.aboutUnskip')}
+                </Button>
+              </div>
+            )}
+            {lastCheckAt !== null && (
+              <span className="text-muted-foreground text-[11px]">
+                {t('settings.aboutLastCheck', {
+                  time: formatDateTime(lastCheckAt, i18n.language),
+                })}
+              </span>
+            )}
           </div>
         </div>
       </Card>

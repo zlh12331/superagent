@@ -50,7 +50,7 @@ function createEmptyApi(): MockApi {
       check: async () => ({ data: { status: 'checking' } }),
       install: async () => ({ data: { ok: true } }),
       cancel: async () => ({ data: { ok: true } }),
-      getStatus: async () => ({ data: { snapshot: null } }),
+      getStatus: async () => ({ data: { snapshot: null, lastCheckAt: null } }),
       subscribeStatus: () => () => {},
     },
   };

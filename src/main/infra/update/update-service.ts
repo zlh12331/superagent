@@ -16,7 +16,12 @@
 //   （由 electron-builder.yml 的 publish 配置生成），无需运行时 setFeedURL
 // ──────────────────────────────────────────────────────────────
 
-import type { UpdateCheckRes, UpdateStatusPayload } from '@code-agent/shared/main';
+import type {
+  UpdateCheckRes,
+  UpdateErrorKind,
+  UpdateGetStatusRes,
+  UpdateStatusPayload,
+} from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { BrowserWindow } from 'electron';
 import { emitEvent } from '../../utils/emit-event';
@@ -123,8 +128,8 @@ export interface IUpdateService {
   check(manual: boolean): Promise<UpdateCheckRes>;
   /** 取消在途下载（无在途下载时为空操作；取消结果经 update-cancelled 推送） */
   cancelDownload(): void;
-  /** 最近一次状态快照（渲染层重载后恢复界面用；从未产生过为 null） */
-  getStatus(): UpdateStatusPayload | null;
+  /** 状态快照与上次检查时间（渲染层重载后恢复界面用；从未产生过分别为 null） */
+  getStatus(): UpdateGetStatusRes;
   /** 安装已下载的更新并重启（静默安装 + 装完自动启动） */
   quitAndInstall(): void;
   /** 释放资源（清挂起定时器；在途下载留给 pending 缓存续传） */
@@ -143,6 +148,9 @@ export interface IUpdateService {
 export class UpdateService implements IUpdateService {
   /** 最近一次状态快照（emit 时更新，供 getStatus 读取） */
   private snapshot: UpdateStatusPayload | null = null;
+
+  /** 上次检查发起时间（毫秒时间戳；从未检查过为 null） */
+  private lastCheckAt: number | null = null;
 
   /** 发现新版的版本号（进度事件不带版本，下载中/取消时补进 payload） */
   private pendingVersion: string | null = null;
@@ -212,15 +220,17 @@ export class UpdateService implements IUpdateService {
       return { status: 'checking' };
     }
     this.checkInFlight = true;
+    this.lastCheckAt = Date.now();
     try {
       await this.updater.checkForUpdates();
       this.afterCheck(true);
       return { status: 'checking' };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn({ scope: 'auto-updater' }, `更新检查失败：${message}`);
+      const errorKind = classifyUpdateError(error);
+      logger.warn({ scope: 'auto-updater', errorKind }, `更新检查失败：${message}`);
       if (manual) {
-        this.emit({ phase: 'error', message });
+        this.emit({ phase: 'error', errorKind, message });
       }
       this.afterCheck(false);
       return { status: 'error', message };
@@ -240,8 +250,8 @@ export class UpdateService implements IUpdateService {
   }
 
   /** @inheritDoc */
-  getStatus(): UpdateStatusPayload | null {
-    return this.snapshot;
+  getStatus(): UpdateGetStatusRes {
+    return { snapshot: this.snapshot, lastCheckAt: this.lastCheckAt };
   }
 
   /** @inheritDoc */
@@ -289,7 +299,7 @@ export class UpdateService implements IUpdateService {
     this.updater.on('error', (error) => {
       logger.error({ scope: 'auto-updater' }, '自动更新失败', error);
       this.cancelToken = null;
-      this.emit({ phase: 'error', message: error.message });
+      this.emit({ phase: 'error', errorKind: classifyUpdateError(error), message: error.message });
     });
   }
 
@@ -307,7 +317,7 @@ export class UpdateService implements IUpdateService {
         const message = error instanceof Error ? error.message : String(error);
         logger.error({ scope: 'auto-updater' }, '更新下载失败', error);
         this.cancelToken = null;
-        this.emit({ phase: 'error', message });
+        this.emit({ phase: 'error', errorKind: classifyUpdateError(error), message });
       })
       .finally(() => {
         if (this.cancelToken === token) {
@@ -401,6 +411,60 @@ export class UpdateService implements IUpdateService {
     }
     this.timerKind = null;
   }
+}
+
+/**
+ * 更新错误分类（按错误特征归类，供渲染层映射本地化文案）
+ *
+ * 识别依据来自真实错误形状：builder-util-runtime 的 HttpError 带
+ * `statusCode` 与 `code = HTTP_ERROR_<status>`；Node 网络错误带 code
+ * （ENOTFOUND/ECONNREFUSED…）；Electron net 抛 net::ERR_* 文本；校验失败为
+ * sha512/checksum 描述文本。无法归类一律 unknown（保留原始 message 供排查）。
+ */
+export function classifyUpdateError(error: unknown): UpdateErrorKind {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = readErrorField(error, 'code');
+  const statusCode = readErrorField(error, 'statusCode');
+
+  // 限流：HTTP 403（无权限/被挡）与 429（请求过多）
+  if (
+    statusCode === 403 ||
+    statusCode === 429 ||
+    code === 'HTTP_ERROR_403' ||
+    code === 'HTTP_ERROR_429'
+  ) {
+    return 'rate-limited';
+  }
+  // 校验失败：sha512 / checksum 不匹配
+  if (/sha512|checksum/i.test(message)) {
+    return 'checksum';
+  }
+  // 磁盘：Node fs 空间不足（ENOSPC）与超配额（EDQUOT）
+  if (code === 'ENOSPC' || code === 'EDQUOT' || /ENOSPC|no space left/i.test(message)) {
+    return 'disk';
+  }
+  // 网络：Electron net 错误文本与 Node 网络错误码
+  if (
+    /net::ERR_|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|socket hang up|timeout/i.test(
+      message,
+    ) ||
+    code === 'ENOTFOUND' ||
+    code === 'EAI_AGAIN' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT'
+  ) {
+    return 'network';
+  }
+  return 'unknown';
+}
+
+/** 读取错误对象上的字段（Error 子类运行时携带 code/statusCode，类型上不可见） */
+function readErrorField(error: unknown, field: string): unknown {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  return Reflect.get(error, field) as unknown;
 }
 
 /** 把值转为单行日志文本（保留 Error 的堆栈信息，对象走 JSON） */

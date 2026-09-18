@@ -11,7 +11,7 @@ function mockUpdateApi(overrides: Partial<Record<string, unknown>> = {}): void {
     check: vi.fn(async () => ({ data: { status: 'checking' } })),
     install: vi.fn(async () => ({ data: { ok: true } })),
     cancel: vi.fn(async () => ({ data: { ok: true } })),
-    getStatus: vi.fn(async () => ({ data: { snapshot: null } })),
+    getStatus: vi.fn(async () => ({ data: { snapshot: null, lastCheckAt: null } })),
     subscribeStatus: vi.fn(() => () => {}),
     ...overrides,
   } as never;
@@ -50,7 +50,10 @@ describe('use-update', () => {
   it('挂载时拉取快照：无事件时以快照为准且标记 fromSnapshot', async () => {
     mockUpdateApi({
       getStatus: vi.fn(async () => ({
-        data: { snapshot: { phase: 'downloaded', version: '1.1.0' } },
+        data: {
+          snapshot: { phase: 'downloaded', version: '1.1.0' },
+          lastCheckAt: 1_700_000_000_000,
+        },
       })),
     });
     const { result } = renderHook(() => useUpdate());
@@ -58,6 +61,7 @@ describe('use-update', () => {
       expect(result.current.state).toEqual({ phase: 'downloaded', version: '1.1.0' });
     });
     expect(result.current.fromSnapshot).toBe(true);
+    expect(result.current.lastCheckAt).toBe(1_700_000_000_000);
   });
 
   it('快照为空时不覆盖 state（保持 null）', async () => {
@@ -67,6 +71,15 @@ describe('use-update', () => {
     });
     expect(result.current.state).toBeNull();
     expect(result.current.fromSnapshot).toBe(false);
+    expect(result.current.lastCheckAt).toBeNull();
+  });
+
+  it('检查后刷新上次检查时间（无需再发 getStatus）', async () => {
+    const { result } = renderHook(() => useUpdate());
+    await act(async () => {
+      await result.current.check();
+    });
+    expect(result.current.lastCheckAt).toBeTypeOf('number');
   });
 
   it('check：调用 update.check({ manual: true })', async () => {

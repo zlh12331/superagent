@@ -10,7 +10,7 @@ function createFakeUpdateService() {
     start: vi.fn(),
     check: vi.fn(async () => ({ status: 'checking' as const })),
     cancelDownload: vi.fn(),
-    getStatus: vi.fn(() => null),
+    getStatus: vi.fn(() => ({ snapshot: null, lastCheckAt: null })),
     quitAndInstall: vi.fn(),
     dispose: vi.fn(),
   } as unknown as UpdateHandlerDeps['updateService'] & {
@@ -60,14 +60,20 @@ describe('update.handler', () => {
     expect(result).toEqual({ ok: true });
   });
 
-  it('getStatus：包装成 snapshot 返回（无快照时为 null）', async () => {
+  it('getStatus：透传服务快照与上次检查时间', async () => {
     const result = await handlers.getStatus(undefined, EMPTY_CTX);
-    expect(result).toEqual({ snapshot: null });
+    expect(result).toEqual({ snapshot: null, lastCheckAt: null });
   });
 
   it('getStatus：透传服务快照', async () => {
-    updateService.getStatus.mockReturnValueOnce({ phase: 'downloaded', version: '1.2.0' });
+    updateService.getStatus.mockReturnValueOnce({
+      snapshot: { phase: 'downloaded', version: '1.2.0' },
+      lastCheckAt: 1_700_000_000_000,
+    });
     const result = await handlers.getStatus(undefined, EMPTY_CTX);
-    expect(result).toEqual({ snapshot: { phase: 'downloaded', version: '1.2.0' } });
+    expect(result).toEqual({
+      snapshot: { phase: 'downloaded', version: '1.2.0' },
+      lastCheckAt: 1_700_000_000_000,
+    });
   });
 });
