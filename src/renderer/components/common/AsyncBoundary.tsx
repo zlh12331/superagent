@@ -125,7 +125,7 @@ export function AsyncBoundary<T>({
           <p className="text-muted-foreground text-sm">{resolveErrorMessage(view.error)}</p>
           <div className="flex gap-2">
             {action !== undefined && action.kind === 'open-settings' && (
-              <Button variant="outline" size="sm" onClick={openSettings}>
+              <Button variant="outline" size="sm" onClick={() => openSettings()}>
                 <Settings2 className="size-3.5" strokeWidth={2} />
                 {t('common.goToSettings')}
               </Button>

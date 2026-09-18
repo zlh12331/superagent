@@ -51,7 +51,10 @@ import { app, BrowserWindow } from 'electron';
 // 必须默认导入后解构（Node ESM 对 CJS 的 default = module.exports，可靠）
 import electronUpdater from 'electron-updater';
 
-const { autoUpdater } = electronUpdater;
+const { autoUpdater, CancellationToken } = electronUpdater;
+
+/** 取消令牌工厂（UpdateService 自持 token 以支持"取消下载"） */
+const createUpdateToken = (): InstanceType<typeof CancellationToken> => new CancellationToken();
 
 import { resetConfigCache } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
@@ -949,12 +952,13 @@ class ServiceContainer {
   /**
    * 获取 UpdateService 实例
    *
-   * 首次调用延迟初始化：注入 electron-updater 的 autoUpdater 与打包状态判断。
-   * 打包环境（app.isPackaged）才有 app-update.yml 更新源，开发模式 check 返回明确错误。
+   * 首次调用延迟初始化：注入 electron-updater 的 autoUpdater、打包状态判断与取消
+   * 令牌工厂（electron-updater 未暴露取消 API，下载由 UpdateService 自持 token
+   * 才能取消）。打包环境（app.isPackaged）才有 app-update.yml 更新源。
    */
   getUpdateService(): IUpdateService {
     if (this.updateService === null) {
-      this.updateService = new UpdateService(autoUpdater, () => app.isPackaged);
+      this.updateService = new UpdateService(autoUpdater, () => app.isPackaged, createUpdateToken);
     }
     return this.updateService;
   }

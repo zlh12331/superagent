@@ -156,6 +156,23 @@ const errorCallbacks = new Set<
 >();
 const terminalOutputCallbacks = new Set<(payload: { terminalId: string; data: string }) => void>();
 const updateStatusCallbacks = new Set<(payload: UpdateStatusPayload) => void>();
+
+/**
+ * 更新域 mock（独立于 createMockApi 的对象字面量：该函数体已远超行长阈值，
+ * 内联新增方法会继续推高其体量棘轮基线）
+ */
+const mockUpdateApi: IpcApi['update'] = {
+  check: async () => ipcOk({ status: 'checking' }),
+  install: async () => ipcOk({ ok: true }),
+  cancel: async () => ipcOk({ ok: true }),
+  getStatus: async () => ipcOk({ snapshot: null, lastCheckAt: null }),
+  getCacheInfo: async () => ipcOk({ path: null, bytes: 0, fileCount: 0 }),
+  clearCache: async () => ipcOk({ path: null, bytes: 0, fileCount: 0 }),
+  subscribeStatus: (cb: Parameters<IpcApi['update']['subscribeStatus']>[0]) => {
+    updateStatusCallbacks.add(cb);
+    return () => updateStatusCallbacks.delete(cb);
+  },
+};
 /** 审批请求回调（agent:approval:request 模拟推送，验证内联审批卡） */
 const approvalCallbacks = new Set<(payload: AgentApprovalRequestPayload) => void>();
 /** Agent 提问回调（agent:event:ask 模拟推送，验证 AskDialog） */
@@ -968,14 +985,7 @@ function createMockApi(): IpcApi {
       pickFiles: async () => ipcOk({ canceled: true, paths: [] }),
     },
 
-    update: {
-      check: async () => ipcOk({ status: 'up-to-date' }),
-      install: async () => ipcOk({ ok: true }),
-      subscribeStatus: (cb: Parameters<IpcApi['update']['subscribeStatus']>[0]) => {
-        updateStatusCallbacks.add(cb);
-        return () => updateStatusCallbacks.delete(cb);
-      },
-    },
+    update: mockUpdateApi,
 
     im: {
       list: async () => ipcOk({ channels: [] }),

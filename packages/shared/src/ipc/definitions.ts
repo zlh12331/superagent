@@ -279,9 +279,13 @@ import {
 } from '../schemas/terminal';
 import { ToolListReqSchema, type ToolListRes, ToolListResSchema } from '../schemas/tool';
 import {
+  type UpdateCacheInfo,
+  UpdateCacheInfoSchema,
   UpdateCheckReqSchema,
   type UpdateCheckRes,
   UpdateCheckResSchema,
+  type UpdateGetStatusRes,
+  UpdateGetStatusResSchema,
   type UpdateStatusPayload,
   UpdateStatusPayloadSchema,
 } from '../schemas/update';
@@ -977,6 +981,25 @@ export const IPC_DEFINITIONS = {
       UpdateCheckResSchema,
     ),
     install: withSchema(IPC_META.update.install, null, {} as { ok: boolean }, OkResSchema),
+    cancel: withSchema(IPC_META.update.cancel, null, {} as { ok: boolean }, OkResSchema),
+    getStatus: withSchema(
+      IPC_META.update.getStatus,
+      null,
+      {} as UpdateGetStatusRes,
+      UpdateGetStatusResSchema,
+    ),
+    getCacheInfo: withSchema(
+      IPC_META.update.getCacheInfo,
+      null,
+      {} as UpdateCacheInfo,
+      UpdateCacheInfoSchema,
+    ),
+    clearCache: withSchema(
+      IPC_META.update.clearCache,
+      null,
+      {} as UpdateCacheInfo,
+      UpdateCacheInfoSchema,
+    ),
     subscribeStatus: withPayload(
       IPC_META.update.subscribeStatus,
       {} as UpdateStatusPayload,

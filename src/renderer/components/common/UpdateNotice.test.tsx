@@ -12,11 +12,13 @@ import { render } from '@testing-library/react';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { UpdateNotice } from './UpdateNotice';
 
 const mockState = vi.hoisted(() => ({
   value: null as null | { phase: string; version?: string; message?: string },
 }));
+const mockFromSnapshot = vi.hoisted(() => ({ value: false }));
 const installSpy = vi.hoisted(() => vi.fn());
 
 vi.mock('sonner', () => ({
@@ -28,8 +30,13 @@ vi.mock('sonner', () => ({
 }));
 
 vi.mock('@/hooks/use-update', () => ({
-  useUpdate: (): { state: typeof mockState.value; install: typeof installSpy } => ({
+  useUpdate: (): {
+    state: typeof mockState.value;
+    fromSnapshot: boolean;
+    install: typeof installSpy;
+  } => ({
     state: mockState.value,
+    fromSnapshot: mockFromSnapshot.value,
     install: installSpy,
   }),
 }));
@@ -38,6 +45,8 @@ describe('UpdateNotice', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.value = null;
+    mockFromSnapshot.value = false;
+    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: null } });
   });
 
   it('纯事件消费：不渲染任何 DOM（返回 null）', () => {
@@ -114,5 +123,33 @@ describe('UpdateNotice', () => {
     rerender(<UpdateNotice />);
     rerender(<UpdateNotice />);
     expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('已跳过该版本（settings.update.skippedVersion）：不弹任何 toast', () => {
+    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: '1.2.3' } });
+    mockState.value = { phase: 'downloaded', version: '1.2.3' };
+    render(<UpdateNotice />);
+    expect(toast).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalled();
+  });
+
+  it('跳过的是别的版本：仍正常提示当前版本', () => {
+    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: '1.0.0' } });
+    mockState.value = { phase: 'downloaded', version: '1.2.3' };
+    render(<UpdateNotice />);
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it('快照回放（fromSnapshot）：只记阶段、不重弹 toast', () => {
+    mockFromSnapshot.value = true;
+    mockState.value = { phase: 'downloaded', version: '1.2.3' };
+    render(<UpdateNotice />);
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it('cancelled：静默（取消由关于面板就地提示）', () => {
+    mockState.value = { phase: 'cancelled', version: '1.2.3' };
+    render(<UpdateNotice />);
+    expect(toast).not.toHaveBeenCalled();
   });
 });

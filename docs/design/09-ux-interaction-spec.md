@@ -483,7 +483,7 @@ flowchart TB
 
 ### 5.9 其余组件一句话
 
-命令面板：cmdk + 模糊搜索，操作/文件(≤50)/会话(≤20) 三组，Esc/遮罩关闭。会话内搜索：纯前端匹配、↑↓ 循环、居中高亮。限流横幅：429 触发、5 分钟有效、可关闭。模型选择器：只显示已配 Key 的提供商。提问框：agent:event:ask 打开、确认回传/取消回空。更新提示：事件驱动 toast（可用/下载完成可重启安装/已最新/错误）。
+命令面板：cmdk + 模糊搜索，操作/文件(≤50)/会话(≤20) 三组，Esc/遮罩关闭。会话内搜索：纯前端匹配、↑↓ 循环、居中高亮。限流横幅：429 触发、5 分钟有效、可关闭。模型选择器：只显示已配 Key 的提供商。提问框：agent:event:ask 打开、确认回传/取消回空。更新提示：三处接触点（toast / 顶栏常驻指示 / 关于面板，见 27-auto-update-spec §6）。
 
 ### 5.10 聊天渲染与通用组件实现细节（补全）
 
@@ -505,7 +505,7 @@ flowchart TB
 
 **空态（EmptyState.tsx 85 行）**：props icon（默认 Inbox）/title/description/actionLabel/onAction；图标 48px 圆底（bg-muted）+ 衬线标题 + 可选 outline 按钮；纯展示无业务。
 
-**更新提示（UpdateNotice.tsx 70 行）**：phase 防抖（同阶段不重复弹）；available → toast.info（自动下载中）；downloaded → toast + 重启安装按钮（60s duration）；not-available → success；error → error + message；checking/downloading 不弹（高频）。
+**更新提示（三处接触点，见 27-auto-update-spec §6）**：toast（UpdateNotice.tsx）只做瞬时通知——phase 防抖（同阶段不重复弹）、快照回放不重弹、用户跳过的版本静默；available → toast.info（自动下载中）；downloaded → toast + 重启安装按钮（60s duration）；not-available → success；error → error + 分类文案（network/rate-limited/checksum/disk，unknown 展示原始信息）；checking/downloading/cancelled 不弹。顶栏常驻指示（update-indicator.tsx）承载静默可见性：下载中旋转图标（点击直达关于面板）；就绪徽标（点击开操作菜单：重启并安装 / 稍后 / 跳过此版本）。关于面板是完整信息面：进度条（字节 / 速率 / 剩余）+ 取消下载 + 更新说明折叠区 + 自动检查开关 + 上次检查时间。
 
 ## 六、交互流程（时序图）
 

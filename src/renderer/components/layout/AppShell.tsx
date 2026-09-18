@@ -37,6 +37,7 @@ import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useResizablePanels } from '@/hooks/use-resizable-panels';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
+import { useUpdateBridge } from '@/hooks/use-update-bridge';
 import { useActiveWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import { DRAFT_SESSION_ID, ROUTES } from '@/lib/constants';
@@ -100,6 +101,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
   useTerminalBridge();
+
+  // 更新事件桥：订阅 update:event:status 并写入 update-store（唯一订阅点；
+  // 关于面板 / 顶栏指示 / toast 提示均读 store，不再各自订阅）
+  useUpdateBridge();
 
   // IPC 协议版本校验：主进程/渲染层版本错配时提示重启（P0 契约加固）
   useProtocolCheck();

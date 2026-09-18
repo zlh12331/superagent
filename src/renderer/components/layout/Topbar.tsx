@@ -28,6 +28,7 @@ import { microTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 import { nextTheme } from '@/stores/persistent/settings-store';
+import { UpdateIndicator } from './update-indicator';
 
 interface TopbarProps {
   /** 侧栏是否已折叠（控制 sb-collapse-btn 图标方向） */
@@ -122,6 +123,8 @@ export function Topbar({
           <span>{t('topbar.commandPalette')}</span>
           <kbd className="text-muted-foreground font-mono text-[9px]">{paletteKbd}</kbd>
         </Button>
+        {/* 更新指示（下载中/就绪时才出现；点击直达关于面板或操作菜单） */}
+        <UpdateIndicator />
         {/* 设置按钮已删除（用户要求）：入口保留在命令面板与账户菜单 */}
         <Button
           variant="ghost"

@@ -452,9 +452,33 @@ jobs:
           # 主安装包按 产品名-平台-架构 命名前缀校验（与 electron-builder.yml artifactName、
           # Collect 白名单对齐）。2026-09-10 资产规范化后全为连字符命名，
           # 不再依赖空格名（GitHub asset 名曾把空格转点导致精确 glob 失配）。
-          if ! grep -Eq 'Code-Agent-Desktop-Windows-.*\.exe($|\.blockmap$)' <<<"$ASSETS"; then echo "::error::缺少 Windows 安装包 (*Windows-*.exe)"; MISSING=1; fi
-          if ! grep -Eq 'Code-Agent-Desktop-macOS-.*\.dmg($|\.blockmap$)' <<<"$ASSETS"; then echo "::error::缺少 macOS 安装包 (*macOS-*.dmg)"; MISSING=1; fi
-          if ! grep -Eq 'Code-Agent-Desktop-Linux-.*\.AppImage($|\.blockmap$)' <<<"$ASSETS"; then echo "::error::缺少 Linux 安装包 (*Linux-*.AppImage)"; MISSING=1; fi
+          if ! grep -Eq 'Code-Agent-Desktop-Windows-.*\.exe$' <<<"$ASSETS"; then echo "::error::缺少 Windows 安装包 (*Windows-*.exe)"; MISSING=1; fi
+          if ! grep -Eq 'Code-Agent-Desktop-macOS-.*\.dmg$' <<<"$ASSETS"; then echo "::error::缺少 macOS 安装包 (*macOS-*.dmg)"; MISSING=1; fi
+          if ! grep -Eq 'Code-Agent-Desktop-Linux-.*\.AppImage$' <<<"$ASSETS"; then echo "::error::缺少 Linux 安装包 (*Linux-*.AppImage)"; MISSING=1; fi
+          # ── 差分产物门禁（设计文档 27 §8）──────────────────────────────
+          # 差分更新完全依赖 blockmap：缺 Windows/macOS 的独立 blockmap 时，
+          # electron-updater 会静默回退全量下载（用户与 CI 都察觉不到），
+          # 因此把"差分可用"变成发布硬性条件。
+          # Linux AppImage 的 blockmap 内嵌在产物尾部（无独立资产），改为校验
+          # latest-linux.yml 含 blockMapSize。
+          if ! grep -Eq 'Code-Agent-Desktop-Windows-.*\.exe\.blockmap$' <<<"$ASSETS"; then
+            echo "::error::缺少 Windows 差分产物 (*.exe.blockmap)——差分更新会静默退化为全量下载"
+            MISSING=1
+          fi
+          if ! grep -Eq 'Code-Agent-Desktop-macOS-.*\.zip\.blockmap$' <<<"$ASSETS"; then
+            echo "::error::缺少 macOS 差分产物 (*.zip.blockmap)——差分更新会静默退化为全量下载"
+            MISSING=1
+          fi
+          LINUX_YML_ID=$(gh api "/repos/$REPO/releases/$RELEASE_ID" \
+            --jq '.assets[] | select(.name == "latest-linux.yml") | .id')
+          if [ -n "$LINUX_YML_ID" ]; then
+            # draft release 的资产下载走 assets/{id}（/releases/tags/{tag} 对 draft 返回 404）
+            if ! gh api "/repos/$REPO/releases/assets/$LINUX_YML_ID" \
+              -H "Accept: application/octet-stream" | grep -q "blockMapSize"; then
+              echo "::error::latest-linux.yml 缺 blockMapSize（AppImage 差分更新会退化为全量）"
+              MISSING=1
+            fi
+          fi
           if [ "$MISSING" = "1" ]; then
             echo "::error::安装包未齐，保持草稿不发布。修复后 rerun 对应 build job 再重跑本 job。"
             exit 1

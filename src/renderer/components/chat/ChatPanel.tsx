@@ -28,6 +28,7 @@ import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useAgentRunStore } from '@/stores/transient/agent-run-store';
 import { usePendingMessageStore } from '@/stores/transient/pending-message-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { ChatInput } from './ChatInput';
@@ -179,6 +180,16 @@ export function ChatPanel({
     ...(history.messages.length > 0 ? { messages: history.messages } : {}),
     onError: handleError,
   });
+
+  // 回合运行态发布到全局（更新"重启并安装"等危险操作需要先确认）；判定与
+  // ChatMessageList 的 isStreaming 保持一致。卸载时复位：残留 true 会让后续
+  // 安装永远多弹一次确认。
+  const setAgentRunning = useAgentRunStore((s) => s.setRunning);
+  const agentRunning = status === 'streaming' || status === 'submitted';
+  useEffect(() => {
+    setAgentRunning(agentRunning);
+    return () => setAgentRunning(false);
+  }, [agentRunning, setAgentRunning]);
 
   // 欢迎页首条消息透传：home.tsx 创建会话后 stash，本组件挂载后 consume 一次并发送。
   // useAgentWithIpc 的 transport configure effect 先于本 effect 执行（同组件内按声明

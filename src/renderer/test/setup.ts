@@ -44,6 +44,17 @@ function createEmptyApi(): MockApi {
     git: {},
     codebase: {},
     tool: {},
+    // 更新域给出最小可用实现：顶栏更新指示 / 关于面板 / use-update 在挂载时即调用
+    // getStatus 与 subscribeStatus，空对象会导致渲染顶栏的测试直接抛错
+    update: {
+      check: async () => ({ data: { status: 'checking' } }),
+      install: async () => ({ data: { ok: true } }),
+      cancel: async () => ({ data: { ok: true } }),
+      getStatus: async () => ({ data: { snapshot: null, lastCheckAt: null } }),
+      getCacheInfo: async () => ({ data: { path: null, bytes: 0, fileCount: 0 } }),
+      clearCache: async () => ({ data: { path: null, bytes: 0, fileCount: 0 } }),
+      subscribeStatus: () => () => {},
+    },
   };
 }
 

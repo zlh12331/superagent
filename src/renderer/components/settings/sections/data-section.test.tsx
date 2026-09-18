@@ -96,4 +96,44 @@ describe('DataSection', () => {
     expect(mockToastError).not.toHaveBeenCalled();
     expect(mockToastSuccess).not.toHaveBeenCalled();
   });
+
+  describe('更新缓存', () => {
+    it('正向：展示占用并清理（确认后刷新为 0）', async () => {
+      const getCacheInfo = vi
+        .fn()
+        .mockResolvedValue({ data: { path: '/tmp/app-updater', bytes: 1048576, fileCount: 2 } });
+      const clearCache = vi
+        .fn()
+        .mockResolvedValue({ data: { path: '/tmp/app-updater', bytes: 0, fileCount: 0 } });
+      window.api = { update: { getCacheInfo, clearCache } } as never;
+      render(<DataSection />);
+
+      // 占用文案（1.0 MB / 2 个文件）
+      await waitFor(() => expect(screen.getByText(/1\.0 MB/)).toBeTruthy());
+
+      await userEvent.click(screen.getByRole('button', { name: t('settings.clearUpdateCache') }));
+      // 危险操作先确认：沿用 confirm store（DialogHost 未挂载 → 需手动放行）
+      const { useConfirmDialogStore } = await import('@/stores/transient/confirm-dialog-store');
+      await waitFor(() => expect(useConfirmDialogStore.getState().currentRequest).not.toBeNull());
+      useConfirmDialogStore.getState()._resolve(true);
+
+      await waitFor(() => expect(clearCache).toHaveBeenCalledOnce());
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(t('settings.clearUpdateCacheDone')),
+      );
+    });
+
+    it('边界：无法解析缓存目录（path 为 null）→ 隐藏该行，不展示猜测值', async () => {
+      window.api = {
+        update: {
+          getCacheInfo: vi.fn().mockResolvedValue({ data: { path: null, bytes: 0, fileCount: 0 } }),
+          clearCache: vi.fn(),
+        },
+      } as never;
+      render(<DataSection />);
+
+      await waitFor(() => expect(window.api.update.getCacheInfo).toHaveBeenCalled());
+      expect(screen.queryByRole('button', { name: t('settings.clearUpdateCache') })).toBeNull();
+    });
+  });
 });

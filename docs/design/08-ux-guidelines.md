@@ -254,7 +254,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 限流横幅 | 429（rate-limit-store） | 聊天区顶部横幅 |
 | 内联审批卡 | pending 审批 | 消息列表上方内联卡 |
 | 中断提示条 | `session.lastRunStatus` 异常（崩溃恢复） | 顶部 amber 提示，可关闭（会话内不再显示） |
-| 更新提示 | update 事件 | toast（无 DOM） |
+| 更新提示 | update 事件 | toast + 顶栏常驻指示 + 关于面板更新区（见 27-auto-update-spec） |
 | 协议校验 | 主/渲染层版本错配 | 提示重启（P0 契约） |
 | Toast | 错误/成功/引导 | sonner，`z-toast-stack` 最高优先级 |
 
