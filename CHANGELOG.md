@@ -2,6 +2,16 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.1.2](https://github.com/zlh12331/superagent/compare/v1.1.1...v1.1.2) (2026-09-17)
+
+> 本版本无应用功能变更，为发布流程与文档改进。
+
+### 内部改进
+
+- 发布说明加固：新增润色门禁——后续版本的更新说明若未改写为面向用户的文案，Release PR 将被 CI 阻塞无法合并；发版前还会二次校验，未通过则在打 tag 前失败（不占版本号、可重试）
+- 新增 `pnpm release:draft`：展开版本区间内的提交明细生成底稿，降低撰写更新说明的成本
+- 修正 v1.1.1 的发布说明：由内部提交标题改写为面向用户的表述
+
 ## [1.1.1](https://github.com/zlh12331/superagent/compare/v1.1.0...v1.1.1) (2026-09-17)
 
 ### 修复
@@ -18,8 +28,6 @@
 - Web 抓取工具修复 HTML 实体二次解码与 `<script>` 变体剥离；API Key 不再有任何明文落盘路径（[09ce70c](https://github.com/zlh12331/superagent/commit/09ce70c2a595901da0c66e97e8a2f6afea66ecec)）
 - 静态分析迁至 advanced setup 并排除 vendored 第三方源码，消除噪声告警（[4f5fa5e](https://github.com/zlh12331/superagent/commit/4f5fa5eb0ea6f6b3ced43e7b2df46a3458f5f907)）
 - 新增 3 项工程门禁（动画 keyframes 引用、CSS 变量引用、写法一致性）并修复视觉回归门禁长期失效问题（[#44](https://github.com/zlh12331/superagent/issues/44)）
-
-<!-- changelog:polished -->
 
 ## [1.1.0](https://github.com/zlh12331/superagent/compare/v1.0.0...v1.1.0) (2026-09-14)
 
