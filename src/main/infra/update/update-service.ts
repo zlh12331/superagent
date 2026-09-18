@@ -305,6 +305,7 @@ export class UpdateService implements IUpdateService {
     this.updater.on('update-downloaded', (info) => {
       logger.info({ scope: 'auto-updater', version: info.version }, '新版本下载完成');
       this.cancelToken = null;
+      this.setTaskbarProgress(null);
       // 就绪态继续展示更新说明（部分 provider 只在 downloaded 事件带 notes）
       const notes = toReleaseNotes(info.releaseNotes) ?? this.pendingReleaseNotes;
       this.emit({
@@ -318,11 +319,13 @@ export class UpdateService implements IUpdateService {
       this.cancelToken = null;
       this.pendingVersion = null;
       this.pendingReleaseNotes = null;
+      this.setTaskbarProgress(null);
       this.emit({ phase: 'cancelled', version: info.version });
     });
     this.updater.on('error', (error) => {
       logger.error({ scope: 'auto-updater' }, '自动更新失败', error);
       this.cancelToken = null;
+      this.setTaskbarProgress(null);
       this.emit({ phase: 'error', errorKind: classifyUpdateError(error), message: error.message });
     });
   }
@@ -353,14 +356,29 @@ export class UpdateService implements IUpdateService {
   /** 进度事件 → payload（透传字节与速率；差分下载时 total 为差分包大小） */
   private emitProgress(info: UpdateProgressInfo): void {
     const version = this.pendingVersion;
+    const percent = Math.round(info.percent);
+    this.setTaskbarProgress(percent);
     this.emit({
       phase: 'downloading',
-      progress: Math.round(info.percent),
+      progress: percent,
       transferred: info.transferred,
       total: info.total,
       bytesPerSecond: info.bytesPerSecond,
       ...(version !== null ? { version } : {}),
     });
+  }
+
+  /**
+   * 任务栏进度（Windows/macOS 生效，其他平台 no-op）
+   *
+   * @param percent 0-100；null 表示清除（下载结束/取消/失败）
+   */
+  private setTaskbarProgress(percent: number | null): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.setProgressBar(percent === null ? -1 : percent / 100);
+      }
+    }
   }
 
   /** 推送状态到所有渲染窗口，并留快照（无窗口时也留，供后续 getStatus） */

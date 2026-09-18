@@ -68,10 +68,15 @@ function fire(updater: FakeUpdater, event: string, arg?: unknown): void {
   }
 }
 
-/** 创建 fake 窗口（记录 webContents.send；R2：emitEvent 需要 webContents.isDestroyed） */
+/** 创建 fake 窗口（记录 webContents.send / setProgressBar；R2：emitEvent 需要 webContents.isDestroyed） */
 function createFakeWindow() {
   const send = vi.fn();
-  return { isDestroyed: () => false, webContents: { isDestroyed: () => false, send } };
+  const setProgressBar = vi.fn();
+  return {
+    isDestroyed: () => false,
+    setProgressBar,
+    webContents: { isDestroyed: () => false, send },
+  };
 }
 
 /** 取窗口上收到的最后一个 payload */
@@ -319,6 +324,37 @@ describe('UpdateService', () => {
       fire(updater, 'update-available', { version: '1.2.0', releaseNotes: '说明原文' });
       fire(updater, 'update-cancelled', { version: '1.2.0' });
       expect(lastPayload(win)).toEqual({ phase: 'cancelled', version: '1.2.0' });
+    });
+
+    it('下载进度同步到任务栏（0-1，结束后清除）', () => {
+      const win = createFakeWindow();
+      mockGetAllWindows.mockReturnValue([win]);
+      service.start();
+      fire(updater, 'update-available', { version: '1.2.0' });
+      fire(updater, 'download-progress', {
+        percent: 42.6,
+        transferred: 1,
+        total: 2,
+        bytesPerSecond: 1,
+      });
+      expect(win.setProgressBar).toHaveBeenCalledWith(0.43);
+      fire(updater, 'update-downloaded', { version: '1.2.0' });
+      expect(win.setProgressBar).toHaveBeenLastCalledWith(-1);
+    });
+
+    it('取消下载清除任务栏进度', () => {
+      const win = createFakeWindow();
+      mockGetAllWindows.mockReturnValue([win]);
+      service.start();
+      fire(updater, 'update-available', { version: '1.2.0' });
+      fire(updater, 'download-progress', {
+        percent: 50,
+        transferred: 1,
+        total: 2,
+        bytesPerSecond: 1,
+      });
+      fire(updater, 'update-cancelled', { version: '1.2.0' });
+      expect(win.setProgressBar).toHaveBeenLastCalledWith(-1);
     });
 
     it('无窗口时仍留快照（getStatus 可读）', () => {

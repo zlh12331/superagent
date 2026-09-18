@@ -229,7 +229,7 @@
 **P1**（第一批与第二批已完成，2026-09-18；见 §14）：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~、~~更新说明折叠区~~、~~重启确认对话框~~。
 **P1 剩余**：缓存占用与清理入口（设置 → 数据）。
 
-**P2**：任务栏进度、`forceDevUpdateConfig` + `dev-app-update.yml` 让更新链路可在 dev 与 e2e 覆盖、签名与公证、自定义更新源的 host 校验。
+**P2**：~~任务栏进度~~（已实现：下载中同步 `setProgressBar`，结束/取消/失败清除）、`forceDevUpdateConfig` + `dev-app-update.yml` 让更新链路可在 dev 与 e2e 覆盖、签名与公证、自定义更新源的 host 校验。
 
 ## 12. 验收
 
@@ -290,3 +290,10 @@ P0 已落地，与本文档的两处机制偏差如实记录如下（均为实�
 验收实测：`pnpm typecheck` / `pnpm lint` / `pnpm check:static`（13 项）/ `pnpm knip` 通过；
 `pnpm test` = shared 81 + main 1849 + renderer 1505 + integration 152 + scripts 158 全绿。
 新增测试：`toReleaseNotes` 4 组、更新说明透传与取消清空、`use-install-update` 3 组（无回合直装 / 确认后装 / 取消不装）。
+
+### 14.3 任务栏进度（2026-09-18，已提交）
+
+- 下载中把百分比同步到任务栏（`BrowserWindow.setProgressBar(percent/100)`，Windows/macOS 生效、其他平台 no-op），
+  就绪 / 取消 / 失败时清除（`-1`）。数据源复用既有进度事件，无新增 IPC、无新增契约。
+- 验证：`pnpm typecheck` / `lint` / `check:static` / `knip` 通过；main 更新域 43 项测试通过
+  （新增 2 项：进度同步与结束后清除、取消时清除）。
