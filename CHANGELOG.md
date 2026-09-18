@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0](https://github.com/zlh12331/superagent/compare/v1.1.2...v1.2.0) (2026-09-18)
+
+
+### Features
+
+* **update:** 自动更新系统——启动检查、进度可取消、跳过版本、缓存清理与发布门禁 ([#47](https://github.com/zlh12331/superagent/issues/47)) ([b6c78a0](https://github.com/zlh12331/superagent/commit/b6c78a0aeb3823dee24859bd3f77d9de2319bee3))
+
 ## [1.1.2](https://github.com/zlh12331/superagent/compare/v1.1.1...v1.1.2) (2026-09-17)
 
 > 本版本无应用功能变更，为发布流程与文档改进。
