@@ -32,6 +32,7 @@ import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { reportEventLoopLag } from './infra/telemetry/lag-alert';
 import { startMemoryMonitor } from './infra/telemetry/memory-monitor';
 import { initTelemetry, shutdownTelemetry } from './infra/telemetry/otel';
+import { clearUpdateCache, readUpdateCacheInfo } from './infra/update/update-cache';
 import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { createAgentAskHandlers } from './ipc/agent-ask.handler';
@@ -312,7 +313,11 @@ app
       browser: createBrowserHandlers({
         browserPreviewService: serviceContainer.getBrowserPreviewService(),
       }),
-      update: createUpdateHandlers({ updateService: serviceContainer.getUpdateService() }),
+      update: createUpdateHandlers({
+        updateService: serviceContainer.getUpdateService(),
+        readCacheInfo: () => readUpdateCacheInfo(process.resourcesPath),
+        clearCache: () => clearUpdateCache(process.resourcesPath),
+      }),
     });
 
     // 启动自动更新服务（注册 autoUpdater 事件 → 推送渲染层）

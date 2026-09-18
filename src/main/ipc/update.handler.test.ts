@@ -25,11 +25,13 @@ const EMPTY_CTX = {} as never;
 describe('update.handler', () => {
   let updateService: ReturnType<typeof createFakeUpdateService>;
   let handlers: ReturnType<typeof createUpdateHandlers>;
+  const readCacheInfo = vi.fn(async () => ({ path: '/tmp/cache', bytes: 123, fileCount: 2 }));
+  const clearCache = vi.fn(async () => ({ path: '/tmp/cache', bytes: 0, fileCount: 0 }));
 
   beforeEach(() => {
     vi.clearAllMocks();
     updateService = createFakeUpdateService();
-    handlers = createUpdateHandlers({ updateService });
+    handlers = createUpdateHandlers({ updateService, readCacheInfo, clearCache });
   });
 
   it('check：转发 manual 参数', async () => {
@@ -75,5 +77,17 @@ describe('update.handler', () => {
       snapshot: { phase: 'downloaded', version: '1.2.0' },
       lastCheckAt: 1_700_000_000_000,
     });
+  });
+
+  it('getCacheInfo：转发注入的缓存读取', async () => {
+    const result = await handlers.getCacheInfo(undefined, EMPTY_CTX);
+    expect(readCacheInfo).toHaveBeenCalledOnce();
+    expect(result).toEqual({ path: '/tmp/cache', bytes: 123, fileCount: 2 });
+  });
+
+  it('clearCache：转发注入的缓存清理', async () => {
+    const result = await handlers.clearCache(undefined, EMPTY_CTX);
+    expect(clearCache).toHaveBeenCalledOnce();
+    expect(result).toEqual({ path: '/tmp/cache', bytes: 0, fileCount: 0 });
   });
 });

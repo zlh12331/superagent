@@ -1,19 +1,54 @@
 // data-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · 数据区块（会话导出 + 打开数据目录，数据极致）
+// 设置对话框 · 数据区块（会话导出 + 打开数据目录 + 更新缓存占用与清理，数据极致）
 // ──────────────────────────────────────────────
 // 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
 // ──────────────────────────────────────────────
 
+import type { UpdateCacheInfo } from '@code-agent/shared/renderer';
 import { Database } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
+import { formatBytes } from '@/lib/format-bytes';
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { confirm } from '@/stores/transient/confirm-dialog-store';
 
-/** 数据区块（会话导出 + 打开数据目录） */
+/** 数据区块（会话导出 + 打开数据目录 + 更新缓存） */
 export function DataSection(): React.ReactElement {
   const { t } = useTranslation();
+  // 更新缓存占用（path 为 null 表示无法解析缓存目录 → 隐藏该行，不展示猜测值）
+  const [cache, setCache] = useState<UpdateCacheInfo | null>(null);
+
+  // 挂载时读一次占用（失败静默：不影响本区块其他操作）
+  useEffect(() => {
+    if (!hasIpcBridge()) return;
+    void (async (): Promise<void> => {
+      try {
+        setCache(unwrap<UpdateCacheInfo>(await window.api.update.getCacheInfo()));
+      } catch {
+        // 读取失败：不展示该行
+      }
+    })();
+  }, []);
+
+  const handleClearUpdateCache = async (): Promise<void> => {
+    if (!hasIpcBridge() || cache?.path == null || cache.fileCount === 0) return;
+    // 危险操作：删除的是差分更新基线，先确认并说明后果
+    const confirmed = await confirm({
+      title: t('settings.clearUpdateCache'),
+      message: t('settings.clearUpdateCacheConfirm'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      setCache(unwrap<UpdateCacheInfo>(await window.api.update.clearCache()));
+      toast.success(t('settings.clearUpdateCacheDone'));
+    } catch {
+      toast.error(t('settings.exportFailed'));
+    }
+  };
 
   const handleExportAll = async (): Promise<void> => {
     if (!hasIpcBridge()) return;
@@ -56,6 +91,24 @@ export function DataSection(): React.ReactElement {
           {t('settings.openDataDir')}
         </Button>
       </div>
+      {cache !== null && cache.path !== null && (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground font-sans text-xs">
+            {t('settings.updateCacheUsage', {
+              size: formatBytes(cache.bytes),
+              count: String(cache.fileCount),
+            })}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={cache.fileCount === 0}
+            onClick={() => void handleClearUpdateCache()}
+          >
+            {t('settings.clearUpdateCache')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

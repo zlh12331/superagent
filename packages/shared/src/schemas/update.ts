@@ -123,3 +123,25 @@ export const UpdateGetStatusResSchema = z.object({
   snapshot: UpdateStatusPayloadSchema.nullable(),
   lastCheckAt: z.number().nullable(),
 });
+
+/**
+ * 更新缓存信息（update:getCacheInfo / update:clearCache 响应）
+ *
+ * path 为 null 表示无法解析缓存目录（开发模式无 app-update.yml 等），
+ * 此时界面不展示该行——不猜路径、不误删。
+ */
+export interface UpdateCacheInfo {
+  /** 缓存目录绝对路径（无法解析为 null） */
+  readonly path: string | null;
+  /** 占用字节数 */
+  readonly bytes: number;
+  /** 文件数 */
+  readonly fileCount: number;
+}
+
+/** 更新缓存信息 zod schema */
+export const UpdateCacheInfoSchema = z.object({
+  path: z.string().nullable(),
+  bytes: z.number().min(0),
+  fileCount: z.number().min(0),
+});

@@ -166,6 +166,8 @@ const mockUpdateApi: IpcApi['update'] = {
   install: async () => ipcOk({ ok: true }),
   cancel: async () => ipcOk({ ok: true }),
   getStatus: async () => ipcOk({ snapshot: null, lastCheckAt: null }),
+  getCacheInfo: async () => ipcOk({ path: null, bytes: 0, fileCount: 0 }),
+  clearCache: async () => ipcOk({ path: null, bytes: 0, fileCount: 0 }),
   subscribeStatus: (cb: Parameters<IpcApi['update']['subscribeStatus']>[0]) => {
     updateStatusCallbacks.add(cb);
     return () => updateStatusCallbacks.delete(cb);

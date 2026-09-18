@@ -205,6 +205,8 @@
 
 更新缓存常驻磁盘：`pending` 目录、Windows 的 `installer.exe`（约 328MB，差分基线）、macOS 的 `update.zip`（约 324MB）。需在「设置 → 数据」展示占用并提供清理入口，文案必须说明"删除后下次升级转为全量下载"。
 
+已实现：`update:getCacheInfo` / `update:clearCache` 两个 IPC；主进程 `infra/update/update-cache.ts` 按 electron-updater 的口径解析目录（缓存根 `LOCALAPPDATA` / `~/Library/Caches` / `XDG_CACHE_HOME`，目录名取 `app-update.yml` 的 `updaterCacheDirName`），**解析不到即 path=null、界面隐藏该行**（不猜路径、不误删）；清理前走统一 `confirm()` 并说明全量代价。
+
 ## 10. 已拍板项
 
 | 项 | 结论 | 说明 |
@@ -226,8 +228,7 @@
 3. 日志接管：`update-service.ts` 注入 logger 适配。
 4. 发布门禁：`.github/workflows/release.yml` 的 publish job 强制 blockmap。
 
-**P1**（第一批与第二批已完成，2026-09-18；见 §14）：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~、~~更新说明折叠区~~、~~重启确认对话框~~。
-**P1 剩余**：缓存占用与清理入口（设置 → 数据）。
+**P1（全部完成，2026-09-18；见 §14）**：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~、~~更新说明折叠区~~、~~重启确认对话框~~、~~缓存占用与清理入口~~。
 
 **P2**：~~任务栏进度~~（已实现：下载中同步 `setProgressBar`，结束/取消/失败清除）、`forceDevUpdateConfig` + `dev-app-update.yml` 让更新链路可在 dev 与 e2e 覆盖、签名与公证、自定义更新源的 host 校验。
 
@@ -297,3 +298,18 @@ P0 已落地，与本文档的两处机制偏差如实记录如下（均为实�
   就绪 / 取消 / 失败时清除（`-1`）。数据源复用既有进度事件，无新增 IPC、无新增契约。
 - 验证：`pnpm typecheck` / `lint` / `check:static` / `knip` 通过；main 更新域 43 项测试通过
   （新增 2 项：进度同步与结束后清除、取消时清除）。
+
+### 14.4 更新缓存占用与清理（2026-09-18，已提交）
+
+- 新增 `src/main/infra/update/update-cache.ts`：按 electron-updater 口径解析缓存目录
+  （平台缓存根 + `app-update.yml` 的 `updaterCacheDirName`），递归统计占用、清理目录；
+  **解析不到 → path=null（界面隐藏该行），不猜路径、不误删**；测试注入临时缓存根，
+  绝不触碰真实缓存目录。
+- 新增 IPC `update:getCacheInfo` / `update:clearCache`（定义表驱动，handler 经 DI 注入读取/清理函数）。
+- 设置 → 数据：展示"更新缓存：<占用>（N 个文件）"+ 清理按钮；清理前走统一 `confirm()`，
+  文案说明"差分基线被删除，下次升级改为全量下载"；浏览器模式无桥时不请求。
+- 棘轮：`definitions.ts` 927 → 941、`mock-api.ts` 936 → 938（新增 IPC 必然增长单一真源
+  定义表与 mock 镜像，`--update-baseline --force` 显式承认，diff 仅此两行）。
+
+验收实测：`pnpm typecheck` / `lint` / `check:static`（13 项）/ `knip` 通过；`pnpm test` 全链路通过。
+新增测试：`update-cache` 8 项（解析三种形态 / 统计 / 清理 / 无法解析）、handler 2 项、data-section 2 项。

@@ -51,6 +51,8 @@ function createEmptyApi(): MockApi {
       install: async () => ({ data: { ok: true } }),
       cancel: async () => ({ data: { ok: true } }),
       getStatus: async () => ({ data: { snapshot: null, lastCheckAt: null } }),
+      getCacheInfo: async () => ({ data: { path: null, bytes: 0, fileCount: 0 } }),
+      clearCache: async () => ({ data: { path: null, bytes: 0, fileCount: 0 } }),
       subscribeStatus: () => () => {},
     },
   };
