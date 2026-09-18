@@ -230,7 +230,7 @@
 
 **P1（全部完成，2026-09-18；见 §14）**：~~跳过此版本~~、~~错误分类与本地化~~、~~上次检查时间~~、~~顶栏操作菜单~~、~~更新说明折叠区~~、~~重启确认对话框~~、~~缓存占用与清理入口~~。
 
-**P2**：~~任务栏进度~~（已实现：下载中同步 `setProgressBar`，结束/取消/失败清除）、`forceDevUpdateConfig` + `dev-app-update.yml` 让更新链路可在 dev 与 e2e 覆盖、签名与公证、自定义更新源的 host 校验。
+**P2**：~~任务栏进度~~（已实现：下载中同步 `setProgressBar`，结束/取消/失败清除）、~~dev 更新链路可测性~~（见 §14.5）、签名与公证、自定义更新源的 host 校验。
 
 ## 12. 验收
 
@@ -313,3 +313,17 @@ P0 已落地，与本文档的两处机制偏差如实记录如下（均为实�
 
 验收实测：`pnpm typecheck` / `lint` / `check:static`（13 项）/ `knip` 通过；`pnpm test` 全链路通过。
 新增测试：`update-cache` 8 项（解析三种形态 / 统计 / 清理 / 无法解析）、handler 2 项、data-section 2 项。
+
+### 14.5 dev 更新链路可测性（2026-09-18，已提交）
+
+- 背景：dev 模式此前直接返回"开发模式不支持自动更新"，进度条 / 取消 / 就绪态等 UI
+  无法在开发环境端到端验证，只能打包后手工测。
+- 实现：`UpdateStartOptions.devUpdateEnabled` → `autoUpdater.forceDevUpdateConfig = true`
+  （electron-updater 据此改读 `app.getAppPath()/dev-app-update.yml`）；置位后 `check()`
+  与启动调度都不再以 `app.isPackaged` 为硬门槛。**默认关闭**——dev 不发任何更新请求。
+- 仓库新增 `dev-app-update.yml`（GitHub provider / channel 与 release 配置一致，
+  `updaterCacheDirName` 用独立的 `code-agent-desktop-dev-updater`，不污染正式版缓存）。
+- 启用方式：`CODE_AGENT_DEV_UPDATE=1 pnpm dev`（index.ts 读环境变量注入）。
+  注意会真实访问 GitHub Releases，Windows 首次会整包下载（约 328MB）。
+- 验证：main 更新域 52 项测试通过（新增 2 项：默认 dev 不调度且 `forceDevUpdateConfig=false`；
+  置位后放行调度与手动检查）；`pnpm typecheck` / `lint` / `check:static` / `knip` / `test` 全绿。

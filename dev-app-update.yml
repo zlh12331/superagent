@@ -1,0 +1,20 @@
+# 开发模式更新调试配置（仅本地使用，不进安装包）
+# ──────────────────────────────────────────────────────────────
+# electron-updater 在未打包时读 app.getAppPath()/dev-app-update.yml（打包版读
+# process.resourcesPath/app-update.yml，由 electron-builder 生成）。
+#
+# 启用方式（默认关闭：dev 不发起任何更新请求）：
+#   Git Bash      CODE_AGENT_DEV_UPDATE=1 pnpm dev
+#   PowerShell    $env:CODE_AGENT_DEV_UPDATE='1'; pnpm dev
+#
+# ⚠️ 启用后会真实访问 GitHub Releases：
+# - 发现新版会真实下载安装包（Windows 全量约 328MB；已有缓存时走差分）
+# - 缓存写入独立目录 code-agent-desktop-dev-updater，不污染正式版缓存
+#   （正式版为 code-agent-desktop-updater）
+# - 与 release 的 publish 配置（electron-builder.yml）保持同一 provider/channel
+# ──────────────────────────────────────────────────────────────
+provider: github
+owner: zlh12331
+repo: superagent
+channel: latest
+updaterCacheDirName: code-agent-desktop-dev-updater

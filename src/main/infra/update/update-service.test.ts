@@ -36,6 +36,7 @@ function createFakeUpdater(): FakeUpdater {
     listeners,
     autoDownload: true,
     autoInstallOnAppQuit: true,
+    forceDevUpdateConfig: false,
     logger: null as unknown,
     checkForUpdates: vi.fn(async () => {}),
     downloadUpdate: vi.fn(async () => {}),
@@ -159,6 +160,24 @@ describe('UpdateService', () => {
       devService.start();
       await vi.advanceTimersByTimeAsync(60_000);
       expect(updater.checkForUpdates).not.toHaveBeenCalled();
+      expect(updater.forceDevUpdateConfig).toBe(false);
+      devService.dispose();
+    });
+
+    it('dev 调试开关开启：置 forceDevUpdateConfig 并放行调度与手动检查', async () => {
+      vi.useFakeTimers();
+      const devService = new UpdateService(
+        updater,
+        () => false,
+        () => createFakeToken(),
+      );
+      devService.start({ devUpdateEnabled: true });
+      expect(updater.forceDevUpdateConfig).toBe(true);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(updater.checkForUpdates).toHaveBeenCalledOnce();
+      // 手动检查同样放行（不再返回"开发模式不支持"）
+      const result = await devService.check(true);
+      expect(result).toEqual({ status: 'checking' });
       devService.dispose();
     });
 

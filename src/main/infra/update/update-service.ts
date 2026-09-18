@@ -84,6 +84,15 @@ export interface UpdateStartOptions {
    * （否则上一次会话残留的已下载包仍会在退出时装上）。
    */
   readonly autoCheckEnabled?: () => boolean;
+  /**
+   * 开发模式更新调试（缺省关闭）
+   *
+   * 开启后置 autoUpdater.forceDevUpdateConfig=true：electron-updater 改为读取
+   * app.getAppPath()/dev-app-update.yml，未打包也能跑通检查/下载链路（用于本地
+   * 验证进度条、取消、就绪等 UI 的端到端行为）。由 index.ts 读环境变量注入，
+   * 默认关闭意味着 dev 不会发起任何更新请求。
+   */
+  readonly devUpdateEnabled?: boolean;
 }
 
 /**
@@ -110,6 +119,8 @@ export interface AutoUpdaterLike {
   autoInstallOnAppQuit: boolean;
   /** 日志出口（本服务接管为项目 logger 适配器） */
   logger: UpdaterLoggerLike | null;
+  /** 开发模式更新调试开关（electron-updater 据此改读 dev-app-update.yml） */
+  forceDevUpdateConfig: boolean;
   on(event: 'checking-for-update', listener: () => void): void;
   on(event: 'update-available', listener: (info: UpdateInfoLike) => void): void;
   on(event: 'update-not-available', listener: () => void): void;
@@ -185,6 +196,9 @@ export class UpdateService implements IUpdateService {
   /** start 是否已调用（dispose 后不再调度） */
   private started = false;
 
+  /** 开发模式更新调试是否生效（生效后 isPackaged 不再是硬门槛） */
+  private devUpdateForced = false;
+
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly isPackaged: () => boolean,
@@ -195,16 +209,19 @@ export class UpdateService implements IUpdateService {
   start(options: UpdateStartOptions = {}): void {
     this.started = true;
     const autoCheckEnabled = options.autoCheckEnabled ?? ((): boolean => true);
+    this.devUpdateForced = options.devUpdateEnabled === true;
 
     // 日志接管：库默认走主进程 console（打包后无处可看），接进项目 logger
     this.updater.logger = createUpdaterLogger();
     // 下载改由本服务显式发起（只有自持 token 才能取消）
     this.updater.autoDownload = false;
     this.updater.autoInstallOnAppQuit = autoCheckEnabled();
+    // 开发模式调试：改读 dev-app-update.yml（默认关闭，dev 不发任何更新请求）
+    this.updater.forceDevUpdateConfig = this.devUpdateForced;
 
     this.registerListeners();
 
-    if (!this.isPackaged()) {
+    if (!this.isPackaged() && !this.devUpdateForced) {
       logger.info({ scope: 'auto-updater' }, '开发模式：跳过启动检查调度（更新仅对打包版生效）');
       return;
     }
@@ -218,9 +235,11 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   async check(manual: boolean): Promise<UpdateCheckRes> {
-    // 开发模式（未打包）：electron-updater 无 app-update.yml，检查必失败
-    if (!this.isPackaged()) {
-      const message = '开发模式不支持自动更新（请打包后测试）';
+    // 开发模式（未打包）：electron-updater 无 app-update.yml，检查必失败。
+    // 例外：devUpdateEnabled 时已置 forceDevUpdateConfig，库改读 dev-app-update.yml。
+    if (!this.isPackaged() && !this.devUpdateForced) {
+      const message =
+        '开发模式不支持自动更新（可用 CODE_AGENT_DEV_UPDATE=1 + dev-app-update.yml 调试）';
       if (manual) {
         this.emit({ phase: 'error', message });
       }
