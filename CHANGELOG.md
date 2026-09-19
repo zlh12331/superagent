@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.2.1](https://github.com/zlh12331/superagent/compare/v1.2.0...v1.2.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **update:** 更新安装改两段式，消除无法关闭弹窗竞态 ([#49](https://github.com/zlh12331/superagent/issues/49)) ([af30b52](https://github.com/zlh12331/superagent/commit/af30b52bc869afff301301c206674251bcf3e07d))
+
 ## [1.2.0](https://github.com/zlh12331/superagent/compare/v1.1.2...v1.2.0) (2026-09-18)
 
 > 本版本为应用加入了完整的自动更新能力：打开应用即自动检查新版本，下载进度可见也可随时取消，更新在退出时自动安装。
