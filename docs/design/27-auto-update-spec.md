@@ -314,6 +314,28 @@ P0 已落地，与本文档的两处机制偏差如实记录如下（均为实�
 验收实测：`pnpm typecheck` / `lint` / `check:static`（13 项）/ `knip` 通过；`pnpm test` 全链路通过。
 新增测试：`update-cache` 8 项（解析三种形态 / 统计 / 清理 / 无法解析）、handler 2 项、data-section 2 项。
 
+### 14.6 「无法关闭」弹窗修复（2026-09-19，真机反馈）
+
+**现象**（1.1.2 → 1.2.0 真机升级实测）：点击「重启并安装」后，NSIS 安装器弹出
+「Code Agent Desktop 无法关闭。请手动关闭它，然后单击重试以继续。」（重试/取消）。
+
+**根因**（源码核实）：electron-updater 的 `quitAndInstall` 是"先 spawn 安装器、后
+app.quit()"，而 NSIS 辅助安装器（`oneClick: false`）启动即尝试关闭应用并运行旧卸载器，
+重试 5 次等不到退出就弹 `appCannotBeClosed`（`installUtil.nsh` 的 UninstallLoop，
+`MessageBox MB_RETRYCANCEL "$(appCannotBeClosed)"`）。我们的退出链含异步清理
+（IM 通道 3s 竞速 + 服务释放 + telemetry 关闭），应用在安装器检查时仍然存活。
+
+**修复**：Windows 上安装改两段式——`quitAndInstall()` 只置标记（`quitForUpdatePending`）、
+置关闭协商标志（渲染层入口已确认过）并 `app.quit()`；退出善后完成（文件锁释放）后由
+`runDeferredInstall()`（index.ts 在 `app.exit(0)` 前调用）拉起静默安装器。非 Windows 保持
+库的原生路径（mac 解包替换 / AppImage 替换自身，无此竞态）。
+
+**差分判定的诚实说明**：1.1.2 → 1.2.0 这次升级**无法事后确证是否走了差分**——1.1.2 的
+构建早于日志接管（§8），electron-updater 的 `Full: … To download: …` 日志走了控制台已丢失；
+文件痕迹（缓存目录的 `installer.exe` 基线在位、pending 产物为全尺寸拼装结果、blockmap
+时间线）只能证明"差分前置条件全部成立、库会尝试差分"，尝试成功与否不可回溯。**1.2.0 起
+有日志接管**，下次升级（1.2.0 → 后续版本）的 `main.log` 会直接给出确证。
+
 ### 14.5 dev 更新链路可测性（2026-09-18，已提交）
 
 - 背景：dev 模式此前直接返回"开发模式不支持自动更新"，进度条 / 取消 / 就绪态等 UI

@@ -11,6 +11,7 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
+import { isCloseConfirmed, setCloseConfirmed } from './quit-state';
 import { hasRunningAgentTurns } from './service-container';
 import { reportMessage } from './utils/error-report';
 import { logger } from './utils/logger';
@@ -21,21 +22,10 @@ import { TITLE_BAR_SYMBOL } from './window-theme';
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
 // 详见 https://electron-vite.org/guide/dev#limitations-of-sandboxing
 
-// ── 关窗协商共享状态（进程与窗口维度）──
-// close 路径（Windows/Linux 点 X）与 before-quit 进程级路径（macOS Cmd+Q / app.quit()）
-// 共享同一个"用户已确认"标志：任一路径确认后，另一路径直接放行。
-// macOS Cmd+Q 不触发窗口 close 事件（before-quit 先行），因此标志必须模块级。
-let closeConfirmed = false;
-
-/** 用户是否已确认退出（关窗协商通过后置位） */
-export function isCloseConfirmed(): boolean {
-  return closeConfirmed;
-}
-
-/** 标记用户已确认退出（协商弹窗"退出"按钮回调） */
-export function setCloseConfirmed(): void {
-  closeConfirmed = true;
-}
+// ── 关窗协商共享状态 ──
+// 已独立到 ./quit-state（close 路径与 before-quit 路径共享"用户已确认"标志；
+// 更新安装入口亦需置位该标志，为避免 update-service → window → service-container
+// 循环依赖，标志移出本文件）。
 
 /**
  * 运行中回合退出确认弹窗（close 协商与 before-quit 协商共用）

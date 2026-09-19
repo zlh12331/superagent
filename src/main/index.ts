@@ -60,6 +60,7 @@ import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { mountTurnNotifications } from './notification';
+import { isCloseConfirmed, setCloseConfirmed } from './quit-state';
 import { buildCsp } from './security/csp';
 import {
   disposeServices,
@@ -71,12 +72,7 @@ import {
 import { createTray } from './tray';
 import { reportMessage } from './utils/error-report';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
-import {
-  confirmInterruptRunningTurns,
-  createWindow,
-  isCloseConfirmed,
-  setCloseConfirmed,
-} from './window';
+import { confirmInterruptRunningTurns, createWindow } from './window';
 // 主题联动独立模块（无 service-container 依赖的纯 Electron 关注点）
 import { syncTitleBarOverlayFromTheme } from './window-theme';
 
