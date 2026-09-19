@@ -75,6 +75,8 @@ test-results-visual/
 .electron-user-data/
 # E2E Electron 测试专用 userData（多实例隔离）
 .e2e-user-data/
+# dev 更新链路 E2E 专用 userData（electron-update-dev.spec.ts）
+.e2e-user-data-update/
 
 # Electron 打包
 *.exe

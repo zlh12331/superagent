@@ -1,75 +1,181 @@
 // src/main/tray.ts
-// 系统托盘关注点（后台驻留 + 窗口唤回）
+// 系统托盘（后台驻留中心）：状态驱动的 tooltip/动态菜单
 // ──────────────────────────────────────────────────────────────
-// 背景（2026-09-04 功能补齐）：桌面 Agent 常驻托盘——后台运行时用户可从
-// 托盘唤回（最小化/失焦后）。
-
-// 设计（保守，不改变既有"点 X 即协商退出"语义）：
-// - 常驻托盘图标 + 右键菜单：显示窗口 / 退出
-// - 左键单击托盘图标 → 显示/聚焦主窗口（桌面应用惯例）
-// - 退出菜单位走完整善后链（app.quit() → before-quit drain）
-// - 窗口关闭语义不变（仍由 window.ts 协商 + window-all-closed 退出）
-//
-// 平台差异：
-// - Windows/Linux：Tray 长期可用；macOS 需 template 图标（menubar 自动深色适配）
-// - 图标来源：resources/icons/trayTemplate.png（macOS template）+ tray.png（其他）
+// 设计（docs/design/28-tray-spec.md）：
+// - 菜单在右键时即时构建（读取实时回合/更新状态与当前语言），无重建时机簿记
+// - tooltip 随更新状态变化（空闲/下载中/就绪），经 onUpdateStatus 订阅驱动；
+//   托盘图标的视觉变体（角标）需要设计资源，列 P2（见 §5 角标实现口径）
+// - 左键唤回主窗口；「退出」走完整善后链（app.quit() → before-quit 协商）
+// - 依赖全部注入（index.ts 装配），本模块不触碰 service-container
 // ──────────────────────────────────────────────────────────────
 
 import { join } from 'node:path';
-import { app, BrowserWindow, Menu, nativeImage, Tray } from 'electron';
-
+import type { UpdateStatusPayload } from '@code-agent/shared/main';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  type MenuItemConstructorOptions,
+  Notification,
+  nativeImage,
+  Tray,
+} from 'electron';
+import { broadcastDeepLink } from './deep-link';
+import { readSetting, writeSetting } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
 
+/** 托盘文案形状（双语文案表统一结构） */
+interface TrayText {
+  readonly running: string;
+  readonly idle: string;
+  readonly newSession: string;
+  readonly recentSessions: string;
+  readonly checkUpdate: string;
+  readonly installUpdate: string;
+  readonly downloading: string;
+  readonly autostart: string;
+  readonly quit: string;
+  readonly minimized: string;
+}
+
+/** 界面语言（settings.language 的合法值） */
+type TrayLocale = 'zh-CN' | 'en';
+
+/** 托盘文案（主进程无 i18n 体系，内置双语文案表按 settings.language 取用） */
+const TRAY_TEXT: Readonly<Record<TrayLocale, TrayText>> = {
+  'zh-CN': {
+    running: '● 有回合正在运行',
+    idle: '空闲',
+    newSession: '新建会话',
+    recentSessions: '最近会话',
+    checkUpdate: '检查更新',
+    installUpdate: '重启并安装',
+    downloading: '下载中',
+    autostart: '开机自启',
+    quit: '退出',
+    minimized: '已最小化到托盘，退出请用托盘菜单',
+  },
+  en: {
+    running: '● A turn is running',
+    idle: 'Idle',
+    newSession: 'New session',
+    recentSessions: 'Recent sessions',
+    checkUpdate: 'Check for updates',
+    installUpdate: 'Restart & install',
+    downloading: 'Downloading',
+    autostart: 'Launch at login',
+    quit: 'Quit',
+    minimized: 'Minimized to tray. Quit from the tray menu',
+  },
+} as const;
+
+/** 托盘会话条目（菜单「最近会话 ▸」） */
+export interface TraySessionItem {
+  readonly id: string;
+  readonly title: string;
+}
+
+/** 首次最小化引导的已提示标记（app_settings；主进程直写，渲染层不感知） */
+const HIDE_HINT_KEY = 'window.hideHintShown';
+
+/** 托盘依赖（index.ts 装配；全部注入，本模块不触碰服务容器） */
+export interface TrayDeps {
+  /** 当前更新状态（null = 从未检查） */
+  getUpdateStatus: () => UpdateStatusPayload | null;
+  /** 是否有回合在跑（Agent 服务未初始化时安全返回 false） */
+  hasRunningTurns: () => boolean;
+  /** 最近会话（按更新时间倒序前 5） */
+  listRecentSessions: () => Promise<readonly TraySessionItem[]>;
+  /** 新建会话（返回新会话 id，用于唤回 + 导航） */
+  createSession: () => Promise<string>;
+  /** 打开指定会话（唤回 + 导航） */
+  openSession: (sessionId: string) => void;
+  /** 手动检查更新（自动检查静默） */
+  checkForUpdate: () => void;
+  /** 两段式安装（置标记 + 触发退出，退出链末端拉起安装器） */
+  installUpdate: () => void;
+  /** 写入开机自启（OS 登录项） */
+  setAutostart: (enabled: boolean) => void;
+  /** 订阅更新状态变化（图标/tooltip 更新） */
+  onUpdateStatus: (listener: (payload: UpdateStatusPayload) => void) => () => void;
+  /** 当前界面语言（settings.language；未知回退 zh-CN） */
+  getLocale: () => TrayLocale;
+}
+
 let tray: Tray | null = null;
+let deps: TrayDeps | null = null;
 
 /**
- * 创建系统托盘（幂等：已存在则复用）
+ * 创建托盘图标
  *
- * 在 whenReady 后调用（Tray 构造需要 app ready）。应用退出时随进程回收。
+ * macOS：template 图标（trayTemplate.png，createFromPath 自动挂同名 @2x 为
+ *        2x 表示；黑色剪影 + alpha，系统按菜单栏深浅色自动反色）。
+ * Windows/Linux：预生成多尺寸彩色图标（16/24/32 按 DPI 取档，见
+ *        scripts/generate-tray-assets.py）；缺资源时回退运行时缩放 icon.png。
  */
-export function createTray(): void {
+function createTrayImage(): Electron.NativeImage {
+  const resourcesDir = join(app.getAppPath(), 'resources/icons');
+
+  if (process.platform === 'darwin') {
+    // 只 load 1x 文件：createFromPath 对带 @2x 后缀的同名文件自动挂 2x 表示
+    // （16pt 逻辑尺寸 + retina 高清）；直接 load @2x 会把 32px 当 1x 尺寸用
+    const template = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate.png'));
+    if (!template.isEmpty()) {
+      template.setTemplateImage(true);
+      return template;
+    }
+    // 无 template 资源：回退常规图标
+    logger.info({}, 'macOS template 图标不存在，回退常规图标');
+  }
+
+  // 多尺寸表示：100%/150%/200% DPI 各取最近档，预生成图比单张源图运行时
+  // 缩到 16px 更清晰（spec §9 Windows 按 DPI 选尺寸避免模糊）
+  const base = nativeImage.createFromPath(join(resourcesDir, 'tray16.png'));
+  if (!base.isEmpty()) {
+    for (const [scaleFactor, file] of [
+      [1.5, 'tray24.png'],
+      [2, 'tray32.png'],
+    ] as const) {
+      const rep = nativeImage.createFromPath(join(resourcesDir, file));
+      if (!rep.isEmpty()) {
+        base.addRepresentation({ scaleFactor, buffer: rep.toPNG() });
+      }
+    }
+    return base;
+  }
+
+  const iconPath = join(resourcesDir, 'icon.png');
+  const image = nativeImage.createFromPath(iconPath);
+  const fallback = nativeImage.createEmpty();
+  return image.isEmpty() ? fallback : image.resize({ width: 16, height: 16 });
+}
+export function createTray(trayDeps: TrayDeps): void {
   if (tray !== null) {
     return; // 已创建（如 macOS activate 重建窗口路径），复用
   }
-  // 图标：暂用应用图标（icon.png，随应用打包在 resources/icons/）。
-  // macOS 托盘理想为 template 图标（trayTemplate.png，系统自动深色适配），
-  // 当前 assets 未产出——待补资源时切换；缺图时 nativeImage 空图会静默
-  // 崩溃窗口，故先创建失败则回退默认（Electron 默认图标）。
-  const iconPath = join(app.getAppPath(), 'resources/icons/icon.png');
-  const image = nativeImage.createFromPath(iconPath);
-  const fallback = nativeImage.createEmpty();
-  // 派生的 16x16（托盘标准尺寸，减内存与平台适配抖动）
-  const trayImage = image.isEmpty() ? fallback : image.resize({ width: 16, height: 16 });
+  deps = trayDeps;
 
+  // macOS 优先 template 图标（系统自动深浅色），无则回退常规彩色图标
+  const trayImage = createTrayImage();
   tray = new Tray(trayImage);
-  tray.setToolTip(app.getName());
+  updateTrayPresentation();
 
   // 左键单击 → 显示/聚焦主窗口（Windows 默认行为；macOS Linux 需显式绑定）
   tray.on('click', () => {
     showMainWindow();
   });
 
-  // 右键菜单：显示窗口 / 退出（对齐桌面应用托盘惯例）
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: '显示 Code Agent',
-        click: () => {
-          showMainWindow();
-        },
-      },
-      { type: 'separator' },
-      {
-        label: '退出',
-        click: () => {
-          logger.info({}, '托盘退出菜单被点击，走完整退出善后链');
-          app.quit();
-        },
-      },
-    ]),
-  );
+  // 右键 → 即时构建菜单（实时状态 + 当前语言），无静态菜单的重建时机问题
+  tray.on('right-click', () => {
+    void popUpMenu();
+  });
 
-  logger.info({}, '系统托盘已创建（后台驻留，托盘可唤回窗口）');
+  // 更新状态变化 → 刷新 tooltip（菜单在右键时即时构建，无需跟随）
+  trayDeps.onUpdateStatus(() => {
+    updateTrayPresentation();
+  });
+
+  logger.info({}, '系统托盘已创建（后台驻留中心）');
 }
 
 /** 显示并聚焦主窗口（最小化时还原） */
@@ -83,4 +189,153 @@ function showMainWindow(): void {
   }
   win.show();
   win.focus();
+}
+
+/** 当前语言的托盘文案 */
+function currentText(): TrayText {
+  const locale = deps?.getLocale() ?? 'zh-CN';
+  return TRAY_TEXT[locale] ?? TRAY_TEXT['zh-CN'];
+}
+
+/** tooltip 随更新状态变化（空闲 / 下载中带百分比 / 就绪） */
+function updateTrayPresentation(): void {
+  if (tray === null || deps === null) {
+    return;
+  }
+  const status = deps.getUpdateStatus();
+  const name = app.getName();
+  if (status?.phase === 'downloading') {
+    tray.setToolTip(`${name} — ${currentText().downloading} ${status.progress ?? 0}%`);
+    return;
+  }
+  if (status?.phase === 'downloaded') {
+    tray.setToolTip(`${name} — ${currentText().installUpdate}`);
+    return;
+  }
+  tray.setToolTip(name);
+}
+
+/** 右键菜单：即时构建（状态行 / 新建会话 / 最近会话 / 更新 / 自启 / 退出） */
+async function popUpMenu(): Promise<void> {
+  // 局部捕获：闭包内引用模块级可变变量会让 TS 收窄失效（且运行时更稳）
+  const d = deps;
+  const t = tray;
+  if (t === null || d === null) {
+    return;
+  }
+  const text = currentText();
+  const running = d.hasRunningTurns();
+  const status = d.getUpdateStatus();
+  const template: MenuItemConstructorOptions[] = [
+    // 状态行（只读）：回合运行态即时读取
+    { label: running ? text.running : text.idle, enabled: false },
+    { type: 'separator' },
+    {
+      label: text.newSession,
+      click: () => {
+        void d
+          .createSession()
+          .then((sessionId) => {
+            openSession(sessionId);
+          })
+          .catch((err: unknown) => {
+            logger.error({ error: String(err) }, '托盘新建会话失败');
+          });
+      },
+    },
+  ];
+
+  const sessions = await d.listRecentSessions().catch(() => []);
+  if (sessions.length > 0) {
+    template.push({
+      label: text.recentSessions,
+      submenu: sessions.slice(0, 5).map((session) => ({
+        label: session.title,
+        click: () => {
+          openSession(session.id);
+        },
+      })),
+    });
+  }
+
+  template.push({ type: 'separator' });
+  if (status?.phase === 'downloaded') {
+    // 更新就绪：菜单项升级为安装动作（复用两段式安装链路）
+    template.push({
+      label: text.installUpdate,
+      click: () => {
+        d.installUpdate();
+      },
+    });
+  } else if (status?.phase === 'downloading') {
+    template.push({
+      label: `${text.downloading} ${status.progress ?? 0}%`,
+      enabled: false,
+    });
+  } else {
+    template.push({
+      label: text.checkUpdate,
+      click: () => {
+        d.checkForUpdate();
+      },
+    });
+  }
+
+  // 开机自启（OS 登录项直读直写，与设置页开关同源）
+  const openAtLogin = app.getLoginItemSettings().openAtLogin;
+  template.push({
+    label: text.autostart,
+    type: 'checkbox',
+    checked: openAtLogin,
+    click: () => {
+      d.setAutostart(!openAtLogin);
+    },
+  });
+
+  template.push({ type: 'separator' });
+  template.push({
+    label: text.quit,
+    click: () => {
+      logger.info({}, '托盘退出菜单被点击，走完整退出善后链');
+      app.quit();
+    },
+  });
+
+  t.popUpContextMenu(Menu.buildFromTemplate(template));
+}
+
+/** 打开指定会话：唤回窗口并广播深度链接导航 */
+function openSession(sessionId: string): void {
+  showMainWindow();
+  broadcastDeepLink({ sessionId, url: `code-agent://open/session/${sessionId}` });
+}
+
+/**
+ * 首次最小化到托盘的一次性引导通知（点击唤回；已提示过不再发）
+ *
+ * 由 window.ts 的 minimize 关窗分支调用（closeAction = minimize 时）。
+ */
+export function notifyMinimizedToTray(): void {
+  if (tray === null || deps === null || !Notification.isSupported()) {
+    return;
+  }
+  try {
+    if (readSetting(HIDE_HINT_KEY) === true) {
+      return;
+    }
+    writeSetting(HIDE_HINT_KEY, true);
+    const text = currentText();
+    const notification = new Notification({
+      title: app.getName(),
+      body: text.minimized,
+      silent: true,
+    });
+    notification.on('click', () => {
+      showMainWindow();
+    });
+    notification.show();
+  } catch (err) {
+    // 通知失败（构造异常等）非致命：记录后继续运行
+    logger.warn({ error: String(err) }, '最小化引导通知发送失败（忽略）');
+  }
 }

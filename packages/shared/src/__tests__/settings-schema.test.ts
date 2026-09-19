@@ -20,6 +20,7 @@ describe('SETTING_KEYS 白名单', () => {
       'workspace',
       'browser',
       'update',
+      'window',
       'memory',
       'im.allowedGroups',
     ]);

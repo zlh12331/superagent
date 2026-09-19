@@ -147,6 +147,25 @@ describe('UpdateNotice', () => {
     expect(toast).not.toHaveBeenCalled();
   });
 
+  it('快照回放记录旧版本后，同阶段的新版本实时推送仍正常提示（去重键含版本）', () => {
+    // 回归锚：去重键曾是纯 phase——回放记下 available@1.2.0 后，1.2.1 的
+    // available 实时推送会被误吞，用户永远看不到新版本提示
+    const { rerender } = render(<UpdateNotice />);
+    mockState.value = { phase: 'available', version: '1.2.0' };
+    mockFromSnapshot.value = true;
+    rerender(<UpdateNotice />);
+    expect(toast.info).not.toHaveBeenCalled();
+    // 同版本实时推送：去重，不弹
+    mockFromSnapshot.value = false;
+    mockState.value = { phase: 'available', version: '1.2.0' };
+    rerender(<UpdateNotice />);
+    expect(toast.info).not.toHaveBeenCalled();
+    // 新版本同阶段实时推送：必须弹
+    mockState.value = { phase: 'available', version: '1.2.1' };
+    rerender(<UpdateNotice />);
+    expect(toast.info).toHaveBeenCalledTimes(1);
+  });
+
   it('cancelled：静默（取消由关于面板就地提示）', () => {
     mockState.value = { phase: 'cancelled', version: '1.2.3' };
     render(<UpdateNotice />);

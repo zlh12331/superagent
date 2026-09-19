@@ -8,6 +8,7 @@
 // 当前主进程负责：Logger 初始化、SQLite 初始化、
 // 窗口创建、退出清理（含 closeDb）。
 
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow, nativeTheme, session } from 'electron';
 import { broadcastDeepLink, parseDeepLink, registerDeepLinkProtocol } from './deep-link';
@@ -60,7 +61,7 @@ import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { mountTurnNotifications } from './notification';
-import { isCloseConfirmed, setCloseConfirmed } from './quit-state';
+import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
 import { buildCsp } from './security/csp';
 import {
   disposeServices,
@@ -318,8 +319,14 @@ app
 
     // 启动自动更新服务（注册 autoUpdater 事件 → 推送渲染层）
     // 启动检查按用户设置调度（settings.update.autoCheck；缺失/损坏视为开）；
-    // 非打包环境内部直接跳过调度，仅注册监听
-    serviceContainer.getUpdateService().start({ autoCheckEnabled: isAutoCheckEnabled });
+    // 非打包环境内部直接跳过调度，仅注册监听。
+    // dev 更新调试接线：CODE_AGENT_DEV_UPDATE=1 时置 forceDevUpdateConfig，
+    // electron-updater 改读 dev-app-update.yml，dev 也能跑通检查/下载链路
+    // （启用契约见 dev-app-update.yml 头注释；缺省关闭，dev 不发起任何更新请求）
+    serviceContainer.getUpdateService().start({
+      autoCheckEnabled: isAutoCheckEnabled,
+      devUpdateEnabled: process.env['CODE_AGENT_DEV_UPDATE'] === '1',
+    });
 
     // 注入 CSP 响应头（P1-5 安全基线）
     // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）
@@ -403,8 +410,40 @@ app
 
     createWindow();
 
-    // 系统托盘：后台驻留 + 窗口唤回（图标/菜单，含"显示窗口/退出"）
-    createTray();
+    // 系统托盘：后台驻留中心（状态驱动 tooltip/菜单，见 docs/design/28-tray-spec.md）
+    createTray({
+      getUpdateStatus: () => serviceContainer.getUpdateService().getStatus().snapshot,
+      hasRunningTurns: () => serviceContainer.hasRunningAgentTurns(),
+      listRecentSessions: async () => {
+        const res = await serviceContainer.getSessionService().list(5, 0);
+        return res.sessions.map((session) => ({ id: session.id, title: session.title }));
+      },
+      createSession: async () => {
+        // 用最近使用的项目目录创建（无历史目录则回退用户主目录），创建后唤回导航
+        const dirs = await serviceContainer
+          .getSessionService()
+          .listRecentDirs({ limit: 1 })
+          .catch(() => null);
+        const workingDir = dirs?.dirs[0]?.workingDir ?? homedir();
+        return serviceContainer
+          .getSessionService()
+          .create({ workingDir, title: undefined, messages: undefined });
+      },
+      openSession: (sessionId) => {
+        broadcastDeepLink({ sessionId, url: `code-agent://open/session/${sessionId}` });
+      },
+      checkForUpdate: () => {
+        void serviceContainer.getUpdateService().check(false);
+      },
+      installUpdate: () => {
+        serviceContainer.getUpdateService().quitAndInstall();
+      },
+      setAutostart: (enabled) => {
+        app.setLoginItemSettings({ openAtLogin: enabled, args: ['--hidden'] });
+      },
+      onUpdateStatus: (listener) => serviceContainer.getUpdateService().onStatus(listener),
+      getLocale: () => (readSetting('language') === 'en' ? 'en' : 'zh-CN'),
+    });
 
     // 记忆引擎启动预热：后台拉起 sidecar（生产走 tsx 直跑 TS，冷启动约 14s），
     // 消除应用刚启动后首次记忆操作的等待。延迟启动避免与渲染层争抢 CPU；
@@ -470,14 +509,15 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // 应用退出前统一清理所有服务（设计文档 §1.1 应用生命周期 / §7.6 生命周期管理）
 // P3-10 改造：disposeServices 内部调用 ChatService.dispose() 等待所有活跃 stream 真正完成
 // （带 3s 超时兜底），避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
-// 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
-let isQuitting = false;
+// 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理。
+// 用 ./quit-state 的进程级标志——window.ts close 协商依赖 isQuitting() 区分
+// 「用户点 X」与「退出流程中的窗口销毁」（后者放行，不做最小化劫持）
 // IM 渠道初始化 Promise（whenReady 内赋值；before-quit 等待其落定，见下）
 let imChannelsInit: Promise<void> | null = null;
 // 事件循环延迟监控器（whenReady 内赋值；before-quit 停止）
 let lagMonitor: EventLoopLagMonitor | null = null;
 app.on('before-quit', async (event) => {
-  if (isQuitting) {
+  if (isQuitting()) {
     return;
   }
   // ── 进程级关窗协商（覆盖 macOS Cmd+Q / app.quit() 路径）──
@@ -504,7 +544,7 @@ app.on('before-quit', async (event) => {
   }
   // preventDefault 必须在事件循环开始处同步调用，确保能阻止默认退出
   event.preventDefault();
-  isQuitting = true;
+  setQuitting();
   try {
     // 事件循环延迟监控先停（避免退出路径上仍产生告警样本）
     lagMonitor?.stop();
@@ -526,6 +566,10 @@ app.on('before-quit', async (event) => {
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }
+  // 更新安装（Windows）：应用已完全退出、即将 exit 时拉起新版安装器——
+  // 消除「安装器启动时应用仍在退出链中」的竞态（NSIS 会弹「无法关闭」要求手动关闭）。
+  // 静默安装（/S）+ --force-run 装完自动启动。
+  serviceContainer.getUpdateService().runDeferredInstall();
   // 强制退出，不再触发 before-quit（与 app.quit() 不同）
   app.exit(0);
 });

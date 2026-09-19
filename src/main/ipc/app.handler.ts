@@ -92,6 +92,23 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     return { ok: error.length === 0 };
   },
 
+  // 开机自启回显（OS 登录项状态；设置页开关与托盘菜单同源）
+  getLoginItemSettings: async () => {
+    return { openAtLogin: app.getLoginItemSettings().openAtLogin };
+  },
+
+  // 开机自启写入（--hidden 启动参数由 index.ts 消费：启动即驻留托盘）
+  setLoginItemSettings: async (input) => {
+    app.setLoginItemSettings({ openAtLogin: input.openAtLogin, args: ['--hidden'] });
+    return { openAtLogin: input.openAtLogin };
+  },
+
+  // 退出应用（走完整善后链：before-quit 协商 → dispose → 延迟安装）
+  quit: async () => {
+    app.quit();
+    return { ok: true };
+  },
+
   // 诊断包导出：日志 + 设置（脱敏）+ 版本清单 → 用户选定路径的 zip（取消时 saved=false）
   exportDiagnostics: async () => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

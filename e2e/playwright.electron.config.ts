@@ -29,8 +29,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export default defineConfig({
   testDir: '.',
-  // 匹配 electron.spec.ts 与 perf-electron.spec.ts（真实 Electron 链路功能 + 性能）
-  testMatch: ['**/electron.spec.ts', '**/perf-electron.spec.ts'],
+  // 匹配 electron.spec.ts / perf-electron.spec.ts / electron-update-dev.spec.ts
+  // （真实 Electron 链路功能 + 性能 + dev 更新调试链路）
+  testMatch: ['**/electron.spec.ts', '**/perf-electron.spec.ts', '**/electron-update-dev.spec.ts'],
   timeout: 60_000,
   expect: {
     timeout: 10_000,

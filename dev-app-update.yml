@@ -12,6 +12,13 @@
 # - 缓存写入独立目录 code-agent-desktop-dev-updater，不污染正式版缓存
 #   （正式版为 code-agent-desktop-updater）
 # - 与 release 的 publish 配置（electron-builder.yml）保持同一 provider/channel
+#
+# ⚠️ dev 下 app.getVersion() 返回 Electron 运行时版本（如 44.2.0）而非应用版本
+# （主进程入口在 out/main，无 package.json），远端 latest 版本号低于该值时
+# 表现为「已是最新」；需演示「发现新版/下载」须让远端 latest.yml 的 version
+# 高于 Electron 版本。本文件由 electron.vite.config.ts 的 copyDevAppUpdateYml
+# 插件在构建时同步到 out/main（electron-updater 从 app.getAppPath() 读取）。
+# dev 更新链路回归测试：e2e/electron-update-dev.spec.ts
 # ──────────────────────────────────────────────────────────────
 provider: github
 owner: zlh12331
