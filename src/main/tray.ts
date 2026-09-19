@@ -108,27 +108,40 @@ let deps: TrayDeps | null = null;
 /**
  * 创建托盘图标
  *
- * macOS：优先加载 template 图标（trayTemplate[_@2x].png，系统自动深浅色适配）；
- *        无 template 资源时回退到常规彩色图标。
- * Windows/Linux：加载常规彩色图标。
+ * macOS：template 图标（trayTemplate.png，createFromPath 自动挂同名 @2x 为
+ *        2x 表示；黑色剪影 + alpha，系统按菜单栏深浅色自动反色）。
+ * Windows/Linux：预生成多尺寸彩色图标（16/24/32 按 DPI 取档，见
+ *        scripts/generate-tray-assets.py）；缺资源时回退运行时缩放 icon.png。
  */
 function createTrayImage(): Electron.NativeImage {
   const resourcesDir = join(app.getAppPath(), 'resources/icons');
 
   if (process.platform === 'darwin') {
-    // macOS template 图标：黑色轮廓 + alpha 通道，系统自动深浅色适配
-    const template2x = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate@2x.png'));
-    if (!template2x.isEmpty()) {
-      template2x.setTemplateImage(true);
-      return template2x;
-    }
-    const template1x = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate.png'));
-    if (!template1x.isEmpty()) {
-      template1x.setTemplateImage(true);
-      return template1x;
+    // 只 load 1x 文件：createFromPath 对带 @2x 后缀的同名文件自动挂 2x 表示
+    // （16pt 逻辑尺寸 + retina 高清）；直接 load @2x 会把 32px 当 1x 尺寸用
+    const template = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate.png'));
+    if (!template.isEmpty()) {
+      template.setTemplateImage(true);
+      return template;
     }
     // 无 template 资源：回退常规图标
     logger.info({}, 'macOS template 图标不存在，回退常规图标');
+  }
+
+  // 多尺寸表示：100%/150%/200% DPI 各取最近档，预生成图比单张源图运行时
+  // 缩到 16px 更清晰（spec §9 Windows 按 DPI 选尺寸避免模糊）
+  const base = nativeImage.createFromPath(join(resourcesDir, 'tray16.png'));
+  if (!base.isEmpty()) {
+    for (const [scaleFactor, file] of [
+      [1.5, 'tray24.png'],
+      [2, 'tray32.png'],
+    ] as const) {
+      const rep = nativeImage.createFromPath(join(resourcesDir, file));
+      if (!rep.isEmpty()) {
+        base.addRepresentation({ scaleFactor, buffer: rep.toPNG() });
+      }
+    }
+    return base;
   }
 
   const iconPath = join(resourcesDir, 'icon.png');

@@ -187,8 +187,11 @@ OS 登录项状态（注册表 / 登录项），不是 SQLite 设置，写入白
 
 ## 9. 平台细节
 
-- **macOS template 图标**（已记录的待办）：`trayTemplate.png` + `trayTemplate@2x.png`，
-  系统自动深浅色适配；其余平台用多尺寸图标（16/24/32）。
+- **macOS template 图标**（已落地 2026-09-19）：`trayTemplate.png`（16px）+
+  `trayTemplate@2x.png`（32px），由 `scripts/generate-tray-assets.py` 从 icon.png
+  提取白色符号转黑色剪影生成，系统自动深浅色适配；其余平台用多尺寸图标
+  `tray{16,24,32}.png`（同脚本生成，tray.ts 按 DPI 挂表示）。菜单栏最终观感待
+  macOS 真机确认。
 - **Linux**：部分桌面环境（AppIndicator）左键行为受限，右键菜单必须始终可用（兜底）。
 - **DPI**：Windows 下按缩放比选择尺寸，避免模糊。
 - **无托盘环境降级（边界，必须处理）**：Linux 部分桌面环境（GNOME 默认配置）不
@@ -245,7 +248,7 @@ OS 登录项状态（注册表 / 登录项），不是 SQLite 设置，写入白
 新增 get/set 两个 IPC）、命令面板「退出应用」命令、通用分区 SegControl 与开机自启
 文案的双语键。
 
-**P2**：macOS template 图标与多尺寸资源、Linux AppIndicator 细节、下载中角标。
+**P2**：Linux AppIndicator 细节（真机验证）、下载中角标。（template 图标与多尺寸资源已于 2026-09-19 落地，见 §9）
 
 ## 12. 验收
 
