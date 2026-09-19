@@ -2,6 +2,32 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.0](https://github.com/zlh12331/superagent/compare/v1.2.1...v1.3.0) (2026-09-19)
+
+> 本版本让应用可以「关窗而不退出」：点关闭按钮默认最小化到系统托盘，正在执行的任务与会话继续运行；托盘中可直接新建/切换会话、查看更新状态、开关开机自启或彻底退出。
+
+### 新增
+
+- **关窗最小化到托盘**：点窗口关闭按钮默认隐藏到系统托盘而非退出，正在执行的任务、会话以及定时任务不会中断；可用托盘右键菜单「退出应用」或在 设置 → 通用 → 窗口 改回「关闭时退出应用」（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **托盘菜单**：右键托盘图标可直接新建会话、快速切换最近会话（最多 5 个）、顶部显示当前是否有任务在跑；更新相关动作也收进菜单——发现新版本时可检查更新、下载中显示进度、就绪后可直接安装（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **托盘图标状态提示**：鼠标悬停显示应用名；下载更新时显示百分比，更新就绪时提示可安装（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **开机自启开关**：设置 → 通用 → 窗口 新增「开机时自动启动」开关，托盘菜单中同一项也可直接勾选（两处状态实时同步）（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **命令面板新增「退出应用」**：以 Ctrl+K 打开命令面板即可彻底退出（走完整退出流程，不会残留后台进程）（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **托盘图标适配系统主题**：macOS 菜单栏图标自动跟随浅色/深色模式反色；Windows/Linux 按屏幕缩放比选用对应尺寸，高分屏下更清晰（[#52](https://github.com/zlh12331/superagent/issues/52)）
+
+### 修复
+
+- **退出确认不再重复弹出**：修复特定路径下（如 macOS 用 Cmd+Q、托盘退出）退出确认可能弹两次、或窗口已进入退出流程仍被误判为「关闭到托盘」的问题（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **更新状态推送更稳**：修复某个窗口异常时可能影响其余窗口接收更新状态推送的问题（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **新版本提示不再被误吞**：修复窗口刷新恢复状态后，同一阶段出现更高版本时通知被去重规则吞掉、看不到新版本提示的问题（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- **开发调试更新链路可用**：修复 `CODE_AGENT_DEV_UPDATE=1` 调试开关此前未接线、启用后仍提示「开发模式不支持」的问题；现在未打包环境也可跑通完整更新链路，便于验证界面（[#52](https://github.com/zlh12331/superagent/issues/52)）
+
+### 内部改进
+
+- 更新调试配置文件改为随构建自动落位，不再需要手工放置（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- 新增未打包环境下更新链路的端到端测试（含开关关闭时的门卫拦截），防止调试链路再次静默失效（[#52](https://github.com/zlh12331/superagent/issues/52)）
+- 托盘图标资源改为从应用图标脚本化生成（模板剪影 + 多尺寸），图标更新后可一键重新生成（[#52](https://github.com/zlh12331/superagent/issues/52)）
+
 ## [1.2.1](https://github.com/zlh12331/superagent/compare/v1.2.0...v1.2.1) (2026-09-19)
 
 ### 修复
