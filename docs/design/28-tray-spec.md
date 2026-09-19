@@ -67,6 +67,9 @@ Windows/Linux 直接 `app.quit()`——窗口一关，进程退出，以上全�
   cron）不经过 Chromium 调度，**不受节流影响**，后台能力完整。
 - **darwin 不参与**：macOS 原生惯例即"关窗不退出"（Cmd+Q 才退出），不读
   `closeAction`，保持平台行为。
+- **minimize 模式下退出入口的可发现性**：点 X 不再退出后，退出的稳定入口只有
+  托盘菜单（托盘可能被 Windows 收进溢出区）——命令面板补「退出应用」命令
+  （现行面板无此项），作为不依赖托盘的兜底入口。
 - **驻留模式下的系统关机 / 注销边界**：Windows 会话结束时驻留进程被系统终止，
   异步善后链可能跑不完——由**既有的崩溃恢复语义兜底**（`.crash-marker` +
   启动期 `recoverFromCrash()`，running 回合标 interrupted），不为此新增处理。
@@ -104,6 +107,11 @@ tooltip 同步携带状态文本（如「运行中 · 修复登录页」/「有�
 已指明其存在，不重复实现、不轮询 `hasRunningAgentTurns`）；更新状态复用本服务
 （§27）的下载进度 / 就绪事件。托盘模块内一个状态机消费这两路输入，统一重建
 图标与菜单。
+
+**角标实现口径**：Electron `Tray` 没有角标 API（`setBadgeCount` 仅 macOS dock /
+Linux Unity，Windows 托盘无效）——状态角标需要**预合成图标集**（空闲 / 运行中 /
+就绪各一套，随资源打包）或运行时 `nativeImage` 合成；进度每秒变化时合成需跟随
+既有 1s 节流，避免高频重绘。此为实现约束，不是可选优化。
 
 ## 6. 动态菜单
 
@@ -183,6 +191,11 @@ OS 登录项状态（注册表 / 登录项），不是 SQLite 设置，写入白
   Electron 无法可靠探测托盘是否可见。降级策略：Linux 上 `closeAction` 默认强制
   为 quit（与 darwin 同类的平台化默认），设置界面允许显式改 minimize 但文案注明
   "需桌面环境支持托盘图标"；全局快捷键唤回列 P2。
+- **卸载时清理登录项**：electron-builder 的卸载器**不会**清理应用自管的
+  `HKCU\...\Run` 登录项——开启自启后卸载应用，登录时 Windows 会尝试启动已不存在的
+  程序。需通过自定义 NSIS 卸载宏清理该键值（列 P2）。
+- **命令面板补「退出应用」命令**：minimize 模式下退出的兜底入口不依赖托盘
+  （现面板无此项，见 §3 关窗语义）。
 
 ## 10. 已拍板项
 
@@ -208,9 +221,10 @@ OS 登录项状态（注册表 / 登录项），不是 SQLite 设置，写入白
 3. 首次最小化系统通知（一次性标记存 `app_settings`）。
 4. 托盘菜单 i18n（双语文案表 + `settings.language` 驱动 + 语言变更重建）。
 
-**P1**：回合运行中 / 更新就绪图标态与 tooltip、动态菜单（状态行 + 新建会话 + 更新
-入口 + 开机自启开关）、通知点击导航会话、开机自启设置页开关（app 域新增
-get/set 两个 IPC）、通用分区 SegControl 与开机自启文案的双语键。
+**P1**：回合运行中 / 更新就绪图标态与 tooltip（含预合成图标集）、动态菜单（状态行 +
+新建会话 + 更新入口 + 开机自启开关）、通知点击导航会话、开机自启设置页开关（app 域
+新增 get/set 两个 IPC）、命令面板「退出应用」命令、通用分区 SegControl 与开机自启
+文案的双语键。
 
 **P2**：macOS template 图标与多尺寸资源、Linux AppIndicator 细节、下载中角标。
 
@@ -222,6 +236,8 @@ get/set 两个 IPC）、通用分区 SegControl 与开机自启文案的双语�
 - **门禁**：typecheck / lint / check:static（i18n 双语、tokens）/ test / knip 全绿。
 - **真机**：minimize 下点 X → 托盘驻留、回合继续、cron 到点触发；托盘退出 → 协商 →
   退出；macOS 行为不变。
+- **E2E 可测**：Electron E2E 可断言关窗行为（点 X 后 `win.isVisible()` 与进程存活、
+  closeAction = quit 时进程退出）——minimize 行为可以自动化验证，不留死角。
 
 ## 13. 明确不做
 
