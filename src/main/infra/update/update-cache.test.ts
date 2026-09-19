@@ -3,11 +3,13 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   clearUpdateCache,
   measureDirRecursive,
+  pruneStaleDifferentialBaseline,
   readUpdateCacheInfo,
   resolveUpdaterCacheDir,
 } from './update-cache';
@@ -100,6 +102,60 @@ describe('update-cache', () => {
         bytes: 0,
         fileCount: 0,
       });
+    });
+  });
+
+  describe('pruneStaleDifferentialBaseline', () => {
+    /** 写一份块图（gzip(JSON)，结构与 electron-builder 产物一致） */
+    async function writeBlockMap(dir: string, sizes: number[]): Promise<void> {
+      const blockMap = {
+        version: 2,
+        files: [{ name: 'file', offset: 0, checksums: sizes.map(() => 'x'), sizes }],
+      };
+      await writeFile(
+        join(dir, 'current.blockmap'),
+        gzipSync(Buffer.from(JSON.stringify(blockMap))),
+      );
+    }
+
+    it('块图总大小与基准安装包不一致 → 剔除块图（差分失败回退全量的根因）', async () => {
+      const cacheDir = join(cacheRoot, 'app-updater');
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(join(cacheDir, 'installer.exe'), 'x'.repeat(20));
+      await writeBlockMap(cacheDir, [10, 5]); // 总 15 ≠ 20
+
+      expect(await pruneStaleDifferentialBaseline(cacheDir)).toBe('pruned');
+      await expect(readFile(join(cacheDir, 'current.blockmap'))).rejects.toThrow();
+      // 基准安装包保留（库仍需它做差分的 COPY 来源）
+      await expect(readFile(join(cacheDir, 'installer.exe'))).resolves.toBeDefined();
+    });
+
+    it('块图总大小与基准安装包一致 → 保留（consistent）', async () => {
+      const cacheDir = join(cacheRoot, 'app-updater');
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(join(cacheDir, 'installer.exe'), 'x'.repeat(15));
+      await writeBlockMap(cacheDir, [10, 5]);
+
+      expect(await pruneStaleDifferentialBaseline(cacheDir)).toBe('consistent');
+      await expect(readFile(join(cacheDir, 'current.blockmap'))).resolves.toBeDefined();
+    });
+
+    it('无基准安装包 / 无块图 / 块图损坏 → absent（不处理、不抛错）', async () => {
+      const noInstaller = join(cacheRoot, 'no-installer');
+      await mkdir(noInstaller, { recursive: true });
+      await writeBlockMap(noInstaller, [10]);
+      expect(await pruneStaleDifferentialBaseline(noInstaller)).toBe('absent');
+
+      const noBlockMap = join(cacheRoot, 'no-blockmap');
+      await mkdir(noBlockMap, { recursive: true });
+      await writeFile(join(noBlockMap, 'installer.exe'), 'x'.repeat(10));
+      expect(await pruneStaleDifferentialBaseline(noBlockMap)).toBe('absent');
+
+      const corrupt = join(cacheRoot, 'corrupt');
+      await mkdir(corrupt, { recursive: true });
+      await writeFile(join(corrupt, 'installer.exe'), 'x'.repeat(10));
+      await writeFile(join(corrupt, 'current.blockmap'), 'not-gzip');
+      expect(await pruneStaleDifferentialBaseline(corrupt)).toBe('absent');
     });
   });
 });
