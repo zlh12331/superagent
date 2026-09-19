@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.1](https://github.com/zlh12331/superagent/compare/v1.3.0...v1.3.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **update:** 真机三问题取证修复——差分基准一致性 + 退出后安装生效 ([#54](https://github.com/zlh12331/superagent/issues/54)) ([836e8b0](https://github.com/zlh12331/superagent/commit/836e8b095a183ab854af28b7bc5e924600fdac71))
+
 ## [1.3.0](https://github.com/zlh12331/superagent/compare/v1.2.1...v1.3.0) (2026-09-19)
 
 > 本版本让应用可以「关窗而不退出」：点关闭按钮默认最小化到系统托盘，正在执行的任务与会话继续运行；托盘中可直接新建/切换会话、查看更新状态、开关开机自启或彻底退出。
