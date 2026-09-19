@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.0](https://github.com/zlh12331/superagent/compare/v1.2.1...v1.3.0) (2026-09-19)
+
+
+### Features
+
+* **tray:** 托盘后台驻留 + dev 更新链路修复 + 托盘图标资源落地 ([#52](https://github.com/zlh12331/superagent/issues/52)) ([aaf229b](https://github.com/zlh12331/superagent/commit/aaf229b8c3eaf509be155fc254ba7965b4e53c2e))
+
 ## [1.2.1](https://github.com/zlh12331/superagent/compare/v1.2.0...v1.2.1) (2026-09-19)
 
 ### 修复
