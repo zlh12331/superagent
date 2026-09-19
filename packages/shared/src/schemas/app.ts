@@ -91,3 +91,29 @@ export interface ExportDiagnosticsRes {
   /** 诊断包保存路径（saved=true 时提供） */
   readonly path?: string;
 }
+
+/**
+ * app:getLoginItemSettings 响应（开机自启当前状态）
+ *
+ * 读的是 OS 登录项（Windows HKCU Run / macOS 登录项），不走 SQLite 设置——
+ * 设置页开关与托盘菜单开关读写同一 OS 状态，天然同步。
+ */
+export interface LoginItemSettingsRes {
+  /** 是否开机自启 */
+  readonly openAtLogin: boolean;
+}
+
+/** app:getLoginItemSettings 响应 zod schema */
+export const LoginItemSettingsResSchema = z.object({
+  openAtLogin: z.boolean(),
+});
+
+/** app:setLoginItemSettings 入参（写入 OS 登录项；启动参数由主进程决定） */
+export const SetLoginItemSettingsReqSchema = z.object({
+  openAtLogin: z.boolean(),
+});
+
+/** app:setLoginItemSettings 响应 zod schema（写入后的回显） */
+export const SetLoginItemSettingsResSchema = z.object({
+  openAtLogin: z.boolean(),
+});

@@ -5,12 +5,16 @@
 // ──────────────────────────────────────────────────────────────
 
 import { Check, Database, Languages } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
+import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
 import { DataSection } from './data-section';
 import { EditorSection } from './editor-section';
 import { PromptSection } from './prompt-section';
@@ -60,15 +64,71 @@ function LanguageRow(): ReactElement {
   );
 }
 
-/** 通用 pane：语言 + 数据管理 + 遥测 + 编辑器/快捷键/提示词（导航收敛后并入） */
+/** 通用 pane：语言 + 窗口行为 + 数据管理 + 遥测 + 编辑器/快捷键/提示词（导航收敛后并入） */
 export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean }): ReactElement {
   const { t } = useTranslation();
+  const closeAction = useSettingsStore((s) => s.window.closeAction);
+  const setWindow = useSettingsStore((s) => s.setWindow);
+  const [openAtLogin, setOpenAtLogin] = useState<boolean | null>(null);
+
+  // 开机自启状态挂载时回显（OS 登录项为唯一真源，读取失败隐藏开关避免误导）
+  useEffect(() => {
+    if (!hasIpcBridge()) return;
+    void (async () => {
+      try {
+        const res = unwrap<{ openAtLogin: boolean }>(await window.api.app.getLoginItemSettings());
+        setOpenAtLogin(res.openAtLogin);
+      } catch {
+        // 读取失败（桥不存在/旧版本）：隐藏开关避免误导
+        setOpenAtLogin(null);
+      }
+    })();
+  }, []);
+
+  const handleToggleAutostart = async (checked: boolean): Promise<void> => {
+    if (!hasIpcBridge()) return;
+    try {
+      const res = unwrap<{ openAtLogin: boolean }>(
+        await window.api.app.setLoginItemSettings({ openAtLogin: checked }),
+      );
+      setOpenAtLogin(res.openAtLogin);
+    } catch {
+      toast.error(t('settings.autostartFailed'));
+    }
+  };
+
   return (
     <div className="flex flex-col gap-5 pt-2">
       <div>
         <h3 className="text-foreground text-sm font-semibold">{t('settings.generalTitle')}</h3>
         <div className="border-border bg-muted/20 mt-2 rounded-md border p-3">
           <LanguageRow />
+        </div>
+      </div>
+
+      {/* 窗口行为（关窗语义 + 开机自启，见 docs/design/28-tray-spec.md） */}
+      <div>
+        <h3 className="text-foreground text-sm font-semibold">{t('settings.windowTitle')}</h3>
+        <div className="mt-2 flex flex-col gap-2">
+          <SettingRow
+            label={t('settings.closeActionLabel')}
+            description={t('settings.closeActionDesc')}
+          >
+            <SegControl
+              value={closeAction}
+              options={[
+                { value: 'minimize', label: t('settings.closeActionMinimize') },
+                { value: 'quit', label: t('settings.closeActionQuit') },
+              ]}
+              onChange={(value) => setWindow({ closeAction: value as 'quit' | 'minimize' })}
+            />
+          </SettingRow>
+          <ToggleRow
+            name={t('settings.autostartLabel')}
+            description={t('settings.autostartDesc')}
+            checked={openAtLogin ?? false}
+            onChange={(checked) => void handleToggleAutostart(checked)}
+          />
         </div>
       </div>
 

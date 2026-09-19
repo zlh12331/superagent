@@ -35,12 +35,19 @@ import {
   type AskRespondRes,
   AskRespondResSchema,
 } from '../schemas/agent-ask';
-import type { AppInfoRes, DeepLinkPayload, ExportDiagnosticsRes } from '../schemas/app';
+import type {
+  AppInfoRes,
+  DeepLinkPayload,
+  ExportDiagnosticsRes,
+  LoginItemSettingsRes,
+} from '../schemas/app';
 import {
   AppInfoResSchema,
   AppStatusResSchema,
   DeepLinkPayloadSchema,
   ExportDiagnosticsResSchema,
+  LoginItemSettingsResSchema,
+  SetLoginItemSettingsReqSchema,
 } from '../schemas/app';
 import {
   BrowserConfigureReqSchema,
@@ -423,6 +430,19 @@ export const IPC_DEFINITIONS = {
       OkResSchema,
     ),
     openDataDir: withSchema(IPC_META.app.openDataDir, null, {} as { ok: boolean }, OkResSchema),
+    getLoginItemSettings: withSchema(
+      IPC_META.app.getLoginItemSettings,
+      null,
+      {} as LoginItemSettingsRes,
+      LoginItemSettingsResSchema,
+    ),
+    setLoginItemSettings: withSchema(
+      IPC_META.app.setLoginItemSettings,
+      SetLoginItemSettingsReqSchema,
+      {} as LoginItemSettingsRes,
+      LoginItemSettingsResSchema,
+    ),
+    quit: withSchema(IPC_META.app.quit, null, {} as { ok: boolean }, OkResSchema),
     // 诊断包导出：无入参，响应（saved/path）
     exportDiagnostics: withSchema(
       IPC_META.app.exportDiagnostics,

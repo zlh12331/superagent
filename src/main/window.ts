@@ -11,8 +11,10 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
-import { isCloseConfirmed, setCloseConfirmed } from './quit-state';
+import { readSetting } from './infra/storage/settings-pref';
+import { isCloseConfirmed, isQuitting, setCloseConfirmed } from './quit-state';
 import { hasRunningAgentTurns } from './service-container';
+import { notifyMinimizedToTray } from './tray';
 import { reportMessage } from './utils/error-report';
 import { logger } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
@@ -21,6 +23,19 @@ import { TITLE_BAR_SYMBOL } from './window-theme';
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
 // 详见 https://electron-vite.org/guide/dev#limitations-of-sandboxing
+
+/** 关窗行为（settings.window.closeAction；缺失/损坏/读取失败 → 默认 minimize） */
+function readCloseAction(): 'minimize' | 'quit' {
+  try {
+    const value = readSetting('window');
+    if (typeof value !== 'object' || value === null) {
+      return 'minimize';
+    }
+    return (value as { closeAction?: unknown }).closeAction === 'quit' ? 'quit' : 'minimize';
+  } catch {
+    return 'minimize';
+  }
+}
 
 // ── 关窗协商共享状态 ──
 // 已独立到 ./quit-state（close 路径与 before-quit 路径共享"用户已确认"标志；
@@ -148,14 +163,20 @@ export function createWindow(): BrowserWindow {
     win.show();
   });
 
-  // ── 关窗协商（进程与窗口维度：关窗前与用户确认运行中回合）──
-  // 有 Agent 回合在跑时拦截 close，弹确认框（对齐 VS Code"未保存工作退出确认"）：
-  // - 取消 → 窗口保留，回合继续（用户可等回合自然结束再关）
-  // - 退出 → 置共享标志放行本次 close，退出路径由 before-quit
-  //   的 agentService.dispose drain + markInterruptedOnShutdown 善后
-  // 豁免：CODE_AGENT_SKIP_CLOSE_GUARD=1（E2E / 无头场景跳过协商，防模态框卡死测试）
+  // ── 关窗行为（docs/design/28-tray-spec.md §3）──
+  // minimize（默认）：点 X 隐藏窗口到托盘，进程与后台能力（回合/IM/定时任务）
+  //   继续运行——最小化不中断回合，因此不经过运行中回合协商。
+  // quit：点 X 走现行协商（有回合确认）后关闭。
+  // 真实退出流程（isQuitting / 用户已确认 / E2E 豁免）优先放行。
   win.on('close', (event) => {
-    if (isCloseConfirmed() || process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] === '1') {
+    if (isQuitting() || isCloseConfirmed() || process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] === '1') {
+      return;
+    }
+    if (readCloseAction() === 'minimize') {
+      event.preventDefault();
+      logger.info({}, '关窗行为为最小化：隐藏窗口到托盘');
+      notifyMinimizedToTray();
+      win.hide();
       return;
     }
     if (!hasRunningAgentTurns()) {

@@ -29,6 +29,11 @@ export const IPC_META = {
     openDataDir: request('app:openDataDir'),
     // 诊断包导出（日志 + 版本信息 → 用户选择路径的 zip，支持排障闭环）
     exportDiagnostics: request('app:exportDiagnostics'),
+    // 开机自启（读写 OS 登录项，不走 SQLite 设置——托盘菜单与设置页同源）
+    getLoginItemSettings: request('app:getLoginItemSettings'),
+    setLoginItemSettings: request('app:setLoginItemSettings'),
+    // 退出应用（走完整善后链：before-quit 协商 → dispose → 延迟安装）
+    quit: request('app:quit'),
     // 深度链接事件（协议唤起 `code-agent://` 时主进程广播，渲染层导航）
     subscribeDeepLink: event('app:event:deepLink'),
   },

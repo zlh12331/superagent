@@ -25,6 +25,7 @@ import {
   PanelLeft,
   PanelRight,
   Plus,
+  Power,
   Search,
   Settings,
   Sun,
@@ -113,6 +114,8 @@ interface BuildCommandsContext {
   readonly clearActiveSession: () => void;
   readonly enterWelcomeMode: (dir: string | null) => void;
   readonly openSettings: () => void;
+  /** 退出应用（minimize 模式下的兜底退出入口，见 28-tray-spec §3） */
+  readonly quitApp: () => void;
   readonly closePalette: () => void;
 }
 
@@ -166,6 +169,16 @@ function buildCommands(ctx: BuildCommandsContext): readonly CommandItemData[] {
       icon: Settings,
       action: () => {
         ctx.openSettings();
+        closePalette();
+      },
+    },
+    {
+      id: 'quit-app',
+      section: t('palette.sectionActions'),
+      title: t('palette.quitApp'),
+      icon: Power,
+      action: () => {
+        ctx.quitApp();
         closePalette();
       },
     },
@@ -322,6 +335,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
       enterWelcomeMode(dir);
     },
     openSettings,
+    quitApp: () => {
+      // 退出走完整善后链（before-quit 协商 → dispose → 延迟安装）
+      void window.api?.app.quit();
+    },
     closePalette: () => onOpenChange(false),
   });
 

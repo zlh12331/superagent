@@ -8,6 +8,7 @@
 // 当前主进程负责：Logger 初始化、SQLite 初始化、
 // 窗口创建、退出清理（含 closeDb）。
 
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow, nativeTheme, session } from 'electron';
 import { broadcastDeepLink, parseDeepLink, registerDeepLinkProtocol } from './deep-link';
@@ -403,8 +404,40 @@ app
 
     createWindow();
 
-    // 系统托盘：后台驻留 + 窗口唤回（图标/菜单，含"显示窗口/退出"）
-    createTray();
+    // 系统托盘：后台驻留中心（状态驱动 tooltip/菜单，见 docs/design/28-tray-spec.md）
+    createTray({
+      getUpdateStatus: () => serviceContainer.getUpdateService().getStatus().snapshot,
+      hasRunningTurns: () => serviceContainer.hasRunningAgentTurns(),
+      listRecentSessions: async () => {
+        const res = await serviceContainer.getSessionService().list(5, 0);
+        return res.sessions.map((session) => ({ id: session.id, title: session.title }));
+      },
+      createSession: async () => {
+        // 用最近使用的项目目录创建（无历史目录则回退用户主目录），创建后唤回导航
+        const dirs = await serviceContainer
+          .getSessionService()
+          .listRecentDirs({ limit: 1 })
+          .catch(() => null);
+        const workingDir = dirs?.dirs[0]?.workingDir ?? homedir();
+        return serviceContainer
+          .getSessionService()
+          .create({ workingDir, title: undefined, messages: undefined });
+      },
+      openSession: (sessionId) => {
+        broadcastDeepLink({ sessionId, url: `code-agent://open/session/${sessionId}` });
+      },
+      checkForUpdate: () => {
+        void serviceContainer.getUpdateService().check(false);
+      },
+      installUpdate: () => {
+        serviceContainer.getUpdateService().quitAndInstall();
+      },
+      setAutostart: (enabled) => {
+        app.setLoginItemSettings({ openAtLogin: enabled, args: ['--hidden'] });
+      },
+      onUpdateStatus: (listener) => serviceContainer.getUpdateService().onStatus(listener),
+      getLocale: () => (readSetting('language') === 'en' ? 'en' : 'zh-CN'),
+    });
 
     // 记忆引擎启动预热：后台拉起 sidecar（生产走 tsx 直跑 TS，冷启动约 14s），
     // 消除应用刚启动后首次记忆操作的等待。延迟启动避免与渲染层争抢 CPU；
@@ -526,6 +559,10 @@ app.on('before-quit', async (event) => {
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }
+  // 更新安装（Windows）：应用已完全退出、即将 exit 时拉起新版安装器——
+  // 消除「安装器启动时应用仍在退出链中」的竞态（NSIS 会弹「无法关闭」要求手动关闭）。
+  // 静默安装（/S）+ --force-run 装完自动启动。
+  serviceContainer.getUpdateService().runDeferredInstall();
   // 强制退出，不再触发 before-quit（与 app.quit() 不同）
   app.exit(0);
 });

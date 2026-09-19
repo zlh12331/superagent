@@ -21,3 +21,18 @@ export function isCloseConfirmed(): boolean {
 export function setCloseConfirmed(): void {
   closeConfirmed = true;
 }
+
+// ── 退出进行中标志 ──
+// before-quit 与窗口 close 处理器分属两个文件，退出链中窗口 close 事件需要
+// 区分"用户点 X"与"退出流程中的窗口销毁"（后者放行，不做最小化劫持）。
+let quitting = false;
+
+/** 退出流程是否已开始（before-quit 置位后为 true） */
+export function isQuitting(): boolean {
+  return quitting;
+}
+
+/** 标记退出流程开始（index.ts before-quit 善后前置位） */
+export function setQuitting(): void {
+  quitting = true;
+}

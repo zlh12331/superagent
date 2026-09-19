@@ -162,6 +162,8 @@ export interface IUpdateService {
   cancelDownload(): void;
   /** 状态快照与上次检查时间（渲染层重载后恢复界面用；从未产生过分别为 null） */
   getStatus(): UpdateGetStatusRes;
+  /** 订阅状态变化（托盘等主进程内消费方；与事件通道同源） */
+  onStatus(listener: (payload: UpdateStatusPayload) => void): () => void;
   /**
    * 请求安装已下载的更新（静默安装 + 装完自动启动）
    *
@@ -189,6 +191,9 @@ export interface IUpdateService {
 export class UpdateService implements IUpdateService {
   /** 最近一次状态快照（emit 时更新，供 getStatus 读取） */
   private snapshot: UpdateStatusPayload | null = null;
+
+  /** 状态监听器（主进程内消费方，如托盘；emit 时同步通知） */
+  private readonly statusListeners = new Set<(payload: UpdateStatusPayload) => void>();
 
   /** 上次检查发起时间（毫秒时间戳；从未检查过为 null） */
   private lastCheckAt: number | null = null;
@@ -345,6 +350,14 @@ export class UpdateService implements IUpdateService {
   }
 
   /** @inheritDoc */
+  onStatus(listener: (payload: UpdateStatusPayload) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
+  }
+
+  /** @inheritDoc */
   quitAndInstall(): void {
     // Windows：两段式——本方法只置标记并触发退出，真正的静默安装在退出善后
     // 完成（文件锁释放）后由 runDeferredInstall 发起。electron-updater 的
@@ -484,9 +497,17 @@ export class UpdateService implements IUpdateService {
     }
   }
 
-  /** 推送状态到所有渲染窗口，并留快照（无窗口时也留，供后续 getStatus） */
+  /** 推送状态到所有渲染窗口与主进程内监听者，并留快照（无窗口时也留，供后续 getStatus） */
   private emit(payload: UpdateStatusPayload): void {
     this.snapshot = payload;
+    for (const listener of this.statusListeners) {
+      try {
+        listener(payload);
+      } catch (err) {
+        // 监听者异常不阻断其余监听者与状态广播
+        logger.warn({ scope: 'auto-updater', error: String(err) }, '状态监听器执行失败');
+      }
+    }
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
         emitEvent(win.webContents, IPC_DEFINITIONS.update.subscribeStatus, payload);

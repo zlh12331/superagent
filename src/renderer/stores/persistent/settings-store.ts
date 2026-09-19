@@ -214,6 +214,18 @@ export interface UpdateSettings {
 }
 
 /**
+ * 窗口行为设置（docs/design/28-tray-spec.md §3/§7）
+ *
+ * closeAction 是关窗语义：minimize（默认）= 点 X 隐藏到托盘、后台能力继续；
+ * quit = 点 X 走关窗协商后退出。主进程在关窗事件中实时读取（readSetting），
+ * 渲染层的写穿透只负责持久化与设置页回显。
+ */
+export interface WindowSettings {
+  /** 点 X 的行为（默认 minimize） */
+  readonly closeAction: 'quit' | 'minimize';
+}
+
+/**
  * 应用界面语言
  *
  * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
@@ -248,6 +260,8 @@ interface SettingsData {
   readonly memory: MemorySettings;
   /** 自动更新（自动检查开关） */
   readonly update: UpdateSettings;
+  /** 窗口行为（关窗语义） */
+  readonly window: WindowSettings;
 }
 
 /**
@@ -277,6 +291,8 @@ interface SettingsState extends SettingsData {
   readonly updateMemory: (patch: Partial<MemorySettings>) => void;
   /** 更新自动更新设置（写穿透 SQLite；主进程下次启动读取生效） */
   readonly setUpdate: (patch: Partial<UpdateSettings>) => void;
+  /** 更新窗口行为设置（写穿透 SQLite；主进程关窗事件实时读取） */
+  readonly setWindow: (patch: Partial<WindowSettings>) => void;
 }
 
 /**
@@ -393,6 +409,9 @@ const DEFAULT_SETTINGS: SettingsData = {
     autoCheck: true,
     skippedVersion: null,
   },
+  window: {
+    closeAction: 'minimize',
+  },
 };
 
 /**
@@ -474,6 +493,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     set({ update });
     persistSetting('update', update);
   },
+  setWindow: (patch) => {
+    const window = { ...useSettingsStore.getState().window, ...patch };
+    set({ window });
+    persistSetting('window', window);
+  },
 }));
 
 /**
@@ -521,6 +545,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     update: {
       ...DEFAULT_SETTINGS.update,
       ...((snapshot['update'] as Partial<UpdateSettings> | undefined) ?? {}),
+    },
+    window: {
+      ...DEFAULT_SETTINGS.window,
+      ...((snapshot['window'] as Partial<WindowSettings> | undefined) ?? {}),
     },
   });
 }
