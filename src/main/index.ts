@@ -61,7 +61,7 @@ import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { mountTurnNotifications } from './notification';
-import { isCloseConfirmed, setCloseConfirmed } from './quit-state';
+import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
 import { buildCsp } from './security/csp';
 import {
   disposeServices,
@@ -503,14 +503,15 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // 应用退出前统一清理所有服务（设计文档 §1.1 应用生命周期 / §7.6 生命周期管理）
 // P3-10 改造：disposeServices 内部调用 ChatService.dispose() 等待所有活跃 stream 真正完成
 // （带 3s 超时兜底），避免进程退出时正在进行的 IPC send 丢失 / 渲染层 loading 状态卡死
-// 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理
-let isQuitting = false;
+// 防重入标志：app.exit(0) 可能再次触发 before-quit，避免重复清理。
+// 用 ./quit-state 的进程级标志——window.ts close 协商依赖 isQuitting() 区分
+// 「用户点 X」与「退出流程中的窗口销毁」（后者放行，不做最小化劫持）
 // IM 渠道初始化 Promise（whenReady 内赋值；before-quit 等待其落定，见下）
 let imChannelsInit: Promise<void> | null = null;
 // 事件循环延迟监控器（whenReady 内赋值；before-quit 停止）
 let lagMonitor: EventLoopLagMonitor | null = null;
 app.on('before-quit', async (event) => {
-  if (isQuitting) {
+  if (isQuitting()) {
     return;
   }
   // ── 进程级关窗协商（覆盖 macOS Cmd+Q / app.quit() 路径）──
@@ -537,7 +538,7 @@ app.on('before-quit', async (event) => {
   }
   // preventDefault 必须在事件循环开始处同步调用，确保能阻止默认退出
   event.preventDefault();
-  isQuitting = true;
+  setQuitting();
   try {
     // 事件循环延迟监控先停（避免退出路径上仍产生告警样本）
     lagMonitor?.stop();

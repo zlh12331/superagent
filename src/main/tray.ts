@@ -106,25 +106,44 @@ let tray: Tray | null = null;
 let deps: TrayDeps | null = null;
 
 /**
- * 创建系统托盘（幂等：已存在则复用）
+ * 创建托盘图标
  *
- * 在 whenReady 后调用（Tray 构造需要 app ready）。应用退出时随进程回收。
+ * macOS：优先加载 template 图标（trayTemplate[_@2x].png，系统自动深浅色适配）；
+ *        无 template 资源时回退到常规彩色图标。
+ * Windows/Linux：加载常规彩色图标。
  */
+function createTrayImage(): Electron.NativeImage {
+  const resourcesDir = join(app.getAppPath(), 'resources/icons');
+
+  if (process.platform === 'darwin') {
+    // macOS template 图标：黑色轮廓 + alpha 通道，系统自动深浅色适配
+    const template2x = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate@2x.png'));
+    if (!template2x.isEmpty()) {
+      template2x.setTemplateImage(true);
+      return template2x;
+    }
+    const template1x = nativeImage.createFromPath(join(resourcesDir, 'trayTemplate.png'));
+    if (!template1x.isEmpty()) {
+      template1x.setTemplateImage(true);
+      return template1x;
+    }
+    // 无 template 资源：回退常规图标
+    logger.info({}, 'macOS template 图标不存在，回退常规图标');
+  }
+
+  const iconPath = join(resourcesDir, 'icon.png');
+  const image = nativeImage.createFromPath(iconPath);
+  const fallback = nativeImage.createEmpty();
+  return image.isEmpty() ? fallback : image.resize({ width: 16, height: 16 });
+}
 export function createTray(trayDeps: TrayDeps): void {
   if (tray !== null) {
     return; // 已创建（如 macOS activate 重建窗口路径），复用
   }
   deps = trayDeps;
 
-  // 图标：暂用应用图标（icon.png，随应用打包在 resources/icons/）缩到 16×16；
-  // 状态视觉变体（角标）需要设计资源，列 P2（见 28-tray-spec §5 角标实现口径）。
-  // 缺图时 nativeImage 空图会静默崩溃窗口，故创建失败则回退默认（Electron 默认图标）。
-  const iconPath = join(app.getAppPath(), 'resources/icons/icon.png');
-  const image = nativeImage.createFromPath(iconPath);
-  const trayImage = image.isEmpty()
-    ? nativeImage.createEmpty()
-    : image.resize({ width: 16, height: 16 });
-
+  // macOS 优先 template 图标（系统自动深浅色），无则回退常规彩色图标
+  const trayImage = createTrayImage();
   tray = new Tray(trayImage);
   updateTrayPresentation();
 

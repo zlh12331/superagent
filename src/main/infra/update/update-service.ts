@@ -394,6 +394,11 @@ export class UpdateService implements IUpdateService {
     this.cancelToken = null;
     this.pendingVersion = null;
     this.pendingReleaseNotes = null;
+    // dispose 发生在退出链中（disposeServices），此后 runDeferredInstall 只读
+    // quitForUpdatePending 拉起安装器、不再广播，故监听者在此一并释放；
+    // quitForUpdatePending 必须跨 dispose 保留（先于本方法在 quitAndInstall 置位），
+    // 若在此清除，Windows 更新安装会在退出链末端被静默吞掉
+    this.statusListeners.clear();
   }
 
   /** 注册 autoUpdater 事件监听（事件 → payload 推送 + 快照） */
@@ -509,8 +514,13 @@ export class UpdateService implements IUpdateService {
       }
     }
     for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        emitEvent(win.webContents, IPC_DEFINITIONS.update.subscribeStatus, payload);
+      try {
+        if (!win.isDestroyed()) {
+          emitEvent(win.webContents, IPC_DEFINITIONS.update.subscribeStatus, payload);
+        }
+      } catch (err) {
+        // 单窗口广播失败（如 webContents 已销毁的竞态窗口）不阻断其余窗口
+        logger.warn({ scope: 'auto-updater', error: String(err) }, '状态窗口广播失败');
       }
     }
   }
