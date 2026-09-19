@@ -22,6 +22,15 @@ import type { UpdateCacheInfo } from '@code-agent/shared/main';
 /** app-update.yml 中的缓存目录名（行首键，值为单个 token 或带引号） */
 const CACHE_DIR_NAME_RE = /^updaterCacheDirName:\s*(.+?)\s*$/m;
 
+/**
+ * 目录名白名单：仅允许字母数字/点/下划线/连字符
+ *
+ * 该值虽由我们打包时生成（app-update.yml 随应用分发），此处仍做白名单校验——
+ * 纵深防御：拒绝路径穿越（如 `../evil`）与任意形态的值，保证派生路径必然
+ * 落在平台缓存根之下。
+ */
+const CACHE_DIR_NAME_SAFE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 /** electron-updater 的缓存根（对齐 AppAdapter.getAppCacheDir） */
 function getAppCacheRoot(): string {
   if (process.platform === 'win32') {
@@ -52,7 +61,7 @@ export async function resolveUpdaterCacheDir(
     return null;
   }
   const dirName = yml.match(CACHE_DIR_NAME_RE)?.[1]?.replace(/^['"]|['"]$/g, '');
-  if (dirName === undefined || dirName === '') {
+  if (dirName === undefined || dirName === '' || !CACHE_DIR_NAME_SAFE_RE.test(dirName)) {
     return null;
   }
   return join(cacheRoot, dirName);

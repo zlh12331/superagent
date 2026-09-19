@@ -23,7 +23,8 @@ import type {
   UpdateStatusPayload,
 } from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import { setCloseConfirmed } from '../../quit-state';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
 
@@ -161,8 +162,17 @@ export interface IUpdateService {
   cancelDownload(): void;
   /** 状态快照与上次检查时间（渲染层重载后恢复界面用；从未产生过分别为 null） */
   getStatus(): UpdateGetStatusRes;
-  /** 安装已下载的更新并重启（静默安装 + 装完自动启动） */
+  /**
+   * 请求安装已下载的更新（静默安装 + 装完自动启动）
+   *
+   * Windows 上是"两段式"：本方法只置标记并触发退出（渲染层入口已确认过"重启会
+   * 中断任务"，故同时置关闭协商标志）；真正的静默安装在退出善后完成、文件锁
+   * 释放之后由 runDeferredInstall 发起——消除「无法关闭」弹窗竞态（见 §14.6）。
+   * 非 Windows 保持库的原生路径。定位不到待装产物时回退为库的立即安装。
+   */
   quitAndInstall(): void;
+  /** 退出链末端调用（index.ts）：此前请求过安装则此刻拉起静默安装器 */
+  runDeferredInstall(): void;
   /** 释放资源（清挂起定时器；在途下载留给 pending 缓存续传） */
   dispose(): void;
 }
@@ -210,6 +220,9 @@ export class UpdateService implements IUpdateService {
 
   /** 开发模式更新调试是否生效（生效后 isPackaged 不再是硬门槛） */
   private devUpdateForced = false;
+
+  /** Windows：已请求"退出后静默安装"（退出链末端由 runDeferredInstall 拉起安装器） */
+  private quitForUpdatePending = false;
 
   constructor(
     private readonly updater: AutoUpdaterLike,
@@ -333,7 +346,31 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   quitAndInstall(): void {
-    // 静默安装 + 装完自动启动（对齐"重启即装"的按钮文案；per-user 安装不弹 UAC）
+    // Windows：两段式——本方法只置标记并触发退出，真正的静默安装在退出善后
+    // 完成（文件锁释放）后由 runDeferredInstall 发起。electron-updater 的
+    // quitAndInstall 是"先 spawn 安装器、后 app.quit()"，而 NSIS 辅助安装器启动
+    // 即尝试关闭应用，旧卸载器重试 5 次等不到退出就会弹「无法关闭。请手动关闭
+    // 它…」（1.1.2→1.2.0 实测出现）。先退出消除竞态。
+    if (process.platform === 'win32') {
+      this.quitForUpdatePending = true;
+      // 渲染层入口已确认「重启会中断任务」：置关闭协商标志，退出链不再重复弹窗
+      setCloseConfirmed();
+      app.quit();
+      return;
+    }
+    // 非 Windows 保持库的原生路径（mac 解包替换 / AppImage 替换自身，无此竞态）
+    this.updater.quitAndInstall(true, true);
+  }
+
+  /** @inheritDoc */
+  runDeferredInstall(): void {
+    if (!this.quitForUpdatePending) {
+      return;
+    }
+    this.quitForUpdatePending = false;
+    // 此刻应用已完全退出（文件锁释放），静默安装不会遇到「无法关闭」；
+    // 装完自动启动（--force-run）
+    logger.info({ scope: 'auto-updater' }, '应用已退出，拉起静默安装器');
     this.updater.quitAndInstall(true, true);
   }
 

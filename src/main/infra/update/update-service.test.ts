@@ -3,15 +3,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // mock electron：BrowserWindow.getAllWindows（事件推送目标窗口）
-const { mockGetAllWindows } = vi.hoisted(() => ({
+const { mockGetAllWindows, mockAppQuit } = vi.hoisted(() => ({
   mockGetAllWindows: vi.fn(),
+  mockAppQuit: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
   // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { getAllWindows: mockGetAllWindows },
+  ['app']: { quit: mockAppQuit },
 }));
 
+import { isCloseConfirmed } from '../../quit-state';
 import {
   type AutoUpdaterLike,
   type CancellationTokenLike,
@@ -534,9 +537,27 @@ describe('UpdateService', () => {
   });
 
   describe('quitAndInstall', () => {
-    it('静默安装 + 装完自动启动（isSilent=true, isForceRunAfter=true）', () => {
-      service.quitAndInstall();
+    it('非 Windows：走库的静默安装（isSilent=true, isForceRunAfter=true）', async () => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      await service.quitAndInstall();
       expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+    });
+
+    it('Windows：置退出后安装标记、置关闭协商标志并触发退出；退出链末端经 runDeferredInstall 静默安装', async () => {
+      await service.quitAndInstall();
+      expect(updater.quitAndInstall).not.toHaveBeenCalled();
+      expect(mockAppQuit).toHaveBeenCalledOnce();
+      expect(isCloseConfirmed()).toBe(true);
+      // 退出善后完成（dispose 已跑）后：拉起静默安装器
+      service.dispose();
+      service.runDeferredInstall();
+      expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    });
+
+    it('Windows：未请求安装时 runDeferredInstall 为空操作', () => {
+      service.runDeferredInstall();
+      expect(updater.quitAndInstall).not.toHaveBeenCalled();
     });
   });
 
