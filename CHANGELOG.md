@@ -2,6 +2,16 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.2.1](https://github.com/zlh12331/superagent/compare/v1.2.0...v1.2.1) (2026-09-19)
+
+### 修复
+
+- **更新安装不再弹「无法关闭」**：修复点击「重启并安装」后安装器提示无法关闭应用、
+  需要手动关闭再重试的问题——现在应用会先完全退出，再自动运行安装并重新启动，
+  全程无需手动干预（[#49](https://github.com/zlh12331/superagent/issues/49)）
+- **更新状态订阅去重**：修复关于面板与顶栏指示各自重复订阅更新状态、导致启动期
+  多余请求的问题（[#49](https://github.com/zlh12331/superagent/issues/49)）
+
 ## [1.2.0](https://github.com/zlh12331/superagent/compare/v1.1.2...v1.2.0) (2026-09-18)
 
 > 本版本为应用加入了完整的自动更新能力：打开应用即自动检查新版本，下载进度可见也可随时取消，更新在退出时自动安装。
