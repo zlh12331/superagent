@@ -207,6 +207,11 @@
 
 已实现：`update:getCacheInfo` / `update:clearCache` 两个 IPC；主进程 `infra/update/update-cache.ts` 按 electron-updater 的口径解析目录（缓存根 `LOCALAPPDATA` / `~/Library/Caches` / `XDG_CACHE_HOME`，目录名取 `app-update.yml` 的 `updaterCacheDirName`），**解析不到即 path=null、界面隐藏该行**（不猜路径、不误删）；清理前走统一 `confirm()` 并说明全量代价。
 
+**差分基准一致性看护（2026-09-19 新增，见 §14.7）**：`installer.exe`（基准安装包）与
+`current.blockmap`（基准块图）可能版本错位（手动安装新版、全量回退后缓存残留等），此时
+差分重建必然 sha512 失败并回退全量。每次发起下载前 `pruneStaleDifferentialBaseline()`
+校验两者总大小，不一致即剔除陈旧块图（库随即下载与基准包同版本的块图，差分得以继续）。
+
 ## 10. 已拍板项
 
 | 项 | 结论 | 说明 |
@@ -349,3 +354,44 @@ app.quit()"，而 NSIS 辅助安装器（`oneClick: false`）启动即尝试关�
   注意会真实访问 GitHub Releases，Windows 首次会整包下载（约 328MB）。
 - 验证：main 更新域 52 项测试通过（新增 2 项：默认 dev 不调度且 `forceDevUpdateConfig=false`；
   置位后放行调度与手动检查）；`pnpm typecheck` / `lint` / `check:static` / `knip` / `test` 全绿。
+
+### 14.7 真机三问题取证与修复（2026-09-19，用户反馈）
+
+用户反馈三件事：① 差分是否真的实现；② 重启安装时后台进程没退干净、安装失败弹窗；
+③ 差分"下载完"后又下了一遍全量。用用户机上的真实日志与缓存文件逐项取证，结论与修复：
+
+**① 差分已实现且本次真实走了差分**（此前 §14.6 的"无法确证"至此有了确证）：
+`main.log` 记录 `File has 1019 changed blocks` / `To download: 20,775 KB (6%)`，
+即库确实按差分只下 6% 的块；且缓存的 `installer.exe`（基准包）sha512 与 v1.2.1
+发布资产**逐字节一致**，基准前置条件成立。
+
+**② 陈旧块图导致差分重建失败 → 自动回退全量（即用户看到的"下两遍"）**：
+日志 `Cannot download differentially, fallback to full download: sha512 checksum
+mismatch, expected jAZlt…(v1.3.0), got kQysv…`。**根因经可复现实验锁定**：
+缓存的 `current.blockmap` 描述的是 **v1.3.0**（总大小 328,513,551，即上次下载时刷新），
+而基准包 `installer.exe` 是 **v1.2.1**（328,509,173）——两者版本错位，重建出的文件
+必然不是 v1.3.0。实验：用 v1.2.0 块图 + 本机基准包重放差分计划，**逐字节复现出日志
+中的 got 哈希 `kQysv…`，且 changed blocks 数恰为 1019**（与日志完全吻合）；用 v1.2.1
+块图重放则得到 expected `jAZlt…`。至此因果链闭合，非猜测。
+修复：下载前 `pruneStaleDifferentialBaseline()`（§9）校验块图与基准包总大小，
+不一致即剔除块图 → 库改从 release 拉与基准包同版本的块图 → 差分恢复正常
+（剔除后最坏退化为与库原行为相同的全量下载，不会更差）。
+
+**③ 退出后静默安装实际未生效**（用户感知为"进程没退干净导致安装失败"）：
+用户机 `main.log` 末次安装走的是 electron-updater 自身的 `Auto install update on
+quit`（`isForceRunAfter: false`），而我们 1.2.x 的退出链**根本没有接线
+`runDeferredInstall()`**——`git grep` 证实该方法仅存在于 update-service.ts 与
+其测试，index.ts 直到 v1.3.0 才加入调用。**且 v1.3.0 的接线也是无效的**：
+`before-quit` 在 `disposeServices()` **之后**才调 `getUpdateService()`，而容器
+dispose 会把 `updateService` 引用置空，取到的是**惰性新建的实例**——实例字段上的
+挂起标志恒为 false，`runDeferredInstall()` 直接空返回。修复：挂起标志移交
+`quit-state.ts` 模块级（`requestDeferredInstall` / `isDeferredInstallPending` /
+`clearDeferredInstall`），跨实例、跨 dispose 存活；新增回归锚「挂起标志跨实例可见」。
+副作用：NSIS 安装器的进程检查（`allowOnlyOneInstallerInstance.nsh`：进程可见时
+Sleep 1s 后 force kill，命不到才弹 `appCannotBeClosed`）在延迟安装路径下应当能
+自行通过；若仍出现弹窗，可用 `CODE_AGENT_SKIP_CLOSE_GUARD=1` 之外的现场日志继续定位。
+
+**验证**：`update-service.test.ts` / `update-cache.test.ts` 共 59 项通过（新增 4 项：
+跨实例挂起标志、陈旧基线剔除、一致基线保留、无基线/损坏块图不抛错）；用本机真实缓存
+文件跑真实实现，判定为"陈旧（剔除）"符合预期；`pnpm typecheck` / `lint` /
+`check:static` / `knip` / `test` 全绿。真机升级验证仍需下次发版后回归。

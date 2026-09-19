@@ -2,19 +2,21 @@
 // UpdateService 单测：事件桥接 / 启动调度与退避 / 开关 / 进度透传 / 快照 / 取消 / 静默安装
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// mock electron：BrowserWindow.getAllWindows（事件推送目标窗口）
-const { mockGetAllWindows, mockAppQuit } = vi.hoisted(() => ({
+// mock electron：BrowserWindow.getAllWindows（事件推送目标窗口）、app.quit（退出触发）、
+// app.getAppPath（差分基线的开发版缓存目录解析，测试下返回不存在路径即跳过）
+const { mockGetAllWindows, mockAppQuit, mockGetAppPath } = vi.hoisted(() => ({
   mockGetAllWindows: vi.fn(),
   mockAppQuit: vi.fn(),
+  mockGetAppPath: vi.fn(() => '/nonexistent-app-path'),
 }));
 
 vi.mock('electron', () => ({
   // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { getAllWindows: mockGetAllWindows },
-  ['app']: { quit: mockAppQuit },
+  ['app']: { quit: mockAppQuit, getAppPath: mockGetAppPath },
 }));
 
-import { isCloseConfirmed } from '../../quit-state';
+import { clearDeferredInstall, isCloseConfirmed } from '../../quit-state';
 import {
   type AutoUpdaterLike,
   type CancellationTokenLike,
@@ -98,6 +100,8 @@ describe('UpdateService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    // 挂起标志（模块级，跨实例共享）：逐测清零，防用例间串味
+    clearDeferredInstall();
     updater = createFakeUpdater();
     tokens = [];
     service = new UpdateService(
@@ -114,6 +118,7 @@ describe('UpdateService', () => {
 
   afterEach(() => {
     service.dispose();
+    clearDeferredInstall();
     vi.useRealTimers();
   });
 
@@ -225,13 +230,16 @@ describe('UpdateService', () => {
   });
 
   describe('事件 → payload', () => {
-    it('update-available → available payload，并以自持 token 发起下载', () => {
+    it('update-available → available payload，并以自持 token 发起下载', async () => {
       const win = createFakeWindow();
       mockGetAllWindows.mockReturnValue([win]);
       service.start();
       fire(updater, 'update-available', { version: '1.2.0' });
       expect(lastPayload(win)).toEqual({ phase: 'available', version: '1.2.0' });
-      expect(updater.downloadUpdate).toHaveBeenCalledOnce();
+      // 发起下载前有一步异步的差分基线检查（文件 I/O），下载在其后开始
+      await vi.waitFor(() => {
+        expect(updater.downloadUpdate).toHaveBeenCalledOnce();
+      });
       expect(tokens).toHaveLength(1);
       expect(updater.downloadUpdate).toHaveBeenCalledWith(tokens[0]);
     });
@@ -558,6 +566,31 @@ describe('UpdateService', () => {
     it('Windows：未请求安装时 runDeferredInstall 为空操作', () => {
       service.runDeferredInstall();
       expect(updater.quitAndInstall).not.toHaveBeenCalled();
+    });
+
+    it('Windows：挂起标志跨实例可见（退出链末端取到的是 dispose 后惰性新建的实例）', async () => {
+      // 回归锚：挂起标志若退回实例字段，容器 dispose 置空引用后新建的实例
+      // 看不到标记，退出链末端安装被静默吞掉（2026-09-19 实测：点「重启并安装」
+      // 应用退出但安装器从未拉起）
+      await service.quitAndInstall();
+      service.dispose();
+      const freshUpdater = createFakeUpdater();
+      const freshService = new UpdateService(
+        freshUpdater,
+        () => true,
+        () => createFakeToken(),
+      );
+      freshService.runDeferredInstall();
+      expect(freshUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+      // 标志已被消费：再次执行为空操作（不重复拉起安装器）
+      const secondUpdater = createFakeUpdater();
+      const secondService = new UpdateService(
+        secondUpdater,
+        () => true,
+        () => createFakeToken(),
+      );
+      secondService.runDeferredInstall();
+      expect(secondUpdater.quitAndInstall).not.toHaveBeenCalled();
     });
   });
 

@@ -36,3 +36,26 @@ export function isQuitting(): boolean {
 export function setQuitting(): void {
   quitting = true;
 }
+
+// ── 退出后安装挂起标志（Windows 两段式安装）──
+// 为什么必须模块级而非 UpdateService 实例字段：退出链末端（index.ts）在
+// disposeServices() 之后才调用 getUpdateService()，而容器 dispose 会把
+// updateService 引用置空——此后取出的是惰性新建的实例，实例字段上的挂起标志
+// 恒为 false，安装会被静默吞掉（2026-09-19 实测：点「重启并安装」应用退出但
+// 安装器从未拉起，用户侧表现为安装失败）。
+let deferredInstallPending = false;
+
+/** 标记「用户已请求退出后静默安装」（UpdateService.quitAndInstall 置位） */
+export function requestDeferredInstall(): void {
+  deferredInstallPending = true;
+}
+
+/** 是否有待执行的退出后静默安装 */
+export function isDeferredInstallPending(): boolean {
+  return deferredInstallPending;
+}
+
+/** 清除挂起标志（拉起安装器时调用；测试清理亦用） */
+export function clearDeferredInstall(): void {
+  deferredInstallPending = false;
+}

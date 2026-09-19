@@ -16,6 +16,7 @@
 import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 import type { UpdateCacheInfo } from '@code-agent/shared/main';
 
@@ -45,17 +46,19 @@ function getAppCacheRoot(): string {
 /**
  * 解析更新缓存目录
  *
- * @param resourcesPath 打包资源目录（process.resourcesPath；其中含 app-update.yml）
+ * @param resourcesPath 含配置文件的目录（打包版 process.resourcesPath；开发版 app.getAppPath()）
  * @param cacheRoot 缓存根（默认按平台推导；测试注入临时目录，避免触碰真实缓存）
+ * @param ymlFileName 配置文件名（打包版 app-update.yml；开发版 dev-app-update.yml）
  * @returns 缓存目录绝对路径；无法解析时为 null
  */
 export async function resolveUpdaterCacheDir(
   resourcesPath: string,
   cacheRoot: string = getAppCacheRoot(),
+  ymlFileName: string = 'app-update.yml',
 ): Promise<string | null> {
   let yml: string;
   try {
-    yml = await readFile(join(resourcesPath, 'app-update.yml'), 'utf8');
+    yml = await readFile(join(resourcesPath, ymlFileName), 'utf8');
   } catch {
     // 无 app-update.yml（开发模式）或读取失败：不展示、不清理
     return null;
@@ -137,4 +140,77 @@ export async function clearUpdateCache(
   }
   await rm(dir, { recursive: true, force: true });
   return { path: dir, bytes: 0, fileCount: 0 };
+}
+
+/** 基线剔除结果：pruned=已剔除陈旧块图；consistent=与基准同版本；absent=无基线文件可用 */
+export type BaselinePruneResult = 'pruned' | 'consistent' | 'absent';
+
+/**
+ * 剔除陈旧的差分基准块图
+ *
+ * 背景（2026-09-19 实测根因）：electron-updater 差分重建时，旧块图优先取自
+ * 缓存根目录的 current.blockmap，而基准安装包是 NSIS 安装时写入的
+ * installer.exe。两者版本错位时（如手动安装新版，或旧块图残留），重建必然
+ * sha512 校验失败并回退全量——用户侧表现为「明明差分下完又重下一遍 300MB」。
+ * 实测：块图=v1.2.0、基准包=v1.2.1 时 1019 个变更块全部错位，重建产物哈希
+ * 与日志中的失败值逐字节一致。
+ *
+ * 处理：总块大小与 installer.exe 不一致即剔除块图（库随后会按当前版本从
+ * release 重新下载匹配的旧块图，差分得以继续；剔除阻塞下载时最坏退化为
+ * 与库原行为相同的全量下载）。块图无法解析同样剔除。
+ *
+ * @param cacheDir 更新缓存目录（resolveUpdaterCacheDir 的结果）
+ */
+export async function pruneStaleDifferentialBaseline(
+  cacheDir: string,
+): Promise<BaselinePruneResult> {
+  const blockMapPath = join(cacheDir, 'current.blockmap');
+  const installerPath = join(cacheDir, 'installer.exe');
+  const [installerInfo, blockMapTotal] = await Promise.all([
+    stat(installerPath).catch(() => null),
+    readBlockMapTotalSize(blockMapPath),
+  ]);
+  // 无基准安装包（从未安装过/被清理）：差分本就无从谈起，不处理
+  if (installerInfo === null) {
+    return 'absent';
+  }
+  // 块图缺失：库会自行下载与当前版本匹配的旧块图，无需处理
+  if (blockMapTotal === null) {
+    return 'absent';
+  }
+  if (blockMapTotal === installerInfo.size) {
+    return 'consistent';
+  }
+  await rm(blockMapPath, { force: true });
+  return 'pruned';
+}
+
+/**
+ * 读取块图描述的完整文件大小（sizes 求和）
+ *
+ * 块图为 gzip(JSON)；任何读取/解析失败返回 null（调用方视为不可用）。
+ */
+async function readBlockMapTotalSize(blockMapPath: string): Promise<number | null> {
+  try {
+    const raw = await readFile(blockMapPath);
+    const parsed: unknown = JSON.parse(gunzipSync(raw).toString('utf8'));
+    const files = (parsed as { files?: unknown }).files;
+    if (!Array.isArray(files) || files.length === 0) {
+      return null;
+    }
+    const sizes = (files[0] as { sizes?: unknown }).sizes;
+    if (!Array.isArray(sizes) || sizes.length === 0) {
+      return null;
+    }
+    let total = 0;
+    for (const size of sizes) {
+      if (typeof size !== 'number') {
+        return null;
+      }
+      total += size;
+    }
+    return total;
+  } catch {
+    return null;
+  }
 }

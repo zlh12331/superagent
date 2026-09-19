@@ -24,9 +24,15 @@ import type {
 } from '@code-agent/shared/main';
 import { IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { app, BrowserWindow } from 'electron';
-import { setCloseConfirmed } from '../../quit-state';
+import {
+  clearDeferredInstall,
+  isDeferredInstallPending,
+  requestDeferredInstall,
+  setCloseConfirmed,
+} from '../../quit-state';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
+import { pruneStaleDifferentialBaseline, resolveUpdaterCacheDir } from './update-cache';
 
 /** 启动检查延迟（窗口就绪后再发起，避开启动期资源争抢） */
 const LAUNCH_CHECK_DELAY_MS = 5_000;
@@ -226,9 +232,6 @@ export class UpdateService implements IUpdateService {
   /** 开发模式更新调试是否生效（生效后 isPackaged 不再是硬门槛） */
   private devUpdateForced = false;
 
-  /** Windows：已请求"退出后静默安装"（退出链末端由 runDeferredInstall 拉起安装器） */
-  private quitForUpdatePending = false;
-
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly isPackaged: () => boolean,
@@ -365,7 +368,9 @@ export class UpdateService implements IUpdateService {
     // 即尝试关闭应用，旧卸载器重试 5 次等不到退出就会弹「无法关闭。请手动关闭
     // 它…」（1.1.2→1.2.0 实测出现）。先退出消除竞态。
     if (process.platform === 'win32') {
-      this.quitForUpdatePending = true;
+      // 挂起标志存 quit-state（模块级）：退出链末端取到的 UpdateService 可能是
+      // 容器 dispose 后惰性新建的实例，实例字段会丢失（见 quit-state 注释）
+      requestDeferredInstall();
       // 渲染层入口已确认「重启会中断任务」：置关闭协商标志，退出链不再重复弹窗
       setCloseConfirmed();
       app.quit();
@@ -377,10 +382,10 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   runDeferredInstall(): void {
-    if (!this.quitForUpdatePending) {
+    if (!isDeferredInstallPending()) {
       return;
     }
-    this.quitForUpdatePending = false;
+    clearDeferredInstall();
     // 此刻应用已完全退出（文件锁释放），静默安装不会遇到「无法关闭」；
     // 装完自动启动（--force-run）
     logger.info({ scope: 'auto-updater' }, '应用已退出，拉起静默安装器');
@@ -395,9 +400,9 @@ export class UpdateService implements IUpdateService {
     this.pendingVersion = null;
     this.pendingReleaseNotes = null;
     // dispose 发生在退出链中（disposeServices），此后 runDeferredInstall 只读
-    // quitForUpdatePending 拉起安装器、不再广播，故监听者在此一并释放；
-    // quitForUpdatePending 必须跨 dispose 保留（先于本方法在 quitAndInstall 置位），
-    // 若在此清除，Windows 更新安装会在退出链末端被静默吞掉
+    // 挂起标志拉起安装器、不再广播，故监听者在此一并释放。
+    // 挂起标志本身在 quit-state 模块级（不随实例释放丢失）——若它是实例字段，
+    // 退出链末端惰性新建的实例会看不到标记，Windows 更新安装被静默吞掉
     this.statusListeners.clear();
   }
 
@@ -455,8 +460,23 @@ export class UpdateService implements IUpdateService {
   private beginDownload(): void {
     const token = this.createCancellationToken();
     this.cancelToken = token;
-    void this.updater
-      .downloadUpdate(token)
+    void (async (): Promise<void> => {
+      // 差分基线一致性：基准块图与基准安装包不同版本时，差分重建必然 sha512
+      // 失败并回退全量（1.2.1→1.3.0 实测：1019 块全错、328MB 重下）——
+      // 先剔除陈旧块图表，让库下载与基准文件同版本的块图
+      await this.ensureDifferentialBaseline();
+      if (token.cancelled) {
+        // 检查窗口内被取消：下载尚未发起，库不会推 update-cancelled，自行收尾
+        // （否则界面停在下载中态；语义与库事件分支一致）
+        const version = this.pendingVersion;
+        this.cancelToken = null;
+        this.pendingVersion = null;
+        this.pendingReleaseNotes = null;
+        this.emit({ phase: 'cancelled', ...(version !== null ? { version } : {}) });
+        return;
+      }
+      await this.updater.downloadUpdate(token);
+    })()
       .catch((error: unknown) => {
         // 用户取消：库会推 update-cancelled，这里不再重复报错
         if (token.cancelled) {
@@ -472,6 +492,46 @@ export class UpdateService implements IUpdateService {
           this.cancelToken = null;
         }
       });
+  }
+
+  /**
+   * 差分基线一致性（下载前）
+   *
+   * 解析更新缓存目录（打包版 app-update.yml / 开发版 dev-app-update.yml）并剔除
+   * 与基准安装包不同版本的 current.blockmap。任何异常只记日志，绝不阻塞下载。
+   */
+  private async ensureDifferentialBaseline(): Promise<void> {
+    try {
+      const cacheDir = await this.resolveUpdateCacheDir();
+      if (cacheDir === null) {
+        return;
+      }
+      if ((await pruneStaleDifferentialBaseline(cacheDir)) === 'pruned') {
+        logger.info(
+          { scope: 'auto-updater' },
+          '基准块图与基准安装包版本不一致，已剔除陈旧块图（改从 release 取匹配基准，避免差分失败回退全量）',
+        );
+      }
+    } catch (err) {
+      logger.warn({ scope: 'auto-updater', error: String(err) }, '差分基线一致性检查失败，跳过');
+    }
+  }
+
+  /**
+   * 解析更新缓存目录
+   *
+   * 打包版读 process.resourcesPath/app-update.yml；开发版（resourcesPath 不存在
+   * 或未命中）读 app.getAppPath()/dev-app-update.yml。均未命中返回 null。
+   */
+  private async resolveUpdateCacheDir(): Promise<string | null> {
+    const resourcesPath: unknown = process.resourcesPath;
+    if (typeof resourcesPath === 'string' && resourcesPath.length > 0) {
+      const fromPackaged = await resolveUpdaterCacheDir(resourcesPath);
+      if (fromPackaged !== null) {
+        return fromPackaged;
+      }
+    }
+    return await resolveUpdaterCacheDir(app.getAppPath(), undefined, 'dev-app-update.yml');
   }
 
   /** 进度事件 → payload（透传字节与速率；差分下载时 total 为差分包大小） */
