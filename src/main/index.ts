@@ -319,8 +319,14 @@ app
 
     // 启动自动更新服务（注册 autoUpdater 事件 → 推送渲染层）
     // 启动检查按用户设置调度（settings.update.autoCheck；缺失/损坏视为开）；
-    // 非打包环境内部直接跳过调度，仅注册监听
-    serviceContainer.getUpdateService().start({ autoCheckEnabled: isAutoCheckEnabled });
+    // 非打包环境内部直接跳过调度，仅注册监听。
+    // dev 更新调试接线：CODE_AGENT_DEV_UPDATE=1 时置 forceDevUpdateConfig，
+    // electron-updater 改读 dev-app-update.yml，dev 也能跑通检查/下载链路
+    // （启用契约见 dev-app-update.yml 头注释；缺省关闭，dev 不发起任何更新请求）
+    serviceContainer.getUpdateService().start({
+      autoCheckEnabled: isAutoCheckEnabled,
+      devUpdateEnabled: process.env['CODE_AGENT_DEV_UPDATE'] === '1',
+    });
 
     // 注入 CSP 响应头（P1-5 安全基线）
     // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）

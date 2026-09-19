@@ -20,8 +20,8 @@ import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
-/** toast 文案函数的最小结构类型（解耦 react-i18next 的 TFunction 泛型） */
-type Translate = (key: string, options?: Record<string, string>) => string;
+/** toast 文案函数类型（从 useTranslation 返回值反推，避免手抄 TFunction 泛型） */
+type Translate = ReturnType<typeof useTranslation>['t'];
 
 /**
  * 阶段 → toast 分派（模块级纯函数）
