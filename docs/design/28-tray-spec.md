@@ -67,6 +67,9 @@ Windows/Linux 直接 `app.quit()`——窗口一关，进程退出，以上全�
   cron）不经过 Chromium 调度，**不受节流影响**，后台能力完整。
 - **darwin 不参与**：macOS 原生惯例即"关窗不退出"（Cmd+Q 才退出），不读
   `closeAction`，保持平台行为。
+- **驻留模式下的系统关机 / 注销边界**：Windows 会话结束时驻留进程被系统终止，
+  异步善后链可能跑不完——由**既有的崩溃恢复语义兜底**（`.crash-marker` +
+  启动期 `recoverFromCrash()`，running 回合标 interrupted），不为此新增处理。
 
 ### 3.3 首次最小化的引导
 
@@ -122,27 +125,43 @@ tooltip 同步携带状态文本（如「运行中 · 修复登录页」/「有�
 
 - 「重启并安装」复用已落地的两段式安装链路（quit-for-update → 退出链末端拉起）。
 - 「退出」保持走完整善后链（不变）。
+- 「开机自启 ☑」与设置 → 通用的开关**同源**（读写 OS 登录项），两处任一变更
+  另一处回显自动一致（无缓存）。
 - 菜单文案不再硬编码：托盘模块内置 `zh-CN` / `en` 双语文案表，构建菜单时按
   `settings.language` 取用；语言变更时重建菜单。
+- **两个勾选项的数据来源不同**：「开机自启 ☑」读 OS 登录项；「关闭时最小化到
+  托盘 ☑」读 `settings.window.closeAction`——实现时勿混用存储。
+- **重建触发时机清单**：回合开始/结束（状态行）、更新状态变化、语言变更、
+  `closeAction` 或开机自启设置变更。
 
 ### 6.1 菜单动作的落地口径
 
 - 「新建会话」：主进程直接调 SessionService 创建，随后广播深度链接
   （`code-agent://session/<id>`）唤回并导航——复用既有机制，不新造导航通道。
+  注意广播前先 `show` 窗口（closeAction = minimize 时窗口隐藏，仅 send 不显示
+  用户看不到）。
 - 「最近会话 ▸」：数据源复用 `session:listRecentDirs`，点击导航同上。
 - 「重启并安装」：复用已落地的两段式安装链路（quit-for-update → 退出链末端拉起）。
 
 ## 7. 开机自启
 
-- `app.setLoginItemSettings({ openAtLogin, args: ['--hidden'] })`：开机自启时以
+**入口双处，同源 OS API**：设置 → 通用（`ToggleRow`）与托盘右键菜单各一个开关，
+读写都走 OS API（`app.getLoginItemSettings()` 回显 / `app.setLoginItemSettings()`
+写入）——两处没有独立状态，天然同步。**不进 `settings.window` 域**：开机自启是
+OS 登录项状态（注册表 / 登录项），不是 SQLite 设置，写入白名单不含它。
+
+- **新增 IPC（app 域，定义表驱动）**：`app:getLoginItemSettings`（回显）与
+  `app:setLoginItemSettings`（写入，入参 `{ enabled: boolean }`）。
+- `setLoginItemSettings({ openAtLogin, args: ['--hidden'] })`：开机自启时以
   `--hidden` 启动（不弹窗口，仅托盘驻留）——没有它，"最小化到托盘"在重启后失效。
-- 托盘菜单提供开关（读取 `app.getLoginItemSettings()` 回显，OS 持久化，不需要
-  额外设置字段）。
 - **`--hidden` 的消费点（实现必需，此前遗漏）**：`index.ts` 启动期检查
-  `process.argv` 含 `--hidden` → 窗口创建后立即 `hide()`（窗口仍要创建——托盘与
+  `process.argv` 含 `--hidden` → 窗口创建后立即 `hide()`（窗口仍需创建——托盘与
   事件订阅依赖它），且优先于 window-state 的"恢复上次显示状态"。
 - **macOS dev 限制**：未打包环境下 `setLoginItemSettings` 不可靠（Electron 平台
   差异），该开关仅在打包版承诺生效（设置界面注明）。
+- **IPC 安全口径**：`app:setLoginItemSettings` 入参仅 `{ enabled: boolean }`——
+  开机启动的程序路径由主进程内部决定（自身可执行文件），渲染层无法注入路径或
+  参数，不存在借该通道植入任意启动项的攻击面。
 
 ## 8. 通知与联动
 
@@ -174,6 +193,8 @@ tooltip 同步携带状态文本（如「运行中 · 修复登录页」/「有�
 | darwin | 不读 `closeAction` | 保持 macOS 原生"关窗不退出"语义 |
 | 退出确认 | 保留 | 最小化不打扰回合；退出（中断回合）必须确认，两段确认语义不同 |
 | 设置项形态 | 单 SegControl 两态 | 不做三态（无第三种关窗行为） |
+| 开机自启入口 | 设置页 + 托盘菜单两处开关，同源 OS 登录项 | 不进 `settings.window` 域（OS 状态非 SQLite 设置）；需新增 app 域 get/set 两个 IPC |
+| 托盘左键 | 只唤回，不做"再点隐藏"的 toggle | 避免误触把窗口藏起来；隐藏入口只有点 X |
 
 ## 11. 落地分期
 
@@ -188,7 +209,8 @@ tooltip 同步携带状态文本（如「运行中 · 修复登录页」/「有�
 4. 托盘菜单 i18n（双语文案表 + `settings.language` 驱动 + 语言变更重建）。
 
 **P1**：回合运行中 / 更新就绪图标态与 tooltip、动态菜单（状态行 + 新建会话 + 更新
-入口 + 开机自启开关）、通知点击导航会话。
+入口 + 开机自启开关）、通知点击导航会话、开机自启设置页开关（app 域新增
+get/set 两个 IPC）、通用分区 SegControl 与开机自启文案的双语键。
 
 **P2**：macOS template 图标与多尺寸资源、Linux AppIndicator 细节、下载中角标。
 
