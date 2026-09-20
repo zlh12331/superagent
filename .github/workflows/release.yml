@@ -510,35 +510,54 @@ jobs:
             if ! grep -qx "$req" <<<"$ASSETS"; then echo "::error::缺少更新元数据: $req"; MISSING=1; fi
           done
           # ── 安装包：每个平台-架构-格式组合都必须存在 ─────────────────────
-          # 2026-09-20 多架构发布：命名由 artifactName 的 ${arch} 区分（electron-builder
-          # 的 Arch 展开：x64 / arm64）。任一组合缺失即视为发布不完整。
+          # 2026-09-20 命名规范化：`产品名-平台-架构-版本.扩展名`
+          # （artifactName 含 ${arch} 与 ${version}）。每个组合各一份安装包，
+          # 不再产出「双架构通用包」（nsis.buildUniversalInstaller: false）。
+          # 注意 Windows/macOS 用 ${arch} 原值（x64/arm64），Linux 用各生态惯例串。
+          V="${{ needs.gate.outputs.version }}"
           require_asset() {
             if ! grep -Eq "$1" <<<"$ASSETS"; then echo "::error::缺少 $2"; MISSING=1; fi
           }
-          require_asset 'Code-Agent-Desktop-Windows-x64\.exe$'    'Windows x64 安装包'
-          require_asset 'Code-Agent-Desktop-Windows-arm64\.exe$'  'Windows arm64 安装包'
-          require_asset 'Code-Agent-Desktop-macOS-x64\.dmg$'      'macOS x64 安装包'
-          require_asset 'Code-Agent-Desktop-macOS-arm64\.dmg$'    'macOS arm64 安装包'
-          require_asset 'Code-Agent-Desktop-Linux-x86_64\.AppImage$' 'Linux x64 AppImage'
-          require_asset 'Code-Agent-Desktop-Linux-arm64\.AppImage$'  'Linux arm64 AppImage'
-          require_asset 'Code-Agent-Desktop-Linux-amd64\.deb$'       'Linux x64 deb'
-          require_asset 'Code-Agent-Desktop-Linux-arm64\.deb$'       'Linux arm64 deb'
-          require_asset 'Code-Agent-Desktop-Linux-x86_64\.rpm$'      'Linux x64 rpm'
-          require_asset 'Code-Agent-Desktop-Linux-aarch64\.rpm$'     'Linux arm64 rpm'
+          # 负向断言：命中即视为配置回退（比"缺资产"更难被察觉，故显式拦截）
+          forbid_asset() {
+            if grep -Eq "$1" <<<"$ASSETS"; then echo "::error::出现不应存在的资产（$2）：$(grep -E "$1" <<<"$ASSETS")"; MISSING=1; fi
+          }
+          require_asset "Code-Agent-Desktop-Windows-x64-${V//./\\.}\\.exe$"    'Windows x64 安装包'
+          require_asset "Code-Agent-Desktop-Windows-arm64-${V//./\\.}\\.exe$"  'Windows arm64 安装包'
+          require_asset "Code-Agent-Desktop-macOS-x64-${V//./\\.}\\.dmg$"      'macOS x64 安装包'
+          require_asset "Code-Agent-Desktop-macOS-arm64-${V//./\\.}\\.dmg$"    'macOS arm64 安装包'
+          require_asset "Code-Agent-Desktop-macOS-x64-${V//./\\.}\\.zip$"      'macOS x64 更新包（zip）'
+          require_asset "Code-Agent-Desktop-macOS-arm64-${V//./\\.}\\.zip$"    'macOS arm64 更新包（zip）'
+          require_asset "Code-Agent-Desktop-Linux-x86_64-${V//./\\.}\\.AppImage$" 'Linux x64 AppImage'
+          require_asset "Code-Agent-Desktop-Linux-arm64-${V//./\\.}\\.AppImage$"  'Linux arm64 AppImage'
+          require_asset "Code-Agent-Desktop-Linux-amd64-${V//./\\.}\\.deb$"       'Linux x64 deb'
+          require_asset "Code-Agent-Desktop-Linux-arm64-${V//./\\.}\\.deb$"       'Linux arm64 deb'
+          require_asset "Code-Agent-Desktop-Linux-x86_64-${V//./\\.}\\.rpm$"      'Linux x64 rpm'
+          require_asset "Code-Agent-Desktop-Linux-aarch64-${V//./\\.}\\.rpm$"     'Linux arm64 rpm'
           # 架构串来源 builder-util 的 getArtifactArchName(arch, ext)（已核实映射）：
           #   x64   → AppImage/rpm: x86_64 ｜ deb: amd64
           #   arm64 → rpm: aarch64 ｜ AppImage/deb: arm64
-          # Windows exe 与 macOS dmg 用 arch 原值（x64 / arm64）。
+          # ── 负向断言（2026-09-20 资产瘦身）───────────────────────────────
+          # ① 双架构通用安装包：nsis.buildUniversalInstaller=false 后不应再出现。
+          #    它的存在会带来两个问题：latest.yml 的 path 指向它（但门禁不收它 →
+          #    悬空引用）、其 .blockmap 被通配符单独收进 release（孤儿资产）。
+          forbid_asset 'Code-Agent-Desktop-Windows\.exe'          '双架构通用安装包（应已由 buildUniversalInstaller:false 关闭）'
+          forbid_asset 'Code-Agent-Desktop-Windows\.exe\.blockmap' '通用包的差分产物（孤儿资产）'
+          # ② dmg 的 blockmap：dmg.writeUpdateInfo=false 后不应再出现
+          #    （electron-updater 在 macOS 只对 zip 做差分，dmg 的 blockmap 永不被读）
+          forbid_asset 'Code-Agent-Desktop-macOS-[a-z0-9]+[^ ]*\.dmg\.blockmap' 'dmg 差分产物（永不被读取，应已由 dmg.writeUpdateInfo:false 关闭）'
+          # ③ 无版本号段的旧命名：防配置回退后资产名与本文档/门禁脱节
+          forbid_asset 'Code-Agent-Desktop-(Windows|macOS|Linux)-[a-z0-9_]+\.(exe|dmg|zip|deb|rpm|AppImage)$' '未带版本号的旧命名资产'
           # ── 差分产物门禁（设计文档 27 §8）──────────────────────────────
           # 差分更新完全依赖 blockmap：缺 Windows/macOS 的独立 blockmap 时，
           # electron-updater 会静默回退全量下载（用户与 CI 都察觉不到），
           # 因此把"差分可用"变成发布硬性条件（双架构各一份）。
           # Linux AppImage 的 blockmap 内嵌在产物尾部（无独立资产），改为校验
           # latest-linux*.yml 含 blockMapSize。
-          require_asset 'Code-Agent-Desktop-Windows-x64\.exe\.blockmap$'   'Windows x64 差分产物（缺失会静默退化为全量下载）'
-          require_asset 'Code-Agent-Desktop-Windows-arm64\.exe\.blockmap$' 'Windows arm64 差分产物（缺失会静默退化为全量下载）'
-          require_asset 'Code-Agent-Desktop-macOS-x64\.zip\.blockmap$'     'macOS x64 差分产物（缺失会静默退化为全量下载）'
-          require_asset 'Code-Agent-Desktop-macOS-arm64\.zip\.blockmap$'   'macOS arm64 差分产物（缺失会静默退化为全量下载）'
+          require_asset "Code-Agent-Desktop-Windows-x64-${V//./\\.}\\.exe\\.blockmap$"   'Windows x64 差分产物（缺失会静默退化为全量下载）'
+          require_asset "Code-Agent-Desktop-Windows-arm64-${V//./\\.}\\.exe\\.blockmap$" 'Windows arm64 差分产物（缺失会静默退化为全量下载）'
+          require_asset "Code-Agent-Desktop-macOS-x64-${V//./\\.}\\.zip\\.blockmap$"     'macOS x64 差分产物（缺失会静默退化为全量下载）'
+          require_asset "Code-Agent-Desktop-macOS-arm64-${V//./\\.}\\.zip\\.blockmap$"   'macOS arm64 差分产物（缺失会静默退化为全量下载）'
           for yml in "latest-linux.yml" "latest-linux-arm64.yml"; do
             YML_ID=$(gh api "/repos/$REPO/releases/$RELEASE_ID" \
               --jq ".assets[] | select(.name == \"$yml\") | .id")

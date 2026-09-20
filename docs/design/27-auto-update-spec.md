@@ -583,3 +583,68 @@ Abort `Can't rename ...`                        ← Abort 的退出码固定为 
 **仍未验证**：真机上从 1.3.1 升级到含本修复的版本（需发版后实测）。
 本机无法直接验证升级路径——但三层修复中第 2 层会在构建期就拦住同类问题，
 第 3 层保证即使再出现未知原因也不会阻断用户。
+
+### 14.11 发布资产瘦身与命名规范化（2026-09-20）
+
+**背景**：核对 v1.3.2 的 27 个资产（3.31GB）时发现三处冗余/缺陷：
+
+1. **双架构通用安装包及其孤儿 blockmap**：`NsisTarget.shouldBuildUniversalInstaller`
+   默认为 `true`——即使 target 按架构声明，仍会额外构建一个 686MB 的
+   `Code-Agent-Desktop-Windows.exe`（同时支持 x64/arm64）。发布门禁白名单要求
+   `Windows-` 后有架构段，**把通用包过滤掉了**；而 `*.blockmap` 是无差别通配符，
+   于是它的 blockmap 被单独收进 release（0.6MB 孤儿资产）。
+2. **`latest.yml` 悬空引用**：通用包被过滤但元数据里有它的条目 ⇒ `path` 与
+   `files[0]` 指向一个**未发布**的文件。实际更新不受影响——electron-updater 用
+   `name.includes(process.arch)` 在文件列表里选按架构包（`Provider.js:80`，
+   已核实），但这是"靠匹配逻辑兜住"而非配置正确。
+3. **无用的 dmg blockmap**：`dmg-builder/out/dmg.js:48` 默认也生成 blockmap，
+   而 electron-updater 在 macOS 只对 **zip** 做差分
+   （`MacUpdater.js:81`：`findFile(files, "zip", ["pkg","dmg"])`，dmg 被显式排除）
+   ⇒ 两个 `.dmg.blockmap`（合计 0.6MB）永不被读取。
+
+**修复（三处配置，均为官方开关，无自研）**：
+
+| 配置 | 取值 | 作用 |
+|---|---|---|
+| `nsis.buildUniversalInstaller` | `false` | 不再产出双架构通用包 ⇒ 同时消除孤儿 blockmap 与悬空引用 |
+| `dmg.writeUpdateInfo` | `false` | dmg 不生成 blockmap（zip 的 blockmap 保留，macOS 差分依赖它） |
+| 五个 `artifactName` | 加 `${version}` | 资产名带版本号，便于用户在下载目录分辨 |
+
+**最终命名**：`Code-Agent-Desktop-<平台>-<架构>-<版本>.<扩展名>`，共 10 个安装包：
+
+```
+Windows-x64-1.3.3.exe        Windows-arm64-1.3.3.exe
+Linux-x86_64-1.3.3.AppImage  Linux-arm64-1.3.3.AppImage
+Linux-amd64-1.3.3.deb        Linux-arm64-1.3.3.deb
+Linux-x86_64-1.3.3.rpm       Linux-aarch64-1.3.3.rpm
+macOS-x64-1.3.3.dmg          macOS-arm64-1.3.3.dmg
+```
+
+**命名约束（源码核实，决定了哪些写法可用）**：
+
+- **架构串必须是字面量 `x64` / `arm64`**（Windows/macOS）：`latest.yml` 与
+  `latest-mac.yml` 各自同时含两个架构的条目，electron-updater 靠
+  `name.includes(process.arch)` 选包。写成「Apple芯片 / Intel芯片」等字样会让
+  ARM Mac 匹配失败、回退取到 x64 包。
+- **Linux 保留生态惯例串**（`x86_64` / `amd64` / `aarch64`）：由 `getArtifactArchName`
+  按格式映射，且 Linux 的元数据**按架构分文件**（`latest-linux.yml` /
+  `latest-linux-arm64.yml`），每个文件里只有一个 AppImage ⇒ 无论按名匹配还是
+  回退取首个都必然选中正确架构（已用真实 yml 数据实测验证）。
+- **版本号入文件名安全**：旧 blockmap 的 URL 由「新版本号字符串替换为旧版本号」
+  推导（`Provider.js:24`），只要每个版本的资产名都带自己的版本号即可成立。
+  ⚠️ 一次性代价：从 ≤1.3.3 升到带版本号的版本时，推导出的旧 blockmap URL 在旧
+  release 里不存在（旧资产名无版本号段），差分失败一次并**自动回退全量下载**
+  （不报错，只是多下一次完整包）。
+
+**门禁同步（release.yml）**：安装包断言改为「平台-架构-版本」全匹配；新增
+**负向断言**（命中即失败）——禁用通用包、其 blockmap、dmg blockmap、以及不带
+版本号的旧命名（防止配置回退后资产名与文档脱节）；补 macOS zip 的显式断言。
+
+**验证**：
+- 门禁断言逻辑用真实数据双向验证：新命名资产全通过；旧命名 + 通用包 + dmg
+  blockmap 的组合全部被拦（含逐条失败信息）
+- 本机实构建（`electron-builder --win --x64`）实测：产物为
+  `Code-Agent-Desktop-Windows-x64-1.3.3.exe`、**仅一个 target**（无通用包）、
+  `latest.yml` 的 `path` 指向真实存在的包、无孤儿 blockmap；对真实产物跑门禁
+  断言 `MISSING=0`
+- typecheck / lint / 两份 YAML 解析全绿
