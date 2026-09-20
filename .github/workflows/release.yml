@@ -301,6 +301,16 @@ jobs:
       - name: Verify packaged memory engine
         run: pnpm check:packaged-engine
 
+      # ── 原生模块架构断言（防「交叉构建静默产出错误架构二进制」）──────
+      # 2026-09-20 实测：x64 机器上为 arm64 目标打包时，@electron/rebuild 会以
+      # 0.4s「成功」（真实编译 9s/98s），实际复用 host 架构 —— 构建日志无任何错误，
+      # 产出的 arm64 安装包内是 x64 原生模块（用户装上即崩）。唯一可靠探针是读
+      # 二进制头（ELF e_machine / PE Machine / Mach-O cputype），见 check-native-arch。
+      # 逐个 unpacked 目录按目录名推断目标架构（win-unpacked=x64、linux-arm64-unpacked=arm64），
+      # 校验 node-pty 编译产物、better-sqlite3 主动加载的二进制、codegraph 捆绑包。
+      - name: Verify native module architecture
+        run: pnpm check:native-arch
+
       # ── 生产产物 smoke 测试（验证打包后 binary 可启动）──────────────
       # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
       # 打包产物，无需 Playwright 自带浏览器；ffmpeg 供 video:'retain-on-failure' 录像。

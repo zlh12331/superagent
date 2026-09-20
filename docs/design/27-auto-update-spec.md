@@ -456,3 +456,48 @@ YAML 解析校验全绿。**Windows arm64 交叉编译未在本机验证**——
 `pnpm build:win`（现为双架构）作为合并前验证。Linux arm64 由原生 runner 保证，
 同样待首次 CI/CD 运行确认。smoke 测试的产物路径解析已按架构自适应
 （`win-arm64-unpacked` / `linux-arm64-unpacked`）。
+
+### 14.9 多架构修复的正确性再修正（2026-09-20，CI 观察后）
+
+§14.8 首次提交后，观察 CI 日志发现三处必须修正的问题（均为该次改动引入或未覆盖）：
+
+**① CLI 架构标志与配置的 `arch` 是并集（不是覆盖）**。源码核实：
+`targetFactory.computeArchToTargetNamesMap` 先用 CLI 的 raw keys 作 `defaultArchs`，
+再遍历配置文件 `platform.target[].arch` 并**全部并入**结果。因此配置里写
+`arch: [x64, arm64]` 会让 `electron-builder --win --x64` **同时构建 arm64**。
+实测后果：CI 的 Linux x64 job 跑 `--linux --x64` 却产出了全部 6 个目标（含 arm64 的
+deb/rpm/AppImage），其中 arm64 那份是在 x64 机器上"编译"的。
+**修复**：从 `electron-builder.yml` 的 win/mac/linux 三个平台段**移除全部 `arch`
+列表**（只声明格式），架构完全由脚本 CLI 标志决定——`build:win`/`build:mac`/
+`build:linux` 显式传 `--x64 --arm64`，`build:*:x64`/`build:*:arm64` 传单个标志。
+本机实测确认：修复后 `--win --x64` 只产出 `win-unpacked`（修复前会额外产出
+`win-arm64-unpacked`）。
+
+**② 跨架构"编译"会静默失败**。CI 日志证据：在 x64 runner 上为 arm64 目标
+`@electron/rebuild` 报 `finished moduleName=node-pty arch=arm64` 仅耗时 **2.8s**
+（对照：Windows 上真实 arm64 交叉编译 `node-pty` 耗时 **97.8s**），且全程无
+gcc/aarch64 工具链调用痕迹——即**静默复用 host 架构的二进制**，构建日志无任何错误。
+⇒ 产出的 arm64 安装包内是 x64 原生模块（ARM 用户装上即崩）。
+**这就是 Linux 必须拆两个原生 runner job 的真实原因**（而不是"配置脆弱"）：
+x64 job 无法为 arm64 产出正确二进制。
+
+**③ 新增架构错配探针**（唯一可靠的检测手段）。新增
+`scripts/lib/native-arch.ts`（ELF/PE/Mach-O 头解析）+ `scripts/check-native-arch.ts`
+（遍历 `release/*-unpacked`，按目录名推断目标架构——`win-unpacked`=x64、
+`linux-arm64-unpacked`=arm64，逐个读二进制头断言），接入 CI smoke job 与
+release.yml build job（fail-closed）。
+检查范围：node-pty 的 `build/Release/*.{node,exe}`（@electron/rebuild 产物）、
+better-sqlite3 的编译产物或主动加载的 prebuild、codegraph 的 `node.exe`/`bin/codegraph`。
+**双向验证**：本机 x64 产物通过；把 `win-unpacked` 改名为 `win-arm64-unpacked`
+后精确报出 5 处错配（node-pty 4 个 + codegraph node.exe），退出码 1。
+
+**CI 同步调整**：smoke job 改为构建**本机架构**（`build:win:x64` / `build:linux:x64`）
+并加 `CODE_AGENT_TARGET_ARCHS` 收窄 codegraph 部署——CI 只验证能在 runner 上启动的
+那份产物；arm64 由 release.yml 的 `ubuntu-24.04-arm` 原生 job 与 windows-latest
+双架构 job 覆盖。
+
+**验证**：`scripts/lib/native-arch.test.ts` 23 项（三格式 × 各架构 + 非二进制/截断
+边界 + 目录名推断）；`check:native-arch` 在真实产物上双向验证通过；typecheck / lint /
+test:scripts（181 项）全绿。**仍未在本机验证**：Windows/Linux 的 arm64 真实构建
+（本机无 ARM64 工具链），待 release.yml 的对应 job 首次运行确认——届时
+`check:native-arch` 会在架构错配时直接失败，不会再出现"静默产出坏包"。
