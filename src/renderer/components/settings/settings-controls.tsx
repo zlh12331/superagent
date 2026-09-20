@@ -91,6 +91,8 @@ export interface ToggleRowProps {
   readonly checked: boolean;
   /** 切换回调 */
   readonly onChange: (checked: boolean) => void;
+  /** 禁用（如当前环境不支持该开关；配合 description 说明原因） */
+  readonly disabled?: boolean;
   readonly className?: string;
 }
 
@@ -102,6 +104,7 @@ export function ToggleRow({
   description,
   checked,
   onChange,
+  disabled,
   className,
 }: ToggleRowProps): ReactElement {
   return (
@@ -110,7 +113,12 @@ export function ToggleRow({
       {...(description !== undefined ? { description } : {})}
       className={cn('py-[11px]', className)}
     >
-      <Switch checked={checked} onCheckedChange={onChange} aria-label={name} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-label={name}
+        {...(disabled === true ? { disabled: true } : {})}
+      />
     </SettingRow>
   );
 }

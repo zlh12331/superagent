@@ -22,6 +22,7 @@ import { LearnSkillService } from './infra/ai/knowledge/learn-skill-agent';
 import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
+import { createAutostartDeps, setAutostartEnabled } from './infra/autostart/autostart';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
@@ -439,7 +440,9 @@ app
         serviceContainer.getUpdateService().quitAndInstall();
       },
       setAutostart: (enabled) => {
-        app.setLoginItemSettings({ openAtLogin: enabled, args: ['--hidden'] });
+        // 与设置页走同一抽象层（平台差异/dev 守卫/写后回读集中在 infra/autostart）：
+        // 此处 fire-and-forget，失败由下次菜单右键重建时的真实读取反映
+        void setAutostartEnabled(createAutostartDeps(), enabled);
       },
       onUpdateStatus: (listener) => serviceContainer.getUpdateService().onStatus(listener),
       getLocale: () => (readSetting('language') === 'en' ? 'en' : 'zh-CN'),

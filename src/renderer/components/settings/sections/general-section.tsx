@@ -4,10 +4,10 @@
 // 聚合原散落项：语言切换（i18n 真实）+ 数据管理（原 data pane）+ 遥测（原 telemetry pane）
 // ──────────────────────────────────────────────────────────────
 
+import type { LoginItemSettingsRes } from '@code-agent/shared/renderer';
 import { Check, Database, Languages } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
 import { Button } from '@/components/ui/button';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
@@ -69,18 +69,18 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
   const { t } = useTranslation();
   const closeAction = useSettingsStore((s) => s.window.closeAction);
   const setWindow = useSettingsStore((s) => s.setWindow);
-  const [openAtLogin, setOpenAtLogin] = useState<boolean | null>(null);
+  // null = 未读到（隐藏开关，避免误导）；supported=false = 当前环境不支持（禁用 + 说明）
+  const [autostart, setAutostart] = useState<LoginItemSettingsRes | null>(null);
 
   // 开机自启状态挂载时回显（OS 登录项为唯一真源，读取失败隐藏开关避免误导）
   useEffect(() => {
     if (!hasIpcBridge()) return;
     void (async () => {
       try {
-        const res = unwrap<{ openAtLogin: boolean }>(await window.api.app.getLoginItemSettings());
-        setOpenAtLogin(res.openAtLogin);
+        setAutostart(unwrap<LoginItemSettingsRes>(await window.api.app.getLoginItemSettings()));
       } catch {
         // 读取失败（桥不存在/旧版本）：隐藏开关避免误导
-        setOpenAtLogin(null);
+        setAutostart(null);
       }
     })();
   }, []);
@@ -88,10 +88,12 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
   const handleToggleAutostart = async (checked: boolean): Promise<void> => {
     if (!hasIpcBridge()) return;
     try {
-      const res = unwrap<{ openAtLogin: boolean }>(
-        await window.api.app.setLoginItemSettings({ openAtLogin: checked }),
+      // 响应是写入后回读的真实 OS 状态（注册失败/待审批会如实反映，非入参回显）
+      setAutostart(
+        unwrap<LoginItemSettingsRes>(
+          await window.api.app.setLoginItemSettings({ openAtLogin: checked }),
+        ),
       );
-      setOpenAtLogin(res.openAtLogin);
     } catch {
       toast.error(t('settings.autostartFailed'));
     }
@@ -125,8 +127,15 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
           </SettingRow>
           <ToggleRow
             name={t('settings.autostartLabel')}
-            description={t('settings.autostartDesc')}
-            checked={openAtLogin ?? false}
+            description={
+              autostart?.requiresApproval === true
+                ? t('settings.autostartApprovalDesc')
+                : autostart?.supported === false
+                  ? t('settings.autostartUnsupportedDesc')
+                  : t('settings.autostartDesc')
+            }
+            checked={autostart?.openAtLogin ?? false}
+            disabled={autostart?.supported === false}
             onChange={(checked) => void handleToggleAutostart(checked)}
           />
         </div>

@@ -8,6 +8,20 @@ packages:
   # 排除下划线前缀的模板目录（如 tools/_ts6-template），不作为真实 workspace 包
   - '!tools/_*'
 
+# ── 多架构安装（2026-09-20：发布矩阵扩展到 x64 + arm64）───────────────────────
+# 为什么需要：@colbymchenry/codegraph 与 @node-rs/jieba（记忆引擎依赖）都是
+# 「按平台/架构分发的 optionalDependencies」——pnpm 默认只装 host 架构的那一个，
+# 于是交叉构建（如 macos-latest 是 arm64 而需产出 x64 包）会把**错误架构的二进制**
+# 打进安装包（实测 mac x64 包内含 darwin-arm64 的 codegraph，属已发布的既有缺陷）。
+# os: [current] 只装当前系统的包（不跨 OS 膨胀），cpu 两个架构都装，
+# 使 prepare-codegraph 能按架构分别部署、extraResources 用 ${arch} 选取正确那套。
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - x64
+    - arm64
+
 # ── 构建脚本决策（pnpm 11: allowBuilds 取代 onlyBuiltDependencies）────────────────
 # electron 的 postinstall 会下载平台二进制，必须放行，否则运行时报
 # "Electron failed to install correctly"；better-sqlite3/node-pty 需原生编译；

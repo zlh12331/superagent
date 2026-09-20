@@ -138,7 +138,9 @@ extraResources:
   # codegraph 代码智能 CLI（平台捆绑包：vendored Node 24 + app）
   # 由 scripts/prepare-codegraph.mjs 生成；CodebaseService 打包环境读取
   # process.resourcesPath/codegraph（dev 直接定位 node_modules/.pnpm 平台包）
-  - from: resources/codegraph
+  # ${arch} 宏由 electron-builder 按构建目标展开（x64 / arm64）——捆绑包含平台二进制，
+  # 两架构各存一份（resources/codegraph-x64 | -arm64），交叉构建时取对应那套
+  - from: resources/codegraph-${arch}
     to: codegraph
     filter:
       - "**/*"
@@ -150,11 +152,18 @@ extraResources:
 win:
   # 图标：1024x1024 PNG 源（electron-builder 自动派生 .ico）
   icon: resources/icons/icon.png
-  # 目标架构（仅打 x64，Intel/AMD 桌面端通用）
+  # 目标：NSIS 安装器。**不在此声明 arch**（2026-09-20 修复）——
+  # 已核实 electron-builder 的 arch 解析：CLI 的 --x64/--arm64 与配置的
+  # target[].arch 是**并集**（targetFactory.computeArchToTargetNamesMap：先取 CLI
+  # 的 raw keys 作 defaultArchs，再遍历配置 target 把其 arch 全部并入），
+  # 因此在配置里写 [x64, arm64] 会让 `--win --x64` 也构建出 arm64——而
+  # @electron/rebuild 在 x64 机器上为 arm64"编译"会静默复用 host 架构
+  # （实测耗时 0.4s vs 真实 9s，日志无错），产出的 arm64 包含 x64 原生模块。
+  # 现在架构完全由脚本的 CLI 标志决定（build:win 传 --x64 --arm64；
+  # 单架构脚本只传对应标志），`check:native-arch` 在打包后断言二进制真架构。
+  # arm64 在 CI 的 windows-latest 上交叉编译可行（镜像含 ARM64 MSVC 工具链）。
   target:
-    - target: nsis
-      arch:
-        - x64
+    - nsis
   # 自定义协议（深度链接）：注册 `code-agent://` 为 Windows URL 协议
   # （注册表 HKCR，卸载时自动清理）；与 src/main/deep-link.ts CODE_AGENT_PROTOCOL 一致
   # 26.x 属性名由 protocol 改为 protocols
@@ -192,16 +201,13 @@ mac:
   # mac 平台通用 artifactName：dmg 有自己的 dmg.artifactName 覆盖；zip（自动更新
   # 制品）沿用 mac.artifactName（顶层独立 zip: 键在 electron-builder schema 中非法）
   artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
-  # 目标：dmg（分发安装包）+ zip（electron-updater 自动更新必须，latest-mac.yml）
+  # 目标：dmg（分发安装包）+ zip（electron-updater 自动更新必须，latest-mac.yml）。
+  # **不声明 arch**（同 win 段说明）：由脚本 CLI 标志决定——build:mac 传
+  # --x64 --arm64（macos-latest 为 arm64，Xcode 原生支持交叉编译出 x64，
+  # 且同 job 双架构会合并为一份含两组条目的 latest-mac.yml）。
   target:
-    - target: dmg
-      arch:
-        - x64
-        - arm64
-    - target: zip
-      arch:
-        - x64
-        - arm64
+    - dmg
+    - zip
   # macOS 应用分类（App Store 元数据）
   category: public.app-category.developer-tools
   # 深色模式支持
@@ -244,13 +250,15 @@ linux:
   # 图标：1024x1024 PNG 源（electron-builder 自动派生各尺寸）
   icon: resources/icons/icon.png
   # 目标：AppImage（单文件分发，electron-updater 支持）+ deb（Debian/Ubuntu）
+  # + rpm（Fedora/RHEL/openSUSE）。**不声明 arch**（同 win 段说明）：架构由脚本的
+  # CLI 标志决定，避免与 CLI 并集导致「单架构脚本产出双架构、其中一份是错误架构」。
+  # 发布形态：x64 与 arm64 分别在各自的原生 runner 上构建（ubuntu-latest /
+  # ubuntu-24.04-arm）——node-pty 无 Linux 预编译产物，必须本地编译；Linux 的
+  # 架构无法在 x64 上可靠交叉编译（无工具链时静默复用 host，见 check:native-arch）。
   target:
-    - target: AppImage
-      arch:
-        - x64
-    - target: deb
-      arch:
-        - x64
+    - AppImage
+    - deb
+    - rpm
   # 分类（Linux 桌面条目 Categories）
   category: Development
   # 可执行文件名
@@ -271,6 +279,10 @@ appImage:
 
 # deb 配置
 deb:
+  artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
+
+# rpm 配置（Fedora/RHEL/openSUSE；构建需 runner 装 rpm 与 xz，见 release.yml）
+rpm:
   artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
 
 # 版本元数据（设计文档 §1.1 版本管理）

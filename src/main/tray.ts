@@ -21,6 +21,7 @@ import {
   Tray,
 } from 'electron';
 import { broadcastDeepLink } from './deep-link';
+import { createAutostartDeps, readAutostartState } from './infra/autostart/autostart';
 import { readSetting, writeSetting } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
 
@@ -281,14 +282,17 @@ async function popUpMenu(): Promise<void> {
     });
   }
 
-  // 开机自启（OS 登录项直读直写，与设置页开关同源）
-  const openAtLogin = app.getLoginItemSettings().openAtLogin;
+  // 开机自启（与设置页开关同源，均经 infra/autostart 读写；读取用
+  // executableWillLaunchAtLogin / XDG 文件 / macOS status 的真实状态——
+  // 此前直读 openAtLogin 在 Windows 上恒 false，勾选框永远不勾且点击只会重复开启）
+  const autostart = await readAutostartState(createAutostartDeps());
   template.push({
     label: text.autostart,
     type: 'checkbox',
-    checked: openAtLogin,
+    checked: autostart.openAtLogin,
+    ...(autostart.supported ? {} : { enabled: false }),
     click: () => {
-      d.setAutostart(!openAtLogin);
+      d.setAutostart(!autostart.openAtLogin);
     },
   });
 

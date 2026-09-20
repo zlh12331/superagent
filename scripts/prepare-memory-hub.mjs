@@ -136,7 +136,17 @@ console.log('[prepare-memory-hub] 已拷贝 src/ + package.json（排除测试�
 console.log('[prepare-memory-hub] 在目标目录安装生产依赖（--ignore-scripts）…');
 // 隔离 workspace：写一个仅含空 packages 的 pnpm-workspace.yaml，阻止 pnpm 沿目录上溯
 // 找到 F:\TraeProjects\1\ 项目根 workspace（否则依赖被装到父级、目标目录近乎为空）。
-writeFileSync(join(TARGET, 'pnpm-workspace.yaml'), 'packages: []\n', 'utf8');
+//
+// supportedArchitectures（2026-09-20 多架构发布）：引擎依赖 @node-rs/jieba，它按
+// 平台/架构分发原生绑定（optionalDependencies，如 jieba-darwin-x64 / -darwin-arm64），
+// 运行时由包内 index.js 按 process.platform + process.arch 动态 require。只装
+// host 架构会在交叉构建时打进错误架构的绑定（x64 包内为 arm64 绑定 → 分词功能失败）。
+// 两个架构都装后运行时可正确选择，且体积代价很小（jieba 绑定仅数 MB）。
+writeFileSync(
+  join(TARGET, 'pnpm-workspace.yaml'),
+  'packages: []\nsupportedArchitectures:\n  os:\n    - current\n  cpu:\n    - x64\n    - arm64\n',
+  'utf8',
+);
 const storeDir = join(tmpdir(), 'pnpm-store-memory-hub');
 run(
   pnpm,

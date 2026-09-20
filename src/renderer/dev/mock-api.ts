@@ -516,9 +516,12 @@ function createMockApi(): IpcApi {
         }),
       openExternal: async () => ipcOk({ ok: true }),
       openDataDir: async () => ipcOk({ ok: true }),
-      // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项）
-      getLoginItemSettings: async () => ipcOk({ openAtLogin: false }),
-      setLoginItemSettings: async (input) => ipcOk({ openAtLogin: input.openAtLogin }),
+      // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项；supported=false 与真实
+      // dev 环境一致——未打包不注册，界面据 supported 显示禁用态并说明）
+      getLoginItemSettings: async () =>
+        ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
+      setLoginItemSettings: async () =>
+        ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
       // 诊断包导出：浏览器模式无真实打包，模拟用户取消（saved=false）
       exportDiagnostics: async () => ipcOk({ saved: false }),
       // 退出应用（走完整善后链，浏览器模式 no-op 语义一致）

@@ -24,36 +24,55 @@ import { _electron as electron } from 'playwright';
 // P5 修复：按平台解析打包产物可执行文件路径（此前硬编码 Windows 路径，
 // 而 CI smoke-prod 双平台 + release.yml 三平台矩阵都会跑本 spec——
 // Linux/macOS 上「可执行文件不存在」必挂，长期红灯掩盖真实回归）。
-// electron-builder 产物约定：
-// - Windows：release/win-unpacked/<productName>.exe
-// - Linux：release/linux-unpacked/code-agent-desktop（executableName）
-// - macOS：release/mac*/<productName>.app/Contents/MacOS/<productName>（arm64 与 x64 两种目录）
+// electron-builder 产物约定（2026-09-20 多架构后目录名带架构后缀，见
+// platformPackager.computeAppOutDir：`${platform}${getArchSuffix(arch)}-unpacked`，
+// 默认架构 x64 不带后缀）：
+// - Windows：release/win-unpacked 或 win-arm64-unpacked
+// - Linux：release/linux-unpacked 或 linux-arm64-unpacked
+// - macOS：release/mac（x64）/ mac-arm64，.app 在其中的 Contents/MacOS/
+// 选择策略：优先匹配**当前进程架构**的目录（CI 上 runner 架构即目标架构之一；
+// Windows/macOS 单 job 产出双架构时，只有本机架构的产物可被 smoke 启动）。
 const PRODUCT_NAME = 'Code Agent Desktop';
 const LINUX_EXECUTABLE = 'code-agent-desktop';
 
-function resolvePackagedExecutable(): string {
-  const releaseDir = join(process.cwd(), 'release');
-  if (process.platform === 'win32') {
-    return join(releaseDir, 'win-unpacked', `${PRODUCT_NAME}.exe`);
-  }
-  if (process.platform === 'linux') {
-    return join(releaseDir, 'linux-unpacked', LINUX_EXECUTABLE);
-  }
-  // macOS：mac-arm64 / mac 两种 unpacked 目录，按存在性选择
-  for (const dirName of ['mac-arm64', 'mac', 'mac-x64']) {
-    const candidate = join(
-      releaseDir,
-      dirName,
-      `${PRODUCT_NAME}.app`,
-      'Contents',
-      'MacOS',
-      PRODUCT_NAME,
-    );
+/** 当前架构对应的 unpacked 目录后缀（x64 为默认架构，无后缀） */
+const ARCH_SUFFIX = process.arch === 'arm64' ? '-arm64' : '';
+
+/** 按候选顺序找到第一个存在的路径 */
+function firstExisting(candidates: readonly string[]): string {
+  for (const candidate of candidates) {
     if (existsSync(candidate)) {
       return candidate;
     }
   }
-  return join(releaseDir, 'mac-arm64', `${PRODUCT_NAME}.app`, 'Contents', 'MacOS', PRODUCT_NAME);
+  // 都不存在时返回首选路径，让测试以「文件不存在」的真实原因失败
+  return candidates[0] ?? '';
+}
+
+function resolvePackagedExecutable(): string {
+  const releaseDir = join(process.cwd(), 'release');
+  if (process.platform === 'win32') {
+    return firstExisting(
+      [`win${ARCH_SUFFIX}-unpacked`, 'win-unpacked'].map((dir) =>
+        join(releaseDir, dir, `${PRODUCT_NAME}.exe`),
+      ),
+    );
+  }
+  if (process.platform === 'linux') {
+    return firstExisting(
+      [`linux${ARCH_SUFFIX}-unpacked`, 'linux-unpacked'].map((dir) =>
+        join(releaseDir, dir, LINUX_EXECUTABLE),
+      ),
+    );
+  }
+  // macOS：本机架构目录优先，再回退到其它已知目录名（mac 为 x64 默认，无后缀）
+  const preferred =
+    process.arch === 'arm64' ? ['mac-arm64', 'mac'] : ['mac', 'mac-arm64', 'mac-x64'];
+  return firstExisting(
+    preferred.map((dirName) =>
+      join(releaseDir, dirName, `${PRODUCT_NAME}.app`, 'Contents', 'MacOS', PRODUCT_NAME),
+    ),
+  );
 }
 
 const EXECUTABLE_PATH = resolvePackagedExecutable();

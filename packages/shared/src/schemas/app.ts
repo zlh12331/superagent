@@ -95,17 +95,23 @@ export interface ExportDiagnosticsRes {
 /**
  * app:getLoginItemSettings 响应（开机自启当前状态）
  *
- * 读的是 OS 登录项（Windows HKCU Run / macOS 登录项），不走 SQLite 设置——
- * 设置页开关与托盘菜单开关读写同一 OS 状态，天然同步。
+ * 读的是 OS 登录项（Windows HKCU Run / macOS 登录项 / Linux XDG autostart），
+ * 不走 SQLite 设置——设置页开关与托盘菜单开关读写同一 OS 状态，天然同步。
  */
 export interface LoginItemSettingsRes {
-  /** 是否开机自启 */
+  /** 是否开机自启（OS 真实状态，非入参回显） */
   readonly openAtLogin: boolean;
+  /** 当前环境是否支持该开关（未打包 / 平台无实现时为 false，界面据此禁用） */
+  readonly supported: boolean;
+  /** macOS 13+：已注册但等用户在系统设置批准（界面提示，避免误显示为已生效） */
+  readonly requiresApproval: boolean;
 }
 
 /** app:getLoginItemSettings 响应 zod schema */
 export const LoginItemSettingsResSchema = z.object({
   openAtLogin: z.boolean(),
+  supported: z.boolean(),
+  requiresApproval: z.boolean(),
 });
 
 /** app:setLoginItemSettings 入参（写入 OS 登录项；启动参数由主进程决定） */
@@ -113,7 +119,5 @@ export const SetLoginItemSettingsReqSchema = z.object({
   openAtLogin: z.boolean(),
 });
 
-/** app:setLoginItemSettings 响应 zod schema（写入后的回显） */
-export const SetLoginItemSettingsResSchema = z.object({
-  openAtLogin: z.boolean(),
-});
+/** app:setLoginItemSettings 响应 zod schema（写入后的真实回读状态） */
+export const SetLoginItemSettingsResSchema = LoginItemSettingsResSchema;

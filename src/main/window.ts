@@ -11,6 +11,7 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
+import { resolveStartHidden } from './infra/autostart/autostart';
 import { readSetting } from './infra/storage/settings-pref';
 import { isCloseConfirmed, isQuitting, setCloseConfirmed } from './quit-state';
 import { hasRunningAgentTurns } from './service-container';
@@ -159,8 +160,18 @@ export function createWindow(): BrowserWindow {
     void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
+  // 静默启动（开机自启）：Windows/Linux 由登录项携带 --hidden 参数、macOS 由
+  // wasOpenedAtLogin 判定（ServiceManagement 不透传 args，见 infra/autostart 头注释）。
+  // 判定在 ready-to-show 处生效：窗口照常创建（托盘/事件订阅依赖它）但不显示，
+  // 仅驻留托盘；用户点托盘「打开主窗口」即可唤出（此前该参数无消费端 = 死参数）。
+  const startHidden = resolveStartHidden(app);
+  if (startHidden) {
+    logger.info({}, '开机自启静默启动：窗口驻留托盘不显示');
+  }
   win.once('ready-to-show', () => {
-    win.show();
+    if (!startHidden) {
+      win.show();
+    }
   });
 
   // ── 关窗行为（docs/design/28-tray-spec.md §3）──
