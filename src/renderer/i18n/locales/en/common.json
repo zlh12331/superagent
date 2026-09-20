@@ -658,7 +658,9 @@
     "imAllowedGroupsFailed": "Failed to save allowlist",
     "imAllowedGroupsLoadFailed": "Failed to load allowlist. Retry before editing to avoid overwriting existing entries.",
     "memoryClearConfirmDesc_one": "The only memory in this session will be cleared. This cannot be undone.",
-    "memoryClearConfirmDesc_other": "All {{count}} memories in this session will be cleared. This cannot be undone."
+    "memoryClearConfirmDesc_other": "All {{count}} memories in this session will be cleared. This cannot be undone.",
+    "autostartApprovalDesc": "Registered, but you must allow it in System Settings → Login Items before it takes effect",
+    "autostartUnsupportedDesc": "Available in installed builds only (not in development mode)"
   },
   "home": {
     "justNow": "Just now",

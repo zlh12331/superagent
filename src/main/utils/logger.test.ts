@@ -69,4 +69,18 @@ describe('logger', () => {
     expect(onSpy).toHaveBeenCalledWith('unhandledRejection', expect.any(Function));
     onSpy.mockRestore();
   });
+
+  it('测试环境重定向日志路径（回归锚：曾把测试夹具写进真实用户日志目录）', () => {
+    // 修复前：electron-log 默认路径解析在纯 Node 下回退到
+    // %APPDATA%/<appName>/logs，即真实用户日志目录（实测污染 143 行）
+    initLogger();
+    const fileTransport = mockLog.transports.file as unknown as {
+      resolvePathFn?: () => string;
+    };
+    expect(typeof fileTransport.resolvePathFn).toBe('function');
+    const resolved = fileTransport.resolvePathFn?.() ?? '';
+    expect(resolved).toContain('code-agent-test-logs');
+    // 且不再写入真实用户日志目录
+    expect(resolved).not.toContain('code-agent-desktop');
+  });
 });

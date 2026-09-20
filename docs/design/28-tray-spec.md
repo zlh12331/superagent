@@ -163,16 +163,31 @@ Linux Unity，Windows 托盘无效）——状态角标需要**预合成图标�
 写入）——两处没有独立状态，天然同步。**不进 `settings.window` 域**：开机自启是
 OS 登录项状态（注册表 / 登录项），不是 SQLite 设置，写入白名单不含它。
 
-- **新增 IPC（app 域，定义表驱动）**：`app:getLoginItemSettings`（回显）与
-  `app:setLoginItemSettings`（写入，入参 `{ enabled: boolean }`）。
-- `setLoginItemSettings({ openAtLogin, args: ['--hidden'] })`：开机自启时以
-  `--hidden` 启动（不弹窗口，仅托盘驻留）——没有它，"最小化到托盘"在重启后失效。
-- **`--hidden` 的消费点（实现必需，此前遗漏）**：`index.ts` 启动期检查
-  `process.argv` 含 `--hidden` → 窗口创建后立即 `hide()`（窗口仍需创建——托盘与
-  事件订阅依赖它），且优先于 window-state 的"恢复上次显示状态"。
-- **macOS dev 限制**：未打包环境下 `setLoginItemSettings` 不可靠（Electron 平台
-  差异），该开关仅在打包版承诺生效（设置界面注明）。
-- **IPC 安全口径**：`app:setLoginItemSettings` 入参仅 `{ enabled: boolean }`——
+- **新增 IPC（app 域，定义表驱动）**：`app:getLoginItemSettings`（真实回读）与
+  `app:setLoginItemSettings`（写入，入参 `{ openAtLogin: boolean }`）。
+- **实现落在 `src/main/infra/autostart/autostart.ts`**（2026-09-20 重构，原
+  handler/tray 两处各自调 Electron API）：三平台差异集中一处 + 写后一律回读真实
+  状态 + dev 不注册。核实结论（Electron v44 源码 + Windows 实测）：
+  - **Windows**：`openAtLogin` 是「注册表命令行与本次入参的逐字符比对」——写入带
+    `--hidden`、读取不带即恒 false（实测：UI 恒显关闭且无法关闭自启）。改用
+    `executableWillLaunchAtLogin`（忽略 args、含任务管理器禁用态），且 `path`
+    必须带引号（含空格路径不加引号时匹配失败）。
+  - **macOS**：`args` 被 ServiceManagement 忽略（`--hidden` 到不了应用）⇒ 静默
+    启动改由启动期读 `wasOpenedAtLogin` 判定；`status=requires-approval`
+    （macOS 13+ 需用户在系统设置批准）透传给界面，避免"已注册却显示未启用"。
+  - **Linux**：Electron 的 `SetLoginItemSettings` 是空函数（`browser_linux.cc`
+    实测源码）⇒ 自行实现 XDG autostart（`~/.config/autostart/*.desktop`，
+    含 `X-GNOME-Autostart-enabled` 判定与"应用被移动"的自愈路径）。
+  - **未打包（dev）**：不做任何注册（Windows 会把 electron.exe 写进注册表污染
+    开发机），响应 `supported:false`，界面禁用开关并说明。
+- **`--hidden` 的消费点**（2026-09-20 落地；此前只有写入端、无读取端 = 死参数）：
+  `window.ts` 在 `ready-to-show` 按 `resolveStartHidden()`（`process.argv` 含
+  `--hidden`，或 macOS 的 `wasOpenedAtLogin`）决定是否 `show()`——窗口仍照常创建
+  （托盘与事件订阅依赖它），仅不显示。回归锚：`e2e/electron-hidden-start.spec.ts`
+  双向断言（带参不显示 / 不带参显示），已实测在回退修复后失败（非恒真测试）。
+- **响应契约扩展**：`LoginItemSettingsRes` 增加 `supported`（环境是否支持）与
+  `requiresApproval`（macOS 待批准）——两者都是界面必须区分的真实状态。
+- **IPC 安全口径**：`app:setLoginItemSettings` 入参仅 `{ openAtLogin: boolean }`——
   开机启动的程序路径由主进程内部决定（自身可执行文件），渲染层无法注入路径或
   参数，不存在借该通道植入任意启动项的攻击面。
 

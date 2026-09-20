@@ -658,7 +658,9 @@
     "imAllowedGroupsFailed": "允许列表保存失败",
     "imAllowedGroupsLoadFailed": "允许列表读取失败，请重试后再编辑（避免覆盖已有配置）",
     "memoryClearConfirmDesc_other": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。",
-    "memoryClearConfirmDesc_one": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。"
+    "memoryClearConfirmDesc_one": "将清空当前会话的全部 {{count}} 条记忆，此操作不可撤销。",
+    "autostartApprovalDesc": "已在系统中注册，但需要你在系统设置的「登录项」中允许后才能生效",
+    "autostartUnsupportedDesc": "仅安装版本（非开发模式）支持此开关"
   },
   "home": {
     "justNow": "刚刚",

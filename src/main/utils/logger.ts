@@ -9,6 +9,7 @@
 // 5. 注册全局 unhandledRejection / uncaughtException 捕获
 
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { app } from 'electron';
 import log from 'electron-log';
@@ -43,6 +44,17 @@ export function initLogger(): void {
   log.transports.file.level = app.isPackaged ? 'info' : 'debug';
   // 控制台日志级别：仅 dev 启用
   log.transports.console.level = app.isPackaged ? false : 'debug';
+
+  // 测试环境不写真实用户日志目录（2026-09-20 修复）：
+  // electron-log 的默认路径解析在纯 Node（vitest）下回退到 %APPDATA%/<appName>/logs，
+  // 即**真实用户的日志目录**——实测生产 main.log 被写入 143 行测试夹具
+  // （sessionId:'s1' / 条件 A 等），既污染用户诊断包导出，也让日志取证失真
+  // （曾据此误判"应用运行时触发过延迟安装"）。测试下只重定向**文件路径**，
+  // level 逻辑保持不变（生产/开发分支语义原样可测）。
+  const isTestEnv = process.env['VITEST'] !== undefined || process.env['NODE_ENV'] === 'test';
+  if (isTestEnv) {
+    log.transports.file.resolvePathFn = () => join(tmpdir(), 'code-agent-test-logs', 'main.log');
+  }
 
   // 文件轮转配置：单文件 10MB 上限
   // electron-log 5 的轮转机制：超出 maxSize 后当前文件移为 main.old.log，新文件从空开始写

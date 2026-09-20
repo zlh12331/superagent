@@ -19,6 +19,11 @@ import {
 import { app, dialog, shell } from 'electron';
 
 import { exportDiagnosticsPackage } from '../diagnostics';
+import {
+  createAutostartDeps,
+  readAutostartState,
+  setAutostartEnabled,
+} from '../infra/autostart/autostart';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -92,15 +97,17 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
     return { ok: error.length === 0 };
   },
 
-  // 开机自启回显（OS 登录项状态；设置页开关与托盘菜单同源）
+  // 开机自启回显（OS 登录项真实状态；设置页开关与托盘菜单同源）
+  // 平台差异（Windows 命令行比对 / macOS 审批态 / Linux XDG autostart）与 dev 守卫
+  // 集中在 infra/autostart（该文件头注释记录了 Electron v44 源码核实与实测结论）
   getLoginItemSettings: async () => {
-    return { openAtLogin: app.getLoginItemSettings().openAtLogin };
+    return await readAutostartState(createAutostartDeps());
   },
 
-  // 开机自启写入（--hidden 启动参数由 index.ts 消费：启动即驻留托盘）
+  // 开机自启写入（返回写后回读的真实状态——注册失败/审批未通过会如实反映，
+  // 不再回显入参；此前回显曾让 Linux 空实现与 macOS 待审批都显示"成功"）
   setLoginItemSettings: async (input) => {
-    app.setLoginItemSettings({ openAtLogin: input.openAtLogin, args: ['--hidden'] });
-    return { openAtLogin: input.openAtLogin };
+    return await setAutostartEnabled(createAutostartDeps(), input.openAtLogin);
   },
 
   // 退出应用（走完整善后链：before-quit 协商 → dispose → 延迟安装）
