@@ -22,6 +22,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import type { BinaryArch } from './lib/native-arch';
 import { archMatches, detectBinaryInfo, expectedArchFromDirName } from './lib/native-arch';
@@ -106,8 +107,15 @@ function collectFiles(
   return out;
 }
 
-/** macOS 的 resources 相对路径（.app/Contents/Resources） */
-function resourcesDirOf(unpackedDir: string): string {
+/**
+ * 平台产物内的 resources 目录
+ *
+ * macOS 为 `<dir>/<Product>.app/Contents/Resources`，其余平台为 `<dir>/resources`。
+ *
+ * ⚠️ 导出供单测：该函数曾写错导致 macOS 上「一个二进制都没查到却报通过」
+ * （2026-09-20 首次 CD 实测暴露），是静默漏洞的关键点，必须有回归锚。
+ */
+export function resourcesDirOf(unpackedDir: string): string {
   const base = basename(unpackedDir);
   if (base.startsWith('mac')) {
     // mac / mac-arm64 / mac-x64 → <dir>/<Product>.app/Contents/Resources
@@ -128,31 +136,23 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
   const dirName = basename(unpackedDir);
   const label = (p: string): string => relative(ROOT, p).replace(/\\/g, '/');
   const targets: CheckTarget[] = [];
+  // ⚠️ 必须用 resourcesDirOf 而非硬编码 `unpackedDir/resources`：macOS 的资源在
+  // `<dir>/<Product>.app/Contents/Resources`，硬编码路径会让 macOS 上一个都查不到
+  // ——而检查器"0 个也通过"的设计会把它变成静默漏洞（2026-09-20 首次 CD 实测暴露：
+  // macOS job 报「已检查 0 个二进制」仍通过）。
+  const resourcesDir = resourcesDirOf(unpackedDir);
+  const asarUnpacked = join(resourcesDir, 'app.asar.unpacked', 'node_modules');
 
   // node-pty：build/Release 下的编译产物（.node 与 winpty-agent.exe）
   for (const pattern of ['node', 'exe']) {
-    const base = join(
-      unpackedDir,
-      'resources',
-      'app.asar.unpacked',
-      'node_modules',
-      'node-pty',
-      'build',
-      'Release',
-    );
+    const base = join(asarUnpacked, 'node-pty', 'build', 'Release');
     for (const file of collectFiles(base, (n) => n.endsWith(`.${pattern}`), 2)) {
       targets.push({ label: label(file), path: file, expected });
     }
   }
 
   // better-sqlite3：优先 build/Release（rebuild 产物），缺失则用其主动加载的 prebuild
-  const sqliteBase = join(
-    unpackedDir,
-    'resources',
-    'app.asar.unpacked',
-    'node_modules',
-    'better-sqlite3',
-  );
+  const sqliteBase = join(asarUnpacked, 'better-sqlite3');
   const sqliteRelease = collectFiles(
     join(sqliteBase, 'build', 'Release'),
     (n) => n.endsWith('.node'),
@@ -180,7 +180,6 @@ function targetsFor(unpackedDir: string, expected: 'x64' | 'arm64'): CheckTarget
   }
 
   // codegraph 平台捆绑包（extraResources 按 ${arch} 选取）
-  const resourcesDir = resourcesDirOf(unpackedDir);
   for (const rel of [
     join('codegraph', 'node.exe'), // Windows
     join('codegraph', 'bin', 'codegraph'), // 其他平台
@@ -278,7 +277,25 @@ function main(): void {
     process.exit(1);
   }
 
+  // ⚠️ 0 个检查对象 = 检查器失灵，不是"没有原生模块"
+  // 本应用必然携带 node-pty（终端功能的原生模块），任何平台都应查到至少一个二进制。
+  // 若此处放行，"路径解析写错 → 一个都没查到 → 报通过"就会成为静默漏洞
+  // （2026-09-20 首次 CD 实测：macOS job 正是这样报「已检查 0 个」仍通过）。
+  if (result.checked === 0) {
+    console.error('[check-native-arch] ❌ 未检查到任何原生二进制——检查器路径解析可能失配：');
+    console.error(`  已扫描的产物目录：${dirs.map((d) => basename(d)).join(', ')}`);
+    console.error(
+      '  预期至少能查到 node-pty 的编译产物（build/Release/*.node）。请核对' +
+        ' resourcesDirOf 对当前平台的路径推导（macOS 应为 <dir>/<App>.app/Contents/Resources）。',
+    );
+    process.exit(1);
+  }
+
   console.log('[check-native-arch] ✅ 通过：所有原生模块与目标架构一致');
 }
 
-main();
+// 仅在被直接执行时运行主逻辑（被测试 import 时不执行——否则单测会连带扫描
+// 真实 release/ 目录并在无产物时以 exit(1) 中断测试进程）
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
