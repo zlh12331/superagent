@@ -190,6 +190,8 @@ nsis:
   # NSIS 安装器图标：由 win.icon（icon.png）自动派生 .ico（NSIS 不接受 png）
   # 安装完成后启动应用
   runAfterFinish: true
+  # 自定义 NSIS 脚本：旧卸载器失败时不中断安装（见 resources/installer.nsh 头注释）
+  include: resources/installer.nsh
 
 # ── macOS 平台配置 ────────────────────────────────────────────
 # 注意：macOS 包只能在 macOS runner 上构建（electron-builder 不支持 Windows → macOS 交叉编译）
