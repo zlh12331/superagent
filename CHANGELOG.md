@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.2](https://github.com/zlh12331/superagent/compare/v1.3.1...v1.3.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* **ci:** 补严格提交标题门禁 + 解除被双 type 标题阻断的发版通道 ([#57](https://github.com/zlh12331/superagent/issues/57)) ([9dd436c](https://github.com/zlh12331/superagent/commit/9dd436c57e1f749f95ef51f1146365d4fbf87af0))
+
 ## [1.3.1](https://github.com/zlh12331/superagent/compare/v1.3.0...v1.3.1) (2026-09-19)
 
 > 本版本修复更新流程中的两个问题：更新包偶尔会重复下载（差分下载完成后又转全量），以及点「重启并安装」后应用退出但安装未真正执行。
