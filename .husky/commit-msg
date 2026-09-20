@@ -1,6 +1,11 @@
 #!/usr/bin/env sh
 # .husky/commit-msg
-# 提交信息钩子：校验 Conventional Commits
+# 提交信息钩子：校验 Conventional Commits（两道）
+# 1) commitlint：官方规则（type/scope/subject/长度等）
+# 2) check-commit-msg：严格 header 结构——commitlint 的贪婪括号匹配会放行
+#    `fix(x)+build(y): …` 这类双 type 标题，而 release-please 会拒绝并跳过该提交，
+#    后果是发版通道静默阻断（2026-09-20 实证）。详见 scripts/check-commit-msg.ts。
 # 设计文档 §9.8 / §9.9
 
-pnpm commitlint --edit "$1"
+pnpm commitlint --edit "$1" || exit 1
+pnpm exec tsx scripts/check-commit-msg.ts "$1" || exit 1

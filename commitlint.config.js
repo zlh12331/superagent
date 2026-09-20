@@ -42,6 +42,11 @@ export default {
     // 不提到 1000 的理由：subject 是「一行摘要」，出现在 git log --oneline、
     // GitHub PR 标题、各 IDE 提交列表等窄位；放长会让摘要失去可扫读性，属反模式。
     'header-max-length': [2, 'always', 100],
+    // ⚠️ header 结构严格化不在本文件（commitlint 21.x 无 header-pattern 规则，实测
+    // 写入未知规则会直接抛错）。改由 `scripts/check-commit-msg.ts` 经 .husky/commit-msg
+    // 钩子校验——原因见该脚本头注释（commitlint 的贪婪括号匹配会放行
+    // `fix(x)+build(y): …` 双 type 标题，而 release-please 的严格解析器拒绝它，
+    // 后果是发版通道静默阻断）。
     // body 前必须空一行（warning 级，宽松一些）
     'body-leading-blank': [1, 'always'],
     // body / footer 取消行宽强制（2026-09-11 放宽；0 = 关闭该规则）
