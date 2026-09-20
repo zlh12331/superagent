@@ -96,6 +96,8 @@ resources/pg/
 # 体积大（含 node_modules），不入仓；打包前执行 pnpm prepare:memory-hub 生成
 # 注：引擎源码已 vendored 进仓（packages/memory-engine/MemoryCore），此处仅构建产物
 resources/memory-hub/
+# 构建信息（scripts/generate-build-info.mjs 生成，随安装包分发；构建产物不入仓）
+resources/build-info.json
 # codegraph 平台捆绑包（vendored Node 24 + app，体积大），由 scripts/prepare-codegraph.mjs 生成
 # 按架构分目录（resources/codegraph-x64 与 -arm64），extraResources 用 ${arch} 选取对应那套
 resources/codegraph/
