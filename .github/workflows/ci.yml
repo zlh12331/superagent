@@ -6,7 +6,7 @@
 # - integration-tests job：集成测试（tests/integration）
 # - e2e-browser job：浏览器模式 E2E（唯一需要 Chromium 的 job）
 # - e2e-electron job：三平台矩阵（windows/ubuntu/macos），跑真实 Electron E2E
-# - smoke-prod job：windows + ubuntu 矩阵，跑生产构建 smoke 测试
+# - （smoke-prod job 已移除：生产产物 smoke 统一交给 CD，见文件末尾说明）
 # - （原 package job 已移除：打包验证交给 CD，见文件末尾说明）
 #
 # 触发策略（2026-09-10 方案二：CI on PR, CD on main）：
@@ -283,73 +283,10 @@ jobs:
           path: playwright-report-electron/
           retention-days: 7
 
-  # ── Job 4: 生产构建 Smoke 测试（最接近用户场景，win + linux）─
-  smoke-prod:
-    name: Smoke (Production Build, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        # Windows：NSIS；Linux：AppImage（macOS smoke 由 package job 覆盖）
-        os: [windows-latest, ubuntu-latest]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
-      # 打包后的可执行文件，不需要 Playwright 自带浏览器。仅需 ffmpeg（录像）。
-      - name: Install Playwright deps (ffmpeg only, no Chromium)
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
-          pnpm exec playwright install ffmpeg
-
-      - name: Build production artifacts
-        # 记忆引擎源码已 vendored 进仓（packages/memory-engine/MemoryCore），
-        # 构建必然带上引擎；缺失会直接失败而非降级（2026-09-13 起）。
-        # 2026-09-20 多架构发布：CI 只验证**本机架构**产物（smoke 用
-        # resolvePackagedExecutable 按 process.arch 选择，跨架构产物无法在 runner 上启动）。
-        # Windows 用 build:win:x64（单架构——`--x64` 现已真正只构建 x64；
-        # 此前配置里的 arch 列表与 CLI 是并集，会让单架构脚本产出双架构且其中
-        # arm64 那份静默复用 host 架构，见 check:native-arch 的说明）。
-        # arm64 由 release.yml 的 windows-latest 双架构 job 与 ubuntu-24.04-arm 原生 job 覆盖。
-        run: ${{ runner.os == 'Windows' && 'pnpm build:win:x64' || 'pnpm build:linux:x64' }}
-        env:
-          # codegraph 捆绑包按架构部署（每个约 250MB）：CI 两个 runner 都是 x64，
-          # 只部署 x64 那套（arm64 由 release.yml 的 ARM64 job 负责）
-          CODE_AGENT_TARGET_ARCHS: x64
-
-      # 原生模块架构断言（防交叉构建静默产出错误架构二进制）
-      - name: Verify native module architecture
-        run: pnpm check:native-arch
-
-      - name: Run production smoke tests
-        # Linux 无头环境走 xvfb（Electron 启动需要 Display）；Windows runner DISPLAY 无需
-        run: ${{ runner.os == 'Linux' && 'xvfb-run -a pnpm test:smoke' || 'pnpm test:smoke' }}
-        env:
-          ELECTRON_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
-
-      - name: Upload smoke test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
-        with:
-          name: playwright-report-smoke-${{ matrix.os }}-${{ github.run_id }}
-          path: playwright-report-smoke/
-          retention-days: 7
+  # ── Job 4「生产构建 Smoke 测试」已移除（2026-09-20）─────────────────
+  # 原 smoke-prod job（windows + ubuntu 矩阵：打包 → check:native-arch → test:smoke）
+  # 已删除，生产产物验证统一交给 CD（release.yml 的 build job 各自跑 test:smoke）。
+  # 成本与覆盖对比、代价、以及 ruleset 连带变更见文件末尾「Job 5」注释块。
 
   # ── Job 5「三平台打包验证」已移除（2026-09-10 方案二）───────────────
   # 原 package job（三平台 electron-builder 打包验证，各约 5 分钟）与 release.yml 的
@@ -362,4 +299,27 @@ jobs:
   # ⚠️ 必需同步：ruleset「protect-release-branches」的 required_status_checks 已移除
   # Package (windows/ubuntu/macos-latest) 三项。若只删本 job 而不改 ruleset，这三项
   # 检查永不 report，所有 PR 会卡在 pending 无法合并（strict policy 下）。
+  #
+  # ── Job 6「生产构建 Smoke 测试」已移除（2026-09-20，同一原则）──────────
+  # 原 smoke-prod job（windows + ubuntu 矩阵）做的事是：真实打包（build:*:x64）
+  # → check:native-arch → test:smoke（用 _electron.launch 启动打包产物并断言
+  # 能渲染 / preload 注入 / SQLite 可查 / 无控制台错误）。删除理由：
+  #   1. 成本不对称：CI 里必须从零打包才有产物可启动，实测每 PR 约 20 分钟
+  #      （Windows 9m20s + Ubuntu 10m19s）；CD 的同一套 smoke 夹在本来就要跑的
+  #      build job 内，增量仅 1–3 分钟。
+  #   2. 覆盖面反而更全：CD 覆盖全部四个变体（Windows x64+arm64 / macOS x64+arm64 /
+  #      Linux x64 原生 / Linux arm64 原生），CI 只能跑 x64 的 win+ubuntu——
+  #      macOS 打包在 PR 阶段本就无法验证（原注释声称"由 package job 覆盖"，
+  #      而该 job 已于 2026-09-10 删除，属过期注释）。
+  #   3. 风险由 CD 的 fail-closed 兜底：build job 失败即不打 tag、不占版本号，
+  #      修复后重跑同一 workflow 即可。
+  # ⚠️ 连带变更（已同步）：required_status_checks 移除
+  # Smoke (Production Build, windows-latest) 与 Smoke (Production Build, ubuntu-latest)
+  # ⇒ 必需检查从 8 项降为 6 项。只删 job 不改 ruleset 会让这两项永不 report，
+  # 所有 PR 卡在 pending（与上面 package job 同一个坑）。
+  # 代价（如实记录）：打包层回归——preload 被误打成 ESM、原生模块 ABI/架构错配、
+  # extraResources 漏文件、安装路径超长等——不再有 PR 阶段的早反馈，要到发版跑 CD
+  # 才暴露。这类问题在本项目历史上出现过多次；若日后发现"发版时才炸"过于昂贵，
+  # 恢复路径是加一个用 `electron-builder --dir` 打包的轻量 job（跳过安装器生成，
+  # 约省一半时间）——smoke 启动的是 unpacked 目录里的可执行文件，本不需要安装器。
 

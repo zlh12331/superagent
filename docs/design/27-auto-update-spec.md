@@ -491,10 +491,20 @@ better-sqlite3 的编译产物或主动加载的 prebuild、codegraph 的 `node.
 **双向验证**：本机 x64 产物通过；把 `win-unpacked` 改名为 `win-arm64-unpacked`
 后精确报出 5 处错配（node-pty 4 个 + codegraph node.exe），退出码 1。
 
-**CI 同步调整**：smoke job 改为构建**本机架构**（`build:win:x64` / `build:linux:x64`）
-并加 `CODE_AGENT_TARGET_ARCHS` 收窄 codegraph 部署——CI 只验证能在 runner 上启动的
-那份产物；arm64 由 release.yml 的 `ubuntu-24.04-arm` 原生 job 与 windows-latest
-双架构 job 覆盖。
+**CI 同步调整（2026-09-20 二次修订：smoke 已整体移交 CD）**：
+原先 CI 的 smoke job 用 `build:win:x64` / `build:linux:x64` 构建本机架构产物并跑
+`test:smoke`。现已**从 CI 整体移除**（含 ruleset 的必需检查同步），理由：
+① 成本不对称——CI 必须从零打包才有可启动的产物（实测每 PR 约 20 分钟），CD 的同
+一套 smoke 夹在本就要跑的 build job 内（增量 1–3 分钟）；② CD 覆盖更全——四个变体
+（Windows 双架构 / macOS 双架构 / Linux x64 / Linux arm64），CI 只能跑 x64 的
+win+ubuntu，macOS 打包在 PR 阶段本就无法验证（原注释称"由 package job 覆盖"，
+而该 job 已于 2026-09-10 删除，属过期注释）；③ 风险由 CD 的 fail-closed 兜底——
+build job 失败即不打 tag、不占版本号，可重试。
+代价（如实记录）：打包层回归（preload 打成 ESM / 原生模块 ABI 与架构错配 /
+extraResources 漏文件 / 安装路径超长）失去 PR 阶段早反馈，要到发版跑 CD 才暴露；
+若日后觉得昂贵，恢复路径是加一个 `electron-builder --dir` 的轻量 job（跳过安装器
+生成，smoke 启动的是 unpacked 里的可执行文件，本不需要安装器）。
+`CODE_AGENT_TARGET_ARCHS` 仍在 CD 的 build job 使用（收窄 codegraph 部署）。
 
 **验证**：`scripts/lib/native-arch.test.ts` 23 项（三格式 × 各架构 + 非二进制/截断
 边界 + 目录名推断）；`check:native-arch` 在真实产物上双向验证通过；typecheck / lint /
