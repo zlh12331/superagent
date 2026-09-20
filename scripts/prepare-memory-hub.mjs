@@ -30,13 +30,14 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const TARGET = join(ROOT, 'resources', 'memory-hub');
@@ -137,14 +138,25 @@ console.log('[prepare-memory-hub] 在目标目录安装生产依赖（--ignore-s
 // 隔离 workspace：写一个仅含空 packages 的 pnpm-workspace.yaml，阻止 pnpm 沿目录上溯
 // 找到 F:\TraeProjects\1\ 项目根 workspace（否则依赖被装到父级、目标目录近乎为空）。
 //
-// supportedArchitectures（2026-09-20 多架构发布）：引擎依赖 @node-rs/jieba，它按
-// 平台/架构分发原生绑定（optionalDependencies，如 jieba-darwin-x64 / -darwin-arm64），
-// 运行时由包内 index.js 按 process.platform + process.arch 动态 require。只装
-// host 架构会在交叉构建时打进错误架构的绑定（x64 包内为 arm64 绑定 → 分词功能失败）。
-// 两个架构都装后运行时可正确选择，且体积代价很小（jieba 绑定仅数 MB）。
+// ⚠️ virtualStoreDirMaxLength（2026-09-20 修 Windows 升级失败）：
+// 默认的 .pnpm 实体目录名形如 `@opentelemetry+sdk-node@0.2_7e8bdd95a3790ff09…`
+// （约 70 字符），与深层包路径叠加后使安装目录内的最深相对路径达 **206 字符**。
+// 而 Windows 的 NSIS 卸载器在「更新模式」下要把每个文件**重命名**到
+// `$PLUGINSDIR\old-install\<相对路径>`（实测 $PLUGINSDIR 45 字符 + 前缀 13 字符），
+// 总长 264 > MAX_PATH 260 ⇒ 重命名失败 ⇒ 卸载器 Abort（退出码 2）⇒ 安装器弹
+// 「Failed to uninstall old application files」。已用真实 makensis 复现
+// （206 字符路径 CreateDirectory/Rename 均 FAILED，短路径对照 OK）。
+// 收紧到 24 后实体目录名为哈希（33 字符），最深相对路径降到 170（目标 228 < 260）。
+//
+// supportedArchitectures：引擎依赖 @node-rs/jieba，它按平台/架构分发原生绑定
+// （optionalDependencies，如 jieba-darwin-x64 / -darwin-arm64），运行时由包内
+// index.js 按 process.platform + process.arch 动态 require。只装 host 架构会在
+// 交叉构建时打进错误架构的绑定（x64 包内为 arm64 绑定 → 分词功能失败）。
 writeFileSync(
   join(TARGET, 'pnpm-workspace.yaml'),
-  'packages: []\nsupportedArchitectures:\n  os:\n    - current\n  cpu:\n    - x64\n    - arm64\n',
+  'packages: []\n' +
+    'supportedArchitectures:\n  os:\n    - current\n  cpu:\n    - x64\n    - arm64\n' +
+    'virtualStoreDirMaxLength: 24\n',
   'utf8',
 );
 const storeDir = join(tmpdir(), 'pnpm-store-memory-hub');
@@ -192,24 +204,89 @@ function readDeps(dir) {
 }
 
 /**
- * 从 .pnpm 实体目录名解析该实体**自身的包名**
+ * 从 .pnpm 实体目录解析该实体**自身的包名**
  *
- * 目录名格式：`<包名>@<版本>[_<peer 解析后缀>]`，作用域包的分隔符 `/` 被编码为 `+`。
- * 例：
- *   openclaw@2026.9.4_@opentele_93aeb3cb…  → openclaw
- *   @openclaw+fs-safe@0.8.5                → @openclaw/fs-safe
- *   zod@4.6.2                              → zod
+ * 两条路径（2026-09-20 增补第二条）：
+ * 1. **目录名解析**（常规布局）：`<包名>@<版本>[_<peer 后缀>]`，作用域包的分隔符
+ *    `/` 编码为 `+`。例：`@openclaw+fs-safe@0.8.5` → `@openclaw/fs-safe`。
+ * 2. **结构识别**（哈希名布局）：virtualStoreDirMaxLength 收紧后目录名变为
+ *    `_<32 位哈希>`，目录名里没有包名 ⇒ 改看该实体 `node_modules/` 下的
+ *    **非链接成员**。pnpm 的隔离式布局中，实体自身的包是**真实目录**，其依赖是
+ *    junction/symlink 链接；实测该结构在 73 个实体上「非链接成员」恒为 1 个、
+ *    且与包名一致（零歧义）。
  *
- * ⚠️ 必须解析自身包名而不是遍历其 node_modules：`.pnpm/<实体>/node_modules/` 里
- *   同时装着该实体的**全部依赖**（pnpm 隔离式布局）。若把其中的包名都登记到本实体，
- *   会出现"某实体的依赖被当成该实体自身"的错配——实测因此把 zod 的依赖 openclaw
- *   误判为"zod 自身"，导致 214MB 的 openclaw 被错误保留。
+ * ⚠️ 必须解析自身包名而不是遍历全部成员：`.pnpm/<实体>/node_modules/` 里同时装着
+ *   该实体的**全部依赖**。若把其中的包名都登记到本实体，会出现"某实体的依赖被当成
+ *   该实体自身"的错配——实测因此把 zod 的依赖 openclaw 误判为"zod 自身"，导致
+ *   214MB 的 openclaw 被错误保留。
+ *
+ * @returns 包名；两条路径都失败时为 null（调用方跳过该实体）
  */
 function parseOwnPackageName(entryName) {
+  const byName = parseNameFromEntry(entryName);
+  if (byName !== null) {
+    return byName;
+  }
+  return parseNameFromStructure(entryName);
+}
+
+/** 目录名解析（常规布局；哈希名返回 null） */
+function parseNameFromEntry(entryName) {
+  // 哈希名（virtualStoreDirMaxLength 生效后的形态）没有可解析的包名
+  if (entryName.startsWith('_')) {
+    return null;
+  }
   const withoutPeers = entryName.split('_')[0] ?? entryName;
   const at = withoutPeers.lastIndexOf('@');
   const raw = at <= 0 ? withoutPeers : withoutPeers.slice(0, at);
-  return raw.replace('+', '/');
+  return raw === '' ? null : raw.replace('+', '/');
+}
+
+/**
+ * 结构识别（哈希名布局）：实体自身是 node_modules 下唯一的**非链接**成员
+ *
+ * 用 realpath 对比判定链接——Windows 上 pnpm 用 junction，Node 的
+ * `lstat().isSymbolicLink()` 对 junction 返回 false，但 realpath 与原路径不同。
+ */
+function parseNameFromStructure(entryName) {
+  const nmDir = join(PNPM_DIR, entryName, 'node_modules');
+  let members;
+  try {
+    members = readdirSync(nmDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const own = [];
+  for (const member of members) {
+    if (member.name === '.bin') continue;
+    const full = join(nmDir, member.name);
+    if (member.name.startsWith('@')) {
+      // 作用域目录：其下的子目录才是包本身
+      let subs;
+      try {
+        subs = readdirSync(full, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const sub of subs) {
+        const subFull = join(full, sub.name);
+        if (isRealDirectory(subFull)) own.push(`${member.name}/${sub.name}`);
+      }
+      continue;
+    }
+    if (isRealDirectory(full)) own.push(member.name);
+  }
+  // 仅在唯一时才认定（多成员意味着布局异常，宁可跳过该实体也不误判）
+  return own.length === 1 ? (own[0] ?? null) : null;
+}
+
+/** 判定是否为「实体自身的真实目录」（非 junction/符号链接） */
+function isRealDirectory(path) {
+  try {
+    return realpathSync(path) === resolve(path);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -220,6 +297,11 @@ function buildPnpmIndex() {
   for (const entry of readdirSync(PNPM_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name === 'node_modules') continue;
     const ownName = parseOwnPackageName(entry.name);
+    // 两条识别路径都失败时跳过该实体（宁可少登记也不误判归属）
+    if (ownName === null) {
+      console.warn(`[prepare-memory-hub] ⚠️ 无法识别实体自身包名，跳过：${entry.name}`);
+      continue;
+    }
     // 仅当实体内确实存在该包（避免解析失配时登记错误映射）
     if (!existsSync(join(PNPM_DIR, entry.name, 'node_modules', ownName, 'package.json'))) {
       continue;
@@ -461,7 +543,27 @@ if (removedCrossPlatform > 0) {
 
 const MAX_PATH = 260;
 const ASSUMED_INSTALL_PREFIX = 59; // 默认安装路径实测估算（见上）
+/**
+ * 升级路径的额外前缀（2026-09-20 补，本次事故的直接原因）
+ *
+ * ⚠️ 为什么必须单独算：NSIS 卸载器在**更新模式**（--updated）下不删除文件，而是
+ * 把每个文件**重命名**到 `$PLUGINSDIR\old-install\<相对路径>`（uninstaller.nsh 的
+ * un.atomicRMDir）。任一重命名失败即 Abort（退出码 2），安装器随即弹
+ * 「Failed to uninstall old application files」并中止升级。
+ *
+ * 实测数据（本机真实 makensis 复现）：
+ *   $PLUGINSDIR = C:\Users\<user>\AppData\Local\Temp\nsgXXXX.tmp（45 字符）
+ *   加 `\old-install\`（13）= 58 字符
+ *   原最长相对路径 206 → 目标 264 > 260 ⇒ CreateDirectory/Rename 均 FAILED
+ *   （短路径对照 OK，证明是长度而非权限/占用问题）
+ *
+ * ⇒ 只校验「安装前缀 + 相对路径」（全新安装路径）会**漏掉升级场景**：
+ *   1.3.1 能装（全新安装不重命名）而 1.3.2 升级失败，正是这个盲区。
+ * 生成侧已用 virtualStoreDirMaxLength=24 收紧（见步骤 5 的说明）。
+ */
+const UPDATE_MODE_EXTRA_PREFIX = 58;
 let overLimit = 0;
+let overLimitUpdate = 0;
 let maxRelative = 0;
 const checkPathLength = (dir) => {
   let entries;
@@ -480,19 +582,37 @@ const checkPathLength = (dir) => {
     if (!ent.isFile()) continue;
     const relLen = p.length - ROOT.length; // 相对项目根（含 resources/memory-hub）
     if (relLen > maxRelative) maxRelative = relLen;
+    // 全新安装：<安装目录>/resources/memory-hub/<rel>
     if (relLen + ASSUMED_INSTALL_PREFIX > MAX_PATH) overLimit += 1;
+    // 升级：文件名同样会被重命名到 $PLUGINSDIR\old-install 下，故加该前缀
+    if (relLen + UPDATE_MODE_EXTRA_PREFIX > MAX_PATH) overLimitUpdate += 1;
   }
 };
 checkPathLength(TARGET);
+const installTotal = maxRelative + ASSUMED_INSTALL_PREFIX;
+const updateTotal = maxRelative + UPDATE_MODE_EXTRA_PREFIX;
 if (overLimit > 0) {
   console.warn(
     `[prepare-memory-hub] ⚠ Windows 路径长度：${overLimit} 个文件在默认安装路径下` +
       `可能超过 ${MAX_PATH} 字符（最长相对 ${maxRelative}）。若安装失败请装到更浅的目录。`,
   );
-} else {
+}
+if (overLimitUpdate > 0) {
+  // 升级场景必须 fail-loud：它不会立刻暴露，而是在用户「重启并安装」时才以
+  // 「Failed to uninstall old application files」的形式爆发（真实事故形态）
+  console.error(
+    `[prepare-memory-hub] ❌ Windows 升级路径超限：${overLimitUpdate} 个文件在升级时` +
+      `（$PLUGINSDIR\\old-install 前缀 ${UPDATE_MODE_EXTRA_PREFIX}）会超过 ${MAX_PATH} 字符` +
+      `（最长相对 ${maxRelative} → ${updateTotal}）。` +
+      '这会让 NSIS 卸载器 Abort 并阻断用户升级。请收紧依赖目录名长度' +
+      '（virtualStoreDirMaxLength）或裁掉更深层的文件。',
+  );
+  process.exit(1);
+}
+if (overLimit === 0 && overLimitUpdate === 0) {
   console.log(
-    `[prepare-memory-hub] 路径长度检查通过（最长相对 ${maxRelative} 字符 + 安装前缀 ` +
-      `${ASSUMED_INSTALL_PREFIX} = ${maxRelative + ASSUMED_INSTALL_PREFIX} ≤ ${MAX_PATH}）`,
+    `[prepare-memory-hub] 路径长度检查通过（最长相对 ${maxRelative}；全新安装 ` +
+      `${installTotal} ≤ ${MAX_PATH}；升级 ${updateTotal} ≤ ${MAX_PATH}）`,
   );
 }
 

@@ -501,3 +501,85 @@ better-sqlite3 的编译产物或主动加载的 prebuild、codegraph 的 `node.
 test:scripts（181 项）全绿。**仍未在本机验证**：Windows/Linux 的 arm64 真实构建
 （本机无 ARM64 工具链），待 release.yml 的对应 job 首次运行确认——届时
 `check:native-arch` 会在架构错配时直接失败，不会再出现"静默产出坏包"。
+
+### 14.10 Windows 1.3.1→1.3.2 升级失败：NSIS 长路径（2026-09-20，真机反馈）
+
+**现象**：用户在 1.3.1 上点「重启并安装」升级 1.3.2，安装器弹出
+「Failed to uninstall old application files. Please try running the installer
+again.」并中止（错误码 2），无法升级。
+
+**根因（已用真实 NSIS 完整复现）**：
+
+`uninstallFailed` 消息来自 app-builder-lib 的 `installUtil.nsh:129`，`: 2` 是**旧
+卸载器的退出码**。查 `uninstaller.nsh` 的更新模式路径（`--updated` 时）：
+
+```
+CreateDirectory "$PLUGINSDIR\old-install..."   ← CreateDirectory 失败即 Abort
+Rename "$INSTDIR\<rel>" "$PLUGINSDIR\old-install\<rel>"
+Abort `Can't rename ...`                        ← Abort 的退出码固定为 2
+```
+
+即：升级时旧卸载器**不删除文件**，而是把每个文件逐个重命名到临时目录，**任一失败
+即 Abort**。
+
+三条实测数据（本机真实测量）：
+- 安装目录内**最深相对路径 = 206 字符**（`resources/memory-hub/node_modules/.pnpm/
+  @opentelemetry+sdk-node@0.2_7e8bdd95…/node_modules/@opentelemetry/resources/…`）
+- NSIS `$PLUGINSDIR` = **45 字符**（编译并运行一个探针安装器实测：
+  `C:\Users\26592\AppData\Local\Temp\nsg6437.tmp`）
+- 加上 `\old-install\`（13）⇒ 重命名**目标 = 264 > MAX_PATH 260**
+
+**决定性实验**（用真实 makensis 编译探针，而非推理）：
+```
+--- long（206 字符相对路径）---
+  CreateDirectory(full) FAILED   ← 目标超限
+  Rename FAILED                  ← 卸载器在此 Abort → 退出码 2
+--- short（对照）---
+  CreateDirectory(full) OK       ← 短路径正常（证明是长度而非权限/占用）
+```
+另核实：用户系统 `LongPathsEnabled=1`，但旧卸载器二进制内**未声明 `longPathAware`**
+（只搜到 `requestedExecutionLevel`）⇒ 该进程无法利用长路径支持。
+
+**为什么此前没暴露**：升级路径的额外前缀此前**不在任何检查的模型里**——
+`prepare-memory-hub.mjs` 原本只校验「安装前缀 + 相对路径」（全新安装），
+故 1.3.1 能全新安装成功，而升级时多出的 58 字符前缀恰好把路径推过 260。
+
+**修复（三层）**：
+
+1. **缩短路径（根因）**：`scripts/prepare-memory-hub.mjs` 的嵌套安装声明
+   `virtualStoreDirMaxLength: 24` ⇒ `.pnpm` 实体目录名从约 70 字符的
+   `@opentelemetry+sdk-node@0.2_7e8bdd95…` 变为 33 字符的哈希 `_<32hex>`。
+   实测最长相对路径 **206 → 188**。
+   ⚠️ 连带改动：裁剪逻辑原本从目录名解析包名（`parseOwnPackageName`），哈希名下
+   失效 ⇒ 增补**结构识别**（实体自身的包是其 `node_modules` 下唯一的**非链接**
+   目录，用 realpath 判定——Windows 的 junction 用 `isSymbolicLink` 识别不到；
+   实测 73 个实体该结构零歧义）。
+2. **构建期断言（防回归）**：同文件新增**升级路径**校验——除原有的
+   `相对路径 + 安装前缀(59)`，另算 `相对路径 + $PLUGINSDIR前缀(58)`，后者超 260
+   即 **fail-closed**（`process.exit(1)`）。这是原检查的盲区所在。
+3. **安装器逃生舱（`resources/installer.nsh`，经 `nsis.include` 注入）**：定义
+   `customUnInstallCheck` 宏接管「旧卸载器非 0 退出码 → 弹窗 → Quit」逻辑，
+   改为记录退出码 → 清理 `$INSTDIR` → `ClearErrors` → **继续安装**。
+   理由：路径长度只是已知的一种失败原因（文件占用/权限/磁盘错误同样会返回非 0），
+   而「装新版本前必须卸载干净旧版本」是优化而非正确性前提（新版安装器本就覆盖
+   全部文件）。正常升级（`$R0 == 0`）不受影响。
+   ⚠️ 三条实现约束（均由 makensis 编译失败/失败两次换来，见文件头注释）：
+   ① 本文件注入在生成脚本**最前**（早于 `multiUser.nsh`），不能引用
+   `${INSTALL_REGISTRY_KEY}` 等常量（"unknown variable" 警告即错误）；
+   ② 清理必须在**安装器**侧——卸载失败走 `Abort`，`customUnInstall`（卸载器段）
+   的代码根本不会执行；③ 辅助 `Function` 会被 "install function not referenced"
+   误判（宏展开晚于该分析）⇒ 清理逻辑**内联在宏体内**。
+
+**验证**：
+- 路径：`prepare-memory-hub` 重跑实测「最长相对 188；全新安装 247 ≤ 260；
+  升级 246 ≤ 260」全部通过
+- 安装器：`electron-builder --win --x64`（真实 NSIS 目标）编译**成功**，且
+  `builder-debug.yml` 证实 `!include ".../resources/installer.nsh"` 已注入
+  （位置在所有 NSIS 模板之前，与约束 ① 一致）
+- 产物：安装器内 `resources/memory-hub/node_modules/.pnpm/` 已是短名
+  （如 `@ai-sdk+provider@3.0.16`），证明修复进入了最终产物
+- 门禁：typecheck / lint / check:static（12 项）全绿
+
+**仍未验证**：真机上从 1.3.1 升级到含本修复的版本（需发版后实测）。
+本机无法直接验证升级路径——但三层修复中第 2 层会在构建期就拦住同类问题，
+第 3 层保证即使再出现未知原因也不会阻断用户。
