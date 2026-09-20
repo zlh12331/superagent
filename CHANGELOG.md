@@ -2,6 +2,29 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.2](https://github.com/zlh12331/superagent/compare/v1.3.1...v1.3.2) (2026-09-20)
+
+> 本版本为 Linux 与 ARM 设备用户带来更完整的安装包：新增 RPM 格式与 ARM64 架构支持，
+> 同时修复开机自启的若干问题。
+
+### 新增
+
+- **Linux 新增 RPM 安装包**：Fedora / RHEL / openSUSE 等发行版可直接安装（此前只有 AppImage 与 deb）（[#56](https://github.com/zlh12331/superagent/issues/56)）
+- **全平台支持 ARM64 架构**：为 ARM 设备提供原生安装包——Windows on ARM（`.exe`）、Apple 芯片 Mac（`.dmg`，此前已有）、Linux ARM64（AppImage / deb / rpm）。ARM 设备上运行时不再经过 x64 兼容层，性能与功耗更好（[#56](https://github.com/zlh12331/superagent/issues/56)）
+- **Linux 更新包按架构分发**：ARM64 设备自动获取对应架构的更新，不会误装 x64 版本（[#56](https://github.com/zlh12331/superagent/issues/56)）
+
+### 修复
+
+- **开机自启开关显示错误**：修复 Windows 上开关始终显示「关闭」（即使实际已开启）、且无法在应用内关闭开机自启的问题——原因是读取系统登录项时未传启动参数，与写入时不匹配（[#56](https://github.com/zlh12331/superagent/issues/56)）
+- **开机自启时不再弹窗**：修复开启开机自启后，开机时应用仍会弹出主窗口的问题；现在按预期静默驻留系统托盘（macOS / Linux 同样适用）（[#56](https://github.com/zlh12331/superagent/issues/56)）
+- **Linux 开机自启真正生效**：Linux 上此前开关可点但系统层面不会注册（表现为"看着成功、实际无效"），现按桌面环境标准（XDG autostart）正确实现（[#56](https://github.com/zlh12331/superagent/issues/56)）
+- **macOS 开机自启状态更准确**：系统要求手动批准时给出明确提示，不再显示为「已关闭」造成困惑（[#56](https://github.com/zlh12331/superagent/issues/56)）
+
+### 内部改进
+
+- 新增安装包原生模块架构断言（读二进制头校验），防止「在 A 架构上为 B 架构打包」时静默产出无法运行的安装包（[#56](https://github.com/zlh12331/superagent/issues/56)）
+- 修复提交标题规范的一个门禁缺口：此前形如 `fix(a)+build(b): …` 的双类型标题会被放行，但会导致发版流程静默阻断；现已在提交时拦截（[#57](https://github.com/zlh12331/superagent/issues/57)）
+
 ## [1.3.1](https://github.com/zlh12331/superagent/compare/v1.3.0...v1.3.1) (2026-09-19)
 
 > 本版本修复更新流程中的两个问题：更新包偶尔会重复下载（差分下载完成后又转全量），以及点「重启并安装」后应用退出但安装未真正执行。
