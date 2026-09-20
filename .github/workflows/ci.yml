@@ -320,7 +320,12 @@ jobs:
       - name: Build production artifacts
         # 记忆引擎源码已 vendored 进仓（packages/memory-engine/MemoryCore），
         # 构建必然带上引擎；缺失会直接失败而非降级（2026-09-13 起）。
-        run: pnpm build:${{ runner.os == 'Windows' && 'win' || 'linux' }}
+        # 2026-09-20 多架构发布后显式指定本 job 架构：Windows 用 build:win（x64+arm64
+        # 双架构——同时验证 ci 阶段 arm64 交叉编译可行，runner 镜像带 ARM64 MSVC），
+        # Linux 用 build:linux:x64（CI 只需验证 x64 产物可启动；arm64 由 release.yml
+        # 的 ubuntu-24.04-arm 原生 job 覆盖，且 arm64 交叉编译在 Linux 上不可用）。
+        # smoke 用本机架构产物（resolvePackagedExecutable 按 process.arch 选择）。
+        run: ${{ runner.os == 'Windows' && 'pnpm build:win' || 'pnpm build:linux:x64' }}
 
       - name: Run production smoke tests
         # Linux 无头环境走 xvfb（Electron 启动需要 Display）；Windows runner DISPLAY 无需

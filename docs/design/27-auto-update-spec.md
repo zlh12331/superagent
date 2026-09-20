@@ -395,3 +395,64 @@ Sleep 1s 后 force kill，命不到才弹 `appCannotBeClosed`）在延迟安装�
 跨实例挂起标志、陈旧基线剔除、一致基线保留、无基线/损坏块图不抛错）；用本机真实缓存
 文件跑真实实现，判定为"陈旧（剔除）"符合预期；`pnpm typecheck` / `lint` /
 `check:static` / `knip` / `test` 全绿。真机升级验证仍需下次发版后回归。
+
+### 14.8 发布矩阵扩展到多架构（2026-09-20）
+
+**目标产物**：Linux 6 个（AppImage / deb / rpm × x64 / arm64）、Windows 2 个
+（x64 / arm64 `.exe`）、macOS 2 个（x64 / arm64 `.dmg`）。
+
+**构建矩阵（release.yml 的 build job）**：
+
+| job | runner | 架构 | 说明 |
+|---|---|---|---|
+| Windows | windows-latest | x64 + arm64 单 job | 见下方约束 2 |
+| macOS | macos-latest | x64 + arm64 单 job | Xcode 原生支持交叉编译（v1.3.1 已实证） |
+| Linux x64 | ubuntu-latest | x64 | 三种格式 |
+| Linux arm64 | ubuntu-24.04-arm | arm64 | 原生 ARM64 runner（公共仓库免费） |
+
+**三条实测/源码核实的约束（决定矩阵形态）**：
+
+1. **原生模块必须为每个架构重新编译**：`@electron/rebuild` 的 buildArgs 硬编码
+   `--build-from-source`，从不使用包内预编译产物；其 rebuildModule 对跨平台直接
+   抛错。⇒ 每个架构都需要具备该架构工具链的 runner。本机（Windows x64，VS 仅含
+   Hostx64/x86 目标）实测 arm64 构建失败（MSB8020 缺 v143 生成工具），而
+   GitHub 的 windows-latest 镜像含 ARM64 MSVC 组件（官方镜像清单核实）。
+2. **Windows 不可拆分为两个 job**（源码核实）：更新元数据写入按「文件名 + publish
+   配置」累积 files，而架构前缀只对 **Linux** 追加（`getArchPrefixForUpdateFile`）
+   ⇒ Windows 双 job 会各产一份 `latest.yml` 且内容互斥，合并时（`cp -n`）只有一份
+   生效，另一架构拿不到自动更新。单 job 内双架构则在同一份文件里累积两组条目
+   （与 macOS 的 `latest-mac.yml` 同机制，后者已由 v1.3.1 实测确认含 4 条目）。
+3. **Linux 拆 job 安全**：其更新元数据按架构分文件（`latest-linux.yml` /
+   `latest-linux-arm64.yml`），分开构建天然无覆盖；且能各自原生编译
+   （node-pty 无 Linux 预编译产物）。
+
+**多架构资源（顺带修复的既有缺陷）**：
+
+- `@colbymchenry/codegraph`（代码智能 CLI 捆绑包）与 `@node-rs/jieba`（记忆引擎
+  分词依赖）都按平台/架构分发为 optionalDependencies，pnpm 默认只装 host 架构那
+  一份 ⇒ **交叉构建会把错误架构的二进制打进安装包**。这是既有缺陷：此前 macOS
+  在单 job 内构建双架构，x64 包内实际是 darwin-arm64 的 codegraph（mac x64 用户
+  codebase 工具会因架构不匹配失败）。
+- 修复：`pnpm-workspace.yaml` 增 `supportedArchitectures.cpu: [x64, arm64]`
+  （os 保持 `current`，不跨 OS 膨胀）；`prepare-codegraph.mjs` 改为按架构分目录
+  部署（`resources/codegraph-{x64,arm64}`），electron-builder 侧用 extraResources
+  的 `${arch}` 宏按构建目标选取（该宏经 `getFileMatchers → expandMacro(Arch[arch])`
+  展开，源码核实）。`prepare-memory-hub.mjs` 同样为内层 install 声明双架构。
+- **本机实证**：x64 构建产物内 `resources/codegraph/node.exe` 的 sha256 与
+  `resources/codegraph-x64` 源完全一致（`b3094d0b…`），despite
+  `resources/codegraph-arm64` 存在且内容不同（`6694c255…`）⇒ 宏按目标架构选取成立。
+
+**资产完整性校验（release job）**：安装包按「平台-架构-格式」逐一断言（10 个组合），
+更新元数据断言 4 份（latest.yml / latest-mac.yml / latest-linux.yml /
+latest-linux-arm64.yml）。架构串取自 `getArtifactArchName(arch, ext)`（源码核实）：
+x64 → AppImage/rpm 为 `x86_64`、deb 为 `amd64`；arm64 → rpm 为 `aarch64`、
+AppImage/deb 为 `arm64`。
+
+**验证状态（如实分工）**：electron-builder 配置经实际加载与完整构建验证（Windows
+x64 全流程通过，产物内 codegraph 架构正确）；typecheck / lint / check:static（12 项）/
+test 全链（shared 81 + main 1896 + renderer 1533 + integration 152 + scripts 158）/
+YAML 解析校验全绿。**Windows arm64 交叉编译未在本机验证**——本机无 ARM64 工具链
+（实测失败）；其可行性依据为官方镜像含 ARM64 组件，且 CI 的 e2e-electron job 会执行
+`pnpm build:win`（现为双架构）作为合并前验证。Linux arm64 由原生 runner 保证，
+同样待首次 CI/CD 运行确认。smoke 测试的产物路径解析已按架构自适应
+（`win-arm64-unpacked` / `linux-arm64-unpacked`）。

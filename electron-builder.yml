@@ -138,7 +138,9 @@ extraResources:
   # codegraph 代码智能 CLI（平台捆绑包：vendored Node 24 + app）
   # 由 scripts/prepare-codegraph.mjs 生成；CodebaseService 打包环境读取
   # process.resourcesPath/codegraph（dev 直接定位 node_modules/.pnpm 平台包）
-  - from: resources/codegraph
+  # ${arch} 宏由 electron-builder 按构建目标展开（x64 / arm64）——捆绑包含平台二进制，
+  # 两架构各存一份（resources/codegraph-x64 | -arm64），交叉构建时取对应那套
+  - from: resources/codegraph-${arch}
     to: codegraph
     filter:
       - "**/*"
@@ -150,11 +152,15 @@ extraResources:
 win:
   # 图标：1024x1024 PNG 源（electron-builder 自动派生 .ico）
   icon: resources/icons/icon.png
-  # 目标架构（仅打 x64，Intel/AMD 桌面端通用）
+  # 目标架构：x64（Intel/AMD）与 arm64（Windows on ARM）；产物名由 ${arch} 区分。
+  # arm64 在 x64 runner 上交叉编译：windows-2022 镜像自带 ARM64 MSVC 工具链
+  # （Microsoft.VisualStudio.Component.VC.Tools.ARM64），@electron/rebuild 能为
+  # 目标架构重建 better-sqlite3/node-pty（本机无该工具链时实测报 MSB8020）
   target:
     - target: nsis
       arch:
         - x64
+        - arm64
   # 自定义协议（深度链接）：注册 `code-agent://` 为 Windows URL 协议
   # （注册表 HKCR，卸载时自动清理）；与 src/main/deep-link.ts CODE_AGENT_PROTOCOL 一致
   # 26.x 属性名由 protocol 改为 protocols
@@ -244,13 +250,24 @@ linux:
   # 图标：1024x1024 PNG 源（electron-builder 自动派生各尺寸）
   icon: resources/icons/icon.png
   # 目标：AppImage（单文件分发，electron-updater 支持）+ deb（Debian/Ubuntu）
+  # + rpm（Fedora/RHEL/openSUSE）；两种架构各一套，共 6 个产物。
+  # 注意（2026-09-20 CI 实测约束）：x64 与 arm64 分别在各自的原生 runner 上构建
+  # （ubuntu-latest / ubuntu-24.04-arm）——node-pty 无 Linux 预编译产物，必须本地
+  # 编译，交叉构建需要 aarch64 工具链且 node-gyp 交叉配置脆弱；分开 job 还让
+  # resources/codegraph（按 process.arch 部署的 250MB 平台包）天然正确。
   target:
     - target: AppImage
       arch:
         - x64
+        - arm64
     - target: deb
       arch:
         - x64
+        - arm64
+    - target: rpm
+      arch:
+        - x64
+        - arm64
   # 分类（Linux 桌面条目 Categories）
   category: Development
   # 可执行文件名
@@ -271,6 +288,10 @@ appImage:
 
 # deb 配置
 deb:
+  artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
+
+# rpm 配置（Fedora/RHEL/openSUSE；构建需 runner 装 rpm 与 xz，见 release.yml）
+rpm:
   artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
 
 # 版本元数据（设计文档 §1.1 版本管理）
