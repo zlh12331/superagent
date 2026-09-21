@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.3](https://github.com/zlh12331/superagent/compare/v1.3.2...v1.3.3) (2026-09-21)
+
+
+### Bug Fixes
+
+* **scripts:** 修 check-native-arch 的 macOS 路径缺陷 + 0 检查数改为失败 ([#59](https://github.com/zlh12331/superagent/issues/59)) ([9701992](https://github.com/zlh12331/superagent/commit/9701992d2ab3237dbbfe3068db8190190a21df61))
+* **update:** 修复 Windows 1.3.1→1.3.2 升级失败（NSIS 长路径） ([#61](https://github.com/zlh12331/superagent/issues/61)) ([66290dc](https://github.com/zlh12331/superagent/commit/66290dcca4f1988a019d64196ab63d083fa7d426))
+
 ## [1.3.2](https://github.com/zlh12331/superagent/compare/v1.3.1...v1.3.2) (2026-09-20)
 
 > 本版本为 Linux 与 ARM 设备用户带来更完整的安装包：新增 RPM 格式与 ARM64 架构支持，
