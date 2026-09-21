@@ -158,6 +158,29 @@ export const SettingsSetResSchema = z.object({
 });
 
 /**
+ * settings:event:changed 事件 payload（主进程主动变更某个设置域后的推送）
+ *
+ * 为什么需要：正常路径下设置由渲染层写入（`settings:set`），渲染层 store 即真源；
+ * 但托盘菜单等**主进程主动写入**（如「关闭时最小化到托盘」改 `window.closeAction`）
+ * 绕过了渲染层 store ⇒ 不推送会让设置页显示旧值，且后续任何其它设置变更都会把旧值
+ * 写回、静默覆盖（丢更新，见 docs/design/30-residency-fix-spec.md §3 P2-6）。
+ *
+ * `key` 复用 `SETTING_KEYS`（与 settings:set 同一域清单），`value` 为该域的完整新值。
+ */
+export const SettingsChangedPayloadSchema = z.object({
+  key: z.enum(SETTING_KEYS),
+  value: z.unknown(),
+});
+
+/** settings:event:changed 事件 payload 类型 */
+export interface SettingsChangedPayload {
+  /** 变更的设置域（settings-store 的 key） */
+  readonly key: (typeof SETTING_KEYS)[number];
+  /** 该域的完整新值（渲染层按域合并，不做整快照覆盖） */
+  readonly value: unknown;
+}
+
+/**
  * settings:setApiKey 请求 payload
  *
  * 渲染层传入明文 API Key，主进程加密后存储到 keychain。

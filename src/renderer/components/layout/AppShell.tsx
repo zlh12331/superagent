@@ -35,6 +35,7 @@ import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useResizablePanels } from '@/hooks/use-resizable-panels';
+import { useSettingsBridge } from '@/hooks/use-settings-bridge';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useUpdateBridge } from '@/hooks/use-update-bridge';
@@ -105,6 +106,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 更新事件桥：订阅 update:event:status 并写入 update-store（唯一订阅点；
   // 关于面板 / 顶栏指示 / toast 提示均读 store，不再各自订阅）
   useUpdateBridge();
+
+  // 设置变更桥：订阅 settings:event:changed（主进程主动写入的设置域，如托盘改
+  // 「关闭时最小化到托盘」）→ 应用进 settings-store，避免旧值在后续写入时覆盖它
+  useSettingsBridge();
 
   // IPC 协议版本校验：主进程/渲染层版本错配时提示重启（P0 契约加固）
   useProtocolCheck();

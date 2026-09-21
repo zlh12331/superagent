@@ -293,6 +293,14 @@ interface SettingsState extends SettingsData {
   readonly setUpdate: (patch: Partial<UpdateSettings>) => void;
   /** 更新窗口行为设置（写穿透 SQLite；主进程关窗事件实时读取） */
   readonly setWindow: (patch: Partial<WindowSettings>) => void;
+  /**
+   * 应用「主进程主动变更的设置」（托盘菜单等）
+   *
+   * 与各 set / update 方法的关键区别：**只更新内存态、不回写**（变更来源就是主进程，
+   * 回写是回声）。按域合并而非整快照覆盖——`SettingsData` 有多个域，整体替换会把
+   * 未变更的域重置为默认值（`applySettingsSnapshot` 是启动专用，勿复用）。
+   */
+  readonly applyMainSettingChange: (key: SettingKey, value: unknown) => void;
 }
 
 /**
@@ -497,6 +505,26 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     const window = { ...useSettingsStore.getState().window, ...patch };
     set({ window });
     persistSetting('window', window);
+  },
+  applyMainSettingChange: (key, value) => {
+    // 只 setState 不 persist：变更来源是主进程（SQLite 已被它写过），回写是回声。
+    // 逐域合并：整快照覆盖会把其它域打回默认值（这正是不能复用 applySettingsSnapshot 的原因）。
+    if (key === 'window' && typeof value === 'object' && value !== null) {
+      set({ window: { ...useSettingsStore.getState().window, ...(value as WindowSettings) } });
+      return;
+    }
+    // 其余域：命中已知键时按域合并，未知键忽略（避免用未知结构污染 state）
+    if (typeof value !== 'object' || value === null) {
+      return;
+    }
+    const current = useSettingsStore.getState() as unknown as Record<string, unknown>;
+    const existing = current[key];
+    if (typeof existing !== 'object' || existing === null) {
+      return;
+    }
+    set({
+      [key]: { ...(existing as Record<string, unknown>), ...(value as Record<string, unknown>) },
+    } as Partial<SettingsState>);
   },
 }));
 

@@ -39,6 +39,7 @@ import type {
   AppInfoRes,
   DeepLinkPayload,
   ExportDiagnosticsRes,
+  LoginItemChangedPayload,
   LoginItemSettingsRes,
 } from '../schemas/app';
 import {
@@ -46,6 +47,7 @@ import {
   AppStatusResSchema,
   DeepLinkPayloadSchema,
   ExportDiagnosticsResSchema,
+  LoginItemChangedPayloadSchema,
   LoginItemSettingsResSchema,
   SetLoginItemSettingsReqSchema,
 } from '../schemas/app';
@@ -239,6 +241,8 @@ import {
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
   SetTelemetryLevelResSchema,
+  type SettingsChangedPayload,
+  SettingsChangedPayloadSchema,
   SettingsGetAllReqSchema,
   SettingsGetAllResSchema,
   SettingsSetReqSchema,
@@ -455,6 +459,12 @@ export const IPC_DEFINITIONS = {
       IPC_META.app.subscribeDeepLink,
       {} as DeepLinkPayload,
       DeepLinkPayloadSchema,
+    ),
+    // 登录项变更事件：主进程主动写入后广播真实回读值（托盘改自启 → 设置页回显）
+    subscribeLoginItemChanged: withPayload(
+      IPC_META.app.subscribeLoginItemChanged,
+      {} as LoginItemChangedPayload,
+      LoginItemChangedPayloadSchema,
     ),
   },
 
@@ -832,6 +842,12 @@ export const IPC_DEFINITIONS = {
       UpdateRuntimeModelReqSchema,
       {} as UpdateRuntimeModelRes,
       UpdateRuntimeModelResSchema,
+    ),
+    // 设置变更事件：主进程主动写入某域后广播（payload = 该域完整新值）
+    subscribeChanged: withPayload(
+      IPC_META.settings.subscribeChanged,
+      {} as SettingsChangedPayload,
+      SettingsChangedPayloadSchema,
     ),
   },
 

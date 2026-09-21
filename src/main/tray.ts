@@ -13,7 +13,6 @@ import { join } from 'node:path';
 import type { UpdateStatusPayload } from '@code-agent/shared/main';
 import {
   app,
-  BrowserWindow,
   Menu,
   type MenuItemConstructorOptions,
   Notification,
@@ -24,6 +23,7 @@ import { broadcastDeepLink } from './deep-link';
 import { createAutostartDeps, readAutostartState } from './infra/autostart/autostart';
 import { readSetting, writeSetting } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
+import { showMainWindow } from './window-show';
 
 /** 托盘文案形状（双语文案表统一结构） */
 interface TrayText {
@@ -35,6 +35,7 @@ interface TrayText {
   readonly installUpdate: string;
   readonly downloading: string;
   readonly autostart: string;
+  readonly closeToTray: string;
   readonly quit: string;
   readonly minimized: string;
 }
@@ -53,6 +54,7 @@ const TRAY_TEXT: Readonly<Record<TrayLocale, TrayText>> = {
     installUpdate: '重启并安装',
     downloading: '下载中',
     autostart: '开机自启',
+    closeToTray: '关闭时最小化到托盘',
     quit: '退出',
     minimized: '已最小化到托盘，退出请用托盘菜单',
   },
@@ -65,6 +67,7 @@ const TRAY_TEXT: Readonly<Record<TrayLocale, TrayText>> = {
     installUpdate: 'Restart & install',
     downloading: 'Downloading',
     autostart: 'Launch at login',
+    closeToTray: 'Minimize to tray on close',
     quit: 'Quit',
     minimized: 'Minimized to tray. Quit from the tray menu',
   },
@@ -97,6 +100,15 @@ export interface TrayDeps {
   installUpdate: () => void;
   /** 写入开机自启（OS 登录项） */
   setAutostart: (enabled: boolean) => void;
+  /**
+   * 读取关窗行为
+   *
+   * 数据源是 `settings.window.closeAction`（SQLite），**不是** OS 登录项——
+   * spec 28 §6:145-146 明确两个勾选项来源不同、勿混用存储。
+   */
+  getCloseAction: () => 'minimize' | 'quit';
+  /** 写入关窗行为（实现须读改写，不覆盖同域其它字段） */
+  setCloseAction: (action: 'minimize' | 'quit') => void;
   /** 订阅更新状态变化（图标/tooltip 更新） */
   onUpdateStatus: (listener: (payload: UpdateStatusPayload) => void) => () => void;
   /** 当前界面语言（settings.language；未知回退 zh-CN） */
@@ -177,19 +189,6 @@ export function createTray(trayDeps: TrayDeps): void {
   });
 
   logger.info({}, '系统托盘已创建（后台驻留中心）');
-}
-
-/** 显示并聚焦主窗口（最小化时还原） */
-function showMainWindow(): void {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win === undefined || win.isDestroyed()) {
-    return;
-  }
-  if (win.isMinimized()) {
-    win.restore();
-  }
-  win.show();
-  win.focus();
 }
 
 /** 当前语言的托盘文案 */
@@ -293,6 +292,19 @@ async function popUpMenu(): Promise<void> {
     ...(autostart.supported ? {} : { enabled: false }),
     click: () => {
       d.setAutostart(!autostart.openAtLogin);
+    },
+  });
+
+  // 关闭时最小化到托盘（spec 28 §6:134 菜单形态里的第二个勾选项）
+  // 数据源与上一项不同：读 settings.window.closeAction（SQLite），非 OS 登录项。
+  // 写入走主进程直写 + 广播 settings:event:changed，渲染层设置页据此保持同步。
+  const closeAction = d.getCloseAction();
+  template.push({
+    label: text.closeToTray,
+    type: 'checkbox',
+    checked: closeAction === 'minimize',
+    click: () => {
+      d.setCloseAction(closeAction === 'minimize' ? 'quit' : 'minimize');
     },
   });
 

@@ -500,35 +500,46 @@ function simulateAllPartsDemo(sessionId: string): void {
 
 // ── 各域 mock 实现（参数类型从 IpcApi 推导）──────────────────
 
+/**
+ * app 域 mock（浏览器模式假实现）
+ *
+ * 提取为独立函数而非内联在 createMockApi 里：该工厂已是超大函数（受 check:functions
+ * 棘轮看护），新增方法不宜继续推高其函数体行数。
+ */
+function createAppDomainMock(): IpcApi['app'] {
+  return {
+    getStatus: async () => ipcOk({ ready: true, protocolVersion: IPC_PROTOCOL_VERSION }),
+    getInfo: async () =>
+      ipcOk({
+        version: '0.1.0-mock',
+        electron: 'mock',
+        node: 'mock',
+        chrome: 'mock',
+        platform: 'web',
+        arch: 'x64',
+        userDataPath: '（浏览器模式）',
+      }),
+    openExternal: async () => ipcOk({ ok: true }),
+    openDataDir: async () => ipcOk({ ok: true }),
+    // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项；supported=false 与真实
+    // dev 环境一致——未打包不注册，界面据 supported 显示禁用态并说明）
+    getLoginItemSettings: async () =>
+      ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
+    setLoginItemSettings: async () =>
+      ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
+    // 诊断包导出：浏览器模式无真实打包，模拟用户取消（saved=false）
+    exportDiagnostics: async () => ipcOk({ saved: false }),
+    // 退出应用（走完整善后链，浏览器模式 no-op 语义一致）
+    quit: async () => ipcOk({ ok: true }),
+    // 深度链接与登录项变更：浏览器模式无协议注册/无 OS 登录项 ⇒ 订阅即 no-op
+    subscribeDeepLink: () => () => {},
+    subscribeLoginItemChanged: () => () => {},
+  };
+}
+
 function createMockApi(): IpcApi {
   return {
-    app: {
-      getStatus: async () => ipcOk({ ready: true, protocolVersion: IPC_PROTOCOL_VERSION }),
-      getInfo: async () =>
-        ipcOk({
-          version: '0.1.0-mock',
-          electron: 'mock',
-          node: 'mock',
-          chrome: 'mock',
-          platform: 'web',
-          arch: 'x64',
-          userDataPath: '（浏览器模式）',
-        }),
-      openExternal: async () => ipcOk({ ok: true }),
-      openDataDir: async () => ipcOk({ ok: true }),
-      // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项；supported=false 与真实
-      // dev 环境一致——未打包不注册，界面据 supported 显示禁用态并说明）
-      getLoginItemSettings: async () =>
-        ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
-      setLoginItemSettings: async () =>
-        ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
-      // 诊断包导出：浏览器模式无真实打包，模拟用户取消（saved=false）
-      exportDiagnostics: async () => ipcOk({ saved: false }),
-      // 退出应用（走完整善后链，浏览器模式 no-op 语义一致）
-      quit: async () => ipcOk({ ok: true }),
-      // 深度链接：浏览器模式无协议注册，订阅即返回 no-op unsubscribe
-      subscribeDeepLink: () => () => {},
-    },
+    app: createAppDomainMock(),
 
     session: {
       list: async ({ limit }: Req<IpcApi['session']['list']>) => {
@@ -879,6 +890,8 @@ function createMockApi(): IpcApi {
       },
       // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）
       listRuntimeModels: async () => ipcOk({ models: mockRuntimeModels }),
+      // 设置变更推送：浏览器模式下设置只由本页写入（无托盘等主进程入口）⇒ 订阅即 no-op
+      subscribeChanged: () => () => {},
     },
 
     whitelist: {

@@ -36,6 +36,8 @@ export const IPC_META = {
     quit: request('app:quit'),
     // 深度链接事件（协议唤起 `code-agent://` 时主进程广播，渲染层导航）
     subscribeDeepLink: event('app:event:deepLink'),
+    // 登录项变更事件（主进程主动写入后推送真实回读值——托盘菜单改自启，设置页据此回显）
+    subscribeLoginItemChanged: event('app:event:loginItemChanged'),
   },
 
   agent: {
@@ -136,6 +138,8 @@ export const IPC_META = {
     removeRuntimeModel: request('settings:removeRuntimeModel'),
     listRuntimeModels: request('settings:listRuntimeModels'),
     updateRuntimeModel: request('settings:updateRuntimeModel'),
+    // 设置变更事件（主进程主动写入某域后推送——托盘菜单改关窗行为，设置页据此更新 store）
+    subscribeChanged: event('settings:event:changed'),
   },
 
   system: {

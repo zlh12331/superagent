@@ -85,6 +85,18 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
     })();
   }, []);
 
+  // 托盘菜单也能改自启（两处开关同源 OS 登录项）：订阅主进程广播，
+  // 设置页正开着时同步回显——否则会一直显示托盘改动前的旧值（30-spec §3 P2-6）。
+  useEffect(() => {
+    if (!hasIpcBridge()) return;
+    const unsubscribe = window.api.app.subscribeLoginItemChanged((payload) => {
+      setAutostart(payload);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const handleToggleAutostart = async (checked: boolean): Promise<void> => {
     if (!hasIpcBridge()) return;
     try {
