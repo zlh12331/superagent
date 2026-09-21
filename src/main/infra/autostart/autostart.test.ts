@@ -19,16 +19,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // 这里 mock 仅避免测试进程触碰真实 Electron API
 vi.mock('electron', () => ({ app: {} }));
 
+// logger mock：本模块新增的自启日志若走真实实现会写文件（虽已重定向到临时目录，
+// 但测试不应依赖日志副作用，也让输出保持干净）
+vi.mock('../../utils/logger', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 import {
   AUTOSTART_HIDDEN_ARG,
   type AutostartAdapter,
   type AutostartDeps,
   buildLinuxDesktopEntry,
   createAutostartDeps,
+  evaluateLinuxEntry,
   isAutostartSupported,
   isLinuxEntryActive,
   linuxAutostartFilePath,
   readAutostartState,
+  resolveAutostartExecPath,
   resolveStartHidden,
   setAutostartEnabled,
   shouldStartHidden,
@@ -304,8 +312,161 @@ describe('autostart', () => {
     it('读取进程级真实值（platform / execPath 非空，homeDir 非空）', () => {
       const deps = createAutostartDeps();
       expect(deps.platform).toBe(process.platform);
-      expect(deps.execPath).toBe(process.execPath);
+      // execPath 经 resolveAutostartExecPath：非 linux 或无 APPIMAGE 时即 process.execPath
+      if (process.platform === 'linux' && process.env['APPIMAGE'] !== undefined) {
+        expect(deps.execPath).toBe(process.env['APPIMAGE']);
+      } else {
+        expect(deps.execPath).toBe(process.execPath);
+      }
       expect(deps.homeDir.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── 2026-09-21 修复项（docs/design/30-residency-fix-spec.md §4.4/§4.5）──
+
+  describe('resolveAutostartExecPath（AppImage 用 $APPIMAGE，修 P1-1）', () => {
+    it('linux + 有 APPIMAGE → 用 APPIMAGE（execPath 是临时挂载点，每次启动都变）', () => {
+      expect(resolveAutostartExecPath('linux', '/home/u/Apps/CodeAgent.AppImage')).toBe(
+        '/home/u/Apps/CodeAgent.AppImage',
+      );
+    });
+
+    it('linux 无 APPIMAGE（deb/rpm 安装）→ 回退 execPath', () => {
+      expect(resolveAutostartExecPath('linux', undefined)).toBe(process.execPath);
+    });
+
+    it('linux + 空字符串 APPIMAGE → 回退 execPath（不写空路径）', () => {
+      expect(resolveAutostartExecPath('linux', '')).toBe(process.execPath);
+    });
+
+    it('非 linux 平台即使有 APPIMAGE 也不采用（该变量只在 AppImage 运行时存在）', () => {
+      expect(resolveAutostartExecPath('win32', '/tmp/x.AppImage')).toBe(process.execPath);
+      expect(resolveAutostartExecPath('darwin', '/tmp/x.AppImage')).toBe(process.execPath);
+    });
+
+    it('AppImage 场景下写入的 .desktop 指向真实文件而非挂载点', async () => {
+      const { adapter } = createFakeAdapter();
+      const appImagePath = '/home/u/Apps/CodeAgent-1.3.3.AppImage';
+      const deps = createDeps('linux', adapter, {
+        homeDir,
+        execPath: resolveAutostartExecPath('linux', appImagePath),
+      });
+
+      const state = await setAutostartEnabled(deps, true);
+
+      expect(state.openAtLogin).toBe(true);
+      const content = readFileSync(linuxAutostartFilePath(deps), 'utf8');
+      expect(content).toContain(`Exec="${appImagePath}" ${AUTOSTART_HIDDEN_ARG}`);
+      expect(content).not.toContain('/tmp/.mount_');
+    });
+  });
+
+  describe('linuxAutostartFilePath（遵循 XDG_CONFIG_HOME，修 P2-3）', () => {
+    it('设置 xdgConfigHome 时使用它（与 update-cache 的 XDG_CACHE_HOME 口径一致）', () => {
+      const deps = createDeps('linux', createFakeAdapter().adapter, {
+        homeDir: '/home/mock',
+        xdgConfigHome: '/custom/config',
+      });
+      expect(linuxAutostartFilePath(deps)).toBe(
+        join('/custom/config', 'autostart', 'code-agent-desktop.desktop'),
+      );
+    });
+
+    it('未设置 xdgConfigHome 时回退 ~/.config', () => {
+      const deps = createDeps('linux', createFakeAdapter().adapter, { homeDir: '/home/mock' });
+      expect(linuxAutostartFilePath(deps)).toBe(
+        join('/home/mock', '.config', 'autostart', 'code-agent-desktop.desktop'),
+      );
+    });
+  });
+
+  describe('evaluateLinuxEntry（Hidden=true 语义，修 P2-4）', () => {
+    const expectedExec = `"${EXEC_PATH}" ${AUTOSTART_HIDDEN_ARG}`;
+
+    it('Hidden=true（KDE 等禁用写法）→ 未启用，即使 Exec 与 X-GNOME 键都正常', () => {
+      const content = [
+        '[Desktop Entry]',
+        'Type=Application',
+        `Exec=${expectedExec}`,
+        'X-GNOME-Autostart-enabled=true',
+        'Hidden=true',
+        '',
+      ].join('\n');
+      const verdict = evaluateLinuxEntry(content, EXEC_PATH);
+      expect(verdict.active).toBe(false);
+      expect(verdict.reason).toContain('Hidden=true');
+      expect(isLinuxEntryActive(content, EXEC_PATH)).toBe(false);
+    });
+
+    it('Hidden=false 不影响判定（只有 =true 才是禁用）', () => {
+      const content = [
+        '[Desktop Entry]',
+        `Exec=${expectedExec}`,
+        'X-GNOME-Autostart-enabled=true',
+        'Hidden=false',
+        '',
+      ].join('\n');
+      expect(isLinuxEntryActive(content, EXEC_PATH)).toBe(true);
+    });
+
+    it('正常条目 → 启用，并给出判定依据', () => {
+      const verdict = evaluateLinuxEntry(buildLinuxDesktopEntry(EXEC_PATH), EXEC_PATH);
+      expect(verdict.active).toBe(true);
+      expect(verdict.reason.length).toBeGreaterThan(0);
+    });
+
+    it('缺 Exec 行 → 未启用且原因明确', () => {
+      const verdict = evaluateLinuxEntry('[Desktop Entry]\nType=Application\n', EXEC_PATH);
+      expect(verdict.active).toBe(false);
+      expect(verdict.reason).toContain('Exec');
+    });
+  });
+
+  describe('日志（spec 28 §9A:232-233：自启变更必须落 main.log，修 P2-1）', () => {
+    it('写入成功 → logger.info 记录请求值与写入后的真实状态', async () => {
+      const { logger } = await import('../../utils/logger');
+      const { adapter } = createFakeAdapter({ executableWillLaunchAtLogin: true });
+
+      await setAutostartEnabled(createDeps('win32', adapter), true);
+
+      expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+        expect.objectContaining({ platform: 'win32', requested: true }),
+        expect.stringContaining('开机自启已变更'),
+      );
+    });
+
+    it('写入抛错 → logger.error 记录后向上抛（不掩盖失败）', async () => {
+      const { logger } = await import('../../utils/logger');
+      const adapter: AutostartAdapter = {
+        setLoginItemSettings: () => {
+          throw new Error('registry denied');
+        },
+        getLoginItemSettings: () => ({ openAtLogin: false }),
+      };
+
+      await expect(setAutostartEnabled(createDeps('win32', adapter), true)).rejects.toThrow(
+        'registry denied',
+      );
+      expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+        expect.objectContaining({ platform: 'win32' }),
+        expect.stringContaining('写入开机自启失败'),
+      );
+    });
+
+    it('未打包（dev 守卫）→ 记 info 说明跳过原因，不静默', async () => {
+      const { logger } = await import('../../utils/logger');
+      const { adapter } = createFakeAdapter();
+
+      const state = await setAutostartEnabled(
+        createDeps('win32', adapter, { isPackaged: false }),
+        true,
+      );
+
+      expect(state.supported).toBe(false);
+      expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+        expect.objectContaining({ isPackaged: false }),
+        expect.stringContaining('不支持'),
+      );
     });
   });
 
