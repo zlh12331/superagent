@@ -168,11 +168,21 @@ test.describe('开机自启静默启动（--hidden 消费端）', () => {
     expect(await isWindowVisible(app)).toBe(true);
   });
 
-  test('不带 --hidden 且上次为最大化：窗口显示且处于最大化态（防 P0-1 修复误伤）', async () => {
+  test('不带 --hidden 且上次为最大化：窗口显示（防 P0-1 修复误伤常规启动）', async () => {
     seedWindowState({ isMaximized: true });
     ({ app } = await launchElectron([]));
     await new Promise((resolve) => setTimeout(resolve, 3000));
+    // 核心断言：窗口必须显示（P0-1 的修复把 maximize 移进 ready-to-show，
+    // 若写错会让常规启动也不显示窗口——本断言就是防这个）
     expect(await isWindowVisible(app)).toBe(true);
+
+    // 最大化态只在有真实窗口管理器的平台断言：Linux CI 走 xvfb（无 WM），
+    // isMaximized() 依赖 WM 的 EWMH 状态，在无 WM 下恒为 false
+    // （2026-09-21 实测：ubuntu-latest / ubuntu-24.04-arm 上此断言稳定失败，
+    // 而同批次的 Windows / macOS 与两个 P0 锚全绿）。这是断言过强而非实现缺陷。
+    if (process.platform === 'linux') {
+      return;
+    }
     const maximized = await app.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
       return win?.isMaximized() === true;
