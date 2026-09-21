@@ -2,6 +2,22 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.3.3](https://github.com/zlh12331/superagent/compare/v1.3.2...v1.3.3) (2026-09-21)
+
+> 本版本修复 Windows 用户升级应用时被中断的问题，并加固发布流程——让有问题的构建在到达用户之前就被拦下。
+
+### 修复
+
+- **Windows 升级不再报错中止**：修复在旧版本上点「重启并安装」后，安装器提示「Failed to uninstall old application files」并中止、导致无法升级的问题。原因是安装目录内的文件路径过长（264 字符，超出 Windows 的 260 上限），旧版本清理阶段失败即中断。现已从两方面解决：缩短安装目录内的嵌套路径，并让安装器在旧版本清理失败时仍能继续完成安装（[#61](https://github.com/zlh12331/superagent/issues/61)）
+
+### 内部改进
+
+- **构建期拦截同类问题**：新增安装产物校验（原生模块架构、路径长度），若未来依赖变更导致路径再次超限或打进错误架构的二进制，构建阶段就会失败，不会把有问题的版本发到用户手上（[#59](https://github.com/zlh12331/superagent/issues/59)、[#61](https://github.com/zlh12331/superagent/issues/61)）
+- **质量验证扩到六个平台**：单测与端到端测试从 1–3 个平台扩到 Windows / macOS / Linux 的 x64 与 ARM64 全平台覆盖，平台相关缺陷在合并前即可发现，不再等到发版（[#62](https://github.com/zlh12331/superagent/issues/62)）
+- **自动更新链路加固**：双架构更新元数据改由独立步骤合并并加断言校验，避免某一架构的用户拿到另一个架构的更新包（[#62](https://github.com/zlh12331/superagent/issues/62)）
+
+<!-- changelog:polished -->
+
 ## [1.3.2](https://github.com/zlh12331/superagent/compare/v1.3.1...v1.3.2) (2026-09-20)
 
 > 本版本为 Linux 与 ARM 设备用户带来更完整的安装包：新增 RPM 格式与 ARM64 架构支持，
