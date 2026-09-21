@@ -444,7 +444,7 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
     expect(handle.watcherId).toBeTruthy();
 
     await writeFile(join(dir, 'new.txt'), 'x');
-    await vi.waitFor(() => expect(events.length).toBeGreaterThan(0), { timeout: 5000 });
+    await vi.waitFor(() => expect(events.length).toBeGreaterThan(0), { timeout: 8000 });
     expect(events[0]).toMatchObject({ type: 'create', path: expect.stringContaining('new.txt') });
 
     expect(svc.unwatch(handle.watcherId)).toBe(true);
@@ -453,20 +453,24 @@ describe('FileService.watch/unwatch/dispose（监听生命周期）', () => {
   it('正向：事件映射（addDir→create / change→modify / unlink→delete）', async () => {
     const { wc, events } = fakeWebContents();
     const handle = await svc.watch({ path: dir, webContents: wc });
+    // ⚠️ chokidar 的事件投递依赖 OS 的 inotify/FSEvents/ReadDirectoryChangesW，
+    // 共享 runner（尤其 ARM 机型）在高负载下延迟可达数秒——本机实测 421ms，
+    // 但 2026-09-21 六平台 CI 首跑的 windows-11-arm 上首个 waitFor 即超时。
+    // 这里给每次等待留足余量；测试体本身已有 15s 上限兜底。
     await writeFile(join(dir, 'f.txt'), 'a');
     await vi.waitFor(
       () => expect(events.some((e) => (e as { type: string }).type === 'create')).toBe(true),
-      { timeout: 5000 },
+      { timeout: 8000 },
     );
     await writeFile(join(dir, 'f.txt'), 'b');
     await vi.waitFor(
       () => expect(events.some((e) => (e as { type: string }).type === 'modify')).toBe(true),
-      { timeout: 5000 },
+      { timeout: 8000 },
     );
     await rm(join(dir, 'f.txt'));
     await vi.waitFor(
       () => expect(events.some((e) => (e as { type: string }).type === 'delete')).toBe(true),
-      { timeout: 5000 },
+      { timeout: 8000 },
     );
     svc.unwatch(handle.watcherId);
   }, 15_000);

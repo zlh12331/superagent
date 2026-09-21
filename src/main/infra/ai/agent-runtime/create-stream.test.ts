@@ -48,6 +48,12 @@ function createFakeStream(options: {
 }
 
 describe('createStreamWithRetry', () => {
+  // ⚠️ 走重试链的用例必须显式放宽超时：重试退避是真实等待（llm-client/retry.ts
+  // 的 initialDelayMs 默认 1500ms，指数递增），本用例两次失败 ≈ 4.5s，贴着
+  // vitest 默认的 5000ms 上限（实测 4521ms，余量仅 10%）。在共享 runner 上
+  // 必现偶发超时（2026-09-21 六平台 CI 首跑：windows-latest 与 windows-11-arm
+  // 各挂一处——同批次的 ubuntu/macOS 通过，属负载差异而非平台缺陷）。
+  // 不从产品侧注入"测试用短延迟"：那会让测试不再覆盖真实的退避时序。
   it('首读失败自动重试，成功后返回首 part 与 reader', async () => {
     const { streamable, createdCount } = createFakeStream({ firstReadFailures: 2 });
     const created = await createStreamWithRetry({
@@ -61,7 +67,7 @@ describe('createStreamWithRetry', () => {
     // 接续读取：reader 已预读首 part，后续读到流结束
     const next = await created.reader.read();
     expect(next.done).toBe(true);
-  });
+  }, 15_000);
 
   it('重试耗尽后抛最后错误', async () => {
     const { streamable } = createFakeStream({ firstReadFailures: 5 });
@@ -72,7 +78,7 @@ describe('createStreamWithRetry', () => {
         maxAttempts: 2,
       }),
     ).rejects.toThrow('network failure');
-  });
+  }, 15_000);
 
   it('HTTP 类错误不在本层重试（model call 级重试真源是 SDK）', async () => {
     // 带 retry-after 的 429：SDK 已按该头定时长重试，本层再重试会放大请求数
