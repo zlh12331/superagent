@@ -15,6 +15,25 @@ import { app } from 'electron';
 import log from 'electron-log';
 
 /**
+ * 测试环境标记（模块加载期求值）
+ *
+ * ⚠️ **文件落盘路径**必须在模块加载期就重定向到临时目录，不能只放在 initLogger() 里：
+ * 纯 Node（vitest）下 electron-log 的默认路径解析会回退到**真实用户日志目录**
+ * （%APPDATA%/code-agent-desktop/logs/main.log）。而单测通常不调用 initLogger()，
+ * 于是任何在测试中被 import 的模块只要打了日志，就会污染用户日志与诊断包
+ * （2026-09-21 实测：新增 autostart 日志后，跑一次单测即向用户 main.log 写入多条
+ * 含测试夹具路径的记录）。
+ *
+ * 范围**仅限文件路径**：console 级别仍由 initLogger() 按 app.isPackaged 决定——
+ * 把 console 也在此处锁死会让「dev 分支 console=debug」失去可测性（utils-gaps.test.ts
+ * 覆盖该分支），且控制台输出不落盘、不污染任何持久状态。
+ */
+const IS_TEST_ENV = process.env['VITEST'] !== undefined || process.env['NODE_ENV'] === 'test';
+if (IS_TEST_ENV) {
+  log.transports.file.resolvePathFn = () => join(tmpdir(), 'code-agent-test-logs', 'main.log');
+}
+
+/**
  * 日志上下文（结构化字段）
  *
  * traceId 贯穿渲染层 → IPC → 主进程日志（云端上报已于 2026-09-13 移除，见 error-report.ts）
@@ -45,16 +64,8 @@ export function initLogger(): void {
   // 控制台日志级别：仅 dev 启用
   log.transports.console.level = app.isPackaged ? false : 'debug';
 
-  // 测试环境不写真实用户日志目录（2026-09-20 修复）：
-  // electron-log 的默认路径解析在纯 Node（vitest）下回退到 %APPDATA%/<appName>/logs，
-  // 即**真实用户的日志目录**——实测生产 main.log 被写入 143 行测试夹具
-  // （sessionId:'s1' / 条件 A 等），既污染用户诊断包导出，也让日志取证失真
-  // （曾据此误判"应用运行时触发过延迟安装"）。测试下只重定向**文件路径**，
-  // level 逻辑保持不变（生产/开发分支语义原样可测）。
-  const isTestEnv = process.env['VITEST'] !== undefined || process.env['NODE_ENV'] === 'test';
-  if (isTestEnv) {
-    log.transports.file.resolvePathFn = () => join(tmpdir(), 'code-agent-test-logs', 'main.log');
-  }
+  // 测试环境的文件路径重定向已在模块加载期设置（见文件头 IS_TEST_ENV）——
+  // 那一步不能挪到这里：单测通常不调用 initLogger()，晚设置等于没设置。
 
   // 文件轮转配置：单文件 10MB 上限
   // electron-log 5 的轮转机制：超出 maxSize 后当前文件移为 main.old.log，新文件从空开始写

@@ -28,7 +28,7 @@ import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
-import { readAllSettings, readSetting } from './infra/storage/settings-pref';
+import { readAllSettings, readSetting, writeSetting } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { reportEventLoopLag } from './infra/telemetry/lag-alert';
@@ -61,6 +61,7 @@ import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
+import { broadcastLoginItemChanged, broadcastSettingChanged } from './main-events';
 import { mountTurnNotifications } from './notification';
 import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
 import { buildCsp } from './security/csp';
@@ -74,7 +75,8 @@ import {
 import { createTray } from './tray';
 import { reportMessage } from './utils/error-report';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
-import { confirmInterruptRunningTurns, createWindow } from './window';
+import { confirmInterruptRunningTurns, createWindow, readCloseAction } from './window';
+import { bringMainWindowToFront } from './window-show';
 // 主题联动独立模块（无 service-container 依赖的纯 Electron 关注点）
 import { syncTitleBarOverlayFromTheme } from './window-theme';
 
@@ -123,16 +125,14 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  // 用户再次启动应用（双击 exe / 命令行 / 协议唤起）时：聚焦已有主窗口而不是新开实例
+  // 用户再次启动应用（双击 exe / 开始菜单 / 命令行 / 协议唤起）时：把已有主窗口带到眼前
+  // 而不是新开实例。⚠️ 必须经 bringMainWindowToFront（内含 show()）——此前这里只做
+  // restore（仅最小化时）+ focus，而 closeAction=minimize 隐藏的窗口既不可见也未最小化，
+  // focus() 不会让它出现（2026-09-21 真机实测：静默驻留后点桌面图标"没反应"）。
   app.on('second-instance', (_event, argv) => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win !== undefined) {
-      if (win.isMinimized()) {
-        win.restore();
-      }
-      win.focus();
-    }
+    bringMainWindowToFront(createWindow);
     // Windows/Linux 深度链接：协议唤起时 argv 携 code-agent:// URL，解析并广播
+    // （顺序：先显示再广播——窗口隐藏时仅 send 用户看不到，见 spec 28 §6.1）
     broadcastDeepLink(parseDeepLink(argv.find((a) => a.startsWith('code-agent://')) ?? ''));
   });
 }
@@ -440,9 +440,27 @@ app
         serviceContainer.getUpdateService().quitAndInstall();
       },
       setAutostart: (enabled) => {
-        // 与设置页走同一抽象层（平台差异/dev 守卫/写后回读集中在 infra/autostart）：
-        // 此处 fire-and-forget，失败由下次菜单右键重建时的真实读取反映
-        void setAutostartEnabled(createAutostartDeps(), enabled);
+        // 与设置页走同一抽象层（平台差异/dev 守卫/写后回读集中在 infra/autostart）
+        void setAutostartEnabled(createAutostartDeps(), enabled)
+          .then((state) => {
+            // 托盘改动后通知渲染层（设置页正开着时回显会跟随；渲染层发起的写入不回灌）
+            broadcastLoginItemChanged(state);
+          })
+          .catch((err: unknown) => {
+            // 失败已由 autostart 内部落 error 日志；此处再记一次并吞掉 rejection，
+            // 避免 unhandled rejection。菜单下次右键重建时会按真实状态回显。
+            logger.warn({ error: String(err) }, '托盘切换开机自启失败');
+          });
+      },
+      getCloseAction: () => readCloseAction(),
+      setCloseAction: (action) => {
+        // 主进程主动写入（spec 28 §6:145-146：该勾选项读 settings.window.closeAction）
+        // 必须读改写，避免覆盖同域其它字段；写完广播给渲染层，防止其 store 持旧值
+        // 在后续设置变更时把旧 closeAction 写回（丢更新）。
+        const next = { ...readWindowSettings(), closeAction: action };
+        writeSetting('window', next);
+        logger.info({ closeAction: action }, '托盘切换关窗行为');
+        broadcastSettingChanged('window', next);
       },
       onUpdateStatus: (listener) => serviceContainer.getUpdateService().onStatus(listener),
       getLocale: () => (readSetting('language') === 'en' ? 'en' : 'zh-CN'),
@@ -466,11 +484,10 @@ app
       syncTitleBarOverlayFromTheme(readAllSettings()['theme']);
     });
 
-    // macOS: 点击 dock 图标时若无窗口则重建
+    // macOS: 点击 dock 图标时把窗口带到眼前（零窗口则重建，窗口被隐藏则唤出）
+    // 此前只在零窗口时重建 ⇒ 静默驻留（窗口隐藏）时点 Dock 图标毫无反应。
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-      }
+      bringMainWindowToFront(createWindow);
     });
   })
   .catch((err: unknown) => {
@@ -576,6 +593,23 @@ app.on('before-quit', async (event) => {
   // 强制退出，不再触发 before-quit（与 app.quit() 不同）
   app.exit(0);
 });
+
+/**
+ * 读取 `window` 设置域的完整值（托盘写关窗行为时用于"读改写"，避免覆盖同域其它字段）
+ *
+ * 结构损坏/读取异常一律回退空对象——后续写入会补上 closeAction，不影响其它字段的存留。
+ */
+function readWindowSettings(): Record<string, unknown> {
+  try {
+    const value = readSetting('window');
+    if (typeof value !== 'object' || value === null) {
+      return {};
+    }
+    return { ...(value as Record<string, unknown>) };
+  } catch {
+    return {};
+  }
+}
 
 /**
  * 读取"自动检查更新"开关（app_settings 的 update 域，见设计文档 §4）

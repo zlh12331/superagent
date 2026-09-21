@@ -19,6 +19,7 @@ import { BrowserWindow, Notification } from 'electron';
 
 import type { IAgentService } from './infra/ai/agent/agent-service';
 import { logger } from './utils/logger';
+import { showMainWindow } from './window-show';
 
 /** 通知标题（用户可识别为应用来源） */
 const NOTIFY_TITLE = 'Code Agent';
@@ -78,16 +79,11 @@ export function mountTurnNotifications(agentService: IAgentService): () => void 
         // 用户可自行在系统通知中心关闭）
         silent: true,
       });
-      // 点击通知 → 聚焦主窗口（用户点通知回到应用）
+      // 点击通知 → 把主窗口带到眼前（用户点通知回到应用的常规映射）
+      // 用 window-show 的唯一实现：本处原为 restore → show → focus 的第三份副本，
+      // 已并入 showMainWindow（含"静默启动后首次唤回时恢复最大化"的处理）
       notification.on('click', () => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win !== undefined && !win.isDestroyed()) {
-          if (win.isMinimized()) {
-            win.restore();
-          }
-          win.show();
-          win.focus();
-        }
+        showMainWindow();
       });
       notification.show();
     } catch (err) {
