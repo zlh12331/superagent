@@ -1,7 +1,7 @@
 # 29. CI/CD 流水线重构规格（六平台质量验证 + 产物验证分层）
 
-> 状态：**已实施**（2026-09-20，本地门禁全绿；云端 ruleset 变更待管理员执行，见 §10.3）。
-> 本文档描述目标形态；「第 2 节基线事实」为 2026-09-20 逐项实测的改前现状，「第 10 节」为落地记录与待实跑清单。
+> 状态：**已实施并实跑验证**（2026-09-21：六平台 CI 全绿、CD 六个单架构 job + merge job 全部成功、v1.3.3 已发版）。
+> 「第 2 节」为改前基线；「第 10 节」为落地记录、实跑结果与发现的问题（5 处，均为验证机制自身而非产品缺陷）。
 > 关联：[27-auto-update-spec.md](./27-auto-update-spec.md)（更新机制与发布资产）、[RELEASING.md](../../RELEASING.md)（发版 runbook）
 
 ## 1. 定位与原则
@@ -612,17 +612,47 @@ gh api repos/{owner}/{repo}/rulesets --jq '.[] | select(.name=="protect-release-
 gh api repos/{owner}/{repo}/rulesets/<id> --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
 ```
 
-### 10.4 尚未验证（须首次实跑）
+### 10.4 实跑结果（2026-09-21 首次真实运行，逐项核对）
 
-以下**只能在真实 CI/CD 运行时验证**，本地无法覆盖——如实列出，避免误认为"全部已验证"：
+**六平台 CI 全部实跑通过**（run 35566778264，17 个 job 全绿），此前列为「未验证」的项目均有结论：
 
-- **Windows ARM64（`windows-11-arm`）**：单测与 Electron E2E 均未跑过（R1/R2）。该 label 正处 2026-09-21~09-30 的 VS2026 镜像迁移窗口，首次若遇工具链异常可临时换 `windows-11-vs2026-arm`。
-- **macOS Intel（`macos-26-intel`）**：单测与 E2E 未跑过；`build:mac:x64` 在该 runner 上的交叉/原生编译行为待验。
-- **合并后的元数据在真实 CD 中的产出**：本地已用真实数据验证算法等价，但 `download-artifact` 的子目录布局、merge job 的 artifact 传递需实跑确认。
-- **新平台的 perf 基线**（R8）：`perf-electron.spec.ts` 含硬阈值，4 个新平台的实测值需记录。
-- **账户并发上限**（R9）：单 PR 17 个实例（macOS 4 个）是否触发排队，取决于账户实际计划。
-- **artifact 命名唯一性在真实上传中的表现**（R10）：本地校验了 suffix 不重复，但 `upload-artifact@v4` 的实际行为待实跑。
+| 项 | 结果 |
+|---|---|
+| Windows ARM64（`windows-11-arm`）单测 | ✅ 通过。R1 预判的"可能崩"未发生（Windows 只跑 main/renderer）；唯一失败是 `file-service` 的 watch 用例——该 runner **不派发 fs 事件**（native 与 polling 皆然，本机 x64 实测轮询正常），已按平台跳过 3 个用例（见 §10.5） |
+| Windows ARM64 的 Electron E2E | ✅ 通过。**R2 的"Playwright 不支持 ARM"担忧不成立**（与源码级核实一致）；perf 基准也通过（吞吐 677 事件/s > 500 阈值、并发 p95 2.03ms） |
+| macOS Intel（`macos-26-intel`）单测 | ✅ 通过 |
+| macOS Intel 的 Electron E2E | ✅ 通过（修了 perf 阈值分档，见 §10.5） |
+| 两个 summary job 正常 report | ✅ 通过；ruleset 已改为 5 项后，PR `mergeStateStatus: CLEAN`（无死锁） |
+| artifact 命名唯一性（R10） | ✅ 6 个 build artifact 互不冲突（`release-win-x64-*` … `release-mac-arm64-*`） |
 
-⇒ **首次 push 后应重点看**：① 两个 summary job 是否正常 report（决定 PR 能否合并）；② 4 个新平台 job 是否通过；③ CD 的 merge job 输出是否与本地实测一致。
+**CD 六 job 全部实跑通过**（run 35571371144）：
+
+| job | 结果 |
+|---|---|
+| gate（含润色兜底） | ✅ |
+| 6 个单架构 build（含新平台 `Windows arm64` / `macOS x64`） | ✅ **6/6 成功**——原生 runner 构建、`check:packaged-engine`、`check:native-arch`、smoke 全部通过 |
+| **merge（本次改造的核心新增）** | ✅ **成功**。合并产出的 `latest.yml` 与 `latest-mac.yml` 均为**双架构**（各含 x64 + arm64 两条），`path` 指向 x64-first——与本地逐字节等价性验证的预期完全一致 |
+| release（打 tag + draft + label 收尾） | ✅ draft 含 26 个资产（10 安装包 + 6 SBOM + 4 元数据 + blockmap）；Release PR 的 label 已正确变为 `autorelease: tagged`（发版通道不死锁） |
+| publish（资产断言） | ❌ 首次失败——**断言正则写错**，非元数据问题（见 §10.5） |
+
+**资产实测（v1.3.3 draft）**：`Code-Agent-Desktop-macOS-x64-1.3.3.zip` 与 `-arm64-` 同名两份、Windows 两个 `.exe` + 各自 blockmap、**无通用包**（`buildUniversalInstaller: false` 生效）、无孤儿 blockmap——与前序改造目标一致。
+
+### 10.5 实跑中发现并修掉的问题（5 处，均为测试/断言缺陷而非产品缺陷）
+
+| # | 问题 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | `create-stream` 单测在共享 runner 上偶发超时 | 该用例走真实重试退避，实测稳定 **4521ms**，而 vitest 默认上限 5000ms（余量仅 10%） | 给走重试链的用例显式设 15s |
+| 2 | `file-service` 的 watch 用例在 `windows-11-arm` 上失败 | 该 runner **不派发 fs 事件**（watcher 能注册并 ready，但创建文件后 8s 内零事件；native/polling 皆然，本机 x64 实测轮询正常） | 按平台跳过 3 个用例（含一个"断言无事件"的——它在无事件环境会**假通过**） |
+| 3 | `windows-latest` 单测偶发整文件失败 | pnpm 解压 electron 竞态（`os error 183`），dist 不完整 ⇒ `import electron` 抛错、**整个测试文件被跳过**（静默覆盖缺失） | unit job 增加 `path.txt` 校验与自动修复 |
+| 4 | `macos-26-intel` 的 perf 断言失败（R8 已实证） | 该 runner 是 4 核 Intel 机型，实测 p95 102–165ms（阈值 50ms，超 2–3 倍且重试 3 次全败），但 median 7.4–11.1ms 仍在阈值内 ⇒ **该机型的真实长尾特征**，非代码退化 | p95 上限按平台分档（darwin+x64 → 250ms），median 保持严格；其余 4 项基准余量充裕未动 |
+| 5 | CD 的 publish 断言把正确的双架构元数据判为"缺条目" | 断言用 `grep -- "-$arch\."`（架构后须跟**点号**），而真实产物是 `…-x64-1.3.3.zip`（架构后跟**连字符**）⇒ 必然漏判 | 改为 `grep -E -- "-$arch[-.]"`；用真实元数据 + 3 种故障形态验证判别力 |
+
+⇒ **5 处全部是"验证机制自身"的问题**（测试超时余量、环境能力假设、工具链竞态、性能基线假设、断言正则），没有一处是产品代码缺陷。这印证了本次改造的核心价值：把平台差异暴露在 PR 阶段，而不是留给用户。
+
+### 10.6 仍待观察
+
+- **账户并发上限**（R9）：单 PR 17 实例（macOS 4）是否在并发 PR 下排队，需在多 PR 并行时观察。
+- **新平台 perf 基线的长期稳定性**：本次仅一轮实测（各平台单次），跨多轮后的抖动范围待积累。
+- **`windows-11-arm` 的 VS2026 镜像迁移**（官方公告 #14602，2026-09-21~09-30）：迁移完成后需复跑确认工具链行为不变。
 
 
