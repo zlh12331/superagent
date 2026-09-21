@@ -123,49 +123,61 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── 架构策略（2026-09-20 多架构发布：6 Linux + 2 Windows + 2 macOS）─────
-          # @electron/rebuild **总是**传 --build-from-source（源码里 buildArgs 硬编码，
-          # 已核实），即原生模块必须为每个架构从源码编译；node-gyp 拒绝跨平台编译
-          # （node-gyp.js 显式 throw），故每个架构都需要**能编译该架构的 runner**。
-          # 据此：
-          # - Windows / Linux：每架构一个原生 runner。x64 用 *-latest；arm64 用
-          #   原生 ARM64 runner（公共仓库免费）。Windows arm64 必须用
-          #   windows-11-vs2026-arm（含 VS2026 ARM64 C++ 工具链）——基础的
-          #   windows-11-arm 镜像不含 Visual Studio（已核实官方镜像清单）。
-          # - macOS：单 job 双架构（macos-latest 为 arm64，Xcode 原生支持 -arch x86_64
-          #   交叉编译，Apple 官方机制；v1.3.1 已实证双架构产物，latest-mac.yml 同时
-          #   含 x64/arm64 条目）。
-          # - 更新元数据：Windows/macOS 单份（内含双架构条目）；Linux 按架构分文件
-          #   （latest-linux.yml / latest-linux-arm64.yml，由 app-builder-lib 的
-          #   getArchPrefixForUpdateFile 决定），分开 job 天然无覆盖。
-          # - target-archs：传给 prepare-codegraph.mjs（CODE_AGENT_TARGET_ARCHS），
-          #   只部署本 job 需要的 codegraph 捆绑包（每个约 250MB）。
-          # - artifact-suffix：SBOM 与 artifact 上传名后缀，防同名 job 互相覆盖。
+          # ── 架构策略（2026-09-20 二次改造：6 个单架构 build job）────────────────
+          # 每个平台变体一个 job，全部在**原生 runner** 上构建：
+          # 为什么必须原生：@electron/rebuild **总是**传 --build-from-source（源码里
+          # buildArgs 硬编码，已核实），即原生模块必须为每个架构从源码编译；node-gyp
+          # 拒绝跨平台编译（node-gyp.js 显式 throw）。在 x64 上为 arm64 交叉编译会
+          # **静默复用 host 架构**（实测 @electron/rebuild 以 0.4s 假成功，产物含
+          # x64 原生模块），check:native-arch 是唯一的兜底探针。
           #
-          # ⚠️ 为什么 Windows 不能像 Linux 那样拆成两个 job（已核实源码）：
-          # app-builder-lib 的 writeUpdateInfoFiles 按「文件名 + publish 配置」为 key
-          # 累积 files（createUpdateInfo 每次只产单文件 info，写入时 push 合并）。
-          # Windows 的更新文件名**不区分架构**（getArchPrefixForUpdateFile 仅对
-          # Linux 加 -arm64 后缀）⇒ 两个 job 各自产出 latest.yml 且内容互斥，
-          # 在 release job 合并时（cp -n）只有一份生效——另一架构将拿不到自动更新。
-          # 单 job 内构建双架构则天然合并成一份（同 macOS：latest-mac.yml 含
-          # x64/arm64 两组条目，v1.3.1 实测如此）。代价是需交叉编译 arm64，
-          # 依赖 runner 的 ARM64 MSVC 工具链（windows-2025 镜像含
-          # Microsoft.VisualStudio.Component.VC.Tools.ARM64，已核实）。
-          # Linux 的元数据按架构分文件（latest-linux.yml / latest-linux-arm64.yml），
-          # 拆 job 无此冲突，且能各自原生编译（更可靠）。
+          # - Windows / macOS / Linux：每架构一个原生 runner。x64 用 *-latest；
+          #   arm64 用原生 ARM64 runner（公共仓库免费）。Windows arm64 用
+          #   windows-11-arm——该镜像**含** Visual Studio Enterprise 2022 + 
+          #   Microsoft.VisualStudio.Component.VC.Tools.ARM64（已核实官方镜像清单
+          #   images/windows/Windows11-Arm64-Readme.md；此前注释称"不含 VS"是错的）。
+          #   ⚠️ 该 label 正于 2026-09-21~09-30 迁移到 VS2026 镜像（官方公告 #14602），
+          #   两者都带 ARM64 工具链；迁移窗口内如遇工具链异常可临时改用显式
+          #   `windows-11-vs2026-arm` 隔离变量。
+          #
+          # - 更新元数据（拆 job 的硬约束，已核实 app-builder-lib 源码）：
+          #   writeUpdateInfoFiles 按「文件名 + publish 配置」为 key 累积 files，而
+          #   getArchPrefixForUpdateFile **仅对 Linux** 追加架构后缀 ⇒
+          #   · Linux：latest-linux.yml / latest-linux-arm64.yml，天然分文件，无冲突；
+          #   · Windows（latest.yml）/ macOS（latest-mac.yml）：两个 job 各产一份**同名**
+          #     互斥文件。故新增 merge job（见下）把两份合并成一份双架构元数据，
+          #     release job 用合并结果建 Release。合并逻辑见 scripts/lib/update-metadata.ts。
+          #
+          # - target-archs：传给 prepare-codegraph.mjs（CODE_AGENT_TARGET_ARCHS），
+          #   只部署本 job 需要的 codegraph 捆绑包。**每个 job 必须收窄为单值**：
+          #   双架构值会让单架构 job 多下载约 240MB 无关捆绑包。
+          # - artifact-suffix：SBOM 命名与 artifact 上传名后缀。**必须唯一**——
+          #   upload-artifact@v4 的 artifact 不可变，同名会冲突（Windows/macOS
+          #   拆双 job 后不能再用 win / mac）。
           - platform: Windows
-            variant: x64+arm64
+            variant: x64
             runs-on: windows-latest
-            target-archs: x64,arm64
-            artifact-suffix: win
-            build-cmd: pnpm build:win
+            target-archs: x64
+            artifact-suffix: win-x64
+            build-cmd: pnpm build:win:x64
+          - platform: Windows
+            variant: arm64
+            runs-on: windows-11-arm
+            target-archs: arm64
+            artifact-suffix: win-arm64
+            build-cmd: pnpm build:win:arm64
           - platform: macOS
-            variant: x64+arm64
+            variant: arm64
             runs-on: macos-latest
-            target-archs: x64,arm64
-            artifact-suffix: mac
-            build-cmd: pnpm build:mac
+            target-archs: arm64
+            artifact-suffix: mac-arm64
+            build-cmd: pnpm build:mac:arm64
+          - platform: macOS
+            variant: x64
+            runs-on: macos-26-intel
+            target-archs: x64
+            artifact-suffix: mac-x64
+            build-cmd: pnpm build:mac:x64
           - platform: Linux
             variant: x64
             runs-on: ubuntu-latest
@@ -217,24 +229,13 @@ jobs:
         if: matrix.platform == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2 rpm xz-utils
 
-      # ── 原生单测（保留；2026-09-10 方案二复核）────────────────────────
-      # 为什么保留：PR CI 的 quality job 只跑在 ubuntu，**mac/win 的原生单测没有其它
-      # 环节覆盖**——而单测恰是最易暴露平台差异的一层（路径分隔符、原生模块
-      # better-sqlite3/node-pty、safeStorage 的 DPAPI/Keychain/libsecret 分支）。
-      # 发布是最后一道闸，故各平台打包前先跑自己的原生单测。
-      # 为什么 typecheck / lint 不在此重跑：二者与平台无关（同一份源码在三个平台结论
-      # 相同），PR CI 的 ubuntu quality job 已覆盖；释放出 2 步 × 3 平台 = 6 次重复执行。
-      # Windows 只跑 main/renderer/scripts：node-pty/ConPTY 与 vitest fork worker 并发会
-      # 崩（0xC0000005 ACCESS_VIOLATION），该集成层本就不在 Windows 覆盖范围
-      # （集成测试只在 ubuntu 的 CI job 跑）。
-      - name: Unit tests (${{ matrix.platform }})
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "Windows" ]; then
-            pnpm test:main && pnpm test:renderer && pnpm test:scripts
-          else
-            pnpm test
-          fi
+      # ── 单测已移出（2026-09-20 二次改造）────────────────────────────
+      # 原步骤「Unit tests」在此跑各平台原生单测（每平台 2–3 分钟）。现已移交
+      # PR 阶段的 CI：ci.yml 新增 unit job，6 个平台各自跑自己的单测。
+      # 为什么移出：① 质量验证属 PR 阶段（失败要在合并前暴露，而非发版时才知道）；
+      # ② CD 的职责收敛为「构建 + 产物验证」，失败原因一眼可判；③ 同一件事只跑一次。
+      # Windows 仍不跑集成测试（node-pty/ConPTY + vitest fork worker 崩 0xC0000005，
+      # 该层本就只在 ubuntu 的 CI job 覆盖）。
 
       # ── 平台打包 ───────────────────────────────────────────────────
       - name: Build & package ${{ matrix.platform }} installer
@@ -326,12 +327,12 @@ jobs:
         # matrix.platform 为 'Linux'（variant 区分架构），条件判断不受变体影响。
         run: ${{ matrix.platform == 'Linux' && 'xvfb-run -a pnpm test:smoke' || 'pnpm test:smoke' }}
 
-      # ── 上传构建产物（release job 合并）──────────────────────────────
+      # ── 上传构建产物（merge/release job 使用）────────────────────────
       # 2026-09-10 资产规范化：只上传 release/ 根目录的安装包 + 更新元数据 + SBOM，
       # 不再整个 release/（否则 win-unpacked/linux-unpacked 内 node.exe/rg.exe/
       # OpenConsole/winpty-agent 等杂项与 app-update.yml 一并混入 GitHub Release）。
-      # 上传名用 artifact-suffix：Linux 拆双 job 后 platform 相同，仅用它会让两份
-      # artifact 同名覆盖（arm64 产物丢失）。
+      # 上传名用 artifact-suffix：6 个 job 必须互不相同——upload-artifact@v4 的
+      # artifact 不可变（官方 MIGRATION 文档："Artifacts are immutable"），同名会冲突。
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -349,9 +350,61 @@ jobs:
             release/sbom-*.cdx.json
           retention-days: 30
 
+  # ── merge：把 Windows / macOS 的双份同名更新元数据合成双架构一份 ──────────
+  # 为什么必需（已核实 app-builder-lib/out/publish/updateInfoBuilder.js:55-60）：
+  # electron-builder 的 getArchPrefixForUpdateFile **仅对 Linux** 追加架构后缀，
+  # 故 Windows（latest.yml）/ macOS（latest-mac.yml）在拆成两个单架构 build job 后
+  # 会各产一份同名互斥文件。不合并的后果是**静默故障**：release job 的 `cp -n`
+  # 只有一份生效，另一架构的用户在 electron-updater 的 findFile 里找不到自己的
+  # 条目，回退下载到另一个架构的包（x64 用户拿到 arm64 版，装上即无法运行）。
+  # Linux 的 latest-linux.yml / latest-linux-arm64.yml 天然分文件，不参与合并。
+  merge:
+    name: Merge update metadata (win/mac dual-arch)
+    needs: [gate, build]
+    if: needs.gate.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 保留各 build job 的子目录结构（不用 merge-multiple）——
+      # 两份 latest.yml 必须能各自取到：脚本按子目录名（release-win-x64-<ref> /
+      # release-win-arm64-<ref>）识别架构，扁平化会让它们互相覆盖。
+      - name: Download build artifacts (keep subdirectories)
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # 合并 Windows / macOS 的双架构元数据（纯函数 + 单测见 scripts/lib/update-metadata.ts）
+      - name: Merge dual-arch update metadata
+        run: pnpm exec tsx scripts/merge-update-metadata.ts
+
+      # 作为独立 artifact 上传（release job 只从这里取合并结果，避免与
+      # build job 上传的两份单架构同名文件混在一起）
+      - name: Upload merged metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-update-metadata
+          path: merged-meta/latest*.yml
+          retention-days: 30
+
   release:
     name: Create GitHub Release (tag + draft)
-    needs: [gate, build]
+    needs: [gate, build, merge]
     if: needs.gate.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -365,27 +418,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      # ⚠️ 不能用 merge-multiple（2026-09-20 拆 job 改造）：Windows 的两个单架构
+      # build job 各上传一份 latest.yml、macOS 同理，扁平化后会互相覆盖，且与
+      # merge job 产出的双架构版本混在一起——取到哪一份将取决于解包顺序（不确定）。
+      # 保留子目录（artifacts/<artifact 名>/…）才能确定性地按来源取用。
+      - name: Download all artifacts (keep subdirectories)
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          merge-multiple: true
 
-      # 合并三平台产物到统一目录（避免文件名冲突覆盖）。
-      # 2026-09-10 资产规范化：安装包用 命名白名单 收集（产品名-平台-架构连字符名），
-      # 与 electron-builder.yml artifactName 一致；CBOM/更新元数据/blockmap 一并收集。
-      # 不再用 *.exe/*.yml 通配——那会把 win-unpacked 杂项（node.exe 等）混入。
+      # ── 更新元数据的取用规则（拆 job 后新增，2026-09-20）───────────────────
+      # 取用优先级是**显式**的两步，而非依赖 cp -n 的遍历顺序：
+      #   ① 先放 merge job 的双架构合并件（artifacts/merged-update-metadata/）；
+      #   ② 再收集其余资产——含各 build job 的单架构 latest.yml / latest-mac.yml，
+      #      它们会被第 ① 步的文件挡住（cp -n 不覆盖已存在文件），因此不可能覆盖
+      #      合并结果；Linux 的 latest-linux*.yml 按架构分文件，天然唯一，直接收。
+      # publish job 的「元数据必含双架构条目」断言是这条规则失效时的 fail-closed 兜底。
       - name: Collect release files
         run: |
           mkdir -p release
-          find artifacts \( -type f \) \( \
+          # ① 双架构合并件优先（merge job 产出）
+          if [ -d artifacts/merged-update-metadata ]; then
+            find artifacts/merged-update-metadata -type f -name "latest*.yml" -exec cp -n {} release/ \;
+          else
+            echo "::error::artifacts/merged-update-metadata 不存在——merge job 的产物缺失，无法保证元数据为双架构"
+            exit 1
+          fi
+          # ② 其余资产（安装包 / blockmap / SBOM / Linux 元数据）
+          find artifacts -type f \( \
             -name "Code-Agent-Desktop-Windows-*.exe" -o \
             -name "Code-Agent-Desktop-macOS-*.dmg" -o \
             -name "Code-Agent-Desktop-macOS-*.zip" -o \
             -name "Code-Agent-Desktop-Linux-*.AppImage" -o \
             -name "Code-Agent-Desktop-Linux-*.deb" -o \
             -name "Code-Agent-Desktop-Linux-*.rpm" -o \
-            -name "latest*.yml" -o \
+            -name "latest-linux*.yml" -o \
             -name "*.blockmap" -o \
             -name "sbom-*.cdx.json" \
           \) -exec cp -n {} release/ \;
@@ -508,6 +575,37 @@ jobs:
           # -<arch> 后缀，x64 不加后缀）
           for req in "latest.yml" "latest-mac.yml" "latest-linux.yml" "latest-linux-arm64.yml"; do
             if ! grep -qx "$req" <<<"$ASSETS"; then echo "::error::缺少更新元数据: $req"; MISSING=1; fi
+          done
+          # ── 元数据双架构断言（2026-09-20 拆 job 后新增，fail-closed）──────────
+          # 背景：拆成单架构 build job 后，Windows/macOS 各自产出同名 latest*.yml，
+          # 必须由 merge job 合成双架构一份（见 release.yml 的 merge job 注释）。
+          # 若 merge 未生效、或 release job 误取了单架构版本，用户侧的后果是**静默故障**：
+          # electron-updater 的 findFile 按 `url.includes(process.arch)` 挑包
+          # （providers/Provider.js:80），元数据里缺哪个架构的条目，那个架构的用户就会
+          # 回退下载另一个架构的包（装上无法运行）。故此处校验每个条目族**同时含
+          # x64 与 arm64**，而不是只看文件是否存在。
+          # 判定方式：下载元数据正文，各自 grep 架构串。
+          for yml in "latest.yml" "latest-mac.yml"; do
+            YML_ID=$(gh api "/repos/$REPO/releases/$RELEASE_ID" \
+              --jq ".assets[] | select(.name == \"$yml\") | .id")
+            if [ -z "$YML_ID" ] || [ "$YML_ID" = "null" ]; then
+              continue # 缺文件已由上一段断言报错，此处只处理"存在但内容不完整"
+            fi
+            YML_BODY=$(gh api "/repos/$REPO/releases/assets/$YML_ID" -H "Accept: application/octet-stream")
+            for arch in "x64" "arm64"; do
+              if ! grep -q -- "-$arch\." <<<"$YML_BODY"; then
+                echo "::error::$yml 缺 $arch 条目（合并元数据未生效或取了单架构版本）"
+                echo "$YML_BODY" | head -20
+                MISSING=1
+              fi
+            done
+            # path 必须指向 files 中的首个条目之一（防悬空引用：electron-updater 1.x
+            # 回退路径会 404）。取 path: 行的值，断言它在正文中作为 url 出现过。
+            PRIMARY=$(grep -m1 '^path:' <<<"$YML_BODY" | sed 's/^path:[[:space:]]*//')
+            if [ -n "$PRIMARY" ] && ! grep -qF "$PRIMARY" <<<"$(grep 'url:' <<<"$YML_BODY")"; then
+              echo "::error::$yml 的 path=\"$PRIMARY\" 不在 files 中（悬空引用）"
+              MISSING=1
+            fi
           done
           # ── 安装包：每个平台-架构-格式组合都必须存在 ─────────────────────
           # 2026-09-20 命名规范化：`产品名-平台-架构-版本.扩展名`

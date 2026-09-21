@@ -422,6 +422,11 @@ Sleep 1s 后 force kill，命不到才弹 `appCannotBeClosed`）在延迟安装�
    ⇒ Windows 双 job 会各产一份 `latest.yml` 且内容互斥，合并时（`cp -n`）只有一份
    生效，另一架构拿不到自动更新。单 job 内双架构则在同一份文件里累积两组条目
    （与 macOS 的 `latest-mac.yml` 同机制，后者已由 v1.3.1 实测确认含 4 条目）。
+   > **2026-09-20 更新**：该障碍已被**新增 merge job** 消除——`scripts/merge-update-metadata.ts`
+   > 把两份单架构同名元数据合成双架构一份，语义与 electron-builder 的原生输出
+   > **逐字节一致**（用 v1.3.2 真实元数据拆开再合并验证）。CD 因此已拆为 6 个单架构
+   > job，各在原生 runner 上构建（不再交叉编译），smoke 覆盖 6/6。详见
+   > [29-pipeline-spec.md](./29-pipeline-spec.md) §3.4 与 §4 第二步。
 3. **Linux 拆 job 安全**：其更新元数据按架构分文件（`latest-linux.yml` /
    `latest-linux-arm64.yml`），分开构建天然无覆盖；且能各自原生编译
    （node-pty 无 Linux 预编译产物）。
