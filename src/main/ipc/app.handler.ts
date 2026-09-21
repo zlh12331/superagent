@@ -128,8 +128,15 @@ export const appHandlers: InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContex
       return { saved: false };
     }
     try {
-      await exportDiagnosticsPackage({ filePath, userDataPath: app.getPath('userData') });
-      logger.info({ filePath }, '诊断包导出完成');
+      // 开机自启状态读好传入（诊断模块不直接依赖 autostart/Electron app，见
+      // ExportDiagnosticsOptions.autostart 的说明）；读失败不阻断导出，记 null
+      const autostart = await readAutostartState(createAutostartDeps()).catch(() => null);
+      await exportDiagnosticsPackage({
+        filePath,
+        userDataPath: app.getPath('userData'),
+        autostart,
+      });
+      logger.info({ filePath, autostart }, '诊断包导出完成');
       return { saved: true, path: filePath };
     } catch (error) {
       logger.error({ error: String(error), filePath }, '诊断包导出失败');

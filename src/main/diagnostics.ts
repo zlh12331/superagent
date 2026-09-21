@@ -65,6 +65,14 @@ export interface ExportDiagnosticsOptions {
   readonly filePath: string;
   /** 用户数据目录（日志位于其下 logs/） */
   readonly userDataPath: string;
+  /**
+   * 开机自启状态（由调用方读好传入）
+   *
+   * 为什么由调用方传入而非本模块自行读取：autostart 依赖 Electron `app` 与平台环境，
+   * 在诊断模块内直接调会引入对 `app` 桩的额外耦合（本模块的测试用极简 app mock）。
+   * 这两项是「开机自启/静默启动」类报障的关键判据（见 30-spec §3 P2-2）。
+   */
+  readonly autostart?: unknown;
 }
 
 /**
@@ -148,7 +156,7 @@ async function collectLogFiles(logsDir: string): Promise<Array<{ name: string; c
  * @throws 读取或写盘失败时抛出（由 IPC wrap 统一错误分类 + 本地日志）
  */
 export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions): Promise<void> {
-  const { filePath, userDataPath } = options;
+  const { filePath, userDataPath, autostart } = options;
   const zip = new AdmZip();
 
   // 1. 版本与环境清单（manifest.json）
@@ -175,6 +183,30 @@ export async function exportDiagnosticsPackage(options: ExportDiagnosticsOptions
     zip.addFile(`logs/${log.name}`, Buffer.from(redactText(log.content.toString('utf8'))));
   }
 
-  // 4. 写盘（用户选定路径；writeZipPromise 异步压缩，避免阻塞主进程）
+  // 4. 运行时状态（开机自启 + 窗口状态）
+  // 这两项是「开机自启不生效 / 开机弹窗」类报障的直接判据：自启注册态决定该不该静默启动，
+  // window-state.isMaximized 决定静默启动是否会被最大化恢复击穿（30-spec §3 P0-1）。
+  // 读不到（文件不存在/损坏）记 null 而非省略键——"读不到"本身也是诊断信息。
+  zip.addFile(
+    'runtime.json',
+    Buffer.from(
+      JSON.stringify(
+        { autostart: autostart ?? null, windowState: await readWindowState(userDataPath) },
+        null,
+        2,
+      ),
+    ),
+  );
+
+  // 5. 写盘（用户选定路径；writeZipPromise 异步压缩，避免阻塞主进程）
   await zip.writeZipPromise(filePath);
+}
+
+/** 读取窗口状态文件（诊断用；不存在/损坏返回 null，不阻断导出） */
+async function readWindowState(userDataPath: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(join(userDataPath, 'window-state.json'), 'utf8'));
+  } catch {
+    return null;
+  }
 }

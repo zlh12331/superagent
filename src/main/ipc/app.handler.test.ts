@@ -80,9 +80,12 @@ describe('app.handler', () => {
 
     const result = await appHandlers.exportDiagnostics(undefined, EMPTY_CTX);
 
+    // autostart：诊断包新增的运行时状态段（30-spec §3 P2-2）——测试环境未打包，
+    // autostart 的 supported=false，读取结果原样透传
     expect(mockExport).toHaveBeenCalledWith({
       filePath: 'C:/diag/diagnostics-2026-09-04.zip',
       userDataPath: '/mock/user-data',
+      autostart: { openAtLogin: false, supported: false, requiresApproval: false },
     });
     expect(result).toEqual({ saved: true, path: 'C:/diag/diagnostics-2026-09-04.zip' });
   });
