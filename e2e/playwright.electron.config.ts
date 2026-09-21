@@ -42,7 +42,16 @@ export default defineConfig({
   },
   workers: 1,
   retries: 0,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report-electron' }]],
+  // ⚠️ outputFolder 必须写成基于 ROOT 的绝对路径：相对路径会被解析到**配置文件所在目录**
+  // （即 e2e/），而非 cwd。此前写成 'playwright-report-electron' 时报告落在
+  // e2e/playwright-report-electron/，而 ci.yml 的上传路径是仓库根的
+  // playwright-report-electron/ ⇒ 报告从未被上传（"No files were found"），
+  // 失败现场无 artifact 可查（2026-09-21 调查 windows-11-arm 的 E2E 失败时暴露）。
+  // browser 那套未设 outputFolder，默认落在仓库根，故一直正常——此处对齐它。
+  reporter: [
+    ['list'],
+    ['html', { open: 'never', outputFolder: join(ROOT, 'playwright-report-electron') }],
+  ],
   use: {
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
