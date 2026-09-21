@@ -206,6 +206,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # ── Electron 二进制兜底（2026-09-21 实测的 Windows 竞态）──────────────
+      # 症状：windows-latest 上 pnpm install 的 electron postinstall 偶发解压竞态
+      # ——"failed to create directory '…/electron/dist/locales': Cannot create a
+      # file when that file already exists (os error 183)"，install 步骤仍以 0 退出，
+      # 但 dist 不完整 ⇒ 单测 import electron 时抛
+      # "Electron failed to install correctly"，整个测试文件被跳过（157 passed / 1 failed suite）。
+      # 为什么单测依赖 electron：main 层的模块加载期就 import electron（如
+      # llm-client 走 Electron 的 net 模块），vitest 需要 electron 包能解析出路径。
+      # 修法：安装后校验 path.txt（electron/install.js 在解压完成后才写它）——
+      # 缺失即判定为竞态，重跑官方安装脚本修复。校验本身是毫秒级的文件存在性检查。
+      - name: Ensure Electron binary (repair install race)
+        shell: bash
+        run: |
+          if [ ! -f node_modules/electron/path.txt ]; then
+            echo "::warning::electron 未正确安装（postinstall 解压竞态），重新安装"
+            node node_modules/electron/install.js
+          fi
+          test -f node_modules/electron/path.txt || { echo "::error::electron 仍不可用"; exit 1; }
+
       - name: Unit tests (main + renderer)
         if: matrix.coverage != true
         # Windows 只跑 main/renderer：node-pty/ConPTY 与 vitest fork worker 并发会崩
