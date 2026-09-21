@@ -149,6 +149,39 @@ beta 与正式版共用 `latest*.yml` 更新源；已装 beta 版的应用（版
 - 本地修复后 push，或
 - 手动重放 CD：`workflow_dispatch` 触发 Release workflow，`confirm_version` 必须填**与 `package.json` 当前版本一致**的版本号，否则 gate 拒绝
 
+### ⚠️ 重放到「release job 已成功过」的阶段时注意 tag 锚点（2026-09-21 事故）
+
+`release.yml` 的 release job 在 tag **已存在**时会走 update 路径。若其 `target_commitish`
+指向"当前分支 tip"而不是**产出该版本的发布提交**，重跑会把已发布的 tag **挪到更新的提交上**。
+
+后果不是立刻可见，而是**下一次发版时爆发**：release-please 靠「tag 指向
+`chore(main): release X.Y.Z` 提交」建立版本锚点，tag 脱离发布提交后它认不出该版本，
+会一路回退遍历更早的 release（那些也因 `SHA not found in recent commits` 被跳过），
+最终以历史起点算出下一个版本 = **1.0.0**，并把**全量历史条目**塞进 CHANGELOG。
+
+实测影响范围：v1.3.3 因此被从发布提交 `3b9b8fa` 移到 `1f1a66b`，release-please 随即开出
+`chore(main): release 1.0.0`（PR #64）。
+
+**已修复**（2026-09-21，#67）：gate 新增 `release_sha` 输出（回溯 git log 找出发布提交），
+release job 显式传 `target_commitish: ${{ needs.gate.outputs.release_sha }}` ⇒ 重跑永远把 tag
+钉在同一提交上。注意**不能**用 `github.sha`——手动 dispatch 时它是 main tip，往往已是发布提交
+之后的修复提交。
+
+**若事故已发生，补救三步**：
+
+```bash
+# 1. 把 tag 移回发布提交（先确认目标：该 tag 应对应 chore(main): release X.Y.Z）
+gh api -X PATCH repos/{owner}/{repo}/git/refs/tags/vX.Y.Z -f sha=<发布提交SHA>
+
+# 2. 关闭误开的 Release PR（版本倒退的那个）
+gh pr close <PR号> --comment "误开：根因见 RELEASING.md 第五节"
+
+# 3. 手动触发 release-please 复验（应开出正确的下一个版本）
+gh workflow run release-please.yml --ref main
+```
+
+Release 资产与正文不受影响（tag 只是引用），用户侧无需任何动作。
+
 ## 六、热修复（待需要时启用）
 
 若已发布的 `1.0.0` 爆出严重 bug，而 main 已累积了 1.1.0 的功能，需要出只含该修复的 `1.0.1`：
