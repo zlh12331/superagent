@@ -214,6 +214,9 @@ importers:
       '@types/diff-match-patch':
         specifier: ^1.0.36
         version: 1.0.36
+      '@types/js-yaml':
+        specifier: 4.0.3
+        version: 4.0.3
       '@types/node':
         specifier: ^26.4.1
         version: 26.4.1
@@ -286,6 +289,9 @@ importers:
       i18next-cli:
         specifier: ^1.73.0
         version: 1.73.0(@types/node@26.4.1)(react-dom@19.2.8(react@19.2.8))(typescript@7.0.2)
+      js-yaml:
+        specifier: 4.3.2
+        version: 4.3.2
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.4.0)
@@ -3148,6 +3154,9 @@ packages:
 
   '@types/http-cache-semantics@4.2.0':
     resolution: {integrity: sha512-L3LgimLHXtGkWikKnsPg0/VFx9OGZaC+eN1u4r+OB1XRqH3meBIAVC2zr1WdMH+RHmnRkqliQAOHNJ/E0j/e0Q==}
+
+  '@types/js-yaml@4.0.3':
+    resolution: {integrity: sha512-5t9BhoORasuF5uCPr+d5/hdB++zRFUTMIZOzbNkr+jZh3yQht4HYbRDyj9fY8n2TZT30iW9huzav73x4NikqWg==}
 
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
@@ -9716,6 +9725,8 @@ snapshots:
       '@types/unist': 3.0.3
 
   '@types/http-cache-semantics@4.2.0': {}
+
+  '@types/js-yaml@4.0.3': {}
 
   '@types/keyv@3.1.4':
     dependencies:

@@ -1,13 +1,27 @@
 # .github/workflows/ci.yml
-# CI 流水线：PR 触发，跑质量门禁 + 测试矩阵（三平台）
+# CI 流水线：PR 触发，跑质量门禁 + 测试矩阵（六平台）
 #
-# 设计：
-# - quality job：跑在 ubuntu-latest，快速反馈 typecheck/lint/unit test/audit
-# - integration-tests job：集成测试（tests/integration）
-# - e2e-browser job：浏览器模式 E2E（唯一需要 Chromium 的 job）
-# - e2e-electron job：三平台矩阵（windows/ubuntu/macos），跑真实 Electron E2E
-# - smoke-prod job：windows + ubuntu 矩阵，跑生产构建 smoke 测试
+# 设计（2026-09-20 六平台改造后）：
+# - quality job：ubuntu ×1，快速反馈 typecheck/lint/gitleaks/静态审计/门禁自测/audit
+#   + CHANGELOG 润色门禁（仅 Release PR 分支）
+# - unit job：**6 平台矩阵**，各平台跑自己的原生单测；覆盖率阈值只在 ubuntu 把关
+# - unit-summary job：汇总 unit 矩阵（ruleset 引用此稳定名，见下）
+# - integration-tests job：集成测试（tests/integration，仅 ubuntu）
+# - e2e-browser job：浏览器模式 E2E（唯一需要 Chromium 的 job，仅 ubuntu）
+# - e2e-electron job：**6 平台矩阵**，跑真实 Electron E2E
+# - e2e-electron-summary job：汇总 e2e-electron 矩阵（ruleset 引用此稳定名）
+# - （smoke-prod job 已移除：生产产物 smoke 统一交给 CD，见文件末尾说明）
 # - （原 package job 已移除：打包验证交给 CD，见文件末尾说明）
+#
+# ⚠️ ruleset 必需检查（5 项，云端配置，改 workflow 时须同步）：
+#   1. Typecheck / Lint / Unit Test / Audit   ← quality
+#   2. Unit Tests (all platforms)             ← unit-summary
+#   3. Integration Tests                      ← integration-tests
+#   4. E2E (Browser Mode)                     ← e2e-browser
+#   5. E2E (Electron, all platforms)          ← e2e-electron-summary
+#   多平台作业一律经 summary job 暴露稳定名：平台 label 换代时只改 workflow、
+#   不改云端 ruleset（"改漏 → 检查永不 report → PR 永久卡 pending"已发生过两次）。
+#   summary job 的 `name:` 必须逐字等于上述字符串，且必须带 `if: always()`。
 #
 # 触发策略（2026-09-10 方案二：CI on PR, CD on main）：
 # - **只 pull_request 触发，不再 push: main**。仓库 ruleset 强制「main 所有提交必须走 PR」
@@ -38,7 +52,7 @@ on:
 # - contents: read      —— actions/checkout 取代码；gitleaks 读 PR 的 commit 列表
 # - pull-requests: read —— gitleaks-action 调 GET /pulls/{n}/commits（实证：同类项目
 #                          生成器对 gitleaks@v2 用的正是 contents+pull-requests 均为 read）
-# 不放 write：本项目 5 个 job 都不需要写（gitleaks 的「泄漏时发评论」需要写权限，
+# 不放 write：本项目所有 job 都不需要写（gitleaks 的「泄漏时发评论」需要写权限，
 # 但那本来在 read-all 下也不可用；泄漏时该 action 以非零退出让检查红，信号已足够）。
 # upload-artifact 走 ACTIONS_RUNTIME_TOKEN，不受此块影响。
 permissions:
@@ -115,8 +129,11 @@ jobs:
           fi
           pnpm exec drizzle-kit check
 
-      - name: Unit tests + coverage gate (shared + main + renderer)
-        run: pnpm test:coverage
+      # ── 单测 + 覆盖率已移出（2026-09-20 六平台改造）──────────────────────
+      # 原步骤 `pnpm test:coverage` 在此只跑 ubuntu 一套（shared/main/renderer），
+      # Windows/macOS 的原生单测没有任何环节覆盖。现移交下方的 `unit` job：
+      # 6 个平台各自跑自己的单测，覆盖率阈值仍只在 ubuntu 把关（原因见 unit job 注释）。
+      # 本 job 保留 test:scripts：门禁脚本自身与平台无关，单次执行即可。
 
       - name: Gate scripts self-test
         # 守卫门禁自身的测试（棘轮/覆盖率真源/文件度量等 9 个文件）——
@@ -133,15 +150,95 @@ jobs:
         # 含几十个修复的 PR 在 CHANGELOG 里只剩一行 PR 标题。RELEASING.md 要求合并
         # Release PR 前人工润色，但该步骤此前无任何机制看守（2026-09-17 实测漏做
         # v1.1.1，用户可见修复在 Release 页面全部不可见）。
-        # 放进本 job 而非新开 job：ruleset 的必需检查清单是固定的 8 项，新 job 不
-        # 阻塞合并；quality 已是必需检查，挂在此处即自动获得合并阻塞力（无需改云端
-        # ruleset）。条件限定 release-please-- 前缀分支 ⇒ 只对 Release PR 生效，
-        # 其他 PR 零开销。release.yml 的 gate job 另有同一步兜底（打 tag 前）。
+        # 放进本 job 而非新开 job：quality 已是 ruleset 必需检查，挂在此处即自动获得
+        # 合并阻塞力（无需改云端 ruleset 清单）。条件限定 release-please-- 前缀分支
+        # ⇒ 只对 Release PR 生效，其他 PR 零开销。release.yml 的 gate job 另有同一步
+        # 兜底（打 tag 前再校验一次）。
         if: startsWith(github.head_ref, 'release-please--')
         run: pnpm check:changelog-polish
 
+  # ── Job 2: 单测（6 平台原生各跑一份）──────────────────────────
+  # 为什么扩到 6 平台：单测是最易暴露平台差异的一层（路径分隔符、原生模块
+  # better-sqlite3/node-pty、safeStorage 的 DPAPI/Keychain/libsecret 分支）。
+  # 此前只在 ubuntu 跑，Windows/macOS 的原生单测失败要到**发版**才暴露（那时
+  # 代码已合并，只能回滚或热修）。本 job 让失败在 PR 阶段红。
+  #
+  # 覆盖率阈值只在这里的 ubuntu 实例把关（其余 5 个平台跑不带阈值的同套用例）：
+  # 平台专属代码（process.platform 分支、原生模块封装）在各平台被执行到的比例
+  # 不同，多平台都卡阈值会出现「这个平台过、那个平台不过」的怪象。
+  #
+  # test:scripts 不在本 job：门禁脚本自测与平台无关，留在 quality 单次执行，
+  # 避免 6 倍重复。集成测试同理（Windows 上 node-pty/ConPTY + vitest fork worker
+  # 会崩 0xC0000005，故只保留 ubuntu 的 integration-tests job）。
+  unit:
+    name: Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            coverage: false
+          - os: windows-11-arm
+            coverage: false
+          - os: ubuntu-latest
+            coverage: true # 覆盖率阈值唯一把关点
+          - os: ubuntu-24.04-arm
+            coverage: false
+          - os: macos-latest
+            coverage: false
+          - os: macos-26-intel
+            coverage: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Electron 二进制兜底（2026-09-21 实测的 Windows 竞态）──────────────
+      # 症状：windows-latest 上 pnpm install 的 electron postinstall 偶发解压竞态
+      # ——"failed to create directory '…/electron/dist/locales': Cannot create a
+      # file when that file already exists (os error 183)"，install 步骤仍以 0 退出，
+      # 但 dist 不完整 ⇒ 单测 import electron 时抛
+      # "Electron failed to install correctly"，整个测试文件被跳过（157 passed / 1 failed suite）。
+      # 为什么单测依赖 electron：main 层的模块加载期就 import electron（如
+      # llm-client 走 Electron 的 net 模块），vitest 需要 electron 包能解析出路径。
+      # 修法：安装后校验 path.txt（electron/install.js 在解压完成后才写它）——
+      # 缺失即判定为竞态，重跑官方安装脚本修复。校验本身是毫秒级的文件存在性检查。
+      - name: Ensure Electron binary (repair install race)
+        shell: bash
+        run: |
+          if [ ! -f node_modules/electron/path.txt ]; then
+            echo "::warning::electron 未正确安装（postinstall 解压竞态），重新安装"
+            node node_modules/electron/install.js
+          fi
+          test -f node_modules/electron/path.txt || { echo "::error::electron 仍不可用"; exit 1; }
+
+      - name: Unit tests (main + renderer)
+        if: matrix.coverage != true
+        # Windows 只跑 main/renderer：node-pty/ConPTY 与 vitest fork worker 并发会崩
+        # （0xC0000005 ACCESS_VIOLATION），该集成层不在 Windows 覆盖范围。
+        # 注：packages/shared 的单测只在 ubuntu 实例跑（见下一步的 test:coverage）——
+        # 它是纯类型/schema/常量契约层，无平台分支代码，无需 6 份重复。
+        run: pnpm test:main && pnpm test:renderer
+
+      - name: Unit tests + coverage gate (shared + main + renderer)
+        if: matrix.coverage == true
+        run: pnpm test:coverage
+
       - name: Upload coverage
-        if: always()
+        if: matrix.coverage == true
         uses: actions/upload-artifact@v4
         continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
         with:
@@ -151,6 +248,27 @@ jobs:
             src/main/coverage/
             src/renderer/coverage/
           retention-days: 7
+
+  # ── Job 3: unit 汇总（ruleset 引用它，而非 6 个平台名）──────────
+  # 存在的唯一目的是让 ruleset 引用**稳定名称**：若把 6 个平台 job 名写进 ruleset，
+  # 平台 label 换代（如 macos-latest 指向新 OS）就要改云端 ruleset，而"改漏 = 该检查
+  # 永不 report = 所有 PR 永久卡 pending"（本项目已有两次同类事故）。
+  # ⚠️ name 必须逐字等于 ruleset 里的 context 字符串；if: always() 必需（依赖失败时
+  # 也要跑，否则被跳过的必需检查等于永不 report，PR 会卡 pending 而非显示红）。
+  unit-summary:
+    name: Unit Tests (all platforms)
+    needs: [unit]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check matrix result
+        run: |
+          if [ "${{ needs.unit.result }}" != "success" ]; then
+            echo "::error::unit 矩阵未全部通过：${{ needs.unit.result }}"
+            exit 1
+          fi
+          echo "✅ 6 平台单测全部通过"
 
   # ── Job 2: 集成测试（慢速分层门控，不阻塞单测高频反馈）──
   integration-tests:
@@ -221,8 +339,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 三平台真实 Electron 窗口验证（macOS 验证 mac 专属路径，Linux 验证 libsecret 降级路径）
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # 六平台真实 Electron 窗口验证（2026-09-20 从 3 平台扩到 6）——
+        # macOS 验证 mac 专属路径、Linux 验证 libsecret 降级路径、ARM64 验证
+        # 原生模块在 ARM 上的构建与加载（此前 arm64 只由 CD 的打包覆盖）。
+        os: [windows-latest, windows-11-arm, ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-26-intel]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -283,73 +403,28 @@ jobs:
           path: playwright-report-electron/
           retention-days: 7
 
-  # ── Job 4: 生产构建 Smoke 测试（最接近用户场景，win + linux）─
-  smoke-prod:
-    name: Smoke (Production Build, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        # Windows：NSIS；Linux：AppImage（macOS smoke 由 package job 覆盖）
-        os: [windows-latest, ubuntu-latest]
+  # ── Job 7: e2e-electron 汇总（ruleset 引用它，而非 6 个平台名）────────
+  # 与 unit-summary 同理：让 ruleset 引用稳定名称，平台增减不改云端配置。
+  # ⚠️ name 必须逐字等于 ruleset 的 context 字符串；if: always() 必需。
+  e2e-electron-summary:
+    name: E2E (Electron, all platforms)
+    needs: [e2e-electron]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # 不下载 Chromium（2026-09-10 优化）：smoke.prod.spec.ts 用 _electron.launch 驱动
-      # 打包后的可执行文件，不需要 Playwright 自带浏览器。仅需 ffmpeg（录像）。
-      - name: Install Playwright deps (ffmpeg only, no Chromium)
-        shell: bash
+      - name: Check matrix result
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then pnpm exec playwright install-deps chromium; fi
-          pnpm exec playwright install ffmpeg
+          if [ "${{ needs.e2e-electron.result }}" != "success" ]; then
+            echo "::error::e2e-electron 矩阵未全部通过：${{ needs.e2e-electron.result }}"
+            exit 1
+          fi
+          echo "✅ 6 平台 Electron E2E 全部通过"
 
-      - name: Build production artifacts
-        # 记忆引擎源码已 vendored 进仓（packages/memory-engine/MemoryCore），
-        # 构建必然带上引擎；缺失会直接失败而非降级（2026-09-13 起）。
-        # 2026-09-20 多架构发布：CI 只验证**本机架构**产物（smoke 用
-        # resolvePackagedExecutable 按 process.arch 选择，跨架构产物无法在 runner 上启动）。
-        # Windows 用 build:win:x64（单架构——`--x64` 现已真正只构建 x64；
-        # 此前配置里的 arch 列表与 CLI 是并集，会让单架构脚本产出双架构且其中
-        # arm64 那份静默复用 host 架构，见 check:native-arch 的说明）。
-        # arm64 由 release.yml 的 windows-latest 双架构 job 与 ubuntu-24.04-arm 原生 job 覆盖。
-        run: ${{ runner.os == 'Windows' && 'pnpm build:win:x64' || 'pnpm build:linux:x64' }}
-        env:
-          # codegraph 捆绑包按架构部署（每个约 250MB）：CI 两个 runner 都是 x64，
-          # 只部署 x64 那套（arm64 由 release.yml 的 ARM64 job 负责）
-          CODE_AGENT_TARGET_ARCHS: x64
-
-      # 原生模块架构断言（防交叉构建静默产出错误架构二进制）
-      - name: Verify native module architecture
-        run: pnpm check:native-arch
-
-      - name: Run production smoke tests
-        # Linux 无头环境走 xvfb（Electron 启动需要 Display）；Windows runner DISPLAY 无需
-        run: ${{ runner.os == 'Linux' && 'xvfb-run -a pnpm test:smoke' || 'pnpm test:smoke' }}
-        env:
-          ELECTRON_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
-
-      - name: Upload smoke test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        continue-on-error: true # 制品配额耗尽时报告上传失败不阻断 CI 结论
-        with:
-          name: playwright-report-smoke-${{ matrix.os }}-${{ github.run_id }}
-          path: playwright-report-smoke/
-          retention-days: 7
+  # ── Job 4「生产构建 Smoke 测试」已移除（2026-09-20）─────────────────
+  # 原 smoke-prod job（windows + ubuntu 矩阵：打包 → check:native-arch → test:smoke）
+  # 已删除，生产产物验证统一交给 CD（release.yml 的 build job 各自跑 test:smoke）。
+  # 成本与覆盖对比、代价、以及 ruleset 连带变更见文件末尾「Job 5」注释块。
 
   # ── Job 5「三平台打包验证」已移除（2026-09-10 方案二）───────────────
   # 原 package job（三平台 electron-builder 打包验证，各约 5 分钟）与 release.yml 的
@@ -362,4 +437,32 @@ jobs:
   # ⚠️ 必需同步：ruleset「protect-release-branches」的 required_status_checks 已移除
   # Package (windows/ubuntu/macos-latest) 三项。若只删本 job 而不改 ruleset，这三项
   # 检查永不 report，所有 PR 会卡在 pending 无法合并（strict policy 下）。
+  #
+  # ── Job 6「生产构建 Smoke 测试」已移除（2026-09-20，同一原则）──────────
+  # 原 smoke-prod job（windows + ubuntu 矩阵）做的事是：真实打包（build:*:x64）
+  # → check:native-arch → test:smoke（用 _electron.launch 启动打包产物并断言
+  # 能渲染 / preload 注入 / SQLite 可查 / 无控制台错误）。删除理由：
+  #   1. 成本不对称：CI 里必须从零打包才有产物可启动，实测每 PR 约 20 分钟
+  #      （Windows 9m20s + Ubuntu 10m19s）；CD 的同一套 smoke 夹在本来就要跑的
+  #      build job 内，增量仅 1–3 分钟。
+  #   2. 覆盖面反而更全：CD 覆盖全部四个变体（Windows x64+arm64 / macOS x64+arm64 /
+  #      Linux x64 原生 / Linux arm64 原生），CI 只能跑 x64 的 win+ubuntu——
+  #      macOS 打包在 PR 阶段本就无法验证（原注释声称"由 package job 覆盖"，
+  #      而该 job 已于 2026-09-10 删除，属过期注释）。
+  #      〔2026-09-20 更新：CD 已进一步拆为 **6 个单架构 job**（Windows/macOS 各自
+  #      拆 x64 + arm64），每个在原生 runner 上打包并跑 smoke ⇒ 覆盖 6/6 产物，
+  #      原先"单 job 兼双架构"时 win-arm64 与 mac-x64 无 smoke 的缺口已消除。〕
+  #   3. 风险由 CD 的 fail-closed 兜底：build job 失败即不打 tag、不占版本号，
+  #      修复后重跑同一 workflow 即可。
+  # ⚠️ 连带变更（已同步）：required_status_checks 移除
+  # Smoke (Production Build, windows-latest) 与 Smoke (Production Build, ubuntu-latest)
+  # ⇒ 当时必需检查从 8 项降为 6 项。只删 job 不改 ruleset 会让这两项永不 report，
+  # 所有 PR 卡在 pending（与上面 package job 同一个坑）。
+  # 2026-09-20 六平台改造后已是 **5 项**（见文件头清单）——smoke 覆盖改由 CD 的
+  # 6 个 build job 各自承担（每个平台验证自己的产物，含此前缺的 win-arm64 / mac-x64）。
+  # 代价（如实记录）：打包层回归——preload 被误打成 ESM、原生模块 ABI/架构错配、
+  # extraResources 漏文件、安装路径超长等——不再有 PR 阶段的早反馈，要到发版跑 CD
+  # 才暴露。这类问题在本项目历史上出现过多次；若日后发现"发版时才炸"过于昂贵，
+  # 恢复路径是加一个用 `electron-builder --dir` 打包的轻量 job（跳过安装器生成，
+  # 约省一半时间）——smoke 启动的是 unpacked 目录里的可执行文件，本不需要安装器。
 

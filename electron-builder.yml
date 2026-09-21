@@ -178,9 +178,20 @@ nsis:
   oneClick: false
   # 允许修改安装目录
   allowToChangeInstallationDirectory: true
-  # 安装包文件名：产品名-平台-架构（2026-09-10 发布资产规范化）——
-  # 连字符命名 + 平台/架构标识，避免 GitHub asset 名空格转点点、无法区分平台。
-  artifactName: Code-Agent-Desktop-Windows-${arch}.${ext}
+  # 安装包文件名：产品名-平台-架构-版本（2026-09-20 命名规范化）——
+  # 连字符命名，避免 GitHub asset 名空格转点；版本号在末位便于用户在下载目录分辨。
+  # ⚠️ 架构串必须是字面量 ${arch}（x64 / arm64）：electron-updater 用
+  #    `name.includes(process.arch)` 从 latest.yml 的多架构条目里选包
+  #    （providers/Provider.js:80）——换成中文或其他写法会让 ARM 设备拿到 x64 包。
+  artifactName: Code-Agent-Desktop-Windows-${arch}-${version}.${ext}
+  # 每架构一个独立安装包（2026-09-20 新增）——
+  # 默认 true 会额外构建「双架构通用安装包」（一个 exe 同时支持 x64/arm64，约 690MB）：
+  #   · 它使 latest.yml 的 path/files[0] 指向该通用包；若发布门禁只收按架构资产
+  #     （白名单要求 `Windows-` 后有架构段），通用包被过滤 → 元数据出现悬空引用，
+  #     且其 .blockmap 会被 `*.blockmap` 通配符单独收进 release（孤儿资产）。
+  #   · 用户侧的取舍：通用包体积翻倍且与「一渠道一包」的分发策略不符。
+  # 关掉后 latest.yml 只含 x64/arm64 两条（均真实发布），无悬空引用。
+  buildUniversalInstaller: false
   # 创建桌面快捷方式
   createDesktopShortcut: true
   # 创建开始菜单快捷方式
@@ -202,7 +213,10 @@ mac:
   icon: resources/icons/icon.png
   # mac 平台通用 artifactName：dmg 有自己的 dmg.artifactName 覆盖；zip（自动更新
   # 制品）沿用 mac.artifactName（顶层独立 zip: 键在 electron-builder schema 中非法）
-  artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
+  # ⚠️ 架构串必须是字面量 ${arch}（x64 / arm64）：latest-mac.yml 同时含两架构的 zip，
+  #    electron-updater 用 `name.includes(process.arch)` 选包——写成「Apple芯片」
+  #    「Intel芯片」会让 ARM Mac 匹配失败、回退取到 x64 包（providers/Provider.js:80）。
+  artifactName: Code-Agent-Desktop-macOS-${arch}-${version}.${ext}
   # 目标：dmg（分发安装包）+ zip（electron-updater 自动更新必须，latest-mac.yml）。
   # **不声明 arch**（同 win 段说明）：由脚本 CLI 标志决定——build:mac 传
   # --x64 --arm64（macos-latest 为 arm64，Xcode 原生支持交叉编译出 x64，
@@ -245,7 +259,13 @@ mac:
 # DMG 安装包配置
 # 自动更新用 zip artifact（latest-mac.yml，zip 命名沿用 mac.artifactName），DMG 仅作首次安装分发
 dmg:
-  artifactName: Code-Agent-Desktop-macOS-${arch}.${ext}
+  artifactName: Code-Agent-Desktop-macOS-${arch}-${version}.${ext}
+  # 不为 dmg 生成 blockmap（2026-09-20 新增，默认 true）——
+  # electron-updater 在 macOS 只下载 zip 做差分（MacUpdater.js:81：
+  # `findFile(files, "zip", ["pkg","dmg"])`，dmg 被显式排除），
+  # 故 `*.dmg.blockmap` 是一份永远不会被读取的资产（每个约 0.3MB）。
+  # 关闭后 latest-mac.yml 只含 zip 条目，dmg 仍是正常的分发安装包。
+  writeUpdateInfo: false
 
 # ── Linux 平台配置 ────────────────────────────────────────────
 linux:
@@ -277,15 +297,22 @@ linux:
 
 # AppImage 配置
 appImage:
-  artifactName: Code-Agent-Desktop-Linux-${arch}.AppImage
+  artifactName: Code-Agent-Desktop-Linux-${arch}-${version}.AppImage
 
 # deb 配置
 deb:
-  artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
+  artifactName: Code-Agent-Desktop-Linux-${arch}-${version}.${ext}
 
 # rpm 配置（Fedora/RHEL/openSUSE；构建需 runner 装 rpm 与 xz，见 release.yml）
 rpm:
-  artifactName: Code-Agent-Desktop-Linux-${arch}.${ext}
+  artifactName: Code-Agent-Desktop-Linux-${arch}-${version}.${ext}
+# 说明：Linux 的 ${arch} 由 electron-builder 按各包管理器惯例映射
+# （getArtifactArchName）：x64 → AppImage/rpm 为 `x86_64`、deb 为 `amd64`；
+# arm64 → rpm 为 `aarch64`、AppImage/deb 为 `arm64`。保留惯例串是刻意的：
+#   · 它们是各生态的标准标识（`dpkg --print-architecture` / `uname -m` 输出一致）
+#   · 更新选择不受影响——Linux 的元数据按架构分文件（latest-linux.yml /
+#     latest-linux-arm64.yml），每个文件里只有一个 AppImage，electron-updater
+#     无论按名字匹配还是回退取首个，都必然选中正确架构（已用真实 yml 实测验证）
 
 # 版本元数据（设计文档 §1.1 版本管理）
 # - Git tag v0.1.0 → 版本 0.1.0
