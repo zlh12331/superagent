@@ -487,7 +487,8 @@ home、`afterEach` 清理）。
 
 | 项 | 验证方式 | 结果 |
 |---|---|---|
-| P0-1 最大化击穿静默启动 | E2E 锚（预置 `isMaximized:true` + `--hidden`）+ **反向验证** | ✅ 通过；退回旧写法后锚立即失败（`Expected:false, Received:true`） |
+| P0-1 最大化击穿静默启动 | E2E 锚（预置 `isMaximized:true` + `--hidden`）+ **反向验证** | ✅ 通过（Linux 六平台 CI 亦通过）；退回旧写法后锚立即失败（`Expected:false, Received:true`） |
+| P0-1 的防误伤锚（常规启动仍显示） | E2E：不带 `--hidden` + 上次最大化 ⇒ 窗口显示 | ✅ 通过；**最大化态断言限定非 Linux**（xvfb 无 WM，见 §5.6 ④） |
 | P0-2 二次启动唤不回 | E2E 锚（隐藏启动 → execFile 起第二实例 → 断言可见）+ **反向验证** | ✅ 通过；退回旧写法后锚失败（`Expected:true, Received:false`） |
 | P1-1 AppImage 路径 | 单测：`resolveAutostartExecPath` 5 例（含 AppImage 场景下写出的 `.desktop` 不含 `/tmp/.mount_`） | ✅（真机 AppImage 运行待 Linux 平台确认） |
 | P1-2 macOS Dock / 关窗语义 | 单测（`bringMainWindowToFront` 零窗口重建）+ 代码级核对 spec 28 §3.2/§10 | ✅（macOS 真机行为待确认） |
@@ -528,6 +529,21 @@ depcruise ✅（1059 模块无环）/ build:win:x64 ✅ / E2E 浏览器 49 ✅ /
 
 `grep` 安装器二进制找不到 `Software\Microsoft\...\Run` 属**正常现象**（NSIS 压缩字符串）——
 连自己写的探针都搜不到。唯一可靠的验证是**实际装一次、查注册表、卸一次、再查**。
+
+**④ Linux CI 无窗口管理器，`isMaximized()` 恒为 false**
+
+首次推送后 CI 在 `ubuntu-latest` 与 `ubuntu-24.04-arm` 上失败：新增的"不带 `--hidden`
+且上次为最大化"用例断言 `isMaximized() === true` 稳定失败（重试 3 次全败），而同批次
+Windows / macOS 与**两个 P0 锚**（含"最大化 + `--hidden` 仍隐藏"）全绿。
+
+根因是平台限制：CI 用 `xvfb-run` 起虚拟显示且**不启动窗口管理器**（job 日志中无任何
+WM 进程），而 X11 的 `maximize()` 通过 WM 的 EWMH 协议生效——无 WM 时窗口无法真正
+最大化，`isMaximized()` 恒为 false。**窗口可见性**（该用例的核心意图）在 Linux 上是
+通过的。
+
+处置：保留跨平台成立的"窗口必须显示"断言，仅在非 Linux 平台追加最大化态断言并注明依据。
+⇒ **教训**：涉及窗口几何/状态（maximize / alwaysOnTop / 位置）的 E2E 断言，在 xvfb 下
+都不成立，应限定平台或改用可见性等不依赖 WM 的信号。
 
 ### 5.7 附带修复（实施中发现的新缺陷）
 
