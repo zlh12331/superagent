@@ -593,12 +593,18 @@ jobs:
             fi
             YML_BODY=$(gh api "/repos/$REPO/releases/assets/$YML_ID" -H "Accept: application/octet-stream")
             for arch in "x64" "arm64"; do
-              if ! grep -q -- "-$arch\." <<<"$YML_BODY"; then
-                echo "::error::$yml 缺 $arch 条目（合并元数据未生效或取了单架构版本）"
-                echo "$YML_BODY" | head -20
-                MISSING=1
-              fi
-            done
+            # 匹配 "-x64-" / "-x64." 两种形态：产物名是 `产品名-平台-架构-版本.扩展名`
+            # （架构后跟 `-版本`），而 electron-updater 的 findFile 判据是
+            # `url.includes(process.arch)` ⇒ 断言"架构串以分隔符为界出现"即可。
+            # ⚠️ 首版这里只匹配 `-x64.`（点号），在真实产物 `…-macOS-x64-1.3.3.zip`
+            # 上必然漏判（架构后是 `-`）——2026-09-21 首次实跑把正确的双架构元数据
+            # 误判为"缺 x64 条目"。断言必须贴合真实命名形态。
+            if ! grep -qE -- "-${arch}[-.]" <<<"$YML_BODY"; then
+              echo "::error::$yml 缺 $arch 条目（合并元数据未生效或取了单架构版本）"
+              echo "$YML_BODY" | head -20
+              MISSING=1
+            fi
+          done
             # path 必须指向 files 中的首个条目之一（防悬空引用：electron-updater 1.x
             # 回退路径会 404）。取 path: 行的值，断言它在正文中作为 url 出现过。
             PRIMARY=$(grep -m1 '^path:' <<<"$YML_BODY" | sed 's/^path:[[:space:]]*//')
