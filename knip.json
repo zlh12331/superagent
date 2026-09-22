@@ -28,9 +28,5 @@
   },
   "ignoreBinaries": ["gitleaks", "robocopy"],
   "ignoreWorkspaces": ["packages/memory-engine"],
-  "ignoreDependencies": [
-    "@electron/rebuild",
-    "tslib",
-    "@cursorless/tree-sitter-wasms"
-  ]
+  "ignoreDependencies": ["@electron/rebuild", "tslib", "@cursorless/tree-sitter-wasms"]
 }
