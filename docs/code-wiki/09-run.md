@@ -178,6 +178,35 @@ printf '%s\n' "<sha>" > .git/refs/heads/<branch>
    `git update-ref refs/heads/fix/<新名> HEAD` 不仅不写入，**还会删掉整个 `fix/` 目录**
    （连带删除该目录下已存在的分支 ref）。这不是「写入失败」，而是「破坏性失败」。
    恢复方式同上：`mkdir -p` + `printf`。
-   同理 `lint-staged` 依赖 `git stash`（需写 `refs/stash`），在受限环境下会失败；
-   可手工执行钩子等价步骤（`gitleaks git --staged` + `biome check`）后用
-   `git commit --no-verify` 提交，并**在提交说明或 PR 中注明原因**。
+
+### 8.4 受限环境的根因与根治方案
+
+**根因**（2026-09-22 深挖）：git 对嵌套 ref 报
+
+```
+fatal: update-ref failed for ref 'refs/heads/aaa/bbb':
+  cannot lock ref 'refs/heads/aaa/bbb': unable to resolve reference 'refs/heads/aaa/bbb'
+```
+
+即 git **无法在 `.git/refs/heads/<子目录>/` 内创建锁文件**；失败后其清理逻辑会删除该子目录。
+逐项排除过：路径不可写（shell 的 `mkdir`/`printf`/`rm` 在同一路径全部正常）、
+仓库特有（在受限路径内新建的临时仓库 100% 复现）、git 不能建目录
+（`git init` 能创建 `.git/objects/info`、`.git/refs/heads` 等嵌套目录）、
+命令未放行（已把 `git update-ref`/`commit`/`fetch` 与项目目录加入白名单）。
+⇒ 拦截点在**沙箱对 git 进程「锁文件创建 + rename」类文件操作的策略**，
+**只加路径白名单无法解决**。
+
+**根治方案（已验证）：分支改用扁平名**（`fix-residency-defects` 而非 `fix/residency-defects`）。
+扁平 ref 在受限环境下**完全正常**：`git branch`、`git update-ref`、`git commit`、
+`git push` 的 ref 写入全部成功，无需任何手工修补。迁移方式：
+
+```bash
+git branch <flat-name>                    # 从当前 HEAD 建扁平分支
+git checkout <flat-name>                  # HEAD 是扁平文件，切换正常
+git push -u origin <flat-name>            # 远端建新分支
+git branch -D <old/nested-name>           # 删旧本地分支
+# 远端旧分支可在 GitHub 上删，或 git push origin --delete <old/nested-name>
+```
+
+⚠️ 迁移后 remote-tracking ref（`refs/remotes/origin/<name>`）仍是嵌套路径，
+`git push` 不会写入它——需手工 `mkdir -p` + `printf` 补一次（之后 `git fetch` 亦如此）。
