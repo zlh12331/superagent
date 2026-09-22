@@ -6,6 +6,8 @@ node_modules/
 .pnpm-store/
 # TRAE 本地工具产物（会话文档等，不入仓）
 .trae/
+# WorkBuddy AI 工作区数据（会话记忆、门禁核实笔记等，不入仓）
+.workbuddy-ai/
 
 # 构建产物
 dist/
