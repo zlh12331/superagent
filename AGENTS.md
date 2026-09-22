@@ -11,7 +11,7 @@ pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计 12 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + test-boundary + csp-hash + css-vars（var(--x) 引用无定义）+ animations（animation/任意值动画引用无 @keyframes 定义）+ ui-consistency（写法一致性棘轮），pre-push/CI 卡关
+pnpm check:static           # 静态审计 14 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + test-boundary + csp-hash + css-vars（var(--x) 引用无定义）+ animations（animation/任意值动画引用无 @keyframes 定义）+ ui-consistency（写法一致性棘轮）+ memory-engine:integrity，CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:animations       # 动画审计：animation / animate-[…] 引用的 keyframes 不存在即卡关（防「引用已删动画」静默失效）
@@ -44,8 +44,9 @@ pnpm analyze:bundle         # 包体积分析（ANALYZE_BUNDLE=1）
 pnpm docs:types             # TypeDoc 契约文档（tools/typedoc 子包，TS6 隔离）
 ```
 
-质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`。
-pre-push 钩子：gitleaks 密钥扫描（`gitleaks dir .`）+ typecheck + lint + check:static + depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）。
+质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`（CI 权威）。
+pre-push 钩子：**仅密钥扫描**（`gitleaks git --log-opts="<远端 main>..HEAD"`，约 1.5 秒；`SKIP_PREPUSH=1` 跳过）。
+本地全量验证走聚合命令：`pnpm verify:local`（质量层，约 4 分钟）/ `pnpm verify:local:full`（追加产物层，约 13–14 分钟）。
 
 ## 架构
 
@@ -175,7 +176,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **Renovate**：依赖自动更新（周末批次，electron major 人工评审）
 - **供应链加固**（2026-09 落地）：asar 完整性校验 + SBOM 生成 + `check:csp-hash`（CSP 内联脚本哈希锚定，防注释旧脚本静默放行）；`pnpm audit` 走 audit-ci（--moderate 起卡关）
 - **主进程遥测**：EventLoopLagMonitor 事件循环延迟监控（基准按期望间隔推进，空闲不误报）
-- **pre-push 钩子**：gitleaks 密钥扫描（`gitleaks dir .`）+ typecheck + lint + check:static（check:tokens + check:i18n）+ depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）
+- **pre-push 钩子（2026-09-22 精简为仅密钥扫描）**：`gitleaks git --log-opts="<远端 main>..HEAD"`（实测 1.4 秒；未安装 gitleaks 则**失败**，`SKIP_PREPUSH=1` 显式跳过）。原先的 typecheck / lint / check:static / depcruise / drizzle 漂移 / test:scripts 六步与 `ci.yml` 的 quality job 完全重复，已删除、交由 CI 权威把关；本地全量验证改用 `pnpm verify:local` / `pnpm verify:local:full`。保留密钥扫描的理由是**唯一不可逆的失效**（推上去即只能作废重签）。⚠️ 配套：`.gitleaks.toml` 必须有 `[extend] useDefault = true`——缺它则规则数归零、扫描恒报 `no leaks found`（2026-09-22 前一直如此，三道 gitleaks 闸全为空转）；allowlist 需覆盖 `.pnpm-store/`、`.electron-user-data*/`、`.e2e-user-data*/`、`.tmp/`，否则 `gitleaks dir .` 会扫到 3.21 GB 非版本库内容（191 秒 / 451 条噪音命中）
 - **TypeDoc**：`pnpm docs:types` 在 tools/typedoc 子包运行（TS6 隔离，规避 TS7 不兼容）
 - **包体积分析**：`pnpm analyze:bundle`（rollup-plugin-visualizer，ANALYZE_BUNDLE=1）
 

@@ -29,12 +29,16 @@ pnpm dev:web      # 浏览器模式，配合 src/renderer/dev/mock-api.ts 提供
 
 ## 二、提交前必须跑的门禁
 
-本地 `pre-push` 钩子会自动跑下列大部分检查；**CI 会完整跑一遍**，两者任一失败都不能合并。
+本地 `pre-push` 钩子**只做密钥扫描**（约 1.5 秒）；下列检查全部由 **CI 权威执行**，失败即不能合并。
+
+> 2026-09-22 变更：原先 pre-push 会重复跑 typecheck / lint / check:static / depcruise /
+> drizzle 漂移 / test:scripts 六步，与 `ci.yml` 的 quality job 完全重复，已移除。
+> 本地想跑全套请用聚合命令：`pnpm verify:local`（质量层）/ `pnpm verify:local:full`（含产物层）。
 
 ```bash
 pnpm typecheck     # tsc --build（注意：不是 --noEmit，本项目用 project references）
 pnpm lint          # biome check .（含格式化与 import 排序）
-pnpm check:static  # 静态审计 10 项（tokens/i18n/注释/文件大小/函数体/覆盖率下限等）
+pnpm check:static  # 静态审计 14 项（tokens/i18n/注释/文件大小/函数体/覆盖率下限等）
 pnpm test          # 全量单测（packages → main → renderer → integration → scripts）
 pnpm knip          # 死代码 / 死依赖检测
 ```

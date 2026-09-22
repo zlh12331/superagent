@@ -11,9 +11,16 @@
 # - 用户可设 SKIP_CODEGRAPH_SYNC=1 完全跳过 sync
 
 
-# 密钥扫描（gitleaks 业界标准；未安装时跳过并提示）
+# 密钥扫描（gitleaks 业界标准；未安装时跳过并提示——本钩子取「软」策略，
+# 「硬」闸门在 pre-push：未安装即失败。分层理由见 .husky/pre-push 头注释）
+# 2026-09-22：命令由 `protect --staged` 改为 `git --staged`。依据：gitleaks
+# v8.19.0 release notes「Deprecate `detect` and `protect`. Add `git`, `dir`,
+# `stdin`」——官方同时声明该变更 "backwards compatible"，且**未公布移除版本**，
+# 故 `protect` 在当前最新版 8.30.1 仍可运行，只是已不再出现在 `--help` 列表中。
+# 改用文档化的 `git --staged` 是为对齐官方命令面；实测两者行为一致
+# （暂存含密钥文件时两者均报 leaks found: 1 并 exit 1）。
 if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks protect --staged --redact || exit 1
+  gitleaks git --staged --config .gitleaks.toml --redact --no-banner || exit 1
 else
   echo "[pre-commit] gitleaks 未安装（winget install Gitleaks.Gitleaks），跳过密钥扫描"
 fi

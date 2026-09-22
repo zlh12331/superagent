@@ -198,7 +198,7 @@ flowchart TB
 
 | job | 实例 | 步骤 |
 |---|---|---|
-| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（12 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ schema 漂移（`drizzle-kit generate` + `git diff --quiet -- drizzle/`）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
+| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（14 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ schema 漂移（`drizzle-kit generate` + `git diff --quiet -- drizzle/`）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
 | **unit** | 6 | `pnpm test:main` + `pnpm test:renderer`；**ubuntu-latest 实例改跑 `pnpm test:coverage`**（覆盖率阈值唯一把关点，覆盖率产物也从这里上传）；其余 5 个平台跑不带阈值的同套用例。`test:scripts` 不在此 job（与平台无关，留在 quality 单次执行，避免 6 倍重复） |
 | **integration** | 1 | `pnpm test:integration`（`tests/integration/`，20+ 文件；用户决策不扩平台） |
 | **e2e-browser** | 1 | `playwright install --with-deps chromium` → `playwright test --config e2e/playwright.config.ts --retries=2` |
@@ -684,7 +684,16 @@ pnpm verify:local:full   # 追加产物层（含 build:win:x64 + smoke），约 
 2. **ruleset 的 5 项必需检查由云端产生**（用户决定暂不动 ruleset）。配额恢复前 PR 会卡在 pending；`.workbuddy-ai/` 等本地产物的提交也需按此策略权衡。
 
 **顺带发现的可优化项**（本次未改，供配额恢复后参考）：
-- **`pre-push` 的 gitleaks 是本步最慢项**：`gitleaks dir .` 实测 **92–123 秒**（每次推送都跑），而只扫待推送提交（`gitleaks git --log-ops="origin/main..HEAD"`）**仅 1 秒**。本地优先之后本地时间更值钱，建议改后者。
+- ✅ **`pre-push` 的 gitleaks 已改造（2026-09-22 实施）**：原 `gitleaks dir .` 实测 **191 秒**
+  （本机复测；扫 3.21 GB，含 `.pnpm-store` / `.electron-user-data` 等非版本库目录），
+  改为 `gitleaks git --log-opts="<远端 main>..HEAD"` 后 **1.4 秒**。同时 pre-push 里
+  与 quality job 重复的另外 6 步（typecheck / lint / check:static / depcruise /
+  drizzle 漂移 / test:scripts）已删除，交由 CI 权威执行；本地全量验证改用
+  `pnpm verify:local` / `pnpm verify:local:full`。pre-push 现仅保留密钥扫描
+  （理由：唯一不可逆的失效——推上远端即只能作废重签）。
+  ⚠️ 同批修复：`.gitleaks.toml` 缺 `[extend] useDefault = true` 导致规则数归零，
+  三道 gitleaks 闸（pre-commit / pre-push / CI Action）此前**全部空转**，详见
+  `17-security-spec.md` §三。
 - **六平台全矩阵每 PR ≈ 50–60 runner-分钟**（17 个 job 实例）。若常态化使用，可让普通 PR 只跑核心平台、Release PR 才跑全六平台，成本降 3–4×。
 - **CD artifact 每次发版约 3.4 GB × retention 30 天**是存储的主要来源。已清理至 20.72 GB（保留最近 4 天）；建议同时考虑调小 `retention-days` 或对非发布运行缩短保留。
 
