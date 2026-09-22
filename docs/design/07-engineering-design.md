@@ -33,8 +33,11 @@
 | `preview` | `electron-vite preview` | 预览构建 |
 | `build:dist` | `pnpm prepare:build-info && pnpm prepare:memory-hub && pnpm prepare:codegraph && pnpm build && electron-builder --publish never` | 构建 + 打包（不发布） |
 | `build:win` | `pnpm prepare:build-info && pnpm prepare:memory-hub && pnpm prepare:codegraph && pnpm build && electron-builder --win --x64 --arm64 --publish never` | Windows NSIS 安装器（x64 + arm64） |
-| `build:mac` / `build:linux` | 同上，`--mac` / `--linux` | 对应平台包（各自 x64 + arm64） |
-| `build:win:x64` 等 | `build:{win,mac,linux}:{x64,arm64}` | 单架构变体（2026-09-20 多架构发布改造后新增） |
+
+另有 `build:mac` / `build:linux`（同样带三个 prepare 步骤，分别用 `--mac` / `--linux`，各自 x64 + arm64），
+以及单架构变体 `build:{win,mac,linux}:{x64,arm64}`（2026-09-20 多架构发布改造后新增）。
+以上均遵循 `build:win` 的形态，故不逐条列表——**本表约定一行只写一个脚本**，
+以便 `scripts/check-docs-scripts.ts` 能逐行与 `package.json` 比对。
 
 ### 2.2 质量门禁
 
