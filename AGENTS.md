@@ -7,7 +7,7 @@
 ```bash
 pnpm dev                    # 启动 dev server + Electron 窗口
 pnpm dev:web                # 浏览器模式 dev（vite.web.config.ts，配合 src/renderer/dev/mock-api.ts）
-pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会自动增量编译）
+pnpm typecheck              # tsc --build + tsc -p scripts/tsconfig.json（必须，不要用 --noEmit；不会自动增量编译）
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）

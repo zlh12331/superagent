@@ -77,7 +77,12 @@ export function serializeBaseline(baseline: Baseline): string {
     const entry = baseline[key];
     if (entry === undefined) continue;
     const ordered: Metrics = {};
-    for (const m of Object.keys(entry).sort()) ordered[m] = entry[m];
+    for (const m of Object.keys(entry).sort()) {
+      const value = entry[m];
+      // 索引签名 + noUncheckedIndexedAccess ⇒ 取值为 number | undefined。
+      // 跳过 undefined 与原先写入 undefined 后再被 JSON.stringify 丢弃等价。
+      if (value !== undefined) ordered[m] = value;
+    }
     sorted[key] = ordered;
   }
   return `${JSON.stringify(sorted, null, 2)}\n`;

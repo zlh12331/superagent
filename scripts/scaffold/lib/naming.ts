@@ -23,10 +23,13 @@ export function isValidDomain(domain: string): boolean {
 
 /** snake_case → PascalCase（read_file → ReadFile） */
 export function snakeToPascal(name: string): string {
-  return name
-    .split('_')
-    .map((seg) => (seg === '' ? seg : seg[0].toUpperCase() + seg.slice(1)))
-    .join('');
+  return (
+    name
+      .split('_')
+      // 分支已保证 seg 非空，charAt(0) 与 seg[0] 等价（后者受 noUncheckedIndexedAccess 影响为 string | undefined）
+      .map((seg) => (seg === '' ? seg : seg.charAt(0).toUpperCase() + seg.slice(1)))
+      .join('')
+  );
 }
 
 /** snake_case → kebab-case（read_file → read-file） */
@@ -36,7 +39,11 @@ export function snakeToKebab(name: string): string {
 
 /** camelCase → PascalCase（codebase → Codebase；myDomain → MyDomain） */
 export function camelToPascal(domain: string): string {
-  return domain[0].toUpperCase() + domain.slice(1);
+  const first = domain[0];
+  if (first === undefined) {
+    throw new Error('camelToPascal: domain 不能为空字符串');
+  }
+  return first.toUpperCase() + domain.slice(1);
 }
 
 /** 校验 tool 权限取值 */

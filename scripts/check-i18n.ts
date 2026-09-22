@@ -57,7 +57,11 @@ function collectStaticKeys(file: string): { direct: string[]; used: string[] } {
   lines.forEach((line) => {
     const t = line.trim();
     if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
-    for (const m of line.matchAll(re)) direct.push(m[1]);
+    for (const m of line.matchAll(re)) {
+      // 捕获组在正则命中时必然存在；显式判 undefined 仅为满足 noUncheckedIndexedAccess
+      const captured = m[1];
+      if (captured !== undefined) direct.push(captured);
+    }
     // 非字符串实参的 t() 调用：t(labelKey) / t(item.labelKey) 等
     if (/\bt\(\s*[a-zA-Z_$][\w$.]*\s*\)/.test(line)) hasIndirectT = true;
   });
@@ -69,7 +73,8 @@ function collectStaticKeys(file: string): { direct: string[]; used: string[] } {
     const t = line.trim();
     if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) continue;
     for (const m of line.matchAll(/['"]([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+){1,4})['"]/g)) {
-      if (keyRe.test(m[1])) used.push(m[1]);
+      const captured = m[1];
+      if (captured !== undefined && keyRe.test(captured)) used.push(captured);
     }
   }
   return { direct, used };
@@ -193,8 +198,9 @@ function main(): number {
   if (strict) {
     for (const p of hardcodedText) problems.push(`未国际化文案: ${p}`);
   } else if (hardcodedText.length > 0) {
+    const first = hardcodedText[0] ?? '';
     console.warn(
-      `[check-i18n] ⚠️ ${hardcodedText.length} 处 JSX 中文文案未走 t()（--strict 时卡关；建议迁移到 i18n：${hardcodedText[0].trim().slice(0, 60)}…）`,
+      `[check-i18n] ⚠️ ${hardcodedText.length} 处 JSX 中文文案未走 t()（--strict 时卡关；建议迁移到 i18n：${first.trim().slice(0, 60)}…）`,
     );
   }
 

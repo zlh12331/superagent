@@ -109,21 +109,28 @@ function readLayer(value: unknown, layer: LayerKey): LayerFloors {
  */
 export function parseCoverageFloors(raw: string): CoverageFloorsFile {
   const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || !isRecord(parsed.layers)) {
+  if (!isRecord(parsed)) {
+    throw new Error('覆盖率真源格式错误：顶层必须是含 layers 对象');
+  }
+  // 先取出并收窄到局部变量：`parsed['layers']` 在 noPropertyAccessFromIndexSignature
+  // 下必须用方括号访问，且收窄结果无法穿过属性访问表达式（否则为 unknown）。
+  const layers = parsed['layers'];
+  if (!isRecord(layers)) {
     throw new Error('覆盖率真源格式错误：顶层必须是含 layers 对象');
   }
   for (const layer of LAYER_KEYS) {
-    if (!(layer in parsed.layers)) {
+    if (!(layer in layers)) {
       throw new Error(`覆盖率真源缺少层级 ${layer}`);
     }
   }
-  if (typeof parsed.maxStaleDays !== 'number' || parsed.maxStaleDays <= 0) {
+  const maxStaleDays = parsed['maxStaleDays'];
+  if (typeof maxStaleDays !== 'number' || maxStaleDays <= 0) {
     throw new Error('覆盖率真源的 maxStaleDays 必须是正数（实测过期上限，单位：天）');
   }
   return {
-    maxStaleDays: parsed.maxStaleDays,
+    maxStaleDays,
     layers: Object.fromEntries(
-      LAYER_KEYS.map((layer) => [layer, readLayer(parsed.layers[layer], layer)]),
+      LAYER_KEYS.map((layer) => [layer, readLayer(layers[layer], layer)]),
     ) as Record<LayerKey, LayerFloors>,
   };
 }

@@ -18,7 +18,7 @@
     "dev:web": "vite --config vite.web.config.ts --mode web",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --build",
+    "typecheck": "tsc --build && tsc -p scripts/tsconfig.json",
     "typecheck:watch": "tsc --build --watch",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

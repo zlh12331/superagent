@@ -49,7 +49,11 @@ function extractJsDocBlocks(content: string): Array<{ start: number; end: number
   const blocks: Array<{ start: number; end: number; text: string }> = [];
   const re = /\/\*\*([\s\S]*?)\*\//g;
   for (const m of content.matchAll(re)) {
-    blocks.push({ start: m.index, end: m.index + m[0].length, text: m[1] });
+    const index = m.index;
+    const captured = m[1];
+    // matchAll 必然提供 index 与捕获组；显式判 undefined 仅为满足类型收窄
+    if (index === undefined || captured === undefined) continue;
+    blocks.push({ start: index, end: index + m[0].length, text: captured });
   }
   return blocks;
 }
@@ -71,9 +75,9 @@ function extractSignatureParams(signature: string): Set<string> {
   const names = new Set<string>();
   const params = signature.slice(signature.indexOf('(') + 1, signature.lastIndexOf(')'));
   // 解构对象参数 { a: T; b: T } → 属性名并入（JSDoc 常以 @param a 描述解构属性；TS 对象类型用 ; 分隔）
-  const destructured = params.match(/\{\s*([^}]+)\}/);
-  if (destructured) {
-    for (const p of destructured[1].split(/[;,]/)) {
+  const destructuredInner = params.match(/\{\s*([^}]+)\}/)?.[1];
+  if (destructuredInner !== undefined) {
+    for (const p of destructuredInner.split(/[;,]/)) {
       const name = p
         .trim()
         .split(':')[0]
@@ -137,10 +141,13 @@ function checkFileRefs(content: string, file: string, problems: Problem[]): void
   const re = /file:\/\/\/([^)\s"`]+)/g;
   for (const m of content.matchAll(re)) {
     const raw = m[1];
+    // matchAll 必然提供捕获组；显式判 undefined 仅为满足类型收窄
+    if (raw === undefined) continue;
     // 模板字符串插值（如 `file:///${dir.replace(...)}` 构造运行时 URL）
     // 无法静态验证路径存在性 → 跳过（避免把真实业务代码误报为过期引用）
     if (raw.includes('${')) continue;
-    const [pathPart, linePart] = raw.split('#L');
+    // 默认值 '' 保证 pathPart 为 string（split 结果首元素必然存在）
+    const [pathPart = '', linePart] = raw.split('#L');
     // docs 内为绝对路径（f:/...），src 注释内为相对路径
     const abs = pathPart.includes(':') ? pathPart : join(ROOT, pathPart.replace(/^\/+/, ''));
     const lineNo = content.slice(0, m.index).split('\n').length;

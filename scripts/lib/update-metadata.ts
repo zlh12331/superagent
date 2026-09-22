@@ -54,8 +54,15 @@ export interface UpdateInfo {
   files: UpdateFileEntry[];
   /** @deprecated electron-updater 1.x 兼容字段；仍被写入 */
   path: string;
-  /** @deprecated 同上 */
-  sha512: string;
+  /**
+   * @deprecated 同 path（electron-updater 1.x 兼容字段）
+   *
+   * 标为可选的原因：parseUpdateInfo 以展开运算原样透传来源字段，只强制校验
+   * `path`，并未校验 sha512 ⇒ 类型如实反映「可能缺失」。
+   * 未改为解析期强制校验，是因为那会收紧 CD 合并脚本的接受面（高风险），
+   * 且本仓库无任何代码读取该字段（仅测试 fixture 中出现）。
+   */
+  sha512?: string;
   releaseName?: string | null;
   releaseNotes?: unknown;
   releaseDate?: string;

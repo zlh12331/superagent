@@ -128,7 +128,9 @@ function main(): number {
     console.log(`  门槛：净 ≤${NET_LIMIT} 行（原始行 >${RAW_WARN_LIMIT} 仅告警）`);
     for (const r of sorted) {
       const base = baseline[r.path];
-      console.log(`  存量 ${r.path}: net ${r.net} raw ${r.raw}（基线 net ${base?.net ?? '-'}）`);
+      console.log(
+        `  存量 ${r.path}: net ${r.net} raw ${r.raw}（基线 net ${base?.['net'] ?? '-'}）`,
+      );
     }
     for (const line of rawWarnLines) console.log(line);
     return 0;
@@ -137,7 +139,7 @@ function main(): number {
   console.error(`[check-file-size] ❌ ${problems.length} 处棘轮违规（门槛 net ${NET_LIMIT}）：`);
   for (const line of renderProblems(problems)) console.error(line);
   console.error(
-    `[check-file-size] 当前净行超限 ${current.size} 处：\n${sorted.map((r) => `  ${r.path}: net ${r.net} raw ${r.raw}（${formatMetrics(r, METRICS)}）`).join('\n')}`,
+    `[check-file-size] 当前净行超限 ${current.size} 处：\n${sorted.map((r) => `  ${r.path}: net ${r.net} raw ${r.raw}（${formatMetrics({ net: r.net }, METRICS)}）`).join('\n')}`,
   );
   console.error(
     '[check-file-size] 修复指引：拆文件（typescript-dev-standards-ai.md §工程）；已重构请跑 pnpm check:file-size --update-baseline 收紧基线',

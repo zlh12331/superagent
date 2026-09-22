@@ -182,7 +182,7 @@ for (const full of files) {
       }
       // 上一行含 noArrayIndexKey biome-ignore 的豁免（与 Biome 同步：
       // 骨架屏/静态拆分等 index 稳定且无重排的合理场景）
-      const prev = i > 0 ? lines[i - 1] : '';
+      const prev = i > 0 ? (lines[i - 1] ?? '') : '';
       if (prev.includes('noArrayIndexKey')) {
         continue;
       }
