@@ -23,21 +23,30 @@ pnpm dev                # electron-vite dev -w
 
 ## 3. 质量门禁（按顺序执行）
 
-```bash
-pnpm typecheck     # tsc --build（0 错误；不要用 --noEmit）
-pnpm lint          # biome check .（0 问题）
-pnpm test          # shared → main → renderer 全部单元测试 + integration + scripts
-```
-
-其余检查：
+一条命令跑完全部质量层（与 CI quality job 的检查项对齐，约 4.5 分钟）：
 
 ```bash
-pnpm knip           # 未使用依赖/文件检测
-pnpm check:static   # tokens + i18n + comments + file-size + functions + docs + test-boundary
-pnpm check:secrets  # gitleaks 扫描
-pnpm depcruise      # 依赖环检测（dependency-cruiser）
-pnpm audit          # audit-ci（moderate 以上门禁）
+pnpm verify:local        # 质量层
+pnpm verify:local:full   # 追加产物层（构建/体积/编译/E2E/打包/引擎与架构断言/smoke）
 ```
+
+拆开则是（`verify:local` 即按此顺序执行）：
+
+```bash
+pnpm check:secrets-git    # 密钥扫描（gitleaks git，扫 <远端 main>..HEAD）
+pnpm typecheck            # tsc --build（0 错误；不要用 --noEmit）
+pnpm lint                 # biome check .（0 问题）
+pnpm check:static         # 静态审计 14 项（tokens/i18n/注释/文件大小/函数体/复杂度/覆盖率下限等）
+pnpm tokens:check         # 令牌生成物一致性（tokens/aurora.json ↔ tokens.css）
+pnpm knip                 # 未使用依赖/文件检测
+pnpm depcruise            # 依赖方向与环检测（dependency-cruiser）
+pnpm check:schema-drift   # schema.ts ↔ drizzle/ 迁移漂移 + 快照链
+pnpm audit:registry       # audit-ci（moderate 以上门禁）
+pnpm test                 # shared → main → renderer 全部单元测试 + integration + scripts
+```
+
+> 2026-09-22 起，`tokens:check` 与 `check:schema-drift` 的判据是「重新生成前后是否一致」
+> （而非对比 HEAD）——因此「改了源、已重新生成、尚未提交」不会误报，可安全用于开发中途。
 
 ## 4. 测试体系
 
@@ -104,3 +113,56 @@ pnpm sentry:release:new / pnpm sentry:upload:symbols
 | 深度调试主进程 | `pnpm perf:inspect`（electron --inspect=9229） |
 | 检查未用代码 | `pnpm knip` |
 | 生成类型文档 | `pnpm docs:types`（@code-agent/typedoc-docs） |
+
+## 8. Git 对象库损坏的识别与恢复
+
+> 依据 2026-09-22 实发事故（提交时被中断的 `gc --auto` 重打包导致对象库散点式丢失，
+> 影响 `28afb81` / `2059fcd` / `3e8b1f6` 等提交）。**远端始终是权威副本，恢复的前提是它完好。**
+
+### 8.1 症状识别
+
+| 症状 | 含义 |
+|---|---|
+| `git log` 报 `your current branch 'X' does not have any commits yet` | HEAD 指向的 ref 文件丢失 ⇒ unborn |
+| `git cat-file -t <sha>` 报 `could not get object info` | 该对象缺失 |
+| `git commit` 报 `failed to write commit-graph` / `unable to read tree <sha>` | 提交被维护任务中止 |
+| `git fetch` 报 `unresolved deltas left after unpacking` | 本地缺的正是增量包的基线对象 |
+
+**首要动作**：`git rev-parse HEAD` + `git log --oneline | wc -l` + `git fsck --no-progress`。
+先确认「工作区文件是否完好」（`ls` 关键文件）——对象库损坏不影响工作区。
+
+### 8.2 恢复流程（按序执行）
+
+```bash
+# ① 确认远端完好（权威副本）
+git ls-remote origin | head
+
+# ② 强制全量重取（--refetch 不假设本地已有哪些对象）
+git fetch --refetch origin
+
+# ③ 若 ② 报 "failed to write commit-graph"：清掉引用了缺失提交的失效图链，再重试 ②
+rm -f .git/objects/info/commit-graphs/commit-graph-chain \
+      .git/objects/info/commit-graphs/graph-*.graph
+
+# ④ 关掉会触发重打包的自动维护（本地 config，可逆）
+git config gc.auto 0
+git config fetch.writeCommitGraph false
+git config gc.writeCommitGraph false
+
+# ⑤ ref 丢失时：直接写文件（唯一可靠方式）
+mkdir -p .git/refs/heads/<dir>          # 分支名含 / 时
+printf '%s\n' "<sha>" > .git/refs/heads/<branch>
+# remote-tracking ref 同理写 .git/refs/remotes/origin/<branch>
+# SHA 来源：tail -1 .git/logs/refs/heads/<branch> | awk '{print $2}'
+```
+
+### 8.3 两条硬经验
+
+1. **提交后必须验证 `git rev-parse HEAD` 能解析**。`git commit` 可能打印成功的变更摘要，
+   但分支 ref 未落盘——只看提交输出会误判成功。reflog（`.git/logs/`）通常仍有记录，
+   可据此取 SHA 重建 ref。
+2. **`git update-ref` 并非总是可靠**。某些受限环境（AI 沙箱等）会静默丢弃 git 自身的
+   ref 写入（lock+rename 路径），而**普通文件写入正常**——此时必须直接 `printf >` 目标
+   ref 文件。同理，`lint-staged` 依赖 `git stash`（需写 `refs/stash`），在该类环境下
+   必然失败；可手工执行钩子等价步骤（`gitleaks git --staged` + `biome check`）后
+   用 `git commit --no-verify` 提交，并**在提交说明或 PR 中注明原因**。
