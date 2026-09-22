@@ -219,7 +219,7 @@ packages/shared/src/
     └── smoke.test.ts
 ```
 
-**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///src/preload/index.ts#L27)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
+**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///src/preload/index.ts)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
 
 ## 6. packages/tsconfig/ — TS 预设包
 

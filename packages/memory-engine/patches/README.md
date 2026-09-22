@@ -12,9 +12,13 @@
 ## 用法
 
 1. **改代码**：正常编辑 `MemoryCore/` 下的文件
-2. **导出补丁**：`pnpm memory-engine:patch:export <name>` → 生成 `patches/<NNNN>-<name>.patch`
-3. **回滚源码**：`pnpm memory-engine:patch:reset` → 把 `MemoryCore/` 恢复到锚点状态
-4. **应用补丁**：`pnpm memory-engine:patch:apply` → 重放 `patches/` 下所有补丁（sync 会自动调用）
+2. **导出补丁**：`pnpm memory-engine:patch export <name>` → 生成 `patches/<NNNN>-<name>.patch`
+3. **回滚源码**：`pnpm memory-engine:patch reset` → 把 `MemoryCore/` 恢复到锚点状态
+4. **应用补丁**：`pnpm memory-engine:patch apply` → 重放 `patches/` 下所有补丁（sync 会自动调用）
+
+> action 是**参数**而非脚本名后缀：`package.json` 里只有 `memory-engine:patch`
+> （`node scripts/patch-memory-engine.mjs`），`export` / `apply` / `reset` 由脚本读
+> `process.argv[2]` 分派。
 
 ## 登记（每加一个补丁必须登记）
 

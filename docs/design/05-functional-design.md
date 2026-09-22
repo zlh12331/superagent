@@ -47,7 +47,7 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
     → 8. 流结束推送 AGENT_STREAM_END(reason='completed')
 ```
 
-源码：[agent-service.ts#L164-L215](file:///src/main/infra/ai/agent/agent-service.ts#L164)（startAgent）、[agent-service.ts#L291-L530](file:///src/main/infra/ai/agent/agent-service.ts#L291)（streamToWebContents）。
+源码：[agent-service.ts#L164-L215](file:///src/main/infra/ai/agent/agent-service.ts)（startAgent）、[agent-service.ts#L291-L530](file:///src/main/infra/ai/agent/agent-service.ts)（streamToWebContents）。
 
 ### 2.2 关键设计
 
@@ -59,13 +59,13 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 - `stopWhen: isStepCount(maxSteps)`：v7 替代旧 `maxSteps`，限制工具调用轮数上限
 - `maxSteps` 默认 20，上限 50，避免无限循环消耗 token
 
-源码：[agent-service.ts#L423-L470](file:///src/main/infra/ai/agent/agent-service.ts#L423)（streamText + stopWhen 调用）。
+源码：[agent-service.ts#L423-L470](file:///src/main/infra/ai/agent/agent-service.ts)（streamText + stopWhen 调用）。
 
 #### executeHook 失败容忍
 
 `executeHook` 注入 `ToolExecutor.execute` 作为权限检查 + 审批 + IPC 推送层。失败时不抛错，返回结构化错误对象 `{ error }` 给 LLM，让模型看到错误信息自行决策（重试 / 换工具 / 告知用户）。
 
-源码：[agent-service.ts#L383-L414](file:///src/main/infra/ai/agent/agent-service.ts#L383)（executeHook 注入与失败容忍）。
+源码：[agent-service.ts#L383-L414](file:///src/main/infra/ai/agent/agent-service.ts)（executeHook 注入与失败容忍）。
 
 #### 中断与生命周期
 
@@ -75,13 +75,13 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 - `abortAll()`：触发所有活跃 session 的 abort
 - `dispose(timeoutMs=3000)`：abortAll + Promise.allSettled 等待所有 stream 完成，超时兜底
 
-源码：[agent-service.ts#L218-L276](file:///src/main/infra/ai/agent/agent-service.ts#L218)（abort / abortAll / dispose）。
+源码：[agent-service.ts#L218-L276](file:///src/main/infra/ai/agent/agent-service.ts)（abort / abortAll / dispose）。
 
 #### webContents 销毁守卫
 
 流推送前检查 `webContents.isDestroyed()`，避免窗口关闭后继续推送导致异常。
 
-源码：[agent-service.ts#L322-L347](file:///src/main/infra/ai/agent/agent-service.ts#L322)（回合事件推送前的 isDestroyed 守卫）、[agent-service.ts#L488](file:///src/main/infra/ai/agent/agent-service.ts#L488)（流推送循环内的守卫）。
+源码：[agent-service.ts#L322-L347](file:///src/main/infra/ai/agent/agent-service.ts)（回合事件推送前的 isDestroyed 守卫）、[agent-service.ts#L488](file:///src/main/infra/ai/agent/agent-service.ts)（流推送循环内的守卫）。
 
 ### 2.3 AgentService 执行细节
 
@@ -150,13 +150,13 @@ PermissionService（权限决策 + 审批）
 | `cron_create` / `cron_list` / `cron_delete` | ask/auto | cron 表达式定时任务 |
 | `lsp_definition` / `lsp_references` / `lsp_hover` | auto | LSP 代码智能（跳转定义/查找引用/悬停信息），按文件扩展名路由语言服务器（TypeScript/Python/Go/Rust 内置默认，可在设置中覆盖命令） |
 
-源码：[tools/index.ts#L102-L155](file:///src/main/infra/ai/tools/index.ts#L102)（registerBuiltinTools 函数体）。
+源码：[tools/index.ts#L102-L155](file:///src/main/infra/ai/tools/index.ts)（registerBuiltinTools 函数体）。
 
 ### 3.3 权限模型
 
 **二态权限**：`'auto' | 'ask'`（不是三态 `'allow'|'ask'|'deny'`）。
 
-源码：[tool.ts](file:///src/main/infra/ai/tools/tool.ts)（Tool 接口 permission 字段）、[permission-service.ts#L38-L43](file:///src/main/infra/ai/tools/permission-service.ts#L38-L43)（PermissionDecision）。
+源码：[tool.ts](file:///src/main/infra/ai/tools/tool.ts)（Tool 接口 permission 字段）、[permission-service.ts#L38-L43](file:///src/main/infra/ai/tools/permission-service.ts)（PermissionDecision）。
 
 #### 决策顺序（PermissionService.decide）
 
@@ -169,7 +169,7 @@ PermissionService（权限决策 + 审批）
 - TTL：5 分钟（`REMEMBER_TTL_MS`）
 - 过期后重新询问
 
-源码：[permission-service.ts#L51-L59](file:///src/main/infra/ai/tools/permission-service.ts#L51-L59)。
+源码：[permission-service.ts#L51-L59](file:///src/main/infra/ai/tools/permission-service.ts)。
 
 ### 3.4 工具执行流程（ToolExecutor.execute）
 
@@ -187,7 +187,7 @@ PermissionService（权限决策 + 审批）
 7. 返回 ToolResult（含 output 或 error）
 ```
 
-源码：[tool-executor.ts#L95-L200](file:///src/main/infra/ai/tools/tool-executor.ts#L95)（execute 方法体）。
+源码：[tool-executor.ts#L95-L200](file:///src/main/infra/ai/tools/tool-executor.ts)（execute 方法体）。
 
 ### 3.5 ToolContext
 
@@ -336,7 +336,7 @@ PromptService
 4. 返回 ResolvedPrompt { content, source: 'database' | 'default-fallback' }
 ```
 
-源码：[prompt-service.ts#L42-L79](file:///src/main/infra/ai/prompt/prompt-service.ts#L42-L79)。
+源码：[prompt-service.ts#L42-L79](file:///src/main/infra/ai/prompt/prompt-service.ts)。
 
 ### 9.3 GitSummaryProvider 注入
 
@@ -344,7 +344,7 @@ PromptService
 
 > 注：项目中不存在独立的 `git-adapter.ts` 文件（`_template` 模板中有但未纳入实际项目）。`GitSummaryProvider` 由调用方（ServiceContainer）在构造 PromptService 时注入适配实现。
 
-源码：[dynamic-context.ts#L42](file:///src/main/infra/ai/prompt/dynamic-context.ts#L42)（GitSummaryProvider 类型）、[prompt-service.ts#L68](file:///src/main/infra/ai/prompt/prompt-service.ts#L68)（PromptServiceOptions.gitSummaryProvider）。
+源码：[dynamic-context.ts#L42](file:///src/main/infra/ai/prompt/dynamic-context.ts)（GitSummaryProvider 类型）、[prompt-service.ts#L68](file:///src/main/infra/ai/prompt/prompt-service.ts)（PromptServiceOptions.gitSummaryProvider）。
 
 ## 10. 可观测性三层体系
 

@@ -91,10 +91,10 @@ renderer:  useAgentBridge → window.api.agent.run({ mode, sessionId, prompt })
 
 | 文件 | 职责 |
 |---|---|
-| [definitions.ts](file:///f:/TraeProjects/1/packages/shared/src/ipc/definitions.ts) | IPC 定义表（完整单一真源） |
-| [meta.ts](file:///f:/TraeProjects/1/packages/shared/src/ipc/meta.ts) | 纯 channel 元数据（零 zod） |
-| [api.ts](file:///f:/TraeProjects/1/packages/shared/src/ipc/api.ts) | `IpcApi` 接口（由定义表推导） |
-| [channels.ts](file:///f:/TraeProjects/1/packages/shared/src/ipc/channels.ts) | channel 常量 |
-| [register.ts](file:///f:/TraeProjects/1/src/main/ipc/register.ts) | 定义表驱动 handler 注册 |
-| [wrap.ts](file:///f:/TraeProjects/1/src/main/utils/wrap.ts) | traceId/sender/schema/Sentry 中间件 |
-| [create-api.ts](file:///f:/TraeProjects/1/src/preload/utils/create-api.ts) | preload 自动生成 window.api |
+| [definitions.ts](file:///packages/shared/src/ipc/definitions.ts) | IPC 定义表（完整单一真源） |
+| [meta.ts](file:///packages/shared/src/ipc/meta.ts) | 纯 channel 元数据（零 zod） |
+| [api.ts](file:///packages/shared/src/ipc/api.ts) | `IpcApi` 接口（由定义表推导） |
+| [channels.ts](file:///packages/shared/src/ipc/channels.ts) | channel 常量 |
+| [register.ts](file:///src/main/ipc/register.ts) | 定义表驱动 handler 注册 |
+| [wrap.ts](file:///src/main/utils/wrap.ts) | traceId/sender/schema/Sentry 中间件 |
+| [create-api.ts](file:///src/preload/utils/create-api.ts) | preload 自动生成 window.api |

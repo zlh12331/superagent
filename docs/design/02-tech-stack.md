@@ -7,21 +7,21 @@
 
 | 项              | 值                                                              | 来源                                         |
 | -------------- | -------------------------------------------------------------- | ------------------------------------------ |
-| name           | `code-agent-desktop`                                           | [package.json#L2](file:///package.json#L2) |
-| version        | `1.0.0`                                                        | [package.json#L3](file:///package.json#L3) |
-| description    | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json#L4](file:///package.json#L4) |
-| type           | `module`                                                       | [package.json#L7](file:///package.json#L7) |
-| main           | `./out/main/index.js`                                          | [package.json#L8](file:///package.json#L8) |
-| packageManager | `pnpm@10.0.0`                                                  | [package.json#L9](file:///package.json#L9) |
+| name           | `code-agent-desktop`                                           | [package.json](file:///package.json) |
+| version        | `1.0.0`                                                        | [package.json](file:///package.json) |
+| description    | Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端） | [package.json](file:///package.json) |
+| type           | `module`                                                       | [package.json](file:///package.json) |
+| main           | `./out/main/index.js`                                          | [package.json](file:///package.json) |
+| packageManager | `pnpm@10.0.0`                                                  | [package.json](file:///package.json) |
 
 ## 2. engines 与运行时要求
 
 | 依赖      | 版本要求        | 来源                                               |
 | ------- | ----------- | ------------------------------------------------ |
-| Node.js | `>=24.13.0` | [package.json#L10-L13](file:///package.json#L10) |
-| pnpm    | `>=10.0.0`  | [package.json#L10-L13](file:///package.json#L10) |
+| Node.js | `>=24.13.0` | [package.json](file:///package.json) |
+| pnpm    | `>=10.0.0`  | [package.json](file:///package.json) |
 
-`pnpm.onlyBuiltDependencies` 限制仅 3 个原生模块参与编译：`better-sqlite3` / `esbuild` / `node-pty`（[package.json#L14-L20](file:///package.json#L14)）。
+`pnpm.onlyBuiltDependencies` 限制仅 3 个原生模块参与编译：`better-sqlite3` / `esbuild` / `node-pty`（[package.json](file:///package.json)）。
 
 ## 3. 依赖分类清单
 

@@ -41,7 +41,7 @@
 | jsdom | `^29.1.1` | 浏览器环境模拟 |
 | @axe-core/playwright | `^4.12.1` | 可访问性审计 |
 
-源码：[package.json#L79-L117](file:///package.json#L79)（devDependencies）。
+源码：[package.json](file:///package.json)（devDependencies）。
 
 > 注：`msw` 已从 devDependencies 中移除，渲染层 mock 由独立 mock-api 层实现（见 §5.1）。
 
@@ -59,15 +59,15 @@
 
 ### 3.2 跑测试脚本
 
-来自 [package.json#L33-L58](file:///package.json#L33)：
+来自 [package.json](file:///package.json)：
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
-| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts` | 全量单元测试（shared + main + renderer + scripts） |
+| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:integration && pnpm test:scripts` | 全量单元测试（shared + main + renderer + integration + scripts） |
 | `test:scripts` | `vitest run --root scripts` | scripts 目录测试（i18n / changelog / scaffold 工具链） |
 | `test:main` | `vitest run --root src/main` | 仅主进程 |
 | `test:renderer` | `vitest run --root src/renderer` | 仅渲染层 |
-| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage` | shared + main + renderer 覆盖率 |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage` | shared + main + renderer 覆盖率 |
 
 ### 3.3 覆盖率配置
 
@@ -334,7 +334,7 @@ E2E 兑底是正式策略而非欠账：
 | Electron | [e2e/playwright.electron.config.ts](file:///e2e/playwright.electron.config.ts) | `pnpm test:e2e:electron` | 真实 Electron 窗口 |
 | Smoke | [e2e/playwright.smoke.config.ts](file:///e2e/playwright.smoke.config.ts) | `pnpm test:smoke` | 生产构建 smoke |
 
-源码：[package.json#L52-L54](file:///package.json#L52)（test:e2e / test:e2e:electron / test:smoke 脚本）。
+源码：[package.json](file:///package.json)（test:e2e / test:e2e:electron / test:smoke 脚本）。
 
 ### 4.2 E2E 文件清单（6 个）
 
@@ -349,13 +349,13 @@ E2E 兑底是正式策略而非欠账：
 
 ### 4.3 专项测试脚本
 
-来自 [package.json#L55-L57](file:///package.json#L55)（test:visual / test:a11y / test:perf 脚本）：
+来自 [package.json](file:///package.json)（test:visual / test:a11y / test:perf 脚本）：
 
 | 脚本 | grep 模式 |
 |------|----------|
 | `test:visual` | `"视觉回归"` |
 | `test:a11y` | `"可访问性"` |
-| `test:perf` | `"性能基准"` |
+| `test:perf` | `"性能基准\|渲染性能基准\|内存基准\|IPC 基准"` |
 
 ### 4.4 Browser mode 环境变量
 

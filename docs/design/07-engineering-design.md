@@ -22,24 +22,25 @@
 
 ## 2. 构建脚本
 
-来自 [package.json#L33-L72](file:///package.json#L33)：
+来自 [package.json](file:///package.json)：
 
 ### 2.1 核心构建
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
-| `dev` | `electron-vite dev` | 开发模式 |
+| `dev` | `electron-vite dev -w` | 开发模式（watch） |
 | `build` | `electron-vite build` | 构建 dev artifacts |
 | `preview` | `electron-vite preview` | 预览构建 |
-| `build:dist` | `pnpm build && electron-builder --publish never` | 构建 + 打包（不发布） |
-| `build:win` | `pnpm build && electron-builder --win --publish never` | Windows NSIS 安装器 |
-| `build:win:full` | `pnpm build:win && pnpm sentry:release:new && pnpm sentry:upload:symbols` | 构建 + 创建 Sentry release + 上传符号 |
+| `build:dist` | `pnpm prepare:build-info && pnpm prepare:memory-hub && pnpm prepare:codegraph && pnpm build && electron-builder --publish never` | 构建 + 打包（不发布） |
+| `build:win` | `pnpm prepare:build-info && pnpm prepare:memory-hub && pnpm prepare:codegraph && pnpm build && electron-builder --win --x64 --arm64 --publish never` | Windows NSIS 安装器（x64 + arm64） |
+| `build:mac` / `build:linux` | 同上，`--mac` / `--linux` | 对应平台包（各自 x64 + arm64） |
+| `build:win:x64` 等 | `build:{win,mac,linux}:{x64,arm64}` | 单架构变体（2026-09-20 多架构发布改造后新增） |
 
 ### 2.2 质量门禁
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
-| `typecheck` | `tsc --build` | TypeScript 类型检查 |
+| `typecheck` | `tsc --build && tsc -p scripts/tsconfig.json` | TypeScript 类型检查（含 scripts/，2026-09-22 起） |
 | `lint` | `biome check .` | Biome lint + format 检查 |
 | `lint:fix` | `biome check --write .` | 自动修复 |
 | `format` | `biome format --write .` | 仅格式化 |
@@ -49,7 +50,7 @@
 
 | 脚本 | 命令 |
 |------|------|
-| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts` |
+| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:integration && pnpm test:scripts` |
 | `test:scripts` | `vitest run --root scripts` |
 | `test:main` | `vitest run --root src/main` |
 | `test:main:watch` | `vitest --root src/main` |
@@ -60,15 +61,16 @@
 | `test:smoke` | `playwright test --config e2e/playwright.smoke.config.ts` |
 | `test:visual` | `playwright test --config e2e/playwright.config.ts --grep "视觉回归"` |
 | `test:a11y` | `playwright test --config e2e/playwright.config.ts --grep "可访问性"` |
-| `test:perf` | `playwright test --config e2e/playwright.config.ts --grep "性能基准"` |
-| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage` |
+| `test:perf` | `playwright test --config e2e/playwright.config.ts --grep "性能基准\|渲染性能基准\|内存基准\|IPC 基准"` |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage` |
 
-### 2.4 Sentry
+### 2.4 错误处理（Sentry 已移除）
 
-| 脚本 | 命令 |
-|------|------|
-| `sentry:upload:symbols` | `sentry-cli sourcemaps upload --org sentry --project electron --release "code-agent@1.0.0" --url-prefix "app:///out/" ./out && sentry-cli sourcemaps upload --org sentry --project electron --release "code-agent@1.0.0" --url-prefix "app:///renderer/" ./out/renderer` |
-| `sentry:release:new` | `sentry-cli releases new "code-agent@1.0.0"` |
+2026-09-13 起**移除 Sentry**，改为**本地优先**错误处理：所有异常经
+`infra/telemetry/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志
+（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。
+因此**不存在 `sentry:*` 脚本，也没有符号上传环节**（此前本节记录的
+`sentry:release:new` / `sentry:upload:symbols` 已随移除一并删除）。
 
 ### 2.5 其他
 
@@ -271,11 +273,11 @@ tsconfig 启用以下严格选项：
 
 ### 7.1 husky
 
-`prepare` 脚本安装钩子（[package.json#L72](file:///package.json#L72)）。
+`prepare` 脚本安装钩子（[package.json](file:///package.json)）。
 
 ### 7.2 lint-staged
 
-[package.json#L74-L78](file:///package.json#L74)：
+[package.json](file:///package.json)：
 
 ```json
 "lint-staged": {
@@ -352,7 +354,7 @@ sentry-cli releases new "code-agent@1.0.0"
 
 ### 10.2 脚本
 
-[package.json#L65](file:///package.json#L65)：
+[package.json](file:///package.json)：
 
 ```json
 "codegraph:sync": "codegraph sync"
@@ -381,7 +383,7 @@ sentry-cli releases new "code-agent@1.0.0"
 | 项 | 说明 |
 |----|------|
 | `test:bench` 脚本不存在 | 实际只有 `test:perf`（与文档/记忆中提及的不符） |
-| service-container.ts 注释漂移 | 注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///src/main/service-container.ts#L205) / L239 / L246）；`tools/index.ts` 文件头注释说"7 个"（[L5](file:///src/main/infra/ai/tools/index.ts#L5)），实际 12 个 |
+| service-container.ts 注释漂移 | 注释说"5 个内置工具"，实际 12 个（见 [service-container.ts#L205](file:///src/main/service-container.ts) / L239 / L246）；`tools/index.ts` 文件头注释说"7 个"（[L5](file:///src/main/infra/ai/tools/index.ts)），实际 12 个 |
 | 整体覆盖率约 0.13 | 与 vitest 配置阈值 80 差距较大（`test:coverage` 现已包含 renderer） |
 
 ### 11.3 低优先级

@@ -143,9 +143,9 @@ dev 环境自动 `installExtension(REACT_DEVELOPER_TOOLS)`（失败容忍）+ `o
 
 | 文件 | 职责 |
 |---|---|
-| [index.ts](file:///f:/TraeProjects/1/src/main/index.ts) | 主进程入口、生命周期、窗口、安全 |
-| [service-container.ts](file:///f:/TraeProjects/1/src/main/service-container.ts) | 服务单例 + 生命周期 |
-| [config/index.ts](file:///f:/TraeProjects/1/src/main/config/index.ts) | AppConfig（含 Sentry 配置读取） |
-| [security/csp.ts](file:///f:/TraeProjects/1/src/main/security/csp.ts) | 构建 CSP 响应头 |
-| [utils/logger.ts](file:///f:/TraeProjects/1/src/main/utils/logger.ts) | electron-log + 全局错误处理 + 崩溃标记 |
-| [utils/window-state.ts](file:///f:/TraeProjects/1/src/main/utils/window-state.ts) | 窗口尺寸状态记忆 |
+| [index.ts](file:///src/main/index.ts) | 主进程入口、生命周期、窗口、安全 |
+| [service-container.ts](file:///src/main/service-container.ts) | 服务单例 + 生命周期 |
+| [config/index.ts](file:///src/main/config/index.ts) | AppConfig（含 Sentry 配置读取） |
+| [security/csp.ts](file:///src/main/security/csp.ts) | 构建 CSP 响应头 |
+| [utils/logger.ts](file:///src/main/utils/logger.ts) | electron-log + 全局错误处理 + 崩溃标记 |
+| [utils/window-state.ts](file:///src/main/utils/window-state.ts) | 窗口尺寸状态记忆 |
