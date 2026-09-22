@@ -158,13 +158,26 @@ printf '%s\n' "<sha>" > .git/refs/heads/<branch>
 # SHA 来源：tail -1 .git/logs/refs/heads/<branch> | awk '{print $2}'
 ```
 
-### 8.3 两条硬经验
+### 8.3 三条硬经验
 
 1. **提交后必须验证 `git rev-parse HEAD` 能解析**。`git commit` 可能打印成功的变更摘要，
    但分支 ref 未落盘——只看提交输出会误判成功。reflog（`.git/logs/`）通常仍有记录，
    可据此取 SHA 重建 ref。
-2. **`git update-ref` 并非总是可靠**。某些受限环境（AI 沙箱等）会静默丢弃 git 自身的
-   ref 写入（lock+rename 路径），而**普通文件写入正常**——此时必须直接 `printf >` 目标
-   ref 文件。同理，`lint-staged` 依赖 `git stash`（需写 `refs/stash`），在该类环境下
-   必然失败；可手工执行钩子等价步骤（`gitleaks git --staged` + `biome check`）后
-   用 `git commit --no-verify` 提交，并**在提交说明或 PR 中注明原因**。
+
+2. **受限环境下 git 自身的 ref 写入按「扁平 / 嵌套」分裂**（2026-09-22 实测，加白名单后复测）：
+
+   | ref 形态 | 例子 | git 自身写入 |
+   |---|---|---|
+   | 扁平 | `refs/heads/main`、`refs/stash` | ✅ 可用（故 `git stash` / lint-staged 能跑） |
+   | 嵌套 | `refs/heads/fix/x`、`refs/remotes/origin/main` | ❌ 返回 0 但**静默不写**（需创建中间目录） |
+
+   因此：`git commit` 在嵌套分支上会丢失 ref、`git fetch` 不会更新 remote-tracking ref，
+   而 `mkdir -p` + `printf >` 直接写文件**始终可靠**——这是唯一的稳妥路径。
+
+3. **⚠️ 分支名含 `/` 时禁用 `git update-ref`**。实测
+   `git update-ref refs/heads/fix/<新名> HEAD` 不仅不写入，**还会删掉整个 `fix/` 目录**
+   （连带删除该目录下已存在的分支 ref）。这不是「写入失败」，而是「破坏性失败」。
+   恢复方式同上：`mkdir -p` + `printf`。
+   同理 `lint-staged` 依赖 `git stash`（需写 `refs/stash`），在受限环境下会失败；
+   可手工执行钩子等价步骤（`gitleaks git --staged` + `biome check`）后用
+   `git commit --no-verify` 提交，并**在提交说明或 PR 中注明原因**。
