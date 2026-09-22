@@ -7,14 +7,14 @@
 | 项 | 要求 |
 |---|---|
 | Node.js | `>=24.13.0`（`engines`）；TRAE IDE 终端可能注入自带 Node（v22）导致版本不符，属 TRAE 限制，系统 Node 正确安装即可） |
-| pnpm | `>=10.0.0`（`packageManager: pnpm@10.0.0`） |
+| pnpm | `>=11.0.0`（`packageManager: pnpm@11.24.0`） |
 | 原生模块 | better-sqlite3 / esbuild / node-pty（`pnpm.onlyBuiltDependencies`） |
 
 ## 2. 安装与启动
 
 ```bash
 pnpm install            # 安装依赖 + 原生模块编译 + postinstall-rebuild
-cp .env.example .env    # 可选：Sentry DSN / 供应商 baseURL
+cp .env.example .env    # 可选：供应商 baseURL 等默认值（API Key 走应用内 safeStorage，不经 .env）
 pnpm dev                # electron-vite dev -w
 ```
 
@@ -79,27 +79,29 @@ pnpm test:perf            # 性能基准（IPC 基准 / 渲染 / 内存 / 导航
 
 ```bash
 pnpm build                 # electron-vite build（main/preload/renderer 三入口）
-pnpm build:win             # 构建 + NSIS 安装包（允许自定义安装目录）
-pnpm build:mac / linux     # 对应平台包
+pnpm build:win             # 构建 + NSIS 安装包（x64 + arm64）
+pnpm build:mac / linux     # 对应平台包（各自 x64 + arm64）
 pnpm build:all             # 全平台
-pnpm build:win:full        # build + Sentry 创建 release + 上传符号
+pnpm build:win:x64         # 单架构变体（另有 build:{win,mac,linux}:{x64,arm64}）
 pnpm analyze:bundle        # 包体积分析（rollup-plugin-visualizer → stats/renderer-bundle.html）
 ```
 
-发布配置：`electron-builder.yml`（github provider，GitHub Releases 为更新源）；CI：`.github/workflows/ci.yml`（quality + integration-tests）+ `release.yml`（三平台矩阵）。
+发布配置：`electron-builder.yml`（github provider，GitHub Releases 为更新源）。
+CI/CD：`.github/workflows/ci.yml` 为 **5 个必需检查 job**（quality / unit 六平台矩阵 /
+integration-tests / e2e-browser / e2e-electron 六平台矩阵，另有 2 个 summary job 暴露稳定名）；
+`release.yml` 为 **6 个单架构 build job**（win/mac/linux × x64/arm64）→ merge 更新元数据 →
+release 打 tag → publish 转正式。打包验证不在 CI（PR 阶段），统一交给 CD。
 
-Sentry 符号：
-```bash
-pnpm sentry:release:new / pnpm sentry:upload:symbols
-```
+> 错误处理已本地化（2026-09-13 移除 Sentry）：异常经 `infra/telemetry/error-report.ts`
+> 落本地日志，随诊断包导出，报障走 GitHub Issue 深链；无符号上传环节。
 
 ## 6. 工程纪律要点
 
 - **每次代码改动同步 CodeGraph 索引**：`pnpm codegraph:sync`（仓库根）。
-- **每次实现轮次做 git commit**（`gh` / 常规 commit；commitlint conventional 规范 + husky pre-commit/pre-push）。
+- **每次实现轮次做 git commit**（`gh` / 常规 commit；commitlint conventional 规范 + husky 钩子）。钩子分工：`pre-commit` 跑密钥扫描（暂存区）+ lint-staged 自动修复；`commit-msg` 跑 commitlint + 双 type 标题拦截；`pre-push` **仅**密钥扫描（`gitleaks git` 扫待推送区间，约 1.5 秒），其余检查交 CI / `pnpm verify:local`。
 - **前端 mock 层保留**：渲染层 `dev/mock-api.ts` + MSW，前端可独立开发。
 - **原生模块双环境**：Node 测试环境与 Electron 运行时同 ABI（Electron 44 = Node 24，modules 137），无需重编译（rebuild-native.mjs 已删）。
-- **CSS 令牌**：改令牌改 `tokens/aurora.json`（`pnpm tokens:build` 生成），禁止手改 `tokens.css`（`check:tokens` 卡关）。
+- **CSS 令牌**：改令牌改 `tokens/aurora.json`（`pnpm tokens:build` 生成），禁止手改 `tokens.css`——生成物一致性由 `tokens:check` 卡关，设计令牌用法由 `check:tokens` 卡关。
 - **i18n**：新增 key 需补全 en/zh-CN 两组（`check:i18n` 严格卡关）。
 - **版本/CHANGELOG**：由 release-please 自动化（`.github/workflows/release-please.yml`），push main 开 Release PR，合并即打 tag 发版；无自研 changelog 脚本。
 
