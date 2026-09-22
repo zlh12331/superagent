@@ -210,3 +210,51 @@ git branch -D <old/nested-name>           # 删旧本地分支
 
 ⚠️ 迁移后 remote-tracking ref（`refs/remotes/origin/<name>`）仍是嵌套路径，
 `git push` 不会写入它——需手工 `mkdir -p` + `printf` 补一次（之后 `git fetch` 亦如此）。
+
+### 8.5 索引与树层面的两种故障（2026-09-22 实测）
+
+扁平化分支解决了 ref 写入，但对象库损坏还会以另外两种形式表现出来，**都能让提交
+静默产出一个坏结果**，因此提交前后必须校验。
+
+**故障 A：索引引用了已缺失的 blob ⇒ `git stash` / lint-staged 必然失败**
+
+```
+$ git stash push -m probe
+error: invalid object 100644 <sha> for '<path>'
+Cannot save the current index state
+```
+
+`git add` **修不了**（git 认为对象已存在，跳过写入），必须逐个强制重写：
+
+```sh
+for f in $(git diff --cached --name-only); do git hash-object -w "$f"; done
+# 校验（用一次进程；循环调 cat-file 在 1900 文件规模下会超时）
+git ls-files -s | awk '{print $2}' | git cat-file --batch-check='%(objecttype)' | grep -c missing
+```
+
+**故障 B：被中断的 `git commit` 会写出「部分树」**
+
+`git commit` 从索引的 **cache-tree** 直接复用子树，而 cache-tree 可能引用已缺失的
+子树且不做校验 ⇒ commit 成功但树不完整。症状是「看似成功却少了大量文件」：
+
+```sh
+git ls-tree -r HEAD --name-only | wc -l   # 实测 652
+git ls-files | wc -l                      # 实测 1906 —— 不一致即为坏提交
+git diff <parent> HEAD                    # fatal: unable to read tree <sha>
+```
+
+修复：`git reset --mixed <上一个完好提交>` 重建索引 → 重新 `git add` → 再提交。
+
+**提交前后固定校验清单**
+
+| 时机 | 命令 | 期望 |
+|---|---|---|
+| 提交前 | `git ls-files -s \| awk '{print $2}' \| git cat-file --batch-check='%(objecttype)' \| grep -c missing` | `0` |
+| 提交后 | `git rev-parse HEAD` | 能解析 |
+| 提交后 | `git ls-tree -r HEAD --name-only \| wc -l` vs `git ls-files \| wc -l` | **两者相等** |
+
+**受限环境下的安全提交流程**：① 强制重写暂存 blob（`git hash-object -w`）→
+② 手工执行钩子等价步骤（`biome check --write` + `gitleaks git --staged`）→
+③ `git commit --no-verify`（lint-staged 因故障 A 不可用；且让提交在数秒内完成，
+把「被中断」的窗口压到最小——中断正是故障 B 的成因）→ ④ 按上表校验 →
+⑤ `git push` 后补 remote-tracking ref。
