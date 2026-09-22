@@ -198,7 +198,7 @@ flowchart TB
 
 | job | 实例 | 步骤 |
 |---|---|---|
-| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（14 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ schema 漂移（`drizzle-kit generate` + `git diff --quiet -- drizzle/`）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
+| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（14 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
 | **unit** | 6 | `pnpm test:main` + `pnpm test:renderer`；**ubuntu-latest 实例改跑 `pnpm test:coverage`**（覆盖率阈值唯一把关点，覆盖率产物也从这里上传）；其余 5 个平台跑不带阈值的同套用例。`test:scripts` 不在此 job（与平台无关，留在 quality 单次执行，避免 6 倍重复） |
 | **integration** | 1 | `pnpm test:integration`（`tests/integration/`，20+ 文件；用户决策不扩平台） |
 | **e2e-browser** | 1 | `playwright install --with-deps chromium` → `playwright test --config e2e/playwright.config.ts --retries=2` |
@@ -217,7 +217,7 @@ flowchart TB
 | 5 | 令牌审计 | `pnpm tokens:check` | 裸色 / `dark:` / 间距双写 / hex 写法 |
 | 6 | 死代码 | `pnpm knip` | files / deps / binaries 级 |
 | 7 | 依赖方向 | `pnpm depcruise` | 分层依赖约束 |
-| 8 | schema 漂移 | `drizzle-kit generate` + `git diff --quiet -- drizzle/` | 改了 `schema.ts` 却没生成迁移 → 红 |
+| 8 | schema 漂移 | `pnpm check:schema-drift`（判据：generate 前后文件集合是否新增，不依赖提交状态） | 改了 `schema.ts` 却没生成迁移 → 红 |
 | 9 | 门禁脚本自测 | `pnpm test:scripts` | 门禁脚本自身的单测 |
 | 10 | 依赖漏洞 | `pnpm audit` | audit-ci，中危（moderate）起卡关 |
 | 11 | **CHANGELOG 润色门禁** | `pnpm check:changelog-polish` | **仅 Release PR 分支**（`if: startsWith(github.head_ref, 'release-please--')`）——断言 CHANGELOG 已面向用户改写，不做就合并不了 |
@@ -665,16 +665,25 @@ gh api repos/{owner}/{repo}/rulesets/<id> --jq '.rules[] | select(.type=="requir
 
 | 层 | 在哪跑 | 内容 |
 |---|---|---|
-| 质量验证 | **本地** | typecheck / lint / 12 项静态检查 / knip / depcruise / audit / 5 层测试 |
+| 质量验证 | **本地** | 密钥扫描 / typecheck / lint / 14 项静态检查 / tokens 一致性 / knip / depcruise / schema 漂移 / audit / 5 层测试 |
 | 产物验证（Windows） | **本地** | build / bundle 门槛 / compiler 门槛 / E2E 浏览器 + Electron / `build:win:x64` / 引擎与架构断言 / 产物 smoke |
 | 多端适配 | **云端**（配额恢复后） | 六平台矩阵（Linux/macOS 的构建、单测、E2E） |
 
 新增两条聚合命令消除"每次手敲清单"的摩擦：
 
 ```bash
-pnpm verify:local        # 质量层，约 4 分钟，零成本
+pnpm verify:local        # 质量层，约 4.5 分钟，零成本
 pnpm verify:local:full   # 追加产物层（含 build:win:x64 + smoke），约 13-14 分钟
 ```
+
+**2026-09-22 补齐覆盖缺口**：核对发现 `verify:local` 原缺 3 项本地入口——
+`tokens:check`、schema 漂移检测、密钥扫描（仅 pre-push 有）。已全部纳入：
+新增 `scripts/check-tokens-sync.ts` / `scripts/check-schema-drift.ts` /
+`scripts/check-secrets-git.ts`，`verify:local` 与 CI quality job 的检查项至此对齐
+（唯一例外是 CI 独有的 `check:changelog-polish`，它只对 Release PR 生效）。
+同时修正了前两者的判据：原实现用 `git diff` 对比 HEAD，会把「已重新生成、尚未提交」
+误判为失败，导致这两个闸在本地开发中途不可用；改为对比「重新生成前后」后，
+判据与提交状态无关，且能额外捕获「手改生成物」（原实现会静默覆盖掉手改、反而放行）。
 
 **已验证**：Windows 端全链路**可在本地跑完**，包括原本只在 CD 跑的产物 smoke（`build:win:x64` → `test:smoke` 6 项通过）。故本地优先不会丢失任何 Windows 侧覆盖。
 

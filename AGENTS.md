@@ -15,6 +15,10 @@ pnpm check:static           # 静态审计 14 项：tokens + i18n + comments（�
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:animations       # 动画审计：animation / animate-[…] 引用的 keyframes 不存在即卡关（防「引用已删动画」静默失效）
+pnpm tokens:check           # 令牌生成物一致性：tokens/aurora.json ↔ src/renderer/styles/tokens.css（判据与提交状态无关）
+pnpm check:schema-drift     # schema.ts ↔ drizzle/ 迁移漂移 + 快照链完整性（本地/CI 共用同一脚本）
+pnpm check:secrets-git      # 密钥扫描：gitleaks git 扫 <远端 main>..HEAD（≈1.4s，基线缺失回退全历史）
+pnpm check:secrets          # 密钥扫描：gitleaks dir src（含未提交内容，定向自查用）
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
 pnpm check:packaged-engine  # 打包后断言产物含可运行记忆引擎（入口+node_modules+无占位标记+关键依赖），release.yml 卡关
@@ -46,7 +50,8 @@ pnpm docs:types             # TypeDoc 契约文档（tools/typedoc 子包，TS6 
 
 质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`（CI 权威）。
 pre-push 钩子：**仅密钥扫描**（`gitleaks git --log-opts="<远端 main>..HEAD"`，约 1.5 秒；`SKIP_PREPUSH=1` 跳过）。
-本地全量验证走聚合命令：`pnpm verify:local`（质量层，约 4 分钟）/ `pnpm verify:local:full`（追加产物层，约 13–14 分钟）。
+本地全量验证走聚合命令：`pnpm verify:local`（质量层，约 4.5 分钟）/ `pnpm verify:local:full`（追加产物层，约 13–14 分钟）。
+`verify:local` 现覆盖：密钥扫描（gitleaks git）+ typecheck + lint + check:static + tokens:check + knip + depcruise + check:schema-drift + audit + 全部单测——与 CI quality job 的检查项已对齐（唯一例外：CI 独有的 `check:changelog-polish` 仅对 Release PR 生效）。
 
 ## 架构
 

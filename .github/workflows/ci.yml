@@ -117,17 +117,15 @@ jobs:
 
       - name: Schema drift check (drizzle-kit)
         # 防 schema.ts 与 drizzle/ 迁移快照漂移（数据层单一真源一致性）。
-        # 2026-09-08 修复：此前只跑 `drizzle-kit check`，实测它只校验迁移快照链
-        # 自身（版本/父子 id），**从不读 schema.ts**——改了 schema 忘 generate
-        # 时 CI 依旧全绿。现在用 generate + git diff 做真实漂移检测。
-        run: |
-          pnpm exec drizzle-kit generate
-          if ! git diff --quiet -- drizzle/; then
-            echo "::error::schema.ts 与 drizzle/ 迁移不同步——请提交 pnpm exec drizzle-kit generate 的产物"
-            git diff --stat -- drizzle/
-            exit 1
-          fi
-          pnpm exec drizzle-kit check
+        # 2026-09-08：此前只跑 `drizzle-kit check`，实测它只校验迁移快照链自身
+        # （版本/父子 id），**从不读 schema.ts**——改了 schema 忘 generate 时
+        # CI 依旧全绿。改用 generate 做真实漂移检测。
+        # 2026-09-22：逻辑抽到 scripts/check-schema-drift.ts，与本地 verify:local
+        # 共用同一实现（原内联 `git diff --quiet -- drizzle/` 有两个缺陷：
+        # ① 只看已跟踪文件，漏检新增的迁移 .sql / meta 快照——CI 上靠
+        #    meta/_journal.json 被改动才侥幸生效；② 判据依赖提交状态，
+        #    在本地会把「已 generate 未提交」误判为失败，故无法复用到本地）。
+        run: pnpm check:schema-drift
 
       # ── 单测 + 覆盖率已移出（2026-09-20 六平台改造）──────────────────────
       # 原步骤 `pnpm test:coverage` 在此只跑 ubuntu 一套（shared/main/renderer），

@@ -27,6 +27,9 @@
    - ⚠️ **2026-09-22 修复（此前长期空转）**：`.gitleaks.toml` 的 `[extend]` 是空表、缺 `useDefault = true`，而 gitleaks 找到配置文件即**替代**默认规则集 ⇒ 有效规则数为 0 ⇒ 三处闸门全部恒报 `no leaks found` 并 exit 0，与本节声称的「100+ 规则」不符。已补 `useDefault = true`。
    - **实测（启用默认规则后）**：`src` / `scripts` / `packages` / `e2e` / `tests` / `docs` / `resources` / `tools` 命中数 = **0**（版本库干净）；451 条命中全部落在 gitignored 的 `.pnpm-store`(377) / `.electron-user-data`(66) / `.e2e-user-data*`(7) / `.env`(1) ——前三类已补入 allowlist，`.env` 故意保留（文件系统扫描报出真实本地密钥属正确行为，且它从未入库、`gitleaks git` 看不到它）
    - **模式选择**：闸门一律用 `gitleaks git`（只扫已提交内容）。`gitleaks dir .` 扫文件系统，会连同缓存/本地密钥一起扫（3.21 GB / 191 秒），仅适合定向自查（如 `check:secrets` 限定 `src`）
+   - **两个命令的分工**（2026-09-22 起，`verify:local` 纳入前者）：
+     · `pnpm check:secrets-git` = `gitleaks git` 扫 `<远端 main>..HEAD`（≈1.4s）——「即将推送/并入 main 的东西」，是闸门；基线缺失回退全历史（fail-closed）
+     · `pnpm check:secrets` = `gitleaks dir src`（0.6s）——含**未提交**内容，定向自查用
 3. **.env 保护**：环境变量仅主进程启动时 `process.loadEnvFile()` 加载（whenReady 之前），.gitignore 排除
 4. **测试密钥**：测试/mock 必须用显式 fake 值（`fake-token` 风格），禁止复制真实密钥
 5. **日志纪律**：日志禁止输出密钥（16-error-logging §2.3，traceId 只记前 8 位已实现）
