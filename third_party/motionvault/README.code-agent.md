@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-第三方**网页动效灵感库**：10 个分类、202 个动效组件（text/card/button/background/particle/scroll/svg/loader/spring/3D），每个效果带 AI 复现 prompt。本目录为**只读参考源**，不参与本项目构建（不在 tsconfig / biome / knip 扫描范围）。
+第三方**网页动效灵感库**：11 个分类、206 个动效组件（background/button/card/layout/loader/particle/scroll/spring/svg/text/threeD），每个效果带 AI 复现 prompt。本目录为**只读参考源**，不参与本项目构建（不在 tsconfig / biome / knip 扫描范围）。
 
 ## 用途
 

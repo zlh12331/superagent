@@ -17,8 +17,7 @@
 | 安全审计 | audit-ci 7.1.0 |
 | Git 钩子 | husky 9 + lint-staged 17 + commitlint 21 |
 | 打包 | electron-builder 26（NSIS） |
-| 错误监控 | @sentry/electron 7.15 |
-| 符号上传 | @sentry/cli 2.41 |
+| 错误处理 | error-report 单一出口落本地日志（Sentry 已于 2026-09-13 移除，见 §2.4） |
 
 ## 2. 构建脚本
 
@@ -162,11 +161,13 @@ concurrency:
 
 **macOS 公证与签名**（正式发布必需）：
 1. Apple Developer 证书（Developer ID Application）→ 配置 CI Secrets：`CSC_LINK`（.p12 base64）+ `CSC_KEY_PASSWORD`
-2. 公证（notarize）：electron-builder.yml `mac.notarize` 当前为 false；开启需 `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD`（或 `APPLE_TEAM_ID`）Secrets
+2. 公证（notarize）：electron-builder.yml `mac.notarize: true`（2026-09-14 启用）——提供了公证凭据就执行公证，
+   未提供时 electron-builder 仅 warn 跳过（本地/无证书 CI 构建照常通过）。凭据三选一（CI Secrets）：
+   `APPLE_API_KEY` + `APPLE_API_KEY_ID` + `APPLE_API_ISSUER`（推荐）或 `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID`
 3. 未签名/未公证版本仅限本地开发分发（macOS Gatekeeper 会拦截）
 
 **Windows 签名**（可选）：Authenticode 证书 → 同一 `CSC_LINK`/`CSC_KEY_PASSWORD` 自动签名
-## 4. Release 流水线
+## 4. Release 流水线（CD）
 
 源码：[.github/workflows/release.yml](file:///.github/workflows/release.yml)。
 
@@ -175,53 +176,44 @@ concurrency:
 ```yaml
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]   # Release PR（release-please 生成）合并产生的 push
   workflow_dispatch:
+    inputs:
+      confirm_version: # 手动重放防误触发：必须与 package.json 版本一致，gate 校验不符即拒绝
+        required: true
+        type: string
 ```
 
-### 4.2 单 Job 流程
+**tag 由工作流创建，不是触发条件**（2026-09-10 流程改造的核心语义）：三平台构建全部成功后，
+release job 才打 tag `vX.Y.Z` 并创建 draft Release——任一环节失败则无 tag 无 release，
+版本号不占号、可重试。
+
+### 4.2 Job 流程（5 个 job）
 
 ```
-1. Checkout (fetch-depth: 0 全部历史，便于生成 changelog)
-2. Setup pnpm + Node 24
-3. pnpm install --frozen-lockfile
-4. Release Gate:
-   - pnpm typecheck
-   - pnpm lint
-   - pnpm test
-5. pnpm build:win
-   env:
-     CSC_LINK: ${{ secrets.CSC_LINK }}         # 代码签名证书（可选）
-     CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-6. pnpm sentry:upload:symbols  # if: env.SENTRY_AUTH_TOKEN != ''
-   env:
-     SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-7. pnpm exec playwright install --with-deps chromium
-8. pnpm test:smoke  # 生产构建 smoke 测试
-9. softprops/action-gh-release@v2  # 创建 GitHub Release
-   with:
-     generate_release_notes: true  # 自动从 commits 生成 changelog
-     files: |
-       release/*-setup.exe
-       release/latest.yml
-     draft: false
-     prerelease: ${{ contains(github.ref_name, '-') }}  # v0.1.0-beta1 标记为 prerelease
-   env:
-     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-10. upload-artifact  # release-${{ github.ref_name }}
-    retention-days: 30
+gate     → 识别本次 push 是否 release-please 的发布提交（chore(main): release X.Y.Z），
+           提取版本号 + 发布提交 SHA（tag 锚点）；附带 CHANGELOG 润色兜底检查。
+           非发布 push → 后续 job 全部跳过。
+build    → 6 个单架构 job（Windows/macOS/Linux × x64/arm64，全部原生 runner）：打包
+           + SBOM 生成 + check:packaged-engine + check:native-arch + 生产 smoke 测试
+           + 产物上传（安装包/blockmap/latest*.yml/SBOM，artifact 名带架构后缀）
+merge    → 把 Windows/macOS 各自产出的双份同名更新元数据合并为双架构一份
+           （latest.yml / latest-mac.yml；Linux 按架构天然分文件，不参与合并）
+release  → 三平台构建全部成功后：打 tag（钉在 gate 找出的发布提交上）→ 创建 draft Release
+           → 把 release PR 的 label 从 autorelease: pending 改为 tagged（代 release-please 收尾，
+           防下次发版静默死锁）
+publish  → 校验三平台安装包 + latest*.yml 齐全（含双架构条目断言、差分 blockmap 门禁）
+           → draft 转正式；缺任一项保持草稿
 ```
 
 ### 4.3 必需 Secrets
 
 | Secret | 用途 |
 |--------|------|
-| `SENTRY_AUTH_TOKEN` | Sentry CLI 认证（符号上传） |
-| `CSC_LINK` | 代码签名证书链接（可选） |
-| `CSC_KEY_PASSWORD` | 代码签名证书密码（可选） |
-| `GITHUB_TOKEN` | 自动提供，发布 GitHub Release |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | 代码签名证书（可选；未配置时干净跳过签名） |
+| `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` | macOS 公证凭据（App Store Connect API Key 模式，三件套齐备才导出） |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | macOS 公证凭据（Apple ID 模式回退，与上者二选一） |
+| `GITHUB_TOKEN` | 自动提供：打 tag / 创建 Release / label 回写 |
 
 ## 5. 构建配置
 
@@ -316,38 +308,16 @@ tsconfig 启用以下严格选项：
 
 | 变量 | 用途 | 风险 |
 |------|------|------|
-| `SENTRY_DSN` | Sentry 项目 DSN | 低（公开 DSN） |
-| `SENTRY_AUTH_TOKEN` | Sentry CLI 认证 | 低（仅本地 `.env` 持有且 gitignore；CI 走 `secrets.SENTRY_AUTH_TOKEN`） |
 | `OPENAI_API_KEY`（如有） | LLM provider | 高 |
 
-## 9. Source Map 与符号化
+## 9. Source Map 策略
 
-### 9.1 上传流程
-
-```bash
-# 上传主进程 + 渲染层 source map
-sentry-cli sourcemaps upload \
-  --org sentry --project electron \
-  --release "code-agent@1.0.0" \
-  --url-prefix "app:///out/" ./out
-
-sentry-cli sourcemaps upload \
-  --org sentry --project electron \
-  --release "code-agent@1.0.0" \
-  --url-prefix "app:///renderer/" ./out/renderer
-```
-
-### 9.2 Release 创建
-
-```bash
-sentry-cli releases new "code-agent@1.0.0"
-```
-
-每个版本发布前必须创建 Sentry release 并上传符号，否则错误堆栈无法符号化。
-
-### 9.3 sentry.properties
-
-[sentry.properties](file:///sentry.properties) 配置 sentry-cli 默认 org / project / url。
+- 三入口统一 `sourcemap: 'hidden'`（electron.vite.config.ts）：生成 `.map` 文件但不写
+  `sourceMappingURL` 注释（产物不暴露映射入口）
+- `.map` 不入安装包：electron-builder.yml `files` 排除 `**/*.map`（源码不随包分发，
+  实测 map 占 asar 约 24%）；构建机 `out/` 保留供本地排障
+- 无云端符号上传：Sentry 已于 2026-09-13 移除（见 §2.4），错误堆栈经
+  error-report.ts 落本地日志，随诊断包导出
 
 ## 10. CodeGraph 索引同步
 
@@ -407,4 +377,4 @@ sentry-cli releases new "code-agent@1.0.0"
 | 测试 | vitest + Playwright | vitest（主流）/ jest（部分） |
 | E2E | Playwright 3 套配置 | 多数 CLI 项目无 Electron E2E |
 | 发布 | electron-builder + GitHub Release | CLI 工具用 npm publish |
-| 监控 | Sentry + OTel + electron-log | 多数参考项目无远程监控 |
+| 监控 | OTel（可选外发）+ electron-log 本地日志 | 多数参考项目无结构化遥测 |

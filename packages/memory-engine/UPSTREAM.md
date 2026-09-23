@@ -8,9 +8,9 @@
 |---|---|
 | 上游项目 | TencentDB Agent Memory |
 | 仓库 | https://github.com/TencentCloud/TencentDB-Agent-Memory |
-| 当前版本 | tag `v2.0.1`,commit `a5dcbe6e9fee0d1d1e32d935326f1d3bcf927fdb` |
+| 当前版本 | tag `v2.0.2-beta.1`,commit `220af62226` |
 | 收录模块 | **仅 `MemoryCore/`**（上游为 monorepo：另有 MemoryPanel / MemoryKnowledge / MemoryProxy / SDK，均不收录） |
-| 子包版本 | `@tencentdb-agent-memory/memory-tencentdb-v2@2.0.0-beta.1` |
+| 子包版本 | `@tencentdb-agent-memory/memory-tencentdb-v2@1.0.2-beta.1` |
 | 许可 | MIT,Copyright (C) 2026 Tencent（全文见 `LICENSE-THIRD-PARTY`） |
 
 版本锚点唯一真源：`versions.json`。
@@ -25,7 +25,8 @@ vendoring 后：源码随仓库分发，CI 与本地构建使用同一份代码�
 
 ## 体积
 
-`MemoryCore/` 约 348 个文件 / 5 MB（源码），依赖由 pnpm 按 `MemoryCore/pnpm-lock.yaml` 安装。
+`MemoryCore/` 共 402 个文件 / 4.5 MB（源码，实测）；其中 `integrity.lock.json` 的门禁校验口径为
+`src/` + `package.json` + `pnpm-lock.yaml`（304 文件）。依赖由 pnpm 按 `MemoryCore/pnpm-lock.yaml` 安装。
 
 ## ⚠️ 不要直接修改本目录
 

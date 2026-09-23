@@ -114,8 +114,6 @@
 
 | 依赖                                        | 版本         | 用途                          |
 | ----------------------------------------- | ---------- | --------------------------- |
-| `@sentry/electron`                        | `^7.15.0`  | 错误聚合 + Performance + Replay |
-| `@sentry/cli`                             | `^2.41.1`  | devDep，source map 上传        |
 | `@opentelemetry/api`                      | `^1.9.1`   | OTel API                    |
 | `@opentelemetry/exporter-trace-otlp-http` | `^0.221.0` | OTLP HTTP exporter          |
 | `@opentelemetry/resources`                | `^2.10.0`  | Resource 定义                 |
@@ -219,11 +217,11 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 关键配置：
 
-- **Sourcemap 模式**：`'hidden'`（生成 `.map` 但不写 `sourceMappingURL`，便于 Sentry 上传）
+- **Sourcemap 模式**：`'hidden'`（生成 `.map` 但不写 `sourceMappingURL`；map 不入安装包，构建机保留供本地排障）
 
 - **renderer 插件**：`@vitejs/plugin-react`（启用 React Compiler：oxc 通道 `compiler: { compilationMode: 'infer' }`，依赖 `oxc-transform-react`）+ `@tailwindcss/vite`（Tailwind v4 官方插件）
 
-- **Sentry plugin**：未集成进 Vite 构建链，source map 通过独立 `sentry-cli` 命令上传
+- **符号上传**：无（Sentry 已于 2026-09-13 移除，错误经 error-report.ts 落本地日志）
 
 ## 7. Biome 配置
 
@@ -245,7 +243,7 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 - **css parser**：`tailwindDirectives: true`
 
-- **ignore 列表**：`resources/pg`、`release`、`coverage`、`node_modules`、`out`、`dist`、`.codegraph`、`playwright-report`、`playwright-report-electron`、`playwright-report-smoke`、`test-results`、`playwright/.cache`、`docs/design`
+- **ignore 列表**：`release`、`coverage`、`node_modules`、`out`、`dist`、`.codegraph`、`playwright-report`、`playwright-report-electron`、`playwright-report-smoke`、`test-results`、`playwright/.cache`、`docs/design`
 
 - **overrides**（22 组）：`src/renderer/**/*.tsx` 关闭 `noDefaultExport`；常量/枚举文件关闭 `useNamingConvention`；AI 服务层 + storage + IPC handler 关闭 `strictCase`；`tests/**`、`e2e/**`、`scripts/**` 关闭 `noConsole`
 
@@ -255,32 +253,17 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 
 [.env.example](file:///.env.example) 提供环境变量模板，实际值写入本地 `.env`（gitignore，不入仓）：
 
-- `SENTRY_DSN="http://b24f47b022820d979452bf4ef3d43473@127.0.0.1:9000/3"`
+- AI Provider base URL（`DEEPSEEK_API_BASE` / `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` 等，全部可选）
+- `LOG_LEVEL`（debug / info / warn / error）
+- `OTEL_EXPORTER_OTLP_ENDPOINT`（OpenTelemetry OTLP 端点，未配置时不外发、退化为 Console exporter）
+- `MEMORY_HUB_ROOT`（dev 专用：记忆引擎上游解压根目录；打包环境读 `process.resourcesPath/memory-hub`）
 
-- `SENTRY_TRACES_SAMPLE_RATE=1.0`
-
-- `SENTRY_URL` / `SENTRY_ORG` / `SENTRY_PROJECT`
-
-- `SENTRY_AUTH_TOKEN`（仅本地 `.env` 持有，`.env` 已 gitignore；CI 经 `secrets.SENTRY_AUTH_TOKEN` 注入，仓库历史无真实 token）
-
-### sentry.properties
-
-[sentry.properties](file:///sentry.properties)：
-
-- `defaults.url=http://127.0.0.1:9000`
-
-- `defaults.org=sentry`
-
-- `defaults.project=electron`
-
-- 自托管 Sentry v26.6.0
+> 注：API Key 不通过 .env 管理（走应用内 safeStorage 加密存储），.env 仅提供便于 CI/自动化场景的默认值。
 
 ## 9. 关键风险点
 
-1. **Sentry 指向 127.0.0.1:9000**：本地自托管 Sentry，生产环境无法上报
-2. **`SENTRY_TRACES_SAMPLE_RATE=1.0`**：100% 采样，生产规模下可能造成服务端压力
-3. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
-4. **自动更新依赖仓库可见性**：`electron-builder.yml` `publish` 为 `provider: github`，自动更新源为 GitHub Releases；私有仓库的资产下载需认证 token，面向用户分发需将仓库转为公开
+1. **`electron-vite 6.0.0-beta.1`**：构建链核心依赖使用 beta 版本，存在稳定性风险
+2. **自动更新依赖仓库可见性**：`electron-builder.yml` `publish` 为 `provider: github`，自动更新源为 GitHub Releases；私有仓库的资产下载需认证 token，面向用户分发需将仓库转为公开
 
 ## 10. 关键亮点
 

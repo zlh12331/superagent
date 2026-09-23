@@ -10,10 +10,10 @@ import { defineConfig } from 'electron-vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import type { Plugin } from 'vite';
 
-// Source Map 生成配置（用于 Sentry 符号上传）
-// - main/preload: 'hidden' 生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
-// - renderer: 'sourcemap' 标准 source map（Vite 默认开发行为）
-// 生成后通过 `pnpm sentry:upload:symbols` 上传到 Sentry
+// Source Map 生成配置
+// - main/preload/renderer 统一 'hidden'：生成 .map 文件但不暴露 sourceMappingURL（生产环境推荐）
+// - .map 不入安装包（electron-builder.yml files 排除 **/*.map），构建机 out/ 保留供本地排障
+// - 无符号上传：Sentry 已于 2026-09-13 移除，错误经 error-report.ts 落本地日志
 const SOURCEMAP_MODE = 'hidden' as const;
 
 // 包体积分析：`pnpm analyze:bundle` 时启用 rollup-plugin-visualizer

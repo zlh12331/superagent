@@ -8,7 +8,6 @@
   "files": {
     "includes": [
       "**",
-      "!**/resources/pg",
       "!**/third_party",
       "!**/packages/memory-engine/MemoryCore",
       "!**/release",

@@ -66,11 +66,6 @@ playwright-report-smoke/
 playwright/.cache/
 test-results/
 
-# Playwright 视觉回归基线图（首次生成后提交到仓库，不忽略）
-# e2e/visual.spec.ts-snapshots/ 需要提交以做 diff 基线
-# 但本地更新产生的临时 diff 产物可忽略
-test-results-visual/
-
 # Electron 二进制下载缓存（dev 环境用，避免 TRAE 沙箱拦截系统 %LOCALAPPDATA%）
 .electron-cache/
 # Electron userData 目录（dev 环境重定向到此，避免 TRAE 沙箱拦截系统 %APPDATA%）
@@ -87,11 +82,7 @@ test-results-visual/
 *.appx
 *.msi
 
-# PostgreSQL 便携版二进制（由 scripts/download-pg.ts 下载，约 200MB/版本，不入仓）
-# 设计文档 §6.5：resources/pg/18.4 + resources/pg/17.10 双版本
-resources/pg/
-
-# PG 下载脚本的临时目录（zip + 解压目录，盘符内同盘移动避免 EXDEV）
+# 临时目录（脚本运行的中间产物，zip / 解压目录等，盘符内同盘移动避免 EXDEV）
 .tmp/
 
 # 记忆引擎运行目录（由 scripts/prepare-memory-hub.mjs 从仓库内源码生成）
