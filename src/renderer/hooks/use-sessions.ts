@@ -178,6 +178,13 @@ export function useDeleteSession() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
+    onSuccess: (_data, id) => {
+      // 删除成功后彻底移除该会话的详情缓存（removeQueries 而非 invalidate）：
+      // invalidate 只标记 stale，30s staleTime 内 deep-link 回到已删会话仍会命中
+      // 旧缓存渲染出已删除的内容（debt.md#d2 关联的缓存生命周期缺口）。
+      // gcTime 5min 只回收「无观察者」的缓存，不解决「数据已不存在」。
+      void queryClient.removeQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(id) });
+    },
   });
 }
 

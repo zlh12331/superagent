@@ -51,7 +51,7 @@ export function ChatPage(): ReactElement {
 function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  const { data: session, isLoading } = useSessionDetail(sessionId);
+  const { data: session, isLoading, isError } = useSessionDetail(sessionId);
   // 唯一权威入口：详情已到位时以详情值为权威，否则回落会话列表索引
   const workingDir = useWorkingDir(sessionId, session?.session.workingDir);
   const setWelcomeMode = useWelcomeStore((state) => state.setWelcomeMode);
@@ -71,8 +71,10 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     );
   }
 
-  // session 不存在（已被删除或 URL 伪造）：重定向到首页
-  if (session === undefined) {
+  // session 不存在（已被删除或 URL 伪造）或查询出错：重定向到首页。
+  // isError 必须显式检查：被删会话的详情缓存已 removeQueries，重查返回错误而非
+  // undefined 数据——不检查会让错误态落在所有守卫之外。
+  if (session === undefined || isError) {
     return <Navigate to={ROUTES.home} replace />;
   }
 
