@@ -67,7 +67,7 @@
 | `test:scripts` | `vitest run --root scripts` | scripts 目录测试（i18n / changelog / scaffold 工具链） |
 | `test:main` | `vitest run --root src/main` | 仅主进程 |
 | `test:renderer` | `vitest run --root src/renderer` | 仅渲染层 |
-| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage` | shared + main + renderer 覆盖率 |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage && pnpm coverage:settings` | shared + main + renderer 覆盖率（链尾回填 settings 子集实测） |
 
 ### 3.3 覆盖率配置
 

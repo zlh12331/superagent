@@ -19,8 +19,11 @@ import { join } from 'node:path';
 /** 四项覆盖率指标名（与 vitest thresholds 字段一致） */
 export const METRIC_KEYS = ['statements', 'branches', 'functions', 'lines'] as const;
 
-/** 参与门槛治理的层级（preload 无独立测试工程，不单列） */
-export const LAYER_KEYS = ['shared', 'main', 'renderer'] as const;
+/** 参与门槛治理的层级（preload 无独立测试工程，不单列）。
+ * renderer-settings 是 settings 子集单列（JSON 治理层）：不接 vitest thresholds
+ * （洼地直接开硬卡会炸 CI），由 measure-settings-coverage.ts 回填实测、
+ * floor 随实测经 --tighten 抬升；硬卡关仍由 renderer 汇总 thresholds 承担。 */
+export const LAYER_KEYS = ['shared', 'main', 'renderer', 'renderer-settings'] as const;
 
 /** 收紧机制（设计文档 §3.3）：新实测减去该缓冲才可作为新门槛 */
 export const MEASURE_BUFFER = 5;
@@ -247,7 +250,7 @@ export function formatMetricSet(set: MetricSet): string {
 
 /** 表头（供门禁与测试共用，避免文案漂移） */
 export const FLOORS_TABLE_HEADER =
-  '  层级       门槛 St/Br/Fn/Li      实测 St/Br/Fn/Li        与规范目标差';
+  '  层级             门槛 St/Br/Fn/Li      实测 St/Br/Fn/Li        与规范目标差';
 
 /**
  * 渲染门槛对照表：门槛 / 实测 / 与规范目标的真实差距（逐指标）
@@ -264,14 +267,16 @@ export function renderFloorsTable(file: CoverageFloorsFile): string[] {
       return gap === 0 ? '✓' : `-${gap}pp`;
     }).join(' ');
     rows.push(
-      `  ${layer.padEnd(10)} ${formatMetricSet(entry.floor).padEnd(21)} ${formatMetricSet(entry.measured).padEnd(23)} ${gapText}`,
+      `  ${layer.padEnd(17)} ${formatMetricSet(entry.floor).padEnd(21)} ${formatMetricSet(entry.measured).padEnd(23)} ${gapText}`,
     );
   }
   return rows;
 }
 
-/** 层级 → 该层强制门槛的配置文件（相对仓库根） */
-export const LAYER_CONFIGS: Record<LayerKey, string> = {
+/** 层级 → 该层强制门槛的配置文件（相对仓库根）。
+ * 治理层（renderer-settings）不接 vitest thresholds，无对应配置——
+ * validateConfigWiring 对无配置的层跳过接线校验（其实测仍受自洽校验约束）。 */
+export const LAYER_CONFIGS: Partial<Record<LayerKey, string>> = {
   shared: 'packages/shared/vitest.config.ts',
   main: 'src/main/vitest.config.ts',
   renderer: 'src/renderer/vitest.config.ts',
@@ -290,6 +295,7 @@ export function validateConfigWiring(root: string): FloorsProblem[] {
   const problems: FloorsProblem[] = [];
   for (const layer of LAYER_KEYS) {
     const rel = LAYER_CONFIGS[layer];
+    if (rel === undefined) continue; // 治理层无 vitest 配置（JSON 治理，见 LAYER_KEYS 注释）
     let text: string;
     try {
       text = readFileSync(join(root, rel), 'utf-8');

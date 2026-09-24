@@ -58,10 +58,11 @@ export default defineConfig({
       '../../src/main/**',
       '../../src/preload/**',
     ],
-    // 覆盖率收集（与 main/shared 对齐）
+    // 覆盖率收集（与 main/shared 对齐）；json-summary 供 settings 目录
+    // 单列聚合（scripts/measure-settings-coverage.ts 按 per-file 计数求和）
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html', 'lcov'],
+      reporter: ['text', 'html', 'lcov', 'json-summary'],
       // 门槛按设计文档 §3.3 收紧机制维护；floor/ratchet/measured 三元组见真源
       thresholds: {
         statements: rendererFloor.statements,

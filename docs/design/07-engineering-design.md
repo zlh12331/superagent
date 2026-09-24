@@ -64,7 +64,7 @@
 | `test:visual` | `playwright test --config e2e/playwright.config.ts --grep "视觉回归"` |
 | `test:a11y` | `playwright test --config e2e/playwright.config.ts --grep "可访问性"` |
 | `test:perf` | `playwright test --config e2e/playwright.config.ts --grep "性能基准\|渲染性能基准\|内存基准\|IPC 基准"` |
-| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage` |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage && pnpm coverage:settings` |
 
 ### 2.4 错误处理（Sentry 已移除）
 
@@ -87,6 +87,7 @@
 | `docs:types` | `pnpm --filter @code-agent/typedoc-docs run gen` | 类型文档生成 |
 | `postinstall` | `node scripts/postinstall-rebuild.mjs` | 安装后 native 模块重编译 |
 | `prepare` | `husky` | 安装 git 钩子 |
+| `coverage:settings` | `tsx scripts/measure-settings-coverage.ts` | settings 子集覆盖率聚合回填（renderer-settings 层真源，test:coverage 链尾自动执行） |
 
 ## 3. CI 流水线
 
