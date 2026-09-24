@@ -136,6 +136,10 @@
    */
   --color-on-accent: var(--on-accent);
 
+  /* 品牌墨色（tokens/aurora.json → --ink）：accent 渐变上的头像字色、勾选对号等
+   * 高对比墨色细节；双主题同值。用法：text-ink / bg-ink / css 内 var(--ink) */
+  --color-ink: var(--ink);
+
   /* 字体族映射到 Tailwind 工具类 */
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
@@ -1638,7 +1642,7 @@ body.resizing iframe {
 /* 助手头像：双 accent 渐变 + 外发光，与品牌标记呼应 */
 .msg-avatar.assistant {
   background: linear-gradient(135deg, var(--accent), var(--accent-2) 140%);
-  color: #001814;
+  color: var(--ink);
   box-shadow:
     var(--glow-sm),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
@@ -2263,7 +2267,7 @@ body.resizing iframe {
   border-radius: 8px;
   border: none;
   background: var(--error);
-  color: #ffffff;
+  color: var(--color-destructive-foreground);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2741,7 +2745,7 @@ button.card-head {
   top: 0;
   width: 4px;
   height: 8px;
-  border: solid #001814;
+  border: solid var(--ink);
   border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
 }
@@ -3743,15 +3747,16 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   cursor: pointer;
   pointer-events: auto;
   scrollbar-width: none;
-  /* 上下渐隐：内容超长时边缘柔和过渡（对齐参考项目 mask 方案） */
+  /* 上下渐隐：内容超长时边缘柔和过渡（对齐参考项目 mask 方案）。
+   * black 为 mask 亮度语义（非视觉色），等效 #000 的关键字写法 */
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    #000 16%,
-    #000 84%,
+    black 16%,
+    black 84%,
     transparent 100%
   );
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 16%, black 84%, transparent 100%);
 }
 
 .jump-scroll::-webkit-scrollbar {

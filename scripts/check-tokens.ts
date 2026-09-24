@@ -17,7 +17,11 @@ import { join, relative } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const SCAN_DIR = join(ROOT, 'src', 'renderer');
-const EXCLUDE_DIRS = new Set(['styles', 'test']);
+// 目录排除仅剩 test 与 coverage（测试与覆盖率报告产物）；styles 目录**不再整体排除**
+// （2026-09-24：目录粒度豁免曾把手写的 globals.css 与生成物一起放走，硬编码 hex 无人管辖）。
+// 文件粒度豁免：tokens.css 是 aurora.json 的生成物（hex 为令牌定义本身，必然存在）。
+const EXCLUDE_DIRS = new Set(['test', 'coverage']);
+const EXCLUDE_FILES = new Set(['tokens.css']);
 
 // 24 色板 + 常用派生色（Tailwind 裸色值检测）
 const COLOR_PALETTE = [
@@ -101,6 +105,9 @@ function collectTsxFiles(dir: string, acc: string[] = []): string[] {
       !entry.name.includes('.test.')
     ) {
       acc.push(join(dir, entry.name));
+    } else if (entry.name.endsWith('.css') && !EXCLUDE_FILES.has(entry.name)) {
+      // css 纳入管辖（2026-09-24）：此前只扫 .ts/.tsx，globals.css 的硬编码 hex 完全不在范围
+      acc.push(join(dir, entry.name));
     }
   }
   return acc;
@@ -178,10 +185,42 @@ function checkFile(file: string, violations: Violation[]): void {
   });
 }
 
+/** css 专用检查：只查硬编码 hex/rgb（className 类规则对 css 无意义）。
+ * 剔除块注释（含跨行）与行内 /* … *\/ 注释片段、var(--…) 片段后再查。 */
+function checkCssFile(file: string, violations: Violation[]): void {
+  const rel = relative(ROOT, file).replace(/\\/g, '/');
+  const lines = readFileSync(file, 'utf8').split('\n');
+  let inBlockComment = false;
+  lines.forEach((raw, idx) => {
+    let line = raw;
+    if (inBlockComment) {
+      if (line.includes('*/')) inBlockComment = false;
+      return;
+    }
+    // 行内 /* … */ 注释片段剔除（尾注释中的色值属文档说明，非生效样式）
+    line = line.replace(/\/\*[\s\S]*?\*\//g, '');
+    if (line.trim().startsWith('/*')) {
+      if (!line.includes('*/')) inBlockComment = true;
+      return;
+    }
+    // 先剔除 var(--…) 片段再查（豁免收窄到片段级）
+    const withoutVars = line.replace(/var\(--[^)]*\)/g, '');
+    const lineNo = idx + 1;
+    for (const m of withoutVars.matchAll(HEX_COLOR_RE)) {
+      violations.push({ file: rel, line: lineNo, rule: 'hex-color', detail: m[0] });
+    }
+    // 边界（如实记录）：css 的 rgba(…) 带 alpha 效果色暂不收口——收编需 color-mix
+    // 全量改造（实测 12+ 处），属独立批次；rgb 检查仅对 .ts/.tsx 的 className 保留
+  });
+}
+
 function main(): number {
   const files = collectTsxFiles(SCAN_DIR);
   const violations: Violation[] = [];
-  for (const file of files) checkFile(file, violations);
+  for (const file of files) {
+    if (file.endsWith('.css')) checkCssFile(file, violations);
+    else checkFile(file, violations);
+  }
 
   if (violations.length === 0) {
     console.log(`[check-tokens] ✅ 通过：${files.length} 个文件，0 违规`);

@@ -325,6 +325,10 @@
     "comment": "TraeWork --accent-violet",
     "dark": "#B655FC"
   },
+  "ink": {
+    "value": "#001814",
+    "comment": "品牌墨色（accent 渐变上的头像字色 / 勾选对号等高对比墨色细节）；双主题同值"
+  },
   "success": {
     "value": "#15A877",
     "comment": "TraeWork --status-success-default（基色：图形/边框/氛围；实底+白字用 --success-emphasis）"
