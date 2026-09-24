@@ -177,7 +177,7 @@ E2E 兑底是正式策略而非欠账：
 | 文件 | 目标函数 | 覆盖的不变量 |
 |---|---|---|
 | [src/main/infra/ai/models/token-limits.property.test.ts](file:///src/main/infra/ai/models/token-limits.property.test.ts) | `clampOutputTokens` | 恒整非负；≤ 有效上限；有窗口时满足 `prompt + output + margin ≤ window`（唯一例外 MIN 保底）；下限保护；无窗口仅应用能力上限 |
-| [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | `joinPath` | 空 parentDir 原样返回；前缀/后缀保真；连接处恰一个分隔符；混合分隔符共存 |
+| [src/renderer/hooks/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/use-file-tree-ops.property.test.ts) | `joinPath` | 空 parentDir 原样返回；前缀/后缀保真；连接处恰一个分隔符；混合分隔符共存 |
 
 **试点收获**：joinPath 属性测试首轮即抓到手写用例未覆盖的断言缺陷——"全串不含 `//`"
 错误地假设了 parentDir 中部既有的连续分隔符在函数职责内（实际只负责连接处），
@@ -227,9 +227,9 @@ E2E 兑底是正式策略而非欠账：
 
 | 文件 | 说明 |
 |------|------|
-| [src/renderer/test/__tests__/mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
-| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
-| [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
+| [src/renderer/test/mock-api.test.ts](file:///src/renderer/test/mock-api.test.ts) | mock-api 形状一致性 |
+| [src/renderer/hooks/use-agent-bridge.test.tsx](file:///src/renderer/hooks/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
+| [src/renderer/hooks/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
 | [src/renderer/components/layout/DevPanel.test.tsx](file:///src/renderer/components/layout/DevPanel.test.tsx) | DevPanel |
 
 #### scripts 工具链（4 个）
@@ -368,7 +368,7 @@ E2E 兑底是正式策略而非欠账：
 渲染层维护独立 mock 层，使前端独立开发：
 
 - 位置：[src/renderer/test/](file:///src/renderer/test/)
-- 形状一致性测试：[mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) 确保 mock 与真实 IpcApi 接口一致
+- 形状一致性测试：[mock-api.test.ts](file:///src/renderer/test/mock-api.test.ts) 确保 mock 与真实 IpcApi 接口一致
 
 ### 5.2 关键 mock 约定（来自 project memory）
 
