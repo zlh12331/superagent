@@ -95,8 +95,11 @@ export interface ISessionService {
 
   /** 分页列出所有会话（按 updatedAt 倒序） */
   list(limit: number, offset: number): Promise<SessionListRes>;
-  /** 获取指定会话的完整消息历史 */
-  get(id: string): Promise<SessionGetRes>;
+  /**
+   * 获取指定会话详情；includeMessages 为 false 时跳过消息查询（messages 返回空数组），
+   * 供仅需元数据的消费方（ChatPage workingDir/lastRunStatus、cron 触发）免付全量消息负载
+   */
+  get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes>;
   /** 删除指定会话（连同 messages 表级联删除） */
   delete(id: string): Promise<SessionDeleteRes>;
   /** 重命名会话标题 */

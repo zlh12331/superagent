@@ -92,9 +92,9 @@ export function createSessionHandlers(
       return sessionService.list(input.limit, input.offset);
     },
 
-    // session:get - 获取完整会话消息历史
+    // session:get - 获取会话详情（includeMessages=false 时仅元数据，消息走 getTurnMessages 增量）
     get: async (input) => {
-      return sessionService.get(input.id);
+      return sessionService.get(input.id, { includeMessages: input.includeMessages !== false });
     },
 
     // session:delete - 删除会话（级联删除消息）

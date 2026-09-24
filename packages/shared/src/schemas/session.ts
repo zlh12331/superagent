@@ -75,6 +75,13 @@ export const SessionListResSchema = z.object({
 /** session:get 入参 zod schema */
 export const SessionGetReqSchema = z.object({
   id: z.string().min(1),
+  /**
+   * 是否返回完整消息历史（默认 true，向后兼容）。
+   * false 时仅返回会话元数据（messages: []）——渲染层历史已改走
+   * session:getTurns + session:getTurnMessages 按回合增量拉取（debt.md#d2），
+   * 元数据消费方（workingDir/lastRunStatus）不再为全量消息付 IPC 负载。
+   */
+  includeMessages: z.boolean().optional(),
 });
 
 /**

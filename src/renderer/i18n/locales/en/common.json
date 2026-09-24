@@ -137,7 +137,8 @@
     "startNewChat": "Start a new chat",
     "startNewChatDesc": "Type your question below and press Enter to send",
     "scrollToBottom": "Scroll to bottom",
-    "loadedMessages": "Loaded {{count}} / {{total}} messages · scroll up for earlier",
+    "loadedMessages": "Loaded latest {{count}} messages · scroll up for earlier turns",
+    "loadingEarlier": "Loading earlier turns…",
     "msgNavRail": "Message navigation",
     "msgNavGoTo": "Go to message {{n}}",
     "assistant": "Assistant",
@@ -209,8 +210,8 @@
     "goalClearConfirmTitle": "Delete session goal",
     "goalClearConfirmMessage": "This session will stop tracking the goal. This action cannot be undone.",
     "goalCompleted": "Completed",
-    "loadedMessages_one": "Loaded {{count}} / {{total}} message · scroll up for earlier",
-    "loadedMessages_other": "Loaded {{count}} / {{total}} messages · scroll up for earlier"
+    "loadedMessages_one": "Loaded latest {{count}} message · scroll up for earlier turns",
+    "loadedMessages_other": "Loaded latest {{count}} messages · scroll up for earlier turns"
   },
   "update": {
     "noticeAvailable": "Update available",

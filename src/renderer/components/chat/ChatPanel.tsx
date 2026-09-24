@@ -15,7 +15,7 @@
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
 import { Search } from 'lucide-react';
-import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
@@ -36,7 +36,7 @@ import { ChatMessageList } from './ChatMessageList';
 import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
 import { ConversationSearchBar } from './conversation-search-bar';
 import { GoalBar } from './GoalBar';
-import { reconstructHistory } from './history-parts';
+import { reconstructHistory, toInitialMessages } from './history-parts';
 import { PanelNotice } from './panel-notice';
 import { RateLimitBanner } from './rate-limit-banner';
 import { executeSlashCommand } from './slash-commands';
@@ -63,12 +63,21 @@ interface ChatPanelProps {
    */
   workingDir: string;
   /**
-   * 历史消息（ChatMessage[] = ModelMessage[]，来自 session:get）
+   * 历史消息（ChatMessage[] = ModelMessage[]，来自回合分页首屏）
    *
    * 转换为 UIMessage 后作为 useChat 的 messages（v7 字段名）注入，
    * 打开历史会话时回显消息；仅在组件首次挂载时生效。空数组表示新会话。
    */
   initialMessages?: readonly ChatMessage[];
+  /** 是否仍有更早回合未加载（滚动到顶触发 loadEarlier 向上补页） */
+  hasEarlier?: boolean;
+  /** 更早回合加载中（顶部指示条） */
+  loadingEarlier?: boolean;
+  /**
+   * 加载更早一页回合消息（返回该页 ChatMessage[]，无更早/失败返回 null）；
+   * 加载结果由本组件 prepend 进 messages（toInitialMessages 重建）
+   */
+  loadEarlier?: () => Promise<readonly ChatMessage[] | null>;
   /**
    * 上次回合是否异常中断（崩溃恢复：由路由层从 session.lastRunStatus 注入）
    * 为 true 时顶部展示"上次回合已中断"提示条
@@ -97,6 +106,9 @@ export function ChatPanel({
   chatId,
   workingDir,
   initialMessages,
+  hasEarlier,
+  loadingEarlier,
+  loadEarlier,
   interrupted = false,
   className,
 }: ChatPanelProps): ReactElement {
@@ -180,6 +192,20 @@ export function ChatPanel({
     ...(history.messages.length > 0 ? { messages: history.messages } : {}),
     onError: handleError,
   });
+
+  // 向上补页：更早回合消息 prepend 进本地消息态（setMessages 函数式更新，
+  // 避免与流式 append 竞态丢增量）；重建与 initialMessages 同走 toInitialMessages。
+  // 回调由路由层提供（回合分页 useInfiniteQuery 的 fetchNextPage 包装）。
+  const handleLoadEarlier = useCallback(async (): Promise<void> => {
+    if (loadEarlier === undefined) {
+      return;
+    }
+    const older = await loadEarlier();
+    if (older === null || older.length === 0) {
+      return;
+    }
+    setMessages((prev) => [...toInitialMessages(older), ...prev]);
+  }, [loadEarlier, setMessages]);
 
   // 回合运行态发布到全局（更新"重启并安装"等危险操作需要先确认）；判定与
   // ChatMessageList 的 isStreaming 保持一致。卸载时复位：残留 true 会让后续
@@ -327,13 +353,16 @@ export function ChatPanel({
       {/* 中间消息列表 */}
       <div className="min-h-0 flex-1">
         <ChatMessageList
-          // key=chatId：会话切换强制重挂载——分页窗口/底部状态不跨会话滞留
+          // key=chatId：会话切换强制重挂载——分页状态/底部状态不跨会话滞留
           //（此前切到大分会话时旧 windowStart 滞留，分页被旁路且落点错位）
           key={chatId}
           messages={messages}
           status={status}
           onRegenerate={handleRegenerate}
           searchActiveIndex={searchActiveIndex}
+          {...(hasEarlier ? { hasEarlier: true } : {})}
+          {...(loadingEarlier ? { loadingEarlier: true } : {})}
+          {...(hasEarlier ? { onLoadEarlier: handleLoadEarlier } : {})}
         />
       </div>
 

@@ -3,20 +3,29 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 从 URL 参数读取 sessionId
-// - 通过 useSessionDetail 获取 session.workingDir + 历史消息
-// - 渲染 ChatPanel，传入 chatId + workingDir + initialMessages
+// - 元数据经 useSessionDetail({ includeMessages: false })（workingDir/lastRunStatus）
+// - 历史消息按回合增量加载（useSessionTurns + useTurnMessagesInfinite，
+//   debt.md#d2/#d4）：首屏仅取最近一页回合的消息，滚动到顶再拉更早页
+// - 渲染 ChatPanel，传入 chatId + workingDir + initialMessages + 向上补页回调
 // - session 不存在或 workingDir 为空时重定向到首页
 // - 进入时退出欢迎页模式（确保从 HomePage navigate 过来后 welcome-mode class 移除）
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useEffect } from 'react';
+import type { ChatMessage } from '@code-agent/shared/renderer';
+import { type ReactElement, useCallback, useEffect } from 'react';
 import { Navigate, useParams } from 'react-router';
-
+import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
+import {
+  flattenTurnPages,
+  useSessionTurns,
+  useTurnMessagesInfinite,
+} from '@/hooks/use-session-turns';
 import { useSessionDetail } from '@/hooks/use-sessions';
 import { useWorkingDir } from '@/hooks/use-working-dir';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { useWelcomeStore } from '@/stores/transient/welcome-store';
 
 /**
@@ -43,15 +52,24 @@ export function ChatPage(): ReactElement {
 }
 
 /**
- * 内部组件：sessionId 已确定，查询会话详情后渲染 ChatPanel
+ * 内部组件：sessionId 已确定，装配数据后渲染 ChatPanel
  *
- * 拆分原因：useSessionDetail 必须 unconditional 调用（hooks 规则），
+ * 拆分原因：hooks 必须 unconditional 调用（hooks 规则），
  * 因此在 sessionId 确定后调用，避免条件 hook。
+ *
+ * 数据装配（debt.md#d2/#d4）：
+ * - 元数据：useSessionDetail(id, false)（workingDir / lastRunStatus，免付全量消息负载）
+ * - 回合列表：useSessionTurns（摘要，一次全量）
+ * - 消息体：useTurnMessagesInfinite（首页 = 最近 TURNS_PER_PAGE 个回合，
+ *   向上翻页加载更早；flattenTurnPages 为 ChatPanel initialMessages 单一口径）
  */
 function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
-  const { data: session, isLoading, isError } = useSessionDetail(sessionId);
+  const { getErrorMessage } = useErrorMessage();
+  const { data: session, isLoading, isError } = useSessionDetail(sessionId, false);
+  const turnsQuery = useSessionTurns(sessionId);
+  const history = useTurnMessagesInfinite(sessionId, turnsQuery.data?.turns);
   // 唯一权威入口：详情已到位时以详情值为权威，否则回落会话列表索引
   const workingDir = useWorkingDir(sessionId, session?.session.workingDir);
   const setWelcomeMode = useWelcomeStore((state) => state.setWelcomeMode);
@@ -62,8 +80,32 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     setWelcomeMode(false);
   }, [setWelcomeMode]);
 
-  // loading 中：显示加载状态
-  if (isLoading) {
+  // 向上补页回调（hooks 规则：须在早退 return 之前声明）：拉取更早一页并返回
+  // 其消息（ChatPanel prepend 后锚定由列表层处理）
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = history;
+  const loadEarlier = useCallback(async (): Promise<readonly ChatMessage[] | null> => {
+    if (!hasNextPage) {
+      return null;
+    }
+    try {
+      const result = await fetchNextPage();
+      const pages = result.data?.pages;
+      const oldestPage = pages?.[pages.length - 1];
+      return oldestPage?.messages ?? null;
+    } catch (error) {
+      toast.error(
+        unwrapErrorMessage(
+          error instanceof Error ? error : new Error(String(error)),
+          getErrorMessage,
+        ),
+      );
+      return null;
+    }
+  }, [hasNextPage, fetchNextPage, getErrorMessage]);
+
+  // loading 中：显示加载状态（元数据 / 回合列表 / 首页消息任一未就绪）
+  const historyReady = turnsQuery.isSuccess && history.isSuccess;
+  if (isLoading || !historyReady) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center">
         {t('common.loading')}
@@ -76,6 +118,15 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // undefined 数据——不检查会让错误态落在所有守卫之外。
   if (session === undefined || isError) {
     return <Navigate to={ROUTES.home} replace />;
+  }
+
+  // 回合列表 / 消息分页查询失败（历史拉取出错）：显示错误状态
+  if (turnsQuery.isError || history.isError) {
+    return (
+      <div className="text-muted-foreground flex h-full items-center justify-center">
+        <p>{t('common.chatLoadFailed')}</p>
+      </div>
+    );
   }
 
   // workingDir 未知（旧 chat 会话空目录兼容 / 列表与详情都无数据）：显示错误状态
@@ -92,8 +143,11 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
       chatId={sessionId}
       workingDir={workingDir}
       interrupted={session.session.lastRunStatus === 'interrupted'}
-      // 历史消息注入 useChat（ChatMessage = ModelMessage，useChat 直接消费）
-      initialMessages={session.messages}
+      // 历史消息注入 useChat（已加载页按时间正序平铺；向上补页经 loadEarlier）
+      initialMessages={flattenTurnPages(history.data?.pages)}
+      {...(hasNextPage ? { hasEarlier: true } : {})}
+      {...(isFetchingNextPage ? { loadingEarlier: true } : {})}
+      {...(hasNextPage ? { loadEarlier } : {})}
     />
   );
 }

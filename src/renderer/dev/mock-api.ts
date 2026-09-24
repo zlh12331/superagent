@@ -30,6 +30,7 @@ import type { ModelMessage } from 'ai';
 
 import { ipcOk } from '@/lib/ipc-factories';
 import { mockGitStatus, mockModels, mockSystemStatus, mockUsageSummary } from './mock-data';
+import { buildMockTurnMessages, buildMockTurns } from './mock-turns';
 
 /** IPC 方法入参类型推导（mock 实现标注用） */
 type Req<M> = M extends (input: infer P) => unknown ? P : never;
@@ -550,7 +551,9 @@ function createMockApi(): IpcApi {
         });
         return ipcOk({ sessions: sorted.slice(0, limit), total: sorted.length });
       },
-      get: async ({ id }: Req<IpcApi['session']['get']>) => {
+      get: async ({ id, includeMessages }: Req<IpcApi['session']['get']>) => {
+        // includeMessages=false：仅元数据（对齐主进程 session:get 契约）
+        const messages = includeMessages === false ? [] : (messagesBySession[id] ?? []);
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
           // 宽松兜底：任意 id 返回默认会话（dev mock——首页 DRAFT 场景需 workingDir 供 agent 发送）
@@ -566,10 +569,10 @@ function createMockApi(): IpcApi {
               lastRunStatus: 'idle',
               pinned: false,
             },
-            messages: messagesBySession[id] ?? [],
+            messages,
           });
         }
-        return ipcOk({ session, messages: messagesBySession[id] ?? [] });
+        return ipcOk({ session, messages });
       },
       create: async ({ workingDir }: Req<IpcApi['session']['create']>) => {
         const id = `mock-${Date.now()}`;
@@ -619,25 +622,22 @@ function createMockApi(): IpcApi {
       exportAll: async () => ipcOk({ saved: false }),
       compact: async () => ipcOk({ removed: 0, remaining: 0, reclaimedTokens: 0, messages: [] }),
       getUsageSummary: async () => ipcOk(mockUsageSummary()),
-      getTurns: async () => ipcOk({ sessionId: 'mock-1', turns: [] }),
+      getTurns: async ({ sessionId }: Req<IpcApi['session']['getTurns']>) =>
+        ipcOk({
+          sessionId,
+          turns: buildMockTurns(messagesBySession[sessionId] ?? [], sessionId, now),
+        }),
       getRecentTurns: async () =>
         ipcOk({
-          turns: [
-            {
-              turnId: 't1',
-              sessionId: 'mock-1',
-              seq: 3,
-              modelId: 'deepseek-v4-flash',
-              status: 'completed',
-              inputTokens: 120,
-              outputTokens: 320,
-              totalTokens: 440,
-              durationMs: 8_400,
-              createdAt: now - 3_600_000,
-            },
-          ],
+          turns: buildMockTurns(messagesBySession['mock-1'] ?? [], 'mock-1', now).map((t) => ({
+            ...t,
+            sessionId: 'mock-1',
+          })),
         }),
-      getTurnMessages: async () => ipcOk({ messages: [] }),
+      getTurnMessages: async ({ turnId }: Req<IpcApi['session']['getTurnMessages']>) =>
+        ipcOk({
+          messages: buildMockTurnMessages((sid) => messagesBySession[sid] ?? [], turnId),
+        }),
     },
 
     models: {

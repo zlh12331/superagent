@@ -22,7 +22,12 @@
 //   「lazy 下载 → 挂载 → 才发 IPC」的串行等待（debt.md#d5）
 
 import { createHashRouter } from 'react-router';
-
+import {
+  fetchSessionTurns,
+  fetchTurnMessagesPage,
+  SESSION_TURN_PAGES_QUERY_KEY,
+  SESSION_TURNS_QUERY_KEY,
+} from '@/hooks/use-session-turns';
 import { fetchSessionDetail, SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { ROUTES } from '@/lib/constants';
 import { queryClient } from '@/lib/query/query-client';
@@ -63,16 +68,32 @@ export const router = createHashRouter([
         loader: ({ params }) => {
           const sessionId = params['sessionId'];
           if (sessionId !== undefined) {
-            // match 即预取会话详情（与 route.lazy 并行），缓存 key 与
-            // ChatPage 的 useSessionDetail 一致；fire-and-forget：失败不
-            // 阻断导航——被删会话等错误仍由 ChatPage 的 isError 守卫优雅
-            // 重定向首页，而非落入全页错误边界。
+            // match 即预取（与 route.lazy 并行），缓存 key 与页面查询一致：
+            // 元数据 → 回合列表 → 最近一页消息链式预取，消除
+            // 「lazy 下载 → 挂载 → 才发 IPC」的串行等待。fire-and-forget：
+            // 失败不阻断导航——被删会话等错误仍由 ChatPage 的 isError 守卫
+            // 优雅重定向首页，而非落入全页错误边界。
             void queryClient
               .ensureQueryData({
                 queryKey: SESSION_DETAIL_QUERY_KEY(sessionId),
-                queryFn: () => fetchSessionDetail(sessionId),
+                queryFn: () => fetchSessionDetail(sessionId, false),
               })
               .catch(() => undefined);
+            void (async () => {
+              const turns = await queryClient
+                .ensureQueryData({
+                  queryKey: SESSION_TURNS_QUERY_KEY(sessionId),
+                  queryFn: () => fetchSessionTurns(sessionId),
+                })
+                .catch(() => undefined);
+              if (turns === undefined) return;
+              await queryClient
+                .ensureQueryData({
+                  queryKey: SESSION_TURN_PAGES_QUERY_KEY(sessionId),
+                  queryFn: () => fetchTurnMessagesPage(turns.turns, 0),
+                })
+                .catch(() => undefined);
+            })();
           }
           return null;
         },

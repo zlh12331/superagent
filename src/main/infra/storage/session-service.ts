@@ -135,7 +135,7 @@ export class SessionService {
    * @throws AppError(SESSION_NOT_FOUND) 会话不存在
    * @throws AppError(INTERNAL_ERROR) JSON 反序列化失败
    */
-  async get(id: string): Promise<SessionGetRes> {
+  async get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes> {
     const db = getDb();
 
     // 1. 查询会话元数据
@@ -144,7 +144,10 @@ export class SessionService {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId: id });
     }
 
-    // 2. 查询消息历史（按 seq 升序）
+    // 2. 查询消息历史（按 seq 升序）；includeMessages=false 跳过（元数据消费方免付全量负载）
+    if (options?.includeMessages === false) {
+      return { session: rowToMeta(sessionRow), messages: [] };
+    }
     const messageRows = db
       .select()
       .from(messages)

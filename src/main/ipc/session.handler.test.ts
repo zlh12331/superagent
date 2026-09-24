@@ -72,9 +72,14 @@ describe('session.handler 参数转发（三件套）', () => {
     expect(sessionService.list).toHaveBeenCalledWith(20, 40);
   });
 
-  it('get：转发 id', async () => {
+  it('get：转发 id + 默认含消息', async () => {
     await handlers.get({ id: 's1' }, EMPTY_CTX);
-    expect(sessionService.get).toHaveBeenCalledWith('s1');
+    expect(sessionService.get).toHaveBeenCalledWith('s1', { includeMessages: true });
+  });
+
+  it('get：includeMessages=false 透传（元数据模式）', async () => {
+    await handlers.get({ id: 's1', includeMessages: false }, EMPTY_CTX);
+    expect(sessionService.get).toHaveBeenCalledWith('s1', { includeMessages: false });
   });
 
   it('delete：转发 id', async () => {

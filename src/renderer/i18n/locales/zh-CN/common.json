@@ -137,7 +137,8 @@
     "startNewChat": "开始新对话",
     "startNewChatDesc": "在下方输入框输入你的问题，按 Enter 发送",
     "scrollToBottom": "滚动到底部",
-    "loadedMessages": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息",
+    "loadedMessages": "已加载最近 {{count}} 条消息 · 向上滚动加载更早回合",
+    "loadingEarlier": "正在加载更早回合…",
     "msgNavRail": "消息导航轨",
     "msgNavGoTo": "跳转到消息 {{n}}",
     "assistant": "助手",
@@ -209,8 +210,8 @@
     "goalClearConfirmTitle": "删除会话目标",
     "goalClearConfirmMessage": "删除后本会话将不再追踪该目标，此操作不可撤销。",
     "goalCompleted": "已完成",
-    "loadedMessages_other": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息",
-    "loadedMessages_one": "已加载 {{count}} / {{total}} 条，向上滚动加载更早消息"
+    "loadedMessages_other": "已加载最近 {{count}} 条消息 · 向上滚动加载更早回合",
+    "loadedMessages_one": "已加载最近 {{count}} 条消息 · 向上滚动加载更早回合"
   },
   "update": {
     "noticeAvailable": "发现新版本",

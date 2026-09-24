@@ -97,6 +97,29 @@ describe('SessionService', () => {
       expect(detail.session.title).toBe('帮我读取 package.json 文件内容');
     });
 
+    it('includeMessages=false：返回元数据，messages 为空数组（免付全量消息负载）', async () => {
+      const messages: ChatMessage[] = [
+        { role: 'user', content: '历史消息一' },
+        { role: 'assistant', content: '历史消息二' },
+      ];
+      const sessionId = await service.create({
+        workingDir: 'D:\\project',
+        title: undefined,
+        messages,
+      });
+
+      const metaOnly = await service.get(sessionId, { includeMessages: false });
+      expect(metaOnly.session.workingDir).toBe('D:\\project');
+      expect(metaOnly.session.messageCount).toBe(2);
+      expect(metaOnly.messages).toEqual([]);
+
+      // 默认（不传 / 显式 true）仍返回全量消息
+      const full = await service.get(sessionId);
+      expect(full.messages).toHaveLength(2);
+      const explicit = await service.get(sessionId, { includeMessages: true });
+      expect(explicit.messages).toHaveLength(2);
+    });
+
     it('边界：workingDir 为超长路径(260 字符) → 正常写入', async () => {
       const longPath = `D:\\${'a'.repeat(257)}`;
       expect(longPath).toHaveLength(260);

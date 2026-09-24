@@ -92,30 +92,36 @@ export function useSessionsQuery() {
  *
  * 独立导出的原因：路由 loader（router.tsx）需在不渲染组件的前提下预取
  * 同 key 缓存——查询点与预取点必须引用同一 queryFn，保证缓存形状一致。
+ *
+ * @param includeMessages false 时仅拉元数据（消息走 getTurnMessages 增量，
+ *   见 use-session-turns.ts）；路由 loader 与 ChatPage 元数据查询均传 false
  */
-export async function fetchSessionDetail(id: string) {
-  const response = await window.api.session.get({ id });
+export async function fetchSessionDetail(id: string, includeMessages = true) {
+  const response = await window.api.session.get({
+    id,
+    ...(includeMessages ? {} : { includeMessages: false }),
+  });
   return unwrap(response);
 }
 
 /**
- * 会话详情查询 hook（含完整消息历史）
+ * 会话详情查询 hook（默认含完整消息历史；传 false 仅元数据）
  *
- * 调用 session:get IPC 获取指定会话的完整消息历史。
- * 用于用户切换到某个历史会话时，加载该会话的 messages。
+ * 调用 session:get IPC。includeMessages=false 时主进程跳过消息查询
+ * （messages 返回空数组）——消息历史已改走 use-session-turns.ts 按回合
+ * 增量加载（debt.md#d2），元数据消费方（ChatPage workingDir/lastRunStatus）
+ * 不再为全量消息付 IPC 负载。
  *
  * @param id 会话 id（null 时跳过查询，避免无激活会话时请求）
+ * @param includeMessages 是否返回消息历史（默认 true；ChatPage 传 false）
  * @returns TanStack Query 结果
  *
  * @example
  * ```tsx
- * const { data: detail } = useSessionDetail(activeSessionId);
- * if (detail) {
- *   // 把 detail.messages 传给 useChat 初始化
- * }
+ * const { data: detail } = useSessionDetail(activeSessionId, false);
  * ```
  */
-export function useSessionDetail(id: string | null) {
+export function useSessionDetail(id: string | null, includeMessages = true) {
   return useQuery({
     queryKey: SESSION_DETAIL_QUERY_KEY(id ?? 'unknown'),
     queryFn: async () => {
@@ -124,7 +130,7 @@ export function useSessionDetail(id: string | null) {
         // 此处抛错仅用于类型守卫，运行时不会进入
         throw new Error('id is null');
       }
-      return fetchSessionDetail(id);
+      return fetchSessionDetail(id, includeMessages);
     },
     // 仅当 id 不为 null 时启用查询
     enabled: id !== null,

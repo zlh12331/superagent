@@ -29,14 +29,13 @@ import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
  * Agent 回合结束统一处理（invalidate 缓存 + 清理 L2 缓冲）
  */
 function handleSessionEnd(sessionId: string): void {
-  // 1. L3 模式 B：失效会话列表 + 详情缓存（回合结束后重新拉取）
+  // 1. L3 模式 B：失效会话列表 + 会话域缓存（回合结束后重新拉取）
   void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
   if (sessionId.length > 0) {
-    // 详情缓存必须失效（2026-09-08 评估后保留）：ChatPanel 用 useSessionDetail
-    // 的 initialMessages 初始化 useChat（reconstructHistory），若此处不失效，
-    // 用户切走再切回该会话会看到回合前的旧消息。一次全量重拉换来的是
-    // 「重开会话数据正确」，该代价可接受（数据层全量传输债登记于
-    // docs/design/debt.md#d2，应由 session:get 分页/增量解决，而非在失效点绕过）。
+    // 详情缓存必须失效：ChatPage 元数据（workingDir/lastRunStatus，includeMessages=false）
+    // 从这里读，不失效则 interrupted 横幅等元数据陈旧。回合历史域（turns / turn-pages）
+    // key 均挂在 ['session', id] 前缀下，被本次 invalidate 前缀匹配一并覆盖——
+    // 重开会话即取到最新回合列表（历史已按回合增量加载，debt.md#d2/#d4）。
     void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
     // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
     void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(sessionId) });
