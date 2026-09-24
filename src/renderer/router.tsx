@@ -18,10 +18,14 @@
 // - HomePage 创建会话后跳转 /chat/:id，ChatPanel 仅在聊天路由渲染
 // - useChat 通过 chatId 隔离消息状态，切换时自动重置
 // - AppShell 中已集成 AskDialog，所有路由下都能接收 Agent 提问
+// - /chat/:id 路由 loader 预取会话详情（与 lazy 并行），消除
+//   「lazy 下载 → 挂载 → 才发 IPC」的串行等待（debt.md#d5）
 
 import { createHashRouter } from 'react-router';
 
+import { fetchSessionDetail, SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
 import { ROUTES } from '@/lib/constants';
+import { queryClient } from '@/lib/query/query-client';
 import { RootErrorBoundary, RootHydrateFallback, RootLayout } from './routes/root';
 
 /**
@@ -56,6 +60,22 @@ export const router = createHashRouter([
       // 聊天页：历史会话续传（chatId=URL 参数 sessionId）
       {
         path: ROUTES.chat,
+        loader: ({ params }) => {
+          const sessionId = params['sessionId'];
+          if (sessionId !== undefined) {
+            // match 即预取会话详情（与 route.lazy 并行），缓存 key 与
+            // ChatPage 的 useSessionDetail 一致；fire-and-forget：失败不
+            // 阻断导航——被删会话等错误仍由 ChatPage 的 isError 守卫优雅
+            // 重定向首页，而非落入全页错误边界。
+            void queryClient
+              .ensureQueryData({
+                queryKey: SESSION_DETAIL_QUERY_KEY(sessionId),
+                queryFn: () => fetchSessionDetail(sessionId),
+              })
+              .catch(() => undefined);
+          }
+          return null;
+        },
         lazy: async () => {
           const { ChatPage } = await import('./routes/chat');
           // biome-ignore lint/style/useNamingConvention: React Router lazy 要求模块导出 Component

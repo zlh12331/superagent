@@ -88,6 +88,17 @@ export function useSessionsQuery() {
 }
 
 /**
+ * 会话详情原始拉取函数（hook 与路由 loader 共用）
+ *
+ * 独立导出的原因：路由 loader（router.tsx）需在不渲染组件的前提下预取
+ * 同 key 缓存——查询点与预取点必须引用同一 queryFn，保证缓存形状一致。
+ */
+export async function fetchSessionDetail(id: string) {
+  const response = await window.api.session.get({ id });
+  return unwrap(response);
+}
+
+/**
  * 会话详情查询 hook（含完整消息历史）
  *
  * 调用 session:get IPC 获取指定会话的完整消息历史。
@@ -113,8 +124,7 @@ export function useSessionDetail(id: string | null) {
         // 此处抛错仅用于类型守卫，运行时不会进入
         throw new Error('id is null');
       }
-      const response = await window.api.session.get({ id });
-      return unwrap(response);
+      return fetchSessionDetail(id);
     },
     // 仅当 id 不为 null 时启用查询
     enabled: id !== null,
