@@ -6,7 +6,14 @@
 //      （反向"参数缺 @param"不报：属注释缺失，非过期）
 //   B. 注释/文档中 file:/// 引用路径存在性 + #L行号 越界检查
 //   C. TODO/FIXME 过期——带日期超 90 天 = error；无日期 = warning（提示补日期）
+//   D. pnpm 命令引用存在性——`pnpm <name>`（反引号行内代码或普通文本）中的 <name>
+//      非 pnpm 内置命令时必须存在于根 package.json scripts（命令被删/改名后的
+//      注释漂移由机器拦，如已删除的 `pnpm sentry:upload:symbols` 曾在注释里存活）
 // 范围：src/**/*.{ts,tsx} + docs/design/*.md
+//
+// 已知盲区（如实记录，评估中）：
+//   - "所有 export 必须有 TSDoc"（typescript-dev-standards-ai.md 规则 18.1）无自动门禁：
+//     规则 A 只拦"过期 @param"，不拦"缺失注释"；实现需 AST 扫描 + 棘轮基线（存量违规多）
 //
 // 运行：pnpm check:comments
 // ──────────────────────────────────────────────────────────────
@@ -17,6 +24,83 @@ import { join, relative } from 'node:path';
 const ROOT = join(import.meta.dirname, '..');
 const SCAN_DIRS = [join(ROOT, 'src'), join(ROOT, 'docs', 'design')];
 const TODO_STALE_DAYS = 90;
+
+/** 根 package.json scripts 键集合（规则 D 的存在性判据；加载失败即门禁自身失效，直接抛） */
+const ROOT_SCRIPTS: ReadonlySet<string> = new Set(
+  Object.keys(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts as object),
+);
+
+/** pnpm 内置 CLI 命令（引用中出现视为合法，不要求是 scripts 键） */
+const PNPM_BUILTIN = new Set([
+  'install',
+  'i',
+  'add',
+  'remove',
+  'rm',
+  'uninstall',
+  'update',
+  'up',
+  'upgrade',
+  'upgrade-interactive',
+  'link',
+  'unlink',
+  'list',
+  'ls',
+  'll',
+  'why',
+  'audit',
+  'prune',
+  'rebuild',
+  'rb',
+  'run',
+  'exec',
+  'dlx',
+  'create',
+  'init',
+  'start',
+  'stop',
+  'restart',
+  'test',
+  't',
+  'set',
+  'get',
+  'config',
+  'bin',
+  'root',
+  'store',
+  'outdated',
+  'owner',
+  'pack',
+  'publish',
+  'patch',
+  'patch-commit',
+  'patch-remove',
+  'import',
+  'licenses',
+  'completion',
+  'env',
+  'setup',
+  'fetch',
+  'dedupe',
+  'deploy',
+  'approve-builds',
+  'install-test',
+  'it',
+  'ci',
+  'help',
+  'runx',
+  'workspaces',
+]);
+
+/** node_modules/.bin 内可用工具名（pnpm 对未知命令会回退 .bin，`pnpm drizzle-kit generate` 即合法） */
+const BIN_STEMS: ReadonlySet<string> = (() => {
+  const dir = join(ROOT, 'node_modules', '.bin');
+  try {
+    return new Set(readdirSync(dir).map((f) => f.replace(/\.(cmd|ps1|exe|sh)$/i, '')));
+  } catch {
+    return new Set(); // .bin 不存在（未装依赖）时跳过该判据，不阻断门禁
+  }
+})();
 
 interface Problem {
   readonly file: string;
@@ -206,6 +290,45 @@ function checkTodos(content: string, file: string, problems: Problem[]): void {
   }
 }
 
+/** 规则 D：pnpm 命令引用存在性——只查**代码语境**的命令（行内反引号 `pnpm <name>` 与
+ * md 围栏代码块的行首命令）。裸文本不查：「pnpm workspace 配置」「pnpm node_modules 结构」
+ * 等描述性短语无法与命令引用区分，强行匹配只会持续误报（实测）。 */
+function checkCommandRefs(content: string, file: string, problems: Problem[]): void {
+  const reInline = /`pnpm\s+([a-zA-Z@][\w@:./-]*)/g; // 行内代码：`pnpm <name>`
+  const reLine = /^pnpm\s+([a-zA-Z@][\w@:./-]*)/; // md 围栏代码块内：行首整行命令
+
+  const verify = (token: string | undefined, fileLine: number): void => {
+    if (token === undefined) return;
+    if (token.startsWith('-')) return; // 旗标（-r / --filter / --frozen-lockfile…）
+    if (PNPM_BUILTIN.has(token)) return;
+    if (ROOT_SCRIPTS.has(token)) return;
+    if (BIN_STEMS.has(token)) return; // pnpm 未知命令回退 node_modules/.bin
+    problems.push({
+      file,
+      line: fileLine + 1,
+      rule: 'stale-command',
+      detail: `pnpm '${token}' 既非 pnpm 内置命令、不在根 package.json scripts，也不是 .bin 工具`,
+      level: 'error',
+    });
+  };
+
+  const lines = content.split('\n');
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) continue; // noUncheckedIndexedAccess：索引访问需收窄
+    if (inFence) {
+      const m = reLine.exec(line);
+      if (m !== null) verify(m[1], i);
+    }
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence; // 围栏开/关（``` 或 ~~~）
+      continue;
+    }
+    for (const m of line.matchAll(reInline)) verify(m[1], i);
+  }
+}
+
 function main(): number {
   const files = SCAN_DIRS.flatMap((d) => collectFiles(d));
   const problems: Problem[] = [];
@@ -216,6 +339,7 @@ function main(): number {
     const rel = relative(ROOT, file);
     checkJsDoc(content, rel, problems);
     checkFileRefs(content, rel, problems);
+    checkCommandRefs(content, rel, problems);
     // TODO 过期检查仅针对 src 代码（docs 文档内 TODO 为格式示例，非待办管理对象）
     // 注：file 为绝对路径，必须与 ROOT 拼接后的 src 前缀比较（此前误用相对串
     // 'src' 导致条件恒假，TODO 检查静默失效）
@@ -237,7 +361,7 @@ function main(): number {
   for (const p of errors) console.error(`  ${p.file}:${p.line} [${p.rule}] ${p.detail}`);
   for (const w of warnings) console.warn(`  ⚠️ ${w.file}:${w.line} [${w.rule}] ${w.detail}`);
   console.error(
-    '[check-comments] 修复指引：更新注释以匹配当前代码（docs/design/10 规范 §五 组件文档模板）',
+    '[check-comments] 修复指引：更新注释以匹配当前代码（docs/design/10 规范 §五 组件文档模板）；规则 D 命中请改为 scripts 中真实存在的命令，或确认其属 pnpm 内置命令并补入 PNPM_BUILTIN',
   );
   return 1;
 }
