@@ -99,6 +99,15 @@ const RULES: readonly Rule[] = [
     pattern: /queryKey:\s*\[/,
     fileFilter: (relFile) => relFile !== join('lib', 'query', 'keys.ts'),
   },
+  {
+    id: 'direct-ipc',
+    // 规范：组件不直连 window.api——IPC 经域 hook 桥接（mock 可替换 + 契约测试可达）。
+    // 边界（2026-09-24 定案）：hooks/*.ts 与 lib/*.ts 是桥接/工具层，直连是其职责，豁免；
+    // 规则只管 .tsx 组件。存量（约 32 文件）入棘轮基线只降，新组件直连立刻卡关。
+    desc: '组件直连 window.api（应经域 hook 桥接；hooks/lib 层豁免）',
+    pattern: /\bwindow\.api\./,
+    fileFilter: (relFile) => relFile.endsWith('.tsx'),
+  },
 ];
 
 /**

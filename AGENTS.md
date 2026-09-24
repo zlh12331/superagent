@@ -133,6 +133,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 标准设施已全部建成，新代码必须使用（存量由 `check:ui-consistency` 棘轮看护，只许下降）：
 
 - **请求-响应**：TanStack Query，query 逻辑放 `hooks/` 域文件并导出 queryKey 常量（禁组件内联定义 key）；响应一律 `unwrap()`（`lib/ipc.ts`），禁手写 `'data' in` 判别
+- **组件不直连 IPC**：`.tsx` 组件禁止直连 `window.api.*`（经域 hook 桥接：mock 可替换 + 契约测试可达）；hooks/*.ts 与 lib/*.ts 是桥接/工具层，直连是其职责（豁免）。check:ui-consistency 规则 `direct-ipc` 卡关，存量走棘轮只降
 - **变更操作**：useMutation 定义处**必须挂 onError** → `toast.error(unwrapErrorMessage(error, getErrorMessage))`（错误码解析单一真源在 `lib/ipc.ts`，勿再抄正则）；调用层不重复挂 onError（防双弹）
 - **危险操作**（删除/清空类）：一律命令式 `confirm()` store（`confirm-dialog-store`，DialogHost 全局宿主），禁内联 AlertDialog 重复造轮子
 - **复制反馈**：统一 `useCopy()`（`hooks/use-copy.ts`，copied 2s 复位 + 失败 toast），勿手写 copied state + 定时器
