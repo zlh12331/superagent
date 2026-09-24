@@ -13,11 +13,11 @@
 | ID | 严重度 | 主题 | 状态 |
 |---|---|---|---|
 | D1 | P2 | path-guard TOCTOU 残余风险 | open（接受，专项时处理） |
-| D2 | P1 | 会话数据全量传输（无分页/增量） | open（批 6 改造中） |
+| D2 | P1 | 会话数据全量传输（无分页/增量） | resolved（2e20ed6，回合分页落地） |
 | D3 | P2 | TSDoc 规则 18.1 无自动门禁 | open（维持标注，不强制） |
-| D4 | P2 | `session:getTurnMessages` IPC 闲置未接线 | open（并入 D2 批次） |
-| D5 | P2 | Query 预取/loader 空白（路由串行等待） | open（批 4 改造中） |
-| D6 | P1 | 数据层写路径未收敛 + 事务边界未成文 | open（批 5 拍板后收敛） |
+| D4 | P2 | `session:getTurnMessages` IPC 闲置未接线 | resolved（2e20ed6，渲染层已消费） |
+| D5 | P2 | Query 预取/loader 空白（路由串行等待） | resolved（647896e，chat 路由 loader 预取） |
+| D6 | P1 | 数据层写路径未收敛 + 事务边界未成文 | resolved（683b1f3，拍板成文 + 事务盘点） |
 | D7 | P3 | css rgba alpha 效果色未收口令牌 | open（color-mix 专项） |
 | D8 | P3 | React Compiler 单组件 bail-out 无度量 | open（接受，源码层有 try-finally 规则兜底） |
 | D9 | P3 | 云端 CI electron postinstall 解压竞态 | open（用户指示暂不管云端 CI） |
@@ -34,12 +34,17 @@
 
 ### D2 · 会话数据全量传输
 
-- 位置：[use-agent-bridge.ts](file:///src/renderer/hooks/use-agent-bridge.ts)（失效点注释）、
-  契约 `SessionGetReqSchema = { id }`（无分页参数，`messages` 全量返回）。
-- 描述：会话消息历史全量拉取 + 渲染层 `message-window` 本地 DOM 裁剪（PAGE_SIZE 200）。
-  长会话下 IPC 负载与内存随消息数线性增长。
-- 处置：`session:getTurnMessages`（按回合分页）已在 IPC 契约中但渲染层未接线；
-  改造方案 = 渲染层换 `useInfiniteQuery` 按回合增量拉取，message-window 退化为滚动锚定。
+- 位置：[use-session-turns.ts](file:///src/renderer/hooks/use-session-turns.ts)、
+  [chat.tsx](file:///src/renderer/routes/chat.tsx)、契约 `SessionGetReqSchema.includeMessages`。
+- 描述（改造前）：会话消息历史全量拉取 + 渲染层 `message-window` 本地 DOM 裁剪（PAGE_SIZE 200），
+  IPC 负载与内存随消息数线性增长。
+- 处置：**resolved（2e20ed6，2026-09-24）**。渲染层改走 `getTurns`（回合元数据一次全量）+
+  `getTurnMessages` 按回合分页（useInfiniteQuery，每页 10 回合）；`session:get` 增
+  `includeMessages=false` 元数据模式；路由 loader 预取链与 lazy 并行；message-window DOM
+  窗口移除（内存中 messages = 已加载页并集，天然有界）。
+  数据不变量：所有持久化消息带 turnId（cron 预落库重复行已随 2e20ed6 移除）。
+  **如实登记的取舍**：① /compact 后的压缩上下文消息无 turnId（「旧上下文不可回放」既有语义），
+  按回合重建不含它们；② 会话内搜索/导航轨覆盖面 = 已加载页（更早回合未加载前不可达）。
 - 来源：use-agent-bridge 注释自记 + 外部审计确认。
 
 ### D3 · TSDoc 规则 18.1 无自动门禁
@@ -52,25 +57,31 @@
 
 ### D4 · `session:getTurnMessages` 闲置
 
-- 位置：`packages/shared` 契约已定义；渲染层仅 [mock-api.ts](file:///src/renderer/dev/mock-api.ts) 占位。
-- 描述：与 D2 同根——分页能力在 IPC 侧已就绪，渲染层未消费。并入 D2 批次一并处置。
+- 位置：[use-session-turns.ts](file:///src/renderer/hooks/use-session-turns.ts)（useTurnMessagesInfinite）。
+- 描述：与 D2 同根——分页能力在 IPC 侧已就绪，渲染层未消费。
+- 处置：**resolved（2e20ed6）**，渲染层已按回合分页消费（连同 session:getTurns）。
 
 ### D5 · Query 预取 / loader 空白
 
-- 位置：[router.tsx](file:///src/renderer/router.tsx)（`route.lazy` 但无 loader）。
+- 位置：[router.tsx](file:///src/renderer/router.tsx)（chat 路由 loader）。
 - 描述：进入 `/chat/:id` 的时序为 lazy 组件 → 挂载 → 才发 `useSessionDetail`，「等组件」与
   「等数据」串行。`prefetchQuery`/`ensureQueryData` 全仓 0 使用。
-- 处置：路由 loader + `ensureQueryData`（2026-09-24 批次实施中）。
+- 处置：**resolved（647896e，2026-09-24）**。chat 路由 loader 在 match 时 fire-and-forget
+  预取（元数据 → 回合列表 → 首页消息链式 `ensureQueryData`，与 route.lazy 并行）；
+  失败不阻断导航（错误仍由 ChatPage 守卫优雅处理）。home 路由无需预取——会话列表由
+  Sidebar（非 lazy 的 AppShell）在启动时拉取。
 
 ### D6 · 数据层写路径与事务边界
 
-- 位置：[18-data-layer-spec.md](file:///docs/design/18-data-layer-spec.md)（规范自相矛盾）、
-  7 个服务约 20+ 处 `getDb()` DML（cron 6 / goal 4 / prompt 4 / runtime-model-store 5 /
-  learn-skill-agent 3 / task 3）、事务全主进程仅 5 处（session 4 + goal 1）。
+- 位置：[18-data-layer-spec.md §三/§四](file:///docs/design/18-data-layer-spec.md)、
+  [data-ownership.md](file:///docs/design/data-ownership.md)。
 - 描述：规范既说「Service → Repository」又说「收敛在 storage/」，实现选了前者但规范未更新；
   多语句写路径无成文的事务边界依据。
-- 处置：2026-09-24 拍板「Service 直访合法化」（session-service 模式健康），spec 修订 +
-  事务边界清单成文（同批次）。
+- 处置：**resolved（683b1f3，2026-09-24）**。spec 修订为「Service 直访 getDb 合法」（旧
+  Repository 规矩废止），事务边界清单全量盘点成文：真正的多语句写仅 4 处（session 3 + goal 1）
+  且均已有事务；审计所称「约 13 处多语句写」实为 13 处 getDb 调用现场、逐一核查均为单语句
+  DML——**无需补事务**；runtime-model-store 跨存储组合（DB+keychain+registry）按
+  「DB 真源 + 可重建投影」成文。数据所有权/缓存失效全景另立 data-ownership.md。
 
 ### D7 · css rgba alpha 效果色未收口
 
