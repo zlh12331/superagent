@@ -45,6 +45,8 @@ vendoring 后：源码随仓库分发，CI 与本地构建使用同一份代码�
 ```bash
 pnpm memory-engine:check            # 查看上游是否有新版本
 pnpm memory-engine:sync <tag>       # 同步到指定 tag（下载 → 校验 → 提取 MemoryCore → 更新锚点 → 重放补丁）
+#                                   可选 --archive <zip>：把归档 sha256 登记进 versions.json 的
+#                                   provenance（供应链溯源；不提供会 warn 提醒，防溯源记录与 tag 脱节）
 pnpm memory-engine:integrity        # 校验源码与锚点一致
 pnpm test:main                      # 契约测试（真实拉起引擎）
 git diff --stat packages/memory-engine   # 复核上游改动范围

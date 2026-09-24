@@ -69,7 +69,7 @@
 ### 2.4 错误处理（Sentry 已移除）
 
 2026-09-13 起**移除 Sentry**，改为**本地优先**错误处理：所有异常经
-`infra/telemetry/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志
+`utils/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志
 （渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。
 因此**不存在 `sentry:*` 脚本，也没有符号上传环节**（此前本节记录的
 `sentry:release:new` / `sentry:upload:symbols` 已随移除一并删除）。
@@ -346,7 +346,7 @@ tsconfig 启用以下严格选项：
 
 | 项 | 说明 | 建议 |
 |----|------|------|
-| ~~`.env` 硬编码 `SENTRY_AUTH_TOKEN`~~ | ~~安全风险~~ | 已解决：`.env` gitignore 未入仓，历史无真实 token，CI 走 secrets 注入 |
+| ~~`.env` 硬编码 `SENTRY_AUTH_TOKEN`~~ | ~~安全风险~~ | 已解决：`.env` gitignore 未入仓，历史无真实 token；Sentry 已整体移除，该 Secret 已不复存在 |
 | Lint 失败未修复 | 3 个 lint 格式化错误 | `pnpm lint:fix` |
 | 设计文档同步滞后 | 旧文档已删除，新文档已生成 | 持续维护 |
 | git 状态大量未提交修改 | 影响回滚 | 整理提交 |

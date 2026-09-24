@@ -1,7 +1,6 @@
 #!/usr/bin/env sh
 # .husky/pre-commit
 # 提交前钩子：跑 lint-staged（自动修复）+ codegraph sync（带超时）
-# 设计文档 §9.9 / §9.13
 #
 # codegraph sync 容错说明：
 # - 当 codegraph daemon 锁住数据库（如 IDE 启动了 MCP server）时，sync 会失败

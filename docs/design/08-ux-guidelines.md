@@ -283,7 +283,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 
 | 层 | 组件 | 表现 |
 |---|---|---|
-| App 级 | [AppErrorBoundary.tsx](../src/renderer/components/common/AppErrorBoundary.tsx) | 全屏兜底 + Sentry 自动上报 + 「重新加载」/「发送报告」（显式补报） |
+| App 级 | [AppErrorBoundary.tsx](../src/renderer/components/common/AppErrorBoundary.tsx) | 全屏兜底 + error-report 本地上报 + 「重新加载」/「发送报告」（显式补报） |
 | 路由级 | [root.tsx](../src/renderer/routes/root.tsx) RootErrorBoundary | 状态码/错误消息 + 重新加载按钮 |
 | 组件级 | [SectionErrorBoundary.tsx](../src/renderer/components/common/SectionErrorBoundary.tsx) | 侧栏 / 主内容 / 右面板 / 设置 pane 局部降级 |
 

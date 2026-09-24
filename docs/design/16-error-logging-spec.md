@@ -1,11 +1,10 @@
 # 16. 错误与日志规范
 
-> 统一主进程（electron-log + traceId）、渲染层（ErrorBoundary + sonner）与观测（Sentry + OTel）的错误处理约定。
-> 最后同步：2026-08-11
+> 统一主进程（electron-log + traceId）、渲染层（ErrorBoundary + sonner）与观测（error-report 本地错误上报 + OTel）的错误处理约定。
+> 最后同步：2026-09-24（Sentry 已于 2026-09-13 移除）
 
 ---
-> 🔒 工程化强制：Biome 
-oConsole 规则 + traceId 由 preload 自动附加（运行时强制，非人工约定）
+> 🔒 工程化强制：Biome noConsole 规则 + traceId 由 preload 自动附加（运行时强制，非人工约定）
 
 ## 一、错误对象契约（主进程 → 渲染层）
 
@@ -46,11 +45,10 @@ oConsole 规则 + traceId 由 preload 自动附加（运行时强制，非人工
 - 禁止空 catch（必须按 unknown 缩小 + 记录）
 - 网络错误指数退避最多 3 次（TypeScript 规范 §错误）
 
-## 三、Sentry 与 OTel
+## 三、错误上报与 OTel
 
-- **Sentry**（@sentry/electron）：初始化必须在 `app.whenReady()` 之前（AGENTS.md 关键约束）；主进程 + 渲染层双端上报
-- **OTel**（@opentelemetry/*）：telemetry/otel.ts 导出 span（可观测性），与 electron-log 互补（结构化指标 vs 文本日志）
-- 浏览器模式（dev:web 无主进程）：Sentry IPC 过滤 allowlist（06-testing-design §5.3）
+- **error-report**（`utils/error-report.ts` main / `lib/error-report.ts` renderer）：异常单一出口，落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链；Sentry 已于 2026-09-13 移除（决策记录见 23-otel-spec）
+- **OTel**（@opentelemetry/*）：telemetry/otel.ts 导出 span（可观测性），与 electron-log 互补（结构化指标 vs 文本日志）；未配置 OTLP 端点时不外发
 
 ## 四、渲染层错误 UI 约定
 

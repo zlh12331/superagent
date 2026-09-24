@@ -19,7 +19,7 @@ Code Agent 的核心能力链路：**用户消息 → 主进程 AgentService →
 | 7 | 终端集成 | [terminal-service.ts](file:///src/main/infra/terminal/terminal-service.ts) | node-pty 多终端会话 |
 | 8 | 文件服务 | [file-service.ts](file:///src/main/infra/file/file-service.ts) | 文件读写 + chokidar 监听 |
 | 9 | Prompt 系统 | [prompt/prompt-service.ts](file:///src/main/infra/ai/prompt/prompt-service.ts) | DB 模板 + 动态上下文注入 |
-| 10 | 可观测性 | [utils/logger.ts](file:///src/main/utils/logger.ts) + [telemetry/otel.ts](file:///src/main/infra/telemetry/otel.ts) + [AppErrorBoundary.tsx](file:///src/renderer/components/common/AppErrorBoundary.tsx) | electron-log + OTel + Sentry 三层 |
+| 10 | 可观测性 | [utils/logger.ts](file:///src/main/utils/logger.ts) + [telemetry/otel.ts](file:///src/main/infra/telemetry/otel.ts) + [error-report.ts](file:///src/main/utils/error-report.ts) + [AppErrorBoundary.tsx](file:///src/renderer/components/common/AppErrorBoundary.tsx) | electron-log + OTel（可选外发）+ error-report 本地错误上报 |
 | 11 | DevPanel | [DevPanel.tsx](file:///src/renderer/components/layout/DevPanel.tsx) | 应用内诊断面板 |
 | 12 | i18n | [i18n/](file:///src/renderer/i18n) | 中英双语 |
 | 13 | 目标系统 | [goal-service.ts](file:///src/main/infra/ai/knowledge/goal-service.ts) | 目标驱动会话（GoalJudge LLM 判定） |
@@ -346,38 +346,30 @@ PromptService
 
 源码：[dynamic-context.ts#L42](file:///src/main/infra/ai/prompt/dynamic-context.ts)（GitSummaryProvider 类型）、[prompt-service.ts#L68](file:///src/main/infra/ai/prompt/prompt-service.ts)（PromptServiceOptions.gitSummaryProvider）。
 
-## 10. 可观测性三层体系
+## 10. 可观测性体系
 
-### 10.1 三层职责分工
+### 10.1 层级职责分工
 
 | 层 | 技术 | 职责 | 数据位置 |
 |----|------|------|---------|
 | 本地全量日志 | electron-log | 本地完整日志，供 DevPanel + 用户 bug report | `%APPDATA%/code-agent/logs/` |
-| 业务 trace | OpenTelemetry | Code Agent 工具链路自定义 span | OTLP HTTP 上报 |
-| 远程错误聚合 | Sentry | 远程错误聚合 + 性能追踪 + Session Replay | Sentry self-hosted v26.6.0 |
+| 业务 trace | OpenTelemetry | Code Agent 工具链路自定义 span | OTLP HTTP 上报（未配置端点时不外发） |
+| 错误处理 | error-report 单一出口 | 异常落本地日志（渲染层经 electron-log 转发主进程），报障走 GitHub Issue 深链 | 本地（Sentry 已于 2026-09-13 移除，见 23-otel-spec） |
 
 ### 10.2 traceId 贯穿机制
 
 ```
-渲染层 crypto.randomUUID() → IPC（ipc-bridge.ts 自动注入）→ 主进程日志 → Sentry → OTel span
+渲染层 crypto.randomUUID() → IPC（ipc-bridge.ts 自动注入）→ 主进程日志 → error-report → OTel span
 ```
 
 ### 10.3 关键文件
 
 - 主进程 logger：[utils/logger.ts](file:///src/main/utils/logger.ts)
 - OTel 入口：[telemetry/otel.ts](file:///src/main/infra/telemetry/otel.ts)
-- Sentry 主进程初始化：[main/index.ts](file:///src/main/index.ts)（`initSentry()` 在 app.whenReady 前调用）
-- Sentry 渲染层集成：[AppErrorBoundary.tsx](file:///src/renderer/components/common/AppErrorBoundary.tsx)（通过 `@sentry/electron/renderer` 的 `Sentry.captureException` 上报）
+- 主进程错误单一出口：[utils/error-report.ts](file:///src/main/utils/error-report.ts)（index.ts / window.ts / wrap.ts / lag-alert.ts 均经它落盘）
+- 渲染层错误上报：[lib/error-report.ts](file:///src/renderer/lib/error-report.ts) + [AppErrorBoundary.tsx](file:///src/renderer/components/common/AppErrorBoundary.tsx)（`reportError` 落本地日志）
 
-> 注：项目中不存在独立的 `src/renderer/instrumentation.ts` 文件（`_template` 模板中有但未纳入实际项目）。渲染层 Sentry 集成直接在 `AppErrorBoundary` 组件中完成。
-
-### 10.4 三层不可替代关系
-
-- electron-log：本地全量，DevPanel 与用户 bug report 依赖
-- OTel：业务自定义 span，串联工具链路
-- Sentry：远程聚合，跨设备/会话关联，性能追踪
-
-通过 traceId 把三层串联。
+> 注：Sentry 已于 2026-09-13 移除（本地优先路线，决策记录见 23-otel-spec）；原「Sentry 主进程初始化 / 渲染层集成」小节随之删除。
 
 ## 11. DevPanel
 
@@ -448,5 +440,5 @@ PromptService
 
 ### 14.3 安全风险
 
-- ~~`.env` 硬编码 `SENTRY_AUTH_TOKEN`~~：已核实为误报——`.env` gitignore 未入仓，git 历史仅含脱敏占位符，release.yml 经 `secrets.SENTRY_AUTH_TOKEN` 注入
+- ~~`.env` 硬编码 `SENTRY_AUTH_TOKEN`~~：已核实为误报——`.env` gitignore 未入仓，git 历史仅含脱敏占位符。且 Sentry 已于 2026-09-13 整体移除（release.yml 不再有该 Secret 注入），风险不复存在
 - `run_command` 工具的 `ask` 权限仅弹窗确认，无沙箱隔离

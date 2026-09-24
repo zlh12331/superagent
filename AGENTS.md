@@ -116,7 +116,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 关键约束（易踩坑）
 
 - **preload 必须输出 CJS**（sandbox: true 限制，`electron.vite.config.ts` 中 format: 'cjs'），纯 ESM 包（如 zod）引入 preload 会静默失败导致 `window.api` 为 undefined。preload 必须通过 `@code-agent/shared/ipc/channels` / `@code-agent/shared/preload` 子路径导入（避开 shared 主入口中的 zod）
-- **错误处理本地优先**（2026-09-13 移除 Sentry）：所有异常经 `infra/telemetry/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。⚠️ renderer 上报模块内 `electron-log/renderer` 必须**惰性加载**（CJS 首次 import >5s，静态导入会让 renderer 测试套件从 30s 劣化到 300s）。将来接任何后端只改这两个出口文件
+- **错误处理本地优先**（2026-09-13 移除 Sentry）：所有异常经 `utils/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。⚠️ renderer 上报模块内 `electron-log/renderer` 必须**惰性加载**（CJS 首次 import >5s，静态导入会让 renderer 测试套件从 30s 劣化到 300s）。将来接任何后端只改这两个出口文件
 - **dev 环境 userData 重定向到 `.electron-user-data/`**（避免沙箱拦截 %APPDATA%）
 - **dev 环境开启远程调试端口 9222**（CDP over WebSocket）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）

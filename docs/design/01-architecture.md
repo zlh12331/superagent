@@ -9,7 +9,7 @@
 
 | 层级 | 入口文件 | 职责 |
 |---|---|---|
-| main | [src/main/index.ts](file:///src/main/index.ts) | Electron 主进程入口：窗口创建、Sentry/Logger/SQLite 初始化、CSP 注入、IPC handler 注册、退出清理 |
+| main | [src/main/index.ts](file:///src/main/index.ts) | Electron 主进程入口：窗口创建、Logger/SQLite 初始化、CSP 注入、IPC handler 注册、退出清理 |
 | renderer | [src/renderer/main.tsx](file:///src/renderer/main.tsx) | React 19 渲染层入口：Router + Providers |
 | preload | [src/preload/index.ts](file:///src/preload/index.ts) | contextBridge 暴露 `window.api`（16 个域，由 `createIpcApi(IPC_META)` 自动生成），sandbox + contextIsolation |
 | shared | [packages/shared/src/index.ts](file:///packages/shared/src/index.ts) | 跨进程共享包 `@code-agent/shared`：错误码、IPC 类型契约、Zod schemas |
@@ -194,7 +194,7 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 1. 渲染层 `invoke` 调用 [src/preload/utils/ipc-bridge.ts#L36-L40](file:///src/preload/utils/ipc-bridge.ts)：`crypto.randomUUID()` 生成 traceId，作为第三个参数传入 `ipcRenderer.invoke`
 2. 主进程 `wrap` [src/main/utils/wrap.ts#L48-L51](file:///src/main/utils/wrap.ts)：`const traceId = incomingTraceId ?? randomUUID()`，构造 `IpcHandlerContext { traceId, sender }` 传给业务 handler
 3. 日志贯穿：`LogContext` 接口 [logger.ts#L20-L27](file:///src/main/utils/logger.ts) 含 `traceId?` 字段
-4. Sentry 上报：wrap.ts catch 中带 traceId 上下文上报 Sentry
+4. 本地错误上报：wrap.ts catch 中带 traceId 上下文经 error-report.ts 落本地日志（Sentry 已于 2026-09-13 移除）
 5. OTel span：`withSpan('agent.streamText', { 'session.id': sessionId, ... })` 把 sessionId / maxSteps 等作为 span 属性
 
 ## 7. 关键风险点

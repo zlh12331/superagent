@@ -8,12 +8,15 @@
 //   这样同步流程离线可用、可复现，且与"构建不依赖网络"的设计一致。
 //
 // 用法：
-//   node scripts/sync-memory-engine.mjs --from <解压目录> --tag <tag> [--commit <sha>] [--dry-run]
+//   node scripts/sync-memory-engine.mjs --from <解压目录> --tag <tag> [--commit <sha>] [--archive <zip>] [--dry-run]
 //
 // 参数：
 //   --from    上游解压根目录（其下应有 MemoryCore/）
 //   --tag     目标版本 tag（写入 versions.json）
 //   --commit  目标 commit（可选；省略则保留现值并提示）
+//   --archive 上游归档 zip 路径（可选；提供时把文件名与 sha256 登记进 versions.json
+//             的 provenance——该字段是供应链溯源记录，漏登会让 provenance 与
+//             repoTag 脱节：本项目曾因此停留在 v2.0.1 登记而 tag 已到 v2.0.2-beta.1）
 //   --dry-run 只显示将要发生的变更，不落盘
 //
 // 流程：
@@ -25,6 +28,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -36,13 +40,20 @@ const VERSIONS_PATH = join(ENGINE_DIR, 'versions.json');
 
 /** 解析命令行参数 */
 function parseArgs(argv) {
-  const out = { from: undefined, tag: undefined, commit: undefined, dryRun: false };
+  const out = {
+    from: undefined,
+    tag: undefined,
+    commit: undefined,
+    archive: undefined,
+    dryRun: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--dry-run') out.dryRun = true;
     else if (a === '--from') out.from = argv[++i];
     else if (a === '--tag') out.tag = argv[++i];
     else if (a === '--commit') out.commit = argv[++i];
+    else if (a === '--archive') out.archive = argv[++i];
   }
   return out;
 }
@@ -180,12 +191,36 @@ rmSync(backup, { recursive: true, force: true });
 
 // 更新版本锚点（保留来源/许可等既有字段）
 const corePkg = JSON.parse(readFileSync(join(CORE_TARGET, 'package.json'), 'utf8'));
+
+// provenance 登记（供应链溯源）：--archive 提供时登记归档名 + sha256；未提供但已登记的
+// 归档名与本次 tag 不符时警告——防 provenance 与 repoTag 脱节（本项目曾因 sync 不更新
+// 该字段而停留在 v2.0.1 登记、tag 已到 v2.0.2-beta.1，溯源记录失效）
+function buildProvenance() {
+  if (args.archive) {
+    if (!existsSync(args.archive)) fail(`--archive 文件不存在：${args.archive}`);
+    const sha = createHash('sha256').update(readFileSync(args.archive)).digest('hex');
+    return {
+      archiveName: args.archive.split(/[\\/]/).pop(),
+      archiveSha256: sha,
+      note: '归档 sha256 由 sync --archive 登记；归档与源码树的内容一致性由 memory-engine:integrity 校验',
+    };
+  }
+  const previous = currentVersions.provenance;
+  if (previous?.archiveName && !previous.archiveName.includes(args.tag.replace(/^v/, ''))) {
+    console.warn(
+      `[memory-engine:sync] ⚠️ provenance.archiveName（${previous.archiveName}）与本次 tag（${args.tag}）不符且未提供 --archive——溯源记录脱节，请补登记（重跑并带 --archive <zip>）`,
+    );
+  }
+  return previous;
+}
+
 const nextVersions = {
   ...currentVersions,
   repoTag: args.tag,
   commit: args.commit ?? currentVersions.commit,
   corePackageName: corePkg.name,
   corePackageVersion: corePkg.version,
+  provenance: buildProvenance(),
   syncedAt: new Date().toISOString().slice(0, 10),
   ...(args.commit === undefined
     ? {

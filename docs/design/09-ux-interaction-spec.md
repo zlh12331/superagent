@@ -83,7 +83,7 @@ flowchart TB
 ```mermaid
 flowchart LR
   U[组件] --> Q[TanStack Query] --> W[window.api.*<br/>preload]
-  W -->|invoke 通道| H[主进程 handler<br/>校验/日志/Sentry]
+  W -->|invoke 通道| H[主进程 handler<br/>校验/日志]
   H --> S[服务] --> D[(SQLite/keychain/文件/LLM)]
   S -->|send 事件| W -->|订阅| B[桥接 hook] --> ST[Zustand store] --> U
 ```
@@ -477,7 +477,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TB
-  E1[AppErrorBoundary<br/>全屏+Sentry+重新加载/发报告] --> E2[RootErrorBoundary<br/>路由错误+重载]
+  E1[AppErrorBoundary<br/>全屏+本地上报+重新加载/发报告] --> E2[RootErrorBoundary<br/>路由错误+重载]
   E2 --> E3[SectionErrorBoundary<br/>侧栏/主区/右面板/设置pane 局部降级+重试]
 ```
 
@@ -501,7 +501,7 @@ flowchart TB
 
 **统一 diff 视图（UnifiedDiffView.tsx 88 行）**：parseUnifiedDiff 按 hunk 拆分，每 hunk 渲染一个 ReactDiffViewer（splitView 双栏、LINES 比较、隐藏行号关闭）；COMPACT_STYLES：content 10px 等宽、行高 1.6；空 diff 显示"无差异"。
 
-**区块错误边界（SectionErrorBoundary.tsx 101 行）**：props children/name（Sentry tag）/resetKeys（任一变化自动清除错误）；fallback 零依赖（静态中文文案，避免 Provider 错误时二次失败）；错误消息截断显示 + title 悬浮全文；上报 Sentry 带 boundary + section tag。
+**区块错误边界（SectionErrorBoundary.tsx 101 行）**：props children/name（上报 tag 区分区块）/resetKeys（任一变化自动清除错误）；fallback 零依赖（静态中文文案，避免 Provider 错误时二次失败）；错误消息截断显示 + title 悬浮全文；经 error-report 上报带 boundary + section tag。
 
 **空态（EmptyState.tsx 85 行）**：props icon（默认 Inbox）/title/description/actionLabel/onAction；图标 48px 圆底（bg-muted）+ 衬线标题 + 可选 outline 按钮；纯展示无业务。
 
@@ -622,7 +622,7 @@ preload/index.ts：`createIpcApi(IPC_META)` 生成全部 API → `contextBridge.
 
 create-api.ts 生成器：遍历 IPC_META——`kind==='request'` 生成 `(input) => invoke(channel, input)`；`kind==='event'` 生成 `(callback) => subscribe(channel, callback)`（返回 unsubscribe）。**新增 IPC 方法只改 meta + definitions，本文件零改动**。
 
-ipc-bridge.ts：`invoke` 用全局 Web Crypto 生成 traceId（sandbox 不能 import node:crypto）作为第三参传入 ipcRenderer.invoke，traceId 贯穿渲染层→主进程→日志→Sentry；`subscribe` 包装回调吞掉 IpcRendererEvent（Electron Security #17，不向渲染层暴露事件对象），**必须保留同一 handler 引用**（匿名函数无法 removeListener 导致泄漏），返回 removeListener 包装。
+ipc-bridge.ts：`invoke` 用全局 Web Crypto 生成 traceId（sandbox 不能 import node:crypto）作为第三参传入 ipcRenderer.invoke，traceId 贯穿渲染层→主进程→日志→本地错误上报；`subscribe` 包装回调吞掉 IpcRendererEvent（Electron Security #17，不向渲染层暴露事件对象），**必须保留同一 handler 引用**（匿名函数无法 removeListener 导致泄漏），返回 removeListener 包装。
 
 ### 7.1.2 shared 推导层（packages/shared/src/ipc）
 

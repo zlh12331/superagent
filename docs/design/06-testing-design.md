@@ -377,10 +377,6 @@ E2E 兑底是正式策略而非欠账：
 - StreamText mock 必须监听 abortSignal 并调用 `controller.error(AbortError)` 防止 reader pending
 - `controller.start` 用 `mockImplementationOnce` 而非 `mockResolvedValueOnce(undefined)`，避免丢失 'running' 事件
 
-### 5.3 Sentry IPC 错误过滤
-
-E2E browser mode 下无主进程，Sentry IPC 会失败，需加入 filter allowlist。
-
 ## 6. DevPanel 测试关键约定
 
 DevPanel 测试用条件渲染 + `toHaveAttribute('data-state', 'active')` 等待 Git trigger 激活，避免时序问题。
