@@ -7,37 +7,25 @@
 //   check:tokens 查「裸色值/裸 z 数字」能查，
 //   但查不出「引用了不存在的令牌」。
 // 本门禁补上这个盲区（与 check:csp-hash / check:compiler 同属「防静默失效」家族）。
+// 判据核在 scripts/lib/css-vars.ts（反例测试同目录）。
 //
-// 豁免（按需，均需在下方给出理由）：
+// 豁免（按需，均需给出理由）：
 // - 运行时注入：Radix 等库在运行时设置（--radix-*）；Tailwind v4 动态前缀（--spacing 等）
 // - 带 fallback 的引用：var(--x, fallback) 即使 --x 未定义也有确定取值，不算失效
+//
+// 运行：pnpm check:css-vars
 // ──────────────────────────────────────────────────────────────
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { findMissingVars, scanCssVars } from './lib/css-vars';
 
 const ROOT = join(import.meta.dirname, '..');
 const SCAN_DIRS = ['src'];
 
 /** 扫描时跳过的目录名 */
 const SKIP_DIRS: ReadonlySet<string> = new Set(['node_modules', 'out', 'coverage', '.vite']);
-
-/**
- * 允许「被引用但不在本仓定义」的变量前缀
- *
- * 这些由外部环境在运行时注入，静态扫描必然看不到定义：
- */
-const RUNTIME_INJECTED_PREFIXES: readonly string[] = [
-  '--radix-', // Radix UI 运行时注入尺寸（如 --radix-select-trigger-width）
-  '--spacing', // Tailwind v4 动态 spacing 前缀（--spacing-md 等在 @theme 计算生成）
-];
-
-/** 单个文件发现的引用 */
-interface Reference {
-  readonly name: string;
-  readonly file: string;
-  readonly line: number;
-}
 
 /** 递归收集目标文件 */
 function collectFiles(dir: string, acc: string[] = []): string[] {
@@ -53,56 +41,25 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-/**
- * 提取一行中的 var(--x) 引用
- *
- * 带 fallback 的写法（var(--x, #fff)）**不计入**：即使 --x 未定义也有确定取值。
- * 注释行整体跳过：说明文字里常写 `var(--x)` 举例（实测 terminal.tsx 头注释即如此），
- * 那不是真实引用。
- */
-function extractRefs(line: string): string[] {
-  const trimmed = line.trim();
-  // 单行注释 / 块注释续行（* 开头）/ CSS 注释内容行
-  if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
-    return [];
-  }
-  const refs: string[] = [];
-  for (const match of line.matchAll(/var\(\s*(--[a-zA-Z0-9-]+)\s*([,)])/g)) {
-    const name = match[1];
-    const next = match[2];
-    if (name === undefined) continue;
-    // 紧跟 ',' 说明有 fallback → 跳过
-    if (next === ',') continue;
-    refs.push(name);
-  }
-  return refs;
-}
-
-/** 是否为运行时注入（豁免） */
-function isRuntimeInjected(name: string): boolean {
-  return RUNTIME_INJECTED_PREFIXES.some((p) => name.startsWith(p));
-}
-
 function main(): void {
   const defined = new Set<string>();
-  const references: Reference[] = [];
+  const missing: Array<{ file: string; line: number; name: string }> = [];
   const files = SCAN_DIRS.flatMap((d) => collectFiles(join(ROOT, d)));
+  let referenceCount = 0;
 
-  for (const file of files) {
-    const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  // 两遍扫描：先并集全仓定义（tokens.css 的定义对全组件生效），再判缺失
+  const scans = files.map((file) => {
+    const scan = scanCssVars(readFileSync(file, 'utf8'));
+    for (const name of scan.defined) defined.add(name);
+    referenceCount += scan.references.length;
+    return { file, scan };
+  });
+  for (const { file, scan } of scans) {
     const rel = file.replace(`${ROOT}\\`, '').replace(`${ROOT}/`, '').split('\\').join('/');
-    lines.forEach((line, i) => {
-      // 定义：`--name:` 形态（CSS 自定义属性声明）
-      for (const m of line.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)) {
-        if (m[1] !== undefined) defined.add(m[1]);
-      }
-      for (const name of extractRefs(line)) {
-        references.push({ name, file: rel, line: i + 1 });
-      }
-    });
+    for (const r of findMissingVars(scan.references, defined)) {
+      missing.push({ file: rel, line: r.line, name: r.name });
+    }
   }
-
-  const missing = references.filter((r) => !defined.has(r.name) && !isRuntimeInjected(r.name));
 
   if (missing.length > 0) {
     console.error(`[check-css-vars] ❌ ${missing.length} 处 var() 引用无对应定义：`);
@@ -118,7 +75,7 @@ function main(): void {
   }
 
   console.log(
-    `[check-css-vars] ✅ 通过：${references.length} 处 var() 引用均有定义（扫描 ${files.length} 文件）`,
+    `[check-css-vars] ✅ 通过：${referenceCount} 处 var() 引用均有定义（扫描 ${files.length} 文件）`,
   );
 }
 

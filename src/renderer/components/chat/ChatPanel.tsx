@@ -33,7 +33,7 @@ import { usePendingMessageStore } from '@/stores/transient/pending-message-store
 import { useUiStore } from '@/stores/transient/ui-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
-import { collectHistoryNotices, statusLabel } from './chat-panel-derives';
+import { collectHistoryNotices, prependEarlierPage, statusLabel } from './chat-panel-derives';
 import { ConversationSearchBar } from './conversation-search-bar';
 import { GoalBar } from './GoalBar';
 import { reconstructHistory, toInitialMessages } from './history-parts';
@@ -106,8 +106,8 @@ export function ChatPanel({
   chatId,
   workingDir,
   initialMessages,
-  hasEarlier,
-  loadingEarlier,
+  hasEarlier = false,
+  loadingEarlier = false,
   loadEarlier,
   interrupted = false,
   className,
@@ -194,17 +194,12 @@ export function ChatPanel({
   });
 
   // 向上补页：更早回合消息 prepend 进本地消息态（setMessages 函数式更新，
-  // 避免与流式 append 竞态丢增量）；重建与 initialMessages 同走 toInitialMessages。
-  // 回调由路由层提供（回合分页 useInfiniteQuery 的 fetchNextPage 包装）。
-  const handleLoadEarlier = useCallback(async (): Promise<void> => {
-    if (loadEarlier === undefined) {
-      return;
-    }
-    const older = await loadEarlier();
-    if (older === null || older.length === 0) {
-      return;
-    }
-    setMessages((prev) => [...toInitialMessages(older), ...prev]);
+  // 避免与流式 append 竞态丢增量）。前置检查/重建逻辑在 prependEarlierPage
+  // （chat-panel-derives.ts，认知复杂度棘轮）；回调由路由层提供（回合分页
+  // useInfiniteQuery 的 fetchNextPage 包装）。
+  const handleLoadEarlier = useCallback((): Promise<void> => {
+    if (loadEarlier === undefined) return Promise.resolve();
+    return prependEarlierPage({ loadEarlier, setMessages, toUiMessages: toInitialMessages });
   }, [loadEarlier, setMessages]);
 
   // 回合运行态发布到全局（更新"重启并安装"等危险操作需要先确认）；判定与
@@ -360,8 +355,8 @@ export function ChatPanel({
           status={status}
           onRegenerate={handleRegenerate}
           searchActiveIndex={searchActiveIndex}
-          {...(hasEarlier ? { hasEarlier: true } : {})}
-          {...(loadingEarlier ? { loadingEarlier: true } : {})}
+          hasEarlier={hasEarlier}
+          loadingEarlier={loadingEarlier}
           {...(hasEarlier ? { onLoadEarlier: handleLoadEarlier } : {})}
         />
       </div>
