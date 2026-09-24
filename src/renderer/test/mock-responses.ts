@@ -1,4 +1,4 @@
-// src/renderer/test/msw-handlers.ts
+// src/renderer/test/mock-responses.ts
 // 统一 IPC mock 响应工厂
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -11,10 +11,9 @@
 // - 改为封装 mock 工厂模式：集中 IPC 响应数据 + 按 domain 分桶
 // - 每个测试文件仍按需 vi.mock 具体方法，但响应数据从此处导入
 //
-// 与 MSW 的关系：
-// - 当前阶段保留 IPC mock 工厂模式（务实）
-// - 未来若引入 HTTP 后端（如远程模型代理），可启用 MSW 拦截 HTTP
-// - MSW 已安装，预留扩展空间
+// 命名说明：原名 msw-handlers.ts 系历史残留（MSW 从未实际拦截本项目 IPC），
+// 2026-09-24 更名为 mock-responses.ts 以反映真实职责；MSW 依赖保留——
+// 未来若引入 HTTP 后端（如远程模型代理）可启用 MSW 拦截 HTTP。
 // ──────────────────────────────────────────────────────────────
 
 import type { IpcResponse } from '@code-agent/shared/renderer';

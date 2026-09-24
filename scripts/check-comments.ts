@@ -11,9 +11,10 @@
 //      注释漂移由机器拦，如已删除的 `pnpm sentry:upload:symbols` 曾在注释里存活）
 // 范围：src/**/*.{ts,tsx} + docs/design/*.md
 //
-// 已知盲区（如实记录，评估中）：
+// 已知盲区（如实记录）：
 //   - "所有 export 必须有 TSDoc"（typescript-dev-standards-ai.md 规则 18.1）无自动门禁：
-//     规则 A 只拦"过期 @param"，不拦"缺失注释"；实现需 AST 扫描 + 棘轮基线（存量违规多）
+//     规则 A 只拦"过期 @param"，不拦"缺失注释"；实现需 AST 扫描 + 棘轮基线（存量违规多）。
+//     已登记 docs/design/debt.md#d3。
 //
 // 运行：pnpm check:comments
 // ──────────────────────────────────────────────────────────────

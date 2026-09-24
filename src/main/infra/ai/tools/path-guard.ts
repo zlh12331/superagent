@@ -128,6 +128,6 @@ export function resolveWithinWorkspace(inputPath: string, workingDir: string): s
   // 但会改变所有工具返回给模型/UI 的路径形态（symlink 路径被解析成真实路径），
   // 影响面覆盖 read/write/edit/grep/glob/terminal 等全部文件工具，
   // 且与本条债的收益不成比例。此处保留返回 resolved，
-  // TOCTOU 残余风险记录在技术债清单（需要时按"返回 realTarget + 全量回归"专项处理）。
+  // TOCTOU 残余风险登记于 docs/design/debt.md#d1（需要时按"返回 realTarget + 全量回归"专项处理）。
   return resolved;
 }

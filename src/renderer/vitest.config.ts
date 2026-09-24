@@ -78,7 +78,7 @@ export default defineConfig({
         '../../_template/**',
         'test/**',
         'main.tsx',
-        'app.tsx',
+        'App.tsx',
       ],
     },
   },

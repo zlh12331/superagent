@@ -35,8 +35,8 @@ function handleSessionEnd(sessionId: string): void {
     // 详情缓存必须失效（2026-09-08 评估后保留）：ChatPanel 用 useSessionDetail
     // 的 initialMessages 初始化 useChat（reconstructHistory），若此处不失效，
     // 用户切走再切回该会话会看到回合前的旧消息。一次全量重拉换来的是
-    // 「重开会话数据正确」，该代价可接受（数据层全量传输债见技术债清单，
-    // 应由 session:get 分页/增量解决，而非在失效点绕过）。
+    // 「重开会话数据正确」，该代价可接受（数据层全量传输债登记于
+    // docs/design/debt.md#d2，应由 session:get 分页/增量解决，而非在失效点绕过）。
     void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
     // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
     void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(sessionId) });

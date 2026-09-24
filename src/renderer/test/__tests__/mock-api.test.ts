@@ -20,7 +20,7 @@ import {
   settingsMocks,
   systemMocks,
   terminalMocks,
-} from '../msw-handlers';
+} from '../mock-responses';
 
 describe('IPC mock 工厂', () => {
   it('ok() 返回 { data } 形状', () => {
