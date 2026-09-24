@@ -264,15 +264,11 @@ e2e/
 
 ## 9. 测试目录布局
 
-统一采用 **`.test.ts(x)` 与源码同目录（colocation）**（2026-09-17 调整：components 域原 `__tests__/` 内联目录已全部迁出为同目录；迁移同时把审计脚本的测试排除口径从「`__tests__` 目录」改为「`.test.` 文件名」，行为不变）：
+统一采用 **`.test.ts(x)` 与源码同目录（colocation）**（2026-09-17 迁出 components 域；2026-09-24 迁出剩余全部内联目录——hooks 19 / i18n 1 / lib 4 / providers 1 / stores 4 / test 1，`lib/diff` 的双份 line-diff 测试同步合并，`__tests__/` 内联目录在渲染层已不存在；迁移同时把审计脚本的测试排除口径从「`__tests__` 目录」改为「`.test.` 文件名」，行为不变）：
 
-| 位置 | 模式 | 文件数（2026-09-17 实测） |
+| 位置 | 模式 | 文件数（2026-09-24 实测） |
 |---|---|---|
 | src/main/ 同目录 .test.ts | colocation | 290 |
-| src/renderer/components/{域}/ 同目录 .test.ts(x) | colocation | 98 |
-| src/renderer/hooks/__tests__/ | 内联 __tests__ 目录 | 17 |
-| src/renderer/lib/ 同目录 .test.ts | colocation | 17 |
+| src/renderer/ 全部子目录（components/hooks/i18n/lib/providers/stores/test）同目录 .test.ts(x) | colocation | 160 |
 | packages/shared/src/__tests__/ | 内联 __tests__ 目录 | 9（api / channels / errors / smoke / shared-gaps 等） |
-| src/renderer/stores/ 同目录 + transient/__tests__/ | 混合 | 8 |
-| src/renderer/test/ | 独立测试目录 | 2（smoke.test + __tests__/mock-api.test，另有 setup 等非测试文件） |
 | e2e/ | 独立 Playwright E2E | 6 spec 文件 |
