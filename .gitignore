@@ -100,6 +100,11 @@ resources/codegraph-arm64/
 # 上游 MemoryCore 源码压缩包（本地参考，不入仓；源码已 vendored 至 packages/memory-engine）
 docs/TencentDB-Agent-Memory-*.zip
 
+# third_party 参考源的依赖锁文件（vendored 只读源码从不安装依赖，锁文件无功能作用，
+# 却会被 GitHub dependency graph 扫描产生 Dependabot 安全告警——依赖清单只保留
+# package.json 供溯源，锁文件不入仓）
+third_party/**/package-lock.json
+
 # electron-builder 打包产物（NSIS 安装包、latest.yml 等）
 release/
 

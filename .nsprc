@@ -4,8 +4,6 @@
   "high": true,
   "critical": true,
   "report-type": "summary",
-  "allowlist": [
-    "GHSA-vwc7-r8mq-g2x9"
-  ],
+  "allowlist": [],
   "packages": {}
 }
