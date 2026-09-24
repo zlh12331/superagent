@@ -110,6 +110,21 @@ const RULES: readonly Rule[] = [
   },
 ];
 
+// ── 采用率棘轮（正向，2026-09-24）────────────────────────────────────────
+// 违规棘轮管下限（防离群写法回潮），采用棘轮管上限（推标准设施落地）——
+// 后者此前缺失，useCopy/AsyncBoundary 等停在个位数无人推。统计标准设施在
+// 非测试渲染层文件中的 import 引用文件数；基线记录历史最高，当前 < 基线 =
+// 设施被拆除/降级 → 卡关；--update-adoption 取 max(旧, 实测) 只升不降。
+// 口径边界：toast 反馈形态的复制场景（use-copy.ts 头注释明文豁免，如远程
+// 令牌/诊断信息复制）本就不 import useCopy，不属采用缺口，不参与统计。
+const ADOPTION_BASELINE_PATH = join(import.meta.dirname, 'ui-consistency-adoption-baseline.json');
+const ADOPTION_FACILITIES = [
+  { id: 'useCopy', match: 'hooks/use-copy' },
+  { id: 'AsyncBoundary', match: 'components/common/AsyncBoundary' },
+  { id: 'SectionErrorBoundary', match: 'components/common/SectionErrorBoundary' },
+  { id: 'DialogHost', match: 'components/common/DialogHost' },
+] as const;
+
 /**
  * 已归属 globals.css 按钮类体系的钮（icon-btn/tab/树节点/segmented 等
  * 有专属 CSS 类控制的场景），不属于 raw-button 规则目标——
@@ -250,6 +265,47 @@ function loadBaseline(): Record<string, Metrics> {
 
 const baseline = loadBaseline();
 
+// 采用率统计（每设施：import 引用的非测试文件数）
+const adoptionCurrent = new Map<string, number>();
+for (const { id, match } of ADOPTION_FACILITIES) {
+  let n = 0;
+  for (const full of files) {
+    if (readFileSync(full, 'utf8').includes(match)) n += 1;
+  }
+  adoptionCurrent.set(id, n);
+}
+
+function loadAdoptionBaseline(): Record<string, Metrics> {
+  if (!existsSync(ADOPTION_BASELINE_PATH)) return {}; // 首次无基线 → 视为全 0，由 --update-adoption 创建
+  try {
+    return parseBaseline(readFileSync(ADOPTION_BASELINE_PATH, 'utf8'), METRICS);
+  } catch (error: unknown) {
+    console.error(
+      `[check-ui-consistency] ❌ 采用率基线读取失败：${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
+}
+
+const adoptionBaseline = loadAdoptionBaseline();
+
+if (process.argv.slice(2).includes('--update-adoption')) {
+  const next: Record<string, Metrics> = { ...adoptionBaseline };
+  for (const { id } of ADOPTION_FACILITIES) {
+    const cur = adoptionCurrent.get(id) ?? 0;
+    const old = next[id]?.['count'] ?? 0;
+    next[id] = { count: Math.max(old, cur) }; // 只升不降
+  }
+  writeFileSync(ADOPTION_BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  console.log(
+    `[check-ui-consistency] 采用率基线已更新（${ADOPTION_BASELINE_PATH}，逐设施取 max(旧, 实测)）：`,
+  );
+  for (const { id } of ADOPTION_FACILITIES) {
+    console.log(`  ${id}: ${next[id]?.['count'] ?? 0}`);
+  }
+  process.exit(0);
+}
+
 if (wantsBaselineUpdate(process.argv.slice(2))) {
   const next = proposeBaseline(current, baseline, METRICS, wantsForce(process.argv.slice(2)));
   writeFileSync(BASELINE_PATH, serializeBaseline(next), 'utf8');
@@ -270,9 +326,35 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+// 采用率棘轮检查：当前引用数低于基线 = 标准设施被拆除/降级（只许升）
+const adoptionProblems: string[] = [];
+for (const { id } of ADOPTION_FACILITIES) {
+  const cur = adoptionCurrent.get(id) ?? 0;
+  const base = adoptionBaseline[id]?.['count'] ?? 0;
+  if (cur < base) {
+    adoptionProblems.push(
+      `  [adoption] ${id}：引用文件 ${cur} 低于基线 ${base}（设施被拆除或降级）`,
+    );
+  }
+}
+if (adoptionProblems.length > 0) {
+  console.error('[check-ui-consistency] ❌ 设施采用率棘轮违规：');
+  for (const line of adoptionProblems) console.error(line);
+  console.error(
+    '[check-ui-consistency] 修复指引：恢复设施引用；确属设计变更请 --update-adoption 并说明理由',
+  );
+  process.exit(1);
+}
+
 console.log(
   `[check-ui-consistency] ✅ 通过：${files.length} 个文件，${violations.length} 处命中（均在棘轮基线内）`,
 );
 for (const v of violations) {
   console.log(`  [${v.rule}] ${v.file}:${v.line}`);
 }
+const adoptionLine = ADOPTION_FACILITIES.map(({ id }) => {
+  const cur = adoptionCurrent.get(id) ?? 0;
+  const base = adoptionBaseline[id]?.['count'] ?? 0;
+  return `${id} ${cur}/${base}`;
+}).join('，');
+console.log(`[check-ui-consistency] 采用率（当前/基线）：${adoptionLine}`);
