@@ -87,6 +87,23 @@ describe('keychain', () => {
     expect(mockSafeStorage.decryptString).toHaveBeenCalled();
   });
 
+  it('Windows ACL：USERNAME 误导（=SYSTEM）时不锁死属主（whoami 优先）', async () => {
+    // 回归：旧实现用 process.env.USERNAME 跑 icacls /inheritance:r /grant:r，
+    // 沙箱/服务上下文里 USERNAME 可能是 SYSTEM，会把文件锁给 SYSTEM、属主 EPERM。
+    const prevUser = process.env['USERNAME'];
+    process.env['USERNAME'] = 'SYSTEM';
+    try {
+      await setSecret('acl-regression-key', 'acl-secret');
+      expect(await getSecret('acl-regression-key')).toBe('acl-secret');
+    } finally {
+      if (prevUser === undefined) {
+        delete process.env['USERNAME'];
+      } else {
+        process.env['USERNAME'] = prevUser;
+      }
+    }
+  });
+
   it('getSecret（未设置）：返回 null', async () => {
     expect(await getSecret('nonexistent-key')).toBeNull();
   });

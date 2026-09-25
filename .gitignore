@@ -124,3 +124,6 @@ release/
 
 # AI 浼氳瘽鐢熸垚鐨勪复鏃跺浘鐗囩礌鏉愶紙涓嶅叆浠擄級
 /vibe_images/
+
+# Zcode 本地工具忽略副本（与 .gitignore 同源，不入仓）
+.zcodeignore

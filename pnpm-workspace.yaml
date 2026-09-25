@@ -82,7 +82,16 @@ overrides:
 # 代价：新增/升级依赖时，若目标版本发布不足 24h 会被拦——这是**有意的**，
 # 通常等一天或改用已过期的版本即可。确需立即安装时按需临时豁免（见下）。
 #
-# 临时豁免方式（不要改本文件）：`pnpm install --config.minimumReleaseAge=0`
+# 临时豁免（按报错形态选，2026-09-25 实测；都不要改本文件）：
+#   1) 版本过新（ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION + 可解析到发布时间）：
+#      `pnpm install --config.minimumReleaseAge=0`
+#   2) 版本不在当前 registry manifest（同上错误码，文案含
+#      "version not present in registry manifest"——典型是 npmmirror 漏同步某个
+#      平台可选包，如 @colbymchenry/codegraph-linux-x64）：
+#      改走官方源 `pnpm install --registry=https://registry.npmjs.org`
+#      （实测可过；`--config.minimumReleaseAge=0` 对这种「查不到年龄」无效）
+#   3) lockfile 已在可信环境校验过、只想跳过再校验：
+#      `pnpm install --trust-lockfile`（跳过整段供应链再校验，慎用）
 minimumReleaseAge: 1440
 
 # ── 存储与缓存：固定到项目内（TRAE 沙箱不允许写系统根目录 F:\.pnpm-store）───
