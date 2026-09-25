@@ -1,4 +1,4 @@
-// src/renderer/lib/__tests__/theme-init.test.ts
+// src/renderer/lib/theme-init.test.ts
 // theme-init 单测：FOUC 防护的初始主题应用
 // 直接操作 jsdom 的 localStorage / document.documentElement.classList 验证。
 

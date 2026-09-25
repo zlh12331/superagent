@@ -1,4 +1,4 @@
-// src/renderer/stores/transient/__tests__/terminal-store.test.ts
+// src/renderer/stores/transient/terminal-store.test.ts
 // terminal-store 单元测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

@@ -162,8 +162,7 @@ src/renderer/
 │   └── locales/
 │       ├── en/common.json + errors.json
 │       └── zh-CN/common.json + errors.json
-├── test/                 # 3 个（setup / setup-lang / msw-handlers / smoke.test）
-│   └── __tests__/mock-api.test.ts
+├── test/                 # 5 个（setup / setup-lang / mock-responses / mock-api.test / smoke.test）
 ├── styles/
 │   └── globals.css
 ├── App.tsx
@@ -211,11 +210,16 @@ packages/shared/src/
 │   ├── terminal.ts
 │   ├── tool.ts
 │   └── update.ts
-└── __tests__/            # 4 测试文件
+└── __tests__/            # 9 测试文件
     ├── api.test.ts
     ├── channels.test.ts
     ├── errors.test.ts
-    └── smoke.test.ts
+    ├── git-schema.test.ts
+    ├── mcp-schema.test.ts
+    ├── settings-schema.test.ts
+    ├── shared-gaps.test.ts
+    ├── smoke.test.ts
+    └── terminal-schema.test.ts
 ```
 
 **子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///src/preload/index.ts)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。

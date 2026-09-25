@@ -89,7 +89,7 @@ export function Markdown({ content, className, highlight = true }: MarkdownProps
  * - inline code（`` `text` ``）：无 language-* className → 渲染 <code class="inline">
  * - block code（```lang\n...\n```）：有 language-* className → 渲染 CodeBlock
  * - 无语言标注的围栏（```\n...\n```）不带 info string ⇒ className 为空 ⇒ 走 inline 分支
- *   （现状行为，见 __tests__/markdown.test.tsx）
+ *   （现状行为，见同目录 markdown.test.tsx）
  *
  * 两档写死为模块级常量而非在渲染内联定义：react-markdown 把 components[name] 直接
  * 当作元素 type，内联箭头每次渲染都是新 identity ⇒ React 视为不同类型而卸载重挂该

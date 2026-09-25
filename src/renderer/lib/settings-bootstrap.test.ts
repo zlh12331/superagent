@@ -1,4 +1,4 @@
-// src/renderer/lib/__tests__/settings-bootstrap.test.ts
+// src/renderer/lib/settings-bootstrap.test.ts
 // settings-bootstrap 单测（S1：SQLite 快照 / legacy 迁移 / 浏览器回退）
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

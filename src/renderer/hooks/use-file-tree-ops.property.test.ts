@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts
+// src/renderer/hooks/use-file-tree-ops.property.test.ts
 // fast-check 属性测试试点 2/2：joinPath 路径拼接不变量
 // ──────────────────────────────────────────────────────────────
 // 试点背景（2026-08 讨论收敛）：仅对强纯函数引入属性测试。joinPath 是

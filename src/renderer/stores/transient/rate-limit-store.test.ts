@@ -1,4 +1,4 @@
-// src/renderer/stores/transient/__tests__/rate-limit-store.test.ts
+// src/renderer/stores/transient/rate-limit-store.test.ts
 // 限流提示 store 单测：触发/关闭/自动过期判定
 
 import { beforeEach, describe, expect, it } from 'vitest';

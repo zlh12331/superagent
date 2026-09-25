@@ -1,4 +1,4 @@
-// src/renderer/providers/__tests__/theme-provider.test.tsx
+// src/renderer/providers/theme-provider.test.tsx
 // ThemeProvider 批次7 缺口补全：主题应用副作用 + system 解析 + matchMedia 监听
 //
 // 测试要点：dark/light 应用到 html class、system 模式按 matchMedia 解析、

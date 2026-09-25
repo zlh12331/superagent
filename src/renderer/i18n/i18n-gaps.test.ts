@@ -1,4 +1,4 @@
-// src/renderer/i18n/__tests__/i18n-gaps.test.ts
+// src/renderer/i18n/i18n-gaps.test.ts
 // i18n 域批次8 缺口补全：initI18n 幂等 / 语言切换 / useErrorMessage 兜底链
 //
 // 测试要点：

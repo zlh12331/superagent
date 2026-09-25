@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-terminal-bridge.test.tsx
+// src/renderer/hooks/use-terminal-bridge.test.tsx
 // use-terminal-bridge 单元测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

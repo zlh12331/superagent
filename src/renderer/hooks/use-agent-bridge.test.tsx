@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-agent-bridge.test.tsx
+// src/renderer/hooks/use-agent-bridge.test.tsx
 // use-agent-bridge 单测：回合结束 → invalidate 缓存 + 清理 L2 缓冲 + usage 累积
 import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';

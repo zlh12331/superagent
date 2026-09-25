@@ -1,4 +1,4 @@
-// src/renderer/stores/__tests__/stores-gaps.test.ts
+// src/renderer/stores/stores-gaps.test.ts
 // stores 层批次1 缺口补全：draft/settings/tool/approvals/create-persistent 首次补测
 //
 // 测试要点（真实 Zustand store，无 mock；beforeEach 重置状态与 localStorage）：

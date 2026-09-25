@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-agent.test.tsx
+// src/renderer/hooks/use-agent.test.tsx
 // 回归：useAgentWithIpc 必须把 id 透传给 useChat
 //
 // 根因链（journey-agent E2E 三例失败）：id 被解构掉未透传 → useChat 自生成随机

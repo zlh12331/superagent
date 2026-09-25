@@ -97,7 +97,7 @@ export function useComposerDrag(textareaRef: RefObject<HTMLTextAreaElement | nul
   // 卸载兜底（2026-09-11 补）：拖拽进行中组件被卸载（切会话/关闭面板）时 pointerup
   // 不会再派发，document 上的 pointermove/pointerup/pointercancel 监听与 dragRef 会滞留
   // ——监听闭包同时持有 dragRef 与已分离的 textarea 引用，构成句柄泄漏。
-  // 回归守卫见 __tests__/use-composer-drag.test.tsx 的「拖拽进行中卸载组件」用例。
+  // 回归守卫见同目录 use-composer-drag.test.tsx 的「拖拽进行中卸载组件」用例。
   useEffect(
     () => () => {
       endDragRef.current?.();

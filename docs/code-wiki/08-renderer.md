@@ -90,7 +90,7 @@
 ## 10. dev / 测试
 
 - `dev/mock-api.ts`：前端 mock 层，支持脱离主进程独立开发（保留是铁律）。
-- `test/`：`msw-handlers`（MSW）、`setup`（jest-dom）、`smoke.test.tsx`、`mock-api.test.ts`。
+- `test/`：`mock-responses`（IPC 响应桩）、`setup`（jest-dom）、`smoke.test.tsx`、`mock-api.test.ts`。
 
 ## 11. 关键文件
 

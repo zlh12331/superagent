@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-conversation-search.test.ts
+// src/renderer/hooks/use-conversation-search.test.ts
 // 会话内搜索单测：匹配纯函数（大小写/多匹配/空查询/无匹配）
 
 import type { UIMessage } from 'ai';

@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-file-tree.test.ts
+// src/renderer/hooks/use-file-tree.test.ts
 // useFileTree 数据生命周期测试（此前零覆盖）
 // ──────────────────────────────────────────────────────────────
 // 覆盖（正向 / 边界 / 异常）：

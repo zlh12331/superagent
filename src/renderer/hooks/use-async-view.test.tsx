@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-async-view.test.tsx
+// src/renderer/hooks/use-async-view.test.tsx
 // useAsyncView 契约层单测：五态映射（loading / refreshing / error / empty / ready）
 // 无业务 mock：用真实 QueryClient + useQuery 驱动各状态。
 

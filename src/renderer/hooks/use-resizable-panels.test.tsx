@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-resizable-panels.test.tsx
+// src/renderer/hooks/use-resizable-panels.test.tsx
 // 面板宽度与分隔线交互测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 该逻辑此前内联在 AppShell（约 100 行、5 个 state/ref/callback + 3 个 effect），

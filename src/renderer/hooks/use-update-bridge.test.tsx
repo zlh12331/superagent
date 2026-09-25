@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-update-bridge.test.tsx
+// src/renderer/hooks/use-update-bridge.test.tsx
 // use-update-bridge 单测：唯一订阅点（getStatus 快照 + subscribeStatus 事件）
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

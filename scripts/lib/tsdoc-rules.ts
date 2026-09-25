@@ -4,7 +4,8 @@
 // 落实 docs/design/typescript-dev-standards-ai.md 规则 18.1：
 // 「所有 export 的函数、类、接口、类型必须有 TSDoc 注释」。
 // 此前无自动门禁（debt.md#d3），2026-09-25 落地：AST 扫描 + 棘轮基线
-// （存量 1126 处，分批消化；新代码即写即 100% 覆盖）。
+// （存量已清零——落地日实测 75 处并全部补写；量化首跑的 1126 系判据误判
+// 产物，修正 Export 节点锚定后 75 为真值；新代码即写即 100% 覆盖）。
 //
 // 判据（@babel/parser AST，零手写正则）：
 // - 目标：export 的 function / class / interface / type alias / enum 声明

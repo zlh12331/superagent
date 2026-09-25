@@ -71,6 +71,7 @@ Service 层（session-service/cron-service/goal-service 等）→ getDb() 直接
 - **prompt-service**：initialize（单 insert onConflictDoNothing）/ updatePrompt（单 update）。
 - **usage-turn-store**：recordUsage / recordTurn（单 insert）/ pruneExpiredUsage（单 delete）。
 - **settings-pref**：upsert / delete（单语句）。
+- **goal-service**：clear（单 update）/ judge 落账（单 update）——create 属 4.1 事务清单。
 
 ### 4.3 跨存储组合写（SQLite 事务不适用，按顺序设计 + 可重建投影兜底）
 

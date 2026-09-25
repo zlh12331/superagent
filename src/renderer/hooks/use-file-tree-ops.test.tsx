@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-file-tree-ops.test.tsx
+// src/renderer/hooks/use-file-tree-ops.test.tsx
 // 文件树编辑操作 hook 单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 此前仅 joinPath 有属性测试，createFile / createDir 的

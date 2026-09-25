@@ -1,4 +1,4 @@
-// src/renderer/stores/__tests__/stores-gaps-2.test.ts
+// src/renderer/stores/stores-gaps-2.test.ts
 // stores 层批次2 缺口补全：confirm-dialog/ui/welcome/reasoning-collapse/sessions（激活会话）
 //
 // 测试要点（真实 Zustand store，无 mock；beforeEach 重置状态与 localStorage）：

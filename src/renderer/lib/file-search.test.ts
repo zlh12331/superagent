@@ -1,4 +1,4 @@
-// src/renderer/lib/__tests__/file-search.test.ts
+// src/renderer/lib/file-search.test.ts
 // 文件名搜索纯函数单测（glob 模式构造 / 目录派生）
 // ──────────────────────────────────────────────────────────────
 // 三个函数此前内联在 fuzzy-search-dialog 组件里、零直接覆盖：

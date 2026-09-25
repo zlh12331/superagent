@@ -5,7 +5,8 @@
 // 判据核在 scripts/lib/tsdoc-rules.ts（@babel/parser AST，反例测试同目录）。
 //
 // 棘轮：per-file 基线（key = 文件相对路径，metric = count），只允许下降——
-// 存量 1126 处（2026-09-25 实测）按域分批消化；新代码即写即 100% 覆盖。
+// 存量已清零（2026-09-25 落地日实测 75 处并全部补写；量化首跑的 1126 系判据
+// 误判，修正 Export 节点锚定后 75 为真值，详见 debt.md#d3）；新代码即写即 100% 覆盖。
 // 基线：scripts/tsdoc-baseline.json（--update-baseline 收紧）
 //
 // 运行：pnpm check:tsdoc

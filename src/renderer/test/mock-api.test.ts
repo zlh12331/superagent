@@ -1,4 +1,4 @@
-// src/renderer/test/__tests__/mock-api.test.ts
+// src/renderer/test/mock-api.test.ts
 // MSW IPC mock 工厂集成测试
 // ──────────────────────────────────────────────────────────────
 // 职责：

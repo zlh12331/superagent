@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-file-glob-search.test.tsx
+// src/renderer/hooks/use-file-glob-search.test.tsx
 // 文件名搜索 hook 单测（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 覆盖（含此前内联在对话框组件、无独立覆盖的竞态路径）：

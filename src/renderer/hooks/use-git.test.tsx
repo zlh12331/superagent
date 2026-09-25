@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-git.test.tsx
+// src/renderer/hooks/use-git.test.tsx
 // use-git 单元测试
 // ──────────────────────────────────────────────────────────────
 // 测试要点：

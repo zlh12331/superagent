@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-install-update.test.tsx
+// src/renderer/hooks/use-install-update.test.tsx
 // use-install-update 单测：无回合直接安装 / 有回合先确认（确认与取消两条路径）
 //
 // 用真实 confirm store（而非 mock confirm 函数）：验证的是"是否真的弹了确认、

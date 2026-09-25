@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-sidebar-highlight.test.tsx
+// src/renderer/hooks/use-sidebar-highlight.test.tsx
 // 侧边栏搜索高亮测试（正向 / 边界 / 异常）
 // ──────────────────────────────────────────────────────────────
 // 该副作用此前内联在 Sidebar（3 个 effect/ref，是复杂度 16 + 函数体 219 行

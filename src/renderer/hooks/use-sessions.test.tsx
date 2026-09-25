@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/use-sessions.test.tsx
+// src/renderer/hooks/use-sessions.test.tsx
 // use-sessions 单元测试：会话列表 / 详情 / 创建 / 删除 / 重命名
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

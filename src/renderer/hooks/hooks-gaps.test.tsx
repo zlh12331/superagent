@@ -1,4 +1,4 @@
-// src/renderer/hooks/__tests__/hooks-gaps.test.ts
+// src/renderer/hooks/hooks-gaps.test.ts
 // hooks 层批次2 缺口补全：tool-bridge 事件桥接、conversation-search 边界、
 // api-key 查询与 mutation、sessions 查询与乐观更新
 //
