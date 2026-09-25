@@ -103,6 +103,18 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     }
   }, [hasNextPage, fetchNextPage, getErrorMessage]);
 
+  // 回合列表 / 消息分页查询失败（历史拉取出错）：显示错误状态。
+  // 必须先于 loading 判定：isSuccess 与 isError 互斥，isError 时 historyReady
+  // 恒为 false，若 loading 分支在前会吞掉错误态（实测：任何历史查询失败都
+  // 永久卡「加载中」，下方错误分支成死代码——2026-09-25 审查修复）。
+  if (turnsQuery.isError || history.isError) {
+    return (
+      <div className="text-muted-foreground flex h-full items-center justify-center">
+        <p>{t('common.chatLoadFailed')}</p>
+      </div>
+    );
+  }
+
   // loading 中：显示加载状态（元数据 / 回合列表 / 首页消息任一未就绪）
   const historyReady = turnsQuery.isSuccess && history.isSuccess;
   if (isLoading || !historyReady) {
@@ -113,7 +125,7 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     );
   }
 
-  // session 不存在（已被删除或 URL 伪造）或查询出错：重定向到首页。
+  // session 不存在（已被删除或 URL 伪造）：重定向到首页。
   // isError 必须显式检查：被删会话的详情缓存已 removeQueries，重查返回错误而非
   // undefined 数据——不检查会让错误态落在所有守卫之外。
   if (session === undefined || isError) {
