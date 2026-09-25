@@ -12,7 +12,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { type ReactElement, useCallback, useEffect } from 'react';
+import { type ReactElement, useCallback, useEffect, useRef } from 'react';
 import { Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
@@ -81,7 +81,18 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   }, [setWelcomeMode]);
 
   // 向上补页回调（hooks 规则：须在早退 return 之前声明）：拉取更早一页并返回
-  // 其消息（ChatPanel prepend 后锚定由列表层处理）
+  // 其消息（ChatPanel prepend 后锚定由列表层处理）。
+  // shownTurnIdsRef 注册 UI 已显示/即将显示的回合（幂等）：翻页与回合结束
+  // invalidate 的交错窗口里，fetchNextPage 返回页可能与已显示页重叠——
+  // 返回前按回合身份过滤，防重复 prepend（2026-09-25 审查修复）。
+  const shownTurnIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const page of history.data?.pages ?? []) {
+      for (const group of page.turns) {
+        shownTurnIdsRef.current.add(group.turnId);
+      }
+    }
+  }, [history.data]);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = history;
   const loadEarlier = useCallback(async (): Promise<readonly ChatMessage[] | null> => {
     if (!hasNextPage) {
@@ -91,7 +102,14 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
       const result = await fetchNextPage();
       const pages = result.data?.pages;
       const oldestPage = pages?.[pages.length - 1];
-      return oldestPage?.messages ?? null;
+      if (oldestPage === undefined) {
+        return null;
+      }
+      const fresh = oldestPage.turns.filter((group) => !shownTurnIdsRef.current.has(group.turnId));
+      for (const group of fresh) {
+        shownTurnIdsRef.current.add(group.turnId);
+      }
+      return fresh.flatMap((group) => group.messages);
     } catch (error) {
       toast.error(
         unwrapErrorMessage(

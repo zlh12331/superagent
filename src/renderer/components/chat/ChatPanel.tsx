@@ -196,10 +196,20 @@ export function ChatPanel({
   // 向上补页：更早回合消息 prepend 进本地消息态（setMessages 函数式更新，
   // 避免与流式 append 竞态丢增量）。前置检查/重建逻辑在 prependEarlierPage
   // （chat-panel-derives.ts，认知复杂度棘轮）；回调由路由层提供（回合分页
-  // useInfiniteQuery 的 fetchNextPage 包装）。
+  // useInfiniteQuery 的 fetchNextPage 包装）。toUiMessages 按批次注入递增
+  // idPrefix——挂载批（hist-N）与各补页批（earlier-k-N）的 UIMessage id
+  // 不共用索引空间，防 id 撞车破坏 React key 与 regenerate 定位。
+  const earlierSeqRef = useRef(0);
   const handleLoadEarlier = useCallback((): Promise<void> => {
     if (loadEarlier === undefined) return Promise.resolve();
-    return prependEarlierPage({ loadEarlier, setMessages, toUiMessages: toInitialMessages });
+    return prependEarlierPage({
+      loadEarlier,
+      setMessages,
+      toUiMessages: (messages) => {
+        earlierSeqRef.current += 1;
+        return toInitialMessages(messages, `earlier-${String(earlierSeqRef.current)}`);
+      },
+    });
   }, [loadEarlier, setMessages]);
 
   // 回合运行态发布到全局（更新"重启并安装"等危险操作需要先确认）；判定与

@@ -90,7 +90,7 @@ export const router = createHashRouter([
               await queryClient
                 .ensureQueryData({
                   queryKey: SESSION_TURN_PAGES_QUERY_KEY(sessionId),
-                  queryFn: () => fetchTurnMessagesPage(turns.turns, 0),
+                  queryFn: () => fetchTurnMessagesPage(turns.turns, 'latest'),
                 })
                 .catch(() => undefined);
             })();

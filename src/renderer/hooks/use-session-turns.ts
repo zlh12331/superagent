@@ -37,27 +37,59 @@ export async function fetchSessionTurns(id: string) {
   return unwrap(response);
 }
 
+/** 单回合消息分组（页载荷按回合分组，turnId 是去重与游标推进的身份键） */
+export interface TurnMessageGroup {
+  readonly turnId: string;
+  readonly messages: readonly ChatMessage[];
+}
+
 /**
- * 单页回合消息原始拉取：从「最近」取 [fromEnd, fromEnd + TURNS_PER_PAGE) 窗内
- * 回合，并发拉取消息明细后按回合顺序平铺（hook 与路由 loader 共用）
+ * 页游标：'latest' = 最近一页（窗口动态跟随回合列表末端，保证重进会话时
+ * 最新回合总在缓存）；turnId = 锚定回合（窗口 [idx-10, idx)，**不含锚点**——
+ * 下一页衔接到上一页左端）。
+ *
+ * 为什么用回合身份而非「已加载数量」（2026-09-25 审查修复）：数量游标的窗口
+ * 按最新 turns.length 计算，回合列表增长（新回合结束触发 invalidate）后窗口
+ * 相对已缓存页平移，fetchNextPage 会与旧页大幅重叠；身份游标的窗口只依赖
+ * 锚点回合的索引（回合列表 append-only，索引稳定），且 React Query refetch
+ * 会以 getNextPageParam 逐页递推（下一页锚点 = 当前页首回合）——布局在任何
+ * 时刻都无缝衔接，无重叠无缺口。
+ */
+export type TurnPageParam = 'latest' | string;
+
+/**
+ * 单页回合消息原始拉取（hook 与路由 loader 共用）
+ *
+ * @param turns 回合列表（seq 升序）
+ * @param param 页游标（见 TurnPageParam 注释）
  */
 export async function fetchTurnMessagesPage(
   turns: readonly TurnSummary[],
-  fromEnd: number,
+  param: TurnPageParam,
 ): Promise<TurnMessagesPage> {
-  const end = Math.max(0, turns.length - fromEnd);
+  let end: number;
+  if (param === 'latest') {
+    end = turns.length;
+  } else {
+    const anchor = turns.findIndex((t) => t.turnId === param);
+    // 锚点回合不存在（回合不删除，防御）：空页让翻页判尽终止
+    if (anchor === -1) {
+      return { turnCount: 0, turns: [] };
+    }
+    end = anchor;
+  }
   const start = Math.max(0, end - TURNS_PER_PAGE);
   const pageTurns = turns.slice(start, end);
   if (pageTurns.length === 0) {
-    return { turnCount: 0, messages: [] };
+    return { turnCount: 0, turns: [] };
   }
-  const batches = await Promise.all(
+  const groups = await Promise.all(
     pageTurns.map(async (turn) => {
       const response = await window.api.session.getTurnMessages({ turnId: turn.turnId });
-      return unwrap(response).messages;
+      return { turnId: turn.turnId, messages: unwrap(response).messages };
     }),
   );
-  return { turnCount: pageTurns.length, messages: batches.flat() };
+  return { turnCount: groups.length, turns: groups };
 }
 
 /**
@@ -78,19 +110,20 @@ export function useSessionTurns(id: string | null) {
   });
 }
 
-/** 单页消息载荷（messages 按回合 seq 升序平铺） */
+/** 单页消息载荷（turns 按回合 seq 升序分组） */
 export interface TurnMessagesPage {
-  /** 本页回合数（翻页游标推进用；含 0 消息的空回合也计数） */
+  /** 本页回合数（含 0 消息的空回合也计数） */
   readonly turnCount: number;
-  /** 本页全部消息（回合内按 seq 升序；页与页之间新的在前） */
-  readonly messages: readonly ChatMessage[];
+  /** 本页回合分组（seq 升序；每回合含其全部消息） */
+  readonly turns: readonly TurnMessageGroup[];
 }
 
 /**
  * 回合消息分页 hook（useInfiniteQuery，页序：pages[0] = 最近一页，越后越早）
  *
- * pageParam 语义：已从「最近」加载的回合数（0 = 首页）。每页并发拉取该页
- * 全部回合的消息明细（本地 IPC，毫秒级），按回合顺序平铺。
+ * 游标语义见 TurnPageParam 注释。getNextPageParam 返回本页最早回合的 turnId，
+ * queryFn 据此取该回合**之前**的 TURNS_PER_PAGE 个回合——翻页与 refetch 都
+ * 通过「下一页锚点 = 当前页首回合」递推，布局恒无缝。
  *
  * @param id 会话 id
  * @param turns 回合列表（来自 useSessionTurns；undefined 时查询禁用）
@@ -99,18 +132,21 @@ export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[
   return useInfiniteQuery({
     queryKey: SESSION_TURN_PAGES_QUERY_KEY(id),
     enabled: turns !== undefined,
-    initialPageParam: 0,
+    initialPageParam: 'latest' as TurnPageParam,
     queryFn: async ({ pageParam }): Promise<TurnMessagesPage> => {
       if (turns === undefined) {
         throw new Error('turns not loaded');
       }
       return fetchTurnMessagesPage(turns, pageParam);
     },
-    // 已加载回合数未达总回合数时继续翻页
-    getNextPageParam: (_lastPage, allPages) => {
+    // 本页最早回合已是全局最早 → 无更早页；否则以其 turnId 作下一页锚点
+    getNextPageParam: (lastPage) => {
       if (turns === undefined) return undefined;
-      const loaded = allPages.reduce((sum, page) => sum + page.turnCount, 0);
-      return loaded < turns.length ? loaded : undefined;
+      const first = lastPage.turns[0];
+      if (first === undefined) return undefined;
+      const oldest = turns[0];
+      if (oldest !== undefined && first.turnId === oldest.turnId) return undefined;
+      return first.turnId;
     },
   });
 }
@@ -118,11 +154,23 @@ export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[
 /**
  * 已加载消息按时间正序平铺（页序反转：最早页在前，回合内 seq 升序保持）
  *
+ * 身份游标递推下相邻页理论无缝，但「翻页飞行中回合列表失效重取」的交错窗口
+ * 可能产生页间重叠——按回合身份去重（保序首现）防御缓存瞬时混合布局。
+ *
  * ChatPanel 的 initialMessages / 向上补页 prepend 均以此为单一口径。
  */
 export function flattenTurnPages(
   pages: readonly TurnMessagesPage[] | undefined,
 ): readonly ChatMessage[] {
   if (pages === undefined) return [];
-  return [...pages].reverse().flatMap((page) => page.messages);
+  const seen = new Set<string>();
+  const groups: TurnMessageGroup[] = [];
+  for (const page of [...pages].reverse()) {
+    for (const group of page.turns) {
+      if (seen.has(group.turnId)) continue;
+      seen.add(group.turnId);
+      groups.push(group);
+    }
+  }
+  return groups.flatMap((group) => group.messages);
 }
