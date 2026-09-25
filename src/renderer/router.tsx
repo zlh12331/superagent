@@ -28,7 +28,7 @@ import {
   SESSION_TURN_PAGES_QUERY_KEY,
   SESSION_TURNS_QUERY_KEY,
 } from '@/hooks/use-session-turns';
-import { fetchSessionDetail, SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
+import { fetchSessionDetail, SESSION_DETAIL_DATA_KEY } from '@/hooks/use-sessions';
 import { ROUTES } from '@/lib/constants';
 import { queryClient } from '@/lib/query/query-client';
 import { RootErrorBoundary, RootHydrateFallback, RootLayout } from './routes/root';
@@ -75,7 +75,9 @@ export const router = createHashRouter([
             // 优雅重定向首页，而非落入全页错误边界。
             void queryClient
               .ensureQueryData({
-                queryKey: SESSION_DETAIL_QUERY_KEY(sessionId),
+                // 数据 key 与 useSessionDetail 一致（meta 形状）；失效/清理
+                // 走 SESSION_DETAIL_QUERY_KEY 前缀，与此数据 key 解耦
+                queryKey: SESSION_DETAIL_DATA_KEY(sessionId, false),
                 queryFn: () => fetchSessionDetail(sessionId, false),
               })
               .catch(() => undefined);

@@ -35,10 +35,16 @@ import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
  * Query key 常量（避免手写字符串导致 typo）
  *
  * ['sessions'] - 会话列表缓存
- * ['session', id] - 单个会话详情缓存
+ * ['session', id] - 会话域失效/清理**前缀**（invalidate/removeQueries 用，
+ *   前缀匹配覆盖详情全形状 + turns / turn-pages 分页域）
+ * ['session', id, 'meta'|'full'] - 会话详情数据缓存（SESSION_DETAIL_DATA_KEY，
+ *   按 includeMessages 分形状——同一缓存条目恒同形状，防「同 key 两种
+ *   queryFn 互相覆盖」（2026-09-25 审查修复：此前双形状共用 ['session', id]）
  */
 export const SESSIONS_QUERY_KEY = ['sessions'] as const;
 export const SESSION_DETAIL_QUERY_KEY = (id: string) => ['session', id] as const;
+export const SESSION_DETAIL_DATA_KEY = (id: string, includeMessages: boolean) =>
+  includeMessages ? (['session', id, 'full'] as const) : (['session', id, 'meta'] as const);
 
 /** 默认分页大小（一页 50 条） */
 const DEFAULT_PAGE_SIZE = 50;
@@ -123,7 +129,7 @@ export async function fetchSessionDetail(id: string, includeMessages = true) {
  */
 export function useSessionDetail(id: string | null, includeMessages = true) {
   return useQuery({
-    queryKey: SESSION_DETAIL_QUERY_KEY(id ?? 'unknown'),
+    queryKey: SESSION_DETAIL_DATA_KEY(id ?? 'unknown', includeMessages),
     queryFn: async () => {
       if (id === null) {
         // enabled: false 时不会执行，但 TS 无法推断分支不可达

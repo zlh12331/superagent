@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  SESSION_DETAIL_QUERY_KEY,
+  SESSION_DETAIL_DATA_KEY,
   useCreateSession,
   useDeleteSession,
   useRecentDirs,
@@ -98,17 +98,18 @@ describe('use-sessions hooks', () => {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
     }
     const { result } = renderHook(() => useDeleteSession(), { wrapper: Wrapper });
-    // 先在缓存中植入该会话的详情（模拟用户曾打开过该会话）
-    queryClient.setQueryData(SESSION_DETAIL_QUERY_KEY('s1'), {
+    // 先在缓存中植入该会话的详情（模拟用户曾打开过该会话；用真实数据 key——
+    // removeQueries 按前缀清理，须覆盖 hook 实际写入的 meta 形状条目）
+    queryClient.setQueryData(SESSION_DETAIL_DATA_KEY('s1', false), {
       session: { id: 's1', workingDir: '/tmp', title: '旧会话' },
       messages: [],
     });
-    expect(queryClient.getQueryData(SESSION_DETAIL_QUERY_KEY('s1'))).toBeDefined();
+    expect(queryClient.getQueryData(SESSION_DETAIL_DATA_KEY('s1', false))).toBeDefined();
 
     result.current.mutate('s1');
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     // removeQueries 语义：缓存条目彻底消失（invalidate 只会标记 stale，仍可命中）
-    expect(queryClient.getQueryData(SESSION_DETAIL_QUERY_KEY('s1'))).toBeUndefined();
+    expect(queryClient.getQueryData(SESSION_DETAIL_DATA_KEY('s1', false))).toBeUndefined();
   });
 
   it('useRenameSession：调用 rename', async () => {
