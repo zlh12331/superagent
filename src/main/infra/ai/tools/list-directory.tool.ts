@@ -25,6 +25,11 @@ const ListDirectoryInputSchema = z.object({
 
 type ListDirectoryInput = z.infer<typeof ListDirectoryInputSchema>;
 
+/**
+ * 创建 list_directory 工具（列出目录内容：递归深度可控，含类型/大小/修改时间）
+ *
+ * @param fileService 文件服务（执行实际列目录）
+ */
 export function createListDirectoryTool(fileService: IFileService): Tool<ListDirectoryInput> {
   return {
     name: 'list_directory',

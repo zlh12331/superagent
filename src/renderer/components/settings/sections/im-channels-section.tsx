@@ -17,6 +17,7 @@ import { IM_CHANNELS_QUERY_KEY } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { ImAllowlistField } from './im-allowlist-field';
 
+/** IM 渠道设置区：渠道列表 + token 录入与启停 + 群聊白名单字段 */
 export function ImChannelsSection(): ReactElement {
   const { t } = useTranslation();
   const queryClient = useQueryClient();

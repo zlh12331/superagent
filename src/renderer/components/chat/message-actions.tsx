@@ -11,6 +11,7 @@ import { useCopy } from '@/hooks/use-copy';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+/** 消息操作行：复制全文（useCopy）/ 重新生成（流式中禁用） */
 export function MsgActions({
   text,
   messageId,

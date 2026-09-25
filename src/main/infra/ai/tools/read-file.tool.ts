@@ -43,6 +43,11 @@ const ReadFileInputSchema = z.object({
 
 type ReadFileInput = z.infer<typeof ReadFileInputSchema>;
 
+/**
+ * 创建 read_file 工具（读取工作目录内 UTF-8 文本文件，支持 offset/limit 分批读取）
+ *
+ * @param fileService 文件服务（执行实际读取）
+ */
 export function createReadFileTool(fileService: IFileService): Tool<ReadFileInput> {
   return {
     name: 'read_file',

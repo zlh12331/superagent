@@ -123,6 +123,7 @@ function HeadlessModeWarning({ mode }: { readonly mode: string }): ReactElement 
   );
 }
 
+/** 远程控制设置区：状态展示 + 启动/停止远程控制（模式限制警告见上方 ModeWarning） */
 export function RemoteControlSection(): ReactElement {
   const { t } = useTranslation();
   const { data, isPending: statusLoading, isError, error, refetch } = useRemoteStatusQuery();

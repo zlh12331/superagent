@@ -24,6 +24,7 @@ interface FileDiffViewProps {
   readonly deletions: number | undefined;
   readonly isLoading: boolean;
 }
+/** 单文件 diff 视图：新增/删除行数徽标 + diff 正文（高亮降级见文件实现） */
 export function FileDiffView({
   filePath,
   diff,

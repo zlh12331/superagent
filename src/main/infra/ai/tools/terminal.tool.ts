@@ -38,6 +38,11 @@ const TerminalActionSchema = z.object({
 
 type TerminalInput = z.infer<typeof TerminalActionSchema>;
 
+/**
+ * 创建 terminal 工具（交互式终端会话管理：创建/输入/读输出/调尺寸/终止；无头场景拒绝，ask 级审批）
+ *
+ * @param terminalService 终端服务（执行实际终端操作）
+ */
 export function createTerminalTool(terminalService: ITerminalService): Tool<TerminalInput> {
   return {
     name: 'terminal',

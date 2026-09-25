@@ -158,6 +158,7 @@ function ModelUsageList({
   );
 }
 
+/** Token 用量设置区：汇总统计 + 按模型/按日明细（失败态显式呈现，不静默全零） */
 export function UsageSection(): ReactElement {
   const { t, i18n } = useTranslation();
 

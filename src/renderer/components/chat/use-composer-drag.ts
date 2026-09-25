@@ -78,6 +78,7 @@ export interface ComposerDragHandleProps {
   readonly onKeyDown: (event: KeyboardEvent<HTMLHRElement>) => void;
 }
 
+/** 输入框高度拖拽 hook 返回：拖拽手柄事件 props（展开到 hr 手柄上） */
 export interface ComposerDrag {
   /** 展开到拖拽手柄上的事件 props */
   readonly handleProps: ComposerDragHandleProps;

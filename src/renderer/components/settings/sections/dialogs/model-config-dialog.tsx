@@ -34,6 +34,7 @@ import {
   type ModelConfigMode,
 } from './model-config-fields';
 
+/** 模型配置弹窗 props（新增/编辑双模式，mode 与 editingModel 联动见字段注释） */
 export interface ModelConfigDialogProps {
   readonly open: boolean;
   /** 弹窗模式（edit 时 editingModel 必传） */

@@ -44,6 +44,11 @@ const WriteFileInputSchema = z.object({
 
 type WriteFileInput = z.infer<typeof WriteFileInputSchema>;
 
+/**
+ * 创建 write_file 工具（写入 UTF-8 文本：默认覆盖，append=true 追加；ask 级审批）
+ *
+ * @param fileService 文件服务（执行实际写入）
+ */
 export function createWriteFileTool(fileService: IFileService): Tool<WriteFileInput> {
   return {
     name: 'write_file',

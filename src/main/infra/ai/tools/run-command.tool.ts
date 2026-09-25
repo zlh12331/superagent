@@ -112,6 +112,10 @@ interface RunCommandOutput {
   readonly stderrTruncated: boolean;
 }
 
+/**
+ * 创建 run_command 工具（在工作目录内执行 shell 命令：DANGEROUS_PATTERNS 拦截高危命令，
+ * 超时默认 30s 上限 5 分钟；ask 级审批）
+ */
 export function createRunCommandTool(): Tool<RunCommandInput> {
   return {
     name: 'run_command',

@@ -1262,10 +1262,12 @@ AI 生成任何 TypeScript 项目时，必须使用以下完整 tsconfig.json �
 
   规则 18.1  所有 export 的函数、类、接口、类型必须有 TSDoc 注释。
 
-    ⚠️ 门禁状态（2026-09-24 如实标注）：本条**暂无自动门禁**。check:comments 规则 A 只拦
-    「过期 @param」（注释与签名漂移），不拦「缺失注释」；全量强制需 AST 扫描 + 棘轮基线
-    （存量无 TSDoc 的 export 数量多，直接开会炸 CI）。已记录于 scripts/check-comments.ts
-    头注释「已知盲区」段，待评估实现。
+    ⚠️ 门禁状态（2026-09-25 更新）：**已落地自动门禁** `pnpm check:tsdoc`（挂 check:static 链）。
+    判据核 scripts/lib/tsdoc-rules.ts（@babel/parser AST：export 的函数/类/接口/类型/enum
+    声明前须有 /** TSDoc；重载签名跳过、export { } 形态责任在被指向声明、JSDoc 与声明间
+    允许 biome-ignore 指令行）。存量已清零（2026-09-25，原登记债 debt.md#d3 关闭）；
+    棘轮基线 scripts/tsdoc-baseline.json（当前空表 = 0 存量，新代码即写即 100% 覆盖）。
+    注：规则只拦「缺失」；「过期 @param」由 check:comments 规则 A 拦截，两者互补。
 
   规则 18.2  TSDoc 必须包含以下标签（按顺序）：
 

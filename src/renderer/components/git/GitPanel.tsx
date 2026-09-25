@@ -66,6 +66,7 @@ function StatusArea({
   return <FileList files={status.files} selectedFilePath={selectedFilePath} onSelect={onSelect} />;
 }
 
+/** Git 面板（右面板）：工作区状态查询 + 文件列表/单文件 diff 双视图，四态守卫见上方 Content */
 export function GitPanel({ path, className }: GitPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

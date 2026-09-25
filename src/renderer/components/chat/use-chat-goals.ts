@@ -20,6 +20,7 @@ export interface ChatGoalView {
   readonly status: 'active' | 'completed' | 'aborted';
 }
 
+/** 会话目标 hook 返回：展示态（currentGoal/isGoalCompleted）+ 增删动作 */
 export interface ChatGoals {
   /** 当前展示目标（active 优先 → completed；无目标为 undefined） */
   readonly currentGoal: ChatGoalView | undefined;

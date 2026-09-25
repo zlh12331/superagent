@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { RECENT_TURNS_QUERY_KEY } from '@/lib/query/keys';
 
+/** 回合记录设置区：最近回合列表（四态契约：行内加载 / 错误重试 / 空态） */
 export function TurnsSection(): ReactElement {
   const { t } = useTranslation();
 

@@ -416,6 +416,7 @@ export const cronTasks = sqliteTable(
   (t) => [check('chk_cron_tasks_enabled', sql`${t.enabled} IN (0,1)`)],
 );
 
+/** cron_tasks 表类型（select 产物） */
 export type CronTaskRow = typeof cronTasks.$inferSelect;
 
 /**
@@ -438,6 +439,7 @@ export const skills = sqliteTable(
   (t) => [check('chk_skills_source', sql`${t.source} IN ('learned','builtin')`)],
 );
 
+/** skills 表类型（select 产物） */
 export type SkillRow = typeof skills.$inferSelect;
 
 /** tasks 表类型 */

@@ -14,7 +14,7 @@
 |---|---|---|---|
 | D1 | P2 | path-guard TOCTOU 残余风险 | open（接受，专项时处理） |
 | D2 | P1 | 会话数据全量传输（无分页/增量） | resolved（2e20ed6，回合分页落地） |
-| D3 | P2 | TSDoc 规则 18.1 无自动门禁 | open（维持标注，不强制） |
+| D3 | P2 | TSDoc 规则 18.1 无自动门禁 | resolved（check:tsdoc 门禁落地 + 存量清零） |
 | D4 | P2 | `session:getTurnMessages` IPC 闲置未接线 | resolved（2e20ed6，渲染层已消费） |
 | D5 | P2 | Query 预取/loader 空白（路由串行等待） | resolved（647896e，chat 路由 loader 预取） |
 | D6 | P1 | 数据层写路径未收敛 + 事务边界未成文 | resolved（683b1f3，拍板成文 + 事务盘点） |
@@ -49,11 +49,17 @@
 
 ### D3 · TSDoc 规则 18.1 无自动门禁
 
-- 位置：[check-comments.ts](file:///scripts/check-comments.ts) 头注释「已知盲区」段、
-  [typescript-dev-standards-ai.md](file:///docs/design/typescript-dev-standards-ai.md) 规则 18.1。
-- 描述：check:comments 规则 A 只拦「过期 @param」，不拦「缺失注释」；全量强制需 AST 扫描 +
-  棘轮基线（存量无 TSDoc 的 export 数量多）。
-- 处置：2026-09-24 已双端如实标注；评估结论为「收益 < 噪音，暂不实施」。
+- 位置：[check-tsdoc.ts](file:///scripts/check-tsdoc.ts)、
+  [tsdoc-rules.ts](file:///scripts/lib/tsdoc-rules.ts)（判据核 + 反例测试）、
+  [typescript-dev-standards-ai.md 规则 18.1](file:///docs/design/typescript-dev-standards-ai.md)。
+- 描述：规则 18.1（export 的函数/类/接口/类型必须有 TSDoc）此前无自动门禁，
+  check:comments 规则 A 只拦「过期 @param」不拦「缺失」。
+- 处置：**resolved（2026-09-25）**。① 门禁落地：`pnpm check:tsdoc` 挂 check:static 链，
+  @babel/parser AST 判据（重载/重导出/enum 语义、biome-ignore 邻近豁免），per-file 棘轮基线；
+  ② 存量清零：实测 75 处（量化首跑 1126 为脚本误判，修正判据后 75 为真值——含 26 处
+  「JSDoc 被 biome-ignore 隔开」的既有文档形态），全部基于真实行为补写；③ 分工成文：
+  本门禁拦「缺失」，check:comments 规则 A 拦「漂移」。export const 未强制（规范 18.1 未列，
+  16 处无注释仅统计）。
 
 ### D4 · `session:getTurnMessages` 闲置
 

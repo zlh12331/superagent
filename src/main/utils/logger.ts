@@ -192,6 +192,10 @@ function serializeError(error: unknown): Record<string, unknown> {
  */
 let fatalErrorHandled = false;
 
+/**
+ * 注册全局错误处理器：uncaughtException / unhandledRejection 落盘 + 致命退出
+ * （行为契约见上方 fatalErrorHandled 注释；幂等由模块级标志保证）
+ */
 export function registerGlobalErrorHandlers(): void {
   process.on('uncaughtException', (error: Error) => {
     // 重入保护：flush/退出过程中再次抛错时不再递归

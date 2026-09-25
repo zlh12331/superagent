@@ -66,6 +66,10 @@ const MESSAGE_LIST_LIVE_PROPS = {
   'aria-relevant': 'additions text',
 } as const;
 
+/**
+ * 聊天消息列表组装层：消息行渲染 + 流式占位 + 滚动跟随/到底按钮 +
+ * 会话内搜索定位 + 导航轨跳转；数据按回合分页，滚动到顶触发向上补页
+ */
 export function ChatMessageList({
   messages,
   status,

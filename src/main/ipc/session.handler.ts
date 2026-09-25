@@ -23,6 +23,7 @@ import type { ISessionService } from '../infra/storage/session-service';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
+/** session 域 IPC handler 依赖（组合根注入；compactMessages 见字段注释） */
 export interface SessionHandlerDeps {
   readonly sessionService: ISessionService;
   /**

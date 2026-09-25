@@ -27,6 +27,11 @@ const CodeReviewInputSchema = z.object({
 
 type CodeReviewInput = z.infer<typeof CodeReviewInputSchema>;
 
+/**
+ * 创建 code_review 工具（读取指定文件完整内容，供后续代码质量/安全/性能审查分析）
+ *
+ * @param fileService 文件服务（执行实际读取）
+ */
 export function createCodeReviewTool(fileService: IFileService): Tool<CodeReviewInput> {
   return {
     name: 'code_review',

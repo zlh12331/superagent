@@ -21,6 +21,7 @@ interface BrandMarkProps {
   readonly className?: string;
 }
 
+/** 品牌标记 SVG：flat 实心 / gradient 品牌渐变两种填充，尺寸可调（默认 22px） */
 export function BrandMark({
   size = 22,
   variant = 'flat',

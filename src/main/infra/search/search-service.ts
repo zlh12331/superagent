@@ -145,6 +145,10 @@ function appendSearchPaths(args: string[], paths: readonly string[]): void {
   args.push('--', ...paths);
 }
 
+/**
+ * 文件搜索服务（ISearchService 实现）：封装 ripgrep 子进程——
+ * 文件名匹配（--files）/ 内容搜索（正则+glob 过滤），注入 spawn 便于测试
+ */
 export class SearchService implements ISearchService {
   /**
    * 子进程启动函数（DI 注入点：测试传 fake，生产默认 node:child_process spawn）

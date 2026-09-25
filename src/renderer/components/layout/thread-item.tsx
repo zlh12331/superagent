@@ -53,6 +53,7 @@ interface SortableThreadItemProps {
   readonly onOpenInExplorer: () => void;
 }
 
+/** 可排序会话条目（dnd-kit）：选中/置顶/删除/打开文件树/资源管理器打开 */
 export function SortableThreadItem({
   sessionId,
   folderName,

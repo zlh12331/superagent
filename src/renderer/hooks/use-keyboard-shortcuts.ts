@@ -97,6 +97,10 @@ function toHotkeyString(parsed: ParsedShortcut): string {
 /** useHotkeys 公共选项：阻止默认行为，表单元素内不触发（与原实现一致） */
 const HOTKEY_OPTIONS = { preventDefault: true } as const;
 
+/**
+ * 全局快捷键 hook：从设置读 shortcut 配置 → react-hotkeys 绑定
+ * （preventDefault + 表单内不触发；handlers 经 ref 转发避免重复绑定）
+ */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
   const shortcuts = useSettingsStore((s) => s.shortcuts);
 

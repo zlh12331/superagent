@@ -39,6 +39,11 @@ const GrepInputSchema = z.object({
 
 type GrepInput = z.infer<typeof GrepInputSchema>;
 
+/**
+ * 创建 grep 工具（基于 ripgrep 的内容搜索：正则/字面量模式 + glob 过滤，返回行号与前后 2 行上下文）
+ *
+ * @param searchService 搜索服务（执行实际搜索）
+ */
 export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
   return {
     name: 'grep',

@@ -36,6 +36,7 @@ import { detectLangFromPath, lineCount } from './file-viewer-utils';
 /** 大文件高亮降级阈值（行）：shiki 整文件 tokenize 超过则跳过高亮渲染纯文本 */
 const MAX_HIGHLIGHT_LINES = 5000;
 
+/** 文件查看面板（右面板）：shiki 高亮查看/编辑/保存，超 5000 行降级纯文本 */
 export function FileViewerPanel(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

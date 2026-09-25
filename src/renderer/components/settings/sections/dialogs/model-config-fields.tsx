@@ -49,6 +49,7 @@ export interface ModelConfigFormValues {
   readonly topK: string;
 }
 
+/** 模型配置表单字段组 props（受控表单：值/错误/高级段展开均由父层持有） */
 export interface ModelConfigFieldsProps {
   readonly mode: ModelConfigMode;
   readonly values: ModelConfigFormValues;

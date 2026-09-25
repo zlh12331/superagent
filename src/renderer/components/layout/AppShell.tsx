@@ -87,6 +87,10 @@ interface AppShellProps {
   children: ReactNode;
 }
 
+/**
+ * 应用根布局：Topbar + Sidebar + 主内容区 + 底部 DevPanel，挂载全部
+ * IPC 桥接 hook（审批/提问/工具流/回合结束失效）与全局对话框宿主
+ */
 export function AppShell({ children }: AppShellProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

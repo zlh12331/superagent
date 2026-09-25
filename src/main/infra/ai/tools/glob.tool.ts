@@ -27,6 +27,11 @@ const GlobInputSchema = z.object({
 
 type GlobInput = z.infer<typeof GlobInputSchema>;
 
+/**
+ * 创建 glob 工具（按 glob 模式匹配文件路径，基于 ripgrep --files，遵守 .gitignore）
+ *
+ * @param searchService 搜索服务（执行实际匹配）
+ */
 export function createGlobTool(searchService: ISearchService): Tool<GlobInput> {
   return {
     name: 'glob',

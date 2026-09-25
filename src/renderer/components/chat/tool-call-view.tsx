@@ -39,6 +39,7 @@ interface ToolCallViewProps {
   errorText: string | undefined;
 }
 
+/** 工具调用 inline 卡片：按 state 渲染执行态，input/output 折叠展开（含 diff 类专用视图） */
 export function ToolCallView({
   type,
   toolCallId,

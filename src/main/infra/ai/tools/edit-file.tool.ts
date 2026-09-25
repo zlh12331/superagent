@@ -29,6 +29,9 @@ function countLines(s: string): number {
   return s.split('\n').length;
 }
 
+/**
+ * 创建 edit_file 工具（oldString→newString 字符串替换精确编辑：默认要求唯一匹配，replaceAll 全替换）
+ */
 export function createEditFileTool(): Tool<EditFileInput> {
   return {
     name: 'edit_file',

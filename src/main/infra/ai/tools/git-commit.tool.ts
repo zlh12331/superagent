@@ -32,6 +32,11 @@ const GitCommitInputSchema = z.object({
 
 type GitCommitInput = z.infer<typeof GitCommitInputSchema>;
 
+/**
+ * 创建 git_commit 工具（提交暂存区改动到本地仓库：不自动 git add，amend=true 修补上次提交）
+ *
+ * @param gitService Git 服务（执行实际提交）
+ */
 export function createGitCommitTool(gitService: IGitService): Tool<GitCommitInput> {
   return {
     name: 'git_commit',

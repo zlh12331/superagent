@@ -8,10 +8,10 @@
 //   D. pnpm 命令引用存在性——非内置/scripts/.bin 的命令引用 = 过期
 // 范围：src/**/*.{ts,tsx} + docs/design/*.md
 //
-// 已知盲区（如实记录）：
-//   - "所有 export 必须有 TSDoc"（typescript-dev-standards-ai.md 规则 18.1）无自动门禁：
-//     规则 A 只拦"过期 @param"，不拦"缺失注释"；实现需 AST 扫描 + 棘轮基线（存量违规多）。
-//     已登记 docs/design/debt.md#d3。
+// 分工说明（2026-09-25）：
+//   - "缺失 TSDoc"（规则 18.1）由 check:tsdoc（scripts/lib/tsdoc-rules.ts）拦截；
+//   - 本脚本规则 A 拦"过期 @param"（注释与签名漂移）——两者互补。
+//     原「已知盲区」登记（debt.md#d3）已随 check:tsdoc 落地关闭。
 //
 // 运行：pnpm check:comments
 // ──────────────────────────────────────────────────────────────

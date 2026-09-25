@@ -65,6 +65,12 @@ const CodebaseInputSchema = z.object({
 
 type CodebaseInput = z.infer<typeof CodebaseInputSchema>;
 
+/**
+ * 创建 codebase 工具（基于本地索引的代码库智能查询：符号定义/调用方/影响面/自然语言探索；
+ * 首次查询自动建索引，大项目首次可达数十秒）
+ *
+ * @param codebaseService 代码索引服务（执行实际查询）
+ */
 export function createCodebaseTool(codebaseService: ICodebaseService): Tool<CodebaseInput> {
   return {
     name: 'codebase',

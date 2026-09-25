@@ -130,6 +130,10 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
   };
 }
 
+/**
+ * 记忆中枢服务：管理记忆引擎 sidecar（utilityProcess）生命周期——
+ * 启动/健康检查/停止，启动成功后经 HttpMemoryPort 代理 MemoryPort 调用
+ */
 export class MemoryHubService {
   private child: EngineProcessHandle | null = null;
   private port: MemoryPort | null = null;

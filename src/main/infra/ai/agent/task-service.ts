@@ -32,6 +32,7 @@ export const TaskStatus = {
   CANCELLED: 'cancelled',
 } as const;
 
+/** 任务状态机（pending → running → completed/failed/cancelled，见 TaskStatus 常量表） */
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
 
 /** 任务种类 */
@@ -42,6 +43,7 @@ export const TaskKind = {
   SHELL: 'shell',
 } as const;
 
+/** 任务种类（agent / shell，见 TaskKind 常量表） */
 export type TaskKind = (typeof TaskKind)[keyof typeof TaskKind];
 
 /** 任务条目 */

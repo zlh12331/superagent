@@ -20,6 +20,7 @@ import { TOOLS_LIST_QUERY_KEY, WHITELIST_ENTRIES_QUERY_KEY } from '@/lib/query/k
 import { cn } from '@/lib/utils';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 
+/** 审批模式设置区：模式切换（自动/询问）+ 工具白名单增删 */
 export function ApprovalModeSection(): ReactElement {
   const { t } = useTranslation();
   const { mode, setMode } = useApprovalMode();

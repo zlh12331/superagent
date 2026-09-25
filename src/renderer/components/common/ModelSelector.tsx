@@ -55,6 +55,7 @@ function resolveMenuNavIndex(key: string, currentIndex: number, count: number): 
   return null;
 }
 
+/** 模型选择器（composer 右侧）：厂商/模型二级下拉，受控/非受控 open 双模式 */
 export function ModelSelector({
   provider,
   model,

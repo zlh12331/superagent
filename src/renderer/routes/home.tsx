@@ -70,6 +70,7 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
   },
 ] as const;
 
+/** 欢迎页路由：品牌区 + composer（首条消息 stash 透传 ChatPanel）+ 快捷动作 + 最近项目 */
 export function HomePage(): ReactElement {
   // 本地化文案 + 错误码解析（单一真源）
   const { t } = useTranslation();

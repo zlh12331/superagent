@@ -162,6 +162,10 @@ function createTrayImage(): Electron.NativeImage {
   const fallback = nativeImage.createEmpty();
   return image.isEmpty() ? fallback : image.resize({ width: 16, height: 16 });
 }
+/**
+ * 创建系统托盘（幂等：已创建则复用）。左键单击显示/聚焦主窗口，
+ * 右键菜单含窗口/设置/退出入口
+ */
 export function createTray(trayDeps: TrayDeps): void {
   if (tray !== null) {
     return; // 已创建（如 macOS activate 重建窗口路径），复用

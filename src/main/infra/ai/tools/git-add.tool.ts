@@ -27,6 +27,11 @@ const GitAddInputSchema = z.object({
 
 type GitAddInput = z.infer<typeof GitAddInputSchema>;
 
+/**
+ * 创建 git_add 工具（暂存改动到 Git 暂存区：paths 为空数组 = 全部暂存；ask 级审批）
+ *
+ * @param gitService Git 服务（执行实际暂存）
+ */
 export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
   return {
     name: 'git_add',

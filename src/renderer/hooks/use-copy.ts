@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
 
+/** 复制反馈 hook 返回：copied 反馈态 + copy 动作 */
 export interface UseCopyResult {
   /** 最近一次复制是否处于「已复制」反馈期（2 秒后自动复位） */
   readonly copied: boolean;
@@ -18,6 +19,10 @@ export interface UseCopyResult {
   readonly copy: (text: string) => Promise<void>;
 }
 
+/**
+ * 剪贴板复制 hook（全仓统一入口）：成功进入 2 秒「已复制」反馈期，失败 toast；
+ * 卸载时清理反馈定时器
+ */
 export function useCopy(): UseCopyResult {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);

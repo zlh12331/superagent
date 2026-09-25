@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useTranslation } from '@/i18n/use-translation';
 import { PROVIDER_LABELS } from '../provider-labels';
 
+/** 添加模型弹窗 props（选择厂商或自定义入口，进入 ModelConfigDialog） */
 export interface AddModelDialogProps {
   /** 弹窗开关（受控） */
   readonly open: boolean;

@@ -87,6 +87,7 @@ function openInFileManager(dir: string, message: string): void {
   });
 }
 
+/** 左侧栏：会话列表（分页/搜索/置顶分组）+ 快捷导航 + 账户区 */
 export function Sidebar(): ReactElement {
   const navigate = useNavigate();
   // 本地化文案

@@ -38,6 +38,11 @@ const GitPushInputSchema = z.object({
 
 type GitPushInput = z.infer<typeof GitPushInputSchema>;
 
+/**
+ * 创建 git_push 工具（推送本地提交到远程：支持 -u 设上游与 --force-with-lease 安全强推；高风险 ask 审批）
+ *
+ * @param gitService Git 服务（执行实际推送）
+ */
 export function createGitPushTool(gitService: IGitService): Tool<GitPushInput> {
   return {
     name: 'git_push',
