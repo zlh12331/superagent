@@ -143,10 +143,11 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         }
       }
 
-      const cwd =
+      // realTarget：spawn 落点用真实路径（TOCTOU，debt.md#d1）；metadata.cwd 保持输入形态
+      const { resolved, realTarget } =
         input.cwd !== undefined
           ? resolveWithinWorkspace(input.cwd, ctx.workingDir)
-          : ctx.workingDir;
+          : { resolved: ctx.workingDir, realTarget: ctx.workingDir };
 
       const isWin = process.platform === 'win32';
       const shell = isWin ? (process.env['ComSpec'] ?? 'cmd.exe') : '/bin/sh';
@@ -154,7 +155,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
 
       const result: RunCommandOutput = await new Promise<RunCommandOutput>((resolve) => {
         const child = spawn(shell, [shellFlag, input.command], {
-          cwd,
+          cwd: realTarget,
           env: process.env,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
@@ -300,7 +301,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         output,
         metadata: {
           command: input.command,
-          cwd,
+          cwd: resolved,
           exitCode: result.exitCode,
           signal: result.signal,
           stdout: result.stdout,

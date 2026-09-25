@@ -10,11 +10,13 @@
 // 6. 工作区内部路径（含子目录回溯后仍在区内）→ 通过
 // 7. 符号链接（P1 安全修复）：工作区内 symlink 指向外部 → UNAUTHORIZED；
 //    指向工作区内 → 通过；新建文件经 symlink 祖先 → UNAUTHORIZED
+// 8. TOCTOU（debt.md#d1）：双形态返回——resolved 保持输入形态（展示零漂移），
+//    realTarget 为真实落点（文件 IO 必用）；symlink 场景两者指向不同链路
 //
 // 注：realpath 校验需要真实文件系统（2026-08 安全修复引入），
 // 测试使用真实临时目录（与 file-service 测试同一模式）。
 
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
@@ -40,18 +42,18 @@ describe('resolveWithinWorkspace', () => {
 
   it('相对路径：基于 workingDir 解析为绝对路径', () => {
     const result = resolveWithinWorkspace('src/main.ts', workspace);
-    expect(result).toBe(join(workspace, 'src', 'main.ts'));
+    expect(result.resolved).toBe(join(workspace, 'src', 'main.ts'));
   });
 
   it('相对路径带子目录：正常解析', () => {
     const result = resolveWithinWorkspace('packages/shared/src/index.ts', workspace);
-    expect(result).toBe(join(workspace, 'packages', 'shared', 'src', 'index.ts'));
+    expect(result.resolved).toBe(join(workspace, 'packages', 'shared', 'src', 'index.ts'));
   });
 
   it('绝对路径：直接使用（在 workingDir 内则通过）', () => {
     const abs = join(workspace, 'src', 'main.ts');
     const result = resolveWithinWorkspace(abs, workspace);
-    expect(result).toBe(abs);
+    expect(result.resolved).toBe(abs);
   });
 
   it('路径遍历（../etc/passwd）：越界 → UNAUTHORIZED', () => {
@@ -87,24 +89,32 @@ describe('resolveWithinWorkspace', () => {
 
   it('工作区根路径本身：通过（rel 为空字符串）', () => {
     const result = resolveWithinWorkspace('.', workspace);
-    expect(result).toBe(workspace);
+    expect(result.resolved).toBe(workspace);
   });
 
   it('工作区内部回溯（父目录回溯）：解析后仍在区内 → 通过', () => {
     const trackback = `src${sep}..${sep}package.json`;
     const result = resolveWithinWorkspace(trackback, workspace);
-    expect(result).toBe(join(workspace, 'package.json'));
+    expect(result.resolved).toBe(join(workspace, 'package.json'));
   });
 
   it('路径含 Unicode 中文目录：正常解析且不误判', () => {
     const result = resolveWithinWorkspace('笔记/第一章.md', workspace);
-    expect(result).toBe(join(workspace, '笔记', '第一章.md'));
+    expect(result.resolved).toBe(join(workspace, '笔记', '第一章.md'));
   });
 
   it('新建文件（父目录已存在）：通过（祖先 realpath 解析）', () => {
     mkdirSync(join(workspace, 'src'));
     const result = resolveWithinWorkspace('src/new-file.ts', workspace);
-    expect(result).toBe(join(workspace, 'src', 'new-file.ts'));
+    expect(result.resolved).toBe(join(workspace, 'src', 'new-file.ts'));
+  });
+
+  it('无 symlink：realTarget 为真实落点（realpath 意义下与 resolved 同指）', () => {
+    mkdirSync(join(workspace, 'src'));
+    writeFileSync(join(workspace, 'src', 'main.ts'), 'x');
+    const result = resolveWithinWorkspace('src/main.ts', workspace);
+    // macOS tmpdir 本身可能是链接（/var → /private/var），用 realpath 基准对比而非字符串
+    expect(result.realTarget).toBe(realpathSync(join(workspace, 'src', 'main.ts')));
   });
 
   // ── 符号链接（P1 安全修复，2026-08 安全审计） ──────────────
@@ -126,7 +136,18 @@ describe('resolveWithinWorkspace', () => {
     mkdirSync(join(workspace, 'src'));
     symlinkSync(join(workspace, 'src'), join(workspace, 'alias'), SYMLINK_TYPE);
     const result = resolveWithinWorkspace('alias/main.ts', workspace);
-    expect(result).toBe(join(workspace, 'alias', 'main.ts'));
+    expect(result.resolved).toBe(join(workspace, 'alias', 'main.ts'));
+  });
+
+  it('TOCTOU（debt.md#d1）：symlink 场景 realTarget 为真实落点，resolved 保持输入形态', () => {
+    mkdirSync(join(workspace, 'src'));
+    writeFileSync(join(workspace, 'src', 'main.ts'), 'x');
+    symlinkSync(join(workspace, 'src'), join(workspace, 'alias'), SYMLINK_TYPE);
+    const result = resolveWithinWorkspace('alias/main.ts', workspace);
+    // resolved：输入形态（alias 链路），LLM/UI 展示零漂移
+    expect(result.resolved).toBe(join(workspace, 'alias', 'main.ts'));
+    // realTarget：真实落点（src 链路），文件 IO 必用——经链接读取不会拿别名路径
+    expect(result.realTarget).toBe(realpathSync(join(workspace, 'src', 'main.ts')));
   });
 
   it('新建文件经 symlink 祖先（祖先指向工作区外）→ UNAUTHORIZED', () => {

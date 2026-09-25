@@ -53,9 +53,10 @@ export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
     permission: 'auto',
     category: 'read',
     execute: async (input: GrepInput, ctx: ToolContext): Promise<ToolResult> => {
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata 保持输入形态
       const resolvedPaths =
         input.paths.length > 0
-          ? input.paths.map((p) => resolveWithinWorkspace(p, ctx.workingDir))
+          ? input.paths.map((p) => resolveWithinWorkspace(p, ctx.workingDir).realTarget)
           : [ctx.workingDir];
 
       const result: GrepRes = await searchService.grep({

@@ -41,10 +41,11 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
     permission: 'auto',
     category: 'read',
     execute: async (input: CodeReviewInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileReadRes = await fileService.read({
-        path: absPath,
+        path: realTarget,
         offset: undefined,
         limit: undefined,
       });
@@ -63,7 +64,7 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
         title: `代码审查: ${input.path}`,
         output,
         metadata: {
-          path: absPath,
+          path: resolved,
           ...stats,
           encoding: result.encoding,
         },

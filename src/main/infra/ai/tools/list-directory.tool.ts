@@ -39,10 +39,11 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
     permission: 'auto',
     category: 'read',
     execute: async (input: ListDirectoryInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileListRes = await fileService.list({
-        path: absPath,
+        path: realTarget,
         depth: input.depth,
         includeHidden: input.includeHidden,
       });
@@ -57,7 +58,7 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
         title: `列出目录: ${input.path}`,
         output: lines.join('\n') || '(空目录)',
         metadata: {
-          path: absPath,
+          path: resolved,
           depth: input.depth,
           count: result.entries.length,
           entries: result.entries,

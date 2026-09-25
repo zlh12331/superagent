@@ -57,21 +57,22 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
     permission: 'auto',
     category: 'read',
     execute: async (input: ReadFileInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：文件 IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileReadRes = await fileService.read({
-        path: absPath,
+        path: realTarget,
         offset: input.offset,
         limit: input.limit,
       });
-      // 记录已读文件（priorReadEnforcement：编辑前必须先读）
-      readTracker.record(ctx.sessionId, absPath);
+      // 记录已读文件（priorReadEnforcement：编辑前必须先读；键与 edit/write 的检查侧一致）
+      readTracker.record(ctx.sessionId, realTarget);
 
       return {
         title: `读取文件: ${input.path}`,
         output: result.content,
         metadata: {
-          path: absPath,
+          path: resolved,
           totalLines: result.totalLines,
           encoding: result.encoding,
           offset: input.offset ?? 0,

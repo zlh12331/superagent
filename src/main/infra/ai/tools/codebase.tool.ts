@@ -120,12 +120,13 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
         }
 
         case 'node': {
+          // realTarget：分析器读文件用真实落点（TOCTOU，debt.md#d1）
           const res = await codebaseService.node({
             path,
             name: input.symbol,
             file:
               input.file !== undefined && input.file.length > 0
-                ? resolveWithinWorkspace(input.file, ctx.workingDir)
+                ? resolveWithinWorkspace(input.file, ctx.workingDir).realTarget
                 : undefined,
             offset: input.offset,
             limit: input.limit,

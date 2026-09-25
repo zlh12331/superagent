@@ -35,8 +35,9 @@ export function createCodeSymbolsTool(): Tool<CodeSymbolsInput> {
     permission: 'auto',
     category: 'read',
     execute: async (input: CodeSymbolsInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
-      const result = await getCodeAnalyzer().analyze({ path: absPath });
+      // realTarget：分析器读文件用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
+      const result = await getCodeAnalyzer().analyze({ path: realTarget });
       if (result.parseFailed) {
         return {
           title: `代码符号: ${input.path}`,
@@ -52,7 +53,7 @@ export function createCodeSymbolsTool(): Tool<CodeSymbolsInput> {
       return {
         title: `代码符号: ${input.path}（${result.symbols.length} 个，${result.language}）`,
         output: lines.join('\n'),
-        metadata: { path: absPath, language: result.language, count: result.symbols.length },
+        metadata: { path: resolved, language: result.language, count: result.symbols.length },
       };
     },
   };

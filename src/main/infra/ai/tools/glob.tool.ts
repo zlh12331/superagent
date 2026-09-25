@@ -42,11 +42,12 @@ export function createGlobTool(searchService: ISearchService): Tool<GlobInput> {
     category: 'read',
     execute: async (input: GlobInput, ctx: ToolContext): Promise<ToolResult> => {
       const rawPath = input.path ?? '.';
-      const absPath = resolveWithinWorkspace(rawPath, ctx.workingDir);
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(rawPath, ctx.workingDir);
 
       const result: GlobRes = await searchService.glob({
         pattern: input.pattern,
-        path: absPath,
+        path: realTarget,
         includeHidden: input.includeHidden,
         maxResults: input.maxResults,
       });
@@ -56,7 +57,7 @@ export function createGlobTool(searchService: ISearchService): Tool<GlobInput> {
         output: result.files.join('\n') || '(无匹配结果)',
         metadata: {
           pattern: input.pattern,
-          path: absPath,
+          path: resolved,
           count: result.files.length,
           truncated: result.truncated,
           files: result.files,

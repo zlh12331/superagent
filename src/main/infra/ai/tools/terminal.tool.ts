@@ -58,12 +58,13 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
       }
       switch (input.action) {
         case 'create': {
-          const cwd =
+          // realTarget：终端进程落点用真实路径（TOCTOU，debt.md#d1）；展示/metadata 保持输入形态
+          const { resolved, realTarget } =
             input.cwd !== undefined
               ? resolveWithinWorkspace(input.cwd, ctx.workingDir)
-              : ctx.workingDir;
+              : { resolved: ctx.workingDir, realTarget: ctx.workingDir };
           const result = await terminalService.create({
-            cwd,
+            cwd: realTarget,
             command: input.command,
             env: undefined,
             cols: input.cols ?? 80,
@@ -74,13 +75,13 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           const title = input.command ?? 'shell';
           return {
             title: `创建终端: ${title}`,
-            output: `终端已创建，terminalId: ${result.terminalId}\n工作目录: ${cwd}\nPID: ${result.pid}`,
+            output: `终端已创建，terminalId: ${result.terminalId}\n工作目录: ${resolved}\nPID: ${result.pid}`,
             metadata: {
               terminalId: result.terminalId,
               sessionId: ctx.sessionId,
               title,
               pid: result.pid,
-              cwd,
+              cwd: resolved,
               command: input.command,
               cols: input.cols,
               rows: input.rows,

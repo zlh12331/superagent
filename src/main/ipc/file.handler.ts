@@ -141,8 +141,10 @@ export async function confineToWorkspace(
   let lastDenied: AppError | null = null;
   for (const root of roots) {
     try {
-      // 多根语义：任一根内即为合法（相对路径按「第一个命中的根」解析）
-      return resolveWithinWorkspace(inputPath, root);
+      // 多根语义：任一根内即为合法（相对路径按「第一个命中的根」解析）。
+      // 取 .resolved：渲染层用户手势路径（用户在对话框选中文件）非 LLM 生成，
+      // 无 symlink 换链威胁面，保持 resolved 形态即 FileService 入参（debt.md#d1 取舍）
+      return resolveWithinWorkspace(inputPath, root).resolved;
     } catch (error: unknown) {
       if (error instanceof AppError && error.code === ErrorCode.UNAUTHORIZED) {
         lastDenied = error;

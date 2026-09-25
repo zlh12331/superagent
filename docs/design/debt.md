@@ -12,7 +12,7 @@
 
 | ID | 严重度 | 主题 | 状态 |
 |---|---|---|---|
-| D1 | P2 | path-guard TOCTOU 残余风险 | open（接受，专项时处理） |
+| D1 | P2 | path-guard TOCTOU 残余风险 | resolved（双形态返回 realTarget，13 工具点适配） |
 | D2 | P1 | 会话数据全量传输（无分页/增量） | resolved（2e20ed6，回合分页落地） |
 | D3 | P2 | TSDoc 规则 18.1 无自动门禁 | resolved（check:tsdoc 门禁落地 + 存量清零） |
 | D4 | P2 | `session:getTurnMessages` IPC 闲置未接线 | resolved（2e20ed6，渲染层已消费） |
@@ -27,10 +27,19 @@
 ### D1 · path-guard TOCTOU 残余风险
 
 - 位置：[path-guard.ts:131](file:///src/main/infra/ai/tools/path-guard.ts)
-- 描述：字符串级边界检查后经 realpath 重校验已修大部分 TOCTOU，但「resolveRealTarget 返回后、
-  实际 IO 前」的窗口仍存在。残余风险低（需要本地并发攻击者），专项处理方案：
-  「返回 realTarget + 全量回归」。
+- 描述（改造前）：字符串级边界检查后经 realpath 重校验已修大部分 TOCTOU，但「resolveRealTarget 返回后、
+  实际 IO 前」的窗口仍存在，且各工具拿到的是 realpath 后的字符串，与输入形态脱节。残余风险低（需要本地并发攻击者）。
 - 来源：安全审计（2026-09）。
+- 处置：**resolved（2026-09-25）**。`resolveWithinWorkspace` 改返回双形态
+  `{ resolved, realTarget }`——resolved 为输入形态（LLM/UI 展示零漂移），realTarget 为真实落点
+  （文件 IO 必用）；13 个工具消费点统一适配（read/write/edit/list/glob/grep/code-review/
+  code-symbols/codebase/lsp×3/run-command/terminal：IO 行用 realTarget，metadata/title 用 resolved；
+  readTracker 三处键统一 realTarget）。path-guard 测试新增 TOCTOU 回归用例
+  （symlink 场景 realTarget 为真实落点、resolved 保持输入形态；realpath 基准对比，兼容 macOS tmpdir 链接）。
+  **如实登记的取舍**：① 渲染层用户手势路径（`confineToWorkspace`，用户在对话框选中的文件）保持
+  resolved 形态——非 LLM 生成、无 symlink 换链威胁面；② 「resolveRealTarget 返回后、实际 IO 前」的
+  检查-使用窗口在单线程工具执行流内已收窄到最小（校验结果直接作为 IO 入参，不再二次解析），
+  理论上的跨进程竞态（外部进程在窗口内换链）由 OS 层兜底，用户态无解，与审计结论一致不再扩项。
 
 ### D2 · 会话数据全量传输
 

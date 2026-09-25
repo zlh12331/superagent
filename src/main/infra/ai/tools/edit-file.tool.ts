@@ -41,10 +41,12 @@ export function createEditFileTool(): Tool<EditFileInput> {
     permission: 'ask',
     category: 'edit',
     execute: async (input: EditFileInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：文件 IO 用真实落点（TOCTOU，debt.md#d1）；title/metadata 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       // priorReadEnforcement：修改已存在文件前必须已 read_file（防盲目编辑）
-      if (!readTracker.has(ctx.sessionId, absPath)) {
+      // 键与 read-file 的 record 侧一致（均为 realTarget）
+      if (!readTracker.has(ctx.sessionId, realTarget)) {
         return {
           title: '文件未读取',
           output:
@@ -54,11 +56,11 @@ export function createEditFileTool(): Tool<EditFileInput> {
 
       let original: string;
       try {
-        original = await fs.readFile(absPath, 'utf-8');
+        original = await fs.readFile(realTarget, 'utf-8');
       } catch (error) {
         const nodeError = error as { code?: string };
         if (nodeError.code === 'ENOENT') {
-          throw new AppError(ErrorCode.NOT_FOUND, `文件不存在：${absPath}`, error);
+          throw new AppError(ErrorCode.NOT_FOUND, `文件不存在：${resolved}`, error);
         }
         throw new AppError(ErrorCode.FS_READ_FAILED, '读取文件失败', error);
       }
@@ -93,14 +95,14 @@ export function createEditFileTool(): Tool<EditFileInput> {
 
       try {
         const buffer = Buffer.from(updated, 'utf-8');
-        await fs.writeFile(absPath, buffer);
+        await fs.writeFile(realTarget, buffer);
         const isDelete = input.newString.length === 0;
         const action = isDelete ? '删除' : input.replaceAll ? '替换全部' : '替换';
         return {
           title: `编辑文件: ${input.path}`,
           output: `已${action} ${replacedCount} 处（+${addedLines} 行 / -${removedLines} 行，写入 ${buffer.byteLength} 字节）`,
           metadata: {
-            path: absPath,
+            path: resolved,
             bytesWritten: buffer.byteLength,
             replacedCount,
             addedLines,

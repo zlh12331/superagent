@@ -41,7 +41,8 @@ export function createLspHoverTool(manager: LspServerManager): Tool<LspHoverInpu
     category: 'read',
     execute: async (input: LspHoverInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
-        const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir);
+        // realTarget：语言服务器按真实落点读文件（TOCTOU，debt.md#d1）
+        const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir).realTarget;
         const rootUri = pathToFileURL(ctx.workingDir).href;
         const client = await manager.getClient(rootUri, absPath);
         const hover = await client.hover(pathToFileURL(absPath).href, {
