@@ -74,8 +74,8 @@ describe('规则 B · stale-file-ref / stale-line-ref（file:/// 引用）', () 
   });
 
   it('边界：模板插值路径（运行时构造）→ 跳过', () => {
-    const dynamic = 'dynamic';
-    expect(run(RULES.checkFileRefs, '参见 file:///$' + '{' + dynamic + '}')).toHaveLength(0);
+    // \u0024 = $：样本需含 "${dynamic}" 文本，但源码字面量禁写相邻 ${（noTemplateCurlyInString）
+    expect(run(RULES.checkFileRefs, '参见 file:///\u0024{dynamic}')).toHaveLength(0);
   });
 });
 

@@ -60,7 +60,9 @@ const SPACE_UTIL_RE = /(?:^|\s|")space-[xy]-[0-9.]+/g;
 // className 中的硬编码 hex 颜色
 const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/g;
 
-// className 中的硬编码 rgba()/rgb() 颜色（此前只查 #hex，rgba 色会漏网）
+// className 中的硬编码 rgba()/rgb() 颜色（此前只查 #hex，rgba 色会漏网）；
+// css 分支（scanCss）复用同一正则——D7 收口后 css 效果层统一 color-mix 形态，
+// 生成物 tokens.css 由 CLI 层文件豁免，其 rgba 令牌值不受影响
 const RGB_COLOR_RE = /rgba?\([^\n)]*\)/g;
 
 // 裸 z-* 数字层级（收口到 --z-* 令牌体系）：z-10/z-50/z-[100] 及 hover:/focus: 变体均违例；
@@ -155,9 +157,10 @@ export function scanTsLike(content: string, rel: string, monoExempt = false): To
 }
 
 /**
- * 扫描 css 内容：只查硬编码 hex（className 类规则对 css 无意义）。
+ * 扫描 css 内容：查硬编码 hex 与 rgba()/rgb()（className 类规则对 css 无意义）。
  * 剔除块注释（含跨行）与行内 /* … *\/ 注释片段、var(--…) 片段后再查。
- * 边界（如实记录）：css 的 rgba(…) 带 alpha 效果色暂不收口（debt.md#d7）。
+ * D7 收口后效果层统一 color-mix(in srgb, <token|white|black> N%, transparent) 形态
+ * （color-mix( 不匹配 rgba?\( 正则，不会误报）。
  */
 export function scanCss(content: string, rel: string): TokenViolation[] {
   const violations: TokenViolation[] = [];
@@ -179,6 +182,9 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
     const lineNo = idx + 1;
     for (const m of withoutVars.matchAll(HEX_COLOR_RE)) {
       violations.push({ file: rel, line: lineNo, rule: 'hex-color', detail: m[0] });
+    }
+    for (const m of withoutVars.matchAll(RGB_COLOR_RE)) {
+      violations.push({ file: rel, line: lineNo, rule: 'rgb-color', detail: m[0] });
     }
   });
   return violations;

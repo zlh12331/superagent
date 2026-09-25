@@ -114,9 +114,25 @@ describe('scanCss（css 硬编码 hex）', () => {
     expect(rulesOf(scanCss('.x { color: #ffffff; }', 'a.css'))).toContain('hex-color');
   });
 
-  it('豁免：var(--x) 与 rgba 效果色（debt.md#d7 边界）', () => {
+  it('反例：css 硬编码 rgba() → 命中（D7 收口后 rgba 必卡关）', () => {
+    expect(rulesOf(scanCss('.x { background: rgba(139, 69, 19, 0.15); }', 'a.css'))).toContain(
+      'rgb-color',
+    );
+    expect(rulesOf(scanCss('.x { color: rgb(1, 2, 3); }', 'a.css'))).toContain('rgb-color');
+  });
+
+  it('豁免：var(--x) 与 color-mix 效果形态不误报', () => {
     expect(
-      scanCss('.x { color: var(--brand); background: rgba(0,0,0,0.1); }', 'a.css'),
+      scanCss(
+        '.x { color: var(--brand); background: color-mix(in srgb, var(--ink-brown) 15%, transparent); }',
+        'a.css',
+      ),
+    ).toHaveLength(0);
+    expect(
+      scanCss(
+        '.y { box-shadow: inset 0 1px 0 color-mix(in srgb, white 30%, transparent); }',
+        'a.css',
+      ),
     ).toHaveLength(0);
   });
 

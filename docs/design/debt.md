@@ -18,7 +18,7 @@
 | D4 | P2 | `session:getTurnMessages` IPC 闲置未接线 | resolved（2e20ed6，渲染层已消费） |
 | D5 | P2 | Query 预取/loader 空白（路由串行等待） | resolved（647896e，chat 路由 loader 预取） |
 | D6 | P1 | 数据层写路径未收敛 + 事务边界未成文 | resolved（683b1f3，拍板成文 + 事务盘点） |
-| D7 | P3 | css rgba alpha 效果色未收口令牌 | open（color-mix 专项） |
+| D7 | P3 | css rgba alpha 效果色未收口令牌 | resolved（D7 专项，color-mix 收口 + rgba 门禁） |
 | D8 | P3 | React Compiler 单组件 bail-out 无度量 | open（接受，源码层有 try-finally 规则兜底） |
 | D9 | P3 | 云端 CI electron postinstall 解压竞态 | open（用户指示暂不管云端 CI） |
 
@@ -85,10 +85,17 @@
 
 ### D7 · css rgba alpha 效果色未收口
 
-- 位置：[check-tokens.ts](file:///scripts/check-tokens.ts) css 分支（hex 已管，rgba 边界如实记录）。
-- 描述：globals.css 内 12+ 处 `rgba(…)` 带 alpha 效果色（白 3%-35%、语义色低透明度变体），
-  收编需 color-mix + 令牌 alpha 体系改造。
-- 处置：独立批次评估；铁律口径以「hex 硬编码 0 存量」先行。
+- 位置：[globals.css](file:///src/renderer/styles/globals.css)（效果层）、
+  [token-rules.ts](file:///scripts/lib/token-rules.ts)（scanCss 门禁）。
+- 描述（改造前）：globals.css 内 16 处 `rgba(…)` 带 alpha 效果色，且**基色与令牌漂移**
+  （diff 绿 #22c55e ≠ --success、红 #ef4444 ≠ --error、琥珀 #ffb84d ≠ --amber——暗主题不联动）。
+- 处置：**resolved（D7 专项，2026-09-25）**。16 处全部改写 `color-mix(in srgb, …)` 形态：
+  文学棕 3 处入新令牌 `--ink-brown`（亮 #8B4513 / 暗 #D4A574，恰为现状双主题值）；
+  diff/琥珀/stop 红 7 处对齐既有语义令牌（--success/--error/--amber，顺带修复暗主题联动）；
+  白高光 5 处 + 阴影黑 1 处用 white/black 关键字（双主题语义一致，无需令牌）。
+  门禁升级：scanCss 增补 `rgba?(` 检测（error 级，存量 0；color-mix 形态不误报；
+  tokens.css 生成物豁免不变）。视觉变化如实登记：diff 绿/红与琥珀边框色值向令牌收敛
+  （同色系内微差），暗主题下这些效果色首次跟随主题。
 
 ### D8 · React Compiler 单组件 bail-out 无度量
 

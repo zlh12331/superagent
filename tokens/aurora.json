@@ -329,6 +329,11 @@
     "value": "#001814",
     "comment": "品牌墨色（accent 渐变上的头像字色 / 勾选对号等高对比墨色细节）；双主题同值"
   },
+  "ink-brown": {
+    "value": "#8B4513",
+    "comment": "文学棕（::selection 墨水印迹 / blockquote 底色等文学风效果层基色；效果层用 color-mix(var(--ink-brown) N%, transparent) 引用，alpha 留在使用处）",
+    "dark": "#D4A574"
+  },
   "success": {
     "value": "#15A877",
     "comment": "TraeWork --status-success-default（基色：图形/边框/氛围；实底+白字用 --success-emphasis）"

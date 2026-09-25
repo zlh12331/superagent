@@ -123,6 +123,8 @@
   --magenta: #9570FF;
   /* 品牌墨色（accent 渐变上的头像字色 / 勾选对号等高对比墨色细节）；双主题同值 */
   --ink: #001814;
+  /* 文学棕（::selection 墨水印迹 / blockquote 底色等文学风效果层基色；效果层用 color-mix(var(--ink-brown) N%, transparent) 引用，alpha 留在使用处） */
+  --ink-brown: #8B4513;
   /* TraeWork --status-success-default（基色：图形/边框/氛围；实底+白字用 --success-emphasis） */
   --success: #15A877;
   /* 成功强调绿（实底+白字场景专属，双主题同值：白色前景 CR=5.55 达 AA；原基色仅 3.04） */
@@ -291,6 +293,8 @@
   --terminal-selection: rgba(212, 212, 212, 0.25);
   /* TraeWork --accent-violet */
   --magenta: #B655FC;
+  /* 文学棕（::selection 墨水印迹 / blockquote 底色等文学风效果层基色；效果层用 color-mix(var(--ink-brown) N%, transparent) 引用，alpha 留在使用处） */
+  --ink-brown: #D4A574;
   /* 成功文本绿（亮色用深档保 4.5:1；暗色对黑底复用基色即达标） */
   --success-text: var(--success);
   /* 消息气泡 — TraeWork --bg-base-secondary */
