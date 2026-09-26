@@ -1,5 +1,5 @@
 // src/renderer/components/common/EmptyState.tsx
-// 通用空状态组件 · 极简文学风
+// 通用空状态组件 · TraeWork
 // ──────────────────────────────────────────────────────────────
 // 设计：
 // - 图标用 size-12 圆形 + 暖米底 + strokeWidth=1.5

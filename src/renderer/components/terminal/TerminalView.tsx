@@ -88,7 +88,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     const terminalId = session.id;
     const container = containerRef.current;
 
-    // 创建 Terminal 实例（文学风主题：米色背景 + 衬线字体）
+    // 创建 Terminal 实例（主题色与 tokens --bg/--text 联动）
     const term = new Terminal({
       fontFamily: '"Cascadia Code", "JetBrains Mono", "Consolas", monospace',
       fontSize: 13,

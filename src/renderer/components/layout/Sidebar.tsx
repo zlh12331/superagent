@@ -11,7 +11,7 @@
 //   sidebar-tab / sidebar-list / thread-group-label / folder-label /
 //   folder-items / thread-item / ti-row / ti-dot / ti-content / ti-title /
 //   ti-meta / ti-actions / sidebar-foot
-// - 文学风视觉令牌：深棕主色 + 衬线标题 + 等宽元信息
+// - 标题衬线 + 等宽元信息（排版选择，非「文学风」设计轴）
 //
 // 状态分层（符合项目规范）：
 // - L2 Zustand：useActiveSessionStore（激活会话）/ useSidebarPrefStore（拖拽覆盖 + 折叠）

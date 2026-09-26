@@ -208,22 +208,6 @@
   --text-primary: var(--text);
   --bg-ter: var(--bg-elev-2);
   --danger: var(--error);
-  /* 兼容别名 — 指向 TraeWork 品牌色 */
-  --aurora-accent: var(--accent);
-  --aurora-accent-2: var(--accent-2);
-  --aurora-accent-glow: var(--accent-glow);
-  --aurora-accent-2-glow: var(--accent-2-glow);
-  --aurora-glow-sm: var(--glow-sm);
-  --aurora-glow-md: var(--glow-md);
-  /* 玻璃质感 - 顶栏背景（半透明 + 模糊） */
-  --aurora-glass-bg: var(--glass-bg);
-  /* 布局尺寸别名 */
-  --aurora-sidebar-w: var(--sidebar-w);
-  --aurora-right-panel-w: var(--right-panel-w);
-  --aurora-resizer-w: var(--resizer-w);
-  --aurora-topbar-h: var(--topbar-h);
-  /* 缓动曲线 */
-  --aurora-ease-out: var(--ease-out);
   /* 主按钮实底（bg-primary+白字场景）：暗色取深档保白字 CR≥4.5；与 --accent（图形/文本）职责分离 */
   --primary: var(--accent);
 }

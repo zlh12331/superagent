@@ -294,7 +294,7 @@ export function HomePage(): ReactElement {
           animate="visible"
         >
           <motion.span aria-hidden="true" variants={letterUpVariants} className="wl-icon">
-            <BrandMark size={40} variant="gradient" />
+            <BrandMark size={40} />
           </motion.span>
           {BRAND_TEXT.split('').map((ch, index) => (
             <motion.span

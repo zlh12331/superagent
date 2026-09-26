@@ -1,5 +1,5 @@
 // src/renderer/components/dev/LogsPanel.tsx
-// 日志查看器面板 · 极简文学风
+// 日志查看器面板
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 调用 useLogsReadQuery 获取 main.log 文件尾部 N 行日志

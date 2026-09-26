@@ -1,6 +1,6 @@
 ---
 feature: design-identity
-status: designed
+status: in-progress
 updated: 2026-09-26
 branch: (pending)
 commits:

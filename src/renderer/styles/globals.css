@@ -12,13 +12,13 @@
    TraeWork 设计系统 · 设计令牌
    ──────────────────────────────────────────────────────────────
    设计哲学（对齐 TraeWork Design Library）：
-   - 品牌色：紫色 #4B3FE3（--bg-brand），稀缺使用
+   - 品牌色：紫色 #4B3FE3，稀缺使用；品牌面实心（禁双 accent 渐变）
    - 中性灰表面体系：白 → 浅灰 → 灰 → 深灰
    - 6 级字号阶梯：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-*）
-     兼容旧 7 级 --fs-* 别名
+     兼容旧档 --fs-*（待 P2 按值迁移）
    - 暗色 / 亮色双主题，通过 <html class="dark"> 切换
    - Quiet by default：无装饰背景、无发光氛围、无噪点纹理
-   - 中性阴影替代发光效果
+   - 中性阴影替代发光效果；焦点允许 0 0 0 Npx soft ring
    - 完整 z-index 层级体系（--z-base 到 --z-boundary）
    ────────────────────────────────────────────────────────────── */
 
@@ -215,109 +215,7 @@ body {
   background: color-mix(in srgb, var(--ink-brown) 20%, transparent);
 }
 
-/* ──────────────────────────────────────────────────────────────
-   编辑器正文 · 衬线宋体 + 舒适行高（用于 TipTap ProseMirror）
-   通过 .prose-literary 类显式启用，不影响 UI 文本
-   ────────────────────────────────────────────────────────────── */
-.prose-literacy {
-  font-family: var(--font-serif);
-  font-size: 17px;
-  line-height: 1.9;
-  color: var(--foreground);
-  letter-spacing: 0.01em;
-  outline: none;
-}
-
-.prose-literacy p {
-  margin-bottom: 1.4em;
-  text-indent: 2em;
-}
-
-.prose-literacy h1 {
-  font-family: var(--font-serif);
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 1.3;
-  margin: 1em 0 0.5em;
-  text-indent: 0;
-  text-align: center;
-}
-
-.prose-literacy h2 {
-  font-family: var(--font-serif);
-  font-size: 20px;
-  font-weight: 600;
-  margin: 1.5em 0 0.8em;
-  padding-left: 12px;
-  border-left: 2px solid var(--primary);
-  text-indent: 0;
-}
-
-.prose-literacy h3 {
-  font-family: var(--font-serif);
-  font-size: 17px;
-  font-weight: 600;
-  margin: 1.2em 0 0.6em;
-  text-indent: 0;
-}
-
-.prose-literacy blockquote {
-  margin: 1.5em 0;
-  padding: 0.5em 1.2em;
-  border-left: 2px solid var(--border);
-  color: var(--muted-foreground);
-  font-style: italic;
-  background: color-mix(in srgb, var(--ink-brown) 3%, transparent);
-  text-indent: 0;
-}
-
-.prose-literacy code {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  padding: 2px 6px;
-  background: var(--secondary);
-  border-radius: 2px;
-  color: var(--destructive);
-}
-
-.prose-literacy ul,
-.prose-literacy ol {
-  margin: 1em 0;
-  padding-left: 2em;
-}
-
-.prose-literacy ul li {
-  list-style: disc;
-  text-indent: 0;
-  margin: 0.4em 0;
-}
-
-.prose-literacy ol li {
-  list-style: decimal;
-  text-indent: 0;
-  margin: 0.4em 0;
-}
-
-.prose-literacy a {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.prose-literacy strong {
-  font-weight: 700;
-  color: var(--foreground);
-}
-
-/* TipTap 占位符（ProseMirror 编辑器空内容时显示） */
-.prose-literacy.is-empty::before {
-  content: attr(data-placeholder);
-  color: var(--muted-foreground);
-  font-style: italic;
-  pointer-events: none;
-  float: left;
-  height: 0;
-}
+/* .prose-literacy 已删除（TSX 零引用；非设计轴，见 design-identity 残留表） */
 
 /* ProseMirror 焦态 */
 .ProseMirror:focus {
@@ -369,23 +267,21 @@ body {
    布局复刻 · 对齐原型 class 命名（docs/prototype/prototype-v2.html）
    ──────────────────────────────────────────────────────────────
    设计哲学：
-   - 保留文学风视觉令牌（米黄/深棕），复刻原型的布局结构
+   - 保留标题衬线 + mono 元信息排版（非「文学风」设计轴），复刻原型的布局结构
    - 三段式 grid：顶栏 / 主体（sidebar + resizer + main + resizer + right-panel）
    - class 命名对齐原型：.app / .topbar / .brand / .resizer / .chat-right-panel
-   - CSS 变量保留 --aurora-* 前缀，避免与 shadcn 的 --accent / --border 冲突
+   - 布局宽度令牌：--sidebar-w / --right-panel-w（JS 可覆盖 clamp 默认值）
    - 宽度采用 clamp() 响应式（拖拽时由 JS 动态覆盖为 px 值）
    ────────────────────────────────────────────────────────────── */
 
 /*
- * .dark 块原先重复定义了 --aurora-* 的暗色值，且与主令牌不一致
- * （如 --aurora-accent: #00f0d0 vs --accent: #00e5c7）。
- * 改为别名后，.dark 自动继承 :root 的 var() 引用，无需在此重复声明。
+ * 布局宽度令牌：:root 上为 clamp 默认值；拖拽时 JS 直接 setProperty 覆盖为 px。
  */
 
 /* ── 应用骨架：顶栏 + 弹性主体（grid 两行） ── */
 .app {
   display: grid;
-  grid-template-rows: var(--aurora-topbar-h) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
   height: 100vh;
   overflow: hidden;
   min-width: 0;
@@ -398,11 +294,11 @@ body {
   background: var(--background);
   display: grid;
   grid-template-columns:
-    var(--aurora-sidebar-w)
-    var(--aurora-resizer-w)
+    var(--sidebar-w)
+    var(--resizer-w)
     minmax(0, 1fr)
-    var(--aurora-resizer-w)
-    var(--aurora-right-panel-w);
+    var(--resizer-w)
+    var(--right-panel-w);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -434,10 +330,10 @@ body {
 .view-chat.sb-collapsed {
   grid-template-columns:
     0
-    var(--aurora-resizer-w)
+    var(--resizer-w)
     minmax(0, 1fr)
-    var(--aurora-resizer-w)
-    var(--aurora-right-panel-w);
+    var(--resizer-w)
+    var(--right-panel-w);
 }
 
 .view-chat.sb-collapsed .sidebar,
@@ -448,8 +344,8 @@ body {
 /* 右面板折叠态：第五列塌缩为 0 */
 .view-chat.crp-collapsed {
   grid-template-columns:
-    var(--aurora-sidebar-w)
-    var(--aurora-resizer-w)
+    var(--sidebar-w)
+    var(--resizer-w)
     minmax(0, 1fr)
     0
     0;
@@ -463,7 +359,7 @@ body {
 .view-chat.sb-collapsed.crp-collapsed {
   grid-template-columns:
     0
-    var(--aurora-resizer-w)
+    var(--resizer-w)
     minmax(0, 1fr)
     0
     0;
@@ -481,7 +377,7 @@ body {
   /* frameless 窗口（titleBarStyle: hidden）：顶栏即窗口标题栏
      右侧预留 Win11 overlay 窗口控件占位（最小化/最大化/关闭约 140px） */
   padding-right: 158px;
-  height: var(--aurora-topbar-h, 52px);
+  height: var(--topbar-h, 52px);
 }
 
 /* 通用 frameless 拖拽区（Topbar / 设置抽屉头部窗口控件预留区复用） */
@@ -649,8 +545,8 @@ body {
 }
 
 .sidebar-search-input:focus {
-  border-color: var(--aurora-accent);
-  box-shadow: 0 0 0 3px var(--aurora-accent-glow);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .sidebar-tabs {
@@ -687,7 +583,7 @@ body {
 .sidebar-tab.active {
   color: var(--sidebar-foreground);
   background: var(--sidebar-accent);
-  box-shadow: inset 0 0 0 1px var(--aurora-accent-glow);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
 }
 
 .sidebar-tab .count {
@@ -715,7 +611,7 @@ body {
   min-width: 0;
 }
 
-/* 新建会话按钮 - Aurora：双 accent 渐变 + 发光 */
+/* 新建会话按钮 · TraeWork C3 实心 primary（禁双 accent 渐变/发光） */
 .new-thread-btn {
   width: 100%;
   display: flex;
@@ -723,7 +619,7 @@ body {
   justify-content: center;
   gap: 8px;
   padding: 9px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 130%);
+  background: var(--primary);
   color: var(--primary-foreground);
   border: none;
   border-radius: 7px;
@@ -732,22 +628,15 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
-  box-shadow: var(--glow-sm);
-  transition:
-    transform 0.15s var(--ease-out),
-    box-shadow 0.15s var(--ease-out),
-    filter 0.15s var(--ease-out);
+  transition: background 0.15s var(--ease-out);
 }
 
 .new-thread-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--glow-md);
-  filter: brightness(1.08);
+  background: color-mix(in srgb, var(--primary) 90%, black);
 }
 
 .new-thread-btn:active {
-  transform: translateY(0);
-  filter: brightness(0.95);
+  background: color-mix(in srgb, var(--primary) 85%, black);
 }
 
 /* 会话分组标签（最近会话 / 归档） */
@@ -855,7 +744,7 @@ body {
   display: none;
 }
 
-/* 会话条目 - 文学风：衬线标题 + 等宽元信息 */
+/* 会话条目 — 衬线标题 + 等宽元信息 */
 .thread-item {
   display: flex;
   align-items: flex-start;
@@ -976,7 +865,7 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  color: var(--aurora-accent);
+  color: var(--accent);
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -1031,11 +920,11 @@ body {
 }
 
 .resizer:hover {
-  background: var(--aurora-accent-glow);
+  background: var(--accent-glow);
 }
 
 .resizer.dragging {
-  background: var(--aurora-accent-glow);
+  background: var(--accent-glow);
 }
 
 .resizer::after {
@@ -1054,8 +943,7 @@ body {
 /* hover/拖拽仅变色 + 光晕提示可拖拽，宽度保持 1px（用户要求：分隔线恒 1px） */
 .resizer:hover::after,
 .resizer.dragging::after {
-  background: var(--aurora-accent);
-  box-shadow: 0 0 8px var(--aurora-accent-glow);
+  background: var(--accent);
 }
 
 body.resizing {
@@ -1121,13 +1009,11 @@ body.resizing iframe {
 }
 
 .welcome-logo .wl-icon {
-  /* 品牌标识（components/common/BrandMark，size=40 渐变变体）——
-     与顶栏 .brand-mark 同一实现，品牌语言一致 */
+  /* 品牌标识（BrandMark，size=40，flat 实心） */
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 12px var(--accent-glow));
 }
 
 .welcome-quick-actions {
@@ -1177,11 +1063,11 @@ body.resizing iframe {
    grid 保持 5 列（sidebar | resizer | main | resizer | right-panel） */
 .view-chat.welcome-mode {
   grid-template-columns:
-    var(--aurora-sidebar-w)
-    var(--aurora-resizer-w)
+    var(--sidebar-w)
+    var(--resizer-w)
     minmax(0, 1fr)
-    var(--aurora-resizer-w)
-    var(--aurora-right-panel-w);
+    var(--resizer-w)
+    var(--right-panel-w);
 }
 
 /* main 改为居中 flex 容器（对齐原型 .thread 行为） */
@@ -1575,7 +1461,7 @@ body.resizing iframe {
 
 /* ── 启动动画 ── */
 .topbar {
-  animation: boot-reveal 0.55s var(--aurora-ease-out) backwards;
+  animation: boot-reveal 0.55s var(--ease-out) backwards;
 }
 
 @keyframes boot-reveal {
@@ -1614,7 +1500,7 @@ body.resizing iframe {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   消息流 · Aurora 设计系统（对齐原型 .msg 系列）
+   消息流 · TraeWork（对齐原型 .msg 系列）
    ────────────────────────────────────────────────────────────── */
 .msg {
   display: flex;
@@ -1639,13 +1525,11 @@ body.resizing iframe {
   display: none;
 }
 
-/* 助手头像：双 accent 渐变 + 外发光，与品牌标记呼应 */
+/* 助手头像：TraeWork C3 实心 accent（禁双 accent 渐变/外发光） */
 .msg-avatar.assistant {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 140%);
+  background: var(--accent);
   color: var(--ink);
-  box-shadow:
-    var(--glow-sm),
-    inset 0 1px 0 color-mix(in srgb, white 30%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
 }
 
 .msg-body {
@@ -2004,7 +1888,7 @@ body.resizing iframe {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Composer 输入舱 · Aurora 悬浮舱 + focus 发光
+   Composer 输入舱 · TraeWork 悬浮舱 + focus soft ring
    ────────────────────────────────────────────────────────────── */
 /* biome-ignore lint/style/noDescendingSpecificity: welcome-mode 变体在上方定义，此处为默认样式，不冲突 */
 .composer {
@@ -2064,7 +1948,6 @@ body.resizing iframe {
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
   opacity: 0;
   transition: opacity 0.3s ease;
-  filter: drop-shadow(0 0 4px var(--accent-glow));
 }
 
 .composer-box:focus-within {
@@ -2218,12 +2101,12 @@ body.resizing iframe {
 
 /* 输入框字符计数（已删除：用户要求移除字符计数器） */
 
-/* 发送按钮：双 accent 渐变 + 发光 */
+/* 发送按钮 · TraeWork C3 实心 primary */
 .send-btn {
   width: 30px;
   height: 30px;
   border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  background: var(--primary);
   border: none;
   color: var(--primary-foreground);
   cursor: pointer;
@@ -2231,19 +2114,15 @@ body.resizing iframe {
   align-items: center;
   justify-content: center;
   transition:
-    box-shadow 0.15s ease,
+    background 0.15s ease,
     transform 0.12s ease,
-    filter 0.15s ease;
+    opacity 0.15s ease;
   flex-shrink: 0;
   padding: 0;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 25%, transparent);
 }
 
 .send-btn:hover {
-  box-shadow:
-    var(--glow-md),
-    inset 0 1px 0 color-mix(in srgb, white 35%, transparent);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--primary) 90%, black);
 }
 
 .send-btn:active {
@@ -2283,7 +2162,6 @@ body.resizing iframe {
 
 .stop-gen-btn:hover {
   opacity: 0.9;
-  box-shadow: 0 0 14px color-mix(in srgb, var(--error) 35%, transparent);
 }
 
 .stop-gen-btn:active {
@@ -2303,7 +2181,7 @@ body.resizing iframe {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   卡片系统 · Aurora（工具调用 / 推理 / Plan / 审批）
+   卡片系统 · TraeWork（工具调用 / 推理 / Plan / 审批）
    ────────────────────────────────────────────────────────────── */
 .card {
   margin-top: 10px;
@@ -2340,7 +2218,6 @@ body.resizing iframe {
 
 .card:hover::before {
   background: var(--accent);
-  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .card-head {
@@ -2402,7 +2279,6 @@ button.card-head {
   background: var(--accent);
   margin-right: 5px;
   animation: pulseDot 1.4s ease-in-out infinite;
-  box-shadow: 0 0 6px var(--accent);
   display: inline-block;
   vertical-align: middle;
 }
@@ -2771,7 +2647,6 @@ button.card-head {
 
 .card.paused::before {
   background: var(--warning);
-  box-shadow: 0 0 10px var(--amber-glow);
 }
 
 .card.paused .card-head {
@@ -2793,7 +2668,7 @@ button.card-head {
 }
 
 /* ── 审批对话框 Diff 视图样式 ────────────────────────── */
-/* 适配 react-diff-viewer-continued 的文学风/米色主题 */
+/* 适配 react-diff-viewer-continued 主题 */
 
 .approval-diff-wrapper {
   font-family: var(--font-mono);
@@ -2894,7 +2769,7 @@ button.card-head {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   空状态 · Aurora
+   空状态 · TraeWork
    ────────────────────────────────────────────────────────────── */
 .empty-state {
   display: flex;
@@ -2916,7 +2791,7 @@ button.card-head {
 }
 
 /* ── 文件树面板（Sidebar 文件 Tab）────────────────────────── */
-/* 文学风视觉：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
+/* 文件树：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
  * 对齐 thread-item 的圆角 + 悬停 + 激活态样式约定
  */
 
@@ -3016,7 +2891,7 @@ button.card-head {
   min-width: 0;
   padding: 1px 4px;
   margin: 0;
-  border: 1px solid var(--aurora-accent);
+  border: 1px solid var(--accent);
   border-radius: 4px;
   background: var(--bg-elev);
   color: var(--text);
@@ -3024,7 +2899,7 @@ button.card-head {
   font-size: 13px;
   line-height: 1.4;
   outline: none;
-  box-shadow: 0 0 0 2px var(--aurora-accent-glow);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 .ft-rename-input::placeholder {
@@ -3034,8 +2909,8 @@ button.card-head {
 }
 
 .ft-rename-input:focus {
-  border-color: var(--aurora-accent);
-  box-shadow: 0 0 0 2px var(--aurora-accent-glow);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 /* ── 内联新建临时节点 ────────────────────────────────────── */
@@ -3043,7 +2918,7 @@ button.card-head {
 .ft-row.ft-creating {
   opacity: 0.85;
   background: var(--accent-soft);
-  border: 1px dashed var(--aurora-accent-glow);
+  border: 1px dashed var(--accent-glow);
   border-radius: 6px;
 }
 
@@ -3284,7 +3159,6 @@ button.card-head {
   height: 6px;
   border-radius: 50%;
   background: var(--amber);
-  box-shadow: 0 0 6px var(--amber-glow);
   animation: file-viewer-pulse 1.6s ease-in-out infinite;
 }
 
@@ -3436,7 +3310,7 @@ button.card-head {
 
 .ft-file.active .ft-name {
   font-weight: 600;
-  color: var(--aurora-accent);
+  color: var(--accent);
 }
 
 /* 展开箭头：折叠态朝右，展开态旋转 90° 朝下 */
@@ -3466,7 +3340,7 @@ button.card-head {
 }
 
 .ft-dir .ft-icon {
-  color: var(--aurora-accent);
+  color: var(--accent);
 }
 
 .ft-file-icon {
@@ -3577,7 +3451,7 @@ button.card-head {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   骨架屏 · Aurora shimmer
+   骨架屏 · shimmer
    ────────────────────────────────────────────────────────────── */
 .thread-loading-skeleton {
   padding: 16px 20px;
@@ -3846,7 +3720,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Aurora 动画 keyframes
+   动画 keyframes
    ────────────────────────────────────────────────────────────── */
 @keyframes msgEnter {
   from {
@@ -3925,7 +3799,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   width: 40%;
   height: 100%;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  box-shadow: 0 0 8px var(--accent-glow);
   animation: refreshing-slide 1.2s var(--ease-soft) infinite;
 }
 
@@ -4026,13 +3899,9 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   0%,
   100% {
     opacity: 0.4;
-    box-shadow: 0 0 4px var(--accent);
   }
   50% {
     opacity: 1;
-    box-shadow:
-      0 0 12px var(--accent),
-      0 0 20px var(--accent-glow);
   }
 }
 

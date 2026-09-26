@@ -1,19 +1,31 @@
 ---
 design_tokens:
-  name: Aurora Design Tokens
-  version: 1.1.0
-  source: tokens/aurora.json（Style Dictionary，生成 src/renderer/styles/tokens.css）
+  name: TraeWork Design Tokens
+  version: 1.2.0
+  source: tokens/aurora.json（Style Dictionary，生成 src/renderer/styles/tokens.css；文件名为历史名，内容为 TraeWork）
   themes: [light, dark]
   mechanism: css-variables
-  last_synced: 2026-08-27
+  last_synced: 2026-09-26
 ---
 
-# DESIGN.md — Aurora 设计令牌契约
+# DESIGN.md — TraeWork 设计令牌契约
 
 > 机器可读的设计系统契约（供 design-md-review / design-debt-review 类工具接入）。
 > **单一真源：`tokens/aurora.json`**（Style Dictionary 构建，`pnpm tokens:build` 生成 `src/renderer/styles/tokens.css`；改令牌只改 aurora.json，禁止手改生成物）。
+> **设计系统名：TraeWork**（历史名 Aurora / 「文学风」不得当作现行设计体系；见 `docs/compose/spec/design-identity.md`）。
 
 > 🔒 工程化强制：pnpm check:tokens（扫描裸色/dark:/space-*/w+h 双写/hex/裸 z-*，CI 卡关）
+
+## 0. 身份宪法（TraeWork quiet）
+
+| 条 | 规则 |
+|---|---|
+| C1 | 表面 quiet：无默认品牌渐变、无彩色 blur 发光、无默认噪点 |
+| C2 | 品牌色稀缺：紫 accent 仅用于主操作/选中/焦点/关键状态 |
+| C3 | 品牌面实心：CTA/头像/BrandMark 用 `--primary`/`--accent` 实底，禁止 `accent→accent-2` 渐变填充 |
+| C4 | 阴影中性：elevation 用 shadow 语义；焦点允许 `0 0 0 Npx` soft ring；禁止 `0 0 Npx` 彩色 glow |
+| C5 | 状态用色层（`-*-text` / `*-emphasis` / `*-soft`），不用 blur 发光强调 |
+| C6 | 命名诚实：注释/文档不把 Aurora 或「文学风」写成现行设计轴 |
 
 ## 1. 令牌分组总览
 
@@ -39,7 +51,7 @@ design_tokens:
 
 ## 2. 双主题机制
 
-- 两套定义：`:root`（Aurora Light）+ `.dark`（Aurora Dark），通过 `documentElement.classList` 切换（ThemeProvider）
+- 两套定义：`:root`（TraeWork Light）+ `.dark`（TraeWork Dark），通过 `documentElement.classList` 切换（ThemeProvider）
 - **派生色规则**：每个语义色族 = 主色 + 可选 `-dim`（深）/`-soft`（半透明底）/`-glow`（光晕），双主题各自定义
 - **禁止**：组件内 `dark:` 手动覆盖（10-component-design-spec 铁律 ②）；裸 Tailwind 色板值（铁律 ①）
 

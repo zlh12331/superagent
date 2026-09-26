@@ -224,15 +224,15 @@ describe('useResizablePanels', () => {
     it('展开态：变量写实际宽度', () => {
       renderHook(() => useResizablePanels(false, false));
       const root = document.documentElement;
-      expect(root.style.getPropertyValue('--aurora-sidebar-w')).toMatch(/^\d+px$/);
-      expect(root.style.getPropertyValue('--aurora-right-panel-w')).toMatch(/^\d+px$/);
+      expect(root.style.getPropertyValue('--sidebar-w')).toMatch(/^\d+px$/);
+      expect(root.style.getPropertyValue('--right-panel-w')).toMatch(/^\d+px$/);
     });
 
     it('折叠态：变量置 0px（grid 列塌缩）', () => {
       renderHook(() => useResizablePanels(true, true));
       const root = document.documentElement;
-      expect(root.style.getPropertyValue('--aurora-sidebar-w')).toBe('0px');
-      expect(root.style.getPropertyValue('--aurora-right-panel-w')).toBe('0px');
+      expect(root.style.getPropertyValue('--sidebar-w')).toBe('0px');
+      expect(root.style.getPropertyValue('--right-panel-w')).toBe('0px');
     });
   });
 

@@ -1,5 +1,5 @@
 // src/renderer/components/dev/InspectorPanel.tsx
-// 开发者工具检查器面板 · 极简文学风
+// 开发者工具检查器面板
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 提供按钮一键唤起 Chromium DevTools（通过 IPC 调用 webContents.openDevTools）

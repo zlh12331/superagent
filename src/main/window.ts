@@ -113,7 +113,7 @@ export function createWindow(): BrowserWindow {
             color: '#00000000',
             // stone-400：暗色玻璃背景上清晰可见（纯黑会隐身）
             symbolColor: TITLE_BAR_SYMBOL.dark,
-            // 与 --aurora-topbar-h（52px）对齐
+            // 与 --topbar-h（52px）对齐
             height: 52,
           },
         }

@@ -1,5 +1,5 @@
 // src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 极简文学风 · 组装层
+// Git 状态展示面板 · 组装层
 // ──────────────────────────────
 // 职责：
 // - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表

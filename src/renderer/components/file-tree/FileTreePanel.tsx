@@ -12,7 +12,7 @@
 // 设计：
 // - 容器组件：仅负责生命周期 + 状态分支 + 意图编排，不参与节点渲染逻辑
 // - 数据生命周期委托给 useFileTree hook（IPC + watch + 状态同步 + refresh）
-// - 视觉对齐 Sidebar 文学风：根目录显示 workingDir basename
+// - 根目录显示 workingDir basename
 // ──────────────────────────────────────────────────────────────
 
 import { ArrowLeft, Ellipsis, FilePlus, FolderOpen, FolderPlus, RefreshCw } from 'lucide-react';

@@ -113,11 +113,8 @@ export function useResizablePanels(
   // 同步 CSS 变量到根元素（供 .view-chat 的 grid-template-columns 使用）
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--aurora-sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
-    root.style.setProperty(
-      '--aurora-right-panel-w',
-      rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`,
-    );
+    root.style.setProperty('--sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
+    root.style.setProperty('--right-panel-w', rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`);
   }, [sidebarWidth, rightPanelWidth, sidebarCollapsed, rightPanelCollapsed]);
 
   const handleMouseMove = useCallback((event: globalThis.MouseEvent) => {

@@ -1,4 +1,5 @@
 {
+  "$comment": "历史文件名 aurora.json · 内容为 TraeWork Design Tokens（1.3=A 不改文件名）",
   "sidebar-w": {
     "value": "clamp(200px, 17vw, 280px)",
     "comment": "布局尺寸 — clamp() 实现响应式宽度约束"
@@ -555,46 +556,6 @@
   },
   "danger": {
     "value": "var(--error)"
-  },
-  "aurora-accent": {
-    "value": "var(--accent)",
-    "comment": "兼容别名 — 指向 TraeWork 品牌色"
-  },
-  "aurora-accent-2": {
-    "value": "var(--accent-2)"
-  },
-  "aurora-accent-glow": {
-    "value": "var(--accent-glow)"
-  },
-  "aurora-accent-2-glow": {
-    "value": "var(--accent-2-glow)"
-  },
-  "aurora-glow-sm": {
-    "value": "var(--glow-sm)"
-  },
-  "aurora-glow-md": {
-    "value": "var(--glow-md)"
-  },
-  "aurora-glass-bg": {
-    "value": "var(--glass-bg)",
-    "comment": "玻璃质感 - 顶栏背景（半透明 + 模糊）"
-  },
-  "aurora-sidebar-w": {
-    "value": "var(--sidebar-w)",
-    "comment": "布局尺寸别名"
-  },
-  "aurora-right-panel-w": {
-    "value": "var(--right-panel-w)"
-  },
-  "aurora-resizer-w": {
-    "value": "var(--resizer-w)"
-  },
-  "aurora-topbar-h": {
-    "value": "var(--topbar-h)"
-  },
-  "aurora-ease-out": {
-    "value": "var(--ease-out)",
-    "comment": "缓动曲线"
   },
   "primary": {
     "value": "var(--accent)",

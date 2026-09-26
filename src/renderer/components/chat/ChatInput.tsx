@@ -1,5 +1,5 @@
 // src/renderer/components/chat/ChatInput.tsx
-// 聊天输入框 + 发送/停止按钮 · Aurora 设计系统
+// 聊天输入框 + 发送/停止按钮 · TraeWork
 // ─────────────────────────────────────────────
 // 约束（调用方须知）：
 // - 不在此组件内调用 useChat，所有状态由父组件（ChatPanel）传入
