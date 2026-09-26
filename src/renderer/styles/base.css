@@ -16,16 +16,16 @@
    （如 bg-background、text-foreground、font-serif 等）
    ────────────────────────────────────────────────────────────── */
 @theme inline {
-  /* 字号阶梯接入 Tailwind 工具类（text-2xs/xs/sm/base/md/lg = 10/11/12/13/14/16px）
-     Tailwind v4 字号命名空间是 --text-*（非 --font-size-*），
-     此前未接入：text-xs 等回落到默认 scale（12px），与设计阶梯（11px）不一致。
-     直接内联设计值（--text-* 与 --font-size-* 同数） */
+  /* 字号阶梯 9 级：text-2xs…text-3xl = 10/11/12/13/14/16/18/22/28px */
   --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
   --text-md: 14px;
   --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
 
   /* 圆角派生 */
   --radius-sm: calc(var(--radius) - 2px);

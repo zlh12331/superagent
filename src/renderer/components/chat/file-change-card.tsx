@@ -67,7 +67,7 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
   const fileName = path.split(/[\\/]/).pop() ?? path;
 
   return (
-    <div className={cn('card tool-card', open && 'open')}>
+    <div className={cn('card tool-card is-settled', open && 'open')}>
       <button
         type="button"
         className="card-head"

@@ -119,13 +119,30 @@ AGENTS.md       = 工程约定摘要（命令/约束；不重复长 UX 表）
 - 视觉/交互行为 PR：作者勾选「已更新 `08`/`09` 对应段或注明 N/A」；
 - 季度或大版本前：跑一次 `docs/audit` 式对照（可复用 ux-audit 方法论），结果追加而非覆盖。
 
-### S2.3 抽样对照模板（F7 用）
+### S2.3 抽样对照表（F7 · 2026-09-26 实做）
 
-| 文档行 | 声称 | 代码锚点 | 结论 |
-|---|---|---|---|
-| 08:151 | 字符计数 | ChatInput / globals:2219 | removed → 删行 |
-| 08:243 | iframe 说明页 | browser-pane / preview-service | live 架构不同 → 改写 |
-| … | | | |
+| # | 文档行 | 声称 | 代码锚点 | 结论 |
+|---|---|---|---|---|
+| 1 | 08:151 | 字符计数 UI | —（globals 曾删；现无） | removed → 文档已写「无计数」 |
+| 2 | 08:152 | 8000 字符上限 | `use-composer-send.ts` MAX_MESSAGE_LENGTH_CHARS | live |
+| 3 | 08:50 | `--aurora-sidebar-w` 覆盖 | `use-resizable-panels` 写 `--sidebar-w` | doc wrong → 已改 |
+| 4 | 08:78 | 旧 `--fs-*` 兼容 | tokens 无 `fs-*` | doc wrong → 已改 9 级 |
+| 5 | 08:79 | `--sp-1…7` | 已删 | doc wrong → 已改 |
+| 6 | 08:80 | radius 10px | tokens `--radius: 8px` | doc wrong → 已改 |
+| 7 | 08:242 | 浏览器 WebContentsView | `preview-service.ts` | live |
+| 8 | 08:218 | Git 只读 | `GitPanel.tsx` | live |
+| 9 | 08:349 | 欢迎页首条透传 | `pending-message.ts` | live |
+| 10 | 08:348 | 侧栏搜索过滤 | `Sidebar.tsx` | live |
+| 11 | 08:238 | 温度透传 | generation-options | live |
+| 12 | 08:241 | 系统提示词生效 | prompt-section + use-agent | live |
+| 13 | 08:363 | 「Aurora 令牌」验收 | DESIGN.md TraeWork | doc wrong → 已改 |
+| 14 | 09:109 | accent 青绿 | tokens 紫 | doc wrong → 已改 |
+| 15 | 09:123–130 | fs/sp/radius 旧表 | tokens 9 级/8px | doc wrong → 已改 |
+| 16 | 09:153–154 | body 光晕/噪点 | `base.css` quiet | doc wrong → 已改 |
+| 17 | 09:474 | 浏览器 iframe | WebContentsView | doc wrong → 已改 |
+| 18 | 10:30 | 「Aurora 令牌」 | TraeWork | doc wrong → 已改 |
+| 19 | 11:23 | 「Aurora 语义令牌」 | TraeWork | doc wrong → 已改 |
+| 20 | 08:244 | scanlines 实验默认关 | settings + AppShell | live |
 
 ### S2.4 与系列文档边界
 
