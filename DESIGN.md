@@ -78,5 +78,5 @@ design_tokens:
 ## 5. 审计接入
 
 - `design-debt-review`：扫描硬编码颜色/任意 Tailwind 值/px 魔法数字对照本契约
-- `design-md-review`：本文件 + globals.css 一致性（token 增删同步更新本文件）
+- `design-md-review`：本文件 + `styles/tokens.css`/`styles/*` 一致性（token 增删同步更新本文件）
 - `check:tokens`：裸色/dark:/space-*/w+h 双写/hex/裸 z-* 全量卡关（CI）

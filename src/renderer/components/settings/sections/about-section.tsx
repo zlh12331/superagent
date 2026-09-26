@@ -505,13 +505,8 @@ export function AboutSection(): ReactElement {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 品牌 Hero：居中视觉中心——大标识 + 渐变光晕 + 版本/渠道 + 更新 */}
+      {/* 品牌 Hero：居中视觉中心——大标识 + 版本/渠道 + 更新（TraeWork quiet：无装饰光晕） */}
       <Card className="relative overflow-hidden px-4 py-8">
-        {/* 装饰光晕（top 覆盖，配合圆角溢出隐藏） */}
-        <div
-          aria-hidden
-          className="bg-primary/10 pointer-events-none absolute -top-12 left-1/2 h-36 w-72 -translate-x-1/2 rounded-full blur-2xl"
-        />
         <div className="relative flex flex-col items-center text-center">
           <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-xl">
             <Rocket className="size-7" strokeWidth={1.25} />

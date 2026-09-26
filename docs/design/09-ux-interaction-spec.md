@@ -692,7 +692,7 @@ flowchart LR
 
 **i18n**：initI18n 幂等（模块加载时同步 init，早于 I18nextProvider 渲染防白屏）；语言检测 localStorage → navigator，持久化 `code-agent:lang`；interpolation.escapeValue false（React 已转义）；useSuspense false（资源全量打包）；useErrorMessage 错误码文案查询，资源缺失回退 `ERROR_META[code]?.userMessage`（未知码不抛错，保护 onError）。
 
-**loading-ui/terminal.tsx**：纯展示终端加载动画——内联 style 注入 keyframes，光标 `--duration` 令牌可覆盖，role=status + sr-only Loading。
+**loading-ui/terminal.tsx**：纯展示终端加载动画——复用 `styles/motion.css` 的 `blink` 关键帧（无内联 style），role=status + sr-only Loading。
 
 ### 8.2 设置控件与 sections 细节
 

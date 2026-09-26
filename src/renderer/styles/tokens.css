@@ -20,7 +20,7 @@
   --z-boundary: 999;
   --sans: var(--font-sans);
   --serif: var(--font-serif);
-  /* 字号阶梯 — 6 级 */
+  /* 字号阶梯 — 9 级（含 xl/2xl/3xl） */
   --font-size-2xs: 10px;
   --font-size-xs: 11px;
   --font-size-sm: 12px;

@@ -48,7 +48,7 @@
   },
   "font-size-2xs": {
     "value": "10px",
-    "comment": "字号阶梯 — 6 级"
+    "comment": "字号阶梯 — 9 级（含 xl/2xl/3xl）"
   },
   "font-size-xs": {
     "value": "11px"
