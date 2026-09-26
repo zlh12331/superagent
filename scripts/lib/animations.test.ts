@@ -167,16 +167,16 @@ describe('仓库现状（styles/* + renderer components）', () => {
     return paths.map((p) => readFileSync(join(REPO_ROOT, p), 'utf8')).join('\n');
   }
 
-  it('globals.css 的 animation 引用全部有 @keyframes 定义', () => {
+  it('styles/ 各域 css 的 animation 引用全部有 @keyframes 定义', () => {
     const css = readAll(Styles);
     const defined = new Set(extractKeyframeNames(css));
     const refs = extractCssAnimationRefs(css).map(
-      (name, i): AnimationRef => ({ name, file: 'globals.css', line: i }),
+      (name, i): AnimationRef => ({ name, file: 'styles/*', line: i }),
     );
     expect(findMissingAnimations(refs, defined)).toEqual([]);
   });
 
-  it('browser-pane 的加载条动画名在 globals.css 中有定义', () => {
+  it('browser-pane 的加载条动画名在 styles/ 各域 css 中有定义', () => {
     const pane = readFileSync(
       join(REPO_ROOT, 'src/renderer/components/browser/browser-pane.tsx'),
       'utf8',

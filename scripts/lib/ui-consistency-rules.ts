@@ -38,7 +38,7 @@ export const UI_RULES: readonly UiRule[] = [
   },
   {
     id: 'raw-button',
-    desc: 'components/** 内裸 <button>（应用 ui/button 的 Button；已归属 globals.css 按钮类体系的除外）',
+    desc: 'components/** 内裸 <button>（应用 ui/button 的 Button；已归属 styles/ 领域按钮类的除外）',
     pattern: /<button\b/,
     fileFilter: (relFile) =>
       relFile.startsWith('components/') && !relFile.startsWith('components/ui/'),
@@ -73,7 +73,7 @@ export const UI_RULES: readonly UiRule[] = [
 ];
 
 /**
- * 已归属 globals.css 按钮类体系的钮（icon-btn/tab/树节点/segmented 等
+ * 已归属 styles/ 领域按钮类的钮（icon-btn/tab/树节点/segmented 等
  * 有专属 CSS 类控制的场景），不属于 raw-button 规则目标。
  */
 export const OWNED_CSS_BUTTON_CLASSES: readonly string[] = [
@@ -124,7 +124,7 @@ export interface UiViolation {
  * 通用豁免（与 CLI 既有行为一致）：
  * - 纯注释行（// * /* 开头）跳过——注释里的示例不构成代码信号
  * - 上一行含 noArrayIndexKey biome-ignore → 跳过（index-key 规则的豁免）
- * - raw-button：起始块（回溯 3 行）内出现 globals.css 归属类名或
+ * - raw-button：起始块（回溯 3 行）内出现 styles/* 归属类名或
  *   aria-pressed/aria-selected/aria-expanded/role="tab" 语义 → 豁免
  */
 export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {

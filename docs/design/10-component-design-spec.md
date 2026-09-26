@@ -27,7 +27,7 @@
 2. **禁止手动 `dark:` 覆盖**
    - 双主题差异必须用语义令牌表达（`bg-muted` 等令牌两主题自适应）
    - ❌ `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400` → ✅ `bg-accent/10 text-accent`
-   - 例外：Aurora 令牌未覆盖的琥珀/警告语义可暂用，但须先检查 `--amber`/`--warn`/`--error` 令牌
+   - 例外：语义令牌未覆盖的琥珀/警告可先检查 `--amber`/`--warn-text`/`--error`
 3. **`className` 只管布局，不管样式**
    - 不改组件颜色/字体；组件内部视觉由组件类与令牌负责
 4. **`flex` + `gap-*`，禁止 `space-x-*`/`space-y-*`**
@@ -120,6 +120,16 @@ active/selected 配 aria-selected 或 data-state；checked 配 aria-checked；ex
 - [ ] JSDoc 规格段与实际实现一致（注释声称的状态必须有对应代码）
 
 ## 七、新组件开发检查清单
+
+### 7.0 新样式写哪（决策表，P3）
+
+| 场景 | 写在哪 |
+|---|---|
+| shadcn/Radix 变体、按钮/输入基础 | `components/ui/*` + cva |
+| 布局/间距/排版微调 | TSX utility + `cn()` |
+| 跨组件稳定皮肤 | `styles/{layout,welcome,chat,composer,cards,file-tree,fuzzy}.css` |
+| 全局动画/焦点/reduced-motion | `styles/motion.css` / `base.css` |
+| **禁止** | 组件内 `<style>`、未登记全局魔法类、第二套按钮类 |
 
 - [ ] 基于 Radix 原语或现有 ui/ 组件组合，不重复造轮子
 - [ ] 全部颜色/间距/字体走语义令牌，零硬编码、零 `dark:` 双写

@@ -251,7 +251,7 @@ function CodeBlock({
             copied && 'text-accent',
             // 键盘可达性（WCAG 2.4.7）：此前仅 group-hover 显形，Tab 聚焦到按钮时
             // 父容器仍 opacity-0——可聚焦但视觉不可见。补 group-focus-within（与
-            // globals.css 中 .msg:focus-within .msg-actions 的既有修复同源）。
+            // styles/ 各域 css 中 .msg:focus-within .msg-actions 的既有修复同源）。
             'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           )}
           onClick={handleCopy}

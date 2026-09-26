@@ -97,7 +97,7 @@ describe('通用豁免', () => {
     expect(scanUiConsistency(scanOne('components/a.tsx', content))).toHaveLength(0);
   });
 
-  it('raw-button：归属 globals.css 按钮类体系 → 豁免', () => {
+  it('raw-button：归属 styles/ 领域按钮类 → 豁免', () => {
     const content = ['<button', '  className="icon-btn"', '>'].join('\n');
     expect(scanUiConsistency(scanOne('components/a.tsx', content))).toHaveLength(0);
   });

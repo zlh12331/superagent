@@ -472,7 +472,7 @@
   gap: 8px;
   padding: 8px 10px;
   border-top: 1px solid var(--border-strong);
-  border-radius: 0 0 13px 13px;
+  border-radius: 0 0 calc(var(--radius) + 5px) calc(var(--radius) + 5px);
   min-height: 46px;
 }
 

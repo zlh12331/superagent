@@ -114,7 +114,7 @@ type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
  * 开发者子视图切换按钮（segmented 形态）
  *
  * 独立为组件而非 map 内联：一是让「选中态 → 类名」的映射只有一处，
- * 二是类名归属（.dev-sub-tab，globals.css 按钮类体系）与 <button> 相邻，
+ * 二是类名归属（.dev-sub-tab，styles/ 领域按钮类）与 <button> 相邻，
  * 符合 ui-consistency 的 raw-button 豁免识别。
  */
 function DevSubTabButton({

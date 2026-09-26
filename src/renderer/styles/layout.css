@@ -493,7 +493,7 @@
   width: 3px;
   height: 60%;
   background: var(--accent);
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 calc(var(--radius) - 6px) calc(var(--radius) - 6px) 0;
   box-shadow: var(--shadow-soft);
 }
 
@@ -657,7 +657,7 @@
   transition:
     background 0.15s ease,
     width 0.15s ease;
-  border-radius: 1px;
+  border-radius: calc(var(--radius) - 7px);
 }
 
 /* hover/拖拽仅变色 + 光晕提示可拖拽，宽度保持 1px（用户要求：分隔线恒 1px） */

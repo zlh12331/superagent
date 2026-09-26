@@ -196,7 +196,7 @@ button.card-head {
   width: 2px;
   height: 12px;
   background: var(--success);
-  border-radius: 1px;
+  border-radius: calc(var(--radius) - 7px);
   z-index: 2;
   pointer-events: none;
   animation: toolSettle 0.2s var(--ease-soft) both;
@@ -213,17 +213,6 @@ button.card-head {
   background: var(--error);
   z-index: 2;
   pointer-events: none;
-}
-
-@keyframes toolSettle {
-  from {
-    height: 100%;
-    opacity: 0.6;
-  }
-  to {
-    height: 12px;
-    opacity: 1;
-  }
 }
 
 .tool-args {

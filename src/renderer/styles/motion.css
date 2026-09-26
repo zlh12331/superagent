@@ -453,6 +453,46 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
+@keyframes search-highlight-fade {
+  0% {
+    background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes toolSettle {
+  from {
+    height: 100%;
+    opacity: 0.6;
+  }
+  to {
+    height: 12px;
+    opacity: 1;
+  }
+}
+
+@keyframes file-viewer-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* 尊重系统的"减弱动态效果"设置（扩展覆盖所有动画） */
 @media (prefers-reduced-motion: reduce) {
   .brand-mark,

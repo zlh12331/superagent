@@ -198,16 +198,6 @@ body {
 /* ──────────────────────────────────────────────────────────────
    动画 · 纸张呼吸感（用于状态指示器脉冲）
    ────────────────────────────────────────────────────────────── */
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
 .animate-pulse-soft {
   animation: pulse-soft 2s var(--ease-soft) infinite;
 }
@@ -226,7 +216,7 @@ body {
   width: 3px;
   height: 16px;
   background: var(--primary);
-  border-radius: 1px;
+  border-radius: calc(var(--radius) - 7px);
 }
 
 /* 纸张纹理 · TraeWork（安静表面，无装饰渐变） */

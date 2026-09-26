@@ -47,7 +47,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 └────────┴────┴────────────────────────┴────┴────────────────────────┘
 ```
 
-- 布局尺寸用 `clamp()` 响应式（`--sidebar-w: clamp(200px,17vw,280px)`、`--right-panel-w: clamp(260px,22vw,360px)`）；拖拽调整后以 CSS 变量 `--aurora-sidebar-w` / `--aurora-right-panel-w` 覆盖。
+- 布局尺寸用 `clamp()` 响应式（`--sidebar-w: clamp(200px,17vw,280px)`、`--right-panel-w: clamp(260px,22vw,360px)`）；拖拽调整后 JS 直接覆盖同名 CSS 变量为 px（`use-resizable-panels` → `--sidebar-w` / `--right-panel-w`）。
 - **折叠态**：`sb-collapsed` / `crp-collapsed` 类使 grid 对应列塌缩为 0；折叠按钮在顶栏与右面板竖条内。
 - **断点联动**：窗口 <1200px 自动折叠右面板、<900px 自动折叠侧栏；用户手动切换后（`manualRef` 置位）断点不再覆盖手动意图。
 - **resizer 可拖拽**：左右两条分隔线，`mousedown` + 全局 `mousemove/mouseup`，拖拽范围钳位 `SIDEBAR_WIDTH_MIN~MAX`（左 200-400px，见 [layout-utils.ts](../src/renderer/components/layout/layout-utils.ts)）与 `RIGHT_PANEL_WIDTH_MIN~MAX`（右 260-360px）；拖拽期间 `body.resizing`；元素 `tabIndex=0` + `aria-valuenow` 可聚焦（ARIA 滑块语义）。
@@ -75,10 +75,10 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 ### 3.1 令牌体系（禁止硬编码）
 
 - **颜色**：亮/暗两套令牌（`tokens/aurora.json` 真源）；背景 L0–L3 灰阶；文字三级；品牌紫 `--accent:#4B3FE3`（暗 `#6A6FFF`）+ 辅蓝 `--accent-2`；语义色三层（base/text/emphasis）；品牌面实心、quiet 无装饰发光（详见 DESIGN.md 宪法 C1–C6）。
-- **字号**：6 级阶梯 `--font-size-2xs(10) / xs(11) / sm(12) / base(13) / md(14) / lg(16)`；旧 `--fs-*` 别名仅兼容保留。
-- **间距**：`--sp-1` ~ `--sp-7`（4px 步进，16px 基准）。
-- **圆角**：`--radius: 0.625rem`（10px）。
-- **字体**：`--font-sans / --font-serif / --font-mono`；侧栏/设置标题用衬线（文学风），元信息与状态用等宽。
+- **字号**：9 级 `--font-size-2xs(10) / xs(11) / sm(12) / base(13) / md(14，对话正文) / lg(16) / xl(18) / 2xl(22) / 3xl(28)`；旧 `--fs-*` 已删除。
+- **间距**：布局/组件间距走 Tailwind `gap-*`/`p-*`（`--sp-*` 阶梯已删除）。
+- **圆角**：`--radius: 8px` + `--radius-sm/md/lg/xl` 派生（6/8/10/12）。
+- **字体**：`--font-sans / --font-serif / --font-mono`；标题可用衬线、元信息用等宽（非「文学风」设计轴）。
 - 通过 `@theme inline` 映射为 Tailwind 工具类（`bg-background` / `text-muted-foreground` / `text-primary` 等），组件中**禁止**出现颜色字面量与任意像素值。
 
 ### 3.2 主题机制
@@ -101,9 +101,9 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ### 3.4 氛围层与动效
 
-- `body::before`：双 accent 渐变光晕 + 技术网格 + 扫描线；`body::after`：SVG 噪点纹理（mix-blend-mode）。
-- 主区 `thread-bg paper-texture`：多层光晕 + 纸张噪点。
-- 顶栏：`backdrop-filter: blur(16px) saturate(1.4)` + 底部双 accent 渐变发光刻度线。
+- TraeWork quiet：无 body 光晕/网格/噪点；扫描线仅 `experimental.scanlines` 默认关。
+- 顶栏中性表面，无发光刻度线。
+- 动画统一 `tw-animate-css` + `styles/motion.css` `@keyframes`；消息入场 `motion`（opacity + y:6 → 0）；`prefers-reduced-motion` 全局降级。
 - 动画统一 `tw-animate-css`；消息入场 `motion`（opacity + y:6 → 0，`smoothEaseOut`）；流式状态点 `animate-pulse-soft`；自定义动画必须在 `globals.css` 定义并复用缓动变量。
 - 实验开关：`experimental.scanlines` 控制扫描线视觉叠加（默认关）。
 
@@ -360,7 +360,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 新功能/修复合入前的 UI 验收项（对照本规范逐条自检）：
 
 **布局与视觉**
-- [ ] 无硬编码颜色/像素值；全部走 Aurora 令牌与 Tailwind 工具类
+- [ ] 无硬编码颜色/像素值；全部走 TraeWork 令牌与 Tailwind 工具类
 - [ ] 深浅两主题截图对比：文字对比度 ≥4.5:1（WebAIM 或 getComputedStyle 实测）
 - [ ] 折叠态/断点（<1200px / <900px）下布局不破；手动折叠不被断点覆盖
 - [ ] 新增浮层使用既有 z-index 档位

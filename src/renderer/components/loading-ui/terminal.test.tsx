@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 // 此前仅经 TerminalPanel 间接覆盖（无独立断言），故这些行为没有被锁定：
 // 1. 可访问性契约：role="status" + sr-only **本地化** 文案；提示符/光标对读屏器隐藏
-// 2. 动画不内联 <style>（改用 globals.css 的 .loading-ui-terminal-cursor）
+// 2. 动画不内联 <style>（改用 styles/ 各域 css 的 .loading-ui-terminal-cursor）
 //    —— 防止回退为组件内私有 keyframe（渲染层唯一内联 style 的历史问题）
 // 3. props 透传：prompt 默认值与覆盖、className 合并、style 透传
 // ──────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ describe('Terminal（loading-ui）', () => {
   });
 
   describe('动画实现（回退防护）', () => {
-    it('不在组件内内联 <style>（关键帧统一在 globals.css）', () => {
+    it('不在组件内内联 <style>（关键帧统一在 styles/*）', () => {
       const { container } = render(<Terminal />);
       expect(container.querySelector('style')).toBeNull();
     });

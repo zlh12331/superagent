@@ -99,35 +99,34 @@ flowchart LR
 
 | 用途 | 亮色 | 暗色 |
 |---|---|---|
-| 背景 L0 页面基底 | `--bg #f7f8fa` | `#080b10` |
-| L1 侧栏/顶栏/卡片 | `--bg-elev #ffffff` | `#0e1319` |
-| L2 悬浮/卡片头/悬停 | `--bg-elev-2 #eef0f4` | `#141a23` |
-| L3 激活/强调容器 | `--bg-elev-3 #e0e4ec` | `#1a2130` |
-| 主文字 | `--text #1a2130` | `#e8edf4` |
-| 次要文字 | `--text-dim #5a6478` | `#8a95a6` |
-| 辅助/占位文字 | `--text-faint #5d6779`（5.39:1 AA） | `#7a8699`（6.5:1） |
+| 背景 L0 页面基底 | `--bg #FFFFFF` | `#0A0A0A` |
+| L1 侧栏/顶栏/卡片 | `--bg-elev #F5F5F5` | `#171717` |
+| L2 悬浮/卡片头/悬停 | `--bg-elev-2 #E5E5E5` | `#262626` |
+| L3 激活/强调容器 | `--bg-elev-3 #D4D4D4` | `#404040` |
+| 主文字 | `--text #171717` | `#F5F5F5` |
+| 次要文字 | `--text-secondary #404040` | `#D4D4D4` |
+| 辅助/占位文字 | `--text-faint #A1A1A1` | `#737373` |
 | 主 accent 紫 | `--accent #4B3FE3` | `#6A6FFF` |
-| 辅 accent 蓝 | `--accent-2 #2b7fff` | `#4a9eff` |
-| 边框 | `--border #e1e4eb` / strong `#cbd0db` | `#1c2330` / `#2d3848` |
-| 成功 | `--success #00d9c0` | 同左 |
-| 警告 | `--warning = --amber #e89038`（glow rgba(232,144,56,.15)） | 同左 |
-| 错误 | `--error #c53030`（bg rgba(197,48,48,.08)） | 同左 |
-| accent 上文字 | `--on-accent #001814`（7.6:1） | 同左 |
-| 用户气泡 | `--msg-bubble-user #e8edf5` | 暗色另值 |
+| 辅 accent 蓝 | `--accent-2 #3F85FF` | `#4C88FF` |
+| 边框 | `--border` / `--border-strong`（灰阶半透明） | 同语义 |
+| 成功 | `--success #15A877` | 同左 |
+| 警告 | `--warning = --amber #E27900` | `#F39A35` |
+| 错误 | `--error #E8463A` | `#EA574C` |
+| accent 上文字 | `--on-accent #FFFFFF` | 同左 |
+| 用户气泡 | `--msg-bubble-user #F5F5F5` | `#262626` |
 
-映射：`--primary=accent`、`--muted-foreground=text-dim`、`--muted=bg-elev-2`、`--ring=accent`、`--input=border`；图表五色 = accent/accent-2/amber/success/error。`@theme inline` 把这些变量暴露成 Tailwind 类（`bg-background`/`text-muted-foreground`…）。
+映射：`--primary` 为实底按钮（与 `--accent` 职责分离）；`@theme inline` 暴露 Tailwind 类。详见 `DESIGN.md` 宪法 C1–C6。
 
-### 2.2 字号 / 间距 / 圆角 / 阴影 / 缓动 / 图标
+### 2.2 字号 / 间距 / 圆角 / 阴影 / 缓动
 
 ```
-字号 6 级：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-2xs…lg，UI 默认 13）
-间距 7 级：4 → 48 px（--sp-1…7，4px 步进）
-圆角：--radius 0.625rem（10px），lg +2px，xl +4px
-阴影 5 档：--shadow-elev（抬升）/ --shadow-modal（模态，accent 描边）/ --shadow-dropdown（下拉）/ --shadow-card / --shadow-card-hover
-发光 3 档：--glow-sm/md/lg（青）、--glow-2-sm/md（蓝）
-缓动 3 个：--ease-soft 标准 / --ease-paper 纸张 / --ease-out 出场
-图标 5 档：10/12/14/16/20 px（lucide-react，strokeWidth 1.5-2）
-字体：--font-sans（UI）/ --font-serif（文学风标题）/ --font-mono（代码/状态/日志）
+字号 9 级：10 / 11 / 12 / 13 / 14 / 16 / 18 / 22 / 28（--font-size-2xs…3xl；UI base=13，对话正文 md=14）
+间距：Tailwind gap/p 系（--sp-* 已删除）
+圆角：--radius 8px + sm/md/lg/xl（6/8/10/12）
+阴影：--shadow-soft / --shadow-raise / --shadow-modal / --shadow-dropdown / --shadow-card(-hover)（中性 elevation；旧 glow-* 已改名）
+缓动：--ease-soft / --ease-paper / --ease-out
+图标：lucide size-*（--icon-* 阶梯已删除）
+字体：--font-sans（UI）/ --font-serif（标题）/ --font-mono（代码/状态）
 ```
 
 ### 2.3 z-index 档位
@@ -150,8 +149,7 @@ flowchart LR
 
 ### 2.5 页面氛围与动效
 
-- `body::before`：双 accent 渐变光晕 + 技术网格 + 扫描线；`body::after`：SVG 噪点（mix-blend-mode）。
-- 主区 `.thread-bg paper-texture`：多层光晕 + 纸张噪点；顶栏 `backdrop-filter: blur(16px) saturate(1.4)` + 底部发光刻度线。
+- TraeWork quiet：无装饰光晕/网格/噪点；扫描线仅实验开关默认关；顶栏中性表面。
 - 动画统一 tw-animate-css + 自定义关键帧（pulse-soft 状态点 / typingBounce 打字点 / msgEnter 消息入场 / shimmer 骨架 / refreshing-slide 刷新条 / reasoningReveal 推理块 / modalin 模态入场等，定义在 globals.css）。
 - 对比度硬标准：正文 ≥16:1、次要 ≥5.39:1、accent 上文字 7.6:1（历史坑：硬编码 stone-* 曾低至 1.23:1，勿回退）。
 

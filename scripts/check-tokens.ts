@@ -21,7 +21,7 @@ import { scanCss, scanTsLike, type TokenViolation } from './lib/token-rules';
 const ROOT = join(import.meta.dirname, '..');
 const SCAN_DIR = join(ROOT, 'src', 'renderer');
 // 目录排除仅剩 test 与 coverage（测试与覆盖率报告产物）；styles 目录**不再整体排除**
-// （2026-09-24：目录粒度豁免曾把手写的 globals.css 与生成物一起放走，硬编码 hex 无人管辖）。
+// （2026-09-24：目录粒度豁免曾把手写的 styles/* 与生成物一起放走，硬编码 hex 无人管辖）。
 // 文件粒度豁免：tokens.css 是 aurora.json 的生成物（hex 为令牌定义本身，必然存在）。
 const EXCLUDE_DIRS = new Set(['test', 'coverage']);
 const EXCLUDE_FILES = new Set(['tokens.css']);
@@ -49,7 +49,7 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
     ) {
       acc.push(join(dir, entry.name));
     } else if (entry.name.endsWith('.css') && !EXCLUDE_FILES.has(entry.name)) {
-      // css 纳入管辖（2026-09-24）：此前只扫 .ts/.tsx，globals.css 的硬编码 hex 完全不在范围
+      // css 纳入管辖（2026-09-24）：此前只扫 .ts/.tsx，styles/ 各域 css 的硬编码 hex 完全不在范围
       acc.push(join(dir, entry.name));
     }
   }

@@ -128,7 +128,7 @@ function ResultRow({
   monospace,
 }: ResultRowProps): ReactElement {
   return (
-    // 行样式归 .fuzzy-result（globals.css 按钮类体系；选中态由 aria-selected 驱动，
+    // 行样式归 .fuzzy-result（styles/ 领域按钮类；选中态由 aria-selected 驱动，
     // 无需在 JSX 里重复一份条件类，选中判定与可访问性状态自此同源）
     <button
       id={id}

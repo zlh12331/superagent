@@ -4,7 +4,7 @@
    - @tailwindcss/vite 插件自动注入 Tailwind 工具类
    - tw-animate-css 提供 Tailwind v3 风格的动画工具类（v4 移除默认）
    - @custom-variant dark 启用 .dark 类切换暗黑模式（配合 ThemeProvider）
-   - globals.css 定义 shadcn 设计令牌（--background / --foreground 等） */
+   - styles/* 定义 shadcn 设计令牌（--background / --foreground 等） */
 
 /* 所有 @import 必须在其他 at-rule 之前（CSS 规范要求） */
 @import "tailwindcss";
@@ -18,13 +18,4 @@
 /* 会话内搜索：当前匹配消息高亮（短暂 accent 背景 + 淡出） */
 .search-highlight {
   animation: search-highlight-fade 2.5s ease-out forwards;
-}
-
-@keyframes search-highlight-fade {
-  0% {
-    background-color: color-mix(in srgb, var(--accent) 18%, transparent);
-  }
-  100% {
-    background-color: transparent;
-  }
 }

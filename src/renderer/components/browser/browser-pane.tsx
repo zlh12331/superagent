@@ -259,7 +259,7 @@ export function BrowserPane(): ReactElement {
       )}
 
       {/* 加载进度条：位于占位区之外（占位区内的渲染层 UI 会被原生视图盖住）。
-          不定式动画（keyframes 见 globals.css 的 browser-loading-bar）：无进度
+          不定式动画（keyframes 见 styles/ 各域 css 的 browser-loading-bar）：无进度
           百分比可报，故 role="progressbar" 不设 aria-valuenow（ARIA 允许「不确定」
           形态，只需 aria-label 说明在做什么）。 */}
       {state.isLoading && (
