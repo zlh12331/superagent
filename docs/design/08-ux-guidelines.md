@@ -68,13 +68,13 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 > ⚠️ **数值真源 = `src/renderer/styles/tokens.css` 的 `--z-*`**（由 `tokens/aurora.json` 经 Style Dictionary 生成）。本节数值须与之一致；改令牌后同步本节。**引用令牌时也只能用真源里存在的名字**——`check:css-vars` 卡关「引用未定义令牌」（2026-09-14 新增门禁，此前 `var(--z-dropdown)` 等 5 处引用不存在的令牌导致声明被静默丢弃）。
 
-## 3. Aurora 2.0 视觉规范
+## 3. TraeWork 视觉规范
 
 实现：[globals.css](../src/renderer/styles/globals.css)（`@import` 引入 tokens.css 并补充组件级样式）+ [tokens.css](../src/renderer/styles/tokens.css)（**设计令牌真源生成物**，勿手改）+ [index.css](../src/renderer/index.css)
 
 ### 3.1 令牌体系（禁止硬编码）
 
-- **颜色**：亮/暗两套完整令牌集（`:root` 与 `.dark` 块）；背景三级深度（L0 `--bg` / L1 `--bg-elev` / L2 `--bg-elev-2` / L3 `--bg-elev-3`）、文字三级明度（`--text` / `--text-dim` / `--text-faint`）、双 accent（青绿主 `--accent:#00b89e` + 蓝色辅 `--accent-2:#2b7fff`）、语义色（success/warning/destructive）、消息气泡、遮罩/玻璃、滚动条、发光阴影（glow-sm/md/lg）、动效缓动。
+- **颜色**：亮/暗两套令牌（`tokens/aurora.json` 真源）；背景 L0–L3 灰阶；文字三级；品牌紫 `--accent:#4B3FE3`（暗 `#6A6FFF`）+ 辅蓝 `--accent-2`；语义色三层（base/text/emphasis）；品牌面实心、quiet 无装饰发光（详见 DESIGN.md 宪法 C1–C6）。
 - **字号**：6 级阶梯 `--font-size-2xs(10) / xs(11) / sm(12) / base(13) / md(14) / lg(16)`；旧 `--fs-*` 别名仅兼容保留。
 - **间距**：`--sp-1` ~ `--sp-7`（4px 步进，16px 基准）。
 - **圆角**：`--radius: 0.625rem`（10px）。
@@ -148,8 +148,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 停止 | 流式中按钮变「停止」；`Esc` 全局可中断（window 级监听，textarea 失焦也生效） |
 | 自动增高 | 1 → 8 行（240px 封顶），超出滚动 |
 | 拖拽调高 | 顶部手柄 `ns-resize`：向上拉高，钳位 [40, 460]；**双击重置**为自动高度；键盘 `↑/↓` 20px 步进 |
-| 字符计数 | trim 后显示，>2000 变警告色（`aria-live`） |
-| 长度上限 | 8000 字符拦截（toast 报错） |
+| 长度上限 | 8000 字符拦截（toast 报错）；无字符计数 UI（已移除） |
 | 附件 | `@` 按钮（原生多选文件）→ chip 展示（可移除，去重）→ 发送时 `file:read` 读取（≤4000 字符截断，失败仅标注文件名不阻断） |
 | 斜杠命令 | 输入 `/` 弹建议（/help /new /clear /compact /models /interrupt /goal）；`Tab/Enter` 应用，`Esc` 关闭；带 action 的命令点击直接执行：/new 回欢迎页、/clear 清空消息、/help 打开快捷键帮助、/interrupt 真实中断、/goal 预填输入框、/models 打开项目栏模型选择下拉（受控）、/compact 手动压缩会话上下文（主进程按模型窗口预算裁剪 compressByTokenBudget → 整体落库 → 本地消息态同步 + toast 结果） |
 | 草稿 | 按会话持久化文本+附件（draft-store）；发送成功清除；切换会话自动恢复 |
@@ -240,7 +239,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 技能 | 已学技能列表 + 描述学习（learn-skill-agent）+ 移除 | 已实现 |
 | 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 模式：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 插入 · Esc 切换，输入舱 NORMAL/INSERT 徽章；不支持 y/p/v/u 与数字前缀——设置页如实标注）；快捷键（ShortcutPicker 录制 6 项）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
 | 工作树 | 当前工作目录 + 展开节点数（只读状态） | 已实现（配置项规划中） |
-| 浏览器 | 右面板「浏览器」tab 为 iframe 预览工具的说明页 | 说明页（配置项规划中） |
+| 浏览器 | 右面板「浏览器」= WebContentsView 进程外预览（独立 session `browser-preview`），非 iframe | `browser-pane` / `preview-service` |
 | 实验 | scanlines 扫描线（AppShell 根级 .scanlines-overlay 条件渲染，--text 令牌）/ 推理块默认折叠（message-item 消费） | 已实现（原型其余项不展示假开关） |
 | 关于 | 版本号 / Electron-Node-Chromium 运行时 / 打开数据目录 | 已实现 |
 | 账号 / 移动端 / 插件 / hooks / 命令 | 「🚧 规划中」占位（诚实标注；IM 渠道真实功能保留在移动端分区） | 占位 |

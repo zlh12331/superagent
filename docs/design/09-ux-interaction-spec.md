@@ -91,7 +91,7 @@ flowchart LR
 - 通道命名：`域:动作`（请求）、`域:stream:事件`（流式）、`域:event:名称`（状态事件）；全表见第七章。
 - 错误约定：返回 `{data} | {error:{code,message}}`，消息带 `[CODE]` 前缀 → 前端查 i18n。
 
-## 二、UI 设计体系（Aurora 2.0）
+## 二、UI 设计体系（TraeWork）
 
 唯一真源：[globals.css](../../src/renderer/styles/globals.css)（4224 行）。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
 
@@ -106,7 +106,7 @@ flowchart LR
 | 主文字 | `--text #1a2130` | `#e8edf4` |
 | 次要文字 | `--text-dim #5a6478` | `#8a95a6` |
 | 辅助/占位文字 | `--text-faint #5d6779`（5.39:1 AA） | `#7a8699`（6.5:1） |
-| 主 accent 青绿 | `--accent #00b89e` | `#00e5c7` |
+| 主 accent 紫 | `--accent #4B3FE3` | `#6A6FFF` |
 | 辅 accent 蓝 | `--accent-2 #2b7fff` | `#4a9eff` |
 | 边框 | `--border #e1e4eb` / strong `#cbd0db` | `#1c2330` / `#2d3848` |
 | 成功 | `--success #00d9c0` | 同左 |
@@ -471,7 +471,7 @@ stateDiagram-v2
 
 **Git（5 文件）**：status 缓存 10s；diff 不缓存；文件列表状态映射（git-status-utils）——modified amber FileEdit / added emerald FilePlus / deleted red FileX / renamed blue FileEdit / untracked muted FileQuestion / conflicted 红加粗 AlertCircle；分支行 ahead 显示 emerald ↑N、behind 显示 amber ↓N；diff 统计用 diff-match-patch 语义统计（移动行不计增删），兜底主进程文本统计；展开区 ScrollArea 内 Skeleton/无 diff/UnifiedDiffView。
 
-**日志（LogsPanel 252 行）**：行数选项 [100,200,500]（默认 200）；级别过滤 all/info/warn/error/debug（all 时传 undefined 避免 IPC 歧义）；行级着色按行内 [error]/[warn]/[debug] 标记。**指标（MetricsPanel 267 行）**：六卡 2 列网格——rss / heapUsed（含 heapTotal hint）/ external / cpu user（含 system hint）/ uptime（含 PID hint）/ 版本卡（col-span-2：app/electron/node + platform/arch + packaged/dev）；格式化 formatBytes（B/MB/GB）/ formatMs / formatUptime（h m s）；10s refetchInterval + enabled 面板可见。**检查器（InspectorPanel）**：detach/right/bottom 三模式 → devtools.open；状态 idle/loading/success/error，3s 自动回 idle；成功显示打开模式。**浏览器（browser-pane 301 行）**：设备尺寸 desktop {1366,768} / tablet {768,1024} / mobile {375,667} / responsive；历史栈前进后退；刷新用 `key={loadedUrl}` 强制 iframe 重挂载（置 null 100ms 后恢复）；URL 无协议自动补 https://；iframe sandbox allow-scripts/allow-same-origin/allow-forms/allow-popups。
+**日志（LogsPanel 252 行）**：行数选项 [100,200,500]（默认 200）；级别过滤 all/info/warn/error/debug（all 时传 undefined 避免 IPC 歧义）；行级着色按行内 [error]/[warn]/[debug] 标记。**指标（MetricsPanel 267 行）**：六卡 2 列网格——rss / heapUsed（含 heapTotal hint）/ external / cpu user（含 system hint）/ uptime（含 PID hint）/ 版本卡（col-span-2：app/electron/node + platform/arch + packaged/dev）；格式化 formatBytes（B/MB/GB）/ formatMs / formatUptime（h m s）；10s refetchInterval + enabled 面板可见。**检查器（InspectorPanel）**：detach/right/bottom 三模式 → devtools.open；状态 idle/loading/success/error，3s 自动回 idle；成功显示打开模式。**浏览器（browser-pane）**：WebContentsView 进程外预览；设备尺寸 desktop/tablet/mobile/responsive；历史栈前进后退；URL 无协议自动补 https://。
 
 ### 5.8 错误边界三层
 
