@@ -9,7 +9,7 @@
 /* 所有 @import 必须在其他 at-rule 之前（CSS 规范要求） */
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./styles/globals.css";
+@import "./styles/index.css";
 
 /* 暗黑模式变体：当父元素含 .dark 类时启用
    ThemeProvider 通过给 <html> 添加 .dark 切换主题 */

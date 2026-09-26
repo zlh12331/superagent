@@ -1,0 +1,700 @@
+/* ── 应用骨架：顶栏 + 弹性主体（grid 两行） ── */
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) 1fr;
+  height: 100vh;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── 主体容器：水平 grid（sidebar | resizer | main | resizer | right-panel） ──
+   对齐原型 .view-chat，合并了原型的 .body + .view-chat 两层 */
+.view-chat {
+  /* 背景锚定到主区色：resizer 列（透明）不露 body 氛围层，交界处与两侧完全一致 */
+  background: var(--background);
+  display: grid;
+  grid-template-columns:
+    var(--sidebar-w)
+    var(--resizer-w)
+    minmax(0, 1fr)
+    var(--resizer-w)
+    var(--right-panel-w);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── 侧边栏基础样式（须在折叠态规则之前，避免特异性降序告警） ── */
+.sidebar {
+  /* 侧边栏纯底色（移除左右镜像渐变） */
+  background: var(--sidebar);
+  /* 像素实测：1px transparent border 会在交界处产生亮色突变带——彻底移除 */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  grid-column: 1;
+}
+
+/* resizer 列定位（放在折叠态规则之前，避免特异性降序告警） */
+.resizer-left {
+  grid-column: 2;
+}
+
+.resizer-right {
+  grid-column: 4;
+}
+
+/* 侧栏折叠态：第一列塌缩为 0 */
+.view-chat.sb-collapsed {
+  grid-template-columns:
+    0
+    var(--resizer-w)
+    minmax(0, 1fr)
+    var(--resizer-w)
+    var(--right-panel-w);
+}
+
+.view-chat.sb-collapsed .sidebar,
+.view-chat.sb-collapsed .resizer-left {
+  display: none;
+}
+
+/* 右面板折叠态：第五列塌缩为 0 */
+.view-chat.crp-collapsed {
+  grid-template-columns:
+    var(--sidebar-w)
+    var(--resizer-w)
+    minmax(0, 1fr)
+    0
+    0;
+}
+
+.view-chat.crp-collapsed .resizer-right {
+  display: none;
+}
+
+/* 双折叠态（侧栏 + 右面板同时折叠） */
+.view-chat.sb-collapsed.crp-collapsed {
+  grid-template-columns:
+    0
+    var(--resizer-w)
+    minmax(0, 1fr)
+    0
+    0;
+}
+
+/* ── 顶栏：干净中性表面（TraeWork quiet by default）── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  /* frameless 窗口（titleBarStyle: hidden）：顶栏即窗口标题栏
+     右侧预留 Win11 overlay 窗口控件占位（最小化/最大化/关闭约 140px） */
+  padding-right: 158px;
+  height: var(--topbar-h, 52px);
+}
+
+/* 通用 frameless 拖拽区（Topbar / 设置抽屉头部窗口控件预留区复用） */
+.app-region-drag {
+  -webkit-app-region: drag;
+}
+
+/* frameless 拖拽区：顶栏背景整体可拖（含 padding 预留区），
+   交互元素（按钮/品牌）no-drag——空 spacer 高度为 0 无法承载 drag，必须挂在容器上 */
+.topbar {
+  -webkit-app-region: drag;
+}
+
+.topbar > * {
+  -webkit-app-region: no-drag;
+}
+
+/* TraeWork：移除底部发光刻度线（quiet by default — 纯 border 分割） */
+
+/* ── 品牌标识：纯色品牌方块（TraeWork — brand color is scarce）── */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* 品牌标识：形态由 components/common/BrandMark.tsx 的 SVG 提供（顶栏/欢迎页共用），
+   此处仅保留顶栏尺寸约束与不收缩 */
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  font-size: 15px;
+}
+
+.brand-name span {
+  color: var(--muted-foreground);
+  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  margin-left: 4px;
+}
+
+.brand-telemetry {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  padding-left: 12px;
+  margin-left: 4px;
+  border-left: 1px solid var(--border);
+  letter-spacing: 0.05em;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+/* TraeWork：移除品牌呼吸脉冲动画（无发光装饰） */
+
+/* ── 顶栏图标按钮（对齐原型 .icon-btn） ── */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border-radius: calc(var(--radius) - 1px);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+/* ── 主内容区背景：TraeWork 安静表面（无装饰光晕）
+   原 Aurora 三层 radial 光晕已移除 */
+.thread-bg {
+  min-width: 0;
+  min-height: 0;
+  /* grid 列锚定（对齐原型 L1215 .thread { grid-column: 3 }）：
+     双折叠态下 sidebar/resizer display:none 不占轨道，
+     auto 放置会把 main 放进第 1 列（0px）→ 主区崩溃 */
+  grid-column: 3;
+  background: var(--background);
+}
+
+/* ── 会话顶部状态条：等宽字体遥测带 ── */
+.thread-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  /* 高度与右面板 tab 栏对齐（用户要求：两者 30px，消除交界不齐） */
+  height: 30px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  /* 不透明背景：与 resizer 透明热区（--background）完全同色，消除两侧 6px 间隔感
+     （玻璃渐变/透明均会暴露 thread-bg 氛围层色差，用户标注） */
+  background: var(--background);
+  /* 竖缝根因：paper-texture::before 光晕层（absolute + z-index 0）叠在 static 状态条上，
+     青绿光把状态条染成 8,15,19（两侧 resizer 纯 8,11,16）→ 竖缝；z-index 1 让状态条盖住光晕 */
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── 侧边栏子元素（基础样式见上方 .sidebar） ── */
+.sidebar-head {
+  padding: 12px;
+  border-bottom: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.sidebar-search-input {
+  width: 100%;
+  padding: 5px 8px 5px 26px;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 1px);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--foreground);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sidebar-search-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.sidebar-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.sidebar-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  /* 激活态底条（sidebar-tab-active-bar，layoutId 滑动动画）定位基准 */
+  position: relative;
+}
+
+.sidebar-tab:hover {
+  color: var(--sidebar-foreground);
+  background: var(--sidebar-accent);
+}
+
+.sidebar-tab.active {
+  color: var(--sidebar-foreground);
+  background: var(--sidebar-accent);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+
+.sidebar-tab .count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  /* 数量徽章（对齐参考项目 SidebarTabButton：圆角背景 + 等宽数字） */
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-tab.active .count {
+  color: var(--sidebar-foreground);
+  /* 徽章背景恒为 --bg（对齐参考项目 SidebarTabButton：bg-[var(--bg)]，仅文字色随激活变化） */
+  background: var(--bg);
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  min-width: 0;
+}
+
+/* 新建会话按钮 · TraeWork C3 实心 primary（禁双 accent 渐变/发光） */
+.new-thread-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: calc(var(--radius) - 1px);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out);
+}
+
+.new-thread-btn:hover {
+  background: color-mix(in srgb, var(--primary) 90%, black);
+}
+
+.new-thread-btn:active {
+  background: color-mix(in srgb, var(--primary) 85%, black);
+}
+
+/* 会话分组标签（最近会话 / 归档） */
+.thread-group-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted-foreground);
+  padding: 14px 10px 5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.thread-group-label .group-action {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+
+.thread-group-label .group-action:hover {
+  opacity: 1;
+  color: var(--primary);
+}
+
+/* 文件夹标签 */
+/* 单元格：flex 同行布局——folder-label（折叠+图标+名称）与 fl-add-btn（+号）水平排列，
+   默认 block 会让两个按钮垂直堆叠（+号落到名称下一行，2026-09-04 修复） */
+.folder-label-cell {
+  display: flex;
+  align-items: center;
+}
+
+.folder-label {
+  /* button 默认样式重置（元素从 div 改为 button 以满足 a11y 语义化要求） */
+  background: none;
+  border: none;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+  /* 布局 */
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 4px 4px 6px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sidebar-foreground);
+  cursor: pointer;
+  user-select: none;
+}
+
+.folder-label .fl-chevron {
+  display: inline-flex;
+  transition: transform 0.15s ease;
+  color: var(--muted-foreground);
+}
+
+.folder-label.collapsed .fl-chevron {
+  transform: rotate(-90deg);
+}
+
+.folder-label .fl-icon {
+  display: inline-flex;
+  color: var(--primary);
+}
+
+.folder-label .fl-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.folder-label .fl-add-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: calc(var(--radius) - 4px);
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.folder-label-cell:hover .fl-add-btn {
+  opacity: 1;
+}
+
+.folder-label-cell .fl-add-btn:hover {
+  color: var(--primary);
+  background: var(--sidebar-accent);
+}
+
+.folder-items {
+  overflow: hidden;
+}
+
+.folder-label.collapsed + .folder-items {
+  display: none;
+}
+
+/* 会话条目 — 衬线标题 + 等宽元信息 */
+.thread-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: calc(var(--radius) - 1px);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.thread-item:hover {
+  background: var(--sidebar-accent);
+}
+
+.thread-item.active {
+  background: var(--sidebar-accent);
+}
+
+.thread-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  box-shadow: var(--shadow-soft);
+}
+
+.thread-item .ti-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.thread-item .ti-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  margin-top: 6px;
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
+.thread-item.active .ti-dot {
+  background: var(--primary);
+  opacity: 1;
+}
+
+.thread-item .ti-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-item .ti-title {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--sidebar-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.thread-item.active .ti-title {
+  font-weight: 600;
+}
+
+.thread-item .ti-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.thread-item .ti-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.thread-item:hover .ti-actions,
+.thread-item:focus-within .ti-actions {
+  opacity: 1;
+}
+
+/* 内联重命名时收起操作按钮：输入框获得整行宽度
+   （.hidden 工具类会被本文件 .ti-actions display:flex 覆盖——同特异性后者胜，
+   故用更高特异性显式声明） */
+.thread-item .ti-actions.hidden {
+  display: none;
+}
+
+.sidebar-foot {
+  padding: 10px;
+  border-top: 1px solid var(--sidebar-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.sidebar-foot .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: calc(var(--radius) - 1px);
+  background: linear-gradient(135deg, var(--sidebar-accent), var(--secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-foot .user-info {
+  flex: 1;
+  min-width: 0;
+  /* 名称与邮箱纵向堆叠（默认 inline 会粘连成一行） */
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-foot .user-info .uname {
+  font-size: 12px;
+  color: var(--sidebar-foreground);
+}
+
+.sidebar-foot .user-info .uemail {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 拖拽分隔线 ── */
+.resizer {
+  /* h-full 必须显式：Tailwind preflight 给 hr 默认 height 0.67px，
+     align-self: stretch 无法覆盖显式高度 → 命中区塌陷不可拖（同抽屉调宽条坑） */
+  height: 100%;
+  /* 热区 = 元素 6px（用户要求：好拖）；grid 列宽已为 0（--resizer-w: 0px，用户要求：
+     无视觉间隔），元素溢出覆盖相邻列边缘承担热区；视觉线由 ::after 1px 居中承担，默认透明 */
+  width: 6px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  min-width: 0;
+  align-self: stretch;
+  background: transparent;
+  transition: background 0.15s ease;
+  position: relative;
+  /* 溢出覆盖 main/面板边缘后仍可命中（默认透明不影响视觉） */
+  z-index: 10;
+  margin: 0;
+  /* 关键：preflight 给 hr 设了 border-top-width: 1px + color inherit（亮色）——
+     6px 溢出条顶部有 1px 亮白横线，正是用户多轮反馈的"状态条与侧边栏间隔"竖缝；显式归零 */
+  border-width: 0;
+}
+
+.resizer:hover {
+  background: var(--accent-glow);
+}
+
+.resizer.dragging {
+  background: var(--accent-glow);
+}
+
+.resizer::after {
+  content: "";
+  width: 1px;
+  height: 100%;
+  max-height: 100%;
+  /* 用户要求：默认不可见（侧边栏与对话区无缝衔接）；hover/拖拽时显示 accent 提示线 */
+  background: transparent;
+  transition:
+    background 0.15s ease,
+    width 0.15s ease;
+  border-radius: 1px;
+}
+
+/* hover/拖拽仅变色 + 光晕提示可拖拽，宽度保持 1px（用户要求：分隔线恒 1px） */
+.resizer:hover::after,
+.resizer.dragging::after {
+  background: var(--accent);
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing iframe {
+  pointer-events: none;
+}
+
+/* ── 右面板 ── */
+.chat-right-panel {
+  /* 右面板纯底色（与左栏一致，移除镜像渐变） */
+  background: var(--sidebar);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+  grid-column: 5;
+}
+
+.view-chat.crp-collapsed .chat-right-panel {
+  overflow: visible;
+}
+
+/* 右面板折叠按钮 */
+/* 右面板折叠展开按钮已删除（用户要求）：展开走顶栏开关 */
+
+.crp-collapse-btn:hover {
+  color: var(--foreground);
+}

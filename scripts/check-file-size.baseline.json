@@ -6,9 +6,6 @@
     "net": 683
   },
   "src/renderer/dev/mock-api.ts": {
-    "net": 948
-  },
-  "src/renderer/styles/globals.css": {
-    "net": 3416
+    "net": 947
   }
 }

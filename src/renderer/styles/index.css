@@ -1,0 +1,32 @@
+@import "./tokens.css";
+@import "./base.css";
+@import "./layout.css";
+@import "./welcome.css";
+@import "./chat.css";
+@import "./composer.css";
+@import "./cards.css";
+@import "./file-tree.css";
+@import "./fuzzy.css";
+@import "./motion.css";
+
+/* 原生控件配色（非令牌，保留在 globals） */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+/* src/renderer/styles/globals.css
+   TraeWork 设计系统 · 设计令牌
+   ──────────────────────────────────────────────────────────────
+   设计哲学（对齐 TraeWork Design Library）：
+   - 品牌色：紫色 #4B3FE3，稀缺使用；品牌面实心（禁双 accent 渐变）
+   - 中性灰表面体系：白 → 浅灰 → 灰 → 深灰
+   - 6 级字号阶梯：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-*）
+     字号唯一阶梯 --font-size-*（含 xl/2xl/3xl）；旧档 --fs-* 已删除
+   - 暗色 / 亮色双主题，通过 <html class="dark"> 切换
+   - Quiet by default：无装饰背景、无发光氛围、无噪点纹理
+   - 中性阴影替代发光效果；焦点允许 0 0 0 Npx soft ring
+   - 完整 z-index 层级体系（--z-base 到 --z-boundary）
+   ────────────────────────────────────────────────────────────── */

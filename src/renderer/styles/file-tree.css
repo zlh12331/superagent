@@ -1,0 +1,681 @@
+/* ──────────────────────────────────────────────────────────────
+   空状态 · TraeWork
+   ────────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--muted-foreground);
+  position: relative;
+}
+
+.empty-state::before {
+  content: "";
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(180deg, transparent, var(--border-strong), transparent);
+  margin-bottom: 18px;
+}
+
+/* ── 文件树面板（Sidebar 文件 Tab）────────────────────────── */
+/* 文件树：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
+ * 对齐 thread-item 的圆角 + 悬停 + 激活态样式约定
+ */
+
+.file-tree {
+  padding: 4px 0 8px;
+}
+
+/* ── 文件树视图头部（返回按钮 + 标题 + 更多菜单；此前 sft-* 无 CSS 规则）── */
+.sft-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sft-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sft-back:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+.sft-title {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  color: var(--sidebar-foreground);
+}
+
+/* 头部「更多操作」菜单触发器：靠右，尺寸与 .sft-back 对齐 */
+.sft-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: auto;
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sft-more-btn:hover,
+.sft-more-btn[data-state="open"] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+/* 单个节点容器 */
+.ft-node {
+  user-select: none;
+}
+
+/* 子节点容器（fieldset 原生即 role="group"；此处重置其默认 border/padding/margin） */
+.ft-children {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+  min-width: 0;
+}
+
+/* ── 节点行容器（包裹 row button）─────────────────────────── */
+.ft-row-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* 操作中状态：降低不透明度 + 等待光标（防重复操作的可视反馈） */
+.ft-row.pending {
+  opacity: 0.5;
+  cursor: wait;
+  pointer-events: none;
+}
+
+/* ── 内联新建输入框 ──────────────────────────────────────── */
+.ft-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  margin: 0;
+  border: 1px solid var(--accent);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.ft-rename-input::placeholder {
+  color: var(--text-faint);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.ft-rename-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── 内联新建临时节点 ────────────────────────────────────── */
+/* 视觉与普通节点对齐，但整体降低不透明度表示「临时」状态 */
+.ft-row.ft-creating {
+  opacity: 0.85;
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent-glow);
+  border-radius: var(--radius-sm);
+}
+
+/* ── 文件查看器（右面板「文件」tab；原为对话框，现为常驻面板）────── */
+/* 视觉对齐 .code-block-wrapper + .msg-content pre.shiki 风格 */
+
+/* 工具栏：行数 + 复制按钮 */
+.file-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.file-viewer-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  opacity: 0.8;
+  letter-spacing: 0.02em;
+}
+
+.file-viewer-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.file-viewer-copy-btn:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.file-viewer-copy-btn.copied {
+  color: var(--accent);
+  border-color: var(--accent-glow);
+  background: var(--accent-soft);
+}
+
+.file-viewer-copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 内容区：固定高度 + 内部滚动 */
+.file-viewer-body {
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 16rem);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+
+/* 查看器左右布局：左侧文件树导航 + 右侧内容（文件树导航接管高度，body 不再限高） */
+.file-viewer-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
+
+.file-viewer-layout .file-viewer-body {
+  max-height: none;
+}
+
+/* shiki 高亮输出（pre.shiki 自带内联 style，background 需覆盖 shiki 输出的内联 background-color） */
+.file-viewer-code pre.shiki {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  font-family: var(--font-mono);
+  /* biome-ignore lint/complexity/noImportantStyles: 覆盖 shiki codeToHtml 内联 background-color，由 .file-viewer-body 提供统一背景 */
+  background: transparent !important;
+}
+
+.file-viewer-code pre.shiki code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+}
+
+/* 纯文本降级（shiki 未就绪或语言不支持时） */
+.file-viewer-plaintext {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  font-family: var(--font-mono);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 状态占位 */
+.file-viewer-loading,
+.file-viewer-empty,
+.file-viewer-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 40px 20px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+.file-viewer-error {
+  color: var(--error);
+}
+
+.file-viewer-error-detail {
+  font-size: 10px;
+  opacity: 0.7;
+  word-break: break-all;
+  max-width: 480px;
+}
+
+/* ── 文件查看器：编辑模式扩展样式 ────────────────────────── */
+
+/* 工具栏右侧操作区（模式切换 + 保存 + 复制） */
+.file-viewer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 模式切换按钮（编辑/查看） */
+.file-viewer-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.file-viewer-mode-btn:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.file-viewer-mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 保存按钮：默认禁用态（无修改时），dirty 态高亮 accent */
+.file-viewer-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: not-allowed;
+  opacity: 0.5;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.file-viewer-save-btn.dirty {
+  color: var(--accent);
+  border-color: var(--accent-glow);
+  background: var(--accent-soft);
+  cursor: pointer;
+  opacity: 1;
+}
+
+.file-viewer-save-btn.dirty:hover:not(:disabled) {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.file-viewer-save-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* 编辑中徽章 */
+.file-viewer-edit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* 未保存小红点 */
+.file-viewer-dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: file-viewer-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes file-viewer-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* 编辑器容器：textarea + shiki 高亮叠加 */
+.file-viewer-editor {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+}
+
+/* 高亮层（背景）：与 textarea 完全对齐 */
+.file-viewer-editor-highlight {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  pointer-events: none;
+  /* 隐藏滚动条（滚动由 textarea 控制，同步到本层） */
+  scrollbar-width: none;
+}
+
+.file-viewer-editor-highlight::-webkit-scrollbar {
+  display: none;
+}
+
+/* 高亮层 shiki pre 样式：与查看态一致（选择器特异度与 .file-viewer-code pre.shiki 相等，无降序告警） */
+.file-viewer-editor-highlight pre.shiki {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  font-family: var(--font-mono);
+  /* biome-ignore lint/complexity/noImportantStyles: 覆盖 shiki codeToHtml 内联 background-color */
+  background: transparent !important;
+}
+
+.file-viewer-editor-highlight pre.shiki code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+}
+
+/* textarea 层（前景）：文字透明、caret 不透明 */
+.file-viewer-editor-textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  /* 文字透明：让下层 shiki 高亮透出 */
+  color: transparent;
+  /* caret 不透明：让用户看到光标位置 */
+  caret-color: var(--accent);
+  /* 文字接收事件 */
+  -webkit-text-fill-color: transparent;
+  resize: none;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  /* white-space: pre 保留所有空格和换行，与 shiki 输出对齐 */
+  white-space: pre;
+  overflow: auto;
+}
+
+/* 选中文本时的高亮（让用户看到选择范围） */
+.file-viewer-editor-textarea::selection {
+  background: var(--accent-glow);
+  color: var(--text);
+}
+
+.file-viewer-editor-textarea:focus {
+  outline: none;
+}
+
+/* 节点行（按钮）：统一缩进 + 图标 + 名称
+ * .ft-row 始终在 .ft-row-wrap（flex 容器）内，用 flex:1 填充剩余空间
+ */
+.ft-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 10px 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+  color: var(--sidebar-foreground);
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  position: relative;
+}
+
+.ft-row:hover {
+  background: var(--sidebar-accent);
+}
+
+/* 节点名称：衬线字体 + 截断（先定义基础样式，再定义激活态覆盖） */
+.ft-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-serif);
+  font-size: 13px;
+}
+
+/* 文件激活态：左侧 accent 光带 + 加粗 */
+.ft-file.active {
+  background: var(--sidebar-accent);
+}
+
+.ft-file.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  box-shadow: var(--shadow-soft);
+}
+
+.ft-file.active .ft-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* 展开箭头：折叠态朝右，展开态旋转 90° 朝下 */
+.ft-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--muted-foreground);
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+}
+
+.ft-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+/* 节点图标（文件夹 / 文件） */
+.ft-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.ft-dir .ft-icon {
+  color: var(--accent);
+}
+
+.ft-file-icon {
+  color: var(--muted-foreground);
+}
+
+/* 加载中 / 空目录占位 */
+.ft-loading,
+.ft-empty {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/* 文件树空状态（无激活会话 / workingDir 为空） */
+.ft-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.ft-empty-icon {
+  color: var(--muted-foreground);
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+.ft-empty-title {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--sidebar-foreground);
+  margin: 0;
+}
+
+.ft-empty-desc {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 4px;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（空状态 vs 工具卡片），无覆盖 */
+.empty-state svg {
+  margin-bottom: 14px;
+  opacity: 0.45;
+}
+
+/* ── vim 模式徽章（输入舱底部，settings.editor.vimMode 消费）── */
+.vim-mode-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  color: var(--muted-foreground);
+  margin-right: 6px;
+  user-select: none;
+}
+
+.vim-mode-badge.insert {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* ── 实验功能：扫描线视觉叠加（settings.experimental.scanlines）── */
+/* AppShell 根容器内条件渲染；固定全屏 + pointer-events:none 不拦截交互；
+   颜色走 --text 令牌（随主题自适应），无裸色/hex。 */
+.scanlines-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 3px,
+    var(--text) 3px,
+    var(--text) 4px
+  );
+  opacity: 0.04;
+}
+
+.empty-state-title {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: 6px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.empty-state-sub {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+  max-width: 340px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}

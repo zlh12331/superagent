@@ -24,7 +24,19 @@ import {
 } from './lib/animations';
 
 const ROOT = join(import.meta.dirname, '..');
-const STYLE_FILES = ['src/renderer/styles/globals.css', 'src/renderer/styles/tokens.css'];
+const STYLE_FILES = [
+  'src/renderer/styles/index.css',
+  'src/renderer/styles/base.css',
+  'src/renderer/styles/layout.css',
+  'src/renderer/styles/welcome.css',
+  'src/renderer/styles/chat.css',
+  'src/renderer/styles/composer.css',
+  'src/renderer/styles/cards.css',
+  'src/renderer/styles/file-tree.css',
+  'src/renderer/styles/fuzzy.css',
+  'src/renderer/styles/motion.css',
+  'src/renderer/styles/tokens.css',
+];
 const COMPONENT_DIR = join(ROOT, 'src/renderer/components');
 /** 扫描时跳过的目录名 */
 const SKIP_DIRS: ReadonlySet<string> = new Set(['node_modules', 'out', 'coverage', '.vite']);
