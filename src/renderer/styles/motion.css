@@ -465,6 +465,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   .card-status.running::before,
   .tool-card:has(.card-status.running) .card-icon::after,
   .tool-card:has(.card-status.running)::after,
+  .tool-card.is-settled::after,
   .plan-item.active .plan-check,
   .async-refreshing-bar::before {
     animation: none;

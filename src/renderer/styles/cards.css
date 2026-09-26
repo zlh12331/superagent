@@ -173,7 +173,7 @@ button.card-head {
   will-change: transform;
 }
 
-/* running：左侧脉冲光条 */
+/* running：左侧进度条（quiet，无 blur 发光） */
 .tool-card:has(.card-status.running)::after {
   content: "";
   position: absolute;
@@ -185,6 +185,45 @@ button.card-head {
   animation: runningBar 1.5s ease-in-out infinite;
   z-index: 2;
   pointer-events: none;
+}
+
+/* 成功收束（签名 R2）：左缘收成短点 */
+.tool-card.is-settled::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 2px;
+  height: 12px;
+  background: var(--success);
+  border-radius: 1px;
+  z-index: 2;
+  pointer-events: none;
+  animation: toolSettle 0.2s var(--ease-soft) both;
+}
+
+/* 失败（签名 R3）：左缘静态 error 条 */
+.tool-card.is-error::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--error);
+  z-index: 2;
+  pointer-events: none;
+}
+
+@keyframes toolSettle {
+  from {
+    height: 100%;
+    opacity: 0.6;
+  }
+  to {
+    height: 12px;
+    opacity: 1;
+  }
 }
 
 .tool-args {
