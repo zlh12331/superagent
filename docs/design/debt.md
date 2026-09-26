@@ -100,7 +100,7 @@
 
 ### D7 · css rgba alpha 效果色未收口
 
-- 位置：[globals.css](file:///src/renderer/styles/globals.css)（效果层）、
+- 位置：[styles/*](file:///src/renderer/styles)（效果层，原 globals.css 已按域拆分）、
   [token-rules.ts](file:///scripts/lib/token-rules.ts)（scanCss 门禁）。
 - 描述（改造前）：globals.css 内 16 处 `rgba(…)` 带 alpha 效果色，且**基色与令牌漂移**
   （diff 绿 #22c55e ≠ --success、红 #ef4444 ≠ --error、琥珀 #ffb84d ≠ --amber——暗主题不联动）。
