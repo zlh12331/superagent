@@ -1,9 +1,9 @@
 ---
 feature: design-signature-moment
-status: designed
+status: delivered
 updated: 2026-09-26
-branch: (pending)
-commits:
+branch: feat/design-identity
+commits: 2059fcd..ca3c8f8
 ---
 
 # 问题 4 · 签名时刻（可记忆的产品瞬间）
@@ -14,6 +14,13 @@ commits:
 > **核实方式**（2026-09-26）：通读 `home.tsx`、`tool-call-view.tsx`、`file-change-card.tsx`、`streaming-cursor.tsx`、`message-utils.ts`、`MotionReveal.tsx`、`lib/motion/variants.ts`，并核对 `globals.css` 中 `.card*` / `.tool-card` / `.welcome-logo` / `runningBar` 相关规则。下列类名与状态机均可复验。
 
 ## Report
+
+**What was built** — 工具卡签名：running 静默左缘、`is-settled` 成功收束、`is-error` 失败默认展开；streaming cursor 去 glow；欢迎页次签名保留逐字入场。
+
+**Verification** — `tool-call-view.test.tsx` 3 例（错误默认展开/settled/running 无钩子）通过；`check:animations` 绿。
+
+**Journey log** — ① 记忆点做在工具生命周期而非欢迎页；② 收束用 class 钩子可测；③ 签名必须在 P1 去 glow 之后。
+
 
 ## [S1] Problem
 
@@ -137,13 +144,13 @@ P1 宪法：quiet、品牌色稀缺、禁装饰渐变/彩色 blur 发光。因�
 
 ## Tasks
 
-- [ ] T1: 工具卡 running 态去 glow、左缘线 quiet 化 — acceptance: R1 契约；`check:tokens` 绿 (covers: S2.1)
-- [ ] T2: 成功收束态（左缘收束 + settled 过渡） — acceptance: R2 可人工复述；`output-available` 有稳定样式钩子 (covers: S2.1; depends: T1)
-- [ ] T3: 失败默认展开 + 错误左缘 — acceptance: R3；`tool-call-view` 单测覆盖 (covers: S2.1; depends: T2)
-- [ ] T4: pending/审批与 `card.paused` 同族 — acceptance: R4；无双套琥珀语言 (covers: S2.1; depends: T2)
-- [ ] T5: FileChangeCard 统计收束 + 流式光标去 glow — acceptance: S2.3；visual 仅 tool/cursor 区预期 diff (covers: S2.3; depends: T2)
-- [ ] T6: 欢迎页次签名对齐 P1（flat BrandMark，保留逐字） — acceptance: S2.2；reducedMotion 下可无动画 (covers: S2.2)
-- [ ] T7: 验证与文档 — acceptance: S4 全绿并记录；08/09 若描述工具卡状态视觉则同步 (covers: S4; depends: T3, T5)
+- [x] T1: 工具卡 running 态去 glow、左缘线 quiet 化 — acceptance: R1 契约；`check:tokens` 绿 (covers: S2.1)
+- [x] T2: 成功收束态（左缘收束 + settled 过渡） — acceptance: R2 可人工复述；`output-available` 有稳定样式钩子 (covers: S2.1; depends: T1)
+- [x] T3: 失败默认展开 + 错误左缘 — acceptance: R3；`tool-call-view` 单测覆盖 (covers: S2.1; depends: T2)
+- [x] T4: pending/审批与 `card.paused` 同族 — acceptance: R4；无双套琥珀语言 (covers: S2.1; depends: T2)
+- [x] T5: FileChangeCard 统计收束 + 流式光标去 glow — acceptance: S2.3；visual 仅 tool/cursor 区预期 diff (covers: S2.3; depends: T2)
+- [x] T6: 欢迎页次签名对齐 P1（flat BrandMark，保留逐字） — acceptance: S2.2；reducedMotion 下可无动画 (covers: S2.2)
+- [x] T7: 验证与文档 — acceptance: S4 全绿并记录；08/09 若描述工具卡状态视觉则同步 (covers: S4; depends: T3, T5)
 
 ## 决策记录（供审查）
 

@@ -1,9 +1,9 @@
 ---
 feature: design-tokens-debt
-status: designed
+status: delivered
 updated: 2026-09-26
-branch: (pending)
-commits:
+branch: feat/design-identity
+commits: 2059fcd..ca3c8f8
 ---
 
 # 问题 2 · 令牌债收敛
@@ -14,6 +14,13 @@ commits:
 > **核实方式**（2026-09-26，只读）：全文读 `tokens/aurora.json`（604 行）；对照 `tokens.css` 生成物；对 `src/**/*.{ts,tsx,css}` 做 `var(--…)` 全量计数（PowerShell Group-Object）；逐键确认零引用。下文「0 消费」均经 `rg var(--键)` 无命中（定义/`@theme` 注册除外）。
 
 ## Report
+
+**What was built** — 字号 9 级唯一阶梯并按值迁移（`fs-base`→`font-size-md`）；删除死键（sp/icon/danger/glow-lg 等）；`text-dim`→`text-secondary`；`glow-*`→`shadow-soft/raise`；圆角全量令牌化（2.6=B）。
+
+**Verification** — `tokens:check` / `check:tokens` / `check:css-vars` / `check:file-size` 绿；visual 零像素 diff；评审后补 1px/复合圆角 calc 映射。
+
+**Journey log** — ① base/md 两轨值对调，必须按值迁；② 死键含整段 sp/icon 阶梯；③ glow 名实不符且主消费在错名。
+
 
 ## [S1] Problem
 
@@ -194,13 +201,13 @@ Tailwind text-*
 
 ## Tasks
 
-- [ ] T1: 字号 9 级唯一 + 删 `fs-*` — acceptance: xl/2xl/3xl 入真源；tokens:build/check 绿 (covers: S2.0)
-- [ ] T2: 12 处 `--fs-*` 按映射迁移 — acceptance: 无 `var(--fs-`；base↔md 不得对调错误；visual 零 diff (covers: S2.1; depends: T1)
-- [ ] T3: 删死键（含 sp/icon/shadow-elev 决策落地） — acceptance: 表 B 全清或 sp/icon 明确接线；0 悬空 (covers: S2.2; depends: T1)
-- [ ] T4: text-dim / user-bubble / warn 合并 — acceptance: 15+1+应用侧 warn 改完；假「指向」注释删除 (covers: S2.2; depends: T3)
-- [ ] T5: 阴影改名迁移（方案 A） — acceptance: 单一 shadow 族；glow 键删除 (covers: S2.3; depends: T3)
-- [ ] T6: 圆角全量令牌化（2.6=B） — acceptance: globals 无裸 `border-radius: px`（点状 50% 除外）；映射表执行；visual diff 仅圆角且已说明 (covers: S2.4)
-- [ ] T7: DESIGN.md + 全量验证 — acceptance: 9 级表；S2.6 全绿并记录 (covers: S2.5, S2.6; depends: T2, T4, T5)
+- [x] T1: 字号 9 级唯一 + 删 `fs-*` — acceptance: xl/2xl/3xl 入真源；tokens:build/check 绿 (covers: S2.0)
+- [x] T2: 12 处 `--fs-*` 按映射迁移 — acceptance: 无 `var(--fs-`；base↔md 不得对调错误；visual 零 diff (covers: S2.1; depends: T1)
+- [x] T3: 删死键（含 sp/icon/shadow-elev 决策落地） — acceptance: 表 B 全清或 sp/icon 明确接线；0 悬空 (covers: S2.2; depends: T1)
+- [x] T4: text-dim / user-bubble / warn 合并 — acceptance: 15+1+应用侧 warn 改完；假「指向」注释删除 (covers: S2.2; depends: T3)
+- [x] T5: 阴影改名迁移（方案 A） — acceptance: 单一 shadow 族；glow 键删除 (covers: S2.3; depends: T3)
+- [x] T6: 圆角全量令牌化（2.6=B） — acceptance: globals 无裸 `border-radius: px`（点状 50% 除外）；映射表执行；visual diff 仅圆角且已说明 (covers: S2.4)
+- [x] T7: DESIGN.md + 全量验证 — acceptance: 9 级表；S2.6 全绿并记录 (covers: S2.5, S2.6; depends: T2, T4, T5)
 
 ## 决策记录（供审查）
 

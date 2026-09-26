@@ -1,9 +1,9 @@
 ---
 feature: design-identity
-status: in-progress
+status: delivered
 updated: 2026-09-26
-branch: (pending)
-commits:
+branch: feat/design-identity
+commits: 2059fcd..ca3c8f8
 ---
 
 # 问题 1 · 设计身份收口（TraeWork 唯一化）
@@ -18,6 +18,13 @@ commits:
 > 下文凡写「已核实」均可在上述文件按行号复现。
 
 ## Report
+
+**What was built** — TraeWork 身份收口：DESIGN.md 宪法 C1–C6；品牌面（新建钮/头像/发送钮/BrandMark）实心化；删除 12 个 `--aurora-*` 并迁移消费；清除彩色 blur 发光（保留 soft ring）；删除死类 `.prose-literacy`；注释去 Aurora/「文学风」自称。
+
+**Verification** — `tokens:check` / `check:tokens` / `check:css-vars` / `typecheck` / `test:renderer`（1534）/ `test:visual`（4）通过；评审后补 streaming-cursor 去 glow 与文档对齐。
+
+**Journey log** — ①「文学风」不是设计轴，勿写入宪法；② 品牌渐变与 quiet 冲突须一次禁干净；③ `--aurora-*` 与文件名 `aurora.json` 分离决策（1.3=A）。
+
 
 ## [S1] Problem
 
@@ -225,13 +232,13 @@ TraeWork（表面 / 色彩 / 装饰 / 排版均服从此宪法）
 
 ## Tasks
 
-- [ ] T1: 宪法写入 `DESIGN.md` — acceptance: **单一 TraeWork 轴** + C1–C6（无文学风轴/C7）；无「Aurora Light/Dark」现行表述 (covers: S2.0, S2.3)
-- [ ] T2: 12 个 `--aurora-*` 删除与引用迁移 — acceptance: 反向 grep 为 0；resizer 拖拽/折叠单测过 (covers: S2.1; depends: T1)
-- [ ] T3: V1–V4 品牌面实心化 — acceptance: 契约 S2.2；BrandMark 全站 flat (covers: S2.2; depends: T1)
-- [ ] T4: V5–V7 发光语法清零 — acceptance: 无彩色 blur/drop-shadow（ring 白名单）；`check:tokens` 绿 (covers: S2.2; depends: T3)
-- [ ] T5: 注释/假色词清理 + 删 `.prose-literacy` — acceptance: N4–N12 与实现一致；全仓无「文学风」作为设计自称；prose-literacy 零残留 (covers: S2.1, S2.3; depends: T2, T4)
-- [ ] T6: 08/09/10/11 对齐 — acceptance: 无现行青绿/Aurora 验收措辞；对比度与 radius 与 tokens 一致 (covers: S2.3; depends: T5)
-- [ ] T7: 验证与视觉基线 — acceptance: S2.4 命令与反向 grep 全过；test:visual 附 quiet 说明 (covers: S2.4; depends: T4, T6)
+- [x] T1: 宪法写入 `DESIGN.md` — acceptance: **单一 TraeWork 轴** + C1–C6（无文学风轴/C7）；无「Aurora Light/Dark」现行表述 (covers: S2.0, S2.3)
+- [x] T2: 12 个 `--aurora-*` 删除与引用迁移 — acceptance: 反向 grep 为 0；resizer 拖拽/折叠单测过 (covers: S2.1; depends: T1)
+- [x] T3: V1–V4 品牌面实心化 — acceptance: 契约 S2.2；BrandMark 全站 flat (covers: S2.2; depends: T1)
+- [x] T4: V5–V7 发光语法清零 — acceptance: 无彩色 blur/drop-shadow（ring 白名单）；`check:tokens` 绿 (covers: S2.2; depends: T3)
+- [x] T5: 注释/假色词清理 + 删 `.prose-literacy` — acceptance: N4–N12 与实现一致；全仓无「文学风」作为设计自称；prose-literacy 零残留 (covers: S2.1, S2.3; depends: T2, T4)
+- [x] T6: 08/09/10/11 对齐 — acceptance: 无现行青绿/Aurora 验收措辞；对比度与 radius 与 tokens 一致 (covers: S2.3; depends: T5)
+- [x] T7: 验证与视觉基线 — acceptance: S2.4 命令与反向 grep 全过；test:visual 附 quiet 说明 (covers: S2.4; depends: T4, T6)
 
 ## 附录 · 系列文档同步（「文学风」去轴化）
 

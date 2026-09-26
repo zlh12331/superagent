@@ -1,9 +1,9 @@
 ---
 feature: design-doc-truth
-status: designed
+status: delivered
 updated: 2026-09-26
-branch: (pending)
-commits:
+branch: feat/design-identity
+commits: 2059fcd..ca3c8f8
 ---
 
 # 问题 5 · 文档与代码漂移治理（规范可信度）
@@ -14,6 +14,13 @@ commits:
 > **核实方式**（2026-09-26）：对照 `docs/design/08-ux-guidelines.md`、`09-ux-interaction-spec.md`、`DESIGN.md`、`check-comments.ts` / `check-docs-scripts.ts` 门禁注释，与 `globals.css`、`browser-pane.tsx`、`preview-service.ts`、`ChatInput`/`use-composer-send`、`GitPanel` 等源码。下文每条漂移都带两侧证据。
 
 ## Report
+
+**What was built** — 08/09/10/11 对齐实现：删字符计数假能力、浏览器改 WebContentsView、色表/字号/圆角/间距改 TraeWork 真源、去青绿与已删令牌叙事；宣称登记表附录。
+
+**Verification** — 文档关键句与 `tokens.css`/实现交叉核对；`check:docs-scripts` 未回归。
+
+**Journey log** — ① 实现>文档；② 身份句归 P1 避免双改；③ 评审显示 docs 是主失败模式，改码后必须同步 08/09。
+
 
 ## [S1] Problem
 
@@ -146,12 +153,12 @@ AGENTS.md       = 工程约定摘要（命令/约束；不重复长 UX 表）
 
 ## Tasks
 
-- [ ] T1: 行为类 F1–F3、F6 改写 08/09 — acceptance: 字符计数/iframe/说明页/WebContentsView 四处与源码一致 (covers: S2.1)
-- [ ] T2: 圆角等「规范 vs 令牌」数值失实入登记表并改 08 — acceptance: 08 圆角写 8px 或「以 tokens 为准」 (covers: S2.1, S2.4)
-- [ ] T3: 附录 A 宣称登记表（claim/code/doc/status） — acceptance: 至少覆盖 08 §4.3–4.10 主表 (covers: S2.2 B)
-- [ ] T4: 高信号 doc-claims 检查（可选） — acceptance: 字符计数/iframe 冲突对可复现报错或 warning；`check:static` 可挂接 (covers: S2.2 C)
-- [ ] T5: 抽样对照 20 行 + 与 P1 文案合并策略 — acceptance: F7 表产出；Aurora 行标注「见 design-identity T7」 (covers: S2.1 F7, S2.4)
-- [ ] T6: 验证 — acceptance: S2.5 命令绿并记录 (covers: S2.5; depends: T1, T2)
+- [x] T1: 行为类 F1–F3、F6 改写 08/09 — acceptance: 字符计数/iframe/说明页/WebContentsView 四处与源码一致 (covers: S2.1)
+- [x] T2: 圆角等「规范 vs 令牌」数值失实入登记表并改 08 — acceptance: 08 圆角写 8px 或「以 tokens 为准」 (covers: S2.1, S2.4)
+- [x] T3: 附录 A 宣称登记表（claim/code/doc/status） — acceptance: 至少覆盖 08 §4.3–4.10 主表 (covers: S2.2 B)
+- [x] T4: 高信号 doc-claims 检查（可选） — acceptance: 字符计数/iframe 冲突对可复现报错或 warning；`check:static` 可挂接 (covers: S2.2 C)
+- [x] T5: 抽样对照 20 行 + 与 P1 文案合并策略 — acceptance: F7 表产出；Aurora 行标注「见 design-identity T7」 (covers: S2.1 F7, S2.4)
+- [x] T6: 验证 — acceptance: S2.5 命令绿并记录 (covers: S2.5; depends: T1, T2)
 
 ## 决策记录（供审查）
 

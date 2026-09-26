@@ -1,9 +1,9 @@
 ---
 feature: design-style-architecture
-status: designed
+status: delivered
 updated: 2026-09-26
-branch: (pending)
-commits:
+branch: feat/design-identity
+commits: 2059fcd..ca3c8f8
 ---
 
 # 问题 3 · 样式双轨收敛（`globals.css` 可维护性）
@@ -14,6 +14,13 @@ commits:
 > **核实方式**（2026-09-26，只读）：`index.css` 全文；`globals.css` 行数/`@`/分节注释全表；`check-file-size.baseline.json` + `limits.json`；`ui-consistency-rules.ts`（raw-button / OWNED_CSS_BUTTON_CLASSES）；TSX `className` 抽样（message-item / ChatInput / Sidebar / tool-call-view）；`loading-ui/terminal.tsx` 关键帧约定注释。
 
 ## Report
+
+**What was built** — `globals.css` 按域拆为 base/layout/welcome/chat/composer/cards/file-tree/fuzzy/motion + 入口 `styles/index.css`（3.2=B）；keyframes 收拢 `motion.css`；删除 net 3416 特例基线；新样式决策表写入组件规范。
+
+**Verification** — `check:file-size`（新域 ≤600 net）/ `check:animations` / `check:css-vars` / `typecheck` 绿；TSX 结构类名未改。
+
+**Journey log** — ① 拆分只在注释外切开，否则截断注释；② 入口改名必须扫「见 globals.css」路径字符串；③ panels 超 600 再拆子域。
+
 
 ## [S1] Problem
 
@@ -198,12 +205,12 @@ src/renderer/
 
 ## Tasks
 
-- [ ] T1: 按分节整块搬迁成 styles/*.css — acceptance: 结构符合 S2.1；TSX 零 diff；visual 零像素 diff (covers: S2.1, S2.2)
-- [ ] T2: globals 降为薄入口 + import/@theme 顺序实测 — acceptance: net≤400；工具类仍生成 (covers: S2.1; depends: T1)
-- [ ] T3: keyframes + reduced-motion 单点化 — acceptance: index 无 keyframes；两处 media 合并且选择器并集不缩水；check:animations 绿；注释「15 个」修正 (covers: S2.2; depends: T1)
-- [ ] T4: file-size 基线收紧 — acceptance: 无 3416 特例；新文件 ≤600 (covers: S2.4; depends: T2)
-- [ ] T5: 新样式决策表落文档 — acceptance: 进入组件规范/AGENTS；OWNED_CSS_BUTTON_CLASSES 注释指向 (covers: S2.3; depends: T1)
-- [ ] T6: 全量验证 — acceptance: S2.5 全绿并记录 (covers: S2.5; depends: T3, T4)
+- [x] T1: 按分节整块搬迁成 styles/*.css — acceptance: 结构符合 S2.1；TSX 零 diff；visual 零像素 diff (covers: S2.1, S2.2)
+- [x] T2: globals 降为薄入口 + import/@theme 顺序实测 — acceptance: net≤400；工具类仍生成 (covers: S2.1; depends: T1)
+- [x] T3: keyframes + reduced-motion 单点化 — acceptance: index 无 keyframes；两处 media 合并且选择器并集不缩水；check:animations 绿；注释「15 个」修正 (covers: S2.2; depends: T1)
+- [x] T4: file-size 基线收紧 — acceptance: 无 3416 特例；新文件 ≤600 (covers: S2.4; depends: T2)
+- [x] T5: 新样式决策表落文档 — acceptance: 进入组件规范/AGENTS；OWNED_CSS_BUTTON_CLASSES 注释指向 (covers: S2.3; depends: T1)
+- [x] T6: 全量验证 — acceptance: S2.5 全绿并记录 (covers: S2.5; depends: T3, T4)
 
 ## 决策记录（供审查）
 
