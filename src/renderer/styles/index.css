@@ -23,7 +23,7 @@
    设计哲学（对齐 TraeWork Design Library）：
    - 品牌色：紫色 #4B3FE3，稀缺使用；品牌面实心（禁双 accent 渐变）
    - 中性灰表面体系：白 → 浅灰 → 灰 → 深灰
-   - 6 级字号阶梯：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-*）
+   - 9 级字号阶梯：10–28px（--font-size-*）
      字号唯一阶梯 --font-size-*（含 xl/2xl/3xl）；旧档 --fs-* 已删除
    - 暗色 / 亮色双主题，通过 <html class="dark"> 切换
    - Quiet by default：无装饰背景、无发光氛围、无噪点纹理

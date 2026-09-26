@@ -14,7 +14,7 @@
 |---|---|---|
 | **实事求是** | 后端无数据源的能力不渲染假 UI；规划中功能诚实标注 | 侧栏搜索框仅 UI 不过滤；归档 tab 计数恒 0；设置页 account/plugins/hooks 等为"规划中"占位；侧栏底部账户无"退出登录" |
 | **原型对齐** | 原型阶段已结束：`docs/prototype/prototype-v2.html` 与 `codex-desktop-prototype.design/` 已于 2026-08-30 删除，交互真源改为已实现代码与 09-ux-interaction-spec | 三段式 grid、welcome-mode、composer-project-bar、composer-stats-bar、消息导航轨、滚动到底部按钮等 |
-| **可访问性（WCAG AA）** | 文字对比度 ≥4.5:1；全部颜色经设计令牌输出 | `globals.css` 注释标注关键对比度实测值；浅色导航激活态用 `text-foreground` 而非青色 `text-primary`（2.51:1 不达标） |
+| **可访问性（WCAG AA）** | 文字对比度 ≥4.5:1；全部颜色经设计令牌输出 | `styles/*` 注释标注关键对比度实测值；浅色导航激活态用 `text-foreground` |
 
 ### 1.2 状态管理四层架构（UX 侧约定）
 
@@ -35,7 +35,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ### 2.1 三段式主布局
 
-实现：[AppShell.tsx](../src/renderer/components/layout/AppShell.tsx) + [globals.css](../src/renderer/styles/globals.css) `.view-chat`
+实现：[AppShell.tsx](../src/renderer/components/layout/AppShell.tsx) + [layout.css](../src/renderer/styles/layout.css) `.view-chat`
 
 ```
 ┌────────────────────── topbar（52px，玻璃质感）──────────────────────┐
@@ -70,7 +70,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ## 3. TraeWork 视觉规范
 
-实现：[globals.css](../src/renderer/styles/globals.css)（`@import` 引入 tokens.css 并补充组件级样式）+ [tokens.css](../src/renderer/styles/tokens.css)（**设计令牌真源生成物**，勿手改）+ [index.css](../src/renderer/index.css)
+实现：[styles/index.css](../src/renderer/styles/index.css)（@import tokens + base/layout/welcome/chat/composer/cards/file-tree/fuzzy/motion + `@theme`）+ [tokens.css](../src/renderer/styles/tokens.css)（**设计令牌真源生成物**，勿手改）+ [renderer/index.css](../src/renderer/index.css)
 
 ### 3.1 令牌体系（禁止硬编码）
 
@@ -104,7 +104,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 - TraeWork quiet：无 body 光晕/网格/噪点；扫描线仅 `experimental.scanlines` 默认关。
 - 顶栏中性表面，无发光刻度线。
 - 动画统一 `tw-animate-css` + `styles/motion.css` `@keyframes`；消息入场 `motion`（opacity + y:6 → 0）；`prefers-reduced-motion` 全局降级。
-- 动画统一 `tw-animate-css`；消息入场 `motion`（opacity + y:6 → 0，`smoothEaseOut`）；流式状态点 `animate-pulse-soft`；自定义动画必须在 `globals.css` 定义并复用缓动变量。
+- 动画统一 `tw-animate-css`；消息入场 `motion`（opacity + y:6 → 0，`smoothEaseOut`）；流式状态点 `animate-pulse-soft`；自定义动画必须在 `styles/motion.css` 定义并复用缓动变量。
 - 实验开关：`experimental.scanlines` 控制扫描线视觉叠加（默认关）。
 
 ## 4. 核心交互流程
@@ -400,7 +400,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 | 终端 | `components/terminal/TerminalPanel.tsx` |
 | Git | `components/git/GitPanel.tsx` |
 | 设置 | `components/settings/SettingsDialog.tsx` + `sections/*` |
-| 主题/令牌 | `providers/ThemeProvider.tsx`、`styles/globals.css` |
+| 主题/令牌 | `providers/ThemeProvider.tsx`、`styles/index.css` + `styles/tokens.css` |
 | 状态管理 | `stores/persistent/*`、`stores/transient/*` |
 | 错误体系 | `components/common/AppErrorBoundary.tsx`、`AsyncBoundary.tsx`、`SectionErrorBoundary.tsx`、`lib/error-actions.ts` |
 | i18n | `i18n/locales/zh-CN/*.json`、`i18n/locales/en/*.json` |

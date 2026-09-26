@@ -280,7 +280,7 @@ export function FuzzySearchDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="top-[20vh] translate-y-0 left-[50%] translate-x-[-50%] w-[90vw] max-w-[560px] gap-0 rounded-[10px] border p-0 shadow-[var(--shadow-modal)]"
+        className="top-[20vh] translate-y-0 left-[50%] translate-x-[-50%] w-[90vw] max-w-[560px] gap-0 rounded-lg border p-0 shadow-[var(--shadow-modal)]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{t('fileTree.fuzzySearch.title')}</DialogTitle>

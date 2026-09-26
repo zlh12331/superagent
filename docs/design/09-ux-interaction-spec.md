@@ -93,7 +93,7 @@ flowchart LR
 
 ## 二、UI 设计体系（TraeWork）
 
-唯一真源：[globals.css](../../src/renderer/styles/globals.css)（4224 行）。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
+唯一真源：[styles/index.css](../../src/renderer/styles/index.css)（@import 各域 css + `@theme`）+ `styles/tokens.css`。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
 
 ### 2.1 颜色总览（亮 / 暗两套）
 
@@ -150,7 +150,7 @@ flowchart LR
 ### 2.5 页面氛围与动效
 
 - TraeWork quiet：无装饰光晕/网格/噪点；扫描线仅实验开关默认关；顶栏中性表面。
-- 动画统一 tw-animate-css + 自定义关键帧（pulse-soft 状态点 / typingBounce 打字点 / msgEnter 消息入场 / shimmer 骨架 / refreshing-slide 刷新条 / reasoningReveal 推理块 / modalin 模态入场等，定义在 globals.css）。
+- 动画统一 tw-animate-css + 自定义关键帧（pulse-soft / typingBounce / msgEnter / shimmer / refreshing-slide / reasoningReveal / modalin 等，定义在 `styles/motion.css`）。
 - 对比度硬标准：正文 ≥16:1、次要 ≥5.39:1、accent 上文字 7.6:1（历史坑：硬编码 stone-* 曾低至 1.23:1，勿回退）。
 
 ## 三、页面布局（每个界面一张图）
@@ -224,7 +224,7 @@ flowchart LR
 │  模型服务  │← 打开时默认停在「模型服务」              │
 │  ...      │                                          │
 ├──────────┴───────────────────────────────────────────┤
-│ 导航：160px 固定列；激活项 = 青色 2px 竖条 + 加粗      │
+│ 导航：160px 固定列；激活项 = accent 2px 竖条 + 加粗    │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -684,7 +684,7 @@ flowchart LR
 
 **main.tsx**：`unhandledrejection` 全局捕获——AbortError 预期中断不报错，其余 console.error（唯一日志出口）；**applyInitialTheme() 必须在 createRoot 渲染之前调用**（FOUC 防闪烁）；StrictMode 包裹。
 
-**index.css**：`@import tailwindcss + tw-animate-css + styles/globals.css`（@import 必须在其他 at-rule 之前）；`@custom-variant dark`；`.search-highlight` 搜索高亮动画（2.5s accent 淡出）。
+**index.css**：`@import tailwindcss + tw-animate-css + styles/index.css`（@import 必须在其他 at-rule 之前）；`@custom-variant dark`；`.search-highlight` 搜索高亮动画（2.5s accent 淡出，keyframes 在 styles/motion.css）。
 
 **theme-init.ts（FOUC 防护）**：读 localStorage `code-agent:settings` 的 zustand persist 结构 `{state:{theme}}`，非法回退 dark；system 模式用 matchMedia 解析；`document.documentElement.classList.toggle('dark')`；**必须 module script 而非 index.html 内联脚本**（生产 CSP script-src 'self' 禁止 inline）。
 
