@@ -34,7 +34,7 @@ design_tokens:
 | 布局尺寸 | `--sidebar-w` / `--right-panel-w` / `--resizer-w` / `--drawer-w` / `--topbar-h` | `clamp(200px,17vw,280px)` | 面板宽高，clamp 响应式 |
 | z-index 层级 | `--z-base:1` / `--z-surface:2` / `--z-popover:50` / `--z-modal:100` / `--z-toast:110` / `--z-boundary:999` | `z-(--z-popover)` | 6 档浮层体系，禁止裸 z-* 数字（check-tokens bare-z-index 卡关） |
 | 字体 | `--font-mono/sans/serif` | `--font-mono: "JetBrains Mono", …` | 等宽/无衬线/衬线三族 |
-| 字号 | `--font-size-2xs:10px` … `--font-size-lg:16px` | 6 级阶梯 | `text-xs` 等 Tailwind 类映射 |
+| 字号 | `--font-size-2xs:10px` … `--font-size-3xl:28px` | 9 级唯一阶梯 | `text-*` Tailwind 映射（base=13/md=14） |
 | 圆角 | `--radius:8px` + `--radius-sm/md/lg/xl` 派生（6/8/10/12px） | `rounded-md` | shadcn 圆角映射 |
 | 背景层级 | `--bg` / `--bg-elev` / `--bg-elev-2/3` | L0 页面底 → L3 悬浮态 | 3 层背景深度，双主题 |
 | shadcn 语义映射 | `--background/--foreground/--card/--popover/--muted/--accent/--destructive/--border/--ring/--input` 等 | `--muted: var(--bg-elev-2)` | 与 shadcn 标准语义对齐，双主题自适应 |

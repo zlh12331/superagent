@@ -30,7 +30,7 @@ describe('FileIcon · 扩展名映射', () => {
   it('rs：FileCode 图标 + 橙（warn）', () => {
     const { classes, color } = renderIcon('lib.rs');
     expect(classes).toContain('lucide-file-code');
-    expect(color).toContain('--warn');
+    expect(color).toContain('--amber');
   });
 
   it('ts / tsx / js / jsx：FileCode 图标 + 蓝（accent-2）', () => {

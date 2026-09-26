@@ -27,6 +27,10 @@
   --font-size-base: 13px;
   --font-size-md: 14px;
   --font-size-lg: 16px;
+  /* 字号阶梯扩展（由旧档 fs-xl/2xl/3xl 升格，2.2=A 按值） */
+  --font-size-xl: 18px;
+  --font-size-2xl: 22px;
+  --font-size-3xl: 28px;
   /* 圆角 — TraeWork 默认容器圆角 --radius-8 */
   --radius: 8px;
   /* 页面基底色 — TraeWork --bg-base-default */
@@ -37,8 +41,6 @@
   --bg-elev-2: #E5E5E5;
   /* L3 激活态 / 强调容器 — TraeWork --brand-grey-300 */
   --bg-elev-3: #D4D4D4;
-  /* 兼容别名：指向 --bg-elev-3 避免破坏旧引用 */
-  --bg-elev-4: var(--bg-elev-3);
   /* shadcn 标准背景映射 */
   --background: var(--bg);
   --foreground: #171717;
@@ -57,8 +59,6 @@
   --text-secondary: #404040;
   /* TraeWork --text-tertiary（亮色由 #737373 收紧至 #595959：原值对 --bg-elev/#F5F5F5 仅 4.35:1、对 --bg-elev-2/#E5E5E5 仅 3.76:1，均低于 AA；新值对各亮色底 ≥4.5，含 hover 底 --bg-elev-3/#D4D4D4 的 4.73） */
   --text-tertiary: #595959;
-  /* 兼容别名 — 指向 --text-secondary */
-  --text-dim: #404040;
   /* TraeWork --text-disabled */
   --text-faint: #A1A1A1;
   /* shadcn muted-foreground — TraeWork --text-tertiary（亮色收紧理由同 text-tertiary：原 #737373 在浮起底色上低于 AA 4.5；暗色 #A1A1A1 实测已达标不动） */
@@ -88,12 +88,9 @@
   --info-blue: rgba(63, 133, 255, 0.08);
   --info-amber: rgba(226, 121, 0, 0.10);
   --error-bg: rgba(232, 70, 58, 0.08);
-  /* 柔和阴影（替代发光 — TraeWork 无 glow） */
-  --glow-sm: 0 1px 3px rgba(115, 115, 115, 0.08);
-  --glow-md: 0 4px 12px rgba(115, 115, 115, 0.06), 0 0 0 1px rgba(115, 115, 115, 0.04);
-  --glow-lg: 0 8px 24px rgba(115, 115, 115, 0.04);
-  --glow-2-sm: 0 1px 3px rgba(115, 115, 115, 0.06);
-  --glow-2-md: 0 4px 12px rgba(115, 115, 115, 0.04), 0 0 0 1px rgba(115, 115, 115, 0.03);
+  /* 柔和阴影（TraeWork 中性 elevation；旧名 glow-sm，2.5=A 改名） */
+  --shadow-soft: 0 1px 3px rgba(115, 115, 115, 0.08);
+  --shadow-raise: 0 4px 12px rgba(115, 115, 115, 0.06), 0 0 0 1px rgba(115, 115, 115, 0.04);
   /* 背景纹理：TraeWork 无装饰背景，纹理关闭 */
   --grid-line: transparent;
   --scan-line: transparent;
@@ -105,7 +102,6 @@
   --amber-dim: #C46F11;
   --amber-glow: rgba(226, 121, 0, 0.10);
   --warning: var(--amber);
-  --warn: var(--amber);
   /* 警告文本橙（亮色加深保 4.5:1；暗色对黑底复用基色即达标） */
   --warn-text: #A85C00;
   /* TraeWork --status-error-default（基色：图形/边框/氛围；文字用 --error-text，实底+白字用 --error-emphasis） */
@@ -140,8 +136,6 @@
   /* 消息气泡 — TraeWork --bg-base-secondary */
   --msg-bubble-user: #F5F5F5;
   --msg-bubble-assistant: transparent;
-  /* 兼容别名 */
-  --user-bubble: var(--msg-bubble-user);
   /* 遮罩 / 玻璃 */
   --overlay-bg: rgba(0, 0, 0, 0.25);
   /* 命令/代码块深色背景（双主题一致，终端风格） */
@@ -167,26 +161,7 @@
   --font-serif: "SF Pro", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* TraeWork --font-family-mono */
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  /* 旧字号别名（兼容已有组件代码） */
-  --fs-2xs: 10px;
-  --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-md: 13px;
-  --fs-base: 14px;
-  --fs-lg: 16px;
-  --fs-xl: 18px;
-  --fs-2xl: 22px;
-  --fs-3xl: 28px;
-  /* 间距基线 — TraeWork --spacer 体系 */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 24px;
-  --sp-6: 32px;
-  --sp-7: 48px;
   /* 阴影体系 — TraeWork 中性阴影 */
-  --shadow-elev: 0 4px 16px rgba(115, 115, 115, 0.08), 0 0 0 1px rgba(115, 115, 115, 0.04);
   --shadow-modal: 0 16px 48px rgba(115, 115, 115, 0.12), 0 0 0 1px rgba(115, 115, 115, 0.06);
   --shadow-dropdown: 0 8px 24px rgba(115, 115, 115, 0.1);
   /* 扩展阴影（兼容已有组件） */
@@ -197,17 +172,6 @@
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-paper: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* 图标尺寸阶梯 */
-  --icon-xs: 10px;
-  --icon-sm: 12px;
-  --icon-md: 14px;
-  --icon-lg: 16px;
-  --icon-xl: 20px;
-  /* 语义别名变量 — 兼容多套命名 */
-  --bg-primary: var(--bg);
-  --text-primary: var(--text);
-  --bg-ter: var(--bg-elev-2);
-  --danger: var(--error);
   /* 主按钮实底（bg-primary+白字场景）：暗色取深档保白字 CR≥4.5；与 --accent（图形/文本）职责分离 */
   --primary: var(--accent);
 }
@@ -234,8 +198,6 @@
   --text-secondary: #D4D4D4;
   /* TraeWork --text-tertiary（亮色由 #737373 收紧至 #595959：原值对 --bg-elev/#F5F5F5 仅 4.35:1、对 --bg-elev-2/#E5E5E5 仅 3.76:1，均低于 AA；新值对各亮色底 ≥4.5，含 hover 底 --bg-elev-3/#D4D4D4 的 4.73） */
   --text-tertiary: #A1A1A1;
-  /* 兼容别名 — 指向 --text-secondary */
-  --text-dim: #D4D4D4;
   /* TraeWork --text-disabled */
   --text-faint: #737373;
   /* shadcn muted-foreground — TraeWork --text-tertiary（亮色收紧理由同 text-tertiary：原 #737373 在浮起底色上低于 AA 4.5；暗色 #A1A1A1 实测已达标不动） */
@@ -256,12 +218,9 @@
   --info-blue: rgba(76, 136, 255, 0.12);
   --info-amber: rgba(243, 154, 53, 0.12);
   --error-bg: rgba(234, 87, 76, 0.10);
-  /* 柔和阴影（替代发光 — TraeWork 无 glow） */
-  --glow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
-  --glow-md: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.02);
-  --glow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
-  --glow-2-sm: 0 1px 3px rgba(0, 0, 0, 0.15);
-  --glow-2-md: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  /* 柔和阴影（TraeWork 中性 elevation；旧名 glow-sm，2.5=A 改名） */
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-raise: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.02);
   /* 语义色 — TraeWork --status-warning-default */
   --amber: #F39A35;
   /* TraeWork --status-warning-active */
@@ -291,7 +250,6 @@
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
   /* 阴影体系 — TraeWork 中性阴影 */
-  --shadow-elev: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
   --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02);
   --shadow-dropdown: 0 12px 36px rgba(0, 0, 0, 0.5);
   --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.3);

@@ -15,7 +15,7 @@
    - 品牌色：紫色 #4B3FE3，稀缺使用；品牌面实心（禁双 accent 渐变）
    - 中性灰表面体系：白 → 浅灰 → 灰 → 深灰
    - 6 级字号阶梯：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-*）
-     兼容旧档 --fs-*（待 P2 按值迁移）
+     字号唯一阶梯 --font-size-*（含 xl/2xl/3xl）；旧档 --fs-* 已删除
    - 暗色 / 亮色双主题，通过 <html class="dark"> 切换
    - Quiet by default：无装饰背景、无发光氛围、无噪点纹理
    - 中性阴影替代发光效果；焦点允许 0 0 0 Npx soft ring
@@ -43,7 +43,7 @@
   /* 字号阶梯接入 Tailwind 工具类（text-2xs/xs/sm/base/md/lg = 10/11/12/13/14/16px）
      Tailwind v4 字号命名空间是 --text-*（非 --font-size-*），
      此前未接入：text-xs 等回落到默认 scale（12px），与设计阶梯（11px）不一致。
-     直接内联设计值（不引用旧别名 --fs-*：其 fs-base=15px 与设计 13px 冲突） */
+     直接内联设计值（--text-* 与 --font-size-* 同数） */
   --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 12px;
@@ -107,7 +107,6 @@
   /* 补注册（2026-09）：跨域消费的类别/语义色接入工具类命名空间，与 success/error/amber
      对称（仅暴露既有令牌，未新增颜色值）；--glass-bg 为表面特效令牌不注册（避免
      bg-glass-bg 语义类被滥用，其消费处保持 arbitrary 写法） */
-  --color-warn: var(--warn);
   --color-info-blue: var(--info-blue);
   --color-magenta: var(--magenta);
   --color-error-bg: var(--error-bg);
@@ -118,8 +117,6 @@
   --color-bg-elev: var(--bg-elev);
   --color-bg-elev-2: var(--bg-elev-2);
   --color-bg-elev-3: var(--bg-elev-3);
-  --color-bg-elev-4: var(--bg-elev-4);
-  --color-text-dim: var(--text-dim);
   --color-text-faint: var(--text-faint);
   --color-accent-2: var(--accent-2);
   --color-accent-glow: var(--accent-glow);
@@ -160,7 +157,7 @@ body,
 body {
   /* 默认无衬线（UI 层），正文用 font-serif 类显式指定 */
   font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  font-size: var(--font-size-md);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
@@ -194,7 +191,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   /* 两侧留白，模拟纸张边缘 */
   border: 2px solid var(--background);
 }
@@ -457,7 +454,7 @@ body {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   transition:
     background 0.15s ease,
     color 0.15s ease;
@@ -530,7 +527,7 @@ body {
   padding: 5px 8px 5px 26px;
   background: var(--secondary);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--foreground);
@@ -559,7 +556,7 @@ body {
   padding: 4px 8px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--font-size-xs);
   color: var(--muted-foreground);
@@ -592,7 +589,7 @@ body {
   color: var(--muted-foreground);
   /* 数量徽章（对齐参考项目 SidebarTabButton：圆角背景 + 等宽数字） */
   background: var(--bg);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 1px 5px;
   font-variant-numeric: tabular-nums;
 }
@@ -622,7 +619,7 @@ body {
   background: var(--primary);
   color: var(--primary-foreground);
   border: none;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 600;
@@ -721,7 +718,7 @@ body {
   color: var(--muted-foreground);
   cursor: pointer;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   display: inline-flex;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -750,7 +747,7 @@ body {
   align-items: flex-start;
   gap: 8px;
   padding: 8px 11px;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   cursor: pointer;
   transition: background 0.15s ease;
   position: relative;
@@ -774,7 +771,7 @@ body {
   height: 60%;
   background: var(--accent);
   border-radius: 0 2px 2px 0;
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .thread-item .ti-row {
@@ -857,7 +854,7 @@ body {
 .sidebar-foot .avatar {
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   background: linear-gradient(135deg, var(--sidebar-accent), var(--secondary));
   display: flex;
   align-items: center;
@@ -1000,7 +997,7 @@ body.resizing iframe {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: var(--fs-3xl); /* 28px，对齐原型品牌大字 */
+  font-size: var(--font-size-3xl); /* 28px */
   font-weight: 600;
   color: var(--foreground);
   letter-spacing: -0.02em;
@@ -1031,7 +1028,7 @@ body.resizing iframe {
   padding: 7px 16px;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: calc(var(--radius) + 12px);
   font-size: var(--font-size-sm);
   color: var(--muted-foreground);
   cursor: pointer;
@@ -1050,7 +1047,7 @@ body.resizing iframe {
   background: var(--bg-elev-2);
   color: var(--foreground);
   transform: translateY(-1px);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .welcome-pill svg {
@@ -1111,7 +1108,7 @@ body.resizing iframe {
 }
 
 .view-chat.welcome-mode .composer-box {
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   border-color: var(--border);
   box-shadow: 0 2px 12px color-mix(in srgb, black 8%, transparent);
   max-width: 720px;
@@ -1168,7 +1165,7 @@ body.resizing iframe {
 .view-chat.welcome-mode .composer-project-bar {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   max-width: 720px;
   width: 100%;
   margin-left: auto;
@@ -1193,7 +1190,7 @@ body.resizing iframe {
   gap: 4px;
   cursor: pointer;
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   transition:
     background 0.15s ease,
     color 0.15s ease;
@@ -1207,7 +1204,7 @@ body.resizing iframe {
 }
 
 .cpb-select:hover {
-  color: var(--text-dim);
+  color: var(--text-secondary);
   background: var(--bg-elev-3);
 }
 
@@ -1260,7 +1257,7 @@ body.resizing iframe {
   left: 10px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 4px;
   min-width: 240px;
   max-width: 320px;
@@ -1287,7 +1284,7 @@ body.resizing iframe {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   font-size: var(--font-size-sm);
   color: var(--text);
@@ -1351,7 +1348,7 @@ body.resizing iframe {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   font-size: var(--font-size-sm);
   color: var(--accent);
@@ -1407,7 +1404,7 @@ body.resizing iframe {
 .model-provider-icon {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   background: var(--bg-elev-3);
   display: inline-flex;
   align-items: center;
@@ -1430,7 +1427,7 @@ body.resizing iframe {
   display: flex;
   align-items: center;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   font-size: var(--font-size-sm);
   color: var(--text);
@@ -1510,12 +1507,12 @@ body.resizing iframe {
 .msg-avatar {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   flex-shrink: 0;
   margin-top: 2px;
@@ -1563,7 +1560,7 @@ body.resizing iframe {
 
 .msg-role.assistant::before {
   background: var(--accent);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .msg-role .msg-time {
@@ -1575,14 +1572,14 @@ body.resizing iframe {
 
 /* 用户气泡：玻璃渐变底 + 发丝描边 + 内高光 */
 .msg-content {
-  font-size: var(--fs-base);
+  font-size: var(--font-size-md);
   line-height: 1.7;
   color: var(--text);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   padding: 11px 15px;
-  border-radius: 12px;
-  background: linear-gradient(160deg, var(--bg-elev-2) 0%, var(--user-bubble) 100%);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(160deg, var(--bg-elev-2) 0%, var(--msg-bubble-user) 100%);
   border: 1px solid var(--border);
   box-shadow:
     var(--shadow-card),
@@ -1627,7 +1624,7 @@ body.resizing iframe {
   font-size: var(--font-size-sm);
   background: var(--accent-soft);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   border: 1px solid var(--accent-glow);
   color: var(--accent);
 }
@@ -1695,7 +1692,7 @@ body.resizing iframe {
   margin: 8px 0;
   padding: 4px 12px;
   border-left: 3px solid var(--accent-glow);
-  color: var(--text-dim);
+  color: var(--text-secondary);
   background: var(--accent-soft);
   border-radius: 0 4px 4px 0;
 }
@@ -1748,7 +1745,7 @@ body.resizing iframe {
    此处仅覆盖 margin / border-radius / overflow 等 */
 .msg-content pre.shiki {
   margin: 8px 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow-x: auto;
   font-size: var(--font-size-sm);
   line-height: 1.6;
@@ -1770,7 +1767,7 @@ body.resizing iframe {
   vertical-align: text-bottom;
   margin-left: 2px;
   animation: blink 1s steps(2) infinite;
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
   border-radius: 1px;
 }
 
@@ -1801,7 +1798,7 @@ body.resizing iframe {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
   animation: typingBounce 1.2s ease-in-out infinite;
 }
 
@@ -1838,9 +1835,9 @@ body.resizing iframe {
   background: none;
   border: none;
   color: var(--muted-foreground);
-  font-size: var(--fs-xs);
+  font-size: var(--font-size-xs);
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1855,7 +1852,7 @@ body.resizing iframe {
 .msg-action-btn:hover {
   background: var(--bg-elev-2);
   color: var(--text);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .msg-action-btn svg {
@@ -1922,7 +1919,7 @@ body.resizing iframe {
 .composer-box {
   background: var(--bg-elev-2);
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
+  border-radius: calc(var(--radius) + 6px);
   transition:
     box-shadow 0.25s ease,
     transform 0.25s var(--ease-out),
@@ -1954,7 +1951,7 @@ body.resizing iframe {
   border-color: var(--accent-dim);
   box-shadow:
     0 0 0 3px var(--accent-glow),
-    var(--glow-md);
+    var(--shadow-raise);
   background: var(--bg-elev-3);
   transform: translateY(-1px);
 }
@@ -1990,7 +1987,7 @@ body.resizing iframe {
   display: block;
   width: 36px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: calc(var(--radius) - 6px);
   background: var(--border-strong);
   transition:
     background 0.15s ease,
@@ -1999,7 +1996,7 @@ body.resizing iframe {
 .composer-drag-handle:hover::before,
 .composer-drag-handle.dragging::before {
   background: var(--accent);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 .composer-input {
   width: 100%;
@@ -2008,7 +2005,7 @@ body.resizing iframe {
   outline: none;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  font-size: var(--font-size-md);
   line-height: 1.5;
   padding: 12px 14px;
   resize: none;
@@ -2053,7 +2050,7 @@ body.resizing iframe {
   border: none;
   background: transparent;
   color: var(--muted-foreground);
-  border-radius: 5px;
+  border-radius: calc(var(--radius) - 3px);
   cursor: pointer;
   transition:
     background 0.12s ease,
@@ -2072,7 +2069,7 @@ body.resizing iframe {
 .composer-tool-btn.active {
   color: var(--accent);
   background: var(--accent-glow);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .composer-hint {
@@ -2080,7 +2077,7 @@ body.resizing iframe {
   font-size: 10.5px;
   /* 不用 --text-faint：它映射 TraeWork --text-disabled（禁用态专用），对本区底
      --bg-elev-2 仅 3.19:1（暗）/ 2.05:1（亮），低于 AA 小文本 4.5:1 */
-  color: var(--text-dim);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   line-height: 1;
@@ -2089,7 +2086,7 @@ body.resizing iframe {
 .composer-hint kbd {
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: calc(var(--radius) - 5px);
   padding: 1px 5px;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2105,7 +2102,7 @@ body.resizing iframe {
 .send-btn {
   width: 30px;
   height: 30px;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 1px);
   background: var(--primary);
   border: none;
   color: var(--primary-foreground);
@@ -2143,7 +2140,7 @@ body.resizing iframe {
 .stop-gen-btn {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: none;
   background: var(--error);
   color: var(--color-destructive-foreground);
@@ -2172,7 +2169,7 @@ body.resizing iframe {
 .sk {
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: calc(var(--radius) - 5px);
   padding: 1px 6px;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2186,7 +2183,7 @@ body.resizing iframe {
 .card {
   margin-top: 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: linear-gradient(180deg, var(--bg-elev), var(--bg-elev-2) 160%);
   position: relative;
@@ -2228,7 +2225,7 @@ body.resizing iframe {
   background: var(--bg-elev-2);
   border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--font-size-sm);
 }
 
 button.card-head {
@@ -2260,7 +2257,7 @@ button.card-head {
   margin-left: auto;
   font-size: 10.5px;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -2372,10 +2369,10 @@ button.card-head {
 .tool-args {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   background: var(--bg);
   padding: 10px 12px;
-  border-radius: 5px;
+  border-radius: calc(var(--radius) - 3px);
   border: 1px solid var(--border);
   border-left: 2px solid var(--accent-dim);
   white-space: pre-wrap;
@@ -2388,7 +2385,7 @@ button.card-head {
   color: var(--text);
   background: var(--bg);
   padding: 8px 10px 8px 12px;
-  border-radius: 5px;
+  border-radius: calc(var(--radius) - 3px);
   border: 1px solid var(--border);
   border-left: 2px solid var(--accent-dim);
   margin-bottom: 8px;
@@ -2402,12 +2399,12 @@ button.card-head {
 
 .term-output {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--font-size-sm);
   line-height: 1.6;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   background: var(--bg);
   padding: 10px 12px;
-  border-radius: 5px;
+  border-radius: calc(var(--radius) - 3px);
   border: 1px solid var(--border);
   max-height: 200px;
   overflow-y: auto;
@@ -2429,7 +2426,7 @@ button.card-head {
   padding: 6px 10px;
   background: var(--bg-elev-2);
   border-bottom: 1px solid var(--border);
-  color: var(--text-dim);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2437,7 +2434,7 @@ button.card-head {
 
 .diff-lines {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--font-size-sm);
   line-height: 1.55;
   padding: 8px 0;
 }
@@ -2466,7 +2463,7 @@ button.card-head {
 }
 
 .diff-line.ctx {
-  color: var(--text-dim);
+  color: var(--text-secondary);
 }
 
 .diff-actions {
@@ -2481,7 +2478,7 @@ button.card-head {
 .reasoning-block {
   margin-top: 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-elev-2);
   transition:
@@ -2491,7 +2488,7 @@ button.card-head {
 
 .reasoning-block:hover {
   border-color: var(--accent-glow);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .reasoning-head {
@@ -2519,8 +2516,8 @@ button.card-head {
 }
 
 .reasoning-title {
-  font-size: var(--fs-xs);
-  color: var(--text-dim);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
@@ -2537,7 +2534,7 @@ button.card-head {
   padding: 10px 12px;
   font-size: var(--font-size-sm);
   line-height: 1.6;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   border-top: 1px solid var(--border);
   font-family: var(--font-mono);
   white-space: pre-wrap;
@@ -2552,7 +2549,7 @@ button.card-head {
 .plan-block {
   margin-top: 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-elev-2);
 }
@@ -2592,13 +2589,13 @@ button.card-head {
   padding: 5px 12px;
   font-size: var(--font-size-sm);
   line-height: 1.5;
-  color: var(--text-dim);
+  color: var(--text-secondary);
 }
 
 .plan-check {
   width: 14px;
   height: 14px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   border: 1.5px solid var(--text-faint);
   flex-shrink: 0;
   margin-top: 2px;
@@ -2611,7 +2608,7 @@ button.card-head {
 .plan-item.done .plan-check {
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .plan-item.done .plan-check::after {
@@ -2724,13 +2721,13 @@ button.card-head {
 
 .approval-diff-wrapper .word-diff-added {
   background: color-mix(in srgb, var(--success) 30%, transparent);
-  border-radius: 2px;
+  border-radius: calc(var(--radius) - 6px);
   padding: 0 1px;
 }
 
 .approval-diff-wrapper .word-diff-removed {
   background: color-mix(in srgb, var(--error) 25%, transparent);
-  border-radius: 2px;
+  border-radius: calc(var(--radius) - 6px);
   padding: 0 1px;
   text-decoration: line-through;
 }
@@ -2816,7 +2813,7 @@ button.card-head {
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
@@ -2844,7 +2841,7 @@ button.card-head {
   padding: 0;
   margin-left: auto;
   border: none;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
@@ -2892,7 +2889,7 @@ button.card-head {
   padding: 1px 4px;
   margin: 0;
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   background: var(--bg-elev);
   color: var(--text);
   font-family: var(--font-serif);
@@ -2919,7 +2916,7 @@ button.card-head {
   opacity: 0.85;
   background: var(--accent-soft);
   border: 1px dashed var(--accent-glow);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 /* ── 文件查看器（右面板「文件」tab；原为对话框，现为常驻面板）────── */
@@ -2948,7 +2945,7 @@ button.card-head {
   gap: 4px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
@@ -2984,7 +2981,7 @@ button.card-head {
   max-height: calc(100vh - 16rem);
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-elev);
 }
 
@@ -3075,7 +3072,7 @@ button.card-head {
   gap: 4px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
@@ -3105,7 +3102,7 @@ button.card-head {
   gap: 4px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
@@ -3142,7 +3139,7 @@ button.card-head {
   align-items: center;
   gap: 3px;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   background: var(--accent-soft);
   color: var(--accent);
   font-family: var(--font-mono);
@@ -3262,7 +3259,7 @@ button.card-head {
   padding: 4px 10px 4px 8px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
     background 0.12s ease,
@@ -3305,7 +3302,7 @@ button.card-head {
   height: 60%;
   background: var(--accent);
   border-radius: 0 2px 2px 0;
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 .ft-file.active .ft-name {
@@ -3402,7 +3399,7 @@ button.card-head {
   letter-spacing: 0.08em;
   padding: 1px 5px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   color: var(--muted-foreground);
   margin-right: 6px;
   user-select: none;
@@ -3432,8 +3429,8 @@ button.card-head {
 }
 
 .empty-state-title {
-  font-size: var(--fs-base);
-  color: var(--text-dim);
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
   font-weight: 500;
   margin-bottom: 6px;
   font-family: var(--font-serif);
@@ -3485,7 +3482,7 @@ button.card-head {
 
 .skeleton-line {
   height: 10px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   margin-bottom: 6px;
   background: linear-gradient(
     90deg,
@@ -3530,7 +3527,7 @@ button.card-head {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  color: var(--text-dim);
+  color: var(--text-secondary);
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -3551,7 +3548,7 @@ button.card-head {
 .scroll-to-bottom:hover {
   color: var(--accent);
   border-color: var(--accent-dim);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
 }
 
 /* 新消息提示红点（对齐原型 .new-msg-dot） */
@@ -3563,7 +3560,7 @@ button.card-head {
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: var(--glow-sm);
+  box-shadow: var(--shadow-soft);
   display: none;
 }
 
@@ -3656,7 +3653,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 .jump-dot {
   pointer-events: none;
   height: 3px;
-  border-radius: 2px;
+  border-radius: calc(var(--radius) - 6px);
   background: var(--border);
   transition:
     background 200ms,
@@ -3694,7 +3691,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   padding: 4px 8px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-elev);
   box-shadow: var(--shadow-pop);
   color: var(--text);
@@ -3935,7 +3932,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   padding: 7px 10px;
   border: none;
   border-left: 2px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -3993,7 +3990,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   max-width: 92vw;
   background: var(--bg-elev);
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-modal);
   overflow: hidden;
   animation: modalin 0.2s var(--ease-out);
@@ -4020,7 +4017,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   outline: none;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  font-size: var(--font-size-md);
 }
 
 .palette-input::placeholder {
@@ -4070,13 +4067,13 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 .palette-item .pi-icon {
   width: 22px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: calc(var(--radius) - 3px);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -4107,7 +4104,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   padding: 2px 6px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
 }
 
 .palette-foot {
@@ -4125,11 +4122,11 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 .palette-foot kbd {
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: calc(var(--radius) - 5px);
   padding: 1px 5px;
   font-family: var(--font-mono);
   font-size: var(--font-size-2xs);
-  color: var(--text-dim);
+  color: var(--text-secondary);
 }
 
 .palette-empty {

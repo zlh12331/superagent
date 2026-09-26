@@ -65,6 +65,16 @@
   "font-size-lg": {
     "value": "16px"
   },
+  "font-size-xl": {
+    "value": "18px",
+    "comment": "字号阶梯扩展（由旧档 fs-xl/2xl/3xl 升格，2.2=A 按值）"
+  },
+  "font-size-2xl": {
+    "value": "22px"
+  },
+  "font-size-3xl": {
+    "value": "28px"
+  },
   "radius": {
     "value": "8px",
     "comment": "圆角 — TraeWork 默认容器圆角 --radius-8"
@@ -88,10 +98,6 @@
     "value": "#D4D4D4",
     "comment": "L3 激活态 / 强调容器 — TraeWork --brand-grey-300",
     "dark": "#404040"
-  },
-  "bg-elev-4": {
-    "value": "var(--bg-elev-3)",
-    "comment": "兼容别名：指向 --bg-elev-3 避免破坏旧引用"
   },
   "background": {
     "value": "var(--bg)",
@@ -142,11 +148,6 @@
     "value": "#595959",
     "comment": "TraeWork --text-tertiary（亮色由 #737373 收紧至 #595959：原值对 --bg-elev/#F5F5F5 仅 4.35:1、对 --bg-elev-2/#E5E5E5 仅 3.76:1，均低于 AA；新值对各亮色底 ≥4.5，含 hover 底 --bg-elev-3/#D4D4D4 的 4.73）",
     "dark": "#A1A1A1"
-  },
-  "text-dim": {
-    "value": "#404040",
-    "comment": "兼容别名 — 指向 --text-secondary",
-    "dark": "#D4D4D4"
   },
   "text-faint": {
     "value": "#A1A1A1",
@@ -232,26 +233,14 @@
     "value": "rgba(232, 70, 58, 0.08)",
     "dark": "rgba(234, 87, 76, 0.10)"
   },
-  "glow-sm": {
+  "shadow-soft": {
     "value": "0 1px 3px rgba(115, 115, 115, 0.08)",
-    "comment": "柔和阴影（替代发光 — TraeWork 无 glow）",
+    "comment": "柔和阴影（TraeWork 中性 elevation；旧名 glow-sm，2.5=A 改名）",
     "dark": "0 1px 3px rgba(0, 0, 0, 0.2)"
   },
-  "glow-md": {
+  "shadow-raise": {
     "value": "0 4px 12px rgba(115, 115, 115, 0.06), 0 0 0 1px rgba(115, 115, 115, 0.04)",
     "dark": "0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.02)"
-  },
-  "glow-lg": {
-    "value": "0 8px 24px rgba(115, 115, 115, 0.04)",
-    "dark": "0 8px 24px rgba(0, 0, 0, 0.1)"
-  },
-  "glow-2-sm": {
-    "value": "0 1px 3px rgba(115, 115, 115, 0.06)",
-    "dark": "0 1px 3px rgba(0, 0, 0, 0.15)"
-  },
-  "glow-2-md": {
-    "value": "0 4px 12px rgba(115, 115, 115, 0.04), 0 0 0 1px rgba(115, 115, 115, 0.03)",
-    "dark": "0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.02)"
   },
   "grid-line": {
     "value": "transparent",
@@ -285,9 +274,6 @@
     "dark": "rgba(243, 154, 53, 0.12)"
   },
   "warning": {
-    "value": "var(--amber)"
-  },
-  "warn": {
     "value": "var(--amber)"
   },
   "warn-text": {
@@ -372,10 +358,6 @@
   "msg-bubble-assistant": {
     "value": "transparent"
   },
-  "user-bubble": {
-    "value": "var(--msg-bubble-user)",
-    "comment": "兼容别名"
-  },
   "overlay-bg": {
     "value": "rgba(0, 0, 0, 0.25)",
     "comment": "遮罩 / 玻璃",
@@ -443,63 +425,9 @@
     "value": "\"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, Consolas, monospace",
     "comment": "TraeWork --font-family-mono"
   },
-  "fs-2xs": {
-    "value": "10px",
-    "comment": "旧字号别名（兼容已有组件代码）"
-  },
-  "fs-xs": {
-    "value": "11px"
-  },
-  "fs-sm": {
-    "value": "12px"
-  },
-  "fs-md": {
-    "value": "13px"
-  },
-  "fs-base": {
-    "value": "14px"
-  },
-  "fs-lg": {
-    "value": "16px"
-  },
-  "fs-xl": {
-    "value": "18px"
-  },
-  "fs-2xl": {
-    "value": "22px"
-  },
-  "fs-3xl": {
-    "value": "28px"
-  },
-  "sp-1": {
-    "value": "4px",
-    "comment": "间距基线 — TraeWork --spacer 体系"
-  },
-  "sp-2": {
-    "value": "8px"
-  },
-  "sp-3": {
-    "value": "12px"
-  },
-  "sp-4": {
-    "value": "16px"
-  },
-  "sp-5": {
-    "value": "24px"
-  },
-  "sp-6": {
-    "value": "32px"
-  },
-  "sp-7": {
-    "value": "48px"
-  },
-  "shadow-elev": {
-    "value": "0 4px 16px rgba(115, 115, 115, 0.08), 0 0 0 1px rgba(115, 115, 115, 0.04)",
-    "comment": "阴影体系 — TraeWork 中性阴影",
-    "dark": "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02)"
-  },
   "shadow-modal": {
     "value": "0 16px 48px rgba(115, 115, 115, 0.12), 0 0 0 1px rgba(115, 115, 115, 0.06)",
+    "comment": "阴影体系 — TraeWork 中性阴影",
     "dark": "0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02)"
   },
   "shadow-dropdown": {
@@ -527,35 +455,6 @@
   },
   "ease-out": {
     "value": "cubic-bezier(0.2, 0.8, 0.2, 1)"
-  },
-  "icon-xs": {
-    "value": "10px",
-    "comment": "图标尺寸阶梯"
-  },
-  "icon-sm": {
-    "value": "12px"
-  },
-  "icon-md": {
-    "value": "14px"
-  },
-  "icon-lg": {
-    "value": "16px"
-  },
-  "icon-xl": {
-    "value": "20px"
-  },
-  "bg-primary": {
-    "value": "var(--bg)",
-    "comment": "语义别名变量 — 兼容多套命名"
-  },
-  "text-primary": {
-    "value": "var(--text)"
-  },
-  "bg-ter": {
-    "value": "var(--bg-elev-2)"
-  },
-  "danger": {
-    "value": "var(--error)"
   },
   "primary": {
     "value": "var(--accent)",
