@@ -15,8 +15,13 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { TOOLS_LIST_QUERY_KEY, WHITELIST_ENTRIES_QUERY_KEY } from '@/lib/query/keys';
+import {
+  addWhitelistEntry,
+  listTools,
+  listWhitelistEntries,
+  removeWhitelistEntry,
+} from '@/lib/settings-ops';
 import { cn } from '@/lib/utils';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 
@@ -55,23 +60,13 @@ export function ApprovalModeSection(): ReactElement {
   // L3：白名单条目（跨会话持久化）
   const whitelistQuery = useQuery({
     queryKey: WHITELIST_ENTRIES_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { entries: [] as Array<{ toolName: string; pattern: string }> };
-      }
-      return unwrap(await window.api.whitelist.list());
-    },
+    queryFn: listWhitelistEntries,
   });
 
   // L3：工具清单（tool:list，权限配置卡片数据源）
   const toolsQuery = useQuery({
     queryKey: TOOLS_LIST_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { tools: [] as Array<{ name: string; permission: 'auto' | 'ask' }> };
-      }
-      return unwrap(await window.api.tool.list({ permission: undefined }));
-    },
+    queryFn: listTools,
   });
 
   const invalidateWhitelist = (): void => {
@@ -80,13 +75,7 @@ export function ApprovalModeSection(): ReactElement {
 
   // 添加白名单 mutation（whitelist:add）
   const addMutation = useMutation({
-    mutationFn: async (entry: { toolName: string; pattern: string }) => {
-      // 浏览器模式（dev 预览）无 window.api：本地空操作
-      if (!hasIpcBridge()) {
-        return { ok: true };
-      }
-      return unwrap(await window.api.whitelist.add(entry));
-    },
+    mutationFn: addWhitelistEntry,
     onSuccess: () => {
       // 只清空 pattern、保留 toolName：常见流程是「同一工具加多条 pattern」，
       // 保留工具名可连续添加（清空会让「添加」按钮因 wlTool 为空而禁用，被迫重输）
@@ -100,13 +89,7 @@ export function ApprovalModeSection(): ReactElement {
 
   // 移除白名单 mutation（whitelist:remove）
   const removeMutation = useMutation({
-    mutationFn: async (entry: { toolName: string; pattern: string }) => {
-      // 浏览器模式（dev 预览）无 window.api：本地空操作
-      if (!hasIpcBridge()) {
-        return { ok: true };
-      }
-      return unwrap(await window.api.whitelist.remove(entry));
-    },
+    mutationFn: removeWhitelistEntry,
     onSuccess: () => {
       invalidateWhitelist();
     },

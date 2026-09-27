@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { changeLanguage, SUPPORTED_LANGUAGES } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
+import { openExternal } from '@/lib/app-actions';
 import { useTheme } from '@/providers/ThemeProvider';
 import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -54,8 +55,9 @@ export function SidebarAccount(): ReactElement {
 
   /** 报告问题：打开 GitHub issues（仅 http/https，复用 app:openExternal 安全校验） */
   const handleReportIssue = (): void => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
-    void window.api.app.openExternal({ url: ISSUES_URL });
+    openExternal(ISSUES_URL).catch(() => {
+      // 打开失败静默：非关键路径，用户可重试
+    });
   };
 
   return (

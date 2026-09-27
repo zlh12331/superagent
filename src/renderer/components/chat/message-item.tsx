@@ -16,7 +16,7 @@ import {
   isTextUIPart,
 } from 'ai';
 import { motion } from 'motion/react';
-import { memo, type ReactElement, useMemo } from 'react';
+import type { ReactElement } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { extractText } from '@/lib/chat/message-text';
@@ -33,9 +33,12 @@ import { ToolCallView } from './tool-call-view';
 /** part 类型（UIMessage['parts'][number] 派生） */
 type UIMessagePart = UIMessage['parts'][number];
 
-// 记忆化导出：消息未变化（引用不变）时跳过重渲染——
-// 去 Virtuoso 后流式场景仅变化消息重渲染，避免全列表 Markdown 重新解析
-export const MessageItem = memo(function MessageItem({
+/**
+ * 单条消息行渲染（user / assistant / system 分发 + parts 展示）
+ *
+ * 组件级记忆化交给 React Compiler（props 未变时跳过重渲染，覆盖原 memo() 目标）。
+ */
+export function MessageItem({
   message,
   onRegenerate,
   disableActions,
@@ -59,16 +62,12 @@ export const MessageItem = memo(function MessageItem({
   // 并标记**最后一个 part** 的流式光标（仅流式 assistant 消息；user/历史恒 false）。
   // 注意：光标只在走 text 分支的 part 上渲染，故末位 part 是 reasoning/tool 时
   // 不会出现光标（也不再回落到更早的 text part 上）——这是期望行为。
-  const partsWithCursor = useMemo(
-    () =>
-      message.parts.map((part, index) => ({
-        part,
-        key: `${message.id}-${index}`,
-        showCursor:
-          message.role === 'assistant' && isStreaming && index === message.parts.length - 1,
-      })),
-    [message.parts, message.id, isStreaming, message.role],
-  );
+  // 纯派生，交给 React Compiler 记忆化。
+  const partsWithCursor = message.parts.map((part, index) => ({
+    part,
+    key: `${message.id}-${index}`,
+    showCursor: message.role === 'assistant' && isStreaming && index === message.parts.length - 1,
+  }));
 
   if (message.role === 'user') {
     // user 消息：text 拼接为气泡内容；非 text parts（历史重建产生的孤儿
@@ -145,7 +144,7 @@ export const MessageItem = memo(function MessageItem({
       </div>
     </div>
   );
-});
+}
 
 /**
  * 单个 part 渲染

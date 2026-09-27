@@ -11,8 +11,8 @@ import type { ReactElement } from 'react';
 import { AsyncSection } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { RECENT_TURNS_QUERY_KEY } from '@/lib/query/keys';
+import { getRecentTurns } from '@/lib/settings-ops';
 
 /** 回合记录设置区：最近回合列表（四态契约：行内加载 / 错误重试 / 空态） */
 export function TurnsSection(): ReactElement {
@@ -28,13 +28,7 @@ export function TurnsSection(): ReactElement {
     refetch,
   } = useQuery({
     queryKey: RECENT_TURNS_QUERY_KEY,
-    queryFn: async (): Promise<SessionRecentTurnsRes['turns']> => {
-      if (!hasIpcBridge()) {
-        return [];
-      }
-      return unwrap<SessionRecentTurnsRes>(await window.api.session.getRecentTurns({ limit: 10 }))
-        .turns;
-    },
+    queryFn: (): Promise<SessionRecentTurnsRes['turns']> => getRecentTurns(10),
   });
 
   const turnsList = turns ?? [];

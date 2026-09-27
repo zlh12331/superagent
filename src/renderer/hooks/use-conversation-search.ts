@@ -8,7 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { UIMessage } from 'ai';
-import { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { extractText } from '@/lib/chat/message-text';
 
 /** 搜索状态 */
@@ -71,40 +71,37 @@ export function useConversationSearch(messages: readonly UIMessage[]): Conversat
   const [query, setQuery] = useState('');
   const [currentMatch, setCurrentMatch] = useState(-1);
 
-  // 匹配计算（query 变化时重算）
-  const matchIndexes = useMemo(() => findMessageMatches(messages, query), [messages, query]);
+  // 匹配计算：纯派生，交给 React Compiler 记忆化（messages/query 变化时重算）
+  const matchIndexes = findMessageMatches(messages, query);
 
-  const open = useCallback(() => {
+  const open = () => {
     setVisible(true);
     setQuery('');
     setCurrentMatch(-1);
-  }, []);
+  };
 
-  const close = useCallback(() => {
+  const close = () => {
     setVisible(false);
     setQuery('');
     setCurrentMatch(-1);
-  }, []);
+  };
 
-  const search = useCallback((nextQuery: string) => {
+  const search = (nextQuery: string) => {
     setQuery(nextQuery);
     // 重置到第一个匹配（查询变化时）
     setCurrentMatch(nextQuery.trim() === '' ? -1 : 0);
-  }, []);
+  };
 
-  const navigate = useCallback(
-    (dir: 1 | -1) => {
-      if (matchIndexes.length === 0) return;
-      setCurrentMatch((prev) => {
-        // 无当前匹配（-1）时：下一个=第一个，上一个=最后一个
-        if (prev === -1) {
-          return dir === 1 ? 0 : matchIndexes.length - 1;
-        }
-        return (prev + dir + matchIndexes.length) % matchIndexes.length;
-      });
-    },
-    [matchIndexes],
-  );
+  const navigate = (dir: 1 | -1) => {
+    if (matchIndexes.length === 0) return;
+    setCurrentMatch((prev) => {
+      // 无当前匹配（-1）时：下一个=第一个，上一个=最后一个
+      if (prev === -1) {
+        return dir === 1 ? 0 : matchIndexes.length - 1;
+      }
+      return (prev + dir + matchIndexes.length) % matchIndexes.length;
+    });
+  };
 
   return {
     visible,

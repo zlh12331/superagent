@@ -16,20 +16,18 @@ import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { ALL_SKILLS_QUERY_KEY, LEARNED_SKILLS_QUERY_KEY } from '@/lib/query/keys';
+import {
+  type LearnedSkillInfo,
+  learnSkill,
+  listLearnedSkills,
+  listSkills,
+  removeLearnedSkill,
+} from '@/lib/settings-ops';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { SectionTitle, SettingRow } from '../settings-controls';
 
-/** 已学技能形状 */
-interface LearnedSkill {
-  readonly name: string;
-  readonly description: string;
-}
-
-/**
- * 技能管理 pane
- */
+/** 技能管理 pane */
 export function SkillsSection(): ReactElement {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -40,22 +38,14 @@ export function SkillsSection(): ReactElement {
   const learnedQuery = useQuery({
     queryKey: LEARNED_SKILLS_QUERY_KEY,
     queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { learned: [] as LearnedSkill[] };
-      }
-      return { learned: unwrap(await window.api.skill.listLearned()) };
+      return { learned: await listLearnedSkills() };
     },
   });
 
   // L3：全部可用技能（内置 + 已学）
   const allSkillsQuery = useQuery({
     queryKey: ALL_SKILLS_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { skills: [] as LearnedSkill[] };
-      }
-      return unwrap(await window.api.skill.list());
-    },
+    queryFn: listSkills,
   });
 
   const invalidate = (): void => {
@@ -65,12 +55,7 @@ export function SkillsSection(): ReactElement {
 
   // 学习技能 mutation（LLM 生成）
   const learnMutation = useMutation({
-    mutationFn: async (rawInput: string) => {
-      if (!hasIpcBridge()) {
-        return { name: '', description: '', prompt: '', replaced: false };
-      }
-      return unwrap(await window.api.skill.learn({ rawInput }));
-    },
+    mutationFn: learnSkill,
     onSuccess: () => {
       toast.success(t('settings.skillLearned'));
       setLearnPrompt('');
@@ -83,12 +68,7 @@ export function SkillsSection(): ReactElement {
 
   // 移除技能 mutation
   const removeMutation = useMutation({
-    mutationFn: async (name: string) => {
-      if (!hasIpcBridge()) {
-        return { removed: true };
-      }
-      return unwrap(await window.api.skill.removeLearned({ name }));
-    },
+    mutationFn: removeLearnedSkill,
     onSuccess: () => {
       invalidate();
     },
@@ -97,7 +77,7 @@ export function SkillsSection(): ReactElement {
     },
   });
 
-  const learned = learnedQuery.data?.learned ?? [];
+  const learned: readonly LearnedSkillInfo[] = learnedQuery.data?.learned ?? [];
   const allSkills = allSkillsQuery.data?.skills ?? [];
   const learnedNames = new Set(learned.map((s) => s.name));
   // 内置技能 = 全部 - 已学

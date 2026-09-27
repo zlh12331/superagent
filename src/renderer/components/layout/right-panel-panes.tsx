@@ -9,14 +9,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'lucide-react';
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useGitDiffQuery } from '@/hooks/use-git';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
 import { TASK_LIST_QUERY_KEY } from '@/lib/query/keys';
+import { fetchTaskList } from '@/lib/task-actions';
 import { basename, cn } from '@/lib/utils';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 import { useToolStore } from '@/stores/transient/tool-store';
@@ -44,34 +44,27 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   // L3：待办列表（按会话过滤）
   const tasksQuery = useQuery({
     queryKey: TASK_LIST_QUERY_KEY(sessionId),
-    queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
-        return { tasks: [] as unknown[] };
-      }
-      return unwrap(await window.api.task.list({ sessionId: sessionId ?? undefined }));
-    },
+    queryFn: async () => fetchTaskList(sessionId),
   });
 
-  const tasks = (tasksQuery.data?.tasks ?? []) as LocalTask[];
+  const tasks = (tasksQuery.data?.tasks ?? []) as readonly LocalTask[];
 
   // 引用文件（对齐原型 crpFiles）：从 tool-store 提取 read_file 调用路径（去重，保留最新）
+  // 纯派生，交给 React Compiler 记忆化（calls 为 store 原始数组引用）
   const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
-  const referencedFiles = useMemo(() => {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const c of [...calls].reverse()) {
-      if (c.toolName !== 'read_file') continue;
-      const filePath =
-        typeof c.input === 'object' && c.input !== null
-          ? String((c.input as Record<string, unknown>)['path'] ?? '')
-          : '';
-      if (filePath !== '' && !seen.has(filePath)) {
-        seen.add(filePath);
-        result.push(filePath);
-      }
+  const seen = new Set<string>();
+  const referencedFiles: string[] = [];
+  for (const c of [...calls].reverse()) {
+    if (c.toolName !== 'read_file') continue;
+    const filePath =
+      typeof c.input === 'object' && c.input !== null
+        ? String((c.input as Record<string, unknown>)['path'] ?? '')
+        : '';
+    if (filePath !== '' && !seen.has(filePath)) {
+      seen.add(filePath);
+      referencedFiles.push(filePath);
     }
-    return result;
-  }, [calls]);
+  }
   return (
     <div className="flex h-full flex-col gap-3 p-3 text-xs">
       {/* 计划待办（占 40% 空间，用户要求）：状态视觉对齐参考项目 PlanNode（completed 删除线 / running spinner / failed error） */}
@@ -225,28 +218,25 @@ export function DiffPane({
   // 在 selector 内 filter/map 会每次返回新数组 → Zustand 认为状态变化 → 无限重渲染
   const calls = useToolStore((state) => state.callsBySession.get(sessionId) ?? EMPTY_CALLS);
 
-  // 派生：文件变更记录（useMemo 依赖稳定引用，仅真实数据变化时重算）
-  const changes = useMemo(
-    () =>
-      calls
-        .filter((c) => c.toolName === 'edit_file' || c.toolName === 'write_file')
-        .filter((c) => c.status === 'success' || c.status === 'error')
-        .map((c) => {
-          const path =
-            typeof c.input === 'object' && c.input !== null
-              ? String((c.input as Record<string, unknown>)['path'] ?? '')
-              : '';
-          return {
-            id: c.id,
-            path,
-            toolName: c.toolName,
-            status: c.status,
-            title: c.title,
-          };
-        })
-        .reverse(),
-    [calls],
-  );
+  // 派生：文件变更记录（纯派生，交给 React Compiler；calls 为 store 原始数组引用）
+  // 注意：filter/map 留在 hook 体内，绝不能放进 selector（会每次返回新数组 → 无限重渲染）
+  const changes = calls
+    .filter((c) => c.toolName === 'edit_file' || c.toolName === 'write_file')
+    .filter((c) => c.status === 'success' || c.status === 'error')
+    .map((c) => {
+      const path =
+        typeof c.input === 'object' && c.input !== null
+          ? String((c.input as Record<string, unknown>)['path'] ?? '')
+          : '';
+      return {
+        id: c.id,
+        path,
+        toolName: c.toolName,
+        status: c.status,
+        title: c.title,
+      };
+    })
+    .reverse();
 
   if (changes.length === 0) {
     return (

@@ -9,7 +9,7 @@
 // 不含 autoResize/focus（渲染职责由调用方基于 value 触发）；不含发送逻辑。
 // ──────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useDraftStore } from '@/stores/persistent/draft-store';
 import type { ChatAttachment } from './attachments';
@@ -83,18 +83,16 @@ export function useComposerInput({
   );
   const value = isControlled ? controlledValue : internalValue;
 
-  const setValue = useCallback(
-    (next: string): void => {
-      if (!isControlled) {
-        setInternalValue(next);
-      }
-      onValueChange?.(next);
-      onAfterChange?.();
-    },
-    [isControlled, onValueChange, onAfterChange],
-  );
+  // 操作函数：引用稳定性交给 React Compiler（捕获 props/state）
+  const setValue = (next: string): void => {
+    if (!isControlled) {
+      setInternalValue(next);
+    }
+    onValueChange?.(next);
+    onAfterChange?.();
+  };
 
-  const pickAttachments = useCallback((paths: readonly string[]): void => {
+  const pickAttachments = (paths: readonly string[]): void => {
     setAttachments((prev) => {
       const seen = new Set(prev.map((a) => a.path));
       const next = [...prev];
@@ -105,20 +103,20 @@ export function useComposerInput({
       }
       return next;
     });
-  }, []);
+  };
 
-  const removeAttachment = useCallback((path: string): void => {
+  const removeAttachment = (path: string): void => {
     setAttachments((prev) => prev.filter((a) => a.path !== path));
-  }, []);
+  };
 
-  const clear = useCallback((): void => {
+  const clear = (): void => {
     if (!isControlled) {
       setInternalValue('');
     }
     onValueChange?.('');
     setAttachments([]);
     onAfterChange?.();
-  }, [isControlled, onValueChange, onAfterChange]);
+  };
 
   // 外部注入值（编辑重提 / 目标预填）：非受控模式同步，保持草稿语义
   // 受控模式跳过：value 由外部持有，setInternalValue 是无效写入（且会破坏受控语义）

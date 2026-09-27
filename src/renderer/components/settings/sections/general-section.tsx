@@ -11,7 +11,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import {
+  getLoginItemSettings,
+  setLoginItemSettings,
+  subscribeLoginItemChanged,
+} from '@/lib/settings-ops';
 import { cn } from '@/lib/utils';
 import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
 import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
@@ -74,12 +78,11 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
 
   // 开机自启状态挂载时回显（OS 登录项为唯一真源，读取失败隐藏开关避免误导）
   useEffect(() => {
-    if (!hasIpcBridge()) return;
     void (async () => {
       try {
-        setAutostart(unwrap<LoginItemSettingsRes>(await window.api.app.getLoginItemSettings()));
+        setAutostart(await getLoginItemSettings());
       } catch {
-        // 读取失败（桥不存在/旧版本）：隐藏开关避免误导
+        // 读取失败（无桥/旧版本）：隐藏开关避免误导
         setAutostart(null);
       }
     })();
@@ -88,8 +91,7 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
   // 托盘菜单也能改自启（两处开关同源 OS 登录项）：订阅主进程广播，
   // 设置页正开着时同步回显——否则会一直显示托盘改动前的旧值（30-spec §3 P2-6）。
   useEffect(() => {
-    if (!hasIpcBridge()) return;
-    const unsubscribe = window.api.app.subscribeLoginItemChanged((payload) => {
+    const unsubscribe = subscribeLoginItemChanged((payload) => {
       setAutostart(payload);
     });
     return () => {
@@ -98,14 +100,11 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
   }, []);
 
   const handleToggleAutostart = async (checked: boolean): Promise<void> => {
-    if (!hasIpcBridge()) return;
     try {
       // 响应是写入后回读的真实 OS 状态（注册失败/待审批会如实反映，非入参回显）
-      setAutostart(
-        unwrap<LoginItemSettingsRes>(
-          await window.api.app.setLoginItemSettings({ openAtLogin: checked }),
-        ),
-      );
+      const res = await setLoginItemSettings({ openAtLogin: checked });
+      if (res === null) return;
+      setAutostart(res);
     } catch {
       toast.error(t('settings.autostartFailed'));
     }

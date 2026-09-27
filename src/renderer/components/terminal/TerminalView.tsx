@@ -23,6 +23,12 @@ import { type ReactElement, useEffect, useRef } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { hasIpcBridge } from '@/lib/ipc';
+import {
+  resizeTerminal,
+  subscribeTerminalExit,
+  subscribeTerminalOutput,
+  writeTerminalInput,
+} from '@/lib/terminal-actions';
 import type { TerminalMeta } from '@/stores/transient/terminal-store';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
@@ -125,7 +131,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
 
     // 订阅 IPC output 事件：按 terminalId 过滤，直接 write 到 xterm
     // 不走 store buffer，性能最优
-    const unsubscribeOutput = window.api.terminal.subscribeOutputEvent((payload) => {
+    const unsubscribeOutput = subscribeTerminalOutput((payload) => {
       if (payload.terminalId !== terminalId) return;
       term.write(payload.data);
     });
@@ -133,7 +139,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     // 订阅 IPC exit 事件：标记 alive=false（store 已通过 useTerminalBridge 处理）
     // 此处仅用于在终端退出时关闭输入响应（避免向已退出的 PTY 发送数据）
     let isExited = false;
-    const unsubscribeExit = window.api.terminal.subscribeExitEvent((payload) => {
+    const unsubscribeExit = subscribeTerminalExit((payload) => {
       if (payload.terminalId !== terminalId) return;
       isExited = true;
       // 在终端末尾追加退出提示（便于用户感知）
@@ -143,7 +149,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     // 用户输入回调：直接转发到 IPC（不经过 store）
     term.onData((data) => {
       if (isExited) return;
-      void window.api.terminal.input({ terminalId, data });
+      writeTerminalInput(terminalId, data);
     });
 
     // 自适应尺寸：ResizeObserver + 防抖
@@ -157,7 +163,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
         try {
           fitAddon.fit();
           const { cols, rows } = term;
-          void window.api.terminal.resize({ terminalId, cols, rows });
+          resizeTerminal(terminalId, cols, rows);
         } catch (error) {
           // fit 在容器隐藏或尺寸为 0 时可能抛错，忽略
           // 此处不弹 toast（高频场景），仅静默吞掉避免控制台噪声

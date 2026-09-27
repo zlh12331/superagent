@@ -24,6 +24,32 @@ export function statusLabel(status: string): string {
 }
 
 /**
+ * composer 发送意图（/goal 前缀 vs 普通消息）
+ *
+ * 精确前缀匹配：startsWith('/goal') 会把 '/goals' 等误判成目标命令。
+ * 提为纯函数以压低 ChatPanel 认知复杂度，并便于单测。
+ */
+export type ComposerSendIntent =
+  | { readonly kind: 'createGoal'; readonly condition: string }
+  | { readonly kind: 'prefillGoal' }
+  | { readonly kind: 'send' };
+
+/**
+ * 解析 composer 发送文本的意图
+ *
+ * @param raw 用户输入原文
+ * @returns createGoal（带条件）/ prefillGoal（/goal 无条件）/ send（普通消息）
+ */
+export function resolveComposerSend(raw: string): ComposerSendIntent {
+  const trimmed = raw.trim();
+  if (trimmed === '/goal' || trimmed.startsWith('/goal ')) {
+    const condition = trimmed.slice(5).trim();
+    return condition.length > 0 ? { kind: 'createGoal', condition } : { kind: 'prefillGoal' };
+  }
+  return { kind: 'send' };
+}
+
+/**
  * 历史回显能力缺口清单（如实告知，不假装历史完整）
  *
  * - 落库仅存文本 → 工具调用 / 推理在重开会话后无法恢复

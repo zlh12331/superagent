@@ -12,7 +12,12 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatBytes } from '@/lib/format-bytes';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import {
+  clearUpdateCache,
+  exportAllSessions,
+  getUpdateCacheInfo,
+  openDataDirChecked,
+} from '@/lib/settings-ops';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUpdateStore } from '@/stores/transient/update-store';
 
@@ -26,18 +31,17 @@ export function DataSection(): React.ReactElement {
 
   // 挂载时读一次占用（失败静默：不影响本区块其他操作）
   useEffect(() => {
-    if (!hasIpcBridge()) return;
     void (async (): Promise<void> => {
       try {
-        setCache(unwrap<UpdateCacheInfo>(await window.api.update.getCacheInfo()));
+        setCache(await getUpdateCacheInfo());
       } catch {
-        // 读取失败：不展示该行
+        // 读取失败（含无桥）：不展示该行
       }
     })();
   }, []);
 
   const handleClearUpdateCache = async (): Promise<void> => {
-    if (!hasIpcBridge() || cache?.path == null || cache.fileCount === 0 || downloading) return;
+    if (cache?.path == null || cache.fileCount === 0 || downloading) return;
     // 危险操作：删除的是差分更新基线，先确认并说明后果
     const confirmed = await confirm({
       title: t('settings.clearUpdateCache'),
@@ -46,7 +50,7 @@ export function DataSection(): React.ReactElement {
     });
     if (!confirmed) return;
     try {
-      setCache(unwrap<UpdateCacheInfo>(await window.api.update.clearCache()));
+      setCache(await clearUpdateCache());
       toast.success(t('settings.clearUpdateCacheDone'));
     } catch {
       toast.error(t('settings.exportFailed'));
@@ -54,28 +58,27 @@ export function DataSection(): React.ReactElement {
   };
 
   const handleExportAll = async (): Promise<void> => {
-    if (!hasIpcBridge()) return;
     try {
-      const response = await window.api.session.exportAll();
-      const res = unwrap<{ saved: boolean; path?: string }>(response);
+      const res = await exportAllSessions();
       if (res.saved) {
         toast.success(t('settings.exportSuccess', { path: res.path ?? '' }));
       }
-      // 用户取消：静默
+      // 用户取消 / 无桥：静默
     } catch {
       toast.error(t('settings.exportFailed'));
     }
   };
 
   const handleOpenDataDir = async (): Promise<void> => {
-    // 浏览器模式无桥：直接返回（否则成员访问阶段抛 TypeError，下面的 await 兜不住）
-    if (!hasIpcBridge()) return;
-    const response = await window.api.app.openDataDir();
-    const res = unwrap<{ ok: boolean }>(response);
-    if (res.ok) {
-      toast.success(t('settings.dataDirOpened'));
-    } else {
-      toast.error(t('settings.exportFailed'));
+    try {
+      const res = await openDataDirChecked();
+      if (res.ok) {
+        toast.success(t('settings.dataDirOpened'));
+      } else {
+        toast.error(t('settings.exportFailed'));
+      }
+    } catch {
+      // 无桥 / IPC 失败：静默（与原「浏览器模式直接返回」一致，不误报）
     }
   };
 

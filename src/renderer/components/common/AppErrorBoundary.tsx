@@ -25,8 +25,8 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { i18n } from '@/i18n';
+import { fetchAppInfo, openExternal } from '@/lib/app-actions';
 import { reportError } from '@/lib/error-report';
-import { unwrap } from '@/lib/ipc';
 
 /** 项目 GitHub 新建 issue 入口（开源报障后端；本地优先路线的错误出口） */
 const REPO_NEW_ISSUE_URL = 'https://github.com/zlh12331/superagent/issues/new';
@@ -44,7 +44,7 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
   const stack = error instanceof Error ? (error.stack ?? '') : '';
   let envLine = '';
   try {
-    const info = unwrap(await window.api.app.getInfo());
+    const info = await fetchAppInfo();
     envLine = i18n.t('common.crashIssueVersion', {
       version: info.version,
       platform: info.platform,
@@ -92,7 +92,12 @@ function AppFallback({
   // 报障：深链 GitHub 新建 issue（预填崩溃信息与版本环境；诊断包由用户手动附上）
   const handleSendReport = (): void => {
     void buildIssueUrl(message, error)
-      .then(async (url) => unwrap(await window.api.app.openExternal({ url })))
+      .then(async (url) => {
+        const started = await openExternal(url);
+        if (!started) {
+          throw new Error('openExternal unavailable');
+        }
+      })
       .then(() => {
         toast.success(i18n.t('common.crashReportOpened'));
       })

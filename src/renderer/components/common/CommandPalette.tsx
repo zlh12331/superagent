@@ -36,6 +36,7 @@ import { useNavigate } from 'react-router';
 
 import { useSessionsQuery } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
+import { quitApp } from '@/lib/app-actions';
 import { ROUTES } from '@/lib/constants';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -337,7 +338,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     openSettings,
     quitApp: () => {
       // 退出走完整善后链（before-quit 协商 → dispose → 延迟安装）
-      void window.api?.app.quit();
+      quitApp();
     },
     closePalette: () => onOpenChange(false),
   });

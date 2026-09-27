@@ -7,7 +7,7 @@
 // - 描述走 i18n（shortcutHelp.*），按键符号为技术标识不本地化
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useMemo } from 'react';
+import type { ReactElement } from 'react';
 
 import {
   Dialog,
@@ -60,24 +60,22 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
   const { t } = useTranslation();
   // 可自定义快捷键读设置真源（此前硬编码默认值：用户改键后帮助表与实际绑定不一致，实测 bug）
   const shortcuts = useSettingsStore((s) => s.shortcuts);
-  const items = useMemo<readonly ShortcutItem[]>(
-    () => [
-      // ⌘K 与 ⌘P 等价（对齐参考项目 toggle-command-palette）
-      {
-        descriptionKey: 'shortcutHelp.item.openCommandPalette',
-        keys: `${formatKeys(shortcuts.commandPalette)} / Ctrl + K`,
-      },
-      {
-        descriptionKey: 'shortcutHelp.item.openSettings',
-        keys: formatKeys(shortcuts.openSettings),
-      },
-      { descriptionKey: 'shortcutHelp.item.newSession', keys: formatKeys(shortcuts.newSession) },
-      { descriptionKey: 'shortcutHelp.item.toggleTheme', keys: formatKeys(shortcuts.toggleTheme) },
-      { descriptionKey: 'shortcutHelp.item.searchFiles', keys: formatKeys(shortcuts.searchFile) },
-      ...FIXED_SHORTCUTS,
-    ],
-    [shortcuts],
-  );
+  // 纯派生，交给 React Compiler 记忆化（shortcuts 稳定时复用）
+  const items: readonly ShortcutItem[] = [
+    // ⌘K 与 ⌘P 等价（对齐参考项目 toggle-command-palette）
+    {
+      descriptionKey: 'shortcutHelp.item.openCommandPalette',
+      keys: `${formatKeys(shortcuts.commandPalette)} / Ctrl + K`,
+    },
+    {
+      descriptionKey: 'shortcutHelp.item.openSettings',
+      keys: formatKeys(shortcuts.openSettings),
+    },
+    { descriptionKey: 'shortcutHelp.item.newSession', keys: formatKeys(shortcuts.newSession) },
+    { descriptionKey: 'shortcutHelp.item.toggleTheme', keys: formatKeys(shortcuts.toggleTheme) },
+    { descriptionKey: 'shortcutHelp.item.searchFiles', keys: formatKeys(shortcuts.searchFile) },
+    ...FIXED_SHORTCUTS,
+  ];
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

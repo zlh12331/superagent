@@ -13,7 +13,7 @@
 // - 紧凑样式（content 区 10px 等宽，对齐应用小字视觉）
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useMemo } from 'react';
+import type { ReactElement } from 'react';
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
 import { useTranslation } from '@/i18n/use-translation';
 import { parseUnifiedDiff } from '@/lib/diff/unified-diff';
@@ -56,7 +56,8 @@ export interface UnifiedDiffViewProps {
 export function UnifiedDiffView({ diff, className }: UnifiedDiffViewProps): ReactElement {
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const hunks = useMemo(() => parseUnifiedDiff(diff), [diff]);
+  // 纯派生，交给 React Compiler 记忆化（diff 稳定时复用解析结果）
+  const hunks = parseUnifiedDiff(diff);
 
   if (hunks.length === 0) {
     return <div className="text-muted-foreground p-2 text-2xs">{t('common.noDiff')}</div>;

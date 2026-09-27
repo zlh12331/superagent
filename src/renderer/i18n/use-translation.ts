@@ -25,7 +25,6 @@
 
 import type { ErrorCode } from '@code-agent/shared/renderer';
 import { ERROR_META } from '@code-agent/shared/renderer';
-import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 // 再导出 react-i18next 的原生 useTranslation，业务方统一从 @/i18n 导入
@@ -44,19 +43,17 @@ export { useTranslation };
 export function useErrorMessage() {
   const { t } = useTranslation('errors');
 
-  const getErrorMessage = useCallback(
-    (code: ErrorCode): string => {
-      // 错误码本身就是 i18n key（如 'AI_TIMEOUT'）
-      // 资源文件结构：errors.errors.AI_TIMEOUT（namespace.errors.code）
-      const key = `errors.${code}`;
-      const message = t(key);
-      // 兜底：如果资源文件缺失 key，i18next 会返回 key 本身
-      // 此时回退到 ERROR_META 的中文默认值（DRY：文案只在 shared 一处维护）
-      // ?. 保护：未知错误码（未在 ERROR_META 注册）时回退原文，避免抛错中断 onError
-      return message === key ? (ERROR_META[code]?.userMessage ?? message) : message;
-    },
-    [t],
-  );
+  // 引用稳定性交给 React Compiler（仅捕获稳定 t，无手写 useCallback 必要）
+  const getErrorMessage = (code: ErrorCode): string => {
+    // 错误码本身就是 i18n key（如 'AI_TIMEOUT'）
+    // 资源文件结构：errors.errors.AI_TIMEOUT（namespace.errors.code）
+    const key = `errors.${code}`;
+    const message = t(key);
+    // 兜底：如果资源文件缺失 key，i18next 会返回 key 本身
+    // 此时回退到 ERROR_META 的中文默认值（DRY：文案只在 shared 一处维护）
+    // ?. 保护：未知错误码（未在 ERROR_META 注册）时回退原文，避免抛错中断 onError
+    return message === key ? (ERROR_META[code]?.userMessage ?? message) : message;
+  };
 
   return { getErrorMessage };
 }

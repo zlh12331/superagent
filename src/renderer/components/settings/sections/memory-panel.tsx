@@ -12,8 +12,13 @@ import { toast } from 'sonner';
 import { AsyncSection } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { MEMORY_LIST_QUERY_KEY, MEMORY_STATUS_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
+import {
+  clearAllMemories,
+  clearSessionMemory,
+  getMemoryStatus,
+  listSessionMemories,
+} from '@/lib/settings-ops';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
@@ -22,31 +27,6 @@ import { ToggleRow } from '../settings-controls';
 interface MemoryEntry {
   readonly id: string;
   readonly content: string;
-}
-
-/**
- * 清空会话记忆（模块级：从组件提取以保持函数体精简）
- *
- * 主进程在引擎不可用时返回 `{ ok: false }`（不是 `{ error }`），
- * 因此必须显式检查 ok 并抛错，否则清除失败会被当作成功提示。
- * 浏览器模式无桥：抛可读错误（调用方 onError 提示），不静默成功。
- */
-async function clearMemoryOrThrow(sessionId: string): Promise<void> {
-  if (!hasIpcBridge()) throw new Error('window.api unavailable');
-  const res = unwrap(await window.api.memory.clear({ sessionId }));
-  if (!res.ok) {
-    throw new Error('memory clear failed');
-  }
-}
-
-/** 清空全部记忆（同上：ok=false 需显式抛错） */
-async function clearAllMemoryOrThrow(): Promise<{ clearedSessions: number }> {
-  if (!hasIpcBridge()) throw new Error('window.api unavailable');
-  const res = unwrap(await window.api.memory.clearAll({}));
-  if (!res.ok) {
-    throw new Error(res.message ?? 'memory clear all failed');
-  }
-  return { clearedSessions: res.clearedSessions };
 }
 
 /** 引擎状态文案（区分"未随包提供/未启动/运行中/运行但不健康"） */
@@ -150,7 +130,7 @@ function useMemoryClear(params: {
   const clearOneMutation = useMutation({
     mutationFn: async () => {
       if (activeSessionId === null) return;
-      await clearMemoryOrThrow(activeSessionId);
+      await clearSessionMemory(activeSessionId);
     },
     onSuccess: () => {
       toast.success(t('settings.memoryCleared'));
@@ -162,7 +142,7 @@ function useMemoryClear(params: {
   });
 
   const clearAllMutation = useMutation({
-    mutationFn: clearAllMemoryOrThrow,
+    mutationFn: clearAllMemories,
     onSuccess: (result) => {
       toast.success(t('settings.memoryClearedAll', { sessions: result.clearedSessions }));
       invalidate();
@@ -260,11 +240,8 @@ export function MemoryPanel(): ReactElement {
     queryKey: MEMORY_LIST_QUERY_KEY(activeSessionId ?? 'none'),
     enabled: activeSessionId !== null,
     queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { memories: [] as MemoryEntry[] };
-      }
       const sid = activeSessionId as string;
-      const data = unwrap(await window.api.memory.list({ sessionId: sid }));
+      const data = await listSessionMemories(sid);
       return {
         memories: (data.memories ?? []).map((m) => ({
           id: String(m.id),
@@ -278,12 +255,7 @@ export function MemoryPanel(): ReactElement {
   // 引擎状态：面板打开时拉一次（不轮询——状态变化低频，且拉取本身不启动引擎）
   const { data: status } = useQuery({
     queryKey: MEMORY_STATUS_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return null;
-      }
-      return unwrap(await window.api.memory.status({}));
-    },
+    queryFn: getMemoryStatus,
   });
   const statusText = statusTextOf(status ?? null, t);
   const { clearOne, clearAll, clearingOne, clearingAll } = useMemoryClear({

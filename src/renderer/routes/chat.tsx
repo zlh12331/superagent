@@ -12,7 +12,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { type ReactElement, useCallback, useEffect, useRef } from 'react';
+import { type ReactElement, useEffect, useRef } from 'react';
 import { Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
@@ -94,7 +94,8 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     }
   }, [history.data]);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = history;
-  const loadEarlier = useCallback(async (): Promise<readonly ChatMessage[] | null> => {
+  // 引用稳定性交给 React Compiler（捕获分页状态与回调）
+  const loadEarlier = async (): Promise<readonly ChatMessage[] | null> => {
     if (!hasNextPage) {
       return null;
     }
@@ -119,7 +120,7 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
       );
       return null;
     }
-  }, [hasNextPage, fetchNextPage, getErrorMessage]);
+  };
 
   // 回合列表 / 消息分页查询失败（历史拉取出错）：显示错误状态。
   // 必须先于 loading 判定：isSuccess 与 isError 互斥，isError 时 historyReady

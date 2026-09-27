@@ -13,7 +13,7 @@
 // - 行为：默认在 input/textarea/contentEditable 内不触发（库默认，与原实现一致）
 // ──────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -112,17 +112,15 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
     handlersRef.current = handlers;
   });
 
-  const hotkeys = useMemo(
-    () => ({
-      commandPalette: toHotkeyString(parseShortcut(shortcuts.commandPalette)),
-      saveFile: toHotkeyString(parseShortcut(shortcuts.saveFile)),
-      searchFile: toHotkeyString(parseShortcut(shortcuts.searchFile)),
-      toggleTheme: toHotkeyString(parseShortcut(shortcuts.toggleTheme)),
-      openSettings: toHotkeyString(parseShortcut(shortcuts.openSettings)),
-      newSession: toHotkeyString(parseShortcut(shortcuts.newSession)),
-    }),
-    [shortcuts],
-  );
+  // 纯派生，交给 React Compiler 记忆化；下游 useHotkeys 依赖的是字符串字段（按值比较）
+  const hotkeys = {
+    commandPalette: toHotkeyString(parseShortcut(shortcuts.commandPalette)),
+    saveFile: toHotkeyString(parseShortcut(shortcuts.saveFile)),
+    searchFile: toHotkeyString(parseShortcut(shortcuts.searchFile)),
+    toggleTheme: toHotkeyString(parseShortcut(shortcuts.toggleTheme)),
+    openSettings: toHotkeyString(parseShortcut(shortcuts.openSettings)),
+    newSession: toHotkeyString(parseShortcut(shortcuts.newSession)),
+  };
 
   // 逐个绑定：handlers 经 ref 取最新，key 变化触发重新绑定
   useHotkeys(hotkeys.commandPalette, () => handlersRef.current.onCommandPalette(), HOTKEY_OPTIONS, [

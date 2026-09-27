@@ -8,7 +8,7 @@
 
 import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -70,16 +70,14 @@ export function ModelSelector({
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = useCallback(
-    (next: boolean): void => {
-      if (isControlled) {
-        controlledOnOpenChange?.(next);
-      } else {
-        setInternalOpen(next);
-      }
-    },
-    [isControlled, controlledOnOpenChange],
-  );
+  // 引用稳定性交给 React Compiler（捕获受控 props）
+  const setOpen = (next: boolean): void => {
+    if (isControlled) {
+      controlledOnOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  };
   const containerRef = useRef<HTMLDivElement>(null);
   // 触发按钮 ref：菜单关闭后把焦点还给它（roving focus 的收尾契约）
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -88,31 +86,23 @@ export function ModelSelector({
   const { data: modelsData } = useModelsQuery();
   const allModels = modelsData?.models ?? [];
 
-  // 当前模型展示名（来自后端清单；未知 id 回退原始 id）
-  const currentModelName = useMemo(
-    () => allModels.find((m) => m.id === model)?.label ?? model,
-    [allModels, model],
-  );
+  // 当前模型展示名（来自后端清单；未知 id 回退原始 id）——纯派生，交给 React Compiler
+  const currentModelName = allModels.find((m) => m.id === model)?.label ?? model;
 
-  // 当前选中模型的实际供应商（来自清单数据；未知回退 settings 值）
-  const currentProvider = useMemo(
-    () => allModels.find((m) => m.id === model)?.providerKind ?? provider,
-    [allModels, model, provider],
-  );
+  // 当前选中模型的实际供应商（来自清单数据；未知回退 settings 值）——纯派生
+  const currentProvider = allModels.find((m) => m.id === model)?.providerKind ?? provider;
 
   // 是否已配置可用模型（空清单 = 未配置：按钮显示占位，不渲染默认配置名）
   const hasConfiguredModels = allModels.length > 0;
 
-  // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）
-  const providerGroups = useMemo(() => {
-    const groups = new Map<string, AvailableModelInfo[]>();
-    for (const m of allModels) {
-      const list = groups.get(m.providerKind) ?? [];
-      list.push(m);
-      groups.set(m.providerKind, list);
-    }
-    return [...groups.entries()];
-  }, [allModels]);
+  // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）——纯派生，交给 React Compiler
+  const groups = new Map<string, AvailableModelInfo[]>();
+  for (const m of allModels) {
+    const list = groups.get(m.providerKind) ?? [];
+    list.push(m);
+    groups.set(m.providerKind, list);
+  }
+  const providerGroups = [...groups.entries()];
 
   useEffect(() => {
     if (!open) return;
@@ -146,14 +136,12 @@ export function ModelSelector({
     };
   }, [open, setOpen]);
 
-  const handleModelSelect = useCallback(
-    (providerKind: string, modelId: string) => {
-      onProviderChange(providerKind as ApiKeyProvider);
-      onModelChange(modelId);
-      setOpen(false);
-    },
-    [onProviderChange, onModelChange, setOpen],
-  );
+  // 引用稳定性交给 React Compiler
+  const handleModelSelect = (providerKind: string, modelId: string) => {
+    onProviderChange(providerKind as ApiKeyProvider);
+    onModelChange(modelId);
+    setOpen(false);
+  };
 
   return (
     <div ref={containerRef} className="relative">

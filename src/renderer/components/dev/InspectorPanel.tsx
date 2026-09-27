@@ -14,15 +14,17 @@
 // ──────────────────────────────────────────────────────────────
 
 import { CheckCircle2, ExternalLink, Info, PanelBottom, PanelRight, XCircle } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import type { DevToolsDockMode } from '@/lib/devtools-actions';
+import { openDevTools } from '@/lib/devtools-actions';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
 /** DevTools 停靠模式 */
-type DevToolsMode = 'detach' | 'right' | 'bottom';
+type DevToolsMode = DevToolsDockMode;
 
 /** 模式按钮配置（labelKey 为 dev.* 下的 i18n 键名） */
 const MODE_BUTTONS: readonly {
@@ -74,46 +76,41 @@ export function InspectorPanel({ className }: InspectorPanelProps): ReactElement
     [],
   );
 
-  /** 调用 IPC 打开 DevTools */
-  const handleOpen = useCallback(
-    async (mode: DevToolsMode) => {
-      setStatus('loading');
-      setStatusMessage(t('dev.openingDevtools'));
-      setLoadingMode(mode);
+  /** 调用 IPC 打开 DevTools（仅 onClick 使用，引用稳定交给 Compiler） */
+  const handleOpen = async (mode: DevToolsMode) => {
+    setStatus('loading');
+    setStatusMessage(t('dev.openingDevtools'));
+    setLoadingMode(mode);
 
-      try {
-        // 浏览器模式无桥：给一致错误态（而非成员访问抛 TypeError）
-        if (!hasIpcBridge()) throw new Error('window.api unavailable');
-        const data = unwrap(await window.api.devtools.open({ mode }));
-        if (data.ok) {
-          setStatus('success');
-          setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
-        } else {
-          setStatus('error');
-          setStatusMessage(t('dev.openFailedSender'));
-        }
-      } catch (err) {
-        // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示。
-        // 经 unwrapErrorMessage 解析错误码：此前直出 err.message，IPC 失败会
-        // 把英文码原样展示（其余面板已统一走该出口）。
+    try {
+      const data = await openDevTools(mode);
+      if (data.ok) {
+        setStatus('success');
+        setStatusMessage(t('dev.devtoolsOpened', { mode: data.mode }));
+      } else {
         setStatus('error');
-        const error = err instanceof Error ? err : new Error(String(err));
-        setStatusMessage(unwrapErrorMessage(error, getErrorMessage));
+        setStatusMessage(t('dev.openFailedSender'));
       }
-      // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
-      // 成功/失败路径统一走到这里复位 + 3s 后自动清除状态
-      setLoadingMode(null);
-      if (statusTimerRef.current !== null) {
-        clearTimeout(statusTimerRef.current);
-      }
-      statusTimerRef.current = setTimeout(() => {
-        statusTimerRef.current = null;
-        setStatus('idle');
-        setStatusMessage('');
-      }, STATUS_CLEAR_DELAY);
-    },
-    [t, getErrorMessage],
-  );
+    } catch (err) {
+      // 错误响应（[CODE] message）/ 协议异常 / 调用异常统一提示。
+      // 经 unwrapErrorMessage 解析错误码：此前直出 err.message，IPC 失败会
+      // 把英文码原样展示（其余面板已统一走该出口）。
+      setStatus('error');
+      const error = err instanceof Error ? err : new Error(String(err));
+      setStatusMessage(unwrapErrorMessage(error, getErrorMessage));
+    }
+    // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
+    // 成功/失败路径统一走到这里复位 + 3s 后自动清除状态
+    setLoadingMode(null);
+    if (statusTimerRef.current !== null) {
+      clearTimeout(statusTimerRef.current);
+    }
+    statusTimerRef.current = setTimeout(() => {
+      statusTimerRef.current = null;
+      setStatus('idle');
+      setStatusMessage('');
+    }, STATUS_CLEAR_DELAY);
+  };
 
   return (
     <div className={cn('flex h-full flex-col', className)}>

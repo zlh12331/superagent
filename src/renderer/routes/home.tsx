@@ -29,8 +29,9 @@ import { MotionReveal } from '@/components/common/MotionReveal';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { pickDirectory } from '@/lib/dialog-actions';
 import { formatRelativeTime } from '@/lib/format-time';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { fadeInVariants, letterContainerVariants, letterUpVariants } from '@/lib/motion';
 import { basename, cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -170,7 +171,7 @@ export function HomePage(): ReactElement {
    */
   const handleBrowseFolder = async (): Promise<void> => {
     try {
-      const data = unwrap(await window.api.dialog.pickDirectory({}));
+      const data = await pickDirectory();
       if (data.canceled || data.path === undefined) {
         // 用户取消：保持 dropdown 打开
         return;

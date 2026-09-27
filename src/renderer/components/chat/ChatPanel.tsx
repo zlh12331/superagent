@@ -14,14 +14,12 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage } from '@code-agent/shared/renderer';
-import { Search } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { InlineApprovalCard } from '@/components/agent/inline-approval-card';
 import { ModelSelector } from '@/components/common/ModelSelector';
-import { Button } from '@/components/ui/button';
 import { useAgentWithIpc } from '@/hooks/use-agent';
 import { useConversationSearch } from '@/hooks/use-conversation-search';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
@@ -34,13 +32,14 @@ import { useUiStore } from '@/stores/transient/ui-store';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
 import { collectHistoryNotices, prependEarlierPage, statusLabel } from './chat-panel-derives';
+import { ChatStatusBar } from './chat-status-bar';
 import { ConversationSearchBar } from './conversation-search-bar';
 import { GoalBar } from './GoalBar';
 import { reconstructHistory, toInitialMessages } from './history-parts';
 import { PanelNotice } from './panel-notice';
 import { RateLimitBanner } from './rate-limit-banner';
-import { executeSlashCommand } from './slash-commands';
 import { useAutoCompact } from './use-auto-compact';
+import { createChatComposerActions } from './use-chat-composer-actions';
 import { useChatGoals } from './use-chat-goals';
 import { useSessionCompact } from './use-session-compact';
 
@@ -163,22 +162,14 @@ export function ChatPanel({
   // try/catch 双保险：getErrorMessage 异常时也绝不让 onError 抛错
   // （onError 抛错会中断 AI SDK 状态机 setStatus(error)，界面永久卡 THINKING）
   const handleError = (error: Error): void => {
-    try {
-      // [CODE] 前缀匹配 i18n 文案，失败回退原始消息（解析收敛至 lib/ipc 单一真源）
-      toast.error(unwrapErrorMessage(error, getErrorMessage));
-    } catch {
-      // 极端保险：本地化失败时仍展示原始消息（onError 绝不允许抛错）
-      toast.error(error.message);
-    }
+    // unwrapErrorMessage 内部已兜底 localize 失败回退原始消息，onError 不允许再抛
+    toast.error(unwrapErrorMessage(error, getErrorMessage));
   };
 
-  // 历史重建（纯函数 memo）：session:get 返回 ModelMessage 形态（role/content），
+  // 历史重建（纯派生，交给 React Compiler 记忆化）：session:get 返回 ModelMessage 形态（role/content），
   // v7 只导出 UIMessage→ModelMessage，反向需手写；重建保留存储里真实存在的
   // tool/reasoning/file part，并如实登记无法回显的类型（见 history-parts.ts）。
-  const history = useMemo(
-    () => reconstructHistory(initialMessages ?? NO_STORED_MESSAGES),
-    [initialMessages],
-  );
+  const history = reconstructHistory(initialMessages ?? NO_STORED_MESSAGES);
 
   // useAgentWithIpc：Agent 模式专用 hook
   // - id: 控制消息状态隔离
@@ -200,7 +191,8 @@ export function ChatPanel({
   // idPrefix——挂载批（hist-N）与各补页批（earlier-k-N）的 UIMessage id
   // 不共用索引空间，防 id 撞车破坏 React key 与 regenerate 定位。
   const earlierSeqRef = useRef(0);
-  const handleLoadEarlier = useCallback((): Promise<void> => {
+  // 引用稳定性交给 React Compiler（捕获 loadEarlier/setMessages/ref）
+  const handleLoadEarlier = (): Promise<void> => {
     if (loadEarlier === undefined) return Promise.resolve();
     return prependEarlierPage({
       loadEarlier,
@@ -210,7 +202,7 @@ export function ChatPanel({
         return toInitialMessages(messages, `earlier-${String(earlierSeqRef.current)}`);
       },
     });
-  }, [loadEarlier, setMessages]);
+  };
 
   // 回合运行态发布到全局（更新"重启并安装"等危险操作需要先确认）；判定与
   // ChatMessageList 的 isStreaming 保持一致。卸载时复位：残留 true 会让后续
@@ -277,46 +269,29 @@ export function ChatPanel({
     void regenerate({ messageId });
   };
 
+  // 发送 / 斜杠命令（提取自本组件，压低认知复杂度）
+  const { handleSend, handleSlashCommand } = createChatComposerActions({
+    chatId,
+    createGoal,
+    injectComposerValue,
+    sendMessage,
+    setMessages: (msgs) => {
+      setMessages(msgs as Parameters<typeof setMessages>[0]);
+    },
+    navigate,
+    openShortcutHelp,
+    setModelMenuOpen,
+    compact,
+    stop,
+  });
+
   return (
     <div
       className={cn('flex h-full flex-col', className)}
       style={{ fontSize: `${editorFontSize}px` }}
     >
-      {/* 顶部状态条：等宽字体遥测带（右侧状态指示器——用户要求：左侧目录信息删掉）
-          置顶（用户要求：与限流横幅互换位置） */}
-      <div className="thread-status-bar">
-        <div className="ml-auto inline-flex items-center gap-1.5">
-          {/* 会话内搜索入口（对齐参考项目 ConversationSearchBar） */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-foreground -mr-1 size-5"
-            onClick={search.actions.open}
-            aria-label={t('chat.searchInConversation')}
-            title={t('chat.searchInConversation')}
-          >
-            <Search className="size-3.5" strokeWidth={1.5} />
-          </Button>
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5',
-              status === 'streaming' && 'text-accent-text',
-              status === 'error' && 'text-error-text',
-            )}
-            role="status"
-            aria-label={t('chat.sessionStatus', { status: statusText })}
-          >
-            {/* 状态点：streaming 时脉冲动画 */}
-            <span
-              className={cn(
-                'inline-block size-1.5 rounded-full bg-current',
-                status === 'streaming' && 'animate-pulse-soft',
-              )}
-            />
-            {statusText}
-          </span>
-        </div>
-      </div>
+      {/* 顶部状态条：等宽字体遥测带（右侧状态指示器） */}
+      <ChatStatusBar status={status} statusText={statusText} onOpenSearch={search.actions.open} />
 
       {/* 内联审批卡：当前会话 pending 审批就地呈现（对齐参考项目 InlineApprovalCard） */}
       <InlineApprovalCard
@@ -387,41 +362,8 @@ export function ChatPanel({
           chatId={chatId}
           workingDir={workingDir}
           {...(injectedComposerValue !== undefined ? { injectedValue: injectedComposerValue } : {})}
-          onSlashCommand={(action) => {
-            // 斜杠命令分发（slash-commands.ts：命令 → 动作唯一映射点，纯函数可测）
-            executeSlashCommand(action, {
-              navigateToHome: () => navigate('/'),
-              clearMessages: () => setMessages([]),
-              openShortcutHelp,
-              openModelMenu: () => setModelMenuOpen(true),
-              compact,
-              interrupt: () => {
-                void stop();
-              },
-              sendMessage: (text) => {
-                void sendMessage({ text });
-              },
-              prefillGoal: () => injectComposerValue('/goal '),
-            });
-          }}
-          onSend={(text) => {
-            // /goal 前缀：创建会话目标（用户需求：输入 /goal 需求 → 发送 → 输入框上方显示目标栏；
-            // 目标命令不进对话，避免把 "/goal xxx" 当普通消息发给 AI）
-            const trimmed = text.trim();
-            // 精确前缀匹配：startsWith('/goal') 会把 '/goals' 等误判成目标命令
-            if (trimmed === '/goal' || trimmed.startsWith('/goal ')) {
-              const condition = trimmed.slice(5).trim();
-              if (condition.length > 0 && chatId !== undefined) {
-                createGoal(condition);
-              } else {
-                // /goal 无需求：重新填入输入框让用户补充需求（与斜杠建议项行为一致）
-                injectComposerValue('/goal ');
-              }
-              return;
-            }
-            // sendMessage 接受 { text: string } 格式
-            void sendMessage({ text });
-          }}
+          onSlashCommand={handleSlashCommand}
+          onSend={handleSend}
           onStop={() => {
             // stop 是同步操作，但返回 Promise（兼容 abortSignal）
             void stop();

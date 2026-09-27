@@ -13,7 +13,8 @@ import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { sendApprovalResponse } from '@/lib/agent/agent-actions';
+import { hasIpcBridge } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { StructuredPreview } from './approval-preview';
@@ -31,21 +32,16 @@ export interface InlineApprovalCardProps {
 }
 
 /**
- * 发送审批响应（模块级：从组件提取以保持函数体精简）
+ * 发送审批响应（模块级包装：保持组件内调用签名稳定）
  *
  * @returns 是否成功（失败由调用方 toast，主进程侧 5 分钟超时兜底仍生效）
  */
-async function sendApprovalResponse(
+async function respondApproval(
   approvalId: string,
   approved: boolean,
   rememberDecision: boolean,
 ): Promise<boolean> {
-  try {
-    unwrap(await window.api.agent.approvalResponse({ approvalId, approved, rememberDecision }));
-    return true;
-  } catch {
-    return false;
-  }
+  return sendApprovalResponse({ approvalId, approved, rememberDecision });
 }
 
 /** 已决状态徽章（approved/rejected 双态） */
@@ -209,7 +205,7 @@ export function InlineApprovalCard({
     if (!hasIpcBridge()) {
       return;
     }
-    const ok = await sendApprovalResponse(item.id, approved, rememberDecision);
+    const ok = await respondApproval(item.id, approved, rememberDecision);
     if (!ok) {
       toast.error(t('approval.responseFailed'));
     }

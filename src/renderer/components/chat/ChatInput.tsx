@@ -12,7 +12,7 @@ import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { pickFiles } from '@/lib/dialog-actions';
 import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -256,17 +256,14 @@ export function ChatInput({
     disabled,
   });
 
-  /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
+  /** 选择附件（原生文件选择器多选；浏览器模式无桥时 pickFiles 返回 canceled） */
   const handlePickFiles = async (): Promise<void> => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
     try {
-      // 选择器错误响应/取消均静默（非关键路径，用户可重试）
-      const data = unwrap(await window.api.dialog.pickFiles({ multiple: true }));
+      const data = await pickFiles({ multiple: true });
       if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
       pickAttachments(data.paths);
     } catch {
       // 选择器错误/取消：静默失败（非关键路径，用户可重试）
-      // 注：此处不写 `return`——函数已到末尾，bare return 是死语句（noUselessReturn）
     }
   };
 

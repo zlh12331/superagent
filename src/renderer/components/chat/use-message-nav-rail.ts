@@ -10,7 +10,7 @@
 // ──────────────────────────────────────────────
 
 import type { UIMessage } from 'ai';
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 
 import { extractText } from '@/lib/chat/message-text';
 
@@ -66,10 +66,10 @@ interface NavRailState {
  */
 export function useMessageNavRail({ messages, scrollerRef }: NavRailOptions): NavRailState {
   // 圆点代表用户消息而非每条消息（对齐参考项目 VerticalProgressBar）
-  const userMessageIndices = useMemo(
-    () => messages.map((m, i) => (m.role === 'user' ? i : -1)).filter((i) => i >= 0),
-    [messages],
-  );
+  // 纯派生数组：引用稳定性交给 React Compiler（下游 effect 以身份作「集合已变」信号）
+  const userMessageIndices = messages
+    .map((m, i) => (m.role === 'user' ? i : -1))
+    .filter((i) => i >= 0);
   const questions = useQuestionAnchors(messages, userMessageIndices);
   const readMeasured = useMeasureOffsets({ userMessageIndices });
   const { activeTurn, scheduleSync } = useActiveTurn({
@@ -86,21 +86,20 @@ function useQuestionAnchors(
   messages: readonly UIMessage[],
   userMessageIndices: readonly number[],
 ): readonly QuestionAnchor[] {
-  return useMemo(() => {
-    return userMessageIndices.map((messageIndex, i) => {
-      const text = extractText(messages[messageIndex]?.parts ?? []);
-      return {
-        id: `q-${messageIndex}`,
-        turn: i,
-        messageIndex,
-        text: text.length > PREVIEW_MAX_CHARS ? `${text.slice(0, PREVIEW_MAX_CHARS)}…` : text,
-      };
-    });
-  }, [userMessageIndices, messages]);
+  // 纯派生，交给 React Compiler 记忆化
+  return userMessageIndices.map((messageIndex, i) => {
+    const text = extractText(messages[messageIndex]?.parts ?? []);
+    return {
+      id: `q-${messageIndex}`,
+      turn: i,
+      messageIndex,
+      text: text.length > PREVIEW_MAX_CHARS ? `${text.slice(0, PREVIEW_MAX_CHARS)}…` : text,
+    };
+  });
 }
 
 interface MeasureOffsetsOptions {
-  /** 用户消息索引（memo 身份随消息集变化，作为「需重测」信号） */
+  /** 用户消息索引（引用随消息集变化，作为「需重测」信号；稳定性由 React Compiler 保证） */
   readonly userMessageIndices: readonly number[];
 }
 
@@ -113,13 +112,14 @@ function useMeasureOffsets({
   useEffect(() => {
     snapshotRef.current = null;
   }, [userMessageIndices]);
-  return useCallback((el: HTMLElement): readonly MeasuredMessage[] => {
+  // 仅捕获 snapshotRef，引用稳定性交给 React Compiler
+  return (el: HTMLElement): readonly MeasuredMessage[] => {
     const cached = snapshotRef.current;
     if (cached !== null && isSnapshotFresh(cached, el.scrollHeight)) return cached.measured;
     const measured = measureMessages(el, MSG_INDEX_ATTR);
     snapshotRef.current = { measured, scrollHeight: el.scrollHeight };
     return measured;
-  }, []);
+  };
 }
 
 interface ActiveTurnOptions {
@@ -141,17 +141,15 @@ function useActiveTurn({
   useEffect(() => {
     indicesRef.current = userMessageIndices;
   }, [userMessageIndices]);
-  const sync = useCallback(
-    (el: HTMLElement): void => {
-      const midpoint = el.scrollTop + el.clientHeight / 2;
-      const activeMessageIndex = findActiveMessageIndex(readMeasured(el), midpoint);
-      const order = findUserOrder(indicesRef.current, activeMessageIndex);
-      setActiveTurn((prev) => (prev === order ? prev : order));
-    },
-    [readMeasured],
-  );
+  // 引用稳定性交给 React Compiler（捕获 readMeasured / scrollerRef / ref / setter）
+  const sync = (el: HTMLElement): void => {
+    const midpoint = el.scrollTop + el.clientHeight / 2;
+    const activeMessageIndex = findActiveMessageIndex(readMeasured(el), midpoint);
+    const order = findUserOrder(indicesRef.current, activeMessageIndex);
+    setActiveTurn((prev) => (prev === order ? prev : order));
+  };
   const frameRef = useRef<number | null>(null);
-  const scheduleSync = useCallback((): void => {
+  const scheduleSync = (): void => {
     if (frameRef.current !== null) return;
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null;
@@ -159,7 +157,7 @@ function useActiveTurn({
       const el = scrollerRef.current;
       if (el !== null) sync(el);
     });
-  }, [scrollerRef, sync]);
+  };
   useEffect(
     () => () => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);

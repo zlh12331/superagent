@@ -7,8 +7,6 @@
 // 消息，仅为拿一个目录字符串去拉详情是净负收益。
 // ──────────────────────────────────────────────────────────────
 
-import { useMemo } from 'react';
-
 import { resolveWorkingDir } from '@/lib/working-dir';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
@@ -17,15 +15,14 @@ import { useSessionsQuery } from './use-sessions';
 /** 会话 id → workingDir 索引（平铺无限分页的全部已加载会话） */
 export function useWorkingDirIndex(): ReadonlyMap<string, string> {
   const { data } = useSessionsQuery();
-  return useMemo(() => {
-    const index = new Map<string, string>();
-    for (const page of data?.pages ?? []) {
-      for (const session of page.sessions) {
-        index.set(session.id, session.workingDir);
-      }
+  // 纯派生，交给 React Compiler 记忆化（Map 仅用于本次 resolve 查询，不对外暴露引用）
+  const index = new Map<string, string>();
+  for (const page of data?.pages ?? []) {
+    for (const session of page.sessions) {
+      index.set(session.id, session.workingDir);
     }
-    return index;
-  }, [data]);
+  }
+  return index;
 }
 
 /**
@@ -36,10 +33,7 @@ export function useWorkingDirIndex(): ReadonlyMap<string, string> {
  */
 export function useWorkingDir(sessionId: string | null, knownDir?: string): string | null {
   const dirBySession = useWorkingDirIndex();
-  return useMemo(
-    () => resolveWorkingDir({ knownDir, dirBySession, sessionId }),
-    [knownDir, dirBySession, sessionId],
-  );
+  return resolveWorkingDir({ knownDir, dirBySession, sessionId });
 }
 
 /** 当前激活会话的工作目录（无激活会话 / 目录未知 → null） */

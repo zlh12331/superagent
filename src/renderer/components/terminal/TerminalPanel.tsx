@@ -15,7 +15,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { TERMINAL_DEFAULT_COLS, TERMINAL_DEFAULT_ROWS } from '@code-agent/shared/renderer';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
@@ -23,7 +23,8 @@ import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
 import { Button } from '@/components/ui/button';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { hasIpcBridge } from '@/lib/ipc';
+import { createTerminal, killTerminal } from '@/lib/terminal-actions';
 import { cn } from '@/lib/utils';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
@@ -68,13 +69,11 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   // 本地化文案
   const { t } = useTranslation();
   // 当前会话的全部终端（store 多终端设计；对齐参考项目 TerminalPanel 多 tab 结构）
-  // 注意：selector 返回 store 原始引用（稳定），过滤结果用 useMemo 缓存——
-  // 直接在 selector 内 filter 会每次返回新数组，触发 useSyncExternalStore 无限循环
+  // 注意：selector 返回 store 原始引用（稳定），过滤在 hook 体内——
+  // 绝不能在 selector 内 filter（每次返回新数组 → useSyncExternalStore 无限循环）。
+  // 过滤结果引用稳定性交给 React Compiler。
   const allTerminals = useTerminalStore((state) => state.terminals);
-  const terminals = useMemo(
-    () => allTerminals.filter((term) => term.sessionId === sessionId),
-    [allTerminals, sessionId],
-  );
+  const terminals = allTerminals.filter((term) => term.sessionId === sessionId);
   const activeTerminalId = useTerminalStore((state) => state.activeTerminalId);
   const setActiveTerminal = useTerminalStore((state) => state.setActiveTerminal);
   const createTerminalInStore = useTerminalStore((state) => state.createTerminal);
@@ -108,9 +107,9 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
 
   // 创建终端：调用 IPC create → 写入 store
   // store.createTerminal 触发 terminals 数组变化 → TerminalView 初始化 xterm
-  // P3 修复：useCallback 稳定引用（auto-create effect 依赖 handleCreate，
-  // 普通函数每渲染重建会触发 effect 反复执行）
-  const handleCreate = useCallback(async (): Promise<void> => {
+  // 引用稳定性交给 React Compiler（auto-create effect 依赖 handleCreate；
+  // autoCreateTriedRef 兜底防重入，即便引用不稳也不会形成 create 风暴）
+  const handleCreate = async (): Promise<void> => {
     if (creatingRef.current) return;
     // 浏览器模式（dev 预览）无桥：不发起创建，也不进入错误态（无终端可显示）
     if (!hasIpcBridge()) return;
@@ -123,16 +122,14 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
       // exactOptionalPropertyTypes：TerminalCreateReqSchema 的 command/env 虽为可选
       // 但 zod 的 .optional().transform() 让类型变为 `string | undefined`（属性必填）
       // 因此必须显式传入 undefined（表示使用默认 shell）
-      const { terminalId, pid, title } = unwrap(
-        await window.api.terminal.create({
-          // 无激活会话时 undefined → 主进程回退用户主目录
-          cwd: workingDir ?? undefined,
-          command: undefined,
-          env: undefined,
-          cols: DEFAULT_COLS,
-          rows: DEFAULT_ROWS,
-        }),
-      );
+      const { terminalId, pid, title } = await createTerminal({
+        // 无激活会话时 undefined → 主进程回退用户主目录
+        cwd: workingDir ?? undefined,
+        command: undefined,
+        env: undefined,
+        cols: DEFAULT_COLS,
+        rows: DEFAULT_ROWS,
+      });
       createTerminalInStore({
         id: terminalId,
         sessionId,
@@ -153,7 +150,7 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
     // finally 语义（React Compiler 不优化 try/finally）：catch 已吞掉全部异常
     creatingRef.current = false;
     setIsCreating(false);
-  }, [workingDir, sessionId, createTerminalInStore, t]);
+  };
 
   // 自动创建：进入终端视图时无终端则创建一次（用户要求：点击终端 tab 直接打开终端）
   // 每轮空态只尝试一次——handleCreate 置位标记后，effect 不再自动重触发；
@@ -169,22 +166,20 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   }, [terminals.length, isCreating, handleCreate]);
 
   /** 失败后重试：直接调 handleCreate（不经 effect，故不会重复触发） */
-  const handleRetry = useCallback((): void => {
+  const handleRetry = (): void => {
     void handleCreate();
-  }, [handleCreate]);
+  };
 
   // 关闭终端：调用 IPC kill → 从 store 移除
   const handleClose = async (terminalId: string): Promise<void> => {
-    if (!hasIpcBridge()) {
-      closeTerminalInStore(terminalId);
-      return;
-    }
-    try {
-      await window.api.terminal.kill({ terminalId });
-    } catch (error) {
-      // 关闭失败时通过 toast 提示用户，但仍从 store 移除（避免 UI 卡住）
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(t('terminal.closeFailed', { message }));
+    if (hasIpcBridge()) {
+      try {
+        await killTerminal({ terminalId });
+      } catch (error) {
+        // 关闭失败时通过 toast 提示用户，但仍从 store 移除（避免 UI 卡住）
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(t('terminal.closeFailed', { message }));
+      }
     }
     // 无论 IPC 是否成功，都从 store 移除（避免 UI 卡住）
     closeTerminalInStore(terminalId);

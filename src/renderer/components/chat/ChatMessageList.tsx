@@ -17,14 +17,7 @@
 
 import type { UIMessage } from 'ai';
 import { ChevronDown, Sparkles } from 'lucide-react';
-import {
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { useTranslation } from '@/i18n/use-translation';
@@ -104,7 +97,8 @@ export function ChatMessageList({
   const pendingHasNewRef = useRef(false);
 
   /** 滚动到顶判定（rAF 帧内执行）：仍有更早回合且不在加载中 → 触发补页 */
-  const maybeLoadEarlier = useCallback((): void => {
+  // 引用稳定性交给 React Compiler
+  const maybeLoadEarlier = (): void => {
     if (!hasEarlier || loadingEarlier || onLoadEarlier === undefined) {
       return;
     }
@@ -114,7 +108,7 @@ export function ChatMessageList({
     }
     pendingAnchorRef.current = el.scrollHeight;
     onLoadEarlier();
-  }, [hasEarlier, loadingEarlier, onLoadEarlier]);
+  };
 
   // 补页锚定补偿：内容增长（prepend 渲染完成）且 pending 在位 → 回补 scrollTop；
   // 补页结束但内容未增长（空页/失败）→ 放弃补偿，避免悬挂的 pending 误判
@@ -176,7 +170,8 @@ export function ChatMessageList({
   };
 
   /** 合帧执行滚动派生状态更新（每帧至多一次） */
-  const scheduleScrollFrame = useCallback((): void => {
+  // 引用稳定性交给 React Compiler
+  const scheduleScrollFrame = (): void => {
     if (scrollFrameRef.current !== null) return;
     scrollFrameRef.current = requestAnimationFrame(() => {
       scrollFrameRef.current = null;
@@ -191,7 +186,7 @@ export function ChatMessageList({
         }
       }
     });
-  }, [maybeLoadEarlier]);
+  };
 
   // 组件卸载时取消挂起帧（防 setState on unmounted）
   useEffect(
@@ -218,12 +213,13 @@ export function ChatMessageList({
 
   /** 滚动到指定消息（导航轨/搜索定位；居中）。目标未渲染（未加载的更早回合）时静默——
    *  搜索/跳转覆盖面 = 已加载页（debt.md#d2 既有取舍） */
-  const scrollToIndex = useCallback((index: number): void => {
+  // 引用稳定性交给 React Compiler（仅捕获 scrollerRef，供下方 effect 依赖）
+  const scrollToIndex = (index: number): void => {
     const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`) ?? null;
     if (el !== null) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  }, []);
+  };
 
   // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
   useEffect(() => {
