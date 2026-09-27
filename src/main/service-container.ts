@@ -106,6 +106,7 @@ import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
 import { readApprovalModeSync } from './infra/storage/approval-pref';
 import { closeDb, resetDb } from './infra/storage/db';
+import { readRemoteBindScope } from './infra/storage/remote-pref';
 import type { ISessionService } from './infra/storage/session-service';
 import { getSessionService, resetSessionService } from './infra/storage/session-service';
 import type { ITerminalService } from './infra/terminal/terminal-service';
@@ -570,7 +571,10 @@ class ServiceContainer {
    */
   getRemoteControlService(): IRemoteControlService {
     if (this.remoteControlService === null) {
-      this.remoteControlService = new RemoteControlService();
+      // 绑定范围自 app_settings 读取（remote.bindScope，默认 lan 兼容现状）
+      this.remoteControlService = new RemoteControlService({
+        bindScope: readRemoteBindScope(),
+      });
       this.remoteAgentBridge = new RemoteAgentBridge(
         this.remoteControlService,
         this.getAgentService(),

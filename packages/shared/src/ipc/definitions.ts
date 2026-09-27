@@ -167,7 +167,7 @@ import {
   TestModelResSchema,
 } from '../schemas/models';
 import type { RemoteStatusRes } from '../schemas/remote';
-import { RemoteStatusResSchema } from '../schemas/remote';
+import { RemoteSetBindScopeReqSchema, RemoteStatusResSchema } from '../schemas/remote';
 import {
   GlobReqSchema,
   type GlobRes,
@@ -973,6 +973,12 @@ export const IPC_DEFINITIONS = {
     ),
     start: withSchema(IPC_META.remote.start, null, {} as RemoteStatusRes, RemoteStatusResSchema),
     stop: withSchema(IPC_META.remote.stop, null, {} as RemoteStatusRes, RemoteStatusResSchema),
+    setBindScope: withSchema(
+      IPC_META.remote.setBindScope,
+      RemoteSetBindScopeReqSchema,
+      {} as RemoteStatusRes,
+      RemoteStatusResSchema,
+    ),
   },
 
   logs: {

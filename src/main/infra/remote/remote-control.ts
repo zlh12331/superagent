@@ -43,7 +43,9 @@ import { createSocket, type Socket as UdpSocket } from 'node:dgram';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { hostname } from 'node:os';
+import type { RemoteBindScope } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
+import { resolveBindAddress } from '../storage/remote-pref';
 import { REMOTE_CLIENT_CSP, REMOTE_CLIENT_HTML } from './remote-web-client';
 
 /** 发现公告服务标识（移动端按此过滤公告包） */
@@ -115,6 +117,8 @@ const NOOP_EMITTER: RemoteCommandEmitter = () => {};
 export interface RemoteControlOptions {
   /** HTTP 监听端口（默认 0 = 随机端口，经发现公告/配对界面告知） */
   readonly httpPort?: number;
+  /** 绑定范围（lan=0.0.0.0 + 发现广播；loopback=仅 127.0.0.1 + 停发公告；默认 lan） */
+  readonly bindScope?: RemoteBindScope;
   /** UDP 发现公告端口（移动端监听端口） */
   readonly discoveryPort?: number;
   /** 公告广播间隔毫秒数 */
@@ -146,8 +150,22 @@ export interface IRemoteControlService {
   getSessionToken(): string | null;
   /** HTTP 监听端口（未启动为 null；配对二维码 / 手动输入展示用） */
   getPort(): number | null;
+  /** 绑定范围（lan=局域网可连；loopback=仅本机 127.0.0.1） */
+  getBindScope(): RemoteBindScope;
+  /** HTTP 实际绑定地址（OS 回报 '0.0.0.0' | '127.0.0.1'；未启动为 null） */
+  getBindAddress(): string | null;
   /** 实例名（发现公告展示名 = 主机名，配对界面标题用） */
   getInstanceName(): string;
+  /**
+   * 切换绑定范围（设置页变更时调用）
+   *
+   * - 未运行：仅记录，下次 start() 生效
+   * - 运行中：停 HTTP 监听与发现广播后按新地址重启（立即生效）。配对话轮保留
+   *   （令牌与命令订阅不动，无需重新配对；随机端口下监听端口可能变化，快照回读）
+   * - 新地址重启失败：尽力回滚到原范围恢复服务，原错误上抛（IPC 层提示用户）；
+   *   回滚也失败则以停止态收场（诚实暴露不可用，不虚报运行中）
+   */
+  setBindScope(scope: RemoteBindScope): Promise<void>;
   /** 命令执行活动（设置面板实时状态：执行中命令数 + 最近到达时间） */
   getActivity(): { activeCommands: number; lastCommandAt: number | null };
   /**
@@ -185,10 +203,14 @@ export interface IRemoteControlService {
 export class RemoteControlService implements IRemoteControlService {
   private running = false;
   private sessionToken: string | null = null;
+  /** 绑定范围（可运行中切换；初始值来自 remote.bindScope 偏好） */
+  private bindScope: RemoteBindScope;
   /** 认证失败限流：当前窗口起点与累计失败次数（2026-09-08 加固） */
   private authWindowStartAt = 0;
   private authFailCount = 0;
   private httpPort: number | null = null;
+  /** HTTP 实际绑定地址（OS 回报；启动后记录，诊断/测试用） */
+  private bindAddress: string | null = null;
   /** 执行中命令数（监听器 in-flight 计数；面板状态展示） */
   private activeCommands = 0;
   /** 最近一次命令到达时间（当前配对话轮内） */
@@ -209,6 +231,7 @@ export class RemoteControlService implements IRemoteControlService {
 
   constructor(options: RemoteControlOptions = {}) {
     this.httpPortOption = options.httpPort ?? 0;
+    this.bindScope = options.bindScope ?? 'lan';
     this.discoveryPort = options.discoveryPort ?? DEFAULT_DISCOVERY_PORT;
     this.broadcastIntervalMs = options.broadcastIntervalMs ?? DEFAULT_BROADCAST_INTERVAL_MS;
     this.broadcastAddress = options.broadcastAddress ?? DEFAULT_BROADCAST_ADDRESS;
@@ -224,40 +247,32 @@ export class RemoteControlService implements IRemoteControlService {
     this.activeCommands = 0;
     this.lastCommandAt = null;
     await this.startHttpServer();
-    this.startDiscovery();
+    // 仅本机模式不做局域网发现：广播自身存在与 loopback 语义矛盾
+    if (this.bindScope === 'lan') {
+      this.startDiscovery();
+    }
     this.running = true;
     logger.info(
-      { port: this.httpPort, discoveryPort: this.discoveryPort },
-      '远程控制已启动（LAN 直连：HTTP 命令入口 + UDP 发现广播）',
+      {
+        port: this.httpPort,
+        bindAddress: this.bindAddress,
+        bindScope: this.bindScope,
+        discoveryPort: this.bindScope === 'lan' ? this.discoveryPort : null,
+      },
+      this.bindScope === 'lan'
+        ? '远程控制已启动（LAN 直连：HTTP 命令入口 + UDP 发现广播）'
+        : '远程控制已启动（仅本机：HTTP 命令入口，无发现广播）',
     );
     return this.sessionToken;
   }
 
   async stop(): Promise<void> {
-    if (this.broadcastTimer !== null) {
-      clearInterval(this.broadcastTimer);
-      this.broadcastTimer = null;
-    }
-    if (this.discoverySocket !== null) {
-      const socket = this.discoverySocket;
-      this.discoverySocket = null;
-      await new Promise<void>((resolve) => {
-        socket.close(() => resolve());
-      });
-    }
-    if (this.server !== null) {
-      const server = this.server;
-      this.server = null;
-      this.httpPort = null;
-      // keep-alive 连接不阻塞关闭（fetch 等客户端连接残留）
-      server.closeAllConnections();
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
-    }
+    await this.stopDiscovery();
+    await this.stopHttpServer();
     this.running = false;
     this.sessionToken = null;
     this.activeCommands = 0;
+    this.lastCommandAt = null;
     // 不清 commandListeners：订阅是桥接层的结构性挂载（RemoteAgentBridge.unmount
     // 负责解除）。此处清空会导致"关闭再开启"后命令被接收却无人执行。
     logger.info({}, '远程控制已停止');
@@ -273,6 +288,61 @@ export class RemoteControlService implements IRemoteControlService {
 
   getPort(): number | null {
     return this.httpPort;
+  }
+
+  getBindScope(): RemoteBindScope {
+    return this.bindScope;
+  }
+
+  getBindAddress(): string | null {
+    return this.bindAddress;
+  }
+
+  async setBindScope(scope: RemoteBindScope): Promise<void> {
+    if (scope === this.bindScope) {
+      return; // 幂等：同值切换 no-op（不重启监听）
+    }
+    if (!this.running) {
+      // 未运行：仅记录，下次 start() 按新范围监听
+      this.bindScope = scope;
+      logger.info({ scope }, '远程控制绑定范围已更新（未运行，下次启动生效）');
+      return;
+    }
+    const previous: RemoteBindScope = this.bindScope;
+    // 运行中切换：停监听与广播 → 按新地址重启。配对话轮保留（令牌/订阅/活动
+    // 计数不动，无需重新配对）；随机端口下重启可能换端口，快照回读新端口。
+    await this.stopDiscovery();
+    await this.stopHttpServer();
+    this.bindScope = scope;
+    try {
+      await this.startHttpServer();
+      // 仅本机模式不广播（与 start 同一语义）
+      if (scope === 'lan') {
+        this.startDiscovery();
+      }
+    } catch (err) {
+      // 新地址启动失败：回滚到原范围尽力恢复服务，原错误上抛（IPC 层提示用户）
+      this.bindScope = previous;
+      try {
+        await this.startHttpServer();
+        if (previous === 'lan') {
+          this.startDiscovery();
+        }
+        logger.error({ error: err, scope: previous }, '远程控制绑定范围切换失败，已回滚到原范围');
+      } catch (rollbackErr) {
+        // 回滚也失败：以停止态收场（诚实暴露不可用，不虚报运行中）
+        this.running = false;
+        this.sessionToken = null;
+        this.activeCommands = 0;
+        this.lastCommandAt = null;
+        logger.error({ error: rollbackErr }, '远程控制绑定范围切换回滚失败，服务已停止');
+      }
+      throw err;
+    }
+    logger.info(
+      { scope, port: this.httpPort, bindAddress: this.bindAddress },
+      '远程控制绑定范围已切换（监听按新地址重启）',
+    );
   }
 
   getInstanceName(): string {
@@ -348,7 +418,7 @@ export class RemoteControlService implements IRemoteControlService {
     }
   }
 
-  /** 启动 HTTP 命令入口（0.0.0.0，端口缺省随机） */
+  /** 启动 HTTP 命令入口（地址按绑定范围解析，端口缺省随机） */
   private async startHttpServer(): Promise<void> {
     const server = createServer((req, res) => {
       this.handleRequest(req, res);
@@ -357,15 +427,47 @@ export class RemoteControlService implements IRemoteControlService {
       logger.warn({ error: err.message }, '远程控制 HTTP client 错误');
       socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
     });
+    const bindAddress = resolveBindAddress(this.bindScope);
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(this.httpPortOption, '0.0.0.0', () => resolve());
+      server.listen(this.httpPortOption, bindAddress, () => resolve());
     });
     server.on('error', (err: unknown) => {
       logger.error({ error: err }, '远程控制 HTTP 服务异常');
     });
     this.server = server;
-    this.httpPort = (server.address() as AddressInfo).port;
+    const address = server.address() as AddressInfo;
+    this.httpPort = address.port;
+    this.bindAddress = address.address;
+  }
+
+  /** 停止发现广播（定时器 + UDP socket；未启动可重入） */
+  private async stopDiscovery(): Promise<void> {
+    if (this.broadcastTimer !== null) {
+      clearInterval(this.broadcastTimer);
+      this.broadcastTimer = null;
+    }
+    if (this.discoverySocket !== null) {
+      const socket = this.discoverySocket;
+      this.discoverySocket = null;
+      await new Promise<void>((resolve) => {
+        socket.close(() => resolve());
+      });
+    }
+  }
+
+  /** 停止 HTTP 监听（keep-alive 连接不阻塞关闭；未启动可重入） */
+  private async stopHttpServer(): Promise<void> {
+    if (this.server !== null) {
+      const server = this.server;
+      this.server = null;
+      this.httpPort = null;
+      this.bindAddress = null;
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   }
 
   /** 启动 UDP 发现广播（绑定失败降级为仅 HTTP 直连，不阻断启动） */

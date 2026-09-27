@@ -22,6 +22,7 @@ import {
   type GoalInfo,
   IPC_PROTOCOL_VERSION,
   type IpcApi,
+  type RemoteBindScope,
   type RemoteStatusRes,
   type SessionMeta,
   type UpdateStatusPayload,
@@ -188,27 +189,34 @@ const mockGoals: Array<{ sessionId: string; condition: string }> = [];
 /** 远程控制模拟状态（可变：开启后返回假令牌/端点，Web 预览可联调配对面板） */
 let mockRemoteRunning = false;
 
-/** 远程控制状态快照（对齐真实 handler：停止时令牌与端点置空） */
+/** 远程控制绑定范围（可变：setBindScope 联动，Web 预览可联调范围切换） */
+let mockRemoteBindScope: RemoteBindScope = 'lan';
+
+/** 远程控制状态快照（对齐真实 handler：停止时令牌与端点置空；仅本机模式回本机端点） */
 function mockRemoteStatus(): RemoteStatusRes {
-  return mockRemoteRunning
-    ? {
-        running: true,
-        port: 4173,
-        token: 'mock-remote-token-0123456789abcdef',
-        instanceName: 'web-preview',
-        addresses: ['http://192.168.1.10:4173'],
-        activeCommands: 0,
-        lastCommandAt: null,
-      }
-    : {
-        running: false,
-        port: null,
-        token: null,
-        instanceName: 'web-preview',
-        addresses: [],
-        activeCommands: 0,
-        lastCommandAt: null,
-      };
+  if (!mockRemoteRunning) {
+    return {
+      running: false,
+      port: null,
+      token: null,
+      instanceName: 'web-preview',
+      bindScope: mockRemoteBindScope,
+      addresses: [],
+      activeCommands: 0,
+      lastCommandAt: null,
+    };
+  }
+  return {
+    running: true,
+    port: 4173,
+    token: 'mock-remote-token-0123456789abcdef',
+    instanceName: 'web-preview',
+    bindScope: mockRemoteBindScope,
+    addresses:
+      mockRemoteBindScope === 'loopback' ? ['http://127.0.0.1:4173'] : ['http://192.168.1.10:4173'],
+    activeCommands: 0,
+    lastCommandAt: null,
+  };
 }
 
 /** 模拟助手回答：按 AI SDK v7 UIMessageChunk 格式（带 id）分片推送 → end（含 usage） */
@@ -1021,6 +1029,10 @@ function createMockApi(): IpcApi {
       },
       stop: async () => {
         mockRemoteRunning = false;
+        return ipcOk(mockRemoteStatus());
+      },
+      setBindScope: async ({ scope }: Req<IpcApi['remote']['setBindScope']>) => {
+        mockRemoteBindScope = scope;
         return ipcOk(mockRemoteStatus());
       },
     },

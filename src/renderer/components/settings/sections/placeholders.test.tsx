@@ -36,6 +36,7 @@ const IDLE: RemoteStatusRes = {
   port: null,
   token: null,
   instanceName: 'test-host',
+  bindScope: 'lan',
   addresses: [],
   activeCommands: 0,
   lastCommandAt: null,
