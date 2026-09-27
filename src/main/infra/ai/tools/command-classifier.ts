@@ -104,9 +104,14 @@ export class CommandClassifier {
       result = { verdict: 'unknown', reason: '分类器不可用，降级人工确认' };
     }
 
-    // 缓存（超限时清空最旧——简单 FIFO 清空）
-    if (this.cache.size >= CommandClassifier.CACHE_LIMIT) {
-      this.cache.clear();
+    // 缓存写入：达限时淘汰最旧条目（Map 迭代序 first 为最旧，逐出至阈值以下），
+    // 保留较新判定——此前误写为整体 clear()，会把仍高频复用的判定一并丢掉重判
+    while (this.cache.size >= CommandClassifier.CACHE_LIMIT) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.cache.delete(oldest);
     }
     this.cache.set(command, result);
     return result;
