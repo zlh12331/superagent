@@ -85,6 +85,16 @@ export const UI_RULES: readonly UiRule[] = [
     pattern: /toast\.error\(\s*error\.message\s*\)/,
     fileFilter: (relFile) => relFile.endsWith('.ts') || relFile.endsWith('.tsx'),
   },
+  {
+    id: 'mutation-on-error',
+    // 规范：useMutation 选项对象必须含 onError——写路径失败必须反馈用户
+    //（纯 toast 语义统一 useMutationOnError（hooks/use-mutation-error.ts），
+    // 含回滚等附加逻辑的内联 onError 同样合规）。测试文件沿用 CLI 既有
+    // .test. 排除豁免；选项对象是多行块，「块内有无 onError」无法用单行
+    // 正则表达，与 raw-button 同走 scan 内的块级特判（花括号深度配对）。
+    desc: 'useMutation 选项缺 onError（写路径失败必须反馈；纯 toast 语义用 hooks/use-mutation-error）',
+    pattern: /useMutation\b.*?\(\s*\{/,
+  },
 ];
 
 /**
@@ -134,6 +144,53 @@ export interface UiViolation {
 }
 
 /**
+ * mutation-on-error 判据：自 `useMutation({` 命中行做花括号深度配对，
+ * 定位选项对象块尾并返回块内代码（剔除纯注释行）。
+ *
+ * - 深度只数 `{`/`}`：选项对象内的嵌套函数体/模板插值天然配平，
+ *   字符串内不配平括号属静态启发式的已知盲区（与 raw-button 同级取舍）
+ * - 命中行自 `useMutation` 起计数——同一行前置的函数体开括号不参与配对
+ * - 块未闭合（畸形代码）时退化为扫描至文件尾
+ */
+function findMutationOptionsCode(
+  lines: readonly string[],
+  start: number,
+): {
+  end: number;
+  code: string;
+} {
+  let depth = 0;
+  let end = lines.length - 1;
+  for (let j = start; j < lines.length; j++) {
+    const blockLine = lines[j];
+    if (blockLine === undefined) break;
+    const trimmed = blockLine.trim();
+    // 注释行不参与深度配对（注释示例里的括号不构成结构信号）
+    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
+      continue;
+    }
+    const countFrom =
+      j === start ? blockLine.slice(Math.max(0, blockLine.indexOf('useMutation'))) : blockLine;
+    for (const ch of countFrom) {
+      if (ch === '{') depth += 1;
+      else if (ch === '}') depth -= 1;
+    }
+    if (depth <= 0) {
+      end = j;
+      break;
+    }
+  }
+  const code = lines
+    .slice(start, end + 1)
+    .filter((l) => {
+      const t = l.trim();
+      return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+    })
+    .join('\n');
+  return { end, code };
+}
+
+/**
  * 扫描文件集，返回违规清单（逐文件 × 逐规则 × 逐行）
  *
  * 通用豁免（与 CLI 既有行为一致）：
@@ -141,6 +198,7 @@ export interface UiViolation {
  * - 上一行含 noArrayIndexKey biome-ignore → 跳过（index-key 规则的豁免）
  * - raw-button：起始块（回溯 3 行）内出现 styles/* 归属类名或
  *   aria-pressed/aria-selected/aria-expanded/role="tab" 语义 → 豁免
+ * - mutation-on-error：useMutation 选项块内（剔除注释行）出现 onError → 豁免
  */
 export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {
   const violations: UiViolation[] = [];
@@ -179,6 +237,16 @@ export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {
           ) {
             continue;
           }
+        }
+        // mutation-on-error 规则：选项块内（剔除注释行）无 onError → 违规；
+        // 整块消费避免块内行被本规则重复判定
+        if (rule.id === 'mutation-on-error') {
+          const { end, code } = findMutationOptionsCode(lines, i);
+          if (!/\bonError\s*[:,]/.test(code)) {
+            violations.push({ rule: rule.id, file: relFile, line: i + 1 });
+          }
+          i = end; // 外层 i++ 落到块尾下一行
+          continue;
         }
         violations.push({ rule: rule.id, file: relFile, line: i + 1 });
       }

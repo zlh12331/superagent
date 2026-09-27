@@ -111,3 +111,86 @@ describe('通用豁免', () => {
     expect(OWNED_CSS_BUTTON_CLASSES.length).toBeGreaterThan(10);
   });
 });
+
+describe('mutation-on-error · useMutation 选项必须含 onError（块级判据）', () => {
+  it('多行选项块缺 onError → 命中（违规定位在开括号行）', () => {
+    const content = [
+      'const m = useMutation({',
+      '  mutationFn: save,',
+      '  onSuccess: () => {},',
+      '});',
+    ].join('\n');
+    expect(scanUiConsistency(scanOne('hooks/a.ts', content))).toEqual([
+      { rule: 'mutation-on-error', file: 'hooks/a.ts', line: 1 },
+    ]);
+  });
+
+  it('泛型形式 useMutation<T, E, V>({ 缺 onError → 命中', () => {
+    const content = [
+      'const m = useMutation<FileRes, Error, FileReq>({',
+      '  mutationFn: write,',
+      '});',
+    ].join('\n');
+    expect(ruleIdsOf(scanUiConsistency(scanOne('hooks/a.ts', content)))).toContain(
+      'mutation-on-error',
+    );
+  });
+
+  it('块内 onError（共享 hook 引用 / 内联回滚逻辑均可）→ 放过', () => {
+    const onErrorShorthand = [
+      'const m = useMutation({',
+      '  mutationFn: save,',
+      '  onError,',
+      '});',
+    ].join('\n');
+    const onErrorRollback = [
+      'const m = useMutation({',
+      '  mutationFn: save,',
+      '  onError: (error, _v, ctx) => {',
+      '    if (ctx?.prev !== undefined) rollback(ctx.prev);',
+      '    toast.error(unwrapErrorMessage(error, getErrorMessage));',
+      '  },',
+      '});',
+    ].join('\n');
+    expect(ruleIdsOf(scanUiConsistency(scanOne('hooks/a.ts', onErrorShorthand)))).toHaveLength(0);
+    expect(ruleIdsOf(scanUiConsistency(scanOne('hooks/a.ts', onErrorRollback)))).toHaveLength(0);
+  });
+
+  it('单行 useMutation({ onError: f }) → 放过', () => {
+    const content = 'const m = useMutation({ mutationFn: save, onError: report });';
+    expect(ruleIdsOf(scanUiConsistency(scanOne('hooks/a.ts', content)))).toHaveLength(0);
+  });
+
+  it('块内注释提及 onError 不算数（注释行剔除后缺 onError → 命中）', () => {
+    const content = [
+      'const m = useMutation({',
+      '  mutationFn: save,',
+      '  // onError 由上层统一处理（实际未挂）',
+      '});',
+    ].join('\n');
+    expect(ruleIdsOf(scanUiConsistency(scanOne('hooks/a.ts', content)))).toContain(
+      'mutation-on-error',
+    );
+  });
+
+  it('注释行提及 useMutation({ 不构成信号', () => {
+    const content = '// useMutation({ mutationFn: save }) 缺 onError 的反例说明';
+    expect(scanUiConsistency(scanOne('hooks/a.ts', content))).toHaveLength(0);
+  });
+
+  it('同文件多个 mutation：前者有 onError、后者缺失 → 只命中后者', () => {
+    const content = [
+      'const a = useMutation({',
+      '  mutationFn: save,',
+      '  onError,',
+      '});',
+      '',
+      'const b = useMutation({',
+      '  mutationFn: remove,',
+      '});',
+    ].join('\n');
+    expect(scanUiConsistency(scanOne('hooks/a.ts', content))).toEqual([
+      { rule: 'mutation-on-error', file: 'hooks/a.ts', line: 6 },
+    ]);
+  });
+});
