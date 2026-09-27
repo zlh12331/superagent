@@ -265,7 +265,7 @@ app
             const res = await port.clear(sessionKey);
             // 引擎 SQLite 是权威存储；JSONL 为 UI 列表数据源（审计镜像），
             // 同步清理该会话的行，保证清除后列表中不再残留（杜绝"假清空"）
-            const jsonlRemoved = service.removeL0JsonlBySession(sessionKey);
+            const jsonlRemoved = await service.removeL0JsonlBySession(sessionKey);
             if (res.ok && jsonlRemoved > 0) {
               logger.info(
                 { sessionKey, jsonlRemoved },
@@ -282,6 +282,14 @@ app
             };
           }
         },
+        // clearAll 用：仅引擎删除（异常向上抛，由 handler 归类为该 key 失败）；
+        // JSONL 清理由 handler 在全部 key 删除后经 removeL0Jsonl 单遍统一做（P2-26）
+        clearEngineBySession: async (sessionKey) => {
+          const port = await serviceContainer.getMemoryHubService().ensureStarted();
+          return port.clear(sessionKey);
+        },
+        removeL0Jsonl: (sessionKeys) =>
+          serviceContainer.getMemoryHubService().removeL0JsonlBySessions(sessionKeys),
         status: {
           isEnabled: () => isMemoryEnabled(),
           isAvailable: () => serviceContainer.getMemoryHubService().isConfigured(),

@@ -197,7 +197,7 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
     return new MemoryHubService({ hubRoot: undefined, dataDir });
   }
 
-  it('仅移除目标会话行，保留其他会话与损坏行（原子重写）', () => {
+  it('仅移除目标会话行，保留其他会话与损坏行（原子重写）', async () => {
     const dir = createDataDir({
       '2026-08-24.jsonl': [
         JSON.stringify({ sessionKey: 'sess-1', role: 'user', content: '要删', timestamp: 1 }),
@@ -206,7 +206,7 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
       ].join('\n'),
     });
     const service = createService(dir);
-    const removed = service.removeL0JsonlBySession('sess-1');
+    const removed = await service.removeL0JsonlBySession('sess-1');
     expect(removed).toBe(1);
 
     // 其余数据完好（其他会话 + 损坏行不误伤）
@@ -218,23 +218,44 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
     expect(remaining.join('\n')).toContain('not-json{broken');
   });
 
-  it('跨多文件清理（sessionKey 或 session_id 命中即删）', () => {
+  it('跨多文件清理（sessionKey 或 session_id 命中即删）', async () => {
     const dir = createDataDir({
       '2026-08-23.jsonl': JSON.stringify({ sessionKey: 'sess-1', content: '昨天' }),
       // biome-ignore lint/style/useNamingConvention: 模拟上游 JSONL 镜像字段（snake_case）
       '2026-08-24.jsonl': JSON.stringify({ session_id: 'sess-1', content: '旧格式' }),
     });
     const service = createService(dir);
-    const removed = service.removeL0JsonlBySession('sess-1');
+    const removed = await service.removeL0JsonlBySession('sess-1');
     expect(removed).toBe(2);
   });
 
-  it('空 sessionKey / 目录不存在 → 0（不抛错）', () => {
+  it('空 sessionKey / 目录不存在 → 0（不抛错）', async () => {
     const dir = createDataDir({ '2026-08-24.jsonl': 'x\n' });
     const service = createService(dir);
-    expect(service.removeL0JsonlBySession('   ')).toBe(0);
+    await expect(service.removeL0JsonlBySession('   ')).resolves.toBe(0);
     const empty = createService(join(tmpdir(), 'memory-hub-no-such-clear'));
-    expect(empty.removeL0JsonlBySession('sess-1')).toBe(0);
+    await expect(empty.removeL0JsonlBySession('sess-1')).resolves.toBe(0);
+  });
+
+  it('批量移除：多个 key 单遍扫描一次完成（P2-26），移除行为与逐 key 一致', async () => {
+    const dir = createDataDir({
+      '2026-08-24.jsonl': [
+        JSON.stringify({ sessionKey: 'sess-1', content: '删我', timestamp: 1 }),
+        JSON.stringify({ sessionKey: 'sess-2', content: '也删', timestamp: 2 }),
+        JSON.stringify({ sessionKey: 'sess-3', content: '保留', timestamp: 3 }),
+        'not-json{broken',
+      ].join('\n'),
+    });
+    const service = createService(dir);
+    // 逐 key 两次调用 = 两次全扫；批量一次完成且移除行数相同
+    const batchRemoved = await service.removeL0JsonlBySessions(['sess-1', 'sess-2']);
+    expect(batchRemoved).toBe(2);
+    const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    expect(remaining).toHaveLength(2);
+    expect(remaining.join('\n')).toContain('sess-3');
+    expect(remaining.join('\n')).toContain('not-json{broken');
   });
 });
 
