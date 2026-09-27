@@ -4,7 +4,7 @@
 // 拆分背景（2026-08 重构）：自 GitPanel 486 行按职责提取。
 // 职责：接收父级已取到的 diff 文本与统计，负责折叠交互与三态展示
 // （加载中 / 无 diff / 渲染）；自身不调用任何 query hook。
-// diff 渲染走统一方案 UnifiedDiffView（内部 react-diff-viewer-continued +
+// diff 渲染走统一方案 UnifiedDiffView（内部自研 DiffRowsTable +
 // parseUnifiedDiff 拆 hunk），本文件不感知其实现。
 // ──────────────────────────────
 

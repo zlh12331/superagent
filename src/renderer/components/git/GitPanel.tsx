@@ -8,7 +8,7 @@
 //
 // 设计：
 // - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - diff 渲染统一走 UnifiedDiffView（react-diff-viewer-continued + parseUnifiedDiff）
+// - diff 渲染统一走 UnifiedDiffView（自研 DiffRowsTable + parseUnifiedDiff）
 // - 路径必须为绝对路径（由调用方传入）
 //
 // 拆分记录（2026-08 重构）：原文件 486 行，按职责拆分为本组装层 +

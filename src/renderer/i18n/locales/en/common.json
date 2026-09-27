@@ -843,5 +843,8 @@
     "askSubmit": "Submit",
     "askSubmitFailed": "Failed to submit answer",
     "askProgress": "Answer progress"
+  },
+  "diff": {
+    "showMoreRows": "Show more ({{remaining}} rows left)"
   }
 }

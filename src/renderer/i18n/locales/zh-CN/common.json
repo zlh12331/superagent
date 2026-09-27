@@ -843,5 +843,8 @@
     "askSubmit": "提交",
     "askSubmitFailed": "提交回答失败",
     "askProgress": "回答进度"
+  },
+  "diff": {
+    "showMoreRows": "展开更多（剩余 {{remaining}} 行）"
   }
 }

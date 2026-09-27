@@ -513,103 +513,10 @@ button.card-head {
   background: var(--bg-elev-2);
 }
 
-/* ── 审批对话框 Diff 视图样式 ────────────────────────── */
-/* 适配 react-diff-viewer-continued 主题 */
+/* ── 审批卡 Diff 容器（表格样式统一在 styles/diff.css 的 DiffRowsTable）── */
 
 .approval-diff-wrapper {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.55;
-}
-
-.approval-diff-wrapper .diff-viewer {
-  /* biome-ignore lint/complexity/noImportantStyles: 覆盖 react-diff-viewer-continued 默认 margin，确保容器边缘对齐 */
-  margin: 0 !important;
-  border-radius: 0;
-  border: none;
-}
-
-.approval-diff-wrapper .diff-gutter {
-  background: var(--bg-elev);
-  color: var(--text-faint);
-  font-size: 11px;
-  min-width: 40px;
-  padding: 0 8px;
-  text-align: right;
-  user-select: none;
-}
-
-.approval-diff-wrapper .diff-gutter-col {
-  width: 40px;
-}
-
-.approval-diff-wrapper .diff-line-num {
-  color: var(--text-faint);
-}
-
-.approval-diff-wrapper .diff-code {
-  padding: 0 10px;
-  white-space: pre;
-}
-
-.approval-diff-wrapper .line-added {
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-}
-
-.approval-diff-wrapper .line-added .diff-code {
-  color: inherit;
-}
-
-.approval-diff-wrapper .line-removed {
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-}
-
-.approval-diff-wrapper .line-removed .diff-code {
-  color: inherit;
-}
-
-.approval-diff-wrapper .word-diff-added {
-  background: color-mix(in srgb, var(--success) 30%, transparent);
-  border-radius: calc(var(--radius) - 6px);
-  padding: 0 1px;
-}
-
-.approval-diff-wrapper .word-diff-removed {
-  background: color-mix(in srgb, var(--error) 25%, transparent);
-  border-radius: calc(var(--radius) - 6px);
-  padding: 0 1px;
-  text-decoration: line-through;
-}
-
-.approval-diff-wrapper .diff-title {
-  background: var(--bg-elev-2);
-  color: var(--text-secondary);
-  font-family: var(--font-serif);
-  font-size: 12px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.approval-diff-wrapper .content-text {
-  padding: 0 10px;
-  white-space: pre;
-}
-
-.approval-diff-wrapper table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-/* biome-ignore lint/style/noDescendingSpecificity: 与 .msg-content tr 命中不同组件容器 td（审批 diff vs 消息表格），无覆盖 */
-.approval-diff-wrapper td {
-  padding: 0;
-  vertical-align: top;
-}
-
-.approval-diff-wrapper tr {
-  height: 1.55em;
-}
-
-.approval-diff-wrapper .marker {
-  display: none;
 }

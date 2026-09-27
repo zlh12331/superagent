@@ -185,7 +185,7 @@ describe('DiffPane', () => {
         true,
       ),
     );
-    // diff 内容经 react-diff-viewer 逐行渲染（文本会被拆分），断言表结构落地
+    // diff 内容经 UnifiedDiffView（自研 DiffRowsTable）渲染为表格，断言表结构落地
     expect(document.querySelector('table')).not.toBeNull();
   });
 

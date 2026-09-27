@@ -182,7 +182,6 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-activity-calendar": "^3.2.1",
-    "react-diff-viewer-continued": "^4.4.0",
     "react-dom": "^19.2.8",
     "react-error-boundary": "^6.1.4",
     "react-hotkeys-hook": "^5.3.3",

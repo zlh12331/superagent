@@ -1,0 +1,113 @@
+/* src/renderer/styles/diff.css
+   统一 diff 双栏表格（自研 DiffRowsTable；2026-09 替换 react-diff-viewer-continued）
+   ──────────────────────────────────────────────────────────────
+   颜色全部走语义令牌（check:tokens）；add/del 混色配方沿用原 approval-diff-wrapper
+   （success 12% / error 10% 行底，词级 30% / 25%），保证与存量 diff 视觉基调一致。 */
+
+.diff-table-wrap {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.diff-table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed; /* 双栏严格各半，增删行左右对齐不漂移 */
+}
+
+.diff-col-gutter {
+  width: 44px;
+}
+
+.diff-col-code {
+  width: calc(50% - 44px);
+}
+
+.diff-table tbody + tbody {
+  /* hunk 分组边界（每 hunk 一个 tbody，单表语义不变） */
+  border-top: 1px solid var(--border);
+}
+
+.diff-gutter {
+  background: var(--bg-elev);
+  color: var(--text-faint);
+  font-size: var(--font-size-xs);
+  padding: 0 8px;
+  text-align: right;
+  user-select: none;
+  white-space: pre;
+  vertical-align: top;
+}
+
+.diff-code {
+  padding: 0 10px;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere; /* 超长行折行（react-diff-viewer 默认行为），避免双栏错位 */
+}
+
+.diff-code.is-add {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.diff-code.is-del {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+.diff-marker {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 0.5ch;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+/* 词级差异片段（wordDiff 模式；del 保留原 line-through 语义） */
+.diff-code .word-add {
+  background: color-mix(in srgb, var(--success) 30%, transparent);
+  border-radius: calc(var(--radius) - 6px);
+  padding: 0 1px;
+}
+
+.diff-code .word-del {
+  background: color-mix(in srgb, var(--error) 25%, transparent);
+  border-radius: calc(var(--radius) - 6px);
+  padding: 0 1px;
+  text-decoration: line-through;
+}
+
+.diff-title {
+  background: var(--bg-elev-2);
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  padding: 6px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 「展开更多」折叠控件（ui/button 的 Button ghost+sm；此处仅补 diff 域配色与贴合） */
+.diff-more {
+  margin-top: 4px;
+  width: 100%;
+  color: var(--text-secondary);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+
+.diff-more:hover {
+  color: var(--text-secondary);
+  background: var(--bg-elev-2);
+}
+
+.diff-more:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* 审批卡内保持原 12px 密度（git 面板侧用 11px 紧凑密度） */
+.approval-diff-wrapper .diff-table-wrap {
+  font-size: var(--font-size-sm);
+}
