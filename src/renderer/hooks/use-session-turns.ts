@@ -148,6 +148,14 @@ export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[
       if (oldest !== undefined && first.turnId === oldest.turnId) return undefined;
       return first.turnId;
     },
+    // 不启用 maxPages（2026-09-27 读 @tanstack/query-core@5.102.8 实证）：maxPages
+    // 在每次追加页时生效，fetchNextPage（forward）走 addToEnd，超限 slice(1) 丢弃
+    // pages[0]/pageParams[0]（infiniteQueryBehavior.js:36-40 + utils.js:151-154）；
+    // 普通 refetch 又从 oldPageParams[0] 起逐页重放（infiniteQueryBehavior.js:52-58），
+    // 被裁页不会自愈。本查询单向向上翻页，pages[0] 是最近一页消息（initialPageParam
+    // 'latest'），flattenTurnPages 平铺全部 pages 渲染——被裁端正是聊天区最新可见
+    // 消息。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
+    // 落在尾端，使被裁端不再是可见数据。
   });
 }
 

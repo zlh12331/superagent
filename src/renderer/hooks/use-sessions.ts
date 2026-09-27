@@ -92,6 +92,15 @@ export function useSessionsQuery() {
       const loaded = allPages.reduce((sum, page) => sum + page.sessions.length, 0);
       return loaded < lastPage.total ? loaded : undefined;
     },
+    // 不启用 maxPages（2026-09-27 读 @tanstack/query-core@5.102.8 实证）：maxPages
+    // 在每次追加页时生效，裁「与拉取方向相反」的一端——fetchNextPage（forward，
+    // infiniteQueryObserver.js:21-25）走 addToEnd，超限 slice(1) 丢弃
+    // pages[0]/pageParams[0]（infiniteQueryBehavior.js:36-40 + utils.js:151-154）；
+    // 普通 refetch 又从 oldPageParams[0] 起逐页重放（infiniteQueryBehavior.js:52-58），
+    // 被裁页不会自愈。本查询单向 fetchNextPage，pages[0] 恰是最新一批会话（服务端
+    // updatedAt 倒序、置顶在前），Sidebar 平铺全部 pages 渲染——被裁端正是用户可见
+    // 数据。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
+    // 落在尾端，使被裁端不再是可见数据。
   });
 }
 
