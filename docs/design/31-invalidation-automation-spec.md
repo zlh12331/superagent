@@ -1,7 +1,7 @@
 # 31 · 失效自动化规格（写路径声明式失效域）
 
 - **状态**：用户拍板立项（2026-09-28），方案方向已对齐；实施随同分支 `feat(invalidation)` 提交落地，
-  验证结果见 §6.4。
+  验证结果见 §8 实施记录。
 - **范围**：`packages/shared/src/ipc/`（定义表三步走）、`packages/shared/src/schemas/invalidation.ts`（新）、
   `src/main/infra/invalidation/`（新）、`src/main/infra/storage/session-service.ts`、
   `src/main/infra/ai/agent/agent-service.ts`、`src/main/infra/memory-hub/memory-hub-service.ts`、
@@ -106,7 +106,11 @@ export interface InvalidationPayload {
 
 域元素形如 `'sessions'` 或 `'session:<id>'`，渲染层 `split(':')` 得 queryKey 前缀：
 `'sessions' → ['sessions']`、`'session:abc' → ['session', 'abc']`。
-前半段与 `QUERY_KEY_ROOTS` 键一一对应（sessions/session/goal/task/usage/git/file/turns/memory/im）。
+前半段即渲染层该域的 key 根：`QUERY_KEY_ROOTS`（`keys.ts:28-38`）已收纳 9 根
+（sessions/session/goal/task/usage/git/file/turns/memory）；`im` **刻意不在** QUERY_KEY_ROOTS 内
+（`keys.ts:18-19` 的既定设计——该域无专用 hook，key 未纳入前缀根表），
+其 key 为独立的 `IM_CHANNELS_QUERY_KEY = ['im', 'channels']`（`keys.ts:68`），
+按同一前缀规则被 `'im'` 域命中。映射不查表，故「域根 ⊂ 某 key 首段」即生效。
 
 ```ts
 /** 主进程声明点统一取词；渲染层按 ':' 拆成 queryKey 前缀 */
@@ -142,12 +146,16 @@ export function broadcastInvalidation(
   `IPC_CHANNELS['INVALIDATION_EVENT_DOMAINS']`。
 - **复用 `emitEvent`**（`emit-event.ts`）做逐窗发送：免费获得 dev 侧 payload 契约校验 +
   webContents 销毁守卫（P2-38 / R2 既有能力，不另造第二套发送路径）。
-- **electron 引用用命名空间惰性访问 + 空窗降级**（本设计对先例的一处细化）：`import * as electron
-  from 'electron'` 后在函数体内取 `electron.BrowserWindow`，不可用或返回空即 no-op。理由：
+- **electron 引用用「枚举窗口 try/catch + 空窗降级」**（本设计对先例的一处细化，实施形态）：
+  顶层 `import { BrowserWindow } from 'electron'`，在 `collectWindows()` 内 `try { return
+  BrowserWindow.getAllWindows(); } catch { return []; }`——electron 替身缺 `BrowserWindow`
+  时成员访问抛错即降级为空窗，整体 no-op。理由：
   ① 广播在"无窗口"下本来就该是 no-op（`deep-link.ts:64` 同语义）；② session-service /
-  agent-service / memory-hub / im-service 四条链的单测与集成测试都会传递性 import 本模块，
-  惰性访问让测试环境（electron 命名空间为部分形状）零 mock 透传，不为广播改十余个测试文件的
-  mock 形状——广播行为本身由本模块专属单测（vi.mock electron 捕获 send）严格覆盖。
+  agent-service / memory-hub / im-service 四条链的单测与集成测试都会传递性 import 本模块
+  （实测 `tests/integration/setup.ts:38-57` 的 electron 替身**没有** `BrowserWindow`），
+  降级让这些既有测试零 mock 透传，不为广播改十余个测试文件的 mock 形状——广播行为本身由本模块
+  专属单测（vi.mock electron 捕获 send）严格覆盖。try 的范围仅「枚举窗口」：真实运行时不会抛
+  （BrowserWindow 恒可用），故不会掩盖真实故障。
 
 ### 2.4 主进程声明点（写路径 → 域）
 
@@ -158,7 +166,7 @@ export function broadcastInvalidation(
 | S3 | `session-service.create` | `['sessions', 'session:<id>']` | 事务提交后（IM/远程桥创建会话由此到达渲染层——缺口 D 的一部分） |
 | S4 | `session-service.appendMessage` | `['sessions', 'session:<id>']` | 事务提交后（回合开始的用户消息 / 回合结束的助手消息落库） |
 | S5 | `session-service.replaceMessages` | `['sessions', 'session:<id>']` | /compact 压缩落库后 |
-| S6 | `session-service.importAll` | `['sessions']` | 导入完成后 |
+| S6 | `session-service.importAll` | `['sessions']` | 导入完成且 `imported > 0` 时（全部同 id 跳过 ⇒ 库未变，不声明；对齐 §3「只有真实写才通知」） |
 | S7 | `agent-service.completeTurn` | `turnEndInvalidationDomains(sessionId)`（8 域聚合） | **先于** `agent:stream:end` 推送；三出口（completed/aborted/error）全走；**不判 webContents**（无头回合也广播——缺口 D 的主修复） |
 | S8 | `memory-hub-service`（sidecar 就绪 / 进程退出 / stop 收尾） | `['memory']` | 运行态真实迁移时（未配置降级路径不声明——状态没变） |
 | S9 | `memory.handler.clear / clearAll`（有实际删除时） | `['memory']` | 清除落盘后（列表 + 状态面板的 recordCount 都变） |
@@ -229,7 +237,7 @@ AppShell 挂载（与 `useAgentBridge` 同列），订阅 `invalidation:event:do
    infra 叶子依赖，无环；失败路径不声明——只有真实写/状态迁移才通知）。
 4. **renderer**：`lib/invalidation/` + `use-invalidation-bridge` + AppShell 挂载 +
    `use-agent-bridge` 回落改造（§2.5）+ `mock-api.ts` 补域。
-5. **测试**：§6.1。
+5. **测试**：§5.1。
 
 ## 4. 风险与对策
 
@@ -248,13 +256,13 @@ AppShell 挂载（与 `useAgentBridge` 同列），订阅 `invalidation:event:do
 | 文件 | 断言要点 |
 |---|---|
 | `src/main/infra/invalidation/invalidation.test.ts`（新） | 逐窗 send（channel + payload 形状）；isDestroyed 窗口跳过；无窗口 no-op；sessionId 条件展开（缺省不出现 undefined 键）；domains 空数组不发送 |
-| `session-service.test.ts`（增强） | S1–S6 各写操作广播的域清单逐字断言；markRunning/markIdle **不**广播（防回归锚） |
+| `session-service.test.ts`（增强） | S1–S6 各写操作广播的域清单逐字断言（S6 含「全部同 id 跳过不广播」守卫）；markRunning/markIdle **不**广播（防回归锚） |
 | `agent-service.test.ts`（增强） | 回合完成 → 广播事件含 8 域聚合且**先于** `agent:stream:end`；无 webContents 的回合同样广播（缺口 D 锚） |
 | `memory-hub-service.test.ts`（增强） | fake launcher + stub fetch 走通启动 → 广播 memory；进程退出回调 → 广播；未配置降级**不**广播 |
 | `im-service.test.ts`（增强） | start 成功 / stop 真停止 / stopAll 广播 im；幂等重复调用不广播 |
-| `memory.handler.test.ts`（增强） | clear/clearAll 有删除时广播 memory |
-| `src/renderer/lib/invalidation/invalidation.test.ts`（新） | 域映射：`'sessions'`/`'session:<id>'`/各全局域 → 与 `QUERY_KEY_ROOTS` 对齐；非法域（空串/空段）→ null；覆盖判定：全域命中登记、部分命中不登记、TTL 过期失效 |
-| `use-invalidation-bridge.test.tsx`（新） | 订阅/退订；事件 → 按映射逐域 invalidateQueries；无 window.api 跳过 |
+| `memory.handler.test.ts`（增强） | clear/clearAll 有删除时广播 memory；失败路径不广播 |
+| `src/renderer/lib/invalidation/invalidation.test.ts`（新） | 域映射：8 个 `QUERY_KEY_ROOTS` 根逐一对齐 + `'session:<id>'` 拆分 + `'im'`（不在根表内，按其 key 首段命中）；非法域（空串/空段）→ null；覆盖判定：全域命中登记、部分命中不登记、`session:other` 不登记、TTL 过期失效、容量上界逐出 |
+| `use-invalidation-bridge.test.tsx`（新） | 订阅/退订；事件 → 按映射逐域 invalidateQueries；聚合事件 → 登记覆盖 |
 | `use-agent-bridge.test.tsx`（增强） | 未覆盖 → 旧清单生效（既有断言保持绿）；已覆盖（noteInvalidationEvent 预置）→ 旧清单跳过但 L2 清理仍执行 |
 
 ### 5.2 门禁
@@ -274,5 +282,41 @@ E2E 不在本任务范围（失效链路已由单测在通道级锚定；双桥�
 
 ## 7. 交付拆分
 
-1. `docs(design): 31 号失效自动化设计文档` —— 本文档。
-2. `feat(invalidation): 写路径声明式失效域与渲染层事件桥` —— §3 全部 + §5.1 测试 + 文档实施记录回填。
+1. `docs(design): 31 号失效自动化设计文档` —— 本文档（含 §8 实施记录）。
+2. `feat(invalidation): 写路径声明式失效域与渲染层事件桥` —— §3 全部 + §5.1 测试 +
+  `scripts/check-file-size.baseline.json` 的必要增量。
+
+## 8. 实施记录（2026-09-28）
+
+### 8.1 与设计的三处细化（实证后调整）
+
+| # | 细化 | 理由与证据 |
+|---|---|---|
+| 1 | **S6 加 `imported > 0` 守卫**：`session-service.importAll` 由「无条件声明」收紧为「有真实导入才声明」 | §3 的统一原则是「只有真实写/状态迁移才通知」，S2（`pin` 判 `changes`）、S9、S10 都已按此守卫，原设计对 S6 的写法属内部不一致：全部同 id 跳过的导入库里没变，声明只会换来一次无谓列表重拉 |
+| 2 | **§2.2 的 `im` 归类修正**：原文写「前半段与 `QUERY_KEY_ROOTS` 键一一对应（…/memory/im）」，但 `im` **不在** `QUERY_KEY_ROOTS` 内（`keys.ts:18-19` 既定设计：该域无专用 hook） | `keys.ts:28-38` 实际只有 9 根；`im` 的 key 是独立的 `IM_CHANNELS_QUERY_KEY = ['im','channels']`（`keys.ts:68`）。映射是纯 `split(':')` 不查表，故 `'im'` 域仍自然命中——实现无需改动，是**文档表述**失准。已在 `lib/invalidation.invalidation.test.ts` 补断言锚定该边界（`QUERY_KEY_ROOTS` 无 im + `'im'` 映射生效） |
+| 3 | **§2.3 的 electron 访问形态修正**：原文写「`import * as electron` + 函数体内取 `electron.BrowserWindow`」，实施改为顶层具名 import + `collectWindows()` 内 try/catch | 两者降级语义等价（缺成员即空窗 no-op），但本仓既有先例（`emit-event.ts:88-93` 的 `app.isPackaged` 探测）用的是具名 import + try/catch，且具名 import 让 tree-shaking/类型检查更直接；已在 §2.3 按实施形态改写并锚定集成测试替身位置（`tests/integration/setup.ts` 无 `BrowserWindow`，是降级的真实触发场景） |
+
+### 8.2 门禁实测（本机，2026-09-28）
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 类型 | `pnpm typecheck` | 通过（exit 0） |
+| 格式/lint | `pnpm lint` | 通过（1098 文件，0 违规） |
+| 静态 15 项 | `pnpm check:static` | 通过（含 file-size 棘轮；见下） |
+| main 单测 | `pnpm test:main` | 2032 passed / 8 skipped（167 文件） |
+| renderer 单测 | `pnpm test:renderer` | 1761 passed（180 文件） |
+| shared 单测 | `pnpm --filter @code-agent/shared run test` | 81 passed（9 文件） |
+
+**file-size 棘轮**：增长集中在 3 个既有超限文件的**必要**增量——`definitions.ts` +8 net
+（事件定义 + 词表出口）、`agent-service.ts` +8 net（S7 声明点与注释）、`mock-api.ts` +3 net
+（`IpcApi` 契约要求 dev 桩）。三者都是「单文件承载的契约/装配点」，拆文件会把声明点推离写路径
+（与 §4「新增声明点被遗忘」对策相悖），故按 `scripts/check-file-size.baseline.json` 的既有
+`--update-baseline --force` 路径**显式承认放宽**（先例：6ca98c12 为 settings 导出多 +14 net）。
+基线写的是实测值本身，无预留空间。
+
+### 8.3 未覆盖项（诚实边界）
+
+- **E2E 未跑**：§5.2 已声明不在本任务范围；失效链路在通道级由单测锚定（含「先广播后 END」的
+  顺序断言），跨桥并存的 UI 级回归由 `use-agent-bridge` 增强用例覆盖。
+- **无头回合的端到端链路**：单测锚定到 `agent-service` 广播出口（缺口 D 的主修复点），
+  IM/远程/定时三条真实触发链路未做 E2E 验证——需要 IM 真实凭据与外网，属集成环境限制。
