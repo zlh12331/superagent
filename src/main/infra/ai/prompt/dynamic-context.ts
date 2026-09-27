@@ -48,11 +48,23 @@ interface GitSummaryView {
 export type GitSummaryProvider = (workingDir: string) => Promise<GitSummary | null>;
 
 /**
+ * 同回合 git 状态缓存 TTL（毫秒）
+ *
+ * 取值依据：只合并「同回合内的连发调用」（resolvePrompt 复用/多入口注入，
+ * 间隔为毫秒级）；用户下一次消息（秒级以上）已超 TTL，git 状态新鲜度不受影响。
+ */
+const GIT_SUMMARY_TTL_MS = 2000;
+
+/**
  * 从「异步 git 状态查询」构造 GitSummaryProvider
  *
  * 只依赖查询的返回形状（branch / clean / files），不绑定具体 GitService
  * 实现。非 git 仓库等场景下查询抛错时向上传播，由
  * injectDynamicContext 捕获并回落为占位符。
+ *
+ * P2-32：进程内缓存（按 workingDir，短 TTL）+ 并发合并——同一回合内多次
+ * injectDynamicContext 只 spawn 一次 git status 子进程；查询失败不缓存
+ * （下次调用重试），与「失败回落占位符」语义兼容。
  */
 export function gitSummaryProviderFrom(
   getStatus: (workingDir: string) => Promise<{
@@ -61,9 +73,29 @@ export function gitSummaryProviderFrom(
     readonly files: readonly unknown[];
   }>,
 ): GitSummaryProvider {
+  const cache = new Map<string, { readonly summary: GitSummary | null; readonly at: number }>();
+  const inflight = new Map<string, Promise<GitSummary | null>>();
   return async (workingDir) => {
-    const status = await getStatus(workingDir);
-    return { branch: status.branch, clean: status.clean, changedFiles: status.files.length };
+    const cached = cache.get(workingDir);
+    if (cached !== undefined && Date.now() - cached.at < GIT_SUMMARY_TTL_MS) {
+      return cached.summary;
+    }
+    const pending = inflight.get(workingDir);
+    if (pending !== undefined) {
+      return pending;
+    }
+    const query = (async () => {
+      const status = await getStatus(workingDir);
+      return { branch: status.branch, clean: status.clean, changedFiles: status.files.length };
+    })();
+    inflight.set(workingDir, query);
+    try {
+      const summary = await query;
+      cache.set(workingDir, { summary, at: Date.now() });
+      return summary;
+    } finally {
+      inflight.delete(workingDir);
+    }
   };
 }
 

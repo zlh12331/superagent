@@ -26,12 +26,9 @@ import { randomUUID } from 'node:crypto';
 import type {
   AgentStreamEndPayload,
   AgentStreamErrorPayload,
-  AgentStreamPartPayload,
   ChatMessage,
   TurnEndEvent,
   TurnEvent,
-  TurnTextDeltaEvent,
-  TurnToolCallEvent,
   TurnToolResultEvent,
   TurnUsage,
 } from '@code-agent/shared/main';
@@ -64,10 +61,10 @@ import type { LlmClient } from '../llm-client/llm-client';
 import { buildGenerationOptions, modelRegistry } from '../models';
 import type { GenerationOptions } from '../models/generation-options';
 import type { ResolvedModel } from '../models/types';
-import type { IPromptService } from '../prompt/prompt-service';
+import type { IPromptService, ResolvedPrompt } from '../prompt/prompt-service';
 import { classifyError, isAbortError } from '../tools/error-classifier';
 import type { IPermissionService } from '../tools/permission-service';
-import { clampToolPartOutput, type IToolExecutor } from '../tools/tool-executor';
+import type { IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
 import {
   compressByTokenBudget,
@@ -76,32 +73,11 @@ import {
   getTokenBudgetDecision,
 } from './context-compression';
 import { createRepairToolCall } from './repair-tool-call';
+import { createTurnPartForwarder } from './stream-part-forward';
 import { resolveTokenBudgetBasis } from './token-overhead';
+import { subscribeApprovalLifecycle, subscribeTurnAccumulators } from './turn-subscriptions';
 import type { SdkTotalUsageLike } from './turn-usage-report';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
-
-/**
- * 推送单个流式 part 到渲染层（2026-09-08 从 streamToWebContents 提取）
- *
- * 含输出闸门（此前只加在 tool-executor 的 tool-result 通道，本通道会原样
- * 透传 tool-output-available 的完整 output，read_file 可带 2MB → 约 50 万
- * token 进渲染层与后续上下文）。
- */
-function forwardStreamPart(
-  part: { readonly type: string; readonly delta?: unknown },
-  sessionId: string,
-  webContents: WebContents | undefined,
-): void {
-  if (webContents === undefined || webContents.isDestroyed()) {
-    return;
-  }
-  const payload: AgentStreamPartPayload = {
-    sessionId,
-    part: clampToolPartOutput(part),
-  };
-  // dev 契约校验后发送（payloadSchema 见定义表）
-  emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeStreamPart, payload);
-}
 
 /**
  * Agent 启动选项
@@ -126,6 +102,14 @@ export interface StartAgentOptions {
   readonly workingDir: string;
   /** 可选系统提示词（覆盖默认 system prompt，定义 Agent 行为） */
   readonly systemPrompt: string | undefined;
+  /**
+   * 预解析的基础 prompt（P2-32：调用方已 resolvePrompt 时传入复用，回合内免二次解析）
+   *
+   * 仅在 systemPrompt 未传时消费；agent.handler 的记忆召回链已解析基础 prompt
+   * 用于拼接 <memory_context>，复用它避免重复读库 + git status 子进程 +
+   * AGENTS.md 遍历。与 systemPrompt 独立：传了 systemPrompt 时本字段被忽略。
+   */
+  readonly resolvedPrompt?: ResolvedPrompt;
   /** 最大工具调用轮数（默认 20，上限 50，避免无限循环） */
   readonly maxSteps: number;
   /** 思考强度（可选：渲染层设置项，覆盖模型级默认 reasoningEffort） */
@@ -261,6 +245,19 @@ export class AgentService implements IAgentService {
     };
   }
 
+  /**
+   * 解析基础 system prompt（P2-32）
+   *
+   * 调用方（agent.handler 记忆召回链）已 resolvePrompt 时直接复用；
+   * 未传时按工作目录解析默认 Code Agent prompt（DB 失败内部回退硬编码默认）。
+   */
+  private resolveSystemPrompt(options: StartAgentOptions): Promise<ResolvedPrompt> {
+    if (options.resolvedPrompt !== undefined) {
+      return Promise.resolve(options.resolvedPrompt);
+    }
+    return this.promptService.resolvePrompt(undefined, options.workingDir);
+  }
+
   /** @inheritDoc */
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
@@ -378,20 +375,12 @@ export class AgentService implements IAgentService {
           modelId: modelRegistry.resolve(undefined).modelId,
           startedAt: turnStartTime,
         });
-        // 审批生命周期订阅（waitingApproval 状态运行时数据源）：
-        // 审批推送 → waitingApproval；决议完成 → 恢复 running（按 sessionId 过滤）
-        const unsubscribeApproval = this.permissionService?.onApprovalLifecycle({
-          onRequested: (p) => {
-            if (p.sessionId === sessionId) {
-              turnMachine.send({ type: 'approval.requested', approvalId: p.approvalId });
-            }
-          },
-          onResolved: (p) => {
-            if (p.sessionId === sessionId) {
-              turnMachine.send({ type: 'approval.responded' });
-            }
-          },
-        });
+        // 审批生命周期订阅（waitingApproval 状态运行时数据源，装配见模块级函数）
+        const unsubscribeApproval = subscribeApprovalLifecycle(
+          this.permissionService,
+          sessionId,
+          turnMachine,
+        );
         // 模型级超时定时器（回合作用域；finally 清理）
         let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
         const resolvedModel = modelRegistry.resolve(undefined);
@@ -414,6 +403,9 @@ export class AgentService implements IAgentService {
         // 声明在 try 外：catch 分支（错误/中断出口）同样需要把已发生的部分传给 completeTurn
         const transcriptEntries: TurnTranscriptEntry[] = [];
         let rawPartCount = 0;
+        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
+        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
+        const partForwarder = createTurnPartForwarder(sessionId, options.webContents);
         // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
         let releaseGate: (() => void) | undefined;
         try {
@@ -440,24 +432,13 @@ export class AgentService implements IAgentService {
           // 回合事件仅内部消费：类级监听器（onTurnEvent，供记忆捕获）与
           // TEXT_DELTA 累积（落库）订阅；不再向渲染层 IPC 推送——渲染层
           // 流式渲染走 agent:stream:part，回合历史走 session:getTurns 拉取
-          unsubscribeAll = () => {
-            unsubscribeTextAcc();
-            unsubscribeToolCallAcc();
-          };
-
-          const unsubscribeTextAcc = turnEmitter.on(TurnEventType.TEXT_DELTA, (event) => {
-            assistantText += (event as TurnTextDeltaEvent).text;
-          });
-
-          // 工具调用转录（tool-call：模型发起，含入参；结果在 executeHook 处累积 output）
-          const unsubscribeToolCallAcc = turnEmitter.on(TurnEventType.TOOL_CALL, (event) => {
-            const e = event as TurnToolCallEvent;
-            transcriptEntries.push({
-              kind: 'tool-call',
-              toolCallId: e.toolCallId,
-              toolName: e.toolName,
-              input: e.input,
-            });
+          unsubscribeAll = subscribeTurnAccumulators(turnEmitter, {
+            onTextDelta: (text) => {
+              assistantText += text;
+            },
+            onToolCall: (entry) => {
+              transcriptEntries.push(entry);
+            },
           });
 
           // 用户消息落库（回合开始）：失败静默（会话不存在/写入异常均不阻断对话；
@@ -480,9 +461,11 @@ export class AgentService implements IAgentService {
           //     - 调用方未传 systemPrompt：调用 PromptService.resolvePrompt 注入默认 Code Agent prompt
           //       内部会从数据库读取模板 + 注入动态上下文（workingDir / git / AGENTS.md 等）
           //     - 失败容忍：PromptService 内部已处理回退（DB 失败 → 硬编码默认值）
+          //     - P2-32：调用方（agent.handler 记忆召回链）已解析的基础 prompt 直接
+          //       复用，同回合内不二次 resolvePrompt
           let systemPrompt = options.systemPrompt;
           if (systemPrompt === undefined) {
-            const resolved = await this.promptService.resolvePrompt(undefined, options.workingDir);
+            const resolved = await this.resolveSystemPrompt(options);
             systemPrompt = resolved.content;
             logger.debug({ sessionId, source: resolved.source }, '已加载默认 Code Agent prompt');
           }
@@ -640,7 +623,8 @@ export class AgentService implements IAgentService {
               if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
                 transcriptEntries.push({ kind: 'reasoning', text: part.delta });
               }
-              forwardStreamPart(part, sessionId, options.webContents);
+              // P2-31：text-delta 进合帧缓冲，其余 part 落地缓冲后立即透传（保序）
+              partForwarder.push(part);
             },
           });
           const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
@@ -670,6 +654,8 @@ export class AgentService implements IAgentService {
           if (runResult.reason === 'aborted') {
             logger.info({ sessionId }, 'Agent 对话被用户中断');
             span?.setAttribute('agent.aborted', true);
+            // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
+            partForwarder.flush();
             this.completeTurn({
               sessionId,
               turnId,
@@ -685,6 +671,8 @@ export class AgentService implements IAgentService {
             // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默；
             // 投影/遥测/持久化细节见 finalizeCompletedTurn 与 turn-usage-report
             const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
+            // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
+            partForwarder.flush();
             this.finalizeCompletedTurn({
               sessionId,
               turnId,
@@ -705,6 +693,8 @@ export class AgentService implements IAgentService {
           if (isAbortError(error)) {
             logger.info({ sessionId }, 'Agent 对话被用户中断');
             span?.setAttribute('agent.aborted', true);
+            // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
+            partForwarder.flush();
             this.completeTurn({
               sessionId,
               turnId,
@@ -718,6 +708,8 @@ export class AgentService implements IAgentService {
             });
           } else {
             // 其他错误：分类、状态机 error、推送 AGENT_STREAM_ERROR、落库（见 finalizeErrorTurn）
+            // P2-31：ERROR 推送前落地合帧缓冲（保序防丢尾）
+            partForwarder.flush();
             this.finalizeErrorTurn({
               sessionId,
               turnId,
@@ -734,6 +726,8 @@ export class AgentService implements IAgentService {
         } finally {
           // 并发槽位释放（幂等；必须在超时定时器清理前完成，让排队的下个回合尽早启动）
           releaseGate?.();
+          // P2-31：兜底落地合帧缓冲（幂等；正常路径已在 END/ERROR 前显式 flush）
+          partForwarder.flush();
           // 取消回合事件订阅（防泄漏）
           unsubscribeAll();
           forwardTurnEvents();

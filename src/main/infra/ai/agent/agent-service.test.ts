@@ -484,6 +484,93 @@ describe('agent-service', () => {
       expect(lastCall[1]).toEqual({ sessionId: 'session-1', reason: 'completed' });
     });
 
+    it('P2-31 合帧：相邻 text-delta 合并单条 part，且 END 前落地（不丢尾、不乱序）', async () => {
+      const wc = createMockWebContents();
+      const parts = [
+        { type: 'text-delta', id: 't1', delta: '你' },
+        { type: 'text-delta', id: 't1', delta: '好' },
+        { type: 'text-delta', id: 't1', delta: '，世界' },
+      ];
+      mocks.mockStreamText.mockReturnValue(createMockStreamResult(parts));
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: 'session-batch',
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      // 3 条 text-delta 合并成 1 条 part + 1 条 END；无 webContents.send 定时器依赖
+      // （合帧在流收尾路径同步 flush，END 恒在最后一个文本 part 之后）
+      expect(getNonTurnCalls(wc)).toHaveLength(2);
+      const partCall = getNonTurnCalls(wc)[0];
+      if (!partCall) throw new Error('webContents.send 未被调用');
+      expect(partCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_PART);
+      expect(partCall[1]).toEqual({
+        sessionId: 'session-batch',
+        part: { type: 'text-delta', id: 't1', delta: '你好，世界' },
+      });
+      const endCall = getNonTurnCalls(wc)[1];
+      if (!endCall) throw new Error('END 推送缺失');
+      expect(endCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
+    });
+
+    it('P2-31 合帧：text-delta 与其他 part 交错时不跨合、顺序保持', async () => {
+      const wc = createMockWebContents();
+      const parts = [
+        { type: 'text-delta', id: 't1', delta: '前文' },
+        { type: 'tool-call', toolCallId: 'c1', toolName: 'read_file' },
+        { type: 'text-delta', id: 't1', delta: '后文' },
+      ];
+      mocks.mockStreamText.mockReturnValue(createMockStreamResult(parts));
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: 'session-batch2',
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      // tool-call 前落地「前文」，之后「后文」单独成条（不同段不跨合）
+      const payloads = getNonTurnCalls(wc)
+        .filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_PART)
+        .map((c) => c[1] as { part: { type: string; delta?: string; toolCallId?: string } });
+      expect(payloads).toHaveLength(3);
+      expect(payloads[0]?.part.delta).toBe('前文');
+      expect(payloads[1]?.part.toolCallId).toBe('c1');
+      expect(payloads[2]?.part.delta).toBe('后文');
+    });
+
+    it('P2-32：resolvedPrompt 传入时复用，不再调用 resolvePrompt', async () => {
+      const wc = createMockWebContents();
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: undefined,
+        workingDir: '/tmp/project',
+        systemPrompt: undefined,
+        resolvedPrompt: { content: '复用的基础 prompt', source: 'database' },
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      expect(mockPromptService.resolvePrompt).not.toHaveBeenCalled();
+      const callArgs = mocks.mockStreamText.mock.calls[0];
+      if (!callArgs) throw new Error('streamText 未被调用');
+      const opts = callArgs[0] as { system: string };
+      expect(opts.system).toBe('复用的基础 prompt');
+    });
+
     it('webContents.isDestroyed=true：停止推送 part', async () => {
       const wc = createMockWebContents();
       wc.isDestroyed.mockReturnValue(true);
