@@ -9,6 +9,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { isMemoryEnabled } from '../../memory-hub/memory-pref';
 import type { MemoryPort } from '../../memory-hub/types';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -37,7 +38,10 @@ export function createSaveMemoryTool(memoryPort: MemoryPort): Tool<SaveMemoryInp
     execute: async (input: SaveMemoryInput, ctx: ToolContext): Promise<ToolResult> => {
       // 用户关闭记忆功能时不接受写入（关闭语义 = 不捕获）
       if (!isMemoryEnabled()) {
-        return { title: '记忆功能已关闭', output: '用户已在设置中关闭记忆功能，未保存该条目。' };
+        return {
+          title: t('tools.saveMemory.disabled'),
+          output: '用户已在设置中关闭记忆功能，未保存该条目。',
+        };
       }
       const result = await memoryPort.capture({
         sessionKey: ctx.sessionId,
@@ -45,10 +49,10 @@ export function createSaveMemoryTool(memoryPort: MemoryPort): Tool<SaveMemoryInp
         assistantContent: '已记录该记忆。',
       });
       if (result.l0Recorded === 0) {
-        return { title: '记忆保存失败', output: '记忆引擎不可用，未能保存该条目。' };
+        return { title: t('tools.saveMemory.failed'), output: '记忆引擎不可用，未能保存该条目。' };
       }
       return {
-        title: '记忆已保存',
+        title: t('tools.saveMemory.saved'),
         output: `已保存记忆（${input.kind ?? 'fact'}）：${input.content.slice(0, 100)}`,
       };
     },

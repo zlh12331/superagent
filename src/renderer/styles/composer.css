@@ -329,7 +329,6 @@
 /* ──────────────────────────────────────────────────────────────
    Composer 输入舱 · TraeWork 悬浮舱 + focus soft ring
    ────────────────────────────────────────────────────────────── */
-/* biome-ignore lint/style/noDescendingSpecificity: welcome-mode 变体在上方定义，此处为默认样式，不冲突 */
 .composer {
   border-top: 1px solid var(--border);
   background: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
@@ -340,7 +339,6 @@
 }
 
 /* 顶部发丝高光带（静态） */
-/* biome-ignore lint/style/noDescendingSpecificity: welcome-mode 变体在上方定义，此处为默认样式，不冲突 */
 .composer::before {
   content: "";
   position: absolute;
@@ -357,7 +355,6 @@
   );
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: welcome-mode 变体在上方定义，此处为默认样式，不冲突 */
 .composer-box {
   background: var(--bg-elev-2);
   border: 1px solid var(--border-strong);
@@ -465,7 +462,6 @@
   color: var(--text-faint);
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: welcome-mode 变体在上方定义，此处为默认样式，不冲突 */
 .composer-bar {
   display: flex;
   align-items: center;

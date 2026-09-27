@@ -82,7 +82,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（命令面板输入 vs 工具卡片），无覆盖 */
 .palette-input-wrap svg {
   color: var(--text-faint);
   flex-shrink: 0;
@@ -155,7 +154,6 @@
   flex-shrink: 0;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（命令面板项 vs 工具卡片），无覆盖 */
 .palette-item .pi-icon svg {
   width: 12px;
   height: 12px;

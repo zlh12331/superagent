@@ -7,6 +7,8 @@
 //   对比度缺陷曾因此漏网
 // - 动态内容排除项：终端输出流 / 聊天消息流（滚动噪声）；Radix Tabs 折叠态
 //   aria-controls 指向懒渲染 content 为库标准行为，非真实问题
+// - 扩页扫描（2026-09-27）：会话页（mock 首会话入口，journey-chat 同款）与
+//   设置页（命令面板 → 打开设置，journey-settings 同款）
 // ──────────────────────────────
 
 import AxeBuilder from '@axe-core/playwright';
@@ -168,5 +170,53 @@ test.describe('键盘 Tab 遍历', () => {
     await page.keyboard.press('Enter');
     // 应用未被 Enter 搞崩（根节点仍在）
     await expect(page.locator('#root')).toBeAttached();
+  });
+});
+
+// ── 扩页 axe 扫描（2026-09-27）：会话页 / 设置页 ───────────────────
+// 入口复用既有旅程基建（journey-chat 的首会话点击 / journey-settings 的
+// 命令面板→打开设置），排除项与首页扫描一致。
+test.describe('扩页审计（会话页 / 设置页）', () => {
+  test('会话页无 a11y 违规', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // 进入已有会话（mock 第一会话「重构 IPC 定义表」，与 journey-chat 同款入口）
+    const sessionTitle = page.getByText('重构 IPC 定义表').first();
+    await expect(sessionTitle).toBeVisible({ timeout: 10_000 });
+    await sessionTitle.click();
+    // 等会话视图真正渲染（composer 输入框出现）
+    await expect(page.locator('.composer-box textarea, .composer textarea').first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .exclude('[data-testid="chat-message-list"]') // 聊天动态内容（滚动噪声）
+      .exclude('[data-slot="tabs-trigger"]') // Radix Tabs 折叠态 aria-controls（库标准行为）
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  test('设置页（设置对话框）无 a11y 违规', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // 入口：命令面板（Topbar 文字按钮）→ 过滤 → 打开设置（与 journey-settings 同款）
+    await page.getByRole('button', { name: '命令面板' }).first().click();
+    await page.keyboard.type('设置');
+    await page.waitForTimeout(200); // cmdk 防抖
+    const item = page.getByRole('option', { name: /打开设置/ }).first();
+    await expect(item).toBeVisible({ timeout: 5_000 });
+    await item.click();
+    const dialog = page.locator('[role="dialog"]').first();
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .exclude('[data-testid="chat-message-list"]')
+      .exclude('[data-slot="tabs-trigger"]')
+      .analyze();
+    expect(results.violations).toEqual([]);
   });
 });

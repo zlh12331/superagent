@@ -14,6 +14,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
 import { checkUrlAllowed } from './url-guard';
 
@@ -36,7 +37,7 @@ type WebFetchInput = z.infer<typeof WebFetchInputSchema>;
 
 /** 统一失败结果（不抛异常，交回模型可读原因） */
 function failure(message: string): ToolResult {
-  return { title: 'web_fetch 失败', output: message };
+  return { title: t('tools.webFetch.failed'), output: message };
 }
 
 /** 3xx 重定向状态码 */
@@ -119,7 +120,7 @@ export function createWebFetchTool(): Tool<WebFetchInput> {
         const text = stripHtml(html).trim();
         if (text.length === 0) {
           return {
-            title: 'web_fetch 完成',
+            title: t('tools.webFetch.completed'),
             output: '（页面无可提取的正文文本，可能为动态渲染页面）',
           };
         }

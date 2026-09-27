@@ -176,7 +176,6 @@
 .msg-content ol {
   list-style: decimal;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: 与 .prose-literacy 选择器针对不同父容器，不会相互覆盖 */
 .msg-content li {
   margin-bottom: 4px;
 }
@@ -294,7 +293,6 @@
   padding: 10px 14px;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: 与 .thread-item.active .ti-dot 命中不同组件（typing 指示器 vs 会话项），无覆盖 */
 .typing-indicator .ti-dot {
   width: 7px;
   height: 7px;

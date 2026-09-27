@@ -13,6 +13,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+import { scanHardcodedZh } from './lib/i18n-hardcoded-scan';
+
 const ROOT = join(import.meta.dirname, '..');
 const RENDERER = join(ROOT, 'src', 'renderer');
 const LOCALES = join(RENDERER, 'i18n', 'locales');
@@ -95,10 +97,12 @@ function collectDynamicPrefixes(files: string[]): Set<string> {
  * 检测 JSX 文本节点里的中文字符串是否未走 t()。
  *
  * check-i18n 原只能校验「已写的 t() key 存在」，无法发现「JSX 直接写中文却不国际化」。
- * 本规则在 .tsx（排除测试 / 注释 / 含 t() 调用行）中匹配 `>…中文…<` 形态的单行文本节点。
+ * 2026-09-27 盲区修复：扫描核移至 lib/i18n-hardcoded-scan.ts（oxc-parser AST 主路径 +
+ * 正则兜底），覆盖旧逐行正则的三类漏扫——多行 JSX 文本、字符串字面量属性、
+ * 表达式容器内字符串；判据细节见该文件头注释，正反自测见其 .test.ts。
  *
  * @param file 渲染层 .tsx/.ts 文件绝对路径
- * @returns 命中描述列表（文件:行号 + 片段）；无则空数组
+ * @returns 命中描述列表（文件:行号 + 类别 + 片段）；无则空数组
  */
 function collectHardcodedZhText(file: string): string[] {
   if (!file.endsWith('.tsx')) return [];
@@ -108,19 +112,9 @@ function collectHardcodedZhText(file: string): string[] {
     return [];
   }
   const content = readFileSync(file, 'utf8');
-  // 单行 JSX 文本节点：>…中文…< ；排除 {}、<>、=、+ 形似者（表达式/片段/箭头）。
-  // 中文用 BMP 范围 [\u4e00-\u9fff]，不依赖 unicode property escape（跨运行环境更稳）。
-  const nodeRe = />\s*[^<>{}=\r\n]*[\u4e00-\u9fff][^<>{}=\r\n]*</g;
-  const hits: string[] = [];
-  content.split('\n').forEach((line, idx) => {
-    const t = line.trim();
-    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
-    if (/\bt\(/.test(line)) return; // 该行已含 i18n 调用，跳过避免误报
-    for (const m of line.matchAll(nodeRe)) {
-      hits.push(`  ${rel}:${idx + 1}  ${m[0].trim().slice(0, 60)}`);
-    }
-  });
-  return hits;
+  return scanHardcodedZh(content).map(
+    (hit) => `  ${rel}:${hit.line}  [${hit.kind}] ${hit.snippet}`,
+  );
 }
 
 function loadLocale(lang: string): { common: Set<string>; errors: Set<string> } {

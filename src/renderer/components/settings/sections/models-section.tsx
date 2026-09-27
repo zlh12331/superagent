@@ -73,7 +73,7 @@ function RuntimeModelTable({
               <div className="flex items-center gap-2">
                 {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
                 <span className="bg-accent/10 text-accent-text flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
-                  {providerLabel(model.providerKind)[0]}
+                  {providerLabel(model.providerKind, t)[0]}
                 </span>
                 <div className="flex min-w-0 flex-col">
                   <span className="text-foreground truncate">
@@ -85,7 +85,7 @@ function RuntimeModelTable({
                 </div>
               </div>
             </td>
-            <td className="text-foreground px-2 py-1.5">{providerLabel(model.providerKind)}</td>
+            <td className="text-foreground px-2 py-1.5">{providerLabel(model.providerKind, t)}</td>
             <td className="px-2 py-1.5">
               <div className="flex items-center justify-end gap-1.5">
                 <Button

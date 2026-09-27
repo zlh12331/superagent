@@ -18,6 +18,7 @@
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -61,7 +62,7 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
       const output = `文件内容（${result.totalLines} 行）:\n\n${result.content}\n\n---\n文件统计:\n- 总行数: ${stats.totalLines}\n- 代码行: ${stats.codeLines}\n- 注释行: ${stats.commentLines}\n- 空行: ${stats.blankLines}`;
 
       return {
-        title: `代码审查: ${input.path}`,
+        title: t('tools.codeReview.title', { path: input.path }),
         output,
         metadata: {
           path: resolved,

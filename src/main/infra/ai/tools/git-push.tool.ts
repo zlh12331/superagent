@@ -16,6 +16,7 @@
 
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
+import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitPushInputSchema = z.object({
@@ -66,7 +67,7 @@ export function createGitPushTool(gitService: IGitService): Tool<GitPushInput> {
             ? `${input.remote}/${input.refspec}`
             : `${input.remote}/<current-branch>`;
         return {
-          title: 'Git: 推送失败',
+          title: t('tools.gitPush.failed'),
           output: `推送失败：${target}\n${result.stderr}`,
           metadata: {
             ok: false,
@@ -88,7 +89,7 @@ export function createGitPushTool(gitService: IGitService): Tool<GitPushInput> {
         (result.stderr.length > 0 ? result.stderr : '');
 
       return {
-        title: 'Git: 推送成功',
+        title: t('tools.gitPush.success'),
         output: summary,
         metadata: {
           ok: true,

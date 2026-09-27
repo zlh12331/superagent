@@ -14,8 +14,8 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
-
 import type { ICodebaseService } from '../../codebase/codebase-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -101,7 +101,7 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
               `${i + 1}. ${r.node.qualifiedName} — ${r.node.filePath}:${r.node.startLine} (${r.node.kind}, score=${r.score.toFixed(2)})`,
           );
           return {
-            title: `符号搜索: ${input.search}`,
+            title: t('tools.codebase.symbolSearch', { search: input.search }),
             output: lines.length > 0 ? lines.join('\n') : '未找到匹配符号',
             metadata: { count: res.results.length },
           };
@@ -116,7 +116,7 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             query: input.exploreQuery,
             maxFiles: input.maxFiles ?? 5,
           });
-          return { title: '代码区域探索', output: res.markdown };
+          return { title: t('tools.codebase.explore'), output: res.markdown };
         }
 
         case 'node': {
@@ -133,7 +133,9 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbolsOnly: input.symbolsOnly,
           });
           return {
-            title: `符号/文件详情: ${input.symbol ?? input.file ?? '(项目概览)'}`,
+            title: t('tools.codebase.detail', {
+              target: input.symbol ?? input.file ?? '(项目概览)',
+            }),
             output: res.markdown,
           };
         }
@@ -147,7 +149,10 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbol: input.symbol,
             limit: input.limit ?? 20,
           });
-          return { title: `调用方: ${input.symbol}`, output: res.markdown };
+          return {
+            title: t('tools.codebase.callers', { symbol: input.symbol }),
+            output: res.markdown,
+          };
         }
 
         case 'callees': {
@@ -159,7 +164,10 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbol: input.symbol,
             limit: input.limit ?? 20,
           });
-          return { title: `被调用方: ${input.symbol}`, output: res.markdown };
+          return {
+            title: t('tools.codebase.callees', { symbol: input.symbol }),
+            output: res.markdown,
+          };
         }
 
         case 'impact': {
@@ -171,7 +179,10 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbol: input.symbol,
             depth: input.depth ?? 2,
           });
-          return { title: `影响分析: ${input.symbol}`, output: res.markdown };
+          return {
+            title: t('tools.codebase.impact', { symbol: input.symbol }),
+            output: res.markdown,
+          };
         }
       }
     },

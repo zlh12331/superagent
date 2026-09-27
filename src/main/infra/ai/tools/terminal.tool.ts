@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { ITerminalService } from '../../terminal/terminal-service';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -54,7 +55,10 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
     execute: async (input: TerminalInput, ctx: ToolContext): Promise<ToolResult> => {
       // 无头场景（IM 桥接等）拒绝：终端输出推送依赖桌面窗口
       if (ctx.webContents === undefined) {
-        return { title: '终端不可用', output: '终端工具需要桌面窗口，无头执行不支持。' };
+        return {
+          title: t('tools.terminal.unavailable'),
+          output: '终端工具需要桌面窗口，无头执行不支持。',
+        };
       }
       switch (input.action) {
         case 'create': {
@@ -74,7 +78,7 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
           });
           const title = input.command ?? 'shell';
           return {
-            title: `创建终端: ${title}`,
+            title: t('tools.terminal.create', { title }),
             output: `终端已创建，terminalId: ${result.terminalId}\n工作目录: ${resolved}\nPID: ${result.pid}`,
             metadata: {
               terminalId: result.terminalId,
@@ -91,40 +95,49 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
         }
         case 'input': {
           if (input.terminalId === undefined || input.data === undefined) {
-            return { title: '参数缺失', output: 'input 操作需要 terminalId 与 data 参数' };
+            return {
+              title: t('tools.terminal.missingParams'),
+              output: 'input 操作需要 terminalId 与 data 参数',
+            };
           }
           const result = await terminalService.input(input.terminalId, input.data);
           if (!result.ok) {
             return {
-              title: `输入终端: ${input.terminalId}`,
+              title: t('tools.terminal.input', { id: input.terminalId }),
               output: `[错误] 终端不存在或已关闭: ${input.terminalId}`,
               metadata: { terminalId: input.terminalId, ok: false },
             };
           }
           return {
-            title: `输入终端: ${input.terminalId}`,
+            title: t('tools.terminal.input', { id: input.terminalId }),
             output: `已写入 ${input.data.length} 字节到终端`,
             metadata: { terminalId: input.terminalId, ok: true, bytesWritten: input.data.length },
           };
         }
         case 'read': {
           if (input.terminalId === undefined) {
-            return { title: '参数缺失', output: 'read 操作需要 terminalId 参数' };
+            return {
+              title: t('tools.terminal.missingParams'),
+              output: 'read 操作需要 terminalId 参数',
+            };
           }
           const output = terminalService.getOutput(input.terminalId);
           return {
-            title: `读取终端: ${input.terminalId}`,
+            title: t('tools.terminal.read', { id: input.terminalId }),
             output: output || '(无输出)',
             metadata: { terminalId: input.terminalId, outputLength: output.length },
           };
         }
         case 'clear': {
           if (input.terminalId === undefined) {
-            return { title: '参数缺失', output: 'clear 操作需要 terminalId 参数' };
+            return {
+              title: t('tools.terminal.missingParams'),
+              output: 'clear 操作需要 terminalId 参数',
+            };
           }
           terminalService.clearOutput(input.terminalId);
           return {
-            title: `清空终端: ${input.terminalId}`,
+            title: t('tools.terminal.clear', { id: input.terminalId }),
             output: '终端输出缓冲已清空',
             metadata: { terminalId: input.terminalId },
           };
@@ -135,18 +148,21 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
             input.cols === undefined ||
             input.rows === undefined
           ) {
-            return { title: '参数缺失', output: 'resize 操作需要 terminalId、cols 与 rows 参数' };
+            return {
+              title: t('tools.terminal.missingParams'),
+              output: 'resize 操作需要 terminalId、cols 与 rows 参数',
+            };
           }
           const result = await terminalService.resize(input.terminalId, input.cols, input.rows);
           if (!result.ok) {
             return {
-              title: `调整终端: ${input.terminalId}`,
+              title: t('tools.terminal.resize', { id: input.terminalId }),
               output: `[错误] 终端不存在或已关闭: ${input.terminalId}`,
               metadata: { terminalId: input.terminalId, ok: false },
             };
           }
           return {
-            title: `调整终端: ${input.terminalId}`,
+            title: t('tools.terminal.resize', { id: input.terminalId }),
             output: `终端尺寸已调整为 ${input.cols}x${input.rows}`,
             metadata: {
               terminalId: input.terminalId,
@@ -158,18 +174,21 @@ export function createTerminalTool(terminalService: ITerminalService): Tool<Term
         }
         case 'kill': {
           if (input.terminalId === undefined) {
-            return { title: '参数缺失', output: 'kill 操作需要 terminalId 参数' };
+            return {
+              title: t('tools.terminal.missingParams'),
+              output: 'kill 操作需要 terminalId 参数',
+            };
           }
           const result = await terminalService.kill(input.terminalId);
           if (!result.ok) {
             return {
-              title: `终止终端: ${input.terminalId}`,
+              title: t('tools.terminal.kill', { id: input.terminalId }),
               output: `[错误] 终端不存在: ${input.terminalId}`,
               metadata: { terminalId: input.terminalId, ok: false },
             };
           }
           return {
-            title: `终止终端: ${input.terminalId}`,
+            title: t('tools.terminal.kill', { id: input.terminalId }),
             output: '终端已终止',
             metadata: { terminalId: input.terminalId, ok: true },
           };

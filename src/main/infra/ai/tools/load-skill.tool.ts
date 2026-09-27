@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { SkillRegistry } from '../skills/skill-registry';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -33,7 +34,7 @@ export function createLoadSkillTool(skills: SkillRegistry): Tool<LoadSkillInput>
       const skill = skills.load(input.name);
       if (skill === undefined) {
         return {
-          title: `技能不存在: ${input.name}`,
+          title: t('tools.loadSkill.notFound', { name: input.name }),
           output: `技能 "${input.name}" 不存在。可用技能：${skills
             .list()
             .map((s) => s.name)
@@ -41,7 +42,7 @@ export function createLoadSkillTool(skills: SkillRegistry): Tool<LoadSkillInput>
         };
       }
       return {
-        title: `已加载技能: ${skill.name}`,
+        title: t('tools.loadSkill.loaded', { name: skill.name }),
         output: `【技能：${skill.name}】${skill.description}\n\n${skill.prompt}`,
       };
     },

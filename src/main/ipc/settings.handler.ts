@@ -17,6 +17,7 @@ import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
+import { setMainLanguage } from '../infra/i18n';
 import { readApprovalModeSync, writeApprovalMode } from '../infra/storage/approval-pref';
 import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
 import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
@@ -52,6 +53,10 @@ export function createSettingsHandlers(params: {
       // 主题变更联动窗口控件色（Windows titleBarOverlay，零新增 IPC 的主进程收口）
       if (input.key === 'theme') {
         syncTitleBarOverlayFromTheme(input.value);
+      }
+      // 语言变更同步主进程 i18n（工具 title 等下一回合生效；theme 同款主进程收口模式）
+      if (input.key === 'language') {
+        setMainLanguage(input.value);
       }
       return { ok: true };
     },

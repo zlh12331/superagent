@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -41,12 +42,12 @@ export function createTaskUpdateTool(): Tool<TaskUpdateInput> {
       const ok = taskService.update(input.taskId, input.status);
       if (!ok) {
         return {
-          title: '任务更新失败',
+          title: t('tools.taskUpdate.failed'),
           output: `任务 ${input.taskId} 更新为 ${input.status} 失败：任务不存在或已处于终端状态。`,
         };
       }
       return {
-        title: `任务状态更新: ${input.status}`,
+        title: t('tools.taskUpdate.status', { status: input.status }),
         output: `任务 ${input.taskId} 已更新为 ${input.status}。`,
       };
     },

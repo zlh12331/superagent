@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -41,7 +42,7 @@ export function createTaskListTool(): Tool<TaskListInput> {
     execute: async (input: TaskListInput, ctx: ToolContext): Promise<ToolResult> => {
       const tasks = taskService.list(input.sessionId ?? ctx.sessionId);
       if (tasks.length === 0) {
-        return { title: '任务列表', output: '（当前会话暂无任务）' };
+        return { title: t('tools.taskList.title'), output: '（当前会话暂无任务）' };
       }
       const lines = tasks.map((task) => {
         const label = STATUS_LABELS[task.status] ?? task.status;
@@ -50,7 +51,7 @@ export function createTaskListTool(): Tool<TaskListInput> {
         return `- [${label}] ${task.description.slice(0, 60)}\n  id=${task.id} · 创建 ${new Date(task.startTime).toLocaleString()}${ended}`;
       });
       return {
-        title: `任务列表: ${tasks.length} 条`,
+        title: t('tools.taskList.titleWithCount', { count: tasks.length }),
         output: lines.join('\n'),
       };
     },

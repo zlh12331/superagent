@@ -189,6 +189,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **pre-push 钩子（2026-09-22 精简为仅密钥扫描）**：`gitleaks git --log-opts="<远端 main>..HEAD"`（实测 1.4 秒；未安装 gitleaks 则**失败**，`SKIP_PREPUSH=1` 显式跳过）。原先的 typecheck / lint / check:static / depcruise / drizzle 漂移 / test:scripts 六步与 `ci.yml` 的 quality job 完全重复，已删除、交由 CI 权威把关；本地全量验证改用 `pnpm verify:local` / `pnpm verify:local:full`。保留密钥扫描的理由是**唯一不可逆的失效**（推上去即只能作废重签）。⚠️ 配套：`.gitleaks.toml` 必须有 `[extend] useDefault = true`——缺它则规则数归零、扫描恒报 `no leaks found`（2026-09-22 前一直如此，三道 gitleaks 闸全为空转）；allowlist 需覆盖 `.pnpm-store/`、`.electron-user-data*/`、`.e2e-user-data*/`、`.tmp/`，否则 `gitleaks dir .` 会扫到 3.21 GB 非版本库内容（191 秒 / 451 条噪音命中）
 - **TypeDoc**：`pnpm docs:types` 在 tools/typedoc 子包运行（TS6 隔离，规避 TS7 不兼容）
 - **包体积分析**：`pnpm analyze:bundle`（rollup-plugin-visualizer，ANALYZE_BUNDLE=1）
+- **Mimosa 提交扫描约定（2026-09-27 搁置 D 约定落地）**：Mimosa 对 git commit 的前置深度扫描是 **advisory（建议级）放行**——扫描未得出完整结论时（如 `scanner_enobufs`）不阻断提交，仅输出「按兼容策略继续，不要宣称项目安全」提示。三条纪律：① advisory 放行**不等于安全通过**，任何提交/汇报不得以「Mimosa 已放行」作为安全宣称；② 以**周期性手动完整扫描**补位（Mimosa 深度扫描按需对项目根运行，建议随 `verify:local:full` 节奏或重大改动后手动触发）；③ 扫描提示要求「尽快重新运行完整审计」时，应在当次会话内安排，不跨任务积压。
 
 ## 构建产物 & Git
 

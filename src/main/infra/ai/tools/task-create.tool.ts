@@ -8,6 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { TaskKind, taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -33,7 +34,7 @@ export function createTaskCreateTool(): Tool<TaskCreateInput> {
     execute: async (input: TaskCreateInput, ctx: ToolContext): Promise<ToolResult> => {
       const taskId = taskService.create(ctx.sessionId, TaskKind.AGENT, input.description);
       return {
-        title: `任务已创建: ${input.description.slice(0, 30)}`,
+        title: t('tools.taskCreate.created', { desc: input.description.slice(0, 30) }),
         output: `任务创建成功：${taskId}\n描述：${input.description}`,
       };
     },

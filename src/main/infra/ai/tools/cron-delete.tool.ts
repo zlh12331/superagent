@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { cronService } from '../cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -30,9 +31,12 @@ export function createCronDeleteTool(): Tool<CronDeleteInput> {
     execute: async (input: CronDeleteInput, _ctx: ToolContext): Promise<ToolResult> => {
       const ok = cronService.delete(input.taskId);
       if (!ok) {
-        return { title: '定时任务删除失败', output: `任务 ${input.taskId} 不存在。` };
+        return { title: t('tools.cron.delete.failed'), output: `任务 ${input.taskId} 不存在。` };
       }
-      return { title: '定时任务已删除', output: `任务 ${input.taskId} 已删除，不再触发。` };
+      return {
+        title: t('tools.cron.delete.deleted'),
+        output: `任务 ${input.taskId} 已删除，不再触发。`,
+      };
     },
   };
 }

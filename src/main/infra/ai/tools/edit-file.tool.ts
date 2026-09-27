@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -48,7 +49,7 @@ export function createEditFileTool(): Tool<EditFileInput> {
       // 键与 read-file 的 record 侧一致（均为 realTarget）
       if (!readTracker.has(ctx.sessionId, realTarget)) {
         return {
-          title: '文件未读取',
+          title: t('tools.fileNotRead'),
           output:
             '编辑前必须先读取文件内容。请先使用 read_file 工具读取该文件（含要修改的区域），再调用 edit_file。',
         };
@@ -99,7 +100,7 @@ export function createEditFileTool(): Tool<EditFileInput> {
         const isDelete = input.newString.length === 0;
         const action = isDelete ? '删除' : input.replaceAll ? '替换全部' : '替换';
         return {
-          title: `编辑文件: ${input.path}`,
+          title: t('tools.editFile.title', { path: input.path }),
           output: `已${action} ${replacedCount} 处（+${addedLines} 行 / -${removedLines} 行，写入 ${buffer.byteLength} 字节）`,
           metadata: {
             path: resolved,

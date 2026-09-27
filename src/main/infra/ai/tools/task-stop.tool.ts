@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { TaskStatus, taskService } from '../agent/task-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -34,12 +35,12 @@ export function createTaskStopTool(): Tool {
       const ok = taskService.update(input.taskId, TaskStatus.CANCELLED);
       if (!ok) {
         return {
-          title: '任务中止失败',
+          title: t('tools.taskStop.failed'),
           output: `任务 ${input.taskId} 中止失败：任务不存在或已处于终端状态。`,
         };
       }
       return {
-        title: '任务已中止',
+        title: t('tools.taskStop.stopped'),
         output: `任务 ${input.taskId} 已中止（CANCELLED）${input.reason !== undefined ? `，原因：${input.reason}` : ''}。`,
       };
     },

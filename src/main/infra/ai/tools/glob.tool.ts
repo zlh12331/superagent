@@ -4,6 +4,7 @@
 
 import type { GlobRes } from '@code-agent/shared/main';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { ISearchService } from '../../search/search-service';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -53,7 +54,7 @@ export function createGlobTool(searchService: ISearchService): Tool<GlobInput> {
       });
 
       return {
-        title: `文件匹配: ${input.pattern}`,
+        title: t('tools.glob.title', { pattern: input.pattern }),
         output: result.files.join('\n') || '(无匹配结果)',
         metadata: {
           pattern: input.pattern,
