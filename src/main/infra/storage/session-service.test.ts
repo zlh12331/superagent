@@ -512,9 +512,11 @@ describe('SessionService', () => {
       // updatedAt 倒序：后建的会话二在前
       expect(payload.sessions[0]?.meta.id).toBe(second);
       expect(payload.sessions[1]?.meta.id).toBe(first);
-      // 组内消息按 seq 升序
+      // 组内消息按 seq 升序（t2 起 messages 为 version=1 信封形态：seq/content/createdAt）
       expect(payload.sessions[1]?.messages).toHaveLength(3);
-      expect(payload.sessions[0]?.messages).toEqual([{ role: 'user', content: 'b1' }]);
+      expect(payload.sessions[0]?.messages).toEqual([
+        { seq: 0, content: { role: 'user', content: 'b1' }, createdAt: expect.any(Number) },
+      ]);
     });
 
     it('空库导出：sessions 为空数组且不发起消息查询', async () => {

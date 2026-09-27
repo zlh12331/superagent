@@ -1,13 +1,15 @@
 // src/main/ipc/session.handler.test.ts
-// session.handler 单测：12 个 session:* 方法的参数转发与错误路径（三件套）
+// session.handler 单测：session:* 方法的参数转发与错误路径（三件套）
 // ──────────────────────────────────────────────────────────────
 // 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
 // - fake SessionService 经 deps 注入（handler 薄层：参数转发断言）
 // - electron dialog/app 用 vi.mock 外壳（原生模块，允许 mock）
 // - exportAll 三态：取消 / 成功写文件 / 写文件失败
+// - importAll 三态：取消 / 成功读文件转发 / 非法 JSON（大小上限同 utils/json-file）
 // ──────────────────────────────────────────────────────────────
 
 import { writeFile } from 'node:fs/promises';
+import { ErrorCode } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSessionHandlers, type SessionHandlerDeps } from './session.handler';
 
@@ -15,19 +17,30 @@ import { createSessionHandlers, type SessionHandlerDeps } from './session.handle
 const mocks = vi.hoisted(() => ({
   mockGetPath: vi.fn(() => 'C:\\Users\\test\\Documents'),
   mockShowSaveDialog: vi.fn(async () => ({ canceled: false, filePath: 'C:\\out.json' })),
+  mockShowOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:\\in.json'] })),
+  mockReadFile: vi.fn(async () => '{}'),
+  mockStat: vi.fn(async () => ({ size: 10 })),
 }));
 
 vi.mock('electron', () => ({
   app: { getPath: mocks.mockGetPath },
-  dialog: { showSaveDialog: mocks.mockShowSaveDialog },
+  dialog: {
+    showSaveDialog: mocks.mockShowSaveDialog,
+    showOpenDialog: mocks.mockShowOpenDialog,
+  },
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, writeFile: vi.fn() };
+  return {
+    ...actual,
+    writeFile: vi.fn(),
+    readFile: mocks.mockReadFile,
+    stat: mocks.mockStat,
+  };
 });
 
-/** fake SessionService：12 个方法全部可编程 */
+/** fake SessionService：全部方法可编程 */
 function createFakeSessionService() {
   return {
     list: vi.fn(async () => ({ sessions: [], total: 0 })),
@@ -38,6 +51,7 @@ function createFakeSessionService() {
     create: vi.fn(async () => 'sid-1'),
     listRecentDirs: vi.fn(async () => ({ dirs: [] })),
     exportAll: vi.fn(async () => ({ sessions: [], total: 0 })),
+    importAll: vi.fn(async () => ({ imported: 0, skipped: 0 })),
     getUsageSummary: vi.fn(async () => ({ totalTokens: 0, totalTurns: 0 })),
     getTurns: vi.fn(async () => ({ sessionId: '', turns: [] })),
     getRecentTurns: vi.fn(async () => ({ turns: [] })),
@@ -194,6 +208,67 @@ describe('session.handler.exportAll（三态）', () => {
       throw new Error('EACCES');
     });
     await expect(handlers.exportAll(undefined, EMPTY_CTX)).rejects.toThrow('EACCES');
+  });
+});
+
+describe('session.handler.importAll（三态）', () => {
+  let sessionService: ReturnType<typeof createFakeSessionService>;
+  let handlers: ReturnType<typeof createSessionHandlers>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.mockShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\in.json'] });
+    mocks.mockReadFile.mockResolvedValue('{}');
+    mocks.mockStat.mockResolvedValue({ size: 10 } as never);
+    sessionService = createFakeSessionService();
+    handlers = createSessionHandlers({
+      sessionService,
+      compactMessages: createFakeCompactMessages(),
+    });
+  });
+
+  it('正向：选文件 → 读文件 + JSON 解析 → service.importAll 转发', async () => {
+    const payload = { version: 1, exportedAt: 1, app: 'x', sessions: [] };
+    mocks.mockReadFile.mockResolvedValueOnce(JSON.stringify(payload));
+    vi.mocked(sessionService.importAll).mockResolvedValueOnce({ imported: 2, skipped: 1 });
+
+    const res = await handlers.importAll(undefined, EMPTY_CTX);
+
+    expect(sessionService.importAll).toHaveBeenCalledWith(payload);
+    expect(res).toEqual({ imported: 2, skipped: 1 });
+  });
+
+  it('边界：用户取消 → { imported: 0, skipped: 0 }，不读文件不转发', async () => {
+    mocks.mockShowOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    const res = await handlers.importAll(undefined, EMPTY_CTX);
+    expect(res).toEqual({ imported: 0, skipped: 0 });
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(sessionService.importAll).not.toHaveBeenCalled();
+  });
+
+  it('边界：filePaths 空 → { imported: 0, skipped: 0 }（noUncheckedIndexedAccess 守卫）', async () => {
+    mocks.mockShowOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [] });
+    const res = await handlers.importAll(undefined, EMPTY_CTX);
+    expect(res).toEqual({ imported: 0, skipped: 0 });
+    expect(sessionService.importAll).not.toHaveBeenCalled();
+  });
+
+  it('异常：文件不是合法 JSON → AppError(INVALID_INPUT)，service 不被调用', async () => {
+    mocks.mockReadFile.mockResolvedValueOnce('not-json{');
+    await expect(handlers.importAll(undefined, EMPTY_CTX)).rejects.toMatchObject({
+      name: 'AppError',
+      code: ErrorCode.INVALID_INPUT,
+    });
+    expect(sessionService.importAll).not.toHaveBeenCalled();
+  });
+
+  it('异常：文件超大小上限 → AppError(INVALID_INPUT)', async () => {
+    mocks.mockStat.mockResolvedValueOnce({ size: 256 * 1024 * 1024 + 1 } as never);
+    await expect(handlers.importAll(undefined, EMPTY_CTX)).rejects.toMatchObject({
+      name: 'AppError',
+      code: ErrorCode.INVALID_INPUT,
+    });
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
   });
 });
 

@@ -17,7 +17,10 @@ import type {
   MemoryClearAllRes,
   MemoryListRes,
   MemoryStatusRes,
+  SessionImportRes,
   SessionRecentTurnsRes,
+  SettingsExportRes,
+  SettingsImportRes,
   SkillListRes,
   ToolListRes,
   UpdateCacheInfo,
@@ -406,6 +409,42 @@ export async function exportAllSessions(): Promise<SessionExportAllRes> {
     return { saved: false };
   }
   return unwrap(await window.api.session.exportAll());
+}
+
+/**
+ * 导入会话（主进程 dialog 选文件 + 校验 + 落库）
+ *
+ * @returns 无桥时返回零计数（调用方按取消分支静默处理）
+ */
+export async function importAllSessions(): Promise<SessionImportRes> {
+  if (!hasIpcBridge()) {
+    return { imported: 0, skipped: 0 };
+  }
+  return unwrap(await window.api.session.importAll());
+}
+
+/**
+ * 导出设置（app_settings 全表 JSON；keychain 凭据除外）
+ *
+ * @returns 无桥时视为用户取消（saved: false）
+ */
+export async function exportSettingsFile(): Promise<SettingsExportRes> {
+  if (!hasIpcBridge()) {
+    return { saved: false };
+  }
+  return unwrap(await window.api.settings.exportSettings());
+}
+
+/**
+ * 导入设置（主进程 dialog 选文件 + 白名单过滤 + 事务写入）
+ *
+ * @returns 无桥时返回零计数（调用方按取消分支静默处理）
+ */
+export async function importSettingsFile(): Promise<SettingsImportRes> {
+  if (!hasIpcBridge()) {
+    return { imported: 0, skipped: 0 };
+  }
+  return unwrap(await window.api.settings.importSettings());
 }
 
 /**

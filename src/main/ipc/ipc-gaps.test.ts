@@ -43,7 +43,12 @@ vi.mock('electron', () => ({
 
 /** 构造 handler 上下文（sender 为最小 webContents 形状） */
 function createCtx(): IpcHandlerContext {
-  return { sender: {} as never, traceId: 'trace-gap' };
+  return {
+    // emit-event 的 isDestroyed 守卫与 send 推送要求 sender 实现这两个方法；
+    // agent:stream:start 推送（run 路径）会触达 emitEvent
+    sender: { isDestroyed: () => false, send: () => {} } as never,
+    traceId: 'trace-gap',
+  };
 }
 
 describe('IPC 薄层批次8 缺口补全', () => {

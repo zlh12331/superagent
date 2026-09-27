@@ -67,18 +67,42 @@ const MAX_SETTING_VALUE_CHARS = 256 * 1024;
  */
 export function writeSetting(key: string, value: unknown): void {
   assertKey(key);
-  const serialized = JSON.stringify(value);
-  if (serialized.length > MAX_SETTING_VALUE_CHARS) {
-    throw new Error(`设置值过大（${serialized.length} > ${MAX_SETTING_VALUE_CHARS} 字符）：${key}`);
+  writeSettings([{ key, value }]);
+}
+
+/**
+ * 批量写入设置（单事务原子提交）
+ *
+ * 设置导入（settings:import）使用：逐键过白名单后的写入走本方法——
+ * 任一键值非法（超尺寸/不可序列化）→ 整批回滚，不产生"半截导入"。
+ * 幂等：upsert 语义，重复导入同一文件结果一致。
+ *
+ * @throws Error key 非法（assertKey）或任一 value 序列化超限（事务整体回滚）
+ */
+export function writeSettings(entries: ReadonlyArray<{ key: string; value: unknown }>): void {
+  if (entries.length === 0) {
+    return;
   }
-  getDb()
-    .insert(appSettings)
-    .values({ key, value: serialized, updatedAt: Date.now() })
-    .onConflictDoUpdate({
-      target: appSettings.key,
-      set: { value: sql`excluded.value`, updatedAt: sql`excluded.updated_at` },
-    })
-    .run();
+  for (const entry of entries) {
+    assertKey(entry.key);
+  }
+  getDb().transaction((tx) => {
+    for (const entry of entries) {
+      const serialized = JSON.stringify(entry.value);
+      if (serialized.length > MAX_SETTING_VALUE_CHARS) {
+        throw new Error(
+          `设置值过大（${serialized.length} > ${MAX_SETTING_VALUE_CHARS} 字符）：${entry.key}`,
+        );
+      }
+      tx.insert(appSettings)
+        .values({ key: entry.key, value: serialized, updatedAt: Date.now() })
+        .onConflictDoUpdate({
+          target: appSettings.key,
+          set: { value: sql`excluded.value`, updatedAt: sql`excluded.updated_at` },
+        })
+        .run();
+    }
+  });
 }
 
 /** 删除单个设置（当前无消费方，预留 API；幂等） */

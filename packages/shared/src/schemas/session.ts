@@ -413,3 +413,96 @@ export const SessionCompactResSchema = z.object({
   reclaimedTokens: z.number().int().nonnegative(),
   messages: z.array(z.unknown()),
 });
+
+// ── 会话导出文件格式（版本化，数据资产可迁移） ──────────────────────
+// SessionExportFileSchema 是导出文件的唯一契约真源：导出侧（SessionService.exportAll）
+// 按它产出，导入侧（session:import）按它校验——仅接受当前版本，无野外旧格式兼容。
+
+/** 当前会话导出文件格式版本（导入侧仅接受本版本） */
+export const SESSION_EXPORT_VERSION = 1;
+
+/**
+ * 导出消息条目（messages 表行对称）
+ *
+ * content 为完整 ModelMessage 的 JSON 值（导出侧 JSON.parse 后嵌入；
+ * DB 内容损坏无法解析时保留原始字符串，导入侧原样回写不二次编码）。
+ * turnId 归属回合 id（与 messages.turn_id 对称；缺失 = 未归属回合）。
+ */
+export const SessionExportMessageSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  turnId: z.string().min(1).optional(),
+  content: z.unknown(),
+  createdAt: z.number().int(),
+});
+
+/** 导出消息条目类型 */
+export type SessionExportMessage = z.infer<typeof SessionExportMessageSchema>;
+
+/**
+ * 导出 token 用量条目（token_usage 表行对称，sessionId 由外层会话提供）
+ */
+export const SessionExportUsageSchema = z.object({
+  modelId: z.string(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .transform((v) => v ?? undefined),
+  reasoningTokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .transform((v) => v ?? undefined),
+  createdAt: z.number().int(),
+});
+
+/** 导出 token 用量条目类型 */
+export type SessionExportUsage = z.infer<typeof SessionExportUsageSchema>;
+
+/**
+ * 导出单个会话（元数据 + 消息 + 回合 + 用量）
+ *
+ * turns 复用 TurnSummarySchema（turns 表行对称，sessionId 由外层会话提供）。
+ */
+export const SessionExportItemSchema = z.object({
+  meta: SessionMetaSchema,
+  messages: z.array(SessionExportMessageSchema),
+  turns: z.array(TurnSummarySchema),
+  usage: z.array(SessionExportUsageSchema),
+});
+
+/** 导出单个会话类型 */
+export type SessionExportItemShape = z.infer<typeof SessionExportItemSchema>;
+
+/**
+ * 会话导出文件 schema（version=1）
+ *
+ * 导出侧输出与导入侧校验共用：导入只接受带本版本标记的文件（首次版本化，
+ * 无历史野外格式需要兼容）；version 不匹配 → INVALID_INPUT 拒绝导入。
+ */
+export const SessionExportFileSchema = z.object({
+  version: z.literal(SESSION_EXPORT_VERSION),
+  exportedAt: z.number().int(),
+  app: z.string(),
+  sessions: z.array(SessionExportItemSchema),
+});
+
+/** 会话导出文件类型 */
+export type SessionExportFile = z.infer<typeof SessionExportFileSchema>;
+
+/** session:import 响应 payload（imported = 新增会话数；skipped = 同 id 已存在跳过数） */
+export interface SessionImportRes {
+  readonly imported: number;
+  readonly skipped: number;
+}
+
+/** session:import 响应 zod schema（响应契约校验用） */
+export const SessionImportResSchema = z.object({
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+});
