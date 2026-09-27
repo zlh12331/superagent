@@ -13,12 +13,12 @@ import {
   applyTighten,
   type CoverageFloorsFile,
   FLOORS_TABLE_HEADER,
-  formatMetricSet,
   LAYER_CONFIGS,
   LAYER_KEYS,
   type LayerFloors,
   loadCoverageFloors,
   MEASURE_BUFFER,
+  METRIC_KEYS,
   parseCoverageFloors,
   proposeTighten,
   raiseSet,
@@ -294,10 +294,15 @@ describe('真实仓库接线（回归防护）', () => {
     ]);
   });
 
-  it('渲染层门槛不得被伪造成业务层规范值', () => {
+  // 历史护栏「floor ≠ 规范值 80/75/80/80」随 2026-09-26 缺口清零失效（19fae76 补测达标），
+  // 改守不变式本身：floor 不得高于 min(规范目标, 实测−缓冲)，必须可由实测复现。
+  // 伪造场景（实测 64 时代硬写 80/75/80/80）在此断言下仍被拦：上限只有 59/50/54/59。
+  it('渲染层 floor 不得超出实测可复现的上限（伪造成规范值仍会被拦）', () => {
     const file = loadCoverageFloors(join(REPO_ROOT, 'scripts/coverage-floors.json'));
-    const rendererFloor = formatMetricSet(file.layers.renderer.floor);
-    expect(rendererFloor === '80/75/80/80').toBe(false);
+    const renderer = file.layers.renderer;
+    const ceiling = proposeTighten(renderer);
+    const faked = METRIC_KEYS.filter((metric) => renderer.floor[metric] > ceiling[metric]);
+    expect(faked).toEqual([]);
   });
 });
 

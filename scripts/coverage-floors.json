@@ -1,6 +1,6 @@
 {
   "$comment": "覆盖率门槛单一真源（禁止在各层 vitest.config.ts 内联数字）。各层字段语义：specTarget=该层规范目标；floor=当前强制门槛（vitest 读取）；ratchet=已批准的历史最高门槛（只能升不能降）；measured=最近一次真实实测（报告口径，禁止只公布最好看的数字）。",
-  "updatedAt": "2026-08-31",
+  "updatedAt": "2026-09-27",
   "maxStaleDays": 60,
   "$comment2": "校验规则（scripts/check-coverage-floors.ts）：① 各层 vitest.config.ts 不得再内联数字，只能读本文件；② floor ≥ ratchet（棘轮只能升，降级需显式改 ratchet 并说明理由）；③ measured ≥ floor（数字必须自洽，禁止美化实测）；④ measuredAt 不得超过 maxStaleDays 天，否则重跑 pnpm test:coverage 回填。",
   "layers": {
@@ -21,7 +21,7 @@
       "measuredAt": "2026-08-31"
     },
     "renderer": {
-      "$comment": "渲染层真实门槛显著低于业务层规范值（存量缺口：Markdown/message-item 等纯展示组件由 E2E journey+visual 兜底；settings 子集单列见 rendererSettings 层）。此处记录的是**真实下限**，不得对外表述为 80/75/80/80；缺口以本文件 measured 与 specTarget 之差为准。2026-08-31 P1 补测后 75.35/66.16/71.25/76.36；2026-09-26 direct-ipc 清迁 + memo→Compiler + lib 桥接模块补测后实测 89.56/81.93/87.42/90.32",
+      "$comment": "渲染层门槛曾显著低于业务层规范值（历史缺口：Markdown/message-item 等纯展示组件由 E2E journey+visual 兜底；settings 子集单列见 rendererSettings 层）。2026-08-31 P1 补测后实测 75.35/66.16/71.25/76.36；2026-09-26 direct-ipc 清迁 + memo→Compiler + lib 桥接模块补测后实测 89.56/81.93/87.42/90.32，缺口清零，floor 按 min(规范目标, 实测−缓冲) 升至规范值 80/75/80/80（「真实下限」语义由 scripts/lib/coverage-floors.test.ts 的「floor ≤ 实测可复现上限」护栏承接，伪造仍会被拦）",
       "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
       "floor": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
       "ratchet": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
