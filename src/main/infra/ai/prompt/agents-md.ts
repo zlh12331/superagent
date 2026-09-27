@@ -170,12 +170,12 @@ function walkAgentsMdUpward(root: string, maxBytes: number): FoundAgentsMd[] {
  *
  * @param workingDir 工作目录绝对路径
  * @param maxBytes 总字节预算（默认 8KB），超出后停止收集
- * @returns 按优先级排序的 FoundAgentsMd 数组（workingDir 的在最前）
+ * @returns 按优先级排序的 FoundAgentsMd 数组（workingDir 的在最前；memo 命中时为缓存实例，调用方不得修改）
  */
 export function discoverAgentsMd(
   workingDir: string,
   maxBytes: number = BYTE_BUDGET,
-): FoundAgentsMd[] {
+): readonly FoundAgentsMd[] {
   const root = resolve(workingDir);
   const memoKey = `${root}\u0000${maxBytes}`;
   const cached = memo.get(memoKey);
@@ -206,10 +206,10 @@ export function discoverAgentsMd(
  * <content>
  * ```
  *
- * @param files 发现的 AGENTS.md 文件列表
+ * @param files 发现的 AGENTS.md 文件列表（discoverAgentsMd 返回的只读数组可直接传入）
  * @returns 格式化后的字符串；无文件时返回空字符串
  */
-export function formatAgentsMdSection(files: FoundAgentsMd[]): string {
+export function formatAgentsMdSection(files: readonly FoundAgentsMd[]): string {
   if (files.length === 0) {
     return '';
   }
