@@ -21,6 +21,7 @@ import { promises as fs } from 'node:fs';
 import type { FileWriteRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -65,7 +66,7 @@ export function createWriteFileTool(fileService: IFileService): Tool<WriteFileIn
       const exists = await fileExists(realTarget);
       if (exists && !readTracker.has(ctx.sessionId, realTarget)) {
         return {
-          title: '文件未读取',
+          title: t('tools.fileNotRead'),
           output: '修改已存在文件前必须先读取其内容。请先使用 read_file 工具读取该文件，再写入。',
         };
       }

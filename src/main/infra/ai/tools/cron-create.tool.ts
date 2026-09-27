@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { cronService } from '../cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -35,12 +36,12 @@ export function createCronCreateTool(): Tool<CronCreateInput> {
       try {
         const taskId = cronService.create(ctx.sessionId, input.expression, input.description);
         return {
-          title: '定时任务已创建',
+          title: t('tools.cron.create.created'),
           output: `任务 ${taskId}\n表达式：${input.expression}\n描述：${input.description}\n下次触发：已排定（列表用 cron_list 查看）`,
         };
       } catch (err: unknown) {
         return {
-          title: '定时任务创建失败',
+          title: t('tools.cron.create.failed'),
           output: `无效的 cron 表达式：${err instanceof Error ? err.message : String(err)}`,
         };
       }

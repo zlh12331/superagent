@@ -5,6 +5,7 @@
 import type { FileListRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -55,7 +56,7 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
       });
 
       return {
-        title: `列出目录: ${input.path}`,
+        title: t('tools.listDir.title', { path: input.path }),
         output: lines.join('\n') || '(空目录)',
         metadata: {
           path: resolved,

@@ -1,5 +1,17 @@
 {
   "$comment": "通用 UI 文案 · 中文（默认语言）",
+  "providers": {
+    "deepseek": "DeepSeek",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "ollama": "Ollama",
+    "moonshot": "Moonshot Kimi",
+    "zhipu": "智谱 GLM",
+    "qwen": "通义千问",
+    "doubao": "豆包（火山方舟）",
+    "siliconflow": "硅基流动",
+    "openrouter": "OpenRouter"
+  },
   "common": {
     "loading": "加载中...",
     "save": "保存",

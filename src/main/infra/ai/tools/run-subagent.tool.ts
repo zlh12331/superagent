@@ -8,6 +8,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { getSubagentManager } from '../agent/subagent-manager';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -37,14 +38,14 @@ export function createRunSubagentTool(): Tool<RunSubagentInput> {
       try {
         const result = await manager.run(input.agent, input.task, ctx.workingDir);
         return {
-          title: `子代理完成: ${input.agent}`,
+          title: t('tools.runSubagent.completed', { agent: input.agent }),
           output: result.hasOutput
             ? `【子代理 ${input.agent} 结果】（耗时 ${Math.round(result.durationMs / 1000)}s）\n${result.output}`
             : `【子代理 ${input.agent}】回合完成但无文本输出（可能为纯工具回合），请检查工作区变更。`,
         };
       } catch (err: unknown) {
         return {
-          title: `子代理失败: ${input.agent}`,
+          title: t('tools.runSubagent.failed', { agent: input.agent }),
           output: `子代理执行失败：${err instanceof Error ? err.message : String(err)}`,
         };
       }

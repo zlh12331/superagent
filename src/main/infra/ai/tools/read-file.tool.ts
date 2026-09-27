@@ -19,6 +19,7 @@
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -69,7 +70,7 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
       readTracker.record(ctx.sessionId, realTarget);
 
       return {
-        title: `读取文件: ${input.path}`,
+        title: t('tools.readFile.title', { path: input.path }),
         output: result.content,
         metadata: {
           path: resolved,

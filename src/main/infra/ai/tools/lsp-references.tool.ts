@@ -11,6 +11,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -56,12 +57,12 @@ export function createLspReferencesTool(manager: LspServerManager): Tool<LspRefe
           return `- ${location.uri.replace('file://', '')} (${start.line + 1}:${start.character + 1}-${end.line + 1}:${end.character + 1})`;
         });
         return {
-          title: `引用位置: ${locations.length} 处`,
+          title: t('tools.lspReferences.locations', { count: locations.length }),
           output: lines.join('\n'),
         };
       } catch (err: unknown) {
         return {
-          title: 'lsp_references 失败',
+          title: t('tools.lspReferences.failed'),
           output: `语言服务器不可用：${err instanceof Error ? err.message : String(err)}`,
         };
       }

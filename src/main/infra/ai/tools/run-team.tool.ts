@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { teamService } from '../agent/team-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -75,12 +76,12 @@ export function createRunTeamTool(): Tool<RunTeamInput> {
           ...(result.leaderSummary !== null ? ['', '【领导汇总】', result.leaderSummary] : []),
         ];
         return {
-          title: `团队执行完成: ${result.members.length} 名成员`,
+          title: t('tools.runTeam.completed', { count: result.members.length }),
           output: lines.join('\n\n'),
         };
       } catch (err: unknown) {
         return {
-          title: '团队执行失败',
+          title: t('tools.runTeam.failed'),
           output: `团队执行失败：${err instanceof Error ? err.message : String(err)}`,
         };
       }

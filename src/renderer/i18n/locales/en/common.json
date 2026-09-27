@@ -1,5 +1,17 @@
 {
   "$comment": "Common UI copy · English",
+  "providers": {
+    "deepseek": "DeepSeek",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "ollama": "Ollama",
+    "moonshot": "Moonshot Kimi",
+    "zhipu": "Zhipu GLM",
+    "qwen": "Tongyi Qianwen",
+    "doubao": "Doubao (Volcano Ark)",
+    "siliconflow": "SiliconFlow",
+    "openrouter": "OpenRouter"
+  },
   "common": {
     "loading": "Loading...",
     "save": "Save",

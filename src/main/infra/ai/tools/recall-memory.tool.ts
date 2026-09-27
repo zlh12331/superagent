@@ -9,6 +9,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { isMemoryEnabled } from '../../memory-hub/memory-pref';
 import type { MemoryPort } from '../../memory-hub/types';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -32,18 +33,24 @@ type RecallMemoryInput = z.infer<typeof RecallMemoryInputSchema>;
 async function searchL1(memoryPort: MemoryPort, query: string): Promise<ToolResult> {
   const result = await memoryPort.searchMemories(query, 10);
   if (result.content.trim().length === 0) {
-    return { title: '记忆检索（L1）', output: '未找到相关记忆。' };
+    return { title: t('tools.recallMemory.l1Title'), output: '未找到相关记忆。' };
   }
-  return { title: `记忆检索（L1，${result.total} 条）`, output: result.content };
+  return {
+    title: t('tools.recallMemory.l1WithCount', { count: result.total }),
+    output: result.content,
+  };
 }
 
 /** L0 会话内容检索（跨会话历史对话） */
 async function searchL0(memoryPort: MemoryPort, query: string): Promise<ToolResult> {
   const result = await memoryPort.searchConversations(query, 10);
   if (result.content.trim().length === 0) {
-    return { title: '会话检索（L0）', output: '未找到相关对话内容。' };
+    return { title: t('tools.recallMemory.l0Title'), output: '未找到相关对话内容。' };
   }
-  return { title: `会话检索（L0，${result.total} 条）`, output: result.content };
+  return {
+    title: t('tools.recallMemory.l0WithCount', { count: result.total }),
+    output: result.content,
+  };
 }
 
 /**
@@ -60,14 +67,17 @@ async function prefetchRecall(
   const result = await memoryPort.recall({ query, sessionKey: sessionId });
   if (!result.ok) {
     return {
-      title: '记忆检索失败',
+      title: t('tools.recallMemory.failed'),
       output: `记忆引擎返回失败：${result.message ?? '未知原因'}`,
     };
   }
   if (result.context.trim().length === 0) {
-    return { title: '记忆检索', output: '未找到相关记忆。' };
+    return { title: t('tools.recallMemory.title'), output: '未找到相关记忆。' };
   }
-  return { title: `记忆检索（${result.memoryCount} 条）`, output: result.context };
+  return {
+    title: t('tools.recallMemory.withCount', { count: result.memoryCount }),
+    output: result.context,
+  };
 }
 
 /**
@@ -84,7 +94,7 @@ export function createRecallMemoryTool(memoryPort: MemoryPort): Tool<RecallMemor
     execute: async (input: RecallMemoryInput, ctx: ToolContext): Promise<ToolResult> => {
       // 用户关闭记忆功能时不提供检索（关闭语义 = 不捕获也不使用）
       if (!isMemoryEnabled()) {
-        return { title: '记忆功能已关闭', output: '用户已在设置中关闭记忆功能。' };
+        return { title: t('tools.recallMemory.disabled'), output: '用户已在设置中关闭记忆功能。' };
       }
       if (input.mode === 'memories') {
         return searchL1(memoryPort, input.query);

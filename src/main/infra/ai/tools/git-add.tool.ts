@@ -14,6 +14,7 @@
 
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
+import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitAddInputSchema = z.object({
@@ -53,7 +54,7 @@ export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
           : `已暂存 ${input.paths.length} 个路径（${result.stagedCount} 个文件已暂存）`;
 
       return {
-        title: 'Git: 暂存改动',
+        title: t('tools.gitAdd.title'),
         output: summary,
         metadata: {
           stagedCount: result.stagedCount,

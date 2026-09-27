@@ -12,6 +12,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -53,12 +54,14 @@ export function createLspHoverTool(manager: LspServerManager): Tool<LspHoverInpu
           return { title: 'lsp_hover', output: '（该位置无悬停信息）' };
         }
         return {
-          title: `悬停信息: ${input.filePath.split(/[\\/]/).pop() ?? input.filePath}`,
+          title: t('tools.lspHover.title', {
+            file: input.filePath.split(/[\\/]/).pop() ?? input.filePath,
+          }),
           output: hover.contents,
         };
       } catch (err: unknown) {
         return {
-          title: 'lsp_hover 失败',
+          title: t('tools.lspHover.failed'),
           output: `语言服务器不可用：${err instanceof Error ? err.message : String(err)}`,
         };
       }

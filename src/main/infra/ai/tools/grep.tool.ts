@@ -4,6 +4,7 @@
 
 import type { GrepRes } from '@code-agent/shared/main';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { ISearchService } from '../../search/search-service';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -76,7 +77,7 @@ export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
       });
 
       return {
-        title: `内容搜索: ${input.pattern}`,
+        title: t('tools.grep.title', { pattern: input.pattern }),
         output: lines.join('\n') || '(无匹配结果)',
         metadata: {
           pattern: input.pattern,

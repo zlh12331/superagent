@@ -23,6 +23,7 @@ import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { createAutostartDeps, setAutostartEnabled } from './infra/autostart/autostart';
+import { initMainI18n } from './infra/i18n';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
@@ -178,6 +179,9 @@ app
     // - 启用 WAL 模式 + 外键约束
     // - SessionService 通过 getDb() 动态访问，但首次访问必须确保 db 已初始化
     initDb();
+    // 主进程 i18n 语言初始化：读 app_settings `language` 域（渲染层写穿透），
+    // 缺失/损坏回退 zh-CN；运行中变更经 settings.handler set 钩子同步
+    initMainI18n(readSetting('language'));
     // 初始化 PromptService：幂等插入默认 Code Agent prompt 到 prompts 表
     // - 必须在 initDb 之后（依赖 prompts 表已创建）
     // - 必须在 AgentService 初始化之前（resolvePrompt 时数据库已有默认 prompt）

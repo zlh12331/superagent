@@ -12,6 +12,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -57,12 +58,12 @@ export function createLspDefinitionTool(manager: LspServerManager): Tool<LspDefi
           return `- ${location.uri.replace('file://', '')} (${start.line + 1}:${start.character + 1}-${end.line + 1}:${end.character + 1})`;
         });
         return {
-          title: `定义位置: ${locations.length} 处`,
+          title: t('tools.lspDefinition.locations', { count: locations.length }),
           output: lines.join('\n'),
         };
       } catch (err: unknown) {
         return {
-          title: 'lsp_definition 失败',
+          title: t('tools.lspDefinition.failed'),
           output: `语言服务器不可用：${err instanceof Error ? err.message : String(err)}`,
         };
       }
