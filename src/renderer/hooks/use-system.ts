@@ -9,11 +9,13 @@
 // 设计：
 // - system:getStatus staleTime 5s（指标变化较快，但避免过频拉取拖慢渲染层）
 // - logs:read staleTime 0（日志查看器每次都需要最新数据，用户手动刷新触发 refetch）
+// - logs:read placeholderData: keepPreviousData（级别/行数切换是同一日志文件的
+//   不同切片，旧切片驻留作占位，isPlaceholderData=true 供消费方降透明过渡）
 // - enabled 参数：面板折叠时不查询，节省 IPC 调用
 // ──────────────────────────────────────────────────────────────
 
 import type { ReadLogsRes, SystemStatusRes } from '@code-agent/shared/renderer';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
@@ -70,6 +72,10 @@ export function useSystemStatusQuery(enabled = true, refetchInterval = 10_000) {
  * 调用 logs:read IPC 从 main.log 文件尾部读取最近 N 行日志。
  * DevPanel Logs tab 使用此 hook 展示日志。
  *
+ * 级别/行数切换是同一日志文件的不同切片，接 keepPreviousData 让旧切片
+ * 驻留作占位（isPlaceholderData=true），消费方据此降透明过渡防闪空屏；
+ * 首次加载与同 key 手动刷新无驻留数据，不受影响。
+ *
  * @param lines 读取行数（默认 200）
  * @param level 级别过滤（不传则返回全部）
  * @param enabled 是否启用查询
@@ -91,5 +97,7 @@ export function useLogsReadQuery(
     },
     enabled,
     staleTime: 0, // 日志查看器每次都需要最新数据
+    // 过滤切换防闪空屏：见函数 JSDoc 与文件头设计注释
+    placeholderData: keepPreviousData,
   });
 }
