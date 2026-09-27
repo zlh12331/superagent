@@ -12,10 +12,11 @@
 // 当它是版本区间内唯一提交时即「0 commits」→ 不开 Release PR（发版通道静默阻断）。
 // commitlint 21.x 无 header-pattern 规则（未知规则会抛错），故以本脚本补齐。
 //
-// 路径安全：本脚本只应读取 `.git/` 下的提交信息文件（钩子约定）。传入的路径经
-// resolve 后必须位于 `<cwd>/.git/` 之内，否则拒绝——避免被用作任意文件读取入口。
+// 路径安全：本脚本只应读取 git 目录下的提交信息文件（钩子约定）。传入的路径经
+// resolve 后必须位于真实 git 目录之内，否则拒绝——避免被用作任意文件读取入口。
 // ──────────────────────────────────────────────────────────────
 
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
@@ -34,16 +35,36 @@ export function extractHeader(raw: string): string {
 }
 
 /**
+ * 取当前仓库的真实 git 目录（绝对路径）
+ *
+ * worktree 场景：`<cwd>/.git` 是指向主仓 `.git/worktrees/<name>` 的文件，
+ * COMMIT_EDITMSG 落在主仓的 worktree gitdir 下——`<cwd>/.git` 字面解析会把
+ * 合法路径误判为「.git 之外」，钩子在 worktree 内必挂（2026-09-27 实证）。
+ * 故用 `git rev-parse --absolute-git-dir` 解析（git 自身处理 worktree 链接）；
+ * 解析失败（无 git 环境等）回退 `<cwd>/.git`，保持普通仓库行为。
+ */
+export function resolveGitDir(cwd: string): string {
+  try {
+    // git 输出恒为正斜杠，resolve 归一化到平台分隔符（Windows 反斜杠），
+    // 与 resolveCommitMsgPath 里 resolve 后的待检路径可比
+    return resolve(execSync('git rev-parse --absolute-git-dir', { cwd, encoding: 'utf8' }).trim());
+  } catch {
+    return resolve(cwd, '.git');
+  }
+}
+
+/**
  * 校验提交信息文件路径是否合法
  *
- * 只允许仓库 `.git/` 目录内的文件（Git 钩子的约定：`.git/COMMIT_EDITMSG`，
- * rebase 时为 `.git/rebase-merge/…` 等，均在该目录下）。
+ * 只允许真实 git 目录内的文件（Git 钩子的约定：`.git/COMMIT_EDITMSG`；
+ * worktree 时为 `<主仓>/.git/worktrees/<name>/COMMIT_EDITMSG`；rebase 时为
+ * `.git/rebase-merge/…` 等，均在该目录下）。
  *
  * @returns 规范化后的绝对路径；不合法时返回 null
  */
 export function resolveCommitMsgPath(input: string, cwd: string): string | null {
   const absolute = resolve(cwd, input);
-  const gitDir = resolve(cwd, '.git') + sep;
+  const gitDir = resolveGitDir(cwd) + sep;
   return absolute.startsWith(gitDir) ? absolute : null;
 }
 
