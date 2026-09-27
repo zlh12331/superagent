@@ -39,13 +39,14 @@ export function extractHeader(raw: string): string {
  * 解析当前仓库的 git 目录
  *
  * - 常规仓库：`<cwd>/.git` 为目录，直接返回；
- * - linked worktree：`<cwd>/.git` 是指针文件（`gitdir: <主仓>/.git/worktrees/<name>`），
- *   提交信息文件（COMMIT_EDITMSG 等）落在主仓该子目录下——必须按指针解析，
- *   否则 worktree 内所有提交都会被路径守卫拒绝（2026-09-27 实测）。
+ * - linked worktree（并行 worktree 工作流，见 .worktrees/）：`<cwd>/.git` 是指针文件
+ *   （`gitdir: <主仓>/.git/worktrees/<name>`），提交信息文件（COMMIT_EDITMSG 等）落在
+ *   主仓该子目录下——只认 `<cwd>/.git/` 会把钩子传入的 COMMIT_EDITMSG 误判为越界，
+ *   导致 worktree 内所有提交都会被路径守卫拒绝（2026-09-27 实测）。
  *
  * @returns git 目录绝对路径；`.git` 不存在或指针格式不符时返回 null
  */
-function resolveGitDir(cwd: string): string | null {
+export function resolveGitDir(cwd: string): string | null {
   const dotGit = resolve(cwd, '.git');
   let stats: Stats;
   try {

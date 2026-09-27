@@ -44,7 +44,7 @@ import type {
   UsageSummaryRes,
 } from '@code-agent/shared/main';
 import { AppError, ErrorCode } from '@code-agent/shared/main';
-import { count, desc, eq, sql } from 'drizzle-orm';
+import { count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { getDb, reclaimFreePages } from './db';
 import { type MessageInsert, messages, type SessionInsert, sessions } from './schema';
@@ -71,6 +71,9 @@ import {
   recordTurn as storeRecordTurn,
   recordUsage as storeRecordUsage,
 } from './usage-turn-store';
+
+/** exportAll 分批 IN 查询的会话 id 上限（远低于 SQLite 变量上限，防 SQLITE_MAX_VARIABLE_NUMBER） */
+const EXPORT_BATCH_SIZE = 500;
 
 // 契约层 re-export：外部 import 路径保持 './session-service' 不变（26 处引用零改动）
 export {
@@ -463,17 +466,38 @@ export class SessionService {
     return result.changes;
   }
 
-  /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
+  /**
+   * 导出全部会话（元数据 + 消息历史），数据资产可迁移
+   *
+   * P2-29：原实现每会话一条 messages 查询（N+1，重度使用时数千次查询）；
+   * 改为按会话 id 分批 IN 查询 + 内存分组。导出结构逐字段等价：
+   * sessions 按 updatedAt 倒序（一次查询），组内消息按 seq 升序（SQL 排序
+   * 在分组时保持相对顺序）。IN 按批分片，防会话数超过 SQLite 变量上限。
+   */
   async exportAll(): Promise<SessionExportPayload> {
     const db = getDb();
     const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
-    const items: SessionExportItem[] = rows.map((row) => {
+    // 分批 IN 拉取全部消息并按会话分组（批内 ORDER BY seq 保证组内升序）
+    const messagesBySession = new Map<string, { content: string }[]>();
+    for (let i = 0; i < rows.length; i += EXPORT_BATCH_SIZE) {
+      const batchIds = rows.slice(i, i + EXPORT_BATCH_SIZE).map((row) => row.id);
       const messageRows = db
         .select()
         .from(messages)
-        .where(eq(messages.sessionId, row.id))
+        .where(inArray(messages.sessionId, batchIds))
         .orderBy(messages.seq)
         .all();
+      for (const messageRow of messageRows) {
+        const group = messagesBySession.get(messageRow.sessionId);
+        if (group !== undefined) {
+          group.push(messageRow);
+        } else {
+          messagesBySession.set(messageRow.sessionId, [messageRow]);
+        }
+      }
+    }
+    const items: SessionExportItem[] = rows.map((row) => {
+      const messageRows = messagesBySession.get(row.id) ?? [];
       return {
         meta: rowToMeta(row),
         messages: messageRows.map((m) => {

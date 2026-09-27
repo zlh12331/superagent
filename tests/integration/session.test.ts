@@ -56,7 +56,8 @@ describe('session 域集成链路（batch 1）', () => {
       const msgs = [makeMessage('你好，帮我看看这个项目'), makeMessage('好的，正在分析')];
       // handler.create 为 IPC 语义（空会话）；带消息走 service.create 内部 API 链路（AgentService 用法）
       const sessionId = await svc.create({ workingDir: '/proj', title: undefined, messages: msgs });
-      const detail = await handlers.get({ id: sessionId });
+      // P2-28：契约默认翻转为仅元数据，断言全量消息须显式传 includeMessages: true
+      const detail = await handlers.get({ id: sessionId, includeMessages: true });
       expect(detail.messages).toHaveLength(2);
       // 标题从首条 user 消息预览生成（50 字符内）
       expect(detail.session.title).toBe('你好，帮我看看这个项目');
@@ -118,7 +119,7 @@ describe('session 域集成链路（batch 1）', () => {
       const appendRes = await svc.appendMessage({ sessionId, messages: [makeMessage('第二轮')] });
       void appendRes;
 
-      const detail = await handlers.get({ id: sessionId });
+      const detail = await handlers.get({ id: sessionId, includeMessages: true });
       expect(detail.messages).toHaveLength(2);
       expect(detail.session.messageCount).toBe(2);
     });
@@ -288,7 +289,7 @@ describe('session 域集成链路（batch 1）', () => {
       initDb();
       const svc2 = getSessionService() as SessionService;
       const handlers2 = createSessionHandlers({ sessionService: svc2 });
-      const detail = await handlers2.get({ id: sessionId });
+      const detail = await handlers2.get({ id: sessionId, includeMessages: true });
       expect(detail.session.title).toBe('持久');
       expect(detail.messages).toHaveLength(1);
     });
@@ -321,7 +322,7 @@ describe('session 域集成链路（batch 1）', () => {
         title: '原子',
         messages: [makeMessage('m1'), makeMessage('m2'), makeMessage('m3')],
       });
-      const detail = await handlers.get({ id: sessionId });
+      const detail = await handlers.get({ id: sessionId, includeMessages: true });
       expect(detail.messages).toHaveLength(3);
       // 消息顺序与 seq 一致（时序编排）
       expect((detail.messages[0] as { content: string }).content).toBe('m1');

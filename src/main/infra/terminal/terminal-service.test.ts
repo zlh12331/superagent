@@ -350,6 +350,22 @@ describe('TerminalService 输出缓冲（onData 三件套）', () => {
     expect(output.endsWith('b'.repeat(60 * 1024))).toBe(true);
   });
 
+  it('边界（P2-35）：高频小分片超限 → 头部整片丢弃，尾部字节级等价保留', async () => {
+    const res = await svc.create(makeOptions());
+    const pty = ptys[0] ?? new FakePty();
+    // 300 个 1KB 小分片（分片数组形态的典型负载）：总量 300KB，最终保留尾部 100KB
+    for (let i = 0; i < 300; i++) {
+      pty.emitData(`${i % 10}`.repeat(1024));
+    }
+    const output = svc.getOutput(res.terminalId);
+    expect(output.length).toBe(MAX_BUFFER_BYTES);
+    // 尾部对齐：最后 100KB 恰为第 200~299 个分片（每片 1KB，'0'-'9' 循环）
+    const expectedTail = Array.from({ length: 100 }, (_, k) =>
+      `${(200 + k) % 10}`.repeat(1024),
+    ).join('');
+    expect(output).toBe(expectedTail);
+  });
+
   it('异常：webContents 已销毁 → 不推送 OUTPUT 事件，缓冲照常累积', async () => {
     const { wc } = fakeWebContents(true);
     const res = await svc.create(makeOptions({ webContents: wc }));

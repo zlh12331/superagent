@@ -26,7 +26,7 @@ import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
 import { AppError, ErrorCode, MAX_USER_INPUT_HARD_CAP } from '@code-agent/shared/main';
 
 import type { IAgentService } from '../infra/ai/agent/agent-service';
-import type { IPromptService } from '../infra/ai/prompt/prompt-service';
+import type { IPromptService, ResolvedPrompt } from '../infra/ai/prompt/prompt-service';
 import type { MemoryCaptureWire } from '../infra/memory-hub/capture-wire';
 import { extractLastUserText } from '../infra/memory-hub/capture-wire';
 import { isMemoryEnabled } from '../infra/memory-hub/memory-pref';
@@ -74,6 +74,65 @@ function assertUserInputWithinCap(messages: unknown): string {
 }
 
 /**
+ * 记忆预取召回 + 基础 prompt 解析（独立函数便于 run 保持认知复杂度）
+ *
+ * 召回前置条件（任一不满足则原样返回，不做任何解析）：
+ * 渲染层未显式指定 systemPrompt、记忆端口/prompt 服务可用、有用户文本、
+ * 会话 key 非空（上游 RecallRequest 要求非空，缺失/空串 → HTTP 400——
+ * 新会话跳过召回，首次对话也无历史可召回）、用户开启记忆功能。
+ *
+ * P2-32：基础 prompt 只解析一次——召回命中时拼接 <memory_context>，
+ * 未命中时经 resolvedBase 复用给 startAgent（同回合免二次 resolvePrompt：
+ * 重复读库 + git status 子进程 + AGENTS.md 遍历）。
+ */
+async function resolvePromptWithMemoryRecall(params: {
+  /** 渲染层显式指定的 systemPrompt（可能为 undefined） */
+  readonly baseSystemPrompt: string | undefined;
+  readonly lastUser: string;
+  readonly workingDir: string;
+  readonly recallSessionKey: string | undefined;
+  readonly memoryPort: MemoryPort | undefined;
+  readonly promptService: IPromptService | undefined;
+}): Promise<{
+  readonly systemPrompt: string | undefined;
+  readonly resolvedBase: ResolvedPrompt | undefined;
+}> {
+  const { baseSystemPrompt, lastUser, workingDir, recallSessionKey, memoryPort, promptService } =
+    params;
+  if (
+    baseSystemPrompt !== undefined ||
+    memoryPort === undefined ||
+    promptService === undefined ||
+    lastUser.length === 0 ||
+    recallSessionKey === undefined ||
+    recallSessionKey.length === 0 ||
+    // 用户关闭记忆功能时不注入召回（关闭语义 = 不捕获也不使用）
+    !isMemoryEnabled()
+  ) {
+    return { systemPrompt: baseSystemPrompt, resolvedBase: undefined };
+  }
+  try {
+    const [base, mem] = await Promise.all([
+      promptService.resolvePrompt(undefined, workingDir),
+      memoryPort.recall({ query: lastUser, sessionKey: recallSessionKey }),
+    ]);
+    if (mem.ok && mem.context.trim().length > 0) {
+      // 取 base.content（原 `${base}` 插值 ResolvedPrompt 对象会得到
+      // "[object Object]"——此处顺带修正该实测行为缺陷）
+      return {
+        systemPrompt: `${base.content}\n\n<memory_context>\n${mem.context.trim()}\n</memory_context>`,
+        resolvedBase: base,
+      };
+    }
+    // 召回未命中：基础 prompt 复用给 startAgent
+    return { systemPrompt: baseSystemPrompt, resolvedBase: base };
+  } catch {
+    // 召回失败不阻断对话（sidecar 冷启动/未配置等场景静默降级）
+    return { systemPrompt: baseSystemPrompt, resolvedBase: undefined };
+  }
+}
+
+/**
  * 创建 Agent 域 handler 实现
  *
  * @param deps 依赖项：包含 IAgentService 实例（由 ServiceContainer 注入）
@@ -87,39 +146,22 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
     // 渲染层用返回的 sessionId 订阅后续事件并支持中断
     run: async (input, ctx) => {
       const lastUser = assertUserInputWithinCap(input.messages);
-      // 记忆预取召回：仅在渲染层未显式指定 systemPrompt 时注入一次性上下文块
-      // 上游 RecallRequest 要求 session_key 非空（缺失/空串 → HTTP 400），
-      // 故新会话（尚无 sessionId）跳过召回——首次对话也无历史可召回。
-      // 此前未传 session_key，导致预取召回恒失败并被下方 catch 静默降级。
-      let systemPrompt = input.systemPrompt;
-      const recallSessionKey = input.sessionId;
-      if (
-        systemPrompt === undefined &&
-        memoryPort !== undefined &&
-        promptService !== undefined &&
-        lastUser.length > 0 &&
-        recallSessionKey !== undefined &&
-        recallSessionKey.length > 0 &&
-        // 用户关闭记忆功能时不注入召回（关闭语义 = 不捕获也不使用）
-        isMemoryEnabled()
-      ) {
-        try {
-          const [base, mem] = await Promise.all([
-            promptService.resolvePrompt(undefined, input.workingDir),
-            memoryPort.recall({ query: lastUser, sessionKey: recallSessionKey }),
-          ]);
-          if (mem.ok && mem.context.trim().length > 0) {
-            systemPrompt = `${base}\n\n<memory_context>\n${mem.context.trim()}\n</memory_context>`;
-          }
-        } catch {
-          // 召回失败不阻断对话（sidecar 冷启动/未配置等场景静默降级）
-        }
-      }
+      // 记忆预取召回 + 基础 prompt 单次解析（P2-32，装配见模块级函数）
+      const { systemPrompt, resolvedBase } = await resolvePromptWithMemoryRecall({
+        baseSystemPrompt: input.systemPrompt,
+        lastUser,
+        workingDir: input.workingDir,
+        recallSessionKey: input.sessionId,
+        memoryPort,
+        promptService,
+      });
       const sessionId = await agentService.startAgent({
         messages: input.messages,
         sessionId: input.sessionId,
         workingDir: input.workingDir,
         systemPrompt,
+        // P2-32：召回未命中时复用已解析的基础 prompt（systemPrompt 已设时被忽略）
+        ...(resolvedBase !== undefined ? { resolvedPrompt: resolvedBase } : {}),
         maxSteps: input.maxSteps,
         mode: input.mode,
         ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),

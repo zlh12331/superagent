@@ -76,10 +76,10 @@ export const SessionListResSchema = z.object({
 export const SessionGetReqSchema = z.object({
   id: z.string().min(1),
   /**
-   * 是否返回完整消息历史（默认 true，向后兼容）。
-   * false 时仅返回会话元数据（messages: []）——渲染层历史已改走
-   * session:getTurns + session:getTurnMessages 按回合增量拉取（debt.md#d2），
-   * 元数据消费方（workingDir/lastRunStatus）不再为全量消息付 IPC 负载。
+   * 是否返回完整消息历史（默认 false——P2-28 契约翻转，按需加载）。
+   * 渲染层历史走 session:getTurns + session:getTurnMessages 按回合增量拉取
+   * （debt.md#d2），元数据消费方（workingDir/lastRunStatus）不为全量消息付
+   * IPC 负载；仅显式传 true 的调用方（数据回放/兼容场景）才返回全量消息。
    */
   includeMessages: z.boolean().optional(),
 });

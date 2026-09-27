@@ -1,16 +1,22 @@
 // src/main/infra/telemetry/event-loop-lag.ts
-// 事件循环延迟监控（对齐 qwen telemetry event-loop-lag 语义收敛）
+// 事件循环延迟监控（P2-36：迁移 perf_hooks.monitorEventLoopDelay 直方图分位）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 周期性测量事件循环延迟（期望 tick 间隔 vs 实际间隔）
-// - 超过阈值 → onLag 回调（告警/遥测上报挂载点）
+// - 周期性从事件循环延迟直方图取分位值（默认 p99），超阈值 → onLag 回调
+//   （告警/遥测上报挂载点，见 lag-alert.ts）
 // - 返回 stop（生命周期管理；应用退出时清理）
 //
-// 借鉴声明：
-// 本模块参考 qwen-code 参考项目 packages/core/src/telemetry/event-loop-lag.ts
-// （Copyright 2026 Qwen Team，SPDX-License-Identifier: Apache-2.0）的
-// 延迟测量语义，按我们的技术栈收敛重写（移除遥测 exporter 强耦合，回调挂载点）。
+// 迁移说明（原 setInterval 期望间隔法 → 直方图分位法，2026-09-27）：
+// - 旧实现用「期望 tick 时刻 vs 实际时刻」差值估延迟，只能反映采样定时器
+//   自身被延迟的程度，且需要首采基准修正（2026-09-04 修复）；窗口内的短尖刺
+//   （如两次准点 tick 之间夹一段 300ms 阻塞）不可见。
+// - monitorEventLoopDelay 由 Node 把每次事件循环延迟记入直方图（纳秒），
+//   取窗口分位可覆盖全部尖刺；每窗口采样后 reset() 保证 lag 反映「最近窗口」。
+// - 对外契约不变：EventLoopLagSample 字段语义与阈值判定（lagMs >
+//   warnThresholdMs）保持一致；空窗口分位 ≈ 0，空闲不误报（语义继承）。
 // ──────────────────────────────────────────────────────────────
+
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 /** 默认采样间隔（毫秒） */
 const DEFAULT_INTERVAL_MS = 5_000;
@@ -18,11 +24,17 @@ const DEFAULT_INTERVAL_MS = 5_000;
 /** 默认告警阈值（毫秒）——超过视为事件循环阻塞 */
 const DEFAULT_WARN_THRESHOLD_MS = 1_000;
 
-/** 延迟测量结果 */
+/** 默认分位数（p99：对持续阻塞与尖刺敏感，偶发毛刺不触发） */
+const DEFAULT_PERCENTILE = 99;
+
+/** 纳秒 → 毫秒换算系数 */
+const NS_PER_MS = 1e6;
+
+/** 延迟测量结果（lag-alert 消费接口，字段语义不变） */
 export interface EventLoopLagSample {
-  /** 本次实测延迟（毫秒） */
+  /** 本窗口事件循环延迟的分位值（毫秒） */
   readonly lagMs: number;
-  /** 期望间隔（毫秒） */
+  /** 采样窗口（毫秒） */
   readonly intervalMs: number;
   /** 是否超过告警阈值 */
   readonly exceeded: boolean;
@@ -33,19 +45,39 @@ export interface EventLoopLagSample {
 /** 回调签名 */
 export type LagHandler = (sample: EventLoopLagSample) => void;
 
+/**
+ * 事件循环延迟直方图最小接口
+ *
+ * 形状对齐 perf_hooks.IntervalHistogram（纳秒口径）；独立接口供测试注入 fake。
+ */
+export interface LagHistogram {
+  /** 开始记录（幂等；返回是否新启动） */
+  enable(): boolean;
+  /** 停止记录（幂等） */
+  disable(): boolean;
+  /** 取分位值（纳秒） */
+  percentile(percentile: number): number;
+  /** 清空已采集数据（每窗口采样后调用，保证 lag 反映最近窗口） */
+  reset(): void;
+}
+
+/** 默认直方图工厂：perf_hooks.monitorEventLoopDelay（默认 10ns 分辨率，ms 级阈值精度充足） */
+function defaultHistogramFactory(): LagHistogram {
+  return monitorEventLoopDelay();
+}
+
 /** 监控器配置 */
 export interface EventLoopLagMonitorOptions {
   /** 采样间隔（毫秒；默认 5000） */
   readonly intervalMs?: number;
   /** 告警阈值（毫秒；默认 1000） */
   readonly warnThresholdMs?: number;
+  /** 分位数（0-100；默认 99） */
+  readonly percentile?: number;
   /** 延迟超阈值回调（可多个） */
   readonly onLag?: LagHandler;
-}
-
-/** 延迟计算纯函数（可测）：期望时刻 → 当前时刻 的差值 */
-export function measureLag(expectedAt: number, now: number): number {
-  return Math.max(0, now - expectedAt);
+  /** 直方图工厂（测试注入 fake；默认 perf_hooks.monitorEventLoopDelay） */
+  readonly createHistogram?: () => LagHistogram;
 }
 
 /**
@@ -54,14 +86,19 @@ export function measureLag(expectedAt: number, now: number): number {
 export class EventLoopLagMonitor {
   private readonly intervalMs: number;
   private readonly warnThresholdMs: number;
+  private readonly percentile: number;
+  private readonly createHistogram: () => LagHistogram;
   private handlers: LagHandler[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
-  /** 上一次 tick 的期望时刻（用于计算实际延迟） */
-  private lastExpectedAt = 0;
+  /** 直方图（构造即创建；enable/disable 随 start/stop） */
+  private readonly histogram: LagHistogram;
 
   constructor(options: EventLoopLagMonitorOptions = {}) {
     this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
     this.warnThresholdMs = options.warnThresholdMs ?? DEFAULT_WARN_THRESHOLD_MS;
+    this.percentile = options.percentile ?? DEFAULT_PERCENTILE;
+    this.createHistogram = options.createHistogram ?? defaultHistogramFactory;
+    this.histogram = this.createHistogram();
     if (options.onLag !== undefined) {
       this.handlers.push(options.onLag);
     }
@@ -80,16 +117,14 @@ export class EventLoopLagMonitor {
   /**
    * 启动监控（幂等）
    *
-   * 基准语义：lastExpectedAt 存"下一个 tick 的期望时刻"。
-   * 首个 tick 期望在 `启动时刻 + interval`，故起始基准提前一个 interval——
-   * 否则空闲首个 tick 会被误判为滞后一个周期（2026-09-04 实测修复：
-   * 旧实现 start 后恒报 lag≈interval，空闲环境 5s/条误告警并污染告警日志）。
+   * 直方图 enable 后由 Node 内部采样事件循环延迟；本监控器按 intervalMs
+   * 周期取分位并重置窗口（见 sample）。
    */
   start(): void {
     if (this.timer !== null) {
       return;
     }
-    this.lastExpectedAt = Date.now() + this.intervalMs;
+    this.histogram.enable();
     this.timer = setInterval(() => {
       this.sample();
     }, this.intervalMs);
@@ -102,21 +137,20 @@ export class EventLoopLagMonitor {
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
+      this.histogram.disable();
     }
   }
 
   /**
-   * 采集一次样本（手动触发可测；tick 自动调用）
+   * 采集一次样本（tick 自动调用；可手动触发）
    *
-   * @param now 采样时刻（默认 Date.now()；测试可注入确定性时刻）
+   * lag = 直方图分位（纳秒 → 毫秒）；采样后 reset 直方图，下一窗口重新累计
+   * （lag 恒反映「最近一个窗口」而非启动以来累计）。未启动/空窗口分位 ≈ 0，
+   * 空闲不误报。
    */
   sample(now = Date.now()): EventLoopLagSample {
-    // 首采（未启动/无基准）：仅记录基准时刻，不产生告警
-    const firstSample = this.lastExpectedAt === 0;
-    const lagMs = firstSample ? 0 : measureLag(this.lastExpectedAt, now);
-    // 期望时刻按 interval 前移：lag 只反映"实际采样间隔超出期望间隔"的部分，
-    // 而不是把正常的采样周期误判为阻塞（修复前恒报 lag≈interval 的误告警）。
-    this.lastExpectedAt = now + this.intervalMs;
+    const lagMs = this.histogram.percentile(this.percentile) / NS_PER_MS;
+    this.histogram.reset();
     const sample: EventLoopLagSample = {
       lagMs,
       intervalMs: this.intervalMs,

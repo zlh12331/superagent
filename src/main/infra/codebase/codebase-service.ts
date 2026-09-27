@@ -55,14 +55,38 @@ export interface CodegraphBundle {
 }
 
 /**
+ * 进程内 memo（P2-37）：dev 每次 resolveCodegraphBundle 都 readdirSync 扫
+ * .pnpm 布局 → 首次解析后常驻复用。平台包在进程生命周期内不会变化；
+ * 解析失败不缓存（下次调用重试）。
+ */
+let bundleMemo: CodegraphBundle | undefined;
+
+/** 清空 bundle memo（测试用） */
+export function resetCodegraphBundleMemo(): void {
+  bundleMemo = undefined;
+}
+
+/**
  * 解析 codegraph 平台包启动命令（生产 process.resourcesPath / dev pnpm .pnpm）
  *
  * @colbymchenry/codegraph 以 optionalDependencies 分发各平台捆绑包
  * （vendored Node 24 + app，esbuild 同款模式）。Windows 包内含 node.exe 与
  * lib/dist/bin/codegraph.js 入口（npm-shim 同款：--liftoff-only 规避
  * tree-sitter WASM 在 Node≥22 的 Zone OOM）；其他平台为 bin/codegraph 启动器。
+ *
+ * P2-37：结果进程内 memo——此前 dev 每条 codegraph 命令都 readdirSync 一次。
  */
 export function resolveCodegraphBundle(): CodegraphBundle {
+  if (bundleMemo !== undefined) {
+    return bundleMemo;
+  }
+  const bundle = resolveCodegraphBundleOnce();
+  bundleMemo = bundle;
+  return bundle;
+}
+
+/** memo 未命中时的实际解析（失败抛错不写入 memo） */
+function resolveCodegraphBundleOnce(): CodegraphBundle {
   const target = `${process.platform}-${process.arch}`;
   let dir: string;
   if (app.isPackaged) {

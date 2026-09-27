@@ -552,8 +552,8 @@ function createMockApi(): IpcApi {
         return ipcOk({ sessions: sorted.slice(0, limit), total: sorted.length });
       },
       get: async ({ id, includeMessages }: Req<IpcApi['session']['get']>) => {
-        // includeMessages=false：仅元数据（对齐主进程 session:get 契约）
-        const messages = includeMessages === false ? [] : (messagesBySession[id] ?? []);
+        // includeMessages=true 才返回消息（对齐主进程 session:get 契约默认按需加载，P2-28）
+        const messages = includeMessages === true ? (messagesBySession[id] ?? []) : [];
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
           // 宽松兜底：任意 id 返回默认会话（dev mock——首页 DRAFT 场景需 workingDir 供 agent 发送）

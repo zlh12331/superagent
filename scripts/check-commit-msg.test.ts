@@ -1,12 +1,31 @@
 // scripts/check-commit-msg.test.ts
-// resolveCommitMsgPath 单测：常规仓库 / linked worktree gitdir 指针 / 越界拒绝
-// （2026-09-27 worktree 修复的回归测试——指针文件此前被路径守卫一刀切拒绝）
+// check-commit-msg 单测：路径安全判定（常规仓库 / linked worktree gitdir 指针 / 越界拒绝）
+//   + extractHeader 首行提取
+// （2026-09-27 worktree 修复的回归测试——指针文件此前被路径守卫一刀切拒绝；
+//   合并双方用例：wt/t3「路径守卫支持 linked worktree」+ wt/t5「校验兼容 git worktree 布局」）
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveCommitMsgPath } from './check-commit-msg';
+
+import { extractHeader, resolveCommitMsgPath, resolveGitDir } from './check-commit-msg';
+
+const tempDirs: string[] = [];
+
+function makeTempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  tempDirs.length = 0;
+});
 
 /** 构造临时仓库根 + 嵌套的提交信息文件，返回根目录路径 */
 function makeRoot(kind: 'repo' | 'worktree'): string {
@@ -24,6 +43,26 @@ function makeRoot(kind: 'repo' | 'worktree'): string {
   }
   return root;
 }
+
+describe('resolveGitDir', () => {
+  it('常规仓库：.git 为目录 → 返回该目录', () => {
+    const cwd = makeTempDir('commit-msg-regular-');
+    mkdirSync(join(cwd, '.git'));
+    expect(resolveGitDir(cwd)).toBe(join(cwd, '.git'));
+  });
+
+  it('worktree：.git 为指针文件 → 解析 gitdir 指向的主仓目录', () => {
+    const cwd = makeTempDir('commit-msg-wt-');
+    const mainGit = makeTempDir('commit-msg-main-git-');
+    writeFileSync(join(cwd, '.git'), `gitdir: ${join(mainGit, 'worktrees', 't5')}\n`, 'utf8');
+    expect(resolveGitDir(cwd)).toBe(join(mainGit, 'worktrees', 't5'));
+  });
+
+  it('.git 不存在 → null', () => {
+    const cwd = makeTempDir('commit-msg-empty-');
+    expect(resolveGitDir(cwd)).toBeNull();
+  });
+});
 
 describe('resolveCommitMsgPath', () => {
   const roots: string[] = [];
@@ -71,5 +110,53 @@ describe('resolveCommitMsgPath', () => {
     const root = trackedRoot('worktree');
     const evil = join(root, 'main-repo', '.git', 'worktrees', 't3-evil', 'COMMIT_EDITMSG');
     expect(resolveCommitMsgPath(evil, root)).toBeNull();
+  });
+
+  it('常规仓库：接受 .git 内的 COMMIT_EDITMSG', () => {
+    const cwd = makeTempDir('commit-msg-regular-');
+    const gitDir = join(cwd, '.git');
+    mkdirSync(gitDir);
+    const msgPath = join(gitDir, 'COMMIT_EDITMSG');
+    writeFileSync(msgPath, 'feat: ok\n', 'utf8');
+    expect(resolveCommitMsgPath(msgPath, cwd)).toBe(msgPath);
+  });
+
+  it('worktree：接受主仓 .git/worktrees/<名>/COMMIT_EDITMSG（回归）', () => {
+    const cwd = makeTempDir('commit-msg-wt-');
+    const worktreeGitDir = join(makeTempDir('commit-msg-main-git-'), 'worktrees', 't5');
+    mkdirSync(worktreeGitDir, { recursive: true });
+    writeFileSync(join(cwd, '.git'), `gitdir: ${worktreeGitDir}\n`, 'utf8');
+    const msgPath = join(worktreeGitDir, 'COMMIT_EDITMSG');
+    writeFileSync(msgPath, 'feat: ok\n', 'utf8');
+    expect(resolveCommitMsgPath(msgPath, cwd)).toBe(msgPath);
+  });
+
+  it('拒绝 git 目录之外的路径（防任意文件读取）', () => {
+    const cwd = makeTempDir('commit-msg-regular-');
+    mkdirSync(join(cwd, '.git'));
+    const outside = makeTempDir('commit-msg-outside-');
+    const secret = join(outside, 'secret.txt');
+    writeFileSync(secret, 'nope', 'utf8');
+    expect(resolveCommitMsgPath(secret, cwd)).toBeNull();
+  });
+
+  it('拒绝仅前缀相似的同级目录（worktreeGitDir + sep 判定）', () => {
+    const cwd = makeTempDir('commit-msg-wt-');
+    const mainGit = makeTempDir('commit-msg-main-git-');
+    const worktreeGitDir = join(mainGit, 'worktrees', 't5');
+    mkdirSync(join(mainGit, 'worktrees', 't5-evil'), { recursive: true });
+    writeFileSync(join(cwd, '.git'), `gitdir: ${worktreeGitDir}\n`, 'utf8');
+    const evilMsg = join(mainGit, 'worktrees', 't5-evil', 'COMMIT_EDITMSG');
+    expect(resolveCommitMsgPath(evilMsg, cwd)).toBeNull();
+  });
+});
+
+describe('extractHeader', () => {
+  it('取首个非空非注释行', () => {
+    expect(extractHeader('# comment\n\nperf(x): 标题\nbody')).toBe('perf(x): 标题');
+  });
+
+  it('全空输入 → 空串', () => {
+    expect(extractHeader('\n\n')).toBe('');
   });
 });

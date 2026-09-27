@@ -125,6 +125,6 @@ release/
 # AI 会话生成的临时图片素材（不入仓）
 /vibe_images/
 
-# Zcode ���ع��ߺ��Ը������� .gitignore ͬԴ������֣�
+# Zcode 本地工具忽略副本（与 .gitignore 同源，不入仓）
 .zcodeignore
 .worktrees/

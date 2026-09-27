@@ -485,4 +485,41 @@ describe('SessionService', () => {
       expect(session.messages).toHaveLength(1);
     });
   });
+
+  describe('exportAll（P2-29：分批 IN 批量查询）', () => {
+    it('多会话导出：sessions 按 updatedAt 倒序，组内消息按 seq 升序（逐字段等价）', async () => {
+      const first = await service.create({
+        workingDir: 'D:\\a',
+        title: '会话一',
+        messages: [
+          { role: 'user', content: 'a1' },
+          { role: 'assistant', content: 'a2' },
+          { role: 'user', content: 'a3' },
+        ],
+      });
+      // 2ms 间隔区分 updatedAt（与 listRecentDirs 时序用例同一策略）
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const second = await service.create({
+        workingDir: 'D:\\b',
+        title: '会话二',
+        messages: [{ role: 'user', content: 'b1' }],
+      });
+
+      const payload = await service.exportAll();
+      expect(payload.app).toBe('code-agent-desktop');
+      expect(payload.exportedAt).toBeGreaterThan(0);
+      expect(payload.sessions).toHaveLength(2);
+      // updatedAt 倒序：后建的会话二在前
+      expect(payload.sessions[0]?.meta.id).toBe(second);
+      expect(payload.sessions[1]?.meta.id).toBe(first);
+      // 组内消息按 seq 升序
+      expect(payload.sessions[1]?.messages).toHaveLength(3);
+      expect(payload.sessions[0]?.messages).toEqual([{ role: 'user', content: 'b1' }]);
+    });
+
+    it('空库导出：sessions 为空数组且不发起消息查询', async () => {
+      const payload = await service.exportAll();
+      expect(payload.sessions).toEqual([]);
+    });
+  });
 });

@@ -71,10 +71,6 @@
     "count": 1,
     "max": 16
   },
-  "src/main/infra/memory-hub/memory-hub-service.ts": {
-    "count": 1,
-    "max": 29
-  },
   "src/main/infra/search/search-service.ts": {
     "count": 1,
     "max": 19
@@ -90,10 +86,6 @@
   "src/main/infra/terminal/terminal-service.ts": {
     "count": 1,
     "max": 30
-  },
-  "src/main/ipc/agent.handler.ts": {
-    "count": 1,
-    "max": 16
   },
   "src/main/ipc/mcp.handler.ts": {
     "count": 1,
