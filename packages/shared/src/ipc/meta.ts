@@ -223,6 +223,11 @@ export const IPC_META = {
     stop: request('mcp:stop'),
   },
 
+  invalidation: {
+    // 失效域事件（主进程写路径声明受影响域后广播，渲染层前缀失效缓存——31 号设计文档）
+    subscribeDomains: event('invalidation:event:domains'),
+  },
+
   update: {
     check: request('update:check'),
     install: request('update:install'),

@@ -31,6 +31,7 @@ import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useDeepLink } from '@/hooks/use-deep-link';
+import { useInvalidationBridge } from '@/hooks/use-invalidation-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useProtocolCheck } from '@/hooks/use-protocol-check';
@@ -103,6 +104,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   useToolBridge();
   // Agent 生命周期桥接：回合结束 → invalidate 缓存 + 清理 L2 缓冲 + usage 累积
   useAgentBridge();
+  // 失效域事件桥：订阅 invalidation:event:domains（主进程写路径声明的受影响域）
+  // → 逐域前缀失效；回合结束域覆盖登记供 use-agent-bridge 跳过旧清单（31 号设计文档）
+  useInvalidationBridge();
 
   // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
   useTerminalBridge();

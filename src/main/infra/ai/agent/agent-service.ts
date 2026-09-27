@@ -32,11 +32,18 @@ import type {
   TurnToolResultEvent,
   TurnUsage,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode, IPC_DEFINITIONS, TurnEventType } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  IPC_DEFINITIONS,
+  TurnEventType,
+  turnEndInvalidationDomains,
+} from '@code-agent/shared/main';
 import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
+import { broadcastInvalidation } from '../../invalidation/invalidation';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
 import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
@@ -1021,6 +1028,14 @@ export class AgentService implements IAgentService {
       ...(params.usage !== undefined ? { usage: params.usage } : {}),
     };
     params.emitter.emit(turnEnd);
+
+    // 失效域聚合声明（31 号 spec S7）：迁移自渲染层 use-agent-bridge 的硬编码清单
+    // （sessions/session:<id>/goal/task/usage/git/file/turns）。三出口（completed/
+    // aborted/error）共用；不判 webContents——无头回合（IM/远程/定时触发）此前无
+    // stream:end 推送 ⇒ 渲染层缓存永久 stale，现在统一广播。
+    // 先于 AGENT_STREAM_END 推送：同窗口队列保序，渲染层先登记「回合结束域已覆盖」，
+    // stream:end 处理据此跳过旧清单（渐进回落，见 use-agent-bridge 注释）。
+    broadcastInvalidation(turnEndInvalidationDomains(params.sessionId), params.sessionId);
 
     // AGENT_STREAM_END 推送（error 出口不推 END，已推 AGENT_STREAM_ERROR；
     // 无 webContents 的无头场景跳过推送）

@@ -8,9 +8,13 @@
 // ──────────────────────────────────────────────────────────────
 
 import { describe, expect, it, vi } from 'vitest';
+import { broadcastInvalidation } from '../infra/invalidation/invalidation';
 import type { L0Record } from '../infra/memory-hub/memory-hub-service';
 import type { MemoryClearResult } from '../infra/memory-hub/types';
 import { createMemoryHandlers, type MemoryStatusDeps } from './memory.handler';
+
+// 失效域广播替身（基础设施边界，规范允许 vi.mock；S9 断言用）
+vi.mock('../infra/invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 /** 创建 fake 状态依赖（各方法可被用例覆盖） */
 function createStatusDeps(overrides: Partial<MemoryStatusDeps> = {}): MemoryStatusDeps {
@@ -110,6 +114,19 @@ describe('memory:clear', () => {
     const res = await handlers.clear({ sessionId: 'sess-2' }, {} as never);
     expect(res).toEqual({ ok: false });
   });
+
+  it('失效域声明（31 号 spec S9）：成功清除 → 广播 memory；失败不广播', async () => {
+    const { handlers, clearBySession } = createHandlers();
+    clearBySession.mockResolvedValueOnce({ ok: true, deletedCount: 3 });
+
+    await handlers.clear({ sessionId: 'sess-1' }, {} as never);
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+
+    vi.mocked(broadcastInvalidation).mockClear();
+    clearBySession.mockResolvedValueOnce({ ok: false, deletedCount: 0, message: '引擎未配置' });
+    await handlers.clear({ sessionId: 'sess-2' }, {} as never);
+    expect(broadcastInvalidation).not.toHaveBeenCalled();
+  });
 });
 
 describe('memory:clearAll', () => {
@@ -177,6 +194,25 @@ describe('memory:clearAll', () => {
     expect(res.clearedSessions).toBe(0);
     expect(res.message).toContain('2 个会话清除失败');
     expect(removeL0Jsonl).not.toHaveBeenCalled();
+  });
+
+  it('失效域声明（31 号 spec S9）：有真实删除 → 广播 memory；全失败不广播', async () => {
+    const okCase = createHandlers([], {
+      knownSessions: ['s1', 's2'],
+      engineClearImpl: async () => ({ ok: true, deletedCount: 1 }),
+    });
+    await okCase.handlers.clearAll({}, {} as never);
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+
+    vi.mocked(broadcastInvalidation).mockClear();
+    const failCase = createHandlers([], {
+      knownSessions: ['s1'],
+      engineClearImpl: async () => {
+        throw new Error('engine gone');
+      },
+    });
+    await failCase.handlers.clearAll({}, {} as never);
+    expect(broadcastInvalidation).not.toHaveBeenCalled();
   });
 });
 

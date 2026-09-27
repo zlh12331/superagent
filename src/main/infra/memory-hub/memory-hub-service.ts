@@ -27,7 +27,9 @@ import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { HttpMemoryPort } from './adapter';
 import {
   type EngineLauncher,
@@ -268,6 +270,8 @@ export class MemoryHubService {
       setTimeout(finish, 3000);
     });
     logger.info({}, `${TAG} sidecar 已停止`);
+    // 失效域声明（31 号 spec S8）：运行态 running→false（窗口已被销毁时广播为 no-op）
+    broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
   }
 
   // ─── 内部实现 ───
@@ -332,6 +336,8 @@ export class MemoryHubService {
         logger.warn({ code }, `${TAG} sidecar 进程退出`);
         this.child = null;
         this.port = null;
+        // 失效域声明（31 号 spec S8）：运行态 running→false（崩溃退出也要通知）
+        broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
       }
     });
 
@@ -339,6 +345,9 @@ export class MemoryHubService {
     await this.waitUntilHealthy(baseUrl, apiKey, () => child.stderrTail());
 
     logger.info({ baseUrl }, `${TAG} sidecar 就绪`);
+    // 失效域声明（31 号 spec S8）：运行态 running→true（懒启动缺口——
+    // 设置页此前打开时引擎未启动则永远显示「未运行」）
+    broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
     return new HttpMemoryPort({ baseUrl, apiKey });
   }
 

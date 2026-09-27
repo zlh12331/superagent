@@ -1027,6 +1027,10 @@ function createMockApi(): IpcApi {
       start: async () => ipcOk({ ok: true }),
       stop: async () => ipcOk({ ok: true }),
     },
+    // 失效域事件：浏览器模式无主进程写路径 ⇒ 订阅即 no-op（31 号设计文档 §2.1）
+    invalidation: {
+      subscribeDomains: () => () => {},
+    },
     remote: {
       getStatus: async () => ipcOk(mockRemoteStatus()),
       start: async () => {

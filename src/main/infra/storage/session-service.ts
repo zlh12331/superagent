@@ -44,9 +44,10 @@ import type {
   SessionRenameRes,
   UsageSummaryRes,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import { AppError, ErrorCode, INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { count, desc, eq, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { getDb, reclaimFreePages } from './db';
 import { type MessageInsert, messages, type SessionInsert, sessions } from './schema';
 import {
@@ -189,6 +190,9 @@ export class SessionService {
     db.delete(sessions).where(eq(sessions.id, id)).run();
     // 级联删除只把页放进 freelist，文件不会自己缩小
     reclaimFreePages();
+    // 失效域声明（31 号 spec S1）：列表域；不含 session:<id>——详情缓存指向已删除
+    // 会话，重拉只会 SESSION_NOT_FOUND（渲染层删除 mutation 自行清理详情缓存）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
     return { ok: true };
   }
 
@@ -211,6 +215,8 @@ export class SessionService {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId: id });
     }
 
+    // 失效域声明（31 号 spec S2）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(id)]);
     return { ok: true };
   }
 
@@ -226,6 +232,10 @@ export class SessionService {
       .set({ pinned: pinned ? 1 : 0, updatedAt: Date.now() })
       .where(eq(sessions.id, id))
       .run();
+    // 失效域声明（31 号 spec S2）：仅真实写入时声明（changes=0 是幂等空操作）
+    if (result.changes > 0) {
+      broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(id)]);
+    }
     return { ok: result.changes > 0 };
   }
 
@@ -286,6 +296,8 @@ export class SessionService {
     });
 
     logger.info({ sessionId, messageCount: initialMessages.length }, '创建新会话');
+    // 失效域声明（31 号 spec S3）：IM/远程桥创建会话由此到达渲染层（无头回合链路）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     return sessionId;
   }
 
@@ -316,6 +328,11 @@ export class SessionService {
     // 2. 若无消息追加，仅更新 updatedAt（保持会话活跃）
     if (newMessages.length === 0) {
       db.update(sessions).set({ updatedAt: Date.now() }).where(eq(sessions.id, sessionId)).run();
+      // 失效域声明（31 号 spec S4）：updatedAt 也是真实写（空消息路径）
+      broadcastInvalidation([
+        INVALIDATION_DOMAINS.sessions,
+        INVALIDATION_DOMAINS.session(sessionId),
+      ]);
       return sessionRow.messageCount;
     }
 
@@ -356,6 +373,9 @@ export class SessionService {
       { sessionId, appended: newMessages.length, total: startSeq + newMessages.length },
       '追加会话消息',
     );
+    // 失效域声明（31 号 spec S4）：回合开始/结束的消息落库（含 IM/远程入站消息）；
+    // markRunning/markIdle 刻意不声明（D4A 徽标竞态，见 spec §2.4）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     return startSeq + newMessages.length;
   }
 
@@ -399,6 +419,8 @@ export class SessionService {
         .run();
     });
     logger.info({ sessionId, messageCount: newMessages.length }, '替换会话消息（上下文压缩）');
+    // 失效域声明（31 号 spec S5）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     // 压缩掉的旧消息页需在事务外回收：VACUUM 类 pragma 不能在事务内执行
     reclaimFreePages();
     return newMessages.length;
@@ -442,6 +464,11 @@ export class SessionService {
   }
 
   // ── 崩溃恢复（回合状态机） ──────────────────────────────
+  // ⚠️ 以下三个状态机方法刻意不做失效域声明（31 号 spec §2.4）：
+  // markRunning/markIdle 的 invalidate 有读不到 running 的时序竞态（D4A 徽标闪失，
+  // use-agent-bridge 的既证结论），回合状态由 agent 回合结束的聚合声明统一收敛为真值；
+  // markAllInterrupted 在启动期执行，渲染层尚未挂载（启动后的首次拉取即新数据）。
+  // recordUsage/recordTurn 同理：回合粒度才有消费方，由回合聚合声明覆盖。
 
   async markRunning(id: string): Promise<void> {
     const db = getDb();
@@ -482,7 +509,14 @@ export class SessionService {
    * @throws AppError(INVALID_INPUT) 文件格式校验失败
    */
   async importAll(payload: unknown): Promise<SessionImportRes> {
-    return importSessionsFromPayload(payload);
+    const result = await importSessionsFromPayload(payload);
+    // 失效域声明（31 号 spec S6）：批量导入只影响列表。仅真实导入时声明
+    // （全部同 id 跳过 / 空文件时库里没变，声明只会换来一次无谓的列表重拉——
+    // 对齐 spec §3「只有真实写/状态迁移才通知」与 pin/im.start 的同类守卫）
+    if (result.imported > 0) {
+      broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
+    }
+    return result;
   }
 
   /**

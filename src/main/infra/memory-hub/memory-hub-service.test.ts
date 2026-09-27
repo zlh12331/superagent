@@ -11,8 +11,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { createDeferredMemoryPort, MemoryHubService } from './memory-hub-service';
 import type { MemoryPort } from './types';
+
+// 失效域广播替身（基础设施边界，规范允许 vi.mock；S8 断言用，见文件尾 describe）
+vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 describe('MemoryHubService 配置判定', () => {
   it('hubRoot 未配置 → isConfigured=false', () => {
@@ -297,5 +301,120 @@ describe('createDeferredMemoryPort', () => {
       total: 1,
     });
     expect(ensureStarted).toHaveBeenCalledTimes(5);
+  });
+});
+
+// ── 失效域声明（31 号 spec S8：memory 运行态变化） ──────────────────
+
+describe('MemoryHubService 失效域声明（S8）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.mocked(broadcastInvalidation).mockClear();
+  });
+
+  /** EngineProcessHandle 的 fake 形状（kill 触发 exit 监听，模拟真实进程） */
+  interface FakeHandle {
+    pid: number | undefined;
+    hasExited: () => boolean;
+    stderrTail: () => string;
+    onExit: (listener: (code: number) => void) => void;
+    kill: () => void;
+  }
+
+  /** fake launcher：可编程的 EngineProcessHandle */
+  function createLaunchFake(): { launcher: () => FakeHandle; crash: (code?: number) => void } {
+    const exitListeners: Array<(code: number) => void> = [];
+    let exited = false;
+    const launcher = (): FakeHandle => ({
+      pid: 4242,
+      hasExited: () => exited,
+      stderrTail: () => '',
+      onExit: (listener: (code: number) => void) => {
+        exitListeners.push(listener);
+      },
+      kill: () => {
+        exited = true;
+        for (const listener of exitListeners) {
+          listener(0);
+        }
+      },
+    });
+    return {
+      launcher,
+      crash: (code = 1) => {
+        exited = true;
+        for (const listener of exitListeners) {
+          listener(code);
+        }
+      },
+    };
+  }
+
+  /** 造一个「有上游入口」的 hubRoot（fake launcher + stub fetch，不真拉子进程） */
+  function createStartedService(launcher: () => FakeHandle): MemoryHubService {
+    const dir = mkdtempSync(join(tmpdir(), 'memory-hub-invalidation-'));
+    mkdirSync(join(dir, 'src', 'gateway'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'gateway', 'server.ts'), 'export class TdaiGateway {}');
+    return new MemoryHubService({
+      hubRoot: dir,
+      dataDir: join(dir, 'data'),
+      llm: { baseUrl: 'http://llm.test', apiKey: 'k', model: 'm' },
+      launcher: launcher as never,
+    });
+  }
+
+  it('sidecar 就绪 → 广播 memory（懒启动运行态缺口锚）', async () => {
+    const fake = createLaunchFake();
+    // /health 探测替身：立即就绪（真实 fetch 由 contract test 覆盖）
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
+    );
+    const service = createStartedService(fake.launcher as never);
+
+    await service.ensureStarted();
+
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+  });
+
+  it('sidecar 异常退出 → 广播 memory（running→false）', async () => {
+    const fake = createLaunchFake();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
+    );
+    const service = createStartedService(fake.launcher as never);
+    await service.ensureStarted();
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    fake.crash(1);
+
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+  });
+
+  it('stop 收尾 → 广播 memory（含 kill 触发的 exit 路径）', async () => {
+    const fake = createLaunchFake();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
+    );
+    const service = createStartedService(fake.launcher as never);
+    await service.ensureStarted();
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    await service.stop();
+
+    // exit 回调广播 + stop 尾部广播（真实进程语义下两处都发生）
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+  });
+
+  it('未配置降级路径不广播（状态未迁移）', async () => {
+    const service = new MemoryHubService({ hubRoot: undefined, dataDir: '/tmp/m' });
+
+    await service.ensureStarted();
+
+    expect(broadcastInvalidation).not.toHaveBeenCalled();
   });
 });

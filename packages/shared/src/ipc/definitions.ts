@@ -134,6 +134,7 @@ import {
 } from '../schemas/goal';
 import type { ChannelListRes, ChannelOpRes } from '../schemas/im';
 import { ChannelListResSchema, ChannelStartReqSchema, ChannelStopReqSchema } from '../schemas/im';
+import { type InvalidationPayload, InvalidationPayloadSchema } from '../schemas/invalidation';
 import {
   McpListReqSchema,
   type McpListRes,
@@ -1050,6 +1051,15 @@ export const IPC_DEFINITIONS = {
     list: withSchema(IPC_META.mcp.list, McpListReqSchema, {} as McpListRes, McpListResSchema),
     start: withSchema(IPC_META.mcp.start, McpServerConfigSchema, {} as McpStartRes, OkResSchema),
     stop: withSchema(IPC_META.mcp.stop, McpStopReqSchema, {} as McpStopRes, OkResSchema),
+  },
+
+  invalidation: {
+    // 失效域事件：主进程写路径声明受影响域后广播（payload 契约见 schemas/invalidation.ts）
+    subscribeDomains: withPayload(
+      IPC_META.invalidation.subscribeDomains,
+      {} as InvalidationPayload,
+      InvalidationPayloadSchema,
+    ),
   },
 
   update: {

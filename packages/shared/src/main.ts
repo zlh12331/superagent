@@ -49,6 +49,7 @@ export * from './schemas/file';
 export * from './schemas/git';
 export * from './schemas/goal';
 export * from './schemas/im';
+export * from './schemas/invalidation';
 export * from './schemas/mcp';
 export * from './schemas/memory';
 export * from './schemas/models';

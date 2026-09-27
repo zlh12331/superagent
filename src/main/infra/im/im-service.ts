@@ -16,7 +16,9 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChannelKind, IChannelInfo } from '@code-agent/shared/main';
+import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { getSecret, setSecret } from '../storage/keychain';
 import { createAllAdapters } from './adapters';
 import type { ChannelIncomingMessage, IChannelAdapter } from './channel/types';
@@ -56,8 +58,13 @@ export class ImService {
       token !== undefined && token.length > 0 ? token : await getSecret(channelKeychainKey(kind));
     await adapter.connect(stored ?? undefined);
     if (adapter.isConnected) {
+      // 失效域声明（31 号 spec S10）：仅真实状态迁移（重复 start 已在跑则不声明）
+      const wasRunning = this.started.has(kind);
       this.started.add(kind);
       logger.info({ kind }, 'IM 渠道已启动');
+      if (!wasRunning) {
+        broadcastInvalidation([INVALIDATION_DOMAINS.im]);
+      }
     }
   }
 
@@ -67,8 +74,12 @@ export class ImService {
   async stop(kind: ChannelKind): Promise<void> {
     const adapter = this.getAdapter(kind);
     await adapter.disconnect();
-    this.started.delete(kind);
+    // 失效域声明（31 号 spec S10）：仅真实停止时声明（重复 stop 幂等不声明）
+    const wasRunning = this.started.delete(kind);
     logger.info({ kind }, 'IM 渠道已停止');
+    if (wasRunning) {
+      broadcastInvalidation([INVALIDATION_DOMAINS.im]);
+    }
   }
 
   /**
@@ -149,8 +160,13 @@ export class ImService {
    * 全部渠道停止（应用退出）
    */
   async stopAll(): Promise<void> {
+    const hadRunning = this.started.size > 0;
     await Promise.allSettled(this.adapters.map((adapter) => adapter.disconnect()));
     this.started.clear();
+    // 失效域声明（31 号 spec S10）：退出路径窗口已销毁时广播为 no-op
+    if (hadRunning) {
+      broadcastInvalidation([INVALIDATION_DOMAINS.im]);
+    }
   }
 
   private getAdapter(kind: ChannelKind): IChannelAdapter {

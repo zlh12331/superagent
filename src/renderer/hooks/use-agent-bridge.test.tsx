@@ -6,6 +6,11 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
+import {
+  isTurnEndCovered,
+  noteInvalidationEvent,
+  resetInvalidationCoverage,
+} from '@/lib/invalidation/invalidation';
 import { queryClient as globalQueryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
@@ -51,6 +56,8 @@ describe('use-agent-bridge', () => {
     useApprovalsStore.getState().clearBySession('s1');
     useAgentAskStore.getState().clearAsk();
     globalQueryClient.clear();
+    // 清空回合结束覆盖登记（31 号：避免用例间失效事件状态串扰）
+    resetInvalidationCoverage();
 
     // 订阅回调捕获
     window.api.agent = {
@@ -186,5 +193,62 @@ describe('use-agent-bridge', () => {
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: SESSIONS_QUERY_KEY }),
     );
+  });
+
+  // ── 渐进回落（31 号 spec §2.5c）：事件覆盖 → 跳过旧清单；L2 清理不受影响 ──
+
+  /** 构造回合结束聚合声明域（与主进程 turnEndInvalidationDomains 等形） */
+  function turnEndDomains(sessionId: string): string[] {
+    return ['sessions', `session:${sessionId}`, 'goal', 'task', 'usage', 'git', 'file', 'turns'];
+  }
+
+  it('失效事件已覆盖该会话：stream:end 跳过旧清单（不重复失效）', () => {
+    noteInvalidationEvent(turnEndDomains('s1'), 's1');
+    expect(isTurnEndCovered('s1')).toBe(true);
+
+    const invalidateSpy = vi.spyOn(globalQueryClient, 'invalidateQueries');
+    renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+
+    fireEnd({ sessionId: 's1', reason: 'completed' });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it('事件缺失：回落旧清单（渐进兼容语义不回归）', () => {
+    resetInvalidationCoverage();
+
+    const invalidateSpy = vi.spyOn(globalQueryClient, 'invalidateQueries');
+    renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+
+    fireEnd({ sessionId: 's1', reason: 'completed' });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: SESSIONS_QUERY_KEY }),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['usage'] }));
+  });
+
+  it('事件已覆盖：L2 清理（审批缓冲 / 提问弹窗）仍无条件执行', () => {
+    noteInvalidationEvent(turnEndDomains('s1'), 's1');
+    useAgentAskStore
+      .getState()
+      .setAsk('s1', 'ask-1', [
+        { id: 'q1', question: '继续吗？', header: '确认', options: [] } as never,
+      ]);
+    useApprovalsStore.getState().enqueue({
+      id: 'a-1',
+      sessionId: 's1',
+      type: 'run_command',
+      title: '执行命令',
+      description: 'ls',
+      input: { command: 'ls' },
+      createdAt: Date.now(),
+    });
+
+    renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+    fireEnd({ sessionId: 's1', reason: 'completed' });
+
+    expect(useAgentAskStore.getState().askId).toBeNull();
+    expect(useApprovalsStore.getState().pending.length).toBe(0);
   });
 });

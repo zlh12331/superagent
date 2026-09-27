@@ -94,6 +94,32 @@ vi.mock('ai', async (importOriginal) => {
   };
 });
 
+// electron 替身：BrowserWindow 供失效域广播捕获（31 号 spec §5.1）。
+// 不提供 app —— emit-event 对 app 的访问自带 try/catch（isPackaged 探测降级）。
+const invalidationMocks = vi.hoisted(() => {
+  const sends: Array<[string, unknown]> = [];
+  /** 广播 + options.webContents 推送的统一时间线（channel 顺序） */
+  const order: string[] = [];
+  const win = {
+    isDestroyed: vi.fn(() => false),
+    webContents: {
+      isDestroyed: vi.fn(() => false),
+      send: vi.fn((channel: string, payload: unknown) => {
+        sends.push([channel, payload]);
+        order.push(channel);
+      }),
+    },
+  };
+  return { sends, order, win };
+});
+
+vi.mock('electron', () => ({
+  // 方括号键：规避 useNamingConvention 对 electron API 名（PascalCase）的误报
+  ['BrowserWindow']: {
+    getAllWindows: vi.fn(() => [invalidationMocks.win]),
+  },
+}));
+
 // mock ai-provider：拦截 getModel
 vi.mock('../llm-client/ai-provider', () => ({
   getModel: mocks.mockGetModel,
@@ -1240,6 +1266,61 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect(ctx).toBeDefined();
     expect(ctx).not.toHaveProperty('webContents');
     expect(mockSessionService.markIdle).toHaveBeenCalled();
+  });
+
+  it('回合完成：广播失效域聚合（8 域）且先于 AGENT_STREAM_END（31 号 spec S7）', async () => {
+    invalidationMocks.sends.length = 0;
+    invalidationMocks.order.length = 0;
+    const wc = createMockWebContents();
+    // 单一时间线：webContents 推送与失效广播共用顺序数组（win.send 恒写 order）
+    wc.send.mockImplementation(((channel: string) => {
+      invalidationMocks.order.push(channel);
+    }) as never);
+
+    await service.startAgent(baseOptions({ sessionId: 'session-invalidation', webContents: wc }));
+    await flushAsync();
+
+    // 广播内容：turnEndInvalidationDomains(sessionId) 的 8 域逐字断言（防清单漂移）
+    const invalidationCall = invalidationMocks.sends.find(
+      ([channel]) => channel === 'invalidation:event:domains',
+    );
+    expect(invalidationCall).toBeDefined();
+    expect(invalidationCall?.[1]).toEqual({
+      domains: [
+        'sessions',
+        'session:session-invalidation',
+        'goal',
+        'task',
+        'usage',
+        'git',
+        'file',
+        'turns',
+      ],
+      sessionId: 'session-invalidation',
+    });
+
+    // 顺序：渲染层须先登记「回合结束域已覆盖」再进 stream:end（渐进回落前提）
+    const invalidationIndex = invalidationMocks.order.indexOf('invalidation:event:domains');
+    const endIndex = invalidationMocks.order.indexOf(IPC_CHANNELS.AGENT_STREAM_END);
+    expect(invalidationIndex).toBeGreaterThanOrEqual(0);
+    expect(endIndex).toBeGreaterThanOrEqual(0);
+    expect(invalidationIndex).toBeLessThan(endIndex);
+  });
+
+  it('无头回合（不传 webContents）：同样广播失效域聚合（缺口 D 锚：IM/远程/定时回合）', async () => {
+    invalidationMocks.sends.length = 0;
+
+    await service.startAgent(baseOptions({ sessionId: 's-headless' }));
+    await flushAsync();
+
+    const invalidationCall = invalidationMocks.sends.find(
+      ([channel]) => channel === 'invalidation:event:domains',
+    );
+    expect(invalidationCall).toBeDefined();
+    const payload = invalidationCall?.[1] as { domains: string[]; sessionId: string };
+    expect(payload.sessionId).toBe('s-headless');
+    expect(payload.domains).toContain('session:s-headless');
+    expect(payload.domains).toContain('turns');
   });
 
   it('无头场景 + 流错误：不推送 ERROR，流程正常收尾', async () => {

@@ -8,6 +8,8 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
+import { broadcastInvalidation } from '../infra/invalidation/invalidation';
 import type { L0Record } from '../infra/memory-hub/memory-hub-service';
 import type { MemoryClearResult } from '../infra/memory-hub/types';
 import type { IpcHandlerContext } from '../utils/wrap';
@@ -74,6 +76,10 @@ export function createMemoryHandlers(params: {
     // 清除会话记忆（真实删除 L0；引擎不可用/失败时 ok=false）
     clear: async (input) => {
       const result = await clearBySession(input.sessionId);
+      // 失效域声明（31 号 spec S9）：列表 + 状态面板的 recordCount 都已变化
+      if (result.ok) {
+        broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
+      }
       return { ok: result.ok, ...(result.ok ? { deletedCount: result.deletedCount } : {}) };
     },
 
@@ -108,6 +114,10 @@ export function createMemoryHandlers(params: {
       }
       if (jsonlEligible.length > 0) {
         await removeL0Jsonl(jsonlEligible);
+      }
+      // 失效域声明（31 号 spec S9）：有真实删除才声明（全部失败时数据未变）
+      if (clearedSessions > 0 || deletedCount > 0) {
+        broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
       }
       if (failed.length > 0) {
         return {

@@ -49,6 +49,9 @@ export type * from './schemas/file';
 export type * from './schemas/git';
 export type * from './schemas/goal';
 export type * from './schemas/im';
+export type * from './schemas/invalidation';
+// 失效域词表（值：渲染层映射/回落判定与主进程声明侧共用单一真源，31 号设计文档 §2.2）
+export { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from './schemas/invalidation';
 export type * from './schemas/memory';
 export type * from './schemas/models';
 export type * from './schemas/remote';
