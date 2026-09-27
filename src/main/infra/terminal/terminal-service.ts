@@ -151,6 +151,9 @@ export class TerminalService implements ITerminalService {
   /** 已退出终端保留的输出缓冲数量上限 */
   private static readonly MAX_RETAINED_EXITED_BUFFERS = 20;
 
+  /** dispose 强杀升级等待：kill 后仍未退出多久升级强杀（对齐 terminate-child 的 3s 口径） */
+  private static readonly DISPOSE_ESCALATION_MS = 3_000;
+
   /**
    * 追加 PTY 输出到环形缓冲（2026-09-08 性能修复）
    *
@@ -415,21 +418,19 @@ export class TerminalService implements ITerminalService {
   }
 
   /**
-   * 优雅关闭：kill 所有活跃 PTY
+   * 优雅关闭：kill 所有活跃 PTY，未退出者 3s 后升级强杀（防孤儿）
    *
    * 应用退出时调用，避免 PTY 子进程句柄泄漏导致进程不退出。
-   * kill 后 onExit 会异步触发，但应用即将退出，不等待事件回调。
+   * 对照 memory-hub-service.stop 的「kill → onExit 早放行 → 3s 兜底」形态：
+   * 等待退出期间挂 onExit（正常路径立即放行），超时未退出则升级强杀后放行
+   * （总体最多阻塞 dispose 链 3s，与链上其他 3s 兜底一致）。
    */
   async dispose(): Promise<void> {
     if (this.terminals.size > 0) {
-      for (const [id, ctx] of this.terminals) {
-        try {
-          ctx.pty.kill();
-        } catch (error) {
-          logger.warn({ terminalId: id, error }, 'TerminalService dispose kill 失败');
-        }
-      }
-      // 立即清空 Map（onExit 回调可能异步触发，但应用即将退出）
+      // 快照后逐个 kill+等待（onExit 回调可能并发删 Map，避免迭代中变更）
+      await Promise.all(
+        [...this.terminals.entries()].map(([id, ctx]) => this.killWithEscalation(id, ctx.pty)),
+      );
       this.terminals.clear();
     }
     // 清理所有输出缓冲（包括已退出终端的残留缓冲）
@@ -437,6 +438,57 @@ export class TerminalService implements ITerminalService {
     this.outputBufferBytes.clear();
     this.exitedBufferOrder.length = 0;
     logger.info({}, 'TerminalService 所有 PTY 已清理');
+  }
+
+  /**
+   * kill 单个 PTY 并等待退出；DISPOSE_ESCALATION_MS 未退出则升级强杀
+   *
+   * 退出路径上 fire-and-forget 无效（app.exit(0) 会丢弃未触发的定时器），
+   * 必须在 dispose 内等待升级真正发出，故对照 memory-hub-service.stop 的
+   * Promise 形态实现，而非复用 terminateChild（ChildProcess 事件模型不兼容，见下）。
+   */
+  private async killWithEscalation(terminalId: string, pty: IPty): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      // 正常路径：pty 退出即放行，dispose 不空等
+      pty.onExit(finish);
+      try {
+        pty.kill();
+      } catch (error) {
+        logger.warn({ terminalId, error }, 'TerminalService dispose kill 失败');
+      }
+      const timer = setTimeout(() => {
+        logger.warn({ terminalId }, 'TerminalService PTY kill 后未退出，升级强杀');
+        this.escalateKill(terminalId, pty);
+        finish();
+      }, TerminalService.DISPOSE_ESCALATION_MS);
+      timer.unref?.();
+    });
+  }
+
+  /**
+   * 强杀升级（平台差异，node-pty 1.1.0 实证）：
+   * - Unix：kill() 仅向 shell pid 发 SIGHUP（unixTerminal.js，可被忽略 → 孤儿残留），
+   *   升级为 SIGKILL（IPty.kill(signal) 在 Unix 有效）
+   * - Windows：kill(signal) 直接抛错（'Signals not supported on windows'），
+   *   且 kill() 本身已遍历 console 进程列表逐 pid 终止（ConPTY/winpty 均整树，
+   *   windowsPtyAgent.js），无信号可升级、残留属 node-pty 层已尽力
+   */
+  private escalateKill(terminalId: string, pty: IPty): void {
+    if (process.platform === 'win32') {
+      return;
+    }
+    try {
+      pty.kill('SIGKILL');
+    } catch (error) {
+      logger.warn({ terminalId, error }, 'TerminalService PTY 强杀失败');
+    }
   }
 
   /**
