@@ -1,5 +1,5 @@
 // data-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · 数据区块（会话导出 + 打开数据目录 + 更新缓存占用与清理，数据极致）
+// 设置对话框 · 数据区块（会话导出/导入 + 打开数据目录 + 更新缓存占用与清理，数据极致）
 // ──────────────────────────────────────────────
 // 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
 // ──────────────────────────────────────────────
@@ -16,12 +16,13 @@ import {
   clearUpdateCache,
   exportAllSessions,
   getUpdateCacheInfo,
+  importAllSessions,
   openDataDirChecked,
 } from '@/lib/settings-ops';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUpdateStore } from '@/stores/transient/update-store';
 
-/** 数据区块（会话导出 + 打开数据目录 + 更新缓存） */
+/** 数据区块（会话导出/导入 + 打开数据目录 + 更新缓存） */
 export function DataSection(): React.ReactElement {
   const { t } = useTranslation();
   // 更新缓存占用（path 为 null 表示无法解析缓存目录 → 隐藏该行，不展示猜测值）
@@ -69,6 +70,24 @@ export function DataSection(): React.ReactElement {
     }
   };
 
+  // 导入走 confirm（导入入口统一确认）：同 id 会话自动跳过，属合并不覆盖，
+  // 故不标 danger；danger 留给真正覆盖式的设置导入
+  const handleImportAll = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: t('settings.importSessions'),
+      message: t('settings.importSessionsConfirm'),
+    });
+    if (!confirmed) return;
+    try {
+      const res = await importAllSessions();
+      toast.success(
+        t('settings.importSessionsDone', { imported: res.imported, skipped: res.skipped }),
+      );
+    } catch {
+      toast.error(t('settings.importSessionsFailed'));
+    }
+  };
+
   const handleOpenDataDir = async (): Promise<void> => {
     try {
       const res = await openDataDirChecked();
@@ -92,6 +111,9 @@ export function DataSection(): React.ReactElement {
       <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={handleExportAll}>
           {t('settings.exportSessions')}
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleImportAll}>
+          {t('settings.importSessions')}
         </Button>
         <Button variant="outline" size="sm" onClick={handleOpenDataDir}>
           {t('settings.openDataDir')}

@@ -2,7 +2,7 @@
 // Session 域 IPC handler：会话持久化查询通道（定义表驱动）
 //
 // 职责：
-// - 实现 6 个 session:* 请求-响应方法
+// - 实现 session:* 请求-响应方法（含导出 exportAll / 导入 importAll）
 // - 把 IPC 调用委托给 SessionService
 //
 // 设计：
@@ -16,10 +16,16 @@
 
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ChatMessage, InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import type {
+  ChatMessage,
+  InferHandlers,
+  IPC_DEFINITIONS,
+  SessionImportRes,
+} from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
 
 import type { ISessionService } from '../infra/storage/session-service';
+import { readJsonImportFile } from '../utils/json-file';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
@@ -67,6 +73,30 @@ async function exportAllSessions(sessionService: ISessionService): Promise<{
     logger.error({ error: String(error) }, '会话导出失败');
     throw error;
   }
+}
+
+/**
+ * 导入会话 JSON（数据资产可迁移）
+ *
+ * 流程：dialog 选文件 → 读文件（大小上限 + JSON 解析）→ SessionService.importAll
+ * （zod 文件格式校验 + 同 id 跳过 + 每会话事务落库）。
+ * 用户取消 / 空选时返回 { imported: 0, skipped: 0 }（无操作，不报错）。
+ */
+async function importSessionsFile(sessionService: ISessionService): Promise<SessionImportRes> {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: '导入会话',
+    defaultPath: app.getPath('documents'),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  const filePath = filePaths[0];
+  if (canceled || filePath === undefined) {
+    return { imported: 0, skipped: 0 };
+  }
+  const payload = await readJsonImportFile(filePath);
+  const result = await sessionService.importAll(payload);
+  logger.info({ filePath, imported: result.imported, skipped: result.skipped }, '会话导入完成');
+  return result;
 }
 
 /**
@@ -131,6 +161,11 @@ export function createSessionHandlers(
     // session:exportAll - 导出全部会话 JSON（dialog 选路径 + 写文件）
     exportAll: async () => {
       return exportAllSessions(sessionService);
+    },
+
+    // session:importAll - 导入会话（dialog 选文件 + zod 校验 + 同 id 跳过 + 每会话事务）
+    importAll: async () => {
+      return importSessionsFile(sessionService);
     },
 
     // session:getUsageSummary - 用量统计汇总（设置页展示）

@@ -1,5 +1,6 @@
 // src/renderer/components/settings/sections/data-section.test.tsx
-// DataSection 测试（正向 / 边界 / 异常）：导出会话 / 打开数据目录，含 IPC 与用户取消分支
+// DataSection 测试（正向 / 边界 / 异常）：会话导出/导入 + 打开数据目录，
+// 含 IPC、用户取消与确认分支
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +22,14 @@ const t = i18n.t.bind(i18n);
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+/** 点击按钮 → 放行 confirm store（DialogHost 未挂载，手动 resolve） */
+async function clickWithConfirm(name: string, result: boolean): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name }));
+  const { useConfirmDialogStore } = await import('@/stores/transient/confirm-dialog-store');
+  await waitFor(() => expect(useConfirmDialogStore.getState().currentRequest).not.toBeNull());
+  useConfirmDialogStore.getState()._resolve(result);
+}
 
 describe('DataSection', () => {
   it('正向：导出成功 → 成功提示（含路径）', async () => {
@@ -95,6 +104,46 @@ describe('DataSection', () => {
 
     expect(mockToastError).not.toHaveBeenCalled();
     expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  describe('会话导入', () => {
+    it('正向：确认后导入 → 成功提示（含 imported/skipped 计数）', async () => {
+      window.api = {
+        session: { importAll: vi.fn().mockResolvedValue({ data: { imported: 2, skipped: 1 } }) },
+      } as never;
+      render(<DataSection />);
+
+      await clickWithConfirm(t('settings.importSessions'), true);
+
+      await waitFor(() => expect(window.api.session.importAll).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+          t('settings.importSessionsDone', { imported: 2, skipped: 1 }),
+        ),
+      );
+    });
+
+    it('边界：确认弹窗取消 → 不调 IPC', async () => {
+      window.api = { session: { importAll: vi.fn() } } as never;
+      render(<DataSection />);
+
+      await clickWithConfirm(t('settings.importSessions'), false);
+
+      expect(window.api.session.importAll).not.toHaveBeenCalled();
+    });
+
+    it('异常：导入失败（错误信封）→ 失败提示', async () => {
+      window.api = {
+        session: { importAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
+      } as never;
+      render(<DataSection />);
+
+      await clickWithConfirm(t('settings.importSessions'), true);
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith(t('settings.importSessionsFailed')),
+      );
+    });
   });
 
   describe('更新缓存', () => {

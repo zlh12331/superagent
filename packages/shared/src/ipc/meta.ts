@@ -63,6 +63,8 @@ export const IPC_META = {
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
     exportAll: request('session:exportAll'),
+    // 导入会话（JSON 导出文件，version=1 格式；同 id 会话跳过并计数）
+    importAll: request('session:import'),
     getUsageSummary: request('session:getUsageSummary'),
     getTurns: request('session:getTurns'),
     getRecentTurns: request('session:getRecentTurns'),

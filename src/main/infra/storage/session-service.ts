@@ -36,6 +36,7 @@ import type {
   SessionDeleteRes,
   SessionGetRes,
   SessionGetTurnsRes,
+  SessionImportRes,
   SessionListRecentDirsRes,
   SessionListRes,
   SessionPinRes,
@@ -55,12 +56,12 @@ import {
   rowToMeta,
   serializeMessage,
 } from './session-helpers';
+import { exportAllSessions, importSessionsFromPayload } from './session-io';
 import {
   DEFAULT_SESSION_TITLE,
   type ISessionService,
   type SessionAppendMessageOptions,
   type SessionCreateOptions,
-  type SessionExportItem,
   type SessionExportPayload,
 } from './session-types';
 import {
@@ -463,30 +464,25 @@ export class SessionService {
     return result.changes;
   }
 
-  /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
+  /**
+   * 导出全部会话（元数据 + 消息 + 回合 + token 用量）
+   *
+   * 实现委托 session-io（导出/导入存储层自成一块，本文件保持体量），
+   * 输出为 version=1 的 SessionExportFile 文件格式（schema 见 shared）。
+   */
   async exportAll(): Promise<SessionExportPayload> {
-    const db = getDb();
-    const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
-    const items: SessionExportItem[] = rows.map((row) => {
-      const messageRows = db
-        .select()
-        .from(messages)
-        .where(eq(messages.sessionId, row.id))
-        .orderBy(messages.seq)
-        .all();
-      return {
-        meta: rowToMeta(row),
-        messages: messageRows.map((m) => {
-          try {
-            return JSON.parse(m.content) as unknown;
-          } catch {
-            // 损坏的 content 保留原始字符串（导出不丢数据）
-            return m.content;
-          }
-        }),
-      };
-    });
-    return { exportedAt: Date.now(), app: 'code-agent-desktop', sessions: items };
+    return exportAllSessions();
+  }
+
+  /**
+   * 导入会话（version=1 导出文件格式）
+   *
+   * 实现委托 session-io：zod 校验 → 同 id 会话跳过并计数 → 每会话事务落库。
+   *
+   * @throws AppError(INVALID_INPUT) 文件格式校验失败
+   */
+  async importAll(payload: unknown): Promise<SessionImportRes> {
+    return importSessionsFromPayload(payload);
   }
 
   /**

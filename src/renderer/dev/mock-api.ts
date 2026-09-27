@@ -620,6 +620,7 @@ function createMockApi(): IpcApi {
           ],
         }),
       exportAll: async () => ipcOk({ saved: false }),
+      importAll: async () => ipcOk({ imported: 0, skipped: 0 }),
       compact: async () => ipcOk({ removed: 0, remaining: 0, reclaimedTokens: 0, messages: [] }),
       getUsageSummary: async () => ipcOk(mockUsageSummary()),
       getTurns: async ({ sessionId }: Req<IpcApi['session']['getTurns']>) =>

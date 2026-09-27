@@ -17,6 +17,7 @@ import type {
   MemoryClearAllRes,
   MemoryListRes,
   MemoryStatusRes,
+  SessionImportRes,
   SessionRecentTurnsRes,
   SkillListRes,
   ToolListRes,
@@ -406,6 +407,18 @@ export async function exportAllSessions(): Promise<SessionExportAllRes> {
     return { saved: false };
   }
   return unwrap(await window.api.session.exportAll());
+}
+
+/**
+ * 导入会话（主进程 dialog 选文件 + 校验 + 落库）
+ *
+ * @returns 无桥时返回零计数（调用方按取消分支静默处理）
+ */
+export async function importAllSessions(): Promise<SessionImportRes> {
+  if (!hasIpcBridge()) {
+    return { imported: 0, skipped: 0 };
+  }
+  return unwrap(await window.api.session.importAll());
 }
 
 /**

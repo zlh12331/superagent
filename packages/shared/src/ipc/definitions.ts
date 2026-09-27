@@ -196,6 +196,7 @@ import {
   SessionGetTurnsReqSchema,
   type SessionGetTurnsRes,
   SessionGetTurnsResSchema,
+  SessionImportResSchema,
   SessionListRecentDirsReqSchema,
   type SessionListRecentDirsRes,
   SessionListRecentDirsResSchema,
@@ -573,6 +574,14 @@ export const IPC_DEFINITIONS = {
       null,
       {} as { saved: boolean; path?: string },
       z.object({ saved: z.boolean(), path: z.string().optional() }),
+    ),
+    // 导入会话：dialog 选文件（主进程内完成读文件 + 解析），入参为空；
+    // zod 文件格式校验在 SessionService.importAll 内（INVALID_ERROR 语义见 service）
+    importAll: withSchema(
+      IPC_META.session.importAll,
+      null,
+      {} as { imported: number; skipped: number },
+      SessionImportResSchema,
     ),
     getUsageSummary: withSchema(
       IPC_META.session.getUsageSummary,
