@@ -385,8 +385,8 @@ app
 
     // 主进程内存监控（生产长期趋势 + 泄漏哨兵）
     // - 60s 采样 + 连续 3 次单调增长且累计 > 150MB 才告警（防 GC 抖动误报）
-    // - unref 定时器不阻塞应用退出
-    startMemoryMonitor({
+    // - unref 定时器不阻塞应用退出；stop 句柄保存，before-quit 与 lagMonitor 一并清理
+    stopMemoryMonitor = startMemoryMonitor({
       onAlert: (report) => {
         reportMessage(
           `主进程内存疑似持续增长：${report.growthMb.toFixed(0)}MB / ${report.durationSec.toFixed(0)}s`,
@@ -536,6 +536,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 let imChannelsInit: Promise<void> | null = null;
 // 事件循环延迟监控器（whenReady 内赋值；before-quit 停止）
 let lagMonitor: EventLoopLagMonitor | null = null;
+// 内存监控停止句柄（whenReady 内赋值；before-quit 停止——采样定时器虽 unref
+// 不阻塞退出，但显式停掉可避免退出路径上仍产生采样/告警，与 lagMonitor 同口径）
+let stopMemoryMonitor: (() => void) | null = null;
 app.on('before-quit', async (event) => {
   if (isQuitting()) {
     return;
@@ -569,6 +572,9 @@ app.on('before-quit', async (event) => {
     // 事件循环延迟监控先停（避免退出路径上仍产生告警样本）
     lagMonitor?.stop();
     lagMonitor = null;
+    // 内存监控一并停（避免退出路径上仍采样/告警；stop 幂等，不阻塞退出）
+    stopMemoryMonitor?.();
+    stopMemoryMonitor = null;
     // IM 渠道停止（长轮询等后台协程先停，避免退出时残留请求）
     // 先等启动期 restore() 落定（3s 超时兜底），防止与 stopAll 并发
     if (imChannelsInit !== null) {
