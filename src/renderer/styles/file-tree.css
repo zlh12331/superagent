@@ -608,7 +608,6 @@
   margin-top: 4px;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: 与 tool-card 图标链命中不同组件（空状态 vs 工具卡片），无覆盖 */
 .empty-state svg {
   margin-bottom: 14px;
   opacity: 0.45;

@@ -600,7 +600,6 @@ button.card-head {
   width: 100%;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: 与 .msg-content tr 命中不同组件容器 td（审批 diff vs 消息表格），无覆盖 */
 .approval-diff-wrapper td {
   padding: 0;
   vertical-align: top;
