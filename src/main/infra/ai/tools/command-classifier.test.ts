@@ -56,4 +56,23 @@ describe('CommandClassifier', () => {
     const generateJson = fake.generateJson as ReturnType<typeof vi.fn>;
     expect(generateJson).toHaveBeenCalledTimes(2);
   });
+
+  it('缓存达限：淘汰最旧而非整体清空', async () => {
+    const fake = createFakeLlm({ safe: true, reason: '安全' });
+    const classifier = new CommandClassifier(fake);
+    // 填满缓存（CACHE_LIMIT=200，与实现私有常量对齐）
+    for (let i = 0; i < 200; i += 1) {
+      await classifier.classify(`cmd-${i}`);
+    }
+    const generateJson = fake.generateJson as ReturnType<typeof vi.fn>;
+    generateJson.mockClear();
+    // 达限后再写入：最旧条目（cmd-0）被逐出，较新条目仍保留
+    await classifier.classify('cmd-new');
+    generateJson.mockClear(); // cmd-new 自身的判定不计入后续断言
+    await classifier.classify('cmd-0');
+    expect(generateJson).toHaveBeenCalledTimes(1); // cmd-0 已被逐出 → 重新判定
+    await classifier.classify('cmd-2');
+    expect(generateJson).toHaveBeenCalledTimes(1); // cmd-2 仍命中缓存 → 未整体清空
+    // （重新判定 cmd-0 时逐出的是当时的次旧 cmd-1，故探针取 cmd-2）
+  });
 });

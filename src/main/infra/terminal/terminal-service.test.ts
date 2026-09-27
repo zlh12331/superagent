@@ -516,14 +516,25 @@ describe('TerminalService.dispose（生命周期）', () => {
   let ptys: FakePty[];
 
   beforeEach(() => {
+    // dispose 现在等待 PTY 退出（kill → onExit 早放行 → 3s 强杀兜底），
+    // fake PTY 不会自行退出，用假时钟控制退出时机与升级路径
+    vi.useFakeTimers();
     ({ svc, ptys } = makeService());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('正向：有活跃终端 → 全部 kill + Map/缓冲清空', async () => {
     const res1 = await svc.create(makeOptions());
     await svc.create(makeOptions());
     ptys[0]?.emitData('leftover');
-    await svc.dispose();
+    const disposing = svc.dispose();
+    // 模拟 PTY 响应 kill 正常退出（onExit 早放行，不触发强杀）
+    ptys[0]?.emitExit(0);
+    ptys[1]?.emitExit(0);
+    await disposing;
     expect(ptys[0]?.kill).toHaveBeenCalled();
     expect(ptys[1]?.kill).toHaveBeenCalled();
     expect(svc.getOutput(res1.terminalId)).toBe('');
@@ -537,13 +548,54 @@ describe('TerminalService.dispose（生命周期）', () => {
     ptys[0]?.kill.mockImplementationOnce(() => {
       throw new Error('kill failed');
     });
-    await expect(svc.dispose()).resolves.toBeUndefined();
+    const disposing = svc.dispose();
+    ptys[0]?.emitExit(0);
+    ptys[1]?.emitExit(0);
+    await expect(disposing).resolves.toBeUndefined();
     expect(ptys[1]?.kill).toHaveBeenCalled();
     expect(svc.getOutput(res1.terminalId)).toBe('');
   });
 
   it('正向：无终端 → no-op 不抛', async () => {
     await expect(svc.dispose()).resolves.toBeUndefined();
+  });
+
+  it('防孤儿：kill 后 3s 未退出 → 升级 SIGKILL 强杀（Unix 语义）', async () => {
+    // 升级路径是平台分支行为：固定为 Unix 语义验证 SIGKILL 升级（跨平台可复现）
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    try {
+      await svc.create(makeOptions());
+      const disposing = svc.dispose();
+      await vi.advanceTimersByTimeAsync(3_000);
+      await disposing;
+      expect(ptys[0]?.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
+  });
+
+  it('防孤儿：kill 后及时退出 → 不升级强杀', async () => {
+    await svc.create(makeOptions());
+    const disposing = svc.dispose();
+    ptys[0]?.emitExit(0);
+    await disposing;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(ptys[0]?.kill).not.toHaveBeenCalledWith('SIGKILL');
+  });
+
+  it('防孤儿：Windows 下 kill(signal) 不受支持 → 升级为 no-op 不误杀', async () => {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      await svc.create(makeOptions());
+      const disposing = svc.dispose();
+      await vi.advanceTimersByTimeAsync(3_000);
+      await disposing;
+      expect(ptys[0]?.kill).not.toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
   });
 });
 
