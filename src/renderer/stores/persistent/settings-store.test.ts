@@ -131,7 +131,7 @@ describe('settings-store.persist 失败重试', () => {
     await flushPendingSettings();
     // flush 内已触发一次重试；再 flush 一次应成功落库且无待重试
     await flushPendingSettings();
-    const calls = setSpy.mock.calls;
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
     const themeWrites = calls.filter((c) => c[0]?.key === 'theme');
     expect(themeWrites.length).toBeGreaterThanOrEqual(2);
     expect(useSettingsStore.getState().theme).toBe('light');
@@ -141,7 +141,8 @@ describe('settings-store.persist 失败重试', () => {
     useSettingsStore.getState().setTheme('dark');
     await flushPendingSettings();
     await flushPendingSettings();
-    const themeWrites = setSpy.mock.calls.filter((c) => c[0]?.key === 'theme');
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    const themeWrites = calls.filter((c) => c[0]?.key === 'theme');
     expect(themeWrites.length).toBe(1);
   });
 });

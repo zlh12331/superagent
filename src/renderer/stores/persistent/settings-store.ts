@@ -524,42 +524,61 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     persistSetting('window', window);
   },
   applyMainSettingChange: (key, value) => {
-    // 只 setState 不 persist：变更来源是主进程（SQLite 已被它写过），回写是回声。
-    // 逐域合并：整快照覆盖会把其它域打回默认值（这正是不能复用 applySettingsSnapshot 的原因）。
-    if (key === 'theme') {
-      // primitive 键：此前 typeof value !== 'object' 直接丢弃，托盘改主题后
-      // 下次任意设置写回会用旧值覆盖主进程改动（丢更新）。
-      if (value === 'light' || value === 'dark' || value === 'system') {
-        set({ theme: value });
-      }
-      return;
-    }
-    if (key === 'language') {
-      if (value === 'zh-CN' || value === 'en') {
-        set({ language: value });
-        // UI 即时生效：与侧栏/设置页同一出口，避免 store 与 i18n 分叉
-        changeLanguage(value);
-      }
-      return;
-    }
-    if (key === 'window' && typeof value === 'object' && value !== null) {
-      set({ window: { ...useSettingsStore.getState().window, ...(value as WindowSettings) } });
-      return;
-    }
-    // 其余域：命中已知键时按域合并，未知键忽略（避免用未知结构污染 state）
-    if (typeof value !== 'object' || value === null) {
-      return;
-    }
-    const current = useSettingsStore.getState() as unknown as Record<string, unknown>;
-    const existing = current[key];
-    if (typeof existing !== 'object' || existing === null) {
-      return;
-    }
-    set({
-      [key]: { ...(existing as Record<string, unknown>), ...(value as Record<string, unknown>) },
-    } as Partial<SettingsState>);
+    applyMainChange(key, value, set);
   },
 }));
+
+/** theme 合法值收窄（primitive 键专用） */
+function asTheme(value: unknown): Theme | null {
+  return value === 'light' || value === 'dark' || value === 'system' ? value : null;
+}
+
+/** language 合法值收窄 */
+function asLanguage(value: unknown): AppLanguage | null {
+  return value === 'zh-CN' || value === 'en' ? value : null;
+}
+
+/**
+ * 主进程主动变更的应用逻辑（模块级，压低 store action 认知复杂度）
+ *
+ * 只更新内存、不 persist：变更来源是主进程（SQLite 已写过），回写是回声。
+ */
+function applyMainChange(
+  key: SettingKey,
+  value: unknown,
+  set: (partial: Partial<SettingsState>) => void,
+): void {
+  if (key === 'theme') {
+    const theme = asTheme(value);
+    if (theme !== null) set({ theme });
+    return;
+  }
+  if (key === 'language') {
+    const language = asLanguage(value);
+    if (language !== null) {
+      set({ language });
+      // UI 即时生效：与侧栏/设置页同一出口，避免 store 与 i18n 分叉
+      changeLanguage(language);
+    }
+    return;
+  }
+  if (key === 'window' && typeof value === 'object' && value !== null) {
+    set({ window: { ...useSettingsStore.getState().window, ...(value as WindowSettings) } });
+    return;
+  }
+  // 其余域：命中已知键时按域合并，未知键忽略（避免用未知结构污染 state）
+  if (typeof value !== 'object' || value === null) {
+    return;
+  }
+  const current = useSettingsStore.getState() as unknown as Record<string, unknown>;
+  const existing = current[key];
+  if (typeof existing !== 'object' || existing === null) {
+    return;
+  }
+  set({
+    [key]: { ...(existing as Record<string, unknown>), ...(value as Record<string, unknown>) },
+  } as Partial<SettingsState>);
+}
 
 /**
  * 应用启动快照（S1：main.tsx 在 render 前调用，覆盖默认值）
