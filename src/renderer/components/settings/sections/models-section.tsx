@@ -19,7 +19,8 @@ import {
   useRuntimeModelsQuery,
   useUpdateRuntimeModel,
 } from '@/hooks/use-runtime-models';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { AddModelDialog } from './dialogs/add-model-dialog';
 import { ModelConfigDialog } from './dialogs/model-config-dialog';
@@ -129,6 +130,7 @@ function RuntimeModelTable({
  */
 export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
 
   // 模型管理列表（L3：settings:listRuntimeModels，用户配置的模型记录）
   // 说明：服务商模式保存的模型也落 runtimeModelStore（providerKind + 具体 modelId，
@@ -210,7 +212,7 @@ export function ModelsSection(): ReactElement {
             若不判 error 会被下方空态分支渲染成「还没有配置模型」，把加载失败误导为空 */}
         <QueryErrorRow
           isError={isError}
-          errorMessage={error instanceof Error ? error.message : null}
+          errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
           onRetry={() => void refetch()}
         />
         {!isError && runtimeModels.length === 0 && (

@@ -15,7 +15,8 @@ import { toast } from 'sonner';
 import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { ALL_SKILLS_QUERY_KEY, LEARNED_SKILLS_QUERY_KEY } from '@/lib/query/keys';
 import {
   type LearnedSkillInfo,
@@ -30,6 +31,7 @@ import { SectionTitle, SettingRow } from '../settings-controls';
 /** 技能管理 pane */
 export function SkillsSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const queryClient = useQueryClient();
   // 学习表单状态（对齐参考 SkillsSettingsPane 的添加行）
   const [learnPrompt, setLearnPrompt] = useState('');
@@ -62,7 +64,7 @@ export function SkillsSection(): ReactElement {
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
     },
   });
 
@@ -73,7 +75,7 @@ export function SkillsSection(): ReactElement {
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
     },
   });
 
@@ -92,7 +94,11 @@ export function SkillsSection(): ReactElement {
       </p>
       <QueryErrorRow
         isError={learnedQuery.isError}
-        errorMessage={learnedQuery.error instanceof Error ? learnedQuery.error.message : null}
+        errorMessage={
+          learnedQuery.error instanceof Error
+            ? unwrapErrorMessage(learnedQuery.error, getErrorMessage)
+            : null
+        }
         onRetry={() => void learnedQuery.refetch()}
       />
       <QueryPendingRow isPending={learnedQuery.isPending} />

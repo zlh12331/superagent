@@ -104,9 +104,12 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
     return entries;
   };
   // 稳定入口：effect 与事件回调统一经 ref 调最新实现，自身引用恒定
+  // （用 useRef 固定包装函数身份：即便写进 effect 依赖也不会每渲染重跑）
   const loadDirRef = useRef(loadDirImpl);
   loadDirRef.current = loadDirImpl;
-  const loadDir = (path: string): Promise<readonly FileEntry[] | null> => loadDirRef.current(path);
+  const loadDir = useRef(
+    (path: string): Promise<readonly FileEntry[] | null> => loadDirRef.current(path),
+  ).current;
 
   // 1. 同步 workingDir 到 store（切换会话时重置状态，默认展开根目录）
   //    同时重置自动展开剩余深度（getState 现读：层级设置在挂载/切换项目时生效）
@@ -147,7 +150,7 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
     return () => {
       cancelled = true;
     };
-  }, [workingDir, expandedPaths, expandPaths]);
+  }, [workingDir, expandedPaths, expandPaths, loadDir]);
 
   // 3. 启动 file:watch + 订阅 file:watch:event
   useEffect(() => {
@@ -221,7 +224,7 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
     };
     // 仅依赖 workingDir 与稳定 store actions：watcher 生命周期与根目录绑定；
     // loadDir 经 ref 调用，不进依赖（防每渲染重订阅）
-  }, [workingDir, removeEntry, t]);
+  }, [workingDir, removeEntry, t, loadDir]);
 
   // 组件卸载时重置 store（避免切换到无文件树页面时残留状态）
   useEffect(() => {

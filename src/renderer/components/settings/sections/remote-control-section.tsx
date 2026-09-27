@@ -23,8 +23,9 @@ import {
   useStartRemoteControl,
   useStopRemoteControl,
 } from '@/hooks/use-remote-control';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { formatRelativeTime } from '@/lib/format-time';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { SettingRow, ToggleRow } from '../settings-controls';
 
@@ -126,6 +127,7 @@ function HeadlessModeWarning({ mode }: { readonly mode: string }): ReactElement 
 /** 远程控制设置区：状态展示 + 启动/停止远程控制（模式限制警告见上方 ModeWarning） */
 export function RemoteControlSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const { data, isPending: statusLoading, isError, error, refetch } = useRemoteStatusQuery();
   const { mode } = useApprovalMode();
   const startMutation = useStartRemoteControl();
@@ -187,7 +189,7 @@ export function RemoteControlSection(): ReactElement {
 
       <QueryErrorRow
         isError={isError}
-        errorMessage={error instanceof Error ? error.message : null}
+        errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
         onRetry={() => void refetch()}
       />
       <QueryPendingRow isPending={statusLoading} />

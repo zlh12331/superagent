@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { TOOLS_LIST_QUERY_KEY, WHITELIST_ENTRIES_QUERY_KEY } from '@/lib/query/keys';
 import {
   addWhitelistEntry,
@@ -28,6 +29,7 @@ import { confirm } from '@/stores/transient/confirm-dialog-store';
 /** 审批模式设置区：模式切换（自动/询问）+ 工具白名单增删 */
 export function ApprovalModeSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const { mode, setMode } = useApprovalMode();
   const queryClient = useQueryClient();
   // 白名单添加表单（对齐原型 whitelist-panel 的 whitelistInput + 添加按钮）
@@ -83,7 +85,7 @@ export function ApprovalModeSection(): ReactElement {
       invalidateWhitelist();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
     },
   });
 
@@ -94,7 +96,7 @@ export function ApprovalModeSection(): ReactElement {
       invalidateWhitelist();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
     },
   });
 
@@ -154,7 +156,11 @@ export function ApprovalModeSection(): ReactElement {
         <p className="text-xs text-muted-foreground font-sans">{t('settings.whitelistHint')}</p>
         <QueryErrorRow
           isError={whitelistQuery.isError}
-          errorMessage={whitelistQuery.error instanceof Error ? whitelistQuery.error.message : null}
+          errorMessage={
+            whitelistQuery.error instanceof Error
+              ? unwrapErrorMessage(whitelistQuery.error, getErrorMessage)
+              : null
+          }
           onRetry={() => void whitelistQuery.refetch()}
         />
         <QueryPendingRow isPending={whitelistQuery.isPending} />

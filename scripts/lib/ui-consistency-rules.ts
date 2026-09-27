@@ -77,6 +77,14 @@ export const UI_RULES: readonly UiRule[] = [
     desc: '旧式 window.api 可用性字面量判断（统一用 hasIpcBridge()，见 src/renderer/lib/ipc.ts）',
     pattern: /typeof window === 'undefined'\s*\|\|\s*window\.api === undefined/,
   },
+  {
+    id: 'raw-error-toast',
+    // 错误码解析单一真源是 unwrapErrorMessage（lib/ipc.ts）；
+    // toast.error(error.message) 会把 [CODE] 原样甩给用户。
+    desc: 'toast 直出 error.message（应经 unwrapErrorMessage(error, getErrorMessage) 本地化）',
+    pattern: /toast\.error\(\s*error\.message\s*\)/,
+    fileFilter: (relFile) => relFile.endsWith('.ts') || relFile.endsWith('.tsx'),
+  },
 ];
 
 /**

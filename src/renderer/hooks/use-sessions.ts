@@ -166,6 +166,7 @@ export function useSessionDetail(id: string | null, includeMessages = true) {
  */
 export function useDeleteSession() {
   const queryClient = useQueryClient();
+  const { getErrorMessage } = useErrorMessage();
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -193,8 +194,7 @@ export function useDeleteSession() {
       if (context?.prev !== undefined) {
         queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
       }
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(message);
+      toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
     },
     // 最终一致：无论成败都触发重新拉取（校验服务端真实状态）
     onSettled: () => {
@@ -225,6 +225,7 @@ export function useDeleteSession() {
  */
 export function useRenameSession() {
   const queryClient = useQueryClient();
+  const { getErrorMessage } = useErrorMessage();
 
   return useMutation({
     mutationFn: async (params: { id: string; title: string }) => {
@@ -254,8 +255,7 @@ export function useRenameSession() {
       if (context?.prev !== undefined) {
         queryClient.setQueryData(SESSIONS_QUERY_KEY, context.prev);
       }
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(message);
+      toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
     },
     // 最终一致：无论成败都触发重新拉取（校验服务端真实状态）
     onSettled: () => {
@@ -303,6 +303,7 @@ export function useRecentDirs() {
  */
 export function useCreateSession() {
   const queryClient = useQueryClient();
+  const { getErrorMessage } = useErrorMessage();
 
   return useMutation({
     mutationFn: async (params: { workingDir: string; title?: string }) => {
@@ -315,8 +316,7 @@ export function useCreateSession() {
       void queryClient.invalidateQueries({ queryKey: RECENT_DIRS_QUERY_KEY });
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(message);
+      toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
     },
   });
 }

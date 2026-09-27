@@ -16,7 +16,8 @@ import { toast } from 'sonner';
 import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { MCP_SERVERS_QUERY_KEY } from '@/lib/query/keys';
 import {
   listMcpServers,
@@ -210,6 +211,7 @@ function McpListStatus({
  */
 export function McpSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const queryClient = useQueryClient();
   // 添加表单状态（transport 三态 + 按 transport 切换字段组）
   const [name, setName] = useState('');
@@ -247,7 +249,7 @@ export function McpSection(): ReactElement {
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
       invalidate();
     },
   });
@@ -260,7 +262,7 @@ export function McpSection(): ReactElement {
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
       invalidate();
     },
   });
@@ -278,7 +280,7 @@ export function McpSection(): ReactElement {
       {/* 加载状态区（error 优先 / loading / 空态）—— 提取为子组件，避免 McpSection 主体过长 */}
       <McpListStatus
         isError={isError}
-        errorMessage={error instanceof Error ? error.message : null}
+        errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
         onRetry={() => void refetch()}
         isLoading={isLoading}
         isEmpty={servers.length === 0}
