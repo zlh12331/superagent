@@ -54,9 +54,9 @@
 |------|------|
 | `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:integration && pnpm test:scripts` |
 | `test:scripts` | `vitest run --root scripts` |
-| `test:main` | `vitest run --root src/main` |
+| `test:main` | `vitest run --root src/main --silent=passed-only` |
 | `test:main:watch` | `vitest --root src/main` |
-| `test:renderer` | `vitest run --root src/renderer` |
+| `test:renderer` | `vitest run --root src/renderer --silent=passed-only` |
 | `test:renderer:watch` | `vitest --root src/renderer` |
 | `test:e2e` | `cross-env E2E_MODE=true playwright test --config e2e/playwright.config.ts` |
 | `test:e2e:electron` | `playwright test --config e2e/playwright.electron.config.ts` |

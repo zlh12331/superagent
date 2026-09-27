@@ -65,9 +65,11 @@
 |------|------|------|
 | `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:integration && pnpm test:scripts` | 全量单元测试（shared + main + renderer + integration + scripts） |
 | `test:scripts` | `vitest run --root scripts` | scripts 目录测试（i18n / changelog / scaffold 工具链） |
-| `test:main` | `vitest run --root src/main` | 仅主进程 |
-| `test:renderer` | `vitest run --root src/renderer` | 仅渲染层 |
+| `test:main` | `vitest run --root src/main --silent=passed-only` | 仅主进程 |
+| `test:renderer` | `vitest run --root src/renderer --silent=passed-only` | 仅渲染层 |
 | `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage && pnpm coverage:settings` | shared + main + renderer 覆盖率（链尾回填 settings 子集实测） |
+
+`--silent=passed-only`：通过用例的测试内 console 输出不再打印（失败用例保留完整 console，便于排障）；主因是三阶段测试内 console 噪音合计约 450KB，会撑爆自动化门禁的 stdout 捕获上限（262KB）。
 
 ### 3.3 覆盖率配置
 
