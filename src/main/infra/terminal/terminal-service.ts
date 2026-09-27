@@ -128,20 +128,21 @@ export class TerminalService implements ITerminalService {
   >();
 
   /**
-   * 终端输出缓冲：terminalId → 累积输出字符串
+   * 终端输出缓冲：terminalId → 输出分片数组
    *
    * 独立于 terminals Map 维护，PTY 退出后仍保留缓冲供历史读取。
-   * 使用环形截断策略（MAX_BUFFER_BYTES），避免单缓冲内存膨胀；
+   * P2-35：分片数组 + outputBufferBytes 总长计数——追加为 O(1)（push 分片 +
+   * 计数累加），替代字符串拼接（每次复制整个累积串，O(total)）；
+   * 超限按头部丢弃分片（消费方语义不变：仍保留尾部最新输出）。
    * 已退出终端的缓冲按 FIFO 保留最近 MAX_RETAINED_EXITED_BUFFERS 个，
    * 防长会话中逐个累积（每终端 ≤100KB）的无界增长。
    */
-  private readonly outputBuffers = new Map<string, string>();
+  private readonly outputBuffers = new Map<string, string[]>();
 
   /**
    * 各终端缓冲的累计字节数（2026-09-08 性能修复）
    *
-   * 与 outputBuffers 同步维护，使「是否超限」判断从 O(buffer) 的
-   * `Buffer.byteLength(全量)` 降为 O(1) 计数累加。
+   * 与 outputBuffers 同步维护，使「是否超限」判断保持 O(1) 计数累加。
    */
   private readonly outputBufferBytes = new Map<string, number>();
 
@@ -152,25 +153,38 @@ export class TerminalService implements ITerminalService {
   private static readonly MAX_RETAINED_EXITED_BUFFERS = 20;
 
   /**
-   * 追加 PTY 输出到环形缓冲（2026-09-08 性能修复）
+   * 追加 PTY 输出到分片环形缓冲（P2-35：O(1) 追加，超限按头部丢弃分片）
    *
    * 从 create 的 onData 回调提取（保持 create 在棘轮基线内）。
-   * 维护累计字节计数使超限判断为 O(1)，仅在超限时做一次截断。
+   * 超限优先整片丢弃头部（O(1) 均摊）；仅当越界字节落在头片中段时对该片
+   * 做一次字节级截边——「保留尾部 MAX_BUFFER_BYTES 字节」的语义与旧实现一致
+   * （切片在多字节字符中段可能产生替换字符，与旧 subarray 行为相同）。
    */
   private appendToOutputBuffer(terminalId: string, data: string): void {
-    const current = this.outputBuffers.get(terminalId) ?? '';
-    const dataBytes = Buffer.byteLength(data, 'utf8');
-    const currentBytes = this.outputBufferBytes.get(terminalId) ?? 0;
-    if (currentBytes + dataBytes <= MAX_BUFFER_BYTES) {
-      this.outputBuffers.set(terminalId, current + data);
-      this.outputBufferBytes.set(terminalId, currentBytes + dataBytes);
-      return;
+    const chunks = this.outputBuffers.get(terminalId) ?? [];
+    let totalBytes = this.outputBufferBytes.get(terminalId) ?? 0;
+    chunks.push(data);
+    totalBytes += Buffer.byteLength(data, 'utf8');
+    let overflow = totalBytes - MAX_BUFFER_BYTES;
+    while (overflow > 0 && chunks.length > 0) {
+      const head = chunks[0];
+      if (head === undefined) break;
+      const headBytes = Buffer.byteLength(head, 'utf8');
+      if (headBytes <= overflow) {
+        chunks.shift(); // 头部整片丢弃
+        overflow -= headBytes;
+        totalBytes -= headBytes;
+        continue;
+      }
+      // 越界字节在头片中段：字节级截边保留尾部
+      const kept = Buffer.from(head, 'utf8').subarray(overflow).toString('utf8');
+      const keptBytes = Buffer.byteLength(kept, 'utf8');
+      totalBytes += keptBytes - headBytes;
+      chunks[0] = kept;
+      overflow = 0;
     }
-    // 环形截断：保留尾部 MAX_BUFFER_BYTES 字节
-    const buf = Buffer.from(current + data, 'utf8');
-    const truncated = buf.subarray(buf.length - MAX_BUFFER_BYTES).toString('utf8');
-    this.outputBuffers.set(terminalId, truncated);
-    this.outputBufferBytes.set(terminalId, Buffer.byteLength(truncated, 'utf8'));
+    this.outputBuffers.set(terminalId, chunks);
+    this.outputBufferBytes.set(terminalId, totalBytes);
   }
 
   /**
@@ -246,7 +260,7 @@ export class TerminalService implements ITerminalService {
     }
 
     // 初始化输出缓冲
-    this.outputBuffers.set(terminalId, '');
+    this.outputBuffers.set(terminalId, []);
     this.outputBufferBytes.set(terminalId, 0);
 
     // 绑定输出事件：推送 terminal:event:output + 追加到 outputBuffer
@@ -376,7 +390,7 @@ export class TerminalService implements ITerminalService {
    * @returns 终端输出字符串，不存在时返回空字符串
    */
   getOutput(terminalId: string): string {
-    return this.outputBuffers.get(terminalId) ?? '';
+    return (this.outputBuffers.get(terminalId) ?? []).join('');
   }
 
   /**
