@@ -384,6 +384,8 @@ export function Sidebar(): ReactElement {
                               isActive={entry.session.id === activeSessionId}
                               isDeleting={isDeleting}
                               isPinned={entry.session.pinned === true}
+                              // D4A：跨会话运行徽标 + 中断入口（数据源 sessions 表 lastRunStatus）
+                              isRunning={entry.session.lastRunStatus === 'running'}
                               highlighted={highlightedThreadIds.has(entry.session.id)}
                               onSelect={() => handleSelectSession(entry.session.id)}
                               onDelete={() => handleDelete(entry.session.id)}

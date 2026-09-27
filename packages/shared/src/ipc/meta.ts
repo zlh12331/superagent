@@ -47,6 +47,8 @@ export const IPC_META = {
     stop: request('agent:stop'),
     approvalResponse: request('agent:approval:response'),
     subscribeStreamPart: event('agent:stream:part'),
+    // 回合开始事件（D4A：渲染层据此点亮侧栏跨会话运行徽标）
+    subscribeStreamStart: event('agent:stream:start'),
     subscribeStreamEnd: event('agent:stream:end'),
     subscribeStreamError: event('agent:stream:error'),
     subscribeToolCall: event('agent:tool:call'),

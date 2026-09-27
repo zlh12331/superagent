@@ -25,6 +25,7 @@ import {
   type AgentStreamEndPayload,
   type AgentStreamErrorPayload,
   type AgentStreamPartPayload,
+  type AgentStreamStartPayload,
   type AgentToolCallPayload,
   type AgentToolResultPayload,
 } from '../schemas/agent';
@@ -378,6 +379,11 @@ const StreamPartPayloadSchema = z.object({
   part: z.unknown(),
 });
 
+/** agent:stream:start 事件 payload schema（D4A：回合开始，仅 envelope 校验） */
+const StreamStartPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
 /** agent:stream:error 事件 payload schema */
 const StreamErrorPayloadSchema = z.object({
   sessionId: z.string().min(1),
@@ -492,6 +498,12 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeStreamPart,
       {} as AgentStreamPartPayload,
       StreamPartPayloadSchema,
+    ),
+    // D4A：回合开始事件——渲染层据此点亮侧栏跨会话运行徽标
+    subscribeStreamStart: withPayload(
+      IPC_META.agent.subscribeStreamStart,
+      {} as AgentStreamStartPayload,
+      StreamStartPayloadSchema,
     ),
     subscribeAsk: withPayload(
       IPC_META.agent.subscribeAsk,

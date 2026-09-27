@@ -111,6 +111,8 @@
     "fileTree": "Files",
     "pin": "Pin",
     "unpin": "Unpin",
+    "sessionRunning": "Session running",
+    "stopTurn": "Stop this session's turn",
     "openFiles": "Show files",
     "openInExplorer": "Open in Explorer",
     "fileManager": "File manager",

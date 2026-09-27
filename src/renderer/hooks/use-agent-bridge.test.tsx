@@ -14,6 +14,7 @@ import { useToolStore } from '@/stores/transient/tool-store';
 import { useAgentBridge } from './use-agent-bridge';
 
 /** 事件回调捕获（测试手动触发） */
+let startCallback: ((payload: unknown) => void) | undefined;
 let endCallback: ((payload: unknown) => void) | undefined;
 let errorCallback: ((payload: unknown) => void) | undefined;
 
@@ -22,6 +23,11 @@ function createWrapper() {
     return <QueryClientProvider client={globalQueryClient}>{children}</QueryClientProvider>;
   }
   return Wrapper;
+}
+
+/** 触发 stream:start 事件（模拟主进程推送） */
+function fireStart(payload: unknown): void {
+  startCallback?.(payload);
 }
 
 /** 触发 stream:end 事件（模拟主进程推送） */
@@ -36,6 +42,7 @@ function fireError(payload: unknown): void {
 
 describe('use-agent-bridge', () => {
   beforeEach(() => {
+    startCallback = undefined;
     endCallback = undefined;
     errorCallback = undefined;
     vi.clearAllMocks();
@@ -51,6 +58,10 @@ describe('use-agent-bridge', () => {
       stop: vi.fn(),
       approvalResponse: vi.fn(),
       subscribeStreamPart: vi.fn(() => () => {}),
+      subscribeStreamStart: vi.fn((cb: (payload: unknown) => void) => {
+        startCallback = cb;
+        return () => {};
+      }),
       subscribeStreamEnd: vi.fn((cb: (payload: unknown) => void) => {
         endCallback = cb;
         return () => {};
@@ -65,10 +76,45 @@ describe('use-agent-bridge', () => {
     } as never;
   });
 
-  it('挂载时订阅 stream:end 与 stream:error', () => {
+  it('挂载时订阅 stream:start / stream:end / stream:error', () => {
     renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+    expect(window.api.agent.subscribeStreamStart).toHaveBeenCalledOnce();
     expect(window.api.agent.subscribeStreamEnd).toHaveBeenCalledOnce();
     expect(window.api.agent.subscribeStreamError).toHaveBeenCalledOnce();
+  });
+
+  it('stream:start（D4A）：setQueryData 把该会话乐观点亮为 running，不触发 invalidate', () => {
+    // 预置分页缓存（InfiniteData<SessionListData> 形状，与 use-sessions 同构）
+    globalQueryClient.setQueryData(SESSIONS_QUERY_KEY, {
+      pages: [{ sessions: [{ id: 's1', title: '会话1', lastRunStatus: 'idle' }], total: 1 }],
+      pageParams: [0],
+    });
+    const invalidateSpy = vi.spyOn(globalQueryClient, 'invalidateQueries');
+    renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+
+    fireStart({ sessionId: 's1' });
+
+    const data = globalQueryClient.getQueryData<{
+      pages: Array<{ sessions: Array<{ id: string; lastRunStatus: string }> }>;
+    }>(SESSIONS_QUERY_KEY);
+    expect(data?.pages[0]?.sessions[0]?.lastRunStatus).toBe('running');
+    // 方案语义：start 走 setQueryData（免重拉 + 免 markRunning 落库竞态），不 invalidate
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it('stream:start（D4A）：会话不在缓存（新会话首回合）时静默无操作', () => {
+    globalQueryClient.setQueryData(SESSIONS_QUERY_KEY, {
+      pages: [{ sessions: [{ id: 'other', title: '其他会话', lastRunStatus: 'idle' }], total: 1 }],
+      pageParams: [0],
+    });
+    renderHook(() => useAgentBridge(), { wrapper: createWrapper() });
+
+    fireStart({ sessionId: 's-new' });
+
+    const data = globalQueryClient.getQueryData<{
+      pages: Array<{ sessions: Array<{ id: string; lastRunStatus: string }> }>;
+    }>(SESSIONS_QUERY_KEY);
+    expect(data?.pages[0]?.sessions[0]?.lastRunStatus).toBe('idle');
   });
 
   it('stream:end（completed）：invalidate 会话缓存 + 用量汇总缓存', async () => {

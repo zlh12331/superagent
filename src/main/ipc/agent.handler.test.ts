@@ -16,9 +16,12 @@ function createFakeAgentService() {
   } as unknown as AgentHandlerDeps['agentService'];
 }
 
-/** 构造 ctx（run 需要 sender） */
+/** 构造 ctx（run 需要 sender；isDestroyed/send 供 emitEvent 守卫与推送用） */
 function createCtx() {
-  return { sender: { id: 1 }, traceId: 'trace-1' } as never;
+  return {
+    sender: { id: 1, isDestroyed: () => false, send: vi.fn() },
+    traceId: 'trace-1',
+  } as never;
 }
 
 describe('agent.handler', () => {
@@ -42,12 +45,34 @@ describe('agent.handler', () => {
       thinking: undefined,
       temperature: undefined,
     };
-    const result = await handlers.run(input, createCtx());
+    const ctx = createCtx();
+    const result = await handlers.run(input, ctx);
     expect(agentService.startAgent).toHaveBeenCalledWith({
       ...input,
-      webContents: { id: 1 },
+      webContents: (ctx as { sender: unknown }).sender,
     });
     expect(result.sessionId).toBe('session-abc');
+  });
+
+  it('run：发起成功后推送 agent:stream:start（D4A：跨会话运行徽标点亮源）', async () => {
+    const ctx = createCtx() as { sender: { send: ReturnType<typeof vi.fn> } };
+    await handlers.run(
+      {
+        messages: [{ role: 'user' as const, content: 'hi' }],
+        sessionId: undefined,
+        workingDir: '/tmp/proj',
+        systemPrompt: undefined,
+        maxSteps: 20,
+        mode: 'build' as const,
+        thinking: undefined,
+        temperature: undefined,
+      },
+      ctx as never,
+    );
+    // emitEvent → webContents.send(channel, payload)；channel 契约见 meta.ts
+    const startCall = ctx.sender.send.mock.calls.find((c) => c[0] === 'agent:stream:start');
+    expect(startCall).toBeDefined();
+    expect(startCall?.[1]).toEqual({ sessionId: 'session-abc' });
   });
 
   it('run：最后一条用户消息超过主进程硬上限 → 拒绝且不启动 agent', async () => {

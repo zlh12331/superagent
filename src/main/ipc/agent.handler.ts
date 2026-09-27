@@ -6,6 +6,8 @@
 // - stop 中断指定 sessionId 的 agent 对话
 //
 // 流式事件由 AgentService 主动推送（不在此 handler 返回）：
+// - agent:stream:start  回合开始（D4A：渲染层据此点亮侧栏跨会话运行徽标；
+//                       本 handler 在 run 发起成功后推送，见 run 实现内）
 // - agent:stream:part    逐 part 推送 UIMessageStreamPart（text/tool-call/tool-result/finish）
 // - agent:stream:end     agent 对话结束（含原因：completed/aborted/error）
 // - agent:stream:error   agent 对话异常结束（含 code + message）
@@ -22,8 +24,13 @@
 // - agent-approval.handler.ts 单独实现 agent:approval:response（审批回传通道）
 // - 本 handler 实现 agent:run / agent:stop（agent 对话生命周期）
 
-import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
-import { AppError, ErrorCode, MAX_USER_INPUT_HARD_CAP } from '@code-agent/shared/main';
+import {
+  AppError,
+  ErrorCode,
+  type InferHandlers,
+  IPC_DEFINITIONS,
+  MAX_USER_INPUT_HARD_CAP,
+} from '@code-agent/shared/main';
 
 import type { IAgentService } from '../infra/ai/agent/agent-service';
 import type { IPromptService } from '../infra/ai/prompt/prompt-service';
@@ -31,6 +38,7 @@ import type { MemoryCaptureWire } from '../infra/memory-hub/capture-wire';
 import { extractLastUserText } from '../infra/memory-hub/capture-wire';
 import { isMemoryEnabled } from '../infra/memory-hub/memory-pref';
 import type { MemoryPort } from '../infra/memory-hub/types';
+import { emitEvent } from '../utils/emit-event';
 import type { IpcHandlerContext } from '../utils/wrap';
 
 /**
@@ -133,6 +141,11 @@ export function createAgentHandlers(deps: AgentHandlerDeps): AgentLifecycleHandl
       if (lastUser.trim().length > 0) {
         memoryWire?.noteLastUser(sessionId, lastUser);
       }
+      // D4A：回合开始事件——渲染层 use-agent-bridge 订阅后 setQueryData 点亮
+      // 侧栏跨会话运行徽标（回合结束由 stream:end 的 invalidate 统一收敛）。
+      // isDestroyed 守卫内置于 emitEvent；IM/远程/cron 等无头入口不经本
+      // handler，天然不推送。
+      emitEvent(ctx.sender, IPC_DEFINITIONS.agent.subscribeStreamStart, { sessionId });
       return { sessionId };
     },
 

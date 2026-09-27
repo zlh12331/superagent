@@ -7,6 +7,8 @@
 // 提取为纯函数后可无 React 环境单测（此前 0 测试）。
 // ──────────────────────────────
 
+import type { SessionMeta } from '@code-agent/shared/renderer';
+
 import { basename } from '@/lib/utils';
 
 /** 侧边栏条目所需的会话字段子集（结构化兼容 SessionMeta 等更富类型） */
@@ -17,6 +19,8 @@ export interface SidebarSession {
   readonly updatedAt: number;
   readonly workingDir: string;
   readonly pinned: boolean;
+  /** 最近运行状态（D4A：侧栏运行徽标数据源；类型真源 SessionMeta） */
+  readonly lastRunStatus: SessionMeta['lastRunStatus'];
 }
 
 /** 虚拟化列表条目：文件夹标签 | 会话项 */
