@@ -213,20 +213,23 @@ export function ChatMessageList({
 
   /** 滚动到指定消息（导航轨/搜索定位；居中）。目标未渲染（未加载的更早回合）时静默——
    *  搜索/跳转覆盖面 = 已加载页（debt.md#d2 既有取舍） */
-  // 引用稳定性交给 React Compiler（仅捕获 scrollerRef，供下方 effect 依赖）
   const scrollToIndex = (index: number): void => {
     const el = scrollerRef.current?.querySelector(`[${MSG_INDEX_ATTR}="${index}"]`) ?? null;
     if (el !== null) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   };
+  // effect 依赖用 ref 调最新实现：scrollToIndex 每 render 新建，进依赖会让
+  // 搜索定位 effect 跟着无关渲染重跑（vitest 无 Compiler，不能赌自动记忆化）
+  const scrollToIndexRef = useRef(scrollToIndex);
+  scrollToIndexRef.current = scrollToIndex;
 
   // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
   useEffect(() => {
     if (searchActiveIndex >= 0) {
-      scrollToIndex(searchActiveIndex);
+      scrollToIndexRef.current(searchActiveIndex);
     }
-  }, [searchActiveIndex, scrollToIndex]);
+  }, [searchActiveIndex]);
 
   // 智能自动滚动：messages 身份变化（流式期间每个合帧 chunk 都产生新数组——
   // delta 合并进同一条消息，length 不变，仅监听 length 会让视口在长回复

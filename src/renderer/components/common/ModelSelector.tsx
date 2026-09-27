@@ -78,6 +78,9 @@ export function ModelSelector({
       setInternalOpen(next);
     }
   };
+  // 外点/Esc 监听 effect 用 ref 调 setOpen：函数每 render 新建，进依赖会反复装卸监听
+  const setOpenRef = useRef(setOpen);
+  setOpenRef.current = setOpen;
   const containerRef = useRef<HTMLDivElement>(null);
   // 触发按钮 ref：菜单关闭后把焦点还给它（roving focus 的收尾契约）
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -108,17 +111,17 @@ export function ModelSelector({
     if (!open) return;
     const handleClickOutside = (event: MouseEvent): void => {
       if (containerRef.current !== null && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
+        setOpenRef.current(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open, setOpen]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') setOpenRef.current(false);
     };
     document.addEventListener('keydown', handleKeyDown);
     // 打开时聚焦选中项（无选中取第一项）——键盘用户可直接 ↑↓ 导航
@@ -134,7 +137,7 @@ export function ModelSelector({
       // 菜单项上 → 落到 body，键盘用户丢失位置、需从头 Tab 回来
       triggerRef.current?.focus();
     };
-  }, [open, setOpen]);
+  }, [open]);
 
   // 引用稳定性交给 React Compiler
   const handleModelSelect = (providerKind: string, modelId: string) => {

@@ -148,6 +148,9 @@ function useActiveTurn({
     const order = findUserOrder(indicesRef.current, activeMessageIndex);
     setActiveTurn((prev) => (prev === order ? prev : order));
   };
+  // sync / scheduleSync 身份不进 effect 依赖：实现经 ref 调最新闭包
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
   const frameRef = useRef<number | null>(null);
   const scheduleSync = (): void => {
     if (frameRef.current !== null) return;
@@ -155,7 +158,7 @@ function useActiveTurn({
       frameRef.current = null;
       // 回调延后一帧，容器可能已卸载 → 重新取而非复用旧引用
       const el = scrollerRef.current;
-      if (el !== null) sync(el);
+      if (el !== null) syncRef.current(el);
     });
   };
   useEffect(
@@ -164,10 +167,15 @@ function useActiveTurn({
     },
     [],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 后两个依赖只是「重新同步」的触发信号（圆点经 indicesRef 间接读取），effect 体本就不直接引用它们
-  useEffect(() => {
+  // 依赖只留「重新同步」的触发信号；实现经 ref 调最新闭包，effect 体不读 scrollerRef.current
+  // （否则 exhaustive-deps 会要求把 .current 列入依赖——ref 身份本就稳定，属误报）
+  const runSync = useRef(() => {
     const el = scrollerRef.current;
-    if (el !== null) sync(el);
-  }, [sync, userMessageIndices, messageCount]);
+    if (el !== null) syncRef.current(el);
+  });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: userMessageIndices/messageCount 仅作「重新同步」触发信号（圆点经 indicesRef 读取），effect 体不直接引用
+  useEffect(() => {
+    runSync.current();
+  }, [userMessageIndices, messageCount]);
   return { activeTurn, scheduleSync };
 }

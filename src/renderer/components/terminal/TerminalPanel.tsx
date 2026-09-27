@@ -155,15 +155,19 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   // 自动创建：进入终端视图时无终端则创建一次（用户要求：点击终端 tab 直接打开终端）
   // 每轮空态只尝试一次——handleCreate 置位标记后，effect 不再自动重触发；
   // 失败由用户点重试（见 createError 分支），避免失败风暴。
+  // handleCreate 身份不进依赖：每 render 新建会让 effect 跟着无关渲染重跑；
+  // 实现经 ref 调最新闭包，防重入仍由 creatingRef / autoCreateTriedRef 兜底。
+  const handleCreateRef = useRef(handleCreate);
+  handleCreateRef.current = handleCreate;
   useEffect(() => {
     if (terminals.length === 0 && !isCreating && !autoCreateTriedRef.current) {
-      void handleCreate();
+      void handleCreateRef.current();
     }
     // 有终端后重置标记：下次清空（全部关闭）时仍能自动创建
     if (terminals.length > 0) {
       autoCreateTriedRef.current = false;
     }
-  }, [terminals.length, isCreating, handleCreate]);
+  }, [terminals.length, isCreating]);
 
   /** 失败后重试：直接调 handleCreate（不经 effect，故不会重复触发） */
   const handleRetry = (): void => {
