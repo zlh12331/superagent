@@ -1,30 +1,67 @@
 // src/renderer/hooks/use-agent-bridge.ts
-// Agent 生命周期 IPC 桥接 Hook（回合结束的统一消费端）
+// Agent 生命周期 IPC 桥接 Hook（回合开始 / 回合结束的统一消费端）
 // ──────────────────────────────────────────────────────────────
 // 职责（对齐参考设计的状态分层原则）：
-// 1. 回合结束（stream:end）→ invalidate 会话列表 + 详情缓存（L3 模式 B）
+// 1. 回合开始（stream:start）→ setQueryData 乐观点亮会话运行徽标（D4A）
+//    - 见 applyRunningToCache：选 setQueryData 而非 invalidate 的理由在此
+// 2. 回合结束（stream:end）→ invalidate 会话列表 + 详情缓存（L3 模式 B）
 //    - 修正"回合结束但会话详情缓存仍是旧数据"的正确性问题
-// 2. 回合结束 → 清理 L2 流式缓冲（tool-store / approvals-store clearBySession）
+// 3. 回合结束 → 清理 L2 流式缓冲（tool-store / approvals-store clearBySession）
 //    - 对齐"turn_done 清空流式缓冲"原则，防止长会话内存累积
-// 3. 回合结束 → 失效用量汇总缓存（['usage'] 前缀；真实 UI 读 SQLite 聚合）
+// 4. 回合结束 → 失效用量汇总缓存（['usage'] 前缀；真实 UI 读 SQLite 聚合）
 //    - 孤儿 usage-store 已移除（2026-08 P2 清理）
 //
 // 设计：
 // - 在 AppShell 根布局初始化一次（与 useToolBridge 相同的桥接模式）
-// - 全局订阅（不按 sessionId 过滤）：任何会话回合结束都触发统一处理
+// - 全局订阅（不按 sessionId 过滤）：任何会话回合开始/结束都触发统一处理
 // - 不处理 UI 展示（由 ChatPanel 等组件订阅 store 渲染）
 // ──────────────────────────────────────────────────────────────
 
-import type { AgentStreamEndPayload, AgentStreamErrorPayload } from '@code-agent/shared/renderer';
+import type {
+  AgentStreamEndPayload,
+  AgentStreamErrorPayload,
+  AgentStreamStartPayload,
+} from '@code-agent/shared/renderer';
+import type { InfiniteData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
+import {
+  SESSION_DETAIL_QUERY_KEY,
+  SESSIONS_QUERY_KEY,
+  type SessionListData,
+} from '@/hooks/use-sessions';
 import { hasIpcBridge } from '@/lib/ipc';
 import { GOAL_LIST_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
 import { queryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
+
+/**
+ * 把指定会话的 lastRunStatus 乐观点亮为 running（D4A：回合开始 → 侧栏运行徽标）
+ *
+ * 选 setQueryData 而非 invalidate sessions（两种成熟方案的取舍）：
+ * - 主进程 markRunning 是 fire-and-forget 落库，invalidate 触发的重拉存在
+ *   读不到 running 的时序竞态（徽标闪失）；setQueryData 直接改缓存，确定生效；
+ * - 回合开始是高频事件，免去整列表重拉的 IPC 与渲染成本；
+ * - 回合结束已有 handleSessionEnd 的 invalidate 统一收敛为服务端真值。
+ * 会话不在缓存（如新会话首轮回合、列表尚未刷新）时映射无命中，等下次列表刷新自然带上。
+ */
+function applyRunningToCache(
+  old: InfiniteData<SessionListData> | undefined,
+  sessionId: string,
+): InfiniteData<SessionListData> | undefined {
+  if (old === undefined) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      sessions: page.sessions.map((s) =>
+        s.id === sessionId ? { ...s, lastRunStatus: 'running' as const } : s,
+      ),
+    })),
+  };
+}
 
 /**
  * Agent 回合结束统一处理（invalidate 缓存 + 清理 L2 缓冲）
@@ -91,6 +128,14 @@ export function useAgentBridge(): void {
   useEffect(() => {
     if (!hasIpcBridge()) return;
 
+    // D4A：回合开始——乐观点亮该会话的侧栏运行徽标（方案取舍见 applyRunningToCache）
+    const unsubscribeStart = window.api.agent.subscribeStreamStart((payload) => {
+      const typedPayload = payload as AgentStreamStartPayload;
+      queryClient.setQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY, (old) =>
+        applyRunningToCache(old, typedPayload.sessionId),
+      );
+    });
+
     // 回合正常结束 / 用户中断：invalidate 缓存 + 清理缓冲 + usage 累积
     const unsubscribeEnd = window.api.agent.subscribeStreamEnd((payload) => {
       const typedPayload = payload as AgentStreamEndPayload;
@@ -108,6 +153,7 @@ export function useAgentBridge(): void {
     });
 
     return () => {
+      unsubscribeStart();
       unsubscribeEnd();
       unsubscribeError();
     };

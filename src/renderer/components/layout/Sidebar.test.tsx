@@ -44,6 +44,10 @@ vi.mock('@/hooks/use-sessions', () => ({
   // thread-item 内联重命名使用（Sidebar 渲染 thread-item，故必须提供）
   useRenameSession: () => ({ mutateAsync: vi.fn().mockResolvedValue({ data: { ok: true } }) }),
 }));
+// thread-item 中断入口使用（D4A：真实 hook 需 QueryClientProvider，本文件未包裹）
+vi.mock('@/hooks/use-agent-stop', () => ({
+  useStopAgentTurn: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 vi.mock('@/hooks/use-working-dir', () => ({ useWorkingDir: () => null }));
 vi.mock('@/hooks/use-sidebar-highlight', () => ({
   useSidebarHighlight: () => ({ highlightedIds: new Set<string>() }),

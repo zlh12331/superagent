@@ -828,6 +828,8 @@ function createMockApi(): IpcApi {
         endCallbacks.add(cb);
         return () => endCallbacks.delete(cb);
       },
+      // D4A：回合开始事件（mock 模拟流无独立 start 推送，仅订阅桩保 API 形状完整）
+      subscribeStreamStart: () => () => {},
       subscribeStreamError: (cb: Parameters<IpcApi['agent']['subscribeStreamError']>[0]) => {
         errorCallbacks.add(cb);
         return () => errorCallbacks.delete(cb);

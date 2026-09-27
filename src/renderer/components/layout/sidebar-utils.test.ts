@@ -25,6 +25,7 @@ function sess(overrides: Partial<SidebarSession> & { id: string }): SidebarSessi
     updatedAt: 1000,
     workingDir: 'C:\\proj\\repo-a',
     pinned: false,
+    lastRunStatus: 'idle',
     ...overrides,
   };
 }

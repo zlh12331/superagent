@@ -217,6 +217,16 @@ export interface AgentStreamPartPayload {
   readonly part: unknown;
 }
 
+/**
+ * Agent 流式开始 payload
+ *
+ * 回合开始推送（agent:run 发起成功后），渲染层据此点亮侧栏跨会话运行徽标（D4A）。
+ * 仅 envelope 字段：sessionId 唯一必需。
+ */
+export interface AgentStreamStartPayload {
+  readonly sessionId: string;
+}
+
 /** Agent 回合 token 使用量（AI SDK totalUsage，可选字段） */
 export interface AgentUsage {
   /** 输入 token 数（prompt 侧） */

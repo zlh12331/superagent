@@ -123,6 +123,8 @@
     "fileTree": "文件管理",
     "pin": "置顶",
     "unpin": "取消置顶",
+    "sessionRunning": "会话运行中",
+    "stopTurn": "停止该会话的回合",
     "openFiles": "查看文件",
     "openInExplorer": "在资源管理器中打开",
     "fileManager": "文件管理",

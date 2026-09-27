@@ -12,14 +12,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
 
-const { mockRenameAsync, sortableState } = vi.hoisted(() => ({
+const { mockRenameAsync, mockStopTurn, sortableState } = vi.hoisted(() => ({
   mockRenameAsync: vi.fn(),
+  mockStopTurn: vi.fn(),
   sortableState: { isDragging: false },
 }));
 
 vi.mock('@/hooks/use-sessions', () => ({
   // 组件仅解构 mutateAsync；重命名提交经 mutation 落库（invalidate 由 hook 内部负责）
   useRenameSession: () => ({ mutateAsync: mockRenameAsync }),
+}));
+
+vi.mock('@/hooks/use-agent-stop', () => ({
+  // D4A：跨会话中断 mutation 边界 mock（invalidate/toast 由 hook 内部负责）
+  useStopAgentTurn: () => ({ mutate: mockStopTurn, isPending: false }),
 }));
 
 vi.mock('@dnd-kit/sortable', () => ({
@@ -44,6 +50,7 @@ const base = {
   isActive: false,
   isDeleting: false,
   isPinned: false,
+  isRunning: false,
   highlighted: false,
   onSelect: vi.fn(),
   onDelete: vi.fn(),
@@ -111,6 +118,32 @@ describe('ThreadItem · 渲染与选择', () => {
     renderThread({ isDeleting: true });
     expect(screen.getByLabelText(i18n.t('sidebar.sessionActions'))).toBeDisabled();
     expect(screen.getByLabelText(i18n.t('sidebar.openFiles'))).toBeDisabled();
+  });
+
+  it('运行徽标（D4A）：isRunning → 标题行转圈 + sr-only aria 文案', () => {
+    const { container } = renderThread({ isRunning: true });
+    expect(container.querySelector('.ti-title .animate-spin')).not.toBeNull();
+    expect(screen.getByText(i18n.t('sidebar.sessionRunning'))).toBeDefined();
+  });
+
+  it('运行徽标（D4A）：非运行会话不渲染徽标与停止按钮', () => {
+    renderThread({ isRunning: false });
+    expect(screen.queryByText(i18n.t('sidebar.sessionRunning'))).toBeNull();
+    expect(screen.queryByLabelText(i18n.t('sidebar.stopTurn'))).toBeNull();
+  });
+
+  it('中断入口（D4A）：运行中会话显示停止按钮，点击 → useStopAgentTurn 且不冒泡成选择', () => {
+    const { props } = renderThread({ isRunning: true });
+    const stopBtn = screen.getByLabelText(i18n.t('sidebar.stopTurn'));
+    expect(stopBtn).toBeDefined();
+    fireEvent.click(stopBtn);
+    expect(mockStopTurn).toHaveBeenCalledWith('s1');
+    expect(props.onSelect).not.toHaveBeenCalled();
+  });
+
+  it('中断入口（D4A）：isDeleting 中停止按钮禁用（行级操作互斥）', () => {
+    renderThread({ isRunning: true, isDeleting: true });
+    expect(screen.getByLabelText(i18n.t('sidebar.stopTurn'))).toBeDisabled();
   });
 });
 

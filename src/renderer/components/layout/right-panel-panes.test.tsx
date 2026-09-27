@@ -109,6 +109,21 @@ describe('InfoPane', () => {
     renderWithQuery(<InfoPane sessionId="s1" />);
     expect(screen.getByText(t('panel.tasks'))).toBeDefined();
   });
+
+  it('错误态（P3-56）：task:list 失败 → QueryErrorRow 提示 + 重试，不再渲染成空态', async () => {
+    const list = vi.fn().mockRejectedValue(new Error('task 查询失败'));
+    window.api = { task: { list } } as never;
+    renderWithQuery(<InfoPane sessionId="s1" />);
+
+    // 错误行出现（retry: false 后 error 落定），空态文案被错误态取代
+    expect(await screen.findByRole('alert')).toBeDefined();
+    expect(screen.getByText(t('common.sectionLoadFailed'))).toBeDefined();
+    expect(screen.queryByText(t('panel.noTasks'))).toBeNull();
+
+    // 重试按钮触发重新拉取
+    fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe('DiffPane', () => {

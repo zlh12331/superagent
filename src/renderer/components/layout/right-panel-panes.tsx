@@ -10,11 +10,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
+import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { UnifiedDiffView } from '@/components/common/UnifiedDiffView';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useGitDiffQuery } from '@/hooks/use-git';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { TASK_LIST_QUERY_KEY } from '@/lib/query/keys';
 import { fetchTaskList } from '@/lib/task-actions';
 import { basename, cn } from '@/lib/utils';
@@ -40,14 +42,20 @@ interface LocalTask {
  */
 export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
 
   // L3：待办列表（按会话过滤）
-  const tasksQuery = useQuery({
+  const {
+    data: tasksData,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: TASK_LIST_QUERY_KEY(sessionId),
     queryFn: async () => fetchTaskList(sessionId),
   });
 
-  const tasks = (tasksQuery.data?.tasks ?? []) as readonly LocalTask[];
+  const tasks = (tasksData?.tasks ?? []) as readonly LocalTask[];
 
   // 引用文件（对齐原型 crpFiles）：从 tool-store 提取 read_file 调用路径（去重，保留最新）
   // 纯派生，交给 React Compiler 记忆化（calls 为 store 原始数组引用）
@@ -72,35 +80,43 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
         <div className="text-muted-foreground mb-1.5 text-2xs font-semibold tracking-wide uppercase">
           {t('panel.tasks')}
         </div>
-        {tasks.length === 0 ? (
-          <div className="text-muted-foreground/60">{t('panel.noTasks')}</div>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {tasks.map((task) => {
-              // 状态视觉（对齐参考项目 PlanNode：完成 = 删除线淡色；运行中 = spinner + accent；失败 = error 色）
-              const status = task.status;
-              const isDone = status === 'completed';
-              const isActive = status === 'running';
-              return (
-                <li
-                  key={task.id ?? task.description}
-                  className={cn(
-                    'flex items-start gap-1.5 leading-relaxed',
-                    isDone && 'text-muted-foreground line-through',
-                    isActive && 'text-accent-text',
-                    status === 'failed' && 'text-error-text',
-                  )}
-                >
-                  {/* 运行中：旋转 spinner（对齐参考项目 active 态） */}
-                  {isActive && (
-                    <Loader2 className="text-accent-text mt-0.5 size-3 shrink-0 animate-spin" />
-                  )}
-                  <span className="min-w-0 flex-1">{task.description}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        {/* P3-56：isError 此前未消费——查询失败渲染成空态，误导「无任务」。
+            形态对齐 models-section：QueryErrorRow 行内提示 + 重试，空态仅在非错误时展示 */}
+        <QueryErrorRow
+          isError={isError}
+          errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
+          onRetry={() => void refetch()}
+        />
+        {!isError &&
+          (tasks.length === 0 ? (
+            <div className="text-muted-foreground/60">{t('panel.noTasks')}</div>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {tasks.map((task) => {
+                // 状态视觉（对齐参考项目 PlanNode：完成 = 删除线淡色；运行中 = spinner + accent；失败 = error 色）
+                const status = task.status;
+                const isDone = status === 'completed';
+                const isActive = status === 'running';
+                return (
+                  <li
+                    key={task.id ?? task.description}
+                    className={cn(
+                      'flex items-start gap-1.5 leading-relaxed',
+                      isDone && 'text-muted-foreground line-through',
+                      isActive && 'text-accent-text',
+                      status === 'failed' && 'text-error-text',
+                    )}
+                  >
+                    {/* 运行中：旋转 spinner（对齐参考项目 active 态） */}
+                    {isActive && (
+                      <Loader2 className="text-accent-text mt-0.5 size-3 shrink-0 animate-spin" />
+                    )}
+                    <span className="min-w-0 flex-1">{task.description}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ))}
       </div>
 
       {/* 分割线（用户要求：计划待办与引用文件之间；加深——--border 在暗背景对比弱） */}
