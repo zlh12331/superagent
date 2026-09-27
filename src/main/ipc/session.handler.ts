@@ -93,9 +93,14 @@ export function createSessionHandlers(
       return sessionService.list(input.limit, input.offset);
     },
 
-    // session:get - 获取会话详情（includeMessages=false 时仅元数据，消息走 getTurnMessages 增量）
+    // session:get - 获取会话详情
+    // P2-28：契约默认翻转为「仅元数据」——消息历史走 getTurns/getTurnMessages
+    // 增量拉取（debt.md#d2），显式传 includeMessages=true 才返回全量消息。
+    // 生产调用方（ChatPage / 路由 loader / cron 抢占检查）此前已全部显式传 false，
+    // 本次翻转防「新调用方遗漏传参时静默支付全量消息负载」；默认全量的
+    // 旧契约下，一次 get 可能把数千条消息序列化过 IPC。
     get: async (input) => {
-      return sessionService.get(input.id, { includeMessages: input.includeMessages !== false });
+      return sessionService.get(input.id, { includeMessages: input.includeMessages === true });
     },
 
     // session:delete - 删除会话（级联删除消息）

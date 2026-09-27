@@ -155,35 +155,37 @@ export function useSessionsFlat() {
  * 独立导出的原因：路由 loader（router.tsx）需在不渲染组件的前提下预取
  * 同 key 缓存——查询点与预取点必须引用同一 queryFn，保证缓存形状一致。
  *
- * @param includeMessages false 时仅拉元数据（消息走 getTurnMessages 增量，
- *   见 use-session-turns.ts）；路由 loader 与 ChatPage 元数据查询均传 false
+ * P2-28：session:get 契约默认翻转为「仅元数据」，此处默认参数随之对齐；
+ * 显式传 true 才把 includeMessages:true 发上 IPC（主进程返回全量消息）。
+ *
+ * @param includeMessages false（默认）时仅拉元数据（消息走 getTurnMessages
+ *   增量，见 use-session-turns.ts）
  */
-export async function fetchSessionDetail(id: string, includeMessages = true) {
+export async function fetchSessionDetail(id: string, includeMessages = false) {
   const response = await window.api.session.get({
     id,
-    ...(includeMessages ? {} : { includeMessages: false }),
+    ...(includeMessages ? { includeMessages: true } : {}),
   });
   return unwrap(response);
 }
 
 /**
- * 会话详情查询 hook（默认含完整消息历史；传 false 仅元数据）
+ * 会话详情查询 hook（默认仅元数据；传 true 返回完整消息历史）
  *
- * 调用 session:get IPC。includeMessages=false 时主进程跳过消息查询
- * （messages 返回空数组）——消息历史已改走 use-session-turns.ts 按回合
- * 增量加载（debt.md#d2），元数据消费方（ChatPage workingDir/lastRunStatus）
- * 不再为全量消息付 IPC 负载。
+ * 调用 session:get IPC。消息历史走 use-session-turns.ts 按回合增量加载
+ * （debt.md#d2），元数据消费方（ChatPage workingDir/lastRunStatus）不为
+ * 全量消息付 IPC 负载（P2-28：主进程契约默认亦为按需加载）。
  *
  * @param id 会话 id（null 时跳过查询，避免无激活会话时请求）
- * @param includeMessages 是否返回消息历史（默认 true；ChatPage 传 false）
+ * @param includeMessages 是否返回消息历史（默认 false，按需加载）
  * @returns TanStack Query 结果
  *
  * @example
  * ```tsx
- * const { data: detail } = useSessionDetail(activeSessionId, false);
+ * const { data: detail } = useSessionDetail(activeSessionId);
  * ```
  */
-export function useSessionDetail(id: string | null, includeMessages = true) {
+export function useSessionDetail(id: string | null, includeMessages = false) {
   return useQuery({
     queryKey: SESSION_DETAIL_DATA_KEY(id ?? 'unknown', includeMessages),
     queryFn: async () => {
