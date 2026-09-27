@@ -8,11 +8,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   SESSION_DETAIL_DATA_KEY,
+  SESSIONS_QUERY_KEY,
   useCreateSession,
   useDeleteSession,
   useRecentDirs,
   useRenameSession,
   useSessionDetail,
+  useSessionsFlat,
   useSessionsQuery,
 } from './use-sessions';
 
@@ -49,6 +51,28 @@ describe('use-sessions hooks', () => {
       expect(result.current.data?.pages[0]?.sessions).toEqual([{ id: 's1', title: '会话1' }]),
     );
     expect(window.api.session.list).toHaveBeenCalledWith({ limit: 50, offset: 0 });
+  });
+
+  it('useSessionsFlat：select 平铺为会话数组，缓存仍为分页形状（与 useSessionsQuery 共享）', async () => {
+    (window.api.session.list as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ sessions: [{ id: 's1', title: '会话1' }], total: 1 }),
+    );
+    // staleTime Infinity：第二个观察者挂载命中新鲜缓存，不触发重复拉取
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: 0 } },
+    });
+    function Wrapper({ children }: { readonly children: ReactNode }): ReactNode {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const { result } = renderHook(() => useSessionsFlat(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.data).toEqual([{ id: 's1', title: '会话1' }]));
+    // select 只作用于观察者 result：缓存条目保持分页形状（乐观更新按页适配不受影响）
+    expect(queryClient.getQueryData(SESSIONS_QUERY_KEY)).toMatchObject({
+      pages: [{ sessions: [{ id: 's1', title: '会话1' }] }],
+    });
+    // 同 key 同 queryFn：再挂一个 useSessionsQuery 观察者共享缓存，不重复请求
+    renderHook(() => useSessionsQuery(), { wrapper: Wrapper });
+    expect(window.api.session.list).toHaveBeenCalledTimes(1);
   });
 
   it('useSessionDetail：按 id 获取会话详情', async () => {

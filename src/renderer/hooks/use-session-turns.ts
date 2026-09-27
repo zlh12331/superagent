@@ -15,7 +15,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ChatMessage, TurnSummary } from '@code-agent/shared/renderer';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { type InfiniteData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { unwrap } from '@/lib/ipc';
 
 /**
@@ -119,28 +119,26 @@ export interface TurnMessagesPage {
 }
 
 /**
- * 回合消息分页 hook（useInfiniteQuery，页序：pages[0] = 最近一页，越后越早）
+ * 回合消息分页共通选项（useTurnMessagesInfinite / useTurnPagesInfinite 同 key 同
+ * queryFn——同一缓存条目恒同形状；select 由两观察者各自应用，互不影响）
  *
  * 游标语义见 TurnPageParam 注释。getNextPageParam 返回本页最早回合的 turnId，
  * queryFn 据此取该回合**之前**的 TURNS_PER_PAGE 个回合——翻页与 refetch 都
  * 通过「下一页锚点 = 当前页首回合」递推，布局恒无缝。
- *
- * @param id 会话 id
- * @param turns 回合列表（来自 useSessionTurns；undefined 时查询禁用）
  */
-export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[] | undefined) {
-  return useInfiniteQuery({
+function turnPagesQueryOptions(id: string, turns: readonly TurnSummary[] | undefined) {
+  return {
     queryKey: SESSION_TURN_PAGES_QUERY_KEY(id),
     enabled: turns !== undefined,
     initialPageParam: 'latest' as TurnPageParam,
-    queryFn: async ({ pageParam }): Promise<TurnMessagesPage> => {
+    queryFn: async ({ pageParam }: { pageParam: TurnPageParam }): Promise<TurnMessagesPage> => {
       if (turns === undefined) {
         throw new Error('turns not loaded');
       }
       return fetchTurnMessagesPage(turns, pageParam);
     },
     // 本页最早回合已是全局最早 → 无更早页；否则以其 turnId 作下一页锚点
-    getNextPageParam: (lastPage) => {
+    getNextPageParam: (lastPage: TurnMessagesPage): TurnPageParam | undefined => {
       if (turns === undefined) return undefined;
       const first = lastPage.turns[0];
       if (first === undefined) return undefined;
@@ -156,7 +154,54 @@ export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[
     // 'latest'），flattenTurnPages 平铺全部 pages 渲染——被裁端正是聊天区最新可见
     // 消息。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
     // 落在尾端，使被裁端不再是可见数据。
+  };
+}
+
+/**
+ * useTurnMessagesInfinite 的 select：InfiniteData → 时间正序消息数组
+ *
+ * select 收到的是 InfiniteData 对象而非 pages 数组，须经本包装拆 .pages 再走
+ * flattenTurnPages（单一口径不变）；模块级函数保证 select 身份稳定，可复用
+ * 观察者缓存的上次 select 结果（queryObserver 对同 data + 同 select 跳过重算）。
+ */
+function selectFlatTurnMessages(
+  data: InfiniteData<TurnMessagesPage, TurnPageParam>,
+): readonly ChatMessage[] {
+  return flattenTurnPages(data.pages);
+}
+
+/**
+ * 回合消息分页 hook（useInfiniteQuery，页序：pages[0] = 最近一页，越后越早）
+ *
+ * data 经 select selectFlatTurnMessages（→ flattenTurnPages）平铺为**时间正序
+ * 消息数组**（去重单一口径），只消费消息序列的调用方（ChatPage initialMessages）
+ * 无需再各自平铺；翻页 / 失效 / hasNextPage 语义不变。需要回合分组形状
+ * （turnId 身份）的调用方用 {@link useTurnPagesInfinite}——平铺 ChatMessage
+ * （AI SDK ModelMessage）不带 turnId，表达不了回合身份。
+ *
+ * @param id 会话 id
+ * @param turns 回合列表（来自 useSessionTurns；undefined 时查询禁用）
+ */
+export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[] | undefined) {
+  return useInfiniteQuery({
+    ...turnPagesQueryOptions(id, turns),
+    select: selectFlatTurnMessages,
   });
+}
+
+/**
+ * 回合消息分页原始形状观察者（useTurnMessagesInfinite 的同 key 非 select 镜像）
+ *
+ * data 为 InfiniteData<TurnMessagesPage>（pages[0] = 最近一页，越后越早）。存在
+ * 原因：chat.tsx 的 shownTurnIdsRef 注册与 loadEarlier 去重按回合身份（turnId）
+ * 过滤，而 ChatMessage 不携带 turnId——这两个消费点必须读原始分页形状。同 key
+ * 同 queryFn（turnPagesQueryOptions 共用），与平铺观察者共享缓存 / 失效 / fetchNextPage。
+ *
+ * @param id 会话 id
+ * @param turns 回合列表（来自 useSessionTurns；undefined 时查询禁用）
+ */
+export function useTurnPagesInfinite(id: string, turns: readonly TurnSummary[] | undefined) {
+  return useInfiniteQuery(turnPagesQueryOptions(id, turns));
 }
 
 /**
@@ -165,7 +210,9 @@ export function useTurnMessagesInfinite(id: string, turns: readonly TurnSummary[
  * 身份游标递推下相邻页理论无缝，但「翻页飞行中回合列表失效重取」的交错窗口
  * 可能产生页间重叠——按回合身份去重（保序首现）防御缓存瞬时混合布局。
  *
- * ChatPanel 的 initialMessages / 向上补页 prepend 均以此为单一口径。
+ * 现为 {@link useTurnMessagesInfinite} 的 select（单一口径，select 身份为模块级
+ * 函数、可复用观察者缓存的上次 select 结果）；需要回合身份的消费方读
+ * {@link useTurnPagesInfinite} 的原始分页形状。
  */
 export function flattenTurnPages(
   pages: readonly TurnMessagesPage[] | undefined,

@@ -15,7 +15,7 @@
 //
 // 状态分层（符合项目规范）：
 // - L2 Zustand：useActiveSessionStore（激活会话）/ useSidebarPrefStore（拖拽覆盖 + 折叠）
-// - L3 TanStack Query：useSessionsQuery 拉取列表
+// - L3 TanStack Query：useSessionsFlat 拉取列表（select 平铺）
 // - L3 TanStack Mutation：useDeleteSession / usePinSession / useRenameSession
 //
 // 拆分记录（2026-08 重构）：原文件 641 行，按职责拆分为本组装层 +
@@ -49,7 +49,7 @@ import {
   type SessionListData,
   useDeleteSession,
   usePinSession,
-  useSessionsQuery,
+  useSessionsFlat,
 } from '@/hooks/use-sessions';
 import { useSidebarHighlight } from '@/hooks/use-sidebar-highlight';
 import { useWorkingDir } from '@/hooks/use-working-dir';
@@ -92,11 +92,9 @@ export function Sidebar(): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
 
-  // L3 TanStack Query：会话列表数据（P3：无限分页）
-  const query = useSessionsQuery();
-  // 平铺分页数据为会话列表（useInfiniteQuery 的 data.pages 结构）
-  // 纯派生，交给 React Compiler 记忆化
-  const sessions = query.data?.pages.flatMap((page) => page.sessions) ?? [];
+  // L3 TanStack Query：会话列表数据（P3：无限分页；useSessionsFlat 的 select 已平铺）
+  const query = useSessionsFlat();
+  const sessions = query.data ?? [];
   const hasMore = query.hasNextPage === true && query.isFetchingNextPage === false;
   // 视图状态机映射（五态：loading / refreshing / error / empty / ready）
   // 适配：useAsyncView 消费 UseQueryResult 形状，此处把分页数据投影为单页形状

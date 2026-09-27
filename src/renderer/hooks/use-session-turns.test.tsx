@@ -12,6 +12,7 @@ import {
   TURNS_PER_PAGE,
   useSessionTurns,
   useTurnMessagesInfinite,
+  useTurnPagesInfinite,
 } from './use-session-turns';
 
 function createWrapper() {
@@ -77,10 +78,10 @@ describe('use-session-turns hooks', () => {
     expect(window.api.session.getTurns).not.toHaveBeenCalled();
   });
 
-  it('useTurnMessagesInfinite：首页 = 最近 TURNS_PER_PAGE 个回合，按回合分组', async () => {
+  it('useTurnPagesInfinite：首页 = 最近 TURNS_PER_PAGE 个回合，按回合分组', async () => {
     stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
     const turns = makeTurns(TURNS_PER_PAGE + 3);
-    const { result } = renderHook(() => useTurnMessagesInfinite('s1', turns), {
+    const { result } = renderHook(() => useTurnPagesInfinite('s1', turns), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -98,16 +99,16 @@ describe('use-session-turns hooks', () => {
     expect(result.current.hasNextPage).toBe(true);
   });
 
-  it('useTurnMessagesInfinite：全部回合 ≤ 一页时无更早页', async () => {
+  it('useTurnPagesInfinite：全部回合 ≤ 一页时无更早页', async () => {
     stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
-    const { result } = renderHook(() => useTurnMessagesInfinite('s1', makeTurns(3)), {
+    const { result } = renderHook(() => useTurnPagesInfinite('s1', makeTurns(3)), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.hasNextPage).toBe(false);
   });
 
-  it('useTurnMessagesInfinite：翻页按锚点回合身份递推，铺满全部回合后判尽', async () => {
+  it('useTurnPagesInfinite：翻页按锚点回合身份递推，铺满全部回合后判尽', async () => {
     stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0 } },
@@ -118,7 +119,7 @@ describe('use-session-turns hooks', () => {
     const turns = makeTurns(TURNS_PER_PAGE + 3);
     const { result } = renderHook(
       () => {
-        const query = useTurnMessagesInfinite('s1', turns);
+        const query = useTurnPagesInfinite('s1', turns);
         // v5 tracked-props：渲染期读取属性才会在其变更时通知（对齐 ChatPage 真实消费）
         void query.data;
         void query.hasNextPage;
@@ -144,6 +145,34 @@ describe('use-session-turns hooks', () => {
     // 最早回合（t0）在最前，最后回合（t12）在最后
     expect(flat[0]?.content).toBe('u0');
     expect(flat.at(-1)?.content).toBe('a12');
+  });
+
+  it('useTurnMessagesInfinite：select 平铺为时间正序消息数组（单一口径）', async () => {
+    stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
+    const turns = makeTurns(TURNS_PER_PAGE + 3);
+    const { result } = renderHook(
+      () => {
+        const query = useTurnMessagesInfinite('s1', turns);
+        // v5 tracked-props：渲染期读取属性才会在其变更时通知（对齐 ChatPage 真实消费）
+        void query.data;
+        return query;
+      },
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // 首页（最近 10 回合）平铺：20 条，最早在前（t3 的 u3 开头，t12 的 a12 结尾）
+    expect(result.current.data).toHaveLength(TURNS_PER_PAGE * 2);
+    expect(result.current.data?.[0]?.content).toBe('u3');
+    expect(result.current.data?.at(-1)?.content).toBe('a12');
+    // 翻页后 data 增长为全部 13 回合 × 2 条，仍时间正序（页序反转在 select 内完成）
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+    await waitFor(() => expect(result.current.data).toHaveLength(13 * 2));
+    expect(result.current.data?.[0]?.content).toBe('u0');
+    expect(result.current.data?.at(-1)?.content).toBe('a12');
+    // 分页控制不受 select 影响
+    expect(result.current.hasNextPage).toBe(false);
   });
 
   it('fetchTurnMessagesPage：锚点不存在返回空页（翻页判尽终止）', async () => {

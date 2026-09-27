@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFileGlobSearch } from '@/hooks/use-file-glob-search';
-import { useSessionsQuery } from '@/hooks/use-sessions';
+import { useSessionsFlat } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
 import { extractDir } from '@/lib/file-search';
@@ -163,10 +163,8 @@ export function FuzzySearchDialog({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // 会话列表（TanStack Query；会话搜索 + workingDir 派生共用）
-  const sessionsQuery = useSessionsQuery();
-  // P3：无限分页——平铺 pages
-  const sessions = sessionsQuery.data?.pages.flatMap((page) => page.sessions) ?? [];
+  // 会话列表（TanStack Query；会话搜索 + workingDir 派生共用；select 已平铺）
+  const sessions = useSessionsFlat().data ?? [];
   // 激活会话的 workingDir（文件搜索根目录；无激活会话时仅会话搜索可用）
   const activeSessionId = useActiveSessionStore((state) => state.activeSessionId);
   const workingDir = sessions.find((session) => session.id === activeSessionId)?.workingDir ?? null;

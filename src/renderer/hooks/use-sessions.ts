@@ -58,40 +58,59 @@ export type SessionListData = {
 };
 
 /**
+ * 会话列表分页原始拉取（useSessionsQuery 与 useSessionsFlat 共用同一 queryFn）
+ *
+ * 同 key 必须同 queryFn：两 hook 共享 ['sessions'] 缓存条目，queryFn 形状不一致
+ * 会互相覆盖缓存（同 SESSION_DETAIL_DATA_KEY 双形状先例）。
+ */
+async function fetchSessionListPage({
+  pageParam,
+}: {
+  pageParam: number;
+}): Promise<SessionListData> {
+  // E2E 浏览器模式下 window.api 未注入（无 preload），返回空列表
+  if (!hasIpcBridge()) {
+    return { sessions: [], total: 0 };
+  }
+  const response = await window.api.session.list({
+    limit: DEFAULT_PAGE_SIZE,
+    offset: pageParam,
+  });
+  return unwrap(response);
+}
+
+/** 下一页 offset = 已加载条数；已加载数达 total 时停止（两个 hook 共用） */
+function sessionListNextPageParam(
+  lastPage: SessionListData,
+  allPages: readonly SessionListData[],
+): number | undefined {
+  const loaded = allPages.reduce((sum, page) => sum + page.sessions.length, 0);
+  return loaded < lastPage.total ? loaded : undefined;
+}
+
+/** 平铺全部已加载页为会话数组（useSessionsFlat 的 select，模块级函数保证 select 身份稳定） */
+function flattenSessionPages(data: InfiniteData<SessionListData>): readonly SessionMeta[] {
+  return data.pages.flatMap((page) => page.sessions);
+}
+
+/**
  * 会话列表查询 hook（P3 修复：无限分页）
  *
  * 调用 session:list IPC 按页拉取（默认按 updatedAt 倒序，每页 50 条）。
  * 此前固定拉 50 条：会话超限时侧栏静默截断且无「加载更多」。
- * 现改为 useInfiniteQuery：消费方用 data.pages 平铺 + fetchNextPage 加载更多。
+ * 现改为 useInfiniteQuery：data.pages 为分页数组，fetchNextPage 加载更多。
+ *
+ * 只消费平铺会话数组的调用方改用 {@link useSessionsFlat}（同 key 同 queryFn，
+ * select 已平铺）；需要 pages/total 形状（乐观更新按页适配、缓存直读）的用本 hook。
  *
  * @returns InfiniteQuery 结果（data.pages 为分页数组）
- *
- * @example
- * ```tsx
- * const query = useSessionsQuery();
- * const sessions = query.data?.pages.flatMap((p) => p.sessions) ?? [];
- * ```
  */
 export function useSessionsQuery() {
   return useInfiniteQuery({
     queryKey: SESSIONS_QUERY_KEY,
-    queryFn: async ({ pageParam }) => {
-      // E2E 浏览器模式下 window.api 未注入（无 preload），返回空列表
-      if (!hasIpcBridge()) {
-        return { sessions: [], total: 0 };
-      }
-      const response = await window.api.session.list({
-        limit: DEFAULT_PAGE_SIZE,
-        offset: pageParam,
-      });
-      return unwrap(response);
-    },
+    queryFn: fetchSessionListPage,
     initialPageParam: 0,
-    // 下一页 offset = 已加载条数；已加载数达 total 时停止
-    getNextPageParam: (lastPage, allPages) => {
-      const loaded = allPages.reduce((sum, page) => sum + page.sessions.length, 0);
-      return loaded < lastPage.total ? loaded : undefined;
-    },
+    getNextPageParam: sessionListNextPageParam,
     // 不启用 maxPages（2026-09-27 读 @tanstack/query-core@5.102.8 实证）：maxPages
     // 在每次追加页时生效，裁「与拉取方向相反」的一端——fetchNextPage（forward，
     // infiniteQueryObserver.js:21-25）走 addToEnd，超限 slice(1) 丢弃
@@ -101,6 +120,32 @@ export function useSessionsQuery() {
     // updatedAt 倒序、置顶在前），Sidebar 平铺全部 pages 渲染——被裁端正是用户可见
     // 数据。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
     // 落在尾端，使被裁端不再是可见数据。
+  });
+}
+
+/**
+ * 会话列表平铺查询 hook（useSessionsQuery 的 select 投影，只消费平铺数组的调用方用）
+ *
+ * 同 key 同 queryFn（fetchSessionListPage / sessionListNextPageParam 共用）：与
+ * useSessionsQuery 共享 ['sessions'] 缓存条目与失效；select 只作用于本观察者的
+ * result.data（query-core createResult 按观察者应用 select），不改缓存、不影响
+ * 其他观察者。分页控制不受影响：hasNextPage / isFetchingNextPage / fetchNextPage
+ * 照常可用（Sidebar「加载更多」即依赖它们）。
+ *
+ * @returns 无限分页查询结果（data 为平铺后的 readonly SessionMeta[]，保持服务端排序）
+ *
+ * @example
+ * ```tsx
+ * const { data: sessions } = useSessionsFlat();
+ * ```
+ */
+export function useSessionsFlat() {
+  return useInfiniteQuery({
+    queryKey: SESSIONS_QUERY_KEY,
+    queryFn: fetchSessionListPage,
+    initialPageParam: 0,
+    getNextPageParam: sessionListNextPageParam,
+    select: flattenSessionPages,
   });
 }
 

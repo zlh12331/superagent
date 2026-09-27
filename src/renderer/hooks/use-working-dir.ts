@@ -10,17 +10,15 @@
 import { resolveWorkingDir } from '@/lib/working-dir';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
-import { useSessionsQuery } from './use-sessions';
+import { useSessionsFlat } from './use-sessions';
 
 /** 会话 id → workingDir 索引（平铺无限分页的全部已加载会话） */
 export function useWorkingDirIndex(): ReadonlyMap<string, string> {
-  const { data } = useSessionsQuery();
+  const { data: sessions } = useSessionsFlat();
   // 纯派生，交给 React Compiler 记忆化（Map 仅用于本次 resolve 查询，不对外暴露引用）
   const index = new Map<string, string>();
-  for (const page of data?.pages ?? []) {
-    for (const session of page.sessions) {
-      index.set(session.id, session.workingDir);
-    }
+  for (const session of sessions ?? []) {
+    index.set(session.id, session.workingDir);
   }
   return index;
 }

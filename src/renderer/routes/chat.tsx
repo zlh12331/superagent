@@ -17,9 +17,9 @@ import { Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import {
-  flattenTurnPages,
   useSessionTurns,
   useTurnMessagesInfinite,
+  useTurnPagesInfinite,
 } from '@/hooks/use-session-turns';
 import { useSessionDetail } from '@/hooks/use-sessions';
 import { useWorkingDir } from '@/hooks/use-working-dir';
@@ -60,8 +60,9 @@ export function ChatPage(): ReactElement {
  * 数据装配（debt.md#d2/#d4）：
  * - 元数据：useSessionDetail(id, false)（workingDir / lastRunStatus，免付全量消息负载）
  * - 回合列表：useSessionTurns（摘要，一次全量）
- * - 消息体：useTurnMessagesInfinite（首页 = 最近 TURNS_PER_PAGE 个回合，
- *   向上翻页加载更早；flattenTurnPages 为 ChatPanel initialMessages 单一口径）
+ * - 消息体：useTurnMessagesInfinite（select 平铺，data 即时间正序消息数组）+
+ *   useTurnPagesInfinite（原始分页形状镜像：shownTurnIdsRef 注册与 loadEarlier
+ *   去重按回合身份 turnId，平铺 ChatMessage 不带 turnId 表达不了）
  */
 function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // 本地化文案
@@ -69,7 +70,11 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   const { getErrorMessage } = useErrorMessage();
   const { data: session, isLoading, isError } = useSessionDetail(sessionId, false);
   const turnsQuery = useSessionTurns(sessionId);
+  // 平铺消息（select 单一口径：data 即时间正序去重后的 ChatMessage[]）
   const history = useTurnMessagesInfinite(sessionId, turnsQuery.data?.turns);
+  // 原始分页形状镜像（同 key 同 queryFn，select 各观察者独立应用）：注册与去重
+  // 按 turnId 走它，平铺数组表达不了回合身份
+  const pagesQuery = useTurnPagesInfinite(sessionId, turnsQuery.data?.turns);
   // 唯一权威入口：详情已到位时以详情值为权威，否则回落会话列表索引
   const workingDir = useWorkingDir(sessionId, session?.session.workingDir);
   const setWelcomeMode = useWelcomeStore((state) => state.setWelcomeMode);
@@ -87,13 +92,13 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
   // 返回前按回合身份过滤，防重复 prepend（2026-09-25 审查修复）。
   const shownTurnIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    for (const page of history.data?.pages ?? []) {
+    for (const page of pagesQuery.data?.pages ?? []) {
       for (const group of page.turns) {
         shownTurnIdsRef.current.add(group.turnId);
       }
     }
-  }, [history.data]);
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = history;
+  }, [pagesQuery.data]);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = pagesQuery;
   // 引用稳定性交给 React Compiler（捕获分页状态与回调）
   const loadEarlier = async (): Promise<readonly ChatMessage[] | null> => {
     if (!hasNextPage) {
@@ -174,8 +179,9 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
       chatId={sessionId}
       workingDir={workingDir}
       interrupted={session.session.lastRunStatus === 'interrupted'}
-      // 历史消息注入 useChat（已加载页按时间正序平铺；向上补页经 loadEarlier）
-      initialMessages={flattenTurnPages(history.data?.pages)}
+      // 历史消息注入 useChat（useTurnMessagesInfinite 的 select 已平铺去重；
+      // 向上补页经 loadEarlier）
+      initialMessages={history.data}
       {...(hasNextPage ? { hasEarlier: true } : {})}
       {...(isFetchingNextPage ? { loadingEarlier: true } : {})}
       {...(hasNextPage ? { loadEarlier } : {})}
