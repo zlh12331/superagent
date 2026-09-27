@@ -48,6 +48,40 @@ const CORE =
 const skipIfExists = process.argv.includes('--skip-if-exists');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
+/** 支持的架构集合（与 electron-builder.yml 的 target.arch 对齐） */
+const ALL_ARCHS = ['x64', 'arm64'];
+
+/**
+ * 目标架构：可由 CODE_AGENT_TARGET_ARCHS 收窄（逗号分隔），默认全部
+ *
+ * 与 scripts/prepare-codegraph.mjs 同一约定（release.yml 每个构建 job 都 export
+ * `CODE_AGENT_TARGET_ARCHS=${{ matrix.target-archs }}`）。默认（未设置）保持
+ * **双架构**：本地 `pnpm build:win`（CLI 同时传 --x64 --arm64）在单架构机器上
+ * 交叉构建时，收窄到 host 架构会把错误架构的原生绑定打进另一架构的包。
+ * 只有 CI 单架构 job 显式收窄时才裁剪——此时 runner 架构即目标架构。
+ */
+function resolveTargetArchs() {
+  const raw = process.env['CODE_AGENT_TARGET_ARCHS'];
+  if (raw === undefined || raw.trim() === '') {
+    return ALL_ARCHS;
+  }
+  const requested = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+  const unknown = requested.filter((a) => !ALL_ARCHS.includes(a));
+  if (unknown.length > 0) {
+    console.error(
+      `[prepare-memory-hub] CODE_AGENT_TARGET_ARCHS 含未知架构：${unknown.join(', ')}` +
+        `（支持：${ALL_ARCHS.join(', ')}）`,
+    );
+    process.exit(1);
+  }
+  return requested.length > 0 ? requested : ALL_ARCHS;
+}
+
+const targetArchs = resolveTargetArchs();
+
 function run(cmd, args, cwd) {
   const res = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
   if (res.status !== 0) {
@@ -152,13 +186,23 @@ console.log('[prepare-memory-hub] 在目标目录安装生产依赖（--ignore-s
 // （optionalDependencies，如 jieba-darwin-x64 / -darwin-arm64），运行时由包内
 // index.js 按 process.platform + process.arch 动态 require。只装 host 架构会在
 // 交叉构建时打进错误架构的绑定（x64 包内为 arm64 绑定 → 分词功能失败）。
+// cpu 列表由 targetArchs 决定：默认双架构（本地交叉构建安全）；CI 单架构 job 经
+// CODE_AGENT_TARGET_ARCHS 收窄后，另一架构的原生包（@esbuild / @node-rs/jieba
+// 的异架构绑定，实测 ~12MB）不再下载——该 job 的产物只服务单一架构。
 writeFileSync(
   join(TARGET, 'pnpm-workspace.yaml'),
   'packages: []\n' +
-    'supportedArchitectures:\n  os:\n    - current\n  cpu:\n    - x64\n    - arm64\n' +
+    'supportedArchitectures:\n  os:\n    - current\n  cpu:\n' +
+    targetArchs.map((a) => `    - ${a}\n`).join('') +
     'virtualStoreDirMaxLength: 24\n',
   'utf8',
 );
+if (targetArchs.length < ALL_ARCHS.length) {
+  console.log(
+    `[prepare-memory-hub] 按 CODE_AGENT_TARGET_ARCHS 收窄目标架构：${targetArchs.join(', ')}` +
+      '（跳过异架构原生依赖）',
+  );
+}
 const storeDir = join(tmpdir(), 'pnpm-store-memory-hub');
 run(
   pnpm,

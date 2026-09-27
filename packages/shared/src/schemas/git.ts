@@ -150,7 +150,7 @@ export const GitDiffReqSchema = z.object({
 /**
  * git:diff 响应 payload
  *
- * diff 为 unified diff 原始文本，渲染层用 react-diff-viewer-continued 渲染。
+ * diff 为 unified diff 原始文本，渲染层用自研 DiffRowsTable 渲染（shiki 行高亮）。
  * additions/deletions/filesChanged 为结构化统计，便于顶部摘要展示。
  */
 export interface GitDiffRes {

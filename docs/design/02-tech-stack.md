@@ -52,7 +52,6 @@
 | `react-error-boundary`                                           | `^6.1.2`                          |
 | `react-hotkeys-hook`                                             | `^5.3.3`                          |
 | `react-markdown` / `remark-gfm`                                  | `^10.1.0` / `^4.0.1`              |
-| `react-diff-viewer-continued`                                    | `^4.4.0`                          |
 | `react-activity-calendar`                                        | `^3.2.1`                          |
 | `react-arborist`                                                 | `^3.15.0`                         |
 

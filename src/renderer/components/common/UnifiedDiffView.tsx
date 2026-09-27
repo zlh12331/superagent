@@ -1,9 +1,10 @@
 // src/renderer/components/common/UnifiedDiffView.tsx
 // unified diff 文本渲染（自研 DiffRowsTable + shiki 按需高亮）
 // ──────────────────────────────────────────────────────────────
-// 背景（2026-09）：替换 react-diff-viewer-continued——其静态依赖的语法分析库
-// 会在产物中拖入 37 个语言 chunk（out/ 约 2.7MB 死重）。现改用项目已有资产
-// 自研渲染：unified-diff 解析 → DiffRowsTable 双栏表格（shiki 行高亮）。
+// 背景（2026-09）：替换 react-diff-viewer-continued——其静态依赖的语法高亮语言包
+// 会在产物中拖入 37 个语言 chunk（实测：迁移前构建 37 个 chunk 命中该依赖，
+// .js 合计 0.43MB；迁移后产物 0 命中）。现改用项目已有资产自研渲染：unified-diff
+// 解析 → DiffRowsTable 双栏表格（shiki 行高亮）。
 //
 // 输入：git:diff 返回的 unified diff 原始文本
 // 输出：单张 diff 表（每 hunk 一个 tbody 分组，GitHub 风格变更块）
