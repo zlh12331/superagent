@@ -126,6 +126,8 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
     setSubmitting(true);
     try {
       await respondAgentAsk({ askId, answers: answers.map(toAnswerPayload) });
+      // 仅成功才关闭：失败保留现场（选项/文本/askId），用户可原地重试
+      clearAsk();
     } catch (error) {
       // 对齐全仓统一模式：[CODE] 前缀错误 → 错误码本地化；非 IPC 异常回退通用文案
       toast.error(
@@ -134,8 +136,8 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
           : t('agent.askSubmitFailed'),
       );
     }
-    // finally 语义（React Compiler 不优化 try/finally）：成功/失败路径统一收尾
-    clearAsk();
+    // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
+    // 成功/失败统一复位 submitting（关闭仅发生在成功分支）
     setSubmitting(false);
   };
 
@@ -207,8 +209,15 @@ export function AskDialog(): ReactElement | null {
   }
 
   const handleCancel = (): void => {
-    // 取消 = 回传空回答（LLM 按「用户未选择」继续执行）
-    void handleSubmit();
+    // 取消 = 回传空回答（LLM 按「用户未选择」继续）。
+    // 与「提交失败」区分：用户意图是离开，无论 IPC 成败都 clearAsk，
+    // 否则关闭按钮失灵会把用户锁在弹窗里。
+    if (hasIpcBridge() && askId !== null) {
+      void respondAgentAsk({ askId, answers: [] }).catch(() => {
+        // 取消回传失败：主进程 5 分钟超时兜底，UI 不再阻塞用户
+      });
+    }
+    clearAsk();
   };
 
   return (
