@@ -23,7 +23,7 @@ import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
 
@@ -323,7 +323,7 @@ function notifyWatchStartFailure(err: unknown, t: TranslateFn): void {
  * @returns 失败目录数（0 表示全部成功）——调用方据此决定是否提示
  */
 async function refreshExpandedDirs(rootPath: string): Promise<number> {
-  if (typeof window === 'undefined' || window.api === undefined) {
+  if (!hasIpcBridge()) {
     return 0;
   }
   const paths = [...new Set([rootPath, ...useFileTreeStore.getState().expandedPaths])];

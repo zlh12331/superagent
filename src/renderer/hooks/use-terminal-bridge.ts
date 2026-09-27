@@ -29,7 +29,7 @@ import type {
   TerminalOutputEventPayload,
 } from '@code-agent/shared/renderer';
 import { useEffect } from 'react';
-
+import { hasIpcBridge } from '@/lib/ipc';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
 /**
@@ -47,7 +47,7 @@ import { useTerminalStore } from '@/stores/transient/terminal-store';
  */
 export function useTerminalBridge(): void {
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
+    if (!hasIpcBridge()) return;
 
     // 订阅终端输出事件：主进程推送 PTY 原始输出（含 ANSI 转义序列）
     // 渲染层由 TerminalPanel 用 xterm.js 直接 write，不解码

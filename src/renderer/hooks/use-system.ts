@@ -15,7 +15,7 @@
 import type { ReadLogsRes, SystemStatusRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /** system:getStatus Query key */
 export const SYSTEM_STATUS_QUERY_KEY = ['system', 'getStatus'] as const;
@@ -40,7 +40,7 @@ export function useSystemStatusQuery(enabled = true, refetchInterval = 10_000) {
   return useQuery({
     queryKey: SYSTEM_STATUS_QUERY_KEY,
     queryFn: async (): Promise<SystemStatusRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return {
           appVersion: '0.0.0',
           electronVersion: '0.0.0',
@@ -82,7 +82,7 @@ export function useLogsReadQuery(
   return useQuery({
     queryKey: LOGS_READ_QUERY_KEY(lines, level),
     queryFn: async (): Promise<ReadLogsRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { lines: [], total: 0, filePath: '', truncated: false } satisfies ReadLogsRes;
       }
       const input = level !== undefined ? { lines, level } : { lines };

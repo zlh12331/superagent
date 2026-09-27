@@ -10,7 +10,7 @@
 import type { ModelsListRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /** 模型清单查询 key（全局共享：ModelSelector / ModelsSection 等） */
 export const MODELS_QUERY_KEY = ['models', 'list'] as const;
@@ -29,7 +29,7 @@ export function useModelsQuery() {
   return useQuery({
     queryKey: MODELS_QUERY_KEY,
     queryFn: async (): Promise<ModelsListRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { models: [] };
       }
       const response = await window.api.models.list();
@@ -48,7 +48,7 @@ export function useBuiltinModelsQuery(providerKind: string | undefined) {
   return useQuery({
     queryKey: BUILTIN_MODELS_QUERY_KEY(providerKind),
     queryFn: async (): Promise<ModelsListRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { models: [] };
       }
       const response = await window.api.models.listBuiltin({

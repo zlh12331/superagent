@@ -223,6 +223,11 @@ export function ChatInput({
   // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
 
+  // onStop 经 ref 调用：window 监听 effect 不依赖函数身份（vitest 无 React Compiler，
+  // 父级内联 () => stop() 每渲染新建会导致流式期间监听反复 add/remove）
+  const onStopRef = useRef(onStop);
+  onStopRef.current = onStop;
+
   // 流式期间 window 级 Esc 监听：textarea 未聚焦时也可中断生成
   // （对齐原型 composer-hint "Esc 中断"；disabled 元素收不到键盘事件的补充通道）
   useEffect(() => {
@@ -235,14 +240,14 @@ export function ChatInput({
       if (event.isComposing) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
-        onStop();
+        onStopRef.current();
       }
     };
     window.addEventListener('keydown', onWindowKeyDown);
     return () => {
       window.removeEventListener('keydown', onWindowKeyDown);
     };
-  }, [isStreaming, onStop]);
+  }, [isStreaming]);
 
   // 发送管线（自 ChatInput 拆出：use-composer-send.ts）
   // 职责：in-flight 守卫 / 超长拦截 / 附件拼接 / 清草稿与输入（三路径统一复位）

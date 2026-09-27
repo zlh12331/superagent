@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { reportError } from '@/lib/error-report';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 const DEFAULT_MODE: ApprovalMode = 'ask';
 
@@ -27,7 +27,7 @@ export function useApprovalMode(): {
 
   useEffect(() => {
     // 浏览器模式（dev 预览）无 window.api：保持默认模式
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       return;
     }
     let cancelled = false;
@@ -51,7 +51,7 @@ export function useApprovalMode(): {
   // 引用稳定性交给 React Compiler（捕获 mode/t 均为响应式值）
   const setMode = async (next: ApprovalMode): Promise<void> => {
     const previous = mode;
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       // 浏览器模式无语义可写：仅本地回显（与上方读取分支同构）
       setModeState(next);
       return;

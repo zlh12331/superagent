@@ -17,7 +17,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { FILE_CONTENT_QUERY_KEY } from './use-file-content';
 
 /**
@@ -40,7 +40,7 @@ export function useFileWrite() {
   return useMutation<FileWriteRes, Error, FileWriteReq>({
     mutationFn: async (input: FileWriteReq): Promise<FileWriteRes> => {
       // E2E 浏览器模式下 window.api 未注入
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { bytesWritten: input.content.length };
       }
       const response = await window.api.file.write(input);

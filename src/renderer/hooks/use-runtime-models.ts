@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useErrorMessage } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { MODELS_QUERY_KEY } from './use-models';
 
 /** mutation 失败反馈（一致性收敛：错误经 [CODE] 解析本地化，杜绝静默失败） */
@@ -36,7 +36,7 @@ export function useRuntimeModelsQuery() {
   return useQuery({
     queryKey: RUNTIME_MODELS_QUERY_KEY,
     queryFn: async (): Promise<ListRuntimeModelsRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { models: [] };
       }
       return unwrap<ListRuntimeModelsRes>(await window.api.settings.listRuntimeModels());
@@ -146,7 +146,7 @@ export function useTestModel() {
   const onError = useMutationOnError();
   return useMutation({
     mutationFn: async (input: TestModelInput): Promise<TestModelRes> => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { ok: false, error: 'browser mode' };
       }
       return unwrap<TestModelRes>(

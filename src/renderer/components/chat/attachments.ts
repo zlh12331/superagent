@@ -7,7 +7,7 @@
 
 import { ATTACHMENT_MAX_CHARS as SHARED_ATTACHMENT_MAX_CHARS } from '@code-agent/shared/renderer';
 
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /** 附件项（对齐参考项目 ChatInputAttachments） */
 export interface ChatAttachment {
@@ -47,7 +47,7 @@ export async function buildTextWithAttachments(
     readonly truncated: (chars: number) => string;
   },
 ): Promise<string> {
-  if (attachments.length === 0 || typeof window === 'undefined' || window.api === undefined) {
+  if (attachments.length === 0 || !hasIpcBridge()) {
     return baseText;
   }
   let text = baseText;

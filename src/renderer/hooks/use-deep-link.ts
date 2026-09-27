@@ -17,6 +17,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 
 import { ROUTES } from '@/lib/constants';
+import { hasIpcBridge } from '@/lib/ipc';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 
 /**
@@ -30,7 +31,7 @@ export function useDeepLink(): void {
   const setActiveSession = useActiveSessionStore((s) => s.setActiveSession);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       return;
     }
 

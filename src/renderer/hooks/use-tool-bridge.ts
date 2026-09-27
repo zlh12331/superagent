@@ -20,7 +20,7 @@
 
 import type { AgentToolCallPayload, AgentToolResultPayload } from '@code-agent/shared/renderer';
 import { useEffect } from 'react';
-
+import { hasIpcBridge } from '@/lib/ipc';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 import { useToolStore } from '@/stores/transient/tool-store';
 
@@ -40,7 +40,7 @@ import { useToolStore } from '@/stores/transient/tool-store';
  */
 export function useToolBridge(): void {
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
+    if (!hasIpcBridge()) return;
 
     // 订阅工具调用事件：主进程推送工具调用入参与权限级别
     const unsubscribeToolCall = window.api.agent.subscribeToolCall((payload) => {

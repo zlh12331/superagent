@@ -16,6 +16,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useEffect } from 'react';
+import { hasIpcBridge } from '@/lib/ipc';
 import type { AgentAskEventPayload } from '@/stores/transient/agent-ask-store';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
 
@@ -24,7 +25,7 @@ import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
  */
 export function useAgentAskBridge(): void {
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       return;
     }
     const unsubscribe = window.api.agent.subscribeAsk((payload: AgentAskEventPayload) => {

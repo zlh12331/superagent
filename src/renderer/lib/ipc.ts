@@ -43,6 +43,7 @@ const ERROR_CODE_PREFIX = /^\[([A-Z_]+)\]/;
  * 散落 57 处，且**遗漏若干写入路径**（browser:configure、im allowlist 保存、
  * mcp/im/memory 的 mutation）——每次新增 IPC 调用都要记得手抄一遍，漏一处即
  * 浏览器预览下报错。提取后调用方只需 `if (!hasIpcBridge()) return/throw`。
+ * 2026-09-26 存量字面量已全部收口到本函数，并加 ui-consistency 规则防回潮。
  */
 export function hasIpcBridge(): boolean {
   return typeof window !== 'undefined' && window.api !== undefined;

@@ -13,7 +13,7 @@ import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/use-translation';
 import { reportError } from '@/lib/error-report';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /**
  * 启动时校验 IPC 协议版本（AppShell 挂载一次）
@@ -25,7 +25,7 @@ export function useProtocolCheck(): void {
   const { t } = useTranslation();
 
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       return;
     }
     let cancelled = false;

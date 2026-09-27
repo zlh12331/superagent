@@ -23,7 +23,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { useEffect } from 'react';
-
+import { hasIpcBridge } from '@/lib/ipc';
 import { type ApprovalType, useApprovalsStore } from '@/stores/transient/approvals-store';
 
 /**
@@ -98,7 +98,7 @@ function classifyTool(toolName: string): ApprovalType {
 export function useApprovalBridge(): void {
   // 订阅 IPC approval:request 事件，将 payload 入队到 store
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       // SSR / 测试环境下 window.api 可能不存在，安全跳过
       return;
     }

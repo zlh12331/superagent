@@ -19,6 +19,7 @@ import type { AgentStreamEndPayload, AgentStreamErrorPayload } from '@code-agent
 import { useEffect } from 'react';
 
 import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
+import { hasIpcBridge } from '@/lib/ipc';
 import { GOAL_LIST_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
 import { queryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
@@ -88,7 +89,7 @@ function handleSessionEnd(sessionId: string): void {
  */
 export function useAgentBridge(): void {
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
+    if (!hasIpcBridge()) return;
 
     // 回合正常结束 / 用户中断：invalidate 缓存 + 清理缓冲 + usage 累积
     const unsubscribeEnd = window.api.agent.subscribeStreamEnd((payload) => {

@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { buildFileSearchPattern } from '@/lib/file-search';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /** 空结果常量：稳定引用，使「无结果」时重复置空不触发重渲染 */
 const EMPTY_FILES: readonly string[] = [];
@@ -93,7 +93,7 @@ export function useFileGlobSearch({
       setFiles(EMPTY_FILES);
       return;
     }
-    if (typeof window === 'undefined' || window.api === undefined) {
+    if (!hasIpcBridge()) {
       // 浏览器模式（E2E）无桥：不搜索也不报错
       setFiles(EMPTY_FILES);
       return;

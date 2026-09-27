@@ -70,6 +70,13 @@ export const UI_RULES: readonly UiRule[] = [
     pattern: /\bwindow\.api\./,
     fileFilter: (relFile) => relFile.endsWith('.tsx'),
   },
+  {
+    id: 'legacy-bridge-guard',
+    // 2026-09-26 hasIpcBridge 收口：禁止再写旧字面量守卫（单一真源 lib/ipc.ts）。
+    // 注释中的示例已由「纯注释行跳过」豁免覆盖。
+    desc: '旧式 window.api 可用性字面量判断（统一用 hasIpcBridge()，见 src/renderer/lib/ipc.ts）',
+    pattern: /typeof window === 'undefined'\s*\|\|\s*window\.api === undefined/,
+  },
 ];
 
 /**

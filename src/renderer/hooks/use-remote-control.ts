@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useErrorMessage } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 
 /** mutation 失败反馈（一致性收敛：错误经 [CODE] 解析本地化，杜绝静默失败） */
 function useMutationOnError(): (error: Error) => void {
@@ -41,7 +41,7 @@ const IDLE_STATUS: RemoteStatusRes = {
 };
 
 async function fetchStatus(): Promise<RemoteStatusRes> {
-  if (typeof window === 'undefined' || window.api === undefined) {
+  if (!hasIpcBridge()) {
     return IDLE_STATUS;
   }
   return unwrap<RemoteStatusRes>(await window.api.remote.getStatus());
@@ -58,7 +58,7 @@ export function useRemoteStatusQuery() {
 
 /** 启停请求：主进程返回变更后快照（浏览器模式降级为已停止） */
 async function requestChange(action: 'start' | 'stop'): Promise<RemoteStatusRes> {
-  if (typeof window === 'undefined' || window.api === undefined) {
+  if (!hasIpcBridge()) {
     return IDLE_STATUS;
   }
   const res = action === 'start' ? await window.api.remote.start() : await window.api.remote.stop();

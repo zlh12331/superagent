@@ -29,7 +29,7 @@ import {
 } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useErrorMessage } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 
 /**
  * Query key 常量（避免手写字符串导致 typo）
@@ -75,7 +75,7 @@ export function useSessionsQuery() {
     queryKey: SESSIONS_QUERY_KEY,
     queryFn: async ({ pageParam }) => {
       // E2E 浏览器模式下 window.api 未注入（无 preload），返回空列表
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { sessions: [], total: 0 };
       }
       const response = await window.api.session.list({
@@ -277,7 +277,7 @@ export function useRecentDirs() {
   return useQuery({
     queryKey: RECENT_DIRS_QUERY_KEY,
     queryFn: async () => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { dirs: [] };
       }
       const response = await window.api.session.listRecentDirs({ limit: 10 });
