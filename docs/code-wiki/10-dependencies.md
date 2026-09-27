@@ -131,7 +131,7 @@ UI：`@radix-ui/*` + `tailwindcss` + `lucide-react` + `class-variance-authority`
 框架：`react`/`react-dom`/`react-router`/`vite`；electron：`electron` + `electron-vite` + `electron-updater` + `electron-builder` + `electron-log`
 遥测：`@sentry/electron` + `@opentelemetry/*`
 序列化/校验：`zod`；富文本：`react-markdown` + `remark-gfm` + `shiki`
-定时：`croner`；diff：`diff-match-patch` + `react-diff-viewer-continued`；模糊搜索：`fuse.js`
+定时：`croner`；diff：`diff-match-patch` + 自研 `DiffRowsTable`（shiki 行高亮）；模糊搜索：`fuse.js`
 
 > 完整清单见根 `package.json` dependencies/devDependencies。
 
