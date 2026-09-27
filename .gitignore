@@ -127,3 +127,4 @@ release/
 
 # Zcode 本地工具忽略副本（与 .gitignore 同源，不入仓）
 .zcodeignore
+.worktrees/
