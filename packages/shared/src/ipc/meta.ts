@@ -196,6 +196,7 @@ export const IPC_META = {
     getStatus: request('remote:getStatus'),
     start: request('remote:start'),
     stop: request('remote:stop'),
+    setBindScope: request('remote:setBindScope'),
   },
 
   logs: {

@@ -9,7 +9,7 @@
 // 面板不持久化令牌；关闭服务即撤销全部局域网入口。
 // ──────────────────────────────────────────────────────────────
 
-import type { RemoteStatusRes } from '@code-agent/shared/renderer';
+import type { RemoteBindScope, RemoteStatusRes } from '@code-agent/shared/renderer';
 import { Copy, Loader2, ShieldAlert, Smartphone } from 'lucide-react';
 import { toDataURL } from 'qrcode';
 import type { ReactElement } from 'react';
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
 import {
   useRemoteStatusQuery,
+  useSetRemoteBindScope,
   useStartRemoteControl,
   useStopRemoteControl,
 } from '@/hooks/use-remote-control';
@@ -27,7 +28,7 @@ import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { formatRelativeTime } from '@/lib/format-time';
 import { unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
-import { SettingRow, ToggleRow } from '../settings-controls';
+import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
 
 /**
  * 配对二维码（端点 + #令牌）
@@ -124,7 +125,7 @@ function HeadlessModeWarning({ mode }: { readonly mode: string }): ReactElement 
   );
 }
 
-/** 远程控制设置区：状态展示 + 启动/停止远程控制（模式限制警告见上方 ModeWarning） */
+/** 远程控制设置区：状态展示 + 启动/停止远程控制 + 绑定范围（模式限制警告见上方 ModeWarning） */
 export function RemoteControlSection(): ReactElement {
   const { t } = useTranslation();
   const { getErrorMessage } = useErrorMessage();
@@ -132,9 +133,11 @@ export function RemoteControlSection(): ReactElement {
   const { mode } = useApprovalMode();
   const startMutation = useStartRemoteControl();
   const stopMutation = useStopRemoteControl();
+  const setBindScopeMutation = useSetRemoteBindScope();
 
   const running = data?.running === true;
-  const pending = startMutation.isPending || stopMutation.isPending;
+  const pending =
+    startMutation.isPending || stopMutation.isPending || setBindScopeMutation.isPending;
 
   const handleToggle = (checked: boolean): void => {
     // 失败反馈由 hook 层 onError 统一 toast（本地化错误文案），此处只处理成功
@@ -147,6 +150,13 @@ export function RemoteControlSection(): ReactElement {
         onSuccess: () => toast.success(t('settings.remote.stopped')),
       });
     }
+  };
+
+  // 失败反馈由 hook 层 onError 统一 toast；成功后快照已写入缓存（含新范围与端点）
+  const handleBindScopeChange = (value: string): void => {
+    setBindScopeMutation.mutate(value as RemoteBindScope, {
+      onSuccess: () => toast.success(t('settings.remote.bindScopeChanged')),
+    });
   };
 
   const handleCopyToken = async (): Promise<void> => {
@@ -200,6 +210,23 @@ export function RemoteControlSection(): ReactElement {
         checked={running}
         onChange={(checked) => void handleToggle(checked)}
       />
+
+      {/* 绑定范围（lan=局域网可连 / loopback=仅本机；运行中切换即时生效，见 28-spec 两态 SegControl 形态） */}
+      {data !== undefined && (
+        <SettingRow
+          label={t('settings.remote.bindScopeLabel')}
+          description={t('settings.remote.bindScopeDesc')}
+        >
+          <SegControl
+            value={data.bindScope}
+            options={[
+              { value: 'lan', label: t('settings.remote.bindScopeLan') },
+              { value: 'loopback', label: t('settings.remote.bindScopeLoopback') },
+            ]}
+            onChange={handleBindScopeChange}
+          />
+        </SettingRow>
+      )}
 
       {pending && (
         <span className="text-muted-foreground flex items-center gap-1.5 text-2xs">

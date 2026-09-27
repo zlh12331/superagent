@@ -428,6 +428,11 @@
       "tokenCopyFailed": "令牌复制失败",
       "qrAlt": "远程控制配对二维码",
       "qrHint": "手机相机扫码直接打开配对页",
+      "bindScopeLabel": "监听范围",
+      "bindScopeDesc": "局域网：同一网络内的设备可配对连接（含发现广播）；仅本机：只监听 127.0.0.1，不向局域网广播，运行中切换即时生效",
+      "bindScopeLan": "局域网",
+      "bindScopeLoopback": "仅本机",
+      "bindScopeChanged": "监听范围已生效",
       "activeCommands_other": "执行中 {{count}} 条",
       "activeCommands_one": "执行中 {{count}} 条"
     },

@@ -8,7 +8,7 @@
 // 说明：令牌只在服务运行期间由主进程下发，停止后快照置 null（不落渲染层缓存）
 // ──────────────────────────────────────────────────────────────
 
-import type { RemoteStatusRes } from '@code-agent/shared/renderer';
+import type { RemoteBindScope, RemoteStatusRes } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
@@ -27,6 +27,7 @@ const IDLE_STATUS: RemoteStatusRes = {
   port: null,
   token: null,
   instanceName: '',
+  bindScope: 'lan',
   addresses: [],
   activeCommands: 0,
   lastCommandAt: null,
@@ -76,6 +77,24 @@ export function useStopRemoteControl() {
   const onError = useMutationOnError();
   return useMutation({
     mutationFn: () => requestChange('stop'),
+    onSuccess: (status) => {
+      queryClient.setQueryData(REMOTE_STATUS_QUERY_KEY, status);
+    },
+    onError,
+  });
+}
+
+/** 绑定范围切换 mutation：主进程先应用后落库，返回应用后快照（浏览器模式降级为回显） */
+export function useSetRemoteBindScope() {
+  const queryClient = useQueryClient();
+  const onError = useMutationOnError();
+  return useMutation({
+    mutationFn: async (scope: RemoteBindScope): Promise<RemoteStatusRes> => {
+      if (!hasIpcBridge()) {
+        return { ...IDLE_STATUS, bindScope: scope };
+      }
+      return unwrap<RemoteStatusRes>(await window.api.remote.setBindScope({ scope }));
+    },
     onSuccess: (status) => {
       queryClient.setQueryData(REMOTE_STATUS_QUERY_KEY, status);
     },

@@ -11,7 +11,16 @@
 import { z } from 'zod';
 
 /**
- * 远程控制状态响应（getStatus / start / stop 共用）
+ * 绑定范围：HTTP 监听与局域网可见性
+ *
+ * - lan：监听 0.0.0.0（局域网设备可配对连接）+ UDP 发现广播（现状默认，兼容存量）
+ * - loopback：仅监听 127.0.0.1（局域网不可达），停发 UDP 公告——
+ *   仅本机模式不应向局域网广播自身存在
+ */
+export type RemoteBindScope = 'loopback' | 'lan';
+
+/**
+ * 远程控制状态响应（getStatus / start / stop / setBindScope 共用）
  */
 export interface RemoteStatusRes {
   /** 监听是否在运行 */
@@ -22,7 +31,9 @@ export interface RemoteStatusRes {
   readonly token: string | null;
   /** 实例名（发现公告展示名，默认主机名） */
   readonly instanceName: string;
-  /** 局域网直连地址（形如 http://192.168.1.10:52341；未运行为空数组） */
+  /** 绑定范围（lan=局域网可连；loopback=仅本机 127.0.0.1） */
+  readonly bindScope: RemoteBindScope;
+  /** 直连地址（lan=局域网 IPv4 端点；loopback=仅本机端点；未运行为空数组） */
   readonly addresses: readonly string[];
   /** 正在执行的远程命令数（无头回合） */
   readonly activeCommands: number;
@@ -36,7 +47,16 @@ export const RemoteStatusResSchema = z.object({
   port: z.number().int().nonnegative().nullable(),
   token: z.string().nullable(),
   instanceName: z.string(),
+  bindScope: z.enum(['loopback', 'lan']),
   addresses: z.array(z.string()),
   activeCommands: z.number().int().nonnegative(),
   lastCommandAt: z.number().int().nonnegative().nullable(),
+});
+
+/** remote:setBindScope 请求体（z.infer 派生，与 im 域请求类型同构，防手写漂移） */
+export type RemoteSetBindScopeReq = z.infer<typeof RemoteSetBindScopeReqSchema>;
+
+/** remote:setBindScope 请求体 zod schema */
+export const RemoteSetBindScopeReqSchema = z.object({
+  scope: z.enum(['loopback', 'lan']),
 });

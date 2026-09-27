@@ -428,6 +428,11 @@
       "tokenCopyFailed": "Failed to copy token",
       "qrAlt": "Remote control pairing QR code",
       "qrHint": "Scan with your phone camera to open the pairing page",
+      "bindScopeLabel": "Listen scope",
+      "bindScopeDesc": "LAN: devices on your network can pair and connect (includes discovery broadcast); Loopback: listen on 127.0.0.1 only, no LAN broadcast. Changes apply immediately while running",
+      "bindScopeLan": "LAN",
+      "bindScopeLoopback": "This device only",
+      "bindScopeChanged": "Listen scope applied",
       "activeCommands_one": "{{count}} running",
       "activeCommands_other": "{{count}} running"
     },
