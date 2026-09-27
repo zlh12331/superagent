@@ -16,7 +16,7 @@
 // resolve 后必须位于 `<cwd>/.git/` 之内，否则拒绝——避免被用作任意文件读取入口。
 // ──────────────────────────────────────────────────────────────
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
 import { checkCommitHeader } from './lib/commit-header';
@@ -34,17 +34,45 @@ export function extractHeader(raw: string): string {
 }
 
 /**
+ * 解析仓库的实际 git 目录（路径安全判定的基准目录）
+ *
+ * 常规仓库：`<cwd>/.git` 即目录本身。git worktree（并行 worktree 工作流，
+ * 见 .worktrees/）：`<cwd>/.git` 是一个指针文件（`gitdir: <主仓>/.git/worktrees/<名>`），
+ * 实际 git 目录在主仓侧——只认 `<cwd>/.git/` 会把钩子传入的
+ * `COMMIT_EDITMSG` 误判为越界，导致 worktree 内一切提交被拒（2026-09-27 实测）。
+ *
+ * @returns 实际 git 目录绝对路径；`.git` 不存在时返回 null
+ */
+export function resolveGitDir(cwd: string): string | null {
+  const dotGit = resolve(cwd, '.git');
+  if (!existsSync(dotGit)) {
+    return null;
+  }
+  if (statSync(dotGit).isDirectory()) {
+    return dotGit;
+  }
+  // worktree 指针文件：`gitdir: <path>`
+  const content = readFileSync(dotGit, 'utf8').trim();
+  const match = /^gitdir:\s*(.+)$/m.exec(content);
+  return match?.[1] !== undefined ? resolve(cwd, match[1].trim()) : null;
+}
+
+/**
  * 校验提交信息文件路径是否合法
  *
- * 只允许仓库 `.git/` 目录内的文件（Git 钩子的约定：`.git/COMMIT_EDITMSG`，
- * rebase 时为 `.git/rebase-merge/…` 等，均在该目录下）。
+ * 只允许仓库实际 git 目录内的文件（Git 钩子的约定：`.git/COMMIT_EDITMSG`，
+ * rebase 时为 `.git/rebase-merge/…`、worktree 时为主仓
+ * `.git/worktrees/<名>/COMMIT_EDITMSG` 等，均在该目录下）。
  *
  * @returns 规范化后的绝对路径；不合法时返回 null
  */
 export function resolveCommitMsgPath(input: string, cwd: string): string | null {
   const absolute = resolve(cwd, input);
-  const gitDir = resolve(cwd, '.git') + sep;
-  return absolute.startsWith(gitDir) ? absolute : null;
+  const gitDir = resolveGitDir(cwd);
+  if (gitDir === null) {
+    return null;
+  }
+  return absolute.startsWith(gitDir + sep) ? absolute : null;
 }
 
 function readInput(argv: readonly string[], cwd: string): string | null {
