@@ -891,6 +891,9 @@ function createMockApi(): IpcApi {
       },
       // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）
       listRuntimeModels: async () => ipcOk({ models: mockRuntimeModels }),
+      // 设置导出/导入：浏览器模式无主进程 dialog/文件系统 ⇒ 返回取消 / 零操作
+      exportSettings: async () => ipcOk({ saved: false }),
+      importSettings: async () => ipcOk({ imported: 0, skipped: 0 }),
       // 设置变更推送：浏览器模式下设置只由本页写入（无托盘等主进程入口）⇒ 订阅即 no-op
       subscribeChanged: () => () => {},
     },

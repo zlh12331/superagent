@@ -444,3 +444,51 @@ export const SetApprovalModeResSchema = z.object({
   ok: z.boolean(),
   mode: ApprovalModeSchema,
 });
+
+// ─── 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外） ─────────
+
+/**
+ * 当前设置导出文件格式版本（导入侧仅接受本版本）
+ *
+ * 导出内容 = app_settings 表全量 key-value；API Key 等凭据存于系统 keychain
+ * （safeStorage 加密，本机绑定不可迁移），不在导出文件内——这是显式安全取舍。
+ */
+export const SETTINGS_EXPORT_VERSION = 1;
+
+/** 设置导出文件 schema（version=1；导入逐键过 SETTING_KEYS 白名单后才写入） */
+export const SettingsExportFileSchema = z.object({
+  version: z.literal(SETTINGS_EXPORT_VERSION),
+  exportedAt: z.number().int(),
+  settings: z.record(z.string(), z.unknown()),
+});
+
+/** 设置导出文件类型 */
+export type SettingsExportFile = z.infer<typeof SettingsExportFileSchema>;
+
+/** settings:export 响应 payload（saved/path，与 session:exportAll 同形） */
+export interface SettingsExportRes {
+  readonly saved: boolean;
+  readonly path?: string;
+}
+
+/** settings:export 响应 zod schema（响应契约校验用） */
+export const SettingsExportResSchema = z.object({
+  saved: z.boolean(),
+  path: z.string().optional(),
+});
+
+/**
+ * settings:import 响应 payload
+ *
+ * imported = 通过白名单校验并写入的键数；skipped = 白名单外被跳过的键数。
+ */
+export interface SettingsImportRes {
+  readonly imported: number;
+  readonly skipped: number;
+}
+
+/** settings:import 响应 zod schema（响应契约校验用） */
+export const SettingsImportResSchema = z.object({
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+});

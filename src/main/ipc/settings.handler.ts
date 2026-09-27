@@ -1,8 +1,10 @@
 // src/main/ipc/settings.handler.ts
 // Settings 域 IPC handler（API Key 管理 + 遥测级别 + 自定义模型，定义表驱动）
 //
-// 实现 11 个请求-响应方法：
+// 实现 13 个请求-响应方法：
 // - getAll / set   渲染层用户设置（app_settings 表，SQLite 单一真源）
+// - exportSettings / importSettings   设置导出/导入（app_settings 全表 JSON；
+//   keychain 凭据除外——safeStorage 本机绑定不可迁移）
 // - getApiKey / setApiKey / deleteApiKey   API Key 管理（safeStorage 加密存 keychain）
 // - getTelemetryLevel / setTelemetryLevel  遥测级别开关
 // - addRuntimeModel / updateRuntimeModel / removeRuntimeModel / listRuntimeModels  自定义模型（运行时快照）
@@ -12,15 +14,22 @@
 // - runtimeModelStore 单例在 ai-provider 层（与 llmClient 同层），启动时 loadAll()
 // - keychain key 命名规则：'<provider>-api-key' / 'runtime:<modelId>'
 
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import { app, dialog } from 'electron';
 
 import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
 import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { readApprovalModeSync, writeApprovalMode } from '../infra/storage/approval-pref';
 import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
+import { applySettingsImport, buildSettingsExportFile } from '../infra/storage/settings-io';
 import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
+import { broadcastSettingChanged } from '../main-events';
+import { readJsonImportFile } from '../utils/json-file';
+import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 // 独立主题联动模块（无 service-container 依赖）——IPC 层引用它不会穿透
 // 到 electron-updater 初始化链（2026-09-03 回归修复，见 window-theme.ts 头注释）
@@ -54,6 +63,54 @@ export function createSettingsHandlers(params: {
         syncTitleBarOverlayFromTheme(input.value);
       }
       return { ok: true };
+    },
+
+    // settings:export - 导出 app_settings 全表 JSON（dialog 选保存路径）
+    // keychain 凭据（safeStorage 加密的 API Key）不在 app_settings 表内，
+    // 天然不含在导出文件中（本机绑定不可迁移，UI 文案注明）
+    exportSettings: async () => {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: '导出设置',
+        defaultPath: join(app.getPath('documents'), `settings-export-${stamp}.json`),
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (canceled || filePath === undefined || filePath === '') {
+        return { saved: false };
+      }
+      try {
+        await writeFile(filePath, JSON.stringify(buildSettingsExportFile()), 'utf8');
+        logger.info({ filePath }, '设置导出完成');
+        return { saved: true, path: filePath };
+      } catch (error) {
+        logger.error({ error: String(error) }, '设置导出失败');
+        throw error;
+      }
+    },
+
+    // settings:import - 导入设置（读文件 → zod 校验 → 白名单过滤 → 单事务写入）
+    // 逐键广播 settings:event:changed：主进程主动写入必须推送（P2-6 丢更新防线），
+    // 渲染层 settings-store 收到即应用，无需重启
+    importSettings: async () => {
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        title: '导入设置',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+      const filePath = filePaths[0];
+      if (canceled || filePath === undefined) {
+        return { imported: 0, skipped: 0 };
+      }
+      const payload = await readJsonImportFile(filePath);
+      const outcome = applySettingsImport(payload);
+      for (const { key, value } of outcome.applied) {
+        // 主题联动窗口控件色：与 settings:set 同一收口
+        if (key === 'theme') {
+          syncTitleBarOverlayFromTheme(value);
+        }
+        broadcastSettingChanged(key, value);
+      }
+      return { imported: outcome.imported, skipped: outcome.skipped };
     },
 
     // 查询 API Key 配置状态：仅返回布尔（P0 安全修复）

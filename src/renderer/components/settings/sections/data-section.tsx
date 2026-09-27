@@ -1,5 +1,5 @@
 // data-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · 数据区块（会话导出/导入 + 打开数据目录 + 更新缓存占用与清理，数据极致）
+// 设置对话框 · 数据区块（会话导出/导入 + 设置导出/导入 + 打开数据目录 + 更新缓存，数据极致）
 // ──────────────────────────────────────────────
 // 拆分背景：SettingsDialog 1052 行多域混合，按域提取为独立文件（高内聚）
 // ──────────────────────────────────────────────
@@ -15,14 +15,16 @@ import { formatBytes } from '@/lib/format-bytes';
 import {
   clearUpdateCache,
   exportAllSessions,
+  exportSettingsFile,
   getUpdateCacheInfo,
   importAllSessions,
+  importSettingsFile,
   openDataDirChecked,
 } from '@/lib/settings-ops';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUpdateStore } from '@/stores/transient/update-store';
 
-/** 数据区块（会话导出/导入 + 打开数据目录 + 更新缓存） */
+/** 数据区块（会话导出/导入 + 设置导出/导入 + 打开数据目录 + 更新缓存） */
 export function DataSection(): React.ReactElement {
   const { t } = useTranslation();
   // 更新缓存占用（path 为 null 表示无法解析缓存目录 → 隐藏该行，不展示猜测值）
@@ -88,6 +90,36 @@ export function DataSection(): React.ReactElement {
     }
   };
 
+  const handleExportSettings = async (): Promise<void> => {
+    try {
+      const res = await exportSettingsFile();
+      if (res.saved) {
+        toast.success(t('settings.exportSuccess', { path: res.path ?? '' }));
+      }
+      // 用户取消 / 无桥：静默
+    } catch {
+      toast.error(t('settings.exportSettingsFailed'));
+    }
+  };
+
+  // 覆盖类危险操作：导入会用文件中的同名设置覆盖当前值，确认标红
+  const handleImportSettings = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: t('settings.importSettings'),
+      message: t('settings.importSettingsConfirm'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      const res = await importSettingsFile();
+      toast.success(
+        t('settings.importSettingsDone', { imported: res.imported, skipped: res.skipped }),
+      );
+    } catch {
+      toast.error(t('settings.importSettingsFailed'));
+    }
+  };
+
   const handleOpenDataDir = async (): Promise<void> => {
     try {
       const res = await openDataDirChecked();
@@ -117,6 +149,15 @@ export function DataSection(): React.ReactElement {
         </Button>
         <Button variant="outline" size="sm" onClick={handleOpenDataDir}>
           {t('settings.openDataDir')}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground font-sans">{t('settings.settingsDataHint')}</p>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={handleExportSettings}>
+          {t('settings.exportSettings')}
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleImportSettings}>
+          {t('settings.importSettings')}
         </Button>
       </div>
       {cache !== null && cache.path !== null && (

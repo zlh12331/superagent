@@ -244,8 +244,10 @@ import {
   SetTelemetryLevelResSchema,
   type SettingsChangedPayload,
   SettingsChangedPayloadSchema,
+  SettingsExportResSchema,
   SettingsGetAllReqSchema,
   SettingsGetAllResSchema,
+  SettingsImportResSchema,
   SettingsSetReqSchema,
   SettingsSetResSchema,
   UpdateRuntimeModelReqSchema,
@@ -851,6 +853,20 @@ export const IPC_DEFINITIONS = {
       UpdateRuntimeModelReqSchema,
       {} as UpdateRuntimeModelRes,
       UpdateRuntimeModelResSchema,
+    ),
+    // 设置导出：dialog 选保存路径（主进程内聚合 app_settings 全表），无入参
+    exportSettings: withSchema(
+      IPC_META.settings.exportSettings,
+      null,
+      {} as { saved: boolean; path?: string },
+      SettingsExportResSchema,
+    ),
+    // 设置导入：dialog 选文件（主进程内读文件 + 白名单过滤 + 事务写入），无入参
+    importSettings: withSchema(
+      IPC_META.settings.importSettings,
+      null,
+      {} as { imported: number; skipped: number },
+      SettingsImportResSchema,
     ),
     // 设置变更事件：主进程主动写入某域后广播（payload = 该域完整新值）
     subscribeChanged: withPayload(
