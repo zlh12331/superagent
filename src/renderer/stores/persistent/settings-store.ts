@@ -23,7 +23,8 @@ import {
 } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
 
-import { LANGUAGE_STORAGE_KEY } from '@/i18n/config';
+import { changeLanguage, LANGUAGE_STORAGE_KEY } from '@/i18n/config';
+import { reportError } from '@/lib/error-report';
 import { mirrorThemeForFirstPaint } from '@/lib/theme-init';
 
 /**
@@ -318,32 +319,48 @@ interface SettingsState extends SettingsData {
 const pendingWrites = new Set<Promise<unknown>>();
 
 /**
- * 等待所有在途设置写入落库（供 main.tsx 注册 pagehide/beforeunload 调用）
+ * 写失败待重试（2026-09-26）：同键后写覆盖前写。
+ * 失败不再静默丢——内存与 SQLite 分叉会一直持续到「同键再写」；
+ * 现记账并在 flushPendingSettings 时重试，pagehide 前尽量收敛。
+ */
+const failedWrites = new Map<SettingKey, unknown>();
+
+/**
+ * 等待所有在途设置写入落库，并重试失败键（供 main.tsx 注册 pagehide/beforeunload 调用）
  *
  * 注：pagehide 阶段无法阻塞卸载，但 Electron 渲染层退出前主进程会先收到
  * IPC，这里的等待能让绝大多数写入完成（fire-and-forget 的窗口从「整个进程
  * 生命周期」收敛到「同步调用栈」）。
  */
 export async function flushPendingSettings(): Promise<void> {
-  if (pendingWrites.size === 0) {
+  await Promise.allSettled([...pendingWrites]);
+  if (failedWrites.size === 0) {
     return;
   }
-  await Promise.allSettled([...pendingWrites]);
+  const retries = [...failedWrites.entries()].map(([key, value]) => {
+    failedWrites.delete(key);
+    return persistSettingAsync(key, value);
+  });
+  await Promise.allSettled(retries);
 }
 
-function persistSetting(key: SettingKey, value: unknown): void {
+/** 单键写入（返回 Promise；成功不记账，失败写入 failedWrites 并 reportError） */
+function persistSettingAsync(key: SettingKey, value: unknown): Promise<unknown> {
   const api = window.api;
   const setter = api?.settings?.set;
   if (typeof setter !== 'function') {
-    return;
+    return Promise.resolve(undefined);
   }
-  const write = setter({ key, value })
-    .catch(() => {
-      // 落库失败静默：下次变更会重写；不阻断 UI
-    })
-    .finally(() => {
-      pendingWrites.delete(write);
-    });
+  return setter({ key, value }).catch((error: unknown) => {
+    failedWrites.set(key, value);
+    reportError(error, { tags: { scope: 'settings.persist', key } });
+  });
+}
+
+function persistSetting(key: SettingKey, value: unknown): void {
+  const write = persistSettingAsync(key, value).finally(() => {
+    pendingWrites.delete(write);
+  });
   pendingWrites.add(write);
 }
 
@@ -509,6 +526,22 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   applyMainSettingChange: (key, value) => {
     // 只 setState 不 persist：变更来源是主进程（SQLite 已被它写过），回写是回声。
     // 逐域合并：整快照覆盖会把其它域打回默认值（这正是不能复用 applySettingsSnapshot 的原因）。
+    if (key === 'theme') {
+      // primitive 键：此前 typeof value !== 'object' 直接丢弃，托盘改主题后
+      // 下次任意设置写回会用旧值覆盖主进程改动（丢更新）。
+      if (value === 'light' || value === 'dark' || value === 'system') {
+        set({ theme: value });
+      }
+      return;
+    }
+    if (key === 'language') {
+      if (value === 'zh-CN' || value === 'en') {
+        set({ language: value });
+        // UI 即时生效：与侧栏/设置页同一出口，避免 store 与 i18n 分叉
+        changeLanguage(value);
+      }
+      return;
+    }
     if (key === 'window' && typeof value === 'object' && value !== null) {
       set({ window: { ...useSettingsStore.getState().window, ...(value as WindowSettings) } });
       return;

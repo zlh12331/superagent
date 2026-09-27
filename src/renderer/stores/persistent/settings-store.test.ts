@@ -17,13 +17,19 @@ Object.defineProperty(window, 'api', {
   configurable: true,
 });
 
-import { useSettingsStore } from './settings-store';
+import { flushPendingSettings, useSettingsStore } from './settings-store';
 
 /** store 的初始默认值（DEFAULT_SETTINGS 为模块私有；此处按已知默认态复位） */
 const DEFAULTS = { theme: 'dark', language: 'zh-CN', closeAction: 'minimize' } as const;
 
 describe('settings-store.applyMainSettingChange', () => {
   beforeEach(() => {
+    // setup.ts 的 afterEach 会重建 window.api 空骨架，这里重新挂上 spy
+    Object.defineProperty(window, 'api', {
+      value: { settings: { set: setSpy } },
+      writable: true,
+      configurable: true,
+    });
     setSpy.mockClear();
     // 复位到默认态（各用例独立）
     useSettingsStore.setState({
@@ -83,5 +89,59 @@ describe('settings-store.applyMainSettingChange', () => {
 
     useSettingsStore.getState().applyMainSettingChange('ai', 42);
     expect(useSettingsStore.getState().ai).toEqual(before.ai);
+  });
+
+  it('theme primitive：应用合法值且不回写（此前被 typeof value !== object 丢弃）', () => {
+    useSettingsStore.getState().applyMainSettingChange('theme', 'light');
+    expect(useSettingsStore.getState().theme).toBe('light');
+    useSettingsStore.getState().applyMainSettingChange('theme', 'system');
+    expect(useSettingsStore.getState().theme).toBe('system');
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('theme 非法值忽略', () => {
+    useSettingsStore.getState().applyMainSettingChange('theme', 'neon');
+    useSettingsStore.getState().applyMainSettingChange('theme', 123);
+    expect(useSettingsStore.getState().theme).toBe(DEFAULTS.theme);
+  });
+
+  it('language primitive：应用合法值且不回写', () => {
+    useSettingsStore.getState().applyMainSettingChange('language', 'en');
+    expect(useSettingsStore.getState().language).toBe('en');
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('settings-store.persist 失败重试', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'api', {
+      value: { settings: { set: setSpy } },
+      writable: true,
+      configurable: true,
+    });
+    setSpy.mockReset();
+    setSpy.mockResolvedValue({ data: { ok: true } });
+    useSettingsStore.setState({ theme: 'dark' });
+  });
+
+  it('写失败后 flushPendingSettings 会重试同键（内存与 SQLite 不永久分叉）', async () => {
+    setSpy.mockRejectedValueOnce(new Error('db locked'));
+    useSettingsStore.getState().setTheme('light');
+    // 让首笔写 settle（失败已入 failedWrites）
+    await flushPendingSettings();
+    // flush 内已触发一次重试；再 flush 一次应成功落库且无待重试
+    await flushPendingSettings();
+    const calls = setSpy.mock.calls;
+    const themeWrites = calls.filter((c) => c[0]?.key === 'theme');
+    expect(themeWrites.length).toBeGreaterThanOrEqual(2);
+    expect(useSettingsStore.getState().theme).toBe('light');
+  });
+
+  it('写成功不进入重试账', async () => {
+    useSettingsStore.getState().setTheme('dark');
+    await flushPendingSettings();
+    await flushPendingSettings();
+    const themeWrites = setSpy.mock.calls.filter((c) => c[0]?.key === 'theme');
+    expect(themeWrites.length).toBe(1);
   });
 });
