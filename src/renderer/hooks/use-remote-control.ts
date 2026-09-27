@@ -10,18 +10,10 @@
 
 import type { RemoteStatusRes } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 
-import { useErrorMessage } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
-/** mutation 失败反馈（一致性收敛：错误经 [CODE] 解析本地化，杜绝静默失败） */
-function useMutationOnError(): (error: Error) => void {
-  const { getErrorMessage } = useErrorMessage();
-  return (error: Error): void => {
-    toast.error(unwrapErrorMessage(error, getErrorMessage));
-  };
-}
+import { useMutationOnError } from './use-mutation-error';
 
 /** 远程控制状态查询 key */
 export const REMOTE_STATUS_QUERY_KEY = ['remote', 'status'] as const;

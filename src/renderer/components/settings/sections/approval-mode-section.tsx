@@ -7,13 +7,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Shield, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
-import { toast } from 'sonner';
 import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
+import { useMutationOnError } from '@/hooks/use-mutation-error';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { unwrapErrorMessage } from '@/lib/ipc';
 import { TOOLS_LIST_QUERY_KEY, WHITELIST_ENTRIES_QUERY_KEY } from '@/lib/query/keys';
@@ -74,6 +74,8 @@ export function ApprovalModeSection(): ReactElement {
   const invalidateWhitelist = (): void => {
     void queryClient.invalidateQueries({ queryKey: WHITELIST_ENTRIES_QUERY_KEY });
   };
+  // 错误反馈（一致性审计：写路径 mutation 必须有 onError）
+  const onError = useMutationOnError();
 
   // 添加白名单 mutation（whitelist:add）
   const addMutation = useMutation({
@@ -84,9 +86,7 @@ export function ApprovalModeSection(): ReactElement {
       setWlPattern('');
       invalidateWhitelist();
     },
-    onError: (error: Error) => {
-      toast.error(unwrapErrorMessage(error, getErrorMessage));
-    },
+    onError,
   });
 
   // 移除白名单 mutation（whitelist:remove）
@@ -95,9 +95,7 @@ export function ApprovalModeSection(): ReactElement {
     onSuccess: () => {
       invalidateWhitelist();
     },
-    onError: (error: Error) => {
-      toast.error(unwrapErrorMessage(error, getErrorMessage));
-    },
+    onError,
   });
 
   const entries = whitelistQuery.data?.entries ?? [];

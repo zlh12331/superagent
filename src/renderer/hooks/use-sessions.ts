@@ -31,6 +31,8 @@ import { toast } from 'sonner';
 import { useErrorMessage } from '@/i18n/use-translation';
 import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 
+import { useMutationOnError } from './use-mutation-error';
+
 /**
  * Query key 常量（避免手写字符串导致 typo）
  *
@@ -303,7 +305,7 @@ export function useRecentDirs() {
  */
 export function useCreateSession() {
   const queryClient = useQueryClient();
-  const { getErrorMessage } = useErrorMessage();
+  const onError = useMutationOnError();
 
   return useMutation({
     mutationFn: async (params: { workingDir: string; title?: string }) => {
@@ -315,9 +317,7 @@ export function useCreateSession() {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: RECENT_DIRS_QUERY_KEY });
     },
-    onError: (error) => {
-      toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
-    },
+    onError,
   });
 }
 

@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useMutationOnError } from '@/hooks/use-mutation-error';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { unwrapErrorMessage } from '@/lib/ipc';
 import { ALL_SKILLS_QUERY_KEY, LEARNED_SKILLS_QUERY_KEY } from '@/lib/query/keys';
@@ -54,6 +55,8 @@ export function SkillsSection(): ReactElement {
     void queryClient.invalidateQueries({ queryKey: LEARNED_SKILLS_QUERY_KEY });
     void queryClient.invalidateQueries({ queryKey: ALL_SKILLS_QUERY_KEY });
   };
+  // 错误反馈（一致性审计：写路径 mutation 必须有 onError）
+  const onError = useMutationOnError();
 
   // 学习技能 mutation（LLM 生成）
   const learnMutation = useMutation({
@@ -63,9 +66,7 @@ export function SkillsSection(): ReactElement {
       setLearnPrompt('');
       invalidate();
     },
-    onError: (error: Error) => {
-      toast.error(unwrapErrorMessage(error, getErrorMessage));
-    },
+    onError,
   });
 
   // 移除技能 mutation
@@ -74,9 +75,7 @@ export function SkillsSection(): ReactElement {
     onSuccess: () => {
       invalidate();
     },
-    onError: (error: Error) => {
-      toast.error(unwrapErrorMessage(error, getErrorMessage));
-    },
+    onError,
   });
 
   const learned: readonly LearnedSkillInfo[] = learnedQuery.data?.learned ?? [];

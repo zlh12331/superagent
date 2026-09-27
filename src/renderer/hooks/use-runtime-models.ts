@@ -14,19 +14,10 @@ import type {
   TestModelRes,
 } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 
-import { useErrorMessage } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { MODELS_QUERY_KEY } from './use-models';
-
-/** mutation 失败反馈（一致性收敛：错误经 [CODE] 解析本地化，杜绝静默失败） */
-function useMutationOnError(): (error: Error) => void {
-  const { getErrorMessage } = useErrorMessage();
-  return (error: Error): void => {
-    toast.error(unwrapErrorMessage(error, getErrorMessage));
-  };
-}
+import { useMutationOnError } from './use-mutation-error';
 
 /** 运行时模型列表查询 key（模型设置页列表） */
 export const RUNTIME_MODELS_QUERY_KEY = ['settings', 'runtime-models'] as const;

@@ -12,9 +12,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
 import { toast } from 'sonner';
 
+import { useMutationOnError } from '@/hooks/use-mutation-error';
 import { SESSION_DETAIL_QUERY_KEY } from '@/hooks/use-sessions';
-import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { useTranslation } from '@/i18n/use-translation';
+import { unwrap } from '@/lib/ipc';
 
 import { toInitialMessages } from './history-parts';
 
@@ -39,7 +40,9 @@ export function useSessionCompact({ chatId, setMessages }: UseSessionCompactDeps
 } {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
-  const { getErrorMessage } = useErrorMessage();
+  // 统一走 unwrapErrorMessage（错误码 → i18n 单一真源）
+  // 2026-09-06 审计修复：此前直接弹 error.message，[CODE] 前缀不会被本地化
+  const onError = useMutationOnError();
 
   const compactMutation = useMutation({
     mutationFn: async () => {
@@ -57,11 +60,8 @@ export function useSessionCompact({ chatId, setMessages }: UseSessionCompactDeps
         toast.info(t('chat.compactNothing'));
       }
     },
-    // 统一走 unwrapErrorMessage（错误码 → i18n 单一真源）
-    // 2026-09-06 审计修复：此前直接弹 error.message，[CODE] 前缀不会被本地化
-    onError: (error: Error): void => {
-      toast.error(unwrapErrorMessage(error, getErrorMessage));
-    },
+    // 错误反馈（unwrapErrorMessage 单一真源，见上方 onError 说明）
+    onError,
   });
 
   return { compact: () => compactMutation.mutate() };
