@@ -28,6 +28,7 @@ import {
 import { changeLanguage, SUPPORTED_LANGUAGES } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
 import { openExternal } from '@/lib/app-actions';
+import { LANGUAGE_ENDONYMS } from '@/lib/language-endonyms';
 import { useTheme } from '@/providers/ThemeProvider';
 import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
 import { useUiStore } from '@/stores/transient/ui-store';
@@ -101,7 +102,7 @@ export function SidebarAccount(): ReactElement {
                   onSelect={() => handleSelectLanguage(code)}
                   aria-label={code}
                 >
-                  {code === 'zh-CN' ? '简体中文' : 'English'}
+                  {LANGUAGE_ENDONYMS[code]}
                   {currentLang === code && <Check className="ml-auto size-3.5" />}
                 </DropdownMenuItem>
               ))}

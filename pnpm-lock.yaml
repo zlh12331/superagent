@@ -313,6 +313,9 @@ importers:
       motion:
         specifier: ^13.2.0
         version: 13.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      oxc-parser:
+        specifier: 0.147.0
+        version: 0.147.0
       oxc-transform-react:
         specifier: ^0.148.0
         version: 0.148.0

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
+import { LANGUAGE_ENDONYMS } from '@/lib/language-endonyms';
 import {
   getLoginItemSettings,
   setLoginItemSettings,
@@ -59,7 +60,7 @@ function LanguageRow(): ReactElement {
             )}
             onClick={() => handleSelect(code)}
           >
-            {code === 'zh-CN' ? '简体中文' : 'English'}
+            {LANGUAGE_ENDONYMS[code]}
             {lang === code && <Check className="size-3" strokeWidth={2} />}
           </Button>
         ))}
