@@ -471,6 +471,55 @@ if (removedUseless > 0) {
   );
 }
 
+// 5.3 BM25 词典无损压缩（tcvdb-text 的 data/bm25_*.json）
+//
+// 背景：上游 @tencentdb-agent-memory/tcvdb-text 的 BM25 预训练词典以 pretty-print
+//   JSON 分发（en ~191MB / zh ~81MB，为运行目录最大头）。运行期读取方式是
+//   readFileSync + JSON.parse（tcvdb-text/dist/encoder/bm25.js 的 setParamsSync），
+//   与排版无关 ⇒ JSON.stringify(JSON.parse(x)) 后语义完全等价（数值/键序不变，
+//   实测 roundtrip 一致），却可省 ~32% 体积。
+// 范围与安全性：只重写生成目录内 tcvdb-text/data/bm25_*.json；解析失败或 minify
+//   未变小则保留原文件（不阻断构建）；不触碰 MemoryCore 上游源码（integrity 锁定域）。
+// 注意：单文件 JSON.parse 峰值内存可达 ~1-2GB（en 词典 ~543 万词条），CI runner 可承受。
+const BM25_FILE_PATTERN = /^bm25_.+\.json$/;
+let bm25TrimmedFiles = 0;
+let bm25SavedBytes = 0;
+if (existsSync(PNPM_DIR)) {
+  for (const ent of readdirSync(PNPM_DIR, { withFileTypes: true })) {
+    if (!ent.isDirectory() || ent.name === 'node_modules') continue;
+    const dataDir = join(
+      PNPM_DIR,
+      ent.name,
+      'node_modules',
+      '@tencentdb-agent-memory',
+      'tcvdb-text',
+      'data',
+    );
+    if (!existsSync(dataDir)) continue;
+    for (const f of readdirSync(dataDir)) {
+      if (!BM25_FILE_PATTERN.test(f)) continue;
+      const filePath = join(dataDir, f);
+      try {
+        const raw = readFileSync(filePath, 'utf8');
+        const min = JSON.stringify(JSON.parse(raw));
+        if (min.length < raw.length) {
+          writeFileSync(filePath, min, 'utf8');
+          bm25TrimmedFiles += 1;
+          bm25SavedBytes += raw.length - min.length;
+        }
+      } catch {
+        // 词典损坏/解析失败：保留原文件（运行期行为与未压缩时一致）
+      }
+    }
+  }
+}
+if (bm25TrimmedFiles > 0) {
+  console.log(
+    `[prepare-memory-hub] 已无损压缩 BM25 词典 ${bm25TrimmedFiles} 个` +
+      ` ~${(bm25SavedBytes / 1048576).toFixed(1)} MB（语义等价 minify，键值不变）`,
+  );
+}
+
 // 6. Windows 路径长度检查（MAX_PATH=260）
 //
 // 背景：electron-builder 把本目录部署到 <安装目录>/resources/memory-hub。
