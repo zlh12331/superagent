@@ -222,15 +222,25 @@ export function isDeniedByPlanMode(
 }
 
 /**
- * 从工具入参提取命令文本（run_command: { command }；terminal: { command? }）
+ * 从工具入参提取命令文本
  *
- * 无命令字段的工具入参返回 undefined（跳过命令级检测）。
+ * 已知命令形键：run_command / terminal 用 `command`；MCP server 可能用
+ * `script` / `cmd` / `shell` / `bash` 携带同类内容——别名一并识别（按序取
+ * 首个非空字符串）。无任何命令形键返回 undefined（降级策略由调用方决定，
+ * 见 permission-service auto 分支对 MCP 工具的 fail-closed）。
  */
 export function extractCommandFromInput(input: unknown): string | undefined {
+  // 已知命令形键（按序取首个非空字符串；模块内私有，非导出面故不挂 TSDoc）
+  const CommandInputKeys = ['command', 'script', 'cmd', 'shell', 'bash'] as const;
   if (typeof input !== 'object' || input === null) {
     return undefined;
   }
   const record = input as Record<string, unknown>;
-  const command = record['command'];
-  return typeof command === 'string' && command.trim().length > 0 ? command : undefined;
+  for (const key of CommandInputKeys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
 }

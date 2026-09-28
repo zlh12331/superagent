@@ -39,6 +39,7 @@ import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { readWhitelistSync, writeWhitelist } from '../../storage/whitelist-pref';
+import { isMcpTool } from '../mcp/mcp-types';
 import type { CommandClassifier } from './command-classifier';
 import {
   commandTargetsOutsideBoundary,
@@ -380,8 +381,19 @@ export class PermissionService implements IPermissionService {
           };
         }
       }
-      // 2c. plan 模式下非只读工具已在步骤 0 统一 deny，这里只剩控制面与只读工具
-      // 2d. 其余（控制面工具 / 非 plan 模式的无命令 auto 工具）维持免审批
+      // 2c. MCP 工具（mcp__ 命名空间）的元数据不可信：入参无命令形状时不给
+      //     免审批——此前 2d 直达 auto，撒谎的 MCP server 用 script/cmd 等
+      //     非 command 键携带 shell 内容即可绕过 Layer-0 三检（2026-09-28 深读
+      //     发现；别名键已被上方 extract 覆盖，此处兜住未知形状）。内置工具
+      //     元数据可信不受此限；可信 MCP 工具走用户白名单（2.5）或
+      //     permissionOverride 显式放行。
+      if (isMcpTool(tool.name)) {
+        return {
+          permission: 'ask',
+          description: `${tool.description}（MCP 工具入参无命令形状，需确认后执行）`,
+        };
+      }
+      // 2d. 其余（内置控制面工具 / 非 plan 模式的无命令 auto 工具）维持免审批
       return {
         permission: 'auto',
         description: tool.description,
