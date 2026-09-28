@@ -1676,6 +1676,29 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('INTERNAL_ERROR');
   });
 
+  it('旧流迟到收尾不回退新回合的 running 状态（CAS 门控 markIdle）', () => {
+    // 2026-09-28 深读回归：preempt 兜底超时（5s）后新回合可能已 register +
+    // markRunning，旧流的迟到 finally 若无条件 markIdle 会把 running 回退成 idle
+    const svc = service as unknown as {
+      registry: {
+        register: (sessionId: string, controller: AbortController, stream: Promise<void>) => void;
+        removeStreamIfCurrent: (sessionId: string, stream: Promise<void>) => boolean;
+      };
+      handleStreamSettled: (sessionId: string, stream: Promise<void>) => void;
+    };
+    const promiseA = Promise.resolve();
+    const promiseB = Promise.resolve();
+    svc.registry.register('s-cas', new AbortController(), promiseA);
+    // 新回合接管（覆盖注册；语义上新回合的 markRunning 已发生）
+    svc.registry.register('s-cas', new AbortController(), promiseB);
+
+    svc.handleStreamSettled('s-cas', promiseA); // 旧流迟到收尾
+    expect(mockSessionService.markIdle).not.toHaveBeenCalled();
+
+    svc.handleStreamSettled('s-cas', promiseB); // 当前流收尾
+    expect(mockSessionService.markIdle).toHaveBeenCalledWith('s-cas');
+  });
+
   it('TurnRunner 返回 aborted：推送 END(aborted)，不推 ERROR', async () => {
     // runner 的 abort 归因（read 抛 AbortError → aborted）由 turn-runner.test 单独覆盖；
     // 此处 mock runner.run 返回 aborted，验证 agent-service 的 aborted 分支

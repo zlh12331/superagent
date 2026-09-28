@@ -302,13 +302,9 @@ export class AgentService implements IAgentService {
       );
       this.registry.register(sessionId, controller, streamPromise);
 
-      // R2：CAS 删除 stream 条目（语义内聚于共享注册表）
+      // R2：CAS 删除 stream 条目（语义内聚于共享注册表）；CAS 成功才归位 idle
       streamPromise.finally(() => {
-        this.registry.removeStreamIfCurrent(sessionId, streamPromise);
-        // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
-        void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
-          logger.error({ sessionId, error: err }, 'markIdle 失败');
-        });
+        this.handleStreamSettled(sessionId, streamPromise);
       });
 
       return sessionId;
@@ -316,6 +312,25 @@ export class AgentService implements IAgentService {
       // 注册完成（或异常）即释放，后续并发调用可正常走 preempt 路径
       this.startingSessions.delete(sessionId);
     }
+  }
+
+  /**
+   * stream 收尾：CAS 归位 + markIdle
+   *
+   * 仅当本流仍是被注册的当前流时才 markIdle——preempt 兜底超时（5s）后新回合
+   * 可能已 register + markRunning，旧流的迟到收尾若无条件 markIdle 会把
+   * running 回退成 idle（2026-09-28 深读发现；仅 DB 持久层语义失真，内存侧
+   * registry 因 CAS 本就无误删）。
+   */
+  private handleStreamSettled(sessionId: string, streamPromise: Promise<void>): void {
+    const isCurrent = this.registry.removeStreamIfCurrent(sessionId, streamPromise);
+    if (!isCurrent) {
+      return;
+    }
+    // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
+    void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
+      logger.error({ sessionId, error: err }, 'markIdle 失败');
+    });
   }
 
   /** @inheritDoc */
