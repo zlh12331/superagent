@@ -156,15 +156,6 @@ function ChatPageInner({ sessionId }: { sessionId: string }): ReactElement {
     return <Navigate to={ROUTES.home} replace />;
   }
 
-  // 回合列表 / 消息分页查询失败（历史拉取出错）：显示错误状态
-  if (turnsQuery.isError || history.isError) {
-    return (
-      <div className="text-muted-foreground flex h-full items-center justify-center">
-        <p>{t('common.chatLoadFailed')}</p>
-      </div>
-    );
-  }
-
   // workingDir 未知（旧 chat 会话空目录兼容 / 列表与详情都无数据）：显示错误状态
   if (workingDir === null) {
     return (
