@@ -159,14 +159,12 @@ export class TurnRunner {
       return { reason: 'completed', durationMs: Date.now() - this.startTime };
     } catch (error) {
       // 用户中断：归为 aborted（不视为错误，由上层推送 END(aborted)）
+      // 模型级总时长超时同样以 abort 形态到达（combinedAbortSignals）：isTimeout
+      // 归因为 timeout——上层据此走错误出口而非中断出口，状态机快照与落库
+      // status 不再分叉（2026-09-28 深读发现）
       if (isAbortError(error)) {
-        // 模型级总时长超时同样以 abort 形态到达（combinedAbortSignals）：
-        // isTimeout 归因为 timeout——上层据此走错误出口而非中断出口，
-        // 状态机快照与落库 status 不再分叉（2026-09-28 深读发现）
-        if (this.options.isTimeout?.() === true) {
-          return { reason: 'timeout', durationMs: Date.now() - this.startTime };
-        }
-        return { reason: 'aborted', durationMs: Date.now() - this.startTime };
+        const reason = this.options.isTimeout?.() === true ? 'timeout' : 'aborted';
+        return { reason, durationMs: Date.now() - this.startTime };
       }
       // 其他错误（含流空闲超时 AI_TIMEOUT）：抛出，由上层分类 + 产出 error 事件
       throw error;
