@@ -873,7 +873,12 @@ function createMockApi(): IpcApi {
         localStorage.setItem('mock-settings', JSON.stringify(cur));
         return ipcOk({ ok: true });
       },
-      getApiKey: async () => ipcOk({ configured: localStorage.getItem('mock-key-flag') === '1' }),
+      // 浏览器 mock 无 safeStorage：keychainAvailable=false（对齐真实降级语义）
+      getApiKey: async () =>
+        ipcOk({
+          configured: localStorage.getItem('mock-key-flag') === '1',
+          keychainAvailable: false,
+        }),
       // 只落「已配置」标志、不落明文：真实 handler 的明文加密后仅主进程内消费，渲染层
       // 拿不到也不需要；浏览器 mock 无加密存储，落明文等于把 Key 平文留在本地。
       // 省略入参不违背 IpcApi 契约（TS 允许少参函数赋给多参签名）

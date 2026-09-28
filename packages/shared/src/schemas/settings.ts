@@ -60,11 +60,15 @@ export const GetApiKeyReqSchema = z.object({
 export interface GetApiKeyRes {
   /** 是否已配置（true = keychain 中存在该 provider 的 Key） */
   readonly configured: boolean;
+  /** 系统加密（safeStorage）是否可用——false 时 configured 恒为 false，
+   * 「密钥不可读」与「未配置」在调用方视角必须可区分（2026-09-28 深读收口） */
+  readonly keychainAvailable: boolean;
 }
 
 /** settings:getApiKey 响应 zod schema（R3：响应契约校验） */
 export const GetApiKeyResSchema = z.object({
   configured: z.boolean(),
+  keychainAvailable: z.boolean(),
 });
 
 // ── 渲染层设置下沉 SQLite（settings 持久化单一真源） ─────────────

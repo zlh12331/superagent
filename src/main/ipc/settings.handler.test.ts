@@ -61,6 +61,7 @@ const mocks = vi.hoisted(() => ({
   getSecret: vi.fn(async () => undefined),
   setSecret: vi.fn(async () => {}),
   deleteSecret: vi.fn(async () => {}),
+  isEncryptionAvailable: vi.fn(() => true),
   readTelemetryLevelSync: vi.fn(() => 'off'),
   writeTelemetryLevel: vi.fn(async () => {}),
   readApprovalModeSync: vi.fn(() => 'auto'),
@@ -83,6 +84,7 @@ vi.mock('../infra/storage/keychain', () => ({
   getSecret: mocks.getSecret,
   setSecret: mocks.setSecret,
   deleteSecret: mocks.deleteSecret,
+  isEncryptionAvailable: mocks.isEncryptionAvailable,
 }));
 
 vi.mock('../infra/storage/telemetry-pref', () => ({
@@ -154,7 +156,7 @@ describe('settings.handler API Key（三件套）', () => {
     mocks.getSecret.mockResolvedValueOnce('sk-123' as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(mocks.getSecret).toHaveBeenCalledWith('deepseek-api-key');
-    expect(res).toEqual({ configured: true });
+    expect(res).toEqual({ configured: true, keychainAvailable: true });
     // P0 安全：响应中不得包含明文
     expect(JSON.stringify(res)).not.toContain('sk-123');
   });
@@ -162,7 +164,18 @@ describe('settings.handler API Key（三件套）', () => {
   it('getApiKey：未配置 → configured 为 false', async () => {
     mocks.getSecret.mockResolvedValueOnce(null as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
-    expect(res).toEqual({ configured: false });
+    expect(res).toEqual({ configured: false, keychainAvailable: true });
+  });
+
+  it('getApiKey：加密不可用 → configured false 且 keychainAvailable false（可区分「不可读」与「未配置」）', async () => {
+    mocks.isEncryptionAvailable.mockReturnValue(false);
+    mocks.getSecret.mockResolvedValueOnce(null as never);
+    try {
+      const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
+      expect(res).toEqual({ configured: false, keychainAvailable: false });
+    } finally {
+      mocks.isEncryptionAvailable.mockReturnValue(true);
+    }
   });
 
   it('setApiKey：加密存储 + ok:true', async () => {

@@ -24,7 +24,12 @@ import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { setMainLanguage } from '../infra/i18n';
 import { readApprovalModeSync, writeApprovalMode } from '../infra/storage/approval-pref';
-import { deleteSecret, getSecret, setSecret } from '../infra/storage/keychain';
+import {
+  deleteSecret,
+  getSecret,
+  isEncryptionAvailable,
+  setSecret,
+} from '../infra/storage/keychain';
 import { applySettingsImport, buildSettingsExportFile } from '../infra/storage/settings-io';
 import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
@@ -121,10 +126,12 @@ export function createSettingsHandlers(params: {
     // 查询 API Key 配置状态：仅返回布尔（P0 安全修复）
     // 明文不回传渲染层（对比 listRuntimeModels 的剥 key 策略，此处对齐），
     // 渲染层只关心"是否已配置"，明文仅主进程内部（llmClient）消费
+    // keychainAvailable：safeStorage 不可用时 configured 恒为 false——
+    // 「密钥不可读」与「未配置」在调用方视角必须可区分（2026-09-28 深读收口）
     getApiKey: async (input) => {
       const key = toKeychainKey(input.provider);
       const apiKey = await getSecret(key);
-      return { configured: apiKey !== null };
+      return { configured: apiKey !== null, keychainAvailable: isEncryptionAvailable() };
     },
 
     // 设置 API Key：渲染层传入明文，主进程加密后存储到 keychain

@@ -36,6 +36,19 @@ import { getKeychainPath } from './app-data';
  */
 let lock: Promise<void> = Promise.resolve();
 
+/** 加密不可用告警是否已发出（每进程仅一次，避免每次读密钥都刷日志） */
+let warnedEncryptionUnavailable = false;
+
+/**
+ * 系统加密（safeStorage）是否可用
+ *
+ * 供 IPC 响应透出（settings:getApiKey 的 keychainAvailable）：false 时所有
+ * getSecret 返回 null——「密钥不可读」与「未配置」在调用方视角必须可区分。
+ */
+export function isEncryptionAvailable(): boolean {
+  return safeStorage.isEncryptionAvailable();
+}
+
 /**
  * 获取互斥锁（等待前一个持有者释放）
  *
@@ -314,6 +327,17 @@ export async function setSecret(key: string, value: string): Promise<void> {
  */
 export async function getSecret(key: string): Promise<string | null> {
   if (!safeStorage.isEncryptionAvailable()) {
+    // fail-silent 收口（2026-09-28 深读发现）：此前静默返 null——Linux 无 keyring
+    // 等场景下已保存的 Key 读出为「未配置」，用户视角密钥凭空消失且无任何线索。
+    // 现每进程告警一次（随诊断包导出）；仍返回 null 保持可用性——读抛错会卡死
+    // 设置页，而 set 侧的抛错语义不变（写入失败必须让用户知道）
+    if (!warnedEncryptionUnavailable) {
+      warnedEncryptionUnavailable = true;
+      logger.warn(
+        { key },
+        'safeStorage 加密不可用：已保存的 API Key 均不可读取（getSecret 返回 null）',
+      );
+    }
     return null;
   }
 

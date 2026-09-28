@@ -52,6 +52,21 @@ vi.mock('../../utils/logger', () => ({ logger: mockLogger }));
 
 import { deleteSecret, getKeychainIntegrity, getSecret, listSecrets, setSecret } from './keychain';
 
+describe('加密不可用降级', () => {
+  it('getSecret 返回 null 且告警仅一次（fail-silent 收口，2026-09-28）', async () => {
+    mockSafeStorage.isEncryptionAvailable.mockReturnValue(false);
+    try {
+      mockLogger.warn.mockClear();
+      expect(await getSecret('deepseek-api-key')).toBeNull();
+      expect(await getSecret('deepseek-api-key')).toBeNull();
+      // 每进程仅告警一次（两次读取只产生一条 warn），随诊断包导出可追溯
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    } finally {
+      mockSafeStorage.isEncryptionAvailable.mockReturnValue(true);
+    }
+  });
+});
+
 /** 明文字符串 → keychain.dat 中存储的密文数组（与 encryptString 桩一致） */
 function cipherBytes(plaintext: string): number[] {
   return Array.from(Buffer.from(`enc:${plaintext}`));
