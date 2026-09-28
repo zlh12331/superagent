@@ -7,7 +7,7 @@
 import type { UIMessage, UIMessageChunk } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { IpcAgentTransport } from './ipc-agent-transport';
+import { buildAgentTransportConfig, IpcAgentTransport } from './ipc-agent-transport';
 
 type PartCb = (payload: { sessionId: string; part: unknown }) => void;
 type EndCb = (payload: { sessionId: string }) => void;
@@ -208,6 +208,45 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
     });
     await tick();
     expect(ipc.runArgs).toMatchObject({ temperature: 0.3 });
+  });
+
+  it('systemPrompt 清空：全键装配使显式 undefined 覆盖缓存旧值（回归）', async () => {
+    const transport = new IpcAgentTransport();
+    transport.configureFor('s1', { workingDir: '/w', systemPrompt: 'old-prompt' });
+    // 模拟 use-agent 装配：设置清空 → effectiveSystemPrompt = undefined → 全键传入
+    transport.configureFor(
+      's1',
+      buildAgentTransportConfig({
+        workingDir: '/w',
+        systemPrompt: undefined,
+        maxSteps: undefined,
+        thinking: undefined,
+        temperature: undefined,
+      }),
+    );
+    await transport.sendMessages({
+      trigger: 'submit-message',
+      chatId: 's1',
+      messageId: undefined,
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+      abortSignal: undefined,
+    });
+    await tick();
+    // 清空生效：run 入参的 systemPrompt 为 undefined（主进程回落默认提示词）——
+    // 此前旧值 'old-prompt' 残留、静默语义漂移
+    expect(ipc.runArgs['systemPrompt']).toBeUndefined();
+  });
+
+  it('buildAgentTransportConfig：undefined 键显式存在（合并覆盖语义的前提）', () => {
+    const config = buildAgentTransportConfig({
+      workingDir: '/w',
+      systemPrompt: undefined,
+      maxSteps: undefined,
+      thinking: undefined,
+      temperature: undefined,
+    });
+    expect('systemPrompt' in config).toBe(true);
+    expect(config.systemPrompt).toBeUndefined();
   });
 
   it('stream error 事件 → 流错误 + 三订阅全部退订 + 批处理器释放', async () => {
