@@ -759,11 +759,6 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 回合落库（Transcript）：失败不阻断主流程
-   *
-   * seq 取会话已有回合数（单会话串行执行，无并发冲突）。
-   */
-  /**
    * 阶段 4：生成参数与上下文预算解析（2026-09-12 自 streamToWebContents 提取）
    *
    * TokenBudget 回合级调度（对齐 qwen token-budget）：
