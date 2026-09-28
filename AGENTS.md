@@ -20,6 +20,7 @@ pnpm check:schema-drift     # schema.ts ↔ drizzle/ 迁移漂移 + 快照链完
 pnpm check:secrets-git      # 密钥扫描：gitleaks git 扫 <远端 main>..HEAD（≈1.4s，基线缺失回退全历史）
 pnpm check:secrets          # 密钥扫描：gitleaks dir src（含未提交内容，定向自查用）
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
+pnpm check:devtools         # build 后断言产物无 react-query devtools 残留（dev 调试面板 DCE 门禁），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
 pnpm check:packaged-engine  # 打包后断言产物含可运行记忆引擎（入口+node_modules+无占位标记+关键依赖），release.yml 卡关
 pnpm memory-engine:check    # 查上游记忆引擎新版本（网络不可用时提示，不算失败）

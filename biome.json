@@ -32,6 +32,8 @@
       "!**/.design",
       "!**/.electron-user-data",
       "!**/.electron-user-data-*",
+      "!**/.e2e-user-data",
+      "!**/.e2e-user-data-*",
       "!**/.tmp",
       "!**/.mimosa",
       "!**/.trae",
