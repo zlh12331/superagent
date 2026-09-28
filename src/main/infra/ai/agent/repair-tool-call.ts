@@ -64,7 +64,8 @@ const REPAIR_SYSTEM_PROMPT =
   'You are a tool call repairer. A previous tool call failed argument validation. ' +
   'Fix the arguments so they match the tool input schema. ' +
   'Respond with ONLY the corrected JSON object: ' +
-  '{"name": "<tool name>", "arguments": {<corrected arguments>}}.';
+  '{"name": "<tool name>", "arguments": {<corrected arguments>}}. ' +
+  'The "name" field MUST be exactly the same tool name as the original call — never change it.';
 
 /** 构造修复提示词（含原始调用与校验错误） */
 function buildRepairPrompt(toolCall: ToolCallLike, message: string): string {
@@ -82,8 +83,16 @@ function buildRepairPrompt(toolCall: ToolCallLike, message: string): string {
  *
  * 容错：剥离 ```json 代码块包裹；解析后经 schema 校验（name + arguments 结构）。
  * 解析失败返回 null（放弃修复）。
+ *
+ * @param text 模型原始输出
+ * @param expectedName 期望的工具名（提供时 name 必须与原 toolCall 完全一致——
+ *   修复模型不得偷换工具，否则用户审批与审计转录看到的是被替换后的调用；
+ *   不匹配视为修复失败返回 null）
  */
-export function extractRepairedToolCallJson(text: string): RepairedToolCall | null {
+export function extractRepairedToolCallJson(
+  text: string,
+  expectedName?: string,
+): RepairedToolCall | null {
   const cleaned = text.trim();
   // 剥离 ```json ... ``` / ``` ... ``` 代码块包裹（模型可能包代码块输出）
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(cleaned);
@@ -94,7 +103,12 @@ export function extractRepairedToolCallJson(text: string): RepairedToolCall | nu
   } catch {
     return null;
   }
-  const result = RepairedToolCallSchema.safeParse(parsed);
+  // expectedName 提供时：name 收紧为字面量匹配——修复模型不得偷换工具
+  const schema =
+    expectedName === undefined
+      ? RepairedToolCallSchema
+      : RepairedToolCallSchema.extend({ name: z.literal(expectedName) });
+  const result = schema.safeParse(parsed);
   return result.success ? result.data : null;
 }
 
@@ -125,7 +139,7 @@ export function createRepairToolCall(
         system: REPAIR_SYSTEM_PROMPT,
         prompt: buildRepairPrompt(toolCall, error.message),
       });
-      const repaired = extractRepairedToolCallJson(result.text);
+      const repaired = extractRepairedToolCallJson(result.text, toolCall.toolName);
       if (repaired === null) {
         logger.warn({ toolName: toolCall.toolName }, '工具调用修复：输出解析失败，放弃修复');
         return null;
@@ -133,7 +147,9 @@ export function createRepairToolCall(
       logger.info({ toolName: toolCall.toolName }, '工具调用入参已自动修复');
       return {
         ...toolCall,
-        toolName: repaired.name,
+        // 强制原工具名：extract 的 literal 校验已保证 repaired.name === toolCall.toolName，
+        // 此处显式写原值是不信任模型输出的第二道保险（schema 将来被放宽也不穿透）
+        toolName: toolCall.toolName,
         input: JSON.stringify(repaired.arguments),
       };
     } catch (error: unknown) {
