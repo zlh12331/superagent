@@ -65,7 +65,7 @@ import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { broadcastLoginItemChanged, broadcastSettingChanged } from './main-events';
 import { mountTurnNotifications } from './notification';
 import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
-import { buildCsp } from './security/csp';
+import { applyCspToSession } from './security/csp';
 import {
   disposeServices,
   hasRunningAgentTurns,
@@ -343,42 +343,8 @@ app
 
     // 注入 CSP 响应头（P1-5 安全基线）
     // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）
-    // 覆盖渲染层 HTML 的 CSP meta，确保所有响应统一使用主进程策略
-    const csp = buildCsp(!app.isPackaged);
-    const isProduction = app.isPackaged;
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      // 跳过 chrome-extension:// 协议的响应
-      // 原因：dev 环境 React DevTools 扩展（chrome-extension://<id>/main.html）的
-      // 内部资源加载策略由扩展自身 manifest.content_security_policy 控制，
-      // 主进程注入的 CSP 会与扩展策略冲突，触发 ERR_BLOCKED_BY_RESPONSE 导致
-      // Components/Profiler 面板无法加载。
-      // 安全性：chrome-extension:// 协议的响应头由 Chrome Web Store 签名验证，
-      // 不需要主进程额外注入安全头。
-      if (details.url.startsWith('chrome-extension://')) {
-        callback({});
-        return;
-      }
-
-      const headers: Record<string, string[]> = {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [csp],
-        // X-Content-Type-Options: nosniff — 防止 MIME 类型嗅探
-        // 阻止浏览器将非脚本资源解释为可执行脚本（防 XSS via MIME 混淆）
-        // 参考：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options
-        'X-Content-Type-Options': ['nosniff'],
-      };
-
-      // X-Frame-Options: 仅对 http(s) 协议注入
-      // - 生产环境 DENY：完全禁止嵌入（最严格）
-      // - 开发环境 SAMEORIGIN：允许同源嵌入（DevTools 面板用 chrome-extension:// 协议已被上面跳过）
-      // CSP frame-ancestors 是更现代的替代方案，此头作为旧浏览器兜底
-      // 参考：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
-      if (details.url.startsWith('http')) {
-        headers['X-Frame-Options'] = [isProduction ? 'DENY' : 'SAMEORIGIN'];
-      }
-
-      callback({ responseHeaders: headers });
-    });
+    // 唯一执行点 = applyCspToSession；渲染层 HTML 刻意不含 CSP meta（见 csp.ts 头注释）
+    applyCspToSession(session.defaultSession, !app.isPackaged);
     logger.info({ isPackaged: app.isPackaged }, 'CSP 策略已注入');
 
     // 权限请求策略（安全基线）：默认拒绝所有 web 权限请求
