@@ -297,6 +297,11 @@ function restrictKeychainPermissions(filePath: string): void {
   }
 }
 
+// 2026-09-28：以 restrictFileAccessWin32 之名导出——sessions.db / -wal / -shm /
+// 备份（db.ts restrictFilePermissions 的 win32 分支）与 keychain.dat 共用同一套
+// ACL 收紧机制，此前 db 侧 Windows 完全跳过、纵深标准低于密钥文件（深读发现）
+export { restrictKeychainPermissions as restrictFileAccessWin32 };
+
 /**
  * 存储加密的敏感数据
  *

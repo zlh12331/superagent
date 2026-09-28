@@ -33,6 +33,13 @@ vi.mock('../../utils/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+// mock keychain 的 Windows ACL 收紧：win32 上真实 icacls/whoami 会为每个
+// 打开点 spawn 子进程（本文件 initDb 调用密集），改用 spy 断言调用契约
+const { restrictFileAccessWin32Mock } = vi.hoisted(() => ({
+  restrictFileAccessWin32Mock: vi.fn(),
+}));
+vi.mock('./keychain', () => ({ restrictFileAccessWin32: restrictFileAccessWin32Mock }));
+
 import { logger } from '../../utils/logger';
 import { closeDb, getDb, getDbPath, initDb, reclaimFreePages, resetDb } from './db';
 import { SessionService } from './session-service';
@@ -61,6 +68,23 @@ describe('db', () => {
 
   it('getDbPath：指向 userData 下的 sessions.db', () => {
     expect(getDbPath()).toBe(join(tempDir, 'sessions.db'));
+  });
+
+  it('win32：打开后对 db/-wal/-shm 调用 ACL 收紧（2026-09-28 深读收口）', () => {
+    // POSIX 走 chmod 0600（不经此函数）；win32 分支此前完全跳过、纵深标准
+    // 低于 keychain.dat——现经 restrictFileAccessWin32 对齐
+    resetDb();
+    restrictFileAccessWin32Mock.mockClear();
+    initDb();
+    if (process.platform !== 'win32') {
+      expect(restrictFileAccessWin32Mock).not.toHaveBeenCalled();
+      return;
+    }
+    const dbPath = getDbPath();
+    const called = restrictFileAccessWin32Mock.mock.calls.map((c) => c[0]);
+    expect(called).toContain(dbPath);
+    expect(called).toContain(`${dbPath}-wal`);
+    expect(called).toContain(`${dbPath}-shm`);
   });
 
   it('initDb 热备份：原子落位 sessions-*.db、无 .tmp 残留、备份可校验', async () => {

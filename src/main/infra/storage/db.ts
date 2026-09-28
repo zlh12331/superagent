@@ -33,6 +33,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
+import { restrictFileAccessWin32 } from './keychain';
 import { schema } from './schema';
 
 /**
@@ -56,13 +57,18 @@ const AUTO_VACUUM_INCREMENTAL = 2;
 const FREELIST_RECLAIM_PAGES = 1024;
 
 /**
- * 限制敏感数据文件权限为仅属主可读写（0o600）
+ * 限制敏感数据文件权限为仅属主可读写
  *
  * 安全修复：SQLite 含完整对话历史（工具参数/文件内容/命令输出），
- * 默认 umask（Linux 常为 644）下同机其他进程可读。Windows 依赖 OS ACL，跳过。
+ * 默认 umask（Linux 常为 644）下同机其他进程可读。
+ * - POSIX：chmod 0600
+ * - Windows：icacls 剥继承 + 仅当前用户（2026-09-28 深读收口——此前完全跳过、
+ *   只依赖 %APPDATA% 默认 ACL，与 keychain.dat 的纵深标准不一致；实现复用
+ *   keychain 的 whoami/icacls 机制，含「解析失败保持继承 ACL 不锁死属主」教训）
  */
 function restrictFilePermissions(filePath: string): void {
   if (process.platform === 'win32') {
+    restrictFileAccessWin32(filePath);
     return;
   }
   try {
