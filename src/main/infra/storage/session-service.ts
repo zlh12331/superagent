@@ -336,29 +336,47 @@ export class SessionService {
       return sessionRow.messageCount;
     }
 
-    // 3. 预计算（事务外）：startSeq / now / newLastMessage / messageInserts
-    const startSeq = sessionRow.messageCount;
+    // 3. 预计算（事务外）：now / newLastMessage / 序列化
+    //    （M2 修复沿用：JSON.stringify 不进写锁——事务内只做纯组装）
     const now = Date.now();
     const newLastMessage = resolveLastMessagePreview(newMessages);
-    const messageInserts: MessageInsert[] = newMessages.map((msg, index) => ({
-      sessionId,
-      // exactOptionalPropertyTypes：turnId 未传时条件展开（不写 NULL）
-      ...(options.turnId !== undefined ? { turnId: options.turnId } : {}),
-      seq: startSeq + index,
-      role: extractRole(msg),
-      content: serializeMessage(msg),
-      createdAt: now,
-    }));
+    const serializedRows: Array<Pick<MessageInsert, 'turnId' | 'role' | 'content'>> =
+      newMessages.map((msg) => ({
+        // exactOptionalPropertyTypes：turnId 未传时条件展开（不写 NULL）
+        ...(options.turnId !== undefined ? { turnId: options.turnId } : {}),
+        role: extractRole(msg),
+        content: serializeMessage(msg),
+      }));
 
-    // 4. 事务：批量插入 messages + 更新 sessions
-    //    条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
-    //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
-    //     用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
+    // 4. 事务：messageCount 读取 → seq 分配 → 批量插入 + 更新 sessions
+    //    正确性前提改造（2026-09-28 深读收口）：此前 messageCount 读在事务外，
+    //    读-写之间仅靠 better-sqlite3 同步驱动 + 主进程单连接事件循环保证无交错，
+    //    未来引入第二连接（如多窗口独立连接）会撞 uq_messages_session_seq 唯一约束。
+    //    现在 seq 分配移入事务、由 SQLite 写锁保护，隐式前提变为结构性保证；
+    //    会话在快速失败检查后被并发删除（TOCTOU）时，事务内兜底抛 NOT_FOUND 并回滚。
+    let startSeq = 0;
     db.transaction((tx) => {
-      // 批量插入预序列化的 messages 行
-      tx.insert(messages).values(messageInserts).run();
+      const locked = tx.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+      if (locked === undefined) {
+        throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId });
+      }
+      startSeq = locked.messageCount;
+      // 批量插入消息行（seq 由事务内读到的计数分配）
+      tx.insert(messages)
+        .values(
+          serializedRows.map((row, index) => ({
+            sessionId,
+            ...row,
+            seq: startSeq + index,
+            createdAt: now,
+          })),
+        )
+        .run();
 
       // 更新 sessions：updatedAt + messageCount（+ lastMessage 若有新 user 消息）
+      // 条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
+      // （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
+      //  用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
       tx.update(sessions)
         .set({
           updatedAt: now,
