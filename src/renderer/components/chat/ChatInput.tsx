@@ -11,6 +11,7 @@
 import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { useTranslation } from '@/i18n/use-translation';
 import { pickFiles } from '@/lib/dialog-actions';
 import { microTransition, springTransition } from '@/lib/motion';
@@ -223,10 +224,9 @@ export function ChatInput({
   // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
 
-  // onStop 经 ref 调用：window 监听 effect 不依赖函数身份（vitest 无 React Compiler，
-  // 父级内联 () => stop() 每渲染新建会导致流式期间监听反复 add/remove）
-  const onStopRef = useRef(onStop);
-  onStopRef.current = onStop;
+  // onStop 经 ref 调用：window 监听 effect 不依赖函数身份（父级内联 () => stop()
+  // 每渲染新建会导致流式期间监听反复装卸）——统一走 useLatestRef
+  const onStopRef = useLatestRef(onStop);
 
   // 流式期间 window 级 Esc 监听：textarea 未聚焦时也可中断生成
   // （对齐原型 composer-hint "Esc 中断"；disabled 元素收不到键盘事件的补充通道）

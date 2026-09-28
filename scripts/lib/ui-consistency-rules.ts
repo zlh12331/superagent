@@ -95,6 +95,17 @@ export const UI_RULES: readonly UiRule[] = [
     desc: 'useMutation 选项缺 onError（写路径失败必须反馈；纯 toast 语义用 hooks/use-mutation-error）',
     pattern: /useMutation\b.*?\(\s*\{/,
   },
+  {
+    id: 'render-ref-write',
+    // 2026-09-28 深读发现：7 处渲染期写 ref——React 并发渲染禁止（render 可被
+    // 丢弃，ref 会持被弃渲染的闭包），且组件被 React Compiler 判违规跳出优化。
+    // 已收敛 7 处到 useLatestRef（hooks/use-latest-ref.ts，写入在 effect 阶段）。
+    // 行级正则无法区分 effect 内外，存量的 effect 内写入（FileViewerPanel 先例
+    // 等 ~50 处）走棘轮基线（只降不升），新代码一律 useLatestRef。
+    desc: '渲染层直接写 xxxRef.current（统一 useLatestRef；effect 内写入走棘轮基线）',
+    pattern: /\b\w+Ref\.current\s*=\s*(?!=)/,
+    fileFilter: (relFile) => relFile !== 'hooks/use-latest-ref.ts',
+  },
 ];
 
 /**

@@ -26,6 +26,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
+import { useLatestRef } from './use-latest-ref';
 
 /**
  * i18n 文案函数类型
@@ -104,9 +105,8 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
     return entries;
   };
   // 稳定入口：effect 与事件回调统一经 ref 调最新实现，自身引用恒定
-  // （用 useRef 固定包装函数身份：即便写进 effect 依赖也不会每渲染重跑）
-  const loadDirRef = useRef(loadDirImpl);
-  loadDirRef.current = loadDirImpl;
+  // （统一 useLatestRef：即便写进 effect 依赖也不会每渲染重跑）
+  const loadDirRef = useLatestRef(loadDirImpl);
   const loadDir = useRef(
     (path: string): Promise<readonly FileEntry[] | null> => loadDirRef.current(path),
   ).current;

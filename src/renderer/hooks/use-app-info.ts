@@ -7,9 +7,9 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { AppInfoRes } from '@code-agent/shared/renderer';
-import { useEffect, useRef, useState } from 'react';
-
+import { useEffect, useState } from 'react';
 import { unwrap } from '@/lib/ipc';
+import { useLatestRef } from './use-latest-ref';
 
 /**
  * 拉取应用信息（挂载后一次性；浏览器模式 / IPC 失败时返回 null，调用方自兜底）
@@ -21,8 +21,8 @@ import { unwrap } from '@/lib/ipc';
 export function useAppInfo(onError?: (error: unknown) => void): AppInfoRes | null {
   const [info, setInfo] = useState<AppInfoRes | null>(null);
   // 最新回调经 ref 读取：避免把 onError 放进依赖导致调用方改动即重新请求
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+  // （统一 useLatestRef：写入在 effect 阶段，避免渲染期写 ref）
+  const onErrorRef = useLatestRef(onError);
 
   useEffect(() => {
     let cancelled = false;

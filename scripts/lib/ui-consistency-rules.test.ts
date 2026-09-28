@@ -42,6 +42,13 @@ describe('七条规则 · 反例必须命中', () => {
     expect(ruleIdsOf(v)).toContain('raw-button');
   });
 
+  it('render-ref-write：渲染期写 Ref.current → 命中', () => {
+    const v = scanUiConsistency(
+      scanOne('components/a.tsx', 'scrollToIndexRef.current = scrollToIndex;'),
+    );
+    expect(ruleIdsOf(v)).toContain('render-ref-write');
+  });
+
   it('try-finally：} finally { → 命中', () => {
     const v = scanUiConsistency(scanOne('components/a.tsx', '} finally {\n  reset();\n}'));
     expect(ruleIdsOf(v)).toContain('try-finally');
@@ -109,6 +116,21 @@ describe('通用豁免', () => {
 
   it('OWNED_CSS_BUTTON_CLASSES 清单非空（防手滑清空导致全量误报）', () => {
     expect(OWNED_CSS_BUTTON_CLASSES.length).toBeGreaterThan(10);
+  });
+
+  it('render-ref-write：use-latest-ref.ts 豁免 / 读取与比较放过', () => {
+    // hook 内的写入是规则的合法实现点
+    expect(
+      ruleIdsOf(scanUiConsistency(scanOne('hooks/use-latest-ref.ts', 'ref.current = value;'))),
+    ).not.toContain('render-ref-write');
+    // 读取调用（无赋值）不命中
+    expect(
+      ruleIdsOf(scanUiConsistency(scanOne('components/a.tsx', 'onStopRef.current(onStop);'))),
+    ).not.toContain('render-ref-write');
+    // 比较运算（== / ===）不命中
+    expect(
+      ruleIdsOf(scanUiConsistency(scanOne('components/a.tsx', 'if (aRef.current === b) return;'))),
+    ).not.toContain('render-ref-write');
   });
 });
 

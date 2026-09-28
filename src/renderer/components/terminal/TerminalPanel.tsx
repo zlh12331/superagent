@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 // loading-ui 终端光标动画（与 xterm 的 Terminal 类名冲突，用别名导入）
 import { Terminal as TerminalLoader } from '@/components/loading-ui/terminal';
 import { Button } from '@/components/ui/button';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
 import { hasIpcBridge } from '@/lib/ipc';
@@ -156,9 +157,9 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   // 每轮空态只尝试一次——handleCreate 置位标记后，effect 不再自动重触发；
   // 失败由用户点重试（见 createError 分支），避免失败风暴。
   // handleCreate 身份不进依赖：每 render 新建会让 effect 跟着无关渲染重跑；
-  // 实现经 ref 调最新闭包，防重入仍由 creatingRef / autoCreateTriedRef 兜底。
-  const handleCreateRef = useRef(handleCreate);
-  handleCreateRef.current = handleCreate;
+  // 实现经 ref 调最新闭包（统一 useLatestRef），防重入仍由 creatingRef /
+  // autoCreateTriedRef 兜底。
+  const handleCreateRef = useLatestRef(handleCreate);
   useEffect(() => {
     if (terminals.length === 0 && !isCreating && !autoCreateTriedRef.current) {
       void handleCreateRef.current();

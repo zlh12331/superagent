@@ -11,7 +11,7 @@
 
 import type { UIMessage } from 'ai';
 import { type RefObject, useEffect, useRef, useState } from 'react';
-
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { extractText } from '@/lib/chat/message-text';
 
 import {
@@ -149,8 +149,8 @@ function useActiveTurn({
     setActiveTurn((prev) => (prev === order ? prev : order));
   };
   // sync / scheduleSync 身份不进 effect 依赖：实现经 ref 调最新闭包
-  const syncRef = useRef(sync);
-  syncRef.current = sync;
+  // （统一 useLatestRef：写入在 effect 阶段，避免渲染期写 ref）
+  const syncRef = useLatestRef(sync);
   const frameRef = useRef<number | null>(null);
   const scheduleSync = (): void => {
     if (frameRef.current !== null) return;

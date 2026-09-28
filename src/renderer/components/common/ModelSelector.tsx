@@ -9,6 +9,7 @@
 import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -79,8 +80,8 @@ export function ModelSelector({
     }
   };
   // 外点/Esc 监听 effect 用 ref 调 setOpen：函数每 render 新建，进依赖会反复装卸监听
-  const setOpenRef = useRef(setOpen);
-  setOpenRef.current = setOpen;
+  // ——统一走 useLatestRef（写入在 effect 阶段，避免渲染期写 ref）
+  const setOpenRef = useLatestRef(setOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   // 触发按钮 ref：菜单关闭后把焦点还给它（roving focus 的收尾契约）
   const triggerRef = useRef<HTMLButtonElement>(null);

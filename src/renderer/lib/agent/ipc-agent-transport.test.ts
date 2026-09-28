@@ -232,9 +232,10 @@ describe('IpcAgentTransport 配置注入与分支覆盖', () => {
       abortSignal: undefined,
     });
     await tick();
+    expect(window.api.agent.run).toHaveBeenCalledOnce();
     // 清空生效：run 入参的 systemPrompt 为 undefined（主进程回落默认提示词）——
     // 此前旧值 'old-prompt' 残留、静默语义漂移
-    expect(ipc.runArgs['systemPrompt']).toBeUndefined();
+    expect(ipc.runArgs?.['systemPrompt']).toBeUndefined();
   });
 
   it('buildAgentTransportConfig：undefined 键显式存在（合并覆盖语义的前提）', () => {

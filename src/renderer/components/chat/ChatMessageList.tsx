@@ -20,6 +20,7 @@ import { ChevronDown, Sparkles } from 'lucide-react';
 import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 import { MessageItem } from './message-item';
@@ -220,9 +221,9 @@ export function ChatMessageList({
     }
   };
   // effect 依赖用 ref 调最新实现：scrollToIndex 每 render 新建，进依赖会让
-  // 搜索定位 effect 跟着无关渲染重跑（vitest 无 Compiler，不能赌自动记忆化）
-  const scrollToIndexRef = useRef(scrollToIndex);
-  scrollToIndexRef.current = scrollToIndex;
+  // 搜索定位 effect 跟着无关渲染重跑——统一走 useLatestRef（写入在 effect 阶段，
+  // 避免渲染期写 ref 的并发渲染/Compiler 违规）
+  const scrollToIndexRef = useLatestRef(scrollToIndex);
 
   // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
   useEffect(() => {
