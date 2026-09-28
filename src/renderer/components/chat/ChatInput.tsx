@@ -230,6 +230,8 @@ export function ChatInput({
 
   // 流式期间 window 级 Esc 监听：textarea 未聚焦时也可中断生成
   // （对齐原型 composer-hint "Esc 中断"；disabled 元素收不到键盘事件的补充通道）
+  // useLatestRef 惯用法：经 ref 调最新闭包正是为让 effect 不随 onStop 身份重订阅
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!isStreaming) {
       return;

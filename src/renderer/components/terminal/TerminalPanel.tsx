@@ -160,6 +160,8 @@ export function TerminalPanel({ sessionId, className }: TerminalPanelProps): Rea
   // 实现经 ref 调最新闭包（统一 useLatestRef），防重入仍由 creatingRef /
   // autoCreateTriedRef 兜底。
   const handleCreateRef = useLatestRef(handleCreate);
+  // useLatestRef 惯用法：经 ref 调最新闭包，effect 不随 handleCreate 身份重跑
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (terminals.length === 0 && !isCreating && !autoCreateTriedRef.current) {
       void handleCreateRef.current();

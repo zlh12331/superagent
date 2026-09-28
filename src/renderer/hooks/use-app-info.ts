@@ -24,6 +24,8 @@ export function useAppInfo(onError?: (error: unknown) => void): AppInfoRes | nul
   // （统一 useLatestRef：写入在 effect 阶段，避免渲染期写 ref）
   const onErrorRef = useLatestRef(onError);
 
+  // useLatestRef 惯用法：onError 经 ref 读取，调用方改动回调不重新请求
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     let cancelled = false;
     const api = typeof window !== 'undefined' ? window.api : undefined;

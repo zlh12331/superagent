@@ -3,9 +3,9 @@
     "net": 1019
   },
   "src/main/infra/ai/agent/agent-service.ts": {
-    "net": 674
+    "net": 704
   },
   "src/renderer/dev/mock-api.ts": {
-    "net": 964
+    "net": 968
   }
 }

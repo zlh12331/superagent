@@ -226,6 +226,8 @@ export function ChatMessageList({
   const scrollToIndexRef = useLatestRef(scrollToIndex);
 
   // 会话内搜索：当前匹配消息变化时滚动到该消息（居中）
+  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 searchActiveIndex 重跑
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (searchActiveIndex >= 0) {
       scrollToIndexRef.current(searchActiveIndex);

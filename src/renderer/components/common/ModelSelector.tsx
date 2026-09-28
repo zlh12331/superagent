@@ -108,6 +108,8 @@ export function ModelSelector({
   }
   const providerGroups = [...groups.entries()];
 
+  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 open 重订阅
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (event: MouseEvent): void => {
@@ -119,6 +121,8 @@ export function ModelSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
+  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 open 重订阅
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
