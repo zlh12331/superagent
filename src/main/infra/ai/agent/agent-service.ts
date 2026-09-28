@@ -369,28 +369,14 @@ export class AgentService implements IAgentService {
         'agent.hasSystemPrompt': options.systemPrompt !== undefined,
       },
       async (span) => {
-        // 回合事件上下文（try/catch/finally 共享：必须声明在 try 外，
-        // catch/finally 是独立块级作用域，无法访问 try 内的 const）
+        // 不可抛的最小集声明在 try 外（catch 需要 turnId/turnEmitter 推送错误事件）；
+        // 其余装配全部移入 try——此前装配段（含 modelRegistry.resolve）在 try 之外，
+        // 抛错只落 startAgent 的纯日志 catch、不推 AGENT_STREAM_ERROR，渲染层该回合
+        // 永久 loading（2026-09-28 深读发现）。catch 对未装配完成的状态做容忍：
+        // turnMachine/partForwarder/resolvedModel 均可缺席。
         const turnEmitter = new TurnEventEmitter();
         const turnId = randomUUID();
         const turnStartTime = Date.now();
-        // 回合状态机（XState）：回合执行层唯一状态权威；关键节点发送事件，
-        // 非法转换被忽略（转换合法性由 agent-turn-machine.test 全表断言）
-        const turnMachine = createAgentTurnActor({
-          sessionId,
-          turnId,
-          modelId: modelRegistry.resolve(undefined).modelId,
-          startedAt: turnStartTime,
-        });
-        // 审批生命周期订阅（waitingApproval 状态运行时数据源，装配见模块级函数）
-        const unsubscribeApproval = subscribeApprovalLifecycle(
-          this.permissionService,
-          sessionId,
-          turnMachine,
-        );
-        // 模型级超时定时器（回合作用域；finally 清理）
-        let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
-        const resolvedModel = modelRegistry.resolve(undefined);
         // 类级事件转发（IM 桥接等跨会话监听方）：回合内所有事件同步转发
         const forwardTurnEvents = turnEmitter.onAny((event) => {
           for (const listener of this.turnListeners) {
@@ -404,19 +390,44 @@ export class AgentService implements IAgentService {
         let unsubscribeAll = (): void => {};
         // 消息持久化累积（此前主链路从未落库 messages——重启后历史丢失）：
         // TEXT_DELTA 拼接助手全文；rawPartCount 统计流内原始 part（空回复检测）。
-        // 声明在 try 外：catch 分支（错误/中断出口）同样需要读取代传递 completeTurn
         let assistantText = '';
         // 回合转录累积（reasoning/tool-call/tool-result，落库为富 parts——重开会话可见）
-        // 声明在 try 外：catch 分支（错误/中断出口）同样需要把已发生的部分传给 completeTurn
         const transcriptEntries: TurnTranscriptEntry[] = [];
         let rawPartCount = 0;
-        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
-        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
-        const partForwarder = createTurnPartForwarder(sessionId, options.webContents);
-        // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
+        // 装配产物（try 内赋值；catch/finally 容忍缺席）
         let releaseGate: (() => void) | undefined;
+        let turnMachine: ReturnType<typeof createAgentTurnActor> | undefined;
+        let partForwarder: ReturnType<typeof createTurnPartForwarder> | undefined;
+        let resolvedModel: ResolvedModel | undefined;
+        let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
+        let unsubscribeApproval: (() => void) | undefined;
         try {
-          // 0. 并发槽位（回合执行开始前获取，释放见 finally）
+          // 0. 模型解析（装配首步；此前在 try 之外，抛错只落纯日志 catch）
+          resolvedModel = modelRegistry.resolve(undefined);
+          // 非空别名：streamText 重试工厂 / repairToolCall 是闭包，TS 不保留
+          // 跨闭包的 let 窄化——闭包内一律引用此常量
+          const resolvedModelRef = resolvedModel;
+          // 回合状态机（XState）：回合执行层唯一状态权威；关键节点发送事件，
+          // 非法转换被忽略（转换合法性由 agent-turn-machine.test 全表断言）。
+          // （原装配段在此处与下方重复 resolve 两次，现收敛为一次）
+          turnMachine = createAgentTurnActor({
+            sessionId,
+            turnId,
+            modelId: resolvedModel.modelId,
+            startedAt: turnStartTime,
+          });
+          // 审批生命周期订阅（waitingApproval 状态运行时数据源，装配见模块级函数）
+          unsubscribeApproval = subscribeApprovalLifecycle(
+            this.permissionService,
+            sessionId,
+            turnMachine,
+          );
+          // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
+          // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
+          partForwarder = createTurnPartForwarder(sessionId, options.webContents);
+          // 非空别名：onPart 闭包内使用（TS 不保留跨闭包的 let 窄化）
+          const partForwarderRef = partForwarder;
+          // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
           releaseGate =
             this.concurrencyGate === undefined
               ? undefined
@@ -582,7 +593,7 @@ export class AgentService implements IAgentService {
                 tools,
                 stopWhen: isStepCount(options.maxSteps),
                 // model call 级重试真源：模型级 maxRetries（默认 2 次重试 = 3 次尝试）
-                maxRetries: resolvedModel.generationConfig?.maxRetries ?? 2,
+                maxRetries: resolvedModelRef.generationConfig?.maxRetries ?? 2,
                 ...(effectiveAbortSignal !== undefined
                   ? { abortSignal: effectiveAbortSignal }
                   : {}),
@@ -593,7 +604,7 @@ export class AgentService implements IAgentService {
                   ? {
                       repairToolCall: createRepairToolCall({
                         llmClient: this.llmClient,
-                        modelId: resolvedModel.modelId,
+                        modelId: resolvedModelRef.modelId,
                         ...(effectiveAbortSignal !== undefined
                           ? { signal: effectiveAbortSignal }
                           : {}),
@@ -623,6 +634,12 @@ export class AgentService implements IAgentService {
             idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
             // 请求级重试链路：首 part 已预读，TurnRunner 接续消费（复用 reader）
             firstPart: created.firstPart,
+            // 模型级超时归因：combinedAbortSignals 把超时与用户中断折叠成同一
+            // abort 形态，TurnRunner 借此回调区分二者（timeout 走错误出口，
+            // aborted 走中断出口）
+            ...(modelTimeout !== undefined
+              ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
+              : {}),
             // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
             onPart: (part) => {
               rawPartCount += 1;
@@ -631,10 +648,47 @@ export class AgentService implements IAgentService {
                 transcriptEntries.push({ kind: 'reasoning', text: part.delta });
               }
               // P2-31：text-delta 进合帧缓冲，其余 part 落地缓冲后立即透传（保序）
-              partForwarder.push(part);
+              partForwarderRef.push(part);
             },
           });
           const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
+
+          // 模型级总时长超时归因（两路，均不发终态、直接走错误出口；必须先于
+          // 空回复防护——超时正是空流的常见成因，超时归因优先）：
+          // ① abort 形态——TurnRunner 经 isTimeout 回调归因为 reason='timeout'；
+          // ② completed 形态——超时恰与流收尾竞态时 reason 仍是 completed，
+          //    只能靠标志判定。此前顺序颠倒：先 send 终态、再 throw AI_TIMEOUT，
+          //    finalizeErrorTurn 的 stream.error 被终态吞掉，状态机快照与落库
+          //    status 无声分叉（2026-09-28 深读发现）
+          if (runResult.reason === 'timeout' || modelTimeout?.signal.aborted === true) {
+            span?.setAttribute('agent.timeout', true);
+            // P2-31：ERROR 推送前落地合帧缓冲（保序防丢尾）
+            partForwarder.flush();
+            this.finalizeErrorTurn({
+              sessionId,
+              turnId,
+              modelId: resolvedModel.modelId,
+              error: new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时'),
+              turnStartTime,
+              turnMachine,
+              turnEmitter,
+              options,
+              assistantText,
+              transcriptEntries,
+            });
+            return;
+          }
+
+          // 空回复防护（先于状态机终态，同款理由）：流「正常」结束但零 part
+          // （供应商对无效 Key/余额/模型名可能静默返回空流——此前用户侧表现为
+          // 「发不出去」无任何提示）。AI_EMPTY_RESPONSE 走错误出口 finalizeErrorTurn，
+          // 此时机器仍处非终态、stream.error 可送达——终态后发送会被静默吞掉
+          if (runResult.reason === 'completed' && rawPartCount === 0) {
+            throw new AppError(
+              ErrorCode.AI_EMPTY_RESPONSE,
+              '模型返回了空回复，请检查 API Key 有效性、账户余额与模型名称',
+            );
+          }
 
           // 回合状态机：流结束 → completed / aborted（TurnRunner 已归因）
           turnMachine.send(
@@ -642,20 +696,6 @@ export class AgentService implements IAgentService {
               ? { type: 'stream.finished' }
               : { type: 'stream.aborted' },
           );
-
-          // 模型级总时长超时检查：超时信号已触发 → 按 AI_TIMEOUT 归类（非用户中断）
-          if (modelTimeout?.signal.aborted === true) {
-            throw new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时');
-          }
-
-          // 空回复防护：流「正常」结束但零 part（供应商对无效 Key/余额/模型名
-          // 可能静默返回空流——此前用户侧表现为「发不出去」无任何提示）
-          if (runResult.reason === 'completed' && rawPartCount === 0) {
-            throw new AppError(
-              ErrorCode.AI_EMPTY_RESPONSE,
-              '模型返回了空回复，请检查 API Key 有效性、账户余额与模型名称',
-            );
-          }
 
           // 7+8. 结束处理：usage / AGENT_STREAM_END / turn-end / Transcript 落库
           if (runResult.reason === 'aborted') {
@@ -694,6 +734,10 @@ export class AgentService implements IAgentService {
             });
           }
         } catch (error: unknown) {
+          // 装配段（modelRegistry.resolve / 机器构造等）失败时 resolvedModel/
+          // turnMachine/partForwarder 可能缺席：仍推送错误事件归位，渲染层不再
+          // 永久 loading（2026-09-28 深读发现）；modelId 以 'unknown' 兜底落库
+          const modelId = resolvedModel?.modelId ?? 'unknown';
           // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
           // 注：TurnRunner 内的中断已归为 aborted result；此处处理组装阶段
           // （streamText 调用）直接抛出的中断
@@ -701,11 +745,11 @@ export class AgentService implements IAgentService {
             logger.info({ sessionId }, 'Agent 对话被用户中断');
             span?.setAttribute('agent.aborted', true);
             // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
-            partForwarder.flush();
+            partForwarder?.flush();
             this.completeTurn({
               sessionId,
               turnId,
-              modelId: resolvedModel.modelId,
+              modelId,
               reason: 'aborted',
               durationMs: Date.now() - turnStartTime,
               emitter: turnEmitter,
@@ -714,13 +758,14 @@ export class AgentService implements IAgentService {
               transcriptEntries,
             });
           } else {
-            // 其他错误：分类、状态机 error、推送 AGENT_STREAM_ERROR、落库（见 finalizeErrorTurn）
+            // 其他错误：分类、状态机 error（装配失败时 turnMachine 尚未建立则跳过——
+            // 机器未离开初始态，无需收敛）、推送 AGENT_STREAM_ERROR、落库（见 finalizeErrorTurn）
             // P2-31：ERROR 推送前落地合帧缓冲（保序防丢尾）
-            partForwarder.flush();
+            partForwarder?.flush();
             this.finalizeErrorTurn({
               sessionId,
               turnId,
-              resolvedModel,
+              modelId,
               error,
               turnStartTime,
               turnMachine,
@@ -733,8 +778,9 @@ export class AgentService implements IAgentService {
         } finally {
           // 并发槽位释放（幂等；必须在超时定时器清理前完成，让排队的下个回合尽早启动）
           releaseGate?.();
-          // P2-31：兜底落地合帧缓冲（幂等；正常路径已在 END/ERROR 前显式 flush）
-          partForwarder.flush();
+          // P2-31：兜底落地合帧缓冲（幂等；正常路径已在 END/ERROR 前显式 flush；
+          // 装配失败时 partForwarder 未建立，可选链跳过）
+          partForwarder?.flush();
           // 取消回合事件订阅（防泄漏）
           unsubscribeAll();
           forwardTurnEvents();
@@ -910,10 +956,11 @@ export class AgentService implements IAgentService {
   private finalizeErrorTurn(args: {
     readonly sessionId: string;
     readonly turnId: string;
-    readonly resolvedModel: ResolvedModel;
+    readonly modelId: string;
     readonly error: unknown;
     readonly turnStartTime: number;
-    readonly turnMachine: ReturnType<typeof createAgentTurnActor>;
+    /** 装配失败时机器可能尚未建立（catch 容忍半装配态）——缺席则跳过状态收敛 */
+    readonly turnMachine?: ReturnType<typeof createAgentTurnActor> | undefined;
     readonly turnEmitter: TurnEventEmitter;
     readonly options: StartAgentOptions;
     readonly assistantText: string;
@@ -922,7 +969,7 @@ export class AgentService implements IAgentService {
     const {
       sessionId,
       turnId,
-      resolvedModel,
+      modelId,
       error,
       turnStartTime,
       turnMachine,
@@ -932,8 +979,8 @@ export class AgentService implements IAgentService {
       transcriptEntries,
     } = args;
     const appError = classifyError(error);
-    // 回合状态机：异常 → error（带错误码上下文）
-    turnMachine.send({
+    // 回合状态机：异常 → error（带错误码上下文）；机器未建立时跳过（见上）
+    turnMachine?.send({
       type: 'stream.error',
       code: appError.code,
       message: appError.message,
@@ -958,7 +1005,7 @@ export class AgentService implements IAgentService {
     this.completeTurn({
       sessionId,
       turnId,
-      modelId: resolvedModel.modelId,
+      modelId,
       reason: 'error',
       durationMs: Date.now() - turnStartTime,
       emitter: turnEmitter,

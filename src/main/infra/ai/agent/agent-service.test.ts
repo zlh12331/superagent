@@ -1662,6 +1662,20 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_TIMEOUT');
   });
 
+  it('装配段失败（模型解析抛错）→ 推送 AGENT_STREAM_ERROR（渲染层不悬挂）', async () => {
+    // 2026-09-28 深读回归：装配段此前在 try 之外，抛错只落纯日志 catch、
+    // 不推 AGENT_STREAM_ERROR——渲染层该回合永久 loading
+    mocks.mockResolveModel.mockImplementationOnce(() => {
+      throw new Error('no model configured');
+    });
+    const wc = createMockWebContents();
+    await service.startAgent(baseOptions({ sessionId: 's-assembly', webContents: wc }));
+    await flushAsync();
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect(errCalls).toHaveLength(1);
+    expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('INTERNAL_ERROR');
+  });
+
   it('TurnRunner 返回 aborted：推送 END(aborted)，不推 ERROR', async () => {
     // runner 的 abort 归因（read 抛 AbortError → aborted）由 turn-runner.test 单独覆盖；
     // 此处 mock runner.run 返回 aborted，验证 agent-service 的 aborted 分支
