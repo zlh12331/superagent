@@ -17,6 +17,7 @@
 import type { ChatMessage, TurnSummary } from '@code-agent/shared/renderer';
 import { type InfiniteData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { unwrap } from '@/lib/ipc';
+import { queryClient } from '@/lib/query/query-client';
 
 /**
  * Query key 常量（挂在 ['session', id] 前缀下：use-agent-bridge 回合结束
@@ -155,6 +156,26 @@ function turnPagesQueryOptions(id: string, turns: readonly TurnSummary[] | undef
     // 消息。启用前提：接 fetchPreviousPage（backward 改裁尾端）或反转页序让最新页
     // 落在尾端，使被裁端不再是可见数据。
   };
+}
+
+/**
+ * 路由 loader 预取最近一页回合消息（与 useTurnPagesInfinite **同 key 同形状**）
+ *
+ * ⚠️ 必须以 infinite 形状写入：本 key 的消费方是 useInfiniteQuery，若改用普通
+ * `ensureQueryData` 写入裸页对象（`{ turnCount, turns }`），观察者会把它当作
+ * InfiniteData 读 `.pages` ⇒ 渲染期 TypeError「Cannot read properties of
+ * undefined (reading 'length')」（2026-09-28 实测：打开任意会话即整页落错误
+ * 边界，浏览器 E2E 旅程批量失败）。预取与消费共用 {@link turnPagesQueryOptions}，
+ * 形状漂移在编译期暴露。
+ *
+ * @param id 会话 id
+ * @param turns 回合列表（来自 fetchSessionTurns；首页锚点 'latest' 依赖其长度）
+ */
+export function prefetchTurnPages(
+  id: string,
+  turns: readonly TurnSummary[],
+): Promise<InfiniteData<TurnMessagesPage, TurnPageParam>> {
+  return queryClient.ensureInfiniteQueryData(turnPagesQueryOptions(id, turns));
 }
 
 /**

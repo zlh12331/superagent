@@ -6,9 +6,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { queryClient as singletonQueryClient } from '@/lib/query/query-client';
+
 import {
   fetchTurnMessagesPage,
   flattenTurnPages,
+  prefetchTurnPages,
   TURNS_PER_PAGE,
   useSessionTurns,
   useTurnMessagesInfinite,
@@ -222,5 +225,20 @@ describe('use-session-turns hooks', () => {
     const flat = flattenTurnPages(pages);
     // 最早页在前：t1、t2、t3 各出现一次
     expect(flat.map((m) => m.content)).toEqual(['u1', 'u2', 'u3']);
+  });
+
+  it('prefetchTurnPages：按 infinite 形状写入缓存（消费方读 .pages 不崩）', async () => {
+    // 回归锚（2026-09-28）：路由 loader 此前用 ensureQueryData 写裸页对象
+    // （{ turnCount, turns }），而消费方是 useInfiniteQuery ⇒ 观察者读 .pages
+    // 得 undefined，渲染期 TypeError 直接掀翻整页（浏览器 E2E 旅程批量失败）。
+    // 断言预取写出的缓存确实带 pages/pageParams（形状与消费端一致）。
+    stubTurnMessages(window.api.session.getTurnMessages as ReturnType<typeof vi.fn>);
+    const turns = makeTurns(3);
+    const prefetched = await prefetchTurnPages('prefetch-shape', turns);
+    expect(Array.isArray(prefetched.pages)).toBe(true);
+    expect(prefetched.pages[0]?.turns.map((g) => g.turnId)).toEqual(['t0', 't1', 't2']);
+    expect(Array.isArray(prefetched.pageParams)).toBe(true);
+    const cached = singletonQueryClient.getQueryData(['session', 'prefetch-shape', 'turn-pages']);
+    expect(cached).toMatchObject({ pages: expect.any(Array), pageParams: expect.any(Array) });
   });
 });

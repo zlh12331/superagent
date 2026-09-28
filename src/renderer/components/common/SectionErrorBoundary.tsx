@@ -33,6 +33,15 @@ import { reportError } from '@/lib/error-report';
  * 且 React 19 的 render 阶段错误恢复对 fallback 内 hook 调用有限制）。
  * 文案经 i18next 全局单例 i18n.t() 取（纯数据访问，非 React hook/context，
  * 不破坏 fallback 零依赖约束），并随当前语言自动切换、无需双份硬编码。
+ *
+ * ⚠️ 必须以 `FallbackComponent`（而非 `fallbackRender`）挂载（2026-09-28）：
+ * react-error-boundary 的 fallbackRender 是**直接函数调用**（dist 内 `i = t(u)`），
+ * 而 React Compiler 会把本函数编译成带 memo 缓存的形态（`_c()` = useMemoCache）；
+ * 类组件 render 路径不设置 hooks dispatcher ⇒ 直接调用即抛
+ * 「Invalid hook call」⇒ 区块内的局部错误被升级为整路由/整应用崩溃
+ * （实测：任一区块报错都让 RootErrorBoundary 接管整页，兜底形同虚设）。
+ * FallbackComponent 走 createElement（真正的组件渲染），hooks 宿主正常。
+ * 与 AppErrorBoundary 的 fallback 同源同修——两者都曾被该缺陷击穿。
  */
 function SectionFallback({
   error,
@@ -85,7 +94,7 @@ export function SectionErrorBoundary({
 }: SectionErrorBoundaryProps): ReactElement {
   return (
     <ErrorBoundary
-      fallbackRender={SectionFallback}
+      FallbackComponent={SectionFallback}
       // 条件展开 + 断言：resetKeys 未传时不携带字段；readonly 数组转 unknown[]
       // （react-error-boundary 的 resetKeys 类型为非 readonly unknown[]）
       {...(resetKeys !== undefined ? { resetKeys: resetKeys as unknown[] } : {})}

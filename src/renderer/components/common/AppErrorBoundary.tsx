@@ -74,6 +74,12 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
  * App 级错误边界的 fallback 渲染函数
  *
  * 全屏错误页面，仅依赖最基础的原生 DOM（无 Provider 依赖）。
+ *
+ * ⚠️ 必须以 `FallbackComponent`（而非 `fallbackRender`）挂载（2026-09-28）：
+ * react-error-boundary 的 fallbackRender 是直接函数调用，而 React Compiler 会
+ * 为本函数注入 memo 缓存 hook（`_c()` = useMemoCache）；类组件 render 路径没有
+ * hooks dispatcher，直接调用即抛「Invalid hook call」——最后一道兜底自身崩溃，
+ * 用户看到的是白屏而非本页。详见 SectionErrorBoundary 的同类注释。
  */
 function AppFallback({
   error,
@@ -166,7 +172,7 @@ interface AppErrorBoundaryProps {
 export function AppErrorBoundary({ children }: AppErrorBoundaryProps): ReactElement {
   return (
     <ErrorBoundary
-      fallbackRender={AppFallback}
+      FallbackComponent={AppFallback}
       onError={(error: unknown, info: ErrorInfo) => {
         // 统一错误出口：electron-log renderer → 主进程落盘（随诊断包导出）
         // info.componentStack 帮助定位错误来源组件

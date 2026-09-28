@@ -24,8 +24,7 @@
 import { createHashRouter } from 'react-router';
 import {
   fetchSessionTurns,
-  fetchTurnMessagesPage,
-  SESSION_TURN_PAGES_QUERY_KEY,
+  prefetchTurnPages,
   SESSION_TURNS_QUERY_KEY,
 } from '@/hooks/use-session-turns';
 import { fetchSessionDetail, SESSION_DETAIL_DATA_KEY } from '@/hooks/use-sessions';
@@ -89,12 +88,7 @@ export const router = createHashRouter([
                 })
                 .catch(() => undefined);
               if (turns === undefined) return;
-              await queryClient
-                .ensureQueryData({
-                  queryKey: SESSION_TURN_PAGES_QUERY_KEY(sessionId),
-                  queryFn: () => fetchTurnMessagesPage(turns.turns, 'latest'),
-                })
-                .catch(() => undefined);
+              await prefetchTurnPages(sessionId, turns.turns).catch(() => undefined);
             })();
           }
           return null;
