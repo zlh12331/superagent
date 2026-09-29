@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';
 
 describe('SETTING_KEYS 白名单', () => {
-  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update 开关）', () => {
+  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification 开关）', () => {
     expect(SETTING_KEYS).toEqual([
       'theme',
       'language',
@@ -22,6 +22,7 @@ describe('SETTING_KEYS 白名单', () => {
       'update',
       'window',
       'memory',
+      'notification',
       'im.allowedGroups',
     ]);
   });
