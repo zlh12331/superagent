@@ -14,6 +14,7 @@
 
 import { z } from 'zod';
 
+import { TERMINAL_FONT_SIZES, TERMINAL_SHELL_CHOICES } from '../constants/terminal-shell';
 import { ZOOM_LEVELS } from '../constants/zoom';
 
 /**
@@ -137,6 +138,10 @@ export const SETTING_KEYS = [
   // 界面缩放（settings.appearance：{zoom}；主进程 window:applyZoom 应用
   // webContents.setZoomFactor + Windows overlay 联动；缺失视为 1，损坏归最近档位）
   'appearance',
+  // 终端（settings.terminal：{shell, fontSize}；主进程 TerminalService spawn 时
+  // 即时读并解析默认 shell——渲染层不传 shell（terminal:create P0 收口不变）；
+  // 缺失视为 {shell:'auto', fontSize:13}，损坏逐字段回落）
+  'terminal',
   // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
   'im.allowedGroups',
 ] as const;
@@ -251,6 +256,38 @@ export const SettingsSetReqSchema = z
         code: 'custom',
         path: ['value'],
         message: `appearance.zoom 必须是合法缩放档位（${ZOOM_LEVELS.join('/')}）`,
+      });
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 36 号 B：terminal 值级门禁——shell 必须是合法档位（TERMINAL_SHELL_CHOICES
+    // 单一真源，含平台不适用档位：跨平台写入合法、读侧回落是 34 号 fail-open
+    // 同款取舍），fontSize 必须是合法档位。settings:set 通道防御；导入路径不过
+    // 本 schema，靠渲染层读侧 clampFontSize 归一（双防线，35 号 §2.3 同构）
+    if (cfg.key !== 'terminal') {
+      return;
+    }
+    const value = cfg.value as { shell?: unknown; fontSize?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'terminal 配置必须是非空对象（{shell, fontSize}）',
+      });
+      return;
+    }
+    if (!TERMINAL_SHELL_CHOICES.includes(value.shell as never)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `terminal.shell 必须是合法档位（${TERMINAL_SHELL_CHOICES.join('/')}）`,
+      });
+    }
+    if (!TERMINAL_FONT_SIZES.includes(value.fontSize as number)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `terminal.fontSize 必须是合法档位（${TERMINAL_FONT_SIZES.join('/')}）`,
       });
     }
   });

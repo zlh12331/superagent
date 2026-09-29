@@ -15,6 +15,8 @@ export * from './constants/defaults';
 // 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';
+// 终端设置（36 号 B：shell 档位/平台适用性 + 字号档位，TerminalService 消费）
+export * from './constants/terminal-shell';
 // 界面缩放（35 号：档位集 + 归一/步进/overlay 联动纯函数，主进程渲染层共用）
 export * from './constants/zoom';
 export type { IpcChannel } from './ipc/channels';

@@ -24,6 +24,17 @@ export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';
 export { IPC_PROTOCOL_VERSION } from './constants/protocol';
+// 终端设置（36 号 B：shell 档位/平台适用性 + 字号档位，设置 UI 与 store 消费）
+export {
+  clampFontSize,
+  DEFAULT_TERMINAL_FONT_SIZE,
+  isShellChoiceApplicable,
+  TERMINAL_FONT_SIZES,
+  TERMINAL_SHELL_CHOICES,
+  type TerminalPlatform,
+  type TerminalShellChoice,
+  terminalShellChoicesForPlatform,
+} from './constants/terminal-shell';
 // 界面缩放（35 号：档位集 + 纯函数，UI Select 与快捷键消费）
 export {
   clampZoom,

@@ -9,7 +9,7 @@ import { ZOOM_LEVELS } from '../constants/zoom';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';
 
 describe('SETTING_KEYS 白名单', () => {
-  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy/appearance 开关）', () => {
+  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy/appearance/terminal 开关）', () => {
     expect(SETTING_KEYS).toEqual([
       'theme',
       'language',
@@ -26,15 +26,23 @@ describe('SETTING_KEYS 白名单', () => {
       'notification',
       'proxy',
       'appearance',
+      'terminal',
       'im.allowedGroups',
     ]);
   });
 });
 
 describe('SettingsSetReqSchema · key 白名单（P0）', () => {
-  it('白名单内键通过（proxy/appearance 例外：值级门禁要求合法形态）', () => {
+  it('白名单内键通过（proxy/appearance/terminal 例外：值级门禁要求合法形态）', () => {
     for (const key of SETTING_KEYS) {
-      const value = key === 'proxy' ? { mode: 'system' } : key === 'appearance' ? { zoom: 1 } : {};
+      const value =
+        key === 'proxy'
+          ? { mode: 'system' }
+          : key === 'appearance'
+            ? { zoom: 1 }
+            : key === 'terminal'
+              ? { shell: 'auto', fontSize: 13 }
+              : {};
       expect(SettingsSetReqSchema.safeParse({ key, value }).success).toBe(true);
     }
   });
@@ -89,6 +97,35 @@ describe('SettingsSetReqSchema · appearance 值级门禁（35 号）', () => {
   it('非法档位/非对象/缺 zoom → 拒绝', () => {
     for (const value of [{ zoom: 0.93 }, { zoom: 3 }, {}, null, '1']) {
       expect(SettingsSetReqSchema.safeParse({ key: 'appearance', value }).success).toBe(false);
+    }
+  });
+});
+
+describe('SettingsSetReqSchema · terminal 值级门禁（36 号 B）', () => {
+  it('合法 shell + 字号档位通过（shell 跨平台写入合法，读侧回落是 fail-open 取舍）', () => {
+    for (const shell of ['auto', 'powershell', 'gitbash', 'zsh']) {
+      expect(
+        SettingsSetReqSchema.safeParse({ key: 'terminal', value: { shell, fontSize: 13 } }).success,
+      ).toBe(true);
+    }
+    for (const fontSize of [12, 13, 14, 16, 18]) {
+      expect(
+        SettingsSetReqSchema.safeParse({ key: 'terminal', value: { shell: 'auto', fontSize } })
+          .success,
+      ).toBe(true);
+    }
+  });
+
+  it('非法 shell / 非法字号 / 非对象 → 拒绝', () => {
+    for (const value of [
+      { shell: 'pwsh', fontSize: 13 },
+      { shell: 'auto', fontSize: 15 },
+      { shell: 'auto' },
+      { fontSize: 13 },
+      null,
+      'powershell',
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'terminal', value }).success).toBe(false);
     }
   });
 });
