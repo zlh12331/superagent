@@ -26,6 +26,7 @@ import { NotificationSection } from './notification-section';
 import { PromptSection } from './prompt-section';
 import { ShortcutsSection } from './shortcuts-section';
 import { TelemetrySection } from './telemetry-section';
+import { ZoomSection } from './zoom-section';
 
 /** 语言切换行（真实 i18n：changeLanguage 立即生效；P2：同步写入 SQLite 设置链路） */
 function LanguageRow(): ReactElement {
@@ -156,6 +157,9 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
 
       {/* 系统通知（回合结束后台提醒门控，33 号 spec；驻留行为域与关窗/自启相邻） */}
       <NotificationSection />
+
+      {/* 界面缩放（35 号：显示域，与窗口行为/系统通知相邻） */}
+      <ZoomSection />
 
       {/* 编辑器 / 快捷键 / 提示词（并入通用） */}
       <div className="flex flex-col gap-4">
