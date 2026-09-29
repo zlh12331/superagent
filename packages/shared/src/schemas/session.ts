@@ -109,6 +109,14 @@ export interface SessionDeleteRes {
   readonly ok: boolean;
 }
 
+/** session:clearAll 入参 zod schema（无入参；36-D 清空全部会话） */
+export const SessionClearAllReqSchema = z.object({});
+
+/** session:clearAll 响应 payload（deleted = 真实删除的会话行数） */
+export interface SessionClearAllRes {
+  readonly deleted: number;
+}
+
 /** session:rename 入参 zod schema */
 export const SessionRenameReqSchema = z.object({
   id: z.string().min(1),
@@ -283,6 +291,11 @@ export const SessionGetResSchema = z.object({
 /** session:delete 响应 schema */
 export const SessionDeleteResSchema = z.object({
   ok: z.boolean(),
+});
+
+/** session:clearAll 响应 schema（36-D：deleted = 真实删除的会话行数） */
+export const SessionClearAllResSchema = z.object({
+  deleted: z.number().int().nonnegative(),
 });
 
 /** session:rename 响应 schema */

@@ -271,6 +271,7 @@ const mockSessionService: ISessionService = {
   list: vi.fn(),
   get: vi.fn(),
   delete: vi.fn(),
+  clearAll: vi.fn(async () => ({ deleted: 0 })),
   rename: vi.fn(),
   pin: vi.fn(),
   create: vi.fn(),

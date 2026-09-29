@@ -22,6 +22,7 @@ import type {
   IPC_DEFINITIONS,
   SessionImportRes,
 } from '@code-agent/shared/main';
+import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
 
 import type { ISessionService } from '../infra/storage/session-service';
@@ -29,7 +30,7 @@ import { readJsonImportFile } from '../utils/json-file';
 import { logger } from '../utils/logger';
 import type { IpcHandlerContext } from '../utils/wrap';
 
-/** session 域 IPC handler 依赖（组合根注入；compactMessages 见字段注释） */
+/** session 域 IPC handler 依赖（组合根注入；compactMessages/hasRunningAgentTurns 见字段注释） */
 export interface SessionHandlerDeps {
   readonly sessionService: ISessionService;
   /**
@@ -41,6 +42,11 @@ export interface SessionHandlerDeps {
     readonly removed: number;
     readonly reclaimedTokens: number;
   };
+  /**
+   * 是否有运行中回合（36-D 清空守卫）：组合根传 serviceContainer.hasRunningAgentTurns()
+   * ——与关窗协商同一「运行中」真源。清空全部会话在有回合运行时拒绝（SESSION_IN_USE）。
+   */
+  readonly hasRunningAgentTurns: () => boolean;
 }
 
 /**
@@ -115,7 +121,7 @@ async function importSessionsFile(sessionService: ISessionService): Promise<Sess
 export function createSessionHandlers(
   deps: SessionHandlerDeps,
 ): InferHandlers<typeof IPC_DEFINITIONS, IpcHandlerContext>['session'] {
-  const { sessionService, compactMessages } = deps;
+  const { sessionService, compactMessages, hasRunningAgentTurns } = deps;
 
   return {
     // session:list - 分页列出会话
@@ -136,6 +142,15 @@ export function createSessionHandlers(
     // session:delete - 删除会话（级联删除消息）
     delete: async (input) => {
       return sessionService.delete(input.id);
+    },
+
+    // session:clearAll - 清空全部会话（36-D）：运行中回合先拒绝（防删除在途回合
+    // 的会话导致消息级联丢失/写入打空），守卫信号与关窗协商同源
+    clearAll: async () => {
+      if (hasRunningAgentTurns()) {
+        throw new AppError(ErrorCode.SESSION_IN_USE);
+      }
+      return sessionService.clearAll();
     },
 
     // session:rename - 重命名会话标题

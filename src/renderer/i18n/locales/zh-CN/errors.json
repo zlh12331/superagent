@@ -29,6 +29,7 @@
     "NOT_FOUND": "资源不存在",
     "RATE_LIMITED": "操作过于频繁",
     "SESSION_NOT_FOUND": "会话不存在",
+    "SESSION_IN_USE": "有回合正在运行，请先停止后再清空",
     "TERMINAL_SPAWN_FAILED": "终端启动失败",
     "TOOL_ABORTED": "工具执行被中断",
     "TOOL_EXECUTION_FAILED": "工具执行失败",

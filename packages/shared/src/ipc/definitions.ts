@@ -180,6 +180,9 @@ import {
   GrepResSchema,
 } from '../schemas/search';
 import {
+  SessionClearAllReqSchema,
+  type SessionClearAllRes,
+  SessionClearAllResSchema,
   SessionCompactReqSchema,
   type SessionCompactRes,
   SessionCompactResSchema,
@@ -564,6 +567,13 @@ export const IPC_DEFINITIONS = {
       SessionDeleteReqSchema,
       {} as SessionDeleteRes,
       SessionDeleteResSchema,
+    ),
+    // 清空全部会话（36-D）：无入参；运行中回合守卫在 handler（SESSION_IN_USE）
+    clearAll: withSchema(
+      IPC_META.session.clearAll,
+      SessionClearAllReqSchema,
+      {} as SessionClearAllRes,
+      SessionClearAllResSchema,
     ),
     rename: withSchema(
       IPC_META.session.rename,

@@ -40,6 +40,8 @@ function lastInvalidationPayload(): { domains: string[]; sessionId?: string } | 
   return last?.[1] as { domains: string[]; sessionId?: string } | undefined;
 }
 
+import { ErrorCode } from '@code-agent/shared/main';
+
 import { resetDb } from './db';
 import { SessionService } from './session-service';
 import { createTestDb } from './test-utils';
@@ -676,6 +678,67 @@ describe('SessionService', () => {
       await service.markIdle(sessionId);
 
       expect(mockInvalidationSends).toHaveLength(0);
+    });
+  });
+
+  // ── 清空全部会话（36 号 D） ─────────────────────────────────────
+
+  describe('clearAll（36-D）', () => {
+    beforeEach(() => {
+      mockInvalidationSends.length = 0;
+    });
+
+    it('正向：全表删除并返回真实计数，消息级联清空（V1/V3）', async () => {
+      const s1 = await service.create({
+        workingDir: 'D:\\a',
+        title: undefined,
+        messages: undefined,
+      });
+      const s2 = await service.create({
+        workingDir: 'D:\\b',
+        title: undefined,
+        messages: undefined,
+      });
+      await service.appendMessage({
+        sessionId: s1,
+        turnId: 'turn-1',
+        messages: [{ role: 'user', content: 'a1' }],
+      });
+      await service.appendMessage({
+        sessionId: s2,
+        turnId: 'turn-2',
+        messages: [{ role: 'user', content: 'b1' }],
+      });
+
+      const res = await service.clearAll();
+
+      expect(res.deleted).toBe(2);
+      // 级联：消息已随会话删除（get 抛 SESSION_NOT_FOUND）
+      await expect(service.get(s1, { includeMessages: true })).rejects.toMatchObject({
+        code: ErrorCode.SESSION_NOT_FOUND,
+      });
+      await expect(service.get(s2)).rejects.toMatchObject({
+        code: ErrorCode.SESSION_NOT_FOUND,
+      });
+    });
+
+    it('失效域声明：广播 [sessions, usage, turns, goal]（V7）', async () => {
+      await service.create({
+        workingDir: 'D:\\a',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.clearAll();
+
+      expect(mockInvalidationSends).toHaveLength(1);
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', 'usage', 'turns', 'goal']);
+    });
+
+    it('幂等：空表清空 → deleted=0 不报错（V8）', async () => {
+      const res = await service.clearAll();
+      expect(res.deleted).toBe(0);
     });
   });
 });

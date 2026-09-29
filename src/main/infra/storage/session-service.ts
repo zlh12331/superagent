@@ -33,6 +33,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   ChatMessage,
+  SessionClearAllRes,
   SessionDeleteRes,
   SessionGetRes,
   SessionGetTurnsRes,
@@ -194,6 +195,32 @@ export class SessionService {
     // 会话，重拉只会 SESSION_NOT_FOUND（渲染层删除 mutation 自行清理详情缓存）
     broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
     return { ok: true };
+  }
+
+  /**
+   * 清空全部会话（36-D）
+   *
+   * 无 where 全表删除：messages / turns / goals 经 FK ON DELETE CASCADE 一并级联；
+   * tasks / cron_tasks 无外键（有意），不受影响。幂等：空表 → deleted=0。
+   * 运行中回合守卫在 handler 层（SESSION_IN_USE）——服务层保持纯数据操作，
+   * 与 compactMessages 注入同模式。
+   */
+  async clearAll(): Promise<SessionClearAllRes> {
+    const db = getDb();
+    const result = db.delete(sessions).run();
+    const deleted = result.changes;
+    reclaimFreePages();
+    // 失效域声明（31 号 spec）：级联清空波及 usage（用量汇总）/ turns（最近回合）/
+    // goal（目标），四域一并声明；session:<id> 详情与 recent-dirs 由渲染层 mutation
+    // removeQueries 前缀清理（清空场景逐 id 声明不现实）
+    broadcastInvalidation([
+      INVALIDATION_DOMAINS.sessions,
+      INVALIDATION_DOMAINS.usage,
+      INVALIDATION_DOMAINS.turns,
+      INVALIDATION_DOMAINS.goal,
+    ]);
+    logger.info({ deleted }, '全部会话已清空');
+    return { deleted };
   }
 
   /**

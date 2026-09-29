@@ -258,6 +258,8 @@ app
             ),
           };
         },
+        // 清空全部会话守卫（36-D）：与关窗协商同一「运行中回合」真源
+        hasRunningAgentTurns: () => serviceContainer.hasRunningAgentTurns(),
       }),
       file: createFileHandlers({ fileService: serviceContainer.getFileService() }),
       search: createSearchHandlers({ searchService: serviceContainer.getSearchService() }),

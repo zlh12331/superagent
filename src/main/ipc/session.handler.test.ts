@@ -46,6 +46,7 @@ function createFakeSessionService() {
     list: vi.fn(async () => ({ sessions: [], total: 0 })),
     get: vi.fn(async () => ({ session: null, messages: [] })),
     delete: vi.fn(async () => ({ deleted: true })),
+    clearAll: vi.fn(async () => ({ deleted: 0 })),
     rename: vi.fn(async () => ({ renamed: true })),
     pin: vi.fn(async () => ({ pinned: true })),
     create: vi.fn(async () => 'sid-1'),
@@ -70,14 +71,18 @@ const EMPTY_CTX = {} as never;
 describe('session.handler 参数转发（三件套）', () => {
   let sessionService: ReturnType<typeof createFakeSessionService>;
   let handlers: ReturnType<typeof createSessionHandlers>;
+  /** 运行中回合守卫桩（36-D）：beforeEach 复位 false，守卫用例改写 true */
+  const hasRunningAgentTurns = vi.fn(() => false);
 
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockShowSaveDialog.mockResolvedValue({ canceled: false, filePath: 'C:\\out.json' });
     sessionService = createFakeSessionService();
+    hasRunningAgentTurns.mockReturnValue(false);
     handlers = createSessionHandlers({
       sessionService,
       compactMessages: createFakeCompactMessages(),
+      hasRunningAgentTurns,
     });
   });
 
@@ -99,6 +104,21 @@ describe('session.handler 参数转发（三件套）', () => {
   it('delete：转发 id', async () => {
     await handlers.delete({ id: 's1' }, EMPTY_CTX);
     expect(sessionService.delete).toHaveBeenCalledWith('s1');
+  });
+
+  it('clearAll：无运行中回合 → 转发服务（36-D）', async () => {
+    const res = await handlers.clearAll({}, EMPTY_CTX);
+    expect(res).toEqual({ deleted: 0 });
+    expect(sessionService.clearAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('clearAll：有运行中回合 → SESSION_IN_USE 拒绝，服务不调用（36-D V2）', async () => {
+    hasRunningAgentTurns.mockReturnValue(true);
+
+    await expect(handlers.clearAll({}, EMPTY_CTX)).rejects.toMatchObject({
+      code: ErrorCode.SESSION_IN_USE,
+    });
+    expect(sessionService.clearAll).not.toHaveBeenCalled();
   });
 
   it('rename：转发 id + title', async () => {
@@ -169,6 +189,7 @@ describe('session.handler.exportAll（三态）', () => {
     handlers = createSessionHandlers({
       sessionService,
       compactMessages: createFakeCompactMessages(),
+      hasRunningAgentTurns: () => false,
     });
   });
 
@@ -224,6 +245,7 @@ describe('session.handler.importAll（三态）', () => {
     handlers = createSessionHandlers({
       sessionService,
       compactMessages: createFakeCompactMessages(),
+      hasRunningAgentTurns: () => false,
     });
   });
 
@@ -287,6 +309,7 @@ describe('session.handler.compact（/compact 上下文压缩）', () => {
     const handlers = createSessionHandlers({
       sessionService,
       compactMessages: compactMessages as unknown as SessionHandlerDeps['compactMessages'],
+      hasRunningAgentTurns: () => false,
     });
 
     const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);
@@ -313,6 +336,7 @@ describe('session.handler.compact（/compact 上下文压缩）', () => {
         removed: 0,
         reclaimedTokens: 0,
       })) as never,
+      hasRunningAgentTurns: () => false,
     });
 
     const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);
@@ -335,6 +359,7 @@ describe('session.handler.compact（/compact 上下文压缩）', () => {
         removed: 0,
         reclaimedTokens: 15,
       })) as unknown as SessionHandlerDeps['compactMessages'],
+      hasRunningAgentTurns: () => false,
     });
 
     const res = await handlers.compact({ sessionId: 's1' }, EMPTY_CTX);

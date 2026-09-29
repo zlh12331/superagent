@@ -80,6 +80,8 @@ export const ErrorCode = {
   TOOL_ABORTED: 'TOOL_ABORTED',
   // 会话相关：Code Agent 会话持久化与恢复
   SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
+  /** 会话正被占用（有运行中回合）：破坏性批量操作（清空全部会话）拒绝执行（36-D） */
+  SESSION_IN_USE: 'SESSION_IN_USE',
   // 终端相关：node-pty 终端会话管理
   TERMINAL_SPAWN_FAILED: 'TERMINAL_SPAWN_FAILED',
 } as const;
@@ -208,6 +210,11 @@ export const ERROR_META: Readonly<Record<ErrorCode, ErrorMeta>> = {
   TOOL_ABORTED: { userMessage: '工具执行被中断', retryable: false, severity: 'info' },
   // Code Agent：会话相关
   SESSION_NOT_FOUND: { userMessage: '会话不存在', retryable: false, severity: 'warn' },
+  SESSION_IN_USE: {
+    userMessage: '有回合正在运行，请先停止后再清空',
+    retryable: false,
+    severity: 'warn',
+  },
   // Code Agent：终端相关
   TERMINAL_SPAWN_FAILED: {
     userMessage: '终端启动失败',

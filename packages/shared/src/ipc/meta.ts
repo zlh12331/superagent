@@ -66,6 +66,8 @@ export const IPC_META = {
     list: request('session:list'),
     get: request('session:get'),
     delete: request('session:delete'),
+    // 清空全部会话（36-D：破坏性批量操作，主进程拒绝运行中回合）
+    clearAll: request('session:clearAll'),
     rename: request('session:rename'),
     pin: request('session:pin'),
     create: request('session:create'),

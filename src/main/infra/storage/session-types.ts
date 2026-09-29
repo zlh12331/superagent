@@ -7,6 +7,7 @@
 
 import type {
   ChatMessage,
+  SessionClearAllRes,
   SessionDeleteRes,
   SessionExportFile,
   SessionExportItemShape,
@@ -102,6 +103,11 @@ export interface ISessionService {
   get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes>;
   /** 删除指定会话（连同 messages 表级联删除） */
   delete(id: string): Promise<SessionDeleteRes>;
+  /**
+   * 清空全部会话（36-D）：sessions 全表删除 + messages/turns/goals 级联，
+   * 返回删除的会话数。运行中回合守卫在 IPC handler 层（SESSION_IN_USE）
+   */
+  clearAll(): Promise<SessionClearAllRes>;
   /** 重命名会话标题 */
   rename(id: string, title: string): Promise<SessionRenameRes>;
   /** 置顶/取消置顶会话（对齐参考项目 pinned-header 分组） */
