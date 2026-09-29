@@ -151,6 +151,12 @@ export const IPC_META = {
     subscribeChanged: event('settings:event:changed'),
   },
 
+  proxy: {
+    // 测试代理连通性（34 号网络代理：主进程经 proxiedFetch 探测轻量端点，
+    // 渲染层测试连接按钮消费；mode 非 fixed 时返回不可测）
+    test: request('proxy:test'),
+  },
+
   system: {
     getStatus: request('system:getStatus'),
   },

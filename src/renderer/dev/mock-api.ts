@@ -857,6 +857,16 @@ function createMockApi(): IpcApi {
       },
     },
 
+    proxy: {
+      // 34 号：浏览器模式无真实网络栈，测试连接恒返回不可测（UI 可用，行为无感）
+      test: async () =>
+        ipcOk({
+          ok: false,
+          kind: 'not-applicable',
+          message: '浏览器模式不支持代理测试',
+        }),
+    },
+
     settings: {
       // S1：settings 下沉 SQLite 的 mock 实现（浏览器模式持久化到 localStorage）
       getAll: async () => {

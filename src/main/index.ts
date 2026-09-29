@@ -51,6 +51,7 @@ import { createImHandlers } from './ipc/im.handler';
 import { createMcpHandlers } from './ipc/mcp.handler';
 import { createMemoryHandlers } from './ipc/memory.handler';
 import { modelsHandlers } from './ipc/models.handler';
+import { createProxyHandlers } from './ipc/proxy.handler';
 import { registerIpcHandlers } from './ipc/register';
 import { createRemoteHandlers } from './ipc/remote.handler';
 import { createSearchHandlers } from './ipc/search.handler';
@@ -262,6 +263,7 @@ app
       settings: createSettingsHandlers({
         permissionService: serviceContainer.getPermissionService(),
       }),
+      proxy: createProxyHandlers(),
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
       memory: createMemoryHandlers({

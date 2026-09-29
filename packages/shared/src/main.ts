@@ -53,6 +53,7 @@ export * from './schemas/invalidation';
 export * from './schemas/mcp';
 export * from './schemas/memory';
 export * from './schemas/models';
+export * from './schemas/proxy';
 export * from './schemas/remote';
 export * from './schemas/search';
 export * from './schemas/session';

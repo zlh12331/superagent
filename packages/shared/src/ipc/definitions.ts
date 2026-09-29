@@ -168,6 +168,7 @@ import {
   type TestModelRes,
   TestModelResSchema,
 } from '../schemas/models';
+import { ProxyTestReqSchema, type ProxyTestRes, ProxyTestResSchema } from '../schemas/proxy';
 import type { RemoteStatusRes } from '../schemas/remote';
 import { RemoteSetBindScopeReqSchema, RemoteStatusResSchema } from '../schemas/remote';
 import {
@@ -789,6 +790,15 @@ export const IPC_DEFINITIONS = {
 
   tool: {
     list: withSchema(IPC_META.tool.list, ToolListReqSchema, {} as ToolListRes, ToolListResSchema),
+  },
+
+  proxy: {
+    test: withSchema(
+      IPC_META.proxy.test,
+      ProxyTestReqSchema,
+      {} as ProxyTestRes,
+      ProxyTestResSchema,
+    ),
   },
 
   settings: {
