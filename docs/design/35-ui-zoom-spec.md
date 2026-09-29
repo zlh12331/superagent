@@ -1,7 +1,7 @@
 # 35 · 界面缩放（需求 → 设计 → 实施状态）
 
-- **状态**：CP2 双路深读完成（路1 fail ×2 / 路2 fail ×5，全部修复采纳，处置表
-  见 §3.1）→ 实施中
+- **状态**：**已实施**（2026-09-29；55761cf3 → 89b787ce → ab73b9bb → d6794c21 →
+  ce50fd62 → 本提交；CP2 双路 7 fail 全部修复采纳，处置表见 §3.1；V1-V9 核对 §3.2）
 - **判级**：四问三 yes（新增持久化 `app_settings`/`appearance` 键 + 跨进程副作用
   Windows overlay 联动 + 多组件联动 store/UI/快捷键）→ 全量流程
 - **形态轴**：全链路 + 主进程子系统；**消费方式 = 混合型**（渲染层推送式应用 +
@@ -281,7 +281,50 @@ resetAll（快照回落）⑤ 启动链（bootstrap 首帧值 + useZoomEffect �
 
 ### 3.2 实施记录
 
-- 提交链：待回填。
-- V1-V9 逐条核对：收尾回填。
-- 实施首日验证项（CP2 指名）：① 键串 Equal/Minus/Digit0 真机匹配；② Ctrl+滚轮
-  原生缩放是否生效（zoom-changed 处理决策）。
+**提交链**（每个独立可编译可回退）：
+
+1. `55761cf3` 35 号 spec（需求/设计/CP2 双路 7 fail 处置表 15 项全量成文）；
+2. `89b787ce` shared 地基：constants/zoom.ts（四纯函数，ZOOM_LEVELS 11 档）+
+   SETTING_KEYS 登记 appearance + superRefine 档位门禁 + 白名单契约测试同步；
+3. `ab73b9bb` 主进程与应用端：window:applyZoom 契约四处闭环（meta/schema/
+   definitions/handler/mock）+ window.handler（遍历/win32 overlay/销毁守卫）+
+   store appearance 域（快照合并处 clampZoom 归一，CP2 fail-5 钉死点）；
+4. `d6794c21` 应用链：lib/zoom 薄壳 + main.tsx 首帧前应用（CP2 路1 fail 修复）
+   + use-zoom-effect 单点（CP2 路2 D-1 采纳，五入口构造性覆盖）+ Ctrl+Equal/
+   Minus/0 固定快捷键（v5 code 名实证）；
+5. `ce50fd62` UI：zoom-section（ui/select 11 档）+ GeneralSection 挂载 + i18n
+   四键双语 + 组件四断言。
+
+**实施期实测补充**（32 号回审素材）：
+
+- **clampZoom 非有限数缺陷**（实施期实测）：NaN 比较全 false 使结果停在数组首项
+  （返回 0.5 而非默认 1）——「缺失语义」与「越界钳制」的分野必须前置类型拦截。
+  已修复（非有限数 → DEFAULT_ZOOM）+ 4 断言固化。教训：纯函数的「缺失」路径要在
+  实现期就用 undefined/NaN 实测，不能只推理。
+- **react-hotkeys v5 键串实证**：源码归一化 `replace(/key|digit|numpad/,'')` +
+  `event.code` 匹配——`Digit0`→`0`、`Equal`/`Minus` 为裸名；键串写 `ctrl+Equal`/
+  `ctrl+Minus`/`ctrl+0`（CP2 fail-4 的疑虑以源码证据消解，无需降级方案）。
+- **棘轮连锁**：file-size definitions 1037→1046 / mock-api 980→983、functions
+  mock-api 380→382——applyZoom 契约与 mock 域注册的声明性增长，`--force` 显式
+  放宽留痕（提交 ce50fd62）。
+- **门禁实录**：check:static 15 项全过；五层测试链 shared 95 + main 2095 +
+  renderer 1802 + integration 152 + scripts 364 全绿。
+
+**V1-V9 逐条核对**（32 号 §5.9②；测试名对照 §2.7）：
+
+| V | 结论 | 证据 |
+|---|---|---|
+| V1 缺失 1 / 损坏归一 | ✅ | shared「缺失语义非有限数→1」4 断言 + 「损坏归一 0.93→0.9」+ store「快照缺失回落/损坏归一」 |
+| V2 125% 整体放大 | ✅ | handler「遍历全部窗口 setZoomFactor(1.25)」+ 组件「125% 回显」；窗口尺寸不变为构造性（无代码触 bounds） |
+| V3 各档即时生效 | ✅ | use-zoom-effect 订阅 store → applyZoom（handler 同步执行断言）+ 五断言全绿 |
+| V4 重启保持 | ✅ | store 写穿透 key 断言 + 快照合并（持久化半）；启动半 = main.tsx render 前 applyZoom（时序构造性，代码评审保证——bootstrap→snapshot→applyZoom 顺序在同一 await 链） |
+| V5 resetAll 回落 100% | ✅ | applySettingsSnapshot({}) → zoom 归 DEFAULT_ZOOM → useZoomEffect 触发应用（store V1 断言 + 单点链） |
+| V6 导入回显+应用 | ✅ | store「applyMainChange 按域合并且不回写」+ 通用分支落 store → useZoomEffect 应用（单点覆盖） |
+| V7 win32 overlay 联动 | ✅ | handler 4 断言（win32 65/非 win32 不调/100% 52/API 抛错不阻断）+ shared overlayHeightFor 数值 |
+| V8 预览缩放隔离 | ✅ | handler「仅遍历 BrowserWindow」构造性隔离断言（WebContentsView 非 BrowserWindow，不在集内） |
+| V9 Ctrl+±0 | ✅ | 键串 v5 源码实证 + use-keyboard-shortcuts 三固定绑定 + AppShell handlers（stepZoom/DEFAULT_ZOOM）+ shared stepZoom 边界钳制 |
+
+**遗留（真机确认类）**：① Ctrl+滚轮原生缩放是否生效（zoom-changed 回写方案已设计
+未实现——实测若确认原生生效，按 §2.1 处置）；② Windows overlay 联动在非 100% 档位
+的真机视觉确认（逻辑与断言已覆盖，视觉需人工）；③ macOS/Linux 无 overlay 语义
+（构造性，无需验证）。
