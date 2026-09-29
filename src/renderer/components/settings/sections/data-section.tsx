@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { changeLanguage, LANGUAGE_STORAGE_KEY } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatBytes } from '@/lib/format-bytes';
 import {
@@ -20,7 +21,13 @@ import {
   importAllSessions,
   importSettingsFile,
   openDataDirChecked,
+  resetAllSettings,
 } from '@/lib/settings-ops';
+import {
+  applySettingsSnapshot,
+  flushPendingSettings,
+  useSettingsStore,
+} from '@/stores/persistent/settings-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUpdateStore } from '@/stores/transient/update-store';
 
@@ -120,6 +127,34 @@ export function DataSection(): React.ReactElement {
     }
   };
 
+  // 恢复默认（覆盖类危险操作）：先把在途写穿透落库（防 DELETE 后旧值复活），
+  // 再清空 app_settings 设置键；响应为空快照 → applySettingsSnapshot({}) 全量
+  // 回落默认（内部含主题首帧镜像）。applySettingsSnapshot 不切 i18n 实例
+  // （启动专用假设：此时 i18n 由 detector 读镜像初始化），运行时需显式切回。
+  const handleResetAllSettings = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: t('settings.resetAllSettings'),
+      message: t('settings.resetAllSettingsConfirm'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await flushPendingSettings();
+      const settings = await resetAllSettings();
+      applySettingsSnapshot(settings);
+      const language = useSettingsStore.getState().language;
+      changeLanguage(language);
+      try {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+      } catch {
+        // 无痕模式等场景静默（SQLite 真源已是默认）
+      }
+      toast.success(t('settings.resetAllSettingsDone'));
+    } catch {
+      toast.error(t('settings.resetAllSettingsFailed'));
+    }
+  };
+
   const handleOpenDataDir = async (): Promise<void> => {
     try {
       const res = await openDataDirChecked();
@@ -158,6 +193,9 @@ export function DataSection(): React.ReactElement {
         </Button>
         <Button variant="outline" size="sm" onClick={handleImportSettings}>
           {t('settings.importSettings')}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => void handleResetAllSettings()}>
+          {t('settings.resetAllSettings')}
         </Button>
       </div>
       {cache !== null && cache.path !== null && (

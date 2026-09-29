@@ -15,6 +15,7 @@ vi.mock('sonner', () => ({
   toast: { success: mockToastSuccess, error: mockToastError, warning: vi.fn() },
 }));
 
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { DataSection } from './data-section';
 
 const t = i18n.t.bind(i18n);
@@ -218,6 +219,51 @@ describe('DataSection', () => {
 
       await waitFor(() =>
         expect(mockToastError).toHaveBeenCalledWith(t('settings.importSettingsFailed')),
+      );
+    });
+
+    it('正向：恢复默认设置（确认后）→ store 全量回落默认 + 成功提示', async () => {
+      // 预置非默认值：重置后必须回到 DEFAULT_SETTINGS
+      useSettingsStore.setState({
+        theme: 'light',
+        ai: { ...useSettingsStore.getState().ai, temperature: 1.5, systemPrompt: 'custom' },
+      });
+      window.api = {
+        settings: { resetAll: vi.fn().mockResolvedValue({ data: { settings: {} } }) },
+      } as never;
+      render(<DataSection />);
+
+      await clickWithConfirm(t('settings.resetAllSettings'), true);
+
+      await waitFor(() => expect(window.api.settings.resetAll).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(t('settings.resetAllSettingsDone')),
+      );
+      // store 已全量回落默认（applySettingsSnapshot({}) 语义）
+      expect(useSettingsStore.getState().theme).toBe('dark');
+      expect(useSettingsStore.getState().ai.temperature).toBe(0.7);
+      expect(useSettingsStore.getState().ai.systemPrompt).toBe('');
+    });
+
+    it('边界：恢复默认确认取消 → 不调 IPC', async () => {
+      window.api = { settings: { resetAll: vi.fn() } } as never;
+      render(<DataSection />);
+
+      await clickWithConfirm(t('settings.resetAllSettings'), false);
+
+      expect(window.api.settings.resetAll).not.toHaveBeenCalled();
+    });
+
+    it('异常：恢复默认失败 → 失败提示', async () => {
+      window.api = {
+        settings: { resetAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
+      } as never;
+      render(<DataSection />);
+
+      await clickWithConfirm(t('settings.resetAllSettings'), true);
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith(t('settings.resetAllSettingsFailed')),
       );
     });
   });

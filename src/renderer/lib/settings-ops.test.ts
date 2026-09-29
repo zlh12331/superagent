@@ -33,6 +33,7 @@ import {
   openDataDirChecked,
   removeLearnedSkill,
   removeWhitelistEntry,
+  resetAllSettings,
   saveImAllowedGroups,
   setLoginItemSettings,
   startImChannel,
@@ -540,6 +541,21 @@ describe('settings-ops', () => {
     it('getRecentTurns 无桥 → 空回合列表', async () => {
       removeBridge();
       await expect(getRecentTurns(5)).resolves.toEqual([]);
+    });
+
+    it('resetAllSettings 成功 → 返回重置后快照（空对象）', async () => {
+      mockApiDomain('settings', { resetAll: vi.fn(async () => ipcOk({ settings: {} })) });
+      await expect(resetAllSettings()).resolves.toEqual({});
+    });
+
+    it('resetAllSettings 无桥 → 抛 [NO_BRIDGE]', async () => {
+      removeBridge();
+      await expect(resetAllSettings()).rejects.toThrow(/\[NO_BRIDGE\]/);
+    });
+
+    it('resetAllSettings IPC 错误 → unwrap 抛 [CODE]', async () => {
+      mockApiDomain('settings', { resetAll: vi.fn(async () => ipcErr('DB_ERROR', 'boom')) });
+      await expect(resetAllSettings()).rejects.toThrow(/\[DB_ERROR\]/);
     });
   });
 

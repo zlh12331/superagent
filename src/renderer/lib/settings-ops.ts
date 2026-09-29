@@ -448,6 +448,24 @@ export async function importSettingsFile(): Promise<SettingsImportRes> {
 }
 
 /**
+ * 恢复所有设置为默认（settings:resetAll）
+ *
+ * 调用前应先 flushPendingSettings()（stores/persistent/settings-store 导出）：
+ * 在途写穿透若未落库，DELETE 后旧值会复活。响应 settings 恒为空对象——
+ * 调用方据此 applySettingsSnapshot({}) 回落 DEFAULT_SETTINGS。
+ *
+ * @returns 重置后的设置快照（空对象；形状与 settings:getAll 响应一致）
+ * @throws Error 无桥（[NO_BRIDGE]）或 IPC 失败
+ */
+export async function resetAllSettings(): Promise<Record<string, unknown>> {
+  if (!hasIpcBridge()) {
+    throw new Error('[NO_BRIDGE] window.api unavailable');
+  }
+  const res = unwrap<{ settings: Record<string, unknown> }>(await window.api.settings.resetAll({}));
+  return res.settings;
+}
+
+/**
  * 打开用户数据目录（返回主进程回读结果，供调用方区分成功/失败提示）
  *
  * @throws Error 无桥（[NO_BRIDGE]）或 IPC 失败
