@@ -22,6 +22,7 @@ import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings
 import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
 import { DataSection } from './data-section';
 import { EditorSection } from './editor-section';
+import { NotificationSection } from './notification-section';
 import { PromptSection } from './prompt-section';
 import { ShortcutsSection } from './shortcuts-section';
 import { TelemetrySection } from './telemetry-section';
@@ -152,6 +153,9 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
           />
         </div>
       </div>
+
+      {/* 系统通知（回合结束后台提醒门控，33 号 spec；驻留行为域与关窗/自启相邻） */}
+      <NotificationSection />
 
       {/* 编辑器 / 快捷键 / 提示词（并入通用） */}
       <div className="flex flex-col gap-4">
