@@ -1,6 +1,7 @@
 # 34 · 网络代理（需求 → 设计 → 实施状态）
 
-- **状态**：CP2 双路深读完成（各 2 项 fail，全部修复采纳；处置表见 §3.1）→ 实施中
+- **状态**：**已实施**（2026-09-29；6834d4a5 → a5aecaf9 → 4c50994e → a1095521 →
+  本提交；CP2 双路深读 4 fail 全部修复，分歧处置表见 §3.1；V1-V10 核对见 §3.2）
 - **判级**：四问全 yes（新增持久化结构 settings.proxy 键 + 跨进程副作用全覆盖 +
   多组件联动 + 新设置分区交互）→ 全量流程
 - **形态轴**：全链路 + 主进程子系统（比 33 号多「平台网络栈」维度）——CP2 后回审
@@ -309,6 +310,36 @@ env 五个应用点全部读同一 resolver 真源，无双份状态。**MCP 远
   proxy-resolver.ts + proxiedFetch + applyProxyChange + 四路径收口 + login 处理器
   → 各应用点注入（AI 工厂 fetch / telegram fetchFn / webhook postWebhook / MCP
   requestInit）+ 红灯测试。
-- **WP2**（设置面）：store proxy 域 + SETTING_KEYS/superRefine + proxy:test IPC +
-  UI 分区（NAV_GROUPS + ui-store 两处同步）+ i18n 双语 + 组件测试。
-- 提交链与 V1-V10 逐条核对：收尾回填。
+- **WP2b**（设置面，a1095521）：store proxy 域（updateProxy 写穿透 + 非 fixed 清
+  残留 + 快照合并四断言）+ ProxySection 三模式/测试连接（经 settings-ops 桥接，
+  direct-ipc 棘轮新增项重构消化）+ SettingsDialog 13 项导航（两处同步）+ i18n 17 键
+  双语 + 冒烟测试 12→13 tab。
+- 棘轮连锁登记（§5.5）：file-size definitions 1028→1037 / mock-api 972→980、
+  functions mock-api 374→380——三处均 proxy 键登记/mock 域注册的声明性契约代码
+  增长，`--update-baseline --force` 显式放宽（提交 a1095521 内基线文件）。
+- **门禁实录**：check:static 15 项全过 / 五层测试链 shared 84 + main 2087 +
+  renderer 1791 + integration 152 + scripts 364 全绿。
+
+**V1-V10 逐条核对**（32 号 §5.9②；测试名对照 §2.7）：
+
+| V | 结论 | 证据 |
+|---|---|---|
+| V1 默认行为不变 | ✅ | resolver「V1 缺失→system」+ proxiedFetch「V1 未初始化直通全局 fetch」+ applier「V1 system 三分区 {mode:system} env 全清」 |
+| V2 fixed 经代理 | ✅ | proxiedFetch「V2 fixed → undici fetch + ProxyAgent dispatcher」（spy 断言）+ applier「V2 fixed 三分区 fixed_servers + env 双写」 |
+| V3 direct 直连 | ✅ | resolver「V3 direct→{mode:direct}」+ proxiedFetch「V3 direct 直连无 dispatcher」+ applier「V3 resetAll 回落」 |
+| V4 localhost 绕过 | ✅ | resolver「V4 localhost 家族恒绕过」+ proxiedFetch「V4 即使 fixed 也直连（不建 agent）」+ applier proxyBypassRules 强制 `<local>` 断言 |
+| V5 免重启生效 | ✅ | applier 五断言均含 resetAIProvider 调用断言（settings:set 收口链 → 工厂重建，CP2 第一路三层缓存链核实） |
+| V6 重启保持 | ✅ | SQLite 真源 + store 写穿透断言 + 启动路径 applyProxyChange（index.ts whenReady，initDb 后 IM 恢复前） |
+| V7 resetAll 回 system | ✅ | handler resetAll 显式 `applyProxyChange(undefined)`（CP2 fail 修复项落地）+ applier「V3 resetAll 语义三分区回落 + env 清空」 |
+| V8 导入即时生效 | ✅ | handler importSettings 显式 applyProxyChange（CP2 fail 修复项落地）+ store「applyMainChange 按域合并不回写」 |
+| V9 非法地址拒写 | ✅ | shared superRefine 门禁 3 断言（fixed 缺 url/非法协议/mode 未知）+ 组件 blur 前置校验「非法地址不入库」 |
+| V10 UI 三态 | ✅ | 组件五断言（三模式显隐/写穿透/blur 校验/测试成功文案/proxy:test 调用） |
+
+**实施期实测补充**（32 号回审素材，全链路+主进程子系统形态）：
+- 探针先行价值实证：`.tmp` Electron 探针（全局 fetch 不认 dispatcher）直接决定了
+  proxiedFetch 闭环方案，避免实施期推翻设计；该探针结论已沉淀于 §0 与模块头注释。
+- CP2 双路 fail 全部集中在「推送式 vs 拉取式」语义差异（33 号 notification 是
+  拉取式零代码，34 号是推送式必须四路径显式收口）——**主进程急切副作用功能**
+  应在 32 号 §4.2 增补「消费方式判定」检查项，防下个功能再犯。
+- direct-ipc 棘轮在 UI 提交时咬到（组件直连 proxy:test）——正确处理是桥接重构
+  而非放宽，棘轮设计意图实测有效。
