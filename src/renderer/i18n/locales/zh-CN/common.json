@@ -499,8 +499,23 @@
       "mobile": "移动端",
       "browser": "浏览器",
       "workspace": "工作树",
+      "terminal": "终端",
       "rulesMemory": "规则与记忆",
       "beta": "Beta"
+    },
+    "terminal": {
+      "title": "终端",
+      "shellLabel": "默认 Shell",
+      "shellDesc": "新建终端使用的 shell；auto 为平台默认（Windows PowerShell / macOS zsh / Linux $SHELL）",
+      "shellAuto": "Auto",
+      "shellPowershell": "PowerShell",
+      "shellCmd": "CMD",
+      "shellGitBash": "Git Bash",
+      "shellWsl": "WSL",
+      "shellBash": "Bash",
+      "shellZsh": "Zsh",
+      "shellFish": "Fish",
+      "fontSizeLabel": "终端字号"
     },
     "sectionsAriaLabel": "设置分区导航",
     "whitelistTitle": "命令白名单",

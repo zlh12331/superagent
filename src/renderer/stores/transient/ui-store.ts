@@ -22,6 +22,7 @@ export type SettingsSectionId =
   | 'mobile'
   | 'browser'
   | 'workspace'
+  | 'terminal'
   | 'rules-memory'
   | 'models'
   | 'approval-mode'

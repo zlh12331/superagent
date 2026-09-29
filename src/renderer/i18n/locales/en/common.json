@@ -499,8 +499,23 @@
       "mobile": "Mobile",
       "browser": "Browser",
       "workspace": "Workspace",
+      "terminal": "Terminal",
       "rulesMemory": "Rules & Memory",
       "beta": "Beta"
+    },
+    "terminal": {
+      "title": "Terminal",
+      "shellLabel": "Default shell",
+      "shellDesc": "Shell used for new terminals; Auto follows the platform default (PowerShell on Windows, zsh on macOS, $SHELL on Linux)",
+      "shellAuto": "Auto",
+      "shellPowershell": "PowerShell",
+      "shellCmd": "CMD",
+      "shellGitBash": "Git Bash",
+      "shellWsl": "WSL",
+      "shellBash": "Bash",
+      "shellZsh": "Zsh",
+      "shellFish": "Fish",
+      "fontSizeLabel": "Font size"
     },
     "sectionsAriaLabel": "Settings sections navigation",
     "whitelistTitle": "Command Whitelist",

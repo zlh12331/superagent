@@ -15,6 +15,8 @@ const { MockTerminal, mockTerm, mockFitAddon, fitAddon } = vi.hoisted(() => {
     loadAddon: vi.fn(),
     open: vi.fn(),
     dispose: vi.fn(),
+    // options 真实 xterm 实例恒有（36-B 字号热更 effect 读写 options.fontSize）
+    options: { fontSize: 13 } as { fontSize?: number },
     cols: 80,
     rows: 24,
   };

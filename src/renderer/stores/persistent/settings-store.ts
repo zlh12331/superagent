@@ -16,11 +16,15 @@
 
 import {
   type ApiKeyProvider,
+  clampFontSize,
   clampZoom,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
+  DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_ZOOM,
   type SettingKey,
+  TERMINAL_SHELL_CHOICES,
+  type TerminalShellChoice,
   type ThinkingLevel,
 } from '@code-agent/shared/renderer';
 import { create } from 'zustand';
@@ -276,6 +280,21 @@ export interface AppearanceSettings {
 }
 
 /**
+ * 终端设置（36 号 B spec：交互式终端默认 shell + 字号）
+ *
+ * shell 由**主进程** TerminalService 在 spawn 时刻即时读取消费（渲染层不传
+ * shell——terminal:create 的 P0 收口保持）；fontSize 是渲染层 xterm 消费的字段。
+ * 缺失语义 = { shell: 'auto', fontSize: 13 }（13 = 此前硬编码值，升级零视觉变化）；
+ * 快照/导入的损坏字号在读侧 clampFontSize 归一（双防线，35 号 §2.3 同构）。
+ */
+export interface TerminalSettings {
+  /** 默认 shell 档位（auto = 平台默认；档位集见 shared TERMINAL_SHELL_CHOICES） */
+  readonly shell: TerminalShellChoice;
+  /** 终端字号档位（px；TERMINAL_FONT_SIZES 单一真源） */
+  readonly fontSize: number;
+}
+
+/**
  * 应用界面语言
  *
  * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
@@ -318,6 +337,8 @@ interface SettingsData {
   readonly proxy: ProxySettings;
   /** 界面缩放（35 号：主窗口整体缩放） */
   readonly appearance: AppearanceSettings;
+  /** 终端（36 号 B：默认 shell + 字号；shell 由主进程消费） */
+  readonly terminal: TerminalSettings;
 }
 
 /**
@@ -355,6 +376,8 @@ interface SettingsState extends SettingsData {
   readonly updateProxy: (patch: Partial<ProxySettings>) => void;
   /** 更新界面缩放（写穿透 SQLite；应用由 AppShell useZoomEffect 单点收敛） */
   readonly updateAppearance: (patch: Partial<AppearanceSettings>) => void;
+  /** 更新终端设置（写穿透 SQLite；shell 主进程 spawn 时消费，fontSize xterm 消费） */
+  readonly updateTerminal: (patch: Partial<TerminalSettings>) => void;
   /**
    * 应用「主进程主动变更的设置」（托盘菜单等）
    *
@@ -510,6 +533,10 @@ const DEFAULT_SETTINGS: SettingsData = {
   appearance: {
     zoom: DEFAULT_ZOOM,
   },
+  terminal: {
+    shell: 'auto',
+    fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+  },
 };
 
 /**
@@ -615,6 +642,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     const appearance = { ...useSettingsStore.getState().appearance, ...patch };
     set({ appearance });
     persistSetting('appearance', appearance);
+  },
+  updateTerminal: (patch) => {
+    const terminal = { ...useSettingsStore.getState().terminal, ...patch };
+    set({ terminal });
+    persistSetting('terminal', terminal);
   },
   applyMainSettingChange: (key, value) => {
     applyMainChange(key, value, set);
@@ -736,5 +768,18 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
       // 钉死的归一点——导入路径绕过 superRefine，读侧归一在此收口）
       zoom: clampZoom((snapshot['appearance'] as { zoom?: unknown } | undefined)?.zoom as number),
     },
+    terminal: {
+      // 36 号 B：缺失 → 默认（auto/13）；shell 非法档位 → auto；损坏字号 →
+      // clampFontSize 最近档归一（导入路径绕过 superRefine，读侧归一收口）
+      shell: asShellChoice((snapshot['terminal'] as { shell?: unknown } | undefined)?.shell),
+      fontSize: clampFontSize(
+        (snapshot['terminal'] as { fontSize?: unknown } | undefined)?.fontSize as number,
+      ),
+    },
   });
+}
+
+/** terminal.shell 合法值收窄（快照/导入路径的损坏值 → auto） */
+function asShellChoice(value: unknown): TerminalShellChoice {
+  return TERMINAL_SHELL_CHOICES.includes(value as never) ? (value as TerminalShellChoice) : 'auto';
 }

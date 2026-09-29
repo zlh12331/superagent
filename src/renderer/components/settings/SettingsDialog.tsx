@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  TerminalSquare,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -43,6 +44,7 @@ import { MobileSection } from './sections/placeholders';
 import { ProxySection } from './sections/proxy-section';
 import { RulesMemorySection } from './sections/rules-memory-section';
 import { SkillsSection } from './sections/skills-section';
+import { TerminalSection } from './sections/terminal-section';
 import { UsageSection } from './sections/usage-section';
 import { WorkspaceSection } from './sections/workspace-section';
 
@@ -91,6 +93,8 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
       { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
+      // 终端（36 号 B）：默认 shell 选择 + 字号（交互式终端域）
+      { id: 'terminal', labelKey: 'settings.nav.terminal', icon: TerminalSquare },
     ],
   },
   {
@@ -130,6 +134,8 @@ function renderSection(section: SettingsSectionId, drawerOpen: boolean): ReactEl
       return <BrowserSection />;
     case 'workspace':
       return <WorkspaceSection />;
+    case 'terminal':
+      return <TerminalSection />;
     case 'rules-memory':
       return <RulesMemorySection />;
     case 'models':
