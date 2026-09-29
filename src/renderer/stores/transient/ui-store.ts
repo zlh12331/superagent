@@ -18,6 +18,7 @@ import { create } from 'zustand';
 export type SettingsSectionId =
   | 'usage'
   | 'general'
+  | 'proxy'
   | 'mobile'
   | 'browser'
   | 'workspace'

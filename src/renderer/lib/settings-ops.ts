@@ -17,6 +17,7 @@ import type {
   MemoryClearAllRes,
   MemoryListRes,
   MemoryStatusRes,
+  ProxyTestRes,
   SessionImportRes,
   SessionRecentTurnsRes,
   SettingsExportRes,
@@ -569,4 +570,18 @@ export function configureBrowser(params: { readonly strictSandbox: boolean }): P
     return Promise.resolve(false);
   }
   return window.api.browser.configure(params).then(() => true);
+}
+
+// ── proxy（34 号网络代理）─────────────────────────────────────
+
+/**
+ * 测试代理连接（主进程经 proxiedFetch 探测轻量端点）
+ *
+ * @returns 无桥时返回不可测（浏览器模式 UI 可用，行为无感）
+ */
+export async function testProxyConnection(): Promise<ProxyTestRes> {
+  if (!hasIpcBridge()) {
+    return { ok: false, kind: 'not-applicable' };
+  }
+  return unwrap(await window.api.proxy.test({}));
 }

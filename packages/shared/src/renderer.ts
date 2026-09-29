@@ -54,6 +54,7 @@ export type * from './schemas/invalidation';
 export { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from './schemas/invalidation';
 export type * from './schemas/memory';
 export type * from './schemas/models';
+export type * from './schemas/proxy';
 export type * from './schemas/remote';
 export type * from './schemas/search';
 export type * from './schemas/session';

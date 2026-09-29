@@ -207,3 +207,56 @@ describe('settings-store.notification 域', () => {
     expect(calls.filter((c) => c[0]?.key === 'notification')).toHaveLength(0);
   });
 });
+
+describe('settings-store.proxy 域（34 号网络代理）', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'api', {
+      value: { settings: { set: setSpy } },
+      writable: true,
+      configurable: true,
+    });
+    setSpy.mockReset();
+    setSpy.mockResolvedValue({ data: { ok: true } });
+    useSettingsStore.setState({ proxy: { mode: 'system' } });
+  });
+
+  it('updateProxy：fixed 部分合并 + 以 proxy 键写穿透', () => {
+    useSettingsStore.getState().updateProxy({ mode: 'fixed', url: 'http://127.0.0.1:7890' });
+    expect(useSettingsStore.getState().proxy).toEqual({
+      mode: 'fixed',
+      url: 'http://127.0.0.1:7890',
+    });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    const writes = calls.filter((c) => c[0]?.key === 'proxy');
+    expect(writes).toHaveLength(1);
+  });
+
+  it('模式从 fixed 切回 system → url/bypass 清除（非 fixed 域不携带代理数据）', () => {
+    useSettingsStore.getState().updateProxy({
+      mode: 'fixed',
+      url: 'http://p:1',
+      bypass: ['corp.example'],
+    });
+    useSettingsStore.getState().updateProxy({ mode: 'system' });
+    expect(useSettingsStore.getState().proxy).toEqual({ mode: 'system' });
+  });
+
+  it('快照缺 proxy 键 → 回落 system（V1/V6 渲染半）', () => {
+    useSettingsStore.getState().updateProxy({ mode: 'fixed', url: 'http://p:1' });
+    applySettingsSnapshot({});
+    expect(useSettingsStore.getState().proxy).toEqual({ mode: 'system' });
+  });
+
+  it('applyMainChange(proxy)：按域合并且不回写（导入广播回声防线，V8）', () => {
+    useSettingsStore.getState().applyMainSettingChange('proxy', {
+      mode: 'fixed',
+      url: 'http://10.0.0.1:8080',
+    });
+    expect(useSettingsStore.getState().proxy).toEqual({
+      mode: 'fixed',
+      url: 'http://10.0.0.1:8080',
+    });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    expect(calls.filter((c) => c[0]?.key === 'proxy')).toHaveLength(0);
+  });
+});

@@ -17,6 +17,7 @@ import {
   FolderTree,
   Globe,
   Info,
+  Network,
   Plug,
   Server as ServerIcon,
   Settings as SettingsIcon,
@@ -39,6 +40,7 @@ import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
 import { ModelsSection } from './sections/models-section';
 import { MobileSection } from './sections/placeholders';
+import { ProxySection } from './sections/proxy-section';
 import { RulesMemorySection } from './sections/rules-memory-section';
 import { SkillsSection } from './sections/skills-section';
 import { UsageSection } from './sections/usage-section';
@@ -75,6 +77,8 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
       { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
+      // 网络代理（34 号）：运行环境域——代理/直连模式 + 测试连接
+      { id: 'proxy', labelKey: 'settings.nav.proxy', icon: Network },
       { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
     ],
   },
@@ -118,6 +122,8 @@ function renderSection(section: SettingsSectionId, drawerOpen: boolean): ReactEl
       return <UsageSection />;
     case 'general':
       return <GeneralSection drawerOpen={drawerOpen} />;
+    case 'proxy':
+      return <ProxySection />;
     case 'mobile':
       return <MobileSection />;
     case 'browser':

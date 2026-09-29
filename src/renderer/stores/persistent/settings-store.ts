@@ -243,6 +243,23 @@ export interface NotificationSettings {
 }
 
 /**
+ * 网络代理设置（34 号 spec：Node/Chromium 双栈出口的单一真源）
+ *
+ * 三模式（D4）：system=跟随系统（默认，V1 零行为变化）/ direct=强制直连 /
+ * fixed=自定义代理。url 仅 fixed 时有效（http(s)，可内嵌凭据——日志侧已由
+ * 主进程脱敏）；bypass 是主机后缀列表（localhost 家族主进程恒绕过，无需配置）。
+ * 缺失/损坏语义 = system（fail-open 向既有行为）。
+ */
+export interface ProxySettings {
+  /** 代理模式 */
+  readonly mode: 'system' | 'direct' | 'fixed';
+  /** 代理地址（仅 mode=fixed；如 http://127.0.0.1:7890） */
+  readonly url?: string;
+  /** 不走代理的主机后缀（仅 mode=fixed；如 ['corp.example']） */
+  readonly bypass?: readonly string[];
+}
+
+/**
  * 应用界面语言
  *
  * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
@@ -281,6 +298,8 @@ interface SettingsData {
   readonly window: WindowSettings;
   /** 系统通知（回合结束后台提醒门控） */
   readonly notification: NotificationSettings;
+  /** 网络代理（34 号：双栈出口单一真源） */
+  readonly proxy: ProxySettings;
 }
 
 /**
@@ -314,6 +333,8 @@ interface SettingsState extends SettingsData {
   readonly setWindow: (patch: Partial<WindowSettings>) => void;
   /** 更新系统通知设置（写穿透 SQLite；主进程发送通知前即时读取） */
   readonly updateNotification: (patch: Partial<NotificationSettings>) => void;
+  /** 更新网络代理设置（写穿透 SQLite；主进程 settings:set 收口即时应用——V5） */
+  readonly updateProxy: (patch: Partial<ProxySettings>) => void;
   /**
    * 应用「主进程主动变更的设置」（托盘菜单等）
    *
@@ -462,6 +483,9 @@ const DEFAULT_SETTINGS: SettingsData = {
     onTurnFinished: true,
     onTurnFailed: true,
   },
+  proxy: {
+    mode: 'system',
+  },
 };
 
 /**
@@ -552,6 +576,16 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     const notification = { ...useSettingsStore.getState().notification, ...patch };
     set({ notification });
     persistSetting('notification', notification);
+  },
+  updateProxy: (patch) => {
+    const proxy = { ...useSettingsStore.getState().proxy, ...patch };
+    // 模式从 fixed 切走时清掉残留 url/bypass（语义干净：非 fixed 域不携带代理数据）
+    if (proxy.mode !== 'fixed') {
+      delete (proxy as { url?: string; bypass?: readonly string[] }).url;
+      delete (proxy as { url?: string; bypass?: readonly string[] }).bypass;
+    }
+    set({ proxy });
+    persistSetting('proxy', proxy);
   },
   applyMainSettingChange: (key, value) => {
     applyMainChange(key, value, set);
@@ -663,6 +697,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     notification: {
       ...DEFAULT_SETTINGS.notification,
       ...((snapshot['notification'] as Partial<NotificationSettings> | undefined) ?? {}),
+    },
+    proxy: {
+      ...DEFAULT_SETTINGS.proxy,
+      ...((snapshot['proxy'] as Partial<ProxySettings> | undefined) ?? {}),
     },
   });
 }
