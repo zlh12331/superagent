@@ -16,7 +16,7 @@
 
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { InferHandlers, IPC_DEFINITIONS } from '@code-agent/shared/main';
+import { type InferHandlers, type IPC_DEFINITIONS, SETTING_KEYS } from '@code-agent/shared/main';
 import { app, dialog } from 'electron';
 
 import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider';
@@ -31,7 +31,7 @@ import {
   setSecret,
 } from '../infra/storage/keychain';
 import { applySettingsImport, buildSettingsExportFile } from '../infra/storage/settings-io';
-import { readAllSettings, writeSetting } from '../infra/storage/settings-pref';
+import { deleteSettings, readAllSettings, writeSetting } from '../infra/storage/settings-pref';
 import { readTelemetryLevelSync, writeTelemetryLevel } from '../infra/storage/telemetry-pref';
 import { broadcastSettingChanged } from '../main-events';
 import { readJsonImportFile } from '../utils/json-file';
@@ -121,6 +121,20 @@ export function createSettingsHandlers(params: {
         broadcastSettingChanged(key, value);
       }
       return { imported: outcome.imported, skipped: outcome.skipped };
+    },
+
+    // 恢复所有设置为默认（2026-09-29）：删除 SETTING_KEYS 全部键——app_settings
+    // 回到新用户空表状态，缺失即默认（渲染层 applySettingsSnapshot({}) 回落
+    // DEFAULT_SETTINGS；主进程各 readSetting 消费方均有 undefined→默认兜底，
+    // 见 readCloseAction / isAutoCheckEnabled / syncTitleBarOverlayFromTheme）。
+    // 默认值真源保持在渲染层 settings-store，主进程零默认值知识。
+    // 不影响：keychain 凭据、会话历史、MCP/IM 渠道配置、OS 登录项（开机自启）。
+    resetAll: async () => {
+      deleteSettings(SETTING_KEYS);
+      // 窗口控件色回落默认主题：键已删，sync 内部对非合法值回落 dark
+      syncTitleBarOverlayFromTheme(undefined);
+      logger.info({}, '设置已全部恢复默认（app_settings 设置键已清空）');
+      return { settings: {} };
     },
 
     // 查询 API Key 配置状态：仅返回布尔（P0 安全修复）

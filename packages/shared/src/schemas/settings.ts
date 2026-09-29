@@ -81,6 +81,25 @@ export const SettingsGetAllResSchema = z.object({
   settings: z.record(z.string(), z.unknown()),
 });
 
+/** settings:resetAll 入参（无入参） */
+export const SettingsResetAllReqSchema = z.object({});
+
+/**
+ * settings:resetAll 响应
+ *
+ * settings 恒为空对象：重置的实现语义是「删除 SETTING_KEYS 全部键」——
+ * app_settings 回到新用户空表状态，缺失即默认（渲染层 applySettingsSnapshot({})
+ * 全量回落 DEFAULT_SETTINGS；主进程各 readSetting 消费方均有 undefined→默认兜底）。
+ * 不影响：keychain 凭据、会话历史、MCP/IM 渠道配置、OS 登录项（开机自启）。
+ */
+export interface SettingsResetAllRes {
+  readonly settings: Record<string, unknown>;
+}
+
+export const SettingsResetAllResSchema = z.object({
+  settings: z.record(z.string(), z.unknown()),
+});
+
 /**
  * settings:set 可写键白名单（P0 收口）
  *

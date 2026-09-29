@@ -250,6 +250,9 @@ import {
   SettingsGetAllReqSchema,
   SettingsGetAllResSchema,
   SettingsImportResSchema,
+  SettingsResetAllReqSchema,
+  type SettingsResetAllRes,
+  SettingsResetAllResSchema,
   SettingsSetReqSchema,
   SettingsSetResSchema,
   UpdateRuntimeModelReqSchema,
@@ -794,6 +797,12 @@ export const IPC_DEFINITIONS = {
       SettingsGetAllReqSchema,
       {} as { settings: Record<string, unknown> },
       SettingsGetAllResSchema,
+    ),
+    resetAll: withSchema(
+      IPC_META.settings.resetAll,
+      SettingsResetAllReqSchema,
+      {} as SettingsResetAllRes,
+      SettingsResetAllResSchema,
     ),
     set: withSchema(
       IPC_META.settings.set,

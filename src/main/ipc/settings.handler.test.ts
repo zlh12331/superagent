@@ -10,7 +10,7 @@
 //   依赖 settings-pref（文件存储外部依赖）——白名单语义经 handler 全链验证
 // ──────────────────────────────────────────────────────────────
 
-import { ErrorCode, ListRuntimeModelsResSchema } from '@code-agent/shared/main';
+import { ErrorCode, ListRuntimeModelsResSchema, SETTING_KEYS } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSettingsHandlers } from './settings.handler';
 
@@ -62,6 +62,7 @@ const mocks = vi.hoisted(() => ({
   setSecret: vi.fn(async () => {}),
   deleteSecret: vi.fn(async () => {}),
   isEncryptionAvailable: vi.fn(() => true),
+  deleteSettings: vi.fn(),
   readTelemetryLevelSync: vi.fn(() => 'off'),
   writeTelemetryLevel: vi.fn(async () => {}),
   readApprovalModeSync: vi.fn(() => 'auto'),
@@ -101,6 +102,7 @@ vi.mock('../infra/storage/settings-pref', () => ({
   readAllSettings: mocks.readAllSettings,
   writeSetting: mocks.writeSetting,
   writeSettings: mocks.writeSettings,
+  deleteSettings: mocks.deleteSettings,
 }));
 
 vi.mock('../infra/ai/llm-client/ai-provider', () => ({
@@ -451,5 +453,12 @@ describe('settings.handler 导出/导入（keychain 凭据除外）', () => {
       name: 'AppError',
       code: ErrorCode.INVALID_INPUT,
     });
+  });
+
+  it('resetAll：按 SETTING_KEYS 批量删除并返回空快照（恢复默认）', async () => {
+    const res = await handlers.resetAll({}, EMPTY_CTX);
+    expect(mocks.deleteSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteSettings.mock.calls[0]?.[0]).toEqual([...SETTING_KEYS]);
+    expect(res).toEqual({ settings: {} });
   });
 });

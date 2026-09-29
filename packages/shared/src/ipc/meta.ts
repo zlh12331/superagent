@@ -145,6 +145,8 @@ export const IPC_META = {
     // 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外）
     exportSettings: request('settings:export'),
     importSettings: request('settings:import'),
+    // 恢复所有设置为默认（删除 SETTING_KEYS 全部键，app_settings 回到空表）
+    resetAll: request('settings:resetAll'),
     // 设置变更事件（主进程主动写入某域后推送——托盘菜单改关窗行为，设置页据此更新 store）
     subscribeChanged: event('settings:event:changed'),
   },

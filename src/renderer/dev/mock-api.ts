@@ -865,6 +865,11 @@ function createMockApi(): IpcApi {
           settings: raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>),
         });
       },
+      // 恢复默认：清空 mock-settings（与真实语义一致——缺失即默认）
+      resetAll: async () => {
+        localStorage.removeItem('mock-settings');
+        return ipcOk({ settings: {} });
+      },
       set: async (input: Req<IpcApi['settings']['set']>) => {
         const raw = localStorage.getItem('mock-settings');
         const cur: Record<string, unknown> =
