@@ -19,10 +19,10 @@
 // 拆分记录：宽度计算纯函数 → layout-utils；resizer 交互 → hooks/use-resizable-panels
 // ──────────────────────────────
 
+import { DEFAULT_ZOOM, stepZoom } from '@code-agent/shared/renderer';
 import { MotionConfig } from 'motion/react';
 import { lazy, type ReactElement, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-
 import { AskDialog } from '@/components/agent/ask-dialog';
 import { DialogHost } from '@/components/common/DialogHost';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -41,6 +41,7 @@ import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useUpdateBridge } from '@/hooks/use-update-bridge';
 import { useActiveWorkingDir } from '@/hooks/use-working-dir';
+import { useZoomEffect } from '@/hooks/use-zoom-effect';
 import { useTranslation } from '@/i18n/use-translation';
 import { DRAFT_SESSION_ID, ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -233,7 +234,23 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         navigate('/');
       }
     },
+    // 界面缩放（35 号：Ctrl+=/Ctrl+-/Ctrl+0，固定键；应用由 useZoomEffect 单点收敛，
+    // 此处只改 store——单真源，与设置页 Select 同一出口）
+    onZoomIn: () => {
+      const { appearance, updateAppearance } = useSettingsStore.getState();
+      updateAppearance({ zoom: stepZoom(appearance.zoom, 1) });
+    },
+    onZoomOut: () => {
+      const { appearance, updateAppearance } = useSettingsStore.getState();
+      updateAppearance({ zoom: stepZoom(appearance.zoom, -1) });
+    },
+    onZoomReset: () => {
+      useSettingsStore.getState().updateAppearance({ zoom: DEFAULT_ZOOM });
+    },
   });
+
+  // 35 号：缩放应用单点（订阅 store.appearance.zoom——五入口构造性覆盖）
+  useZoomEffect();
 
   // 面板宽度 + 分隔线交互（拖拽 / 键盘 / CSS 变量同步），实现见 use-resizable-panels
   const { sidebarWidth, rightPanelWidth, draggingSide, onResizerMouseDown, onResizerKeyDown } =

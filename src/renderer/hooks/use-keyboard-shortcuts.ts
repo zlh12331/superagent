@@ -35,6 +35,12 @@ interface ShortcutHandlers {
   readonly onOpenTerminal?: () => void;
   /** 返回上一视图（Alt+←，对齐参考项目 backBtn 快捷键） */
   readonly onBack?: () => void;
+  /** 界面放大（Ctrl/Cmd + =，固定键；35 号） */
+  readonly onZoomIn?: () => void;
+  /** 界面缩小（Ctrl/Cmd + -，固定键；35 号） */
+  readonly onZoomOut?: () => void;
+  /** 界面缩放重置 100%（Ctrl/Cmd + 0，固定键；35 号） */
+  readonly onZoomReset?: () => void;
 }
 
 interface ParsedShortcut {
@@ -177,4 +183,17 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
     HOTKEY_OPTIONS,
     [],
   );
+
+  // 界面缩放（35 号：Ctrl/Cmd + = / - / 0，固定键区）
+  // v5 按 event.code 匹配（实测源码归一化剥 key/digit/numpad 前缀）：
+  // '=' 物理键 code = 'Equal'（+ 与 = 同键，Shift 变体同绑）；
+  // '-' code = 'Minus'；'0' 写 Digit0 或 0 均可（归一后同为 '0'，用裸 0 更直观）。
+  useHotkeys(
+    'ctrl+Equal,ctrl+shift+Equal,meta+Equal,meta+shift+Equal',
+    () => handlersRef.current.onZoomIn?.(),
+    HOTKEY_OPTIONS,
+    [],
+  );
+  useHotkeys('ctrl+Minus,meta+Minus', () => handlersRef.current.onZoomOut?.(), HOTKEY_OPTIONS, []);
+  useHotkeys('ctrl+0,meta+0', () => handlersRef.current.onZoomReset?.(), HOTKEY_OPTIONS, []);
 }

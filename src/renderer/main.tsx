@@ -29,7 +29,14 @@ import { bootstrapSettings } from '@/lib/settings-bootstrap';
 // 在 React 渲染前同步应用初始主题，消除首屏闪烁（FOUC 防护）
 // 必须在 createRoot(...).render() 之前调用
 import { applyInitialTheme } from '@/lib/theme-init';
-import { applySettingsSnapshot, flushPendingSettings } from '@/stores/persistent/settings-store';
+// 35 号：首帧前应用缩放（CP2 路1 修复——effect 在首帧 commit 后才跑且生效还需
+// 异步 IPC，非 100% 用户会先见 100% 再跳变；theme 同款「render 前应用」先例）
+import { applyZoom } from '@/lib/zoom';
+import {
+  applySettingsSnapshot,
+  flushPendingSettings,
+  useSettingsStore,
+} from '@/stores/persistent/settings-store';
 
 // 2026-09-08 可靠性修复：退出前等待在途设置写入落库
 // （settings-store 写穿透是 fire-and-forget，改设置后立即关窗会丢最后一次变更）
@@ -40,6 +47,9 @@ window.addEventListener('pagehide', () => {
 const { theme, snapshot } = await bootstrapSettings();
 applySettingsSnapshot(snapshot);
 applyInitialTheme(theme);
+// 35 号：首帧前应用缩放（render 前调用）——从 store 读（applySettingsSnapshot
+// 已把快照值归一写入），applyZoom 内部再 clamp 兜底
+await applyZoom(useSettingsStore.getState().appearance.zoom);
 // P2 修复：语言真源在 SQLite（settings-store），但 i18next LanguageDetector
 // 初始化只读 localStorage——render 前把快照语言镜像进 detector 键，
 // 保证首帧即为用户选择的语言（无 SQLite 时回落 detector 默认行为）
