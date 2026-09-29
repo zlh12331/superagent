@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner';
 import { useErrorMessage } from '@/i18n/use-translation';
 import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { clearAllSessions } from '@/lib/settings-ops';
 
 import { useMutationOnError } from './use-mutation-error';
 
@@ -264,6 +265,44 @@ export function useDeleteSession() {
       // 旧缓存渲染出已删除的内容（debt.md#d2 关联的缓存生命周期缺口）。
       // gcTime 5min 只回收「无观察者」的缓存，不解决「数据已不存在」。
       void queryClient.removeQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(id) });
+    },
+  });
+}
+
+/**
+ * 清空全部会话 mutation hook（36-D：破坏性批量操作）
+ *
+ * 调用 session:clearAll IPC。成功后**彻底移除** 'session' 前缀下全部缓存
+ * （详情/回合历史/最近目录——清空场景逐 id removeQueries 不现实；recent-dirs
+ * 被一并移除属有意，观察者挂载时自动重拉）；列表 ['sessions'] 由 onSettled
+ * invalidate 重拉对齐服务端空态。激活会话的清理由调用方处理（clearActiveSession
+ * + 导航回首页，对齐 Sidebar 删除激活会话的回落行为）。
+ *
+ * @example
+ * ```tsx
+ * const { mutateAsync: clearAll } = useClearAllSessions();
+ * await clearAll(); // confirm 后调用
+ * ```
+ */
+export function useClearAllSessions() {
+  const queryClient = useQueryClient();
+  const { getErrorMessage } = useErrorMessage();
+
+  return useMutation({
+    mutationFn: async () => {
+      return clearAllSessions();
+    },
+    onSuccess: () => {
+      // 详情/回合/最近目录缓存指向已删除数据：removeQueries 而非 invalidate
+      // （同 useDeleteSession 的 onSuccess 语义，放大到全量前缀）
+      void queryClient.removeQueries({ queryKey: ['session'] });
+    },
+    onError: (error) => {
+      toast.error(unwrapErrorMessage(error as Error, getErrorMessage));
+    },
+    // 最终一致：无论成败都重拉列表（校验服务端真实状态）
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     },
   });
 }

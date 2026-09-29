@@ -1,8 +1,11 @@
 // src/renderer/components/settings/sections/data-section.test.tsx
 // DataSection 测试（正向 / 边界 / 异常）：会话导出/导入 + 设置导出/导入 +
-// 打开数据目录，含 IPC、用户取消与确认分支
+// 打开数据目录 + 清空全部会话（36-D），含 IPC、用户取消与确认分支
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
@@ -19,6 +22,28 @@ import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { DataSection } from './data-section';
 
 const t = i18n.t.bind(i18n);
+
+/**
+ * DataSection 使用 useNavigate（36-D 清空后回首页）与 useClearAllSessions
+ * （TanStack Query mutation）：Router + QueryClient 双上下文内渲染
+ */
+function renderSection(): void {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  function Wrapper({ children }: { readonly children: ReactNode }): ReactNode {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+  render(
+    <Wrapper>
+      <DataSection />
+    </Wrapper>,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -39,7 +64,7 @@ describe('DataSection', () => {
         exportAll: vi.fn().mockResolvedValue({ data: { saved: true, path: '/tmp/a.zip' } }),
       },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
 
@@ -54,7 +79,7 @@ describe('DataSection', () => {
     window.api = {
       session: { exportAll: vi.fn().mockResolvedValue({ data: { saved: false } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
 
@@ -67,7 +92,7 @@ describe('DataSection', () => {
     window.api = {
       session: { exportAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
 
@@ -78,7 +103,7 @@ describe('DataSection', () => {
     window.api = {
       app: { openDataDir: vi.fn().mockResolvedValue({ data: { ok: true } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.openDataDir') }));
 
@@ -89,7 +114,7 @@ describe('DataSection', () => {
     window.api = {
       app: { openDataDir: vi.fn().mockResolvedValue({ data: { ok: false } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.openDataDir') }));
 
@@ -98,7 +123,7 @@ describe('DataSection', () => {
 
   it('边界：浏览器模式（无桥）→ 不调 IPC、不抛错、无提示', async () => {
     (window as unknown as { api: undefined }).api = undefined;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
     await userEvent.click(screen.getByRole('button', { name: t('settings.openDataDir') }));
@@ -112,7 +137,7 @@ describe('DataSection', () => {
       window.api = {
         session: { importAll: vi.fn().mockResolvedValue({ data: { imported: 2, skipped: 1 } }) },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.importSessions'), true);
 
@@ -126,7 +151,7 @@ describe('DataSection', () => {
 
     it('边界：确认弹窗取消 → 不调 IPC', async () => {
       window.api = { session: { importAll: vi.fn() } } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.importSessions'), false);
 
@@ -137,7 +162,7 @@ describe('DataSection', () => {
       window.api = {
         session: { importAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.importSessions'), true);
 
@@ -154,7 +179,7 @@ describe('DataSection', () => {
           exportSettings: vi.fn().mockResolvedValue({ data: { saved: true, path: '/a.json' } }),
         },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await userEvent.click(screen.getByRole('button', { name: t('settings.exportSettings') }));
 
@@ -171,7 +196,7 @@ describe('DataSection', () => {
           exportSettings: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }),
         },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await userEvent.click(screen.getByRole('button', { name: t('settings.exportSettings') }));
 
@@ -186,7 +211,7 @@ describe('DataSection', () => {
           importSettings: vi.fn().mockResolvedValue({ data: { imported: 3, skipped: 0 } }),
         },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.importSettings'), true);
 
@@ -200,7 +225,7 @@ describe('DataSection', () => {
 
     it('边界：导入设置确认取消 → 不调 IPC', async () => {
       window.api = { settings: { importSettings: vi.fn() } } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.importSettings'), false);
 
@@ -213,7 +238,7 @@ describe('DataSection', () => {
           importSettings: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }),
         },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.importSettings'), true);
 
@@ -231,7 +256,7 @@ describe('DataSection', () => {
       window.api = {
         settings: { resetAll: vi.fn().mockResolvedValue({ data: { settings: {} } }) },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.resetAllSettings'), true);
 
@@ -247,7 +272,7 @@ describe('DataSection', () => {
 
     it('边界：恢复默认确认取消 → 不调 IPC', async () => {
       window.api = { settings: { resetAll: vi.fn() } } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.resetAllSettings'), false);
 
@@ -258,7 +283,7 @@ describe('DataSection', () => {
       window.api = {
         settings: { resetAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await clickWithConfirm(t('settings.resetAllSettings'), true);
 
@@ -277,7 +302,7 @@ describe('DataSection', () => {
         .fn()
         .mockResolvedValue({ data: { path: '/tmp/app-updater', bytes: 0, fileCount: 0 } });
       window.api = { update: { getCacheInfo, clearCache } } as never;
-      render(<DataSection />);
+      renderSection();
 
       // 占用文案（1.0 MB / 2 个文件）
       await waitFor(() => expect(screen.getByText(/1\.0 MB/)).toBeTruthy());
@@ -301,10 +326,59 @@ describe('DataSection', () => {
           clearCache: vi.fn(),
         },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await waitFor(() => expect(window.api.update.getCacheInfo).toHaveBeenCalled());
       expect(screen.queryByRole('button', { name: t('settings.clearUpdateCache') })).toBeNull();
+    });
+  });
+
+  // ── 清空全部会话（36-D） ──────────────────────────────────────
+
+  describe('clearAllSessions（36-D）', () => {
+    it('正向：confirm 放行 → IPC 调用 + 成功提示含删除数', async () => {
+      window.api = {
+        session: {
+          clearAll: vi.fn().mockResolvedValue({ data: { deleted: 7 } }),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.clearAllSessions'), true);
+
+      await waitFor(() => expect(window.api.session.clearAll).toHaveBeenCalledWith({}));
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+          t('settings.clearAllSessionsDone', { count: '7' }),
+        ),
+      );
+    });
+
+    it('边界：确认拒绝 → 不发起 IPC', async () => {
+      window.api = {
+        session: {
+          clearAll: vi.fn(),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.clearAllSessions'), false);
+
+      expect(window.api.session.clearAll).not.toHaveBeenCalled();
+      expect(mockToastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('异常：运行中回合被拒（SESSION_IN_USE）→ 错误提示', async () => {
+      window.api = {
+        session: {
+          clearAll: vi.fn().mockRejectedValue(new Error('[SESSION_IN_USE] 有回合正在运行')),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.clearAllSessions'), true);
+
+      await waitFor(() => expect(mockToastError).toHaveBeenCalledTimes(1));
     });
   });
 });

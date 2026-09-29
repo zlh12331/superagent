@@ -425,6 +425,18 @@ export async function importAllSessions(): Promise<SessionImportRes> {
 }
 
 /**
+ * 清空全部会话（36-D：破坏性批量操作；主进程拒绝运行中回合 SESSION_IN_USE）
+ *
+ * @returns 无桥时返回零删除（调用方按取消分支静默处理）
+ */
+export async function clearAllSessions(): Promise<{ deleted: number }> {
+  if (!hasIpcBridge()) {
+    return { deleted: 0 };
+  }
+  return unwrap(await window.api.session.clearAll({}));
+}
+
+/**
  * 导出设置（app_settings 全表 JSON；keychain 凭据除外）
  *
  * @returns 无桥时视为用户取消（saved: false）
