@@ -111,6 +111,28 @@ export function deleteSetting(key: string): void {
   getDb().delete(appSettings).where(eq(appSettings.key, key)).run();
 }
 
+/**
+ * 批量删除设置（单事务原子提交）
+ *
+ * 恢复默认设置（settings:resetAll）使用：按 SETTING_KEYS 白名单传入键清单，
+ * 白名单外的键（如未来新增的主进程内部配置组）不受影响。幂等：删除不存在的
+ * 键无副作用。键缺失即默认——主进程各 readSetting 消费方均有 undefined→默认
+ * 兜底（readCloseAction/isAutoCheckEnabled 等，见各自注释）。
+ */
+export function deleteSettings(keys: ReadonlyArray<string>): void {
+  if (keys.length === 0) {
+    return;
+  }
+  for (const key of keys) {
+    assertKey(key);
+  }
+  getDb().transaction((tx) => {
+    for (const key of keys) {
+      tx.delete(appSettings).where(eq(appSettings.key, key)).run();
+    }
+  });
+}
+
 /** key 合法性校验 */
 function assertKey(key: string): void {
   if (!KEY_PATTERN.test(key)) {
