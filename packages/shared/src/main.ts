@@ -15,6 +15,8 @@ export * from './constants/defaults';
 // 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';
+// 界面缩放（35 号：档位集 + 归一/步进/overlay 联动纯函数，主进程渲染层共用）
+export * from './constants/zoom';
 export type { IpcChannel } from './ipc/channels';
 // IPC 通道常量（值，零 zod 依赖，主进程 handler 注册用）
 export { IPC_CHANNELS } from './ipc/channels';

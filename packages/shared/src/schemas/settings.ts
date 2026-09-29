@@ -14,6 +14,8 @@
 
 import { z } from 'zod';
 
+import { ZOOM_LEVELS } from '../constants/zoom';
+
 /**
  * API Key 提供商标识
  *
@@ -132,6 +134,9 @@ export const SETTING_KEYS = [
   // 网络代理（settings.proxy：{mode, url?, bypass?}；主进程 proxy-applier 四路径
   // 收口应用——启动/settings:set/import/resetAll；缺失/损坏视为 system 直通）
   'proxy',
+  // 界面缩放（settings.appearance：{zoom}；主进程 window:applyZoom 应用
+  // webContents.setZoomFactor + Windows overlay 联动；缺失视为 1，损坏归最近档位）
+  'appearance',
   // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
   'im.allowedGroups',
 ] as const;
@@ -223,6 +228,30 @@ export const SettingsSetReqSchema = z
             'proxy.mode=fixed 时 url 必须是合法 http(s) 代理地址（如 http://127.0.0.1:7890）',
         });
       }
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 35 号：appearance 值级门禁——zoom 必须是合法档位（ZOOM_LEVELS 单一真源）。
+    // settings:set 通道防御；导入路径不过本 schema，靠渲染层读侧 clampZoom 归一
+    // （双防线，35 号 spec §2.3）
+    if (cfg.key !== 'appearance') {
+      return;
+    }
+    const value = cfg.value as { zoom?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'appearance 配置必须是非空对象（{zoom}）',
+      });
+      return;
+    }
+    if (!ZOOM_LEVELS.includes(value.zoom as number)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `appearance.zoom 必须是合法缩放档位（${ZOOM_LEVELS.join('/')}）`,
+      });
     }
   });
 

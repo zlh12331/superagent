@@ -5,10 +5,11 @@
 // 且持久化重启仍生效；lsp.serverCommands 值曾可为任意路径形态的可执行文件。
 
 import { describe, expect, it } from 'vitest';
+import { ZOOM_LEVELS } from '../constants/zoom';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';
 
 describe('SETTING_KEYS 白名单', () => {
-  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy 开关）', () => {
+  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy/appearance 开关）', () => {
     expect(SETTING_KEYS).toEqual([
       'theme',
       'language',
@@ -24,15 +25,16 @@ describe('SETTING_KEYS 白名单', () => {
       'memory',
       'notification',
       'proxy',
+      'appearance',
       'im.allowedGroups',
     ]);
   });
 });
 
 describe('SettingsSetReqSchema · key 白名单（P0）', () => {
-  it('白名单内键通过（proxy 例外：值级门禁要求合法 mode，传 system 形态）', () => {
+  it('白名单内键通过（proxy/appearance 例外：值级门禁要求合法形态）', () => {
     for (const key of SETTING_KEYS) {
-      const value = key === 'proxy' ? { mode: 'system' } : {};
+      const value = key === 'proxy' ? { mode: 'system' } : key === 'appearance' ? { zoom: 1 } : {};
       expect(SettingsSetReqSchema.safeParse({ key, value }).success).toBe(true);
     }
   });
@@ -72,6 +74,22 @@ describe('SettingsSetReqSchema · proxy 值级门禁（34 号 V9）', () => {
       SettingsSetReqSchema.safeParse({ key: 'proxy', value: { mode: 'system', url: 'junk' } })
         .success,
     ).toBe(true);
+  });
+});
+
+describe('SettingsSetReqSchema · appearance 值级门禁（35 号）', () => {
+  it('全部合法档位通过', () => {
+    for (const zoom of ZOOM_LEVELS) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'appearance', value: { zoom } }).success).toBe(
+        true,
+      );
+    }
+  });
+
+  it('非法档位/非对象/缺 zoom → 拒绝', () => {
+    for (const value of [{ zoom: 0.93 }, { zoom: 3 }, {}, null, '1']) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'appearance', value }).success).toBe(false);
+    }
   });
 });
 

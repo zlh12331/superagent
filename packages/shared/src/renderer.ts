@@ -24,6 +24,14 @@ export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';
 export { IPC_PROTOCOL_VERSION } from './constants/protocol';
+// 界面缩放（35 号：档位集 + 纯函数，UI Select 与快捷键消费）
+export {
+  clampZoom,
+  DEFAULT_ZOOM,
+  overlayHeightFor,
+  stepZoom,
+  ZOOM_LEVELS,
+} from './constants/zoom';
 // IPC 类型契约（纯类型，自动推导）
 export type { IpcApi } from './ipc/api';
 export type { IpcChannel } from './ipc/channels';
