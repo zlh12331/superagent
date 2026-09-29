@@ -51,18 +51,23 @@ packageExtensions:
 
 # ── 依赖覆盖（pnpm 11: overrides）─────────────────────────────────────────────
 overrides:
-  ip-address: 10.3.1
+  # 2026-09-29 升级：10.3.1 → 10.5.1（GHSA 两条 moderate：isLinkLocal 误判 / NAT64
+  # classifier 缺失，patched 10.5.1；传递路径 @modelcontextprotocol/sdk→express-rate-limit）
+  ip-address: 10.5.1
   # 2026-09-09 升级：4.12.34 → 4.13.7（CVE-2026-84363/84364/84365 系列 query/parseBody DoS，patched 4.13.5）
   'hono@>=4.0.0': 4.13.7
   '@hono/node-server': 1.19.15
   postcss: 8.5.23
-  # 2026-09-04 升级：3.1.5 → 3.1.6（CVE-2026-75899/75931/75975 系列 SSRF 修复版）
-  # GHSA-fph4-wmhf-6fwf / GHSA-5jgf-p345-68v8 / GHSA-f65p-4m7j-42xc / GHSA-jqff-g426-hqxp
-  fast-uri: 3.1.6
+  # 2026-09-29 升级：3.1.6 → 3.1.7（GHSA 两条 high：authority injection / host
+  # confusion，patched 3.1.7；传递路径 ajv←MCP SDK / commitlint / cdxgen / electron-builder）
+  fast-uri: 3.1.7
   nanoid: 3.3.18
   tar: 7.5.21
-  'undici@>=7.0.0': 7.29.0
-  'undici@<7': 6.28.0
+  # 2026-09-29 升级：7.29.0 → 7.29.1、6.28.0 → 6.28.1（GHSA 两条 moderate DoS，
+  # 双 major 线分别 patch；7.x 线 = AI SDK provider-utils 生产 fetch，6.x 线 =
+  # node-gyp 构建链 devDependencies）
+  'undici@>=7.0.0': 7.29.1
+  'undici@<7': 6.28.1
   # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
   'js-yaml@>=4.0.0': 4.3.2
   # Dependabot GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895：DoS，仅命中 typedoc 工具链的 4.x 线；1.x/2.x 合法共存不动
