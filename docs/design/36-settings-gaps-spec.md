@@ -1,6 +1,7 @@
 # 36 · 设置面缺口补全（审批等待通知 / 终端设置 / 快捷键冲突与重置 / 清空全部会话）
 
-- **状态**：实施中
+- **状态**：**已实施**（2026-09-30；9b0d191e → e2228749 共 10 提交，V 矩阵逐条核对见
+  §3.2；门禁实录见 §3.3）
 - **判级**：四个子功能均为「全链路」形态（存储/契约 + 主进程或纯渲染层消费 + UI），合入
   单 spec 管理（同一批设置面缺口、同一轮四问判级；拆四份会碎片化复盘）
 - **来源**：2026-09-30 设置面盘点（对照 5 组 13 分区 + 16 个 SETTING_KEYS 现状）确定的
@@ -277,22 +278,74 @@
 
 ## 2 提交链（每提交独立可编译可回退）
 
-1. `docs(design)` 本 spec 初稿（需求 + 设计节）；
-2. `feat(main)` 36-A 审批等待通知：域字段 + readNotificationSettings 扩展 +
-   mountApprovalNotifications + 挂载 + 主进程测试；
-3. `feat(ui)` 36-A 设置行 + i18n 双语 + 组件/store 测试；
-4. `feat(shared)` 36-B 终端设置地基：terminal-shell 常量 + SETTING_KEYS 登记 + 门禁 +
-   契约测试同步；
-5. `feat(main)` 36-B 默认 shell 接管：resolveShellChoice + defaultShell 即时读 + 测试；
-6. `feat(ui)` 36-B 终端分区 + TerminalView 字号接线 + i18n + 测试；
-7. `feat(ui)` 36-C 快捷键冲突检测：归一化/判定纯函数 + 固定键清单导出 + section 接线
-   + 测试；
-8. `feat(ui)` 36-C 恢复默认：DEFAULT_SHORTCUTS 导出 + 单键/全部重置 + i18n + 测试；
-9. `feat(ipc)` 36-D session:clearAll：错误码 + schema/meta/definitions + 服务/handler
-   + 测试；
-10. `feat(ui)` 36-D 数据区清空入口 + 缓存清理 + i18n + 测试；
-11. `docs(design)` 实施状态收尾（V 矩阵逐条核对）。
+1. `9b0d191e` `docs(design)` 本 spec 初稿（需求 + 设计节）；
+2. `7ce8e0e7` `feat(main)` 36-A 审批等待通知：域字段 + readNotificationSettings 扩展 +
+   mountApprovalNotifications + index 挂载 + 主进程测试；
+3. `c8637101` `feat(ui)` 36-A 设置行 + i18n 双语 + 组件/store 测试；
+4. `d1d4e10c` `feat(shared)` 36-B 终端设置地基：terminal-shell 常量 + SETTING_KEYS 登记 +
+   门禁 + 契约测试同步；
+5. `2e27cd94` `feat(main)` 36-B 默认 shell 接管：resolveShellChoice + defaultShell 即时读 +
+   测试；
+6. `f6f82063` `feat(ui)` 36-B 终端分区 + TerminalView 字号接线 + i18n + 测试；
+7. `4751cb2b` `feat(ui)` 36-C 快捷键冲突检测 + 恢复默认（合并为一提交：二者在
+   ShortcutsSection 重写中交织，强行拆分需人为割裂同一组件——偏离 §2 计划的两提交，
+   如实披露）；
+8. `75cf9d76` `feat(ipc)` 36-D session:clearAll：错误码 + schema/meta/definitions + 服务/
+   handler + 测试；
+9. `304f2f68` `feat(ui)` 36-D 数据区清空入口 + 缓存清理 + i18n + 测试；
+10. `e2228749` `fix(ui)` 验证期审计修复（棘轮放宽登记 + 一致性重构，见 §3.3）。
 
 ## 3 状态
 
-（实施期回填）
+### 3.1 实施期实测修正（设计节与实现的差异，如实披露）
+
+1. **36-B 字号热更形态**：设计时按「term ref 化 + 二段 effect」实现首轮通过，但
+   check:ui-consistency 的 render-ref-write 棘轮拒绝 4 处新增 ref 写入。终版改用
+   **zustand subscribe**：主 effect 内订阅 store，闭包直接持有 term/fitAddon
+   （生命周期与实例严格一致，dispose 即退订），零 ref、零重建。比设计稿更优。
+2. **36-C 固定键清单的 '+' 键缺口**：'ctrl+shift++'（e.key '+' 的 shift 变体）无法被
+   '+' 分隔的存储格式往返（normalize 得 null），录入侧本就产生损坏串——清单**不收**
+   该变体，由 store 格式约束排除（锚定测试固定 13 条）。
+3. **check-i18n 间接引用规则**：`t(SHELL_LABEL_KEYS[choice] ?? '...')` 表达式实参会
+   逃过「key 形状字面量 + 间接 t()」扫描（误报冗余）——改为先取 `const labelKey`
+   再 `t(labelKey)`（对齐脚本注释的既有约定）。
+4. **36-D 双弹陷阱**：mutateAsync 的 catch 与 mutation onError 各弹一次 toast——按
+   AGENTS.md「调用层不重复挂 onError」约定，组件侧 catch 仅吞 rejection。
+5. **测试基建**：DataSection 引入 useNavigate/useClearAllSessions 后，general-section
+   / SettingsDialog / data-section 测试需补 Router + QueryClient 上下文；SettingsDialog
+   导航 tab 断言 13→14（新增终端分区）。
+
+### 3.2 验收核对
+
+**36-A（V1-V10）**：主进程 notification.test.ts 七断言（V1 fail-open / V2 总开关 /
+V3 单开关+即时读 / V4 前台 / V8 isSupported / 部分损坏字段收窄 / onResolved 零通知）；
+V10 headless 为构造性保证（onRequested 仅在真实推送后触发，requestApproval 代码路径）；
+V5/V6/V7 store 快照回落 + applyMainChange 合并不回写断言；V9 组件 disabled 断言。
+**全过**。
+
+**36-B（V1-V10）**：shared 常量测试（平台选项表 / clampFontSize 非有限数前置拦截）+
+门禁测试（V10）；resolveShellChoice 平台矩阵（V2/V3/V4，fs 注入）+ defaultShell 读设置
+（V1 损坏 fail-open / V8 显式 command 不受影响 / 平台不适用 warn）；V5 不做 spawn
+失败静默回退（设计取舍，注释锚定）；V6/V7 store 快照 clamp + resetAll 白名单自动覆盖；
+V9 subscribe 热更（TerminalView 实测 mock options 更新）。**全过**。
+
+**36-C（V1-V8）**：归一化矩阵（V3 Meta≡Ctrl / V4 空串）+ 冲突矩阵（V1 自定义互斥 /
+V2 固定键含缩放组 / V5 exclude 自身）+ 清单锚定（V8：13 条 + labelKey 形状 + normalize
+可复现）；组件测试（V1/V2 toast 拒绝不写 store / V6 单键重置 / V7 confirm 放行与拒绝）。
+**全过**。
+
+**36-D（V1-V8）**：service 测试（V1 计数 / V3 级联 SESSION_NOT_FOUND / V7 四域广播 /
+V8 空表幂等）；handler 测试（V2/V6 SESSION_IN_USE 拒绝且服务不调用）；组件测试
+（V4/V5 confirm 放行 + IPC 入参 / 拒绝不发起 / 异常 toast 单发）。**全过**。
+
+### 3.3 门禁实录
+
+- typecheck / lint / check:static 15 项全过；knip（files/deps/binaries）零问题；
+- 全量测试链：shared 105 + main 2117 + renderer 1830 + integration 152 + scripts 364
+  = **4568 全绿**；
+- **棘轮放宽登记 3 处**（33-35 号先例同款，`--update-baseline` 显式放宽）：
+  ① `check-file-size.baseline.json` definitions.ts 1046→1055、mock-api.ts 983→991
+  （新增 clearAll 定义块 / mock）；② `check-functions.baseline.json` mock-api max
+  382→388（同因）；agent-service.ts 704 为存量超限（未触碰，不在本轮范围）；
+- 复盘双锚：用户反馈 + 诊断包日志（shell 回落 warn / 通知发送失败 warn / 清空操作
+  logger.info 均随诊断包导出）；四功能均为纯设置门控/数据操作，不进 experimental。
