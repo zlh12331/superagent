@@ -68,3 +68,4 @@ export * from './schemas/thinking';
 export * from './schemas/tool';
 export * from './schemas/update';
 export * from './schemas/whitelist';
+export * from './schemas/window';

@@ -40,6 +40,12 @@ export const IPC_META = {
     subscribeLoginItemChanged: event('app:event:loginItemChanged'),
   },
 
+  window: {
+    // 应用界面缩放（35 号：主进程遍历全部 BrowserWindow 执行 setZoomFactor +
+    // Windows titleBarOverlay.height 联动——渲染层无 webContents 句柄，单点收口）
+    applyZoom: request('window:applyZoom'),
+  },
+
   agent: {
     run: request('agent:run'),
     subscribeAsk: event('agent:event:ask'),

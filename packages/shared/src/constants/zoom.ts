@@ -16,8 +16,15 @@ export const DEFAULT_ZOOM = 1;
 
 /**
  * 任意数值归一到最近合法档位（损坏 DB 值归一——0.93 → 0.9，非整域丢弃）
+ *
+ * 非有限数（undefined/NaN/Infinity，即「缺失或彻底损坏」）→ DEFAULT_ZOOM：
+ * 缺失语义是「默认 100%」而非「钳到最小档」——NaN 比较全 false 会把结果停在
+ * 数组首项，必须前置拦截（实施期实测缺陷，35 号 spec §3.2 登记）。
  */
 export function clampZoom(value: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_ZOOM;
+  }
   let nearest = ZOOM_LEVELS[0] as number;
   let best = Number.POSITIVE_INFINITY;
   for (const level of ZOOM_LEVELS) {

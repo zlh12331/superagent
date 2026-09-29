@@ -64,6 +64,7 @@ import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
+import { createWindowHandlers } from './ipc/window.handler';
 import { broadcastLoginItemChanged, broadcastSettingChanged } from './main-events';
 import { mountTurnNotifications } from './notification';
 import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
@@ -264,6 +265,7 @@ app
         permissionService: serviceContainer.getPermissionService(),
       }),
       proxy: createProxyHandlers(),
+      window: createWindowHandlers(),
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
       memory: createMemoryHandlers({

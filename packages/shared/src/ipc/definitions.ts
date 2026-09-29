@@ -318,6 +318,7 @@ import {
   WhitelistRemoveReqSchema,
   type WhitelistRemoveRes,
 } from '../schemas/whitelist';
+import { ApplyZoomReqSchema, type ApplyZoomRes, ApplyZoomResSchema } from '../schemas/window';
 import { IPC_META, type IpcMeta } from './meta';
 
 /**
@@ -790,6 +791,15 @@ export const IPC_DEFINITIONS = {
 
   tool: {
     list: withSchema(IPC_META.tool.list, ToolListReqSchema, {} as ToolListRes, ToolListResSchema),
+  },
+
+  window: {
+    applyZoom: withSchema(
+      IPC_META.window.applyZoom,
+      ApplyZoomReqSchema,
+      {} as ApplyZoomRes,
+      ApplyZoomResSchema,
+    ),
   },
 
   proxy: {

@@ -31,6 +31,13 @@ describe('clampZoom', () => {
     expect(clampZoom(-3)).toBe(0.5);
     expect(clampZoom(99)).toBe(2);
   });
+
+  it('V1 缺失语义：非有限数（undefined/NaN/Infinity）→ 默认 1（非最小档）', () => {
+    expect(clampZoom(undefined as unknown as number)).toBe(1);
+    expect(clampZoom(Number.NaN)).toBe(1);
+    expect(clampZoom(Number.POSITIVE_INFINITY)).toBe(1);
+    expect(clampZoom('1.25' as unknown as number)).toBe(1);
+  });
 });
 
 describe('stepZoom', () => {

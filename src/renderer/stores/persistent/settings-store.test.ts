@@ -260,3 +260,44 @@ describe('settings-store.proxy 域（34 号网络代理）', () => {
     expect(calls.filter((c) => c[0]?.key === 'proxy')).toHaveLength(0);
   });
 });
+
+describe('settings-store.appearance 域（35 号界面缩放）', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'api', {
+      value: { settings: { set: setSpy } },
+      writable: true,
+      configurable: true,
+    });
+    setSpy.mockReset();
+    setSpy.mockResolvedValue({ data: { ok: true } });
+    useSettingsStore.setState({ appearance: { zoom: 1 } });
+  });
+
+  it('updateAppearance：部分合并 + 以 appearance 键写穿透', () => {
+    useSettingsStore.getState().updateAppearance({ zoom: 1.25 });
+    expect(useSettingsStore.getState().appearance).toEqual({ zoom: 1.25 });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    const writes = calls.filter((c) => c[0]?.key === 'appearance');
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.[0]).toEqual({ key: 'appearance', value: { zoom: 1.25 } });
+  });
+
+  it('V1 快照缺失 → 回落 1；V1 损坏值 → clampZoom 最近档位归一（CP2 fail-5）', () => {
+    useSettingsStore.getState().updateAppearance({ zoom: 2 });
+    applySettingsSnapshot({});
+    expect(useSettingsStore.getState().appearance).toEqual({ zoom: 1 });
+
+    applySettingsSnapshot({ appearance: { zoom: 0.93 } });
+    expect(useSettingsStore.getState().appearance).toEqual({ zoom: 0.9 });
+
+    applySettingsSnapshot({ appearance: { zoom: 'junk' } });
+    expect(useSettingsStore.getState().appearance).toEqual({ zoom: 1 });
+  });
+
+  it('V6 导入回显：applyMainChange 通用分支按域合并且不回写', () => {
+    useSettingsStore.getState().applyMainSettingChange('appearance', { zoom: 1.5 });
+    expect(useSettingsStore.getState().appearance).toEqual({ zoom: 1.5 });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    expect(calls.filter((c) => c[0]?.key === 'appearance')).toHaveLength(0);
+  });
+});

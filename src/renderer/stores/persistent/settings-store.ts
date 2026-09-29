@@ -16,8 +16,10 @@
 
 import {
   type ApiKeyProvider,
+  clampZoom,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
+  DEFAULT_ZOOM,
   type SettingKey,
   type ThinkingLevel,
 } from '@code-agent/shared/renderer';
@@ -260,6 +262,18 @@ export interface ProxySettings {
 }
 
 /**
+ * 界面缩放设置（35 号 spec：主窗口整体缩放单一真源）
+ *
+ * zoom 为合法档位（ZOOM_LEVELS，1 = 100%）；快照/导入路径的损坏值在读侧
+ * clampZoom 归一（superRefine 门禁只覆盖 settings:set 通道——双防线，35 号 §2.3）。
+ * 缺失语义 = { zoom: 1 }。应用链 = AppShell useZoomEffect 单点（订阅本域）。
+ */
+export interface AppearanceSettings {
+  /** 缩放档位（1 = 100%） */
+  readonly zoom: number;
+}
+
+/**
  * 应用界面语言
  *
  * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
@@ -300,6 +314,8 @@ interface SettingsData {
   readonly notification: NotificationSettings;
   /** 网络代理（34 号：双栈出口单一真源） */
   readonly proxy: ProxySettings;
+  /** 界面缩放（35 号：主窗口整体缩放） */
+  readonly appearance: AppearanceSettings;
 }
 
 /**
@@ -335,6 +351,8 @@ interface SettingsState extends SettingsData {
   readonly updateNotification: (patch: Partial<NotificationSettings>) => void;
   /** 更新网络代理设置（写穿透 SQLite；主进程 settings:set 收口即时应用——V5） */
   readonly updateProxy: (patch: Partial<ProxySettings>) => void;
+  /** 更新界面缩放（写穿透 SQLite；应用由 AppShell useZoomEffect 单点收敛） */
+  readonly updateAppearance: (patch: Partial<AppearanceSettings>) => void;
   /**
    * 应用「主进程主动变更的设置」（托盘菜单等）
    *
@@ -486,6 +504,9 @@ const DEFAULT_SETTINGS: SettingsData = {
   proxy: {
     mode: 'system',
   },
+  appearance: {
+    zoom: DEFAULT_ZOOM,
+  },
 };
 
 /**
@@ -586,6 +607,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     }
     set({ proxy });
     persistSetting('proxy', proxy);
+  },
+  updateAppearance: (patch) => {
+    const appearance = { ...useSettingsStore.getState().appearance, ...patch };
+    set({ appearance });
+    persistSetting('appearance', appearance);
   },
   applyMainSettingChange: (key, value) => {
     applyMainChange(key, value, set);
@@ -701,6 +727,11 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     proxy: {
       ...DEFAULT_SETTINGS.proxy,
       ...((snapshot['proxy'] as Partial<ProxySettings> | undefined) ?? {}),
+    },
+    appearance: {
+      // 35 号 V1：缺失 → 默认 1；损坏 → clampZoom 最近档位归一（CP2 fail-5
+      // 钉死的归一点——导入路径绕过 superRefine，读侧归一在此收口）
+      zoom: clampZoom((snapshot['appearance'] as { zoom?: unknown } | undefined)?.zoom as number),
     },
   });
 }

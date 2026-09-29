@@ -867,6 +867,11 @@ function createMockApi(): IpcApi {
         }),
     },
 
+    window: {
+      // 35 号：浏览器模式无 webContents，applyZoom 本地确认成功（行为无感）
+      applyZoom: async () => ipcOk({ ok: true }),
+    },
+
     settings: {
       // S1：settings 下沉 SQLite 的 mock 实现（浏览器模式持久化到 localStorage）
       getAll: async () => {
