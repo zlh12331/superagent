@@ -59,7 +59,7 @@ vi.mock('./utils/logger', () => ({
 
 import { type TurnEndEvent, type TurnEvent, TurnEventType } from '@code-agent/shared/main';
 import { readSetting } from './infra/storage/settings-pref';
-import { mountTurnNotifications } from './notification';
+import { mountApprovalNotifications, mountTurnNotifications } from './notification';
 
 type TurnReason = TurnEndEvent['reason'];
 
@@ -173,5 +173,139 @@ describe('mountTurnNotifications 通知设置门控', () => {
     emit(turnEnd('completed'));
 
     expect(mocks.notifications).toHaveLength(1);
+  });
+});
+
+/** 审批生命周期回调集合（mountApprovalNotifications 订阅缝的捕获形状） */
+interface CapturedLifecycle {
+  onRequested: (payload: { sessionId: string; approvalId: string; toolName: string }) => void;
+  onResolved: (payload: { sessionId: string; approvalId: string }) => void;
+}
+
+/** 挂载并捕获审批生命周期 listener（模拟 PermissionService 订阅缝） */
+function mountApprovalAndCapture(): CapturedLifecycle {
+  let listener: CapturedLifecycle | undefined;
+  mountApprovalNotifications({
+    onApprovalLifecycle: (l: CapturedLifecycle) => {
+      listener = l;
+      return () => {};
+    },
+  } as never);
+  if (listener === undefined) {
+    throw new Error('mountApprovalNotifications 未订阅 onApprovalLifecycle');
+  }
+  return listener;
+}
+
+describe('mountApprovalNotifications 通知设置门控（36-A）', () => {
+  it('V1 无字段（缺失 onApprovalRequested）→ 审批照常弹（fail-open）且 body 含工具名', () => {
+    setSettingValue({ enabled: true, onTurnFinished: true, onTurnFailed: true });
+    const lifecycle = mountApprovalAndCapture();
+
+    lifecycle.onRequested({ sessionId: 's1', approvalId: 'a1', toolName: 'run_command' });
+
+    expect(mocks.notifications).toHaveLength(1);
+    expect(mocks.notifications[0]?.body).toContain('run_command');
+  });
+
+  it('V2 总开关关 → 审批不弹', () => {
+    setSettingValue({
+      enabled: false,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: true,
+    });
+    const lifecycle = mountApprovalAndCapture();
+
+    lifecycle.onRequested({ sessionId: 's1', approvalId: 'a1', toolName: 'run_command' });
+
+    expect(mocks.notifications).toHaveLength(0);
+  });
+
+  it('V3 只关审批开关 → 审批不弹；开关恢复后照常弹（即时读无缓存）', () => {
+    setSettingValue({
+      enabled: true,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: false,
+    });
+    const lifecycle = mountApprovalAndCapture();
+
+    lifecycle.onRequested({ sessionId: 's1', approvalId: 'a1', toolName: 'run_command' });
+    expect(mocks.notifications).toHaveLength(0);
+
+    setSettingValue({
+      enabled: true,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: true,
+    });
+    lifecycle.onRequested({ sessionId: 's1', approvalId: 'a2', toolName: 'write_file' });
+    expect(mocks.notifications).toHaveLength(1);
+  });
+
+  it('V4 前台有焦点窗口 → 设置全开也不弹（审批弹窗用户可见）', () => {
+    setSettingValue({
+      enabled: true,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: true,
+    });
+    mocks.focusedWindows.push(true);
+    const lifecycle = mountApprovalAndCapture();
+
+    lifecycle.onRequested({ sessionId: 's1', approvalId: 'a1', toolName: 'run_command' });
+
+    expect(mocks.notifications).toHaveLength(0);
+  });
+
+  it('V8 系统通知不可用（isSupported=false）→ 静默跳过不抛错', async () => {
+    const electron = await vi.importMock<Record<string, unknown>>('electron');
+    const original = (electron['Notification'] as { isSupported: () => boolean }).isSupported;
+    (electron['Notification'] as { isSupported: () => boolean }).isSupported = () => false;
+    try {
+      setSettingValue({
+        enabled: true,
+        onTurnFinished: true,
+        onTurnFailed: true,
+        onApprovalRequested: true,
+      });
+      const lifecycle = mountApprovalAndCapture();
+
+      expect(() =>
+        lifecycle.onRequested({ sessionId: 's1', approvalId: 'a1', toolName: 'run_command' }),
+      ).not.toThrow();
+      expect(mocks.notifications).toHaveLength(0);
+    } finally {
+      (electron['Notification'] as { isSupported: () => boolean }).isSupported = original;
+    }
+  });
+
+  it('部分损坏（onApprovalRequested 非布尔）→ 字段按默认 true 补齐，审批照常弹', () => {
+    setSettingValue({
+      enabled: true,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: 'yes',
+    });
+    const lifecycle = mountApprovalAndCapture();
+
+    lifecycle.onRequested({ sessionId: 's1', approvalId: 'a1', toolName: 'run_command' });
+
+    expect(mocks.notifications).toHaveLength(1);
+  });
+
+  it('onResolved 决议回调 → 不产生任何通知', () => {
+    setSettingValue({
+      enabled: true,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: true,
+    });
+    const lifecycle = mountApprovalAndCapture();
+
+    lifecycle.onResolved({ sessionId: 's1', approvalId: 'a1' });
+
+    expect(mocks.notifications).toHaveLength(0);
   });
 });

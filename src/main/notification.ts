@@ -15,12 +15,15 @@
 // - 文案按 reason 区分：completed（完成）/ error（失败）/ aborted（被中断）
 // - 通知点击聚焦窗口（用户点通知回到应用的常规映射）
 // - 平台差异由 Electron Notification 封装；Linux 需 libnotify（AppImage 自带）
+// - 审批等待通知（2026-09-30，36 号 A）：订阅 PermissionService 审批生命周期，
+//   后台弹审批时提醒用户回来处理（onApprovalRequested 事件开关）
 // ──────────────────────────────────────────────────────────────
 
 import { type TurnEndEvent, type TurnEvent, TurnEventType } from '@code-agent/shared/main';
 import { BrowserWindow, Notification } from 'electron';
 
 import type { IAgentService } from './infra/ai/agent/agent-service';
+import type { IPermissionService } from './infra/ai/tools/permission-service';
 import { readSetting } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
 import { showMainWindow } from './window-show';
@@ -33,7 +36,8 @@ const NOTIFICATION_DEFAULTS: {
   enabled: boolean;
   onTurnFinished: boolean;
   onTurnFailed: boolean;
-} = { enabled: true, onTurnFinished: true, onTurnFailed: true };
+  onApprovalRequested: boolean;
+} = { enabled: true, onTurnFinished: true, onTurnFailed: true, onApprovalRequested: true };
 
 /**
  * 读系统通知设置（app_settings/notification 键；渲染层 settings-store 写穿透落库）
@@ -46,6 +50,7 @@ function readNotificationSettings(): {
   enabled: boolean;
   onTurnFinished: boolean;
   onTurnFailed: boolean;
+  onApprovalRequested: boolean;
 } {
   try {
     const value = readSetting('notification');
@@ -168,4 +173,56 @@ function formatDuration(ms: number): string {
     return `${(ms / 60_000).toFixed(1)} 分钟`;
   }
   return `${Math.max(1, Math.round(ms / 1000))} 秒`;
+}
+
+/**
+ * 挂载审批等待系统通知（36 号 A：后台回合弹权限审批时提醒用户回来处理）
+ *
+ * 挂载点 = PermissionService 审批生命周期 onRequested——该回调仅在审批请求
+ * **真实推送渲染层之后**触发（requestApproval 内），headless（IM 桥接）自动拒绝
+ * 路径与 webContents 已销毁路径结构性地不会到这里，无需额外分支。
+ *
+ * 与回合结束通知的差异：
+ * - 门控用 settings.notification.onApprovalRequested（第三事件开关，即时读）
+ * - 不传 silent（系统默认音）：回合结束是告知（silent），审批等待是需要用户
+ *   行动的 actionable 提醒——不响应 5 分钟即超时拒绝，代价高于多一声提示
+ * - 点击通知 → showMainWindow（回到应用去审批，与回合通知同一映射）
+ */
+export function mountApprovalNotifications(permissionService: IPermissionService): () => void {
+  const unsubscribe = permissionService.onApprovalLifecycle({
+    onRequested: (payload) => {
+      // 用户设置门控（36-A）：发送前即时读；前台/能力检查在设置检查之后
+      const settings = readNotificationSettings();
+      if (!settings.enabled || !settings.onApprovalRequested) {
+        return;
+      }
+      // 前台有焦点 → 审批弹窗用户可见，不弹（避免打扰）
+      if (isAppInForeground()) {
+        return;
+      }
+      // 系统通知不可用（Linux 无 libnotify 等）静默跳过
+      if (!Notification.isSupported()) {
+        return;
+      }
+      try {
+        const notification = new Notification({
+          title: NOTIFY_TITLE,
+          body: `工具 ${payload.toolName} 等待审批`,
+        });
+        notification.on('click', () => {
+          showMainWindow();
+        });
+        notification.show();
+      } catch (err) {
+        // 通知失败（构造异常等）非致命：记录后继续运行
+        logger.warn({ error: String(err) }, '审批等待通知发送失败（继续运行）');
+      }
+    },
+    onResolved: () => {
+      // 审批决议无需通知（用户刚操作完或超时——超时后由回合出错通知覆盖）
+    },
+  });
+
+  logger.info({}, '审批等待系统通知已挂载（仅窗口后台时提醒）');
+  return unsubscribe;
 }

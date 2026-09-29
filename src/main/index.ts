@@ -66,7 +66,7 @@ import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
 import { createWindowHandlers } from './ipc/window.handler';
 import { broadcastLoginItemChanged, broadcastSettingChanged } from './main-events';
-import { mountTurnNotifications } from './notification';
+import { mountApprovalNotifications, mountTurnNotifications } from './notification';
 import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
 import { applyCspToSession } from './security/csp';
 import {
@@ -213,6 +213,9 @@ app
     // 系统通知：Agent 回合完成后台提醒（窗口不可见时才弹，前台不打扰）
     // 订阅 onTurnEvent（TURN_END），unsubscribe 随进程退出自然回收
     mountTurnNotifications(serviceContainer.getAgentService());
+    // 审批等待通知（36-A）：后台回合弹权限审批时提醒用户回来处理——订阅
+    // PermissionService 审批生命周期，headless 自动拒绝路径结构性不触发
+    mountApprovalNotifications(serviceContainer.getPermissionService());
     // 定时任务调度接线（C2 修复：cron-service 建成未接线——任务能建不会跑）；
     // 必须在 initDb 之后（start 从 sqlite 恢复启用任务），fire 触发的回合经
     // initCronScheduler 注册的 handler 无头执行
