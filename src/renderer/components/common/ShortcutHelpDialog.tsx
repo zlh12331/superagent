@@ -40,6 +40,10 @@ const FIXED_SHORTCUTS: readonly ShortcutItem[] = [
   { descriptionKey: 'shortcutHelp.item.openTerminal', keys: 'Ctrl + `' },
   // Alt+← 返回上一视图（对齐参考项目 backBtn）
   { descriptionKey: 'shortcutHelp.item.back', keys: 'Alt + ←' },
+  // 界面缩放（35 号固定键区：36 号 C 补录进帮助——此前帮助表漏列）
+  { descriptionKey: 'shortcutHelp.item.zoomIn', keys: 'Ctrl + =' },
+  { descriptionKey: 'shortcutHelp.item.zoomOut', keys: 'Ctrl + -' },
+  { descriptionKey: 'shortcutHelp.item.zoomReset', keys: 'Ctrl + 0' },
   { descriptionKey: 'shortcutHelp.item.sendMessage', keys: 'Enter' },
   { descriptionKey: 'shortcutHelp.item.newline', keys: 'Shift + Enter' },
   { descriptionKey: 'shortcutHelp.item.closeDialog', keys: 'Esc' },

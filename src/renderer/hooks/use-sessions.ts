@@ -48,6 +48,11 @@ export const SESSIONS_QUERY_KEY = ['sessions'] as const;
 export const SESSION_DETAIL_QUERY_KEY = (id: string) => ['session', id] as const;
 export const SESSION_DETAIL_DATA_KEY = (id: string, includeMessages: boolean) =>
   includeMessages ? (['session', id, 'full'] as const) : (['session', id, 'meta'] as const);
+/**
+ * 会话域根前缀（36-D：removeQueries 用）——清空全部会话时详情/回合/最近目录
+ * 缓存全部指向已删数据，按根前缀一次性移除（观察者挂载时自动重拉）
+ */
+export const SESSION_ROOT_QUERY_KEY = ['session'] as const;
 
 /** 默认分页大小（一页 50 条） */
 const DEFAULT_PAGE_SIZE = 50;
@@ -295,7 +300,7 @@ export function useClearAllSessions() {
     onSuccess: () => {
       // 详情/回合/最近目录缓存指向已删除数据：removeQueries 而非 invalidate
       // （同 useDeleteSession 的 onSuccess 语义，放大到全量前缀）
-      void queryClient.removeQueries({ queryKey: ['session'] });
+      void queryClient.removeQueries({ queryKey: SESSION_ROOT_QUERY_KEY });
     },
     onError: (error) => {
       toast.error(unwrapErrorMessage(error as Error, getErrorMessage));

@@ -46,16 +46,23 @@ const SHELL_LABEL_KEYS: Record<string, string> = {
   fish: 'settings.terminal.shellFish',
 };
 
+/** 档位 → 展示名 key（未知档位兜底 auto，防运行时 key 缺失） */
+function shellLabelKey(choice: TerminalShellChoice): string {
+  return SHELL_LABEL_KEYS[choice] ?? 'settings.terminal.shellAuto';
+}
+
 /** 终端设置分区 */
 export function TerminalSection(): ReactElement {
   const { t } = useTranslation();
   const terminal = useSettingsStore((s) => s.terminal);
   const updateTerminal = useSettingsStore((s) => s.updateTerminal);
 
-  const shellOptions = terminalShellChoicesForPlatform(TERMINAL_PLATFORM).map((choice) => ({
-    value: choice,
-    label: t(SHELL_LABEL_KEYS[choice] ?? 'settings.terminal.shellAuto'),
-  }));
+  const shellOptions = terminalShellChoicesForPlatform(TERMINAL_PLATFORM).map((choice) => {
+    // 先取 key 再 t()（间接引用）：check-i18n 以「key 形状字面量 + 间接 t()」
+    // 同文件判定引用，表达式实参会逃过扫描误报冗余
+    const labelKey = shellLabelKey(choice);
+    return { value: choice, label: t(labelKey) };
+  });
   const fontOptions = TERMINAL_FONT_SIZES.map((size) => ({
     value: String(size),
     label: String(size),

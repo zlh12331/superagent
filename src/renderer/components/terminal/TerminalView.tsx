@@ -84,11 +84,6 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
   const { t } = useTranslation();
   // xterm 容器 div 引用（用于挂载 Terminal 实例）
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // 终端字号（36 号 B：settings.terminal.fontSize 真源；变化时实时热更，见下方 effect）
-  const fontSize = useSettingsStore((s) => s.terminal.fontSize);
-  // xterm 实例 + fitAddon 引用（字号实时更新用；创建/销毁都在主 effect 内管理）
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
 
   // ── xterm.js 实例生命周期管理 ────────────────────────────
   // 依赖 session.id 变化时重新初始化（切换终端或新建终端时触发）
@@ -101,7 +96,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     const container = containerRef.current;
 
     // 创建 Terminal 实例（主题色与 tokens --bg/--text 联动；字号取设置快照——
-    // 后续变化走热更 effect，不重建实例）
+    // 后续变化走下方 store 订阅热更，不重建实例）
     const term = new Terminal({
       fontFamily: '"Cascadia Code", "JetBrains Mono", "Consolas", monospace',
       fontSize: useSettingsStore.getState().terminal.fontSize,
@@ -111,13 +106,11 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
       allowProposedApi: true,
       theme: resolveTerminalTheme(),
     });
-    termRef.current = term;
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(container);
     fitAddon.fit();
-    fitAddonRef.current = fitAddon;
 
     // 主题实时同步：监听 <html>.dark 类变更（由 ThemeProvider.applyTheme 驱动），
     // 类切换后重读 CSS 令牌更新 xterm 色板，无需重建终端实例
@@ -182,6 +175,22 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     });
     resizeObserver.observe(container);
 
+    // 字号实时热更（36-B V9）：订阅 settings-store，fontSize 档位变化 →
+    // xterm options 热更 + refit，无需重开终端。闭包直接持有 term/fitAddon
+    //（生命周期与本实例严格一致：dispose 即退订），不引入跨渲染 ref
+    let lastFontSize = useSettingsStore.getState().terminal.fontSize;
+    const unsubscribeFontSize = useSettingsStore.subscribe((state) => {
+      const next = state.terminal.fontSize;
+      if (next === lastFontSize) return;
+      lastFontSize = next;
+      term.options.fontSize = next;
+      try {
+        fitAddon.fit();
+      } catch {
+        // 容器隐藏（display:none 切换）时 fit 可能抛错：与 resize 路径同款静默
+      }
+    });
+
     // 清理：组件卸载或 session.id 变化时调用
     return () => {
       if (resizeTimer !== null) {
@@ -189,33 +198,12 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
       }
       resizeObserver.disconnect();
       themeObserver.disconnect();
+      unsubscribeFontSize();
       unsubscribeOutput();
       unsubscribeExit();
       term.dispose();
-      termRef.current = null;
-      fitAddonRef.current = null;
     };
   }, [session.id, t]);
-
-  // 字号实时热更（36-B V9）：settings.terminal.fontSize 变化 → xterm options 热更
-  // + refit，无需重开终端（xterm 实例经 ref 触达，主 effect 不依赖 fontSize——
-  // 若进依赖数组会导致字号每次变化都销毁重建整个终端实例）
-  useEffect(() => {
-    const term = termRef.current;
-    const fitAddon = fitAddonRef.current;
-    if (term === null || fitAddon === null) {
-      return;
-    }
-    if (term.options.fontSize === fontSize) {
-      return;
-    }
-    term.options.fontSize = fontSize;
-    try {
-      fitAddon.fit();
-    } catch {
-      // 容器隐藏（display:none 切换）时 fit 可能抛错：与 resize 路径同款静默
-    }
-  }, [fontSize]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">

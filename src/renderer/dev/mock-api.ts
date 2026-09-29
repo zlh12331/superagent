@@ -604,6 +604,15 @@ function createMockApi(): IpcApi {
         }
         return ipcOk({ ok: true });
       },
+      // 清空全部会话（36-D）：连同 mock 消息历史一并清（对齐主进程级联语义）
+      clearAll: async () => {
+        const deleted = mockSessions.length;
+        mockSessions.length = 0;
+        for (const key of Object.keys(messagesBySession)) {
+          delete messagesBySession[key];
+        }
+        return ipcOk({ deleted });
+      },
       rename: async ({ id, title }: Req<IpcApi['session']['rename']>) => {
         const s = mockSessions.find((x) => x.id === id);
         if (s !== undefined) {
