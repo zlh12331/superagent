@@ -11,13 +11,19 @@ import { EventEmitter } from 'node:events';
 import { ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readSetting } from '../storage/settings-pref';
 import {
   getTerminalService,
   resetTerminalService,
+  resolveShellChoice,
   splitShellWords,
   type TerminalCreateOptions,
   TerminalService,
 } from './terminal-service';
+
+vi.mock('../storage/settings-pref', () => ({
+  readSetting: vi.fn(),
+}));
 
 /** 输出缓冲上限（与实现 MAX_BUFFER_BYTES 对齐，测环形截断用） */
 const MAX_BUFFER_BYTES = 100 * 1024;
@@ -210,6 +216,48 @@ describe('TerminalService.create（终端创建三件套）', () => {
     await svc.create(makeOptions({ command: '   ' }));
     const [file] = spawnFn.mock.calls[0] ?? [];
     expect(file).toBe(expectedDefaultShell().file);
+  });
+
+  it('36-B：shell=auto 配置 → 与无设置同行为（平台默认）', async () => {
+    vi.mocked(readSetting).mockReturnValue({ shell: 'auto', fontSize: 13 });
+    await svc.create(makeOptions());
+    const [file] = spawnFn.mock.calls[0] ?? [];
+    expect(file).toBe(expectedDefaultShell().file);
+  });
+
+  it('36-B：配置平台可用档位 → 按配置解析（win32 外 bash=/bin/bash；win32 回落默认）', async () => {
+    vi.mocked(readSetting).mockReturnValue({ shell: 'bash', fontSize: 13 });
+    await svc.create(makeOptions());
+    const [file] = spawnFn.mock.calls[0] ?? [];
+    // unix 上 /bin/bash 存在（三平台 CI 均满足）；win32 不适用回落平台默认
+    const expected = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash';
+    expect(file).toBe(expected);
+  });
+
+  it('36-B：损坏设置值（非对象 / shell 非法档位）→ 回落平台默认（fail-open）', async () => {
+    vi.mocked(readSetting).mockReturnValue('garbage');
+    await svc.create(makeOptions());
+    expect(spawnFn.mock.calls[0]?.[0]).toBe(expectedDefaultShell().file);
+
+    vi.mocked(readSetting).mockReturnValue({ shell: 'pwsh', fontSize: 13 });
+    await svc.create(makeOptions());
+    expect(spawnFn.mock.calls[1]?.[0]).toBe(expectedDefaultShell().file);
+  });
+
+  it('36-B：平台不适用档位（win32 选 zsh）→ 回落平台默认 + warn 痕迹', async () => {
+    if (process.platform !== 'win32') {
+      return;
+    }
+    vi.mocked(readSetting).mockReturnValue({ shell: 'zsh', fontSize: 13 });
+    await svc.create(makeOptions());
+    expect(spawnFn.mock.calls[0]?.[0]).toBe('powershell.exe');
+  });
+
+  it('36-B：显式 command（工具路径）不受 shell 设置影响', async () => {
+    vi.mocked(readSetting).mockReturnValue({ shell: 'fish', fontSize: 13 });
+    await svc.create(makeOptions({ command: 'echo hi' }));
+    const [file] = spawnFn.mock.calls[0] ?? [];
+    expect(file).toBe('echo');
   });
 
   it('边界：env 合并——用户 env 覆盖系统同名变量，其余继承', async () => {
@@ -634,5 +682,49 @@ describe('TerminalService 单例', () => {
   it('边界：resetTerminalService 幂等——连续调用 no-op 不抛', async () => {
     await resetTerminalService();
     await expect(resetTerminalService()).resolves.toBeUndefined();
+  });
+});
+
+describe('resolveShellChoice（36-B：档位 → 可执行文件解析，fs 注入）', () => {
+  const existsAll = (): boolean => true;
+  const existsNone = (): boolean => false;
+
+  it('windows：powershell/cmd/wsl 按 PATH 解析；gitbash 命中候选路径', () => {
+    expect(resolveShellChoice('powershell', 'win32', existsAll)).toEqual({
+      file: 'powershell.exe',
+      args: [],
+    });
+    expect(resolveShellChoice('cmd', 'win32', existsAll)).toEqual({ file: 'cmd.exe', args: [] });
+    expect(resolveShellChoice('wsl', 'win32', existsAll)).toEqual({ file: 'wsl.exe', args: [] });
+    const gitBash = resolveShellChoice('gitbash', 'win32', (p) => p.includes('(x86)'));
+    expect(gitBash?.file).toContain('(x86)');
+  });
+
+  it('windows：gitbash 候选全不存在 → undefined（回落语义）', () => {
+    expect(resolveShellChoice('gitbash', 'win32', existsNone)).toBeUndefined();
+  });
+
+  it('平台不适用 → undefined（macos 选 wsl/powershell；linux 选 cmd/gitbash）', () => {
+    expect(resolveShellChoice('wsl', 'darwin', existsAll)).toBeUndefined();
+    expect(resolveShellChoice('powershell', 'darwin', existsAll)).toBeUndefined();
+    expect(resolveShellChoice('cmd', 'linux', existsAll)).toBeUndefined();
+    expect(resolveShellChoice('gitbash', 'linux', existsAll)).toBeUndefined();
+  });
+
+  it('unix：bash/zsh/fish 绝对路径 + 存在性预检', () => {
+    expect(resolveShellChoice('bash', 'linux', existsAll)).toEqual({ file: '/bin/bash', args: [] });
+    expect(resolveShellChoice('zsh', 'darwin', existsAll)).toEqual({ file: '/bin/zsh', args: [] });
+    expect(resolveShellChoice('fish', 'linux', (p) => p.endsWith('fish'))).toEqual({
+      file: '/usr/bin/fish',
+      args: [],
+    });
+    // fish 未安装（unix 常见）→ undefined
+    expect(resolveShellChoice('fish', 'linux', existsNone)).toBeUndefined();
+  });
+
+  it('auto 恒 undefined（auto 本身就是「平台默认」语义，由调用方回落）', () => {
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+      expect(resolveShellChoice('auto', platform, existsAll)).toBeUndefined();
+    }
   });
 });

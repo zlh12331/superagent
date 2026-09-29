@@ -17,6 +17,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import type {
   TerminalCreatedEventPayload,
@@ -31,12 +32,16 @@ import {
   AppError,
   ErrorCode,
   IPC_DEFINITIONS,
+  isShellChoiceApplicable,
   TERMINAL_ENV_DENY_KEYS,
+  TERMINAL_SHELL_CHOICES,
+  type TerminalShellChoice,
 } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { type IPty, spawn } from 'node-pty';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
+import { readSetting } from '../storage/settings-pref';
 
 /**
  * create 方法入参
@@ -571,10 +576,27 @@ export class TerminalService implements ITerminalService {
   /**
    * 默认 shell
    *
-   * Windows 用 powershell.exe（schema 约定，PowerShell 是现代化 Windows shell）
-   * Unix 用 $SHELL 环境变量（通常 /bin/bash 或 /bin/zsh），fallback /bin/bash
+   * 36 号 B：用户配置优先（settings.terminal.shell，spawn 时刻即时读）——配置在
+   * 当前平台不可用 / 可执行文件不存在 / 读设置失败时回落平台默认（fail-open 向
+   * 既有行为；回落路径补 warn 留诊断痕迹）。显式配置的 shell 通过存在性预检后
+   * spawn 仍失败 → TERMINAL_SPAWN_FAILED 抛错（不做静默回退：显式配置的错误要
+   * 可见，静默回退会造成「配置了但没生效」的困惑）。
+   *
+   * 平台默认（auto）：Windows 用 powershell.exe（schema 约定，PowerShell 是现代
+   * 化 Windows shell）；Unix 用 $SHELL 环境变量，fallback /bin/bash
    */
   private defaultShell(): { file: string; args: string[] } {
+    const choice = this.readShellChoice();
+    if (choice !== 'auto') {
+      const resolved = resolveShellChoice(choice, process.platform);
+      if (resolved !== undefined) {
+        return resolved;
+      }
+      logger.warn(
+        { choice, platform: process.platform },
+        '终端 shell 配置在当前平台不可用或可执行文件不存在，回落平台默认',
+      );
+    }
     if (process.platform === 'win32') {
       return { file: 'powershell.exe', args: [] };
     }
@@ -582,6 +604,83 @@ export class TerminalService implements ITerminalService {
     const shell = process.env['SHELL'] ?? '/bin/bash';
     return { file: shell, args: [] };
   }
+
+  /**
+   * 读终端 shell 配置（即时读 + 字段收窄，36 号 B）
+   *
+   * DB 值不可信：非对象 / shell 非法档位 → 'auto'（平台默认语义）；读取异常
+   * fail-open 回 'auto' 并记 warn（同 notification readNotificationSettings 范式，
+   * 正常路径零日志）。fontSize 是渲染层 xterm 消费的字段，主进程不读。
+   */
+  private readShellChoice(): TerminalShellChoice {
+    try {
+      const value: unknown = readSetting('terminal');
+      if (typeof value !== 'object' || value === null) {
+        return 'auto';
+      }
+      const shell = (value as { shell?: unknown }).shell;
+      const choices = TERMINAL_SHELL_CHOICES as readonly unknown[];
+      return choices.includes(shell) ? (shell as TerminalShellChoice) : 'auto';
+    } catch (err) {
+      logger.warn({ error: String(err) }, '终端设置读取失败（按平台默认兜底）');
+      return 'auto';
+    }
+  }
+}
+
+/**
+ * 解析用户配置的 shell 档位为可执行文件（36 号 B，导出供测试）
+ *
+ * 纯函数：fs 存在性经 fileExists 注入（测试无需真实文件系统）。返回 undefined
+ * 表示「无法解析」（档位平台不适用 / 可执行文件不存在），调用方回落平台默认。
+ *
+ * - windows：powershell/cmd/wsl 按 PATH 解析（System32 内置，不做 fs 预检）；
+ *   gitbash 候选路径逐个探测（Git for Windows 安装位置不固定）
+ * - unix：绝对路径 + 存在性预检（fish 安装位置差异大，缺席即回落）
+ */
+export function resolveShellChoice(
+  choice: TerminalShellChoice,
+  platform: NodeJS.Platform,
+  fileExists: (path: string) => boolean = existsSync,
+): { file: string; args: string[] } | undefined {
+  const normalized: 'windows' | 'macos' | 'linux' =
+    platform === 'win32' ? 'windows' : platform === 'darwin' ? 'macos' : 'linux';
+  if (!isShellChoiceApplicable(choice, normalized)) {
+    return undefined;
+  }
+  if (normalized === 'windows') {
+    switch (choice) {
+      case 'powershell':
+        return { file: 'powershell.exe', args: [] };
+      case 'cmd':
+        return { file: 'cmd.exe', args: [] };
+      case 'wsl':
+        return { file: 'wsl.exe', args: [] };
+      case 'gitbash': {
+        const candidates = [
+          'C:\\Program Files\\Git\\bin\\bash.exe',
+          'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+          ...(process.env['LOCALAPPDATA']
+            ? [`${process.env['LOCALAPPDATA']}\\Programs\\Git\\bin\\bash.exe`]
+            : []),
+        ];
+        const hit = candidates.find((path) => fileExists(path));
+        return hit !== undefined ? { file: hit, args: [] } : undefined;
+      }
+      default:
+        return undefined;
+    }
+  }
+  const unixTargets: Partial<Record<TerminalShellChoice, string>> = {
+    bash: '/bin/bash',
+    zsh: '/bin/zsh',
+    fish: '/usr/bin/fish',
+  };
+  const target = unixTargets[choice];
+  if (target === undefined || !fileExists(target)) {
+    return undefined;
+  }
+  return { file: target, args: [] };
 }
 
 /**
