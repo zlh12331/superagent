@@ -6,7 +6,10 @@
 // 在"窗口不可见 + 后台事件"时用系统通知提醒。
 //
 // 设计：
-// - 订阅 AgentService.onTurnEvent 的 TURN_END / ERROR 事件
+// - 订阅 AgentService.onTurnEvent 的 TURN_END 事件（错误后必跟 turn-end reason='error'，
+//   单事件覆盖全部终止路径）
+// - 用户设置门控（2026-09-29，33 号 spec）：settings.notification 三开关（总开关 +
+//   完成/出错两组事件开关），发送前即时读 app_settings，缺失/损坏按全开兜底
 // - 仅当应用窗口不可见（无窗口获得焦点）时发通知——前台用户看得到结果，
 //   重复弹通知是打扰（对齐行业惯例：Slack 只在窗口失焦时弹桌面通知）
 // - 文案按 reason 区分：completed（完成）/ error（失败）/ aborted（被中断）
@@ -18,11 +21,69 @@ import { type TurnEndEvent, type TurnEvent, TurnEventType } from '@code-agent/sh
 import { BrowserWindow, Notification } from 'electron';
 
 import type { IAgentService } from './infra/ai/agent/agent-service';
+import { readSetting } from './infra/storage/settings-pref';
 import { logger } from './utils/logger';
 import { showMainWindow } from './window-show';
 
 /** 通知标题（用户可识别为应用来源） */
 const NOTIFY_TITLE = 'Code Agent';
+
+/** 通知设置默认值（缺失/损坏字段按此补齐——「全开」向 2026-09-04 以来的恒通知行为兼容） */
+const NOTIFICATION_DEFAULTS: {
+  enabled: boolean;
+  onTurnFinished: boolean;
+  onTurnFailed: boolean;
+} = { enabled: true, onTurnFinished: true, onTurnFailed: true };
+
+/**
+ * 读系统通知设置（app_settings/notification 键；渲染层 settings-store 写穿透落库）
+ *
+ * DB 值不可信：逐字段布尔收窄，损坏字段按默认补齐（部分损坏降级到部分默认）；
+ * 读取异常 fail-open（返回全开）——通知是即时性提醒，静默失效比多弹一条更难察觉，
+ * 但异常分支记 logger.warn 留诊断痕迹（正常路径零日志，不产生每回合噪音）。
+ */
+function readNotificationSettings(): {
+  enabled: boolean;
+  onTurnFinished: boolean;
+  onTurnFailed: boolean;
+} {
+  try {
+    const value = readSetting('notification');
+    if (typeof value !== 'object' || value === null) {
+      return { ...NOTIFICATION_DEFAULTS };
+    }
+    const partial = value as Record<string, unknown>;
+    const resolved = { ...NOTIFICATION_DEFAULTS };
+    for (const key of Object.keys(NOTIFICATION_DEFAULTS) as ReadonlyArray<
+      keyof typeof NOTIFICATION_DEFAULTS
+    >) {
+      const field = partial[key];
+      if (typeof field === 'boolean') {
+        resolved[key] = field;
+      }
+    }
+    return resolved;
+  } catch (err) {
+    logger.warn({ error: String(err) }, '通知设置读取失败（按全开兜底）');
+    return { ...NOTIFICATION_DEFAULTS };
+  }
+}
+
+/**
+ * 回合终止原因 → 是否弹通知（纯函数，导出供测试）
+ *
+ * aborted/max-steps 归「完成组」：语义是「非错误终止」（与 describeEndReason 的
+ * completed/aborted/max-steps 同属回合结束告知），error 才是用户必须知道的异常态。
+ */
+export function shouldNotifyTurnEnd(
+  reason: TurnEndEvent['reason'],
+  settings: { enabled: boolean; onTurnFinished: boolean; onTurnFailed: boolean },
+): boolean {
+  if (!settings.enabled) {
+    return false;
+  }
+  return reason === 'error' ? settings.onTurnFailed : settings.onTurnFinished;
+}
 
 /** 回合完成原因 → 通知文案 */
 function describeEndReason(reason: TurnEndEvent['reason']): string {
@@ -59,6 +120,11 @@ export function mountTurnNotifications(agentService: IAgentService): () => void 
       return;
     }
     const endEvent = event as TurnEndEvent;
+    // 用户设置门控（33 号）：发送前即时读（无缓存，渲染层写穿透落库即生效）；
+    // 前台/能力检查在设置检查之后——设置关闭时连 isSupported 查询都省掉
+    if (!shouldNotifyTurnEnd(endEvent.reason, readNotificationSettings())) {
+      return;
+    }
     // 前台有焦点 → 用户正在看，不弹（避免打扰）
     if (isAppInForeground()) {
       return;
