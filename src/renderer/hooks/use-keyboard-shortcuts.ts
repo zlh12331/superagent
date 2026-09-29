@@ -104,6 +104,38 @@ function toHotkeyString(parsed: ParsedShortcut): string {
 const HOTKEY_OPTIONS = { preventDefault: true } as const;
 
 /**
+ * 固定键冲突清单（36 号 C：录键冲突检测用）
+ *
+ * match 是 **e.key 归一化形态**（normalizeShortcutForCompare：修饰符 Meta ≡ Ctrl、
+ * 排序 alt<ctrl<shift、主键小写），与上方/下方 useHotkeys 的固定绑定**同源维护**——
+ * 增删固定键必须两处同步（shortcut-conflicts.test.ts 锚定内容）。
+ * 绑定串是 event.code 形态（v5 按 code 匹配），code→key 的差异已在 match 中
+ * 人工换算（Slash→? / Equal→= / Minus→- / Backquote→`）。注意 'ctrl+shift++'
+ * （e.key '+' 的 shift 变体）**不在清单**：'+' 主键在 '+' 分隔的存储格式中无法
+ * 往返（normalize 得到 null），录入侧本就产生损坏串——由 store 格式约束排除。
+ */
+export const FIXED_SHORTCUT_CONFLICTS: readonly {
+  /** 归一化匹配串（与录键结果比较） */
+  readonly match: string;
+  /** 冲突提示用的动作名 i18n key */
+  readonly labelKey: string;
+}[] = [
+  { match: 'shift+?', labelKey: 'shortcutHelp.item.openShortcutHelp' },
+  { match: 'f1', labelKey: 'shortcutHelp.item.openShortcutHelp' },
+  { match: 'ctrl+k', labelKey: 'shortcutHelp.item.openCommandPalette' },
+  { match: 'alt+arrowleft', labelKey: 'shortcutHelp.item.back' },
+  { match: 'ctrl+b', labelKey: 'shortcutHelp.item.toggleSidebar' },
+  { match: 'ctrl+1', labelKey: 'shortcutHelp.item.toggleSidebar' },
+  { match: 'ctrl+j', labelKey: 'shortcutHelp.item.toggleRightPanel' },
+  { match: 'ctrl+2', labelKey: 'shortcutHelp.item.toggleRightPanel' },
+  { match: 'ctrl+`', labelKey: 'shortcutHelp.item.openTerminal' },
+  { match: 'ctrl+=', labelKey: 'shortcutHelp.item.zoomIn' },
+  { match: 'ctrl+shift+=', labelKey: 'shortcutHelp.item.zoomIn' },
+  { match: 'ctrl+-', labelKey: 'shortcutHelp.item.zoomOut' },
+  { match: 'ctrl+0', labelKey: 'shortcutHelp.item.zoomReset' },
+];
+
+/**
  * 全局快捷键 hook：从设置读 shortcut 配置 → react-hotkeys 绑定
  * （preventDefault + 表单内不触发；handlers 经 ref 转发避免重复绑定）
  */

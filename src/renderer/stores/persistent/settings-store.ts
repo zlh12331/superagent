@@ -471,6 +471,19 @@ export function migrateShortcuts<T extends object>(state: T): T {
   return { ...state, shortcuts: migrated } as T;
 }
 
+/**
+ * 默认快捷键（36 号 C 导出：恢复默认入口与冲突检测共用此单一真源；
+ * DEFAULT_SETTINGS.shortcuts 引用同一常量）
+ */
+export const DEFAULT_SHORTCUTS: KeyboardShortcuts = {
+  commandPalette: `${MOD}+P`,
+  saveFile: `${MOD}+S`,
+  searchFile: `${MOD}+F`,
+  toggleTheme: `${MOD}+Shift+T`,
+  openSettings: `${MOD}+,`,
+  newSession: `${MOD}+N`,
+};
+
 /** 默认设置（模块级常量；applySettingsSnapshot 覆盖） */
 const DEFAULT_SETTINGS: SettingsData = {
   theme: 'dark',
@@ -486,14 +499,7 @@ const DEFAULT_SETTINGS: SettingsData = {
     fontSize: 14,
     vimMode: false,
   },
-  shortcuts: {
-    commandPalette: `${MOD}+P`,
-    saveFile: `${MOD}+S`,
-    searchFile: `${MOD}+F`,
-    toggleTheme: `${MOD}+Shift+T`,
-    openSettings: `${MOD}+,`,
-    newSession: `${MOD}+N`,
-  },
+  shortcuts: DEFAULT_SHORTCUTS,
   experimental: {
     scanlines: false,
     reasoningCollapsed: true,
