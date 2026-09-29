@@ -23,6 +23,7 @@ import { llmClient, runtimeModelStore } from '../infra/ai/llm-client/ai-provider
 import { toKeychainKey } from '../infra/ai/providers';
 import type { IPermissionService } from '../infra/ai/tools/permission-service';
 import { setMainLanguage } from '../infra/i18n';
+import { applyProxyChange } from '../infra/network/proxy-applier';
 import { readApprovalModeSync, writeApprovalMode } from '../infra/storage/approval-pref';
 import {
   deleteSecret,
@@ -72,6 +73,10 @@ export function createSettingsHandlers(params: {
       if (input.key === 'language') {
         setMainLanguage(input.value);
       }
+      // 34 号：代理是推送式急切副作用（setProxy/env/缓存重置），写入即应用（V5）
+      if (input.key === 'proxy') {
+        await applyProxyChange(input.value);
+      }
       return { ok: true };
     },
 
@@ -118,6 +123,11 @@ export function createSettingsHandlers(params: {
         if (key === 'theme') {
           syncTitleBarOverlayFromTheme(value);
         }
+        // 34 号：导入 proxy 键 → 主进程显式应用（CP2 fail 修复项：广播只达渲染层，
+        // 推送式副作用必须在此收口，V8）
+        if (key === 'proxy') {
+          await applyProxyChange(value);
+        }
         broadcastSettingChanged(key, value);
       }
       return { imported: outcome.imported, skipped: outcome.skipped };
@@ -133,6 +143,8 @@ export function createSettingsHandlers(params: {
       deleteSettings(SETTING_KEYS);
       // 窗口控件色回落默认主题：键已删，sync 内部对非合法值回落 dark
       syncTitleBarOverlayFromTheme(undefined);
+      // 34 号：代理回落 system（CP2 fail 修复项——不收口则分区代理/env 残留，V7）
+      await applyProxyChange(undefined);
       logger.info({}, '设置已全部恢复默认（app_settings 设置键已清空）');
       return { settings: {} };
     },

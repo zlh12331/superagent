@@ -191,4 +191,19 @@ describe('settings-store.notification 域', () => {
       onTurnFailed: true,
     });
   });
+
+  it('applyMainChange(notification)：按域合并且不回写（导入广播回声防线，33 号 V8）', () => {
+    useSettingsStore.getState().applyMainSettingChange('notification', {
+      enabled: false,
+      onTurnFailed: false,
+    });
+    expect(useSettingsStore.getState().notification).toEqual({
+      enabled: false,
+      onTurnFinished: true,
+      onTurnFailed: false,
+    });
+    // 变更来源是主进程（导入已落库）：内存更新即真源，回写是回声——不得再写穿透
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    expect(calls.filter((c) => c[0]?.key === 'notification')).toHaveLength(0);
+  });
 });

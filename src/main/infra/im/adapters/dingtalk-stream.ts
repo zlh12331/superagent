@@ -17,6 +17,7 @@
 
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
+import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage } from '../channel/types';
 
 /** 钉钉 Stream 配置 */
@@ -146,7 +147,7 @@ export class DingTalkStreamReceiver {
     this.appKey = config.appKey;
     this.appSecret = config.appSecret;
     this.apiBaseUrl = config.apiBaseUrl ?? 'https://api.dingtalk.com';
-    this.fetchFn = options.fetchFn ?? fetch;
+    this.fetchFn = options.fetchFn ?? (proxiedFetch as unknown as typeof fetch);
     this.wsCtor = options.WebSocketCtor ?? WebSocket;
     this.httpTimeoutMs = options.timeoutMs ?? HTTP_TIMEOUT_MS;
     this.heartbeatMs = options.heartbeatMs ?? HEARTBEAT_INTERVAL_MS;

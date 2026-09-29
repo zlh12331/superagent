@@ -27,6 +27,7 @@ import { initMainI18n } from './infra/i18n';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
+import { applyProxyChange } from './infra/network/proxy-applier';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
 import { readAllSettings, readSetting, writeSetting } from './infra/storage/settings-pref';
@@ -182,6 +183,11 @@ app
     // 主进程 i18n 语言初始化：读 app_settings `language` 域（渲染层写穿透），
     // 缺失/损坏回退 zh-CN；运行中变更经 settings.handler set 钩子同步
     initMainI18n(readSetting('language'));
+    // 34 号：代理配置启动应用（第四收口路径）——三分区 setProxy + Node fetch 栈 +
+    // env 侧门 + AI 工厂重建；必须在 initDb 之后（读 settings.proxy）且在
+    // initImChannels 之前（IM 渠道连接吃到代理）。fire-and-forget：setProxy 失败
+    // 仅 warn，不阻断启动链（spec §2.1 失败路径）
+    void applyProxyChange(readSetting('proxy'));
     // 初始化 PromptService：幂等插入默认 Code Agent prompt 到 prompts 表
     // - 必须在 initDb 之后（依赖 prompts 表已创建）
     // - 必须在 AgentService 初始化之前（resolvePrompt 时数据库已有默认 prompt）

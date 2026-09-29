@@ -20,6 +20,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 
 import { getAppConfig } from '../../../config';
+import { proxiedFetch } from '../../network/proxied-fetch';
 // 单一真源：默认模型 / 默认供应商由模型领域层定义（避免双源维护路由分裂）
 import { DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from '../models/builtin-models';
 import type {
@@ -160,6 +161,15 @@ function withOpenAiV1(baseUrl: string): string {
   return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
 }
 
+/**
+ * AI SDK fetch 注入（34 号网络代理）
+ *
+ * 统一传 proxiedFetch：fixed 模式经 ProxyAgent、localhost/bypass 直连、
+ * 其余模式零开销直通全局 fetch（proxiedFetch 内部判定）。SDK 在每次请求时
+ * 调用该函数——工厂重建（resetAIProvider）+ 此处闭包 = 配置变更免重启生效。
+ */
+const sdkFetch = { fetch: proxiedFetch as unknown as typeof fetch };
+
 const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   deepseek: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
@@ -169,6 +179,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段（ollama 等本地场景）
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
       // DeepSeek 深度适配（官方文档 https://api-docs.deepseek.com/zh-cn/）：
       // 1. transformRequestBody：思考模式显式开启（v4 默认开启，此处兜底确保语义明确）
       // 2. convertUsage：DeepSeek 非标准 usage 字段（prompt_cache_hit_tokens /
@@ -219,6 +230,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
       baseURL: withOpenAiV1(resolvedBaseUrl),
+      ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
   },
   anthropic: ({ apiKey, baseUrl }) => {
@@ -227,6 +239,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       // exactOptionalPropertyTypes: apiKey 为 undefined 时不传该字段
       ...(apiKey !== undefined ? { apiKey } : {}),
       baseURL: resolvedBaseUrl,
+      ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
   },
   // 以下 6 家 OpenAI-compatible 供应商补 includeUsage:true（2026-09-06 审计修复）：
@@ -240,6 +253,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
     });
   },
   zhipu: ({ apiKey, baseUrl }) => {
@@ -249,6 +263,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
     });
   },
   qwen: ({ apiKey, baseUrl }) => {
@@ -258,6 +273,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
     });
   },
   doubao: ({ apiKey, baseUrl }) => {
@@ -267,6 +283,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
     });
   },
   siliconflow: ({ apiKey, baseUrl }) => {
@@ -276,6 +293,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
     });
   },
   openrouter: ({ apiKey, baseUrl }) => {
@@ -285,6 +303,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       baseURL: trimTrailingSlash(resolvedBaseUrl),
       ...(apiKey !== undefined ? { apiKey } : {}),
       includeUsage: true,
+      ...sdkFetch,
     });
   },
   ollama: ({ baseUrl }) => {
@@ -295,6 +314,7 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
       apiKey: 'ollama',
       // 本地模型不按 token 计费，且 Ollama 的 OpenAI 兼容端点不保证回传 usage
       includeUsage: false,
+      ...sdkFetch,
     }) as unknown as (modelId: string) => LanguageModel;
   },
 };

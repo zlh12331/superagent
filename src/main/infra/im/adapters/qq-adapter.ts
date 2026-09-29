@@ -9,6 +9,7 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
+import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 import { fetchQqAccessToken, QqStreamReceiver } from './qq-stream';
 
@@ -45,7 +46,8 @@ export class QqAdapter implements IChannelAdapter {
   ) {
     this.fetchTokenFn = options.fetchToken ?? fetchQqAccessToken;
     this.receiverCtor = options.Receiver ?? QqStreamReceiver;
-    this.fetchFn = options.fetchFn ?? fetch;
+    // 34 号：生产默认 proxiedFetch（同 telegram-adapter 注入语义）
+    this.fetchFn = options.fetchFn ?? (proxiedFetch as unknown as typeof fetch);
   }
 
   isConnected = false;

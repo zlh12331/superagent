@@ -25,6 +25,13 @@ const { mockElectronApi, dialogs, broadcast } = vi.hoisted(() => {
   api['nativeTheme'] = { shouldUseDarkColors: false };
   // settings:export 的 defaultPath 走 app.getPath('documents')
   api['app'] = { getPath: () => 'C:\\Users\\test\\Documents' };
+  // resetAll 新走 applyProxyChange（34 号）→ 需要 session 分区 mock（setProxy 可 await）
+  const setProxy = vi.fn(async () => {});
+  const fakeSession = () => ({ setProxy });
+  api['session'] = {
+    defaultSession: fakeSession(),
+    fromPartition: vi.fn(() => fakeSession()),
+  };
   const dialogFns = {
     // 泛型标注放宽默认实现推断（filePath 允许写入字符串路径供正向用例覆盖）
     showSaveDialog: vi.fn<() => Promise<{ canceled: boolean; filePath?: string | undefined }>>(
@@ -113,6 +120,8 @@ vi.mock('../infra/ai/llm-client/ai-provider', () => ({
     update: mocks.runtimeUpdate,
     list: mocks.runtimeList,
   },
+  // resetAll → applyProxyChange → resetAIProvider（34 号代理收口链）
+  resetAIProvider: vi.fn(),
 }));
 
 const EMPTY_CTX = {} as never;

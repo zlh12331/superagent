@@ -14,6 +14,7 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
+import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 
 const API_BASE = 'https://api.telegram.org';
@@ -47,7 +48,9 @@ export class TelegramAdapter implements IChannelAdapter {
   private readonly fetchFn: typeof fetch;
 
   constructor(options: { fetchFn?: typeof fetch } = {}) {
-    this.fetchFn = options.fetchFn ?? fetch;
+    // 34 号：生产默认 proxiedFetch（fixed 模式经代理、localhost/bypass 直连、
+    // 其余零开销直通全局 fetch）；测试注入 fake fetch 语义不变
+    this.fetchFn = options.fetchFn ?? (proxiedFetch as unknown as typeof fetch);
   }
 
   private botToken: string | undefined;

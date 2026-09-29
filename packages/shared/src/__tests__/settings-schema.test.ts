@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';
 
 describe('SETTING_KEYS 白名单', () => {
-  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification 开关）', () => {
+  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy 开关）', () => {
     expect(SETTING_KEYS).toEqual([
       'theme',
       'language',
@@ -23,15 +23,17 @@ describe('SETTING_KEYS 白名单', () => {
       'window',
       'memory',
       'notification',
+      'proxy',
       'im.allowedGroups',
     ]);
   });
 });
 
 describe('SettingsSetReqSchema · key 白名单（P0）', () => {
-  it('白名单内键通过', () => {
+  it('白名单内键通过（proxy 例外：值级门禁要求合法 mode，传 system 形态）', () => {
     for (const key of SETTING_KEYS) {
-      expect(SettingsSetReqSchema.safeParse({ key, value: {} }).success).toBe(true);
+      const value = key === 'proxy' ? { mode: 'system' } : {};
+      expect(SettingsSetReqSchema.safeParse({ key, value }).success).toBe(true);
     }
   });
 
@@ -39,6 +41,37 @@ describe('SettingsSetReqSchema · key 白名单（P0）', () => {
     for (const key of ['lsp2', 'runtime.models', 'im', '__proto__', 'theme.dark', '']) {
       expect(SettingsSetReqSchema.safeParse({ key, value: {} }).success).toBe(false);
     }
+  });
+});
+
+describe('SettingsSetReqSchema · proxy 值级门禁（34 号 V9）', () => {
+  it('三合法 mode 通过（fixed 带 url）', () => {
+    for (const value of [
+      { mode: 'system' },
+      { mode: 'direct' },
+      { mode: 'fixed', url: 'http://127.0.0.1:7890' },
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'proxy', value }).success).toBe(true);
+    }
+  });
+
+  it('fixed 缺 url / url 非 http(s) / mode 未知 → 拒绝', () => {
+    for (const value of [
+      { mode: 'fixed' },
+      { mode: 'fixed', url: 'ftp://x' },
+      { mode: 'fixed', url: 'not-a-url' },
+      { mode: 'quick' },
+      null,
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'proxy', value }).success).toBe(false);
+    }
+  });
+
+  it('system/direct 忽略 url（不校验）', () => {
+    expect(
+      SettingsSetReqSchema.safeParse({ key: 'proxy', value: { mode: 'system', url: 'junk' } })
+        .success,
+    ).toBe(true);
   });
 });
 

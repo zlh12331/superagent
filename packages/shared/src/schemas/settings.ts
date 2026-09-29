@@ -129,6 +129,9 @@ export const SETTING_KEYS = [
   // 系统通知（settings.notification：回合结束后台提醒的门控开关组，
   // 主进程 notification.ts 发送前即时读取；缺失/损坏视为全开——既有行为）
   'notification',
+  // 网络代理（settings.proxy：{mode, url?, bypass?}；主进程 proxy-applier 四路径
+  // 收口应用——启动/settings:set/import/resetAll；缺失/损坏视为 system 直通）
+  'proxy',
   // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
   'im.allowedGroups',
 ] as const;
@@ -175,6 +178,51 @@ export const SettingsSetReqSchema = z
         path: ['value'],
         message: `lsp.serverCommands 仅支持 PATH 中的裸可执行名，非法语言键：${invalid.join(', ')}`,
       });
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 34 号：proxy 值级门禁（V9）——fixed 模式下 url 必须是合法 http(s) URL；
+    // 写拒在前 + resolver fail-open 兜底（导入路径绕过本 schema 时仍有防线），
+    // 无半生效状态
+    if (cfg.key !== 'proxy') {
+      return;
+    }
+    const value = cfg.value as { mode?: unknown; url?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'proxy 配置必须是非空对象（{mode, url?, bypass?}）',
+      });
+      return;
+    }
+    const validModes = ['system', 'direct', 'fixed'];
+    if (!validModes.includes(value.mode as string)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `proxy.mode 仅支持 ${validModes.join('/')}`,
+      });
+      return;
+    }
+    if (value.mode === 'fixed') {
+      let urlOk = false;
+      if (typeof value.url === 'string' && value.url.length > 0) {
+        try {
+          const parsed = new URL(value.url);
+          urlOk = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+          urlOk = false;
+        }
+      }
+      if (!urlOk) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['value'],
+          message:
+            'proxy.mode=fixed 时 url 必须是合法 http(s) 代理地址（如 http://127.0.0.1:7890）',
+        });
+      }
     }
   });
 
