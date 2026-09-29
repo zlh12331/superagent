@@ -126,6 +126,9 @@ export const SETTING_KEYS = [
   'window',
   // 记忆功能开关（settings.memory.enabled；关闭后不捕获新记忆、不注入召回）
   'memory',
+  // 系统通知（settings.notification：回合结束后台提醒的门控开关组，
+  // 主进程 notification.ts 发送前即时读取；缺失/损坏视为全开——既有行为）
+  'notification',
   // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
   'im.allowedGroups',
 ] as const;

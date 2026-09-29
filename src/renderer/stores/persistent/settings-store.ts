@@ -227,6 +227,22 @@ export interface WindowSettings {
 }
 
 /**
+ * 系统通知设置（回合结束后台提醒的门控，主进程 notification.ts 发送前即时读取）
+ *
+ * 两组事件开关 + 总开关：enabled=false 时全部静默（优先级高于事件开关）。
+ * 缺失/损坏语义 = 全开——与通知能力的历史行为一致（此前无设置面、恒通知），
+ * 主进程读取失败也按全开兜底（fail-open 向既有行为）。
+ */
+export interface NotificationSettings {
+  /** 系统通知总开关（默认 true；false 时回合结束一律不弹） */
+  readonly enabled: boolean;
+  /** 回合正常结束通知（completed / aborted / max-steps；默认 true） */
+  readonly onTurnFinished: boolean;
+  /** 回合出错通知（error；默认 true） */
+  readonly onTurnFailed: boolean;
+}
+
+/**
  * 应用界面语言
  *
  * P2 修复（S1 单真源残留）：语言此前经 i18next LanguageDetector 只写 localStorage，
@@ -263,6 +279,8 @@ interface SettingsData {
   readonly update: UpdateSettings;
   /** 窗口行为（关窗语义） */
   readonly window: WindowSettings;
+  /** 系统通知（回合结束后台提醒门控） */
+  readonly notification: NotificationSettings;
 }
 
 /**
@@ -294,6 +312,8 @@ interface SettingsState extends SettingsData {
   readonly setUpdate: (patch: Partial<UpdateSettings>) => void;
   /** 更新窗口行为设置（写穿透 SQLite；主进程关窗事件实时读取） */
   readonly setWindow: (patch: Partial<WindowSettings>) => void;
+  /** 更新系统通知设置（写穿透 SQLite；主进程发送通知前即时读取） */
+  readonly updateNotification: (patch: Partial<NotificationSettings>) => void;
   /**
    * 应用「主进程主动变更的设置」（托盘菜单等）
    *
@@ -437,6 +457,11 @@ const DEFAULT_SETTINGS: SettingsData = {
   window: {
     closeAction: 'minimize',
   },
+  notification: {
+    enabled: true,
+    onTurnFinished: true,
+    onTurnFailed: true,
+  },
 };
 
 /**
@@ -522,6 +547,11 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     const window = { ...useSettingsStore.getState().window, ...patch };
     set({ window });
     persistSetting('window', window);
+  },
+  updateNotification: (patch) => {
+    const notification = { ...useSettingsStore.getState().notification, ...patch };
+    set({ notification });
+    persistSetting('notification', notification);
   },
   applyMainSettingChange: (key, value) => {
     applyMainChange(key, value, set);
@@ -629,6 +659,10 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     window: {
       ...DEFAULT_SETTINGS.window,
       ...((snapshot['window'] as Partial<WindowSettings> | undefined) ?? {}),
+    },
+    notification: {
+      ...DEFAULT_SETTINGS.notification,
+      ...((snapshot['notification'] as Partial<NotificationSettings> | undefined) ?? {}),
     },
   });
 }

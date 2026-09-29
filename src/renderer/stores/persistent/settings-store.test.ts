@@ -17,7 +17,7 @@ Object.defineProperty(window, 'api', {
   configurable: true,
 });
 
-import { flushPendingSettings, useSettingsStore } from './settings-store';
+import { applySettingsSnapshot, flushPendingSettings, useSettingsStore } from './settings-store';
 
 /** store 的初始默认值（DEFAULT_SETTINGS 为模块私有；此处按已知默认态复位） */
 const DEFAULTS = { theme: 'dark', language: 'zh-CN', closeAction: 'minimize' } as const;
@@ -144,5 +144,51 @@ describe('settings-store.persist 失败重试', () => {
     const calls = setSpy.mock.calls as unknown as { key: string }[][];
     const themeWrites = calls.filter((c) => c[0]?.key === 'theme');
     expect(themeWrites.length).toBe(1);
+  });
+});
+
+describe('settings-store.notification 域', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'api', {
+      value: { settings: { set: setSpy } },
+      writable: true,
+      configurable: true,
+    });
+    setSpy.mockReset();
+    setSpy.mockResolvedValue({ data: { ok: true } });
+  });
+
+  it('updateNotification：部分字段合并 + 以 notification 键写穿透', () => {
+    useSettingsStore.getState().updateNotification({ enabled: false });
+    const state = useSettingsStore.getState().notification;
+    expect(state).toEqual({ enabled: false, onTurnFinished: true, onTurnFailed: true });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    const writes = calls.filter((c) => c[0]?.key === 'notification');
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.[0]).toEqual({
+      key: 'notification',
+      value: { enabled: false, onTurnFinished: true, onTurnFailed: true },
+    });
+  });
+
+  it('快照缺失 notification 键 → 回落默认（全开，向既有行为）', () => {
+    useSettingsStore.setState({
+      notification: { enabled: false, onTurnFinished: false, onTurnFailed: false },
+    });
+    applySettingsSnapshot({});
+    expect(useSettingsStore.getState().notification).toEqual({
+      enabled: true,
+      onTurnFinished: true,
+      onTurnFailed: true,
+    });
+  });
+
+  it('快照部分字段 → 与默认合并', () => {
+    applySettingsSnapshot({ notification: { enabled: false } });
+    expect(useSettingsStore.getState().notification).toEqual({
+      enabled: false,
+      onTurnFinished: true,
+      onTurnFailed: true,
+    });
   });
 });
