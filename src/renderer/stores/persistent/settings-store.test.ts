@@ -161,34 +161,51 @@ describe('settings-store.notification 域', () => {
   it('updateNotification：部分字段合并 + 以 notification 键写穿透', () => {
     useSettingsStore.getState().updateNotification({ enabled: false });
     const state = useSettingsStore.getState().notification;
-    expect(state).toEqual({ enabled: false, onTurnFinished: true, onTurnFailed: true });
+    expect(state).toEqual({
+      enabled: false,
+      onTurnFinished: true,
+      onTurnFailed: true,
+      onApprovalRequested: true,
+    });
     const calls = setSpy.mock.calls as unknown as { key: string }[][];
     const writes = calls.filter((c) => c[0]?.key === 'notification');
     expect(writes).toHaveLength(1);
     expect(writes[0]?.[0]).toEqual({
       key: 'notification',
-      value: { enabled: false, onTurnFinished: true, onTurnFailed: true },
+      value: {
+        enabled: false,
+        onTurnFinished: true,
+        onTurnFailed: true,
+        onApprovalRequested: true,
+      },
     });
   });
 
   it('快照缺失 notification 键 → 回落默认（全开，向既有行为）', () => {
     useSettingsStore.setState({
-      notification: { enabled: false, onTurnFinished: false, onTurnFailed: false },
+      notification: {
+        enabled: false,
+        onTurnFinished: false,
+        onTurnFailed: false,
+        onApprovalRequested: false,
+      },
     });
     applySettingsSnapshot({});
     expect(useSettingsStore.getState().notification).toEqual({
       enabled: true,
       onTurnFinished: true,
       onTurnFailed: true,
+      onApprovalRequested: true,
     });
   });
 
-  it('快照部分字段 → 与默认合并', () => {
+  it('快照部分字段 → 与默认合并（36-A：快照缺 onApprovalRequested 字段回落默认开）', () => {
     applySettingsSnapshot({ notification: { enabled: false } });
     expect(useSettingsStore.getState().notification).toEqual({
       enabled: false,
       onTurnFinished: true,
       onTurnFailed: true,
+      onApprovalRequested: true,
     });
   });
 
@@ -196,11 +213,13 @@ describe('settings-store.notification 域', () => {
     useSettingsStore.getState().applyMainSettingChange('notification', {
       enabled: false,
       onTurnFailed: false,
+      onApprovalRequested: false,
     });
     expect(useSettingsStore.getState().notification).toEqual({
       enabled: false,
       onTurnFinished: true,
       onTurnFailed: false,
+      onApprovalRequested: false,
     });
     // 变更来源是主进程（导入已落库）：内存更新即真源，回写是回声——不得再写穿透
     const calls = setSpy.mock.calls as unknown as { key: string }[][];

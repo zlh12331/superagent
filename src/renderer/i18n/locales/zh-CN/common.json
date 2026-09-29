@@ -367,6 +367,8 @@
     "notificationFinishedDesc": "正常结束、手动中断或达到步骤上限时提醒",
     "notificationFailedLabel": "回合出错提醒",
     "notificationFailedDesc": "回合因错误终止时提醒（建议保持开启）",
+    "notificationApprovalLabel": "审批等待提醒",
+    "notificationApprovalDesc": "回合在后台等待工具审批时提醒（不处理会超时拒绝）",
     "notificationDisabledDesc": "先开启回合结束后台提醒，才能调整具体事件",
     "proxyTitle": "网络代理",
     "proxyModeLabel": "代理模式",

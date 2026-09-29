@@ -367,6 +367,8 @@
     "notificationFinishedDesc": "Notify on normal completion, manual interruption, or step limit reached",
     "notificationFailedLabel": "Turn failed",
     "notificationFailedDesc": "Notify when a turn ends with an error (recommended to keep on)",
+    "notificationApprovalLabel": "Approval pending",
+    "notificationApprovalDesc": "Notify when a background turn waits for tool approval (it times out and gets denied if ignored)",
     "notificationDisabledDesc": "Turn on background turn alerts first to adjust individual events",
     "proxyTitle": "Network Proxy",
     "proxyModeLabel": "Proxy mode",

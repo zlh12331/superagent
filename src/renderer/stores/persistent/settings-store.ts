@@ -242,6 +242,8 @@ export interface NotificationSettings {
   readonly onTurnFinished: boolean;
   /** 回合出错通知（error；默认 true） */
   readonly onTurnFailed: boolean;
+  /** 审批等待通知（后台回合弹权限审批时提醒，36 号 A；默认 true） */
+  readonly onApprovalRequested: boolean;
 }
 
 /**
@@ -500,6 +502,7 @@ const DEFAULT_SETTINGS: SettingsData = {
     enabled: true,
     onTurnFinished: true,
     onTurnFailed: true,
+    onApprovalRequested: true,
   },
   proxy: {
     mode: 'system',
