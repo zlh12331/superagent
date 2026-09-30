@@ -54,6 +54,12 @@ pre-push 钩子：**仅密钥扫描**（`gitleaks git --log-opts="<远端 main>.
 本地全量验证走聚合命令：`pnpm verify:local`（质量层，约 4.5 分钟）/ `pnpm verify:local:full`（追加产物层，约 13–14 分钟）。
 `verify:local` 现覆盖：密钥扫描（gitleaks git）+ typecheck + lint + check:static + tokens:check + knip + depcruise + check:schema-drift + audit + 全部单测——与 CI quality job 的检查项已对齐（唯一例外：CI 独有的 `check:changelog-polish` 仅对 Release PR 生效）。
 
+## 文档地图
+
+- **docs/design/**：设计文档。入口 [docs/design/README.md](docs/design/README.md)（规范 / 实施记录 / 治理三区索引）；新功能实施记录按 32 号流程以 `NN-<slug>-spec.md` 落位并登记。
+- **docs/code-wiki/**：代码库导航（新成员读 00-index 起）。
+- **docs/archive/**：已完结的一次性交付记录（compose-spec 系列、UX 审计报告），只读留档，不再维护。
+
 ## 架构
 
 ```
