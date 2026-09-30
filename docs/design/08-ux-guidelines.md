@@ -229,7 +229,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 实现：[SettingsDialog.tsx](../src/renderer/components/settings/SettingsDialog.tsx) + `sections/`（20 个 section 文件）
 
 - **形态**：全屏 Sheet（右上 140px 透明拖拽区避让窗口控件）；左上「← 返回」；打开时重置到「模型服务」分区（避免停留深层分区）。
-- **导航**：5 组 15 项，`role="tablist"` + `↑↓` 方向键循环；激活项 = accent 2px 左竖条（`border-l-[color:var(--accent)]`）+ `text-foreground font-medium`（浅色模式对比度达标）。
+- **导航**：5 组 16 项，`role="tablist"` + `↑↓` 方向键循环；激活项 = accent 2px 左竖条（`border-l-[color:var(--accent)]`）+ `text-foreground font-medium`（浅色模式对比度达标）。
 - **分区能力矩阵**：
 
 | 分区 | 能力 | 状态 |
@@ -237,7 +237,8 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 模型服务 | 10 家提供商行（配置状态徽标 + 展开编辑 API Key：显示/隐藏/保存/删除）；运行时模型增删（modelId/provider/baseUrl）；模型参数（默认模型/温度/思考强度 off-low-medium-high）——温度全链路透传 agent:run（schema→handler→buildGenerationOptions temperatureOverride），DeepSeek 思考模型按官方限制忽略采样参数；审批权限（审批模式/白名单） | 已实现 |
 | MCP | server 列表（名称/状态徽章/工具数/最后一次错误信息）+ 添加表单 + 启动/停止 | 已实现 |
 | 技能 | 已学技能列表 + 描述学习（learn-skill-agent）+ 移除 | 已实现 |
-| 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 模式：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 插入 · Esc 切换，输入舱 NORMAL/INSERT 徽章；不支持 y/p/v/u 与数字前缀——设置页如实标注）；快捷键（ShortcutPicker 录制 6 项）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
+| 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 模式：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 插入 · Esc 切换，输入舱 NORMAL/INSERT 徽章；不支持 y/p/v/u 与数字前缀——设置页如实标注）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
+| 快捷键 | 自定义 6 项（ShortcutPicker 录制 + 冲突检测拒绝写入 + 单键/一键恢复默认）；固定键速查（只读 11 项，与帮助对话框同源清单） | 已实现 |
 | 工作树 | 当前工作目录 + 展开节点数（只读状态） | 已实现（配置项规划中） |
 | 浏览器 | 右面板「浏览器」= WebContentsView 进程外预览（独立 session `browser-preview`），非 iframe | `browser-pane` / `preview-service` |
 | 实验 | scanlines 扫描线（AppShell 根级 .scanlines-overlay 条件渲染，--text 令牌）/ 推理块默认折叠（message-item 消费） | 已实现（原型其余项不展示假开关） |
