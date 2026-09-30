@@ -16,21 +16,22 @@ Tool<TInput> 接口（tool.ts）
 ## 2. 核心抽象 `tool.ts`
 
 - `ToolContext`：工具执行上下文（含 `mode: 'plan'|'build'`、`webContents`、`abortSignal`、`metadata`）。
-- `ToolResult`：统一返回结构（`{ ok, data?, error? }`）。
-- `ToolCategory`：工具类别枚举。
+- `ToolResult`：统一返回结构（`{ title, output, metadata? }`——title 给 UI、output 给 LLM、metadata 结构化可选）。
+- `ToolCategory`：`'read' | 'edit' | 'exec'`（ApprovalMode 分级决策依据）。
 - `Tool<TInput>` 接口：
 
 ```ts
 interface Tool<TInput> {
   name: string;
   description: string;
-  inputSchema: z.ZodType<TInput>;
-  permission: 'auto' | 'ask' | 'deny';   // 工具默认权限
+  inputSchema: z.ZodType<TInput> | Schema<TInput>;  // 内置 zod / MCP 等上游 JSON Schema 原样透传
+  permission: 'auto' | 'ask';            // 工具默认权限（deny 只由权限决策产出，工具不可自声明）
   category: ToolCategory;
-  requiresReview?: boolean;
   execute(input: TInput, ctx: ToolContext): Promise<ToolResult>;
 }
 ```
+
+> `execute` 用方法声明而非函数属性：注册表存异构 `Tool<unknown>` 集合，方法声明获得双变（bivariance）才能赋值，函数属性在 strictFunctionTypes 下逆变不合法。
 
 ## 3. ToolRegistry（`tool-registry.ts`）
 
@@ -39,22 +40,26 @@ interface Tool<TInput> {
 
 ## 4. ToolExecutor（`tool-executor.ts`）
 
-`execute(name, input, ctx)` 统一入口：
-1. 查工具（未找到 → 错误）。
-2. 权限决策（经 PermissionService）：`auto` 直接执行；`ask` 发起审批；`deny` 拒绝。
+`execute(name, input, ctx, webContents)` 统一入口：
+1. 查工具（未找到 → 结构化错误）。
+2. 权限决策（**fail-closed**：decide 本身抛异常 → 拒绝执行，保证 AGENT_TOOL_RESULT 必推送）。
 3. 推送 `agent:tool:call` 事件（含 permission）。
-4. 处理审批结果 / 拒绝 / 超时。
-5. 检查中断信号（abort）。
-6. 调用 `tool.execute(input, ctx)` → 标准化 `ToolResult` → 推送 `agent:tool:result`。
+4. **pre-tool-use 钩子**（可阻断执行；错误隔离）。
+5. 权限闸：deny 直接拒绝 / ask 推审批（批准 / 拒绝 / 超时 / 窗口销毁 / 用户中断五种出口，中断经 abortSignal 立即 reject）。
+6. 中断信号复查（审批等待期间被停止）。
+7. 调用 `tool.execute(input, ctx)` → **post-tool-use 钩子** → 输出闸门 `clampToolOutput`（200KB 按字节截断，Buffer 切分防多字节字符劈半）→ 推送 `agent:tool:result`。
 
 ## 5. PermissionService（`permission-service.ts`）
 
-- `IPermissionService`：权限决策、审批请求、审批响应、记忆决策、白名单、拒绝跟踪、审批生命周期监听。
-- 审批模式（`ask | auto | denied`，由 `approval-pref.json` 持久化）；写操作（`permission='ask'`）需用户批准。
-- **拒绝跟踪**（`denial-tracking.ts`）：记录拒绝历史，避免重复申请。
-- **危险命令**（`dangerous-commands.ts`）：`run_command`/`terminal` 识别高风险命令。
-- **命令分类器**（`command-classifier.ts`）：用 LLM 判断命令安全性（`deny`/`ask`）。
-- **路径守卫**（`path-guard.ts`）：限制工具访问工作目录之外路径。
+- `IPermissionService`：权限决策、审批请求、审批响应、记忆决策（stableStringify 键序稳定哈希）、白名单、拒绝跟踪、审批生命周期监听。
+- 审批模式（**`plan | ask | auto | yolo` 四档**，`ApprovalModeSchema` 见 shared settings schema，`approval-pref.json` 持久化）；`decide()` 分层决策：记忆决策 → 白名单（token 级前缀匹配，空/纯通配符模式永不命中）→ plan 模式（read→auto / 非 read→deny，带逃生舱名单）→ Layer-0 危险命令确定性拦截（不可被 auto 绕过）→ 模式分级（auto 模式下 exec 出 workingDir 边界降级 ask + LLM 分类器）。
+- **拒绝跟踪**（`denial-tracking.ts`）：连续 3 次 / 累计 20 次拒绝 → 降级手动确认（放行重置连续计数），防模型死循环。
+- **危险命令**（`dangerous-commands.ts`）：破坏性 git（reset --hard / clean -f / stash drop）与 IaC destroy 正则集强制 ask；用户 prompt 显式提及 discard/wipe 时意图豁免。
+- **命令分类器**（`command-classifier.ts`）：auto 模式下 LLM 判定命令安全性（`{safe, reason}`），**fail-closed**——任何失败归 unknown → ask；带会话内缓存。
+- **路径守卫**（`path-guard.ts`）：resolved（展示形态）/ realTarget（realpathSync 真实落点，IO 专用）双路径对抗 symlink TOCTOU。
+- **出站 URL 守卫**（`url-guard.ts`）：web_fetch 的 SSRF 防护——本地名/云元数据黑名单、DNS 全地址解析任一命中即拒、重定向逐跳复查。
+- **决策原语**（`command-guards.ts`）：白名单语义/复合命令识别/plan 逃生舱名单等纯函数层（与审批流解耦，独立单测）。
+- **先读后写**（`read-tracker.ts`）：write/edit 已存在文件前必须先 read_file（会话级作用域）。
 
 ## 6. 内置工具清单（`tools/`，`registerBuiltinTools` 注册）
 
@@ -74,8 +79,9 @@ interface Tool<TInput> {
 - `git-commit.tool.ts` / `git-add.tool.ts` / `git-push.tool.ts`
 
 **代码智能 / LSP**：
+- `codebase.tool.ts`（codebase，auto/read——codegraph CLI 代码智能查询）
+- `code-symbols.tool.ts`（code_symbols，auto/read）
 - `lsp-definition.tool.ts` / `lsp-references.tool.ts` / `lsp-hover.tool.ts`（LSP 定位/引用/悬停）
-- 其余 codebase 查询经 `codebase` 域 handler
 
 **网络 / 代码评审 / 模式**：
 - `web-fetch.tool.ts`（web_fetch）
@@ -98,7 +104,7 @@ interface Tool<TInput> {
 
 **错误分类**：`error-classifier.ts`（工具错误 → ErrorCode）。
 
-> 完整注册清单见 `tools/index.ts` 的 `registerBuiltinTools(registry, fileService, searchService, terminalService, gitService, memoryPort, lspManager, askService, permissionService)` —— 工具工厂依赖这些服务注入（memoryPort 为 memory-hub 的 `MemoryPort`，见 07 记忆章节）。
+> 完整注册清单见 `tools/index.ts` 的 `registerBuiltinTools(registry, fileService, searchService, terminalService, gitService, memoryPort, lspManager, askService, permissionService, codebaseService)` —— 工具工厂依赖这些服务注入（memoryPort 为 memory-hub 的 `MemoryPort`，见 07 记忆章节）。
 
 ## 7. MCP 集成（`mcp/`）
 
@@ -106,17 +112,19 @@ interface Tool<TInput> {
 |---|---|
 | `mcp-client.ts` | `MCPClient.connect()` 启动 MCP server 子进程、协议握手、缓存 listTools；`callTool()` 转发调用、透传 abortSignal、转换结果为 `McpToolCallResult` |
 | `mcp-service.ts` | 多 MCP server 管理器；`startServer()` → `listTools()` → `adaptMcpTool()` → 注册进 ToolRegistry；`stopAll()` 关闭所有子进程 |
-| `mcp-tool-adapter.ts` | `adaptMcpTool()`：命名空间工具名、宽松 inputSchema、`decideMcpToolPermission()`（优先 config 覆盖 → `readOnlyHint=true` → `auto` → 默认 `ask`） |
+| `mcp-tool-adapter.ts` | `adaptMcpTool()`：命名空间工具名（`mcp__${server}__${tool}`）、inputSchema 经 AI SDK `jsonSchema()` 原样透传（不降级，校验责任在上游 server）、`decideMcpToolPermission()`（优先 config.permissionOverride → `annotations.readOnlyHint=true` → 默认 `ask`） |
 | `mcp-types.ts` | MCP 类型定义 |
 
 **流程**：入配置的 MCP server → MCPService 启动子进程 → 拉取工具列表 → 适配为项目内 `Tool` → 注册进统一 ToolRegistry → Agent 经 ToolExecutor 调用（同样走权限审批）。
 
 ## 8. 关键设计点
 
-- **审批流**：写操作 `permission='ask'` → PermissionService 请求审批 → 主进程推送 `agent:tool:call` → 渲染层 `inline-approval-card` / `approval-preview` 展示 → 用户批准/拒绝 → `agent:approvalResponse` → 回合状态机 `waitingApproval` 恢复。
-- **plan/build 差异**：plan 模式下写工具（`ask`）统一拒绝返回 `TOOL_PERMISSION_DENIED`，零副作用。
-- **统一错误分类**：工具失败经 `error-classifier` 映射到 ErrorCode，供渲染层 i18n。
-- **MCP 权限宽严**：优先 `permissionOverride`，其次只读 hint 自动放行，其余一律询问。
+- **审批流**：写操作 `permission='ask'` → PermissionService 请求审批 → 主进程推送 `agent:tool:call` → 渲染层 `inline-approval-card`（agent/ 组件）/ `approval-preview` 展示 → 用户批准/拒绝 → `agent:approval:response` IPC 回传 → 回合状态机 `waitingApproval` 恢复。
+- **plan/build 差异**：plan 模式下 `ask` 与 `deny` 双保险——ToolExecutor 直接拒绝写操作返回 `TOOL_PERMISSION_DENIED`（不弹审批框），零副作用（plan/apply 分离的核心约束）。
+- **统一错误分类**：工具失败经 `error-classifier` 映射到 ErrorCode（instanceof 类型守卫优先于 message 扫描），供渲染层 i18n。
+- **MCP 权限宽严**：优先 `permissionOverride`，其次 `readOnlyHint` 自动放行，其余一律询问（安全默认）。
+- **权限元数据不可信边界**：MCP 工具（`mcp__` 命名空间）入参不给 Layer-0 短路豁免；`permission='auto'` 的非只读工具同样先过 Layer-0（不可被标记绕过）。
+- **输出闸门**：`clampToolOutput` 200KB 上限统一截断，SDK 流 part 侧同闸（盲区修复）。
 
 ## 9. 关键文件
 
