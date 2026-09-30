@@ -1,7 +1,7 @@
 # 22. AI 工具开发规范
 
-> 基于项目实际工具体系（28 个工具 + tool-executor/registry/permission 支撑层 + scaffold:tool 脚手架）制定。
-> 最后同步：2026-08-11
+> 基于项目实际工具体系（34 个内置工具 + tool-executor/registry/permission 支撑层 + scaffold:tool 脚手架）制定。
+> 最后同步：2026-09-30（工具数/审批模式/IM 渠道数实测核对）
 
 ---
 
