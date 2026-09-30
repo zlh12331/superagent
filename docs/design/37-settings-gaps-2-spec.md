@@ -169,7 +169,8 @@
    暂存恢复链 + 测试；
 5. `05d3db0d` `feat(ui)` 37-B 渲染层：use-backups + 数据区子块 + i18n + 测试；
 6. `0ab9b0cf` `chore(quality)` 验证期登记（棘轮放宽 3 处 + 测试边界豁免）；
-7. 本提交 `docs(design)` 状态节收尾。
+7. `285fedf8` `fix(main)` 验证期修复：健康探针伴生文件清理（端到端实测发现）；
+8. 本提交 `docs(design)` 状态节收尾。
 
 ## 3 状态
 
@@ -194,6 +195,17 @@
    `applyPendingRestore` 消费。恢复成功路径不弹「已恢复」toast（进程随后重启）。
 7. **37-B 安全扫描拦截一次**：`String.match()` 版本通过 Mimosa（初版 `RegExp.exec()`
    被误判「命令注入」——无 shell 执行，属误报形态；改用 match 保持语义等价）。
+8. **37-B 伴生文件清理（真实环境端到端验证发现，`285fedf8` 修复）**：WAL 模式的备份
+   .db 被只读探针打开时，SQLite 会在同目录新建 `-shm`/`-wal` 伴生文件——每次打开
+   设置页都残留一对（用户可见的目录污染）。immutable URI 在 better-sqlite3 下实测
+   不可用（unable to open database file）。修复 = 探针只清理「本次新建」的伴生文件。
+9. **端到端验证实录**（真实 dev Electron + CDP）：`backup:list` 真实返回 3 份健康
+   备份（毫秒精度命名确认）→ `backup:create` 真实创建 + 轮转保持 3 份 → 设置页
+   「启动备份」子块渲染 + 恢复钮 5 个在版 + 「立即备份」成功 toast → Tab 宽度点击 4
+   → `--code-tab-size=4` + 落库回读 → 自动换行开关 → 落库 `wordWrap:true` →
+   设置复原。备份目录零伴生残留复验通过。**查看器 wrap/tab-size 的换行算法对齐已由
+   Playwright 探针在真实 Chromium 独立实证**（6 内容 × 4 宽度）；查看器组件的挂载
+   行为由 32 项单测覆盖（含新增 3 项 wrap 用例）。
 
 ### 3.2 验收核对
 
