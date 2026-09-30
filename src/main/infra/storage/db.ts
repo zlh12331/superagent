@@ -12,27 +12,26 @@
 // - WAL 模式：提升并发读性能（better-sqlite3 默认开启）
 // - 单例模式：与 FileService / GitService 一致，便于统一生命周期管理
 // - Drizzle 的 better-sqlite3 driver 是同步的，无需 await
+// - 备份文件操作（创建/列表/暂存/启动应用）在 backup-store.ts（37 号 B 抽离），
+//   本文件只保留调度（pendingBackup 串行化）与自愈链
 // ──────────────────────────────────────────────────────────────
 
-import {
-  chmodSync,
-  closeSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  unlinkSync,
-} from 'node:fs';
-import { dirname, join } from 'node:path';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from 'electron';
 import { logger } from '../../utils/logger';
+import {
+  applyPendingRestore,
+  backupDirPath,
+  cleanupBackupTmpFiles,
+  createBackupFile,
+  isBackupHealthy,
+  listBackupNames,
+} from './backup-store';
 import { restrictFileAccessWin32 } from './keychain';
 import { schema } from './schema';
 
@@ -42,10 +41,6 @@ import { schema } from './schema';
  * 存放在 userData 目录下，与 keychain.dat / logs/ 同级。
  */
 const DB_FILENAME = 'sessions.db';
-/** 备份保留份数（自动轮转，保留最近 N 份） */
-const BACKUP_KEEP = 3;
-/** 备份目录名（位于 userData 下） */
-const BACKUP_DIR = 'backups';
 /** PRAGMA auto_vacuum 的 INCREMENTAL 取值（0=NONE 默认 / 1=FULL / 2=INCREMENTAL） */
 const AUTO_VACUUM_INCREMENTAL = 2;
 /**
@@ -79,65 +74,47 @@ function restrictFilePermissions(filePath: string): void {
 }
 
 /**
- * 启动时热备份数据库（better-sqlite3 内置 backup API，不中断服务）
+ * 备份调度入口（唯一写路径）
  *
- * 轮转策略：写入 backups/sessions-<时间戳>.db，删除超出 BACKUP_KEEP 的最旧备份。
- * 崩溃后可从备份恢复（配合 WAL 崩溃恢复双保险）。
- * 注意：better-sqlite3 的 backup() 是异步 API，必须 await，否则拒绝未被捕获。
+ * 备份文件操作已抽到 backup-store（37 号 B）；本函数保留「原子落盘后轮转」
+ * 失败收尾的语义边界：失败时清 .db.tmp 残片、记日志、不阻断启动。
+ * pendingBackup 赋值使 closeDb 可等待在途备份落地。
  */
-async function backupDatabase(sqlite: Database.Database, dbPath: string): Promise<void> {
-  try {
-    const backupDir = join(dirname(dbPath), BACKUP_DIR);
-    mkdirSync(backupDir, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupPath = join(backupDir, `sessions-${stamp}.db`);
-    // 原子落盘：先写 .db.tmp 成功后再 rename。backup() 中途失败（磁盘满、进程被
-    // 强杀）会留下半截文件，而轮转按 *.db 计数——残缺备份会被误当成可用恢复点。
-    const tmpPath = `${backupPath}.tmp`;
-    // 安全修复：先以 0600 预创建空文件再交给 sqlite.backup 截断写入——
-    // 此前备份以默认 umask（644）完整落盘后才 chmod，POSIX 下存在
-    // 其他进程读到明文对话历史的窗口期。openSync 'a' 不截断已存在文件。
-    if (process.platform !== 'win32') {
-      try {
-        closeSync(openSync(tmpPath, 'a', 0o600));
-      } catch {
-        // 预创建失败不阻断（backup 会按原逻辑创建，restrictFilePermissions 兜底）
-      }
-    }
-    await sqlite.backup(tmpPath);
-    // 安全修复：备份含完整对话历史，同样限制为仅属主可读写
-    restrictFilePermissions(tmpPath);
-    renameSync(tmpPath, backupPath);
-    logger.info({ backupPath }, '数据库热备份完成');
+function runBackup(sqlite: Database.Database, dbPath: string): Promise<void> {
+  const task: Promise<void> = createBackupFile(sqlite, dbPath)
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      cleanupBackupTmpFiles(dbPath);
+      // 备份失败不阻断启动（日志中可诊断）
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        '数据库备份失败',
+      );
+    });
+  pendingBackup = task;
+  return task;
+}
 
-    // 轮转：删除超出保留份数的最旧备份
-    const backups = readdirSync(backupDir)
-      .filter((name) => name.startsWith('sessions-') && name.endsWith('.db'))
-      .sort();
-    const excess = backups.length - BACKUP_KEEP;
-    for (let i = 0; i < excess; i++) {
-      const stale = join(backupDir, backups[i] ?? '');
-      unlinkSync(stale);
-      logger.info({ stale }, '轮转删除过期备份');
-    }
-  } catch (error) {
-    // 失败清理：残缺的 .db.tmp 不留存（不匹配轮转的 .db 过滤，但避免目录堆积）
-    const partial = join(dirname(dbPath), BACKUP_DIR);
-    try {
-      for (const name of readdirSync(partial)) {
-        if (name.endsWith('.db.tmp')) {
-          unlinkSync(join(partial, name));
-        }
-      }
-    } catch {
-      // 备份目录尚未创建，无残留可清
-    }
-    // 备份失败不阻断启动（日志中可诊断）
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      '数据库备份失败',
-    );
+/**
+ * 手动立即备份（37 号 B：设置页「立即备份」入口）
+ *
+ * 与启动备份共用同一路径与轮转环；经 pendingBackup 串行化——在途启动备份
+ * 未落地时手动备份排队等待（两次 backup() 并发会在同一轮转环内竞态计数）。
+ *
+ * @returns 新备份文件名（裸名）
+ * @throws Error 备份失败（磁盘满/权限等，备份目录未就绪时也在此抛出——
+ *   手动入口与启动入口的失败语义不同：前者要用户可见，后者只记日志）
+ */
+export async function createManualBackup(): Promise<{ readonly name: string }> {
+  if (pendingBackup !== null) {
+    await pendingBackup;
   }
+  if (sqliteInstance === null) {
+    throw new Error('数据库未初始化，无法备份');
+  }
+  const dbPath = getDbPath();
+  const name = await createBackupFile(sqliteInstance, dbPath);
+  return { name };
 }
 
 /**
@@ -159,10 +136,8 @@ function scheduleStartupBackup(
     logger.warn({}, '本次启动重建了空数据库，跳过启动备份以保留既有健康备份');
     return;
   }
-  // backupDatabase 内部已捕获全部异常，此 Promise 永不 reject，可安全 await
-  pendingBackup = backupDatabase(sqlite, dbPath).catch((error: unknown) => {
-    logger.error({ error: String(error) }, '数据库备份失败');
-  });
+  // runBackup 内部已捕获全部异常，返回的 Promise 永不 reject，可安全忽略
+  void runBackup(sqlite, dbPath);
 }
 
 /**
@@ -171,18 +146,13 @@ function scheduleStartupBackup(
  * 策略：从新到旧遍历 backups/ 轮转环，逐份 quick_check 验证，
  * 取第一份健康备份覆盖主库文件（并清理可能不匹配的 WAL/SHM 残件）。
  * 若轮转环全部损坏（极端情况）返回 false。
+ *
+ * 37 号 B：轮转环遍历与健康判据复用 backup-store（备份文件操作单点）——
+ * 本函数只保留「覆盖主库 + 权限 + 日志」的自愈专有部分。
  */
 function tryRestoreFromBackup(dbPath: string): boolean {
-  const backupDir = join(dirname(dbPath), BACKUP_DIR);
-  let backups: string[];
-  try {
-    backups = readdirSync(backupDir)
-      .filter((name) => name.startsWith('sessions-') && name.endsWith('.db'))
-      .sort();
-  } catch {
-    // 备份目录不存在（从未成功备份）
-    return false;
-  }
+  const backupDir = backupDirPath(dbPath);
+  const backups = listBackupNames(dbPath);
   if (backups.length === 0) {
     return false;
   }
@@ -190,11 +160,7 @@ function tryRestoreFromBackup(dbPath: string): boolean {
   for (const name of [...backups].reverse()) {
     const candidate = join(backupDir, name);
     try {
-      const probe = new Database(candidate, { readonly: true });
-      const integrity = probe.pragma('quick_check', { simple: true }) as unknown;
-      probe.close();
-      const healthy = !(typeof integrity === 'string' && integrity !== 'ok');
-      if (!healthy) {
+      if (!isBackupHealthy(candidate)) {
         logger.warn({ backup: name }, '备份完整性校验失败，尝试更早备份');
         continue;
       }
@@ -458,12 +424,15 @@ function openWithDefaultPragmas(dbPath: string): Database.Database | null {
  *
  * 流程：
  * 1. 确保 userData 目录存在（mkdirSync recursive）
- * 2. 打开 better-sqlite3 连接（同步）
- * 3. 配置 WAL 模式（提升并发读性能）
- * 4. 创建 drizzle 实例
- * 5. 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生，幂等）
+ * 2. **消费待应用恢复（37 号 B）**：备份恢复暂存存在时替换主库文件——
+ *    必须在任何连接打开之前（WAL 句柄冲突）
+ * 3. 打开 better-sqlite3 连接（同步）
+ * 4. 配置 WAL 模式（提升并发读性能）
+ * 5. 创建 drizzle 实例
+ * 6. 执行 drizzle-kit 生成的迁移（schema.ts 单一真源自动派生，幂等）
  *
- * 启动顺序（2026-09-06 审计修复，2026-09-08 加固）：
+ * 启动顺序（2026-09-06 审计修复，2026-09-08 加固，37 号 B 扩展）：
+ * - **先消费恢复暂存再打开连接**：暂存替换只有放在连接打开前才无句柄冲突
  * - **先损坏自愈再 VACUUM**：损坏库上任何写操作（含 VACUUM）都会先抛
  *   SQLITE_CORRUPT，把 auto_vacuum 转换放在前面会让自愈永远走不到
  *   （auto_vacuum=NONE 的老库一旦损坏 = 每次启动即死，健康备份形同虚设）
@@ -484,6 +453,17 @@ export function initDb(): DrizzleDB {
   mkdirSync(dir, { recursive: true });
 
   logger.info({ dbPath }, '初始化 SQLite 数据库');
+
+  // 37 号 B：消费待应用恢复（备份恢复暂存 → 替换主库）——必须在任何连接
+  // 打开之前（WAL 句柄冲突）；替换后主库即为恢复点内容，走正常打开/自愈链
+  try {
+    applyPendingRestore(dbPath);
+  } catch (error) {
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      '备份恢复应用失败（暂存保留，下次启动重试；继续按现有库启动）',
+    );
+  }
 
   // 打开连接（打开/pragma 失败降级为 null，交由自愈流程处理）
   const recovery = restoreCorruptDatabase(openWithDefaultPragmas(dbPath), dbPath);

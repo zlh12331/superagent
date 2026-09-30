@@ -46,6 +46,15 @@ export const IPC_META = {
     applyZoom: request('window:applyZoom'),
   },
 
+  backup: {
+    // 备份恢复点列表（37 号 B：backups/ 轮转环 + quick_check 健康度，最新在前）
+    list: request('backup:list'),
+    // 手动立即备份（复用启动备份同一路径，进同一轮转环）
+    create: request('backup:create'),
+    // 从指定恢复点恢复（暂存 + 重启生效；运行中回合拒绝）
+    restore: request('backup:restore'),
+  },
+
   agent: {
     run: request('agent:run'),
     subscribeAsk: event('agent:event:ask'),

@@ -550,6 +550,8 @@ function createMockApi(): IpcApi {
   return {
     app: createAppDomainMock(),
 
+    backup: createBackupMock(),
+
     session: {
       list: async ({ limit }: Req<IpcApi['session']['list']>) => {
         // 对齐主进程排序：置顶优先，同置顶内 updatedAt 倒序
@@ -1098,6 +1100,18 @@ function createMockApi(): IpcApi {
     },
     browser: createBrowserMock(),
   } satisfies IpcApi;
+}
+
+/**
+ * backup 域 mock（37-B）：浏览器模式无 backups/ 目录与真实备份文件——
+ * list 返回空列表（UI 空态可测）、create/restore 以假名/ok 模拟成功路径
+ */
+function createBackupMock(): IpcApi['backup'] {
+  return {
+    list: async () => ipcOk({ backups: [] }),
+    create: async () => ipcOk({ name: 'sessions-mock.db' }),
+    restore: async () => ipcOk({ ok: true }),
+  };
 }
 
 /** browser 域 mock：浏览器模式无主进程 WebContentsView，导航 no-op，状态恒空 */

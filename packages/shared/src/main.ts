@@ -46,6 +46,7 @@ export * from './schemas/agent';
 export * from './schemas/agent-ask';
 export * from './schemas/agent-events';
 export * from './schemas/app';
+export * from './schemas/backup';
 export * from './schemas/browser';
 export * from './schemas/chat';
 export * from './schemas/codebase';

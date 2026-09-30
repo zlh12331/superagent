@@ -41,6 +41,7 @@ import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { createAgentAskHandlers } from './ipc/agent-ask.handler';
 import { appHandlers } from './ipc/app.handler';
+import { createBackupHandlers } from './ipc/backup.handler';
 import { createBrowserHandlers } from './ipc/browser.handler';
 import { devtoolsHandlers } from './ipc/devtools.handler';
 import { dialogHandlers } from './ipc/dialog.handler';
@@ -271,6 +272,10 @@ app
       }),
       proxy: createProxyHandlers(),
       window: createWindowHandlers(),
+      // 备份可见性（37-B）：list/create/restore；恢复守卫与清空会话同一真源
+      backup: createBackupHandlers({
+        hasRunningAgentTurns: () => serviceContainer.hasRunningAgentTurns(),
+      }),
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
       memory: createMemoryHandlers({

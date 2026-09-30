@@ -53,6 +53,15 @@ import {
   SetLoginItemSettingsReqSchema,
 } from '../schemas/app';
 import {
+  type BackupCreateRes,
+  BackupCreateResSchema,
+  type BackupListRes,
+  BackupListResSchema,
+  BackupRestoreReqSchema,
+  type BackupRestoreRes,
+  BackupRestoreResSchema,
+} from '../schemas/backup';
+import {
   BrowserConfigureReqSchema,
   type BrowserLoadFailedPayload,
   BrowserLoadFailedPayloadSchema,
@@ -809,6 +818,20 @@ export const IPC_DEFINITIONS = {
       ApplyZoomReqSchema,
       {} as ApplyZoomRes,
       ApplyZoomResSchema,
+    ),
+  },
+
+  backup: {
+    // 备份恢复点列表（37 号 B）：无入参；健康度由主进程 quick_check 给出
+    list: withSchema(IPC_META.backup.list, null, {} as BackupListRes, BackupListResSchema),
+    // 手动立即备份：无入参；name = 新备份文件名（进同一轮转环）
+    create: withSchema(IPC_META.backup.create, null, {} as BackupCreateRes, BackupCreateResSchema),
+    // 从指定恢复点恢复：name 为裸文件名（路径穿越防御在主进程）
+    restore: withSchema(
+      IPC_META.backup.restore,
+      BackupRestoreReqSchema,
+      {} as BackupRestoreRes,
+      BackupRestoreResSchema,
     ),
   },
 
