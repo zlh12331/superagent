@@ -45,6 +45,8 @@
   vertical-align: top;
   white-space: pre-wrap;
   overflow-wrap: anywhere; /* 超长行折行（react-diff-viewer 默认行为），避免双栏错位 */
+  /* Tab 宽度（37 号 A）：--code-tab-size 单点变量的 diff 侧消费 */
+  tab-size: var(--code-tab-size, 8);
 }
 
 .diff-code.is-add {

@@ -90,6 +90,9 @@
   overflow-wrap: break-word;
   word-break: break-word;
   min-width: 0;
+  /* Tab 宽度（37 号 A）：--code-tab-size 由 use-editor-code-style 写入
+     documentElement；tab-size 继承下沉到 pre/code（含行内 code） */
+  tab-size: var(--code-tab-size, 8);
 }
 
 /* 用户消息：右对齐 + 气泡限宽（对齐设计「玻璃渐变气泡靠右」；

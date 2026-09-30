@@ -216,6 +216,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elev);
+  /* Tab 宽度（37 号 A）：--code-tab-size 单点变量的查看态消费点
+     （tab-size 继承下沉到 pre；编辑态消费点见 .file-viewer-editor） */
+  tab-size: var(--code-tab-size, 8);
 }
 
 /* 查看器左右布局：左侧文件树导航 + 右侧内容（文件树导航接管高度，body 不再限高） */
@@ -398,6 +401,8 @@
   width: 100%;
   height: 100%;
   min-height: 200px;
+  /* Tab 宽度（37 号 A）：编辑态消费点（继承下沉到 textarea 与高亮层 pre） */
+  tab-size: var(--code-tab-size, 8);
 }
 
 /* 高亮层（背景）：与 textarea 完全对齐 */
@@ -468,6 +473,39 @@
 
 .file-viewer-editor-textarea:focus {
   outline: none;
+}
+
+/* ── 自动换行（37 号 A：file-viewer-wrap 类开启）──────────────
+ *
+ * 对齐不变式（textarea 与高亮层逐行一致）——两层必须「同换行算法 + 同有效宽度」：
+ * 1. 换行算法：两层同 `white-space: pre-wrap; overflow-wrap: break-word;
+ *    word-break: normal`。实测（Playwright 探针，6 内容 × 4 宽度全对齐）——
+ *    break-word 家族与 textarea soft-wrap 逐行一致；`word-break: break-all`
+ *    更激进（长词/混排处先行折断），与 textarea 不一致，禁用。
+ * 2. 有效宽度：textarea 强制 `overflow-y: scroll`（滚动条占位恒定，Classic 恒定
+ *    占位 / Overlay 恒零），高亮层经行内 padding-right 补等价占位（组件运行时
+ *    测量 offsetWidth-clientWidth，不硬编码宽度——平台滚动条形态差异收敛在测量）。
+ */
+.file-viewer-wrap .file-viewer-editor-textarea {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  /* 占位恒定：无内容溢出时也保留滚动条位（高亮层测量后一次对齐） */
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+
+.file-viewer-wrap .file-viewer-editor-highlight {
+  overflow-x: hidden;
+}
+
+/* 高亮层/查看态 shiki 与纯文本降级：与 textarea 同换行算法 */
+.file-viewer-wrap .file-viewer-editor-highlight pre.shiki,
+.file-viewer-wrap .file-viewer-code pre.shiki,
+.file-viewer-wrap .file-viewer-plaintext {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* 节点行（按钮）：统一缩进 + 图标 + 名称

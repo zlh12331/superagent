@@ -31,6 +31,7 @@ import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useDeepLink } from '@/hooks/use-deep-link';
+import { useEditorCodeStyle } from '@/hooks/use-editor-code-style';
 import { useInvalidationBridge } from '@/hooks/use-invalidation-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
@@ -251,6 +252,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
 
   // 35 号：缩放应用单点（订阅 store.appearance.zoom——五入口构造性覆盖）
   useZoomEffect();
+
+  // 37 号 A：代码面 Tab 宽度应用单点（订阅 store.editor.tabSize → --code-tab-size）
+  useEditorCodeStyle();
 
   // 面板宽度 + 分隔线交互（拖拽 / 键盘 / CSS 变量同步），实现见 use-resizable-panels
   const { sidebarWidth, rightPanelWidth, draggingSide, onResizerMouseDown, onResizerKeyDown } =

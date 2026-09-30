@@ -606,6 +606,10 @@
     "editor": {
       "display": "Display",
       "fontSize": "Font size",
+      "tabSize": "Tab width",
+      "tabSizeDesc": "Display width of tab characters in code (file viewer / chat code blocks / diffs)",
+      "wordWrap": "Word wrap",
+      "wordWrapDesc": "Wrap long lines when viewing and editing files (off = horizontal scrolling)",
       "behavior": "Behavior",
       "vimMode": "Vim mode",
       "vimModeDesc": "Vim keybindings in the composer: h/j/k/l move · w/b word start · 0/$ line start/end · x delete char · dd delete line · i/a/I/A enter insert · Esc back to normal (y/p/v/u and count prefixes not supported)"

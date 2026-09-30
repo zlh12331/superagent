@@ -28,6 +28,7 @@ import { useTranslation } from '@/i18n/use-translation';
 import { ensureLangLoaded, getHighlighter } from '@/lib/highlight';
 import { basename, cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useFileViewerStore } from '@/stores/transient/file-viewer-store';
 
@@ -168,6 +169,10 @@ export function FileViewerPanel(): ReactElement {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
 
+  // 编辑器设置：自动换行（37 号 A：查看/编辑双层同步——编辑态 textarea wrap +
+  // 高亮层/查看态 pre-wrap，双层同字体/同宽/同内边距保证逐行对齐）
+  const wordWrap = useSettingsStore((s) => s.editor.wordWrap);
+
   // textarea 滚动同步：编辑态下滚动 textarea 时同步高亮层
   const handleTextareaScroll = (): void => {
     if (textareaRef.current !== null && highlightRef.current !== null) {
@@ -175,6 +180,30 @@ export function FileViewerPanel(): ReactElement {
       highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
     }
   };
+
+  // 自动换行占位对齐（37 号 A）：wrap 模式下 textarea 纵向滚动条（占用宽度因
+  // 平台/滚动条形态而异）会减少其可用换行宽度，而高亮层隐藏滚动条不占位 →
+  // 两层折行点不一致。此处运行时测量 textarea 真实占位，补给高亮层的
+  // padding-right（不硬编码 8px：Classic 占位 / Overlay 零占位在测量处收敛）。
+  // 换行算法一致性由 CSS 层保证（file-tree.css .file-viewer-wrap 注释）。
+  // 依赖 html：高亮层在 shiki 就绪前不渲染，就绪后需补测
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控读，html 为高亮层挂载信号
+  useEffect(() => {
+    const highlight = highlightRef.current;
+    if (highlight === null) {
+      return;
+    }
+    const textarea = textareaRef.current;
+    if (!editMode || !wordWrap || textarea === null) {
+      highlight.style.paddingRight = '';
+      return;
+    }
+    const occupancy = textarea.offsetWidth - textarea.clientWidth;
+    highlight.style.paddingRight = occupancy > 0 ? `${occupancy}px` : '0px';
+    return () => {
+      highlight.style.paddingRight = '';
+    };
+  }, [editMode, wordWrap, html]);
 
   // 渲染
   const fileName = filePath !== null ? basename(filePath) : '';
@@ -215,7 +244,7 @@ export function FileViewerPanel(): ReactElement {
 
       {/* 内容区：文件内容（侧边栏文件树已提供目录导航——面板只显示内容） */}
       <div className="file-viewer-layout">
-        <div className="file-viewer-body">
+        <div className={cn('file-viewer-body', wordWrap && 'file-viewer-wrap')}>
           <ViewerBody
             isLoading={isLoading}
             error={error}
@@ -223,6 +252,7 @@ export function FileViewerPanel(): ReactElement {
             content={displayContent}
             html={html}
             fileName={fileName}
+            wordWrap={wordWrap}
             editor={{
               value: editedContent,
               onChange: setEditedContent,
@@ -251,11 +281,17 @@ interface EditorBindings {
 interface EditorViewProps extends EditorBindings {
   readonly html: string | null;
   readonly fileName: string;
+  /** 自动换行（37 号 A）：wrap 开关 + 双层 pre-wrap 类） */
+  readonly wordWrap: boolean;
 }
 
 /**
  * 编辑态视图：shiki 高亮做背景层，textarea 做前景层
  * （文字透明、caret 不透明，与下层高亮逐行对齐）
+ *
+ * 37 号 A：wordWrap 开启时 textarea `wrap="soft"` + 容器 file-viewer-wrap 类
+ * （CSS 将双层切为 pre-wrap + break-all 的确定换行算法——同字体/同宽/同内边距
+ * 下逐行对齐不破）。
  */
 function EditorView({
   value,
@@ -265,10 +301,11 @@ function EditorView({
   onScroll,
   html,
   fileName,
+  wordWrap,
 }: EditorViewProps): ReactElement {
   const { t } = useTranslation();
   return (
-    <div className="file-viewer-editor">
+    <div className={cn('file-viewer-editor', wordWrap && 'file-viewer-wrap')}>
       {/* 高亮层（背景，pointer-events: none） */}
       {html !== null && (
         <div
@@ -289,7 +326,7 @@ function EditorView({
         autoComplete="off"
         autoCapitalize="off"
         autoCorrect="off"
-        wrap="off"
+        wrap={wordWrap ? 'soft' : 'off'}
         // 空文件在编辑态给一句引导（textarea 自身无内容时全空，用户不知可输入）
         {...(value === '' ? { placeholder: t('common.emptyFileEdit') } : {})}
         aria-label={t('chat.editFileLabel', { name: fileName })}
@@ -306,6 +343,8 @@ interface ViewerBodyProps {
   readonly content: string;
   readonly html: string | null;
   readonly fileName: string;
+  /** 自动换行（37 号 A：编辑态 textarea wrap + 高亮层同步） */
+  readonly wordWrap: boolean;
   readonly editor: EditorBindings;
 }
 
@@ -328,6 +367,7 @@ function ViewerBody({
   content,
   html,
   fileName,
+  wordWrap,
   editor,
 }: ViewerBodyProps): ReactElement {
   const { t } = useTranslation();
@@ -344,7 +384,7 @@ function ViewerBody({
   }
   // 编辑态优先：空文件也必须可编辑（textarea 为空串即可正常输入）
   if (editMode) {
-    return <EditorView {...editor} html={html} fileName={fileName} />;
+    return <EditorView {...editor} html={html} fileName={fileName} wordWrap={wordWrap} />;
   }
   if (content === '') {
     return <div className="file-viewer-empty">{t('common.emptyFile')}</div>;

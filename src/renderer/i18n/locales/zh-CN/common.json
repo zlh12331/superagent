@@ -606,6 +606,10 @@
     "editor": {
       "display": "显示",
       "fontSize": "字体大小",
+      "tabSize": "Tab 宽度",
+      "tabSizeDesc": "代码中 Tab 字符的显示宽度（文件查看器 / 聊天代码块 / 变更对比）",
+      "wordWrap": "自动换行",
+      "wordWrapDesc": "文件查看与编辑时长行折行显示（关闭为横向滚动）",
       "behavior": "行为",
       "vimMode": "Vim 模式",
       "vimModeDesc": "Vim 键位（输入舱）：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 进入插入 · Esc 回普通模式（不支持 y/p/v/u 与数字前缀）"

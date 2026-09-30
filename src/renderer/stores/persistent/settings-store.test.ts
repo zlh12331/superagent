@@ -320,3 +320,65 @@ describe('settings-store.appearance 域（35 号界面缩放）', () => {
     expect(calls.filter((c) => c[0]?.key === 'appearance')).toHaveLength(0);
   });
 });
+
+describe('settings-store.editor 域（37 号 A 代码面排版）', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'api', {
+      value: { settings: { set: setSpy } },
+      writable: true,
+      configurable: true,
+    });
+    setSpy.mockReset();
+    setSpy.mockResolvedValue({ data: { ok: true } });
+    useSettingsStore.setState({
+      editor: { fontSize: 14, vimMode: false, wordWrap: false, tabSize: 8 },
+    });
+  });
+
+  it('updateEditor：部分合并 + 以 editor 键写穿透', () => {
+    useSettingsStore.getState().updateEditor({ wordWrap: true, tabSize: 2 });
+    expect(useSettingsStore.getState().editor).toEqual({
+      fontSize: 14,
+      vimMode: false,
+      wordWrap: true,
+      tabSize: 2,
+    });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    const writes = calls.filter((c) => c[0]?.key === 'editor');
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.[0]).toEqual({
+      key: 'editor',
+      value: { fontSize: 14, vimMode: false, wordWrap: true, tabSize: 2 },
+    });
+  });
+
+  it('V1/V5 快照缺失 → 回落 false/8；损坏值 → 逐字段收窄（tabSize clamp、wordWrap 非布尔→false）', () => {
+    useSettingsStore.getState().updateEditor({ wordWrap: true, tabSize: 2 });
+    applySettingsSnapshot({});
+    expect(useSettingsStore.getState().editor).toEqual({
+      fontSize: 14,
+      vimMode: false,
+      wordWrap: false,
+      tabSize: 8,
+    });
+
+    applySettingsSnapshot({ editor: { tabSize: 6, wordWrap: 'junk' } });
+    expect(useSettingsStore.getState().editor.wordWrap).toBe(false);
+    expect(useSettingsStore.getState().editor.tabSize).toBe(4);
+
+    applySettingsSnapshot({ editor: { tabSize: Number.NaN } });
+    expect(useSettingsStore.getState().editor.tabSize).toBe(8);
+  });
+
+  it('V8 导入回显：applyMainChange 通用分支按域合并不回写', () => {
+    useSettingsStore.getState().applyMainSettingChange('editor', { wordWrap: true, tabSize: 4 });
+    expect(useSettingsStore.getState().editor).toEqual({
+      fontSize: 14,
+      vimMode: false,
+      wordWrap: true,
+      tabSize: 4,
+    });
+    const calls = setSpy.mock.calls as unknown as { key: string }[][];
+    expect(calls.filter((c) => c[0]?.key === 'editor')).toHaveLength(0);
+  });
+});

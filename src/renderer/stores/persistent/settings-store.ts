@@ -16,8 +16,10 @@
 
 import {
   type ApiKeyProvider,
+  clampEditorTabSize,
   clampFontSize,
   clampZoom,
+  DEFAULT_EDITOR_TAB_SIZE,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -96,13 +98,23 @@ export interface AiSettings {
 }
 
 /**
- * 编辑器相关设置
+ * 编辑器相关设置（37 号 A 扩展：wordWrap/tabSize 代码面排版）
  */
 export interface EditorSettings {
-  /** 字体大小（px，默认 14） */
+  /** 字体大小（px，默认 14；聊天消息区消费） */
   readonly fontSize: number;
   /** 是否启用 vim 模式 */
   readonly vimMode: boolean;
+  /**
+   * 自动换行（默认 false=现状：长行横向滚动）；FileViewerPanel 查看/编辑态消费
+   * （textarea wrap + 高亮层/查看态 white-space 双层同步）
+   */
+  readonly wordWrap: boolean;
+  /**
+   * Tab 宽度档位（2/4/8，默认 8=浏览器默认；EDITOR_TAB_SIZES 单一真源）；
+   * 经 --code-tab-size 变量收敛文件查看器/聊天代码块/diff 全部代码面
+   */
+  readonly tabSize: number;
 }
 
 /**
@@ -498,6 +510,8 @@ const DEFAULT_SETTINGS: SettingsData = {
   editor: {
     fontSize: 14,
     vimMode: false,
+    wordWrap: false,
+    tabSize: DEFAULT_EDITOR_TAB_SIZE,
   },
   shortcuts: DEFAULT_SHORTCUTS,
   experimental: {
@@ -727,7 +741,15 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
     ai: { ...DEFAULT_SETTINGS.ai, ...((snapshot['ai'] as Partial<AiSettings> | undefined) ?? {}) },
     editor: {
       ...DEFAULT_SETTINGS.editor,
+      // 37 号 A：缺失 → 默认（false/8）；损坏 tabSize → clamp 最近档（导入路径
+      // 绕过 superRefine，读侧归一在此收口）；wordWrap 非布尔 → 默认 false
       ...((snapshot['editor'] as Partial<EditorSettings> | undefined) ?? {}),
+      wordWrap: asEditorWordWrap(
+        (snapshot['editor'] as { wordWrap?: unknown } | undefined)?.wordWrap,
+      ),
+      tabSize: clampEditorTabSize(
+        (snapshot['editor'] as { tabSize?: unknown } | undefined)?.tabSize as number,
+      ),
     },
     shortcuts: {
       ...DEFAULT_SETTINGS.shortcuts,
@@ -788,4 +810,9 @@ export function applySettingsSnapshot(snapshot: Readonly<Record<string, unknown>
 /** terminal.shell 合法值收窄（快照/导入路径的损坏值 → auto） */
 function asShellChoice(value: unknown): TerminalShellChoice {
   return TERMINAL_SHELL_CHOICES.includes(value as never) ? (value as TerminalShellChoice) : 'auto';
+}
+
+/** editor.wordWrap 布尔收窄（快照/导入路径的损坏值 → 默认 false=现状） */
+function asEditorWordWrap(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : false;
 }
