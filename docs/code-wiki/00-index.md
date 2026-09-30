@@ -46,3 +46,11 @@
 2. 需要理解"一条消息如何变成 AI 回复" → 读 `04` 的 AgentService + agent-runtime，`05` 的工具系统。
 3. 需要给前端加功能 → 读 `03`（新增 IPC）+ `08`（渲染层）；新功能流程见 `../design/32-feature-workflow-spec.md`。
 4. 需要排查数据问题 → 读 `06`。
+5. 需要查设计决策的「为什么」 → `../design/README.md` 三区索引（规范 / 实施记录 / 治理）；技术债唯一可信清单在 `../design/debt.md`（代码注释 `debt.md#dN` 指向它）。
+
+## 数字速览（2026-09-30 实测，随代码演进会过时——以仓库现状为准）
+
+- 版本 v1.3.3；Electron 44.2 / React 19.2 / AI SDK 7.0（OpenAI 兼容端点，用户自带 Key）
+- 34 个内置工具（`src/main/infra/ai/tools/index.ts` 注册表）· 115 个 IPC 方法 / 28 域（`packages/shared/src/ipc/meta.ts`）
+- 供应商 10 家：deepseek / openai / anthropic / ollama / moonshot / zhipu / qwen / doubao / siliconflow / openrouter（`packages/shared/src/schemas/settings.ts` 枚举）
+- 测试 400+ 文件（renderer/main/integration/scripts 单测 + E2E 三套 Playwright 配置）；质量门禁顺序与命令见 `09-run.md`
