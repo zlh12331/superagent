@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe('GeneralSection', () => {
-  it('正向：渲染语言行与各子区块（编辑器/快捷键/提示词/数据/遥测）', () => {
+  it('正向：渲染语言行与各子区块（编辑器/提示词/数据/遥测）', () => {
     renderWithQuery(<GeneralSection drawerOpen={false} />);
 
     expect(screen.getByText(t('settings.language'))).toBeDefined();

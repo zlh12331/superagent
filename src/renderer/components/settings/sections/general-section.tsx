@@ -24,7 +24,6 @@ import { DataSection } from './data-section';
 import { EditorSection } from './editor-section';
 import { NotificationSection } from './notification-section';
 import { PromptSection } from './prompt-section';
-import { ShortcutsSection } from './shortcuts-section';
 import { TelemetrySection } from './telemetry-section';
 import { ZoomSection } from './zoom-section';
 
@@ -161,10 +160,9 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
       {/* 界面缩放（35 号：显示域，与窗口行为/系统通知相邻） */}
       <ZoomSection />
 
-      {/* 编辑器 / 快捷键 / 提示词（并入通用） */}
+      {/* 编辑器 / 提示词（并入通用；快捷键已独立分区，见 shortcuts-section） */}
       <div className="flex flex-col gap-4">
         <EditorSection />
-        <ShortcutsSection />
         <PromptSection open={drawerOpen} />
       </div>
 

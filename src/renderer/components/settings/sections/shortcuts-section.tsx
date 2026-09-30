@@ -1,5 +1,5 @@
 // shortcuts-section.tsx（自 SettingsDialog 拆分）
-// 设置对话框 · 快捷键设置（36 号 C：录键冲突检测 + 恢复默认）
+// 设置 · 快捷键独立分区（36 号 C：录键冲突检测 + 恢复默认；原嵌通用页，后独立成导航项）
 // ──────────────────────────────────────────────
 // 设计：
 // - 冲突检测在 onChange（ShortcutPicker 保持纯录制控件，不知业务清单）：
@@ -13,7 +13,6 @@ import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { useTranslation } from '@/i18n/use-translation';
 import {
   CUSTOM_SHORTCUT_KEYS,
@@ -79,9 +78,9 @@ export function ShortcutsSection(): ReactElement {
     <div className="flex flex-col gap-3 pt-2">
       <div className="flex items-center gap-2">
         <Keyboard className="text-muted-foreground size-4" strokeWidth={1.5} />
-        <Label className="font-serif text-sm tracking-wide">{t('common.shortcuts')}</Label>
+        <h3 className="text-foreground text-sm font-semibold">{t('settings.shortcuts.title')}</h3>
       </div>
-      <p className="text-muted-foreground text-xs font-sans">{t('common.shortcutsHint')}</p>
+      <p className="text-muted-foreground text-xs font-sans">{t('settings.shortcuts.hint')}</p>
       <div className="flex flex-col gap-2">
         {SHORTCUT_ITEMS.map((item) => {
           const changed = shortcuts[item.key] !== DEFAULT_SHORTCUTS[item.key];

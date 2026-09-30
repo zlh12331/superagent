@@ -23,6 +23,7 @@ export type SettingsSectionId =
   | 'browser'
   | 'workspace'
   | 'terminal'
+  | 'shortcuts'
   | 'rules-memory'
   | 'models'
   | 'approval-mode'

@@ -17,6 +17,7 @@ import {
   FolderTree,
   Globe,
   Info,
+  Keyboard,
   Network,
   Plug,
   Server as ServerIcon,
@@ -43,6 +44,7 @@ import { ModelsSection } from './sections/models-section';
 import { MobileSection } from './sections/placeholders';
 import { ProxySection } from './sections/proxy-section';
 import { RulesMemorySection } from './sections/rules-memory-section';
+import { ShortcutsSection } from './sections/shortcuts-section';
 import { SkillsSection } from './sections/skills-section';
 import { TerminalSection } from './sections/terminal-section';
 import { UsageSection } from './sections/usage-section';
@@ -72,7 +74,7 @@ interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
-/** 导航分组（5 组 12 项，语义归组；未实现的规划入口已移除，见 docs/design/05 §14） */
+/** 导航分组（5 组 15 项，语义归组；未实现的规划入口已移除，见 docs/design/05 §14） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.general',
@@ -95,6 +97,8 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
       // 终端（36 号 B）：默认 shell 选择 + 字号（交互式终端域）
       { id: 'terminal', labelKey: 'settings.nav.terminal', icon: TerminalSquare },
+      // 快捷键：自定义键录制/冲突检测/恢复默认 + 固定键速查（原嵌通用页，独立分区提升可发现性）
+      { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
     ],
   },
   {
@@ -136,6 +140,8 @@ function renderSection(section: SettingsSectionId, drawerOpen: boolean): ReactEl
       return <WorkspaceSection />;
     case 'terminal':
       return <TerminalSection />;
+    case 'shortcuts':
+      return <ShortcutsSection />;
     case 'rules-memory':
       return <RulesMemorySection />;
     case 'models':
