@@ -20,6 +20,12 @@ export {
   TERMINAL_DEFAULT_COLS,
   TERMINAL_DEFAULT_ROWS,
 } from './constants/defaults';
+// 编辑器代码面排版（37 号 A：Tab 宽度档位，查看器/聊天代码块/diff 单点收敛）
+export {
+  clampEditorTabSize,
+  DEFAULT_EDITOR_TAB_SIZE,
+  EDITOR_TAB_SIZES,
+} from './constants/editor';
 export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';

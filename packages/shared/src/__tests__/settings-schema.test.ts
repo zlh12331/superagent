@@ -130,6 +130,26 @@ describe('SettingsSetReqSchema · terminal 值级门禁（36 号 B）', () => {
   });
 });
 
+describe('SettingsSetReqSchema · editor 值级门禁（37 号 A）', () => {
+  it('合法 wordWrap/tabSize 通过；缺字段（旧调用方只写 fontSize/vimMode）放行', () => {
+    for (const value of [
+      {},
+      { fontSize: 14, vimMode: false },
+      { wordWrap: true },
+      { tabSize: 4 },
+      { wordWrap: false, tabSize: 8 },
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'editor', value }).success).toBe(true);
+    }
+  });
+
+  it('tabSize 非档位 / wordWrap 非布尔 / 非对象 → 拒绝', () => {
+    for (const value of [{ tabSize: 6 }, { wordWrap: 'yes' }, null, 'plain']) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'editor', value }).success).toBe(false);
+    }
+  });
+});
+
 describe('SettingsSetReqSchema · lsp.serverCommands 值级门禁（P0）', () => {
   it('PATH 裸可执行名通过（含参数）', () => {
     const result = SettingsSetReqSchema.safeParse({

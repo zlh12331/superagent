@@ -12,6 +12,8 @@
 
 export * from './constants/approval';
 export * from './constants/defaults';
+// 编辑器代码面排版（37 号 A：Tab 宽度档位，值级门禁消费）
+export * from './constants/editor';
 // 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';

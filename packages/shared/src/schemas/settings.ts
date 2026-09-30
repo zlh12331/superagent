@@ -14,6 +14,7 @@
 
 import { z } from 'zod';
 
+import { EDITOR_TAB_SIZES } from '../constants/editor';
 import { TERMINAL_FONT_SIZES, TERMINAL_SHELL_CHOICES } from '../constants/terminal-shell';
 import { ZOOM_LEVELS } from '../constants/zoom';
 
@@ -288,6 +289,37 @@ export const SettingsSetReqSchema = z
         code: 'custom',
         path: ['value'],
         message: `terminal.fontSize 必须是合法档位（${TERMINAL_FONT_SIZES.join('/')}）`,
+      });
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 37 号 A：editor 值级门禁——wordWrap/tabSize 字段存在时才校验（部分写入
+    // 合并语义：旧调用方只写 fontSize/vimMode 不受影响）。settings:set 通道
+    // 防御；导入路径不过本 schema，靠渲染层读侧 clamp 兜底（双防线，35 号 §2.3）
+    if (cfg.key !== 'editor') {
+      return;
+    }
+    const value = cfg.value as { wordWrap?: unknown; tabSize?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'editor 配置必须是非空对象（{fontSize, vimMode, wordWrap?, tabSize?}）',
+      });
+      return;
+    }
+    if (value.wordWrap !== undefined && typeof value.wordWrap !== 'boolean') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'editor.wordWrap 必须是布尔值',
+      });
+    }
+    if (value.tabSize !== undefined && !EDITOR_TAB_SIZES.includes(value.tabSize as number)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `editor.tabSize 必须是合法档位（${EDITOR_TAB_SIZES.join('/')}）`,
       });
     }
   });
