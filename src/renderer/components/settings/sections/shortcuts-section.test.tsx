@@ -60,6 +60,17 @@ describe('ShortcutsSection', () => {
     expect(screen.getByText(t('settings.shortcuts.fixedTitle'))).toBeDefined();
     expect(screen.getByText('Ctrl + B')).toBeDefined();
     expect(screen.getByText('Shift + Enter')).toBeDefined();
+    // 自定义键行卡片化（SettingRow）：六行标签全量渲染
+    for (const item of [
+      t('palette.commandPaletteShortcut'),
+      t('common.saveFileShortcut'),
+      t('common.searchFileShortcut'),
+      t('common.toggleThemeShortcut'),
+      t('common.openSettingsShortcut'),
+      t('common.newSessionShortcut'),
+    ]) {
+      expect(screen.getByText(item)).toBeDefined();
+    }
   });
 
   it('边界：已绑定键显示键名，未绑定显示占位文案', () => {

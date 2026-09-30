@@ -86,8 +86,7 @@ export function ShortcutsSection(): ReactElement {
         {SHORTCUT_ITEMS.map((item) => {
           const changed = shortcuts[item.key] !== DEFAULT_SHORTCUTS[item.key];
           return (
-            <div key={item.key} className="flex items-center justify-between gap-2">
-              <span className="text-foreground text-xs">{t(item.labelKey)}</span>
+            <SettingRow key={item.key} label={t(item.labelKey)}>
               <div className="flex items-center gap-1.5">
                 {changed && (
                   <Button
@@ -106,7 +105,7 @@ export function ShortcutsSection(): ReactElement {
                   onChange={(value) => handleRecord(item.key, value)}
                 />
               </div>
-            </div>
+            </SettingRow>
           );
         })}
       </div>
