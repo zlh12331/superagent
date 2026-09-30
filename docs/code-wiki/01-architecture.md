@@ -19,7 +19,7 @@
 │   ServiceContainer ── 20+ 服务（延迟初始化 + 反向依赖 dispose）│
 │   Chat / Agent / File / Search / Terminal / Git / Codebase    │
 │   Session / Tool(Runtime+Executor) / MCP / Permission / Prompt │
-│   LSP / Memory / Goal / IM / Update / Telemetry(OTel+Sentry)  │
+│   LSP / Memory / Goal / IM / Update / Telemetry(OTel 单通道)  │
 └───────────────────────────────────────────────────────────────┘
 ```
 

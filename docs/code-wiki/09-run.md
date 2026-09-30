@@ -92,7 +92,7 @@ integration-tests / e2e-browser / e2e-electron 六平台矩阵，另有 2 个 su
 `release.yml` 为 **6 个单架构 build job**（win/mac/linux × x64/arm64）→ merge 更新元数据 →
 release 打 tag → publish 转正式。打包验证不在 CI（PR 阶段），统一交给 CD。
 
-> 错误处理已本地化（2026-09-13 移除 Sentry）：异常经 `infra/telemetry/error-report.ts`
+> 错误处理已本地化（2026-09-13 移除 Sentry）：异常经 `utils/error-report.ts`（main）/ `lib/error-report.ts`（renderer）
 > 落本地日志，随诊断包导出，报障走 GitHub Issue 深链；无符号上传环节。
 
 ## 6. 工程纪律要点

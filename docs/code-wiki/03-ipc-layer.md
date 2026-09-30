@@ -50,7 +50,7 @@ paylaods.ts / api.ts（IpcRequestMap / IpcEventMap / IpcApi）
 - **sender 校验**：校验 `event.sender` 合法来源。
 - **zod 入参校验**（`def.schema`）+ **响应契约校验**（`def.resSchema`，R4 响应契约）。
 - **错误分类**：把异常映射为 `AppError` / 错误码（见 §6）。
-- **Sentry**：错误上报（fire-and-forget，不阻塞响应）。
+- **错误上报**：经 error-report 单一出口落本地结构化日志（fire-and-forget，不阻塞响应；2026-09-13 移除 Sentry）。
 
 `IpcHandlerContext` 提供给 handler 统一的 `{ event, traceId, ... }` 运行上下文。
 
@@ -96,5 +96,5 @@ renderer:  useAgentBridge → window.api.agent.run({ mode, sessionId, prompt })
 | [api.ts](file:///packages/shared/src/ipc/api.ts) | `IpcApi` 接口（由定义表推导） |
 | [channels.ts](file:///packages/shared/src/ipc/channels.ts) | channel 常量 |
 | [register.ts](file:///src/main/ipc/register.ts) | 定义表驱动 handler 注册 |
-| [wrap.ts](file:///src/main/utils/wrap.ts) | traceId/sender/schema/Sentry 中间件 |
+| [wrap.ts](file:///src/main/utils/wrap.ts) | traceId/sender/schema/错误上报（error-report）中间件 |
 | [create-api.ts](file:///src/preload/utils/create-api.ts) | preload 自动生成 window.api |

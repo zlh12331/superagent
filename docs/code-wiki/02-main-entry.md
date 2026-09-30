@@ -9,10 +9,11 @@
 ```
 whenReady
  ├─ 单实例锁（requestSingleInstanceLock；失败则 quit）
- ├─ initSentry()           ← 必须在 whenReady 之前（已先执行）
  ├─ initLogger()           初始化 electron-log
- ├─ initTelemetry()        初始化 OpenTelemetry（无 endpoint 退化为 Console）
- ├─ initDb()               SQLite（建表幂等 + WAL + 外键）
+ ├─ initTelemetry()        初始化 OpenTelemetry（遥测级别 off→跳过；无 endpoint 退化为 Console）
+ ├─ initDb()               SQLite（建表幂等 + WAL + 外键 + 备份轮转 + 损坏自愈 + 待应用恢复）
+ ├─ initMainI18n()         主进程 i18n（读 app_settings language 域）
+ ├─ applyProxyChange()     34 号：代理配置启动应用（在 initDb 后、IM 渠道前）
  ├─ promptService.initialize()  幂等插入默认 Code Agent prompt（onConflictDoNothing）
  ├─ registerGlobalErrorHandlers()
  ├─ recoverFromCrash()     上次异常退出 → 残留 running 会话标 interrupted + 清崩溃标记
@@ -21,7 +22,9 @@ whenReady
  ├─ skillRegistry.loadFromRows(new LearnSkillService(llmClient).listLearned())  已学技能合并
  ├─ serviceContainer.initImChannels()  已配置 IM 渠道自动连接（含 IM→Agent 桥接挂载）
  ├─ serviceContainer.initSubagents()   run_subagent 工具依赖
- ├─ registerIpcHandlers({...23 域 handler})   定义表驱动，缺失编译期报错
+ ├─ mountTurnNotifications / mountApprovalNotifications  系统通知（后台回合 + 审批等待）
+ ├─ initCronScheduler()    定时任务调度（须在 initDb 之后）
+ ├─ registerIpcHandlers({...域 handler})   定义表驱动，缺失编译期报错
  ├─ updateService.start()  注册 autoUpdater 事件
  ├─ 注入 CSP 响应头（buildCsp）+ 权限请求拒绝
  ├─ startMemoryMonitor()   主进程内存泄漏哨兵
@@ -41,7 +44,7 @@ whenReady
 
 ### 1.4 退出清理（`before-quit`）
 
-`preventDefault()` → `disposeImChannels()` → `disposeServices()` → `shutdownTelemetry()`（flush span）→ `Sentry.close(2000)`（flush 错误）→ `app.exit(0)`。`isQuitting` 标志防重入。
+`preventDefault()` → `disposeImChannels()` → `disposeServices()`（含 closeDb，等待在途备份落地）→ `shutdownTelemetry()`（flush span）→ `app.exit(0)`。`isQuitting` 标志防重入。
 
 ### 1.5 错误兜底
 
@@ -121,7 +124,7 @@ lspManager.disposeAll → agentService.dispose
 
 - **CSP**：主进程注入响应头（`buildCsp`），生产严格 / 开发宽松（允许 HMR）。跳过 `chrome-extension://` 协议响应（避免与 React DevTools 扩展自身 CSP 冲突）。`X-Content-Type-Options: nosniff`；`X-Frame-Options`（生产 DENY / 开发 SAMEORIGIN，仅 http）。
 - **权限请求**：`setPermissionRequestHandler` 默认拒绝所有（摄像头/麦克风/地理位置/通知等），显式拒绝 + 日志。
-- **内存监控**：60s 采样，连续 3 次单调增长且累计 > 150MB 才告警（Sentry warning）。
+- **内存监控**：60s 采样，连续 3 次单调增长且累计 > 150MB 才告警（logger.warn）。
 
 ### 3.4 开发辅助
 
@@ -136,8 +139,9 @@ dev 环境自动 `installExtension(REACT_DEVELOPER_TOOLS)`（失败容忍）+ `o
 
 | 组件 | 说明 |
 |---|---|
-| Sentry | `initSentry()` 在 whenReady 前；读 `telemetry-pref.json` 级别（off→跳过 / error-only→tracesSampleRate=0 / full）；`beforeSend` 脱敏移除 `Authorization` header；`startupTracingIntegration` 启动追踪 |
-| OTel | `initTelemetry()` whenReady 后；采集 agent.streamText / tool.execute / IPC 业务 span；无 `OTEL_EXPORTER_OTLP_ENDPOINT` 退化为 Console |
+| OpenTelemetry | `initTelemetry()` whenReady 后；采集 agent.streamText / tool.execute / IPC 业务 span；遥测级别 off→跳过初始化；无 `OTEL_EXPORTER_OTLP_ENDPOINT` 退化为 Console |
+
+> 错误处理为本地优先（2026-09-13 移除 Sentry）：异常经 `utils/error-report.ts` 单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出）。
 
 ## 5. 关键文件清单
 
@@ -145,7 +149,7 @@ dev 环境自动 `installExtension(REACT_DEVELOPER_TOOLS)`（失败容忍）+ `o
 |---|---|
 | [index.ts](file:///src/main/index.ts) | 主进程入口、生命周期、窗口、安全 |
 | [service-container.ts](file:///src/main/service-container.ts) | 服务单例 + 生命周期 |
-| [config/index.ts](file:///src/main/config/index.ts) | AppConfig（含 Sentry 配置读取） |
+| [config/index.ts](file:///src/main/config/index.ts) | AppConfig（环境配置读取） |
 | [security/csp.ts](file:///src/main/security/csp.ts) | 构建 CSP 响应头 |
 | [utils/logger.ts](file:///src/main/utils/logger.ts) | electron-log + 全局错误处理 + 崩溃标记 |
 | [utils/window-state.ts](file:///src/main/utils/window-state.ts) | 窗口尺寸状态记忆 |

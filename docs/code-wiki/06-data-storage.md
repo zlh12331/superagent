@@ -65,7 +65,7 @@
 |---|---|
 | `settings-pref.ts` | 渲染层设置下沉 SQLite `app_settings` 表（key-value JSON） |
 | `approval-pref.ts` | 审批模式（`ask|auto|deny`），启动时同步读入 PermissionService |
-| `telemetry-pref.ts` | 遥测级别（`off|error-only|full`），Sentry 初始化前同步读 |
+| `telemetry-pref.ts` | 遥测级别（`off|error-only|full`），OTel 初始化前同步读（off→跳过初始化） |
 | `whitelist-pref.ts` | 命令白名单（`whitelist.json`），跨会话保留 |
 
 ## 7. 迁移（Drizzle Kit 官方迁移）

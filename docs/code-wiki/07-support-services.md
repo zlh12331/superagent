@@ -79,7 +79,7 @@
 | 文件 | 职责 |
 |---|---|
 | `logger.ts` | electron-log 封装 + 全局错误捕获 + 崩溃标记（`hasCrashMarker`/`clearCrashMarker`） |
-| `wrap.ts` | IPC 中间件（traceId/sender/zod/Sentry，见 03） |
+| `wrap.ts` | IPC 中间件（traceId/sender/zod/error-report，见 03） |
 | `emit-event.ts` | 事件发送统一封装（推送渲染层，含 webContents 销毁保护） |
 | `window-state.ts` | 窗口状态记忆（move/resize 防抖 + close 落盘） |
 
