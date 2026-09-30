@@ -5,11 +5,12 @@
 // backup-store.test.ts 覆盖）；此处只断言 handler 的守卫与转发契约。
 // ──────────────────────────────────────────────────────────────
 
+import type { BackupEntry } from '@code-agent/shared/main';
 import { ErrorCode } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  listBackups: vi.fn(() => []),
+  listBackups: vi.fn((): BackupEntry[] => []),
   stageRestore: vi.fn(),
   createManualBackup: vi.fn(async () => ({ name: 'sessions-x.db' })),
   getDbPath: vi.fn(() => 'C:\\data\\sessions.db'),
@@ -37,15 +38,16 @@ import { createBackupHandlers } from './backup.handler';
 const EMPTY_CTX = {} as never;
 
 describe('backup.handler（37-B）', () => {
-  let hasRunningAgentTurns: ReturnType<typeof vi.fn>;
   let handlers: ReturnType<typeof createBackupHandlers>;
+  /** 运行中回合守卫桩：beforeEach 复位 false，守卫用例改写 true */
+  const hasRunningAgentTurns = vi.fn(() => false);
 
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createManualBackup.mockResolvedValue({ name: 'sessions-x.db' });
-    hasRunningAgentTurns = vi.fn(() => false);
+    hasRunningAgentTurns.mockReturnValue(false);
     handlers = createBackupHandlers({
-      hasRunningAgentTurns: () => hasRunningAgentTurns(),
+      hasRunningAgentTurns,
     });
   });
 

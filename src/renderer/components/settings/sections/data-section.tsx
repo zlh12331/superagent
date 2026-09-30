@@ -36,6 +36,8 @@ import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { useUiStore } from '@/stores/transient/ui-store';
 import { useUpdateStore } from '@/stores/transient/update-store';
 
+import { BackupBlock } from './backup-block';
+
 /** 数据区块（会话导出/导入 + 设置导出/导入 + 打开数据目录 + 更新缓存） */
 export function DataSection(): React.ReactElement {
   const { t } = useTranslation();
@@ -257,6 +259,9 @@ export function DataSection(): React.ReactElement {
           </Button>
         </div>
       )}
+
+      {/* 启动备份（37-B）：恢复点可见性 + 手动备份 + 逐行恢复（子块独立文件控净行） */}
+      <BackupBlock />
     </div>
   );
 }
