@@ -20,18 +20,23 @@ import { useTranslation } from '@/i18n/use-translation';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 
 /** 单条快捷键项：i18n 描述 key + 按键显示文本 */
-interface ShortcutItem {
+export interface ShortcutItem {
   readonly descriptionKey: string;
   readonly keys: string;
 }
 
 /** 键串展示格式化：Ctrl+Shift+F → Ctrl + Shift + F（kbd 排版用空格分隔） */
-function formatKeys(value: string): string {
+export function formatKeys(value: string): string {
   return value.replaceAll('+', ' + ');
 }
 
-/** 固定键（不可自定义）——与 use-keyboard-shortcuts 的固定绑定一致 */
-const FIXED_SHORTCUTS: readonly ShortcutItem[] = [
+/**
+ * 固定键清单（不可自定义）——与 use-keyboard-shortcuts 的固定绑定一致
+ *
+ * 唯一真源：ShortcutHelpDialog 帮助表与设置快捷键分区只读小节共用，
+ * 防两处清单漂移（36 号 C 曾发生帮助表漏列缩放键）。
+ */
+export const FIXED_SHORTCUTS: readonly ShortcutItem[] = [
   // F1 与 '?' 等价（对齐参考项目：? / F1 打开快捷键帮助）
   { descriptionKey: 'shortcutHelp.item.openShortcutHelp', keys: '? / F1' },
   { descriptionKey: 'shortcutHelp.item.toggleSidebar', keys: 'Ctrl + B' },

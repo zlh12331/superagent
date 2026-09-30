@@ -11,7 +11,7 @@
 import { Keyboard, RotateCcw } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
-
+import { FIXED_SHORTCUTS } from '@/components/common/ShortcutHelpDialog';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import {
@@ -21,6 +21,7 @@ import {
 } from '@/lib/shortcut-conflicts';
 import { DEFAULT_SHORTCUTS, useSettingsStore } from '@/stores/persistent/settings-store';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
+import { SectionTitle, SettingRow } from '../settings-controls';
 import { ShortcutPicker } from '../shortcut-picker';
 
 /** 自定义键 → 展示名 i18n key（冲突提示与行标签共用） */
@@ -118,6 +119,20 @@ export function ShortcutsSection(): ReactElement {
         >
           {t('settings.shortcutResetAll')}
         </Button>
+      </div>
+
+      {/* 固定键速查（只读）：清单与帮助对话框同源（FIXED_SHORTCUTS），不可自定义 */}
+      <div className="pt-2">
+        <SectionTitle>{t('settings.shortcuts.fixedTitle')}</SectionTitle>
+        <div className="flex flex-col gap-2">
+          {FIXED_SHORTCUTS.map((item) => (
+            <SettingRow key={item.descriptionKey} label={t(item.descriptionKey)}>
+              <span className="text-muted-foreground border-border bg-muted rounded-[calc(var(--radius)-5px)] border px-1.5 py-px font-mono text-2xs">
+                {item.keys}
+              </span>
+            </SettingRow>
+          ))}
+        </div>
       </div>
     </div>
   );

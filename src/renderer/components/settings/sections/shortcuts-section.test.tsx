@@ -47,7 +47,7 @@ async function record(combo: {
 }
 
 describe('ShortcutsSection', () => {
-  it('正向：渲染六个录键控件 + 恢复默认按钮（默认值时禁用）', () => {
+  it('正向：渲染六个录键控件 + 恢复默认按钮（默认值时禁用）+ 固定键只读区块', () => {
     render(<ShortcutsSection />);
 
     // 6 个 ShortcutPicker + 1 个「恢复默认快捷键」按钮
@@ -56,6 +56,10 @@ describe('ShortcutsSection', () => {
       (screen.getByRole('button', { name: t('settings.shortcutResetAll') }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    // 固定键速查区块（与帮助对话框同源 FIXED_SHORTCUTS；只读非 button，key 串原样展示）
+    expect(screen.getByText(t('settings.shortcuts.fixedTitle'))).toBeDefined();
+    expect(screen.getByText('Ctrl + B')).toBeDefined();
+    expect(screen.getByText('Shift + Enter')).toBeDefined();
   });
 
   it('边界：已绑定键显示键名，未绑定显示占位文案', () => {

@@ -521,7 +521,8 @@
     },
     "shortcuts": {
       "title": "Shortcuts",
-      "hint": "Supports Ctrl/Cmd + letter combos, e.g. Ctrl+P, Ctrl+S. Changes take effect immediately."
+      "hint": "Supports Ctrl/Cmd + letter combos, e.g. Ctrl+P, Ctrl+S. Changes take effect immediately.",
+      "fixedTitle": "Fixed shortcuts (not customizable)"
     },
     "terminal": {
       "title": "Terminal",
