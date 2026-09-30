@@ -113,8 +113,18 @@ function resolveCreatedAtMs(name: string, fullPath: string): number {
  * 备份文件完整性校验（quick_check === ok）
  *
  * 与 db.ts 自愈链同一判据：无法打开/校验失败一律视为不健康（不可用于恢复）。
+ *
+ * 伴生文件副作用（2026-09-30 实测）：WAL 模式的库文件被只读打开时，SQLite 会在
+ * 同目录新建 `-shm`/`-wal` 伴生文件（immutable URI 在 better-sqlite3 下不可用，
+ * 实测 unable to open）。备份 .db 是 sqlite.backup() 产出的自包含快照，其伴生
+ * 文件只可能由本探针产生（无真实数据）——探针结束后清理「本次新建」的那两个
+ * （探针前已存在的旧残留不动：非本函数产物，保守不删）。
  */
 export function isBackupHealthy(backupPath: string): boolean {
+  const shmPath = `${backupPath}-shm`;
+  const walPath = `${backupPath}-wal`;
+  const shmExisted = existsSync(shmPath);
+  const walExisted = existsSync(walPath);
   let probe: Database.Database | null = null;
   try {
     probe = new Database(backupPath, { readonly: true });
@@ -127,6 +137,20 @@ export function isBackupHealthy(backupPath: string): boolean {
       probe?.close();
     } catch {
       // 已损坏连接的 close 可能失败，忽略
+    }
+    if (!shmExisted) {
+      try {
+        unlinkSync(shmPath);
+      } catch {
+        // 未产生或已被清理
+      }
+    }
+    if (!walExisted) {
+      try {
+        unlinkSync(walPath);
+      } catch {
+        // 未产生或已被清理
+      }
     }
   }
 }

@@ -144,6 +144,25 @@ describe('isBackupHealthy', () => {
     expect(isBackupHealthy(bad)).toBe(false);
     expect(isBackupHealthy(join(tempDir, 'missing.db'))).toBe(false);
   });
+
+  it('伴生文件清理：WAL 备份被探针只读打开后不留 -shm/-wal（探针副作用）', async () => {
+    // WAL 模式库的备份副本形态（sqlite.backup 产物自包含，无伴生文件）
+    const db = makeDbFile(dbPath, 'x');
+    try {
+      const name = await createBackupFile(db, dbPath);
+      const backupPath = join(backupDirPath(dbPath), name);
+      expect(existsSync(`${backupPath}-shm`)).toBe(false);
+      expect(existsSync(`${backupPath}-wal`)).toBe(false);
+
+      // 探针（list 会触发）：打开 WAL 库会在同目录新建伴生文件，探针负责清理
+      expect(isBackupHealthy(backupPath)).toBe(true);
+
+      expect(existsSync(`${backupPath}-shm`)).toBe(false);
+      expect(existsSync(`${backupPath}-wal`)).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe('stageRestore（暂存 + 重启生效）', () => {
