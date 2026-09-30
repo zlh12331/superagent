@@ -1,11 +1,11 @@
 {
   "packages/shared/src/ipc/definitions.ts": {
-    "net": 1055
+    "net": 1074
   },
   "src/main/infra/ai/agent/agent-service.ts": {
     "net": 704
   },
   "src/renderer/dev/mock-api.ts": {
-    "net": 991
+    "net": 999
   }
 }
