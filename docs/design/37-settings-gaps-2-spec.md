@@ -1,6 +1,6 @@
 # 37 · 设置面补全二期（编辑器域补全 / 备份可见性）
 
-- **状态**：实施中
+- **状态**：**已实施**（2026-09-30；a9a2bafb → 本提交共 7 提交，V 矩阵核对见 §3.2）
 - **判级**：37-A 全链路（新持久化字段 + 跨层消费：store→CSS 变量/组件双路径）；37-B
   全链路（新 IPC 域 + 文件系统操作 + 危险恢复语义）。合入单 spec（同一批设置面缺口）
 - **来源**：2026-09-30 设置面盘点遗留的两项（36 号完成后的次优先项）
@@ -160,16 +160,64 @@
 
 ## 2 提交链（每提交独立可编译可回退）
 
-1. `docs(design)` 本 spec 初稿；
-2. `feat(shared)` 37-A 地基：editor 域值扩展（wordWrap/tabSize）+ 值级门禁 +
-   constants/editor + 契约测试；
-3. `feat(ui)` 37-A 设置行 + --code-tab-size 单点 effect + 查看器自动换行 + i18n +
-   测试；
-4. `feat(ipc)` 37-B backup 域三通道：backup-store 抽离 + list/create/restore +
+1. `a9a2bafb` `docs(design)` 本 spec 初稿；
+2. `8df2a435` `feat(shared)` 37-A 地基：editor 域值扩展（wordWrap/tabSize）+ constants/editor
+   + 值级门禁 + 契约测试；
+3. `fbee6901` `feat(ui)` 37-A 渲染层：设置行 + --code-tab-size 单点 effect + 查看器
+   自动换行双层同步 + i18n + 测试；
+4. `16ef539f` `feat(ipc)` 37-B 主进程侧：backup 域三通道 + backup-store 抽离 +
    暂存恢复链 + 测试；
-5. `feat(ui)` 37-B 备份可见性：use-backups + 数据区子块 + i18n + 测试；
-6. `docs(design)` 状态节收尾（V 矩阵核对）。
+5. `05d3db0d` `feat(ui)` 37-B 渲染层：use-backups + 数据区子块 + i18n + 测试；
+6. `0ab9b0cf` `chore(quality)` 验证期登记（棘轮放宽 3 处 + 测试边界豁免）；
+7. 本提交 `docs(design)` 状态节收尾。
 
 ## 3 状态
 
-（实施期回填）
+### 3.1 实施期实测修正（设计节与实现的差异，如实披露）
+
+1. **37-A 换行算法：break-all → break-word（设计稿写错，实证推翻）**。Playwright 探针
+   （6 类内容 × 4 种宽度）实测：`overflow-wrap: break-word + word-break: normal` 与
+   textarea soft-wrap **逐行全对齐**；`word-break: break-all` 有 7 处不对齐（更激进的
+   长词先行折断）。设计稿的 break-all 假设作废，终版以 break-word 落地（CSS 注释锚定）。
+2. **37-A 滚动条占位差**：高亮层隐藏滚动条（现设计）而 textarea 显示 → 两层有效换行宽度
+   不同。解法 = 运行时测量 textarea 占位（offsetWidth - clientWidth）补高亮层
+   padding-right，不硬编码 8px（Classic/Overlay 滚动条形态差异在测量处收敛）。
+3. **37-A textarea 默认 rows=2 假象**：首批探针误判「中英混排不对齐」，根因是 textarea
+   空内容 scrollHeight 也含 2 行下限；真实换行行数一致（探针修正后全绿）。
+4. **37-A --code-tab-size 落位**：定义在 styles/index.css :root（**行为变量**非设计令牌，
+   不进 tokens.css 生成物）；消费点分散在各域 CSS（file-tree/chat/diff），
+   noDescendingSpecificity 告警教训：规则须与基类同域就近放置。
+5. **37-B 备份命名秒精度缺陷（实施新发现）**：启动备份与手动备份可能同秒发生，
+   秒精度文件名同名覆盖（轮转环丢失一份恢复点）——修为毫秒精度，解析正则兼容旧名。
+6. **37-B 恢复语义修正为「暂存 + 重启生效」**：WAL 连接持有文件句柄，热替换打开中的库
+   不可行；暂存放 `sessions.db.restore-pending`，initDb 顶部（连接打开前）
+   `applyPendingRestore` 消费。恢复成功路径不弹「已恢复」toast（进程随后重启）。
+7. **37-B 安全扫描拦截一次**：`String.match()` 版本通过 Mimosa（初版 `RegExp.exec()`
+   被误判「命令注入」——无 shell 执行，属误报形态；改用 match 保持语义等价）。
+
+### 3.2 验收核对
+
+**37-A（V1-V8）**：shared 常量测试（clamp 非有限数前置拦截）+ editor 门禁测试（V7）；
+store 快照缺字段回落 + 损坏 tabSize clamp + wordWrap 非布尔回落（V1/V5）+ 写穿透；
+组件测试（设置行 toggle/档位）；FileViewerPanel wrap 行为测试（V2：textarea wrap=soft
++ 双层类名；查看态 pre-wrap）＋ 对齐算法经 Playwright 实证（V3，见 §3.1-1/2）；
+V4 tab-size 四代码面消费（CSS 变量单点 + check:css-vars 门禁）；V6 resetAll 走
+SETTING_KEYS 白名单自动覆盖（零代码）；V8 applyMainChange 合并不回写断言。**全过**。
+
+**37-B（V1-V8）**：backup-store 测试（v1 列表排序/健康度/空目录；V2 轮转删除最旧 +
+毫秒命名；V4 暂存与启动应用（含暂存消费后消失/幂等）；V5 损坏备份拒绝；
+V6 路径穿越矩阵拒绝；V7 两次暂存后者覆盖）；handler 测试（V3 SESSION_IN_USE 拒绝且
+不暂存不重启；转发与 relaunch 时序）；组件测试（V1 空态/徽标/损坏禁用；V2 备份 toast；
+V3 confirm 流与失败单发 toast）；V8 mock 域三方法。**全过**。
+
+### 3.3 门禁实录
+
+- typecheck / lint / check:static 15 项全过；knip（files/deps/binaries）零问题；
+- 全量测试链：shared 110 + main 2134 + renderer 1844 + integration 152 + scripts 364
+  = **4604 全绿**；
+- **棘轮放宽/登记 3 处**（36 号先例同款）：check-file-size（definitions.ts 1055→1074、
+  mock-api.ts 991→999）+ check-functions（mock-api 388→389）+ test-boundary-exempt
+  登记 backup-store.test.ts（真实 better-sqlite3，单模块非链路型）；
+- db.ts 净行因 backup-store 抽离而下降（棘轮顺势收紧留待在下一轮基线更新窗口处理）；
+- 复盘双锚：用户反馈 + 诊断包日志（备份创建/轮转/暂存/恢复应用全程 logger 痕迹）；
+  两功能均为设置面/数据面能力，不进 experimental。
