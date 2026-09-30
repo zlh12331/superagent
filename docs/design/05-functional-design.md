@@ -428,7 +428,7 @@ PromptService
 - **MCP OAuth 授权**：远程 transport 支持 headers 手动注入授权头，无 OAuth 流程
 - **workflow 持久化**：WorkflowService 为内存编排（重启丢失；与任务/记忆先例一致，先功能后存储）
 - **LSP 语言扩展**：内置默认仅 TypeScript/Python/Go/Rust 四语言（可在设置中覆盖命令，但新增语言需扩展 ls-config 映射表）
-- **remote-control**：纯骨架（令牌生成/校验/路由已实现），WebSocket/HTTP 桥接 + LAN 发现未实现且未挂载 ServiceContainer（见 remote-control.ts TODO 阶段 2）
+- ~~remote-control~~：**已随 25 号落地**（HTTP server + SSE + LAN 发现 + 设置「移动端」真实面板，见 25-remote-control-spec.md；2026-09-30 复核从缺口清单移除）
 - **hooks / 插件系统**：设置页规划入口已移除（2026-08-22 决策：未实现不暴露入口），待落地时随实现恢复
 
 ### 14.2 待优化项

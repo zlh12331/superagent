@@ -63,7 +63,7 @@
 **状态管理分工铁律**：IPC `invoke` server state → TanStack Query；IPC `on` 推送事件 → Zustand。
 
 - `persistent/`：`create-persistent-store`（持久化基座）、`sessions-store`、`settings-store`、`draft-store`、`sidebar-pref-store`。
-- `transient/`：`agent-ask-store`、`approvals-store`、`confirm-dialog-store`、`file-tree-store`、`file-viewer-store`、`rate-limit-store`、`reasoning-collapse-store`、`terminal-store`、`tool-store`、`ui-store`、`welcome-store`。
+- `transient/`（2026-09-30 实测 14 个）：`agent-ask-store`、`agent-run-store`、`approvals-store`、`confirm-dialog-store`、`file-tree-store`、`file-viewer-store`、`pending-message-store`、`rate-limit-store`、`reasoning-collapse-store`、`terminal-store`、`tool-store`、`ui-store`、`update-store`、`welcome-store`。
 
 ## 7. lib（`lib/`）
 

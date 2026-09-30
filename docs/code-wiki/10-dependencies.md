@@ -12,6 +12,8 @@ pnpm workspace（`pnpm-workspace.yaml`）：
 
 - `@code-agent/tsconfig`（packages/tsconfig，base/node/web 三档）
 
+- `@code-agent/memory-engine`（packages/memory-engine，记忆引擎上游源码进仓 + patches 补丁重放，构建失败即打包失败）
+
 - `@code-agent/depcruise`、`@code-agent/typedoc-docs`（工程辅助，被根 `check:docs`/`depcruise` 调用）
 
 依赖方向：`code-agent-desktop → @code-agent/shared`（运行时）+ `@code-agent/tsconfig`（构建期）。
@@ -32,7 +34,7 @@ main/infra 服务  ──不反向依赖 ipc──
                     ┌──► FileService ────────────────┐
                     ├──► SearchService ──────────────┤
                     ├──► TerminalService ────────────┤
-ToolRegistry ───────┤──► GitService ─────────────────┼──► 内置工具注册（33 个）
+ToolRegistry ───────┤──► GitService ─────────────────┼──► 内置工具注册（34 个，2026-09-30 实测）
    │                ├──► MemoryPort（memory-hub）────┤
    │                ├──► LspManager ────────────────┤
    │                ├──► agentAskService ───────────┤
