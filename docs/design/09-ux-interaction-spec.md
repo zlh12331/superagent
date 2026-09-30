@@ -716,4 +716,8 @@ flowchart LR
 
 **不适用**：退出登录/云端账户（无登录后端）；Git 写操作（通道存在零调用）；search/codebase/audio 域无 UI；独立审批对话框（已内联化）。
 
-**已知不一致**：主题按钮两态 vs 快捷键三态；快捷键帮助表 Ctrl+B/Ctrl+J 未绑定；Git 路径与终端工作目录硬编码项目路径。
+**已知不一致**：主题按钮两态 vs 快捷键三态；Git 路径与终端工作目录硬编码项目路径。
+
+（2026-09-30 核销：原记录「快捷键帮助表 Ctrl+B/Ctrl+J 未绑定」已过期——
+`use-keyboard-shortcuts` 实际绑定 ctrl+b,meta+b,ctrl+1,meta+1 / ctrl+j,meta+j,ctrl+2,meta+2，
+AppShell 已接线 onToggleSidebar/onToggleRightPanel，帮助表与设置·快捷键分区的固定键速查均为真实键位。）
