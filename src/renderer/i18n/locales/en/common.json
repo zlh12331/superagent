@@ -924,6 +924,7 @@
   },
   "shortcutHelp": {
     "title": "Keyboard Shortcuts",
+    "customize": "Customize shortcuts",
     "item": {
       "openCommandPalette": "Open command palette",
       "openSettings": "Open settings",

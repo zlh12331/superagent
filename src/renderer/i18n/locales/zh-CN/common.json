@@ -924,6 +924,7 @@
   },
   "shortcutHelp": {
     "title": "快捷键帮助",
+    "customize": "自定义快捷键",
     "item": {
       "openCommandPalette": "打开命令面板",
       "openSettings": "打开设置",

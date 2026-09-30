@@ -7,10 +7,12 @@
 // ──────────────────────────────────────────────
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useUiStore } from '@/stores/transient/ui-store';
 
 import { ShortcutHelpDialog } from './ShortcutHelpDialog';
 
@@ -21,6 +23,8 @@ const ORIGINAL = useSettingsStore.getState().shortcuts;
 afterEach(() => {
   // 还原默认键位，避免污染其他用例
   useSettingsStore.setState({ shortcuts: ORIGINAL });
+  // 还原 ui-store（直达入口用例会写入设置分区状态）
+  useUiStore.setState({ settingsOpen: false, settingsSection: null });
 });
 
 describe('ShortcutHelpDialog', () => {
@@ -59,6 +63,19 @@ describe('ShortcutHelpDialog', () => {
     expect(screen.getByText('Shift + Enter')).toBeDefined();
     // 可自定义键渲染自 settings
     expect(screen.getByText(t('shortcutHelp.item.openSettings'), { exact: false })).toBeDefined();
+  });
+
+  it('直达入口：点「自定义快捷键」→ 打开设置并直达 shortcuts 分区 + 关闭本对话框', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<ShortcutHelpDialog open onClose={onClose} />);
+
+    await user.click(screen.getByRole('button', { name: t('shortcutHelp.customize') }));
+
+    const ui = useUiStore.getState();
+    expect(ui.settingsOpen).toBe(true);
+    expect(ui.settingsSection).toBe('shortcuts');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('a11y：DialogDescription 提供 sr-only 描述（Radix 契约）', () => {

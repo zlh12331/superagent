@@ -7,8 +7,10 @@
 // - 描述走 i18n（shortcutHelp.*），按键符号为技术标识不本地化
 // ──────────────────────────────────────────────────────────────
 
+import { Keyboard } from 'lucide-react';
 import type { ReactElement } from 'react';
 
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { useTranslation } from '@/i18n/use-translation';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
+import { useUiStore } from '@/stores/transient/ui-store';
 
 /** 单条快捷键项：i18n 描述 key + 按键显示文本 */
 export interface ShortcutItem {
@@ -69,6 +72,8 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
   const { t } = useTranslation();
   // 可自定义快捷键读设置真源（此前硬编码默认值：用户改键后帮助表与实际绑定不一致，实测 bug）
   const shortcuts = useSettingsStore((s) => s.shortcuts);
+  // 「自定义快捷键」直达：多入口分区机制复用（openSettings 带分区 id），先关本对话框再开设置
+  const openSettings = useUiStore((s) => s.openSettings);
   // 纯派生，交给 React Compiler 记忆化（shortcuts 稳定时复用）
   const items: readonly ShortcutItem[] = [
     // ⌘K 与 ⌘P 等价（对齐参考项目 toggle-command-palette）
@@ -103,6 +108,21 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
               <span className="text-muted-foreground truncate">{t(item.descriptionKey)}</span>
             </div>
           ))}
+        </div>
+        {/* 底部直达：自定义快捷键去设置分区（快速参考与管理面板的联动入口） */}
+        <div className="border-border flex justify-end border-t px-5 py-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground h-auto gap-1.5 rounded px-2 py-1 text-xs"
+            onClick={() => {
+              onClose();
+              openSettings('shortcuts');
+            }}
+          >
+            <Keyboard className="size-3.5" strokeWidth={1.5} />
+            {t('shortcutHelp.customize')}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
