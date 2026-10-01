@@ -30,7 +30,7 @@ vi.mock('electron', () => ({
   app: { isPackaged: false, getPath: vi.fn(() => '/tmp/test-userdata') },
 }));
 
-import { initLogger, logger, registerGlobalErrorHandlers } from './logger';
+import { flushPendingLogs, initLogger, logger, registerGlobalErrorHandlers } from './logger';
 
 describe('logger', () => {
   beforeEach(() => {
@@ -82,5 +82,22 @@ describe('logger', () => {
     expect(resolved).toContain('code-agent-test-logs');
     // 且不再写入真实用户日志目录
     expect(resolved).not.toContain('code-agent-desktop');
+  });
+
+  it('flushPendingLogs：electron-log 无 getFile（内部结构变化/测试 mock）时立即返回', async () => {
+    await expect(flushPendingLogs(50)).resolves.toBeUndefined();
+  });
+
+  it('flushPendingLogs：轮询等待队列清空后返回', async () => {
+    // 模拟在途异步写：首次探测队列非空，下次探测已清空 → 循环退出
+    const fileState = { asyncWriteQueue: ['log line'], hasActiveAsyncWriting: true };
+    const fileTransport = mockLog.transports.file as { getFile?: () => unknown };
+    fileTransport.getFile = () => {
+      fileState.asyncWriteQueue = [];
+      fileState.hasActiveAsyncWriting = false;
+      return fileState;
+    };
+    await expect(flushPendingLogs(2_000)).resolves.toBeUndefined();
+    delete fileTransport.getFile;
   });
 });

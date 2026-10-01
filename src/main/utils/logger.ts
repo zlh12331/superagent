@@ -193,6 +193,34 @@ function serializeError(error: unknown): Record<string, unknown> {
 let fatalErrorHandled = false;
 
 /**
+ * 等待异步文件日志落盘（退出链专用）
+ *
+ * sync=false 时 electron-log 经内部串行队列写盘（File 实例的 asyncWriteQueue +
+ * hasActiveAsyncWriting，见 electron-log File.js），而 app.exit() 立即终止进程、
+ * 不等队列——2026-10-01 实测：更新安装的退出链日志（含「应用已退出，拉起安装
+ * 向导」）整体丢失，排障只能靠前后日志反推。uncaughtException 路径早有 300ms
+ * 写盘窗口，正常退出链此前没有。
+ *
+ * 轮询内部队列清空即返回（无在途写时立即返回），timeoutMs 上限兜底；electron-log
+ * 升级若改名内部字段（getFile/队列不可达），退化为直接返回——正确性不受影响，
+ * 只是失去"等队列"的加速。
+ */
+export async function flushPendingLogs(timeoutMs = 300): Promise<void> {
+  const file = (
+    log.transports.file as unknown as {
+      getFile?(): { asyncWriteQueue: string[]; hasActiveAsyncWriting: boolean } | undefined;
+    }
+  ).getFile?.();
+  if (file === undefined) {
+    return;
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && (file.asyncWriteQueue.length > 0 || file.hasActiveAsyncWriting)) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+/**
  * 注册全局错误处理器：uncaughtException / unhandledRejection 落盘 + 致命退出
  * （行为契约见上方 fatalErrorHandled 注释；幂等由模块级标志保证）
  */
