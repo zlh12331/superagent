@@ -79,7 +79,7 @@ import {
 } from './service-container';
 import { createTray } from './tray';
 import { reportMessage } from './utils/error-report';
-import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
+import { flushPendingLogs, initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
 import { confirmInterruptRunningTurns, createWindow, readCloseAction } from './window';
 import { bringMainWindowToFront } from './window-show';
 // 主题联动独立模块（无 service-container 依赖的纯 Electron 关注点）
@@ -358,6 +358,7 @@ app
     // （启用契约见 dev-app-update.yml 头注释；缺省关闭，dev 不发起任何更新请求）
     serviceContainer.getUpdateService().start({
       autoCheckEnabled: isAutoCheckEnabled,
+      allowPrereleaseEnabled: isAllowPrereleaseEnabled,
       devUpdateEnabled: process.env['CODE_AGENT_DEV_UPDATE'] === '1',
     });
 
@@ -590,10 +591,14 @@ app.on('before-quit', async (event) => {
   } catch (err) {
     logger.error({ error: err }, '应用退出清理失败');
   }
-  // 更新安装（Windows）：应用已完全退出、即将 exit 时拉起新版安装器——
+  // 更新安装（Windows）：应用已完全退出、即将 exit 时拉起新版安装向导——
   // 消除「安装器启动时应用仍在退出链中」的竞态（NSIS 会弹「无法关闭」要求手动关闭）。
-  // 静默安装（/S）+ --force-run 装完自动启动。
+  // 向导式（2026-10-01）：自动跳过选择页、进度可见，完成页点「完成」启动新版。
   serviceContainer.getUpdateService().runDeferredInstall();
+  // flush 异步日志缓冲：app.exit 不等 electron-log 的写盘队列，不等待的话
+  // 退出链全部日志丢失（1.3.3→1.4.0 更新排障实测：15:40 update:install 之后
+  // 的日志一条都没有，只能靠前后日志反推发生了什么）
+  await flushPendingLogs();
   // 强制退出，不再触发 before-quit（与 app.quit() 不同）
   app.exit(0);
 });
@@ -630,5 +635,24 @@ function isAutoCheckEnabled(): boolean {
     return (value as { autoCheck?: unknown }).autoCheck !== false;
   } catch {
     return true;
+  }
+}
+
+/**
+ * 读取"接收预发布更新"开关（app_settings 的 update 域）
+ *
+ * 缺失、结构损坏或读取异常（如 db 未就绪）一律视为关闭——与设置默认值一致，
+ * 且不阻断启动流程。装了 beta 版（版本号含 `-`）的用户不受本开关影响：
+ * 库构造器按版本判定的 allowPrerelease 初值恒为 true（见 update-service）。
+ */
+function isAllowPrereleaseEnabled(): boolean {
+  try {
+    const value = readSetting('update');
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+    return (value as { allowPrerelease?: unknown }).allowPrerelease === true;
+  } catch {
+    return false;
   }
 }

@@ -17,7 +17,7 @@ import { confirm } from '@/stores/transient/confirm-dialog-store';
 /**
  * 返回"重启并安装"动作
  *
- * 有回合在跑时先弹确认（重启会中断该回合），确认后才触发安装。
+ * 有回合在跑时先弹确认（安装会退出应用、中断该回合），确认后才触发安装。
  *
  * @example
  * ```tsx

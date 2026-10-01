@@ -3,17 +3,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // mock electron：BrowserWindow.getAllWindows（事件推送目标窗口）、app.quit（退出触发）、
-// app.getAppPath（差分基线的开发版缓存目录解析，测试下返回不存在路径即跳过）
-const { mockGetAllWindows, mockAppQuit, mockGetAppPath } = vi.hoisted(() => ({
+// app.getAppPath（差分基线的开发版缓存目录解析，测试下返回不存在路径即跳过）、
+// app.getVersion（接收预发布的版本判定，默认稳定版无 `-`；beta 用例改写）
+const { mockGetAllWindows, mockAppQuit, mockGetAppPath, mockGetVersion } = vi.hoisted(() => ({
   mockGetAllWindows: vi.fn(),
   mockAppQuit: vi.fn(),
   mockGetAppPath: vi.fn(() => '/nonexistent-app-path'),
+  mockGetVersion: vi.fn(() => '1.4.0'),
 }));
 
 vi.mock('electron', () => ({
   // 字符串键：避免 useNamingConvention 对 PascalCase 属性名的检查
   ['BrowserWindow']: { getAllWindows: mockGetAllWindows },
-  ['app']: { quit: mockAppQuit, getAppPath: mockGetAppPath },
+  ['app']: { quit: mockAppQuit, getAppPath: mockGetAppPath, getVersion: mockGetVersion },
 }));
 
 import { clearDeferredInstall, isCloseConfirmed } from '../../quit-state';
@@ -41,6 +43,7 @@ function createFakeUpdater(): FakeUpdater {
     listeners,
     autoDownload: true,
     autoInstallOnAppQuit: true,
+    allowPrerelease: false,
     forceDevUpdateConfig: false,
     logger: null as unknown,
     checkForUpdates: vi.fn(async () => {}),
@@ -226,6 +229,26 @@ describe('UpdateService', () => {
       service.dispose();
       await vi.advanceTimersByTimeAsync(60_000);
       expect(updater.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('接收预发布开关：check() 入口幂等应用用户设置（每次检查前重读）', async () => {
+      // 未注入开关（缺省视为关闭）+ 稳定版（版本号无 `-`）→ false
+      service.start();
+      await service.check(false);
+      expect(updater.allowPrerelease).toBe(false);
+
+      // 注入开关 true → 检查时置 true（UI 开启后立即补检即生效）
+      service.start({ allowPrereleaseEnabled: () => true });
+      await service.check(false);
+      expect(updater.allowPrerelease).toBe(true);
+    });
+
+    it('接收预发布：beta 版本（版本号含 `-`）恒收预发布，不受开关关闭影响', async () => {
+      // 与库构造器的版本判定同语义：app.getVersion() 含 `-` → 恒 true
+      mockGetVersion.mockReturnValue('1.5.0-beta.1');
+      service.start({ allowPrereleaseEnabled: () => false });
+      await service.check(false);
+      expect(updater.allowPrerelease).toBe(true);
     });
   });
 
@@ -552,15 +575,15 @@ describe('UpdateService', () => {
       Object.defineProperty(process, 'platform', { value: 'win32' });
     });
 
-    it('Windows：置退出后安装标记、置关闭协商标志并触发退出；退出链末端经 runDeferredInstall 静默安装', async () => {
+    it('Windows：置退出后安装标记、置关闭协商标志并触发退出；退出链末端经 runDeferredInstall 拉起安装向导', async () => {
       await service.quitAndInstall();
       expect(updater.quitAndInstall).not.toHaveBeenCalled();
       expect(mockAppQuit).toHaveBeenCalledOnce();
       expect(isCloseConfirmed()).toBe(true);
-      // 退出善后完成（dispose 已跑）后：拉起静默安装器
+      // 退出善后完成（dispose 已跑）后：拉起安装向导（isSilent=false，进度可见）
       service.dispose();
       service.runDeferredInstall();
-      expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
+      expect(updater.quitAndInstall).toHaveBeenCalledWith(false, false);
     });
 
     it('Windows：未请求安装时 runDeferredInstall 为空操作', () => {
@@ -581,7 +604,7 @@ describe('UpdateService', () => {
         () => createFakeToken(),
       );
       freshService.runDeferredInstall();
-      expect(freshUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+      expect(freshUpdater.quitAndInstall).toHaveBeenCalledWith(false, false);
       // 标志已被消费：再次执行为空操作（不重复拉起安装器）
       const secondUpdater = createFakeUpdater();
       const secondService = new UpdateService(
