@@ -5,7 +5,7 @@
 // 静默丢弃该声明（元素退化为无动画）：
 //   - browser-pane.tsx 的 animate-[br-loading-bar_…]（定义随 prototype-v2.html
 //     被删，类名在其后才引入）
-//   - globals.css 的 .palette-overlay / .palette 的 animation: fadein / modalin
+//   - styles/ 各域 css 的 .palette-overlay / .palette 的 animation: fadein / modalin
 // 与 check:css-vars 的 var(--x) 未定义是同类「引用不存在的东西」缺陷，用同一
 // 思路做静态兜底：check:comments 通过、lint 通过、测试通过，都不覆盖它——
 // 测试只断言「元素存在/有该类名」，类名再错也不失败。

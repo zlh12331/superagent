@@ -8,10 +8,9 @@
 
 import type { GoalInfo } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 
-import { useErrorMessage } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { useMutationOnError } from '@/hooks/use-mutation-error';
+import { unwrap } from '@/lib/ipc';
 import { GOAL_LIST_QUERY_KEY } from '@/lib/query/keys';
 
 /** 目标栏展示形态（供 GoalBar 组件消费） */
@@ -20,6 +19,7 @@ export interface ChatGoalView {
   readonly status: 'active' | 'completed' | 'aborted';
 }
 
+/** 会话目标 hook 返回：展示态（currentGoal/isGoalCompleted）+ 增删动作 */
 export interface ChatGoals {
   /** 当前展示目标（active 优先 → completed；无目标为 undefined） */
   readonly currentGoal: ChatGoalView | undefined;
@@ -55,10 +55,7 @@ export function useChatGoals(chatId: string): ChatGoals {
   const goals = goalsQuery.data?.goals ?? [];
 
   // 错误反馈（一致性审计：写路径 mutation 必须有 onError——此前创建/清除失败静默）
-  const { getErrorMessage } = useErrorMessage();
-  const onError = (error: Error): void => {
-    toast.error(unwrapErrorMessage(error, getErrorMessage));
-  };
+  const onError = useMutationOnError();
 
   const createGoalMutation = useMutation({
     mutationFn: async (condition: string) => {

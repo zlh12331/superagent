@@ -16,27 +16,19 @@ import { toast } from 'sonner';
 import { QueryErrorRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { MCP_SERVERS_QUERY_KEY } from '@/lib/query/keys';
+import {
+  listMcpServers,
+  type McpServerInfo,
+  type McpStartConfig,
+  type McpTransport,
+  startMcpServer,
+  stopMcpServer,
+} from '@/lib/settings-ops';
 import { cn } from '@/lib/utils';
 import { SectionTitle, SettingRow } from '../settings-controls';
-
-/**
- * MCP 服务器行类型（从 IPC 契约推导：mcp:list 响应的 servers 元素）
- *
- * 不引 shared 出口——renderer 出口不含 mcp schema（避免 zod 运行时进渲染层），
- * 与组件内其他类型获取方式一致。
- */
-type McpServerInfo = Extract<
-  Awaited<ReturnType<typeof window.api.mcp.list>>,
-  { data: unknown }
->['data'] extends { servers: readonly (infer S)[] }
-  ? S
-  : never;
-
-/** 传输类型三态（与 shared MCP_TRANSPORTS 对齐） */
-type McpTransport = 'stdio' | 'sse' | 'streamable-http';
 
 const TRANSPORT_OPTIONS: readonly McpTransport[] = ['stdio', 'sse', 'streamable-http'];
 
@@ -219,6 +211,7 @@ function McpListStatus({
  */
 export function McpSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const queryClient = useQueryClient();
   // 添加表单状态（transport 三态 + 按 transport 切换字段组）
   const [name, setName] = useState('');
@@ -235,12 +228,7 @@ export function McpSection(): ReactElement {
   // L3 查询：服务器列表
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: MCP_SERVERS_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { servers: [] };
-      }
-      return unwrap(await window.api.mcp.list({}));
-    },
+    queryFn: listMcpServers,
   });
 
   /** 操作后失效列表缓存（重新拉取） */
@@ -250,28 +238,7 @@ export function McpSection(): ReactElement {
 
   // 启动 mutation
   const startMutation = useMutation({
-    mutationFn: async (config: {
-      name: string;
-      transport: McpTransport;
-      command: string;
-      args?: string[];
-      url?: string;
-      headers?: Record<string, string>;
-    }) => {
-      // 浏览器模式（dev 预览）无桥：抛可读错误交给 onError 提示，
-      // 而非在成员访问阶段抛 TypeError（挂在其后的 .catch 兜不住）
-      if (!hasIpcBridge()) throw new Error('window.api unavailable');
-      return unwrap(
-        await window.api.mcp.start({
-          name: config.name,
-          ...(config.transport !== 'stdio' ? { transport: config.transport } : {}),
-          ...(config.url !== undefined ? { url: config.url } : {}),
-          ...(config.headers !== undefined ? { headers: config.headers } : {}),
-          command: config.command,
-          ...(config.args !== undefined ? { args: config.args } : {}),
-        }),
-      );
-    },
+    mutationFn: (config: McpStartConfig) => startMcpServer(config),
     onSuccess: () => {
       toast.success(t('settings.mcpStarted'));
       setName('');
@@ -282,23 +249,20 @@ export function McpSection(): ReactElement {
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
       invalidate();
     },
   });
 
   // 停止 mutation
   const stopMutation = useMutation({
-    mutationFn: async (serverName: string) => {
-      if (!hasIpcBridge()) throw new Error('window.api unavailable');
-      return unwrap(await window.api.mcp.stop({ name: serverName }));
-    },
+    mutationFn: (serverName: string) => stopMcpServer(serverName),
     onSuccess: () => {
       toast.success(t('settings.mcpStopped'));
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
       invalidate();
     },
   });
@@ -316,7 +280,7 @@ export function McpSection(): ReactElement {
       {/* 加载状态区（error 优先 / loading / 空态）—— 提取为子组件，避免 McpSection 主体过长 */}
       <McpListStatus
         isError={isError}
-        errorMessage={error instanceof Error ? error.message : null}
+        errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
         onRetry={() => void refetch()}
         isLoading={isLoading}
         isEmpty={servers.length === 0}

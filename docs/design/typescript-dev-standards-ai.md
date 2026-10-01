@@ -1262,6 +1262,13 @@ AI 生成任何 TypeScript 项目时，必须使用以下完整 tsconfig.json �
 
   规则 18.1  所有 export 的函数、类、接口、类型必须有 TSDoc 注释。
 
+    ⚠️ 门禁状态（2026-09-25 更新）：**已落地自动门禁** `pnpm check:tsdoc`（挂 check:static 链）。
+    判据核 scripts/lib/tsdoc-rules.ts（@babel/parser AST：export 的函数/类/接口/类型/enum
+    声明前须有 /** TSDoc；重载签名跳过、export { } 形态责任在被指向声明、JSDoc 与声明间
+    允许 biome-ignore 指令行）。存量已清零（2026-09-25，原登记债 debt.md#d3 关闭）；
+    棘轮基线 scripts/tsdoc-baseline.json（当前空表 = 0 存量，新代码即写即 100% 覆盖）。
+    注：规则只拦「缺失」；「过期 @param」由 check:comments 规则 A 拦截，两者互补。
+
   规则 18.2  TSDoc 必须包含以下标签（按顺序）：
 
     /**
@@ -1279,9 +1286,15 @@ AI 生成任何 TypeScript 项目时，必须使用以下完整 tsconfig.json �
   规则 18.3  注释解释"为什么"，不解释"做了什么"。
   规则 18.4  禁止注释掉的大段代码（删除它）。
   规则 18.5  禁止显而易见的注释（如 // 加 1）。
-  规则 18.6  TODO 注释必须包含原因、计划和预期日期：
-            // TODO: 优化性能，当前 O(n²) 实现，
-            // 计划用哈希表重构，2025-06-01
+  规则 18.6  TODO 注释必须包含原因、计划与登记日期：
+            // TODO(2026-12-01) 优化性能：当前 O(n²) 实现，计划用哈希表重构
+
+            ⚠️ 日期必须**紧邻** TODO 标记——`TODO(YYYY-MM-DD)`，或 `TODO: YYYY-MM-DD`。
+            门禁 check:comments 规则 C 的正则要求日期紧跟标记词（中间仅允许一个 `:`
+            或 `(`），把日期写在**下一行**会被判「无日期」warning（本规则此前示例
+            即为此形态，2026-09-25 修正）。日期即登记日期：门禁按「距该日期已过
+            N 天」判定，超过 90 天 = error；写未来日期不会立刻报错，但也不代表它
+            是截止日期。
 
   规则 18.7  使用 @internal 标记内部 API。
   规则 18.8  使用 @deprecated 标记废弃 API，并提供替代方案。

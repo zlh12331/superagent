@@ -12,6 +12,10 @@ vi.mock('../storage/keychain', () => ({
   setSecret: vi.fn(async () => {}),
 }));
 
+// 失效域广播替身（基础设施边界，规范允许 vi.mock；S10 断言用，见文件尾 describe）
+vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
+
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { getSecret } from '../storage/keychain';
 
 /** fake 渠道适配器（手写最小实现，无 mock 框架） */
@@ -170,5 +174,63 @@ describe('ImService', () => {
     await service.start('telegram', 't');
     await service.stopAll();
     expect(adapters[0]?.isConnected).toBe(false);
+  });
+});
+
+// ── 失效域声明（31 号 spec S10：im 渠道状态变化） ───────────────────
+
+describe('ImService 失效域声明（S10）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('start 连接成功 → 广播 im', async () => {
+    const { service } = createService();
+
+    await service.start('telegram', 't');
+
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['im']);
+  });
+
+  it('重复 start（已在跑）不广播（仅真实状态迁移声明）', async () => {
+    const { service } = createService();
+    await service.start('telegram', 't');
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    await service.start('telegram', 't');
+
+    expect(broadcastInvalidation).not.toHaveBeenCalled();
+  });
+
+  it('stop 真停止 → 广播 im；重复 stop 幂等不广播', async () => {
+    const { service } = createService();
+    await service.start('telegram', 't');
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    await service.stop('telegram');
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+
+    await service.stop('telegram');
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+  });
+
+  it('stopAll 有渠道在跑 → 广播 im；无渠道时不广播', async () => {
+    const { service } = createService();
+    await service.start('telegram', 't');
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    await service.stopAll();
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+
+    await service.stopAll();
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+  });
+
+  it('start 失败（骨架渠道）不广播', async () => {
+    const { service } = createService();
+
+    await expect(service.start('wechat', 'x')).rejects.toThrow();
+
+    expect(broadcastInvalidation).not.toHaveBeenCalled();
   });
 });

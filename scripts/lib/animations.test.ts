@@ -148,23 +148,35 @@ describe('findMissingAnimations', () => {
 // 无此锚点，将来再删 keyframes 而漏改引用不会被任何门禁拦住。
 // ──────────────────────────────────────────────────────────────
 
-describe('仓库现状（styles/globals.css + renderer components）', () => {
-  const Styles = ['src/renderer/styles/globals.css', 'src/renderer/styles/tokens.css'];
+describe('仓库现状（styles/* + renderer components）', () => {
+  const Styles = [
+    'src/renderer/styles/index.css',
+    'src/renderer/styles/base.css',
+    'src/renderer/styles/layout.css',
+    'src/renderer/styles/welcome.css',
+    'src/renderer/styles/chat.css',
+    'src/renderer/styles/composer.css',
+    'src/renderer/styles/cards.css',
+    'src/renderer/styles/file-tree.css',
+    'src/renderer/styles/fuzzy.css',
+    'src/renderer/styles/motion.css',
+    'src/renderer/styles/tokens.css',
+  ];
 
   function readAll(paths: readonly string[]): string {
     return paths.map((p) => readFileSync(join(REPO_ROOT, p), 'utf8')).join('\n');
   }
 
-  it('globals.css 的 animation 引用全部有 @keyframes 定义', () => {
+  it('styles/ 各域 css 的 animation 引用全部有 @keyframes 定义', () => {
     const css = readAll(Styles);
     const defined = new Set(extractKeyframeNames(css));
     const refs = extractCssAnimationRefs(css).map(
-      (name, i): AnimationRef => ({ name, file: 'globals.css', line: i }),
+      (name, i): AnimationRef => ({ name, file: 'styles/*', line: i }),
     );
     expect(findMissingAnimations(refs, defined)).toEqual([]);
   });
 
-  it('browser-pane 的加载条动画名在 globals.css 中有定义', () => {
+  it('browser-pane 的加载条动画名在 styles/ 各域 css 中有定义', () => {
     const pane = readFileSync(
       join(REPO_ROOT, 'src/renderer/components/browser/browser-pane.tsx'),
       'utf8',

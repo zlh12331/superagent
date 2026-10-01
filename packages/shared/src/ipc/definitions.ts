@@ -25,6 +25,7 @@ import {
   type AgentStreamEndPayload,
   type AgentStreamErrorPayload,
   type AgentStreamPartPayload,
+  type AgentStreamStartPayload,
   type AgentToolCallPayload,
   type AgentToolResultPayload,
 } from '../schemas/agent';
@@ -39,6 +40,7 @@ import type {
   AppInfoRes,
   DeepLinkPayload,
   ExportDiagnosticsRes,
+  LoginItemChangedPayload,
   LoginItemSettingsRes,
 } from '../schemas/app';
 import {
@@ -46,9 +48,19 @@ import {
   AppStatusResSchema,
   DeepLinkPayloadSchema,
   ExportDiagnosticsResSchema,
+  LoginItemChangedPayloadSchema,
   LoginItemSettingsResSchema,
   SetLoginItemSettingsReqSchema,
 } from '../schemas/app';
+import {
+  type BackupCreateRes,
+  BackupCreateResSchema,
+  type BackupListRes,
+  BackupListResSchema,
+  BackupRestoreReqSchema,
+  type BackupRestoreRes,
+  BackupRestoreResSchema,
+} from '../schemas/backup';
 import {
   BrowserConfigureReqSchema,
   type BrowserLoadFailedPayload,
@@ -131,6 +143,7 @@ import {
 } from '../schemas/goal';
 import type { ChannelListRes, ChannelOpRes } from '../schemas/im';
 import { ChannelListResSchema, ChannelStartReqSchema, ChannelStopReqSchema } from '../schemas/im';
+import { type InvalidationPayload, InvalidationPayloadSchema } from '../schemas/invalidation';
 import {
   McpListReqSchema,
   type McpListRes,
@@ -164,8 +177,9 @@ import {
   type TestModelRes,
   TestModelResSchema,
 } from '../schemas/models';
+import { ProxyTestReqSchema, type ProxyTestRes, ProxyTestResSchema } from '../schemas/proxy';
 import type { RemoteStatusRes } from '../schemas/remote';
-import { RemoteStatusResSchema } from '../schemas/remote';
+import { RemoteSetBindScopeReqSchema, RemoteStatusResSchema } from '../schemas/remote';
 import {
   GlobReqSchema,
   type GlobRes,
@@ -175,6 +189,9 @@ import {
   GrepResSchema,
 } from '../schemas/search';
 import {
+  SessionClearAllReqSchema,
+  type SessionClearAllRes,
+  SessionClearAllResSchema,
   SessionCompactReqSchema,
   type SessionCompactRes,
   SessionCompactResSchema,
@@ -194,6 +211,7 @@ import {
   SessionGetTurnsReqSchema,
   type SessionGetTurnsRes,
   SessionGetTurnsResSchema,
+  SessionImportResSchema,
   SessionListRecentDirsReqSchema,
   type SessionListRecentDirsRes,
   SessionListRecentDirsResSchema,
@@ -239,8 +257,15 @@ import {
   SetTelemetryLevelReqSchema,
   type SetTelemetryLevelRes,
   SetTelemetryLevelResSchema,
+  type SettingsChangedPayload,
+  SettingsChangedPayloadSchema,
+  SettingsExportResSchema,
   SettingsGetAllReqSchema,
   SettingsGetAllResSchema,
+  SettingsImportResSchema,
+  SettingsResetAllReqSchema,
+  type SettingsResetAllRes,
+  SettingsResetAllResSchema,
   SettingsSetReqSchema,
   SettingsSetResSchema,
   UpdateRuntimeModelReqSchema,
@@ -305,6 +330,7 @@ import {
   WhitelistRemoveReqSchema,
   type WhitelistRemoveRes,
 } from '../schemas/whitelist';
+import { ApplyZoomReqSchema, type ApplyZoomRes, ApplyZoomResSchema } from '../schemas/window';
 import { IPC_META, type IpcMeta } from './meta';
 
 /**
@@ -372,6 +398,11 @@ export function withPayload<
 const StreamPartPayloadSchema = z.object({
   sessionId: z.string().min(1),
   part: z.unknown(),
+});
+
+/** agent:stream:start 事件 payload schema（D4A：回合开始，仅 envelope 校验） */
+const StreamStartPayloadSchema = z.object({
+  sessionId: z.string().min(1),
 });
 
 /** agent:stream:error 事件 payload schema */
@@ -456,6 +487,12 @@ export const IPC_DEFINITIONS = {
       {} as DeepLinkPayload,
       DeepLinkPayloadSchema,
     ),
+    // 登录项变更事件：主进程主动写入后广播真实回读值（托盘改自启 → 设置页回显）
+    subscribeLoginItemChanged: withPayload(
+      IPC_META.app.subscribeLoginItemChanged,
+      {} as LoginItemChangedPayload,
+      LoginItemChangedPayloadSchema,
+    ),
   },
 
   agent: {
@@ -482,6 +519,12 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeStreamPart,
       {} as AgentStreamPartPayload,
       StreamPartPayloadSchema,
+    ),
+    // D4A：回合开始事件——渲染层据此点亮侧栏跨会话运行徽标
+    subscribeStreamStart: withPayload(
+      IPC_META.agent.subscribeStreamStart,
+      {} as AgentStreamStartPayload,
+      StreamStartPayloadSchema,
     ),
     subscribeAsk: withPayload(
       IPC_META.agent.subscribeAsk,
@@ -534,6 +577,13 @@ export const IPC_DEFINITIONS = {
       {} as SessionDeleteRes,
       SessionDeleteResSchema,
     ),
+    // 清空全部会话（36-D）：无入参；运行中回合守卫在 handler（SESSION_IN_USE）
+    clearAll: withSchema(
+      IPC_META.session.clearAll,
+      SessionClearAllReqSchema,
+      {} as SessionClearAllRes,
+      SessionClearAllResSchema,
+    ),
     rename: withSchema(
       IPC_META.session.rename,
       SessionRenameReqSchema,
@@ -563,6 +613,14 @@ export const IPC_DEFINITIONS = {
       null,
       {} as { saved: boolean; path?: string },
       z.object({ saved: z.boolean(), path: z.string().optional() }),
+    ),
+    // 导入会话：dialog 选文件（主进程内完成读文件 + 解析），入参为空；
+    // zod 文件格式校验在 SessionService.importAll 内（INVALID_ERROR 语义见 service）
+    importAll: withSchema(
+      IPC_META.session.importAll,
+      null,
+      {} as { imported: number; skipped: number },
+      SessionImportResSchema,
     ),
     getUsageSummary: withSchema(
       IPC_META.session.getUsageSummary,
@@ -754,12 +812,50 @@ export const IPC_DEFINITIONS = {
     list: withSchema(IPC_META.tool.list, ToolListReqSchema, {} as ToolListRes, ToolListResSchema),
   },
 
+  window: {
+    applyZoom: withSchema(
+      IPC_META.window.applyZoom,
+      ApplyZoomReqSchema,
+      {} as ApplyZoomRes,
+      ApplyZoomResSchema,
+    ),
+  },
+
+  backup: {
+    // 备份恢复点列表（37 号 B）：无入参；健康度由主进程 quick_check 给出
+    list: withSchema(IPC_META.backup.list, null, {} as BackupListRes, BackupListResSchema),
+    // 手动立即备份：无入参；name = 新备份文件名（进同一轮转环）
+    create: withSchema(IPC_META.backup.create, null, {} as BackupCreateRes, BackupCreateResSchema),
+    // 从指定恢复点恢复：name 为裸文件名（路径穿越防御在主进程）
+    restore: withSchema(
+      IPC_META.backup.restore,
+      BackupRestoreReqSchema,
+      {} as BackupRestoreRes,
+      BackupRestoreResSchema,
+    ),
+  },
+
+  proxy: {
+    test: withSchema(
+      IPC_META.proxy.test,
+      ProxyTestReqSchema,
+      {} as ProxyTestRes,
+      ProxyTestResSchema,
+    ),
+  },
+
   settings: {
     getAll: withSchema(
       IPC_META.settings.getAll,
       SettingsGetAllReqSchema,
       {} as { settings: Record<string, unknown> },
       SettingsGetAllResSchema,
+    ),
+    resetAll: withSchema(
+      IPC_META.settings.resetAll,
+      SettingsResetAllReqSchema,
+      {} as SettingsResetAllRes,
+      SettingsResetAllResSchema,
     ),
     set: withSchema(
       IPC_META.settings.set,
@@ -832,6 +928,26 @@ export const IPC_DEFINITIONS = {
       UpdateRuntimeModelReqSchema,
       {} as UpdateRuntimeModelRes,
       UpdateRuntimeModelResSchema,
+    ),
+    // 设置导出：dialog 选保存路径（主进程内聚合 app_settings 全表），无入参
+    exportSettings: withSchema(
+      IPC_META.settings.exportSettings,
+      null,
+      {} as { saved: boolean; path?: string },
+      SettingsExportResSchema,
+    ),
+    // 设置导入：dialog 选文件（主进程内读文件 + 白名单过滤 + 事务写入），无入参
+    importSettings: withSchema(
+      IPC_META.settings.importSettings,
+      null,
+      {} as { imported: number; skipped: number },
+      SettingsImportResSchema,
+    ),
+    // 设置变更事件：主进程主动写入某域后广播（payload = 该域完整新值）
+    subscribeChanged: withPayload(
+      IPC_META.settings.subscribeChanged,
+      {} as SettingsChangedPayload,
+      SettingsChangedPayloadSchema,
     ),
   },
 
@@ -957,6 +1073,12 @@ export const IPC_DEFINITIONS = {
     ),
     start: withSchema(IPC_META.remote.start, null, {} as RemoteStatusRes, RemoteStatusResSchema),
     stop: withSchema(IPC_META.remote.stop, null, {} as RemoteStatusRes, RemoteStatusResSchema),
+    setBindScope: withSchema(
+      IPC_META.remote.setBindScope,
+      RemoteSetBindScopeReqSchema,
+      {} as RemoteStatusRes,
+      RemoteStatusResSchema,
+    ),
   },
 
   logs: {
@@ -991,6 +1113,15 @@ export const IPC_DEFINITIONS = {
     list: withSchema(IPC_META.mcp.list, McpListReqSchema, {} as McpListRes, McpListResSchema),
     start: withSchema(IPC_META.mcp.start, McpServerConfigSchema, {} as McpStartRes, OkResSchema),
     stop: withSchema(IPC_META.mcp.stop, McpStopReqSchema, {} as McpStopRes, OkResSchema),
+  },
+
+  invalidation: {
+    // 失效域事件：主进程写路径声明受影响域后广播（payload 契约见 schemas/invalidation.ts）
+    subscribeDomains: withPayload(
+      IPC_META.invalidation.subscribeDomains,
+      {} as InvalidationPayload,
+      InvalidationPayloadSchema,
+    ),
   },
 
   update: {

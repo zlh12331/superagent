@@ -24,6 +24,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+/** 查询四态容器 props（pending/error/empty/ready 由调用方传入判定结果） */
 export interface AsyncSectionProps {
   /** 首次加载 / 无缓存刷新中 */
   readonly isPending: boolean;
@@ -122,6 +123,10 @@ export function QueryPendingRow({ isPending }: { isPending: boolean }): React.Re
 /** 外层统一间距与字号的四态容器 */
 const WRAPPER_CLASS = 'mt-2 text-xs leading-relaxed';
 
+/**
+ * 查询四态分区容器：pending → Spinner、error → 提示 + 重试、empty → 空态文案、
+ * ready → children（a11y 见文件头注释）
+ */
 export function AsyncSection({
   isPending,
   isError,

@@ -303,8 +303,18 @@ function collectUiParts(
  *
  * 保留存储中真实存在的每一种 part；无法回显的类型登记进 droppedPartTypes。
  * 空消息（无 part 可渲染）整体跳过，避免空气泡。
+ *
+ * @param rawMessages 持久化消息（ModelMessage 形态）
+ * @param options.idPrefix 生成消息 id 的前缀（默认 'hist'）。同一 useChat
+ *   本地态会共存多批重建消息（挂载 initialMessages + 每次向上补页 prepend），
+ *   id 由调用方按批次注入不同前缀防撞（id 重复会破坏 React key 与
+ *   regenerate/messageId 定位——2026-09-25 审查修复）
  */
-export function reconstructHistory(rawMessages: readonly ChatMessage[]): ReconstructedHistory {
+export function reconstructHistory(
+  rawMessages: readonly ChatMessage[],
+  options?: { readonly idPrefix?: string },
+): ReconstructedHistory {
+  const idPrefix = options?.idPrefix ?? 'hist';
   const normalized = rawMessages.map((raw) => normalizeMessage(raw));
   const { outcomes, callIds } = collectOutcomes(normalized);
   const dropped = new Set<string>();
@@ -316,13 +326,16 @@ export function reconstructHistory(rawMessages: readonly ChatMessage[]): Reconst
     const { parts, rich } = collectUiParts(message, ctx);
     if (rich) hasRichParts = true;
     if (parts.length === 0) return;
-    messages.push({ id: `hist-${index}`, role: toUiRole(message.role), parts });
+    messages.push({ id: `${idPrefix}-${index}`, role: toUiRole(message.role), parts });
   });
 
   return { messages, droppedPartTypes: [...dropped], hasRichParts };
 }
 
-/** 兼容旧调用点：只要消息数组（compact 后替换本地态用） */
-export function toInitialMessages(messages: readonly ChatMessage[]): UIMessage[] {
-  return reconstructHistory(messages).messages;
+/** 兼容旧调用点：只要消息数组（compact 后替换本地态用；整态替换无 id 共存） */
+export function toInitialMessages(
+  messages: readonly ChatMessage[],
+  idPrefix?: string,
+): UIMessage[] {
+  return reconstructHistory(messages, { ...(idPrefix !== undefined ? { idPrefix } : {}) }).messages;
 }

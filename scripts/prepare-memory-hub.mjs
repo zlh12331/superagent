@@ -48,6 +48,40 @@ const CORE =
 const skipIfExists = process.argv.includes('--skip-if-exists');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
+/** 支持的架构集合（与 electron-builder.yml 的 target.arch 对齐） */
+const ALL_ARCHS = ['x64', 'arm64'];
+
+/**
+ * 目标架构：可由 CODE_AGENT_TARGET_ARCHS 收窄（逗号分隔），默认全部
+ *
+ * 与 scripts/prepare-codegraph.mjs 同一约定（release.yml 每个构建 job 都 export
+ * `CODE_AGENT_TARGET_ARCHS=${{ matrix.target-archs }}`）。默认（未设置）保持
+ * **双架构**：本地 `pnpm build:win`（CLI 同时传 --x64 --arm64）在单架构机器上
+ * 交叉构建时，收窄到 host 架构会把错误架构的原生绑定打进另一架构的包。
+ * 只有 CI 单架构 job 显式收窄时才裁剪——此时 runner 架构即目标架构。
+ */
+function resolveTargetArchs() {
+  const raw = process.env['CODE_AGENT_TARGET_ARCHS'];
+  if (raw === undefined || raw.trim() === '') {
+    return ALL_ARCHS;
+  }
+  const requested = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+  const unknown = requested.filter((a) => !ALL_ARCHS.includes(a));
+  if (unknown.length > 0) {
+    console.error(
+      `[prepare-memory-hub] CODE_AGENT_TARGET_ARCHS 含未知架构：${unknown.join(', ')}` +
+        `（支持：${ALL_ARCHS.join(', ')}）`,
+    );
+    process.exit(1);
+  }
+  return requested.length > 0 ? requested : ALL_ARCHS;
+}
+
+const targetArchs = resolveTargetArchs();
+
 function run(cmd, args, cwd) {
   const res = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
   if (res.status !== 0) {
@@ -152,13 +186,23 @@ console.log('[prepare-memory-hub] 在目标目录安装生产依赖（--ignore-s
 // （optionalDependencies，如 jieba-darwin-x64 / -darwin-arm64），运行时由包内
 // index.js 按 process.platform + process.arch 动态 require。只装 host 架构会在
 // 交叉构建时打进错误架构的绑定（x64 包内为 arm64 绑定 → 分词功能失败）。
+// cpu 列表由 targetArchs 决定：默认双架构（本地交叉构建安全）；CI 单架构 job 经
+// CODE_AGENT_TARGET_ARCHS 收窄后，另一架构的原生包（@esbuild / @node-rs/jieba
+// 的异架构绑定，实测 ~12MB）不再下载——该 job 的产物只服务单一架构。
 writeFileSync(
   join(TARGET, 'pnpm-workspace.yaml'),
   'packages: []\n' +
-    'supportedArchitectures:\n  os:\n    - current\n  cpu:\n    - x64\n    - arm64\n' +
+    'supportedArchitectures:\n  os:\n    - current\n  cpu:\n' +
+    targetArchs.map((a) => `    - ${a}\n`).join('') +
     'virtualStoreDirMaxLength: 24\n',
   'utf8',
 );
+if (targetArchs.length < ALL_ARCHS.length) {
+  console.log(
+    `[prepare-memory-hub] 按 CODE_AGENT_TARGET_ARCHS 收窄目标架构：${targetArchs.join(', ')}` +
+      '（跳过异架构原生依赖）',
+  );
+}
 const storeDir = join(tmpdir(), 'pnpm-store-memory-hub');
 run(
   pnpm,
@@ -468,6 +512,55 @@ if (removedUseless > 0) {
   console.log(
     `[prepare-memory-hub] 已清理运行期无用文件 ${removedUseless} 个（sourcemap/类型声明）` +
       ` ~${(removedBytes / 1048576).toFixed(1)} MB——同时缓解 Windows 路径长度限制`,
+  );
+}
+
+// 5.3 BM25 词典无损压缩（tcvdb-text 的 data/bm25_*.json）
+//
+// 背景：上游 @tencentdb-agent-memory/tcvdb-text 的 BM25 预训练词典以 pretty-print
+//   JSON 分发（en ~191MB / zh ~81MB，为运行目录最大头）。运行期读取方式是
+//   readFileSync + JSON.parse（tcvdb-text/dist/encoder/bm25.js 的 setParamsSync），
+//   与排版无关 ⇒ JSON.stringify(JSON.parse(x)) 后语义完全等价（数值/键序不变，
+//   实测 roundtrip 一致），却可省 ~32% 体积。
+// 范围与安全性：只重写生成目录内 tcvdb-text/data/bm25_*.json；解析失败或 minify
+//   未变小则保留原文件（不阻断构建）；不触碰 MemoryCore 上游源码（integrity 锁定域）。
+// 注意：单文件 JSON.parse 峰值内存可达 ~1-2GB（en 词典 ~543 万词条），CI runner 可承受。
+const BM25_FILE_PATTERN = /^bm25_.+\.json$/;
+let bm25TrimmedFiles = 0;
+let bm25SavedBytes = 0;
+if (existsSync(PNPM_DIR)) {
+  for (const ent of readdirSync(PNPM_DIR, { withFileTypes: true })) {
+    if (!ent.isDirectory() || ent.name === 'node_modules') continue;
+    const dataDir = join(
+      PNPM_DIR,
+      ent.name,
+      'node_modules',
+      '@tencentdb-agent-memory',
+      'tcvdb-text',
+      'data',
+    );
+    if (!existsSync(dataDir)) continue;
+    for (const f of readdirSync(dataDir)) {
+      if (!BM25_FILE_PATTERN.test(f)) continue;
+      const filePath = join(dataDir, f);
+      try {
+        const raw = readFileSync(filePath, 'utf8');
+        const min = JSON.stringify(JSON.parse(raw));
+        if (min.length < raw.length) {
+          writeFileSync(filePath, min, 'utf8');
+          bm25TrimmedFiles += 1;
+          bm25SavedBytes += raw.length - min.length;
+        }
+      } catch {
+        // 词典损坏/解析失败：保留原文件（运行期行为与未压缩时一致）
+      }
+    }
+  }
+}
+if (bm25TrimmedFiles > 0) {
+  console.log(
+    `[prepare-memory-hub] 已无损压缩 BM25 词典 ${bm25TrimmedFiles} 个` +
+      ` ~${(bm25SavedBytes / 1048576).toFixed(1)} MB（语义等价 minify，键值不变）`,
   );
 }
 

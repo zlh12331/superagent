@@ -89,6 +89,39 @@ describe('TurnRunner', () => {
     expect(result.reason).toBe('aborted');
   });
 
+  it('模型级超时（isTimeout 归因）：abort 形态返回 reason=timeout', async () => {
+    // combinedAbortSignals 把超时与用户中断折叠成同一 abort 形态：
+    // isTimeout 回调返回 true 时归因为 timeout（上层据此走错误出口）
+    const runner = new TurnRunner({
+      ...ctx,
+      controller,
+      emitter,
+      isTimeout: () => true,
+    });
+    const stream = new ReadableStream<unknown>({
+      start(controller_) {
+        controller_.error(new DOMException('aborted', 'AbortError'));
+      },
+    });
+
+    const result = await runner.run(stream);
+
+    expect(result.reason).toBe('timeout');
+  });
+
+  it('isTimeout 未提供或返回 false：abort 形态仍归为 aborted', async () => {
+    const runner = new TurnRunner({ ...ctx, controller, emitter, isTimeout: () => false });
+    const stream = new ReadableStream<unknown>({
+      start(controller_) {
+        controller_.error(new DOMException('aborted', 'AbortError'));
+      },
+    });
+
+    const result = await runner.run(stream);
+
+    expect(result.reason).toBe('aborted');
+  });
+
   it('非中断错误：抛出由上层分类', async () => {
     const runner = new TurnRunner({ ...ctx, controller, emitter });
     const stream = new ReadableStream<unknown>({

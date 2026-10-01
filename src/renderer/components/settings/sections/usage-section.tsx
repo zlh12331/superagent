@@ -20,10 +20,11 @@ import 'react-activity-calendar/tooltips.css';
 
 import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { formatCompactNumber, formatPercent } from '@/lib/format-intl';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { USAGE_SUMMARY_QUERY_KEY } from '@/lib/query/keys';
+import { getUsageSummary } from '@/lib/settings-ops';
 import { TurnsSection } from './turns-section';
 
 /** 生成近 N 天日期列表（倒序，today 在前；与 byDay 数据格式一致） */
@@ -158,8 +159,10 @@ function ModelUsageList({
   );
 }
 
+/** Token 用量设置区：汇总统计 + 按模型/按日明细（失败态显式呈现，不静默全零） */
 export function UsageSection(): ReactElement {
   const { t, i18n } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
 
   // 用量汇总：TanStack Query（L3 服务端数据；浏览器模式守卫返回空骨架）
   // 失败态以 QueryErrorRow 呈现（此前静默渲染成全零骨架，误导用户）
@@ -172,45 +175,41 @@ export function UsageSection(): ReactElement {
   } = useQuery({
     queryKey: USAGE_SUMMARY_QUERY_KEY,
     queryFn: async (): Promise<UsageSummaryRes> => {
-      // 浏览器模式（dev 预览）无 window.api：渲染空数据 UI 骨架
+      const res = await getUsageSummary();
+      // 无桥（dev 预览）：渲染空数据 UI 骨架
       // （0 值三卡 + 近 90 天 0 值热力图格子，形态完整可见）
-      if (!hasIpcBridge()) {
-        return {
+      return (
+        res ?? {
           total: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
           byModel: [],
           byDay: recentDays(90).map((date) => ({ date, calls: 0, totalTokens: 0 })),
-        };
-      }
-      return unwrap<UsageSummaryRes>(await window.api.session.getUsageSummary());
+        }
+      );
     },
   });
 
+  // 挂载时刻快照（非响应式）：必须 useMemo 空依赖，交给 Compiler 会每渲染重算 new Date()
   const heatEnd = useMemo(() => new Date(), []);
   const heatStart = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 89);
     return d;
   }, []);
-  /** 日期锚点（ISO，用于首尾空条目） */
-  const heatStartIso = useMemo(() => toIsoDate(heatStart), [heatStart]);
-  const heatEndIso = useMemo(() => toIsoDate(heatEnd), [heatEnd]);
+  /** 日期锚点（ISO，用于首尾空条目）；纯派生，交给 React Compiler */
+  const heatStartIso = toIsoDate(heatStart);
+  const heatEndIso = toIsoDate(heatEnd);
 
-  /** 热力图数据（色档按当日最大值分位；纯派生，抽 buildHeatValue 便于测试）
-   * 不手写 heatMax/heatLevel——buildHeatValue 内部计算，编译器和 biome 依赖推导完整 */
-  const heatValue = useMemo(
-    () => buildHeatValue(summary?.byDay, heatStartIso, heatEndIso),
-    [summary, heatStartIso, heatEndIso],
-  );
+  /** 热力图数据（色档按当日最大值分位；纯派生，抽 buildHeatValue 便于测试） */
+  const heatValue = buildHeatValue(summary?.byDay, heatStartIso, heatEndIso);
 
   // 近 30 天合计（"本月"近似：byDay 为近 90 天倒序，取前 30 项）
-  const monthTokens = useMemo(
-    () => (summary?.byDay ?? []).slice(0, 30).reduce((sum, d) => sum + d.totalTokens, 0),
-    [summary],
-  );
+  const monthTokens = (summary?.byDay ?? [])
+    .slice(0, 30)
+    .reduce((sum, d) => sum + d.totalTokens, 0);
   const todayTokens = summary?.byDay[0]?.totalTokens ?? 0;
 
   // 模型占比：占总量百分比
-  const modelRows = useMemo(() => {
+  const modelRows = (() => {
     const total = summary?.total.totalTokens ?? 0;
     if (total <= 0) return [];
     return (summary?.byModel ?? []).map((m) => ({
@@ -220,7 +219,7 @@ export function UsageSection(): ReactElement {
       share: (m.totalTokens / total) * 100,
       reasoningTokens: m.reasoningTokens,
     }));
-  }, [summary]);
+  })();
 
   // 空态：查询尚无数据（undefined）。**不是** null——此前写成 `=== null` 恒假，
   // 导致「空数据」文案（settings.usageEmpty）永不显示、且 loading/error 时
@@ -238,7 +237,7 @@ export function UsageSection(): ReactElement {
 
       <QueryErrorRow
         isError={isError}
-        errorMessage={error instanceof Error ? error.message : null}
+        errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
         onRetry={() => void refetch()}
       />
       <QueryPendingRow isPending={isPending} />

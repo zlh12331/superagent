@@ -23,6 +23,13 @@ import { type ReactElement, useEffect, useRef } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { hasIpcBridge } from '@/lib/ipc';
+import {
+  resizeTerminal,
+  subscribeTerminalExit,
+  subscribeTerminalOutput,
+  writeTerminalInput,
+} from '@/lib/terminal-actions';
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import type { TerminalMeta } from '@/stores/transient/terminal-store';
 import { useTerminalStore } from '@/stores/transient/terminal-store';
 
@@ -88,10 +95,11 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     const terminalId = session.id;
     const container = containerRef.current;
 
-    // 创建 Terminal 实例（文学风主题：米色背景 + 衬线字体）
+    // 创建 Terminal 实例（主题色与 tokens --bg/--text 联动；字号取设置快照——
+    // 后续变化走下方 store 订阅热更，不重建实例）
     const term = new Terminal({
       fontFamily: '"Cascadia Code", "JetBrains Mono", "Consolas", monospace',
-      fontSize: 13,
+      fontSize: useSettingsStore.getState().terminal.fontSize,
       lineHeight: 1.3,
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -125,7 +133,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
 
     // 订阅 IPC output 事件：按 terminalId 过滤，直接 write 到 xterm
     // 不走 store buffer，性能最优
-    const unsubscribeOutput = window.api.terminal.subscribeOutputEvent((payload) => {
+    const unsubscribeOutput = subscribeTerminalOutput((payload) => {
       if (payload.terminalId !== terminalId) return;
       term.write(payload.data);
     });
@@ -133,7 +141,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     // 订阅 IPC exit 事件：标记 alive=false（store 已通过 useTerminalBridge 处理）
     // 此处仅用于在终端退出时关闭输入响应（避免向已退出的 PTY 发送数据）
     let isExited = false;
-    const unsubscribeExit = window.api.terminal.subscribeExitEvent((payload) => {
+    const unsubscribeExit = subscribeTerminalExit((payload) => {
       if (payload.terminalId !== terminalId) return;
       isExited = true;
       // 在终端末尾追加退出提示（便于用户感知）
@@ -143,7 +151,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     // 用户输入回调：直接转发到 IPC（不经过 store）
     term.onData((data) => {
       if (isExited) return;
-      void window.api.terminal.input({ terminalId, data });
+      writeTerminalInput(terminalId, data);
     });
 
     // 自适应尺寸：ResizeObserver + 防抖
@@ -157,7 +165,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
         try {
           fitAddon.fit();
           const { cols, rows } = term;
-          void window.api.terminal.resize({ terminalId, cols, rows });
+          resizeTerminal(terminalId, cols, rows);
         } catch (error) {
           // fit 在容器隐藏或尺寸为 0 时可能抛错，忽略
           // 此处不弹 toast（高频场景），仅静默吞掉避免控制台噪声
@@ -167,6 +175,22 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
     });
     resizeObserver.observe(container);
 
+    // 字号实时热更（36-B V9）：订阅 settings-store，fontSize 档位变化 →
+    // xterm options 热更 + refit，无需重开终端。闭包直接持有 term/fitAddon
+    //（生命周期与本实例严格一致：dispose 即退订），不引入跨渲染 ref
+    let lastFontSize = useSettingsStore.getState().terminal.fontSize;
+    const unsubscribeFontSize = useSettingsStore.subscribe((state) => {
+      const next = state.terminal.fontSize;
+      if (next === lastFontSize) return;
+      lastFontSize = next;
+      term.options.fontSize = next;
+      try {
+        fitAddon.fit();
+      } catch {
+        // 容器隐藏（display:none 切换）时 fit 可能抛错：与 resize 路径同款静默
+      }
+    });
+
     // 清理：组件卸载或 session.id 变化时调用
     return () => {
       if (resizeTimer !== null) {
@@ -174,6 +198,7 @@ export function TerminalView({ session }: TerminalViewProps): ReactElement {
       }
       resizeObserver.disconnect();
       themeObserver.disconnect();
+      unsubscribeFontSize();
       unsubscribeOutput();
       unsubscribeExit();
       term.dispose();

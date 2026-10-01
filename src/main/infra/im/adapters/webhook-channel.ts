@@ -15,6 +15,7 @@
 
 import { AppError, type ChannelKind, ErrorCode } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
+import { proxiedFetch } from '../../network/proxied-fetch';
 import type { ChannelIncomingMessage, ChannelTarget, IChannelAdapter } from '../channel/types';
 
 /** webhook 发送超时（毫秒） */
@@ -174,7 +175,8 @@ async function postWebhook(url: string, payload: unknown): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), WEBHOOK_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
+    // 34 号：经 proxiedFetch（fixed 模式走代理；此前无缝直调全局 fetch）
+    const response = await (proxiedFetch as unknown as typeof fetch)(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

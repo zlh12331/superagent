@@ -12,9 +12,15 @@
 
 export * from './constants/approval';
 export * from './constants/defaults';
+// 编辑器代码面排版（37 号 A：Tab 宽度档位，值级门禁消费）
+export * from './constants/editor';
 // 错误处理（§7）
 export * from './constants/errors';
 export * from './constants/protocol';
+// 终端设置（36 号 B：shell 档位/平台适用性 + 字号档位，TerminalService 消费）
+export * from './constants/terminal-shell';
+// 界面缩放（35 号：档位集 + 归一/步进/overlay 联动纯函数，主进程渲染层共用）
+export * from './constants/zoom';
 export type { IpcChannel } from './ipc/channels';
 // IPC 通道常量（值，零 zod 依赖，主进程 handler 注册用）
 export { IPC_CHANNELS } from './ipc/channels';
@@ -40,6 +46,7 @@ export * from './schemas/agent';
 export * from './schemas/agent-ask';
 export * from './schemas/agent-events';
 export * from './schemas/app';
+export * from './schemas/backup';
 export * from './schemas/browser';
 export * from './schemas/chat';
 export * from './schemas/codebase';
@@ -49,9 +56,11 @@ export * from './schemas/file';
 export * from './schemas/git';
 export * from './schemas/goal';
 export * from './schemas/im';
+export * from './schemas/invalidation';
 export * from './schemas/mcp';
 export * from './schemas/memory';
 export * from './schemas/models';
+export * from './schemas/proxy';
 export * from './schemas/remote';
 export * from './schemas/search';
 export * from './schemas/session';
@@ -64,3 +73,4 @@ export * from './schemas/thinking';
 export * from './schemas/tool';
 export * from './schemas/update';
 export * from './schemas/whitelist';
+export * from './schemas/window';

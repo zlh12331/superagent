@@ -4,6 +4,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -112,6 +113,10 @@ interface RunCommandOutput {
   readonly stderrTruncated: boolean;
 }
 
+/**
+ * 创建 run_command 工具（在工作目录内执行 shell 命令：DANGEROUS_PATTERNS 拦截高危命令，
+ * 超时默认 30s 上限 5 分钟；ask 级审批）
+ */
 export function createRunCommandTool(): Tool<RunCommandInput> {
   return {
     name: 'run_command',
@@ -124,7 +129,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
       for (const { pattern, reason } of DANGEROUS_PATTERNS) {
         if (pattern.test(input.command) || pattern.test(normalizeForDangerScan(input.command))) {
           return {
-            title: `执行命令: ${input.command}`,
+            title: t('tools.runCommand.title', { command: input.command }),
             output: `[安全拦截] ${reason}：${input.command}`,
             metadata: {
               exitCode: 1,
@@ -139,10 +144,11 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
         }
       }
 
-      const cwd =
+      // realTarget：spawn 落点用真实路径（TOCTOU，debt.md#d1）；metadata.cwd 保持输入形态
+      const { resolved, realTarget } =
         input.cwd !== undefined
           ? resolveWithinWorkspace(input.cwd, ctx.workingDir)
-          : ctx.workingDir;
+          : { resolved: ctx.workingDir, realTarget: ctx.workingDir };
 
       const isWin = process.platform === 'win32';
       const shell = isWin ? (process.env['ComSpec'] ?? 'cmd.exe') : '/bin/sh';
@@ -150,7 +156,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
 
       const result: RunCommandOutput = await new Promise<RunCommandOutput>((resolve) => {
         const child = spawn(shell, [shellFlag, input.command], {
-          cwd,
+          cwd: realTarget,
           env: process.env,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
@@ -292,11 +298,11 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
           : `失败 (exit=${result.exitCode})`;
 
       return {
-        title: `执行命令: ${input.command}`,
+        title: t('tools.runCommand.title', { command: input.command }),
         output,
         metadata: {
           command: input.command,
-          cwd,
+          cwd: resolved,
           exitCode: result.exitCode,
           signal: result.signal,
           stdout: result.stdout,

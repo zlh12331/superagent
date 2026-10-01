@@ -20,6 +20,7 @@ export interface LsServerSpec {
 
 /** 支持的语言标识 */
 export const SUPPORTED_LS_LANGUAGES = ['typescript', 'python', 'go', 'rust'] as const;
+/** 支持的语言标识（typescript / python / go / rust，见 SUPPORTED_LS_LANGUAGES） */
 export type LsLanguage = (typeof SUPPORTED_LS_LANGUAGES)[number];
 
 /** 内置默认服务器（stdio 约定；用户可在设置中按语言覆盖） */

@@ -4,6 +4,7 @@
 
 import type { GrepRes } from '@code-agent/shared/main';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { ISearchService } from '../../search/search-service';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -39,6 +40,11 @@ const GrepInputSchema = z.object({
 
 type GrepInput = z.infer<typeof GrepInputSchema>;
 
+/**
+ * 创建 grep 工具（基于 ripgrep 的内容搜索：正则/字面量模式 + glob 过滤，返回行号与前后 2 行上下文）
+ *
+ * @param searchService 搜索服务（执行实际搜索）
+ */
 export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
   return {
     name: 'grep',
@@ -48,9 +54,10 @@ export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
     permission: 'auto',
     category: 'read',
     execute: async (input: GrepInput, ctx: ToolContext): Promise<ToolResult> => {
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata 保持输入形态
       const resolvedPaths =
         input.paths.length > 0
-          ? input.paths.map((p) => resolveWithinWorkspace(p, ctx.workingDir))
+          ? input.paths.map((p) => resolveWithinWorkspace(p, ctx.workingDir).realTarget)
           : [ctx.workingDir];
 
       const result: GrepRes = await searchService.grep({
@@ -70,7 +77,7 @@ export function createGrepTool(searchService: ISearchService): Tool<GrepInput> {
       });
 
       return {
-        title: `内容搜索: ${input.pattern}`,
+        title: t('tools.grep.title', { pattern: input.pattern }),
         output: lines.join('\n') || '(无匹配结果)',
         metadata: {
           pattern: input.pattern,

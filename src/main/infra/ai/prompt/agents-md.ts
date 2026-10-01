@@ -74,22 +74,59 @@ function findAgentsMdInDir(dir: string): string | null {
 }
 
 /**
- * 从工作目录向上逐级查找 AGENTS.md 文件
+ * 进程内 memo 条目（P2-32）
  *
- * 查找顺序：workingDir → parent → ... → 文件系统根目录
- * 收集路径上所有 AGENTS.md，越靠近 workingDir 的优先级越高（排在前面）。
- *
- * @param workingDir 工作目录绝对路径
- * @param maxBytes 总字节预算（默认 8KB），超出后停止收集
- * @returns 按优先级排序的 FoundAgentsMd 数组（workingDir 的在最前）
+ * 每回合 resolvePrompt 都会向上 20 级 statSync 探测 + readFileSync 读取全部
+ * AGENTS.md；memo 命中时只需 2–3 次 stat 即可判定新鲜。
  */
-export function discoverAgentsMd(
-  workingDir: string,
-  maxBytes: number = BYTE_BUDGET,
-): FoundAgentsMd[] {
+interface AgentsMdMemoEntry {
+  readonly files: readonly FoundAgentsMd[];
+  /** 发现时各命中文件的 mtimeMs（内容修改/删除失效检测） */
+  readonly fileMtimes: ReadonlyMap<string, number>;
+  /** 发现时解析根目录的 mtimeMs（根目录新增/删除文件失效检测） */
+  readonly rootMtime: number;
+}
+
+/** memo 缓存：key = 解析根 + 预算（预算不同结果不同，须入 key） */
+const memo = new Map<string, AgentsMdMemoEntry>();
+
+/** 清空 memo（测试用；生产常驻进程内复用） */
+export function resetAgentsMdMemo(): void {
+  memo.clear();
+}
+
+/** mtime 读取（stat 失败视为 null——与「文件不存在」同途触发失效） */
+function mtimeOf(filePath: string): number | null {
+  try {
+    return statSync(filePath).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/** memo 新鲜度：解析根目录 mtime 未变 且 各命中文件 mtime 未变 */
+function isMemoFresh(root: string, entry: AgentsMdMemoEntry): boolean {
+  if (mtimeOf(root) !== entry.rootMtime) {
+    return false;
+  }
+  for (const [path, mtime] of entry.fileMtimes) {
+    if (mtimeOf(path) !== mtime) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 向上逐级扫描 AGENTS.md（发现逻辑本体，独立于 memo 便于控制复杂度）
+ *
+ * 查找顺序：root → parent → ... → 文件系统根目录（最多 20 级）。
+ * 收集路径上所有 AGENTS.md，越靠近 root 的优先级越高（排在前面）。
+ */
+function walkAgentsMdUpward(root: string, maxBytes: number): FoundAgentsMd[] {
   const results: FoundAgentsMd[] = [];
   let remainingBudget = maxBytes;
-  let currentDir = resolve(workingDir);
+  let currentDir = root;
 
   // 防御：无限循环保护（最多 20 级目录）
   for (let i = 0; i < 20; i += 1) {
@@ -121,6 +158,41 @@ export function discoverAgentsMd(
 }
 
 /**
+ * 从工作目录向上逐级查找 AGENTS.md 文件
+ *
+ * 查找顺序：workingDir → parent → ... → 文件系统根目录
+ * 收集路径上所有 AGENTS.md，越靠近 workingDir 的优先级越高（排在前面）。
+ *
+ * P2-32：按解析根 + 字节预算做进程内 memo，mtime 失效（命中文件内容修改/删除、
+ * 根目录新增文件）。已知取舍：在「根目录以外的祖先目录」中新建 AGENTS.md 不会
+ * 使 memo 失效（目录 mtime 不变化）——会话中途向上级目录补挂约定的场景极罕见，
+ * 重启或工作目录变更（新 memo key）即可刷新。
+ *
+ * @param workingDir 工作目录绝对路径
+ * @param maxBytes 总字节预算（默认 8KB），超出后停止收集
+ * @returns 按优先级排序的 FoundAgentsMd 数组（workingDir 的在最前；memo 命中时为缓存实例，调用方不得修改）
+ */
+export function discoverAgentsMd(
+  workingDir: string,
+  maxBytes: number = BYTE_BUDGET,
+): readonly FoundAgentsMd[] {
+  const root = resolve(workingDir);
+  const memoKey = `${root}\u0000${maxBytes}`;
+  const cached = memo.get(memoKey);
+  if (cached !== undefined && isMemoFresh(root, cached)) {
+    return cached.files;
+  }
+
+  const results = walkAgentsMdUpward(root, maxBytes);
+  memo.set(memoKey, {
+    files: results,
+    fileMtimes: new Map(results.map((file) => [file.path, mtimeOf(file.path) ?? 0])),
+    rootMtime: mtimeOf(root) ?? 0,
+  });
+  return results;
+}
+
+/**
  * 格式化 AGENTS.md 内容为 system prompt 注入块
  *
  * 格式：
@@ -134,10 +206,10 @@ export function discoverAgentsMd(
  * <content>
  * ```
  *
- * @param files 发现的 AGENTS.md 文件列表
+ * @param files 发现的 AGENTS.md 文件列表（discoverAgentsMd 返回的只读数组可直接传入）
  * @returns 格式化后的字符串；无文件时返回空字符串
  */
-export function formatAgentsMdSection(files: FoundAgentsMd[]): string {
+export function formatAgentsMdSection(files: readonly FoundAgentsMd[]): string {
   if (files.length === 0) {
     return '';
   }

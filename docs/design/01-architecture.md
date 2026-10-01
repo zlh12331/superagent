@@ -9,21 +9,21 @@
 
 | 层级 | 入口文件 | 职责 |
 |---|---|---|
-| main | [src/main/index.ts](file:///src/main/index.ts) | Electron 主进程入口：窗口创建、Sentry/Logger/SQLite 初始化、CSP 注入、IPC handler 注册、退出清理 |
+| main | [src/main/index.ts](file:///src/main/index.ts) | Electron 主进程入口：窗口创建、Logger/SQLite 初始化、CSP 注入、IPC handler 注册、退出清理 |
 | renderer | [src/renderer/main.tsx](file:///src/renderer/main.tsx) | React 19 渲染层入口：Router + Providers |
 | preload | [src/preload/index.ts](file:///src/preload/index.ts) | contextBridge 暴露 `window.api`（16 个域，由 `createIpcApi(IPC_META)` 自动生成），sandbox + contextIsolation |
 | shared | [packages/shared/src/index.ts](file:///packages/shared/src/index.ts) | 跨进程共享包 `@code-agent/shared`：错误码、IPC 类型契约、Zod schemas |
 
 ### 主进程安全基线
 
-[src/main/index.ts#L143-L150](file:///src/main/index.ts#L143) 配置：
+[src/main/window.ts](file:///src/main/window.ts) 的 `webPreferences` 配置：
 
 - `contextIsolation: true`
 - `nodeIntegration: false`
 - `sandbox: true`
 - `webSecurity: true`
 
-preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///electron.vite.config.ts#L30)），强制 CJS 以兼容 sandbox 限制。
+preload 输出为 `.cjs`（[electron.vite.config.ts](file:///electron.vite.config.ts) 的 preload 段），强制 CJS 以兼容 sandbox 限制。
 
 ## 2. ServiceContainer：统一生命周期管理
 
@@ -82,11 +82,11 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///electron.vi
 | 17 | UpdateService.dispose() | 更新事件收尾 |
 | 18 | resetAIProvider() → closeDb() | SQLite 必须最后关闭 |
 
-设计依据：[L12-L42](file:///src/main/service-container.ts#L12) 注释说明 dispose 严格按反向依赖顺序，db 必须最后关闭避免 SessionService 访问已关闭连接。每个服务的 dispose 都有 3 秒超时兜底避免 hang 死。
+设计依据：[L12-L42](file:///src/main/service-container.ts) 注释说明 dispose 严格按反向依赖顺序，db 必须最后关闭避免 SessionService 访问已关闭连接。每个服务的 dispose 都有 3 秒超时兜底避免 hang 死。
 
 ### 2.3 reset 函数（测试场景）
 
-[L707-L735](file:///src/main/service-container.ts#L707)：仅清空缓存引用与模块级单例（`resetChatService` / `resetFileService` / `resetSearchService` / `resetTerminalService` / `resetGitService` / `resetCodebaseService` / `resetSessionService` / `resetAIProvider` / `resetDb` / `resetConfigCache`），**不调用 dispose**（不停止外部服务）。供测试用例隔离使用，与 `setXxxService(null)` 配套。
+[L707-L735](file:///src/main/service-container.ts)：仅清空缓存引用与模块级单例（`resetChatService` / `resetFileService` / `resetSearchService` / `resetTerminalService` / `resetGitService` / `resetCodebaseService` / `resetSessionService` / `resetAIProvider` / `resetDb` / `resetConfigCache`），**不调用 dispose**（不停止外部服务）。供测试用例隔离使用，与 `setXxxService(null)` 配套。
 
 ## 3. IPC 架构
 
@@ -125,8 +125,8 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///electron.vi
 
 底层封装在 [src/preload/utils/ipc-bridge.ts](file:///src/preload/utils/ipc-bridge.ts)：
 
-- `invoke<T>(channel, input?)`：返回 `Promise<IpcResponse<T>>`（成功 `{data}` / 失败 `{error}` 判别联合）。每次调用自动生成 `crypto.randomUUID()` 作为 traceId，作为第三个参数传入主进程 `ipcMain.handle`（[L33-L41](file:///src/preload/utils/ipc-bridge.ts#L33)）
-- `subscribe<T>(channel, callback)`：包装 `ipcRenderer.on`，吞掉 `IpcRendererEvent`，返回 unsubscribe 函数（[L69-L81](file:///src/preload/utils/ipc-bridge.ts#L69)）
+- `invoke<T>(channel, input?)`：返回 `Promise<IpcResponse<T>>`（成功 `{data}` / 失败 `{error}` 判别联合）。每次调用自动生成 `crypto.randomUUID()` 作为 traceId，作为第三个参数传入主进程 `ipcMain.handle`（[L33-L41](file:///src/preload/utils/ipc-bridge.ts)）
+- `subscribe<T>(channel, callback)`：包装 `ipcRenderer.on`，吞掉 `IpcRendererEvent`，返回 unsubscribe 函数（[L69-L81](file:///src/preload/utils/ipc-bridge.ts)）
 
 ## 4. 进程通信模型
 
@@ -139,7 +139,7 @@ preload 输出为 `.cjs`（[electron.vite.config.ts#L30-L44](file:///electron.vi
 
 唯一流式通道（chat 域已随死链路清理删除，统一走 agent）：
 
-**agent:stream:part** — [agent-service.ts#L310-L335](file:///src/main/infra/ai/agent/agent-service.ts#L310)
+**agent:stream:part** — [agent-service.ts#L310-L335](file:///src/main/infra/ai/agent/agent-service.ts)
 - 主进程 `streamText()` → `result.toUIMessageStream()` → reader.read() 循环 → `webContents.send(AGENT_STREAM_PART, {sessionId, part})`
 - 额外推送 `AGENT_TOOL_CALL` / `AGENT_TOOL_RESULT` / `AGENT_APPROVAL_REQUEST`
 - 配套 `AGENT_STREAM_END` / `AGENT_STREAM_ERROR`
@@ -164,7 +164,7 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 关键机制：
 
 - 错误分类器 [error-classifier.ts](file:///src/main/infra/ai/tools/error-classifier.ts)
-- dispose 模式（3s 超时兜底的 Promise.race + Promise.allSettled，[agent-service.ts#L182-L217](file:///src/main/infra/ai/agent/agent-service.ts#L182)）
+- dispose 模式（3s 超时兜底的 Promise.race + Promise.allSettled，[agent-service.ts#L182-L217](file:///src/main/infra/ai/agent/agent-service.ts)）
 
 ### 5.2 工具系统三层分层
 
@@ -174,7 +174,7 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 | ToolExecutor | [tool-executor.ts](file:///src/main/infra/ai/tools/tool-executor.ts) | 统一执行入口：查找工具 → 权限决策 → 推送 AGENT_TOOL_CALL → 审批等待 → 执行 → 推送 AGENT_TOOL_RESULT |
 | PermissionService | [permission-service.ts](file:///src/main/infra/ai/tools/permission-service.ts) | 权限决策（`'auto' \| 'ask'` 二态）+ 审批 Promise Map + 5 分钟记忆决策缓存 |
 
-权限模型实际为二态 `'auto' \| 'ask'`（[tool.ts#L72](file:///src/main/infra/ai/tools/tool.ts#L72)），无 `'deny'` 态。
+权限模型实际为二态 `'auto' \| 'ask'`（[tool.ts#L72](file:///src/main/infra/ai/tools/tool.ts)），无 `'deny'` 态。
 
 ### 5.3 PromptService 角色
 
@@ -191,10 +191,10 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 
 ## 6. traceId 贯穿机制
 
-1. 渲染层 `invoke` 调用 [src/preload/utils/ipc-bridge.ts#L36-L40](file:///src/preload/utils/ipc-bridge.ts#L36)：`crypto.randomUUID()` 生成 traceId，作为第三个参数传入 `ipcRenderer.invoke`
-2. 主进程 `wrap` [src/main/utils/wrap.ts#L48-L51](file:///src/main/utils/wrap.ts#L48)：`const traceId = incomingTraceId ?? randomUUID()`，构造 `IpcHandlerContext { traceId, sender }` 传给业务 handler
-3. 日志贯穿：`LogContext` 接口 [logger.ts#L20-L27](file:///src/main/utils/logger.ts#L20) 含 `traceId?` 字段
-4. Sentry 上报：wrap.ts catch 中带 traceId 上下文上报 Sentry
+1. 渲染层 `invoke` 调用 [src/preload/utils/ipc-bridge.ts#L36-L40](file:///src/preload/utils/ipc-bridge.ts)：`crypto.randomUUID()` 生成 traceId，作为第三个参数传入 `ipcRenderer.invoke`
+2. 主进程 `wrap` [src/main/utils/wrap.ts#L48-L51](file:///src/main/utils/wrap.ts)：`const traceId = incomingTraceId ?? randomUUID()`，构造 `IpcHandlerContext { traceId, sender }` 传给业务 handler
+3. 日志贯穿：`LogContext` 接口 [logger.ts#L20-L27](file:///src/main/utils/logger.ts) 含 `traceId?` 字段
+4. 本地错误上报：wrap.ts catch 中带 traceId 上下文经 error-report.ts 落本地日志（Sentry 已于 2026-09-13 移除）
 5. OTel span：`withSpan('agent.streamText', { 'session.id': sessionId, ... })` 把 sessionId / maxSteps 等作为 span 属性
 
 ## 7. 关键风险点
@@ -209,10 +209,10 @@ ChatService（单轮无工具流式）已随死链路清理删除（2026-08 功�
 1. **ServiceContainer 模式**：18 个服务统一生命周期管理，dispose 顺序严格按反向依赖，3s 超时兜底避免 hang 死
 2. **接口化设计**：所有服务都抽出 I*Service 接口，ServiceContainer 提供 `setXxxService()` 注入点便于测试 mock
 3. **类型契约单一来源**：`IPC_DEFINITIONS` 定义在 shared，preload 通过 `createIpcApi(IPC_META)` 自动生成 IpcApi，channel 名通过 `IPC_CHANNELS` 常量表 + `as const` 派生字面量类型防拼写错误
-4. **沙箱友好的 preload 设计**：子路径导入 `@code-agent/shared/ipc/meta` 避免 zod 拉进 CJS 产物（[preload/index.ts#L27](file:///src/preload/index.ts#L27)），使用全局 `crypto.randomUUID()` 替代 node:crypto
+4. **沙箱友好的 preload 设计**：子路径导入 `@code-agent/shared/ipc/meta` 避免 zod 拉进 CJS 产物（[preload/index.ts#L27](file:///src/preload/index.ts)），使用全局 `crypto.randomUUID()` 替代 node:crypto
 5. **AI SDK v7 适配**：使用新 API `stopWhen: isStepCount(n)` 替代旧 `maxSteps`，`allowSystemInMessages: true` 显式兼容旧消息历史
 6. **三层工具系统**：ToolRegistry（注册）/ PermissionService（决策+审批+5分钟记忆）/ ToolExecutor（执行+IPC推送）解耦清晰，权限决策有 TTL 防漂移
-7. **unsubscribe 模式**：所有 subscribe 函数返回 unsubscribe，[ipc-bridge.ts#L78-L80](file:///src/preload/utils/ipc-bridge.ts#L78) 精确移除监听器避免内存泄漏
+7. **unsubscribe 模式**：所有 subscribe 函数返回 unsubscribe，[ipc-bridge.ts#L78-L80](file:///src/preload/utils/ipc-bridge.ts) 精确移除监听器避免内存泄漏
 
 ---
 

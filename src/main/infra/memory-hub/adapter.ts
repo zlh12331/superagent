@@ -30,6 +30,10 @@ export interface HttpMemoryPortOptions {
   readonly apiKey: string;
 }
 
+/**
+ * 记忆引擎 HTTP 适配器（MemoryPort 实现）：对 gateway REST API 的唯一封装点
+ * （health / capture / recall / 检索 / 清除），8s 请求超时
+ */
 export class HttpMemoryPort implements MemoryPort {
   private readonly baseUrl: string;
   private readonly apiKey: string;

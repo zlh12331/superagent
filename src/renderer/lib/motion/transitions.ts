@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 // 设计哲学：
 // - 借鉴 Material Design 的 duration easing 规范
-// - 与 globals.css 的 --ease-soft / --ease-paper 变量对齐
+// - 与 styles/ 各域 css 的 --ease-soft / --ease-paper 变量对齐
 // - 4 档时长：micro(短促反馈) / fast(组件过渡) / normal(面板展开) / slow(全屏切换)
 //
 // 使用方式：
@@ -18,7 +18,7 @@
 import type { Transition } from 'motion/react';
 
 /* ──────────────────────────────────────────────────────────────
-   缓动曲线（与 globals.css 的 --ease-soft / --ease-paper 对齐）
+   缓动曲线（与 styles/ 各域 css 的 --ease-soft / --ease-paper 对齐）
    ──────────────────────────────────────────────────────────────
    注意：类型用 [number, number, number, number] 而非 Transition['ease']，
    因为 exactOptionalPropertyTypes 模式下 Transition['ease'] 会带上 undefined，
@@ -28,7 +28,7 @@ import type { Transition } from 'motion/react';
 /**
  * 标准缓出（最常用）
  *
- * 对应 globals.css 的 --ease-soft: cubic-bezier(0.4, 0, 0.2, 1)
+ * 对应 styles/ 各域 css 的 --ease-soft: cubic-bezier(0.4, 0, 0.2, 1)
  * 适合：消息出现、列表项淡入、按钮反馈
  */
 export const easeOut: [number, number, number, number] = [0.4, 0, 0.2, 1];
@@ -36,7 +36,7 @@ export const easeOut: [number, number, number, number] = [0.4, 0, 0.2, 1];
 /**
  * 纸张缓动（更柔和）
  *
- * 对应 globals.css 的 --ease-paper: cubic-bezier(0.25, 0.46, 0.45, 0.94)
+ * 对应 styles/ 各域 css 的 --ease-paper: cubic-bezier(0.25, 0.46, 0.45, 0.94)
  * 适合：面板展开、抽屉滑入、内容切换
  */
 export const easePaper: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];

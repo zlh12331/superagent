@@ -46,7 +46,6 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       // IPC 失败重试一次
       retry: 1,
-      refetchOnReconnect: true,
     },
     mutations: {
       // mutation 不重试（避免重复写入）

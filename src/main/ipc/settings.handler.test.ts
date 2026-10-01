@@ -1,14 +1,16 @@
 // src/main/ipc/settings.handler.test.ts
-// settings.handler 单测：10 个 settings:* 方法（三件套）
+// settings.handler 单测：settings:* 方法（三件套）
 // ──────────────────────────────────────────────────────────────
 // 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
 // - keychain/telemetry-pref/approval-pref/runtimeModelStore 为文件存储
 //   外部依赖（与 fetch/WebSocket 同类）→ vi.mock
 // - toKeychainKey（纯函数）保持真实实现
 // - permissionService 经 deps 注入 fake
+// - settings-io（导出组装/白名单过滤/写入）保持真实实现，仅 mock 其
+//   依赖 settings-pref（文件存储外部依赖）——白名单语义经 handler 全链验证
 // ──────────────────────────────────────────────────────────────
 
-import { ListRuntimeModelsResSchema } from '@code-agent/shared/main';
+import { ErrorCode, ListRuntimeModelsResSchema, SETTING_KEYS } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSettingsHandlers } from './settings.handler';
 
@@ -17,18 +19,57 @@ import { createSettingsHandlers } from './settings.handler';
 // 既定模式 mock（Electron 属于外部依赖，见本文件头部测试策略注释）。
 // vi.mock 工厂被 hoist，mock 对象必须经 vi.hoisted 定义（不能引用外部变量）；
 // 用 Record 字符串键规避 biome strictCase 对字面对象的检查。
-const { mockElectronApi } = vi.hoisted(() => {
+const { mockElectronApi, dialogs, broadcast } = vi.hoisted(() => {
   const api: Record<string, unknown> = {};
   api['BrowserWindow'] = { getAllWindows: () => [] };
   api['nativeTheme'] = { shouldUseDarkColors: false };
-  return { mockElectronApi: api };
+  // settings:export 的 defaultPath 走 app.getPath('documents')
+  api['app'] = { getPath: () => 'C:\\Users\\test\\Documents' };
+  // resetAll 新走 applyProxyChange（34 号）→ 需要 session 分区 mock（setProxy 可 await）
+  const setProxy = vi.fn(async () => {});
+  const fakeSession = () => ({ setProxy });
+  api['session'] = {
+    defaultSession: fakeSession(),
+    fromPartition: vi.fn(() => fakeSession()),
+  };
+  const dialogFns = {
+    // 泛型标注放宽默认实现推断（filePath 允许写入字符串路径供正向用例覆盖）
+    showSaveDialog: vi.fn<() => Promise<{ canceled: boolean; filePath?: string | undefined }>>(
+      async () => ({ canceled: true, filePath: undefined }),
+    ),
+    showOpenDialog: vi.fn<() => Promise<{ canceled: boolean; filePaths: string[] }>>(async () => ({
+      canceled: true,
+      filePaths: [],
+    })),
+  };
+  api['dialog'] = dialogFns;
+  return {
+    mockElectronApi: api,
+    dialogs: dialogFns,
+    broadcast: { settingChanged: vi.fn() },
+  };
 });
 vi.mock('electron', () => mockElectronApi);
+vi.mock('../main-events', () => ({
+  broadcastSettingChanged: broadcast.settingChanged,
+}));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    writeFile: mocks.writeFile,
+    readFile: mocks.readFile,
+    stat: mocks.stat,
+  };
+});
 
 const mocks = vi.hoisted(() => ({
   getSecret: vi.fn(async () => undefined),
   setSecret: vi.fn(async () => {}),
   deleteSecret: vi.fn(async () => {}),
+  isEncryptionAvailable: vi.fn(() => true),
+  deleteSettings: vi.fn(),
   readTelemetryLevelSync: vi.fn(() => 'off'),
   writeTelemetryLevel: vi.fn(async () => {}),
   readApprovalModeSync: vi.fn(() => 'auto'),
@@ -40,12 +81,18 @@ const mocks = vi.hoisted(() => ({
   invalidateModel: vi.fn(() => {}),
   readAllSettings: vi.fn(() => ({})),
   writeSetting: vi.fn(() => {}),
+  writeSettings: vi.fn(() => {}),
+  // 泛型标注：调用参数入 tuple，供 mock.calls 断言
+  writeFile: vi.fn<(path: string, data: string, encoding: string) => Promise<void>>(async () => {}),
+  readFile: vi.fn<(path: string, encoding: string) => Promise<string>>(async () => '{}'),
+  stat: vi.fn<(path: string) => Promise<{ size: number }>>(async () => ({ size: 10 })),
 }));
 
 vi.mock('../infra/storage/keychain', () => ({
   getSecret: mocks.getSecret,
   setSecret: mocks.setSecret,
   deleteSecret: mocks.deleteSecret,
+  isEncryptionAvailable: mocks.isEncryptionAvailable,
 }));
 
 vi.mock('../infra/storage/telemetry-pref', () => ({
@@ -61,6 +108,8 @@ vi.mock('../infra/storage/approval-pref', () => ({
 vi.mock('../infra/storage/settings-pref', () => ({
   readAllSettings: mocks.readAllSettings,
   writeSetting: mocks.writeSetting,
+  writeSettings: mocks.writeSettings,
+  deleteSettings: mocks.deleteSettings,
 }));
 
 vi.mock('../infra/ai/llm-client/ai-provider', () => ({
@@ -71,6 +120,8 @@ vi.mock('../infra/ai/llm-client/ai-provider', () => ({
     update: mocks.runtimeUpdate,
     list: mocks.runtimeList,
   },
+  // resetAll → applyProxyChange → resetAIProvider（34 号代理收口链）
+  resetAIProvider: vi.fn(),
 }));
 
 const EMPTY_CTX = {} as never;
@@ -116,7 +167,7 @@ describe('settings.handler API Key（三件套）', () => {
     mocks.getSecret.mockResolvedValueOnce('sk-123' as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
     expect(mocks.getSecret).toHaveBeenCalledWith('deepseek-api-key');
-    expect(res).toEqual({ configured: true });
+    expect(res).toEqual({ configured: true, keychainAvailable: true });
     // P0 安全：响应中不得包含明文
     expect(JSON.stringify(res)).not.toContain('sk-123');
   });
@@ -124,7 +175,18 @@ describe('settings.handler API Key（三件套）', () => {
   it('getApiKey：未配置 → configured 为 false', async () => {
     mocks.getSecret.mockResolvedValueOnce(null as never);
     const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
-    expect(res).toEqual({ configured: false });
+    expect(res).toEqual({ configured: false, keychainAvailable: true });
+  });
+
+  it('getApiKey：加密不可用 → configured false 且 keychainAvailable false（可区分「不可读」与「未配置」）', async () => {
+    mocks.isEncryptionAvailable.mockReturnValue(false);
+    mocks.getSecret.mockResolvedValueOnce(null as never);
+    try {
+      const res = await handlers.getApiKey({ provider: 'deepseek' }, EMPTY_CTX);
+      expect(res).toEqual({ configured: false, keychainAvailable: false });
+    } finally {
+      mocks.isEncryptionAvailable.mockReturnValue(true);
+    }
   });
 
   it('setApiKey：加密存储 + ok:true', async () => {
@@ -308,5 +370,104 @@ describe('settings.handler 运行时模型（三件套）', () => {
     });
     // 渲染层契约原样校验（还原"null 直出"会在此失败——回归保障）
     expect(ListRuntimeModelsResSchema.safeParse(res).success).toBe(true);
+  });
+});
+
+describe('settings.handler 导出/导入（keychain 凭据除外）', () => {
+  const permissionService = { setApprovalMode: vi.fn() };
+  const handlers = createSettingsHandlers({
+    permissionService: permissionService as never,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.readAllSettings.mockReturnValue({});
+    mocks.readFile.mockResolvedValue('{}');
+    mocks.stat.mockResolvedValue({ size: 10 } as never);
+    dialogs.showSaveDialog.mockResolvedValue({ canceled: false, filePath: 'C:\\settings.json' });
+    dialogs.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\settings.json'] });
+  });
+
+  it('exportSettings：dialog 选路径 → 全表快照（version=1）写文件 + saved/path', async () => {
+    mocks.readAllSettings.mockReturnValueOnce({ theme: 'dark', editor: { fontSize: 14 } });
+
+    const res = await handlers.exportSettings(undefined, EMPTY_CTX);
+
+    expect(res).toEqual({ saved: true, path: 'C:\\settings.json' });
+    expect(mocks.writeFile).toHaveBeenCalledOnce();
+    const call = mocks.writeFile.mock.calls[0];
+    expect(call?.[0]).toBe('C:\\settings.json');
+    expect(call?.[2]).toBe('utf8');
+    const written = JSON.parse(call?.[1] as string) as {
+      version: number;
+      exportedAt: number;
+      settings: Record<string, unknown>;
+    };
+    expect(written.version).toBe(1);
+    expect(typeof written.exportedAt).toBe('number');
+    expect(written.settings).toEqual({ theme: 'dark', editor: { fontSize: 14 } });
+  });
+
+  it('exportSettings：用户取消 → { saved: false } 不写文件', async () => {
+    dialogs.showSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: undefined });
+    const res = await handlers.exportSettings(undefined, EMPTY_CTX);
+    expect(res).toEqual({ saved: false });
+    expect(mocks.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('exportSettings：写文件失败 → 异常向上抛', async () => {
+    mocks.writeFile.mockRejectedValueOnce(new Error('EACCES'));
+    await expect(handlers.exportSettings(undefined, EMPTY_CTX)).rejects.toThrow('EACCES');
+  });
+
+  it('importSettings：白名单键写入 + 逐键广播；白名单外键跳过计数', async () => {
+    mocks.readFile.mockResolvedValueOnce(
+      JSON.stringify({
+        version: 1,
+        exportedAt: 1,
+        settings: { theme: 'dark', 'runtime.models': { evil: true } },
+      }),
+    );
+
+    const res = await handlers.importSettings(undefined, EMPTY_CTX);
+
+    expect(res).toEqual({ imported: 1, skipped: 1 });
+    expect(mocks.writeSettings).toHaveBeenCalledWith([{ key: 'theme', value: 'dark' }]);
+    // 主进程主动写入必须广播（P2-6 丢更新防线）：渲染层 store 收到即应用
+    expect(broadcast.settingChanged).toHaveBeenCalledWith('theme', 'dark');
+  });
+
+  it('importSettings：用户取消 → { imported: 0, skipped: 0 }，不读文件不写入', async () => {
+    dialogs.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    const res = await handlers.importSettings(undefined, EMPTY_CTX);
+    expect(res).toEqual({ imported: 0, skipped: 0 });
+    expect(mocks.readFile).not.toHaveBeenCalled();
+    expect(mocks.writeSettings).not.toHaveBeenCalled();
+  });
+
+  it('importSettings：文件格式校验失败（版本不匹配）→ AppError(INVALID_INPUT)', async () => {
+    mocks.readFile.mockResolvedValueOnce(
+      JSON.stringify({ version: 2, exportedAt: 1, settings: {} }),
+    );
+    await expect(handlers.importSettings(undefined, EMPTY_CTX)).rejects.toMatchObject({
+      name: 'AppError',
+      code: ErrorCode.INVALID_INPUT,
+    });
+    expect(mocks.writeSettings).not.toHaveBeenCalled();
+  });
+
+  it('importSettings：文件不是合法 JSON → AppError(INVALID_INPUT)', async () => {
+    mocks.readFile.mockResolvedValueOnce('not-json{');
+    await expect(handlers.importSettings(undefined, EMPTY_CTX)).rejects.toMatchObject({
+      name: 'AppError',
+      code: ErrorCode.INVALID_INPUT,
+    });
+  });
+
+  it('resetAll：按 SETTING_KEYS 批量删除并返回空快照（恢复默认）', async () => {
+    const res = await handlers.resetAll({}, EMPTY_CTX);
+    expect(mocks.deleteSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteSettings.mock.calls[0]?.[0]).toEqual([...SETTING_KEYS]);
+    expect(res).toEqual({ settings: {} });
   });
 });

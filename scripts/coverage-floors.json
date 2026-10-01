@@ -1,6 +1,6 @@
 {
   "$comment": "覆盖率门槛单一真源（禁止在各层 vitest.config.ts 内联数字）。各层字段语义：specTarget=该层规范目标；floor=当前强制门槛（vitest 读取）；ratchet=已批准的历史最高门槛（只能升不能降）；measured=最近一次真实实测（报告口径，禁止只公布最好看的数字）。",
-  "updatedAt": "2026-08-31",
+  "updatedAt": "2026-09-27",
   "maxStaleDays": 60,
   "$comment2": "校验规则（scripts/check-coverage-floors.ts）：① 各层 vitest.config.ts 不得再内联数字，只能读本文件；② floor ≥ ratchet（棘轮只能升，降级需显式改 ratchet 并说明理由）；③ measured ≥ floor（数字必须自洽，禁止美化实测）；④ measuredAt 不得超过 maxStaleDays 天，否则重跑 pnpm test:coverage 回填。",
   "layers": {
@@ -21,12 +21,20 @@
       "measuredAt": "2026-08-31"
     },
     "renderer": {
-      "$comment": "渲染层真实门槛显著低于业务层规范值（存量缺口：settings 组件约 21%、Markdown/message-item 等纯展示组件由 E2E journey+visual 兑底）。此处记录的是**真实下限**，不得对外表述为 80/75/80/80；缺口以本文件 measured 与 specTarget 之差为准。2026-08-31 P1 补测（ipc-agent-transport/ChatMessageList/ModelSelector）后实测由 72.08/63.42/68.39/73.04 提升至 75.35/66.16/71.25/76.36",
+      "$comment": "渲染层门槛曾显著低于业务层规范值（历史缺口：Markdown/message-item 等纯展示组件由 E2E journey+visual 兜底；settings 子集单列见 rendererSettings 层）。2026-08-31 P1 补测后实测 75.35/66.16/71.25/76.36；2026-09-26 direct-ipc 清迁 + memo→Compiler + lib 桥接模块补测后实测 89.56/81.93/87.42/90.32，缺口清零，floor 按 min(规范目标, 实测−缓冲) 升至规范值 80/75/80/80（「真实下限」语义由 scripts/lib/coverage-floors.test.ts 的「floor ≤ 实测可复现上限」护栏承接，伪造仍会被拦）",
       "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
-      "floor": { "statements": 70, "branches": 61, "functions": 66, "lines": 71 },
-      "ratchet": { "statements": 70, "branches": 61, "functions": 66, "lines": 71 },
-      "measured": { "statements": 75.35, "branches": 66.16, "functions": 71.25, "lines": 76.36 },
-      "measuredAt": "2026-08-31"
+      "floor": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
+      "ratchet": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
+      "measured": { "statements": 89.56, "branches": 81.93, "functions": 87.42, "lines": 90.32 },
+      "measuredAt": "2026-09-26"
+    },
+    "renderer-settings": {
+      "$comment": "settings 子集单列（2026-09-24 新增，scripts/measure-settings-coverage.ts 从 coverage-summary.json 按 components/settings 前缀聚合，test:coverage 链尾自动回填）：使洼地债从汇总数字中可见、可棘轮。specTarget 同业务层；floor 首次 = 实测 − 5 缓冲，随实测提升经 --tighten 抬升（只升不降）。不接 vitest thresholds（LAYER_CONFIGS 无此项）——本层是 JSON 治理层，硬卡关仍由 renderer 汇总 thresholds 承担。历史口径警示：此前注释称 settings「约 21%」，2026-09-24 实测 71.87/64.06/66.84/72.97，旧数字过期勿再引用",
+      "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },
+      "floor": { "statements": 67, "branches": 60, "functions": 61, "lines": 67 },
+      "ratchet": { "statements": 67, "branches": 60, "functions": 61, "lines": 67 },
+      "measured": { "statements": 72.66, "branches": 65.66, "functions": 66.76, "lines": 72.9 },
+      "measuredAt": "2026-09-26"
     }
   }
 }

@@ -14,6 +14,10 @@
 
 import { z } from 'zod';
 
+import { EDITOR_TAB_SIZES } from '../constants/editor';
+import { TERMINAL_FONT_SIZES, TERMINAL_SHELL_CHOICES } from '../constants/terminal-shell';
+import { ZOOM_LEVELS } from '../constants/zoom';
+
 /**
  * API Key 提供商标识
  *
@@ -60,11 +64,15 @@ export const GetApiKeyReqSchema = z.object({
 export interface GetApiKeyRes {
   /** 是否已配置（true = keychain 中存在该 provider 的 Key） */
   readonly configured: boolean;
+  /** 系统加密（safeStorage）是否可用——false 时 configured 恒为 false，
+   * 「密钥不可读」与「未配置」在调用方视角必须可区分（2026-09-28 深读收口） */
+  readonly keychainAvailable: boolean;
 }
 
 /** settings:getApiKey 响应 zod schema（R3：响应契约校验） */
 export const GetApiKeyResSchema = z.object({
   configured: z.boolean(),
+  keychainAvailable: z.boolean(),
 });
 
 // ── 渲染层设置下沉 SQLite（settings 持久化单一真源） ─────────────
@@ -74,6 +82,25 @@ export const SettingsGetAllReqSchema = z.object({});
 
 /** settings:getAll 响应（key → JSON 值；渲染层设置按域分 key 存储） */
 export const SettingsGetAllResSchema = z.object({
+  settings: z.record(z.string(), z.unknown()),
+});
+
+/** settings:resetAll 入参（无入参） */
+export const SettingsResetAllReqSchema = z.object({});
+
+/**
+ * settings:resetAll 响应
+ *
+ * settings 恒为空对象：重置的实现语义是「删除 SETTING_KEYS 全部键」——
+ * app_settings 回到新用户空表状态，缺失即默认（渲染层 applySettingsSnapshot({})
+ * 全量回落 DEFAULT_SETTINGS；主进程各 readSetting 消费方均有 undefined→默认兜底）。
+ * 不影响：keychain 凭据、会话历史、MCP/IM 渠道配置、OS 登录项（开机自启）。
+ */
+export interface SettingsResetAllRes {
+  readonly settings: Record<string, unknown>;
+}
+
+export const SettingsResetAllResSchema = z.object({
   settings: z.record(z.string(), z.unknown()),
 });
 
@@ -103,6 +130,19 @@ export const SETTING_KEYS = [
   'window',
   // 记忆功能开关（settings.memory.enabled；关闭后不捕获新记忆、不注入召回）
   'memory',
+  // 系统通知（settings.notification：回合结束后台提醒的门控开关组，
+  // 主进程 notification.ts 发送前即时读取；缺失/损坏视为全开——既有行为）
+  'notification',
+  // 网络代理（settings.proxy：{mode, url?, bypass?}；主进程 proxy-applier 四路径
+  // 收口应用——启动/settings:set/import/resetAll；缺失/损坏视为 system 直通）
+  'proxy',
+  // 界面缩放（settings.appearance：{zoom}；主进程 window:applyZoom 应用
+  // webContents.setZoomFactor + Windows overlay 联动；缺失视为 1，损坏归最近档位）
+  'appearance',
+  // 终端（settings.terminal：{shell, fontSize}；主进程 TerminalService spawn 时
+  // 即时读并解析默认 shell——渲染层不传 shell（terminal:create P0 收口不变）；
+  // 缺失视为 {shell:'auto', fontSize:13}，损坏逐字段回落）
+  'terminal',
   // IM 群聊白名单（im-allowlist-field 直写，非 settings-store 分组）
   'im.allowedGroups',
 ] as const;
@@ -150,12 +190,167 @@ export const SettingsSetReqSchema = z
         message: `lsp.serverCommands 仅支持 PATH 中的裸可执行名，非法语言键：${invalid.join(', ')}`,
       });
     }
+  })
+  .superRefine((cfg, ctx) => {
+    // 34 号：proxy 值级门禁（V9）——fixed 模式下 url 必须是合法 http(s) URL；
+    // 写拒在前 + resolver fail-open 兜底（导入路径绕过本 schema 时仍有防线），
+    // 无半生效状态
+    if (cfg.key !== 'proxy') {
+      return;
+    }
+    const value = cfg.value as { mode?: unknown; url?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'proxy 配置必须是非空对象（{mode, url?, bypass?}）',
+      });
+      return;
+    }
+    const validModes = ['system', 'direct', 'fixed'];
+    if (!validModes.includes(value.mode as string)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `proxy.mode 仅支持 ${validModes.join('/')}`,
+      });
+      return;
+    }
+    if (value.mode === 'fixed') {
+      let urlOk = false;
+      if (typeof value.url === 'string' && value.url.length > 0) {
+        try {
+          const parsed = new URL(value.url);
+          urlOk = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+          urlOk = false;
+        }
+      }
+      if (!urlOk) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['value'],
+          message:
+            'proxy.mode=fixed 时 url 必须是合法 http(s) 代理地址（如 http://127.0.0.1:7890）',
+        });
+      }
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 35 号：appearance 值级门禁——zoom 必须是合法档位（ZOOM_LEVELS 单一真源）。
+    // settings:set 通道防御；导入路径不过本 schema，靠渲染层读侧 clampZoom 归一
+    // （双防线，35 号 spec §2.3）
+    if (cfg.key !== 'appearance') {
+      return;
+    }
+    const value = cfg.value as { zoom?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'appearance 配置必须是非空对象（{zoom}）',
+      });
+      return;
+    }
+    if (!ZOOM_LEVELS.includes(value.zoom as number)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `appearance.zoom 必须是合法缩放档位（${ZOOM_LEVELS.join('/')}）`,
+      });
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 36 号 B：terminal 值级门禁——shell 必须是合法档位（TERMINAL_SHELL_CHOICES
+    // 单一真源，含平台不适用档位：跨平台写入合法、读侧回落是 34 号 fail-open
+    // 同款取舍），fontSize 必须是合法档位。settings:set 通道防御；导入路径不过
+    // 本 schema，靠渲染层读侧 clampFontSize 归一（双防线，35 号 §2.3 同构）
+    if (cfg.key !== 'terminal') {
+      return;
+    }
+    const value = cfg.value as { shell?: unknown; fontSize?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'terminal 配置必须是非空对象（{shell, fontSize}）',
+      });
+      return;
+    }
+    if (!TERMINAL_SHELL_CHOICES.includes(value.shell as never)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `terminal.shell 必须是合法档位（${TERMINAL_SHELL_CHOICES.join('/')}）`,
+      });
+    }
+    if (!TERMINAL_FONT_SIZES.includes(value.fontSize as number)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `terminal.fontSize 必须是合法档位（${TERMINAL_FONT_SIZES.join('/')}）`,
+      });
+    }
+  })
+  .superRefine((cfg, ctx) => {
+    // 37 号 A：editor 值级门禁——wordWrap/tabSize 字段存在时才校验（部分写入
+    // 合并语义：旧调用方只写 fontSize/vimMode 不受影响）。settings:set 通道
+    // 防御；导入路径不过本 schema，靠渲染层读侧 clamp 兜底（双防线，35 号 §2.3）
+    if (cfg.key !== 'editor') {
+      return;
+    }
+    const value = cfg.value as { wordWrap?: unknown; tabSize?: unknown } | null | undefined;
+    if (value === null || value === undefined || typeof value !== 'object') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'editor 配置必须是非空对象（{fontSize, vimMode, wordWrap?, tabSize?}）',
+      });
+      return;
+    }
+    if (value.wordWrap !== undefined && typeof value.wordWrap !== 'boolean') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'editor.wordWrap 必须是布尔值',
+      });
+    }
+    if (value.tabSize !== undefined && !EDITOR_TAB_SIZES.includes(value.tabSize as number)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `editor.tabSize 必须是合法档位（${EDITOR_TAB_SIZES.join('/')}）`,
+      });
+    }
   });
 
 /** settings:set 响应 */
 export const SettingsSetResSchema = z.object({
   ok: z.boolean(),
 });
+
+/**
+ * settings:event:changed 事件 payload（主进程主动变更某个设置域后的推送）
+ *
+ * 为什么需要：正常路径下设置由渲染层写入（`settings:set`），渲染层 store 即真源；
+ * 但托盘菜单等**主进程主动写入**（如「关闭时最小化到托盘」改 `window.closeAction`）
+ * 绕过了渲染层 store ⇒ 不推送会让设置页显示旧值，且后续任何其它设置变更都会把旧值
+ * 写回、静默覆盖（丢更新，见 docs/design/30-residency-fix-spec.md §3 P2-6）。
+ *
+ * `key` 复用 `SETTING_KEYS`（与 settings:set 同一域清单），`value` 为该域的完整新值。
+ */
+export const SettingsChangedPayloadSchema = z.object({
+  key: z.enum(SETTING_KEYS),
+  value: z.unknown(),
+});
+
+/** settings:event:changed 事件 payload 类型 */
+export interface SettingsChangedPayload {
+  /** 变更的设置域（settings-store 的 key） */
+  readonly key: (typeof SETTING_KEYS)[number];
+  /** 该域的完整新值（渲染层按域合并，不做整快照覆盖） */
+  readonly value: unknown;
+}
 
 /**
  * settings:setApiKey 请求 payload
@@ -420,4 +615,52 @@ export interface SetApprovalModeRes {
 export const SetApprovalModeResSchema = z.object({
   ok: z.boolean(),
   mode: ApprovalModeSchema,
+});
+
+// ─── 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外） ─────────
+
+/**
+ * 当前设置导出文件格式版本（导入侧仅接受本版本）
+ *
+ * 导出内容 = app_settings 表全量 key-value；API Key 等凭据存于系统 keychain
+ * （safeStorage 加密，本机绑定不可迁移），不在导出文件内——这是显式安全取舍。
+ */
+export const SETTINGS_EXPORT_VERSION = 1;
+
+/** 设置导出文件 schema（version=1；导入逐键过 SETTING_KEYS 白名单后才写入） */
+export const SettingsExportFileSchema = z.object({
+  version: z.literal(SETTINGS_EXPORT_VERSION),
+  exportedAt: z.number().int(),
+  settings: z.record(z.string(), z.unknown()),
+});
+
+/** 设置导出文件类型 */
+export type SettingsExportFile = z.infer<typeof SettingsExportFileSchema>;
+
+/** settings:export 响应 payload（saved/path，与 session:exportAll 同形） */
+export interface SettingsExportRes {
+  readonly saved: boolean;
+  readonly path?: string;
+}
+
+/** settings:export 响应 zod schema（响应契约校验用） */
+export const SettingsExportResSchema = z.object({
+  saved: z.boolean(),
+  path: z.string().optional(),
+});
+
+/**
+ * settings:import 响应 payload
+ *
+ * imported = 通过白名单校验并写入的键数；skipped = 白名单外被跳过的键数。
+ */
+export interface SettingsImportRes {
+  readonly imported: number;
+  readonly skipped: number;
+}
+
+/** settings:import 响应 zod schema（响应契约校验用） */
+export const SettingsImportResSchema = z.object({
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
 });

@@ -12,6 +12,7 @@
 // 1. index.html 存在裸 <script>（无属性）内联块，非空
 // 2. 其 sha256(base64) 出现在 csp.ts 的 script-src 指令中
 // 3. <html> 标签带 background 兜底 style（脚本被拦截时的最后防线）
+// 4. index.html 不含 CSP meta（唯一策略源 = csp.ts 的 applyCspToSession 注入）
 // ──────────────────────────────────────────────────────────────
 
 import { createHash } from 'node:crypto';
@@ -99,6 +100,16 @@ function main(): void {
     console.error(
       '[check-csp-hash] ❌ <html> 缺失 background 兜底 style——CSP/脚本异常时首帧回退白底闪烁',
     );
+    process.exit(1);
+  }
+
+  // 4. index.html 不得含 CSP meta（2026-09-28 新增）：唯一执行点是
+  //    applyCspToSession 的 onHeadersReceived——meta 不支持 frame-ancestors，
+  //    且会与响应头形成双真源漂移（csp.ts 头注释曾谎称有 meta 兜底，已修正）。
+  //    断言缺失防将来有人"补"meta 导致策略分叉。
+  if (/http-equiv=["']?Content-Security-Policy/i.test(html)) {
+    console.error('[check-csp-hash] ❌ index.html 出现 CSP meta——与响应头注入形成双真源漂移：');
+    console.error('  唯一策略源是 src/main/security/csp.ts（applyCspToSession 注入），删除该 meta');
     process.exit(1);
   }
 

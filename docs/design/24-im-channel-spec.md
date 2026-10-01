@@ -1,7 +1,7 @@
 # 24. IM 渠道集成规范
 
-> 基于项目实际 IM 体系（im-service + IChannelAdapter + 8 个渠道适配器：飞书/企微/微信/QQ/钉钉/Telegram/webhook）。
-> 最后同步：2026-08-11
+> 基于项目实际 IM 体系（im-service + IChannelAdapter + 7 个渠道适配器：飞书/企微/微信/QQ/钉钉/Telegram/webhook）。
+> 最后同步：2026-09-30（渠道数按 adapters/ 实测核对）
 
 ---
 

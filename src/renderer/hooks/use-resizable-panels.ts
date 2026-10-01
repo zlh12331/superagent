@@ -15,7 +15,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   computeInitialRightPanelWidth,
@@ -113,14 +113,20 @@ export function useResizablePanels(
   // 同步 CSS 变量到根元素（供 .view-chat 的 grid-template-columns 使用）
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--aurora-sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
-    root.style.setProperty(
-      '--aurora-right-panel-w',
-      rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`,
-    );
+    root.style.setProperty('--sidebar-w', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
+    root.style.setProperty('--right-panel-w', rightPanelCollapsed ? '0px' : `${rightPanelWidth}px`);
   }, [sidebarWidth, rightPanelWidth, sidebarCollapsed, rightPanelCollapsed]);
 
-  const handleMouseMove = useCallback((event: globalThis.MouseEvent) => {
+  // 拖拽/键盘处理器：用 ref 固定「已注册到 document 的那一对」监听函数。
+  // 不用 useCallback：vitest 不跑 React Compiler（仅 vite build 启用），
+  // 依赖 Compiler 稳定函数身份会让单测与 bail-out 场景静默坏掉；
+  // add/remove 必须同一引用，ref 是与 memo 策略无关的正确解法。
+  const listenersRef = useRef<{
+    move: (event: globalThis.MouseEvent) => void;
+    up: () => void;
+  } | null>(null);
+
+  const handleMouseMove = (event: globalThis.MouseEvent) => {
     const dragStart = dragStartRef.current;
     if (dragStart === null) return;
 
@@ -133,57 +139,70 @@ export function useResizablePanels(
         clamp(dragStart.startWidth - delta, RIGHT_PANEL_WIDTH_MIN, RIGHT_PANEL_WIDTH_MAX),
       );
     }
-  }, []);
+  };
 
-  const handleMouseUp = useCallback(() => {
+  const detachListeners = (): void => {
+    const pair = listenersRef.current;
+    if (pair === null) return;
+    document.removeEventListener('mousemove', pair.move);
+    document.removeEventListener('mouseup', pair.up);
+    listenersRef.current = null;
+  };
+
+  const handleMouseUp = () => {
     document.body.classList.remove('resizing');
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
+    detachListeners();
     dragStartRef.current = null;
     setDraggingSide(null);
-  }, [handleMouseMove]);
+  };
 
-  const onResizerMouseDown = useCallback(
-    (side: ResizerSide) => (event: MouseEvent<HTMLHRElement>) => {
-      event.preventDefault();
-      const startWidth = side === 'left' ? sidebarWidth : rightPanelWidth;
-      dragStartRef.current = { side, startX: event.clientX, startWidth };
-      setDraggingSide(side);
-      document.body.classList.add('resizing');
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [sidebarWidth, rightPanelWidth, handleMouseMove, handleMouseUp],
-  );
+  const onResizerMouseDown = (side: ResizerSide) => (event: MouseEvent<HTMLHRElement>) => {
+    event.preventDefault();
+    const startWidth = side === 'left' ? sidebarWidth : rightPanelWidth;
+    dragStartRef.current = { side, startX: event.clientX, startWidth };
+    setDraggingSide(side);
+    document.body.classList.add('resizing');
+    detachListeners();
+    const move = (e: globalThis.MouseEvent) => {
+      handleMouseMove(e);
+    };
+    const up = () => {
+      handleMouseUp();
+    };
+    listenersRef.current = { move, up };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  };
 
   // 卸载时清理监听（防御性：拖拽中组件被卸载时不留全局监听）
   useEffect(() => {
     return () => {
       document.body.classList.remove('resizing');
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      const pair = listenersRef.current;
+      if (pair !== null) {
+        document.removeEventListener('mousemove', pair.move);
+        document.removeEventListener('mouseup', pair.up);
+        listenersRef.current = null;
+      }
     };
-  }, [handleMouseMove, handleMouseUp]);
+  }, []);
 
   // 键盘调整（此前仅 ARIA 语义 + tabIndex，无方向键行为）：
   // ←/→ 步进（右侧分隔线右移 = 面板变窄），Home/End 跳极值
-  const onResizerKeyDown = useCallback(
-    (side: ResizerSide) => (event: KeyboardEvent<HTMLHRElement>) => {
-      const intent = resolveKeyIntent(side, event.key);
-      // 无关按键不拦截（让事件继续冒泡，避免吞掉其它快捷键）
-      if (intent === null) return;
-      event.preventDefault();
-      event.stopPropagation();
+  const onResizerKeyDown = (side: ResizerSide) => (event: KeyboardEvent<HTMLHRElement>) => {
+    const intent = resolveKeyIntent(side, event.key);
+    // 无关按键不拦截（让事件继续冒泡，避免吞掉其它快捷键）
+    if (intent === null) return;
+    event.preventDefault();
+    event.stopPropagation();
 
-      const { min, max } = boundsOf(side);
-      const setWidth = side === 'left' ? setSidebarWidth : setRightPanelWidth;
-      setWidth((w) => {
-        if (intent.kind === 'extreme') return intent.edge === 'min' ? min : max;
-        return clamp(w + intent.delta, min, max);
-      });
-    },
-    [],
-  );
+    const { min, max } = boundsOf(side);
+    const setWidth = side === 'left' ? setSidebarWidth : setRightPanelWidth;
+    setWidth((w) => {
+      if (intent.kind === 'extreme') return intent.edge === 'min' ? min : max;
+      return clamp(w + intent.delta, min, max);
+    });
+  };
 
   return {
     sidebarWidth,

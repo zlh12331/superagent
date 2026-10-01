@@ -18,10 +18,18 @@
 // - HomePage 创建会话后跳转 /chat/:id，ChatPanel 仅在聊天路由渲染
 // - useChat 通过 chatId 隔离消息状态，切换时自动重置
 // - AppShell 中已集成 AskDialog，所有路由下都能接收 Agent 提问
+// - /chat/:id 路由 loader 预取会话详情（与 lazy 并行），消除
+//   「lazy 下载 → 挂载 → 才发 IPC」的串行等待（debt.md#d5）
 
 import { createHashRouter } from 'react-router';
-
+import {
+  fetchSessionTurns,
+  prefetchTurnPages,
+  SESSION_TURNS_QUERY_KEY,
+} from '@/hooks/use-session-turns';
+import { fetchSessionDetail, SESSION_DETAIL_DATA_KEY } from '@/hooks/use-sessions';
 import { ROUTES } from '@/lib/constants';
+import { queryClient } from '@/lib/query/query-client';
 import { RootErrorBoundary, RootHydrateFallback, RootLayout } from './routes/root';
 
 /**
@@ -56,6 +64,35 @@ export const router = createHashRouter([
       // 聊天页：历史会话续传（chatId=URL 参数 sessionId）
       {
         path: ROUTES.chat,
+        loader: ({ params }) => {
+          const sessionId = params['sessionId'];
+          if (sessionId !== undefined) {
+            // match 即预取（与 route.lazy 并行），缓存 key 与页面查询一致：
+            // 元数据 → 回合列表 → 最近一页消息链式预取，消除
+            // 「lazy 下载 → 挂载 → 才发 IPC」的串行等待。fire-and-forget：
+            // 失败不阻断导航——被删会话等错误仍由 ChatPage 的 isError 守卫
+            // 优雅重定向首页，而非落入全页错误边界。
+            void queryClient
+              .ensureQueryData({
+                // 数据 key 与 useSessionDetail 一致（meta 形状）；失效/清理
+                // 走 SESSION_DETAIL_QUERY_KEY 前缀，与此数据 key 解耦
+                queryKey: SESSION_DETAIL_DATA_KEY(sessionId, false),
+                queryFn: () => fetchSessionDetail(sessionId, false),
+              })
+              .catch(() => undefined);
+            void (async () => {
+              const turns = await queryClient
+                .ensureQueryData({
+                  queryKey: SESSION_TURNS_QUERY_KEY(sessionId),
+                  queryFn: () => fetchSessionTurns(sessionId),
+                })
+                .catch(() => undefined);
+              if (turns === undefined) return;
+              await prefetchTurnPages(sessionId, turns.turns).catch(() => undefined);
+            })();
+          }
+          return null;
+        },
         lazy: async () => {
           const { ChatPage } = await import('./routes/chat');
           // biome-ignore lint/style/useNamingConvention: React Router lazy 要求模块导出 Component

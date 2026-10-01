@@ -21,6 +21,7 @@ interface FileListProps {
   readonly onSelect: (path: string) => void;
 }
 
+/** Git 变更文件列表：状态图标 + 文件名，选中高亮（点击回调给父级拉 diff） */
 export function FileList({ files, selectedFilePath, onSelect }: FileListProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

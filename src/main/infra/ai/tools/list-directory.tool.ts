@@ -5,6 +5,7 @@
 import type { FileListRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -25,6 +26,11 @@ const ListDirectoryInputSchema = z.object({
 
 type ListDirectoryInput = z.infer<typeof ListDirectoryInputSchema>;
 
+/**
+ * 创建 list_directory 工具（列出目录内容：递归深度可控，含类型/大小/修改时间）
+ *
+ * @param fileService 文件服务（执行实际列目录）
+ */
 export function createListDirectoryTool(fileService: IFileService): Tool<ListDirectoryInput> {
   return {
     name: 'list_directory',
@@ -34,10 +40,11 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
     permission: 'auto',
     category: 'read',
     execute: async (input: ListDirectoryInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileListRes = await fileService.list({
-        path: absPath,
+        path: realTarget,
         depth: input.depth,
         includeHidden: input.includeHidden,
       });
@@ -49,10 +56,10 @@ export function createListDirectoryTool(fileService: IFileService): Tool<ListDir
       });
 
       return {
-        title: `列出目录: ${input.path}`,
+        title: t('tools.listDir.title', { path: input.path }),
         output: lines.join('\n') || '(空目录)',
         metadata: {
-          path: absPath,
+          path: resolved,
           depth: input.depth,
           count: result.entries.length,
           entries: result.entries,

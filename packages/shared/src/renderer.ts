@@ -20,10 +20,35 @@ export {
   TERMINAL_DEFAULT_COLS,
   TERMINAL_DEFAULT_ROWS,
 } from './constants/defaults';
+// 编辑器代码面排版（37 号 A：Tab 宽度档位，查看器/聊天代码块/diff 单点收敛）
+export {
+  clampEditorTabSize,
+  DEFAULT_EDITOR_TAB_SIZE,
+  EDITOR_TAB_SIZES,
+} from './constants/editor';
 export type { ErrorMeta, IpcError } from './constants/errors';
 // 错误码与错误元数据（值 + 类型）
 export { ERROR_META, ErrorCode } from './constants/errors';
 export { IPC_PROTOCOL_VERSION } from './constants/protocol';
+// 终端设置（36 号 B：shell 档位/平台适用性 + 字号档位，设置 UI 与 store 消费）
+export {
+  clampFontSize,
+  DEFAULT_TERMINAL_FONT_SIZE,
+  isShellChoiceApplicable,
+  TERMINAL_FONT_SIZES,
+  TERMINAL_SHELL_CHOICES,
+  type TerminalPlatform,
+  type TerminalShellChoice,
+  terminalShellChoicesForPlatform,
+} from './constants/terminal-shell';
+// 界面缩放（35 号：档位集 + 纯函数，UI Select 与快捷键消费）
+export {
+  clampZoom,
+  DEFAULT_ZOOM,
+  overlayHeightFor,
+  stepZoom,
+  ZOOM_LEVELS,
+} from './constants/zoom';
 // IPC 类型契约（纯类型，自动推导）
 export type { IpcApi } from './ipc/api';
 export type { IpcChannel } from './ipc/channels';
@@ -40,6 +65,7 @@ export type * from './schemas/agent';
 export type * from './schemas/agent-ask';
 export type * from './schemas/agent-events';
 export type * from './schemas/app';
+export type * from './schemas/backup';
 export type * from './schemas/browser';
 export type * from './schemas/chat';
 export type * from './schemas/codebase';
@@ -49,8 +75,12 @@ export type * from './schemas/file';
 export type * from './schemas/git';
 export type * from './schemas/goal';
 export type * from './schemas/im';
+export type * from './schemas/invalidation';
+// 失效域词表（值：渲染层映射/回落判定与主进程声明侧共用单一真源，31 号设计文档 §2.2）
+export { INVALIDATION_DOMAINS, TURN_END_GLOBAL_DOMAINS } from './schemas/invalidation';
 export type * from './schemas/memory';
 export type * from './schemas/models';
+export type * from './schemas/proxy';
 export type * from './schemas/remote';
 export type * from './schemas/search';
 export type * from './schemas/session';

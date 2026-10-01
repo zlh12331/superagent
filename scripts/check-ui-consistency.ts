@@ -3,13 +3,8 @@
 // ──────────────────────────────────────────────────────────────
 // 背景：渲染层标准设施（unwrap/confirm() store/useCopy/AsyncSection）已建成，
 // 但存量采用率停在中位——本门禁用静态信号阻止「离群写法回潮」。
-// 可程序化检测的结构信号（规则 1-5）：
-//   1. 数组索引直接作 React key（key={index}/key={i}/key={idx}）
-//   2. join(' ') 手工拼接 className（条件类应统一走 cn()）
-//   3. 手写 'data' in 判别解包 IPC 响应（应统一 unwrap()）
-//   4. components/** 内裸 <button>（应用 ui/button 的 Button，icon 钮用 size="icon"）
-//   5. 渲染层 try/finally 语句（React Compiler 不优化，触发组件级 bail-out）
-//   6. 内联 queryKey 字面量（应引用命名常量：域 hook 内 export 或 lib/query/keys.ts）
+// 七条 error 级规则（判据核在 scripts/lib/ui-consistency-rules.ts，
+// 反例 fixture 测试同目录）+ 设施采用率棘轮（正向）。
 // 级别：全部 error（卡关），存量计数走棘轮基线（只允许下降）。
 // 基线：scripts/ui-consistency-baseline.json（--update-baseline 重写）
 //
@@ -29,6 +24,7 @@ import {
   wantsBaselineUpdate,
   wantsForce,
 } from './lib/ratchet';
+import { scanUiConsistency, UI_RULES, type UiViolation } from './lib/ui-consistency-rules';
 
 const ROOT = join(import.meta.dirname, '..');
 const SRC = join(ROOT, 'src', 'renderer');
@@ -37,109 +33,24 @@ const BASELINE_PATH = join(import.meta.dirname, 'ui-consistency-baseline.json');
  * 棘轮指标名（2026-09-08 收敛到 lib/ratchet.ts）
  *
  * 本门禁的「违规」是每条规则的命中计数，故 key = 规则 id、指标 = count。
- * 此前自建读写/比对逻辑与 lib/ratchet.ts 完全重复（同样读 JSON、同样
- * 单向收紧、同样 --update-baseline），现统一复用，行为一致且少 30 行重复。
  */
 const METRICS = ['count'] as const;
 
-interface Rule {
-  readonly id: string;
-  readonly desc: string;
-  /** 命中计数正则（逐行匹配） */
-  readonly pattern: RegExp;
-  /** 适用文件过滤（相对 src/renderer 的路径） */
-  readonly fileFilter?: (relFile: string) => boolean;
-}
+// ── 采用率棘轮（正向，2026-09-24）────────────────────────────────────────
+// 违规棘轮管下限（防离群写法回潮），采用棘轮管上限（推标准设施落地）——
+// 后者此前缺失，useCopy/AsyncBoundary 等停在个位数无人推。统计标准设施在
+// 非测试渲染层文件中的 import 引用文件数；基线记录历史最高，当前 < 基线 =
+// 设施被拆除/降级 → 卡关；--update-adoption 取 max(旧, 实测) 只升不降。
+// 口径边界：toast 反馈形态的复制场景（use-copy.ts 头注释明文豁免，如远程
+// 令牌/诊断信息复制）本就不 import useCopy，不属采用缺口，不参与统计。
+const ADOPTION_BASELINE_PATH = join(import.meta.dirname, 'ui-consistency-adoption-baseline.json');
 
-const RULES: readonly Rule[] = [
-  {
-    id: 'index-key',
-    desc: '数组索引直接作 React key（骨架屏/静态拆分用上一行 biome-ignore noArrayIndexKey 豁免）',
-    pattern: /key=\{(index|i|idx)\}/,
-  },
-  {
-    id: 'join-class',
-    desc: "className 内 join(' ') 手工拼接（条件类统一走 cn()）",
-    // 限定 className 上下文：命令参数等业务拼接（如 args.join(' ')）不属样式
-    pattern: /className.*\.join\(' '\)|\.join\(' '\).*"/,
-    fileFilter: (relFile) => relFile.endsWith('.tsx'),
-  },
-  {
-    id: 'manual-unwrap',
-    desc: "手写 'data' in 判别解包 IPC 响应（统一 unwrap()，见 src/renderer/lib/ipc.ts）",
-    pattern: /'data' in (res|response|result)\b/,
-  },
-  {
-    id: 'raw-button',
-    desc: 'components/** 内裸 <button>（应用 ui/button 的 Button；已归属 globals.css 按钮类体系的除外）',
-    pattern: /<button\b/,
-    fileFilter: (relFile) =>
-      relFile.startsWith(join('components')) && !relFile.startsWith(join('components', 'ui')),
-  },
-  {
-    id: 'try-finally',
-    // React Compiler 对含 try/finally 的函数**静默跳过**（bail-out），该组件失去自动
-    // 记忆化——而 pnpm check:compiler 只断言产物含 compiler-runtime（整体生效），
-    // 抓不到单个组件的 bail-out。故在此以静态信号兜住回归（2026-09-11）：
-    // 曾有 3 处漏网（ChatInput/about-section×2），此前的「已清零」无机制守护。
-    // 修法：去掉 finally，改为 catch 之后统一复位（见 hooks/use-file-tree-ops.ts 既有模式）。
-    desc: 'try/finally 语句（React Compiler 不优化，触发组件级 bail-out）——改为 catch 过后统一复位',
-    // 只匹配语句形式 `} finally {`（Biome 固定此格式）；不匹配 Promise 的
-    // `.finally(() => {`（那是合法用法，如 settings-store 的落库静默处理）
-    pattern: /\}\s*finally\s*\{/,
-  },
-  {
-    id: 'inline-query-key',
-    // 规范：queryKey 必须是命名常量——域 hook（hooks/use-*.ts）内 export，或集中在
-    // lib/query/keys.ts。禁止 `queryKey: ['a','b']` 这类内联字面量：
-    // 内联使**失效点与查询点失去共享引用**，key 形状一变就静默失配（缓存不刷新且无报错）。
-    // 2026-09-11 收敛：此前 8 处内联 + 若干文件私有常量。
-    // 豁免：lib/query/keys.ts 自身（它就是常量的定义处）。
-    desc: '内联 queryKey 字面量（应引用命名常量：域 hook 内 export 或 lib/query/keys.ts）',
-    pattern: /queryKey:\s*\[/,
-    fileFilter: (relFile) => relFile !== join('lib', 'query', 'keys.ts'),
-  },
-];
-
-/**
- * 已归属 globals.css 按钮类体系的钮（icon-btn/tab/树节点/segmented 等
- * 有专属 CSS 类控制的场景），不属于 raw-button 规则目标——
- * 它们的收敛路径是 globals.css 组件类 utility 化专项，而非套 Button。
- */
-const OWNED_CSS_BUTTON_CLASSES = [
-  'icon-btn',
-  'sidebar-tab',
-  'dev-sub-tab',
-  'ft-row',
-  'ft-dir',
-  'ft-file',
-  'sft-back',
-  'sft-more-btn',
-  'cpb-select',
-  'model-item',
-  'fdm-item',
-  'fdm-action-btn',
-  'fl-add-btn',
-  'folder-label',
-  'file-viewer-mode-btn',
-  'file-viewer-save-btn',
-  'file-viewer-copy-btn',
-  'composer-tool-btn',
-  'msg-action-btn',
-  'card-head',
-  'rh-chevron',
-  'reasoning-head',
-  'scroll-to-bottom',
-  'jump-item',
-  'ask-option',
-  'fuzzy-result',
-];
-
-interface Violation {
-  readonly rule: string;
-  readonly file: string;
-  readonly line: number;
-}
+const ADOPTION_FACILITIES = [
+  { id: 'useCopy', match: 'hooks/use-copy' },
+  { id: 'AsyncBoundary', match: 'components/common/AsyncBoundary' },
+  { id: 'SectionErrorBoundary', match: 'components/common/SectionErrorBoundary' },
+  { id: 'DialogHost', match: 'components/common/DialogHost' },
+] as const;
 
 function collectFiles(dir: string, out: string[]): void {
   for (const name of readdirSync(dir)) {
@@ -161,55 +72,13 @@ function collectFiles(dir: string, out: string[]): void {
 const files: string[] = [];
 collectFiles(SRC, files);
 
-const violations: Violation[] = [];
-for (const full of files) {
-  const relFile = relative(SRC, full);
-  const lines = readFileSync(full, 'utf8').split('\n');
-  for (const rule of RULES) {
-    if (rule.fileFilter !== undefined && !rule.fileFilter(relFile)) {
-      continue;
-    }
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line === undefined || !rule.pattern.test(line)) {
-        continue;
-      }
-      // 跳过纯注释行：注释里的用法示例/反例说明不构成实际代码信号
-      // （如 use-git.ts 顶部 `// - queryKey: ['git','status',path] - …` 的文档注释）
-      const trimmed = line.trim();
-      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
-        continue;
-      }
-      // 上一行含 noArrayIndexKey biome-ignore 的豁免（与 Biome 同步：
-      // 骨架屏/静态拆分等 index 稳定且无重排的合理场景）
-      const prev = i > 0 ? lines[i - 1] : '';
-      if (prev.includes('noArrayIndexKey')) {
-        continue;
-      }
-      // raw-button 规则：className 已含 globals.css 按钮类体系归属的豁免；
-      // 类名在 JSX 起始行或后续 className 行（向前探 3 行）——检测当前按钮
-      // 开标签块（回溯至 <button 行）内是否出现归属类名
-      if (rule.id === 'raw-button') {
-        const blockStart = Math.max(0, i - 3);
-        const block = lines.slice(blockStart, i + 4).join('\n');
-        if (OWNED_CSS_BUTTON_CLASSES.some((cls) => block.includes(cls))) {
-          continue;
-        }
-        // segmented/tab/折叠选择器语义（aria-pressed/aria-selected/aria-expanded/
-        // role="tab"）豁免：这些是选择器交互形态，收敛路径是 ToggleGroup/Tabs
-        if (
-          block.includes('aria-pressed=') ||
-          block.includes('aria-selected=') ||
-          block.includes('aria-expanded=') ||
-          block.includes('role="tab"')
-        ) {
-          continue;
-        }
-      }
-      violations.push({ rule: rule.id, file: relFile, line: i + 1 });
-    }
-  }
-}
+// 判据核（lib 纯函数）：relFile 统一 posix 口径，使 fileFilter 与平台无关
+const violations: UiViolation[] = scanUiConsistency(
+  files.map((full) => ({
+    relFile: relative(SRC, full).split('\\').join('/'),
+    lines: readFileSync(full, 'utf8').split('\n'),
+  })),
+);
 
 // 按规则聚合计数，对照棘轮基线（统一走 lib/ratchet.ts）
 // ratchet 语义：current 只含**超限**条目。本门禁的「超限」= 该规则命中数 > 0
@@ -241,6 +110,47 @@ function loadBaseline(): Record<string, Metrics> {
 
 const baseline = loadBaseline();
 
+// 采用率统计（每设施：import 引用的非测试文件数）
+const adoptionCurrent = new Map<string, number>();
+for (const { id, match } of ADOPTION_FACILITIES) {
+  let n = 0;
+  for (const full of files) {
+    if (readFileSync(full, 'utf8').includes(match)) n += 1;
+  }
+  adoptionCurrent.set(id, n);
+}
+
+function loadAdoptionBaseline(): Record<string, Metrics> {
+  if (!existsSync(ADOPTION_BASELINE_PATH)) return {}; // 首次无基线 → 视为全 0，由 --update-adoption 创建
+  try {
+    return parseBaseline(readFileSync(ADOPTION_BASELINE_PATH, 'utf8'), METRICS);
+  } catch (error: unknown) {
+    console.error(
+      `[check-ui-consistency] ❌ 采用率基线读取失败：${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
+}
+
+const adoptionBaseline = loadAdoptionBaseline();
+
+if (process.argv.slice(2).includes('--update-adoption')) {
+  const next: Record<string, Metrics> = { ...adoptionBaseline };
+  for (const { id } of ADOPTION_FACILITIES) {
+    const cur = adoptionCurrent.get(id) ?? 0;
+    const old = next[id]?.['count'] ?? 0;
+    next[id] = { count: Math.max(old, cur) }; // 只升不降
+  }
+  writeFileSync(ADOPTION_BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  console.log(
+    `[check-ui-consistency] 采用率基线已更新（${ADOPTION_BASELINE_PATH}，逐设施取 max(旧, 实测)）：`,
+  );
+  for (const { id } of ADOPTION_FACILITIES) {
+    console.log(`  ${id}: ${next[id]?.['count'] ?? 0}`);
+  }
+  process.exit(0);
+}
+
 if (wantsBaselineUpdate(process.argv.slice(2))) {
   const next = proposeBaseline(current, baseline, METRICS, wantsForce(process.argv.slice(2)));
   writeFileSync(BASELINE_PATH, serializeBaseline(next), 'utf8');
@@ -254,9 +164,29 @@ const problems = evaluateRatchet(current, baseline, METRICS);
 if (problems.length > 0) {
   console.error(`[check-ui-consistency] ❌ 一致性棘轮违规 ${problems.length} 处：`);
   for (const line of renderProblems(problems)) console.error(line);
-  for (const rule of RULES) console.error(`  规则 ${rule.id}：${rule.desc}`);
+  for (const rule of UI_RULES) console.error(`  规则 ${rule.id}：${rule.desc}`);
   console.error(
     '[check-ui-consistency] 修复指引：AGENTS.md「渲染层写法标准」；已收敛请跑 --update-baseline 收紧基线',
+  );
+  process.exit(1);
+}
+
+// 采用率棘轮检查：当前引用数低于基线 = 标准设施被拆除/降级（只许升）
+const adoptionProblems: string[] = [];
+for (const { id } of ADOPTION_FACILITIES) {
+  const cur = adoptionCurrent.get(id) ?? 0;
+  const base = adoptionBaseline[id]?.['count'] ?? 0;
+  if (cur < base) {
+    adoptionProblems.push(
+      `  [adoption] ${id}：引用文件 ${cur} 低于基线 ${base}（设施被拆除或降级）`,
+    );
+  }
+}
+if (adoptionProblems.length > 0) {
+  console.error('[check-ui-consistency] ❌ 设施采用率棘轮违规：');
+  for (const line of adoptionProblems) console.error(line);
+  console.error(
+    '[check-ui-consistency] 修复指引：恢复设施引用；确属设计变更请 --update-adoption 并说明理由',
   );
   process.exit(1);
 }
@@ -267,3 +197,9 @@ console.log(
 for (const v of violations) {
   console.log(`  [${v.rule}] ${v.file}:${v.line}`);
 }
+const adoptionLine = ADOPTION_FACILITIES.map(({ id }) => {
+  const cur = adoptionCurrent.get(id) ?? 0;
+  const base = adoptionBaseline[id]?.['count'] ?? 0;
+  return `${id} ${cur}/${base}`;
+}).join('，');
+console.log(`[check-ui-consistency] 采用率（当前/基线）：${adoptionLine}`);

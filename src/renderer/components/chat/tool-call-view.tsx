@@ -39,6 +39,7 @@ interface ToolCallViewProps {
   errorText: string | undefined;
 }
 
+/** 工具调用 inline 卡片：按 state 渲染执行态，input/output 折叠展开（含 diff 类专用视图） */
 export function ToolCallView({
   type,
   toolCallId,
@@ -47,8 +48,8 @@ export function ToolCallView({
   output,
   errorText,
 }: ToolCallViewProps): ReactElement {
-  // 折叠状态：默认折叠（对齐原型 #toolCard 初始无 .open 类）
-  const [open, setOpen] = useState(false);
+  // 折叠状态：成功默认折叠、错误默认展开（签名时刻 R3：失败可达）
+  const [open, setOpen] = useState(() => state === 'output-error');
   // 本地化文案
   const { t } = useTranslation();
 
@@ -86,7 +87,14 @@ export function ToolCallView({
   return (
     <div className="msg msg-tool enter-anim">
       <div className="msg-body">
-        <div className={cn('card tool-card', open && 'open')}>
+        <div
+          className={cn(
+            'card tool-card',
+            open && 'open',
+            statusClass === 'success' && 'is-settled',
+            statusClass === 'error' && 'is-error',
+          )}
+        >
           <button
             type="button"
             className="card-head"

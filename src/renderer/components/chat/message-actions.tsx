@@ -11,6 +11,7 @@ import { useCopy } from '@/hooks/use-copy';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+/** 消息操作行：复制全文（useCopy）/ 重新生成（流式中禁用） */
 export function MsgActions({
   text,
   messageId,
@@ -34,7 +35,7 @@ export function MsgActions({
 
   return (
     // 类名收敛为 .msg-actions（2026-09 审计）：此前写作 `msg-actions show`，
-    // globals.css 中并无 `.show` 复合规则（.show 只存在于 folder-dropdown-menu
+    // styles/ 各域 css 中并无 `.show` 复合规则（.show 只存在于 folder-dropdown-menu
     // / palette-overlay），属原型残留的死类名。
     <div className="msg-actions">
       <button

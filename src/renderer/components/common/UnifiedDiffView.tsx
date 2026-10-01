@@ -1,46 +1,25 @@
 // src/renderer/components/common/UnifiedDiffView.tsx
-// unified diff 文本渲染（统一 react-diff-viewer-continued 方案）
+// unified diff 文本渲染（自研 DiffRowsTable + shiki 按需高亮）
 // ──────────────────────────────────────────────────────────────
-// 背景：统一 diff 渲染方案为 react-diff-viewer-continued（此前 git 面板与
-// 右面板行级展开用 <pre> 自绘，两套实现并存）。
+// 背景（2026-09）：替换 react-diff-viewer-continued——其静态依赖的语法高亮语言包
+// 会在产物中拖入 37 个语言 chunk（实测：迁移前构建 37 个 chunk 命中该依赖，
+// .js 合计 0.43MB；迁移后产物 0 命中）。现改用项目已有资产自研渲染：unified-diff
+// 解析 → DiffRowsTable 双栏表格（shiki 行高亮）。
 //
 // 输入：git:diff 返回的 unified diff 原始文本
-// 输出：按 hunk 拆分的 ReactDiffViewer（GitHub 风格变更块，主题感知）
+// 输出：单张 diff 表（每 hunk 一个 tbody 分组，GitHub 风格变更块）
 //
 // 设计：
-// - parseUnifiedDiff 解析 → 每 hunk 一个 ReactDiffViewer（splitView 双栏）
-// - useDarkTheme 跟随全局主题
-// - 紧凑样式（content 区 10px 等宽，对齐应用小字视觉）
+// - parseUnifiedDiff 解析（行号由解析器按 @@ 头推算）
+// - extractDiffTargetPath 提取目标文件 → detectLangFromPath 推导 shiki 语言
+// - 大 diff 由 DiffRowsTable 的行数预算折叠（展开更多按钮键盘可达）
 // ──────────────────────────────────────────────────────────────
 
-import { type ReactElement, useMemo } from 'react';
-import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
+import type { ReactElement } from 'react';
+import { detectLangFromPath } from '@/components/file-tree/file-viewer-utils';
 import { useTranslation } from '@/i18n/use-translation';
-import { parseUnifiedDiff } from '@/lib/diff/unified-diff';
-import { useTheme } from '@/providers/ThemeProvider';
-
-/** 紧凑样式：覆盖 ReactDiffViewer 默认密度，对齐应用 10px 小字视觉 */
-const COMPACT_STYLES = {
-  content: {
-    fontSize: '10px',
-    lineHeight: '1.6',
-    fontFamily: 'var(--font-mono)',
-    width: '100%',
-  } as const,
-  lineNumber: {
-    fontSize: '10px',
-    minWidth: '2em',
-  } as const,
-  gutter: {
-    minWidth: '2em',
-  } as const,
-  diffContainer: {
-    width: '100%',
-  } as const,
-  table: {
-    width: '100%',
-  } as const,
-};
+import { extractDiffTargetPath, parseUnifiedDiff } from '@/lib/diff/unified-diff';
+import { DiffRowsTable } from './diff/DiffRowsTable';
 
 /** UnifiedDiffView props */
 export interface UnifiedDiffViewProps {
@@ -51,37 +30,26 @@ export interface UnifiedDiffViewProps {
 }
 
 /**
- * unified diff 文本渲染（按 hunk 分块，主题感知）
+ * unified diff 文本渲染（按 hunk 分组，主题感知，shiki 按需高亮）
  */
 export function UnifiedDiffView({ diff, className }: UnifiedDiffViewProps): ReactElement {
   const { t } = useTranslation();
-  const { resolvedTheme } = useTheme();
-  const hunks = useMemo(() => parseUnifiedDiff(diff), [diff]);
+  // 纯派生，交给 React Compiler 记忆化（diff 稳定时复用解析结果）
+  const hunks = parseUnifiedDiff(diff);
 
   if (hunks.length === 0) {
     return <div className="text-muted-foreground p-2 text-2xs">{t('common.noDiff')}</div>;
   }
 
+  // 语言检测：+++ 头的目标路径 → 扩展名查表；未收录语言 detectLangFromPath
+  // 返回 'text'，此时不传 lang（DiffRowsTable 跳过高亮管线）
+  const targetPath = extractDiffTargetPath(diff);
+  const detectedLang = targetPath === null ? undefined : detectLangFromPath(targetPath);
+  const lang = detectedLang === undefined || detectedLang === 'text' ? undefined : detectedLang;
+
   return (
     <div className={className}>
-      {hunks.map((hunk) => (
-        <div
-          // key 用 hunk 起始行号（同文件同位置唯一，避开数组索引 lint）
-          key={`${hunk.oldStart}-${hunk.newStart}`}
-          className="mt-1 first:mt-0"
-        >
-          <ReactDiffViewer
-            oldValue={hunk.oldLines.join('\n')}
-            newValue={hunk.newLines.join('\n')}
-            splitView={true}
-            compareMethod={DiffMethod.LINES}
-            hideLineNumbers={false}
-            showDiffOnly={false}
-            useDarkTheme={resolvedTheme === 'dark'}
-            styles={COMPACT_STYLES}
-          />
-        </div>
-      ))}
+      <DiffRowsTable rowGroups={hunks.map((hunk) => hunk.lines)} lang={lang} />
     </div>
   );
 }

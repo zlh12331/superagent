@@ -8,7 +8,7 @@
 
 import type { ApiKeyProvider, RuntimeModelInfo } from '@code-agent/shared/renderer';
 import { Loader2, TriangleAlert } from 'lucide-react';
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import {
   useUpdateRuntimeModel,
 } from '@/hooks/use-runtime-models';
 import { useTranslation } from '@/i18n/use-translation';
+import { openExternal } from '@/lib/app-actions';
 import { providerApiKeyUrl } from '../provider-labels';
 import {
   ModelConfigFields,
@@ -34,6 +35,7 @@ import {
   type ModelConfigMode,
 } from './model-config-fields';
 
+/** 模型配置弹窗 props（新增/编辑双模式，mode 与 editingModel 联动见字段注释） */
 export interface ModelConfigDialogProps {
   readonly open: boolean;
   /** 弹窗模式（edit 时 editingModel 必传） */
@@ -150,11 +152,8 @@ export function ModelConfigDialog({
     setAdvancedExpanded(false);
   }, [open, isEdit, editingModel, providerKind]);
 
-  /** 当前厂商的内置模型全集（服务商模式下拉；listBuiltin 已按厂商过滤） */
-  const providerModels = useMemo(() => {
-    if (isCustom || isEdit) return [];
-    return builtinData?.models ?? [];
-  }, [builtinData, isCustom, isEdit]);
+  /** 当前厂商的内置模型全集（服务商模式下拉；listBuiltin 已按厂商过滤）；纯派生交给 Compiler */
+  const providerModels = isCustom || isEdit ? [] : (builtinData?.models ?? []);
 
   /** 服务商模式：下拉选中的模型 id（未选「使用其他模型」时作为最终 modelId） */
   const effectiveModelId =
@@ -309,8 +308,10 @@ export function ModelConfigDialog({
             onFieldChange={setField}
             onOpenApiKeyUrl={() => {
               const url = providerApiKeyUrl(values.providerKind);
-              if (url !== '' && window.api !== undefined) {
-                void window.api.app.openExternal({ url });
+              if (url !== '') {
+                openExternal(url).catch(() => {
+                  // 打开失败静默：非关键路径
+                });
               }
             }}
           />

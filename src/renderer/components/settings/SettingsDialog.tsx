@@ -17,12 +17,15 @@ import {
   FolderTree,
   Globe,
   Info,
+  Keyboard,
+  Network,
   Plug,
   Server as ServerIcon,
   Settings as SettingsIcon,
   ShieldCheck,
   Smartphone,
   Sparkles,
+  TerminalSquare,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -39,8 +42,11 @@ import { GeneralSection } from './sections/general-section';
 import { McpSection } from './sections/mcp-section';
 import { ModelsSection } from './sections/models-section';
 import { MobileSection } from './sections/placeholders';
+import { ProxySection } from './sections/proxy-section';
 import { RulesMemorySection } from './sections/rules-memory-section';
+import { ShortcutsSection } from './sections/shortcuts-section';
 import { SkillsSection } from './sections/skills-section';
+import { TerminalSection } from './sections/terminal-section';
 import { UsageSection } from './sections/usage-section';
 import { WorkspaceSection } from './sections/workspace-section';
 
@@ -68,13 +74,15 @@ interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
-/** 导航分组（5 组 12 项，语义归组；未实现的规划入口已移除，见 docs/design/05 §14） */
+/** 导航分组（5 组 15 项，语义归组；未实现的规划入口已移除，见 docs/design/05 §14） */
 const NAV_GROUPS: readonly NavGroup[] = [
   {
     labelKey: 'settings.group.general',
     items: [
       { id: 'usage', labelKey: 'settings.nav.usage', icon: BarChart3 },
       { id: 'general', labelKey: 'settings.nav.general', icon: SettingsIcon },
+      // 网络代理（34 号）：运行环境域——代理/直连模式 + 测试连接
+      { id: 'proxy', labelKey: 'settings.nav.proxy', icon: Network },
       { id: 'mobile', labelKey: 'settings.nav.mobile', icon: Smartphone },
     ],
   },
@@ -87,6 +95,10 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { id: 'skills', labelKey: 'settings.nav.skills', icon: Sparkles },
       { id: 'browser', labelKey: 'settings.nav.browser', icon: Globe },
       { id: 'workspace', labelKey: 'settings.nav.workspace', icon: FolderTree },
+      // 终端（36 号 B）：默认 shell 选择 + 字号（交互式终端域）
+      { id: 'terminal', labelKey: 'settings.nav.terminal', icon: TerminalSquare },
+      // 快捷键：自定义键录制/冲突检测/恢复默认 + 固定键速查（原嵌通用页，独立分区提升可发现性）
+      { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', icon: Keyboard },
     ],
   },
   {
@@ -118,12 +130,18 @@ function renderSection(section: SettingsSectionId, drawerOpen: boolean): ReactEl
       return <UsageSection />;
     case 'general':
       return <GeneralSection drawerOpen={drawerOpen} />;
+    case 'proxy':
+      return <ProxySection />;
     case 'mobile':
       return <MobileSection />;
     case 'browser':
       return <BrowserSection />;
     case 'workspace':
       return <WorkspaceSection />;
+    case 'terminal':
+      return <TerminalSection />;
+    case 'shortcuts':
+      return <ShortcutsSection />;
     case 'rules-memory':
       return <RulesMemorySection />;
     case 'models':
@@ -221,7 +239,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                       data-nav-item="true"
                       onClick={() => setActiveSection(item.id)}
                       className={cn(
-                        'text-muted-foreground hover:bg-muted hover:text-foreground mb-0.5 flex w-full items-center gap-[9px] rounded-[7px] border-l-2 border-l-transparent px-2.5 py-2 text-left text-sm transition-colors',
+                        'text-muted-foreground hover:bg-muted hover:text-foreground mb-0.5 flex w-full items-center gap-[9px] rounded-[calc(var(--radius)-1px)] border-l-2 border-l-transparent px-2.5 py-2 text-left text-sm transition-colors',
                         // 激活态：accent 竖条（对齐原型 L3535 inset 2px）+ 文字用 foreground
                         // （text-primary 青色在浅色模式白底上仅 2.51:1，不满足 WCAG AA）
                         isActive &&

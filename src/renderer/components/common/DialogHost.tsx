@@ -8,7 +8,7 @@
 // 在 AppShell 根节点挂载一次即可；调用方用 confirm() / prompt() 触发，零 React 依赖。
 // ──────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   AlertDialog,
@@ -70,48 +70,42 @@ export function DialogHost(): React.ReactElement | null {
     return () => cancelAnimationFrame(handle);
   }, [currentRequest]);
 
-  // ===== 事件处理 =====
+  // ===== 事件处理（引用稳定性交给 React Compiler） =====
 
   /** 确认按钮：confirm → true；prompt → inputValue.trim() */
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = () => {
     if (currentRequest === null) return;
     if (currentRequest.kind === 'confirm') {
       resolveRequest(true);
     } else {
       resolveRequest(inputValue.trim());
     }
-  }, [currentRequest, inputValue, resolveRequest]);
+  };
 
   /** 取消按钮/关闭/Esc/遮罩：confirm → false；prompt → null */
-  const handleCancel = useCallback(() => {
+  const handleCancel = () => {
     if (currentRequest === null) return;
     if (currentRequest.kind === 'confirm') {
       resolveRequest(false);
     } else {
       resolveRequest(null);
     }
-  }, [currentRequest, resolveRequest]);
+  };
 
   /** AlertDialog onOpenChange：open=false（Esc/遮罩）视为取消 */
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (!nextOpen) {
-        handleCancel();
-      }
-    },
-    [handleCancel],
-  );
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      handleCancel();
+    }
+  };
 
   /** prompt 输入框 Enter 键确认（Esc 由 AlertDialog 自身处理） */
-  const handleInputKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        handleConfirm();
-      }
-    },
-    [handleConfirm],
-  );
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleConfirm();
+    }
+  };
 
   // 无请求时不渲染（此后 currentRequest 已收窄为非 null）
   if (currentRequest === null) return null;

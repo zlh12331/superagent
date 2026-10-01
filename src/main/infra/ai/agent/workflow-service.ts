@@ -31,6 +31,7 @@ export const WorkflowStatus = {
   CANCELLED: 'cancelled',
 } as const;
 
+/** 工作流状态机（pending → running → completed/failed/cancelled，见 WorkflowStatus 常量表） */
 export type WorkflowStatus = (typeof WorkflowStatus)[keyof typeof WorkflowStatus];
 
 /** 步骤状态 */
@@ -41,6 +42,7 @@ export const WorkflowStepStatus = {
   FAILED: 'failed',
 } as const;
 
+/** 步骤状态机（pending → running → completed/failed，见 WorkflowStepStatus 常量表） */
 export type WorkflowStepStatus = (typeof WorkflowStepStatus)[keyof typeof WorkflowStepStatus];
 
 /** 工作流步骤 */

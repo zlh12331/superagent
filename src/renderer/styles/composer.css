@@ -1,0 +1,616 @@
+/* ──────────────────────────────────────────────────────────────
+   §composer-project-bar 项目栏（cwd 展示 + 模型选择器）
+   ──────────────────────────────────────────────────────────────
+   对齐原型 docs/prototype/prototype-v2.html 的 .composer-project-bar：
+   - 欢迎页：左侧 folder dropdown（切换历史目录 / 浏览其他）+ 右侧模型选择器
+   - 对话页：左侧只读展示当前工作目录 + 右侧模型选择器
+   - 修复：此前基础样式 display:none 且仅 welcome-mode 显示——对话页
+     模型选择器完全不可见（用户反馈「输入框下面没有模型选择」）
+   ────────────────────────────────────────────────────────────── */
+
+/* 基础样式：对话页同样可见（紧凑 flex 布局，无容器底色）；
+   与输入舱 .composer-box 对齐（max-width 820px 居中——此前项目栏通栏
+   全宽，模型选择器贴屏幕右缘，与居中的输入框严重错位） */
+.composer-project-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 7px 10px;
+  margin-top: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  position: relative;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: visible;
+  max-width: 820px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* welcome-mode：居中 720px + 高亮容器（对齐原型） */
+.view-chat.welcome-mode .composer-project-bar {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  max-width: 720px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* folder 组容器：含 cpb-select + dropdown menu */
+.cpb-folder-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  overflow: visible;
+}
+
+/* 单个 select：folder 名 + caret */
+.cpb-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: calc(var(--radius) - 4px);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  user-select: none;
+  min-width: 0;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.cpb-select:hover {
+  color: var(--text-secondary);
+  background: var(--bg-elev-3);
+}
+
+.cpb-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cpb-select svg {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.cpb-select > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 只读变体（对话页工作目录展示）：去掉交互暗示 */
+.cpb-select.static {
+  cursor: default;
+}
+
+.cpb-select.static:hover {
+  color: inherit;
+  background: transparent;
+}
+
+.cpb-caret {
+  font-size: 9px;
+  opacity: 0.5;
+  transition:
+    transform 0.15s var(--ease-out),
+    opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+/* 展开时 caret 翻转 */
+.cpb-select[aria-expanded="true"] .cpb-caret {
+  transform: rotate(180deg);
+  opacity: 0.85;
+}
+
+/* folder dropdown 菜单 */
+.folder-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  min-width: 240px;
+  max-width: 320px;
+  box-shadow: var(--shadow-dropdown);
+  z-index: var(--z-popover);
+  display: none;
+  flex-direction: column;
+}
+
+.folder-dropdown-menu.show {
+  display: flex;
+}
+
+/* 滚动容器 */
+.fdm-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 单项 */
+.fdm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  transition: background 0.12s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.fdm-item:hover {
+  background: var(--bg-elev-3);
+}
+
+.fdm-item.active {
+  color: var(--accent);
+}
+
+.fdm-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fdm-icon svg {
+  opacity: 0.7;
+}
+
+.fdm-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.fdm-meta {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+/* 分隔符 */
+.fdm-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+  flex-shrink: 0;
+}
+
+/* 「选择文件夹…」操作按钮 */
+.fdm-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--accent);
+  transition: background 0.12s ease;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 6px;
+  flex-shrink: 0;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.fdm-action-btn:hover {
+  background: var(--bg-elev-3);
+}
+
+.fdm-action-btn .fdm-icon {
+  opacity: 0.8;
+}
+
+/* 模型选择器菜单 */
+.model-selector-menu {
+  right: 10px;
+  left: auto;
+  min-width: 280px;
+}
+
+.model-provider-group {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.model-provider-group:last-child {
+  border-bottom: none;
+}
+
+.model-provider-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.model-provider-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--bg-elev-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.model-provider-label {
+  font-family: var(--font-sans);
+}
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  transition: background 0.12s ease;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.model-item:hover {
+  background: var(--bg-elev-3);
+}
+
+.model-item.active {
+  color: var(--accent);
+  background: var(--accent) / 8%;
+}
+
+/* 空状态 */
+.fdm-empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: var(--font-size-sm);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Composer 输入舱 · TraeWork 悬浮舱 + focus soft ring
+   ────────────────────────────────────────────────────────────── */
+.composer {
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
+  /* 四边 10px（用户要求） */
+  padding: 10px;
+  position: relative;
+  min-width: 0;
+}
+
+/* 顶部发丝高光带（静态） */
+.composer::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border-strong) 30%,
+    var(--border-strong) 70%,
+    transparent
+  );
+}
+
+.composer-box {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) + 6px);
+  transition:
+    box-shadow 0.25s ease,
+    transform 0.25s var(--ease-out),
+    border-color 0.25s ease,
+    background 0.25s ease;
+  position: relative;
+  min-width: 0;
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+/* 顶部 accent 微光（focus 时点亮） */
+.composer-box::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.composer-box:focus-within {
+  border-color: var(--accent-dim);
+  box-shadow:
+    0 0 0 3px var(--accent-glow),
+    var(--shadow-raise);
+  background: var(--bg-elev-3);
+  transform: translateY(-1px);
+}
+
+.composer-box:focus-within::before {
+  opacity: 1;
+}
+
+/* 输入框高度拖拽手柄（对齐原型 .composer-drag-handle：hover 显示、ns-resize） */
+.composer-drag-handle {
+  position: absolute;
+  top: -7px;
+  left: 0;
+  right: 0;
+  height: 14px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  touch-action: none;
+  /* hr 默认边框会显示为横贯黑线（preflight border-top:1px）：必须清零，仅留 ::before 圆条 */
+  border: none;
+}
+.composer-box:hover .composer-drag-handle,
+.composer-drag-handle.dragging {
+  opacity: 1;
+}
+.composer-drag-handle::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 3px;
+  border-radius: calc(var(--radius) - 6px);
+  background: var(--border-strong);
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.composer-drag-handle:hover::before,
+.composer-drag-handle.dragging::before {
+  background: var(--accent);
+  box-shadow: var(--shadow-soft);
+}
+.composer-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  padding: 12px 14px;
+  resize: none;
+  min-height: 24px;
+  max-height: 160px;
+}
+
+.composer-input:focus,
+.composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.composer-input::placeholder {
+  color: var(--text-faint);
+}
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-strong);
+  border-radius: 0 0 calc(var(--radius) + 5px) calc(var(--radius) + 5px);
+  min-height: 46px;
+}
+
+.composer-tools {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.composer-tool-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  border-radius: calc(var(--radius) - 3px);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
+  padding: 0;
+}
+
+.composer-tool-btn:hover {
+  background: var(--bg-elev-3);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.composer-tool-btn.active {
+  color: var(--accent);
+  background: var(--accent-glow);
+  box-shadow: var(--shadow-soft);
+}
+
+.composer-hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  /* 不用 --text-faint：它映射 TraeWork --text-disabled（禁用态专用），对本区底
+     --bg-elev-2 仅 3.19:1（暗）/ 2.05:1（亮），低于 AA 小文本 4.5:1 */
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.composer-hint kbd {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 5px);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 输入框字符计数（已删除：用户要求移除字符计数器） */
+
+/* 发送按钮 · TraeWork C3 实心 primary */
+.send-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: calc(var(--radius) - 1px);
+  background: var(--primary);
+  border: none;
+  color: var(--primary-foreground);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease,
+    opacity 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.send-btn:hover {
+  background: color-mix(in srgb, var(--primary) 90%, black);
+}
+
+.send-btn:active {
+  transform: scale(0.94);
+}
+
+.send-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+  background: var(--border-strong);
+  color: var(--text-faint);
+  box-shadow: none;
+  transform: none;
+}
+
+/* 停止生成按钮：error 色 + 发光 */
+.stop-gen-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--error);
+  color: var(--color-destructive-foreground);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.12s ease,
+    opacity 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.stop-gen-btn:hover {
+  opacity: 0.9;
+}
+
+.stop-gen-btn:active {
+  transform: scale(0.92);
+}
+
+/* 快捷键标记 */
+.sk {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 5px);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  margin-right: 4px;
+}

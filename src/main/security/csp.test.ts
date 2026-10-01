@@ -17,13 +17,14 @@ describe('buildCsp', () => {
     // 禁止插件与嵌入
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
-    // AI API 域名（多供应商对齐）
-    expect(csp).toContain('https://api.deepseek.com');
-    expect(csp).toContain('https://api.openai.com');
-    expect(csp).toContain('https://api.anthropic.com');
-    // 本地 Ollama 精确端口（2026-09-13 收口：localhost:* → 11434，
-    // 消除被 XSS 的渲染层访问本机任意端口的内网探测面）
-    expect(csp).toContain('http://localhost:11434');
+    // connect-src 收敛为 'self'（2026-09-28 收口：渲染层零直连，AI API 域名
+    // 是自认死重的外渗面——AI 调用全部在主进程）
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).not.toContain('api.deepseek.com');
+    expect(csp).not.toContain('api.openai.com');
+    expect(csp).not.toContain('api.anthropic.com');
+    // 本地 Ollama 精确端口同样收敛（原 2026-09-13 收口的延续）
+    expect(csp).not.toContain('http://localhost:11434');
     expect(csp).not.toContain('http://localhost:*');
   });
 

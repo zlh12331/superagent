@@ -186,6 +186,28 @@ describe('PermissionService', () => {
       expect(decision.permission).toBe('ask');
     });
 
+    it('深读回归：MCP auto 工具无命令形状 → 降级 ask（撒谎元数据不给免审批）', async () => {
+      const tool = { ...createMockTool('auto', 'exec'), name: 'mcp__evil__run' };
+      const decision = await service.decide(tool, { payload: 'anything' });
+      expect(decision.permission).toBe('ask');
+      expect(decision.description).toContain('MCP');
+    });
+
+    it('MCP auto 工具用 script 别名携带命令 → 经 Layer-0 流程后仍降级 ask', async () => {
+      // 别名键被 extract 识别进 Layer-0 流程；该命令未被静态危险库命中时，
+      // 仍由 MCP fail-closed（2c）兜底拦截——两条路都不给免审批
+      const tool = { ...createMockTool('auto', 'exec'), name: 'mcp__evil__run' };
+      const decision = await service.decide(tool, { script: 'rm -rf /' });
+      expect(decision.permission).toBe('ask');
+      expect(decision.description).toContain('MCP');
+    });
+
+    it('内置 auto exec 工具（save_memory 类）：无命令形状维持免审批', async () => {
+      const tool = createMockTool('auto', 'exec');
+      const decision = await service.decide(tool, { content: 'remember this' });
+      expect(decision).toEqual({ permission: 'auto', description: 'Mock 工具' });
+    });
+
     it('P0 白名单空 pattern：加载即清理 + 永不命中（旧语义「该工具全部放行」是免审批后门）', async () => {
       const tool = createMockTool('ask');
       whitelistMocks.readWhitelistSync.mockReturnValue([{ toolName: 'mock_tool', pattern: '' }]);

@@ -1,19 +1,25 @@
 #!/usr/bin/env sh
 # .husky/pre-commit
 # 提交前钩子：跑 lint-staged（自动修复）+ codegraph sync（带超时）
-# 设计文档 §9.9 / §9.13
 #
 # codegraph sync 容错说明：
 # - 当 codegraph daemon 锁住数据库（如 IDE 启动了 MCP server）时，sync 会失败
-# - 当索引有大量待解析 refs（如 docs/参考项目 被全量索引）时，sync 会卡死
+# - 当索引有大量待解析 refs（如大型目录被全量索引）时，sync 会卡死
 # - 用 timeout 60 限制 sync 最多 60 秒，超时后 kill 不阻塞 commit
-# - 配置见 codegraph.json（exclude 字段排除 docs/参考项目）
+# - 排除项可在 codegraph.json 的 exclude 字段按需配置（当前为空）
 # - 用户可设 SKIP_CODEGRAPH_SYNC=1 完全跳过 sync
 
 
-# 密钥扫描（gitleaks 业界标准；未安装时跳过并提示）
+# 密钥扫描（gitleaks 业界标准；未安装时跳过并提示——本钩子取「软」策略，
+# 「硬」闸门在 pre-push：未安装即失败。分层理由见 .husky/pre-push 头注释）
+# 2026-09-22：命令由 `protect --staged` 改为 `git --staged`。依据：gitleaks
+# v8.19.0 release notes「Deprecate `detect` and `protect`. Add `git`, `dir`,
+# `stdin`」——官方同时声明该变更 "backwards compatible"，且**未公布移除版本**，
+# 故 `protect` 在当前最新版 8.30.1 仍可运行，只是已不再出现在 `--help` 列表中。
+# 改用文档化的 `git --staged` 是为对齐官方命令面；实测两者行为一致
+# （暂存含密钥文件时两者均报 leaks found: 1 并 exit 1）。
 if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks protect --staged --redact || exit 1
+  gitleaks git --staged --config .gitleaks.toml --redact --no-banner || exit 1
 else
   echo "[pre-commit] gitleaks 未安装（winget install Gitleaks.Gitleaks），跳过密钥扫描"
 fi
@@ -24,7 +30,7 @@ if [ "$SKIP_CODEGRAPH_SYNC" = "1" ]; then
 else
   # timeout 命令在 Linux/macOS 原生可用；Git Bash for Windows 也自带 timeout
   # 超时返回码 124，失败返回非零，均不阻塞 commit
-  timeout 60 pnpm codegraph sync 2>&1 || echo "[pre-commit] codegraph sync 超时或失败（codegraph.json 已配置 exclude）"
+  timeout 60 pnpm codegraph sync 2>&1 || echo "[pre-commit] codegraph sync 超时或失败（不阻塞 commit）"
 fi
 
 # .codegraph 目录可能不存在或被 .gitignore 忽略，git add 失败不阻塞

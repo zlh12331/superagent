@@ -29,15 +29,33 @@ pnpm dev:web      # 浏览器模式，配合 src/renderer/dev/mock-api.ts 提供
 
 ## 二、提交前必须跑的门禁
 
-本地 `pre-push` 钩子会自动跑下列大部分检查；**CI 会完整跑一遍**，两者任一失败都不能合并。
+本地 `pre-push` 钩子**只做密钥扫描**（约 1.5 秒）；下列检查由 **CI 权威执行**，失败即不能合并。
+本地想跑全套请用聚合命令——它已与 CI quality job 的检查项对齐：
 
 ```bash
-pnpm typecheck     # tsc --build（注意：不是 --noEmit，本项目用 project references）
-pnpm lint          # biome check .（含格式化与 import 排序）
-pnpm check:static  # 静态审计 10 项（tokens/i18n/注释/文件大小/函数体/覆盖率下限等）
-pnpm test          # 全量单测（packages → main → renderer → integration → scripts）
-pnpm knip          # 死代码 / 死依赖检测
+pnpm verify:local       # 质量层（约 4.5 分钟）
+pnpm verify:local:full  # 追加产物层（构建/体积/编译/两套 E2E/打包/引擎与架构断言/smoke）
 ```
+
+`verify:local` 依次跑：
+
+```bash
+pnpm check:secrets-git    # 密钥扫描（gitleaks git，扫 <远端 main>..HEAD）
+pnpm typecheck            # tsc --build + tsc -p scripts/tsconfig.json（注意：不是 --noEmit，本项目用 project references）
+pnpm lint                 # biome check .（含格式化与 import 排序）
+pnpm check:static         # 静态审计 15 项（tokens/i18n/注释/文件大小/函数体/覆盖率下限/文档脚本表等）
+pnpm tokens:check         # 令牌生成物一致性（tokens/aurora.json ↔ tokens.css）
+pnpm knip                 # 死代码 / 死依赖检测
+pnpm depcruise            # 依赖方向与循环依赖
+pnpm check:schema-drift   # schema.ts ↔ drizzle/ 迁移漂移 + 快照链
+pnpm audit:registry       # 依赖漏洞审计（audit-ci + .nsprc 白名单）
+pnpm test                 # 全量单测（packages → main → renderer → integration → scripts）
+```
+
+> 2026-09-22 变更：原先 pre-push 重复跑 typecheck / lint / check:static / depcruise /
+> drizzle 漂移 / test:scripts 六步（与 CI quality job 完全重复），已移除。
+> 同时把 `tokens:check` 与 schema 漂移检测的判据从「对比 HEAD」改为「对比重新生成前后」——
+> 原判据会把「已重新生成、尚未提交」误判为失败，导致这两个闸在本地开发中途不可用。
 
 **门禁不是建议，是硬性要求**。若某个检查报错但它指向的是历史遗留问题，正确做法是修它或
 调整棘轮基线并说明理由，**不要**用 `--no-verify` 绕过（`SKIP_PREPUSH=1` 仅限紧急情况且有痕迹）。

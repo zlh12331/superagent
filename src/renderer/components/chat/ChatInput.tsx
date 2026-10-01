@@ -1,5 +1,5 @@
 // src/renderer/components/chat/ChatInput.tsx
-// 聊天输入框 + 发送/停止按钮 · Aurora 设计系统
+// 聊天输入框 + 发送/停止按钮 · TraeWork
 // ─────────────────────────────────────────────
 // 约束（调用方须知）：
 // - 不在此组件内调用 useChat，所有状态由父组件（ChatPanel）传入
@@ -11,8 +11,9 @@
 import { AtSign, Send, Slash, Square } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { pickFiles } from '@/lib/dialog-actions';
 import { microTransition, springTransition } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -223,8 +224,14 @@ export function ChatInput({
   // 是否处于流式状态（显示停止按钮）
   const isStreaming = status === 'streaming' || status === 'submitted';
 
+  // onStop 经 ref 调用：window 监听 effect 不依赖函数身份（父级内联 () => stop()
+  // 每渲染新建会导致流式期间监听反复装卸）——统一走 useLatestRef
+  const onStopRef = useLatestRef(onStop);
+
   // 流式期间 window 级 Esc 监听：textarea 未聚焦时也可中断生成
   // （对齐原型 composer-hint "Esc 中断"；disabled 元素收不到键盘事件的补充通道）
+  // useLatestRef 惯用法：经 ref 调最新闭包正是为让 effect 不随 onStop 身份重订阅
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!isStreaming) {
       return;
@@ -235,14 +242,14 @@ export function ChatInput({
       if (event.isComposing) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
-        onStop();
+        onStopRef.current();
       }
     };
     window.addEventListener('keydown', onWindowKeyDown);
     return () => {
       window.removeEventListener('keydown', onWindowKeyDown);
     };
-  }, [isStreaming, onStop]);
+  }, [isStreaming]);
 
   // 发送管线（自 ChatInput 拆出：use-composer-send.ts）
   // 职责：in-flight 守卫 / 超长拦截 / 附件拼接 / 清草稿与输入（三路径统一复位）
@@ -256,17 +263,14 @@ export function ChatInput({
     disabled,
   });
 
-  /** 选择附件（原生文件选择器多选；浏览器模式 window.api 缺失时静默跳过） */
+  /** 选择附件（原生文件选择器多选；浏览器模式无桥时 pickFiles 返回 canceled） */
   const handlePickFiles = async (): Promise<void> => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
     try {
-      // 选择器错误响应/取消均静默（非关键路径，用户可重试）
-      const data = unwrap(await window.api.dialog.pickFiles({ multiple: true }));
+      const data = await pickFiles({ multiple: true });
       if (data.canceled || data.paths === undefined || data.paths.length === 0) return;
       pickAttachments(data.paths);
     } catch {
       // 选择器错误/取消：静默失败（非关键路径，用户可重试）
-      // 注：此处不写 `return`——函数已到末尾，bare return 是死语句（noUselessReturn）
     }
   };
 

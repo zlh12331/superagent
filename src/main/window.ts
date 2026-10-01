@@ -19,14 +19,20 @@ import { notifyMinimizedToTray } from './tray';
 import { reportMessage } from './utils/error-report';
 import { logger } from './utils/logger';
 import { loadWindowState, trackWindowState, type WindowState } from './utils/window-state';
+import { markMaximizeOnNextShow } from './window-show';
 import { TITLE_BAR_SYMBOL } from './window-theme';
 
 // __dirname / __filename 由 electron-vite 6.x 在构建时自动注入
 // （基于 import.meta.dirname / import.meta.filename，Node 24 原生支持）
 // 详见 https://electron-vite.org/guide/dev#limitations-of-sandboxing
 
-/** 关窗行为（settings.window.closeAction；缺失/损坏/读取失败 → 默认 minimize） */
-function readCloseAction(): 'minimize' | 'quit' {
+/**
+ * 关窗行为（settings.window.closeAction；缺失/损坏/读取失败 → 默认 minimize）
+ *
+ * 导出供托盘装配复用（index.ts 注入给 tray 的「关闭时最小化到托盘」勾选项读取同一真源，
+ * 不重复实现——spec 28 §6:145-146 明确该勾选项读的就是本设置）。
+ */
+export function readCloseAction(): 'minimize' | 'quit' {
   try {
     const value = readSetting('window');
     if (typeof value !== 'object' || value === null) {
@@ -107,7 +113,7 @@ export function createWindow(): BrowserWindow {
             color: '#00000000',
             // stone-400：暗色玻璃背景上清晰可见（纯黑会隐身）
             symbolColor: TITLE_BAR_SYMBOL.dark,
-            // 与 --aurora-topbar-h（52px）对齐
+            // 与 --topbar-h（52px）对齐
             height: 52,
           },
         }
@@ -162,25 +168,39 @@ export function createWindow(): BrowserWindow {
 
   // 静默启动（开机自启）：Windows/Linux 由登录项携带 --hidden 参数、macOS 由
   // wasOpenedAtLogin 判定（ServiceManagement 不透传 args，见 infra/autostart 头注释）。
-  // 判定在 ready-to-show 处生效：窗口照常创建（托盘/事件订阅依赖它）但不显示，
-  // 仅驻留托盘；用户点托盘「打开主窗口」即可唤出（此前该参数无消费端 = 死参数）。
+  // 判定在 ready-to-show 处生效：窗口照常创建（托盘/事件订阅依赖它）但不显示，仅驻留托盘；
+  // 唤回路径见 window-show.ts（托盘左键/菜单、二次启动、macOS Dock 三处共用同一实现）。
   const startHidden = resolveStartHidden(app);
   if (startHidden) {
     logger.info({}, '开机自启静默启动：窗口驻留托盘不显示');
   }
   win.once('ready-to-show', () => {
-    if (!startHidden) {
-      win.show();
+    if (startHidden) {
+      return;
     }
+    // 最大化必须在 ready-to-show 之后：一是在首帧渲染前显示窗口会破坏 show:false 的防闪设计，
+    // 二是 maximize() 自身会显示窗口（见下），放在此处才能与静默启动互不干扰。
+    if (windowState.isMaximized) {
+      win.maximize();
+    }
+    win.show();
   });
 
   // ── 关窗行为（docs/design/28-tray-spec.md §3）──
   // minimize（默认）：点 X 隐藏窗口到托盘，进程与后台能力（回合/IM/定时任务）
   //   继续运行——最小化不中断回合，因此不经过运行中回合协商。
   // quit：点 X 走现行协商（有回合确认）后关闭。
+  // darwin：**不参与**（spec 28 §3.2:68-69 / §10:243）——macOS 原生惯例即"关窗不退出"，
+  //   不读 closeAction；此处直接放行 ⇒ 窗口被销毁、应用留存（window-all-closed 在 darwin
+  //   不退出，见 index.ts），重建由 Dock 点击 / 托盘 / 二次启动三条路径覆盖。
+  //   关窗 ≠ 退出，故也不走"中断回合"协商（退出仍由 before-quit 协商把关）。
   // 真实退出流程（isQuitting / 用户已确认 / E2E 豁免）优先放行。
   win.on('close', (event) => {
     if (isQuitting() || isCloseConfirmed() || process.env['CODE_AGENT_SKIP_CLOSE_GUARD'] === '1') {
+      return;
+    }
+    if (process.platform === 'darwin') {
+      logger.info({}, 'macOS 关窗：关闭窗口（应用留存），不读 closeAction');
       return;
     }
     if (readCloseAction() === 'minimize') {
@@ -203,9 +223,12 @@ export function createWindow(): BrowserWindow {
     });
   });
 
-  // 恢复最大化状态（必须在 show 前，避免先显示普通窗口再跳变）
-  if (windowState.isMaximized) {
-    win.maximize();
+  // 恢复最大化状态：**静默启动时不可调用 maximize()** —— Electron 的 maximize() 会显示
+  // 尚未显示的窗口（electron.d.ts:3101），会让 --hidden 失效（2026-09-21 真机实测：
+  // 上次最大化过的用户，开机自启必然弹窗；E2E 的 P0-1 锚已覆盖该回归）。
+  // 改为记下 pending 标志，由 window-show.ts 在用户首次唤回时应用（在那之前窗口保持隐藏）。
+  if (startHidden && windowState.isMaximized) {
+    markMaximizeOnNextShow();
   }
 
   // ── 渲染进程崩溃自愈（进程与窗口维度：渲染崩 ≠ 整窗死）──

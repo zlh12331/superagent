@@ -11,13 +11,19 @@ import { EventEmitter } from 'node:events';
 import { ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readSetting } from '../storage/settings-pref';
 import {
   getTerminalService,
   resetTerminalService,
+  resolveShellChoice,
   splitShellWords,
   type TerminalCreateOptions,
   TerminalService,
 } from './terminal-service';
+
+vi.mock('../storage/settings-pref', () => ({
+  readSetting: vi.fn(),
+}));
 
 /** 输出缓冲上限（与实现 MAX_BUFFER_BYTES 对齐，测环形截断用） */
 const MAX_BUFFER_BYTES = 100 * 1024;
@@ -212,6 +218,48 @@ describe('TerminalService.create（终端创建三件套）', () => {
     expect(file).toBe(expectedDefaultShell().file);
   });
 
+  it('36-B：shell=auto 配置 → 与无设置同行为（平台默认）', async () => {
+    vi.mocked(readSetting).mockReturnValue({ shell: 'auto', fontSize: 13 });
+    await svc.create(makeOptions());
+    const [file] = spawnFn.mock.calls[0] ?? [];
+    expect(file).toBe(expectedDefaultShell().file);
+  });
+
+  it('36-B：配置平台可用档位 → 按配置解析（win32 外 bash=/bin/bash；win32 回落默认）', async () => {
+    vi.mocked(readSetting).mockReturnValue({ shell: 'bash', fontSize: 13 });
+    await svc.create(makeOptions());
+    const [file] = spawnFn.mock.calls[0] ?? [];
+    // unix 上 /bin/bash 存在（三平台 CI 均满足）；win32 不适用回落平台默认
+    const expected = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash';
+    expect(file).toBe(expected);
+  });
+
+  it('36-B：损坏设置值（非对象 / shell 非法档位）→ 回落平台默认（fail-open）', async () => {
+    vi.mocked(readSetting).mockReturnValue('garbage');
+    await svc.create(makeOptions());
+    expect(spawnFn.mock.calls[0]?.[0]).toBe(expectedDefaultShell().file);
+
+    vi.mocked(readSetting).mockReturnValue({ shell: 'pwsh', fontSize: 13 });
+    await svc.create(makeOptions());
+    expect(spawnFn.mock.calls[1]?.[0]).toBe(expectedDefaultShell().file);
+  });
+
+  it('36-B：平台不适用档位（win32 选 zsh）→ 回落平台默认 + warn 痕迹', async () => {
+    if (process.platform !== 'win32') {
+      return;
+    }
+    vi.mocked(readSetting).mockReturnValue({ shell: 'zsh', fontSize: 13 });
+    await svc.create(makeOptions());
+    expect(spawnFn.mock.calls[0]?.[0]).toBe('powershell.exe');
+  });
+
+  it('36-B：显式 command（工具路径）不受 shell 设置影响', async () => {
+    vi.mocked(readSetting).mockReturnValue({ shell: 'fish', fontSize: 13 });
+    await svc.create(makeOptions({ command: 'echo hi' }));
+    const [file] = spawnFn.mock.calls[0] ?? [];
+    expect(file).toBe('echo');
+  });
+
   it('边界：env 合并——用户 env 覆盖系统同名变量，其余继承', async () => {
     const original = process.env['CODE_AGENT_TEST_TERM'];
     process.env['CODE_AGENT_TEST_TERM'] = 'system-value';
@@ -348,6 +396,22 @@ describe('TerminalService 输出缓冲（onData 三件套）', () => {
     const output = svc.getOutput(res.terminalId);
     expect(output.length).toBe(MAX_BUFFER_BYTES);
     expect(output.endsWith('b'.repeat(60 * 1024))).toBe(true);
+  });
+
+  it('边界（P2-35）：高频小分片超限 → 头部整片丢弃，尾部字节级等价保留', async () => {
+    const res = await svc.create(makeOptions());
+    const pty = ptys[0] ?? new FakePty();
+    // 300 个 1KB 小分片（分片数组形态的典型负载）：总量 300KB，最终保留尾部 100KB
+    for (let i = 0; i < 300; i++) {
+      pty.emitData(`${i % 10}`.repeat(1024));
+    }
+    const output = svc.getOutput(res.terminalId);
+    expect(output.length).toBe(MAX_BUFFER_BYTES);
+    // 尾部对齐：最后 100KB 恰为第 200~299 个分片（每片 1KB，'0'-'9' 循环）
+    const expectedTail = Array.from({ length: 100 }, (_, k) =>
+      `${(200 + k) % 10}`.repeat(1024),
+    ).join('');
+    expect(output).toBe(expectedTail);
   });
 
   it('异常：webContents 已销毁 → 不推送 OUTPUT 事件，缓冲照常累积', async () => {
@@ -516,14 +580,25 @@ describe('TerminalService.dispose（生命周期）', () => {
   let ptys: FakePty[];
 
   beforeEach(() => {
+    // dispose 现在等待 PTY 退出（kill → onExit 早放行 → 3s 强杀兜底），
+    // fake PTY 不会自行退出，用假时钟控制退出时机与升级路径
+    vi.useFakeTimers();
     ({ svc, ptys } = makeService());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('正向：有活跃终端 → 全部 kill + Map/缓冲清空', async () => {
     const res1 = await svc.create(makeOptions());
     await svc.create(makeOptions());
     ptys[0]?.emitData('leftover');
-    await svc.dispose();
+    const disposing = svc.dispose();
+    // 模拟 PTY 响应 kill 正常退出（onExit 早放行，不触发强杀）
+    ptys[0]?.emitExit(0);
+    ptys[1]?.emitExit(0);
+    await disposing;
     expect(ptys[0]?.kill).toHaveBeenCalled();
     expect(ptys[1]?.kill).toHaveBeenCalled();
     expect(svc.getOutput(res1.terminalId)).toBe('');
@@ -537,13 +612,54 @@ describe('TerminalService.dispose（生命周期）', () => {
     ptys[0]?.kill.mockImplementationOnce(() => {
       throw new Error('kill failed');
     });
-    await expect(svc.dispose()).resolves.toBeUndefined();
+    const disposing = svc.dispose();
+    ptys[0]?.emitExit(0);
+    ptys[1]?.emitExit(0);
+    await expect(disposing).resolves.toBeUndefined();
     expect(ptys[1]?.kill).toHaveBeenCalled();
     expect(svc.getOutput(res1.terminalId)).toBe('');
   });
 
   it('正向：无终端 → no-op 不抛', async () => {
     await expect(svc.dispose()).resolves.toBeUndefined();
+  });
+
+  it('防孤儿：kill 后 3s 未退出 → 升级 SIGKILL 强杀（Unix 语义）', async () => {
+    // 升级路径是平台分支行为：固定为 Unix 语义验证 SIGKILL 升级（跨平台可复现）
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    try {
+      await svc.create(makeOptions());
+      const disposing = svc.dispose();
+      await vi.advanceTimersByTimeAsync(3_000);
+      await disposing;
+      expect(ptys[0]?.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
+  });
+
+  it('防孤儿：kill 后及时退出 → 不升级强杀', async () => {
+    await svc.create(makeOptions());
+    const disposing = svc.dispose();
+    ptys[0]?.emitExit(0);
+    await disposing;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(ptys[0]?.kill).not.toHaveBeenCalledWith('SIGKILL');
+  });
+
+  it('防孤儿：Windows 下 kill(signal) 不受支持 → 升级为 no-op 不误杀', async () => {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      await svc.create(makeOptions());
+      const disposing = svc.dispose();
+      await vi.advanceTimersByTimeAsync(3_000);
+      await disposing;
+      expect(ptys[0]?.kill).not.toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
   });
 });
 
@@ -566,5 +682,49 @@ describe('TerminalService 单例', () => {
   it('边界：resetTerminalService 幂等——连续调用 no-op 不抛', async () => {
     await resetTerminalService();
     await expect(resetTerminalService()).resolves.toBeUndefined();
+  });
+});
+
+describe('resolveShellChoice（36-B：档位 → 可执行文件解析，fs 注入）', () => {
+  const existsAll = (): boolean => true;
+  const existsNone = (): boolean => false;
+
+  it('windows：powershell/cmd/wsl 按 PATH 解析；gitbash 命中候选路径', () => {
+    expect(resolveShellChoice('powershell', 'win32', existsAll)).toEqual({
+      file: 'powershell.exe',
+      args: [],
+    });
+    expect(resolveShellChoice('cmd', 'win32', existsAll)).toEqual({ file: 'cmd.exe', args: [] });
+    expect(resolveShellChoice('wsl', 'win32', existsAll)).toEqual({ file: 'wsl.exe', args: [] });
+    const gitBash = resolveShellChoice('gitbash', 'win32', (p) => p.includes('(x86)'));
+    expect(gitBash?.file).toContain('(x86)');
+  });
+
+  it('windows：gitbash 候选全不存在 → undefined（回落语义）', () => {
+    expect(resolveShellChoice('gitbash', 'win32', existsNone)).toBeUndefined();
+  });
+
+  it('平台不适用 → undefined（macos 选 wsl/powershell；linux 选 cmd/gitbash）', () => {
+    expect(resolveShellChoice('wsl', 'darwin', existsAll)).toBeUndefined();
+    expect(resolveShellChoice('powershell', 'darwin', existsAll)).toBeUndefined();
+    expect(resolveShellChoice('cmd', 'linux', existsAll)).toBeUndefined();
+    expect(resolveShellChoice('gitbash', 'linux', existsAll)).toBeUndefined();
+  });
+
+  it('unix：bash/zsh/fish 绝对路径 + 存在性预检', () => {
+    expect(resolveShellChoice('bash', 'linux', existsAll)).toEqual({ file: '/bin/bash', args: [] });
+    expect(resolveShellChoice('zsh', 'darwin', existsAll)).toEqual({ file: '/bin/zsh', args: [] });
+    expect(resolveShellChoice('fish', 'linux', (p) => p.endsWith('fish'))).toEqual({
+      file: '/usr/bin/fish',
+      args: [],
+    });
+    // fish 未安装（unix 常见）→ undefined
+    expect(resolveShellChoice('fish', 'linux', existsNone)).toBeUndefined();
+  });
+
+  it('auto 恒 undefined（auto 本身就是「平台默认」语义，由调用方回落）', () => {
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+      expect(resolveShellChoice('auto', platform, existsAll)).toBeUndefined();
+    }
   });
 });

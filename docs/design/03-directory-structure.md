@@ -31,7 +31,6 @@ f:\TraeProjects\1\
 ├── electron.vite.config.ts   # electron-vite 构建配置
 ├── package.json
 ├── pnpm-workspace.yaml       # pnpm workspace 配置
-├── sentry.properties         # sentry-cli 配置
 └── tsconfig.json             # solution-style TS 配置
 ```
 
@@ -163,8 +162,7 @@ src/renderer/
 │   └── locales/
 │       ├── en/common.json + errors.json
 │       └── zh-CN/common.json + errors.json
-├── test/                 # 3 个（setup / setup-lang / msw-handlers / smoke.test）
-│   └── __tests__/mock-api.test.ts
+├── test/                 # 5 个（setup / setup-lang / mock-responses / mock-api.test / smoke.test）
 ├── styles/
 │   └── globals.css
 ├── App.tsx
@@ -212,14 +210,19 @@ packages/shared/src/
 │   ├── terminal.ts
 │   ├── tool.ts
 │   └── update.ts
-└── __tests__/            # 4 测试文件
+└── __tests__/            # 9 测试文件
     ├── api.test.ts
     ├── channels.test.ts
     ├── errors.test.ts
-    └── smoke.test.ts
+    ├── git-schema.test.ts
+    ├── mcp-schema.test.ts
+    ├── settings-schema.test.ts
+    ├── shared-gaps.test.ts
+    ├── smoke.test.ts
+    └── terminal-schema.test.ts
 ```
 
-**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///src/preload/index.ts#L27)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
+**子路径导入设计**：preload 通过 `@code-agent/shared/ipc/meta` 子路径导入（[preload/index.ts#L27](file:///src/preload/index.ts)），避免触发主入口的 zod 求值，防止 zod（纯 ESM）被拉进 sandbox preload 的 CJS 构建产物。
 
 ## 6. packages/tsconfig/ — TS 预设包
 
@@ -261,20 +264,15 @@ e2e/
 | electron-builder | [electron-builder.yml](file:///electron-builder.yml) |
 | vitest（3 套） | [src/main/vitest.config.ts](file:///src/main/vitest.config.ts) / [src/renderer/vitest.config.ts](file:///src/renderer/vitest.config.ts) / [packages/shared/vitest.config.ts](file:///packages/shared/vitest.config.ts) |
 | playwright（3 套） | [e2e/playwright.config.ts](file:///e2e/playwright.config.ts) / [e2e/playwright.electron.config.ts](file:///e2e/playwright.electron.config.ts) / [e2e/playwright.smoke.config.ts](file:///e2e/playwright.smoke.config.ts) |
-| sentry | [sentry.properties](file:///sentry.properties) + [.env.example](file:///.env.example) |
 | audit 白名单 | [.nsprc](file:///.nsprc) |
 
 ## 9. 测试目录布局
 
-统一采用 **`.test.ts(x)` 与源码同目录（colocation）**（2026-09-17 调整：components 域原 `__tests__/` 内联目录已全部迁出为同目录；迁移同时把审计脚本的测试排除口径从「`__tests__` 目录」改为「`.test.` 文件名」，行为不变）：
+统一采用 **`.test.ts(x)` 与源码同目录（colocation）**（2026-09-17 迁出 components 域；2026-09-24 迁出剩余全部内联目录——hooks 19 / i18n 1 / lib 4 / providers 1 / stores 4 / test 1，`lib/diff` 的双份 line-diff 测试同步合并，`__tests__/` 内联目录在渲染层已不存在；迁移同时把审计脚本的测试排除口径从「`__tests__` 目录」改为「`.test.` 文件名」，行为不变）：
 
-| 位置 | 模式 | 文件数（2026-09-17 实测） |
+| 位置 | 模式 | 文件数（2026-09-24 实测） |
 |---|---|---|
 | src/main/ 同目录 .test.ts | colocation | 290 |
-| src/renderer/components/{域}/ 同目录 .test.ts(x) | colocation | 98 |
-| src/renderer/hooks/__tests__/ | 内联 __tests__ 目录 | 17 |
-| src/renderer/lib/ 同目录 .test.ts | colocation | 17 |
+| src/renderer/ 全部子目录（components/hooks/i18n/lib/providers/stores/test）同目录 .test.ts(x) | colocation | 160 |
 | packages/shared/src/__tests__/ | 内联 __tests__ 目录 | 9（api / channels / errors / smoke / shared-gaps 等） |
-| src/renderer/stores/ 同目录 + transient/__tests__/ | 混合 | 8 |
-| src/renderer/test/ | 独立测试目录 | 2（smoke.test + __tests__/mock-api.test，另有 setup 等非测试文件） |
 | e2e/ | 独立 Playwright E2E | 6 spec 文件 |

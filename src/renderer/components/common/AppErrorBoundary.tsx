@@ -25,8 +25,8 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { i18n } from '@/i18n';
+import { fetchAppInfo, openExternal } from '@/lib/app-actions';
 import { reportError } from '@/lib/error-report';
-import { unwrap } from '@/lib/ipc';
 
 /** 项目 GitHub 新建 issue 入口（开源报障后端；本地优先路线的错误出口） */
 const REPO_NEW_ISSUE_URL = 'https://github.com/zlh12331/superagent/issues/new';
@@ -44,7 +44,7 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
   const stack = error instanceof Error ? (error.stack ?? '') : '';
   let envLine = '';
   try {
-    const info = unwrap(await window.api.app.getInfo());
+    const info = await fetchAppInfo();
     envLine = i18n.t('common.crashIssueVersion', {
       version: info.version,
       platform: info.platform,
@@ -74,6 +74,12 @@ async function buildIssueUrl(message: string, error: unknown): Promise<string> {
  * App 级错误边界的 fallback 渲染函数
  *
  * 全屏错误页面，仅依赖最基础的原生 DOM（无 Provider 依赖）。
+ *
+ * ⚠️ 必须以 `FallbackComponent`（而非 `fallbackRender`）挂载（2026-09-28）：
+ * react-error-boundary 的 fallbackRender 是直接函数调用，而 React Compiler 会
+ * 为本函数注入 memo 缓存 hook（`_c()` = useMemoCache）；类组件 render 路径没有
+ * hooks dispatcher，直接调用即抛「Invalid hook call」——最后一道兜底自身崩溃，
+ * 用户看到的是白屏而非本页。详见 SectionErrorBoundary 的同类注释。
  */
 function AppFallback({
   error,
@@ -92,7 +98,12 @@ function AppFallback({
   // 报障：深链 GitHub 新建 issue（预填崩溃信息与版本环境；诊断包由用户手动附上）
   const handleSendReport = (): void => {
     void buildIssueUrl(message, error)
-      .then(async (url) => unwrap(await window.api.app.openExternal({ url })))
+      .then(async (url) => {
+        const started = await openExternal(url);
+        if (!started) {
+          throw new Error('openExternal unavailable');
+        }
+      })
       .then(() => {
         toast.success(i18n.t('common.crashReportOpened'));
       })
@@ -161,7 +172,7 @@ interface AppErrorBoundaryProps {
 export function AppErrorBoundary({ children }: AppErrorBoundaryProps): ReactElement {
   return (
     <ErrorBoundary
-      fallbackRender={AppFallback}
+      FallbackComponent={AppFallback}
       onError={(error: unknown, info: ErrorInfo) => {
         // 统一错误出口：electron-log renderer → 主进程落盘（随诊断包导出）
         // info.componentStack 帮助定位错误来源组件

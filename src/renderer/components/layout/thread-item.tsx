@@ -11,7 +11,16 @@
 // ──────────────────────────────
 
 import { useSortable } from '@dnd-kit/sortable';
-import { FolderOpen, FolderTree, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
+import {
+  FolderOpen,
+  FolderTree,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Pin,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useStopAgentTurn } from '@/hooks/use-agent-stop';
 import { useRenameSession } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
 import { formatRelativeTime } from '@/lib/format-time';
@@ -41,6 +51,8 @@ interface SortableThreadItemProps {
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly isPinned: boolean;
+  /** 会话有回合在跑（lastRunStatus='running'，D4A：渲染运行徽标 + 中断入口） */
+  readonly isRunning: boolean;
   /** 搜索匹配高亮（照搬参考项目：Sidebar 防抖搜索后传入，2 秒后自动移除） */
   readonly highlighted: boolean;
   readonly onSelect: () => void;
@@ -53,6 +65,7 @@ interface SortableThreadItemProps {
   readonly onOpenInExplorer: () => void;
 }
 
+/** 可排序会话条目（dnd-kit）：选中/置顶/删除/打开文件树/资源管理器打开 */
 export function SortableThreadItem({
   sessionId,
   folderName,
@@ -61,6 +74,7 @@ export function SortableThreadItem({
   isActive,
   isDeleting,
   isPinned,
+  isRunning,
   highlighted,
   onSelect,
   onDelete,
@@ -90,6 +104,7 @@ export function SortableThreadItem({
         isActive={isActive}
         isDeleting={isDeleting}
         isPinned={isPinned}
+        isRunning={isRunning}
         highlighted={highlighted}
         onSelect={onSelect}
         onDelete={onDelete}
@@ -112,6 +127,8 @@ interface ThreadItemProps {
   readonly isActive: boolean;
   readonly isDeleting: boolean;
   readonly isPinned: boolean;
+  /** 会话有回合在跑（D4A：渲染运行徽标 + hover 中断入口） */
+  readonly isRunning: boolean;
   /** 搜索匹配高亮（照搬参考项目：Sidebar 防抖搜索后传入，2 秒后自动移除） */
   readonly highlighted: boolean;
   readonly onSelect: () => void;
@@ -134,6 +151,7 @@ function ThreadItem({
   isActive,
   isDeleting,
   isPinned,
+  isRunning,
   highlighted,
   onSelect,
   onDelete,
@@ -148,6 +166,8 @@ function ThreadItem({
   const [renaming, setRenaming] = useState(false);
   // 重命名提交（useRenameSession：mutation + invalidate 自动刷新列表）
   const { mutateAsync: renameSession } = useRenameSession();
+  // D4A：跨会话中断（useStopAgentTurn 按 sessionId 粒度调用 agent:stop）
+  const { mutate: stopTurn, isPending: isStopping } = useStopAgentTurn();
 
   /** 提交重命名：空值/未变化时直接退出编辑态 */
   const commitRename = (next: string): void => {
@@ -220,6 +240,17 @@ function ThreadItem({
                 />
               ) : (
                 <div className="ti-title" title={`${title}（${t('sidebar.doubleClickRename')}）`}>
+                  {/* D4A：运行徽标——小转圈 + sr-only aria 文案（点对齐 Pin 图标的行内位置） */}
+                  {isRunning && (
+                    <>
+                      <Loader2
+                        className="text-accent-text mr-1 inline size-2.5 shrink-0 animate-spin"
+                        strokeWidth={2.5}
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">{t('sidebar.sessionRunning')}</span>
+                    </>
+                  )}
                   {/* 置顶标识（用户要求：置顶/未置顶有明显区别） */}
                   {isPinned && (
                     <Pin
@@ -235,6 +266,28 @@ function ThreadItem({
             </div>
             {/* 重命名中隐藏操作按钮：给输入框让出整行宽度（此前 97px 挤在 52px 操作按钮旁） */}
             <div className={cn('ti-actions', renaming && 'hidden')}>
+              {/* D4A：跨会话中断入口——运行中会话 hover/focus-within 显示
+                  （ti-actions 既有 opacity 语义），随行内其他操作钮同宽同级 */}
+              {isRunning && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-accent-text hover:bg-sidebar-accent-foreground/10 hover:text-accent-text size-6 shrink-0"
+                  aria-label={t('sidebar.stopTurn')}
+                  title={t('sidebar.stopTurn')}
+                  disabled={isStopping || isDeleting}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    stopTurn(sessionId);
+                  }}
+                >
+                  {isStopping ? (
+                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <Square className="size-3.5" strokeWidth={1.5} fill="currentColor" />
+                  )}
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

@@ -223,13 +223,15 @@ export type HandlerSignature<Def, C> = Def extends {
 /**
  * 从定义表推导 handler 实现对象形状（ctx 泛型由调用方指定，如主进程 IpcHandlerContext）
  *
- * 缺失任一 request 方法的 handler → 编译期报错（通道↔handler 一致性保证）
+ * 缺失任一 request 方法的 handler → 编译期报错（通道↔handler 一致性保证）。
+ * 仅含 event 方法的域（如 invalidation）经 key remapping 整域免除——事件由主进程
+ * 推送侧广播，无 handler 可注册（31 号设计文档 §2.1）。
  */
 export type InferHandlers<
   D extends Record<string, Record<string, RequestDefLike | EventDefLike>>,
   C,
 > = {
-  [Domain in keyof D]: {
+  [Domain in keyof D as RequestMethods<D, Domain> extends never ? never : Domain]: {
     [M in RequestMethods<D, Domain>]: HandlerSignature<D[Domain][M], C>;
   };
 };

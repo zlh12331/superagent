@@ -8,8 +8,22 @@ export function chatInput(page: Page): Locator {
   return page.locator('.composer-box textarea, .composer textarea').first();
 }
 
+/** 等待 mock IPC 桥注入完成（main.tsx 顶层 await 后动态 import 注入 window.api——
+ * vite 冷启动下 goto 返回时注入可能未完成，直接 evaluate 读 window.api.agent
+ * 会同步抛 TypeError「Cannot read properties of undefined」）
+ * page.goto 的 'load' 事件不等顶层 await，故此处轮询桥就绪。 */
+export async function waitForIpcBridge(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => page.evaluate(() => (window as unknown as { api?: unknown }).api !== undefined),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
 /** 前置：配置 mock API Key（mock 初始 apiKey=null——发送禁用；配置后聊天可用） */
 export async function setupApiKey(page: Page): Promise<void> {
+  await waitForIpcBridge(page);
   await page.evaluate(async () => {
     await (
       window as unknown as {
@@ -26,6 +40,7 @@ export async function setupApiKey(page: Page): Promise<void> {
 
 /** 包装 agent.run（拦截调用计数——transport 发送实证） */
 export async function wrapAgentRun(page: Page): Promise<void> {
+  await waitForIpcBridge(page);
   await page.evaluate(() => {
     const api = window as unknown as {
       api: { agent: { run: (input: unknown) => Promise<unknown> } };
@@ -85,10 +100,20 @@ export async function typeMessage(page: Page, text: string): Promise<Locator> {
 
 /** 发送并等待 agent.run 调用（重试——vite dev 环境偶发 UI 时序丢事件）
  * 重试路径同 sendAndWaitApproval：若首次 send 已触发 streaming（runCalls 因 wrap 时机漏计），
- * typeMessage 重试会撞 disabled 死锁——reload 重建后再发。 */
+ * typeMessage 重试会撞 disabled 死锁——reload 重建后再发。
+ * send 重试点击用 toPass 包裹：点击瞬间按钮可能因 streaming 尾窗被禁用（mock 流
+ * 未收尾时 canSend=false），单次 click 5s 硬超时会放大为整用例失败。
+ * 等待就绪窗口覆盖到流收尾：waitSendReady 只保证点击前一刻可用，点击与 run 之间
+ * 的状态翻转仍可能禁用按钮——点击动作本身以「按钮 enabled」为前提自愈重试。 */
 export async function sendAndWaitRun(page: Page, send: () => Promise<void>): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await send();
+    try {
+      await send();
+    } catch {
+      // 点击被 disabled 拦截（streaming 尾窗）——等按钮恢复后原样重发
+      await waitSendReady(page);
+      await send();
+    }
     try {
       await expect
         .poll(

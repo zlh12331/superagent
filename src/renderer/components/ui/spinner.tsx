@@ -18,11 +18,13 @@ import type * as React from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
 
+/** Spinner props：透传 Loader2 图标 props，label 覆盖读屏文案，aria-hidden 降级为装饰 */
 export interface SpinnerProps extends React.ComponentProps<typeof Loader2> {
   /** 屏幕阅读器文案（默认 i18n "加载中"；父容器已有加载语义时无需关闭） */
   readonly label?: string;
 }
 
+/** 加载指示器：外层 role="status" + sr-only 文案，aria-hidden 可整体降级为装饰（见文件头注释） */
 export function Spinner({ className, label, ...props }: SpinnerProps): React.ReactElement {
   const { t } = useTranslation();
   // 降级开关：此前 {...props} 整体展开到 Loader2，调用方写 aria-hidden 只会给

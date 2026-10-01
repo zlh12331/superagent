@@ -5,7 +5,7 @@
 // 发现广播注入 127.0.0.1 单播（生产为全网广播；单播在 CI/防火墙环境稳定）。
 // ──────────────────────────────────────────────────────────────
 
-import { createSocket } from 'node:dgram';
+import { createSocket, type Socket as UdpSocket } from 'node:dgram';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type RemoteCommand,
@@ -372,5 +372,147 @@ describe('RemoteControlService（局域网发现广播）', () => {
     expect(announcement.protocol).toBe('http');
     expect(announcement.port).toBe(service.getPort());
     expect(packet).not.toContain(token);
+  });
+});
+
+describe('RemoteControlService（绑定范围）', () => {
+  /** 绑定回环随机端口的公告接收端（单播注入，跨平台稳定） */
+  async function bindReceiver(): Promise<UdpSocket> {
+    const receiver = createSocket({ type: 'udp4' });
+    await new Promise<void>((resolve, reject) => {
+      receiver.once('error', reject);
+      receiver.bind(0, '127.0.0.1', () => resolve());
+    });
+    return receiver;
+  }
+
+  /** 等待首个公告包（超时未收到即失败） */
+  function firstPacket(receiver: UdpSocket, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`${timeoutMs}ms 内未收到发现公告`)),
+        timeoutMs,
+      );
+      receiver.once('message', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
+  /** 断言窗口内静默（无任何公告到达；收到即失败） */
+  function expectSilent(receiver: UdpSocket, windowMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        receiver.off('message', onMessage);
+        resolve();
+      }, windowMs);
+      const onMessage = (): void => {
+        clearTimeout(timer);
+        receiver.off('message', onMessage);
+        reject(new Error('仅本机模式不应发出发现公告'));
+      };
+      receiver.on('message', onMessage);
+    });
+  }
+
+  it('listen 地址按绑定范围解析：lan→0.0.0.0、loopback→127.0.0.1（OS 回报）', async () => {
+    const lan = await startService();
+    expect(lan.service.getBindScope()).toBe('lan');
+    expect(lan.service.getBindAddress()).toBe('0.0.0.0');
+
+    const loopback = await startService({ bindScope: 'loopback' });
+    expect(loopback.service.getBindScope()).toBe('loopback');
+    expect(loopback.service.getBindAddress()).toBe('127.0.0.1');
+    expect(loopback.service.getBindAddress()).not.toBe('0.0.0.0');
+  });
+
+  it('仅本机模式：HTTP 在回环地址可达（/info 仅回环可达，不再暴露给局域网）', async () => {
+    const { service } = await startService({ bindScope: 'loopback' });
+    const res = await fetch(`http://127.0.0.1:${service.getPort()}/info`);
+    expect(res.status).toBe(200);
+    expect(service.getBindAddress()).toBe('127.0.0.1');
+  });
+
+  it('仅本机模式：不发 UDP 发现公告（不向局域网广播自身存在）', async () => {
+    const receiver = await bindReceiver();
+    try {
+      const discoveryPort = (receiver.address() as { port: number }).port;
+      await startService({
+        bindScope: 'loopback',
+        discoveryPort,
+        broadcastAddress: '127.0.0.1',
+        broadcastIntervalMs: 30,
+      });
+      // 窗口 ≥ 10 个广播间隔：若误发公告必然落入窗口
+      await expectSilent(receiver, 500);
+    } finally {
+      receiver.close();
+    }
+  });
+
+  it('运行中切换 lan→loopback：令牌保留、按新地址重启、公告立即停发', async () => {
+    const receiver = await bindReceiver();
+    try {
+      const discoveryPort = (receiver.address() as { port: number }).port;
+      const { service, token } = await startService({
+        discoveryPort,
+        broadcastAddress: '127.0.0.1',
+        broadcastIntervalMs: 30,
+      });
+      await firstPacket(receiver, 3000); // lan 模式确认公告在发
+
+      await service.setBindScope('loopback');
+      expect(service.isRunning()).toBe(true);
+      expect(service.getSessionToken()).toBe(token); // 配对话轮保留，无需重新配对
+      expect(service.getBindScope()).toBe('loopback');
+      expect(service.getBindAddress()).toBe('127.0.0.1');
+      // 间隔 30ms，静默 300ms ≈ 10 个间隔：公告确已停发
+      await expectSilent(receiver, 300);
+    } finally {
+      receiver.close();
+    }
+  });
+
+  it('运行中切换 loopback→lan：按 0.0.0.0 重启且公告恢复', async () => {
+    const receiver = await bindReceiver();
+    try {
+      const discoveryPort = (receiver.address() as { port: number }).port;
+      const { service } = await startService({
+        bindScope: 'loopback',
+        discoveryPort,
+        broadcastAddress: '127.0.0.1',
+        broadcastIntervalMs: 30,
+      });
+
+      await service.setBindScope('lan');
+      expect(service.isRunning()).toBe(true);
+      expect(service.getBindScope()).toBe('lan');
+      expect(service.getBindAddress()).toBe('0.0.0.0');
+      await firstPacket(receiver, 3000); // 公告恢复
+    } finally {
+      receiver.close();
+    }
+  });
+
+  it('未运行时切换：仅记录范围，下次 start 按新范围监听', async () => {
+    const service = new RemoteControlService({ bindScope: 'lan' });
+    activeServices.push(service);
+
+    await service.setBindScope('loopback');
+    expect(service.isRunning()).toBe(false);
+    expect(service.getBindScope()).toBe('loopback');
+
+    await service.start();
+    expect(service.getBindAddress()).toBe('127.0.0.1');
+  });
+
+  it('同值切换：幂等 no-op，不重启监听', async () => {
+    const { service, token } = await startService();
+    const port = service.getPort();
+    await service.setBindScope('lan');
+    expect(service.isRunning()).toBe(true);
+    expect(service.getSessionToken()).toBe(token);
+    expect(service.getPort()).toBe(port); // 未重启（随机端口重启必然换端口）
   });
 });

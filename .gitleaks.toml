@@ -1,10 +1,22 @@
 # gitleaks 配置（密钥扫描工程化）
 # 依据 docs/design/17-security-spec.md §密钥管理
 # 排除：构建产物/依赖/报告目录（gitleaks dir 扫描用）
+#
+# ⚠️ 2026-09-22 修复：此前 [extend] 是**空表**（缺 useDefault），而 gitleaks 一旦
+# 找到配置文件就用它**替代**默认规则集 ⇒ 本文件只定义了 [allowlist]、没有任何
+# [[rules]]、也没 extend 默认 ⇒ **有效规则数为 0** ⇒ 每次扫描都报 "no leaks found"
+# 并 exit 0。即 pre-commit / pre-push / CI 三处 gitleaks 闸门**全部空转**，
+# 与 docs/design/17-security-spec.md 声称的「100+ 规则」不符。
+# 实证（同一份含假 AWS key 的文件）：默认规则报 `leaks found: 1`，本配置报
+# `no leaks found`；补上 useDefault = true 后恢复报 `leaks found: 1`。
+# 因此 useDefault = true **不可删除**——删掉即退回静默失效。
 
 title = "code-agent-desktop"
 
 [extend]
+# 继承 gitleaks 内置规则集（100+ 条）。这是本配置唯一的规则来源，
+# 缺失即规则数归零（见上方 2026-09-22 修复说明）。
+useDefault = true
 
 [allowlist]
 description = "构建产物与依赖目录（非源码，无需扫描）"
@@ -37,4 +49,24 @@ paths = [
   '''/docs/api/''',
   '''^\.git/''',
   '''/\.git/''',
+  # ── 2026-09-22 补漏（启用默认规则后实测暴露）─────────────────────────────
+  # 上述清单原本只覆盖构建产物，遗漏了三类**不在版本库、但会被 `gitleaks dir .`
+  # 扫到**的本地目录。启用默认规则后实测：451 条命中全部来自这些目录
+  # （.pnpm-store 377 / .electron-user-data 66 / .e2e-user-data* 7），
+  # 源码目录（src/scripts/packages/e2e/tests/docs/resources/tools）命中数为 0。
+  # 补入后 `gitleaks dir .` 才只反映版本库内容；否则它会扫 3.21 GB 并产生
+  # 数百条与代码无关的噪音（且单次耗时 191 秒）。
+  '''^\.pnpm-store/''',
+  '''/\.pnpm-store/''',
+  '''^\.electron-user-data/''',
+  '''/\.electron-user-data/''',
+  # .e2e-user-data / -update / -hidden 等多个后缀变体
+  '''^\.e2e-user-data[^/]*/''',
+  '''/\.e2e-user-data[^/]*/''',
+  '''^\.tmp/''',
+  '''/\.tmp/''',
 ]
+# 注：`.env` **故意不加入** allowlist。它是本地真实密钥文件（实测第 17 行含
+# sentry-user-token），已被 .gitignore:42 排除、从未入库，因此 `gitleaks git`
+# （各闸门实际使用的模式）不会看到它；而 `gitleaks dir .` 报出它属于正确行为
+# （文件系统扫描本就该报）。加入白名单反而会掩盖真实密钥。

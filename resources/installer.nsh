@@ -64,3 +64,19 @@
 !macro customUnInstallCheckCurrentUser
   !insertmacro customUnInstallCheck
 !macroend
+
+; 卸载器侧：清理开机自启注册项
+;
+; 为什么必需（2026-09-21，docs/design/30-residency-fix-spec.md §3 P2-7）：用户若在应用内
+; 开启过开机自启，注册表 HKCU\...\Run 会留下一条指向本应用的启动项；卸载后它仍指向
+; 已删除的 exe（系统每次登录尝试启动一个不存在的程序）。
+;
+; 约束（与本文件头的三条同源，均经 makensis 编译验证）：
+; - 值名 = Electron 写入时用的 `app.getName()`（优先 productName），即 electron-builder.yml
+;   的 productName「Code Agent Desktop」；NSIS 侧由 ${PRODUCT_NAME} 提供（卸载器段可用）。
+; - 不引用 ${INSTALL_REGISTRY_KEY} / ${UNINSTALL_REGISTRY_KEY}：它们由 multiUser.nsh 定义，
+;   而本文件注入在生成的脚本最前面，引用会触发 "unknown variable"（项目把警告当错误）。
+; - 只删 Run 键下的这一条值，不动其它键；DeleteRegValue 对不存在的值静默（无需先判断）。
+!macro customUnInstall
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_NAME}"
+!macroend

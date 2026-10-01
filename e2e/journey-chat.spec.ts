@@ -13,8 +13,11 @@
 
 import { expect, test } from '@playwright/test';
 
+import { waitForIpcBridge } from './journey-helpers';
+
 /** 前置：配置 mock API Key（mock 初始 apiKey=null——发送禁用；配置后聊天可用） */
 async function setupApiKey(page: import('@playwright/test').Page): Promise<void> {
+  await waitForIpcBridge(page);
   await page.evaluate(async () => {
     await (
       window as unknown as {
@@ -31,6 +34,7 @@ async function setupApiKey(page: import('@playwright/test').Page): Promise<void>
 
 /** 包装 agent.run（拦截调用计数——transport 发送实证） */
 async function wrapAgentRun(page: import('@playwright/test').Page): Promise<void> {
+  await waitForIpcBridge(page);
   await page.evaluate(() => {
     const api = window as unknown as {
       api: { agent: { run: (input: unknown) => Promise<unknown> } };
@@ -98,7 +102,9 @@ async function typeMessage(
 
 /**
  * 发送并等待 agent.run 调用（重试——vite dev 环境偶发 UI 时序丢事件）。
- * 重试时复用同一文本（渲染断言按文本匹配，此前硬编码『重试消息』导致断言落空）
+ * 重试时复用同一文本（渲染断言按文本匹配，此前硬编码『重试消息』导致断言落空）。
+ * send 抛错（点击瞬间按钮因 streaming 尾窗 disabled）时先等就绪再补发一次，
+ * 避免单次 click 5s 硬超时直接吞掉整轮重试。
  */
 async function sendAndWaitRun(
   page: import('@playwright/test').Page,
@@ -106,7 +112,12 @@ async function sendAndWaitRun(
   send: () => Promise<void>,
 ): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await send();
+    try {
+      await send();
+    } catch {
+      await waitSendReady(page, retryText);
+      await send();
+    }
     try {
       await expect
         .poll(

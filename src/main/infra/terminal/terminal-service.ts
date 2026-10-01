@@ -17,6 +17,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import type {
   TerminalCreatedEventPayload,
@@ -31,12 +32,16 @@ import {
   AppError,
   ErrorCode,
   IPC_DEFINITIONS,
+  isShellChoiceApplicable,
   TERMINAL_ENV_DENY_KEYS,
+  TERMINAL_SHELL_CHOICES,
+  type TerminalShellChoice,
 } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
 import { type IPty, spawn } from 'node-pty';
 import { emitEvent } from '../../utils/emit-event';
 import { logger } from '../../utils/logger';
+import { readSetting } from '../storage/settings-pref';
 
 /**
  * create 方法入参
@@ -128,20 +133,21 @@ export class TerminalService implements ITerminalService {
   >();
 
   /**
-   * 终端输出缓冲：terminalId → 累积输出字符串
+   * 终端输出缓冲：terminalId → 输出分片数组
    *
    * 独立于 terminals Map 维护，PTY 退出后仍保留缓冲供历史读取。
-   * 使用环形截断策略（MAX_BUFFER_BYTES），避免单缓冲内存膨胀；
+   * P2-35：分片数组 + outputBufferBytes 总长计数——追加为 O(1)（push 分片 +
+   * 计数累加），替代字符串拼接（每次复制整个累积串，O(total)）；
+   * 超限按头部丢弃分片（消费方语义不变：仍保留尾部最新输出）。
    * 已退出终端的缓冲按 FIFO 保留最近 MAX_RETAINED_EXITED_BUFFERS 个，
    * 防长会话中逐个累积（每终端 ≤100KB）的无界增长。
    */
-  private readonly outputBuffers = new Map<string, string>();
+  private readonly outputBuffers = new Map<string, string[]>();
 
   /**
    * 各终端缓冲的累计字节数（2026-09-08 性能修复）
    *
-   * 与 outputBuffers 同步维护，使「是否超限」判断从 O(buffer) 的
-   * `Buffer.byteLength(全量)` 降为 O(1) 计数累加。
+   * 与 outputBuffers 同步维护，使「是否超限」判断保持 O(1) 计数累加。
    */
   private readonly outputBufferBytes = new Map<string, number>();
 
@@ -151,26 +157,42 @@ export class TerminalService implements ITerminalService {
   /** 已退出终端保留的输出缓冲数量上限 */
   private static readonly MAX_RETAINED_EXITED_BUFFERS = 20;
 
+  /** dispose 强杀升级等待：kill 后仍未退出多久升级强杀（对齐 terminate-child 的 3s 口径） */
+  private static readonly DISPOSE_ESCALATION_MS = 3_000;
+
   /**
-   * 追加 PTY 输出到环形缓冲（2026-09-08 性能修复）
+   * 追加 PTY 输出到分片环形缓冲（P2-35：O(1) 追加，超限按头部丢弃分片）
    *
    * 从 create 的 onData 回调提取（保持 create 在棘轮基线内）。
-   * 维护累计字节计数使超限判断为 O(1)，仅在超限时做一次截断。
+   * 超限优先整片丢弃头部（O(1) 均摊）；仅当越界字节落在头片中段时对该片
+   * 做一次字节级截边——「保留尾部 MAX_BUFFER_BYTES 字节」的语义与旧实现一致
+   * （切片在多字节字符中段可能产生替换字符，与旧 subarray 行为相同）。
    */
   private appendToOutputBuffer(terminalId: string, data: string): void {
-    const current = this.outputBuffers.get(terminalId) ?? '';
-    const dataBytes = Buffer.byteLength(data, 'utf8');
-    const currentBytes = this.outputBufferBytes.get(terminalId) ?? 0;
-    if (currentBytes + dataBytes <= MAX_BUFFER_BYTES) {
-      this.outputBuffers.set(terminalId, current + data);
-      this.outputBufferBytes.set(terminalId, currentBytes + dataBytes);
-      return;
+    const chunks = this.outputBuffers.get(terminalId) ?? [];
+    let totalBytes = this.outputBufferBytes.get(terminalId) ?? 0;
+    chunks.push(data);
+    totalBytes += Buffer.byteLength(data, 'utf8');
+    let overflow = totalBytes - MAX_BUFFER_BYTES;
+    while (overflow > 0 && chunks.length > 0) {
+      const head = chunks[0];
+      if (head === undefined) break;
+      const headBytes = Buffer.byteLength(head, 'utf8');
+      if (headBytes <= overflow) {
+        chunks.shift(); // 头部整片丢弃
+        overflow -= headBytes;
+        totalBytes -= headBytes;
+        continue;
+      }
+      // 越界字节在头片中段：字节级截边保留尾部
+      const kept = Buffer.from(head, 'utf8').subarray(overflow).toString('utf8');
+      const keptBytes = Buffer.byteLength(kept, 'utf8');
+      totalBytes += keptBytes - headBytes;
+      chunks[0] = kept;
+      overflow = 0;
     }
-    // 环形截断：保留尾部 MAX_BUFFER_BYTES 字节
-    const buf = Buffer.from(current + data, 'utf8');
-    const truncated = buf.subarray(buf.length - MAX_BUFFER_BYTES).toString('utf8');
-    this.outputBuffers.set(terminalId, truncated);
-    this.outputBufferBytes.set(terminalId, Buffer.byteLength(truncated, 'utf8'));
+    this.outputBuffers.set(terminalId, chunks);
+    this.outputBufferBytes.set(terminalId, totalBytes);
   }
 
   /**
@@ -246,7 +268,7 @@ export class TerminalService implements ITerminalService {
     }
 
     // 初始化输出缓冲
-    this.outputBuffers.set(terminalId, '');
+    this.outputBuffers.set(terminalId, []);
     this.outputBufferBytes.set(terminalId, 0);
 
     // 绑定输出事件：推送 terminal:event:output + 追加到 outputBuffer
@@ -376,7 +398,7 @@ export class TerminalService implements ITerminalService {
    * @returns 终端输出字符串，不存在时返回空字符串
    */
   getOutput(terminalId: string): string {
-    return this.outputBuffers.get(terminalId) ?? '';
+    return (this.outputBuffers.get(terminalId) ?? []).join('');
   }
 
   /**
@@ -415,21 +437,19 @@ export class TerminalService implements ITerminalService {
   }
 
   /**
-   * 优雅关闭：kill 所有活跃 PTY
+   * 优雅关闭：kill 所有活跃 PTY，未退出者 3s 后升级强杀（防孤儿）
    *
    * 应用退出时调用，避免 PTY 子进程句柄泄漏导致进程不退出。
-   * kill 后 onExit 会异步触发，但应用即将退出，不等待事件回调。
+   * 对照 memory-hub-service.stop 的「kill → onExit 早放行 → 3s 兜底」形态：
+   * 等待退出期间挂 onExit（正常路径立即放行），超时未退出则升级强杀后放行
+   * （总体最多阻塞 dispose 链 3s，与链上其他 3s 兜底一致）。
    */
   async dispose(): Promise<void> {
     if (this.terminals.size > 0) {
-      for (const [id, ctx] of this.terminals) {
-        try {
-          ctx.pty.kill();
-        } catch (error) {
-          logger.warn({ terminalId: id, error }, 'TerminalService dispose kill 失败');
-        }
-      }
-      // 立即清空 Map（onExit 回调可能异步触发，但应用即将退出）
+      // 快照后逐个 kill+等待（onExit 回调可能并发删 Map，避免迭代中变更）
+      await Promise.all(
+        [...this.terminals.entries()].map(([id, ctx]) => this.killWithEscalation(id, ctx.pty)),
+      );
       this.terminals.clear();
     }
     // 清理所有输出缓冲（包括已退出终端的残留缓冲）
@@ -437,6 +457,57 @@ export class TerminalService implements ITerminalService {
     this.outputBufferBytes.clear();
     this.exitedBufferOrder.length = 0;
     logger.info({}, 'TerminalService 所有 PTY 已清理');
+  }
+
+  /**
+   * kill 单个 PTY 并等待退出；DISPOSE_ESCALATION_MS 未退出则升级强杀
+   *
+   * 退出路径上 fire-and-forget 无效（app.exit(0) 会丢弃未触发的定时器），
+   * 必须在 dispose 内等待升级真正发出，故对照 memory-hub-service.stop 的
+   * Promise 形态实现，而非复用 terminateChild（ChildProcess 事件模型不兼容，见下）。
+   */
+  private async killWithEscalation(terminalId: string, pty: IPty): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      // 正常路径：pty 退出即放行，dispose 不空等
+      pty.onExit(finish);
+      try {
+        pty.kill();
+      } catch (error) {
+        logger.warn({ terminalId, error }, 'TerminalService dispose kill 失败');
+      }
+      const timer = setTimeout(() => {
+        logger.warn({ terminalId }, 'TerminalService PTY kill 后未退出，升级强杀');
+        this.escalateKill(terminalId, pty);
+        finish();
+      }, TerminalService.DISPOSE_ESCALATION_MS);
+      timer.unref?.();
+    });
+  }
+
+  /**
+   * 强杀升级（平台差异，node-pty 1.1.0 实证）：
+   * - Unix：kill() 仅向 shell pid 发 SIGHUP（unixTerminal.js，可被忽略 → 孤儿残留），
+   *   升级为 SIGKILL（IPty.kill(signal) 在 Unix 有效）
+   * - Windows：kill(signal) 直接抛错（'Signals not supported on windows'），
+   *   且 kill() 本身已遍历 console 进程列表逐 pid 终止（ConPTY/winpty 均整树，
+   *   windowsPtyAgent.js），无信号可升级、残留属 node-pty 层已尽力
+   */
+  private escalateKill(terminalId: string, pty: IPty): void {
+    if (process.platform === 'win32') {
+      return;
+    }
+    try {
+      pty.kill('SIGKILL');
+    } catch (error) {
+      logger.warn({ terminalId, error }, 'TerminalService PTY 强杀失败');
+    }
   }
 
   /**
@@ -505,10 +576,27 @@ export class TerminalService implements ITerminalService {
   /**
    * 默认 shell
    *
-   * Windows 用 powershell.exe（schema 约定，PowerShell 是现代化 Windows shell）
-   * Unix 用 $SHELL 环境变量（通常 /bin/bash 或 /bin/zsh），fallback /bin/bash
+   * 36 号 B：用户配置优先（settings.terminal.shell，spawn 时刻即时读）——配置在
+   * 当前平台不可用 / 可执行文件不存在 / 读设置失败时回落平台默认（fail-open 向
+   * 既有行为；回落路径补 warn 留诊断痕迹）。显式配置的 shell 通过存在性预检后
+   * spawn 仍失败 → TERMINAL_SPAWN_FAILED 抛错（不做静默回退：显式配置的错误要
+   * 可见，静默回退会造成「配置了但没生效」的困惑）。
+   *
+   * 平台默认（auto）：Windows 用 powershell.exe（schema 约定，PowerShell 是现代
+   * 化 Windows shell）；Unix 用 $SHELL 环境变量，fallback /bin/bash
    */
   private defaultShell(): { file: string; args: string[] } {
+    const choice = this.readShellChoice();
+    if (choice !== 'auto') {
+      const resolved = resolveShellChoice(choice, process.platform);
+      if (resolved !== undefined) {
+        return resolved;
+      }
+      logger.warn(
+        { choice, platform: process.platform },
+        '终端 shell 配置在当前平台不可用或可执行文件不存在，回落平台默认',
+      );
+    }
     if (process.platform === 'win32') {
       return { file: 'powershell.exe', args: [] };
     }
@@ -516,6 +604,83 @@ export class TerminalService implements ITerminalService {
     const shell = process.env['SHELL'] ?? '/bin/bash';
     return { file: shell, args: [] };
   }
+
+  /**
+   * 读终端 shell 配置（即时读 + 字段收窄，36 号 B）
+   *
+   * DB 值不可信：非对象 / shell 非法档位 → 'auto'（平台默认语义）；读取异常
+   * fail-open 回 'auto' 并记 warn（同 notification readNotificationSettings 范式，
+   * 正常路径零日志）。fontSize 是渲染层 xterm 消费的字段，主进程不读。
+   */
+  private readShellChoice(): TerminalShellChoice {
+    try {
+      const value: unknown = readSetting('terminal');
+      if (typeof value !== 'object' || value === null) {
+        return 'auto';
+      }
+      const shell = (value as { shell?: unknown }).shell;
+      const choices = TERMINAL_SHELL_CHOICES as readonly unknown[];
+      return choices.includes(shell) ? (shell as TerminalShellChoice) : 'auto';
+    } catch (err) {
+      logger.warn({ error: String(err) }, '终端设置读取失败（按平台默认兜底）');
+      return 'auto';
+    }
+  }
+}
+
+/**
+ * 解析用户配置的 shell 档位为可执行文件（36 号 B，导出供测试）
+ *
+ * 纯函数：fs 存在性经 fileExists 注入（测试无需真实文件系统）。返回 undefined
+ * 表示「无法解析」（档位平台不适用 / 可执行文件不存在），调用方回落平台默认。
+ *
+ * - windows：powershell/cmd/wsl 按 PATH 解析（System32 内置，不做 fs 预检）；
+ *   gitbash 候选路径逐个探测（Git for Windows 安装位置不固定）
+ * - unix：绝对路径 + 存在性预检（fish 安装位置差异大，缺席即回落）
+ */
+export function resolveShellChoice(
+  choice: TerminalShellChoice,
+  platform: NodeJS.Platform,
+  fileExists: (path: string) => boolean = existsSync,
+): { file: string; args: string[] } | undefined {
+  const normalized: 'windows' | 'macos' | 'linux' =
+    platform === 'win32' ? 'windows' : platform === 'darwin' ? 'macos' : 'linux';
+  if (!isShellChoiceApplicable(choice, normalized)) {
+    return undefined;
+  }
+  if (normalized === 'windows') {
+    switch (choice) {
+      case 'powershell':
+        return { file: 'powershell.exe', args: [] };
+      case 'cmd':
+        return { file: 'cmd.exe', args: [] };
+      case 'wsl':
+        return { file: 'wsl.exe', args: [] };
+      case 'gitbash': {
+        const candidates = [
+          'C:\\Program Files\\Git\\bin\\bash.exe',
+          'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+          ...(process.env['LOCALAPPDATA']
+            ? [`${process.env['LOCALAPPDATA']}\\Programs\\Git\\bin\\bash.exe`]
+            : []),
+        ];
+        const hit = candidates.find((path) => fileExists(path));
+        return hit !== undefined ? { file: hit, args: [] } : undefined;
+      }
+      default:
+        return undefined;
+    }
+  }
+  const unixTargets: Partial<Record<TerminalShellChoice, string>> = {
+    bash: '/bin/bash',
+    zsh: '/bin/zsh',
+    fish: '/usr/bin/fish',
+  };
+  const target = unixTargets[choice];
+  if (target === undefined || !fileExists(target)) {
+    return undefined;
+  }
+  return { file: target, args: [] };
 }
 
 /**

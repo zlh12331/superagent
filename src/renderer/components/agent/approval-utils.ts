@@ -24,6 +24,10 @@ import {
 } from 'lucide-react';
 import type { ApprovalType } from '@/stores/transient/approvals-store';
 
+/**
+ * 安全读取对象字符串字段（类型守卫）：非对象/字段非 string 返回 undefined；
+ * 空串视为合法值（区分「不存在」与「空串」用 getNonEmptyField）
+ */
 export function getField(obj: unknown, key: string): string | undefined {
   if (typeof obj !== 'object' || obj === null) return undefined;
   const value = (obj as Record<string, unknown>)[key];

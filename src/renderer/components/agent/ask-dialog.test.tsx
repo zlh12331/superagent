@@ -37,9 +37,9 @@ function setAsk(askId: string, questions: ReturnType<typeof mkQuestion>[]) {
   useAgentAskStore.setState({ askId, questions: questions as never });
 }
 
-/** 注入 window.api.agent.respondAsk 并返回 mock */
+/** 注入 window.api.agent.respondAsk 并返回 mock（合法 IpcResponse 成功体） */
 function injectRespondAsk() {
-  const respondAsk = vi.fn(async (_p: unknown) => ({}));
+  const respondAsk = vi.fn(async (_p: unknown) => ({ data: { ok: true } }));
   (window.api as unknown as Record<string, Record<string, unknown>>)['agent'] = { respondAsk };
   return respondAsk;
 }
@@ -154,7 +154,7 @@ describe('AskDialog', () => {
     expect(now).toBe(2);
   });
 
-  it('respondAsk 返回 error：错误码本地化 toast（对齐 unwrapErrorMessage 统一模式）+ 仍清空 store', async () => {
+  it('respondAsk 返回 error：本地化 toast + 保留现场可重试', async () => {
     const user = userEvent.setup();
     const respondAsk = vi.fn(async (_p: unknown) => ({
       error: { code: 'INVALID_INPUT', message: '答案格式不合法' },
@@ -166,10 +166,11 @@ describe('AskDialog', () => {
     const { toast } = await import('sonner');
     // [CODE] 前缀错误 → 错误码经 errors namespace 本地化（zh-CN：输入参数有误）
     expect(toast.error).toHaveBeenCalledWith('输入参数有误');
-    expect(useAgentAskStore.getState().askId).toBeNull();
+    // 失败不 clearAsk：选项保留，用户可原地重试（此前强制关窗丢答案）
+    expect(useAgentAskStore.getState().askId).toBe('ask-9');
   });
 
-  it('respondAsk 拒绝：无 [CODE] 前缀原始消息透传 toast + 仍清空 store', async () => {
+  it('respondAsk 拒绝：无 [CODE] 前缀原始消息透传 toast + 保留现场', async () => {
     const user = userEvent.setup();
     const respondAsk = vi.fn(async (_p: unknown) => {
       throw new Error('ipc down');
@@ -181,6 +182,16 @@ describe('AskDialog', () => {
     const { toast } = await import('sonner');
     // 非 IPC 错误响应（无 [CODE] 前缀）→ unwrapErrorMessage 原样透传（全仓统一行为）
     expect(toast.error).toHaveBeenCalledWith('ipc down');
+    expect(useAgentAskStore.getState().askId).toBe('ask-9');
+  });
+
+  it('取消：回传空回答且清空 store（与提交失败区分）', async () => {
+    const user = userEvent.setup();
+    const respondAsk = injectRespondAsk();
+    setAsk('ask-9', [mkQuestion()]);
+    render(<AskDialog />);
+    await user.click(screen.getByRole('button', { name: '取消' }));
+    expect(respondAsk).toHaveBeenCalledWith({ askId: 'ask-9', answers: [] });
     expect(useAgentAskStore.getState().askId).toBeNull();
   });
 });

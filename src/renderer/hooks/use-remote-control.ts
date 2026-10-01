@@ -8,20 +8,12 @@
 // 说明：令牌只在服务运行期间由主进程下发，停止后快照置 null（不落渲染层缓存）
 // ──────────────────────────────────────────────────────────────
 
-import type { RemoteStatusRes } from '@code-agent/shared/renderer';
+import type { RemoteBindScope, RemoteStatusRes } from '@code-agent/shared/renderer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 
-import { useErrorMessage } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
-/** mutation 失败反馈（一致性收敛：错误经 [CODE] 解析本地化，杜绝静默失败） */
-function useMutationOnError(): (error: Error) => void {
-  const { getErrorMessage } = useErrorMessage();
-  return (error: Error): void => {
-    toast.error(unwrapErrorMessage(error, getErrorMessage));
-  };
-}
+import { useMutationOnError } from './use-mutation-error';
 
 /** 远程控制状态查询 key */
 export const REMOTE_STATUS_QUERY_KEY = ['remote', 'status'] as const;
@@ -35,13 +27,14 @@ const IDLE_STATUS: RemoteStatusRes = {
   port: null,
   token: null,
   instanceName: '',
+  bindScope: 'lan',
   addresses: [],
   activeCommands: 0,
   lastCommandAt: null,
 };
 
 async function fetchStatus(): Promise<RemoteStatusRes> {
-  if (typeof window === 'undefined' || window.api === undefined) {
+  if (!hasIpcBridge()) {
     return IDLE_STATUS;
   }
   return unwrap<RemoteStatusRes>(await window.api.remote.getStatus());
@@ -58,7 +51,7 @@ export function useRemoteStatusQuery() {
 
 /** 启停请求：主进程返回变更后快照（浏览器模式降级为已停止） */
 async function requestChange(action: 'start' | 'stop'): Promise<RemoteStatusRes> {
-  if (typeof window === 'undefined' || window.api === undefined) {
+  if (!hasIpcBridge()) {
     return IDLE_STATUS;
   }
   const res = action === 'start' ? await window.api.remote.start() : await window.api.remote.stop();
@@ -84,6 +77,24 @@ export function useStopRemoteControl() {
   const onError = useMutationOnError();
   return useMutation({
     mutationFn: () => requestChange('stop'),
+    onSuccess: (status) => {
+      queryClient.setQueryData(REMOTE_STATUS_QUERY_KEY, status);
+    },
+    onError,
+  });
+}
+
+/** 绑定范围切换 mutation：主进程先应用后落库，返回应用后快照（浏览器模式降级为回显） */
+export function useSetRemoteBindScope() {
+  const queryClient = useQueryClient();
+  const onError = useMutationOnError();
+  return useMutation({
+    mutationFn: async (scope: RemoteBindScope): Promise<RemoteStatusRes> => {
+      if (!hasIpcBridge()) {
+        return { ...IDLE_STATUS, bindScope: scope };
+      }
+      return unwrap<RemoteStatusRes>(await window.api.remote.setBindScope({ scope }));
+    },
     onSuccess: (status) => {
       queryClient.setQueryData(REMOTE_STATUS_QUERY_KEY, status);
     },

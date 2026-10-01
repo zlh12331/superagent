@@ -23,12 +23,14 @@ import { llmClient } from './infra/ai/llm-client/ai-provider';
 import { modelRegistry } from './infra/ai/models';
 import { skillRegistry } from './infra/ai/skills/skill-registry';
 import { createAutostartDeps, setAutostartEnabled } from './infra/autostart/autostart';
+import { initMainI18n } from './infra/i18n';
 import { createMemoryCaptureWire } from './infra/memory-hub/capture-wire';
 import { isMemoryEnabled } from './infra/memory-hub/memory-pref';
 import { scheduleMemoryPrewarm } from './infra/memory-hub/prewarm';
+import { applyProxyChange } from './infra/network/proxy-applier';
 import { buildRemoteEndpoints, getLanIPv4Addresses } from './infra/remote/network-info';
 import { initDb } from './infra/storage/db';
-import { readAllSettings, readSetting } from './infra/storage/settings-pref';
+import { readAllSettings, readSetting, writeSetting } from './infra/storage/settings-pref';
 import { readTelemetryLevelSync } from './infra/storage/telemetry-pref';
 import { EventLoopLagMonitor } from './infra/telemetry/event-loop-lag';
 import { reportEventLoopLag } from './infra/telemetry/lag-alert';
@@ -39,6 +41,7 @@ import { createAgentHandlers } from './ipc/agent.handler';
 import { createAgentApprovalHandlers } from './ipc/agent-approval.handler';
 import { createAgentAskHandlers } from './ipc/agent-ask.handler';
 import { appHandlers } from './ipc/app.handler';
+import { createBackupHandlers } from './ipc/backup.handler';
 import { createBrowserHandlers } from './ipc/browser.handler';
 import { devtoolsHandlers } from './ipc/devtools.handler';
 import { dialogHandlers } from './ipc/dialog.handler';
@@ -49,6 +52,7 @@ import { createImHandlers } from './ipc/im.handler';
 import { createMcpHandlers } from './ipc/mcp.handler';
 import { createMemoryHandlers } from './ipc/memory.handler';
 import { modelsHandlers } from './ipc/models.handler';
+import { createProxyHandlers } from './ipc/proxy.handler';
 import { registerIpcHandlers } from './ipc/register';
 import { createRemoteHandlers } from './ipc/remote.handler';
 import { createSearchHandlers } from './ipc/search.handler';
@@ -61,9 +65,11 @@ import { createTerminalHandlers } from './ipc/terminal.handler';
 import { createToolHandlers } from './ipc/tool.handler';
 import { createUpdateHandlers } from './ipc/update.handler';
 import { createWhitelistHandlers } from './ipc/whitelist.handler';
-import { mountTurnNotifications } from './notification';
+import { createWindowHandlers } from './ipc/window.handler';
+import { broadcastLoginItemChanged, broadcastSettingChanged } from './main-events';
+import { mountApprovalNotifications, mountTurnNotifications } from './notification';
 import { isCloseConfirmed, isQuitting, setCloseConfirmed, setQuitting } from './quit-state';
-import { buildCsp } from './security/csp';
+import { applyCspToSession } from './security/csp';
 import {
   disposeServices,
   hasRunningAgentTurns,
@@ -74,7 +80,8 @@ import {
 import { createTray } from './tray';
 import { reportMessage } from './utils/error-report';
 import { initLogger, logger, registerGlobalErrorHandlers } from './utils/logger';
-import { confirmInterruptRunningTurns, createWindow } from './window';
+import { confirmInterruptRunningTurns, createWindow, readCloseAction } from './window';
+import { bringMainWindowToFront } from './window-show';
 // 主题联动独立模块（无 service-container 依赖的纯 Electron 关注点）
 import { syncTitleBarOverlayFromTheme } from './window-theme';
 
@@ -123,16 +130,14 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  // 用户再次启动应用（双击 exe / 命令行 / 协议唤起）时：聚焦已有主窗口而不是新开实例
+  // 用户再次启动应用（双击 exe / 开始菜单 / 命令行 / 协议唤起）时：把已有主窗口带到眼前
+  // 而不是新开实例。⚠️ 必须经 bringMainWindowToFront（内含 show()）——此前这里只做
+  // restore（仅最小化时）+ focus，而 closeAction=minimize 隐藏的窗口既不可见也未最小化，
+  // focus() 不会让它出现（2026-09-21 真机实测：静默驻留后点桌面图标"没反应"）。
   app.on('second-instance', (_event, argv) => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win !== undefined) {
-      if (win.isMinimized()) {
-        win.restore();
-      }
-      win.focus();
-    }
+    bringMainWindowToFront(createWindow);
     // Windows/Linux 深度链接：协议唤起时 argv 携 code-agent:// URL，解析并广播
+    // （顺序：先显示再广播——窗口隐藏时仅 send 用户看不到，见 spec 28 §6.1）
     broadcastDeepLink(parseDeepLink(argv.find((a) => a.startsWith('code-agent://')) ?? ''));
   });
 }
@@ -178,6 +183,14 @@ app
     // - 启用 WAL 模式 + 外键约束
     // - SessionService 通过 getDb() 动态访问，但首次访问必须确保 db 已初始化
     initDb();
+    // 主进程 i18n 语言初始化：读 app_settings `language` 域（渲染层写穿透），
+    // 缺失/损坏回退 zh-CN；运行中变更经 settings.handler set 钩子同步
+    initMainI18n(readSetting('language'));
+    // 34 号：代理配置启动应用（第四收口路径）——三分区 setProxy + Node fetch 栈 +
+    // env 侧门 + AI 工厂重建；必须在 initDb 之后（读 settings.proxy）且在
+    // initImChannels 之前（IM 渠道连接吃到代理）。fire-and-forget：setProxy 失败
+    // 仅 warn，不阻断启动链（spec §2.1 失败路径）
+    void applyProxyChange(readSetting('proxy'));
     // 初始化 PromptService：幂等插入默认 Code Agent prompt 到 prompts 表
     // - 必须在 initDb 之后（依赖 prompts 表已创建）
     // - 必须在 AgentService 初始化之前（resolvePrompt 时数据库已有默认 prompt）
@@ -201,6 +214,9 @@ app
     // 系统通知：Agent 回合完成后台提醒（窗口不可见时才弹，前台不打扰）
     // 订阅 onTurnEvent（TURN_END），unsubscribe 随进程退出自然回收
     mountTurnNotifications(serviceContainer.getAgentService());
+    // 审批等待通知（36-A）：后台回合弹权限审批时提醒用户回来处理——订阅
+    // PermissionService 审批生命周期，headless 自动拒绝路径结构性不触发
+    mountApprovalNotifications(serviceContainer.getPermissionService());
     // 定时任务调度接线（C2 修复：cron-service 建成未接线——任务能建不会跑）；
     // 必须在 initDb 之后（start 从 sqlite 恢复启用任务），fire 触发的回合经
     // initCronScheduler 注册的 handler 无头执行
@@ -243,6 +259,8 @@ app
             ),
           };
         },
+        // 清空全部会话守卫（36-D）：与关窗协商同一「运行中回合」真源
+        hasRunningAgentTurns: () => serviceContainer.hasRunningAgentTurns(),
       }),
       file: createFileHandlers({ fileService: serviceContainer.getFileService() }),
       search: createSearchHandlers({ searchService: serviceContainer.getSearchService() }),
@@ -251,6 +269,12 @@ app
       tool: createToolHandlers({ toolRegistry: serviceContainer.getToolRegistry() }),
       settings: createSettingsHandlers({
         permissionService: serviceContainer.getPermissionService(),
+      }),
+      proxy: createProxyHandlers(),
+      window: createWindowHandlers(),
+      // 备份可见性（37-B）：list/create/restore；恢复守卫与清空会话同一真源
+      backup: createBackupHandlers({
+        hasRunningAgentTurns: () => serviceContainer.hasRunningAgentTurns(),
       }),
       system: systemHandlers,
       goal: createGoalHandlers({ goalService: serviceContainer.getGoalService() }),
@@ -265,7 +289,7 @@ app
             const res = await port.clear(sessionKey);
             // 引擎 SQLite 是权威存储；JSONL 为 UI 列表数据源（审计镜像），
             // 同步清理该会话的行，保证清除后列表中不再残留（杜绝"假清空"）
-            const jsonlRemoved = service.removeL0JsonlBySession(sessionKey);
+            const jsonlRemoved = await service.removeL0JsonlBySession(sessionKey);
             if (res.ok && jsonlRemoved > 0) {
               logger.info(
                 { sessionKey, jsonlRemoved },
@@ -282,6 +306,14 @@ app
             };
           }
         },
+        // clearAll 用：仅引擎删除（异常向上抛，由 handler 归类为该 key 失败）；
+        // JSONL 清理由 handler 在全部 key 删除后经 removeL0Jsonl 单遍统一做（P2-26）
+        clearEngineBySession: async (sessionKey) => {
+          const port = await serviceContainer.getMemoryHubService().ensureStarted();
+          return port.clear(sessionKey);
+        },
+        removeL0Jsonl: (sessionKeys) =>
+          serviceContainer.getMemoryHubService().removeL0JsonlBySessions(sessionKeys),
         status: {
           isEnabled: () => isMemoryEnabled(),
           isAvailable: () => serviceContainer.getMemoryHubService().isConfigured(),
@@ -331,42 +363,8 @@ app
 
     // 注入 CSP 响应头（P1-5 安全基线）
     // 生产环境严格策略 / 开发环境宽松策略（允许 Vite HMR）
-    // 覆盖渲染层 HTML 的 CSP meta，确保所有响应统一使用主进程策略
-    const csp = buildCsp(!app.isPackaged);
-    const isProduction = app.isPackaged;
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      // 跳过 chrome-extension:// 协议的响应
-      // 原因：dev 环境 React DevTools 扩展（chrome-extension://<id>/main.html）的
-      // 内部资源加载策略由扩展自身 manifest.content_security_policy 控制，
-      // 主进程注入的 CSP 会与扩展策略冲突，触发 ERR_BLOCKED_BY_RESPONSE 导致
-      // Components/Profiler 面板无法加载。
-      // 安全性：chrome-extension:// 协议的响应头由 Chrome Web Store 签名验证，
-      // 不需要主进程额外注入安全头。
-      if (details.url.startsWith('chrome-extension://')) {
-        callback({});
-        return;
-      }
-
-      const headers: Record<string, string[]> = {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [csp],
-        // X-Content-Type-Options: nosniff — 防止 MIME 类型嗅探
-        // 阻止浏览器将非脚本资源解释为可执行脚本（防 XSS via MIME 混淆）
-        // 参考：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options
-        'X-Content-Type-Options': ['nosniff'],
-      };
-
-      // X-Frame-Options: 仅对 http(s) 协议注入
-      // - 生产环境 DENY：完全禁止嵌入（最严格）
-      // - 开发环境 SAMEORIGIN：允许同源嵌入（DevTools 面板用 chrome-extension:// 协议已被上面跳过）
-      // CSP frame-ancestors 是更现代的替代方案，此头作为旧浏览器兜底
-      // 参考：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
-      if (details.url.startsWith('http')) {
-        headers['X-Frame-Options'] = [isProduction ? 'DENY' : 'SAMEORIGIN'];
-      }
-
-      callback({ responseHeaders: headers });
-    });
+    // 唯一执行点 = applyCspToSession；渲染层 HTML 刻意不含 CSP meta（见 csp.ts 头注释）
+    applyCspToSession(session.defaultSession, !app.isPackaged);
     logger.info({ isPackaged: app.isPackaged }, 'CSP 策略已注入');
 
     // 权限请求策略（安全基线）：默认拒绝所有 web 权限请求
@@ -385,8 +383,8 @@ app
 
     // 主进程内存监控（生产长期趋势 + 泄漏哨兵）
     // - 60s 采样 + 连续 3 次单调增长且累计 > 150MB 才告警（防 GC 抖动误报）
-    // - unref 定时器不阻塞应用退出
-    startMemoryMonitor({
+    // - unref 定时器不阻塞应用退出；stop 句柄保存，before-quit 与 lagMonitor 一并清理
+    stopMemoryMonitor = startMemoryMonitor({
       onAlert: (report) => {
         reportMessage(
           `主进程内存疑似持续增长：${report.growthMb.toFixed(0)}MB / ${report.durationSec.toFixed(0)}s`,
@@ -440,9 +438,27 @@ app
         serviceContainer.getUpdateService().quitAndInstall();
       },
       setAutostart: (enabled) => {
-        // 与设置页走同一抽象层（平台差异/dev 守卫/写后回读集中在 infra/autostart）：
-        // 此处 fire-and-forget，失败由下次菜单右键重建时的真实读取反映
-        void setAutostartEnabled(createAutostartDeps(), enabled);
+        // 与设置页走同一抽象层（平台差异/dev 守卫/写后回读集中在 infra/autostart）
+        void setAutostartEnabled(createAutostartDeps(), enabled)
+          .then((state) => {
+            // 托盘改动后通知渲染层（设置页正开着时回显会跟随；渲染层发起的写入不回灌）
+            broadcastLoginItemChanged(state);
+          })
+          .catch((err: unknown) => {
+            // 失败已由 autostart 内部落 error 日志；此处再记一次并吞掉 rejection，
+            // 避免 unhandled rejection。菜单下次右键重建时会按真实状态回显。
+            logger.warn({ error: String(err) }, '托盘切换开机自启失败');
+          });
+      },
+      getCloseAction: () => readCloseAction(),
+      setCloseAction: (action) => {
+        // 主进程主动写入（spec 28 §6:145-146：该勾选项读 settings.window.closeAction）
+        // 必须读改写，避免覆盖同域其它字段；写完广播给渲染层，防止其 store 持旧值
+        // 在后续设置变更时把旧 closeAction 写回（丢更新）。
+        const next = { ...readWindowSettings(), closeAction: action };
+        writeSetting('window', next);
+        logger.info({ closeAction: action }, '托盘切换关窗行为');
+        broadcastSettingChanged('window', next);
       },
       onUpdateStatus: (listener) => serviceContainer.getUpdateService().onStatus(listener),
       getLocale: () => (readSetting('language') === 'en' ? 'en' : 'zh-CN'),
@@ -466,11 +482,10 @@ app
       syncTitleBarOverlayFromTheme(readAllSettings()['theme']);
     });
 
-    // macOS: 点击 dock 图标时若无窗口则重建
+    // macOS: 点击 dock 图标时把窗口带到眼前（零窗口则重建，窗口被隐藏则唤出）
+    // 此前只在零窗口时重建 ⇒ 静默驻留（窗口隐藏）时点 Dock 图标毫无反应。
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-      }
+      bringMainWindowToFront(createWindow);
     });
   })
   .catch((err: unknown) => {
@@ -519,6 +534,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 let imChannelsInit: Promise<void> | null = null;
 // 事件循环延迟监控器（whenReady 内赋值；before-quit 停止）
 let lagMonitor: EventLoopLagMonitor | null = null;
+// 内存监控停止句柄（whenReady 内赋值；before-quit 停止——采样定时器虽 unref
+// 不阻塞退出，但显式停掉可避免退出路径上仍产生采样/告警，与 lagMonitor 同口径）
+let stopMemoryMonitor: (() => void) | null = null;
 app.on('before-quit', async (event) => {
   if (isQuitting()) {
     return;
@@ -552,6 +570,9 @@ app.on('before-quit', async (event) => {
     // 事件循环延迟监控先停（避免退出路径上仍产生告警样本）
     lagMonitor?.stop();
     lagMonitor = null;
+    // 内存监控一并停（避免退出路径上仍采样/告警；stop 幂等，不阻塞退出）
+    stopMemoryMonitor?.();
+    stopMemoryMonitor = null;
     // IM 渠道停止（长轮询等后台协程先停，避免退出时残留请求）
     // 先等启动期 restore() 落定（3s 超时兜底），防止与 stopAll 并发
     if (imChannelsInit !== null) {
@@ -576,6 +597,23 @@ app.on('before-quit', async (event) => {
   // 强制退出，不再触发 before-quit（与 app.quit() 不同）
   app.exit(0);
 });
+
+/**
+ * 读取 `window` 设置域的完整值（托盘写关窗行为时用于"读改写"，避免覆盖同域其它字段）
+ *
+ * 结构损坏/读取异常一律回退空对象——后续写入会补上 closeAction，不影响其它字段的存留。
+ */
+function readWindowSettings(): Record<string, unknown> {
+  try {
+    const value = readSetting('window');
+    if (typeof value !== 'object' || value === null) {
+      return {};
+    }
+    return { ...(value as Record<string, unknown>) };
+  } catch {
+    return {};
+  }
+}
 
 /**
  * 读取"自动检查更新"开关（app_settings 的 update 域，见设计文档 §4）

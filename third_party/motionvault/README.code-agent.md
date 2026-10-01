@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-第三方**网页动效灵感库**：10 个分类、202 个动效组件（text/card/button/background/particle/scroll/svg/loader/spring/3D），每个效果带 AI 复现 prompt。本目录为**只读参考源**，不参与本项目构建（不在 tsconfig / biome / knip 扫描范围）。
+第三方**网页动效灵感库**：11 个分类、206 个动效组件（background/button/card/layout/loader/particle/scroll/spring/svg/text/threeD），每个效果带 AI 复现 prompt。本目录为**只读参考源**，不参与本项目构建（不在 tsconfig / biome / knip 扫描范围）。
 
 ## 用途
 
@@ -25,4 +25,10 @@
 - 仓库原技术栈为 Vite 7 + Tailwind 3（本项目 Vite 8 + Tailwind 4），组件不能直接复制粘贴，只借鉴动效参数。
 
 - 不修改本目录内容（如需要精确版本可 `git -C . log` 对照）。
+
+- **依赖清单与锁文件**：`package.json`（含 `capture/` 子项目）保留作上游溯源；`package-lock.json` 已于
+  2026-09-24 从 git 移除（已加根 `.gitignore` 防回加）——本目录从不安装依赖，锁文件无任何功能作用，
+  却会被 GitHub dependency graph 扫描产生 Dependabot 安全告警（实测 18 个包命中：12 high / 4 moderate
+  / 2 low，全部位于上游自身 devDeps，与本项目构建/发布产物零关联）。需要精确版本信息时用
+  `package.json` 的 range 对照 npm registry。
 

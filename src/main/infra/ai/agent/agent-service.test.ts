@@ -94,6 +94,32 @@ vi.mock('ai', async (importOriginal) => {
   };
 });
 
+// electron 替身：BrowserWindow 供失效域广播捕获（31 号 spec §5.1）。
+// 不提供 app —— emit-event 对 app 的访问自带 try/catch（isPackaged 探测降级）。
+const invalidationMocks = vi.hoisted(() => {
+  const sends: Array<[string, unknown]> = [];
+  /** 广播 + options.webContents 推送的统一时间线（channel 顺序） */
+  const order: string[] = [];
+  const win = {
+    isDestroyed: vi.fn(() => false),
+    webContents: {
+      isDestroyed: vi.fn(() => false),
+      send: vi.fn((channel: string, payload: unknown) => {
+        sends.push([channel, payload]);
+        order.push(channel);
+      }),
+    },
+  };
+  return { sends, order, win };
+});
+
+vi.mock('electron', () => ({
+  // 方括号键：规避 useNamingConvention 对 electron API 名（PascalCase）的误报
+  ['BrowserWindow']: {
+    getAllWindows: vi.fn(() => [invalidationMocks.win]),
+  },
+}));
+
 // mock ai-provider：拦截 getModel
 vi.mock('../llm-client/ai-provider', () => ({
   getModel: mocks.mockGetModel,
@@ -240,10 +266,12 @@ const mockSessionService: ISessionService = {
   markIdle: vi.fn(async () => {}),
   markAllInterrupted: vi.fn(async () => 0),
   pruneExpiredUsage: vi.fn(() => 0),
-  exportAll: vi.fn(async () => ({ exportedAt: 0, app: 'test', sessions: [] })),
+  exportAll: vi.fn(async () => ({ version: 1 as const, exportedAt: 0, app: 'test', sessions: [] })),
+  importAll: vi.fn(async () => ({ imported: 0, skipped: 0 })),
   list: vi.fn(),
   get: vi.fn(),
   delete: vi.fn(),
+  clearAll: vi.fn(async () => ({ deleted: 0 })),
   rename: vi.fn(),
   pin: vi.fn(),
   create: vi.fn(),
@@ -482,6 +510,93 @@ describe('agent-service', () => {
       if (!lastCall) throw new Error('最后一个 webContents.send 不存在');
       expect(lastCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
       expect(lastCall[1]).toEqual({ sessionId: 'session-1', reason: 'completed' });
+    });
+
+    it('P2-31 合帧：相邻 text-delta 合并单条 part，且 END 前落地（不丢尾、不乱序）', async () => {
+      const wc = createMockWebContents();
+      const parts = [
+        { type: 'text-delta', id: 't1', delta: '你' },
+        { type: 'text-delta', id: 't1', delta: '好' },
+        { type: 'text-delta', id: 't1', delta: '，世界' },
+      ];
+      mocks.mockStreamText.mockReturnValue(createMockStreamResult(parts));
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: 'session-batch',
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      // 3 条 text-delta 合并成 1 条 part + 1 条 END；无 webContents.send 定时器依赖
+      // （合帧在流收尾路径同步 flush，END 恒在最后一个文本 part 之后）
+      expect(getNonTurnCalls(wc)).toHaveLength(2);
+      const partCall = getNonTurnCalls(wc)[0];
+      if (!partCall) throw new Error('webContents.send 未被调用');
+      expect(partCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_PART);
+      expect(partCall[1]).toEqual({
+        sessionId: 'session-batch',
+        part: { type: 'text-delta', id: 't1', delta: '你好，世界' },
+      });
+      const endCall = getNonTurnCalls(wc)[1];
+      if (!endCall) throw new Error('END 推送缺失');
+      expect(endCall[0]).toBe(IPC_CHANNELS.AGENT_STREAM_END);
+    });
+
+    it('P2-31 合帧：text-delta 与其他 part 交错时不跨合、顺序保持', async () => {
+      const wc = createMockWebContents();
+      const parts = [
+        { type: 'text-delta', id: 't1', delta: '前文' },
+        { type: 'tool-call', toolCallId: 'c1', toolName: 'read_file' },
+        { type: 'text-delta', id: 't1', delta: '后文' },
+      ];
+      mocks.mockStreamText.mockReturnValue(createMockStreamResult(parts));
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: 'session-batch2',
+        workingDir: '/tmp/project',
+        systemPrompt: '你是 Code Agent',
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      // tool-call 前落地「前文」，之后「后文」单独成条（不同段不跨合）
+      const payloads = getNonTurnCalls(wc)
+        .filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_PART)
+        .map((c) => c[1] as { part: { type: string; delta?: string; toolCallId?: string } });
+      expect(payloads).toHaveLength(3);
+      expect(payloads[0]?.part.delta).toBe('前文');
+      expect(payloads[1]?.part.toolCallId).toBe('c1');
+      expect(payloads[2]?.part.delta).toBe('后文');
+    });
+
+    it('P2-32：resolvedPrompt 传入时复用，不再调用 resolvePrompt', async () => {
+      const wc = createMockWebContents();
+
+      await service.startAgent({
+        messages: [{ role: 'user', content: '帮我读文件' }],
+        sessionId: undefined,
+        workingDir: '/tmp/project',
+        systemPrompt: undefined,
+        resolvedPrompt: { content: '复用的基础 prompt', source: 'database' },
+        maxSteps: 20,
+        webContents: wc,
+      });
+
+      await flushAsync();
+
+      expect(mockPromptService.resolvePrompt).not.toHaveBeenCalled();
+      const callArgs = mocks.mockStreamText.mock.calls[0];
+      if (!callArgs) throw new Error('streamText 未被调用');
+      const opts = callArgs[0] as { system: string };
+      expect(opts.system).toBe('复用的基础 prompt');
     });
 
     it('webContents.isDestroyed=true：停止推送 part', async () => {
@@ -1154,6 +1269,61 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     expect(mockSessionService.markIdle).toHaveBeenCalled();
   });
 
+  it('回合完成：广播失效域聚合（8 域）且先于 AGENT_STREAM_END（31 号 spec S7）', async () => {
+    invalidationMocks.sends.length = 0;
+    invalidationMocks.order.length = 0;
+    const wc = createMockWebContents();
+    // 单一时间线：webContents 推送与失效广播共用顺序数组（win.send 恒写 order）
+    wc.send.mockImplementation(((channel: string) => {
+      invalidationMocks.order.push(channel);
+    }) as never);
+
+    await service.startAgent(baseOptions({ sessionId: 'session-invalidation', webContents: wc }));
+    await flushAsync();
+
+    // 广播内容：turnEndInvalidationDomains(sessionId) 的 8 域逐字断言（防清单漂移）
+    const invalidationCall = invalidationMocks.sends.find(
+      ([channel]) => channel === 'invalidation:event:domains',
+    );
+    expect(invalidationCall).toBeDefined();
+    expect(invalidationCall?.[1]).toEqual({
+      domains: [
+        'sessions',
+        'session:session-invalidation',
+        'goal',
+        'task',
+        'usage',
+        'git',
+        'file',
+        'turns',
+      ],
+      sessionId: 'session-invalidation',
+    });
+
+    // 顺序：渲染层须先登记「回合结束域已覆盖」再进 stream:end（渐进回落前提）
+    const invalidationIndex = invalidationMocks.order.indexOf('invalidation:event:domains');
+    const endIndex = invalidationMocks.order.indexOf(IPC_CHANNELS.AGENT_STREAM_END);
+    expect(invalidationIndex).toBeGreaterThanOrEqual(0);
+    expect(endIndex).toBeGreaterThanOrEqual(0);
+    expect(invalidationIndex).toBeLessThan(endIndex);
+  });
+
+  it('无头回合（不传 webContents）：同样广播失效域聚合（缺口 D 锚：IM/远程/定时回合）', async () => {
+    invalidationMocks.sends.length = 0;
+
+    await service.startAgent(baseOptions({ sessionId: 's-headless' }));
+    await flushAsync();
+
+    const invalidationCall = invalidationMocks.sends.find(
+      ([channel]) => channel === 'invalidation:event:domains',
+    );
+    expect(invalidationCall).toBeDefined();
+    const payload = invalidationCall?.[1] as { domains: string[]; sessionId: string };
+    expect(payload.sessionId).toBe('s-headless');
+    expect(payload.domains).toContain('session:s-headless');
+    expect(payload.domains).toContain('turns');
+  });
+
   it('无头场景 + 流错误：不推送 ERROR，流程正常收尾', async () => {
     mocks.mockStreamText.mockImplementation(() => {
       throw new APICallError({
@@ -1491,6 +1661,43 @@ describe('agent-service 批次1 缺口补全（生命周期边界/事件/压缩/
     const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
     expect(errCalls).toHaveLength(1);
     expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('AI_TIMEOUT');
+  });
+
+  it('装配段失败（模型解析抛错）→ 推送 AGENT_STREAM_ERROR（渲染层不悬挂）', async () => {
+    // 2026-09-28 深读回归：装配段此前在 try 之外，抛错只落纯日志 catch、
+    // 不推 AGENT_STREAM_ERROR——渲染层该回合永久 loading
+    mocks.mockResolveModel.mockImplementationOnce(() => {
+      throw new Error('no model configured');
+    });
+    const wc = createMockWebContents();
+    await service.startAgent(baseOptions({ sessionId: 's-assembly', webContents: wc }));
+    await flushAsync();
+    const errCalls = wc.send.mock.calls.filter((c) => c[0] === IPC_CHANNELS.AGENT_STREAM_ERROR);
+    expect(errCalls).toHaveLength(1);
+    expect((errCalls[0]?.[1] as { code?: string } | undefined)?.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('旧流迟到收尾不回退新回合的 running 状态（CAS 门控 markIdle）', () => {
+    // 2026-09-28 深读回归：preempt 兜底超时（5s）后新回合可能已 register +
+    // markRunning，旧流的迟到 finally 若无条件 markIdle 会把 running 回退成 idle
+    const svc = service as unknown as {
+      registry: {
+        register: (sessionId: string, controller: AbortController, stream: Promise<void>) => void;
+        removeStreamIfCurrent: (sessionId: string, stream: Promise<void>) => boolean;
+      };
+      handleStreamSettled: (sessionId: string, stream: Promise<void>) => void;
+    };
+    const promiseA = Promise.resolve();
+    const promiseB = Promise.resolve();
+    svc.registry.register('s-cas', new AbortController(), promiseA);
+    // 新回合接管（覆盖注册；语义上新回合的 markRunning 已发生）
+    svc.registry.register('s-cas', new AbortController(), promiseB);
+
+    svc.handleStreamSettled('s-cas', promiseA); // 旧流迟到收尾
+    expect(mockSessionService.markIdle).not.toHaveBeenCalled();
+
+    svc.handleStreamSettled('s-cas', promiseB); // 当前流收尾
+    expect(mockSessionService.markIdle).toHaveBeenCalledWith('s-cas');
   });
 
   it('TurnRunner 返回 aborted：推送 END(aborted)，不推 ERROR', async () => {

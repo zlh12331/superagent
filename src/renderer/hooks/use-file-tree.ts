@@ -19,13 +19,14 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { FileEntry } from '@code-agent/shared/renderer';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useTranslation } from '@/i18n/use-translation';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useFileTreeStore } from '@/stores/transient/file-tree-store';
+import { useLatestRef } from './use-latest-ref';
 
 /**
  * i18n 文案函数类型
@@ -77,34 +78,38 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
    * 调用 file:list IPC，结果写入 store（自动排序）。
    * 错误处理：失败时移除 loadedDirs 标记，允许下次重试；静默不提示（后台加载）。
    *
-   * 用 useCallback 包装以稳定引用，避免 useEffect 频繁触发。
+   * 经 loadDirRef 调用：不进 effect 依赖数组（vitest 无 React Compiler，
+   * 每渲染新函数会让 watch 生命周期 effect 反复重订阅）。
    *
    * @returns 成功时返回条目列表（默认展开链读取子目录用）；失败返回 null
    */
-  const loadDir = useCallback(
-    async (path: string): Promise<readonly FileEntry[] | null> => {
-      setLoading(path, true);
-      let entries: readonly FileEntry[] | null = null;
-      try {
-        const response = await window.api.file.list({
-          path,
-          depth: 1,
-          includeHidden: false,
-        });
-        const data = unwrap(response);
-        setEntries(path, data.entries);
-        entries = data.entries;
-      } catch {
-        // 加载失败/异常：移除标记，允许下次展开时重试
-        loadedDirsRef.current.delete(path);
-      }
-      // finally 语义（React Compiler 不优化 try/finally）：try 内不 rethrow，
-      // 统一在这里复位加载态后再返回结果
-      setLoading(path, false);
-      return entries;
-    },
-    [setEntries, setLoading],
-  );
+  const loadDirImpl = async (path: string): Promise<readonly FileEntry[] | null> => {
+    setLoading(path, true);
+    let entries: readonly FileEntry[] | null = null;
+    try {
+      const response = await window.api.file.list({
+        path,
+        depth: 1,
+        includeHidden: false,
+      });
+      const data = unwrap(response);
+      setEntries(path, data.entries);
+      entries = data.entries;
+    } catch {
+      // 加载失败/异常：移除标记，允许下次展开时重试
+      loadedDirsRef.current.delete(path);
+    }
+    // finally 语义（React Compiler 不优化 try/finally）：try 内不 rethrow，
+    // 统一在这里复位加载态后再返回结果
+    setLoading(path, false);
+    return entries;
+  };
+  // 稳定入口：effect 与事件回调统一经 ref 调最新实现，自身引用恒定
+  // （统一 useLatestRef：即便写进 effect 依赖也不会每渲染重跑）
+  const loadDirRef = useLatestRef(loadDirImpl);
+  const loadDir = useRef(
+    (path: string): Promise<readonly FileEntry[] | null> => loadDirRef.current(path),
+  ).current;
 
   // 1. 同步 workingDir 到 store（切换会话时重置状态，默认展开根目录）
   //    同时重置自动展开剩余深度（getState 现读：层级设置在挂载/切换项目时生效）
@@ -145,7 +150,7 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
     return () => {
       cancelled = true;
     };
-  }, [workingDir, expandedPaths, loadDir, expandPaths]);
+  }, [workingDir, expandedPaths, expandPaths, loadDir]);
 
   // 3. 启动 file:watch + 订阅 file:watch:event
   useEffect(() => {
@@ -217,8 +222,9 @@ export function useFileTree(workingDir: string | null): { refresh: () => void } 
         watcherId = null;
       }
     };
-    // 仅依赖 workingDir 和稳定的 store actions：watcher 生命周期与根目录绑定
-  }, [workingDir, removeEntry, loadDir, t]);
+    // 仅依赖 workingDir 与稳定 store actions：watcher 生命周期与根目录绑定；
+    // loadDir 经 ref 调用，不进依赖（防每渲染重订阅）
+  }, [workingDir, removeEntry, t, loadDir]);
 
   // 组件卸载时重置 store（避免切换到无文件树页面时残留状态）
   useEffect(() => {
@@ -320,7 +326,7 @@ function notifyWatchStartFailure(err: unknown, t: TranslateFn): void {
  * @returns 失败目录数（0 表示全部成功）——调用方据此决定是否提示
  */
 async function refreshExpandedDirs(rootPath: string): Promise<number> {
-  if (typeof window === 'undefined' || window.api === undefined) {
+  if (!hasIpcBridge()) {
     return 0;
   }
   const paths = [...new Set([rootPath, ...useFileTreeStore.getState().expandedPaths])];

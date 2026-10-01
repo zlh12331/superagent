@@ -1,5 +1,5 @@
 // src/renderer/components/dev/MetricsPanel.tsx
-// 运行时指标面板 · 极简文学风
+// 运行时指标面板
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 调用 useSystemStatusQuery 获取主进程运行时状态（内存/CPU/uptime/版本）

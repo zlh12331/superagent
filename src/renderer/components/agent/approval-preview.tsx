@@ -6,21 +6,23 @@
 //   （run_command 命令预览 / write_file、edit_file diff 预览 / git_* 变更摘要）
 // - 结构化展示区使用 monospace 字体 + 边框容器，便于查看代码 / 命令
 // 组件化背景（2026-09-15）：原 renderXxx 纯函数形态需调用方穿透 t/useDarkTheme，
-// 且在 DevTools 中无组件边界；组件化后依赖自取（useTranslation/useTheme）
+// 且在 DevTools 中无组件边界；组件化后依赖自取（useTranslation）。
 // ──────────────────────────────────────────────────────────────
 
 import type { ReactElement, ReactNode } from 'react';
-import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
+import { DiffRowsTable } from '@/components/common/diff/DiffRowsTable';
+import { detectLangFromPath } from '@/components/file-tree/file-viewer-utils';
 import { useTranslation } from '@/i18n/use-translation';
-import { useTheme } from '@/providers/ThemeProvider';
+import { rowsFromTextPair } from '@/lib/diff/diff-rows';
 import type { ApprovalType } from '@/stores/transient/approvals-store';
 
 import { getBooleanField, getField, getStringArrayField } from './approval-utils';
 
-/** 深色主题读取（ReactDiffViewer 双栏配色跟随全局主题） */
-function useIsDarkTheme(): boolean {
-  const { resolvedTheme } = useTheme();
-  return resolvedTheme === 'dark';
+/** 路径 → 高亮语言（未收录/缺失返回 undefined，跳过 shiki 管线） */
+function langFromPath(path: string): string | undefined {
+  if (path === '') return undefined;
+  const lang = detectLangFromPath(path);
+  return lang === 'text' ? undefined : lang;
 }
 
 /** 审批载荷结构化预览入口（按类型分发；无专属预览的类型返回 null，仅卡片 description） */
@@ -61,7 +63,6 @@ function CommandPreview({ input }: { readonly input: unknown }): ReactElement {
 /** write_file：路径 + 内容 diff（append 模式标记） */
 function WriteFilePreview({ input }: { readonly input: unknown }): ReactElement {
   const { t } = useTranslation();
-  const isDarkTheme = useIsDarkTheme();
   const path = getField(input, 'path') ?? '';
   const content = getField(input, 'content') ?? '';
   const append = getBooleanField(input, 'append') ?? false;
@@ -77,26 +78,22 @@ function WriteFilePreview({ input }: { readonly input: unknown }): ReactElement 
         )}
       </div>
       <div className="approval-diff-wrapper max-h-80 overflow-auto rounded-md border border-amber/30">
-        <ReactDiffViewer
-          oldValue={append ? t('approval.appendToEnd') : t('approval.newFile')}
-          newValue={content}
-          splitView={true}
-          compareMethod={DiffMethod.LINES}
-          hideLineNumbers={false}
-          showDiffOnly={false}
+        <DiffRowsTable
+          rowGroups={[
+            rowsFromTextPair(append ? t('approval.appendToEnd') : t('approval.newFile'), content),
+          ]}
           leftTitle={t('approval.original')}
           rightTitle={t('approval.newContent')}
-          useDarkTheme={isDarkTheme}
+          lang={langFromPath(path)}
         />
       </div>
     </div>
   );
 }
 
-/** edit_file：路径 + oldString/newString diff（replaceAll 标记） */
+/** edit_file：路径 + oldString/newString diff（replaceAll 标记；词级高亮沿用原 WORDS 语义） */
 function EditFilePreview({ input }: { readonly input: unknown }): ReactElement {
   const { t } = useTranslation();
-  const isDarkTheme = useIsDarkTheme();
   const path = getField(input, 'path') ?? '';
   const oldStr = getField(input, 'oldString') ?? '';
   const newStr = getField(input, 'newString') ?? '';
@@ -113,16 +110,17 @@ function EditFilePreview({ input }: { readonly input: unknown }): ReactElement {
         )}
       </div>
       <div className="approval-diff-wrapper max-h-96 overflow-auto rounded-md border border-amber/30">
-        <ReactDiffViewer
-          oldValue={oldStr || t('approval.empty')}
-          newValue={newStr || t('approval.emptyMeansDelete')}
-          splitView={true}
-          compareMethod={DiffMethod.WORDS}
-          hideLineNumbers={false}
-          showDiffOnly={false}
+        <DiffRowsTable
+          rowGroups={[
+            rowsFromTextPair(
+              oldStr || t('approval.empty'),
+              newStr || t('approval.emptyMeansDelete'),
+            ),
+          ]}
           leftTitle={t('approval.oldContent')}
           rightTitle={t('approval.newContent')}
-          useDarkTheme={isDarkTheme}
+          lang={langFromPath(path)}
+          wordDiff={true}
         />
       </div>
     </div>

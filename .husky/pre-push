@@ -1,55 +1,50 @@
 #!/usr/bin/env sh
 # .husky/pre-push
-# 推送前钩子：密钥扫描 + 快速门禁（typecheck + lint + scripts 测试）
+# 推送前钩子：**仅密钥扫描**（2026-09-22 精简，原先 7 步）
 #
-# 设计：
-# - 密钥扫描：gitleaks dir 全量扫描工作目录，与 pre-commit 的 protect --staged 互补
-#   （pre-commit 只检查暂存区，pre-push 检查已提交+工作区全量，防绕过）
-# - 全量测试（unit/e2e）由 CI 覆盖，本地推送只跑秒级快速门禁
-# - typecheck：增量编译，防止带类型错误推送
-# - lint：全量 Biome 检查（含格式/import 排序）
-# - test:scripts：脚手架纯函数测试（秒级）
-# - 用户可设 SKIP_PREPUSH=1 完全跳过（紧急推送时）
+# ── 为什么只剩这一项 ─────────────────────────────────────────────────
+# 原 7 步（gitleaks / typecheck / lint / check:static / depcruise /
+# drizzle 漂移 / test:scripts）中，后 6 步与 ci.yml 的 quality job **完全重复**，
+# 改由 CI 权威把关；本地全量验证改走聚合命令：
+#   pnpm verify:local       质量层（typecheck/lint/check:static/knip/depcruise/audit/全部单测）
+#   pnpm verify:local:full  再叠加产物层（build/bundle/compiler/E2E/打包/引擎与架构断言/smoke）
 #
-# 注意：与 pre-commit（lint-staged 只检查暂存区）互补，
-# pre-push 检查工作区全量状态，防"暂存区通过但工作区带错"推送
+# 保留密钥扫描的理由：**唯一不可逆的失效**。类型错误、死代码、架构越界都能在
+# 下一个提交里修；密钥一旦推上远端，即使 force-push 也已被缓存/镜像抓取，
+# 只能作废重签。故必须在出口拦住，不外包给 CI。
+#
+# ── 为什么用 `gitleaks git` 而不是 `gitleaks dir .`（2026-09-22 实测）──────
+#   gitleaks dir .                        扫 3.21 GB / 191 秒（含 .pnpm-store、
+#                                         .electron-user-data 等非版本库目录）
+#   gitleaks git --log-opts=<待推送区间>     1.4 秒，语义上正好对应「这次要推的东西」
+# 两者规则集相同（同读 .gitleaks.toml），差异只在扫描范围，故改用后者。
+#
+# ── 跳过 ────────────────────────────────────────────────────────────
+# SKIP_PREPUSH=1 git push 完全跳过（紧急推送用，有痕可追溯）。
+# gitleaks 未安装时**失败**而非静默跳过——静默放行等于这道闸门不存在。
 
 if [ "$SKIP_PREPUSH" = "1" ]; then
-  echo "[pre-push] SKIP_PREPUSH=1，跳过快速门禁"
+  echo "[pre-push] SKIP_PREPUSH=1，跳过密钥扫描"
   exit 0
 fi
 
-echo "[pre-push] 运行密钥扫描 + 快速门禁（typecheck + lint + test:scripts）..."
-
-# 密钥扫描（gitleaks 业界标准）：未安装时**失败**而非静默跳过——
-# 静默放行等于这道闸门不存在（2026-09-06 审计修复）。
-# 紧急情况仍可用 SKIP_PREPUSH=1 显式跳过（有痕、可追溯）。
-if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks dir . --redact --no-banner || exit 1
-else
+if ! command -v gitleaks >/dev/null 2>&1; then
   echo "[pre-push] ❌ gitleaks 未安装——密钥扫描无法执行。"
   echo "[pre-push]    安装：https://github.com/gitleaks/gitleaks#installing"
   echo "[pre-push]    或显式跳过：SKIP_PREPUSH=1 git push"
   exit 1
 fi
 
-pnpm typecheck || exit 1
-pnpm lint || exit 1
-pnpm check:static || exit 1
-pnpm depcruise || exit 1
-
-# schema 漂移检测（2026-09-08 新增）：
-# `drizzle-kit check` 只校验迁移快照链自身，不读 schema.ts——改了 schema 忘
-# generate 时它会误报绿。这里用 generate + git status 做真实漂移检测。
-echo "[pre-push] schema 漂移检测（drizzle-kit generate + git status）..."
-pnpm exec drizzle-kit generate --name prepush_drift_check >/dev/null 2>&1 || exit 1
-if [ -n "$(git status --porcelain -- drizzle/)" ]; then
-  echo "[pre-push] ❌ schema.ts 与 drizzle/ 迁移不同步（请提交 generate 产物）："
-  git status --porcelain -- drizzle/
-  exit 1
+# 待推送区间：以远端主分支为基线，只扫本次真正要推上去的提交。
+# 基线缺失时（首次推送、未 fetch 过远端 main）回退全历史扫描——慢但不会漏，
+# 属 fail-closed 取舍。
+REMOTE="${1:-origin}"
+if BASE=$(git rev-parse --verify --quiet "refs/remotes/${REMOTE}/main"); then
+  echo "[pre-push] 密钥扫描（gitleaks git ${BASE}..HEAD）..."
+  gitleaks git . --log-opts="${BASE}..HEAD" --config .gitleaks.toml --redact --no-banner || exit 1
+else
+  echo "[pre-push] 密钥扫描（未找到 refs/remotes/${REMOTE}/main，回退全历史，较慢）..."
+  gitleaks git . --config .gitleaks.toml --redact --no-banner || exit 1
 fi
-pnpm exec drizzle-kit check || exit 1
 
-pnpm test:scripts || exit 1
-
-echo "[pre-push] 快速门禁通过 ✓"
+echo "[pre-push] 密钥扫描通过 ✓（其余门禁见 pnpm verify:local）"

@@ -25,6 +25,10 @@ export interface TestDb {
   sqlite: Database.Database;
 }
 
+/**
+ * 创建内存测试数据库：`:memory:` SQLite + drizzle，应用完整迁移
+ * （含 CHECK/UNIQUE/外键约束，WAL + foreign_keys=ON）
+ */
 export function createTestDb(): TestDb {
   const sqlite = new Database(':memory:');
   sqlite.pragma('journal_mode = WAL');

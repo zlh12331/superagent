@@ -14,6 +14,7 @@
 
 import { z } from 'zod';
 import type { IGitService } from '../../git/git-service';
+import { t } from '../../i18n';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 const GitAddInputSchema = z.object({
@@ -27,6 +28,11 @@ const GitAddInputSchema = z.object({
 
 type GitAddInput = z.infer<typeof GitAddInputSchema>;
 
+/**
+ * 创建 git_add 工具（暂存改动到 Git 暂存区：paths 为空数组 = 全部暂存；ask 级审批）
+ *
+ * @param gitService Git 服务（执行实际暂存）
+ */
 export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
   return {
     name: 'git_add',
@@ -48,7 +54,7 @@ export function createGitAddTool(gitService: IGitService): Tool<GitAddInput> {
           : `已暂存 ${input.paths.length} 个路径（${result.stagedCount} 个文件已暂存）`;
 
       return {
-        title: 'Git: 暂存改动',
+        title: t('tools.gitAdd.title'),
         output: summary,
         metadata: {
           stagedCount: result.stagedCount,

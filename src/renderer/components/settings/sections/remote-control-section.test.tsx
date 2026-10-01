@@ -25,6 +25,7 @@ const IDLE = {
   port: null,
   token: null,
   instanceName: 'dev-desktop',
+  bindScope: 'lan',
   addresses: [],
   activeCommands: 0,
   lastCommandAt: null,
@@ -35,6 +36,7 @@ const ONLINE = {
   port: 45918,
   token: 'tok-abc123',
   instanceName: 'dev-desktop',
+  bindScope: 'lan',
   addresses: ['http://192.168.1.10:45918'],
   activeCommands: 1,
   lastCommandAt: Date.now(),
@@ -44,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   getStatus: vi.fn(async () => ({ data: {} as unknown })),
   start: vi.fn(async () => ({ data: {} as unknown })),
   stop: vi.fn(async () => ({ data: {} as unknown })),
+  setBindScope: vi.fn(async () => ({ data: {} as unknown })),
   getApprovalMode: vi.fn(async () => ({ data: { mode: 'auto' } })),
   writeText: vi.fn(async () => {}),
 }));
@@ -74,6 +77,7 @@ describe('RemoteControlSection 远程控制面板', () => {
         getStatus: mocks.getStatus,
         start: mocks.start,
         stop: mocks.stop,
+        setBindScope: mocks.setBindScope,
       },
       settings: { getApprovalMode: mocks.getApprovalMode },
     } as never;
@@ -182,5 +186,29 @@ describe('RemoteControlSection 远程控制面板', () => {
     expect(await screen.findByText('tok-abc123')).toBeTruthy();
     await waitFor(() => expect(qrMock.encode).toHaveBeenCalled());
     expect(screen.queryByAltText('远程控制配对二维码')).toBeNull();
+  });
+
+  it('监听范围两态：默认选中局域网，点击仅本机调用 remote:setBindScope 并回显快照', async () => {
+    const loopbackStatus = {
+      ...ONLINE,
+      bindScope: 'loopback',
+      addresses: ['http://127.0.0.1:45918'],
+    };
+    stubStatus(ONLINE);
+    mocks.setBindScope.mockResolvedValue({ data: loopbackStatus } as never);
+    renderSection();
+
+    expect(
+      await screen.findByRole('radio', { name: '局域网' }).then((el) => el.dataset['state']),
+    ).toBe('on');
+    expect(screen.getByRole('radio', { name: '仅本机' }).dataset['state']).toBe('off');
+
+    await userEvent.click(screen.getByRole('radio', { name: '仅本机' }));
+    await waitFor(() => {
+      expect(mocks.setBindScope).toHaveBeenCalledWith({ scope: 'loopback' });
+    });
+    // 成功后直接写入返回快照（不等轮询）：端点切换为本机回环地址
+    expect(await screen.findByText('http://127.0.0.1:45918')).toBeTruthy();
+    expect(screen.queryByText('http://192.168.1.10:45918')).toBeNull();
   });
 });

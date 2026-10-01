@@ -10,7 +10,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { FileCode, FilePlus } from 'lucide-react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { useTranslation } from '@/i18n/use-translation';
 import { computeLineDiff, countDiffLines } from '@/lib/diff/line-diff';
 import { cn } from '@/lib/utils';
@@ -40,25 +40,18 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
   // 折叠状态（对齐 ToolCallView：默认折叠）
   const [open, setOpen] = useState(false);
 
-  // 解析 diff 数据（input 稳定时复用）
-  const parsed = useMemo(() => {
-    const path = extractPath(input);
-    if (path === null || typeof input !== 'object' || input === null) {
-      return null;
-    }
-    const record = input as Record<string, unknown>;
-    // write_file → 新建（无 old 内容）；edit_file → 修改（oldString/newString）
-    const isCreate = toolName === 'write_file';
-    const oldText = isCreate ? '' : String(record['oldString'] ?? '');
-    const newText = isCreate ? String(record['content'] ?? '') : String(record['newString'] ?? '');
-    const lines = computeLineDiff(oldText, newText);
-    const stats = countDiffLines(lines);
-    return { path, isCreate, lines, stats };
-  }, [toolName, input]);
+  // 解析 diff 数据：纯派生，交给 React Compiler 记忆化（toolName/input 稳定时复用）
+  const path = extractPath(input);
+  if (path === null || typeof input !== 'object' || input === null) return null;
 
-  if (parsed === null) return null;
+  const record = input as Record<string, unknown>;
+  // write_file → 新建（无 old 内容）；edit_file → 修改（oldString/newString）
+  const isCreate = toolName === 'write_file';
+  const oldText = isCreate ? '' : String(record['oldString'] ?? '');
+  const newText = isCreate ? String(record['content'] ?? '') : String(record['newString'] ?? '');
+  const lines = computeLineDiff(oldText, newText);
+  const stats = countDiffLines(lines);
 
-  const { path, isCreate, lines, stats } = parsed;
   // 预构造带稳定 key 的行（diff 行无天然唯一 id：内容可重复；type+序号 组合保证稳定）
   const rows = lines.map((line, i) => ({ ...line, rowKey: `${line.type}:${i}` }));
   // 变更类型徽章：created（accent 软底）/ modified（蓝底）——纯语义令牌（照搬参考项目 FileChangeCard）
@@ -67,7 +60,7 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
   const fileName = path.split(/[\\/]/).pop() ?? path;
 
   return (
-    <div className={cn('card tool-card', open && 'open')}>
+    <div className={cn('card tool-card is-settled', open && 'open')}>
       <button
         type="button"
         className="card-head"

@@ -7,15 +7,20 @@
 ```bash
 pnpm dev                    # 启动 dev server + Electron 窗口
 pnpm dev:web                # 浏览器模式 dev（vite.web.config.ts，配合 src/renderer/dev/mock-api.ts）
-pnpm typecheck              # tsc --build（必须，不要用 --noEmit；不会自动增量编译）
+pnpm typecheck              # tsc --build + tsc -p scripts/tsconfig.json（必须，不要用 --noEmit；不会自动增量编译）
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计 12 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + test-boundary + csp-hash + css-vars（var(--x) 引用无定义）+ animations（animation/任意值动画引用无 @keyframes 定义）+ ui-consistency（写法一致性棘轮），pre-push/CI 卡关
+pnpm check:static           # 静态审计 15 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + docs-scripts（文档脚本表 ↔ package.json 一致）+ test-boundary + csp-hash + css-vars（var(--x) 引用无定义）+ animations（animation/任意值动画引用无 @keyframes 定义）+ ui-consistency（写法一致性棘轮）+ memory-engine:integrity，CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:animations       # 动画审计：animation / animate-[…] 引用的 keyframes 不存在即卡关（防「引用已删动画」静默失效）
+pnpm tokens:check           # 令牌生成物一致性：tokens/aurora.json ↔ src/renderer/styles/tokens.css（判据与提交状态无关）
+pnpm check:schema-drift     # schema.ts ↔ drizzle/ 迁移漂移 + 快照链完整性（本地/CI 共用同一脚本）
+pnpm check:secrets-git      # 密钥扫描：gitleaks git 扫 <远端 main>..HEAD（≈1.4s，基线缺失回退全历史）
+pnpm check:secrets          # 密钥扫描：gitleaks dir src（含未提交内容，定向自查用）
 pnpm check:compiler         # build 后断言产物含 react/compiler-runtime 痕迹（防 React Compiler 静默失效），CI e2e-electron job 卡关
+pnpm check:devtools         # build 后断言产物无 react-query devtools 残留（dev 调试面板 DCE 门禁），CI e2e-electron job 卡关
 pnpm check:bundle           # 构建产物体积门槛（build 后运行；单 chunk ≤5MB/总包 ≤16MB 基线）
 pnpm check:packaged-engine  # 打包后断言产物含可运行记忆引擎（入口+node_modules+无占位标记+关键依赖），release.yml 卡关
 pnpm memory-engine:check    # 查上游记忆引擎新版本（网络不可用时提示，不算失败）
@@ -44,8 +49,16 @@ pnpm analyze:bundle         # 包体积分析（ANALYZE_BUNDLE=1）
 pnpm docs:types             # TypeDoc 契约文档（tools/typedoc 子包，TS6 隔离）
 ```
 
-质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`。
-pre-push 钩子：gitleaks 密钥扫描（`gitleaks dir .`）+ typecheck + lint + check:static + depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）。
+质量门禁顺序：`pnpm typecheck` → `pnpm lint` → `pnpm check:static` → `pnpm test` → `pnpm knip`（CI 权威）。
+pre-push 钩子：**仅密钥扫描**（`gitleaks git --log-opts="<远端 main>..HEAD"`，约 1.5 秒；`SKIP_PREPUSH=1` 跳过）。
+本地全量验证走聚合命令：`pnpm verify:local`（质量层，约 4.5 分钟）/ `pnpm verify:local:full`（追加产物层，约 13–14 分钟）。
+`verify:local` 现覆盖：密钥扫描（gitleaks git）+ typecheck + lint + check:static + tokens:check + knip + depcruise + check:schema-drift + audit + 全部单测——与 CI quality job 的检查项已对齐（唯一例外：CI 独有的 `check:changelog-polish` 仅对 Release PR 生效）。
+
+## 文档地图
+
+- **docs/design/**：设计文档。入口 [docs/design/README.md](docs/design/README.md)（规范 / 实施记录 / 治理三区索引）；新功能实施记录按 32 号流程以 `NN-<slug>-spec.md` 落位并登记。
+- **docs/code-wiki/**：代码库导航（新成员读 00-index 起）。
+- **docs/archive/**：已完结的一次性交付记录（compose-spec 系列、UX 审计报告），只读留档，不再维护。
 
 ## 架构
 
@@ -110,13 +123,17 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 ## 关键约束（易踩坑）
 
 - **preload 必须输出 CJS**（sandbox: true 限制，`electron.vite.config.ts` 中 format: 'cjs'），纯 ESM 包（如 zod）引入 preload 会静默失败导致 `window.api` 为 undefined。preload 必须通过 `@code-agent/shared/ipc/channels` / `@code-agent/shared/preload` 子路径导入（避开 shared 主入口中的 zod）
-- **错误处理本地优先**（2026-09-13 移除 Sentry）：所有异常经 `infra/telemetry/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。⚠️ renderer 上报模块内 `electron-log/renderer` 必须**惰性加载**（CJS 首次 import >5s，静态导入会让 renderer 测试套件从 30s 劣化到 300s）。将来接任何后端只改这两个出口文件
+- **错误处理本地优先**（2026-09-13 移除 Sentry）：所有异常经 `utils/error-report.ts`（main）/ `lib/error-report.ts`（renderer）单一出口落本地日志（渲染层经 electron-log 转发主进程，随诊断包导出），报障走 GitHub Issue 深链。⚠️ renderer 上报模块内 `electron-log/renderer` 必须**惰性加载**（CJS 首次 import >5s，静态导入会让 renderer 测试套件从 30s 劣化到 300s）。将来接任何后端只改这两个出口文件
 - **dev 环境 userData 重定向到 `.electron-user-data/`**（避免沙箱拦截 %APPDATA%）
 - **dev 环境开启远程调试端口 9222**（CDP over WebSocket）
 - **.env** 由 `process.loadEnvFile()` 在 main 进程启动时加载（需在 whenReady 之前）
 - **桌面端三平台**（Windows/macOS/Linux）：Windows NSIS x64 / macOS dmg+zip（x64+arm64）/ Linux AppImage+deb x64；release.yml 三平台矩阵构建（mac 需 macOS runner，签名走 CSC_LINK）
 - **exactOptionalPropertyTypes 已启用**：可选字段传 undefined 需条件展开（`...(x !== undefined ? { x } : {})`）；同时启用了 `noUncheckedIndexedAccess`（索引访问返回 T|undefined）与 `isolatedDeclarations`（**所有导出必须显式标注类型**）
-- **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 与其共存无害，机会性清理）；hook 仍只能在顶层调用，禁止中间函数包装 hook。存量编译器 bail-out（try/finally 违规）已于 455c476 清零，新代码禁止引入。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
+- **React Compiler 已启用**（2026-08-30 经 oxc 通道落地：`oxc-transform-react`（devDep）+ `react({ compiler: { compilationMode: 'infer' } })`；`@vitejs/plugin-react` v6 无 `babel` 选项，旧 `babel.plugins` 配置曾被 Vite 8/Rolldown 链路静默忽略、已删除）⇒ 新代码默认不写 useMemo/useCallback（编译器自动记忆化；存量手写 memo 已于 2026-09-26 清偿，仅保留 `new Date()` 类挂载快照）；hook 仍只能在顶层调用，禁止中间函数包装 hook。存量编译器 bail-out（try/finally 违规）已于 455c476 清零，新代码禁止引入。**防静默失效**：`pnpm check:compiler` 在 build 后断言产物含 react/compiler-runtime 痕迹（oxc-transform-react 是可选 peerDep，缺失时 compiler 选项无效且无报错），CI e2e-electron job 卡关
+- **⚠️ React Compiler 只在 vite build / electron-vite 构建链生效，vitest 单测不跑 Compiler**（`src/renderer/vitest.config.ts` 无 oxc-transform-react 插件）。因此：
+  ① **effect 依赖 / `document.addEventListener` 的函数身份稳定不得依赖 Compiler**——删 `useCallback` 后单测会因每渲染新引用导致 effect 反复重订阅/清理（实测 `use-resizable-panels` 拖拽、`use-file-tree` watcher 曾踩雷）。正确解法是 **ref 固定「已注册的那一对」listener**（`listenersRef` / `loadDirRef` 模式），与 memo 策略无关；
+  ② `useMemo(() => new Date(), [])` 等**非响应式挂载快照必须保留**——交给 Compiler 会每渲染重算；
+  ③ 纯派生（map/filter/条件对象）可放心删 memo，交给 Compiler。
 - **根级 `*.config.ts` 已纳入 typecheck 但 include 是枚举式**（根 `tsconfig.json` = `files: []` + 6 个 project references，其中 `tsconfig.configs.json` 显式枚举 electron.vite.config.ts / vite.web.config.ts / drizzle.config.ts / i18next.config.ts / vitest.workspace.ts / commitlint.config.js）⇒ **新增根级配置文件必须手动加进 `tsconfig.configs.json` 的 include**，否则 typecheck 查不出它的类型错误/excess property；改配置仍需 `pnpm exec vite build` 实测行为
 - **渲染层动效统一走 MotionVault**（`src/renderer/lib/motion/`：transitions/variants 集中定义），不要散写 CSS transition/手搓动画；shiki 语言按需加载（`loadLanguage`），受首载体积门槛约束
 - **网页预览绝不能回渲染层 iframe**：主进程对 defaultSession 统一注入 CSP/X-Frame-Options（`security/csp.ts` + `index.ts`），iframe 加载外站会被三层拦截（frame-src 回退 'self' / XFO 注入远端响应 / CSP 污染远端文档）。右面板浏览器走 `WebContentsView` + 独立内存分区 `browser-preview`（`infra/browser/preview-service.ts`，容器第 20 个 accessor）——新增网页承载能力必须用进程外视图 + 独立 session 分区
@@ -127,6 +144,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 标准设施已全部建成，新代码必须使用（存量由 `check:ui-consistency` 棘轮看护，只许下降）：
 
 - **请求-响应**：TanStack Query，query 逻辑放 `hooks/` 域文件并导出 queryKey 常量（禁组件内联定义 key）；响应一律 `unwrap()`（`lib/ipc.ts`），禁手写 `'data' in` 判别
+- **组件不直连 IPC**：`.tsx` 组件禁止直连 `window.api.*`（经域 hook 桥接：mock 可替换 + 契约测试可达）；hooks/*.ts 与 lib/*.ts 是桥接/工具层，直连是其职责（豁免）。check:ui-consistency 规则 `direct-ipc` 卡关，存量走棘轮只降
 - **变更操作**：useMutation 定义处**必须挂 onError** → `toast.error(unwrapErrorMessage(error, getErrorMessage))`（错误码解析单一真源在 `lib/ipc.ts`，勿再抄正则）；调用层不重复挂 onError（防双弹）
 - **危险操作**（删除/清空类）：一律命令式 `confirm()` store（`confirm-dialog-store`，DialogHost 全局宿主），禁内联 AlertDialog 重复造轮子
 - **复制反馈**：统一 `useCopy()`（`hooks/use-copy.ts`，copied 2s 复位 + 失败 toast），勿手写 copied state + 定时器
@@ -175,9 +193,10 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **Renovate**：依赖自动更新（周末批次，electron major 人工评审）
 - **供应链加固**（2026-09 落地）：asar 完整性校验 + SBOM 生成 + `check:csp-hash`（CSP 内联脚本哈希锚定，防注释旧脚本静默放行）；`pnpm audit` 走 audit-ci（--moderate 起卡关）
 - **主进程遥测**：EventLoopLagMonitor 事件循环延迟监控（基准按期望间隔推进，空闲不误报）
-- **pre-push 钩子**：gitleaks 密钥扫描（`gitleaks dir .`）+ typecheck + lint + check:static（check:tokens + check:i18n）+ depcruise + test:scripts（`SKIP_PREPUSH=1` 跳过）
+- **pre-push 钩子（2026-09-22 精简为仅密钥扫描）**：`gitleaks git --log-opts="<远端 main>..HEAD"`（实测 1.4 秒；未安装 gitleaks 则**失败**，`SKIP_PREPUSH=1` 显式跳过）。原先的 typecheck / lint / check:static / depcruise / drizzle 漂移 / test:scripts 六步与 `ci.yml` 的 quality job 完全重复，已删除、交由 CI 权威把关；本地全量验证改用 `pnpm verify:local` / `pnpm verify:local:full`。保留密钥扫描的理由是**唯一不可逆的失效**（推上去即只能作废重签）。⚠️ 配套：`.gitleaks.toml` 必须有 `[extend] useDefault = true`——缺它则规则数归零、扫描恒报 `no leaks found`（2026-09-22 前一直如此，三道 gitleaks 闸全为空转）；allowlist 需覆盖 `.pnpm-store/`、`.electron-user-data*/`、`.e2e-user-data*/`、`.tmp/`，否则 `gitleaks dir .` 会扫到 3.21 GB 非版本库内容（191 秒 / 451 条噪音命中）
 - **TypeDoc**：`pnpm docs:types` 在 tools/typedoc 子包运行（TS6 隔离，规避 TS7 不兼容）
 - **包体积分析**：`pnpm analyze:bundle`（rollup-plugin-visualizer，ANALYZE_BUNDLE=1）
+- **Mimosa 提交扫描约定（2026-09-27 搁置 D 约定落地）**：Mimosa 对 git commit 的前置深度扫描是 **advisory（建议级）放行**——扫描未得出完整结论时（如 `scanner_enobufs`）不阻断提交，仅输出「按兼容策略继续，不要宣称项目安全」提示。三条纪律：① advisory 放行**不等于安全通过**，任何提交/汇报不得以「Mimosa 已放行」作为安全宣称；② 以**周期性手动完整扫描**补位（Mimosa 深度扫描按需对项目根运行，建议随 `verify:local:full` 节奏或重大改动后手动触发）；③ 扫描提示要求「尽快重新运行完整审计」时，应在当次会话内安排，不跨任务积压。
 
 ## 构建产物 & Git
 
@@ -194,6 +213,7 @@ L4 IPC 事件流    主进程推送（tool:call/terminal:output/update:status）
 - **IM 子系统不独立化**：7 渠道适配器（QQ/微信/钉钉/Telegram/飞书/企微/webhook）继续留在主进程包内，不拆子包。
 - **技术选型：优先用成熟依赖，找不到合适的才自研兜底**（2026-09-11 转向）：需要解析/度量/校验等能力时，先查现成库（如 Biome 内置规则、`oxc-parser`、`@babel/parser` —— 后两者已在依赖图中），**能复用就复用**；只在无合适依赖时才写脚本兜底。实证：`check:complexity` 首版自研正则度量在一个函数内暴露 3 个 bug 且语义与 Biome 实测不符（Biome：if-else-if 得 2、try-catch 得 2），改用 Biome 内置规则后问题整体消失。**注意区分硬约束**：preload 零运行时依赖（CJS + 纯字符串 meta，Electron 沙箱要求，zod 进 preload 会静默失败）是**平台逼的**，不属本原则范围。`function-metrics.ts` 当前仍是正则实现，属**待评估迁移**（可换 oxc-parser），非禁改。
 - **设置持久化合并到 SQLite**：已完成（见「数据库」节 app_settings 说明）。
+- **新功能三阶段流程**（2026-09-29 立项，试验性；同日 v1.1 补流程级缺口）：功能级新增/修改按 [docs/design/32-feature-workflow-spec.md](docs/design/32-feature-workflow-spec.md) 走「需求讨论 → 设计 → 实施」三阶段——需求期六方向（动机/语义边界/验收/影响面/反例/不做清单）、设计期按依赖序六方向（业务逻辑→数据→契约→状态→UX→UI）+ 测试安全/发布/多入口三专项、实施期九项（红灯先行/棘轮连锁预演/契约闭环/收尾四件套）；产出物落 `docs/design/NN-<slug>-spec.md` 单文件三节式（载体/中止终态/并行约束见 32 号 §1，反例追溯闭环见 §4，CP2 深读操作化见 §2，最小骨架见 §8）；四问判级分级裁剪，两个强制检查点（CP1 边界拍板、CP2 设计评审）不豁免，trivial 修改走轻量路径。
 
 ## 外部服务 / 凭据
 

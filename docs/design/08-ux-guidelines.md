@@ -14,7 +14,7 @@
 |---|---|---|
 | **实事求是** | 后端无数据源的能力不渲染假 UI；规划中功能诚实标注 | 侧栏搜索框仅 UI 不过滤；归档 tab 计数恒 0；设置页 account/plugins/hooks 等为"规划中"占位；侧栏底部账户无"退出登录" |
 | **原型对齐** | 原型阶段已结束：`docs/prototype/prototype-v2.html` 与 `codex-desktop-prototype.design/` 已于 2026-08-30 删除，交互真源改为已实现代码与 09-ux-interaction-spec | 三段式 grid、welcome-mode、composer-project-bar、composer-stats-bar、消息导航轨、滚动到底部按钮等 |
-| **可访问性（WCAG AA）** | 文字对比度 ≥4.5:1；全部颜色经设计令牌输出 | `globals.css` 注释标注关键对比度实测值；浅色导航激活态用 `text-foreground` 而非青色 `text-primary`（2.51:1 不达标） |
+| **可访问性（WCAG AA）** | 文字对比度 ≥4.5:1；全部颜色经设计令牌输出 | `styles/*` 注释标注关键对比度实测值；浅色导航激活态用 `text-foreground` |
 
 ### 1.2 状态管理四层架构（UX 侧约定）
 
@@ -35,7 +35,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ### 2.1 三段式主布局
 
-实现：[AppShell.tsx](../src/renderer/components/layout/AppShell.tsx) + [globals.css](../src/renderer/styles/globals.css) `.view-chat`
+实现：[AppShell.tsx](../src/renderer/components/layout/AppShell.tsx) + [layout.css](../src/renderer/styles/layout.css) `.view-chat`
 
 ```
 ┌────────────────────── topbar（52px，玻璃质感）──────────────────────┐
@@ -47,7 +47,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 └────────┴────┴────────────────────────┴────┴────────────────────────┘
 ```
 
-- 布局尺寸用 `clamp()` 响应式（`--sidebar-w: clamp(200px,17vw,280px)`、`--right-panel-w: clamp(260px,22vw,360px)`）；拖拽调整后以 CSS 变量 `--aurora-sidebar-w` / `--aurora-right-panel-w` 覆盖。
+- 布局尺寸用 `clamp()` 响应式（`--sidebar-w: clamp(200px,17vw,280px)`、`--right-panel-w: clamp(260px,22vw,360px)`）；拖拽调整后 JS 直接覆盖同名 CSS 变量为 px（`use-resizable-panels` → `--sidebar-w` / `--right-panel-w`）。
 - **折叠态**：`sb-collapsed` / `crp-collapsed` 类使 grid 对应列塌缩为 0；折叠按钮在顶栏与右面板竖条内。
 - **断点联动**：窗口 <1200px 自动折叠右面板、<900px 自动折叠侧栏；用户手动切换后（`manualRef` 置位）断点不再覆盖手动意图。
 - **resizer 可拖拽**：左右两条分隔线，`mousedown` + 全局 `mousemove/mouseup`，拖拽范围钳位 `SIDEBAR_WIDTH_MIN~MAX`（左 200-400px，见 [layout-utils.ts](../src/renderer/components/layout/layout-utils.ts)）与 `RIGHT_PANEL_WIDTH_MIN~MAX`（右 260-360px）；拖拽期间 `body.resizing`；元素 `tabIndex=0` + `aria-valuenow` 可聚焦（ARIA 滑块语义）。
@@ -68,17 +68,17 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 > ⚠️ **数值真源 = `src/renderer/styles/tokens.css` 的 `--z-*`**（由 `tokens/aurora.json` 经 Style Dictionary 生成）。本节数值须与之一致；改令牌后同步本节。**引用令牌时也只能用真源里存在的名字**——`check:css-vars` 卡关「引用未定义令牌」（2026-09-14 新增门禁，此前 `var(--z-dropdown)` 等 5 处引用不存在的令牌导致声明被静默丢弃）。
 
-## 3. Aurora 2.0 视觉规范
+## 3. TraeWork 视觉规范
 
-实现：[globals.css](../src/renderer/styles/globals.css)（`@import` 引入 tokens.css 并补充组件级样式）+ [tokens.css](../src/renderer/styles/tokens.css)（**设计令牌真源生成物**，勿手改）+ [index.css](../src/renderer/index.css)
+实现：[styles/index.css](../src/renderer/styles/index.css)（@import tokens + base/layout/welcome/chat/composer/cards/file-tree/fuzzy/motion + `@theme`）+ [tokens.css](../src/renderer/styles/tokens.css)（**设计令牌真源生成物**，勿手改）+ [renderer/index.css](../src/renderer/index.css)
 
 ### 3.1 令牌体系（禁止硬编码）
 
-- **颜色**：亮/暗两套完整令牌集（`:root` 与 `.dark` 块）；背景三级深度（L0 `--bg` / L1 `--bg-elev` / L2 `--bg-elev-2` / L3 `--bg-elev-3`）、文字三级明度（`--text` / `--text-dim` / `--text-faint`）、双 accent（青绿主 `--accent:#00b89e` + 蓝色辅 `--accent-2:#2b7fff`）、语义色（success/warning/destructive）、消息气泡、遮罩/玻璃、滚动条、发光阴影（glow-sm/md/lg）、动效缓动。
-- **字号**：6 级阶梯 `--font-size-2xs(10) / xs(11) / sm(12) / base(13) / md(14) / lg(16)`；旧 `--fs-*` 别名仅兼容保留。
-- **间距**：`--sp-1` ~ `--sp-7`（4px 步进，16px 基准）。
-- **圆角**：`--radius: 0.625rem`（10px）。
-- **字体**：`--font-sans / --font-serif / --font-mono`；侧栏/设置标题用衬线（文学风），元信息与状态用等宽。
+- **颜色**：亮/暗两套令牌（`tokens/aurora.json` 真源）；背景 L0–L3 灰阶；文字三级；品牌紫 `--accent:#4B3FE3`（暗 `#6A6FFF`）+ 辅蓝 `--accent-2`；语义色三层（base/text/emphasis）；品牌面实心、quiet 无装饰发光（详见 DESIGN.md 宪法 C1–C6）。
+- **字号**：9 级 `--font-size-2xs(10) / xs(11) / sm(12) / base(13) / md(14，对话正文) / lg(16) / xl(18) / 2xl(22) / 3xl(28)`；旧 `--fs-*` 已删除。
+- **间距**：布局/组件间距走 Tailwind `gap-*`/`p-*`（`--sp-*` 阶梯已删除）。
+- **圆角**：`--radius: 8px` + `--radius-sm/md/lg/xl` 派生（6/8/10/12）。
+- **字体**：`--font-sans / --font-serif / --font-mono`；标题可用衬线、元信息用等宽（非「文学风」设计轴）。
 - 通过 `@theme inline` 映射为 Tailwind 工具类（`bg-background` / `text-muted-foreground` / `text-primary` 等），组件中**禁止**出现颜色字面量与任意像素值。
 
 ### 3.2 主题机制
@@ -101,10 +101,10 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 
 ### 3.4 氛围层与动效
 
-- `body::before`：双 accent 渐变光晕 + 技术网格 + 扫描线；`body::after`：SVG 噪点纹理（mix-blend-mode）。
-- 主区 `thread-bg paper-texture`：多层光晕 + 纸张噪点。
-- 顶栏：`backdrop-filter: blur(16px) saturate(1.4)` + 底部双 accent 渐变发光刻度线。
-- 动画统一 `tw-animate-css`；消息入场 `motion`（opacity + y:6 → 0，`smoothEaseOut`）；流式状态点 `animate-pulse-soft`；自定义动画必须在 `globals.css` 定义并复用缓动变量。
+- TraeWork quiet：无 body 光晕/网格/噪点；扫描线仅 `experimental.scanlines` 默认关。
+- 顶栏中性表面，无发光刻度线。
+- 动画统一 `tw-animate-css` + `styles/motion.css` `@keyframes`；消息入场 `motion`（opacity + y:6 → 0）；`prefers-reduced-motion` 全局降级。
+- 动画统一 `tw-animate-css`；消息入场 `motion`（opacity + y:6 → 0，`smoothEaseOut`）；流式状态点 `animate-pulse-soft`；自定义动画必须在 `styles/motion.css` 定义并复用缓动变量。
 - 实验开关：`experimental.scanlines` 控制扫描线视觉叠加（默认关）。
 
 ## 4. 核心交互流程
@@ -148,8 +148,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 停止 | 流式中按钮变「停止」；`Esc` 全局可中断（window 级监听，textarea 失焦也生效） |
 | 自动增高 | 1 → 8 行（240px 封顶），超出滚动 |
 | 拖拽调高 | 顶部手柄 `ns-resize`：向上拉高，钳位 [40, 460]；**双击重置**为自动高度；键盘 `↑/↓` 20px 步进 |
-| 字符计数 | trim 后显示，>2000 变警告色（`aria-live`） |
-| 长度上限 | 8000 字符拦截（toast 报错） |
+| 长度上限 | 8000 字符拦截（toast 报错）；无字符计数 UI（已移除） |
 | 附件 | `@` 按钮（原生多选文件）→ chip 展示（可移除，去重）→ 发送时 `file:read` 读取（≤4000 字符截断，失败仅标注文件名不阻断） |
 | 斜杠命令 | 输入 `/` 弹建议（/help /new /clear /compact /models /interrupt /goal）；`Tab/Enter` 应用，`Esc` 关闭；带 action 的命令点击直接执行：/new 回欢迎页、/clear 清空消息、/help 打开快捷键帮助、/interrupt 真实中断、/goal 预填输入框、/models 打开项目栏模型选择下拉（受控）、/compact 手动压缩会话上下文（主进程按模型窗口预算裁剪 compressByTokenBudget → 整体落库 → 本地消息态同步 + toast 结果） |
 | 草稿 | 按会话持久化文本+附件（draft-store）；发送成功清除；切换会话自动恢复 |
@@ -230,7 +229,7 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 实现：[SettingsDialog.tsx](../src/renderer/components/settings/SettingsDialog.tsx) + `sections/`（20 个 section 文件）
 
 - **形态**：全屏 Sheet（右上 140px 透明拖拽区避让窗口控件）；左上「← 返回」；打开时重置到「模型服务」分区（避免停留深层分区）。
-- **导航**：5 组 15 项，`role="tablist"` + `↑↓` 方向键循环；激活项 = accent 2px 左竖条（`border-l-[color:var(--accent)]`）+ `text-foreground font-medium`（浅色模式对比度达标）。
+- **导航**：5 组 16 项，`role="tablist"` + `↑↓` 方向键循环；激活项 = accent 2px 左竖条（`border-l-[color:var(--accent)]`）+ `text-foreground font-medium`（浅色模式对比度达标）。
 - **分区能力矩阵**：
 
 | 分区 | 能力 | 状态 |
@@ -238,9 +237,10 @@ L4 IPC 事件流       主进程推送（agent:tool:call / terminal:event:output
 | 模型服务 | 10 家提供商行（配置状态徽标 + 展开编辑 API Key：显示/隐藏/保存/删除）；运行时模型增删（modelId/provider/baseUrl）；模型参数（默认模型/温度/思考强度 off-low-medium-high）——温度全链路透传 agent:run（schema→handler→buildGenerationOptions temperatureOverride），DeepSeek 思考模型按官方限制忽略采样参数；审批权限（审批模式/白名单） | 已实现 |
 | MCP | server 列表（名称/状态徽章/工具数/最后一次错误信息）+ 添加表单 + 启动/停止 | 已实现 |
 | 技能 | 已学技能列表 + 描述学习（learn-skill-agent）+ 移除 | 已实现 |
-| 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 模式：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 插入 · Esc 切换，输入舱 NORMAL/INSERT 徽章；不支持 y/p/v/u 与数字前缀——设置页如实标注）；快捷键（ShortcutPicker 录制 6 项）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
+| 通用 | 语言切换（中/英立即生效）；编辑器（字号 12/14/16 真实消费于消息区 + vim 模式：h/j/k/l 移动 · w/b 词首 · 0/$ 行首尾 · x 删字符 · dd 删行 · i/a/I/A 插入 · Esc 切换，输入舱 NORMAL/INSERT 徽章；不支持 y/p/v/u 与数字前缀——设置页如实标注）；系统提示词编辑（保存即生效，空串回退内置）；数据管理（导出/打开数据目录）；遥测级别（重启生效） | 已实现 |
+| 快捷键 | 自定义 6 项（ShortcutPicker 录制 + 冲突检测拒绝写入 + 单键/一键恢复默认）；固定键速查（只读 11 项，与帮助对话框同源清单） | 已实现 |
 | 工作树 | 当前工作目录 + 展开节点数（只读状态） | 已实现（配置项规划中） |
-| 浏览器 | 右面板「浏览器」tab 为 iframe 预览工具的说明页 | 说明页（配置项规划中） |
+| 浏览器 | 右面板「浏览器」= WebContentsView 进程外预览（独立 session `browser-preview`），非 iframe | `browser-pane` / `preview-service` |
 | 实验 | scanlines 扫描线（AppShell 根级 .scanlines-overlay 条件渲染，--text 令牌）/ 推理块默认折叠（message-item 消费） | 已实现（原型其余项不展示假开关） |
 | 关于 | 版本号 / Electron-Node-Chromium 运行时 / 打开数据目录 | 已实现 |
 | 账号 / 移动端 / 插件 / hooks / 命令 | 「🚧 规划中」占位（诚实标注；IM 渠道真实功能保留在移动端分区） | 占位 |
@@ -283,7 +283,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 
 | 层 | 组件 | 表现 |
 |---|---|---|
-| App 级 | [AppErrorBoundary.tsx](../src/renderer/components/common/AppErrorBoundary.tsx) | 全屏兜底 + Sentry 自动上报 + 「重新加载」/「发送报告」（显式补报） |
+| App 级 | [AppErrorBoundary.tsx](../src/renderer/components/common/AppErrorBoundary.tsx) | 全屏兜底 + error-report 本地上报 + 「重新加载」/「发送报告」（显式补报） |
 | 路由级 | [root.tsx](../src/renderer/routes/root.tsx) RootErrorBoundary | 状态码/错误消息 + 重新加载按钮 |
 | 组件级 | [SectionErrorBoundary.tsx](../src/renderer/components/common/SectionErrorBoundary.tsx) | 侧栏 / 主内容 / 右面板 / 设置 pane 局部降级 |
 
@@ -361,7 +361,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 新功能/修复合入前的 UI 验收项（对照本规范逐条自检）：
 
 **布局与视觉**
-- [ ] 无硬编码颜色/像素值；全部走 Aurora 令牌与 Tailwind 工具类
+- [ ] 无硬编码颜色/像素值；全部走 TraeWork 令牌与 Tailwind 工具类
 - [ ] 深浅两主题截图对比：文字对比度 ≥4.5:1（WebAIM 或 getComputedStyle 实测）
 - [ ] 折叠态/断点（<1200px / <900px）下布局不破；手动折叠不被断点覆盖
 - [ ] 新增浮层使用既有 z-index 档位
@@ -401,7 +401,7 @@ loading（骨架屏，首载 >200ms 才显示防闪烁）→ refreshing（保留
 | 终端 | `components/terminal/TerminalPanel.tsx` |
 | Git | `components/git/GitPanel.tsx` |
 | 设置 | `components/settings/SettingsDialog.tsx` + `sections/*` |
-| 主题/令牌 | `providers/ThemeProvider.tsx`、`styles/globals.css` |
+| 主题/令牌 | `providers/ThemeProvider.tsx`、`styles/index.css` + `styles/tokens.css` |
 | 状态管理 | `stores/persistent/*`、`stores/transient/*` |
 | 错误体系 | `components/common/AppErrorBoundary.tsx`、`AsyncBoundary.tsx`、`SectionErrorBoundary.tsx`、`lib/error-actions.ts` |
 | i18n | `i18n/locales/zh-CN/*.json`、`i18n/locales/en/*.json` |

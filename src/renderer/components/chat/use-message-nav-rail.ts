@@ -10,8 +10,8 @@
 // ──────────────────────────────────────────────
 
 import type { UIMessage } from 'ai';
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import { type RefObject, useEffect, useRef, useState } from 'react';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { extractText } from '@/lib/chat/message-text';
 
 import {
@@ -44,8 +44,6 @@ export interface QuestionAnchor {
 interface NavRailOptions {
   /** 全量消息（锚点与预览文本数据源） */
   readonly messages: readonly UIMessage[];
-  /** 分页渲染窗口起点（变化即作废偏移快照） */
-  readonly windowStart: number;
   /** 滚动容器 ref（读取视口位置与消息节点） */
   readonly scrollerRef: RefObject<HTMLDivElement | null>;
 }
@@ -62,27 +60,22 @@ interface NavRailState {
 /**
  * 消息导航轨：锚点计算 + 滚动联动的活跃圆点
  *
- * 入参见 {@link NavRailOptions}（消息集、渲染窗口起点、滚动容器 ref）。
+ * 入参见 {@link NavRailOptions}（消息集、滚动容器 ref）。
  *
  * @returns 锚点列表、活跃 turn、合帧同步触发器
  */
-export function useMessageNavRail({
-  messages,
-  windowStart,
-  scrollerRef,
-}: NavRailOptions): NavRailState {
+export function useMessageNavRail({ messages, scrollerRef }: NavRailOptions): NavRailState {
   // 圆点代表用户消息而非每条消息（对齐参考项目 VerticalProgressBar）
-  const userMessageIndices = useMemo(
-    () => messages.map((m, i) => (m.role === 'user' ? i : -1)).filter((i) => i >= 0),
-    [messages],
-  );
+  // 纯派生数组：引用稳定性交给 React Compiler（下游 effect 以身份作「集合已变」信号）
+  const userMessageIndices = messages
+    .map((m, i) => (m.role === 'user' ? i : -1))
+    .filter((i) => i >= 0);
   const questions = useQuestionAnchors(messages, userMessageIndices);
-  const readMeasured = useMeasureOffsets({ userMessageIndices, windowStart });
+  const readMeasured = useMeasureOffsets({ userMessageIndices });
   const { activeTurn, scheduleSync } = useActiveTurn({
     scrollerRef,
     readMeasured,
     userMessageIndices,
-    windowStart,
     messageCount: messages.length,
   });
   return { questions, activeTurn, scheduleSync };
@@ -93,49 +86,46 @@ function useQuestionAnchors(
   messages: readonly UIMessage[],
   userMessageIndices: readonly number[],
 ): readonly QuestionAnchor[] {
-  return useMemo(() => {
-    return userMessageIndices.map((messageIndex, i) => {
-      const text = extractText(messages[messageIndex]?.parts ?? []);
-      return {
-        id: `q-${messageIndex}`,
-        turn: i,
-        messageIndex,
-        text: text.length > PREVIEW_MAX_CHARS ? `${text.slice(0, PREVIEW_MAX_CHARS)}…` : text,
-      };
-    });
-  }, [userMessageIndices, messages]);
+  // 纯派生，交给 React Compiler 记忆化
+  return userMessageIndices.map((messageIndex, i) => {
+    const text = extractText(messages[messageIndex]?.parts ?? []);
+    return {
+      id: `q-${messageIndex}`,
+      turn: i,
+      messageIndex,
+      text: text.length > PREVIEW_MAX_CHARS ? `${text.slice(0, PREVIEW_MAX_CHARS)}…` : text,
+    };
+  });
 }
 
 interface MeasureOffsetsOptions {
-  /** 用户消息索引（memo 身份随消息集变化，作为「需重测」信号） */
+  /** 用户消息索引（引用随消息集变化，作为「需重测」信号；稳定性由 React Compiler 保证） */
   readonly userMessageIndices: readonly number[];
-  readonly windowStart: number;
 }
 
 /** 偏移表读取器：快照仍适用于当前内容高度时复用，否则重测一次 */
 function useMeasureOffsets({
   userMessageIndices,
-  windowStart,
 }: MeasureOffsetsOptions): (el: HTMLElement) => readonly MeasuredMessage[] {
   const snapshotRef = useRef<LayoutSnapshot | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 两个依赖只是「可见消息集合变了即作废快照」的触发信号，effect 体本就不读取它们
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖只是「可见消息集合变了即作废快照」的触发信号，effect 体本就不读取它
   useEffect(() => {
     snapshotRef.current = null;
-  }, [userMessageIndices, windowStart]);
-  return useCallback((el: HTMLElement): readonly MeasuredMessage[] => {
+  }, [userMessageIndices]);
+  // 仅捕获 snapshotRef，引用稳定性交给 React Compiler
+  return (el: HTMLElement): readonly MeasuredMessage[] => {
     const cached = snapshotRef.current;
     if (cached !== null && isSnapshotFresh(cached, el.scrollHeight)) return cached.measured;
     const measured = measureMessages(el, MSG_INDEX_ATTR);
     snapshotRef.current = { measured, scrollHeight: el.scrollHeight };
     return measured;
-  }, []);
+  };
 }
 
 interface ActiveTurnOptions {
   readonly scrollerRef: RefObject<HTMLDivElement | null>;
   readonly readMeasured: (el: HTMLElement) => readonly MeasuredMessage[];
   readonly userMessageIndices: readonly number[];
-  readonly windowStart: number;
   readonly messageCount: number;
 }
 
@@ -144,7 +134,6 @@ function useActiveTurn({
   scrollerRef,
   readMeasured,
   userMessageIndices,
-  windowStart,
   messageCount,
 }: ActiveTurnOptions): { readonly activeTurn: number | null; readonly scheduleSync: () => void } {
   const [activeTurn, setActiveTurn] = useState<number | null>(null);
@@ -152,35 +141,41 @@ function useActiveTurn({
   useEffect(() => {
     indicesRef.current = userMessageIndices;
   }, [userMessageIndices]);
-  const sync = useCallback(
-    (el: HTMLElement): void => {
-      const midpoint = el.scrollTop + el.clientHeight / 2;
-      const activeMessageIndex = findActiveMessageIndex(readMeasured(el), midpoint);
-      const order = findUserOrder(indicesRef.current, activeMessageIndex);
-      setActiveTurn((prev) => (prev === order ? prev : order));
-    },
-    [readMeasured],
-  );
+  // 引用稳定性交给 React Compiler（捕获 readMeasured / scrollerRef / ref / setter）
+  const sync = (el: HTMLElement): void => {
+    const midpoint = el.scrollTop + el.clientHeight / 2;
+    const activeMessageIndex = findActiveMessageIndex(readMeasured(el), midpoint);
+    const order = findUserOrder(indicesRef.current, activeMessageIndex);
+    setActiveTurn((prev) => (prev === order ? prev : order));
+  };
+  // sync / scheduleSync 身份不进 effect 依赖：实现经 ref 调最新闭包
+  // （统一 useLatestRef：写入在 effect 阶段，避免渲染期写 ref）
+  const syncRef = useLatestRef(sync);
   const frameRef = useRef<number | null>(null);
-  const scheduleSync = useCallback((): void => {
+  const scheduleSync = (): void => {
     if (frameRef.current !== null) return;
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null;
       // 回调延后一帧，容器可能已卸载 → 重新取而非复用旧引用
       const el = scrollerRef.current;
-      if (el !== null) sync(el);
+      if (el !== null) syncRef.current(el);
     });
-  }, [scrollerRef, sync]);
+  };
   useEffect(
     () => () => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     },
     [],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 后三个依赖只是「重新同步」的触发信号（圆点经 indicesRef 间接读取），effect 体本就不直接引用它们
-  useEffect(() => {
+  // 依赖只留「重新同步」的触发信号；实现经 ref 调最新闭包，effect 体不读 scrollerRef.current
+  // （否则 exhaustive-deps 会要求把 .current 列入依赖——ref 身份本就稳定，属误报）
+  const runSync = useRef(() => {
     const el = scrollerRef.current;
-    if (el !== null) sync(el);
-  }, [sync, userMessageIndices, windowStart, messageCount]);
+    if (el !== null) syncRef.current(el);
+  });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: userMessageIndices/messageCount 仅作「重新同步」触发信号（圆点经 indicesRef 读取），effect 体不直接引用
+  useEffect(() => {
+    runSync.current();
+  }, [userMessageIndices, messageCount]);
   return { activeTurn, scheduleSync };
 }

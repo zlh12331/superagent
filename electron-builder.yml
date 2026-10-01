@@ -93,7 +93,8 @@ files:
   - "!**/test-results/**"
   # source map 不入包：electron.vite.config.ts 的 'hidden' 只是不写 sourceMappingURL 注释，
   # .map 文件本身连同原始 TS 源码仍会被打成产物（实测 98.4MB / asar 总量 24.3%）。
-  # 运行时不读 asar 内的 map；Sentry 符号化在 release.yml 从构建机 ./out 上传，与安装包无关。
+  # 运行时不读 asar 内的 map，整体排除（构建机 out/ 保留供本地排障；无云端符号上传，
+  # Sentry 已于 2026-09-13 移除）。
   - "!**/*.map"
   # codegraph 平台包不入 asar（2026-09-08 体积修复）：它是生产依赖，
   # 被 electron-builder 自动打入 asar 并对原生二进制 unpack（实测 191MB），

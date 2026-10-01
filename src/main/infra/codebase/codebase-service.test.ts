@@ -1,10 +1,12 @@
 // src/main/infra/codebase/codebase-service.test.ts
 // CodebaseService 单测：codegraph CLI 封装（正向/边界/异常三件套）
+//  + resolveCodegraphBundle dev 平台包解析 memo（P2-37）
 // ──────────────────────────────────────────────────────────────
 // 测试策略（遵循"业务逻辑不 mock、外部依赖注入 fake"）：
 // - spawnFn 经构造注入 fake（返回可编程 ChildProcess 模拟），不 mock 业务代码
 // - timeoutMs 注入短值（50ms）验证超时路径（生产默认 60s）
 // - args 断言验证 CLI 参数构造正确性（各方法的正/边界分支）
+// - bundle memo 用例：electron/node:fs 仅在该 describe 的 mock 层替换
 // ──────────────────────────────────────────────────────────────
 
 import type { ChildProcess, spawn } from 'node:child_process';

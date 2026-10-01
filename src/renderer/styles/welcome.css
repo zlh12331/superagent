@@ -1,0 +1,151 @@
+/* ──────────────────────────────────────────────────────────────
+   §welcome-mode 欢迎页模式
+   ──────────────────────────────────────────────────────────────
+   对齐原型 docs/prototype/prototype-v2.html 的 .view-chat.welcome-mode 行为：
+   - 隐藏右面板 + 右分隔线（欢迎页无需 DevPanel）
+   - 收窄 grid 列数：sidebar | resizer | main | 0 | 0
+   - main 改为居中 flex 容器，承载 welcome-view + composer + quick-actions
+   - welcome-view 默认隐藏，仅在 welcome-mode 下显示
+
+   注意：当前项目用 .thread-bg 替代原型的 .thread，CSS 选择器据此适配。
+   ────────────────────────────────────────────────────────────── */
+
+/* 基础样式：默认隐藏，仅 welcome-mode 下显示 */
+.welcome-view {
+  display: none;
+}
+
+.welcome-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--font-size-3xl); /* 28px */
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: -0.02em;
+  margin-bottom: 0;
+  font-family: var(--font-serif);
+}
+
+.welcome-logo .wl-icon {
+  /* 品牌标识（BrandMark，size=40，flat 实心） */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.welcome-quick-actions {
+  display: none;
+  gap: 8px;
+  justify-content: center;
+  padding: 12px 0 20px;
+  flex-wrap: wrap;
+}
+
+.welcome-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 12px);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s var(--ease-out);
+  white-space: nowrap;
+  font-family: var(--font-sans);
+}
+
+.welcome-pill:hover {
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
+  color: var(--foreground);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.welcome-pill svg {
+  width: 13px;
+  height: 13px;
+  opacity: 0.7;
+}
+
+/* welcome-mode 布局覆写：保留右面板（用户要求欢迎页也可见右面板），
+   grid 保持 5 列（sidebar | resizer | main | resizer | right-panel） */
+.view-chat.welcome-mode {
+  grid-template-columns:
+    var(--sidebar-w)
+    var(--resizer-w)
+    minmax(0, 1fr)
+    var(--resizer-w)
+    var(--right-panel-w);
+}
+
+/* main 改为居中 flex 容器（对齐原型 .thread 行为） */
+.view-chat.welcome-mode .thread-bg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  position: relative;
+}
+
+/* 显示欢迎视图 */
+.view-chat.welcome-mode .welcome-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.view-chat.welcome-mode .welcome-logo {
+  justify-content: center;
+}
+
+/* composer 在欢迎页：透明背景 + 无顶部分隔 + 最大宽度 720px */
+.view-chat.welcome-mode .composer {
+  border-top: none;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 720px;
+}
+
+.view-chat.welcome-mode .composer::before {
+  display: none;
+}
+
+.view-chat.welcome-mode .composer-box {
+  border-radius: var(--radius-xl);
+  border-color: var(--border);
+  box-shadow: 0 2px 12px color-mix(in srgb, black 8%, transparent);
+  max-width: 720px;
+}
+
+.view-chat.welcome-mode .composer-bar {
+  padding: 6px 10px;
+}
+
+/* 快捷动作区在欢迎页显示 */
+.view-chat.welcome-mode .welcome-quick-actions {
+  display: flex;
+  max-width: 720px;
+  width: 100%;
+  margin: 0;
+  justify-content: center;
+  padding: 0;
+}

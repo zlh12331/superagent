@@ -130,9 +130,11 @@ export { createReadFileTool } from './read-file.tool';
       pathKey,
     );
     expect(result).not.toBeNull();
-    const myIndex = result.indexOf('createMyToolTool');
-    const guardIndex = result.indexOf('resolveWithinWorkspace');
-    const readIndex = result.indexOf('createReadFileTool');
+    // 上一行断言已保证非 null；此处的 ?? '' 仅为满足类型收窄（若为 null 断言会先失败）
+    const out = result ?? '';
+    const myIndex = out.indexOf('createMyToolTool');
+    const guardIndex = out.indexOf('resolveWithinWorkspace');
+    const readIndex = out.indexOf('createReadFileTool');
     expect(myIndex).toBeGreaterThan(-1);
     expect(myIndex).toBeLessThan(guardIndex);
     expect(guardIndex).toBeLessThan(readIndex);

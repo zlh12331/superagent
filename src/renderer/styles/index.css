@@ -1,0 +1,43 @@
+@import "./tokens.css";
+@import "./base.css";
+@import "./layout.css";
+@import "./welcome.css";
+@import "./chat.css";
+@import "./composer.css";
+@import "./cards.css";
+@import "./diff.css";
+@import "./file-tree.css";
+@import "./fuzzy.css";
+@import "./motion.css";
+
+/* 原生控件配色（非令牌，保留在 globals） */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+/*
+ * 代码面排版行为变量（37 号 A：非设计令牌——是用户设置驱动的行为值，
+ * 不进 tokens.css 生成物；use-editor-code-style 订阅 store 后
+ * setProperty 覆盖）。默认 8 = 浏览器默认 tab 渲染口径，升级零视觉变化。
+ * 消费面：文件查看器（查看/编辑叠加层）/ 聊天 Markdown 代码块 / diff 行。
+ */
+:root {
+  --code-tab-size: 8;
+}
+
+/* src/renderer/styles/*（按域）
+   TraeWork 设计系统 · 设计令牌
+   ──────────────────────────────────────────────────────────────
+   设计哲学（对齐 TraeWork Design Library）：
+   - 品牌色：紫色 #4B3FE3，稀缺使用；品牌面实心（禁双 accent 渐变）
+   - 中性灰表面体系：白 → 浅灰 → 灰 → 深灰
+   - 9 级字号阶梯：10–28px（--font-size-*）
+     字号唯一阶梯 --font-size-*（含 xl/2xl/3xl）；旧档 --fs-* 已删除
+   - 暗色 / 亮色双主题，通过 <html class="dark"> 切换
+   - Quiet by default：无装饰背景、无发光氛围、无噪点纹理
+   - 中性阴影替代发光效果；焦点允许 0 0 0 Npx soft ring
+   - 完整 z-index 层级体系（--z-base 到 --z-boundary）
+   ────────────────────────────────────────────────────────────── */

@@ -14,6 +14,7 @@
 
 import { z } from 'zod';
 import { getCodeAnalyzer } from '../../code-analysis/code-analyzer';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -35,24 +36,32 @@ export function createCodeSymbolsTool(): Tool<CodeSymbolsInput> {
     permission: 'auto',
     category: 'read',
     execute: async (input: CodeSymbolsInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
-      const result = await getCodeAnalyzer().analyze({ path: absPath });
+      // realTarget：分析器读文件用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
+      const result = await getCodeAnalyzer().analyze({ path: realTarget });
       if (result.parseFailed) {
         return {
-          title: `代码符号: ${input.path}`,
+          title: t('tools.codeSymbols.title', { path: input.path }),
           output: '解析失败（语言不支持或 WASM 不可用），可改用 read_file 查看内容。',
         };
       }
       if (result.symbols.length === 0) {
-        return { title: `代码符号: ${input.path}`, output: '未发现顶层符号。' };
+        return {
+          title: t('tools.codeSymbols.title', { path: input.path }),
+          output: '未发现顶层符号。',
+        };
       }
       const lines = result.symbols.map(
         (s) => `L${String(s.line).padStart(4)}  ${s.kind.padEnd(10)}  ${s.name}`,
       );
       return {
-        title: `代码符号: ${input.path}（${result.symbols.length} 个，${result.language}）`,
+        title: t('tools.codeSymbols.titleWithCount', {
+          path: input.path,
+          count: result.symbols.length,
+          language: result.language,
+        }),
         output: lines.join('\n'),
-        metadata: { path: absPath, language: result.language, count: result.symbols.length },
+        metadata: { path: resolved, language: result.language, count: result.symbols.length },
       };
     },
   };

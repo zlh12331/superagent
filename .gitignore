@@ -6,6 +6,8 @@ node_modules/
 .pnpm-store/
 # TRAE 本地工具产物（会话文档等，不入仓）
 .trae/
+# WorkBuddy AI 工作区数据（会话记忆、门禁核实笔记等，不入仓）
+.workbuddy-ai/
 
 # 构建产物
 dist/
@@ -64,11 +66,6 @@ playwright-report-smoke/
 playwright/.cache/
 test-results/
 
-# Playwright 视觉回归基线图（首次生成后提交到仓库，不忽略）
-# e2e/visual.spec.ts-snapshots/ 需要提交以做 diff 基线
-# 但本地更新产生的临时 diff 产物可忽略
-test-results-visual/
-
 # Electron 二进制下载缓存（dev 环境用，避免 TRAE 沙箱拦截系统 %LOCALAPPDATA%）
 .electron-cache/
 # Electron userData 目录（dev 环境重定向到此，避免 TRAE 沙箱拦截系统 %APPDATA%）
@@ -85,11 +82,7 @@ test-results-visual/
 *.appx
 *.msi
 
-# PostgreSQL 便携版二进制（由 scripts/download-pg.ts 下载，约 200MB/版本，不入仓）
-# 设计文档 §6.5：resources/pg/18.4 + resources/pg/17.10 双版本
-resources/pg/
-
-# PG 下载脚本的临时目录（zip + 解压目录，盘符内同盘移动避免 EXDEV）
+# 临时目录（脚本运行的中间产物，zip / 解压目录等，盘符内同盘移动避免 EXDEV）
 .tmp/
 
 # 记忆引擎运行目录（由 scripts/prepare-memory-hub.mjs 从仓库内源码生成）
@@ -106,6 +99,11 @@ resources/codegraph-arm64/
 
 # 上游 MemoryCore 源码压缩包（本地参考，不入仓；源码已 vendored 至 packages/memory-engine）
 docs/TencentDB-Agent-Memory-*.zip
+
+# third_party 参考源的依赖锁文件（vendored 只读源码从不安装依赖，锁文件无功能作用，
+# 却会被 GitHub dependency graph 扫描产生 Dependabot 安全告警——依赖清单只保留
+# package.json 供溯源，锁文件不入仓）
+third_party/**/package-lock.json
 
 # electron-builder 打包产物（NSIS 安装包、latest.yml 等）
 release/
@@ -126,3 +124,7 @@ release/
 
 # AI 会话生成的临时图片素材（不入仓）
 /vibe_images/
+
+# Zcode 本地工具忽略副本（与 .gitignore 同源，不入仓）
+.zcodeignore
+.worktrees/

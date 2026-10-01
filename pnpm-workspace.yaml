@@ -51,22 +51,31 @@ packageExtensions:
 
 # ── 依赖覆盖（pnpm 11: overrides）─────────────────────────────────────────────
 overrides:
-  ip-address: 10.3.1
+  # 2026-09-30 升级：10.5.1 → 10.7.1（GHSA 两条 moderate：isInSubnet/isHostInSubnet
+  # 子网比较错误、Address6 解析诊断信息泄漏，patched 10.7.1）
+  ip-address: 10.7.1
   # 2026-09-09 升级：4.12.34 → 4.13.7（CVE-2026-84363/84364/84365 系列 query/parseBody DoS，patched 4.13.5）
   'hono@>=4.0.0': 4.13.7
   '@hono/node-server': 1.19.15
   postcss: 8.5.23
-  # 2026-09-04 升级：3.1.5 → 3.1.6（CVE-2026-75899/75931/75975 系列 SSRF 修复版）
-  # GHSA-fph4-wmhf-6fwf / GHSA-5jgf-p345-68v8 / GHSA-f65p-4m7j-42xc / GHSA-jqff-g426-hqxp
-  fast-uri: 3.1.6
+  # 2026-09-30 升级：3.1.7 → 3.1.8（GHSA-hrr3-gc8f-f4qj moderate：host case 不一致，
+  # patched 3.1.8；传递路径 ajv←MCP SDK / commitlint / cdxgen / electron-builder）
+  fast-uri: 3.1.8
   nanoid: 3.3.18
   tar: 7.5.21
-  'undici@>=7.0.0': 7.29.0
-  'undici@<7': 6.28.0
+  # 2026-09-29 升级：7.29.0 → 7.29.1、6.28.0 → 6.28.1（GHSA 两条 moderate DoS，
+  # 双 major 线分别 patch；7.x 线 = AI SDK provider-utils 生产 fetch，6.x 线 =
+  # node-gyp 构建链 devDependencies）
+  'undici@>=7.0.0': 7.29.1
+  'undici@<7': 6.28.1
   # 2026-09-09 升级：4.3.1 → 4.3.2（CVE-2026-84375 maxTotalMergeKeys 空合并源 CPU 耗尽，patched 4.3.2）
   'js-yaml@>=4.0.0': 4.3.2
   # Dependabot GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895：DoS，仅命中 typedoc 工具链的 4.x 线；1.x/2.x 合法共存不动
-  'brace-expansion@>=4.0.0': ^5.0.9
+  # 2026-09-30 三线全升（6 条告警：4 high + 2 moderate + cdxgen 链 3 moderate）：
+  # 1.1.18→1.1.21 / 2.1.4→2.1.7 / 5.0.9→5.0.12（递归 DoS 与二次展开 DoS 全系修复）
+  'brace-expansion@<2': ^1.1.21
+  'brace-expansion@>=2.0.0 <3': ^2.1.7
+  'brace-expansion@>=4.0.0': ^5.0.12
   # Dependabot GHSA-67mh-4wv8-2f99：dev server 请求伪造，命中 drizzle-kit→@esbuild-kit 的 0.18.x
   'esbuild@<0.25.0': ^0.25.12
 
@@ -82,7 +91,16 @@ overrides:
 # 代价：新增/升级依赖时，若目标版本发布不足 24h 会被拦——这是**有意的**，
 # 通常等一天或改用已过期的版本即可。确需立即安装时按需临时豁免（见下）。
 #
-# 临时豁免方式（不要改本文件）：`pnpm install --config.minimumReleaseAge=0`
+# 临时豁免（按报错形态选，2026-09-25 实测；都不要改本文件）：
+#   1) 版本过新（ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION + 可解析到发布时间）：
+#      `pnpm install --config.minimumReleaseAge=0`
+#   2) 版本不在当前 registry manifest（同上错误码，文案含
+#      "version not present in registry manifest"——典型是 npmmirror 漏同步某个
+#      平台可选包，如 @colbymchenry/codegraph-linux-x64）：
+#      改走官方源 `pnpm install --registry=https://registry.npmjs.org`
+#      （实测可过；`--config.minimumReleaseAge=0` 对这种「查不到年龄」无效）
+#   3) lockfile 已在可信环境校验过、只想跳过再校验：
+#      `pnpm install --trust-lockfile`（跳过整段供应链再校验，慎用）
 minimumReleaseAge: 1440
 
 # ── 存储与缓存：固定到项目内（TRAE 沙箱不允许写系统根目录 F:\.pnpm-store）───

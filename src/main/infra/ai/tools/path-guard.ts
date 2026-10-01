@@ -3,6 +3,8 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - resolveWithinWorkspace：把 LLM 提供的路径（相对或绝对）解析为绝对路径
+//   并确保在 workingDir 内（含符号链接真实落点校验），返回双形态：
+//   resolved（输入形态，对外展示）+ realTarget（真实落点，文件 IO 必用）
 // - 确保解析后的路径在 workingDir 内，防止路径遍历攻击（如 ../etc/passwd）
 //
 // 设计原则：
@@ -11,10 +13,19 @@
 //   （处理 Windows 盘符大小写、尾部分隔符差异）
 // - 越界抛出 AppError(UNAUTHORIZED)，由 ToolExecutor 捕获转为 ToolResult.error
 //
+// TOCTOU（debt.md#d1，2026-09-25 专项落地）：
+// 工具层文件 IO 必须使用 realTarget——若用 resolved，攻击者可在校验通过后、
+// IO 执行前把路径组件换成指向外部的符号链接（校验看 A、打开的是 B）。
+// realTarget 的每个组件刚经 realpath 验证，换链窗口收缩到微秒级重放，
+// 残余风险（realTarget 解析后再被换链）需要本地并发攻击者且收益极低。
+// 对外展示保持 resolved：LLM 输入/输出的路径形态零漂移（symlink 路径
+// 不会被解析成真实路径回显），避免模型困惑与 UI 形态变化。
+//
 // 使用示例：
 // ```ts
-// const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
-// await fileService.read({ path: absPath, ... });
+// const { realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
+// await fileService.read({ path: realTarget, ... });  // IO 用 realTarget
+// // 对外展示/回传给模型用 resolved
 // ```
 // ──────────────────────────────────────────────────────────────
 
@@ -56,6 +67,14 @@ export function resolveRealTarget(p: string): string | null {
   return null;
 }
 
+/** resolveWithinWorkspace 的双形态结果 */
+export interface ResolvedWorkspacePath {
+  /** 输入形态解析出的绝对路径（对外展示/回传给模型；symlink 不解析，形态稳定） */
+  readonly resolved: string;
+  /** 真实落点（realpath 已验证在工作区内；**文件 IO 必须用它**，见头注释 TOCTOU 段） */
+  readonly realTarget: string;
+}
+
 /**
  * 解析路径并确保在 workingDir 内
  *
@@ -67,12 +86,15 @@ export function resolveRealTarget(p: string): string | null {
  *
  * @param inputPath LLM 提供的路径（可能是相对或绝对）
  * @param workingDir 工作目录约束（绝对路径）
- * @returns 解析后的绝对路径（已通过边界检查）
+ * @returns 双形态：resolved（展示用）+ realTarget（IO 用，见头注释 TOCTOU 段）
  *
  * @throws AppError(INVALID_INPUT) 路径为空
  * @throws AppError(UNAUTHORIZED) 路径越权访问
  */
-export function resolveWithinWorkspace(inputPath: string, workingDir: string): string {
+export function resolveWithinWorkspace(
+  inputPath: string,
+  workingDir: string,
+): ResolvedWorkspacePath {
   // 空路径校验（含纯空白路径：LLM 可能输出无意义空白）
   if (!inputPath || inputPath.trim().length === 0) {
     throw new AppError(ErrorCode.INVALID_INPUT, '路径不能为空');
@@ -123,11 +145,7 @@ export function resolveWithinWorkspace(inputPath: string, workingDir: string): s
     );
   }
 
-  // 说明（2026-09-08 评估后保留现状）：返回 resolved 而非 realTarget。
-  // 返回 realTarget 能彻底消除「校验与 IO 之间换链」的 TOCTOU 窗口，
-  // 但会改变所有工具返回给模型/UI 的路径形态（symlink 路径被解析成真实路径），
-  // 影响面覆盖 read/write/edit/grep/glob/terminal 等全部文件工具，
-  // 且与本条债的收益不成比例。此处保留返回 resolved，
-  // TOCTOU 残余风险记录在技术债清单（需要时按"返回 realTarget + 全量回归"专项处理）。
-  return resolved;
+  // 2026-09-25 D1 专项落地：返回双形态（此前仅返回 resolved——TOCTOU 残余窗口
+  // 登记于 debt.md#d1）。工具层 IO 用 realTarget、展示用 resolved，取舍见头注释。
+  return { resolved, realTarget };
 }

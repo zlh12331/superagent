@@ -34,7 +34,19 @@ type MockApi = {
 /** 重建空骨架（模块加载与 afterEach 共用）：避免复用单例导致注入域残留到下一测试 */
 function createEmptyApi(): MockApi {
   return {
-    app: {},
+    // app 域给出最小可用实现：设置页（GeneralSection）挂载时会调用
+    // getLoginItemSettings 并订阅 subscribeLoginItemChanged，空对象会让渲染它的
+    // 测试直接抛错（与 update 域同一取舍）
+    app: {
+      getLoginItemSettings: async () => ({
+        data: { openAtLogin: false, supported: false, requiresApproval: false },
+      }),
+      setLoginItemSettings: async () => ({
+        data: { openAtLogin: false, supported: false, requiresApproval: false },
+      }),
+      subscribeLoginItemChanged: () => () => {},
+      subscribeDeepLink: () => () => {},
+    },
     chat: {},
     agent: {},
     session: {},
@@ -44,6 +56,10 @@ function createEmptyApi(): MockApi {
     git: {},
     codebase: {},
     tool: {},
+    // settings 域同样给最小实现：useSettingsBridge 订阅 subscribeChanged（AppShell 挂载即调用）
+    settings: {
+      subscribeChanged: () => () => {},
+    },
     // 更新域给出最小可用实现：顶栏更新指示 / 关于面板 / use-update 在挂载时即调用
     // getStatus 与 subscribeStatus，空对象会导致渲染顶栏的测试直接抛错
     update: {

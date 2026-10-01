@@ -11,11 +11,11 @@
 //   sidebar-tab / sidebar-list / thread-group-label / folder-label /
 //   folder-items / thread-item / ti-row / ti-dot / ti-content / ti-title /
 //   ti-meta / ti-actions / sidebar-foot
-// - 文学风视觉令牌：深棕主色 + 衬线标题 + 等宽元信息
+// - 标题衬线 + 等宽元信息（排版选择，非「文学风」设计轴）
 //
 // 状态分层（符合项目规范）：
 // - L2 Zustand：useActiveSessionStore（激活会话）/ useSidebarPrefStore（拖拽覆盖 + 折叠）
-// - L3 TanStack Query：useSessionsQuery 拉取列表
+// - L3 TanStack Query：useSessionsFlat 拉取列表（select 平铺）
 // - L3 TanStack Mutation：useDeleteSession / usePinSession / useRenameSession
 //
 // 拆分记录（2026-08 重构）：原文件 641 行，按职责拆分为本组装层 +
@@ -36,7 +36,7 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-ki
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { motion } from 'motion/react';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { AsyncBoundary } from '@/components/common/AsyncBoundary';
@@ -49,13 +49,13 @@ import {
   type SessionListData,
   useDeleteSession,
   usePinSession,
-  useSessionsQuery,
+  useSessionsFlat,
 } from '@/hooks/use-sessions';
 import { useSidebarHighlight } from '@/hooks/use-sidebar-highlight';
 import { useWorkingDir } from '@/hooks/use-working-dir';
 import { useTranslation } from '@/i18n/use-translation';
+import { openExternal } from '@/lib/app-actions';
 import { ROUTES } from '@/lib/constants';
-import { hasIpcBridge } from '@/lib/ipc';
 import { springTransition } from '@/lib/motion';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useSidebarPrefStore } from '@/stores/persistent/sidebar-pref-store';
@@ -80,25 +80,21 @@ import { SortableThreadItem } from './thread-item';
  * 却毫无反应、也无任何线索。
  */
 function openInFileManager(dir: string, message: string): void {
-  // 浏览器模式无桥：直接返回（否则成员访问阶段同步抛 TypeError，.catch 兜不住）
-  if (!hasIpcBridge()) return;
-  void window.api.app.openExternal({ url: `file:///${dir.replace(/\\/g, '/')}` }).catch(() => {
+  // 无桥时 openExternal 返回 false，静默；IPC 失败抛错 → toast（此前完全静默无线索）
+  openExternal(`file:///${dir.replace(/\\/g, '/')}`).catch(() => {
     toast.error(message);
   });
 }
 
+/** 左侧栏：会话列表（分页/搜索/置顶分组）+ 快捷导航 + 账户区 */
 export function Sidebar(): ReactElement {
   const navigate = useNavigate();
   // 本地化文案
   const { t } = useTranslation();
 
-  // L3 TanStack Query：会话列表数据（P3：无限分页）
-  const query = useSessionsQuery();
-  // 平铺分页数据为会话列表（useInfiniteQuery 的 data.pages 结构）
-  const sessions = useMemo(
-    () => query.data?.pages.flatMap((page) => page.sessions) ?? [],
-    [query.data],
-  );
+  // L3 TanStack Query：会话列表数据（P3：无限分页；useSessionsFlat 的 select 已平铺）
+  const query = useSessionsFlat();
+  const sessions = query.data ?? [];
   const hasMore = query.hasNextPage === true && query.isFetchingNextPage === false;
   // 视图状态机映射（五态：loading / refreshing / error / empty / ready）
   // 适配：useAsyncView 消费 UseQueryResult 形状，此处把分页数据投影为单页形状
@@ -388,6 +384,8 @@ export function Sidebar(): ReactElement {
                               isActive={entry.session.id === activeSessionId}
                               isDeleting={isDeleting}
                               isPinned={entry.session.pinned === true}
+                              // D4A：跨会话运行徽标 + 中断入口（数据源 sessions 表 lastRunStatus）
+                              isRunning={entry.session.lastRunStatus === 'running'}
                               highlighted={highlightedThreadIds.has(entry.session.id)}
                               onSelect={() => handleSelectSession(entry.session.id)}
                               onDelete={() => handleDelete(entry.session.id)}

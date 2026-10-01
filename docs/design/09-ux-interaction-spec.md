@@ -83,7 +83,7 @@ flowchart TB
 ```mermaid
 flowchart LR
   U[组件] --> Q[TanStack Query] --> W[window.api.*<br/>preload]
-  W -->|invoke 通道| H[主进程 handler<br/>校验/日志/Sentry]
+  W -->|invoke 通道| H[主进程 handler<br/>校验/日志]
   H --> S[服务] --> D[(SQLite/keychain/文件/LLM)]
   S -->|send 事件| W -->|订阅| B[桥接 hook] --> ST[Zustand store] --> U
 ```
@@ -91,43 +91,42 @@ flowchart LR
 - 通道命名：`域:动作`（请求）、`域:stream:事件`（流式）、`域:event:名称`（状态事件）；全表见第七章。
 - 错误约定：返回 `{data} | {error:{code,message}}`，消息带 `[CODE]` 前缀 → 前端查 i18n。
 
-## 二、UI 设计体系（Aurora 2.0）
+## 二、UI 设计体系（TraeWork）
 
-唯一真源：[globals.css](../../src/renderer/styles/globals.css)（4224 行）。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
+唯一真源：[styles/index.css](../../src/renderer/styles/index.css)（@import 各域 css + `@theme`）+ `styles/tokens.css`。原则：**所有颜色/尺寸走 CSS 变量（令牌），禁止硬编码**。
 
 ### 2.1 颜色总览（亮 / 暗两套）
 
 | 用途 | 亮色 | 暗色 |
 |---|---|---|
-| 背景 L0 页面基底 | `--bg #f7f8fa` | `#080b10` |
-| L1 侧栏/顶栏/卡片 | `--bg-elev #ffffff` | `#0e1319` |
-| L2 悬浮/卡片头/悬停 | `--bg-elev-2 #eef0f4` | `#141a23` |
-| L3 激活/强调容器 | `--bg-elev-3 #e0e4ec` | `#1a2130` |
-| 主文字 | `--text #1a2130` | `#e8edf4` |
-| 次要文字 | `--text-dim #5a6478` | `#8a95a6` |
-| 辅助/占位文字 | `--text-faint #5d6779`（5.39:1 AA） | `#7a8699`（6.5:1） |
-| 主 accent 青绿 | `--accent #00b89e` | `#00e5c7` |
-| 辅 accent 蓝 | `--accent-2 #2b7fff` | `#4a9eff` |
-| 边框 | `--border #e1e4eb` / strong `#cbd0db` | `#1c2330` / `#2d3848` |
-| 成功 | `--success #00d9c0` | 同左 |
-| 警告 | `--warning = --amber #e89038`（glow rgba(232,144,56,.15)） | 同左 |
-| 错误 | `--error #c53030`（bg rgba(197,48,48,.08)） | 同左 |
-| accent 上文字 | `--on-accent #001814`（7.6:1） | 同左 |
-| 用户气泡 | `--msg-bubble-user #e8edf5` | 暗色另值 |
+| 背景 L0 页面基底 | `--bg #FFFFFF` | `#0A0A0A` |
+| L1 侧栏/顶栏/卡片 | `--bg-elev #F5F5F5` | `#171717` |
+| L2 悬浮/卡片头/悬停 | `--bg-elev-2 #E5E5E5` | `#262626` |
+| L3 激活/强调容器 | `--bg-elev-3 #D4D4D4` | `#404040` |
+| 主文字 | `--text #171717` | `#F5F5F5` |
+| 次要文字 | `--text-secondary #404040` | `#D4D4D4` |
+| 辅助/占位文字 | `--text-faint #A1A1A1` | `#737373` |
+| 主 accent 紫 | `--accent #4B3FE3` | `#6A6FFF` |
+| 辅 accent 蓝 | `--accent-2 #3F85FF` | `#4C88FF` |
+| 边框 | `--border` / `--border-strong`（灰阶半透明） | 同语义 |
+| 成功 | `--success #15A877` | 同左 |
+| 警告 | `--warning = --amber #E27900` | `#F39A35` |
+| 错误 | `--error #E8463A` | `#EA574C` |
+| accent 上文字 | `--on-accent #FFFFFF` | 同左 |
+| 用户气泡 | `--msg-bubble-user #F5F5F5` | `#262626` |
 
-映射：`--primary=accent`、`--muted-foreground=text-dim`、`--muted=bg-elev-2`、`--ring=accent`、`--input=border`；图表五色 = accent/accent-2/amber/success/error。`@theme inline` 把这些变量暴露成 Tailwind 类（`bg-background`/`text-muted-foreground`…）。
+映射：`--primary` 为实底按钮（与 `--accent` 职责分离）；`@theme inline` 暴露 Tailwind 类。详见 `DESIGN.md` 宪法 C1–C6。
 
-### 2.2 字号 / 间距 / 圆角 / 阴影 / 缓动 / 图标
+### 2.2 字号 / 间距 / 圆角 / 阴影 / 缓动
 
 ```
-字号 6 级：10 / 11 / 12 / 13 / 14 / 16 px（--font-size-2xs…lg，UI 默认 13）
-间距 7 级：4 → 48 px（--sp-1…7，4px 步进）
-圆角：--radius 0.625rem（10px），lg +2px，xl +4px
-阴影 5 档：--shadow-elev（抬升）/ --shadow-modal（模态，accent 描边）/ --shadow-dropdown（下拉）/ --shadow-card / --shadow-card-hover
-发光 3 档：--glow-sm/md/lg（青）、--glow-2-sm/md（蓝）
-缓动 3 个：--ease-soft 标准 / --ease-paper 纸张 / --ease-out 出场
-图标 5 档：10/12/14/16/20 px（lucide-react，strokeWidth 1.5-2）
-字体：--font-sans（UI）/ --font-serif（文学风标题）/ --font-mono（代码/状态/日志）
+字号 9 级：10 / 11 / 12 / 13 / 14 / 16 / 18 / 22 / 28（--font-size-2xs…3xl；UI base=13，对话正文 md=14）
+间距：Tailwind gap/p 系（--sp-* 已删除）
+圆角：--radius 8px + sm/md/lg/xl（6/8/10/12）
+阴影：--shadow-soft / --shadow-raise / --shadow-modal / --shadow-dropdown / --shadow-card(-hover)（中性 elevation；旧 glow-* 已改名）
+缓动：--ease-soft / --ease-paper / --ease-out
+图标：lucide size-*（--icon-* 阶梯已删除）
+字体：--font-sans（UI）/ --font-serif（标题）/ --font-mono（代码/状态）
 ```
 
 ### 2.3 z-index 档位
@@ -150,9 +149,8 @@ flowchart LR
 
 ### 2.5 页面氛围与动效
 
-- `body::before`：双 accent 渐变光晕 + 技术网格 + 扫描线；`body::after`：SVG 噪点（mix-blend-mode）。
-- 主区 `.thread-bg paper-texture`：多层光晕 + 纸张噪点；顶栏 `backdrop-filter: blur(16px) saturate(1.4)` + 底部发光刻度线。
-- 动画统一 tw-animate-css + 自定义关键帧（pulse-soft 状态点 / typingBounce 打字点 / msgEnter 消息入场 / shimmer 骨架 / refreshing-slide 刷新条 / reasoningReveal 推理块 / modalin 模态入场等，定义在 globals.css）。
+- TraeWork quiet：无装饰光晕/网格/噪点；扫描线仅实验开关默认关；顶栏中性表面。
+- 动画统一 tw-animate-css + 自定义关键帧（pulse-soft / typingBounce / msgEnter / shimmer / refreshing-slide / reasoningReveal / modalin 等，定义在 `styles/motion.css`）。
 - 对比度硬标准：正文 ≥16:1、次要 ≥5.39:1、accent 上文字 7.6:1（历史坑：硬编码 stone-* 曾低至 1.23:1，勿回退）。
 
 ## 三、页面布局（每个界面一张图）
@@ -226,7 +224,7 @@ flowchart LR
 │  模型服务  │← 打开时默认停在「模型服务」              │
 │  ...      │                                          │
 ├──────────┴───────────────────────────────────────────┤
-│ 导航：160px 固定列；激活项 = 青色 2px 竖条 + 加粗      │
+│ 导航：160px 固定列；激活项 = accent 2px 竖条 + 加粗    │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -471,13 +469,13 @@ stateDiagram-v2
 
 **Git（5 文件）**：status 缓存 10s；diff 不缓存；文件列表状态映射（git-status-utils）——modified amber FileEdit / added emerald FilePlus / deleted red FileX / renamed blue FileEdit / untracked muted FileQuestion / conflicted 红加粗 AlertCircle；分支行 ahead 显示 emerald ↑N、behind 显示 amber ↓N；diff 统计用 diff-match-patch 语义统计（移动行不计增删），兜底主进程文本统计；展开区 ScrollArea 内 Skeleton/无 diff/UnifiedDiffView。
 
-**日志（LogsPanel 252 行）**：行数选项 [100,200,500]（默认 200）；级别过滤 all/info/warn/error/debug（all 时传 undefined 避免 IPC 歧义）；行级着色按行内 [error]/[warn]/[debug] 标记。**指标（MetricsPanel 267 行）**：六卡 2 列网格——rss / heapUsed（含 heapTotal hint）/ external / cpu user（含 system hint）/ uptime（含 PID hint）/ 版本卡（col-span-2：app/electron/node + platform/arch + packaged/dev）；格式化 formatBytes（B/MB/GB）/ formatMs / formatUptime（h m s）；10s refetchInterval + enabled 面板可见。**检查器（InspectorPanel）**：detach/right/bottom 三模式 → devtools.open；状态 idle/loading/success/error，3s 自动回 idle；成功显示打开模式。**浏览器（browser-pane 301 行）**：设备尺寸 desktop {1366,768} / tablet {768,1024} / mobile {375,667} / responsive；历史栈前进后退；刷新用 `key={loadedUrl}` 强制 iframe 重挂载（置 null 100ms 后恢复）；URL 无协议自动补 https://；iframe sandbox allow-scripts/allow-same-origin/allow-forms/allow-popups。
+**日志（LogsPanel 252 行）**：行数选项 [100,200,500]（默认 200）；级别过滤 all/info/warn/error/debug（all 时传 undefined 避免 IPC 歧义）；行级着色按行内 [error]/[warn]/[debug] 标记。**指标（MetricsPanel 267 行）**：六卡 2 列网格——rss / heapUsed（含 heapTotal hint）/ external / cpu user（含 system hint）/ uptime（含 PID hint）/ 版本卡（col-span-2：app/electron/node + platform/arch + packaged/dev）；格式化 formatBytes（B/MB/GB）/ formatMs / formatUptime（h m s）；10s refetchInterval + enabled 面板可见。**检查器（InspectorPanel）**：detach/right/bottom 三模式 → devtools.open；状态 idle/loading/success/error，3s 自动回 idle；成功显示打开模式。**浏览器（browser-pane）**：WebContentsView 进程外预览；设备尺寸 desktop/tablet/mobile/responsive；历史栈前进后退；URL 无协议自动补 https://。
 
 ### 5.8 错误边界三层
 
 ```mermaid
 flowchart TB
-  E1[AppErrorBoundary<br/>全屏+Sentry+重新加载/发报告] --> E2[RootErrorBoundary<br/>路由错误+重载]
+  E1[AppErrorBoundary<br/>全屏+本地上报+重新加载/发报告] --> E2[RootErrorBoundary<br/>路由错误+重载]
   E2 --> E3[SectionErrorBoundary<br/>侧栏/主区/右面板/设置pane 局部降级+重试]
 ```
 
@@ -501,7 +499,7 @@ flowchart TB
 
 **统一 diff 视图（UnifiedDiffView.tsx 88 行）**：parseUnifiedDiff 按 hunk 拆分，每 hunk 渲染一个 ReactDiffViewer（splitView 双栏、LINES 比较、隐藏行号关闭）；COMPACT_STYLES：content 10px 等宽、行高 1.6；空 diff 显示"无差异"。
 
-**区块错误边界（SectionErrorBoundary.tsx 101 行）**：props children/name（Sentry tag）/resetKeys（任一变化自动清除错误）；fallback 零依赖（静态中文文案，避免 Provider 错误时二次失败）；错误消息截断显示 + title 悬浮全文；上报 Sentry 带 boundary + section tag。
+**区块错误边界（SectionErrorBoundary.tsx 101 行）**：props children/name（上报 tag 区分区块）/resetKeys（任一变化自动清除错误）；fallback 零依赖（静态中文文案，避免 Provider 错误时二次失败）；错误消息截断显示 + title 悬浮全文；经 error-report 上报带 boundary + section tag。
 
 **空态（EmptyState.tsx 85 行）**：props icon（默认 Inbox）/title/description/actionLabel/onAction；图标 48px 圆底（bg-muted）+ 衬线标题 + 可选 outline 按钮；纯展示无业务。
 
@@ -622,7 +620,7 @@ preload/index.ts：`createIpcApi(IPC_META)` 生成全部 API → `contextBridge.
 
 create-api.ts 生成器：遍历 IPC_META——`kind==='request'` 生成 `(input) => invoke(channel, input)`；`kind==='event'` 生成 `(callback) => subscribe(channel, callback)`（返回 unsubscribe）。**新增 IPC 方法只改 meta + definitions，本文件零改动**。
 
-ipc-bridge.ts：`invoke` 用全局 Web Crypto 生成 traceId（sandbox 不能 import node:crypto）作为第三参传入 ipcRenderer.invoke，traceId 贯穿渲染层→主进程→日志→Sentry；`subscribe` 包装回调吞掉 IpcRendererEvent（Electron Security #17，不向渲染层暴露事件对象），**必须保留同一 handler 引用**（匿名函数无法 removeListener 导致泄漏），返回 removeListener 包装。
+ipc-bridge.ts：`invoke` 用全局 Web Crypto 生成 traceId（sandbox 不能 import node:crypto）作为第三参传入 ipcRenderer.invoke，traceId 贯穿渲染层→主进程→日志→本地错误上报；`subscribe` 包装回调吞掉 IpcRendererEvent（Electron Security #17，不向渲染层暴露事件对象），**必须保留同一 handler 引用**（匿名函数无法 removeListener 导致泄漏），返回 removeListener 包装。
 
 ### 7.1.2 shared 推导层（packages/shared/src/ipc）
 
@@ -686,7 +684,7 @@ flowchart LR
 
 **main.tsx**：`unhandledrejection` 全局捕获——AbortError 预期中断不报错，其余 console.error（唯一日志出口）；**applyInitialTheme() 必须在 createRoot 渲染之前调用**（FOUC 防闪烁）；StrictMode 包裹。
 
-**index.css**：`@import tailwindcss + tw-animate-css + styles/globals.css`（@import 必须在其他 at-rule 之前）；`@custom-variant dark`；`.search-highlight` 搜索高亮动画（2.5s accent 淡出）。
+**index.css**：`@import tailwindcss + tw-animate-css + styles/index.css`（@import 必须在其他 at-rule 之前）；`@custom-variant dark`；`.search-highlight` 搜索高亮动画（2.5s accent 淡出，keyframes 在 styles/motion.css）。
 
 **theme-init.ts（FOUC 防护）**：读 localStorage `code-agent:settings` 的 zustand persist 结构 `{state:{theme}}`，非法回退 dark；system 模式用 matchMedia 解析；`document.documentElement.classList.toggle('dark')`；**必须 module script 而非 index.html 内联脚本**（生产 CSP script-src 'self' 禁止 inline）。
 
@@ -694,7 +692,7 @@ flowchart LR
 
 **i18n**：initI18n 幂等（模块加载时同步 init，早于 I18nextProvider 渲染防白屏）；语言检测 localStorage → navigator，持久化 `code-agent:lang`；interpolation.escapeValue false（React 已转义）；useSuspense false（资源全量打包）；useErrorMessage 错误码文案查询，资源缺失回退 `ERROR_META[code]?.userMessage`（未知码不抛错，保护 onError）。
 
-**loading-ui/terminal.tsx**：纯展示终端加载动画——内联 style 注入 keyframes，光标 `--duration` 令牌可覆盖，role=status + sr-only Loading。
+**loading-ui/terminal.tsx**：纯展示终端加载动画——复用 `styles/motion.css` 的 `blink` 关键帧（无内联 style），role=status + sr-only Loading。
 
 ### 8.2 设置控件与 sections 细节
 
@@ -718,4 +716,8 @@ flowchart LR
 
 **不适用**：退出登录/云端账户（无登录后端）；Git 写操作（通道存在零调用）；search/codebase/audio 域无 UI；独立审批对话框（已内联化）。
 
-**已知不一致**：主题按钮两态 vs 快捷键三态；快捷键帮助表 Ctrl+B/Ctrl+J 未绑定；Git 路径与终端工作目录硬编码项目路径。
+**已知不一致**：主题按钮两态 vs 快捷键三态；Git 路径与终端工作目录硬编码项目路径。
+
+（2026-09-30 核销：原记录「快捷键帮助表 Ctrl+B/Ctrl+J 未绑定」已过期——
+`use-keyboard-shortcuts` 实际绑定 ctrl+b,meta+b,ctrl+1,meta+1 / ctrl+j,meta+j,ctrl+2,meta+2，
+AppShell 已接线 onToggleSidebar/onToggleRightPanel，帮助表与设置·快捷键分区的固定键速查均为真实键位。）

@@ -11,15 +11,21 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n/config';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { LANGUAGE_ENDONYMS } from '@/lib/language-endonyms';
+import {
+  getLoginItemSettings,
+  setLoginItemSettings,
+  subscribeLoginItemChanged,
+} from '@/lib/settings-ops';
 import { cn } from '@/lib/utils';
 import { type AppLanguage, useSettingsStore } from '@/stores/persistent/settings-store';
 import { SegControl, SettingRow, ToggleRow } from '../settings-controls';
 import { DataSection } from './data-section';
 import { EditorSection } from './editor-section';
+import { NotificationSection } from './notification-section';
 import { PromptSection } from './prompt-section';
-import { ShortcutsSection } from './shortcuts-section';
 import { TelemetrySection } from './telemetry-section';
+import { ZoomSection } from './zoom-section';
 
 /** 语言切换行（真实 i18n：changeLanguage 立即生效；P2：同步写入 SQLite 设置链路） */
 function LanguageRow(): ReactElement {
@@ -55,7 +61,7 @@ function LanguageRow(): ReactElement {
             )}
             onClick={() => handleSelect(code)}
           >
-            {code === 'zh-CN' ? '简体中文' : 'English'}
+            {LANGUAGE_ENDONYMS[code]}
             {lang === code && <Check className="size-3" strokeWidth={2} />}
           </Button>
         ))}
@@ -74,26 +80,33 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
 
   // 开机自启状态挂载时回显（OS 登录项为唯一真源，读取失败隐藏开关避免误导）
   useEffect(() => {
-    if (!hasIpcBridge()) return;
     void (async () => {
       try {
-        setAutostart(unwrap<LoginItemSettingsRes>(await window.api.app.getLoginItemSettings()));
+        setAutostart(await getLoginItemSettings());
       } catch {
-        // 读取失败（桥不存在/旧版本）：隐藏开关避免误导
+        // 读取失败（无桥/旧版本）：隐藏开关避免误导
         setAutostart(null);
       }
     })();
   }, []);
 
+  // 托盘菜单也能改自启（两处开关同源 OS 登录项）：订阅主进程广播，
+  // 设置页正开着时同步回显——否则会一直显示托盘改动前的旧值（30-spec §3 P2-6）。
+  useEffect(() => {
+    const unsubscribe = subscribeLoginItemChanged((payload) => {
+      setAutostart(payload);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const handleToggleAutostart = async (checked: boolean): Promise<void> => {
-    if (!hasIpcBridge()) return;
     try {
       // 响应是写入后回读的真实 OS 状态（注册失败/待审批会如实反映，非入参回显）
-      setAutostart(
-        unwrap<LoginItemSettingsRes>(
-          await window.api.app.setLoginItemSettings({ openAtLogin: checked }),
-        ),
-      );
+      const res = await setLoginItemSettings({ openAtLogin: checked });
+      if (res === null) return;
+      setAutostart(res);
     } catch {
       toast.error(t('settings.autostartFailed'));
     }
@@ -141,10 +154,15 @@ export function GeneralSection({ drawerOpen }: { readonly drawerOpen: boolean })
         </div>
       </div>
 
-      {/* 编辑器 / 快捷键 / 提示词（并入通用） */}
+      {/* 系统通知（回合结束后台提醒门控，33 号 spec；驻留行为域与关窗/自启相邻） */}
+      <NotificationSection />
+
+      {/* 界面缩放（35 号：显示域，与窗口行为/系统通知相邻） */}
+      <ZoomSection />
+
+      {/* 编辑器 / 提示词（并入通用；快捷键已独立分区，见 shortcuts-section） */}
       <div className="flex flex-col gap-4">
         <EditorSection />
-        <ShortcutsSection />
         <PromptSection open={drawerOpen} />
       </div>
 

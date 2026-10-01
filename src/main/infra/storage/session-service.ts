@@ -33,9 +33,11 @@
 import { randomUUID } from 'node:crypto';
 import type {
   ChatMessage,
+  SessionClearAllRes,
   SessionDeleteRes,
   SessionGetRes,
   SessionGetTurnsRes,
+  SessionImportRes,
   SessionListRecentDirsRes,
   SessionListRes,
   SessionPinRes,
@@ -43,9 +45,10 @@ import type {
   SessionRenameRes,
   UsageSummaryRes,
 } from '@code-agent/shared/main';
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import { AppError, ErrorCode, INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { count, desc, eq, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { getDb, reclaimFreePages } from './db';
 import { type MessageInsert, messages, type SessionInsert, sessions } from './schema';
 import {
@@ -55,12 +58,12 @@ import {
   rowToMeta,
   serializeMessage,
 } from './session-helpers';
+import { exportAllSessions, importSessionsFromPayload } from './session-io';
 import {
   DEFAULT_SESSION_TITLE,
   type ISessionService,
   type SessionAppendMessageOptions,
   type SessionCreateOptions,
-  type SessionExportItem,
   type SessionExportPayload,
 } from './session-types';
 import {
@@ -135,7 +138,7 @@ export class SessionService {
    * @throws AppError(SESSION_NOT_FOUND) 会话不存在
    * @throws AppError(INTERNAL_ERROR) JSON 反序列化失败
    */
-  async get(id: string): Promise<SessionGetRes> {
+  async get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes> {
     const db = getDb();
 
     // 1. 查询会话元数据
@@ -144,7 +147,10 @@ export class SessionService {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId: id });
     }
 
-    // 2. 查询消息历史（按 seq 升序）
+    // 2. 查询消息历史（按 seq 升序）；includeMessages=false 跳过（元数据消费方免付全量负载）
+    if (options?.includeMessages === false) {
+      return { session: rowToMeta(sessionRow), messages: [] };
+    }
     const messageRows = db
       .select()
       .from(messages)
@@ -185,7 +191,36 @@ export class SessionService {
     db.delete(sessions).where(eq(sessions.id, id)).run();
     // 级联删除只把页放进 freelist，文件不会自己缩小
     reclaimFreePages();
+    // 失效域声明（31 号 spec S1）：列表域；不含 session:<id>——详情缓存指向已删除
+    // 会话，重拉只会 SESSION_NOT_FOUND（渲染层删除 mutation 自行清理详情缓存）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
     return { ok: true };
+  }
+
+  /**
+   * 清空全部会话（36-D）
+   *
+   * 无 where 全表删除：messages / turns / goals 经 FK ON DELETE CASCADE 一并级联；
+   * tasks / cron_tasks 无外键（有意），不受影响。幂等：空表 → deleted=0。
+   * 运行中回合守卫在 handler 层（SESSION_IN_USE）——服务层保持纯数据操作，
+   * 与 compactMessages 注入同模式。
+   */
+  async clearAll(): Promise<SessionClearAllRes> {
+    const db = getDb();
+    const result = db.delete(sessions).run();
+    const deleted = result.changes;
+    reclaimFreePages();
+    // 失效域声明（31 号 spec）：级联清空波及 usage（用量汇总）/ turns（最近回合）/
+    // goal（目标），四域一并声明；session:<id> 详情与 recent-dirs 由渲染层 mutation
+    // removeQueries 前缀清理（清空场景逐 id 声明不现实）
+    broadcastInvalidation([
+      INVALIDATION_DOMAINS.sessions,
+      INVALIDATION_DOMAINS.usage,
+      INVALIDATION_DOMAINS.turns,
+      INVALIDATION_DOMAINS.goal,
+    ]);
+    logger.info({ deleted }, '全部会话已清空');
+    return { deleted };
   }
 
   /**
@@ -207,6 +242,8 @@ export class SessionService {
       throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId: id });
     }
 
+    // 失效域声明（31 号 spec S2）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(id)]);
     return { ok: true };
   }
 
@@ -222,6 +259,10 @@ export class SessionService {
       .set({ pinned: pinned ? 1 : 0, updatedAt: Date.now() })
       .where(eq(sessions.id, id))
       .run();
+    // 失效域声明（31 号 spec S2）：仅真实写入时声明（changes=0 是幂等空操作）
+    if (result.changes > 0) {
+      broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(id)]);
+    }
     return { ok: result.changes > 0 };
   }
 
@@ -282,6 +323,8 @@ export class SessionService {
     });
 
     logger.info({ sessionId, messageCount: initialMessages.length }, '创建新会话');
+    // 失效域声明（31 号 spec S3）：IM/远程桥创建会话由此到达渲染层（无头回合链路）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     return sessionId;
   }
 
@@ -312,32 +355,55 @@ export class SessionService {
     // 2. 若无消息追加，仅更新 updatedAt（保持会话活跃）
     if (newMessages.length === 0) {
       db.update(sessions).set({ updatedAt: Date.now() }).where(eq(sessions.id, sessionId)).run();
+      // 失效域声明（31 号 spec S4）：updatedAt 也是真实写（空消息路径）
+      broadcastInvalidation([
+        INVALIDATION_DOMAINS.sessions,
+        INVALIDATION_DOMAINS.session(sessionId),
+      ]);
       return sessionRow.messageCount;
     }
 
-    // 3. 预计算（事务外）：startSeq / now / newLastMessage / messageInserts
-    const startSeq = sessionRow.messageCount;
+    // 3. 预计算（事务外）：now / newLastMessage / 序列化
+    //    （M2 修复沿用：JSON.stringify 不进写锁——事务内只做纯组装）
     const now = Date.now();
     const newLastMessage = resolveLastMessagePreview(newMessages);
-    const messageInserts: MessageInsert[] = newMessages.map((msg, index) => ({
-      sessionId,
-      // exactOptionalPropertyTypes：turnId 未传时条件展开（不写 NULL）
-      ...(options.turnId !== undefined ? { turnId: options.turnId } : {}),
-      seq: startSeq + index,
-      role: extractRole(msg),
-      content: serializeMessage(msg),
-      createdAt: now,
-    }));
+    const serializedRows: Array<Pick<MessageInsert, 'turnId' | 'role' | 'content'>> =
+      newMessages.map((msg) => ({
+        // exactOptionalPropertyTypes：turnId 未传时条件展开（不写 NULL）
+        ...(options.turnId !== undefined ? { turnId: options.turnId } : {}),
+        role: extractRole(msg),
+        content: serializeMessage(msg),
+      }));
 
-    // 4. 事务：批量插入 messages + 更新 sessions
-    //    条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
-    //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
-    //     用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
+    // 4. 事务：messageCount 读取 → seq 分配 → 批量插入 + 更新 sessions
+    //    正确性前提改造（2026-09-28 深读收口）：此前 messageCount 读在事务外，
+    //    读-写之间仅靠 better-sqlite3 同步驱动 + 主进程单连接事件循环保证无交错，
+    //    未来引入第二连接（如多窗口独立连接）会撞 uq_messages_session_seq 唯一约束。
+    //    现在 seq 分配移入事务、由 SQLite 写锁保护，隐式前提变为结构性保证；
+    //    会话在快速失败检查后被并发删除（TOCTOU）时，事务内兜底抛 NOT_FOUND 并回滚。
+    let startSeq = 0;
     db.transaction((tx) => {
-      // 批量插入预序列化的 messages 行
-      tx.insert(messages).values(messageInserts).run();
+      const locked = tx.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+      if (locked === undefined) {
+        throw new AppError(ErrorCode.SESSION_NOT_FOUND, undefined, undefined, { sessionId });
+      }
+      startSeq = locked.messageCount;
+      // 批量插入消息行（seq 由事务内读到的计数分配）
+      tx.insert(messages)
+        .values(
+          serializedRows.map((row, index) => ({
+            sessionId,
+            ...row,
+            seq: startSeq + index,
+            createdAt: now,
+          })),
+        )
+        .run();
 
       // 更新 sessions：updatedAt + messageCount（+ lastMessage 若有新 user 消息）
+      // 条件展开：若追加消息中无 user 角色消息，保留原 lastMessage 不变
+      // （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined，
+      //  用条件展开而非 Partial 类型，让 TS 自动推导出正确类型）
       tx.update(sessions)
         .set({
           updatedAt: now,
@@ -352,6 +418,9 @@ export class SessionService {
       { sessionId, appended: newMessages.length, total: startSeq + newMessages.length },
       '追加会话消息',
     );
+    // 失效域声明（31 号 spec S4）：回合开始/结束的消息落库（含 IM/远程入站消息）；
+    // markRunning/markIdle 刻意不声明（D4A 徽标竞态，见 spec §2.4）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     return startSeq + newMessages.length;
   }
 
@@ -395,6 +464,8 @@ export class SessionService {
         .run();
     });
     logger.info({ sessionId, messageCount: newMessages.length }, '替换会话消息（上下文压缩）');
+    // 失效域声明（31 号 spec S5）
+    broadcastInvalidation([INVALIDATION_DOMAINS.sessions, INVALIDATION_DOMAINS.session(sessionId)]);
     // 压缩掉的旧消息页需在事务外回收：VACUUM 类 pragma 不能在事务内执行
     reclaimFreePages();
     return newMessages.length;
@@ -438,6 +509,11 @@ export class SessionService {
   }
 
   // ── 崩溃恢复（回合状态机） ──────────────────────────────
+  // ⚠️ 以下三个状态机方法刻意不做失效域声明（31 号 spec §2.4）：
+  // markRunning/markIdle 的 invalidate 有读不到 running 的时序竞态（D4A 徽标闪失，
+  // use-agent-bridge 的既证结论），回合状态由 agent 回合结束的聚合声明统一收敛为真值；
+  // markAllInterrupted 在启动期执行，渲染层尚未挂载（启动后的首次拉取即新数据）。
+  // recordUsage/recordTurn 同理：回合粒度才有消费方，由回合聚合声明覆盖。
 
   async markRunning(id: string): Promise<void> {
     const db = getDb();
@@ -460,30 +536,32 @@ export class SessionService {
     return result.changes;
   }
 
-  /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
+  /**
+   * 导出全部会话（元数据 + 消息 + 回合 + token 用量）
+   *
+   * 实现委托 session-io（导出/导入存储层自成一块，本文件保持体量），
+   * 输出为 version=1 的 SessionExportFile 文件格式（schema 见 shared）。
+   */
   async exportAll(): Promise<SessionExportPayload> {
-    const db = getDb();
-    const rows = db.select().from(sessions).orderBy(desc(sessions.updatedAt)).all();
-    const items: SessionExportItem[] = rows.map((row) => {
-      const messageRows = db
-        .select()
-        .from(messages)
-        .where(eq(messages.sessionId, row.id))
-        .orderBy(messages.seq)
-        .all();
-      return {
-        meta: rowToMeta(row),
-        messages: messageRows.map((m) => {
-          try {
-            return JSON.parse(m.content) as unknown;
-          } catch {
-            // 损坏的 content 保留原始字符串（导出不丢数据）
-            return m.content;
-          }
-        }),
-      };
-    });
-    return { exportedAt: Date.now(), app: 'code-agent-desktop', sessions: items };
+    return exportAllSessions();
+  }
+
+  /**
+   * 导入会话（version=1 导出文件格式）
+   *
+   * 实现委托 session-io：zod 校验 → 同 id 会话跳过并计数 → 每会话事务落库。
+   *
+   * @throws AppError(INVALID_INPUT) 文件格式校验失败
+   */
+  async importAll(payload: unknown): Promise<SessionImportRes> {
+    const result = await importSessionsFromPayload(payload);
+    // 失效域声明（31 号 spec S6）：批量导入只影响列表。仅真实导入时声明
+    // （全部同 id 跳过 / 空文件时库里没变，声明只会换来一次无谓的列表重拉——
+    // 对齐 spec §3「只有真实写/状态迁移才通知」与 pin/im.start 的同类守卫）
+    if (result.imported > 0) {
+      broadcastInvalidation([INVALIDATION_DOMAINS.sessions]);
+    }
+    return result;
   }
 
   /**

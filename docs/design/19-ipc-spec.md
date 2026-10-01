@@ -2,7 +2,7 @@
 
 > 04-interface-design 是接口清单（是什么），本文是**开发规范**（怎么加/怎么用/怎么传错）。
 > 基于项目自研 IPC 自动化体系（meta → definitions → derive → preload 生成 → register 统一注册）。
-> 最后同步：2026-08-11
+> 最后同步：2026-09-30（域/channel 数按 meta.ts 实测核对）
 
 ---
 
@@ -14,7 +14,7 @@
 | `{domain}:stream:{event}` | 流式事件 | `agent:stream:part` |
 | `{domain}:event:{name}` | 状态推送 | `terminal:event:output`、`update:event:status` |
 
-- domain 与 meta.ts 域表一致（25 域），新域需评估是否并入现有域
+- domain 与 meta.ts 域表一致（28 域 134 channel），新域需评估是否并入现有域
 - action 用动词（get/list/create/delete/rename/start/stop/send）
 
 ## 二、新增 IPC 方法（三步流程，编译期强制）

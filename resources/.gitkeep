@@ -1,3 +1,15 @@
-# 此目录用于存放打包资源
-# - pg/: PostgreSQL 便携版二进制（由 pnpm download:pg 下载，已加入 .gitignore）
-# - icons/: 应用图标（icon.ico）
+# 此目录存放打包资源与构建脚本产物
+#
+# 入库（git 跟踪）：
+# - icons/: 应用图标（icon.png 1024x1024 源图标，electron-builder 自动派生 ico/icns；
+#   另含 tray*.png 托盘图标）
+# - installer.nsh: NSIS 自定义安装脚本（electron-builder.yml nsis.include 引用）
+# - entitlements.mac.plist: macOS 公证 entitlements（electron-builder.yml mac 引用）
+#
+# 不入库（.gitignore 排除的构建产物）：
+# - memory-hub/: 记忆引擎运行目录（scripts/prepare-memory-hub.mjs 生成）
+# - codegraph-x64/、codegraph-arm64/: codegraph 平台捆绑包（scripts/prepare-codegraph.mjs 生成）
+# - build-info.json: 构建信息（scripts/generate-build-info.mjs 生成）
+#
+# 历史说明：pg/（PostgreSQL 便携版）已随数据库层删除（2026-09 前），图标已由
+# icon.ico 统一为 icon.png 源（electron-builder 自动派生）。

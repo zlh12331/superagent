@@ -1,5 +1,5 @@
 // src/renderer/components/git/GitPanel.tsx
-// Git 状态展示面板 · 极简文学风 · 组装层
+// Git 状态展示面板 · 组装层
 // ──────────────────────────────
 // 职责：
 // - 调用 useGitStatusQuery 获取当前分支、ahead/behind、变更文件列表
@@ -8,7 +8,7 @@
 //
 // 设计：
 // - 纯只读面板（不提供 commit/push 等写操作，避免误操作主仓库）
-// - diff 渲染统一走 UnifiedDiffView（react-diff-viewer-continued + parseUnifiedDiff）
+// - diff 渲染统一走 UnifiedDiffView（自研 DiffRowsTable + parseUnifiedDiff）
 // - 路径必须为绝对路径（由调用方传入）
 //
 // 拆分记录（2026-08 重构）：原文件 486 行，按职责拆分为本组装层 +
@@ -66,6 +66,7 @@ function StatusArea({
   return <FileList files={status.files} selectedFilePath={selectedFilePath} onSelect={onSelect} />;
 }
 
+/** Git 面板（右面板）：工作区状态查询 + 文件列表/单文件 diff 双视图，四态守卫见上方 Content */
 export function GitPanel({ path, className }: GitPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();

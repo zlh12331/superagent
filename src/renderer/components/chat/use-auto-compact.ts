@@ -22,6 +22,7 @@ export const AUTO_COMPACT_THRESHOLD = 600;
 /** 回合状态（ChatMessageListProps.status 同款联合；useChat 四态） */
 type TurnStatus = 'submitted' | 'streaming' | 'ready' | 'error';
 
+/** 自动压缩 hook 选项（chatId/messages/status/compact 回调与测试阈值覆盖） */
 export interface AutoCompactOptions {
   /** 会话 id（切换会话时重置水位线） */
   readonly chatId: string;

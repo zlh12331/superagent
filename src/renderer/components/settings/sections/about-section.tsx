@@ -18,11 +18,7 @@
 // 副作用函数（copyToClipboard / exportDiagnostics / openDataDir）。
 // ──────────────────────────────────────────────────────────────
 
-import type {
-  AppInfoRes,
-  ExportDiagnosticsRes,
-  UpdateStatusPayload,
-} from '@code-agent/shared/renderer';
+import type { AppInfoRes, UpdateStatusPayload } from '@code-agent/shared/renderer';
 import { Clipboard, FolderOpen, Loader2, PackageCheck, RefreshCw, Rocket } from 'lucide-react';
 import { type ReactElement, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
@@ -34,10 +30,12 @@ import { useAppInfo } from '@/hooks/use-app-info';
 import { useInstallUpdate } from '@/hooks/use-install-update';
 import { useUpdate } from '@/hooks/use-update';
 import { useTranslation } from '@/i18n/use-translation';
+import { openDataDir } from '@/lib/app-actions';
 import { reportError } from '@/lib/error-report';
 import { formatBytes, formatRemainingClock } from '@/lib/format-bytes';
 import { formatDateTime } from '@/lib/format-intl';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { hasIpcBridge } from '@/lib/ipc';
+import { exportDiagnostics as exportDiagnosticsOp } from '@/lib/settings-ops';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { SectionTitle, ToggleRow } from '../settings-controls';
@@ -367,7 +365,7 @@ function DiagnosticsCard({
           )}
           {t('settings.aboutCopyDiagnostics')}
         </Button>
-        <Button variant="outline" size="sm" onClick={openDataDir} disabled={!bridgeReady}>
+        <Button variant="outline" size="sm" onClick={openDataDirAction} disabled={!bridgeReady}>
           <FolderOpen className="size-3.5" strokeWidth={1.5} />
           {t('settings.aboutOpenDataDir')}
         </Button>
@@ -422,9 +420,10 @@ async function copyToClipboard(text: string, t: TranslateFn): Promise<void> {
 
 /** 导出诊断包（构建/日志/系统信息，上传给支持定位问题的标准途径） */
 async function exportDiagnostics(t: TranslateFn): Promise<void> {
-  if (!hasIpcBridge()) return;
   try {
-    const res = unwrap<ExportDiagnosticsRes>(await window.api.app.exportDiagnostics());
+    const res = await exportDiagnosticsOp();
+    // 无桥：静默返回（按钮已按 hasIpcBridge 禁用，此处为防御）
+    if (res === null) return;
     if (res.saved && res.path !== undefined) {
       toast.success(t('settings.aboutExportSuccess', { path: res.path }));
     } else {
@@ -436,9 +435,8 @@ async function exportDiagnostics(t: TranslateFn): Promise<void> {
 }
 
 /** 打开数据目录（userData；无桥时 no-op——按钮已按 hasIpcBridge 禁用） */
-function openDataDir(): void {
-  if (!hasIpcBridge()) return;
-  void window.api.app.openDataDir();
+function openDataDirAction(): void {
+  void openDataDir();
 }
 
 // ── 主组件 ────────────────────────────────────────────────────
@@ -505,13 +503,8 @@ export function AboutSection(): ReactElement {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 品牌 Hero：居中视觉中心——大标识 + 渐变光晕 + 版本/渠道 + 更新 */}
+      {/* 品牌 Hero：居中视觉中心——大标识 + 版本/渠道 + 更新（TraeWork quiet：无装饰光晕） */}
       <Card className="relative overflow-hidden px-4 py-8">
-        {/* 装饰光晕（top 覆盖，配合圆角溢出隐藏） */}
-        <div
-          aria-hidden
-          className="bg-primary/10 pointer-events-none absolute -top-12 left-1/2 h-36 w-72 -translate-x-1/2 rounded-full blur-2xl"
-        />
         <div className="relative flex flex-col items-center text-center">
           <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-xl">
             <Rocket className="size-7" strokeWidth={1.25} />
@@ -534,7 +527,7 @@ export function AboutSection(): ReactElement {
               onCancel={cancel}
               onInstall={() => void installUpdate()}
               onSkip={handleSkipVersion}
-              onOpenDataDir={openDataDir}
+              onOpenDataDir={openDataDirAction}
             />
             {skippedVersion !== null && skippedVersion === updateState?.version && (
               <div className="flex items-center gap-1">

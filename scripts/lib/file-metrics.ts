@@ -59,9 +59,10 @@ export function measureLines(source: string): { raw: number; net: number } {
   return { raw: lines.length, net };
 }
 
-/** 是否为受门禁管辖的源文件（.ts/.tsx，排除测试与类型声明） */
+/** 是否为受门禁管辖的源文件（.ts/.tsx/.css，排除测试与类型声明）。
+ * css 纳入（2026-09-24）：styles/*（按域） 手写样式此前完全不受体积棘轮管辖。 */
 export function isSourceFile(name: string): boolean {
-  if (!(name.endsWith('.ts') || name.endsWith('.tsx'))) return false;
+  if (!(name.endsWith('.ts') || name.endsWith('.tsx') || name.endsWith('.css'))) return false;
   if (name.includes('.test.')) return false;
   return true;
 }

@@ -13,7 +13,7 @@
 // - 行为：默认在 input/textarea/contentEditable 内不触发（库默认，与原实现一致）
 // ──────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -35,6 +35,12 @@ interface ShortcutHandlers {
   readonly onOpenTerminal?: () => void;
   /** 返回上一视图（Alt+←，对齐参考项目 backBtn 快捷键） */
   readonly onBack?: () => void;
+  /** 界面放大（Ctrl/Cmd + =，固定键；35 号） */
+  readonly onZoomIn?: () => void;
+  /** 界面缩小（Ctrl/Cmd + -，固定键；35 号） */
+  readonly onZoomOut?: () => void;
+  /** 界面缩放重置 100%（Ctrl/Cmd + 0，固定键；35 号） */
+  readonly onZoomReset?: () => void;
 }
 
 interface ParsedShortcut {
@@ -97,6 +103,42 @@ function toHotkeyString(parsed: ParsedShortcut): string {
 /** useHotkeys 公共选项：阻止默认行为，表单元素内不触发（与原实现一致） */
 const HOTKEY_OPTIONS = { preventDefault: true } as const;
 
+/**
+ * 固定键冲突清单（36 号 C：录键冲突检测用）
+ *
+ * match 是 **e.key 归一化形态**（normalizeShortcutForCompare：修饰符 Meta ≡ Ctrl、
+ * 排序 alt<ctrl<shift、主键小写），与上方/下方 useHotkeys 的固定绑定**同源维护**——
+ * 增删固定键必须两处同步（shortcut-conflicts.test.ts 锚定内容）。
+ * 绑定串是 event.code 形态（v5 按 code 匹配），code→key 的差异已在 match 中
+ * 人工换算（Slash→? / Equal→= / Minus→- / Backquote→`）。注意 'ctrl+shift++'
+ * （e.key '+' 的 shift 变体）**不在清单**：'+' 主键在 '+' 分隔的存储格式中无法
+ * 往返（normalize 得到 null），录入侧本就产生损坏串——由 store 格式约束排除。
+ */
+export const FIXED_SHORTCUT_CONFLICTS: readonly {
+  /** 归一化匹配串（与录键结果比较） */
+  readonly match: string;
+  /** 冲突提示用的动作名 i18n key */
+  readonly labelKey: string;
+}[] = [
+  { match: 'shift+?', labelKey: 'shortcutHelp.item.openShortcutHelp' },
+  { match: 'f1', labelKey: 'shortcutHelp.item.openShortcutHelp' },
+  { match: 'ctrl+k', labelKey: 'shortcutHelp.item.openCommandPalette' },
+  { match: 'alt+arrowleft', labelKey: 'shortcutHelp.item.back' },
+  { match: 'ctrl+b', labelKey: 'shortcutHelp.item.toggleSidebar' },
+  { match: 'ctrl+1', labelKey: 'shortcutHelp.item.toggleSidebar' },
+  { match: 'ctrl+j', labelKey: 'shortcutHelp.item.toggleRightPanel' },
+  { match: 'ctrl+2', labelKey: 'shortcutHelp.item.toggleRightPanel' },
+  { match: 'ctrl+`', labelKey: 'shortcutHelp.item.openTerminal' },
+  { match: 'ctrl+=', labelKey: 'shortcutHelp.item.zoomIn' },
+  { match: 'ctrl+shift+=', labelKey: 'shortcutHelp.item.zoomIn' },
+  { match: 'ctrl+-', labelKey: 'shortcutHelp.item.zoomOut' },
+  { match: 'ctrl+0', labelKey: 'shortcutHelp.item.zoomReset' },
+];
+
+/**
+ * 全局快捷键 hook：从设置读 shortcut 配置 → react-hotkeys 绑定
+ * （preventDefault + 表单内不触发；handlers 经 ref 转发避免重复绑定）
+ */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
   const shortcuts = useSettingsStore((s) => s.shortcuts);
 
@@ -108,17 +150,15 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
     handlersRef.current = handlers;
   });
 
-  const hotkeys = useMemo(
-    () => ({
-      commandPalette: toHotkeyString(parseShortcut(shortcuts.commandPalette)),
-      saveFile: toHotkeyString(parseShortcut(shortcuts.saveFile)),
-      searchFile: toHotkeyString(parseShortcut(shortcuts.searchFile)),
-      toggleTheme: toHotkeyString(parseShortcut(shortcuts.toggleTheme)),
-      openSettings: toHotkeyString(parseShortcut(shortcuts.openSettings)),
-      newSession: toHotkeyString(parseShortcut(shortcuts.newSession)),
-    }),
-    [shortcuts],
-  );
+  // 纯派生，交给 React Compiler 记忆化；下游 useHotkeys 依赖的是字符串字段（按值比较）
+  const hotkeys = {
+    commandPalette: toHotkeyString(parseShortcut(shortcuts.commandPalette)),
+    saveFile: toHotkeyString(parseShortcut(shortcuts.saveFile)),
+    searchFile: toHotkeyString(parseShortcut(shortcuts.searchFile)),
+    toggleTheme: toHotkeyString(parseShortcut(shortcuts.toggleTheme)),
+    openSettings: toHotkeyString(parseShortcut(shortcuts.openSettings)),
+    newSession: toHotkeyString(parseShortcut(shortcuts.newSession)),
+  };
 
   // 逐个绑定：handlers 经 ref 取最新，key 变化触发重新绑定
   useHotkeys(hotkeys.commandPalette, () => handlersRef.current.onCommandPalette(), HOTKEY_OPTIONS, [
@@ -175,4 +215,17 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
     HOTKEY_OPTIONS,
     [],
   );
+
+  // 界面缩放（35 号：Ctrl/Cmd + = / - / 0，固定键区）
+  // v5 按 event.code 匹配（实测源码归一化剥 key/digit/numpad 前缀）：
+  // '=' 物理键 code = 'Equal'（+ 与 = 同键，Shift 变体同绑）；
+  // '-' code = 'Minus'；'0' 写 Digit0 或 0 均可（归一后同为 '0'，用裸 0 更直观）。
+  useHotkeys(
+    'ctrl+Equal,ctrl+shift+Equal,meta+Equal,meta+shift+Equal',
+    () => handlersRef.current.onZoomIn?.(),
+    HOTKEY_OPTIONS,
+    [],
+  );
+  useHotkeys('ctrl+Minus,meta+Minus', () => handlersRef.current.onZoomOut?.(), HOTKEY_OPTIONS, []);
+  useHotkeys('ctrl+0,meta+0', () => handlersRef.current.onZoomReset?.(), HOTKEY_OPTIONS, []);
 }

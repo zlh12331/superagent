@@ -106,6 +106,7 @@ import type { ISearchService } from './infra/search/search-service';
 import { getSearchService, resetSearchService } from './infra/search/search-service';
 import { readApprovalModeSync } from './infra/storage/approval-pref';
 import { closeDb, resetDb } from './infra/storage/db';
+import { readRemoteBindScope } from './infra/storage/remote-pref';
 import type { ISessionService } from './infra/storage/session-service';
 import { getSessionService, resetSessionService } from './infra/storage/session-service';
 import type { ITerminalService } from './infra/terminal/terminal-service';
@@ -520,7 +521,9 @@ class ServiceContainer {
     readonly description: string;
   }): Promise<void> {
     try {
-      const session = await this.getSessionService().get(task.sessionId);
+      const session = await this.getSessionService().get(task.sessionId, {
+        includeMessages: false,
+      });
       // 抢占保护（2026-09-06 审计修复）：会话执行中跳过，否则 preemptExisting 会 abort 用户对话
       if (session.session.lastRunStatus === 'running') {
         logger.warn({ taskId: task.id }, '定时任务跳过：会话正在执行中');
@@ -528,11 +531,9 @@ class ServiceContainer {
       }
       const { workingDir } = session.session;
       const prompt = `【定时任务触发】${task.description}`;
-      // 先落触发 prompt 为用户消息（与渲染层先 append 再 run 的时序一致，保证 transcript 完整）
-      await this.getSessionService().appendMessage({
-        sessionId: task.sessionId,
-        messages: [{ role: 'user', content: prompt }],
-      });
+      // 用户消息由 AgentService 回合开始时统一落库（appendMessage 带 turnId）——
+      // 此前这里预落库一份（无 turnId），与回合内落库重复：重开会话会看到
+      // 两条相同触发 prompt，且无 turnId 的那行无法按回合回放（debt.md#d2）。
       await this.getAgentService().startAgent({
         messages: [{ role: 'user', content: prompt }],
         sessionId: task.sessionId,
@@ -570,7 +571,10 @@ class ServiceContainer {
    */
   getRemoteControlService(): IRemoteControlService {
     if (this.remoteControlService === null) {
-      this.remoteControlService = new RemoteControlService();
+      // 绑定范围自 app_settings 读取（remote.bindScope，默认 lan 兼容现状）
+      this.remoteControlService = new RemoteControlService({
+        bindScope: readRemoteBindScope(),
+      });
       this.remoteAgentBridge = new RemoteAgentBridge(
         this.remoteControlService,
         this.getAgentService(),

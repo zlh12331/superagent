@@ -8,8 +8,10 @@
 // 不支持（如实声明）：数字前缀（3dd）、y/p 复制粘贴、v 可视模式、u 撤销。
 // ──────────────────────────────────────────────────────────────
 
+/** vim 模式（normal / insert；编辑命令子集见文件头注释） */
 export type VimMode = 'normal' | 'insert';
 
+/** vim 状态：当前模式 + normal 态命令缓冲（'d' 等待第二键） */
 export interface VimState {
   readonly mode: VimMode;
   /** normal 模式命令缓冲（'d' 等待第二键） */
@@ -18,6 +20,7 @@ export interface VimState {
 
 export const INITIAL_VIM_STATE: VimState = { mode: 'normal', pending: '' };
 
+/** 按键处理结果：noop 放行原逻辑 / state 仅状态变化 / move 光标移动 / edit 文本替换 */
 export interface VimResult {
   /**
    * noop = 调用方按原逻辑处理（插入态普通按键放行 / normal 态未知按键拦截）

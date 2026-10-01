@@ -51,20 +51,52 @@ const CONFIG_CACHE_LIMIT = 20;
 
 /**
  * Agent 配置（通过 configure 注入到 transport 实例）
+ *
+ * 可选字段的 undefined 是有意义的值（"本轮显式无覆盖"）而非键缺席：
+ * configure/configureFor 语义是「合并」——显式 undefined 键覆盖 prev 旧值，
+ * 键缺席则 sticky（2026-09-28 修复：此前调用方为绕 exactOptionalPropertyTypes
+ * 把 undefined 键 omit 掉，导致「清空 systemPrompt」永远无法覆盖缓存旧值）。
+ * 装配请用 buildAgentTransportConfig（保证全键存在）。
  */
-interface AgentConfig {
+export interface AgentConfig {
   /** 工作目录（必填）：限制所有文件操作的根目录 */
   readonly workingDir: string;
-  /** 可选系统提示词（覆盖主进程默认 system prompt） */
-  readonly systemPrompt?: string;
+  /** 可选系统提示词（覆盖主进程默认 system prompt）；undefined = 无自定义 */
+  readonly systemPrompt?: string | undefined;
   /** 最大工具调用轮数（默认 20，上限 50） */
-  readonly maxSteps?: number;
+  readonly maxSteps?: number | undefined;
   /** 运行模式（plan 只读探索 / build 审批后执行，缺省 build） */
-  readonly mode?: 'plan' | 'build';
+  readonly mode?: 'plan' | 'build' | undefined;
   /** 思考强度（可选：渲染层设置项，覆盖主进程模型级默认） */
-  readonly thinking?: ThinkingLevel;
+  readonly thinking?: ThinkingLevel | undefined;
   /** 采样温度（可选：渲染层设置项，覆盖模型级默认；DeepSeek 思考模型忽略） */
-  readonly temperature?: number;
+  readonly temperature?: number | undefined;
+}
+
+/**
+ * 从 hook 侧输入装配 AgentConfig——全键传入（undefined 键显式存在）
+ *
+ * 独立成纯函数的原因：装配此前内联在 use-agent 的条件展开里，undefined 键被
+ * omit 导致「清空 systemPrompt」永远无法覆盖 transport 缓存的旧值（静默语义
+ * 漂移，无任何报错）。抽出后"全键存在"这一不变量可直接被断言。
+ *
+ * @param input hook 侧解析后的有效值（undefined = 本轮无覆盖/已清空）
+ * @returns AgentConfig（显式 undefined 覆盖语义，见 AgentConfig 注释）
+ */
+export function buildAgentTransportConfig(input: {
+  workingDir: string;
+  systemPrompt: string | undefined;
+  maxSteps: number | undefined;
+  thinking: ThinkingLevel | undefined;
+  temperature: number | undefined;
+}): AgentConfig {
+  return {
+    workingDir: input.workingDir,
+    systemPrompt: input.systemPrompt,
+    maxSteps: input.maxSteps,
+    thinking: input.thinking,
+    temperature: input.temperature,
+  };
 }
 
 /**

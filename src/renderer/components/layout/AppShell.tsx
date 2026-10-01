@@ -19,10 +19,10 @@
 // 拆分记录：宽度计算纯函数 → layout-utils；resizer 交互 → hooks/use-resizable-panels
 // ──────────────────────────────
 
+import { DEFAULT_ZOOM, stepZoom } from '@code-agent/shared/renderer';
 import { MotionConfig } from 'motion/react';
 import { lazy, type ReactElement, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-
 import { AskDialog } from '@/components/agent/ask-dialog';
 import { DialogHost } from '@/components/common/DialogHost';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
@@ -31,14 +31,18 @@ import { useAgentAskBridge } from '@/hooks/use-agent-ask-bridge';
 import { useAgentBridge } from '@/hooks/use-agent-bridge';
 import { useApprovalBridge } from '@/hooks/use-approval-bridge';
 import { useDeepLink } from '@/hooks/use-deep-link';
+import { useEditorCodeStyle } from '@/hooks/use-editor-code-style';
+import { useInvalidationBridge } from '@/hooks/use-invalidation-bridge';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useLayoutBreakpoint } from '@/hooks/use-layout-breakpoint';
 import { useProtocolCheck } from '@/hooks/use-protocol-check';
 import { useResizablePanels } from '@/hooks/use-resizable-panels';
+import { useSettingsBridge } from '@/hooks/use-settings-bridge';
 import { useTerminalBridge } from '@/hooks/use-terminal-bridge';
 import { useToolBridge } from '@/hooks/use-tool-bridge';
 import { useUpdateBridge } from '@/hooks/use-update-bridge';
 import { useActiveWorkingDir } from '@/hooks/use-working-dir';
+import { useZoomEffect } from '@/hooks/use-zoom-effect';
 import { useTranslation } from '@/i18n/use-translation';
 import { DRAFT_SESSION_ID, ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -86,6 +90,10 @@ interface AppShellProps {
   children: ReactNode;
 }
 
+/**
+ * 应用根布局：Topbar + Sidebar + 主内容区 + 底部 DevPanel，挂载全部
+ * IPC 桥接 hook（审批/提问/工具流/回合结束失效）与全局对话框宿主
+ */
 export function AppShell({ children }: AppShellProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
@@ -98,6 +106,9 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   useToolBridge();
   // Agent 生命周期桥接：回合结束 → invalidate 缓存 + 清理 L2 缓冲 + usage 累积
   useAgentBridge();
+  // 失效域事件桥：订阅 invalidation:event:domains（主进程写路径声明的受影响域）
+  // → 逐域前缀失效；回合结束域覆盖登记供 use-agent-bridge 跳过旧清单（31 号设计文档）
+  useInvalidationBridge();
 
   // 终端桥接：订阅 terminal:event:output / terminal:event:exit IPC 事件
   useTerminalBridge();
@@ -105,6 +116,10 @@ export function AppShell({ children }: AppShellProps): ReactElement {
   // 更新事件桥：订阅 update:event:status 并写入 update-store（唯一订阅点；
   // 关于面板 / 顶栏指示 / toast 提示均读 store，不再各自订阅）
   useUpdateBridge();
+
+  // 设置变更桥：订阅 settings:event:changed（主进程主动写入的设置域，如托盘改
+  // 「关闭时最小化到托盘」）→ 应用进 settings-store，避免旧值在后续写入时覆盖它
+  useSettingsBridge();
 
   // IPC 协议版本校验：主进程/渲染层版本错配时提示重启（P0 契约加固）
   useProtocolCheck();
@@ -220,7 +235,26 @@ export function AppShell({ children }: AppShellProps): ReactElement {
         navigate('/');
       }
     },
+    // 界面缩放（35 号：Ctrl+=/Ctrl+-/Ctrl+0，固定键；应用由 useZoomEffect 单点收敛，
+    // 此处只改 store——单真源，与设置页 Select 同一出口）
+    onZoomIn: () => {
+      const { appearance, updateAppearance } = useSettingsStore.getState();
+      updateAppearance({ zoom: stepZoom(appearance.zoom, 1) });
+    },
+    onZoomOut: () => {
+      const { appearance, updateAppearance } = useSettingsStore.getState();
+      updateAppearance({ zoom: stepZoom(appearance.zoom, -1) });
+    },
+    onZoomReset: () => {
+      useSettingsStore.getState().updateAppearance({ zoom: DEFAULT_ZOOM });
+    },
   });
+
+  // 35 号：缩放应用单点（订阅 store.appearance.zoom——五入口构造性覆盖）
+  useZoomEffect();
+
+  // 37 号 A：代码面 Tab 宽度应用单点（订阅 store.editor.tabSize → --code-tab-size）
+  useEditorCodeStyle();
 
   // 面板宽度 + 分隔线交互（拖拽 / 键盘 / CSS 变量同步），实现见 use-resizable-panels
   const { sidebarWidth, rightPanelWidth, draggingSide, onResizerMouseDown, onResizerKeyDown } =

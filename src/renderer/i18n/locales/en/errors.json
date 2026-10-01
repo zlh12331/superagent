@@ -29,6 +29,8 @@
     "NOT_FOUND": "Resource not found",
     "RATE_LIMITED": "Too many requests",
     "SESSION_NOT_FOUND": "Session not found",
+    "SESSION_IN_USE": "A turn is running; stop it before continuing",
+    "BACKUP_INVALID": "Backup file is invalid or missing",
     "TERMINAL_SPAWN_FAILED": "Failed to start terminal",
     "TOOL_ABORTED": "Tool execution interrupted",
     "TOOL_EXECUTION_FAILED": "Tool execution failed",

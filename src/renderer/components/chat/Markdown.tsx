@@ -89,7 +89,7 @@ export function Markdown({ content, className, highlight = true }: MarkdownProps
  * - inline code（`` `text` ``）：无 language-* className → 渲染 <code class="inline">
  * - block code（```lang\n...\n```）：有 language-* className → 渲染 CodeBlock
  * - 无语言标注的围栏（```\n...\n```）不带 info string ⇒ className 为空 ⇒ 走 inline 分支
- *   （现状行为，见 __tests__/markdown.test.tsx）
+ *   （现状行为，见同目录 markdown.test.tsx）
  *
  * 两档写死为模块级常量而非在渲染内联定义：react-markdown 把 components[name] 直接
  * 当作元素 type，内联箭头每次渲染都是新 identity ⇒ React 视为不同类型而卸载重挂该
@@ -251,7 +251,7 @@ function CodeBlock({
             copied && 'text-accent',
             // 键盘可达性（WCAG 2.4.7）：此前仅 group-hover 显形，Tab 聚焦到按钮时
             // 父容器仍 opacity-0——可聚焦但视觉不可见。补 group-focus-within（与
-            // globals.css 中 .msg:focus-within .msg-actions 的既有修复同源）。
+            // styles/ 各域 css 中 .msg:focus-within .msg-actions 的既有修复同源）。
             'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           )}
           onClick={handleCopy}

@@ -5,7 +5,7 @@
 // 返回 processKey：处理一次按键，返回 true 表示已被 vim 消费（需 preventDefault）。
 // ──────────────────────────────────────────────
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 import { INITIAL_VIM_STATE, type VimState, vimHandleKey } from '@/lib/vim-mode';
 
@@ -39,32 +39,28 @@ export function useVimMode({ setValue }: UseVimModeDeps): UseVimModeResult {
   const [vimState, setVimState] = useState<VimState>(INITIAL_VIM_STATE);
   const [pendingCursor, setPendingCursor] = useState<number | null>(null);
 
-  const processKey = useCallback(
-    (event: { key: string; selectionStart: number | null }, buffer: string): boolean => {
-      const result = vimHandleKey(
-        vimState,
-        event.key,
-        buffer,
-        event.selectionStart ?? buffer.length,
-      );
-      if (result.type !== 'noop' || vimState.mode === 'normal') {
-        if (result.type === 'edit' && result.value !== undefined) {
-          setValue(result.value);
-          setPendingCursor(result.cursor ?? 0);
-        } else if (result.type === 'move' && result.cursor !== undefined) {
-          setPendingCursor(result.cursor);
-        }
-        setVimState(result.state);
-        return true;
+  // 引用稳定性交给 React Compiler（捕获 state 与 props）
+  const processKey = (
+    event: { key: string; selectionStart: number | null },
+    buffer: string,
+  ): boolean => {
+    const result = vimHandleKey(vimState, event.key, buffer, event.selectionStart ?? buffer.length);
+    if (result.type !== 'noop' || vimState.mode === 'normal') {
+      if (result.type === 'edit' && result.value !== undefined) {
+        setValue(result.value);
+        setPendingCursor(result.cursor ?? 0);
+      } else if (result.type === 'move' && result.cursor !== undefined) {
+        setPendingCursor(result.cursor);
       }
-      return false;
-    },
-    [vimState, setValue],
-  );
+      setVimState(result.state);
+      return true;
+    }
+    return false;
+  };
 
-  const clearPendingCursor = useCallback((): void => {
+  const clearPendingCursor = (): void => {
     setPendingCursor(null);
-  }, []);
+  };
 
   return { vimState, pendingCursor, processKey, clearPendingCursor };
 }

@@ -17,15 +17,7 @@
 // - 状态源单一化：所有主题设置变更都走 settings-store.setTheme()
 // ──────────────────────────────────────────────────────────────
 
-import {
-  createContext,
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-} from 'react';
+import { createContext, type ReactElement, type ReactNode, useContext, useEffect } from 'react';
 
 import type { Theme } from '@/stores/persistent/settings-store';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
@@ -117,15 +109,9 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  // setTheme：直接调用 settings-store 的 setTheme（持久化由 store 负责）
-  // 用 useCallback 稳定引用，避免 Context value 每次渲染变化
-  const stableSetTheme = useCallback((next: Theme) => setTheme(next), [setTheme]);
-
-  // 用 useMemo 稳定 context 值，避免不必要的重渲染
-  const value = useMemo<ThemeContextValue>(
-    () => ({ theme, resolvedTheme, setTheme: stableSetTheme }),
-    [theme, resolvedTheme, stableSetTheme],
-  );
+  // setTheme 是 settings-store 的稳定 action，直接放入 Context value；
+  // 对象引用稳定性交给 React Compiler（仅用于稳定 Context value 的手写 memo 可删）
+  const value: ThemeContextValue = { theme, resolvedTheme, setTheme };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

@@ -185,6 +185,56 @@ describe('gitSummaryProviderFrom（GitService → GitSummary 适配）', () => {
     });
   });
 
+  it('TTL 缓存（P2-32）：同 workingDir 连续调用只查询一次底层 git', async () => {
+    const getStatus = vi.fn(async () => ({ branch: 'main', clean: true, files: [] }));
+    const provider = gitSummaryProviderFrom(getStatus);
+    const first = await provider('/repo');
+    const second = await provider('/repo');
+    expect(getStatus).toHaveBeenCalledTimes(1); // 同回合内复用，不重复 spawn
+    expect(second).toEqual(first);
+  });
+
+  it('TTL 缓存（P2-32）：不同 workingDir 各自独立缓存', async () => {
+    const getStatus = vi.fn(async (dir: string) => ({
+      branch: dir === '/a' ? 'branch-a' : 'branch-b',
+      clean: true,
+      files: [],
+    }));
+    const provider = gitSummaryProviderFrom(getStatus);
+    expect(await provider('/a')).toMatchObject({ branch: 'branch-a' });
+    expect(await provider('/b')).toMatchObject({ branch: 'branch-b' });
+    expect(getStatus).toHaveBeenCalledTimes(2);
+    // 命中各自缓存
+    expect(await provider('/a')).toMatchObject({ branch: 'branch-a' });
+    expect(getStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('TTL 缓存（P2-32）：查询抛错不缓存，下次调用重试', async () => {
+    let fail = true;
+    const getStatus = vi.fn(async () => {
+      if (fail) throw new Error('git not found');
+      return { branch: 'main', clean: true, files: [] };
+    });
+    const provider = gitSummaryProviderFrom(getStatus);
+    await expect(provider('/repo')).rejects.toThrow('git not found');
+    fail = false;
+    expect(await provider('/repo')).toMatchObject({ branch: 'main' });
+    expect(getStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('TTL 缓存（P2-32）：并发调用合并为一次底层查询', async () => {
+    const getStatus = vi.fn(
+      async () =>
+        new Promise<{ branch: string; clean: boolean; files: unknown[] }>((resolve) => {
+          setTimeout(() => resolve({ branch: 'main', clean: true, files: [] }), 5);
+        }),
+    );
+    const provider = gitSummaryProviderFrom(getStatus);
+    const [r1, r2] = await Promise.all([provider('/repo'), provider('/repo')]);
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    expect(r2).toEqual(r1);
+  });
+
   it('clean 仓库：changedFiles 为 0', async () => {
     const provider = gitSummaryProviderFrom(async () => ({
       branch: 'main',

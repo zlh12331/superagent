@@ -13,6 +13,7 @@ const SLASH_QUERY_MAX = 20;
 /** mention 查询段长度上限 */
 const MENTION_QUERY_MAX = 30;
 
+/** composer 建议触发态：'/' 斜杠命令与 '@' 文件提及的解析结果（互斥取靠后） */
 export interface SuggestTriggerState {
   /** '/' 触发位置（无则为 -1） */
   readonly slashIndex: number;

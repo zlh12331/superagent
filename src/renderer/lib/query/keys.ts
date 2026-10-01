@@ -14,6 +14,14 @@
 // - **没有域 hook** 的域（goal / task / skill / turns / usage / mcp / im / whitelist /
 //   tool / memory）统一放这里；组件不得再内联 `queryKey: [...]` 字面量
 //   （由 scripts/check-ui-consistency.ts 的 inline-query-key 规则看护）。
+//
+// 失效前提（2026-09-27）：
+// - skill / mcp / im / whitelist / tool / settings 各域 key **未纳入** QUERY_KEY_ROOTS，
+//   也没有回合结束失效点（use-agent-bridge 不失效它们），目前依赖设置页自身
+//   mutation onSuccess 自失效（如 skills-section.tsx 同时失效两个 skill key）。
+// - 成立前提：这些数据**只经渲染层发起的 IPC 写入**（如技能学习走 LearnSkillService）。
+// - 若将来 Agent 回合内会写这些数据，必须补根前缀（QUERY_KEY_ROOTS）+ use-agent-bridge
+//   失效，否则复现 turns/git 那类静默 stale。
 // ──────────────────────────────────────────────────────────────
 
 /** 各域的 key 根前缀：用于**前缀失效**（invalidateQueries 匹配该域全部子 key） */

@@ -36,6 +36,19 @@ import { getKeychainPath } from './app-data';
  */
 let lock: Promise<void> = Promise.resolve();
 
+/** 加密不可用告警是否已发出（每进程仅一次，避免每次读密钥都刷日志） */
+let warnedEncryptionUnavailable = false;
+
+/**
+ * 系统加密（safeStorage）是否可用
+ *
+ * 供 IPC 响应透出（settings:getApiKey 的 keychainAvailable）：false 时所有
+ * getSecret 返回 null——「密钥不可读」与「未配置」在调用方视角必须可区分。
+ */
+export function isEncryptionAvailable(): boolean {
+  return safeStorage.isEncryptionAvailable();
+}
+
 /**
  * 获取互斥锁（等待前一个持有者释放）
  *
@@ -231,9 +244,30 @@ async function writeStore(store: KeychainStore): Promise<void> {
 }
 
 /**
+ * 解析当前进程的 Windows 账户名（icacls 可识别的 DOMAIN\user 形态）
+ *
+ * 不能用 `process.env.USERNAME`：沙箱 / 服务 / 提权上下文中该变量可能是
+ * `SYSTEM` 等与进程真实令牌不一致的值。若据此执行
+ * `icacls /inheritance:r /grant:r SYSTEM:F`，会剥掉继承 ACL 只留给 SYSTEM，
+ * 真实用户立刻 EPERM（读/写/删 keychain.dat 全部失败，等于锁死密钥库）。
+ * `whoami` 读的是进程令牌，才是 icacls 该授权的主体。
+ */
+function resolveWindowsAccount(): string {
+  const systemRoot = process.env['SystemRoot'];
+  const whoamiExe =
+    systemRoot !== undefined ? join(systemRoot, 'System32', 'whoami.exe') : 'whoami';
+  try {
+    return execFileSync(whoamiExe, [], { encoding: 'utf8', timeout: 3000 }).trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
  * 收紧 keychain.dat 权限（POSIX chmod 0600 / Windows icacls 仅当前用户）
  *
  * DPAPI/Keychain 加密是主防线，文件权限是纵深防御——失败仅告警不阻断。
+ * Windows 侧解析不到账户时**保持继承 ACL**（宁可少一层收紧，不可锁死属主）。
  */
 function restrictKeychainPermissions(filePath: string): void {
   if (process.platform !== 'win32') {
@@ -244,11 +278,12 @@ function restrictKeychainPermissions(filePath: string): void {
     }
     return;
   }
+  const user = resolveWindowsAccount();
+  if (user.length === 0) {
+    logger.warn({ filePath }, 'keychain.dat Windows ACL 收紧跳过（whoami 未解析到账户）');
+    return;
+  }
   try {
-    const user = process.env['USERNAME'] ?? process.env['USER'] ?? '';
-    if (user.length === 0) {
-      return;
-    }
     // 解析系统绝对路径（不依赖 PATH）：%SystemRoot%\System32\icacls.exe
     const icaclsExe =
       process.env['SystemRoot'] !== undefined
@@ -261,6 +296,11 @@ function restrictKeychainPermissions(filePath: string): void {
     logger.warn({ filePath }, 'keychain.dat Windows ACL 收紧失败（DPAPI 仍为主防线）');
   }
 }
+
+// 2026-09-28：以 restrictFileAccessWin32 之名导出——sessions.db / -wal / -shm /
+// 备份（db.ts restrictFilePermissions 的 win32 分支）与 keychain.dat 共用同一套
+// ACL 收紧机制，此前 db 侧 Windows 完全跳过、纵深标准低于密钥文件（深读发现）
+export { restrictKeychainPermissions as restrictFileAccessWin32 };
 
 /**
  * 存储加密的敏感数据
@@ -292,6 +332,17 @@ export async function setSecret(key: string, value: string): Promise<void> {
  */
 export async function getSecret(key: string): Promise<string | null> {
   if (!safeStorage.isEncryptionAvailable()) {
+    // fail-silent 收口（2026-09-28 深读发现）：此前静默返 null——Linux 无 keyring
+    // 等场景下已保存的 Key 读出为「未配置」，用户视角密钥凭空消失且无任何线索。
+    // 现每进程告警一次（随诊断包导出）；仍返回 null 保持可用性——读抛错会卡死
+    // 设置页，而 set 侧的抛错语义不变（写入失败必须让用户知道）
+    if (!warnedEncryptionUnavailable) {
+      warnedEncryptionUnavailable = true;
+      logger.warn(
+        { key },
+        'safeStorage 加密不可用：已保存的 API Key 均不可读取（getSecret 返回 null）',
+      );
+    }
     return null;
   }
 

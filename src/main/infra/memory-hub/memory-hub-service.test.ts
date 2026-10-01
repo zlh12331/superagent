@@ -11,8 +11,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { createDeferredMemoryPort, MemoryHubService } from './memory-hub-service';
 import type { MemoryPort } from './types';
+
+// 失效域广播替身（基础设施边界，规范允许 vi.mock；S8 断言用，见文件尾 describe）
+vi.mock('../invalidation/invalidation', () => ({ broadcastInvalidation: vi.fn() }));
 
 describe('MemoryHubService 配置判定', () => {
   it('hubRoot 未配置 → isConfigured=false', () => {
@@ -197,7 +201,7 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
     return new MemoryHubService({ hubRoot: undefined, dataDir });
   }
 
-  it('仅移除目标会话行，保留其他会话与损坏行（原子重写）', () => {
+  it('仅移除目标会话行，保留其他会话与损坏行（原子重写）', async () => {
     const dir = createDataDir({
       '2026-08-24.jsonl': [
         JSON.stringify({ sessionKey: 'sess-1', role: 'user', content: '要删', timestamp: 1 }),
@@ -206,7 +210,7 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
       ].join('\n'),
     });
     const service = createService(dir);
-    const removed = service.removeL0JsonlBySession('sess-1');
+    const removed = await service.removeL0JsonlBySession('sess-1');
     expect(removed).toBe(1);
 
     // 其余数据完好（其他会话 + 损坏行不误伤）
@@ -218,23 +222,44 @@ describe('MemoryHubService.removeL0JsonlBySession', () => {
     expect(remaining.join('\n')).toContain('not-json{broken');
   });
 
-  it('跨多文件清理（sessionKey 或 session_id 命中即删）', () => {
+  it('跨多文件清理（sessionKey 或 session_id 命中即删）', async () => {
     const dir = createDataDir({
       '2026-08-23.jsonl': JSON.stringify({ sessionKey: 'sess-1', content: '昨天' }),
       // biome-ignore lint/style/useNamingConvention: 模拟上游 JSONL 镜像字段（snake_case）
       '2026-08-24.jsonl': JSON.stringify({ session_id: 'sess-1', content: '旧格式' }),
     });
     const service = createService(dir);
-    const removed = service.removeL0JsonlBySession('sess-1');
+    const removed = await service.removeL0JsonlBySession('sess-1');
     expect(removed).toBe(2);
   });
 
-  it('空 sessionKey / 目录不存在 → 0（不抛错）', () => {
+  it('空 sessionKey / 目录不存在 → 0（不抛错）', async () => {
     const dir = createDataDir({ '2026-08-24.jsonl': 'x\n' });
     const service = createService(dir);
-    expect(service.removeL0JsonlBySession('   ')).toBe(0);
+    await expect(service.removeL0JsonlBySession('   ')).resolves.toBe(0);
     const empty = createService(join(tmpdir(), 'memory-hub-no-such-clear'));
-    expect(empty.removeL0JsonlBySession('sess-1')).toBe(0);
+    await expect(empty.removeL0JsonlBySession('sess-1')).resolves.toBe(0);
+  });
+
+  it('批量移除：多个 key 单遍扫描一次完成（P2-26），移除行为与逐 key 一致', async () => {
+    const dir = createDataDir({
+      '2026-08-24.jsonl': [
+        JSON.stringify({ sessionKey: 'sess-1', content: '删我', timestamp: 1 }),
+        JSON.stringify({ sessionKey: 'sess-2', content: '也删', timestamp: 2 }),
+        JSON.stringify({ sessionKey: 'sess-3', content: '保留', timestamp: 3 }),
+        'not-json{broken',
+      ].join('\n'),
+    });
+    const service = createService(dir);
+    // 逐 key 两次调用 = 两次全扫；批量一次完成且移除行数相同
+    const batchRemoved = await service.removeL0JsonlBySessions(['sess-1', 'sess-2']);
+    expect(batchRemoved).toBe(2);
+    const remaining = readFileSync(`${dir}/data/conversations/2026-08-24.jsonl`, 'utf8')
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    expect(remaining).toHaveLength(2);
+    expect(remaining.join('\n')).toContain('sess-3');
+    expect(remaining.join('\n')).toContain('not-json{broken');
   });
 });
 
@@ -276,5 +301,120 @@ describe('createDeferredMemoryPort', () => {
       total: 1,
     });
     expect(ensureStarted).toHaveBeenCalledTimes(5);
+  });
+});
+
+// ── 失效域声明（31 号 spec S8：memory 运行态变化） ──────────────────
+
+describe('MemoryHubService 失效域声明（S8）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.mocked(broadcastInvalidation).mockClear();
+  });
+
+  /** EngineProcessHandle 的 fake 形状（kill 触发 exit 监听，模拟真实进程） */
+  interface FakeHandle {
+    pid: number | undefined;
+    hasExited: () => boolean;
+    stderrTail: () => string;
+    onExit: (listener: (code: number) => void) => void;
+    kill: () => void;
+  }
+
+  /** fake launcher：可编程的 EngineProcessHandle */
+  function createLaunchFake(): { launcher: () => FakeHandle; crash: (code?: number) => void } {
+    const exitListeners: Array<(code: number) => void> = [];
+    let exited = false;
+    const launcher = (): FakeHandle => ({
+      pid: 4242,
+      hasExited: () => exited,
+      stderrTail: () => '',
+      onExit: (listener: (code: number) => void) => {
+        exitListeners.push(listener);
+      },
+      kill: () => {
+        exited = true;
+        for (const listener of exitListeners) {
+          listener(0);
+        }
+      },
+    });
+    return {
+      launcher,
+      crash: (code = 1) => {
+        exited = true;
+        for (const listener of exitListeners) {
+          listener(code);
+        }
+      },
+    };
+  }
+
+  /** 造一个「有上游入口」的 hubRoot（fake launcher + stub fetch，不真拉子进程） */
+  function createStartedService(launcher: () => FakeHandle): MemoryHubService {
+    const dir = mkdtempSync(join(tmpdir(), 'memory-hub-invalidation-'));
+    mkdirSync(join(dir, 'src', 'gateway'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'gateway', 'server.ts'), 'export class TdaiGateway {}');
+    return new MemoryHubService({
+      hubRoot: dir,
+      dataDir: join(dir, 'data'),
+      llm: { baseUrl: 'http://llm.test', apiKey: 'k', model: 'm' },
+      launcher: launcher as never,
+    });
+  }
+
+  it('sidecar 就绪 → 广播 memory（懒启动运行态缺口锚）', async () => {
+    const fake = createLaunchFake();
+    // /health 探测替身：立即就绪（真实 fetch 由 contract test 覆盖）
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
+    );
+    const service = createStartedService(fake.launcher as never);
+
+    await service.ensureStarted();
+
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+  });
+
+  it('sidecar 异常退出 → 广播 memory（running→false）', async () => {
+    const fake = createLaunchFake();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
+    );
+    const service = createStartedService(fake.launcher as never);
+    await service.ensureStarted();
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    fake.crash(1);
+
+    expect(broadcastInvalidation).toHaveBeenCalledTimes(1);
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+  });
+
+  it('stop 收尾 → 广播 memory（含 kill 触发的 exit 路径）', async () => {
+    const fake = createLaunchFake();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ status: 'ok' }) })),
+    );
+    const service = createStartedService(fake.launcher as never);
+    await service.ensureStarted();
+    vi.mocked(broadcastInvalidation).mockClear();
+
+    await service.stop();
+
+    // exit 回调广播 + stop 尾部广播（真实进程语义下两处都发生）
+    expect(broadcastInvalidation).toHaveBeenCalledWith(['memory']);
+  });
+
+  it('未配置降级路径不广播（状态未迁移）', async () => {
+    const service = new MemoryHubService({ hubRoot: undefined, dataDir: '/tmp/m' });
+
+    await service.ensureStarted();
+
+    expect(broadcastInvalidation).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,10 @@
 <!doctype html>
 <!--
   src/renderer/index.html
-  Electron 渲染层入口 HTML · 极简文学风
+  Electron 渲染层入口 HTML
   ──────────────────────────────────────────────────────────────
   设计：
-  - 通过 Google Fonts 加载文学风字体：
+  - 通过 Google Fonts 加载字体：
     - Noto Serif SC（正文衬线）
     - Noto Sans SC（UI 无衬线）
     - JetBrains Mono（数字等宽）
@@ -27,7 +27,7 @@
     （mirrorThemeForFirstPaint，见 src/renderer/lib/theme-init.ts）
   注意：
   - 用 preconnect 提前建立 TLS，降低字体加载延迟
-  - 字体在 globals.css 中通过 --font-serif/--font-sans/--font-mono 变量定义并附本地回退
+  - 字体在 styles/ 各域 css 中通过 --font-serif/--font-sans/--font-mono 变量定义并附本地回退
   - 加载失败时自动降级到系统字体（Songti SC / Microsoft YaHei / Consolas 等）
 -->
 <html lang="zh-CN" style="background:#0A0A0A">
@@ -38,7 +38,7 @@
     <!-- 预连接 Google Fonts 域名，降低首次字体请求延迟 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- 文学风字体：Noto Serif SC（正文）+ Noto Sans SC（UI）+ JetBrains Mono（数字） -->
+    <!-- 字体：Noto Serif SC（标题衬线）+ Noto Sans SC（UI）+ JetBrains Mono（数字） -->
     <link
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@400;500;700&display=swap"
       rel="stylesheet"

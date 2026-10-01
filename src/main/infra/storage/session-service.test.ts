@@ -7,9 +7,10 @@
 import type { ChatMessage } from '@code-agent/shared/main';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// mock electron（app.getPath 在 db.ts 中使用）
-const { mockGetPath } = vi.hoisted(() => ({
+// mock electron（app.getPath 在 db.ts 中使用；BrowserWindow 供失效域广播捕获——31 号 spec §5.1）
+const { mockGetPath, mockInvalidationSends } = vi.hoisted(() => ({
   mockGetPath: vi.fn(() => '/tmp/test-userdata'),
+  mockInvalidationSends: [] as Array<[string, unknown]>,
 }));
 
 vi.mock('electron', () => ({
@@ -17,7 +18,29 @@ vi.mock('electron', () => ({
     getPath: mockGetPath,
     isPackaged: false,
   },
+  // 方括号键：规避 useNamingConvention 对 electron API 名（PascalCase）的误报
+  ['BrowserWindow']: {
+    getAllWindows: vi.fn(() => [
+      {
+        isDestroyed: vi.fn(() => false),
+        webContents: {
+          isDestroyed: vi.fn(() => false),
+          send: vi.fn((channel: string, payload: unknown) => {
+            mockInvalidationSends.push([channel, payload]);
+          }),
+        },
+      },
+    ]),
+  },
 }));
+
+/** 最近一次失效广播的 payload（broadcastInvalidation 每次调用恰好 send 一窗） */
+function lastInvalidationPayload(): { domains: string[]; sessionId?: string } | undefined {
+  const last = mockInvalidationSends.at(-1);
+  return last?.[1] as { domains: string[]; sessionId?: string } | undefined;
+}
+
+import { ErrorCode } from '@code-agent/shared/main';
 
 import { resetDb } from './db';
 import { SessionService } from './session-service';
@@ -35,6 +58,8 @@ vi.mock('./db', async (importOriginal) => {
 
   return {
     ...actual,
+    // VACUUM 类 pragma 依赖真实初始化的连接（内存库无需页回收），置为 no-op
+    reclaimFreePages: vi.fn(),
     getDb: () => {
       if (memoryDb === null) {
         memoryDb = createInMemoryDb();
@@ -95,6 +120,29 @@ describe('SessionService', () => {
       expect(detail.messages).toHaveLength(2);
       // title 取首条 user 消息前 50 字符
       expect(detail.session.title).toBe('帮我读取 package.json 文件内容');
+    });
+
+    it('includeMessages=false：返回元数据，messages 为空数组（免付全量消息负载）', async () => {
+      const messages: ChatMessage[] = [
+        { role: 'user', content: '历史消息一' },
+        { role: 'assistant', content: '历史消息二' },
+      ];
+      const sessionId = await service.create({
+        workingDir: 'D:\\project',
+        title: undefined,
+        messages,
+      });
+
+      const metaOnly = await service.get(sessionId, { includeMessages: false });
+      expect(metaOnly.session.workingDir).toBe('D:\\project');
+      expect(metaOnly.session.messageCount).toBe(2);
+      expect(metaOnly.messages).toEqual([]);
+
+      // 默认（不传 / 显式 true）仍返回全量消息
+      const full = await service.get(sessionId);
+      expect(full.messages).toHaveLength(2);
+      const explicit = await service.get(sessionId, { includeMessages: true });
+      expect(explicit.messages).toHaveLength(2);
     });
 
     it('边界：workingDir 为超长路径(260 字符) → 正常写入', async () => {
@@ -460,6 +508,237 @@ describe('SessionService', () => {
       expect(await service.getTurnMessages('anything')).toEqual([]);
       const session = await service.get(sessionId);
       expect(session.messages).toHaveLength(1);
+    });
+  });
+
+  describe('exportAll（P2-29：分批 IN 批量查询）', () => {
+    it('多会话导出：sessions 按 updatedAt 倒序，组内消息按 seq 升序（逐字段等价）', async () => {
+      const first = await service.create({
+        workingDir: 'D:\\a',
+        title: '会话一',
+        messages: [
+          { role: 'user', content: 'a1' },
+          { role: 'assistant', content: 'a2' },
+          { role: 'user', content: 'a3' },
+        ],
+      });
+      // 2ms 间隔区分 updatedAt（与 listRecentDirs 时序用例同一策略）
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const second = await service.create({
+        workingDir: 'D:\\b',
+        title: '会话二',
+        messages: [{ role: 'user', content: 'b1' }],
+      });
+
+      const payload = await service.exportAll();
+      expect(payload.app).toBe('code-agent-desktop');
+      expect(payload.exportedAt).toBeGreaterThan(0);
+      expect(payload.sessions).toHaveLength(2);
+      // updatedAt 倒序：后建的会话二在前
+      expect(payload.sessions[0]?.meta.id).toBe(second);
+      expect(payload.sessions[1]?.meta.id).toBe(first);
+      // 组内消息按 seq 升序（t2 起 messages 为 version=1 信封形态：seq/content/createdAt）
+      expect(payload.sessions[1]?.messages).toHaveLength(3);
+      expect(payload.sessions[0]?.messages).toEqual([
+        { seq: 0, content: { role: 'user', content: 'b1' }, createdAt: expect.any(Number) },
+      ]);
+    });
+
+    it('空库导出：sessions 为空数组且不发起消息查询', async () => {
+      const payload = await service.exportAll();
+      expect(payload.sessions).toEqual([]);
+    });
+  });
+
+  // ── 失效域声明（31 号 spec §2.4 S1–S6：写路径声明受影响域） ──────────
+
+  describe('失效域声明', () => {
+    beforeEach(() => {
+      mockInvalidationSends.length = 0;
+    });
+
+    it('create：广播 [sessions, session:<id>]（S3）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+
+      expect(mockInvalidationSends).toHaveLength(1);
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', `session:${sessionId}`]);
+      expect(lastInvalidationPayload()?.sessionId).toBeUndefined();
+    });
+
+    it('rename：广播 [sessions, session:<id>]（S2）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.rename(sessionId, '新标题');
+
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', `session:${sessionId}`]);
+    });
+
+    it('pin：真实写入广播；幂等空操作（不存在会话）不广播（S2）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.pin(sessionId, true);
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', `session:${sessionId}`]);
+
+      mockInvalidationSends.length = 0;
+      const missing = await service.pin('no-such-session', true);
+      expect(missing.ok).toBe(false);
+      expect(mockInvalidationSends).toHaveLength(0);
+    });
+
+    it('delete：仅广播 [sessions]（详情缓存指向已删除会话，不声明 session:<id>）（S1）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.delete(sessionId);
+
+      expect(mockInvalidationSends).toHaveLength(1);
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions']);
+    });
+
+    it('appendMessage：广播 [sessions, session:<id>]（S4）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.appendMessage({
+        sessionId,
+        messages: [{ role: 'user', content: 'hello' } as ChatMessage],
+      });
+
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', `session:${sessionId}`]);
+    });
+
+    it('replaceMessages：广播 [sessions, session:<id>]（S5，/compact 压缩落库）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.replaceMessages(sessionId, [
+        { role: 'user', content: '压缩后' } as ChatMessage,
+      ]);
+
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', `session:${sessionId}`]);
+    });
+
+    it('importAll：有导入广播 [sessions]；全部同 id 跳过不广播（S6）', async () => {
+      await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      const file = await service.exportAll();
+      mockInvalidationSends.length = 0;
+
+      // 同 id 已存在 → 跳过，库未变 ⇒ 不声明
+      const skipped = await service.importAll(structuredClone(file));
+      expect(skipped).toEqual({ imported: 0, skipped: 1 });
+      expect(mockInvalidationSends).toHaveLength(0);
+
+      // 换空库导入 → 真实写入 ⇒ 声明列表域（不含 session:<id>）
+      resetDb();
+      const imported = await service.importAll(structuredClone(file));
+      expect(imported).toEqual({ imported: 1, skipped: 0 });
+      expect(mockInvalidationSends).toHaveLength(1);
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions']);
+    });
+
+    it('markRunning / markIdle：刻意不广播（D4A 徽标竞态，spec §2.4 反回归锚）', async () => {
+      const sessionId = await service.create({
+        workingDir: 'D:\\x',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.markRunning(sessionId);
+      await service.markIdle(sessionId);
+
+      expect(mockInvalidationSends).toHaveLength(0);
+    });
+  });
+
+  // ── 清空全部会话（36 号 D） ─────────────────────────────────────
+
+  describe('clearAll（36-D）', () => {
+    beforeEach(() => {
+      mockInvalidationSends.length = 0;
+    });
+
+    it('正向：全表删除并返回真实计数，消息级联清空（V1/V3）', async () => {
+      const s1 = await service.create({
+        workingDir: 'D:\\a',
+        title: undefined,
+        messages: undefined,
+      });
+      const s2 = await service.create({
+        workingDir: 'D:\\b',
+        title: undefined,
+        messages: undefined,
+      });
+      await service.appendMessage({
+        sessionId: s1,
+        turnId: 'turn-1',
+        messages: [{ role: 'user', content: 'a1' }],
+      });
+      await service.appendMessage({
+        sessionId: s2,
+        turnId: 'turn-2',
+        messages: [{ role: 'user', content: 'b1' }],
+      });
+
+      const res = await service.clearAll();
+
+      expect(res.deleted).toBe(2);
+      // 级联：消息已随会话删除（get 抛 SESSION_NOT_FOUND）
+      await expect(service.get(s1, { includeMessages: true })).rejects.toMatchObject({
+        code: ErrorCode.SESSION_NOT_FOUND,
+      });
+      await expect(service.get(s2)).rejects.toMatchObject({
+        code: ErrorCode.SESSION_NOT_FOUND,
+      });
+    });
+
+    it('失效域声明：广播 [sessions, usage, turns, goal]（V7）', async () => {
+      await service.create({
+        workingDir: 'D:\\a',
+        title: undefined,
+        messages: undefined,
+      });
+      mockInvalidationSends.length = 0;
+
+      await service.clearAll();
+
+      expect(mockInvalidationSends).toHaveLength(1);
+      expect(lastInvalidationPayload()?.domains).toEqual(['sessions', 'usage', 'turns', 'goal']);
+    });
+
+    it('幂等：空表清空 → deleted=0 不报错（V8）', async () => {
+      const res = await service.clearAll();
+      expect(res.deleted).toBe(0);
     });
   });
 });

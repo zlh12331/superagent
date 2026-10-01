@@ -29,7 +29,7 @@ import { type UseChatOptions, useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import { useEffect } from 'react';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
-import { IpcAgentTransport } from '../lib/agent/ipc-agent-transport';
+import { buildAgentTransportConfig, IpcAgentTransport } from '../lib/agent/ipc-agent-transport';
 
 /**
  * IpcAgentTransport 单例
@@ -109,17 +109,21 @@ export function useAgentWithIpc<Message extends UIMessage = UIMessage>(
 
   // 在 agent 配置变化时同步更新 transport（useEffect 确保在 render 后执行）
   // sendMessage 由用户交互触发（总是在 effect 执行后），不存在竞态
-  // 使用条件展开避免 exactOptionalPropertyTypes 下 string | undefined 报错
+  // 全键传入（undefined 键显式存在）：清空 systemPrompt 才能覆盖缓存旧值
+  // （此前条件展开 omit undefined 键 → 清空永不生效，2026-09-28 修复）
   // 按会话 id 配置（并发回合支持）：各 ChatPanel 的 useChat id = chatId，互不覆盖
   // biome-ignore lint/correctness/useExhaustiveDependencies: transport 为模块级单例（引用恒定），不入依赖
   useEffect(() => {
-    transport.configureFor(id ?? 'agent-chat', {
-      workingDir,
-      ...(effectiveSystemPrompt !== undefined ? { systemPrompt: effectiveSystemPrompt } : {}),
-      ...(maxSteps !== undefined ? { maxSteps } : {}),
-      ...(thinking !== undefined ? { thinking } : {}),
-      ...(temperature !== undefined ? { temperature } : {}),
-    });
+    transport.configureFor(
+      id ?? 'agent-chat',
+      buildAgentTransportConfig({
+        workingDir,
+        systemPrompt: effectiveSystemPrompt,
+        maxSteps,
+        thinking,
+        temperature,
+      }),
+    );
   }, [id, workingDir, effectiveSystemPrompt, maxSteps, thinking, temperature]);
 
   // id 必须透传给 useChat：transport.sendMessages 用 options.chatId 作为 IPC sessionId，

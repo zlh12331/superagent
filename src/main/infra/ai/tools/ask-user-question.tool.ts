@@ -11,6 +11,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { AgentAskService } from '../agent/agent-ask-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -59,7 +60,7 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
       // 无窗口（后台执行/测试）时直接返回「无法提问」——不阻塞回合
       if (webContents === undefined || webContents.isDestroyed()) {
         return {
-          title: '提问失败',
+          title: t('tools.askUser.failed'),
           output: '无法向用户提问（无可用窗口）。请基于现有信息继续执行或说明需要用户确认的原因。',
         };
       }
@@ -67,7 +68,7 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
       const answers = await askService.ask(webContents, questions, context.sessionId);
       if (answers === null) {
         return {
-          title: '用户未响应',
+          title: t('tools.askUser.noResponse'),
           output: '用户在 60 秒内未回答提问。请基于现有信息继续执行，或说明需要用户确认的原因。',
         };
       }
@@ -94,7 +95,7 @@ export function createAskUserQuestionTool(askService: AgentAskService): Tool {
         .join('\n');
 
       return {
-        title: '用户已回答',
+        title: t('tools.askUser.answered'),
         output: `用户回答如下：\n${rendered}`,
       };
     },

@@ -1,24 +1,39 @@
 // src/renderer/hooks/use-agent-bridge.ts
-// Agent 生命周期 IPC 桥接 Hook（回合结束的统一消费端）
+// Agent 生命周期 IPC 桥接 Hook（回合开始 / 回合结束的统一消费端）
 // ──────────────────────────────────────────────────────────────
 // 职责（对齐参考设计的状态分层原则）：
-// 1. 回合结束（stream:end）→ invalidate 会话列表 + 详情缓存（L3 模式 B）
+// 1. 回合开始（stream:start）→ setQueryData 乐观点亮会话运行徽标（D4A）
+//    - 见 applyRunningToCache：选 setQueryData 而非 invalidate 的理由在此
+// 2. 回合结束（stream:end）→ invalidate 会话列表 + 详情缓存（L3 模式 B）
 //    - 修正"回合结束但会话详情缓存仍是旧数据"的正确性问题
-// 2. 回合结束 → 清理 L2 流式缓冲（tool-store / approvals-store clearBySession）
+//    - 2026-09-28（31 号设计文档）：失效清单迁至主进程声明（completeTurn 聚合
+//      广播 invalidation:event:domains），本处仅在事件缺失时回落旧硬编码清单
+// 3. 回合结束 → 清理 L2 流式缓冲（tool-store / approvals-store clearBySession）
 //    - 对齐"turn_done 清空流式缓冲"原则，防止长会话内存累积
-// 3. 回合结束 → 失效用量汇总缓存（['usage'] 前缀；真实 UI 读 SQLite 聚合）
+// 4. 回合结束 → 失效用量汇总缓存（['usage'] 前缀；真实 UI 读 SQLite 聚合）
 //    - 孤儿 usage-store 已移除（2026-08 P2 清理）
 //
 // 设计：
-// - 在 AppShell 根布局初始化一次（与 useToolBridge 相同的桥接模式）
-// - 全局订阅（不按 sessionId 过滤）：任何会话回合结束都触发统一处理
+// - 在 AppShell 根布局初始化一次（与 useToolBridge / useInvalidationBridge 相同的桥接模式）
+// - 全局订阅（不按 sessionId 过滤）：任何会话回合开始/结束都触发统一处理
 // - 不处理 UI 展示（由 ChatPanel 等组件订阅 store 渲染）
 // ──────────────────────────────────────────────────────────────
 
-import type { AgentStreamEndPayload, AgentStreamErrorPayload } from '@code-agent/shared/renderer';
+import type {
+  AgentStreamEndPayload,
+  AgentStreamErrorPayload,
+  AgentStreamStartPayload,
+} from '@code-agent/shared/renderer';
+import type { InfiniteData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { SESSION_DETAIL_QUERY_KEY, SESSIONS_QUERY_KEY } from '@/hooks/use-sessions';
+import {
+  SESSION_DETAIL_QUERY_KEY,
+  SESSIONS_QUERY_KEY,
+  type SessionListData,
+} from '@/hooks/use-sessions';
+import { isTurnEndCovered } from '@/lib/invalidation/invalidation';
+import { hasIpcBridge } from '@/lib/ipc';
 import { GOAL_LIST_QUERY_KEY, QUERY_KEY_ROOTS } from '@/lib/query/keys';
 import { queryClient } from '@/lib/query/query-client';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
@@ -26,36 +41,70 @@ import { useApprovalsStore } from '@/stores/transient/approvals-store';
 import { useRateLimitStore } from '@/stores/transient/rate-limit-store';
 
 /**
+ * 把指定会话的 lastRunStatus 乐观点亮为 running（D4A：回合开始 → 侧栏运行徽标）
+ *
+ * 选 setQueryData 而非 invalidate sessions（两种成熟方案的取舍）：
+ * - 主进程 markRunning 是 fire-and-forget 落库，invalidate 触发的重拉存在
+ *   读不到 running 的时序竞态（徽标闪失）；setQueryData 直接改缓存，确定生效；
+ * - 回合开始是高频事件，免去整列表重拉的 IPC 与渲染成本；
+ * - 回合结束已有 handleSessionEnd 的 invalidate 统一收敛为服务端真值。
+ * 会话不在缓存（如新会话首轮回合、列表尚未刷新）时映射无命中，等下次列表刷新自然带上。
+ */
+function applyRunningToCache(
+  old: InfiniteData<SessionListData> | undefined,
+  sessionId: string,
+): InfiniteData<SessionListData> | undefined {
+  if (old === undefined) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      sessions: page.sessions.map((s) =>
+        s.id === sessionId ? { ...s, lastRunStatus: 'running' as const } : s,
+      ),
+    })),
+  };
+}
+
+/**
  * Agent 回合结束统一处理（invalidate 缓存 + 清理 L2 缓冲）
+ *
+ * 失效（1）走渐进回落：主进程回合结束已先广播 invalidation:event:domains
+ * （agent-service.completeTurn 的聚合声明，use-invalidation-bridge 消费并登记覆盖），
+ * 本处仅在事件缺失（覆盖未登记）时回落旧硬编码清单。L2 清理（2）不属于缓存
+ * 失效域，事件不覆盖，保持无条件执行。
  */
 function handleSessionEnd(sessionId: string): void {
-  // 1. L3 模式 B：失效会话列表 + 详情缓存（回合结束后重新拉取）
-  void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
-  if (sessionId.length > 0) {
-    // 详情缓存必须失效（2026-09-08 评估后保留）：ChatPanel 用 useSessionDetail
-    // 的 initialMessages 初始化 useChat（reconstructHistory），若此处不失效，
-    // 用户切走再切回该会话会看到回合前的旧消息。一次全量重拉换来的是
-    // 「重开会话数据正确」，该代价可接受（数据层全量传输债见技术债清单，
-    // 应由 session:get 分页/增量解决，而非在失效点绕过）。
-    void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
-    // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
-    void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(sessionId) });
-    // P3 修复：task 列表此前遗漏失效——回合内新增/更新的 task 在回合结束后
-    // 30s（staleTime）内右面板 InfoPane 仍显示旧状态，而回合结束恰是
-    // 最需要看任务收敛的时刻。前缀匹配覆盖 ['task', 'list', sessionId] 等子 key。
-    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.task });
-    // P2 修复：用量汇总此前无人失效——设置页 usage-section 读 SQLite
-    // session:getUsageSummary（key 见 lib/query/keys.ts），回合结束
-    // 不失效则展示过期数据。前缀匹配覆盖 summary 及其派生 key。
-    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.usage });
-    // 2026-09-08 修复：回合内 git/file/turns 的写入此前无人失效——
-    // Agent 通过 git_add/git_commit 改动工作区后 GitPanel（staleTime 10s）不刷新；
-    // write_file/edit_file 落盘后已打开的文件面板（staleTime 30s）显示旧内容；
-    // 设置页回合记录（['turns','recent']）从定义起无任何失效点，永远等 gc。
-    // 前缀匹配：各域 key 根见 lib/query/keys.ts 的 QUERY_KEY_ROOTS。
-    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.git });
-    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.file });
-    void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.turns });
+  // 1. L3 模式 B：失效会话列表 + 会话域缓存（回合结束后重新拉取）
+  //    ⚠️ 旧清单 + isTurnEndCovered 回落判定是过渡态（31 号 spec §2.5c）：
+  //    待主进程声明全路径（含 error 出口）稳定后，两者一并删除。
+  if (!isTurnEndCovered(sessionId)) {
+    void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
+    if (sessionId.length > 0) {
+      // 详情缓存必须失效：ChatPage 元数据（workingDir/lastRunStatus，includeMessages=false）
+      // 从这里读，不失效则 interrupted 横幅等元数据陈旧。回合历史域（turns / turn-pages）
+      // key 均挂在 ['session', id] 前缀下，被本次 invalidate 前缀匹配一并覆盖——
+      // 重开会话即取到最新回合列表（历史已按回合增量加载，debt.md#d2/#d4）。
+      void queryClient.invalidateQueries({ queryKey: SESSION_DETAIL_QUERY_KEY(sessionId) });
+      // 目标判定在回合结束后执行（GoalService TURN_END → 可能 completed）——失效目标列表缓存
+      void queryClient.invalidateQueries({ queryKey: GOAL_LIST_QUERY_KEY(sessionId) });
+      // P3 修复：task 列表此前遗漏失效——回合内新增/更新的 task 在回合结束后
+      // 30s（staleTime）内右面板 InfoPane 仍显示旧状态，而回合结束恰是
+      // 最需要看任务收敛的时刻。前缀匹配覆盖 ['task', 'list', sessionId] 等子 key。
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.task });
+      // P2 修复：用量汇总此前无人失效——设置页 usage-section 读 SQLite
+      // session:getUsageSummary（key 见 lib/query/keys.ts），回合结束
+      // 不失效则展示过期数据。前缀匹配覆盖 summary 及其派生 key。
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.usage });
+      // 2026-09-08 修复：回合内 git/file/turns 的写入此前无人失效——
+      // Agent 通过 git_add/git_commit 改动工作区后 GitPanel（staleTime 10s）不刷新；
+      // write_file/edit_file 落盘后已打开的文件面板（staleTime 30s）显示旧内容；
+      // 设置页回合记录（['turns','recent']）从定义起无任何失效点，永远等 gc。
+      // 前缀匹配：各域 key 根见 lib/query/keys.ts 的 QUERY_KEY_ROOTS。
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.git });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.file });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROOTS.turns });
+    }
   }
 
   // 2. L2 清理：审批缓冲 + 提问弹窗（对齐 turn_done 清空原则）
@@ -89,7 +138,15 @@ function handleSessionEnd(sessionId: string): void {
  */
 export function useAgentBridge(): void {
   useEffect(() => {
-    if (typeof window === 'undefined' || window.api === undefined) return;
+    if (!hasIpcBridge()) return;
+
+    // D4A：回合开始——乐观点亮该会话的侧栏运行徽标（方案取舍见 applyRunningToCache）
+    const unsubscribeStart = window.api.agent.subscribeStreamStart((payload) => {
+      const typedPayload = payload as AgentStreamStartPayload;
+      queryClient.setQueryData<InfiniteData<SessionListData>>(SESSIONS_QUERY_KEY, (old) =>
+        applyRunningToCache(old, typedPayload.sessionId),
+      );
+    });
 
     // 回合正常结束 / 用户中断：invalidate 缓存 + 清理缓冲 + usage 累积
     const unsubscribeEnd = window.api.agent.subscribeStreamEnd((payload) => {
@@ -108,6 +165,7 @@ export function useAgentBridge(): void {
     });
 
     return () => {
+      unsubscribeStart();
       unsubscribeEnd();
       unsubscribeError();
     };

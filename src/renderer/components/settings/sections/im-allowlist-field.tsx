@@ -16,32 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import { IM_ALLOWED_GROUPS_QUERY_KEY } from '@/lib/query/keys';
-
-/** 群聊执行白名单的 settings key（与主进程 im-allowlist-pref 约定一致） */
-export const IM_ALLOWED_GROUPS_SETTING_KEY = 'im.allowedGroups';
-
-/** 读取白名单（浏览器模式无 window.api 时返回空） */
-async function fetchAllowedGroups(): Promise<readonly string[]> {
-  if (!hasIpcBridge()) {
-    return [];
-  }
-  // 不吞异常：读取失败必须区分于「真的是空白名单」。此前 catch 后 return []，
-  // 使 UI 把失败渲染成空白名单，用户一保存就把服务端已登记的白名单覆盖清空。
-  const res = unwrap<{ settings: Record<string, unknown> }>(await window.api.settings.getAll({}));
-  const raw = res.settings[IM_ALLOWED_GROUPS_SETTING_KEY];
-  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
-}
-
-/** 写入白名单（覆盖式） */
-async function saveAllowedGroups(groups: readonly string[]): Promise<void> {
-  // 守卫与读取路径保持一致（浏览器模式无桥时写库同样无意义）
-  if (!hasIpcBridge()) {
-    throw new Error('window.api unavailable');
-  }
-  unwrap(await window.api.settings.set({ key: IM_ALLOWED_GROUPS_SETTING_KEY, value: [...groups] }));
-}
+import {
+  fetchImAllowedGroups,
+  IM_ALLOWED_GROUPS_SETTING_KEY,
+  saveImAllowedGroups,
+} from '@/lib/settings-ops';
 
 /** 多行文本 → 去空行的白名单条目 */
 function parseGroups(text: string): readonly string[] {
@@ -70,10 +50,10 @@ export function ImAllowlistField(): ReactElement {
     isError,
   } = useQuery({
     queryKey: IM_ALLOWED_GROUPS_QUERY_KEY(IM_ALLOWED_GROUPS_SETTING_KEY),
-    queryFn: fetchAllowedGroups,
+    queryFn: fetchImAllowedGroups,
   });
   const saveMutation = useMutation({
-    mutationFn: saveAllowedGroups,
+    mutationFn: saveImAllowedGroups,
     onSuccess: () => {
       toast.success(t('settings.imAllowedGroupsSaved'));
       setDraft(null);

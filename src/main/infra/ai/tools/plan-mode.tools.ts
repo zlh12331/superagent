@@ -12,6 +12,7 @@
 
 import type { ApprovalMode } from '@code-agent/shared/main';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { writeApprovalMode } from '../../storage/approval-pref';
 import type { IPermissionService } from './permission-service';
 import type { Tool, ToolResult } from './tool';
@@ -37,13 +38,16 @@ export function createEnterPlanModeTool(permissionService: IPermissionService): 
     async execute(): Promise<ToolResult> {
       const current = permissionService.getApprovalMode();
       if (current === 'plan') {
-        return { title: '已在计划模式', output: '当前已处于计划模式（只读），无需重复切换。' };
+        return {
+          title: t('tools.planMode.alreadyInPlan'),
+          output: '当前已处于计划模式（只读），无需重复切换。',
+        };
       }
       previousMode = current;
       await writeApprovalMode('plan');
       permissionService.setApprovalMode('plan');
       return {
-        title: '已进入计划模式',
+        title: t('tools.planMode.entered'),
         output:
           '已进入计划模式（只读）：所有写操作（编辑/写入/命令）将被拒绝，仅可读取与搜索。请先完成分析与方案设计，然后调用 exit_plan_mode 恢复原模式，或在方案确认后由用户恢复。',
       };
@@ -67,14 +71,14 @@ export function createExitPlanModeTool(permissionService: IPermissionService): T
     async execute(): Promise<ToolResult> {
       const current = permissionService.getApprovalMode();
       if (current !== 'plan') {
-        return { title: '不在计划模式', output: '当前不在计划模式，无需退出。' };
+        return { title: t('tools.planMode.notInPlan'), output: '当前不在计划模式，无需退出。' };
       }
       const target: ApprovalMode = previousMode ?? 'ask';
       previousMode = null;
       await writeApprovalMode(target);
       permissionService.setApprovalMode(target);
       return {
-        title: '已退出计划模式',
+        title: t('tools.planMode.exited'),
         output: `已退出计划模式，恢复审批模式为 ${target}（写操作按该模式决策）。`,
       };
     },

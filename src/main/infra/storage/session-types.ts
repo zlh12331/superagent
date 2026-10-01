@@ -7,12 +7,15 @@
 
 import type {
   ChatMessage,
+  SessionClearAllRes,
   SessionDeleteRes,
+  SessionExportFile,
+  SessionExportItemShape,
   SessionGetRes,
   SessionGetTurnsRes,
+  SessionImportRes,
   SessionListRecentDirsRes,
   SessionListRes,
-  SessionMeta,
   SessionPinRes,
   SessionRecentTurnsRes,
   SessionRenameRes,
@@ -61,21 +64,19 @@ export interface SessionAppendMessageOptions {
 }
 
 /**
- * 导出单个会话（元数据 + 消息历史）
+ * 导出单个会话（元数据 + 消息 + 回合 + 用量）
+ *
+ * 类型收敛到 shared 的 SessionExportItemSchema（z.infer）——导出与导入共用同一
+ * zod 契约，杜绝手写接口与 schema 漂移（本类型仅为保持既有 import 路径的别名）。
  */
-export interface SessionExportItem {
-  readonly meta: SessionMeta;
-  readonly messages: readonly unknown[];
-}
+export type SessionExportItem = SessionExportItemShape;
 
 /**
- * 导出全部会话的 payload（数据资产可迁移格式）
+ * 导出全部会话的 payload（version=1 文件格式）
+ *
+ * 同上收敛为 shared SessionExportFileSchema 的推断类型。
  */
-export interface SessionExportPayload {
-  readonly exportedAt: number;
-  readonly app: string;
-  readonly sessions: readonly SessionExportItem[];
-}
+export type SessionExportPayload = SessionExportFile;
 
 /**
  * SessionService 接口
@@ -95,10 +96,18 @@ export interface ISessionService {
 
   /** 分页列出所有会话（按 updatedAt 倒序） */
   list(limit: number, offset: number): Promise<SessionListRes>;
-  /** 获取指定会话的完整消息历史 */
-  get(id: string): Promise<SessionGetRes>;
+  /**
+   * 获取指定会话详情；includeMessages 为 false 时跳过消息查询（messages 返回空数组），
+   * 供仅需元数据的消费方（ChatPage workingDir/lastRunStatus、cron 触发）免付全量消息负载
+   */
+  get(id: string, options?: { includeMessages?: boolean }): Promise<SessionGetRes>;
   /** 删除指定会话（连同 messages 表级联删除） */
   delete(id: string): Promise<SessionDeleteRes>;
+  /**
+   * 清空全部会话（36-D）：sessions 全表删除 + messages/turns/goals 级联，
+   * 返回删除的会话数。运行中回合守卫在 IPC handler 层（SESSION_IN_USE）
+   */
+  clearAll(): Promise<SessionClearAllRes>;
   /** 重命名会话标题 */
   rename(id: string, title: string): Promise<SessionRenameRes>;
   /** 置顶/取消置顶会话（对齐参考项目 pinned-header 分组） */
@@ -147,6 +156,16 @@ export interface ISessionService {
 
   /** 导出全部会话（元数据 + 消息历史），数据资产可迁移 */
   exportAll(): Promise<SessionExportPayload>;
+
+  /**
+   * 导入会话（version=1 导出文件格式）
+   *
+   * - 入参为已 JSON.parse 的文件内容（unknown），格式校验在本方法内（zod）
+   * - 冲突策略：同 id 会话已存在则整体跳过并计数（不合并、不覆盖）
+   * - 幂等：同一文件重复导入 → 全部 skipped
+   * - 每会话一个事务：单会话写入失败只回滚该会话
+   */
+  importAll(payload: unknown): Promise<SessionImportRes>;
 
   // ── token 用量统计（设置页展示） ──────────────────────────
 

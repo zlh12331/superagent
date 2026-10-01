@@ -27,6 +27,7 @@ const defaultScheduler: Scheduler = (callback, ms) => {
   return () => clearTimeout(timer);
 };
 
+/** 批处理器选项（emit 出口 + 合并窗口/字符上限/定时器可注入） */
 export interface StreamChunkBatcherOptions {
   /** 下游出口（transport 里为 ReadableStream controller.enqueue） */
   readonly emit: (chunk: UIMessageChunk) => void;
@@ -38,6 +39,7 @@ export interface StreamChunkBatcherOptions {
   readonly schedule?: Scheduler;
 }
 
+/** 批处理器接口：push 上游 chunk / flush 透出缓冲 / dispose 放弃缓冲 */
 export interface StreamChunkBatcher {
   /** 推入一个上游 chunk（text-delta 可能被缓冲，其余立即透出） */
   push(chunk: UIMessageChunk): void;
@@ -61,6 +63,7 @@ export interface StreamChunkBatcher {
 /** 仅 text-delta 参与合并（缓冲后覆盖 delta 字段仍须保持类型正确） */
 type TextDeltaChunk = Extract<UIMessageChunk, { type: 'text-delta' }>;
 
+/** 创建 text-delta 合并批处理器（用法见上方 example；非 text-delta chunk 立即透出） */
 export function createStreamChunkBatcher(options: StreamChunkBatcherOptions): StreamChunkBatcher {
   const { emit } = options;
   const batchMs = options.batchMs ?? TEXT_DELTA_BATCH_MS;

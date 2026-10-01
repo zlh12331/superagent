@@ -34,8 +34,9 @@ import {
 import { type ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useSessionsQuery } from '@/hooks/use-sessions';
+import { useSessionsFlat } from '@/hooks/use-sessions';
 import { useTranslation } from '@/i18n/use-translation';
+import { quitApp } from '@/lib/app-actions';
 import { ROUTES } from '@/lib/constants';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -284,7 +285,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
   const setActiveSession = useActiveSessionStore((state) => state.setActiveSession);
   const enterWelcomeMode = useWelcomeStore((state) => state.enterWelcomeMode);
 
-  const { data: sessionsData } = useSessionsQuery();
+  const { data: sessionsData } = useSessionsFlat();
 
   const rootPath = useFileTreeStore((state) => state.rootPath);
   const getAllFilePaths = useFileTreeStore((state) => state.getAllFilePaths);
@@ -310,7 +311,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
 
   // 命令列表（操作组 + 文件组 + 会话组）（依赖外部状态派生；React Compiler 自动缓存）
   // 构建逻辑已外提为 buildCommands（见文件头「抽离动机」），组件只负责注入依赖
-  const sessions = sessionsData?.pages.flatMap((page) => page.sessions) ?? [];
+  const sessions = sessionsData ?? [];
   const commands = buildCommands({
     t,
     modKey,
@@ -337,7 +338,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     openSettings,
     quitApp: () => {
       // 退出走完整善后链（before-quit 协商 → dispose → 延迟安装）
-      void window.api?.app.quit();
+      quitApp();
     },
     closePalette: () => onOpenChange(false),
   });

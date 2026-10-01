@@ -1,7 +1,7 @@
 # 21. 前端状态管理规范（四层架构）
 
 > 基于项目实际状态体系（React Compiler + Zustand 5 + TanStack Query 5 + IPC 事件流）制定分层与判定标准。
-> 最后同步：2026-08-11
+> 最后同步：2026-09-30（与 React Compiler 现行约定对齐）
 
 ---
 
@@ -27,7 +27,7 @@
 ## 三、工程化约束（已强制）
 
 - **L3 类型安全**：queryKey 与 IPC 定义表联动（invoke 入参/返回类型推导）
-- **L2 selector 稳定性**：selector 返回新数组/对象触发 useSyncExternalStore 无限循环——必须 useMemo 缓存派生值（TerminalPanel 教训）
+- **L2 selector 稳定性**：selector 返回新数组/对象触发 useSyncExternalStore 无限循环——selector 只返回 store 原始引用，过滤/派生放 hook 体内（TerminalPanel 教训；派生值引用稳定性交给 React Compiler，禁手写 useMemo）
 - **L4 清理义务**：subscribe 返回的 unsubscribe 必须在卸载时调用（useEffect cleanup）
 - **回合结束统一处理**：use-agent-bridge（AppShell 挂载）→ invalidate 会话缓存 + 清理 L2 缓冲 + usage 累积
 
@@ -36,5 +36,5 @@
 - [ ] 查询类数据走 L3（TanStack Query），非手写 useEffect fetch
 - [ ] 事件订阅 L4 且卸载清理
 - [ ] 跨组件 UI 状态进 L2，组件独享留 L1
-- [ ] selector 派生值 useMemo 缓存
+- [ ] selector 只返回 store 原始引用（不在 selector 内 filter/map）
 - [ ] 配置型数据不写渲染层兜底表

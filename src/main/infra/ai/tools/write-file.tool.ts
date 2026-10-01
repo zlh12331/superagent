@@ -21,6 +21,7 @@ import { promises as fs } from 'node:fs';
 import type { FileWriteRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -44,6 +45,11 @@ const WriteFileInputSchema = z.object({
 
 type WriteFileInput = z.infer<typeof WriteFileInputSchema>;
 
+/**
+ * 创建 write_file 工具（写入 UTF-8 文本：默认覆盖，append=true 追加；ask 级审批）
+ *
+ * @param fileService 文件服务（执行实际写入）
+ */
 export function createWriteFileTool(fileService: IFileService): Tool<WriteFileInput> {
   return {
     name: 'write_file',
@@ -53,19 +59,20 @@ export function createWriteFileTool(fileService: IFileService): Tool<WriteFileIn
     permission: 'ask',
     category: 'edit',
     execute: async (input: WriteFileInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：文件 IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       // priorReadEnforcement：覆盖/追加已存在文件前必须已 read_file（新建文件不要求）
-      const exists = await fileExists(absPath);
-      if (exists && !readTracker.has(ctx.sessionId, absPath)) {
+      const exists = await fileExists(realTarget);
+      if (exists && !readTracker.has(ctx.sessionId, realTarget)) {
         return {
-          title: '文件未读取',
+          title: t('tools.fileNotRead'),
           output: '修改已存在文件前必须先读取其内容。请先使用 read_file 工具读取该文件，再写入。',
         };
       }
 
       const result: FileWriteRes = await fileService.write({
-        path: absPath,
+        path: realTarget,
         content: input.content,
         append: input.append,
         createDirs: input.createDirs,
@@ -76,7 +83,7 @@ export function createWriteFileTool(fileService: IFileService): Tool<WriteFileIn
         title: `${action}: ${input.path}`,
         output: `已${action} ${input.path}（${result.bytesWritten} 字节）`,
         metadata: {
-          path: absPath,
+          path: resolved,
           bytesWritten: result.bytesWritten,
           append: input.append,
           createDirs: input.createDirs,

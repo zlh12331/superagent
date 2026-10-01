@@ -3,7 +3,7 @@
 // 五态（loading/error/empty/ready/搜索空态）、会话选择与新建导航、
 // 搜索过滤、置顶标识、tab 计数、加载更多、文件树视图切换
 // ──────────────────────────────────────────────────────────────
-// mock 边界：会话数据域（useSessionsQuery / mutations）、useWorkingDir、
+// mock 边界：会话数据域（useSessionsFlat / mutations）、useWorkingDir、
 // 搜索高亮副作用 hook、FileTreePanel（独立域已有自身测试）。
 // thread-item / folder-label / sidebar-account / sidebar-utils 走真实实现。
 // ──────────────────────────────────────────────────────────────
@@ -28,9 +28,10 @@ const { mockDeleteSession, mockPinSession } = vi.hoisted(() => ({
 const mockQuery = vi.hoisted(() => ({ value: undefined as Record<string, unknown> | undefined }));
 
 vi.mock('@/hooks/use-sessions', () => ({
-  useSessionsQuery: () =>
+  // Sidebar 消费 useSessionsFlat：data 即平铺会话数组
+  useSessionsFlat: () =>
     mockQuery.value ?? {
-      data: { pages: [{ sessions: [] }], pageParams: [] },
+      data: [],
       isLoading: false,
       isError: false,
       error: null,
@@ -42,6 +43,10 @@ vi.mock('@/hooks/use-sessions', () => ({
   usePinSession: () => ({ mutate: mockPinSession, isPending: false }),
   // thread-item 内联重命名使用（Sidebar 渲染 thread-item，故必须提供）
   useRenameSession: () => ({ mutateAsync: vi.fn().mockResolvedValue({ data: { ok: true } }) }),
+}));
+// thread-item 中断入口使用（D4A：真实 hook 需 QueryClientProvider，本文件未包裹）
+vi.mock('@/hooks/use-agent-stop', () => ({
+  useStopAgentTurn: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('@/hooks/use-working-dir', () => ({ useWorkingDir: () => null }));
 vi.mock('@/hooks/use-sidebar-highlight', () => ({
@@ -67,10 +72,10 @@ function session(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-/** 组装分页形状的 query 返回值（v5 契约：status + fetchStatus，见 use-async-view） */
+/** 组装平铺形状的 query 返回值（v5 契约：status + fetchStatus，见 use-async-view） */
 function readyQuery(sessions: readonly Record<string, unknown>[], hasNextPage = false) {
   return {
-    data: { pages: [{ sessions }], pageParams: [] },
+    data: sessions,
     status: 'success',
     fetchStatus: 'idle',
     isLoading: false,

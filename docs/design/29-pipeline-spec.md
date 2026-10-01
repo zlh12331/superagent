@@ -198,7 +198,7 @@ flowchart TB
 
 | job | 实例 | 步骤 |
 |---|---|---|
-| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（12 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ schema 漂移（`drizzle-kit generate` + `git diff --quiet -- drizzle/`）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
+| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（15 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
 | **unit** | 6 | `pnpm test:main` + `pnpm test:renderer`；**ubuntu-latest 实例改跑 `pnpm test:coverage`**（覆盖率阈值唯一把关点，覆盖率产物也从这里上传）；其余 5 个平台跑不带阈值的同套用例。`test:scripts` 不在此 job（与平台无关，留在 quality 单次执行，避免 6 倍重复） |
 | **integration** | 1 | `pnpm test:integration`（`tests/integration/`，20+ 文件；用户决策不扩平台） |
 | **e2e-browser** | 1 | `playwright install --with-deps chromium` → `playwright test --config e2e/playwright.config.ts --retries=2` |
@@ -213,11 +213,11 @@ flowchart TB
 | 1 | Typecheck | `pnpm typecheck` | `tsc --build` 全量类型（含 project references） |
 | 2 | Lint | `pnpm lint` | Biome 检查 + 格式 + import 排序 |
 | 3 | 密钥扫描 | `gitleaks-action@v2` | 全历史无泄漏；**`fetch-depth: 0` 是前提**（浅克隆会假绿） |
-| 4 | 静态审计 | `pnpm check:static` | 12 项：tokens / i18n / 过期注释 / 文件体积 / 函数指标 / 复杂度 / 覆盖率下限 / docs / test-boundary / csp-hash / css-vars / animations / ui-consistency（棘轮只许下降） |
+| 4 | 静态审计 | `pnpm check:static` | 15 项：tokens / i18n / 过期注释 / 文件体积 / 函数指标 / 复杂度 / 覆盖率下限 / docs / docs-scripts / test-boundary / csp-hash / css-vars / animations / ui-consistency / memory-engine:integrity（棘轮只许下降） |
 | 5 | 令牌审计 | `pnpm tokens:check` | 裸色 / `dark:` / 间距双写 / hex 写法 |
 | 6 | 死代码 | `pnpm knip` | files / deps / binaries 级 |
 | 7 | 依赖方向 | `pnpm depcruise` | 分层依赖约束 |
-| 8 | schema 漂移 | `drizzle-kit generate` + `git diff --quiet -- drizzle/` | 改了 `schema.ts` 却没生成迁移 → 红 |
+| 8 | schema 漂移 | `pnpm check:schema-drift`（判据：generate 前后文件集合是否新增，不依赖提交状态） | 改了 `schema.ts` 却没生成迁移 → 红 |
 | 9 | 门禁脚本自测 | `pnpm test:scripts` | 门禁脚本自身的单测 |
 | 10 | 依赖漏洞 | `pnpm audit` | audit-ci，中危（moderate）起卡关 |
 | 11 | **CHANGELOG 润色门禁** | `pnpm check:changelog-polish` | **仅 Release PR 分支**（`if: startsWith(github.head_ref, 'release-please--')`）——断言 CHANGELOG 已面向用户改写，不做就合并不了 |
@@ -535,7 +535,7 @@ artifacts/mac-arm64/latest-mac.yml
 | **R1** | **Windows ARM 单测可能崩**：x64 Windows 已实测崩过（node-pty/ConPTY + vitest fork worker，`0xC0000005`）。ARM 上可能同样。 | 先试全量；崩了就按现状降级（Windows 只跑 `test:main && test:renderer && test:scripts`）并在 workflow 注释记录实测原因。**降级不影响其他平台**。 |
 | **R2** | **Windows ARM 上 Playwright + Electron E2E 无实测先例**（论证已按源码核实修正） | 已核实：Playwright 的 Windows 分支不区分架构且标记为官方支持（`isOfficiallySupportedPlatform: true`）；Electron 官方发布 `win32-arm64` 构建；ffmpeg 在 win-arm64 上取 x64 版、靠系统模拟运行。**不再是"无官方支持"级别的问题**，而是"未经实测的组合"。 | 先试；若失败则 e2e-electron 的 win-arm 变体降级（跳过该平台 E2E，保留单测）。降级**不影响其他平台**，且 ruleset 因汇总 job 无需变更。 |
 | **R3** | **ruleset 与 workflow 不同步 → PR 永久卡 pending** | 用汇总 job 隔离（§3.3）。落地顺序必须是**「先 workflow、后 ruleset」**（ruleset 是 API 对象不是仓库文件，"同一次推送内完成"做不到，早先版本如此写是错的）。之所以安全：扩到 6 平台后**原有三个 label（`windows-latest` / `ubuntu-latest` / `macos-latest`）仍在矩阵内**，旧 ruleset 的 6 项检查在过渡期照常 report，因此不存在死锁窗口。步骤：① 合并 workflow → ② 开测试 PR 确认旧 6 项仍全绿 → ③ 改 ruleset 为 5 项 → ④ 再开一个 PR 确认 `mergeStateStatus: CLEAN`。**前提是矩阵确实保留了那三个 label**——若改成全新 label 集合，本缓解措施失效 |
-| **R4** | **macOS Intel 与 ARM runner 的计费属性**（**已核实，不要钱**） | 三条独立证据：① GitHub 官方文档：**"Use of the standard GitHub-hosted runners is free and unlimited on public repositories."**；② `macos-26-intel` / `macos-15-intel` / `macos-latest` / `ubuntu-24.04-arm` / `windows-11-arm` **全部列在官方"标准 runner"表内**（`-large`/`-xlarge` 才是 Larger runners，官方明示"Larger runners are always charged for, even when used by public repositories"）；③ **计费 API 实测**：本仓库最近三次运行的 `actions/runs/{id}/timing` 返回 `MACOS=0ms UBUNTU=0ms WINDOWS=0ms`——即已含的 macOS/Windows/Linux 运行**一个计费分钟都没消耗**。⚠️ 两个新 label（`macos-26-intel` / `windows-11-arm`）**尚未实跑过**，其免费属性依据"在标准表内 + 同表其他 label 实测 0 计费"推断，首次跑完可再核 Billing 页确认。 |
+| **R4** | **计费属性**（原结论"不要钱"**已于 2026-09-21 实测更正**） | ~~三条证据支持"免费"~~ → **更正**：runner 分钟确实免费，但**账户被配额挡住了**。实测事实：仓库是 public，却收到「2000 分钟 + 500MB 存储 已用完」并使 Actions 派发被拒（我触发的 `gh run rerun` 未生效，attempt 仍为 1）；同期本仓库 artifact 占用 **129.92 GB / 520 个**（账户下另有一个 private 仓库 `easy-writing-2.0.0`，而 **Free 套餐的 2000 分钟与 500MB 属私有仓库配额，artifact 存储为账户级共享**）。⇒ 原判断只覆盖了"standard runner 的分钟计费"，**漏掉了 artifact 存储这一账户级约束**。已清理旧 artifact（保留最近 4 天，129.92 → 20.72 GB）。**不要再用"public 所以零成本"作为无限使用的依据**，见 §10.7 的策略调整。 |
 | **R5** | **合并脚本写错 → 用户装到错误架构的包**（静默故障） | ① 纯函数 + 单测（用真实元数据）；② publish 门禁断言"元数据必含双架构条目"（fail-closed）；③ 首次发版后 API 回读实测 |
 | **R6** | **CI wall-clock 上升**（**早先版本的推算已更正**） | 单测是移到**独立的 `unit` job 并行跑**，不是叠加到 e2e-electron 上——所以"5m21s → 8-9 分钟"的算法是错的。CD 实测的同套单测耗时（Windows 3m17s / macOS 3m16s / Linux x64 2m8s）**短于**当前最慢 job（e2e-electron win 5m21s），故 wall-clock 预计与现状相当（**≈5–6 分钟**）。真正的变量是**新平台 e2e-electron 的耗时**（win-arm64 / linux-arm64 / macos-26-intel 均未实测）。**runner 免费，无金钱成本。** |
 | **R7** | **macOS Intel 机器未来消失**（Apple 淘汰 Intel） | 已知；届时应已能用 Rosetta 在 arm64 上验 x64（runner-images 的 arm64 镜像装有 Rosetta，已核实其构建脚本与测试）。届时改 label 即可，ruleset 因汇总 job 无需变更。 |
@@ -654,5 +654,56 @@ gh api repos/{owner}/{repo}/rulesets/<id> --jq '.rules[] | select(.type=="requir
 - **账户并发上限**（R9）：单 PR 17 实例（macOS 4）是否在并发 PR 下排队，需在多 PR 并行时观察。
 - **新平台 perf 基线的长期稳定性**：本次仅一轮实测（各平台单次），跨多轮后的抖动范围待积累。
 - **`windows-11-arm` 的 VS2026 镜像迁移**（官方公告 #14602，2026-09-21~09-30）：迁移完成后需复跑确认工具链行为不变。
+
+### 10.7 策略调整：本地优先（2026-09-21，因账户配额耗尽）
+
+**触发**：账户配额用尽（§7 R4 的更正），云端 CI/CD 已无法派发运行。
+
+**新策略**（用户决策）：**CICD 尽量只在本地跑，只做 Windows 端；全部做完后再推云端做多端适配。云端 workflow 定义保持不变。**
+
+分工：
+
+| 层 | 在哪跑 | 内容 |
+|---|---|---|
+| 质量验证 | **本地** | 密钥扫描 / typecheck / lint / 15 项静态检查 / tokens 一致性 / knip / depcruise / schema 漂移 / audit / 5 层测试 |
+| 产物验证（Windows） | **本地** | build / bundle 门槛 / compiler 门槛 / E2E 浏览器 + Electron / `build:win:x64` / 引擎与架构断言 / 产物 smoke |
+| 多端适配 | **云端**（配额恢复后） | 六平台矩阵（Linux/macOS 的构建、单测、E2E） |
+
+新增两条聚合命令消除"每次手敲清单"的摩擦：
+
+```bash
+pnpm verify:local        # 质量层，约 4.5 分钟，零成本
+pnpm verify:local:full   # 追加产物层（含 build:win:x64 + smoke），约 13-14 分钟
+```
+
+**2026-09-22 补齐覆盖缺口**：核对发现 `verify:local` 原缺 3 项本地入口——
+`tokens:check`、schema 漂移检测、密钥扫描（仅 pre-push 有）。已全部纳入：
+新增 `scripts/check-tokens-sync.ts` / `scripts/check-schema-drift.ts` /
+`scripts/check-secrets-git.ts`，`verify:local` 与 CI quality job 的检查项至此对齐
+（唯一例外是 CI 独有的 `check:changelog-polish`，它只对 Release PR 生效）。
+同时修正了前两者的判据：原实现用 `git diff` 对比 HEAD，会把「已重新生成、尚未提交」
+误判为失败，导致这两个闸在本地开发中途不可用；改为对比「重新生成前后」后，
+判据与提交状态无关，且能额外捕获「手改生成物」（原实现会静默覆盖掉手改、反而放行）。
+
+**已验证**：Windows 端全链路**可在本地跑完**，包括原本只在 CD 跑的产物 smoke（`build:win:x64` → `test:smoke` 6 项通过）。故本地优先不会丢失任何 Windows 侧覆盖。
+
+**两个必须知晓的约束**：
+
+1. **推送仍会触发云端 workflow 并消耗配额**（`ci.yml` 由 `pull_request` 触发、`release.yml`/`release-please.yml` 由 `push: main` 触发、`codeql.yml` 三种都有）。仅"本地验证"不能阻止派发；需要控量时用 commit message 加 `[skip ci]`（官方支持 `[skip ci]` / `[ci skip]` / `[no ci]` / `[skip actions]` / `[actions skip]`，仅作用于 `push` 与 `pull_request`，`pull_request_target` 例外）。
+2. **ruleset 的 5 项必需检查由云端产生**（用户决定暂不动 ruleset）。配额恢复前 PR 会卡在 pending；`.workbuddy-ai/` 等本地产物的提交也需按此策略权衡。
+
+**顺带发现的可优化项**（本次未改，供配额恢复后参考）：
+- ✅ **`pre-push` 的 gitleaks 已改造（2026-09-22 实施）**：原 `gitleaks dir .` 实测 **191 秒**
+  （本机复测；扫 3.21 GB，含 `.pnpm-store` / `.electron-user-data` 等非版本库目录），
+  改为 `gitleaks git --log-opts="<远端 main>..HEAD"` 后 **1.4 秒**。同时 pre-push 里
+  与 quality job 重复的另外 6 步（typecheck / lint / check:static / depcruise /
+  drizzle 漂移 / test:scripts）已删除，交由 CI 权威执行；本地全量验证改用
+  `pnpm verify:local` / `pnpm verify:local:full`。pre-push 现仅保留密钥扫描
+  （理由：唯一不可逆的失效——推上远端即只能作废重签）。
+  ⚠️ 同批修复：`.gitleaks.toml` 缺 `[extend] useDefault = true` 导致规则数归零，
+  三道 gitleaks 闸（pre-commit / pre-push / CI Action）此前**全部空转**，详见
+  `17-security-spec.md` §三。
+- **六平台全矩阵每 PR ≈ 50–60 runner-分钟**（17 个 job 实例）。若常态化使用，可让普通 PR 只跑核心平台、Release PR 才跑全六平台，成本降 3–4×。
+- **CD artifact 每次发版约 3.4 GB × retention 30 天**是存储的主要来源。已清理至 20.72 GB（保留最近 4 天）；建议同时考虑调小 `retention-days` 或对非发布运行缩短保留。
 
 

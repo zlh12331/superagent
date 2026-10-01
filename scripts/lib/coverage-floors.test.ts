@@ -13,12 +13,12 @@ import {
   applyTighten,
   type CoverageFloorsFile,
   FLOORS_TABLE_HEADER,
-  formatMetricSet,
   LAYER_CONFIGS,
   LAYER_KEYS,
   type LayerFloors,
   loadCoverageFloors,
   MEASURE_BUFFER,
+  METRIC_KEYS,
   parseCoverageFloors,
   proposeTighten,
   raiseSet,
@@ -53,6 +53,8 @@ function fixture(over: Partial<Record<keyof CoverageFloorsFile['layers'], LayerF
       shared: layer(),
       main: layer(),
       renderer: layer(),
+      // 按真源层级清单补齐治理层（LAYER_KEYS 与此处必须同步，缺层会被 parse 抛错）
+      'renderer-settings': layer(),
       ...over,
     },
   };
@@ -205,6 +207,13 @@ describe('applyTighten：文本级回填，保留治理注释', () => {
     '      "ratchet": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },',
     '      "measured": { "statements": 64.06, "branches": 55.91, "functions": 59.96, "lines": 64.87 },',
     '      "measuredAt": "2026-08-27"',
+    '    },',
+    '    "renderer-settings": {',
+    '      "specTarget": { "statements": 80, "branches": 75, "functions": 80, "lines": 80 },',
+    '      "floor": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },',
+    '      "ratchet": { "statements": 59, "branches": 50, "functions": 54, "lines": 59 },',
+    '      "measured": { "statements": 64.06, "branches": 55.91, "functions": 59.96, "lines": 64.87 },',
+    '      "measuredAt": "2026-08-27"',
     '    }',
     '  }',
     '}',
@@ -269,8 +278,12 @@ describe('真实仓库接线（回归防护）', () => {
     expect(validateConfigWiring(REPO_ROOT)).toEqual([]);
   });
 
-  it.each(LAYER_KEYS)('%s 层门槛与 vitest 读取的键一致', (layerKey) => {
-    const text = readFileSync(join(REPO_ROOT, LAYER_CONFIGS[layerKey]), 'utf-8');
+  // 仅覆盖接 vitest 的层；治理层（renderer-settings，LAYER_CONFIGS 无项）无 thresholds 接线
+  const wiredLayers = LAYER_KEYS.filter((l) => typeof LAYER_CONFIGS[l] === 'string');
+  it.each(wiredLayers)('%s 层门槛与 vitest 读取的键一致', (layerKey) => {
+    const rel = LAYER_CONFIGS[layerKey];
+    if (rel === undefined) throw new Error('已按 typeof 收窄，unreachable');
+    const text = readFileSync(join(REPO_ROOT, rel), 'utf-8');
     expect(text).toContain(`layers.${layerKey}.floor`);
     const file = loadCoverageFloors(join(REPO_ROOT, 'scripts/coverage-floors.json'));
     expect(Object.keys(thresholdsOf(file, layerKey)).sort()).toEqual([
@@ -281,10 +294,15 @@ describe('真实仓库接线（回归防护）', () => {
     ]);
   });
 
-  it('渲染层门槛不得被伪造成业务层规范值', () => {
+  // 历史护栏「floor ≠ 规范值 80/75/80/80」随 2026-09-26 缺口清零失效（19fae76 补测达标），
+  // 改守不变式本身：floor 不得高于 min(规范目标, 实测−缓冲)，必须可由实测复现。
+  // 伪造场景（实测 64 时代硬写 80/75/80/80）在此断言下仍被拦：上限只有 59/50/54/59。
+  it('渲染层 floor 不得超出实测可复现的上限（伪造成规范值仍会被拦）', () => {
     const file = loadCoverageFloors(join(REPO_ROOT, 'scripts/coverage-floors.json'));
-    const rendererFloor = formatMetricSet(file.layers.renderer.floor);
-    expect(rendererFloor === '80/75/80/80').toBe(false);
+    const renderer = file.layers.renderer;
+    const ceiling = proposeTighten(renderer);
+    const faked = METRIC_KEYS.filter((metric) => renderer.floor[metric] > ceiling[metric]);
+    expect(faked).toEqual([]);
   });
 });
 
@@ -292,10 +310,12 @@ describe('接线校验能抓到真实回归', () => {
   it('config 内联数字被抓；缺失配置被报', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'cov-floors-'));
     try {
+      const mainConfig = LAYER_CONFIGS.main;
+      if (mainConfig === undefined) throw new Error('main 层必须接 vitest 配置');
       mkdirSync(join(tmp, 'src/main'), { recursive: true });
-      const good = readFileSync(join(REPO_ROOT, LAYER_CONFIGS.main), 'utf-8');
+      const good = readFileSync(join(REPO_ROOT, mainConfig), 'utf-8');
       writeFileSync(
-        join(tmp, LAYER_CONFIGS.main),
+        join(tmp, mainConfig),
         good.replace('thresholds: {', 'thresholds: { statements: 42,'),
         'utf-8',
       );

@@ -2,6 +2,7 @@
 
 > 本文档基于源码梳理 Code Agent 项目的测试体系结构。
 > 所有测试文件路径、配置项、覆盖目标均来自项目实际代码。
+> 最后同步：2026-09-30（测试文件数实测核对）。
 
 ## 1. 测试金字塔
 
@@ -21,7 +22,7 @@
                 │   Perf Bench              │  e2e/perf/navigation.bench.spec.ts
                 │   性能基准                │
                 ├──────────────────────────┤
-                │   Unit (vitest)           │  128 个测试文件 / 242+ 用例
+                │   Unit (vitest)           │  399 个测试文件（2026-09-30 实测）
                 │   shared / main / renderer │
                 │   + scripts               │
                 └──────────────────────────┘
@@ -41,7 +42,7 @@
 | jsdom | `^29.1.1` | 浏览器环境模拟 |
 | @axe-core/playwright | `^4.12.1` | 可访问性审计 |
 
-源码：[package.json#L79-L117](file:///package.json#L79)（devDependencies）。
+源码：[package.json](file:///package.json)（devDependencies）。
 
 > 注：`msw` 已从 devDependencies 中移除，渲染层 mock 由独立 mock-api 层实现（见 §5.1）。
 
@@ -59,15 +60,17 @@
 
 ### 3.2 跑测试脚本
 
-来自 [package.json#L33-L58](file:///package.json#L33)：
+来自 [package.json](file:///package.json)：
 
 | 脚本 | 命令 | 说明 |
 |------|------|------|
-| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:scripts` | 全量单元测试（shared + main + renderer + scripts） |
+| `test` | `pnpm -r --filter "@code-agent/*" --filter "!@code-agent/typedoc-docs" run test && pnpm test:main && pnpm test:renderer && pnpm test:integration && pnpm test:scripts` | 全量单元测试（shared + main + renderer + integration + scripts） |
 | `test:scripts` | `vitest run --root scripts` | scripts 目录测试（i18n / changelog / scaffold 工具链） |
-| `test:main` | `vitest run --root src/main` | 仅主进程 |
-| `test:renderer` | `vitest run --root src/renderer` | 仅渲染层 |
-| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main -- --coverage && pnpm test:renderer -- --coverage` | shared + main + renderer 覆盖率 |
+| `test:main` | `vitest run --root src/main --silent=passed-only` | 仅主进程 |
+| `test:renderer` | `vitest run --root src/renderer --silent=passed-only` | 仅渲染层 |
+| `test:coverage` | `pnpm --filter "@code-agent/shared" exec vitest run --coverage && pnpm test:main --coverage && pnpm test:renderer --coverage && pnpm coverage:settings` | shared + main + renderer 覆盖率（链尾回填 settings 子集实测） |
+
+`--silent=passed-only`：通过用例的测试内 console 输出不再打印（失败用例保留完整 console，便于排障）；主因是三阶段测试内 console 噪音合计约 450KB，会撑爆自动化门禁的 stdout 捕获上限（262KB）。
 
 ### 3.3 覆盖率配置
 
@@ -177,7 +180,7 @@ E2E 兑底是正式策略而非欠账：
 | 文件 | 目标函数 | 覆盖的不变量 |
 |---|---|---|
 | [src/main/infra/ai/models/token-limits.property.test.ts](file:///src/main/infra/ai/models/token-limits.property.test.ts) | `clampOutputTokens` | 恒整非负；≤ 有效上限；有窗口时满足 `prompt + output + margin ≤ window`（唯一例外 MIN 保底）；下限保护；无窗口仅应用能力上限 |
-| [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | `joinPath` | 空 parentDir 原样返回；前缀/后缀保真；连接处恰一个分隔符；混合分隔符共存 |
+| [src/renderer/hooks/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/use-file-tree-ops.property.test.ts) | `joinPath` | 空 parentDir 原样返回；前缀/后缀保真；连接处恰一个分隔符；混合分隔符共存 |
 
 **试点收获**：joinPath 属性测试首轮即抓到手写用例未覆盖的断言缺陷——"全串不含 `//`"
 错误地假设了 parentDir 中部既有的连续分隔符在函数职责内（实际只负责连接处），
@@ -227,9 +230,9 @@ E2E 兑底是正式策略而非欠账：
 
 | 文件 | 说明 |
 |------|------|
-| [src/renderer/test/__tests__/mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) | mock-api 形状一致性 |
-| [src/renderer/hooks/__tests__/use-agent-bridge.test.tsx](file:///src/renderer/hooks/__tests__/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
-| [src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/__tests__/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
+| [src/renderer/test/mock-api.test.ts](file:///src/renderer/test/mock-api.test.ts) | mock-api 形状一致性 |
+| [src/renderer/hooks/use-agent-bridge.test.tsx](file:///src/renderer/hooks/use-agent-bridge.test.tsx) | Agent 桥接 hook（孤儿 usage-store 已随 2026-08 P2 清理移除） |
+| [src/renderer/hooks/use-file-tree-ops.property.test.ts](file:///src/renderer/hooks/use-file-tree-ops.property.test.ts) | fast-check 属性测试试点：joinPath 路径拼接不变量（前缀/后缀保真 + 连接处单分隔符） |
 | [src/renderer/components/layout/DevPanel.test.tsx](file:///src/renderer/components/layout/DevPanel.test.tsx) | DevPanel |
 
 #### scripts 工具链（4 个）
@@ -334,7 +337,7 @@ E2E 兑底是正式策略而非欠账：
 | Electron | [e2e/playwright.electron.config.ts](file:///e2e/playwright.electron.config.ts) | `pnpm test:e2e:electron` | 真实 Electron 窗口 |
 | Smoke | [e2e/playwright.smoke.config.ts](file:///e2e/playwright.smoke.config.ts) | `pnpm test:smoke` | 生产构建 smoke |
 
-源码：[package.json#L52-L54](file:///package.json#L52)（test:e2e / test:e2e:electron / test:smoke 脚本）。
+源码：[package.json](file:///package.json)（test:e2e / test:e2e:electron / test:smoke 脚本）。
 
 ### 4.2 E2E 文件清单（6 个）
 
@@ -349,13 +352,13 @@ E2E 兑底是正式策略而非欠账：
 
 ### 4.3 专项测试脚本
 
-来自 [package.json#L55-L57](file:///package.json#L55)（test:visual / test:a11y / test:perf 脚本）：
+来自 [package.json](file:///package.json)（test:visual / test:a11y / test:perf 脚本）：
 
 | 脚本 | grep 模式 |
 |------|----------|
 | `test:visual` | `"视觉回归"` |
 | `test:a11y` | `"可访问性"` |
-| `test:perf` | `"性能基准"` |
+| `test:perf` | `"性能基准\|渲染性能基准\|内存基准\|IPC 基准"` |
 
 ### 4.4 Browser mode 环境变量
 
@@ -368,7 +371,7 @@ E2E 兑底是正式策略而非欠账：
 渲染层维护独立 mock 层，使前端独立开发：
 
 - 位置：[src/renderer/test/](file:///src/renderer/test/)
-- 形状一致性测试：[mock-api.test.ts](file:///src/renderer/test/__tests__/mock-api.test.ts) 确保 mock 与真实 IpcApi 接口一致
+- 形状一致性测试：[mock-api.test.ts](file:///src/renderer/test/mock-api.test.ts) 确保 mock 与真实 IpcApi 接口一致
 
 ### 5.2 关键 mock 约定（来自 project memory）
 
@@ -376,10 +379,6 @@ E2E 兑底是正式策略而非欠账：
 - MockedWebContents 使用交叉类型 `WebContents & { send: Mock; isDestroyed: Mock }` 满足类型签名并支持 mock 调用检查
 - StreamText mock 必须监听 abortSignal 并调用 `controller.error(AbortError)` 防止 reader pending
 - `controller.start` 用 `mockImplementationOnce` 而非 `mockResolvedValueOnce(undefined)`，避免丢失 'running' 事件
-
-### 5.3 Sentry IPC 错误过滤
-
-E2E browser mode 下无主进程，Sentry IPC 会失败，需加入 filter allowlist。
 
 ## 6. DevPanel 测试关键约定
 

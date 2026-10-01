@@ -16,7 +16,11 @@
 // 地址规范化 → ./browser-url；工具栏按钮样式 → ./browser-toolbar。
 // ──────────────────────────────────────────────────────────────
 
-import type { BrowserLoadFailedPayload, BrowserState } from '@code-agent/shared/renderer';
+import type {
+  BrowserLoadFailedPayload,
+  BrowserState,
+  IpcResponse,
+} from '@code-agent/shared/renderer';
 import { ArrowLeft, ArrowRight, Link2, MonitorSmartphone, RotateCw } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -24,6 +28,16 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { DEVICE_DIMENSIONS } from '@/lib/browser/presets';
+import {
+  type BrowserNavRes,
+  browserBack,
+  browserForward,
+  browserNavigate,
+  browserReload,
+  getBrowserState,
+  subscribeBrowserLoadFailed,
+  subscribeBrowserState,
+} from '@/lib/browser-actions';
 import { hasIpcBridge, unwrap, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import type { BrowserDevicePreset, BrowserZoom } from '@/stores/persistent/settings-store';
@@ -87,19 +101,15 @@ export function BrowserPane(): ReactElement {
   // getState 快照视为陈旧值丢弃（否则 UI 会被旧状态回退）
   const receivedEventRef = useRef(false);
   useEffect(() => {
-    // 浏览器模式 / preload 缺失：window.api 为 undefined，成员访问阶段即抛
-    // TypeError（后续 .catch 兜不住），故必须先判桥（lib/ipc.ts hasIpcBridge）。
     // 无桥时保持 INITIAL_STATE，渲染空状态即可。
     if (!hasIpcBridge()) return;
-    const api = window.api.browser;
     let active = true;
-    void api
-      .getState()
-      .then((res) => {
-        if (active && !receivedEventRef.current) setState(unwrap(res));
+    void getBrowserState()
+      .then((snap) => {
+        if (active && !receivedEventRef.current) setState(snap);
       })
       .catch(() => {});
-    const unsubscribeState = api.subscribeState((payload) => {
+    const unsubscribeState = subscribeBrowserState((payload) => {
       receivedEventRef.current = true;
       setState(payload);
       // 新一次加载开始时清除上一次的失败状态
@@ -107,7 +117,7 @@ export function BrowserPane(): ReactElement {
         setLoadError(null);
       }
     });
-    const unsubscribeLoadFailed = api.subscribeLoadFailed((payload) => {
+    const unsubscribeLoadFailed = subscribeBrowserLoadFailed((payload) => {
       setLoadError(payload);
     });
     return () => {
@@ -139,7 +149,7 @@ export function BrowserPane(): ReactElement {
    * 静默——与 navigateTo 的「失败必提示」不一致。主进程这三个动作是幂等
    * no-op（无视图也返回 ok:true），故不会产生提示噪音。
    */
-  const runNavigation = (pending: ReturnType<typeof window.api.browser.back>): void => {
+  const runNavigation = (pending: Promise<IpcResponse<BrowserNavRes>>): void => {
     void pending.then(unwrap).catch((error: Error) => {
       toast.error(unwrapErrorMessage(error, getErrorMessage));
     });
@@ -151,12 +161,9 @@ export function BrowserPane(): ReactElement {
     if (normalized === '') return;
     setUrlInput(normalized);
     if (!hasIpcBridge()) return;
-    void window.api.browser
-      .navigate({ url: normalized })
-      .then(unwrap)
-      .catch((error: Error) => {
-        toast.error(unwrapErrorMessage(error, getErrorMessage));
-      });
+    void browserNavigate(normalized).catch((error: Error) => {
+      toast.error(unwrapErrorMessage(error, getErrorMessage));
+    });
   };
 
   /** 切换设备预设（responsive 用 0 表示跟随宿主，不覆盖宽高输入） */
@@ -179,7 +186,7 @@ export function BrowserPane(): ReactElement {
           title={t('panel.browserBack')}
           aria-label={t('panel.browserBack')}
           onClick={() => {
-            if (hasIpcBridge()) runNavigation(window.api.browser.back());
+            if (hasIpcBridge()) runNavigation(browserBack());
           }}
           disabled={!state.canGoBack}
           className={TOOLBAR_BTN_CLASS}
@@ -192,7 +199,7 @@ export function BrowserPane(): ReactElement {
           title={t('panel.browserForward')}
           aria-label={t('panel.browserForward')}
           onClick={() => {
-            if (hasIpcBridge()) runNavigation(window.api.browser.forward());
+            if (hasIpcBridge()) runNavigation(browserForward());
           }}
           disabled={!state.canGoForward}
           className={TOOLBAR_BTN_CLASS}
@@ -205,7 +212,7 @@ export function BrowserPane(): ReactElement {
           title={t('panel.browserRefresh')}
           aria-label={t('panel.browserRefresh')}
           onClick={() => {
-            if (hasIpcBridge()) runNavigation(window.api.browser.reload());
+            if (hasIpcBridge()) runNavigation(browserReload());
           }}
           disabled={state.url === null}
           className={TOOLBAR_BTN_CLASS}
@@ -259,7 +266,7 @@ export function BrowserPane(): ReactElement {
       )}
 
       {/* 加载进度条：位于占位区之外（占位区内的渲染层 UI 会被原生视图盖住）。
-          不定式动画（keyframes 见 globals.css 的 browser-loading-bar）：无进度
+          不定式动画（keyframes 见 styles/ 各域 css 的 browser-loading-bar）：无进度
           百分比可报，故 role="progressbar" 不设 aria-valuenow（ARIA 允许「不确定」
           形态，只需 aria-label 说明在做什么）。 */}
       {state.isLoading && (

@@ -18,6 +18,7 @@
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -27,6 +28,11 @@ const CodeReviewInputSchema = z.object({
 
 type CodeReviewInput = z.infer<typeof CodeReviewInputSchema>;
 
+/**
+ * 创建 code_review 工具（读取指定文件完整内容，供后续代码质量/安全/性能审查分析）
+ *
+ * @param fileService 文件服务（执行实际读取）
+ */
 export function createCodeReviewTool(fileService: IFileService): Tool<CodeReviewInput> {
   return {
     name: 'code_review',
@@ -36,10 +42,11 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
     permission: 'auto',
     category: 'read',
     execute: async (input: CodeReviewInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileReadRes = await fileService.read({
-        path: absPath,
+        path: realTarget,
         offset: undefined,
         limit: undefined,
       });
@@ -55,10 +62,10 @@ export function createCodeReviewTool(fileService: IFileService): Tool<CodeReview
       const output = `文件内容（${result.totalLines} 行）:\n\n${result.content}\n\n---\n文件统计:\n- 总行数: ${stats.totalLines}\n- 代码行: ${stats.codeLines}\n- 注释行: ${stats.commentLines}\n- 空行: ${stats.blankLines}`;
 
       return {
-        title: `代码审查: ${input.path}`,
+        title: t('tools.codeReview.title', { path: input.path }),
         output,
         metadata: {
-          path: absPath,
+          path: resolved,
           ...stats,
           encoding: result.encoding,
         },

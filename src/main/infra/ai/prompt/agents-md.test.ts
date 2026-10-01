@@ -1,11 +1,17 @@
 // src/main/infra/ai/prompt/agents-md.test.ts
 // AGENTS.md 分层发现单测：向上查找 / 大小写 / 字节预算 / 格式化 / 上限
+//  + 进程内 memo（P2-32：mtime 失效语义）
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { discoverAgentsMd, formatAgentsMdSection, resolveAgentsMd } from './agents-md';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  discoverAgentsMd,
+  formatAgentsMdSection,
+  resetAgentsMdMemo,
+  resolveAgentsMd,
+} from './agents-md';
 
 let root: string;
 
@@ -15,6 +21,11 @@ beforeAll(() => {
   mkdirSync(join(root, 'sub', 'proj'), { recursive: true });
   writeFileSync(join(root, 'AGENTS.md'), 'ROOT_RULES', 'utf-8');
   writeFileSync(join(root, 'sub', 'proj', 'AGENTS.md'), 'PROJ_RULES', 'utf-8');
+});
+
+beforeEach(() => {
+  // memo 为进程级：每用例前清空，保证用例独立（mtime 粒度不受用例间干扰）
+  resetAgentsMdMemo();
 });
 
 afterAll(() => {
@@ -58,6 +69,41 @@ describe('discoverAgentsMd（从工作目录向上查找）', () => {
       expect(found.map((f) => f.content)).toEqual(['y'.repeat(64), 'x'.repeat(64)]);
     } finally {
       rmSync(bigRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('memo（P2-32）：同根连续发现返回一致结果；命中文件内容修改后失效刷新', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agents-md-memo-'));
+    try {
+      writeFileSync(join(dir, 'AGENTS.md'), 'V1', 'utf-8');
+      const first = discoverAgentsMd(dir);
+      const second = discoverAgentsMd(dir);
+      expect(second.map((f) => f.content)).toEqual(first.map((f) => f.content));
+      expect(second[0]?.content).toBe('V1');
+
+      // 内容修改 → 文件 mtime 变化 → memo 失效 → 读到新内容
+      // （等 15ms：规避 NTFS/ext4 mtime 粒度内的写覆盖）
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      writeFileSync(join(dir, 'AGENTS.md'), 'V2', 'utf-8');
+      const refreshed = discoverAgentsMd(dir);
+      expect(refreshed[0]?.content).toBe('V2');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('memo（P2-32）：解析根目录新增 AGENTS.md 后失效并纳入', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agents-md-memo-new-'));
+    try {
+      expect(discoverAgentsMd(dir)).toEqual([]);
+      // 等 15ms 保证目录 mtime 变化可观测
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      writeFileSync(join(dir, 'AGENTS.md'), 'NEW_RULES', 'utf-8');
+      const found = discoverAgentsMd(dir);
+      expect(found).toHaveLength(1);
+      expect(found[0]?.content).toBe('NEW_RULES');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

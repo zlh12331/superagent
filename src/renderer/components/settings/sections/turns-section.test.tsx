@@ -129,8 +129,11 @@ describe('TurnsSection', () => {
     setupApi(async () => ({ error: { code: 'TURNS_FAILED', message: 'boom' } }));
     renderSection();
 
-    // 错误消息被展示，且提供重试入口
-    await waitFor(() => expect(screen.getByText(/boom/)).toBeDefined());
+    // unwrapErrorMessage 统一解析：未知码回退 i18n key，不再直出原始 message
+    await waitFor(() => expect(screen.getByRole('alert')).toBeDefined());
+    const all = document.body.textContent ?? '';
+    expect(all).toContain('errors.TURNS_FAILED');
+    expect(all).not.toContain('boom');
     expect(screen.getByRole('button', { name: new RegExp(i18n.t('common.retry')) })).toBeDefined();
   });
 

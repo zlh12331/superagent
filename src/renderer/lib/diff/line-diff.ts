@@ -2,9 +2,9 @@
 // 行级 diff 渲染数据（diff-match-patch 行编码，供 FileChangeCard 渲染）
 // ──────────────────────────────────────────────────────────────
 // R5 说明：diff-stats.ts 已删除（git diff 统计口径统一为主进程 numstat）。
-// 本文件是唯一保留的 dmp 用途：agent 工具 write_file 的**原文前后对比**
-// （oldText/newText 原始字符串对，非 unified diff 文本）——这是与
-// react-diff-viewer-continued（unified diff 渲染）不同的输入形态，不构成重复实现。
+// 本文件是 dmp 的行级用途：agent 工具 write_file 的**原文前后对比**
+// （oldText/newText 原始字符串对，非 unified diff 文本）——这与
+// unified-diff（unified diff 文本解析）输入形态不同，不构成重复实现。
 // ──────────────────────────────────────────────────────────────
 
 import {

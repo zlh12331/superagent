@@ -40,7 +40,7 @@ interface IconConfig {
 
 /** 图标语义色 → 现有令牌（双主题自适应）：橙=warn / 蓝=accent-2 / 黄=amber / 灰=muted / 红=error / 绿=success */
 const EXT_ICONS: Readonly<Record<string, IconConfig>> = {
-  rs: { icon: FileCode, color: 'var(--warn)' },
+  rs: { icon: FileCode, color: 'var(--amber)' },
   ts: { icon: FileCode, color: 'var(--accent-2)' },
   tsx: { icon: FileCode, color: 'var(--accent-2)' },
   js: { icon: FileCode, color: 'var(--accent-2)' },

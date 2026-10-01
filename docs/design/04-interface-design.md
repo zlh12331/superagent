@@ -88,7 +88,7 @@
 
 底层封装在 [src/preload/utils/ipc-bridge.ts](file:///src/preload/utils/ipc-bridge.ts)：
 
-**invoke** — [L33-L41](file:///src/preload/utils/ipc-bridge.ts#L33)：
+**invoke** — [L33-L41](file:///src/preload/utils/ipc-bridge.ts)：
 
 ```ts
 function invoke<T>(channel: string, input?: unknown): Promise<IpcResponse<T>>
@@ -97,7 +97,7 @@ function invoke<T>(channel: string, input?: unknown): Promise<IpcResponse<T>>
 - 返回 `Promise<IpcResponse<T>>`（成功 `{data}` / 失败 `{error}` 判别联合）
 - 每次调用自动生成 `crypto.randomUUID()` 作为 `traceId`，作为第三个参数传入主进程 `ipcMain.handle`
 
-**subscribe** — [L69-L80](file:///src/preload/utils/ipc-bridge.ts#L69)：
+**subscribe** — [L69-L80](file:///src/preload/utils/ipc-bridge.ts)：
 
 ```ts
 function subscribe<T>(channel: string, callback: (payload: T) => void): () => void
@@ -108,7 +108,7 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 
 ### 2.3 类型契约
 
-[packages/shared/src/ipc/api.ts#L29-L42](file:///packages/shared/src/ipc/api.ts#L29)：
+[packages/shared/src/ipc/api.ts#L29-L42](file:///packages/shared/src/ipc/api.ts)：
 
 - `IpcInvokeMethod<Channel>`：根据 `IpcRequestMap[Channel]['req']` 是否为 `void` 决定参数个数，返回 `Promise<IpcResponse<...>>`
 - `IpcSubscribeMethod<Channel>`：接收 `(payload: IpcEventMap[Channel]) => void` 回调，返回 `() => void`
@@ -119,7 +119,7 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 
 ### 3.1 IAgentService
 
-[src/main/infra/ai/agent/agent-service.ts#L100-L130](file:///src/main/infra/ai/agent/agent-service.ts#L100)：
+[src/main/infra/ai/agent/agent-service.ts#L100-L130](file:///src/main/infra/ai/agent/agent-service.ts)：
 
 ```ts
 export interface IAgentService {
@@ -132,7 +132,7 @@ export interface IAgentService {
 
 ### 3.3 IFileService
 
-[src/main/infra/file/file-service.ts#L145-L166](file:///src/main/infra/file/file-service.ts#L145)：
+[src/main/infra/file/file-service.ts#L145-L166](file:///src/main/infra/file/file-service.ts)：
 
 ```ts
 export interface IFileService {
@@ -151,7 +151,7 @@ export interface IFileService {
 
 ### 3.4 ISearchService
 
-[src/main/infra/search/search-service.ts#L66-L73](file:///src/main/infra/search/search-service.ts#L66)：
+[src/main/infra/search/search-service.ts#L66-L73](file:///src/main/infra/search/search-service.ts)：
 
 ```ts
 export interface ISearchService {
@@ -163,7 +163,7 @@ export interface ISearchService {
 
 ### 3.5 ITerminalService
 
-[src/main/infra/terminal/terminal-service.ts#L63-L78](file:///src/main/infra/terminal/terminal-service.ts#L63)：
+[src/main/infra/terminal/terminal-service.ts#L63-L78](file:///src/main/infra/terminal/terminal-service.ts)：
 
 ```ts
 export interface ITerminalService {
@@ -179,7 +179,7 @@ export interface ITerminalService {
 
 ### 3.6 IGitService
 
-[src/main/infra/git/git-service.ts#L104-L117](file:///src/main/infra/git/git-service.ts#L104)：
+[src/main/infra/git/git-service.ts#L104-L117](file:///src/main/infra/git/git-service.ts)：
 
 ```ts
 export interface IGitService {
@@ -194,7 +194,7 @@ export interface IGitService {
 
 ### 3.7 ISessionService
 
-[src/main/infra/storage/session-service.ts#L121-L190](file:///src/main/infra/storage/session-service.ts#L121)：
+[src/main/infra/storage/session-service.ts#L121-L190](file:///src/main/infra/storage/session-service.ts)：
 
 ```ts
 export interface ISessionService {
@@ -227,7 +227,7 @@ export interface ISessionService {
 
 ### 3.8 IToolRegistry
 
-[src/main/infra/ai/tools/tool-registry.ts#L38-L95](file:///src/main/infra/ai/tools/tool-registry.ts#L38)：
+[src/main/infra/ai/tools/tool-registry.ts#L38-L95](file:///src/main/infra/ai/tools/tool-registry.ts)：
 
 ```ts
 export interface IToolRegistry {
@@ -244,7 +244,7 @@ export interface IToolRegistry {
 
 ### 3.9 IToolExecutor
 
-[src/main/infra/ai/tools/tool-executor.ts#L44-L73](file:///src/main/infra/ai/tools/tool-executor.ts#L44)：
+[src/main/infra/ai/tools/tool-executor.ts#L44-L73](file:///src/main/infra/ai/tools/tool-executor.ts)：
 
 ```ts
 export interface IToolExecutor {
@@ -260,7 +260,7 @@ export interface IToolExecutor {
 
 ### 3.10 IPermissionService
 
-[src/main/infra/ai/tools/permission-service.ts#L68-L130](file:///src/main/infra/ai/tools/permission-service.ts#L68)：
+[src/main/infra/ai/tools/permission-service.ts#L68-L130](file:///src/main/infra/ai/tools/permission-service.ts)：
 
 ```ts
 export interface IPermissionService {
@@ -279,7 +279,7 @@ export interface IPermissionService {
 
 ### 3.11 IPromptService
 
-[src/main/infra/ai/prompt/prompt-service.ts#L42-L53](file:///src/main/infra/ai/prompt/prompt-service.ts#L42)：
+[src/main/infra/ai/prompt/prompt-service.ts#L42-L53](file:///src/main/infra/ai/prompt/prompt-service.ts)：
 
 ```ts
 export interface IPromptService {
@@ -290,7 +290,7 @@ export interface IPromptService {
 
 ### 3.12 ICodebaseService
 
-[src/main/infra/codebase/codebase-service.ts#L120-L140](file:///src/main/infra/codebase/codebase-service.ts#L120)：
+[src/main/infra/codebase/codebase-service.ts#L120-L140](file:///src/main/infra/codebase/codebase-service.ts)：
 
 ```ts
 export interface ICodebaseService {
@@ -306,7 +306,7 @@ export interface ICodebaseService {
 
 ### 3.13 IMCPService
 
-[src/main/infra/ai/mcp/mcp-service.ts#L48-L59](file:///src/main/infra/ai/mcp/mcp-service.ts#L48)：
+[src/main/infra/ai/mcp/mcp-service.ts#L48-L59](file:///src/main/infra/ai/mcp/mcp-service.ts)：
 
 ```ts
 export interface IMCPService {
@@ -320,7 +320,7 @@ export interface IMCPService {
 
 ### 3.14 IUpdateService
 
-[src/main/infra/update/update-service.ts#L40-L49](file:///src/main/infra/update/update-service.ts#L40)：
+[src/main/infra/update/update-service.ts#L40-L49](file:///src/main/infra/update/update-service.ts)：
 
 ```ts
 export interface IUpdateService {
@@ -384,14 +384,14 @@ export interface MemoryPort {
 
 ### 4.1 Zod schema 作为单一来源
 
-示例 [packages/shared/src/schemas/chat.ts#L41](file:///packages/shared/src/schemas/chat.ts#L41)：
+示例 [packages/shared/src/schemas/chat.ts#L41](file:///packages/shared/src/schemas/chat.ts)：
 
 ```ts
 export const ChatMessageSchema: z.ZodType<ModelMessage> = z.custom<ModelMessage>(...);
 export type ChatMessage = ModelMessage;
 ```
 
-[packages/shared/src/schemas/agent.ts#L34](file:///packages/shared/src/schemas/agent.ts#L34)：
+[packages/shared/src/schemas/agent.ts#L34](file:///packages/shared/src/schemas/agent.ts)：
 
 ```ts
 export const AgentRunReqSchema = z.object({
@@ -406,11 +406,11 @@ export const AgentRunReqSchema = z.object({
 Schema 与 inferred type 关系：
 
 - request 类型从 schema 用 `z.infer` 派生
-- response 类型直接定义为 TypeScript interface（如 `AgentRunRes` [agent.ts#L63](file:///packages/shared/src/schemas/agent.ts#L63)）
+- response 类型直接定义为 TypeScript interface（如 `AgentRunRes` [agent.ts#L63](file:///packages/shared/src/schemas/agent.ts)）
 
 ### 4.2 核心 Payload 类型
 
-`AgentStreamPartPayload` [agent.ts#L156](file:///packages/shared/src/schemas/agent.ts#L156)：
+`AgentStreamPartPayload` [agent.ts#L156](file:///packages/shared/src/schemas/agent.ts)：
 
 ```ts
 export interface AgentStreamPartPayload {
@@ -421,21 +421,21 @@ export interface AgentStreamPartPayload {
 
 其他 payload：
 
-- `AgentStreamEndPayload` (reason: 'completed' | 'aborted' | 'error') [L163](file:///packages/shared/src/schemas/agent.ts#L163)
-- `AgentStreamErrorPayload` [L170](file:///packages/shared/src/schemas/agent.ts#L170)
-- `AgentToolCallPayload` (含 permission: 'auto' | 'ask') [L83](file:///packages/shared/src/schemas/agent.ts#L83)
-- `AgentToolResultPayload` [L101](file:///packages/shared/src/schemas/agent.ts#L101)
-- `AgentApprovalRequestPayload` [L123](file:///packages/shared/src/schemas/agent.ts#L123)
-- `AgentApprovalResponseReqSchema` (zod) [L144](file:///packages/shared/src/schemas/agent.ts#L144)
+- `AgentStreamEndPayload` (reason: 'completed' | 'aborted' | 'error') [L163](file:///packages/shared/src/schemas/agent.ts)
+- `AgentStreamErrorPayload` [L170](file:///packages/shared/src/schemas/agent.ts)
+- `AgentToolCallPayload` (含 permission: 'auto' | 'ask') [L83](file:///packages/shared/src/schemas/agent.ts)
+- `AgentToolResultPayload` [L101](file:///packages/shared/src/schemas/agent.ts)
+- `AgentApprovalRequestPayload` [L123](file:///packages/shared/src/schemas/agent.ts)
+- `AgentApprovalResponseReqSchema` (zod) [L144](file:///packages/shared/src/schemas/agent.ts)
 
 ### 4.3 错误类型
 
 定义在 [packages/shared/src/constants/errors.ts](file:///packages/shared/src/constants/errors.ts)：
 
-- `ErrorCode` 常量对象 + `as const` 派生联合类型（[L25-L65](file:///packages/shared/src/constants/errors.ts#L25)），分 6 组：通用 / IPC 边界 / AI 调用 / 文件系统 / Code Agent 工具 / 会话 / 终端
-- `ERROR_META` 表覆盖所有错误码，每项含 `userMessage` / `retryable` / `severity`（[L89-L141](file:///packages/shared/src/constants/errors.ts#L89)）
-- `AppError` 类继承 Error，使用 ES2022 原生 `cause` 属性（[L165-L223](file:///packages/shared/src/constants/errors.ts#L165)），提供 `meta` / `retryable` / `severity` getter 与 `toIpcError()` 序列化方法
-- `IpcError` 接口（[L148-L152](file:///packages/shared/src/constants/errors.ts#L148)）作为 IPC 错误传输结构
+- `ErrorCode` 常量对象 + `as const` 派生联合类型（[L25-L65](file:///packages/shared/src/constants/errors.ts)），分 6 组：通用 / IPC 边界 / AI 调用 / 文件系统 / Code Agent 工具 / 会话 / 终端
+- `ERROR_META` 表覆盖所有错误码，每项含 `userMessage` / `retryable` / `severity`（[L89-L141](file:///packages/shared/src/constants/errors.ts)）
+- `AppError` 类继承 Error，使用 ES2022 原生 `cause` 属性（[L165-L223](file:///packages/shared/src/constants/errors.ts)），提供 `meta` / `retryable` / `severity` getter 与 `toIpcError()` 序列化方法
+- `IpcError` 接口（[L148-L152](file:///packages/shared/src/constants/errors.ts)）作为 IPC 错误传输结构
 
 ## 5. 数据库表结构
 
@@ -443,7 +443,7 @@ export interface AgentStreamPartPayload {
 
 ### sessions 表（会话元数据）
 
-[L29-L46](file:///src/main/infra/storage/schema.ts#L29)：
+[L29-L46](file:///src/main/infra/storage/schema.ts)：
 
 - `id` text primaryKey（UUID，由 SessionService.create 生成）
 - `title` text notNull（用户可编辑，默认取首条用户消息前 50 字符）
@@ -456,7 +456,7 @@ export interface AgentStreamPartPayload {
 
 ### messages 表（消息历史）
 
-[L57-L75](file:///src/main/infra/storage/schema.ts#L57)：
+[L57-L75](file:///src/main/infra/storage/schema.ts)：
 
 - `id` integer primaryKey autoIncrement
 - `session_id` text notNull + `references(() => sessions.id, { onDelete: 'cascade' })`（外键级联删除）
@@ -467,7 +467,7 @@ export interface AgentStreamPartPayload {
 
 ### prompts 表（System Prompt 模板存储）
 
-[L95-L112](file:///src/main/infra/storage/schema.ts#L95)：
+[L95-L112](file:///src/main/infra/storage/schema.ts)：
 
 - `id` text primaryKey（如 'code-agent'）
 - `name` text notNull（显示名称）
@@ -480,7 +480,7 @@ export interface AgentStreamPartPayload {
 
 ### token_usage 表（LLM 调用 token 用量记录）
 
-[L132-L153](file:///src/main/infra/storage/schema.ts#L132)：
+[L132-L153](file:///src/main/infra/storage/schema.ts)：
 
 - `id` integer primaryKey autoIncrement
 - `session_id` text notNull + `references(() => sessions.id, { onDelete: 'cascade' })`
@@ -494,7 +494,7 @@ export interface AgentStreamPartPayload {
 
 ### turns 表（Agent 回合记录 / Transcript 结构化）
 
-[L168-L193](file:///src/main/infra/storage/schema.ts#L168)：
+[L168-L193](file:///src/main/infra/storage/schema.ts)：
 
 - `id` integer primaryKey autoIncrement
 - `turn_id` text notNull（UUID，关联 TurnEvent.turnId）
@@ -510,7 +510,7 @@ export interface AgentStreamPartPayload {
 
 ### runtime_models 表（用户手动配置的模型运行时快照）
 
-[L208-L217](file:///src/main/infra/storage/schema.ts#L208)：
+[L208-L217](file:///src/main/infra/storage/schema.ts)：
 
 - `model_id` text primaryKey（全局唯一）
 - `provider_kind` text notNull（所属供应商 kind，决定 SDK 协议）
@@ -521,6 +521,6 @@ export interface AgentStreamPartPayload {
 
 ### 消息存储格式
 
-`serializeMessage` [session-service.ts#L524-L530](file:///src/main/infra/storage/session-service.ts#L524) 直接 `JSON.stringify(msg)` 存入 `content` 列；反序列化通过 `JSON.parse` 还原为 `unknown`（[L210-L220](file:///src/main/infra/storage/session-service.ts#L210)）。`create` / `appendMessage` 都用事务包裹（`db.transaction`）保证 sessions 行与 messages 行原子写入。
+`serializeMessage` [session-service.ts#L524-L530](file:///src/main/infra/storage/session-service.ts) 直接 `JSON.stringify(msg)` 存入 `content` 列；反序列化通过 `JSON.parse` 还原为 `unknown`（[L210-L220](file:///src/main/infra/storage/session-service.ts)）。`create` / `appendMessage` 都用事务包裹（`db.transaction`）保证 sessions 行与 messages 行原子写入。
 
 数据库操作使用 `IF NOT EXISTS` for tables 和 indexes 确保幂等。

@@ -159,6 +159,16 @@ describe('extractCommandFromInput（工具入参提取命令）', () => {
   it('terminal 风格：无 command 字段返回 undefined', () => {
     expect(extractCommandFromInput({ args: ['ls'] })).toBeUndefined();
   });
+  it('MCP 别名键：script/cmd/shell/bash 携带的命令被识别（2026-09-28 收口）', () => {
+    expect(extractCommandFromInput({ script: 'npm test' })).toBe('npm test');
+    expect(extractCommandFromInput({ cmd: 'ls -la' })).toBe('ls -la');
+    expect(extractCommandFromInput({ shell: 'echo hi', note: 'x' })).toBe('echo hi');
+    expect(extractCommandFromInput({ bash: './build.sh' })).toBe('./build.sh');
+  });
+  it('别名不命中：无命令形键 / 纯空白 → undefined', () => {
+    expect(extractCommandFromInput({ query: 'ls' })).toBeUndefined();
+    expect(extractCommandFromInput({ script: '   ' })).toBeUndefined();
+  });
   it('非对象 / null / 空字符串均返回 undefined', () => {
     expect(extractCommandFromInput('cmd')).toBeUndefined();
     expect(extractCommandFromInput(null)).toBeUndefined();

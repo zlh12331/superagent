@@ -12,6 +12,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { t } from '../../i18n';
 import type { LspServerManager } from '../../lsp/lsp-server-manager';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -41,7 +42,8 @@ export function createLspDefinitionTool(manager: LspServerManager): Tool<LspDefi
     category: 'read',
     execute: async (input: LspDefinitionInput, ctx: ToolContext): Promise<ToolResult> => {
       try {
-        const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir);
+        // realTarget：语言服务器按真实落点读文件（TOCTOU，debt.md#d1）
+        const absPath = resolveWithinWorkspace(input.filePath, ctx.workingDir).realTarget;
         const rootUri = pathToFileURL(ctx.workingDir).href;
         const client = await manager.getClient(rootUri, absPath);
         const locations = await client.definition(pathToFileURL(absPath).href, {
@@ -56,12 +58,12 @@ export function createLspDefinitionTool(manager: LspServerManager): Tool<LspDefi
           return `- ${location.uri.replace('file://', '')} (${start.line + 1}:${start.character + 1}-${end.line + 1}:${end.character + 1})`;
         });
         return {
-          title: `定义位置: ${locations.length} 处`,
+          title: t('tools.lspDefinition.locations', { count: locations.length }),
           output: lines.join('\n'),
         };
       } catch (err: unknown) {
         return {
-          title: 'lsp_definition 失败',
+          title: t('tools.lspDefinition.failed'),
           output: `语言服务器不可用：${err instanceof Error ? err.message : String(err)}`,
         };
       }

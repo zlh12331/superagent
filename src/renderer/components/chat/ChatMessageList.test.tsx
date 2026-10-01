@@ -109,54 +109,69 @@ describe('ChatMessageList', () => {
     expect(btn.className).not.toContain('visible');
   });
 
-  // ── 分页窗口 ────────────────────────────────────────────────
+  // ── 回合分页（数据按回合增量，列表只渲染已加载页）─────────────
 
-  it('长会话首屏只渲染最近一页（200 条），索引基线与分页提示计数同源', () => {
-    const { container } = renderList(makeMsgs(521));
-    const items = screen.getAllByTestId('mi');
-    expect(items).toHaveLength(200);
-    // 窗口起点 321：首条渲染的是索引 321 的消息
-    expect(items[0]).toHaveAttribute('data-mid', 'm321');
-    // 分页提示（"已加载 200/521"）
-    expect(
-      screen.getByText(i18n.t('chat.loadedMessages', { count: 200, total: 521 })),
-    ).toBeInTheDocument();
-    // DOM 层索引基线（data-msg-index）与渲染条数对齐
+  it('已加载消息全量渲染；hasEarlier 时顶部提示已加载数', () => {
+    const { container } = renderList(makeMsgs(521), { hasEarlier: true });
+    // 已加载页并集全量渲染（DOM 窗口已移除——数据层由路由层回合分页兜底）
+    expect(screen.getAllByTestId('mi')).toHaveLength(521);
+    // 顶部提示（"已加载最近 521 条"）
+    expect(screen.getByText(i18n.t('chat.loadedMessages', { count: 521 }))).toBeInTheDocument();
+    // DOM 层索引基线（data-msg-index）与全量渲染对齐
     const indexes = Array.from(container.querySelectorAll(`[${MSG_INDEX_ATTR}]`)).map((el) =>
       Number(el.getAttribute(MSG_INDEX_ATTR)),
     );
-    expect(indexes).toHaveLength(200);
-    expect(indexes[0]).toBe(321);
+    expect(indexes).toHaveLength(521);
+    expect(indexes[0]).toBe(0);
     expect(indexes.at(-1)).toBe(520);
   });
 
-  it('短会话（<200 条）全量渲染，无分页提示', () => {
+  it('无更早回合（hasEarlier 缺省）→ 全量渲染且无提示', () => {
     renderList(makeMsgs(3));
     expect(screen.getAllByTestId('mi')).toHaveLength(3);
-    expect(screen.queryByText(i18n.t('chat.loadedMessages', { count: 3, total: 3 }))).toBeNull();
+    expect(screen.queryByText(i18n.t('chat.loadedMessages', { count: 3 }))).toBeNull();
   });
 
-  it('滚动到顶 → 向上扩展一页（加载更早消息）', async () => {
-    const { container } = renderList(makeMsgs(521));
+  it('滚动到顶 → 触发 onLoadEarlier（rAF 合帧，一次）', async () => {
+    const onLoadEarlier = vi.fn();
+    const { container } = renderList(makeMsgs(30), { hasEarlier: true, onLoadEarlier });
     const scroller = container.querySelector('.messages') as HTMLElement;
     scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
-
-    // 合帧（rAF）后 loadEarlier 生效，窗口起点 321 → 121，渲染 400 条
-    await waitFor(() => expect(screen.getAllByTestId('mi')).toHaveLength(400));
-    const items = screen.getAllByTestId('mi');
-    expect(items[0]).toHaveAttribute('data-mid', 'm121');
+    await waitFor(() => expect(onLoadEarlier).toHaveBeenCalledTimes(1));
   });
 
-  it('窗口已到开头时滚动到顶不再翻页', () => {
-    renderList(makeMsgs(3));
-    const scroller = document.querySelector('.messages') as HTMLElement;
+  it('loadingEarlier 中 → 顶部加载指示，且不重复触发补页', async () => {
+    const onLoadEarlier = vi.fn();
+    const { container } = renderList(makeMsgs(30), {
+      hasEarlier: true,
+      loadingEarlier: true,
+      onLoadEarlier,
+    });
+    expect(screen.getByText(i18n.t('chat.loadingEarlier'))).toBeInTheDocument();
+    const scroller = container.querySelector('.messages') as HTMLElement;
     scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
-    expect(screen.getAllByTestId('mi')).toHaveLength(3);
+    // 合帧后仍不应触发（加载中防抖）
+    await waitFor(() => {
+      expect(Number(scroller.scrollTop)).toBe(0);
+    });
+    expect(onLoadEarlier).not.toHaveBeenCalled();
   });
 
-  it('会话骤变（消息数变小）→ clamp 兜底不白屏，全量渲染新消息', () => {
+  it('无更早回合时滚动到顶不触发补页', async () => {
+    const onLoadEarlier = vi.fn();
+    const { container } = renderList(makeMsgs(3), { onLoadEarlier });
+    const scroller = container.querySelector('.messages') as HTMLElement;
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    await waitFor(() => {
+      expect(Number(scroller.scrollTop)).toBe(0);
+    });
+    expect(onLoadEarlier).not.toHaveBeenCalled();
+  });
+
+  it('会话骤变（消息数变小）→ 全量渲染新消息，索引从 0 起算', () => {
     const { rerender } = renderList(makeMsgs(521));
     rerender(<ChatMessageList messages={makeMsgs(3)} status="ready" onRegenerate={noop} />);
     const items = screen.getAllByTestId('mi');

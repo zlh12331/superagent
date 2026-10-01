@@ -12,11 +12,13 @@
 // 当它是版本区间内唯一提交时即「0 commits」→ 不开 Release PR（发版通道静默阻断）。
 // commitlint 21.x 无 header-pattern 规则（未知规则会抛错），故以本脚本补齐。
 //
-// 路径安全：本脚本只应读取 `.git/` 下的提交信息文件（钩子约定）。传入的路径经
-// resolve 后必须位于 `<cwd>/.git/` 之内，否则拒绝——避免被用作任意文件读取入口。
+// 路径安全：本脚本只应读取仓库 git 目录下的提交信息文件（钩子约定）。传入的路径经
+// resolve 后必须位于真实 git 目录之内，否则拒绝——避免被用作任意文件读取入口。
+// linked worktree 的 git 目录不在 <cwd>/.git/ 而在主仓 .git/worktrees/<name>/，
+// 按 .git 指针文件解析（见 resolveGitDir）。
 // ──────────────────────────────────────────────────────────────
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, type Stats, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
 import { checkCommitHeader } from './lib/commit-header';
@@ -34,17 +36,60 @@ export function extractHeader(raw: string): string {
 }
 
 /**
+ * 解析当前仓库的 git 目录（worktree 感知）
+ *
+ * - 常规仓库：`<cwd>/.git` 为目录，直接返回；
+ * - linked worktree（并行 worktree 工作流，见 .worktrees/）：`<cwd>/.git` 是指针文件
+ *   （`gitdir: <主仓>/.git/worktrees/<name>`），提交信息文件（COMMIT_EDITMSG 等）落在
+ *   主仓该子目录下——只认 `<cwd>/.git/` 会把钩子传入的 COMMIT_EDITMSG 误判为越界，
+ *   导致 worktree 内所有提交都会被路径守卫拒绝（2026-09-27 实测）。
+ *
+ * 纯 fs 实现（不派生 git 子进程）：单测以假指针文件模拟 worktree 布局，
+ * `git rev-parse --absolute-git-dir` 在该场景下不可用。
+ *
+ * @returns git 目录绝对路径；`.git` 不存在或指针格式不符时返回 null
+ */
+export function resolveGitDir(cwd: string): string | null {
+  const dotGit = resolve(cwd, '.git');
+  let stats: Stats;
+  try {
+    stats = statSync(dotGit);
+  } catch {
+    return null;
+  }
+  if (stats.isDirectory()) {
+    return dotGit;
+  }
+  const pointer = /^gitdir:\s*(.+)$/.exec(readFileSync(dotGit, 'utf8').trim());
+  const target = pointer !== null ? pointer[1] : undefined;
+  return target !== undefined ? resolve(cwd, target) : null;
+}
+
+/**
  * 校验提交信息文件路径是否合法
  *
- * 只允许仓库 `.git/` 目录内的文件（Git 钩子的约定：`.git/COMMIT_EDITMSG`，
- * rebase 时为 `.git/rebase-merge/…` 等，均在该目录下）。
+ * 只允许真实 git 目录内的文件（Git 钩子的约定：`.git/COMMIT_EDITMSG`，
+ * rebase 时为 `.git/rebase-merge/…`，linked worktree 时为主仓
+ * `.git/worktrees/<name>/…`，均在该目录下）。2026-09-27 修复：此前按
+ * `<cwd>/.git` 前缀判定，worktree 内提交被误拒。
  *
+ * @param gitDir 显式指定真实 git 目录（调用方已知晓时跳过解析；传 posix
+ * 风格路径亦可，resolve 会统一为平台分隔符）
  * @returns 规范化后的绝对路径；不合法时返回 null
  */
-export function resolveCommitMsgPath(input: string, cwd: string): string | null {
+export function resolveCommitMsgPath(
+  input: string,
+  cwd: string,
+  gitDir?: string | null,
+): string | null {
   const absolute = resolve(cwd, input);
-  const gitDir = resolve(cwd, '.git') + sep;
-  return absolute.startsWith(gitDir) ? absolute : null;
+  const base = gitDir ?? resolveGitDir(cwd);
+  if (base === null) {
+    return null;
+  }
+  // git 输出 posix 风格分隔符，resolve 统一为平台分隔符再比较（Windows 必需）
+  const dir = resolve(base) + sep;
+  return absolute.startsWith(dir) ? absolute : null;
 }
 
 function readInput(argv: readonly string[], cwd: string): string | null {

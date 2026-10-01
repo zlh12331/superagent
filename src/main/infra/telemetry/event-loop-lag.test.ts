@@ -1,14 +1,46 @@
 // src/main/infra/telemetry/event-loop-lag.test.ts
-// 事件循环延迟监控单测：纯函数 + 采样逻辑（含 start() 空闲不误报回归）+ 生命周期
+// 事件循环延迟监控单测（P2-36：monitorEventLoopDelay 直方图分位语义）
 // ──────────────────────────────────────────────────────────────
-// 2026-09-04 修复背景：旧实现把"采样间隔本身"误判为延迟（start() 后恒报
-// lag≈interval），空闲环境 5s/条误告警并污染告警日志。修复后 lag 只反映
-// "实际采样间隔超出期望间隔"的部分；本文件同步对齐该语义并补回归用例。
+// - 直方图注入 fake：分位值可编程（纳秒），enable/disable/reset 记录调用
+// - 真实直方图用例：start() 空闲连续 tick 不误报（语义继承，fake timers 下
+//   真实延迟 ≈ 0 → 分位值远低于阈值）
+// - 阈值语义与旧实现一致：lagMs > warnThresholdMs 才告警（相等不告警）
+// ──────────────────────────────────────────────────────────────
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EventLoopLagMonitor, measureLag } from './event-loop-lag';
+
+import { EventLoopLagMonitor, type LagHistogram } from './event-loop-lag';
 
 const monitors: EventLoopLagMonitor[] = [];
+
+/** 直方图 fake：percentile 返回可编程纳秒值 */
+function createFakeHistogram(initialNs = 0) {
+  const calls = { enable: 0, disable: 0, reset: 0 };
+  let valueNs = initialNs;
+  const histogram: LagHistogram = {
+    enable: vi.fn(() => {
+      calls.enable += 1;
+      return true;
+    }),
+    disable: vi.fn(() => {
+      calls.disable += 1;
+      return true;
+    }),
+    percentile: vi.fn(() => valueNs),
+    reset: vi.fn(() => {
+      calls.reset += 1;
+      valueNs = 0;
+    }),
+  };
+  return {
+    histogram,
+    calls,
+    /** 设置下一采样将读到的分位值（纳秒） */
+    setNs: (v: number) => {
+      valueNs = v;
+    },
+  };
+}
 
 function createMonitor(options?: ConstructorParameters<typeof EventLoopLagMonitor>[0]) {
   const monitor = new EventLoopLagMonitor(options);
@@ -24,116 +56,106 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('measureLag（纯函数）', () => {
-  it('正常：无延迟返回 0', () => {
-    expect(measureLag(1000, 1000)).toBe(0);
-    expect(measureLag(1000, 1100)).toBe(100);
+describe('EventLoopLagMonitor（直方图分位语义）', () => {
+  it('分位值换算：纳秒 → 毫秒，超阈值触发 onLag', () => {
+    const fake = createFakeHistogram();
+    const fired: Array<{ lagMs: number }> = [];
+    const monitor = createMonitor({
+      warnThresholdMs: 1000,
+      createHistogram: () => fake.histogram,
+      onLag: (sample) => fired.push({ lagMs: sample.lagMs }),
+    });
+    fake.setNs(1.5e9); // 1500ms
+    const sample = monitor.sample(1000);
+    expect(sample.lagMs).toBeCloseTo(1500, 6);
+    expect(sample.exceeded).toBe(true);
+    expect(sample.intervalMs).toBe(5000);
+    expect(fired).toEqual([{ lagMs: sample.lagMs }]);
   });
 
-  it('负延迟钳制为 0（时钟异常防御）', () => {
-    expect(measureLag(2000, 1500)).toBe(0);
-  });
-});
-
-describe('EventLoopLagMonitor（采样语义：lag = 实际间隔 − 期望间隔）', () => {
-  it('首采为基准：不告警，且只记录期望时刻', () => {
-    const monitor = createMonitor({ warnThresholdMs: 1000 });
-    const fired: string[] = [];
-    monitor.onLag(() => {
-      fired.push('lag');
+  it('阈值边界语义与旧实现一致：lagMs == 阈值不告警（严格大于）', () => {
+    const fake = createFakeHistogram(1e9); // 恰好 1000ms
+    const fired: number[] = [];
+    const monitor = createMonitor({
+      warnThresholdMs: 1000,
+      createHistogram: () => fake.histogram,
+      onLag: () => fired.push(1),
     });
     const sample = monitor.sample(1000);
-    expect(sample.lagMs).toBe(0);
+    expect(sample.lagMs).toBeCloseTo(1000, 6);
     expect(sample.exceeded).toBe(false);
     expect(fired).toHaveLength(0);
   });
 
-  it('间隔 = 期望间隔：正常采样不告警（修复前误报场景）', () => {
-    const monitor = createMonitor({ warnThresholdMs: 1000 });
-    const fired: string[] = [];
-    monitor.onLag(() => {
-      fired.push('lag');
-    });
-    monitor.sample(1000); // 基准 → 期望下个采样时刻 1000 + 5000 = 6000
-    const sample = monitor.sample(6000); // 准点到达：lag = 0
-    expect(sample.lagMs).toBe(0);
-    expect(sample.exceeded).toBe(false);
-    expect(fired).toHaveLength(0);
-  });
-
-  it('超出期望间隔：真实阻塞才告警（阈值 1000，滞后 2000 触发）', () => {
-    const monitor = createMonitor({ warnThresholdMs: 1000 });
-    const fired: Array<{ lagMs: number }> = [];
-    monitor.onLag((sample) => {
-      fired.push({ lagMs: sample.lagMs });
-    });
-    monitor.sample(1000); // 期望下个采样时刻 6000
-    // 事件循环被阻塞：本应 6000 采样，实际 8000 才采到 → lag = 8000 - 6000 = 2000
-    const sample = monitor.sample(8000);
-    expect(sample.lagMs).toBe(2000);
-    expect(sample.exceeded).toBe(true);
-    expect(fired).toEqual([{ lagMs: 2000 }]);
-  });
-
-  it('滞后恢复后：下一轮期望随实测推进，空闲不再持续误报', () => {
-    const monitor = createMonitor({ warnThresholdMs: 1000 });
-    const fired: Array<{ lagMs: number }> = [];
-    monitor.onLag((sample) => {
-      fired.push({ lagMs: sample.lagMs });
-    });
-    monitor.sample(1000); // 期望 6000
-    monitor.sample(9000); // 阻塞 3000 → lag 3000，期望推进为 9000 + 5000 = 14000
-    const recovered = monitor.sample(14000); // 恢复准点
-    expect(recovered.lagMs).toBe(0);
-    expect(recovered.exceeded).toBe(false);
-    expect(fired).toEqual([{ lagMs: 3000 }]); // 仅阻塞轮告警
+  it('采样后 reset 直方图（lag 恒反映最近窗口；未 start 采样不告警）', () => {
+    const fake = createFakeHistogram();
+    const monitor = createMonitor({ createHistogram: () => fake.histogram });
+    fake.setNs(100e6); // 100ms（远低于阈值）
+    monitor.sample();
+    expect(fake.calls.reset).toBe(1);
+    // reset 后分位归零：再次采样 lagMs ≈ 0
+    const second = monitor.sample();
+    expect(second.lagMs).toBe(0);
+    expect(second.exceeded).toBe(false);
   });
 
   it('onLag：unsubscribe 生效', () => {
-    const monitor = createMonitor({ warnThresholdMs: 1000 });
+    const fake = createFakeHistogram(2e9); // 2000ms，恒超阈值
     const fired: number[] = [];
-    const unsubscribe = monitor.onLag(() => {
-      fired.push(1);
-    });
+    const monitor = createMonitor({ createHistogram: () => fake.histogram });
+    const unsubscribe = monitor.onLag(() => fired.push(1));
     unsubscribe();
-    monitor.sample(1000);
-    monitor.sample(9000); // 若未退订此时应告警
+    monitor.sample();
     expect(fired).toHaveLength(0);
   });
 
   it('构造 onLag 与后续订阅均生效', () => {
+    const fake = createFakeHistogram(2e9);
     const fired: number[] = [];
     const monitor = createMonitor({
-      warnThresholdMs: 1000,
-      onLag: () => {
-        fired.push(1);
-      },
+      createHistogram: () => fake.histogram,
+      onLag: () => fired.push(1),
     });
-    monitor.sample(1000);
-    monitor.sample(9000);
-    expect(fired).toHaveLength(1);
+    monitor.onLag(() => fired.push(2));
+    monitor.sample();
+    expect(fired).toEqual([1, 2]);
   });
 
-  it('回归：start() 空闲环境连续 tick 不误报（修复核心）', () => {
-    vi.useFakeTimers();
-    const monitor = createMonitor({ intervalMs: 1000, warnThresholdMs: 100 });
-    const fired: number[] = [];
-    monitor.onLag(() => {
-      fired.push(1);
-    });
-    monitor.start();
-    // 空闲推进 5 个期望周期：定时器准点触发，lag 应为 0，不得告警
-    vi.advanceTimersByTime(5000);
-    expect(fired).toHaveLength(0);
-  });
-
-  it('start/stop：生命周期幂等', () => {
-    const monitor = createMonitor({ intervalMs: 10 });
+  it('start/stop：histogram enable/disable 联动 + 生命周期幂等', () => {
+    const fake = createFakeHistogram();
+    const monitor = createMonitor({ intervalMs: 10, createHistogram: () => fake.histogram });
     monitor.start();
     expect(monitor.running).toBe(true);
+    expect(fake.calls.enable).toBe(1);
     monitor.start(); // 幂等
+    expect(fake.calls.enable).toBe(1);
     monitor.stop();
     expect(monitor.running).toBe(false);
+    expect(fake.calls.disable).toBe(1);
     monitor.stop(); // 幂等
+    expect(fake.calls.disable).toBe(1);
+  });
+
+  it('start 后按 intervalMs 周期采样（tick 自动取分位 + reset）', () => {
+    vi.useFakeTimers();
+    const fake = createFakeHistogram();
+    const monitor = createMonitor({ intervalMs: 1000, createHistogram: () => fake.histogram });
+    monitor.start();
+    vi.advanceTimersByTime(1000);
+    expect(fake.histogram.percentile).toHaveBeenCalledTimes(1);
+    expect(fake.calls.reset).toBe(1);
+    vi.advanceTimersByTime(1000);
+    expect(fake.histogram.percentile).toHaveBeenCalledTimes(2);
+  });
+
+  it('回归（语义继承）：start() 空闲环境连续 tick 不误报', () => {
+    vi.useFakeTimers();
+    // 真实直方图：fake timers 下真实事件循环延迟 ≈ 0 → 分位值远低于阈值
+    const monitor = createMonitor({ intervalMs: 1000, warnThresholdMs: 100 });
+    const fired: number[] = [];
+    monitor.onLag(() => fired.push(1));
+    monitor.start();
+    vi.advanceTimersByTime(5000);
+    expect(fired).toHaveLength(0);
   });
 });

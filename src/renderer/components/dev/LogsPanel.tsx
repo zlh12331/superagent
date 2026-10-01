@@ -1,5 +1,5 @@
 // src/renderer/components/dev/LogsPanel.tsx
-// 日志查看器面板 · 极简文学风
+// 日志查看器面板
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 调用 useLogsReadQuery 获取 main.log 文件尾部 N 行日志
@@ -15,6 +15,9 @@
 //   即停，省下无谓 IPC）——不是「折叠态」控制
 // - 级别/行数用分段控件（ToggleGroup）而非下拉：与面板内其他分段控件同款，
 //   窄面板下选项直接可见
+// - 级别/行数切换接 keepPreviousData（use-system）：同一日志文件的不同切片，
+//   isPlaceholderData 时列表容器降透明（opacity-50，与 InspectorPanel 加载降
+//   透明同款），旧切片驻留防闪空屏；首次加载/同 key 手动刷新不触发
 // ──────────────────────────────────────────────────────────────
 
 import type { ReadLogsRes } from '@code-agent/shared/renderer';
@@ -72,7 +75,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
 
   // 仅在级别非 'all' 时传 level 参数（避免 IPC 传 undefined 导致歧义）
   const queryLevel = level !== 'all' ? level : undefined;
-  const { data, isLoading, error, refetch, isFetching } = useLogsReadQuery(
+  const { data, isLoading, error, refetch, isFetching, isPlaceholderData } = useLogsReadQuery(
     lines,
     queryLevel,
     enabled,
@@ -162,8 +165,9 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
       </div>
 
       {/* 日志列表：普通滚动容器（Radix ScrollArea 内层 display:table 会随最长日志行撑宽
-          到 391px，超出 283px 面板被裁剪且横向滚动条不可达——长行尾部永远看不到） */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+          到 391px，超出 283px 面板被裁剪且横向滚动条不可达——长行尾部永远看不到）。
+          isPlaceholderData：过滤切换瞬间旧切片驻留，降透明示意数据非最新 */}
+      <div className={cn('min-h-0 flex-1 overflow-y-auto', isPlaceholderData && 'opacity-50')}>
         <LogsBody isLoading={isLoading} error={error} data={data} />
       </div>
     </div>

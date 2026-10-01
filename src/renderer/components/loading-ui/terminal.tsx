@@ -8,9 +8,8 @@
 // 本组件是终端提示符样式，服务于「终端正在启动」这一具体语境。
 //
 // 动画与可访问性：
-// - 光标闪烁复用 globals.css 的 blink 关键帧（见 .loading-ui-terminal-cursor），
-//   不再内联 <style>——该 keyframe 此前在组件内私有复制了一份等价实现，
-//   且是渲染层唯一的内联 <style>；globals.css 现有 15 个 @keyframes 统一在此维护
+// - 光标闪烁复用 styles/motion.css 的 blink 关键帧（见 .loading-ui-terminal-cursor），
+//   不再内联 <style>——关键帧统一在 styles/motion.css 维护
 // - role="status" + sr-only 本地化文案播报加载语义；提示符与光标对读屏器隐藏
 //   （与 ui/spinner 的可访问性模式一致）
 // ──────────────────────────────────────────────────────────────

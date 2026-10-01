@@ -110,6 +110,6 @@
 |---|---|---|
 | **渲染层取证** | CDP `HeapProfiler.takeHeapSnapshot`（memory-leak 基准内建） | 基准断言失败自动落盘 `stats/heap-snapshots/*.heapsnapshot` → Chrome DevTools Memory → Load → Retainers 面板看引用链（人工权威分析） |
 | **主进程诊断** | `pnpm perf:inspect`（Electron `--inspect=9229`） | Chrome DevTools `chrome://inspect` 连接 → Memory 面板 heap snapshot / Allocation instrumentation；或主进程代码内 `v8.writeHeapSnapshot()` 按需落盘 |
-| **生产趋势** | Sentry `captureMessage`（主进程 memory-monitor 内建） | 60s 采样 + 连续 3 次单调增长且累计 > 150MB 告警（防 GC 抖动误报）；遥测 off / DSN 未配置时 no-op |
+| **生产趋势** | memory-monitor 泄漏告警（主进程内建，`onAlert` 回调上报由调用方挂载） | 60s 采样 + 连续 3 次单调增长且累计 > 150MB 告警（防 GC 抖动误报）；告警经 error-report 落本地日志 |
 
 > **评估记录**：Clinic.js（NearForm，Node 社区标准）实测**不适用**——命令行强制 `node` 前缀（`clinic doctor -- node ...`），无法 profile Electron 主进程；0x 同理需额外验证。Electron 主进程即 Node 环境，官方 `--inspect` + DevTools / `v8.writeHeapSnapshot()` 是零依赖且 100% 可行的正确路径（2026-08-11 实测结论）。

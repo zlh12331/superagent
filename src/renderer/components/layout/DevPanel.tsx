@@ -28,7 +28,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { lazy, memo, type ReactElement, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, type ReactElement, Suspense, useEffect, useRef, useState } from 'react';
 import { InspectorPanel } from '@/components/dev/InspectorPanel';
 import { LogsPanel } from '@/components/dev/LogsPanel';
 import { MetricsPanel } from '@/components/dev/MetricsPanel';
@@ -114,7 +114,7 @@ type DevSubTab = 'git' | 'logs' | 'metrics' | 'inspector';
  * 开发者子视图切换按钮（segmented 形态）
  *
  * 独立为组件而非 map 内联：一是让「选中态 → 类名」的映射只有一处，
- * 二是类名归属（.dev-sub-tab，globals.css 按钮类体系）与 <button> 相邻，
+ * 二是类名归属（.dev-sub-tab，styles/ 领域按钮类）与 <button> 相邻，
  * 符合 ui-consistency 的 raw-button 豁免识别。
  */
 function DevSubTabButton({
@@ -175,12 +175,10 @@ const DEV_SUBTABS: ReadonlyArray<{
 
 /**
  * 右面板（会话上下文面板）
+ *
+ * 组件级记忆化交给 React Compiler（props 未变时跳过重渲染，覆盖原 memo() 目标）。
  */
-export const DevPanel = memo(function DevPanel({
-  sessionId,
-  gitRepoPath,
-  className,
-}: DevPanelProps): ReactElement {
+export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): ReactElement {
   // 本地化文案
   const { t } = useTranslation();
   // 当前激活 Tab（默认会话详情，对齐原型首位；集中到 ui-store——命令面板「打开终端」等入口可跨组件切换）
@@ -395,4 +393,4 @@ export const DevPanel = memo(function DevPanel({
       </div>
     </div>
   );
-});
+}

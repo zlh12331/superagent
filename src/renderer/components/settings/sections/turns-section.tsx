@@ -10,12 +10,15 @@ import { History } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { AsyncSection } from '@/components/common/AsyncSection';
 import { Label } from '@/components/ui/label';
-import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { RECENT_TURNS_QUERY_KEY } from '@/lib/query/keys';
+import { getRecentTurns } from '@/lib/settings-ops';
 
+/** 回合记录设置区：最近回合列表（四态契约：行内加载 / 错误重试 / 空态） */
 export function TurnsSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
 
   // 最近回合：TanStack Query（L3 服务端数据；浏览器模式守卫返回空列表）
   // 四态契约：pending→行内加载、error→提示+重试（此前 error 被静默渲染成空态）
@@ -27,13 +30,7 @@ export function TurnsSection(): ReactElement {
     refetch,
   } = useQuery({
     queryKey: RECENT_TURNS_QUERY_KEY,
-    queryFn: async (): Promise<SessionRecentTurnsRes['turns']> => {
-      if (!hasIpcBridge()) {
-        return [];
-      }
-      return unwrap<SessionRecentTurnsRes>(await window.api.session.getRecentTurns({ limit: 10 }))
-        .turns;
-    },
+    queryFn: (): Promise<SessionRecentTurnsRes['turns']> => getRecentTurns(10),
   });
 
   const turnsList = turns ?? [];
@@ -55,7 +52,7 @@ export function TurnsSection(): ReactElement {
       <AsyncSection
         isPending={isPending}
         isError={isError}
-        errorMessage={error instanceof Error ? error.message : null}
+        errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
         onRetry={() => void refetch()}
         isEmpty={turnsList.length === 0}
         emptyText={t('settings.turnsEmpty')}

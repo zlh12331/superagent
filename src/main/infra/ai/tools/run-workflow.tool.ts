@@ -10,6 +10,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
+import { t } from '../../i18n';
 import { workflowService } from '../agent/workflow-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -83,12 +84,15 @@ export function createRunWorkflowTool(): Tool<RunWorkflowInput> {
           }),
         ];
         return {
-          title: `工作流执行${result.status === 'completed' ? '完成' : '结束'}: ${input.goal.slice(0, 30)}`,
+          title:
+            result.status === 'completed'
+              ? t('tools.runWorkflow.completed', { goal: input.goal.slice(0, 30) })
+              : t('tools.runWorkflow.ended', { goal: input.goal.slice(0, 30) }),
           output: lines.join('\n\n'),
         };
       } catch (err: unknown) {
         return {
-          title: '工作流执行失败',
+          title: t('tools.runWorkflow.failed'),
           output: `工作流执行失败：${err instanceof Error ? err.message : String(err)}`,
         };
       }

@@ -6,13 +6,14 @@
 
 ```
 ai/
- ├─ agent/          高层编排：AgentService、Workflow/Task/Team/Branch、Hook 注册表、上下文压缩、子代理、Agent 提问、工具入参修复、停顿看门狗
- ├─ agent-runtime/  回合执行原语：TurnMachine、TurnRunner、create-stream、stream-reader、并发闸、活跃会话、循环检测
+ ├─ agent/          高层编排：AgentService、Workflow/Task/Team/Branch、Hook 注册表、上下文压缩、子代理、Agent 提问、工具入参修复、停顿看门狗、回合订阅/用量上报/流 part 转发
+ ├─ agent-runtime/  回合执行原语：TurnMachine（xstate）、TurnRunner、create-stream、stream-reader、并发闸、活跃会话、循环检测、text-delta 批处理、回合转录
  ├─ llm-client/     LlmClient 封装 + ai-provider + retry
  ├─ models/         模型注册表、运行时模型存储、generation-options、token-limits、reasoning-effort
- ├─ providers/      供应商工厂与内置定义（deepseek/openai/anthropic/ollama）
+ ├─ providers/      供应商工厂与内置定义（10 家，见 §4.3）
  ├─ prompt/         PromptService + dynamic-context + agents-md + default-prompt
  ├─ skills/         技能注册表（skill-registry，learned + builtin）
+ ├─ middleware/     模型观测中间件（wrapLanguageModel，OTel 接线）
  ├─ mcp/            MCP 客户端与服务（见 05）
  ├─ tools/          工具系统（见 05）
  ├─ cron-service    定时任务调度服务（cron_tasks 表 + croner）
@@ -47,9 +48,11 @@ ai/
 |---|---|
 | `create-stream.ts` | 请求级流创建 + **重试**：创建 `streamText`、拿到 `toUIMessageStream()` reader；只重试"创建 + 首 part"，首 part 成功后不重试（防重复工具副作用） |
 | `turn-runner.ts` | 回合执行器：复用上层 reader，循环读取流并翻译为 `TurnEvent`；含 tool-call 循环检测、abort 归类、错误传播、finally 清理 |
-| `agent-turn-machine.ts` | 回合状态机（idle / running / waitingApproval / ended 等），驱动审批等待 |
+| `agent-turn-machine.ts` | 回合状态机（**xstate v5 实现**：idle / running / waitingApproval / ended 等），驱动审批等待 |
 | `turn-translator.ts` | 把 AI SDK 流 part 翻译为内部 `TurnEvent` |
 | `turn-emitter.ts` | 回合事件分发 |
+| `turn-transcript.ts` | 回合转录累积（TEXT_DELTA 收集 → TURN_END 消费，GoalService 判定证据） |
+| `text-delta-batcher.ts` | 文本增量批处理（高频 delta 合并降低事件量） |
 | `stream-reader.ts` | 读取/消费 `UIMessageStream` 的封装 |
 | `active-session-registry.ts` | 活跃 stream 注册表（共享 CAS 删除，防旧 stream 覆盖新 controller） |
 | `concurrency-gate.ts` | 并发公平调度门（默认槽位 `DEFAULT_MAX_CONCURRENT_TURNS`，FIFO，防供应商 429） |
@@ -77,9 +80,9 @@ ai/
 
 ### 4.3 providers（`providers/`）
 
-- `types.ts`：`PROVIDER_KINDS`（deepseek / openai / anthropic / ollama）。
-- `registry.ts`：`BUILTIN_DEFINITIONS` + `BUILTIN_FACTORIES`（新增供应商 = 注册一条定义 + 一个工厂）；`registry-factory.ts` 工厂装配。
-- 路由：`getModel(kind, modelId)` → ProviderRegistry；deepseek/ollama 走 `@ai-sdk/openai-compatible`，openai 走 `@ai-sdk/openai`，anthropic 走 `@ai-sdk/anthropic`。
+- `types.ts`：`PROVIDER_KINDS`（**10 家**：deepseek / openai / anthropic / ollama / moonshot / zhipu / qwen / doubao / siliconflow / openrouter）。
+- `registry.ts`：`BUILTIN_DEFINITIONS` + `BUILTIN_FACTORIES`（同文件；新增供应商 = 注册一条定义 + 一个工厂）。
+- 路由：`getModel(kind, modelId)`（实现在 `llm-client/ai-provider.ts`，委托 llmClient）→ ProviderRegistry；deepseek/ollama 及其余兼容端走 `@ai-sdk/openai-compatible`，openai 走 `@ai-sdk/openai`，anthropic 走 `@ai-sdk/anthropic`。
 - API Key 按供应商存 keychain（safeStorage）；baseURL 可 `.env` 覆盖（`*_API_BASE`）。
 - **默认供应商/模型单一真源**：`packages/shared/src/constants/defaults.ts` 定义 `DEFAULT_PROVIDER`（deepseek）与 `DEFAULT_MODEL`（deepseek-v4-flash），渲染层对话区模型选择器与主进程 `ModelRegistry.resolve(undefined)` 共用，保证"默认模型"三端一致。
 
@@ -106,7 +109,7 @@ ai/
 
 - `hook-registry.ts`：Hook 生命周期注册表。
 - `workflow-service.ts`：多步工作流编排。
-- `task-service.ts` + `branch-service.ts`：任务（tasks 表）+ 分支（git 分支管理，`git-branch` 工具）。
+- `task-service.ts` + `branch-service.ts`：任务（tasks 表，五态状态机）+ 会话分支**分类语义**（rewind 分支判定纯函数：ordinary / rewind-descendant / rewind-sibling / mixed-rewind——注意这是**对话回合的分支分类**，非 git 分支管理；持久化随会话模型 parent 字段升级预留）。
 - `team-service.ts`：团队协作（多 Agent）。
 - `stall-watchdog.ts`：LLM 长时间不响应（TCP 未断但无数据）的看门狗——per-part 60s 超时，推送 `AI_TIMEOUT` 错误，避免前端无限等待。
 - `repair-tool-call.ts`：工具调用入参自动修复引擎——以 llmClient 为依赖，接 AI SDK `streamText` 的 `repairToolCall` 钩子，工具入参解析失败时用 LLM 重试修复入参，并覆写 OTel 模型级 span。

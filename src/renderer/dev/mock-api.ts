@@ -22,6 +22,7 @@ import {
   type GoalInfo,
   IPC_PROTOCOL_VERSION,
   type IpcApi,
+  type RemoteBindScope,
   type RemoteStatusRes,
   type SessionMeta,
   type UpdateStatusPayload,
@@ -30,6 +31,7 @@ import type { ModelMessage } from 'ai';
 
 import { ipcOk } from '@/lib/ipc-factories';
 import { mockGitStatus, mockModels, mockSystemStatus, mockUsageSummary } from './mock-data';
+import { buildMockTurnMessages, buildMockTurns } from './mock-turns';
 
 /** IPC 方法入参类型推导（mock 实现标注用） */
 type Req<M> = M extends (input: infer P) => unknown ? P : never;
@@ -187,27 +189,34 @@ const mockGoals: Array<{ sessionId: string; condition: string }> = [];
 /** 远程控制模拟状态（可变：开启后返回假令牌/端点，Web 预览可联调配对面板） */
 let mockRemoteRunning = false;
 
-/** 远程控制状态快照（对齐真实 handler：停止时令牌与端点置空） */
+/** 远程控制绑定范围（可变：setBindScope 联动，Web 预览可联调范围切换） */
+let mockRemoteBindScope: RemoteBindScope = 'lan';
+
+/** 远程控制状态快照（对齐真实 handler：停止时令牌与端点置空；仅本机模式回本机端点） */
 function mockRemoteStatus(): RemoteStatusRes {
-  return mockRemoteRunning
-    ? {
-        running: true,
-        port: 4173,
-        token: 'mock-remote-token-0123456789abcdef',
-        instanceName: 'web-preview',
-        addresses: ['http://192.168.1.10:4173'],
-        activeCommands: 0,
-        lastCommandAt: null,
-      }
-    : {
-        running: false,
-        port: null,
-        token: null,
-        instanceName: 'web-preview',
-        addresses: [],
-        activeCommands: 0,
-        lastCommandAt: null,
-      };
+  if (!mockRemoteRunning) {
+    return {
+      running: false,
+      port: null,
+      token: null,
+      instanceName: 'web-preview',
+      bindScope: mockRemoteBindScope,
+      addresses: [],
+      activeCommands: 0,
+      lastCommandAt: null,
+    };
+  }
+  return {
+    running: true,
+    port: 4173,
+    token: 'mock-remote-token-0123456789abcdef',
+    instanceName: 'web-preview',
+    bindScope: mockRemoteBindScope,
+    addresses:
+      mockRemoteBindScope === 'loopback' ? ['http://127.0.0.1:4173'] : ['http://192.168.1.10:4173'],
+    activeCommands: 0,
+    lastCommandAt: null,
+  };
 }
 
 /** 模拟助手回答：按 AI SDK v7 UIMessageChunk 格式（带 id）分片推送 → end（含 usage） */
@@ -500,35 +509,48 @@ function simulateAllPartsDemo(sessionId: string): void {
 
 // ── 各域 mock 实现（参数类型从 IpcApi 推导）──────────────────
 
+/**
+ * app 域 mock（浏览器模式假实现）
+ *
+ * 提取为独立函数而非内联在 createMockApi 里：该工厂已是超大函数（受 check:functions
+ * 棘轮看护），新增方法不宜继续推高其函数体行数。
+ */
+function createAppDomainMock(): IpcApi['app'] {
+  return {
+    getStatus: async () => ipcOk({ ready: true, protocolVersion: IPC_PROTOCOL_VERSION }),
+    getInfo: async () =>
+      ipcOk({
+        version: '0.1.0-mock',
+        electron: 'mock',
+        node: 'mock',
+        chrome: 'mock',
+        platform: 'web',
+        arch: 'x64',
+        userDataPath: '（浏览器模式）',
+      }),
+    openExternal: async () => ipcOk({ ok: true }),
+    openDataDir: async () => ipcOk({ ok: true }),
+    // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项；supported=false 与真实
+    // dev 环境一致——未打包不注册，界面据 supported 显示禁用态并说明）
+    getLoginItemSettings: async () =>
+      ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
+    setLoginItemSettings: async () =>
+      ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
+    // 诊断包导出：浏览器模式无真实打包，模拟用户取消（saved=false）
+    exportDiagnostics: async () => ipcOk({ saved: false }),
+    // 退出应用（走完整善后链，浏览器模式 no-op 语义一致）
+    quit: async () => ipcOk({ ok: true }),
+    // 深度链接与登录项变更：浏览器模式无协议注册/无 OS 登录项 ⇒ 订阅即 no-op
+    subscribeDeepLink: () => () => {},
+    subscribeLoginItemChanged: () => () => {},
+  };
+}
+
 function createMockApi(): IpcApi {
   return {
-    app: {
-      getStatus: async () => ipcOk({ ready: true, protocolVersion: IPC_PROTOCOL_VERSION }),
-      getInfo: async () =>
-        ipcOk({
-          version: '0.1.0-mock',
-          electron: 'mock',
-          node: 'mock',
-          chrome: 'mock',
-          platform: 'web',
-          arch: 'x64',
-          userDataPath: '（浏览器模式）',
-        }),
-      openExternal: async () => ipcOk({ ok: true }),
-      openDataDir: async () => ipcOk({ ok: true }),
-      // 开机自启（浏览器模式假实现：仅回显，不写 OS 登录项；supported=false 与真实
-      // dev 环境一致——未打包不注册，界面据 supported 显示禁用态并说明）
-      getLoginItemSettings: async () =>
-        ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
-      setLoginItemSettings: async () =>
-        ipcOk({ openAtLogin: false, supported: false, requiresApproval: false }),
-      // 诊断包导出：浏览器模式无真实打包，模拟用户取消（saved=false）
-      exportDiagnostics: async () => ipcOk({ saved: false }),
-      // 退出应用（走完整善后链，浏览器模式 no-op 语义一致）
-      quit: async () => ipcOk({ ok: true }),
-      // 深度链接：浏览器模式无协议注册，订阅即返回 no-op unsubscribe
-      subscribeDeepLink: () => () => {},
-    },
+    app: createAppDomainMock(),
+
+    backup: createBackupMock(),
 
     session: {
       list: async ({ limit }: Req<IpcApi['session']['list']>) => {
@@ -539,7 +561,9 @@ function createMockApi(): IpcApi {
         });
         return ipcOk({ sessions: sorted.slice(0, limit), total: sorted.length });
       },
-      get: async ({ id }: Req<IpcApi['session']['get']>) => {
+      get: async ({ id, includeMessages }: Req<IpcApi['session']['get']>) => {
+        // includeMessages=true 才返回消息（对齐主进程 session:get 契约默认按需加载，P2-28）
+        const messages = includeMessages === true ? (messagesBySession[id] ?? []) : [];
         const session = mockSessions.find((s) => s.id === id);
         if (session === undefined) {
           // 宽松兜底：任意 id 返回默认会话（dev mock——首页 DRAFT 场景需 workingDir 供 agent 发送）
@@ -555,10 +579,10 @@ function createMockApi(): IpcApi {
               lastRunStatus: 'idle',
               pinned: false,
             },
-            messages: messagesBySession[id] ?? [],
+            messages,
           });
         }
-        return ipcOk({ session, messages: messagesBySession[id] ?? [] });
+        return ipcOk({ session, messages });
       },
       create: async ({ workingDir }: Req<IpcApi['session']['create']>) => {
         const id = `mock-${Date.now()}`;
@@ -581,6 +605,15 @@ function createMockApi(): IpcApi {
           mockSessions.splice(idx, 1);
         }
         return ipcOk({ ok: true });
+      },
+      // 清空全部会话（36-D）：连同 mock 消息历史一并清（对齐主进程级联语义）
+      clearAll: async () => {
+        const deleted = mockSessions.length;
+        mockSessions.length = 0;
+        for (const key of Object.keys(messagesBySession)) {
+          delete messagesBySession[key];
+        }
+        return ipcOk({ deleted });
       },
       rename: async ({ id, title }: Req<IpcApi['session']['rename']>) => {
         const s = mockSessions.find((x) => x.id === id);
@@ -606,27 +639,25 @@ function createMockApi(): IpcApi {
           ],
         }),
       exportAll: async () => ipcOk({ saved: false }),
+      importAll: async () => ipcOk({ imported: 0, skipped: 0 }),
       compact: async () => ipcOk({ removed: 0, remaining: 0, reclaimedTokens: 0, messages: [] }),
       getUsageSummary: async () => ipcOk(mockUsageSummary()),
-      getTurns: async () => ipcOk({ sessionId: 'mock-1', turns: [] }),
+      getTurns: async ({ sessionId }: Req<IpcApi['session']['getTurns']>) =>
+        ipcOk({
+          sessionId,
+          turns: buildMockTurns(messagesBySession[sessionId] ?? [], sessionId, now),
+        }),
       getRecentTurns: async () =>
         ipcOk({
-          turns: [
-            {
-              turnId: 't1',
-              sessionId: 'mock-1',
-              seq: 3,
-              modelId: 'deepseek-v4-flash',
-              status: 'completed',
-              inputTokens: 120,
-              outputTokens: 320,
-              totalTokens: 440,
-              durationMs: 8_400,
-              createdAt: now - 3_600_000,
-            },
-          ],
+          turns: buildMockTurns(messagesBySession['mock-1'] ?? [], 'mock-1', now).map((t) => ({
+            ...t,
+            sessionId: 'mock-1',
+          })),
         }),
-      getTurnMessages: async () => ipcOk({ messages: [] }),
+      getTurnMessages: async ({ turnId }: Req<IpcApi['session']['getTurnMessages']>) =>
+        ipcOk({
+          messages: buildMockTurnMessages((sid) => messagesBySession[sid] ?? [], turnId),
+        }),
     },
 
     models: {
@@ -817,6 +848,8 @@ function createMockApi(): IpcApi {
         endCallbacks.add(cb);
         return () => endCallbacks.delete(cb);
       },
+      // D4A：回合开始事件（mock 模拟流无独立 start 推送，仅订阅桩保 API 形状完整）
+      subscribeStreamStart: () => () => {},
       subscribeStreamError: (cb: Parameters<IpcApi['agent']['subscribeStreamError']>[0]) => {
         errorCallbacks.add(cb);
         return () => errorCallbacks.delete(cb);
@@ -835,6 +868,21 @@ function createMockApi(): IpcApi {
       },
     },
 
+    proxy: {
+      // 34 号：浏览器模式无真实网络栈，测试连接恒返回不可测（UI 可用，行为无感）
+      test: async () =>
+        ipcOk({
+          ok: false,
+          kind: 'not-applicable',
+          message: '浏览器模式不支持代理测试',
+        }),
+    },
+
+    window: {
+      // 35 号：浏览器模式无 webContents，applyZoom 本地确认成功（行为无感）
+      applyZoom: async () => ipcOk({ ok: true }),
+    },
+
     settings: {
       // S1：settings 下沉 SQLite 的 mock 实现（浏览器模式持久化到 localStorage）
       getAll: async () => {
@@ -842,6 +890,11 @@ function createMockApi(): IpcApi {
         return ipcOk({
           settings: raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>),
         });
+      },
+      // 恢复默认：清空 mock-settings（与真实语义一致——缺失即默认）
+      resetAll: async () => {
+        localStorage.removeItem('mock-settings');
+        return ipcOk({ settings: {} });
       },
       set: async (input: Req<IpcApi['settings']['set']>) => {
         const raw = localStorage.getItem('mock-settings');
@@ -851,7 +904,12 @@ function createMockApi(): IpcApi {
         localStorage.setItem('mock-settings', JSON.stringify(cur));
         return ipcOk({ ok: true });
       },
-      getApiKey: async () => ipcOk({ configured: localStorage.getItem('mock-key-flag') === '1' }),
+      // 浏览器 mock 无 safeStorage：keychainAvailable=false（对齐真实降级语义）
+      getApiKey: async () =>
+        ipcOk({
+          configured: localStorage.getItem('mock-key-flag') === '1',
+          keychainAvailable: false,
+        }),
       // 只落「已配置」标志、不落明文：真实 handler 的明文加密后仅主进程内消费，渲染层
       // 拿不到也不需要；浏览器 mock 无加密存储，落明文等于把 Key 平文留在本地。
       // 省略入参不违背 IpcApi 契约（TS 允许少参函数赋给多参签名）
@@ -879,6 +937,11 @@ function createMockApi(): IpcApi {
       },
       // 运行时模型：返回模块级可变状态（开关/删除在 Web 预览实时生效）
       listRuntimeModels: async () => ipcOk({ models: mockRuntimeModels }),
+      // 设置导出/导入：浏览器模式无主进程 dialog/文件系统 ⇒ 返回取消 / 零操作
+      exportSettings: async () => ipcOk({ saved: false }),
+      importSettings: async () => ipcOk({ imported: 0, skipped: 0 }),
+      // 设置变更推送：浏览器模式下设置只由本页写入（无托盘等主进程入口）⇒ 订阅即 no-op
+      subscribeChanged: () => () => {},
     },
 
     whitelist: {
@@ -1000,6 +1063,10 @@ function createMockApi(): IpcApi {
       start: async () => ipcOk({ ok: true }),
       stop: async () => ipcOk({ ok: true }),
     },
+    // 失效域事件：浏览器模式无主进程写路径 ⇒ 订阅即 no-op（31 号设计文档 §2.1）
+    invalidation: {
+      subscribeDomains: () => () => {},
+    },
     remote: {
       getStatus: async () => ipcOk(mockRemoteStatus()),
       start: async () => {
@@ -1008,6 +1075,10 @@ function createMockApi(): IpcApi {
       },
       stop: async () => {
         mockRemoteRunning = false;
+        return ipcOk(mockRemoteStatus());
+      },
+      setBindScope: async ({ scope }: Req<IpcApi['remote']['setBindScope']>) => {
+        mockRemoteBindScope = scope;
         return ipcOk(mockRemoteStatus());
       },
     },
@@ -1029,6 +1100,18 @@ function createMockApi(): IpcApi {
     },
     browser: createBrowserMock(),
   } satisfies IpcApi;
+}
+
+/**
+ * backup 域 mock（37-B）：浏览器模式无 backups/ 目录与真实备份文件——
+ * list 返回空列表（UI 空态可测）、create/restore 以假名/ok 模拟成功路径
+ */
+function createBackupMock(): IpcApi['backup'] {
+  return {
+    list: async () => ipcOk({ backups: [] }),
+    create: async () => ipcOk({ name: 'sessions-mock.db' }),
+    restore: async () => ipcOk({ ok: true }),
+  };
 }
 
 /** browser 域 mock：浏览器模式无主进程 WebContentsView，导航 no-op，状态恒空 */

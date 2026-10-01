@@ -36,6 +36,7 @@ function setLogsState(
     isLoading: boolean;
     error: Error | null;
     isFetching: boolean;
+    isPlaceholderData: boolean;
   }>,
 ): void {
   mockUseLogsReadQuery.mockReturnValue({
@@ -44,6 +45,7 @@ function setLogsState(
     error: null,
     refetch: mockRefetchLogs,
     isFetching: false,
+    isPlaceholderData: false,
     ...overrides,
   });
 }
@@ -177,5 +179,21 @@ describe('LogsPanel', () => {
     expect(screen.getByRole('radio', { name: '100' })).toBeDisabled();
     expect(screen.getByLabelText('刷新日志')).toBeDisabled();
     expect(lastLogsArgs()).toEqual([200, undefined, false]);
+  });
+
+  it('占位数据：isPlaceholderData=true 时列表容器降透明（keepPreviousData 驻留过渡），否则不降', () => {
+    // keepPreviousData 生效时：旧切片驻留渲染（isLoading=false），容器 opacity-50
+    setLogsState({ data: LOGS_SAMPLE, isPlaceholderData: true });
+    const { container, unmount } = render(<LogsPanel />);
+    const listContainer = container.querySelector('.overflow-y-auto');
+    expect(listContainer).toBeTruthy();
+    expect(listContainer?.className).toContain('opacity-50');
+    unmount();
+    // 非占位（首份数据 / 刷新完成）：容器不降透明
+    setLogsState({ data: LOGS_SAMPLE, isPlaceholderData: false });
+    const normal = render(<LogsPanel />);
+    expect(normal.container.querySelector('.overflow-y-auto')?.className).not.toContain(
+      'opacity-50',
+    );
   });
 });

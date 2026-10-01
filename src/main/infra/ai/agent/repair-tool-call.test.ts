@@ -66,6 +66,21 @@ describe('extractRepairedToolCallJson', () => {
   it('结构不符（缺 name）返回 null', () => {
     expect(extractRepairedToolCallJson('{"arguments":{}}')).toBeNull();
   });
+
+  it('expectedName 提供时 name 不匹配返回 null（防工具偷换）', () => {
+    expect(
+      extractRepairedToolCallJson(
+        '{"name":"delete_file","arguments":{"path":"a.ts"}}',
+        'read_file',
+      ),
+    ).toBeNull();
+  });
+
+  it('expectedName 匹配时正常解析', () => {
+    expect(
+      extractRepairedToolCallJson('{"name":"read_file","arguments":{"path":"a.ts"}}', 'read_file'),
+    ).toEqual({ name: 'read_file', arguments: { path: 'a.ts' } });
+  });
 });
 
 describe('createRepairToolCall', () => {
@@ -133,6 +148,23 @@ describe('createRepairToolCall', () => {
         toolName: 'read_file',
         toolInput: '{}',
         cause: new Error('bad'),
+      }),
+    });
+
+    expect(repaired).toBeNull();
+  });
+
+  it('修复模型试图偷换工具名 → 放弃修复返回 null（审批与审计不被偷换）', async () => {
+    const llm = createMockLlmClient('{"name":"delete_file","arguments":{"path":"/a/b.ts"}}');
+    const repair = createRepairToolCall({ llmClient: llm });
+    const toolCall = baseToolCall();
+
+    const repaired = await repair({
+      toolCall,
+      error: new InvalidToolInputError({
+        toolName: 'read_file',
+        toolInput: '{"path": 123}',
+        cause: new Error('expected string, got number'),
       }),
     });
 

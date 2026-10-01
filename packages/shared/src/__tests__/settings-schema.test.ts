@@ -5,10 +5,11 @@
 // 且持久化重启仍生效；lsp.serverCommands 值曾可为任意路径形态的可执行文件。
 
 import { describe, expect, it } from 'vitest';
+import { ZOOM_LEVELS } from '../constants/zoom';
 import { isSafeLsServerCommand, SETTING_KEYS, SettingsSetReqSchema } from '../schemas/settings';
 
 describe('SETTING_KEYS 白名单', () => {
-  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update 开关）', () => {
+  it('覆盖渲染层全部持久化分组（含直写的 im.allowedGroups 与 memory/update/notification/proxy/appearance/terminal 开关）', () => {
     expect(SETTING_KEYS).toEqual([
       'theme',
       'language',
@@ -22,21 +23,129 @@ describe('SETTING_KEYS 白名单', () => {
       'update',
       'window',
       'memory',
+      'notification',
+      'proxy',
+      'appearance',
+      'terminal',
       'im.allowedGroups',
     ]);
   });
 });
 
 describe('SettingsSetReqSchema · key 白名单（P0）', () => {
-  it('白名单内键通过', () => {
+  it('白名单内键通过（proxy/appearance/terminal 例外：值级门禁要求合法形态）', () => {
     for (const key of SETTING_KEYS) {
-      expect(SettingsSetReqSchema.safeParse({ key, value: {} }).success).toBe(true);
+      const value =
+        key === 'proxy'
+          ? { mode: 'system' }
+          : key === 'appearance'
+            ? { zoom: 1 }
+            : key === 'terminal'
+              ? { shell: 'auto', fontSize: 13 }
+              : {};
+      expect(SettingsSetReqSchema.safeParse({ key, value }).success).toBe(true);
     }
   });
 
   it('白名单外键拒绝（含主进程内部配置命名空间）', () => {
     for (const key of ['lsp2', 'runtime.models', 'im', '__proto__', 'theme.dark', '']) {
       expect(SettingsSetReqSchema.safeParse({ key, value: {} }).success).toBe(false);
+    }
+  });
+});
+
+describe('SettingsSetReqSchema · proxy 值级门禁（34 号 V9）', () => {
+  it('三合法 mode 通过（fixed 带 url）', () => {
+    for (const value of [
+      { mode: 'system' },
+      { mode: 'direct' },
+      { mode: 'fixed', url: 'http://127.0.0.1:7890' },
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'proxy', value }).success).toBe(true);
+    }
+  });
+
+  it('fixed 缺 url / url 非 http(s) / mode 未知 → 拒绝', () => {
+    for (const value of [
+      { mode: 'fixed' },
+      { mode: 'fixed', url: 'ftp://x' },
+      { mode: 'fixed', url: 'not-a-url' },
+      { mode: 'quick' },
+      null,
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'proxy', value }).success).toBe(false);
+    }
+  });
+
+  it('system/direct 忽略 url（不校验）', () => {
+    expect(
+      SettingsSetReqSchema.safeParse({ key: 'proxy', value: { mode: 'system', url: 'junk' } })
+        .success,
+    ).toBe(true);
+  });
+});
+
+describe('SettingsSetReqSchema · appearance 值级门禁（35 号）', () => {
+  it('全部合法档位通过', () => {
+    for (const zoom of ZOOM_LEVELS) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'appearance', value: { zoom } }).success).toBe(
+        true,
+      );
+    }
+  });
+
+  it('非法档位/非对象/缺 zoom → 拒绝', () => {
+    for (const value of [{ zoom: 0.93 }, { zoom: 3 }, {}, null, '1']) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'appearance', value }).success).toBe(false);
+    }
+  });
+});
+
+describe('SettingsSetReqSchema · terminal 值级门禁（36 号 B）', () => {
+  it('合法 shell + 字号档位通过（shell 跨平台写入合法，读侧回落是 fail-open 取舍）', () => {
+    for (const shell of ['auto', 'powershell', 'gitbash', 'zsh']) {
+      expect(
+        SettingsSetReqSchema.safeParse({ key: 'terminal', value: { shell, fontSize: 13 } }).success,
+      ).toBe(true);
+    }
+    for (const fontSize of [12, 13, 14, 16, 18]) {
+      expect(
+        SettingsSetReqSchema.safeParse({ key: 'terminal', value: { shell: 'auto', fontSize } })
+          .success,
+      ).toBe(true);
+    }
+  });
+
+  it('非法 shell / 非法字号 / 非对象 → 拒绝', () => {
+    for (const value of [
+      { shell: 'pwsh', fontSize: 13 },
+      { shell: 'auto', fontSize: 15 },
+      { shell: 'auto' },
+      { fontSize: 13 },
+      null,
+      'powershell',
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'terminal', value }).success).toBe(false);
+    }
+  });
+});
+
+describe('SettingsSetReqSchema · editor 值级门禁（37 号 A）', () => {
+  it('合法 wordWrap/tabSize 通过；缺字段（旧调用方只写 fontSize/vimMode）放行', () => {
+    for (const value of [
+      {},
+      { fontSize: 14, vimMode: false },
+      { wordWrap: true },
+      { tabSize: 4 },
+      { wordWrap: false, tabSize: 8 },
+    ]) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'editor', value }).success).toBe(true);
+    }
+  });
+
+  it('tabSize 非档位 / wordWrap 非布尔 / 非对象 → 拒绝', () => {
+    for (const value of [{ tabSize: 6 }, { wordWrap: 'yes' }, null, 'plain']) {
+      expect(SettingsSetReqSchema.safeParse({ key: 'editor', value }).success).toBe(false);
     }
   });
 });

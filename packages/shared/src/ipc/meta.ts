@@ -36,6 +36,23 @@ export const IPC_META = {
     quit: request('app:quit'),
     // 深度链接事件（协议唤起 `code-agent://` 时主进程广播，渲染层导航）
     subscribeDeepLink: event('app:event:deepLink'),
+    // 登录项变更事件（主进程主动写入后推送真实回读值——托盘菜单改自启，设置页据此回显）
+    subscribeLoginItemChanged: event('app:event:loginItemChanged'),
+  },
+
+  window: {
+    // 应用界面缩放（35 号：主进程遍历全部 BrowserWindow 执行 setZoomFactor +
+    // Windows titleBarOverlay.height 联动——渲染层无 webContents 句柄，单点收口）
+    applyZoom: request('window:applyZoom'),
+  },
+
+  backup: {
+    // 备份恢复点列表（37 号 B：backups/ 轮转环 + quick_check 健康度，最新在前）
+    list: request('backup:list'),
+    // 手动立即备份（复用启动备份同一路径，进同一轮转环）
+    create: request('backup:create'),
+    // 从指定恢复点恢复（暂存 + 重启生效；运行中回合拒绝）
+    restore: request('backup:restore'),
   },
 
   agent: {
@@ -45,6 +62,8 @@ export const IPC_META = {
     stop: request('agent:stop'),
     approvalResponse: request('agent:approval:response'),
     subscribeStreamPart: event('agent:stream:part'),
+    // 回合开始事件（D4A：渲染层据此点亮侧栏跨会话运行徽标）
+    subscribeStreamStart: event('agent:stream:start'),
     subscribeStreamEnd: event('agent:stream:end'),
     subscribeStreamError: event('agent:stream:error'),
     subscribeToolCall: event('agent:tool:call'),
@@ -56,11 +75,15 @@ export const IPC_META = {
     list: request('session:list'),
     get: request('session:get'),
     delete: request('session:delete'),
+    // 清空全部会话（36-D：破坏性批量操作，主进程拒绝运行中回合）
+    clearAll: request('session:clearAll'),
     rename: request('session:rename'),
     pin: request('session:pin'),
     create: request('session:create'),
     listRecentDirs: request('session:listRecentDirs'),
     exportAll: request('session:exportAll'),
+    // 导入会话（JSON 导出文件，version=1 格式；同 id 会话跳过并计数）
+    importAll: request('session:import'),
     getUsageSummary: request('session:getUsageSummary'),
     getTurns: request('session:getTurns'),
     getRecentTurns: request('session:getRecentTurns'),
@@ -136,6 +159,19 @@ export const IPC_META = {
     removeRuntimeModel: request('settings:removeRuntimeModel'),
     listRuntimeModels: request('settings:listRuntimeModels'),
     updateRuntimeModel: request('settings:updateRuntimeModel'),
+    // 设置导出/导入（app_settings 全表 JSON；keychain 凭据除外）
+    exportSettings: request('settings:export'),
+    importSettings: request('settings:import'),
+    // 恢复所有设置为默认（删除 SETTING_KEYS 全部键，app_settings 回到空表）
+    resetAll: request('settings:resetAll'),
+    // 设置变更事件（主进程主动写入某域后推送——托盘菜单改关窗行为，设置页据此更新 store）
+    subscribeChanged: event('settings:event:changed'),
+  },
+
+  proxy: {
+    // 测试代理连通性（34 号网络代理：主进程经 proxiedFetch 探测轻量端点，
+    // 渲染层测试连接按钮消费；mode 非 fixed 时返回不可测）
+    test: request('proxy:test'),
   },
 
   system: {
@@ -190,6 +226,7 @@ export const IPC_META = {
     getStatus: request('remote:getStatus'),
     start: request('remote:start'),
     stop: request('remote:stop'),
+    setBindScope: request('remote:setBindScope'),
   },
 
   logs: {
@@ -209,6 +246,11 @@ export const IPC_META = {
     list: request('mcp:list'),
     start: request('mcp:start'),
     stop: request('mcp:stop'),
+  },
+
+  invalidation: {
+    // 失效域事件（主进程写路径声明受影响域后广播，渲染层前缀失效缓存——31 号设计文档）
+    subscribeDomains: event('invalidation:event:domains'),
   },
 
   update: {

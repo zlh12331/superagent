@@ -91,7 +91,7 @@ export function ConversationSearchBar({
         autoComplete="off"
         spellCheck={false}
         aria-label={t('chat.searchInputAriaLabel')}
-        className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded-[4px] border px-2 py-1 text-xs transition-colors focus:outline-none"
+        className="border-border bg-background focus:border-primary min-w-0 flex-1 rounded-[calc(var(--radius)-4px)] border px-2 py-1 text-xs transition-colors focus:outline-none"
       />
       {/* 匹配计数（有查询时显示） */}
       {hasQuery && (
@@ -110,7 +110,7 @@ export function ConversationSearchBar({
         disabled={!hasMatches}
         aria-label={t('chat.searchPrev')}
         title={t('chat.searchPrev')}
-        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[3px] px-1.5 py-[3px]"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[calc(var(--radius)-5px)] px-1.5 py-[3px]"
       >
         <ChevronUp className="size-3" />
       </Button>
@@ -122,7 +122,7 @@ export function ConversationSearchBar({
         disabled={!hasMatches}
         aria-label={t('chat.searchNext')}
         title={t('chat.searchNext')}
-        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[3px] px-1.5 py-[3px]"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[calc(var(--radius)-5px)] px-1.5 py-[3px]"
       >
         <ChevronDown className="size-3" />
       </Button>
@@ -133,7 +133,7 @@ export function ConversationSearchBar({
         onClick={onClose}
         aria-label={t('common.close')}
         title={t('common.close')}
-        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[3px] px-1.5 py-[3px]"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground size-auto shrink-0 rounded-[calc(var(--radius)-5px)] px-1.5 py-[3px]"
       >
         <X className="size-3.5" />
       </Button>

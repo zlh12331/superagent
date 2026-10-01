@@ -20,7 +20,7 @@
 
 ### 1.2 项目语义令牌保证
 
-- 全部颜色走 Aurora 语义令牌（`--background` / `--foreground` / `--muted` / `--muted-foreground` / `--accent` 等），双主题各自保证对比：**新增/修改令牌时必须校验双主题对比度**，禁止引入低于门槛的派生色（检查清单见 §五）
+- 全部颜色走 TraeWork 语义令牌（`--background` / `--foreground` / `--muted` / `--muted-foreground` / `--accent` 等），双主题各自保证对比：**新增/修改令牌时必须校验双主题对比度**，禁止引入低于门槛的派生色（检查清单见 §五）
 - 文本色禁止单独使用 `text-muted-foreground` 承载关键信息（如错误提示需配合 `text-[var(--error)]` 或图标）
 - 已知语义映射：success/error/warn 徽章文字与底色均为令牌化组合（`bg-[var(--error-bg)] text-[var(--error)]` 等），保证 3:1 以上
 

@@ -7,21 +7,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Shield, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
-import { toast } from 'sonner';
 import { QueryErrorRow, QueryPendingRow } from '@/components/common/AsyncSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useApprovalMode } from '@/hooks/use-approval-mode';
-import { useTranslation } from '@/i18n/use-translation';
-import { hasIpcBridge, unwrap } from '@/lib/ipc';
+import { useMutationOnError } from '@/hooks/use-mutation-error';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { TOOLS_LIST_QUERY_KEY, WHITELIST_ENTRIES_QUERY_KEY } from '@/lib/query/keys';
+import {
+  addWhitelistEntry,
+  listTools,
+  listWhitelistEntries,
+  removeWhitelistEntry,
+} from '@/lib/settings-ops';
 import { cn } from '@/lib/utils';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 
+/** 审批模式设置区：模式切换（自动/询问）+ 工具白名单增删 */
 export function ApprovalModeSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
   const { mode, setMode } = useApprovalMode();
   const queryClient = useQueryClient();
   // 白名单添加表单（对齐原型 whitelist-panel 的 whitelistInput + 添加按钮）
@@ -54,64 +62,40 @@ export function ApprovalModeSection(): ReactElement {
   // L3：白名单条目（跨会话持久化）
   const whitelistQuery = useQuery({
     queryKey: WHITELIST_ENTRIES_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { entries: [] as Array<{ toolName: string; pattern: string }> };
-      }
-      return unwrap(await window.api.whitelist.list());
-    },
+    queryFn: listWhitelistEntries,
   });
 
   // L3：工具清单（tool:list，权限配置卡片数据源）
   const toolsQuery = useQuery({
     queryKey: TOOLS_LIST_QUERY_KEY,
-    queryFn: async () => {
-      if (!hasIpcBridge()) {
-        return { tools: [] as Array<{ name: string; permission: 'auto' | 'ask' }> };
-      }
-      return unwrap(await window.api.tool.list({ permission: undefined }));
-    },
+    queryFn: listTools,
   });
 
   const invalidateWhitelist = (): void => {
     void queryClient.invalidateQueries({ queryKey: WHITELIST_ENTRIES_QUERY_KEY });
   };
+  // 错误反馈（一致性审计：写路径 mutation 必须有 onError）
+  const onError = useMutationOnError();
 
   // 添加白名单 mutation（whitelist:add）
   const addMutation = useMutation({
-    mutationFn: async (entry: { toolName: string; pattern: string }) => {
-      // 浏览器模式（dev 预览）无 window.api：本地空操作
-      if (!hasIpcBridge()) {
-        return { ok: true };
-      }
-      return unwrap(await window.api.whitelist.add(entry));
-    },
+    mutationFn: addWhitelistEntry,
     onSuccess: () => {
       // 只清空 pattern、保留 toolName：常见流程是「同一工具加多条 pattern」，
       // 保留工具名可连续添加（清空会让「添加」按钮因 wlTool 为空而禁用，被迫重输）
       setWlPattern('');
       invalidateWhitelist();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError,
   });
 
   // 移除白名单 mutation（whitelist:remove）
   const removeMutation = useMutation({
-    mutationFn: async (entry: { toolName: string; pattern: string }) => {
-      // 浏览器模式（dev 预览）无 window.api：本地空操作
-      if (!hasIpcBridge()) {
-        return { ok: true };
-      }
-      return unwrap(await window.api.whitelist.remove(entry));
-    },
+    mutationFn: removeWhitelistEntry,
     onSuccess: () => {
       invalidateWhitelist();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError,
   });
 
   const entries = whitelistQuery.data?.entries ?? [];
@@ -170,7 +154,11 @@ export function ApprovalModeSection(): ReactElement {
         <p className="text-xs text-muted-foreground font-sans">{t('settings.whitelistHint')}</p>
         <QueryErrorRow
           isError={whitelistQuery.isError}
-          errorMessage={whitelistQuery.error instanceof Error ? whitelistQuery.error.message : null}
+          errorMessage={
+            whitelistQuery.error instanceof Error
+              ? unwrapErrorMessage(whitelistQuery.error, getErrorMessage)
+              : null
+          }
           onRetry={() => void whitelistQuery.refetch()}
         />
         <QueryPendingRow isPending={whitelistQuery.isPending} />

@@ -23,6 +23,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 import { logger } from '../../../utils/logger';
+import { proxiedFetch } from '../../network/proxied-fetch';
 import type { McpCallToolFn, McpToolCallResult, McpToolDescriptor } from './mcp-tool-adapter';
 import type { McpServerConfig } from './mcp-types';
 import { resolveMcpTransport } from './mcp-types';
@@ -61,15 +62,17 @@ export function createMcpTransport(config: McpServerConfig): McpTransportInstanc
     throw new AppError(ErrorCode.INVALID_INPUT, `MCP server "${config.name}" 缺少 url 配置`);
   }
   const url = new URL(config.url);
-  const requestInit: RequestInit | undefined =
-    config.headers !== undefined ? { headers: { ...config.headers } } : undefined;
+  // 34 号：远程 transport 注入 proxiedFetch（fixed 模式经代理；34 号 spec §2.1）。
+  // proxiedFetch 签名兼容 SDK FetchLike（(url: string|URL, init?) => Promise<Response>）；
+  // 注记：存量远程 MCP 连接保持到自然重连，不热切换（§2.9）。
+  const remoteOptions = {
+    ...(config.headers !== undefined ? { requestInit: { headers: { ...config.headers } } } : {}),
+    fetch: proxiedFetch as unknown as (url: string | URL, init?: RequestInit) => Promise<Response>,
+  };
   if (transport === 'sse') {
-    return new SSEClientTransport(url, ...(requestInit !== undefined ? [{ requestInit }] : []));
+    return new SSEClientTransport(url, remoteOptions);
   }
-  return new StreamableHTTPClientTransport(
-    url,
-    ...(requestInit !== undefined ? [{ requestInit }] : []),
-  );
+  return new StreamableHTTPClientTransport(url, remoteOptions);
 }
 
 /** MCPClient 支持的传输实例联合 */

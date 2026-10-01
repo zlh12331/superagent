@@ -1,13 +1,12 @@
 // src/renderer/components/layout/Topbar.tsx
-// 顶部栏 · 玻璃质感 + 双 accent 发光刻度线
+// 顶部栏 · TraeWork 中性表面
 // ──────────────────────────────────────────────────────────────
-// 设计（对齐原型 docs/prototype/prototype-v2.html）：
-// - 半透明玻璃背景 + 模糊（让下方光晕透出）
-// - 底部双 accent 渐变发光刻度线（青 → 蓝紫 → 青）
+// 设计：
+// - 干净中性表面（quiet，无发光刻度线）
 // - 左侧：折叠侧栏按钮 + 品牌标识（brand-mark + 名称 + 遥测带）
 // - 中部：弹性 spacer（命令面板入口由右侧按钮承载）
 // - 右侧：右面板开关 + 命令面板按钮 + 设置 + 主题切换（三态循环 dark→light→system）
-// - 高度 52px（由 --aurora-topbar-h 控制）
+// - 高度 52px（由 --topbar-h 控制）
 //
 // 按钮位（对齐原型）：
 // - sb-collapse-btn：折叠/展开侧栏（真实功能，由 AppShell 控制）
@@ -48,7 +47,7 @@ interface TopbarProps {
 /**
  * 顶部栏组件
  *
- * 玻璃质感 + 双 accent 发光刻度线 + 品牌标识。
+ * 中性表面 + 品牌标识。
  * 集成侧栏/右面板折叠开关 + 命令面板按钮(⌘P) + 设置 + 主题切换。
  */
 export function Topbar({

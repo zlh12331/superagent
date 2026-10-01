@@ -6,7 +6,7 @@
 // （组件测试只断言「有该类名」，类名再错也通过）：
 //   - browser-pane.tsx 的 animate-[br-loading-bar_…]（定义随 prototype-v2.html
 //     在 4980885 删除，类名在其后的 82bc2d6 才引入）
-//   - globals.css 的 .palette-overlay / .palette 的 animation: fadein / modalin
+//   - styles/ 各域 css 的 .palette-overlay / .palette 的 animation: fadein / modalin
 // 与 check:css-vars（var(--x) 未定义）同属「防静默失效」家族。
 //
 // 运行：pnpm check:animations
@@ -24,7 +24,19 @@ import {
 } from './lib/animations';
 
 const ROOT = join(import.meta.dirname, '..');
-const STYLE_FILES = ['src/renderer/styles/globals.css', 'src/renderer/styles/tokens.css'];
+const STYLE_FILES = [
+  'src/renderer/styles/index.css',
+  'src/renderer/styles/base.css',
+  'src/renderer/styles/layout.css',
+  'src/renderer/styles/welcome.css',
+  'src/renderer/styles/chat.css',
+  'src/renderer/styles/composer.css',
+  'src/renderer/styles/cards.css',
+  'src/renderer/styles/file-tree.css',
+  'src/renderer/styles/fuzzy.css',
+  'src/renderer/styles/motion.css',
+  'src/renderer/styles/tokens.css',
+];
 const COMPONENT_DIR = join(ROOT, 'src/renderer/components');
 /** 扫描时跳过的目录名 */
 const SKIP_DIRS: ReadonlySet<string> = new Set(['node_modules', 'out', 'coverage', '.vite']);
@@ -80,7 +92,7 @@ function main(): void {
       console.error(`  ${m.file}:${m.line}  animation: ${m.name}`);
     }
     console.error(
-      '[check-animations] 修复：在 src/renderer/styles/globals.css 补 @keyframes ' +
+      '[check-animations] 修复：在 src/renderer/styles/*（按域） 补 @keyframes ' +
         '（原型 prototype-v2.html 已删，可查 git 历史取回原定义），或改用已有动画名',
     );
     process.exitCode = 1;

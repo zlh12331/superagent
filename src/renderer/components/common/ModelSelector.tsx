@@ -8,7 +8,8 @@
 
 import type { ApiKeyProvider, AvailableModelInfo } from '@code-agent/shared/renderer';
 import { ChevronDown } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { useModelsQuery } from '@/hooks/use-models';
 import { useTranslation } from '@/i18n/use-translation';
 import { cn } from '@/lib/utils';
@@ -55,6 +56,7 @@ function resolveMenuNavIndex(key: string, currentIndex: number, count: number): 
   return null;
 }
 
+/** 模型选择器（composer 右侧）：厂商/模型二级下拉，受控/非受控 open 双模式 */
 export function ModelSelector({
   provider,
   model,
@@ -69,16 +71,17 @@ export function ModelSelector({
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = useCallback(
-    (next: boolean): void => {
-      if (isControlled) {
-        controlledOnOpenChange?.(next);
-      } else {
-        setInternalOpen(next);
-      }
-    },
-    [isControlled, controlledOnOpenChange],
-  );
+  // 引用稳定性交给 React Compiler（捕获受控 props）
+  const setOpen = (next: boolean): void => {
+    if (isControlled) {
+      controlledOnOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  };
+  // 外点/Esc 监听 effect 用 ref 调 setOpen：函数每 render 新建，进依赖会反复装卸监听
+  // ——统一走 useLatestRef（写入在 effect 阶段，避免渲染期写 ref）
+  const setOpenRef = useLatestRef(setOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   // 触发按钮 ref：菜单关闭后把焦点还给它（roving focus 的收尾契约）
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -87,47 +90,43 @@ export function ModelSelector({
   const { data: modelsData } = useModelsQuery();
   const allModels = modelsData?.models ?? [];
 
-  // 当前模型展示名（来自后端清单；未知 id 回退原始 id）
-  const currentModelName = useMemo(
-    () => allModels.find((m) => m.id === model)?.label ?? model,
-    [allModels, model],
-  );
+  // 当前模型展示名（来自后端清单；未知 id 回退原始 id）——纯派生，交给 React Compiler
+  const currentModelName = allModels.find((m) => m.id === model)?.label ?? model;
 
-  // 当前选中模型的实际供应商（来自清单数据；未知回退 settings 值）
-  const currentProvider = useMemo(
-    () => allModels.find((m) => m.id === model)?.providerKind ?? provider,
-    [allModels, model, provider],
-  );
+  // 当前选中模型的实际供应商（来自清单数据；未知回退 settings 值）——纯派生
+  const currentProvider = allModels.find((m) => m.id === model)?.providerKind ?? provider;
 
   // 是否已配置可用模型（空清单 = 未配置：按钮显示占位，不渲染默认配置名）
   const hasConfiguredModels = allModels.length > 0;
 
-  // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）
-  const providerGroups = useMemo(() => {
-    const groups = new Map<string, AvailableModelInfo[]>();
-    for (const m of allModels) {
-      const list = groups.get(m.providerKind) ?? [];
-      list.push(m);
-      groups.set(m.providerKind, list);
-    }
-    return [...groups.entries()];
-  }, [allModels]);
+  // 供应商分组（按数据动态生成，顺序 = 后端返回顺序）——纯派生，交给 React Compiler
+  const groups = new Map<string, AvailableModelInfo[]>();
+  for (const m of allModels) {
+    const list = groups.get(m.providerKind) ?? [];
+    list.push(m);
+    groups.set(m.providerKind, list);
+  }
+  const providerGroups = [...groups.entries()];
 
+  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 open 重订阅
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (event: MouseEvent): void => {
       if (containerRef.current !== null && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
+        setOpenRef.current(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open, setOpen]);
+  }, [open]);
 
+  // useLatestRef 惯用法：经 ref 调最新闭包，effect 只随 open 重订阅
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref.current 是受控的 latest-ref 读取
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') setOpenRef.current(false);
     };
     document.addEventListener('keydown', handleKeyDown);
     // 打开时聚焦选中项（无选中取第一项）——键盘用户可直接 ↑↓ 导航
@@ -143,16 +142,14 @@ export function ModelSelector({
       // 菜单项上 → 落到 body，键盘用户丢失位置、需从头 Tab 回来
       triggerRef.current?.focus();
     };
-  }, [open, setOpen]);
+  }, [open]);
 
-  const handleModelSelect = useCallback(
-    (providerKind: string, modelId: string) => {
-      onProviderChange(providerKind as ApiKeyProvider);
-      onModelChange(modelId);
-      setOpen(false);
-    },
-    [onProviderChange, onModelChange, setOpen],
-  );
+  // 引用稳定性交给 React Compiler
+  const handleModelSelect = (providerKind: string, modelId: string) => {
+    onProviderChange(providerKind as ApiKeyProvider);
+    onModelChange(modelId);
+    setOpen(false);
+  };
 
   return (
     <div ref={containerRef} className="relative">

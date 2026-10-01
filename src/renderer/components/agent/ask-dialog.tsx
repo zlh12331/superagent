@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { respondAgentAsk } from '@/lib/agent/agent-actions';
+import { hasIpcBridge, unwrapErrorMessage } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
 import { useAgentAskStore } from '@/stores/transient/agent-ask-store';
@@ -85,7 +86,7 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
   readonly handleSubmit: () => Promise<void>;
 } {
   const { t } = useTranslation();
-  // 错误码 → 本地化文案（对齐全仓 unwrapErrorMessage 统一模式，见 catch 分支）
+  // 错误码 → 本地化文案（unwrapErrorMessage 统一模式）
   const { getErrorMessage } = useErrorMessage();
   const [answers, setAnswers] = useState<AnswerState[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -118,17 +119,17 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
   };
 
   const handleSubmit = async (): Promise<void> => {
-    if (typeof window === 'undefined' || window.api === undefined || askId === null) {
+    if (askId === null || !hasIpcBridge()) {
       clearAsk();
       return;
     }
     setSubmitting(true);
     try {
-      // 错误响应由 unwrap 抛 [CODE] message；异常走下方 catch 统一提示
-      unwrap(await window.api.agent.respondAsk({ askId, answers: answers.map(toAnswerPayload) }));
+      await respondAgentAsk({ askId, answers: answers.map(toAnswerPayload) });
+      // 仅成功才关闭：失败保留现场（选项/文本/askId），用户可原地重试
+      clearAsk();
     } catch (error) {
-      // 对齐全仓 11 处统一模式：[CODE] 前缀错误 → 错误码本地化（errors namespace →
-      // ERROR_META 兜底）；非 IPC 异常回退通用提交失败文案
+      // 对齐全仓统一模式：[CODE] 前缀错误 → 错误码本地化；非 IPC 异常回退通用文案
       toast.error(
         error instanceof Error
           ? unwrapErrorMessage(error, getErrorMessage)
@@ -136,8 +137,7 @@ function useAskAnswers({ askId, questions, clearAsk }: UseAskAnswersDeps): {
       );
     }
     // finally 语义（React Compiler 不优化 try/finally）：catch 不 rethrow，
-    // 成功/失败路径统一在这里关闭弹窗并复位提交态
-    clearAsk();
+    // 成功/失败统一复位 submitting（关闭仅发生在成功分支）
     setSubmitting(false);
   };
 
@@ -209,8 +209,15 @@ export function AskDialog(): ReactElement | null {
   }
 
   const handleCancel = (): void => {
-    // 取消 = 回传空回答（LLM 按「用户未选择」继续执行）
-    void handleSubmit();
+    // 取消 = 回传空回答（LLM 按「用户未选择」继续）。
+    // 与「提交失败」区分：用户意图是离开，无论 IPC 成败都 clearAsk，
+    // 否则关闭按钮失灵会把用户锁在弹窗里。
+    if (hasIpcBridge() && askId !== null) {
+      void respondAgentAsk({ askId, answers: [] }).catch(() => {
+        // 取消回传失败：主进程 5 分钟超时兜底，UI 不再阻塞用户
+      });
+    }
+    clearAsk();
   };
 
   return (

@@ -43,6 +43,13 @@ const DEFAULT_OPTIONS: CompressionOptions = {
   recentMessages: 10,
 };
 
+/**
+ * 压缩上下文：超 maxMessages 时保留首条 + recentMessages 条最近消息（中段裁剪），
+ * 未超限原样返回
+ *
+ * @param messages 完整消息历史
+ * @param options 裁剪参数（缺省用 DEFAULT_OPTIONS）
+ */
 export function compressContext(
   messages: ModelMessage[],
   options: Partial<CompressionOptions> = {},

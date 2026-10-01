@@ -49,6 +49,7 @@ export interface ModelConfigFormValues {
   readonly topK: string;
 }
 
+/** 模型配置表单字段组 props（受控表单：值/错误/高级段展开均由父层持有） */
 export interface ModelConfigFieldsProps {
   readonly mode: ModelConfigMode;
   readonly values: ModelConfigFormValues;
@@ -189,7 +190,7 @@ export function ModelConfigFields({
               <SelectContent>
                 {PROVIDER_LABELS.map((p) => (
                   <SelectItem key={p.kind} value={p.kind} className={inputClass}>
-                    {p.label}
+                    {providerLabel(p.kind, t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -260,7 +261,7 @@ export function ModelConfigFields({
           <Label className={labelClass}>{t('settings.modelMgmt.providerLabel')}</Label>
           <Input
             type="text"
-            value={providerLabel(values.providerKind)}
+            value={providerLabel(values.providerKind, t)}
             disabled
             className={cn(inputClass, 'opacity-60')}
           />

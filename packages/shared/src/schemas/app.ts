@@ -1,7 +1,9 @@
 // packages/shared/src/schemas/app.ts
-// 应用域响应 payload（app:getInfo）
+// 应用域 payload（app:getInfo / 登录项读写与变更事件 / 诊断导出 / 深链事件）
 // ──────────────────────────────────────────────────────────────
-// 提供「关于」对话框所需的版本与环境信息（渲染层无法直接读取主进程版本）
+// 提供「关于」对话框所需的版本与环境信息（渲染层无法直接读取主进程版本），
+// 以及开机自启状态的读写契约与「主进程主动变更」的推送事件
+// （托盘菜单改自启后，设置页据此回显，见 docs/design/30-residency-fix-spec.md §4.7）。
 // ──────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
@@ -119,5 +121,14 @@ export const SetLoginItemSettingsReqSchema = z.object({
   openAtLogin: z.boolean(),
 });
 
-/** app:setLoginItemSettings 响应 zod schema（写入后的真实回读状态） */
-export const SetLoginItemSettingsResSchema = LoginItemSettingsResSchema;
+/**
+ * app:event:loginItemChanged 事件 payload（开机自启状态的真实回读值）
+ *
+ * 触发时机：**主进程主动变更**（托盘菜单勾选）之后——渲染层设置页据此刷新回显，
+ * 否则托盘改动后设置页会一直显示旧值（2026-09-21 实测缺口）。
+ * 渲染层自身发起的写入不回灌（其响应已是写后回读，避免回声）。
+ */
+export const LoginItemChangedPayloadSchema = LoginItemSettingsResSchema;
+
+/** app:event:loginItemChanged 事件 payload 类型 */
+export type LoginItemChangedPayload = LoginItemSettingsRes;

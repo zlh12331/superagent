@@ -1,0 +1,242 @@
+/* ──────────────────────────────────────────────────────────────
+   全局布局与层级令牌（主题无关，所有主题共享）
+   ────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────────
+   亮色主题（默认）· TraeWork Light
+   ────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────────
+   暗色主题（.dark 类切换）· TraeWork Dark
+   ────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────────
+   Tailwind v4 主题映射
+   @theme inline：将 CSS 变量映射到 Tailwind 工具类
+   （如 bg-background、text-foreground、font-serif 等）
+   ────────────────────────────────────────────────────────────── */
+@theme inline {
+  /* 字号阶梯 9 级：text-2xs…text-3xl = 10/11/12/13/14/16/18/22/28px */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+
+  /* 圆角派生 */
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* shadcn 标准颜色映射 */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  /* WCAG AA 文本安全层与实底强调层（语义色三态拆分，见 aurora.json 各 comment） */
+  --color-error-emphasis: var(--error-emphasis);
+  --color-error-text: var(--error-text);
+  --color-success-emphasis: var(--success-emphasis);
+  --color-success-text: var(--success-text);
+  --color-warn-text: var(--warn-text);
+  --color-accent-text: var(--accent-text);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* 扩展颜色（TraeWork 设计系统） */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-amber: var(--amber);
+  /* 补注册（2026-09）：跨域消费的类别/语义色接入工具类命名空间，与 success/error/amber
+     对称（仅暴露既有令牌，未新增颜色值）；--glass-bg 为表面特效令牌不注册（避免
+     bg-glass-bg 语义类被滥用，其消费处保持 arbitrary 写法） */
+  --color-info-blue: var(--info-blue);
+  --color-magenta: var(--magenta);
+  --color-error-bg: var(--error-bg);
+  --color-accent-2-soft: var(--accent-2-soft);
+  --color-overlay-bg: var(--overlay-bg);
+  --color-accent-dim: var(--accent-dim);
+  --color-code-block-bg: var(--code-block-bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-elev-2: var(--bg-elev-2);
+  --color-bg-elev-3: var(--bg-elev-3);
+  --color-text-faint: var(--text-faint);
+  --color-accent-2: var(--accent-2);
+  --color-accent-glow: var(--accent-glow);
+  --color-accent-soft: var(--accent-soft);
+  /*
+   * 品牌强调色（--accent 紫色 #4B3FE3）上的前景色 token。
+   *
+   * 注意：shadcn 语义的 --color-accent / --color-accent-foreground 指悬停背景色，
+   * 与项目自定义的 --accent（紫色品牌色）是不同概念。
+   * 此处 --color-on-accent 专用于「在 --accent 背景上的文字/图标颜色」，
+   * 浅色与深色主题统一使用 #FFFFFF，对比度通过 WCAG AA。
+   *
+   * 用法：Tailwind 工具类 text-on-accent / bg-on-accent / border-on-accent
+   */
+  --color-on-accent: var(--on-accent);
+
+  /* 品牌墨色（tokens/aurora.json → --ink）：accent 渐变上的头像字色、勾选对号等
+   * 高对比墨色细节；双主题同值。用法：text-ink / bg-ink / css 内 var(--ink) */
+  --color-ink: var(--ink);
+
+  /* 字体族映射到 Tailwind 工具类 */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   全局基础样式
+   ────────────────────────────────────────────────────────────── */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  /* 默认无衬线（UI 层），正文用 font-serif 类显式指定 */
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  background-color: var(--background);
+  color: var(--foreground);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   TraeWork：Quiet by default — 无装饰背景层
+   原 Aurora 氛围层（渐变光晕 / 网格线 / 扫描线 / 噪点）已移除
+   ────────────────────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────────────────────
+   滚动条样式 · TraeWork
+   ────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: calc(var(--radius) - 4px);
+  /* 两侧留白，模拟纸张边缘 */
+  border: 2px solid var(--background);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   选中文本 · 墨水印迹感
+   ────────────────────────────────────────────────────────────── */
+::selection {
+  background: color-mix(in srgb, var(--ink-brown) 15%, transparent);
+  color: var(--foreground);
+}
+
+.dark ::selection {
+  background: color-mix(in srgb, var(--ink-brown) 20%, transparent);
+}
+
+/* .prose-literacy 已删除（TSX 零引用；非设计轴，见 design-identity 残留表） */
+
+/* ProseMirror 焦态 */
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   动画 · 纸张呼吸感（用于状态指示器脉冲）
+   ────────────────────────────────────────────────────────────── */
+.animate-pulse-soft {
+  animation: pulse-soft 2s var(--ease-soft) infinite;
+}
+
+/* 章节激活态墨水条标记 */
+.chapter-ink-mark {
+  position: relative;
+}
+
+.chapter-ink-mark::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: var(--primary);
+  border-radius: calc(var(--radius) - 7px);
+}
+
+/* 纸张纹理 · TraeWork（安静表面，无装饰渐变） */
+.paper-texture {
+  position: relative;
+}
+
+/* TraeWork：无装饰光晕背景层 */
+
+/* ──────────────────────────────────────────────────────────────
+   布局复刻 · 对齐原型 class 命名（docs/prototype/prototype-v2.html）
+   ──────────────────────────────────────────────────────────────
+   设计哲学：
+   - 保留标题衬线 + mono 元信息排版（非「文学风」设计轴），复刻原型的布局结构
+   - 三段式 grid：顶栏 / 主体（sidebar + resizer + main + resizer + right-panel）
+   - class 命名对齐原型：.app / .topbar / .brand / .resizer / .chat-right-panel
+   - 布局宽度令牌：--sidebar-w / --right-panel-w（JS 可覆盖 clamp 默认值）
+   - 宽度采用 clamp() 响应式（拖拽时由 JS 动态覆盖为 px 值）
+   ────────────────────────────────────────────────────────────── */
+
+/*
+ * 布局宽度令牌：:root 上为 clamp 默认值；拖拽时 JS 直接 setProperty 覆盖为 px。
+ */

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { closeDb, initDb, resetDb } from './db';
-import { deleteSetting, readAllSettings, writeSetting } from './settings-pref';
+import { deleteSetting, deleteSettings, readAllSettings, writeSetting } from './settings-pref';
 
 const mocks = vi.hoisted(() => ({
   mockGetPath: vi.fn(() => '/tmp/settings-pref-default'),
@@ -69,6 +69,21 @@ describe('settings-pref（app_settings 表，SQLite 单一真源）', () => {
     expect(readAllSettings()).toEqual({});
     // 幂等：再删不抛
     expect(() => deleteSetting('theme')).not.toThrow();
+  });
+
+  it('deleteSettings 批量删除（单事务；白名单外键不受影响；幂等）', () => {
+    writeSetting('theme', 'dark');
+    writeSetting('ai', { temperature: 1 });
+    writeSetting('internal.trusted', { x: 1 });
+    deleteSettings(['theme', 'ai', 'nonexistent']);
+    // 白名单外键（主进程内部配置组语义）不受批量删除影响
+    expect(readAllSettings()).toEqual({ 'internal.trusted': { x: 1 } });
+    // 幂等：重复删除不抛
+    expect(() => deleteSettings(['theme', 'ai', 'nonexistent'])).not.toThrow();
+  });
+
+  it('deleteSettings：非法 key 抛错（与单键删除同一防御）', () => {
+    expect(() => deleteSettings(['a b'])).toThrow();
   });
 
   it('非法 key 抛错（防御：路径注入/超长 key）', () => {

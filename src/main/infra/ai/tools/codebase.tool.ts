@@ -14,8 +14,8 @@
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { z } from 'zod';
-
 import type { ICodebaseService } from '../../codebase/codebase-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
@@ -65,6 +65,12 @@ const CodebaseInputSchema = z.object({
 
 type CodebaseInput = z.infer<typeof CodebaseInputSchema>;
 
+/**
+ * 创建 codebase 工具（基于本地索引的代码库智能查询：符号定义/调用方/影响面/自然语言探索；
+ * 首次查询自动建索引，大项目首次可达数十秒）
+ *
+ * @param codebaseService 代码索引服务（执行实际查询）
+ */
 export function createCodebaseTool(codebaseService: ICodebaseService): Tool<CodebaseInput> {
   return {
     name: 'codebase',
@@ -95,7 +101,7 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
               `${i + 1}. ${r.node.qualifiedName} — ${r.node.filePath}:${r.node.startLine} (${r.node.kind}, score=${r.score.toFixed(2)})`,
           );
           return {
-            title: `符号搜索: ${input.search}`,
+            title: t('tools.codebase.symbolSearch', { search: input.search }),
             output: lines.length > 0 ? lines.join('\n') : '未找到匹配符号',
             metadata: { count: res.results.length },
           };
@@ -110,23 +116,26 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             query: input.exploreQuery,
             maxFiles: input.maxFiles ?? 5,
           });
-          return { title: '代码区域探索', output: res.markdown };
+          return { title: t('tools.codebase.explore'), output: res.markdown };
         }
 
         case 'node': {
+          // realTarget：分析器读文件用真实落点（TOCTOU，debt.md#d1）
           const res = await codebaseService.node({
             path,
             name: input.symbol,
             file:
               input.file !== undefined && input.file.length > 0
-                ? resolveWithinWorkspace(input.file, ctx.workingDir)
+                ? resolveWithinWorkspace(input.file, ctx.workingDir).realTarget
                 : undefined,
             offset: input.offset,
             limit: input.limit,
             symbolsOnly: input.symbolsOnly,
           });
           return {
-            title: `符号/文件详情: ${input.symbol ?? input.file ?? '(项目概览)'}`,
+            title: t('tools.codebase.detail', {
+              target: input.symbol ?? input.file ?? '(项目概览)',
+            }),
             output: res.markdown,
           };
         }
@@ -140,7 +149,10 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbol: input.symbol,
             limit: input.limit ?? 20,
           });
-          return { title: `调用方: ${input.symbol}`, output: res.markdown };
+          return {
+            title: t('tools.codebase.callers', { symbol: input.symbol }),
+            output: res.markdown,
+          };
         }
 
         case 'callees': {
@@ -152,7 +164,10 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbol: input.symbol,
             limit: input.limit ?? 20,
           });
-          return { title: `被调用方: ${input.symbol}`, output: res.markdown };
+          return {
+            title: t('tools.codebase.callees', { symbol: input.symbol }),
+            output: res.markdown,
+          };
         }
 
         case 'impact': {
@@ -164,7 +179,10 @@ export function createCodebaseTool(codebaseService: ICodebaseService): Tool<Code
             symbol: input.symbol,
             depth: input.depth ?? 2,
           });
-          return { title: `影响分析: ${input.symbol}`, output: res.markdown };
+          return {
+            title: t('tools.codebase.impact', { symbol: input.symbol }),
+            output: res.markdown,
+          };
         }
       }
     },

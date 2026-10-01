@@ -22,21 +22,14 @@
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { INVALIDATION_DOMAINS } from '@code-agent/shared/main';
 import { logger } from '../../utils/logger';
+import { broadcastInvalidation } from '../invalidation/invalidation';
 import { HttpMemoryPort } from './adapter';
 import {
   type EngineLauncher,
@@ -45,6 +38,7 @@ import {
   launchEngineProcess,
 } from './engine-process';
 import { countL0Records, listL0SessionKeys, readSessionRecords } from './l0-inspect';
+import { removeSessionLinesFromJsonl } from './l0-rewrite';
 import type { MemoryPort } from './types';
 
 const TAG = '[memory-hub]';
@@ -130,6 +124,10 @@ export function createDeferredMemoryPort(getService: () => MemoryHubService): Me
   };
 }
 
+/**
+ * 记忆中枢服务：管理记忆引擎 sidecar（utilityProcess）生命周期——
+ * 启动/健康检查/停止，启动成功后经 HttpMemoryPort 代理 MemoryPort 调用
+ */
 export class MemoryHubService {
   private child: EngineProcessHandle | null = null;
   private port: MemoryPort | null = null;
@@ -206,60 +204,25 @@ export class MemoryHubService {
    * memory:list 面板读 JSONL 展示，若只删 SQLite，UI 会残留旧条目造成"假清空"。
    * 本方法配合 clear 让 UI 列表与引擎存储一致（原子写：临时文件 + rename）。
    *
+   * P2-26：原 readdirSync/readFileSync 全目录同步扫描 + writeFileSync 全量重写
+   * 会停摆事件循环，改为 fs.promises 异步形态（实现见 l0-rewrite.ts）。
+   *
    * @returns 移除的行数
    */
-  removeL0JsonlBySession(sessionKey: string): number {
-    const dir = join(this.options.dataDir, 'data', 'conversations');
-    if (!existsSync(dir) || sessionKey.trim().length === 0) {
-      return 0;
-    }
-    let removed = 0;
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith('.jsonl')) continue;
-      const filePath = join(dir, file);
-      let lines: string[];
-      try {
-        lines = readFileSync(filePath, 'utf8').split(/\r?\n/);
-      } catch {
-        continue; // 文件读取失败（占用/权限）跳过
-      }
-      const kept: string[] = [];
-      for (const raw of lines) {
-        if (raw.trim().length === 0) continue;
-        try {
-          const rec = JSON.parse(raw) as {
-            sessionKey?: unknown;
-            // biome-ignore lint/style/useNamingConvention: 上游 JSONL 镜像字段（snake_case）
-            session_id?: unknown;
-          };
-          // 索引访问绕过属性命名规则（字段来自上游数据，非本地 API）
-          if (rec.sessionKey === sessionKey || rec['session_id'] === sessionKey) {
-            removed += 1;
-            continue; // 丢弃该会话的行
-          }
-          kept.push(raw);
-        } catch {
-          kept.push(raw); // 损坏行保留（不因清理误伤）
-        }
-      }
-      const keptText = kept.length > 0 ? `${kept.join('\n')}\n` : '';
-      const tmpPath = `${filePath}.tmp`;
-      try {
-        writeFileSync(tmpPath, keptText, 'utf8');
-        renameSync(tmpPath, filePath);
-      } catch (error) {
-        logger.warn(
-          { error: error instanceof Error ? error.message : String(error), file },
-          '[memory-hub] JSONL 清理写回失败（保留原文件）',
-        );
-        try {
-          unlinkSync(tmpPath);
-        } catch {
-          // tmp 清理失败不阻断
-        }
-      }
-    }
-    return removed;
+  async removeL0JsonlBySession(sessionKey: string): Promise<number> {
+    return removeSessionLinesFromJsonl(this.options.dataDir, [sessionKey]);
+  }
+
+  /**
+   * 批量移除多个会话的 JSONL 行（clearAll 用：单遍扫描统一重写）
+   *
+   * P2-26：原 clearAll 每 key 调一次 removeL0 = N 次全目录扫描 + N 次全量重写；
+   * 批量入口把 N 个 key 合并为一次扫描一次重写，语义不变（移除行集合的并集）。
+   *
+   * @returns 移除的行数
+   */
+  async removeL0JsonlBySessions(sessionKeys: readonly string[]): Promise<number> {
+    return removeSessionLinesFromJsonl(this.options.dataDir, sessionKeys);
   }
 
   /**
@@ -307,6 +270,8 @@ export class MemoryHubService {
       setTimeout(finish, 3000);
     });
     logger.info({}, `${TAG} sidecar 已停止`);
+    // 失效域声明（31 号 spec S8）：运行态 running→false（窗口已被销毁时广播为 no-op）
+    broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
   }
 
   // ─── 内部实现 ───
@@ -371,6 +336,8 @@ export class MemoryHubService {
         logger.warn({ code }, `${TAG} sidecar 进程退出`);
         this.child = null;
         this.port = null;
+        // 失效域声明（31 号 spec S8）：运行态 running→false（崩溃退出也要通知）
+        broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
       }
     });
 
@@ -378,6 +345,9 @@ export class MemoryHubService {
     await this.waitUntilHealthy(baseUrl, apiKey, () => child.stderrTail());
 
     logger.info({ baseUrl }, `${TAG} sidecar 就绪`);
+    // 失效域声明（31 号 spec S8）：运行态 running→true（懒启动缺口——
+    // 设置页此前打开时引擎未启动则永远显示「未运行」）
+    broadcastInvalidation([INVALIDATION_DOMAINS.memory]);
     return new HttpMemoryPort({ baseUrl, apiKey });
   }
 

@@ -1,7 +1,11 @@
 // src/renderer/components/settings/sections/data-section.test.tsx
-// DataSection 测试（正向 / 边界 / 异常）：导出会话 / 打开数据目录，含 IPC 与用户取消分支
+// DataSection 测试（正向 / 边界 / 异常）：会话导出/导入 + 设置导出/导入 +
+// 打开数据目录 + 清空全部会话（36-D），含 IPC、用户取消与确认分支
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
@@ -14,13 +18,44 @@ vi.mock('sonner', () => ({
   toast: { success: mockToastSuccess, error: mockToastError, warning: vi.fn() },
 }));
 
+import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { DataSection } from './data-section';
 
 const t = i18n.t.bind(i18n);
 
+/**
+ * DataSection 使用 useNavigate（36-D 清空后回首页）与 useClearAllSessions
+ * （TanStack Query mutation）：Router + QueryClient 双上下文内渲染
+ */
+function renderSection(): void {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  function Wrapper({ children }: { readonly children: ReactNode }): ReactNode {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+  render(
+    <Wrapper>
+      <DataSection />
+    </Wrapper>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+/** 点击按钮 → 放行 confirm store（DialogHost 未挂载，手动 resolve） */
+async function clickWithConfirm(name: string, result: boolean): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name }));
+  const { useConfirmDialogStore } = await import('@/stores/transient/confirm-dialog-store');
+  await waitFor(() => expect(useConfirmDialogStore.getState().currentRequest).not.toBeNull());
+  useConfirmDialogStore.getState()._resolve(result);
+}
 
 describe('DataSection', () => {
   it('正向：导出成功 → 成功提示（含路径）', async () => {
@@ -29,7 +64,7 @@ describe('DataSection', () => {
         exportAll: vi.fn().mockResolvedValue({ data: { saved: true, path: '/tmp/a.zip' } }),
       },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
 
@@ -44,7 +79,7 @@ describe('DataSection', () => {
     window.api = {
       session: { exportAll: vi.fn().mockResolvedValue({ data: { saved: false } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
 
@@ -57,7 +92,7 @@ describe('DataSection', () => {
     window.api = {
       session: { exportAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
 
@@ -68,7 +103,7 @@ describe('DataSection', () => {
     window.api = {
       app: { openDataDir: vi.fn().mockResolvedValue({ data: { ok: true } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.openDataDir') }));
 
@@ -79,7 +114,7 @@ describe('DataSection', () => {
     window.api = {
       app: { openDataDir: vi.fn().mockResolvedValue({ data: { ok: false } }) },
     } as never;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.openDataDir') }));
 
@@ -88,13 +123,174 @@ describe('DataSection', () => {
 
   it('边界：浏览器模式（无桥）→ 不调 IPC、不抛错、无提示', async () => {
     (window as unknown as { api: undefined }).api = undefined;
-    render(<DataSection />);
+    renderSection();
 
     await userEvent.click(screen.getByRole('button', { name: t('settings.exportSessions') }));
     await userEvent.click(screen.getByRole('button', { name: t('settings.openDataDir') }));
 
     expect(mockToastError).not.toHaveBeenCalled();
     expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  describe('会话导入', () => {
+    it('正向：确认后导入 → 成功提示（含 imported/skipped 计数）', async () => {
+      window.api = {
+        session: { importAll: vi.fn().mockResolvedValue({ data: { imported: 2, skipped: 1 } }) },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.importSessions'), true);
+
+      await waitFor(() => expect(window.api.session.importAll).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+          t('settings.importSessionsDone', { imported: 2, skipped: 1 }),
+        ),
+      );
+    });
+
+    it('边界：确认弹窗取消 → 不调 IPC', async () => {
+      window.api = { session: { importAll: vi.fn() } } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.importSessions'), false);
+
+      expect(window.api.session.importAll).not.toHaveBeenCalled();
+    });
+
+    it('异常：导入失败（错误信封）→ 失败提示', async () => {
+      window.api = {
+        session: { importAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.importSessions'), true);
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith(t('settings.importSessionsFailed')),
+      );
+    });
+  });
+
+  describe('设置导出/导入', () => {
+    it('正向：导出设置成功 → 成功提示（含路径）', async () => {
+      window.api = {
+        settings: {
+          exportSettings: vi.fn().mockResolvedValue({ data: { saved: true, path: '/a.json' } }),
+        },
+      } as never;
+      renderSection();
+
+      await userEvent.click(screen.getByRole('button', { name: t('settings.exportSettings') }));
+
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+          t('settings.exportSuccess', { path: '/a.json' }),
+        ),
+      );
+    });
+
+    it('异常：导出设置失败 → 失败提示', async () => {
+      window.api = {
+        settings: {
+          exportSettings: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }),
+        },
+      } as never;
+      renderSection();
+
+      await userEvent.click(screen.getByRole('button', { name: t('settings.exportSettings') }));
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith(t('settings.exportSettingsFailed')),
+      );
+    });
+
+    it('正向：导入设置（覆盖类，确认标红后执行）→ 成功提示（含计数）', async () => {
+      window.api = {
+        settings: {
+          importSettings: vi.fn().mockResolvedValue({ data: { imported: 3, skipped: 0 } }),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.importSettings'), true);
+
+      await waitFor(() => expect(window.api.settings.importSettings).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+          t('settings.importSettingsDone', { imported: 3, skipped: 0 }),
+        ),
+      );
+    });
+
+    it('边界：导入设置确认取消 → 不调 IPC', async () => {
+      window.api = { settings: { importSettings: vi.fn() } } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.importSettings'), false);
+
+      expect(window.api.settings.importSettings).not.toHaveBeenCalled();
+    });
+
+    it('异常：导入设置失败 → 失败提示', async () => {
+      window.api = {
+        settings: {
+          importSettings: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.importSettings'), true);
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith(t('settings.importSettingsFailed')),
+      );
+    });
+
+    it('正向：恢复默认设置（确认后）→ store 全量回落默认 + 成功提示', async () => {
+      // 预置非默认值：重置后必须回到 DEFAULT_SETTINGS
+      useSettingsStore.setState({
+        theme: 'light',
+        ai: { ...useSettingsStore.getState().ai, temperature: 1.5, systemPrompt: 'custom' },
+      });
+      window.api = {
+        settings: { resetAll: vi.fn().mockResolvedValue({ data: { settings: {} } }) },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.resetAllSettings'), true);
+
+      await waitFor(() => expect(window.api.settings.resetAll).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(t('settings.resetAllSettingsDone')),
+      );
+      // store 已全量回落默认（applySettingsSnapshot({}) 语义）
+      expect(useSettingsStore.getState().theme).toBe('dark');
+      expect(useSettingsStore.getState().ai.temperature).toBe(0.7);
+      expect(useSettingsStore.getState().ai.systemPrompt).toBe('');
+    });
+
+    it('边界：恢复默认确认取消 → 不调 IPC', async () => {
+      window.api = { settings: { resetAll: vi.fn() } } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.resetAllSettings'), false);
+
+      expect(window.api.settings.resetAll).not.toHaveBeenCalled();
+    });
+
+    it('异常：恢复默认失败 → 失败提示', async () => {
+      window.api = {
+        settings: { resetAll: vi.fn().mockResolvedValue({ error: { code: 'E', message: 'no' } }) },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.resetAllSettings'), true);
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith(t('settings.resetAllSettingsFailed')),
+      );
+    });
   });
 
   describe('更新缓存', () => {
@@ -106,7 +302,7 @@ describe('DataSection', () => {
         .fn()
         .mockResolvedValue({ data: { path: '/tmp/app-updater', bytes: 0, fileCount: 0 } });
       window.api = { update: { getCacheInfo, clearCache } } as never;
-      render(<DataSection />);
+      renderSection();
 
       // 占用文案（1.0 MB / 2 个文件）
       await waitFor(() => expect(screen.getByText(/1\.0 MB/)).toBeTruthy());
@@ -130,10 +326,59 @@ describe('DataSection', () => {
           clearCache: vi.fn(),
         },
       } as never;
-      render(<DataSection />);
+      renderSection();
 
       await waitFor(() => expect(window.api.update.getCacheInfo).toHaveBeenCalled());
       expect(screen.queryByRole('button', { name: t('settings.clearUpdateCache') })).toBeNull();
+    });
+  });
+
+  // ── 清空全部会话（36-D） ──────────────────────────────────────
+
+  describe('clearAllSessions（36-D）', () => {
+    it('正向：confirm 放行 → IPC 调用 + 成功提示含删除数', async () => {
+      window.api = {
+        session: {
+          clearAll: vi.fn().mockResolvedValue({ data: { deleted: 7 } }),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.clearAllSessions'), true);
+
+      await waitFor(() => expect(window.api.session.clearAll).toHaveBeenCalledWith({}));
+      await waitFor(() =>
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+          t('settings.clearAllSessionsDone', { count: '7' }),
+        ),
+      );
+    });
+
+    it('边界：确认拒绝 → 不发起 IPC', async () => {
+      window.api = {
+        session: {
+          clearAll: vi.fn(),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.clearAllSessions'), false);
+
+      expect(window.api.session.clearAll).not.toHaveBeenCalled();
+      expect(mockToastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('异常：运行中回合被拒（SESSION_IN_USE）→ 错误提示', async () => {
+      window.api = {
+        session: {
+          clearAll: vi.fn().mockRejectedValue(new Error('[SESSION_IN_USE] 有回合正在运行')),
+        },
+      } as never;
+      renderSection();
+
+      await clickWithConfirm(t('settings.clearAllSessions'), true);
+
+      await waitFor(() => expect(mockToastError).toHaveBeenCalledTimes(1));
     });
   });
 });

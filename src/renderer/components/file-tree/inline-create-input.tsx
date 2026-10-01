@@ -31,6 +31,7 @@ interface InlineCreateInputProps {
   /** 取消新建（空名 / Esc / 放弃） */
   readonly onCancel: () => void;
 }
+/** 树内联新建输入框（文件/目录）：Enter 提交 / Esc 取消 / 失焦收尾 */
 export function InlineCreateInput({
   type,
   depth,

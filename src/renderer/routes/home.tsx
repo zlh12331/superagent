@@ -29,8 +29,9 @@ import { MotionReveal } from '@/components/common/MotionReveal';
 import { useCreateSession, useRecentDirs } from '@/hooks/use-sessions';
 import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
 import { ROUTES } from '@/lib/constants';
+import { pickDirectory } from '@/lib/dialog-actions';
 import { formatRelativeTime } from '@/lib/format-time';
-import { unwrap, unwrapErrorMessage } from '@/lib/ipc';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { fadeInVariants, letterContainerVariants, letterUpVariants } from '@/lib/motion';
 import { basename, cn } from '@/lib/utils';
 import { useActiveSessionStore } from '@/stores/persistent/sessions-store';
@@ -70,6 +71,7 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
   },
 ] as const;
 
+/** 欢迎页路由：品牌区 + composer（首条消息 stash 透传 ChatPanel）+ 快捷动作 + 最近项目 */
 export function HomePage(): ReactElement {
   // 本地化文案 + 错误码解析（单一真源）
   const { t } = useTranslation();
@@ -169,7 +171,7 @@ export function HomePage(): ReactElement {
    */
   const handleBrowseFolder = async (): Promise<void> => {
     try {
-      const data = unwrap(await window.api.dialog.pickDirectory({}));
+      const data = await pickDirectory();
       if (data.canceled || data.path === undefined) {
         // 用户取消：保持 dropdown 打开
         return;
@@ -293,7 +295,7 @@ export function HomePage(): ReactElement {
           animate="visible"
         >
           <motion.span aria-hidden="true" variants={letterUpVariants} className="wl-icon">
-            <BrandMark size={40} variant="gradient" />
+            <BrandMark size={40} />
           </motion.span>
           {BRAND_TEXT.split('').map((ch, index) => (
             <motion.span

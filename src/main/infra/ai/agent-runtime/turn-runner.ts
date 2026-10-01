@@ -3,12 +3,14 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 消费 streamText 的 UIMessageStream，逐 part 翻译为 TurnEvent 并 emit
-// - 回合统计：耗时、终止原因（completed / aborted）
+// - 回合统计：耗时、终止原因（completed / aborted / timeout）
 // - 流空闲超时守卫（复用 stream-reader）
 //
 // 设计（对齐 qwen AgentCore.runReasoningLoop 的收敛子集）：
 // - 不感知 webContents / DB：事件经 TurnEventEmitter 产出，由订阅方推送/落库
 // - 中断（AbortError）归为 reason='aborted'，其余错误抛出由上层分类
+// - 模型级总时长超时经 isTimeout 回调显式归因为 reason='timeout'（combinedAbortSignals
+//   把超时与用户中断都折叠成 abort 形态，二者必须区分：超时走错误出口、中断走中断出口）
 // - usage（token 统计）来自 streamText 结果对象（上层持有），本层不重复采集
 // ──────────────────────────────────────────────────────────────
 
@@ -51,14 +53,20 @@ export interface TurnRunnerOptions {
    * 提供时回合先处理该 part 再继续循环读流。
    */
   readonly firstPart?: { done: boolean; value?: unknown };
+  /**
+   * 模型级超时归因回调（combinedAbortSignals 把超时与用户中断都折叠成 abort；
+   * 返回 true 时中断被归因为 reason='timeout' 而非 'aborted'——二者出口不同：
+   * timeout 走错误出口 finalizeErrorTurn，aborted 走中断出口 completeTurn）
+   */
+  readonly isTimeout?: () => boolean;
 }
 
 /**
  * 回合执行结果（turn-end 的统计输入）
  */
 export interface TurnRunResult {
-  /** 终止原因：completed 正常结束 / aborted 用户中断 */
-  readonly reason: 'completed' | 'aborted';
+  /** 终止原因：completed 正常结束 / aborted 用户中断 / timeout 模型级总时长超时 */
+  readonly reason: 'completed' | 'aborted' | 'timeout';
   /** 回合总耗时（毫秒） */
   readonly durationMs: number;
 }
@@ -151,8 +159,12 @@ export class TurnRunner {
       return { reason: 'completed', durationMs: Date.now() - this.startTime };
     } catch (error) {
       // 用户中断：归为 aborted（不视为错误，由上层推送 END(aborted)）
+      // 模型级总时长超时同样以 abort 形态到达（combinedAbortSignals）：isTimeout
+      // 归因为 timeout——上层据此走错误出口而非中断出口，状态机快照与落库
+      // status 不再分叉（2026-09-28 深读发现）
       if (isAbortError(error)) {
-        return { reason: 'aborted', durationMs: Date.now() - this.startTime };
+        const reason = this.options.isTimeout?.() === true ? 'timeout' : 'aborted';
+        return { reason, durationMs: Date.now() - this.startTime };
       }
       // 其他错误（含流空闲超时 AI_TIMEOUT）：抛出，由上层分类 + 产出 error 事件
       throw error;

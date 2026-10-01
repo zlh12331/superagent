@@ -25,6 +25,7 @@ export const HookEventName = {
   POST_TOOL_USE: 'post-tool-use',
 } as const;
 
+/** 钩子事件名（pre-tool-use / post-tool-use，见 HookEventName 常量表） */
 export type HookEventName = (typeof HookEventName)[keyof typeof HookEventName];
 
 /** 钩子上下文（事件携带数据） */

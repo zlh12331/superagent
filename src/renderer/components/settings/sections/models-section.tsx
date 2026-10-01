@@ -19,7 +19,8 @@ import {
   useRuntimeModelsQuery,
   useUpdateRuntimeModel,
 } from '@/hooks/use-runtime-models';
-import { useTranslation } from '@/i18n/use-translation';
+import { useErrorMessage, useTranslation } from '@/i18n/use-translation';
+import { unwrapErrorMessage } from '@/lib/ipc';
 import { confirm } from '@/stores/transient/confirm-dialog-store';
 import { AddModelDialog } from './dialogs/add-model-dialog';
 import { ModelConfigDialog } from './dialogs/model-config-dialog';
@@ -72,7 +73,7 @@ function RuntimeModelTable({
               <div className="flex items-center gap-2">
                 {/* 品牌图标：无图标数据源，用首字母色块（默认图标） */}
                 <span className="bg-accent/10 text-accent-text flex size-5 shrink-0 items-center justify-center rounded text-2xs font-semibold">
-                  {providerLabel(model.providerKind)[0]}
+                  {providerLabel(model.providerKind, t)[0]}
                 </span>
                 <div className="flex min-w-0 flex-col">
                   <span className="text-foreground truncate">
@@ -84,7 +85,7 @@ function RuntimeModelTable({
                 </div>
               </div>
             </td>
-            <td className="text-foreground px-2 py-1.5">{providerLabel(model.providerKind)}</td>
+            <td className="text-foreground px-2 py-1.5">{providerLabel(model.providerKind, t)}</td>
             <td className="px-2 py-1.5">
               <div className="flex items-center justify-end gap-1.5">
                 <Button
@@ -129,6 +130,7 @@ function RuntimeModelTable({
  */
 export function ModelsSection(): ReactElement {
   const { t } = useTranslation();
+  const { getErrorMessage } = useErrorMessage();
 
   // 模型管理列表（L3：settings:listRuntimeModels，用户配置的模型记录）
   // 说明：服务商模式保存的模型也落 runtimeModelStore（providerKind + 具体 modelId，
@@ -210,7 +212,7 @@ export function ModelsSection(): ReactElement {
             若不判 error 会被下方空态分支渲染成「还没有配置模型」，把加载失败误导为空 */}
         <QueryErrorRow
           isError={isError}
-          errorMessage={error instanceof Error ? error.message : null}
+          errorMessage={error instanceof Error ? unwrapErrorMessage(error, getErrorMessage) : null}
           onRetry={() => void refetch()}
         />
         {!isError && runtimeModels.length === 0 && (

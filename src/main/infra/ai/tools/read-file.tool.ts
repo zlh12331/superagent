@@ -19,6 +19,7 @@
 import type { FileReadRes } from '@code-agent/shared/main';
 import { z } from 'zod';
 import type { IFileService } from '../../file/file-service';
+import { t } from '../../i18n';
 import { resolveWithinWorkspace } from './path-guard';
 import { readTracker } from './read-tracker';
 import type { Tool, ToolContext, ToolResult } from './tool';
@@ -43,6 +44,11 @@ const ReadFileInputSchema = z.object({
 
 type ReadFileInput = z.infer<typeof ReadFileInputSchema>;
 
+/**
+ * 创建 read_file 工具（读取工作目录内 UTF-8 文本文件，支持 offset/limit 分批读取）
+ *
+ * @param fileService 文件服务（执行实际读取）
+ */
 export function createReadFileTool(fileService: IFileService): Tool<ReadFileInput> {
   return {
     name: 'read_file',
@@ -52,21 +58,22 @@ export function createReadFileTool(fileService: IFileService): Tool<ReadFileInpu
     permission: 'auto',
     category: 'read',
     execute: async (input: ReadFileInput, ctx: ToolContext): Promise<ToolResult> => {
-      const absPath = resolveWithinWorkspace(input.path, ctx.workingDir);
+      // realTarget：文件 IO 用真实落点（TOCTOU，debt.md#d1）；metadata.path 保持输入形态
+      const { resolved, realTarget } = resolveWithinWorkspace(input.path, ctx.workingDir);
 
       const result: FileReadRes = await fileService.read({
-        path: absPath,
+        path: realTarget,
         offset: input.offset,
         limit: input.limit,
       });
-      // 记录已读文件（priorReadEnforcement：编辑前必须先读）
-      readTracker.record(ctx.sessionId, absPath);
+      // 记录已读文件（priorReadEnforcement：编辑前必须先读；键与 edit/write 的检查侧一致）
+      readTracker.record(ctx.sessionId, realTarget);
 
       return {
-        title: `读取文件: ${input.path}`,
+        title: t('tools.readFile.title', { path: input.path }),
         output: result.content,
         metadata: {
-          path: absPath,
+          path: resolved,
           totalLines: result.totalLines,
           encoding: result.encoding,
           offset: input.offset ?? 0,

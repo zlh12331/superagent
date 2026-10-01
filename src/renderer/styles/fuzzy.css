@@ -1,0 +1,232 @@
+/* ──────────────────────────────────────────────────────────────
+   文件模糊搜索结果行（fuzzy-search-dialog）· 会话与文件两类结果共用
+   行样式归类体系，选中态由 [aria-selected="true"] 单一来源驱动
+   ────────────────────────────────────────────────────────────── */
+.fuzzy-result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.fuzzy-result[aria-selected="true"] {
+  border-left-color: var(--accent);
+  background: var(--bg-elev-2);
+}
+
+.fuzzy-result-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.fuzzy-result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.fuzzy-result-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   命令面板（⌘P）· 对齐原型 §命令面板
+   ────────────────────────────────────────────────────────────── */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(var(--overlay-blur));
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: var(--z-modal);
+  animation: fadein 0.15s ease;
+}
+
+.palette-overlay.show {
+  display: flex;
+}
+
+.palette {
+  width: 560px;
+  max-width: 92vw;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  animation: modalin 0.2s var(--ease-out);
+}
+
+.palette-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.palette-input-wrap svg {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.palette-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+}
+
+.palette-input::placeholder {
+  color: var(--text-faint);
+}
+
+.palette-results {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.palette-section {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted-foreground);
+  padding: 10px 16px 4px;
+  font-weight: 600;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  text-align: left;
+}
+
+.palette-item:hover,
+.palette-item.active,
+.palette-item[data-selected="true"] {
+  background: var(--bg-elev-2);
+}
+
+.palette-item.active,
+.palette-item[data-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.palette-item .pi-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.palette-item .pi-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.palette-item .pi-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.palette-item .pi-title {
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-item .pi-shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+}
+
+.palette-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--muted-foreground);
+}
+
+.palette-foot kbd {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 5px);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--text-secondary);
+}
+
+.palette-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: var(--font-size-sm);
+}
+
+/* composer-stats-bar：输入栏底部信息栏（就绪 · 消息数 · Token；对齐原型 .csb-*） */
+.composer-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  letter-spacing: 0.02em;
+}
+.composer-stats-bar .csb-item b {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.composer-stats-bar .csb-sep {
+  opacity: 0.5;
+}

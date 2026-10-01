@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { buildFileSearchPattern } from '@/lib/file-search';
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 import type { SuggestTrigger } from './suggest-trigger';
 
 /** 防抖窗口（ms）——对齐参考项目 useSlashSuggest 的防抖约定 */
@@ -51,7 +51,7 @@ export function useMentionFiles(
     }
     // 防抖后调 glob（浏览器模式无 window.api 时静默清空）
     timerRef.current = setTimeout(() => {
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         setMentionFiles([]);
         return;
       }

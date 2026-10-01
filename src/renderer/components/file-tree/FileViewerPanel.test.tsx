@@ -620,4 +620,57 @@ describe('FileViewerPanel', () => {
       useSettingsStore.setState({ theme: 'system' });
     });
   });
+
+  // ── 37 号 A：自动换行（wordWrap 设置的真实消费） ─────────────
+  describe('自动换行（37-A）', () => {
+    it('wrap 关闭（默认）：textarea wrap=off，容器无 file-viewer-wrap', async () => {
+      diskContent = 'hello';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'hello',
+        editedContent: 'hello',
+        isDirty: false,
+      });
+      const { container } = render(createWrapper());
+
+      const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
+      expect((textarea as HTMLTextAreaElement).wrap).toBe('off');
+      expect(container.querySelector('.file-viewer-wrap')).toBeNull();
+    });
+
+    it('wrap 开启：textarea wrap=soft + 编辑容器与内容区带 file-viewer-wrap（双层同步）', async () => {
+      useSettingsStore.setState((s) => ({
+        editor: { ...s.editor, wordWrap: true },
+      }));
+      diskContent = 'hello';
+      useFileViewerStore.setState({
+        open: true,
+        filePath: 'C:\\proj\\src\\a.ts',
+        editMode: true,
+        originalContent: 'hello',
+        editedContent: 'hello',
+        isDirty: false,
+      });
+      const { container } = render(createWrapper());
+
+      const textarea = await screen.findByLabelText(i18n.t('chat.editFileLabel', { name: 'a.ts' }));
+      expect((textarea as HTMLTextAreaElement).wrap).toBe('soft');
+      // 编辑容器（textarea+高亮层）与查看容器（pre）都带类名
+      expect(container.querySelectorAll('.file-viewer-wrap').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('wrap 开启 + 查看态：内容区带 file-viewer-wrap（pre 折行）', async () => {
+      useSettingsStore.setState((s) => ({
+        editor: { ...s.editor, wordWrap: true },
+      }));
+      diskContent = 'const a = 1;';
+      openViewer('C:\\proj\\src\\a.ts');
+      const { container } = render(createWrapper());
+
+      await screen.findByText('const a = 1;');
+      expect(container.querySelector('.file-viewer-body.file-viewer-wrap')).not.toBeNull();
+    });
+  });
 });

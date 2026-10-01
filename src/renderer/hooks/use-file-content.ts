@@ -20,7 +20,7 @@
 import type { FileReadRes } from '@code-agent/shared/renderer';
 import { useQuery } from '@tanstack/react-query';
 
-import { unwrap } from '@/lib/ipc';
+import { hasIpcBridge, unwrap } from '@/lib/ipc';
 
 /** 文件内容 query key 工厂（保持 queryKey 一致性，便于失效） */
 export const FILE_CONTENT_QUERY_KEY = (path: string) => ['file', path] as const;
@@ -51,7 +51,7 @@ export function useFileContent(filePath: string | null) {
         throw new Error('filePath is null');
       }
       // E2E 浏览器模式下 window.api 未注入
-      if (typeof window === 'undefined' || window.api === undefined) {
+      if (!hasIpcBridge()) {
         return { content: '', totalLines: 0, encoding: 'utf-8' };
       }
       // file:read 入参 schema 中 offset/limit 用了 .optional().transform()，

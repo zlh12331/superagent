@@ -32,6 +32,7 @@ interface FolderLabelProps {
   readonly onDeleteFolder: (folderName: string) => void;
 }
 
+/** 文件夹分组标签行：折叠展开 + 新建会话 + 右键菜单（资源管理器打开/删除分组） */
 export function FolderLabel({
   folderName,
   collapsed,

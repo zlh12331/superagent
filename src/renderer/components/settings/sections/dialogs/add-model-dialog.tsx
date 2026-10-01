@@ -13,8 +13,9 @@ import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTranslation } from '@/i18n/use-translation';
-import { PROVIDER_LABELS } from '../provider-labels';
+import { PROVIDER_LABELS, providerLabel } from '../provider-labels';
 
+/** 添加模型弹窗 props（选择厂商或自定义入口，进入 ModelConfigDialog） */
 export interface AddModelDialogProps {
   /** 弹窗开关（受控） */
   readonly open: boolean;
@@ -56,9 +57,11 @@ export function AddModelDialog({
               onClick={() => onSelectProvider(item.kind)}
             >
               <span className="bg-accent/10 text-accent flex size-6 shrink-0 items-center justify-center rounded text-xs font-semibold">
-                {item.label[0]}
+                {providerLabel(item.kind, t)[0]}
               </span>
-              <span className="text-foreground min-w-0 flex-1 truncate text-sm">{item.label}</span>
+              <span className="text-foreground min-w-0 flex-1 truncate text-sm">
+                {providerLabel(item.kind, t)}
+              </span>
               <ChevronRight className="text-muted-foreground size-3.5 shrink-0" strokeWidth={1.5} />
             </Button>
           ))}

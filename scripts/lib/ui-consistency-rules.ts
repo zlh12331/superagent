@@ -1,0 +1,267 @@
+// scripts/lib/ui-consistency-rules.ts
+// 渲染层写法一致性规则核（纯函数层，供 check-ui-consistency.ts CLI 调用）
+// ──────────────────────────────────────────────────────────────
+// 从 check-ui-consistency.ts 抽出的原因：七条 error 级规则的判据（含豁免语义）
+// 此前内联零测试（外部审计点名）。反例 fixture 测试见 ui-consistency-rules.test.ts
+// ——每条规则都有「最小违规样本必须命中 + 干净/豁免样本必须放过」的双向断言。
+//
+// relFile 口径：posix 相对路径（CLI 侧 relative() 结果需统一转 '/'），
+// 使 fileFilter 与平台无关。
+// ──────────────────────────────────────────────────────────────
+
+export interface UiRule {
+  readonly id: string;
+  readonly desc: string;
+  /** 命中计数正则（逐行匹配） */
+  readonly pattern: RegExp;
+  /** 适用文件过滤（posix 相对 src/renderer 的路径） */
+  readonly fileFilter?: (relFile: string) => boolean;
+}
+
+export const UI_RULES: readonly UiRule[] = [
+  {
+    id: 'index-key',
+    desc: '数组索引直接作 React key（骨架屏/静态拆分用上一行 biome-ignore noArrayIndexKey 豁免）',
+    pattern: /key=\{(index|i|idx)\}/,
+  },
+  {
+    id: 'join-class',
+    desc: "className 内 join(' ') 手工拼接（条件类统一走 cn()）",
+    // 限定 className 上下文：命令参数等业务拼接（如 args.join(' ')）不属样式
+    pattern: /className.*\.join\(' '\)|\.join\(' '\).*"/,
+    fileFilter: (relFile) => relFile.endsWith('.tsx'),
+  },
+  {
+    id: 'manual-unwrap',
+    desc: "手写 'data' in 判别解包 IPC 响应（统一 unwrap()，见 src/renderer/lib/ipc.ts）",
+    pattern: /'data' in (res|response|result)\b/,
+  },
+  {
+    id: 'raw-button',
+    desc: 'components/** 内裸 <button>（应用 ui/button 的 Button；已归属 styles/ 领域按钮类的除外）',
+    pattern: /<button\b/,
+    fileFilter: (relFile) =>
+      relFile.startsWith('components/') && !relFile.startsWith('components/ui/'),
+  },
+  {
+    id: 'try-finally',
+    // React Compiler 对含 try/finally 的函数**静默跳过**（bail-out），该组件失去自动
+    // 记忆化——check:compiler 只断言产物整体生效，抓不到单个组件的 bail-out，
+    // 故以静态信号兜住回归（2026-09-11）。
+    desc: 'try/finally 语句（React Compiler 不优化，触发组件级 bail-out）——改为 catch 过后统一复位',
+    // 只匹配语句形式 `} finally {`（Biome 固定此格式）；不匹配 Promise 的
+    // `.finally(() => {`（那是合法用法，如 settings-store 的落库静默处理）
+    pattern: /\}\s*finally\s*\{/,
+  },
+  {
+    id: 'inline-query-key',
+    // 规范：queryKey 必须是命名常量——域 hook（hooks/use-*.ts）内 export，或集中在
+    // lib/query/keys.ts。内联使**失效点与查询点失去共享引用**，key 形状一变就静默失配。
+    desc: '内联 queryKey 字面量（应引用命名常量：域 hook 内 export 或 lib/query/keys.ts）',
+    pattern: /queryKey:\s*\[/,
+    fileFilter: (relFile) => relFile !== 'lib/query/keys.ts',
+  },
+  {
+    id: 'direct-ipc',
+    // 规范：组件不直连 window.api——IPC 经域 hook 桥接（mock 可替换 + 契约测试可达）。
+    // 边界（2026-09-24 定案）：hooks/*.ts 与 lib/*.ts 是桥接/工具层，直连是其职责，豁免；
+    // 规则只管 .tsx 组件。
+    desc: '组件直连 window.api（应经域 hook 桥接；hooks/lib 层豁免）',
+    pattern: /\bwindow\.api\./,
+    fileFilter: (relFile) => relFile.endsWith('.tsx'),
+  },
+  {
+    id: 'legacy-bridge-guard',
+    // 2026-09-26 hasIpcBridge 收口：禁止再写旧字面量守卫（单一真源 lib/ipc.ts）。
+    // 注释中的示例已由「纯注释行跳过」豁免覆盖。
+    desc: '旧式 window.api 可用性字面量判断（统一用 hasIpcBridge()，见 src/renderer/lib/ipc.ts）',
+    pattern: /typeof window === 'undefined'\s*\|\|\s*window\.api === undefined/,
+  },
+  {
+    id: 'raw-error-toast',
+    // 错误码解析单一真源是 unwrapErrorMessage（lib/ipc.ts）；
+    // toast.error(error.message) 会把 [CODE] 原样甩给用户。
+    desc: 'toast 直出 error.message（应经 unwrapErrorMessage(error, getErrorMessage) 本地化）',
+    pattern: /toast\.error\(\s*error\.message\s*\)/,
+    fileFilter: (relFile) => relFile.endsWith('.ts') || relFile.endsWith('.tsx'),
+  },
+  {
+    id: 'mutation-on-error',
+    // 规范：useMutation 选项对象必须含 onError——写路径失败必须反馈用户
+    //（纯 toast 语义统一 useMutationOnError（hooks/use-mutation-error.ts），
+    // 含回滚等附加逻辑的内联 onError 同样合规）。测试文件沿用 CLI 既有
+    // .test. 排除豁免；选项对象是多行块，「块内有无 onError」无法用单行
+    // 正则表达，与 raw-button 同走 scan 内的块级特判（花括号深度配对）。
+    desc: 'useMutation 选项缺 onError（写路径失败必须反馈；纯 toast 语义用 hooks/use-mutation-error）',
+    pattern: /useMutation\b.*?\(\s*\{/,
+  },
+  {
+    id: 'render-ref-write',
+    // 2026-09-28 深读发现：7 处渲染期写 ref——React 并发渲染禁止（render 可被
+    // 丢弃，ref 会持被弃渲染的闭包），且组件被 React Compiler 判违规跳出优化。
+    // 已收敛 7 处到 useLatestRef（hooks/use-latest-ref.ts，写入在 effect 阶段）。
+    // 行级正则无法区分 effect 内外，存量的 effect 内写入（FileViewerPanel 先例
+    // 等 ~50 处）走棘轮基线（只降不升），新代码一律 useLatestRef。
+    desc: '渲染层直接写 xxxRef.current（统一 useLatestRef；effect 内写入走棘轮基线）',
+    pattern: /\b\w+Ref\.current\s*=\s*(?!=)/,
+    fileFilter: (relFile) => relFile !== 'hooks/use-latest-ref.ts',
+  },
+];
+
+/**
+ * 已归属 styles/ 领域按钮类的钮（icon-btn/tab/树节点/segmented 等
+ * 有专属 CSS 类控制的场景），不属于 raw-button 规则目标。
+ */
+export const OWNED_CSS_BUTTON_CLASSES: readonly string[] = [
+  'icon-btn',
+  'sidebar-tab',
+  'dev-sub-tab',
+  'ft-row',
+  'ft-dir',
+  'ft-file',
+  'sft-back',
+  'sft-more-btn',
+  'cpb-select',
+  'model-item',
+  'fdm-item',
+  'fdm-action-btn',
+  'fl-add-btn',
+  'folder-label',
+  'file-viewer-mode-btn',
+  'file-viewer-save-btn',
+  'file-viewer-copy-btn',
+  'composer-tool-btn',
+  'msg-action-btn',
+  'card-head',
+  'rh-chevron',
+  'reasoning-head',
+  'scroll-to-bottom',
+  'jump-item',
+  'ask-option',
+  'fuzzy-result',
+];
+
+/** 扫描输入：posix 相对路径 + 按行拆分的内容 */
+export interface UiScanFile {
+  readonly relFile: string;
+  readonly lines: readonly string[];
+}
+
+/** 单条违规（file 为 posix 相对路径，line 为 1-based 行号） */
+export interface UiViolation {
+  readonly rule: string;
+  readonly file: string;
+  readonly line: number;
+}
+
+/**
+ * mutation-on-error 判据：自 `useMutation({` 命中行做花括号深度配对，
+ * 定位选项对象块尾并返回块内代码（剔除纯注释行）。
+ *
+ * - 深度只数 `{`/`}`：选项对象内的嵌套函数体/模板插值天然配平，
+ *   字符串内不配平括号属静态启发式的已知盲区（与 raw-button 同级取舍）
+ * - 命中行自 `useMutation` 起计数——同一行前置的函数体开括号不参与配对
+ * - 块未闭合（畸形代码）时退化为扫描至文件尾
+ */
+function findMutationOptionsCode(
+  lines: readonly string[],
+  start: number,
+): {
+  end: number;
+  code: string;
+} {
+  let depth = 0;
+  let end = lines.length - 1;
+  for (let j = start; j < lines.length; j++) {
+    const blockLine = lines[j];
+    if (blockLine === undefined) break;
+    const trimmed = blockLine.trim();
+    // 注释行不参与深度配对（注释示例里的括号不构成结构信号）
+    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
+      continue;
+    }
+    const countFrom =
+      j === start ? blockLine.slice(Math.max(0, blockLine.indexOf('useMutation'))) : blockLine;
+    for (const ch of countFrom) {
+      if (ch === '{') depth += 1;
+      else if (ch === '}') depth -= 1;
+    }
+    if (depth <= 0) {
+      end = j;
+      break;
+    }
+  }
+  const code = lines
+    .slice(start, end + 1)
+    .filter((l) => {
+      const t = l.trim();
+      return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+    })
+    .join('\n');
+  return { end, code };
+}
+
+/**
+ * 扫描文件集，返回违规清单（逐文件 × 逐规则 × 逐行）
+ *
+ * 通用豁免（与 CLI 既有行为一致）：
+ * - 纯注释行（// * /* 开头）跳过——注释里的示例不构成代码信号
+ * - 上一行含 noArrayIndexKey biome-ignore → 跳过（index-key 规则的豁免）
+ * - raw-button：起始块（回溯 3 行）内出现 styles/* 归属类名或
+ *   aria-pressed/aria-selected/aria-expanded/role="tab" 语义 → 豁免
+ * - mutation-on-error：useMutation 选项块内（剔除注释行）出现 onError → 豁免
+ */
+export function scanUiConsistency(files: readonly UiScanFile[]): UiViolation[] {
+  const violations: UiViolation[] = [];
+  for (const { relFile, lines } of files) {
+    for (const rule of UI_RULES) {
+      if (rule.fileFilter !== undefined && !rule.fileFilter(relFile)) {
+        continue;
+      }
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line === undefined || !rule.pattern.test(line)) {
+          continue;
+        }
+        // 跳过纯注释行：注释里的用法示例/反例说明不构成实际代码信号
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
+          continue;
+        }
+        // 上一行含 noArrayIndexKey biome-ignore 的豁免（与 Biome 同步）
+        const prev = i > 0 ? (lines[i - 1] ?? '') : '';
+        if (prev.includes('noArrayIndexKey')) {
+          continue;
+        }
+        // raw-button 规则：检测当前按钮开标签块（回溯 3 行）内的归属类名/选择器语义
+        if (rule.id === 'raw-button') {
+          const blockStart = Math.max(0, i - 3);
+          const block = lines.slice(blockStart, i + 4).join('\n');
+          if (OWNED_CSS_BUTTON_CLASSES.some((cls) => block.includes(cls))) {
+            continue;
+          }
+          if (
+            block.includes('aria-pressed=') ||
+            block.includes('aria-selected=') ||
+            block.includes('aria-expanded=') ||
+            block.includes('role="tab"')
+          ) {
+            continue;
+          }
+        }
+        // mutation-on-error 规则：选项块内（剔除注释行）无 onError → 违规；
+        // 整块消费避免块内行被本规则重复判定
+        if (rule.id === 'mutation-on-error') {
+          const { end, code } = findMutationOptionsCode(lines, i);
+          if (!/\bonError\s*[:,]/.test(code)) {
+            violations.push({ rule: rule.id, file: relFile, line: i + 1 });
+          }
+          i = end; // 外层 i++ 落到块尾下一行
+          continue;
+        }
+        violations.push({ rule: rule.id, file: relFile, line: i + 1 });
+      }
+    }
+  }
+  return violations;
+}
