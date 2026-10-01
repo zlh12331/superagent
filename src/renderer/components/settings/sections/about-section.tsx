@@ -460,6 +460,8 @@ export function AboutSection(): ReactElement {
   const installUpdate = useInstallUpdate();
   // 自动检查开关与跳过版本（写穿透落库；主进程下次启动读取开关）
   const autoCheck = useSettingsStore((s) => s.update.autoCheck);
+  // 接收预发布（beta）开关：主进程每次检查前重读，开启后立即补检即生效
+  const allowPrerelease = useSettingsStore((s) => s.update.allowPrerelease);
   const skippedVersion = useSettingsStore((s) => s.update.skippedVersion);
   const setUpdate = useSettingsStore((s) => s.setUpdate);
 
@@ -471,6 +473,20 @@ export function AboutSection(): ReactElement {
    */
   const handleAutoCheckChange = (checked: boolean): void => {
     setUpdate({ autoCheck: checked });
+    if (checked) {
+      void check();
+    }
+  };
+
+  /**
+   * 切换「接收预发布更新」开关
+   *
+   * 主进程在每次检查入口重读本设置（update-service check()），开启后立即补检
+   * 一次即可收到 beta；关闭回退为只收正式版。装了 beta 版（版本号含 `-`）时
+   * 恒收预发布，本开关不影响（update-service 的版本判定基线保留）。
+   */
+  const handleAllowPrereleaseChange = (checked: boolean): void => {
+    setUpdate({ allowPrerelease: checked });
     if (checked) {
       void check();
     }
@@ -561,6 +577,12 @@ export function AboutSection(): ReactElement {
         description={t('settings.aboutAutoCheckDesc')}
         checked={autoCheck}
         onChange={handleAutoCheckChange}
+      />
+      <ToggleRow
+        name={t('settings.aboutAllowPrerelease')}
+        description={t('settings.aboutAllowPrereleaseDesc')}
+        checked={allowPrerelease}
+        onChange={handleAllowPrereleaseChange}
       />
 
       {/* 构建信息 */}

@@ -46,7 +46,9 @@ describe('UpdateNotice', () => {
     vi.clearAllMocks();
     mockState.value = null;
     mockFromSnapshot.value = false;
-    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: null } });
+    useSettingsStore.setState({
+      update: { autoCheck: true, allowPrerelease: false, skippedVersion: null },
+    });
   });
 
   it('纯事件消费：不渲染任何 DOM（返回 null）', () => {
@@ -126,7 +128,9 @@ describe('UpdateNotice', () => {
   });
 
   it('已跳过该版本（settings.update.skippedVersion）：不弹任何 toast', () => {
-    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: '1.2.3' } });
+    useSettingsStore.setState({
+      update: { autoCheck: true, allowPrerelease: false, skippedVersion: '1.2.3' },
+    });
     mockState.value = { phase: 'downloaded', version: '1.2.3' };
     render(<UpdateNotice />);
     expect(toast).not.toHaveBeenCalled();
@@ -134,7 +138,9 @@ describe('UpdateNotice', () => {
   });
 
   it('跳过的是别的版本：仍正常提示当前版本', () => {
-    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: '1.0.0' } });
+    useSettingsStore.setState({
+      update: { autoCheck: true, allowPrerelease: false, skippedVersion: '1.0.0' },
+    });
     mockState.value = { phase: 'downloaded', version: '1.2.3' };
     render(<UpdateNotice />);
     expect(toast).toHaveBeenCalledTimes(1);
