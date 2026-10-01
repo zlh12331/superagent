@@ -35,6 +35,18 @@
 #   跳过就永不 report，PR 会卡在 pending 无法合并。要省纯文档 PR 的开销请用 job 级 if。
 # - workflow_dispatch 保留（便于手动调试全矩阵）。
 #
+# ⚠️ Release PR（release-please-- 前缀分支）跳过重矩阵（2026-10-01）：
+#   Release PR 的内容 = 来源 PR 已全绿验证的代码 + 版本号 + CHANGELOG——零新增
+#   可测面，全矩阵在其上重跑是纯重复（同一内容实测被跑 2-3 遍：feature PR 一遍、
+#   Release PR 创建一遍、CHANGELOG 润色推送再一遍）。故 unit / integration-tests /
+#   e2e-browser / e2e-electron 四个重 job 在该前缀分支上跳过（job 级 if——被跳过
+#   的必需检查按 GitHub 语义视为成功，区别于 workflow 级 paths 过滤的"永不 report"）；
+#   quality 不跳——CHANGELOG 润色门禁正是在它里面（Release PR 上唯一真正需要
+#   验证的东西），release.yml 的 gate 打 tag 前另有兜底。summary job 保留 always()
+#   并显式放行 skipped（防"矩阵失败时 summary 被跳过 → 失败信号丢失"）。
+#   残余风险（有界）：Release PR 合并前 main 若再进其他 PR，多份已测变更的组合树
+#   不做整树重测——各组成 PR 均各自全绿，CD 六平台打包 + smoke 兜底。
+#
 # 参考项目 electron-shadcn-main/.github/workflows/testing.yaml 的 job 分层模式
 
 name: CI
@@ -172,6 +184,8 @@ jobs:
     name: Unit Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    # Release PR 跳过（内容已在来源 PR 验证，见文件头 2026-10-01 条目）
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     strategy:
       fail-fast: false
       matrix:
@@ -262,17 +276,22 @@ jobs:
     steps:
       - name: Check matrix result
         run: |
-          if [ "${{ needs.unit.result }}" != "success" ]; then
+          if [ "${{ needs.unit.result }}" = "success" ]; then
+            echo "✅ 6 平台单测全部通过"
+          elif [ "${{ needs.unit.result }}" = "skipped" ]; then
+            echo "⏭️ Release PR：单测矩阵跳过——同一内容已在来源 PR 全绿验证，本 PR 仅新增版本号与 CHANGELOG"
+          else
             echo "::error::unit 矩阵未全部通过：${{ needs.unit.result }}"
             exit 1
           fi
-          echo "✅ 6 平台单测全部通过"
 
   # ── Job 2: 集成测试（慢速分层门控，不阻塞单测高频反馈）──
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Release PR 跳过（同 unit，见文件头 2026-10-01 条目）
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -297,6 +316,8 @@ jobs:
     name: E2E (Browser Mode)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Release PR 跳过（同 unit，见文件头 2026-10-01 条目）
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -334,6 +355,8 @@ jobs:
     name: E2E (Electron Mode, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    # Release PR 跳过（同 unit，见文件头 2026-10-01 条目）
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     strategy:
       fail-fast: false
       matrix:
@@ -418,11 +441,14 @@ jobs:
     steps:
       - name: Check matrix result
         run: |
-          if [ "${{ needs.e2e-electron.result }}" != "success" ]; then
+          if [ "${{ needs.e2e-electron.result }}" = "success" ]; then
+            echo "✅ 6 平台 Electron E2E 全部通过"
+          elif [ "${{ needs.e2e-electron.result }}" = "skipped" ]; then
+            echo "⏭️ Release PR：Electron E2E 矩阵跳过——同一内容已在来源 PR 全绿验证，本 PR 仅新增版本号与 CHANGELOG"
+          else
             echo "::error::e2e-electron 矩阵未全部通过：${{ needs.e2e-electron.result }}"
             exit 1
           fi
-          echo "✅ 6 平台 Electron E2E 全部通过"
 
   # ── Job 4「生产构建 Smoke 测试」已移除（2026-09-20）─────────────────
   # 原 smoke-prod job（windows + ubuntu 矩阵：打包 → check:native-arch → test:smoke）
