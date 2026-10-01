@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.4.0](https://github.com/zlh12331/superagent/compare/v1.3.3...v1.4.0) (2026-10-01)
+
+
+### Features
+
+* 后台驻留修复链落地 + 设置面补全（33-37 号）+ code-wiki 全量对账 ([#70](https://github.com/zlh12331/superagent/issues/70)) ([6683c57](https://github.com/zlh12331/superagent/commit/6683c57d3fee09ab912a6b7ff0014f61846c3eb9))
+
+
+### Bug Fixes
+
+* **ci:** release job 的 tag 钉在发布提交上（修重跑移动 tag 的事故） ([#67](https://github.com/zlh12331/superagent/issues/67)) ([3bfb8a5](https://github.com/zlh12331/superagent/commit/3bfb8a5a16b2117a8d43da729193b6d1dbc65fd7))
+* **ci:** 修正 publish 的双架构元数据断言正则（首版漏判真实产物） ([#63](https://github.com/zlh12331/superagent/issues/63)) ([1f1a66b](https://github.com/zlh12331/superagent/commit/1f1a66b416c69b3bf168ef78720530d36202cf8e))
+
 ## [1.3.3](https://github.com/zlh12331/superagent/compare/v1.3.2...v1.3.3) (2026-09-21)
 
 > 本版本修复 Windows 用户升级应用时被中断的问题，并加固发布流程——让有问题的构建在到达用户之前就被拦下。
