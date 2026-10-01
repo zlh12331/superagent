@@ -7,8 +7,8 @@
 | 项 | 要求 |
 |---|---|
 | Node.js | `>=24.13.0`（`engines`）；TRAE IDE 终端可能注入自带 Node（v22）导致版本不符，属 TRAE 限制，系统 Node 正确安装即可） |
-| pnpm | `>=11.0.0`（`packageManager: pnpm@11.24.0`） |
-| 原生模块 | better-sqlite3 / esbuild / node-pty（`pnpm.onlyBuiltDependencies`） |
+| pnpm | `>=11.0.0`（`packageManager: pnpm@11.24.0`；**构建脚本决策在 `pnpm-workspace.yaml` 的 `allowBuilds`**——pnpm 11 不再读 `package.json#pnpm.onlyBuiltDependencies`） |
+| 原生模块 | better-sqlite3 / esbuild / node-pty 等（allowBuilds 放行编译；postinstall 走 `scripts/postinstall-rebuild.mjs`） |
 
 ## 2. 安装与启动
 
@@ -36,12 +36,12 @@ pnpm verify:local:full   # 追加产物层（构建/体积/编译/E2E/打包/引
 pnpm check:secrets-git    # 密钥扫描（gitleaks git，扫 <远端 main>..HEAD）
 pnpm typecheck            # tsc --build + tsc -p scripts/tsconfig.json（0 错误；不要用 --noEmit）
 pnpm lint                 # biome check .（0 问题）
-pnpm check:static         # 静态审计 15 项（tokens/i18n/注释/文件大小/函数体/复杂度/覆盖率下限/文档脚本表等）
+pnpm check:static         # 静态审计 16 项（tokens/i18n/comments/tsdoc/文件大小/函数/复杂度/覆盖率下限/docs/docs-scripts/test-boundary/csp-hash/css-vars/animations/ui-consistency/memory-engine:integrity）
 pnpm tokens:check         # 令牌生成物一致性（tokens/aurora.json ↔ tokens.css）
 pnpm knip                 # 未使用依赖/文件检测
 pnpm depcruise            # 依赖方向与环检测（dependency-cruiser）
 pnpm check:schema-drift   # schema.ts ↔ drizzle/ 迁移漂移 + 快照链
-pnpm audit:registry       # audit-ci（moderate 以上门禁）
+pnpm audit:registry       # pnpm audit --audit-level=moderate（npm 官方源）
 pnpm test                 # shared → main → renderer 全部单元测试 + integration + scripts
 ```
 
@@ -53,12 +53,14 @@ pnpm test                 # shared → main → renderer 全部单元测试 + in
 ### 4.1 单元（Vitest）
 
 ```bash
-pnpm test:main        # vitest --root src/main（参考 ~1300+ 用例）
-pnpm test:renderer    # vitest --root src/renderer（参考 ~490）
-pnpm test:scripts     # vitest --root scripts
-pnpm test:integration # vitest --root tests/integration
-pnpm test:coverage    # 覆盖率（80% 门禁）
+pnpm test:main        # vitest --root src/main（2026-09-30 实测 2135 用例）
+pnpm test:renderer    # vitest --root src/renderer（实测 1845 用例）
+pnpm test:scripts     # vitest --root scripts（实测 364）
+pnpm test:integration # vitest --root tests/integration（实测 152）
+pnpm test:coverage    # 覆盖率（下限棘轮，数字真源 scripts/coverage-floors.json）
 ```
+
+- `pnpm test` 全链：packages(shared) → main → renderer → integration → scripts（任一层失败即中断）。
 
 - 原生模块 ABI：Electron 44 与 Node 24 同构（NODE_MODULE_VERSION=137），无需切换脚本（rebuild-native.mjs 已删，2026-08）；若未来版本再次分叉，按 process.versions.modules 对比重新引入。
 
@@ -79,12 +81,15 @@ pnpm test:perf            # 性能基准（IPC 基准 / 渲染 / 内存 / 导航
 
 ```bash
 pnpm build                 # electron-vite build（main/preload/renderer 三入口）
-pnpm build:win             # 构建 + NSIS 安装包（x64 + arm64）
+pnpm build:dist            # 构建 + electron-builder 全平台 --publish never
+pnpm build:win             # 构建 + NSIS 安装包（x64 + arm64；含 prepare:memory-hub/codegraph）
 pnpm build:mac / linux     # 对应平台包（各自 x64 + arm64）
-pnpm build:all             # 全平台
-pnpm build:win:x64         # 单架构变体（另有 build:{win,mac,linux}:{x64,arm64}）
+pnpm build:all             # 全平台（electron-builder --publish never）
+pnpm build:win:x64         # 单架构变体（build:{win,mac,linux}:{x64,arm64} 六变体齐备）
 pnpm analyze:bundle        # 包体积分析（rollup-plugin-visualizer → stats/renderer-bundle.html）
 ```
+
+> 打包脚本先跑三个 prepare：`prepare:build-info`（构建信息注入）→ `prepare:memory-hub`（记忆引擎运行目录）→ `prepare:codegraph`（按架构部署二进制——supportedArchitectures 双架构安装的配套）。
 
 发布配置：`electron-builder.yml`（github provider，GitHub Releases 为更新源）。
 CI/CD：`.github/workflows/ci.yml` 为 **5 个必需检查 job**（quality / unit 六平台矩阵 /
@@ -97,13 +102,13 @@ release 打 tag → publish 转正式。打包验证不在 CI（PR 阶段），�
 
 ## 6. 工程纪律要点
 
-- **每次代码改动同步 CodeGraph 索引**：`pnpm codegraph:sync`（仓库根）。
-- **每次实现轮次做 git commit**（`gh` / 常规 commit；commitlint conventional 规范 + husky 钩子）。钩子分工：`pre-commit` 跑密钥扫描（暂存区）+ lint-staged 自动修复；`commit-msg` 跑 commitlint + 双 type 标题拦截；`pre-push` **仅**密钥扫描（`gitleaks git` 扫待推送区间，约 1.5 秒），其余检查交 CI / `pnpm verify:local`。
-- **前端 mock 层保留**：渲染层 `dev/mock-api.ts` + MSW，前端可独立开发。
-- **原生模块双环境**：Node 测试环境与 Electron 运行时同 ABI（Electron 44 = Node 24，modules 137），无需重编译（rebuild-native.mjs 已删）。
+- **每次代码改动同步 CodeGraph 索引**：pre-commit 钩子内自动 `codegraph sync`（60s 超时容错，`SKIP_CODEGRAPH_SYNC=1` 跳过）。
+- **每次实现轮次做 git commit**（`gh` / 常规 commit；commitlint conventional 规范 + husky 钩子）。钩子分工：`pre-commit` 跑 gitleaks 暂存区扫描 + lint-staged 自动修复 + codegraph sync；`commit-msg` 跑 commitlint + `check-commit-msg` 双 type 标题拦截（双 type 会静默阻断 release-please 发版通道，2026-09-20 实证）；`pre-push` **仅**密钥扫描（`gitleaks git` 扫待推送区间，约 1.5 秒，未安装即失败），其余检查交 CI / `pnpm verify:local`。
+- **前端 mock 层保留**：渲染层 `dev/mock-api.ts`（浏览器 dev 模式走 IPC mock），前端可独立开发（不用 MSW，见 03/08）。
+- **原生模块双环境**：Node 测试环境与 Electron 运行时同 ABI（Electron 44 = Node 24，modules 137），postinstall 智能检测（ABI 就绪跳过 rebuild）。
 - **CSS 令牌**：改令牌改 `tokens/aurora.json`（`pnpm tokens:build` 生成），禁止手改 `tokens.css`——生成物一致性由 `tokens:check` 卡关，设计令牌用法由 `check:tokens` 卡关。
-- **i18n**：新增 key 需补全 en/zh-CN 两组（`check:i18n` 严格卡关）。
-- **版本/CHANGELOG**：由 release-please 自动化（`.github/workflows/release-please.yml`），push main 开 Release PR，合并即打 tag 发版；无自研 changelog 脚本。
+- **i18n**：新增 key 需补全 en/zh-CN 两组（`check:i18n --strict` 卡缺失/冗余/双语不一致/JSX 硬编码中文）。
+- **版本/CHANGELOG**：由 release-please 自动化（`.github/workflows/release-please.yml`），push main 开 Release PR；**合并 Release PR 不打 tag**——tag 与 Release 由 release.yml 在三平台构建全部成功后创建（防空版本占号，详见 RELEASING.md）。
 
 ## 7. 快速定位命令
 
