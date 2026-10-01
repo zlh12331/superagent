@@ -4,16 +4,43 @@
 
 ## [1.4.0](https://github.com/zlh12331/superagent/compare/v1.3.3...v1.4.0) (2026-10-01)
 
+> 本版本是一轮大版本功能累积：设置页新增系统通知、网络代理、界面缩放、终端、快捷键、编辑器、数据库备份等一整批能力，并带来会话历史导出/导入、设置导出/导入、一键恢复默认、远程控制绑定范围等管理功能；同时修复多处影响回合稳定性的缺陷与托盘驻留问题，并升级依赖清零全部安全通告（含 8 条高危）。
 
-### Features
+### 新增
 
-* 后台驻留修复链落地 + 设置面补全（33-37 号）+ code-wiki 全量对账 ([#70](https://github.com/zlh12331/superagent/issues/70)) ([6683c57](https://github.com/zlh12331/superagent/commit/6683c57d3fee09ab912a6b7ff0014f61846c3eb9))
+- **系统通知可自定义**：回合完成、回合失败、等待审批三类系统通知均可独立开关——此前通知无法关闭，多回合跑批时成为打扰（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **应用内网络代理**：支持跟随系统 / 直连 / 自定义 HTTP 代理三种模式，AI 对话、IM 渠道、MCP 工具、自动更新统一走代理，附「测试连接」一键探测——解决内网/防火墙环境下核心链路不可达的问题（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **界面缩放**：11 档界面缩放（设置页选择，或 Ctrl + = / - / 0 快捷键），高分屏、低视力与投屏场景友好；Windows 顶栏控件随缩放联动（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **终端设置**：新建终端可选默认 Shell（PowerShell / CMD / Git Bash / WSL / bash / zsh / fish，随平台列出可用项），终端字号可调并即时生效（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **快捷键自定义与独立设置分区**：六个常用快捷键（命令面板 / 新会话 / 搜索文件等）可录制修改，与其他键冲突时明确提示并拒绝写入；固定快捷键以速查表同页展示；帮助对话框（? / F1）可一键直达该分区（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **数据库备份可视化**：设置页可查看恢复点列表（含健康状态）、手动创建备份、一键恢复（重启后生效）（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **编辑器设置**：文件查看器支持自动换行开关与 Tab 宽度（2 / 4 / 8）调整（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **一键清空全部会话**：数据管理新增入口，带二次确认与「运行中回合」保护（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **会话历史导出 / 导入**：导出为版本化 JSON 文件、可跨设备迁移；导入幂等（同 id 会话自动跳过），个别损坏条目不影响整体导入（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **设置导出 / 导入**：全部应用设置可备份为 JSON 文件；API Key 等凭据因本机加密绑定不参与迁移（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **一键恢复默认设置**：所有应用设置整体回落默认，不影响 API Key、会话历史与渠道配置（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **审批等待通知**：后台回合弹出权限审批时提醒用户回来处理，避免回合停在等待状态无人知晓（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **跨会话运行指示**：侧栏会话项显示运行中徽标，可直接中断其他会话正在运行的回合（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **远程控制绑定范围**：可设为「仅本机」，不再向局域网广播发现端口（[#70](https://github.com/zlh12331/superagent/issues/70)）
 
+### 修复
 
-### Bug Fixes
+- **托盘驻留与开机自启**：修复静默启动后从桌面图标 / 开始菜单无法唤回窗口的问题；开启自启后开机不再弹出主窗口（按预期静默驻留托盘）；修正 Linux AppImage 自启路径与桌面规范（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **回合稳定性**：修复模型装配失败、请求超时、空回复三类场景下聊天界面永久转圈或状态错标的问题；上一回合异常收尾不再把新回合错误标记为空闲（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **设置生效**：修复清空自定义系统提示词后旧提示词仍持续生效的静默漂移；设置写入失败不再被静默丢弃（自动重试并计入诊断包）（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **安全加固**：内容安全策略（CSP）收敛为不外联，封堵被注入脚本向外部域名外渗的通道；数据库文件与备份在 Windows 上补齐权限收紧（与密钥库同级纵深）；封堵 MCP 工具参数绕过危险命令检查的口子（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **提问框**：提交失败时保留已填内容可原地重试；取消操作不再被失败锁死（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **密钥诊断**：Linux 无密钥环等场景下 API Key 无法读取时给出明确告警（随诊断包导出），不再表现为「密钥凭空消失」（[#70](https://github.com/zlh12331/superagent/issues/70)）
 
-* **ci:** release job 的 tag 钉在发布提交上（修重跑移动 tag 的事故） ([#67](https://github.com/zlh12331/superagent/issues/67)) ([3bfb8a5](https://github.com/zlh12331/superagent/commit/3bfb8a5a16b2117a8d43da729193b6d1dbc65fd7))
-* **ci:** 修正 publish 的双架构元数据断言正则（首版漏判真实产物） ([#63](https://github.com/zlh12331/superagent/issues/63)) ([1f1a66b](https://github.com/zlh12331/superagent/commit/1f1a66b416c69b3bf168ef78720530d36202cf8e))
+### 内部改进
+
+- **性能**：首屏冷启动量化与记忆引擎包体积裁剪；流式文本主进程合帧（每 token 一条合并为 16–20ms 一帧）；Git 状态与 AGENTS.md 查询加缓存；会话导出改批量查询；终端输出缓冲改分片结构；记忆审计镜像清理异步化（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **依赖安全**：两批依赖升级清零 16 条安全通告（含 8 条高危 DoS），审计门禁恢复绿（[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **工程质量**：新增调试面板零残留门禁与 mutation 错误处理一致性门禁；覆盖率护栏改为不变式；提交信息校验兼容 worktree 布局；仓库钉死 npm 官方源（镜像环境审计不再误报）（[#67](https://github.com/zlh12331/superagent/issues/67)、[#70](https://github.com/zlh12331/superagent/issues/70)）
+- **CI 修复**：发版 tag 钉在发布提交上（防重跑移动 tag 导致版本倒退）；双架构元数据断言修正（[#67](https://github.com/zlh12331/superagent/issues/67)、[#63](https://github.com/zlh12331/superagent/issues/63)）
+- **文档**：code-wiki 11 篇与设计文档全量对账（逐项与代码实测核对）；新增 32 号新功能三阶段流程规范与 33-37 号功能规格（[#70](https://github.com/zlh12331/superagent/issues/70)）
+
+<!-- changelog:polished -->
 
 ## [1.3.3](https://github.com/zlh12331/superagent/compare/v1.3.2...v1.3.3) (2026-09-21)
 
