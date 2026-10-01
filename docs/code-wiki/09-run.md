@@ -94,6 +94,9 @@ pnpm analyze:bundle        # 包体积分析（rollup-plugin-visualizer → stat
 发布配置：`electron-builder.yml`（github provider，GitHub Releases 为更新源）。
 CI/CD：`.github/workflows/ci.yml` 为 **5 个必需检查 job**（quality / unit 六平台矩阵 /
 integration-tests / e2e-browser / e2e-electron 六平台矩阵，另有 2 个 summary job 暴露稳定名）；
+**Release PR（release-please-- 前缀分支）跳过四个重 job 只跑 quality**（2026-10-01：其内容 =
+来源 PR 已全绿验证的代码 + 版本号 + CHANGELOG，零新增可测面；job 级 if 跳过，被跳过的
+必需检查按 GitHub 语义视为成功；润色门禁在 quality 中不跳）；
 `release.yml` 为 **6 个单架构 build job**（win/mac/linux × x64/arm64）→ merge 更新元数据 →
 release 打 tag → publish 转正式。打包验证不在 CI（PR 阶段），统一交给 CD。
 
