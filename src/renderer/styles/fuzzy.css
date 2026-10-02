@@ -18,7 +18,8 @@
 }
 
 .fuzzy-result[aria-selected="true"] {
-  /* 选中态统一配方：品牌淡底 + inset 左条（border 换 inset shadow 不占布局宽） */
+  /* 选中态统一配方：品牌淡底 + inset 左条。2px 透明 border-left 为所有行
+     统一预留位置，选中条用 box-shadow 绘制（不占布局宽，选中前后无位移） */
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }

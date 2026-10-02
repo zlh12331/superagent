@@ -8,7 +8,9 @@
 }
 
 /* ── 主体容器：水平 grid（sidebar | resizer | main | resizer | right-panel） ──
-   对齐原型 .view-chat，合并了原型的 .body + .view-chat 两层 */
+   对齐原型 .view-chat，合并了原型的 .body + .view-chat 两层
+   宽度令牌 --sidebar-w / --right-panel-w 在 :root 上为 clamp 默认值，
+   拖拽时由 use-resizable-panels 直接 setProperty 覆盖为 px */
 .view-chat {
   /* 背景锚定到主区色：resizer 列（透明）不露 body 氛围层，交界处与两侧完全一致 */
   background: var(--background);

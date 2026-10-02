@@ -1,5 +1,7 @@
 /* ──────────────────────────────────────────────────────────────
-   全局布局与层级令牌（主题无关，所有主题共享）
+   Tailwind v4 主题映射（@theme inline / @utility）+ 全局基础样式
+   （滚动条 / 选区 / 布局锚点）。设计令牌真源：tokens/aurora.json →
+   tokens.css（生成物），本文件只做映射与消费。
    ────────────────────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────────────────────
@@ -201,24 +203,12 @@ body {
   animation: pulse-soft 2s var(--ease-soft) infinite;
 }
 
-/* 纸张纹理 · TraeWork（安静表面，无装饰渐变） */
+/* 纸张纹理 · TraeWork（安静表面，无装饰渐变）
+   原纹理层已随 quiet 迁移删除；类名保留作为 .thread-bg 的定位锚——
+   jump-bar / scroll-to-bottom 的 absolute 定位依赖 main 的
+   position:relative，勿当死代码删除 */
 .paper-texture {
   position: relative;
 }
 
 /* TraeWork：无装饰光晕背景层 */
-
-/* ──────────────────────────────────────────────────────────────
-   布局复刻 · 对齐原型 class 命名（docs/prototype/prototype-v2.html）
-   ──────────────────────────────────────────────────────────────
-   设计哲学：
-   - 保留标题衬线 + mono 元信息排版（非「文学风」设计轴），复刻原型的布局结构
-   - 三段式 grid：顶栏 / 主体（sidebar + resizer + main + resizer + right-panel）
-   - class 命名对齐原型：.app / .topbar / .brand / .resizer / .chat-right-panel
-   - 布局宽度令牌：--sidebar-w / --right-panel-w（JS 可覆盖 clamp 默认值）
-   - 宽度采用 clamp() 响应式（拖拽时由 JS 动态覆盖为 px 值）
-   ────────────────────────────────────────────────────────────── */
-
-/*
- * 布局宽度令牌：:root 上为 clamp 默认值；拖拽时 JS 直接 setProperty 覆盖为 px。
- */
