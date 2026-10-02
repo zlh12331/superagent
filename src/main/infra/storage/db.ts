@@ -296,8 +296,11 @@ function applyDefaultPragmas(sqlite: Database.Database, dbPath: string): void {
  * 获取数据库文件路径
  *
  * 路径：%APPDATA%/<AppName>/sessions.db
- * - dev 环境：%PROJECT%/.electron-user-data/sessions.db
- * - prod 环境：%APPDATA%/code-agent-agent/sessions.db
+ * - dev 环境：项目内 .electron-user-data/sessions.db（index.ts 在 !isPackaged 时重定向；
+ *   E2E 可用 CODE_AGENT_USER_DATA 环境变量覆盖，仅未打包时生效）
+ * - prod 环境：%APPDATA%/Code Agent Desktop/sessions.db（目录名取 electron-builder 的
+ *   productName，**含空格**——拼接命令行引用此路径时必须加引号，先例见 autostart
+ *   的 quoteForCommandLine）
  *
  * 外部导出供测试使用（注入临时路径）。
  */

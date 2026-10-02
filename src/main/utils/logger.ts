@@ -4,7 +4,8 @@
 // 职责：
 // 1. 封装 electron-log，提供统一 logger 接口
 // 2. 支持 traceId 字段贯穿同一请求的多条日志
-// 3. 文件日志按日轮转（保留 14 天，10MB 上限）
+// 3. 文件日志按大小轮转：单文件 10MB，保留 main.log + main.old.log 两份
+//    （§7.6 原文「按日轮转、保留 14 天」未落地，实际保留口径以本条与 initLogger 注释为准）
 // 4. 控制台仅 dev 环境
 // 5. 注册全局 unhandledRejection / uncaughtException 捕获
 
@@ -51,8 +52,9 @@ export interface LogContext {
 /**
  * 初始化 logger 配置
  *
- * 设计文档 §7.6：
- * - 文件日志：按日轮转，保留 14 天，10MB 上限
+ * 设计文档 §7.6 的落地口径（轮转与保留以本注释为准）：
+ * - 文件日志：单文件 10MB 上限，超出后当前文件移为 main.old.log——
+ *   实际保留 main.log + main.old.log 两份（§7.6 原文「按日轮转、保留 14 天」未落地）
  * - 控制台：仅 dev 环境
  * - 文件位置：%APPDATA%/<AppName>/logs/main.log
  *
