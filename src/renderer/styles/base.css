@@ -119,6 +119,14 @@
   --font-mono: var(--font-mono);
 }
 
+/* z-popover 工具类注册：Tailwind v4 的 @theme 无 z-index 命名空间，
+   shadcn 浮层（dialog/dropdown/select/alert-dialog/sheet 共 10 处）用的
+   z-popover 类曾因未注册而静默失效——产物 CSS 无该规则，层级全靠 DOM
+   顺序兜底。@utility 注册后与 tokens.css 的 --z-popover 档位接通。 */
+@utility z-popover {
+  z-index: var(--z-popover);
+}
+
 /* ──────────────────────────────────────────────────────────────
    全局基础样式
    ────────────────────────────────────────────────────────────── */
@@ -150,12 +158,11 @@ body {
 
 /* ──────────────────────────────────────────────────────────────
    滚动条样式 · TraeWork
+   Chromium 121+ 起，设置 scrollbar-width / scrollbar-color（非 auto）会
+   让 ::-webkit-scrollbar 自定义整体失效——此前两者并存，8px 宽 + 2px 留白的
+   「纸张边缘」滚动条从不渲染。本应用是 Chromium-only（Electron），走 webkit
+   伪元素路径，不设 scrollbar-width/color。
    ────────────────────────────────────────────────────────────── */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
-}
-
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

@@ -15,12 +15,10 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from 'ai';
-import { motion } from 'motion/react';
 import type { ReactElement } from 'react';
 
 import { useTranslation } from '@/i18n/use-translation';
 import { extractText } from '@/lib/chat/message-text';
-import { smoothEaseOut } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/persistent/settings-store';
 import { useReasoningCollapseStore } from '@/stores/transient/reasoning-collapse-store';
@@ -72,21 +70,19 @@ export function MessageItem({
   if (message.role === 'user') {
     // user 消息：text 拼接为气泡内容；非 text parts（历史重建产生的孤儿
     // 工具结果 / 附件 file）此前一律不渲染——留下空气泡且工具卡丢失
+    // 入场动画走 CSS（enter-anim → msgEnter）：此前 motion.div 的 JS 入场与
+    // CSS animation 同时挂在同一元素上互相打架（CSS 期间覆盖 JS 的
+    // transform/opacity，JS motion 实际不生效）——纯展示动画统一走 CSS
     const text = extractText(message.parts);
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={smoothEaseOut}
-        className="msg user enter-anim"
-      >
+      <div className="msg user enter-anim">
         <div className="msg-body">
           {text.length > 0 && <div className="msg-content">{text}</div>}
           {partsWithCursor.map(({ part, key }) =>
             isTextUIPart(part) ? null : <PartView key={key} part={part} collapseKey={key} />,
           )}
         </div>
-      </motion.div>
+      </div>
     );
   }
 
@@ -94,13 +90,9 @@ export function MessageItem({
     // assistant 消息：avatar + body（role + parts + actions）
     // 对齐原型 addMsgActions()：仅 assistant 消息显示 hover 操作栏
     // 连续 assistant 消息（isContinuation）：隐藏头像与角色标签，内容缩进对齐（照搬参考项目）
+    // 入场动画走 CSS（同 user 分支：此前与 motion.div JS 入场互相打架）
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={smoothEaseOut}
-        className="msg assistant enter-anim"
-      >
+      <div className="msg assistant enter-anim">
         {!isContinuation && (
           <div className="msg-avatar assistant" aria-hidden="true">
             C
@@ -132,7 +124,7 @@ export function MessageItem({
             disabled={disableActions}
           />
         </div>
-      </motion.div>
+      </div>
     );
   }
 

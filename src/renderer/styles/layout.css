@@ -435,7 +435,10 @@
   font-size: 11px;
 }
 
-.folder-label .fl-add-btn {
+/* fl-add-btn 是 .folder-label-cell 内与 .folder-label 平级的兄弟按钮
+   （由原内嵌 span 移出为平级 button）——基础样式必须挂在 cell 作用域，
+   后代选择器 .folder-label .fl-add-btn 永不匹配（曾致按钮 hover 显现失效） */
+.folder-label-cell .fl-add-btn {
   background: transparent;
   border: none;
   color: var(--muted-foreground);
@@ -454,14 +457,6 @@
 .folder-label-cell .fl-add-btn:hover {
   color: var(--primary);
   background: var(--sidebar-accent);
-}
-
-.folder-items {
-  overflow: hidden;
-}
-
-.folder-label.collapsed + .folder-items {
-  display: none;
 }
 
 /* 会话条目 — 衬线标题 + 等宽元信息 */

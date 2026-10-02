@@ -315,7 +315,8 @@
 
 .model-item.active {
   color: var(--accent);
-  background: var(--accent) / 8%;
+  /* var() 后直接接 / 8% 是非法语法，声明曾被浏览器整条丢弃——选中背景从未渲染 */
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* 空状态 */
