@@ -38,6 +38,7 @@
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import { isAbortError } from '../tools/error-classifier';
+import type { ApprovalDecisionOutcome } from '../tools/permission-types';
 import type { CreatedStream } from './create-stream';
 import type { TurnRunner } from './turn-runner';
 
@@ -105,6 +106,8 @@ export interface AgentTurnContext {
   runOutput?: TurnRunOutput;
   /** 错误对象（error 终态收尾消费；超时/空回复在 deciding 内构造 AppError） */
   error?: unknown;
+  /** 最后一次审批决策（38 号阶段 2：waitingApproval 出口语义显式化；快照审计用） */
+  approvalDecision?: ApprovalDecisionOutcome;
 }
 
 /** 机器事件（可辨识联合；send 类型不匹配编译期报错）。
@@ -112,7 +115,7 @@ export interface AgentTurnContext {
  * （{ type, error }）经此进入类型系统，guard/assign 可窄化读取 error 字段 */
 export type TurnMachineEvent =
   | { readonly type: 'approval.requested'; readonly approvalId: string }
-  | { readonly type: 'approval.responded' }
+  | { readonly type: 'approval.responded'; readonly decision: ApprovalDecisionOutcome }
   | { readonly type: 'xstate.error.actor.*'; readonly error: unknown };
 
 /** 回合状态字面量联合（快照 value 形态；running 为层级嵌套） */
@@ -270,7 +273,12 @@ export const agentTurnMachine = setup({
         },
         waitingApproval: {
           on: {
-            'approval.responded': { target: 'streaming' },
+            // 38 号阶段 2：responded 携带决策结果（approved/denied/timed-out/aborted），
+            // context 记录供快照审计——此前出口语义黑盒（机器只知道"结束了"）
+            'approval.responded': {
+              target: 'streaming',
+              actions: assign({ approvalDecision: ({ event }) => event.decision }),
+            },
           },
         },
       },

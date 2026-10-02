@@ -31,7 +31,8 @@ export function subscribeApprovalLifecycle(
     },
     onResolved: (p) => {
       if (p.sessionId === sessionId) {
-        turnMachine.send({ type: 'approval.responded' });
+        // 38 号阶段 2：决议结果透传（approved/denied/timed-out/aborted）
+        turnMachine.send({ type: 'approval.responded', decision: p.decision });
       }
     },
   });

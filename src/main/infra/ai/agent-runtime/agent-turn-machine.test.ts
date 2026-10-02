@@ -227,7 +227,7 @@ describe('AgentTurnMachine（编排者）', () => {
     expect(t.actor.getSnapshot().context.error).toBeInstanceOf(Error);
   });
 
-  it('审批往返：running/streaming ⇄ waitingApproval；审批后可正常完成', async () => {
+  it('审批往返：running/streaming ⇄ waitingApproval；决策结果入 context（38 号阶段 2）', async () => {
     const t = createTurn();
     t.resolveModel.resolve('m');
     await settle(t.actor);
@@ -235,8 +235,9 @@ describe('AgentTurnMachine（编排者）', () => {
     await settle(t.actor);
     t.actor.send({ type: 'approval.requested', approvalId: 'ap-1' });
     expect(t.state()).toEqual({ running: 'waitingApproval' });
-    t.actor.send({ type: 'approval.responded' });
+    t.actor.send({ type: 'approval.responded', decision: 'approved' });
     expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.approvalDecision).toBe('approved');
     t.executeTurn.resolve(runOutput());
     await settle(t.actor);
     expect(t.state()).toBe('completed');
