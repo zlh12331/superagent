@@ -124,4 +124,56 @@ agent-service.ts 预期净行从 683 降至约 450（file-size 棘轮只紧不�
 | 1 | 本 spec | ✅ |
 | 2 | 机器重写（setup/层级/invoked/guards）+ 全表断言迁移 | ✅（含 v5 实测三坑记录：invoke.input 显式传 / onError 事件 type 实值含 actor id / actor 调度跨宏任务） |
 | 3 | 宿主切换（runTurnStream = 效果提供者）+ 装配段提取 turn-assembly.ts（agent-service 净行 705→657，complexity 基线条目删除） | ✅ |
-| 4（后续） | 阶段 2：暂停/恢复 + 并行子任务 | 未立项 |
+| 4 | 阶段 2：审批等待决策面收敛（见 §4 设计判定——原「暂停/恢复 + 并行子任务」经实况核查裁剪） | 实施中 |
+
+## 4 阶段 2：审批等待决策面收敛（2026-10-02 设计判定）
+
+### 4.0 原计划的裁剪（实事求是）
+
+原阶段 2 设想「暂停/恢复 + 并行子任务」两项。设计前量实况核查后**两项均裁剪**：
+
+- **暂停/恢复**：PermissionService 已有 5 分钟真实 setTimeout 超时（超时/用户中断/
+  响应三路径全量 notifyApprovalResolved → 机器经订阅自动回 streaming）——
+  「机器卡死在 waitingApproval」不存在。给机器加 `after` 转换会形成**双计时源**
+  （机器 fake timer vs 真实 setTimeout 各自 5 分钟，必然漂移），是负资产。
+  真正的"事件驱动执行流"重构（invoke 接管 tool execute 的 await）受 AI SDK v7
+  streamText 内部结构约束，维持不做（§1.2 既定边界）。
+- **并行子任务**：TeamService.runTeam 已用 Promise.all 并行委派 + 失败隔离，
+  run_team 工具已接通（1-4 成员），子代理回合同样过并发门（容量 4，FIFO）——
+  并行执行的运行时已存在。机器层"并行状态"是控制流建模工具，而这里的并行
+  发生在**工具执行内部**（run_team 的 execute 内），机器视角始终是一个工具
+  调用——无需并行状态。
+
+### 4.1 实际缺口（阶段 2 真正要做的）
+
+核查发现的真实缺口是**审批等待的决策信息在传输链上丢失**：
+
+1. **超时常量双写**：`APPROVAL_TIMEOUT_MS`（permission-service 私有常量）与
+   `REMEMBER_TTL_MS`（shared 单一真源）是两个独立的 `5 * 60 * 1000` 字面量——
+   注释互相引用"与审批超时对齐"，但没有机制保证对齐。改一处忘另一处即漂移。
+2. **approval.responded 事件无结果**：机器只知道"审批结束了"，不知道
+   approved / denied / timed-out——waitingApproval 的决策语义在机器视角是黑盒。
+   后续任何"超时自动策略"（如超时后跳过该工具继续）都无从谈起。
+3. **渲染层无超时提示**：审批卡（inline-approval-card）不显示剩余时间，
+   用户不知道 5 分钟后自动拒绝（注释里写着"主进程侧 5 分钟超时兜底仍生效"，
+   但用户不可见）。
+
+### 4.2 设计
+
+- **单一真源**：`APPROVAL_TIMEOUT_MS` 上收至 `packages/shared/src/constants/approval.ts`
+  （与 REMEMBER_TTL_MS 同文件，注释互相锚定），permission-service 改为导入；
+  主进程私有常量删除。
+- **决策面显式化**：`approval.responded` 事件携带 `decision: 'approved' |
+  'denied' | 'timed-out' | 'aborted'`——机器 context 记录最后审批决策（可选消费：
+  快照审计/落库富 parts）；notifyApprovalResolved 载荷增加 decision 字段，
+  permission-service 三个出口（响应/超时/中断）分别传值。turn-subscriptions
+  透传。dispose 出口不通知（应用退出机器随之销毁，与现状一致）。
+- **渲染层倒计时**：inline-approval-card 显示剩余时间（shared 常量派生，
+  1 分钟内变警示色）。纯展示，不加交互。
+
+### 4.3 验收
+
+- 机器测试：responded 带 decision 的 context 断言；
+- permission-service 测试：三出口 decision 载荷断言；
+- 渲染层：inline-approval-card 倒计时渲染测试；
+- 全量 main + typecheck/lint/check:static 绿。
