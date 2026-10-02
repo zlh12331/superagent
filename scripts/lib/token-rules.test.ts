@@ -175,3 +175,36 @@ describe('css-z-index-literal（CSS 侧 z 层级收口）', () => {
     expect(scanCss('.x { z-index: var(--z-popover); }', 'a.css')).toHaveLength(0);
   });
 });
+
+describe('text-base-color（语义基色禁作文字色）', () => {
+  it('反例：四个语义基色作 color: → 命中', () => {
+    expect(rulesOf(scanCss('.x { color: var(--error); }', 'a.css'))).toContain('text-base-color');
+    expect(rulesOf(scanCss('.x { color: var(--success); }', 'a.css'))).toContain('text-base-color');
+    expect(rulesOf(scanCss('.x { color: var(--warning); }', 'a.css'))).toContain('text-base-color');
+    expect(rulesOf(scanCss('.x { color: var(--amber); }', 'a.css'))).toContain('text-base-color');
+  });
+
+  it('正例：*-text 文字层（含 --warn-text）→ 无命中', () => {
+    expect(
+      scanCss(
+        '.x { color: var(--error-text); } .y { color: var(--success-text); } .z { color: var(--warn-text); }',
+        'a.css',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('边界：background/border 用基色合法（图形/边框/氛围分工）→ 无命中', () => {
+    expect(
+      scanCss(
+        '.x { background: var(--error); border-color: var(--success); background-color: var(--amber); }',
+        'a.css',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('边界：caret-color / accent-color 等复合属性中的 color 字尾不误报', () => {
+    expect(
+      scanCss('.x { caret-color: var(--error); accent-color: var(--success); }', 'a.css'),
+    ).toHaveLength(0);
+  });
+});

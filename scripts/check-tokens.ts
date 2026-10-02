@@ -7,6 +7,8 @@
 //   铁律④ flex+gap 替代 space-x/y
 //   铁律⑤ 宽高相等用 size-N，禁 w-N h-N 双写
 //   硬编码颜色（#hex 出现在 className/内联样式）禁用
+//   语义基色禁作 color: 文字色（text-base-color，2026-10-02 立规：
+//   基色压浅灰面 2.2-3.9:1 全不达 AA，文字走对应 *-text 层）
 // 判据核在 scripts/lib/token-rules.ts（反例测试同目录）。
 //
 // 运行：pnpm check:tokens
@@ -72,7 +74,7 @@ function main(): number {
   }
 
   console.error(
-    `[check-tokens] ❌ ${violations.length} 处违规（铁律①裸色/②dark:/④space-*/⑤w+h/hex）：`,
+    `[check-tokens] ❌ ${violations.length} 处违规（铁律①裸色/②dark:/④space-*/⑤w+h/hex/文字层）：`,
   );
   for (const v of violations) {
     console.error(`  ${v.file}:${v.line} [${v.rule}] ${v.detail}`);
