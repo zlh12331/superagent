@@ -408,7 +408,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
 /* 尊重系统的"减弱动态效果"设置：覆盖全部 animation 消费者（2026-10-02 复核补齐
    animate-pulse-soft / palette 入场 / reasoningReveal / file-viewer-pulse 四处缺口）；
    .jump-bar 例外单独处理——其可见性依赖 jump-bar-in 的 forwards 填充（基础态
-   opacity:0），animation:none 会让跳转条永久隐形，改为零时长瞬时到达终态 */
+   opacity:0），动画被禁用会让跳转条永久隐形，改为零时长瞬时到达终态 */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-soft,
   .enter-anim,

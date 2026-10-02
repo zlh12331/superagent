@@ -154,13 +154,28 @@ const ANIMATION_DECLARATION_RE = /animation(?:-name)?\s*:([^;]*)/g;
 /**
  * 从 CSS 文本收集 animation 引用名（含行号）
  *
- * 注释行（// 与 * 开头）跳过：文档里常以 `animation: foo 1s` 举例。
+ * 块注释用状态机整段跳过、行内 /* … *\/ 片段先剔除再匹配：注释里常以
+ * `animation: foo 1s` 举例或讨论动画行为（如 reduced-motion 的例外说明）。
+ * 仅靠行首 /* 与 * 前缀的行首启发式挡不住本项目 biome 风格的无 * 前缀
+ * 块注释续行——实测「animation:none 会让…」的讨论注释曾被整条误报。
  */
 export function extractCssAnimationRefsWithLines(css: string): { name: string; line: number }[] {
   const found: { name: string; line: number }[] = [];
+  let inBlockComment = false;
   css.split(/\r?\n/).forEach((rawLine, index) => {
-    const line = rawLine.trim();
-    if (line.startsWith('//') || line.startsWith('*') || line.startsWith('/*')) return;
+    let line = rawLine.trim();
+    if (line.startsWith('//')) return;
+    if (inBlockComment) {
+      if (line.includes('*/')) inBlockComment = false;
+      return;
+    }
+    line = line.replace(/\/\*[\s\S]*?\*\//g, '');
+    const openIdx = line.indexOf('/*');
+    if (openIdx !== -1) {
+      // 行内未闭合的块注释起点：截掉注释段并进入注释态
+      line = line.slice(0, openIdx);
+      inBlockComment = true;
+    }
     for (const declaration of line.matchAll(ANIMATION_DECLARATION_RE)) {
       if (declaration[1] === undefined) continue;
       for (const name of extractAnimationNamesFromValue(declaration[1])) {

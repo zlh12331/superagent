@@ -99,6 +99,20 @@ describe('extractCssAnimationRefs', () => {
   it('边界：animation: none 不产生引用', () => {
     expect(extractCssAnimationRefs('.a { animation: none; }')).toEqual([]);
   });
+
+  it('边界：跨行块注释里讨论动画不算引用（无 * 前缀续行，biome 风格）', () => {
+    const css = [
+      '/* reduced-motion 说明：动画被禁用会让 jump-bar 永久隐形，',
+      '   animation:none 不可用，改为零时长瞬时到达终态 */',
+      '.a { animation: blink 1s; }',
+    ].join('\n');
+    expect(extractCssAnimationRefs(css)).toEqual(['blink']);
+  });
+
+  it('边界：行内注释片段剔除，未闭合行内注释之后的内容不算引用', () => {
+    const css = '.a { animation: blink 1s; } /* animation: ghost 2s */\n.b { color: red; /* 注释';
+    expect(extractCssAnimationRefs(css)).toEqual(['blink']);
+  });
 });
 
 describe('extractCssAnimationRefsWithLines', () => {
