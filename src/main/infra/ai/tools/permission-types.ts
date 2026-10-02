@@ -27,6 +27,12 @@ export interface PermissionDecision {
 }
 
 /**
+ * 审批决议结果（38 号 spec 阶段 2：决策面显式化——机器 waitingApproval 的
+ * 出口语义不再黑盒，context 记录最后决策供快照审计/后续自动策略消费）
+ */
+export type ApprovalDecisionOutcome = 'approved' | 'denied' | 'timed-out' | 'aborted';
+
+/**
  * 审批生命周期监听器（Agent 回合状态机 waitingApproval 状态的数据源）
  */
 export interface ApprovalLifecycleListener {
@@ -36,8 +42,12 @@ export interface ApprovalLifecycleListener {
     readonly approvalId: string;
     readonly toolName: string;
   }): void;
-  /** 审批决议完成（批准/拒绝；带 sessionId 供回合过滤） */
-  onResolved(payload: { readonly sessionId: string; readonly approvalId: string }): void;
+  /** 审批决议完成（带结果与 sessionId 供回合过滤；dispose 出口不通知——退出场景机器随之销毁） */
+  onResolved(payload: {
+    readonly sessionId: string;
+    readonly approvalId: string;
+    readonly decision: ApprovalDecisionOutcome;
+  }): void;
 }
 
 /**

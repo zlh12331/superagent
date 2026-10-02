@@ -29,6 +29,7 @@ import type {
   WhitelistEntry,
 } from '@code-agent/shared/main';
 import {
+  APPROVAL_TIMEOUT_MS,
   AppError,
   DEFAULT_APPROVAL_MODE,
   ErrorCode,
@@ -58,6 +59,7 @@ import {
   shouldFallbackToManual,
 } from './denial-tracking';
 import type {
+  ApprovalDecisionOutcome,
   ApprovalLifecycleListener,
   IPermissionService,
   PermissionDecision,
@@ -75,12 +77,10 @@ export type {
 } from './permission-types';
 
 /**
- * 审批超时时间（毫秒）
- *
- * 5 分钟，避免用户离开后 Promise 长期挂起。
+ * 审批超时时间已上收 shared 单一真源（APPROVAL_TIMEOUT_MS，38 号 spec 阶段 2）：
+ * 此前本文件私有字面量与 shared 的 REMEMBER_TTL_MS 双写，靠注释互锚无机制保证。
  * 超时后视为拒绝，工具不会被执行。
  */
-const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
  * pending 审批条目
@@ -256,6 +256,7 @@ export class PermissionService implements IPermissionService {
   private notifyApprovalResolved(payload: {
     readonly sessionId: string;
     readonly approvalId: string;
+    readonly decision: ApprovalDecisionOutcome;
   }): void {
     for (const listener of this.lifecycleListeners) {
       try {
@@ -531,6 +532,7 @@ export class PermissionService implements IPermissionService {
         this.notifyApprovalResolved({
           sessionId: payload.sessionId,
           approvalId: payload.approvalId,
+          decision: 'timed-out',
         });
         reject(new AppError(ErrorCode.TOOL_PERMISSION_DENIED, `审批超时：${payload.toolName}`));
       }, APPROVAL_TIMEOUT_MS);
@@ -548,6 +550,7 @@ export class PermissionService implements IPermissionService {
         this.notifyApprovalResolved({
           sessionId: payload.sessionId,
           approvalId: payload.approvalId,
+          decision: 'aborted',
         });
         reject(new AppError(ErrorCode.TOOL_ABORTED, '工具执行已被中断'));
       };
@@ -628,7 +631,11 @@ export class PermissionService implements IPermissionService {
     entry.resolve(approved);
     logger.info({ approvalId, approved, rememberDecision }, '审批响应已处理');
     // 审批生命周期：决议完成通知（Agent 回合状态机 → 恢复 running）
-    this.notifyApprovalResolved({ sessionId: entry.sessionId, approvalId });
+    this.notifyApprovalResolved({
+      sessionId: entry.sessionId,
+      approvalId,
+      decision: approved ? 'approved' : 'denied',
+    });
   }
 
   /**
