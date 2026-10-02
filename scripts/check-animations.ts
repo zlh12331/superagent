@@ -32,6 +32,7 @@ const STYLE_FILES = [
   'src/renderer/styles/chat.css',
   'src/renderer/styles/composer.css',
   'src/renderer/styles/cards.css',
+  'src/renderer/styles/diff.css',
   'src/renderer/styles/file-tree.css',
   'src/renderer/styles/fuzzy.css',
   'src/renderer/styles/motion.css',
