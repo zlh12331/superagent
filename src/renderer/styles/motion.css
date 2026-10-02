@@ -404,10 +404,12 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
-/* 尊重系统的"减弱动态效果"设置（扩展覆盖所有动画） */
+/* 尊重系统的"减弱动态效果"设置：覆盖全部 animation 消费者（2026-10-02 复核补齐
+   animate-pulse-soft / palette 入场 / reasoningReveal / file-viewer-pulse 四处缺口）；
+   .jump-bar 例外单独处理——其可见性依赖 jump-bar-in 的 forwards 填充（基础态
+   opacity:0），animation:none 会让跳转条永久隐形，改为零时长瞬时到达终态 */
 @media (prefers-reduced-motion: reduce) {
-  .brand-mark,
-  .topbar,
+  .animate-pulse-soft,
   .enter-anim,
   .typing-indicator .ti-dot,
   .loading-ui-terminal-cursor,
@@ -415,7 +417,16 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   .tool-card:has(.card-status.running) .card-icon::after,
   .tool-card:has(.card-status.running)::after,
   .tool-card.is-settled::after,
-  .async-refreshing-bar::before {
+  .async-refreshing-bar::before,
+  .palette-overlay,
+  .palette,
+  .reasoning-block.open .reasoning-body,
+  .file-viewer-dirty-dot {
     animation: none;
+  }
+
+  .jump-bar {
+    animation-duration: 0.01ms;
+    animation-delay: 0s;
   }
 }
