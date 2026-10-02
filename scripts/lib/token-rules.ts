@@ -69,6 +69,18 @@ const RGB_COLOR_RE = /rgba?\([^\n)]*\)/g;
 // z-(--z-popover) 等变量引用形式放行（Tailwind v4 圆括号语法）
 const BARE_Z_RE = /(?:^|\s|")((?:[a-z-]+:)*)z-(\[?-?\d+)/g;
 
+// TSX 任意值字号（text-[Npx]）：绕过 --font-size-* 九级阶梯与 @theme 映射的
+// text-2xs…text-3xl 命名类——字号轴的单一真源是 aurora.json，任意值 px 双开第二源
+const BARE_FONT_RE = /(?:^|\s|")text-\[\d+(?:\.\d+)?px\]/g;
+
+// CSS 侧字号字面量：font-size: 10px 这类裸 px 绕过 --font-size-* 令牌
+// （var() 引用经 withoutVars 剥离后自然放行；em/% 形式是跟随父级的合法设计，不匹配）
+const CSS_FONT_SIZE_RE = /font-size:\s*[0-9.]+px\b/g;
+
+// CSS 侧裸 z-index 数字：tokens.css:9 明文禁止（此前只扫 TSX 类名串，CSS 侧免检——
+// 实测曾漏过 file-tree.css 的 z-index: 9999 越过 --z-boundary: 999 无任何拦截）
+const CSS_Z_INDEX_RE = /z-index:\s*-?\d+/g;
+
 /** 单条令牌违规 */
 export interface TokenViolation {
   readonly file: string;
@@ -151,6 +163,15 @@ export function scanTsLike(content: string, rel: string, monoExempt = false): To
       for (const m of cls.matchAll(BARE_Z_RE)) {
         violations.push({ file: rel, line: lineNo, rule: 'bare-z-index', detail: m[0].trim() });
       }
+      // 字号轴收口：任意值 px 绕过 --font-size-* 阶梯与 text-2xs…text-3xl 命名类
+      for (const m of cls.matchAll(BARE_FONT_RE)) {
+        violations.push({
+          file: rel,
+          line: lineNo,
+          rule: 'font-size-literal',
+          detail: m[0].trim(),
+        });
+      }
     }
   });
   return violations;
@@ -177,7 +198,7 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
       if (!line.includes('*/')) inBlockComment = true;
       return;
     }
-    // 先剔除 var(--…) 片段再查（豁免收窄到片段级）
+    // 先剔除 var(--…) 片段再查（豁免收口到片段级）
     const withoutVars = line.replace(/var\(--[^)]*\)/g, '');
     const lineNo = idx + 1;
     for (const m of withoutVars.matchAll(HEX_COLOR_RE)) {
@@ -185,6 +206,19 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
     }
     for (const m of withoutVars.matchAll(RGB_COLOR_RE)) {
       violations.push({ file: rel, line: lineNo, rule: 'rgb-color', detail: m[0] });
+    }
+    // 字号轴收口（CSS 侧）：裸 px 绕过 --font-size-* 令牌（var 引用经剥离后放行）
+    for (const m of withoutVars.matchAll(CSS_FONT_SIZE_RE)) {
+      violations.push({ file: rel, line: lineNo, rule: 'font-size-literal', detail: m[0].trim() });
+    }
+    // z 层级收口（CSS 侧）：此前只扫 TSX，CSS 的 z-index: 9999 曾静默越界
+    for (const m of withoutVars.matchAll(CSS_Z_INDEX_RE)) {
+      violations.push({
+        file: rel,
+        line: lineNo,
+        rule: 'css-z-index-literal',
+        detail: m[0].trim(),
+      });
     }
   });
   return violations;
