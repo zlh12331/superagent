@@ -200,6 +200,16 @@ export interface IUpdateService {
   quitAndInstall(): void;
   /** 退出链末端调用（index.ts）：此前请求过安装则此刻拉起静默安装器 */
   runDeferredInstall(): void;
+  /**
+   * 按当前设置重算 autoInstallOnAppQuit（退出链调用，index.ts）
+   *
+   * autoCheckEnabled 原本只在 start() 读一次——运行中切换开关只落库，
+   * 内存值直到重启不变，导致"开着启动 → 下载完成 → 运行中关掉 → 退出仍被
+   * 静默安装"（与 27 号 §4「关 = 全停」语义冲突的边界缺口，2026-10-02 修）。
+   * 退出时重读设置，退出那一刻的开关状态说了算；用户主动点「重启并安装」
+   * 的路径（deferredInstallPending 标志）不受本开关门控、不受影响。
+   */
+  refreshAutoInstallOnAppQuit(): void;
   /** 释放资源（清挂起定时器；在途下载留给 pending 缓存续传） */
   dispose(): void;
 }
@@ -254,6 +264,9 @@ export class UpdateService implements IUpdateService {
   /** 「接收预发布」开关读取器（start 注入；未注入视为关闭） */
   private allowPrereleaseEnabled: (() => boolean) | null = null;
 
+  /** 「自动检查更新」开关读取器（start 注入；未注入视为开启）——退出链 refresh 重读用 */
+  private autoCheckEnabled: (() => boolean) | null = null;
+
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly isPackaged: () => boolean,
@@ -269,6 +282,9 @@ export class UpdateService implements IUpdateService {
     // 「接收预发布」开关读取器：不在此处设置 allowPrerelease——它在 check() 入口
     // 每次幂等重算（见 UpdateStartOptions 注释），避免捕获库字段被二次 start 污染
     this.allowPrereleaseEnabled = options.allowPrereleaseEnabled ?? null;
+    // 「自动检查更新」开关读取器：start 时读一次设置 autoInstallOnAppQuit；
+    // 运行中切换开关后由退出链 refreshAutoInstallOnAppQuit 重读（见该方法注释）
+    this.autoCheckEnabled = options.autoCheckEnabled ?? null;
 
     // 日志接管：库默认走主进程 console（打包后无处可看），接进项目 logger
     this.updater.logger = createUpdaterLogger();
@@ -426,6 +442,11 @@ export class UpdateService implements IUpdateService {
     // 用户侧表现为"应用退出后十余分钟毫无反应"，无从得知安装在进行）
     logger.info({ scope: 'auto-updater' }, '应用已退出，拉起安装向导');
     this.updater.quitAndInstall(false, false);
+  }
+
+  /** @inheritDoc */
+  refreshAutoInstallOnAppQuit(): void {
+    this.updater.autoInstallOnAppQuit = this.autoCheckEnabled?.() ?? true;
   }
 
   /** @inheritDoc */

@@ -615,6 +615,26 @@ describe('UpdateService', () => {
       secondService.runDeferredInstall();
       expect(secondUpdater.quitAndInstall).not.toHaveBeenCalled();
     });
+
+    describe('refreshAutoInstallOnAppQuit', () => {
+      it('按退出时刻的开关状态重算（运行中切换立即生效——2026-10-02 缺口回归锚）', () => {
+        // 修复前：start 时读一次，运行中切换只落库、内存值不变——
+        // 「开着启动 → 下载完成 → 运行中关掉 → 退出仍被静默安装」
+        let autoCheck = true;
+        service.start({ autoCheckEnabled: () => autoCheck });
+        expect(updater.autoInstallOnAppQuit).toBe(true);
+
+        autoCheck = false; // 用户运行中关闭开关（只写库，autoInstallOnAppQuit 不自动变）
+        service.refreshAutoInstallOnAppQuit(); // 退出链重读
+        expect(updater.autoInstallOnAppQuit).toBe(false);
+      });
+
+      it('未注入开关读取器（缺省语义）：refresh 视为开启', () => {
+        service.start();
+        service.refreshAutoInstallOnAppQuit();
+        expect(updater.autoInstallOnAppQuit).toBe(true);
+      });
+    });
   });
 
   describe('toReleaseNotes', () => {

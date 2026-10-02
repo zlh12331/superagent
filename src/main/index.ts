@@ -568,6 +568,10 @@ app.on('before-quit', async (event) => {
   event.preventDefault();
   setQuitting();
   try {
+    // 退出时自动安装以退出时刻的开关为准（运行中切换 autoCheck 立即生效）——
+    // 必须在 disposeServices 之前：此后 getUpdateService() 取到的是 dispose 后
+    // 惰性新建的实例，开关读取器字段丢失（null → 缺省恒"允许"，修复失效）
+    serviceContainer.getUpdateService().refreshAutoInstallOnAppQuit();
     // 事件循环延迟监控先停（避免退出路径上仍产生告警样本）
     lagMonitor?.stop();
     lagMonitor = null;
