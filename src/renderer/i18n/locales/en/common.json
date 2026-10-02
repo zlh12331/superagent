@@ -323,6 +323,8 @@
     "skip": "Skip",
     "skipped": "Skipped",
     "responseFailed": "Failed to send approval response. Please retry.",
+    "timeoutHint": "Auto-rejects after {{minutes}} minutes of inactivity",
+    "expiresSoon": "Expiring soon",
     "stagePaths_one": "git add (stage {{count}} path)",
     "stagePaths_other": "git add (stage {{count}} paths)"
   },

@@ -323,6 +323,8 @@
     "skip": "跳过",
     "skipped": "已跳过",
     "responseFailed": "审批响应发送失败，请重试",
+    "timeoutHint": "{{minutes}} 分钟内未处理将自动拒绝",
+    "expiresSoon": "即将超时",
     "stagePaths_other": "git add（暂存 {{count}} 个路径）",
     "stagePaths_one": "git add（暂存 {{count}} 个路径）"
   },
