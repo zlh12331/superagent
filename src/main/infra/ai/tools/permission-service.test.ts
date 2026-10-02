@@ -105,10 +105,14 @@ describe('PermissionService', () => {
         toolName: 'mock_tool',
       });
 
-      // 决议 → onResolved
+      // 决议 → onResolved（38 号阶段 2：带决策结果）
       service.handleApprovalResponse('ap-1', true, false);
       await expect(requestPromise).resolves.toBe(true);
-      expect(onResolved).toHaveBeenCalledWith({ sessionId: 'session-1', approvalId: 'ap-1' });
+      expect(onResolved).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        approvalId: 'ap-1',
+        decision: 'approved',
+      });
       unsubscribe();
     });
 
