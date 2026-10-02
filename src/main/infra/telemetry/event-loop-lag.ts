@@ -125,9 +125,13 @@ export class EventLoopLagMonitor {
       return;
     }
     this.histogram.enable();
-    this.timer = setInterval(() => {
+    const timer = setInterval(() => {
       this.sample();
     }, this.intervalMs);
+    // 与 MemoryMonitor 同口径：unref 不阻塞应用退出（窗口关闭驻留托盘时，
+    // 该 5s 周期定时器不得阻止 Electron 的退出流程走完）
+    timer.unref();
+    this.timer = timer;
   }
 
   /**
