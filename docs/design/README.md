@@ -55,6 +55,7 @@
 | 35 | [界面缩放](35-ui-zoom-spec.md) | 已实施 |
 | 36 | [设置面缺口补全](36-settings-gaps-spec.md) | 已实施（审批通知/终端/快捷键/清空会话） |
 | 37 | [设置面补全二期](37-settings-gaps-2-spec.md) | 已实施（编辑器域/备份可见性） |
+| 38 | [Agent 回合 XState 编排化](38-agent-turn-xstate-spec.md) | 实施中（阶段 1：机器升级为编排者） |
 
 ## 三、治理
 
