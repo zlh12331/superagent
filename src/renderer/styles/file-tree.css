@@ -38,7 +38,7 @@
 
 .sft-title {
   font-family: var(--font-serif);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--sidebar-foreground);
 }
 
@@ -104,7 +104,7 @@
   background: var(--bg-elev);
   color: var(--text);
   font-family: var(--font-serif);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   line-height: 1.4;
   outline: none;
   box-shadow: 0 0 0 2px var(--accent-glow);
@@ -144,7 +144,7 @@
 
 .file-viewer-meta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   opacity: 0.8;
   letter-spacing: 0.02em;
@@ -160,12 +160,12 @@
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 .file-viewer-copy-btn:hover:not(:disabled) {
@@ -255,7 +255,7 @@
   padding: 40px 20px;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   text-align: center;
 }
 
@@ -264,7 +264,7 @@
 }
 
 .file-viewer-error-detail {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   opacity: 0.7;
   word-break: break-all;
   max-width: 480px;
@@ -290,12 +290,12 @@
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 .file-viewer-mode-btn:hover:not(:disabled) {
@@ -320,14 +320,14 @@
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: not-allowed;
   opacity: 0.5;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease,
-    opacity 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
 }
 
 .file-viewer-save-btn.dirty {
@@ -357,7 +357,7 @@
   background: var(--accent-soft);
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -501,12 +501,12 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
   color: var(--sidebar-foreground);
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.4;
   position: relative;
 }
@@ -523,7 +523,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-serif);
-  font-size: 13px;
+  font-size: var(--font-size-base);
 }
 
 /* 文件激活态：左侧 accent 光带 + 加粗 */
@@ -557,7 +557,7 @@
   width: 12px;
   height: 12px;
   color: var(--muted-foreground);
-  transition: transform 0.12s ease;
+  transition: transform var(--duration-fast) ease;
   flex-shrink: 0;
 }
 
@@ -588,7 +588,7 @@
 .ft-empty {
   padding: 4px 10px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   opacity: 0.6;
 }
@@ -612,14 +612,14 @@
 
 .ft-empty-title {
   font-family: var(--font-serif);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   color: var(--sidebar-foreground);
   margin: 0;
 }
 
 .ft-empty-desc {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   margin-top: 4px;
 }
@@ -628,7 +628,7 @@
 .vim-mode-badge {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   letter-spacing: 0.08em;
   padding: 1px 5px;
   border: 1px solid var(--border);
@@ -649,7 +649,7 @@
 .scanlines-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-boundary);
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,

@@ -37,7 +37,7 @@
 }
 
 .msg-role {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   font-family: var(--font-mono);
   margin-bottom: 5px;
@@ -202,7 +202,7 @@
   color: var(--accent);
   text-decoration: none;
   border-bottom: 1px solid var(--accent-glow);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--duration-fast) ease;
 }
 .msg-content a:hover {
   border-color: var(--accent);
@@ -299,7 +299,7 @@
   gap: 2px;
   margin-top: 4px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--duration-fast) ease;
 }
 
 .msg:hover .msg-actions {
@@ -327,13 +327,14 @@
   gap: 4px;
   touch-action: manipulation;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    box-shadow 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
 .msg-action-btn:hover {
-  background: var(--bg-elev-2);
+  /* hover 底色统一 L3 档（与 composer 域菜单一致，此前 L2 与其余档位分裂） */
+  background: var(--bg-elev-3);
   color: var(--text);
   box-shadow: var(--shadow-soft);
 }
@@ -354,7 +355,7 @@
 
 /* 消息列表内层：居中限宽 + 呼吸感间距 */
 .messages-inner {
-  max-width: 820px;
+  max-width: var(--content-w);
   margin: 0 auto;
   padding: 0 24px;
   display: flex;
@@ -364,5 +365,5 @@
 
 /* 消息入场动画 */
 .enter-anim {
-  animation: msgEnter 0.42s var(--ease-out) both;
+  animation: msgEnter var(--duration-reveal) var(--ease-out) both;
 }

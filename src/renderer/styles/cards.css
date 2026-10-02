@@ -9,9 +9,9 @@
   background: linear-gradient(180deg, var(--bg-elev), var(--bg-elev-2) 160%);
   position: relative;
   transition:
-    border-color 0.2s ease,
-    transform 0.2s var(--ease-out),
-    box-shadow 0.2s ease;
+    border-color var(--duration-state) ease,
+    transform var(--duration-state) var(--ease-out),
+    box-shadow var(--duration-state) ease;
 }
 
 /* 左侧状态光条 */
@@ -24,8 +24,8 @@
   width: 2px;
   background: var(--border-strong);
   transition:
-    background 0.25s ease,
-    box-shadow 0.25s ease;
+    background var(--duration-state) ease,
+    box-shadow var(--duration-state) ease;
 }
 
 .card:hover {
@@ -76,7 +76,7 @@ button.card-head {
 
 .card-status {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: var(--font-size-2xs);
   padding: 2px 8px;
   border-radius: var(--radius-lg);
   font-weight: 600;
@@ -131,7 +131,7 @@ button.card-head {
 
 .tool-card .card-head {
   cursor: pointer;
-  transition: background 0.18s ease;
+  transition: background var(--duration-fast) ease;
 }
 
 .tool-card .card-head:hover {
@@ -140,8 +140,8 @@ button.card-head {
 
 .tool-chev {
   transition:
-    transform 0.25s var(--ease-out),
-    color 0.25s ease;
+    transform var(--duration-state) var(--ease-out),
+    color var(--duration-state) ease;
   color: var(--text-faint);
 }
 
@@ -183,7 +183,7 @@ button.card-head {
   width: 2px;
   background: var(--accent);
   animation: runningBar 1.5s ease-in-out infinite;
-  z-index: 2;
+  z-index: var(--z-surface);
   pointer-events: none;
 }
 
@@ -197,9 +197,9 @@ button.card-head {
   height: 12px;
   background: var(--success);
   border-radius: calc(var(--radius) - 7px);
-  z-index: 2;
+  z-index: var(--z-surface);
   pointer-events: none;
-  animation: toolSettle 0.2s var(--ease-soft) both;
+  animation: toolSettle var(--duration-state) var(--ease-soft) both;
 }
 
 /* 失败（签名 R3）：左缘静态 error 条 */
@@ -211,7 +211,7 @@ button.card-head {
   bottom: 0;
   width: 2px;
   background: var(--error);
-  z-index: 2;
+  z-index: var(--z-surface);
   pointer-events: none;
 }
 
@@ -230,8 +230,8 @@ button.card-head {
   overflow: hidden;
   background: var(--bg-elev-2);
   transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color var(--duration-state) ease,
+    box-shadow var(--duration-state) ease;
 }
 
 .reasoning-block:hover {
@@ -247,7 +247,7 @@ button.card-head {
   cursor: pointer;
   background: var(--bg-elev-2);
   user-select: none;
-  transition: background 0.12s ease;
+  transition: background var(--duration-fast) ease;
 }
 
 .reasoning-head:hover {
@@ -255,7 +255,7 @@ button.card-head {
 }
 
 .reasoning-head .rh-chevron {
-  transition: transform 0.2s var(--ease-out);
+  transition: transform var(--duration-state) var(--ease-out);
   color: var(--text-faint);
 }
 
@@ -272,7 +272,7 @@ button.card-head {
 
 .reasoning-duration {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   font-family: var(--font-mono);
 }
@@ -290,7 +290,7 @@ button.card-head {
 
 .reasoning-block.open .reasoning-body {
   display: block;
-  animation: reasoningReveal 0.3s var(--ease-out);
+  animation: reasoningReveal var(--duration-reveal) var(--ease-out);
 }
 
 /* ── 审批卡 Diff 容器（表格样式统一在 styles/diff.css 的 DiffRowsTable）── */

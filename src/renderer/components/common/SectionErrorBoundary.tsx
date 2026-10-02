@@ -56,7 +56,7 @@ function SectionFallback({
     <div
       role="alert"
       data-testid="section-error-boundary"
-      className="bg-error/5 border-error/20 text-error flex flex-col items-center gap-2 rounded-md border px-4 py-6"
+      className="bg-error/5 border-error/20 text-error-text flex flex-col items-center gap-2 rounded-md border px-4 py-6"
     >
       <AlertTriangle className="size-5" strokeWidth={1.5} />
       <p className="text-xs leading-relaxed">{i18n.t('common.sectionLoadFailed')}</p>

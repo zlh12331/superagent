@@ -302,8 +302,8 @@ export function DiffPane({
                 variant="outline"
                 className={
                   change.status === 'error'
-                    ? 'text-error-text border-transparent font-mono text-[9px]'
-                    : 'text-success-text border-transparent font-mono text-[9px]'
+                    ? 'text-error-text border-transparent font-mono text-2xs'
+                    : 'text-success-text border-transparent font-mono text-2xs'
                 }
               >
                 {change.toolName === 'write_file' ? 'NEW' : 'EDIT'}

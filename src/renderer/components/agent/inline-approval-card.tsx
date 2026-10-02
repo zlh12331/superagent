@@ -50,7 +50,7 @@ function StatusBadge({ approved }: { readonly approved: boolean }): ReactElement
   return (
     <span
       className={cn(
-        'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
+        'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-2xs',
         approved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
       )}
     >

@@ -55,7 +55,9 @@ export function FileChangeCard({ toolName, input }: FileChangeCardProps): ReactE
   // 预构造带稳定 key 的行（diff 行无天然唯一 id：内容可重复；type+序号 组合保证稳定）
   const rows = lines.map((line, i) => ({ ...line, rowKey: `${line.type}:${i}` }));
   // 变更类型徽章：created（accent 软底）/ modified（蓝底）——纯语义令牌（照搬参考项目 FileChangeCard）
-  const badgeClass = isCreate ? 'bg-accent-soft text-accent-text' : 'bg-info-blue text-accent-2';
+  const badgeClass = isCreate
+    ? 'bg-accent-soft text-accent-text'
+    : 'bg-info-blue text-accent-2-text';
   const badgeText = isCreate ? t('chat.fileChange.created') : t('chat.fileChange.modified');
   const fileName = path.split(/[\\/]/).pop() ?? path;
 

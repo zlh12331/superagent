@@ -35,7 +35,7 @@ const TRANSPORT_OPTIONS: readonly McpTransport[] = ['stdio', 'sse', 'streamable-
 /** 状态徽章配色（键名与主进程 McpServerStatus 对齐，含 snake_case） */
 const STATUS_BADGE: Record<string, string> = {
   running: 'bg-success/10 text-success-text',
-  starting: 'bg-info-blue text-accent-2',
+  starting: 'bg-info-blue text-accent-2-text',
   error: 'bg-error/10 text-error-text',
   stopped: 'bg-muted text-muted-foreground',
   // biome-ignore lint/style/useNamingConvention: 键名与主进程状态枚举对齐（McpServerStatus 含 snake_case）

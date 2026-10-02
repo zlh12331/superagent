@@ -78,7 +78,7 @@ function ChannelBadge({ channel }: { readonly channel: string }): ReactElement {
   return (
     <span
       className={cn(
-        'rounded-full px-1.5 py-0.5 font-mono text-[10px]',
+        'rounded-full px-1.5 py-0.5 font-mono text-2xs',
         CHANNEL_CLASSES[channel] ?? 'bg-muted text-muted-foreground',
       )}
     >
@@ -100,8 +100,8 @@ function ReleaseNotes({ notes }: { readonly notes: string }): ReactElement {
   const visible = expanded ? lines : lines.slice(0, 3);
   return (
     <div className="flex w-full flex-col items-start gap-1">
-      <span className="text-muted-foreground text-[11px]">{t('update.notesTitle')}</span>
-      <p className="text-muted-foreground text-[11px] leading-[1.6] whitespace-pre-line">
+      <span className="text-muted-foreground text-xs">{t('update.notesTitle')}</span>
+      <p className="text-muted-foreground text-xs leading-[1.6] whitespace-pre-line">
         {visible.join('\n')}
       </p>
       {lines.length > 3 && (
@@ -186,7 +186,7 @@ function DownloadingBlock({ state, onCancel }: DownloadingBlockProps): ReactElem
         </Button>
       </div>
       <Progress value={percent} label={title} />
-      <span className="text-muted-foreground text-[11px] leading-[1.5]">
+      <span className="text-muted-foreground text-xs leading-[1.5]">
         {percent < 1 ? t('update.preparing') : detail}
       </span>
     </div>
@@ -547,7 +547,7 @@ export function AboutSection(): ReactElement {
             />
             {skippedVersion !== null && skippedVersion === updateState?.version && (
               <div className="flex items-center gap-1">
-                <span className="text-muted-foreground text-[11px]">
+                <span className="text-muted-foreground text-xs">
                   {t('settings.aboutSkipped', { version: skippedVersion })}
                 </span>
                 <Button
@@ -560,7 +560,7 @@ export function AboutSection(): ReactElement {
               </div>
             )}
             {lastCheckAt !== null && (
-              <span className="text-muted-foreground text-[11px]">
+              <span className="text-muted-foreground text-xs">
                 {t('settings.aboutLastCheck', {
                   time: formatDateTime(lastCheckAt, i18n.language),
                 })}

@@ -157,7 +157,7 @@ export function SkillsSection(): ReactElement {
           <SectionTitle>{t('settings.skillBuiltinTitle')}</SectionTitle>
           {builtinSkills.map((skill) => (
             <SettingRow key={skill.name} label={skill.name} description={skill.description}>
-              <span className="text-muted-foreground/60 font-mono text-[9px]">
+              <span className="text-muted-foreground/60 font-mono text-2xs">
                 {t('settings.skillBuiltin')}
               </span>
             </SettingRow>

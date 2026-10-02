@@ -14,12 +14,13 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--duration-fast) ease;
 }
 
 .fuzzy-result[aria-selected="true"] {
-  border-left-color: var(--accent);
-  background: var(--bg-elev-2);
+  /* 选中态统一配方：品牌淡底 + inset 左条（border 换 inset shadow 不占布局宽） */
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .fuzzy-result-body {
@@ -31,7 +32,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text);
 }
 
@@ -56,7 +57,7 @@
   justify-content: center;
   padding-top: 12vh;
   z-index: var(--z-modal);
-  animation: fadein 0.15s ease;
+  animation: fadein var(--duration-fast) ease;
 }
 
 .palette-overlay.show {
@@ -71,7 +72,7 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-modal);
   overflow: hidden;
-  animation: modalin 0.2s var(--ease-out);
+  animation: modalin var(--duration-state) var(--ease-out);
 }
 
 .palette-input-wrap {
@@ -126,18 +127,18 @@
   background: none;
   border: none;
   cursor: pointer;
-  transition: background 0.1s ease;
+  transition: background var(--duration-fast) ease;
   text-align: left;
 }
 
-.palette-item:hover,
-.palette-item.active,
-.palette-item[data-selected="true"] {
-  background: var(--bg-elev-2);
+.palette-item:hover {
+  background: var(--bg-elev-3);
 }
 
 .palette-item.active,
 .palette-item[data-selected="true"] {
+  /* 选中态统一配方：品牌淡底 + inset 左条 */
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 

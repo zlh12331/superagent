@@ -53,7 +53,7 @@ export function TelemetrySection(): React.ReactElement {
               )}
             >
               <span className="font-serif text-xs tracking-wide">{option.label}</span>
-              <span className="text-[9px] text-muted-foreground">{option.desc}</span>
+              <span className="text-2xs text-muted-foreground">{option.desc}</span>
             </Button>
           );
         })}

@@ -214,7 +214,7 @@ function GitPushPreview({ input }: { readonly input: unknown }): ReactElement {
       <span className="ml-1">{`git push${setUpstream ? ' -u' : ''}${force ? ' --force-with-lease' : ''} ${target}`}</span>
       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
         {setUpstream && (
-          <span className="rounded bg-info-blue px-1.5 py-0.5 text-2xs text-accent-2">
+          <span className="rounded bg-info-blue px-1.5 py-0.5 text-2xs text-accent-2-text">
             {t('approval.setUpstream')}
           </span>
         )}

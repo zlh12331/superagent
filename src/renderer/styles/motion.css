@@ -20,13 +20,13 @@
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-pop);
-  z-index: 10;
+  z-index: var(--z-raised);
   touch-action: manipulation;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
 .scroll-to-bottom.visible {
@@ -81,7 +81,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   position: absolute;
   top: 50%;
   right: 0;
-  z-index: 5;
+  z-index: var(--z-raised);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -91,7 +91,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   opacity: 0;
   pointer-events: none;
   transform: translate(4px, -50%);
-  animation: jump-bar-in 0.18s ease-out 0.08s forwards;
+  animation: jump-bar-in var(--duration-fast) ease-out 0.08s forwards;
 }
 
 /* biome-ignore lint/style/noDescendingSpecificity: body:has(dialog) 变体仅设 visibility，与基础布局属性无声明冲突 */

@@ -123,10 +123,11 @@ export function DialogHost(): React.ReactElement | null {
   const cancelText = confirmOpts?.cancelText ?? promptOpts?.cancelText ?? t('common.cancel');
   const danger = confirmOpts?.danger ?? false;
 
-  // 确认按钮样式：danger → 实底强调红（--error-emphasis 双主题锁定白字 CR≥4.5）；否则 accent 色
+  // 确认按钮样式：danger → 实底强调红（--error-emphasis 双主题锁定白字 CR≥4.5）；否则品牌实底
+  // （--accent 暗色提亮为图形可见性后白字仅 3.94:1 不达 AA，用 --primary 暗色深档 #5D62FF 的 4.51）
   const confirmButtonClass = danger
     ? 'bg-error-emphasis text-destructive-foreground hover:bg-error-emphasis/90'
-    : 'bg-accent text-on-accent hover:bg-accent-dim';
+    : 'bg-primary text-primary-foreground hover:bg-accent-dim';
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
@@ -139,7 +140,7 @@ export function DialogHost(): React.ReactElement | null {
       >
         {/* Header — 标题 */}
         <AlertDialogHeader className="border-border flex flex-row items-center gap-2.5 border-b px-4 py-3.5">
-          <AlertDialogTitle className="text-foreground text-[14px] font-semibold">
+          <AlertDialogTitle className="text-foreground text-md font-semibold">
             {title}
           </AlertDialogTitle>
         </AlertDialogHeader>
@@ -147,7 +148,7 @@ export function DialogHost(): React.ReactElement | null {
         {/* Body — 正文描述或输入框 */}
         <div className="px-4 py-3.5">
           {confirmOpts != null && (
-            <AlertDialogDescription className="text-muted-foreground text-[13px] leading-[1.6]">
+            <AlertDialogDescription className="text-muted-foreground text-base leading-[1.6]">
               {confirmOpts.message}
             </AlertDialogDescription>
           )}
@@ -156,7 +157,7 @@ export function DialogHost(): React.ReactElement | null {
               {/* 输入框标签（htmlFor 关联，辅助技术可正确读出标签内容） */}
               <label
                 htmlFor="dialog-prompt-input"
-                className="text-muted-foreground mb-1.5 block font-mono text-[10px] tracking-[0.08em] uppercase"
+                className="text-muted-foreground mb-1.5 block font-mono text-2xs tracking-[0.08em] uppercase"
               >
                 {promptOpts.label}
               </label>

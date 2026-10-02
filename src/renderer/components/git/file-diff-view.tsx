@@ -68,7 +68,7 @@ export function FileDiffView({
 
         {/* 增删统计（git numstat 口径，与状态徽标一致） */}
         {stats !== null && (
-          <div className="flex shrink-0 items-center gap-1.5 text-[9px]">
+          <div className="flex shrink-0 items-center gap-1.5 text-2xs">
             <span className="text-success-text">+{stats.additions}</span>
             <span className="text-error-text">-{stats.deletions}</span>
           </div>

@@ -101,7 +101,8 @@
 
 .diff-more:hover {
   color: var(--text-secondary);
-  background: var(--bg-elev-2);
+  /* hover 底色统一 L3 档（与 composer 域菜单一致） */
+  background: var(--bg-elev-3);
 }
 
 .diff-more:focus-visible {

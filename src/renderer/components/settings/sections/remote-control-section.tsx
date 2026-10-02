@@ -118,7 +118,7 @@ function PairingCard({
 function HeadlessModeWarning({ mode }: { readonly mode: string }): ReactElement {
   const { t } = useTranslation();
   return (
-    <div className="text-warning bg-warning/10 border-warning/30 flex items-start gap-2 rounded-lg border px-3 py-2">
+    <div className="text-warn-text bg-warning/10 border-warning/30 flex items-start gap-2 rounded-lg border px-3 py-2">
       <ShieldAlert className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.5} />
       <span className="text-2xs leading-relaxed">{t('settings.remote.modeWarning', { mode })}</span>
     </div>

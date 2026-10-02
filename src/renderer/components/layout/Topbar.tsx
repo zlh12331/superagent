@@ -120,7 +120,7 @@ export function Topbar({
         >
           <Search className="size-3" strokeWidth={1.5} />
           <span>{t('topbar.commandPalette')}</span>
-          <kbd className="text-muted-foreground font-mono text-[9px]">{paletteKbd}</kbd>
+          <kbd className="text-muted-foreground font-mono text-2xs">{paletteKbd}</kbd>
         </Button>
         {/* 更新指示（下载中/就绪时才出现；点击直达关于面板或操作菜单） */}
         <UpdateIndicator />

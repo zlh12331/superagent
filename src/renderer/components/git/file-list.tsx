@@ -57,7 +57,7 @@ export function FileList({ files, selectedFilePath, onSelect }: FileListProps): 
               >
                 {file.path}
               </span>
-              <span className={cn('text-[9px] shrink-0', meta.labelClassName)}>{label}</span>
+              <span className={cn('text-2xs shrink-0', meta.labelClassName)}>{label}</span>
             </Button>
           </li>
         );
