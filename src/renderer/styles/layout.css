@@ -584,7 +584,8 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--accent);
+  /* --accent-text：基色 --accent 作暗色首字母文字仅 3.84，文本层 6.29 */
+  color: var(--accent-text);
   border: 1px solid var(--border);
   flex-shrink: 0;
 }

@@ -174,8 +174,8 @@
 }
 
 .fdm-item.active {
-  /* 选中态统一配方：品牌文字 + 品牌淡底 + inset 左条（此前仅变文字色，扫视不易定位） */
-  color: var(--accent);
+  /* 选中态统一配方：品牌淡底 + inset 左条（文字保持中性 --text，与
+     fuzzy/palette 选中态同款——暗色彩字压菜单灰底仅 3.5，不到 AA） */
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
@@ -224,7 +224,8 @@
   border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   font-size: var(--font-size-sm);
-  color: var(--accent);
+  /* --accent-text：基色 --accent 作暗色菜单文字仅 3.84，文本层 6.29 */
+  color: var(--accent-text);
   transition: background var(--duration-fast) ease;
   border-top: 1px solid var(--border);
   margin-top: 2px;
@@ -317,8 +318,7 @@
 }
 
 .model-item.active {
-  color: var(--accent);
-  /* var() 后直接接 / 8% 是非法语法，声明曾被浏览器整条丢弃——选中背景从未渲染 */
+  /* 同 fdm-item.active：淡底 + 左条承载选中，文字保持中性 */
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
@@ -576,13 +576,15 @@
   transform: none;
 }
 
-/* 停止生成按钮：error 色 + 发光 */
+/* 停止生成按钮：error 色实底 + 白字
+   实底用 --error-emphasis（令牌注释明文规定「实底+白字用 emphasis」：
+   基色 --error 配白字仅 3.91，emphasis 4.57 达 AA） */
 .stop-gen-btn {
   width: 34px;
   height: 34px;
   border-radius: var(--radius);
   border: none;
-  background: var(--error);
+  background: var(--error-emphasis);
   color: var(--color-destructive-foreground);
   cursor: pointer;
   display: flex;

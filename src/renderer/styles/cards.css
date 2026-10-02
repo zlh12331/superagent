@@ -83,8 +83,10 @@ button.card-head {
   letter-spacing: 0.04em;
 }
 
+/* 状态色由底色承载、文字保持中性 --text：彩色小字（10px/600）压浅灰卡头
+   在双主题都到不了 AA 4.5（基色实测 2.19-3.8，*-text 深色层也仅 3.6-4.4），
+   色相语义交给徽章底色（对齐 fuzzy/palette 选中态「色由底承载」配方） */
 .card-status.running {
-  color: var(--accent);
   background: var(--accent-glow);
   position: relative;
 }
@@ -102,17 +104,15 @@ button.card-head {
 }
 
 .card-status.success {
-  color: var(--accent);
-  background: var(--accent-soft);
+  /* 回归绿色语义（此前误用品牌紫，与 running 徽章近乎同色难分辨） */
+  background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 .card-status.error {
-  color: var(--error);
   background: var(--error-bg);
 }
 
 .card-status.pending {
-  color: var(--warning);
   background: var(--info-amber);
 }
 

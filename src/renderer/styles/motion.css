@@ -153,8 +153,12 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   outline: none;
 }
 
-.jump-item:focus-visible .jump-dot {
-  box-shadow: 0 0 0 3px var(--accent-soft);
+/* 焦点环走 2px --ring outline（对齐 cpb-select / diff-more 的 focus-visible 写法）：
+   原 3px --accent-soft（4% alpha）box-shadow 实测不可感知，键盘用户找不到焦点 */
+.jump-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
 
 .jump-dot[data-d="0"] {

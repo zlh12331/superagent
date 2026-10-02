@@ -24,10 +24,13 @@
   display: none;
 }
 
-/* 助手头像：TraeWork C3 实心 accent（禁双 accent 渐变/外发光） */
+/* 助手头像：实心品牌方（禁双 accent 渐变/外发光）。
+   实底+白字场景按令牌分工用 --primary（暗色深档 #5D62FF 白字 4.51 达 AA；
+   原 --accent 暗色 #6A6FFF 配任何前景最高仅 3.94），与 send-btn/new-thread-btn
+   同配方。原 --ink 墨色字亮色对 accent 仅 2.73，已随实底统一迁白 */
 .msg-avatar.assistant {
-  background: var(--accent);
-  color: var(--ink);
+  background: var(--primary);
+  color: var(--on-accent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
 }
 

@@ -260,7 +260,8 @@
 }
 
 .file-viewer-error {
-  color: var(--error);
+  /* --error-text：基色 --error 对 --bg-elev 仅 3.59，文本层 4.66 */
+  color: var(--error-text);
 }
 
 .file-viewer-error-detail {
@@ -633,14 +634,18 @@
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 4px);
+  /* chip 化配 --bg 底：与相邻 kbd 同配方，也使 insert 绿字对白底达 AA
+     （透明底压 --bg-elev-2 时 --success-text 仅 4.35，白底 5.08） */
+  background: var(--bg);
   color: var(--muted-foreground);
   margin-right: 6px;
   user-select: none;
 }
 
 .vim-mode-badge.insert {
-  color: var(--success);
-  border-color: var(--success);
+  /* 文字/描边用 --success-text：基色 --success 对浅灰面仅 2.79，文本层亮色 5.08 */
+  color: var(--success-text);
+  border-color: var(--success-text);
 }
 
 /* ── 实验功能：扫描线视觉叠加（settings.experimental.scanlines）── */
