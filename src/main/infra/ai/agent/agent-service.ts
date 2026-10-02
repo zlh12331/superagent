@@ -39,22 +39,18 @@ import {
   TurnEventType,
   turnEndInvalidationDomains,
 } from '@code-agent/shared/main';
-import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { broadcastInvalidation } from '../../invalidation/invalidation';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
-import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { TurnEventEmitter } from '../agent-runtime';
-import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
+import type { createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { ActiveSessionRegistry } from '../agent-runtime/active-session-registry';
 import { createAgentTurnActor, type TurnDeps } from '../agent-runtime/agent-turn-machine';
 import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
-import { createStreamWithRetry } from '../agent-runtime/create-stream';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../agent-runtime/stream-reader';
-import { TurnRunner, type TurnRunResult } from '../agent-runtime/turn-runner';
+import type { TurnRunResult } from '../agent-runtime/turn-runner';
 import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
 import { buildAssistantTurnMessages } from '../agent-runtime/turn-transcript';
 import type { ITitleGenerator } from '../knowledge/session-title';
@@ -63,8 +59,9 @@ import {
   firstUserMessageText,
   lastUserMessageText,
 } from '../knowledge/session-title';
-import { getModel } from '../llm-client/ai-provider';
 import type { LlmClient } from '../llm-client/llm-client';
+// ⚠️ buildGenerationOptions 必须从 '../models' 桶出口导入：测试 mock 缝在该模块
+// （vi.mock('../models')），直连 generation-options 会绕过 mock（实测 22 测试红）
 import { buildGenerationOptions, modelRegistry } from '../models';
 import type { GenerationOptions } from '../models/generation-options';
 import type { ResolvedModel } from '../models/types';
@@ -80,9 +77,9 @@ import {
   getCompactionBudget,
   getTokenBudgetDecision,
 } from './context-compression';
-import { createRepairToolCall } from './repair-tool-call';
 import { createTurnPartForwarder } from './stream-part-forward';
 import { resolveTokenBudgetBasis } from './token-overhead';
+import { assembleAndRunTurn } from './turn-assembly';
 import { subscribeApprovalLifecycle, subscribeTurnAccumulators } from './turn-subscriptions';
 import type { SdkTotalUsageLike } from './turn-usage-report';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
@@ -500,19 +497,6 @@ export class AgentService implements IAgentService {
             if (resolved === undefined) {
               throw new Error('回合装配状态缺失（结构上不可达的防御分支）');
             }
-            // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
-            const model = await getModel(undefined);
-
-            // 模型级容错（P0-1）：总时长超时（声明提升至回合作用域；有效信号组合）
-            modelTimeout =
-              resolved.generationConfig?.timeoutMs !== undefined
-                ? createTimeoutSignal(resolved.generationConfig.timeoutMs)
-                : undefined;
-            const effectiveAbortSignal = combineAbortSignals([
-              controller.signal,
-              modelTimeout?.signal,
-            ]);
-
             // 回合事件仅内部消费：类级监听器（onTurnEvent，供记忆捕获）与
             // TEXT_DELTA 累积（落库）订阅；不再向渲染层 IPC 推送——渲染层
             // 流式渲染走 agent:stream:part，回合历史走 session:getTurns 拉取
@@ -528,24 +512,20 @@ export class AgentService implements IAgentService {
             // 用户消息落库（回合开始）：失败静默（见方法注释）
             this.persistUserMessageQuietly(sessionId, turnId, options);
 
-            // 1.5 解析 System Prompt
-            //     - 调用方传了 systemPrompt：直接用（用户显式覆盖）
-            //     - 调用方未传 systemPrompt：调用 PromptService.resolvePrompt 注入默认 Code Agent prompt
-            //       内部会从数据库读取模板 + 注入动态上下文（workingDir / git / AGENTS.md 等）
-            //     - 失败容忍：PromptService 内部已处理回退（DB 失败 → 硬编码默认值）
-            //     - P2-32：调用方（agent.handler 记忆召回链）已解析的基础 prompt 直接
-            //       复用，同回合内不二次 resolvePrompt
+            // 1.5 解析 System Prompt（P2-32：调用方已解析时复用，同回合不二次 resolve；
+            //     失败容忍：PromptService 内部已回退硬编码默认值）
             let systemPrompt = options.systemPrompt;
             if (systemPrompt === undefined) {
-              const resolved = await this.resolveSystemPrompt(options);
-              systemPrompt = resolved.content;
-              logger.debug({ sessionId, source: resolved.source }, '已加载默认 Code Agent prompt');
+              const resolvedPrompt = await this.resolveSystemPrompt(options);
+              systemPrompt = resolvedPrompt.content;
+              logger.debug(
+                { sessionId, source: resolvedPrompt.source },
+                '已加载默认 Code Agent prompt',
+              );
             }
 
-            // 2. 构造工具执行基础上下文（每次对话独立，闭包捕获 sessionId / workingDir / abortSignal / webContents）
-            //    messageId / callId 由每次工具调用时动态填充
-            //    mode：plan 模式下 ToolExecutor 会拒绝所有写操作（只读探索）
-            //    userPrompt：权限决策用（意图豁免破坏性拦截）
+            // 装配 + 消费（38 号：提取至 turn-assembly.ts——模型实例/超时信号/
+            // 预算/streamText/TurnRunner/usage；超时与空回复归因在机器 deciding）
             const userPrompt = lastUserMessageText(options.messages);
             const baseCtx = {
               workingDir: options.workingDir,
@@ -556,9 +536,6 @@ export class AgentService implements IAgentService {
               // 用户原始 prompt（权限决策：意图豁免破坏性拦截）
               ...(userPrompt !== undefined ? { userPrompt } : {}),
             };
-
-            // 3. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute；
-            //    内部流程/失败不抛错理由见 buildToolExecuteHook 注释）
             const tools = this.toolRegistry.toAISDKTools(
               baseCtx,
               this.buildToolExecuteHook({
@@ -569,119 +546,44 @@ export class AgentService implements IAgentService {
                 transcriptEntries,
               }),
             );
-
-            // 4. 启动 streamText（带 tools + stopWhen，自动多轮工具调用循环）
-            //    AI SDK v7 用 stopWhen 替代旧版 maxSteps：
-            //    - isStepCount(n) 创建步数限制条件，n 表示 LLM 调用工具的轮数上限
-            //    - 超过 n 轮后 streamText 自动停止，避免无限循环消耗 token
-            //
-            //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
-            //    条件展开：systemPrompt 为 undefined 时不传 system 字段
-            //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
-            // 4. 生成参数与上下文预算（预算决策/压缩/采样参数解析见 resolveTurnGeneration）
-            const { compressedMessages, genOptions } = this.resolveTurnGeneration({
-              sessionId,
-              messages: options.messages,
-              thinking: options.thinking,
-              temperature: options.temperature,
-              resolvedModel: resolved,
-              systemPrompt,
-              span,
-            });
-
-            // 5+6. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；
-            //    首 part 成功后不重试——流中错误重试会重复工具副作用）
-            //
-            //    重试分层（避免嵌套放大请求数）：
-            //    - model call 级：SDK maxRetries（下方显式传入），每一步都生效，
-            //      含工具调用之后的步骤；SDK 自带指数退避并尊重 retry-after 头
-            //    - 请求级：createStreamWithRetry 只兜 SDK 覆盖不到的传输层失败
-            const created = await createStreamWithRetry({
-              create: () =>
-                streamText({
-                  model,
-                  messages: compressedMessages,
-                  allowSystemInMessages: true,
-                  ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-                  ...genOptions.samplingOptions,
-                  ...(genOptions.maxOutputTokens !== undefined
-                    ? { maxOutputTokens: genOptions.maxOutputTokens }
-                    : {}),
-                  ...(genOptions.providerOptions !== undefined
-                    ? { providerOptions: genOptions.providerOptions }
-                    : {}),
-                  tools,
-                  stopWhen: isStepCount(options.maxSteps),
-                  // model call 级重试真源：模型级 maxRetries（默认 2 次重试 = 3 次尝试）
-                  maxRetries: resolved.generationConfig?.maxRetries ?? 2,
-                  ...(effectiveAbortSignal !== undefined
-                    ? { abortSignal: effectiveAbortSignal }
-                    : {}),
-                  // 工具入参自动修复（SDK v7 repairToolCall 钩子）：
-                  // LLM 生成非法工具入参（zod 校验失败）时用轻量 LLM 调用重生成，
-                  // 避免 parse 阶段失败导致工具调用静默丢弃。未注入 llmClient 时不启用。
-                  ...(this.llmClient !== undefined
-                    ? {
-                        repairToolCall: createRepairToolCall({
-                          llmClient: this.llmClient,
-                          modelId: resolved.modelId,
-                          ...(effectiveAbortSignal !== undefined
-                            ? { signal: effectiveAbortSignal }
-                            : {}),
-                        }),
-                      }
-                    : {}),
-                  // 模型级遥测（SDK telemetry integration）：在回合 span 之下自动
-                  // 生成单次 LLM 调用 span（latency / usage / finishReason）。
-                  // integration 内部对未初始化 OTel（getTracer 为 null）判空跳过。
-                  telemetry: { integrations: [createSdkTelemetryIntegration()] },
-                }),
-              controller,
-              // 请求级尝试次数走 createStreamWithRetry 默认值：与 SDK 的 model call
-              // 级重试互不重叠（仅兜传输层失败），不再由 maxRetries 换算
-            });
-            const uiStream = created.stream;
-
-            // 7. 回合执行（TurnRunner：读流 → 翻译 → 事件产出 → 统计）
-            //    不感知 webContents / DB：事件经 emitter 产出，由订阅回调推送；
-            //    流空闲超时在 TurnRunner 内守卫（复用 stream-reader）
-            const runner = new TurnRunner({
+            const output = await assembleAndRunTurn({
               sessionId,
               turnId,
-              modelId: resolved.modelId,
+              resolvedModel: resolved,
+              options,
               controller,
-              emitter: turnEmitter,
-              idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-              // 请求级重试链路：首 part 已预读，TurnRunner 接续消费（复用 reader）
-              firstPart: created.firstPart,
-              // 模型级超时归因：combinedAbortSignals 把超时与用户中断折叠成同一
-              // abort 形态，TurnRunner 借此回调区分二者（timeout 走错误出口，
-              // aborted 走中断出口）
-              ...(modelTimeout !== undefined
-                ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
-                : {}),
-              // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
-              onPart: (part) => {
+              turnEmitter,
+              transcriptEntries,
+              onRawPart: () => {
                 rawPartCount += 1;
-                // 思考过程转录（SDK reasoning-delta；TOOL_* 走事件订阅，见 executeHook）
-                if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
-                  transcriptEntries.push({ kind: 'reasoning', text: part.delta });
-                }
-                // P2-31：text-delta 进合帧缓冲，其余 part 落地缓冲后立即透传（保序）
+              },
+              pushPart: (part) => {
                 partForwarder.push(part);
               },
+              resolveGeneration: (prompt, spanRef) =>
+                this.resolveTurnGeneration({
+                  sessionId,
+                  messages: options.messages,
+                  thinking: options.thinking,
+                  temperature: options.temperature,
+                  resolvedModel: resolved,
+                  systemPrompt: prompt,
+                  span: spanRef as import('@opentelemetry/api').Span | undefined,
+                }),
+              systemPrompt,
+              tools,
+              llmClient: this.llmClient,
+              span,
             });
-            const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
-            const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
             // 超时/空回复/中断/完成的归因与收尾：由机器 deciding 决策链按序裁决
             // （guards：isTimeout ▶ isEmptyResponse ▶ isAborted ▶ completed，见机器文件头；
             // 超时/空回复的 AppError 亦在机器内构造——本方法不再人工排序）
             return {
-              reason: runResult.reason,
-              durationMs: runResult.durationMs,
+              reason: output.reason,
+              durationMs: output.durationMs,
               rawPartCount,
-              usage,
-              timeoutSignalAborted: modelTimeout?.signal.aborted === true,
+              usage: output.usage,
+              timeoutSignalAborted: output.timeoutSignalAborted,
             };
           },
           finalizeCompleted: (output) => {

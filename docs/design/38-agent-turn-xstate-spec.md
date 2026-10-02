@@ -122,6 +122,6 @@ agent-service.ts 预期净行从 683 降至约 450（file-size 棘轮只紧不�
 | 提交 | 内容 | 状态 |
 |---|---|---|
 | 1 | 本 spec | ✅ |
-| 2 | 机器重写（setup/层级/invoked/guards）+ 全表断言迁移 | 待做 |
-| 3 | 宿主切换（streamToWebContents 骨架下沉）+ 既有测试适配 | 待做 |
+| 2 | 机器重写（setup/层级/invoked/guards）+ 全表断言迁移 | ✅（含 v5 实测三坑记录：invoke.input 显式传 / onError 事件 type 实值含 actor id / actor 调度跨宏任务） |
+| 3 | 宿主切换（runTurnStream = 效果提供者）+ 装配段提取 turn-assembly.ts（agent-service 净行 705→657，complexity 基线条目删除） | ✅ |
 | 4（后续） | 阶段 2：暂停/恢复 + 并行子任务 | 未立项 |
