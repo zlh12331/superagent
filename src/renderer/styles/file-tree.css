@@ -444,9 +444,10 @@
   overflow: auto;
 }
 
-/* 选中文本时的高亮（让用户看到选择范围） */
+/* 选中文本时的高亮（让用户看到选择范围）：30% 对齐 --terminal-selection 的
+   可见性校准；原 --accent-glow 仅 8%，代码底色上几乎不可辨 */
 .file-viewer-editor-textarea::selection {
-  background: var(--accent-glow);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text);
 }
 

@@ -144,9 +144,10 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   border-radius: calc(var(--radius) - 6px);
   background: var(--border);
   transition:
-    background 200ms,
-    width 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 150ms;
+    background var(--duration-state),
+    /* 400ms spring 超出三档时长令牌范围，是磁性横条的弹性特征值，保留字面量 */ width 400ms
+    cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow var(--duration-fast);
 }
 
 .jump-item:focus {

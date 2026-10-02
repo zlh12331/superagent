@@ -169,9 +169,11 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
+  /* 透明边留白收窄拇指，background-clip 让留白真正透出所在面板底色——
+     原 border 用 --background 实色，在灰底面板（侧栏/右面板）上露出异色框线 */
+  border: 2px solid transparent;
+  background-clip: padding-box;
   border-radius: calc(var(--radius) - 4px);
-  /* 两侧留白，模拟纸张边缘 */
-  border: 2px solid var(--background);
 }
 
 ::-webkit-scrollbar-thumb:hover {
