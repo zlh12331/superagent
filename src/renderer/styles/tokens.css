@@ -4,13 +4,12 @@
   --sidebar-w: clamp(200px, 17vw, 280px);
   --right-panel-w: clamp(260px, 22vw, 360px);
   --resizer-w: 0px;
-  --drawer-w: 540px;
   --topbar-h: 52px;
   /* 聊天内容列最大宽（此前魔法数跨 chat/composer 两个文件散写 3 处） */
   --content-w: 820px;
   /* 欢迎态输入舱最大宽（此前魔法数跨 composer/welcome 两个文件散写 4 处） */
   --content-w-narrow: 720px;
-  /* z-index 层级体系 — 从低到高（surface < popover < modal < toast < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌 */
+  /* z-index 层级体系 — 从低到高（surface < popover < modal < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌。toast 不设档：sonner 用库默认层级，气泡语义不参与应用内 stacking context 竞争 */
   --z-base: 1;
   /* 面板内容之上的行内浮层（进度条/斜杠建议面板等，同一 stacking context 内竞争） */
   --z-surface: 2;
@@ -20,8 +19,6 @@
   --z-popover: 50;
   /* 强制顶层模态（AskDialog 等需压过一切浮层的场景） */
   --z-modal: 100;
-  /* 通知层（sonner） */
-  --z-toast: 110;
   /* 层级边界值（skip-link 聚焦等不遮挡内容的最高层） */
   --z-boundary: 999;
   --sans: var(--font-sans);
@@ -125,8 +122,6 @@
   --destructive-foreground: #FFFFFF;
   /* TraeWork --accent-violet */
   --magenta: #9570FF;
-  /* 品牌墨色（accent 渐变上的头像字色 / 勾选对号等高对比墨色细节）；双主题同值 */
-  --ink: #001814;
   /* 文学棕（::selection 墨水印迹 / blockquote 底色等文学风效果层基色；效果层用 color-mix(var(--ink-brown) N%, transparent) 引用，alpha 留在使用处） */
   --ink-brown: #8B4513;
   /* TraeWork --status-success-default（基色：图形/边框/氛围；实底+白字用 --success-emphasis） */
@@ -135,21 +130,13 @@
   --success-emphasis: #047857;
   /* 成功文本绿（亮色用深档保 4.5:1；暗色对黑底复用基色即达标） */
   --success-text: #047857;
-  /* 图表色 */
-  --chart-1: var(--accent);
-  --chart-2: var(--accent-2);
-  --chart-3: var(--amber);
-  --chart-4: var(--success);
-  --chart-5: var(--error);
   /* 消息气泡 — TraeWork --bg-base-secondary */
   --msg-bubble-user: #F5F5F5;
-  --msg-bubble-assistant: transparent;
   /* 遮罩 / 玻璃 */
   --overlay-bg: rgba(0, 0, 0, 0.25);
   /* 命令/代码块深色背景（双主题一致，终端风格） */
   --code-block-bg: #070A0E;
   --overlay-blur: 8px;
-  --drawer-overlay: rgba(245, 245, 245, 0.55);
   --glass-bg: rgba(255, 255, 255, 0.85);
   /* 滚动条令牌 */
   --scrollbar-thumb: rgba(115, 115, 115, 0.15);
@@ -260,7 +247,6 @@
   --msg-bubble-user: #262626;
   /* 遮罩 / 玻璃 */
   --overlay-bg: rgba(0, 0, 0, 0.5);
-  --drawer-overlay: rgba(10, 10, 10, 0.55);
   --glass-bg: rgba(23, 23, 23, 0.85);
   /* 滚动条令牌 */
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);

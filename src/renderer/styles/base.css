@@ -65,11 +65,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -112,10 +107,6 @@
    * 用法：Tailwind 工具类 text-on-accent / bg-on-accent / border-on-accent
    */
   --color-on-accent: var(--on-accent);
-
-  /* 品牌墨色（tokens/aurora.json → --ink）：accent 渐变上的头像字色、勾选对号等
-   * 高对比墨色细节；双主题同值。用法：text-ink / bg-ink / css 内 var(--ink) */
-  --color-ink: var(--ink);
 
   /* 字体族映射到 Tailwind 工具类 */
   --font-sans: var(--font-sans);
@@ -201,33 +192,11 @@ body {
 
 /* .prose-literacy 已删除（TSX 零引用；非设计轴，见 design-identity 残留表） */
 
-/* ProseMirror 焦态 */
-.ProseMirror:focus {
-  outline: none;
-}
-
 /* ──────────────────────────────────────────────────────────────
    动画 · 纸张呼吸感（用于状态指示器脉冲）
    ────────────────────────────────────────────────────────────── */
 .animate-pulse-soft {
   animation: pulse-soft 2s var(--ease-soft) infinite;
-}
-
-/* 章节激活态墨水条标记 */
-.chapter-ink-mark {
-  position: relative;
-}
-
-.chapter-ink-mark::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 16px;
-  background: var(--primary);
-  border-radius: calc(var(--radius) - 7px);
 }
 
 /* 纸张纹理 · TraeWork（安静表面，无装饰渐变） */

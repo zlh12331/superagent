@@ -108,16 +108,6 @@
   padding: 6px 0;
 }
 
-.palette-section {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--muted-foreground);
-  padding: 10px 16px 4px;
-  font-weight: 600;
-}
-
 .palette-item {
   display: flex;
   align-items: center;

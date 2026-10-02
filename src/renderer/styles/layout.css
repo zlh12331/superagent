@@ -374,19 +374,6 @@
   justify-content: space-between;
 }
 
-.thread-group-label .group-action {
-  cursor: pointer;
-  font-family: var(--font-mono);
-  text-transform: none;
-  letter-spacing: 0;
-  opacity: 0.7;
-}
-
-.thread-group-label .group-action:hover {
-  opacity: 1;
-  color: var(--primary);
-}
-
 /* 文件夹标签 */
 /* 单元格：flex 同行布局——folder-label（折叠+图标+名称）与 fl-add-btn（+号）水平排列，
    默认 block 会让两个按钮垂直堆叠（+号落到名称下一行，2026-09-04 修复） */
@@ -577,7 +564,8 @@
   width: 28px;
   height: 28px;
   border-radius: calc(var(--radius) - 1px);
-  background: linear-gradient(135deg, var(--sidebar-accent), var(--secondary));
+  /* 平色（原 135deg 渐变两端在双主题下同为 --bg-elev-2，渲染即平色） */
+  background: var(--sidebar-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -667,10 +655,6 @@
 body.resizing {
   cursor: col-resize;
   user-select: none;
-}
-
-body.resizing iframe {
-  pointer-events: none;
 }
 
 /* ── 右面板 ── */

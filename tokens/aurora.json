@@ -10,9 +10,6 @@
   "resizer-w": {
     "value": "0px"
   },
-  "drawer-w": {
-    "value": "540px"
-  },
   "topbar-h": {
     "value": "52px"
   },
@@ -26,7 +23,7 @@
   },
   "z-base": {
     "value": "1",
-    "comment": "z-index 层级体系 — 从低到高（surface < popover < modal < toast < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌"
+    "comment": "z-index 层级体系 — 从低到高（surface < popover < modal < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌。toast 不设档：sonner 用库默认层级，气泡语义不参与应用内 stacking context 竞争"
   },
   "z-surface": {
     "value": "2",
@@ -43,10 +40,6 @@
   "z-modal": {
     "value": "100",
     "comment": "强制顶层模态（AskDialog 等需压过一切浮层的场景）"
-  },
-  "z-toast": {
-    "value": "110",
-    "comment": "通知层（sonner）"
   },
   "z-boundary": {
     "value": "999",
@@ -329,10 +322,6 @@
     "comment": "TraeWork --accent-violet",
     "dark": "#B655FC"
   },
-  "ink": {
-    "value": "#001814",
-    "comment": "品牌墨色（accent 渐变上的头像字色 / 勾选对号等高对比墨色细节）；双主题同值"
-  },
   "ink-brown": {
     "value": "#8B4513",
     "comment": "文学棕（::selection 墨水印迹 / blockquote 底色等文学风效果层基色；效果层用 color-mix(var(--ink-brown) N%, transparent) 引用，alpha 留在使用处）",
@@ -351,29 +340,10 @@
     "comment": "成功文本绿（亮色用深档保 4.5:1；暗色对黑底复用基色即达标）",
     "dark": "var(--success)"
   },
-  "chart-1": {
-    "value": "var(--accent)",
-    "comment": "图表色"
-  },
-  "chart-2": {
-    "value": "var(--accent-2)"
-  },
-  "chart-3": {
-    "value": "var(--amber)"
-  },
-  "chart-4": {
-    "value": "var(--success)"
-  },
-  "chart-5": {
-    "value": "var(--error)"
-  },
   "msg-bubble-user": {
     "value": "#F5F5F5",
     "comment": "消息气泡 — TraeWork --bg-base-secondary",
     "dark": "#262626"
-  },
-  "msg-bubble-assistant": {
-    "value": "transparent"
   },
   "overlay-bg": {
     "value": "rgba(0, 0, 0, 0.25)",
@@ -387,10 +357,6 @@
   },
   "overlay-blur": {
     "value": "8px"
-  },
-  "drawer-overlay": {
-    "value": "rgba(245, 245, 245, 0.55)",
-    "dark": "rgba(10, 10, 10, 0.55)"
   },
   "glass-bg": {
     "value": "rgba(255, 255, 255, 0.85)",

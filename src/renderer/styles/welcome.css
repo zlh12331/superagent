@@ -79,16 +79,9 @@
   opacity: 0.7;
 }
 
-/* welcome-mode 布局覆写：保留右面板（用户要求欢迎页也可见右面板），
-   grid 保持 5 列（sidebar | resizer | main | resizer | right-panel） */
-.view-chat.welcome-mode {
-  grid-template-columns:
-    var(--sidebar-w)
-    var(--resizer-w)
-    minmax(0, 1fr)
-    var(--resizer-w)
-    var(--right-panel-w);
-}
+/* welcome-mode 布局：沿用 .view-chat 默认 5 列 grid（sidebar | resizer | main |
+   resizer | right-panel）——欢迎页保留右面板（用户要求），与默认态一致故无覆写规则；
+   历史上 welcome-mode 曾收窄为 3 列隐藏右面板，覆写已随该行为废止 */
 
 /* main 改为居中 flex 容器（对齐原型 .thread 行为） */
 .view-chat.welcome-mode .thread-bg {
