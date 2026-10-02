@@ -65,13 +65,6 @@
   box-shadow: var(--shadow-soft);
 }
 
-.msg-role .msg-time {
-  color: var(--muted-foreground);
-  font-size: 9px;
-  margin-left: auto;
-  letter-spacing: 0.05em;
-}
-
 /* 用户气泡：玻璃渐变底 + 发丝描边 + 内高光 */
 .msg-content {
   font-size: var(--font-size-md);
@@ -262,21 +255,8 @@
   color: inherit;
 }
 
-/* streaming 光标：accent 发光块 */
-.cursor {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
-  background: var(--accent);
-  vertical-align: text-bottom;
-  margin-left: 2px;
-  animation: blink 1s steps(2) infinite;
-  box-shadow: var(--shadow-soft);
-  border-radius: calc(var(--radius) - 7px);
-}
-
 /* loading-ui 终端光标：块状光标闪烁
-   复用既有 blink 关键帧（前 50% 亮 / 后 50% 灭的硬闪烁，与 .cursor 同源）——
+   复用既有 blink 关键帧（前 50% 亮 / 后 50% 灭的硬闪烁）——
    此前该动画在组件内联 <style> 里私有复制了一份等价 keyframe，
    是渲染层唯一的内联 <style>，且与「关键帧统一在 styles/*」的约定不符。
    尺寸用 em 跟随字号，颜色走 currentColor 以便调用方用 className 控色。 */

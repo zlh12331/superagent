@@ -561,10 +561,6 @@
   background: color-mix(in srgb, var(--primary) 90%, black);
 }
 
-.send-btn:active {
-  transform: scale(0.94);
-}
-
 .send-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -598,20 +594,4 @@
 
 .stop-gen-btn:hover {
   opacity: 0.9;
-}
-
-.stop-gen-btn:active {
-  transform: scale(0.92);
-}
-
-/* 快捷键标记 */
-.sk {
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: calc(var(--radius) - 5px);
-  padding: 1px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--accent);
-  margin-right: 4px;
 }

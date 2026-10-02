@@ -1,67 +1,4 @@
 /* ──────────────────────────────────────────────────────────────
-   骨架屏 · shimmer
-   ────────────────────────────────────────────────────────────── */
-.thread-loading-skeleton {
-  padding: 16px 20px;
-}
-
-.skeleton-msg {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.skeleton-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: linear-gradient(
-    90deg,
-    var(--bg-elev-2) 25%,
-    var(--bg-elev-3) 50%,
-    var(--bg-elev-2) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-}
-
-.skeleton-lines {
-  flex: 1;
-  min-width: 0;
-}
-
-.skeleton-line {
-  height: 10px;
-  border-radius: calc(var(--radius) - 4px);
-  margin-bottom: 6px;
-  background: linear-gradient(
-    90deg,
-    var(--bg-elev-2) 25%,
-    var(--bg-elev-3) 50%,
-    var(--bg-elev-2) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-}
-
-.skeleton-line:nth-child(1) {
-  width: 80%;
-}
-
-.skeleton-line:nth-child(2) {
-  width: 60%;
-}
-
-.skeleton-line:nth-child(3) {
-  width: 40%;
-}
-
-.skeleton-line:nth-child(4) {
-  width: 70%;
-}
-
-/* ──────────────────────────────────────────────────────────────
    回到底部悬浮按钮 · 玻璃圆钮
    ────────────────────────────────────────────────────────────── */
 .scroll-to-bottom {
@@ -305,15 +242,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
 @keyframes pulseDot {
   0%,
   100% {
@@ -411,17 +339,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
-@keyframes toolExpand {
-  from {
-    opacity: 0;
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 600px;
-  }
-}
-
 @keyframes reasoningReveal {
   from {
     opacity: 0;
@@ -430,16 +347,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   to {
     opacity: 1;
     max-height: 800px;
-  }
-}
-
-@keyframes pulse-check {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 var(--accent-glow);
-  }
-  50% {
-    box-shadow: 0 0 0 4px var(--accent-glow);
   }
 }
 
@@ -498,15 +405,12 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   .brand-mark,
   .topbar,
   .enter-anim,
-  .cursor,
   .typing-indicator .ti-dot,
-  .skeleton-avatar,
-  .skeleton-line,
+  .loading-ui-terminal-cursor,
   .card-status.running::before,
   .tool-card:has(.card-status.running) .card-icon::after,
   .tool-card:has(.card-status.running)::after,
   .tool-card.is-settled::after,
-  .plan-item.active .plan-check,
   .async-refreshing-bar::before {
     animation: none;
   }

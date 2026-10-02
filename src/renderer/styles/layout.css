@@ -106,7 +106,7 @@
 }
 
 /* frameless 拖拽区：顶栏背景整体可拖（含 padding 预留区），
-   交互元素（按钮/品牌）no-drag——空 spacer 高度为 0 无法承载 drag，必须挂在容器上 */
+   交互元素（按钮/品牌）no-drag——drag 必须挂在容器上 */
 .topbar {
   -webkit-app-region: drag;
 }
@@ -212,10 +212,10 @@
   /* 不透明背景：与 resizer 透明热区（--background）完全同色，消除两侧 6px 间隔感
      （玻璃渐变/透明均会暴露 thread-bg 氛围层色差，用户标注） */
   background: var(--background);
-  /* 竖缝根因：paper-texture::before 光晕层（absolute + z-index 0）叠在 static 状态条上，
-     青绿光把状态条染成 8,15,19（两侧 resizer 纯 8,11,16）→ 竖缝；z-index 1 让状态条盖住光晕 */
+  /* z-index 1：让状态条盖住绝对定位的同级内容（原根因 paper-texture::before
+     光晕层已在 quiet 迁移中删除，此处保留为防御性层叠，档位见 --z-base） */
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted-foreground);
@@ -291,7 +291,7 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  /* 激活态底条（sidebar-tab-active-bar，layoutId 滑动动画）定位基准 */
+  /* 激活态底条（sidebar-tab-active-bar）定位基准：单 tab 常驻激活，滑动动画实际不触发 */
   position: relative;
 }
 
@@ -649,9 +649,7 @@
   max-height: 100%;
   /* 用户要求：默认不可见（侧边栏与对话区无缝衔接）；hover/拖拽时显示 accent 提示线 */
   background: transparent;
-  transition:
-    background 0.15s ease,
-    width 0.15s ease;
+  transition: background 0.15s ease;
   border-radius: calc(var(--radius) - 7px);
 }
 
@@ -685,11 +683,4 @@ body.resizing iframe {
 
 .view-chat.crp-collapsed .chat-right-panel {
   overflow: visible;
-}
-
-/* 右面板折叠按钮 */
-/* 右面板折叠展开按钮已删除（用户要求）：展开走顶栏开关 */
-
-.crp-collapse-btn:hover {
-  color: var(--foreground);
 }
