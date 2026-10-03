@@ -16,6 +16,9 @@
 // - 修复调用 maxAttempts=1：修复不重试（重试会放大成本，失败即放弃）
 // - 任何失败/超时/用户中断 → 返回 null（SDK 流出 invalid tool-call part，
 //   与现状等价，绝不阻塞主流程）
+//
+// 装配点：turn-assembly 组装 streamText 时仅在 llmClient 注入后挂上本钩子
+// （modelId 取当前回合模型，signal 复用回合中断信号），未注入则不启用。
 // ──────────────────────────────────────────────────────────────
 
 import { InvalidToolInputError, type NoSuchToolError } from 'ai';
@@ -49,7 +52,7 @@ const RepairedToolCallSchema = z.object({
 
 type RepairedToolCall = z.infer<typeof RepairedToolCallSchema>;
 
-/** createRepairToolCall 依赖 */
+/** createRepairToolCall 依赖（闭包捕获当前回合上下文） */
 export interface CreateRepairToolCallOptions {
   /** LLM 客户端（side-query 链路：模型级路由 + per-model 缓存 + 重试/超时/降级） */
   readonly llmClient: LlmClient;
@@ -67,7 +70,7 @@ const REPAIR_SYSTEM_PROMPT =
   '{"name": "<tool name>", "arguments": {<corrected arguments>}}. ' +
   'The "name" field MUST be exactly the same tool name as the original call — never change it.';
 
-/** 构造修复提示词（含原始调用与校验错误） */
+/** 构造修复提示词（含原始调用与校验错误；末行为引导模型续写的位置标记） */
 function buildRepairPrompt(toolCall: ToolCallLike, message: string): string {
   return [
     `Tool name: ${toolCall.toolName}`,
