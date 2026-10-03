@@ -11,7 +11,11 @@
 // 保持打包体积最小、依赖边界清晰（主进程专属逻辑不泄漏到浏览器环境）。
 // ──────────────────────────────────────────────────────────────
 
-export { APPROVAL_TIMEOUT_MINUTES, REMEMBER_TTL_MINUTES } from './constants/approval';
+export {
+  APPROVAL_TIMEOUT_MINUTES,
+  ASK_TIMEOUT_SECONDS,
+  REMEMBER_TTL_MINUTES,
+} from './constants/approval';
 export {
   ATTACHMENT_MAX_CHARS,
   DEFAULT_MODEL,

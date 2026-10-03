@@ -12,6 +12,7 @@ import type { TurnEventEmitter } from '../agent-runtime';
 import type { createAgentTurnActor } from '../agent-runtime/agent-turn-machine';
 import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
 import type { IPermissionService } from '../tools/permission-service';
+import type { AgentAskService } from './agent-ask-service';
 
 /**
  * 审批生命周期订阅（waitingApproval 状态运行时数据源）
@@ -33,6 +34,35 @@ export function subscribeApprovalLifecycle(
       if (p.sessionId === sessionId) {
         // 38 号阶段 2：决议结果透传（approved/denied/timed-out/aborted）
         turnMachine.send({ type: 'approval.responded', decision: p.decision });
+      }
+    },
+  });
+}
+
+/**
+ * 提问生命周期订阅（waitingInput 状态运行时数据源，38 号阶段 2 收尾）
+ *
+ * 提问推送 → waitingInput；回答/超时完成 → 回 streaming（按 sessionId 过滤）。
+ * 与 subscribeApprovalLifecycle 同构：此前机器不感知提问，挂起期间显示 streaming。
+ */
+export function subscribeAskLifecycle(
+  askService: AgentAskService,
+  sessionId: string,
+  turnMachine: ReturnType<typeof createAgentTurnActor>,
+): () => void {
+  return askService.onAskLifecycle({
+    onRequested: (p) => {
+      if (p.sessionId === sessionId) {
+        turnMachine.send({ type: 'ask.requested', askId: p.askId });
+      }
+    },
+    onResolved: (p) => {
+      if (p.sessionId === sessionId) {
+        // 机器 waitingInput 只认 answered/timed-out（aborted 走回合中断路径，
+        // 不经此事件——AskDecisionOutcome 的 aborted 分支在此不映射）
+        if (p.decision !== 'aborted') {
+          turnMachine.send({ type: 'ask.responded', decision: p.decision });
+        }
       }
     },
   });

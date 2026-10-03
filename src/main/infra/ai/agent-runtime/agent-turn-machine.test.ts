@@ -55,8 +55,8 @@ function runOutput(overrides?: Partial<Parameters<typeof Object.assign>[0]>): {
   };
 }
 
-/** 测试夹具：deferred deps + 调用日志 */
-function createTurn(approvalTimeoutMs?: number) {
+/** 测试夹具：deferred deps + 调用日志（可选注入超时短值供 after 测试） */
+function createTurn(approvalTimeoutMs?: number, askTimeoutMs?: number) {
   const resolveModel = createDeferred<string>();
   const acquireGate = createDeferred<void>();
   const executeTurn = createDeferred<{
@@ -105,12 +105,16 @@ function createTurn(approvalTimeoutMs?: number) {
     expireApproval: (approvalId) => {
       log.push(`expireApproval:${approvalId}`);
     },
+    expireAsk: (askId) => {
+      log.push(`expireAsk:${askId}`);
+    },
   };
   const actor = createAgentTurnActor({
     sessionId: 'session-1',
     turnId: 'turn-1',
     deps,
     ...(approvalTimeoutMs !== undefined ? { approvalTimeoutMs } : {}),
+    ...(askTimeoutMs !== undefined ? { askTimeoutMs } : {}),
   });
   const state = (): AgentTurnState => actor.getSnapshot().value;
   return { actor, state, resolveModel, acquireGate, executeTurn, log, deps };
@@ -285,6 +289,56 @@ describe('AgentTurnMachine（编排者）', () => {
     // 决策保持 responded 的值（若 after 未取消，会被改写成 timed-out）
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('denied');
     expect(t.log.some((x) => x.startsWith('expireApproval'))).toBe(false);
+  });
+
+  it('提问挂起：ask.requested → waitingInput → ask.responded 回 streaming（38 号收尾）', async () => {
+    const t = createTurn();
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'ask.requested', askId: 'ask-1' });
+    expect(t.state()).toEqual({ running: 'waitingInput' });
+    expect(t.actor.getSnapshot().context.pendingAskId).toBe('ask-1');
+    t.actor.send({ type: 'ask.responded', decision: 'answered' });
+    expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.askDecision).toBe('answered');
+    expect(t.actor.getSnapshot().context.pendingAskId).toBeUndefined();
+    t.executeTurn.resolve(runOutput());
+    await settle(t.actor);
+    expect(t.state()).toBe('completed');
+  });
+
+  it('提问 after 超时：waitingInput 到期 → 回 streaming + expireAsk + decision=timed-out', async () => {
+    // createTurn 第二参为 askTimeoutMs（20ms 真实 timer）
+    const t = createTurn(undefined, 20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'ask.requested', askId: 'ask-timeout' });
+    expect(t.state()).toEqual({ running: 'waitingInput' });
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.askDecision).toBe('timed-out');
+    expect(t.log).toContain('expireAsk:ask-timeout');
+    expect(t.actor.getSnapshot().context.pendingAskId).toBeUndefined();
+  });
+
+  it('提问 after 取消语义：提前 answered → 到期不再触发 expireAsk', async () => {
+    const t = createTurn(undefined, 20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'ask.requested', askId: 'ask-early' });
+    t.actor.send({ type: 'ask.responded', decision: 'answered' });
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.askDecision).toBe('answered');
+    expect(t.log.some((x) => x.startsWith('expireAsk'))).toBe(false);
   });
 
   it('exit 顺序：releaseGate 先于 clearModelTimeout（排队下回合尽早启动）', async () => {

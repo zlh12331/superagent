@@ -71,6 +71,9 @@ import type { IPermissionService } from '../tools/permission-service';
 import type { Tool, ToolContext } from '../tools/tool';
 import type { IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
+// agentAskService 为模块级单例（与 cronService 同模式：非容器 accessor，
+// 直接 import——见 AGENTS.md 架构说明）；测试下无 pending 时 expireAsk 为 no-op
+import { agentAskService } from './agent-ask-service';
 import {
   compressByTokenBudget,
   estimateMessagesTokens,
@@ -80,7 +83,11 @@ import {
 import { createTurnPartForwarder } from './stream-part-forward';
 import { resolveTokenBudgetBasis } from './token-overhead';
 import { assembleAndRunTurn } from './turn-assembly';
-import { subscribeApprovalLifecycle, subscribeTurnAccumulators } from './turn-subscriptions';
+import {
+  subscribeApprovalLifecycle,
+  subscribeAskLifecycle,
+  subscribeTurnAccumulators,
+} from './turn-subscriptions';
 import type { SdkTotalUsageLike } from './turn-usage-report';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
@@ -477,6 +484,7 @@ export class AgentService implements IAgentService {
         let resolvedModel: ResolvedModel | undefined;
         let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
         let unsubscribeApproval: (() => void) | undefined;
+        let unsubscribeAsk: (() => void) | undefined;
 
         // 本轮效果面（机器经 TurnDeps 在正确时机调用；闭包捕获 span/累积器/窗口）
         const deps: TurnDeps = {
@@ -651,6 +659,7 @@ export class AgentService implements IAgentService {
             unsubscribeAll();
             forwardTurnEvents();
             unsubscribeApproval?.();
+            unsubscribeAsk?.();
             this.registry.removeControllerIfCurrent(sessionId, controller);
             const durationMs = Math.round(performance.now() - startTime);
             logger.info({ sessionId, durationMs }, 'Agent streamText 总耗时');
@@ -663,11 +672,18 @@ export class AgentService implements IAgentService {
             // 无审批通道场景本就不会进入 waitingApproval）
             this.permissionService?.expireApproval(approvalId);
           },
+          expireAsk: (askId) => {
+            // 38 号阶段 2 收尾：机器 after 超时 → agent-ask-service 以「未响应」
+            // 语义 resolve(null)（askService 为模块单例，恒可用）
+            agentAskService.expireAsk(askId);
+          },
         };
 
         const actor = createAgentTurnActor({ sessionId, turnId, deps });
         // 审批生命周期订阅（waitingApproval 状态运行时数据源；start 前建立）
         unsubscribeApproval = subscribeApprovalLifecycle(this.permissionService, sessionId, actor);
+        // 提问生命周期订阅（waitingInput 状态运行时数据源；同审批模式）
+        unsubscribeAsk = subscribeAskLifecycle(agentAskService, sessionId, actor);
         // 终态等待：机器进入任一 final 即 done（全部路径结构上必达终态）
         const done = new Promise<void>((resolve) => {
           actor.subscribe((snapshot) => {

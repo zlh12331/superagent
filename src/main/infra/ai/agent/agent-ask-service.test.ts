@@ -79,14 +79,30 @@ describe('AgentAskService.ask（提问推送）', () => {
     expect(service.getPendingCount()).toBe(0);
   });
 
-  it('60s 无响应 → resolve null + pending 清理', async () => {
+  it('expireAsk（机器 after 到期）→ resolve null + pending 清理 + decision=timed-out', async () => {
     const service = new AgentAskService();
+    const onResolved = vi.fn();
+    service.onAskLifecycle({ onRequested: vi.fn(), onResolved });
     const promise = service.ask(makeWebContents(), [{ question: '超时测试' }], 's1');
+    const askId = [...(service as unknown as { pending: Map<string, unknown> }).pending.keys()][0];
+    if (askId === undefined) throw new Error('pending 未注册');
 
-    await vi.advanceTimersByTimeAsync(61_000);
+    service.expireAsk(askId);
 
     await expect(promise).resolves.toBeNull();
     expect(service.getPendingCount()).toBe(0);
+    expect(onResolved).toHaveBeenCalledWith({
+      sessionId: 's1',
+      askId,
+      decision: 'timed-out',
+    });
+    // 幂等：再次 expire 不抛错（pending 已清）
+    expect(() => service.expireAsk(askId)).not.toThrow();
+  });
+
+  it('expireAsk：未知 id 幂等忽略（已被响应/dispose 清理）', () => {
+    const service = new AgentAskService();
+    expect(() => service.expireAsk('nonexistent')).not.toThrow();
   });
 
   it('dispose 清理全部 pending（应用退出/回合中断不挂起）', async () => {

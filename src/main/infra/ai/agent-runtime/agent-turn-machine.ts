@@ -35,7 +35,7 @@
 // 机器只有开销没有安全收益（rawPartCount 经 turn.runDone 输出回传供判据）。
 // ──────────────────────────────────────────────────────────────
 
-import { APPROVAL_TIMEOUT_MS, AppError, ErrorCode } from '@code-agent/shared/main';
+import { APPROVAL_TIMEOUT_MS, AppError, ASK_TIMEOUT_MS, ErrorCode } from '@code-agent/shared/main';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import { isAbortError } from '../tools/error-classifier';
 import type { ApprovalDecisionOutcome } from '../tools/permission-types';
@@ -88,6 +88,12 @@ export interface TurnDeps {
    * 的 executeHook 到达（ToolExecutor.execute 唯一调用方是 agent-service）。
    */
   expireApproval(approvalId: string): void;
+  /**
+   * 提问超时到期（机器 after 转换调用，38 号阶段 2 收尾）：让 agent-ask-service
+   * 以「未响应」语义 resolve(null)（工具据此返回让 LLM 继续）。
+   * 前提同 expireApproval：ask 只经 agent 回合的 ToolExecutor 到达。
+   */
+  expireAsk(askId: string): void;
 }
 
 /** 回合上下文（deps 注入 + 决策产物；字段在 actions 内 assign） */
@@ -108,6 +114,12 @@ export interface AgentTurnContext {
   pendingApprovalId?: string;
   /** 审批超时毫秒（input 注入；默认 shared APPROVAL_TIMEOUT_MS，测试可缩短） */
   readonly approvalTimeoutMs: number;
+  /** 当前等待中的提问 id（ask.requested 赋值；after 超时据此定位待决条目） */
+  pendingAskId?: string;
+  /** 提问超时毫秒（input 注入；默认 shared ASK_TIMEOUT_MS，测试可缩短） */
+  readonly askTimeoutMs: number;
+  /** 最后一次提问决策（waitingInput 出口语义显式化；快照审计用） */
+  askDecision?: 'answered' | 'timed-out';
 }
 
 /** 机器事件（可辨识联合；send 类型不匹配编译期报错）。
@@ -116,13 +128,15 @@ export interface AgentTurnContext {
 export type TurnMachineEvent =
   | { readonly type: 'approval.requested'; readonly approvalId: string }
   | { readonly type: 'approval.responded'; readonly decision: ApprovalDecisionOutcome }
+  | { readonly type: 'ask.requested'; readonly askId: string }
+  | { readonly type: 'ask.responded'; readonly decision: 'answered' | 'timed-out' }
   | { readonly type: 'xstate.error.actor.*'; readonly error: unknown };
 
 /** 回合状态字面量联合（快照 value 形态；running 为层级嵌套） */
 export type AgentTurnState =
   | 'resolving'
   | 'queued'
-  | { running: 'streaming' | 'waitingApproval' }
+  | { running: 'streaming' | 'waitingApproval' | 'waitingInput' }
   | 'deciding'
   | 'completed'
   | 'aborted'
@@ -135,6 +149,8 @@ export interface AgentTurnInput {
   readonly deps: TurnDeps;
   /** 审批超时毫秒（缺省 shared APPROVAL_TIMEOUT_MS；测试注入短值） */
   readonly approvalTimeoutMs?: number;
+  /** 提问超时毫秒（缺省 shared ASK_TIMEOUT_MS；测试注入短值） */
+  readonly askTimeoutMs?: number;
 }
 
 /**
@@ -160,6 +176,7 @@ export const agentTurnMachine = setup({
   // 命名延迟（after 转换引用；动态值从 context 取——审批超时可注入短值供测试）
   delays: {
     approvalTimeout: ({ context }: { context: AgentTurnContext }) => context.approvalTimeoutMs,
+    askTimeout: ({ context }: { context: AgentTurnContext }) => context.askTimeoutMs,
   },
   guards: {
     /** 超时归因（timeout reason 或 completed 形态竞态）——决策链首位（2026-09-28） */
@@ -225,6 +242,7 @@ export const agentTurnMachine = setup({
     startedAt: Date.now(),
     deps: input.deps,
     approvalTimeoutMs: input.approvalTimeoutMs ?? APPROVAL_TIMEOUT_MS,
+    askTimeoutMs: input.askTimeoutMs ?? ASK_TIMEOUT_MS,
   }),
   states: {
     // 模型解析（轻量）：失败直接 error（不进并发队列——排队前失败不占槽位）。
@@ -279,6 +297,12 @@ export const agentTurnMachine = setup({
               target: 'waitingApproval',
               actions: assign({ pendingApprovalId: ({ event }) => event.approvalId }),
             },
+            // 提问挂起（ask_user_question）：此前机器完全不感知，挂起期间显示
+            // streaming（状态失真）；38 号阶段 2 收尾补齐为 waitingInput 状态
+            'ask.requested': {
+              target: 'waitingInput',
+              actions: assign({ pendingAskId: ({ event }) => event.askId }),
+            },
           },
         },
         waitingApproval: {
@@ -313,6 +337,36 @@ export const agentTurnMachine = setup({
                   }
                 },
                 assign({ pendingApprovalId: (): string | undefined => undefined }),
+              ],
+            },
+          },
+        },
+        // 等待用户回答提问（ask_user_question 挂起；与 waitingApproval 同构）
+        waitingInput: {
+          on: {
+            'ask.responded': {
+              target: 'streaming',
+              actions: [
+                assign({
+                  askDecision: ({ event }) => event.decision,
+                  pendingAskId: (): string | undefined => undefined,
+                }),
+              ],
+            },
+          },
+          // 声明式超时（同 waitingApproval）：提前 answered 退出 → after 自动取消。
+          // 计时源单一：agent-ask-service 不再自设 setTimeout（见 TurnDeps.expireAsk）。
+          after: {
+            askTimeout: {
+              target: 'streaming',
+              actions: [
+                assign({ askDecision: (): 'timed-out' => 'timed-out' }),
+                ({ context }: { context: AgentTurnContext }) => {
+                  if (context.pendingAskId !== undefined) {
+                    context.deps.expireAsk(context.pendingAskId);
+                  }
+                },
+                assign({ pendingAskId: (): string | undefined => undefined }),
               ],
             },
           },
