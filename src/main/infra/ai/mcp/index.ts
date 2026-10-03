@@ -1,9 +1,14 @@
 // src/main/infra/ai/mcp/index.ts
-// MCP 模块 barrel 导出
+// MCP 模块 barrel 导出（目录级桶出口）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 统一导出 MCP 集成所需的类型、客户端、服务、适配器
-// - 供 ServiceContainer / IPC handler / 测试用例按需 import
+//
+// 桶消费方：
+// - service-container：IMCPService 接口 + MCPService 实现（lazy accessor 创建）
+// - ipc/mcp.handler：validateMcpServerConfig（mcp:start 前双重防线）
+// - 单测：各模块行为回归
+// （resolveMcpTransport 不在本桶——仅目录内 mcp-client/mcp-service 深度导入）
 //
 // 模块结构：
 // - mcp-types.ts：配置类型 + 命名空间 helper

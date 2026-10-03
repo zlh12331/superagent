@@ -6,10 +6,14 @@
 // - stopServer(name)：停止 MCP server，从 ToolRegistry 注销工具
 // - stopAll()：停止所有 MCP server（用于 dispose）
 // - listServers()：返回所有 server 的运行时状态
-// - updateConfig(configs)：批量更新配置（diff 后增量启动/停止）
+//
+// 启动链：唯一生产入口 = mcp:start IPC handler（mcp.handler 先 validate 后
+// startServer，双重防线）；应用启动不自动恢复 server——运行时状态不持久化，
+// 重启后由用户在设置页再次启动（mcp:list 仅反映本次运行的 Map 状态）。
 //
 // 设计原则：
-// - 单例模式：通过 ServiceContainer 持有，整个应用生命周期共享一个实例
+// - 单例：ServiceContainer lazy accessor 持有（getMcpService 创建；dispose 走
+//   stopAll + 置 null；setMcpService 供工具注册表重建时替换注入）
 // - 错误隔离：单个 server 启动失败不影响其他 server
 // - 工具命名空间：所有 MCP 工具名以 mcp__ 开头，便于按 server 名批量过滤
 // - 状态追踪：维护 serverName → { client, status, toolNames } 的 Map
@@ -48,7 +52,7 @@ interface ServerEntry {
  *
  * 解耦 ServiceContainer 对具体实现的依赖，便于：
  * - 单元测试：注入 mock 实现，不依赖真实子进程
- * - 未来扩展：支持 HTTP/SSE 传输等
+ * - 实现替换：setMcpService 注入另一实现（工具注册表重建场景）
  */
 export interface IMCPService {
   /** 启动单个 MCP server 并注册工具 */
@@ -227,7 +231,9 @@ export class MCPService implements IMCPService {
 /**
  * 校验工具名是否为 MCP 工具（基于命名空间前缀）
  *
- * 暴露给 ToolExecutor / AgentService 使用，用于按需过滤 MCP 工具。
+ * ⚠️ 当前无生产调用方（仅 barrel 导出与单测）——权限层的 MCP 防线直接用
+ * mcp-types 的 isMcpTool（permission-service）；本函数是语义别名，供未来
+ * 消费方与类型可达。保留属 knip exports 级人工审阅范畴。
  *
  * @param toolName 工具名
  * @returns 是否以 'mcp__' 开头
@@ -239,7 +245,9 @@ export function isMcpToolName(toolName: string): boolean {
 /**
  * 校验工具配置：name 不能为空、传输字段按 transport 分支校验
  *
- * 在 startServer 前调用，提前拦截非法配置。
+ * 生产调用方 = mcp.handler（mcp:start 前校验，与本层 startServer 的运行时
+ * 行为构成双重防线——此前该函数只被测试引用，生产路径裸奔，mcp.handler
+ * 接线后闭合）。
  * - stdio：command 必填且为裸可执行文件名（P0 安全，与 shared MCP_COMMAND_PATTERN 同源）
  * - sse / streamable-http：url 必填且为 http(s) 地址
  *
