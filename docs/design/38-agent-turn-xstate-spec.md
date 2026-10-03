@@ -125,6 +125,46 @@ agent-service.ts 预期净行从 683 降至约 450（file-size 棘轮只紧不�
 | 2 | 机器重写（setup/层级/invoked/guards）+ 全表断言迁移 | ✅（含 v5 实测三坑记录：invoke.input 显式传 / onError 事件 type 实值含 actor id / actor 调度跨宏任务） |
 | 3 | 宿主切换（runTurnStream = 效果提供者）+ 装配段提取 turn-assembly.ts（agent-service 净行 705→657，complexity 基线条目删除） | ✅ |
 | 4 | 阶段 2：审批等待决策面收敛（见 §4 设计判定——原「暂停/恢复 + 并行子任务」经实况核查裁剪） | ✅（journey-agent E2E 3/3 + verify:local 全量绿；audit:registry 对齐 CI audit-ci 口径，GHSA-ch52-4w7c-c8xp 无补丁 allowlist 登记） |
+| 5 | 阶段 2 收尾（XState 能力利用深读后）：审批超时迁移机器 after 转换 + 模型级超时清理链修复 + 死导出清理 | ✅（after 到期/取消语义各有用例；permission-service 三处手工 clearTimeout 消失；E2E 3/3 回归） |
+
+## 5 阶段 2 收尾：声明式计时与清理链修复（2026-10-03）
+
+### 5.1 动机（XState 能力利用评估的结论）
+
+深读发现两处能力未用 + 两处链路断裂，非为用而用：
+
+- **`after` 延迟转换完全未用**：审批超时一直是 permission-service 的裸
+  setTimeout + 三处手工 clearTimeout（超时/响应/dispose）；机器 waitingApproval
+  只被动等事件。
+- **模型级超时清理链在装配段提取时断裂**：定时器创建随装配体移入
+  turn-assembly，但 `clear()` 留在宿主清一个**从未赋值**的变量（no-op）——
+  长超时 × 高频调用会堆积定时器。
+- **TurnDeps.onRawPart 冗余**（恒紧随后 pushPart 调用）。
+- **死导出 TurnAssembly**（改设计后的残留，零引用）。
+
+### 5.2 迁移设计（计时源唯一性论证）
+
+机器 `waitingApproval.after.approvalTimeout`（命名延迟从
+`context.approvalTimeoutMs` 取动态值，缺省 shared `APPROVAL_TIMEOUT_MS`）：
+到期 → 回 `streaming` + 记 `approvalDecision='timed-out'` + 调
+`deps.expireApproval(approvalId)` → 宿主转 permission-service 以「超时」
+语义 reject pending。
+
+**唯一性前提（已固化进代码注释）**：`requestApproval` 的带 webContents 分支
+只经 agent 回合 executeHook 到达（ToolExecutor.execute 唯一调用方是
+agent-service）；无头分支不推送审批、不进入 waitingApproval，机器不为其计时
+（保持其即时自动拒绝）。因此不存在「机器计时 + permission-service 计时」并存的
+双计时源窗口——这是本迁移（而非叠加）成立的关键。
+
+**取消语义**：提前 `approval.responded` 退出 waitingApproval → v5 自动取消
+after 计时（无需手工 clearTimeout），已用「提前响应后到期不改写决策 +
+不触发 expireApproval」的用例锁定。
+
+### 5.3 验证
+
+机器 15 用例（+2：after 到期触发 / 提前取消）、permission-service 55
+（+2：expireApproval 语义与幂等）、全量 main 2133、check:static 15 项、
+journey-agent E2E 3/3（真实窗口审批全链路）。
 
 ## 4 阶段 2：审批等待决策面收敛（2026-10-02 设计判定）
 
