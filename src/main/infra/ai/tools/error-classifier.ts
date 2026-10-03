@@ -1,10 +1,11 @@
-// src/main/infra/ai/error-classifier.ts
+// src/main/infra/ai/tools/error-classifier.ts
 // AI 调用错误分类器：把未知错误转换为 AppError
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 把 streamText / generateText 抛出的各种错误分类为项目标准 AppError
 // - 判断是否为用户主动中断（AbortError）
-// - 供 ChatService 和 AgentService 共用，避免错误分类逻辑重复
+// - 供 agent-service / turn-runner 等调用方共用，避免错误分类逻辑重复
+//   （原注释的 ChatService 已并入 agent-service 删除）
 //
 // 设计：
 // - 完全基于 instanceof 类型守卫，避免脆弱的 message 字符串扫描
@@ -27,7 +28,6 @@
 //     // 推送错误到渲染层
 //   }
 // }
-// ```
 // ──────────────────────────────────────────────────────────────
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';

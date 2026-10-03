@@ -1,4 +1,4 @@
-// src/main/infra/ai/command-classifier.ts
+// src/main/infra/ai/tools/command-classifier.ts
 // AUTO 模式命令安全分类器（LLM 判定，fail-closed）
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -50,6 +50,9 @@ const CLASSIFIER_SYSTEM_PROMPT = [
 
 /**
  * 命令安全分类器（依赖 LlmClient 注入，可替换为 fake）
+ *
+ * 生产装配方 = service-container（new PermissionService 时注入
+ * new CommandClassifier(llmClient)）——auto 模式 exec 命令的分层决策消费。
  */
 export class CommandClassifier {
   /** 会话内缓存：command → 判定（防模型每轮重复调用重复计费） */
@@ -117,7 +120,8 @@ export class CommandClassifier {
     return result;
   }
 
-  /** 清空缓存（审批模式切换时调用） */
+  /** 清空缓存（当前无生产调用方，预留能力——审批模式切换重置的是拒绝
+   * 计数，不清分类缓存；本方法供未来消费方） */
   clearCache(): void {
     this.cache.clear();
   }

@@ -1,4 +1,4 @@
-// src/main/infra/ai/permission-service.ts
+// src/main/infra/ai/tools/permission-service.ts
 // 权限服务：工具调用的权限决策与审批管理
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -6,6 +6,7 @@
 // - requestApproval(...)：推送 ApprovalRequest 到渲染层，等待用户响应
 // - handleApprovalResponse(...)：处理用户响应，resolve 对应 Promise
 // - rememberDecision(tool, input, approved)：缓存用户决策，5分钟内自动应用
+// - expireApproval(...)：审批超时到期（机器 after 转换调用）
 // - dispose()：清理所有 pending Promise，避免内存泄漏
 //
 // 设计原则：
@@ -13,13 +14,16 @@
 // - 记忆决策：用户可选"5分钟内对此工具+入参组合不再询问"
 //   - key 格式：`${toolName}:${hash(input)}`，hash 用 stable JSON 序列化后取 SHA-256 前 16 字节
 //   - TTL 5 分钟，避免长期缓存导致权限漂移
-// - 审批超时：默认 5 分钟，超时后 reject，避免 Promise 长期挂起
+// - 审批超时：计时源已迁移至 agent 回合状态机 after（38 号阶段 2，APPROVAL_
+//   TIMEOUT_MS 默认 5 分钟）；本服务不自设定时器，超时到期由机器调
+//   expireApproval 以「超时」语义拒绝
 // - dispose 清理：应用退出时调用，reject 所有 pending Promise
 //
 // 与 IPC 的关系：
 // - 主进程通过 webContents.send 推送 AGENT_APPROVAL_REQUEST
-// - 渲染层通过 ipcRenderer.invoke('agent:approval:response', { approvalId, approved, rememberDecision })
-//   回传审批结果，IPC handler 调用 handleApprovalResponse resolve 对应 Promise
+//   （agent:approval:request，统一出口 emitEvent）
+// - 渲染层通过 agent:approval:response 回传审批结果，
+//   IPC handler 调用 handleApprovalResponse resolve 对应 Promise
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
