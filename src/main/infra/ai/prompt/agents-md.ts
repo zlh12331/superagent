@@ -18,8 +18,8 @@ import { dirname, join, resolve } from 'node:path';
 /**
  * AGENTS.md 文件名
  *
- * 与 codex / Cursor 的 .cursorrules 一致的命名约定。
- * 支持大写（AGENTS.md）和小写（agents.md）两种形式。
+ * codex 同名 AGENTS.md 约定（Cursor 的 .cursorrules 是同类机制的对应物）。
+ * 支持大写（AGENTS.md）和小写（agents.md）两种形式，优先匹配大写。
  */
 const AGENTS_MD_FILENAME = 'AGENTS.md';
 const AGENTS_MD_FILENAME_LOWER = 'agents.md';
@@ -162,6 +162,9 @@ function walkAgentsMdUpward(root: string, maxBytes: number): FoundAgentsMd[] {
  *
  * 查找顺序：workingDir → parent → ... → 文件系统根目录
  * 收集路径上所有 AGENTS.md，越靠近 workingDir 的优先级越高（排在前面）。
+ *
+ * 消费方：唯一生产调用链 = dynamic-context 的 resolveAgentsMd
+ * （注入 {{agentsMd}} 变量）；本模块不感知 prompt 模板。
  *
  * P2-32：按解析根 + 字节预算做进程内 memo，mtime 失效（命中文件内容修改/删除、
  * 根目录新增文件）。已知取舍：在「根目录以外的祖先目录」中新建 AGENTS.md 不会
