@@ -1,5 +1,10 @@
 // src/main/infra/ai/models/runtime-model-store.test.ts
 // RuntimeModelStore 单测：持久化 / keychain / 注册 / 启动加载
+//
+// 接线背景：生产消费方 = settings.handler（模型配置 add/update/remove/list）
+// + models.handler（list）+ ServiceContainer init（loadAll，LLM 首次调用前）。
+// 本文件用内存 DB + mock electron/safeStorage（基础设施 mock），停用/重启
+// 恢复语义（clearRuntimeModels + loadAll）是生产启动路径的结构性回归。
 
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';

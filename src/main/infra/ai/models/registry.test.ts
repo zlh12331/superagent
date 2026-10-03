@@ -4,9 +4,14 @@
 // 测试要点：
 // 1. resolve(undefined) → 默认供应商默认模型（deepseek-v4-flash）
 // 2. resolve(显式 id) → 跨供应商查找（gpt-4o → openai）
-// 3. resolve(未注册 id) → 默认供应商 + 原始 id 透传（兼容测试连接）
+// 3. resolve(未注册 id) → 默认供应商 + 原始 id 透传（防御性降级）
 // 4. 运行时快照：注册 / 覆盖内置 / 注销 / 显式 apiKey+baseUrl
-// 5. listModels：内置 + 运行时快照
+// 5. 停用身份：available=false（含默认模型停用的主链路拦截）
+// 6. listModels：内置 + 运行时快照
+//
+// 接线背景：生产中单例 modelRegistry 在 models/index.ts 装配，llm-client
+// getModel 与 runtime-model-store 消费；停用拦截经 resolve 的 available
+// 字段（isModelDisabled 方法无生产调用方）。本文件为纯领域层测试（无 mock）。
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BUILTIN_MODELS, DEFAULT_MODEL_BY_KIND } from './builtin-models';

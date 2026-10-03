@@ -1,5 +1,9 @@
 // src/main/infra/ai/models/generation-options.test.ts
 // buildGenerationOptions 单测：采样/思考强度/输出上限的单一真源构造
+//
+// 接线背景：生产消费方两路——llm-client.generateTextOnce（side query）与
+// agent-service.resolveTurnGeneration（主回合，用户 thinking/temperature
+// 覆盖经此传入）；本组用例守住两路共用的同一份配置逻辑（单一真源）。
 
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_MODELS, DEFAULT_KIND, DEFAULT_MODEL_BY_KIND } from './builtin-models';

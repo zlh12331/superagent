@@ -8,6 +8,10 @@
 // 4. ceiling 缺省：OUTPUT_TOKEN_CEILING 封顶
 // 5. 窗口几乎占满：下限 MIN_OUTPUT_TOKENS
 // 6. outputClampMargin：max(10K, 5% × window)
+//
+// 接线背景：生产消费方 = generation-options（构造 maxOutputTokens）；
+// 本组手写用例覆盖边界点，全输入域不变量由 token-limits.property.test.ts
+// （fast-check）扫描守护——两文件互补。
 
 import { describe, expect, it } from 'vitest';
 import {
