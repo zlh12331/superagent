@@ -1,5 +1,9 @@
-// src/main/infra/ai/command-classifier.test.ts
+// src/main/infra/ai/tools/command-classifier.test.ts
 // 命令分类器单测：safe/dangerous/unknown（fail-closed）/ 缓存
+//
+// 接线背景：生产装配方 = service-container（注入 PermissionService，
+// auto 模式 exec 命令分层决策消费）；本文件用 fake LlmClient 注入（无 mock），
+// fail-closed 语义（任何失败 → unknown 必拦）是安全关键回归锚。
 
 import { describe, expect, it, vi } from 'vitest';
 import type { LlmClient } from '../llm-client';

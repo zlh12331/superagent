@@ -1,4 +1,4 @@
-// src/main/infra/ai/permission-service.test.ts
+// src/main/infra/ai/tools/permission-service.test.ts
 // PermissionService 单测：权限决策 + 审批流（安全关键模块）
 //
 // 测试要点：

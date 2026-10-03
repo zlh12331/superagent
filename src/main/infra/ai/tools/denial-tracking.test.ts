@@ -1,5 +1,8 @@
-// src/main/infra/ai/denial-tracking.test.ts
+// src/main/infra/ai/tools/denial-tracking.test.ts
 // 拒绝跟踪状态机单测：拒绝/放行计数与降级阈值
+//
+// 接线背景：PermissionService 持有状态（recordUserDenial/recordUserAllowance
+// 由 ToolExecutor 审批出口调用；decideByMode auto 分支消费降级判定）。
 
 import { describe, expect, it } from 'vitest';
 import {

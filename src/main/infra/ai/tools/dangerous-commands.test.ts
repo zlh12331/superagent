@@ -1,5 +1,9 @@
-// src/main/infra/ai/dangerous-commands.test.ts
+// src/main/infra/ai/tools/dangerous-commands.test.ts
 // 危险命令检测单测：破坏性拦截 / 意图豁免 / 只读白名单
+//
+// 接线背景：Layer-0 确定性守卫（permission-service 的 auto 快速路径与
+// auto 模式 exec 分层都消费）——本组用例是「不可被分类器失败绕过」的
+// 结构性回归锚。
 
 import { describe, expect, it } from 'vitest';
 import { detectDangerousCommand, isSafeReadOnlyCommand } from './dangerous-commands';
