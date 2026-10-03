@@ -39,19 +39,6 @@ import { APPROVAL_TIMEOUT_MS, AppError, ErrorCode } from '@code-agent/shared/mai
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import { isAbortError } from '../tools/error-classifier';
 import type { ApprovalDecisionOutcome } from '../tools/permission-types';
-import type { CreatedStream } from './create-stream';
-import type { TurnRunner } from './turn-runner';
-
-/** 回合装配产物（resolving → running 的数据交接；由宿主 executeTurn 前半段构造） */
-export interface TurnAssembly {
-  /** 解析出的模型 id */
-  readonly modelId: string;
-  /** 预构建的回合执行器（纯构造无副作用；run 阶段消费） */
-  readonly runner: TurnRunner;
-  /** createStreamWithRetry 产物（首 part 已预读，TurnRunner 接续消费） */
-  readonly created: CreatedStream;
-}
-
 /** runTurn 输出（deciding 决策链与收尾的数据源） */
 export interface TurnRunOutput {
   readonly reason: 'completed' | 'aborted' | 'timeout';
