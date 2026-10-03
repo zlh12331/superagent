@@ -954,7 +954,9 @@
     "askCancel": "取消",
     "askSubmit": "提交",
     "askSubmitFailed": "提交回答失败",
-    "askProgress": "回答进度"
+    "askProgress": "回答进度",
+    "askTimeoutHint": "{{seconds}} 秒内未回答将自动继续",
+    "askExpiresSoon": "即将超时"
   },
   "diff": {
     "showMoreRows": "展开更多（剩余 {{remaining}} 行）"

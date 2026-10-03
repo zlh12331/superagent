@@ -954,7 +954,9 @@
     "askCancel": "Cancel",
     "askSubmit": "Submit",
     "askSubmitFailed": "Failed to submit answer",
-    "askProgress": "Answer progress"
+    "askProgress": "Answer progress",
+    "askTimeoutHint": "Auto-continues after {{seconds}}s without an answer",
+    "askExpiresSoon": "Expiring soon"
   },
   "diff": {
     "showMoreRows": "Show more ({{remaining}} rows left)"
