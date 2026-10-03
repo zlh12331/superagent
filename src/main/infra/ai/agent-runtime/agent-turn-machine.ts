@@ -13,21 +13,25 @@
 //   running         回合执行（重装配 + streamText + TurnRunner 消费 + usage 等待）
 //     streaming             流执行中（文本/推理/工具调用不细分，避免过度建模）
 //     waitingApproval       等待用户审批（permission=ask；approval.responded 恢复）
+//     waitingInput          等待用户回答提问（ask_user_question 挂起；ask.responded 恢复）
 //   deciding        runDone 决策链（guard 有序：超时 → 空回复 → 中断 → 完成）
 //   completed       正常结束（final）
 //   aborted         用户中断（final）
 //   error           异常结束（final：模型解析失败 / 排队失败 / 超时 / 空回复 / 流异常）
 //
-// 事件：
-//   assembly.done/.failed   模型解析完成/失败
-//   gate.acquired/.failed   并发槽位获取/失败
-//   turn.runDone/.runError  TurnRunner 消费完成（reason/rawPartCount/usage）/异常
-//   approval.requested/.responded  审批等待/恢复（permission-service 生命周期推送）
+// 事件与转换：
+// - 显式事件（send）：approval.requested/.responded、ask.requested/.responded
+//   （审批/提问生命周期推送，turn-subscriptions 按 sessionId 过滤后转发）、
+//   xstate.error.actor.*（invoke 平台错误事件，types 声明通配符做类型匹配）
+// - invoked services 的完成/失败走 onDone/onError 内联转换（非显式事件）：
+//   resolving 的 done/.failed、queued 的 acquired/.failed、running 的
+//   runDone/.runError——模型解析/槽位获取/回合执行的三个阶段
 //
 // 顺序敏感语义（历史坑，已固化为 guard/entry 顺序，改动前先读测试）：
 //   - deciding 决策链：isTimeout 先于 isEmptyResponse 先于 isAborted
 //     （2026-09-28：终态吞事件导致快照与落库分叉）
-//   - running.exit：先释放并发槽位后清模型超时定时器（让排队的下个回合尽早启动）
+//   - running.exit：先释放并发槽位后清模型超时定时器（让排队的下个回合尽早启动；
+//     clearModelTimeout 宿主当前为显式 no-op——定时器由 turn-assembly try/finally 自管）
 //   - 三终态 entry：flushForwarder 先于 finalize（合帧缓冲保序，P2-31）
 //
 // 宿主数据流分工：控制流相关数据（modelId/runOutput/error）进 context；
@@ -75,7 +79,11 @@ export interface TurnDeps {
   flushForwarder(): void;
   /** running 退出·槽位释放（幂等；未排队时 no-op；须先于 clearModelTimeout） */
   releaseGate(): void;
-  /** running 退出·模型超时定时器清理（幂等） */
+  /** running 退出·模型超时定时器清理（幂等）。
+   * 宿主当前实现为显式 no-op：定时器的创建与清理已移至 turn-assembly
+   * （谁创建谁清理，try/finally 内闭环）；保留本 dep 是为不动机器契约
+   * （running.exit 引用它）与 exit 顺序测试——若要移除，需同步改
+   * TurnDeps/action/exit 与顺序测试（跨模块，另行处理） */
   clearModelTimeout(): void;
   /** 终态清理：订阅退订 + registry CAS + 耗时日志 + span.end（幂等） */
   cleanup(): void;
