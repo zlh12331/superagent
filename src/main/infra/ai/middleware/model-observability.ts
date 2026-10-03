@@ -7,12 +7,11 @@
 // - 失败路径打 warn（生产可查：任何模型调用失败都在此集中可见）
 //
 // 接入方式：
-// - 常规链路（agent 主回合 / chat / side query）：LlmClient.getModel 内 wrap，
+// - 常规链路（agent 主回合 / side query）：LlmClient.getModel 内 wrap，
 //   per-model 缓存的就是 wrapped 实例，所有调用方零改动即可获得观测
-// - 覆盖路径（settings 测试连接等显式 kind/apiKey 覆盖）不观察测：
-//   短线低频诊断调用，错误已由 settings UI 独立展示；且覆盖路径走
-//   providerRegistry.createFactory 直出（不经 LlmClient），包装会引入
-//   对模型接口形态的无谓耦合，观测收益趋零
+// - 覆盖路径（kind/apiKey 覆盖直出 providerRegistry.createFactory）不观察测：
+//   该路径当前生产零调用（仅单测；连通性测试走 models:test 裸 HTTP 探测，
+//   不经 LlmClient）——包装会引入对模型接口形态的无谓耦合，观测收益趋零
 //
 // 边界（实事求是）：
 // - wrapStream 的 doStream 只 resolve 到「流头建立」，latencyMs 语义是
@@ -31,8 +30,8 @@ function errorMessage(error: unknown): string {
 /**
  * 模型调用级观测中间件（模块级单例常量）
  *
- * 挂到 getModel 出口后，agent 主回合、chat、side query 的每个模型调用
- * 都会经过这里打点：provider / modelId / 耗时 / token 用量。
+ * 挂到 getModel 出口后，agent 主回合与 side query（generateText/generateJson）
+ * 的每个模型调用都会经过这里打点：provider / modelId / 耗时 / token 用量。
  */
 export const modelObservabilityMiddleware: LanguageModelMiddleware = {
   wrapGenerate({ doGenerate, model }) {
