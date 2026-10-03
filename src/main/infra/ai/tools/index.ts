@@ -66,7 +66,8 @@ export { createGitPushTool } from './git-push.tool';
 export { createGlobTool } from './glob.tool';
 export { createGrepTool } from './grep.tool';
 export { createListDirectoryTool } from './list-directory.tool';
-// 重新导出路径守卫，供其他工具复用
+// 重新导出路径守卫（当前无外部消费方——工具内部深度导入 './path-guard'；
+// 保留为目录公共面声明，属 knip exports 级人工审阅范畴）
 export { resolveWithinWorkspace } from './path-guard';
 // 重新导出工具工厂函数，供外部按需使用
 export { createReadFileTool } from './read-file.tool';
