@@ -5,8 +5,16 @@
 // - initialize()：创建 prompts 表 + 插入默认 Code Agent prompt（幂等）
 // - getPrompt(id)：从数据库读取 prompt 模板
 // - resolvePrompt(id, workingDir)：读取模板 + 注入动态上下文 → 返回完整 system prompt
-// - listPrompts()：列出所有 prompt（未来供设置界面使用）
-// - updatePrompt(id, content)：更新 prompt 内容（未来供设置界面使用）
+// - listPrompts() / updatePrompt(id, content)：预留设置界面接入点
+//
+// 消费方与调用链：
+// - initialize：index.ts 在 AgentService 初始化之前调用（resolvePrompt 时
+//   数据库已有默认 prompt）
+// - resolvePrompt：agent.handler 记忆召回链预解析（P2-32）→ agent-service
+//   resolveSystemPrompt 复用（同回合免二次解析；PromptService 内部已回退
+//   硬编码默认值，失败容忍）
+// - listPrompts / updatePrompt：当前生产零调用（无 prompt 域 IPC，仅单测），
+//   预留设置界面接入
 //
 // 设计原则：
 // - 数据库存储：用户选择的方案，支持运行时编辑
@@ -35,9 +43,9 @@ export const DEFAULT_CODE_AGENT_PROMPT_ID = 'code-agent';
  *
  * 解耦 AgentService / ServiceContainer 对具体类的依赖：
  * - 单元测试：注入 mock 实现，不依赖真实 SQLite
- * - 未来扩展：支持基于远程配置中心的 prompt 同步
+ * - 实现替换：setPromptService 注入另一实现
  *
- * 与 IAgentService / IChatService 的接口设计模式一致。
+ * 与 IAgentService / IMCPService 的接口设计模式一致。
  */
 export interface IPromptService {
   /** 初始化默认 prompt（幂等，重复调用安全） */
@@ -82,9 +90,13 @@ export interface ResolvedPrompt {
  * PromptService：管理 System Prompt 的数据库存储与动态上下文注入
  *
  * 生命周期：
- * - initialize()：应用启动时调用，幂等建表 + 插入默认 prompt
+ * - initialize()：应用启动时调用（AgentService 初始化前），幂等建表 + 插入默认 prompt
  * - resolvePrompt()：每次 agent:run 时调用，读取模板 + 注入上下文
- * - getPrompt() / listPrompts() / updatePrompt()：供未来设置界面使用
+ * - getPrompt() / listPrompts() / updatePrompt()：预留设置界面（当前生产
+ *   零调用，仅单测覆盖）
+ *
+ * 生产实例由 ServiceContainer lazy accessor 持有（getPromptService 创建，
+ * 闭包装配 gitSummaryProviderFrom(gitService.status)；setPromptService 供替换）。
  */
 export class PromptService implements IPromptService {
   /** 标记 initialize 是否已执行（避免重复插入） */
@@ -160,7 +172,7 @@ export class PromptService implements IPromptService {
   /**
    * 列出所有 prompt
    *
-   * 供未来设置界面使用。
+   * 预留设置界面接入点（当前生产零调用，仅单测）。
    */
   listPrompts(): PromptRow[] {
     try {
@@ -175,11 +187,11 @@ export class PromptService implements IPromptService {
   /**
    * 更新 prompt 内容
    *
-   * 供未来设置界面使用。
+   * 预留设置界面接入点（当前生产零调用，仅单测）。
    *
    * @param id prompt ID
    * @param content 新的 prompt 内容
-   * @returns 是否成功
+   * @returns 是否成功（无该行返回 false）
    */
   updatePrompt(id: string, content: string): boolean {
     try {
@@ -199,7 +211,10 @@ export class PromptService implements IPromptService {
   /**
    * 解析 prompt：读取模板 + 注入动态上下文
    *
-   * 这是 AgentService 调用的入口：
+   * 生产调用链（agent:run）：
+   * 1. agent.handler 记忆召回链先调用（预解析，P2-32）
+   * 2. agent-service resolveSystemPrompt 复用该结果（同回合免二次解析）
+   * 步骤：
    * 1. 从数据库读取指定 ID 的 prompt 模板
    * 2. 如果数据库读取失败，回退到硬编码默认值
    * 3. 调用 injectDynamicContext 注入环境信息 + Git 状态 + AGENTS.md
