@@ -1,4 +1,4 @@
-// src/main/infra/ai/dangerous-commands.ts
+// src/main/infra/ai/tools/dangerous-commands.ts
 // 危险命令确定性拦截（AUTO 模式 Layer-0 守卫）
 // ──────────────────────────────────────────────────────────────
 // 职责：

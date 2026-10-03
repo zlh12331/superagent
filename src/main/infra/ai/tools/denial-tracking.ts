@@ -1,4 +1,4 @@
-// src/main/infra/ai/denial-tracking.ts
+// src/main/infra/ai/tools/denial-tracking.ts
 // AUTO 模式拒绝跟踪状态机（信任衰减守卫）
 // ──────────────────────────────────────────────────────────────
 // 职责：

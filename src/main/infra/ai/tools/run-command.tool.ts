@@ -210,7 +210,7 @@ export function createRunCommandTool(): Tool<RunCommandInput> {
               killTree(child, true);
             }
           }, 2000).unref();
-          // 终极兑底：close 依赖 stdio 流关闭，极端情况下孙进程句柄滞留
+          // 终极兜底：close 依赖 stdio 流关闭，极端情况下孙进程句柄滞留
           // 时永不触发——5s 后直接以已缓冲输出 resolve，避免悬挂到看门狗
           setTimeout(() => {
             if (!settled) {
