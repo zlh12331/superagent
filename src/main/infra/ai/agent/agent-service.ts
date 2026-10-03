@@ -1,25 +1,27 @@
 // src/main/infra/ai/agent/agent-service.ts
-// AgentService：Code Agent 核心服务，封装 streamText + tools + stopWhen 多轮工具调用循环
+// AgentService：Code Agent 回合的宿主（生命周期编排 + 效果提供 + 落库 + 推送）
 // ──────────────────────────────────────────────────────────────
-// 职责：
-// 1. 接收渲染层发起的 agent:run 请求，启动 streamText 流式响应（带工具调用能力）
-// 2. 通过 ToolRegistry.toAISDKTools(ctx, executeHook) 转换工具为 AI SDK 原生格式
-// 3. executeHook 注入 ToolExecutor.execute 作为权限检查 + 审批 + IPC 推送层
-// 4. 使用 stopWhen: isStepCount(maxSteps) 限制多轮工具调用循环次数（AI SDK v7）
-// 5. 把 result.toUIMessageStream() 的 part 逐个通过 IPC 推送到渲染层
-// 6. 维护 sessionId → AbortController Map，支持中断指定/全部 agent 对话
-// 7. 错误分类（复用 error-classifier）→ AppError → AGENT_STREAM_ERROR 推送
-// 8. webContents.isDestroyed 守卫，避免销毁后继续推送
+// 在 38 号重构后的职责划分（改动前务必先读）：
+// - **控制流不在这里**：模型解析/并发排队/回合执行/审批与提问等待/终态裁决
+//   全部由 XState 状态机（agent-runtime/agent-turn-machine）驱动。本文件在
+//   runTurnStream 内构造 TurnDeps（效果闭包）交给机器，机器在正确时机回调。
+// - **本文件提供效果**：装配（模型/工具/提示词/预算）、流消费委托
+//   turn-assembly、收尾（三个 finalize：completed/aborted/error）、
+//   事件推送（part/END/ERROR）、落库（turns + messages 富 parts）。
+// - **跨回合记账留在本文件**：活跃会话注册表、preempt 防重、TOCTOU 集合——
+//   这些是「回合之间」的职责，不属于单回合机器。
 //
-// 与 agent-runtime/ 的分工：
-// - 本文件：回合编排宿主（XState 回合状态机、上下文压缩、落库、IPC 推送，感知 webContents/DB）
-// - agent-runtime/：纯函数执行层（turn-runner 流翻译、循环检测、并发门，不感知 webContents/DB）
-// - 错误分类复用 error-classifier.ts，错误 → AppError → AGENT_STREAM_ERROR 推送
+// 与 agent-runtime/ 的分工：本文件感知 webContents/DB（副作用层）；
+// agent-runtime/ 是纯函数执行层（turn-runner 流翻译、并发门、循环检测），
+// 不感知窗口与数据库。
 //
-// 与 AI SDK v7 的关系：
-// - streamText 接收 tools 参数：Record<string, Tool>，AI SDK 自动多轮调用直到模型不再请求工具
-// - stopWhen 接受 StopCondition（替代旧版 maxSteps）：isStepCount(n) 限制步数
-// - result.toUIMessageStream() 返回 UIMessageStream，逐 part 含 text-delta/tool-call/tool-result/finish
+// 对外契约（IAgentService，勿改）：
+// - startAgent(options) 立即返回 sessionId，回合在后台异步推进（不 await 完成）
+// - abort / abortAll 中断；dispose 中断并等待收尾（带超时兜底）
+// - onTurnEvent 订阅类级回合事件总线（IM 桥接等跨会话监听方）
+//
+// 错误处理：复用 error-classifier，错误 → AppError → AGENT_STREAM_ERROR 推送
+// （AbortError 例外——用户中断不是错误，走 aborted 出口）。
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
@@ -46,7 +48,6 @@ import { broadcastInvalidation } from '../../invalidation/invalidation';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
 import { TurnEventEmitter } from '../agent-runtime';
-import type { createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { ActiveSessionRegistry } from '../agent-runtime/active-session-registry';
 import { createAgentTurnActor, type TurnDeps } from '../agent-runtime/agent-turn-machine';
 import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
@@ -151,18 +152,16 @@ export interface StartAgentOptions {
  */
 export interface IAgentService {
   /**
-   * 启动一次 agent 对话
+   * 启动一次 agent 回合
    *
-   * 流程：
-   * 1. 生成或复用 sessionId
-   * 2. 创建 AbortController 并加入 Map
-   * 3. 构造 ToolContext（含 workingDir / sessionId / abortSignal）
-   * 4. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）
-   * 5. 调用 streamText 启动流式响应（带 tools + stopWhen）
-   * 6. 异步读取 toUIMessageStream 的 reader，逐 part 通过 IPC 推送
-   * 7. 流结束（正常/异常/abort）后从 Map 移除
+   * 流程（38 号重构后）：
+   * 1. 生成或复用 sessionId；TOCTOU 集合把「检查—注册」变原子（见 startingSessions）
+   * 2. preempt 同 sessionId 的旧流（abort 并等其退出，避免孤儿流）
+   * 3. markRunning（崩溃恢复识别）；fire-and-forget 启动 runTurnStream
+   * 4. 注册 controller + streamPromise；返回 sessionId（**不等待回合完成**）
+   * 5. 回合内的控制流由状态机驱动（见 runTurnStream 与 agent-turn-machine）
    *
-   * @returns 本次 agent 对话的 sessionId
+   * @returns 本次 agent 对话的 sessionId（立即返回）
    */
   startAgent(options: StartAgentOptions): Promise<string>;
   /** 中断指定 sessionId 的 agent 对话，返回是否成功中断 */
@@ -197,13 +196,16 @@ export interface IAgentService {
 /**
  * AgentService 默认实现
  *
- * 依赖：
+ * 依赖（全部经构造注入，测试可替换）：
  * - IToolRegistry：转换为 AI SDK tools（toAISDKTools）
  * - IToolExecutor：作为 executeHook 注入，统一执行权限检查 + 审批 + IPC 推送
- * - IPromptService：当调用方未传 systemPrompt 时，自动解析默认 Code Agent prompt
+ * - IPromptService：调用方未传 systemPrompt 时解析默认 Code Agent prompt
+ * - ISessionService：回合落库（turns/messages）与 running/idle 状态维护
+ * - 可选：titleGenerator / concurrencyGate / permissionService / llmClient
+ *   （缺省时对应能力降级，见各构造参数注释）
  *
- * 单例模式：通过 ServiceContainer 持有，整个应用生命周期共享一个实例。
- * 内部维护 sessionId → AbortController + streamPromise 两个 Map（与 ChatService 一致）。
+ * 生命周期：由 ServiceContainer 持有为单例（整个应用共享）。
+ * 跨回合记账集中在两个成员：registry（活跃会话）+ startingSessions（启动临界区）。
  */
 export class AgentService implements IAgentService {
   /**
@@ -274,32 +276,33 @@ export class AgentService implements IAgentService {
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
 
-    // 2026-09-08 修复（注册 TOCTOU）：同 sessionId 已在启动中 → 等待其完成再继续，
-    // 避免两次并发调用都通过「无活跃」判定后重复注册（后者覆盖前者的
-    // controller/stream，产生孤儿流与 persistTurn 的 seq 冲突）。
+    // 注册 TOCTOU 临界区（2026-09-08 修复）：同 sessionId 已在启动中则先等它结束。
+    // 必要性：await preemptExisting 与 registry.register 之间跨越 await 边界，
+    // 两次并发调用会都通过「无活跃」判定再先后 register，后者覆盖前者的
+    // controller/stream（孤儿流 + persistTurn 的 seq 冲突）。
     // 用微任务轮询等待而非抛错：调用方语义是「启动/复用该会话的回合」，
-    // 等待后走正常 preempt 流程（会中断前一个回合）更符合预期。
+    // 等完走正常 preempt 流程（中断前一个回合）比抛错更符合预期。
     while (this.startingSessions.has(sessionId)) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     this.startingSessions.add(sessionId);
 
     try {
-      // 防重检查（R2：收敛到共享注册表）：若同 sessionId 已有活跃 stream，
-      // 先 abort 并等待其退出，避免孤儿 stream
+      // 防重：同 sessionId 已有活跃 stream → abort 并等其退出（避免孤儿 stream）。
+      // 语义内聚于共享注册表（R2），与 ChatService 同一实现
       await this.registry.preemptExisting(sessionId, 'agent');
 
       const controller = new AbortController();
 
-      // 回合状态机：标记进行中（崩溃恢复识别；正常结束在 stream finally 归位 idle）
+      // 标记 running（崩溃恢复识别：启动期会把残留 running 标 interrupted）；
+      // 归位 idle 在 handleStreamSettled（CAS 门控）。失败不阻断（仅记日志）
       void this.sessionService.markRunning(sessionId).catch((err: unknown) => {
         logger.error({ sessionId, error: err }, 'markRunning 失败');
       });
 
-      // 异步推送流式 part（不 await，让 startAgent 立即返回 sessionId）
-      // 任何错误都通过 catch 推送 AGENT_STREAM_ERROR，不抛回调用方
-      // catch 内部仅记录日志，不改变 Promise 状态（仍为 fulfilled），
-      // 这样 dispose 的 Promise.allSettled 不会被 reject 影响
+      // fire-and-forget 启动回合流：不 await，让 startAgent 立即返回 sessionId。
+      // 这里 catch 兜住所有异常（只记日志、不 rethrow）——保证 streamPromise 恒为
+      // fulfilled，dispose 的 Promise.allSettled 不会被 reject 干扰
       const streamPromise = this.runTurnStream(sessionId, options, controller).catch(
         (err: unknown) => {
           logger.error({ sessionId, error: err }, 'AgentService 流推送异常');
@@ -307,32 +310,32 @@ export class AgentService implements IAgentService {
       );
       this.registry.register(sessionId, controller, streamPromise);
 
-      // R2：CAS 删除 stream 条目（语义内聚于共享注册表）；CAS 成功才归位 idle
+      // 流收尾挂钩（CAS：仅当注册表里仍是本流时才归位 idle，见 handleStreamSettled）
       streamPromise.finally(() => {
         this.handleStreamSettled(sessionId, streamPromise);
       });
 
       return sessionId;
     } finally {
-      // 注册完成（或异常）即释放，后续并发调用可正常走 preempt 路径
+      // 临界区释放：注册完成（或异常）即放开，后续并发调用可走正常 preempt 路径
       this.startingSessions.delete(sessionId);
     }
   }
 
   /**
-   * stream 收尾：CAS 归位 + markIdle
+   * 流收尾：CAS 归位 idle
    *
-   * 仅当本流仍是被注册的当前流时才 markIdle——preempt 兜底超时（5s）后新回合
-   * 可能已 register + markRunning，旧流的迟到收尾若无条件 markIdle 会把
-   * running 回退成 idle（2026-09-28 深读发现；仅 DB 持久层语义失真，内存侧
-   * registry 因 CAS 本就无误删）。
+   * 仅当本流仍是被注册的当前流时才 markIdle。必要性（2026-09-28 深读）：
+   * preempt 兜底超时（5s）后新回合可能已 register + markRunning，旧流的迟到
+   * 收尾若无条件 markIdle 会把 running 回退成 idle——仅 DB 持久层语义失真
+   * （内存侧 registry 因 CAS 本就无误删），但会让崩溃恢复读到错误状态。
    */
   private handleStreamSettled(sessionId: string, streamPromise: Promise<void>): void {
     const isCurrent = this.registry.removeStreamIfCurrent(sessionId, streamPromise);
     if (!isCurrent) {
       return;
     }
-    // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
+    // 流完全结束（正常/错误/中断）→ 归位 idle
     void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
       logger.error({ sessionId, error: err }, 'markIdle 失败');
     });
@@ -436,17 +439,27 @@ export class AgentService implements IAgentService {
     };
   }
 
+  /**
+   * 回合流驱动：构造效果面（TurnDeps）→ 创建并启动状态机 → 等终态
+   *
+   * 这是宿主与机器的**唯一接缝**：本方法不写控制流，只把「机器可能需要的能力」
+   * 包成 deps 闭包（捕获 options/webContents/span/累积器/合帧器），机器在
+   * 正确时机回调它们。控制流的权威在 agent-turn-machine（状态/guard 顺序/
+   * exit-entry 顺序/终态收尾都在那边，见其文件头）。
+   *
+   * 与 ChatService.streamToWebContents 的区别：带 tools + stopWhen 限轮数、
+   * executeHook 注入权限层、错误复用 error-classifier（Chat 无这些）。
+   *
+   * @param sessionId 会话 id（registry 记账键）
+   * @param options 回合启动选项（消息/工作目录/模型参数/窗口）
+   * @param controller 本回合的中断控制器（用户 abort / preempt 触发）
+   */
   private async runTurnStream(
     sessionId: string,
     options: StartAgentOptions,
     controller: AbortController,
   ): Promise<void> {
-    // 回合流驱动（38 号 spec）：控制流（装配顺序/排队/运行/收尾/审批等待）由
-    // agent-turn-machine 驱动，本方法只提供效果面——deps 闭包捕获 options/
-    // webContents/span/累积器，机器在正确时机调用它们（exit 顺序/guard 顺序/
-    // 终态收尾见机器文件头）。与 ChatService.streamToWebContents 的区别：
-    // 带 tools + stopWhen 限轮数、executeHook 注入权限层、错误复用 error-classifier。
-    // 性能埋点：streamText 全流程耗时（含 prompt 解析 + 模型调用 + 工具执行 + 流推送）
+    // 性能埋点：整回合耗时（含 prompt 解析 + 模型调用 + 工具执行 + 流推送）
     const startTime = performance.now();
     // OpenTelemetry span：串联 prompt 解析 → streamText → 工具执行 → 流推送整条链路
     await withSpan(
@@ -482,7 +495,6 @@ export class AgentService implements IAgentService {
         const partForwarder = createTurnPartForwarder(sessionId, options.webContents);
         let releaseGate: (() => void) | undefined;
         let resolvedModel: ResolvedModel | undefined;
-        let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
         let unsubscribeApproval: (() => void) | undefined;
         let unsubscribeAsk: (() => void) | undefined;
 
@@ -650,7 +662,11 @@ export class AgentService implements IAgentService {
             releaseGate?.();
           },
           clearModelTimeout: () => {
-            modelTimeout?.clear();
+            // 显式 no-op：模型级超时定时器现由 turn-assembly 在 try/finally 内
+            // 创建与清理（谁创建谁清理），宿主已不再持有该定时器。
+            // 保留本 dep 是为不动机器 TurnDeps 契约（running.exit 引用它）——
+            // 若要一并清理，需同步改 agent-turn-machine 的 TurnDeps/action/exit
+            // 与 exit 顺序测试（跨模块，另行处理）
           },
           cleanup: () => {
             // 订阅退订（防泄漏）→ registry CAS（R2：仅当注册表里仍是自己时才删，
@@ -774,13 +790,13 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 阶段 7+8：completed 收尾（2026-09-12 自 streamToWebContents 提取）
+   * completed 收尾：由机器 completed 终态 entry 调用（deps.finalizeCompleted）
    *
-   * usage 投影与上报（reportTurnUsage）→ completeTurn(completed) 落库 →
-   * 标题生成（回合结束后异步，失败静默；会话仍为默认标题时用首条用户消息
-   * 生成简洁标题）。
+   * 三件事（顺序即语义）：usage 投影与上报（reportTurnUsage，含 span 打点）→
+   * completeTurn(completed) 落库（turn-end 事件 + END 推送 + transcript）→
+   * 标题生成（异步、失败静默：会话仍是默认标题时用首条用户消息生成）。
    *
-   * @param usage SDK totalUsage（调用方已 await；失败时为 null）
+   * @param usage SDK totalUsage（宿主已 await 得到；失败时为 null）
    */
   private finalizeCompletedTurn(args: {
     readonly sessionId: string;
@@ -841,12 +857,12 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 阶段 catch：error 收尾（2026-09-12 自 streamToWebContents 提取）
+   * error 收尾：由机器 error 终态 entry 调用（deps.finalizeError）
    *
-   * 非 AbortError 的异常出口：错误由机器 error 终态 entry 调用（状态收敛已由
-   * 机器完成）→ 推送 AGENT_STREAM_ERROR（webContents 存活时）→ 回合事件 ERROR →
-   * completeTurn(error) 落库 → 日志。AbortError 不经过此方法（用户中断不是
-   * 错误，机器 isAbortFailure guard 路由到 aborted 终态）。
+   * 非 AbortError 的异常出口（AbortError 走 aborted——用户中断不是错误，机器
+   * isAbortFailure guard 已路由）。四件事：classifyError 归类 → 推送
+   * AGENT_STREAM_ERROR（webContents 存活时）→ 回合事件 ERROR →
+   * completeTurn(error) 落库。**状态收敛已由机器完成**，本方法不回发状态事件。
    */
   private finalizeErrorTurn(args: {
     readonly sessionId: string;
@@ -905,6 +921,9 @@ export class AgentService implements IAgentService {
   /**
    * 持久化回合流水（失败不阻断主流程）
    *
+   * 由 completeTurn 以 fire-and-forget 调用（`void this.persistTurn(...)`）——
+   * 落库失败只记日志，不影响回合已推送给渲染层的终态。
+   *
    * seq 由 usage-turn-store.recordTurn 内部用 `MAX(seq)+1` 原子计算
    * （2026-09-08 修复：此前这里全量查 turns 取 length，既 O(n²) 又在
    * 并发写同一会话时产生重复 seq）。此处传 0 占位，实际值以存储层为准。
@@ -928,9 +947,14 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 统一回合收尾：turn-end 事件 + AGENT_STREAM_END 推送 + Transcript 落库
+   * 统一回合收尾：turn-end 事件 + 失效域广播 + AGENT_STREAM_END 推送 + 落库
    *
-   * 三个出口（completed / aborted / error）共用，消除重复。
+   * 三个出口（completed / aborted / error）共用，消除重复。由三个 finalize
+   * 方法各自调用（completed → finalizeCompletedTurn；aborted → deps.finalizeAborted；
+   * error → finalizeErrorTurn）。
+   *
+   * 顺序约束：失效域广播**先于** END 推送（同窗口队列保序，渲染层先登记
+   * 「回合结束域已覆盖」，stream:end 处理据此跳过旧清单——渐进回落）。
    */
   private completeTurn(params: {
     readonly sessionId: string;
