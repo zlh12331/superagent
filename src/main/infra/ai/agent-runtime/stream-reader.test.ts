@@ -6,6 +6,9 @@
 // 2. 流挂起超阈值：抛 AI_TIMEOUT + abort controller
 // 3. 流分块读取：多块顺序返回
 // 4. 超时定时器清理：正常路径不残留（finally clearTimeout）
+//
+// 接线背景：生产消费方为 agent-runtime 内部两处（create-stream 首 part
+// 预读 + TurnRunner 循环读流）——本守卫不依赖任何配置，主回合链路恒生效。
 
 import { describe, expect, it, vi } from 'vitest';
 import { readWithIdleTimeout } from './stream-reader';

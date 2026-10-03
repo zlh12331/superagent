@@ -2,7 +2,7 @@
 // Agent 回合状态机单测：转换表全表断言（合法转换 + 决策链顺序 + 非法转换护栏）
 // ──────────────────────────────────────────────────────────────
 // 验证目标：
-// 1. 合法路径：resolving → queued → running{streaming⇄waitingApproval} → deciding → 三终态
+// 1. 合法路径：resolving → queued → running{streaming⇄waitingApproval/waitingInput} → deciding → 三终态
 // 2. deciding 决策链顺序：isTimeout ▶ isEmptyResponse ▶ isAborted ▶ completed
 //    （2026-09-28 顺序坑的结构性回归锚：终态吞事件类 bug 在此拦下）
 // 3. 终态 entry 顺序：flushForwarder 先于 finalize 先于 cleanup（P2-31 保序）
@@ -11,6 +11,8 @@
 //
 // 测试手法：deps 全部走 deferred（手工 resolve/reject 控制时序）+ 调用日志数组
 // 断言相对顺序——不 mock 模块（机器纯层，deps 注入即全部效果面）。
+// after 超时测试用**真实 timer 短值**（20ms）而非 fake timers：XState actor
+// 信箱调度跨宏任务，fake timers 下推进不会触发 after 转换的派发（实测死锁）。
 // ──────────────────────────────────────────────────────────────
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';

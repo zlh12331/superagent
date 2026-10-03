@@ -5,6 +5,10 @@
 // - 不丢 part：任何入队 part 最终都被 emit（缓冲在窗口定时器或 flush 时落地）
 // - 不乱序：emit 顺序与 push 顺序一致（非 delta part 前先落地缓冲）
 // - 不跨合：不同 id 的 text-delta、不同类型的 part 不合并
+//
+// 接线背景：生产中由 agent-service 经 stream-part-forward.ts 的
+// createTurnPartForwarder 创建（emit = forwardStreamPart 单参包装）；
+// 定时器经 BatchScheduler 注入，本文件用假定时器控制窗口时序。
 // ──────────────────────────────────────────────────────────────
 
 import { describe, expect, it, vi } from 'vitest';
