@@ -7,8 +7,15 @@
 // - 连续相同文件读取 ≥ 阈值 → 判定循环（"总结这个项目"等合法场景
 //   会并行 read_file，因此文件读取阈值放宽）
 //
+// 接线现状（重要）：
+// - recordToolCall 已接线：TurnRunner 读流时对每个 tool-call 事件记录
+// - recordFileRead 未接线：生产代码零调用（TurnRunner 不记录文件读取，
+//   agent-service executeHook 也未接），当前仅单测覆盖，属预留能力；
+//   接线点应在 executeHook 的 read_file 分支，补齐前文件读取循环不设防
+//
 // 语义：
-// - recordToolCall 返回 true = 触发循环（调用方应中断回合）
+// - recordToolCall 抛 LoopDetectedError = 触发循环（agent-service 按
+//   AI_LOOP_DETECTED 分类终止回合）
 // - 单回合实例（TurnRunner 每次 run 创建），回合结束自然释放
 // ──────────────────────────────────────────────────────────────
 

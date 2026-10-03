@@ -42,7 +42,8 @@ export interface TurnRunnerOptions {
   /**
    * 原始 part 回调（读流时每个 part 先回调再翻译）
    *
-   * 用途：上层推送 AGENT_STREAM_PART 等原始通道（本层不感知传输目标）。
+   * 用途：上层推送 agent:stream:part 等原始通道（meta.ts subscribeStreamPart；
+   * 宿主经 createTurnPartForwarder 合帧后推送，本层不感知传输目标）。
    * 注意：类型是领域投影（编译期裁剪），运行时对象为 SDK 完整 part，透传无损。
    */
   readonly onPart?: (part: StreamPart) => void;
@@ -57,6 +58,10 @@ export interface TurnRunnerOptions {
    * 模型级超时归因回调（combinedAbortSignals 把超时与用户中断都折叠成 abort；
    * 返回 true 时中断被归因为 reason='timeout' 而非 'aborted'——二者出口不同：
    * timeout 走错误出口 finalizeErrorTurn，aborted 走中断出口 completeTurn）
+   *
+   * 生产接线现实：turn-assembly 仅当模型配置 generationConfig.timeoutMs 才注入
+   * 本回调——生产常态未配置（模型条目无此字段，已登记待补数据源），此时超时
+   * abort 会归为 'aborted'；真实可达的超时保护是流空闲超时（AI_TIMEOUT，走抛错）。
    */
   readonly isTimeout?: () => boolean;
 }
