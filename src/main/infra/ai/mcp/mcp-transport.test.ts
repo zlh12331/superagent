@@ -1,5 +1,9 @@
 // src/main/infra/ai/mcp/mcp-transport.test.ts
 // createMcpTransport 工厂单测：三态分支返回正确实例（仅构造，不发起连接）
+//
+// 接线背景：生产消费方 = MCPClient.connect（按 transport 三态创建传输层）；
+// 远程传输经 proxiedFetch 注入（34 号网络代理）——本组用例仅断言实例类型
+// 与防御分支，真实连接行为不在此覆盖。
 
 import { AppError } from '@code-agent/shared/main';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';

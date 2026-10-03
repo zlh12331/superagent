@@ -5,6 +5,10 @@
 // 1. buildMcpToolName：构建 mcp__${serverName}__${toolName}
 // 2. isMcpTool：判断是否以 mcp__ 开头
 // 3. parseMcpToolName：解析命名空间名称为 { serverName, toolName }
+//
+// 接线背景：isMcpTool 被权限层的 MCP 防线消费（permission-service 对 MCP
+// 工具有额外审批防线）；buildMcpToolName/parseMcpToolName 被适配器与
+// tool-registry 命名约定依赖——本组用例守住命名空间格式的往返一致性。
 
 import { describe, expect, it } from 'vitest';
 

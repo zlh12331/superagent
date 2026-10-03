@@ -5,6 +5,11 @@
 // 1. decideMcpToolPermission：权限决策（permissionOverride > readOnlyHint > 默认 'ask'）
 // 2. normalizeMcpToolResult：结果标准化（isError 抛错 / structuredContent 优先 / text 拼接）
 // 3. adaptMcpTool：适配 Tool 实例（命名空间、权限、execute 转发）
+//
+// 接线背景：生产消费方 = mcp-service.startServer（adaptMcpTool + client.callTool
+// 注入）。注意 tool.permission='auto' 不担保免审批——权限服务对 MCP 工具
+// （category 恒 'exec'）有额外防线，本文件断言的是适配层决策（适配器不感知
+// 权限服务）。
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Schema } from 'ai';

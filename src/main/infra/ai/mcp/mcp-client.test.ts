@@ -10,6 +10,10 @@
 // 6. callTool：未连接时抛 INTERNAL_ERROR
 // 7. callTool：转发失败抛 TOOL_EXECUTION_FAILED
 // 8. close：幂等（已关闭时直接返回）
+//
+// 接线背景：生产创建方唯一 = mcp-service.startServer；本文件 mock MCP SDK
+// 的 Client 与 StdioClientTransport（基础设施 mock，协议行为走断言），
+// 批次 12 节覆盖条件展开/stderr 转写/兜底分支等缺口。
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { WebContents } from 'electron';
