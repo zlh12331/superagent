@@ -124,7 +124,7 @@ agent-service.ts 预期净行从 683 降至约 450（file-size 棘轮只紧不�
 | 1 | 本 spec | ✅ |
 | 2 | 机器重写（setup/层级/invoked/guards）+ 全表断言迁移 | ✅（含 v5 实测三坑记录：invoke.input 显式传 / onError 事件 type 实值含 actor id / actor 调度跨宏任务） |
 | 3 | 宿主切换（runTurnStream = 效果提供者）+ 装配段提取 turn-assembly.ts（agent-service 净行 705→657，complexity 基线条目删除） | ✅ |
-| 4 | 阶段 2：审批等待决策面收敛（见 §4 设计判定——原「暂停/恢复 + 并行子任务」经实况核查裁剪） | 实施中 |
+| 4 | 阶段 2：审批等待决策面收敛（见 §4 设计判定——原「暂停/恢复 + 并行子任务」经实况核查裁剪） | ✅（journey-agent E2E 3/3 + verify:local 全量绿；audit:registry 对齐 CI audit-ci 口径，GHSA-ch52-4w7c-c8xp 无补丁 allowlist 登记） |
 
 ## 4 阶段 2：审批等待决策面收敛（2026-10-02 设计判定）
 

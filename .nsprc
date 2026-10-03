@@ -4,6 +4,12 @@
   "high": true,
   "critical": true,
   "report-type": "summary",
-  "allowlist": [],
-  "packages": {}
+  "allowlist": ["GHSA-ch52-4w7c-c8xp"],
+  "packages": {
+    "http-cache-semantics": {
+      "reason": "GHSA-ch52-4w7c-c8xp（max-stale 跨用户缓存响应信息泄露）：Vulnerable <=4.2.0 且 Patched None（registry 实测 latest=4.2.0 即漏洞上限，无补丁版本可升）；命中路径为 devDependency 传递链 electron-builder→app-builder-lib→@electron/get→got→cacheable-request——构建期下载缓存，非应用运行时依赖，攻击面仅限本机构建环境。上游（got/cacheable-request 或 electron-builder）发布修复后应移除本条并复跑 audit",
+      "added": "2026-10-03",
+      "source": "verify:local audit:registry 实测（38 号 spec 收尾轮）"
+    }
+  }
 }
