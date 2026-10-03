@@ -1,10 +1,10 @@
-// src/main/infra/ai/cron-service.test.ts
+// src/main/infra/ai/agent/cron-service.test.ts
 // 定时任务服务单测：创建/删除/列表/启停/触发（内存 DB + croner 真实调度）
 
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { schema } from '../storage/schema';
-import { createTestDb } from '../storage/test-utils';
+import { schema } from '../../storage/schema';
+import { createTestDb } from '../../storage/test-utils';
 import { CronService } from './cron-service';
 
 // mock getDb：内存数据库（drizzle 迁移，schema.ts 单一真源）
@@ -12,8 +12,8 @@ function createInMemoryDb() {
   return createTestDb();
 }
 
-vi.mock('../storage/db', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../storage/db')>();
+vi.mock('../../storage/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../storage/db')>();
   let memoryDb: ReturnType<typeof createInMemoryDb> | null = null;
   return {
     ...actual,
@@ -29,7 +29,7 @@ vi.mock('../storage/db', async (importOriginal) => {
   };
 });
 
-import { getDb, resetDb } from '../storage/db';
+import { getDb, resetDb } from '../../storage/db';
 
 /** 秒级表达式（croner 6 字段：秒/分/时/日/月/周）——单测触发不等待分钟级 */
 const EVERY_SECOND = '* * * * * *';

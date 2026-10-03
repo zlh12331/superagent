@@ -59,6 +59,7 @@ const createUpdateToken = (): InstanceType<typeof CancellationToken> => new Canc
 import { resetConfigCache } from './config';
 import { agentAskService } from './infra/ai/agent/agent-ask-service';
 import { AgentService, type IAgentService } from './infra/ai/agent/agent-service';
+import { cronService } from './infra/ai/agent/cron-service';
 import { initSubagentManager } from './infra/ai/agent/subagent-manager';
 import { taskService } from './infra/ai/agent/task-service';
 import {
@@ -66,7 +67,6 @@ import {
   createConcurrencyGate,
   DEFAULT_MAX_CONCURRENT_TURNS,
 } from './infra/ai/agent-runtime/concurrency-gate';
-import { cronService } from './infra/ai/cron-service';
 import { GoalJudge } from './infra/ai/knowledge/goal-judge';
 import { GoalService } from './infra/ai/knowledge/goal-service';
 import type { LlmClient } from './infra/ai/llm-client';
