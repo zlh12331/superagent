@@ -11,7 +11,9 @@
 //   缺省 stdio（向后兼容：旧配置无 transport 字段视为 stdio）
 // - 工具命名空间：mcp__${serverName}__${toolName}（与 Claude Code 一致）
 //   避免与内置工具（read_file 等）重名，且便于按 server 名批量过滤
-// - MCP server 配置可由 settings store 持久化，运行时动态加载
+// - 配置生命周期：经 mcp:start IPC 按次传入（设置页表单组装），运行时状态
+//   不持久化——应用重启后 server 不自动恢复，需再次启动（原注释的
+//   「settings store 持久化」未实施，勿据此假设配置跨重启存在）
 // ──────────────────────────────────────────────────────────────
 
 /** MCP 传输类型（与 shared MCP_TRANSPORTS 对齐；缺省 stdio） */
