@@ -38,7 +38,7 @@ export interface ModelCapabilities {
    * OUTPUT_TOKEN_CEILING（token-limits.ts）。
    */
   maxOutputTokens?: number;
-  /** 是否仅用于"快模型"场景（标题生成 / 摘要 / 子代理等 side query） */
+  /** 是否仅用于"快模型"场景（标题生成 / 工具入参修复等 side query） */
   fastOnly?: boolean;
   /**
    * 是否思考模型（reasoning，输出前先产生思维链）
@@ -145,7 +145,8 @@ export interface ResolvedModel {
    * 是否可路由（false = 模型已停用，调用方应拒绝使用）
    *
    * 停用模型不注册运行时快照，但保留"曾配置"身份：resolve 返回 available=false，
-   * 供 LLM 层拦截（区别于"未注册任意 id"的测试连接透传兜底）。
+   * 供 LLM 层拦截（区别于"未注册任意 id"的透传兜底——后者是配置错误的
+   * 防御性降级，仍可路由）。
    */
   readonly available: boolean;
 }
