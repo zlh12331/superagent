@@ -7,6 +7,10 @@
 // 3. getRetryAfterDelayMs：Retry-After 头解析
 // 4. retryWithBackoff：成功不重试 / 重试到成功 / 耗尽抛错 / 不可重试立即抛 / abort 贯穿
 // 5. onRetry 遥测回调参数正确
+//
+// 接线背景：生产消费方两路——llm-client runSideQuery（side query 完整重试）
+// 与 create-stream（shouldRetryOnError 覆盖，主回合只兜传输层失败）；本组
+// 用例守住默认判定语义（isRetryableError），两路覆盖行为各有专属用例。
 
 import { APICallError } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

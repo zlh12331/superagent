@@ -7,8 +7,12 @@
 // 3. per-model 缓存：同模型不重复创建工厂
 // 4. 未注册模型 → 默认供应商 + 原始 id 透传
 // 5. 运行时快照：explicitApiKey/baseUrl 透传到 createProviderFactory
-// 6. generateText：成功路径 + 可重试错误重试
-// 7. reset：清空 per-model 缓存
+// 6. generateText：成功路径 + 可重试错误重试 + ModelFallback 降级链
+// 7. reset / invalidateModel：缓存清理
+//
+// mock 缝说明：仅替换 'ai' 的 generateText（APICallError 等保持真实导出）——
+// 结构化输出（Output.object）与错误分类走真实实现，mock 缝最小化。
+// 工厂 fake 返回合法 v4 model 形状（wrap 后 specificationVersion 检查才通过）。
 
 import type { LanguageModel } from 'ai';
 import { APICallError } from 'ai';
