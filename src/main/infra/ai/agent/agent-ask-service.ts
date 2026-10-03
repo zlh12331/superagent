@@ -1,21 +1,26 @@
 // src/main/infra/ai/agent/agent-ask-service.ts
-// Agent 交互式提问服务（ask_user_question 工具的 pending 闭环）
+// Agent 交互式提问服务：ask_user_question 工具的「等待用户作答」闭环
 // ──────────────────────────────────────────────────────────────
-// 职责（对齐审批 pending 模式）：
-// - ask()：推送提问事件到渲染层 + 注册 pending（await 用户回答）
-// - respond()：渲染层回传回答 → resolve 对应 pending
-// - expireAsk()：机器 after 超时到期 → 以「未响应」语义 resolve(null)
-// - dispose()：清理全部 pending（应用退出/回合中断，避免挂起）
+// 形态：模块级单例（非 Service Container accessor，与 cronService 同模式）——
+// 全局只应存在一份 pending 表，多会话共享；调用方直接 import 单例。
 //
-// 生命周期订阅（38 号阶段 2 收尾，对齐 permission-service 的 onApprovalLifecycle）：
-// 提问同样会挂起工具执行（await 用户回答），机器需据此进入 waitingInput 状态——
-// 此前机器完全不感知提问，挂起期间显示 streaming（状态失真）。onAskLifecycle
-// 提供 requested/resolved 数据源；超时计时源在机器 after 转换（本服务不自设
-// setTimeout），见 AskLifecycleListener 注释。
+// 核心机制是「挂起容器」：ask() 注册 pending 后返回一个悬置 Promise，工具执行
+// 在此 await 停住（进而整个 streamText 停住），直到三个外部出口之一解除：
+//   ① 用户作答  → respond()      → resolve(answers)
+//   ② 机器超时  → expireAsk()    → resolve(null)（工具返回「未响应」，LLM 自行继续）
+//   ③ 应用退出  → dispose()      → resolve(null)
+// 本服务**不自设任何超时定时器**：超时由 agent 回合状态机的 after 转换计时
+// （38 号 spec 阶段 2），服务只提供「到期后如何解除挂起」这一出口。
 //
-// 与 IPC 的关系：
-// - 主进程 emitEvent(IPC_DEFINITIONS.agent.subscribeAsk) 推送提问（统一出口 + dev 契约校验）
-// - 渲染层对话框提交后 invoke('agent:ask:respond', req) 回传
+// 生命周期订阅（onAskLifecycle）是状态机的数据源：提问会挂起回合，机器据此
+// 进入 waitingInput 状态——否则挂起期间机器显示 streaming，UI 状态失真。
+// 监听器形态刻意与 permission-service 的 onApprovalLifecycle 同构，两条
+// 「回合内等用户」路径语义一致。
+//
+// 与 IPC 的两端：
+// - 出：emitEvent(IPC_DEFINITIONS.agent.subscribeAsk) 推送提问（统一出口做
+//   dev 契约校验；channel 常量取自定义表，勿手写字面量）
+// - 入：渲染层 invoke('agent:ask:respond') → agent-ask.handler → respond()
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
@@ -25,24 +30,43 @@ import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 
-/** 单次提问的 pending 条目 */
+/**
+ * 单次提问的挂起条目
+ *
+ * 只持有解除挂起所需的最小集：resolve 回调 + 归属会话（生命周期事件过滤用）。
+ * questions 是推送时刻的快照——服务自身不读它（渲染层经 IPC 载荷拿问题），
+ * 保留是为诊断时能从 pending 还原「当时问了什么」。
+ */
 interface PendingAsk {
-  /** 问题（渲染层展示） */
+  /** 问题快照（诊断用；服务逻辑不读） */
   readonly questions: readonly AgentQuestion[];
-  /** 回答的 resolve（渲染层回传时触发；null = 超时/中断） */
+  /** 回答的 resolve（三个出口共用：作答传 answers / 超时与退出传 null） */
   resolve: (answers: AgentAnswer[] | null) => void;
-  /** 所属会话 id（生命周期事件过滤用） */
+  /** 归属会话 id（生命周期事件按会话过滤，多会话并发互不串扰） */
   readonly sessionId: string;
 }
 
-/** 提问决议结果（对齐 ApprovalDecisionOutcome 语义） */
+/**
+ * 提问决议结果（形态对齐 permission-types 的 ApprovalDecisionOutcome）
+ *
+ * ⚠️ 'aborted' 当前无生产者：用户中断回合时由 dispose() 静默清理（不通知
+ * 生命周期——机器直接走 aborted 终态，无需 waitingInput 出口）。保留该值是为
+ * 与审批枚举对称，将来若需「提问被中断」的可观测性再接线。
+ */
 export type AskDecisionOutcome = 'answered' | 'timed-out' | 'aborted';
 
-/** 提问生命周期监听器（Agent 回合状态机 waitingInput 状态的数据源） */
+/**
+ * 提问生命周期监听器（agent 回合状态机 waitingInput 状态的数据源）
+ *
+ * 由 turn-subscriptions.subscribeAskLifecycle 实现：按 sessionId 过滤后
+ * send 机器事件（requested → waitingInput；resolved → 回 streaming）。
+ */
 export interface AskLifecycleListener {
-  /** 提问已推送（askId + sessionId 供回合过滤） */
+  /** 提问已推送渲染层（真实推送后触发，非注册时） */
   onRequested(payload: { readonly sessionId: string; readonly askId: string }): void;
-  /** 提问决议完成（answered/timed-out；aborted 经回合中断路径） */
+  /**
+   * 提问决议完成（作答 / 超时；'aborted' 不经此回调，见 AskDecisionOutcome）
+   */
   onResolved(payload: {
     readonly sessionId: string;
     readonly askId: string;
@@ -51,18 +75,22 @@ export interface AskLifecycleListener {
 }
 
 /**
- * Agent 提问服务（模块级单例，工具系统消费）
+ * Agent 提问服务
  *
- * pending：askId → PendingAsk（一次提问 = 一次 pending）。
+ * 不变量：pending 中的每个 askId 恰好对应一个悬置 Promise，且恰有一条出口
+ * 路径（respond / expireAsk / dispose）消费它——三处出口都先 delete 再 resolve，
+ * 故重复调用是幂等的（第二个调用找不到条目即返回）。
  */
 export class AgentAskService {
-  /** pending 提问 Map */
+  /** pending 提问表（askId → 挂起条目；一次提问一条） */
   private readonly pending = new Map<string, PendingAsk>();
-  /** 生命周期监听器（机器 waitingInput 数据源；Set 便于退订） */
+  /** 生命周期监听器（回合结束/机器销毁时退订；单监听器异常不阻断其他） */
   private readonly lifecycleListeners = new Set<AskLifecycleListener>();
 
   /**
-   * 订阅提问生命周期（返回退订函数）
+   * 订阅提问生命周期
+   *
+   * @returns 退订函数（宿主在回合终态 cleanup 中调用，防监听器泄漏）
    */
   onAskLifecycle(listener: AskLifecycleListener): () => void {
     this.lifecycleListeners.add(listener);
@@ -71,7 +99,12 @@ export class AgentAskService {
     };
   }
 
-  /** 通知监听器（单监听器异常不阻断其他） */
+  /**
+   * 广播决议完成（respond / expireAsk 两个出口共用）
+   *
+   * 逐个 try/catch：某个监听器抛错不得影响其余监听器，也不得阻断 resolve
+   * （挂起解除是主职责，通知是附加语义）。
+   */
   private emitResolved(payload: {
     readonly sessionId: string;
     readonly askId: string;
@@ -87,12 +120,12 @@ export class AgentAskService {
   }
 
   /**
-   * 发起提问：推送渲染层 + 等待回答
+   * 发起提问：注册挂起 → 推送渲染层 → 返回悬置 Promise
    *
-   * @param webContents 接收提问的窗口
-   * @param questions 问题列表（一次可多问）
-   * @param sessionId 发起提问的会话（多会话并发时按会话归属弹窗与清理）
-   * @returns 用户回答（超时/中断返回 null）
+   * @param webContents 接收提问的窗口（调用方已保证非空且未销毁——见工具侧守卫）
+   * @param questions 问题列表（一次可多问，渲染层逐题作答）
+   * @param sessionId 发起提问的会话（并发回合时按会话归属弹窗与清理）
+   * @returns 用户回答数组（顺序与 questions 对齐）；超时/中断/无窗口均为 null
    */
   ask(
     webContents: WebContents,
@@ -101,18 +134,17 @@ export class AgentAskService {
   ): Promise<AgentAnswer[] | null> {
     const askId = randomUUID();
     return new Promise((resolve) => {
-      // ⚠️ 38 号阶段 2 收尾：超时计时源在 agent 回合状态机的 after 转换
-      // （进入 waitingInput 起算，退出自动取消）；本服务不自设 setTimeout。
-      // 超时到期时机器调用 expireAsk（下方）以「未响应」语义 resolve(null)。
-
+      // 先注册再推送：推送是同步 send，注册在前可避免「已推送但表里没有」
+      // 的窗口期（此时若渲染层极快作答，respond 会找不到条目）。
       this.pending.set(askId, {
         questions,
         resolve,
         sessionId,
       });
 
-      // P1 修复：webContents 已销毁时立即失败回收（此前无 isDestroyed 守卫，
-      // 会 send 到已销毁窗口且 pending 挂满超时）
+      // 窗口已销毁：无接收方，直接以「未响应」解除挂起并回收（否则条目会
+      // 一直留在 pending 表直到机器超时）。注意仍不发 onRequested——机器
+      // 不应为一次未真正展示的提问进入 waitingInput。
       if (webContents.isDestroyed()) {
         this.pending.delete(askId);
         logger.warn({ askId }, 'webContents 已销毁，提问直接返回未响应');
@@ -120,9 +152,10 @@ export class AgentAskService {
         return;
       }
 
-      // 推送提问事件到渲染层：走统一出口 emitEvent（dev 环境 payload 契约校验）
-      // + 定义表 channel 常量（P1 修复：此前硬编码 'agent:event:ask' 裸字符串，
-      // 不在任何真源链上，meta 改名即静默发向死通道）
+      // 推送提问：emitEvent 统一出口（dev 环境按定义表 payloadSchema 校验，
+      // 防「主进程改结构忘同步契约」；channel 取自 IPC_DEFINITIONS 常量表，
+      // 硬编码字符串会脱离真源链——曾因裸写 'agent:event:ask' 在 meta 改名后
+      // 静默发向死通道）。字段条件展开：exactOptionalPropertyTypes 下不可显式传 undefined。
       emitEvent(webContents, IPC_DEFINITIONS.agent.subscribeAsk, {
         sessionId,
         askId,
@@ -135,7 +168,8 @@ export class AgentAskService {
       });
       logger.info({ askId, questionCount: questions.length }, '提问已推送（ask_user_question）');
 
-      // 生命周期：真实推送后通知（机器 → waitingInput）
+      // 生命周期：真实推送后才通知（机器 → waitingInput）。与上方销毁分支
+      // 相对——未展示给用户的提问不改变机器状态。
       for (const listener of this.lifecycleListeners) {
         try {
           listener.onRequested({ sessionId, askId });
@@ -147,11 +181,12 @@ export class AgentAskService {
   }
 
   /**
-   * 渲染层回传回答（agent:ask:respond handler 调用）
+   * 渲染层回传回答（agent-ask.handler 的 respondAsk 调用）
    *
    * @param askId 提问 id
-   * @param answers 回答列表
-   * @returns 是否找到对应 pending（找不到 = 已超时/已响应）
+   * @param answers 回答列表（取消/跳过时为空数组——语义上「用户未选择」，
+   *   与超时的 null 区分：前者是用户主动行为，后者是无人应答）
+   * @returns 是否命中 pending（false = 已超时/已作答/已清理，回传无害丢弃）
    */
   respond(askId: string, answers: AgentAnswer[]): boolean {
     const entry = this.pending.get(askId);
@@ -168,10 +203,12 @@ export class AgentAskService {
   }
 
   /**
-   * 提问超时到期（38 号阶段 2 收尾：由 agent 回合状态机 after 转换调用）
+   * 提问超时到期（agent 回合状态机 after.askTimeout 转换调用）
    *
-   * 以「未响应」语义 resolve(null)（工具据此返回让 LLM 继续），并通知生命周期
-   * decision='timed-out'。askId 不存在时幂等忽略（已被响应/dispose 清理）。
+   * 以「未响应」语义 resolve(null)：工具据此返回让 LLM 继续（不是错误，
+   * 与审批超时的 reject 不同——提问是信息收集，缺席不应阻断回合）。
+   *
+   * 幂等：askId 不存在时静默返回（已被 respond / dispose 消费）。
    */
   expireAsk(askId: string): void {
     const entry = this.pending.get(askId);
@@ -184,12 +221,22 @@ export class AgentAskService {
     entry.resolve(null);
   }
 
-  /** 当前 pending 数（测试/诊断用） */
+  /**
+   * 当前挂起数（测试/诊断用；无生产消费方）
+   */
   getPendingCount(): number {
     return this.pending.size;
   }
 
-  /** 清理全部 pending（应用退出/回合中断） */
+  /**
+   * 清理全部挂起（应用退出 / 回合中断）
+   *
+   * 由 service-container 的 dispose 链调用（两处：disposeServices 的
+   * agentAskService.dispose 步骤 + disposeInfraServices 的服务重置段——
+   * 两处均幂等，重复调用无害）。全部 resolve(null)：中断语义与超时一致
+   * （工具返回「未响应」，LLM 自行继续），但**不发 onResolved**——回合已中断，
+   * 机器走 aborted 终态，无需 waitingInput 出口。
+   */
   dispose(): void {
     for (const [askId, entry] of this.pending) {
       entry.resolve(null);
@@ -199,5 +246,5 @@ export class AgentAskService {
   }
 }
 
-/** 模块级单例（与 permissionService 生命周期一致） */
+/** 模块级单例（调用方：ask 工具 / IPC handler / 回合宿主 / 容器 dispose 链） */
 export const agentAskService = new AgentAskService();
