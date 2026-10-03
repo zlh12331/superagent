@@ -551,6 +551,34 @@ describe('PermissionService', () => {
       expect(() => service.handleApprovalResponse('nonexistent', true, false)).not.toThrow();
     });
 
+    it('expireApproval（机器 after 触发）：pending 以超时语义 reject + decision=timed-out', async () => {
+      const wc = createMockWebContents();
+      const onResolved = vi.fn();
+      service.onApprovalLifecycle({ onRequested: vi.fn(), onResolved });
+      const pending = service.requestApproval(
+        createApprovalPayload(),
+        createMockTool(),
+        { path: '/tmp/a.ts' },
+        wc,
+      );
+      // 机器 after 超时到期的等价调用
+      service.expireApproval('approval-1');
+      await expect(pending).rejects.toMatchObject({
+        code: ErrorCode.TOOL_PERMISSION_DENIED,
+      });
+      expect(onResolved).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        approvalId: 'approval-1',
+        decision: 'timed-out',
+      });
+      // 幂等：再次 expire 不抛错（pending 已清）
+      expect(() => service.expireApproval('approval-1')).not.toThrow();
+    });
+
+    it('expireApproval：未知 id 幂等忽略（已被用户响应/dispose 清理）', () => {
+      expect(() => service.expireApproval('nonexistent')).not.toThrow();
+    });
+
     it('webContents 已销毁：立即 reject', async () => {
       const wc = { isDestroyed: vi.fn(() => true), send: vi.fn() } as unknown as WebContents;
       await expect(

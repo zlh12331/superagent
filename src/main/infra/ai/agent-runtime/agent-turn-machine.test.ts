@@ -56,7 +56,7 @@ function runOutput(overrides?: Partial<Parameters<typeof Object.assign>[0]>): {
 }
 
 /** 测试夹具：deferred deps + 调用日志 */
-function createTurn() {
+function createTurn(approvalTimeoutMs?: number) {
   const resolveModel = createDeferred<string>();
   const acquireGate = createDeferred<void>();
   const executeTurn = createDeferred<{
@@ -102,8 +102,16 @@ function createTurn() {
     cleanup: () => {
       log.push('cleanup');
     },
+    expireApproval: (approvalId) => {
+      log.push(`expireApproval:${approvalId}`);
+    },
   };
-  const actor = createAgentTurnActor({ sessionId: 'session-1', turnId: 'turn-1', deps });
+  const actor = createAgentTurnActor({
+    sessionId: 'session-1',
+    turnId: 'turn-1',
+    deps,
+    ...(approvalTimeoutMs !== undefined ? { approvalTimeoutMs } : {}),
+  });
   const state = (): AgentTurnState => actor.getSnapshot().value;
   return { actor, state, resolveModel, acquireGate, executeTurn, log, deps };
 }
@@ -235,12 +243,48 @@ describe('AgentTurnMachine（编排者）', () => {
     await settle(t.actor);
     t.actor.send({ type: 'approval.requested', approvalId: 'ap-1' });
     expect(t.state()).toEqual({ running: 'waitingApproval' });
+    expect(t.actor.getSnapshot().context.pendingApprovalId).toBe('ap-1');
     t.actor.send({ type: 'approval.responded', decision: 'approved' });
     expect(t.state()).toEqual({ running: 'streaming' });
     expect(t.actor.getSnapshot().context.approvalDecision).toBe('approved');
+    // responded 清空等待标记（无残留 pending id）
+    expect(t.actor.getSnapshot().context.pendingApprovalId).toBeUndefined();
     t.executeTurn.resolve(runOutput());
     await settle(t.actor);
     expect(t.state()).toBe('completed');
+  });
+
+  it('after 超时（38 号收尾）：waitingApproval 到期 → 回 streaming + expireApproval + 决策入 context', async () => {
+    // 真实 timer 短值（20ms）：fake timers 与 actor 信箱调度死锁（前述实测坑）
+    const t = createTurn(20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-timeout' });
+    expect(t.state()).toEqual({ running: 'waitingApproval' });
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(t.state()).toEqual({ running: 'streaming' });
+    expect(t.actor.getSnapshot().context.approvalDecision).toBe('timed-out');
+    expect(t.log).toContain('expireApproval:ap-timeout');
+    expect(t.actor.getSnapshot().context.pendingApprovalId).toBeUndefined();
+  });
+
+  it('after 超时取消语义：提前 responded → 到期不再触发 expireApproval（无需手工 clearTimeout）', async () => {
+    const t = createTurn(20);
+    t.resolveModel.resolve('m');
+    await settle(t.actor);
+    t.acquireGate.resolve();
+    await settle(t.actor);
+    t.actor.send({ type: 'approval.requested', approvalId: 'ap-early' });
+    t.actor.send({ type: 'approval.responded', decision: 'denied' });
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(t.state()).toEqual({ running: 'streaming' });
+    // 决策保持 responded 的值（若 after 未取消，会被改写成 timed-out）
+    expect(t.actor.getSnapshot().context.approvalDecision).toBe('denied');
+    expect(t.log.some((x) => x.startsWith('expireApproval'))).toBe(false);
   });
 
   it('exit 顺序：releaseGate 先于 clearModelTimeout（排队下回合尽早启动）', async () => {

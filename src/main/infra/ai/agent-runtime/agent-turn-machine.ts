@@ -35,7 +35,7 @@
 // 机器只有开销没有安全收益（rawPartCount 经 turn.runDone 输出回传供判据）。
 // ──────────────────────────────────────────────────────────────
 
-import { AppError, ErrorCode } from '@code-agent/shared/main';
+import { APPROVAL_TIMEOUT_MS, AppError, ErrorCode } from '@code-agent/shared/main';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import { isAbortError } from '../tools/error-classifier';
 import type { ApprovalDecisionOutcome } from '../tools/permission-types';
@@ -92,6 +92,15 @@ export interface TurnDeps {
   clearModelTimeout(): void;
   /** 终态清理：订阅退订 + registry CAS + 耗时日志 + span.end（幂等） */
   cleanup(): void;
+  /**
+   * 审批超时到期（机器 after 转换调用）：让 permission-service 以「超时」语义
+   * 拒绝该 pending（区别于用户拒绝 resolve(false)——错误码/文案不同）。
+   * ⚠️ 38 号阶段 2 收尾：审批超时计时源从 permission-service 的 setTimeout
+   * 迁移至机器 after（声明式、随状态退出自动取消，消除三处手工 clearTimeout）；
+   * 该契约成立的前提是 requestApproval 的带 webContents 分支只经 agent 回合
+   * 的 executeHook 到达（ToolExecutor.execute 唯一调用方是 agent-service）。
+   */
+  expireApproval(approvalId: string): void;
 }
 
 /** 回合上下文（deps 注入 + 决策产物；字段在 actions 内 assign） */
@@ -108,6 +117,10 @@ export interface AgentTurnContext {
   error?: unknown;
   /** 最后一次审批决策（38 号阶段 2：waitingApproval 出口语义显式化；快照审计用） */
   approvalDecision?: ApprovalDecisionOutcome;
+  /** 当前等待中的审批 id（approval.requested 赋值；after 超时据此定位待决条目） */
+  pendingApprovalId?: string;
+  /** 审批超时毫秒（input 注入；默认 shared APPROVAL_TIMEOUT_MS，测试可缩短） */
+  readonly approvalTimeoutMs: number;
 }
 
 /** 机器事件（可辨识联合；send 类型不匹配编译期报错）。
@@ -133,6 +146,8 @@ export interface AgentTurnInput {
   readonly sessionId: string;
   readonly turnId: string;
   readonly deps: TurnDeps;
+  /** 审批超时毫秒（缺省 shared APPROVAL_TIMEOUT_MS；测试注入短值） */
+  readonly approvalTimeoutMs?: number;
 }
 
 /**
@@ -154,6 +169,10 @@ export const agentTurnMachine = setup({
     resolveModel: fromPromise(({ input }: { input: TurnDeps }) => input.resolveModel()),
     acquireGate: fromPromise(({ input }: { input: TurnDeps }) => input.acquireGate()),
     executeTurn: fromPromise(({ input }: { input: TurnDeps }) => input.executeTurn()),
+  },
+  // 命名延迟（after 转换引用；动态值从 context 取——审批超时可注入短值供测试）
+  delays: {
+    approvalTimeout: ({ context }: { context: AgentTurnContext }) => context.approvalTimeoutMs,
   },
   guards: {
     /** 超时归因（timeout reason 或 completed 形态竞态）——决策链首位（2026-09-28） */
@@ -218,6 +237,7 @@ export const agentTurnMachine = setup({
     turnId: input.turnId,
     startedAt: Date.now(),
     deps: input.deps,
+    approvalTimeoutMs: input.approvalTimeoutMs ?? APPROVAL_TIMEOUT_MS,
   }),
   states: {
     // 模型解析（轻量）：失败直接 error（不进并发队列——排队前失败不占槽位）。
@@ -268,7 +288,10 @@ export const agentTurnMachine = setup({
       states: {
         streaming: {
           on: {
-            'approval.requested': { target: 'waitingApproval' },
+            'approval.requested': {
+              target: 'waitingApproval',
+              actions: assign({ pendingApprovalId: ({ event }) => event.approvalId }),
+            },
           },
         },
         waitingApproval: {
@@ -277,7 +300,33 @@ export const agentTurnMachine = setup({
             // context 记录供快照审计——此前出口语义黑盒（机器只知道"结束了"）
             'approval.responded': {
               target: 'streaming',
-              actions: assign({ approvalDecision: ({ event }) => event.decision }),
+              actions: [
+                assign({
+                  approvalDecision: ({ event }) => event.decision,
+                  // 清空等待标记（approvalId 为 string | undefined；exactOptional
+                  // 语义下显式赋 undefined 需类型注解路径）
+                  pendingApprovalId: (): string | undefined => undefined,
+                }),
+              ],
+            },
+          },
+          // 声明式超时：进入 waitingApproval 起算，approvalTimeoutMs 后自动触发；
+          // 提前 responded 退出该状态 → after 计时自动取消（无需手工 clearTimeout）。
+          // 计时源单一：permission-service 不再自设超时定时器（见 TurnDeps.expireApproval）。
+          after: {
+            approvalTimeout: {
+              target: 'streaming',
+              actions: [
+                // 顺序：先记决策（审计）→ 再让宿主以超时语义拒绝 pending →
+                // 最后清 pendingApprovalId（内联 action 读取当时的 context）
+                assign({ approvalDecision: (): 'timed-out' => 'timed-out' }),
+                ({ context }: { context: AgentTurnContext }) => {
+                  if (context.pendingApprovalId !== undefined) {
+                    context.deps.expireApproval(context.pendingApprovalId);
+                  }
+                },
+                assign({ pendingApprovalId: (): string | undefined => undefined }),
+              ],
             },
           },
         },

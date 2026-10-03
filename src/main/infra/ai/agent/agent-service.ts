@@ -554,10 +554,8 @@ export class AgentService implements IAgentService {
               controller,
               turnEmitter,
               transcriptEntries,
-              onRawPart: () => {
-                rawPartCount += 1;
-              },
               pushPart: (part) => {
+                rawPartCount += 1;
                 partForwarder.push(part);
               },
               resolveGeneration: (prompt, spanRef) =>
@@ -658,6 +656,12 @@ export class AgentService implements IAgentService {
             logger.info({ sessionId, durationMs }, 'Agent streamText 总耗时');
             span?.setAttribute('agent.durationMs', durationMs);
             span?.end();
+          },
+          expireApproval: (approvalId) => {
+            // 38 号阶段 2 收尾：机器 after 超时 → 让 permission-service 以
+            // 「超时」语义拒绝 pending（未注入 permissionService 时 no-op——
+            // 无审批通道场景本就不会进入 waitingApproval）
+            this.permissionService?.expireApproval(approvalId);
           },
         };
 

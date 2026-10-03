@@ -130,6 +130,16 @@ export interface IPermissionService {
   handleApprovalResponse(approvalId: string, approved: boolean, rememberDecision: boolean): void;
 
   /**
+   * 审批超时到期（38 号阶段 2 收尾：由 agent 回合状态机 after 转换调用）
+   *
+   * 以「超时」语义拒绝该 pending（区别于用户拒绝——错误码/文案不同），
+   * 并通知审批生命周期 decision='timed-out'。approvalId 不存在时幂等忽略。
+   *
+   * @param approvalId 超时的审批请求 id
+   */
+  expireApproval(approvalId: string): void;
+
+  /**
    * 释放所有 pending Promise 与资源
    *
    * 用于应用退出 / ServiceContainer.dispose 场景，
