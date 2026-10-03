@@ -1,6 +1,10 @@
-// src/main/infra/ai/prompt/agents-md.test.ts
+// src/main/infra/ai/agents-md.test.ts
 // AGENTS.md 分层发现单测：向上查找 / 大小写 / 字节预算 / 格式化 / 上限
 //  + 进程内 memo（P2-32：mtime 失效语义）
+//
+// 接线背景：唯一生产调用链 = dynamic-context 的 resolveAgentsMd（注入
+// {{agentsMd}}）；本文件用真实文件系统临时目录驱动（仅 fs API，无 mock），
+// memo 新鲜度/mtime 失效语义全在此覆盖。
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
