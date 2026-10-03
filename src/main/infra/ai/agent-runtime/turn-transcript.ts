@@ -1,6 +1,6 @@
 // src/main/infra/ai/agent-runtime/turn-transcript.ts
 // 回合 Transcript 累积 → messages 落库构造（纯函数）
-// ──────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
 // 背景：助手消息此前仅落库 TEXT_DELTA 拼接的纯文本，工具调用与思考过程
 // 重开会话后不可见（渲染层 historyTextOnly 横幅告知的能力缺口）。
 // 本模块把回合内累积的 reasoning / tool-call / tool-result 条目构造为
@@ -8,12 +8,16 @@
 // tool-result.output 用 SDK 包装形态（{type:'json'|'text', value}），
 // 渲染层 unwrapOutput 原生解包，无需感知本模块。
 //
+// 消费方：agent-service 的 completeTurn（机器三终态收尾共用的落库段——
+// finalizeCompletedTurn / finalizeAborted / finalizeErrorTurn 最终都经它）。
+//
 // 设计取舍：
 // - 整个回合的助手产出合并为一条 assistant 消息（parts 按发生顺序）+
 //   一条 tool 消息（全部结果），而非逐 step 拆分——渲染层按 toolCallId
 //   关联结果合并进工具卡，逐 step 拆分只会增加气泡噪声。
 // - 工具 output 落库前截断（MAX_PERSISTED_TOOL_OUTPUT_BYTES）：防止
 //   read_file 级大输出膨胀 SQLite；超限给明确标记（展示语义完整）。
+// ──────────────────────────────────────────────────────────────
 
 import type { ModelMessage, ToolResultPart } from 'ai';
 
@@ -142,10 +146,11 @@ function collectToolParts(entries: readonly TurnTranscriptEntry[]): ToolResultPa
 }
 
 /**
- * 回合结束 → messages 落库内容（agent / chat 共用契约）
+ * 回合结束 → messages 落库内容（agent-service completeTurn 的落库契约）
  *
  * 返回 [assistant?, tool?]：assistant 内容非空才含 assistant 消息；
- * 存在工具结果才含 tool 消息；全空返回 []（无内容不落库）。
+ * 存在工具结果才含 tool 消息；全空返回 []（无内容不落库——中断回合
+ * 保留已发生的工具调用，无文本也落库）。
  */
 export function buildAssistantTurnMessages(
   assistantText: string,
