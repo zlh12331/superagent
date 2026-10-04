@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.5.0](https://github.com/zlh12331/superagent/compare/v1.4.0...v1.5.0) (2026-10-04)
+
+
+### Features
+
+* 更新安装向导化 + 审批/提问等待可见化（38 号决策面）+ CSS 三轮深度审查 + AI 层注释重写 ([#71](https://github.com/zlh12331/superagent/issues/71)) ([090a943](https://github.com/zlh12331/superagent/commit/090a943cf93ce1de3b088d12e3fbfe4792157950))
+
 ## [1.4.0](https://github.com/zlh12331/superagent/compare/v1.3.3...v1.4.0) (2026-10-01)
 
 > 本版本是一轮大版本功能累积：设置页新增系统通知、网络代理、界面缩放、终端、快捷键、编辑器、数据库备份等一整批能力，并带来会话历史导出/导入、设置导出/导入、一键恢复默认、远程控制绑定范围等管理功能；同时修复多处影响回合稳定性的缺陷与托盘驻留问题，并升级依赖清零全部安全通告（含 8 条高危）。
