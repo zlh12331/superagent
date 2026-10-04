@@ -60,7 +60,7 @@ export function UpdateIndicator(): ReactElement | null {
       <Button
         variant="ghost"
         size="icon"
-        className={cn(iconButtonClass, 'gap-0 text-[10px] tabular-nums')}
+        className={cn(iconButtonClass, 'gap-0 text-2xs tabular-nums')}
         aria-label={label}
         title={label}
         onClick={() => openSettings('about')}

@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { t } from '../../i18n';
-import { cronService } from '../cron-service';
+import { cronService } from '../agent/cron-service';
 import type { Tool, ToolContext, ToolResult } from './tool';
 
 /** cron_delete 入参 */

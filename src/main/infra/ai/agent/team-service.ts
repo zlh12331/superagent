@@ -1,4 +1,4 @@
-// src/main/infra/ai/team-service.ts
+// src/main/infra/ai/agent/team-service.ts
 // 团队协作：多代理并行委派 + 结果汇总（对齐 qwen team 语义收敛）
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -13,12 +13,14 @@
 // - 移除 mailbox / identity / leaderPermissionBridge（qwen 专有消息总线，
 //   强耦合不搬运；我们的 onTurnEvent 总线按 sessionId 过滤已保证并发隔离）
 // - 收敛为"领导委派 → 成员并行执行 → 结构化汇总"（领导汇总后置）
+//
+// 入口：run_team 工具（src/main/infra/ai/tools/run-team.tool.ts）调用 runTeam。
 // ──────────────────────────────────────────────────────────────
 
 import { logger } from '../../../utils/logger';
 import { getSubagentManager, type SubagentManager } from './subagent-manager';
 
-/** 团队成员委派 */
+/** 团队成员委派（一个成员 = 一个子代理 + 一段任务描述） */
 export interface TeamMemberTask {
   /** 子代理名（general / code_review / plan 等） */
   readonly agent: string;
@@ -26,7 +28,7 @@ export interface TeamMemberTask {
   readonly task: string;
 }
 
-/** 团队成员结果 */
+/** 团队成员结果（成功与失败同构，失败时 output 携带错误说明） */
 export interface TeamMemberResult {
   readonly agent: string;
   readonly task: string;
@@ -37,7 +39,7 @@ export interface TeamMemberResult {
   readonly durationMs: number;
 }
 
-/** 团队执行结果 */
+/** 团队执行结果（成员明细 + 成败计数 + 可选领导结论） */
 export interface TeamRunResult {
   readonly members: readonly TeamMemberResult[];
   /** 成功成员数 */
@@ -48,7 +50,7 @@ export interface TeamRunResult {
   readonly leaderSummary: string | null;
 }
 
-/** 领导汇总配置 */
+/** 领导汇总配置（可选启用；缺省不执行领导回合） */
 export interface TeamLeaderConfig {
   /** 领导子代理名（默认 general） */
   readonly agent?: string;
@@ -60,14 +62,18 @@ export interface TeamLeaderConfig {
 export class TeamService {
   /**
    * 构造注入（测试可控；缺省回退模块级单例）
+   *
+   * manager 省略时每次调用现取 getSubagentManager()，不做构造期快照——
+   * 允许单例在 initSubagentManager 完成前先构造。
    */
   constructor(private readonly manager?: SubagentManager) {}
 
   /**
    * 并行委派团队成员任务并汇总结果
    *
-   * - 并发安全：SubagentManager.run 按 sessionId 过滤回合事件，多成员并行不串流
-   * - 失败隔离：单成员失败记录错误，不阻断其他成员
+   * - 并发安全：SubagentManager.run 为每次委派分配独立 sessionId，回合事件按
+   *   sessionId 过滤，多成员并行不串流
+   * - 失败隔离：单成员失败记录错误，不阻断其他成员（Promise.all 内各自 catch）
    * - leader 汇总：可选——成员完成后由领导子代理聚合结论
    *
    * @param members 团队成员委派列表
@@ -123,7 +129,8 @@ export class TeamService {
   /**
    * 领导汇总：成员结果 → 领导子代理聚合 → 团队结论
    *
-   * 失败（领导回合异常/超时）返回错误说明，不阻断已完成的成员结果。
+   * 成员输出逐条截断到 1500 字符后序列化，避免超长成员输出把领导回合的
+   * prompt 撑爆。失败（领导回合异常/超时）返回错误说明，不阻断已完成的成员结果。
    */
   private async runLeaderSummary(
     agent: string,

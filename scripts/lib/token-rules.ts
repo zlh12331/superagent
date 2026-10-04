@@ -69,6 +69,26 @@ const RGB_COLOR_RE = /rgba?\([^\n)]*\)/g;
 // z-(--z-popover) 等变量引用形式放行（Tailwind v4 圆括号语法）
 const BARE_Z_RE = /(?:^|\s|")((?:[a-z-]+:)*)z-(\[?-?\d+)/g;
 
+// TSX 任意值字号（text-[Npx]）：绕过 --font-size-* 九级阶梯与 @theme 映射的
+// text-2xs…text-3xl 命名类——字号轴的单一真源是 aurora.json，任意值 px 双开第二源
+const BARE_FONT_RE = /(?:^|\s|")text-\[\d+(?:\.\d+)?px\]/g;
+
+// CSS 侧字号字面量：font-size: 10px 这类裸 px 绕过 --font-size-* 令牌
+// （var() 引用经 withoutVars 剥离后自然放行；em/% 形式是跟随父级的合法设计，不匹配）
+const CSS_FONT_SIZE_RE = /font-size:\s*[0-9.]+px\b/g;
+
+// CSS 侧裸 z-index 数字：tokens.css:9 明文禁止（此前只扫 TSX 类名串，CSS 侧免检——
+// 实测曾漏过 file-tree.css 的 z-index: 9999 越过 --z-boundary: 999 无任何拦截）
+const CSS_Z_INDEX_RE = /z-index:\s*-?\d+/g;
+
+// CSS 侧文字层纪律：语义基色（--error/--success/--warning/--amber）只承担
+// 图形/边框/氛围，禁止作 color: 文字色——基色压浅灰面 2.2-3.9:1 全部低于 AA 4.5，
+// 文字必须用对应的 *-text 深色层（2026-10-02 审查实测 12 处违规后立规）。
+// accent/accent-2 不入规则：作文字色在页面底达标（6.7:1），静态扫描无法按所在
+// 底色分诊，误报不可接受；TSX 侧 text-error 等类不扫：现存均为图标用法（≥3:1
+// 达标），图标/文字无法从类名区分。
+const CSS_TEXT_BASE_COLOR_RE = /(?:^|[;{\s])color:\s*var\(--(error|success|warning|amber)\)/g;
+
 /** 单条令牌违规 */
 export interface TokenViolation {
   readonly file: string;
@@ -151,13 +171,24 @@ export function scanTsLike(content: string, rel: string, monoExempt = false): To
       for (const m of cls.matchAll(BARE_Z_RE)) {
         violations.push({ file: rel, line: lineNo, rule: 'bare-z-index', detail: m[0].trim() });
       }
+      // 字号轴收口：任意值 px 绕过 --font-size-* 阶梯与 text-2xs…text-3xl 命名类
+      for (const m of cls.matchAll(BARE_FONT_RE)) {
+        violations.push({
+          file: rel,
+          line: lineNo,
+          rule: 'font-size-literal',
+          detail: m[0].trim(),
+        });
+      }
     }
   });
   return violations;
 }
 
 /**
- * 扫描 css 内容：查硬编码 hex 与 rgba()/rgb()（className 类规则对 css 无意义）。
+ * 扫描 css 内容：查硬编码 hex 与 rgba()/rgb()（className 类规则对 css 无意义）、
+ * 字号/层级字面量（font-size-literal / css-z-index-literal）与文字层纪律
+ * （text-base-color——看 var() 令牌名，须在剥离 var 片段之前对原始行匹配）。
  * 剔除块注释（含跨行）与行内 /* … *\/ 注释片段、var(--…) 片段后再查。
  * D7 收口后效果层统一 color-mix(in srgb, <token|white|black> N%, transparent) 形态
  * （color-mix( 不匹配 rgba?\( 正则，不会误报）。
@@ -177,7 +208,7 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
       if (!line.includes('*/')) inBlockComment = true;
       return;
     }
-    // 先剔除 var(--…) 片段再查（豁免收窄到片段级）
+    // 先剔除 var(--…) 片段再查（豁免收口到片段级）
     const withoutVars = line.replace(/var\(--[^)]*\)/g, '');
     const lineNo = idx + 1;
     for (const m of withoutVars.matchAll(HEX_COLOR_RE)) {
@@ -185,6 +216,29 @@ export function scanCss(content: string, rel: string): TokenViolation[] {
     }
     for (const m of withoutVars.matchAll(RGB_COLOR_RE)) {
       violations.push({ file: rel, line: lineNo, rule: 'rgb-color', detail: m[0] });
+    }
+    // 字号轴收口（CSS 侧）：裸 px 绕过 --font-size-* 令牌（var 引用经剥离后放行）
+    for (const m of withoutVars.matchAll(CSS_FONT_SIZE_RE)) {
+      violations.push({ file: rel, line: lineNo, rule: 'font-size-literal', detail: m[0].trim() });
+    }
+    // z 层级收口（CSS 侧）：此前只扫 TSX，CSS 的 z-index: 9999 曾静默越界
+    for (const m of withoutVars.matchAll(CSS_Z_INDEX_RE)) {
+      violations.push({
+        file: rel,
+        line: lineNo,
+        rule: 'css-z-index-literal',
+        detail: m[0].trim(),
+      });
+    }
+    // 文字层纪律：匹配原始行而非 withoutVars——本规则要看的正是 var() 里的令牌名；
+    // 边界锚 (?:^|[;{\s]) 保证 background-color / caret-color 等复合属性不误报
+    for (const m of line.matchAll(CSS_TEXT_BASE_COLOR_RE)) {
+      violations.push({
+        file: rel,
+        line: lineNo,
+        rule: 'text-base-color',
+        detail: m[0].trim(),
+      });
     }
   });
   return violations;

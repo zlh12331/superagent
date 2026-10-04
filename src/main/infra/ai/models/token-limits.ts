@@ -6,6 +6,10 @@
 // - 输出请求上限：min(用户配置, OUTPUT_TOKEN_CEILING, 窗口余量)
 // - 窗口余量 = max(10K, 5% × 窗口)（吸收 prompt 估算误差 + system/tool/schema 开销）
 // - 下限 MIN_OUTPUT_TOKENS：窗口快满时仍请求至少 4K，压缩交给上层
+//
+// 消费方：generation-options（构造 maxOutputTokens 时钳制，agent 主回合与
+// side query 共用）；不变量由 fast-check 属性测试扫描整个输入域守护
+// （token-limits.property.test.ts）。
 // ──────────────────────────────────────────────────────────────
 
 /** 自动输出请求的封顶值（非用户配置的上限；用户显式设置可突破到模型真实上限） */

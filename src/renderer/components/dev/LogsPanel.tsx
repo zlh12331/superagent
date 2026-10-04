@@ -105,7 +105,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
               key={level}
               value={level}
               disabled={!enabled}
-              className="rounded px-1.5 py-0.5 text-[9px] font-mono"
+              className="rounded px-1.5 py-0.5 text-2xs font-mono"
             >
               {level === 'all' ? t('dev.all') : LEVEL_LABELS[level]}
             </ToggleGroupItem>
@@ -134,7 +134,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
               key={option}
               value={String(option)}
               disabled={!enabled}
-              className="rounded px-1.5 py-0.5 text-[9px] font-mono"
+              className="rounded px-1.5 py-0.5 text-2xs font-mono"
             >
               {option}
             </ToggleGroupItem>
@@ -144,7 +144,7 @@ export function LogsPanel({ enabled = true, className }: LogsPanelProps): ReactE
         {/* 右侧：行数统计 + 刷新按钮 */}
         <div className="ml-auto flex items-center gap-1.5">
           {data !== undefined && (
-            <span className="text-muted-foreground font-mono text-[9px]">
+            <span className="text-muted-foreground font-mono text-2xs">
               {data.total}
               {data.truncated ? t('dev.truncated') : ''}
             </span>
@@ -218,7 +218,7 @@ function LogLines({ lines, filePath }: LogLinesProps): ReactElement {
   return (
     <div className="flex flex-col">
       {/* 文件路径提示（顶部细线） */}
-      <div className="text-muted-foreground/60 border-border truncate border-b px-2 py-0.5 font-mono text-[9px]">
+      <div className="text-muted-foreground/60 border-border truncate border-b px-2 py-0.5 font-mono text-2xs">
         <FileText className="mr-1 inline size-2.5" strokeWidth={1.5} />
         {filePath}
       </div>
@@ -274,7 +274,7 @@ function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
       <FileText className="size-5 opacity-50" strokeWidth={1.5} />
       <p className="font-serif text-xs tracking-wide">{t('common.noLogs')}</p>
       <p className="text-2xs">{t('common.logsTruncatedDesc')}</p>
-      <p className="text-muted-foreground/60 mt-1 truncate font-mono text-[9px]">{filePath}</p>
+      <p className="text-muted-foreground/60 mt-1 truncate font-mono text-2xs">{filePath}</p>
     </div>
   );
 }

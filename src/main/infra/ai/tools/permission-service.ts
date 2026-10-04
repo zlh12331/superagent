@@ -1,4 +1,4 @@
-// src/main/infra/ai/permission-service.ts
+// src/main/infra/ai/tools/permission-service.ts
 // 权限服务：工具调用的权限决策与审批管理
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -6,6 +6,7 @@
 // - requestApproval(...)：推送 ApprovalRequest 到渲染层，等待用户响应
 // - handleApprovalResponse(...)：处理用户响应，resolve 对应 Promise
 // - rememberDecision(tool, input, approved)：缓存用户决策，5分钟内自动应用
+// - expireApproval(...)：审批超时到期（机器 after 转换调用）
 // - dispose()：清理所有 pending Promise，避免内存泄漏
 //
 // 设计原则：
@@ -13,13 +14,16 @@
 // - 记忆决策：用户可选"5分钟内对此工具+入参组合不再询问"
 //   - key 格式：`${toolName}:${hash(input)}`，hash 用 stable JSON 序列化后取 SHA-256 前 16 字节
 //   - TTL 5 分钟，避免长期缓存导致权限漂移
-// - 审批超时：默认 5 分钟，超时后 reject，避免 Promise 长期挂起
+// - 审批超时：计时源已迁移至 agent 回合状态机 after（38 号阶段 2，APPROVAL_
+//   TIMEOUT_MS 默认 5 分钟）；本服务不自设定时器，超时到期由机器调
+//   expireApproval 以「超时」语义拒绝
 // - dispose 清理：应用退出时调用，reject 所有 pending Promise
 //
 // 与 IPC 的关系：
 // - 主进程通过 webContents.send 推送 AGENT_APPROVAL_REQUEST
-// - 渲染层通过 ipcRenderer.invoke('agent:approval:response', { approvalId, approved, rememberDecision })
-//   回传审批结果，IPC handler 调用 handleApprovalResponse resolve 对应 Promise
+//   （agent:approval:request，统一出口 emitEvent）
+// - 渲染层通过 agent:approval:response 回传审批结果，
+//   IPC handler 调用 handleApprovalResponse resolve 对应 Promise
 // ──────────────────────────────────────────────────────────────
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -58,6 +62,7 @@ import {
   shouldFallbackToManual,
 } from './denial-tracking';
 import type {
+  ApprovalDecisionOutcome,
   ApprovalLifecycleListener,
   IPermissionService,
   PermissionDecision,
@@ -75,12 +80,10 @@ export type {
 } from './permission-types';
 
 /**
- * 审批超时时间（毫秒）
- *
- * 5 分钟，避免用户离开后 Promise 长期挂起。
+ * 审批超时时间已上收 shared 单一真源（APPROVAL_TIMEOUT_MS，38 号 spec 阶段 2）：
+ * 此前本文件私有字面量与 shared 的 REMEMBER_TTL_MS 双写，靠注释互锚无机制保证。
  * 超时后视为拒绝，工具不会被执行。
  */
-const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
  * pending 审批条目
@@ -91,10 +94,8 @@ const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 interface PendingApproval {
   /** resolve 函数，用户响应后调用 */
   readonly resolve: (approved: boolean) => void;
-  /** reject 函数，超时或 dispose 时调用 */
+  /** reject 函数，超时/中断/dispose 时调用 */
   readonly reject: (error: Error) => void;
-  /** 超时定时器，超时后自动 reject */
-  readonly timer: ReturnType<typeof setTimeout>;
   /** 关联的工具实例（用于 rememberDecision 时构建 key） */
   readonly tool: Tool;
   /** 关联的工具入参（用于 rememberDecision 时构建 key） */
@@ -256,6 +257,7 @@ export class PermissionService implements IPermissionService {
   private notifyApprovalResolved(payload: {
     readonly sessionId: string;
     readonly approvalId: string;
+    readonly decision: ApprovalDecisionOutcome;
   }): void {
     for (const listener of this.lifecycleListeners) {
       try {
@@ -521,24 +523,15 @@ export class PermissionService implements IPermissionService {
         return;
       }
 
-      // 超时定时器：5 分钟后自动 reject
-      const timer = setTimeout(() => {
-        cleanupAbort();
-        this.pending.delete(payload.approvalId);
-        logger.warn({ approvalId: payload.approvalId, toolName: payload.toolName }, '审批超时');
-        // 状态机修复：超时 reject 也必须通知审批决议完成，否则 agent 回合
-        // 状态机永久卡在 waitingApproval（stream.finished 转换在该状态下非法）
-        this.notifyApprovalResolved({
-          sessionId: payload.sessionId,
-          approvalId: payload.approvalId,
-        });
-        reject(new AppError(ErrorCode.TOOL_PERMISSION_DENIED, `审批超时：${payload.toolName}`));
-      }, APPROVAL_TIMEOUT_MS);
+      // ⚠️ 38 号阶段 2 收尾：审批超时计时源已迁移至 agent 回合状态机的 after
+      // 转换（声明式、随 waitingApproval 退出自动取消）。本处不再自设 setTimeout
+      // ——此前 5 分钟 timer 与机器 after 会构成双计时源。超时到期时机器调用
+      // expireApproval（下方）以「超时」语义拒绝本 pending。
+      // 无头场景（webContents === undefined）不推送审批、不进入 waitingApproval，
+      // 因此机器不会为其计时——该分支保持下方「自动拒绝」即时处理。
 
       // abort 监听器：用户中断对话时立即 reject（H4 修复）
-      // 必须在 pending.set 之前定义，因为 timer 回调中要引用它
       const onAbort = (): void => {
-        clearTimeout(timer);
         this.pending.delete(payload.approvalId);
         logger.info(
           { approvalId: payload.approvalId, toolName: payload.toolName },
@@ -548,6 +541,7 @@ export class PermissionService implements IPermissionService {
         this.notifyApprovalResolved({
           sessionId: payload.sessionId,
           approvalId: payload.approvalId,
+          decision: 'aborted',
         });
         reject(new AppError(ErrorCode.TOOL_ABORTED, '工具执行已被中断'));
       };
@@ -563,7 +557,6 @@ export class PermissionService implements IPermissionService {
       this.pending.set(payload.approvalId, {
         resolve,
         reject,
-        timer,
         tool,
         input,
         sessionId: payload.sessionId,
@@ -590,7 +583,6 @@ export class PermissionService implements IPermissionService {
         });
       } else if (webContents === undefined) {
         // 无头场景（IM 桥接等）无审批通道：自动拒绝（安全优先）
-        clearTimeout(timer);
         cleanupAbort();
         this.pending.delete(payload.approvalId);
         reject(
@@ -598,7 +590,6 @@ export class PermissionService implements IPermissionService {
         );
       } else {
         // webContents 已销毁，立即 reject
-        clearTimeout(timer);
         cleanupAbort();
         this.pending.delete(payload.approvalId);
         reject(
@@ -616,7 +607,6 @@ export class PermissionService implements IPermissionService {
       return;
     }
 
-    clearTimeout(entry.timer);
     entry.cleanupAbort?.();
     this.pending.delete(approvalId);
 
@@ -628,7 +618,11 @@ export class PermissionService implements IPermissionService {
     entry.resolve(approved);
     logger.info({ approvalId, approved, rememberDecision }, '审批响应已处理');
     // 审批生命周期：决议完成通知（Agent 回合状态机 → 恢复 running）
-    this.notifyApprovalResolved({ sessionId: entry.sessionId, approvalId });
+    this.notifyApprovalResolved({
+      sessionId: entry.sessionId,
+      approvalId,
+      decision: approved ? 'approved' : 'denied',
+    });
   }
 
   /**
@@ -654,13 +648,35 @@ export class PermissionService implements IPermissionService {
   dispose(): void {
     // reject 所有 pending Promise
     for (const [approvalId, entry] of this.pending) {
-      clearTimeout(entry.timer);
       entry.cleanupAbort?.();
       entry.reject(new AppError(ErrorCode.TOOL_ABORTED, 'PermissionService 已释放'));
       logger.debug({ approvalId }, 'dispose 时 reject pending 审批');
     }
     this.pending.clear();
     this.remembered.clear();
+  }
+
+  /**
+   * 审批超时到期（38 号阶段 2 收尾：由 agent 回合状态机 after 转换调用）
+   *
+   * 以「超时」语义拒绝该 pending（区别于用户拒绝 resolve(false)——错误码与文案
+   * 不同），并通知审批生命周期（decision='timed-out'）。approvalId 不存在时
+   * 幂等忽略（可能已被用户响应/dispose 清理）。
+   */
+  expireApproval(approvalId: string): void {
+    const entry = this.pending.get(approvalId);
+    if (entry === undefined) {
+      return;
+    }
+    entry.cleanupAbort?.();
+    this.pending.delete(approvalId);
+    logger.warn({ approvalId }, '审批超时（机器 after 转换触发）');
+    this.notifyApprovalResolved({
+      sessionId: entry.sessionId,
+      approvalId,
+      decision: 'timed-out',
+    });
+    entry.reject(new AppError(ErrorCode.TOOL_PERMISSION_DENIED, '审批超时：工具调用被拒绝'));
   }
 
   /**

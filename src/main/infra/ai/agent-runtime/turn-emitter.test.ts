@@ -1,5 +1,10 @@
 // src/main/infra/ai/agent-runtime/turn-emitter.test.ts
 // TurnEventEmitter 单测：类型安全订阅/发布/退订
+//
+// 接线背景：生产中 TurnRunner 与 agent-service executeHook 产事件，
+// agent-service 消费（onAny 转发到类级监听器 + on(TEXT_DELTA/TOOL_CALL)
+// 累积助手全文与转录）。本组用例守住分桶隔离（不同类型互不通知）与
+// 错误隔离（单监听器抛错不阻断其他监听器）。
 
 import type { TurnStartEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';

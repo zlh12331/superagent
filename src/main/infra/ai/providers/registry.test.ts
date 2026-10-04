@@ -8,6 +8,10 @@
 //    prompt_cache_miss_tokens）映射为 cacheRead / noCache
 // 4. convertUsage：兼容标准 OpenAI 字段（prompt_tokens_details.cached_tokens）
 // 5. convertUsage：reasoning_tokens 映射
+//
+// 接线背景：生产消费方 = ai-provider 的工厂装配（getDefaultKind/
+// getDefinition/createFactory）；本文件 mock @ai-sdk/openai-compatible（拦截
+// createOpenAICompatible 入参断言），真实 SDK 消费集成在 registry-factory.test.ts。
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getProviderName, ProviderRegistry, toKeychainKey } from './registry';

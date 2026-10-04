@@ -1,5 +1,8 @@
 // src/main/infra/ai/agent-runtime/create-stream.test.ts
 // 请求级重试链路单测：传输层失败重试 / HTTP 类交 SDK / 首包超时 / 首 part 接续
+//
+// 测试手法：ReadableStream 的 pull 回调内按需失败/发 part（fake UiStreamable，
+// 无 mock 模块——重试时序与错误分类走真实 llm-client/retry 实现）。
 
 import { ErrorCode } from '@code-agent/shared/main';
 import { APICallError, RetryError } from 'ai';

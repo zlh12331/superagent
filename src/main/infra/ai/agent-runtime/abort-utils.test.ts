@@ -1,5 +1,10 @@
 // src/main/infra/ai/agent-runtime/abort-utils.test.ts
 // 中断信号工具单测：组合信号 + 可清理超时信号
+//
+// 接线背景：生产调用方为 turn-assembly（主回合：用户中断 + 模型级超时合并）
+// 与 llm-client runSideQuery（side query：用户信号 + 模型级超时合并，有全局
+// 默认兜底）。本组用例守住两件事：组合语义（任一触发即中断、预置 abort 也
+// 生效）与定时器清理（clear 后不再触发，防定时器堆积）。
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { combineAbortSignals, createTimeoutSignal } from './abort-utils';

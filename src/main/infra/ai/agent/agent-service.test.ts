@@ -187,11 +187,20 @@ function createMockWebContents(overrides?: { isDestroyed?: boolean }): MockedWeb
  *
  * 迭代次数需覆盖 TurnRunner 的完整链路（每次 read 含 Promise.race + finally，
  * 3 次 read + completeTurn 约需 20+ 个微任务 tick）。
+ * 38 号：回合控制流经 XState actor 信箱调度（fromPromise invoked service），
+ * 装配段跨宏任务边界——微任务刷新后补一拍宏任务，保证 actor 回调跑完。
  */
 async function flushAsync(): Promise<void> {
   for (let i = 0; i < 30; i++) {
     // eslint-disable-next-line no-await-in-loop -- 测试需要顺序刷新微任务队列
     await Promise.resolve();
+  }
+  // 38 号：回合控制流经 XState actor 信箱调度（fromPromise invoked service），
+  // 装配段跨宏任务边界——补一拍宏任务保证 actor 回调跑完。
+  // ⚠️ 仅真实定时器下执行：fake timers（vi.useFakeTimers）下 setTimeout(0) 排进
+  // fake 队列且无人 advance → 死锁（流空闲超时用例实测踩中）
+  if (!vi.isFakeTimers()) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
 
@@ -327,6 +336,8 @@ describe('agent-service', () => {
       expect(sessionId).toBe('test-session-id');
       // randomUUID 调用 2 次：sessionId + 回合 turnId（回合事件系统）
       expect(mocks.mockRandomUUID).toHaveBeenCalledTimes(2);
+      // 38 号：控制流经 XState actor 调度，streamText 调用跨宏任务——补拍等待
+      await flushAsync();
       expect(mocks.mockStreamText).toHaveBeenCalledTimes(1);
     });
 
@@ -358,7 +369,8 @@ describe('agent-service', () => {
         webContents: wc,
       });
 
-      // toAISDKTools 收到的基础上下文应携带 mode='plan'
+      // toAISDKTools 收到的基础上下文应携带 mode='plan'（38 号：跨宏任务，补拍等待）
+      await flushAsync();
       const calls = mockRegistry.toAISDKTools.mock.calls;
       const ctx = calls[0]?.[0] as { mode?: string } | undefined;
       expect(ctx?.mode).toBe('plan');
@@ -375,6 +387,8 @@ describe('agent-service', () => {
         webContents: wc,
       });
 
+      // 38 号：控制流经 XState actor 调度，toAISDKTools 跨宏任务——补拍等待
+      await flushAsync();
       const calls = mockRegistry.toAISDKTools.mock.calls;
       const ctx = calls[0]?.[0] as { mode?: string } | undefined;
       expect(ctx?.mode).toBe('build');
@@ -1054,6 +1068,8 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
     );
     await svc.startAgent(options(undefined));
+    // 38 号：toAISDKTools 在 executeTurn（actor 宏任务）内被调——补拍等待
+    await flushAsync();
     expect(capturedHook).toBeDefined();
     if (capturedHook === undefined) throw new Error('hook not captured');
     const result = await capturedHook({ name: 'grep' }, { pattern: 'x' }, { callId: 'c1' });
@@ -1093,6 +1109,8 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
     );
     await svc.startAgent(options(undefined));
+    // 38 号：toAISDKTools 在 executeTurn（actor 宏任务）内被调——补拍等待
+    await flushAsync();
     if (capturedHook === undefined) throw new Error('hook not captured');
     const result = await capturedHook({ name: 'grep' }, {}, { callId: 'c2' });
     expect(result).toEqual({ error: 'permission denied' });
@@ -1126,6 +1144,8 @@ describe('AgentService 生命周期补充（活跃会话分支）', () => {
       } as unknown as ISessionService,
     );
     await svc.startAgent(options(undefined));
+    // 38 号：toAISDKTools 在 executeTurn（actor 宏任务）内被调——补拍等待
+    await flushAsync();
     if (capturedHook === undefined) throw new Error('hook not captured');
     await expect(capturedHook({ name: 'grep' }, {}, { callId: 'c3' })).rejects.toThrow(
       'executor crash',

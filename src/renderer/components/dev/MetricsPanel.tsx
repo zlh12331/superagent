@@ -179,13 +179,13 @@ interface MetricCardProps {
 function MetricCard({ icon: Icon, label, value, hint }: MetricCardProps): ReactElement {
   return (
     <div className="border-border bg-muted/20 flex flex-col gap-0.5 rounded border px-2 py-1.5">
-      <div className="text-muted-foreground flex items-center gap-1 text-[9px]">
+      <div className="text-muted-foreground flex items-center gap-1 text-2xs">
         <Icon className="size-2.5 shrink-0" strokeWidth={1.5} />
         <span className="font-serif tracking-wide">{label}</span>
       </div>
       <div className="text-foreground font-mono text-xs leading-tight">{value}</div>
       {hint !== undefined && (
-        <div className="text-muted-foreground/70 font-mono text-[9px]">{hint}</div>
+        <div className="text-muted-foreground/70 font-mono text-2xs">{hint}</div>
       )}
     </div>
   );
@@ -203,11 +203,11 @@ function VersionCard({ status }: VersionCardProps): ReactElement {
   const { t } = useTranslation();
   return (
     <div className="border-border bg-muted/20 col-span-2 flex flex-col gap-0.5 rounded border px-2 py-1.5">
-      <div className="text-muted-foreground flex items-center gap-1 text-[9px]">
+      <div className="text-muted-foreground flex items-center gap-1 text-2xs">
         <Activity className="size-2.5 shrink-0" strokeWidth={1.5} />
         <span className="font-serif tracking-wide">{t('dev.envInfo')}</span>
       </div>
-      <div className="text-foreground/80 font-mono text-[9px] leading-relaxed">
+      <div className="text-foreground/80 font-mono text-2xs leading-relaxed">
         <div>
           app <span className="text-foreground">{status.appVersion}</span>
           {' · '}

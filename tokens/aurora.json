@@ -10,19 +10,28 @@
   "resizer-w": {
     "value": "0px"
   },
-  "drawer-w": {
-    "value": "540px"
-  },
   "topbar-h": {
     "value": "52px"
   },
+  "content-w": {
+    "value": "820px",
+    "comment": "聊天内容列最大宽（此前魔法数跨 chat/composer 两个文件散写 3 处）"
+  },
+  "content-w-narrow": {
+    "value": "720px",
+    "comment": "欢迎态输入舱最大宽（此前魔法数跨 composer/welcome 两个文件散写 4 处）"
+  },
   "z-base": {
     "value": "1",
-    "comment": "z-index 层级体系 — 从低到高（surface < popover < modal < toast < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌"
+    "comment": "z-index 层级体系 — 从低到高（surface < popover < modal < boundary）；禁止裸 z-* 数字，新浮层一律引用令牌。toast 不设档：sonner 用库默认层级，气泡语义不参与应用内 stacking context 竞争"
   },
   "z-surface": {
     "value": "2",
     "comment": "面板内容之上的行内浮层（进度条/斜杠建议面板等，同一 stacking context 内竞争）"
+  },
+  "z-raised": {
+    "value": "10",
+    "comment": "悬浮于内容之上的粘性件（resizer 分隔线/scroll-to-bottom/jump-bar 等）——介于 surface(2) 与 popover(50) 之间"
   },
   "z-popover": {
     "value": "50",
@@ -31,10 +40,6 @@
   "z-modal": {
     "value": "100",
     "comment": "强制顶层模态（AskDialog 等需压过一切浮层的场景）"
-  },
-  "z-toast": {
-    "value": "110",
-    "comment": "通知层（sonner）"
   },
   "z-boundary": {
     "value": "999",
@@ -151,8 +156,8 @@
   },
   "text-faint": {
     "value": "#A1A1A1",
-    "comment": "TraeWork --text-disabled",
-    "dark": "#737373"
+    "comment": "TraeWork --text-disabled（dark 由 #737373 提亮至 #8A8A8A：原值对 #0A0A0A 仅 4.18:1 低于 AA 且常与 9-10px 小字组合，新值 5.64；仍暗于 --text-secondary/#A1A1A1 的层级关系保持）",
+    "dark": "#8A8A8A"
   },
   "muted-foreground": {
     "value": "#595959",
@@ -181,8 +186,13 @@
   },
   "accent-2": {
     "value": "#3F85FF",
-    "comment": "辅助色 — TraeWork --accent-blue",
+    "comment": "辅助色 — TraeWork --accent-blue（作文字色用 --accent-2-text）",
     "dark": "#4C88FF"
+  },
+  "accent-2-text": {
+    "value": "#2E6FE0",
+    "comment": "accent-2 作文字色专用层：基色 #3F85FF 对白底仅 3.49:1，文字场景不达 AA——收紧后白底 4.70",
+    "dark": "#8FB3FF"
   },
   "primary-foreground": {
     "value": "var(--on-accent)"
@@ -312,10 +322,6 @@
     "comment": "TraeWork --accent-violet",
     "dark": "#B655FC"
   },
-  "ink": {
-    "value": "#001814",
-    "comment": "品牌墨色（accent 渐变上的头像字色 / 勾选对号等高对比墨色细节）；双主题同值"
-  },
   "ink-brown": {
     "value": "#8B4513",
     "comment": "文学棕（::selection 墨水印迹 / blockquote 底色等文学风效果层基色；效果层用 color-mix(var(--ink-brown) N%, transparent) 引用，alpha 留在使用处）",
@@ -334,29 +340,10 @@
     "comment": "成功文本绿（亮色用深档保 4.5:1；暗色对黑底复用基色即达标）",
     "dark": "var(--success)"
   },
-  "chart-1": {
-    "value": "var(--accent)",
-    "comment": "图表色"
-  },
-  "chart-2": {
-    "value": "var(--accent-2)"
-  },
-  "chart-3": {
-    "value": "var(--amber)"
-  },
-  "chart-4": {
-    "value": "var(--success)"
-  },
-  "chart-5": {
-    "value": "var(--error)"
-  },
   "msg-bubble-user": {
     "value": "#F5F5F5",
     "comment": "消息气泡 — TraeWork --bg-base-secondary",
     "dark": "#262626"
-  },
-  "msg-bubble-assistant": {
-    "value": "transparent"
   },
   "overlay-bg": {
     "value": "rgba(0, 0, 0, 0.25)",
@@ -370,10 +357,6 @@
   },
   "overlay-blur": {
     "value": "8px"
-  },
-  "drawer-overlay": {
-    "value": "rgba(245, 245, 245, 0.55)",
-    "dark": "rgba(10, 10, 10, 0.55)"
   },
   "glass-bg": {
     "value": "rgba(255, 255, 255, 0.85)",
@@ -455,6 +438,18 @@
   },
   "ease-out": {
     "value": "cubic-bezier(0.2, 0.8, 0.2, 1)"
+  },
+  "duration-fast": {
+    "value": "120ms",
+    "comment": "动效时长 — hover/微交互（收敛散写的 0.1s/0.12s/0.15s）"
+  },
+  "duration-state": {
+    "value": "200ms",
+    "comment": "动效时长 — 状态切换（收敛散写的 0.2s/0.25s）"
+  },
+  "duration-reveal": {
+    "value": "300ms",
+    "comment": "动效时长 — 内容显现（收敛散写的 0.3s/0.42s）"
   },
   "primary": {
     "value": "var(--accent)",

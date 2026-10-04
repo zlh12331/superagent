@@ -1,13 +1,16 @@
 // src/main/infra/ai/agent-runtime/active-session-registry.ts
 // 活跃会话注册表（R2 去重）
 // ──────────────────────────────────────────────────────────────
-// ChatService 与 AgentService 此前各自维护 activeSessions/activeStreams 双 Map
-// 与同一套防重/中断/等待收尾逻辑（约 100 行重复），语义修正需双处同步。
-// 本类收敛为共享实现：
+// 背景（R2 去重，30 号后台驻留期收敛）：ChatService 与 AgentService 此前各自
+// 维护 activeSessions/activeStreams 双 Map 与同一套防重/中断/等待收尾逻辑
+// （约 100 行重复），语义修正需双处同步。本类收敛为共享实现：
 // - preemptExisting：防重（abort 旧会话 + 等待旧 stream 退出，超时兜底）
 // - abort：立即删除 controller 再 abort（配合 CAS 删除避免误删新会话）
 // - removeXIfCurrent：CAS 删除（旧 stream finally 时只删自己的条目）
 // - dispose：abortAll + 等待全部 stream 完成（超时兜底后强制清空）
+//
+// 生产实例现状：ChatService 已并入 agent-service 回合链路删除，唯一生产实例
+// 在 agent-service（registry 字段）；本类留在 agent-runtime 供后续回合类宿主复用。
 // ──────────────────────────────────────────────────────────────
 
 import { logger } from '../../../utils/logger';
@@ -18,7 +21,7 @@ const PREEMPT_WAIT_MS = 5000;
 /**
  * 活跃会话注册表：sessionId → { AbortController, stream Promise }
  *
- * 每个服务（Chat/Agent）持有独立实例，互不共享会话 id 空间。
+ * 每个宿主服务持有独立实例，互不共享会话 id 空间（当前唯一生产实例 = agent-service）。
  */
 export class ActiveSessionRegistry {
   /** 活跃会话的 AbortController（sessionId → controller） */
@@ -26,7 +29,8 @@ export class ActiveSessionRegistry {
   /** 活跃 stream Promise（catch 后恒 fulfilled） */
   private readonly streams = new Map<string, Promise<void>>();
 
-  /** 当前活跃会话数（关窗协商用：>0 表示有回合在跑） */
+  /** 当前活跃会话数（关窗协商用：>0 表示有回合在跑——window.ts 经
+   * serviceContainer.hasActiveTurns → agentService.hasActiveSessions 到达） */
   get activeCount(): number {
     return this.controllers.size;
   }
@@ -41,6 +45,10 @@ export class ActiveSessionRegistry {
    *
    * 触发场景：用户快速双击发送、stop 后立即 send、跨入口并发 IPC。
    * 超时兜底避免旧 stream 卡死时阻塞调用方。
+   *
+   * 边界：本方法只防「已注册的活跃会话」；`await preemptExisting` 与
+   * `register` 之间跨越 await 边界的并发窗口由宿主的 startingSessions
+   * Set 临界区补齐（agent-service，TOCTOU 2026-09-08 修复）。
    */
   async preemptExisting(sessionId: string, kind: string): Promise<void> {
     const existingController = this.controllers.get(sessionId);

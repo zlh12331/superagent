@@ -1,5 +1,7 @@
 /* ──────────────────────────────────────────────────────────────
-   全局布局与层级令牌（主题无关，所有主题共享）
+   Tailwind v4 主题映射（@theme inline / @utility）+ 全局基础样式
+   （滚动条 / 选区 / 布局锚点）。设计令牌真源：tokens/aurora.json →
+   tokens.css（生成物），本文件只做映射与消费。
    ────────────────────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────────────────────
@@ -16,16 +18,18 @@
    （如 bg-background、text-foreground、font-serif 等）
    ────────────────────────────────────────────────────────────── */
 @theme inline {
-  /* 字号阶梯 9 级：text-2xs…text-3xl = 10/11/12/13/14/16/18/22/28px */
-  --text-2xs: 10px;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 13px;
-  --text-md: 14px;
-  --text-lg: 16px;
-  --text-xl: 18px;
-  --text-2xl: 22px;
-  --text-3xl: 28px;
+  /* 字号阶梯 9 级（真源 tokens/aurora.json → tokens.css 的 --font-size-*）。
+     var 桥接保持单源：此前是手写硬编码 px 值，改令牌不会传导到 Tailwind 工具类
+     （245 处 text-2xs/text-xs 消费的是本文件的字面值，令牌对字号轴是死的） */
+  --text-2xs: var(--font-size-2xs);
+  --text-xs: var(--font-size-xs);
+  --text-sm: var(--font-size-sm);
+  --text-base: var(--font-size-base);
+  --text-md: var(--font-size-md);
+  --text-lg: var(--font-size-lg);
+  --text-xl: var(--font-size-xl);
+  --text-2xl: var(--font-size-2xl);
+  --text-3xl: var(--font-size-3xl);
 
   /* 圆角派生 */
   --radius-sm: calc(var(--radius) - 2px);
@@ -58,14 +62,11 @@
   --color-success-text: var(--success-text);
   --color-warn-text: var(--warn-text);
   --color-accent-text: var(--accent-text);
+  /* accent-2 作文字色专用层（基色 3.49:1 不达标，见 aurora.json comment） */
+  --color-accent-2-text: var(--accent-2-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -109,14 +110,18 @@
    */
   --color-on-accent: var(--on-accent);
 
-  /* 品牌墨色（tokens/aurora.json → --ink）：accent 渐变上的头像字色、勾选对号等
-   * 高对比墨色细节；双主题同值。用法：text-ink / bg-ink / css 内 var(--ink) */
-  --color-ink: var(--ink);
-
   /* 字体族映射到 Tailwind 工具类 */
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
+}
+
+/* z-popover 工具类注册：Tailwind v4 的 @theme 无 z-index 命名空间，
+   shadcn 浮层（dialog/dropdown/select/alert-dialog/sheet 共 10 处）用的
+   z-popover 类曾因未注册而静默失效——产物 CSS 无该规则，层级全靠 DOM
+   顺序兜底。@utility 注册后与 tokens.css 的 --z-popover 档位接通。 */
+@utility z-popover {
+  z-index: var(--z-popover);
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -150,12 +155,11 @@ body {
 
 /* ──────────────────────────────────────────────────────────────
    滚动条样式 · TraeWork
+   Chromium 121+ 起，设置 scrollbar-width / scrollbar-color（非 auto）会
+   让 ::-webkit-scrollbar 自定义整体失效——此前两者并存，8px 宽 + 2px 留白的
+   「纸张边缘」滚动条从不渲染。本应用是 Chromium-only（Electron），走 webkit
+   伪元素路径，不设 scrollbar-width/color。
    ────────────────────────────────────────────────────────────── */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
-}
-
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -167,9 +171,11 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
+  /* 透明边留白收窄拇指，background-clip 让留白真正透出所在面板底色——
+     原 border 用 --background 实色，在灰底面板（侧栏/右面板）上露出异色框线 */
+  border: 2px solid transparent;
+  background-clip: padding-box;
   border-radius: calc(var(--radius) - 4px);
-  /* 两侧留白，模拟纸张边缘 */
-  border: 2px solid var(--background);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -190,11 +196,6 @@ body {
 
 /* .prose-literacy 已删除（TSX 零引用；非设计轴，见 design-identity 残留表） */
 
-/* ProseMirror 焦态 */
-.ProseMirror:focus {
-  outline: none;
-}
-
 /* ──────────────────────────────────────────────────────────────
    动画 · 纸张呼吸感（用于状态指示器脉冲）
    ────────────────────────────────────────────────────────────── */
@@ -202,41 +203,12 @@ body {
   animation: pulse-soft 2s var(--ease-soft) infinite;
 }
 
-/* 章节激活态墨水条标记 */
-.chapter-ink-mark {
-  position: relative;
-}
-
-.chapter-ink-mark::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 16px;
-  background: var(--primary);
-  border-radius: calc(var(--radius) - 7px);
-}
-
-/* 纸张纹理 · TraeWork（安静表面，无装饰渐变） */
+/* 纸张纹理 · TraeWork（安静表面，无装饰渐变）
+   原纹理层已随 quiet 迁移删除；类名保留作为 .thread-bg 的定位锚——
+   jump-bar / scroll-to-bottom 的 absolute 定位依赖 main 的
+   position:relative，勿当死代码删除 */
 .paper-texture {
   position: relative;
 }
 
 /* TraeWork：无装饰光晕背景层 */
-
-/* ──────────────────────────────────────────────────────────────
-   布局复刻 · 对齐原型 class 命名（docs/prototype/prototype-v2.html）
-   ──────────────────────────────────────────────────────────────
-   设计哲学：
-   - 保留标题衬线 + mono 元信息排版（非「文学风」设计轴），复刻原型的布局结构
-   - 三段式 grid：顶栏 / 主体（sidebar + resizer + main + resizer + right-panel）
-   - class 命名对齐原型：.app / .topbar / .brand / .resizer / .chat-right-panel
-   - 布局宽度令牌：--sidebar-w / --right-panel-w（JS 可覆盖 clamp 默认值）
-   - 宽度采用 clamp() 响应式（拖拽时由 JS 动态覆盖为 px 值）
-   ────────────────────────────────────────────────────────────── */
-
-/*
- * 布局宽度令牌：:root 上为 clamp 默认值；拖拽时 JS 直接 setProperty 覆盖为 px。
- */

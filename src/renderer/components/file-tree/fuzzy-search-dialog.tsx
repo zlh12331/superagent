@@ -304,7 +304,7 @@ export function FuzzySearchDialog({
             aria-activedescendant={
               combinedResults.length > 0 ? `fuzzy-result-${safeSelectedIndex}` : undefined
             }
-            className="flex-1 border-none bg-transparent text-[14px] text-foreground outline-none placeholder:text-text-faint"
+            className="flex-1 border-none bg-transparent text-md text-foreground outline-none placeholder:text-text-faint"
           />
         </div>
 
@@ -316,11 +316,11 @@ export function FuzzySearchDialog({
           className="max-h-[400px] overflow-y-auto p-1.5"
         >
           {query.trim().length === 0 ? (
-            <div className="px-3 py-8 text-center text-[12px] text-text-faint">
+            <div className="px-3 py-8 text-center text-sm text-text-faint">
               {t('fileTree.fuzzySearch.hint')}
             </div>
           ) : combinedResults.length === 0 ? (
-            <div className="px-3 py-8 text-center text-[12px] text-text-faint">
+            <div className="px-3 py-8 text-center text-sm text-text-faint">
               {t('fileTree.fuzzySearch.noResults')}
             </div>
           ) : (

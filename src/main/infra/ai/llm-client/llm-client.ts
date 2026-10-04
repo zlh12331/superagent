@@ -3,8 +3,16 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - getModel(modelId)：模型级解析（ModelRegistry）→ 供应商工厂 → per-model 缓存
-// - generateText：会话外工具化调用（标题生成 / 摘要 / 子代理），自带重试
+// - generateText：会话外工具化调用（标题生成 / 工具入参修复），自带重试 + 降级链
+// - generateJson：结构化输出（命令分类 / 目标判定 / 技能学习）
 // - reset：清空 per-model 缓存（API Key / 模型切换后重建实例）
+//
+// side query 消费方（经 generateText/generateJson，单一链路）：
+// - session-title（标题生成，经 ITitleGenerator 鸭子匹配）
+// - repair-tool-call（工具入参修复）
+// - command-classifier / goal-judge / learn-skill-agent（generateJson）
+// （原注释的「摘要 / 子代理」无调用方——context-compression 纯本地、
+//  subagent-manager 不直连 LLM）
 //
 // 设计（对标 qwen-code BaseLlmClient）：
 // - 模型是路由最小单元：调用方传模型 id 即可，无需知道供应商
@@ -241,10 +249,13 @@ export class LlmClient {
   }
 
   /**
-   * 会话外工具化 LLM 调用（标题生成 / 摘要 / 子代理等）
+   * 会话外工具化 LLM 调用（标题生成 / 工具入参修复等）
    *
    * 自带重试（错误码感知 + 指数退避）与遥测回调。
    * 与主回合（streamText）独立：无工具调用、无多轮循环。
+   *
+   * ModelFallback 降级链：显式指定模型 + 可降级错误（5xx/网络/超时）→
+   * 降级默认模型重试一次（见 catch 内实现）。
    *
    * 模型级生成参数适配（buildGenerationOptions 单一真源，与 agent 主流程共用）：
    * - 思考模型：注入 reasoningEffort（DeepSeek 按官方映射钳制），不传采样参数
@@ -312,6 +323,9 @@ export class LlmClient {
 
   /**
    * 结构化输出调用（JSON schema 强制，标题提取 / 结构化任务等）
+   *
+   * 生产消费方：command-classifier（命令分类）/ goal-judge（目标判定）/
+   * learn-skill-agent（技能学习）。
    *
    * 对标 qwen BaseLlmClient.generateJson：模型按 schema 输出（respond_in_schema），
    * 避免自由文本解析的脆弱性。自带重试与中断贯穿。
@@ -389,8 +403,12 @@ export class LlmClient {
   /**
    * 失效单个模型的缓存实例
    *
-   * 触发场景：运行时快照更新（baseUrl / apiKey 变更）后，同 modelId 的
+   * 设计触发场景：运行时快照更新（baseUrl / apiKey 变更）后，同 modelId 的
    * 缓存仍持有旧配置，需主动失效；下次 getModel 重新创建。
+   *
+   * ⚠️ 当前无生产调用方（仅单测）——runtime-model-store 的 add/update 注释
+   * 要求调用方失效缓存，但尚未接线；未接线期间运行时快照变更后同 id 缓存
+   * 持旧配置，需 reset（全清）/重启才清理。接线点应在 models 域 handler。
    */
   invalidateModel(modelId: string): void {
     this.modelCache.delete(modelId);

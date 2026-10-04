@@ -197,4 +197,9 @@ describe('GitService（真实 git 仓库）', () => {
       svc.diff({ path: dir, ref: '--output=pwned.txt', staged: false, filePath: undefined }),
     ).rejects.toMatchObject({ code: ErrorCode.INVALID_INPUT });
   });
+
+  gitIt('dispose：幂等且不抛错（原 infra 根 smoke 唯一增量，并入本文件）', async () => {
+    await svc.dispose();
+    await svc.dispose();
+  });
 });

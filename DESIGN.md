@@ -31,22 +31,22 @@ design_tokens:
 
 | 分组 | 前缀/模式 | 示例 | 说明 |
 |---|---|---|---|
-| 布局尺寸 | `--sidebar-w` / `--right-panel-w` / `--resizer-w` / `--drawer-w` / `--topbar-h` | `clamp(200px,17vw,280px)` | 面板宽高，clamp 响应式 |
-| z-index 层级 | `--z-base:1` / `--z-surface:2` / `--z-popover:50` / `--z-modal:100` / `--z-toast:110` / `--z-boundary:999` | `z-(--z-popover)` | 6 档浮层体系，禁止裸 z-* 数字（check-tokens bare-z-index 卡关） |
+| 布局尺寸 | `--sidebar-w` / `--right-panel-w` / `--resizer-w` / `--drawer-w` / `--topbar-h` / `--content-w:820px` / `--content-w-narrow:720px` | `clamp(200px,17vw,280px)` | 面板宽高，clamp 响应式；content-w 是聊天内容列最大宽（此前魔法数散写） |
+| z-index 层级 | `--z-base:1` / `--z-surface:2` / `--z-raised:10` / `--z-popover:50` / `--z-modal:100` / `--z-toast:110` / `--z-boundary:999` | `z-(--z-popover)` | 7 档浮层体系，禁止裸 z-* 数字（check-tokens bare-z-index + css-z-index-literal 双侧卡关） |
 | 字体 | `--font-mono/sans/serif` | `--font-mono: "JetBrains Mono", …` | 等宽/无衬线/衬线三族 |
-| 字号 | `--font-size-2xs:10px` … `--font-size-3xl:28px` | 9 级唯一阶梯 | `text-*` Tailwind 映射（base=13/md=14） |
+| 字号 | `--font-size-2xs:10px` … `--font-size-3xl:28px` | 9 级唯一阶梯 | `text-*` Tailwind 映射经 var 桥接单源化（base.css @theme 引用 --font-size-*，改令牌传导）；font-size-literal 卡关 |
 | 圆角 | `--radius:8px` + `--radius-sm/md/lg/xl` 派生（6/8/10/12px） | `rounded-md` | shadcn 圆角映射 |
 | 背景层级 | `--bg` / `--bg-elev` / `--bg-elev-2/3` | L0 页面底 → L3 悬浮态 | 3 层背景深度，双主题 |
 | shadcn 语义映射 | `--background/--foreground/--card/--popover/--muted/--accent/--destructive/--border/--ring/--input` 等 | `--muted: var(--bg-elev-2)` | 与 shadcn 标准语义对齐，双主题自适应 |
 | 品牌/强调 | `--accent`（紫 `#4B3FE3` / 暗 `#6A6FFF`）+ `--accent-2`（蓝）+ 派生 `--accent-dim/soft/glow` | `--accent-glow: rgba(75,63,227,.08)` | 双 accent 体系 |
-| 状态色（三层架构） | 基色 `--error/--success/--amber/--magenta` · 文本层 `--error-text/--success-text/--warn-text/--accent-text` · 实底层 `--error-emphasis/--success-emphasis` | `text-error-text` / `bg-error-emphasis` | WCAG AA 文本安全层与按钮实底层分离（详见 §3） |
+| 状态色（三层架构） | 基色 `--error/--success/--amber/--magenta` · 文本层 `--error-text/--success-text/--warn-text/--accent-text/--accent-2-text` · 实底层 `--error-emphasis/--success-emphasis` | `text-error-text` / `bg-error-emphasis` | WCAG AA 文本安全层与按钮实底层分离（详见 §3）；accent-2-text 补齐 accent-2 的文字层（基色 3.49:1 不达标） |
 | 主按钮 | `--primary`（暗 `#5D62FF`） | `bg-primary text-primary-foreground` | 按钮实底与品牌强调职责分离 |
 | 图表色 | `--chart-1..5` | `--chart-3: var(--amber)` | 图表系列（引用语义色） |
 | 消息气泡 | `--msg-bubble-user/assistant` | `--msg-bubble-user: #F5F5F5` | 聊天气泡双主题 |
 | 遮罩/玻璃 | `--overlay-bg/--overlay-blur/--drawer-overlay/--glass-bg` | `--overlay-blur: 8px` | 模态遮罩 |
 | 滚动条 | `--scrollbar-thumb(-hover)` | 双主题 | 滚动条令牌 |
 | 阴影 | `--shadow-elev/modal/dropdown/card(-hover)` | 中性阴影 | TraeWork 无 glow，柔和阴影体系 |
-| 动效 | `--ease-soft/paper/out` + tw-animate-css | — | 缓动曲线与动画关键帧 |
+| 动效 | `--ease-soft/paper/out` + `--duration-fast/state/reveal`（120/200/300ms）+ tw-animate-css | `var(--duration-fast)` | 缓动曲线 + 时长三档与动画关键帧（时长此前散写 7 种已收敛） |
 | 终端 | `--terminal-selection` | `rgba(115,115,115,.30)` | xterm 选区色（禁用 --border 的 0.12） |
 
 ## 2. 双主题机制
@@ -73,7 +73,7 @@ design_tokens:
 2. 引用 CSS 变量一律 `var(--x)`；Tailwind 语义类（`bg-muted`/`text-foreground`）由 @theme inline 映射自动指向令牌
 3. 新增令牌必须双主题成对添加，且满足 WCAG 对比度门槛（11-a11y-spec §1.1）
 4. 删除/改名令牌必须同步搜索 `var(--x)` 引用（设计债审计会检查孤儿令牌）
-5. 浮层层级一律引用 `z-(--z-*)` 令牌（check-tokens bare-z-index 卡关）
+5. 浮层层级一律引用 `z-(--z-*)` 令牌（check-tokens bare-z-index 卡关）；CSS 侧同理（css-z-index-literal 卡关）
 
 ## 5. 审计接入
 

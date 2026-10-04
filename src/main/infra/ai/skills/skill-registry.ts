@@ -5,6 +5,17 @@
 // - 技能定义（name/description/prompt 纯数据）
 // - 内置技能注册表 + 按名加载（模型经 load_skill 工具获取提示词）
 //
+// 接线与消费方（本目录无桶出口，消费者深度导入）：
+// - load_skill 工具：tools/index.ts 注册 createLoadSkillTool(skillRegistry)——
+//   模型按名加载提示词的入口；不存在时工具返回可用技能列表
+// - 启动合并加载：index.ts 用 loadFromRows(LearnSkillService.listLearned())
+//   把 skills 表合并回内存（重启保留）
+// - learn-skill-agent：list（构建现有技能名清单避重名）/ register（学习
+//   技能动态注册）/ remove（删除 + 内置回退）
+//
+// 数据归属：内置技能仅驻注册表内存——skills 表只存 learned 行
+// （唯一写入路径是 learn-skill-agent.learn），重启由 loadFromRows 合并回来。
+//
 // 借鉴声明：
 // 本模块参考 qwen-code 参考项目 packages/core/src/skills/
 // （Copyright 2025 Qwen，SPDX-License-Identifier: Apache-2.0）的
@@ -27,7 +38,10 @@ export interface Skill {
 }
 
 /**
- * 内置技能集
+ * 内置技能集（4 个：code_review / refactor / debugging / commit_message）
+ *
+ * 仅驻注册表内存（skills 表只存 learned 行）；load_skill 工具是模型的
+ * 加载入口，描述是工具选择依据。
  */
 const BUILTIN_SKILLS: readonly Skill[] = Object.freeze([
   {
@@ -79,13 +93,17 @@ const BUILTIN_SKILLS: readonly Skill[] = Object.freeze([
 ]);
 
 /**
- * 技能注册表（模块单例）
+ * 技能注册表（模块级单例 skillRegistry 在文件尾装配；SkillRegistry 类
+ * 仅单测直接实例化，生产一律用单例）
  */
 export class SkillRegistry {
   private readonly skills = new Map<string, Skill>(BUILTIN_SKILLS.map((s) => [s.name, s]));
 
   /**
    * 列出全部技能（按名排序）
+   *
+   * 消费方：load_skill 工具（不存在时返回可用列表）+ learn-skill-agent
+   * （构建现有技能名清单避重名）。
    */
   list(): Skill[] {
     return [...this.skills.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -99,7 +117,10 @@ export class SkillRegistry {
   }
 
   /**
-   * 注册技能（覆盖同名；扩展用）
+   * 注册技能（覆盖同名）
+   *
+   * 生产消费方 = learn-skill-agent.learn（学习技能动态注册，load_skill
+   * 工具立即可用）。
    */
   register(skill: Skill): void {
     this.skills.set(skill.name, skill);
@@ -116,6 +137,9 @@ export class SkillRegistry {
 
   /**
    * 移除技能（若为内置技能则自动回退内置定义）
+   *
+   * 生产消费方 = learn-skill-agent.remove（DB 行删除由调用方负责，本方法
+   * 只管注册表）——内置技能删除后回退内置定义，内置能力不因删除丢失。
    *
    * @returns 是否存在该技能
    */

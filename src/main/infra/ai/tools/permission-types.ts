@@ -27,6 +27,12 @@ export interface PermissionDecision {
 }
 
 /**
+ * 审批决议结果（38 号 spec 阶段 2：决策面显式化——机器 waitingApproval 的
+ * 出口语义不再黑盒，context 记录最后决策供快照审计/后续自动策略消费）
+ */
+export type ApprovalDecisionOutcome = 'approved' | 'denied' | 'timed-out' | 'aborted';
+
+/**
  * 审批生命周期监听器（Agent 回合状态机 waitingApproval 状态的数据源）
  */
 export interface ApprovalLifecycleListener {
@@ -36,8 +42,12 @@ export interface ApprovalLifecycleListener {
     readonly approvalId: string;
     readonly toolName: string;
   }): void;
-  /** 审批决议完成（批准/拒绝；带 sessionId 供回合过滤） */
-  onResolved(payload: { readonly sessionId: string; readonly approvalId: string }): void;
+  /** 审批决议完成（带结果与 sessionId 供回合过滤；dispose 出口不通知——退出场景机器随之销毁） */
+  onResolved(payload: {
+    readonly sessionId: string;
+    readonly approvalId: string;
+    readonly decision: ApprovalDecisionOutcome;
+  }): void;
 }
 
 /**
@@ -51,17 +61,20 @@ export interface IPermissionService {
   /**
    * 决策工具调用的权限级别
    *
-   * 决策顺序（对齐 qwen ApprovalMode + autoMode 三层过滤）：
+   * 决策顺序（与实现对齐；对齐 qwen ApprovalMode + autoMode 三层过滤）：
+   * 0. plan 模式硬拦截：非只读工具直接 'deny'（必须早于记忆缓存与白名单）
    * 1. 检查记忆决策：若用户之前对此 tool+input 组合选了"5分钟内不再询问"且未过期，
    *    返回记忆结果（approved → 'auto'；denied → 'ask' 让用户重新决策）
    * 2. 工具自身 permission='auto'：只有 **category='read'** 才走免审批快速路径；
-   *    非只读的 auto 工具不再无条件短路——先过 Layer-0（危险/复合命令升级为 'ask'），
-   *    再在 plan 模式下按控制面逃生舱之外一律 'deny'（P0 修复，详见实现处注释）
-   * 3. 用户持久化白名单命中 → 'auto'（空/通配符模式无效，见 addWhitelistEntry）
-   * 4. 按工具类别 + ApprovalMode 分级决策：
-   *    - plan：edit/exec 工具 → 'deny'（只读探索零副作用）；read 工具 → 'auto'
-   *    - ask：permission='ask' → 'ask'；permission='auto' → 'auto'（保守默认）
-   *    - auto：edit 工具 → 'auto'（工作区编辑快速路径）；exec 工具 → 'ask'（危险命令仍审批）；read → 'auto'
+   *    非只读的 auto 工具不再无条件短路——命令形状入参先过 Layer-0（危险/复合/
+   *    越界命令升级为 'ask'），MCP 工具入参无命令形状时强制 'ask'（P0/P2 修复，
+   *    详见实现处注释），其余维持免审批
+   * 2.5 用户持久化白名单命中 → 'auto'（空/通配符模式永不命中，见 addWhitelistEntry）
+   * 3. 按审批模式分级决策（decideByMode，仅 permission='ask' 的工具）：
+   *    - plan：非 read 工具 → 'deny'（只读探索零副作用）；read → 'auto'
+   *    - ask：一律 'ask'（保守默认）
+   *    - auto：edit → 'auto'（工作区编辑快速路径）；exec 按危险/安全分层
+   *      （破坏性命令强制 'ask'、只读安全命令 'auto'、其余 'ask'）；read → 'auto'
    *    - yolo：全部 → 'auto'（无审批）
    *
    * @param tool 待执行的工具
@@ -120,6 +133,16 @@ export interface IPermissionService {
   handleApprovalResponse(approvalId: string, approved: boolean, rememberDecision: boolean): void;
 
   /**
+   * 审批超时到期（38 号阶段 2 收尾：由 agent 回合状态机 after 转换调用）
+   *
+   * 以「超时」语义拒绝该 pending（区别于用户拒绝——错误码/文案不同），
+   * 并通知审批生命周期 decision='timed-out'。approvalId 不存在时幂等忽略。
+   *
+   * @param approvalId 超时的审批请求 id
+   */
+  expireApproval(approvalId: string): void;
+
+  /**
    * 释放所有 pending Promise 与资源
    *
    * 用于应用退出 / ServiceContainer.dispose 场景，
@@ -165,7 +188,10 @@ export interface IPermissionService {
   listWhitelist(): readonly WhitelistEntry[];
 
   /**
-   * 添加白名单条目（立即持久化；空 pattern = 该工具全部放行）
+   * 添加白名单条目（立即持久化）
+   *
+   * 空/纯通配符 pattern 一律拒绝（P0：等同放行该工具全部调用——
+   * 白名单的合法语义只有「工具 + 具体命令前缀」）。
    */
   addWhitelistEntry(entry: WhitelistEntry): Promise<void>;
 

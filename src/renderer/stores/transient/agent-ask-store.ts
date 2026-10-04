@@ -16,6 +16,8 @@ interface AgentAskState {
   readonly askId: string | null;
   /** 问题列表（一次可多问） */
   readonly questions: readonly AgentQuestion[];
+  /** 收到时间戳（ms；对话框超时倒计时基准，38 号阶段 2 收尾） */
+  readonly receivedAt: number;
   /** 收到新提问 */
   setAsk: (sessionId: string, askId: string, questions: readonly AgentQuestion[]) => void;
   /**
@@ -37,10 +39,12 @@ export const useAgentAskStore = create<AgentAskState>((set, get) => ({
   sessionId: null,
   askId: null,
   questions: [],
-  setAsk: (sessionId, askId, questions) => set({ sessionId, askId, questions }),
+  receivedAt: 0,
+  setAsk: (sessionId, askId, questions) =>
+    set({ sessionId, askId, questions, receivedAt: Date.now() }),
   clearAsk: (sessionId) => {
     if (sessionId === undefined || get().sessionId === sessionId) {
-      set({ sessionId: null, askId: null, questions: [] });
+      set({ sessionId: null, askId: null, questions: [], receivedAt: 0 });
     }
   },
 }));

@@ -1,7 +1,9 @@
 // src/main/infra/ai/agent-runtime/create-stream.ts
-// 请求级重试：streamText 创建 + 首 part 读取（agent/chat 主流程共用）
+// 请求级重试：streamText 创建 + 首 part 读取
 // ──────────────────────────────────────────────────────────────
-// 背景：主回合（agent/chat）streamText 无重试——网络/认证/首包失败直接抛错。
+// 背景：主回合 streamText 无重试——网络/认证/首包失败直接抛错。
+// 唯一生产消费方 = turn-assembly.assembleAndRunTurn（主回合链路；
+// 原注释的"chat 主流程"随 ChatService 并入删除，不再有独立 chat 流）。
 // 重试语义（务实边界）：
 // - 覆盖"创建 + 首 part 读取"：连接失败 / 认证失败 / 首包超时（请求级失败）
 // - 首 part 成功后不重试：流中错误（半流/工具副作用已发生）重试会重复副作用
@@ -19,7 +21,7 @@ import type { RetryAttemptInfo } from '../llm-client/retry';
 import { isRetryableError, retryWithBackoff } from '../llm-client/retry';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS, readWithIdleTimeout } from './stream-reader';
 
-/** 可转为 UIMessageStream 的 streamText 结果（agent/chat 共用形状） */
+/** 可转为 UIMessageStream 的 streamText 结果（主回合链路共用形状） */
 export interface MessageStreamSource {
   // biome-ignore lint/style/useNamingConvention: SDK 方法名 toUIMessageStream（AI SDK 约定，不可改名）
   toUIMessageStream(): ReadableStream<unknown>;
@@ -83,7 +85,8 @@ export async function createStreamWithRetry<T extends MessageStreamSource>(
       // HTTP 类错误（429/5xx/连接失败）已由 streamText 的 model call 级 maxRetries 重试：
       // - APICallError：SDK 重试真源（指数退避 + 按 retry-after 头定时长）
       // - RetryError：SDK 重试耗尽后的包装，再重试等于把两层尝试次数相乘
-      // （side query 保持完整重试，见 llm-client.runSideQuery）
+      // side query 保持完整重试（含 HTTP 类），见 llm-client.runSideQuery——
+      // 两路重试边界刻意不同：side query 无工具副作用，可放心整段重试
       shouldRetryOnError: (error: unknown) => {
         if (APICallError.isInstance(error) || RetryError.isInstance(error)) {
           return false;

@@ -1,51 +1,60 @@
-// src/main/infra/ai/context-compression.ts
-// 上下文压缩工具
+// src/main/infra/ai/agent/context-compression.ts
+// 上下文压缩 / token 预算模块
 // ──────────────────────────────────────────────────────────────
-// 职责：
-// - 在长对话中压缩消息历史，减少 token 消耗
-// - 保留关键信息：system message、最近对话、工具调用结果
-// - 移除冗余内容：旧的文本回复、重复的工具调用
+// 职责：长对话中压缩消息历史、压低上下文占用，并给出窗口感知的
+// 压缩 / 拒止判定。对外两条压缩路径：
+// - 条数压缩 compressContext：按消息条数裁剪（轻量、不生成摘要）
+// - token 预算压缩 compressByTokenBudget：按 token 预算两档裁剪（主流程使用）
 //
 // 设计：
-// - 分层压缩策略：
-//   1. 保留所有 system message（系统提示词不能丢）
-//   2. 保留最近 N 轮对话（用户最新消息 + 助手回复）
-//   3. 工具调用消息：合并连续工具调用，保留最新结果
-//   4. 早期对话：用摘要替换
-// - token 预算策略（estimateTokenCount / compressByTokenBudget）：
-//   用 gpt-tokenizer 精确统计 token，按预算从后往前保留消息，
+// - 条数压缩（compressContext）：
+//   1. system message 全部保留（系统提示词不能丢）
+//   2. 带工具调用的 assistant 与其 tool 结果归入同列配对，交
+//      mergeToolMessages 合并（保留完整调用-结果对，末尾只留最近 20 条 ≈ 10 对）
+//   3. 其余消息只保留最近 recentMessages 条，更早的直接丢弃（不做摘要替换）
+// - token 预算压缩（compressByTokenBudget，agent 主流程与 /compact 共用）：
+//   用 gpt-tokenizer 统计 token，按预算从后往前保留消息，
 //   适合按 token 计费的 LLM 供应商做上下文预算控制。
 //   估算口径必须覆盖 provider 真实可见的文本（文本段 / 推理块 /
 //   工具入参 / 工具结果 / 多模态 part）——只数 text 段会把工具结果
 //   这类最大消耗估成 0，预算判定与 over-limit 拒止线双双失真
-// - 两档压缩（compressByTokenBudget）：
+// - 两档压缩（compressByTokenBudget，先廉价后昂贵）：
 //   1. 先裁剪低价值 token（旧推理块 + 窗口外的工具调用/结果）：SDK
 //      pruneMessages 按 toolCallId 成对删除，不会留下 provider 拒绝的孤儿
 //      tool_use，且能在保住对话轮次的前提下回收预算
 //   2. 裁剪后仍超预算，才从后往前整条丢弃（先丢最早的消息）。后缀切点
 //      可能把 tool-call 与它的 tool-result 劈开，留下孤儿 result →
 //      dropOrphanToolResults 按 id 剥掉这些段，补齐切片破坏的配对
-// - 压缩服务化（getCompactionBudget / getCompactionDecision）：
-//   对标 qwen chatCompressionService 阈值体系：压缩预算按模型窗口比例计算
-//   （75% 窗口 − 输出预留），warn 提前缓冲提醒，避免一次性硬压缩
+// - 压缩服务化（getCompactionBudget / getCompactionDecision /
+//   getTokenBudgetDecision）：对标 qwen chatCompressionService 阈值体系：
+//   压缩预算按模型窗口比例计算（75% 窗口 − 输出预留），warn 提前缓冲提醒，
+//   over-limit 硬拒止，避免一次性硬压缩
 // ──────────────────────────────────────────────────────────────
 
 import { type ModelMessage, pruneMessages } from 'ai';
 import { encode } from 'gpt-tokenizer';
 
+/** 条数压缩参数：总条数上限 + 保留的最近条数 */
 interface CompressionOptions {
   readonly maxMessages: number;
   readonly recentMessages: number;
 }
 
+/** 条数压缩缺省参数：总条数 > 50 才触发，保留最近 10 条 */
 const DEFAULT_OPTIONS: CompressionOptions = {
   maxMessages: 50,
   recentMessages: 10,
 };
 
 /**
- * 压缩上下文：超 maxMessages 时保留首条 + recentMessages 条最近消息（中段裁剪），
- * 未超限原样返回
+ * 条数压缩：超 maxMessages 时按角色分流重建消息列表，未超限原样返回
+ * （返回同一引用）
+ *
+ * 重建规则：
+ * - system 消息全量保留（排在最前）
+ * - 工具消息（role==='tool' 或带 toolCalls 的 assistant）整体交
+ *   mergeToolMessages 合并，与普通消息的最近窗口彼此独立
+ * - 其余消息只保留最近 recentMessages 条（earlyMessages.slice(-recentMessages)）
  *
  * @param messages 完整消息历史
  * @param options 裁剪参数（缺省用 DEFAULT_OPTIONS）
@@ -77,6 +86,7 @@ export function compressContext(
     }
   }
 
+  // 普通消息只保留最近 recentMessages 条（不足则全留）；slice(-n) 保序
   if (earlyMessages.length <= recentMessages) {
     recentMessagesList.push(...earlyMessages);
   } else {
@@ -85,6 +95,7 @@ export function compressContext(
 
   const compressedToolMessages = mergeToolMessages(toolMessages);
 
+  // 顺序固定为 system → 合并后的工具对 → 最近普通消息
   const result: ModelMessage[] = [
     ...systemMessages,
     ...compressedToolMessages,
@@ -120,7 +131,7 @@ function tokenCacheKey(text: string): string {
 }
 
 /**
- * 估算文本的 token 数（gpt-tokenizer 精确计数，cl100k_base 词表）
+ * 估算文本的 token 数（gpt-tokenizer 精确计数，v4 默认 o200k_base 词表）
  *
  * 用于 token 预算压缩与 UI 展示上下文消耗。结果带 LRU 缓存
  * （见 tokenCountCache 注释：单回合重复编码是长上下文首 token 延迟主因）。
@@ -149,11 +160,14 @@ export function estimateTokenCount(text: string): number {
 }
 
 /**
- * 多模态 part 的保守 token 折算额度。
+ * 多模态「资产型」part 的保守 token 折算额度。
  *
- * image / file 的 base64 负载不能按字符数计 token（一张图会估出几万 token），
- * 供应商按固定块计费；取 1000 作为下界代理，避免「几十张附件仍显示 0 占用」
- * 这一方向的系统性低估。
+ * image / file / reasoning-file 的 base64 负载不能按字符数计 token
+ * （一张图会估出几万 token），供应商按固定块计费；取 1000 作为下界代理，
+ * 避免「几十张附件仍显示 0 占用」这一方向的系统性低估。
+ *
+ * 仅对资产型 part 生效（见 isAssetPart）：内联文本型 file 负载
+ * 已按文本精确计数，不再叠加本额度。
  */
 export const MULTIMODAL_PART_TOKEN_ALLOWANCE = 1_000;
 
@@ -164,7 +178,8 @@ const MULTIMODAL_PART_TYPES = new Set(['image', 'file', 'reasoning-file']);
  * 消息 → 计入估算的文本（provider 真实可见部分）
  *
  * 覆盖文本段、推理块、工具入参、工具结果与内联文本型文件负载；
- * 图片/二进制资产不按字符计数，由 MULTIMODAL_PART_TOKEN_ALLOWANCE 折算。
+ * 图片/二进制资产不按字符计数，由 MULTIMODAL_PART_TOKEN_ALLOWANCE 折算
+ * （见 countMessageTokens）。
  */
 function messageToText(msg: ModelMessage): string {
   const content = msg.content as unknown;
@@ -231,7 +246,11 @@ function inlineTextOf(part: PartShape): string {
   return '';
 }
 
-/** 单个 content part → 文本 */
+/**
+ * 单个 content part → 文本（无法识别的 part 类型返回空串，不抛错）
+ *
+ * 各类型处理见分支注释；资产型 part 只取其内联文本（通常为空）。
+ */
 function partToText(part: unknown): string {
   if (part === null || typeof part !== 'object') {
     return '';
@@ -343,7 +362,8 @@ export const TOOL_CONTEXT_KEEP_MESSAGES = 20;
 /**
  * 裁剪低价值上下文（SDK pruneMessages 封装）
  *
- * - 旧推理块：只保留最后一条 assistant 的 reasoning（推理过程不回灌）
+ * - 旧推理块：清除最后一条消息之前各 assistant 消息里的 reasoning，
+ *   只保留最后一条消息的推理（reasoning: 'before-last-message'，推理不回灌）
  * - 窗口外工具上下文：按 toolCallId 成对删除，不会留下 provider 拒绝的孤儿
  *   tool_use / tool_result（手写按角色丢弃极易踩这个坑）
  * - 裁剪后空消息删除：只剩工具调用的壳消息不占预算
@@ -415,9 +435,11 @@ function dropOrphanToolResults(messages: ModelMessage[]): ModelMessage[] {
  * 按 token 预算压缩消息（gpt-tokenizer 精确计数）
  *
  * 策略（两档，先廉价后昂贵）：
- * - 预算内：原样返回，不做任何有信息损失的裁剪
- * - 第一档：pruneContext 回收旧推理块 + 窗口外工具上下文
- *   → 通常这一步就把预算腾出来了，对话轮次完整保住
+ * - maxTokens ≤ 0：返回空数组
+ * - 预算内：原样返回（同一引用），不做任何有信息损失的裁剪
+ * - 第一档：pruneContext 回收旧推理块 + 窗口外工具上下文；
+ *   裁剪结果仍超对话预算时退回未裁剪列表（candidates），保证第一档
+ *   绝不比不裁剪更差（避免为腾预算反而丢了配对的工具上下文）
  * - 第二档：仍超预算 → 从后往前整条保留（先丢最早的消息），
  *   再用 dropOrphanToolResults 补上切点破坏的工具配对
  * - system 消息无条件保留，且其占用先从预算扣除
@@ -441,6 +463,7 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
   const conversationBudget = Math.max(0, maxTokens - estimateMessagesTokens(systemMessages));
 
   const pruned = pruneContext(others);
+  // 第一档只在真能省预算时才采用（裁剪后仍超预算则退回未裁剪列表）
   const candidates = estimateMessagesTokens(pruned) <= conversationBudget ? pruned : others;
 
   // 从后往前累积 token（保留最新上下文），前缀超出预算的丢弃
@@ -477,7 +500,14 @@ export function compressByTokenBudget(messages: ModelMessage[], maxTokens = 8000
 }
 
 /**
- * 合并连续工具调用消息：保留每对（调用 + 结果）的最新一条，最多 20 条
+ * 合并工具调用消息：把「assistant 调用 + 后续 tool 结果」凑成对，
+ * 只在配对完整时输出，末尾只保留最近 20 条（约 10 对）
+ *
+ * 扫描时用 currentToolCall / currentToolResult 暂存最近一次调用与结果，
+ * 遇到下一次调用或普通消息时若两者都已就绪则输出该对；末尾未配对
+ * （只有调用没有结果，如被中断）不 flush，故不会输出悬空调用。
+ *
+ * @param messages 已按工具语义分流出的消息列表
  */
 function mergeToolMessages(messages: ModelMessage[]): ModelMessage[] {
   if (messages.length === 0) return [];
@@ -519,7 +549,7 @@ function mergeToolMessages(messages: ModelMessage[]): ModelMessage[] {
 /** 压缩触发比例：上下文达到窗口 75% 时触发压缩（对标 qwen auto-compaction threshold） */
 export const COMPACTION_RATIO = 0.75;
 
-/** 压缩输出预留：压缩后仍需窗口空间生成摘要/继续输出（对标 qwen SUMMARY_RESERVE 20K） */
+/** 压缩输出预留上限：压缩后仍需窗口空间生成摘要/继续输出（对标 qwen SUMMARY_RESERVE 20K） */
 export const COMPACTION_RESERVE_TOKENS = 20_000;
 
 /** 压缩预算下限（小窗口保护，避免预算算成负数） */
@@ -528,7 +558,8 @@ export const MIN_COMPACTION_BUDGET = 8_000;
 /**
  * 窗口感知的压缩预算：round(0.75 × window) − 输出预留
  *
- * 预留随窗口缩水（min(20K, 5% × window)），小窗口不会预留过大。
+ * 输出预留 = min(20K, 5% × window)：随窗口缩水而封顶 20K，
+ * 小窗口不会预留过大；结果再与 MIN_COMPACTION_BUDGET 取大值兜底。
  *
  * @param contextWindowSize 模型上下文窗口（token 数）
  * @returns 压缩目标预算（token 数，至少 MIN_COMPACTION_BUDGET）
@@ -540,7 +571,7 @@ export function getCompactionBudget(contextWindowSize: number): number {
 }
 
 /**
- * 估算消息列表的总 token 数（gpt-tokenizer 精确计数）
+ * 估算消息列表的总 token 数（逐条 countMessageTokens 求和）
  */
 export function estimateMessagesTokens(messages: ModelMessage[]): number {
   return messages.reduce((sum, msg) => sum + countMessageTokens(msg), 0);
@@ -552,7 +583,7 @@ export type CompactionLevel = 'ok' | 'warn' | 'compact';
 /**
  * 压缩触发判定（对标 qwen 的 auto/warn 双阈值）
  *
- * - compact 线 = 压缩预算（窗口 75% − 预留）
+ * - compact 线 = 压缩预算（窗口 75% − 预留，下限 MIN_COMPACTION_BUDGET）
  * - warn 线 = compact 线 − 5% 窗口缓冲（提前几轮提醒）
  *
  * @param contextTokens 当前上下文 token 数（estimateMessagesTokens 的结果）
@@ -580,6 +611,9 @@ export type TokenBudgetLevel = 'ok' | 'warn' | 'compact' | 'over-limit';
 
 /**
  * 回合级 token 预算判定结果
+ *
+ * level 由 getTokenBudgetDecision 按 contextTokens 与 compactAt / hardLimit
+ * 的关系得出；各字段回传给调用方用于日志与遥测。
  */
 export interface TokenBudgetDecision {
   readonly level: TokenBudgetLevel;
@@ -587,7 +621,7 @@ export interface TokenBudgetDecision {
   readonly contextTokens: number;
   /** 模型上下文窗口（token 数） */
   readonly contextWindowSize: number;
-  /** 压缩线（窗口 75% − 输出预留） */
+  /** 压缩线（窗口 75% − 输出预留，即 getCompactionBudget 的结果） */
   readonly compactAt: number;
   /** 硬上限（窗口 − 输出预留；超过即拒止，防 400） */
   readonly hardLimit: number;
@@ -602,6 +636,9 @@ export interface TokenBudgetDecision {
  * - compact：达到压缩线（压缩消息历史后执行）
  * - over-limit：超出硬上限（拒绝调用，避免供应商 400 错误）
  *
+ * over-limit 判定优先于 compact/warn：contextTokens > hardLimit 直接返回
+ * over-limit，否则交给 getCompactionDecision 判 ok/warn/compact。
+ *
  * @param contextTokens 当前上下文 token 数
  * @param contextWindowSize 模型上下文窗口（token 数）
  */
@@ -610,7 +647,9 @@ export function getTokenBudgetDecision(
   contextWindowSize: number,
 ): TokenBudgetDecision {
   const compactAt = getCompactionBudget(contextWindowSize);
-  // 硬上限：窗口 − 输出预留（与 maxOutputTokens 钳制同源，保证 prompt + output ≤ window）
+  // 硬上限：窗口 − 输出预留。与 models/token-limits.ts 的 clampOutputTokens
+  // 共同守护 prompt + output ≤ window（此处拦 prompt 侧，那边钳 output 侧，
+  // 两处预留口径独立：本处 min(20K, 5%)，那边 max(10K, 5%)）
   const reserve = Math.min(COMPACTION_RESERVE_TOKENS, Math.round(0.05 * contextWindowSize));
   const hardLimit = contextWindowSize - reserve;
 

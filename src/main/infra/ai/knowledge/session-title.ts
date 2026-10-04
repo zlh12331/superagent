@@ -1,10 +1,15 @@
-// src/main/infra/ai/session-title.ts
-// 会话标题生成（agent 回合与 chat 对话共用）
+// src/main/infra/ai/knowledge/session-title.ts
+// 会话标题生成
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - ITitleGenerator：标题生成窄接口（DI 注入，接口隔离）
-// - ensureSessionTitle：回合/对话正常结束后异步生成标题（失败静默）
-// - firstUserMessageText：从消息历史提取首条 user 文本（生成输入）
+// - ensureSessionTitle：回合正常结束后异步生成标题（失败静默）
+// - firstUserMessageText / lastUserMessageText：从消息历史提取首条/末条
+//   user 文本（前者是标题生成输入，后者是权限决策的用户意图）
+//
+// 消费方：唯一生产调用点 = agent-service 的 finalizeCompletedTurn（正常完成
+// 收尾路径；aborted/error 不生成标题）。历史注释的「chat 对话共用」随
+// ChatService 并入删除，不再有独立 chat 流程。
 //
 // 设计：
 // - 仅当会话仍为默认标题时执行，不覆盖用户自定义标题
@@ -20,7 +25,8 @@ import type { LlmGenerateTextOptions, LlmGenerateTextResult } from '../llm-clien
 /**
  * 标题生成器接口（DI 窄接口：仅依赖 generateText 能力）
  *
- * LlmClient 结构满足本接口；注入接口而非具体类，便于测试替换。
+ * LlmClient 结构满足本接口（service-container 鸭子匹配注入）；
+ * 注入接口而非具体类，便于测试替换。
  */
 export interface ITitleGenerator {
   generateText(options: LlmGenerateTextOptions): Promise<LlmGenerateTextResult>;
@@ -53,8 +59,9 @@ export function lastUserMessageText(messages: ChatMessage[]): string | undefined
 /**
  * 异步生成会话标题（失败静默，不阻断主流程）
  *
- * 仅当会话仍为默认标题时执行；用首条用户消息生成简洁标题。
- * agent 回合与 chat 对话正常结束后均调用（挂载点统一）。
+ * 仅当会话仍为默认标题时执行；用首条用户消息生成简洁标题（超 50 字符
+ * 截断，生成输入超 200 字符截断）。生产调用点唯一：agent-service 的
+ * finalizeCompletedTurn（agent-service.ts；titleGenerator 未注入时跳过）。
  */
 export async function ensureSessionTitle(params: {
   readonly sessionService: ISessionService;

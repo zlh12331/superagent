@@ -62,6 +62,9 @@ const GIT_SUMMARY_TTL_MS = 2000;
  * 实现。非 git 仓库等场景下查询抛错时向上传播，由
  * injectDynamicContext 捕获并回落为占位符。
  *
+ * 生产装配方 = service-container 的 getPromptService（闭包内延迟取
+ * getGitService().status——尊重测试经 setGitService 注入的 mock）。
+ *
  * P2-32：进程内缓存（按 workingDir，短 TTL）+ 并发合并——同一回合内多次
  * injectDynamicContext 只 spawn 一次 git status 子进程；查询失败不缓存
  * （下次调用重试），与「失败回落占位符」语义兼容。

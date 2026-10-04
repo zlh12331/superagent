@@ -4,6 +4,9 @@
 // 为什么提出来：usage 的条件展开投影 + 日志 + recordUsage + span 打点
 // 是一段与回合编排无关的完整块（~55 行），内联会撑爆 completeTurn
 // （file-size 净行 600 棘轮）；投影部分是纯函数可独立测试。
+//
+// 调用链：agent-service 的 completed 收尾先 projectTurnUsage(usage) 得到领域
+// TurnUsage（随后随 completeTurn 落库），再 reportTurnUsage 记日志/写用量表/打 span。
 
 import type { TurnUsage } from '@code-agent/shared/main';
 import { logger } from '../../../utils/logger';
@@ -32,7 +35,13 @@ export interface TurnUsageReportDeps {
     | undefined;
 }
 
-/** SDK usage → 领域 TurnUsage 投影（可选字段条件展开；undefined 透传） */
+/**
+ * SDK usage → 领域 TurnUsage 投影（可选字段条件展开；undefined 透传）
+ *
+ * usage 为 null/undefined 时返回 undefined（该回合无用量信息，不构造空对象）。
+ * 每个字段仅在源值非 undefined 时才写入，保持与 TurnUsage 可选字段语义一致；
+ * 因此返回对象可能只有部分字段甚至为空对象。
+ */
 export function projectTurnUsage(
   usage: SdkTotalUsageLike | null | undefined,
 ): TurnUsage | undefined {
@@ -55,6 +64,10 @@ export function projectTurnUsage(
 /**
  * 回合 usage 遥测：日志 + 用量持久化（设置页统计）+ span 打点。
  * 持久化失败不阻断主流程；span 打点前逐字段守卫（setAttribute 不接受 undefined）。
+ *
+ * usage 缺失时整体短路（无用量即无需上报）。recordUsage 传参时把缺省字段
+ * 归零（?? 0），但 cacheReadTokens / reasoningTokens 保持可选透传（undefined
+ * 表示"未提供"而非 0，避免把缓存命中/思维链计入零值污染统计）。
  */
 export function reportTurnUsage(
   deps: TurnUsageReportDeps,

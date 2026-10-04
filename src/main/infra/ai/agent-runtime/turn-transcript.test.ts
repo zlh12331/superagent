@@ -1,5 +1,10 @@
 // src/main/infra/ai/agent-runtime/turn-transcript.test.ts
 // 回合转录 → 落库消息构造（纯函数测试，无 mock）
+//
+// 接线背景：生产调用方为 agent-service 的 completeTurn（机器三终态收尾
+// 共用的落库段）。本组用例守住 part 形态与 SDK response.messages 的对齐
+// ——渲染层 unwrapOutput 原生解包 tool-result.output 的 {type,value} 包装，
+// 形态变更即跨层破坏（重开会话的富消息可见性依赖此契约）。
 
 import { describe, expect, it } from 'vitest';
 import {

@@ -7,7 +7,7 @@
 // - 浏览器模式守卫：无 window.api 时直接关闭
 // ──────────────────────────────────────────────────────────────
 
-import type { AgentQuestion } from '@code-agent/shared/renderer';
+import { type AgentQuestion, ASK_TIMEOUT_SECONDS } from '@code-agent/shared/renderer';
 import { X } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -32,6 +32,7 @@ interface AskState {
   readonly sessionId: string | null;
   readonly askId: string | null;
   readonly questions: readonly AgentQuestion[];
+  readonly receivedAt: number;
   readonly clearAsk: (sessionId?: string) => void;
 }
 
@@ -49,8 +50,39 @@ function useAskState(): AskState {
     sessionId: useAgentAskStore((s) => s.sessionId),
     askId: useAgentAskStore((s) => s.askId),
     questions: useAgentAskStore((s) => s.questions),
+    receivedAt: useAgentAskStore((s) => s.receivedAt),
     clearAsk: useAgentAskStore((s) => s.clearAsk),
   };
+}
+
+/**
+ * 提问超时倒计时（38 号阶段 2 收尾：主进程 60s 超时自动继续对用户可见化）
+ *
+ * 以 store 的 receivedAt 为基准（与推送时刻同源）；逐秒刷新（秒级提示需
+ * 秒级粒度，与审批卡的分钟粒度不同）；最后 10 秒切警示态。
+ */
+function useAskCountdown(
+  receivedAt: number,
+  active: boolean,
+): {
+  readonly secondsLeft: number;
+  readonly expiring: boolean;
+} {
+  const compute = (): number =>
+    Math.max(0, Math.ceil((receivedAt + ASK_TIMEOUT_SECONDS * 1000 - Date.now()) / 1000));
+  const [secondsLeft, setSecondsLeft] = useState(compute);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => {
+      setSecondsLeft(compute);
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+    // compute 为闭包内纯函数（读 receivedAt），无需进依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receivedAt, active]);
+  return { secondsLeft, expiring: active && secondsLeft <= 10 };
 }
 
 /** 回答载荷：仅带非空字段（单选索引/自由文本二选一或并存） */
@@ -192,7 +224,9 @@ function QuestionProgressBar({
 export function AskDialog(): ReactElement | null {
   const { t } = useTranslation();
   // 逐字段 selector（见 useAskState 说明；此前为整体订阅）
-  const { sessionId: askSessionId, askId, questions, clearAsk } = useAskState();
+  const { sessionId: askSessionId, askId, questions, receivedAt, clearAsk } = useAskState();
+  // 超时倒计时（hook 在 early return 前调用；非本会话提问 active=false 内部短路）
+  const timeout = useAskCountdown(receivedAt, askId !== null);
   // 回答状态机（模块级 useAskAnswers：answers/submitting + 初始化 + 交互与提交）
   const { answers, submitting, toggleOption, setText, handleSubmit } = useAskAnswers({
     askId,
@@ -249,10 +283,20 @@ export function AskDialog(): ReactElement | null {
             ?
           </span>
           <span className="text-foreground text-sm font-semibold">{t('agent.askTitle')}</span>
+          {/* 超时倒计时（38 号阶段 2 收尾：60s 未回答自动继续对用户可见；最后 10 秒警示） */}
+          <span
+            className={cn(
+              'ml-auto font-mono text-2xs',
+              timeout.expiring ? 'text-warn-text' : 'text-muted-foreground',
+            )}
+          >
+            {timeout.expiring && <span className="mr-1">{t('agent.askExpiresSoon')}·</span>}
+            {t('agent.askTimeoutHint', { seconds: timeout.secondsLeft })}
+          </span>
           <Button
             variant="ghost"
             size="icon"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto size-6"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground size-6"
             aria-label={t('common.close')}
             onClick={() => void handleCancel()}
           >

@@ -223,6 +223,16 @@ export interface UpdateSettings {
   /** 是否启用自动检查更新（默认 true） */
   readonly autoCheck: boolean;
   /**
+   * 是否接收预发布（beta）更新（默认 false）
+   *
+   * 稳定版用户开启后可收到 prerelease 版本的更新提示（electron-updater 的
+   * allowPrerelease；GitHub 的 /releases/latest 天然跳过 prerelease，不开
+   * 则稳定版永远只收正式版）。主进程在每次检查前读取（开启后手动"检查更新"
+   * 立即生效）。装了 beta 版（版本号含 `-`）时恒为接收——库按版本判定的
+   * 默认行为保留，开关只负责"稳定版主动 opt-in"。
+   */
+  readonly allowPrerelease: boolean;
+  /**
    * 用户主动跳过的版本号（默认 null）
    *
    * 语义是"这个版本不再提醒"（顶栏徽标与 toast 静默），不阻断下载与安装——
@@ -536,6 +546,7 @@ const DEFAULT_SETTINGS: SettingsData = {
   },
   update: {
     autoCheck: true,
+    allowPrerelease: false,
     skippedVersion: null,
   },
   window: {

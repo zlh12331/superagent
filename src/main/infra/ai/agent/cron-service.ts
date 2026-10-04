@@ -1,4 +1,4 @@
-// src/main/infra/ai/cron-service.ts
+// src/main/infra/ai/agent/cron-service.ts
 // 定时任务服务：cron 表达式调度 + sqlite 持久化（对齐 qwen cronScheduler durable 语义收敛）
 // ──────────────────────────────────────────────────────────────
 // 职责：
@@ -6,6 +6,12 @@
 // - 调度：croner 成熟库（v10）实例化调度——每个任务一个 Cron 实例，
 //   秒级内部精度、分钟级表达式天然不重复触发（替代原自研 30s tick）
 // - 触发语义：fire 时更新 next_fire_at（下次触发时间）
+//
+// 归属与消费方（原位于 ai/ 根，2026-10-03 迁入 agent/——fire 驱动 agent 回合，
+// 与 agent-ask-service 同为「模块级单例、非容器 accessor」模式）：
+// - ServiceContainer：initCronScheduler 订阅 onFire（fire → runCronTurn 无头
+//   执行 agent 回合）+ start；dispose/reset 走 stop（先于 AgentService 收尾）
+// - tools/cron-create / cron-list / cron-delete：任务管理入口
 //
 // 借鉴声明：
 // 本模块参考 qwen-code 参考项目 packages/core/src/services/cronScheduler.ts
@@ -19,10 +25,10 @@
 import { randomUUID } from 'node:crypto';
 import { Cron } from 'croner';
 import { eq } from 'drizzle-orm';
-import { logger } from '../../utils/logger';
-import { getDb } from '../storage/db';
-import type { CronTaskRow } from '../storage/schema';
-import { cronTasks } from '../storage/schema';
+import { logger } from '../../../utils/logger';
+import { getDb } from '../../storage/db';
+import type { CronTaskRow } from '../../storage/schema';
+import { cronTasks } from '../../storage/schema';
 
 /** cron 任务（领域类型） */
 export interface CronTask {

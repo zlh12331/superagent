@@ -1,4 +1,4 @@
-// src/main/infra/ai/permission-service.test.ts
+// src/main/infra/ai/tools/permission-service.test.ts
 // PermissionService 单测：权限决策 + 审批流（安全关键模块）
 //
 // 测试要点：
@@ -105,10 +105,14 @@ describe('PermissionService', () => {
         toolName: 'mock_tool',
       });
 
-      // 决议 → onResolved
+      // 决议 → onResolved（38 号阶段 2：带决策结果）
       service.handleApprovalResponse('ap-1', true, false);
       await expect(requestPromise).resolves.toBe(true);
-      expect(onResolved).toHaveBeenCalledWith({ sessionId: 'session-1', approvalId: 'ap-1' });
+      expect(onResolved).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        approvalId: 'ap-1',
+        decision: 'approved',
+      });
       unsubscribe();
     });
 
@@ -545,6 +549,34 @@ describe('PermissionService', () => {
 
     it('未知 approvalId：忽略（已超时或不存在）', async () => {
       expect(() => service.handleApprovalResponse('nonexistent', true, false)).not.toThrow();
+    });
+
+    it('expireApproval（机器 after 触发）：pending 以超时语义 reject + decision=timed-out', async () => {
+      const wc = createMockWebContents();
+      const onResolved = vi.fn();
+      service.onApprovalLifecycle({ onRequested: vi.fn(), onResolved });
+      const pending = service.requestApproval(
+        createApprovalPayload(),
+        createMockTool(),
+        { path: '/tmp/a.ts' },
+        wc,
+      );
+      // 机器 after 超时到期的等价调用
+      service.expireApproval('approval-1');
+      await expect(pending).rejects.toMatchObject({
+        code: ErrorCode.TOOL_PERMISSION_DENIED,
+      });
+      expect(onResolved).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        approvalId: 'approval-1',
+        decision: 'timed-out',
+      });
+      // 幂等：再次 expire 不抛错（pending 已清）
+      expect(() => service.expireApproval('approval-1')).not.toThrow();
+    });
+
+    it('expireApproval：未知 id 幂等忽略（已被用户响应/dispose 清理）', () => {
+      expect(() => service.expireApproval('nonexistent')).not.toThrow();
     });
 
     it('webContents 已销毁：立即 reject', async () => {

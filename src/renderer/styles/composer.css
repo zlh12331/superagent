@@ -25,7 +25,7 @@
   flex-shrink: 0;
   min-width: 0;
   overflow: visible;
-  max-width: 820px;
+  max-width: var(--content-w);
   width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -36,7 +36,7 @@
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  max-width: 720px;
+  max-width: var(--content-w-narrow);
   width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -62,8 +62,8 @@
   padding: 3px 6px;
   border-radius: calc(var(--radius) - 4px);
   transition:
-    background 0.15s ease,
-    color 0.15s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
   user-select: none;
   min-width: 0;
   overflow: hidden;
@@ -106,11 +106,11 @@
 }
 
 .cpb-caret {
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   opacity: 0.5;
   transition:
-    transform 0.15s var(--ease-out),
-    opacity 0.15s ease;
+    transform var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) ease;
   flex-shrink: 0;
 }
 
@@ -158,7 +158,7 @@
   cursor: pointer;
   font-size: var(--font-size-sm);
   color: var(--text);
-  transition: background 0.12s ease;
+  transition: background var(--duration-fast) ease;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,11 +174,14 @@
 }
 
 .fdm-item.active {
-  color: var(--accent);
+  /* 选中态统一配方：品牌淡底 + inset 左条（文字保持中性 --text，与
+     fuzzy/palette 选中态同款——暗色彩字压菜单灰底仅 3.5，不到 AA） */
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .fdm-icon {
-  font-size: 13px;
+  font-size: var(--font-size-base);
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -198,7 +201,7 @@
 }
 
 .fdm-meta {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   flex-shrink: 0;
   font-family: var(--font-mono);
@@ -221,8 +224,9 @@
   border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   font-size: var(--font-size-sm);
-  color: var(--accent);
-  transition: background 0.12s ease;
+  /* --accent-text：基色 --accent 作暗色菜单文字仅 3.84，文本层 6.29 */
+  color: var(--accent-text);
+  transition: background var(--duration-fast) ease;
   border-top: 1px solid var(--border);
   margin-top: 2px;
   padding-top: 6px;
@@ -265,7 +269,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -279,7 +283,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--accent);
 }
@@ -301,7 +305,7 @@
   cursor: pointer;
   font-size: var(--font-size-sm);
   color: var(--text);
-  transition: background 0.12s ease;
+  transition: background var(--duration-fast) ease;
   border: none;
   background: transparent;
   width: 100%;
@@ -314,8 +318,9 @@
 }
 
 .model-item.active {
-  color: var(--accent);
-  background: var(--accent) / 8%;
+  /* 同 fdm-item.active：淡底 + 左条承载选中，文字保持中性 */
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* 空状态 */
@@ -360,16 +365,16 @@
   border: 1px solid var(--border-strong);
   border-radius: calc(var(--radius) + 6px);
   transition:
-    box-shadow 0.25s ease,
-    transform 0.25s var(--ease-out),
-    border-color 0.25s ease,
-    background 0.25s ease;
+    box-shadow var(--duration-state) ease,
+    transform var(--duration-state) var(--ease-out),
+    border-color var(--duration-state) ease,
+    background var(--duration-state) ease;
   position: relative;
   min-width: 0;
   box-shadow:
     var(--shadow-card),
     inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
-  max-width: 820px;
+  max-width: var(--content-w);
   margin: 0 auto;
 }
 
@@ -383,7 +388,7 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--duration-reveal) ease;
 }
 
 .composer-box:focus-within {
@@ -410,9 +415,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  z-index: var(--z-surface);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--duration-state) ease;
   touch-action: none;
   /* hr 默认边框会显示为横贯黑线（preflight border-top:1px）：必须清零，仅留 ::before 圆条 */
   border: none;
@@ -429,8 +434,8 @@
   border-radius: calc(var(--radius) - 6px);
   background: var(--border-strong);
   transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 .composer-drag-handle:hover::before,
 .composer-drag-handle.dragging::before {
@@ -491,10 +496,10 @@
   border-radius: calc(var(--radius) - 3px);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    box-shadow 0.12s ease,
-    transform 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease,
+    transform var(--duration-fast) ease;
   padding: 0;
 }
 
@@ -506,13 +511,14 @@
 
 .composer-tool-btn.active {
   color: var(--accent);
-  background: var(--accent-glow);
-  box-shadow: var(--shadow-soft);
+  /* 选中态统一配方（与其他列表选中一致）：品牌淡底 + inset 左条 */
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .composer-hint {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--font-size-2xs);
   /* 不用 --text-faint：它映射 TraeWork --text-disabled（禁用态专用），对本区底
      --bg-elev-2 仅 3.19:1（暗）/ 2.05:1（亮），低于 AA 小文本 4.5:1 */
   color: var(--text-secondary);
@@ -527,7 +533,7 @@
   border-radius: calc(var(--radius) - 5px);
   padding: 1px 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   line-height: 1.4;
   display: inline-flex;
   align-items: center;
@@ -549,19 +555,15 @@
   align-items: center;
   justify-content: center;
   transition:
-    background 0.15s ease,
-    transform 0.12s ease,
-    opacity 0.15s ease;
+    background var(--duration-fast) ease,
+    transform var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
   flex-shrink: 0;
   padding: 0;
 }
 
 .send-btn:hover {
   background: color-mix(in srgb, var(--primary) 90%, black);
-}
-
-.send-btn:active {
-  transform: scale(0.94);
 }
 
 .send-btn:disabled {
@@ -574,13 +576,15 @@
   transform: none;
 }
 
-/* 停止生成按钮：error 色 + 发光 */
+/* 停止生成按钮：error 色实底 + 白字
+   实底用 --error-emphasis（令牌注释明文规定「实底+白字用 emphasis」：
+   基色 --error 配白字仅 3.91，emphasis 4.57 达 AA） */
 .stop-gen-btn {
   width: 34px;
   height: 34px;
   border-radius: var(--radius);
   border: none;
-  background: var(--error);
+  background: var(--error-emphasis);
   color: var(--color-destructive-foreground);
   cursor: pointer;
   display: flex;
@@ -588,29 +592,13 @@
   justify-content: center;
   touch-action: manipulation;
   transition:
-    box-shadow 0.15s ease,
-    transform 0.12s ease,
-    opacity 0.15s ease;
+    box-shadow var(--duration-fast) ease,
+    transform var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
   flex-shrink: 0;
   padding: 0;
 }
 
 .stop-gen-btn:hover {
   opacity: 0.9;
-}
-
-.stop-gen-btn:active {
-  transform: scale(0.92);
-}
-
-/* 快捷键标记 */
-.sk {
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: calc(var(--radius) - 5px);
-  padding: 1px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--accent);
-  margin-right: 4px;
 }

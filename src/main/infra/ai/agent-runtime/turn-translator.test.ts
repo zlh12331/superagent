@@ -1,5 +1,9 @@
 // src/main/infra/ai/agent-runtime/turn-translator.test.ts
-// turn-translator 单测：AI SDK part → TurnEvent 翻译
+// turn-translator 单测：AI SDK part → TurnEvent 翻译（TurnRunner 读流时逐 part 调用）
+//
+// 覆盖：text-delta / tool-call 两个可翻译 part + SDK 形状漂移守卫
+// （缺字段 → null，静默跳过不中断读流）+ isTurnEventOfType 类型收窄辅助
+// （当前无生产调用方，测试/工具用）。
 
 import { TurnEventType } from '@code-agent/shared/main';
 import { describe, expect, it } from 'vitest';

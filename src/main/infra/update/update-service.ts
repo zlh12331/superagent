@@ -104,6 +104,23 @@ export interface UpdateStartOptions {
    */
   readonly autoCheckEnabled?: () => boolean;
   /**
+   * 是否接收预发布（beta）更新（读用户设置；缺省视为关闭）
+   *
+   * 稳定版用户主动 opt-in prerelease（electron-updater 的 allowPrerelease）：
+   * GitHub 的 /releases/latest 天然跳过 prerelease，不开则稳定版永远只收正式版、
+   * 收不到 beta。开启后 GitHubProvider 会取最新 release（含 prerelease），其
+   * latest.yml 描述 beta 版本，无 beta.yml 时库自动回退读 latest.yml（实测
+   * GitHubProvider.js 138-141 行）。
+   *
+   * **应用点在 check() 入口而非 start()**：每次检查前幂等重读设置——UI 开关打开后
+   * 立即手动"检查更新"即可生效（与 autoCheck 开关"开启即补检"的交互一致），
+   * 无需重启或新增 IPC。装了 beta 版（版本号含 `-`）时恒为接收：按
+   * `app.getVersion()` 直接判定（与库构造器 `semver.prerelease(version)` 的
+   * 判定同语义），不捕获库字段——二次 start / 惰性重建实例都不会污染基线，
+   * 也不会把 beta 用户的默认行为关掉。
+   */
+  readonly allowPrereleaseEnabled?: () => boolean;
+  /**
    * 开发模式更新调试（缺省关闭）
    *
    * 开启后置 autoUpdater.forceDevUpdateConfig=true：electron-updater 改为读取
@@ -136,6 +153,8 @@ export interface AutoUpdaterLike {
   autoDownload: boolean;
   /** 退出时是否自动安装已下载更新（跟随用户开关） */
   autoInstallOnAppQuit: boolean;
+  /** 是否接收预发布更新（GitHubProvider 据 filtering prerelease release；见 UpdateStartOptions 注释） */
+  allowPrerelease: boolean;
   /** 日志出口（本服务接管为项目 logger 适配器） */
   logger: UpdaterLoggerLike | null;
   /** 开发模式更新调试开关（electron-updater 据此改读 dev-app-update.yml） */
@@ -171,16 +190,26 @@ export interface IUpdateService {
   /** 订阅状态变化（托盘等主进程内消费方；与事件通道同源） */
   onStatus(listener: (payload: UpdateStatusPayload) => void): () => void;
   /**
-   * 请求安装已下载的更新（静默安装 + 装完自动启动）
+   * 请求安装已下载的更新（Windows 向导式安装）
    *
    * Windows 上是"两段式"：本方法只置标记并触发退出（渲染层入口已确认过"重启会
-   * 中断任务"，故同时置关闭协商标志）；真正的静默安装在退出善后完成、文件锁
+   * 中断任务"，故同时置关闭协商标志）；真正的安装在退出善后完成、文件锁
    * 释放之后由 runDeferredInstall 发起——消除「无法关闭」弹窗竞态（见 §14.6）。
    * 非 Windows 保持库的原生路径。定位不到待装产物时回退为库的立即安装。
    */
   quitAndInstall(): void;
   /** 退出链末端调用（index.ts）：此前请求过安装则此刻拉起静默安装器 */
   runDeferredInstall(): void;
+  /**
+   * 按当前设置重算 autoInstallOnAppQuit（退出链调用，index.ts）
+   *
+   * autoCheckEnabled 原本只在 start() 读一次——运行中切换开关只落库，
+   * 内存值直到重启不变，导致"开着启动 → 下载完成 → 运行中关掉 → 退出仍被
+   * 静默安装"（与 27 号 §4「关 = 全停」语义冲突的边界缺口，2026-10-02 修）。
+   * 退出时重读设置，退出那一刻的开关状态说了算；用户主动点「重启并安装」
+   * 的路径（deferredInstallPending 标志）不受本开关门控、不受影响。
+   */
+  refreshAutoInstallOnAppQuit(): void;
   /** 释放资源（清挂起定时器；在途下载留给 pending 缓存续传） */
   dispose(): void;
 }
@@ -232,6 +261,12 @@ export class UpdateService implements IUpdateService {
   /** 开发模式更新调试是否生效（生效后 isPackaged 不再是硬门槛） */
   private devUpdateForced = false;
 
+  /** 「接收预发布」开关读取器（start 注入；未注入视为关闭） */
+  private allowPrereleaseEnabled: (() => boolean) | null = null;
+
+  /** 「自动检查更新」开关读取器（start 注入；未注入视为开启）——退出链 refresh 重读用 */
+  private autoCheckEnabled: (() => boolean) | null = null;
+
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly isPackaged: () => boolean,
@@ -244,6 +279,12 @@ export class UpdateService implements IUpdateService {
     // 只读一次：注入的是同步读 SQLite 的函数，两次调用之间取值可能不同
     const autoCheckEnabled = (options.autoCheckEnabled ?? ((): boolean => true))();
     this.devUpdateForced = options.devUpdateEnabled === true;
+    // 「接收预发布」开关读取器：不在此处设置 allowPrerelease——它在 check() 入口
+    // 每次幂等重算（见 UpdateStartOptions 注释），避免捕获库字段被二次 start 污染
+    this.allowPrereleaseEnabled = options.allowPrereleaseEnabled ?? null;
+    // 「自动检查更新」开关读取器：start 时读一次设置 autoInstallOnAppQuit；
+    // 运行中切换开关后由退出链 refreshAutoInstallOnAppQuit 重读（见该方法注释）
+    this.autoCheckEnabled = options.autoCheckEnabled ?? null;
 
     // 日志接管：库默认走主进程 console（打包后无处可看），接进项目 logger
     this.updater.logger = createUpdaterLogger();
@@ -269,6 +310,12 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   async check(manual: boolean): Promise<UpdateCheckRes> {
+    // 每次检查前幂等重算「接收预发布」（用户开关 ‖ 当前版本含 prerelease 段）——
+    // 与库构造器的版本判定同语义（AppUpdater 构造器按 semver.prerelease 置初值），
+    // 每次直接按版本算、不捕获库字段：二次 start / 惰性重建实例都不会污染基线。
+    // UI 开启后立即手动检查即可收到 beta，无需重启（见 UpdateStartOptions 注释）
+    this.updater.allowPrerelease =
+      (this.allowPrereleaseEnabled?.() ?? false) || app.getVersion().includes('-');
     // 开发模式（未打包）：electron-updater 无 app-update.yml，检查必失败。
     // 例外：devUpdateEnabled 时已置 forceDevUpdateConfig，库改读 dev-app-update.yml。
     if (!this.isPackaged() && !this.devUpdateForced) {
@@ -362,7 +409,7 @@ export class UpdateService implements IUpdateService {
 
   /** @inheritDoc */
   quitAndInstall(): void {
-    // Windows：两段式——本方法只置标记并触发退出，真正的静默安装在退出善后
+    // Windows：两段式——本方法只置标记并触发退出，真正的向导安装在退出善后
     // 完成（文件锁释放）后由 runDeferredInstall 发起。electron-updater 的
     // quitAndInstall 是"先 spawn 安装器、后 app.quit()"，而 NSIS 辅助安装器启动
     // 即尝试关闭应用，旧卸载器重试 5 次等不到退出就会弹「无法关闭。请手动关闭
@@ -386,10 +433,20 @@ export class UpdateService implements IUpdateService {
       return;
     }
     clearDeferredInstall();
-    // 此刻应用已完全退出（文件锁释放），静默安装不会遇到「无法关闭」；
-    // 装完自动启动（--force-run）
-    logger.info({ scope: 'auto-updater' }, '应用已退出，拉起静默安装器');
-    this.updater.quitAndInstall(true, true);
+    // 此刻应用已完全退出（文件锁释放），向导安装不会遇到「无法关闭」。
+    // isSilent=false 弹出安装向导：electron-builder 模板对 --updated 已自动跳过
+    // license/目录页，resources/installer.nsh 补跳「安装模式」页 ⇒ 向导直接进
+    // 安装进度页（自动开始、进度可见），完成页点「完成」启动新版——非静默下
+    // isForceRunAfter 被库忽略、由 autoRunAppAfterInstall（默认 true）接管。
+    // （2026-10-01 由静默 /S 改为向导式：静默安装全程无窗口，1.3.3→1.4.0 实测
+    // 用户侧表现为"应用退出后十余分钟毫无反应"，无从得知安装在进行）
+    logger.info({ scope: 'auto-updater' }, '应用已退出，拉起安装向导');
+    this.updater.quitAndInstall(false, false);
+  }
+
+  /** @inheritDoc */
+  refreshAutoInstallOnAppQuit(): void {
+    this.updater.autoInstallOnAppQuit = this.autoCheckEnabled?.() ?? true;
   }
 
   /** @inheritDoc */

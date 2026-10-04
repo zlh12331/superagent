@@ -65,7 +65,9 @@ export interface McpToolDescriptor {
  * MCP 工具调用结果（callTool 返回）
  *
  * 与 @modelcontextprotocol/sdk 的 callTool 返回结构对齐。
- * 适配器只关心 content 数组（文本/图片/资源等），structuredContent 留待后续迭代。
+ * 适配器关心 content 数组（文本/图片/资源等）；structuredContent 经
+ * normalizeMcpToolResult 优先返回（若 server 声明了 outputSchema），
+ * 元数据以 hasStructuredContent 标记。
  */
 export interface McpToolCallResult {
   /** 内容数组（可能包含 text / image / audio / resource 等类型） */
@@ -213,12 +215,16 @@ export function adaptMcpTool(
     // 透传 server 的 JSON Schema：模型能看到参数定义，客户端不重复校验
     inputSchema: toAiSdkInputSchema(descriptor.inputSchema),
     permission,
-    // MCP 工具一律按 exec 分类：第三方代码无法静态信任（对齐 qwen 白名单排除 MCP 的语义），
-    // auto 模式下不自动放行，仍需审批
+    // category 恒为 'exec'：第三方工具不参与权限服务的 read 快速路径
+    // （对齐 qwen 白名单排除 MCP 的语义）。permission 可为 'auto'（readOnlyHint/
+    // permissionOverride），但权限层对 MCP 有额外防线——auto 标记不担保免审批：
+    // permission-service 对 MCP 工具的无命令形状入参仍强制 ask，命令形状入参
+    // 走 Layer-0 确定性守卫（危险/复合/越界命令降级 ask）
     category: 'exec',
     async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
-      // 中断信号检查：MCP 工具执行前先检查是否已中断
-      // （MCP SDK 当前不原生支持 abortSignal，这里做软检查）
+      // 中断信号软检查（调用前拦截已中断的请求，不发起无效调用）；
+      // callTool 内部还会把 signal 透传到 MCP SDK（M1：cancellation
+      // notification + AbortError），软检查与 SDK 级取消双层保障
       if (ctx.abortSignal.aborted) {
         throw new AppError(ErrorCode.TOOL_ABORTED, `MCP 工具已中断：${namespacedName}`);
       }

@@ -236,7 +236,7 @@
     "later": "Later",
     "skipVersion": "Skip this version",
     "confirmRestartTitle": "A task is in progress",
-    "confirmRestartMessage": "Restarting will interrupt the running task. Continue?",
+    "confirmRestartMessage": "The app will exit and open the installation wizard (progress is shown; click \"Finish\" to relaunch). Running tasks will be interrupted. Continue?",
     "notesTitle": "What's new",
     "notesExpand": "Show full notes",
     "notesCollapse": "Show less",
@@ -323,6 +323,8 @@
     "skip": "Skip",
     "skipped": "Skipped",
     "responseFailed": "Failed to send approval response. Please retry.",
+    "timeoutHint": "Auto-rejects after {{minutes}} minutes of inactivity",
+    "expiresSoon": "Expiring soon",
     "stagePaths_one": "git add (stage {{count}} path)",
     "stagePaths_other": "git add (stage {{count}} paths)"
   },
@@ -570,6 +572,8 @@
     "aboutUpdatesTitle": "Updates",
     "aboutAutoCheck": "Check for updates automatically",
     "aboutAutoCheckDesc": "Checks on every launch, downloads new versions in the background, and installs them when you quit",
+    "aboutAllowPrerelease": "Receive prerelease updates",
+    "aboutAllowPrereleaseDesc": "Get notified about beta releases (stable releases only by default)",
     "aboutSkipped": "Skipped v{{version}}",
     "aboutUnskip": "Don't skip",
     "aboutLastCheck": "Last checked: {{time}}",
@@ -950,7 +954,9 @@
     "askCancel": "Cancel",
     "askSubmit": "Submit",
     "askSubmitFailed": "Failed to submit answer",
-    "askProgress": "Answer progress"
+    "askProgress": "Answer progress",
+    "askTimeoutHint": "Auto-continues after {{seconds}}s without an answer",
+    "askExpiresSoon": "Expiring soon"
   },
   "diff": {
     "showMoreRows": "Show more ({{remaining}} rows left)"

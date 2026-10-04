@@ -9,9 +9,9 @@
   background: linear-gradient(180deg, var(--bg-elev), var(--bg-elev-2) 160%);
   position: relative;
   transition:
-    border-color 0.2s ease,
-    transform 0.2s var(--ease-out),
-    box-shadow 0.2s ease;
+    border-color var(--duration-state) ease,
+    transform var(--duration-state) var(--ease-out),
+    box-shadow var(--duration-state) ease;
 }
 
 /* 左侧状态光条 */
@@ -24,8 +24,8 @@
   width: 2px;
   background: var(--border-strong);
   transition:
-    background 0.25s ease,
-    box-shadow 0.25s ease;
+    background var(--duration-state) ease,
+    box-shadow var(--duration-state) ease;
 }
 
 .card:hover {
@@ -76,15 +76,17 @@ button.card-head {
 
 .card-status {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: var(--font-size-2xs);
   padding: 2px 8px;
   border-radius: var(--radius-lg);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 
+/* 状态色由底色承载、文字保持中性 --text：彩色小字（10px/600）压浅灰卡头
+   在双主题都到不了 AA 4.5（基色实测 2.19-3.8，*-text 深色层也仅 3.6-4.4），
+   色相语义交给徽章底色（对齐 fuzzy/palette 选中态「色由底承载」配方） */
 .card-status.running {
-  color: var(--accent);
   background: var(--accent-glow);
   position: relative;
 }
@@ -102,17 +104,15 @@ button.card-head {
 }
 
 .card-status.success {
-  color: var(--accent);
-  background: var(--accent-soft);
+  /* 回归绿色语义（此前误用品牌紫，与 running 徽章近乎同色难分辨） */
+  background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 .card-status.error {
-  color: var(--error);
   background: var(--error-bg);
 }
 
 .card-status.pending {
-  color: var(--warning);
   background: var(--info-amber);
 }
 
@@ -131,7 +131,7 @@ button.card-head {
 
 .tool-card .card-head {
   cursor: pointer;
-  transition: background 0.18s ease;
+  transition: background var(--duration-fast) ease;
 }
 
 .tool-card .card-head:hover {
@@ -140,8 +140,8 @@ button.card-head {
 
 .tool-chev {
   transition:
-    transform 0.25s var(--ease-out),
-    color 0.25s ease;
+    transform var(--duration-state) var(--ease-out),
+    color var(--duration-state) ease;
   color: var(--text-faint);
 }
 
@@ -183,7 +183,7 @@ button.card-head {
   width: 2px;
   background: var(--accent);
   animation: runningBar 1.5s ease-in-out infinite;
-  z-index: 2;
+  z-index: var(--z-surface);
   pointer-events: none;
 }
 
@@ -197,9 +197,9 @@ button.card-head {
   height: 12px;
   background: var(--success);
   border-radius: calc(var(--radius) - 7px);
-  z-index: 2;
+  z-index: var(--z-surface);
   pointer-events: none;
-  animation: toolSettle 0.2s var(--ease-soft) both;
+  animation: toolSettle var(--duration-state) var(--ease-soft) both;
 }
 
 /* 失败（签名 R3）：左缘静态 error 条 */
@@ -211,74 +211,8 @@ button.card-head {
   bottom: 0;
   width: 2px;
   background: var(--error);
-  z-index: 2;
+  z-index: var(--z-surface);
   pointer-events: none;
-}
-
-.tool-args {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  background: var(--bg);
-  padding: 10px 12px;
-  border-radius: calc(var(--radius) - 3px);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--accent-dim);
-  white-space: pre-wrap;
-}
-
-/* 命令行 / 终端输出 */
-.cmd-line {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  color: var(--text);
-  background: var(--bg);
-  padding: 8px 10px 8px 12px;
-  border-radius: calc(var(--radius) - 3px);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--accent-dim);
-  margin-bottom: 8px;
-  position: relative;
-}
-
-.cmd-line .prompt {
-  color: var(--accent);
-  margin-right: 6px;
-}
-
-.term-output {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--text-secondary);
-  background: var(--bg);
-  padding: 10px 12px;
-  border-radius: calc(var(--radius) - 3px);
-  border: 1px solid var(--border);
-  max-height: 200px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-}
-
-.term-output .ok {
-  color: var(--accent);
-}
-
-.term-output .err {
-  color: var(--error);
-}
-
-/* patch diff 卡片 */
-.diff-file {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  padding: 6px 10px;
-  background: var(--bg-elev-2);
-  border-bottom: 1px solid var(--border);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .diff-lines {
@@ -286,41 +220,6 @@ button.card-head {
   font-size: var(--font-size-sm);
   line-height: 1.55;
   padding: 8px 0;
-}
-
-.diff-line {
-  display: flex;
-  padding: 0 12px;
-}
-
-.diff-line .ln {
-  width: 28px;
-  color: var(--text-faint);
-  text-align: right;
-  padding-right: 12px;
-  user-select: none;
-}
-
-.diff-line.add {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.diff-line.del {
-  background: var(--error-bg);
-  color: var(--error);
-}
-
-.diff-line.ctx {
-  color: var(--text-secondary);
-}
-
-.diff-actions {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev-2);
 }
 
 /* 推理块 */
@@ -331,8 +230,8 @@ button.card-head {
   overflow: hidden;
   background: var(--bg-elev-2);
   transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color var(--duration-state) ease,
+    box-shadow var(--duration-state) ease;
 }
 
 .reasoning-block:hover {
@@ -348,7 +247,7 @@ button.card-head {
   cursor: pointer;
   background: var(--bg-elev-2);
   user-select: none;
-  transition: background 0.12s ease;
+  transition: background var(--duration-fast) ease;
 }
 
 .reasoning-head:hover {
@@ -356,7 +255,7 @@ button.card-head {
 }
 
 .reasoning-head .rh-chevron {
-  transition: transform 0.2s var(--ease-out);
+  transition: transform var(--duration-state) var(--ease-out);
   color: var(--text-faint);
 }
 
@@ -369,13 +268,6 @@ button.card-head {
   color: var(--text-secondary);
   font-family: var(--font-mono);
   letter-spacing: 0.04em;
-}
-
-.reasoning-duration {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
 }
 
 .reasoning-body {
@@ -391,126 +283,7 @@ button.card-head {
 
 .reasoning-block.open .reasoning-body {
   display: block;
-  animation: reasoningReveal 0.3s var(--ease-out);
-}
-
-/* Plan 流式块 */
-.plan-block {
-  margin-top: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--bg-elev-2);
-}
-
-.plan-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 11px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev-2);
-}
-
-.plan-title {
-  font-size: 11.5px;
-  color: var(--text);
-  font-weight: 600;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-}
-
-.plan-progress {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-}
-
-.plan-list {
-  padding: 6px 0;
-}
-
-.plan-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 5px 12px;
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.plan-check {
-  width: 14px;
-  height: 14px;
-  border-radius: calc(var(--radius) - 4px);
-  border: 1.5px solid var(--text-faint);
-  flex-shrink: 0;
-  margin-top: 2px;
-  position: relative;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.plan-item.done .plan-check {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-soft);
-}
-
-.plan-item.done .plan-check::after {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 0;
-  width: 4px;
-  height: 8px;
-  border: solid var(--ink);
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
-}
-
-.plan-item.done .plan-text {
-  color: var(--muted-foreground);
-  text-decoration: line-through;
-}
-
-.plan-item.active .plan-check {
-  border-color: var(--accent);
-  animation: pulse-check 1.4s ease-in-out infinite;
-}
-
-.plan-item.active .plan-text {
-  color: var(--text);
-}
-
-/* 审批卡（琥珀主题） */
-.card.paused {
-  border-color: color-mix(in srgb, var(--amber) 32%, transparent);
-}
-
-.card.paused::before {
-  background: var(--warning);
-}
-
-.card.paused .card-head {
-  background: linear-gradient(180deg, var(--amber-glow), var(--bg-elev-2) 90%);
-  border-bottom-color: color-mix(in srgb, var(--amber) 18%, transparent);
-}
-
-.card.paused .card-status {
-  color: var(--warning);
-  background: var(--info-amber);
-}
-
-.approval-actions {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev-2);
+  animation: reasoningReveal var(--duration-reveal) var(--ease-out);
 }
 
 /* ── 审批卡 Diff 容器（表格样式统一在 styles/diff.css 的 DiffRowsTable）── */

@@ -1,16 +1,18 @@
-// src/main/infra/ai/goal-service.ts
+// src/main/infra/ai/knowledge/goal-service.ts
 // 会话目标服务：目标 CRUD + 回合结束自动判定
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 创建/查询/清除目标（goals 表持久化，对齐 qwen /goal 语义）
-// - 订阅 agent 回合结束（onTurnEvent 类级总线）→ 自动判定目标满足度
+// - 订阅回合事件（onTurnEvent 类级总线）→ TEXT_DELTA 累积转录 + TURN_END 后判定
 // - 判定满足 → 标记 completed；impossible → 标记 aborted（附理由）
 //
 // 设计：
 // - 每会话一个 active 目标（新建覆盖旧——旧目标标记 aborted）
-// - 判定输入：回合转录（TURN_END 前累积的 user/assistant 文本）
+// - 判定输入：TEXT_DELTA 累积的助手全文（user 消息不经事件流，不在证据内；
+//   纯工具回合/空转录不判定——无证据）
 // - 判定失败默认 not met（安全），不阻塞主流程
-// - 低耦合：仅依赖 ISessionService（转录读取）+ GoalJudge + 事件总线
+// - 依赖：IAgentService（onTurnEvent 类级总线）+ GoalJudge + goals 表（getDb）
+//   ——转录经事件累积，不读 ISessionService
 // ──────────────────────────────────────────────────────────────
 
 import type { GoalInfo, GoalStatus, TurnEvent } from '@code-agent/shared/main';
@@ -26,7 +28,8 @@ import type { GoalJudge } from './goal-judge';
 type GoalStatusInternal = 'active' | 'completed' | 'aborted';
 
 /**
- * 会话目标服务（模块单例，由 ServiceContainer 初始化并挂载回合监听）
+ * 会话目标服务（由 ServiceContainer 惰性创建并持有：getGoalService 创建即
+ * mount；dispose/reset 走 unmount——本类自身不是模块单例）
  */
 export class GoalService {
   /** 回合转录累积（sessionId → 文本；回合结束后判定并清理） */
@@ -72,6 +75,9 @@ export class GoalService {
 
   /**
    * 创建会话目标（新建覆盖旧目标——旧目标标记 aborted）
+   *
+   * 单事务保证「覆盖旧 + 插入新」原子（两步之间不残留中间态）。
+   * goals.session_id 外键引用 sessions.id——目标只能挂在已有会话上。
    */
   async create(sessionId: string, condition: string): Promise<void> {
     const db = getDb();
@@ -126,7 +132,10 @@ export class GoalService {
   }
 
   /**
-   * 回合事件处理：累积转录（TEXT_DELTA）+ 回合结束判定（TURN_END）
+   * 回合事件处理：累积转录（TEXT_DELTA，助手全文）+ 回合结束判定（TURN_END）
+   *
+   * 判定是异步副作用（await judge）——onTurnEvent 回调内 void 接住，
+   * 本方法自身 try/catch 兜底（判定异常不冒泡到事件总线）。
    */
   private async handleTurnEvent(event: TurnEvent): Promise<void> {
     try {
@@ -148,6 +157,9 @@ export class GoalService {
 
   /**
    * 回合结束后判定目标（无 active 目标跳过）
+   *
+   * 判定后无条件 iterations+1（lastReason 落库）；仅 met/impossible 才收敛
+   * 终态并落 finishedAt——not met 保持 active，下回合继续累积判定。
    */
   private async evaluate(sessionId: string, transcript: string): Promise<void> {
     const db = getDb();

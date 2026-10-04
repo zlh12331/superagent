@@ -5,6 +5,10 @@
 // 1. normalizeReasoningEffort：别名归一化 / 无法识别返回 undefined
 // 2. clampReasoningEffort：受支持保留 / 取更强档 / 封顶到最强档
 // 3. clampDeepSeekReasoningEffort：应用官方映射表（xhigh→flash:high/pro:max 等）
+//
+// 接线背景：clampDeepSeekReasoningEffort 已接线（generation-options）；
+// normalizeReasoningEffort / clampReasoningEffort 生产零调用（预留能力，
+// 本组用例是其回归锚——接线前防档位语义腐烂）。
 
 import { describe, expect, it } from 'vitest';
 import {

@@ -1,10 +1,14 @@
 // src/main/infra/ai/models/index.ts
-// 模型领域层统一入口
+// 模型领域层统一入口（目录级桶出口）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 导出模型领域类型（ModelEntry / ModelCapabilities / ResolvedModel 等）
 // - 导出 ModelRegistry 类与内置模型定义表
 // - 导出模块级单例 modelRegistry（默认配置：内置模型 + DEFAULT_KIND 为默认供应商）
+//
+// 桶消费方：agent-service（buildGenerationOptions + modelRegistry）、
+// ai-provider（modelRegistry）、llm-client（ModelRegistry 类型）；
+// turn-assembly 等类型引用走深度导入（models/types）。
 //
 // 依赖方向：本层不依赖 providers 层实例（默认模型/默认供应商的单一真源在
 // builtin-models.ts，providers 反向从本层派生），避免领域层依赖倒挂。

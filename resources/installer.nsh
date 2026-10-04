@@ -40,6 +40,7 @@
 ; ══════════════════════════════════════════════════════════════════════════
 
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
 
 ; 安装器侧：旧卸载器失败 → 清理残留后继续安装
 ;
@@ -79,4 +80,43 @@
 ; - 只删 Run 键下的这一条值，不动其它键；DeleteRegValue 对不存在的值静默（无需先判断）。
 !macro customUnInstall
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_NAME}"
+!macroend
+
+; ── 更新模式跳过「安装模式」页（2026-10-01 向导式更新安装）─────────────────
+;
+; 背景：更新安装由静默（/S）改为向导式（update-service.ts runDeferredInstall 传
+; isSilent=false，消除"静默安装全程无窗口"的体验问题）。electron-builder 的
+; assistedInstaller.nsh 已为 license/目录页挂了 skipPageIfUpdated（更新时 Abort），
+; 但 per-user 安装的「为谁安装」页（multiUserUi.nsh 的 PAGE_INSTALL_MODE）没有——
+; 更新时用户会被这页挡住要点一次"下一步"。
+;
+; 方案：multiUserUi.nsh 的 InstallModePre 在判断 $isForceCurrentInstall 之前留了
+; 官方定制口子 `!ifmacrodef customInstallmode`（electron-builder 为"自定义安装
+; 模式"设计）——置 1 即走模板自己的 `$isForceCurrentInstall == "1"` 分支：
+; setInstallModePerUser + Abort，页面跳过且安装模式被显式收敛为 per-user（比
+; PRE 回调里裸 Abort 语义更完整）。
+;
+; 改后更新向导的实际页面流（--updated 参数下）：
+;   [跳过] 安装模式页（本钩子）→ [跳过] 目录页（模板 skipPageIfUpdated）
+;   → 安装进度页（到达即自动开始，进度可见）→ 完成页（点「完成」启动新版）
+; 手动双击安装器（无 --updated）不受影响，向导完整；手动卸载同理（卸载器的
+; InstallModePre 共用本宏，未命中 --updated 时行为不变）。
+;
+; ⚠️ 为什么不用模板的 ${isUpdated} 宏检测 --updated：它展开为 StdUtils 插件调用，
+;    而本文件在 sharedHeader 内部（NsisTarget 的异步任务把 !addplugindir 与本
+;    include 并发推入，顺序不定）——实编失败 "Plugin not found"（2026-10-01）。
+;    模板自己的 isUpdated 展开点全在 installer.nsi 模板内（必然晚于 addplugindir）
+;    所以没事。这里改用 NSIS 标准库 FileFunc.nsh 解析命令行，零插件依赖。
+;    electron-updater 固定传 `--updated`（NsisUpdater.doInstall），GetOptions
+;    按字面串匹配即可；命中后 Errors 标志清零、未命中 SetErrors——${ifNot}
+;    ${Errors} 即"是更新模式"。
+;
+; ⚠️ 也不要用 MUI_PAGE_CUSTOMFUNCTION_PRE 挂钩：卸载器编译时 MUI_UNPAGE_WELCOME
+;    等页面同样消费该 define（MUI2 的 un 页面共用 per-page 定义项），Call 非
+;    "un." 前缀函数直接违反 NSIS 卸载器规则（实编失败，2026-10-01）。
+!macro customInstallmode
+  ${GetOptions} $CMDLINE "--updated" $R0
+  ${ifNot} ${Errors}
+    StrCpy $isForceCurrentInstall "1"
+  ${endif}
 !macroend

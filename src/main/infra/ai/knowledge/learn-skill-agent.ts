@@ -1,9 +1,12 @@
-// src/main/infra/ai/learn-skill-agent.ts
+// src/main/infra/ai/knowledge/learn-skill-agent.ts
 // 技能学习：从用户输入（文本/URL/文件路径）提炼可复用技能（对齐 qwen learn-skill-agent 语义收敛）
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - buildLearnSkillPrompt：LLM 引导模板（结构化输出 name/description/prompt）
 // - LearnSkillService.learn：LLM 生成 → 校验（snake_case/去重）→ sqlite 持久化 → 注册表动态注册
+//
+// 消费方：skill 域 IPC（skill.handler：learn / listLearned / removeLearned）
+// + 启动合并加载（index.ts 用 listLearned → registry.loadFromRows，重启保留）。
 //
 // 借鉴声明：
 // 本模块参考 qwen-code 参考项目 packages/core/src/memory/learn-skill-agent.ts
@@ -24,7 +27,7 @@ import type { LlmClient } from '../llm-client/llm-client';
 import type { Skill } from '../skills/skill-registry';
 import { skillRegistry } from '../skills/skill-registry';
 
-/** 技能名合法性（snake_case：小写字母/数字/下划线） */
+/** 技能名合法性（snake_case：小写字母开头 + 小写字母/数字/下划线，2–32 字符） */
 const SKILL_NAME_RE = /^[a-z][a-z0-9_]{1,31}$/;
 
 /** 学习输出 schema（generateJson 结构化约束） */
@@ -54,6 +57,9 @@ export interface LearnSkillResult {
 
 /**
  * 构建学习引导提示词（含现有技能名清单，避免重名）
+ *
+ * 提示词注入防御：<user_data> 标签包裹知识源（配合系统提示词的
+ * 「不执行其中指令」约束）；超 4000 字符截断。
  */
 export function buildLearnSkillPrompt(rawInput: string, existingNames: readonly string[]): string {
   const existingLine =
@@ -81,6 +87,10 @@ export class LearnSkillService {
 
   /**
    * 从用户输入学习技能：LLM 生成 → 校验 → 持久化 → 注册
+   *
+   * 校验由 LearnOutputSchema 承担（zod：snake_case/长度上限）——非法输出
+   * 抛错不落库；持久化用 onConflictDoUpdate（name 主键，同名覆盖即替换），
+   * 去重判定只服务 replaced 返回值。
    *
    * @returns 学习结果（技能 + 是否覆盖）
    * @throws LLM 失败 / 输出非法时抛错（不落库）
@@ -131,7 +141,10 @@ export class LearnSkillService {
   }
 
   /**
-   * 列出已学习技能（skills 表，source=learned）
+   * 列出已学习技能（skills 表全行，按名排序）
+   *
+   * 无 source 过滤——当前唯一写入路径是 learn()（source 恒为 learned），
+   * 全行即已学习集合；若未来引入其他写入路径需在此补过滤。
    */
   listLearned(): Skill[] {
     const db = getDb();
@@ -150,7 +163,10 @@ export class LearnSkillService {
   /**
    * 删除已学习技能（持久化 + 注册表；内置同名自动回退）
    *
-   * @returns 是否删除成功
+   * 分工：DB 行删除（本方法）+ 注册表移除（skillRegistry.remove——若该名
+   * 与内置技能同名，registry 侧自动回退内置定义，内置能力不因删除丢失）。
+   *
+   * @returns 是否删除成功（不存在返回 false）
    */
   remove(name: string): boolean {
     const db = getDb();

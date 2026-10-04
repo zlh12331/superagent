@@ -1,8 +1,9 @@
 // src/main/infra/ai/agent-runtime/text-delta-batcher.ts
 // text-delta 微批合帧（主进程出口侧）：把「每 token 一次 IPC 推送」合并为「每窗口一次」
 // ──────────────────────────────────────────────────────────────
-// 动机（P2-31）：TurnRunner 每 part 回调 onPart → forwardStreamPart 逐条
-//   webContents.send，长回复高频 token 下 IPC 消息数与 token 数线性相关。
+// 动机（P2-31）：TurnRunner 每 part 回调 onPart → 宿主闭包 pushPart →
+//   partForwarder.push（本模块）→ forwardStreamPart 逐条 webContents.send，
+//   长回复高频 token 下 IPC 消息数与 token 数线性相关。
 //   相邻 text-delta 在窗口（16–20ms）内合并为单条 part 推送后，IPC 消息数
 //   与窗口数挂钩而非 token 数。渲染层已有对偶实现
 //   （src/renderer/lib/agent/stream-chunk-batcher.ts，合并相邻同 id text-delta），
@@ -12,8 +13,9 @@
 // - 仅合并「同一条 text part（id 相同）且相邻」的 delta
 // - 任何非 text-delta part（含 delta 非字符串的形状漂移 part）前先落地缓冲，
 //   保持发射顺序与上游一致
-// - flush 幂等；回合结束/错误路径在推送 END/ERROR 前显式 flush（见
-//   agent-service streamToWebContents 收尾），防丢尾
+// - flush 幂等；回合结束/错误路径在推送 END/ERROR 前显式 flush（机器终态
+//   entry 的 flushForwarder action + 宿主各 finalize 实现首步，双保险均幂等），
+//   防丢尾
 // ──────────────────────────────────────────────────────────────
 
 /** 默认合并窗口（毫秒）：与渲染层 TEXT_DELTA_BATCH_MS（20ms）对齐，16–20ms ≈ 1 帧 */
@@ -32,7 +34,7 @@ const defaultScheduler: BatchScheduler = (callback, ms) => {
 
 /** 批处理器选项（emit 出口 + 合并窗口/字符上限/定时器可注入） */
 export interface TextDeltaBatcherOptions {
-  /** 下游出口（agent-service 侧为 forwardStreamPart 的单参包装） */
+  /** 下游出口（agent-service 侧为 createTurnPartForwarder 内对 forwardStreamPart 的单参包装） */
   readonly emit: (part: unknown) => void;
   /** 覆盖默认合并窗口 */
   readonly batchMs?: number;

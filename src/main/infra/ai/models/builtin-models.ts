@@ -3,8 +3,9 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 以模型为最小单元定义内置模型（区别于旧设计按供应商定义）
-// - 保持与 providers/registry.ts BUILTIN_DEFINITIONS 的默认模型 id 一致
-//   （deepseek-v4-flash / gpt-4o / claude-sonnet-4-20250514 / qwen2.5-coder:7b）
+// - 单一真源：providers/registry.ts 的 defaultModel / isDefault 均从本表的
+//   DEFAULT_MODEL_BY_KIND / DEFAULT_KIND 派生（方向：models → providers，
+//   避免双源维护导致 getModel 与 getAIProvider 路由分裂）
 //
 // 设计（对标 qwen-code modelsConfig + opencode 模型表）：
 // - 同一供应商可挂多个模型条目：默认模型（agent 主循环）+ 快模型（fastOnly）
@@ -196,7 +197,7 @@ export const DEFAULT_MODEL_BY_KIND: Record<ProviderKind, string> = {
 };
 
 /**
- * 全局默认供应商（未指定模型时的最终兑底）
+ * 全局默认供应商（未指定模型时的最终兜底）
  *
  * 单一真源：providers/registry.ts 的 isDefault 标记从此处派生。
  */

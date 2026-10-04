@@ -25,6 +25,9 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 const STYLE_FILES = [
+  // 渲染层根入口（Tailwind import + 少量全局规则）也要管辖：.search-highlight 的
+  // animation 引用曾游离在清单外，keyframe 被删时门禁不会报（2026-10-02 审计补漏）
+  'src/renderer/index.css',
   'src/renderer/styles/index.css',
   'src/renderer/styles/base.css',
   'src/renderer/styles/layout.css',
@@ -32,6 +35,7 @@ const STYLE_FILES = [
   'src/renderer/styles/chat.css',
   'src/renderer/styles/composer.css',
   'src/renderer/styles/cards.css',
+  'src/renderer/styles/diff.css',
   'src/renderer/styles/file-tree.css',
   'src/renderer/styles/fuzzy.css',
   'src/renderer/styles/motion.css',

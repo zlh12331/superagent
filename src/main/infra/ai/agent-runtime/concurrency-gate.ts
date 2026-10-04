@@ -1,17 +1,23 @@
 // src/main/infra/ai/agent-runtime/concurrency-gate.ts
 // 回合级并发公平调度：多会话共享执行槽位（FIFO 先来先得）
 // ──────────────────────────────────────────────────────────────
-// 背景：多会话可同时发起 Agent 回合（chat / agent 共用），无并发上限时
-// 会同时打满供应商 API（免费层极易触发 429）。本门提供全局槽位，
-// 超过上限的回合进入 FIFO 队列等待——先到先得即"平均分配"
-// （不会出现某会话被持续饿死），队列内 abort 立即让位。
+// 背景：多会话可同时发起 Agent 回合，无并发上限时会同时打满供应商 API
+// （免费层极易触发 429）。本门提供全局槽位，超过上限的回合进入 FIFO 队列
+// 等待——先到先得即"平均分配"（不会出现某会话被持续饿死），队列内 abort
+// 立即让位。（历史背景：原 ChatService / AgentService 两路共用；ChatService
+// 已并入 agent-service 回合链路删除，现所有回合同走这一门。）
+//
+// 生产接线：
+// - 唯一生产实例在 ServiceContainer（readonly 字段，非 accessor），槽位数取
+//   DEFAULT_MAX_CONCURRENT_TURNS；agent-service 构造注入，可选——未注入时
+//   跳过并发门（保持原并发行为，测试兼容）
+// - 排队 TTL 全局统一（DEFAULT_ACQUIRE_TIMEOUT_MS），acquire 不暴露按回合配置
 //
 // 设计：
 // - 纯函数 + 零依赖（不依赖 logger / config / telemetry，便于单测）
 // - acquire 返回幂等释放函数（重复调用无害），调用方 finally 释放
 // - signal 贯穿：排队期间 abort → 移除队列并抛 AbortError（与回合
 //   中断同语义，走上层统一错误分类）
-// - 可选注入：service 未注入 gate 时跳过（保持原并发行为，测试兼容）
 // ──────────────────────────────────────────────────────────────
 
 /** 队列条目 */
@@ -31,7 +37,8 @@ interface GateEntry {
  * 默认最大同时执行回合数
  *
  * 桌面单用户场景：4 个并发回合足以覆盖多会话同时操作，
- * 同时避免免费层 API 被打满触发 429。
+ * 同时避免免费层 API 被打满触发 429。真源在 ServiceContainer
+ * （构造 createConcurrencyGate 时传入本常量）。
  */
 export const DEFAULT_MAX_CONCURRENT_TURNS = 4;
 

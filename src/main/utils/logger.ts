@@ -4,7 +4,8 @@
 // 职责：
 // 1. 封装 electron-log，提供统一 logger 接口
 // 2. 支持 traceId 字段贯穿同一请求的多条日志
-// 3. 文件日志按日轮转（保留 14 天，10MB 上限）
+// 3. 文件日志按大小轮转：单文件 10MB，保留 main.log + main.old.log 两份
+//    （§7.6 原文「按日轮转、保留 14 天」未落地，实际保留口径以本条与 initLogger 注释为准）
 // 4. 控制台仅 dev 环境
 // 5. 注册全局 unhandledRejection / uncaughtException 捕获
 
@@ -51,8 +52,9 @@ export interface LogContext {
 /**
  * 初始化 logger 配置
  *
- * 设计文档 §7.6：
- * - 文件日志：按日轮转，保留 14 天，10MB 上限
+ * 设计文档 §7.6 的落地口径（轮转与保留以本注释为准）：
+ * - 文件日志：单文件 10MB 上限，超出后当前文件移为 main.old.log——
+ *   实际保留 main.log + main.old.log 两份（§7.6 原文「按日轮转、保留 14 天」未落地）
  * - 控制台：仅 dev 环境
  * - 文件位置：%APPDATA%/<AppName>/logs/main.log
  *
@@ -191,6 +193,34 @@ function serializeError(error: unknown): Record<string, unknown> {
  * 避免崩溃循环（用户手动重启即可）。
  */
 let fatalErrorHandled = false;
+
+/**
+ * 等待异步文件日志落盘（退出链专用）
+ *
+ * sync=false 时 electron-log 经内部串行队列写盘（File 实例的 asyncWriteQueue +
+ * hasActiveAsyncWriting，见 electron-log File.js），而 app.exit() 立即终止进程、
+ * 不等队列——2026-10-01 实测：更新安装的退出链日志（含「应用已退出，拉起安装
+ * 向导」）整体丢失，排障只能靠前后日志反推。uncaughtException 路径早有 300ms
+ * 写盘窗口，正常退出链此前没有。
+ *
+ * 轮询内部队列清空即返回（无在途写时立即返回），timeoutMs 上限兜底；electron-log
+ * 升级若改名内部字段（getFile/队列不可达），退化为直接返回——正确性不受影响，
+ * 只是失去"等队列"的加速。
+ */
+export async function flushPendingLogs(timeoutMs = 300): Promise<void> {
+  const file = (
+    log.transports.file as unknown as {
+      getFile?(): { asyncWriteQueue: string[]; hasActiveAsyncWriting: boolean } | undefined;
+    }
+  ).getFile?.();
+  if (file === undefined) {
+    return;
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && (file.asyncWriteQueue.length > 0 || file.hasActiveAsyncWriting)) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 /**
  * 注册全局错误处理器：uncaughtException / unhandledRejection 落盘 + 致命退出

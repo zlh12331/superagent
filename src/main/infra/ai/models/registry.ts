@@ -5,12 +5,14 @@
 // - 维护内置模型索引（模型 id → ModelEntry）
 // - 按模型 id 解析：显式 id 优先；未传/未注册 → 供应商默认模型
 // - 运行时快照注册/注销（手动配置的模型与内置模型统一解析）
-// - 列出全部可用模型（设置 UI 下拉）
+// - 停用身份管理（用户关闭的模型 resolve 返回 available=false，LLM 层拦截）
 //
 // 设计（对标 qwen-code modelRegistry + resolveModelAcrossAuthTypes）：
 // - 模型是路由最小单元：resolve('gpt-4o-mini') 无需调用方知道供应商
 // - 未知模型 id 不抛错：回退默认供应商默认模型并保留原始 id 透传
-//   （兼容旧行为：调用方传任意 modelId 测试连接）
+//   （原注释的「测试连接」场景已随 models:test 改为裸 HTTP 探测而不再
+//   经注册表——透传兜底现为「配置错误的防御性降级」，llm-client 侧打
+//   warn 便于定位）
 // - 本文件不依赖 SDK / config / keychain（纯领域层，便于单测）
 // ──────────────────────────────────────────────────────────────
 
@@ -32,8 +34,9 @@ export interface ModelRegistryOptions {
 /**
  * 模型注册表
  *
- * 无状态（除运行时快照 Map 外）：内置模型为常量表。
- * 实例由 ai-provider 层持有（模块级单例）。
+ * 无状态（除运行时快照/停用 Map 外）：内置模型为常量表。
+ * 模块级单例 modelRegistry 在 models/index.ts 装配（ai-provider / llm-client /
+ * agent-service 导入）。
  */
 export class ModelRegistry {
   private readonly modelIndex: Map<string, ModelEntry>;
@@ -74,7 +77,8 @@ export class ModelRegistry {
     this.disabledModels.delete(modelId);
   }
 
-  /** 模型当前是否处于停用状态 */
+  /** 模型当前是否处于停用状态（当前无生产调用方，仅单测——LLM 层拦截走
+   * resolve 的 available 字段，本方法供未来消费方与调试） */
   isModelDisabled(modelId: string): boolean {
     return this.disabledModels.has(modelId);
   }
@@ -83,10 +87,11 @@ export class ModelRegistry {
    * 解析模型 id → 完整解析结果
    *
    * 优先级：
-   * 0. modelId 已停用 → 返回 available=false（不可路由；区别于任意 id 的测试透传）
-   * 1. modelId 显式提供且已注册（内置或运行时快照）→ 该模型条目
+   * 0. modelId 已停用 → 返回 available=false（不可路由；区别于任意 id 的透传兜底）
+   * 1. modelId 显式提供且已注册（运行时快照优先 / 内置条目）→ 该模型条目
    * 2. modelId 显式提供但未注册 → 默认供应商默认模型 + 原始 id 透传
-   *    （兼容旧行为：测试连接场景可传任意 modelId）
+   *    （配置错误的防御性降级：llm-client 侧打 warn 定位，生产多为拼错模型名
+   *    或引用已删除的运行时模型）
    * 3. modelId 未提供 → 默认供应商默认模型
    *
    * @param modelId 目标模型 id（省略 = 默认模型）
@@ -115,7 +120,7 @@ export class ModelRegistry {
       return explicit;
     }
 
-    // 回退：默认供应商默认模型（原始 modelId 透传，兼容测试连接）
+    // 回退：默认供应商默认模型（原始 modelId 透传，防御性降级——llm-client 打 warn）
     const defaultModelId = this.defaultModelByKind[this.defaultKind];
     const entry = this.modelIndex.get(defaultModelId);
     return {

@@ -1,4 +1,4 @@
-// src/main/infra/ai/error-classifier.test.ts
+// src/main/infra/ai/tools/error-classifier.test.ts
 // error-classifier 单测：AI 错误分类映射
 //
 // 测试要点：

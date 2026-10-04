@@ -12,6 +12,10 @@
 // 8. listServers：返回 server 状态快照
 // 9. hasRunningServers：判断是否有运行中 server
 // 10. validateMcpServerConfig：配置校验
+//
+// 接线背景：生产中 MCPService 由 ServiceContainer lazy accessor 创建，
+// mcp:start handler 先 validateMcpServerConfig 后 startServer（双重防线）；
+// 本文件 mock MCPClient 类（不依赖真实子进程），错误隔离语义全在此覆盖。
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';

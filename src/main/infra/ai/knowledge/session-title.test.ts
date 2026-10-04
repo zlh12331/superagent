@@ -1,5 +1,9 @@
 // src/main/infra/ai/knowledge/session-title.test.ts
 // 会话标题单测：首条/末条 user 提取 + 异步生成（默认标题才覆盖 / 失败静默）
+//
+// 接线背景：ensureSessionTitle 唯一生产调用点 = agent-service 的
+// finalizeCompletedTurn（completed 收尾；aborted/error 不生成标题）；
+// lastUserMessageText 另被权限决策消费（用户意图豁免破坏性拦截）。
 
 import type { ChatMessage } from '@code-agent/shared/main';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

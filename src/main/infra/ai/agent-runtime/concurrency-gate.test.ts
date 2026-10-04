@@ -1,5 +1,10 @@
 // src/main/infra/ai/agent-runtime/concurrency-gate.test.ts
 // 并发槽位门单测：槽位限制 / FIFO 公平 / 排队 abort 让位 / 释放幂等
+//
+// 接线背景：唯一生产实例在 ServiceContainer（readonly 字段，默认 4 槽），
+// agent-service 每回合经机器 deps.acquireGate 排队（排队 TTL 10 分钟）。
+// 本组用例守住公平性（先来先得，无饥饿）与让位语义（队列内 abort 立即
+// 出队拒绝，后续会话前移）。
 
 import { describe, expect, it } from 'vitest';
 import { createConcurrencyGate, createGateAbortError } from './concurrency-gate';

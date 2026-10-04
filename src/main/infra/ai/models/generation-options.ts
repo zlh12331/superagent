@@ -7,6 +7,9 @@
 //   DeepSeek 按官方映射钳制）、输出上限（窗口预算钳制）
 // - 单一真源：agent 主流程与 side query 应用同一份生成配置逻辑，
 //   避免"设置生效于 side query 而主流程用默认"的分裂
+//
+// 调用方：llm-client.generateTextOnce（side query）与 agent-service 的
+// resolveTurnGeneration（主回合；用户 thinking/temperature 覆盖经此传入）。
 // ──────────────────────────────────────────────────────────────
 
 import { getProviderName } from '../providers';

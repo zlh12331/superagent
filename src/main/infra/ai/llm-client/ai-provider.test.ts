@@ -1,15 +1,15 @@
-// src/main/infra/ai/ai-provider.test.ts
-// ai-provider 单测：多供应商路由（deepseek/openai/anthropic/ollama）+ keychain 读取 + 单例缓存
+// src/main/infra/ai/llm-client/ai-provider.test.ts
+// ai-provider 单测：多供应商路由 + keychain 读取 + 单例缓存 + 模型门禁
 //
 // 测试要点：
 // 1. getAIProvider 默认 kind=deepseek：从 keychain 读取 apiKey 并创建 provider
 // 2. 缓存：第二次调用直接返回缓存（不重复读 keychain）
 // 3. 显式 apiKey 参数：创建临时实例不污染缓存
 // 4. keychain 返回 null：抛 AppError(AI_API_KEY_MISSING)
-// 5. getModel：默认模型来自供应商定义（deepseek-chat），可显式覆盖
-// 6. 多供应商路由：kind='anthropic' 走 createAnthropic；kind='ollama' 无需 API Key
-// 7. resetAIProvider：清空缓存
-// 8. ProviderRegistry：内置 4 个供应商，默认 kind 为 deepseek
+// 5. getModel：默认模型来自供应商定义，可显式覆盖；门禁拒绝（AI_MODEL_NOT_CONFIGURED）
+// 6. 多供应商路由：kind 路由到对应 SDK 工厂；ollama 无需 API Key
+// 7. resetAIProvider：清空缓存（keychain 也重新读取）
+// 8. ProviderRegistry：内置 10 个供应商，默认 kind 为 deepseek
 
 import { AppError, ErrorCode } from '@code-agent/shared/main';
 import type { Mock } from 'vitest';

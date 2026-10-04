@@ -158,14 +158,14 @@ export function TerminalTabs({
             onKeyDown={(e) => handleTabKeyDown(terminal, index, e)}
           >
             <TerminalIcon className="text-accent size-3 shrink-0" />
-            <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-[11px]">
+            <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-xs">
               {terminal.title}
             </span>
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                'text-muted-foreground hover:bg-destructive/15 hover:text-destructive ml-0.5 size-4 shrink-0 rounded-[calc(var(--radius)-5px)] text-[14px] leading-none',
+                'text-muted-foreground hover:bg-destructive/15 hover:text-destructive ml-0.5 size-4 shrink-0 rounded-[calc(var(--radius)-5px)] text-md leading-none',
                 isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
               )}
               onClick={(e) => {

@@ -6,7 +6,12 @@
 // - 判定是否可重试（429 / 503 Retry-After / 5xx / 网络层错误）
 // - 指数退避重试（默认 7 次、1.5s 初始、30s 上限），支持 Retry-After 头覆盖
 // - onRetry 遥测回调（Otel span / logger 由调用方注入，本层零耦合）
-// - abortSignal 贯穿：中断时立即抛出，不重试
+// - abortSignal 贯穿：中断后不再重试（catch 侧 signal.aborted 检查立即抛出）
+//
+// 消费方（重试语义两路刻意不同）：
+// - llm-client runSideQuery：side query 完整重试（含 HTTP 类，幂等可重试）
+// - create-stream：主回合首读，shouldRetryOnError 覆盖——只兜 SDK 覆盖不到的
+//   传输层失败（HTTP 类交 SDK model call 级 maxRetries，两层不叠加）
 //
 // 设计（对标 qwen-code utils/retry.ts）：
 // - 纯函数 + DI：不依赖 config / telemetry / logger
@@ -123,6 +128,8 @@ export function getRetryAfterDelayMs(error: unknown): number | undefined {
 
 /**
  * 单次重试尝试的信息（onRetry 回调参数）
+ *
+ * attempt 计数 1-based：首次失败即 attempt=1（此时延迟按 initialDelayMs 计算）。
  */
 export interface RetryAttemptInfo {
   /** 已失败的尝试次数（1-based） */
@@ -158,6 +165,10 @@ export interface RetryOptions {
  * @param fn 被重试的异步调用（必须幂等）
  * @param options 重试选项
  * @returns fn 的成功结果；耗尽尝试次数或不可重试错误时抛出原错误
+ *
+ * abort 语义细节：退避 sleep 被中断时提前 resolve（不 reject），循环会再执行
+ * 一次 fn——SDK 侧对已 abort 的 signal 立即抛错，随后 catch 的 signal.aborted
+ * 检查终止重试（不会无限循环；见 llm-client.test「超时中断」用例）。
  */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,

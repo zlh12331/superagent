@@ -7,6 +7,11 @@
 // 3. wrapStream 成功：debug 打点，result 透传
 // 4. wrapStream 失败：warn 打点 + 原始错误原样抛出
 // 5. 不改参：doGenerate/doStream 收到原样 params（观测语义零侵入）
+//
+// 接线背景：生产中该中间件在 LlmClient.getModel 出口挂载（per-model 缓存的
+// 就是 wrapped 实例，agent 主回合与 side query 全部调用零改动获得观测）；
+// 本文件用真实 wrapLanguageModel 驱动（仅 mock logger），打点语义与零侵入
+// 语义全在此覆盖。
 
 import { wrapLanguageModel } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

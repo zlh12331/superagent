@@ -22,6 +22,9 @@ import { clampToolPartOutput } from '../tools/tool-executor';
  * 含输出闸门（此前只加在 tool-executor 的 tool-result 通道，本通道会原样
  * 透传 tool-output-available 的完整 output，read_file 可带 2MB → 约 50 万
  * token 进渲染层与后续上下文）。
+ *
+ * webContents 缺失或已销毁时静默短路——无头场景（子代理/IM 桥）不推流，
+ * 销毁后推送会抛错，故先行判空。
  */
 export function forwardStreamPart(
   part: unknown,
@@ -52,6 +55,9 @@ export interface TurnPartForwarder {
  *
  * text-delta 按 sessionId 聚合微批合帧；无 webContents 的无头场景
  * （IM 桥接等）推送恒为 no-op，直接短路不引入缓冲开销。
+ *
+ * 合帧与保序细节由 createTextDeltaBatcher 承担：同 id 相邻 delta 合并、
+ * 非 text-delta 前先落地缓冲、超 4096 字符立即落地、flush 幂等。
  */
 export function createTurnPartForwarder(
   sessionId: string,

@@ -2,14 +2,14 @@
 // Provider 注册表（Code Agent 模板核心扩展点）
 // ──────────────────────────────────────────────────────────────
 // 职责：
-// - 集中注册内置供应商（deepseek / openai / anthropic / ollama）
+// - 集中注册内置供应商（内置 10 家：deepseek/openai/anthropic/ollama/
+//   moonshot/zhipu/qwen/doubao/siliconflow/openrouter）
 // - 提供按 kind 查找定义与创建 LanguageModel 工厂的入口
-// - 提供注册表快照（settings 域列出可选供应商用）
+// - 提供注册表快照（list，当前生产零调用、仅单测）
 //
 // 设计（对标 OpenCode 的 provider 路由）：
-// - 新增供应商 = 新增一个 ProviderDefinition + 一个 ProviderFactory，
-//   在 registerBuiltinProviders 中追加一行注册即可
-// - deepseek / ollama 复用 OpenAI Compatible 协议（@ai-sdk/openai-compatible）
+// - 新增供应商 = 在 BUILTIN_DEFINITIONS 与 BUILTIN_FACTORIES 常量表中各加一条
+// - deepseek / ollama / 其余 6 家复用 OpenAI Compatible 协议（@ai-sdk/openai-compatible）
 // - openai 使用官方 @ai-sdk/openai，anthropic 使用官方 @ai-sdk/anthropic
 // - 每个供应商的 API Key 独立存储（keychain，key 前缀 = kind）
 // ──────────────────────────────────────────────────────────────
@@ -135,13 +135,6 @@ const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
 ];
 
 /**
- * 内置供应商工厂表
- *
- * 每个工厂返回 (modelId) => LanguageModel 的工厂函数。
- * baseURL 单一入口：从 config.providers 读取（config 内部已处理 .env 覆盖），
- * 支持自托管网关 / 代理场景；新增供应商时同步扩展 config 的 ProviderBaseUrlSchema。
- */
-/**
  * 归一化端点：去尾部斜杠（避免拼出 `//chat/completions`）
  *
  * 2026-09-06 审计修复：自定义端点末尾带 / 会拼出双斜杠，部分网关直接 404。
@@ -170,6 +163,13 @@ function withOpenAiV1(baseUrl: string): string {
  */
 const sdkFetch = { fetch: proxiedFetch as unknown as typeof fetch };
 
+/**
+ * 内置供应商工厂表
+ *
+ * 每个工厂返回 (modelId) => LanguageModel 的工厂函数。
+ * baseURL 单一入口：从 config.providers 读取（config 内部已处理 .env 覆盖），
+ * 支持自托管网关 / 代理场景；新增供应商时同步扩展 config 的 ProviderBaseUrlSchema。
+ */
 const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
   deepseek: ({ apiKey, baseUrl }) => {
     const resolvedBaseUrl = baseUrl ?? getAppConfig().providers.deepseek;
@@ -323,7 +323,8 @@ const BUILTIN_FACTORIES: Record<ProviderKind, ProviderFactory> = {
  * Provider 注册表
  *
  * 无状态：所有供应商定义与工厂均为纯函数/常量。
- * 实例由 ServiceContainer 持有（经 ai-provider.ts 间接使用）。
+ * 模块级单例 providerRegistry 在 providers/index.ts 装配（ai-provider /
+ * generation-options 导入；不经 ServiceContainer——provider 层无状态可直用）。
  */
 export class ProviderRegistry {
   private readonly providers: Map<ProviderKind, RegisteredProvider>;
@@ -373,7 +374,7 @@ export class ProviderRegistry {
    * 创建 LanguageModel 工厂
    *
    * @param kind 供应商标识
-   * @param context 创建上下文（apiKey / timeout）
+   * @param context 创建上下文（apiKey / baseUrl）
    * @returns (modelId) => LanguageModel 工厂函数
    */
   createFactory(

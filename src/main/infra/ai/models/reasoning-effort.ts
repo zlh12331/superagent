@@ -12,6 +12,13 @@
 //   | high   | high         | high        |
 //   | xhigh  | high         | max         |
 //   | max    | max          | max         |
+//
+// 接线现状：
+// - clampDeepSeekReasoningEffort 已接线：generation-options 构造思考强度时
+//   对 DeepSeek 模型应用官方逐档映射
+// - normalizeReasoningEffort / clampReasoningEffort 当前无生产调用方
+//   （仅桶导出与单测，预留能力——用户自定义思考强度输入的归一化与
+//   通用钳制未接线；接入点应在设置域模型配置的输入侧）
 // ──────────────────────────────────────────────────────────────
 
 /**
@@ -49,6 +56,8 @@ export const REASONING_EFFORT_RANKS: Record<ReasoningEffort, number> = {
  *
  * 接受常见别名（x-high / extra-high / maximum / med 等），
  * 无法识别的输入返回 undefined（调用方可提示错误）。
+ *
+ * 当前无生产调用方（预留能力，见文件头接线现状）。
  */
 export function normalizeReasoningEffort(raw?: string | null): ReasoningEffort | undefined {
   if (raw === undefined || raw === null || typeof raw !== 'string') {
@@ -87,6 +96,9 @@ export function normalizeReasoningEffort(raw?: string | null): ReasoningEffort |
  *
  * @param requested 请求档位
  * @param supported 模型支持的档位（缺省 = 全阶梯，不钳制）
+ *
+ * 当前无生产调用方（预留能力，见文件头接线现状）；DeepSeek 模型的实际
+ * 钳制走 clampDeepSeekReasoningEffort（官方逐档映射，非通用 clamp 语义）。
  */
 export function clampReasoningEffort(
   requested: ReasoningEffort,

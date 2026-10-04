@@ -3,14 +3,19 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 把 AI SDK 的 UIMessageStreamPart 翻译为领域事件 TurnEvent
-// - 是"回合显式化"的翻译层：agent-service 读流时调用，SDK 形状不出模块
+// - 是"回合显式化"的翻译层：TurnRunner 读流时逐 part 调用，SDK 形状不出模块
 //
 // 翻译范围（单一信息源原则）：
 // - text-delta → TurnTextDeltaEvent（流侧信息完整）
 // - tool-call  → TurnToolCallEvent（流侧信息完整）
 // - tool-result 不在此翻译：其完整信息（耗时/错误详情）在 ToolExecutor
-//   执行侧最全，由 agent-service 的 executeHook 直接 emit
-// - 其余 part（step-start/finish/error 等）由回合层（agent-service）处理
+//   执行侧最全，由 agent-service 的 buildToolExecuteHook 直接 emit TOOL_RESULT
+//   事件并转录 output/error（与事件同源）
+// - 其余 part（step-start/finish/error 等）由回合层（TurnRunner/agent-service）处理
+//
+// 不变量：纯函数——同 part 同 ctx 输入恒产出同事件，无状态、无副作用；
+// 不可翻译或字段缺失的 part 一律返回 null（静默跳过而非抛错，读流不因
+// 形状漂移中断）。
 // ──────────────────────────────────────────────────────────────
 
 import type { TurnEvent, TurnEventContext, TurnEventType } from '@code-agent/shared/main';
@@ -63,7 +68,8 @@ export function translatePart(part: StreamPart, ctx: TurnEventContext): TurnEven
       };
     default:
       // step-start / step-finish / tool-result / finish / error / abort：
-      // 由回合层（agent-service）按需处理，翻译器保持最小职责
+      // 由回合层按需处理（tool-result 由 agent-service executeHook emit；
+      // reasoning-delta 由 turn-assembly 的 onPart 转录），翻译器保持最小职责
       return null;
   }
 }

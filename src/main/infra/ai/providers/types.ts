@@ -7,24 +7,26 @@
 // - 定义 ProviderFactory（创建 LanguageModel 工厂的签名）
 //
 // 设计（对标 OpenCode 的 provider 路由）：
-// - 供应商列表集中注册在 registry.ts，新增供应商 = 新增一条定义 + 一个工厂
+// - 供应商列表集中注册在 registry.ts，新增供应商 = 在 BUILTIN_DEFINITIONS
+//   与 BUILTIN_FACTORIES 常量表中各加一条
 // - API Key 按 kind 分 key 存储在 keychain（settings 域已支持）
-// - getModel(kind, modelId) 由调用方（chat-service / agent-service）指定供应商，
-//   默认回落到 config 中配置的默认供应商，保持向后兼容
+// - 默认模型/默认供应商从模型领域层派生（builtin-models.ts 单一真源）
 // ──────────────────────────────────────────────────────────────
 
 import type { LanguageModel } from 'ai';
 
 /**
- * 模型供应商标识
+ * 模型供应商标识（内置 10 家）
  *
  * - deepseek：DeepSeek 官方 API（OpenAI Compatible 协议）
  * - openai：OpenAI 官方 API
  * - anthropic：Anthropic Claude API
  * - ollama：本地 Ollama 服务（OpenAI Compatible 协议，无需 API Key）
+ * - moonshot/zhipu/qwen/doubao/siliconflow/openrouter：OpenAI Compatible 协议
  *
- * 扩展新供应商：在 ProviderKindSchema / ProviderKind 中追加枚举值，
- * 并在 registry.ts 的 registerBuiltinProviders 中注册定义与工厂。
+ * 扩展新供应商：在 PROVIDER_KINDS 中追加枚举值，并在 registry.ts 的
+ * BUILTIN_DEFINITIONS / BUILTIN_FACTORIES 常量表中各加一条（运行时校验在
+ * registry.getDefinition——未知 kind 抛错）。
  */
 export const PROVIDER_KINDS = [
   'deepseek',
@@ -62,8 +64,8 @@ export interface ProviderDefinition {
  * 供应商创建选项
  *
  * 由 registry 在创建 provider 时注入。
- * 注意：请求超时不由 provider 层控制，由调用方（chat-service / agent-service）
- * 通过 AbortSignal 管理（已有 abort 机制），避免双轨超时语义混乱。
+ * 注意：请求超时不由 provider 层控制，由调用方（llm-client / agent 侧
+ * turn-assembly）通过 AbortSignal 管理（已有 abort 机制），避免双轨超时语义混乱。
  */
 export interface ProviderCreateContext {
   /** API Key（requiresApiKey=false 的供应商可能为 undefined） */
@@ -79,7 +81,7 @@ export interface ProviderCreateContext {
 /**
  * Provider 工厂签名
  *
- * @param context 创建上下文（apiKey / timeout）
+ * @param context 创建上下文（apiKey / baseUrl）
  * @returns LanguageModel 工厂：调用 factory(modelId) 返回 LanguageModel 实例
  */
 export type ProviderFactory = (

@@ -7,11 +7,12 @@
 // - 数据源：approvals-store（单一真源；全局弹窗 ApprovalDialog 已移除，卡片是唯一审批 UI）
 // ──────────────────────────────────────────────────────────────
 
-import { REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
+import { APPROVAL_TIMEOUT_MINUTES, REMEMBER_TTL_MINUTES } from '@code-agent/shared/renderer';
 import { Check, Pencil, ShieldCheck, X } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { i18n } from '@/i18n';
 import { useTranslation } from '@/i18n/use-translation';
 import { sendApprovalResponse } from '@/lib/agent/agent-actions';
 import { hasIpcBridge } from '@/lib/ipc';
@@ -50,13 +51,45 @@ function StatusBadge({ approved }: { readonly approved: boolean }): ReactElement
   return (
     <span
       className={cn(
-        'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px]',
+        'shrink-0 rounded-full px-1.5 py-0.5 font-mono text-2xs',
         approved ? 'bg-success/10 text-success-text' : 'bg-error/10 text-error-text',
       )}
     >
       {approved ? t('approval.approved') : t('approval.rejected')}
     </span>
   );
+}
+
+/**
+ * 审批超时倒计时（38 号 spec 阶段 2：主进程 5 分钟超时兜底对用户可见化）
+ *
+ * 以审批项 createdAt 为基准计算剩余分钟（与 store 入队时间戳同源）；
+ * 仅剩最后 1 分钟时切换警示态。挂载期一次性算出剩余整分钟即可——
+ * 逐秒刷新对「分钟粒度」的提示无增益，徒增重渲染。
+ */
+function useTimeoutHint(
+  createdAt: number,
+  active: boolean,
+): {
+  readonly minutesLeft: number;
+  readonly expiring: boolean;
+} {
+  const [secondsLeft, setSecondsLeft] = useState(
+    () => Math.max(0, createdAt + APPROVAL_TIMEOUT_MINUTES * 60_000 - Date.now()) / 1000,
+  );
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => {
+      setSecondsLeft(
+        Math.max(0, createdAt + APPROVAL_TIMEOUT_MINUTES * 60_000 - Date.now()) / 1000,
+      );
+    }, 15_000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [createdAt, active]);
+  const minutesLeft = Math.ceil(secondsLeft / 60);
+  return { minutesLeft, expiring: active && minutesLeft <= 1 };
 }
 
 /** pending 操作按钮行：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */
@@ -148,6 +181,106 @@ function RejectedActions({
   );
 }
 
+/** 超时提示行（pending 态；主进程超时即拒绝，让用户知道时限存在） */
+function TimeoutHint({
+  minutesLeft,
+  expiring,
+}: {
+  readonly minutesLeft: number;
+  readonly expiring: boolean;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <p
+      className={cn(
+        'mt-1.5 font-mono text-2xs',
+        expiring ? 'text-warn-text' : 'text-muted-foreground',
+      )}
+    >
+      {expiring && <span className="mr-1">{t('approval.expiresSoon')}·</span>}
+      {t('approval.timeoutHint', {
+        minutes: expiring ? minutesLeft : APPROVAL_TIMEOUT_MINUTES,
+      })}
+    </p>
+  );
+}
+
+/** 响应审批副作用（模块级：store 更新 + IPC 回传；失败 toast 兜底） */
+async function respondToApproval(args: {
+  readonly item: { readonly id: string };
+  readonly approved: boolean;
+  readonly rememberDecision: boolean;
+  readonly approve: (id: string) => void;
+  readonly reject: (id: string) => void;
+}): Promise<void> {
+  const { item, approved, rememberDecision, approve, reject } = args;
+  if (approved) {
+    approve(item.id);
+  } else {
+    reject(item.id);
+  }
+  // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）。
+  // 统一走 lib/ipc.ts 的 hasIpcBridge（单一真源），不再手抄字面量判断。
+  if (!hasIpcBridge()) {
+    return;
+  }
+  const ok = await respondApproval(item.id, approved, rememberDecision);
+  if (!ok) {
+    // useTranslation 在模块级不可用：i18next 实例直取（t 为引用稳定函数）
+    toast.error(i18n.t('approval.responseFailed'));
+  }
+}
+
+/** 卡片头部：图标 + 类型标签 + 状态徽章/关闭按钮 */
+function CardHeader({
+  meta,
+  dangerous,
+  typeLabel,
+  isPending,
+  isApproved,
+  onClose,
+}: {
+  readonly meta: ReturnType<typeof getApprovalMeta>;
+  readonly dangerous: boolean;
+  readonly typeLabel: string;
+  readonly isPending: boolean;
+  readonly isApproved: boolean;
+  readonly onClose: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const Icon = meta.icon;
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-error')} strokeWidth={1.5} />
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate font-medium',
+          // 类型徽章（语义令牌类，来自 APPROVAL_META 单表）
+          meta.className,
+        )}
+      >
+        {/* 类型标签：i18n 协议键收进 approval.types 子段（与 UI 键的 camelCase 分区），
+            键 = ApprovalType 字面量，零映射层 */}
+        {typeLabel}
+      </span>
+      {!isPending && <StatusBadge approved={isApproved} />}
+      {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
+      {!isPending && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto size-5"
+          aria-label={t('common.close')}
+          title={t('common.close')}
+          onClick={onClose}
+        >
+          <X className="size-3" strokeWidth={1.5} />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /**
  * 内联审批卡片
  *
@@ -178,6 +311,9 @@ export function InlineApprovalCard({
   const [skipped, setSkipped] = useState(false);
   // 审批项变化时重置跳过态（渲染期调整 state：新审批卡不继承上一张的 skipped）
   const [prevItemId, setPrevItemId] = useState<string | undefined>(undefined);
+  // 超时倒计时（38 号阶段 2：主进程 5 分钟兜底可见化）——hook 必须在 early return
+  // 之前调用（lint/useHookAtTopLevel），item 未定/已决时 active=false 内部短路
+  const timeout = useTimeoutHint(item?.createdAt ?? 0, item?.status === 'pending');
   if (item?.id !== prevItemId) {
     setPrevItemId(item?.id);
     setSkipped(false);
@@ -185,35 +321,20 @@ export function InlineApprovalCard({
 
   if (item === undefined) return null;
 
-  /**
-   * 响应审批：更新本地 store + 回传主进程（PermissionService 继续/中止工具）
-   *
-   * 此前仅更新 store（UI 假审批），主进程审批永久挂起——工具永远不执行。
-   * 对齐原型 .card.paused 三按钮（拒绝 / 白名单 / 批准）：
-   * - reject     → approved: false
-   * - whitelist  → approved: true + rememberDecision: true（后续同工具自动放行）
-   * - approve    → approved: true
-   */
-  const respond = async (approved: boolean, rememberDecision: boolean): Promise<void> => {
-    if (approved) {
-      approve(item.id);
-    } else {
-      reject(item.id);
-    }
-    // 浏览器模式守卫：无 window.api 时仅更新本地状态（预览不崩溃）。
-    // 统一走 lib/ipc.ts 的 hasIpcBridge（单一真源），不再手抄字面量判断。
-    if (!hasIpcBridge()) {
-      return;
-    }
-    const ok = await respondApproval(item.id, approved, rememberDecision);
-    if (!ok) {
-      toast.error(t('approval.responseFailed'));
-    }
+  // 响应审批（副作用见模块级 respondToApproval 注释）
+  const respond = (approved: boolean, rememberDecision: boolean): void => {
+    if (item === undefined) return;
+    void respondToApproval({
+      item,
+      approved,
+      rememberDecision,
+      approve,
+      reject,
+    });
   };
 
-  // 类型元数据单一入口（图标/徽章类/危险标记/白名单支持）
+  // 类型元数据单一入口（图标/徽章类/危险标记/白名单支持；图标消费在 CardHeader）
   const meta = getApprovalMeta(item.type);
-  const Icon = meta.icon;
   const isPending = item.status === 'pending';
   const isApproved = item.status === 'approved';
   const dangerous = meta.dangerous;
@@ -240,34 +361,14 @@ export function InlineApprovalCard({
       aria-atomic="false"
     >
       {/* 头部：图标 + 类型 + 状态 */}
-      <div className="flex items-center gap-2">
-        <Icon className={cn('size-3.5 shrink-0', dangerous && 'text-error')} strokeWidth={1.5} />
-        <span
-          className={cn(
-            'min-w-0 flex-1 truncate font-medium',
-            // 类型徽章（语义令牌类，来自 APPROVAL_META 单表）
-            meta.className,
-          )}
-        >
-          {/* 类型标签：i18n 协议键收进 approval.types 子段（与 UI 键的 camelCase 分区），
-              键 = ApprovalType 字面量，零映射层 */}
-          {t(`approval.types.${item.type}`)}
-        </span>
-        {!isPending && <StatusBadge approved={isApproved} />}
-        {/* 已决回显的关闭按钮：从 resolved 列表移除（此前 dismiss 无任何 UI 调用方） */}
-        {!isPending && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto size-5"
-            aria-label={t('common.close')}
-            title={t('common.close')}
-            onClick={() => dismiss(item.id)}
-          >
-            <X className="size-3" strokeWidth={1.5} />
-          </Button>
-        )}
-      </div>
+      <CardHeader
+        meta={meta}
+        dangerous={dangerous}
+        typeLabel={t(`approval.types.${item.type}`)}
+        isPending={isPending}
+        isApproved={isApproved}
+        onClose={() => dismiss(item.id)}
+      />
 
       {/* 描述 + 结构化预览 */}
       {item.description !== '' && (
@@ -280,6 +381,9 @@ export function InlineApprovalCard({
           <StructuredPreview type={item.type} input={item.input} />
         </div>
       )}
+
+      {/* 超时提示（pending 态；最后 1 分钟切警示色 + 「即将超时」） */}
+      {isPending && <TimeoutHint minutesLeft={timeout.minutesLeft} expiring={timeout.expiring} />}
 
       {/* pending 操作按钮：拒绝 / 白名单 / 批准（对齐原型 .card.paused 三按钮） */}
       {isPending && (

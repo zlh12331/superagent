@@ -1,5 +1,9 @@
 // src/main/infra/ai/knowledge/goal-service.test.ts
 // 会话目标服务单测：CRUD + 回合事件驱动自动判定（内存 DB + mock 依赖）
+//
+// 接线背景：生产中 GoalService 由 ServiceContainer 惰性创建并 mount；
+// 判定输入 = TEXT_DELTA 累积的助手全文（user 消息不经事件流）——本组用例
+// 以 TEXT_DELTA + TURN_END 事件序列驱动，与生产口径一致。
 
 import type { TurnEvent } from '@code-agent/shared/main';
 import { TurnEventType } from '@code-agent/shared/main';

@@ -95,7 +95,7 @@ export function ShortcutHelpDialog({ open, onClose }: ShortcutHelpDialogProps): 
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="gap-0 p-0">
         <DialogHeader className="border-border border-b px-4 py-3">
-          <DialogTitle className="text-[15px] font-semibold">{t('shortcutHelp.title')}</DialogTitle>
+          <DialogTitle className="text-md font-semibold">{t('shortcutHelp.title')}</DialogTitle>
           <DialogDescription className="sr-only">{t('shortcutHelp.title')}</DialogDescription>
         </DialogHeader>
         {/* 双列网格（对齐原型 #shortcutHelp：grid-cols-2 + gap-x-6 + gap-y-1） */}

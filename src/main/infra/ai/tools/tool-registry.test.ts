@@ -1,4 +1,4 @@
-// src/main/infra/ai/tool-registry.test.ts
+// src/main/infra/ai/tools/tool-registry.test.ts
 // ToolRegistry 单测：注册 / 查找 / 注销 / 列表 / AI SDK 转换
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

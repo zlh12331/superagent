@@ -1,25 +1,3 @@
-/* ──────────────────────────────────────────────────────────────
-   空状态 · TraeWork
-   ────────────────────────────────────────────────────────────── */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--muted-foreground);
-  position: relative;
-}
-
-.empty-state::before {
-  content: "";
-  width: 1px;
-  height: 28px;
-  background: linear-gradient(180deg, transparent, var(--border-strong), transparent);
-  margin-bottom: 18px;
-}
-
 /* ── 文件树面板（Sidebar 文件 Tab）────────────────────────── */
 /* 文件树：衬线字体名称 + 等宽元信息 + 文件夹/文件图标
  * 对齐 thread-item 的圆角 + 悬停 + 激活态样式约定
@@ -60,7 +38,7 @@
 
 .sft-title {
   font-family: var(--font-serif);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--sidebar-foreground);
 }
 
@@ -126,7 +104,7 @@
   background: var(--bg-elev);
   color: var(--text);
   font-family: var(--font-serif);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   line-height: 1.4;
   outline: none;
   box-shadow: 0 0 0 2px var(--accent-glow);
@@ -166,7 +144,7 @@
 
 .file-viewer-meta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   opacity: 0.8;
   letter-spacing: 0.02em;
@@ -182,12 +160,12 @@
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 .file-viewer-copy-btn:hover:not(:disabled) {
@@ -277,16 +255,17 @@
   padding: 40px 20px;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   text-align: center;
 }
 
 .file-viewer-error {
-  color: var(--error);
+  /* --error-text：基色 --error 对 --bg-elev 仅 3.59，文本层 4.66 */
+  color: var(--error-text);
 }
 
 .file-viewer-error-detail {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   opacity: 0.7;
   word-break: break-all;
   max-width: 480px;
@@ -312,12 +291,12 @@
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 .file-viewer-mode-btn:hover:not(:disabled) {
@@ -342,14 +321,14 @@
   background: transparent;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   cursor: not-allowed;
   opacity: 0.5;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease,
-    opacity 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
 }
 
 .file-viewer-save-btn.dirty {
@@ -379,7 +358,7 @@
   background: var(--accent-soft);
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -465,9 +444,10 @@
   overflow: auto;
 }
 
-/* 选中文本时的高亮（让用户看到选择范围） */
+/* 选中文本时的高亮（让用户看到选择范围）：30% 对齐 --terminal-selection 的
+   可见性校准；原 --accent-glow 仅 8%，代码底色上几乎不可辨 */
 .file-viewer-editor-textarea::selection {
-  background: var(--accent-glow);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text);
 }
 
@@ -523,12 +503,12 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
   color: var(--sidebar-foreground);
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.4;
   position: relative;
 }
@@ -545,7 +525,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-serif);
-  font-size: 13px;
+  font-size: var(--font-size-base);
 }
 
 /* 文件激活态：左侧 accent 光带 + 加粗 */
@@ -579,7 +559,7 @@
   width: 12px;
   height: 12px;
   color: var(--muted-foreground);
-  transition: transform 0.12s ease;
+  transition: transform var(--duration-fast) ease;
   flex-shrink: 0;
 }
 
@@ -610,7 +590,7 @@
 .ft-empty {
   padding: 4px 10px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   opacity: 0.6;
 }
@@ -634,40 +614,39 @@
 
 .ft-empty-title {
   font-family: var(--font-serif);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   color: var(--sidebar-foreground);
   margin: 0;
 }
 
 .ft-empty-desc {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--muted-foreground);
   margin-top: 4px;
-}
-
-.empty-state svg {
-  margin-bottom: 14px;
-  opacity: 0.45;
 }
 
 /* ── vim 模式徽章（输入舱底部，settings.editor.vimMode 消费）── */
 .vim-mode-badge {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   letter-spacing: 0.08em;
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 4px);
+  /* chip 化配 --bg 底：与相邻 kbd 同配方，也使 insert 绿字对白底达 AA
+     （透明底压 --bg-elev-2 时 --success-text 仅 4.35，白底 5.08） */
+  background: var(--bg);
   color: var(--muted-foreground);
   margin-right: 6px;
   user-select: none;
 }
 
 .vim-mode-badge.insert {
-  color: var(--success);
-  border-color: var(--success);
+  /* 文字/描边用 --success-text：基色 --success 对浅灰面仅 2.79，文本层亮色 5.08 */
+  color: var(--success-text);
+  border-color: var(--success-text);
 }
 
 /* ── 实验功能：扫描线视觉叠加（settings.experimental.scanlines）── */
@@ -676,7 +655,7 @@
 .scanlines-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-boundary);
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
@@ -686,23 +665,4 @@
     var(--text) 4px
   );
   opacity: 0.04;
-}
-
-.empty-state-title {
-  font-size: var(--font-size-md);
-  color: var(--text-secondary);
-  font-weight: 500;
-  margin-bottom: 6px;
-  font-family: var(--font-serif);
-  font-style: italic;
-  letter-spacing: 0.01em;
-}
-
-.empty-state-sub {
-  font-size: 11.5px;
-  color: var(--muted-foreground);
-  line-height: 1.6;
-  max-width: 340px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.02em;
 }

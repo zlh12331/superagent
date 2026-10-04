@@ -1,67 +1,4 @@
 /* ──────────────────────────────────────────────────────────────
-   骨架屏 · shimmer
-   ────────────────────────────────────────────────────────────── */
-.thread-loading-skeleton {
-  padding: 16px 20px;
-}
-
-.skeleton-msg {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.skeleton-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: linear-gradient(
-    90deg,
-    var(--bg-elev-2) 25%,
-    var(--bg-elev-3) 50%,
-    var(--bg-elev-2) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-}
-
-.skeleton-lines {
-  flex: 1;
-  min-width: 0;
-}
-
-.skeleton-line {
-  height: 10px;
-  border-radius: calc(var(--radius) - 4px);
-  margin-bottom: 6px;
-  background: linear-gradient(
-    90deg,
-    var(--bg-elev-2) 25%,
-    var(--bg-elev-3) 50%,
-    var(--bg-elev-2) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-}
-
-.skeleton-line:nth-child(1) {
-  width: 80%;
-}
-
-.skeleton-line:nth-child(2) {
-  width: 60%;
-}
-
-.skeleton-line:nth-child(3) {
-  width: 40%;
-}
-
-.skeleton-line:nth-child(4) {
-  width: 70%;
-}
-
-/* ──────────────────────────────────────────────────────────────
    回到底部悬浮按钮 · 玻璃圆钮
    ────────────────────────────────────────────────────────────── */
 .scroll-to-bottom {
@@ -83,13 +20,13 @@
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-pop);
-  z-index: 10;
+  z-index: var(--z-raised);
   touch-action: manipulation;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
 .scroll-to-bottom.visible {
@@ -144,7 +81,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   position: absolute;
   top: 50%;
   right: 0;
-  z-index: 5;
+  z-index: var(--z-raised);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -154,7 +91,7 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   opacity: 0;
   pointer-events: none;
   transform: translate(4px, -50%);
-  animation: jump-bar-in 0.18s ease-out 0.08s forwards;
+  animation: jump-bar-in var(--duration-fast) ease-out 0.08s forwards;
 }
 
 /* biome-ignore lint/style/noDescendingSpecificity: body:has(dialog) 变体仅设 visibility，与基础布局属性无声明冲突 */
@@ -207,17 +144,22 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   border-radius: calc(var(--radius) - 6px);
   background: var(--border);
   transition:
-    background 200ms,
-    width 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 150ms;
+    background var(--duration-state),
+    /* 400ms spring 超出三档时长令牌范围，是磁性横条的弹性特征值，保留字面量 */ width 400ms
+    cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow var(--duration-fast);
 }
 
 .jump-item:focus {
   outline: none;
 }
 
-.jump-item:focus-visible .jump-dot {
-  box-shadow: 0 0 0 3px var(--accent-soft);
+/* 焦点环走 2px --ring outline（对齐 cpb-select / diff-more 的 focus-visible 写法）：
+   原 3px --accent-soft（4% alpha）box-shadow 实测不可感知，键盘用户找不到焦点 */
+.jump-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
 
 .jump-dot[data-d="0"] {
@@ -302,15 +244,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   30% {
     transform: translateY(-6px);
     opacity: 1;
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
   }
 }
 
@@ -411,17 +344,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
-@keyframes toolExpand {
-  from {
-    opacity: 0;
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 600px;
-  }
-}
-
 @keyframes reasoningReveal {
   from {
     opacity: 0;
@@ -430,16 +352,6 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   to {
     opacity: 1;
     max-height: 800px;
-  }
-}
-
-@keyframes pulse-check {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 var(--accent-glow);
-  }
-  50% {
-    box-shadow: 0 0 0 4px var(--accent-glow);
   }
 }
 
@@ -493,21 +405,29 @@ body:has(div[role="dialog"]) .scroll-to-bottom {
   }
 }
 
-/* 尊重系统的"减弱动态效果"设置（扩展覆盖所有动画） */
+/* 尊重系统的"减弱动态效果"设置：覆盖全部 animation 消费者（2026-10-02 复核补齐
+   animate-pulse-soft / palette 入场 / reasoningReveal / file-viewer-pulse 四处缺口）；
+   .jump-bar 例外单独处理——其可见性依赖 jump-bar-in 的 forwards 填充（基础态
+   opacity:0），动画被禁用会让跳转条永久隐形，改为零时长瞬时到达终态 */
 @media (prefers-reduced-motion: reduce) {
-  .brand-mark,
-  .topbar,
+  .animate-pulse-soft,
   .enter-anim,
-  .cursor,
   .typing-indicator .ti-dot,
-  .skeleton-avatar,
-  .skeleton-line,
+  .loading-ui-terminal-cursor,
   .card-status.running::before,
   .tool-card:has(.card-status.running) .card-icon::after,
   .tool-card:has(.card-status.running)::after,
   .tool-card.is-settled::after,
-  .plan-item.active .plan-check,
-  .async-refreshing-bar::before {
+  .async-refreshing-bar::before,
+  .palette-overlay,
+  .palette,
+  .reasoning-block.open .reasoning-body,
+  .file-viewer-dirty-dot {
     animation: none;
+  }
+
+  .jump-bar {
+    animation-duration: 0.01ms;
+    animation-delay: 0s;
   }
 }

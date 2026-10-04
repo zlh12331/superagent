@@ -141,3 +141,70 @@ describe('scanCss（css 硬编码 hex）', () => {
     expect(scanCss(content, 'a.css')).toHaveLength(0);
   });
 });
+
+describe('font-size-literal（字号轴收口）', () => {
+  it('反例：TSX 任意值 text-[9px] → 命中', () => {
+    expect(rulesOf(scanTsLike('className="text-[9px] text-muted-foreground"', 'a.tsx'))).toContain(
+      'font-size-literal',
+    );
+  });
+
+  it('正例：命名阶梯类 text-2xs → 无命中', () => {
+    expect(scanTsLike('className="text-2xs text-muted-foreground"', 'a.tsx')).toHaveLength(0);
+  });
+
+  it('反例：CSS 裸 px 字号 font-size: 10px → 命中', () => {
+    expect(rulesOf(scanCss('.x { font-size: 10px; }', 'a.css'))).toContain('font-size-literal');
+  });
+
+  it('正例：var 令牌引用与 em 相对形式 → 无命中', () => {
+    expect(
+      scanCss('.x { font-size: var(--font-size-sm); } .y { font-size: 1.4em; }', 'a.css'),
+    ).toHaveLength(0);
+  });
+});
+
+describe('css-z-index-literal（CSS 侧 z 层级收口）', () => {
+  it('反例：CSS 裸 z-index: 9999（曾静默越过 --z-boundary）→ 命中', () => {
+    expect(rulesOf(scanCss('.overlay { z-index: 9999; }', 'a.css'))).toContain(
+      'css-z-index-literal',
+    );
+  });
+
+  it('正例：var(--z-*) 令牌引用 → 无命中', () => {
+    expect(scanCss('.x { z-index: var(--z-popover); }', 'a.css')).toHaveLength(0);
+  });
+});
+
+describe('text-base-color（语义基色禁作文字色）', () => {
+  it('反例：四个语义基色作 color: → 命中', () => {
+    expect(rulesOf(scanCss('.x { color: var(--error); }', 'a.css'))).toContain('text-base-color');
+    expect(rulesOf(scanCss('.x { color: var(--success); }', 'a.css'))).toContain('text-base-color');
+    expect(rulesOf(scanCss('.x { color: var(--warning); }', 'a.css'))).toContain('text-base-color');
+    expect(rulesOf(scanCss('.x { color: var(--amber); }', 'a.css'))).toContain('text-base-color');
+  });
+
+  it('正例：*-text 文字层（含 --warn-text）→ 无命中', () => {
+    expect(
+      scanCss(
+        '.x { color: var(--error-text); } .y { color: var(--success-text); } .z { color: var(--warn-text); }',
+        'a.css',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('边界：background/border 用基色合法（图形/边框/氛围分工）→ 无命中', () => {
+    expect(
+      scanCss(
+        '.x { background: var(--error); border-color: var(--success); background-color: var(--amber); }',
+        'a.css',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('边界：caret-color / accent-color 等复合属性中的 color 字尾不误报', () => {
+    expect(
+      scanCss('.x { caret-color: var(--error); accent-color: var(--success); }', 'a.css'),
+    ).toHaveLength(0);
+  });
+});

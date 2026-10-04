@@ -1,25 +1,27 @@
 // src/main/infra/ai/agent/agent-service.ts
-// AgentService：Code Agent 核心服务，封装 streamText + tools + stopWhen 多轮工具调用循环
+// AgentService：Code Agent 回合的宿主（生命周期编排 + 效果提供 + 落库 + 推送）
 // ──────────────────────────────────────────────────────────────
-// 职责：
-// 1. 接收渲染层发起的 agent:run 请求，启动 streamText 流式响应（带工具调用能力）
-// 2. 通过 ToolRegistry.toAISDKTools(ctx, executeHook) 转换工具为 AI SDK 原生格式
-// 3. executeHook 注入 ToolExecutor.execute 作为权限检查 + 审批 + IPC 推送层
-// 4. 使用 stopWhen: isStepCount(maxSteps) 限制多轮工具调用循环次数（AI SDK v7）
-// 5. 把 result.toUIMessageStream() 的 part 逐个通过 IPC 推送到渲染层
-// 6. 维护 sessionId → AbortController Map，支持中断指定/全部 agent 对话
-// 7. 错误分类（复用 error-classifier）→ AppError → AGENT_STREAM_ERROR 推送
-// 8. webContents.isDestroyed 守卫，避免销毁后继续推送
+// 在 38 号重构后的职责划分（改动前务必先读）：
+// - **控制流不在这里**：模型解析/并发排队/回合执行/审批与提问等待/终态裁决
+//   全部由 XState 状态机（agent-runtime/agent-turn-machine）驱动。本文件在
+//   runTurnStream 内构造 TurnDeps（效果闭包）交给机器，机器在正确时机回调。
+// - **本文件提供效果**：装配（模型/工具/提示词/预算）、流消费委托
+//   turn-assembly、收尾（三个 finalize：completed/aborted/error）、
+//   事件推送（part/END/ERROR）、落库（turns + messages 富 parts）。
+// - **跨回合记账留在本文件**：活跃会话注册表、preempt 防重、TOCTOU 集合——
+//   这些是「回合之间」的职责，不属于单回合机器。
 //
-// 与 agent-runtime/ 的分工：
-// - 本文件：回合编排宿主（XState 回合状态机、上下文压缩、落库、IPC 推送，感知 webContents/DB）
-// - agent-runtime/：纯函数执行层（turn-runner 流翻译、循环检测、并发门，不感知 webContents/DB）
-// - 错误分类复用 error-classifier.ts，错误 → AppError → AGENT_STREAM_ERROR 推送
+// 与 agent-runtime/ 的分工：本文件感知 webContents/DB（副作用层）；
+// agent-runtime/ 是纯函数执行层（turn-runner 流翻译、并发门、循环检测），
+// 不感知窗口与数据库。
 //
-// 与 AI SDK v7 的关系：
-// - streamText 接收 tools 参数：Record<string, Tool>，AI SDK 自动多轮调用直到模型不再请求工具
-// - stopWhen 接受 StopCondition（替代旧版 maxSteps）：isStepCount(n) 限制步数
-// - result.toUIMessageStream() 返回 UIMessageStream，逐 part 含 text-delta/tool-call/tool-result/finish
+// 对外契约（IAgentService，勿改）：
+// - startAgent(options) 立即返回 sessionId，回合在后台异步推进（不 await 完成）
+// - abort / abortAll 中断；dispose 中断并等待收尾（带超时兜底）
+// - onTurnEvent 订阅类级回合事件总线（IM 桥接等跨会话监听方）
+//
+// 错误处理：复用 error-classifier，错误 → AppError → AGENT_STREAM_ERROR 推送
+// （AbortError 例外——用户中断不是错误，走 aborted 出口）。
 // ──────────────────────────────────────────────────────────────
 
 import { randomUUID } from 'node:crypto';
@@ -39,22 +41,17 @@ import {
   TurnEventType,
   turnEndInvalidationDomains,
 } from '@code-agent/shared/main';
-import { isStepCount, streamText } from 'ai';
 import type { WebContents } from 'electron';
 import { emitEvent } from '../../../utils/emit-event';
 import { logger } from '../../../utils/logger';
 import { broadcastInvalidation } from '../../invalidation/invalidation';
 import type { ISessionService } from '../../storage/session-service';
 import { withSpan } from '../../telemetry/otel';
-import { createSdkTelemetryIntegration } from '../../telemetry/sdk-telemetry';
 import { TurnEventEmitter } from '../agent-runtime';
-import { combineAbortSignals, createTimeoutSignal } from '../agent-runtime/abort-utils';
 import { ActiveSessionRegistry } from '../agent-runtime/active-session-registry';
-import { createAgentTurnActor } from '../agent-runtime/agent-turn-machine';
+import { createAgentTurnActor, type TurnDeps } from '../agent-runtime/agent-turn-machine';
 import type { ConcurrencyGate } from '../agent-runtime/concurrency-gate';
-import { createStreamWithRetry } from '../agent-runtime/create-stream';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../agent-runtime/stream-reader';
-import { TurnRunner, type TurnRunResult } from '../agent-runtime/turn-runner';
+import type { TurnRunResult } from '../agent-runtime/turn-runner';
 import type { TurnTranscriptEntry } from '../agent-runtime/turn-transcript';
 import { buildAssistantTurnMessages } from '../agent-runtime/turn-transcript';
 import type { ITitleGenerator } from '../knowledge/session-title';
@@ -63,26 +60,35 @@ import {
   firstUserMessageText,
   lastUserMessageText,
 } from '../knowledge/session-title';
-import { getModel } from '../llm-client/ai-provider';
 import type { LlmClient } from '../llm-client/llm-client';
+// ⚠️ buildGenerationOptions 必须从 '../models' 桶出口导入：测试 mock 缝在该模块
+// （vi.mock('../models')），直连 generation-options 会绕过 mock（实测 22 测试红）
 import { buildGenerationOptions, modelRegistry } from '../models';
 import type { GenerationOptions } from '../models/generation-options';
 import type { ResolvedModel } from '../models/types';
 import type { IPromptService, ResolvedPrompt } from '../prompt/prompt-service';
-import { classifyError, isAbortError } from '../tools/error-classifier';
+import { classifyError } from '../tools/error-classifier';
 import type { IPermissionService } from '../tools/permission-service';
+import type { Tool, ToolContext } from '../tools/tool';
 import type { IToolExecutor } from '../tools/tool-executor';
 import type { IToolRegistry } from '../tools/tool-registry';
+// agentAskService 为模块级单例（与 cronService 同模式：非容器 accessor，
+// 直接 import——见 AGENTS.md 架构说明）；测试下无 pending 时 expireAsk 为 no-op
+import { agentAskService } from './agent-ask-service';
 import {
   compressByTokenBudget,
   estimateMessagesTokens,
   getCompactionBudget,
   getTokenBudgetDecision,
 } from './context-compression';
-import { createRepairToolCall } from './repair-tool-call';
 import { createTurnPartForwarder } from './stream-part-forward';
 import { resolveTokenBudgetBasis } from './token-overhead';
-import { subscribeApprovalLifecycle, subscribeTurnAccumulators } from './turn-subscriptions';
+import { assembleAndRunTurn } from './turn-assembly';
+import {
+  subscribeApprovalLifecycle,
+  subscribeAskLifecycle,
+  subscribeTurnAccumulators,
+} from './turn-subscriptions';
 import type { SdkTotalUsageLike } from './turn-usage-report';
 import { projectTurnUsage, reportTurnUsage } from './turn-usage-report';
 
@@ -146,18 +152,16 @@ export interface StartAgentOptions {
  */
 export interface IAgentService {
   /**
-   * 启动一次 agent 对话
+   * 启动一次 agent 回合
    *
-   * 流程：
-   * 1. 生成或复用 sessionId
-   * 2. 创建 AbortController 并加入 Map
-   * 3. 构造 ToolContext（含 workingDir / sessionId / abortSignal）
-   * 4. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）
-   * 5. 调用 streamText 启动流式响应（带 tools + stopWhen）
-   * 6. 异步读取 toUIMessageStream 的 reader，逐 part 通过 IPC 推送
-   * 7. 流结束（正常/异常/abort）后从 Map 移除
+   * 流程（38 号重构后）：
+   * 1. 生成或复用 sessionId；TOCTOU 集合把「检查—注册」变原子（见 startingSessions）
+   * 2. preempt 同 sessionId 的旧流（abort 并等其退出，避免孤儿流）
+   * 3. markRunning（崩溃恢复识别）；fire-and-forget 启动 runTurnStream
+   * 4. 注册 controller + streamPromise；返回 sessionId（**不等待回合完成**）
+   * 5. 回合内的控制流由状态机驱动（见 runTurnStream 与 agent-turn-machine）
    *
-   * @returns 本次 agent 对话的 sessionId
+   * @returns 本次 agent 对话的 sessionId（立即返回）
    */
   startAgent(options: StartAgentOptions): Promise<string>;
   /** 中断指定 sessionId 的 agent 对话，返回是否成功中断 */
@@ -192,13 +196,16 @@ export interface IAgentService {
 /**
  * AgentService 默认实现
  *
- * 依赖：
+ * 依赖（全部经构造注入，测试可替换）：
  * - IToolRegistry：转换为 AI SDK tools（toAISDKTools）
  * - IToolExecutor：作为 executeHook 注入，统一执行权限检查 + 审批 + IPC 推送
- * - IPromptService：当调用方未传 systemPrompt 时，自动解析默认 Code Agent prompt
+ * - IPromptService：调用方未传 systemPrompt 时解析默认 Code Agent prompt
+ * - ISessionService：回合落库（turns/messages）与 running/idle 状态维护
+ * - 可选：titleGenerator / concurrencyGate / permissionService / llmClient
+ *   （缺省时对应能力降级，见各构造参数注释）
  *
- * 单例模式：通过 ServiceContainer 持有，整个应用生命周期共享一个实例。
- * 内部维护 sessionId → AbortController + streamPromise 两个 Map（与 ChatService 一致）。
+ * 生命周期：由 ServiceContainer 持有为单例（整个应用共享）。
+ * 跨回合记账集中在两个成员：registry（活跃会话）+ startingSessions（启动临界区）。
  */
 export class AgentService implements IAgentService {
   /**
@@ -269,65 +276,66 @@ export class AgentService implements IAgentService {
   async startAgent(options: StartAgentOptions): Promise<string> {
     const sessionId = options.sessionId ?? randomUUID();
 
-    // 2026-09-08 修复（注册 TOCTOU）：同 sessionId 已在启动中 → 等待其完成再继续，
-    // 避免两次并发调用都通过「无活跃」判定后重复注册（后者覆盖前者的
-    // controller/stream，产生孤儿流与 persistTurn 的 seq 冲突）。
+    // 注册 TOCTOU 临界区（2026-09-08 修复）：同 sessionId 已在启动中则先等它结束。
+    // 必要性：await preemptExisting 与 registry.register 之间跨越 await 边界，
+    // 两次并发调用会都通过「无活跃」判定再先后 register，后者覆盖前者的
+    // controller/stream（孤儿流 + persistTurn 的 seq 冲突）。
     // 用微任务轮询等待而非抛错：调用方语义是「启动/复用该会话的回合」，
-    // 等待后走正常 preempt 流程（会中断前一个回合）更符合预期。
+    // 等完走正常 preempt 流程（中断前一个回合）比抛错更符合预期。
     while (this.startingSessions.has(sessionId)) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     this.startingSessions.add(sessionId);
 
     try {
-      // 防重检查（R2：收敛到共享注册表）：若同 sessionId 已有活跃 stream，
-      // 先 abort 并等待其退出，避免孤儿 stream
+      // 防重：同 sessionId 已有活跃 stream → abort 并等其退出（避免孤儿 stream）。
+      // 语义内聚于共享注册表（R2），与 ChatService 同一实现
       await this.registry.preemptExisting(sessionId, 'agent');
 
       const controller = new AbortController();
 
-      // 回合状态机：标记进行中（崩溃恢复识别；正常结束在 stream finally 归位 idle）
+      // 标记 running（崩溃恢复识别：启动期会把残留 running 标 interrupted）；
+      // 归位 idle 在 handleStreamSettled（CAS 门控）。失败不阻断（仅记日志）
       void this.sessionService.markRunning(sessionId).catch((err: unknown) => {
         logger.error({ sessionId, error: err }, 'markRunning 失败');
       });
 
-      // 异步推送流式 part（不 await，让 startAgent 立即返回 sessionId）
-      // 任何错误都通过 catch 推送 AGENT_STREAM_ERROR，不抛回调用方
-      // catch 内部仅记录日志，不改变 Promise 状态（仍为 fulfilled），
-      // 这样 dispose 的 Promise.allSettled 不会被 reject 影响
-      const streamPromise = this.streamToWebContents(sessionId, options, controller).catch(
+      // fire-and-forget 启动回合流：不 await，让 startAgent 立即返回 sessionId。
+      // 这里 catch 兜住所有异常（只记日志、不 rethrow）——保证 streamPromise 恒为
+      // fulfilled，dispose 的 Promise.allSettled 不会被 reject 干扰
+      const streamPromise = this.runTurnStream(sessionId, options, controller).catch(
         (err: unknown) => {
           logger.error({ sessionId, error: err }, 'AgentService 流推送异常');
         },
       );
       this.registry.register(sessionId, controller, streamPromise);
 
-      // R2：CAS 删除 stream 条目（语义内聚于共享注册表）；CAS 成功才归位 idle
+      // 流收尾挂钩（CAS：仅当注册表里仍是本流时才归位 idle，见 handleStreamSettled）
       streamPromise.finally(() => {
         this.handleStreamSettled(sessionId, streamPromise);
       });
 
       return sessionId;
     } finally {
-      // 注册完成（或异常）即释放，后续并发调用可正常走 preempt 路径
+      // 临界区释放：注册完成（或异常）即放开，后续并发调用可走正常 preempt 路径
       this.startingSessions.delete(sessionId);
     }
   }
 
   /**
-   * stream 收尾：CAS 归位 + markIdle
+   * 流收尾：CAS 归位 idle
    *
-   * 仅当本流仍是被注册的当前流时才 markIdle——preempt 兜底超时（5s）后新回合
-   * 可能已 register + markRunning，旧流的迟到收尾若无条件 markIdle 会把
-   * running 回退成 idle（2026-09-28 深读发现；仅 DB 持久层语义失真，内存侧
-   * registry 因 CAS 本就无误删）。
+   * 仅当本流仍是被注册的当前流时才 markIdle。必要性（2026-09-28 深读）：
+   * preempt 兜底超时（5s）后新回合可能已 register + markRunning，旧流的迟到
+   * 收尾若无条件 markIdle 会把 running 回退成 idle——仅 DB 持久层语义失真
+   * （内存侧 registry 因 CAS 本就无误删），但会让崩溃恢复读到错误状态。
    */
   private handleStreamSettled(sessionId: string, streamPromise: Promise<void>): void {
     const isCurrent = this.registry.removeStreamIfCurrent(sessionId, streamPromise);
     if (!isCurrent) {
       return;
     }
-    // 回合状态机：stream 完全结束（正常/错误/中断）→ 归位 idle
+    // 流完全结束（正常/错误/中断）→ 归位 idle
     void this.sessionService.markIdle(sessionId).catch((err: unknown) => {
       logger.error({ sessionId, error: err }, 'markIdle 失败');
     });
@@ -356,24 +364,102 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 流式推送实现：读取 toUIMessageStream 的 reader，逐 part 推送到 webContents
-   *
-   * 与 ChatService.streamToWebContents 的区别：
-   * - 带 tools 参数（多轮工具调用）
-   * - 带 stopWhen: isStepCount(maxSteps) 限制循环次数（AI SDK v7 替代 maxSteps）
-   * - 带可选 system prompt（Code Agent 通常有系统提示词定义行为）
-   * - executeHook 注入 ToolExecutor.execute 作为权限检查层
-   *
-   * 错误处理复用 error-classifier（与 ChatService 一致）：
-   * - AbortError：用户主动中断，推送 reason='aborted' 的 AGENT_STREAM_END
-   * - 其他错误：分类并推送 AGENT_STREAM_ERROR
+   * 用户消息落库（回合开始）：失败静默（会话不存在/写入异常均不阻断对话；
+   * try/catch 兜底测试桩返回非 Promise 等同步异常）
    */
-  private async streamToWebContents(
+  private persistUserMessageQuietly(
+    sessionId: string,
+    turnId: string,
+    options: StartAgentOptions,
+  ): void {
+    const lastUserMessage = [...options.messages].reverse().find((m) => m.role === 'user');
+    if (lastUserMessage === undefined) {
+      return;
+    }
+    try {
+      void this.sessionService
+        .appendMessage({ sessionId, turnId, messages: [lastUserMessage] })
+        .catch((err: unknown) => {
+          logger.error({ sessionId, error: err }, '用户消息落库失败');
+        });
+    } catch (err) {
+      logger.error({ sessionId, error: err }, '用户消息落库失败（同步异常）');
+    }
+  }
+
+  /**
+   * 工具执行钩子（executeHook）：ToolExecutor.execute 包装 + TOOL_RESULT 事件 + 转录
+   *
+   * 失败不抛错的设计理由：
+   * - 让 LLM 看到错误信息，自行决定下一步（重试 / 换工具 / 告知用户）
+   * - 抛错会中断整个 streamText，无法让 LLM 从错误中恢复
+   * - abortSignal 被触发时 streamText 会自动停止，无需靠抛错中断
+   */
+  private buildToolExecuteHook(args: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly options: StartAgentOptions;
+    readonly turnEmitter: TurnEventEmitter;
+    readonly transcriptEntries: TurnTranscriptEntry[];
+  }): (tool: Tool, input: unknown, ctx: ToolContext) => Promise<unknown> {
+    const { sessionId, turnId, options, turnEmitter, transcriptEntries } = args;
+    return async (tool, input, ctx) => {
+      const toolStartTime = Date.now();
+      const result = await this.toolExecutor.execute(
+        tool.name,
+        ctx.callId,
+        input,
+        ctx,
+        options.webContents,
+      );
+      // 回合事件：工具执行结果（单一信息源：执行器侧信息最全）
+      turnEmitter.emit({
+        type: TurnEventType.TOOL_RESULT,
+        sessionId,
+        turnId,
+        timestamp: Date.now(),
+        toolCallId: ctx.callId,
+        toolName: tool.name,
+        success: result.error === undefined,
+        ...(result.error !== undefined ? { error: result.error } : {}),
+        ...(result.error === undefined ? { durationMs: Date.now() - toolStartTime } : {}),
+      } satisfies TurnToolResultEvent);
+      // 工具结果转录（output/error 在执行侧最全，与上方 TOOL_RESULT 事件同源）
+      transcriptEntries.push({
+        kind: 'tool-result',
+        toolCallId: ctx.callId,
+        toolName: tool.name,
+        ...(result.error !== undefined ? { error: result.error } : { output: result.output }),
+      });
+      // 失败时返回结构化错误对象（让 LLM 看到错误信息）；成功时返回 output
+      if (result.error !== undefined) {
+        return { error: result.error };
+      }
+      return result.output;
+    };
+  }
+
+  /**
+   * 回合流驱动：构造效果面（TurnDeps）→ 创建并启动状态机 → 等终态
+   *
+   * 这是宿主与机器的**唯一接缝**：本方法不写控制流，只把「机器可能需要的能力」
+   * 包成 deps 闭包（捕获 options/webContents/span/累积器/合帧器），机器在
+   * 正确时机回调它们。控制流的权威在 agent-turn-machine（状态/guard 顺序/
+   * exit-entry 顺序/终态收尾都在那边，见其文件头）。
+   *
+   * 与 ChatService.streamToWebContents 的区别：带 tools + stopWhen 限轮数、
+   * executeHook 注入权限层、错误复用 error-classifier（Chat 无这些）。
+   *
+   * @param sessionId 会话 id（registry 记账键）
+   * @param options 回合启动选项（消息/工作目录/模型参数/窗口）
+   * @param controller 本回合的中断控制器（用户 abort / preempt 触发）
+   */
+  private async runTurnStream(
     sessionId: string,
     options: StartAgentOptions,
     controller: AbortController,
   ): Promise<void> {
-    // 性能埋点：streamText 全流程耗时（含 prompt 解析 + 模型调用 + 工具执行 + 流推送）
+    // 性能埋点：整回合耗时（含 prompt 解析 + 模型调用 + 工具执行 + 流推送）
     const startTime = performance.now();
     // OpenTelemetry span：串联 prompt 解析 → streamText → 工具执行 → 流推送整条链路
     await withSpan(
@@ -384,11 +470,6 @@ export class AgentService implements IAgentService {
         'agent.hasSystemPrompt': options.systemPrompt !== undefined,
       },
       async (span) => {
-        // 不可抛的最小集声明在 try 外（catch 需要 turnId/turnEmitter 推送错误事件）；
-        // 其余装配全部移入 try——此前装配段（含 modelRegistry.resolve）在 try 之外，
-        // 抛错只落 startAgent 的纯日志 catch、不推 AGENT_STREAM_ERROR，渲染层该回合
-        // 永久 loading（2026-09-28 深读发现）。catch 对未装配完成的状态做容忍：
-        // turnMachine/partForwarder/resolvedModel 均可缺席。
         const turnEmitter = new TurnEventEmitter();
         const turnId = randomUUID();
         const turnStartTime = Date.now();
@@ -402,419 +483,233 @@ export class AgentService implements IAgentService {
             }
           }
         });
-        let unsubscribeAll = (): void => {};
-        // 消息持久化累积（此前主链路从未落库 messages——重启后历史丢失）：
-        // TEXT_DELTA 拼接助手全文；rawPartCount 统计流内原始 part（空回复检测）。
+        // 消息持久化累积（宿主闭包持有——高频流数据不进机器，见机器文件头）：
+        // TEXT_DELTA 拼接助手全文；rawPartCount 统计流内原始 part（空回复防护判据，
+        // 经 turn.runDone 回传机器）；transcriptEntries 落库为富 parts（重开会话可见）
+        let unsubscribeAll: () => void = () => {};
         let assistantText = '';
-        // 回合转录累积（reasoning/tool-call/tool-result，落库为富 parts——重开会话可见）
         const transcriptEntries: TurnTranscriptEntry[] = [];
         let rawPartCount = 0;
-        // 装配产物（try 内赋值；catch/finally 容忍缺席）
+        // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
+        // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
+        const partForwarder = createTurnPartForwarder(sessionId, options.webContents);
         let releaseGate: (() => void) | undefined;
-        let turnMachine: ReturnType<typeof createAgentTurnActor> | undefined;
-        let partForwarder: ReturnType<typeof createTurnPartForwarder> | undefined;
         let resolvedModel: ResolvedModel | undefined;
-        let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
         let unsubscribeApproval: (() => void) | undefined;
-        try {
-          // 0. 模型解析（装配首步；此前在 try 之外，抛错只落纯日志 catch）
-          resolvedModel = modelRegistry.resolve(undefined);
-          // 非空别名：streamText 重试工厂 / repairToolCall 是闭包，TS 不保留
-          // 跨闭包的 let 窄化——闭包内一律引用此常量
-          const resolvedModelRef = resolvedModel;
-          // 回合状态机（XState）：回合执行层唯一状态权威；关键节点发送事件，
-          // 非法转换被忽略（转换合法性由 agent-turn-machine.test 全表断言）。
-          // （原装配段在此处与下方重复 resolve 两次，现收敛为一次）
-          turnMachine = createAgentTurnActor({
-            sessionId,
-            turnId,
-            modelId: resolvedModel.modelId,
-            startedAt: turnStartTime,
-          });
-          // 审批生命周期订阅（waitingApproval 状态运行时数据源，装配见模块级函数）
-          unsubscribeApproval = subscribeApprovalLifecycle(
-            this.permissionService,
-            sessionId,
-            turnMachine,
-          );
-          // 原始 part 推送（P2-31：text-delta 按 sessionId 16–20ms 微批合帧；
-          // flush 在各收尾路径推送 END/ERROR 前调用，保序防丢尾）
-          partForwarder = createTurnPartForwarder(sessionId, options.webContents);
-          // 非空别名：onPart 闭包内使用（TS 不保留跨闭包的 let 窄化）
-          const partForwarderRef = partForwarder;
-          // 并发公平调度：获取执行槽位（无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类）
-          releaseGate =
-            this.concurrencyGate === undefined
-              ? undefined
-              : await this.concurrencyGate.acquire(sessionId, controller.signal);
-          // 回合状态机：槽位获取成功 → running
-          turnMachine.send({ type: 'gate.ready' });
-          // 1. 获取 model 实例（与 ChatService 一致，复用 ai-provider 单例）
-          const model = await getModel(undefined);
+        let unsubscribeAsk: (() => void) | undefined;
 
-          // 模型级容错（P0-1）：总时长超时（声明提升至回合作用域；有效信号组合）
-          modelTimeout =
-            resolvedModel.generationConfig?.timeoutMs !== undefined
-              ? createTimeoutSignal(resolvedModel.generationConfig.timeoutMs)
-              : undefined;
-          const effectiveAbortSignal = combineAbortSignals([
-            controller.signal,
-            modelTimeout?.signal,
-          ]);
-
-          // 回合事件仅内部消费：类级监听器（onTurnEvent，供记忆捕获）与
-          // TEXT_DELTA 累积（落库）订阅；不再向渲染层 IPC 推送——渲染层
-          // 流式渲染走 agent:stream:part，回合历史走 session:getTurns 拉取
-          unsubscribeAll = subscribeTurnAccumulators(turnEmitter, {
-            onTextDelta: (text) => {
-              assistantText += text;
-            },
-            onToolCall: (entry) => {
-              transcriptEntries.push(entry);
-            },
-          });
-
-          // 用户消息落库（回合开始）：失败静默（会话不存在/写入异常均不阻断对话；
-          // try/catch 兜底测试桩返回非 Promise 等同步异常）
-          const lastUserMessage = [...options.messages].reverse().find((m) => m.role === 'user');
-          if (lastUserMessage !== undefined) {
-            try {
-              void this.sessionService
-                .appendMessage({ sessionId, turnId, messages: [lastUserMessage] })
-                .catch((err: unknown) => {
-                  logger.error({ sessionId, error: err }, '用户消息落库失败');
-                });
-            } catch (err) {
-              logger.error({ sessionId, error: err }, '用户消息落库失败（同步异常）');
+        // 本轮效果面（机器经 TurnDeps 在正确时机调用；闭包捕获 span/累积器/窗口）
+        const deps: TurnDeps = {
+          resolveModel: async () => {
+            resolvedModel = modelRegistry.resolve(undefined);
+            return resolvedModel.modelId;
+          },
+          acquireGate: async () => {
+            // 并发公平调度：无空位时 FIFO 排队；排队期间 abort 走 AbortError 分类
+            releaseGate =
+              this.concurrencyGate === undefined
+                ? undefined
+                : await this.concurrencyGate.acquire(sessionId, controller.signal);
+          },
+          executeTurn: async () => {
+            // 非空：resolving 成功后才会进入 running（机器结构保证）
+            const resolved = resolvedModel;
+            if (resolved === undefined) {
+              throw new Error('回合装配状态缺失（结构上不可达的防御分支）');
             }
-          }
-
-          // 1.5 解析 System Prompt
-          //     - 调用方传了 systemPrompt：直接用（用户显式覆盖）
-          //     - 调用方未传 systemPrompt：调用 PromptService.resolvePrompt 注入默认 Code Agent prompt
-          //       内部会从数据库读取模板 + 注入动态上下文（workingDir / git / AGENTS.md 等）
-          //     - 失败容忍：PromptService 内部已处理回退（DB 失败 → 硬编码默认值）
-          //     - P2-32：调用方（agent.handler 记忆召回链）已解析的基础 prompt 直接
-          //       复用，同回合内不二次 resolvePrompt
-          let systemPrompt = options.systemPrompt;
-          if (systemPrompt === undefined) {
-            const resolved = await this.resolveSystemPrompt(options);
-            systemPrompt = resolved.content;
-            logger.debug({ sessionId, source: resolved.source }, '已加载默认 Code Agent prompt');
-          }
-
-          // 2. 构造工具执行基础上下文（每次对话独立，闭包捕获 sessionId / workingDir / abortSignal / webContents）
-          //    messageId / callId 由每次工具调用时动态填充
-          //    mode：plan 模式下 ToolExecutor 会拒绝所有写操作（只读探索）
-          //    userPrompt：权限决策用（意图豁免破坏性拦截）
-          const userPrompt = lastUserMessageText(options.messages);
-          const baseCtx = {
-            workingDir: options.workingDir,
-            sessionId,
-            abortSignal: controller.signal,
-            ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
-            mode: options.mode ?? 'build',
-            // 用户原始 prompt（权限决策：意图豁免破坏性拦截）
-            ...(userPrompt !== undefined ? { userPrompt } : {}),
-          };
-
-          // 3. 转换工具为 AI SDK 格式，注入 executeHook（ToolExecutor.execute）
-          //    executeHook 内部流程：
-          //    - 调用 ToolExecutor.execute(toolName, toolCallId, input, ctx, webContents)
-          //    - ToolExecutor 内部推送 AGENT_TOOL_CALL / AGENT_TOOL_RESULT 事件
-          //    - ToolExecutor 内部处理权限检查 + 审批流程（permission='ask' 时）
-          //    - 返回结果：成功时返回 output，失败时返回 { error } 对象给 LLM
-          //
-          //    失败时不抛错的设计理由：
-          //    - 让 LLM 看到错误信息，自行决定下一步（重试 / 换工具 / 告知用户）
-          //    - 抛错会中断整个 streamText，无法让 LLM 从错误中恢复
-          //    - abortSignal 被触发时 streamText 会自动停止，无需靠抛错中断
-          const tools = this.toolRegistry.toAISDKTools(baseCtx, async (tool, input, ctx) => {
-            const toolStartTime = Date.now();
-            const result = await this.toolExecutor.execute(
-              tool.name,
-              ctx.callId,
-              input,
-              ctx,
-              options.webContents,
-            );
-            // 回合事件：工具执行结果（单一信息源：执行器侧信息最全）
-            turnEmitter.emit({
-              type: TurnEventType.TOOL_RESULT,
-              sessionId,
-              turnId,
-              timestamp: Date.now(),
-              toolCallId: ctx.callId,
-              toolName: tool.name,
-              success: result.error === undefined,
-              ...(result.error !== undefined ? { error: result.error } : {}),
-              ...(result.error === undefined ? { durationMs: Date.now() - toolStartTime } : {}),
-            } satisfies TurnToolResultEvent);
-            // 工具结果转录（output/error 在执行侧最全，与上方 TOOL_RESULT 事件同源）
-            transcriptEntries.push({
-              kind: 'tool-result',
-              toolCallId: ctx.callId,
-              toolName: tool.name,
-              ...(result.error !== undefined ? { error: result.error } : { output: result.output }),
+            // 回合事件仅内部消费：类级监听器（onTurnEvent，供记忆捕获）与
+            // TEXT_DELTA 累积（落库）订阅；不再向渲染层 IPC 推送——渲染层
+            // 流式渲染走 agent:stream:part，回合历史走 session:getTurns 拉取
+            unsubscribeAll = subscribeTurnAccumulators(turnEmitter, {
+              onTextDelta: (text) => {
+                assistantText += text;
+              },
+              onToolCall: (entry) => {
+                transcriptEntries.push(entry);
+              },
             });
-            // 失败时返回结构化错误对象（让 LLM 看到错误信息）
-            // 成功时返回 output（LLM 据此继续推理）
-            if (result.error !== undefined) {
-              return { error: result.error };
+
+            // 用户消息落库（回合开始）：失败静默（见方法注释）
+            this.persistUserMessageQuietly(sessionId, turnId, options);
+
+            // 1.5 解析 System Prompt（P2-32：调用方已解析时复用，同回合不二次 resolve；
+            //     失败容忍：PromptService 内部已回退硬编码默认值）
+            let systemPrompt = options.systemPrompt;
+            if (systemPrompt === undefined) {
+              const resolvedPrompt = await this.resolveSystemPrompt(options);
+              systemPrompt = resolvedPrompt.content;
+              logger.debug(
+                { sessionId, source: resolvedPrompt.source },
+                '已加载默认 Code Agent prompt',
+              );
             }
-            return result.output;
-          });
 
-          // 4. 启动 streamText（带 tools + stopWhen，自动多轮工具调用循环）
-          //    AI SDK v7 用 stopWhen 替代旧版 maxSteps：
-          //    - isStepCount(n) 创建步数限制条件，n 表示 LLM 调用工具的轮数上限
-          //    - 超过 n 轮后 streamText 自动停止，避免无限循环消耗 token
-          //
-          //    system 参数：可选的系统提示词，覆盖 messages 中的 system 消息
-          //    条件展开：systemPrompt 为 undefined 时不传 system 字段
-          //    （exactOptionalPropertyTypes 要求可选字段不能显式传 undefined）
-          // 4. 生成参数与上下文预算（预算决策/压缩/采样参数解析见 resolveTurnGeneration）
-          const { compressedMessages, genOptions } = this.resolveTurnGeneration({
-            sessionId,
-            messages: options.messages,
-            thinking: options.thinking,
-            temperature: options.temperature,
-            resolvedModel,
-            systemPrompt,
-            span,
-          });
-
-          // 5+6. 请求级重试：创建 + 首 part 读取（连接/认证/首包失败可重试；
-          //    首 part 成功后不重试——流中错误重试会重复工具副作用）
-          //
-          //    重试分层（避免嵌套放大请求数）：
-          //    - model call 级：SDK maxRetries（下方显式传入），每一步都生效，
-          //      含工具调用之后的步骤；SDK 自带指数退避并尊重 retry-after 头
-          //    - 请求级：createStreamWithRetry 只兜 SDK 覆盖不到的传输层失败
-          const created = await createStreamWithRetry({
-            create: () =>
-              streamText({
-                model,
-                messages: compressedMessages,
-                allowSystemInMessages: true,
-                ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-                ...genOptions.samplingOptions,
-                ...(genOptions.maxOutputTokens !== undefined
-                  ? { maxOutputTokens: genOptions.maxOutputTokens }
-                  : {}),
-                ...(genOptions.providerOptions !== undefined
-                  ? { providerOptions: genOptions.providerOptions }
-                  : {}),
-                tools,
-                stopWhen: isStepCount(options.maxSteps),
-                // model call 级重试真源：模型级 maxRetries（默认 2 次重试 = 3 次尝试）
-                maxRetries: resolvedModelRef.generationConfig?.maxRetries ?? 2,
-                ...(effectiveAbortSignal !== undefined
-                  ? { abortSignal: effectiveAbortSignal }
-                  : {}),
-                // 工具入参自动修复（SDK v7 repairToolCall 钩子）：
-                // LLM 生成非法工具入参（zod 校验失败）时用轻量 LLM 调用重生成，
-                // 避免 parse 阶段失败导致工具调用静默丢弃。未注入 llmClient 时不启用。
-                ...(this.llmClient !== undefined
-                  ? {
-                      repairToolCall: createRepairToolCall({
-                        llmClient: this.llmClient,
-                        modelId: resolvedModelRef.modelId,
-                        ...(effectiveAbortSignal !== undefined
-                          ? { signal: effectiveAbortSignal }
-                          : {}),
-                      }),
-                    }
-                  : {}),
-                // 模型级遥测（SDK telemetry integration）：在回合 span 之下自动
-                // 生成单次 LLM 调用 span（latency / usage / finishReason）。
-                // integration 内部对未初始化 OTel（getTracer 为 null）判空跳过。
-                telemetry: { integrations: [createSdkTelemetryIntegration()] },
-              }),
-            controller,
-            // 请求级尝试次数走 createStreamWithRetry 默认值：与 SDK 的 model call
-            // 级重试互不重叠（仅兜传输层失败），不再由 maxRetries 换算
-          });
-          const uiStream = created.stream;
-
-          // 7. 回合执行（TurnRunner：读流 → 翻译 → 事件产出 → 统计）
-          //    不感知 webContents / DB：事件经 emitter 产出，由订阅回调推送；
-          //    流空闲超时在 TurnRunner 内守卫（复用 stream-reader）
-          const runner = new TurnRunner({
-            sessionId,
-            turnId,
-            modelId: resolvedModel.modelId,
-            controller,
-            emitter: turnEmitter,
-            idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-            // 请求级重试链路：首 part 已预读，TurnRunner 接续消费（复用 reader）
-            firstPart: created.firstPart,
-            // 模型级超时归因：combinedAbortSignals 把超时与用户中断折叠成同一
-            // abort 形态，TurnRunner 借此回调区分二者（timeout 走错误出口，
-            // aborted 走中断出口）
-            ...(modelTimeout !== undefined
-              ? { isTimeout: (): boolean => modelTimeout?.signal.aborted === true }
-              : {}),
-            // 原始 part 推送（AGENT_STREAM_PART 兼容通道；运行时对象为 SDK 完整 part）
-            onPart: (part) => {
-              rawPartCount += 1;
-              // 思考过程转录（SDK reasoning-delta；TOOL_* 走事件订阅，见 executeHook）
-              if (part.type === 'reasoning-delta' && typeof part.delta === 'string') {
-                transcriptEntries.push({ kind: 'reasoning', text: part.delta });
-              }
-              // P2-31：text-delta 进合帧缓冲，其余 part 落地缓冲后立即透传（保序）
-              partForwarderRef.push(part);
-            },
-          });
-          const runResult = await runner.run(uiStream as ReadableStream<unknown>, created.reader);
-
-          // 模型级总时长超时归因（两路，均不发终态、直接走错误出口；必须先于
-          // 空回复防护——超时正是空流的常见成因，超时归因优先）：
-          // ① abort 形态——TurnRunner 经 isTimeout 回调归因为 reason='timeout'；
-          // ② completed 形态——超时恰与流收尾竞态时 reason 仍是 completed，
-          //    只能靠标志判定。此前顺序颠倒：先 send 终态、再 throw AI_TIMEOUT，
-          //    finalizeErrorTurn 的 stream.error 被终态吞掉，状态机快照与落库
-          //    status 无声分叉（2026-09-28 深读发现）
-          if (runResult.reason === 'timeout' || modelTimeout?.signal.aborted === true) {
-            span?.setAttribute('agent.timeout', true);
-            // P2-31：ERROR 推送前落地合帧缓冲（保序防丢尾）
-            partForwarder.flush();
-            this.finalizeErrorTurn({
+            // 装配 + 消费（38 号：提取至 turn-assembly.ts——模型实例/超时信号/
+            // 预算/streamText/TurnRunner/usage；超时与空回复归因在机器 deciding）
+            const userPrompt = lastUserMessageText(options.messages);
+            const baseCtx = {
+              workingDir: options.workingDir,
               sessionId,
-              turnId,
-              modelId: resolvedModel.modelId,
-              error: new AppError(ErrorCode.AI_TIMEOUT, '模型级响应总时长超时'),
-              turnStartTime,
-              turnMachine,
-              turnEmitter,
-              options,
-              assistantText,
-              transcriptEntries,
-            });
-            return;
-          }
-
-          // 空回复防护（先于状态机终态，同款理由）：流「正常」结束但零 part
-          // （供应商对无效 Key/余额/模型名可能静默返回空流——此前用户侧表现为
-          // 「发不出去」无任何提示）。AI_EMPTY_RESPONSE 走错误出口 finalizeErrorTurn，
-          // 此时机器仍处非终态、stream.error 可送达——终态后发送会被静默吞掉
-          if (runResult.reason === 'completed' && rawPartCount === 0) {
-            throw new AppError(
-              ErrorCode.AI_EMPTY_RESPONSE,
-              '模型返回了空回复，请检查 API Key 有效性、账户余额与模型名称',
-            );
-          }
-
-          // 回合状态机：流结束 → completed / aborted（TurnRunner 已归因）
-          turnMachine.send(
-            runResult.reason === 'completed'
-              ? { type: 'stream.finished' }
-              : { type: 'stream.aborted' },
-          );
-
-          // 7+8. 结束处理：usage / AGENT_STREAM_END / turn-end / Transcript 落库
-          if (runResult.reason === 'aborted') {
-            logger.info({ sessionId }, 'Agent 对话被用户中断');
-            span?.setAttribute('agent.aborted', true);
-            // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
-            partForwarder.flush();
-            this.completeTurn({
-              sessionId,
-              turnId,
-              modelId: resolvedModel.modelId,
-              reason: 'aborted',
-              durationMs: runResult.durationMs,
-              emitter: turnEmitter,
+              abortSignal: controller.signal,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
-              assistantText,
+              mode: options.mode ?? 'build',
+              // 用户原始 prompt（权限决策：意图豁免破坏性拦截）
+              ...(userPrompt !== undefined ? { userPrompt } : {}),
+            };
+            const tools = this.toolRegistry.toAISDKTools(
+              baseCtx,
+              this.buildToolExecuteHook({
+                sessionId,
+                turnId,
+                options,
+                turnEmitter,
+                transcriptEntries,
+              }),
+            );
+            const output = await assembleAndRunTurn({
+              sessionId,
+              turnId,
+              resolvedModel: resolved,
+              options,
+              controller,
+              turnEmitter,
               transcriptEntries,
+              pushPart: (part) => {
+                rawPartCount += 1;
+                partForwarder.push(part);
+              },
+              resolveGeneration: (prompt, spanRef) =>
+                this.resolveTurnGeneration({
+                  sessionId,
+                  messages: options.messages,
+                  thinking: options.thinking,
+                  temperature: options.temperature,
+                  resolvedModel: resolved,
+                  systemPrompt: prompt,
+                  span: spanRef as import('@opentelemetry/api').Span | undefined,
+                }),
+              systemPrompt,
+              tools,
+              llmClient: this.llmClient,
+              span,
             });
-          } else {
-            // totalUsage 是 PromiseLike（流结束后已 resolve），await 获取失败静默；
-            // 投影/遥测/持久化细节见 finalizeCompletedTurn 与 turn-usage-report
-            const usage = await Promise.resolve(created.result.totalUsage).catch(() => null);
-            // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
+            // 超时/空回复/中断/完成的归因与收尾：由机器 deciding 决策链按序裁决
+            // （guards：isTimeout ▶ isEmptyResponse ▶ isAborted ▶ completed，见机器文件头；
+            // 超时/空回复的 AppError 亦在机器内构造——本方法不再人工排序）
+            return {
+              reason: output.reason,
+              durationMs: output.durationMs,
+              rawPartCount,
+              usage: output.usage,
+              timeoutSignalAborted: output.timeoutSignalAborted,
+            };
+          },
+          finalizeCompleted: (output) => {
             partForwarder.flush();
+            // 非空：completed 必经 executeTurn 成功（机器结构保证）；防御性兜底
+            if (resolvedModel === undefined || output === undefined) {
+              logger.error({ sessionId }, 'finalizeCompleted 在非完整装配态被调用');
+              return;
+            }
+            const runResult: TurnRunResult = { reason: 'completed', durationMs: output.durationMs };
             this.finalizeCompletedTurn({
               sessionId,
               turnId,
               resolvedModel,
               runResult,
-              usage,
+              usage: output.usage as SdkTotalUsageLike | null,
               turnEmitter,
               options,
               assistantText,
               transcriptEntries,
               span,
             });
-          }
-        } catch (error: unknown) {
-          // 装配段（modelRegistry.resolve / 机器构造等）失败时 resolvedModel/
-          // turnMachine/partForwarder 可能缺席：仍推送错误事件归位，渲染层不再
-          // 永久 loading（2026-09-28 深读发现）；modelId 以 'unknown' 兜底落库
-          const modelId = resolvedModel?.modelId ?? 'unknown';
-          // AbortError 是用户主动中断，不视为错误（推送 reason='aborted' 的 END）
-          // 注：TurnRunner 内的中断已归为 aborted result；此处处理组装阶段
-          // （streamText 调用）直接抛出的中断
-          if (isAbortError(error)) {
+          },
+          finalizeAborted: (output) => {
             logger.info({ sessionId }, 'Agent 对话被用户中断');
             span?.setAttribute('agent.aborted', true);
-            // P2-31：END 推送前落地合帧缓冲（保序防丢尾）
-            partForwarder?.flush();
+            partForwarder.flush();
             this.completeTurn({
               sessionId,
               turnId,
-              modelId,
+              modelId: resolvedModel?.modelId ?? 'unknown',
               reason: 'aborted',
-              durationMs: Date.now() - turnStartTime,
+              durationMs: output?.durationMs ?? Date.now() - turnStartTime,
               emitter: turnEmitter,
               ...(options.webContents !== undefined ? { webContents: options.webContents } : {}),
               assistantText,
               transcriptEntries,
             });
-          } else {
-            // 其他错误：分类、状态机 error（装配失败时 turnMachine 尚未建立则跳过——
-            // 机器未离开初始态，无需收敛）、推送 AGENT_STREAM_ERROR、落库（见 finalizeErrorTurn）
-            // P2-31：ERROR 推送前落地合帧缓冲（保序防丢尾）
-            partForwarder?.flush();
+          },
+          finalizeError: (error) => {
+            partForwarder.flush();
             this.finalizeErrorTurn({
               sessionId,
               turnId,
-              modelId,
-              error,
+              modelId: resolvedModel?.modelId ?? 'unknown',
+              error: error ?? new Error('回合异常终止（错误对象缺失）'),
               turnStartTime,
-              turnMachine,
               turnEmitter,
               options,
               assistantText,
               transcriptEntries,
             });
-          }
-        } finally {
-          // 并发槽位释放（幂等；必须在超时定时器清理前完成，让排队的下个回合尽早启动）
-          releaseGate?.();
-          // P2-31：兜底落地合帧缓冲（幂等；正常路径已在 END/ERROR 前显式 flush；
-          // 装配失败时 partForwarder 未建立，可选链跳过）
-          partForwarder?.flush();
-          // 取消回合事件订阅（防泄漏）
-          unsubscribeAll();
-          forwardTurnEvents();
-          // 取消审批生命周期订阅（回合结束；防泄漏）
-          unsubscribeApproval?.();
-          // 模型级超时定时器清理（请求结束立即释放，防长超时 × 高频调用堆积）
-          modelTimeout?.clear();
-          // CAS（Compare-And-Swap）删除 controller（R2：语义内聚于共享注册表）：
-          // 仅当注册表里存的还是自己时才删——abort() 已删除 → startAgent 写入新
-          // controller → 旧 stream finally 不误删新 controller。
-          // stream 条目的 CAS 删除在 startAgent 的 .finally() 链中处理。
-          this.registry.removeControllerIfCurrent(sessionId, controller);
+          },
+          flushForwarder: () => {
+            partForwarder.flush();
+          },
+          releaseGate: () => {
+            releaseGate?.();
+          },
+          clearModelTimeout: () => {
+            // 显式 no-op：模型级超时定时器现由 turn-assembly 在 try/finally 内
+            // 创建与清理（谁创建谁清理），宿主已不再持有该定时器。
+            // 保留本 dep 是为不动机器 TurnDeps 契约（running.exit 引用它）——
+            // 若要一并清理，需同步改 agent-turn-machine 的 TurnDeps/action/exit
+            // 与 exit 顺序测试（跨模块，另行处理）
+          },
+          cleanup: () => {
+            // 订阅退订（防泄漏）→ registry CAS（R2：仅当注册表里仍是自己时才删，
+            // abort() 已删 → startAgent 写入新 controller → 旧流收尾不误删新
+            // controller）→ 耗时日志 + span 收尾
+            unsubscribeAll();
+            forwardTurnEvents();
+            unsubscribeApproval?.();
+            unsubscribeAsk?.();
+            this.registry.removeControllerIfCurrent(sessionId, controller);
+            const durationMs = Math.round(performance.now() - startTime);
+            logger.info({ sessionId, durationMs }, 'Agent streamText 总耗时');
+            span?.setAttribute('agent.durationMs', durationMs);
+            span?.end();
+          },
+          expireApproval: (approvalId) => {
+            // 38 号阶段 2 收尾：机器 after 超时 → 让 permission-service 以
+            // 「超时」语义拒绝 pending（未注入 permissionService 时 no-op——
+            // 无审批通道场景本就不会进入 waitingApproval）
+            this.permissionService?.expireApproval(approvalId);
+          },
+          expireAsk: (askId) => {
+            // 38 号阶段 2 收尾：机器 after 超时 → agent-ask-service 以「未响应」
+            // 语义 resolve(null)（askService 为模块单例，恒可用）
+            agentAskService.expireAsk(askId);
+          },
+        };
 
-          // 性能埋点：总耗时（从 streamText 开始到流推送完毕）
-          const durationMs = Math.round(performance.now() - startTime);
-          logger.info({ sessionId, durationMs }, 'Agent streamText 总耗时');
-          span?.setAttribute('agent.durationMs', durationMs);
-          span?.end();
-        }
+        const actor = createAgentTurnActor({ sessionId, turnId, deps });
+        // 审批生命周期订阅（waitingApproval 状态运行时数据源；start 前建立）
+        unsubscribeApproval = subscribeApprovalLifecycle(this.permissionService, sessionId, actor);
+        // 提问生命周期订阅（waitingInput 状态运行时数据源；同审批模式）
+        unsubscribeAsk = subscribeAskLifecycle(agentAskService, sessionId, actor);
+        // 终态等待：机器进入任一 final 即 done（全部路径结构上必达终态）
+        const done = new Promise<void>((resolve) => {
+          actor.subscribe((snapshot) => {
+            if (snapshot.status === 'done') {
+              resolve();
+            }
+          });
+        });
+        actor.start();
+        await done;
       },
     );
   }
@@ -895,13 +790,13 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 阶段 7+8：completed 收尾（2026-09-12 自 streamToWebContents 提取）
+   * completed 收尾：由机器 completed 终态 entry 调用（deps.finalizeCompleted）
    *
-   * usage 投影与上报（reportTurnUsage）→ completeTurn(completed) 落库 →
-   * 标题生成（回合结束后异步，失败静默；会话仍为默认标题时用首条用户消息
-   * 生成简洁标题）。
+   * 三件事（顺序即语义）：usage 投影与上报（reportTurnUsage，含 span 打点）→
+   * completeTurn(completed) 落库（turn-end 事件 + END 推送 + transcript）→
+   * 标题生成（异步、失败静默：会话仍是默认标题时用首条用户消息生成）。
    *
-   * @param usage SDK totalUsage（调用方已 await；失败时为 null）
+   * @param usage SDK totalUsage（宿主已 await 得到；失败时为 null）
    */
   private finalizeCompletedTurn(args: {
     readonly sessionId: string;
@@ -962,11 +857,12 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 阶段 catch：error 收尾（2026-09-12 自 streamToWebContents 提取）
+   * error 收尾：由机器 error 终态 entry 调用（deps.finalizeError）
    *
-   * 非 AbortError 的异常出口：分类错误 → 回合状态机 error → 推送
-   * AGENT_STREAM_ERROR（webContents 存活时）→ 回合事件 ERROR → completeTurn(error)
-   * 落库 → 日志。AbortError 分支不经过此方法（用户中断不是错误）。
+   * 非 AbortError 的异常出口（AbortError 走 aborted——用户中断不是错误，机器
+   * isAbortFailure guard 已路由）。四件事：classifyError 归类 → 推送
+   * AGENT_STREAM_ERROR（webContents 存活时）→ 回合事件 ERROR →
+   * completeTurn(error) 落库。**状态收敛已由机器完成**，本方法不回发状态事件。
    */
   private finalizeErrorTurn(args: {
     readonly sessionId: string;
@@ -974,8 +870,6 @@ export class AgentService implements IAgentService {
     readonly modelId: string;
     readonly error: unknown;
     readonly turnStartTime: number;
-    /** 装配失败时机器可能尚未建立（catch 容忍半装配态）——缺席则跳过状态收敛 */
-    readonly turnMachine?: ReturnType<typeof createAgentTurnActor> | undefined;
     readonly turnEmitter: TurnEventEmitter;
     readonly options: StartAgentOptions;
     readonly assistantText: string;
@@ -987,19 +881,12 @@ export class AgentService implements IAgentService {
       modelId,
       error,
       turnStartTime,
-      turnMachine,
       turnEmitter,
       options,
       assistantText,
       transcriptEntries,
     } = args;
     const appError = classifyError(error);
-    // 回合状态机：异常 → error（带错误码上下文）；机器未建立时跳过（见上）
-    turnMachine?.send({
-      type: 'stream.error',
-      code: appError.code,
-      message: appError.message,
-    });
     if (options.webContents !== undefined && !options.webContents.isDestroyed()) {
       const errorPayload: AgentStreamErrorPayload = {
         sessionId,
@@ -1034,6 +921,9 @@ export class AgentService implements IAgentService {
   /**
    * 持久化回合流水（失败不阻断主流程）
    *
+   * 由 completeTurn 以 fire-and-forget 调用（`void this.persistTurn(...)`）——
+   * 落库失败只记日志，不影响回合已推送给渲染层的终态。
+   *
    * seq 由 usage-turn-store.recordTurn 内部用 `MAX(seq)+1` 原子计算
    * （2026-09-08 修复：此前这里全量查 turns 取 length，既 O(n²) 又在
    * 并发写同一会话时产生重复 seq）。此处传 0 占位，实际值以存储层为准。
@@ -1057,9 +947,14 @@ export class AgentService implements IAgentService {
   }
 
   /**
-   * 统一回合收尾：turn-end 事件 + AGENT_STREAM_END 推送 + Transcript 落库
+   * 统一回合收尾：turn-end 事件 + 失效域广播 + AGENT_STREAM_END 推送 + 落库
    *
-   * 三个出口（completed / aborted / error）共用，消除重复。
+   * 三个出口（completed / aborted / error）共用，消除重复。由三个 finalize
+   * 方法各自调用（completed → finalizeCompletedTurn；aborted → deps.finalizeAborted；
+   * error → finalizeErrorTurn）。
+   *
+   * 顺序约束：失效域广播**先于** END 推送（同窗口队列保序，渲染层先登记
+   * 「回合结束域已覆盖」，stream:end 处理据此跳过旧清单——渐进回落）。
    */
   private completeTurn(params: {
     readonly sessionId: string;

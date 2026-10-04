@@ -31,7 +31,9 @@
 
 .diff-gutter {
   background: var(--bg-elev);
-  color: var(--text-faint);
+  /* --muted-foreground：--text-faint 属禁用态专用层（composer-hint 注释同纪律），
+     作行号文字对 --bg-elev 仅 2.37；muted 层 6.42 */
+  color: var(--muted-foreground);
   font-size: var(--font-size-xs);
   padding: 0 8px;
   text-align: right;
@@ -61,7 +63,8 @@
   display: inline-block;
   width: 1ch;
   margin-right: 0.5ch;
-  color: var(--text-faint);
+  /* 同 diff-gutter：--muted-foreground 替代禁用态专用层 --text-faint */
+  color: var(--muted-foreground);
   user-select: none;
 }
 
@@ -101,7 +104,8 @@
 
 .diff-more:hover {
   color: var(--text-secondary);
-  background: var(--bg-elev-2);
+  /* hover 底色统一 L3 档（与 composer 域菜单一致） */
+  background: var(--bg-elev-3);
 }
 
 .diff-more:focus-visible {

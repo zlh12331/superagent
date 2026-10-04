@@ -1,5 +1,10 @@
 // src/main/infra/ai/prompt/prompt-service.test.ts
 // PromptService 单测：initialize 幂等 / CRUD / DB 失败回退默认（内存 DB）
+//
+// 接线背景：生产中 PromptService 由 ServiceContainer lazy accessor 持有
+// （闭包装配 gitSummaryProvider）；initialize 在 AgentService 初始化前调用。
+// listPrompts/updatePrompt 生产零调用（无 prompt 域 IPC）——本文件是预留
+// 接口的回归锚；resolvePrompt 的 DB 失败回退默认是生产失败容忍路径的锚。
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDb } from '../../storage/db';

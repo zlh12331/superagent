@@ -1,5 +1,9 @@
 // src/main/infra/ai/agent-runtime/turn-runner.test.ts
 // TurnRunner 单测：读流 → 翻译 → 事件产出 → 统计/终止原因
+//
+// 覆盖：正常流事件序列（turn-start + 翻译事件，finish 不翻译）+ onPart
+// 原始透传 + 中断归因（aborted vs timeout——isTimeout 回调的有无决定
+// abort 形态的归因出口）+ 非中断错误抛出 + 空闲超时（AI_TIMEOUT）。
 
 import { TurnEventType } from '@code-agent/shared/main';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

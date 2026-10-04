@@ -5,7 +5,7 @@
 // - 按配置创建传输层（stdio 子进程 / sse / streamable-http 远程 HTTP）
 // - 完成 MCP 协议初始化握手（capabilities 协商）
 // - listTools：获取 server 提供的工具列表
-// - callTool：转发工具调用到 MCP server
+// - callTool：转发工具调用到 MCP server（abortSignal 贯穿，M1）
 // - close：关闭连接 + 终止子进程（stdio）
 //
 // 设计原则：
@@ -84,6 +84,9 @@ export type McpTransportInstance =
 /**
  * MCPClient：管理与单个 MCP server 的连接
  *
+ * 生产创建方唯一 = mcp-service.startServer（每个 server 一个实例）；
+ * 生命周期由 MCPService 层驱动（本类不感知注册表/其他 server）。
+ *
  * 生命周期：
  * 1. new MCPClient(config)：创建实例（未连接）
  * 2. connect()：启动子进程 + 完成 MCP 握手 + 缓存工具列表
@@ -132,9 +135,10 @@ export class MCPClient {
    * 启动 MCP server 子进程并完成协议握手
    *
    * 步骤：
-   * 1. 创建 StdioClientTransport（启动子进程）
+   * 1. createMcpTransport：按 transport 三态创建（stdio=启动子进程 / 远程=HTTP）
    * 2. 创建 Client + 调用 connect() 完成 MCP 握手
-   * 3. 调用 listTools 缓存工具列表
+   * 3. 缓存 server 元数据（serverName/serverVersion）
+   * 4. 调用 listTools 缓存工具列表
    *
    * 幂等性：已连接时直接返回，不重复启动
    *
@@ -235,7 +239,8 @@ export class MCPClient {
    * 返回缓存的工具描述列表
    *
    * 不再请求 server（connect 时已缓存），避免每次对话都拉取。
-   * 若 server 工具列表变化，需调用 reconnect() 重新拉取。
+   * 若 server 工具列表变化，需经 MCPService 层 stopServer + startServer
+   * 重建实例（本类无 reconnect 方法——工具列表缓存的刷新只能靠重建）。
    *
    * @returns 工具描述数组（不可变）
    * @throws AppError(INTERNAL_ERROR) 当未连接时

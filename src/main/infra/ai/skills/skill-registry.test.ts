@@ -1,5 +1,10 @@
 // src/main/infra/ai/skills/skill-registry.test.ts
 // 技能注册表单测：内置技能列表/加载/注册
+//
+// 接线背景：load_skill 工具已在 tools/index.ts 接线（createLoadSkillTool，
+// 模型按名加载提示词）；启动合并加载（loadFromRows）与 learn-skill-agent
+// 的注册/删除走真实单例。本文件守住内置技能集（≥4 个）、覆盖语义与
+// remove 的内置回退语义（批次 13 缺口节）。
 
 import { describe, expect, it } from 'vitest';
 import { createLoadSkillTool } from '../tools/load-skill.tool';

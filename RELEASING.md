@@ -133,7 +133,12 @@ Release-As: 1.1.0-beta.1
 - 继续发下一个 beta：再写 `Release-As: 1.1.0-beta.2`
 
 beta 与正式版共用 `latest*.yml` 更新源；已装 beta 版的应用（版本含 `-beta`）会自动开启预发布更新检查，
-稳定版用户**不会**收到 prerelease（GitHub `/releases/latest` 天然跳过 prerelease）。
+稳定版用户**默认**收不到 prerelease（GitHub `/releases/latest` 天然跳过 prerelease）。
+
+> **稳定版用户想测 beta**：设置 → 关于 → 打开「接收预发布更新」（`update.allowPrerelease`，
+> 2026-10-01 增补，见 27 号 spec §4）。主进程每次检查前重读该设置，开启后点一次
+> 「检查更新」即可收到 beta 提示，无需重启；关闭即回退为只收正式版。装了 beta 的
+> 用户恒收预发布（版本号判定），不受开关影响。
 
 ## 四、从 beta 毕业为正式版
 

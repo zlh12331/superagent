@@ -1,6 +1,12 @@
 // src/main/infra/ai/agent-runtime/active-session-registry.test.ts
 // ActiveSessionRegistry 单元测试
 // 覆盖：activeCount（关窗协商的判定依据）+ 注册/中断/CAS 删除/dispose 语义回归
+//
+// 接线背景：唯一生产实例在 agent-service（registry 字段，R2 去重收敛）；
+// abort 的「先删再 abort」与 removeXIfCurrent 的 CAS 语义配套——旧 stream
+// finally 迟到时不得误删新回合的条目（本文件用例 4 是该竞态的结构性回归）。
+// preemptExisting 的「检查—注册」TOCTOU 窗口由宿主 startingSessions Set
+// 临界区补齐，不属本文件职责（见 agent-service）。
 import { describe, expect, it, vi } from 'vitest';
 
 // logger 依赖 electron（app.getPath）——测试环境按项目惯例 mock electron

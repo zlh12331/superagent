@@ -61,7 +61,9 @@ function renderWith(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: null } });
+  useSettingsStore.setState({
+    update: { autoCheck: true, allowPrerelease: false, skippedVersion: null },
+  });
 });
 
 describe('关于面板 · 更新区', () => {
@@ -133,7 +135,9 @@ describe('关于面板 · 更新区', () => {
   });
 
   it('跳过态：展示已跳过并提供取消跳过（写回 settings）', async () => {
-    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: '1.2.0' } });
+    useSettingsStore.setState({
+      update: { autoCheck: true, allowPrerelease: false, skippedVersion: '1.2.0' },
+    });
     renderWith({ phase: 'downloaded', version: '1.2.0' });
     expect(screen.getByText(t('settings.aboutSkipped', { version: '1.2.0' }))).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: t('settings.aboutUnskip') }));
@@ -141,7 +145,9 @@ describe('关于面板 · 更新区', () => {
   });
 
   it('跳过的是别的版本：不展示跳过态（版本号不等即失效）', () => {
-    useSettingsStore.setState({ update: { autoCheck: true, skippedVersion: '1.0.0' } });
+    useSettingsStore.setState({
+      update: { autoCheck: true, allowPrerelease: false, skippedVersion: '1.0.0' },
+    });
     renderWith({ phase: 'downloaded', version: '1.2.0' });
     expect(screen.queryByText(t('settings.aboutSkipped', { version: '1.0.0' }))).toBeNull();
   });
@@ -164,6 +170,16 @@ describe('关于面板 · 更新区', () => {
 
     await userEvent.click(screen.getByRole('switch', { name: t('settings.aboutAutoCheck') }));
     await waitFor(() => expect(useSettingsStore.getState().update.autoCheck).toBe(true));
+    expect(check).toHaveBeenCalledOnce();
+  });
+
+  it('预发布开关：打开时写入 settings 并立即补检（主进程每次检查前重读该设置）', async () => {
+    const check = vi.fn(async () => {});
+    renderWith(null, { check });
+    const toggle = screen.getByRole('switch', { name: t('settings.aboutAllowPrerelease') });
+
+    await userEvent.click(toggle);
+    await waitFor(() => expect(useSettingsStore.getState().update.allowPrerelease).toBe(true));
     expect(check).toHaveBeenCalledOnce();
   });
 });

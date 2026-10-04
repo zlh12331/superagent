@@ -1,5 +1,9 @@
-// src/main/infra/ai/learn-skill-agent.test.ts
+// src/main/infra/ai/knowledge/learn-skill-agent.test.ts
 // 技能学习单测：引导模板 + 学习/列出/删除（内存 DB + fake LLM）
+//
+// 接线背景：生产消费方 = skill 域 IPC（learn/listLearned/removeLearned）+
+// 启动合并加载（index.ts listLearned → loadFromRows，重启保留）。remove 对
+// 内置同名自动回退内置定义（registry 侧），本文件 remove 用例是其语义锚。
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDb } from '../../storage/db';

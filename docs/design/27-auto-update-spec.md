@@ -75,6 +75,7 @@
 - 主进程在启动时用 `readSetting('update')` **同步**读取——启动检查不能等渲染层；值缺失或损坏时自动走默认 true。
 - **语义：开关只管自动发现与自动处置。** 开 = 启动检查 + 后台自动下载 + 退出自动安装；关 = 以上全停，但用户手动检查后的下载与安装照常。
 - 关闭时必须同时把 `autoUpdater.autoInstallOnAppQuit` 置 false，否则上一会话残留的已下载包仍会在退出时被安装。
+- `allowPrerelease: boolean`（**默认关**，2026-10-01 增补）：接收预发布（beta）更新。稳定版用户开启后可收到 prerelease 更新提示——GitHub `/releases/latest` 天然跳过 prerelease 且 `allowPrerelease` 默认按「当前版本含 `-`」判定，不开则稳定版永远只收正式版、beta 只能手动下载首装。**应用点在 `check()` 入口**（每次检查前幂等重算，公式 = 用户开关 ‖ `app.getVersion()` 含 `-`，与库构造器的版本判定同语义、不捕获库字段避免二次 start 污染）：UI 开启后立即补检即生效，无需重启或新 IPC；装了 beta 版（版本号含 `-`）的用户恒收预发布、不受开关影响（保住 beta→beta.N 的默认链路）。发版侧零改动——beta release 的 latest.yml 照常上传，GitHubProvider 在 allowPrerelease=true 且无 beta.yml 时自动回退读 latest.yml（GitHubProvider.js:138-141）。
 
 ## 5. 数据契约与状态
 
@@ -663,3 +664,107 @@ macOS-x64-1.3.3.dmg          macOS-arm64-1.3.3.dmg
   `latest.yml` 的 `path` 指向真实存在的包、无孤儿 blockmap；对真实产物跑门禁
   断言 `MISSING=0`
 - typecheck / lint / 两份 YAML 解析全绿
+
+### 14.12 更新安装改向导式 + 退出链日志 flush（2026-10-01，真机反馈）
+
+**现象**（1.3.3→1.4.0 真机升级）：用户点「重启并安装」后应用退出，桌面**十余分钟
+毫无反应**（无窗口、无进度、无通知），最终 1.4.0 悄然装好并自启动——用户无从得知
+安装在进行，误判为"更新失败"，手动卸载 1.4.0 重装 1.3.3。
+
+**取证**（main.log + 文件时间戳，日志在 15:40 update:install 之后断档）：
+
+- `15:15` 发现 1.4.0 → `15:37` 下载完成（341MB，差分基线不一致自动回退全量）
+- `15:40:21` `update:install` IPC → 日志静默 → `15:50:31` 新会话启动，
+  `15:50:40` 检查更新返回 `Update for version 1.4.0 is not available`
+  ⇒ **静默安装实际成功**，15:40–15:50 约十分钟为后台安装窗口（341MB 解压
+  ≈1.17GB 落盘 + Defender 实时扫描，E 盘机械盘放大了耗时）
+- **两个根因**：
+  1. `runDeferredInstall` 传 `quitAndInstall(true, true)`——NSIS `/S` 静默模式
+     **没有任何 UI**，这是 NSIS 模式固有限制，非 bug；
+  2. 退出链日志全丢：`app.exit(0)` 不等 electron-log 的异步写盘队列
+     （`sync=false` 的 File 实例队列），uncaughtException 路径有 300ms 写盘
+     窗口而正常退出链没有 ⇒「应用已退出，拉起安装器」等日志整体丢失。
+
+**修复**：
+
+1. **向导式安装**（update-service.ts）：`runDeferredInstall` 改传
+   `quitAndInstall(false, false)`。非静默下库忽略 `isForceRunAfter`、由
+   `autoRunAppAfterInstall`（默认 true）接管完成页启动。
+2. **自动跳过「安装模式」页**（resources/installer.nsh）：electron-builder 的
+   assistedInstaller.nsh 已为 license/目录页挂 `skipPageIfUpdated`（`--updated`
+   时 Abort），但 per-user 的「为谁安装」页（multiUserUi.nsh `PAGE_INSTALL_MODE`）
+   没有。经官方定制口子 `customInstallmode` 宏（InstallModePre 在判断
+   `$isForceCurrentInstall` 前执行）置 1——模板自己走
+   `setInstallModePerUser + Abort`，页面跳过且安装模式显式收敛为 per-user。
+   **改后更新向导页面流**：[跳过]安装模式页 → [跳过]目录页 → 安装进度页
+   （到达即自动开始，进度可见）→ 完成页（点「完成」启动新版）。手动安装
+   （无 `--updated`）不受影响，向导完整。
+   ⚠️ **实编踩坑两连**：
+   ① 检测 `--updated` 不能用模板的 `${isUpdated}` 宏——它展开为 StdUtils 插件
+   调用，而自定义 include 在 sharedHeader 内部，与 `!addplugindir` 由 NsisTarget
+   的**异步任务并发推入、顺序不定**，本文件编译时插件目录尚未生效（makensis 报
+   `Plugin not found, cannot call StdUtils::TestParameter`）。模板自己的
+   isUpdated 展开点全在 installer.nsi 模板内（必然晚于 addplugindir）所以无恙。
+   改用 NSIS 标准库 FileFunc.nsh 的 `${GetOptions} $CMDLINE "--updated"`，零插件
+   依赖（electron-updater 固定传 `--updated`，字面串匹配即可）。
+   ② 也不能用 `MUI_PAGE_CUSTOMFUNCTION_PRE` 挂 PRE 回调——卸载器编译时
+   `MUI_UNPAGE_WELCOME` 等页面同样消费该 define（MUI2 的 un 页面共用 per-page
+   定义项），Call 非 `un.` 前缀函数直接违反 NSIS 卸载器规则
+   （`Call must be used with function names starting with "un."`）。
+3. **退出链日志 flush**（logger.ts `flushPendingLogs` + index.ts before-quit）：
+   轮询 electron-log File 实例内部队列（`asyncWriteQueue` / `hasActiveAsyncWriting`）
+   至清空，300ms 上限兜底；内部结构不可达（升级改名/测试 mock）时立即返回，
+   正确性不依赖内部实现。调用点在 `runDeferredInstall()` 之后、`app.exit(0)`
+   之前，保证「拉起安装向导」日志落盘。
+4. **确认弹窗文案**（i18n `update.confirmRestartMessage`）：由"重启会中断当前
+   任务"改为明确"应用将退出并打开安装向导（进度可见，装完点「完成」自动启动）"。
+5. **beta 渠道缺口修复**（同日）：beta release 标记为 prerelease 后，稳定版
+   用户（`allowPrerelease` 默认 false）**永远收不到 beta 提示**——beta 只能手动
+   下载首装，与"发 beta 让人测"的意图矛盾。增补 `update.allowPrerelease` 设置
+   （默认关，详见 §4）+ 关于面板「接收预发布更新」开关；应用点在 `check()`
+   入口，开启后立即补检即生效。
+
+**不受影响的行为**：普通退出时的 `autoInstallOnAppQuit` 静默安装路径（库
+`once('quit')` 钩子）保持原样——不打扰场景保持静默；非 Windows 平台安装路径
+不变（mac zip 解包 / AppImage 替换无向导概念）。
+
+**已知取舍**：更新向导的最后一步需要用户点一次「完成」（MUI 完成页无官方的
+自动关闭机制，自动点击属脆弱 hack，违背成熟优先原则）；换取全程安装进度可见。
+普通退出后的静默安装依旧无 UI（行为未变，属 §14.6 两段式设计的既定语义）。
+
+### 14.13 待验证清单（2026-10-01 立项，发正式版后逐项销号）
+
+本批改动已过：typecheck / lint / check:i18n / verify:local 全量（质量层）、
+真实打包 NSIS 双轮编译（卸载器 + 安装器）、55+364 等单测。**运行时行为与
+MUI 模板时序的静态推断仍需真机确认**——用户拍板不发 beta，本地提交攒着，
+下次发正式版（1.5.0）时 1.4.0 用户自动收到更新、顺路逐项验证：
+
+1. **更新向导（核心）**：1.4.0 收到 1.5.0 提示 → 点「重启并安装」→
+   ① 安装窗口弹出（不再静默无窗口）；② 安装模式页与目录页被自动跳过
+   （customInstallmode 在 `--updated` 下的真实页面流——MUI define 消费时序
+   是静态确认，运行时待真机）；③ INSTFILES 进度条可见、自动开始；
+   ④ 完成页点「完成」自动启动新版。
+2. **退出链日志**：同场景 main.log 应有完整退出链日志（含「应用已退出，
+   拉起安装向导」——1.3.3→1.4.0 排障时该行缺失，flushPendingLogs 待真机确认）。
+3. **首装向导回归**：手动双击安装器（无 `--updated`）向导完整（模式页/目录页在，
+   不被误跳过）。
+4. **预发布开关**：将来发 beta 时——关于面板开关可见、开启后手动「检查更新」
+   即收到 beta 提示（allowPrerelease=true 的 feed/回退路径待真机）。
+5. **安装耗时体感**：向导模式进度条 vs 1.4.0 的静默空窗（~10 分钟）对比。
+
+### 14.14 退出时自动安装按退出时刻的开关状态生效（2026-10-02，审查发现）
+
+**缺口**：`autoCheckEnabled` 只在 `start()` 读一次——运行中切换「自动检查更新」
+只落库、内存值直到重启不变。场景：开着启动 → 下载完成 → 运行中关掉 → 退出
+**仍被静默安装**（`autoInstallOnAppQuit` 是启动时的 true），与 §4「关 = 全停」
+语义冲突，且撞上"静默无感知安装"的体验盲区。设置域审查（Explore 全域扫描）
+确认这是全部 17 域中唯一一处语义与实现不一致的开关。
+
+**修复**：`UpdateService.refreshAutoInstallOnAppQuit()`（按 start 注入的读取器
+重算 `autoInstallOnAppQuit`）+ index.ts 退出链在 **disposeServices 之前**调用——
+必须在此之前：此后 `getUpdateService()` 取到的是 dispose 后惰性新建的实例，
+开关读取器字段丢失（null → 缺省恒"允许"，修复失效）。调用点在清理段开头，
+不影响「重启并安装」路径（deferredInstallPending 标志不受本开关门控）。
+
+**设计内不变**：关掉后手动「检查更新」再安装照常（§4 手动处置语义）；UI 注释
+"关闭只影响后续启动的调度"改由退出链重读兜底。单测覆盖（可变开关模拟运行中切换）。

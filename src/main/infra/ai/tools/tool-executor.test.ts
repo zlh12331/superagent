@@ -1,4 +1,4 @@
-// src/main/infra/ai/tool-executor.test.ts
+// src/main/infra/ai/tools/tool-executor.test.ts
 // ToolExecutor 单测：统一工具执行入口（权限检查 + 审批流 + plan 模式只读约束）
 //
 // 测试要点：

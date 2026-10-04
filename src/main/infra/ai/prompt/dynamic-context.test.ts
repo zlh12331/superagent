@@ -1,5 +1,10 @@
 // src/main/infra/ai/prompt/dynamic-context.test.ts
 // dynamic-context 单测：模板变量注入（git 提供者注入 + 失败容忍）
+//
+// 接线背景：生产中 gitSummaryProvider 由 service-container 的 getPromptService
+// 装配（gitSummaryProviderFrom 包装 gitService.status，闭包内延迟取实例）；
+// 本文件的 dirtyProvider/cleanProvider 等是等价形状的测试替身——失败容忍
+// （占位符）、`$&` 转义、单次遍历语义全在此覆盖。
 
 import { homedir } from 'node:os';
 
