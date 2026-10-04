@@ -4,10 +4,30 @@
 
 ## [1.5.0](https://github.com/zlh12331/superagent/compare/v1.4.0...v1.5.0) (2026-10-04)
 
+> 本版本聚焦「等待可见」与「视觉可信」：更新安装改为向导式、进度全程可见，新增「接收预发布更新」开关，审批与提问等待均显示倒计时；同时完成一轮界面视觉深修（12 处对比度达标 + 多处静默失效修复）与 Agent 回合引擎的 XState 架构升级，并全量重写了 AI / Agent / 工具层注释（零逻辑改动）。
 
-### Features
+### 新增
 
-* 更新安装向导化 + 审批/提问等待可见化（38 号决策面）+ CSS 三轮深度审查 + AI 层注释重写 ([#71](https://github.com/zlh12331/superagent/issues/71)) ([090a943](https://github.com/zlh12331/superagent/commit/090a943cf93ce1de3b088d12e3fbfe4792157950))
+- **更新安装向导化**：应用内更新下载完成后进入标准安装向导，安装进度全程可见，不再是一次无反馈的静默替换（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **接收预发布更新开关**：设置 → 关于新增「接收预发布更新」，稳定版用户可主动尝试 beta 版本，关闭即恢复只收正式版（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **审批等待倒计时**：权限审批弹窗实时显示剩余时间——主进程 5 分钟超时兜底不再是黑箱，等待多久、何时自动取消一目了然（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **提问等待倒计时**：Agent 提问对话框显示 60 秒自动继续倒计时，无人值守时回合不会被悄悄卡住（[#71](https://github.com/zlh12331/superagent/issues/71)）
+
+### 修复
+
+- **界面视觉深修**：修复亮色 / 暗色主题下 12 处文字对比度不达 WCAG AA 的问题；修复命令面板弹层不显示、滚动条留白透底、编辑器选区不明显、双动画互相打架等多处静默失效（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **回合稳定性**：修复模型级超时定时器清理链断裂——超时后残留计时器可能误触发后续回合的中断（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **更新行为**：退出时的自动安装按退出时刻的开关状态生效，不再沿用更早的旧状态（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **退出日志**：修复应用退出时异步日志缓冲未落盘、退出原因丢失的问题（[#71](https://github.com/zlh12331/superagent/issues/71)）
+
+### 内部改进
+
+- **Agent 回合引擎 XState 编排化**：回合状态机升级为编排者（层级状态 + invoked services），审批超时迁移为声明式计时（消除双计时源），回合装配段独立成模块（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **设计体系门禁扩容**：新增文字层纪律（语义基色禁作文字色）与字号、z 层级规则，动画门禁加固——防止视觉回归再次静默进入主干（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **全库注释重写（零逻辑改动）**：AI / Agent / 工具层约 45 批次修正过期、幽灵与失实注释并补齐接线背景；顺带清理两处零引用死代码，cron-service 迁移至 agent/ 目录（[#71](https://github.com/zlh12331/superagent/issues/71)）
+- **其他**：事件循环延迟监控定时器补 unref；依赖审计口径与 CI 对齐（GHSA 白名单登记）；清理约 300 行验证过的死代码与死令牌（[#71](https://github.com/zlh12331/superagent/issues/71)）
+
+<!-- changelog:polished -->
 
 ## [1.4.0](https://github.com/zlh12331/superagent/compare/v1.3.3...v1.4.0) (2026-10-01)
 
