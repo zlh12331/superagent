@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.2](https://github.com/zlh12331/superagent/compare/v1.6.1-beta.4...v1.6.2) (2026-10-05)
+
+
+### Features
+
+* **release:** 发版锚点自洽护栏（护栏 A+B） ([#93](https://github.com/zlh12331/superagent/issues/93)) ([e582ef0](https://github.com/zlh12331/superagent/commit/e582ef0723fe21e96a9b3da35e98e07f2a864eff))
+
+
+### Bug Fixes
+
+* **ci:** release-pr quality 瘦身 + 本地打包验证先行纪律 + beta.4 changelog 补全 ([#89](https://github.com/zlh12331/superagent/issues/89)) ([ca3718c](https://github.com/zlh12331/superagent/commit/ca3718c27829326480f338a7a461c69b14e306c6))
+* **memory-engine:** 补拷 tcvdb-text data 数据文件，修复 BM25 分词 ENOENT ([#92](https://github.com/zlh12331/superagent/issues/92)) ([4255c82](https://github.com/zlh12331/superagent/commit/4255c82bc952543d47b4ba884fb6ed815c85cb99))
+
+
+### Miscellaneous Chores
+
+* 毕业至 1.6.2 正式版（Release-As 指令） ([#94](https://github.com/zlh12331/superagent/issues/94)) ([15985c7](https://github.com/zlh12331/superagent/commit/15985c793b533bd146f90f1a6d5963d98f21dabf))
+
 ## [1.6.1-beta.4](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.4...v1.6.1-beta.4) (2026-10-05)
 
 > ⚠️ **预发布版本（beta）**：从 v1.6.0-beta.2 升级即体验全部改进（beta.3/beta.4 因发布流水线问题未出包，内容全部并入本版）。
