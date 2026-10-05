@@ -4,10 +4,17 @@
 
 ## [1.6.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.1...v1.6.0-beta.2) (2026-10-05)
 
+> ⚠️ **预发布版本（beta）**：记忆引擎修复链的最后一环。beta.1 已让引擎入口跑通但仍有间接依赖无法定位；本版预期**完整恢复记忆功能**，请从 beta.1 升级后实际使用验证。
 
-### Bug Fixes
+### 修复
 
-* **memory-engine:** node_modules 全量提升顶层，修复安装目录间接依赖解析失败 ([#75](https://github.com/zlh12331/superagent/issues/75)) ([68e1471](https://github.com/zlh12331/superagent/commit/68e14714928afd5da1081fa36518df3ba039bd6b))
+- **记忆引擎启动链路收尾**：修复安装目录中引擎间接依赖无法定位的问题——应用打包链路会把依赖目录的链接展开为实体副本，引擎的中间层依赖（如分词哈希库）因此不可达；本版将全部依赖平铺到引擎运行目录顶层，不再依赖链接结构（[#75](https://github.com/zlh12331/superagent/issues/75)）
+
+### 内部改进
+
+- 依赖平铺实测零体积代价（引擎运行目录 282.8 MB / 7078 文件与上一版持平）（[#75](https://github.com/zlh12331/superagent/issues/75)）
+
+<!-- changelog:polished -->
 
 ## [1.6.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.5.0...v1.6.0-beta.1) (2026-10-05)
 
