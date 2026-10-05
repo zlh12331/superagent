@@ -6,10 +6,22 @@
 //   打包环境需要自包含运行目录，经 electron-builder extraResources 部署到
 //   process.resourcesPath/memory-hub。
 //
-// 策略：走 `src/gateway/server.ts + tsx`。
-//   上游官方 tsdown 入口是 index.ts，产物 dist 里没有 gateway/server.js，
-//   因此不构建 dist，直接拷贝 src + package.json，并在目标目录用 pnpm 重建
-//   node_modules（在目标原地 install 而非拷贝，保证 pnpm 符号链接正确）。
+// 策略：构建 dist 产物（2026-10-05 起，替代 tsx 直跑）。
+//   上游官方 tsdown 入口是 index.ts，产物 dist 里没有 gateway/server.js，因此
+//   由本脚本用 esbuild 把过滤后的 src 全量转译为 dist（非 bundle，import specifier
+//   原样保留 → 源码的 `.js` 后缀导入在 dist 内恰好命中同名 .js 产物，运行时零
+//   loader 依赖）；转译后删除 src，产物只留 dist + node_modules。
+//
+//   ⚠️ 为什么不再 tsx 直跑（1.4.0/1.5.0 真机实证的启动失败，2026-10-05 排障）：
+//   打包环境 Electron 会剥掉 NODE_OPTIONS（stderr: "Most NODE_OPTIONs are not
+//   supported in packaged apps"）→ tsx loader 挂不上；而 Node 24 的原生类型剥离
+//   仍能直跑 .ts 到 import 阶段，但它不做 tsx 的 `.js`→`.ts` 导入映射 →
+//   `import '../core/tdai-core.js'` 按字面找文件 → ERR_MODULE_NOT_FOUND →
+//   sidecar 启动 100% 失败，记忆功能全程静默降级。dev 模式不受影响（未打包，
+//   NODE_OPTIONS 生效），继续走 src + tsx 分支（MemoryHubService.resolveEntry
+//   的 dist 优先 / src 回退双分支无需改动）。
+//
+//   node_modules 仍在目标目录原地 pnpm install（保证 pnpm 符号链接正确）。
 //
 // 用法：
 //   node scripts/prepare-memory-hub.mjs [--skip-if-exists]
@@ -38,6 +50,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
+import { build as esbuildBuild } from 'esbuild';
 
 const ROOT = process.cwd();
 const TARGET = join(ROOT, 'resources', 'memory-hub');
@@ -113,7 +126,7 @@ function countFiles(dir) {
 // 1. 校验源码（vendored 进仓，缺失即失败——不再有"生成占位产物"的静默降级）
 const upstreamEntry = join(CORE, 'src', 'gateway', 'server.ts');
 const targetReady =
-  existsSync(join(TARGET, 'src', 'gateway', 'server.ts')) &&
+  existsSync(join(TARGET, 'dist', 'gateway', 'server.js')) &&
   existsSync(join(TARGET, 'node_modules'));
 
 if (!existsSync(upstreamEntry)) {
@@ -164,6 +177,48 @@ cpSync(join(CORE, 'src'), join(TARGET, 'src'), {
   },
 });
 console.log('[prepare-memory-hub] 已拷贝 src/ + package.json（排除测试文件）');
+
+// 4.5 编译 TS → dist（esbuild 转译，非 bundle；替代 tsx 直跑，见头注释）
+//     - 非 bundle：esbuild 只转译 entry 文件本身、import specifier 原样保留，
+//       源码的 `.js` 后缀导入（TS nodenext 风格）在 dist 里直接命中同名 .js 产物。
+//     - entryPoints 必须显式枚举全部 .ts：非 bundle 模式 esbuild 不沿 import 展开，
+//       漏枚举 = dist 缺文件 = 运行时才炸（sidecar 启动期 ERR_MODULE_NOT_FOUND）。
+const SRC_DIR = join(TARGET, 'src');
+const DIST_DIR = join(TARGET, 'dist');
+const collectTsEntries = (dir) => {
+  const files = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...collectTsEntries(p));
+    else if (entry.isFile() && /\.ts$/.test(entry.name) && !/\.d\.ts$/.test(entry.name)) {
+      files.push(p);
+    }
+  }
+  return files;
+};
+try {
+  await esbuildBuild({
+    entryPoints: collectTsEntries(SRC_DIR),
+    outbase: SRC_DIR,
+    outdir: DIST_DIR,
+    bundle: false,
+    format: 'esm',
+    platform: 'node',
+    target: 'node20',
+    sourcemap: false,
+    logLevel: 'warning',
+  });
+} catch (err) {
+  console.error(`[prepare-memory-hub] ❌ esbuild 转译失败（fail-closed，不产残缺包）：`, err);
+  process.exit(1);
+}
+// 产物自洽性校验：入口必须在位（与 MemoryHubService.resolveEntry 的 dist 分支对齐）
+if (!existsSync(join(DIST_DIR, 'gateway', 'server.js'))) {
+  console.error('[prepare-memory-hub] ❌ 编译产物缺 dist/gateway/server.js（入口校验失败）');
+  process.exit(1);
+}
+rmSync(SRC_DIR, { recursive: true, force: true });
+console.log('[prepare-memory-hub] 已编译 src/ → dist/（入口校验通过，src 已移除）');
 
 // 5. 在目标目录重建 node_modules
 //    - --store-dir 指向系统临时目录（勿放目标内，否则逻辑体积翻倍；pnpm 链接保持可用）
