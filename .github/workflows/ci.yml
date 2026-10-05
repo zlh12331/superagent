@@ -101,13 +101,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # ── 质量检查段（Release PR 全跳，2026-10-05 瘦身）────────────────────
+      # Release PR 的内容 = 来源 PR 已全绿验证的代码 + 版本号 + CHANGELOG——
+      # 代码零新增可测面，重复全套是纯耗时（每次发版固定多等 ~4 分钟）。
+      # 全跳后 Release PR 的 CI 只剩 CHANGELOG 润色门禁（实测 1m26s）。
+      # ⚠️ 每个 step 都要带 if：GitHub Actions 没有 step 组；漏一个 = 该检查在
+      # Release PR 上照跑（不破坏正确性，只是没省到）。
       - name: Typecheck
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm typecheck
 
       - name: Lint
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm lint
 
       - name: Secret scanning (gitleaks)
+        # Release PR 的 commit 均为 release-please 生成的（版本号+CHANGELOG，无代码），
+        # 且来源 PR 已跑过同一扫描——跳过安全。
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,15 +127,19 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
 
       - name: Static checks (tokens + i18n)
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm check:static
 
       - name: Token consistency (Style Dictionary)
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm tokens:check
 
       - name: Dead code check (knip)
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm knip
 
       - name: Dependency direction (depcruise)
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm depcruise
 
       - name: Schema drift check (drizzle-kit)
@@ -137,6 +152,7 @@ jobs:
         # ① 只看已跟踪文件，漏检新增的迁移 .sql / meta 快照——CI 上靠
         #    meta/_journal.json 被改动才侥幸生效；② 判据依赖提交状态，
         #    在本地会把「已 generate 未提交」误判为失败，故无法复用到本地）。
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm check:schema-drift
 
       # ── 单测 + 覆盖率已移出（2026-09-20 六平台改造）──────────────────────
@@ -148,10 +164,12 @@ jobs:
       - name: Gate scripts self-test
         # 守卫门禁自身的测试（棘轮/覆盖率真源/文件度量等 9 个文件）——
         # 此前只在本地 pre-push 跑，CI 不跑等于门禁自己没人看（2026-09-06 审计修复）
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm test:scripts
 
       - name: Dependency audit
         # audit-ci + .nsprc 白名单（2026-08-30 收紧为卡关；本地已验证 0 命中）
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: pnpm run audit
 
       - name: CHANGELOG polish check (Release PR only)

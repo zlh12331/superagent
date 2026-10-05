@@ -4,11 +4,24 @@
 
 ## [1.6.1-beta.4](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.4...v1.6.1-beta.4) (2026-10-05)
 
-> ⚠️ **预发布版本（beta）**：修复 1.6.0-beta.4 出包失败（发版门禁的过时哨兵）导致流水线阻塞的问题。本版与 1.6.0-beta.4 计划内容一致（打包架构修复已含），是**完整可升级的版本**——从 beta.2 升级即体验全部改进。
+> ⚠️ **预发布版本（beta）**：从 v1.6.0-beta.2 升级即体验全部改进（beta.3/beta.4 因发布流水线问题未出包，内容全部并入本版）。
+
+### 新增
+
+- **关于面板更新日志结构化展示**：更新日志按标题、列表、链接等排版渲染，不再出现原始 Markdown 符号（[#77](https://github.com/zlh12331/superagent/issues/77)）
 
 ### 修复
 
+- **应用内升级大幅提速**：记忆引擎运行目录改为单文件编译产物（282.8MB / 7078 个文件 → 35.6MB / 180 个文件），升级安装耗时从约 17 分钟回落到 2-4 分钟量级；引擎冷启动同步大幅加速（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **升级安装更轻**：打包剔除冗余的第二份依赖实体（依赖提升后的私有层），安装写入量减半（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **引擎启动等待放宽**：安装后首次冷启动（机械盘 + 杀软逐文件扫描场景）的就绪等待由 20 秒放宽至 60 秒，消除刚升级后记忆功能「健康检查未通过」的误报（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **记忆引擎打包架构重建**：依赖链接在打包时被展开为断链导致安装包压缩失败的问题已修复，全部依赖平铺到运行目录顶层，不再依赖链接结构（[#79](https://github.com/zlh12331/superagent/issues/79)）
 - **发版门禁修复**：发布流水线的完整性哨兵清单对齐新的引擎打包架构——1.6.0-beta.4 因此被误拦未出包，本版恢复发版通道（[#85](https://github.com/zlh12331/superagent/issues/85)）
+
+### 内部改进
+
+- 记忆引擎打包链路：esbuild bundle 单入口 + 按原生绑定外置依赖的可达性裁剪，入口校验与冒烟全通过（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- 发版通道自愈：修正 release-please 版本锚点与 tag 的不一致状态（[#81](https://github.com/zlh12331/superagent/issues/81)、[#88](https://github.com/zlh12331/superagent/issues/88)）
 
 <!-- changelog:polished -->
 
