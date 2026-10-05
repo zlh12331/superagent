@@ -193,6 +193,7 @@
     },
     {
       "includes": [
+        "**/scripts/check-release-anchor.ts",
         "**/packages/shared/src/constants/errors.ts",
         "**/packages/shared/src/ipc/channels.ts",
         "**/packages/shared/src/schemas/agent-events.ts",

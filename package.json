@@ -1,6 +1,6 @@
 {
   "name": "code-agent-desktop",
-  "version": "1.6.1-beta.4",
+  "version": "1.6.2",
   "description": "Code Agent Desktop - 生产级 Electron Code Agent 桌面应用（Windows 桌面端）",
   "author": "code-agent",
   "license": "MIT",
@@ -41,6 +41,7 @@
     "check:secrets": "gitleaks dir src --redact --no-banner",
     "check:secrets-git": "tsx scripts/check-secrets-git.ts",
     "check:schema-drift": "tsx scripts/check-schema-drift.ts",
+    "check:release-anchor": "tsx scripts/check-release-anchor.ts",
     "check:coverage-floors": "tsx scripts/check-coverage-floors.ts",
     "coverage-floors:tighten": "tsx scripts/check-coverage-floors.ts --tighten",
     "tokens:build": "node scripts/build-tokens.mjs",

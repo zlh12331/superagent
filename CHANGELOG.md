@@ -2,6 +2,25 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.2](https://github.com/zlh12331/superagent/compare/v1.6.1-beta.4...v1.6.2) (2026-10-05)
+
+> 本版本的核心是**记忆引擎在安装版中完整可用**：v1.6.0-beta 系列（未出正式包）把引擎改为单文件编译产物、依赖平铺与数据文件补齐——beta 系列真机验证 sidecar 已正常启动，本版为第一个包含完整修复的**正式版**，v1.5.0 用户将自动收到更新。
+
+### 修复
+
+- **记忆功能恢复可用**：修复记忆引擎在安装版中无法启动的问题（v1.4.0 起一直静默降级）——打包环境加载器失效、依赖链接被安装器展开、间接依赖与数据文件缺失四层问题逐一修复，引擎以单文件编译产物运行并补齐分词数据（[#91](https://github.com/zlh12331/superagent/issues/91)、[#92](https://github.com/zlh12331/superagent/issues/92)、[#71](https://github.com/zlh12331/superagent/issues/71)、[#73](https://github.com/zlh12331/superagent/issues/73)、[#75](https://github.com/zlh12331/superagent/issues/75)）
+- **应用内升级提速**：升级安装耗时从约 17 分钟回落到 2-4 分钟量级——引擎运行目录从 282.8MB / 7078 个文件缩减为约 220MB / 38 个文件，打包剔除冗余的重复依赖实体；引擎冷启动同步加速（[#71](https://github.com/zlh12331/superagent/issues/71)、[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **关于面板更新日志可读**：更新日志按标题、列表、链接结构化排版展示，不再出现原始 Markdown 符号（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **引擎启动等待放宽**：安装后首次冷启动（机械盘 + 杀软逐文件扫描场景）的就绪等待由 20 秒放宽至 60 秒，消除刚升级后记忆功能「健康检查未通过」的误报（[#77](https://github.com/zlh12331/superagent/issues/77)）
+
+### 内部改进
+
+- **发版锚点自洽护栏**：合并 Release PR 前校验 tag、版本清单与发布标记三者一致（`pnpm check:release-anchor`），防止打包失败后版本链断裂导致版本推导错乱；同步确立「CD 全绿后才合并 Release PR」的发版纪律（[#93](https://github.com/zlh12331/superagent/issues/93)）
+- **发布流水线效率**：Release PR 的 CI 只保留 CHANGELOG 润色门禁（实测 5 分钟 → 1 分半）；打包链路改动必须先通过本地完整打包验证（约 5.5 分钟）再推云端（[#89](https://github.com/zlh12331/superagent/issues/89)）
+- 引擎打包链路：esbuild bundle 单入口 + 按原生绑定外置依赖的可达性裁剪 + BM25 词典压缩，入口校验与冒烟全通过（[#77](https://github.com/zlh12331/superagent/issues/77)）
+
+<!-- changelog:polished -->
+
 ## [1.6.1-beta.4](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.4...v1.6.1-beta.4) (2026-10-05)
 
 > ⚠️ **预发布版本（beta）**：从 v1.6.0-beta.2 升级即体验全部改进（beta.3/beta.4 因发布流水线问题未出包，内容全部并入本版）。
