@@ -22,11 +22,18 @@ import { basename, join } from 'node:path';
 const ROOT = join(import.meta.dirname, '..');
 const RELEASE_DIR = join(ROOT, 'release');
 
-/** 引擎运行必需的关键依赖（裁掉任一即启动失败；作为裁剪误伤的哨兵） */
+/**
+ * 引擎运行必需的关键依赖（裁掉任一即启动失败；作为裁剪误伤的哨兵）
+ *
+ * ⚠️ 2026-10-05 bundle 架构后收缩：非 external 的依赖已全部打进
+ * `dist/gateway/server.js` 单文件（含引擎自有包 tcvdb-text），node_modules 只保留
+ * **external 的原生绑定子树**——哨兵只列这些（native .node 无法打进 bundle）。
+ * `tsx` 已随 dist 方案退役（打包产物为纯 JS，无需 TS loader），从哨兵移除。
+ */
 const REQUIRED_ENGINE_DEPS: readonly string[] = [
-  '@node-rs/jieba', // 中文分词（FTS5 索引依赖）
-  '@tencentdb-agent-memory/tcvdb-text', // 引擎自有包
-  'tsx', // TS 直跑 loader（打包产物为 JS 后可由 dist 分支取代）
+  '@node-rs/jieba', // 中文分词（FTS5 索引依赖；external 原生绑定）
+  '@reflink/reflink', // reflink 复制原生绑定（external）
+  'sqlite-vec', // 向量检索原生绑定（external）
 ];
 
 /** 定位 electron-builder 的 unpacked 目录（跨平台） */
