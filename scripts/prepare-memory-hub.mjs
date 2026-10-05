@@ -308,6 +308,43 @@ console.log(
   '[prepare-memory-hub] 已 bundle src/gateway/server.ts → dist/（入口校验通过，src 已移除）',
 );
 
+// 4.6 记录 bundle 内联包的实体路径 + 补拷 data 文件（必须在 5.1 裁剪**之前**——
+//     tcvdb-text 的 JS 已进 bundle，其实体与顶层链接会被 5.1 判为孤儿删掉；
+//     但它的 data/ 散装文件运行时仍被按原包路径推导读取）
+//     ⚠️ 拷贝必须也在这里完成：realpath 指向 .pnpm 内部，5.1.5 删 .pnpm 后就
+//     读不到了（曾在 5.1.6 才拷，实体已被自己删除——beta.4 修复期实测）。
+//     bundle 后的路径推导：tcvdb-text 的 paths.js packageRoot = __dirname/../，
+//     __dirname = dist/gateway/ ⇒ 运行时读 dist/data/ → 拷到 dist/data/ 对齐。
+const BUNDLED_DATA_PKGS = ['@tencentdb-agent-memory/tcvdb-text']; // 包名 → data/ 需补拷
+for (const name of BUNDLED_DATA_PKGS) {
+  const real = realpathSync(join(TARGET, 'node_modules', name));
+  const dataSrc = join(real, 'data');
+  const dataDest = join(DIST_DIR, 'data');
+  if (existsSync(dataSrc)) {
+    mkdirSync(dataDest, { recursive: true });
+    // BM25 词典 json 原始版带缩进空格（实测 273MB）；minify 语义无损（键值不变），
+    // 降一数量级。解析失败时退回原样拷贝（宁可大不可缺）。
+    for (const entry of readdirSync(dataSrc, { withFileTypes: true })) {
+      const src = join(dataSrc, entry.name);
+      const dest = join(dataDest, entry.name);
+      if (entry.isFile() && entry.name.endsWith('.json')) {
+        try {
+          const parsed = JSON.parse(readFileSync(src, 'utf8'));
+          writeFileSync(dest, JSON.stringify(parsed), 'utf8');
+          continue;
+        } catch {
+          // 解析失败 → 原样拷贝
+        }
+      }
+      cpSync(src, dest, { recursive: true });
+    }
+    console.log(`[prepare-memory-hub] 已补拷 ${name} data/ → dist/data/（JSON 已 minify）`);
+  } else {
+    console.error(`[prepare-memory-hub] ❌ ${name} 缺 data/ 目录（stopwords/BM25 词典缺失）`);
+    process.exit(1);
+  }
+}
+
 // 5.1 裁剪孤儿依赖（体积优化）
 //
 // 策略（2026-09-13 改为可达性分析，替代此前的包名前缀匹配）：
@@ -589,6 +626,8 @@ if (existsSync(PRIVATE_DIR)) {
   // 都安全——不跟随目标；Beta.3 教训：对 junction 用 rmSync(recursive) 会深入
   // .pnpm 实体引发连锁错误）
   const relink = [];
+  /** 包名 → 实体路径（bundle 内联包的 data 文件要从这里补拷，见 5.1.6） */
+  const relinkPackages = new Map();
   const collectLinks = (dir, depth) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (
@@ -610,6 +649,14 @@ if (existsSync(PRIVATE_DIR)) {
       if (real !== resolve(p)) {
         unlinkSync(p);
         relink.push([p, real]);
+        // 记录包名 → 实体路径（供 5.1.6 补拷数据文件）。
+        // ⚠️ 不用正则：Windows 路径分隔符 + node -e 双层转义极易失真，
+        // 分段找最后一个 node_modules 段之后的Join 才稳。
+        const segs = String(p).split(/[\\/]/);
+        const nmIdx = segs.lastIndexOf('node_modules');
+        if (nmIdx >= 0 && nmIdx + 1 < segs.length) {
+          relinkPackages.set(segs.slice(nmIdx + 1).join('/'), real);
+        }
         continue;
       }
       // 真实目录：仅 @scope 组织层需要下钻找包链接
