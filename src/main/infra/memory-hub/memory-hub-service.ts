@@ -43,8 +43,15 @@ import type { MemoryPort } from './types';
 
 const TAG = '[memory-hub]';
 
-/** 就绪等待超时（毫秒） */
-const START_TIMEOUT_MS = 20_000;
+/**
+ * 就绪等待超时（毫秒）
+ *
+ * ⚠️ 60s 的依据（2026-10-05 beta.2 真机实证）：安装后**首次**冷启动要加载 dist 模块图
+ * + node_modules 7000+ 小文件，HDD + Windows Defender 实时扫描下 20s 不够（stderr 空、
+ * 进程存活、/health 未通——纯慢，不是崩）；OS 缓存暖后秒级就绪。放宽只影响冷启动
+ * 那一次，热启动仍由实际就绪时间决定（轮询到即返回，不会等满）。
+ */
+const START_TIMEOUT_MS = 60_000;
 /** 健康轮询间隔（毫秒） */
 const HEALTH_POLL_MS = 300;
 /** 单请求超时（健康探测） */
