@@ -565,6 +565,96 @@ if (existsSync(PNPM_DIR)) {
   }
 }
 
+// 5.1.5 依赖链接实体化（dereference）+ 删除 .pnpm 私有层
+//
+// ⚠️ 必须与 electron-builder.yml 里「排除 .pnpm」配套（beta.3 CD 实测失败根因）：
+//   hoist 的顶层依赖是 junction（指向 .pnpm 实体），filter 排除 .pnpm 后打包产物里
+//   这些链接**全部断链** → 7za 报大量 "The system cannot find the path specified"
+//   退出码 1（electron-builder/scripts 注释早有警告："断链会让 7zip 压缩报错"）。
+//   解法：打包前把顶层 junction 解引用为真实目录副本、整个删掉 .pnpm——
+//   裁剪后顶层只剩 external 子树（~10 个包），解引用成本可忽略；
+//   产物变为「纯实体、零链接」，任何下游复制/压缩链路都不再依赖 pnpm 布局。
+// 细节：
+//   - realpath 判定链接（Windows 上 pnpm v11 用 symlink、旧版用 junction，两者
+//     lstat 行为不同——统一以 realpath 与原路径是否一致为准）
+//   - 两步走：先 unlink 全部链接本体（对 symlink/junction 都安全），再从 .pnpm
+//     实体复制到顶层空位——避免 rmSync(recursive) 误入 junction 实体、避免
+//     rename 的占用面（Beta.3 前两版实测分别栽在这两处）
+//   - 复制安全：pnpm 的包间链接都在 .pnpm 私有层，包目录内部无嵌套链接，单层复制不扩散
+//   - .bin（命令链接池）与 pnpm 元数据文件运行时不需要，随 .pnpm 一起删
+const NM_DIR = join(TARGET, 'node_modules');
+const PRIVATE_DIR = join(NM_DIR, '.pnpm');
+if (existsSync(PRIVATE_DIR)) {
+  // 收集所有链接成员并**只删链接本体**（unlinkSync 对 symlink 与 Windows junction
+  // 都安全——不跟随目标；Beta.3 教训：对 junction 用 rmSync(recursive) 会深入
+  // .pnpm 实体引发连锁错误）
+  const relink = [];
+  const collectLinks = (dir, depth) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (
+        entry.name === '.pnpm' ||
+        entry.name === '.bin' ||
+        entry.name === '.modules.yaml' ||
+        entry.name === '.package-map.json' ||
+        entry.name === '.pnpm-workspace-state-v1.json'
+      ) {
+        continue;
+      }
+      const p = join(dir, entry.name);
+      let real;
+      try {
+        real = realpathSync(p);
+      } catch {
+        continue; // 断链：随 .pnpm 删除一起消失
+      }
+      if (real !== resolve(p)) {
+        unlinkSync(p);
+        relink.push([p, real]);
+        continue;
+      }
+      // 真实目录：仅 @scope 组织层需要下钻找包链接
+      if (entry.isDirectory() && entry.name.startsWith('@') && depth === 0) {
+        collectLinks(p, depth + 1);
+      }
+    }
+  };
+  collectLinks(NM_DIR, 0);
+  // 从 .pnpm 实体复制到顶层空位（目标已 unlink，纯新建——无 rename/覆盖/占用面）
+  for (const [p, real] of relink) {
+    cpSync(real, p, { recursive: true });
+  }
+  // 删私有层与运行时无用元数据；清掉断链清理残留的空 @scope 壳与顶层散文件
+  rmSync(PRIVATE_DIR, { recursive: true, force: true });
+  rmSync(join(NM_DIR, '.bin'), { recursive: true, force: true });
+  for (const entry of readdirSync(NM_DIR, { withFileTypes: true })) {
+    const p = join(NM_DIR, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name.startsWith('@')) {
+        let subs;
+        try {
+          subs = readdirSync(p);
+        } catch {
+          continue;
+        }
+        if (subs.length === 0) rmSync(p, { recursive: true, force: true });
+      }
+    } else {
+      rmSync(p, { force: true });
+    }
+  }
+  // external 包存在性校验（fail-closed——实体化丢包会让 sidecar 运行时才炸）
+  for (const pkg of BUNDLE_EXTERNAL) {
+    if (!existsSync(join(NM_DIR, pkg, 'package.json'))) {
+      console.error(`[prepare-memory-hub] ❌ 实体化后缺 external 包：${pkg}`);
+      process.exit(1);
+    }
+  }
+  console.log(
+    `[prepare-memory-hub] 已实体化 ${relink.length} 个依赖链接并删除 .pnpm 私有层` +
+      '（产物零链接，与打包排除 .pnpm 自洽）',
+  );
+}
+
 // 5.2 删除运行期无用文件（sourcemap / 类型声明）——同时修复 Windows MAX_PATH
 //
 // 背景：electron-builder 把本目录部署到 process.resourcesPath/memory-hub，
