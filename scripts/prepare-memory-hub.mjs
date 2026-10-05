@@ -155,17 +155,14 @@ for (const f of COPY_FILES) {
   const srcFile = join(CORE, f);
   if (existsSync(srcFile)) cpSync(srcFile, join(TARGET, f));
 }
-// 精简上游 package.json 的 optionalDependencies（mongodb/cos/kafka/redis/clickhouse/opik 等
-// 服务端/测试用重型包，不在本集成范围）。不能设 `optional=false`——那会把依赖树中传递的
-// 平台二进制（如 @node-rs/jieba-win32-x64-msvc）一并排除，导致 jieba 加载崩溃。
-// 清空顶层 optionalDependencies 即可：测试重包不装，平台二进制照常解析。
-const pkgPath = join(TARGET, 'package.json');
-const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-if (pkg.optionalDependencies && Object.keys(pkg.optionalDependencies).length > 0) {
-  pkg.optionalDependencies = {};
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), 'utf8');
-  console.log('[prepare-memory-hub] 已清空 optionalDependencies（排除测试重型包）');
-}
+// ⚠️ optionalDependencies **不能清空**（2026-10-05 bundle 实测）：可选后端的包
+//   （@clickhouse/client、@opentelemetry/sdk-node、kafka/crc-32 等）在引擎源码的
+//   **静态 import 链**上——bundle 时 esbuild 要沿链解析，缺包即 Build failed
+//   （21 个 Could not resolve）。旧"清空重包"策略只适用于转译模式（不解析 import），
+//   bundle 模式下必须先装上供解析；bundle 完成后 5.1 裁剪会以 BUNDLE_EXTERNAL 为
+//   闭包起点把它们全部回收（最终 node_modules 只剩 external 子树）。
+//   也不能用 install 的 `--no-optional`——那会连带排除依赖树中传递的平台二进制
+//   （如 @node-rs/jieba-win32-x64-msvc），导致 jieba 加载崩溃。
 const IGNORE_DIRS = new Set(['__tests__', '__mocks__', 'integrations']);
 cpSync(join(CORE, 'src'), join(TARGET, 'src'), {
   recursive: true,
@@ -177,48 +174,6 @@ cpSync(join(CORE, 'src'), join(TARGET, 'src'), {
   },
 });
 console.log('[prepare-memory-hub] 已拷贝 src/ + package.json（排除测试文件）');
-
-// 4.5 编译 TS → dist（esbuild 转译，非 bundle；替代 tsx 直跑，见头注释）
-//     - 非 bundle：esbuild 只转译 entry 文件本身、import specifier 原样保留，
-//       源码的 `.js` 后缀导入（TS nodenext 风格）在 dist 里直接命中同名 .js 产物。
-//     - entryPoints 必须显式枚举全部 .ts：非 bundle 模式 esbuild 不沿 import 展开，
-//       漏枚举 = dist 缺文件 = 运行时才炸（sidecar 启动期 ERR_MODULE_NOT_FOUND）。
-const SRC_DIR = join(TARGET, 'src');
-const DIST_DIR = join(TARGET, 'dist');
-const collectTsEntries = (dir) => {
-  const files = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...collectTsEntries(p));
-    else if (entry.isFile() && /\.ts$/.test(entry.name) && !/\.d\.ts$/.test(entry.name)) {
-      files.push(p);
-    }
-  }
-  return files;
-};
-try {
-  await esbuildBuild({
-    entryPoints: collectTsEntries(SRC_DIR),
-    outbase: SRC_DIR,
-    outdir: DIST_DIR,
-    bundle: false,
-    format: 'esm',
-    platform: 'node',
-    target: 'node20',
-    sourcemap: false,
-    logLevel: 'warning',
-  });
-} catch (err) {
-  console.error(`[prepare-memory-hub] ❌ esbuild 转译失败（fail-closed，不产残缺包）：`, err);
-  process.exit(1);
-}
-// 产物自洽性校验：入口必须在位（与 MemoryHubService.resolveEntry 的 dist 分支对齐）
-if (!existsSync(join(DIST_DIR, 'gateway', 'server.js'))) {
-  console.error('[prepare-memory-hub] ❌ 编译产物缺 dist/gateway/server.js（入口校验失败）');
-  process.exit(1);
-}
-rmSync(SRC_DIR, { recursive: true, force: true });
-console.log('[prepare-memory-hub] 已编译 src/ → dist/（入口校验通过，src 已移除）');
 
 // 5. 在目标目录重建 node_modules
 //    - --store-dir 指向系统临时目录（勿放目标内，否则逻辑体积翻倍；pnpm 链接保持可用）
@@ -272,6 +227,85 @@ run(
   pnpm,
   ['install', '--prod', '--ignore-scripts', '--no-frozen-lockfile', '--store-dir', storeDir],
   TARGET,
+);
+
+// 4.5 编译 TS → dist（esbuild **bundle 单入口**；2026-10-05 深度优化安装体积）
+//     - bundle：非 external 的依赖全部打进 dist/gateway/server.js 单文件——
+//       安装体积/时间的主导因素是 node_modules 的海量小文件（NSIS 解引用复制），
+//       bundle 后 node_modules 只需保留 external 的原生包子树。
+//     - external：原生 .node 绑定无法打包（esbuild 不处理二进制），运行时仍从
+//       node_modules 解析（hoist 后顶层可达）。上游裸 require 的包全集见
+//       grep（createRequire 调用）：node:sqlite（内置，自动 external）、
+//       @node-rs/jieba、@node-rs/jieba/dict、sqlite-vec。
+//     - ../integrations/* external：该目录未拷贝进产物（IGNORE_DIRS），且仅经
+//       **动态 import**（server.ts 的 cos-backend 等）延迟加载——bundle 时必须
+//       放行解析，运行时行为与转译模式一致（走到才炸，本集成不使用该插件面）。
+//     - banner：**不加**。上游对 require 的使用全部自建 createRequire
+//       （tokenize.ts / memory-store.ts 等文件头 import { createRequire } from
+//       'node:module'），banner 再注入会与它们在输出顶层重名
+//       （"createRequire has already been declared"，实测冒烟抓到）。
+//     - stub 插件：node-llama-cpp 系（本地推理，上游注释明说是 OpenClaw 的 peer、
+//       经动态 import 按需加载，本集成不使用）→ 空模块。运行时走到该分支才炸，
+//       与 integrations 同一取舍。
+//     - @reflink/reflink：传递依赖的原生包（引擎源码无直接 import，被某保留包
+//       require），必须 external 而非 stub；裁剪起点同步包含它。
+//     - ⚠️ external 清单同时是 5.1 裁剪的可达性起点：非 external 的包已被打进
+//       dist，运行时不再从 node_modules 解析，node_modules 只保留 external 子树。
+//     - ⚠️ 位置约束：必须在 5 install **之后**——bundle 要沿 import 链解析
+//       node_modules（首跑曾误置于 install 前，21 个 Could not resolve 全源于此）。
+const BUNDLE_EXTERNAL = ['@node-rs/jieba', 'sqlite-vec', '@reflink/reflink'];
+const SRC_DIR = join(TARGET, 'src');
+const DIST_DIR = join(TARGET, 'dist');
+const stubLocalInference = {
+  name: 'stub-local-inference',
+  setup(build) {
+    build.onResolve({ filter: /^(node-llama-cpp|@node-llama-cpp\/.*)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-llama',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'stub-llama' }, () => ({
+      contents: 'export default {};',
+      loader: 'js',
+    }));
+  },
+};
+try {
+  await esbuildBuild({
+    entryPoints: [join(SRC_DIR, 'gateway', 'server.ts')],
+    outdir: join(DIST_DIR, 'gateway'),
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    target: 'node20',
+    sourcemap: false,
+    logLevel: 'warning',
+    plugins: [stubLocalInference],
+    external: [...BUNDLE_EXTERNAL, '../integrations/*'],
+    // ⚠️ 别名 __cjsRequire 必需：banner 与上游模块的同名 import 不参与 esbuild 的
+    //    scope-hoist 重命名，直用 createRequire 会撞上游自建 import（实测报
+    //    "Identifier 'createRequire' has already been declared"）。
+    //    const require = … 供 esbuild 的 __require fallback 使用（CJS 依赖内部的
+    //    动态 require——如 node:assert——在 ESM 输出里只能靠它解析，实测
+    //    "Dynamic require of node:assert is not supported"）。
+    banner: {
+      js: [
+        "import { createRequire as __cjsRequire } from 'node:module';",
+        'const require = __cjsRequire(import.meta.url);',
+      ].join('\n'),
+    },
+  });
+} catch (err) {
+  console.error(`[prepare-memory-hub] ❌ esbuild bundle 失败（fail-closed，不产残缺包）：`, err);
+  process.exit(1);
+}
+// 产物自洽性校验：入口必须在位（与 MemoryHubService.resolveEntry 的 dist 分支对齐）
+if (!existsSync(join(DIST_DIR, 'gateway', 'server.js'))) {
+  console.error('[prepare-memory-hub] ❌ 编译产物缺 dist/gateway/server.js（入口校验失败）');
+  process.exit(1);
+}
+rmSync(SRC_DIR, { recursive: true, force: true });
+console.log(
+  '[prepare-memory-hub] 已 bundle src/gateway/server.ts → dist/（入口校验通过，src 已移除）',
 );
 
 // 5.1 裁剪孤儿依赖（体积优化）
@@ -420,20 +454,17 @@ function buildPnpmIndex() {
   return index;
 }
 
-/** 从顶层依赖出发求可达包名集合 */
+/** 从 BUNDLE_EXTERNAL（bundle 后仍需 node_modules 的包）出发求可达包名集合 */
 function reachablePackages() {
-  const rootPkg = JSON.parse(readFileSync(join(TARGET, 'package.json'), 'utf8'));
   const index = buildPnpmIndex();
   const keepNames = new Set();
   const keepEntries = new Set();
-  // 起点必须包含 optionalDependencies：上游对可选后端（如 @clickhouse/client）有
-  // **静态 import**，缺失会导致模块解析失败（实测：漏掉它直接让引擎启动崩溃）。
-  // peerDependencies 不纳入起点——但作为传递依赖时会经 readDeps 进入（见下），
-  // 若未被任何保留实体引用则自然被裁。
-  const queue = [
-    ...Object.keys(rootPkg.dependencies ?? {}),
-    ...Object.keys(rootPkg.optionalDependencies ?? {}),
-  ];
+  // 起点只放 external 清单（bundle 后非 external 的包已打进 dist，运行时不再
+  // 从 node_modules 解析）——节点上被 external 包依赖的原生绑定（如
+  // @node-rs/jieba 的平台 optionalDeps）会经 readDeps 自然进入闭包。
+  // 旧起点（顶层 dependencies + optionalDependencies 全量）在 bundle 模式下
+  // 会把已打进 dist 的几百 MB 包留在 node_modules，违背 bundle 的优化目标。
+  const queue = [...BUNDLE_EXTERNAL];
 
   while (queue.length > 0) {
     const name = queue.pop();

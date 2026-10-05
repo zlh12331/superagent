@@ -21,6 +21,8 @@
 import type { AppInfoRes, UpdateStatusPayload } from '@code-agent/shared/renderer';
 import { Clipboard, FolderOpen, Loader2, PackageCheck, RefreshCw, Rocket } from 'lucide-react';
 import { type ReactElement, type ReactNode, useState } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -90,25 +92,71 @@ function ChannelBadge({ channel }: { readonly channel: string }): ReactElement {
 /**
  * 更新说明折叠区
  *
- * 内容来自 GitHub release body（即我们润色过的 CHANGELOG 段落），按纯文本 +
- * 换行保真渲染——不为这个低频场景引入 markdown 管线。默认只显示前 3 行。
+ * 内容来自 GitHub release body（即我们润色过的 CHANGELOG 段落）——是**真 Markdown**
+ * （分组标题/列表/粗体/链接）。按结构渲染：react-markdown + remark-gfm（依赖已随
+ * 聊天 Markdown 组件在 bundle 内，零新增），components 映射为设置面板的紧凑排版；
+ * 不用 shiki（更新日志无代码块场景）。折叠用 max-height 而非行数截断（渲染后无行概念）。
  */
+const NOTES_MARKDOWN_COMPONENTS = {
+  blockquote: ({ children }: { children?: ReactNode }) => (
+    <blockquote className="border-foreground/20 border-l-2 pl-2 text-muted-foreground italic">
+      {children}
+    </blockquote>
+  ),
+  h1: ({ children }: { children?: ReactNode }) => (
+    <p className="text-foreground text-xs font-medium">{children}</p>
+  ),
+  h2: ({ children }: { children?: ReactNode }) => (
+    <p className="text-foreground text-xs font-medium">{children}</p>
+  ),
+  h3: ({ children }: { children?: ReactNode }) => (
+    <p className="text-foreground mt-2 text-xs font-medium">{children}</p>
+  ),
+  p: ({ children }: { children?: ReactNode }) => (
+    <p className="text-muted-foreground text-xs leading-[1.6]">{children}</p>
+  ),
+  ul: ({ children }: { children?: ReactNode }) => <ul className="ml-4 list-disc">{children}</ul>,
+  ol: ({ children }: { children?: ReactNode }) => <ol className="ml-4 list-decimal">{children}</ol>,
+  li: ({ children }: { children?: ReactNode }) => (
+    <li className="text-muted-foreground text-xs leading-[1.6]">{children}</li>
+  ),
+  strong: ({ children }: { children?: ReactNode }) => (
+    <strong className="text-foreground/90 font-medium">{children}</strong>
+  ),
+  a: ({ children, href }: { children?: ReactNode; href?: string | undefined }) => (
+    <a
+      className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children }: { children?: ReactNode }) => (
+    <code className="bg-foreground/5 rounded px-1 font-mono text-xs">{children}</code>
+  ),
+} satisfies Components;
+
 function ReleaseNotes({ notes }: { readonly notes: string }): ReactElement {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const lines = notes.split('\n').filter((line) => line.trim() !== '');
-  const visible = expanded ? lines : lines.slice(0, 3);
   return (
     <div className="flex w-full flex-col items-start gap-1">
       <span className="text-muted-foreground text-xs">{t('update.notesTitle')}</span>
-      <p className="text-muted-foreground text-xs leading-[1.6] whitespace-pre-line">
-        {visible.join('\n')}
-      </p>
-      {lines.length > 3 && (
-        <Button variant="ghost" size="sm" onClick={() => setExpanded((prev) => !prev)}>
-          {expanded ? t('update.notesCollapse') : t('update.notesExpand')}
-        </Button>
-      )}
+      <div
+        className={cn(
+          'w-full overflow-hidden transition-[max-height]',
+          expanded ? 'max-h-none' : 'max-h-32',
+        )}
+      >
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={NOTES_MARKDOWN_COMPONENTS}>
+          {notes}
+        </ReactMarkdown>
+      </div>
+      <Button variant="ghost" size="sm" onClick={() => setExpanded((prev) => !prev)}>
+        {expanded ? t('update.notesCollapse') : t('update.notesExpand')}
+      </Button>
     </div>
   );
 }

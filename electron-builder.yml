@@ -131,14 +131,20 @@ extraResources:
   # ── 已知限制：electron-builder 的 extraResources 默认跳过名为 node_modules 的所有目录
   #    （github electron-userland/electron-builder#3104/#3185），即使 filter "**/*" 也不生效。
   #    因此单独加一条 from 以 node_modules 结尾的 extraResources 强制包含（参考 #1492 的解法）。
+  # ── 排除 .pnpm（2026-10-05，beta.2 真机实证）：prepare 已 shamefullyHoist——
+  #    全部可达依赖平铺在 node_modules 顶层，.pnpm 私有层是同一批包的第二份实体
+  #    （运行时经顶层解析，永不读 .pnpm）。不排除则打包/安装双份展开：
+  #    beta.2 安装耗时 17m33s（vs beta.1 的 10m41s），排除后回到单份体积。
   - from: resources/memory-hub
     to: memory-hub
     filter:
       - "**/*"
+      - "!**/.pnpm/**"
   - from: resources/memory-hub/node_modules
     to: memory-hub/node_modules
     filter:
       - "**/*"
+      - "!**/.pnpm/**"
   # codegraph 代码智能 CLI（平台捆绑包：vendored Node 24 + app）
   # 由 scripts/prepare-codegraph.mjs 生成；CodebaseService 打包环境读取
   # process.resourcesPath/codegraph（dev 直接定位 node_modules/.pnpm 平台包）
