@@ -124,7 +124,10 @@ extraResources:
       - "**/*"
   # 记忆引擎（TencentDB-Agent-Memory · MemoryCore 运行目录）
   # 由 scripts/prepare-memory-hub.mjs 生成；MemoryHubService 在打包环境读取
-  # process.resourcesPath/memory-hub（src/gateway/server.ts + node_modules，tsx 直跑）
+  # process.resourcesPath/memory-hub（dist/gateway/server.js + node_modules）。
+  # 2026-10-05 起 prepare 用 esbuild 转译出 dist（tsx 直跑仅剩 dev 分支）：
+  # 打包环境 NODE_OPTIONS 被 Electron 剥掉，tsx 挂不上 → .js→.ts 导入映射失败
+  # （1.4.0/1.5.0 真机实证 sidecar 启动 100% 失败，详见 prepare 脚本头注释）。
   # ── 已知限制：electron-builder 的 extraResources 默认跳过名为 node_modules 的所有目录
   #    （github electron-userland/electron-builder#3104/#3185），即使 filter "**/*" 也不生效。
   #    因此单独加一条 from 以 node_modules 结尾的 extraResources 强制包含（参考 #1492 的解法）。
