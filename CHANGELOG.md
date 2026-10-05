@@ -2,6 +2,22 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.2...v1.6.0-beta.3) (2026-10-05)
+
+> ⚠️ **预发布版本（beta）**：本版是 beta.2 真机反馈的提速闭环——**应用内升级耗时大幅缩短**、引擎冷启动加速、关于面板更新日志改为结构化展示。从 beta.2 升级后请实际体验并向我们反馈。
+
+### 修复
+
+- **升级安装提速**：记忆引擎运行目录改为单文件产物（282.8MB / 7078 个文件 → **35.6MB / 180 个文件**），升级安装耗时预期从约 17 分钟回落到 **2-4 分钟**量级；引擎冷启动（首次加载）同步大幅加速（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **关于面板更新日志可读**：更新日志按标题、列表、链接等结构化排版展示，不再出现原始 Markdown 符号（[#77](https://github.com/zlh12331/superagent/issues/77)）
+- **引擎启动等待放宽**：安装后首次冷启动（机械盘 + 杀软逐文件扫描场景）的就绪等待由 20 秒放宽至 60 秒，消除刚升级后记忆功能「健康检查未通过」的误报；打包内容剔除冗余的第二份依赖实体，安装写入量减半（[#77](https://github.com/zlh12331/superagent/issues/77)）
+
+### 内部改进
+
+- 引擎打包链路：esbuild bundle 单入口 + 按原生绑定外置依赖的可达性裁剪，入口校验与冒烟全通过（[#77](https://github.com/zlh12331/superagent/issues/77)）
+
+<!-- changelog:polished -->
+
 ## [1.6.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.1...v1.6.0-beta.2) (2026-10-05)
 
 > ⚠️ **预发布版本（beta）**：记忆引擎修复链的最后一环。beta.1 已让引擎入口跑通但仍有间接依赖无法定位；本版预期**完整恢复记忆功能**，请从 beta.1 升级后实际使用验证。
