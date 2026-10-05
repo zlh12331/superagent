@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.5.0...v1.6.0-beta.1) (2026-10-05)
+
+> ⚠️ **预发布版本（beta）**：用于真机验证向导式升级安装与记忆引擎修复，稳定版用户默认不会收到本版更新提示；想主动体验请在 设置 → 关于 打开「接收预发布更新」后点一次「检查更新」。验证稳定后将收敛为 1.6.0 正式版。
+
+### 修复
+
+- **记忆功能恢复可用**：修复记忆引擎子进程在安装版中启动失败的问题（1.4.0 / 1.5.0 实测受影响）——受影响版本的记忆功能一直在静默降级；本版起引擎以编译产物运行，不再依赖开发期加载器，从本版升级后将真正建立记忆（[#73](https://github.com/zlh12331/superagent/issues/73)）
+- **引擎运行目录瘦身**：记忆引擎由源码直跑改为编译产物，运行目录 372 MB → 283 MB，应用内升级的安装等待相应缩短（[#73](https://github.com/zlh12331/superagent/issues/73)）
+
+### 内部改进
+
+- 记忆引擎打包链路重做：esbuild 转译出 dist 替代 tsx 源码直跑——打包环境 NODE_OPTIONS 被 Electron 剥掉导致 tsx 挂不上、Node 24 原生类型剥离不做 `.js`→`.ts` 导入映射，是启动失败的完整根因链；入口校验 fail-closed（[#73](https://github.com/zlh12331/superagent/issues/73)）
+
+<!-- changelog:polished -->
+
 ## [1.5.0](https://github.com/zlh12331/superagent/compare/v1.4.0...v1.5.0) (2026-10-04)
 
 > 本版本聚焦「等待可见」与「视觉可信」：更新安装改为向导式、进度全程可见，新增「接收预发布更新」开关，审批与提问等待均显示倒计时；同时完成一轮界面视觉深修（12 处对比度达标 + 多处静默失效修复）与 Agent 回合引擎的 XState 架构升级，并全量重写了 AI / Agent / 工具层注释（零逻辑改动）。
