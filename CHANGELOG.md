@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.5.0...v1.6.0-beta.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **memory-engine:** 打包产物改 dist 转译，修复打包版 sidecar 启动 100% 失败 ([#73](https://github.com/zlh12331/superagent/issues/73)) ([be09ae4](https://github.com/zlh12331/superagent/commit/be09ae49b2143fdbb195dae574c20f0aacecd1bd))
+
 ## [1.5.0](https://github.com/zlh12331/superagent/compare/v1.4.0...v1.5.0) (2026-10-04)
 
 > 本版本聚焦「等待可见」与「视觉可信」：更新安装改为向导式、进度全程可见，新增「接收预发布更新」开关，审批与提问等待均显示倒计时；同时完成一轮界面视觉深修（12 处对比度达标 + 多处静默失效修复）与 Agent 回合引擎的 XState 架构升级，并全量重写了 AI / Agent / 工具层注释（零逻辑改动）。
