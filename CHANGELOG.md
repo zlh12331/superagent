@@ -2,6 +2,16 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.1-beta.4](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.4...v1.6.1-beta.4) (2026-10-05)
+
+> ⚠️ **预发布版本（beta）**：修复 1.6.0-beta.4 出包失败（发版门禁的过时哨兵）导致流水线阻塞的问题。本版与 1.6.0-beta.4 计划内容一致（打包架构修复已含），是**完整可升级的版本**——从 beta.2 升级即体验全部改进。
+
+### 修复
+
+- **发版门禁修复**：发布流水线的完整性哨兵清单对齐新的引擎打包架构——1.6.0-beta.4 因此被误拦未出包，本版恢复发版通道（[#85](https://github.com/zlh12331/superagent/issues/85)）
+
+<!-- changelog:polished -->
+
 ## [1.6.0-beta.4](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.3...v1.6.0-beta.4) (2026-10-05)
 
 > ⚠️ **预发布版本（beta）**：beta.3 因发布流水线缺陷未能出包（版本号未占用，直接跳至 beta.4）。本版 = beta.3 计划内容 + 打包修复，是**完整可升级的版本**——从 beta.2 升级即体验全部改进。
