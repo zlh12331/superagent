@@ -200,6 +200,35 @@ Release 资产与正文不受影响（tag 只是引用），用户侧无需任�
 
 ## 七、常见坑
 
+### 7.1 发版锚点自洽护栏（2026-10-05 落地，1.6.x 连环事故后）
+
+**1.6.x 事故全景**：Release PR 合并时 CD 打包失败 → tag 缺失，但 manifest 已推进、
+label 已收尾 tagged → release-please 三态（tag ↔ manifest ↔ Release PR）不一致 →
+版本推导回退全量历史（#80/#87 两次误开把全部历史条目当增量、1.6.0 被消费、
+版本链跳到 1.6.1）。两次补救均以「补钉缺失 tag 钉回对应 release commit」使
+三态自洽（v1.6.0-beta.3 → b1bc81bc、v1.6.0-beta.4 → 3fdfabd8）。
+
+**护栏 A（合并纪律）**：Release PR 的 squash 合并动作**只在 CD 全绿后人工执行**——
+不发 auto-merge。CD 失败时不合并（失败不占号可重试），修复后重跑 CD 而不是
+先把 PR 合进 main。这是本次事故的总根因防线。
+
+**护栏 B（锚点检查）**：合并 Release PR 前必跑：
+
+```bash
+pnpm check:release-anchor     # tag ↔ manifest ↔ Release PR label 三态自洽校验
+```
+
+四项检查任一 ❌ 即禁止合并，按输出提示走 a/b/c 修复路径（补 tag / revert
+release commit / 修 label）。脚本实现要点：零子进程（fetch 直连 GitHub REST），
+动态值先过 SemVer 严格白名单再进 URL path，host 白名单 api.github.com（SSRF 防线）。
+
+**版本号模型（本仓库实际行为，与 SemVer 标准一致）**：beta 版本挂在**下一个
+未发布的正式版**之下（1.6.0-beta.1 → 1.6.0-beta.2 → …）；正式版发布后计数
+从 beta.1 重新开始。⚠️ 若 beta 序列中途 CD 失败且选择了「补 tag 自洽」，该
+beta 号即被消费（视为已发布）——后续版本会在其之上递进（fix 后 patch+1，
+如 1.6.1-beta.4），这是事故的最小代价路径而非标准流；1.6.1-beta.4 已按此
+接受为既成事实，1.6.2 正式版发布后链条重新干净（下个 beta 从 1.6.3-beta.1 起算）。
+
 | 现象 | 原因 |
 |---|---|
 | 合并 Release PR 后没打 tag | 旧版曾用非法的 `skip-tag` 输入（被 Actions 静默忽略）；现用 `skip-github-release: true`，tag 一律由 `release.yml` 创建 |
