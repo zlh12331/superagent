@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.6.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.6.0-beta.1...v1.6.0-beta.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **memory-engine:** node_modules 全量提升顶层，修复安装目录间接依赖解析失败 ([#75](https://github.com/zlh12331/superagent/issues/75)) ([68e1471](https://github.com/zlh12331/superagent/commit/68e14714928afd5da1081fa36518df3ba039bd6b))
+
 ## [1.6.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.5.0...v1.6.0-beta.1) (2026-10-05)
 
 > ⚠️ **预发布版本（beta）**：用于真机验证向导式升级安装与记忆引擎修复，稳定版用户默认不会收到本版更新提示；想主动体验请在 设置 → 关于 打开「接收预发布更新」后点一次「检查更新」。验证稳定后将收敛为 1.6.0 正式版。
