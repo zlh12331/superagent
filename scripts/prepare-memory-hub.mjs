@@ -249,7 +249,16 @@ writeFileSync(
   'packages: []\n' +
     'supportedArchitectures:\n  os:\n    - current\n  cpu:\n' +
     targetArchs.map((a) => `    - ${a}\n`).join('') +
-    'virtualStoreDirMaxLength: 24\n',
+    'virtualStoreDirMaxLength: 24\n' +
+    // shamefullyHoist（2026-10-05，1.6.0-beta.1 真机实证的第二层缺陷）：
+    // electron-builder / NSIS 链路会把 pnpm 的 junction **解引用展开成实体目录**
+    // （安装目录实测 tcvdb-text isSymbolicLink=false）——展开后入口包不再是链接，
+    // Node 原生 ESM 从实体路径向上找 node_modules 只会到顶层，间接依赖
+    // （如 tcvdb-text 的 murmurhash，只存在于 .pnpm 私有层）必然解析失败
+    // （ERR_MODULE_NOT_FOUND）。tsx 自带 resolver 会折叠 symlink，dev 无此问题；
+    // dist 修复后原生 ESM 首次跑 pnpm 布局才暴露。全量提升到顶层后，
+    // 无论下游如何展开，间接依赖都在顶层可达。
+    'shamefullyHoist: true\n',
   'utf8',
 );
 if (targetArchs.length < ALL_ARCHS.length) {
