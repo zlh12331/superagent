@@ -131,6 +131,28 @@ function checkEngineDir(dir: string): CheckResult[] {
         : '引擎入口缺失（dist/gateway/server.js 与 src/gateway/server.ts 均不存在）',
   });
 
+  // 1.5 运行时数据文件哨兵（仅 dist 模式——src 模式为 dev 回退，数据随源码在位）
+  //     bundle 内联 JS 后，按 __dirname 相对路径读取的散装数据文件不再跟随源码，
+  //     prepare-memory-hub.mjs 必须显式补拷；缺失的表现是运行时静默降级或抛错，
+  //     哨兵在此收口（2026-10-05 两起同类事故：tcvdb-text data/ #92、param-registry JSON）。
+  if (existsSync(distEntry)) {
+    const registryJson = join(dir, 'dist', 'gateway', 'metadata_config_params.json');
+    results.push({
+      ok: existsSync(registryJson),
+      detail: existsSync(registryJson)
+        ? '数据文件 dist/gateway/metadata_config_params.json（param-registry 默认注册表）'
+        : '数据文件缺失 dist/gateway/metadata_config_params.json——打包版 ConfigParamService 必然静默失败',
+    });
+    const dataDir = join(dir, 'dist', 'data');
+    const dataOk = existsSync(dataDir) && readdirSync(dataDir).length > 0;
+    results.push({
+      ok: dataOk,
+      detail: dataOk
+        ? '数据目录 dist/data（tcvdb-text 词典/BM25 数据）'
+        : '数据目录缺失或为空 dist/data——BM25 分词必然 ENOENT（#92 同类）',
+    });
+  }
+
   // 2. node_modules 已安装
   results.push({
     ok: existsSync(join(dir, 'node_modules')),
