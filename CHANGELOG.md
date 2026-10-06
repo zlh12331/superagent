@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.2...v1.7.0-beta.3) (2026-10-06)
+
+
+### 修复
+
+* **memory:** 打包补拷 metadata_config_params.json，哨兵补数据文件断言 ([#105](https://github.com/zlh12331/superagent/issues/105)) ([2ba0552](https://github.com/zlh12331/superagent/commit/2ba05523f79d410d0756edaffb7e7db1202e6f43))
+* **release:** 发版门禁收口——锚点检查 fail-closed、CD gate 接线、Release PR 内容边界闸门 ([#106](https://github.com/zlh12331/superagent/issues/106)) ([9898b09](https://github.com/zlh12331/superagent/commit/9898b098eebe1c6153abd6ed158423d49b7c3d95))
+
 ## [1.7.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.1...v1.7.0-beta.2) (2026-10-06)
 
 > ⚠️ **预发布版本（beta）**：本版修复「设置 → 关于」更新说明的显示问题（GitHub 更新源交付的是渲染后的 HTML，此前按纯 Markdown 渲染导致字面标签直接显示在界面上），并修复发版链的版本号推导模型——beta 阶段的提交此后自动递增 beta 序号，无需逐个手写 Release-As 指令。稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
