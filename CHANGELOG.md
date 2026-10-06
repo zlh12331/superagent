@@ -2,6 +2,23 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.6.2...v1.7.0-beta.1) (2026-10-06)
+
+
+### Features
+
+* **oss:** 自动化运维 L0+L1 落地（33 号 spec v1.2） ([#97](https://github.com/zlh12331/superagent/issues/97)) ([5ff2356](https://github.com/zlh12331/superagent/commit/5ff2356b0fdb69060de89e2908bfd5bf5218bff1))
+
+
+### Bug Fixes
+
+* **e2e:** web 模式端口分离 5199，根治遗留 dev server 误复用 ([#95](https://github.com/zlh12331/superagent/issues/95)) ([c2bff01](https://github.com/zlh12331/superagent/commit/c2bff013da9b73e24130995b131d329f2cdf05a9))
+
+
+### Miscellaneous Chores
+
+* 触发 1.7.0-beta.1 预发布（Release-As 指令） ([#99](https://github.com/zlh12331/superagent/issues/99)) ([8f5abd6](https://github.com/zlh12331/superagent/commit/8f5abd6675c052945113c7bcd0bd193a7daa1e78))
+
 ## [1.6.2](https://github.com/zlh12331/superagent/compare/v1.6.1-beta.4...v1.6.2) (2026-10-05)
 
 > 本版本的核心是**记忆引擎在安装版中完整可用**：v1.6.0-beta 系列（未出正式包）把引擎改为单文件编译产物、依赖平铺与数据文件补齐——beta 系列真机验证 sidecar 已正常启动，本版为第一个包含完整修复的**正式版**，v1.5.0 用户将自动收到更新。
