@@ -134,6 +134,22 @@ jobs:
         if: steps.detect.outputs.is_release == 'true'
         run: npx --yes tsx@^4.23.0 scripts/check-changelog-polish.ts --version ${{ steps.detect.outputs.version }}
 
+      - name: Release anchor check (post-merge, 打 tag 前)
+        # ── 为什么在 gate（与 ci.yml 的差异）─────────────────────────
+        # post-merge 模式：断言 manifest=发布版本 且 tag 尚不存在（重跑挪 tag
+        # 事故形态，RELEASING.md §5——v1.3.3 曾被挪位）。不用 pre-merge 模式：
+        # 刚合并的 Release PR 此刻停在 autorelease: pending 属合法状态（label
+        # 收尾在 release job 末尾），套用会对每次发版误报。
+        # 失败即在打 tag 前终止——不占版本号、可重试，与 changelog-polish 同取舍。
+        #
+        # 用 npx tsx 而非 pnpm：本 job 不装依赖（装依赖会触发 electron 原生模块重建，
+        # 使 gate 从秒级劣化到分钟级，而每次发版重试都要经过它）。本脚本只依赖
+        # node:fs/url 与同目录 lib TS 文件，tsx 足以直接执行。
+        if: steps.detect.outputs.is_release == 'true'
+        run: npx --yes tsx@^4.23.0 scripts/check-release-anchor.ts --phase post-merge --version ${{ steps.detect.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     name: Build & Release ${{ matrix.platform }} (${{ matrix.variant }})
     needs: gate
