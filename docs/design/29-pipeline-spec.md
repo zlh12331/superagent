@@ -198,7 +198,7 @@ flowchart TB
 
 | job | 实例 | 步骤 |
 |---|---|---|
-| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（15 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** |
+| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（15 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** ⑫ **`pnpm check:release-pr-scope --branch <headRef>` + `pnpm check:release-anchor`（仅 Release PR，2026-10-06 护栏 C+B：内容边界白名单 + 锚点三态自洽，GITHUB_TOKEN 注入；其余 Release PR 重步骤 ①-⑩ 全跳，2026-10-05 瘦身）** |
 | **unit** | 6 | `pnpm test:main` + `pnpm test:renderer`；**ubuntu-latest 实例改跑 `pnpm test:coverage`**（覆盖率阈值唯一把关点，覆盖率产物也从这里上传）；其余 5 个平台跑不带阈值的同套用例。`test:scripts` 不在此 job（与平台无关，留在 quality 单次执行，避免 6 倍重复） |
 | **integration** | 1 | `pnpm test:integration`（`tests/integration/`，20+ 文件；用户决策不扩平台） |
 | **e2e-browser** | 1 | `playwright install --with-deps chromium` → `playwright test --config e2e/playwright.config.ts --retries=2` |
@@ -221,11 +221,13 @@ flowchart TB
 | 9 | 门禁脚本自测 | `pnpm test:scripts` | 门禁脚本自身的单测 |
 | 10 | 依赖漏洞 | `pnpm audit` | audit-ci，中危（moderate）起卡关 |
 | 11 | **CHANGELOG 润色门禁** | `pnpm check:changelog-polish` | **仅 Release PR 分支**（`if: startsWith(github.head_ref, 'release-please--')`）——断言 CHANGELOG 已面向用户改写，不做就合并不了 |
+| 12 | **发版门禁（scope + anchor）** | `pnpm check:release-pr-scope --branch <headRef>` + `pnpm check:release-anchor` | **仅 Release PR 分支**（2026-10-06，护栏 C+B 自动化）：断言 PR diff 仅含 CHANGELOG/manifest/package.json 版本行 + 锚点三态自洽；GITHUB_TOKEN 必配（匿名 60/h 限流） |
 
 **读图要点**：
 
 - 5 类作业**同时启动**（互不依赖），wall-clock 由最慢的实例决定，不是累加
 - **润色门禁不是独立 job**，是 quality 里的第 11 步、条件执行：Release PR 与普通 PR 走同一套 CI，润色没做就直接红（发版前的第一道闸；第二道在 CD 的 gate job，见 §3.0.2）
+- **Release PR 瘦身（2026-10-05）与发版门禁（2026-10-06）**：Release PR 的 ①-⑩ 全部 `if` 跳过（release-please 产物零新增可测面，CI 实测 5 分钟 → 1m26s），润色门禁（11）与发版门禁（12）是 Release PR 上唯一真正执行的检查；⚠️ 瘦身 `if` 只看分支名不看 diff——「Release PR 零代码」由第 12 步 scope 闸门机械保证（此前曾发生 #90 携带 276 行代码搭车绕过全部 CI 的事故）
 - `unit` / `e2e-electron` 各展开为 **6 个平台实例**，每平台独立跑、独立报结果
 - 两个 `*-summary` 汇总 job 的唯一目的是让 **ruleset 引用稳定名称**——平台增减时只改 workflow、不改 ruleset（避免"改漏 → 检查永不 report → PR 永久卡 pending"）
 - ⚠️ 汇总 job 必须带 `if: always()`：否则依赖失败时它被跳过，而**被跳过的必需检查等于永不 report**，PR 会卡 pending 而非显示红
@@ -238,7 +240,7 @@ flowchart TB
 flowchart LR
   PUSH(["push main<br/>release-please 的发布提交"]) --> GATE
 
-  GATE{"gate<br/>① 识别发布提交，提取版本号<br/>② CHANGELOG 润色兜底（打 tag 前）"}
+  GATE{"gate<br/>① 识别发布提交，提取版本号<br/>② CHANGELOG 润色兜底（打 tag 前）<br/>③ 锚点 post-merge 复核（2026-10-06：<br/>manifest=版本 且 tag 不存在，防重跑挪位）"}
   GATE -->|非发布提交| SKIP(["其余 job 全部跳过"])
   GATE -->|是发布| BFAN[["6 个 build job 并行<br/>各自在原生 runner 上打包<br/>Windows x64 / arm64 · Linux x64 / arm64<br/>macOS arm64 / x64"]]
 

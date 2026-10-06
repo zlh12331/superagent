@@ -237,7 +237,7 @@ packages/tsconfig/
 
 ```
 e2e/
-├── playwright.config.ts              # 浏览器模式（dev server @ 5173）
+├── playwright.config.ts              # 浏览器模式（dev server @ 5199，与 electron-vite dev 5173 分离）
 ├── playwright.electron.config.ts     # Electron dev 模式
 ├── playwright.smoke.config.ts        # 生产构建 smoke（win-unpacked）
 ├── electron.spec.ts                  # 8 用例，Electron 全链路
