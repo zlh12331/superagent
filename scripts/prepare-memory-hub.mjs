@@ -8,9 +8,11 @@
 //
 // 策略：构建 dist 产物（2026-10-05 起，替代 tsx 直跑）。
 //   上游官方 tsdown 入口是 index.ts，产物 dist 里没有 gateway/server.js，因此
-//   由本脚本用 esbuild 把过滤后的 src 全量转译为 dist（非 bundle，import specifier
-//   原样保留 → 源码的 `.js` 后缀导入在 dist 内恰好命中同名 .js 产物，运行时零
-//   loader 依赖）；转译后删除 src，产物只留 dist + node_modules。
+//   由本脚本用 esbuild 以 src/gateway/server.ts 为单入口做 **bundle**（见 4.5）：
+//   非 external 的依赖全部内联进 dist/gateway/server.js 单文件，src 的 `.js`
+//   后缀导入随 bundle 消解，运行时零 loader 依赖、零 import 解析（同日曾先落
+//   逐文件转译方案，后因 NSIS 海量小文件瓶颈升级为 bundle）；转译后删除 src，
+//   产物只留 dist + external 原生子树。
 //
 //   ⚠️ 为什么不再 tsx 直跑（1.4.0/1.5.0 真机实证的启动失败，2026-10-05 排障）：
 //   打包环境 Electron 会剥掉 NODE_OPTIONS（stderr: "Most NODE_OPTIONs are not
@@ -303,6 +305,36 @@ if (!existsSync(join(DIST_DIR, 'gateway', 'server.js'))) {
   console.error('[prepare-memory-hub] ❌ 编译产物缺 dist/gateway/server.js（入口校验失败）');
   process.exit(1);
 }
+
+// 4.5.1 补拷 metadata_config_params.json（ConfigParamService 默认注册表）
+//     上游 param-registry.ts 以 `resolve(__dirname, "metadata_config_params.json")`
+//     定位默认配置；bundle 后 __dirname = dist/gateway/ ⇒ 运行时按该路径读文件。
+//     该 JSON 原位于 src/metadata/config/，随下方 rmSync(SRC_DIR) 一并移除——
+//     不显式补拷，打包版 loadDefaultRegistry 必然 ENOENT，且 /capture 路径经
+//     v2-router 降级 warn 后资产登记永久静默失败（1.6.x 打包版实测）。
+//     与 4.6 的 tcvdb data/ 补拷同类：bundle 内联 JS 后，散装数据文件不再跟随
+//     源码路径，须按运行时 __dirname 推导落点。
+//     ⚠️ 必须在 rmSync(SRC_DIR) 之前（4.6 拷的是 node_modules 实体，无此时序约束）。
+const REGISTRY_JSON_SRC = join(SRC_DIR, 'metadata', 'config', 'metadata_config_params.json');
+if (!existsSync(REGISTRY_JSON_SRC)) {
+  console.error(
+    `[prepare-memory-hub] ❌ 缺 ${REGISTRY_JSON_SRC}` +
+      '（上游目录结构变化？loadDefaultRegistry 在打包版必然失败）',
+  );
+  process.exit(1);
+}
+try {
+  JSON.parse(readFileSync(REGISTRY_JSON_SRC, 'utf8'));
+} catch (err) {
+  console.error(
+    `[prepare-memory-hub] ❌ metadata_config_params.json 不是合法 JSON：${err.message}`,
+  );
+  process.exit(1);
+}
+const REGISTRY_JSON_DEST = join(DIST_DIR, 'gateway', 'metadata_config_params.json');
+cpSync(REGISTRY_JSON_SRC, REGISTRY_JSON_DEST);
+console.log('[prepare-memory-hub] 已补拷 metadata_config_params.json → dist/gateway/');
+
 rmSync(SRC_DIR, { recursive: true, force: true });
 console.log(
   '[prepare-memory-hub] 已 bundle src/gateway/server.ts → dist/（入口校验通过，src 已移除）',
