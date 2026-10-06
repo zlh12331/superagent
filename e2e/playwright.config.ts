@@ -10,7 +10,8 @@
 //
 // 注意：
 // - 渲染层已支持 mock fallback（api/client.ts），无需 Electron preload
-// - E2E 测试直接访问 http://localhost:5173，测试纯 Web UI
+// - E2E 测试直接访问 http://localhost:5199（web 模式专属端口，5173 留给
+//   electron-vite dev——端口分离防 reuseExistingServer 误复用，见下方 webServer）
 // - 真实 Electron 环境测试留待打包阶段（Phase 11）
 
 import { dirname, join } from 'node:path';
@@ -36,18 +37,21 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:5173',
+    // 5199 与 electron-vite dev（5173）分离：配合 reuseExistingServer，
+    // 防止本地遗留的 electron-vite dev（无 mock）被误复用成裸态页面
+    // （2026-10-02 test:visual 连环红根因，2026-10-05 端口分离根治）
+    baseURL: 'http://localhost:5199',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     trace: 'retain-on-failure',
   },
   // 自动启动 renderer dev server
   // 浏览器模式 = dev:web（--mode web，注入 mock window.api）——与 electron-vite dev
-  // （development 模式，无 mock）区分：ipc-rtt 等 mock 链路基准依赖 web 模式
+  // （development 模式，无 mock，5173）区分：ipc-rtt 等 mock 链路基准依赖 web 模式
   webServer: {
     command: 'pnpm exec vite --config vite.web.config.ts --mode web',
     cwd: ROOT,
-    url: 'http://localhost:5173',
+    url: 'http://localhost:5199',
     timeout: 60_000,
     reuseExistingServer: true,
     stdout: 'pipe',

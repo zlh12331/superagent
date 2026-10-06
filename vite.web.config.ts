@@ -29,9 +29,12 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    port: 5173,
-    // E2E（electron-vite dev）也占用 5173：web 模式自动换端口避免冲突
-    strictPort: false,
+    // 5199 与 electron-vite dev（5173）分离（2026-10-05）：两套 E2E 的
+    // webServer 都开 reuseExistingServer——同端口时本地遗留的 electron-vite dev
+    // 会被浏览器模式复用，页面无 mock 呈现裸态（10-02 test:visual 连环红根因）。
+    // strictPort 锁死端口：漂移会让 Playwright 的 url 探测落空。
+    port: 5199,
+    strictPort: true,
   },
   build: {
     outDir: resolve(__dirname, 'out/web'),
