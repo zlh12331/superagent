@@ -185,6 +185,23 @@ jobs:
         if: startsWith(github.head_ref, 'release-please--')
         run: pnpm check:changelog-polish
 
+      - name: Release PR gates (scope + anchor)
+        # ── 为什么在这里 ──────────────────────────────────────────────
+        # Release PR 的瘦身 if 只看分支名不看 diff——#90（2026-10-05）曾作为
+        # Release PR 携带 276 行脚本进 main（恰逢 #93 空 squash，全跳 CI）。
+        # 本步骤把「Release PR 只含版本号 + CHANGELOG」与「锚点三态自洽」两个
+        # 不变量变成闸门：scope 检查拉取 PR files 断言白名单（护栏 C），
+        # anchor 检查核验已收尾 Release PR 的 tag 存在性 + 待合并版本方向
+        # （护栏 B 的自动化——此前仅挂 RELEASING.md 人工步骤）。
+        # GITHUB_TOKEN 必配：匿名限流 60/h，CI 上必然撞顶。
+        # 检查 3 找到的 open PR 即本 PR 自己——正是「合并前校验」的设计场景。
+        if: startsWith(github.head_ref, 'release-please--')
+        run: |
+          pnpm check:release-pr-scope --branch "${{ github.head_ref }}"
+          pnpm check:release-anchor
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ── Job 2: 单测（6 平台原生各跑一份）──────────────────────────
   # 为什么扩到 6 平台：单测是最易暴露平台差异的一层（路径分隔符、原生模块
   # better-sqlite3/node-pty、safeStorage 的 DPAPI/Keychain/libsecret 分支）。

@@ -250,6 +250,21 @@ pnpm check:release-anchor     # tag ↔ manifest ↔ Release PR label 三态自�
 release commit / 修 label）。脚本实现要点：零子进程（fetch 直连 GitHub REST），
 动态值先过 SemVer 严格白名单再进 URL path，host 白名单 api.github.com（SSRF 防线）。
 
+**自动化（2026-10-06 起已接线，人工跑是第三道）**：
+① `ci.yml` quality 的「Release PR gates」步骤（scope + anchor，GITHUB_TOKEN 自动注入）
+在 Release PR 上自动执行——quality 是 ruleset 必需检查 ⇒ 自动获得合并阻塞力；
+② `release.yml` gate 在打 tag 前以 `--phase post-merge` 再核一次（manifest=发布版本
+且 tag 尚不存在；刚合并 PR 停在 pending 属合法，故 gate 不套用 pre-merge 模式）。
+网络失败一律 fail-closed 计 ❌（2026-10-06 前曾静默落入「近期无 Release PR（正常）」
+分支——发版事故场景恰是它最该工作的时候）。
+
+**护栏 C（Release PR 内容边界，2026-10-06 落地）**：Release PR 只允许出现
+`CHANGELOG.md` / `.release-please-manifest.json` / `package.json`（且 package.json
+仅允许版本 bump 行）。背景：#90 曾作为 Release PR 携带 276 行脚本进 main——
+ci.yml 的瘦身 if 只看分支名不看 diff，且恰逢 #93 空 squash，该代码从未经任何 CI。
+闸门自动化与护栏 B 同一步骤（`check:release-pr-scope --branch <headRef>`），
+越界 = 先走普通 PR（全量 CI 把关），Release PR 只等版本号 + CHANGELOG。
+
 **版本号模型（本仓库实际行为，与 SemVer 标准一致）**：beta 版本挂在**下一个
 未发布的正式版**之下（1.6.0-beta.1 → 1.6.0-beta.2 → …）；正式版发布后计数
 从 beta.1 重新开始。⚠️ 若 beta 序列中途 CD 失败且选择了「补 tag 自洽」，该

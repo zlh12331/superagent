@@ -42,6 +42,7 @@
     "check:secrets-git": "tsx scripts/check-secrets-git.ts",
     "check:schema-drift": "tsx scripts/check-schema-drift.ts",
     "check:release-anchor": "tsx scripts/check-release-anchor.ts",
+    "check:release-pr-scope": "tsx scripts/check-release-pr-scope.ts",
     "check:coverage-floors": "tsx scripts/check-coverage-floors.ts",
     "coverage-floors:tighten": "tsx scripts/check-coverage-floors.ts --tighten",
     "tokens:build": "node scripts/build-tokens.mjs",

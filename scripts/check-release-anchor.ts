@@ -6,99 +6,150 @@
 //   （tag ↔ manifest ↔ Release PR）不一致，版本推导回退全量历史（#80/#87 两次
 //   误开、1.6.0 被消费、版本链跳到 1.6.1）。
 //
-// 职责：合并 Release PR **之前**校验三态自洽，不一致即 fail-closed（exit 1）。
+// 职责：校验三态自洽，不一致或**无法核验**即 fail-closed（exit 1）。
+//   - pre-merge（默认）：合并 Release PR **之前**跑（RELEASING.md §7.1 人工步骤 +
+//     ci.yml quality 的「Release PR gates」自动执行）——最近已合并 Release PR
+//     必须收尾 tagged 且对应 tag 存在；open 的 Release PR 版本必须严格大于
+//     lastReleased。
+//   - post-merge：release.yml gate 在打 tag 前跑——断言 manifest 已推进到该版本
+//     且 tag 尚不存在（重跑挪 tag 事故形态，见 RELEASING.md §5）。刚合并的
+//     Release PR 停在 autorelease: pending 属合法状态（label 收尾在 release job
+//     末尾），故 gate 不能用 pre-merge 模式（会对每次发版误报）。
 //
-// 实现（Mimosa 门禁对齐）：零子进程——Node 原生 fetch 直连 GitHub REST API。
-//   SSRF 防线三重：① 仅 https + 固定 host 白名单（api.github.com）；
-//   ② URL path 只由 SemVer 白名单派生字符 + 固定常量拼出；
-//   ③ 请求前 assertSafeApiUrl 逐条复核（含 path 前缀锚定）。
-//   认证：GITHUB_TOKEN 环境变量（只读公开数据也可匿名，但低限流）。
+// 网络（2026-10-06 收口）：网络失败一律 fail-closed 计 ❌——首版 catch 静默跳过
+//   落入「近期无 Release PR（正常）」分支，与头部 fail-closed 宣称矛盾，且发版
+//   事故场景（GitHub API 抖动）恰是本检查最该工作的时候。404 → null 的「不存在」
+//   合法路径不受影响。
+//
+// 实现（Mimosa 门禁对齐）：零子进程——Node 原生 fetch 直连 GitHub REST API，
+//   SSRF 防线在 scripts/lib/github-rest.ts（host 白名单 + path 前缀锚定）。
+//   认证：GITHUB_TOKEN 环境变量（只读公开数据也可匿名，但低限流；CI 必配）。
 //
 // 用法：
-//   pnpm check:release-anchor                        # 校验 manifest 当前版本
+//   pnpm check:release-anchor                        # pre-merge，校验 manifest 当前版本
 //   pnpm check:release-anchor --version 1.6.2        # 显式指定版本
+//   pnpm check:release-anchor --phase post-merge --version X.Y.Z  # CD gate 用
 // ──────────────────────────────────────────────────────────────
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { createGhApiClient } from './lib/github-rest';
 
 const ROOT = join(import.meta.dirname, '..');
 const REPO = 'zlh12331/superagent';
-const API_HOST = 'api.github.com';
-const PATH_PREFIX = `/repos/${REPO}/`;
 
-interface CheckResult {
+export interface CheckResult {
   name: string;
   ok: boolean;
   detail: string;
 }
-
-const results: CheckResult[] = [];
 
 /** SemVer 严格白名单：通过后动态值才允许进入 URL path（字符面仅 [0-9a-zA-Z.-]，且
  *  固定前缀 "v" 由代码补——SemVer 白名单保证无 "/" "?" "#" "%" 等路径逃逸字符）。 */
 const SEMVER_RE =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
-/** SSRF 防线：仅 https + host 白名单 + path 前缀锚定（逐条复核，不用 else 链省略）。 */
-function assertSafeApiUrl(url: string): void {
-  const u = new URL(url);
-  if (u.protocol !== 'https:') {
-    throw new Error('protocol not https');
-  }
-  if (u.hostname !== API_HOST) {
-    throw new Error('hostname not allowed');
-  }
-  if (!u.pathname.startsWith(PATH_PREFIX)) {
-    throw new Error('path outside repo namespace');
-  }
+export type AnchorPhase = 'pre-merge' | 'post-merge';
+
+export interface AnchorCheckOptions {
+  /** CLI 参数（默认 process.argv.slice(2)）：支持 --version X / --phase pre-merge|post-merge */
+  argv?: string[];
+  /** manifest 路径（测试注入用）；默认 <repoRoot>/.release-please-manifest.json */
+  manifestPath?: string;
+  /** Bearer token；缺省读 GITHUB_TOKEN 环境变量 */
+  token?: string;
+  /** fetch 注入点（测试用）；缺省全局 fetch */
+  fetchFn?: typeof fetch;
 }
 
-/** GitHub REST GET；404 → null（调用方按"不存在"处理），其他失败抛错。 */
-async function ghApiJson(pathAndQuery: string): Promise<unknown | null> {
-  const url = `https://${API_HOST}${pathAndQuery}`;
-  assertSafeApiUrl(url);
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'release-anchor-check',
-  };
-  const token = process.env['GITHUB_TOKEN'];
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GitHub API ${String(res.status)} for ${pathAndQuery}`);
-  return (await res.json()) as unknown;
-}
-
-async function main(): Promise<void> {
-  // ── 输入：要校验的版本（默认取 manifest）─────────────────────────────
-  const argv = process.argv.slice(2);
+function parseArgs(argv: string[]): { versionFlag: string | null; phase: AnchorPhase } {
   const versionFlagIdx = argv.indexOf('--version');
-  let version: string | null =
+  const versionFlag =
     versionFlagIdx >= 0 && argv[versionFlagIdx + 1] ? (argv[versionFlagIdx + 1] as string) : null;
-
-  if (!version) {
-    const manifest = JSON.parse(
-      readFileSync(join(ROOT, '.release-please-manifest.json'), 'utf8'),
-    ) as Record<string, string>;
-    version = typeof manifest['.'] === 'string' ? manifest['.'] : null;
+  const phaseIdx = argv.indexOf('--phase');
+  const phaseRaw = phaseIdx >= 0 && argv[phaseIdx + 1] ? (argv[phaseIdx + 1] as string) : null;
+  if (phaseRaw !== null && phaseRaw !== 'pre-merge' && phaseRaw !== 'post-merge') {
+    throw new Error(`未知 --phase：${phaseRaw}（仅支持 pre-merge / post-merge）`);
   }
+  return { versionFlag, phase: phaseRaw ?? 'pre-merge' };
+}
+
+function readManifestVersion(manifestPath: string): string | null {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, string>;
+  return typeof manifest['.'] === 'string' ? manifest['.'] : null;
+}
+
+/**
+ * 收集锚点检查结果（不决定退出码——由 CLI 入口汇总打印并 process.exit）。
+ * 版本缺失/不合法时抛错（入口转 exit 1）；单项检查失败以 ok:false 表达，
+ * 网络失败一律 ok:false（fail-closed），404 → null 的「不存在」是合法路径。
+ */
+export async function collectAnchorChecks(
+  options: AnchorCheckOptions = {},
+): Promise<CheckResult[]> {
+  const argv = options.argv ?? process.argv.slice(2);
+  const { versionFlag, phase } = parseArgs(argv);
+  const manifestPath = options.manifestPath ?? join(ROOT, '.release-please-manifest.json');
+
+  const manifestVersion = readManifestVersion(manifestPath);
+  const version = versionFlag ?? manifestVersion;
   if (!version || !SEMVER_RE.test(version)) {
-    console.error(
-      `[check-release-anchor] ❌ 版本缺失或未通过 SemVer 白名单：${version ?? '(null)'}——拒绝发起任何请求`,
-    );
-    process.exit(1);
+    throw new Error(`版本缺失或未通过 SemVer 白名单：${version ?? '(null)'}——拒绝发起任何请求`);
   }
   const tag = `v${version}`;
-  console.log(`[check-release-anchor] 校验版本 ${version}（tag ${tag}）`);
+  console.log(`[check-release-anchor] 校验版本 ${version}（tag ${tag}，phase=${phase}）`);
+
+  const token = options.token ?? process.env['GITHUB_TOKEN'];
+  const client = createGhApiClient({
+    repo: REPO,
+    // exactOptionalPropertyTypes：可选字段传 undefined 需条件展开
+    ...(token !== undefined ? { token } : {}),
+    ...(options.fetchFn !== undefined ? { fetchFn: options.fetchFn } : {}),
+  });
 
   // ── 参照系说明 ──────────────────────────────────────────────────────
-  // 「合并前」校验的版本基线 = 最近已收尾 Release PR 的版本（lastReleased），
+  // 「合并前」校验的版本基线 = 最近已收尾（tagged）Release PR 的版本（lastReleased），
   // 不是 manifest——manifest 在 PR 合并后才更新，合并前它还是上一个版本的值。
   // 待合并 PR 的版本必须严格大于 lastReleased；而「tag 存在性」校验只对
   // lastReleased 做（待发布版本的 tag 本来就不该存在，合并后由 CD 打）。
   let lastReleased: string | null = version; // 兜底：找不到 PR 时退回 manifest 值
+
+  const results: CheckResult[] = [];
+
+  // ── post-merge（CD gate，打 tag 前）────────────────────────────────
+  // 只断言本阶段可判定的两件事；不套用 pre-merge 的 label 检查——刚合并的 PR
+  // 此刻停在 autorelease: pending 属合法状态（收尾在 release job 末尾）。
+  if (phase === 'post-merge') {
+    results.push({
+      name: `manifest 版本 = ${version}（发布提交内一致性）`,
+      ok: manifestVersion === version,
+      detail:
+        manifestVersion === version
+          ? '一致 ✓'
+          : `manifest 为 ${manifestVersion ?? '(null)'}——与发布提交版本不一致，锚点断裂`,
+    });
+
+    let tagAbsent = false;
+    let tagLookupFailed = false;
+    try {
+      const ref = (await client.getJson(`/repos/${REPO}/git/ref/tags/v${version}`)) as unknown;
+      tagAbsent = ref === null;
+    } catch {
+      tagLookupFailed = true;
+    }
+    results.push({
+      name: `tag ${tag} 尚不存在（待本次 CD 创建）`,
+      ok: tagAbsent && !tagLookupFailed,
+      detail: tagLookupFailed
+        ? 'GitHub API 不可达：无法核验（fail-closed）——检查网络/GITHUB_TOKEN 后重跑'
+        : tagAbsent
+          ? '不存在 ✓'
+          : `tag ${tag} 已存在——重跑挪位或重复发版事故形态，先按 RELEASING.md §5 处置再放行`,
+    });
+    return results;
+  }
 
   // ── 检查 1：manifest 版本 ↔ tag 存在性（仅当 manifest ≠ lastReleased 才有意义，
   //    即"当前发布点"；首战实测：对"待发布版本"查 tag 会误报，已改为按 lastReleased）──
@@ -107,8 +158,9 @@ async function main(): Promise<void> {
   // ── 检查 2：最近已合并 release-please PR 的 label 与 tag 对应（版本基线来源）──
   {
     let pr: { number: number; title: string; labels: { name: string }[] } | null = null;
+    let fetchFailed = false;
     try {
-      const list = (await ghApiJson(
+      const list = (await client.getJson(
         `/repos/${REPO}/pulls?state=closed&per_page=30&sort=updated&direction=desc`,
       )) as {
         number: number;
@@ -120,7 +172,7 @@ async function main(): Promise<void> {
         (p) => (p.head?.ref ?? '').startsWith('release-please--') && p.merged_at !== null,
       );
       if (head) {
-        const detail = (await ghApiJson(`/repos/${REPO}/pulls/${String(head.number)}`)) as {
+        const detail = (await client.getJson(`/repos/${REPO}/pulls/${String(head.number)}`)) as {
           labels?: { name: string }[];
           title?: string;
         };
@@ -131,7 +183,8 @@ async function main(): Promise<void> {
         };
       }
     } catch {
-      // 网络失败 → 跳过该项并如实标注
+      // 网络失败 → fail-closed（2026-10-06 起不再静默落入「正常」分支）
+      fetchFailed = true;
     }
     if (pr) {
       const labels = pr.labels.map((l) => l.name);
@@ -159,7 +212,7 @@ async function main(): Promise<void> {
       if (prVersion && tagged) {
         let tagOk = false;
         try {
-          const ref = (await ghApiJson(`/repos/${REPO}/git/ref/tags/v${prVersion}`)) as {
+          const ref = (await client.getJson(`/repos/${REPO}/git/ref/tags/v${prVersion}`)) as {
             object?: { sha?: string };
           };
           tagOk = typeof ref?.object?.sha === 'string';
@@ -174,6 +227,12 @@ async function main(): Promise<void> {
             : `PR #${pr.number} 标记 tagged 但 tag v${prVersion} 不存在——锚点断裂（本次事故形态），需补 tag 或回滚 manifest`,
         });
       }
+    } else if (fetchFailed) {
+      results.push({
+        name: '最近 Release PR',
+        ok: false,
+        detail: 'GitHub API 不可达：无法核验（fail-closed）——检查网络/GITHUB_TOKEN 后重跑',
+      });
     } else {
       results.push({
         name: '最近 Release PR',
@@ -186,14 +245,16 @@ async function main(): Promise<void> {
   // ── 检查 3：当前 open 的 release-please PR 版本方向 ───────────────────
   {
     let open: { number: number; title: string } | null = null;
+    let fetchFailed = false;
     try {
-      const list = (await ghApiJson(
+      const list = (await client.getJson(
         `/repos/${REPO}/pulls?state=open&per_page=20&sort=updated&direction=desc`,
       )) as { number: number; title: string; head?: { ref?: string } }[];
       const head = (list ?? []).find((p) => (p.head?.ref ?? '').startsWith('release-please--'));
       if (head) open = { number: head.number, title: head.title };
     } catch {
-      // 网络失败 → 跳过
+      // 网络失败 → fail-closed（2026-10-06 起不再静默落入「无（正常）」分支）
+      fetchFailed = true;
     }
     if (open) {
       const m = open.title.match(/release (\S+)/);
@@ -202,7 +263,7 @@ async function main(): Promise<void> {
       if (openVersion) {
         // 待合并 PR 的版本必须严格大于「最近已发布版本」（lastReleased，取自已收尾
         // Release PR；manifest 在合并前仍是上一版值，不能作参照——首战实测教训）
-        const cmp = compareVersions(openVersion, lastReleased);
+        const cmp = compareVersions(openVersion, lastReleased ?? '');
         results.push({
           name: `待合并 Release PR #${open.number}（${openVersion}）> 已发布版本（${lastReleased}）`,
           ok: cmp > 0,
@@ -215,32 +276,22 @@ async function main(): Promise<void> {
           detail: `标题版本未通过 SemVer 白名单：${openVersionRaw ?? '(null)'}`,
         });
       }
+    } else if (fetchFailed) {
+      results.push({
+        name: '待合并 Release PR',
+        ok: false,
+        detail: 'GitHub API 不可达：无法核验（fail-closed）——检查网络/GITHUB_TOKEN 后重跑',
+      });
     } else {
       results.push({ name: '待合并 Release PR', ok: true, detail: '无（正常）' });
     }
   }
 
-  // ── 汇总 ───────────────────────────────────────────────────────────
-  let failed = 0;
-  for (const r of results) {
-    console.log(`  ${r.ok ? '✅' : '❌'} ${r.name}：${r.detail}`);
-    if (!r.ok) failed += 1;
-  }
-  if (failed > 0) {
-    console.error(`\n[check-release-anchor] ❌ ${failed} 项不自洽——禁止合并 Release PR。`);
-    console.error('  修复路径（按事故形态选）：');
-    console.error(
-      '  a) tag 缺失但内容应发布：gh api -X POST repos/.../git/refs -f ref=refs/tags/<tag> -f sha=<release commit 全 SHA>',
-    );
-    console.error('  b) 内容不应发布（CD 失败且不重试）：revert release commit 使 manifest 回退');
-    console.error('  c) label 停在 pending：确认无发版意图后手工改 tagged 并重跑 release-please');
-    process.exit(1);
-  }
-  console.log(`[check-release-anchor] ✅ 锚点自洽（${results.length} 项检查通过）`);
+  return results;
 }
 
 /** SemVer 比较（含 prerelease；只服务本脚本的方向性判定） */
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const parse = (v: string) => {
     const [core, pre] = v.split('-');
     const nums = (core ?? '').split('.').map(Number);
@@ -270,7 +321,39 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-main().catch((e: unknown) => {
-  console.error('[check-release-anchor] ❌ 执行失败：', e instanceof Error ? e.message : e);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  let results: CheckResult[];
+  try {
+    results = await collectAnchorChecks();
+  } catch (error) {
+    console.error(
+      `[check-release-anchor] ❌ ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(1);
+  }
+  let failed = 0;
+  for (const r of results) {
+    console.log(`  ${r.ok ? '✅' : '❌'} ${r.name}：${r.detail}`);
+    if (!r.ok) failed += 1;
+  }
+  if (failed > 0) {
+    console.error(`\n[check-release-anchor] ❌ ${failed} 项不自洽——禁止合并 Release PR。`);
+    console.error('  修复路径（按事故形态选）：');
+    console.error(
+      '  a) tag 缺失但内容应发布：gh api -X POST repos/.../git/refs -f ref=refs/tags/<tag> -f sha=<release commit 全 SHA>',
+    );
+    console.error('  b) 内容不应发布（CD 失败且不重试）：revert release commit 使 manifest 回退');
+    console.error('  c) label 停在 pending：确认无发版意图后手工改 tagged 并重跑 release-please');
+    process.exit(1);
+  }
+  console.log(`[check-release-anchor] ✅ 锚点自洽（${results.length} 项检查通过）`);
+}
+
+// 仅直接执行时跑 CLI（import 进单测不触发网络/exit——check-commit-msg 无守卫的
+// 教训：模块级 main() 依赖真实仓库状态，曾致 test:scripts 偶发红）。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e: unknown) => {
+    console.error('[check-release-anchor] ❌ 执行失败：', e instanceof Error ? e.message : e);
+    process.exit(1);
+  });
+}
