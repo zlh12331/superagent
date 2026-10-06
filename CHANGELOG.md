@@ -4,10 +4,20 @@
 
 ## [1.7.0](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.3...v1.7.0) (2026-10-06)
 
+> 🎓 **毕业版本**：1.7.0-beta.1 → beta.3 三个预发布版真机验证完毕，本版将其整体毕业为稳定版——是 1.7.x 首个面向稳定通道用户的版本。相对上一个正式版 1.6.2 的主要变化：① 打包版记忆资产登记修复（此前静默失败）；② 更新说明按 Markdown 结构渲染；③ 安装体积深度优化（引擎 bundle 单文件化，安装包内容约减半）；④ 发版链三道护栏自动化（影响发版质量与速度，用户侧无感）。beta 期间每个版本的详细说明见下方各 beta 段落。
 
-### 杂项
+### 修复
 
-* 毕业至 1.7.0 正式版（Release-As 指令） ([#110](https://github.com/zlh12331/superagent/issues/110)) ([4dd578b](https://github.com/zlh12331/superagent/commit/4dd578b8ce3e507bef17bd1da109e61b44d39e13))
+- **打包版记忆资产登记恢复可用**：修复打包产物缺失记忆引擎默认配置文件导致的记忆资产登记永久静默失败——运行时按编译位置找不到该文件即降级为警告，用户无感；现打包脚本显式补拷到运行时实际查找的位置，并在产物门禁新增数据文件断言，同类缺陷此后在发版前即被拦截（[#105](https://github.com/zlh12331/superagent/issues/105)）
+- **web 模式 E2E 根治遗留 dev server 误复用**：浏览器模式 dev server 端口与 Electron 模式分离（5199 vs 5173），杜绝两套测试环境互相占用导致的连环假红（[#95](https://github.com/zlh12331/superagent/issues/95)）
+
+### 优化
+
+- **关于面板更新说明可读**：更新日志按标题、列表、链接等 Markdown 结构渲染（对齐 GitHub 上的显示效果），不再显示字面 HTML 标签，进入渲染层的 HTML 附纵深防御清洗（[#100](https://github.com/zlh12331/superagent/issues/100)）
+- **安装体积与速度深度优化**：记忆引擎 bundle 单文件化（安装内容 282.8MB/7078 文件 → 35.6MB/180 文件量级），sidecar 就绪超时按慢磁盘场景放宽到 60 秒，安装与升级更快更稳（[#100](https://github.com/zlh12331/superagent/issues/100) 系列）
+- **开源社区自动化第一批落地**：PR/issue 标签自动分组、新手引导、issue 指标统计三组 workflow + 23 个流程标签；发版链补三道自动化护栏（发版 PR 内容边界闸门、发版锚点自洽检查、锚点检查 fail-closed），从机制上杜绝此前连环发版事故的复发路径（[#97](https://github.com/zlh12331/superagent/issues/97)、[#106](https://github.com/zlh12331/superagent/issues/106)）
+
+<!-- changelog:polished -->
 
 ## [1.7.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.2...v1.7.0-beta.3) (2026-10-06)
 
