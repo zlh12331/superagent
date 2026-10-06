@@ -20,18 +20,23 @@
 {
   "versioning": "prerelease",
   "prerelease": true,
-  "prerelease-type": "beta"
+  "prerelease-type": "beta",
+  "include-component-in-tag": false
 }
 ```
 
 > ⚠️ release-please **不会按分支名自动识别 prerelease**。配置文件从「被发布分支的 tip」读取，
 > 所以 prerelease 行为完全由上面几行决定，与分支叫什么名字无关。
 >
-> 三个字段的分工（2026-10-06 实证）：`versioning: "prerelease"` 选定 prerelease 版本化策略；
+> 字段分工（2026-10-06 实证）：`versioning: "prerelease"` 选定 prerelease 版本化策略；
 > `prerelease: true` 是**策略闸门**——缺省时策略会把 beta 后缀剥掉直接提案稳定版号；
-> `prerelease-type: "beta"` 决定后缀名。⚠️ **workflow 不得传 `release-type` 输入**：
+> `prerelease-type: "beta"` 决定后缀名；`include-component-in-tag: false` 匹配本仓库
+> 无组件前缀的 tag（`v1.7.0-beta.1`）。⚠️ **workflow 不得传 `release-type` 输入**：
 > release-please-action 收到它会走 `Manifest.fromConfig` 分支把配置文件整个绕过
 > （versioning 落到输入默认值 `default`——此前配置形同虚设的根因，见第三节历史注）。
+> 反向坑：切回配置文件驱动后，fromManifest 模式的字段默认值与 fromConfig **不同**
+> （`include-component-in-tag` 默认翻转为 true）——缺了它 release-please 匹配不到任何
+> 既有 tag，认为「0 个待发布提交」，静默不更新 Release PR。
 
 ### 破坏性变更怎么写（2026-09-11 核实修正）
 
