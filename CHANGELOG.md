@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.3...v1.7.0) (2026-10-06)
+
+
+### 杂项
+
+* 毕业至 1.7.0 正式版（Release-As 指令） ([#110](https://github.com/zlh12331/superagent/issues/110)) ([4dd578b](https://github.com/zlh12331/superagent/commit/4dd578b8ce3e507bef17bd1da109e61b44d39e13))
+
 ## [1.7.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.2...v1.7.0-beta.3) (2026-10-06)
 
 > ⚠️ **预发布版本（beta）**：本版修复一个影响打包版用户的功能缺陷（记忆资产登记静默失败），并给发版链补上三道自动化护栏。稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
