@@ -12,22 +12,26 @@
 | label 收尾 | release.yml `release` job | 打 tag 后把 Release PR 标记为 `autorelease: tagged`。这是 release-please 的**进度游标**：`skip-github-release: true` 跳过了它自身的 label 更新路径，若不代收尾，label 会永久停在 `autorelease: pending`，导致**下一次发版被 abort**（详见第七节） |
 | 对外可见 | release.yml `publish` job | 校验三平台安装包 + `latest*.yml` 齐全后，draft 才转正式 |
 
-**只有 main 一条发布分支。** 预发布（beta）不靠分支实现，靠版本号后缀 + `Release-As`。
+**只有 main 一条发布分支。** 预发布（beta）不靠分支实现，靠版本号后缀 + prerelease 版本化策略。
 
 版本号推导配置见 `release-please-config.json`：
 
 ```json
 {
   "versioning": "prerelease",
+  "prerelease": true,
   "prerelease-type": "beta"
 }
 ```
 
 > ⚠️ release-please **不会按分支名自动识别 prerelease**。配置文件从「被发布分支的 tip」读取，
-> 所以 prerelease 行为完全由上面两行决定，与分支叫什么名字无关。
+> 所以 prerelease 行为完全由上面几行决定，与分支叫什么名字无关。
 >
-> `versioning: "prerelease"` 且未开 `prerelease` 时：稳定版推导与默认策略**完全一致**，
-> 唯一区别是会把 `X.Y.Z-beta.N` 收敛为干净的 `X.Y.Z`（这是"毕业"机制）。
+> 三个字段的分工（2026-10-06 实证）：`versioning: "prerelease"` 选定 prerelease 版本化策略；
+> `prerelease: true` 是**策略闸门**——缺省时策略会把 beta 后缀剥掉直接提案稳定版号；
+> `prerelease-type: "beta"` 决定后缀名。⚠️ **workflow 不得传 `release-type` 输入**：
+> release-please-action 收到它会走 `Manifest.fromConfig` 分支把配置文件整个绕过
+> （versioning 落到输入默认值 `default`——此前配置形同虚设的根因，见第三节历史注）。
 
 ### 破坏性变更怎么写（2026-09-11 核实修正）
 
@@ -120,7 +124,14 @@ pnpm check:changelog-polish   # 验证通过后才能合并 Release PR
 
 ## 三、发 beta（预发布）
 
-在推给 main 的提交里加 footer：
+**正常路径：什么都不用做。** beta 阶段（当前版本为 `X.Y.Z-beta.N`）的 fix/feat 提交合并进
+main 后，release-please 自动把 Release PR 提案为 `X.Y.Z-beta.N+1`（prerelease 策略递增
+prerelease 号，base 版本不动）：
+
+- release-please 开/更新 `chore(main): release X.Y.Z-beta.N+1` 的 PR
+- 合并后 `release.yml` 按版本含 `-` 自动标记为 GitHub **Prerelease**（同时打 tag）
+
+**显式钉版本**（跨系列收敛/跳号）才需要 footer：
 
 ```
 feat(ui): 某个新功能
@@ -128,9 +139,9 @@ feat(ui): 某个新功能
 Release-As: 1.1.0-beta.1
 ```
 
-- release-please 会开 `chore(main): release 1.1.0-beta.1` 的 PR
-- 合并后 `release.yml` 按版本含 `-` 自动标记为 GitHub **Prerelease**（同时打 tag `v1.1.0-beta.1`）
-- 继续发下一个 beta：再写 `Release-As: 1.1.0-beta.2`
+> 历史注（2026-10-06 修复前）：workflow 传了 `release-type` 输入导致配置文件被绕过、
+> prerelease 策略从未生效，beta 序列只能靠逐个 footer 硬指定——漏写就提案出
+> `1.7.1-beta.1` 这类 base bump 版本（实测）。
 
 beta 与正式版共用 `latest*.yml` 更新源；已装 beta 版的应用（版本含 `-beta`）会自动开启预发布更新检查，
 稳定版用户**默认**收不到 prerelease（GitHub `/releases/latest` 天然跳过 prerelease）。
@@ -142,10 +153,14 @@ beta 与正式版共用 `latest*.yml` 更新源；已装 beta 版的应用（版
 
 ## 四、从 beta 毕业为正式版
 
-`1.1.0-beta.N` 之后，**普通提交即可**（不加 `Release-As`）：
+`1.1.0-beta.N` 之后，**必须显式** footer（`prerelease: true` 常开时策略永不收敛
+beta 后缀，普通提交只会继续递增 beta.N）：
 
-- prerelease 策略在 `prerelease` 未开启时，会把 `1.1.0-beta.N` 收敛为 `1.1.0`
-- 也可显式指定：`Release-As: 1.1.0`
+```
+Release-As: 1.1.0
+```
+
+合并后 Release PR 提案 `1.1.0`（干净正式版，无后缀）。
 
 ## 五、发版失败后重试
 

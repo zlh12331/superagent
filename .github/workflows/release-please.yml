@@ -17,16 +17,19 @@
 #   release」路径，被 GitHub 以 403（update-a-release / Resource not accessible
 #   by integration）拒绝——这正是历次发版 CD 全红、且「空壳 tag 占号」的真正根因。
 #
-# 预发布版（beta）——单分支 + Release-As 指定版本（2026-09-10 定案）：
+# 预发布版（beta）——单分支 + prerelease 版本化策略（2026-10-06 重设计）：
 #   - 本仓库**只用 main 一条发布分支**，不发长期 beta 分支。prerelease 由
-#     release-please-config.json 的 `versioning: "prerelease"` + `prerelease-type: "beta"`
-#     驱动（注意：release-please **不会**按分支名自动识别 prerelease，此前注释的说法是错的）。
-#   - 发 beta：在推给 main 的提交里加 footer `Release-As: 1.1.0-beta.1`
-#     → release-please 开 `chore(main): release 1.1.0-beta.1` PR → 合并 → release.yml
-#       按版本含 '-' 自动标 GitHub Prerelease。
-#   - 继续 beta：下一个提交再写 `Release-As: 1.1.0-beta.2`。
-#   - 毕业为正式版：普通提交即可（prerelease 策略在 prerelease 未开启时会把当前
-#     `1.1.0-beta.N` 收敛为干净的 `1.1.0`）；也可显式 `Release-As: 1.1.0`。
+#     release-please-config.json 的 `versioning: "prerelease"` + `prerelease: true`
+#     + `prerelease-type: "beta"` 驱动（release-please **不会**按分支名识别 prerelease）：
+#     beta 阶段的 fix/feat 提交自动递增 prerelease 号（1.7.0-beta.1 → 1.7.0-beta.2）。
+#   - ⚠️ **本 workflow 禁止传 release-type 输入**：release-please-action 收到
+#     release-type 会走 Manifest.fromConfig 分支——配置文件整个被绕过、versioning
+#     落到输入默认值 default。此前配置因此形同虚设（含中文 changelog 分组），beta
+#     序列只能靠 Release-As footer 逐个硬指定（实测：fix 提交在 1.7.0-beta.1 后
+#     天然提案 1.7.1-beta.1，2026-10-06 修复）。
+#   - `Release-As: X.Y.Z` footer 保留两个用途：显式钉版本（跨系列收敛/跳号）与
+#     毕业为正式版（`Release-As: 1.7.0`——prerelease: true 常开时策略永不收敛
+#     beta 后缀，普通提交只会继续递增 beta.N）。
 #
 # 关键约束：
 # - 打 tag 移交给 release.yml，故本 workflow 不再需要触发其他 workflow 的权限要求；
@@ -60,7 +63,8 @@ jobs:
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          release-type: node
+          # ⚠️ 不要加 release-type 输入：会让 action 绕过 release-please-config.json
+          # 走 fromConfig 分支（见文件头「预发布版」节）。配置文件里已有 release-type: node。
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           # 合并后不打 tag、不建 Release——由 release.yml 三平台构建成功后打（防空版本占号）。
