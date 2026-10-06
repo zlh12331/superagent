@@ -755,9 +755,11 @@ export function classifyUpdateError(error: unknown): UpdateErrorKind {
 /**
  * 归一化更新说明
  *
- * electron-updater 的 releaseNotes 按 provider 可能是字符串（GitHub release
- * body）或分段数组（`{ version, note }[]`，如 latest.yml 的内嵌 notes）。
- * 这里统一成纯文本；无法识别的形状返回 null（不编造内容）。
+ * electron-updater 的 releaseNotes 按 provider 可能是字符串或分段数组
+ * （`{ version, note }[]`，如 latest.yml 的内嵌 notes）。注意 GitHub provider
+ * 在 latest.yml 无内嵌 notes 时回退 releases.atom 订阅源——字符串是 GitHub
+ * 渲染后的 HTML 而非 Markdown（渲染层 rehype-raw 按结构渲染）。
+ * 这里统一成字符串透传；无法识别的形状返回 null（不编造内容）。
  */
 export function toReleaseNotes(value: unknown): string | null {
   if (typeof value === 'string') {

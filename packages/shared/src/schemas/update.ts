@@ -78,7 +78,7 @@ export interface UpdateStatusPayload {
   readonly bytesPerSecond?: number;
   /** 错误分类（error 时提供） */
   readonly errorKind?: UpdateErrorKind;
-  /** 更新说明（available/downloaded 时提供；来源为 GitHub release body = 润色过的 CHANGELOG 段落） */
+  /** 更新说明（available/downloaded 时提供；可能是 Markdown（latest.yml 内嵌）或 GitHub 渲染后的 HTML（atom feed 回退），渲染层按双格式处理） */
   readonly releaseNotes?: string;
   /** 错误信息（error 时提供；unknown 分类下展示给用户，其余仅记日志） */
   readonly message?: string;

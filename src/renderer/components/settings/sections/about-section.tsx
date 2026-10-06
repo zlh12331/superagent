@@ -22,6 +22,8 @@ import type { AppInfoRes, UpdateStatusPayload } from '@code-agent/shared/rendere
 import { Clipboard, FolderOpen, Loader2, PackageCheck, RefreshCw, Rocket } from 'lucide-react';
 import { type ReactElement, type ReactNode, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 
@@ -90,12 +92,15 @@ function ChannelBadge({ channel }: { readonly channel: string }): ReactElement {
 }
 
 /**
- * 更新说明折叠区
+ * 更新说明排版映射
  *
- * 内容来自 GitHub release body（即我们润色过的 CHANGELOG 段落）——是**真 Markdown**
- * （分组标题/列表/粗体/链接）。按结构渲染：react-markdown + remark-gfm（依赖已随
- * 聊天 Markdown 组件在 bundle 内，零新增），components 映射为设置面板的紧凑排版；
- * 不用 shiki（更新日志无代码块场景）。折叠用 max-height 而非行数截断（渲染后无行概念）。
+ * 内容来自 electron-updater 的 releaseNotes，交付格式有两种：latest.yml 内嵌
+ * notes 时是真 Markdown；GitHub provider 的 latest.yml 无内嵌时回退 releases.atom
+ * 订阅源——那里是 GitHub **渲染后的 HTML**（blockquote/g-emoji/hovercard 属性），
+ * 不是 Markdown。渲染走 remark-gfm（Markdown 结构）+ rehype-raw（把内嵌 HTML
+ * 解析回元素，两种格式同一条管线）+ rehype-sanitize（raw HTML 进渲染层的纵深
+ * 防御，默认 schema 足够：丢 g-emoji/hovercard 属性，保结构与链接）。
+ * components 映射为设置面板的紧凑排版；不用 shiki（更新日志无代码块场景）。
  */
 const NOTES_MARKDOWN_COMPONENTS = {
   blockquote: ({ children }: { children?: ReactNode }) => (
@@ -150,7 +155,12 @@ function ReleaseNotes({ notes }: { readonly notes: string }): ReactElement {
           expanded ? 'max-h-none' : 'max-h-32',
         )}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={NOTES_MARKDOWN_COMPONENTS}>
+        {/* rehype-raw 必须先于 rehype-sanitize：raw 节点先解析回元素再清洗 */}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw, rehypeSanitize]}
+          components={NOTES_MARKDOWN_COMPONENTS}
+        >
           {notes}
         </ReactMarkdown>
       </div>

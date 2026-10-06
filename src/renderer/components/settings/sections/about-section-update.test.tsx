@@ -113,6 +113,40 @@ describe('关于面板 · 更新区', () => {
     expect(screen.getByText(/第四行/)).toBeTruthy();
   });
 
+  it('就绪：说明是 GitHub 渲染后的 HTML（atom feed 回退）时按结构渲染，不显示字面标签', async () => {
+    // 形状对齐真实数据：GitHubProvider 在 latest.yml 无内嵌 notes 时回退
+    // releases.atom 订阅源，交付的是渲染后 HTML（g-emoji/hovercard 属性）
+    const notes = [
+      '<blockquote>',
+      '<p><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji>',
+      ' <strong>预发布版本（beta）</strong>：本版以仓库基础设施为主。</p>',
+      '</blockquote>',
+      '<h3>新增</h3>',
+      '<ul>',
+      '<li><strong>开源社区自动化第一批</strong>：',
+      '<a href="https://github.com/zlh12331/superagent/issues/97" data-hovercard-type="pull_request">#97</a></li>',
+      '</ul>',
+    ].join('\n');
+    const { container } = renderWith({
+      phase: 'downloaded',
+      version: '1.2.0',
+      releaseNotes: notes,
+    });
+    await userEvent.click(screen.getByRole('button', { name: t('update.notesExpand') }));
+    // 按结构渲染：文本与 emoji 可见、blockquote 是真元素、链接带 target
+    expect(container.querySelector('blockquote')).toBeTruthy();
+    expect(screen.getByText(/预发布版本（beta）/)).toBeTruthy();
+    expect(screen.getByText('新增')).toBeTruthy();
+    expect(container.textContent).toContain('⚠️');
+    const link = container.querySelector('a[href*="issues/97"]');
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute('target')).toBe('_blank');
+    // 字面标签与未知属性不外泄（rehype-raw 解析 + rehype-sanitize 清洗）
+    expect(container.textContent).not.toContain('<blockquote>');
+    expect(container.textContent).not.toContain('<g-emoji>');
+    expect(container.querySelector('[data-hovercard-type]')).toBeNull();
+  });
+
   it('错误分类：network → 本地化文案（不展示原始英文）', () => {
     renderWith({ phase: 'error', errorKind: 'network', message: 'net::ERR_FAILED' });
     expect(screen.getByText(t('update.errNetwork'))).toBeTruthy();
