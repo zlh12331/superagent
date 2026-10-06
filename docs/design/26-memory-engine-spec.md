@@ -61,13 +61,17 @@ git diff --stat packages/memory-engine  # 复核上游改动
 
 ```ts
 utilityProcess.fork(launcherPath, [], {
-  cwd: hubRoot,                                   // tsx loader 从上游 node_modules 解析
+  cwd: hubRoot,
   env: { MEMORY_HUB_ENTRY, TDAI_GATEWAY_CONFIG, MEMORY_TENCENTDB_ROOT, ... },
-  execArgv: useTsx ? ['--import', 'tsx'] : [],
+  execArgv: useTsx ? ['--import', 'tsx'] : [],   // 仅 dev（src 直跑）分支；打包版为纯 JS，无需 loader
   serviceName: 'memory-engine',                   // app.getAppMetrics() 可归因
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 ```
+
+**入口双分支**（`MemoryHubService.resolveEntry`）：打包版优先 `dist/gateway/server.js`
+（2026-10-05 be09ae49 起，bundle 单文件纯 JS——此前 tsx 直跑在打包环境 100% 启动失败：
+Electron 剥掉 `NODE_OPTIONS` 挂不上 tsx loader，见 §六构建）；dev 回退 `src` + tsx。
 
 **为什么不是 `spawn(process.execPath)` + `ELECTRON_RUN_AS_NODE=1`**（2026-09-13 变更）：
 后者要求 `RunAsNode` 熔断**保持开启**；而该熔断开启时签名应用二进制可被同机任意进程
@@ -106,24 +110,37 @@ capture-wire 跳过、预取召回跳过、`save_memory`/`recall_memory` 工具�
 ## 六、构建：prepare-memory-hub.mjs
 
 从 `packages/memory-engine/MemoryCore` 生成 `resources/memory-hub/`（经 extraResources
-部署到 `process.resourcesPath/memory-hub`）。四个阶段：
+部署到 `process.resourcesPath/memory-hub`）。现行四阶段（2026-10-05 bundle 架构，
+be09ae49/68e14714/4d9c4853 等系列改造；替代初版「tsx 直跑源码」方案）：
 
-1. **拷贝**：`src/` + `package.json`（清空 optionalDependencies，排除测试重型包）
-2. **装依赖**：目标目录内 `pnpm install --prod --ignore-scripts`
-3. **裁剪孤儿依赖**：从根依赖求可达闭包，闭包外的 `.pnpm` 实体即删（含 node-llama-cpp
-   全平台二进制，~1.1GB）；随后清理所有断链
-4. **裁剪运行期无用文件**：sourcemap / `.d.ts` / `.d.ts.map`（同时缓解 Windows MAX_PATH），
-   以及 `@opentelemetry` 非本平台实现文件
+1. **拷贝 + 装依赖**：`src/` + `package.json`（optionalDependencies **不能清空**——
+   可选后端在静态 import 链上，bundle 沿链解析缺包即 Build failed）→ 目标目录内
+   `pnpm install --prod --ignore-scripts`（shamefullyHoist + virtualStoreDirMaxLength 24，
+   后者治 NSIS 卸载器 MAX_PATH 重命名失败）
+2. **bundle 单文件**：esbuild 以 `src/gateway/server.ts` 单入口 bundle 到
+   `dist/gateway/server.js`（非 external 依赖全部内联，产物 ~19MB 单文件）；
+   external 只留原生绑定（`@node-rs/jieba` / `sqlite-vec` / `@reflink/reflink`）
+   与 `../integrations/*`；随后删除 src。**散装数据文件显式补拷**：
+   `metadata_config_params.json` → `dist/gateway/`（param-registry 按 `__dirname`
+   读取）、tcvdb-text `data/` → `dist/data/`（BM25 词典，#92）
+3. **裁剪孤儿依赖**：从 BUNDLE_EXTERNAL 求可达闭包，node_modules 只留 external
+   原生子树（~10 包）；依赖链接实体化 + 删 `.pnpm` 私有层（junction 解引用坑见脚本注释）
+4. **裁剪运行期无用文件**：sourcemap / `.d.ts` / `.d.ts.map` 等
 
-**失败即失败**：源码缺失时 `exit 1`（历史上有"生成占位并成功"的静默降级，已删除）。
-`pnpm check:packaged-engine` 进一步断言**最终产物**含可运行引擎（入口 + node_modules
-+ 无占位标记 + 关键依赖），在 release.yml 打包后运行。
+**失败即失败**：源码缺失、bundle 失败、入口/数据文件校验不过时 `exit 1`（历史上
+"生成占位并成功"的静默降级已删除）。`pnpm check:packaged-engine` 进一步断言
+**最终产物**含可运行引擎（入口 + node_modules + 无占位标记 + external 关键依赖 +
+**数据文件**：metadata_config_params.json 与 dist/data 非空，2026-10-06 哨兵补数据
+断言），在 release.yml 打包后运行。
 
 ## 七、已知约束
 
-- **Windows 路径长度**：默认安装路径（`%LOCALAPPDATA%\Programs\Code Agent Desktop\resources\memory-hub`
-  ≈ 59 字符前缀）下仍有约 22 个文件可能超 260 限制（Electron manifest 未声明 longPathAware）。
-  构建脚本会告警；若用户安装失败可装到更浅目录。
-- **冷启动**：tsx 直跑 TS 源码，首次启动约 13–15s（上游 20s 就绪超时内）。应用启动后
-  3s 后台预热（`prewarm.ts`）把该成本前移；根治手段是预处理为 JS。
+- **Windows 路径长度**：bundle 架构后产物仅 ~38 个文件（原 7078，2026-10-05 实测），
+  MAX_PATH 风险面大幅收缩；残余防线 = `virtualStoreDirMaxLength: 24`（治 NSIS 卸载器
+  重命名超限，2026-09-20 实测建模）+ 5.2 步 sourcemap/类型声明裁剪。Electron manifest
+  仍未声明 longPathAware。
+- **冷启动**：打包版为 bundle 纯 JS（无 TS 编译开销），sidecar 就绪超时
+  `START_TIMEOUT_MS = 60s`（memory-hub-service.ts:54；2026-10-05 从上游 20s 放宽——
+  安装后首次冷启动 HDD + Defender 首读大量文件，纯慢非崩）。应用启动后 3s 后台预热
+  （`prewarm.ts`）把该成本前移。
 - **多语言**：见第五节（sqlite 后端天然支持中英文；`bm25.language` 不适用）。

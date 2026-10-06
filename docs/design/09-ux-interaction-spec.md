@@ -12,7 +12,7 @@
 前端可以不依赖 Electron 主进程，在浏览器中单独开发、调试全部界面：
 
 ```bash
-pnpm dev:web   # vite --config vite.web.config.ts --mode web → http://localhost:5173
+pnpm dev:web   # vite --config vite.web.config.ts --mode web → http://localhost:5199（与 electron-vite dev 5173 分离，防 E2E dev server 误复用）
 ```
 
 工作原理：
