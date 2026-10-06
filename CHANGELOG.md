@@ -2,6 +2,17 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.1...v1.7.0-beta.2) (2026-10-06)
+
+> ⚠️ **预发布版本（beta）**：本版修复「设置 → 关于」更新说明的显示问题（GitHub 更新源交付的是渲染后的 HTML，此前按纯 Markdown 渲染导致字面标签直接显示在界面上），并修复发版链的版本号推导模型——beta 阶段的提交此后自动递增 beta 序号，无需逐个手写 Release-As 指令。稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
+
+### 修复
+
+- **关于面板更新说明可读**：更新说明按标题、列表、链接等结构渲染（对齐 GitHub 上的显示效果），不再把 GitHub 渲染后的 HTML 当纯文本显示成字面标签，并对进入渲染层的 HTML 附纵深防御清洗（[#100](https://github.com/zlh12331/superagent/issues/100)）
+- **发版链版本号推导修复**：修复版本化策略从未生效的问题——工作流输入绕过配置文件、组件前缀默认值翻转、配置缺 packages 键三层根因逐一排除；此后 beta 阶段 fix/feat 提交自动递增 prerelease 序号（本版 1.7.0-beta.2 即首个受益版本）（[#102](https://github.com/zlh12331/superagent/issues/102)、[#103](https://github.com/zlh12331/superagent/issues/103)、[#104](https://github.com/zlh12331/superagent/issues/104)）
+
+<!-- changelog:polished -->
+
 ## [1.7.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.6.2...v1.7.0-beta.1) (2026-10-06)
 
 > ⚠️ **预发布版本（beta）**：本版以仓库基础设施为主（开源社区自动化第一批落地），产品功能无变化；稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
