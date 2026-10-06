@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.6.2...v1.7.0-beta.1) (2026-10-06)
+
+> ⚠️ **预发布版本（beta）**：本版以仓库基础设施为主（开源社区自动化第一批落地），产品功能无变化；稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
+
+### 新增
+
+- **开源社区自动化第一批**：PR 打开时按改动路径自动打区域标签、首次 issue/PR 自动欢迎引导（含诊断包导出指引）、每周 Issue 运营指标统计——配套 label 体系重组（type/platform/status/priority 四组）与贡献指南（[#97](https://github.com/zlh12331/superagent/issues/97)）
+
+### 修复
+
+- **本地开发环境防复发**：浏览器模式 E2E 的端口与 electron-vite dev 分离（5199）——此前本地遗留的 dev server 会被测试误复用导致页面无 mock、测试连环失败且排查方向被误导（[#95](https://github.com/zlh12331/superagent/issues/95)）
+- **依赖安全**：simple-git、knip、MCP SDK、cdxgen、source-map-js 升级，清零当日 npm 生态披露的 5 条安全通告；两条无补丁版本的开发链通告按惯例登记白名单并附移除条件（[#96](https://github.com/zlh12331/superagent/issues/96)）
+
+<!-- changelog:polished -->
+
 ## [1.6.2](https://github.com/zlh12331/superagent/compare/v1.6.1-beta.4...v1.6.2) (2026-10-05)
 
 > 本版本的核心是**记忆引擎在安装版中完整可用**：v1.6.0-beta 系列（未出正式包）把引擎改为单文件编译产物、依赖平铺与数据文件补齐——beta 系列真机验证 sidecar 已正常启动，本版为第一个包含完整修复的**正式版**，v1.5.0 用户将自动收到更新。
