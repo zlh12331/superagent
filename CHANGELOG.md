@@ -2,6 +2,16 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.1...v1.7.0-beta.2) (2026-10-06)
+
+
+### 修复
+
+* **release:** 修复版本化策略未生效，beta 序列按 prerelease 递增 ([#102](https://github.com/zlh12331/superagent/issues/102)) ([06220cf](https://github.com/zlh12331/superagent/commit/06220cf30b50fc5d655d4f0cdc2d34d9e55e96e8))
+* **release:** 补 include-component-in-tag 配置，修复 tag 匹配不到的静默停摆 ([#103](https://github.com/zlh12331/superagent/issues/103)) ([27e9a4a](https://github.com/zlh12331/superagent/commit/27e9a4ada9e924ec13021b9f3124cf704f8b1a50))
+* **release:** 配置文件改为 manifest 格式，根治 0 路径静默空转 ([#104](https://github.com/zlh12331/superagent/issues/104)) ([8f9cee8](https://github.com/zlh12331/superagent/commit/8f9cee8e015730bf1bc628c7e3f3cd64885918cf))
+* **settings:** 关于面板更新说明按结构渲染 ([#100](https://github.com/zlh12331/superagent/issues/100)) ([382b777](https://github.com/zlh12331/superagent/commit/382b77793348d8600c4eb3e5711cb321fe904d54))
+
 ## [1.7.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.6.2...v1.7.0-beta.1) (2026-10-06)
 
 > ⚠️ **预发布版本（beta）**：本版以仓库基础设施为主（开源社区自动化第一批落地），产品功能无变化；稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
