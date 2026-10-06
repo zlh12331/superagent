@@ -1,0 +1,34 @@
+# PR 按改动路径自动打区域标签（actions/labeler v5 语法）
+# 与 label taxonomy 配套：type/* 由人工/模板打，本配置只打「区域」标签
+main-process:
+  - changed-files:
+      - any-glob-to-any-file: ["src/main/**"]
+
+renderer:
+  - changed-files:
+      - any-glob-to-any-file: ["src/renderer/**", "src/preload/**"]
+
+shared:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/shared/**"]
+
+memory-engine:
+  - changed-files:
+      - any-glob-to-any-file:
+          ["resources/memory-hub/**", "packages/memory-engine/**", "scripts/prepare-memory-hub.mjs"]
+
+e2e:
+  - changed-files:
+      - any-glob-to-any-file: ["e2e/**"]
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "**/*.md"]
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ["package.json", "pnpm-lock.yaml", "packages/shared/package.json"]

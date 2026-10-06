@@ -128,3 +128,9 @@ release/
 # Zcode 本地工具忽略副本（与 .gitignore 同源，不入仓）
 .zcodeignore
 .worktrees/
+
+# 研究性目录永不进 git（Dependabot 误报总源头：参考项目/cognee-main 的 uv.lock 触发 35 条 Python 假告警）
+参考项目/
+参考*/
+research/
+vendor-ref/
