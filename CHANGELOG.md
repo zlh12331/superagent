@@ -4,13 +4,14 @@
 
 ## [1.7.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.1...v1.7.0-beta.2) (2026-10-06)
 
+> ⚠️ **预发布版本（beta）**：本版修复「设置 → 关于」更新说明的显示问题（GitHub 更新源交付的是渲染后的 HTML，此前按纯 Markdown 渲染导致字面标签直接显示在界面上），并修复发版链的版本号推导模型——beta 阶段的提交此后自动递增 beta 序号，无需逐个手写 Release-As 指令。稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
 
 ### 修复
 
-* **release:** 修复版本化策略未生效，beta 序列按 prerelease 递增 ([#102](https://github.com/zlh12331/superagent/issues/102)) ([06220cf](https://github.com/zlh12331/superagent/commit/06220cf30b50fc5d655d4f0cdc2d34d9e55e96e8))
-* **release:** 补 include-component-in-tag 配置，修复 tag 匹配不到的静默停摆 ([#103](https://github.com/zlh12331/superagent/issues/103)) ([27e9a4a](https://github.com/zlh12331/superagent/commit/27e9a4ada9e924ec13021b9f3124cf704f8b1a50))
-* **release:** 配置文件改为 manifest 格式，根治 0 路径静默空转 ([#104](https://github.com/zlh12331/superagent/issues/104)) ([8f9cee8](https://github.com/zlh12331/superagent/commit/8f9cee8e015730bf1bc628c7e3f3cd64885918cf))
-* **settings:** 关于面板更新说明按结构渲染 ([#100](https://github.com/zlh12331/superagent/issues/100)) ([382b777](https://github.com/zlh12331/superagent/commit/382b77793348d8600c4eb3e5711cb321fe904d54))
+- **关于面板更新说明可读**：更新说明按标题、列表、链接等结构渲染（对齐 GitHub 上的显示效果），不再把 GitHub 渲染后的 HTML 当纯文本显示成字面标签，并对进入渲染层的 HTML 附纵深防御清洗（[#100](https://github.com/zlh12331/superagent/issues/100)）
+- **发版链版本号推导修复**：修复版本化策略从未生效的问题——工作流输入绕过配置文件、组件前缀默认值翻转、配置缺 packages 键三层根因逐一排除；此后 beta 阶段 fix/feat 提交自动递增 prerelease 序号（本版 1.7.0-beta.2 即首个受益版本）（[#102](https://github.com/zlh12331/superagent/issues/102)、[#103](https://github.com/zlh12331/superagent/issues/103)、[#104](https://github.com/zlh12331/superagent/issues/104)）
+
+<!-- changelog:polished -->
 
 ## [1.7.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.6.2...v1.7.0-beta.1) (2026-10-06)
 
