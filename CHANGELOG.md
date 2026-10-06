@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.0-beta.3](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.2...v1.7.0-beta.3) (2026-10-06)
+
+> ⚠️ **预发布版本（beta）**：本版修复一个影响打包版用户的功能缺陷（记忆资产登记静默失败），并给发版链补上三道自动化护栏。稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
+
+### 修复
+
+- **打包版记忆资产登记恢复可用**：修复打包产物缺失记忆引擎默认配置文件（`metadata_config_params.json`）导致的记忆资产登记永久静默失败——bundle 单文件方案把引擎源码内联后，随源码散布的该文件被一并移除，运行时按编译位置找不到即降级为警告；现打包脚本显式补拷到运行时实际查找的位置，并在产物门禁中新增数据文件断言（配置注册表 JSON + 分词词典目录），此后同类「数据文件未随 bundle 走」的缺陷在发版前即被拦截（[#105](https://github.com/zlh12331/superagent/issues/105)）
+
+### 工程与发版链
+
+- **发版门禁收口（三道护栏自动化）**：① 锚点检查网络失败从「静默当作正常」改为 fail-closed（GitHub API 抖动时拒绝放行而非漏检），并接入 CD 在打 tag 前复核「版本号一致且 tag 尚未存在」（防重跑挪位）；② 新增 Release PR 内容边界闸门——发版 PR 只允许包含版本号与更新日志，携带任何代码即拒绝合并（此前曾发生代码搭发版车绕过全部 CI 的事故）；③ 两道检查均已接入 CI 自动执行，不再依赖人工记得跑（[#106](https://github.com/zlh12331/superagent/issues/106)）
+
+<!-- changelog:polished -->
+
 ## [1.7.0-beta.2](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.1...v1.7.0-beta.2) (2026-10-06)
 
 > ⚠️ **预发布版本（beta）**：本版修复「设置 → 关于」更新说明的显示问题（GitHub 更新源交付的是渲染后的 HTML，此前按纯 Markdown 渲染导致字面标签直接显示在界面上），并修复发版链的版本号推导模型——beta 阶段的提交此后自动递增 beta 序号，无需逐个手写 Release-As 指令。稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
