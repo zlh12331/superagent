@@ -344,7 +344,8 @@ console.log(
 //     tcvdb-text 的 JS 已进 bundle，其实体与顶层链接会被 5.1 判为孤儿删掉；
 //     但它的 data/ 散装文件运行时仍被按原包路径推导读取）
 //     ⚠️ 拷贝必须也在这里完成：realpath 指向 .pnpm 内部，5.1.5 删 .pnpm 后就
-//     读不到了（曾在 5.1.6 才拷，实体已被自己删除——beta.4 修复期实测）。
+//     读不到了（旧版脚本曾在裁剪之后才拷——小节号 5.1.6，实体已被自己删除，
+//     beta.4 修复期实测；现补拷已前移至本步 4.6，时序约束见上）。
 //     bundle 后的路径推导：tcvdb-text 的 paths.js packageRoot = __dirname/../，
 //     __dirname = dist/gateway/ ⇒ 运行时读 dist/data/ → 拷到 dist/data/ 对齐。
 const BUNDLED_DATA_PKGS = ['@tencentdb-agent-memory/tcvdb-text']; // 包名 → data/ 需补拷
@@ -658,8 +659,6 @@ if (existsSync(PRIVATE_DIR)) {
   // 都安全——不跟随目标；Beta.3 教训：对 junction 用 rmSync(recursive) 会深入
   // .pnpm 实体引发连锁错误）
   const relink = [];
-  /** 包名 → 实体路径（bundle 内联包的 data 文件要从这里补拷，见 5.1.6） */
-  const relinkPackages = new Map();
   const collectLinks = (dir, depth) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (
@@ -681,14 +680,6 @@ if (existsSync(PRIVATE_DIR)) {
       if (real !== resolve(p)) {
         unlinkSync(p);
         relink.push([p, real]);
-        // 记录包名 → 实体路径（供 5.1.6 补拷数据文件）。
-        // ⚠️ 不用正则：Windows 路径分隔符 + node -e 双层转义极易失真，
-        // 分段找最后一个 node_modules 段之后的Join 才稳。
-        const segs = String(p).split(/[\\/]/);
-        const nmIdx = segs.lastIndexOf('node_modules');
-        if (nmIdx >= 0 && nmIdx + 1 < segs.length) {
-          relinkPackages.set(segs.slice(nmIdx + 1).join('/'), real);
-        }
         continue;
       }
       // 真实目录：仅 @scope 组织层需要下钻找包链接
