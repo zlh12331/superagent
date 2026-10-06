@@ -4,20 +4,18 @@
 
 ## [1.7.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.6.2...v1.7.0-beta.1) (2026-10-06)
 
+> ⚠️ **预发布版本（beta）**：本版以仓库基础设施为主（开源社区自动化第一批落地），产品功能无变化；稳定版用户默认不会收到本版提示。验证稳定后随后续功能一并毕业为 1.7.0。
 
-### Features
+### 新增
 
-* **oss:** 自动化运维 L0+L1 落地（33 号 spec v1.2） ([#97](https://github.com/zlh12331/superagent/issues/97)) ([5ff2356](https://github.com/zlh12331/superagent/commit/5ff2356b0fdb69060de89e2908bfd5bf5218bff1))
+- **开源社区自动化第一批**：PR 打开时按改动路径自动打区域标签、首次 issue/PR 自动欢迎引导（含诊断包导出指引）、每周 Issue 运营指标统计——配套 label 体系重组（type/platform/status/priority 四组）与贡献指南（[#97](https://github.com/zlh12331/superagent/issues/97)）
 
+### 修复
 
-### Bug Fixes
+- **本地开发环境防复发**：浏览器模式 E2E 的端口与 electron-vite dev 分离（5199）——此前本地遗留的 dev server 会被测试误复用导致页面无 mock、测试连环失败且排查方向被误导（[#95](https://github.com/zlh12331/superagent/issues/95)）
+- **依赖安全**：simple-git、knip、MCP SDK、cdxgen、source-map-js 升级，清零当日 npm 生态披露的 5 条安全通告；两条无补丁版本的开发链通告按惯例登记白名单并附移除条件（[#96](https://github.com/zlh12331/superagent/issues/96)）
 
-* **e2e:** web 模式端口分离 5199，根治遗留 dev server 误复用 ([#95](https://github.com/zlh12331/superagent/issues/95)) ([c2bff01](https://github.com/zlh12331/superagent/commit/c2bff013da9b73e24130995b131d329f2cdf05a9))
-
-
-### Miscellaneous Chores
-
-* 触发 1.7.0-beta.1 预发布（Release-As 指令） ([#99](https://github.com/zlh12331/superagent/issues/99)) ([8f5abd6](https://github.com/zlh12331/superagent/commit/8f5abd6675c052945113c7bcd0bd193a7daa1e78))
+<!-- changelog:polished -->
 
 ## [1.6.2](https://github.com/zlh12331/superagent/compare/v1.6.1-beta.4...v1.6.2) (2026-10-05)
 
