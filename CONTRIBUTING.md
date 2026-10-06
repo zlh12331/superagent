@@ -175,6 +175,23 @@ pnpm test:e2e:electron  # 真实 Electron 窗口
 
 PR 会被自动请求给 @zlh12331 审阅。请耐心等待——这是个人维护的项目。
 
+### 打包链路改动的额外要求
+
+涉及 `electron-builder.yml` / `scripts/prepare-*` / `scripts/check-packaged-engine.ts` / NSIS 的 PR，
+除常规门禁外请先本地跑完整打包验证，并在 PR 描述贴结果：
+
+```bash
+pnpm build:win:x64 && pnpm check:packaged-engine && pnpm check:native-arch && pnpm test:smoke
+```
+
+## 六·五、Label 体系
+
+- `type/*`（类型）· `platform/*`（平台）· `status/*`（流转）· `priority/*`（排期，维护者设置）
+- PR 打开时由 [labeler](https://github.com/actions/labeler) 按改动路径自动打区域标签
+- bug 报告请用 Bug Report 模板（自动带 `type/bug`）
+
+PR 会被自动请求给 @zlh12331 审阅。请耐心等待——这是个人维护的项目。
+
 ## 七、发现安全问题怎么办
 
 **请勿公开提交 Issue**——那会立刻暴露问题。请走私密渠道：

@@ -1,0 +1,27 @@
+# 每周 Issue 运营指标统计（github/issue-metrics 官方 action）
+# 输出到本 run 的 Job Summary（起步期不建看板）：
+#   - 存量 / 首次响应时长 / 需要回复的 issue
+# 兼作 33 号 spec §9 观察期的定期回顾锚点（每周产出，人工查看）
+# 权限：issues: read（只读统计）
+
+name: Issue Metrics
+
+on:
+  schedule:
+    - cron: "23 2 * * 1" # 每周一 02:23 UTC（避开整点）
+  workflow_dispatch:
+
+permissions:
+  issues: read
+  pull-requests: read
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # SHA 对应 github/issue-metrics v3（6fa9041b3ea7b6a9dafbdc388d25d86d06b2b6af）
+      - uses: github/issue-metrics@6fa9041b3ea7b6a9dafbdc388d25d86d06b2b6af
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEARCH_QUERY: "repo:zlh12331/superagent is:issue state:open"

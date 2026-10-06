@@ -1,0 +1,44 @@
+# 首次 issue / PR 自动欢迎（actions/first-interaction）
+# 目标：引导补充诊断信息（降 needs-info 率）+ 说明验证要求
+# 权限：issues: write + pull-requests: write（发评论）
+# 安全：action pin 到 commit SHA；欢迎语为固定文案，不引用 issue 内容
+
+name: First Interaction
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # SHA 对应 actions/first-interaction v1（fb2402657b4a28582200150d0a145671d0e50597）
+      - uses: actions/first-interaction@fb2402657b4a28582200150d0a145671d0e50597
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            欢迎来到 superagent！🎉 感谢提交 issue。
+
+            如果是**报障**，补充以下信息能大幅加快定位：
+            - 应用版本（设置 → 关于）
+            - 复现步骤与截图
+            - 诊断包：设置 → 诊断 → **导出诊断包**（脱敏日志，拖拽上传即可）
+
+            我们会尽快处理。
+          pr-message: |
+            欢迎提交 PR！🎉
+
+            请确认：
+            - 描述写明了**改动内容与原因**
+            - 本地验证已通过（`pnpm typecheck && pnpm lint && pnpm test`）
+            - 涉及打包链路（electron-builder / scripts/prepare-*）时已跑本地完整打包验证
+
+            维护者会尽快 review。
