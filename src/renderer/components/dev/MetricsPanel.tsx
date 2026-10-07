@@ -57,7 +57,7 @@ export function MetricsPanel({ enabled = true, className }: MetricsPanelProps): 
           <Activity className="size-3" strokeWidth={1.5} />
           <span className="font-serif tracking-wide">{t('dev.runtimeMetrics')}</span>
           {data !== undefined && (
-            <span className="text-muted-foreground/70 font-mono">
+            <span className="text-muted-foreground font-mono">
               · {formatClockTime(data.timestamp, i18n.language)}
             </span>
           )}
@@ -184,9 +184,7 @@ function MetricCard({ icon: Icon, label, value, hint }: MetricCardProps): ReactE
         <span className="font-serif tracking-wide">{label}</span>
       </div>
       <div className="text-foreground font-mono text-xs leading-tight">{value}</div>
-      {hint !== undefined && (
-        <div className="text-muted-foreground/70 font-mono text-2xs">{hint}</div>
-      )}
+      {hint !== undefined && <div className="text-muted-foreground font-mono text-2xs">{hint}</div>}
     </div>
   );
 }

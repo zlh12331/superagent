@@ -218,7 +218,7 @@ function LogLines({ lines, filePath }: LogLinesProps): ReactElement {
   return (
     <div className="flex flex-col">
       {/* 文件路径提示（顶部细线） */}
-      <div className="text-muted-foreground/60 border-border truncate border-b px-2 py-0.5 font-mono text-2xs">
+      <div className="text-muted-foreground border-border truncate border-b px-2 py-0.5 font-mono text-2xs">
         <FileText className="mr-1 inline size-2.5" strokeWidth={1.5} />
         {filePath}
       </div>
@@ -274,7 +274,7 @@ function EmptyLogs({ filePath }: { readonly filePath: string }): ReactElement {
       <FileText className="size-5 opacity-50" strokeWidth={1.5} />
       <p className="font-serif text-xs tracking-wide">{t('common.noLogs')}</p>
       <p className="text-2xs">{t('common.logsTruncatedDesc')}</p>
-      <p className="text-muted-foreground/60 mt-1 truncate font-mono text-2xs">{filePath}</p>
+      <p className="text-muted-foreground mt-1 truncate font-mono text-2xs">{filePath}</p>
     </div>
   );
 }
