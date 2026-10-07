@@ -55,7 +55,7 @@
 | 35 | [界面缩放](35-ui-zoom-spec.md) | 已实施 |
 | 36 | [设置面缺口补全](36-settings-gaps-spec.md) | 已实施（审批通知/终端/快捷键/清空会话） |
 | 37 | [设置面补全二期](37-settings-gaps-2-spec.md) | 已实施（编辑器域/备份可见性） |
-| 38 | [Agent 回合 XState 编排化](38-agent-turn-xstate-spec.md) | 实施中（阶段 1：机器升级为编排者） |
+| 38 | [Agent 回合 XState 编排化](38-agent-turn-xstate-spec.md) | 已全部实施（阶段 1 编排者 + 阶段 2 决策面，随 1.5.0 发布） |
 | 39 | [GitHub 开源自动化运维](39-oss-automation-spec.md) | L0+L1 已实施（label 四组/三 workflow/护栏/gitignore）；L3-L5 按 §7 重启条件暂缓 |
 
 ## 三、治理
