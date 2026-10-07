@@ -98,10 +98,7 @@ export async function getAIProvider(
   if (definition.requiresApiKey) {
     const stored = await getSecret(toKeychainKey(kind));
     if (stored === null) {
-      throw new AppError(
-        ErrorCode.AI_API_KEY_MISSING,
-        `${definition.displayName} API Key 未配置，请先在设置中添加`,
-      );
+      throw new AppError(ErrorCode.AI_API_KEY_MISSING, `${kind} API Key 未配置，请先在设置中添加`);
     }
     apiKey = stored;
   }
@@ -111,7 +108,6 @@ export async function getAIProvider(
   logger.info(
     {
       kind,
-      displayName: definition.displayName,
       model: definition.defaultModel,
     },
     'AI Provider 已创建',

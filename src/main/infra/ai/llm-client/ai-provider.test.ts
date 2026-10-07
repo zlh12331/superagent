@@ -328,13 +328,12 @@ describe('ai-provider', () => {
       );
     });
 
-    it('ProviderInfo：包含显示名 / 默认模型 / 是否需要 API Key', () => {
+    it('ProviderInfo：包含 kind / 默认模型 / 是否需要 API Key', () => {
       const registry = new ProviderRegistry();
       const deepseek = registry.list().find((i) => i.kind === 'deepseek');
 
       expect(deepseek).toMatchObject({
         kind: 'deepseek',
-        displayName: 'DeepSeek',
         defaultModel: 'deepseek-v4-flash',
         requiresApiKey: true,
         isDefault: true,

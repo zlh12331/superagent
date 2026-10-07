@@ -60,74 +60,65 @@ export function getProviderName(kind: ProviderKind): string {
  *
  * defaultModel / isDefault 均从模型领域层单一真源派生
  * （DEFAULT_MODEL_BY_KIND / DEFAULT_KIND），避免双源维护。
+ * 显示名不在 main 维护：渲染层以 kind 经 i18n（providers.*）解析。
  */
 const BUILTIN_DEFINITIONS: readonly ProviderDefinition[] = [
   {
     kind: 'deepseek',
-    displayName: 'DeepSeek',
     defaultModel: DEFAULT_MODEL_BY_KIND.deepseek,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'deepseek',
   },
   {
     kind: 'openai',
-    displayName: 'OpenAI',
     defaultModel: DEFAULT_MODEL_BY_KIND.openai,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'openai',
   },
   {
     kind: 'anthropic',
-    displayName: 'Anthropic Claude',
     defaultModel: DEFAULT_MODEL_BY_KIND.anthropic,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'anthropic',
   },
   {
     kind: 'ollama',
-    displayName: 'Ollama (Local)',
     defaultModel: DEFAULT_MODEL_BY_KIND.ollama,
     requiresApiKey: false,
     isDefault: DEFAULT_KIND === 'ollama',
   },
   {
     kind: 'moonshot',
-    displayName: 'Moonshot Kimi',
     defaultModel: DEFAULT_MODEL_BY_KIND.moonshot,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'moonshot',
   },
   {
     kind: 'zhipu',
-    displayName: '智谱 GLM',
     defaultModel: DEFAULT_MODEL_BY_KIND.zhipu,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'zhipu',
   },
   {
     kind: 'qwen',
-    displayName: '通义千问',
     defaultModel: DEFAULT_MODEL_BY_KIND.qwen,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'qwen',
   },
   {
     kind: 'doubao',
-    displayName: '豆包（火山方舟）',
     defaultModel: DEFAULT_MODEL_BY_KIND.doubao,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'doubao',
   },
   {
     kind: 'siliconflow',
-    displayName: '硅基流动',
     defaultModel: DEFAULT_MODEL_BY_KIND.siliconflow,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'siliconflow',
   },
   {
     kind: 'openrouter',
-    displayName: 'OpenRouter',
     defaultModel: DEFAULT_MODEL_BY_KIND.openrouter,
     requiresApiKey: true,
     isDefault: DEFAULT_KIND === 'openrouter',
@@ -392,7 +383,10 @@ export class ProviderRegistry {
   }
 
   /**
-   * 列出所有已注册供应商（供 settings 域 / 设置 UI 展示）
+   * 列出所有已注册供应商快照（当前生产零调用、仅单测）
+   *
+   * 显示名不在快照内：渲染层以 kind 经 i18n（providers.* / providerLabel）
+   * 解析，语言包是唯一真源。
    */
   list(): ProviderInfo[] {
     const defaultKind = this.getDefaultKind();
@@ -400,7 +394,6 @@ export class ProviderRegistry {
     for (const { definition } of this.providers.values()) {
       infos.push({
         kind: definition.kind,
-        displayName: definition.displayName,
         defaultModel: definition.defaultModel,
         requiresApiKey: definition.requiresApiKey,
         isDefault: definition.kind === defaultKind,
