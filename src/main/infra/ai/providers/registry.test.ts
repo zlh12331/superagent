@@ -196,14 +196,12 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
     const registry = new ProviderRegistry([
       {
         kind: 'deepseek',
-        displayName: 'D',
         defaultModel: 'm1',
         requiresApiKey: true,
         isDefault: false,
       },
       {
         kind: 'openai',
-        displayName: 'O',
         defaultModel: 'm2',
         requiresApiKey: true,
         isDefault: true,
@@ -218,7 +216,6 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
       new ProviderRegistry([
         {
           kind: 'deepseek',
-          displayName: 'D',
           defaultModel: 'm',
           requiresApiKey: true,
           isDefault: false,
@@ -226,7 +223,6 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
         // 故意传未注册 kind（as never 绕过类型收窄——运行时验证抛错）
         {
           kind: 'nonexistent' as never,
-          displayName: 'X',
           defaultModel: 'm',
           requiresApiKey: true,
           isDefault: false,
@@ -237,7 +233,7 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
 
   it('getDefinition 正向：返回已注册定义', () => {
     const registry = new ProviderRegistry();
-    expect(registry.getDefinition('deepseek').displayName).toBe('DeepSeek');
+    expect(registry.getDefinition('deepseek').requiresApiKey).toBe(true);
   });
 
   it('getDefinition 异常：未知 kind 抛错', () => {
@@ -249,14 +245,12 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
     const registry = new ProviderRegistry([
       {
         kind: 'deepseek',
-        displayName: 'D',
         defaultModel: 'm',
         requiresApiKey: true,
         isDefault: false,
       },
       {
         kind: 'openai',
-        displayName: 'O',
         defaultModel: 'm',
         requiresApiKey: true,
         isDefault: false,
@@ -287,14 +281,12 @@ describe('ProviderRegistry 注册表（类行为三件套）', () => {
     const registry = new ProviderRegistry([
       {
         kind: 'deepseek',
-        displayName: 'D',
         defaultModel: 'm',
         requiresApiKey: false,
         isDefault: true,
       },
       {
         kind: 'openai',
-        displayName: 'O',
         defaultModel: 'm',
         requiresApiKey: true,
         isDefault: false,

@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────────────────────
 // 职责：
 // - 定义 ProviderKind 枚举（模型供应商标识）
-// - 定义 ProviderDefinition（供应商静态元数据：显示名 / 默认模型 / 是否需要 API Key）
+// - 定义 ProviderDefinition（供应商静态元数据：默认模型 / 是否需要 API Key）
 // - 定义 ProviderFactory（创建 LanguageModel 工厂的签名）
 //
 // 设计（对标 OpenCode 的 provider 路由）：
@@ -50,8 +50,6 @@ export type ProviderKind = (typeof PROVIDER_KINDS)[number];
 export interface ProviderDefinition {
   /** 供应商标识（keychain key 前缀 + 路由键） */
   readonly kind: ProviderKind;
-  /** 显示名称（设置 UI 展示用） */
-  readonly displayName: string;
   /** 默认模型 id（未指定模型时使用） */
   readonly defaultModel: string;
   /** 是否需要 API Key（ollama 等本地服务不需要） */
@@ -97,11 +95,14 @@ export interface RegisteredProvider {
 }
 
 /**
- * 注册表快照（供 settings 域列出可选供应商）
+ * 注册表快照（当前生产零调用、仅单测——settings 域未接线）
+ *
+ * 显示名不经 main 下发：渲染层以 kind 经 i18n（providers.* / providerLabel）
+ * 解析，语言包是唯一真源（2026-10-07 移除 main 侧 displayName 死字段，
+ * 消除双源漂移）。
  */
 export interface ProviderInfo {
   readonly kind: ProviderKind;
-  readonly displayName: string;
   readonly defaultModel: string;
   readonly requiresApiKey: boolean;
   readonly isDefault: boolean;
