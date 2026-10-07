@@ -287,7 +287,8 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 
 | 项 | 实测值 |
 |---|---|
-| ruleset「protect-release-branches」 | active，bypass 为空；规则 = deletion + non_fast_forward + required_linear_history + required_status_checks×5（strict）。**无 merge queue、无 required reviews**（单人下正确：自审死锁）⇒ **直推 main 必被拒，一切变更必须走 PR** |
+| ruleset「protect-release-branches」 | active，bypass 为空；规则 = deletion + non_fast_forward + required_linear_history + required_status_checks×5（strict）。**无 merge queue（判定不可用，见 §8）、无 required reviews**（单人下正确：自审死锁）⇒ **直推 main 必被拒，一切变更必须走 PR** |
+| 仓库合并设置 | `allow_auto_merge=false`（合并动作必须人点）/ **`allow_update_branch=true`（2026-10-07 开启：merge queue 不可用 + strict policy 组合下，贡献者可自助 update branch，免维护者手动 rebase）** / `delete_branch_on_merge=true` |
 | 安全 | secret scanning ✅ / push protection ✅ / dependabot alerts ✅ |
 | Actions | 默认 workflow 权限 = **write**（拍板维持）；`sha_pinning_required=false`（pin SHA 靠 workflow 纪律，7 个已全 pin）；`allowed_actions=all`；GITHUB_TOKEN 不可 approve PR |
 | 密钥/环境 | Actions secrets 仅 `RELEASE_PLEASE_TOKEN`；**发布未签名**；environments 仅 copilot 自动项 |
