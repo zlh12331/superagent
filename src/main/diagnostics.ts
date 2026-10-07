@@ -38,7 +38,10 @@ const SENSITIVE_KEY_PATTERN =
  * - `sk-` / `sk_` 前缀的 OpenAI 系密钥
  * - `Bearer <token>` 形式的授权头
  * - PEM 私钥块起始行
- * - 常见长随机串（32+ 位十六进制/base64，多为 token/密钥）
+ * - 常见长随机串（32+ 位十六进制，多为 token/密钥）
+ *
+ * 有意不覆盖 base64：日志里长 base64 与图片/二进制片段无法区分，
+ * 误伤会把诊断包正文打成不可读的 [REDACTED] 海洋——宁缺勿滥。
  */
 const VALUE_PATTERNS: readonly { readonly pattern: RegExp; readonly replacement: string }[] = [
   { pattern: /\bsk-[A-Za-z0-9_-]{8,}/g, replacement: 'sk-[REDACTED]' },
