@@ -12,11 +12,24 @@
 // - 扩页扫描二期（2026-10-07）：设置分区（侧栏导航 tab 切换：通用/快捷键/终端）
 //   与终端面板（Ctrl+` 快捷键，journey-terminal 同款）——axe 扫描前等分区
 //   懒挂载/过渡结束
+// - 扩页扫描三期（2026-10-07，全覆盖收口）：设置其余 11 分区 + 添加模型弹窗
+//   （设置 15 分区至此全部覆盖）；右面板 文件变更/文件/浏览器/开发者（Git
+//   默认子视图 + 日志/指标/检查器子视图，会话详情随一期会话页、终端随二期）；
+//   侧栏文件树（journey-filetree-git 同款「查看文件」入口）；命令面板打开态；
+//   Agent 交互弹层（/ask 提问弹窗、内联审批卡——journey-ask/journey-agent
+//   同款 mock 路径）。扩页扫描均为默认暗色单主题（双主题矩阵仍仅首页，先例）
 // ──────────────────────────────
 
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
+
+import {
+  sendAndWaitApproval,
+  setupChatSession,
+  typeMessage,
+  waitSendReady,
+} from './journey-helpers';
 
 /** 双主题矩阵：Axios 令牌按 <html class="dark"> 切换，evaluate 直加类即可令全部 CSS 变量翻转 */
 const THEMES = ['light', 'dark'] as const;
@@ -39,23 +52,63 @@ async function gotoWithTheme(page: Page, theme: Theme): Promise<void> {
   expect(applied, `主题未按预期落地（期望 dark=${theme === 'dark'}）`).toBe(theme === 'dark');
 }
 
+/**
+ * axe 扫描共用配置（全部扫描统一 tags + 排除项；新增排除项必须写明理由）
+ *
+ * 排除项沿革：
+ * - 2026-09-08 移除无效 exclude——`data-testid="terminal-output"` 全库不存在
+ *   （空匹配属死规则）；聊天列表的 exclude 有效（testid 在 ChatMessageList 上）
+ * - `[data-testid="chat-message-list"]` = 聊天动态内容（滚动噪声）
+ * - `[data-slot="tabs-trigger"]` = Radix Tabs 折叠态 aria-controls 指向未渲染
+ *   的 content，库标准行为（content 懒渲染），非真实 a11y 问题
+ */
+async function scanAxe(page: Page): Promise<void> {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .exclude('[data-testid="chat-message-list"]') // 聊天动态内容（滚动噪声）
+    .exclude('[data-slot="tabs-trigger"]') // Radix Tabs 折叠态 aria-controls（库标准行为）
+    .analyze();
+  expect(results.violations).toEqual([]);
+}
+
+/** 打开设置并切换到指定分区（导航项 = 侧栏 role=tab 的 zh 标签），返回对话框 */
+async function gotoSettingsSection(page: Page, navLabel: string): Promise<Locator> {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.getByRole('button', { name: '命令面板' }).first().click();
+  await page.keyboard.type('设置');
+  await page.waitForTimeout(200); // cmdk 防抖
+  const item = page.getByRole('option', { name: /打开设置/ }).first();
+  await expect(item).toBeVisible({ timeout: 5_000 });
+  await item.click();
+  const dialog = page.locator('[role="dialog"]').first();
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  // exact 匹配：getByRole name 默认子串匹配，分区名互为子串时会误命中
+  await dialog.getByRole('tab', { name: navLabel, exact: true }).first().click();
+  // 等分区内容懒挂载 + 过渡结束（半成品元素会产生假违规）
+  await page.waitForTimeout(800);
+  return dialog;
+}
+
+/** 进入 mock 首会话（journey-chat 同款入口，等 composer 出现确认会话视图渲染） */
+async function openFirstSession(page: Page): Promise<void> {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  const firstThread = page.getByRole('button', { name: /重构 IPC|修复双|设计令牌/ }).first();
+  await expect(firstThread).toBeVisible({ timeout: 10_000 });
+  await firstThread.click();
+  await expect(page.locator('.composer-box textarea, .composer textarea').first()).toBeVisible({
+    timeout: 10_000,
+  });
+}
+
 test.describe('可访问性审计（WCAG 2.2 AA · 亮/暗双主题矩阵）', () => {
   for (const theme of THEMES) {
     test(`首页无 a11y 违规（${theme}）`, async ({ page }) => {
       await gotoWithTheme(page, theme);
 
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        // 2026-09-08：移除无效 exclude——`data-testid="terminal-output"` 全库不存在
-        // （空匹配，属死规则）；聊天列表的 exclude 有效（该 testid 在 ChatMessageList 上）
-        .exclude('[data-testid="chat-message-list"]') // 聊天动态内容
-        // Radix Tabs 在 DevPanel 折叠态下 aria-controls 指向未渲染的 content，
-        // 这是 Radix 的标准行为（content 懒渲染），非真实 a11y 问题
-        .exclude('[data-slot="tabs-trigger"]')
-        .analyze();
-
-      // 违规数为 0 才通过
-      expect(results.violations).toEqual([]);
+      // 违规数为 0 才通过（tags + 排除项统一走 scanAxe，沿革见其注释）
+      await scanAxe(page);
     });
 
     test(`颜色对比度满足 AA 标准（${theme}）`, async ({ page }) => {
@@ -193,12 +246,7 @@ test.describe('扩页审计（会话页 / 设置页）', () => {
       timeout: 10_000,
     });
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .exclude('[data-testid="chat-message-list"]') // 聊天动态内容（滚动噪声）
-      .exclude('[data-slot="tabs-trigger"]') // Radix Tabs 折叠态 aria-controls（库标准行为）
-      .analyze();
-    expect(results.violations).toEqual([]);
+    await scanAxe(page);
   });
 
   test('设置页（设置对话框）无 a11y 违规', async ({ page }) => {
@@ -215,48 +263,15 @@ test.describe('扩页审计（会话页 / 设置页）', () => {
     const dialog = page.locator('[role="dialog"]').first();
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .exclude('[data-testid="chat-message-list"]')
-      .exclude('[data-slot="tabs-trigger"]')
-      .analyze();
-    expect(results.violations).toEqual([]);
+    await scanAxe(page);
   });
 });
 
 // ── 扩页审计二期（2026-10-07）：设置分区 / 终端面板 ───────────────
 // 设置分区：打开设置后点侧栏导航（role=tab，zh 标签即 accessible name）；
 // 终端面板：Ctrl+` 快捷键（journey-terminal 同款路径）。
-// 排除项与首页/一期扩页扫描一致。
+// 分区导航与 axe 扫描共用模块级 helper（三期扩页同用）。
 test.describe('扩页审计二期（设置分区 / 终端面板）', () => {
-  /** 打开设置并切换到指定分区（导航项 = 侧栏 role=tab 的 zh 标签） */
-  async function gotoSettingsSection(page: Page, navLabel: string): Promise<Locator> {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: '命令面板' }).first().click();
-    await page.keyboard.type('设置');
-    await page.waitForTimeout(200); // cmdk 防抖
-    const item = page.getByRole('option', { name: /打开设置/ }).first();
-    await expect(item).toBeVisible({ timeout: 5_000 });
-    await item.click();
-    const dialog = page.locator('[role="dialog"]').first();
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await dialog.getByRole('tab', { name: navLabel }).first().click();
-    // 等分区内容懒挂载 + 过渡结束（半成品元素会产生假违规）
-    await page.waitForTimeout(800);
-    return dialog;
-  }
-
-  /** 分区扫描共用配置（与首页/一期扩页一致：同一组 tags + 排除项） */
-  async function scanAxe(page: Page): Promise<void> {
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .exclude('[data-testid="chat-message-list"]') // 聊天动态内容（滚动噪声）
-      .exclude('[data-slot="tabs-trigger"]') // Radix Tabs 折叠态 aria-controls（库标准行为）
-      .analyze();
-    expect(results.violations).toEqual([]);
-  }
-
   for (const section of [
     { nav: '通用', name: '通用分区' },
     { nav: '快捷键', name: '快捷键分区' },
@@ -286,6 +301,173 @@ test.describe('扩页审计二期（设置分区 / 终端面板）', () => {
     });
     await page.waitForTimeout(800);
 
+    await scanAxe(page);
+  });
+});
+
+// ── 扩页审计三期（2026-10-07）：设置分区补全 / 设置弹窗 ───────────
+// 设置 15 分区全覆盖收口：模型=一期默认分区、通用/快捷键/终端=二期，
+// 本批补齐其余 11 分区；附带「添加模型」弹窗（设置域常驻弹窗入口）。
+test.describe('扩页审计三期 · 设置分区补全', () => {
+  for (const section of [
+    { nav: '用量统计', name: '用量统计分区' },
+    { nav: '网络代理', name: '网络代理分区' },
+    { nav: '移动端', name: '移动端分区（占位）' },
+    { nav: 'MCP 服务器', name: 'MCP 分区' },
+    { nav: '技能管理', name: '技能管理分区' },
+    { nav: '浏览器', name: '浏览器分区' },
+    { nav: '工作树', name: '工作树分区' },
+    { nav: '规则与记忆', name: '规则与记忆分区' },
+    { nav: '审批权限', name: '审批权限分区' },
+    { nav: 'Beta', name: 'Beta 分区' },
+    { nav: '关于', name: '关于分区' },
+  ] as const) {
+    test(`设置页·${section.name}无 a11y 违规`, async ({ page }) => {
+      await gotoSettingsSection(page, section.nav);
+      await scanAxe(page);
+    });
+  }
+
+  test('添加模型弹窗无 a11y 违规', async ({ page }) => {
+    await gotoSettingsSection(page, '模型');
+    await page.getByRole('button', { name: '添加模型' }).first().click();
+    const dialog = page.locator('[role="dialog"]').first();
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    // 等弹窗过渡结束（半成品元素会产生假违规）
+    await page.waitForTimeout(500);
+    await scanAxe(page);
+  });
+});
+
+// ── 扩页审计三期：右面板视图 / 侧栏文件树 ─────────────────────────
+// 右面板六视图全覆盖收口：会话详情随一期会话页（默认视图）、终端随二期
+// （Ctrl+`），本批补齐 文件变更/文件/浏览器/开发者。开发者含四个子视图
+// （Git 默认 + 日志/指标/检查器 segmented 切换，类名 .dev-sub-tab 为
+// ui-consistency 豁免标记、形态稳定可作选择器）。
+test.describe('扩页审计三期 · 右面板视图与侧栏文件树', () => {
+  /**
+   * 进入会话并通过「添加视图」菜单打开右面板指定视图（tab 激活即切换完成）
+   *
+   * 必须用 exact 匹配：getByRole name 默认子串匹配，菜单/标签页里
+   * 「文件变更」含「文件」——子串会误命中前者（实测踩坑）。
+   */
+  async function openPanelView(page: Page, viewName: string): Promise<void> {
+    await openFirstSession(page);
+    const addView = page.getByRole('button', { name: '添加视图' }).first();
+    await expect(addView).toBeVisible({ timeout: 10_000 });
+    await addView.click();
+    const item = page.getByRole('menuitem', { name: viewName, exact: true }).first();
+    await expect(item).toBeVisible({ timeout: 5_000 });
+    await item.click();
+    await expect(page.getByRole('tab', { name: viewName, exact: true }).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    // 等懒挂载/过渡结束
+    await page.waitForTimeout(800);
+  }
+
+  test('右面板·文件变更视图无 a11y 违规', async ({ page }) => {
+    await openPanelView(page, '文件变更');
+    // 空态渲染完成（mock 无 edit/write 记录 → 空态文案）
+    await expect(page.getByText('本轮暂无文件变更')).toBeVisible({ timeout: 10_000 });
+    await scanAxe(page);
+  });
+
+  test('右面板·文件视图无 a11y 违规', async ({ page }) => {
+    await openPanelView(page, '文件');
+    // 懒加载 chunk 就绪（空态引导文案替代 common.loading 兜底）
+    await expect(page.getByText('从文件树选择文件')).toBeVisible({ timeout: 10_000 });
+    await scanAxe(page);
+  });
+
+  test('右面板·浏览器视图无 a11y 违规', async ({ page }) => {
+    await openPanelView(page, '浏览器');
+    // 进程外沙箱预览的空态提示（web 模式无 WebContentsView）
+    await expect(page.getByText('输入地址开始浏览').first()).toBeVisible({ timeout: 10_000 });
+    await scanAxe(page);
+  });
+
+  test('右面板·开发者视图（Git 子视图）无 a11y 违规', async ({ page }) => {
+    await openPanelView(page, '开发者');
+    // Git 默认子视图：分支指示渲染（mock git.status，journey-filetree-git 同款信号）
+    await expect(page.locator('.font-serif').filter({ hasText: 'main' }).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await scanAxe(page);
+  });
+
+  for (const sub of ['日志', '指标', '检查器'] as const) {
+    test(`右面板·开发者${sub}子视图无 a11y 违规`, async ({ page }) => {
+      await openPanelView(page, '开发者');
+      const subTab = page.locator('.dev-sub-tab', { hasText: sub }).first();
+      await expect(subTab).toBeVisible({ timeout: 10_000 });
+      await subTab.click();
+      // 等查询/渲染稳定
+      await page.waitForTimeout(800);
+      await scanAxe(page);
+    });
+  }
+
+  test('侧栏文件树视图无 a11y 违规', async ({ page }) => {
+    await openFirstSession(page);
+    // 会话项「查看文件」按钮 → sidebarView 切文件树（journey-filetree-git 同款）
+    const openFiles = page.getByRole('button', { name: '查看文件' }).first();
+    await expect(openFiles).toBeVisible({ timeout: 10_000 });
+    await openFiles.click();
+    await expect(page.locator('.file-tree[role="tree"]').first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(500);
+    await scanAxe(page);
+  });
+});
+
+// ── 扩页审计三期：命令面板 / Agent 交互弹层 ───────────────────────
+// 命令面板打开态 + Agent 交互两弹层（提问弹窗 / 内联审批卡）。弹层均在
+// portal 或 ChatPanel 根层（审批卡不在 chat-message-list 排除区内），
+// 标准排除项即可覆盖；mock 路径与 journey-ask / journey-agent 同款。
+test.describe('扩页审计三期 · 命令面板与交互弹层', () => {
+  test.beforeAll(async ({ browser }) => {
+    // 预热：vite 冷启动首屏编译慢（journey 系列同款）——交互弹层涉及
+    // ChatPanel/transport/审批卡片重组件链路
+    const page = await browser.newPage();
+    await page.goto('/');
+    await page.waitForTimeout(5_000);
+    await page.close();
+  });
+
+  test('命令面板打开态无 a11y 违规', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: '命令面板' }).first().click();
+    const dialog = page.locator('[role="dialog"]').first();
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(300); // cmdk 渲染
+    await scanAxe(page);
+  });
+
+  test('Agent 提问弹窗（AskDialog）无 a11y 违规', async ({ page }) => {
+    await openFirstSession(page);
+    // /ask 触发 mock 推送提问（journey-ask 同款路径，mock 延迟 600ms）
+    const input = page.locator('.composer textarea, .composer-box textarea').first();
+    await input.fill('/ask 确认操作');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: '确认执行' }).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(300);
+    await scanAxe(page);
+  });
+
+  test('Agent 内联审批卡片无 a11y 违规', async ({ page }) => {
+    await setupChatSession(page);
+    await typeMessage(page, '帮我执行一个命令');
+    await waitSendReady(page);
+    // 发送并等审批卡片出现（重试内建）
+    await sendAndWaitApproval(page, async () => {
+      await page.locator('.send-btn:visible').first().click({ timeout: 5_000 });
+    });
+    await page.waitForTimeout(500);
     await scanAxe(page);
   });
 });
