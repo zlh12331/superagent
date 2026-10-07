@@ -189,7 +189,17 @@ agent 呈现的批次预览必须包含三部分，缺一不可：
 **3.4.5 Q&A 起草**——对 Discussions Q&A 版块新帖起草引用式回答：必须给出处
 （docs/ 链接或历史 issue 号），标注「AI 生成」；**答不了不硬答**，升级为 issue 的
 判据：需要维护者判断、需要诊断包、超出文档与历史 issue 覆盖范围。公告版块
-（仅维护者可发）不进入起草范围。
+（仅维护者可发）不进入起草范围。**升级协议（2026-10-08 补，⑨）**：① issue 用
+对应模板（缺陷走 bug_report）；② 正文首行必带原帖链接（互链双向可溯）；
+③ 原帖回复固定话术「已转 issue #N，后续跟踪在那里」，原帖保持 open 不关闭。
+
+**3.4.5.1 Discussions 运维协议（2026-10-08 补，⑤⑧⑥）**
+
+| 项 | 协议 |
+|---|---|
+| **帖终态语义（⑤）** | Q&A：答案被勾选 = 闭环（可加 `discussion/answered`）；Ideas：采纳 = 转 issue 后原帖回复互链并关闭；重复 = `discussion/duplicate` + 链接原帖后关闭；缺信息 = `discussion/needs-info`（只标记，**永不自动关闭**——对齐 issue 面同一红线） |
+| **moderation 预案（⑧）** | 三步 escalating：单帖违规 = 隐藏（hide）；版块被刷 = 临时锁版块（lock）；惯犯 = 拉黑（block user）。触发全人工——moderation 是定性判断，不自动化。维护者需在网页确认 Discussions 的 report 通知处于开启（Settings → Discussions → 勾选活动通知） |
+| **SLO（⑥）** | Q&A 首答 < 48h（agent 上线时段内实际目标 < 1h）；周度量由 issue-metrics 的 discussions job 产出，Time to Answer 连续两周超标 = 提高清账频率而非加自动化 |
 
 **3.4.6 告警分诊**——CI 失败 / CodeQL 告警增量归类为「真故障 / 已知 flaky / 噪音」；
 处置（重跑、开修复分支、关单）逐项审。已知 flaky 沉淀为本机清单，避免每次重新归因。

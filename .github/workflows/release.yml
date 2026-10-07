@@ -616,6 +616,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      discussions: write # 公告版块自动发帖（仅 beta/stable 发布成功后）
 
     steps:
       - name: Verify all platform assets & promote draft to public
@@ -750,3 +751,70 @@ jobs:
           gh api -X PATCH "/repos/$REPO/releases/$RELEASE_ID" -f draft=false >/dev/null
           gh api "/repos/$REPO/releases/$RELEASE_ID" \
             --jq '"✅ 已正式发布: " + .html_url'
+
+      - name: Post release announcement to Discussions (公告版块)
+        # ── 为什么在 publish job 末尾 ────────────────────────────────
+        # 发版公告的社区触达（39 号 spec §5：公告版块仅维护者可发帖，CD 的
+        # GITHUB_TOKEN 以仓库身份发帖即满足）。放在 publish（而非 release）job：
+        # 公告必须对应"资产已验证并转正式"的 release，draft 态不发。
+        # 失败语义：continue-on-error——公告是锦上添花，不发帖不应使发版 CD 变红
+        # （发布本体已 success，人工可随时补帖）。
+        # 固定模板，仅引用版本号与 Release 链接（两者均为本 run 内部事实，
+        # 无外部输入 ⇒ 无注入面）。GraphQL createDiscussion 形状已按 schema 验证
+        # （repositoryId/title/body/categoryId 四输入，公告 categoryId 已实测）。
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+          PRERELEASE: ${{ needs.gate.outputs.prerelease }}
+        with:
+          script: |
+            const version = process.env.RELEASE_VERSION;
+            const prerelease = process.env.PRERELEASE === 'true';
+            const repo = context.repo.repo;
+            const owner = context.repo.owner;
+
+            const repoData = await github.graphql(
+              `query($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                  id
+                  discussionCategory(query: "公告") { id name }
+                }
+              }`,
+              { owner, repo },
+            );
+            const categoryId = repoData.repository.discussionCategory?.id;
+            if (!categoryId) {
+              core.warning('公告版块不存在，跳过公告发帖');
+              return;
+            }
+
+            const tag = `v${version}`;
+            const channel = prerelease ? 'Beta 测试通道' : '稳定通道';
+            const title = `🎉 superagent ${tag} 发布`;
+            const body = [
+              `**superagent ${tag}** 已发布至 **${channel}**。`,
+              '',
+              `[⬇️ 前往 Release 页下载](https://github.com/${owner}/${repo}/releases/tag/${tag})`,
+              '',
+              '已安装用户：应用会通过内置更新器自动升级（设置 → 关于 可检查更新）。',
+              '问题反馈请走 [Issue](https://github.com/zlh12331/superagent/issues/new/choose)，使用问题可在 [Q&A 版块](https://github.com/zlh12331/superagent/discussions/categories/q-a) 提问。',
+            ].join('\n');
+
+            await github.graphql(
+              `mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
+                createDiscussion(input: {
+                  repositoryId: $repositoryId,
+                  categoryId: $categoryId,
+                  title: $title,
+                  body: $body
+                }) { discussion { number } }
+              }`,
+              {
+                repositoryId: repoData.repository.id,
+                categoryId,
+                title,
+                body,
+              },
+            );
+            core.info(`公告帖已发布：${title}`);
