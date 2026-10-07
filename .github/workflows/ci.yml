@@ -48,12 +48,36 @@
 #   不做整树重测——各组成 PR 均各自全绿，CD 六平台打包 + smoke 兜底。
 #
 # 参考项目 electron-shadcn-main/.github/workflows/testing.yaml 的 job 分层模式
+#
+# ⚠️ merge queue 支持（2026-10-07）：
+#   ruleset 启用 merge_queue 后，必需检查改在 merge_group 事件上把关——队列对
+#   「本 PR + 排在它前面的所有变更」的假想合并树跑检查，那才是合并时的真实树。
+#   本 workflow 必须监听 merge_group: [checks_requested]：漏了 = 队列里必需检查
+#   永不 report = 所有 PR 卡死在队列（「永不 report」事故本项目已发生两次）。
+#
+#   队列上下文的语义差异（merge_group 事件下 github.head_ref 为空串）：
+#   - 各 job 的 `!startsWith(github.head_ref, 'release-please--')` 判空后为 true
+#     ⇒ **队列条目跑全矩阵、零 skip**。Release PR 瘦身只存在于 PR 事件（快速反馈）；
+#     队列合并时全矩阵是权威把关——假想树上没有任何测试被跳过，#90「携带代码
+#     跳过测试」的形态被结构性排除。
+#   - 两个 `startsWith(github.head_ref, 'release-please--')` 步骤（润色门禁 /
+#     scope+anchor 闸门）在队列里跳过（head_ref 为空 ⇒ 条件为假）——权威兜底在
+#     release.yml gate（changelog-polish 与 post-merge anchor 均已存在，打 tag 前
+#     fail-closed）。
+#
+#   ⚠️ 顺序约束：本触发器合入 main 之后才能开 ruleset 的 merge_queue 规则；
+#   反过来先开规则 = 队列里没有检查会 report = 所有 PR（含 Release PR）当场死锁。
+#
+#   成本注记：每 PR 双跑（PR 事件全矩阵 + 队列条目全矩阵）。公开仓库 runner
+#   免费，代价只有时间；2026-10-06 已拍板不为 runner 时间缩编。
 
 name: CI
 
 on:
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch: # 允许手动触发（便于调试）
 
 # 显式收窄 GITHUB_TOKEN 权限（CodeQL actions/missing-workflow-permissions 修复，2026-09-14）。
@@ -116,9 +140,12 @@ jobs:
         run: pnpm lint
 
       - name: Secret scanning (gitleaks)
+        # 只在 PR 事件跑：gitleaks-action 按 PR diff 区间扫描，merge_group 的队列树
+        # 没有对应的 PR 区间（行为未知且无增量信息——队列树上的每个 commit 都来自
+        # 已各自扫过的 PR）。
         # Release PR 的 commit 均为 release-please 生成的（版本号+CHANGELOG，无代码），
         # 且来源 PR 已跑过同一扫描——跳过安全。
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+        if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--') }}
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
