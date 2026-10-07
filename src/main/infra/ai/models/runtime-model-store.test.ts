@@ -100,16 +100,50 @@ describe('RuntimeModelStore', () => {
   });
 
   it('add 带 apiKey：写入 keychain（runtime:<modelId>）', async () => {
+    // 占位值刻意避开真实密钥形态（sk- 前缀等）：测试只验证「存什么返回什么」
+    const placeholderKey = 'test-only-placeholder-key';
     await store.add({
       modelId: 'my-coder',
       providerKind: 'openai',
-      apiKey: 'sk-custom',
+      apiKey: placeholderKey,
     });
 
     expect(mocks.mockEncrypt).toHaveBeenCalled();
     // keychain 写入的 key 应含模型 id（加密前字符串）
     const encryptedInput = mocks.mockEncrypt.mock.calls[0]?.[0] as string | undefined;
-    expect(encryptedInput).toBe('sk-custom');
+    expect(encryptedInput).toBe(placeholderKey);
+  });
+
+  it('add 带 timeoutMs：落库 + 注册表快照携带（resolve 并入 generationConfig）', async () => {
+    await store.add({
+      modelId: 'my-coder',
+      providerKind: 'deepseek',
+      timeoutMs: 600_000,
+    });
+
+    expect((await store.list())[0]).toMatchObject({ modelId: 'my-coder', timeoutMs: 600_000 });
+    const resolved = modelRegistry.resolve('my-coder');
+    expect(resolved.isRuntime).toBe(true);
+    expect(resolved.generationConfig).toEqual({ timeoutMs: 600_000 });
+  });
+
+  it('update：timeoutMs 三态（设置 / null 清除 / 省略不改）', async () => {
+    await store.add({ modelId: 'my-coder', providerKind: 'deepseek' });
+
+    // 设置
+    await store.update({ modelId: 'my-coder', timeoutMs: 300_000 });
+    expect((await store.list())[0]).toMatchObject({ timeoutMs: 300_000 });
+    expect(modelRegistry.resolve('my-coder').generationConfig).toEqual({ timeoutMs: 300_000 });
+
+    // 清除（null → 落 NULL，回不限制）
+    await store.update({ modelId: 'my-coder', timeoutMs: null });
+    expect((await store.list())[0]?.timeoutMs).toBeUndefined();
+    expect(modelRegistry.resolve('my-coder').generationConfig).toBeUndefined();
+
+    // 省略不改（更新其他字段时超时保持）
+    await store.update({ modelId: 'my-coder', timeoutMs: 300_000 });
+    await store.update({ modelId: 'my-coder', displayName: '编码器' });
+    expect((await store.list())[0]).toMatchObject({ timeoutMs: 300_000, displayName: '编码器' });
   });
 
   it('remove：DB 删除 + 注销注册（解析回退默认）', async () => {

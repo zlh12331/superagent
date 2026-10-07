@@ -680,6 +680,8 @@
       "topPPlaceholder": "留空或输入 0~1",
       "topKLabel": "Top K",
       "topKPlaceholder": "留空或输入 1~100",
+      "timeoutLabel": "总时长超时（秒）",
+      "timeoutPlaceholder": "留空不限制，如：3600",
       "connectivityHint": "连通性测试会消耗少量 Token",
       "cancel": "取消",
       "reset": "重置",
@@ -700,7 +702,8 @@
       "modelRequired": "请选择模型或使用其他模型",
       "temperatureRange": "Temperature 需在 0~2 之间",
       "topPRange": "Top P 需在 0~1 之间",
-      "topKRange": "Top K 需在 1~100 之间"
+      "topKRange": "Top K 需在 1~100 之间",
+      "timeoutRange": "总时长超时需在 1~86400 秒之间"
     },
     "language": "语言",
     "generalTitle": "通用设置",

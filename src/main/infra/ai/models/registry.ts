@@ -201,7 +201,16 @@ export class ModelRegistry {
         modelId: snapshot.modelId,
         providerKind: snapshot.providerKind,
         capabilities: {},
-        generationConfig: undefined,
+        // 快照的 timeoutMs 合并进生成参数：用户只调这一个旋钮，不应整组
+        // 抹掉内置条目的 reasoningEffort 等默认值；未配置时保持既有语义
+        // （快照不携带内置 generationConfig）
+        generationConfig:
+          snapshot.timeoutMs !== undefined
+            ? {
+                ...this.modelIndex.get(snapshot.modelId)?.generationConfig,
+                timeoutMs: snapshot.timeoutMs,
+              }
+            : undefined,
         isRuntime: true,
         explicitApiKey: snapshot.apiKey,
         explicitBaseUrl: snapshot.baseUrl,

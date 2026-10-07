@@ -128,6 +128,34 @@ describe('ModelRegistry', () => {
       expect(resolved.explicitBaseUrl).toBe('https://proxy.example.com');
     });
 
+    it('快照 timeoutMs 与内置 generationConfig 合并（不整组覆盖）', () => {
+      // deepseek-v4-pro 内置 generationConfig = { reasoningEffort: 'max' }：
+      // 用户只调超时旋钮不应抹掉思考强度等默认值
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('deepseek', 'deepseek-v4-pro'),
+        providerKind: 'deepseek',
+        modelId: 'deepseek-v4-pro',
+        timeoutMs: 600_000,
+        createdAt: 1_700_000_000_000,
+      });
+
+      const resolved = registry.resolve('deepseek-v4-pro');
+
+      expect(resolved.isRuntime).toBe(true);
+      expect(resolved.generationConfig).toEqual({ reasoningEffort: 'max', timeoutMs: 600_000 });
+    });
+
+    it('快照未配置 timeoutMs：保持既有语义（generationConfig undefined）', () => {
+      registry.registerRuntimeModel({
+        id: buildRuntimeSnapshotId('deepseek', 'my-coder'),
+        providerKind: 'deepseek',
+        modelId: 'my-coder',
+        createdAt: 1_700_000_000_000,
+      });
+
+      expect(registry.resolve('my-coder').generationConfig).toBeUndefined();
+    });
+
     it('注销后解析回退内置条目', () => {
       const snapshotId = buildRuntimeSnapshotId('openai', 'gpt-4o');
       registry.registerRuntimeModel({

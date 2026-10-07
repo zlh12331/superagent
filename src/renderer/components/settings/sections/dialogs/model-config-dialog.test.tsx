@@ -26,6 +26,7 @@ interface TestModelCallArg {
 interface UpdateRuntimeModelCallArg {
   readonly modelId: string;
   readonly baseUrl?: string;
+  readonly timeoutMs?: number | null;
 }
 
 const mocks = vi.hoisted(() => ({
@@ -41,12 +42,13 @@ const mocks = vi.hoisted(() => ({
   setApiKey: vi.fn(async () => ({ data: { ok: true } })),
 }));
 
-/** 编辑对象：原 baseUrl = https://old.example.com */
+/** 编辑对象：原 baseUrl = https://old.example.com，原超时 = 1500ms */
 const EDITING_MODEL = {
   modelId: 'my-coder',
   providerKind: 'deepseek',
   baseUrl: 'https://old.example.com',
   displayName: '我的编码器',
+  timeoutMs: 1500,
   isEnabled: true,
   createdAt: 1,
 } as const;
@@ -137,4 +139,44 @@ describe('ModelConfigDialog 编辑模式连通性测试', () => {
     expect(modelIdInput.value).toBe('my-coder');
     expect(modelIdInput.disabled).toBe(true);
   });
+
+  it('超时字段：毫秒预填换算为秒回显（1500ms → 1.5）', async () => {
+    renderDialog();
+
+    const timeoutInput = (await screen.findByPlaceholderText(
+      '留空不限制，如：3600',
+    )) as HTMLInputElement;
+    expect(timeoutInput.value).toBe('1.5');
+  }, 15_000);
+
+  it('超时字段：保存携带毫秒（120 秒 → 120000ms）', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const timeoutInput = await screen.findByPlaceholderText('留空不限制，如：3600');
+    // 预填 1.5 先清空再输入（type 是追加语义）
+    await user.clear(timeoutInput);
+    await user.type(timeoutInput, '120');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(mocks.updateRuntimeModel).toHaveBeenCalledTimes(1);
+    });
+    expect(updateArg().timeoutMs).toBe(120_000);
+    // 逐字符输入 + 弹窗渲染，全量并发 + coverage 插桩下会超默认 5000ms
+  }, 15_000);
+
+  it('超时字段：清空后保存发送 null（清除语义，回不限制）', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const timeoutInput = await screen.findByPlaceholderText('留空不限制，如：3600');
+    await user.clear(timeoutInput);
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(mocks.updateRuntimeModel).toHaveBeenCalledTimes(1);
+    });
+    expect(updateArg().timeoutMs).toBeNull();
+  }, 15_000);
 });

@@ -680,6 +680,8 @@
       "topPPlaceholder": "Leave empty or enter 0~1",
       "topKLabel": "Top K",
       "topKPlaceholder": "Leave empty or enter 1~100",
+      "timeoutLabel": "Turn timeout (seconds)",
+      "timeoutPlaceholder": "Leave empty for no limit, e.g. 3600",
       "connectivityHint": "Connectivity test consumes a small amount of tokens",
       "cancel": "Cancel",
       "reset": "Reset",
@@ -700,7 +702,8 @@
       "modelRequired": "Select a model or use another model",
       "temperatureRange": "Temperature must be between 0 and 2",
       "topPRange": "Top P must be between 0 and 1",
-      "topKRange": "Top K must be between 1 and 100"
+      "topKRange": "Top K must be between 1 and 100",
+      "timeoutRange": "Turn timeout must be between 1 and 86400 seconds"
     },
     "language": "Language",
     "generalTitle": "General",

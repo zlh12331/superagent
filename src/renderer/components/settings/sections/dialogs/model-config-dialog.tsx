@@ -59,6 +59,7 @@ function createDefaultValues(): ModelConfigFormValues {
     displayName: '',
     requestUrl: '',
     apiKey: '',
+    timeoutSeconds: '',
     contextInput: '',
     contextOutput: '',
     toolCallRounds: '',
@@ -82,16 +83,23 @@ function trimOptionalFields(values: ModelConfigFormValues): {
   readonly requestUrl: Record<string, string>;
   readonly apiKey: Record<string, string>;
   readonly apiKeyValue: string | undefined;
+  /**
+   * 超时（毫秒）：'' → null（编辑分支据此发送 null 清除，回不限制）；
+   * 秒 → 毫秒换算取整（1.5s → 1500ms）
+   */
+  readonly timeoutMs: number | null;
 } {
   const displayName = values.displayName.trim();
   const requestUrl = values.requestUrl.trim();
   const apiKey = values.apiKey.trim();
+  const timeoutRaw = values.timeoutSeconds.trim();
   return {
     displayName: displayName !== '' ? { displayName } : {},
     // update / add 契约里请求地址字段名是 baseUrl
     requestUrl: requestUrl !== '' ? { baseUrl: requestUrl } : {},
     apiKey: apiKey !== '' ? { apiKey } : {},
     apiKeyValue: apiKey !== '' ? apiKey : undefined,
+    timeoutMs: timeoutRaw !== '' ? Math.round(Number(timeoutRaw) * 1000) : null,
   };
 }
 
@@ -141,6 +149,9 @@ export function ModelConfigDialog({
         modelId: editingModel.modelId,
         displayName: editingModel.displayName ?? '',
         requestUrl: editingModel.baseUrl ?? '',
+        // 毫秒 → 秒回显（1500 → '1.5'）；未设置 → 空串（= 不限制）
+        timeoutSeconds:
+          editingModel.timeoutMs !== undefined ? String(editingModel.timeoutMs / 1000) : '',
       });
     } else {
       setValues({
@@ -185,6 +196,9 @@ export function ModelConfigDialog({
     if (!inRange(values.temperature, 0, 2)) {
       return t('settings.modelMgmt.temperatureRange');
     }
+    if (!inRange(values.timeoutSeconds, 1, 86_400)) {
+      return t('settings.modelMgmt.timeoutRange');
+    }
     if (!inRange(values.topP, 0, 1)) {
       return t('settings.modelMgmt.topPRange');
     }
@@ -224,9 +238,9 @@ export function ModelConfigDialog({
   /**
    * 保存（新增或编辑）
    *
-   * 三个分支的 payload 构造抽到模块级纯函数（buildAddPayload 等）——此前
-   * 每个分支内联 3-4 个 `...(x !== undefined ? { y: x } : {})` 展开，使本函数
-   * 认知复杂度达 40（阈值 15）。现在分支只负责「调哪个 mutation + 提示什么」。
+   * 分支只负责「调哪个 mutation + 提示什么」（三模式 payload 构造经
+   * trimOptionalFields 预组装；dispatch 拆为 saveByMode，使 handleSave 仅剩
+   * 校验→测试→执行→提示的直线流程——此前分支内联展开曾把认知复杂度推到 40）。
    */
   const handleSave = async (): Promise<void> => {
     const error = validate();
@@ -234,49 +248,58 @@ export function ModelConfigDialog({
       setErrors((prev) => ({ ...prev, modelId: error }));
       return;
     }
-    const connected = await runConnectivityTest();
-    if (!connected) return;
-
-    const fields = trimOptionalFields(values);
+    if (!(await runConnectivityTest())) return;
     try {
-      if (isEdit) {
-        await updateMutation.mutateAsync({
-          modelId: values.modelId.trim(),
-          ...fields.displayName,
-          ...fields.requestUrl,
-          ...fields.apiKey,
-        });
-        toast.success(t('settings.modelMgmt.modelUpdated'));
-      } else if (isProviderMode) {
-        // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
-        // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）
-        if (fields.apiKeyValue !== undefined) {
-          await setApiKeyMutation.mutateAsync({
-            provider: values.providerKind,
-            apiKey: fields.apiKeyValue,
-          });
-        }
-        await addMutation.mutateAsync({
-          modelId: effectiveModelId,
-          providerKind: values.providerKind,
-          ...fields.displayName,
-        });
-        toast.success(t('settings.modelMgmt.modelAdded'));
-      } else {
-        // 自定义模式：API 密钥走模型级 keychain（addRuntimeModel 的 apiKey 参数）
-        await addMutation.mutateAsync({
-          modelId: effectiveModelId,
-          providerKind: values.providerKind,
-          ...fields.requestUrl,
-          ...fields.apiKey,
-          ...fields.displayName,
-        });
-        toast.success(t('settings.modelMgmt.modelAdded'));
-      }
+      await saveByMode();
       onSaved();
     } catch {
       toast.error(t('settings.modelMgmt.saveFailed'));
     }
+  };
+
+  /** 按模式分发保存：服务商模式密钥走厂商级 keychain，其余走模型级 */
+  const saveByMode = async (): Promise<void> => {
+    const fields = trimOptionalFields(values);
+    if (isEdit) {
+      await updateMutation.mutateAsync({
+        modelId: values.modelId.trim(),
+        ...fields.displayName,
+        ...fields.requestUrl,
+        ...fields.apiKey,
+        // '' → null：编辑弹窗清空超时即发送清除语义（回不限制）
+        timeoutMs: fields.timeoutMs,
+      });
+      toast.success(t('settings.modelMgmt.modelUpdated'));
+      return;
+    }
+    if (isProviderMode) {
+      // 服务商模式：API 密钥走提供商级 keychain（settings:setApiKey），
+      // 模型添加时省略 apiKey（主进程回退读 keychain 提供商 key）
+      if (fields.apiKeyValue !== undefined) {
+        await setApiKeyMutation.mutateAsync({
+          provider: values.providerKind,
+          apiKey: fields.apiKeyValue,
+        });
+      }
+      await addMutation.mutateAsync({
+        modelId: effectiveModelId,
+        providerKind: values.providerKind,
+        ...fields.displayName,
+        timeoutMs: fields.timeoutMs,
+      });
+      toast.success(t('settings.modelMgmt.modelAdded'));
+      return;
+    }
+    // 自定义模式：API 密钥走模型级 keychain（addRuntimeModel 的 apiKey 参数）
+    await addMutation.mutateAsync({
+      modelId: effectiveModelId,
+      providerKind: values.providerKind,
+      ...fields.requestUrl,
+      ...fields.apiKey,
+      ...fields.displayName,
+      timeoutMs: fields.timeoutMs,
+    });
+    toast.success(t('settings.modelMgmt.modelAdded'));
   };
 
   const handleReset = (): void => {

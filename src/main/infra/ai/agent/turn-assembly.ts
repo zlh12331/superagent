@@ -127,10 +127,10 @@ export async function assembleAndRunTurn(args: TurnAssemblyArgs): Promise<TurnRu
   const model = await getModel(undefined);
 
   // 2. 模型级总时长超时（P0-1）：仅当模型配置了 timeoutMs 才创建信号。
-  //    ⚠️ 生产常态下 generationConfig.timeoutMs 恒 undefined（模型条目无此字段、
-  //    runtime_models 表无此列、渲染层不可设）——故 modelTimeout 实际恒 undefined，
-  //    下方 timeoutSignalAborted 恒 false。这是**先于 38 号改造就存在**的既有
-  //    情况（非本模块引入），登记在案待补数据来源。
+  //    数据来源（2026-10-07 接通）：runtime_models.timeout_ms 列（设置页模型
+  //    弹窗可配，经 ModelRegistry 与内置 generationConfig 合并）+ 内置模型条目。
+  //    未配置时 modelTimeout 仍为 undefined——仅流空闲超时兜底（stream-reader），
+  //    与本信号互补：空闲超时管「无字节」，总时长管「有进展但整体跑飞」。
   let modelTimeout: ReturnType<typeof createTimeoutSignal> | undefined;
   if (resolvedModel.generationConfig?.timeoutMs !== undefined) {
     modelTimeout = createTimeoutSignal(resolvedModel.generationConfig.timeoutMs);
