@@ -1,0 +1,20 @@
+# Dependabot 扫描范围收窄（2026-10-07）
+# ──────────────────────────────────────────────────────────────
+# 为什么必须有本文件：完全不配置 dependabot.yml 时，Dependabot 安全更新
+# 会自动探测全仓清单——连 参考项目/（vendored 参考快照，不在此仓维护）
+# 的 Python (uv) 清单都会被拉进更新，周期性产生失败 run 噪音
+# （2026-10-06 实测：uv in /参考项目/cognee-main Update 失败）。
+# 显式列出生态后，仅以下目录参与扫描，其余（参考项目等）退出。
+#
+# 与 Renovate 的分工（避免双轨重复 PR）：
+# - 版本更新主轨 = Renovate（renovate.json，周末批次，electron major 人工评审）
+# - open-pull-requests-limit: 0 关闭 Dependabot 版本更新 PR（该限制不影响
+#   安全更新），Dependabot 只保留根 npm 生态的安全更新 PR
+# ──────────────────────────────────────────────────────────────
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
