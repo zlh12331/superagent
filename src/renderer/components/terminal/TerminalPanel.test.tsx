@@ -131,8 +131,8 @@ describe('TerminalPanel', () => {
 
       // 标题渲染
       expect(screen.getByText('pwsh')).toBeInTheDocument();
-      // 关闭按钮（aria-label）
-      expect(screen.getByRole('button', { name: '关闭终端' })).toBeInTheDocument();
+      // 关闭按钮（title 提示；对无障碍树隐藏——鼠标专用修饰，键盘走 Delete 关闭）
+      expect(screen.getByTitle('关闭终端')).toBeInTheDocument();
     });
 
     it('alive=true 时不显示「已结束」标识', () => {
@@ -158,7 +158,7 @@ describe('TerminalPanel', () => {
       });
 
       render(withQueryPanel('session-1'));
-      const closeButton = screen.getByRole('button', { name: '关闭终端' });
+      const closeButton = screen.getByTitle('关闭终端');
       fireEvent.click(closeButton);
 
       await waitFor(() => {
@@ -178,7 +178,7 @@ describe('TerminalPanel', () => {
       );
 
       render(withQueryPanel('session-1'));
-      fireEvent.click(screen.getByRole('button', { name: '关闭终端' }));
+      fireEvent.click(screen.getByTitle('关闭终端'));
 
       await waitFor(() => {
         expect(mockToastError).toHaveBeenCalledWith('关闭终端失败: kill failed');

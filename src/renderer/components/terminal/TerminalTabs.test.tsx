@@ -56,13 +56,13 @@ describe('TerminalTabs', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('点击关闭按钮：onClose 且不触发 onSelect（stopPropagation）', () => {
+  it('点击关闭按钮：onClose 且不触发 onSelect（关闭钮与 tab 平级，点击不冒泡到 tab）', () => {
     const onSelect = vi.fn();
     const onClose = vi.fn();
     render(
       <TerminalTabs terminals={terminals} activeId="t1" onSelect={onSelect} onClose={onClose} />,
     );
-    fireEvent.click(screen.getAllByLabelText('关闭终端')[0] as HTMLElement);
+    fireEvent.click(screen.getAllByTitle('关闭终端')[0] as HTMLElement);
     expect(onClose).toHaveBeenCalledWith('t1');
     expect(onSelect).not.toHaveBeenCalled();
   });

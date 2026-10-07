@@ -244,7 +244,18 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
               if (def === undefined) return null;
               return (
                 <div key={tab} className="flex shrink-0 items-center">
-                  <TabsTrigger value={tab} className="h-5 flex-none gap-1 px-1.5 py-0 text-2xs">
+                  <TabsTrigger
+                    value={tab}
+                    className="h-5 flex-none gap-1 px-1.5 py-0 text-2xs"
+                    onKeyDown={(e) => {
+                      // 键盘关闭路径（与 TerminalTabs 的 Delete/Backspace 约定对齐）：
+                      // 任务摘要常驻不可关，其余视图可键盘删除
+                      if ((e.key === 'Delete' || e.key === 'Backspace') && tab !== 'info') {
+                        e.preventDefault();
+                        closeTab(tab);
+                      }
+                    }}
+                  >
                     {def.icon}
                     <span className="truncate">{t(def.labelKey)}</span>
                   </TabsTrigger>
@@ -253,8 +264,14 @@ export function DevPanel({ sessionId, gitRepoPath, className }: DevPanelProps): 
                       variant="ghost"
                       size="icon"
                       className="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 p-0.5"
-                      aria-label={t('panel.closeView')}
                       title={t('panel.closeView')}
+                      // 「可关闭标签」模式（VS Code/Chrome 同款）：关闭钮对无障碍树
+                      // 隐藏（鼠标专用修饰），键盘等价路径 = 聚焦标签后 Delete/
+                      // Backspace（本组件 TabsTrigger onKeyDown 实现）——避免
+                      // tablist 混入非 tab 子元素的 aria-required-children 违规
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      data-panel-close-view="true"
                       onClick={(event) => {
                         event.stopPropagation();
                         closeTab(tab);

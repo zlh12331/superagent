@@ -141,39 +141,48 @@ export function TerminalTabs({
       {terminals.map((terminal, index) => {
         const isActive = terminal.id === activeId;
         return (
+          // 包裹层仅承载布局（tablist 允许普通 div 包裹）；tab 与关闭钮必须
+          // 平级——role=tab 内嵌交互元素是 nested-interactive 违规（axe 实测）
           <div
             key={terminal.id}
-            role="tab"
-            aria-selected={isActive}
-            tabIndex={isActive ? 0 : -1}
-            data-terminal-tab={terminal.id}
             className={cn(
-              'group relative flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 border-r pr-2 pl-2.5 whitespace-nowrap transition-colors',
+              'group relative flex h-[30px] shrink-0 items-stretch border-r',
               index === 0 && 'border-l border-l-border',
-              isActive
-                ? 'bg-background text-foreground shadow-[inset_0_-1px_0_var(--accent)]'
-                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground bg-transparent',
             )}
-            onClick={() => onSelect(terminal.id)}
-            onKeyDown={(e) => handleTabKeyDown(terminal, index, e)}
           >
-            <TerminalIcon className="text-accent size-3 shrink-0" />
-            <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-xs">
-              {terminal.title}
-            </span>
+            <div
+              role="tab"
+              aria-selected={isActive}
+              tabIndex={isActive ? 0 : -1}
+              data-terminal-tab={terminal.id}
+              className={cn(
+                'flex cursor-pointer items-center gap-1.5 pr-[26px] pl-2.5 whitespace-nowrap transition-colors',
+                isActive
+                  ? 'bg-background text-foreground shadow-[inset_0_-1px_0_var(--accent)]'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground bg-transparent',
+              )}
+              onClick={() => onSelect(terminal.id)}
+              onKeyDown={(e) => handleTabKeyDown(terminal, index, e)}
+            >
+              <TerminalIcon className="text-accent size-3 shrink-0" />
+              <span className="max-w-[100px] overflow-hidden text-ellipsis font-mono text-xs">
+                {terminal.title}
+              </span>
+            </div>
+            {/* 关闭钮：绝对定位覆盖 tab 右缘；对无障碍树隐藏（鼠标专用修饰），
+                键盘等价路径 = 聚焦标签后 Delete/Backspace（上方 onKeyDown 已实现） */}
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                'text-muted-foreground hover:bg-destructive/15 hover:text-destructive ml-0.5 size-4 shrink-0 rounded-[calc(var(--radius)-5px)] text-md leading-none',
+                'absolute top-1/2 right-0.5 -translate-y-1/2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive size-4 shrink-0 rounded-[calc(var(--radius)-5px)] text-md leading-none',
                 isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
               )}
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose(terminal.id);
-              }}
-              aria-label={t('terminal.closeTerminal')}
+              onClick={() => onClose(terminal.id)}
               title={t('terminal.closeTerminal')}
+              aria-hidden="true"
+              tabIndex={-1}
+              data-terminal-close="true"
             >
               ×
             </Button>
