@@ -349,7 +349,7 @@ Renovate `minimumReleaseAge`（新版发布 24h 后才进升级 PR）+ electron 
 
 | 项 | 设计保留 | 现状与建议 |
 |---|---|---|
-| **L2-Socket** | 设计沿 v1.1 §5：GitHub App 只读评审，盯依赖变更的恶意行为——typosquat / postinstall 外联 / 代码混淆 / 包接管（已知 CVE 库之外的行为面，与 CodeQL/Dependabot 互补）；安装时索要 `contents: write` 直接拒 | **2026-10-07 拍板安装**。待维护者网页授权（安装动作无法由 API 代劳）；装后自动评审每个依赖 PR，观察期 2 周（成功标准「零噪音或噪音有行动价值」，回退 = 后台卸载） |
+| **L2-Socket** | 设计沿 v1.1 §5：GitHub App 只读评审，盯依赖变更的恶意行为——typosquat / postinstall 外联 / 代码混淆 / 包接管（已知 CVE 库之外的行为面，与 CodeQL/Dependabot 互补）；安装时索要 `contents: write` 直接拒 | **✅ 已安装（2026-10-07，维护者网页授权）**。自动评审每个依赖 PR；观察期至 **2026-10-21**（成功标准「零噪音或噪音有行动价值」，不达标即后台卸载） |
 | **L2-Harden-Runner** | v1.1 §5 设计保留：runner 出口 DNS/HTTP 审计（step 形式，`egress-policy: audit` 起步，仅 release.yml 持密钥 job）；三平台采集能力需先核实 | **维持搁置**（2026-10-07 仅批 Socket） |
 | 21 提交推送 | 分组 PR：安全修复组 / dependabot / a11y / 文档 | 安全修复组建议尽早——云端 first-interaction 现在是坏的 |
 | **merge queue** | ruleset `merge_queue` 规则 + ci.yml 监听 `merge_group` | **2026-10-07 拍板开启**。实施顺序（反了当场死锁：队列里无检查会 report）：① ci.yml 加 merge_group 触发（本地已就绪——队列条目跑全矩阵零 skip，Release PR 瘦身仅存于 PR 事件；gitleaks 限定 PR 事件）→ ② 该提交经 PR 合入 main → ③ ruleset 加 merge_queue 规则。strict policy 已挡静默过时合并，队列解决的是「手动 update + 重跑」的负担 |
