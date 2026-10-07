@@ -195,12 +195,16 @@ jobs:
         # （护栏 B 的自动化——此前仅挂 RELEASING.md 人工步骤）。
         # GITHUB_TOKEN 必配：匿名限流 60/h，CI 上必然撞顶。
         # 检查 3 找到的 open PR 即本 PR 自己——正是「合并前校验」的设计场景。
+        # ⚠️ head_ref 是 PR 作者可控的分支名（fork PR 同样触发本事件），直接内插进
+        # run 块是 GitHub 安全加固文档记载的脚本注入向量——必须经 env 中转变量传递，
+        # 由 shell 双引号展开（GitHub 官方缓解模式，2026-10-07 收口）。
         if: startsWith(github.head_ref, 'release-please--')
         run: |
-          pnpm check:release-pr-scope --branch "${{ github.head_ref }}"
+          pnpm check:release-pr-scope --branch "$HEAD_REF"
           pnpm check:release-anchor
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.head_ref }}
 
   # ── Job 2: 单测（6 平台原生各跑一份）──────────────────────────
   # 为什么扩到 6 平台：单测是最易暴露平台差异的一层（路径分隔符、原生模块
