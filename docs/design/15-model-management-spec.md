@@ -33,7 +33,7 @@
 | ----------- | ------ | ------------------------------------- | -------- | ---------------- |
 | 弹窗头部        | 所有弹窗   | 标题 + × 关闭（返回箭头：推断）                 | × 关闭弹窗   | 始终可见             |
 | 下拉选择器       | 配置弹窗   | 厂商/配置方式/模型/模型系列                       | 点击展开     | 必填红星             |
-| 输入框         | 配置弹窗   | 模型ID/名称/API密钥/Token                   | 键盘输入     | placeholder + 必填 |
+| 输入框         | 配置弹窗   | 模型ID/名称/API密钥/Token/总时长超时（秒，2026-10-07 起）   | 键盘输入     | placeholder + 必填 |
 | 单选组         | 配置弹窗   | 支持图片输入/思考模式                           | 点击互斥切换   | 蓝点选中             |
 | 开关          | 列表页行   | 启停开关                                  | 点击切换     | 开启蓝/关闭灰          |
 | Token 快捷按钮组 | 配置弹窗   | `128k/256k/512k/1M`、`4k/16k/32k/128k` | 点击填入预设   | 小号胶囊             |
@@ -100,7 +100,7 @@ interface Model {
 }
 ```
 
-* 数据来源：列表页展示**用户添加的模型**（`settings:listRuntimeModels`，持久化于 SQLite `runtime_models` 表：modelId / providerKind / baseUrl / displayName / isEnabled / createdAt；该通道扩展后直接返回 displayName/isEnabled，无需 models:list 过滤）；厂商/模型预置清单（`models:list`）仅作为添加弹窗与配置弹窗下拉的选择来源
+* 数据来源：列表页展示**用户添加的模型**（`settings:listRuntimeModels`，持久化于 SQLite `runtime_models` 表：modelId / providerKind / baseUrl / displayName / timeoutMs / isEnabled / createdAt；该通道扩展后直接返回 displayName/isEnabled，无需 models:list 过滤）；厂商/模型预置清单（`models:list`）仅作为添加弹窗与配置弹窗下拉的选择来源
 
 * 状态（按四层架构）：
   - models 列表：L3 TanStack Query（`useModelsQuery`，共享 `MODELS_QUERY_KEY`，与 ModelSelector 同源同 key）
@@ -266,7 +266,7 @@ interface ModelConfig {
 ```
 
 * 字段映射与持久化范围（对齐 6.1 数据库变更）：
-  - **持久化**（runtime_models 表）：modelId / providerKind（表单 provider）/ baseUrl（表单 requestUrl）/ displayName（列 display_name）/ isEnabled（新增）
+  - **持久化**（runtime_models 表）：modelId / providerKind（表单 provider）/ baseUrl（表单 requestUrl）/ displayName（列 display_name）/ timeoutMs（列 timeout_ms，2026-10-07 起；弹窗「总时长超时（秒）」字段，秒↔毫秒换算，1~86400 秒，留空 = null 不限制；编辑分支可发 null 清除回不限制）/ isEnabled（新增）
   - **不持久化**（首版仅表单交互）：configType / apiFormat / modelSeries / contextInput / contextOutput / toolCallRounds / imageSupport / thinkingMode / temperature / topP / topK —— 若产品确认高级参数需按模型生效，则扩展 6.1 增列
 
 * 状态：formValues、errors、touched、saving、advancedExpanded（均为 L1 useState）
@@ -346,12 +346,13 @@ interface ModelConfig {
 
 ### 6.1 数据库变更（runtime_models 表）
 
-新增两列（schema.ts 唯一真源 + drizzle-kit generate 自动出迁移）：
+新增三列（schema.ts 唯一真源 + drizzle-kit generate 自动出迁移；timeout_ms 于 2026-10-07 bc28eef1 补加）：
 
 | 列 | 类型 | 说明 |
 |---|---|---|
 | display_name | text, nullable | 模型展示名称（自定义模式选填） |
 | is_enabled | integer, not null, default 1 | 启停状态（0=停用 1=启用） |
+| timeout_ms | integer, nullable | 单回合总时长超时（毫秒；null = 不限制，仅流空闲 600s 兜底）。经 ModelRegistry 并入 generationConfig.timeoutMs，由 turn-assembly 创建总时长超时信号（超时 = 错误终态，与流空闲超时互补：空闲超时管「无字节」，本字段管「有进展但整体跑飞」） |
 
 ### 6.2 新增 IPC 通道（meta.ts + definitions.ts 各一行，其余自动生成）
 
@@ -361,7 +362,7 @@ interface ModelConfig {
 * `models:test`：连通性测试
   - 请求：`{ providerKind, modelId?, baseUrl?, apiKey? }`
   - 响应：`{ ok: boolean; error?: string }`
-  - 规则：真实 HTTP 探测（fetch 直连供应商端点最小请求，apiKey 回退链 input.apiKey → 提供商 keychain key → 运行时模型 key），失败返回 error 提示；"会消耗少量 Token" 为截图既定 UI 文案
+  - 规则：真实 HTTP 探测（fetch 直连供应商端点最小请求，apiKey 回退链 input.apiKey → 提供商 keychain key → 运行时模型 key），失败返回 error 提示；"会消耗少量 Token" 为截图既定 UI 文案。**环回放行（2026-10-07 修正）**：显式 baseUrl 指向本机环回（localhost / *.localhost / 127/8 / ::1）时**放行**（本地 Ollama / 自建推理服务是合法探测目标——发起方是用户本人，与 web_fetch 的模型发起 SSRF 威胁模型不同，守卫不共用），但缺 apiKey 仍拒绝（密钥外泄防线不放宽）；*.local / *.internal / 云元数据地址不在环回之列，仍按私网拦截
 * `settings:listRuntimeModels`：**扩展**返回 displayName / isEnabled 字段（列表页开关与展示名的数据源）
 
 ### 6.3 API Key 复用（无新增）
