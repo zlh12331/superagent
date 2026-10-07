@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.7.1-beta](https://github.com/zlh12331/superagent/compare/v1.7.0...v1.7.1-beta) (2026-10-07)
+
+
+### 修复
+
+* **ai:** 打通模型级总时长超时（runtime_models 新增 timeout_ms） ([a5146d3](https://github.com/zlh12331/superagent/commit/a5146d36e28d8015ef65cc40f2a61c907f1f62e2))
+* **ci:** first-interaction 改 pull_request_target，修复 fork PR 必失败 ([6d651b1](https://github.com/zlh12331/superagent/commit/6d651b1ecf2ff485a0b0230a5e93f8fb5c484be8))
+* **ci:** workflow run 块内插改经环境变量中转，收口脚本注入面 ([0f87345](https://github.com/zlh12331/superagent/commit/0f8734532f5f54681796fc94cebd0352885326c6))
+* **diagnostics:** 修正脱敏注释中未实现的 base64 覆盖声明 ([2f62ef0](https://github.com/zlh12331/superagent/commit/2f62ef012ce741d01003ce3ba32430da980cb1ef))
+* **models:** 连通性测试放行本机环回端点 ([2d49324](https://github.com/zlh12331/superagent/commit/2d4932438704e61f87883e49eda8cd2176031f58))
+* **release:** scope 闸门对 package.json patch 缺失改 fail-closed ([88824f9](https://github.com/zlh12331/superagent/commit/88824f94a6531fdb17046d21c6c63de619be119e))
+* **renderer:** 修复 a11y 三期扩页扫出的低透明度文字对比度违规 ([9cddb87](https://github.com/zlh12331/superagent/commit/9cddb87fcc019c94a8e1c1556812637435ca8801))
+* **renderer:** 修复 a11y 扩页扫描发现的选中态对比度与可关闭标签违规 ([89ab1cc](https://github.com/zlh12331/superagent/commit/89ab1ccf10913f66cd995d28414cfacbafba55c9))
+
 ## [1.7.0](https://github.com/zlh12331/superagent/compare/v1.7.0-beta.3...v1.7.0) (2026-10-06)
 
 > 🎓 **毕业版本**：1.7.0-beta.1 → beta.3 三个预发布版真机验证完毕，本版将其整体毕业为稳定版——是 1.7.x 首个面向稳定通道用户的版本。相对上一个正式版 1.6.2 的主要变化：① 打包版记忆资产登记修复（此前静默失败）；② 更新说明按 Markdown 结构渲染；③ 安装体积深度优化（引擎 bundle 单文件化，安装包内容约减半）；④ 发版链三道护栏自动化（影响发版质量与速度，用户侧无感）。beta 期间每个版本的详细说明见下方各 beta 段落。
