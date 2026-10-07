@@ -2,13 +2,26 @@
 # 目标：引导补充诊断信息（降 needs-info 率）+ 说明验证要求
 # 权限：issues: write + pull-requests: write（发评论）
 # 安全：action pin 到 commit SHA；欢迎语为固定文案，不引用 issue 内容
+#
+# ⚠️ 为什么 PR 用 pull_request_target 而非 pull_request（2026-10-07 收口）：
+# pull_request 事件下 fork PR 的 GITHUB_TOKEN 一律只读（GitHub 官方文档原话：
+# "The GITHUB_TOKEN has read-only permissions in pull requests from forked
+# repositories"），permissions 块提不了权 ⇒ 外部贡献者的 fork PR（恰是本
+# workflow 的目标人群）发评论必 403、job 必红。pull_request_target 在 base
+# 仓库上下文运行、令牌可写——与 labeler.yml 的选型一致。
+# 接受的残余面（评审通过，而非疏漏）：
+# ① checkout 不发生（本 workflow 无 actions/checkout），不会以高权限执行 fork
+#   代码；action 自身按 issue/PR 号调 REST API 发固定文案，不取仓库内容。
+# ② 欢迎语为仓内固定字面量（with: 输入），fork PR 不可控其内容。
+# ③ gate 类型修改（synchronize/编辑标题等）不触发——只监听 opened，重放面
+#   最小；误触发最坏后果 = 多一条欢迎评论。
 
 name: First Interaction
 
 on:
   issues:
     types: [opened]
-  pull_request:
+  pull_request_target:
     types: [opened]
 
 permissions:
