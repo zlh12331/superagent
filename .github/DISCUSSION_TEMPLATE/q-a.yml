@@ -1,0 +1,56 @@
+# Q&A 版块开帖表单（Discussion category form）
+# 文件名必须等于版块 slug（q-a）；Polls 不支持表单，公告仅维护者发帖均无需配置
+# 目标：开帖时就把环境信息收集齐，替代事后追问（原 spec §6「reply templates」
+#       设计所指向的真实功能——reply templates 本身不存在，见 39 号 spec §6 更正）
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提问。为了让你更快得到答案，请先填写下面的环境信息。
+        ⚠️ 粘贴日志/截图前请移除 API Key、令牌、私有代码内容。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到了什么问题？
+      description: 期望的行为 vs 实际发生的行为
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 见「设置 → 关于」，或安装包文件名（如 1.7.1-beta）
+      placeholder: 1.7.1-beta
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (AppImage)
+        - Linux (deb)
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: 已经试过什么？
+      description: 可选——排查过的步骤、看过的文档，避免重复建议
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 可在「设置 → 诊断 → 导出诊断包」获取脱敏日志，拖拽上传即可
+    validations:
+      required: false

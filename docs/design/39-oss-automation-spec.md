@@ -292,7 +292,8 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 | 安全 | secret scanning ✅ / push protection ✅ / dependabot alerts ✅ |
 | Actions | 默认 workflow 权限 = **write**（拍板维持）；`sha_pinning_required=false`（pin SHA 靠 workflow 纪律，7 个已全 pin）；`allowed_actions=all`；GITHUB_TOKEN 不可 approve PR |
 | 密钥/环境 | Actions secrets 仅 `RELEASE_PLEASE_TOKEN`；**发布未签名**；environments 仅 copilot 自动项 |
-| 社区面 | Discussions 5 版块（General / Ideas / Polls / Q&A / 公告[仅维护者]）；labels 28 个 taxonomy 全生效；issue 模板三件套 + blank_issues 关闭 + 安全私密上报引导 |
+| 社区面 | Discussions 5 版块（General / Ideas / Polls / Q&A / 公告[仅维护者]）；**开帖表单 ×2 已配置（2026-10-07：`.github/DISCUSSION_TEMPLATE/q-a.yml` + `ideas.yml`，开帖即收集版本/系统/查重确认——替代事后追问）**；labels 28 个 taxonomy 全生效；issue 模板三件套 + blank_issues 关闭 + 安全私密上报引导 |
+| 社区面更正 | v1.1 §6 所写「Discussions reply templates」**不是真实存在的 GitHub 功能**（2026-10-07 实证：SavedReply 为 viewer 级个人便签且无 API 管理入口，262 个 mutation 无一可写）——其意图由 **Discussion category forms**（开帖侧结构化表单，真实功能）更优实现，见上 |
 | Renovate | 周末批次 + 上海时区；非 major 归一组；electron major `enabled:false`；react-query 双包同 PR；`minimumReleaseAge: 1 day`（供应链 24h 缓冲） |
 
 ### 6.2 workflow 一览（7 个，全部 active、全 pin SHA、显式 permissions）
