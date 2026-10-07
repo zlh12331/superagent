@@ -4,6 +4,7 @@
 
 ## [1.7.1-beta](https://github.com/zlh12331/superagent/compare/v1.7.0...v1.7.1-beta) (2026-10-07)
 
+<!-- changelog:polished -->
 
 ### 修复
 
