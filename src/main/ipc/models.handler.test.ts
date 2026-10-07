@@ -291,6 +291,56 @@ describe('models.handler test（连通性探测）', () => {
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
 
+  it('显式 baseUrl 指向本机环回：放行（本地 Ollama / 自建推理服务）', async () => {
+    // 2026-10-07 修正：环回不再借用 web_fetch 的 SSRF 一律拦截——测试的
+    // 发起方是用户本人，本地推理端点（含自定义端口）是合法探测目标
+    mocks.fetch.mockResolvedValue(respond(200));
+    for (const baseUrl of [
+      'http://127.0.0.1:11434',
+      'http://localhost:9000',
+      'http://[::1]:9000',
+    ]) {
+      const res = await modelsHandlers.test({
+        providerKind: 'ollama',
+        modelId: undefined,
+        baseUrl,
+        apiKey: PLACEHOLDER_CREDENTIAL,
+      });
+      expect(res).toEqual({ ok: true });
+    }
+    const [url] = mocks.fetch.mock.calls[0] as unknown as [string];
+    expect(url).toBe('http://127.0.0.1:11434/v1/chat/completions');
+  });
+
+  it('显式 baseUrl 指向环回但缺 apiKey：仍拒绝（密钥外泄防线不放宽）', async () => {
+    await expect(
+      modelsHandlers.test({
+        providerKind: 'ollama',
+        modelId: undefined,
+        baseUrl: 'http://127.0.0.1:11434',
+        apiKey: undefined,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  });
+
+  it('显式 baseUrl 指向私网/元数据：仍拒绝（环回放行不外溢到受限网段）', async () => {
+    for (const baseUrl of [
+      'http://192.168.1.1:8080',
+      'http://10.0.0.5:3000',
+      'http://metadata.google.internal',
+      'http://my-service.local',
+    ]) {
+      await expect(
+        modelsHandlers.test({
+          providerKind: 'openai',
+          modelId: undefined,
+          baseUrl,
+          apiKey: PLACEHOLDER_CREDENTIAL,
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    }
+  });
+
   it('fetch 异常：ok=false + 异常信息', async () => {
     mocks.fetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
     const res = await modelsHandlers.test({
