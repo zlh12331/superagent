@@ -4,6 +4,7 @@
 
 ## [1.8.0-beta](https://github.com/zlh12331/superagent/compare/v1.7.1-beta...v1.8.0-beta) (2026-10-07)
 
+<!-- changelog:polished -->
 
 ### 新增
 
