@@ -63,6 +63,8 @@ jobs:
           fetch-depth: 0
       - name: Detect release-please commit
         id: detect
+        env:
+          CONFIRM_VERSION: ${{ github.event.inputs.confirm_version }}
         run: |
           # 找出「产出目标版本号的发布提交」的 SHA。
           # 为什么需要：tag 必须钉在这个提交上，而非"当前 main tip"——重跑 release job
@@ -78,8 +80,10 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             # 手动重试（2026-09-10 收口）：必须显式输入与 package.json 一致的版本号，
             # 防止误点 dispatch 直接发版。输入不符 → gate 失败 → 全部 job 跳过。
+            # ⚠️ 输入经 env 中转（2026-10-07 收口）：dispatch 输入是用户可控字符串，
+            # 不直接内插进 run 块（与下游步骤的版本号中转同模式）。
             VERSION=$(node -p "require('./package.json').version")
-            CONFIRM="${{ github.event.inputs.confirm_version }}"
+            CONFIRM="$CONFIRM_VERSION"
             if [[ -z "$CONFIRM" || "$CONFIRM" != "$VERSION" ]]; then
               echo "::error::confirm_version='$CONFIRM' 与 package.json 版本 '$VERSION' 不一致，拒绝放行"
               exit 1
@@ -131,8 +135,13 @@ jobs:
         # 使 gate 从秒级劣化到分钟级，而每次发版重试都要经过它）。本脚本只依赖
         # node:fs 与同目录 TS 文件，tsx 足以直接执行；checkout 默认深 1 足够
         # （只读工作区内的 CHANGELOG.md）。
+        #
+        # ⚠️ 动态值经 env 中转（2026-10-07 收口，与 ci.yml Release PR gates 同模式）：
+        # 不直接内插进 run 块——注入向量的缓解 = 中间环境变量（GitHub 官方加固模式）。
         if: steps.detect.outputs.is_release == 'true'
-        run: npx --yes tsx@^4.23.0 scripts/check-changelog-polish.ts --version ${{ steps.detect.outputs.version }}
+        run: npx --yes tsx@^4.23.0 scripts/check-changelog-polish.ts --version "$RELEASE_VERSION"
+        env:
+          RELEASE_VERSION: ${{ steps.detect.outputs.version }}
 
       - name: Release anchor check (post-merge, 打 tag 前)
         # ── 为什么在 gate（与 ci.yml 的差异）─────────────────────────
@@ -145,10 +154,13 @@ jobs:
         # 用 npx tsx 而非 pnpm：本 job 不装依赖（装依赖会触发 electron 原生模块重建，
         # 使 gate 从秒级劣化到分钟级，而每次发版重试都要经过它）。本脚本只依赖
         # node:fs/url 与同目录 lib TS 文件，tsx 足以直接执行。
+        #
+        # ⚠️ 版本号经 env 中转（与上一步同模式）：不直接内插进 run 块。
         if: steps.detect.outputs.is_release == 'true'
-        run: npx --yes tsx@^4.23.0 scripts/check-release-anchor.ts --phase post-merge --version ${{ steps.detect.outputs.version }}
+        run: npx --yes tsx@^4.23.0 scripts/check-release-anchor.ts --phase post-merge --version "$RELEASE_VERSION"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.detect.outputs.version }}
 
   build:
     name: Build & Release ${{ matrix.platform }} (${{ matrix.variant }})
@@ -501,8 +513,10 @@ jobs:
       # 发布描述取自 CHANGELOG.md 中对应版本的段落（发版前在 Release PR 中润色好的文案）
       - name: Extract release body from CHANGELOG
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          VERSION="${{ needs.gate.outputs.version }}"
+          VERSION="$RELEASE_VERSION"
           VERSION_ESCAPED=$(printf '%s' "$VERSION" | sed 's/\./\\./g')
           awk -v v="$VERSION_ESCAPED" '
             /^## / {
@@ -564,8 +578,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          VERSION="${{ needs.gate.outputs.version }}"
+          VERSION="$RELEASE_VERSION"
           # 优先按版本号精确匹配（release PR 标题形如 chore(main): release X.Y.Z）
           PRS=$(gh pr list --state merged --label "autorelease: pending" \
                   --search "release ${VERSION} in:title" \
@@ -607,8 +622,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          TAG="v${{ needs.gate.outputs.version }}"
+          TAG="v$RELEASE_VERSION"
           REPO="${{ github.repository }}"
           # draft release 不响应 /releases/tags/{tag}（GitHub 对 draft 返回 404，2026-09-10
           # 实测：create 成功后 publish 因此误报"找不到 draft release"）。改用 releases
@@ -671,7 +687,7 @@ jobs:
           # （artifactName 含 ${arch} 与 ${version}）。每个组合各一份安装包，
           # 不再产出「双架构通用包」（nsis.buildUniversalInstaller: false）。
           # 注意 Windows/macOS 用 ${arch} 原值（x64/arm64），Linux 用各生态惯例串。
-          V="${{ needs.gate.outputs.version }}"
+          V="$RELEASE_VERSION"
           require_asset() {
             if ! grep -Eq "$1" <<<"$ASSETS"; then echo "::error::缺少 $2"; MISSING=1; fi
           }
