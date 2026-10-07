@@ -775,13 +775,13 @@ jobs:
             const owner = context.repo.owner;
 
             const repoData = await github.graphql(
-              `query($owner: String!, $repo: String!) {
+              `query($owner: String!, $repo: String!, $slug: String!) {
                 repository(owner: $owner, name: $repo) {
                   id
-                  discussionCategory(query: "公告") { id name }
+                  discussionCategory(slug: $slug) { id name }
                 }
               }`,
-              { owner, repo },
+              { owner, repo, slug: '公告' },
             );
             const categoryId = repoData.repository.discussionCategory?.id;
             if (!categoryId) {
