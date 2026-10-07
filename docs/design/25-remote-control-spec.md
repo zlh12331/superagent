@@ -1,7 +1,7 @@
 # 25. 远程控制规范
 
 > 基于项目实际远程控制体系（RemoteControlService + RemoteAgentBridge + 内置手机 Web 控制页 + 设置「移动端」面板）。
-> 最后同步：2026-08-28
+> 最后同步：2026-10-07
 
 ---
 
@@ -28,9 +28,10 @@ AgentService / PermissionService / SessionService    remote.handler.ts → 设�
 
 | 通道 | 语义 | 说明 |
 |---|---|---|
-| `remote:getStatus` | 状态快照 | 运行状态 + 令牌 + 局域网地址 + 执行活动 |
-| `remote:start` | 开启 LAN 监听 | 生成新令牌，返回变更后快照 |
+| `remote:getStatus` | 状态快照 | 运行状态 + 令牌 + 地址 + 执行活动 + 绑定范围（2026-10-01 起，见下） |
+| `remote:start` | 开启监听 | 按 bindScope 偏好决定绑定地址（lan=0.0.0.0 / loopback=127.0.0.1），生成新令牌，返回变更后快照 |
 | `remote:stop` | 关闭监听（幂等） | 返回快照，`token`/`port`/`addresses` 一律置空 |
+| `remote:setBindScope` | 切换绑定范围（2026-10-01 新增） | lan=0.0.0.0 全网卡 / loopback=仅本机 127.0.0.1；先应用后落库（应用失败不写偏好）；运行中切换重启监听但保留配对话轮（令牌不变），失败回滚原范围；loopback 同时停发 UDP 公告；未运行时仅记录、下次 start 生效 |
 
 响应统一为 `RemoteStatusRes`（`packages/shared/src/schemas/remote.ts`，含 zod schema 做响应契约校验，规则见 `19-ipc-spec.md`）。启停**立即回读状态返回**，渲染层无需二次请求。
 
@@ -42,14 +43,14 @@ AgentService / PermissionService / SessionService    remote.handler.ts → 设�
 
 ## 三、局域网发现与 HTTP 端点
 
-**UDP 公告**（`node:dgram`，默认参数生产使用，测试注入单播与短间隔）：
+**UDP 公告**（`node:dgram`，默认参数生产使用，测试注入单播与短间隔；**仅 lan 范围发送**——loopback 不广播，见 §二 setBindScope）：
 
 - 目标 `255.255.255.255:45918`，间隔 3000ms，启动时立即先播一次
 - 公告体 `{ service: 'code-agent-remote', version: 1, name, port, protocol: 'http' }`——**永不含令牌**
 - 广播地址枚举保留虚拟网卡（VMware/Hyper-V/Docker 网段）：是否命中由用户按自己的网络环境判断，代码不做启发式猜测误删真实地址
 - UDP bind / `setBroadcast` 失败**只降级不阻断**（HTTP 直连仍可用），日志 warn
 
-**HTTP**（`node:http`，监听 `0.0.0.0`，端口默认 0 = 随机，经公告与配对界面告知）：
+**HTTP**（`node:http`，按绑定范围监听 `0.0.0.0`（lan，默认）或 `127.0.0.1`（loopback），端口默认 0 = 随机，经公告与配对界面告知）：
 
 | 方法 · 路径 | 用途 | 失败语义 |
 |---|---|---|
@@ -105,7 +106,7 @@ AgentService / PermissionService / SessionService    remote.handler.ts → 设�
 | 审批门控 | 仅 `approvalMode` 为 `auto` / `yolo` 时执行；`ask`/`plan` 无审批通道，回传可读提示而不是静默失败 |
 | 工作目录 | 应用 `userData/remote-workspace` 专用沙箱，**不用用户主目录**——避免第三方诱导读取 `~/.ssh`、`~/.aws` 等敏感文件并回传 |
 | 滥用面 | 命令体 64KB、文本 8192 字符、回传 20000 字符三重上限；同 clientId 串行，不放大并发 |
-| 暴露前提 | HTTP 明文 + `0.0.0.0`：等价于"同局域网内任何持令牌主机可驱动桌面端"，因此默认关闭、由用户显式开启，且只在可信网络启用；关闭服务即撤销全部入口 |
+| 暴露前提 | 绑定范围两态（2026-10-01 起，`remote-pref.json` 持久化，默认 lan 兼容存量）：lan = HTTP 明文 + `0.0.0.0` + UDP 公告，等价于"同局域网内任何持令牌主机可驱动桌面端"；loopback = `127.0.0.1` 仅本机可达且停发公告。默认关闭、由用户显式开启，且只在可信网络启用；关闭服务即撤销全部入口 |
 
 ## 七、Agent 桥接执行语义
 
