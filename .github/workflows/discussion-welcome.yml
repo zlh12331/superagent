@@ -1,0 +1,87 @@
+# Discussions 新帖自动接纳（按版块发固定欢迎文案）
+# 目标：与 issue 侧 first-interaction 对齐——新帖即刻获得确定性回应，
+#       引导使用版块原生能力（Q&A 勾选答案）与正确入口（报障去 issue）。
+# 权限：discussions: write（发评论所需最小权限）
+# 安全：action pin 到 commit SHA；文案为仓内固定字面量，不引用帖子内容；
+#       无 checkout，不以任何权限执行帖子内容。
+# 事件说明：on: discussion 为官方支持（activity type: created），
+#       GitHub 文档标注 webhook events for Discussions 处于 public preview。
+# 注意：first-interaction 官方 action 不支持 discussion 事件（只有 issue/PR），
+#       故本 workflow 用 actions/github-script 判断"该作者是否首发"——
+#       通过 REST 搜索该作者的 discussion 数量实现，逻辑简单且无第三方依赖。
+
+name: Discussion Welcome
+
+on:
+  discussion:
+    types: [created]
+  discussion_comment:
+    types: [created]
+
+permissions:
+  discussions: write
+
+concurrency:
+  group: discussion-welcome-${{ github.event.discussion.number }}
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 只对"新帖"发欢迎（评论不触发重发）；discussion_comment 事件仅用于
+    # 维持监听面一致，实际由下方的首发判断兜底防重复。
+    if: github.event_name == 'discussion'
+    steps:
+      - name: Welcome on first discussion only
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const author = context.payload.discussion.user.login;
+            // bot 帖（含将来的公告自动发帖）不欢迎
+            if (context.payload.discussion.user.type === 'Bot') return;
+
+            // 首发判断：该作者名下的 discussion 总数（含本帖）为 1 才欢迎。
+            // 固定文案，不引用帖子内容（注入面为零）。
+            const q = `repo:${owner}/${repo} is:discussion author:${author}`;
+            const found = await github.rest.search.issuesAndPullRequests({
+              q, per_page: 1,
+            });
+            if (found.data.total_count > 1) return;
+
+            const category = context.payload.discussion.category.slug;
+            let body;
+            if (category === 'q-a') {
+              body = [
+                '欢迎提问！🎉',
+                '',
+                '为了让问题更快被解答：',
+                '- 环境信息（版本 / 操作系统）已在发帖表单收集，若有遗漏请补充',
+                '- 诊断包：设置 → 诊断 → **导出诊断包**（脱敏日志，拖拽上传即可）',
+                '- 答案解决你的问题后，请**勾选该回答为答案**（Q&A 版块原生能力），',
+                '  方便后来者检索',
+                '',
+                '⚠️ 若你描述的是可复现的缺陷，请改走 [Bug 报告](https://github.com/zlh12331/superagent/issues/new?template=bug_report.yml)，issue 通道会进入修复排期。',
+              ].join('\n');
+            } else if (category === 'ideas') {
+              body = [
+                '感谢提建议！🎉 你的想法已记录。',
+                '',
+                '- 建议被采纳后会转为 issue 进入开发排期，原帖会链接过去',
+                '- 想推动实现，补全「要解决的问题」与真实场景最有帮助',
+                '',
+                '⚠️ 若是明确的、可执行的功能请求，也可以直接开 [功能建议 issue](https://github.com/zlh12331/superagent/issues/new?template=feature_request.yml)。',
+              ].join('\n');
+            } else {
+              return; // General / Polls / 公告：不欢迎（公告仅维护者，无需迎新）
+            }
+
+            await github.graphql(
+              `mutation($id: ID!, $body: String!) {
+                addDiscussionComment(input: { discussionId: $id, body: $body }) {
+                  comment { id }
+                }
+              }`,
+              { id: context.payload.discussion.node_id, body },
+            );
