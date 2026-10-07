@@ -29,6 +29,34 @@ import { getSecret } from '../infra/storage/keychain';
 /** 连通性测试超时（毫秒） */
 const TEST_TIMEOUT_MS = 10_000;
 
+/**
+ * 目标是否指向本机环回（models:test 连通性测试的放行依据）
+ *
+ * 环回 = localhost / *.localhost 主机名，或 127/8、::1（含 IPv4 映射/兼容形式）
+ * 字面量。与 url-guard 的 isBlockedHostname / isBlockedAddress 语义区别：
+ * web_fetch 出站的发起方是模型（环回探测 = SSRF，必须拦）；models:test 的
+ * 发起方是用户本人（本地 Ollama / 自建推理服务是合法目标，环回应放行）。
+ * 两个威胁模型不同，守卫不共用；*.local / *.internal / 元数据域名不在环回
+ * 之列（仍按受限处理，交由 url-guard 拦截）。
+ */
+function isLoopbackTarget(hostname: string): boolean {
+  // URL.hostname 对 IPv6 字面量带方括号（如 [::1]），与 url-guard 同样剥除
+  const host = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    return true;
+  }
+  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    return true;
+  }
+  if (host === '::1') {
+    return true;
+  }
+  return /^::(?:ffff:)?127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
 /** 根地址需拼接 /v1 的供应商（与 ProviderRegistry 拼接规则一致） */
 const V1_PREFIX_KINDS: readonly ProviderKind[] = ['deepseek', 'openai', 'ollama'];
 
@@ -45,6 +73,46 @@ function buildTestUrl(providerKind: ProviderKind, baseUrl: string): string {
   }
   const root = V1_PREFIX_KINDS.includes(providerKind) ? `${baseUrl}/v1` : baseUrl;
   return `${root}/chat/completions`;
+}
+
+/**
+ * 显式 baseUrl 的安全校验（连通性测试专用）
+ *
+ * 2026-09-08 安全修复（密钥外泄原语）：渲染层此前可传任意 baseUrl 并省略
+ * apiKey，主进程会回退 keychain 里的真实密钥并发往该 URL（无白名单）。
+ * 现在：显式 baseUrl 必须同时显式提供 apiKey——不允许用真实密钥探测
+ * 任意端点；同时拒绝私网/链路本地/云元数据地址（SSRF）。
+ * 2026-10-07 修正：loopback（localhost/127.0.0.1/[::1]）**放行**——本地
+ * Ollama / 自建推理服务是合法用法（providerKind='ollama' 的默认端点就是
+ * localhost:11434，自定义端口只能显式填地址）。此前借用 web_fetch 的
+ * url-guard 一律拦环回，与本注释承诺相反且与保存路径（无校验）不一致：
+ * 守卫发起方是用户本人在设置面操作（非模型出站），环回风险可接受。
+ *
+ * @throws AppError(INVALID_INPUT) 缺 apiKey / URL 非法 / 指向受限网段
+ */
+function assertSafeTestBaseUrl(baseUrl: string, apiKey: string | undefined): void {
+  if (apiKey === undefined) {
+    throw new AppError(
+      ErrorCode.INVALID_INPUT,
+      '自定义 baseUrl 时必须同时提供 apiKey（不允许用已保存的密钥探测任意端点）',
+    );
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(baseUrl);
+  } catch {
+    throw new AppError(ErrorCode.INVALID_INPUT, `非法的 baseUrl：${baseUrl}`);
+  }
+  const isLoopback = isLoopbackTarget(parsedUrl.hostname);
+  if (
+    !isLoopback &&
+    (isBlockedHostname(parsedUrl.hostname) || isBlockedAddress(parsedUrl.hostname))
+  ) {
+    throw new AppError(
+      ErrorCode.INVALID_INPUT,
+      `baseUrl 指向受限地址（内网/元数据）：${parsedUrl.hostname}`,
+    );
+  }
 }
 
 /** models 域 handler（定义表驱动，InferHandlers 编译期约束） */
@@ -118,31 +186,8 @@ export const modelsHandlers = {
     const { providerKind } = input;
     const baseUrl = input.baseUrl ?? getAppConfig().providers[providerKind];
 
-    // 2026-09-08 安全修复（密钥外泄原语）：渲染层此前可传任意 baseUrl 并省略
-    // apiKey，主进程会回退 keychain 里的真实密钥并发往该 URL（无白名单）。
-    // 现在：显式 baseUrl 必须同时显式提供 apiKey——不允许用真实密钥探测
-    // 任意端点；同时拒绝私网/链路本地/云元数据地址（SSRF）。
-    // 注意：loopback（localhost/127.0.0.1）**放行**——本地 Ollama / 自建推理
-    // 服务是合法用法（providerKind='ollama' 的默认端点就是 localhost:11434）。
     if (input.baseUrl !== undefined) {
-      if (input.apiKey === undefined) {
-        throw new AppError(
-          ErrorCode.INVALID_INPUT,
-          '自定义 baseUrl 时必须同时提供 apiKey（不允许用已保存的密钥探测任意端点）',
-        );
-      }
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(input.baseUrl);
-      } catch {
-        throw new AppError(ErrorCode.INVALID_INPUT, `非法的 baseUrl：${input.baseUrl}`);
-      }
-      if (isBlockedHostname(parsedUrl.hostname) || isBlockedAddress(parsedUrl.hostname)) {
-        throw new AppError(
-          ErrorCode.INVALID_INPUT,
-          `baseUrl 指向受限地址（内网/元数据）：${parsedUrl.hostname}`,
-        );
-      }
+      assertSafeTestBaseUrl(input.baseUrl, input.apiKey);
     }
 
     // API Key 回退链（显式优先）
