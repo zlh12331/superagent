@@ -39,6 +39,8 @@ export interface ModelConfigFormValues {
   /** 自定义/编辑模式：请求地址（映射 baseUrl） */
   readonly requestUrl: string;
   readonly apiKey: string;
+  /** 单回合总时长上限（秒；'' = 不限制；承载输入态，保存时换算毫秒） */
+  readonly timeoutSeconds: string;
   readonly contextInput: string;
   readonly contextOutput: string;
   readonly toolCallRounds: string;
@@ -293,6 +295,18 @@ export function ModelConfigFields({
           onChange={(e) => onFieldChange('displayName', e.target.value)}
         />
         <p className="text-muted-foreground text-right text-2xs">{values.displayName.length}/32</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label className={labelClass}>{t('settings.modelMgmt.timeoutLabel')}</Label>
+        <Input
+          type="text"
+          inputMode="numeric"
+          value={values.timeoutSeconds}
+          placeholder={t('settings.modelMgmt.timeoutPlaceholder')}
+          className={inputClass}
+          onChange={(e) => onFieldChange('timeoutSeconds', e.target.value)}
+        />
       </div>
 
       <ApiKeyField

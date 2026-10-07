@@ -316,6 +316,14 @@ export const runtimeModels = sqliteTable(
     baseUrl: text('base_url'),
     /** 模型展示名称（自定义模式选填；null = 回退 modelId） */
     displayName: text('display_name'),
+    /**
+     * 单回合总时长上限（毫秒；null = 不限制）
+     *
+     * 经 ModelRegistry 并入 generationConfig.timeoutMs，由 turn-assembly 创建
+     * 总时长超时信号（超时 = 错误终态，与流空闲 600s 兜底互补：空闲超时管
+     * 「无字节」，本字段管「有进展但整体跑飞」）。
+     */
+    timeoutMs: integer('timeout_ms'),
     /** 启停状态（0=停用 1=启用；默认启用） */
     isEnabled: integer('is_enabled').$type<0 | 1>().notNull().default(1),
     /** 创建时间（Unix timestamp 毫秒） */

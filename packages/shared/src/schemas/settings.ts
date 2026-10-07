@@ -470,6 +470,8 @@ export const AddRuntimeModelReqSchema = z.object({
     .max(32)
     .optional()
     .transform((v) => v ?? undefined),
+  // 单回合总时长上限（毫秒；可选；省略 = 不限制，仅流空闲超时兜底）
+  timeoutMs: z.number().int().positive().max(86_400_000).optional(),
   // 启停状态（可选；省略 = 启用）
   isEnabled: z.boolean().optional(),
 });
@@ -524,6 +526,9 @@ export const UpdateRuntimeModelReqSchema = z.object({
     .min(1)
     .optional()
     .transform((v) => v ?? undefined),
+  // 单回合总时长上限（毫秒；三态：省略 = 不修改，null = 清除（回不限制），
+  // number = 设置）
+  timeoutMs: z.number().int().positive().max(86_400_000).nullable().optional(),
   // 启停状态（可选；不传 = 不修改）
   isEnabled: z.boolean().optional(),
 });
@@ -544,6 +549,8 @@ export interface RuntimeModelInfo {
   readonly providerKind: ApiKeyProvider;
   readonly baseUrl: string | undefined;
   readonly displayName: string | undefined;
+  /** 单回合总时长上限（毫秒；省略 = 未设置，不限制） */
+  readonly timeoutMs?: number;
   readonly isEnabled: boolean;
   readonly createdAt: number;
 }
@@ -567,6 +574,7 @@ export const ListRuntimeModelsResSchema = z.object({
         .string()
         .optional()
         .transform((v) => v ?? undefined),
+      timeoutMs: z.number().int().positive().max(86_400_000).optional(),
       isEnabled: z.boolean(),
       createdAt: z.number().int(),
     }),

@@ -117,6 +117,14 @@ export interface RuntimeModelSnapshot {
   readonly apiKey?: string;
   /** 显式 baseUrl（覆盖供应商默认端点） */
   readonly baseUrl?: string;
+  /**
+   * 单回合总时长上限（毫秒；缺省不限制，仅流空闲超时兜底）
+   *
+   * 解析时并入 resolvedModel.generationConfig.timeoutMs（与内置条目的
+   * generationConfig 合并而非整组覆盖），由 turn-assembly 创建总时长
+   * 超时信号。超时语义 = 错误终态，区别于用户中断。
+   */
+  readonly timeoutMs?: number;
   /** 快照创建时间（Unix timestamp 毫秒） */
   readonly createdAt: number;
 }

@@ -40,6 +40,8 @@ export interface RuntimeModelRecord {
   readonly baseUrl?: string;
   /** 展示名称（自定义模式选填；省略 = 回退 modelId） */
   readonly displayName?: string;
+  /** 单回合总时长上限（毫秒；省略 = 不限制，仅流空闲超时兜底） */
+  readonly timeoutMs?: number;
   /** 启停状态（停用模型不注册、不可路由） */
   readonly isEnabled: boolean;
   readonly createdAt: number;
@@ -55,6 +57,8 @@ export interface AddRuntimeModelInput {
   readonly apiKey?: string;
   /** 展示名称（省略 = 回退 modelId） */
   readonly displayName?: string;
+  /** 单回合总时长上限（毫秒；省略 = 不限制） */
+  readonly timeoutMs?: number;
   /** 启停状态（省略 = 启用） */
   readonly isEnabled?: boolean;
 }
@@ -66,6 +70,11 @@ export interface UpdateRuntimeModelInput {
   readonly baseUrl?: string;
   /** 传入时更新 keychain；省略 = 不修改 */
   readonly apiKey?: string;
+  /**
+   * 单回合总时长上限（毫秒；三态：省略 = 不修改，null = 清除（回不限制），
+   * number = 设置）
+   */
+  readonly timeoutMs?: number | null;
   readonly isEnabled?: boolean;
 }
 
@@ -75,6 +84,7 @@ function rowToRecord(row: {
   readonly providerKind: string;
   readonly baseUrl: string | null;
   readonly displayName: string | null;
+  readonly timeoutMs: number | null;
   readonly isEnabled: number;
   readonly createdAt: number;
 }): RuntimeModelRecord {
@@ -83,6 +93,7 @@ function rowToRecord(row: {
     providerKind: row.providerKind as ProviderKind,
     ...(row.baseUrl !== null ? { baseUrl: row.baseUrl } : {}),
     ...(row.displayName !== null ? { displayName: row.displayName } : {}),
+    ...(row.timeoutMs !== null ? { timeoutMs: row.timeoutMs } : {}),
     isEnabled: row.isEnabled === 1,
     createdAt: row.createdAt,
   };
@@ -95,6 +106,7 @@ function toSnapshot(record: RuntimeModelRecord): RuntimeModelSnapshot {
     providerKind: record.providerKind,
     modelId: record.modelId,
     ...(record.baseUrl !== undefined ? { baseUrl: record.baseUrl } : {}),
+    ...(record.timeoutMs !== undefined ? { timeoutMs: record.timeoutMs } : {}),
     createdAt: record.createdAt,
   };
 }
@@ -140,6 +152,7 @@ export class RuntimeModelStore {
         // exactOptionalPropertyTypes：可空列 undefined 时条件展开
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled ? 1 : 0 } : {}),
         createdAt: Date.now(),
       })
@@ -158,6 +171,7 @@ export class RuntimeModelStore {
       providerKind: input.providerKind,
       modelId: input.modelId,
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
       ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
       createdAt: Date.now(),
     });
@@ -184,14 +198,17 @@ export class RuntimeModelStore {
       throw new AppError(ErrorCode.NOT_FOUND, undefined, undefined, { modelId: input.modelId });
     }
     // 仅当有落库字段时执行 UPDATE（仅 apiKey 时 set 空对象会被 drizzle 拒绝）
-    // isEnabled 落库为 0/1（与 schema 的 $type<0 | 1> 对齐）
+    // isEnabled 落库为 0/1（与 schema 的 $type<0 | 1> 对齐）；timeoutMs 为
+    // 三态语义（省略不改 / null 清除落 NULL / number 设置）
     const dbSet: {
       displayName?: string;
       baseUrl?: string;
+      timeoutMs?: number | null;
       isEnabled?: 0 | 1;
     } = {
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
       ...(input.isEnabled !== undefined
         ? { isEnabled: input.isEnabled ? (1 as const) : (0 as const) }
         : {}),

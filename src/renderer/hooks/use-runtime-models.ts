@@ -35,13 +35,15 @@ export function useRuntimeModelsQuery() {
   });
 }
 
-/** 新增入参（表单字段；与 addRuntimeModel 契约对齐） */
+/** 新增入参（表单字段；与 addRuntimeModel 契约对齐；null = 未设置，等价省略） */
 export interface AddRuntimeModelInput {
   readonly modelId: string;
   readonly providerKind: ApiKeyProvider;
   readonly baseUrl?: string;
   readonly apiKey?: string;
   readonly displayName?: string;
+  /** 单回合总时长上限（毫秒；省略或 null = 不限制） */
+  readonly timeoutMs?: number | null;
 }
 
 /** 新增 mutation：成功后失效运行时模型 key + 全局模型清单 key */
@@ -58,6 +60,8 @@ export function useAddRuntimeModel() {
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+          // null 与省略同义（add 契约无「清除」形态——新记录本就无旧值可清）
+          ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
         }),
       );
     },
@@ -69,12 +73,14 @@ export function useAddRuntimeModel() {
   });
 }
 
-/** 编辑/启停入参（partial 语义：省略字段不修改） */
+/** 编辑/启停入参（partial 语义：省略字段不修改；timeoutMs 另支持 null = 清除） */
 export interface UpdateRuntimeModelInput {
   readonly modelId: string;
   readonly displayName?: string;
   readonly baseUrl?: string;
   readonly apiKey?: string;
+  /** 三态：省略 = 不修改，null = 清除（回不限制），number = 设置 */
+  readonly timeoutMs?: number | null;
   readonly isEnabled?: boolean;
 }
 
@@ -91,6 +97,8 @@ export function useUpdateRuntimeModel() {
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+          // null !== undefined：条件展开不会误吞清除语义
+          ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
           ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
         }),
       );

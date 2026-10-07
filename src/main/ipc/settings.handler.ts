@@ -208,6 +208,7 @@ export function createSettingsHandlers(params: {
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
       });
       // 缓存失效：同模型下次 getModel 重建（读取新 baseUrl/apiKey）
       llmClient.invalidateModel(input.modelId);
@@ -221,6 +222,9 @@ export function createSettingsHandlers(params: {
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+        // timeoutMs 三态：省略不改 / null 清除 / number 设置（null !== undefined，
+        // 条件展开不会误吞清除语义）
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         ...(input.isEnabled !== undefined ? { isEnabled: input.isEnabled } : {}),
       });
       llmClient.invalidateModel(input.modelId);
@@ -246,6 +250,7 @@ export function createSettingsHandlers(params: {
           // 触发契约校验失败 → 前端列表读不到已配置模型（2026-09-04 修复）
           baseUrl: r.baseUrl ?? undefined,
           displayName: r.displayName ?? undefined,
+          ...(r.timeoutMs !== undefined ? { timeoutMs: r.timeoutMs } : {}),
           isEnabled: r.isEnabled,
           createdAt: r.createdAt,
         })),
