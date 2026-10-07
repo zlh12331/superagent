@@ -37,44 +37,43 @@
 | `@electron/rebuild`           | `^4.2.0`       | devDep                        |
 | `electron-devtools-installer` | `^4.0.0`       | devDep                        |
 | `vite`                        | `^8`           | dep                           |
-| `@vitejs/plugin-react`        | `^6.0.3`       | devDep                        |
-| `oxc-transform-react`         | `^0.147.0`     | devDep（React Compiler oxc 通道） |
+| `@vitejs/plugin-react`        | `^6.1.1`       | devDep                        |
+| `oxc-transform-react`         | `^0.148.0`     | devDep（React Compiler oxc 通道） |
 
 ### 3.2 React 全家桶
 
 | 依赖                                                               | 版本                                |
 | ---------------------------------------------------------------- | --------------------------------- |
 | `react`（devDep）                                                | `^19.2.8`                         |
-| `react-dom`                                                      | `^19.2`                           |
-| `react-router`                                                   | `^8.3.0`                          |
-| `react-i18next` / `i18next` / `i18next-browser-languagedetector` | `^17.0.10` / `^26.3.6` / `^8.2.1` |
-| `@tanstack/react-query`                                          | `^5.101.3`                        |
-| `react-error-boundary`                                           | `^6.1.2`                          |
+| `react-dom`                                                      | `^19.2.8`                         |
+| `react-router`                                                   | `^8.3.1`                          |
+| `react-i18next` / `i18next` / `i18next-browser-languagedetector` | `^17.0.13` / `^26.4.2` / `^8.2.1` |
+| `@tanstack/react-query`                                          | `^5.102.8`                        |
+| `react-error-boundary`                                           | `^6.1.4`                          |
 | `react-hotkeys-hook`                                             | `^5.3.3`                          |
 | `react-markdown` / `remark-gfm`                                  | `^10.1.0` / `^4.0.1`              |
 | `react-activity-calendar`                                        | `^3.2.1`                          |
-| `react-arborist`                                                 | `^3.15.0`                         |
 
 ### 3.3 AI 相关
 
 | 依赖                          | 版本        | 用途                                                        |
 | --------------------------- | --------- | --------------------------------------------------------- |
 | `ai` (Vercel AI SDK)        | `^7.0.92` | streamText / tools / stopWhen 多轮工具调用                      |
-| `@ai-sdk/openai`            | `^4.0.27` | OpenAI provider                                           |
-| `@ai-sdk/anthropic`         | `^4.0.27` | Anthropic provider                                        |
-| `@ai-sdk/openai-compatible` | `^3.0.13` | DeepSeek 等 OpenAI 兼容 provider                             |
-| `@ai-sdk/react`             | `^4.0.35` | useChat 等 React hooks                                     |
-| `@modelcontextprotocol/sdk` | `^1.30.0` | MCP server 集成（stdio / sse / streamable-http 三态 transport） |
-| `gpt-tokenizer`             | `^3.4.0`  | token 计数                                                  |
+| `@ai-sdk/openai`            | `^4.0.58` | OpenAI provider                                           |
+| `@ai-sdk/anthropic`         | `^4.0.49` | Anthropic provider                                        |
+| `@ai-sdk/openai-compatible` | `^3.0.43` | DeepSeek 等 OpenAI 兼容 provider                             |
+| `@ai-sdk/react`             | `^4.0.95` | useChat 等 React hooks                                     |
+| `@modelcontextprotocol/sdk` | `^1.32.0` | MCP server 集成（stdio / sse / streamable-http 三态 transport） |
+| `gpt-tokenizer`             | `^4.0.0`  | token 计数                                                  |
 
 ### 3.4 数据库
 
 | 依赖                      | 版本         | 用途                                                                  |
 | ----------------------- | ---------- | ------------------------------------------------------------------- |
-| `better-sqlite3`        | `^12.11.1` | SQLite 原生绑定                                                         |
+| `better-sqlite3`        | `^13.0.3`  | SQLite 原生绑定                                                         |
 | `drizzle-orm`           | `^0.45.2`  | TypeScript ORM                                                      |
 | `drizzle-kit`           | `^0.31.10` | devDep，迁移工具（[drizzle.config.ts](file:///drizzle.config.ts) 已在根目录提供） |
-| `@types/better-sqlite3` | `^7.6.13`  | devDep                                                              |
+| `@types/better-sqlite3` | `^9.6.0`   | devDep                                                              |
 
 ### 3.5 UI / 样式
 
@@ -84,7 +83,7 @@
 | `@radix-ui/react-{dialog,dropdown-menu,label,scroll-area,slot,tabs,tooltip,alert-dialog}` | 多个                                          |
 | `class-variance-authority` / `clsx` / `tailwind-merge` / `tw-animate-css`                 | `^0.7.1` / `^2.1.1` / `^3.6.0` / `^1.4.0`   |
 | `lucide-react` / `cmdk` / `sonner` / `motion`                                             | `^1.25.0` / `^1.1.1` / `^2.0.7` / `^13.0.0` |
-| `shiki`                                                                                   | `^4.3.1`                                    |
+| `shiki`                                                                                   | `^4.4.3`                                    |
 
 ### 3.6 终端 / 文件系统 / 搜索
 
@@ -105,8 +104,8 @@
 
 | 依赖              | 版本        |
 | --------------- | --------- |
-| `zustand`       | `^5.0.14` |
-| `zod`           | `^4.0.0`  |
+| `zustand`       | `^5.0.15` |
+| `zod`           | `^4.5.4`  |
 | `@dnd-kit/core` | `^6.3.1`  |
 
 ### 3.8 监控 / 可观测性
@@ -114,20 +113,20 @@
 | 依赖                                        | 版本         | 用途                          |
 | ----------------------------------------- | ---------- | --------------------------- |
 | `@opentelemetry/api`                      | `^1.9.1`   | OTel API                    |
-| `@opentelemetry/exporter-trace-otlp-http` | `^0.221.0` | OTLP HTTP exporter          |
-| `@opentelemetry/resources`                | `^2.10.0`  | Resource 定义                 |
-| `@opentelemetry/sdk-trace-base`           | `^2.10.0`  | Tracer 基础                   |
-| `@opentelemetry/sdk-trace-node`           | `^2.10.0`  | Node Tracer                 |
+| `@opentelemetry/exporter-trace-otlp-http` | `^0.222.0` | OTLP HTTP exporter          |
+| `@opentelemetry/resources`                | `^2.11.0`  | Resource 定义                 |
+| `@opentelemetry/sdk-trace-base`           | `^2.11.0`  | Tracer 基础                   |
+| `@opentelemetry/sdk-trace-node`           | `^2.11.0`  | Node Tracer                 |
 
 ### 3.9 测试
 
 | 依赖                                                   | 版本                               | 用途                 |
 | ---------------------------------------------------- | -------------------------------- | ------------------ |
-| `vitest` / `@vitest/coverage-v8`                     | `^4.0.0` / `^4.0.0`              | 单测框架 + v8 coverage |
-| `@playwright/test` / `playwright`                    | `^1.58` / `^1.61.1`              | E2E 测试             |
-| `@testing-library/react` / `jest-dom` / `user-event` | `^16.3.2` / `^7.0.0` / `^14.6.1` | 组件测试               |
-| `@axe-core/playwright`                               | `^4.12.1`                        | a11y 审计            |
-| `jsdom`                                              | `^29.1.1`                        | DOM 环境             |
+| `vitest` / `@vitest/coverage-v8`                     | `^5.0.0` / `^5.0.0`              | 单测框架 + v8 coverage |
+| `@playwright/test` / `playwright`                    | `^1.62.1` / `^1.62.1`            | E2E 测试             |
+| `@testing-library/react` / `jest-dom` / `user-event` | `^16.3.3` / `^7.0.1` / `^14.6.7` | 组件测试               |
+| `@axe-core/playwright`                               | `^4.13.0`                        | a11y 审计            |
+| `jsdom`                                              | `^30.0.1`                        | DOM 环境             |
 
 ### 3.10 工程化 / 工具
 
@@ -137,10 +136,10 @@
 | `typescript`                              | `^7.0.2`              | TS 编译器            |
 | `tsx`                                     | `^4`                  | TS 脚本执行           |
 | `husky` / `lint-staged`                   | `^9` / `^17.1.0`      | Git hooks         |
-| `@commitlint/cli` / `config-conventional` | `^21.2.1` / `^21.2.0` | 提交规范              |
+| `@commitlint/cli` / `config-conventional` | `^21.2.2` / `^21.2.2` | 提交规范              |
 | `audit-ci`                                | `^7.1.0`              | 依赖审计              |
 | `cross-env`                               | `^10.1.0`             | 跨平台环境变量           |
-| `@types/node`                             | `^26.1.1`             | Node.js 类型        |
+| `@types/node`                             | `^26.4.1`             | Node.js 类型        |
 
 ### 3.11 workspace 内部包
 
@@ -274,5 +273,5 @@ references: packages/tsconfig, packages/shared, src/main, src/preload, src/rende
 4. **Tailwind v4 官方 Vite 插件**：弃用 v3 postcss 流程，改用 `@tailwindcss/vite`，与 Vite 8 原生集成
 5. **完整 monorepo**：pnpm workspace + 两个内部包，主应用三入口严格分离
 6. **preload CJS 输出**：明确注释 sandbox: true 限制，preload 强制 `format: 'cjs'` + `.cjs` 扩展名
-7. **原生模块编译管控**：`pnpm.onlyBuiltDependencies` 仅允许 `better-sqlite3`/`esbuild`/`node-pty` 触发 postinstall 编译
+7. **原生模块编译管控**：pnpm 11 的构建脚本决策在 [pnpm-workspace.yaml](file:///pnpm-workspace.yaml) `allowBuilds`（取代旧 `pnpm.onlyBuiltDependencies`）：放行 `better-sqlite3` / `electron` / `esbuild` / `node-pty` / `libxmljs2`，显式 false 拒绝 `@sentry/cli` / `@swc/core` / `electron-winstaller` / `msw` / `protobufjs`
 
