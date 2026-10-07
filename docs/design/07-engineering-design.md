@@ -97,12 +97,12 @@
 
 ```yaml
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发（便于调试）
 ```
+
+**只由 PR 触发，不再 push: main**（2026-09-10 方案二「CI on PR, CD on main」）：ruleset 强制 main 所有提交走 PR 且 PR 必含 main 最新提交（squash/rebase 合入树与 PR head 一致）⇒ 必需检查在合并前已对相同内容跑过，push 阶段重复无增益。合并后 main 仍有 CodeQL + secret scanning（GitHub 托管）。详细依据见 `docs/design/29-pipeline-spec.md`。
 
 ### 3.2 并发控制
 
@@ -114,34 +114,38 @@ concurrency:
 
 同分支新 push 取消旧 run，节省 CI 时间。
 
-### 3.3 4 Job 矩阵
+### 3.3 Job 矩阵（2026-09-20 六平台改造后）
 
 | Job | Runner | Timeout | 内容 |
 |-----|--------|---------|------|
-| **quality** | ubuntu-latest | 10min | typecheck / lint / unit test / audit / upload coverage |
-| **e2e-browser** | ubuntu-latest | 20min | `playwright install chromium` + `test:e2e` |
-| **e2e-electron** | windows-latest | 20min | install Electron binary + `build` + `test:e2e:electron` |
-| **smoke-prod** | windows-latest | 30min | `build:win` + `test:smoke` |
+| **quality** | ubuntu-latest | 10min | typecheck / lint / gitleaks / check:static / tokens:check / knip / depcruise / schema 漂移 / test:scripts / audit（+ 润色门禁与发版门禁，仅 Release PR） |
+| **unit** | 6 平台矩阵 | 20min | 各平台原生单测（`test:main` + `test:renderer`）；ubuntu 实例改跑 `test:coverage`（阈值唯一把关点） |
+| **unit-summary** | ubuntu-latest | 5min | 汇总 unit 矩阵（`if: always()`，ruleset 稳定名） |
+| **integration-tests** | ubuntu-latest | 10min | `test:integration`（tests/integration/） |
+| **e2e-browser** | ubuntu-latest | 20min | `playwright install --with-deps chromium` + `test:e2e` |
+| **e2e-electron** | 6 平台矩阵 | 20min | 装 Electron 二进制 → `build` → `check:bundle` → `check:compiler` → `test:e2e:electron` |
+| **e2e-electron-summary** | ubuntu-latest | 5min | 汇总 e2e-electron 矩阵（`if: always()`，ruleset 稳定名） |
+
+（smoke-prod 与原 package job 已移除：生产产物验证统一交给 CD 的 release.yml。）
 
 ### 3.4 关键步骤细节
 
-#### quality job
+#### quality job（Release PR 上 ①-⑩ 全跳，仅跑润色门禁 + 发版门禁）
 
 ```yaml
 - run: pnpm install --frozen-lockfile
 - run: pnpm typecheck
 - run: pnpm lint
-- run: pnpm test  # shared + main + renderer + scripts
-- run: pnpm audit
-  continue-on-error: true  # 先警告不阻断（待 .nsprc 白名单稳定后再卡关）
-- uses: actions/upload-artifact@v4
-  with:
-    name: coverage-${{ github.run_id }}
-    path: |
-      packages/shared/coverage/
-      src/main/coverage/
-      src/renderer/coverage/
-    retention-days: 7
+- run: pnpm check:static
+- run: pnpm tokens:check
+- run: pnpm knip
+- run: pnpm depcruise
+- run: pnpm check:schema-drift
+- run: pnpm test:scripts      # 门禁脚本自身单测，与平台无关
+- run: pnpm run audit         # audit-ci，moderate 起卡关（2026-08-30 收紧）
+# 仅 Release PR 分支（if: startsWith(github.head_ref, 'release-please--')）：
+- run: pnpm check:changelog-polish
+- run: pnpm check:release-pr-scope --branch "$HEAD_REF" && pnpm check:release-anchor
 ```
 
 #### e2e-electron job
@@ -365,7 +369,7 @@ tsconfig 启用以下严格选项：
 | 项 | 说明 |
 |----|------|
 | electron-vite 版本约束 | 项目用 vite ^8，与 electron-vite 5.x 不兼容，需用 `6.0.0-beta.1`，待 6.0.0 stable 发布后升级 |
-| audit-ci 白名单稳定后改卡关 | 当前 `continue-on-error: true` |
+| audit-ci 白名单稳定后改卡关 | ~~当前 `continue-on-error: true`~~ 已完成（2026-08-30 收紧为卡关，ci.yml `Dependency audit` 步骤无 continue-on-error） |
 
 ## 12. 与参考项目的工程化对比
 
