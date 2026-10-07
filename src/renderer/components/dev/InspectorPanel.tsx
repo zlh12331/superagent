@@ -200,7 +200,7 @@ function Section({ title, description, children }: SectionProps): ReactElement {
     <div className="border-border flex flex-col gap-1.5 border-b px-2 py-2">
       <div>
         <h3 className="text-foreground/90 font-serif text-xs tracking-wide">{title}</h3>
-        <p className="text-muted-foreground/70 mt-0.5 text-2xs leading-relaxed">{description}</p>
+        <p className="text-muted-foreground mt-0.5 text-2xs leading-relaxed">{description}</p>
       </div>
       {children}
     </div>

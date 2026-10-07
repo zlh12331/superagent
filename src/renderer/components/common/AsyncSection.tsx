@@ -161,7 +161,7 @@ export function AsyncSection({
   if (isEmpty) {
     if (emptyText === undefined || emptyText === '') return null;
     return (
-      <p className={cn(WRAPPER_CLASS, 'text-muted-foreground/70')} role="status">
+      <p className={cn(WRAPPER_CLASS, 'text-muted-foreground')} role="status">
         {emptyText}
       </p>
     );

@@ -216,7 +216,7 @@ export function FileViewerPanel(): ReactElement {
   // 未选择文件时显示引导（右面板"文件"tab 空态）
   if (!open) {
     return (
-      <div className="text-muted-foreground/60 flex h-full flex-col items-center justify-center gap-1.5 p-3 text-xs">
+      <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-1.5 p-3 text-xs">
         <FileText className="size-4" strokeWidth={1.5} />
         {t('fileViewer.selectFile')}
       </div>
@@ -426,7 +426,7 @@ function ViewerHeader({ fileName, filePath, editMode, isDirty }: ViewerHeaderPro
       )}
       {isDirty && <span className="file-viewer-dirty-dot" title={t('fileViewer.unsaved')} />}
       <span
-        className="text-muted-foreground/70 ml-auto min-w-0 flex-1 truncate text-right font-mono text-2xs"
+        className="text-muted-foreground ml-auto min-w-0 flex-1 truncate text-right font-mono text-2xs"
         title={filePath ?? undefined}
       >
         {filePath}

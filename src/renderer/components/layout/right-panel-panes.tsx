@@ -89,7 +89,7 @@ export function InfoPane({ sessionId }: InfoPaneProps): ReactElement {
         />
         {!isError &&
           (tasks.length === 0 ? (
-            <div className="text-muted-foreground/60">{t('panel.noTasks')}</div>
+            <div className="text-muted-foreground">{t('panel.noTasks')}</div>
           ) : (
             <ul className="flex flex-col gap-1">
               {tasks.map((task) => {
@@ -256,7 +256,7 @@ export function DiffPane({
 
   if (changes.length === 0) {
     return (
-      <div className="text-muted-foreground/60 flex h-full items-center justify-center p-3 text-xs">
+      <div className="text-muted-foreground flex h-full items-center justify-center p-3 text-xs">
         {t('panel.noChanges')}
       </div>
     );
