@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta](https://github.com/zlh12331/superagent/compare/v1.7.1-beta...v1.8.0-beta) (2026-10-07)
+
+
+### 新增
+
+* **community:** 讨论区开帖表单与度量覆盖 ([85b40b6](https://github.com/zlh12331/superagent/commit/85b40b6720e314d0588acf72090139a550cf125e))
+* **community:** 讨论区运维补全——接纳工作流与公告联动 ([7be4bfb](https://github.com/zlh12331/superagent/commit/7be4bfba9797ef4111e6146637cbc3b8c79a6497))
+
 ## [1.7.1-beta](https://github.com/zlh12331/superagent/compare/v1.7.0...v1.7.1-beta) (2026-10-07)
 
 <!-- changelog:polished -->
