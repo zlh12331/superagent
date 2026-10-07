@@ -7,7 +7,7 @@
 // - 验证 DOM 渲染完整性、React DevTools 扩展状态、Profiler 埋点
 //
 // 与 e2e/smoke.spec.ts（纯浏览器模式）的区别：
-// - smoke.spec.ts：用浏览器访问 localhost:5173，无 preload，测纯前端 UI
+// - smoke.spec.ts：用浏览器访问 localhost:5199（web 模式专属端口），无 preload，测纯前端 UI
 // - electron.spec.ts：启动真实 Electron，有 preload + 主进程 + IPC 全链路
 //
 // 运行方式：

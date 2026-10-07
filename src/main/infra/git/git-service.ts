@@ -17,6 +17,18 @@
 //   - git 命令失败 → INTERNAL_ERROR
 //   - push 失败不抛错，返回 ok=false 便于 UI 友好提示
 // - 单例模式：与 FileService / SearchService 一致，便于统一生命周期管理
+//
+// ⚠️ simple-git v4 环境守卫（2026-10-07 实测登记，v3→v4 升版的行为变化）：
+// v4 默认在 git 子进程启动前**静默剥除**父进程环境中的「git-impacting」变量——
+// 任意 GIT_ 前缀 + editor/pager/prefix/ssh_askpass/visual 共 20 类
+// （GIT_SSH_COMMAND / GIT_ASKPASS / SSH_ASKPASS / GIT_PROXY_COMMAND /
+// GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM / GIT_EXTERNAL_DIFF 等，清单在
+// @simple-git/argv-parser）。行为探针实证：ambient GIT_CONFIG_* 注入的
+// user.name 不再被 git 看到。影响：依赖 ambient GIT_SSH_COMMAND 的 SSH 推送、
+// GIT_PROXY_COMMAND 代理的用户经本服务操作会降级（push 优雅 ok=false）；
+// HTTPS + credential.helper（git config 文件，非 env）主流路径不受影响。
+// 应用自身不读写 GIT_* 环境变量；如未来需要透传，用 simpleGit 的
+// allowEnvironment 选项显式放行，勿回退 v3。
 // ──────────────────────────────────────────────────────────────
 
 import {

@@ -15,7 +15,7 @@
 //   2. 另开终端跑测试：pnpm test:e2e:electron
 //
 // 与 playwright.config.ts（纯浏览器模式）的区别：
-// - playwright.config.ts：浏览器访问 localhost:5173，无 preload，测纯前端 UI
+// - playwright.config.ts：浏览器访问 localhost:5199（web 模式专属端口），无 preload，测纯前端 UI
 // - playwright.electron.config.ts：_electron.launch 启动 Electron，有 preload + IPC 全链路
 // ──────────────────────────────────────────────────────────────
 
