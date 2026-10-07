@@ -264,6 +264,10 @@ release commit / 修 label）。脚本实现要点：零子进程（fetch 直连
 ci.yml 的瘦身 if 只看分支名不看 diff，且恰逢 #93 空 squash，该代码从未经任何 CI。
 闸门自动化与护栏 B 同一步骤（`check:release-pr-scope --branch <headRef>`），
 越界 = 先走普通 PR（全量 CI 把关），Release PR 只等版本号 + CHANGELOG。
+⚠️ patch 缺失也按越界（2026-10-07 收口，fail-closed）：GitHub 对超 ~400 行 diff
+的文件省略 patch 字段，「仅允许版本行」约束无从执行——package.json 出现此情形
+会红（提示人工在 PR 页面复核完整 diff），CHANGELOG/manifest 不受影响（白名单内
+且非可执行内容）。
 
 **版本号模型（本仓库实际行为，与 SemVer 标准一致）**：beta 版本挂在**下一个
 未发布的正式版**之下（1.6.0-beta.1 → 1.6.0-beta.2 → …）；正式版发布后计数

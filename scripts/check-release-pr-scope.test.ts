@@ -52,9 +52,20 @@ describe('findScopeViolations', () => {
     expect(violations[0]?.reason).toContain('check:evil');
   });
 
-  it('package.json 无 patch（大文件截断）→ 不误报版本行', () => {
-    // GitHub API 对超 400 行 diff 只返回 filename 不带 patch——此时不推断内容
+  it('package.json 无 patch（GitHub 对超 ~400 行 diff 省略）→ fail-closed 报 violation', () => {
+    // 2026-10-07 收口：patch 缺失时「仅允许版本行」约束无从执行——静默放行会让
+    // package.json 大改借超大 diff 搭车，故按存在性风险处理，要求人工复核
     const violations = findScopeViolations([{ filename: 'package.json' }]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.filename).toBe('package.json');
+    expect(violations[0]?.reason).toContain('patch');
+  });
+
+  it('CHANGELOG.md / manifest 无 patch → 不拦（白名单内且非可执行内容）', () => {
+    const violations = findScopeViolations([
+      { filename: 'CHANGELOG.md' },
+      { filename: '.release-please-manifest.json' },
+    ]);
     expect(violations).toEqual([]);
   });
 

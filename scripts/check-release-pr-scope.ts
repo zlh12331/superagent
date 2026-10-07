@@ -9,7 +9,9 @@
 // 职责：拉取 release-please 分支 PR 的 files 列表，断言每个 path ∈ 白名单：
 //   CHANGELOG.md / .release-please-manifest.json / package.json
 //   package.json 只允许动 "version": 行（release-please 的版本 bump）。
-//   任一越界 → exit 1，提示先走普通 PR 再发版。
+//   patch 字段缺失（GitHub 对超 ~400 行 diff 省略）时 package.json 按越界
+//   fail-closed（内容约束无从执行，要求人工复核）；任一越界 → exit 1，
+//   提示先走普通 PR 再发版。
 //
 // 接线：ci.yml quality 的「Release PR gates」步骤（ruleset 必需检查 ⇒ 自动获得
 //   合并阻塞力）+ release.yml gate 兜底。
@@ -53,7 +55,15 @@ export interface ScopeViolation {
   reason: string;
 }
 
-/** 纯函数：判定文件列表是否越界（单测直测，不发请求） */
+/** 纯函数：判定文件列表是否越界（单测直测，不发请求）
+ *
+ * ⚠️ package.json 的 patch 缺失时 fail-closed（2026-10-07 收口）：GitHub API 对
+ * 超 ~400 行 diff 的文件**省略 patch 字段**——此时「仅允许版本行」约束无从执行，
+ * 按存在性风险处理（报 violation 要求人工复核），不静默放行。静默放行的后果：
+ * package.json 大改（如注入恶意 script）可借超大 diff 搭车。CHANGELOG.md /
+ * .release-please-manifest.json 的 patch 缺失不拦：两者均在白名单内且非可执行
+ * 内容，release-please 的产出恒为追加段落/单行版本号。
+ */
 export function findScopeViolations(
   files: { filename: string; patch?: string }[],
 ): ScopeViolation[] {
@@ -68,7 +78,17 @@ export function findScopeViolations(
       continue;
     }
     if (f.filename === 'package.json') {
-      const badLines = (f.patch ?? '')
+      // patch 缺失（GitHub 对超大 diff 省略该字段）→ 内容约束失效，fail-closed
+      if (f.patch === undefined) {
+        violations.push({
+          filename: f.filename,
+          reason:
+            'package.json 的 diff 内容不可得（GitHub 对超 ~400 行 diff 省略 patch 字段）——' +
+            '"仅允许版本行"约束无法执行，请人工在 PR 页面复核该文件的完整 diff',
+        });
+        continue;
+      }
+      const badLines = f.patch
         .split('\n')
         .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
         .filter((line) => !VERSION_LINE_RE.test(line));
