@@ -9,10 +9,13 @@
 //   aria-controls 指向懒渲染 content 为库标准行为，非真实问题
 // - 扩页扫描（2026-09-27）：会话页（mock 首会话入口，journey-chat 同款）与
 //   设置页（命令面板 → 打开设置，journey-settings 同款）
+// - 扩页扫描二期（2026-10-07）：设置分区（侧栏导航 tab 切换：通用/快捷键/终端）
+//   与终端面板（Ctrl+` 快捷键，journey-terminal 同款）——axe 扫描前等分区
+//   懒挂载/过渡结束
 // ──────────────────────────────
 
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 /** 双主题矩阵：Axios 令牌按 <html class="dark"> 切换，evaluate 直加类即可令全部 CSS 变量翻转 */
@@ -218,5 +221,71 @@ test.describe('扩页审计（会话页 / 设置页）', () => {
       .exclude('[data-slot="tabs-trigger"]')
       .analyze();
     expect(results.violations).toEqual([]);
+  });
+});
+
+// ── 扩页审计二期（2026-10-07）：设置分区 / 终端面板 ───────────────
+// 设置分区：打开设置后点侧栏导航（role=tab，zh 标签即 accessible name）；
+// 终端面板：Ctrl+` 快捷键（journey-terminal 同款路径）。
+// 排除项与首页/一期扩页扫描一致。
+test.describe('扩页审计二期（设置分区 / 终端面板）', () => {
+  /** 打开设置并切换到指定分区（导航项 = 侧栏 role=tab 的 zh 标签） */
+  async function gotoSettingsSection(page: Page, navLabel: string): Promise<Locator> {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: '命令面板' }).first().click();
+    await page.keyboard.type('设置');
+    await page.waitForTimeout(200); // cmdk 防抖
+    const item = page.getByRole('option', { name: /打开设置/ }).first();
+    await expect(item).toBeVisible({ timeout: 5_000 });
+    await item.click();
+    const dialog = page.locator('[role="dialog"]').first();
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('tab', { name: navLabel }).first().click();
+    // 等分区内容懒挂载 + 过渡结束（半成品元素会产生假违规）
+    await page.waitForTimeout(800);
+    return dialog;
+  }
+
+  /** 分区扫描共用配置（与首页/一期扩页一致：同一组 tags + 排除项） */
+  async function scanAxe(page: Page): Promise<void> {
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .exclude('[data-testid="chat-message-list"]') // 聊天动态内容（滚动噪声）
+      .exclude('[data-slot="tabs-trigger"]') // Radix Tabs 折叠态 aria-controls（库标准行为）
+      .analyze();
+    expect(results.violations).toEqual([]);
+  }
+
+  for (const section of [
+    { nav: '通用', name: '通用分区' },
+    { nav: '快捷键', name: '快捷键分区' },
+    { nav: '终端', name: '终端设置分区' },
+  ] as const) {
+    test(`设置页·${section.name}无 a11y 违规`, async ({ page }) => {
+      await gotoSettingsSection(page, section.nav);
+      await scanAxe(page);
+    });
+  }
+
+  test('终端面板无 a11y 违规', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // 进入会话（欢迎页右面板隐藏）→ Ctrl+` 打开终端（自动创建）
+    const firstThread = page.getByRole('button', { name: /重构 IPC|修复双|设计令牌/ }).first();
+    await expect(firstThread).toBeVisible({ timeout: 10_000 });
+    await firstThread.click();
+    await page.keyboard.press('Control+`');
+    const terminalTab = page.getByRole('tab', { name: '终端' }).first();
+    await expect(terminalTab).toBeVisible({ timeout: 10_000 });
+    await terminalTab.click();
+    // xterm 渲染在 canvas（journey-terminal 同款等待），再等稳定
+    await expect(page.locator('.xterm, [class*="terminal-view"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.waitForTimeout(800);
+
+    await scanAxe(page);
   });
 });
