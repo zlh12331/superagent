@@ -11,7 +11,7 @@ pnpm typecheck              # tsc --build + tsc -p scripts/tsconfig.json（必�
 pnpm lint                   # biome check .（含格式/import 排序）
 pnpm test                   # 全部测试 && 链式（任一层失败即中断）: packages → main → renderer → integration → scripts（集成测试已在链内，也可单独 pnpm test:integration）
 pnpm knip                   # 死代码/死依赖检测（files/deps/binaries 级，CI 卡关）
-pnpm check:static           # 静态审计 15 项：tokens + i18n + comments（过期注释）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + docs-scripts（文档脚本表 ↔ package.json 一致）+ test-boundary + csp-hash + css-vars（var(--x) 引用无定义）+ animations（animation/任意值动画引用无 @keyframes 定义）+ ui-consistency（写法一致性棘轮）+ memory-engine:integrity，CI 卡关
+pnpm check:static           # 静态审计 16 项：tokens + i18n + comments（过期注释）+ tsdoc（export 符号 TSDoc 缺失，@babel/parser 判据 + per-file 棘轮）+ file-size（净行 ≤600 棘轮；原始行 >600 仅告警，不卡关）+ functions（形参≤4 正则度量 / 体≤200 Biome noExcessiveLinesPerFunction 独占行数，棘轮均只收紧）+ complexity（认知复杂度≤15 棘轮）+ coverage-floors + docs + docs-scripts（文档脚本表 ↔ package.json 一致）+ test-boundary + csp-hash + css-vars（var(--x) 引用无定义）+ animations（animation/任意值动画引用无 @keyframes 定义）+ ui-consistency（写法一致性棘轮）+ memory-engine:integrity，CI 卡关
 pnpm check:tokens           # 令牌审计：裸色/dark:/space-*/w+h 双写/hex（依据 10-component-design-spec 铁律）
 pnpm check:i18n             # i18n 审计：引用缺失 + 双语一致 + 冗余/硬编码文案（脚本已默认 --strict）卡关
 pnpm check:animations       # 动画审计：animation / animate-[…] 引用的 keyframes 不存在即卡关（防「引用已删动画」静默失效）

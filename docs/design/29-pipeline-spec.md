@@ -198,7 +198,7 @@ flowchart TB
 
 | job | 实例 | 步骤 |
 |---|---|---|
-| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（15 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** ⑫ **`pnpm check:release-pr-scope --branch <headRef>` + `pnpm check:release-anchor`（仅 Release PR，2026-10-06 护栏 C+B：内容边界白名单 + 锚点三态自洽，GITHUB_TOKEN 注入；其余 Release PR 重步骤 ①-⑩ 全跳，2026-10-05 瘦身）** |
+| **quality** | 1 | ① `pnpm typecheck` ② `pnpm lint` ③ gitleaks 密钥扫描（依赖 `fetch-depth: 0`，浅克隆会假绿）④ `pnpm check:static`（16 项静态审计）⑤ `pnpm tokens:check` ⑥ `pnpm knip` ⑦ `pnpm depcruise` ⑧ `pnpm check:schema-drift`（与本地 verify:local 共用同一脚本，2026-09-22 起）⑨ `pnpm test:scripts` ⑩ `pnpm audit` ⑪ **`pnpm check:changelog-polish`（仅 Release PR：`if: startsWith(github.head_ref, 'release-please--')`）** ⑫ **`pnpm check:release-pr-scope --branch <headRef>` + `pnpm check:release-anchor`（仅 Release PR，2026-10-06 护栏 C+B：内容边界白名单 + 锚点三态自洽，GITHUB_TOKEN 注入；其余 Release PR 重步骤 ①-⑩ 全跳，2026-10-05 瘦身）** |
 | **unit** | 6 | `pnpm test:main` + `pnpm test:renderer`；**ubuntu-latest 实例改跑 `pnpm test:coverage`**（覆盖率阈值唯一把关点，覆盖率产物也从这里上传）；其余 5 个平台跑不带阈值的同套用例。`test:scripts` 不在此 job（与平台无关，留在 quality 单次执行，避免 6 倍重复） |
 | **integration** | 1 | `pnpm test:integration`（`tests/integration/`，20+ 文件；用户决策不扩平台） |
 | **e2e-browser** | 1 | `playwright install --with-deps chromium` → `playwright test --config e2e/playwright.config.ts --retries=2` |
@@ -213,7 +213,7 @@ flowchart TB
 | 1 | Typecheck | `pnpm typecheck` | `tsc --build` 全量类型（含 project references） |
 | 2 | Lint | `pnpm lint` | Biome 检查 + 格式 + import 排序 |
 | 3 | 密钥扫描 | `gitleaks-action@v2` | 全历史无泄漏；**`fetch-depth: 0` 是前提**（浅克隆会假绿） |
-| 4 | 静态审计 | `pnpm check:static` | 15 项：tokens / i18n / 过期注释 / 文件体积 / 函数指标 / 复杂度 / 覆盖率下限 / docs / docs-scripts / test-boundary / csp-hash / css-vars / animations / ui-consistency / memory-engine:integrity（棘轮只许下降） |
+| 4 | 静态审计 | `pnpm check:static` | 16 项：tokens / i18n / 过期注释 / tsdoc（export 符号 TSDoc 缺失）/ 文件体积 / 函数指标 / 复杂度 / 覆盖率下限 / docs / docs-scripts / test-boundary / csp-hash / css-vars / animations / ui-consistency / memory-engine:integrity（棘轮只许下降） |
 | 5 | 令牌审计 | `pnpm tokens:check` | 裸色 / `dark:` / 间距双写 / hex 写法 |
 | 6 | 死代码 | `pnpm knip` | files / deps / binaries 级 |
 | 7 | 依赖方向 | `pnpm depcruise` | 分层依赖约束 |
@@ -667,7 +667,7 @@ gh api repos/{owner}/{repo}/rulesets/<id> --jq '.rules[] | select(.type=="requir
 
 | 层 | 在哪跑 | 内容 |
 |---|---|---|
-| 质量验证 | **本地** | 密钥扫描 / typecheck / lint / 15 项静态检查 / tokens 一致性 / knip / depcruise / schema 漂移 / audit / 5 层测试 |
+| 质量验证 | **本地** | 密钥扫描 / typecheck / lint / 16 项静态检查 / tokens 一致性 / knip / depcruise / schema 漂移 / audit / 5 层测试 |
 | 产物验证（Windows） | **本地** | build / bundle 门槛 / compiler 门槛 / E2E 浏览器 + Electron / `build:win:x64` / 引擎与架构断言 / 产物 smoke |
 | 多端适配 | **云端**（配额恢复后） | 六平台矩阵（Linux/macOS 的构建、单测、E2E） |
 
