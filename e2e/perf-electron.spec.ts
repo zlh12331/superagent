@@ -121,13 +121,15 @@ test.describe('真实 Electron IPC 性能基准', () => {
         `[perf:electron] invoke RTT median ${median.toFixed(2)}ms / p95 ${p95.toFixed(2)}ms / max ${(sorted[sorted.length - 1] ?? 0).toFixed(2)}ms`,
       );
       expect(median, '真实 IPC RTT 中位数应 < 20ms（基线，渐进收紧）').toBeLessThan(20);
-      // ⚠️ p95 上限按平台分档（2026-09-21 六平台 CI 实测）：
-      // macOS Intel runner 是 4 核 Intel 机型（官方 runner 规格表），实测 p95
-      // 102–165ms，稳定超默认 50ms 阈值 2–3 倍且重试 3 次全败；同批次 macOS
-      // Apple Silicon p95 11.70ms、Windows 14.90ms。但它的 median 仍在阈值内
-      // （7.4–11.1ms < 20ms）⇒ 是**该机型的真实性能特征**（长尾对宿主负载最敏感），
-      // 不是被测量代码的退化。故只放宽 p95，median 保持严格。
-      const p95Limit = process.platform === 'darwin' && process.arch === 'x64' ? 250 : 50;
+      // ⚠️ p95 上限按「机型/负载特征」分档，median 保持严格（真正的回归信号在 median）：
+      // - macOS Intel（macos-26-intel，4 核 Intel）：实测 p95 102–165ms，重试 3 次全败，
+      //   同批次其他平台 p95 11–15ms ⇒ 该机型的真实性能特征（2026-09-21 实测）→ 250ms 档；
+      // - 其余全部是共享 hosted runner（ubuntu/windows 各架构，公共仓库免费档，宿主负载
+      //   不可控）：实测 p95 在 ~25ms（通过）与 >50ms（失败）间 2 倍抖动、median 恒
+      //   1–3ms——同为「长尾对宿主负载最敏感」的真实机器特征（2026-10-08 实证，
+      //   发版批次 #118 attempt 1 翻车、重跑即过）→ 统一 150ms 档（不分架构碎片化）。
+      const isMacIntel = process.platform === 'darwin' && process.arch === 'x64';
+      const p95Limit = isMacIntel ? 250 : 150;
       expect(p95, `真实 IPC RTT p95 应 < ${p95Limit}ms（防长尾）`).toBeLessThan(p95Limit);
     } finally {
       await closeElectronApp(app);

@@ -41,7 +41,15 @@ const { restrictFileAccessWin32Mock } = vi.hoisted(() => ({
 vi.mock('./keychain', () => ({ restrictFileAccessWin32: restrictFileAccessWin32Mock }));
 
 import { logger } from '../../utils/logger';
-import { closeDb, getDb, getDbPath, initDb, reclaimFreePages, resetDb } from './db';
+import {
+  closeDb,
+  drainPendingBackups,
+  getDb,
+  getDbPath,
+  initDb,
+  reclaimFreePages,
+  resetDb,
+} from './db';
 import { SessionService } from './session-service';
 
 let tempDir: string;
@@ -92,14 +100,12 @@ describe('db', () => {
     initDb();
     const backupDir = join(tempDir, 'backups');
 
-    // 备份以 void 异步发起（不阻断启动），轮询等待 rename 落定
-    let names: string[] = [];
-    for (let i = 0; i < 100; i++) {
-      names = readdirSync(backupDir);
-      if (names.some((n) => n.endsWith('.db'))) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    // 备份以 void 异步发起（不阻断启动）：先确定性等待在途备份全部落地
+    //（根治竞态窗口采样——共享 ARM runner 上「轮询到 .db 就断言」曾撞上
+    // 第二个备份的 .tmp 中途态，2026-10-08），再读取目录做原子性断言
+    await drainPendingBackups();
 
+    const names = readdirSync(backupDir);
     const backups = names.filter((n) => n.endsWith('.db'));
     expect(backups.length).toBeGreaterThanOrEqual(1);
     // 关键断言：失败的半成品只可能是 .db.tmp，不可混入 .db 恢复点；
@@ -159,8 +165,9 @@ describe('db', () => {
 
       resetDb();
       initDb();
-      // 备份以 void 异步发起，等待足够时间确认未落盘
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // 失败路径的清 .tmp 收尾也是异步任务（pendingBackup 追踪）——确定性等待
+      // 落地再断言（替代固定 200ms sleep：慢 runner 上收尾未完成曾会撞断言）
+      await drainPendingBackups();
 
       expect(listDbs()).toEqual(baseline);
       expect(readdirSync(backupDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);

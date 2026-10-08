@@ -594,11 +594,24 @@ export function reclaimFreePages(): number {
  *
  * 幂等：多次调用安全。
  */
-export async function closeDb(): Promise<void> {
+/**
+ * 等待在途备份全部落地（不关闭连接）
+ *
+ * 备份以 void 异步发起（copyFileSync 到 .tmp → renameSync 原子落位），
+ * 本函数等待所有在途备份的 rename 完成——调用后备份目录处于稳定态，
+ * 可对「无 .tmp 残留」做确定性断言（测试轮询采样竞态窗口的根治）。
+ *
+ * 幂等：多次调用安全。
+ */
+export async function drainPendingBackups(): Promise<void> {
   if (pendingBackup !== null) {
     await pendingBackup;
     pendingBackup = null;
   }
+}
+
+export async function closeDb(): Promise<void> {
+  await drainPendingBackups();
   if (sqliteInstance !== null) {
     sqliteInstance.close();
     sqliteInstance = null;
