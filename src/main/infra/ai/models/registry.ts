@@ -17,7 +17,35 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { ProviderKind } from '../providers/types';
-import type { AvailableModelInfo, ModelEntry, ResolvedModel, RuntimeModelSnapshot } from './types';
+import type {
+  AvailableModelInfo,
+  ModelEntry,
+  ModelGenerationConfig,
+  ResolvedModel,
+  RuntimeModelSnapshot,
+} from './types';
+
+/**
+ * 合并运行时快照与同名内置条目的生成参数
+ *
+ * 快照只暴露一个生成参数旋钮（timeoutMs），其余默认值属模型固有属性：
+ * 服务商模式下快照的 modelId 就是内置 id（仅覆盖 apiKey/baseUrl），
+ * 若整组丢弃内置 generationConfig，reasoningEffort 等项目级偏好会静默回退到
+ * 供应商默认。自定义模式（modelId 非内置）回落 undefined，保持既有语义。
+ *
+ * @param builtin 同名内置条目的 generationConfig（无则 undefined）
+ * @param snapshot 运行时快照（仅 timeoutMs 参与合并）
+ * @returns 合并结果；两者皆无 → undefined
+ */
+function mergeSnapshotGenerationConfig(
+  builtin: ModelGenerationConfig | undefined,
+  snapshot: RuntimeModelSnapshot,
+): ModelGenerationConfig | undefined {
+  if (snapshot.timeoutMs === undefined) {
+    return builtin;
+  }
+  return { ...builtin, timeoutMs: snapshot.timeoutMs };
+}
 
 /**
  * ModelRegistry 构造参数
@@ -197,20 +225,20 @@ export class ModelRegistry {
     // 1. 运行时快照优先（用户手动配置覆盖内置）
     const snapshot = this.findRuntimeSnapshot(modelId);
     if (snapshot !== undefined) {
+      // 同名内置条目：能力元数据与生成默认值的事实来源。
+      // 服务商模式下快照的 modelId 就是内置 id（如 deepseek-v4-pro，仅覆盖
+      // apiKey/baseUrl），此时能力是同一模型的固有属性，必须沿用——否则
+      // contextWindowSize 回落 128K 保守值、reasoning 标记丢失导致向思考模型
+      // 注入采样参数（DeepSeek 官方语义：思考模式忽略 temperature/top_p）。
+      // 自定义模式的 modelId 通常不对应内置条目 → 回落空能力（保守策略）。
+      const builtin = this.modelIndex.get(snapshot.modelId);
       return {
         modelId: snapshot.modelId,
         providerKind: snapshot.providerKind,
-        capabilities: {},
-        // 快照的 timeoutMs 合并进生成参数：用户只调这一个旋钮，不应整组
-        // 抹掉内置条目的 reasoningEffort 等默认值；未配置时保持既有语义
-        // （快照不携带内置 generationConfig）
-        generationConfig:
-          snapshot.timeoutMs !== undefined
-            ? {
-                ...this.modelIndex.get(snapshot.modelId)?.generationConfig,
-                timeoutMs: snapshot.timeoutMs,
-              }
-            : undefined,
+        capabilities: builtin?.capabilities ?? {},
+        // 生成参数：内置默认值 + 快照 timeoutMs 覆盖（用户只调这一个旋钮，
+        // 不应整组抹掉内置条目的 reasoningEffort 等默认值；两者皆无 → undefined）
+        generationConfig: mergeSnapshotGenerationConfig(builtin?.generationConfig, snapshot),
         isRuntime: true,
         explicitApiKey: snapshot.apiKey,
         explicitBaseUrl: snapshot.baseUrl,
