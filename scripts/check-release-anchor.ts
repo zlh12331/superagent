@@ -311,8 +311,12 @@ export function compareVersions(a: string, b: string): number {
     const x = paParts[i];
     const y = pbParts[i];
     if (x === y) continue;
-    if (x === undefined) return 1;
-    if (y === undefined) return -1;
+    // a 已耗尽而 b 还有段 → a 更小（beta < beta.1 的反面）；b 已耗尽 → a 更大。
+    // SemVer：前缀相同时，预发布标识符更多者优先级更高（1.8.0-beta.1 > 1.8.0-beta）。
+    // ⚠️ 方向曾写反（y 耗尽 return -1）：冻结基底首例（beta → beta.1）触发
+    // 「版本未前进」误报——回归用例见 check-release-anchor.test.ts。
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
     const xn = Number(x);
     const yn = Number(y);
     if (!Number.isNaN(xn) && !Number.isNaN(yn)) return xn - yn;
