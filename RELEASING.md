@@ -137,12 +137,19 @@ pnpm check:changelog-polish   # 验证通过后才能合并 Release PR
 
 ## 三、发 beta（预发布）
 
-**正常路径：什么都不用做。** beta 阶段（当前版本为 `X.Y.Z-beta.N`）的 fix/feat 提交合并进
-main 后，release-please 自动把 Release PR 提案为 `X.Y.Z-beta.N+1`（prerelease 策略递增
-prerelease 号，base 版本不动）：
+**正常路径：什么都不用做。** beta 阶段（当前版本为 `X.Y.0-beta.N`）的 fix/feat 提交合并进
+main 后，release-please 自动把 Release PR 提案为 `X.Y.0-beta.N+1`（prerelease 策略递增
+prerelease 号，**base 版本焊死不动**——feat 与 fix 一视同仁）：
 
-- release-please 开/更新 `chore(main): release X.Y.Z-beta.N+1` 的 PR
+- release-please 开/更新 `chore(main): release X.Y.0-beta.N+1` 的 PR
 - 合并后 `release.yml` 按版本含 `-` 自动标记为 GitHub **Prerelease**（同时打 tag）
+
+**版本冻结模型（2026-10-08 拍板）**：beta 系列期间基底 `X.Y.0-` 焊死，只有 `beta.` 后面的
+数字递增；正式版（如 1.7.0）纹丝不动，毕业时才显式定版。**唯一例外是 breaking change**：
+beta 期间合入 breaking 提交（`feat!` 或 `BREAKING CHANGE:` footer）会让基底直接进位 major
+（如 1.8.0-beta → **2.0.0-beta**，跳过 1.9.0），beta.N 从头计——这是 SemVer 铁律，
+release-please 源码层面冻结不掉；已拍板接受（2026-10-08），写 breaking 提交前确认是真破坏
+（数据格式 / 机器契约 / 功能移除），而非仅内部重构。
 
 **显式钉版本**（跨系列收敛/跳号）才需要 footer：
 

@@ -282,7 +282,21 @@ Latest 切换）——`gh run list` 匹配旧 run 假绿的教训已入档。
 `Release-As: X.Y.Z` 提交 → release-please 开毕业 Release PR → 走同一预检与合并
 流程。v1.7.0（#110→#111）为完整先例。
 
-### 5.5 已知限制（如实登记）
+### 5.5 版本递增规则（2026-10-08 拍板：beta 冻结基底）
+
+- **beta 系列**（基底 `X.Y.0-beta.N` 形态）：任意提交（feat/fix 一视同仁）只递增
+  `beta.N`，基底 `X.Y.0-` 焊死——源码实证（release-please `prerelease.ts` 的
+  `patch === 0` 冻结分支）；1.8.0-beta 后任意提交 → `1.8.0-beta.1`。
+- **正式版不变**：stable 只有显式 `Release-As` 毕业才产生，推导永不触碰已发布版本。
+- **唯一例外 = BREAKING CHANGE 提交**（`feat!` / `BREAKING CHANGE:` footer）：基底直接
+  进位 major（1.8.0-beta → **2.0.0-beta**，跳过 1.9.0，beta.N 从头计）——SemVer 铁律，
+  策略层冻结不掉。**拍板接受（选项 A）**，规则文档化于 RELEASING.md §三（选项 C）；
+  写 breaking 前确认是真破坏（数据格式 / 机器契约 / 功能移除），electron-updater 会把
+  存量用户更上去，无拦截点。
+- 为什么 1.7.1-beta → 1.8.0-beta 动过基底：序列当时停在 `patch = 1` 的半路形态（feat
+  触发 base bump），归位到 `X.Y.0-beta` 后冻结生效——非配置错误，无改动。
+
+### 5.6 已知限制（如实登记）
 
 - **无签名**：Windows 首次安装遇 SmartScreen 警告（更多信息→仍要运行）、macOS
   需系统设置放行；**升级场景不受影响**（electron-updater 在已装应用内自更新）。
