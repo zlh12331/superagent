@@ -1,3 +1,7 @@
+# 版本管理：release-please 基于 Conventional Commits 推导下一版本，
+# 自动开/更新 Release PR（package.json 版本号 + CHANGELOG）。
+# 合并 Release PR 后不打 tag、不建 Release——由 release.yml 在构建全部成功后打。
+
 name: Release Please
 
 on:
@@ -9,6 +13,7 @@ permissions:
   contents: write
   pull-requests: write
 
+# 每次运行都基于当前仓库状态重新计算（幂等），快速连推时取消旧运行安全
 concurrency:
   group: release-please-${{ github.ref }}
   cancel-in-progress: true
@@ -21,7 +26,13 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          # 独立 token：让 Release PR 上的必需检查能被触发
+          #（GITHUB_TOKEN 产生的事件不触发其他 workflow）
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          # 版本策略真源：feat→minor / fix→patch / prerelease(beta) 自动递增，
+          # 详见 release-please-config.json（中文 CHANGELOG 分组也在这）
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # 合并后不打 tag 不建 Release（release.yml 构建成功后打，防空版本占号）。
+          # ⚠️ 不要改回 skip-tag：该输入不存在，会被静默忽略导致自行打 tag + 空壳 Release
           skip-github-release: true
