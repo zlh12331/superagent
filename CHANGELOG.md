@@ -2,6 +2,16 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0-beta.1](https://github.com/zlh12331/superagent/compare/v1.8.0-beta...v1.8.0-beta.1) (2026-10-08)
+
+<!-- changelog:polished -->
+
+### 修复
+
+* **release:** merge job 下载后断言 6 个产物全部落盘 ([5a72656](https://github.com/zlh12331/superagent/commit/5a726562148e970c5ed9589f6ae969f37d3fd8be))
+* **release:** 公告发帖的版块查询改用 slug 参数 ([8c4a2b1](https://github.com/zlh12331/superagent/commit/8c4a2b1f4108a9ede3fc09da23e50fc3e031849a))
+* **release:** 锚点版本比较——prerelease 段追加方向写反（beta → beta.1 误报未前进） ([#120](https://github.com/zlh12331/superagent/issues/120)) ([5bf90ab](https://github.com/zlh12331/superagent/commit/5bf90ab29af9ed7994dd52bbe306b5bcd03c9c3a))
+
 ## [1.8.0-beta](https://github.com/zlh12331/superagent/compare/v1.7.1-beta...v1.8.0-beta) (2026-10-07)
 
 <!-- changelog:polished -->
