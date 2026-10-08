@@ -69,6 +69,10 @@ export const IPC_META = {
     subscribeToolCall: event('agent:tool:call'),
     subscribeToolResult: event('agent:tool:result'),
     subscribeApprovalRequest: event('agent:approval:request'),
+    // 审批决议事件（含超时/中断等非用户决策路径）——渲染层据此清理待审批条目，
+    // 与 approval:request 配对：有请求必有决议，前端不会残留"僵尸审批卡"
+    // （2026-10-08：此前决议只走进程内 lifecycle，渲染层无从得知超时）
+    subscribeApprovalResolved: event('agent:approval:resolved'),
   },
 
   session: {

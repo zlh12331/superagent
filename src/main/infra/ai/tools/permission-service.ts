@@ -29,6 +29,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type {
   AgentApprovalRequestPayload,
+  AgentApprovalResolvedPayload,
   ApprovalMode,
   WhitelistEntry,
 } from '@code-agent/shared/main';
@@ -102,6 +103,14 @@ interface PendingApproval {
   readonly input: unknown;
   /** 所属会话 id（审批生命周期事件过滤用） */
   readonly sessionId: string;
+  /**
+   * 接收审批请求的窗口（决议事件回推目标）
+   *
+   * 超时/中断/dispose 等**非用户决策**路径必须让渲染层知道条目已死，
+   * 否则卡片永久残留（点批准只会得到「approvalId 不存在或已超时」）。
+   * 与请求推送同源（requestApproval 的入参）——同一窗口收发保证配对。
+   */
+  readonly webContents?: WebContents;
   /** abort 监听器清理函数（若注册了 abort 监听则需要清理） */
   readonly cleanupAbort?: () => void;
 }
@@ -266,6 +275,35 @@ export class PermissionService implements IPermissionService {
         logger.error({ error: err }, '审批生命周期监听器 onResolved 异常');
       }
     }
+  }
+
+  /**
+   * 决议回推渲染层（approval:request 的配对事件）
+   *
+   * 必要性（2026-10-08）：决议此前只走 notifyApprovalResolved 的**进程内**
+   * lifecycle（消费方仅回合状态机与系统通知），渲染层无从得知——超时/中断
+   * 等非用户路径下，待审批条目永久残留在界面（卡片不消失、倒计时归零、
+   * 点批准只得到「approvalId 不存在或已超时」）。本方法把决议推给发起窗口，
+   * 前端据此把条目移出队列，保证「有请求必有决议」的配对闭合。
+   *
+   * @param approvalId 审批请求 id（渲染层据此定位待审批条目）
+   * @param entry 已出队的 pending 条目（携带发起窗口；缺失/已销毁时静默跳过）
+   * @param decision 决议结果
+   */
+  private emitResolvedToRenderer(
+    approvalId: string,
+    entry: PendingApproval,
+    decision: ApprovalDecisionOutcome,
+  ): void {
+    const wc = entry.webContents;
+    if (wc === undefined || wc.isDestroyed()) {
+      return;
+    }
+    emitEvent(wc, IPC_DEFINITIONS.agent.subscribeApprovalResolved, {
+      sessionId: entry.sessionId,
+      approvalId,
+      decision,
+    } satisfies AgentApprovalResolvedPayload);
   }
 
   /**
@@ -531,7 +569,9 @@ export class PermissionService implements IPermissionService {
       // 因此机器不会为其计时——该分支保持下方「自动拒绝」即时处理。
 
       // abort 监听器：用户中断对话时立即 reject（H4 修复）
+      // webContents 经 pending 取值（下方 set 之后才可读；abort 必然发生在 set 之后）
       const onAbort = (): void => {
+        const pending = this.pending.get(payload.approvalId);
         this.pending.delete(payload.approvalId);
         logger.info(
           { approvalId: payload.approvalId, toolName: payload.toolName },
@@ -543,6 +583,10 @@ export class PermissionService implements IPermissionService {
           approvalId: payload.approvalId,
           decision: 'aborted',
         });
+        // 渲染层回推：中断路径同样要清理界面上的待审批卡（否则永久残留）
+        if (pending !== undefined) {
+          this.emitResolvedToRenderer(payload.approvalId, pending, 'aborted');
+        }
         reject(new AppError(ErrorCode.TOOL_ABORTED, '工具执行已被中断'));
       };
 
@@ -553,7 +597,7 @@ export class PermissionService implements IPermissionService {
       };
 
       // 在 pending Map 中保存 tool + input 引用，
-      // 用于 handleApprovalResponse 时构建记忆决策 key
+      // 用于 handleApprovalResponse 时构建记忆决策 key；webContents 供决议回推用
       this.pending.set(payload.approvalId, {
         resolve,
         reject,
@@ -561,6 +605,7 @@ export class PermissionService implements IPermissionService {
         input,
         sessionId: payload.sessionId,
         cleanupAbort,
+        ...(webContents !== undefined ? { webContents } : {}),
       });
 
       // 注册 abort 监听（若传入 abortSignal）
@@ -623,6 +668,9 @@ export class PermissionService implements IPermissionService {
       approvalId,
       decision: approved ? 'approved' : 'denied',
     });
+    // 渲染层回推：用户主动决策路径同样推（保证「有请求必有决议」配对闭合；
+    // 前端已自行移出队列时收到本事件为幂等 no-op）
+    this.emitResolvedToRenderer(approvalId, entry, approved ? 'approved' : 'denied');
   }
 
   /**
@@ -676,6 +724,9 @@ export class PermissionService implements IPermissionService {
       approvalId,
       decision: 'timed-out',
     });
+    // 渲染层回推：超时是**非用户路径**，此前渲染层完全不知情——卡片永久残留、
+    // 倒计时归零仍显示、点批准只得到「approvalId 不存在或已超时」（2026-10-08 修复）
+    this.emitResolvedToRenderer(approvalId, entry, 'timed-out');
     entry.reject(new AppError(ErrorCode.TOOL_PERMISSION_DENIED, '审批超时：工具调用被拒绝'));
   }
 

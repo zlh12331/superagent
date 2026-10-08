@@ -862,6 +862,9 @@ function createMockApi(): IpcApi {
         approvalCallbacks.add(cb);
         return () => approvalCallbacks.delete(cb);
       },
+      // 审批决议事件（真实链路：主进程超时/中断/用户决策后回推；mock 无审批流，
+      // 订阅桩只保 API 形状完整）
+      subscribeApprovalResolved: () => () => {},
       subscribeAsk: (cb: Parameters<IpcApi['agent']['subscribeAsk']>[0]) => {
         askCallbacks.add(cb);
         return () => askCallbacks.delete(cb);

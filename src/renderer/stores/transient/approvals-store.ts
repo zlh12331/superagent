@@ -49,8 +49,9 @@ export type ApprovalType =
  * - pending：等待用户决策
  * - approved：用户批准（已通知主进程执行）
  * - rejected：用户拒绝（已通知主进程取消）
+ * - expired：主进程判定超时/中断（用户未操作；UI 显示终态徽章而非按钮）
  */
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 
 /**
  * 审批项
@@ -83,6 +84,12 @@ export interface ApprovalItem {
   readonly createdAt: number;
   /** 决议时间戳（ms，pending 时为 null） */
   readonly resolvedAt: number | null;
+  /**
+   * 主进程侧决议细节（仅 status='expired' 时存在）
+   *
+   * 区分「超时」与「中断」两种非用户路径，供 UI 展示准确文案。
+   */
+  readonly externalDecision?: 'timed-out' | 'aborted';
 }
 
 /**
@@ -101,6 +108,17 @@ interface ApprovalsState {
   readonly approve: (id: string) => void;
   /** 拒绝审批项 */
   readonly reject: (id: string) => void;
+  /**
+   * 主进程决议落定（approval:resolved 事件消费）
+   *
+   * 用于「用户未在界面上操作」的路径：超时（timed-out）与中断（aborted）
+   * 由主进程判定并回推，前端据此处把条目移出待审批队列——否则卡片永久残留。
+   * 幂等：条目已被本地操作移出（用户先点了按钮）时静默 no-op。
+   *
+   * @param id 审批 id
+   * @param decision 决议结果（决定终态徽章展示）
+   */
+  readonly settleExternal: (id: string, decision: 'timed-out' | 'aborted') => void;
   /** 从已决议列表移除（UI 反馈完成后调用） */
   readonly dismiss: (id: string) => void;
   /** 清空指定会话的所有待审批（会话被中断时调用） */
@@ -174,8 +192,50 @@ export const useApprovalsStore = create<ApprovalsState>()((set) => ({
       resolved: state.resolved.filter((a) => a.id !== id),
     })),
 
+  settleExternal: (id, decision) =>
+    set((state) => {
+      const item = state.pending.find((a) => a.id === id);
+      // 幂等：条目已被用户操作移出（approve/reject）或本就未入队 → no-op
+      if (item === undefined) {
+        return state;
+      }
+      const resolved: ApprovalItem = {
+        ...item,
+        status: 'expired',
+        resolvedAt: Date.now(),
+        // 决议细节留在描述位（UI 用 i18n 展示"审批超时/已中断"）
+        externalDecision: decision,
+      };
+      return {
+        pending: state.pending.filter((a) => a.id !== id),
+        resolved: [resolved, ...state.resolved].slice(0, MAX_RESOLVED),
+      };
+    }),
+
   clearBySession: (sessionId) =>
     set((state) => ({
       pending: state.pending.filter((a) => a.sessionId !== sessionId),
     })),
 }));
+
+/**
+ * 待审批会话 id 列表（派生 selector）
+ *
+ * 侧栏徽标数据源：一次性得到"哪些会话有待审批"，避免每行各自遍历 pending。
+ *
+ * ⚠️ 返回数组（而非 Set）是刻意的：消费方 zustand 订阅用 useShallow 做元素级
+ * 浅比较——数组可被浅比较覆盖；Set 是引用类型，浅比较恒判定为"已变化"，
+ * 会触发无限重渲染（React 19 + zustand 5，实测 "getSnapshot should be cached"
+ * 报 Maximum update depth exceeded）。消费方再按需 `includes` / 自建 Set。
+ *
+ * @param state approvals-store 状态
+ */
+export const selectPendingApprovalSessionIds = (state: ApprovalsState): readonly string[] => {
+  const ids: string[] = [];
+  for (const item of state.pending) {
+    if (!ids.includes(item.sessionId)) {
+      ids.push(item.sessionId);
+    }
+  }
+  return ids;
+};

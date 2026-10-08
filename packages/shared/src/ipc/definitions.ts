@@ -15,6 +15,8 @@ import { z } from 'zod';
 import {
   type AgentApprovalRequestPayload,
   AgentApprovalRequestPayloadSchema,
+  type AgentApprovalResolvedPayload,
+  AgentApprovalResolvedPayloadSchema,
   AgentApprovalResponseReqSchema,
   AgentRunReqSchema,
   type AgentRunRes,
@@ -555,6 +557,11 @@ export const IPC_DEFINITIONS = {
       IPC_META.agent.subscribeApprovalRequest,
       {} as AgentApprovalRequestPayload,
       AgentApprovalRequestPayloadSchema,
+    ),
+    subscribeApprovalResolved: withPayload(
+      IPC_META.agent.subscribeApprovalResolved,
+      {} as AgentApprovalResolvedPayload,
+      AgentApprovalResolvedPayloadSchema,
     ),
   },
 
