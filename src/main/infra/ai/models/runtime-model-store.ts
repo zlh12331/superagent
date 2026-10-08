@@ -11,8 +11,8 @@
 // - CRUD 消费方：settings.handler（设置页模型配置 add/update/remove/list）
 //   + models.handler（list，models:list 数据源）+ ServiceContainer init
 //   （loadAll，LLM 首次调用前）
-// - LlmClient per-model 缓存失效契约未接线（add/update 后同 id 缓存持旧
-//   配置，见 add 方法登记说明）
+// - LlmClient per-model 缓存失效：注册表同步在本类内完成，缓存失效由调用方
+//   settings.handler 负责（add/update/remove 三处均调 llmClient.invalidateModel）
 // - keychain key 约定与 keychain 域一致（`${前缀}-api-key` 风格：`runtime:${modelId}`）
 // ──────────────────────────────────────────────────────────────
 
@@ -138,10 +138,8 @@ export class RuntimeModelStore {
   /**
    * 新增运行时模型：DB 持久化 + keychain 存 key + 注册到 ModelRegistry
    *
-   * 注册表同步在本方法内完成；但 LlmClient 的 per-model 缓存失效契约
-   * （llmClient.invalidateModel(modelId)）当前未接线——调用方未调用，
-   * 同 id 缓存持旧配置，需 reset/重启清理（见 LlmClient.invalidateModel
-   * 的登记说明）。
+   * 注册表同步在本方法内完成；LlmClient 的 per-model 缓存失效由调用方
+   * settings.handler 在 add 后调用（见其 addRuntimeModel）。
    */
   async add(input: AddRuntimeModelInput): Promise<void> {
     const db = getDb();
@@ -183,7 +181,8 @@ export class RuntimeModelStore {
    * - displayName / baseUrl / isEnabled 落库
    * - apiKey 传入时更新 keychain（不落库）
    * - 注册表同步：注销旧快照后按最新记录重建；停用则仅注销
-   * - LlmClient per-model 缓存失效契约未接线（同 add——见其登记说明）
+   * - LlmClient per-model 缓存失效由调用方 settings.handler 在 update 后调用
+   *   （见其 updateRuntimeModel）
    *
    * @throws AppError(NOT_FOUND) modelId 不存在
    */

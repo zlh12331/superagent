@@ -406,9 +406,8 @@ export class LlmClient {
    * 设计触发场景：运行时快照更新（baseUrl / apiKey 变更）后，同 modelId 的
    * 缓存仍持有旧配置，需主动失效；下次 getModel 重新创建。
    *
-   * ⚠️ 当前无生产调用方（仅单测）——runtime-model-store 的 add/update 注释
-   * 要求调用方失效缓存，但尚未接线；未接线期间运行时快照变更后同 id 缓存
-   * 持旧配置，需 reset（全清）/重启才清理。接线点应在 models 域 handler。
+   * 接线现状：settings.handler 的 addRuntimeModel / updateRuntimeModel /
+   * removeRuntimeModel 三处已调用（模型配置变更后同 id 缓存不再残留旧配置）。
    */
   invalidateModel(modelId: string): void {
     this.modelCache.delete(modelId);
